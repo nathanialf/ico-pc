@@ -879,6 +879,39 @@ static void checkPasses(const RdFrame *f, bool prepass)
         }
     }
     printf("passes: sampled: %u timed, %u not\n", sampled, untimed);
+    /* without the list and effect stamps ([dev] perf_list_stamps = false):
+       no list or effect time, the GPU total and the pieces' times kept */
+    rd__set_perf_list_stamps(false);
+    rd__set_perf_passes(true);
+    for (int i = 0; i < RHI_FRAMES_IN_FLIGHT + 1; i++) {
+        rd__replay_frame(f, 0, true); /* the records with the stamps drained */
+    }
+    while (rd_perf_pop(&r)) {
+        rd_perf_passes_of(r.replay, &p);
+    }
+    uint32_t bare = 0;
+    for (int i = 0; i < 4 + RHI_FRAMES_IN_FLIGHT; i++) {
+        rd__replay_frame(f, 0, true);
+        while (rd_perf_pop(&r)) {
+            const uint32_t n = rd_perf_passes_of(r.replay, &p);
+            if (!r.gpuValid) {
+                continue;
+            }
+            double lists = 0.0;
+            for (int l = 0; l < RD_LIST_COUNT; l++) {
+                lists += r.gpuListMs[l];
+            }
+            bare++;
+            CHECK(lists == 0.0 && r.gpuMs > 0.0,
+                  "passes: without list stamps replay %u: lists %.3f ms, GPU %.3f ms", r.replay,
+                  lists, r.gpuMs);
+            checkPieces(&r, p, n, prepass);
+        }
+    }
+    rd__set_perf_list_stamps(true);
+    rd__set_perf_passes(false);
+    printf("passes: without list stamps: %u replays checked\n", bare);
+    CHECK(bare > 0, "passes: no replay checked without list stamps");
 }
 
 static int synthetic(void)

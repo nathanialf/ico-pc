@@ -507,6 +507,9 @@ static const struct {
     /* true: every replay timed pass by pass, logs/ico-pc-passes.csv
        (port/render/rd_perf.c rd__perf_passes_init, window_host.c) */
     {"dev.perf_passes", "perf_passes"},
+    /* false: no GPU timestamp inside a render pass (the lists' and the
+       effects' times read 0; port/render/rd_perf.c stamp) */
+    {"dev.perf_list_stamps", "perf_list_stamps"},
     /* false: SDL's DirectInput controller scan off (issue 105; window_host.c
        joystick_scan_hints) */
     {"dev.joystick_directinput", "joystick_directinput"},
@@ -539,6 +542,9 @@ static const struct {
     /* port/render/rd_perf.c rd__perf_passes_init: 1 times every replay pass
        by pass (the window writes ico-pc-passes.csv) */
     {"perf_passes", "ICO_RD_PERF_PASSES"},
+    /* port/render/rd_perf.c rd__perf_passes_init: 0 writes no list or effect
+       timestamp (none inside a render pass) */
+    {"perf_list_stamps", "ICO_RD_PERF_LIST_STAMPS"},
     /* port/platform/window_host.c joystick_scan_hints: 0 sets
        SDL_HINT_JOYSTICK_DIRECTINPUT to 0 before SDL_Init */
     {"joystick_directinput", "ICO_JOYSTICK_DIRECTINPUT"},

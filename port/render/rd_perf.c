@@ -194,6 +194,7 @@ typedef struct PassTable {
 } PassTable;
 
 static bool s_passesMode;            /* every replay timed */
+static bool s_noListStamps;          /* [dev] perf_list_stamps = false (stamp) */
 static bool s_passOn;                /* the replay being recorded is timed */
 static double s_passLastMs = -1.0e9; /* the last timed replay's start */
 static PassTable s_passRec;          /* the replay being recorded */
@@ -207,6 +208,13 @@ void rd__perf_passes_init(void)
 {
     const char *env = getenv("ICO_RD_PERF_PASSES");
     s_passesMode = env && env[0] == '1';
+    const char *lists = getenv("ICO_RD_PERF_LIST_STAMPS");
+    s_noListStamps = lists && lists[0] == '0';
+    if (s_noListStamps) {
+        rd__log("GPU list and effect timestamps: off ([dev] perf_list_stamps = false, "
+                "ICO_RD_PERF_LIST_STAMPS=0): no stamp inside a render pass; the GPU total of a "
+                "present and the passes' times stay, the lists' and effects' read 0");
+    }
 #ifdef ICO_IOS
     rd__log("GPU pass timing: off on iOS");
     return;
@@ -226,6 +234,11 @@ void rd__perf_passes_init(void)
 void rd__set_perf_passes(bool on)
 {
     s_passesMode = on;
+}
+
+void rd__set_perf_list_stamps(bool on)
+{
+    s_noListStamps = !on;
 }
 
 bool rd_perf_passes_mode(void)
@@ -592,6 +605,14 @@ void rd__perf_end(void)
 static void stamp(RhiCommandList cl, uint32_t index)
 {
     if (!g_rd.hasDevice || index >= RD_PERF_TS_PASS0 || (s_stamps.written & (1u << index))) {
+        return;
+    }
+    /* [dev] perf_list_stamps = false: only the stamps written outside every
+       render pass (the replay's start, the pre-pass's, the lists' start, the
+       present's end), for the A/B of what a stamp inside an open pass costs
+       a tile-based GPU (one that ends the pass there and begins it again) */
+    if (s_noListStamps && index != RD_PERF_TS_BEGIN && index != RD_PERF_TS_LISTS &&
+        index != RD_PERF_TS_PREPASS && index != RD_PERF_TS_PRESENT) {
         return;
     }
     rhi_cmd_write_timestamp(cl, index >= RD_PERF_TS_COUNT ? index | RHI_TIMESTAMP_KEEP_BARRIERS

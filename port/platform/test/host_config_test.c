@@ -523,6 +523,11 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("perf_passes", "false"), "0") == 0);
     CHECK(ico_dev_env_value("perf_passes", "maybe") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.perf_passes"), "perf_passes") == 0);
+    /* perf_list_stamps: no timestamp inside a render pass (rd_perf.c stamp) */
+    CHECK(strcmp(ico_dev_env_name("perf_list_stamps"), "ICO_RD_PERF_LIST_STAMPS") == 0);
+    CHECK(strcmp(ico_dev_env_value("perf_list_stamps", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("perf_list_stamps", "true"), "1") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.perf_list_stamps"), "perf_list_stamps") == 0);
     /* audio_sync: the audio on the game's clock (port/audio/audio_host.h) */
     CHECK(strcmp(ico_dev_env_name("audio_sync"), "ICO_AUDIO_SYNC") == 0);
     CHECK(strcmp(ico_dev_env_value("audio_sync", "true"), "1") == 0);

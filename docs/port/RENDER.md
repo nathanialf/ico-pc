@@ -1766,11 +1766,18 @@ the GPU line (`window: GPU ms per replay: ...`) ends with `; VU pre-pass <ms>`, 
 The list and effect stamps are written where a list or an effect changes, which is often inside
 an open render pass (a pass on SCENE runs on across lists 0 to 2 and into list 4). A GPU that
 draws a pass's pixels after the pass ends (a tile-based phone GPU; lavapipe) then puts that work
-in the stretch where the pass ends, not where it was recorded. Measured on lavapipe with the
+in the stretch where the pass ends, not where it was recorded (and a driver may end the pass at
+the stamp and begin it again, loading and storing the target once more). Measured on lavapipe with the
 issue 102 Mac frame at Original 1x: the fog effect reads 39.6 ms, while removing the fog's command
 (`--nop 4:17`) leaves the frame's total where it was (248.6 against 248.7 ms) and removing it with
 the sprite after it (`--nop 4:17 --nop 4:23`) takes 6.8 ms off; the list-4 stretch still reads
 33.4 ms with both gone. So a list's or an effect's time on such a GPU is not its own cost.
+`[dev] perf_list_stamps = false` (`ICO_RD_PERF_LIST_STAMPS=0`) writes only the stamps outside
+every pass (the replay's start, the pre-pass's, the lists' start, the present's end), logging
+`rd: GPU list and effect timestamps: off ...` once: the lists' and effects' times read 0 while the
+GPU total of a present and the per-pass timing stay, so a phone's `window: N replays: ... GPU N
+ms` with and without it says what the stamps inside passes cost there (`port/render/rd_perf.c`
+(`stamp`)).
 
 The per-pass timing measures each piece of GPU work between stamps written outside any render
 pass. The replay names each piece as it begins it (`rd__perf_pass`, before the piece records

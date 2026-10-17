@@ -2238,6 +2238,12 @@ void rd__perf_pass_end(RhiCommandList cl);
  * device start); rd__set_perf_passes sets it (tests, the replay tool) */
 void rd__perf_passes_init(void);
 void rd__set_perf_passes(bool on);
+/* [dev] perf_list_stamps (ICO_RD_PERF_LIST_STAMPS=0 turns them off, read by
+ * rd__perf_passes_init): the list and effect timestamps, which are often
+ * written inside an open render pass; off, only the stamps outside every
+ * pass are written (rd_perf.c stamp).  rd__set_perf_list_stamps for the
+ * tests */
+void rd__set_perf_list_stamps(bool on);
 /* RdPerfPass.target for target id `id` (rd_core.c) */
 uint8_t rd__target_code(uint32_t id);
 /* rd_set_host_call's hook, or fn(arg) directly (rd_core.c) */
