@@ -130,7 +130,8 @@ typedef struct DxCmdList {
     uint32_t vbSize[RHI_MAX_VERTEX_ATTRS];
     uint32_t vbDirty;
     bool inPass;
-    uint32_t tsMask; /* timestamp indices written in this list (rhi_cmd_write_timestamp) */
+    /* timestamp indices written in this list (rhi_cmd_write_timestamp) */
+    uint32_t tsMask[RHI_TIMESTAMP_WORDS];
 } DxCmdList;
 
 typedef struct DxFrame {
@@ -151,7 +152,7 @@ typedef struct DxFrame {
     ID3D12QueryHeap *tsHeap;
     ID3D12Resource *tsRead;
     const uint64_t *tsMapped;
-    uint32_t tsWritten;
+    uint32_t tsWritten[RHI_TIMESTAMP_WORDS];
 } DxFrame;
 
 /* Deferred releases that found their frame's garbage list unable to grow

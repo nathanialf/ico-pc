@@ -187,7 +187,12 @@ both backends (`port/rhi/vk/vk_resource.c`, `port/rhi/d3d12/d3d12_resource.c`); 
 slow-walk line reads it ([RENDER.md](RENDER.md#the-start-up-set)). `window: per replay N draws, ...` therefore
 reads real numbers on both backends.
 
-**Timestamps.** `RHI_MAX_TIMESTAMPS` (32) a [frame slot](ARCHITECTURE.md#terms);
+**Timestamps.** `RHI_MAX_TIMESTAMPS` (256) a [frame slot](ARCHITECTURE.md#terms): the
+renderer's list and effect stamps take the first 32 and a replay timed pass by pass one more per
+pass ([RENDER.md](RENDER.md#the-per-pass-timing)); a pool or heap of 256 is 2 KB a slot. The
+indices written are bit sets of `RHI_TIMESTAMP_WORDS` words (`rhi_ts_has`, `rhi_ts_add` in
+`port/rhi/rhi.h`), and Vulkan reads a slot's results only up to the highest index written
+(`port/rhi/vk/vk_cmd.c` (`vkr_collect_timestamps`)).
 `rhi_read_timestamps` hands back the slot `rhi_wait_frame` last recycled, so reading never waits.
 `RHI_TIMESTAMP_KEEP_BARRIERS` keeps the held-back image barriers held (D3D12 holds none back and
 ignores it). Vulkan uses query pools. D3D12 has a timestamp query heap of `RHI_MAX_TIMESTAMPS`
@@ -199,7 +204,7 @@ slot is recycled, so the GPU is not writing it), converting ticks with
 device) leaves its stamps unread. `rhi_timestamps_supported` is true when the queue reports a
 frequency and every slot got its heap and buffer; otherwise the device log says why once
 (`rhi_d3d12: GPU timestamps: off (...)`) and the calls do nothing. `rhi_init` logs
-`rhi_d3d12: GPU timestamps: on (<Hz> Hz, 32 per frame slot)`. `ICO_DX_FAKE_NO_TIMESTAMPS=1` turns
+`rhi_d3d12: GPU timestamps: on (<Hz> Hz, 256 per frame slot)`. `ICO_DX_FAKE_NO_TIMESTAMPS=1` turns
 them off for a test of the fallback.
 
 **Present mode and timing.** `rhi_prefer_mailbox` asks for mailbox with vsync from the next

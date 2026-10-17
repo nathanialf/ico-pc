@@ -195,8 +195,8 @@ typedef struct VkrFrame {
     VkSemaphore acquireSem; /* swapchain image acquire */
     /* the slot's GPU timestamps (rhi_cmd_write_timestamp) */
     VkQueryPool queryPool;
-    uint32_t tsWritten; /* bit per index written since the slot was recycled */
-    bool tsReset;       /* the pool's reset is recorded in this slot's first list */
+    uint32_t tsWritten[RHI_TIMESTAMP_WORDS]; /* the indices written since the slot was recycled */
+    bool tsReset; /* the pool's reset is recorded in this slot's first list */
 } VkrFrame;
 
 /* -------------------------------------------------------------- device */

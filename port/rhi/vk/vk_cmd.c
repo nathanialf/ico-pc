@@ -157,25 +157,32 @@ static void vkr_collect_timestamps(VkrFrame *f)
 {
     g_vkr.tsCount = 0;
     memset(g_vkr.tsResult, 0, sizeof(g_vkr.tsResult));
-    if (!f->queryPool || !f->tsWritten) {
-        f->tsWritten = 0;
+    /* the results up to the highest index written */
+    uint32_t hi = 0;
+    for (uint32_t i = 0; i < RHI_MAX_TIMESTAMPS; i++) {
+        if (rhi_ts_has(f->tsWritten, i)) {
+            hi = i + 1;
+        }
+    }
+    if (!f->queryPool || hi == 0) {
+        memset(f->tsWritten, 0, sizeof(f->tsWritten));
         return;
     }
     uint64_t data[RHI_MAX_TIMESTAMPS][2];
-    memset(data, 0, sizeof(data));
+    memset(data, 0, sizeof(data[0]) * hi);
     VkResult r = vkGetQueryPoolResults(
-        g_vkr.device, f->queryPool, 0, RHI_MAX_TIMESTAMPS, sizeof(data), data, sizeof(data[0]),
+        g_vkr.device, f->queryPool, 0, hi, sizeof(data[0]) * hi, data, sizeof(data[0]),
         VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
     if (r == VK_SUCCESS || r == VK_NOT_READY) {
-        for (uint32_t i = 0; i < RHI_MAX_TIMESTAMPS; i++) {
-            if ((f->tsWritten & (1u << i)) && data[i][1]) {
+        for (uint32_t i = 0; i < hi; i++) {
+            if (rhi_ts_has(f->tsWritten, i) && data[i][1]) {
                 g_vkr.tsResult[i] =
                     (uint64_t)((double)(data[i][0] & g_vkr.timestampMask) * g_vkr.timestampPeriod);
                 g_vkr.tsCount = i + 1;
             }
         }
     }
-    f->tsWritten = 0;
+    memset(f->tsWritten, 0, sizeof(f->tsWritten));
 }
 
 /* Recycles a frame slot once the GPU is done with it. */
@@ -1607,14 +1614,14 @@ void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index)
     const bool keep = (index & RHI_TIMESTAMP_KEEP_BARRIERS) != 0;
     index &= ~RHI_TIMESTAMP_KEEP_BARRIERS;
     if (!c || !f->queryPool || !f->tsReset || index >= RHI_MAX_TIMESTAMPS ||
-        (f->tsWritten & (1u << index))) {
+        rhi_ts_has(f->tsWritten, index)) {
         return;
     }
     if (!keep) {
         vkr_flush_barriers(c);
     }
     vkCmdWriteTimestamp(c->cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, f->queryPool, index);
-    f->tsWritten |= 1u << index;
+    rhi_ts_add(f->tsWritten, index);
 }
 
 uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max)

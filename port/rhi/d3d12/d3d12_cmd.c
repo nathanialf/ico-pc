@@ -68,7 +68,7 @@ void dx_timestamps_release(DxFrame *f)
     f->tsMapped = NULL;
     DX_RELEASE(f->tsRead);
     DX_RELEASE(f->tsHeap);
-    f->tsWritten = 0;
+    memset(f->tsWritten, 0, sizeof(f->tsWritten));
 }
 
 static void dx_timestamps_init(void)
@@ -150,17 +150,17 @@ void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index)
     /* the barrier flag (Vulkan's held-back image barriers) has no meaning here */
     index &= ~RHI_TIMESTAMP_KEEP_BARRIERS;
     if (!c || !g_dx.timestamps || !f->tsHeap || !c->recording || index >= RHI_MAX_TIMESTAMPS ||
-        (f->tsWritten & (1u << index)) || (c->tsMask & (1u << index))) {
+        rhi_ts_has(f->tsWritten, index) || rhi_ts_has(c->tsMask, index)) {
         return;
     }
     /* a stamp is written once a frame, in one list: not in a second one */
     for (uint32_t j = 0; j < f->listCount; j++) {
-        if (f->lists[j].tsMask & (1u << index)) {
+        if (rhi_ts_has(f->lists[j].tsMask, index)) {
             return;
         }
     }
     ID3D12GraphicsCommandList_EndQuery(c->cl, f->tsHeap, D3D12_QUERY_TYPE_TIMESTAMP, index);
-    c->tsMask |= 1u << index;
+    rhi_ts_add(c->tsMask, index);
 }
 
 /* The list's stamps into the slot's readback buffer, in runs of
@@ -168,17 +168,17 @@ void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index)
 static void dx_resolve_timestamps(DxCmdList *c)
 {
     DxFrame *f = dx_cur_frame();
-    uint32_t m = c->tsMask;
-    if (!m || !f->tsHeap || !f->tsRead) {
+    const uint32_t *m = c->tsMask;
+    if (!f->tsHeap || !f->tsRead) {
         return;
     }
     for (uint32_t i = 0; i < RHI_MAX_TIMESTAMPS;) {
-        if (!(m & (1u << i))) {
+        if (!rhi_ts_has(m, i)) {
             i++;
             continue;
         }
         uint32_t n = 0;
-        while (i + n < RHI_MAX_TIMESTAMPS && (m & (1u << (i + n)))) {
+        while (i + n < RHI_MAX_TIMESTAMPS && rhi_ts_has(m, i + n)) {
             n++;
         }
         ID3D12GraphicsCommandList_ResolveQueryData(c->cl, f->tsHeap, D3D12_QUERY_TYPE_TIMESTAMP, i,
@@ -194,15 +194,20 @@ static void dx_collect_timestamps(DxFrame *f)
 {
     g_dx.tsCount = 0;
     memset(g_dx.tsResult, 0, sizeof(g_dx.tsResult));
-    const uint32_t m = f->tsWritten;
-    f->tsWritten = 0;
-    if (!m || !g_dx.timestamps || !f->tsMapped || g_dx.deviceLost || !g_dx.fence ||
+    uint32_t m[RHI_TIMESTAMP_WORDS];
+    uint32_t any = 0;
+    for (uint32_t w = 0; w < RHI_TIMESTAMP_WORDS; w++) {
+        m[w] = f->tsWritten[w];
+        any |= m[w];
+    }
+    memset(f->tsWritten, 0, sizeof(f->tsWritten));
+    if (!any || !g_dx.timestamps || !f->tsMapped || g_dx.deviceLost || !g_dx.fence ||
         ID3D12Fence_GetCompletedValue(g_dx.fence) < f->fenceValue) {
         return;
     }
     const uint64_t freq = g_dx.tsFreq;
     for (uint32_t i = 0; i < RHI_MAX_TIMESTAMPS; i++) {
-        if (m & (1u << i)) {
+        if (rhi_ts_has(m, i)) {
             const uint64_t t = f->tsMapped[i];
             if (t) {
                 g_dx.tsResult[i] = t / freq * 1000000000ull + t % freq * 1000000000ull / freq;
@@ -418,8 +423,10 @@ void rhi_submit(RhiCommandList cl)
         ID3D12CommandList *lists[1] = {(ID3D12CommandList *)c->cl};
         ID3D12CommandQueue_ExecuteCommandLists(g_dx.queue, 1, lists);
         g_dx.counts.submits++;
-        dx_cur_frame()->tsWritten |=
-            c->tsMask; /* resolved by the list, read at the slot's recycle */
+        /* resolved by the list, read at the slot's recycle */
+        for (uint32_t w = 0; w < RHI_TIMESTAMP_WORDS; w++) {
+            dx_cur_frame()->tsWritten[w] |= c->tsMask[w];
+        }
     }
     dx_cur_frame()->fenceValue = dx_signal();
     dx_note_submit(dx_cur_frame()->fenceValue);

@@ -963,14 +963,35 @@ void rhi_get_stats(RhiStats *out);
  * Vulkan: query pools.  D3D12: a timestamp query heap and a readback
  * buffer per slot (rhi_timestamps_supported is false when the queue has no
  * tick frequency or the heap fails; the calls then do nothing and read 0).
+ * 256 a slot: the renderer's list and effect stamps (the first 32) and one
+ * per pass of the replays it times pass by pass (port/render/rd_perf.c,
+ * RD_PERF_TS_PASS0); a pool or heap of 256 queries is 2 KB a slot, and a
+ * slot's results are read only up to the highest index written.  The
+ * indices written are kept as bit sets of RHI_TIMESTAMP_WORDS words
+ * (rhi_ts_has, rhi_ts_add).
  *
  * RHI_TIMESTAMP_KEEP_BARRIERS or-ed into the index: the image barriers the
  * backend holds back to send with the next command (vk_cmd.c
  * vkr_image_barrier) stay held back, as a timestamp needs none of them; so
  * the barriers recorded are those of a list without the timestamp.  Without
  * it they go out before the timestamp. */
-#define RHI_MAX_TIMESTAMPS 32
+#define RHI_MAX_TIMESTAMPS 256
+#define RHI_TIMESTAMP_WORDS (RHI_MAX_TIMESTAMPS / 32)
 #define RHI_TIMESTAMP_KEEP_BARRIERS 0x80000000u
+
+/* index i in a bit set of timestamp indices (uint32_t[RHI_TIMESTAMP_WORDS]) */
+static inline bool rhi_ts_has(const uint32_t *set, uint32_t i)
+{
+    return i < RHI_MAX_TIMESTAMPS && ((set[i >> 5] >> (i & 31u)) & 1u) != 0;
+}
+
+static inline void rhi_ts_add(uint32_t *set, uint32_t i)
+{
+    if (i < RHI_MAX_TIMESTAMPS) {
+        set[i >> 5] |= 1u << (i & 31u);
+    }
+}
+
 bool rhi_timestamps_supported(void);
 void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index);
 uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max);
