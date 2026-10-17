@@ -883,7 +883,7 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
     RhiPipeline batchPipe[8];
     float batchMs[8];
     BatchWait bw = {0, 0, 0};
-    RhiPipelineBatch batch = {batchWait, &bw, batchMs, 0};
+    RhiPipelineBatch batch = {batchWait, &bw, batchMs, 0, 0};
     pipelineDesc(&c, c.psColor, CF, DF, &noColor, &dsDecr, "stencilDecr", 0u, &batchDesc[0]);
     pipelineDesc(&c, c.psColor, CF, DF, &noColor, &dsReplace, "stencilRep", 0u, &batchDesc[1]);
     pipelineDesc(&c, c.psColor, CF, DF, &noColor, &dsIncr, "stencilIncr", 0u, &batchDesc[2]);
@@ -1112,8 +1112,8 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
                                  RHI_STORE_STORE,
                                  false};
         rp.colorCount = 1;
-        rp.depth = (RhiDepthAttachment){depth, RHI_LOAD_CLEAR, RHI_LOAD_CLEAR,  0.0f,
-                                        0,     false,          RHI_STORE_STORE, RHI_STORE_STORE};
+        rp.depth = (RhiDepthAttachment){depth, RHI_LOAD_CLEAR,  RHI_LOAD_CLEAR,  0.0f, 0,
+                                        false, RHI_STORE_STORE, RHI_STORE_STORE, false};
         rp.width = W;
         rp.height = H;
         rhi_cmd_begin_label(cl, "scene");
