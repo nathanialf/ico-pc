@@ -130,8 +130,10 @@ missing.
 ## Sound that crackles or cuts out
 
 The game keeps its sound playing on its own while a scene loads or the
-picture takes a moment, so the sound carries on through short pauses. If
-you still hear crackling or gaps, send `ico-pc.log` from that run (if you
+picture takes a moment, so the sound carries on through short pauses. When
+the game itself stops for longer (a long load on a slow phone), the sound
+pauses with it, so it never runs ahead of the game. If you still hear
+crackling or gaps, send `ico-pc.log` from that run (if you
 have started the game again since, it is `ico-pc-previous.log`) with a
 [problem report](#send-a-problem-report): every ten seconds the log counts
 the moments the sound could not keep up. A short click when you go from one
@@ -140,8 +142,11 @@ the PlayStation 2; the log writes down how loud each one was.
 
 ## The game is slow on an older graphics card
 
-If the game stutters, or your graphics card is always at full load, these
-settings lower the load the most (Options):
+When the graphics card cannot draw every picture in time, the game keeps
+its normal speed (with the sound on) and leaves some pictures out, so it
+looks less smooth instead of slowing down. If the game stutters, or your
+graphics card is always at full load, these settings lower the load the
+most (Options):
 
 - **Frame rate** Original draws one picture per game step, as on the PS2,
   instead of also drawing the pictures in between: about half the work.

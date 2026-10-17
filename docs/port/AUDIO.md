@@ -646,7 +646,9 @@ On the game's clock `ico_audio_host_vsync(hz)` renders `ico_audio_host_frames(hz
 every vsync at 50 Hz; at 59.94 Hz 800.8 on average, spread exactly over every five vsyncs as 800
 801 801 801 801 (48000 x 1001 / 60000 per vsync, rounded by the running total)
 (`port/audio/audio_host.c` (`ico_audio_host_frames`)). The count depends on the rate and the vsync
-count alone.
+count alone. On both clocks `ico_audio_host_vsync` first hands that count to the output
+(`ico_audio_sdl_game_step`): the game's frames, which the device's render may lead by its bound at
+most ([The pull path](#the-pull-path)).
 
 ### The output's clock
 
