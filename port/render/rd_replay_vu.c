@@ -317,8 +317,8 @@ static uint8_t vuLegacyFs(uint8_t fs)
 
 /* One VU draw call under the planned passes of state s.  vs: the vertex
  * shader, RD_VS_VU_MAIN or RD_VS_VU_PARTICLE_MAIN for a command the
- * pre-passes recorded (its pipelines carry RD_PROG_PRELIT whatever the
- * program, with vu_ps / vu_texa_ps), else the program's own entry progVs
+ * pre-passes recorded (with vu_ps / vu_texa_ps; vu_main_vs's pipelines carry
+ * RD_PROG_PRELIT whatever the program: rd_mesh.c enumerateVuDraws), else the program's own entry progVs
  * with vu_legacy_ps / vu_legacy_texa_ps, which the draw also takes when the
  * main shader's pipeline cannot be made.  The planned passes keep vu_ps's
  * ids (fillDrawCB and the pass expansion read them); the pipeline's key
@@ -358,7 +358,9 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     const uint8_t vuExt = rd__vu_draw_ext(vcb->draw[2]);
 #endif
     for (int i = 0; i < npl; i++) {
-        pl[i].key.gs.program = recorded ? RD_PROG_PRELIT : prog;
+        /* the meshes' main shader serves every program (RD_PROG_PRELIT);
+         * the sprites' keeps the particles' program */
+        pl[i].key.gs.program = vs == RD_VS_VU_MAIN ? RD_PROG_PRELIT : prog;
         pl[i].key.vs = vs;
 #ifndef RD_HAVE_VU_STAGE_KEY
         pl[i].key.vuExt = recorded ? 0u : vuExt;
