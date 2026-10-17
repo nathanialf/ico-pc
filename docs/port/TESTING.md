@@ -70,8 +70,12 @@ shard and no shard is empty
 ## Test programs by area
 
 One line per program, from its first comment; the ctest names follow where they differ from the
-program's. Variants (`_nodual`, `_mali`, `_minlimits`, `_storage`, `_fixed`, `_d24s8`) rerun a
-program under an environment switch ([Environment switches](#environment-switches)).
+program's. Variants (`_nodual`, `_mali`, `_minlimits`, `_storage`, `_fixed`, `_d24s8`, `_static`) rerun a
+program under an environment switch ([Environment switches](#environment-switches)). `_static`
+(`rd_pixel_static`, `rd_mesh_static.1of4`: `ICO_VK_FAKE_NO_DYNAMIC=1`) draws with every pipeline
+static, so the start-up set's membership checks (`rd__pipe_key_equal`) compare whole keys, as on
+D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `rd_mesh`'s shard 1 of
+4, the one with the `gpu_prims` case.
 
 ### port/audio/test
 
@@ -458,7 +462,10 @@ program under an environment switch ([Environment switches](#environment-switche
   nothing, `testAlphaMerge`), the start-up set's VU keys by variant and with the VU vertex
   pre-pass (`testEnumerationVu`, `testEnumerationPrepass`: every program entry's key without the
   pre-pass has its `vu_tri_vs` twin with it, and the keys a phone made on first use, `vu_tri_vs`
-  blend 4 and 12 under Z ALWAYS and the UI sprite under Z GEQUAL, are in the set), and a dump's menu text sheets loading as the renderer makes them, a sheet with its halo made on
+  blend 4 and 12 under Z ALWAYS and the UI sprite under Z GEQUAL, are in the set), the tile-based
+  profile's set against the desktop one, static, with dynamic depth and with dynamic depth and
+  blend, with and without local read (`testTilerSet`: the desktop keys and exactly DATE's, the fog's
+  local key and the fold key, none twice; printed beside the careful-set target), and a dump's menu text sheets loading as the renderer makes them, a sheet with its halo made on
 - `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, each in a child process; the symbolizer, the report file and `ico_log_limited` (above)
 - `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and a text texture
   that could not be uploaded named once in the log, the game's own textures never

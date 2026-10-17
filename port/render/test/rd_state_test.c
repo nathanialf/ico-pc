@@ -1589,6 +1589,148 @@ static void testDynamicNormalise(RdPipeKeyInt *keys)
     rd__set_vu_prepass(keepPrepass);
 }
 
+/* The tiler profile's start-up set (RENDER.md "The device profile"): the
+ * desktop set (the profile all off, as without a device) against the
+ * tile-based one with local read (dateStencil, fogLocal, blurFold, the
+ * DATE, fog and fold shaders given stand-in ids: no device here) and
+ * without it (blurFold alone), static, with dynamic depth (Vulkan 1.3
+ * without VK_EXT_extended_dynamic_state3: the Adreno 740's careful set)
+ * and with dynamic depth and blend.  The tiler set is the desktop set and
+ * exactly its own keys: DATE's (the screen families' twins, the VU keys'
+ * TEST1 twins, the two setup keys), the fog's local key and the fold key,
+ * none twice.  rd__enumerate_reachable_date's screen twins are at most 7
+ * (Z test, Z write, mask) combinations of its four TEST words (0x3400D
+ * ALWAYS, Z write on and off; 0x3F000 the same under DATM 1; 0x3F001 mask
+ * 7 without Z write; 0x5C000 GEQUAL, on and off) x 4 blend paths x 2
+ * prims x 2 spaces x 2 fragment shaders = 224, its VU twins at most the
+ * static set's GEQUAL VU keys; a DATE twin's depth stays static
+ * (rd__key_dynamic_bits: no stencil mode), so dynamic depth leaves the DATE
+ * part as it is.  Printed, with the plan's careful-set target (about
+ * 150-200 keys with dynamic depth and no EDS3) beside them. */
+static bool isVuVs(uint8_t vs)
+{
+    return (vs >= RD_VS_VU_FIRST && vs <= RD_VS_VU_LAST) || rd__vs_is_vu_main(vs);
+}
+
+static bool isDateStencil(uint8_t m)
+{
+    return m == RD_STENCIL_DATE_CLEAR || m == RD_STENCIL_DATE_SET || m == RD_STENCIL_DATE_TEST0 ||
+           m == RD_STENCIL_DATE_TEST1;
+}
+
+static void testTilerSet(RdPipeKeyInt *keys)
+{
+    static RdPipeKeyInt desk[RD_PIPELINE_REACHABLE_MAX];
+    static RdPipeKeyInt bare[RD_PIPELINE_REACHABLE_MAX];
+    static const uint16_t kFs[4] = {RD_FS_DATE_STENCIL, RD_FS_DATE_CLEAR, RD_FS_FOG_LOCAL,
+                                    RD_FS_FX_BLUR2};
+    const RdProfile keepProfile = g_rd.profile;
+    const bool keepD = g_rd.dynDepth, keepB = g_rd.dynBlend, keepPrepass = g_rd.vuPrepass;
+    RhiShader keepFs[4];
+    for (int i = 0; i < 4; i++) {
+        keepFs[i] = g_rd.fs[kFs[i]];
+        if (g_rd.fs[kFs[i]].id == 0) {
+            g_rd.fs[kFs[i]].id = 0x7F000000u + (uint32_t)i; /* stand-ins: never made */
+        }
+    }
+    rd__set_vu_prepass(true);
+    static const char *const kMode[3] = {"static", "dynamic depth", "dynamic depth and blend"};
+    uint32_t vuGeq = 0, date0 = 0, withLocal[3] = {0}, without[3] = {0};
+    for (int mode = 0; mode < 3; mode++) {
+        g_rd.dynDepth = mode >= 1;
+        g_rd.dynBlend = mode == 2;
+        memset(&g_rd.profile, 0, sizeof(g_rd.profile));
+        const uint32_t nd = rd__enumerate_reachable(desk, RD_PIPELINE_REACHABLE_MAX);
+        if (mode == 0) {
+            for (uint32_t i = 0; i < nd && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+                const RdPipeKeyInt *k = &desk[i];
+                vuGeq += isVuVs(k->vs) && k->depthFmt != RHI_FMT_UNKNOWN &&
+                         k->gs.stencil == RD_STENCIL_OFF && k->gs.ztst == RD_ZTST_GEQUAL &&
+                         k->dst == RHI_DST_READ_NONE;
+            }
+        }
+        /* a tile-based GPU without local read: the fold alone */
+        g_rd.profile.tiler = true;
+        g_rd.profile.blurFold = true;
+        const uint32_t nb = rd__enumerate_reachable(bare, RD_PIPELINE_REACHABLE_MAX);
+        /* ... and with it: DATE through the stencil bit, the fog's local read */
+        g_rd.profile.localRead = true;
+        g_rd.profile.dateStencil = true;
+        g_rd.profile.fogLocal = true;
+        const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
+        uint32_t dateScreen = 0, dateVu = 0, setup = 0, fogLocal = 0, fold = 0, other = 0;
+        uint32_t dup = 0, missing = 0, foldBare = 0, otherBare = 0;
+        for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+            const RdPipeKeyInt *k = &keys[i];
+            for (uint32_t j = i + 1; j < n && j < RD_PIPELINE_REACHABLE_MAX; j++) {
+                dup += rd__pipe_key_equal(k, &keys[j]);
+            }
+            if (keyIn(desk, nd, k)) {
+                continue;
+            }
+            if (isDateStencil(k->gs.stencil)) {
+                const bool s =
+                    k->gs.stencil == RD_STENCIL_DATE_CLEAR || k->gs.stencil == RD_STENCIL_DATE_SET;
+                setup += s;
+                dateVu += !s && isVuVs(k->vs);
+                dateScreen += !s && !isVuVs(k->vs);
+            } else if (k->fs == RD_FS_FOG_LOCAL) {
+                fogLocal++;
+            } else if (k->fs == RD_FS_FX_BLUR2) {
+                fold++;
+            } else {
+                other++;
+            }
+        }
+        for (uint32_t i = 0; i < nd && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+            missing += !keyIn(keys, n, &desk[i]) || !keyIn(bare, nb, &desk[i]);
+        }
+        for (uint32_t i = 0; i < nb && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+            if (!keyIn(desk, nd, &bare[i])) {
+                foldBare += bare[i].fs == RD_FS_FX_BLUR2;
+                otherBare += bare[i].fs != RD_FS_FX_BLUR2;
+            }
+        }
+        const uint32_t date = dateScreen + dateVu + setup;
+        if (mode == 0) {
+            date0 = date;
+        }
+        withLocal[mode] = n;
+        without[mode] = nb;
+        printf("  tiler set, %s: %u keys with local read = desktop %u + DATE %u (screen %u, VU "
+               "%u, setup %u) + fog local %u + fold %u; %u without local read (the fold alone)\n",
+               kMode[mode], n, nd, date, dateScreen, dateVu, setup, fogLocal, fold, nb);
+        CHECK(n < RD_PIPELINE_REACHABLE_MAX && nb < RD_PIPELINE_REACHABLE_MAX,
+              "tiler %s: %u and %u keys under %d", kMode[mode], n, nb, RD_PIPELINE_REACHABLE_MAX);
+        CHECK(dup == 0 && missing == 0 && other == 0 && otherBare == 0,
+              "tiler %s: %u keys twice, %u desktop keys missing, %u (and %u) keys of no tiler "
+              "family",
+              kMode[mode], dup, missing, other, otherBare);
+        CHECK(n == nd + date + fogLocal + fold && setup == 2 && fogLocal == 1 && fold == 1 &&
+                  nb == nd + 1 && foldBare == 1,
+              "tiler %s: %u = %u + %u + %u + %u (setup %u), without local read %u = %u + 1",
+              kMode[mode], n, nd, date, fogLocal, fold, setup, nb, nd);
+        CHECK(dateScreen > 0 && dateScreen <= 224u && dateVu > 0 && dateVu <= vuGeq,
+              "tiler %s: DATE screen twins %u (at most 224), VU twins %u (at most %u)", kMode[mode],
+              dateScreen, dateVu, vuGeq);
+        CHECK(mode != 1 || date == date0,
+              "dynamic depth: DATE's part %u, static %u (its depth "
+              "stays static)",
+              date, date0);
+        CHECK(mode != 2 || date < date0, "dynamic blend: DATE's part %u, static %u", date, date0);
+    }
+    printf("  the careful-set target (about 150-200 keys, dynamic depth without EDS3): %u "
+           "without local read, %u with it (static %u / %u, dynamic depth and blend %u / %u)\n",
+           without[1], withLocal[1], without[0], withLocal[0], without[2], withLocal[2]);
+    for (int i = 0; i < 4; i++) {
+        g_rd.fs[kFs[i]] = keepFs[i];
+    }
+    g_rd.profile = keepProfile;
+    g_rd.dynDepth = keepD;
+    g_rd.dynBlend = keepB;
+    rd__set_vu_prepass(keepPrepass);
+}
+
 static void testEnumeration(void)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_REACHABLE_MAX];
@@ -1622,6 +1764,7 @@ static void testEnumeration(void)
           sheet);
     testEnumerationVu(keys);
     testDynamicNormalise(keys);
+    testTilerSet(keys);
 }
 
 /* The native frame's region scale (rd__region_scale, FrameCB g_frame.x):

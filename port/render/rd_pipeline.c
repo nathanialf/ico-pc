@@ -2610,10 +2610,15 @@ uint32_t rd__enumerate_reachable_date(RdPipeKeyInt *out, uint32_t max, uint32_t 
         !g_rd.fs[RD_FS_DATE_CLEAR].id) {
         return n;
     }
-    static const uint64_t kTests[] = {RD_TEST_AT_GT0_DATE0,        RD_TEST_DATE0,
-                                      RD_TEST_AT_ALWAYS_DATE0,     RD_TEST_RGBONLY_DATE1,
+    /* one TEST word and one blend for each key they plan to, so no
+     * candidate is planned only to be found twice: RD_TEST_DATE0 (ATE off)
+     * and RD_TEST_AT_ALWAYS_DATE0 (ATE ALWAYS) plan to RD_TEST_AT_GT0_DATE0's
+     * keys (AFAIL KEEP: one pass, the test in its modeZ, not in the key);
+     * the families' blends 0, 1, 2 and 7 to 5, 6, 4 and 4 (canonicalBlend:
+     * one key per blend path, FIX in the pass's flags) */
+    static const uint64_t kTests[] = {RD_TEST_AT_GT0_DATE0, RD_TEST_RGBONLY_DATE1,
                                       RD_TEST_NEVER_RGBONLY_DATE1, RD_TEST_DATE1_Z_GEQUAL};
-    static const int kBlends[] = {-1, 0, 1, 2, 4, 5, 6, 7};
+    static const int kBlends[] = {-1, 4, 5, 6};
     static const uint8_t kPrims[] = {RD_PRIM_TRIANGLES, RD_PRIM_LINES};
     const uint32_t n0 = n < max ? n : max;
     for (size_t t = 0; t < sizeof(kTests) / sizeof(kTests[0]); t++) {
