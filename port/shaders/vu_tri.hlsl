@@ -7,8 +7,9 @@
 //   vu_tri_rule_pre_vs   one point a triangle (kick vu_rec.z + 2 + id): its
 //                        verdict up to the tick cameras, its STQ planes
 //                        (record slot A)
-//   vu_tri_tick_pre_vs   one tick camera's test (vu_tri.w) a triangle
-//                        (slot C, x or y by the colour mask)
+//   vu_tri_tick_pre_vs   one tick camera's test (vu_tri.w) a triangle the
+//                        blended camera drops (slot C, x or y by the
+//                        colour mask)
 //   vu_tri_planes_pre_vs its colour planes and the STQ planes' change down
 //                        (slot B)
 //   vu_main_vs           the triangle kick-2, kick-1, kick of every mesh
@@ -16,35 +17,10 @@
 //                        value kick * 4 + corner, as the program's own entry
 //                        draws it: the corner from the vertex record, the
 //                        verdict and the planes from the triangle's
-//   vu_tri_vs            the same from the vertex records alone, vu_mesh_out
-//                        in each corner (the fallback's twin, kept for its
-//                        id)
 // The program's choices come from VuCB (vu_rec.w: the clip mode,
 // VU_TRI_CHAIN, VU_TRI_HIDE; vu_lo, vu_hi: the region test's bounds) instead
 // of being written in an entry.
 #include "vu_common.hlsli"
-
-VuVSOut vu_tri_vs(uint vid : SV_VertexID)
-{
-    bool probe = (vu_draw.z & VU_F_PROBE) != 0u;
-    uint kick = vid >> 2;
-    // the triangle's first corner, or the tests' probe vertex
-    VuVtx a = vu_rec_vertex(probe ? vu_probe_vertex(vid) : kick - 2u);
-    if (probe) {
-        return vu_probe_out(vid, vu_probe_field(a, (vid / 3u) % VU_PROBE_FIELDS));
-    }
-    uint rule = vu_rec.w;
-    // a grid's marks are the draw's (vu_mark.z 0: vu_kick_marks gives
-    // vu_mark.y, what vu_grid.hlsl passes)
-    uint marks = vu_kick_marks(kick);
-    if ((rule & VU_TRI_HIDE) != 0u && vu_content_hidden(marks)) {
-        return vu_out_init();
-    }
-    VuVtx b = vu_rec_vertex(kick - 1u);
-    VuVtx c = vu_rec_vertex(kick);
-    return vu_mesh_out(a, b, c, kick, vid & 3u, marks, rule & VU_CLIP_MASK, vu_lo, vu_hi,
-                       (rule & VU_TRI_CHAIN) != 0u);
-}
 
 // --------------------------------------------------- the record stages
 
@@ -136,9 +112,15 @@ VuPreOut vu_tri_rule_pre_vs(uint id : SV_VertexID)
 
 // slot C, the component vu_tri.w (the draw's colour mask writes it alone):
 // whether tick vu_tri.w showed the triangle (vu_tick_shown), for a
-// triangle not wholly inside of a VU_F_TICKS draw in the region mode, else
-// 0; vu_main_vs reads it only where the blended camera's verdict is
-// VU_RULE_DROP
+// triangle of a VU_F_TICKS draw in the region mode the blended camera's
+// verdict can drop, else 0; vu_main_vs reads it only where that verdict
+// (slot A) is VU_RULE_DROP.  Can drop: not wholly inside, not
+// VU_F_BEHIND_EYE, and not under the card test with every corner in front
+// of the eye (VU_F_EXTENDED, vu_strip.y, every h.w > 0: vu_region_rule_cut
+// then gives VU_RULE_CLIP or VU_RULE_STRIP whatever the cut says; NaN
+// fails a comparison, so such a corner keeps the test), the conditions
+// alone, without the cut (in a wide frame most of the triangles beside the
+// picture are in front of the eye: the tick tests are left out for them)
 VuPreOut vu_tri_tick_pre_vs(uint id : SV_VertexID)
 {
     uint kick = vu_rec.z + 2u + id;
@@ -146,8 +128,10 @@ VuPreOut vu_tri_tick_pre_vs(uint id : SV_VertexID)
     VuVtx b = vu_rec_vertex(kick - 1u);
     VuVtx c = vu_rec_vertex(kick);
     uint s = 0u;
+    bool strip = (vu_draw.z & VU_F_EXTENDED) != 0u && vu_strip.y != 0u && a.h.w > 0.0 &&
+                 b.h.w > 0.0 && c.h.w > 0.0;
     if ((vu_rec.w & VU_CLIP_MASK) == VU_CLIP_REGION && (a.inside & b.inside & c.inside) == 0u &&
-        (vu_draw.z & VU_F_BEHIND_EYE) == 0u && (vu_draw.z & VU_F_TICKS) != 0u) {
+        (vu_draw.z & VU_F_BEHIND_EYE) == 0u && (vu_draw.z & VU_F_TICKS) != 0u && !strip) {
         float4 pic = vu_picture_ndc();
         float4 frame = vu_frame_ndc();
         s = vu_tick_shown(a, b, c, vu_tri.w, vu_lo, vu_hi, pic, frame);
@@ -179,9 +163,10 @@ VuPreOut vu_tri_planes_pre_vs(uint id : SV_VertexID)
 // the tick cameras' verdicts), the verdict resolved as vu_region_rule's
 // tail and vu_rule_card do, the position chosen as vu_triangle_out_pos
 // does, the chain plane's cull and distance and the later bias as
-// vu_plane_out and vu_later_out apply them; the planes stay in the record
-// (VuVSOut2.tri)
-VuVSOut2 vu_main_vs(uint vid : SV_VertexID)
+// vu_plane_out and vu_later_out apply them; the planes where they hold
+// from slots A and B (vu_rec_planes: VuVSOut's flat varyings, as the
+// program's entry hands them over)
+VuVSOut vu_main_vs(uint vid : SV_VertexID)
 {
     bool probe = (vu_draw.z & VU_F_PROBE) != 0u;
     uint kick = vid >> 2;
@@ -189,12 +174,13 @@ VuVSOut2 vu_main_vs(uint vid : SV_VertexID)
     // the corner, or the tests' probe vertex
     VuVtx me = vu_rec_vertex(probe ? vu_probe_vertex(vid) : kick - 2u + corner);
     if (probe) {
-        return vu_out2(vu_probe_out(vid, vu_probe_field(me, (vid / 3u) % VU_PROBE_FIELDS)), 0u);
+        return vu_probe_out(vid, vu_probe_field(me, (vid / 3u) % VU_PROBE_FIELDS));
     }
     uint rule = vu_rec.w;
     uint mode = rule & VU_CLIP_MASK;
-    uint f = vu_rec_buf[vu_tri.x + kick].x;
-    VuVSOut2 o = vu_out2_init(kick);
+    uint4 a0 = vu_rec_buf[vu_tri.x + kick];
+    uint f = a0.x;
+    VuVSOut o = vu_out_init();
     if ((f & VU_TF_HIDDEN) != 0u) {
         return o;
     }
@@ -257,7 +243,9 @@ VuVSOut2 vu_main_vs(uint vid : SV_VertexID)
     }
     // the planes hold where vu_attr_planes makes them
     uint planes = exact & (g_vp.x != 0.0 ? 1u : 0u);
-    o.tri = planes != 0u ? kick | VU_TF_EXACT_BIT : kick;
+    if (planes != 0u) {
+        o = vu_rec_planes(o, a0, vu_tri.x + kick, vu_tri.y + kick);
+    }
     return o;
 }
 

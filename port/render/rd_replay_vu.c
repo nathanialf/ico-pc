@@ -314,21 +314,13 @@ static void passSplit(Replay *r)
     s_splitSerial = r->passSerial;
 }
 
-/* the fallback's pixel shader of a main path's (vu_prelit.hlsl
- * vu_legacy_ps, vu_legacy_texa_ps: the planes as VuVSOut's flat varyings) */
-static uint8_t vuLegacyFs(uint8_t fs)
-{
-    return fs == RD_FS_VU_TEXA ? RD_FS_VU_LEGACY_TEXA : RD_FS_VU_LEGACY;
-}
-
 /* One VU draw call under the planned passes of state s.  vs: the vertex
  * shader, RD_VS_VU_MAIN or RD_VS_VU_PARTICLE_MAIN for a command the
- * pre-passes recorded (with vu_ps / vu_texa_ps; vu_main_vs's pipelines carry
- * RD_PROG_PRELIT whatever the program: rd_mesh.c enumerateVuDraws), else the program's own entry progVs
- * with vu_legacy_ps / vu_legacy_texa_ps, which the draw also takes when the
- * main shader's pipeline cannot be made.  The planned passes keep vu_ps's
- * ids (fillDrawCB and the pass expansion read them); the pipeline's key
- * takes the legacy twin on the fallback. */
+ * pre-passes recorded (vu_main_vs's pipelines carry RD_PROG_PRELIT whatever
+ * the program: rd_mesh.c enumerateVuDraws), else the program's own entry
+ * progVs, which the draw also takes when the main shader's pipeline cannot
+ * be made.  Both draw with vu_ps / vu_texa_ps (the planned passes' ids:
+ * VuVSOut, the planes as flat varyings either way). */
 static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBindGroup g2,
                    uint8_t prog, uint8_t vs, uint8_t progVs, RhiBuffer streamBuf,
                    uint64_t streamBufSize, uint64_t streamOff, uint64_t streamSize,
@@ -384,9 +376,6 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     r->st = *s; /* fillDrawCB reads the state the passes were planned from */
     for (int i = 0; i < np; i++) {
         RdPipeKeyInt key = dp[i].key;
-        if (!recorded) {
-            key.fs = vuLegacyFs(key.fs);
-        }
         RhiPipeline p = rd__get_pipeline(&key);
         if (!p.id && recorded && !rd__pipeline_gathering()) {
             /* the main shader's pipeline could not be made: the program's
@@ -400,7 +389,6 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
             }
             key.vs = progVs;
             key.gs.program = prog;
-            key.fs = vuLegacyFs(key.fs);
             p = rd__get_pipeline(&key);
             g_rdPerf.vuPreFallbacks++;
         }

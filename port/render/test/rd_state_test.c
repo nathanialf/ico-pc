@@ -1231,7 +1231,8 @@ static void testAa1Plans(void)
  * RD_VS_VU_PRELIT .. RD_VS_VU_PARTICLE), vu_main_vs's, vu_particle_main_vs's,
  * the pre-pass's and the record stages' */
 typedef struct VuCounts {
-    uint32_t entries, main, particleMain, pre, stages, legacy;
+    uint32_t entries, main, particleMain, pre, stages;
+    uint32_t vuPs; /* the program entries' keys drawn with vu_ps or vu_texa_ps */
 } VuCounts;
 
 static VuCounts countVu(const RdPipeKeyInt *keys, uint32_t n)
@@ -1241,7 +1242,8 @@ static VuCounts countVu(const RdPipeKeyInt *keys, uint32_t n)
     for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
         const uint8_t vs = keys[i].vs;
         c.entries += vs >= RD_VS_VU_PRELIT && vs <= RD_VS_VU_PARTICLE;
-        c.legacy += keys[i].fs == RD_FS_VU_LEGACY || keys[i].fs == RD_FS_VU_LEGACY_TEXA;
+        c.vuPs += vs >= RD_VS_VU_PRELIT && vs <= RD_VS_VU_PARTICLE &&
+                  (keys[i].fs == RD_FS_VU || keys[i].fs == RD_FS_VU_TEXA);
         c.main += vs == RD_VS_VU_MAIN;
         c.particleMain += vs == RD_VS_VU_PARTICLE_MAIN;
         c.pre += rd__vs_is_vu_pre(vs);
@@ -1334,7 +1336,7 @@ static uint32_t checkStageKeys(const RdPipeKeyInt *keys, uint32_t n, const char 
  * (rd__vu_stage_key), each once; no program entry's key (the fallback's
  * are made on first use); every program entry's key enumerated without the
  * pre-pass has its drawing twin in the set (vu_main_vs with RD_PROG_PRELIT,
- * or vu_particle_main_vs; vu_ps for vu_legacy_ps); the phone's first-use
+ * or vu_particle_main_vs; the same vu_ps or vu_texa_ps); the phone's first-use
  * keys (rc2, PowerVR: program 0 blend 4 and 12 through the triangle stage
  * fs vu_ps fmt 1/8, under Z ALWAYS) and the 2D one (program 9 blend 4,
  * sprite_ui_vs + sprite_ps, fmt 1/8, under the list head's Z GEQUAL) are
@@ -1374,8 +1376,7 @@ static void testEnumerationPrepass(RdPipeKeyInt *keys, uint32_t entriesOff)
     printf("  with the vertex pre-pass: %u keys = 2D %u + vu_main_vs %u + vu_particle_main_vs %u "
            "+ pre-pass %u + stages %u (%u without the pre-pass: 2D %u + program entries %u)\n",
            n, n2d, c.main, c.particleMain, c.pre, c.stages, nOff, nOff - entriesOff, entriesOff);
-    CHECK(c.entries == 0 && c.legacy == 0, "pre-pass: %u program entries' keys, %u legacy PS",
-          c.entries, c.legacy);
+    CHECK(c.entries == 0, "pre-pass: %u program entries' keys", c.entries);
     CHECK(c.main == 32 && c.particleMain == 32,
           "pre-pass: vu_main_vs %u, vu_particle_main_vs %u "
           "keys (32 each)",
@@ -1396,7 +1397,6 @@ static void testEnumerationPrepass(RdPipeKeyInt *keys, uint32_t entriesOff)
             t.vs = RD_VS_VU_MAIN;
             t.gs.program = RD_PROG_PRELIT;
         }
-        t.fs = t.fs == RD_FS_VU_LEGACY_TEXA ? RD_FS_VU_TEXA : RD_FS_VU;
         twins++;
         if (!keyIn(keys, n, &t)) {
             if (missing++ < 4) {
@@ -1452,8 +1452,8 @@ static void testEnumerationPrepass(RdPipeKeyInt *keys, uint32_t entriesOff)
 }
 
 /* The VU keys of the start-up set (rd__enumerate_reachable_vu) without the
- * vertex pre-pass: the eleven program entries with the legacy pixel
- * shaders, 16 keys each, whatever the preset (one module set: no variant);
+ * vertex pre-pass: the eleven program entries with vu_ps and vu_texa_ps,
+ * 16 keys each, whatever the preset (one module set: no variant);
  * then with it (testEnumerationPrepass). */
 static void testEnumerationVu(RdPipeKeyInt *keys)
 {
@@ -1469,12 +1469,13 @@ static void testEnumerationVu(RdPipeKeyInt *keys)
     g_rd.settings.interpolate = 1;
     n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
     const VuCounts e = countVu(keys, n);
-    printf("  VU keys without the pre-pass: Original %u (legacy PS %u), Enhanced with "
+    printf("  VU keys without the pre-pass: Original %u (vu_ps or vu_texa_ps %u), Enhanced with "
            "interpolation %u\n",
-           o.entries, o.legacy, e.entries);
-    CHECK(o.entries == 11u * 16u && o.legacy == o.entries && vuTotal(&o) == o.entries,
-          "without the pre-pass: %u program entries' keys (%u legacy PS; 176 wanted)", o.entries,
-          o.legacy);
+           o.entries, o.vuPs, e.entries);
+    CHECK(o.entries == 11u * 16u && o.vuPs == o.entries && vuTotal(&o) == o.entries,
+          "without the pre-pass: %u program entries' keys (%u with vu_ps or vu_texa_ps; 176 "
+          "wanted)",
+          o.entries, o.vuPs);
     CHECK(e.entries == o.entries && vuTotal(&e) == vuTotal(&o),
           "the VU keys do not depend on the state (%u, %u)", o.entries, e.entries);
     g_rd.settings.preset = RD_PRESET_ORIGINAL;

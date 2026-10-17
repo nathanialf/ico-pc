@@ -40,7 +40,7 @@
  * The pipelines of both replays are made first on the worker threads (two
  * replays that draw nothing name them, rd__pipeline_gather;
  * rd__pipeline_create_gathered).  The frame is replayed without the
- * pre-passes (the programs' entries with vu_legacy_ps: the reference) and
+ * pre-passes (the programs' entries: the reference) and
  * with them, and the block is read back after each.  The pre-passes pass
  * when their replay drew every command through them (two passes, the draws
  * the frame's commands make: a vertex draw a mesh, two a particle command,

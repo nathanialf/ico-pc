@@ -267,18 +267,20 @@ VuPreOut vu_particle_pre_vs(uint id : SV_VertexID)
 }
 
 // Sprite vid / 6 as vu_particle_vs draws it, its drop verdict and planes
-// from its record (slot A's flags; vu_ps reads the planes)
-VuVSOut2 vu_particle_main_vs(uint vid : SV_VertexID)
+// from its record (slot A's flags; the planes from slots A and B,
+// vu_rec_planes)
+VuVSOut vu_particle_main_vs(uint vid : SV_VertexID)
 {
     // the particle, or the tests' probe particle
     bool probe = (vu_draw.z & VU_F_PROBE) != 0u;
     VuSprite s = vu_particle(probe ? vu_probe_vertex(vid) : vid / 6u);
     if (probe) {
-        return vu_out2(vu_probe_out(vid, vu_particle_probe(s, (vid / 3u) % VU_PROBE_FIELDS)), 0u);
+        return vu_probe_out(vid, vu_particle_probe(s, (vid / 3u) % VU_PROBE_FIELDS));
     }
     uint i = vid / 6u;
-    VuVSOut2 o = vu_out2_init(i);
-    uint f = vu_rec_buf[vu_tri.x + i].x;
+    VuVSOut o = vu_out_init();
+    uint4 a0 = vu_rec_buf[vu_tri.x + i];
+    uint f = a0.x;
     if ((f & VU_TF_KEPT) == 0u) {
         return o;
     }
@@ -289,6 +291,8 @@ VuVSOut2 vu_particle_main_vs(uint vid : SV_VertexID)
     o.pos = vu_gs_position(right ? s.c1x : s.c0x, down ? s.c1y : s.c0y, s.c1z, false);
     o.col = float4(s.rgba);
     o.stq = float3(right ? s.st.z : s.st.x, down ? s.st.w : s.st.y, 1.0);
-    o.tri = (f & VU_TF_EXACT) != 0u ? i | VU_TF_EXACT_BIT : i;
+    if ((f & VU_TF_EXACT) != 0u) {
+        o = vu_rec_planes(o, a0, vu_tri.x + i, vu_tri.y + i);
+    }
     return o;
 }

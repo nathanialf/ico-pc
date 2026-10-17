@@ -64,7 +64,7 @@
  *           probe and pictures drawn again through vu_main_vs (or
  *           vu_particle_main_vs) and vu_ps with VuCB's vu_rec, vu_lo, vu_hi
  *           and vu_tri as rd_replay_vu.c sets them (triRule): byte for byte
- *           the program entry's probe and pictures (with vu_legacy_ps), and
+ *           the program entry's probe and pictures (also with vu_ps), and
  *           the probe within (1)'s bounds of the CPU reference; the counts
  *           of mesh, particle and tick-camera cases printed, none may be
  *           zero.  The plain variants are compared with the extended ones
@@ -2506,10 +2506,9 @@ static int gpuTests(void)
     RhiBindGroupLayout l2 = rhi_create_bind_group_layout(&(RhiBindGroupLayoutDesc){s2, 3, "tex"});
     const RhiBindGroupLayout lay[3] = {l0, l1, l2};
 
-    /* the programs' entries draw with vu_legacy_ps (VuVSOut's planes), the
-     * main shaders with vu_ps (the record's) */
-    RhiShader probePs = makeShader("vu_probe_ps"), legacyPs = makeShader("vu_legacy_ps");
-    RhiShader vuPs = makeShader("vu_ps");
+    /* the programs' entries and the main shaders draw with vu_ps (VuVSOut's
+     * planes as flat varyings: the main shaders read them from the record) */
+    RhiShader probePs = makeShader("vu_probe_ps"), vuPs = makeShader("vu_ps");
     RhiShader spriteVs = makeShader("sprite_world_vs"), spritePs = makeShader("sprite_ps");
     RhiPipeline pSprite =
         makePipeline(spriteVs, spritePs, lay, 1, RHI_FMT_RGBA8_UNORM, "ref sprite");
@@ -2520,15 +2519,14 @@ static int gpuTests(void)
     for (int i = 0; i < NCASES; i++) {
         RhiShader vs = makeShader(kCases[i].vs);
         pProbe[i] = makePipeline(vs, probePs, lay, 0, RHI_FMT_RGBA8_UINT, kCases[i].name);
-        pDraw[i] = makePipeline(vs, legacyPs, lay, 0, RHI_FMT_RGBA8_UNORM, kCases[i].name);
+        pDraw[i] = makePipeline(vs, vuPs, lay, 0, RHI_FMT_RGBA8_UNORM, kCases[i].name);
         pProbePlain[i] = pDrawPlain[i] = (RhiPipeline){0};
         if (kCases[i].prog != P_PARTICLE) {
             char pn[64];
             plainName(kCases[i].vs, pn, sizeof(pn));
             RhiShader vsp = makeShader(pn);
             pProbePlain[i] = makePipeline(vsp, probePs, lay, 0, RHI_FMT_RGBA8_UINT, kCases[i].name);
-            pDrawPlain[i] =
-                makePipeline(vsp, legacyPs, lay, 0, RHI_FMT_RGBA8_UNORM, kCases[i].name);
+            pDrawPlain[i] = makePipeline(vsp, vuPs, lay, 0, RHI_FMT_RGBA8_UNORM, kCases[i].name);
         }
     }
     int plainCases = 0; /* the cases the plain variant drew, byte for byte the extended's */
@@ -2934,7 +2932,7 @@ static int gpuTests(void)
          * particle case's sprites, slots A and B) once into the record's row
          * 0, a mesh case's triangles' slots A, B and C into row 1 over them,
          * then its probe and pictures through the main shader and vu_ps,
-         * byte for byte the program entry's with vu_legacy_ps */
+         * byte for byte the program entry's */
         if (c->prog == P_PARTICLE || pPre[ci].id) {
             const int sprite = c->prog == P_PARTICLE;
             const uint32_t kicks = sprite || nvert < 3 ? 0u : (uint32_t)nvert - 2u;

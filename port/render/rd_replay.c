@@ -76,7 +76,7 @@ static const char *const s_vsNames[RD_VS_COUNT] = {
     "sprite_ui_vs" /* indexed by RD_VS_* */, "sprite_world_vs", "blit_vs", "blend_int_vs",
     "vu_prelit_vs", "vu_lit_vs", "vu_lit_spec_vs", "vu_reflect_vs", "vu_skin_vs", "vu_skin_spec_vs",
     "vu_skin_debug_vs", "vu_grid_vs", "vu_grid_lit_vs", "vu_grid_spec_vs", "vu_particle_vs",
-    "vu_tri_vs", "fx_rect_vs", "sprite_aa1_ui_vs", "sprite_aa1_world_vs", "sprite_stq_ui_vs",
+    "fx_rect_vs", "sprite_aa1_ui_vs", "sprite_aa1_world_vs", "sprite_stq_ui_vs",
     "sprite_stq_world_vs", "crt_vs", "sprite_plane_ui_vs", "sprite_plane_world_vs",
     "sprite_stq_plane_ui_vs", "sprite_stq_plane_world_vs", "vu_prelit_pre_vs", "vu_lit_pre_vs",
     "vu_lit_spec_pre_vs", "vu_reflect_pre_vs", "vu_skin_pre_vs", "vu_skin_spec_pre_vs",
@@ -97,9 +97,8 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     "crt_blur_ps", "crt_ps", "sprite_texa_ps", "vu_texa_ps", "blit_depth_ps", "fog_lut_buffer_ps",
     "aa_reduce_ps", "fog_lut_ms_ps", "depth_resolve_ps", "depth_upsample_ps", "vu_pre_ps",
     /* RD_FS_OPTIONAL_FIRST on */
-    "vu_legacy_ps", "vu_legacy_texa_ps", "sprite_ps_planes", "sprite_texa_ps_planes",
-    "sprite_stq_ps_planes", "fog_lut_local_ps", "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps",
-    "date_stencil_ps"};
+    "sprite_ps_planes", "sprite_texa_ps_planes", "sprite_stq_ps_planes", "fog_lut_local_ps",
+    "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps", "date_stencil_ps"};
 
 const char *rd__fs_name(uint8_t fs)
 {
@@ -3056,8 +3055,8 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
     const int fs = dp->key.fs;
     const int stqTexa = (fs == RD_FS_SPRITE_STQ || fs == RD_FS_SPRITE_STQ_PLANES) &&
                         rd__gs_filter_int(&r->st) && rd__texa_per_texel(&r->st);
-    const int perTexel = fs == RD_FS_SPRITE_TEXA || fs == RD_FS_VU_TEXA ||
-                         fs == RD_FS_SPRITE_TEXA_PLANES || fs == RD_FS_VU_LEGACY_TEXA || stqTexa;
+    const int perTexel =
+        fs == RD_FS_SPRITE_TEXA || fs == RD_FS_VU_TEXA || fs == RD_FS_SPRITE_TEXA_PLANES || stqTexa;
     if (perTexel) {
         /* the sampler state the TEXA shaders' four-tap filter reproduces
          * (and sprite_stq_ps's, for GS levels under such a TEXA);

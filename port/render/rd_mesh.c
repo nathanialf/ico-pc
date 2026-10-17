@@ -2453,9 +2453,9 @@ void rd_draw_vu_particles(const RdVuParticleDraw *d, RdKey key)
  * made on first use stalls the picture about 750 ms): 32 keys each.  The
  * program entries draw only the fallback then (the plain or extended
  * module, g_rd.vsFallback), made on first use.  Without the pre-pass every
- * VU draw is the old way: the eleven program entries with the legacy pixel
- * shaders (vu_legacy_ps, vu_legacy_texa_ps) under the three tests above,
- * 16 keys each. */
+ * VU draw is the old way: the eleven program entries under the three tests
+ * above, 16 keys each.  Both ways draw with vu_ps and vu_texa_ps (VuVSOut:
+ * the planes as flat varyings). */
 static uint32_t enumerateVuDraws(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 {
     static const uint64_t kTests[] = {RD_TEST_Z_GEQUAL, RD_TEST_AT_GT64_FBONLY,
@@ -2483,8 +2483,6 @@ static uint32_t enumerateVuDraws(RdPipeKeyInt *out, uint32_t max, uint32_t n)
     }
     /* Z ALWAYS (the last test) for the record path's two shaders only */
     const size_t nt = sizeof(kTests) / sizeof(kTests[0]) - (g_rd.vuPrepass ? 0u : 1u);
-    const uint8_t fsPlain = g_rd.vuPrepass ? RD_FS_VU : RD_FS_VU_LEGACY;
-    const uint8_t fsTexa = g_rd.vuPrepass ? RD_FS_VU_TEXA : RD_FS_VU_LEGACY_TEXA;
     for (uint32_t v = 0; v < nv; v++) {
         for (size_t t = 0; t < nt; t++) {
             for (int zw = 0; zw < 2; zw++) {
@@ -2499,12 +2497,12 @@ static uint32_t enumerateVuDraws(RdPipeKeyInt *out, uint32_t max, uint32_t n)
                     int np = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD,
                                                   RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
                     /* vu_ps and, for a 24- or 16-bit texture
-                     * under AEM, vu_texa_ps (their legacy twins) */
+                     * under AEM, vu_texa_ps */
                     for (int i = 0; i < np * 2; i++) {
                         RdPipeKeyInt k = dp[i / 2].key;
                         k.gs.program = progList[v];
                         k.vs = vsList[v];
-                        k.fs = (i & 1) ? fsTexa : fsPlain;
+                        k.fs = (i & 1) ? RD_FS_VU_TEXA : RD_FS_VU;
                         n = rd__add_pipe_key(out, max, n, &k);
                     }
                 }

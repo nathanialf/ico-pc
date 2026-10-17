@@ -1028,10 +1028,6 @@ typedef enum RdVsId {
     RD_VS_VU_GRID_LIT,
     RD_VS_VU_GRID_SPEC,
     RD_VS_VU_PARTICLE,
-    /* vu_tri_vs, the vertex pre-pass's triangle stage of every mesh
-     * program (docs/port/RENDER.md, "The vertex pre-pass"): a VU vertex
-     * shader with its two variants as the program entries above */
-    RD_VS_VU_TRI,
     RD_VS_FX_RECT, /* fx_rect_vs, the fullscreen triangle at the sprite's Z */
     /* PRIM.AA1 lines and triangles, IcoSpriteAa1Vertex (the sprite vertex
      * and its coverage) */
@@ -1076,10 +1072,9 @@ typedef enum RdVsId {
 } RdVsId;
 
 /* the VU program entries (the fallback's, docs/port/RENDER.md "The fallback
- * entries"; the ten mesh entries have a plain variant, g_rd.vsFallback) and
- * the old triangle stage */
+ * entries"; the ten mesh entries have a plain variant, g_rd.vsFallback) */
 #define RD_VS_VU_FIRST RD_VS_VU_PRELIT
-#define RD_VS_VU_LAST RD_VS_VU_TRI
+#define RD_VS_VU_LAST RD_VS_VU_PARTICLE
 #define RD_VS_VU_PRE_FIRST RD_VS_VU_PRE_PRELIT
 #define RD_VS_VU_PRE_LAST RD_VS_VU_PRE_GRID_SPEC
 #define RD_VS_OPTIONAL_FIRST RD_VS_VU_MAIN
@@ -1121,7 +1116,7 @@ typedef enum RdFsId {
     RD_FS_BLEND_INT,
     RD_FS_DATE_SNAP,    /* destination alpha MSB into the R8 DATE snapshot */
     RD_FS_CAMERA_PROBE, /* FrameCB matrices applied to a point, as bytes (tests) */
-    RD_FS_VU,           /* vu_ps, the pixel side of every VU program */
+    RD_FS_VU,           /* vu_ps, the pixel side of every VU draw (VuVSOut) */
     RD_FS_FOG,          /* fog_lut_ps, RD_POST_FOG behind the sprite vertex shaders */
     RD_FS_FX_SPRITE,    /* fx_sprite_ps, staticBlur.c's sprites in GS integers */
     /* COLCLAMP 0 screen prims (rd_replay.c doScreenWrap, raw_wrap.hlsl) */
@@ -1163,8 +1158,6 @@ typedef enum RdFsId {
     RD_FS_VU_PRE,
     /* From RD_FS_OPTIONAL_FIRST on a module missing from the table leaves
      * its id empty (as the vertex ids from RD_VS_OPTIONAL_FIRST) */
-    RD_FS_VU_LEGACY, /* vu_legacy_ps: today's VuVSOut planes-in-varyings pixel side (the fallback) */
-    RD_FS_VU_LEGACY_TEXA,     /* vu_legacy_texa_ps */
     RD_FS_SPRITE_PLANES,      /* sprite_ps_planes: the screen-prim triangles' plane build */
     RD_FS_SPRITE_TEXA_PLANES, /* sprite_texa_ps_planes */
     RD_FS_SPRITE_STQ_PLANES,  /* sprite_stq_ps_planes */
@@ -1176,7 +1169,7 @@ typedef enum RdFsId {
     RD_FS_COUNT
 } RdFsId;
 
-#define RD_FS_OPTIONAL_FIRST RD_FS_VU_LEGACY
+#define RD_FS_OPTIONAL_FIRST RD_FS_SPRITE_PLANES
 
 /* How an RdBlend equation reaches the hardware. */
 typedef enum RdBlendPath {
@@ -2291,7 +2284,7 @@ bool rd__win_take(void);
 /* the note of a VU draw about to be recorded (draws first .. count of
  * g_rdVuCur's list with key k, texture tex; not indexed: the vertices first
  * .. count).  Its vs is classVs, the program's own entry: a draw through
- * vu_tri_vs and the vertex pre-pass's draws are noted as their program's,
+ * vu_main_vs and the pre-passes' draws are noted as their program's,
  * so the second level's VS_ONLY separates the programs (the key text names
  * the pipeline drawn with) */
 struct IcoVuCB;

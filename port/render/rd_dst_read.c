@@ -98,8 +98,6 @@ bool rd__fs_has_dst(uint8_t fs)
     case RD_FS_FOG_BUFFER:
     case RD_FS_VU:
     case RD_FS_VU_TEXA:
-    case RD_FS_VU_LEGACY:
-    case RD_FS_VU_LEGACY_TEXA:
     case RD_FS_SPRITE_PLANES:
     case RD_FS_SPRITE_TEXA_PLANES:
     case RD_FS_SPRITE_STQ_PLANES:

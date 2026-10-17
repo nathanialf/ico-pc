@@ -56,8 +56,7 @@ ico_add_shader(vu_grid_spec_vs vu_grid.hlsl vu_grid_spec_vs vertex)
 ico_add_shader(vu_particle_vs vu_particle.hlsl vu_particle_vs vertex)
 # the vertex pre-pass (docs/port/RENDER.md, "The vertex pre-pass";
 # rd_replay_vu.c rd__vu_prepass): each mesh program's vertices once, as records
-# (vu_X_pre_vs, vu_pre_ps into three RGBA32_UINT targets), and the triangle
-# stage of every mesh program reading them back (vu_tri_vs)
+# (vu_X_pre_vs, vu_pre_ps into three RGBA32_UINT targets)
 foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:skin skin_debug:skin
         grid:grid grid_lit:grid grid_spec:grid)
     string(REGEX REPLACE ":.*" "" _e "${_v}")
@@ -65,7 +64,6 @@ foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:sk
     ico_add_shader(vu_${_e}_pre_vs vu_${_f}.hlsl vu_${_e}_pre_vs vertex)
 endforeach()
 ico_add_shader(vu_pre_ps vu_tri.hlsl vu_pre_ps fragment)
-ico_add_shader(vu_tri_vs vu_tri.hlsl vu_tri_vs vertex)
 # the ten mesh program entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli):
 # no card test and no tick cameras, the fallback's entries on a device of the
 # table (rd_pipeline.c rd__vu_policy_init, g_rd.vsFallback; issue 107: the
@@ -142,25 +140,17 @@ endforeach()
 # RD_FS_OPTIONAL_FIRST on (rd_replay.c s_vsNames, s_fsNames); a module missing
 # from the table leaves its id empty (rd__gpu_init).
 # The record stages (vu_main_vs, vu_particle_main_vs, vu_tri_rule_pre_vs,
-# vu_tri_tick_pre_vs, vu_tri_planes_pre_vs, vu_particle_pre_vs, vu_legacy_ps,
-# vu_legacy_texa_ps and their twins)
+# vu_tri_tick_pre_vs, vu_tri_planes_pre_vs, vu_particle_pre_vs)
 # the triangle pre-pass's record stages and the sprites' (docs/port/RENDER.md,
-# "The vertex and triangle pre-passes"; rd_replay_vu.c rd__vu_prepass), the
-# main vertex shaders drawing from the record, and the programs' entries'
-# pixel shader for the fallback (VuVSOut's planes as flat varyings), with its
-# no-dual and destination-read twins
+# "The vertex and triangle pre-passes"; rd_replay_vu.c rd__vu_prepass) and
+# the main vertex shaders drawing from the record (with vu_ps, as the
+# programs' entries)
 ico_add_shader(vu_main_vs vu_tri.hlsl vu_main_vs vertex)
 ico_add_shader(vu_tri_rule_pre_vs vu_tri.hlsl vu_tri_rule_pre_vs vertex)
 ico_add_shader(vu_tri_tick_pre_vs vu_tri.hlsl vu_tri_tick_pre_vs vertex)
 ico_add_shader(vu_tri_planes_pre_vs vu_tri.hlsl vu_tri_planes_pre_vs vertex)
 ico_add_shader(vu_particle_main_vs vu_particle.hlsl vu_particle_main_vs vertex)
 ico_add_shader(vu_particle_pre_vs vu_particle.hlsl vu_particle_pre_vs vertex)
-foreach(_e vu_legacy_ps vu_legacy_texa_ps)
-    ico_add_shader(${_e} vu_prelit.hlsl ${_e} fragment)
-    ico_add_shader(${_e} vu_prelit.hlsl ${_e} fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
-    ico_add_shader(${_e} vu_prelit.hlsl ${_e} fragment DEFINES ICO_DST_READ=1 SUFFIX _dstrov)
-    ico_add_shader(${_e} vu_prelit.hlsl ${_e} fragment DEFINES ICO_DST_READ=2 SUFFIX _dstatt)
-endforeach()
 # The 2D plane builds (sprite_*_ps_planes and their twins)
 # the screen-prim triangles with their planes (rd_screen_planes.c): the
 # planes build of sprite.hlsl (ICO_SPRITE_PLANES), whose SpriteVSOut and

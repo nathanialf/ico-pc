@@ -515,8 +515,6 @@ bool rd__fs_has_no_dual(uint8_t fs)
     case RD_FS_FOG_LOCAL:
     case RD_FS_VU:
     case RD_FS_VU_TEXA:
-    case RD_FS_VU_LEGACY:
-    case RD_FS_VU_LEGACY_TEXA:
     case RD_FS_SPRITE_PLANES:
     case RD_FS_SPRITE_TEXA_PLANES:
     case RD_FS_SPRITE_STQ_PLANES:
@@ -2164,7 +2162,7 @@ const RdPipeKeyInt *rd__pipeline_key_at(uint32_t i)
  * the region rule's every step.  A draw the record path cannot take (past
  * the record, a stage pipeline that could not be made, a failed self-test,
  * the pre-pass off) draws the old way, through its program's own entry
- * with the legacy pixel shaders: vu_X_vs (the extended build), or on a
+ * with vu_ps: vu_X_vs (the extended build), or on a
  * device of the table (RhiLimits.vuFallbackPlain, vk_device.c kVuPlainOnly)
  * vu_X_plain_vs (ICO_VU_PLAIN: no card test, no tick cameras), as
  * ICO_RD_VU_PLAIN=1 or the host (rd_set_vu_plain_only) ask anywhere;

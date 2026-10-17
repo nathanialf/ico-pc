@@ -17,7 +17,7 @@
  *      after it) holds, with the pre-pass on, the main shaders' keys
  *      (vu_main_vs, vu_particle_main_vs), the vu_X_pre_vs entries' and the
  *      five record stage keys once each (rule, tick R, tick G, planes,
- *      sprite), and no program entry's or vu_tri_vs's; with it off none of
+ *      sprite), and no program entry's; with it off none of
  *      the pre-passes' keys;
  *   4. a frame drawn after it starts SCENE from its clear (no pixel of the
  *      self-test's block is left);
@@ -47,23 +47,22 @@ static void checkSet(bool on)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
     const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_CACHE_MAX);
-    uint32_t main = 0, pre = 0, stage = 0, prog = 0, tri = 0;
+    uint32_t main = 0, pre = 0, stage = 0, prog = 0;
     for (uint32_t i = 0; i < n; i++) {
         const uint8_t vs = keys[i].vs;
         main += vs == RD_VS_VU_MAIN || vs == RD_VS_VU_PARTICLE_MAIN;
         pre += rd__vs_is_vu_pre(vs);
         stage += vs >= RD_VS_VU_TRI_RULE_PRE && vs <= RD_VS_VU_PARTICLE_PRE;
-        tri += vs == RD_VS_VU_TRI;
-        prog += vs >= RD_VS_VU_FIRST && vs <= RD_VS_VU_LAST && vs != RD_VS_VU_TRI;
+        prog += vs >= RD_VS_VU_FIRST && vs <= RD_VS_VU_LAST;
     }
     printf("  the reachable set: %u keys, %u of the main shaders, %u pre-pass entries, %u record "
-           "stages, %u of vu_tri_vs, %u of the programs' entries\n",
-           n, main, pre, stage, tri, prog);
+           "stages, %u of the programs' entries\n",
+           n, main, pre, stage, prog);
     if (on) {
-        CHECK(main > 0 && pre == 10 && stage == 5 && prog == 0 && tri == 0,
+        CHECK(main > 0 && pre == 10 && stage == 5 && prog == 0,
               "with the pre-pass: %u main keys, %u pre-pass keys, %u stage keys (5), %u program "
-              "keys, %u vu_tri_vs keys",
-              main, pre, stage, prog, tri);
+              "keys",
+              main, pre, stage, prog);
     } else {
         CHECK(pre == 0 && stage == 0, "without the pre-pass: %u pre-pass keys, %u stage keys", pre,
               stage);
