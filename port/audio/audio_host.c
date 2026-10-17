@@ -366,6 +366,10 @@ void ico_audio_host_vsync(int hz)
     if (!started) {
         ico_audio_host_init();
     }
+    frames = ico_audio_host_frames(hz, vsync_index);
+    /* the game's frames, which the pull path's render may lead by its bound
+       at most (out_sdl.c) */
+    ico_audio_sdl_game_step(frames);
 #ifdef ICO_AUDIO_SDL
     if (mode == ICO_AUDIO_MODE_PULL && sdl_open && !pull_watch(hz)) {
         /* the device's thread renders (out_sdl.c pull_cb) */
@@ -374,7 +378,6 @@ void ico_audio_host_vsync(int hz)
         return;
     }
 #endif
-    frames = ico_audio_host_frames(hz, vsync_index);
     spu2_render(out, frames);
     /* mirror mode: left and right swapped where the stereo output is
        produced, for the device and the dump alike; the SPU2 is untouched */
@@ -417,6 +420,11 @@ int ico_audio_sdl_queued_ms(void)
 int ico_audio_sdl_cushion_ms(void)
 {
     return 0;
+}
+
+void ico_audio_sdl_game_step(int frames)
+{
+    (void)frames;
 }
 
 /* No SDL output (the headless build): no devices to choose from

@@ -147,6 +147,13 @@ int ico_audio_sdl_open(IcoAudioRender pull, const char *sync_why);
    vsyncs, doubled after each dry queue up to 120 ms, halved again after
    20 s without one (out_sdl.c). */
 void ico_audio_sdl_push(const int16_t *frames, int count);
+/* The game stepped a vsync of `frames` frames (ico_audio_host_vsync, main
+   thread, on both paths).  The pull path renders at most 120 ms past the
+   game's frames since the SPU2 and the game were last level, and holds the
+   rest back as ramped silence until it is 40 ms under that; past 64 ms
+   ahead the stream plays ICO_AUDIO_TRIM slower until it is under 32 ms
+   (out_sdl.c, the file comment).  Never under the audio lock. */
+void ico_audio_sdl_game_step(int frames);
 /* Whether an output stream is open (0 without the SDL output); the window's
    late-present skip runs only with one (pace_policy.h pace_late_skip). */
 int ico_audio_sdl_active(void);
@@ -168,10 +175,11 @@ int ico_audio_sdl_pull_idle_ms(int *asked);
 int ico_audio_sdl_fall_back(void);
 /* The pull path's 10 s line (window_host.c pace_log calls the log one):
      audio: 1000 callbacks, 480000 frames; waited 0.21 ms at most for the
-     driver (0 gave up), 0 callbacks late, 0 ms of silence; the driver ticked
-     599 times, longest gap 17 ms (0 over 200 ms)
-   the counts since the last line, the longest waits since then (zeroed);
-   1 when written into out, 0 (nothing) on the sync path. */
+     driver (0 gave up), 0 callbacks late, 0 ms of silence (0 ms held back
+     behind the game); ahead of the game by 28 ms at most, slowed for 0.0 s;
+     the driver ticked 599 times, longest gap 17 ms (0 over 200 ms)
+   the counts since the last line, the longest waits and lead since then
+   (zeroed); 1 when written into out, 0 (nothing) on the sync path. */
 int ico_audio_sdl_summary_text(char *out, size_t size);
 void ico_audio_sdl_log_summary(void);
 

@@ -27,7 +27,16 @@
  *   - the 10 s line's numbers (ico_audio_sdl_summary_text) with the
  *     driver's ticks and longest gap, and the choice of the mode
  *     (ico_audio_pick_mode: the dump, the fixed clock, [dev] audio_sync,
- *     audio=0 and the headless build on the game's clock).
+ *     audio=0 and the headless build on the game's clock);
+ *   - the bound on the SPU2's lead over the game: 2 s of pulls with the
+ *     game's frames frozen render exactly 120 ms (LEAD_MAX_FRAMES), then a
+ *     96-frame ramp from the last frame to 0 and silence, all of it counted
+ *     as held back (the 10 s line says so); the game stepping 1000 frames
+ *     leaves it held (99 ms ahead, over the 80 ms it resumes at) and turns
+ *     the trim on (the stream at ICO_AUDIO_TRIM slower); 1000 more resume
+ *     the sound, ramped in; the game a second on, level again, turns the
+ *     trim off.  Elsewhere every pull steps the game by the frames it takes
+ *     (pull), so the bound never holds there.
  *
  * Every check is a count, a fence or a sample, never a wall-clock time, so
  * scheduler delays (a loaded machine, ctest -j) change how long the test
@@ -89,7 +98,15 @@ static uint64_t time_locked(void)
     return t;
 }
 
+/* a device's take, the game stepping as many frames first */
 static int pull(int16_t *out)
+{
+    ico_audio_sdl_game_step(PULL_FRAMES);
+    return SDL_GetAudioStreamData(stream, out, PULL_FRAMES * BYTES_PER_FRAME);
+}
+
+/* a device's take with the game's frames standing still */
+static int pull_frozen(int16_t *out)
 {
     return SDL_GetAudioStreamData(stream, out, PULL_FRAMES * BYTES_PER_FRAME);
 }
@@ -549,9 +566,11 @@ static void mode_case(int window_build, const char *enable, int dumping, int rep
 
 static void test_summary_and_mode(void)
 {
-    char line[512];
-    unsigned long long callbacks, frames, gaveup, late, silence_ms, ticks, gap, over, bound;
-    double waited = -1.0;
+    char line[640];
+    unsigned long long callbacks, frames, gaveup, late, silence_ms, held_ms, ticks, gap, over,
+        bound;
+    int ahead_ms = -1;
+    double waited = -1.0, slowed = -1.0;
     uint64_t base;
     int i;
 
@@ -575,13 +594,19 @@ static void test_summary_and_mode(void)
     printf("audio_pull_test: %s\n", line);
     CHECK(sscanf(line,
                  "audio: %llu callbacks, %llu frames; waited %lf ms at most for the driver (%llu "
-                 "gave up), %llu callbacks late, %llu ms of silence; the driver ticked %llu "
-                 "times, longest gap %llu ms (%llu over %llu ms)",
-                 &callbacks, &frames, &waited, &gaveup, &late, &silence_ms, &ticks, &gap, &over,
-                 &bound) == 10,
+                 "gave up), %llu callbacks late, %llu ms of silence (%llu ms held back behind the "
+                 "game); ahead of the game by %d ms at most, slowed for %lf s; the driver ticked "
+                 "%llu times, longest gap %llu ms (%llu over %llu ms)",
+                 &callbacks, &frames, &waited, &gaveup, &late, &silence_ms, &held_ms, &ahead_ms,
+                 &slowed, &ticks, &gap, &over, &bound) == 13,
           "the line's shape: %s", line);
     CHECK(callbacks == 3 && frames == 3 * PULL_FRAMES, "%llu callbacks, %llu frames", callbacks,
           frames);
+    /* the game steps what each pull takes: the take and the lead ahead, no
+       hold, no trim */
+    CHECK(held_ms == 0 && ahead_ms == 2 * PULL_FRAMES * 1000 / RATE && slowed == 0.0,
+          "%llu ms held back, %d ms ahead, slowed for %.1f s: want 0, %d, 0.0", held_ms, ahead_ms,
+          slowed, 2 * PULL_FRAMES * 1000 / RATE);
     /* uncontended: the first try takes the lock, so the wait is 0 */
     CHECK(gaveup == 0 && silence_ms == 0 && waited == 0.0,
           "%llu gave up, %llu ms of silence, waited %.2f ms: want 0, 0, 0.00", gaveup, silence_ms,
@@ -606,6 +631,124 @@ static void test_summary_and_mode(void)
           "without a reason pointer: not the pull path");
 }
 
+/* --- the bound on the SPU2's lead ------------------------------------------------------ */
+
+static int16_t held_out[200 * PULL_FRAMES * CHANNELS];
+
+static int frame_is(const int16_t *f, int l, int r)
+{
+    return f[0] == l && f[1] == r;
+}
+
+static void test_hold(void)
+{
+    char line[640];
+    uint64_t frames0, silence0, held0, f0;
+    int16_t dc[CHANNELS];
+    float ratio;
+    int i;
+    int ok;
+
+    /* one voice of constant level (as the ramp part), steady */
+    scene_setup();
+    W2(1, SPU2_R_VA(0) + SPU2_VA_SSA, 0x8000);
+    W(1, SPU2_R_VP(0) + SPU2_VP_PITCH, 0x1000);
+    W(1, SPU2_R_VP(0) + SPU2_VP_VOLL, 0x3FFF);
+    W(1, SPU2_R_VP(0) + SPU2_VP_VOLR, 0x3FFF);
+    W(1, SPU2_R_VMIXL, 0x0001);
+    W(1, SPU2_R_VMIXR, 0x0001);
+    W(0, SPU2_R_VMIXL, 0);
+    W(0, SPU2_R_VMIXR, 0);
+    W(1, SPU2_R_KON, 1);
+    restart();
+    for (i = 0; i < 20; i++) {
+        pull(dev);
+    }
+    dc[0] = dev[2 * (PULL_FRAMES - 1)];
+    dc[1] = dev[2 * (PULL_FRAMES - 1) + 1];
+    CHECK(dc[0] > 20000 && dc[1] > 20000, "a steady level: %d %d", dc[0], dc[1]);
+
+    /* the game frozen: 2 s of pulls */
+    restart();
+    ico_audio_sdl_summary_text(line, sizeof(line)); /* a new window */
+    frames0 = P_LOAD(P.frames);
+    silence0 = P_LOAD(P.silence);
+    held0 = P_LOAD(P.held);
+    for (i = 0; i < 200; i++) {
+        pull_frozen(held_out + i * PULL_FRAMES * CHANNELS);
+    }
+    CHECK(P_LOAD(P.frames) - frames0 == LEAD_MAX_FRAMES, "rendered %llu frames, want %d",
+          (unsigned long long)(P_LOAD(P.frames) - frames0), LEAD_MAX_FRAMES);
+    CHECK(P_LOAD(P.held) - held0 == 200 * PULL_FRAMES - LEAD_MAX_FRAMES &&
+              P_LOAD(P.silence) - silence0 == P_LOAD(P.held) - held0,
+          "held back %llu frames, silence %llu, want %d of each",
+          (unsigned long long)(P_LOAD(P.held) - held0),
+          (unsigned long long)(P_LOAD(P.silence) - silence0), 200 * PULL_FRAMES - LEAD_MAX_FRAMES);
+    CHECK(SDL_GetAudioStreamQueued(stream) == 0, "%d bytes left queued",
+          SDL_GetAudioStreamQueued(stream));
+    for (ok = 1, i = RAMP_FRAMES; i < LEAD_MAX_FRAMES && ok; i++) {
+        ok = frame_is(held_out + i * CHANNELS, dc[0], dc[1]);
+    }
+    CHECK(ok, "the sound to the bound: frame %d is %d %d, want %d %d", i - 1, held_out[2 * (i - 1)],
+          held_out[2 * (i - 1) + 1], dc[0], dc[1]);
+    for (ok = 1, i = 0; i < RAMP_FRAMES && ok; i++) {
+        ok = frame_is(held_out + (LEAD_MAX_FRAMES + i) * CHANNELS,
+                      dc[0] * (RAMP_FRAMES - 1 - i) / RAMP_FRAMES,
+                      dc[1] * (RAMP_FRAMES - 1 - i) / RAMP_FRAMES);
+    }
+    CHECK(ok, "the ramp at the bound: its frame %d is %d %d", i - 1,
+          held_out[2 * (LEAD_MAX_FRAMES + i - 1)], held_out[2 * (LEAD_MAX_FRAMES + i - 1) + 1]);
+    for (ok = 1, i = LEAD_MAX_FRAMES + RAMP_FRAMES; i < 200 * PULL_FRAMES && ok; i++) {
+        ok = frame_is(held_out + i * CHANNELS, 0, 0);
+    }
+    CHECK(ok, "silence after the ramp: frame %d is %d %d", i - 1, held_out[2 * (i - 1)],
+          held_out[2 * (i - 1) + 1]);
+    CHECK(ico_audio_sdl_summary_text(line, sizeof(line)) == 1, "no 10 s line");
+    printf("audio_pull_test: hold: %s\n", line);
+    CHECK(strstr(line, "1880 ms of silence (1880 ms held back behind the game); ahead of the game "
+                       "by 120 ms at most, slowed for 0.0 s") != NULL,
+          "the line: %s", line);
+
+    /* the game steps 1000 frames: 99 ms ahead, held until 80; the trim on */
+    ico_audio_sdl_game_step(1000);
+    ratio = SDL_GetAudioStreamFrequencyRatio(stream);
+    CHECK(trimming && ratio > 0.99749f && ratio < 0.99751f, "trim %d, the stream at %f", trimming,
+          (double)ratio);
+    f0 = P_LOAD(P.frames);
+    pull_frozen(dev);
+    CHECK(P_LOAD(P.frames) == f0, "rendered %llu frames while held",
+          (unsigned long long)(P_LOAD(P.frames) - f0));
+
+    /* 1000 more: 78 ms ahead, the sound back, ramped in (resampled by the
+       trim, so checked to a margin) */
+    ico_audio_sdl_game_step(1000);
+    held0 = P_LOAD(P.held);
+    pull_frozen(dev);
+    pull_frozen(dev + PULL_FRAMES * CHANNELS);
+    CHECK(P_LOAD(P.frames) > f0 && P_LOAD(P.held) == held0,
+          "%llu frames rendered, %llu held back after the game stepped",
+          (unsigned long long)(P_LOAD(P.frames) - f0),
+          (unsigned long long)(P_LOAD(P.held) - held0));
+    CHECK(dev[0] < dc[0] / 4 && dev[1] < dc[1] / 4, "the sound does not ramp in: %d %d", dev[0],
+          dev[1]);
+    {
+        const int16_t *f = dev + (2 * PULL_FRAMES - 1) * CHANNELS;
+
+        CHECK(f[0] > dc[0] - dc[0] / 50 && f[0] < dc[0] + dc[0] / 50 && f[1] > dc[1] - dc[1] / 50 &&
+                  f[1] < dc[1] + dc[1] / 50,
+              "the level after the ramp in: %d %d, want about %d %d", f[0], f[1], dc[0], dc[1]);
+    }
+
+    /* the game a second on: level at the next callback, then the trim off */
+    ico_audio_sdl_game_step(RATE);
+    pull_frozen(dev);
+    ico_audio_sdl_game_step(0);
+    ratio = SDL_GetAudioStreamFrequencyRatio(stream);
+    CHECK(!trimming && ratio == 1.0f, "trim %d, the stream at %f", trimming, (double)ratio);
+    CHECK(ico_audio_sdl_summary_text(line, sizeof(line)) == 1, "no 10 s line");
+    CHECK(strstr(line, "slowed for 1.0 s") != NULL, "the trim's time: %s", line);
+}
+
 int main(void)
 {
     const SDL_AudioSpec spec = {SDL_AUDIO_S16LE, CHANNELS, RATE};
@@ -627,6 +770,7 @@ int main(void)
     test_free_running();
     test_ramp();
     test_summary_and_mode();
+    test_hold();
 
     SDL_DestroyAudioStream(stream);
     stream = NULL;

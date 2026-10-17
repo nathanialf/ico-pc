@@ -22,10 +22,23 @@
  * cover the request the shortfall (at least 96 frames) is silence ramped
  * down from the last sample over 96 frames (2 ms), after which the next
  * sound ramps in over 96 frames.  The open, a move to another device and a
- * resume also ramp in and prime nothing.  Each block is scaled by the
- * output volume.  The callback counts (callbacks, frames rendered, the
- * longest lock wait, lock misses, late callbacks, silence) for the 10 s
- * line (ico_audio_sdl_log_summary) and the close; it never logs.  Latency:
+ * resume also ramp in and prime nothing.  The SPU2 never runs more than
+ * 120 ms (LEAD_MAX_FRAMES) past the game's own frames (the frames of the
+ * vsyncs the game stepped, ico_audio_sdl_game_step): the callback counts
+ * how far its render is ahead of them (never below 0: a game ahead of the
+ * device is level), renders at most up to the bound, and covers the rest
+ * with silence ramped like a miss; once held back it renders nothing until
+ * it is 40 ms (LEAD_HOLD_FRAMES) under the bound, so a stall of the game is
+ * one gap of sound, as on the game's clock, and a film's or a stream's
+ * read position can lead the game by the bound at most.  A device clock
+ * faster than the system's would creep up to the bound; past 64 ms ahead
+ * (TRIM_ON_FRAMES) the stream plays ICO_AUDIO_TRIM slower until it is under
+ * 32 ms (TRIM_OFF_FRAMES), which also brings a film's sound back to its
+ * picture after a stall.  Each block is scaled by the output volume.  The
+ * callback counts (callbacks, frames rendered, the longest lock wait, lock
+ * misses, late callbacks, silence, the silence of the bound and how far
+ * ahead of the game it was) for the 10 s line (ico_audio_sdl_log_summary)
+ * and the close; it never logs.  Latency:
  * a driver write lands at the next callback (at most a period), then plays
  * after the lead and the device's own buffer: about 25-30 ms at 10 ms
  * periods, constant.  It reports the lead as the queue and a cushion of 0
@@ -90,6 +103,17 @@
 #define PULL_MIN_FRAMES 480
 /* how often the callback tries the audio lock while the game holds it */
 #define LOCK_POLL_NS 50000u
+/* the pull path's bound on the SPU2's lead over the game's frames: 120 ms,
+   the pacer's 100 ms of lag before it drops time (window_host.c
+   RESYNC_NS) and about a period and a lead */
+#define LEAD_MAX_FRAMES (RATE * 120 / 1000)
+/* once held back, how far under the bound the lead falls before the render
+   resumes (about a vsync of the game's frames and a callback's) */
+#define LEAD_HOLD_FRAMES (RATE * 40 / 1000)
+/* the lead over the game above which the stream plays ICO_AUDIO_TRIM
+   slower, and below which it stops */
+#define TRIM_ON_FRAMES (RATE * 64 / 1000)
+#define TRIM_OFF_FRAMES (RATE * 32 / 1000)
 /* the cushion's largest size: the stalls of a slow renderer's cinematics */
 #define CUSHION_MAX_FRAMES (RATE * 120 / 1000)
 /* pushed audio without a dry queue before the cushion halves: 20 s */
@@ -127,10 +151,22 @@ static Uint64 period_ns = 10000000u;                /* the device's period */
 static int device_frames, device_rate; /* the device's period in its frames, its rate */
 
 /* the callback's own (and the main thread's only while no callback can
-   run: before the device starts, after the stream is destroyed) */
+   run: before the device starts, after the stream is destroyed, while it
+   is paused) */
 static int16_t pull_buf[PULL_MAX_FRAMES * CHANNELS];
 static int16_t pull_last[CHANNELS]; /* the last frame put */
 static Uint64 pull_prev_ns;         /* the last callback's start */
+static uint64_t pull_game_seen;     /* game_frames at the last callback */
+static int pull_ahead;              /* frames rendered past the game's (0..LEAD_MAX_FRAMES) */
+static int pull_holding;            /* held back at the bound (LEAD_HOLD_FRAMES) */
+
+/* the game's frames: the frames of every vsync it stepped
+   (ico_audio_sdl_game_step, main thread; the callback reads it) */
+static uint64_t game_frames;
+/* the trim (main thread): playing ICO_AUDIO_TRIM slower, and the game's
+   frames stepped while it did, in all */
+static int trimming;
+static uint64_t trim_frames;
 
 /* Between the callback and the main thread, through __atomic: totals the
    callback adds to, the longest lock waits it raises (since the last 10 s
@@ -139,16 +175,17 @@ static Uint64 pull_prev_ns;         /* the last callback's start */
    fresh: the next callback follows an open or resume, so its gap is not
    late; paused: the device is stopped on purpose). */
 static struct {
-    uint64_t callbacks, frames, silence, misses, late;
+    uint64_t callbacks, frames, silence, held, misses, late;
     uint64_t wait_max_ns, wait_run_ns;
     uint64_t last_ns, asked;
     int queued;
+    int ahead, ahead_max; /* the lead over the game after a callback, its 10 s maximum */
     int ramp_in, fresh, paused;
 } P;
 
 /* the totals at the last 10 s line (main thread) */
 static struct {
-    uint64_t callbacks, frames, silence, misses, late, ticks, long_gaps;
+    uint64_t callbacks, frames, silence, held, misses, late, ticks, long_gaps, trim;
 } P_at;
 
 #define P_LOAD(x) __atomic_load_n(&(x), __ATOMIC_ACQUIRE)
@@ -258,6 +295,17 @@ static void lock_destroy(void)
     }
 }
 
+/* The SPU2 level with the game again (the open, a move, a resume): nothing
+   rendered ahead of its frames, not held back.  Only while no callback
+   runs. */
+static void pull_level(void)
+{
+    pull_game_seen = P_LOAD(game_frames);
+    pull_ahead = 0;
+    pull_holding = 0;
+    P_STORE(P.ahead, 0);
+}
+
 /* The lead and the lock's wait from a device period of `frames` (at 48
    kHz), and a fresh start: the next sound ramps in, the next callback's gap
    is not late, the watchdog's clock starts now.  Only while no callback
@@ -271,6 +319,7 @@ static void pull_setup(int frames)
     period_ns = (Uint64)frames * 1000000000u / RATE;
     pull_prev_ns = 0;
     pull_last[0] = pull_last[1] = 0;
+    pull_level();
     P_STORE(P.queued, 0);
     P_STORE(P.ramp_in, 1);
     P_STORE(P.fresh, 1);
@@ -306,6 +355,51 @@ static void note_wait(Uint64 ns)
     cur = P_LOAD(P.wait_run_ns);
     while (ns > cur && !__atomic_compare_exchange_n(&P.wait_run_ns, &cur, (uint64_t)ns, 1,
                                                     __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {}
+}
+
+/* The lead over the game after a callback, and its maximum since the last
+   10 s line raised. */
+static void note_ahead(int ahead)
+{
+    int cur = P_LOAD(P.ahead_max);
+
+    P_STORE(P.ahead, ahead);
+    while (ahead > cur && !__atomic_compare_exchange_n(&P.ahead_max, &cur, ahead, 1,
+                                                       __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {}
+}
+
+/* How many of `want` frames the bound lets the callback render: the game's
+   frames since the last callback taken off the lead (not below 0), then up
+   to LEAD_MAX_FRAMES ahead, nothing while held back; held back from the
+   first callback the bound cuts until the lead is LEAD_HOLD_FRAMES under
+   it. */
+static int pull_allow(int want)
+{
+    const uint64_t g = P_LOAD(game_frames);
+    const uint64_t moved = g - pull_game_seen;
+    int room;
+
+    pull_game_seen = g;
+    pull_ahead = moved >= (uint64_t)pull_ahead ? 0 : pull_ahead - (int)moved;
+    if (pull_holding && pull_ahead <= LEAD_MAX_FRAMES - LEAD_HOLD_FRAMES) {
+        pull_holding = 0;
+    }
+    room = pull_holding ? 0 : LEAD_MAX_FRAMES - pull_ahead;
+    if (want > room) {
+        pull_holding = 1;
+        return room;
+    }
+    return want;
+}
+
+/* `frames` of silence ramped down from the last frame put, after a miss or
+   at the bound: the next sound ramps in. */
+static void pull_silence(SDL_AudioStream *s, int frames)
+{
+    buffer_ramp_down(s, pull_last, frames);
+    pull_last[0] = pull_last[1] = 0;
+    P_ADD(P.silence, (uint64_t)frames);
+    P_STORE(P.ramp_in, 1);
 }
 
 /* The audio lock, tried every LOCK_POLL_NS for at most a quarter of the
@@ -351,7 +445,8 @@ static void SDLCALL pull_cb(void *user, SDL_AudioStream *s, int additional, int 
     const int need = additional / BYTES_PER_FRAME;
     const int take = total / BYTES_PER_FRAME;
     int want = take + lead_frames - queued;
-    Uint64 waited;
+    int n;
+    Uint64 waited = 0;
 
     (void)user;
     P_ADD(P.callbacks, 1);
@@ -372,7 +467,11 @@ static void SDLCALL pull_cb(void *user, SDL_AudioStream *s, int additional, int 
         P_STORE(P.queued, queued > take ? queued - take : 0);
         return;
     }
-    if (!pull_lock(&waited)) {
+    /* the bound: at most LEAD_MAX_FRAMES past the game's frames (the
+       callback's own counts: before the lock, which a held-back callback
+       does not take) */
+    n = pull_allow(want);
+    if (n > 0 && !pull_lock(&waited)) {
         /* the game's side holds the SPU2: its time stands still; the lead
            plays, and silence ramped down from the last frame covers what
            it does not (`need`, SDL's count past what is queued; at least
@@ -383,32 +482,40 @@ static void SDLCALL pull_cb(void *user, SDL_AudioStream *s, int additional, int 
         P_ADD(P.misses, 1);
         if (need > 0) {
             put = need > RAMP_FRAMES ? need : RAMP_FRAMES;
-            buffer_ramp_down(s, pull_last, put);
-            pull_last[0] = pull_last[1] = 0;
-            P_ADD(P.silence, (uint64_t)put);
-            P_STORE(P.ramp_in, 1);
+            pull_silence(s, put);
         }
         P_STORE(P.queued, queued + put > take ? queued + put - take : 0);
         return;
     }
-    note_wait(waited);
-    pull_render(pull_buf, want);
-    SDL_UnlockMutex(audio_mutex);
-    {
-        const int q8 = ico_audio_volume_q8(); /* one read: Settings may change it */
+    if (n > 0) {
+        int q8;
 
+        note_wait(waited);
+        pull_render(pull_buf, n);
+        SDL_UnlockMutex(audio_mutex);
+        q8 = ico_audio_volume_q8(); /* one read: Settings may change it */
         if (q8 != 256) {
-            ico_audio_scale(pull_buf, pull_buf, want * CHANNELS, q8);
+            ico_audio_scale(pull_buf, pull_buf, n * CHANNELS, q8);
         }
+        if (__atomic_exchange_n(&P.ramp_in, 0, __ATOMIC_ACQ_REL) != 0) {
+            ramp_up(pull_buf, n);
+        }
+        pull_last[0] = pull_buf[2 * (n - 1)];
+        pull_last[1] = pull_buf[2 * (n - 1) + 1];
+        SDL_PutAudioStreamData(s, pull_buf, n * BYTES_PER_FRAME);
+        P_ADD(P.frames, (uint64_t)n);
+        pull_ahead += n;
     }
-    if (__atomic_exchange_n(&P.ramp_in, 0, __ATOMIC_ACQ_REL) != 0) {
-        ramp_up(pull_buf, want);
+    note_ahead(pull_ahead);
+    if (n < want && need > n) {
+        /* held back: SDL's shortfall is silence */
+        const int put = need - n > RAMP_FRAMES ? need - n : RAMP_FRAMES;
+
+        pull_silence(s, put);
+        P_ADD(P.held, (uint64_t)put);
+        n += put;
     }
-    pull_last[0] = pull_buf[2 * (want - 1)];
-    pull_last[1] = pull_buf[2 * (want - 1) + 1];
-    SDL_PutAudioStreamData(s, pull_buf, want * BYTES_PER_FRAME);
-    P_ADD(P.frames, (uint64_t)want);
-    P_STORE(P.queued, queued + want > take ? queued + want - take : 0);
+    P_STORE(P.queued, queued + n > take ? queued + n - take : 0);
 }
 
 /* the playback device called `name`, 0 when none is.  A name as long as
@@ -602,6 +709,7 @@ void ico_audio_sdl_pause(int paused)
        in) */
     SDL_ClearAudioStream(stream);
     if (pull_render != NULL) {
+        pull_level(); /* the device is paused: no callback runs */
         P_STORE(P.ramp_in, 1);
         P_STORE(P.fresh, 1);
         P_STORE(P.asked, 0);
@@ -628,6 +736,36 @@ void ico_audio_set_rate_ratio(double ratio)
     applied_ratio = r; /* the trim, if any, again at the next push */
     if (stream != NULL && !SDL_SetAudioStreamFrequencyRatio(stream, r)) {
         fprintf(stderr, "audio: rate ratio: %s\n", SDL_GetError());
+    }
+}
+
+void ico_audio_sdl_game_step(int frames)
+{
+    int ahead;
+    float want;
+
+    if (frames > 0) {
+        __atomic_fetch_add(&game_frames, (uint64_t)frames, __ATOMIC_RELEASE);
+    }
+    if (stream == NULL || pull_render == NULL) {
+        trimming = 0;
+        return;
+    }
+    /* the trim: past TRIM_ON_FRAMES ahead of the game the stream plays
+       ICO_AUDIO_TRIM slower (the SPU2 renders that much less a second)
+       until under TRIM_OFF_FRAMES */
+    ahead = P_LOAD(P.ahead);
+    if (!trimming && ahead > TRIM_ON_FRAMES) {
+        trimming = 1;
+    } else if (trimming && ahead < TRIM_OFF_FRAMES) {
+        trimming = 0;
+    }
+    if (trimming && frames > 0) {
+        trim_frames += (uint64_t)frames;
+    }
+    want = trimming ? (float)(rate_ratio / ICO_AUDIO_TRIM) : rate_ratio;
+    if (want != applied_ratio && SDL_SetAudioStreamFrequencyRatio(stream, want)) {
+        applied_ratio = want;
     }
 }
 
@@ -758,7 +896,8 @@ int ico_audio_sdl_fall_back(void)
 int ico_audio_sdl_summary_text(char *out, size_t size)
 {
     IcoAudioTicks t;
-    uint64_t callbacks, frames, silence, misses, late, wait;
+    uint64_t callbacks, frames, silence, held, misses, late, wait;
+    int ahead;
 
     if (stream == NULL || pull_render == NULL || out == NULL || size == 0) {
         return 0;
@@ -766,25 +905,31 @@ int ico_audio_sdl_summary_text(char *out, size_t size)
     callbacks = P_LOAD(P.callbacks);
     frames = P_LOAD(P.frames);
     silence = P_LOAD(P.silence);
+    held = P_LOAD(P.held);
     misses = P_LOAD(P.misses);
     late = P_LOAD(P.late);
     wait = __atomic_exchange_n(&P.wait_max_ns, 0, __ATOMIC_ACQ_REL);
+    ahead = __atomic_exchange_n(&P.ahead_max, 0, __ATOMIC_ACQ_REL);
     ico_audio_tick_take(&t);
     snprintf(out, size,
              "audio: %llu callbacks, %llu frames; waited %.2f ms at most for the driver (%llu "
-             "gave up), %llu callbacks late, %llu ms of silence; the driver ticked %llu times, "
-             "longest gap %llu ms (%llu over %llu ms)",
+             "gave up), %llu callbacks late, %llu ms of silence (%llu ms held back behind the "
+             "game); ahead of the game by %d ms at most, slowed for %.1f s; the driver ticked "
+             "%llu times, longest gap %llu ms (%llu over %llu ms)",
              (unsigned long long)(callbacks - P_at.callbacks),
              (unsigned long long)(frames - P_at.frames), wait / 1e6,
              (unsigned long long)(misses - P_at.misses), (unsigned long long)(late - P_at.late),
              (unsigned long long)((silence - P_at.silence) * 1000u / RATE),
-             (unsigned long long)(t.ticks - P_at.ticks),
+             (unsigned long long)((held - P_at.held) * 1000u / RATE), ahead * 1000 / RATE,
+             (double)(trim_frames - P_at.trim) / RATE, (unsigned long long)(t.ticks - P_at.ticks),
              (unsigned long long)(t.gap_max_ns / 1000000u),
              (unsigned long long)(t.long_gaps - P_at.long_gaps),
              (unsigned long long)(ICO_AUDIO_TICK_LONG_NS / 1000000u));
     P_at.callbacks = callbacks;
     P_at.frames = frames;
     P_at.silence = silence;
+    P_at.held = held;
+    P_at.trim = trim_frames;
     P_at.misses = misses;
     P_at.late = late;
     P_at.ticks = t.ticks;
@@ -794,7 +939,7 @@ int ico_audio_sdl_summary_text(char *out, size_t size)
 
 void ico_audio_sdl_log_summary(void)
 {
-    char line[512];
+    char line[640];
 
     if (ico_audio_sdl_summary_text(line, sizeof(line))) {
         fprintf(stderr, "%s\n", line);
@@ -818,11 +963,13 @@ void ico_audio_sdl_close(void)
         fprintf(stderr,
                 "audio: SDL output closed (on the device's clock: %llu callbacks, %llu frames, "
                 "%llu callbacks late; the lock waited %.2f ms at most and gave up %llu times, "
-                "%llu ms of silence)\n",
+                "%llu ms of silence, %llu ms of it held back behind the game; slowed for %.1f "
+                "s)\n",
                 (unsigned long long)P_LOAD(P.callbacks), (unsigned long long)P_LOAD(P.frames),
                 (unsigned long long)P_LOAD(P.late), P_LOAD(P.wait_run_ns) / 1e6,
                 (unsigned long long)P_LOAD(P.misses),
-                (unsigned long long)(P_LOAD(P.silence) * 1000u / RATE));
+                (unsigned long long)(P_LOAD(P.silence) * 1000u / RATE),
+                (unsigned long long)(P_LOAD(P.held) * 1000u / RATE), (double)trim_frames / RATE);
         pull_render = NULL;
         return;
     }

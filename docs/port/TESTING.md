@@ -82,7 +82,10 @@ program under an environment switch ([Environment switches](#environment-switche
   on a device-less SDL stream over the real SPU2: a writer thread under the audio lock and a
   pulling thread render the frames one thread renders; 10 s free-running with the frames and the
   silence accounted; the ramp out of and into silence while the lock is held elsewhere; the 10 s
-  line and the mode choice (`audio_pull`). Its checks are counts, fences and samples, never wall
+  line and the mode choice; the bound on the SPU2's lead over the game (2 s of pulls with the
+  game's frames frozen render exactly 120 ms, then a ramp and silence counted as held back; the
+  game stepping releases the hold 40 ms under the bound, the trim plays the stream slower while
+  over 64 ms and stops under 32) (`audio_pull`). Its checks are counts, fences and samples, never wall
   time, so a loaded machine or `ctest -j` only makes it slower (the free-running part raises the
   lock's wait bound to 500 ms, the one wall-clock bound); a failing check prints its values and
   each part prints a line of its counts. It is the program to run under ThreadSanitizer, with
