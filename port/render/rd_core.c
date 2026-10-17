@@ -110,7 +110,7 @@ void rd_summary_text(char *out, size_t size)
  * storage by the span; since the marks moved into the stream the widest
  * span of a frame is 14,314 and no draw passes 2^24 - 1 (rd_stream_audit).
  * One replay in SPAN_EVERY measures every indexed VU draw's span from its
- * CPU index list (rd_replay.c doVuDraw, rd__span_idx), a grid's from its
+ * CPU index list (rd_replay_vu.c doVuDraw, rd__span_idx), a grid's from its
  * batch count and vertices per batch (rd__span_range: its indices are
  * written to the mapped upload ring, uncached memory, never read back), so a regression
  * shows in the log of a run: the first measured frame's line, a line for
@@ -1563,7 +1563,7 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
      * triangles' marks are bytes in the stream (shader_consts.h
      * ICO_VU_MARK_*; issue 95) */
     rd__log("VU index values: dense (marks in the stream)");
-    /* the pass split (rd_replay.c passSplit), off by default: a fallback
+    /* the pass split (rd_replay_vu.c passSplit), off by default: a fallback
      * for a GPU that faults on a pass of many VU draws (issue 95) */
     {
         const char *split = getenv("ICO_RD_PASS_SPLIT");

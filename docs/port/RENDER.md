@@ -17,6 +17,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_tex.h`, `rd_tex.c` | the texture cache: GS formats decoded into rd textures |
 | `port/render/rd_mesh.h`, `rd_mesh.c` | the VU mesh path (VU1_PROGRAMS.md) |
 | `port/render/rd_replay.c` | a frame onto the RHI: every command's replay |
+| `port/render/rd_replay_vu.c`, `rd_replay.h` | the replay's VU draws; what they share with `rd_replay.c` (the replay's state, a draw's setup, its helpers) |
 | `port/render/rd_upload.c` | the upload ring and what a replay uploads before its first pass |
 | `port/render/rd_pipeline.c` | pipeline keys from the state block, the pipeline cache, the reachable set |
 | `port/render/rd_dst_read.c` | the exact GS blend read from the destination in the fragment shader |
@@ -313,7 +314,7 @@ and actions draw (`port/render/rd_replay.c`):
 | `RDC_SCREEN` | GS window-space prims through `sprite_*_vs` / `sprite_ps` (`doScreen`) |
 | `RDC_EXACT_BLEND` | `blend_int` on RGBA8_UINT copies of source and destination, copied back (`doExact`) |
 | `RDC_COPY` | a texture copy (`doCopy`) |
-| `RDC_MESH` .. `RDC_PARTICLES` | the VU1 program shaders (`doVu`) |
+| `RDC_MESH` .. `RDC_PARTICLES` | the VU1 program shaders (`rd__replay_vu`, `port/render/rd_replay_vu.c`) |
 | `RDC_SHADOW_*` | the stencil count (`doShadowReset`, `doShadowStrip`, `doShadowResolve`) |
 | `RDC_POST_STUB` | `RD_POST_FOG`: `doFog`; the reduction and the staticBlur kinds: `doBlurSprite` |
 | `RDC_OVERLAY_TEXT` | nothing here: the present collects it |
@@ -389,14 +390,14 @@ every result (darkVolume.c's count). `doScreenWrap` draws them into an RGBA16F a
 resolves `(Cd + acc) mod 256` against a copy of the target (`port/render/rd_replay.c`
 (`doScreenWrap`); `port/shaders/raw_wrap.hlsl`).
 
-**VU draws.** `doVu` binds the draw's VU block, the mesh stream (the device arena or the ring), the
+**VU draws.** `rd__replay_vu` binds the draw's VU block, the mesh stream (the device arena or the ring), the
 bones for a skinned draw, and sets the draw's flags: a chain clip plane, the free camera's
 `ICO_VU_BEHIND_EYE`, `ICO_VU_EXTENDED` outside [out of the box](ARCHITECTURE.md#terms)
-(`vuExtended`), and `ICO_VU_TICKS` for a draw seen through a camera blended between two
+(`rd__vu_extended`), and `ICO_VU_TICKS` for a draw seen through a camera blended between two
 [ticks](ARCHITECTURE.md#terms). A mesh with marked triangles binds its mark bytes after its stream
 (`vu_mark`, [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-mesh-path)). A grid draw builds its index list
 here and marks every triangle of a grid of two strips or more joined, as the draw's own mark
-(`port/render/rd_replay.c` (`doVu`, `doVuDraw`, `vuExtended`)). At start the renderer logs `rd: VU
+(`port/render/rd_replay_vu.c` (`rd__replay_vu`, `doVuDraw`); `port/render/rd_pipeline.c` (`rd__vu_extended`)). At start the renderer logs `rd: VU
 index values: dense (marks in the stream)`.
 What the flags do is [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule). `ICO_RD_VU_OFFGRID=1`, a
 developer switch, lets the [VU1](ARCHITECTURE.md#terms) programs output X and Y off the GS's 1/16
@@ -544,7 +545,7 @@ pass again (the scissor taken back), so a GPU that runs a pass's draws as one jo
 the fallback if a device still faults on a pass of many VU draws. It is refused, logged once, in a
 multisampled pass, a storage pass or a readable one (the exact blend's), and its passes are not
 passes of the loss bisect's window. The picture is the same byte for byte
-(`rd_replay_tool_pass_split`) (`port/render/rd_replay.c` (`passSplit`); `port/render/rd_core.c`
+(`rd_replay_tool_pass_split`) (`port/render/rd_replay_vu.c` (`passSplit`); `port/render/rd_core.c`
 (`rd_init`)).
 
 ### The stream bounds audit
@@ -628,7 +629,7 @@ on both. The merged draw's key is the passing draw's, which the failing draw
 shares wherever the merge applies, so the merge adds and removes no pipeline key: the dual,
 no-dual and exact-blend sets keep their counts. The scissor batches' two draws (code 36: the clipped fans with ABE forced on, then the
 strip's kicks) are another state and another set of triangles, not this condition, and stay two
-(`port/render/rd_replay.c` (`doVuDraw`)). The split still orders the passing fragments first where
+(`port/render/rd_replay_vu.c` (`doVuDraw`)). The split still orders the passing fragments first where
 it remains: Z write on (each draw writes other buffers), RGB_ONLY with alpha written, ZB_ONLY with
 colour written. In the dumps measured (2026-10-16) the merged draws are the Z-write-off alpha-tested
 ones: meshes `si_hair`, `bmd-tuno`, `cloud`, `cloud2`, `wf_ab03`, `fogs`, the particles, and two
@@ -1469,7 +1470,7 @@ preset at 4:3 and 1x, `vuExtended`) a draw of a listed sheet stops at the game's
 (`rd__vu_sheet_end`, `RdMeshRec.tiledIndexFrom`), so the appended tiles are never drawn there,
 wherever the sheet is placed, and the picture is the PS2's; in every other state they are drawn,
 clipped by the GPU at the frame. This is decided per draw, so an Options change needs no new mesh
-(`port/render/rd_replay.c` (`doVuDraw`); `port/render/rd_interp.c` (`scratchFor`) carries the
+(`port/render/rd_replay_vu.c` (`doVuDraw`); `port/render/rd_interp.c` (`scratchFor`) carries the
 counts to a blended copy). A dump stores a listed sheet as the game made it, its own vertices,
 triangles and batch (`port/render/rd_dump.c` (`rd__dump_frame`)), so the replay lays the tiles
 again under `ICO_RD_CONTENT_EXTEND` as it is set, and `off` removes them. A morph

@@ -480,7 +480,7 @@ void rd__upload_dirty_textures(void)
  * after rd_update_vu_mesh rewrote them (gpuDirty, the morphs), through the
  * ring and one buffer copy each, all before the first pass.  The
  * interpolation's scratch meshes (transient) and a mesh the arena has no
- * room for stay on the ring path in rd_replay.c doVu. */
+ * room for stay on the ring path in rd_replay_vu.c doVuDraw. */
 void rd__upload_meshes(const RdFrame *f, int keep)
 {
     const uint64_t ua = rhi_limits()->uniformAlign;
@@ -503,14 +503,14 @@ void rd__upload_meshes(const RdFrame *f, int keep)
             const uint64_t sb = vb + (uint64_t)rd__mesh_mark_qw(m) * 16;
             const uint64_t ib = (uint64_t)m->indexCount * 4;
             if (!rd__mesh_gpu_reserve(m, sb, ib, ua)) {
-                m->replaySeen = 0; /* doVu's ring path */
+                m->replaySeen = 0; /* doVuDraw's ring path */
                 continue;
             }
             /* stream and indices in the ring as they lie in the arena */
             const uint64_t span = m->gpuIndexOff - m->gpuOff + (ib ? ib : 4);
             const uint64_t off = rd__ring_alloc(span, 16);
             if (off == ~0ull) {
-                /* the range is reserved but not written: doVu must not draw
+                /* the range is reserved but not written: doVuDraw must not draw
                  * from it, and the next replay uploads it */
                 m->replaySeen = 0;
                 m->gpuDirty = 1;

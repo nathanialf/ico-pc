@@ -247,7 +247,7 @@ since the projection does not change with the width. What the port then draws of
 A `VU_MARK_HIDE` triangle never reaches the rule (`vu_content_hidden`). A drawn triangle with a
 vertex outside takes code 36's corner rule (`vu_cut_position`). A grid's strips share rows with
 their neighbours, so the replay marks every triangle of a grid of two strips or more joined, as the
-draw's own mark (`vu_mark.y`; `port/render/rd_replay.c` (`doVuDraw`)).
+draw's own mark (`vu_mark.y`; `port/render/rd_replay_vu.c` (`doVuDraw`)).
 
 Under `VU_F_TICKS` (a picture between two ticks, through a blended camera) a triangle the rule
 drops at the blended camera is drawn, clipped, when either tick's camera showed it on the frame;
@@ -259,7 +259,7 @@ it), each with its own camera's vertices, one z cut, and the picture's and the f
 
 `rd_replay.c` sets `VU_F_EXTENDED` from `vuExtended` (not the Original preset, a frame wider
 than 512, or a scene scale above 1) and `VU_F_BEHIND_EYE` from the frame camera's `freeCamera`
-(`port/render/rd_replay.c` (`vuExtended`, `doVuDraw`)).
+(`port/render/rd_replay_vu.c` (`doVuDraw`); `port/render/rd_pipeline.c` (`rd__vu_extended`)).
 
 **Particles.** A sprite the VU skips for its x/y window is, out of the box, not drawn when its quad
 reaches the camera's picture and drawn whole when wholly beside it; under the free camera and in
@@ -341,7 +341,7 @@ asserts the bone is below 60), so bone 59 is possible; an address below 16 would
 bone. Neither is in the 145 dumps on the maintainer's machine (4,875 skinned draws, bones 0..58;
 2026-10-15); `rd_stream_audit` reports the range and any draw that fills the block. `vu_strip_card` reads a vertex's two bits; a strip is a card when it was
 one at either tick, so a card never enters the picture between the ticks
-(`port/render/rd_replay.c` (`doVuDraw`); `port/shaders/vu_common.hlsli` (`vu_strip_card`,
+(`port/render/rd_replay_vu.c` (`doVuDraw`); `port/shaders/vu_common.hlsli` (`vu_strip_card`,
 `vu_rule_card`)).
 
 **The cost.** The window's 10 s statistics line gives a step's average (`strip verdicts N strips, M

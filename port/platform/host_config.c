@@ -520,7 +520,7 @@ static const struct {
     {"fog_path", "ICO_RD_FOG_PATH"},               /* port/render/rd_fog_path.c rd__fog_path_init */
     {"gpu_checkpoints", "ICO_GPU_CHECKPOINTS"},    /* port/rhi vk_device.c, d3d12_device.c */
     {"gpu_robust", "ICO_GPU_ROBUST"},              /* port/rhi/vk/vk_device.c */
-    {"pass_split", "ICO_RD_PASS_SPLIT"},           /* port/render/rd_replay.c passSplit */
+    {"pass_split", "ICO_RD_PASS_SPLIT"},           /* port/render/rd_replay_vu.c passSplit */
     {"attachment_read", "ICO_VK_ATTACHMENT_READ"}, /* port/rhi/vk/vk_device.c */
     /* port/render/rd_dst_read.c rd__dst_merge_ok, rd_core.c rd_init */
     {"storage_pass_merge", "ICO_RD_PASS_MERGE"},

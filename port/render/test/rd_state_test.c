@@ -329,7 +329,7 @@ static void testPlans(void)
 
     /* the railing (tesri.tm2's TEST 0x5160D: ATE GREATER 0x60,
      * AFAIL FB_ONLY, Z GEQUAL; ALPHA 0x44 with ABE; Z write on), with ABE
-     * as the material packet sets it and as doVu's scissor fans force it:
+     * as the material packet sets it and as rd_replay_vu.c doVuDraw's scissor fans force it:
      * the failing pass is the passing one's pipeline with Z write off, so
      * a hole keeps the depth test and leaves the Z buffer to what is drawn
      * behind it later */

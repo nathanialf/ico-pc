@@ -322,7 +322,7 @@ _Static_assert(sizeof(IcoSpriteStqVertex) == 24, "STQ vertex size");
  *          the first kick the card bits cover, 1 when the rule has the card
  *          test (0: none, the PS2's rule), the kicks the bits cover (0:
  *          none, no strip of the draw is a card), the bits' first qword in
- *          IcoVuBoneCB (rd_replay.c doVuDraw from the payload's RdVuCards,
+ *          IcoVuBoneCB (rd_replay_vu.c doVuDraw from the payload's RdVuCards,
  *          rd_mesh.h)
  *   ticks  under ICO_VU_TICKS: the two ticks' cameras of a picture blended
  *          between them, as the matrices R = S_tick St^-1 (columns; 0..3

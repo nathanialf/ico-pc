@@ -67,7 +67,7 @@ endforeach()
 ico_add_shader(vu_pre_ps vu_tri.hlsl vu_pre_ps fragment)
 ico_add_shader(vu_tri_vs vu_tri.hlsl vu_tri_vs vertex)
 # the plain variants (ICO_VU_PLAIN, vu_common.hlsli): no card test and no
-# tick cameras, for the draws with neither (rd_replay.c vuDraw); about half
+# tick cameras, for the draws with neither (rd_replay_vu.c vuDraw); about half
 # the size (issue 107: the Adreno 740's compiler hangs the device on the
 # extended ones)
 foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:skin skin_debug:skin

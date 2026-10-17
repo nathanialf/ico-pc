@@ -1616,7 +1616,7 @@ static const float (*caseVertex(const Case *c, const float (*in)[4], int v))[4]
 }
 
 /* The card verdicts as the renderer hands them to the shader (rd_mesh.h
- * RdVuCards, rd_replay.c doVuDraw): both bits of every static kick whose
+ * RdVuCards, rd_replay_vu.c doVuDraw): both bits of every static kick whose
  * strip has no passing triangle (the oracle's stripPasses, the blended
  * camera's in a tick case, as portDraws decides), in VuBoneCB from qword 8
  * for the cluster (its bones, addresses 16 and 20, are qwords 0..7) and
@@ -2560,7 +2560,7 @@ static int gpuTests(void)
         memset(&bones, 0, sizeof(bones));
         makeVuCB(c, &st, &vcb, &bones, 0);
         if (c->prog == P_MESH) {
-            /* a grid's mark is the draw's (rd_replay.c doVuDraw) */
+            /* a grid's mark is the draw's (rd_replay_vu.c doVuDraw) */
             vcb.mark[1] = markBit(c);
         } else if (markBit(c) && c->prog != P_PARTICLE) {
             /* a byte a kick after the stream (rd_mesh.c kickMark,
@@ -2722,7 +2722,7 @@ static int gpuTests(void)
         }
         /* the plain variant of a case whose draw has neither
          * VU_F_EXTENDED nor VU_F_TICKS (the Original preset at 4:3 and 1x
-         * without interpolation: what rd_replay.c vuDraw gives the plain
+         * without interpolation: what rd_replay_vu.c vuDraw gives the plain
          * one): its probe, its exact triangles and the others, byte for
          * byte the extended variant's */
         if ((vcb.draw[2] & (ICO_VU_EXTENDED | ICO_VU_TICKS)) == 0u) {

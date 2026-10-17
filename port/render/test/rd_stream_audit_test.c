@@ -16,7 +16,7 @@
  * CPU, every stream index those shaders can read for it computed as the
  * shader computes it (the same unsigned arithmetic, the strip scans run on
  * the stream's own strip flags), and each checked against the draw's own
- * stream: the qwords the replay uploads for it (rd_replay.c doVuDraw:
+ * stream: the qwords the replay uploads for it (rd_replay_vu.c doVuDraw:
  * the mesh's vertices, or the command's copied stream).  The bound range
  * holds the draw's stream and possibly other meshes' after it, so a read
  * past the draw's own stream is a read of something else or past the
@@ -86,7 +86,7 @@ static int failures;
         }                                                                                          \
     } while (0)
 
-/* One VU draw as the shaders see it: the VuCB words rd_replay.c doVuDraw
+/* One VU draw as the shaders see it: the VuCB words rd_replay_vu.c doVuDraw
  * sets (vu_draw.x 0: the stream's own first qword), the stream and the
  * index values it draws. */
 typedef struct AuditDraw {
@@ -343,7 +343,7 @@ static void auditDraw(const AuditDraw *d, Audit *a)
 }
 
 /* ------------------------------------------------------ the index span
- * Issue 95: the index values the device draws (rd_replay.c doVuDraw: the
+ * Issue 95: the index values the device draws (rd_replay_vu.c doVuDraw: the
  * mesh's list, or the grid's made at replay) are vertex numbers to the
  * driver, whatever the shaders make of them.  Vulkan holds them to
  * VkPhysicalDeviceLimits::maxDrawIndexedIndexValue, which is 2^24 - 1 on
@@ -616,7 +616,7 @@ static bool drawOf(const RdFrame *f, const RdCmd *c, AuditDraw *d, uint32_t **gr
         }
         const RdVuBatchRec *b0 = &m->batches[p.firstBatch], *b1 = &m->batches[last - 1];
         d->stream = (const float (*)[4])m->stream;
-        /* the vertices, then the mark bytes (rd_replay.c doVuDraw binds both) */
+        /* the vertices, then the mark bytes (rd_replay_vu.c doVuDraw binds both) */
         d->markBase = m->vertexCount * m->qwPerVertex;
         d->markQw = rd__mesh_mark_qw(m);
         d->streamQw = d->markBase + d->markQw;
@@ -1033,7 +1033,7 @@ int main(int argc, char **argv)
            t.bad, t.boneOutside);
     /* reported: a skinned draw whose weights reach bone 59 (address 252) or
        wrap below address 16 has no room in VuBoneCB for the card bits
-       (rd_replay.c doVuDraw draws it with no card) */
+       (rd_replay_vu.c doVuDraw draws it with no card) */
     if (t.skinDraws) {
         printf("rd_stream_audit: %u skinned draws, weight addresses %u..%u (bone %d..%d); %u "
                "with their bones filling VuBoneCB (no card bits)\n",

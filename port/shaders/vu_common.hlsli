@@ -53,7 +53,7 @@
 // card test (VU_F_EXTENDED's step of the region rule, vu_region_rule_cut)
 // and no tick cameras (VU_F_TICKS: vu_tick_shown, vu_particle_tick_shown);
 // everything else is the same code, so a draw with neither flag gives the
-// same picture through either.  rd_replay.c vuDraw takes the plain one for
+// same picture through either.  rd_replay_vu.c vuDraw takes the plain one for
 // such a draw, and for every draw on a device that refuses the extended
 // one (rd_pipeline.c rd__vu_plain_only); the plain modules are about half
 // the extended ones' size (tools/check_spirv.py VS_PLAIN_BUDGET).
@@ -122,7 +122,7 @@ cbuffer VuCB : register(b2, space1)
 
 // VU memory 16..255: the cluster program's bones (vu_skin.hlsl), and for
 // every mesh program the card bits from qword vu_strip.w (vu_strip_card;
-// rd_replay.c doVuDraw puts them after the bones a skinned mesh reads)
+// rd_replay_vu.c doVuDraw puts them after the bones a skinned mesh reads)
 cbuffer VuBoneCB : register(b3, space1)
 {
     float4 vu_bone[240];
@@ -148,7 +148,7 @@ StructuredBuffer<float4> vu_stream : register(t0, space1);
 // GPU-clipped over the whole picture, a vertex behind the eye or not, in
 // either preset (vu_triangle_out, vu_particle_vs)
 #define VU_F_BEHIND_EYE 256u
-// The picture is not the PS2's out of the box (rd_replay.c doVuDraw: the
+// The picture is not the PS2's out of the box (rd_replay_vu.c doVuDraw: the
 // Enhanced preset, a frame wider than 4:3 or a scene scale above 1): a
 // triangle the region test drops is drawn, GPU-clipped, unless it belongs
 // to a card (vu_region_rule)

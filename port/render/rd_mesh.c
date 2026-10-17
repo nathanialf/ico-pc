@@ -1288,7 +1288,7 @@ void rd_vu_card_counts(uint64_t *strips, uint64_t *triangles, double *ms)
  * a weight's address as bone * 4 + 16 with bones 0..59 (Packet.c
  * pac_makeClusterStrip asserts below 60), so 16..252: bone 59, or an
  * address below 16 (a negative bone, which no model has), makes 240 and
- * leaves no room for the card bits (rd_replay.c doVuDraw logs it once).
+ * leaves no room for the card bits (rd_replay_vu.c doVuDraw logs it once).
  * The 145 dumps on the maintainer's machine (4,875 skinned draws,
  * 2026-10-15) reach bones 0..58, never below 16 (rd_stream_audit reports
  * the range) */

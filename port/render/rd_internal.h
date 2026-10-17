@@ -771,7 +771,7 @@ typedef struct RdMeshRec {
      * holds each one's first vertex and one past its last, in vertex order
      * (the card test's strips, rd_draw_vu_mesh).  boneQwUsed: a skinned
      * mesh's VuBoneCB qwords its weights read (the card bits go after them,
-     * rd_replay.c doVuDraw) */
+     * rd_replay_vu.c doVuDraw) */
     uint32_t *cardStrips;
     uint32_t cardStripCount, boneQwUsed;
 } RdMeshRec;
@@ -1050,7 +1050,7 @@ typedef struct RdPipeKeyInt {
     /* a VU key's vertex shader variant (issue 107; vu_common.hlsli
      * ICO_VU_PLAIN): 1 the extended one (vu_*_vs: the card test and the
      * tick cameras), 0 the plain one (vu_*_plain_vs); 0 for every other
-     * key.  rd_replay.c vuDraw sets it (rd__vu_draw_ext) */
+     * key.  rd_replay_vu.c vuDraw sets it (rd__vu_draw_ext) */
     uint8_t vuExt;
 } RdPipeKeyInt;
 
@@ -1829,7 +1829,7 @@ typedef struct RdContext {
     uint8_t passSamples;
     /* ICO_RD_PASS_SPLIT=N ([dev] pass_split; rd_core.c rd_init): a render
      * pass of VU draws is ended and begun again, its targets loaded, after
-     * every N of them (rd_replay.c passSplit); 0 off (the default) */
+     * every N of them (rd_replay_vu.c passSplit); 0 off (the default) */
     uint32_t passSplit;
     /* the storage pass merge (rd__dst_merge_ok; [dev] storage_pass_merge,
      * ICO_RD_PASS_MERGE=1 turns it on; rd_core.c rd_init): off by default,
@@ -2026,7 +2026,7 @@ typedef struct RdDrawCtx {
 
 extern RdDrawCtx g_rdDrawCtx;
 
-/* the VU command being replayed, for the draw note (rd_replay.c doVuDraw,
+/* the VU command being replayed, for the draw note (rd_replay_vu.c doVuDraw,
  * while a draw window is set) */
 typedef struct RdVuCur {
     uint8_t type, prog, clip;
