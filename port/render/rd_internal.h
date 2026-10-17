@@ -2146,7 +2146,7 @@ extern char g_rdSumFog[224];
 /* ... and the VU vertex pre-pass's (rd_vuprepass_selftest): "on
  * (self-test: ok)", "off (self-test: <reason>)", "off <why> (self-test not
  * run)" */
-extern char g_rdSumPrepass[288];
+extern char g_rdSumPrepass[352];
 /* A recorded command the replay does not model (RDC_WORLD_PRIMS, or a post
  * kind recorded as a stub): counted, and skipped with one log line for the
  * run.  With rd__set_not_implemented_fatal(true), which the render tests set,

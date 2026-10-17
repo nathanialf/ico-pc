@@ -87,7 +87,7 @@ void rd__log(const char *fmt, ...)
 
 char g_rdSumBlend[288];
 char g_rdSumFog[224];
-char g_rdSumPrepass[288];
+char g_rdSumPrepass[352];
 
 void rd_summary_text(char *out, size_t size)
 {
