@@ -46,4 +46,16 @@ int rhi_driver_is_qualcomm_proprietary(uint32_t vendorId, uint32_t driverId);
  * fixed-function one (port/render/rd_dst_read.c rd__dst_init; issue 102). */
 int rhi_driver_is_moltenvk(uint32_t vendorId, uint32_t driverId, int moltenvkBuild);
 
+/* The bytes one pixel of a pass's colour targets may take together on the
+ * Apple GPU MoltenVK names (VkPhysicalDeviceProperties.deviceName, Metal's
+ * MTLDevice name: "Apple A10 GPU", "Apple M1 Pro"): Metal's implicit image
+ * block a pixel and sample with several colour targets (Metal Feature Set
+ * Tables, "Maximum implicit image block size, per pixel, per sample, when
+ * using multiple color render targets"): 32 for the Apple2 and Apple3
+ * families (A8 to A10), 64 for Apple4 to Apple6 (A11 to A13), 128 from
+ * Apple7 (A14, M1) on.  0 for any other name (an Intel or AMD GPU of a
+ * Mac, which states no such bound), and for a null one (RhiLimits
+ * colorBytesPerPixel). */
+uint32_t rhi_metal_color_bytes(const char *deviceName);
+
 #endif /* PORT_RHI_RHI_DRIVER_VERSION_H */

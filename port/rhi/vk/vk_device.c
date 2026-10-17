@@ -1727,6 +1727,11 @@ static void vkr_fill_limits(void)
      * without it); logged on the device line */
     o->maxDrawIndexedIndexValue = l->maxDrawIndexedIndexValue;
     o->fullDrawIndexUint32 = g_vkr.fullDrawIndex;
+    /* colour targets' bytes a pixel together: no bound in Vulkan; under
+     * MoltenVK the Apple GPU's Metal family's (rhi_metal_color_bytes: 32
+     * on the A9 and A10, which the VU vertex pre-pass's record does not
+     * fit) */
+    o->colorBytesPerPixel = g_vkr.moltenvk ? rhi_metal_color_bytes(g_vkr.props.deviceName) : 0u;
     /* the summary line's (s_driverText starts "; ") */
     o->driverText = s_driverText[0] == ';' ? s_driverText + 2 : NULL;
     o->robustText = s_robustText[0] ? s_robustText : NULL;

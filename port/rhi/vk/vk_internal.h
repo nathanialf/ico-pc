@@ -52,6 +52,9 @@ typedef struct VkrBuffer {
     RhiMemory kind;
     void *mapped;
     bool coherent;
+    /* a device buffer made for vertex, index, uniform or storage reads
+     * (rhi.h rhi_cmd_copy_texture_to_buffer's ordering) */
+    bool shaderRead;
     /* hazard tracking (vk_cmd.c, "Hazards"): a copy's write or read not yet
      * behind a barrier, valid while hzEpoch is the recording list's */
     uint64_t hzEpoch;

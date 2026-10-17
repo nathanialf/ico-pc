@@ -75,8 +75,10 @@ typedef struct {
 } RhiFence;
 
 #define RHI_NULL_ID 0u
-#define RHI_MAX_COLOR_TARGETS                                                                      \
-    2 /* colour + dual-source helper never needs more than one target; 2 for puddle/pool copies */
+/* the colour targets of one pass or pipeline: the VU vertex pre-pass's
+ * three record planes (port/render/rd_replay.c vuPrepass); every other
+ * pass draws into one */
+#define RHI_MAX_COLOR_TARGETS 3
 #define RHI_MAX_BIND_SLOTS 8
 #define RHI_MAX_VERTEX_ATTRS 16 /* the screen-prim planes' vertex has 11 (rd_pipeline.c) */
 #define RHI_FRAMES_IN_FLIGHT 2
@@ -109,6 +111,12 @@ typedef enum RhiFormat {
      * aspect through a buffer, for the fog to read where a depth read fails
      * (rd_fog_path.c).  Sampled (Load only) and copied, never a target. */
     RHI_FMT_R32_UINT,
+    /* four 32-bit unsigned words a texel: the VU vertex pre-pass's record
+     * planes (port/render/rd_replay.c vuPrepass), a colour target and a
+     * copy source, never blended (Vulkan: a colour attachment and sampled
+     * on every device, the specification's required format support;
+     * D3D12: a render target at feature level 11_0) */
+    RHI_FMT_RGBA32_UINT,
     RHI_FMT_COUNT
 } RhiFormat;
 
@@ -633,6 +641,15 @@ typedef struct RhiLimits {
      * marks in the stream since v0.8.0, issue 95) */
     uint32_t maxDrawIndexedIndexValue;
     bool fullDrawIndexUint32;
+    /* The bytes one pixel of a pass's colour targets may take together
+     * (their formats' texel sizes summed), 0 where the device states no
+     * bound beyond its colour target count (D3D12; Vulkan, whose
+     * specification has none).  Under MoltenVK, Metal's implicit image
+     * block a pixel on an Apple GPU (rhi_driver_version.h
+     * rhi_metal_color_bytes): 32 on the A9 and A10, 64 on the A11 to A13,
+     * 128 from the A14 and the M1; the VU vertex pre-pass's 48 bytes need
+     * the second (port/render/rd_replay.c rd__vu_prepass_init). */
+    uint32_t colorBytesPerPixel;
     /* For the start's summary line (diag_host.h ico_diag_set_summary),
      * NULL where unknown: driverText, the device line's driver part
      * ("device 10de:1b81; driver NVIDIA 566.36, version 566.36.0.0";
@@ -839,6 +856,14 @@ void rhi_cmd_copy_buffer_to_texture(RhiCommandList cl, RhiBuffer src, uint64_t s
                                     RhiRect region);
 void rhi_cmd_copy_texture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, RhiTexture dst,
                           int32_t dstX, int32_t dstY);
+/* A texture's region into a buffer (the texture in COPY_SRC), rows
+ * rowPitch bytes apart from dstOffset.  Into a device buffer a shader can
+ * read (made with RHI_BUF_VERTEX, _INDEX, _UNIFORM or _STORAGE_READ) the
+ * copy is ordered as rhi_cmd_copy_buffer's: it waits for every earlier
+ * read of the buffer, and the written range is visible to every later
+ * vertex, index, uniform, storage and copy read (the VU vertex pre-pass's
+ * record, port/render/rd_replay.c vuPrepass).  Into any other buffer (a
+ * readback, a copy staging buffer) only later copies and the host see it. */
 void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAspect aspect,
                                     RhiRect region, RhiBuffer dst, uint64_t dstOffset,
                                     uint32_t rowPitch);

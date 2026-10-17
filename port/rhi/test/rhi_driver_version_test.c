@@ -2,7 +2,9 @@
  * (port/rhi/rhi_driver_version.c) for each packing: NVIDIA's own driver
  * (by driver id, and by vendor id when the id is unknown), Mesa's NVK on an
  * NVIDIA GPU (the Vulkan packing), Intel's Windows driver, and the Vulkan
- * packing of everyone else.  Exit 0 on success, 1 on a failure. */
+ * packing of everyone else; the Qualcomm and MoltenVK rules; the colour
+ * bytes a pixel of the Apple GPUs MoltenVK names (rhi_metal_color_bytes).
+ * Exit 0 on success, 1 on a failure. */
 #include "rhi_driver_version.h"
 #include "../../test/ico_check.h"
 
@@ -53,6 +55,21 @@ int main(void)
     CHECK(!rhi_driver_is_moltenvk(RHI_VENDOR_APPLE, 0, 0));
     CHECK(!rhi_driver_is_moltenvk(RHI_VENDOR_APPLE, 3, 1));
     CHECK(!rhi_driver_is_moltenvk(RHI_VENDOR_NVIDIA, 4, 1));
+    /* Metal's colour bytes a pixel by family (Metal Feature Set Tables):
+       A9 and A10 (Apple3) 32, A11 to A13 64, A14 and the M-series 128;
+       an Intel or AMD GPU of a Mac and a null name state none */
+    CHECK(rhi_metal_color_bytes("Apple A9 GPU") == 32u);
+    CHECK(rhi_metal_color_bytes("Apple A10X GPU") == 32u);
+    CHECK(rhi_metal_color_bytes("Apple A11 GPU") == 64u);
+    CHECK(rhi_metal_color_bytes("Apple A13 GPU") == 64u);
+    CHECK(rhi_metal_color_bytes("Apple A14 GPU") == 128u);
+    CHECK(rhi_metal_color_bytes("Apple A17 Pro GPU") == 128u);
+    CHECK(rhi_metal_color_bytes("Apple M1") == 128u);
+    CHECK(rhi_metal_color_bytes("Apple M3 Max") == 128u);
+    CHECK(rhi_metal_color_bytes("AMD Radeon Pro 5500M") == 0u);
+    CHECK(rhi_metal_color_bytes("Intel(R) UHD Graphics 630") == 0u);
+    CHECK(rhi_metal_color_bytes("Apple Paravirtual device") == 0u);
+    CHECK(rhi_metal_color_bytes(NULL) == 0u);
     /* a short buffer is cut and terminated */
     {
         char small[4];

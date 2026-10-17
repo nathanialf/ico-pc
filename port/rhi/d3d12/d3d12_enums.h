@@ -53,6 +53,8 @@ static const DxFormatMap dx_formatMap[RHI_FMT_COUNT] = {
                            DXGI_FORMAT_UNKNOWN, 16, false, false, false},
     [RHI_FMT_R32_UINT] = {true, DXGI_FORMAT_R32_TYPELESS, DXGI_FORMAT_R32_UINT, DXGI_FORMAT_UNKNOWN,
                           4, false, false, true},
+    [RHI_FMT_RGBA32_UINT] = {true, DXGI_FORMAT_R32G32B32A32_TYPELESS, DXGI_FORMAT_R32G32B32A32_UINT,
+                             DXGI_FORMAT_UNKNOWN, 16, false, false, true},
 };
 
 typedef struct DxVertexFormatMap {

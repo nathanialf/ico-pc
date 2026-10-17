@@ -639,6 +639,9 @@ static void dx_fill_limits(void)
      * smaller limit) */
     o->maxDrawIndexedIndexValue = 0xFFFFFFFFu;
     o->fullDrawIndexUint32 = true;
+    /* colour targets: eight a pass at feature level 11_0, no bound on their
+     * bytes together (rhi.h RhiLimits.colorBytesPerPixel) */
+    o->colorBytesPerPixel = 0;
     /* the summary line's (s_driverText starts "; " when known) */
     o->driverText = s_driverText[0] == ';' ? s_driverText + 2 : NULL;
     o->robustText = NULL;

@@ -483,6 +483,10 @@ static RhiBuffer createBuffer(const RhiBufferDesc *desc)
     b->memSize = req.size;
     b->size = desc->size;
     b->kind = desc->memory;
+    /* a device buffer a shader reads: a texture copied into it is made
+     * visible to those reads (vk_cmd.c rhi_cmd_copy_texture_to_buffer) */
+    const uint32_t reads = RHI_BUF_VERTEX | RHI_BUF_INDEX | RHI_BUF_UNIFORM | RHI_BUF_STORAGE_READ;
+    b->shaderRead = desc->memory == RHI_MEM_DEVICE && (desc->usage & reads) != 0;
     if (desc->memory != RHI_MEM_DEVICE) {
         if (!VKR_CHECK(vkMapMemory(g_vkr.device, b->memory, 0, VK_WHOLE_SIZE, 0, &b->mapped))) {
             b->mapped = NULL;

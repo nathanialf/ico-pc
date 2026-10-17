@@ -39,6 +39,7 @@ static const VkrFormatMap vkr_formatMap[RHI_FMT_COUNT] = {
     [RHI_FMT_BC3_UNORM] = {true, VK_FORMAT_BC3_UNORM_BLOCK, 16, VKR_COLOR, false},
     [RHI_FMT_BC7_UNORM] = {true, VK_FORMAT_BC7_UNORM_BLOCK, 16, VKR_COLOR, false},
     [RHI_FMT_R32_UINT] = {true, VK_FORMAT_R32_UINT, 4, VKR_COLOR, true},
+    [RHI_FMT_RGBA32_UINT] = {true, VK_FORMAT_R32G32B32A32_UINT, 16, VKR_COLOR, true},
 };
 
 typedef struct VkrVertexFormatMap {

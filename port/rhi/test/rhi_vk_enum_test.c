@@ -251,6 +251,11 @@ int main(void)
     }
     CHECK_EQ(vkr_vk_format_with(RHI_FMT_D32F, VK_FORMAT_D24_UNORM_S8_UINT), VK_FORMAT_D32_SFLOAT);
     CHECK_EQ(vkr_formatMap[RHI_FMT_R8_UNORM].vk, VK_FORMAT_R8_UNORM);
+    /* the VU vertex pre-pass's record planes: four words a texel, never
+     * blended */
+    CHECK_EQ(vkr_formatMap[RHI_FMT_RGBA32_UINT].vk, VK_FORMAT_R32G32B32A32_UINT);
+    CHECK_EQ(vkr_formatMap[RHI_FMT_RGBA32_UINT].texelBytes, 16);
+    CHECK_EQ(vkr_formatMap[RHI_FMT_RGBA32_UINT].isInteger, 1);
     CHECK_EQ(vkr_vertexFormatMap[RHI_VTX_U8x4_UNORM].vk, VK_FORMAT_R8G8B8A8_UNORM);
     CHECK_EQ(vkr_state_layout(RHI_STATE_SHADER_READ, RHI_FMT_D32F),
              VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
