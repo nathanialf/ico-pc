@@ -2,8 +2,9 @@
  * (rd_internal.h g_rdWin; docs/port/RENDER.md, "The loss bisect").
  *
  * rd__replay_set_window: the replay numbers its passes 1, 2, ... as they
- * begin (rd_replay.c passPush: render passes, copies, snapshots, exact
- * blends), records the draws and copies of the passes inside [first, last]
+ * begin (rd_replay.c passPush: the VU vertex and triangle pre-passes, 1 and
+ * 2 of a replay that has both, rd_replay_vu.c; render passes, copies,
+ * snapshots, exact blends), records the draws and copies of the passes inside [first, last]
  * only, and stops the walk after the command that began pass last + 1.
  * rd__replay_set_window_draws narrows pass `last` to some of its draws
  * through a filter (the second level), and notes the last draw recorded. */

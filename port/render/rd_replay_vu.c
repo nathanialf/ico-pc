@@ -485,16 +485,17 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
     }
     const uint64_t ua = rhi_limits()->uniformAlign;
     /* the card verdicts (rd_mesh.h RdVuCards, vu_common.hlsli
-     * vu_strip_card), in a state other than out of the box (not with the
-     * plain shaders only) when a strip of the draw is a card at either
-     * tick: in VuBoneCB after the bones a skinned mesh reads
-     * (RdMeshRec.boneQwUsed), from qword 0 for the others; vu_strip = (first kick, the card test, kicks covered, first
-     * qword).  A draw with more kicks than VuBoneCB holds covers the first
-     * ones (the others are no card) */
+     * vu_strip_card), in a state other than out of the box when a strip of
+     * the draw is a card at either tick (the plain variant, the fallback's
+     * on a device of the table, has no card test and never reads them): in
+     * VuBoneCB after the bones a skinned mesh reads (RdMeshRec.boneQwUsed),
+     * from qword 0 for the others; vu_strip = (first kick, the card test,
+     * kicks covered, first qword).  A draw with more kicks than VuBoneCB
+     * holds covers the first ones (the others are no card) */
     RdVuCards cards;
     const uint8_t *pay = f->payload + c->u[1];
     const uint32_t cardWords = rd__vu_cards_at(pay, c->u[2], &cards);
-    const bool cardsRead = cardWords && cards.any && rd__vu_extended() && !g_rd.vuPlainOnly;
+    const bool cardsRead = cardWords && cards.any && rd__vu_extended();
     const bool withCards = cardsRead && (c->type != RDC_SKINNED || (m && m->boneQwUsed < 240u));
     if (cardsRead && !withCards && c->type == RDC_SKINNED) {
         /* bones reaching bone 59 (address 252; the game allows 0..59,
@@ -904,6 +905,10 @@ static bool vuStageDraw(const VuPre *e, IcoVuCB *vcb, uint64_t dOff, const RdPip
                         uint32_t w, uint32_t count)
 {
     vcb->tri[3] = w;
+    if (g_rdWin.first && g_rdWin.filter == 1) {
+        /* the loss bisect's MASK_MARKS (vuDraw's): every triangle unmarked */
+        memset(vcb->mark, 0, sizeof(vcb->mark));
+    }
     const RhiBindGroup g1 = vuGroup(e->src.streamBuf, e->src.streamBufSize, e->src.streamOff,
                                     e->src.streamSize, &vcb->draw[0]);
     const uint64_t vOff = cbCopy(vcb, sizeof(*vcb), rhi_limits()->uniformAlign);
@@ -1106,7 +1111,11 @@ static void vuPrepassRun(const RdFrame *f, int keep)
     }
     s_recFails = 0;
     /* 3. the slots: pass V's from texel 0, pass T's from row rowsV; a
-     * command whose pipelines are all made is drawn into the record */
+     * command whose pipelines are all made is drawn into the record.  The
+     * pipelines single-sampled whatever the last pass was (rd__get_pipeline's
+     * drawKey) */
+    const uint8_t samples = g_rd.passSamples;
+    g_rd.passSamples = 1;
     const uint32_t t0 = rowsV * ICO_VU_REC_W;
     uint32_t vAt = 0, tAt = t0, vEnd = 0, tEnd = t0;
     for (uint32_t i = 0; i < taken; i++) {
@@ -1157,18 +1166,16 @@ static void vuPrepassRun(const RdFrame *f, int keep)
         for (uint32_t i = 0; i < s_preN; i++) {
             s_pre[i].rec = 0; /* the ring is full: drawn the old way */
         }
+        g_rd.passSamples = samples;
         return;
     }
-    /* 4. pass V, single-sampled whatever the last pass was (rd__get_pipeline's
-     * drawKey): a draw a mesh or grid command (its vertices), two a particle
-     * command (its slots A and B).  A piece of the GPU timing (rd_perf.c
+    /* 4. pass V: a draw a mesh or grid command (its vertices), two a
+     * particle command (its slots A and B).  A piece of the GPU timing (rd_perf.c
      * rd__perf_pass) with its copies; the pass ring's entry (rd_passring.h
      * RD_PASSK_VU_PRE: the rows drawn and the vertices); the loss bisect's
      * pass window numbers it pass 1 (rd_window.c): outside the window its
      * draws and copies are left out, and the slot's record buffer keeps what
      * an earlier replay of the frame wrote */
-    const uint8_t samples = g_rd.passSamples;
-    g_rd.passSamples = 1;
     uint32_t verts = 0, sprites = 0, draws = 0, triSlots = 0, passes = 0;
     uint32_t vertDraws = 0;
     rd__perf_pass(rd__replay_cl(), RD_PERF_PASS_PREPASS, RD_PERF_ID_RECORD, ICO_VU_REC_W, usedV,
