@@ -16,7 +16,9 @@
  *     scene's writes stamped with spu2_time() under the lock, as the
  *     driver's serve does: every pull full, the stamps never going back,
  *     the frames rendered and the silence equal to what was taken plus what
- *     is left queued, no lock miss beyond the writer's own long holds;
+ *     is left queued, no lock miss and the lead left queued (the lock's
+ *     wait bound raised to 500 ms here, so a writer the system preempts
+ *     while it holds the lock delays a pull instead of making a miss);
  *   - the ramp: with the lock held by another thread, the first pull plays
  *     the lead and the second a 96-frame linear ramp from the last frame to
  *     0, then silence; two misses, the silence counted; once the lock is
@@ -26,6 +28,12 @@
  *     driver's ticks and longest gap, and the choice of the mode
  *     (ico_audio_pick_mode: the dump, the fixed clock, [dev] audio_sync,
  *     audio=0 and the headless build on the game's clock).
+ *
+ * Every check is a count, a fence or a sample, never a wall-clock time, so
+ * scheduler delays (a loaded machine, ctest -j) change how long the test
+ * takes, not what it finds; the one wall-clock bound, the lock's wait in
+ * the free-running part, is 500 ms.  A failing check prints its values;
+ * each part prints a line of its counts.
  */
 #include "../out_sdl.c"
 
@@ -311,13 +319,14 @@ static void test_bit_for_bit(void)
     for (i = 0; i < SCENE_FRAMES * CHANNELS && cap[i] == ref[i]; i++) {}
     CHECK(i == SCENE_FRAMES * CHANNELS, "frame %d differs: %d, want %d", i / CHANNELS,
           i < SCENE_FRAMES * CHANNELS ? cap[i] : 0, i < SCENE_FRAMES * CHANNELS ? ref[i] : 0);
+    printf("audio_pull_test: bit for bit: %d of %d frames equal; %llu misses on the way\n",
+           i / CHANNELS, SCENE_FRAMES, (unsigned long long)P_LOAD(P.misses));
 }
 
 /* --- free-running ----------------------------------------------------------------- */
 
-static int free_done;       /* the puller finished (atomic) */
-static int free_backwards;  /* a stamp before the last one */
-static int free_long_holds; /* writer holds of the lock over a millisecond */
+static int free_done;      /* the puller finished (atomic) */
+static int free_backwards; /* a stamp before the last one */
 static int free_pushed;
 
 static int writer_free(void *u)
@@ -333,16 +342,12 @@ static int writer_free(void *u)
             SDL_DelayPrecise(500000);
         }
         {
-            const Uint64 t0 = SDL_GetTicksNS();
             uint64_t t;
 
             ico_audio_lock();
             t = spu2_time(); /* the serve's stamp */
             spu2_write_reg(e->core, e->reg, e->value, t);
             ico_audio_unlock();
-            if (SDL_GetTicksNS() - t0 > 1000000u) {
-                free_long_holds++;
-            }
             if (t < last) {
                 free_backwards++;
             }
@@ -380,6 +385,12 @@ static void test_free_running(void)
     scene_events(600, 7000); /* the last write near 9.4 s */
     scene_setup();
     restart();
+    /* the lock's wait bound (a quarter period) at 500 ms: this part checks
+       that two threads keep the SPU2 whole and the counts exact, not the
+       bound (the ramp part makes its misses by holding the lock); with the
+       real 2.5 ms a writer preempted inside its lock on a loaded machine
+       could make a miss */
+    period_ns = 2000000000u;
     frames0 = P_LOAD(P.frames);
     silence0 = P_LOAD(P.silence);
     misses0 = P_LOAD(P.misses);
@@ -393,20 +404,27 @@ static void test_free_running(void)
     CHECK(short_pulls == 0, "%d pulls short", short_pulls);
     CHECK(free_pushed == SCENE_EVENTS, "%d writes pushed", free_pushed);
     CHECK(free_backwards == 0, "%d stamps went back", free_backwards);
-    CHECK(P_LOAD(P.callbacks) - callbacks0 == 1000);
+    CHECK(P_LOAD(P.callbacks) - callbacks0 == 1000, "%llu callbacks, want 1000",
+          (unsigned long long)(P_LOAD(P.callbacks) - callbacks0));
     /* what was put (rendered or silence) is what was taken plus the rest */
     CHECK(P_LOAD(P.frames) - frames0 + (P_LOAD(P.silence) - silence0) ==
               (uint64_t)1000 * PULL_FRAMES + (uint64_t)queued,
           "rendered %llu, silence %llu, taken %d, queued %d",
           (unsigned long long)(P_LOAD(P.frames) - frames0),
           (unsigned long long)(P_LOAD(P.silence) - silence0), 1000 * PULL_FRAMES, queued);
-    /* the lead left queued, unless the last pull missed the lock */
-    CHECK(queued == lead_frames || free_long_holds > 0, "the lead left queued: %d", queued);
-    CHECK(time_locked() == P_LOAD(P.frames) - frames0, "the SPU2's time is the frames rendered");
-    /* a miss needs the lock still held a quarter period on: only a long
-       hold of the writer's (the system preempting it) can make one */
-    CHECK(P_LOAD(P.misses) == misses0 || free_long_holds > 0, "%llu misses, %d long holds",
-          (unsigned long long)(P_LOAD(P.misses) - misses0), free_long_holds);
+    CHECK(queued == lead_frames, "the lead left queued: %d frames, want %d", queued, lead_frames);
+    CHECK(time_locked() == P_LOAD(P.frames) - frames0,
+          "the SPU2's time %llu is not the %llu frames rendered", (unsigned long long)time_locked(),
+          (unsigned long long)(P_LOAD(P.frames) - frames0));
+    CHECK(P_LOAD(P.misses) == misses0 && P_LOAD(P.silence) == silence0,
+          "%llu misses, %llu frames of silence, want none (the longest wait %.2f ms)",
+          (unsigned long long)(P_LOAD(P.misses) - misses0),
+          (unsigned long long)(P_LOAD(P.silence) - silence0), P_LOAD(P.wait_run_ns) / 1e6);
+    printf("audio_pull_test: free-running: %llu callbacks, %llu frames rendered, %d writes, "
+           "%llu misses, the longest lock wait since the start %.2f ms\n",
+           (unsigned long long)(P_LOAD(P.callbacks) - callbacks0),
+           (unsigned long long)(P_LOAD(P.frames) - frames0), free_pushed,
+           (unsigned long long)(P_LOAD(P.misses) - misses0), P_LOAD(P.wait_run_ns) / 1e6);
 }
 
 /* --- the ramp ------------------------------------------------------------------------ */
@@ -445,13 +463,15 @@ static void test_ramp(void)
     dc[0] = dev[2 * (PULL_FRAMES - 1)];
     dc[1] = dev[2 * (PULL_FRAMES - 1) + 1];
     CHECK(dc[0] > 20000 && dc[1] > 20000, "a steady level: %d %d", dc[0], dc[1]);
-    for (ok = 1, i = 0; i < PULL_FRAMES; i++) {
-        ok &= dev[2 * i] == dc[0] && dev[2 * i + 1] == dc[1];
+    for (ok = 1, i = 0; i < PULL_FRAMES && ok; i++) {
+        ok = dev[2 * i] == dc[0] && dev[2 * i + 1] == dc[1];
     }
-    CHECK(ok, "the level is constant");
+    CHECK(ok, "the level is not constant: frame %d is %d %d, want %d %d", i - 1, dev[2 * (i - 1)],
+          dev[2 * (i - 1) + 1], dc[0], dc[1]);
     CHECK(ico_audio_sdl_queued_ms() == PULL_FRAMES * 1000 / RATE, "the lead queued: %d ms",
           ico_audio_sdl_queued_ms());
-    CHECK(ico_audio_sdl_cushion_ms() == 0);
+    CHECK(ico_audio_sdl_cushion_ms() == 0, "a cushion of %d ms, want 0",
+          ico_audio_sdl_cushion_ms());
 
     /* the lock held by this thread while another pulls twice */
     misses0 = P_LOAD(P.misses);
@@ -462,12 +482,15 @@ static void test_ramp(void)
     CHECK(p != NULL, "thread: %s", SDL_GetError());
     SDL_WaitThread(p, NULL);
     ico_audio_unlock();
-    CHECK(P_LOAD(P.misses) - misses0 == 2);
-    CHECK(P_LOAD(P.silence) - silence0 == PULL_FRAMES);
-    for (ok = 1, i = 0; i < PULL_FRAMES; i++) {
-        ok &= dev[2 * i] == dc[0] && dev[2 * i + 1] == dc[1];
+    CHECK(P_LOAD(P.misses) - misses0 == 2, "%llu misses, want 2",
+          (unsigned long long)(P_LOAD(P.misses) - misses0));
+    CHECK(P_LOAD(P.silence) - silence0 == PULL_FRAMES, "%llu frames of silence, want %d",
+          (unsigned long long)(P_LOAD(P.silence) - silence0), PULL_FRAMES);
+    for (ok = 1, i = 0; i < PULL_FRAMES && ok; i++) {
+        ok = dev[2 * i] == dc[0] && dev[2 * i + 1] == dc[1];
     }
-    CHECK(ok, "the first pull plays the lead");
+    CHECK(ok, "the first pull does not play the lead: frame %d is %d %d, want %d %d", i - 1,
+          dev[2 * (i - 1)], dev[2 * (i - 1) + 1], dc[0], dc[1]);
     for (ok = 1, i = 0; i < RAMP_FRAMES; i++) {
         const int16_t *f = dev + (PULL_FRAMES + i) * CHANNELS;
 
@@ -479,25 +502,47 @@ static void test_ramp(void)
         }
     }
     CHECK(ok && dev[(PULL_FRAMES + RAMP_FRAMES - 1) * CHANNELS] == 0,
-          "the second ramps from the last frame to 0");
-    for (ok = 1, i = PULL_FRAMES + RAMP_FRAMES; i < 2 * PULL_FRAMES; i++) {
-        ok &= dev[2 * i] == 0 && dev[2 * i + 1] == 0;
+          "the second does not ramp from the last frame to 0 (its frame %d is %d)", RAMP_FRAMES - 1,
+          dev[(PULL_FRAMES + RAMP_FRAMES - 1) * CHANNELS]);
+    for (ok = 1, i = PULL_FRAMES + RAMP_FRAMES; i < 2 * PULL_FRAMES && ok; i++) {
+        ok = dev[2 * i] == 0 && dev[2 * i + 1] == 0;
     }
-    CHECK(ok, "then silence");
+    CHECK(ok, "no silence after the ramp: frame %d is %d %d", i - 1 - PULL_FRAMES, dev[2 * (i - 1)],
+          dev[2 * (i - 1) + 1]);
 
     /* the lock free again: the sound ramps in, the level where it was */
     pull(dev);
-    for (ok = 1, i = 0; i < RAMP_FRAMES; i++) {
+    for (ok = 1, i = 0; i < RAMP_FRAMES && ok; i++) {
         const int raw0 = dc[0] < 0 ? -dc[0] : dc[0];
 
-        ok &= (dev[2 * i] < 0 ? -dev[2 * i] : dev[2 * i]) <= raw0 * i / RAMP_FRAMES + 1;
-        ok &= dev[2 * i] == dc[0] * i / RAMP_FRAMES && dev[2 * i + 1] == dc[1] * i / RAMP_FRAMES;
+        ok = (dev[2 * i] < 0 ? -dev[2 * i] : dev[2 * i]) <= raw0 * i / RAMP_FRAMES + 1 &&
+             dev[2 * i] == dc[0] * i / RAMP_FRAMES && dev[2 * i + 1] == dc[1] * i / RAMP_FRAMES;
     }
-    CHECK(ok, "the sound ramps in over %d frames", RAMP_FRAMES);
-    for (ok = 1, i = RAMP_FRAMES; i < PULL_FRAMES; i++) {
-        ok &= dev[2 * i] == dc[0] && dev[2 * i + 1] == dc[1];
+    CHECK(ok, "the ramp in: frame %d is %d %d, want %d %d", i - 1, dev[2 * (i - 1)],
+          dev[2 * (i - 1) + 1], dc[0] * (i - 1) / RAMP_FRAMES, dc[1] * (i - 1) / RAMP_FRAMES);
+    for (ok = 1, i = RAMP_FRAMES; i < PULL_FRAMES && ok; i++) {
+        ok = dev[2 * i] == dc[0] && dev[2 * i + 1] == dc[1];
     }
-    CHECK(ok, "then the level it had");
+    CHECK(ok, "after the ramp in: frame %d is %d %d, want %d %d", i - 1, dev[2 * (i - 1)],
+          dev[2 * (i - 1) + 1], dc[0], dc[1]);
+    printf("audio_pull_test: ramp: level %d %d, %llu misses, %llu frames of silence while the "
+           "lock was held\n",
+           dc[0], dc[1], (unsigned long long)(P_LOAD(P.misses) - misses0),
+           (unsigned long long)(P_LOAD(P.silence) - silence0));
+}
+
+/* one row of the mode table (ico_audio_pick_mode), its arguments in the
+   message on a failure */
+static void mode_case(int window_build, const char *enable, int dumping, int repeatable,
+                      const char *sync, int want, const char *want_why)
+{
+    const char *why = "(unset)";
+    const int got = ico_audio_pick_mode(window_build, enable, dumping, repeatable, sync, &why);
+
+    CHECK(got == want && strcmp(why, want_why) == 0,
+          "ico_audio_pick_mode(%d, %s, %d, %d, %s): mode %d (\"%s\"), want %d (\"%s\")",
+          window_build, enable != NULL ? enable : "NULL", dumping, repeatable,
+          sync != NULL ? sync : "NULL", got, why, want, want_why);
 }
 
 /* --- the 10 s line and the mode ---------------------------------------------------------- */
@@ -507,13 +552,12 @@ static void test_summary_and_mode(void)
     char line[512];
     unsigned long long callbacks, frames, gaveup, late, silence_ms, ticks, gap, over, bound;
     double waited = -1.0;
-    const char *why = NULL;
     uint64_t base;
     int i;
 
     /* the window so far, discarded */
     pull(dev);
-    CHECK(ico_audio_sdl_summary_text(line, sizeof(line)) == 1);
+    CHECK(ico_audio_sdl_summary_text(line, sizeof(line)) == 1, "no 10 s line on the pull path");
     /* three pulls with the lead queued (480 frames each), five driver
        ticks with one gap of 250 ms */
     for (i = 0; i < 3; i++) {
@@ -527,7 +571,7 @@ static void test_summary_and_mode(void)
     ico_audio_tick_note(base + 283400000u);
     ico_audio_tick_note(base + 300100000u);
     ico_audio_unlock();
-    CHECK(ico_audio_sdl_summary_text(line, sizeof(line)) == 1);
+    CHECK(ico_audio_sdl_summary_text(line, sizeof(line)) == 1, "no 10 s line on the pull path");
     printf("audio_pull_test: %s\n", line);
     CHECK(sscanf(line,
                  "audio: %llu callbacks, %llu frames; waited %lf ms at most for the driver (%llu "
@@ -538,30 +582,28 @@ static void test_summary_and_mode(void)
           "the line's shape: %s", line);
     CHECK(callbacks == 3 && frames == 3 * PULL_FRAMES, "%llu callbacks, %llu frames", callbacks,
           frames);
-    CHECK(gaveup == 0 && silence_ms == 0 && waited < 1.0);
+    /* uncontended: the first try takes the lock, so the wait is 0 */
+    CHECK(gaveup == 0 && silence_ms == 0 && waited == 0.0,
+          "%llu gave up, %llu ms of silence, waited %.2f ms: want 0, 0, 0.00", gaveup, silence_ms,
+          waited);
     CHECK(gap == 250 && over == 1 && bound == 200, "gap %llu, %llu over %llu", gap, over, bound);
     /* the ticks since the start: these five and none before */
     CHECK(ticks == 5, "%llu ticks", ticks);
     /* the next window's longest gap starts again */
-    CHECK(ico_audio_sdl_summary_text(line, sizeof(line)) == 1);
+    CHECK(ico_audio_sdl_summary_text(line, sizeof(line)) == 1, "no 10 s line on the pull path");
     CHECK(strstr(line, "longest gap 0 ms (0 over 200 ms)") != NULL, "%s", line);
 
     /* the mode */
-    CHECK(ico_audio_pick_mode(1, NULL, 0, 0, NULL, &why) == ICO_AUDIO_MODE_PULL);
-    CHECK_STR(why, "");
-    CHECK(ico_audio_pick_mode(1, NULL, 0, 0, "0", &why) == ICO_AUDIO_MODE_PULL);
-    CHECK(ico_audio_pick_mode(1, NULL, 1, 0, NULL, &why) == ICO_AUDIO_MODE_SYNC);
-    CHECK_STR(why, "audio_dump");
-    CHECK(ico_audio_pick_mode(1, NULL, 0, 0, "1", &why) == ICO_AUDIO_MODE_SYNC);
-    CHECK_STR(why, "[dev] audio_sync");
-    CHECK(ico_audio_pick_mode(1, "0", 0, 0, NULL, &why) == ICO_AUDIO_MODE_SYNC);
-    CHECK_STR(why, "audio=0");
-    CHECK(ico_audio_pick_mode(1, "1", 0, 0, NULL, &why) == ICO_AUDIO_MODE_PULL);
-    CHECK(ico_audio_pick_mode(1, NULL, 0, 1, NULL, &why) == ICO_AUDIO_MODE_SYNC);
-    CHECK_STR(why, "fixed clock");
-    CHECK(ico_audio_pick_mode(0, NULL, 0, 0, NULL, &why) == ICO_AUDIO_MODE_SYNC);
-    CHECK_STR(why, "headless build");
-    CHECK(ico_audio_pick_mode(1, NULL, 0, 0, NULL, NULL) == ICO_AUDIO_MODE_PULL);
+    mode_case(1, NULL, 0, 0, NULL, ICO_AUDIO_MODE_PULL, "");
+    mode_case(1, NULL, 0, 0, "0", ICO_AUDIO_MODE_PULL, "");
+    mode_case(1, NULL, 1, 0, NULL, ICO_AUDIO_MODE_SYNC, "audio_dump");
+    mode_case(1, NULL, 0, 0, "1", ICO_AUDIO_MODE_SYNC, "[dev] audio_sync");
+    mode_case(1, "0", 0, 0, NULL, ICO_AUDIO_MODE_SYNC, "audio=0");
+    mode_case(1, "1", 0, 0, NULL, ICO_AUDIO_MODE_PULL, "");
+    mode_case(1, NULL, 0, 1, NULL, ICO_AUDIO_MODE_SYNC, "fixed clock");
+    mode_case(0, NULL, 0, 0, NULL, ICO_AUDIO_MODE_SYNC, "headless build");
+    CHECK(ico_audio_pick_mode(1, NULL, 0, 0, NULL, NULL) == ICO_AUDIO_MODE_PULL,
+          "without a reason pointer: not the pull path");
 }
 
 int main(void)
@@ -590,7 +632,7 @@ int main(void)
     stream = NULL;
     lock_destroy();
     pull_render = NULL;
-    CHECK(!ico_audio_sdl_active());
+    CHECK(!ico_audio_sdl_active(), "the output still active after its stream is gone");
     SDL_Quit();
     return ico_check_summary("audio_pull_test");
 }

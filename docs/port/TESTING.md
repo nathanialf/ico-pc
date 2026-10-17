@@ -82,9 +82,15 @@ program under an environment switch ([Environment switches](#environment-switche
   on a device-less SDL stream over the real SPU2: a writer thread under the audio lock and a
   pulling thread render the frames one thread renders; 10 s free-running with the frames and the
   silence accounted; the ramp out of and into silence while the lock is held elsewhere; the 10 s
-  line and the mode choice (`audio_pull`). It is the program to run under ThreadSanitizer: the
-  `asan` preset with `-DICO_HEADLESS=OFF -DICO_SANITIZE=thread` into a build folder of its own,
-  `--target audio_pull_test`, run with `TSAN_OPTIONS=halt_on_error=1`; a report is a failure.
+  line and the mode choice (`audio_pull`). Its checks are counts, fences and samples, never wall
+  time, so a loaded machine or `ctest -j` only makes it slower (the free-running part raises the
+  lock's wait bound to 500 ms, the one wall-clock bound); a failing check prints its values and
+  each part prints a line of its counts. It is the program to run under ThreadSanitizer, with
+  `audio_queue_test`: the `asan` preset with `-DICO_HEADLESS=OFF -DICO_SANITIZE=thread` into a
+  build folder of its own, `--target audio_pull_test audio_queue_test`, each run with
+  `TSAN_OPTIONS=halt_on_error=1` under `setarch x86_64 -R`, which turns address-space
+  randomization off for the run (the build host's kernel randomizes more than ThreadSanitizer
+  accepts); a report is a failure.
 - `audio_queue_test.c` (window build): the output on the game's clock (`out_sdl.c`'s push) on a
   device-less SDL stream: the cushion, the refill after a dry queue and its ramp, the trim and the
   drop limit (`audio_queue`).
