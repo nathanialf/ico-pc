@@ -1375,3 +1375,22 @@ if(ICO_RUN_TESTS)
                                     ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk;ICO_RD_FOG_SABOTAGE=local")
 endif()
 # ---- FIXT end ----
+
+# FIXP: the static pipeline path pinned.  Lavapipe has Vulkan 1.3 and
+# VK_EXT_extended_dynamic_state3, so every other run draws with the depth and
+# blend state dynamic and the start-up set's membership checks
+# (rd__pipe_key_equal) compare modulo that normalisation; with
+# ICO_VK_FAKE_NO_DYNAMIC=1 (vk_device.c, [dev] dynamic_state = false) every
+# pipeline is static and each check is exact: rd_pixel's whole run, and
+# rd_mesh's shard 1 of 4 (gpu_prims, the shard that draws the VU cases).
+if(ICO_RUN_TESTS)
+    set(_env_static ${_env} "ICO_VK_FAKE_NO_DYNAMIC=1")
+    set(_st "${CMAKE_CURRENT_BINARY_DIR}/static")
+    file(MAKE_DIRECTORY "${_st}")
+    add_test(NAME rd_pixel_static COMMAND rd_pixel_test "${_st}")
+    add_test(NAME rd_mesh_static.1of4 COMMAND rd_mesh_test "${ICO_DISC_IMAGE}" --shard 1/4)
+    set_tests_properties(rd_pixel_static rd_mesh_static.1of4
+                         PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_st}"
+                                    ENVIRONMENT "${_env_static}")
+endif()
+# FIXP end
