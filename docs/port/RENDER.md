@@ -1509,7 +1509,7 @@ line `rd: profile: <flag> off (self-test)` is logged. The start line, once a run
 
 ```
 rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function; fog local on; DATE stencil; depth stores kept; blur fold on; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; pipelines the start-up set
-rd: profile: immediate-mode GPU (Mesa, Vulkan): blend fixed-function; fog local off; DATE snapshot; depth stores kept; blur fold off; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; pipelines the start-up set
+rd: profile: immediate-mode GPU (Mesa, Vulkan): blend fixed-function; fog local off; DATE snapshot; depth stores kept; blur fold off; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views work and scene; pipelines the start-up set
 ```
 
 and the `ico_pc: summary:` line carries the flags as in force after the blend's text

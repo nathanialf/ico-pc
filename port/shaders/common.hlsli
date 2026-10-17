@@ -267,7 +267,7 @@ cbuffer DrawCB : register(b1, space1)
     float4 g_tex;
     float4 g_param;
     float4 g_scale;
-    // v0.7.10 (shader_consts.h IcoDrawCB.aux0, aux1): spare blocks of the
+    // (shader_consts.h IcoDrawCB.aux0, aux1): spare blocks of the
     // folded blur pair and of the pixel cuts' per-draw constants
     uint4 g_aux0;
     uint4 g_aux1;

@@ -1058,10 +1058,10 @@ typedef enum RdVsId {
     RD_VS_VU_PRE_GRID,
     RD_VS_VU_PRE_GRID_LIT,
     RD_VS_VU_PRE_GRID_SPEC,
-    /* v0.7.10 (docs/port/RENDER.md, the per-triangle record stage): the
-     * ids from RD_VS_V0710_FIRST are the effort's new vertex shaders; until
-     * every package has landed a missing module of theirs is not an init
-     * failure (rd_replay.c rd__gpu_init: the fence) */
+    /* (docs/port/RENDER.md, the per-triangle record stage): the ids from
+     * RD_VS_OPTIONAL_FIRST on are vertex shaders whose module may be missing
+     * from the table; a missing module leaves its id empty and is not an
+     * init failure (rd_replay.c rd__gpu_init) */
     RD_VS_VU_MAIN,           /* vu_main_vs: every mesh and grid draw from the records */
     RD_VS_VU_PARTICLE_MAIN,  /* vu_particle_main_vs: the sprites from their records */
     RD_VS_VU_TRI_RULE_PRE,   /* vu_tri_rule_pre_vs: one point a triangle: the verdict, STQ plane */
@@ -1078,7 +1078,7 @@ typedef enum RdVsId {
 #define RD_VS_VU_LAST RD_VS_VU_TRI
 #define RD_VS_VU_PRE_FIRST RD_VS_VU_PRE_PRELIT
 #define RD_VS_VU_PRE_LAST RD_VS_VU_PRE_GRID_SPEC
-#define RD_VS_V0710_FIRST RD_VS_VU_MAIN
+#define RD_VS_OPTIONAL_FIRST RD_VS_VU_MAIN
 
 /* a mesh program entry's pre-pass entry (RD_VS_VU_PRELIT ..
  * RD_VS_VU_GRID_SPEC), 0 for any other vertex shader (the particles have
@@ -1157,8 +1157,8 @@ typedef enum RdFsId {
     /* vu_pre_ps: the vertex pre-pass's records into its three RGBA32_UINT
      * targets (rd_replay_vu.c rd__vu_prepass) */
     RD_FS_VU_PRE,
-    /* v0.7.10: from RD_FS_V0710_FIRST the effort's new fragment shaders
-     * (the same fence as the vertex ids) */
+    /* From RD_FS_OPTIONAL_FIRST on a module missing from the table leaves
+     * its id empty (as the vertex ids from RD_VS_OPTIONAL_FIRST) */
     RD_FS_VU_LEGACY, /* vu_legacy_ps: today's VuVSOut planes-in-varyings pixel side (the fallback) */
     RD_FS_VU_LEGACY_TEXA,     /* vu_legacy_texa_ps */
     RD_FS_SPRITE_PLANES,      /* sprite_ps_planes: the screen-prim triangles' plane build */
@@ -1172,7 +1172,7 @@ typedef enum RdFsId {
     RD_FS_COUNT
 } RdFsId;
 
-#define RD_FS_V0710_FIRST RD_FS_VU_LEGACY
+#define RD_FS_OPTIONAL_FIRST RD_FS_VU_LEGACY
 
 /* How an RdBlend equation reaches the hardware. */
 typedef enum RdBlendPath {

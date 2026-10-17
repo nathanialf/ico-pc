@@ -785,7 +785,7 @@ void rhi_cmd_set_blend_constant(RhiCommandList cl, const float rgba[4])
     }
 }
 
-/* v0.7.10 dynamic state and local read (rhi.h): D3D12 has neither (its
+/* Dynamic state and local read (rhi.h): D3D12 has neither (its
  * limits say false), so these are no-ops */
 void rhi_cmd_set_depth_state(RhiCommandList cl, bool test, bool write, RhiCompare cmp)
 {

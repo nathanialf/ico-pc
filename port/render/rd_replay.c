@@ -81,7 +81,7 @@ static const char *const s_vsNames[RD_VS_COUNT] = {
     "sprite_stq_plane_ui_vs", "sprite_stq_plane_world_vs", "vu_prelit_pre_vs", "vu_lit_pre_vs",
     "vu_lit_spec_pre_vs", "vu_reflect_pre_vs", "vu_skin_pre_vs", "vu_skin_spec_pre_vs",
     "vu_skin_debug_pre_vs", "vu_grid_pre_vs", "vu_grid_lit_pre_vs", "vu_grid_spec_pre_vs",
-    /* v0.7.10, RD_VS_V0710_FIRST on */
+    /* RD_VS_OPTIONAL_FIRST on */
     "vu_main_vs", "vu_particle_main_vs", "vu_tri_rule_pre_vs", "vu_tri_tick_pre_vs",
     "vu_tri_planes_pre_vs", "vu_particle_pre_vs"};
 
@@ -96,7 +96,7 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     "font_ps", "font_sheet_ps", "sprite_aa1_ps", "box_reduce_ps", "sprite_stq_ps", "crt_bloom_ps",
     "crt_blur_ps", "crt_ps", "sprite_texa_ps", "vu_texa_ps", "blit_depth_ps", "fog_lut_buffer_ps",
     "aa_reduce_ps", "fog_lut_ms_ps", "depth_resolve_ps", "depth_upsample_ps", "vu_pre_ps",
-    /* v0.7.10, RD_FS_V0710_FIRST on */
+    /* RD_FS_OPTIONAL_FIRST on */
     "vu_legacy_ps", "vu_legacy_texa_ps", "sprite_ps_planes", "sprite_texa_ps_planes",
     "sprite_stq_ps_planes", "fog_lut_local_ps", "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps",
     "date_stencil_ps"};
@@ -199,7 +199,7 @@ bool rd__gpu_init(void *sdlWindow)
     static const RhiBindSlot s4[5] = {{0, RHI_BIND_STORAGE_BUFFER, VS},
                                       {1, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS},
                                       /* VuCB and the record also to the pixel side: the
-                                       * per-triangle planes are read there (v0.7.10) */
+                                       * per-triangle planes are read there */
                                       {2, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS},
                                       {3, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS},
                                       {4, RHI_BIND_STORAGE_BUFFER, VS | FS}};
@@ -250,9 +250,9 @@ bool rd__gpu_init(void *sdlWindow)
         }
     }
     for (int i = 0; i < RD_VS_COUNT; i++) {
-        /* the v0.7.10 fence: a module of the effort not yet in the table
-         * leaves its id empty (its draws take their fallback) */
-        if (i >= RD_VS_V0710_FIRST && !ico_find_shader(s_vsNames[i])) {
+        /* a module from RD_VS_OPTIONAL_FIRST on that is missing from the
+         * table leaves its id empty (its draws take their fallback) */
+        if (i >= RD_VS_OPTIONAL_FIRST && !ico_find_shader(s_vsNames[i])) {
             continue;
         }
         g_rd.vs[i] = rd__make_shader(s_vsNames[i]);
@@ -265,8 +265,8 @@ bool rd__gpu_init(void *sdlWindow)
         if (i == RD_FS_FOG_MS && !lim->sampleRateShading) {
             continue;
         }
-        if (i >= RD_FS_V0710_FIRST && !ico_find_shader(s_fsNames[i])) {
-            continue; /* the v0.7.10 fence, as the vertex loop's */
+        if (i >= RD_FS_OPTIONAL_FIRST && !ico_find_shader(s_fsNames[i])) {
+            continue; /* as the vertex loop's */
         }
         /* without dual-source blending the gs_dual_out entries are not
          * created (their second output needs the feature); their *_nodual

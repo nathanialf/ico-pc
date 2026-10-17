@@ -638,7 +638,7 @@ typedef struct RhiLimits {
      * (port/render/rd_dst_read.c; [dev] blend still forces any mode).
      * ICO_VK_FAKE_LIMITS=moltenvk reports it on any device. */
     bool moltenvk;
-    /* v0.7.10 (docs/port/RENDER.md, the device profile).  localRead: Vulkan
+    /* (docs/port/RENDER.md, the device profile).  localRead: Vulkan
      * dynamicRenderingLocalRead (VK_KHR_dynamic_rendering_local_read, or
      * VkPhysicalDeviceVulkan14Features on a 1.4 device without the
      * extension), enabled wherever offered, whatever the destination read
@@ -881,7 +881,7 @@ void rhi_cmd_set_vertex_buffer(RhiCommandList cl, uint32_t binding, RhiBuffer b,
 void rhi_cmd_set_index_buffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, bool u32);
 void rhi_cmd_set_stencil_ref(RhiCommandList cl, uint8_t ref);
 void rhi_cmd_set_blend_constant(RhiCommandList cl, const float rgba[4]);
-/* v0.7.10 dynamic state (RhiPipelineDesc.dynamic): the depth test, write
+/* Dynamic state (RhiPipelineDesc.dynamic): the depth test, write
  * and compare of a RHI_DYN_DEPTH pipeline, the attachment-0 blend of a
  * RHI_DYN_BLEND one; a no-op on a backend whose limits say false.  The
  * backend skips a set equal to the last one and re-emits after a bind. */

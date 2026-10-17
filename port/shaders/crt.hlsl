@@ -42,7 +42,7 @@ cbuffer CrtCB : register(b1, space1)
     float4 c_tone; // vignette, gamma in, gamma out, strength
     float4 c_pass; // x mirror, y unused (the slot's row gain is per pixel, rowGainOf), zw 1 /
                    // the blurred target's size
-    float4 c_pad0; // IcoCrtCB.pad: the slot's size with IcoDrawCB (v0.7.10)
+    float4 c_pad0; // IcoCrtCB.pad: the slot's size with IcoDrawCB
     float4 c_pad1;
 };
 

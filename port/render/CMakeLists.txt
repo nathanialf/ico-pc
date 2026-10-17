@@ -124,7 +124,7 @@ add_library(ico_render STATIC
     rd_join.c
     rd_mesh.c
     rd_passring.c # the last passes recorded, for the device-loss report
-    rd_profile.c # the device profile: what this device class gets (v0.7.10)
+    rd_profile.c # the device profile: what this device class gets 
     rd_content_hide.c # the content table: stage geometry made for the 4:3 picture
     rd_content_extend.c # the content table's sheets: overlays continued to the frame's edges
     rd_content_chain.c # Natural chains: the chains a stage animation lets down
@@ -1280,7 +1280,7 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_vustage_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
 endif()
-# ---- X1: the blend policy (rd_dst_read.c) ----
+# The blend policy (rd_dst_read.c)
 # rd_dst_usage_test: the fixed-function blend by default makes no
 # destination-read layout, shader twin, target usage or start-up key; an
 # ICO_RD_BLEND=attachment opt-in makes the attachment read's alone.
@@ -1311,10 +1311,9 @@ if(ICO_RUN_TESTS)
                          PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_bat}"
                                     ENVIRONMENT "${_env_blend_attachment}")
 endif()
-# ---- X1 end ----
 
-# ---- X2: the tiler passes (rd_replay.c: the fog's local read, DATE through
-# the stencil bit, the blur pair fold) ----
+# The tiler passes (rd_replay.c: the fog's local read, DATE through
+# the stencil bit, the blur pair fold)
 # The fog's depth read inside the scene pass (ICO_RD_FOG_PATH=local: the
 # profile's local read on lavapipe, which has it): rd_fog_test's grid, edge
 # and above-1x cases on the local path, and case d's replays on the other
@@ -1345,4 +1344,3 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_date_selftest PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                      ENVIRONMENT "${_env_date_stencil}")
 endif()
-# ---- X2 end ----

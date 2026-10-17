@@ -138,14 +138,12 @@ foreach(_v rov:1 att:2)
                    SUFFIX _dst${_s})
 endforeach()
 
-# ---- v0.7.10 (docs/port/RENDER.md): each package adds its entries inside its
-# own fence and nowhere else, so the packages merge without conflicts.  The
-# ids and names are rd_internal.h's RD_VS_V0710_FIRST / RD_FS_V0710_FIRST on
-# (rd_replay.c s_vsNames, s_fsNames); a module missing from the table leaves
-# its id empty until its package lands (rd__gpu_init's fence).
-# ---- G1 record stages (vu_main_vs, vu_particle_main_vs, vu_tri_rule_pre_vs,
-#      vu_tri_tick_pre_vs, vu_tri_planes_pre_vs, vu_particle_pre_vs,
-#      vu_legacy_ps, vu_legacy_texa_ps and their twins) ----
+# The ids and names of the entries below are rd_internal.h's RD_VS_OPTIONAL_FIRST /
+# RD_FS_OPTIONAL_FIRST on (rd_replay.c s_vsNames, s_fsNames); a module missing
+# from the table leaves its id empty (rd__gpu_init).
+# The record stages (vu_main_vs, vu_particle_main_vs, vu_tri_rule_pre_vs,
+# vu_tri_tick_pre_vs, vu_tri_planes_pre_vs, vu_particle_pre_vs, vu_legacy_ps,
+# vu_legacy_texa_ps and their twins)
 # the triangle pre-pass's record stages and the sprites' (docs/port/RENDER.md,
 # "The vertex and triangle pre-passes"; rd_replay_vu.c rd__vu_prepass), the
 # main vertex shaders drawing from the record, and the programs' entries'
@@ -163,8 +161,7 @@ foreach(_e vu_legacy_ps vu_legacy_texa_ps)
     ico_add_shader(${_e} vu_prelit.hlsl ${_e} fragment DEFINES ICO_DST_READ=1 SUFFIX _dstrov)
     ico_add_shader(${_e} vu_prelit.hlsl ${_e} fragment DEFINES ICO_DST_READ=2 SUFFIX _dstatt)
 endforeach()
-# ---- G1 end ----
-# ---- G2 2D varying diet (sprite_*_ps_planes and their twins) ----
+# The 2D plane builds (sprite_*_ps_planes and their twins)
 # the screen-prim triangles with their planes (rd_screen_planes.c): the
 # planes build of sprite.hlsl (ICO_SPRITE_PLANES), whose SpriteVSOut and
 # SpriteStqVSOut carry the planes; every other sprite entry is the plain
@@ -184,8 +181,7 @@ foreach(_e sprite_ps sprite_texa_ps sprite_stq_ps)
     ico_add_shader(${_e}_planes sprite.hlsl ${_e} fragment
                    DEFINES ICO_SPRITE_PLANES=1 ICO_DST_READ=2 SUFFIX _dstatt)
 endforeach()
-# ---- G2 end ----
-# ---- X2 tiler passes (fog_lut_local_ps, fx_blur2_ps, date_clear_ps, date_stencil_ps) ----
+# The tiler passes (fog_lut_local_ps, fx_blur2_ps, date_clear_ps, date_stencil_ps)
 # the fog's depth read inside the scene pass by local read (RD_FOG_LOCAL,
 # rd_replay.c doFog), with its two-pass twin; DATE through the stencil bit's
 # setup (rd_replay_tiler.c rd__replay_date_take); a staticBlur pair folded into one pass
@@ -197,12 +193,10 @@ ico_add_shader(fog_lut_local_ps fog_lut.hlsl fog_lut_ps fragment
 ico_add_shader(date_clear_ps sprite.hlsl date_clear_ps fragment)
 ico_add_shader(date_stencil_ps sprite.hlsl date_stencil_ps fragment DEFINES ICO_DATE_STENCIL=1)
 ico_add_shader(fx_blur2_ps fx_sprite.hlsl fx_blur2_ps fragment)
-# ---- X2 end ----
-# ---- X3 pixel cuts (fx_sprite_u_ps) ----
+# The blur sprite's UINT-view build (fx_sprite_u_ps)
 # fx_sprite_ps reading its textures through their RGBA8_UINT views
 # (RHI_TEX_UINT_VIEW; rd_replay.c doBlurSpriteDraw)
 ico_add_shader(fx_sprite_u_ps fx_sprite.hlsl fx_sprite_ps fragment DEFINES ICO_UINT_SRC=1)
-# ---- X3 end ----
 
 # the table of every entry above, the fences included (ico_shaders_library reads
 # the manifest where it is called: it must come after every ico_add_shader)

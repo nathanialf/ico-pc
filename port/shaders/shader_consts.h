@@ -370,7 +370,7 @@ typedef struct IcoVuCB {
     uint32_t rec[4];
     float lo[4];
     float hi[4];
-    /* v0.7.10, the per-triangle record stage (rd_replay_vu.c; vu_common.hlsli
+    /* The per-triangle record stage (rd_replay_vu.c; vu_common.hlsli
      * vu_tri): x, y, z the record texel of kick 0's slot A, B and C (C
      * 0xFFFFFFFF: no tick slots), w the tick a tick-stage draw tests */
     uint32_t tri[4];

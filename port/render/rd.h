@@ -499,7 +499,7 @@ const char *rd_vu_plain_only(void);
  * step draws without it (window_host.c, startup_retry.h). */
 void rd_set_vu_prepass_off(const char *reason);
 
-/* v0.7.10: how the start-up pipeline set is made (rd_precreate_pipelines;
+/* How the start-up pipeline set is made (rd_precreate_pipelines;
  * docs/port/RENDER.md "The start-up set"): the batch size, the worker
  * threads (0: the backend's choice), the process-memory growth in MB past
  * which the set stops and the rest is made on first use (0: no bound), and
