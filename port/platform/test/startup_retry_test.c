@@ -7,14 +7,22 @@
  *     to start the game again or not, cache loaded or not, D3D12 in the
  *     build or not, the backend and the blending named by the player or
  *     not, the run's blend already fixed or not, the crash's note naming
- *     a destination-read pipeline or not, on Vulkan and on D3D12, against
- *     the crash order cache, fixedblend, d3d12, lazy, none and the loss
- *     order blend, backend, none (the note never changes it); the reason
- *     is never empty and a step only grows (every chain ends);
+ *     a destination-read pipeline or not, naming a pipeline of the VU
+ *     vertex pre-pass or not, the run drawing with the pre-pass or not, on
+ *     Vulkan and on D3D12, against the crash order cache, noprepass,
+ *     fixedblend, d3d12, lazy, none and the loss order lossnoprepass,
+ *     blend, backend, none (the note never changes it); the reason is
+ *     never empty and a step only grows (every chain ends);
+ *   - the chains with the pre-pass: a crash in one of its pipelines
+ *     (cache, noprepass, then the rest without it) and a loss in a run
+ *     drawing with it (lossnoprepass, blend, backend), each value written
+ *     and read back, and which values draw without the pre-pass or with
+ *     the fixed blend;
  *   - a crash chain from the first run to the box, as the handler walks
  *     it, with and without a destination-read pipeline in the note, and
  *     the player's blend= skipping fixedblend;
- *   - the note's dst field read from the renderer's note text;
+ *   - the note's dst field read from the renderer's note text, and its
+ *     pre-pass keys and modules;
  *   - the loss chains on Windows from Vulkan and from D3D12, on Linux and
  *     macOS, on Android and iOS, with blend= or backend= in the settings,
  *     and a loss after a crash restart;
@@ -30,21 +38,27 @@
 
 /* the crash order, written out independently of startup_retry.c */
 static StartupRetry expected_crash(StartupRetry step, bool cache, bool d3d12, bool expl,
-                                   bool blendExpl, bool wasFixed, bool dst, const char *backend)
+                                   bool blendExpl, bool wasFixed, bool dst, bool pre,
+                                   const char *backend)
 {
     const bool onD3d12 = strcmp(backend, "d3d12") == 0;
-    if (step == STARTUP_RETRY_LOSS_BLEND || step == STARTUP_RETRY_LOSS_BACKEND) {
+    if (step == STARTUP_RETRY_LOSS_NO_PREPASS || step == STARTUP_RETRY_LOSS_BLEND ||
+        step == STARTUP_RETRY_LOSS_BACKEND) {
         return STARTUP_RETRY_NONE; /* a crash after a loss restart: the box */
     }
     if (step == STARTUP_RETRY_NONE && cache) {
         return STARTUP_RETRY_CACHE;
     }
-    if ((step == STARTUP_RETRY_NONE || step == STARTUP_RETRY_CACHE) && dst && !blendExpl &&
-        !wasFixed) {
+    if ((step == STARTUP_RETRY_NONE || step == STARTUP_RETRY_CACHE) && pre) {
+        return STARTUP_RETRY_NO_PREPASS;
+    }
+    if ((step == STARTUP_RETRY_NONE || step == STARTUP_RETRY_CACHE ||
+         step == STARTUP_RETRY_NO_PREPASS) &&
+        dst && !blendExpl && !wasFixed) {
         return STARTUP_RETRY_CRASH_BLEND;
     }
     if ((step == STARTUP_RETRY_NONE || step == STARTUP_RETRY_CACHE ||
-         step == STARTUP_RETRY_CRASH_BLEND) &&
+         step == STARTUP_RETRY_NO_PREPASS || step == STARTUP_RETRY_CRASH_BLEND) &&
         d3d12 && !expl && !onD3d12) {
         return STARTUP_RETRY_D3D12;
     }
@@ -54,14 +68,18 @@ static StartupRetry expected_crash(StartupRetry step, bool cache, bool d3d12, bo
     return STARTUP_RETRY_NONE;
 }
 
-/* the loss order: blend (same backend, fixed blend) unless the run was
-   already fixed or the player chose the blending; then backend (the other
-   one, fixed blend) in a two-backend build when the player chose neither
-   the backend nor a blending other than fixed; then the box */
+/* the loss order: lossnoprepass (same backend, no pre-pass) when the run
+   drew with the pre-pass; blend (same backend, fixed blend) unless the run
+   was already fixed or the player chose the blending; then backend (the
+   other one, fixed blend) in a two-backend build when the player chose
+   neither the backend nor a blending other than fixed; then the box */
 static StartupRetry expected_loss(StartupRetry step, bool d3d12, bool expl, bool blendExpl,
-                                  bool wasFixed)
+                                  bool wasFixed, bool preOn)
 {
     const bool beforeBlend = step != STARTUP_RETRY_LOSS_BLEND && step != STARTUP_RETRY_LOSS_BACKEND;
+    if (beforeBlend && step != STARTUP_RETRY_LOSS_NO_PREPASS && preOn) {
+        return STARTUP_RETRY_LOSS_NO_PREPASS;
+    }
     if (beforeBlend && !wasFixed && !blendExpl) {
         return STARTUP_RETRY_LOSS_BLEND;
     }
@@ -73,18 +91,20 @@ static StartupRetry expected_loss(StartupRetry step, bool d3d12, bool expl, bool
 
 /* every reason, step, platform (relaunch or not), cache, D3D12 in the
    build, backend and blend named or not, blend already fixed or not, a
-   destination-read pipeline in the note or not, on Vulkan and D3D12 */
+   destination-read pipeline in the note or not, a pre-pass pipeline in
+   the note or not, the run drawing with the pre-pass or not, on Vulkan and
+   D3D12 */
 static void test_table(void)
 {
     static const char *const backends[] = {"vulkan", "d3d12"};
     int combos = 0;
     for (int why = STARTUP_RETRY_CRASH; why <= STARTUP_RETRY_LOSS; why++) {
         for (int step = STARTUP_RETRY_NONE; step <= STARTUP_RETRY_LOSS_BACKEND; step++) {
-            for (int bits = 0; bits < 128; bits++) {
+            for (int bits = 0; bits < 512; bits++) {
                 for (int b = 0; b < 2; b++) {
                     const bool cache = bits & 1, d3d12 = bits & 2, expl = bits & 4,
                                blendExpl = bits & 8, wasFixed = bits & 16, relaunch = bits & 32,
-                               dst = bits & 64;
+                               dst = bits & 64, pre = bits & 128, preOn = bits & 256;
                     const StartupRetryRun run = {
                         .why = (StartupRetryWhy)why,
                         .step = (StartupRetry)step,
@@ -95,6 +115,8 @@ static void test_table(void)
                         .blendExplicit = blendExpl,
                         .blendWasFixed = wasFixed,
                         .dstPipeline = dst,
+                        .prepassPipeline = pre,
+                        .prepassWasOn = preOn,
                         .backendName = backends[b],
                     };
                     char reason[200];
@@ -104,15 +126,15 @@ static void test_table(void)
                     if (relaunch) {
                         want = why == STARTUP_RETRY_CRASH
                                    ? expected_crash((StartupRetry)step, cache, d3d12, expl,
-                                                    blendExpl, wasFixed, dst, backends[b])
+                                                    blendExpl, wasFixed, dst, pre, backends[b])
                                    : expected_loss((StartupRetry)step, d3d12, expl, blendExpl,
-                                                   wasFixed);
+                                                   wasFixed, preOn);
                     }
                     CHECK(got == want,
                           "why %d step %d cache %d d3d12 %d explicit %d blend explicit %d "
-                          "fixed %d relaunch %d dst %d %s: got %d, want %d",
-                          why, step, cache, d3d12, expl, blendExpl, wasFixed, relaunch, dst,
-                          backends[b], (int)got, (int)want);
+                          "fixed %d relaunch %d dst %d pre %d pre on %d %s: got %d, want %d",
+                          why, step, cache, d3d12, expl, blendExpl, wasFixed, relaunch, dst, pre,
+                          preOn, backends[b], (int)got, (int)want);
                     CHECK(reason[0] != '\0', "why %d step %d: empty reason", why, step);
                     /* a loss step only grows, and never comes from a crash */
                     if (got != STARTUP_RETRY_NONE) {
@@ -124,7 +146,7 @@ static void test_table(void)
             }
         }
     }
-    CHECK(combos == 2 * 7 * 128 * 2);
+    CHECK(combos == 2 * 9 * 512 * 2);
     /* no name means the default backend; a NULL reason is allowed */
     {
         StartupRetryRun run = {.canRelaunch = true, .haveD3d12 = true};
@@ -388,6 +410,61 @@ static void test_note_vu_ext(void)
     CHECK(!startup_retry_note_has_vu_ext(NULL));
 }
 
+/* the same notes read for the VU vertex pre-pass's pipelines: a " pre"
+   key (rd_pipeline.c keyWords), a vu_X_pre_vs module, the triangle
+   stage's vu_tri_vs or vu_tri_plain_vs (keyModules, batchModules) */
+static void test_note_vu_pre(void)
+{
+    static const struct {
+        const char *note;
+        bool pre;
+    } notes[] = {
+        {"creating pipeline program 0 blend 0 vs 31 fs 41 fmt 3/0 msaa 0 dst 0 pre "
+         "(vu_prelit_pre_vs 1820 words + vu_pre_ps 300 words)",
+         true},
+        {"creating pipeline program 0 blend 0 vs 31 fs 41 fmt 3/0 msaa 0 dst 0 pre", true},
+        {"creating pipeline program 0 blend 12 vs 30 fs 5 fmt 1/8 msaa 0 dst 0 ext 0 "
+         "(vu_tri_plain_vs 19519 words + vu_ps 9000 words)",
+         true},
+        {"creating pipeline program 0 blend 12 vs 30 fs 5 fmt 1/8 msaa 0 dst 0 ext 1 "
+         "(vu_tri_vs 47637 words + vu_ps 9000 words)",
+         true},
+        {"creating pipelines 300-331 of 702: program 0 blend 0 vs 31 fs 41 fmt 3/0 msaa 0 dst 0 "
+         "pre to program 0 blend 12 vs 30 fs 19 fmt 1/8 msaa 0 dst 0 ext 0; vertex "
+         "vu_prelit_pre_vs 1820 words (400 instructions), vu_tri_plain_vs 19519 words (4318 "
+         "instructions); largest fragment vu_texa_ps 11666 words",
+         true},
+        {"creating pipelines 301-332 of 702: program 0 blend 12 vs 30 fs 5 fmt 1/8 msaa 0 dst 0 "
+         "ext 0 to program 0 blend 4 vs 30 fs 19 fmt 1/8 msaa 0 dst 0 ext 0; vertex "
+         "vu_tri_plain_vs 19519 words",
+         true},
+        /* the programs' own entries, a 2D batch: none of the pre-pass */
+        {"creating pipeline program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 ext 0 "
+         "(vu_prelit_plain_vs 22392 words + vu_ps 9000 words)",
+         false},
+        {"creating pipelines 297-328 of 702: program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 "
+         "ext 1 to program 0 blend 4 vs 5 fs 19 fmt 1/8 msaa 0 dst 0 ext 1; vertex vu_prelit_vs "
+         "50325 words",
+         false},
+        {"creating pipelines 1-32 of 702: program 5 blend 1 vs 0 fs 0 fmt 1/8 msaa 0 dst 0 to "
+         "program 6 blend 1 vs 1 fs 0 fmt 1/8 msaa 0 dst 0; vertex sprite_ui_vs 900 words",
+         false},
+        {"creating pipeline program 0 dst 0 prepared", false},
+        {"creating pipeline program 0 dst 0 pre1", false},
+        {"loading the title pre", false},
+        {"loading vu_tri_vs", false},
+        {"creating pipelinesX pre", false},
+        {"creating the start-up pipelines (12 of 400)", false},
+        {"", false},
+    };
+
+    for (size_t i = 0; i < sizeof notes / sizeof notes[0]; i++) {
+        CHECK(startup_retry_note_has_vu_pre(notes[i].note) == notes[i].pre, "\"%s\"",
+              notes[i].note);
+    }
+    CHECK(!startup_retry_note_has_vu_pre(NULL));
+}
+
 /* one loss-chain step */
 static StartupRetry loss_step(StartupRetry step, bool d3d12, bool expl, bool blendExpl,
                               bool wasFixed, const char *backend, bool relaunch)
@@ -480,6 +557,112 @@ static void test_loss_chain(void)
           STARTUP_RETRY_NONE);
 }
 
+/* one step of a chain with the pre-pass: a crash whose note names one of
+   its pipelines (pre), or a loss in a run that drew with it (preOn) */
+static StartupRetry prepass_step(StartupRetryWhy why, StartupRetry step, bool cache, bool d3d12,
+                                 bool pre, bool preOn, bool wasFixed, const char *backend)
+{
+    const StartupRetryRun run = {
+        .why = why,
+        .step = step,
+        .canRelaunch = true,
+        .cacheWasLoaded = cache,
+        .haveD3d12 = d3d12,
+        .blendWasFixed = wasFixed,
+        .prepassPipeline = pre,
+        .prepassWasOn = preOn,
+        .backendName = backend,
+    };
+    char reason[200];
+    reason[0] = '\0';
+    const StartupRetry next = startup_retry_next(&run, reason, sizeof reason);
+    CHECK(reason[0] != '\0');
+    if (next == STARTUP_RETRY_NO_PREPASS || next == STARTUP_RETRY_LOSS_NO_PREPASS) {
+        CHECK(strstr(reason, "pre-pass") != NULL, "reason: %s", reason);
+    }
+    return next;
+}
+
+/* a crash in a pre-pass pipeline on a Windows build with a loaded cache:
+ * cache, noprepass, then (that run makes none of its pipelines, so a crash
+ * names another) d3d12, lazy, the box, every run from noprepass on without
+ * the pre-pass; without a cache noprepass first; a loss in a run drawing
+ * with the pre-pass: lossnoprepass (not the fixed blend), blend, backend,
+ * the box, every loss run without it; a loss in a run without it (the
+ * noprepass run, or the self-test turned it off): blend first */
+static void test_prepass_chain(void)
+{
+    static const StartupRetry crash[] = {STARTUP_RETRY_CACHE, STARTUP_RETRY_NO_PREPASS,
+                                         STARTUP_RETRY_D3D12, STARTUP_RETRY_LAZY,
+                                         STARTUP_RETRY_NONE};
+    static const char *const crashValues[] = {"cache:vulkan", "noprepass:vulkan", "d3d12:d3d12",
+                                              "lazy:d3d12"};
+    static const StartupRetry loss[] = {STARTUP_RETRY_LOSS_NO_PREPASS, STARTUP_RETRY_LOSS_BLEND,
+                                        STARTUP_RETRY_LOSS_BACKEND, STARTUP_RETRY_NONE};
+    static const char *const lossValues[] = {"lossnoprepass:vulkan", "blend:vulkan",
+                                             "backend:d3d12"};
+    char v[32], be[16];
+    StartupRetry s = STARTUP_RETRY_NONE, p;
+    const char *backend = "vulkan";
+    bool cache = true, pre = true;
+    for (int i = 0; i < 5; i++) {
+        s = prepass_step(STARTUP_RETRY_CRASH, s, cache, true, pre, false, false, backend);
+        CHECK(s == crash[i], "pre-pass crash chain step %d: %d", i, (int)s);
+        if (s == STARTUP_RETRY_NONE) {
+            break;
+        }
+        CHECK(startup_retry_value(s, backend, v, sizeof v) == 0);
+        CHECK_STR(v, crashValues[i]);
+        CHECK(startup_retry_parse(v, &p, be, sizeof be) == 0 && p == s);
+        CHECK(startup_retry_value_no_prepass(v) == (s != STARTUP_RETRY_CACHE), "%s", v);
+        CHECK(startup_retry_draws_no_prepass(s) == (s != STARTUP_RETRY_CACHE), "%s", v);
+        CHECK(!startup_retry_value_draws_fixed(v) && !startup_retry_value_is_loss(v), "%s", v);
+        backend = be[0] == 'd' ? "d3d12" : "vulkan";
+        cache = false;
+        pre = s == STARTUP_RETRY_CACHE; /* the noprepass run makes none of them */
+    }
+    CHECK(prepass_step(STARTUP_RETRY_CRASH, STARTUP_RETRY_NONE, false, true, true, true, false,
+                       "vulkan") == STARTUP_RETRY_NO_PREPASS);
+    CHECK(prepass_step(STARTUP_RETRY_CRASH, STARTUP_RETRY_NONE, false, false, true, true, false,
+                       "vulkan") == STARTUP_RETRY_NO_PREPASS);
+    /* a note naming the pre-pass in a run at noprepass or later: the order
+       goes on (a step only grows) */
+    CHECK(prepass_step(STARTUP_RETRY_CRASH, STARTUP_RETRY_NO_PREPASS, false, false, true, false,
+                       false, "vulkan") == STARTUP_RETRY_LAZY);
+    s = STARTUP_RETRY_NONE;
+    backend = "vulkan";
+    bool preOn = true, fixed = false;
+    for (int i = 0; i < 4; i++) {
+        s = prepass_step(STARTUP_RETRY_LOSS, s, false, true, false, preOn, fixed, backend);
+        CHECK(s == loss[i], "pre-pass loss chain step %d: %d", i, (int)s);
+        if (s == STARTUP_RETRY_NONE) {
+            break;
+        }
+        CHECK(startup_retry_value(s, backend, v, sizeof v) == 0);
+        CHECK_STR(v, lossValues[i]);
+        CHECK(startup_retry_parse(v, &p, be, sizeof be) == 0 && p == s);
+        CHECK(startup_retry_value_is_loss(v) && startup_retry_is_loss(s), "%s", v);
+        CHECK(startup_retry_value_no_prepass(v) && startup_retry_draws_no_prepass(s), "%s", v);
+        CHECK(startup_retry_value_draws_fixed(v) == (s != STARTUP_RETRY_LOSS_NO_PREPASS), "%s", v);
+        CHECK(startup_retry_draws_fixed(s) == (s != STARTUP_RETRY_LOSS_NO_PREPASS), "%s", v);
+        backend = strcmp(be, "d3d12") == 0 ? "d3d12" : "vulkan";
+        preOn = false; /* every loss step's run draws without it */
+        fixed = s != STARTUP_RETRY_LOSS_NO_PREPASS;
+    }
+    /* the noprepass crash run (without the pre-pass) losing the device:
+       blend; a crash in a lossnoprepass run: the box */
+    CHECK(prepass_step(STARTUP_RETRY_LOSS, STARTUP_RETRY_NO_PREPASS, false, true, false, false,
+                       false, "vulkan") == STARTUP_RETRY_LOSS_BLEND);
+    CHECK(prepass_step(STARTUP_RETRY_CRASH, STARTUP_RETRY_LOSS_NO_PREPASS, false, true, true, false,
+                       false, "vulkan") == STARTUP_RETRY_NONE);
+    /* a device without an exact blend (already fixed) and without D3D12,
+       drawing with the pre-pass: lossnoprepass, then the box */
+    CHECK(prepass_step(STARTUP_RETRY_LOSS, STARTUP_RETRY_NONE, false, false, false, true, true,
+                       "vulkan") == STARTUP_RETRY_LOSS_NO_PREPASS);
+    CHECK(prepass_step(STARTUP_RETRY_LOSS, STARTUP_RETRY_LOSS_NO_PREPASS, false, false, false,
+                       false, true, "vulkan") == STARTUP_RETRY_NONE);
+}
+
 static void test_values(void)
 {
     char v[32], be[16];
@@ -556,6 +739,26 @@ static void test_values(void)
     CHECK(strstr(startup_retry_what(STARTUP_RETRY_LOSS_BACKEND), "fresh launch") != NULL);
     CHECK_STR(startup_retry_name(STARTUP_RETRY_LOSS_BLEND), "blend");
     CHECK_STR(startup_retry_name(STARTUP_RETRY_LOSS_BACKEND), "backend");
+    /* the pre-pass's steps */
+    CHECK_STR(startup_retry_name(STARTUP_RETRY_NO_PREPASS), "noprepass");
+    CHECK_STR(startup_retry_name(STARTUP_RETRY_LOSS_NO_PREPASS), "lossnoprepass");
+    CHECK(strstr(startup_retry_what(STARTUP_RETRY_NO_PREPASS), "without the 3D vertex pre-pass") !=
+          NULL);
+    CHECK(strstr(startup_retry_what(STARTUP_RETRY_LOSS_NO_PREPASS), "fresh launch") != NULL);
+    CHECK(strstr(startup_retry_what(STARTUP_RETRY_LAZY), "without the 3D vertex pre-pass") != NULL);
+    CHECK(startup_retry_parse("noprepass:vulkan", &s, be, sizeof be) == 0 &&
+          s == STARTUP_RETRY_NO_PREPASS);
+    CHECK(startup_retry_parse("lossnoprepass:d3d12", &s, be, sizeof be) == 0 &&
+          s == STARTUP_RETRY_LOSS_NO_PREPASS);
+    CHECK(startup_retry_parse("noprepas:vulkan", &s, be, sizeof be) == -1);
+    CHECK(!startup_retry_draws_no_prepass(STARTUP_RETRY_NONE));
+    CHECK(!startup_retry_draws_no_prepass(STARTUP_RETRY_CACHE));
+    CHECK(!startup_retry_value_no_prepass("cache:vulkan"));
+    CHECK(!startup_retry_value_no_prepass("noprepass"));
+    CHECK(!startup_retry_value_no_prepass("noprepassx:vulkan"));
+    CHECK(!startup_retry_value_no_prepass(NULL));
+    CHECK(!startup_retry_value_draws_fixed("lossnoprepass:vulkan"));
+    CHECK(!startup_retry_draws_fixed(STARTUP_RETRY_NO_PREPASS));
 }
 
 static void test_envp(void)
@@ -618,6 +821,8 @@ int main(void)
     test_dst_chain();
     test_note();
     test_note_vu_ext();
+    test_note_vu_pre();
+    test_prepass_chain();
     test_values();
     test_envp();
     test_block();

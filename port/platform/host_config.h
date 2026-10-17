@@ -146,7 +146,10 @@ const char *ico_dev_env_value(const char *key, const char *value);
    order's fixedblend (startup_retry.h): the restart's fixed-function blend wins over blend=
    and over an ICO_RD_BLEND in the environment for that run. The restart
    is never chosen against a player's blending other than fixed, so this
-   only ever replaces nothing or "fixed". */
+   only ever replaces nothing or "fixed". vu_prepass gets "0" when retry
+   names a step that draws without the VU vertex pre-pass (the crash
+   order's noprepass and the steps after it, every loss step:
+   startup_retry_value_no_prepass). */
 const char *ico_dev_env_export_value(const char *key, const char *value, const char *retry);
 /* Whether the clock should be fixed (ICO_FIXED_CLOCK): fixed_clock= when
    present, else true for the headless build, headless=1, or a trace written

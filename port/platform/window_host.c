@@ -1399,6 +1399,13 @@ static int vu_plain_persist(void)
     return ico_config_set_bool("dev.vu_plain_only", 1) == 0 && ico_config_save() == 0 ? 0 : -1;
 }
 
+/* [dev] vu_prepass = false (the second start in a row that ended inside the
+   VU vertex pre-pass's compile; diag_host.h ico_diag_startup_vu_prepass) */
+static int vu_prepass_persist(void)
+{
+    return ico_config_set_bool("dev.vu_prepass", 0) == 0 && ico_config_save() == 0 ? 0 : -1;
+}
+
 int ico_window_open(unsigned int gsW, unsigned int gsH)
 {
     RdSettings rs;
@@ -1479,6 +1486,31 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                                            "while the graphics driver compiled the extended "
                                            "ones, issue 107");
         lazyStart = false;
+    }
+    /* the same for a start that ended inside a batch or pipeline of the VU
+       vertex pre-pass (not an extended VU batch, above; startup_retry.h
+       startup_retry_note_has_vu_pre): this start draws without it
+       (rd_set_vu_prepass_off), the first such end for this start only, the
+       second also every start after it ([dev] vu_prepass = false, written
+       after rd_init); and a restart whose step draws without it
+       (startup_retry_draws_no_prepass: the crash order's noprepass and the
+       steps after it, every loss step) */
+    const int preEnds = retry == STARTUP_RETRY_NONE ? ico_diag_startup_vu_prepass() : 0;
+    if (preEnds > 0) {
+        rd_set_vu_prepass_off(preEnds == 1 ? "for this start: the last start ended while the "
+                                             "graphics driver compiled its pipelines"
+                                           : "[dev] vu_prepass = false: the last two starts "
+                                             "ended while the graphics driver compiled its "
+                                             "pipelines");
+        lazyStart = false;
+    } else if (startup_retry_draws_no_prepass(retry)) {
+        char why[128];
+
+        snprintf(why, sizeof(why), "for this restart (the %s step after %s)",
+                 startup_retry_name(retry),
+                 startup_retry_is_loss(retry) ? "the graphics card stopped responding"
+                                              : "a graphics driver crash");
+        rd_set_vu_prepass_off(why);
     }
     /* issues 93 and 107: the start-up set or none. [dev] pipeline_set =
        "lazy" (ICO_PIPELINE_SET), or a previous start of any version that
@@ -1768,6 +1800,9 @@ open_window:
         (void)ico_diag_startup_end_persist(ICO_DIAG_END_VU_EXT, devVuPlain, vu_plain_persist,
                                            cfgName);
     }
+    if (preEnds >= 1) {
+        (void)ico_diag_startup_end_persist(ICO_DIAG_END_VU_PRE, NULL, vu_prepass_persist, cfgName);
+    }
     if (retry == STARTUP_RETRY_LAZY || pipePolicy != ICO_DIAG_PIPESET_FULL || devLazy != NULL) {
         char why[160];
 
@@ -1845,6 +1880,10 @@ open_window:
             (void)rhi_pipeline_cache_save();
         }
     }
+    /* a device loss from here takes the loss order's lossnoprepass step
+       first when the run draws with the VU vertex pre-pass (its self-test
+       above may have turned it off) */
+    ico_diag_set_vu_prepass(rd_vu_prepass_on());
     /* which way of reading the depth gives the fog its distances on this
        GPU, tried on the real scene size; logged ("fog: depth path") */
     rd_fog_selftest();

@@ -247,12 +247,14 @@ void ico_diag_startup_activity_batch(const char *line);
    counted by ico_diag_startup_activity_begin from the previous run's note,
    by kind: ICO_DIAG_END_PIPELINES (the note names a pipeline being made,
    "creating pipeline ...", "creating pipelines ...", "creating the
-   start-up pipelines", and no extended VU variant) and ICO_DIAG_END_VU_EXT
-   (the note names one, startup_retry_note_has_vu_ext). The counts live in
+   start-up pipelines", and neither of the others), ICO_DIAG_END_VU_EXT
+   (the note names an extended VU variant, startup_retry_note_has_vu_ext)
+   and ICO_DIAG_END_VU_PRE (else a pipeline of the VU vertex pre-pass,
+   startup_retry_note_has_vu_pre). The counts live in
    "<activity file without .txt>-ends.txt" (a write that fails is logged
    once a run: "ico_pc: the count of starts that ended while preparing the
    graphics could not be written to <path> (pipelines <n>, extended VU
-   shaders <n>)"). An end in the foreground counts one more and logs
+   shaders <n>, vertex pre-pass <n>)"). An end in the foreground counts one more and logs
    "ico_pc: starts in a row that ended while preparing the graphics (the
    pipelines): 1"; the second in a row is due, and the count stays until
    ico_diag_startup_end_persist writes the setting or finds the device
@@ -263,12 +265,15 @@ void ico_diag_startup_activity_batch(const char *line);
    background; it breaks the row of its kind). Any other ended note breaks
    the row of the pipelines' ends; a finished start-up set or a lazy run's
    normal exit clears it, and clears the extended VU row when the run
-   built extended VU pipelines (a plain run in between leaves that row).
+   built extended VU pipelines (a plain run in between leaves that row),
+   and the pre-pass's row when it built one of its pipelines (a run
+   without the pre-pass leaves it).
    ico_diag_startup_end_count: this start's count of a kind, 0 (not
    counted), 1 (the first: the setting for this start only) or 2 (the
    second in a row: written by ico_diag_startup_end_persist). */
 #define ICO_DIAG_END_PIPELINES 0
 #define ICO_DIAG_END_VU_EXT 1
+#define ICO_DIAG_END_VU_PRE 2
 int ico_diag_startup_end_count(int kind);
 /* The start-up set's policy for this start (issues 93 and 107), after
    ico_diag_startup_activity_begin (file_lazy: its result) and before the
@@ -311,13 +316,28 @@ int ico_diag_startup_pipeline_set(int relaunched, int file_lazy, const char *set
    made; both lines come from ico_diag_startup_end_persist; 0: neither.
    config_name is unused (the lines are the persist call's). */
 int ico_diag_startup_vu_plain(const char *config_name);
+/* The VU vertex pre-pass off after an end inside one of its batches or
+   pipelines (not an extended VU batch: ico_diag_startup_vu_plain first):
+   this start's ICO_DIAG_END_VU_PRE count. 1: the first in a row, this
+   start draws without the pre-pass (rd.h rd_set_vu_prepass_off) and
+   nothing is written; 2: the second, the window writes [dev] vu_prepass =
+   false after the device is made; both lines come from
+   ico_diag_startup_end_persist ("ico_pc: the previous start ended while
+   the graphics driver compiled the 3D vertex pre-pass's shaders (<note>);
+   this start only draws without it (nothing is written to <config_name>);
+   if a start that compiles them ends there again, [dev] vu_prepass = false
+   is written for good", then "... this start and every start after it
+   draw without it ([dev] vu_prepass = false in <config_name>); delete that
+   line to try it again"); 0: neither. */
+int ico_diag_startup_vu_prepass(void);
 /* After the device is made, for a kind this start counted (else nothing,
    0): the window calls it for the pipelines on ICO_DIAG_PIPESET_LAZY_ONCE
    and ICO_DIAG_PIPESET_LAZY_NOW, for the VU kind when
-   ico_diag_startup_vu_plain was 1 or 2. table: the device table's rule
+   ico_diag_startup_vu_plain was 1 or 2, for the pre-pass's kind when
+   ico_diag_startup_vu_prepass was. table: the device table's rule
    for that kind (RhiLimits.lazyPipelines for the pipelines,
-   RhiLimits.vuPlainOnly for the VU kind; NULL when the table leaves the
-   device alone). With a table rule nothing is written and the count is
+   RhiLimits.vuPlainOnly for the VU kind, none for the pre-pass's; NULL
+   when the table leaves the device alone). With a table rule nothing is written and the count is
    cleared (the setting would be redundant, and would outlive a change of
    the table), the pipelines' lazy run no longer "for this start only":
    the first end "ico_pc: the previous start ended while preparing the
@@ -513,6 +533,11 @@ int ico_diag_loss_bisect2(const char *dump_zip, uint32_t pass, uint32_t draws, u
    named the backend, whether the player named the blending (blend= /
    [dev] blend or ICO_RD_BLEND), and the backend in use; the window sets
    them before the renderer starts. */
+/* Whether the run draws with the VU vertex pre-pass (after its self-test,
+   rd.h rd_vuprepass_selftest): a device loss then takes the loss order's
+   lossnoprepass step first (startup_retry.h StartupRetryRun.prepassWasOn).
+   0 until set. */
+void ico_diag_set_vu_prepass(int on);
 void ico_diag_set_startup_retry(int step, int have_d3d12, int backend_explicit, int blend_explicit,
                                 const char *backend);
 /* The graphics device was lost (window_host.c device_lost_quit; the normal

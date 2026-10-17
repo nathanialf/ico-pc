@@ -632,6 +632,58 @@ static void test_retry_blend(void)
     unset_env("ICO_RD_BLEND");
 }
 
+/* ICO_RD_VU_PREPASS in a restart: 0 at the crash order's noprepass step
+   and every step after it (fixedblend, d3d12, lazy) and at every loss
+   step (lossnoprepass without the fixed blend), over the ini's
+   vu_prepass=; the cache step and a first run keep the ini's */
+static void test_retry_prepass(void)
+{
+    static const struct {
+        const char *retry;
+        const char *prepass, *blend;
+    } runs[] = {
+        {"noprepass:vulkan", "0", NULL},
+        {"fixedblend:vulkan", "0", "fixed"},
+        {"d3d12:d3d12", "0", NULL},
+        {"lazy:vulkan", "0", NULL},
+        {"lossnoprepass:d3d12", "0", NULL},
+        {"blend:vulkan", "0", "fixed"},
+        {"backend:d3d12", "0", "fixed"},
+        {"cache:vulkan", "1", NULL},
+        {NULL, "1", NULL},
+    };
+
+    IcoIni ini;
+
+    /* the pure rule */
+    CHECK(strcmp(ico_dev_env_export_value("vu_prepass", "true", "noprepass:vulkan"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_export_value("vu_prepass", NULL, "lossnoprepass:vulkan"), "0") == 0);
+    CHECK(ico_dev_env_export_value("vu_prepass", NULL, "cache:vulkan") == NULL);
+    CHECK(strcmp(ico_dev_env_export_value("vu_prepass", "true", "cache:vulkan"), "1") == 0);
+    CHECK(ico_dev_env_export_value("blend", NULL, "lossnoprepass:vulkan") == NULL);
+    CHECK(ico_dev_env_export_value("blend", NULL, "noprepass:vulkan") == NULL);
+    for (size_t i = 0; i < sizeof(runs) / sizeof(runs[0]); i++) {
+        unset_env("ICO_RD_VU_PREPASS");
+        unset_env("ICO_RD_BLEND");
+        if (runs[i].retry != NULL) {
+            set_env("ICO_STARTUP_RETRY", runs[i].retry);
+        } else {
+            unset_env("ICO_STARTUP_RETRY");
+        }
+        ico_ini_parse(&ini, "vu_prepass=true\n");
+        ico_ini_export(&ini, "dev-env-test.ini", 0);
+        if (!env_is("ICO_RD_VU_PREPASS", runs[i].prepass) ||
+            !env_is("ICO_RD_BLEND", runs[i].blend)) {
+            fprintf(stderr, "retry %s:\n", runs[i].retry != NULL ? runs[i].retry : "(none)");
+        }
+        CHECK(env_is("ICO_RD_VU_PREPASS", runs[i].prepass));
+        CHECK(env_is("ICO_RD_BLEND", runs[i].blend));
+    }
+    unset_env("ICO_STARTUP_RETRY");
+    unset_env("ICO_RD_VU_PREPASS");
+    unset_env("ICO_RD_BLEND");
+}
+
 int main(void)
 {
     test_sha1();
@@ -643,6 +695,7 @@ int main(void)
     test_portable_value();
     test_dev_env();
     test_retry_blend();
+    test_retry_prepass();
 #ifdef ICO_HOST_FORCE_PORTABLE
     test_forced_portable();
 #else

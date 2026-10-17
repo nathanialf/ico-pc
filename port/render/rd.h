@@ -490,6 +490,9 @@ const char *rd_vu_plain_only(void);
  * start that ended inside the pre-pass's compile and in a restart whose
  * step draws without it (window_host.c, startup_retry.h). */
 void rd_set_vu_prepass_off(const char *reason);
+/* Whether the run draws with the VU vertex pre-pass now (after rd_init and
+ * rd_vuprepass_selftest) */
+bool rd_vu_prepass_on(void);
 const RdSettings *rd_get_settings(void);
 /* The scene's scale in force (rd_present.c
  * rd__apply_display, from the settings applied at the last rd_begin_frame):

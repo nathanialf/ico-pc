@@ -611,6 +611,12 @@ const char *ico_dev_env_export_value(const char *key, const char *value, const c
     if (key != NULL && strcmp(key, "blend") == 0 && startup_retry_value_draws_fixed(retry)) {
         return "fixed";
     }
+    /* ... and a run at the crash order's noprepass step or after it, or at
+       any loss step, draws without the VU vertex pre-pass (startup_retry.h
+       startup_retry_value_no_prepass): its pictures are the same */
+    if (key != NULL && strcmp(key, "vu_prepass") == 0 && startup_retry_value_no_prepass(retry)) {
+        return "0";
+    }
     return ico_dev_env_value(key, value);
 }
 
@@ -764,12 +770,18 @@ void ico_ini_export(const IcoIni *ini, const char *path, int r)
        at the fixedblend crash step (ICO_STARTUP_RETRY, startup_retry.h)
        draws with the fixed-function
        blend: ICO_RD_BLEND=fixed over the ini's blend= and the environment,
-       with or without an ini (ico_dev_env_export_value) */
+       with or without an ini (ico_dev_env_export_value); and one at a step
+       that draws without the VU vertex pre-pass gets ICO_RD_VU_PREPASS=0 */
     {
         const char *v = ico_dev_env_export_value("blend", NULL, getenv(STARTUP_RETRY_ENV));
 
         if (v != NULL) {
             put_env("ICO_RD_BLEND", v);
+        }
+        /* ICO_RD_VU_PREPASS=0 at the steps that draw without the pre-pass */
+        v = ico_dev_env_export_value("vu_prepass", NULL, getenv(STARTUP_RETRY_ENV));
+        if (v != NULL) {
+            put_env("ICO_RD_VU_PREPASS", v);
         }
     }
 }

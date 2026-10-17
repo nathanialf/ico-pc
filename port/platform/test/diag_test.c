@@ -223,6 +223,12 @@ static void segv_thread(void *arg)
     "VU batch 332-340 of 702 (plain, compiler E031.41.03.47): 9 pipelines 0.30-1.10 s, mean "      \
     "0.52 s, 1.4 s on 4 threads; vu_lit_plain_vs 23305 words 4300 instructions: 9 x 0.30-1.10 "    \
     "s mean 0.52 s"
+/* a batch of the VU vertex pre-pass's entries and the triangle stage's
+   plain variant (rd_pipeline.c keyWords " pre", batchModules) */
+#define VU_PRE_NOTE                                                                                \
+    "creating pipelines 297-328 of 702: program 0 blend 0 vs 31 fs 41 fmt 3/0 msaa 0 dst 0 pre "   \
+    "to program 0 blend 4 vs 30 fs 19 fmt 1/8 msaa 0 dst 0 ext 0; vertex vu_prelit_pre_vs 1820 "   \
+    "words, vu_tri_plain_vs 19519 words; largest fragment vu_texa_ps 21000 words"
 #define VU_PLAIN_NOTE                                                                              \
     "creating pipelines 297-328 of 702: program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 ext 0 "  \
     "to program 0 blend 4 vs 4 fs 19 fmt 1/8 msaa 0 dst 0 ext 0; vertex vu_prelit_plain_vs "       \
@@ -497,11 +503,19 @@ static int persist_vu_stub(void)
     return getenv("ICO_TEST_PERSIST_FAIL") != NULL ? -1 : 0;
 }
 
+/* window_host.c vu_prepass_persist, stubbed the same way */
+static int persist_pre_stub(void)
+{
+    ico_diag_log("test: config write dev.vu_prepass = false");
+    return getenv("ICO_TEST_PERSIST_FAIL") != NULL ? -1 : 0;
+}
+
 /* The run after the policy (ICO_TEST_THEN): "die" ends it without a word
    inside a pipeline ("dievu": an extended VU batch), "between" between two
    creations of a lazy run ("betweenbg": there in the background), "clean" ends it cleanly (a lazy run's exit, or
    the set finished), "cleanvu" the set finished after an extended VU
-   batch; unset: no run (the file stays deleted) */
+   batch ("cleanvupre": after a batch of the vertex pre-pass); unset: no
+   run (the file stays deleted) */
 static void pipeset_then(int set)
 {
     const char *then = getenv("ICO_TEST_THEN");
@@ -525,6 +539,8 @@ static void pipeset_then(int set)
         _exit(0);
     } else if (strcmp(then, "cleanvu") == 0) {
         ico_diag_set_activity(VU_EXT_NOTE);
+    } else if (strcmp(then, "cleanvupre") == 0) {
+        ico_diag_set_activity(VU_PRE_NOTE);
     } else if (lazy) {
         ico_diag_set_activity("creating pipeline fog test");
         ico_diag_clear_activity();
@@ -627,12 +643,15 @@ static void activity_child(const char *mode, const char *log)
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
         ico_diag_startup_activity_record(0);
         child_quit(0);
-    } else if (strcmp(mode, "actvuext") == 0 || strcmp(mode, "actvuplain") == 0) {
+    } else if (strcmp(mode, "actvuext") == 0 || strcmp(mode, "actvuplain") == 0 ||
+               strcmp(mode, "actvupre") == 0) {
         /* the start-up set ended without a word inside a VU batch (the
            device froze): the batch's note is in the file */
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
         ico_diag_set_activity(BATCH_NOTE);
-        ico_diag_set_activity(strcmp(mode, "actvuext") == 0 ? VU_EXT_NOTE : VU_PLAIN_NOTE);
+        ico_diag_set_activity(strcmp(mode, "actvuext") == 0   ? VU_EXT_NOTE
+                              : strcmp(mode, "actvupre") == 0 ? VU_PRE_NOTE
+                                                              : VU_PLAIN_NOTE);
         _exit(0);
     } else if (strcmp(mode, "actvutimes") == 0) {
         /* the plain batches compiled (their times kept as the file's
@@ -703,7 +722,8 @@ static void activity_child(const char *mode, const char *log)
            ICO_TEST_TABLE_VU: its plain VU rule, RhiLimits.vuPlainOnly) */
         const int relaunch = strcmp(mode, "actpipesetrelaunch") == 0;
         const int vu = relaunch ? 0 : ico_diag_startup_vu_plain("config.toml");
-        const int set = ico_diag_startup_pipeline_set(relaunch, vu > 0 ? 0 : lazy,
+        const int pre = relaunch ? 0 : ico_diag_startup_vu_prepass();
+        const int set = ico_diag_startup_pipeline_set(relaunch, vu > 0 || pre > 0 ? 0 : lazy,
                                                       getenv("ICO_TEST_PIPESET"), "config.toml");
         if (set == ICO_DIAG_PIPESET_LAZY_ONCE || set == ICO_DIAG_PIPESET_LAZY_NOW) {
             (void)ico_diag_startup_end_persist(ICO_DIAG_END_PIPELINES,
@@ -714,7 +734,12 @@ static void activity_child(const char *mode, const char *log)
             (void)ico_diag_startup_end_persist(ICO_DIAG_END_VU_EXT, getenv("ICO_TEST_TABLE_VU"),
                                                persist_vu_stub, "config.toml");
         }
+        if (pre >= 1) {
+            (void)ico_diag_startup_end_persist(ICO_DIAG_END_VU_PRE, NULL, persist_pre_stub,
+                                               "config.toml");
+        }
         ico_diag_log("test: vu plain %d", vu);
+        ico_diag_log("test: vu prepass %d", pre);
         ico_diag_log("test: pipeline set %d", set);
         pipeset_then(set);
         child_quit(0);
@@ -1905,10 +1930,11 @@ int main(int argc, char **argv)
         s = read_file(log);
         {
             char want[512];
-            snprintf(want, sizeof want,
-                     "ico_pc: the count of starts that ended while preparing the graphics could "
-                     "not be written to %s (pipelines 1, extended VU shaders 0)\n",
-                     ends);
+            snprintf(
+                want, sizeof want,
+                "ico_pc: the count of starts that ended while preparing the graphics could "
+                "not be written to %s (pipelines 1, extended VU shaders 0, vertex pre-pass 0)\n",
+                ends);
             CHECK(strstr(s, want) != NULL);
         }
         CHECK(strstr(s, "test: pipeline set 4\n") != NULL);
@@ -2164,6 +2190,55 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(strstr(s, "test: config write dev.vu_plain_only = true\n") != NULL);
         CHECK(strstr(s, "test: vu plain 2\n") != NULL);
+        /* a batch of the vertex pre-pass's (not an extended one): this
+           start draws without it (nothing written, the set as usual); the
+           second end in a row writes [dev] vu_prepass = false; a run that
+           built the pre-pass's pipelines and finished clears the row */
+        remove(ends);
+        run(argv[0], "actvupre", log);
+        setenv("ICO_TEST_THEN", "clean", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: starts in a row that ended while preparing the graphics (the "
+                        "vertex pre-pass): 1\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous start ended while the graphics driver compiled the "
+                        "3D vertex pre-pass's shaders (" VU_PRE_NOTE "); this start only draws "
+                        "without it (nothing is written to config.toml); if a start that compiles "
+                        "them ends there again, [dev] vu_prepass = false is written for good\n") !=
+              NULL);
+        CHECK(strstr(s, "test: config write") == NULL);
+        CHECK(strstr(s, "test: vu prepass 1\n") != NULL);
+        CHECK(strstr(s, "test: vu plain 0\n") != NULL);
+        CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
+        run(argv[0], "actvupre", log);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: config write dev.vu_prepass = false\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous start ended while the graphics driver compiled the "
+                        "3D vertex pre-pass's shaders (" VU_PRE_NOTE "); this start and every "
+                        "start after it draw without it ([dev] vu_prepass = false in "
+                        "config.toml); delete that line to try it again\n") != NULL);
+        CHECK(strstr(s, "test: vu prepass 2\n") != NULL);
+        CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
+        run(argv[0], "actvupre", log);
+        setenv("ICO_TEST_THEN", "cleanvupre", 1);
+        run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
+        run(argv[0], "actvupre", log);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: config write") == NULL);
+        CHECK(strstr(s, "test: vu prepass 1\n") != NULL);
+        /* an extended VU batch's end is issue 107's kind, not the
+           pre-pass's */
+        remove(ends);
+        run(argv[0], "actvuext", log);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: vu plain 1\n") != NULL);
+        CHECK(strstr(s, "test: vu prepass 0\n") != NULL);
+        remove(ends);
         /* no file: the set; the setting "lazy": none, nothing written */
         r = run(argv[0], "actpipeset", log);
         s = read_file(log);
@@ -2255,7 +2330,7 @@ int main(int argc, char **argv)
     CHECK(strstr(s, "the game starts again at the title when this run has closed, with "
                     "ICO_STARTUP_RETRY=blend:vulkan: ") != NULL);
     CHECK(strstr(s, "test: restart 1\n") != NULL);
-    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=blend:vulkan (parse 0, step 5, backend "
+    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=blend:vulkan (parse 0, step 7, backend "
                     "vulkan, blend fixed)\n") != NULL);
     /* the normal quit path first, then the relaunch */
     CHECK(strstr(s, "test: restart 1") != NULL && strstr(s, "test: the end-of-run steps") != NULL &&
@@ -2275,7 +2350,7 @@ int main(int argc, char **argv)
     s = read_file(log);
     CHECK(r == 0);
     CHECK(strstr(s, "test: restart 1\n") != NULL);
-    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=backend:d3d12 (parse 0, step 6, backend "
+    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=backend:d3d12 (parse 0, step 8, backend "
                     "d3d12, blend fixed)\n") != NULL);
     CHECK(strstr(s, "ico_pc: started the game again") != NULL);
     if (fails) {

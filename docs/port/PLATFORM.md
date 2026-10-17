@@ -379,7 +379,11 @@ Windows, Linux and macOS the handler then starts the program again at once, with
 folder or the settings (an end without a crash report has a step of its own, which writes one
 on the second such end in a row: below). The steps come in order, each taken only when the run before crashed:
 `cache` (the crashed run had loaded the pipeline cache file: it is deleted and the same backend
-tries again), `fixedblend` (the note names a pipeline whose `dst` field is nonzero, an exact-blend
+tries again), `noprepass` (the note names a pipeline of the VU vertex pre-pass: a ` pre` key, a
+`vu_X_pre_vs` module or the triangle stage's `vu_tri_vs` or `vu_tri_plain_vs`,
+`startup_retry_note_has_vu_pre`; the same backend without the pre-pass, `ICO_RD_VU_PREPASS=0`
+from `ico_ini_export`, which makes none of them, [RENDER.md](RENDER.md#the-vertex-pre-pass)),
+`fixedblend` (the note names a pipeline whose `dst` field is nonzero, an exact-blend
 pass with a fragment shader interlock or rasterizer-ordered view entry: the same backend with the
 fixed-function blend, `ICO_RD_BLEND=fixed` from `ico_ini_export` as for the loss steps, which builds
 no such pipeline; skipped when the player chose the blending with `blend=` or `ICO_RD_BLEND`;
@@ -388,6 +392,10 @@ player named no backend; its own blending, not the fixed one), `lazy`
 (each pipeline is built when a frame first needs it), then none: the crash ends as any other, with
 the driver-crash text in the crash box where the platform shows one (`port/platform/startup_retry.h`
 (`startup_retry_next`); `port/platform/diag_host.c` (`driver_crash_plan`, `driver_box_text`)).
+The runs of `noprepass` and of every step after it draw without the pre-pass
+(`startup_retry_draws_no_prepass`; the window also tells the renderer, `rd_set_vu_prepass_off`,
+so its line says `rd: VU pre-pass: off for this restart (the <step> step after a graphics driver
+crash)`), so a later step never makes its pipelines again; the pictures are the same.
 Everything the relaunch needs is captured at start-up, so the handler does not allocate
 (`port/platform/diag_host.h` (`ico_diag_prepare_relaunch`)). On Windows the relaunch is
 `CreateProcessW` with the module path, `GetCommandLineW` and a copy of the environment block, and
@@ -408,13 +416,16 @@ A lost graphics device (the driver reset the card, `DXGI_ERROR_DEVICE_HUNG`, `VK
 logs the loss and the renderer's pass ring, then asks for the loss step
 (`port/platform/window_host.c` (`device_lost_quit`); `port/platform/diag_host.c`
 (`ico_diag_device_lost_restart`)); the steps come in order, each taken only when the run before
-lost the device: `blend` (the same backend with the fixed-function blend, `ICO_RD_BLEND=fixed`, so
+lost the device: `lossnoprepass` (the same backend without the VU vertex pre-pass,
+`ICO_RD_VU_PREPASS=0`, when the losing run drew with it after its self-test:
+`ico_diag_set_vu_prepass`, `StartupRetryRun.prepassWasOn`), `blend` (the same backend with the fixed-function blend, `ICO_RD_BLEND=fixed`, so
 no fragment shader interlock or rasterizer-ordered view passes; skipped when the losing run already
 drew with it or the player chose the blending with `blend=` or `ICO_RD_BLEND`), `backend` (the
 other backend, Direct3D 12 from Vulkan or Vulkan from Direct3D 12, with the fixed-function blend; in
 a build with both, when the player named no backend and no blending other than `fixed`), then none
 (`port/platform/startup_retry.h` (`startup_retry_next`, `StartupRetryRun`); `port/platform/startup_retry.c`
-(`loss_next`)). With a step, the session ends through the normal quit path without a box (the
+(`loss_next`)). Every loss step's run draws without the pre-pass, and `blend` and `backend` with the
+fixed-function blend. With a step, the session ends through the normal quit path without a box (the
 settings are saved and the window, audio and files closed as at any quit) and the program starts
 again at exit, after the end-of-run steps, with `ICO_STARTUP_RETRY=blend:<backend>` or
 `backend:<backend>`; the relaunch is the same `relaunch_now` as the crash's, run from an `atexit`
@@ -425,15 +436,17 @@ itself with simpler blending when the run was a loss step's. Android and iOS kee
 run starts at the title as a fresh launch (what was not saved was lost with the card, as at a quit),
 appends to the log, logs
 `ico_pc: restarted after the graphics card stopped responding: <what this run does>`, and gets
-`ICO_RD_BLEND=fixed` from `ico_ini_export`, which wins over `blend=` and over an `ICO_RD_BLEND` in
-the environment for that run (the step is never taken against a player's blending other than
-`fixed`) (`port/platform/host_config.c` (`ico_ini_export`, `ico_dev_env_export_value`)). When the
+`ICO_RD_BLEND=fixed` (the `blend` and `backend` steps) and `ICO_RD_VU_PREPASS=0` from
+`ico_ini_export`, which win over `blend=` and `vu_prepass=` and over the environment for that run
+(the step is never taken against a player's blending other than `fixed`)
+(`port/platform/host_config.c` (`ico_ini_export`, `ico_dev_env_export_value`)). When the
 `backend` step's Direct3D 12 cannot start, that run goes on with Vulkan itself
 (`port/platform/window_host.c` (`ico_window_open`)). The step only grows (the loss steps come after
 `lazy`), so a crash in a loss step's run ends with the crash box and every chain ends. Nothing is
 written to the user folder. ctest `startup_retry` checks both orders over every input
-and the loss values in the relaunch's environment; ctest `host_config` checks the `ICO_RD_BLEND`
-precedence (`port/platform/test/host_config_test.c` (`test_retry_blend`)). ctest `diag` runs the
+and the loss values in the relaunch's environment, and the chains with the pre-pass
+(`test_prepass_chain`); ctest `host_config` checks the `ICO_RD_BLEND` and `ICO_RD_VU_PREPASS`
+precedence (`port/platform/test/host_config_test.c` (`test_retry_blend`, `test_retry_prepass`)). ctest `diag` runs the
 loss restart end to end with the relaunch prepared and stubbed (`ico_diag_set_relaunch_stub`, so no
 process is started): the step and its value (`blend:vulkan`, then `backend:d3d12`), the quit path's
 `atexit` steps before the relaunch, nothing at exit when no step is left, and the box when the
@@ -465,14 +478,25 @@ the background, or Task Manager did. So the first one changes one start only, an
 row makes it last. A note that names a pipeline being made (`creating pipeline ...`, `creating
 pipelines ...` or `creating the start-up pipelines`), from a start of any version that was not a
 restart after a crash report and was in the foreground, counts one end in a row of its kind: an
-extended VU batch's (` ext 1`, `startup_retry_note_has_vu_ext`) or else the pipelines'. The counts
-live beside the activity file in `logs/startup-activity-ends.txt` (`pipelines <n>`, `vu_ext <n>`),
-and each counted end logs `ico_pc: starts in a row that ended while preparing the graphics (the
-pipelines): 1` (`(the extended VU shaders)` for the other kind) (`port/platform/diag_host.h`
-(`ico_diag_startup_end_count`); `port/platform/diag_host.c` (`ends_count_prev`)). A count file
-that cannot be written is logged once a run: `ico_pc: the count of starts that ended while
-preparing the graphics could not be written to <path> (pipelines <n>, extended VU shaders <n>)`
-(`ends_write`). The first pipelines' end makes the next start, and only that one, skip the
+extended VU batch's (` ext 1`, `startup_retry_note_has_vu_ext`), else the VU vertex pre-pass's (a
+` pre` key or a `vu_X_pre_vs` or `vu_tri` module, `startup_retry_note_has_vu_pre`), or else the
+pipelines'. The counts live beside the activity file in `logs/startup-activity-ends.txt`
+(`pipelines <n>`, `vu_ext <n>`, `vu_pre <n>`), and each counted end logs `ico_pc: starts in a row
+that ended while preparing the graphics (the pipelines): 1` (`(the extended VU shaders)` and `(the
+vertex pre-pass)` for the others) (`port/platform/diag_host.h` (`ico_diag_startup_end_count`);
+`port/platform/diag_host.c` (`ends_count_prev`)). A count file that cannot be written is logged
+once a run: `ico_pc: the count of starts that ended while preparing the graphics could not be
+written to <path> (pipelines <n>, extended VU shaders <n>, vertex pre-pass <n>)` (`ends_write`).
+The pre-pass's kind works as the extended VU kind does: the first end makes the next start, and
+only that one, draw without the pre-pass (`ico_diag_startup_vu_prepass`, `rd_set_vu_prepass_off`;
+its self-test is then not run) and logs `ico_pc: the previous start ended while the graphics
+driver compiled the 3D vertex pre-pass's shaders (<note>); this start only draws without it
+(nothing is written to <path>); if a start that compiles them ends there again, [dev] vu_prepass =
+false is written for good`; the second in a row writes `[dev] vu_prepass = false` to
+`config.toml` (`port/platform/window_host.c` (`vu_prepass_persist`)) and logs `... this start and
+every start after it draw without it ([dev] vu_prepass = false in <path>); delete that line to try
+it again`. That start builds the set as usual, and its notes and the self-test's pipelines are
+written through to the disc before each is made (`act_sync_note`). The first pipelines' end makes the next start, and only that one, skip the
 start-up set (`ico_diag_startup_pipeline_set`, `ICO_DIAG_PIPESET_LAZY_ONCE`); once the device is
 made it logs `ico_pc: the previous start ended while preparing the graphics (<note>); this start
 only makes the pipelines as the game needs them, with no start-up set (nothing is written to
@@ -501,8 +525,9 @@ the line makes the next start try the set again ([RENDER.md](RENDER.md#the-start
 
 What breaks a row: an end in the background (below) breaks the row of its kind; any other note in
 the file (the run ended between two creations, or in the loss bisect) breaks the pipelines' row; a
-start-up set that finished, or a lazy run's normal exit, clears the pipelines' row, and the extended
-VU row too when that run built extended VU pipelines (`ends_clean`). The plain run an extended VU
+start-up set that finished, or a lazy run's normal exit, clears the pipelines' row, the extended
+VU row too when that run built extended VU pipelines, and the pre-pass's row when it built one of
+the pre-pass's (`ends_clean`). The plain run an extended VU
 end gives builds none, so it leaves that row as it was, and the next start that compiles them and
 ends there again is the second. A restart after a crash report counts nothing.
 

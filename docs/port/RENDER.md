@@ -978,11 +978,17 @@ rd: VU pre-pass: off (self-test: a pipeline could not be made (<d> of 3 commands
 rd: VU pre-pass: off (self-test: the device failed in the replay with the pre-pass) on SCENE ...
 ```
 
-A start whose pre-pass is already off (the settings, the device) runs nothing and logs `rd: VU pre-pass: off (self-test not run)`; a frame
+A start whose pre-pass is already off (the settings, the device, the host's
+`rd_set_vu_prepass_off`: a restart step or an end in its compile) runs nothing and logs `rd: VU pre-pass: off (self-test not run)`; a frame
 it could not build, or one in which neither replay drew the meshes, leaves the pre-pass on (`on
 (self-test not run: ...)`, `on (self-test inconclusive: ...)`). The summary line carries the
 verdict (`VU pre-pass on (self-test: ok)`, `VU pre-pass off (self-test: <reason>)`,
-[PLATFORM.md](PLATFORM.md#the-summary-line)). It tests the variant the start draws with:
+[PLATFORM.md](PLATFORM.md#the-summary-line)). A crash in one of its pipelines is noted as the
+start-up set's would be and takes the crash order's `noprepass` step; a start that ended without a
+word in one of the pre-pass's pipelines or batches makes the next start draw without it, and the
+second such end in a row writes `[dev] vu_prepass = false`; a device loss in a run drawing with
+it takes the loss order's `lossnoprepass` step first ([PLATFORM.md](PLATFORM.md#diagnostics)). It
+tests the variant the start draws with:
 a later change of settings that moves the draws to the other variant is not tested again
 (`port/render/rd_vuprepass_selftest.c`; `port/render/rd.h` (`rd_vuprepass_selftest`);
 `ICO_RD_VU_PREPASS_SABOTAGE=1` draws the first command's records a texel off,

@@ -38,6 +38,13 @@ static StartupRetry crash_next(const StartupRetryRun *run, const char *name, boo
                  name);
         return STARTUP_RETRY_CACHE;
     }
+    if (step < STARTUP_RETRY_NO_PREPASS && run->prepassPipeline) {
+        snprintf(reason, reasonLen,
+                 "the pipeline being built was one of the 3D vertex pre-pass's; the next try on "
+                 "%s draws without it",
+                 name);
+        return STARTUP_RETRY_NO_PREPASS;
+    }
     if (step < STARTUP_RETRY_CRASH_BLEND && run->dstPipeline && !run->blendExplicit &&
         !run->blendWasFixed) {
         snprintf(reason, reasonLen,
@@ -74,6 +81,11 @@ static StartupRetry loss_next(const StartupRetryRun *run, const char *name, bool
     const char *other = onD3d12 ? "vulkan" : "d3d12";
     /* the backend step keeps the player's blending: only a fixed one */
     const bool blendFree = !run->blendExplicit || run->blendWasFixed;
+    if (step < STARTUP_RETRY_LOSS_NO_PREPASS && run->prepassWasOn) {
+        snprintf(reason, reasonLen, "the next run on %s draws without the 3D vertex pre-pass",
+                 name);
+        return STARTUP_RETRY_LOSS_NO_PREPASS;
+    }
     if (step < STARTUP_RETRY_LOSS_BLEND && !run->blendWasFixed && !run->blendExplicit) {
         snprintf(reason, reasonLen, "the next run on %s draws with the simpler blending", name);
         return STARTUP_RETRY_LOSS_BLEND;
@@ -158,6 +170,36 @@ bool startup_retry_note_has_vu_ext(const char *note)
     return digits && nonzero && (p[i] == '\0' || p[i] == ' ');
 }
 
+bool startup_retry_note_has_vu_pre(const char *note)
+{
+    static const char head[] = "creating pipeline";
+    const char *p;
+    if (note == NULL || strncmp(note, head, sizeof head - 1) != 0) {
+        return false;
+    }
+    p = note + (sizeof head - 1);
+    if (*p == 's') {
+        p++;
+    }
+    if (*p != ' ') {
+        return false;
+    }
+    /* a module of the pre-pass or the triangle stage (keyModules,
+       batchModules) */
+    if (strstr(p, "_pre_vs") != NULL || strstr(p, "vu_tri_") != NULL) {
+        return true;
+    }
+    /* a pre-pass key's field (keyWords: " pre" after the dst field), a
+       word of its own */
+    for (const char *q = strstr(p, " pre"); q != NULL; q = strstr(q + 1, " pre")) {
+        const char e = q[4];
+        if (e == '\0' || e == ' ' || e == ';' || e == ',' || e == ')') {
+            return true;
+        }
+    }
+    return false;
+}
+
 StartupRetry startup_retry_next(const StartupRetryRun *run, char *reason, size_t reasonLen)
 {
     const char *name =
@@ -181,12 +223,16 @@ const char *startup_retry_name(StartupRetry step)
     switch (step) {
     case STARTUP_RETRY_CACHE:
         return "cache";
+    case STARTUP_RETRY_NO_PREPASS:
+        return "noprepass";
     case STARTUP_RETRY_CRASH_BLEND:
         return "fixedblend";
     case STARTUP_RETRY_D3D12:
         return "d3d12";
     case STARTUP_RETRY_LAZY:
         return "lazy";
+    case STARTUP_RETRY_LOSS_NO_PREPASS:
+        return "lossnoprepass";
     case STARTUP_RETRY_LOSS_BLEND:
         return "blend";
     case STARTUP_RETRY_LOSS_BACKEND:
@@ -215,9 +261,10 @@ int startup_retry_value(StartupRetry next, const char *backendName, char *out, s
 
 int startup_retry_parse(const char *value, StartupRetry *step, char *backend, size_t size)
 {
-    static const StartupRetry steps[] = {STARTUP_RETRY_CACHE,      STARTUP_RETRY_CRASH_BLEND,
-                                         STARTUP_RETRY_D3D12,      STARTUP_RETRY_LAZY,
-                                         STARTUP_RETRY_LOSS_BLEND, STARTUP_RETRY_LOSS_BACKEND};
+    static const StartupRetry steps[] = {STARTUP_RETRY_CACHE,       STARTUP_RETRY_NO_PREPASS,
+                                         STARTUP_RETRY_CRASH_BLEND, STARTUP_RETRY_D3D12,
+                                         STARTUP_RETRY_LAZY,        STARTUP_RETRY_LOSS_NO_PREPASS,
+                                         STARTUP_RETRY_LOSS_BLEND,  STARTUP_RETRY_LOSS_BACKEND};
     const char *colon;
     size_t i, n;
     *step = STARTUP_RETRY_NONE;
@@ -254,20 +301,28 @@ const char *startup_retry_what(StartupRetry step)
     switch (step) {
     case STARTUP_RETRY_CACHE:
         return "the pipeline cache file was deleted; the shaders are prepared again from scratch";
+    case STARTUP_RETRY_NO_PREPASS:
+        return "this run draws without the 3D vertex pre-pass on the same graphics backend";
     case STARTUP_RETRY_CRASH_BLEND:
-        return "this run draws with the simpler blending on the same graphics backend";
+        return "this run draws with the simpler blending on the same graphics backend, without "
+               "the 3D vertex pre-pass";
     case STARTUP_RETRY_D3D12:
-        return "this run uses Direct3D 12";
+        return "this run uses Direct3D 12, without the 3D vertex pre-pass";
     case STARTUP_RETRY_LAZY:
-        return "this run builds the shaders as the game needs them, not all at the start";
-    case STARTUP_RETRY_LOSS_BLEND:
-        return "this run draws with the simpler blending on the same graphics backend; it "
+        return "this run builds the shaders as the game needs them, not all at the start, "
+               "without the 3D vertex pre-pass";
+    case STARTUP_RETRY_LOSS_NO_PREPASS:
+        return "this run draws without the 3D vertex pre-pass on the same graphics backend; it "
                "starts at the title as a fresh launch (what was not saved was lost when the "
                "card stopped)";
+    case STARTUP_RETRY_LOSS_BLEND:
+        return "this run draws with the simpler blending on the same graphics backend, without "
+               "the 3D vertex pre-pass; it starts at the title as a fresh launch (what was not "
+               "saved was lost when the card stopped)";
     case STARTUP_RETRY_LOSS_BACKEND:
-        return "this run uses the other graphics backend with the simpler blending; it starts "
-               "at the title as a fresh launch (what was not saved was lost when the card "
-               "stopped)";
+        return "this run uses the other graphics backend with the simpler blending, without "
+               "the 3D vertex pre-pass; it starts at the title as a fresh launch (what was not "
+               "saved was lost when the card stopped)";
     default:
         return "";
     }

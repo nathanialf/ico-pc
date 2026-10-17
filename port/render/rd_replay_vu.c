@@ -939,6 +939,11 @@ void rd_set_vu_prepass_off(const char *reason)
     snprintf(s_preHostWhy, sizeof(s_preHostWhy), "%s", reason != NULL ? reason : "");
 }
 
+bool rd_vu_prepass_on(void)
+{
+    return g_rd.vuPrepass;
+}
+
 void rd__vu_prepass_init(const RhiLimits *lim)
 {
     g_rd.vuPrepassWhy[0] = '\0';
