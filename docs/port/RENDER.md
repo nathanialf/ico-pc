@@ -1015,7 +1015,13 @@ normal_c code 32, a lit one through normal_l code 32 and a skinned one through c
 with two bones, 12 vertices and 8 triangles each, overlapping at other depths, Z GEQUAL with Z
 write, untextured) with `vu1_test`'s scene in VU memory, once with the pre-pass off (the programs'
 entries, the reference) and once with it on, in the VU shader variant the settings draw with, and
-reads the block back after each. It passes when the replay with the pre-pass drew every command
+reads the block back after each. Their pipelines are made first on the worker threads the start-up
+set uses, named by two replays that draw nothing (`rd__pipeline_gather`,
+`rd__pipeline_create_gathered`, as the loss bisect makes its own): the programs' three entries are
+not in the start-up set with the pre-pass on, and on a cold driver cache a PowerVR DXT-48-1536
+compiles an extended VU program entry in about 1.3 to 3.4 s (its start-up batches in a log), so
+in parallel the self-test costs about the slowest one, and next to nothing once the pipeline cache
+holds them. It passes when the replay with the pre-pass drew every command
 through it (`RdPerfRecord.vuPrePasses` 1, `vuPreDraws` 3, `vuPreFallbacks` 0) and the two blocks
 are equal byte for byte. A difference, a pipeline the pre-pass could not make or a device error
 turns the pre-pass off for the run, so the start-up set made next holds the programs' keys:

@@ -23,8 +23,10 @@
  *   skin    cluster code 20 (RD_PROG_SKIN, two bones)
  * with vu1_test.c's scene in VU memory (model to GS screen x' = 16x +
  * 2048z, y' = 16y + 2048z, z' = 3 * 2^20 (z - 1), w' = z; its two light
- * matrices).  The frame is replayed without the pre-pass (the programs'
- * entries: the reference) and with it, in the VU shader variant the
+ * matrices).  The pipelines of both replays are made first on the worker
+ * threads (two replays that draw nothing name them, rd__pipeline_gather;
+ * rd__pipeline_create_gathered).  The frame is replayed without the
+ * pre-pass (the programs' entries: the reference) and with it, in the VU shader variant the
  * settings draw with (rd__vu_draw_ext), and the block is read back after
  * each.  The pre-pass passes when its replay drew every command through it
  * (one pre-pass, a pre-pass draw a command, no draw the old way) and the
@@ -330,6 +332,25 @@ static void runSelftest(RdTargetRec *t, Verdict *v)
     } else {
         const bool wasBlocked = g_rd.msaaBlocked;
         g_rd.msaaBlocked = true; /* the MSAA epoch is not what is checked */
+        /* both replays' pipelines first, compiled on the worker threads the
+           start-up set uses (as the loss bisect's, rd_dump.c
+           bisectPipelines): a replay of each with nothing drawn names the
+           keys the cache lacks (rd__pipeline_gather); on a phone's driver
+           each VU pipeline takes a second or more, serial on this thread
+           several */
+        rd__replay_set_window(UINT32_MAX, 0);
+        rd__pipeline_gather(true);
+        g_rd.vuPrepass = false;
+        (void)rd__replay_frame(&f, 0, false);
+        g_rd.vuPrepass = true;
+        (void)rd__replay_frame(&f, 0, false);
+        rd__pipeline_gather(false);
+        rd__replay_set_window(0, 0);
+        rhi_wait_idle();
+        if (!rhi_device_lost()) {
+            bool stopped = false;
+            (void)rd__pipeline_create_gathered(&stopped);
+        }
         /* the reference: every command through its program's entry */
         g_rd.vuPrepass = false;
         const bool refOk = runOnce(&f, t, ref, size);
