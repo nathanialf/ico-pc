@@ -6247,11 +6247,6 @@ int rd__replay_perf_target_post(const Replay *r, const RdCmd *c)
     return perfTargetPost(r, c);
 }
 
-int rd__replay_scene_keeps_half(RdStateBlock *st, int list, uint32_t headHalf)
-{
-    return sceneKeepsHalf(st, list, headHalf);
-}
-
 void rd__replay_perf_post(Replay *r, int post)
 {
     perfPost(r, post);
