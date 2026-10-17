@@ -1423,7 +1423,10 @@ one the colour target in force belongs to (the softening's and the aura's target
 last post sprite names, and a post sprite's ends with its list: the next list starts with its
 target's effect, so the motion blur, list 7's last sprite, is the sprite alone and lists 8 to 11
 are no effect's (`port/render/rd_replay.c` (`perfTargetPost`, `Replay.perfTargetEffect`, the list
-loop)). The window sums them
+loop)). The same effect (`Replay.perfPost`) also decides what counts as a glow pass (`glowPasses`,
+below) and labels each pass in the device-loss pass history (`passPush`), so both follow that
+rule too: a pass begun in a later list is counted and labelled by its target's effect, not by the
+last post sprite of an earlier list. Nothing drawn depends on it. The window sums them
 into its 10 s statistics line, and `[dev] perf_log` writes one line per replay
 ([DISPLAY.md](DISPLAY.md#the-perf-csv)). The [replay tool](ARCHITECTURE.md#terms)'s `--stats` prints
 the same record.

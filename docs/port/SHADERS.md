@@ -273,14 +273,18 @@ the code and a CPU sweep against the plain operator in `gs_math_test`:
 - **REPEAT addressing** is `gs_wrap_repeat(c, n)` (`port/shaders/gs_math.hlsli`): `c & (n - 1)`
   when `n` is a power of two, else `((c % n) + n) % n`. In two's complement the low bits of `c`
   are its residue modulo a power of two, negative `c` included, so the two sides agree for every
-  `int`; the test is per draw (a texture's size), kept a branch (`GS_BRANCH`, SPIR-V
-  `DontFlatten`) so the modulo runs only for a size that is not a power of two. Users:
+  `int`; the test is on a texture's size, kept a branch (`GS_BRANCH`, SPIR-V `DontFlatten`) so the
+  modulo runs only for a size that is not a power of two. The size is the draw's, except on the mip
+  paths, which take the size at the pixel's level (`gs_sample_lod_nearest`, `gs_texa_level` in
+  `common.hlsli`), so there the test is per pixel: every level of a 2^TW x 2^TH texture is a power
+  of two, and only a replacement chain whose size is not can take both sides within a wave, with
+  the same values. Users:
   `gs_texa_load` and `gs_load_lv` (`common.hlsli`), `fx_texel` (`fx_sprite.hlsl`).
 - **Integer division** is `gs_div_trunc(n, d)` (`gs_math.hlsli`): `n / d` truncated toward zero
   as `OpSDiv` gives it, from the float quotient of `|n|` and `d` and one integer correction each
   way, exact for `1 <= d <= 2^24` and `|n| < d * 2^21`. There the float quotient is within 0.57
   of the exact one (the conversion within one ulp, the divide within 2.5 ulp: Vulkan's `OpFDiv`
-  bound, which D3D's reciprocal and multiply and Metal's fast-math divide meet), so its integer
+  precision, which the proof assumes of the other APIs' divides too), so its integer
   part is the floor or one off, and the remainder `|n| - q * d` (exact modulo 2^32) says which.
   The function's comment carries the bounds of its one user, `fx_sprite_ps`'s UV step
   (`(X - x0) * (u1 - u0) / (x1 - x0)`: `|n| <= (d + 30) * 65543`); a new user proves its own.

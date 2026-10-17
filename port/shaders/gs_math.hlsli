@@ -18,8 +18,13 @@
 #define GS_BRANCH
 #else
 #define GS_FN
-// an if kept a branch (SPIR-V DontFlatten): its condition is the same for
-// every pixel of a draw, and a select would run both sides
+// an if kept a branch (SPIR-V DontFlatten): a select would run both sides.
+// gs_wrap_repeat's condition is on a texture's size: the same for every
+// pixel of a draw, except on the mip paths, which take the size at the
+// pixel's level (common.hlsli gs_sample_lod_nearest, gs_texa_level). Every
+// level of a 2^TW x 2^TH texture is a power of two; a replacement chain
+// whose size is not can take both sides within a wave, the value right
+// either way.
 #define GS_BRANCH [branch]
 #endif
 
@@ -85,9 +90,9 @@ GS_FN int gs_wrap_repeat(int c, int n)
 // float(d) is exact (d <= 2^24). float(a) is within one ulp of a (Vulkan,
 // D3D and Metal convert correctly rounded, half an ulp), so within
 // 2^-23 * a, which divided by d is 2^-23 * Q < 0.25 for Q < 2^21. The
-// divide is within 2.5 ulp of float(a) / float(d) (Vulkan's OpFDiv and
-// Metal's fast-math divide; D3D's x * (1 / y) at 1 ulp and 0.5 ulp is
-// tighter), and below 2^21 an ulp is at most 2^-3, so 0.3125 at most.
+// divide is taken to be within 2.5 ulp of float(a) / float(d) (Vulkan's
+// OpFDiv precision; the proof assumes no worse of the other APIs' divides),
+// and below 2^21 an ulp is at most 2^-3, so 0.3125 at most.
 // |f - Q| < 0.5625 < 1, so q0 = trunc(f) (f >= 0, so the floor) is
 // floor(Q) - 1, floor(Q) or floor(Q) + 1, and r = a - q0 * d lies in
 // [-d, 2d): one step back when r < 0, one on when r >= d, gives floor(Q)
@@ -102,9 +107,10 @@ GS_FN int gs_wrap_repeat(int c, int n)
 // reduction at most 2560 * 16 + 8, the mirror moves U by -8). X - x0 is
 // the coverage's ox + gb.x - x0, in 0..d-1, plus gp.x - gb.x, the pixel's
 // centre against its block's start, in -8..16 at every scale >= 1 (the
-// target's scale is never below 1, rd_present.c rd__apply_display): at
-// most 31 apart from the block either way however the floats round. So
-// |n| <= (d + 30) * 65543, which is below d * 2^21 for every d >= 1;
+// target's scale is never below 1, rd_present.c rd__apply_display): X - x0
+// lies in about -8..d + 15, float rounding moving it by less than a pixel.
+// So |n| <= (d + 30) * 65543 with room to spare, which is below d * 2^21
+// for every d >= 1 (at d = 1, 2,031,833 < 2,097,152);
 // above d = 1024 every int n is (2^31 / 1025 < 2^21), the product's
 // int32 wrap included, where OpSDiv divided the wrapped value too. V the
 // same with y. gs_math_test sweeps d over 1..2^17 and the quotient over

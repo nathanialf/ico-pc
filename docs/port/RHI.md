@@ -151,11 +151,20 @@ fields are CPU time blocked in the backend: `fenceWaitNs` on GPU completion (`rh
 `swapchains` counts swapchains made, so the window can tell the first present on a new one. On
 Vulkan `acquireNs` is `vkAcquireNextImageKHR` and `presentNs` `vkQueuePresentKHR`; on D3D12
 `acquireNs` is the wait on the frame latency object, `presentNs` is `Present` and `fenceWaitNs` is
-`dx_wait_fence`. The counts are kept at the Vulkan backend's counting points (`DxState.counts`):
-`draws` per draw call, `renderPasses` per pass begun, `pipelineBinds` per pipeline change,
-`bindGroupBinds` per bind group set on the command list at a draw, `barriers` per `ResourceBarrier`
-call, `copies` per copy, resolve or texture-to-buffer call of the RHI, `submits` per executed list,
-`waitIdles`, `readbacks`, the buffers and textures made and destroyed and the transient bind groups.
+`dx_wait_fence`. D3D12 keeps its counts in `DxState.counts`: `draws` per draw call, `renderPasses`
+per pass begun, `pipelineBinds` per pipeline change, `barriers` per `ResourceBarrier` call, `copies`
+per copy, resolve or texture-to-buffer call of the RHI, `submits` per executed command list of a
+frame (a readback's one-shot list is not counted, as Vulkan does not count its readback's submit:
+`port/rhi/vk/vk_cmd.c` (`rhi_readback_texture`), `port/rhi/d3d12/d3d12_cmd.c`
+(`rhi_readback_texture`)), `waitIdles`, `readbacks`, and the buffers and textures made and
+destroyed, at the same points as Vulkan. The bind groups count differently: `bindGroups` counts
+every group made, which on D3D12 includes the null group it makes for a slot a pipeline reads and
+the caller left unbound (`port/rhi/d3d12/d3d12_pipeline.c` (`dx_null_bind_group`)), and
+`bindGroupBinds` counts each slot `dx_flush` sets at a draw: every slot marked dirty, all of the
+root signature's slots after a root-signature change (D3D12 resets the root arguments with it),
+null groups included, where Vulkan counts only the slots it binds a caller's group to
+(`port/rhi/vk/vk_cmd.c` (`vkr_flush_bind_groups`)). So for the same draws D3D12's two bind group
+figures read higher than Vulkan's.
 The Vulkan-only fields read 0 on D3D12: the memory gauges (live and peak allocations, their bytes,
 the device's limit), `memoryAllocs`, `memoryFrees`, `memoryFallbacks`, `orderBarriers`
 (`port/rhi/rhi.h` (`RhiStats`); `port/rhi/vk/vk_swapchain.c` (`rhi_acquire_backbuffer`,

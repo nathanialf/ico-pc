@@ -871,7 +871,11 @@ int movie_init(char *name, int imageW, int imageH, int dbx, int dby, int mono, i
     if (mv.iopBuf == 0) {
         ico_diag_log("fmv: no IOP memory for the PCM buffer");
     } else {
+        /* under the audio lock, as iop_write: the driver's mixer reads IOP
+           RAM inside the SPU2's render */
+        ico_audio_lock();
         memset(ico_iop_ptr((uint32_t)mv.iopBuf), 0, IOP_PCM_SIZE);
+        ico_audio_unlock();
         SgStPcmInit();
         mv.pcmInited = 1;
         pcm[0] = 0;

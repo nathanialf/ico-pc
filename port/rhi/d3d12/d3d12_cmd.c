@@ -48,9 +48,10 @@ void dx_transition(ID3D12GraphicsCommandList *cl, ID3D12Resource *res, uint32_t 
  * Vulkan pools' size (RHI_MAX_TIMESTAMPS).  rhi_cmd_write_timestamp is an
  * EndQuery; the list that wrote them resolves them into the slot's
  * readback buffer as it closes (dx_resolve_timestamps); the slot's recycle
- * reads them once its fence has passed (dx_collect_timestamps), one frame
- * slot late like Vulkan's, so a slot is never read while the GPU can still
- * write it.  Ticks are converted with the queue's GetTimestampFrequency. */
+ * reads them once its fence has passed (dx_collect_timestamps), when the
+ * slot comes round again RHI_FRAMES_IN_FLIGHT frames later, like Vulkan's,
+ * so a slot is never read while the GPU can still write it.  Ticks are
+ * converted with the queue's GetTimestampFrequency. */
 static void dx_timestamps_release_all(void)
 {
     for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
@@ -77,7 +78,10 @@ static void dx_timestamps_init(void)
     g_dx.tsFreq = 0;
     g_dx.tsCount = 0;
     memset(g_dx.tsResult, 0, sizeof(g_dx.tsResult));
-    if (getenv("ICO_DX_FAKE_NO_TIMESTAMPS")) {
+    /* ICO_DX_FAKE_NO_TIMESTAMPS=1 (set, not empty, not "0", as
+       ICO_DX_FAKE_NO_DST) */
+    const char *noTs = getenv("ICO_DX_FAKE_NO_TIMESTAMPS");
+    if (noTs && noTs[0] && noTs[0] != '0') {
         DX_LOG("GPU timestamps: off (ICO_DX_FAKE_NO_TIMESTAMPS)");
         return;
     }

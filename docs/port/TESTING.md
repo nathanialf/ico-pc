@@ -95,8 +95,8 @@ program under an environment switch ([Environment switches](#environment-switche
   randomization off for the run (the build host's kernel randomizes more than ThreadSanitizer
   accepts); a report is a failure.
 - `audio_queue_test.c` (window build): the output on the game's clock (`out_sdl.c`'s push) on a
-  device-less SDL stream: the cushion, the refill after a dry queue and its ramp, the trim and the
-  drop limit (`audio_queue`).
+  device-less SDL stream: the cushion, the refill after a dry queue and its ramp with frames still
+  queued, plain silence after a queue run empty, the trim and the drop limit (`audio_queue`).
 - `libsd_irx_test.c`: the LIBSD.IRX reader on a synthetic module, its structural checks and its
   fallback (`libsd_irx`).
 - `mix_gain_test.c`: the music, effects and film gains, every fixed volume word unchanged at 100 %

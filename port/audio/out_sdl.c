@@ -57,7 +57,8 @@
  * match on average.  When the queue runs dry (a stall: the simulation fell
  * behind real time by more than the cushion) the cushion doubles, up to
  * 120 ms (CUSHION_MAX_FRAMES), and silence fills the queue to it before the
- * block, ramped down from the last pushed sample over 96 frames; after 20 s
+ * block, ramped down from the last pushed sample over 96 frames while
+ * frames are still queued, plain once the queue ran empty; after 20 s
  * of pushed audio without a dry queue
  * (CUSHION_QUIET_FRAMES) it halves again, down to two vsyncs, and the trim
  * below plays the surplus out.  When more than the cushion plus four
@@ -709,7 +710,10 @@ void ico_audio_sdl_pause(int paused)
        in) */
     SDL_ClearAudioStream(stream);
     if (pull_render != NULL) {
-        pull_level(); /* the device is paused: no callback runs */
+        /* the device is paused: no callback runs; a miss right after the
+           resume ramps down from silence, not from before the pause */
+        pull_level();
+        pull_last[0] = pull_last[1] = 0;
         P_STORE(P.ramp_in, 1);
         P_STORE(P.fresh, 1);
         P_STORE(P.asked, 0);
@@ -822,8 +826,14 @@ void ico_audio_sdl_push(const int16_t *frames, int count)
                     "cushion\n",
                     queued / BYTES_PER_FRAME, gap_ms, cushion_frames() * 1000 / RATE);
         }
-        /* ramped down from what is still queued (2 ms) */
-        buffer_ramp_down(stream, push_last, cushion_frames() - queued / BYTES_PER_FRAME);
+        if (queued / BYTES_PER_FRAME > 0) {
+            /* ramped down from what is still queued (2 ms) */
+            buffer_ramp_down(stream, push_last, cushion_frames() - queued / BYTES_PER_FRAME);
+        } else {
+            /* nothing left: the device already played its own silence, so
+               plain silence follows it */
+            buffer_silence(cushion_frames());
+        }
     }
     if (count <= 1024 && q8 != 256) {
         /* the volume (audio_host.h): scaled into a copy, the caller's block
@@ -874,11 +884,42 @@ int ico_audio_sdl_pull_idle_ms(int *asked)
     return now > last ? (int)((now - last) / 1000000u) : 0;
 }
 
+/* What SDL says at the pull path's fall-back (main thread, once a run): the
+   last error SDL set on this thread (the device's own thread keeps its
+   own) and whether the stream's device is still among the playback
+   devices. */
+static void fall_back_reason(void)
+{
+    const char *err = SDL_GetError();
+    const SDL_AudioDeviceID dev = stream != NULL ? SDL_GetAudioStreamDevice(stream) : 0;
+    const char *name = dev != 0 ? SDL_GetAudioDeviceName(dev) : NULL;
+    char held[ICO_AUDIO_DEVICE_NAME_MAX];
+    SDL_AudioDeviceID *ids;
+    int n = 0;
+    int listed = 0;
+    int i;
+
+    snprintf(held, sizeof(held), "%s", name != NULL ? name : "");
+    ids = SDL_GetAudioPlaybackDevices(&n);
+    for (i = 0; ids != NULL && i < n && held[0] != '\0'; i++) {
+        const char *s = SDL_GetAudioDeviceName(ids[i]);
+
+        listed |= s != NULL && strcmp(s, held) == 0;
+    }
+    SDL_free(ids);
+    fprintf(stderr,
+            "audio: at the fall-back SDL's last error on this thread is \"%s\"; the stream's "
+            "device \"%s\" is %s (%d playback devices listed)\n",
+            err != NULL && err[0] != '\0' ? err : "(none)", held[0] != '\0' ? held : "(unnamed)",
+            held[0] == '\0' ? "unknown" : (listed ? "still listed" : "not listed"), n);
+}
+
 int ico_audio_sdl_fall_back(void)
 {
     if (!subsystem || pull_render == NULL) {
         return stream != NULL ? 0 : -1;
     }
+    fall_back_reason();
     if (stream != NULL) {
         SDL_DestroyAudioStream(stream); /* waits for a callback in progress */
         stream = NULL;

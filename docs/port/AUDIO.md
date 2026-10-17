@@ -76,8 +76,15 @@ nothing installed (the headless build, the game's clock, every unit test that in
 | `ico_sndn2_host_reset`, `ico_sndn2_host_register` | `spu2_reset` and the disc's tables |
 | `ico_audio_set_gain`, `ico_audio_gain_reapply` (`port/audio/mix_gain.c`) | the Settings menu's gains re-issue the voice volumes |
 | `audioFrame`, `voiceSounding`, `sampleBlocks`, `findEffectVoices`, `streamTick` (`port/ui/gallery_play.c`) | the music gallery's reads of the SPU2 |
-| `iop_write` (`port/fmv/movie.c`) | the PCM buffer the driver's mixer reads inside the render (`pcm_mix`) |
+| `iop_write` and the PCM buffer's clearing in `movie_init` (`port/fmv/movie.c`) | the PCM buffer the driver's mixer reads inside the render (`pcm_mix`) |
 | `cut_line` (`port/audio/audio_host.c`) | the once-a-second look at the cut voices |
+
+One movie write stays outside it: `close_all` (`port/fmv/movie.c`) frees the PCM buffer's IOP
+memory before the `SgStPcmClose` and `SgStPcmQuit` packets it queues reach the driver at the next
+tick, so for that tick `pcm_mix` can still read the freed (and possibly reused) range on the
+device's thread. It is a race only formally: the end of a film's loop stops its channels at volume
+0 first (`audio_reset`: `SgStPcmVolume(3, 0, 0)`, `SgStPcmStop(3)`), and a film without sound never
+plays them, so nothing read there is heard.
 
 Nothing under the lock switches fibers (the host SIF runs the server synchronously,
 `port/data/sif_host.c`) or calls SDL's stream functions; the audio thread takes it inside SDL's
@@ -608,6 +615,10 @@ While the mirror option is on (`ico_opt_mirror`, `port/game/options.h`), left an
 swapped in each rendered block, by `ico_audio_host_vsync` on the game's clock and by the device's
 render on the device's clock, so the device and the WAV dump hear the mirrored pan; the SPU2 and
 the driver are untouched (`port/audio/audio_host.c` (`ico_audio_pan_mirror`, `device_render`)).
+The device's render reads an atomic copy of the option (`mirror_now`) that the main thread sets in
+`ico_audio_host_init` before the device opens and at every vsync: the option's first read looks
+it up in the config, which the device's thread must not do while the main thread may write the
+config.
 
 ## The audio host
 
@@ -656,6 +667,12 @@ stand still while the game serves on: its streams would never reach their ends a
 would fill (`port/audio/spu2.c` (`ev_push`)). The line:
 
     audio: the output device stopped asking for sound for 412 ms; rendering on the game's clock from here
+
+followed by what SDL says (`ico_audio_sdl_fall_back`): the last error SDL set on the main thread (the
+device's own thread keeps its own, so it may be older or unrelated) and whether the stream's device
+is still among the playback devices:
+
+    audio: at the fall-back SDL's last error on this thread is "(none)"; the stream's device "Speakers" is still listed (2 playback devices listed)
 
 A paused device (the Android lifecycle) and a process stopped as a whole (no steps) never trigger
 it. The start's summary line names the clock (`port/platform/window_host.c` (`log_summary`);
@@ -782,7 +799,9 @@ game's clock (<reason>)`.
   cushion of silence (`cushion_frames`, `open_stream`, `ico_audio_sdl_pause`). When the queue is
   below a quarter of a vsync before a push (a stall: the simulation fell behind real time by more
   than the cushion) the cushion doubles, up to 120 ms (`CUSHION_MAX_FRAMES`), and silence fills
-  the queue to it ahead of the block, ramped down from the last pushed frame over 96 frames; the
+  the queue to it ahead of the block: ramped down from the last pushed frame over 96 frames while
+  frames are still queued, plain when the queue ran empty (the device already played its own
+  silence, and a ramp from a frame played long before would be a step out of it); the
   first eight such refills each log `audio: low queue <n> frames, <ms> ms between pushes; refilled
   to a <ms> ms cushion`. After 20 s of pushed audio without a dry queue (`CUSHION_QUIET_FRAMES`)
   the cushion halves, down to two vsyncs again, and the trim below plays the surplus out. With more
@@ -836,7 +855,7 @@ port"):
 | `spu2` (`spu2_test.c`) | the SPU2 and the libsd front end: the Gaussian table, ADSR lengths against psx-spx's closed forms, a sine at several pitches, loop flags and ENDX, the voices cut short (a key-off at release rate 0 counted with the peak of the frame before, chunked and frame by frame; the envelope at 0 two frames on; another rate not counted), mixing, sweeps, core 0 into core 1, the AutoDMA input, noise, timed writes, transfers and IRQ, the reverb impulse, a determinism checksum |
 | `spu2_render_crc` (`spu2_bench --check`) | five 10 s scenes against golden CRCs of everything observable from the frame-by-frame renderer, and 24 random 2 s scenes rendered both chunked and frame by frame |
 | `volume` (`volume_test.c`) | the output volume's mapping, clamp and integer scaling; the trim's play ratio against a target |
-| `audio_queue` (`audio_queue_test.c`, window build) | `out_sdl.c`'s push on a real SDL stream without a device: the first cushion of two vsyncs, the refill and doubling after a dry queue up to 120 ms with its ramp down from the last pushed frame, the resume's prime, the halving after 20 s, the trim and drop limit following the cushion, the queued-ms query |
+| `audio_queue` (`audio_queue_test.c`, window build) | `out_sdl.c`'s push on a real SDL stream without a device: the first cushion of two vsyncs, the refill and doubling after a dry queue up to 120 ms with its ramp down from the last pushed frame after the frames still queued, plain silence after a queue run empty, the resume's prime, the halving after 20 s, the trim and drop limit following the cushion, the queued-ms query |
 | `audio_pull` (`audio_pull_test.c`, window build) | `out_sdl.c`'s pull path on a real SDL stream without a device over the real SPU2: a writer thread under the audio lock and a pulling thread, fenced so no write lands late, render the frames one thread renders; 10 s free-running with the writes stamped as the serve stamps them: every pull full, the frames rendered and the silence equal to the frames taken plus the lead left, no miss (the lock's wait bound at 500 ms there, so scheduler delays cannot make one); with the lock held elsewhere the lead, then a 96-frame ramp to 0, then silence, two misses, and the ramp in after; the lead as the queue and a cushion of 0; the 10 s line's numbers and the mode choice; with the game's frames frozen, exactly the bound's 120 ms rendered, then the ramp and silence held back and counted, the hold kept until 40 ms under the bound, the sound ramping in after, and the trim on over 64 ms ahead and off under 32 (every other part steps the game by the frames each pull takes). The program to run under ThreadSanitizer ([TESTING.md](TESTING.md#portaudiotest)) |
 | `mix_gain` (`mix_gain_test.c`) | the gains: identity at 100 %, scaling, sweep words, the stream categories, the cache and its re-issue |
 | `adpcm_slots` (`adpcm_slots_test.c`) | the game's `adpcm_init.c` with the driver stubbed: a stream already fading out gives its slot up at once when both stream slots are taken; the ending's six streams opened one over the other alternate the two slots and the two voice pairs, each open's line names its voices and hands the log watch its length |

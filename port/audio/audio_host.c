@@ -38,6 +38,11 @@ static const char *mode_why = ""; /* the sync path's reason (ico_audio_pick_mode
 #ifdef ICO_AUDIO_SDL
 static int sdl_open;
 static unsigned int pull_seen_vsync; /* the last vsync the device was not silent too long */
+/* mirror mode for the device's render: ico_opt_mirror read on the main
+   thread (at init before the device opens, then every vsync), since its
+   first read looks the option up in the config; the device's thread reads
+   this copy */
+static int mirror_now;
 #endif
 static unsigned int vsync_index;
 static int16_t out[MAX_FRAMES_PER_VSYNC * 2];
@@ -235,12 +240,12 @@ const char *ico_audio_mode_text(void)
 #ifdef ICO_AUDIO_SDL
 /* The pull path's render (out_sdl.c pull_cb, the device's thread, under
    the audio lock): the SPU2's frames, and mirror mode's swap where the
-   stereo output is produced (ico_opt_mirror, a plain int the Options menu
-   writes). */
+   stereo output is produced (mirror_now, the main thread's copy of
+   ico_opt_mirror). */
 static void device_render(int16_t *frames, int count)
 {
     spu2_render(frames, count);
-    ico_audio_pan_mirror(frames, count, ico_opt_mirror());
+    ico_audio_pan_mirror(frames, count, __atomic_load_n(&mirror_now, __ATOMIC_RELAXED));
 }
 
 /* The pull path's end (main thread): the stream again without the
@@ -327,7 +332,9 @@ void ico_audio_host_init(void)
     if (enable != NULL && strcmp(enable, "0") == 0) {
         fprintf(stderr, "audio: audio=0: no audio device (the driver still runs)\n");
     } else {
-        /* the pull path: the device's thread renders (device_render) */
+        /* the pull path: the device's thread renders (device_render), with
+           mirror mode read here first */
+        __atomic_store_n(&mirror_now, ico_opt_mirror(), __ATOMIC_RELAXED);
         sdl_open =
             ico_audio_sdl_open(mode == ICO_AUDIO_MODE_PULL ? device_render : NULL, mode_why) == 0;
         if (!sdl_open) {
@@ -371,6 +378,7 @@ void ico_audio_host_vsync(int hz)
        at most (out_sdl.c) */
     ico_audio_sdl_game_step(frames);
 #ifdef ICO_AUDIO_SDL
+    __atomic_store_n(&mirror_now, ico_opt_mirror(), __ATOMIC_RELAXED);
     if (mode == ICO_AUDIO_MODE_PULL && sdl_open && !pull_watch(hz)) {
         /* the device's thread renders (out_sdl.c pull_cb) */
         cut_line(hz);

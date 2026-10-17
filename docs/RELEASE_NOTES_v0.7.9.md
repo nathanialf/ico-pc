@@ -1,7 +1,7 @@
 ## New
 
 - The log now says where the graphics time goes with Direct3D 12 too, as it already did with Vulkan: the lines written every 10 seconds show the time the graphics card spent and how much work it was given.
-- The log now reports how the sound output is doing: how it was opened, and, every 10 seconds, whether it ever ran short. It also notes each time the game cuts a sound off at once and how loud that sound was. If you hear clicks or stutters, send the log with your report.
+- The log now reports how the sound output is doing: how it was opened, and, every 10 seconds while the sound plays at the sound device's own pace (the usual way), whether it ever ran short. It also notes each time the game cuts a sound off at once and how loud that sound was. If you hear clicks or stutters, send the log with your report.
 
 ## Fixed
 
