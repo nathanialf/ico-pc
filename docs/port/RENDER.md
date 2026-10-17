@@ -1849,6 +1849,16 @@ numbers at every frame width. Sprites keep their own path, their colour being fl
 (`sprite_planes`)). The VU programs' triangles do the same (`port/shaders/vu_common.hlsli`
 (`vu_attr_planes`)).
 
+Only such a pass carries the planes: `rd__plane_pass` turns its vertex shader into
+`sprite_plane_*_vs` or `sprite_stq_plane_*_vs` and its fragment shader into `sprite_ps_planes`,
+`sprite_texa_ps_planes` or `sprite_stq_ps_planes`, `sprite.hlsl`'s planes build
+(`ICO_SPRITE_PLANES`, [SHADERS.md](SHADERS.md#the-families)), whose interface has the six plane
+vectors after the colour and uv. Every other sprite, font, fog and wrap draw uses the plain build:
+the position, the colour and uv or stq, two input locations. The plain build is the planes build
+with the planes' zeros removed (the plain vertex shaders wrote zeros, and `sprite_plane_attrs`
+returned at `p5.w == 0`), so the two builds draw the same bytes. The plane keys of the start-up set
+are the same keys with the planes build's fragment id; their count does not change.
+
 ## Camera blending
 
 The presenter draws the pictures between two ticks through a camera blended from the two ticks'

@@ -70,7 +70,7 @@ each file's header comment):
 
 | file | entries | what it draws |
 | --- | --- | --- |
-| `sprite.hlsl` | `sprite_ui_vs`, `sprite_world_vs`, `sprite_ps`, `sprite_texa_ps`, `date_snap_ps`, `sprite_aa1_*`, `sprite_stq_*`, `sprite_plane_*_vs`, `sprite_stq_plane_*_vs` | screen-space prims in GS window coordinates: TEXA per texel before the filter, the DATE snapshot, PRIM.AA1 lines and triangles with a coverage attribute, perspective-correct STQ, and screen-prim triangles evaluated from their planes the same at every frame width |
+| `sprite.hlsl` | `sprite_ui_vs`, `sprite_world_vs`, `sprite_ps`, `sprite_texa_ps`, `date_snap_ps`, `sprite_aa1_*`, `sprite_stq_*`; the planes build: `sprite_plane_*_vs`, `sprite_stq_plane_*_vs`, `sprite_ps_planes`, `sprite_texa_ps_planes`, `sprite_stq_ps_planes` | screen-space prims in GS window coordinates: TEXA per texel before the filter, the DATE snapshot, PRIM.AA1 lines and triangles with a coverage attribute, perspective-correct STQ, and screen-prim triangles evaluated from their planes the same at every frame width |
 | `blit.hlsl` | `blit_vs`, `blit_ps`, `blit_depth_ps`, `box_reduce_ps`, `aa_reduce_ps`, `depth_resolve_ps`, `depth_upsample_ps`, `camera_probe_ps` | the present's box blit, the MSAA resolve's colour copy and the shadow count's resolve passes (`blit_ps`); the present's blit with the scene's depth (`blit_depth_ps`); the shadow count box-reduced to the GS size; the supersampled DISPLAY box-averaged; the MSAA depth resolved (smallest sample) and spread over samples; a test probe |
 | `blend_int.hlsl` | `blend_int_vs`, `blend_int_ps` | the GS integer blend between two RGBA8 UINT textures for feedback passes, no hardware blending |
 | `fx_sprite.hlsl` | `fx_rect_vs`, `fx_sprite_ps` | one GS sprite of `staticBlur.c`'s passes in the GS integer arithmetic (`port/render/rd_blur.c`) |
@@ -113,6 +113,15 @@ region bounds from VuCB, and output `VuVSOut2` (position, colour, STQ, plane dis
   `fog_lut_buffer_ps`, the font entries and `vu_ps`, `vu_texa_ps`. `_dstrov` reads and writes the
   target as a rasterizer-ordered view; `_dstatt` reads the colour attachment in rasterization order
   (Vulkan only; its DXIL is the ROV build, never used).
+- the planes build (`ICO_SPRITE_PLANES=1`): `sprite.hlsl` with the screen-prim triangles' planes in
+  `SpriteVSOut` and `SpriteStqVSOut` (`SPRITE_PLANES`, six `nointerpolation float4`). The four
+  plane vertex entries exist only in it, and `sprite_ps`, `sprite_texa_ps` and `sprite_stq_ps` are
+  built again with it as `sprite_ps_planes`, `sprite_texa_ps_planes` and `sprite_stq_ps_planes`,
+  each with its `_nodual`, `_dstrov` and `_dstatt` twin (the define and the twin's together). Every
+  other sprite entry is the plain build: the position, the colour and uv or stq, two input
+  locations, the layout `font.hlsl`, `fog_lut.hlsl` (`FogPSIn`) and `raw_wrap.hlsl` (`WrapAccIn`)
+  declare, since D3D12 refuses a pixel input the vertex shader does not write. A pass takes both
+  halves of the planes build together (`port/render/rd_screen_planes.c` (`rd__plane_pass`)).
 
 The replay looks entries up by the names in `s_vsNames` and `s_fsNames` (`port/render/rd_replay.c`).
 
