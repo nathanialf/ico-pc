@@ -1896,15 +1896,21 @@ typedef struct RdPerfRecord {
      * draw can count twice; 0 at scale 1.  A work buffer drawn onto the
      * frame is never among them (rd_internal.h rd__work_class) */
     uint32_t a1xDraws;
-    /* The VU vertex pre-pass (rd_replay_vu.c rd__vu_prepass; docs/port/RENDER.md,
-     * "The vertex pre-pass"): vuPrePasses its render passes (0 or 1),
-     * vuPreVertices the vertices it recorded, vuPreDraws its draws (a VU
-     * command each), vuPreFallbacks the mesh and grid draws drawn the old
-     * way while it is on (a command past the record, a pipeline missing; 0
-     * in a usual replay), gpuPrepassMs its GPU time (the pass and the copies
-     * into the record buffer, between the uploads and list 0; inside gpuMs,
-     * not in gpuUploadMs) */
+    /* The VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass;
+     * docs/port/RENDER.md, "The vertex and triangle pre-passes"):
+     * vuPrePasses their render passes (0, 1: the vertices and sprites, or 2:
+     * and the triangles), vuPreVertices the vertices recorded, vuPreSprites
+     * the sprites, vuTriSlots the triangles' record slots (two a kick, three
+     * under the tick cameras), vuPreDraws the draws of both passes (a vertex
+     * draw a mesh or grid command, two a particle command, and the record
+     * stages' three, five with the tick cameras, a mesh or grid command),
+     * vuPreFallbacks the VU draws drawn the old way while they are on (a
+     * command past the record, a pipeline missing; 0 in a usual replay),
+     * gpuPrepassMs their GPU time (the passes and the copies into the record
+     * buffer, between the uploads and list 0; inside gpuMs, not in
+     * gpuUploadMs) */
     uint32_t vuPrePasses, vuPreVertices, vuPreDraws, vuPreFallbacks;
+    uint32_t vuPreSprites, vuTriSlots;
     double gpuPrepassMs;
     /* The per-pass timing (rd_perf_passes_of; docs/port/RENDER.md,
      * "Performance records").  passKinds: the pieces of GPU work begun, by

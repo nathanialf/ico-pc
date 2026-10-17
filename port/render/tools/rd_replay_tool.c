@@ -1414,12 +1414,13 @@ int main(int argc, char **argv)
                "above 1x\n",
                dump, pr->dstDraws, pr->storagePasses, pr->dstSwitches, pr->glowPasses,
                pr->snapshots, pr->snapSwaps, pr->a1xDraws);
-        /* the VU vertex pre-pass (rd_replay_vu.c rd__vu_prepass): each mesh and grid
-         * vertex once, before the lists */
+        /* the VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass):
+         * each mesh and grid vertex and triangle and each sprite once, before
+         * the lists */
         printf("%s: stats: VU pre-pass %s: %u passes, %u vertices in %u draws; %u mesh and grid "
-               "draws the old way\n",
+               "draws the old way; %u sprites, %u triangle slots\n",
                dump, g_rd.vuPrepass ? "on" : "off", pr->vuPrePasses, pr->vuPreVertices,
-               pr->vuPreDraws, pr->vuPreFallbacks);
+               pr->vuPreDraws, pr->vuPreFallbacks, pr->vuPreSprites, pr->vuTriSlots);
     }
     if (replayed && passDir) {
         /* One frame, every target: the renderer keeps each target's contents

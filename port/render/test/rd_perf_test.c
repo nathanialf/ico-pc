@@ -723,6 +723,7 @@ static int ringPiece(uint8_t kind)
     case RD_PASSK_PRESENT:
         return RD_PERF_PASS_PRESENT;
     case RD_PASSK_VU_PRE:
+    case RD_PASSK_VU_TRI:
         return RD_PERF_PASS_PREPASS;
     default:
         return -1;
@@ -1021,8 +1022,9 @@ static int synthetic(void)
               "prepass: %llu created, %llu destroyed, %llu allocations after the first two",
               (unsigned long long)rest.created, (unsigned long long)rest.destroyed,
               (unsigned long long)rest.allocs);
-        CHECK(rest.n > 0 && rest.prePasses == rest.n && rest.preVertMin > 0 &&
-                  rest.preVertMin == rest.preVertMax && rest.preDraws >= (uint64_t)DRAWS * rest.n,
+        CHECK(rest.n > 0 && rest.prePasses >= rest.n && rest.prePasses <= 2u * rest.n &&
+                  rest.preVertMin > 0 && rest.preVertMin == rest.preVertMax &&
+                  rest.preDraws >= (uint64_t)DRAWS * rest.n,
               "prepass: %llu passes in %u replays, %u..%u vertices, %llu draws",
               (unsigned long long)rest.prePasses, rest.n, rest.preVertMin, rest.preVertMax,
               (unsigned long long)rest.preDraws);

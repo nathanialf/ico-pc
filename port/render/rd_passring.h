@@ -1,7 +1,7 @@
 /* rd_passring.h: the pass ring, what the GPU was last given to do.
  *
  * The replay (rd_replay.c) notes every render pass, copy, snapshot, exact
- * blend, upload batch, VU vertex pre-pass and present it records: the last RD_PASSRING_SIZE of
+ * blend, upload batch, VU vertex and triangle pre-pass and present it records: the last RD_PASSRING_SIZE of
  * them, each with its sequence number, replay and frame numbers, keep flag,
  * list, targets and their sizes, storage flag, picture effect and the last
  * pipeline asked for while it was open; and per replay the sequence numbers
@@ -44,6 +44,9 @@ typedef enum RdPassKind {
     /* the VU vertex pre-pass (rd_replay_vu.c rd__vu_prepass): cw x ch the record's
      * texels drawn, dw its vertices (no target id) */
     RD_PASSK_VU_PRE,
+    /* the VU triangle pre-pass after it (the same): cw x ch the record's
+     * texels drawn, dw the triangles' record slots */
+    RD_PASSK_VU_TRI,
     RD_PASSK_COUNT
 } RdPassKind;
 
@@ -79,7 +82,7 @@ int rd__passring_list_now(void);
 const void *rd__passring_push(RdPassKind kind, uint32_t color, uint32_t cw, uint32_t ch,
                               uint32_t depth, uint32_t dw, uint32_t dh, int storage, int post);
 /* the newest entry, while it is a render pass, exact blend or VU
- * pre-pass: the pipeline asked for (rd_pipeline.c rd__get_pipeline) */
+ * pre-pass (either): the pipeline asked for (rd_pipeline.c rd__get_pipeline) */
 void rd__passring_pipeline(uint32_t id, uint8_t vs, uint8_t fs, uint8_t dst);
 /* the newest entry, an upload batch: its bytes */
 void rd__passring_bytes(uint64_t bytes);

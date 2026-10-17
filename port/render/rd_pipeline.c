@@ -477,6 +477,8 @@ bool rd__fs_has_no_dual(uint8_t fs)
     case RD_FS_FOG_MS:
     case RD_FS_VU:
     case RD_FS_VU_TEXA:
+    case RD_FS_VU_LEGACY:
+    case RD_FS_VU_LEGACY_TEXA:
         return true;
     default:
         return false;
@@ -690,11 +692,13 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
         {9, 0, RHI_VTX_F32x4, offsetof(IcoSpritePlaneVertex, sx)},
         {10, 0, RHI_VTX_F32x4, offsetof(IcoSpritePlaneVertex, sy)},
     };
-    if (rd__vs_is_vu_pre(k->vs)) {
-        /* the vertex pre-pass (rd_replay_vu.c rd__vu_prepass): the program's
-         * pre-pass entry reads group 1 as the VU programs do; points into
-         * the record's three RGBA32_UINT targets through vu_pre_ps, no
-         * depth, no blend */
+    if (rd__vs_is_vu_pre(k->vs) ||
+        (k->vs >= RD_VS_VU_TRI_RULE_PRE && k->vs <= RD_VS_VU_PARTICLE_PRE)) {
+        /* the vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass):
+         * the program's pre-pass entry or a record stage reads group 1 as the
+         * VU programs do; points into the record's three RGBA32_UINT targets
+         * through vu_pre_ps, no depth, no blend, the key's colour mask (the
+         * tick stage's R or G) */
         layouts[0] = g_rd.layoutFrame;
         layouts[1] = g_rd.layoutVu;
         layouts[2] = g_rd.layoutTex;
@@ -709,7 +713,7 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
         d->topology = RHI_TOPO_POINT_LIST;
         d->cullNone = true;
         for (uint32_t i = 0; i < ICO_VU_REC_PLANES; i++) {
-            d->blend[i].writeMask = 0xF;
+            d->blend[i].writeMask = k->gs.colorMask;
             d->colorFormats[i] = RHI_FMT_RGBA32_UINT;
         }
         d->colorCount = ICO_VU_REC_PLANES;
@@ -717,7 +721,9 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
         d->debugName = "rd vu pre-pass";
         return true;
     }
-    const int vu = k->vs >= RD_VS_VU_FIRST && k->vs <= RD_VS_VU_LAST;
+    /* the main VU shaders: one module, group 1 as the programs' */
+    const bool vuMain = k->vs == RD_VS_VU_MAIN || k->vs == RD_VS_VU_PARTICLE_MAIN;
+    const int vu = (k->vs >= RD_VS_VU_FIRST && k->vs <= RD_VS_VU_LAST) || vuMain;
     /* the VU program shaders read the stream, VuCB and
      * VuBoneCB from group 1 next to DrawCB, and have no vertex input */
     /* the exact blend's destination read (rd_dst_read.c): group 3 holds the
@@ -731,7 +737,7 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
     memset(d, 0, sizeof(*d));
     /* a VU key's variant: the plain module unless the key asks for the
      * extended one (vuExt, rd__vu_draw_ext) */
-    d->vertex = vu && !k->vuExt ? g_rd.vsPlain[k->vs] : g_rd.vs[k->vs];
+    d->vertex = vu && !vuMain && !k->vuExt ? g_rd.vsPlain[k->vs] : g_rd.vs[k->vs];
     if (!d->vertex.id) {
         return false;
     }

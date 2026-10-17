@@ -1385,10 +1385,15 @@ bool rd__vu_policy_init(const RhiLimits *lim);
  *                     RGBA32_UINT targets, no depth, points, no blend */
 void rd__vu_prepass_init(const RhiLimits *lim);
 void rd__set_vu_prepass(bool on);
-/* rd_vuprepass_selftest's sabotage (ICO_RD_VU_PREPASS_SABOTAGE): while on,
- * the pre-pass draws its first command's records one texel past where the
- * triangle stage reads them */
-void rd__vu_prepass_sabotage(bool on);
+
+/* rd_vuprepass_selftest's sabotage (ICO_RD_VU_PREPASS_SABOTAGE), while the
+ * mode is not RD_VU_SABOTAGE_OFF: VERTEX the first mesh or grid command's
+ * vertex records drawn one texel past where the main shader reads them,
+ * TRI its triangles' slot A one slot past, TICKS every tick stage's tick 1
+ * tested at tick 0's camera */
+enum { RD_VU_SABOTAGE_OFF, RD_VU_SABOTAGE_VERTEX, RD_VU_SABOTAGE_TRI, RD_VU_SABOTAGE_TICKS };
+
+void rd__vu_prepass_sabotage(int mode);
 RdPipeKeyInt rd__vu_pre_key(uint8_t preVs);
 bool rd__vu_ext_reachable(void);
 uint8_t rd__vu_draw_ext(uint32_t drawFlags);

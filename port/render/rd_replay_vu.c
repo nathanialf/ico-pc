@@ -1,10 +1,10 @@
 /* rd_replay_vu.c: the replay's VU draws (rd_replay.c's command walk calls
  * rd__replay_vu for RDC_MESH, RDC_SKINNED, RDC_GRID and RDC_PARTICLES):
  * the VU stream, VuCB and VuBoneCB a draw binds, their group, and the draw
- * calls under the planned passes; and the vertex pre-pass before list 0
- * (rd__vu_prepass: each mesh and grid command's vertices once, into the
- * record the triangle stage reads).  The replay's state and helpers are
- * rd_replay.h's. */
+ * calls under the planned passes; and the vertex and triangle pre-passes
+ * before list 0 (rd__vu_prepass: each mesh and grid command's vertices and
+ * triangles once, each particle command's sprites once, into the record the
+ * main shaders read).  The replay's state and helpers are rd_replay.h's. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,13 +50,14 @@ static uint64_t cbCopy(const void *data, uint64_t size, uint64_t align)
 }
 
 /* ------------------------------------------------ the record's buffers
- * The vertex pre-pass (docs/port/RENDER.md, "The vertex pre-pass";
- * rd__vu_prepass below) draws a record per vertex into three RGBA32_UINT
- * textures, ICO_VU_REC_W texels a row, shared by the frame slots (each
- * replay's pass moves them to RENDER_TARGET and back to COPY_SRC), and
- * copies them into the frame slot's record buffer, the three planes one
- * after the other, which the triangle stage reads (group 1 slot 4,
- * vu_common.hlsli vu_rec_buf).  Both grow by powers of two from
+ * The vertex and triangle pre-passes (docs/port/RENDER.md, "The vertex and
+ * triangle pre-passes"; rd__vu_prepass below) draw a record per vertex,
+ * sprite and triangle into three RGBA32_UINT textures, ICO_VU_REC_W texels
+ * a row, shared by the frame slots (each replay's two passes move them to
+ * RENDER_TARGET and back to COPY_SRC twice), and copy them into the frame
+ * slot's record buffer, the three planes one after the other, which the
+ * main shaders and vu_ps read (group 1 slot 4, vu_common.hlsli
+ * vu_rec_buf).  Both grow by powers of two from
  * RD_VU_REC_ROWS_MIN rows to RD_VU_REC_ROWS_MAX.  Every VU group binds
  * slot 4: the slot's record buffer, or s_recNull before there is one. */
 #define RD_VU_REC_ROWS_MIN 16u
@@ -134,7 +135,7 @@ static bool recEnsure(uint32_t rows)
                 return false;
             }
         }
-        rd__log("VU pre-pass: the record holds %u vertices (%u rows, %llu KB a frame slot)",
+        rd__log("VU pre-pass: the record holds %u slots (%u rows, %llu KB a frame slot)",
                 rows * ICO_VU_REC_W, rows, (unsigned long long)(recBytes(rows) / 1024u));
     }
     for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
@@ -307,11 +308,21 @@ static void passSplit(Replay *r)
     s_splitSerial = r->passSerial;
 }
 
+/* the fallback's pixel shader of a main path's (vu_prelit.hlsl
+ * vu_legacy_ps, vu_legacy_texa_ps: the planes as VuVSOut's flat varyings) */
+static uint8_t vuLegacyFs(uint8_t fs)
+{
+    return fs == RD_FS_VU_TEXA ? RD_FS_VU_LEGACY_TEXA : RD_FS_VU_LEGACY;
+}
+
 /* One VU draw call under the planned passes of state s.  vs: the vertex
- * shader (RD_VS_VU_TRI for a command the pre-pass recorded: its pipelines
- * carry RD_PROG_PRELIT whatever the program, rd_mesh.c enumerateVuVariant),
- * progVs the program's own entry, taken when the triangle stage's pipeline
- * cannot be made. */
+ * shader, RD_VS_VU_MAIN or RD_VS_VU_PARTICLE_MAIN for a command the
+ * pre-passes recorded (its pipelines carry RD_PROG_PRELIT whatever the
+ * program, with vu_ps / vu_texa_ps), else the program's own entry progVs
+ * with vu_legacy_ps / vu_legacy_texa_ps, which the draw also takes when the
+ * main shader's pipeline cannot be made.  The planned passes keep vu_ps's
+ * ids (fillDrawCB and the pass expansion read them); the pipeline's key
+ * takes the legacy twin on the fallback. */
 static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBindGroup g2,
                    uint8_t prog, uint8_t vs, uint8_t progVs, RhiBuffer streamBuf,
                    uint64_t streamBufSize, uint64_t streamOff, uint64_t streamSize,
@@ -321,8 +332,9 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     if (count == 0) {
         return;
     }
-    if (g_rd.vuPrepass && vs != RD_VS_VU_TRI && rd__vu_pre_vs(progVs)) {
-        g_rdPerf.vuPreFallbacks++; /* a mesh or grid draw the pre-pass did not record */
+    const bool recorded = vs == RD_VS_VU_MAIN || vs == RD_VS_VU_PARTICLE_MAIN;
+    if (g_rd.vuPrepass && !recorded && (rd__vu_pre_vs(progVs) || progVs == RD_VS_VU_PARTICLE)) {
+        g_rdPerf.vuPreFallbacks++; /* a VU draw the pre-passes did not record */
     }
     /* one group per stream buffer; the stream's place in it
      * goes into vu_draw.x */
@@ -341,11 +353,16 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     RdDrawPass pl[2], dp[8];
     const int npl = rd__plan_screen_draw(s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, ds->tc->format,
                                          ds->depthFmt, pl);
-    const uint8_t vuExt = rd__vu_draw_ext(vcb->draw[2]); /* the VS variant */
+#ifndef RD_HAVE_VU_STAGE_KEY
+    /* the program entries' variant while the key still has one */
+    const uint8_t vuExt = rd__vu_draw_ext(vcb->draw[2]);
+#endif
     for (int i = 0; i < npl; i++) {
-        pl[i].key.gs.program = vs == RD_VS_VU_TRI ? RD_PROG_PRELIT : prog;
+        pl[i].key.gs.program = recorded ? RD_PROG_PRELIT : prog;
         pl[i].key.vs = vs;
-        pl[i].key.vuExt = vuExt;
+#ifndef RD_HAVE_VU_STAGE_KEY
+        pl[i].key.vuExt = recorded ? 0u : vuExt;
+#endif
         /* the planner's sprite_texa_ps becomes vu_texa_ps */
         pl[i].key.fs = pl[i].key.fs == RD_FS_SPRITE_TEXA ? RD_FS_VU_TEXA : RD_FS_VU;
         if (vcb->batch[2] != 0u) {
@@ -357,22 +374,36 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     }
     /* the exact blend's passes, two passes without dual-source blend */
     const int np = rd__replay_expand_passes(r, pl, npl, dp);
+    /* VuCB once a draw: every pass of it reads the same block */
+    const uint64_t vOff = cbCopy(vcb, sizeof(*vcb), ua);
+    if (vOff == ~0ull) {
+        return;
+    }
     const RdStateBlock saved = r->st;
     r->st = *s; /* fillDrawCB reads the state the passes were planned from */
     for (int i = 0; i < np; i++) {
-        RhiPipeline p = rd__get_pipeline(&dp[i].key);
-        if (!p.id && dp[i].key.vs == RD_VS_VU_TRI && !rd__pipeline_gathering()) {
-            /* the triangle stage's pipeline could not be made: the
-             * program's own entry, which ignores the record (logged once) */
+        RdPipeKeyInt key = dp[i].key;
+        if (!recorded) {
+            key.fs = vuLegacyFs(key.fs);
+        }
+        RhiPipeline p = rd__get_pipeline(&key);
+        if (!p.id && recorded && !rd__pipeline_gathering()) {
+            /* the main shader's pipeline could not be made: the program's
+             * own entry, which ignores the record (logged once) */
             static bool logged; /* once a run */
             if (!logged) {
                 logged = true;
-                rd__log("VU pre-pass: a pipeline of vu_tri_vs could not be made; its draws "
-                        "take their programs' own vertex shaders (reported once)");
+                rd__log("VU pre-pass: a pipeline of %s could not be made; its draws take their "
+                        "programs' own vertex shaders (reported once)",
+                        rd__vs_name(vs));
             }
-            dp[i].key.vs = progVs;
-            dp[i].key.gs.program = prog;
-            p = rd__get_pipeline(&dp[i].key);
+            key.vs = progVs;
+            key.gs.program = prog;
+            key.fs = vuLegacyFs(key.fs);
+#ifndef RD_HAVE_VU_STAGE_KEY
+            key.vuExt = vuExt;
+#endif
+            p = rd__get_pipeline(&key);
             g_rdPerf.vuPreFallbacks++;
         }
         if (!p.id) {
@@ -381,21 +412,20 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         IcoDrawCB cb;
         rd__replay_fill_draw_cb(r, &dp[i], ds, &cb);
         const uint64_t dOff = cbCopy(&cb, sizeof(cb), ua);
-        const uint64_t vOff = cbCopy(vcb, sizeof(*vcb), ua);
-        if (dOff == ~0ull || vOff == ~0ull) {
+        if (dOff == ~0ull) {
             continue;
         }
         const uint32_t offs[3] = {(uint32_t)dOff, (uint32_t)vOff, (uint32_t)bonesOff};
         rd__replay_dst_pass_mode(r, &dp[i].key); /* a storage pass for a storage destination read */
-        rhi_cmd_set_pipeline(rd__replay_cl(), p);
+        rd__set_pipeline(rd__replay_cl(), p, &key);
         rd__bind_uniform(rd__replay_cl(), 0, r->frameBG);
         rhi_cmd_set_bind_group_offsets(rd__replay_cl(), 1, g1, offs, 3);
         rhi_cmd_set_bind_group(rd__replay_cl(), 2, g2);
         rd__replay_dst_bind(r, &dp[i].key);
         if (g_rdWin.first && g_rdWin.drawLast && g_rdWin.passes == g_rdWin.last) {
             /* its class (the second level's VS_ONLY) the program's own
-               entry, whether it draws through it or vu_tri_vs */
-            rd__win_vu_note(r->st.tex, &dp[i].key, vcb, progVs, indexed, first, count);
+               entry, whether it draws through it or the main shader */
+            rd__win_vu_note(r->st.tex, &key, vcb, progVs, indexed, first, count);
         }
         if (indexed) {
             rd__span_draw(first, i ? 0 : count);
@@ -623,24 +653,37 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
     return true;
 }
 
-/* -------------------------------------------------- the vertex pre-pass
- * docs/port/RENDER.md, "The vertex pre-pass".  Before list 0 (replayFrame,
- * after the uploads and the first clears) every mesh and grid command of
- * the replayed lists gets its VuSource (kept for its draws) and the
- * vertices its index range reads, the lowest kick less 2 to the highest
- * (a grid: every strip's); one render pass into the record textures draws
- * each command's vertices as points through its program's pre-pass entry
- * (rd__vu_pre_key) at consecutive texels, and the planes are copied into
- * the slot's record buffer.  doVuDraw then draws the command's triangles
- * through vu_tri_vs with VuCB's vu_rec, vu_lo and vu_hi set (vuPreRecord).
- * A command past the record's RD_VU_REC_ROWS_MAX rows, or whose pre-pass
- * pipeline is missing, keeps its VuSource and is drawn the old way. */
+/* --------------------------------------- the vertex and triangle pre-passes
+ * docs/port/RENDER.md, "The vertex and triangle pre-passes".  Before list 0
+ * (replayFrame, after the uploads and the first clears) every mesh, grid
+ * and particle command of the replayed lists gets its VuSource (kept for
+ * its draws); a mesh or grid command the vertices its index range reads,
+ * the lowest kick less 2 to the highest (a grid: every strip's), and a
+ * record slot A and B for each of its kicks (and C under ICO_VU_TICKS), a
+ * particle command a slot A and B for each sprite.  Pass V (the pass ring's
+ * RD_PASSK_VU_PRE) draws each command's vertices as points through its
+ * program's pre-pass entry (rd__vu_pre_key) at consecutive texels and each
+ * particle command's sprites through vu_particle_pre_vs, twice (slots A
+ * and B), into the record textures' first rows, which are copied into the
+ * slot's record buffer; pass T (RD_PASSK_VU_TRI) reads them there and
+ * draws each mesh or grid command's triangles as points (vu_tri_rule_pre_vs
+ * into slot A, vu_tri_tick_pre_vs twice into slot C under the colour masks
+ * R and G, vu_tri_planes_pre_vs into slot B: rd__vu_stage_key) into the rows
+ * after them, copied the same way.  doVuDraw then draws the command
+ * through vu_main_vs (vu_particle_main_vs) with VuCB's vu_rec, vu_lo, vu_hi
+ * and vu_tri set (vuPreRecord).  A command past the record's
+ * RD_VU_REC_ROWS_MAX rows, or one of whose pipelines is missing, keeps its
+ * VuSource and is drawn the old way. */
 typedef struct VuPre {
     const RdCmd *cmd;
     VuSource src;
-    uint32_t first, count; /* the vertices [first, first + count) */
-    uint32_t base;         /* the first one's record texel */
-    uint8_t preVs;         /* its pre-pass entry */
+    uint32_t first, count; /* the vertices [first, first + count); particles: count sprites */
+    uint32_t base;         /* the first vertex's record texel */
+    uint32_t slotA, slotB; /* slot A and B of kick first + 2 (particles: of sprite 0) */
+    uint32_t slotC;        /* slot C of kick first + 2, ~0u: no tick slots */
+    uint8_t preVs;         /* its pre-pass entry (0: a particle command) */
+    uint8_t particle;      /* RDC_PARTICLES */
+    uint8_t ticks;         /* ICO_VU_TICKS: slot C, the tick stage's draws */
     uint8_t rec;           /* drawn into the record */
 } VuPre;
 
@@ -743,20 +786,85 @@ static void vuTriRule(uint8_t vs, IcoVuCB *v)
     }
 }
 
-/* VuCB's pre-pass fields for entry e: vertex v's texel base - first + v */
+/* VuCB's pre-pass fields for entry e: vertex v's texel base - first + v,
+ * kick k's slots vu_tri.xyz + k (a sprite i's vu_tri.xy + i) */
 static void vuPreRecord(const VuPre *e, IcoVuCB *v)
 {
-    v->rec[0] = e->base - e->first; /* wrapping: the shader adds the vertex */
     v->rec[1] = s_recBufRows[rd__ring_slot()] * ICO_VU_REC_W;
+    if (e->particle) {
+        v->rec[0] = v->rec[2] = v->rec[3] = 0;
+        v->tri[0] = e->slotA;
+        v->tri[1] = e->slotB;
+        v->tri[2] = ~0u;
+        v->tri[3] = 0;
+        return;
+    }
+    v->rec[0] = e->base - e->first; /* wrapping: the shader adds the vertex */
     v->rec[2] = e->first;
     vuTriRule(e->src.vs, v);
+    const uint32_t k0 = e->first + 2u; /* wrapping: the shader adds the kick */
+    v->tri[0] = e->slotA - k0;
+    v->tri[1] = e->slotB - k0;
+    v->tri[2] = e->ticks ? e->slotC - k0 : ~0u;
+    v->tri[3] = 0;
+}
+
+/* the record slots entry e takes in pass V's rows (its vertices, a
+ * particle command's slots A and B) and in pass T's (A, B and C of its
+ * kicks) */
+static uint32_t vuPreVSlots(const VuPre *e)
+{
+    return e->particle ? 2u * e->count : e->count;
+}
+
+static uint32_t vuPreTSlots(const VuPre *e)
+{
+    return e->particle ? 0u : (e->ticks ? 3u : 2u) * (e->count - 2u);
+}
+
+/* the rows of n texels */
+static uint32_t vuRows(uint64_t n)
+{
+    return (uint32_t)((n + ICO_VU_REC_W - 1u) / ICO_VU_REC_W);
+}
+
+#ifndef RD_HAVE_VU_STAGE_KEY
+/* A record stage's pipeline key (rd_pipeline.c rd__vu_stage_key once it
+ * has one: the pre-pass entries' key, points into the record's three
+ * targets, no depth, no blend) with the tick stage's colour mask */
+static RdPipeKeyInt rd__vu_stage_key(uint8_t vs, uint8_t colorMask)
+{
+    RdPipeKeyInt k = rd__vu_pre_key(vs);
+    k.gs.colorMask = colorMask;
+    return k;
+}
+#endif
+
+/* the record stages' pipeline keys of entry e (*n of them): its pre-pass
+ * entry's, the rule, tick (masks R and G) and planes stages' for a mesh or
+ * grid command, the sprite stage's for a particle command */
+static uint32_t vuPreKeys(const VuPre *e, RdPipeKeyInt keys[5])
+{
+    if (e->particle) {
+        keys[0] = rd__vu_stage_key(RD_VS_VU_PARTICLE_PRE, 0xF);
+        return 1;
+    }
+    uint32_t n = 0;
+    keys[n++] = rd__vu_pre_key(e->preVs);
+    keys[n++] = rd__vu_stage_key(RD_VS_VU_TRI_RULE_PRE, 0xF);
+    if (e->ticks) {
+        keys[n++] = rd__vu_stage_key(RD_VS_VU_TRI_TICK_PRE, 0x1);
+        keys[n++] = rd__vu_stage_key(RD_VS_VU_TRI_TICK_PRE, 0x2);
+    }
+    keys[n++] = rd__vu_stage_key(RD_VS_VU_TRI_PLANES_PRE, 0xF);
+    return n;
 }
 
 /* the pre-pass's draws' DrawCB */
 static IcoDrawCB s_preDrawCB;
 
-/* rd__vu_prepass_sabotage: the first command's records one texel off */
-static bool s_preSabotage;
+/* rd__vu_prepass_sabotage's mode (RD_VU_SABOTAGE_*) */
+static int s_preSabotage;
 
 /* rd__vu_prepass is recording (rd__vu_prepass_running) */
 static bool s_preRunning;
@@ -766,9 +874,9 @@ bool rd__vu_prepass_running(void)
     return s_preRunning;
 }
 
-void rd__vu_prepass_sabotage(bool on)
+void rd__vu_prepass_sabotage(int mode)
 {
-    s_preSabotage = on;
+    s_preSabotage = mode;
 }
 
 static void vuPrepassRun(const RdFrame *f, int keep);
@@ -785,15 +893,97 @@ void rd__vu_prepass(const RdFrame *f, int keep)
     s_preRunning = false;
 }
 
+/* one stage draw of entry e into the record (pass V's sprite stage, pass
+ * T's stages): its VuCB with vu_tri.w = w, the key, count points; false
+ * when it could not be recorded (the ring full, a pipeline missing) */
+static bool vuStageDraw(const VuPre *e, IcoVuCB *vcb, uint64_t dOff, const RdPipeKeyInt *key,
+                        uint32_t w, uint32_t count)
+{
+    vcb->tri[3] = w;
+    const RhiBindGroup g1 = vuGroup(e->src.streamBuf, e->src.streamBufSize, e->src.streamOff,
+                                    e->src.streamSize, &vcb->draw[0]);
+    const uint64_t vOff = cbCopy(vcb, sizeof(*vcb), rhi_limits()->uniformAlign);
+    const RhiPipeline p = rd__get_pipeline(key);
+    if (!g1.id || vOff == ~0ull || (!p.id && !rd__pipeline_gathering())) {
+        return false;
+    }
+    if (!p.id) {
+        return true; /* only naming keys */
+    }
+    const uint32_t offs[3] = {(uint32_t)dOff, (uint32_t)vOff, (uint32_t)e->src.bonesOff};
+    rd__set_pipeline(rd__replay_cl(), p, key);
+    rhi_cmd_set_bind_group_offsets(rd__replay_cl(), 1, g1, offs, 3);
+    if (g_rdWin.first && g_rdWin.drawLast && g_rdWin.passes == g_rdWin.last) {
+        /* the draw note: the command's, its class the program's own
+           entry (rd__win_vu_note) */
+        g_rdVuCur.type = e->cmd->type;
+        g_rdVuCur.prog = e->src.p.prog;
+        g_rdVuCur.clip = e->src.p.clip;
+        g_rdVuCur.batch = e->src.p.firstBatch;
+        g_rdVuCur.index = NULL;
+        g_rdVuCur.marks = NULL;
+        g_rdVuCur.markCount = 0;
+        g_rdVuCur.mesh = e->src.m ? e->src.m->name : NULL;
+        rd__win_vu_note(0, key, vcb, e->src.vs, 0, e->first, count);
+    }
+    rd__replay_draw(rd__replay_cl(), count, 0, 1);
+    return true;
+}
+
+/* one of the two passes into the record's textures, rows [row0, row0 +
+ * rows): begun on the targets (load DONT_CARE: the rows before row0 were
+ * copied already), the shaders' mapping the slot buffer's rows (vu_common.hlsli
+ * vu_rec_point_out), the scissor the rows drawn */
+static void vuRecPassBegin(uint32_t row0, uint32_t rows)
+{
+    for (uint32_t k = 0; k < ICO_VU_REC_PLANES; k++) {
+        rd__transition(rd__replay_cl(), s_recTex[k], &s_recTexState[k], RHI_STATE_RENDER_TARGET);
+    }
+    RhiRenderPassDesc rp;
+    memset(&rp, 0, sizeof(rp));
+    for (uint32_t k = 0; k < ICO_VU_REC_PLANES; k++) {
+        rp.color[k].texture = s_recTex[k];
+        rp.color[k].load = RHI_LOAD_DONT_CARE;
+        rp.color[k].store = RHI_STORE_STORE;
+    }
+    rp.colorCount = ICO_VU_REC_PLANES;
+    rp.width = ICO_VU_REC_W;
+    rp.height = row0 + rows;
+    rhi_cmd_begin_render_pass(rd__replay_cl(), &rp);
+    const RhiViewport vp = {0.0f, 0.0f, (float)ICO_VU_REC_W, (float)s_recBufRows[rd__ring_slot()],
+                            0.0f, 1.0f};
+    rhi_cmd_set_viewport(rd__replay_cl(), &vp);
+    const RhiRect sc = {0, (int32_t)row0, ICO_VU_REC_W, rows};
+    rhi_cmd_set_scissor(rd__replay_cl(), &sc);
+}
+
+/* the pass's rows of the planes into the slot's record buffer, plane after
+ * plane (visible to the shaders after: rhi.h rhi_cmd_copy_texture_to_buffer) */
+static void vuRecPassCopy(uint32_t row0, uint32_t rows, bool muted)
+{
+    rhi_cmd_end_render_pass(rd__replay_cl());
+    const uint64_t plane = (uint64_t)s_recBufRows[rd__ring_slot()] * ICO_VU_REC_W * 16u;
+    for (uint32_t k = 0; k < ICO_VU_REC_PLANES; k++) {
+        rd__transition(rd__replay_cl(), s_recTex[k], &s_recTexState[k], RHI_STATE_COPY_SRC);
+        const RhiRect region = {0, (int32_t)row0, ICO_VU_REC_W, rows};
+        if (!muted) {
+            rhi_cmd_copy_texture_to_buffer(
+                rd__replay_cl(), s_recTex[k], RHI_ASPECT_COLOR, region, s_recBuf[rd__ring_slot()],
+                plane * k + (uint64_t)row0 * ICO_VU_REC_W * 16u, ICO_VU_REC_W * 16u);
+        }
+    }
+}
+
 static void vuPrepassRun(const RdFrame *f, int keep)
 {
-    /* 1. every mesh and grid command: its source and its vertices */
-    uint64_t total = 0;
+    /* 1. every mesh, grid and particle command: its source, its vertices
+     * or sprites */
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
         const RdCmdList *list = &f->lists[l];
         for (uint32_t i = 0; i < list->count; i++) {
             const RdCmd *c = &list->cmds[i];
-            if (c->type != RDC_MESH && c->type != RDC_SKINNED && c->type != RDC_GRID) {
+            if (c->type != RDC_MESH && c->type != RDC_SKINNED && c->type != RDC_GRID &&
+                c->type != RDC_PARTICLES) {
                 continue;
             }
             if (s_preN == s_preCap) {
@@ -811,31 +1001,61 @@ static void vuPrepassRun(const RdFrame *f, int keep)
                 continue;
             }
             e->cmd = c;
-            e->preVs = rd__vu_pre_vs(e->src.vs);
-            vuPreRange(c, &e->src, &e->first, &e->count);
-            s_preN++;
-            if (e->preVs && e->count) {
-                e->base = (uint32_t)total;
-                total += e->count;
+            e->slotC = ~0u;
+            if (c->type == RDC_PARTICLES) {
+                e->particle = 1;
+                e->count = e->src.p.vertsPerBatch;
+            } else {
+                e->preVs = rd__vu_pre_vs(e->src.vs);
+                e->ticks = (e->src.vcb.draw[2] & ICO_VU_TICKS) != 0u;
+                vuPreRange(c, &e->src, &e->first, &e->count);
+                if (!e->preVs || e->count < 3u) {
+                    e->count = 0; /* no triangle: the old way */
+                }
             }
+            s_preN++;
         }
     }
     s_preReplay = g_rd.replayCounter;
-    if (total == 0) {
+    /* 2. the record's rows: pass V's (vertices, then sprites) and pass T's
+     * (the kicks' slots) for the commands in order while both fit
+     * RD_VU_REC_ROWS_MAX rows (the rest the old way); its size powers of two
+     * from the least */
+    uint64_t nv = 0, nt = 0;
+    uint32_t taken = 0;
+    for (uint32_t i = 0; i < s_preN; i++) {
+        const VuPre *e = &s_pre[i];
+        if (!e->count) {
+            continue;
+        }
+        const uint64_t v = nv + vuPreVSlots(e), t = nt + vuPreTSlots(e);
+        if ((uint64_t)vuRows(v) + vuRows(t) > RD_VU_REC_ROWS_MAX) {
+            break;
+        }
+        nv = v;
+        nt = t;
+        taken = i + 1u;
+    }
+    if (nv == 0) {
         return;
     }
-    /* 2. the record's size: powers of two from the least */
+    const uint32_t rowsV = vuRows(nv), rowsT = vuRows(nt);
     uint32_t rows = s_recTexRows > RD_VU_REC_ROWS_MIN ? s_recTexRows : RD_VU_REC_ROWS_MIN;
-    while ((uint64_t)rows * ICO_VU_REC_W < total && rows < RD_VU_REC_ROWS_MAX) {
+    while (rows < rowsV + rowsT && rows < RD_VU_REC_ROWS_MAX) {
         rows *= 2u;
     }
-    if ((uint64_t)rows * ICO_VU_REC_W < total) {
+    {
+        uint32_t past = 0, want = 0;
+        for (uint32_t i = 0; i < s_preN; i++) {
+            want += s_pre[i].count != 0u;
+            past += i >= taken && s_pre[i].count != 0u;
+        }
         static bool logged; /* once a run */
-        if (!logged) {
+        if (past && !logged) {
             logged = true;
-            rd__log("VU pre-pass: a frame of %llu vertices past the record's %u: the commands "
-                    "past it are drawn the old way (reported once)",
-                    (unsigned long long)total, rows * ICO_VU_REC_W);
+            rd__log("VU pre-pass: a frame past the record's %u rows: %u of its %u VU commands "
+                    "are drawn the old way (reported once)",
+                    RD_VU_REC_ROWS_MAX, past, want);
         }
     }
     if (!recEnsure(rows)) {
@@ -860,77 +1080,78 @@ static void vuPrepassRun(const RdFrame *f, int keep)
         return;
     }
     s_recFails = 0;
-    const uint64_t cap = (uint64_t)s_recTexRows * ICO_VU_REC_W;
-    /* 3. one pass, a draw a command, single-sampled whatever the last
-     * pass was (rd__get_pipeline's drawKey) */
-    const uint8_t samples = g_rd.passSamples;
-    g_rd.passSamples = 1;
-    uint32_t used = 0;
-    for (uint32_t i = 0; i < s_preN; i++) {
+    /* 3. the slots: pass V's from texel 0, pass T's from row rowsV; a
+     * command whose pipelines are all made is drawn into the record */
+    const uint32_t t0 = rowsV * ICO_VU_REC_W;
+    uint32_t vAt = 0, tAt = t0, vEnd = 0, tEnd = t0;
+    for (uint32_t i = 0; i < taken; i++) {
         VuPre *e = &s_pre[i];
-        if (!e->preVs || !e->count || (uint64_t)e->base + e->count > cap) {
+        if (!e->count) {
             continue;
         }
-        const RdPipeKeyInt key = rd__vu_pre_key(e->preVs);
-        if (!rd__get_pipeline(&key).id && !rd__pipeline_gathering()) {
-            static bool logged; /* once a run */
-            if (!logged) {
-                logged = true;
-                rd__log("VU pre-pass: the pipeline of %s could not be made: its commands are "
-                        "drawn the old way (reported once)",
-                        rd__vs_name(e->preVs));
+        if (e->particle) {
+            e->slotA = vAt;
+            e->slotB = vAt + e->count;
+        } else {
+            const uint32_t k = e->count - 2u;
+            e->base = vAt;
+            e->slotA = tAt;
+            e->slotB = tAt + k;
+            e->slotC = e->ticks ? tAt + 2u * k : ~0u;
+            tAt += vuPreTSlots(e);
+        }
+        vAt += vuPreVSlots(e);
+        RdPipeKeyInt keys[5];
+        const uint32_t nk = vuPreKeys(e, keys);
+        bool made = true;
+        for (uint32_t k = 0; k < nk && made; k++) {
+            made = rd__get_pipeline(&keys[k]).id || rd__pipeline_gathering();
+            if (!made) {
+                static bool logged; /* once a run */
+                if (!logged) {
+                    logged = true;
+                    rd__log("VU pre-pass: the pipeline of %s could not be made: its commands are "
+                            "drawn the old way (reported once)",
+                            rd__vs_name(keys[k].vs));
+                }
             }
+        }
+        if (!made) {
             continue;
         }
         e->rec = 1;
-        used = e->base + e->count;
+        vEnd = vAt;
+        tEnd = e->particle ? tEnd : tAt;
     }
-    const uint32_t usedRows = (used + ICO_VU_REC_W - 1u) / ICO_VU_REC_W;
-    /* the draws' DrawCB (b1 of group 1; no pre-pass entry reads it) */
+    const uint32_t usedV = vuRows(vEnd), usedT = vuRows((uint64_t)tEnd - t0);
+    /* the draws' DrawCB (b1 of group 1; no record stage reads it) */
     const uint64_t ua = rhi_limits()->uniformAlign;
     memset(&s_preDrawCB, 0, sizeof(s_preDrawCB));
-    const uint64_t dOff = usedRows ? cbCopy(&s_preDrawCB, sizeof(s_preDrawCB), ua) : ~0ull;
+    const uint64_t dOff = usedV ? cbCopy(&s_preDrawCB, sizeof(s_preDrawCB), ua) : ~0ull;
     if (dOff == ~0ull) {
         for (uint32_t i = 0; i < s_preN; i++) {
             s_pre[i].rec = 0; /* the ring is full: drawn the old way */
         }
-        g_rd.passSamples = samples;
         return;
     }
-    /* a piece of the GPU timing (rd_perf.c rd__perf_pass): the pass and the
-     * copies into the record buffer */
-    rd__perf_pass(rd__replay_cl(), RD_PERF_PASS_PREPASS, RD_PERF_ID_RECORD, ICO_VU_REC_W, usedRows,
+    /* 4. pass V, single-sampled whatever the last pass was (rd__get_pipeline's
+     * drawKey): a draw a mesh or grid command (its vertices), two a particle
+     * command (its slots A and B).  A piece of the GPU timing (rd_perf.c
+     * rd__perf_pass) with its copies; the pass ring's entry (rd_passring.h
+     * RD_PASSK_VU_PRE: the rows drawn and the vertices); the loss bisect's
+     * pass window numbers it pass 1 (rd_window.c): outside the window its
+     * draws and copies are left out, and the slot's record buffer keeps what
+     * an earlier replay of the frame wrote */
+    const uint8_t samples = g_rd.passSamples;
+    g_rd.passSamples = 1;
+    uint32_t verts = 0, sprites = 0, draws = 0, triSlots = 0, passes = 0;
+    uint32_t vertDraws = 0;
+    rd__perf_pass(rd__replay_cl(), RD_PERF_PASS_PREPASS, RD_PERF_ID_RECORD, ICO_VU_REC_W, usedV,
                   -1);
-    for (uint32_t k = 0; k < ICO_VU_REC_PLANES; k++) {
-        rd__transition(rd__replay_cl(), s_recTex[k], &s_recTexState[k], RHI_STATE_RENDER_TARGET);
-    }
-    /* the pass ring's entry: the record's rows drawn and its vertices
-     * (rd_passring.h RD_PASSK_VU_PRE); the loss bisect's pass window
-     * numbers it pass 1 (rd_window.c): outside the window its draws and
-     * copies are left out, and the slot's record buffer keeps what an
-     * earlier replay of the frame wrote */
     rhi_cmd_checkpoint(rd__replay_cl(), rd__replay_pass_push(RD_PASSK_VU_PRE, 0, ICO_VU_REC_W,
-                                                             usedRows, 0, used, 0, 0, -1));
-    const bool muted = rd__win_muted();
-    RhiRenderPassDesc rp;
-    memset(&rp, 0, sizeof(rp));
-    for (uint32_t k = 0; k < ICO_VU_REC_PLANES; k++) {
-        rp.color[k].texture = s_recTex[k];
-        rp.color[k].load = RHI_LOAD_DONT_CARE;
-        rp.color[k].store = RHI_STORE_STORE;
-    }
-    rp.colorCount = ICO_VU_REC_PLANES;
-    rp.width = ICO_VU_REC_W;
-    rp.height = usedRows;
-    rhi_cmd_begin_render_pass(rd__replay_cl(), &rp);
-    /* the shader's mapping is the record's rows (vu_common.hlsli
-     * vu_pre_out: vu_rec.y / ICO_VU_REC_W), the pass's area the rows used */
-    const RhiViewport vp = {0.0f, 0.0f, (float)ICO_VU_REC_W, (float)s_recBufRows[rd__ring_slot()],
-                            0.0f, 1.0f};
-    rhi_cmd_set_viewport(rd__replay_cl(), &vp);
-    const RhiRect sc = {0, 0, ICO_VU_REC_W, usedRows};
-    rhi_cmd_set_scissor(rd__replay_cl(), &sc);
-    uint32_t verts = 0, draws = 0;
+                                                             usedV, 0, vEnd, 0, 0, -1));
+    bool muted = rd__win_muted();
+    vuRecPassBegin(0, usedV);
     for (uint32_t i = 0; i < s_preN; i++) {
         VuPre *e = &s_pre[i];
         if (!e->rec) {
@@ -938,58 +1159,90 @@ static void vuPrepassRun(const RdFrame *f, int keep)
         }
         IcoVuCB vcb = e->src.vcb;
         vuPreRecord(e, &vcb);
-        if (s_preSabotage && draws == 0) {
+        if (e->particle) {
+            /* the sprite stage, slot A then slot B */
+            const RdPipeKeyInt key = rd__vu_stage_key(RD_VS_VU_PARTICLE_PRE, 0xF);
+            if (!vuStageDraw(e, &vcb, dOff, &key, 0, e->count) ||
+                !vuStageDraw(e, &vcb, dOff, &key, 1, e->count)) {
+                e->rec = 0; /* drawn the old way */
+                continue;
+            }
+            sprites += e->count;
+            draws += 2;
+            continue;
+        }
+        if (s_preSabotage == RD_VU_SABOTAGE_VERTEX && vertDraws == 0) {
             vcb.rec[0] += 1u; /* rd_vuprepass_selftest's sabotage: written a texel on */
         }
-        const RhiBindGroup g1 = vuGroup(e->src.streamBuf, e->src.streamBufSize, e->src.streamOff,
-                                        e->src.streamSize, &vcb.draw[0]);
-        const uint64_t vOff = cbCopy(&vcb, sizeof(vcb), ua);
         const RdPipeKeyInt key = rd__vu_pre_key(e->preVs);
-        const RhiPipeline p = rd__get_pipeline(&key);
-        if (!g1.id || vOff == ~0ull || (!p.id && !rd__pipeline_gathering())) {
+        if (!vuStageDraw(e, &vcb, dOff, &key, 0, e->count)) {
             e->rec = 0; /* drawn the old way */
             continue;
         }
-        if (!p.id) {
-            continue; /* only naming keys: the triangle stage's are named too */
-        }
-        const uint32_t offs[3] = {(uint32_t)dOff, (uint32_t)vOff, (uint32_t)e->src.bonesOff};
-        rhi_cmd_set_pipeline(rd__replay_cl(), p);
-        rhi_cmd_set_bind_group_offsets(rd__replay_cl(), 1, g1, offs, 3);
-        if (g_rdWin.first && g_rdWin.drawLast && g_rdWin.passes == g_rdWin.last) {
-            /* the draw note: the command's, its class the program's own
-               entry (rd__win_vu_note) */
-            g_rdVuCur.type = e->cmd->type;
-            g_rdVuCur.prog = e->src.p.prog;
-            g_rdVuCur.clip = e->src.p.clip;
-            g_rdVuCur.batch = e->src.p.firstBatch;
-            g_rdVuCur.index = NULL;
-            g_rdVuCur.marks = NULL;
-            g_rdVuCur.markCount = 0;
-            g_rdVuCur.mesh = e->src.m ? e->src.m->name : NULL;
-            rd__win_vu_note(0, &key, &vcb, e->src.vs, 0, e->first, e->count);
-        }
-        rd__replay_draw(rd__replay_cl(), e->count, 0, 1);
         verts += e->count;
+        vertDraws++;
         draws++;
     }
-    rhi_cmd_end_render_pass(rd__replay_cl());
-    g_rd.passSamples = samples;
-    /* 4. the planes' rows into the slot's record buffer, plane after
-     * plane (visible to the vertex shaders: rhi.h
-     * rhi_cmd_copy_texture_to_buffer) */
-    const uint64_t plane = (uint64_t)s_recBufRows[rd__ring_slot()] * ICO_VU_REC_W * 16u;
-    for (uint32_t k = 0; k < ICO_VU_REC_PLANES; k++) {
-        rd__transition(rd__replay_cl(), s_recTex[k], &s_recTexState[k], RHI_STATE_COPY_SRC);
-        const RhiRect region = {0, 0, ICO_VU_REC_W, usedRows};
-        if (!muted) {
-            rhi_cmd_copy_texture_to_buffer(rd__replay_cl(), s_recTex[k], RHI_ASPECT_COLOR, region,
-                                           s_recBuf[rd__ring_slot()], plane * k,
-                                           ICO_VU_REC_W * 16u);
+    vuRecPassCopy(0, usedV, muted);
+    passes++;
+    /* 5. pass T over the vertex records in the buffer: per mesh or grid
+     * command the rule stage (slot A), the tick stage under the masks R and
+     * G (slot C: ticks 0 and 1), the planes stage (slot B), a point a kick;
+     * its piece, its pass ring entry (RD_PASSK_VU_TRI: the rows drawn and
+     * the slots), pass 2 of the loss bisect's window; its copies */
+    if (usedT) {
+        rd__perf_pass(rd__replay_cl(), RD_PERF_PASS_PREPASS, RD_PERF_ID_RECORD, ICO_VU_REC_W, usedT,
+                      -1);
+        rhi_cmd_checkpoint(rd__replay_cl(), rd__replay_pass_push(RD_PASSK_VU_TRI, 0, ICO_VU_REC_W,
+                                                                 usedT, 0, tEnd - t0, 0, 0, -1));
+        muted = rd__win_muted();
+        vuRecPassBegin(rowsV, usedT);
+        bool firstTri = true;
+        for (uint32_t i = 0; i < s_preN; i++) {
+            VuPre *e = &s_pre[i];
+            if (!e->rec || e->particle) {
+                continue;
+            }
+            IcoVuCB vcb = e->src.vcb;
+            vuPreRecord(e, &vcb);
+            const uint32_t kicks = e->count - 2u;
+            IcoVuCB rule = vcb;
+            if (s_preSabotage == RD_VU_SABOTAGE_TRI && firstTri) {
+                rule.tri[0] += 1u; /* the self-test's sabotage: slot A written a slot on */
+            }
+            firstTri = false;
+            const RdPipeKeyInt kr = rd__vu_stage_key(RD_VS_VU_TRI_RULE_PRE, 0xF);
+            bool ok = vuStageDraw(e, &rule, dOff, &kr, 0, kicks);
+            if (ok && e->ticks) {
+                IcoVuCB tick = vcb;
+                if (s_preSabotage == RD_VU_SABOTAGE_TICKS) {
+                    /* the self-test's sabotage: tick 1 tested at tick 0's
+                       camera */
+                    memcpy(tick.ticks[4], tick.ticks[0], 4 * sizeof(tick.ticks[0]));
+                }
+                const RdPipeKeyInt k0 = rd__vu_stage_key(RD_VS_VU_TRI_TICK_PRE, 0x1);
+                const RdPipeKeyInt k1 = rd__vu_stage_key(RD_VS_VU_TRI_TICK_PRE, 0x2);
+                ok = vuStageDraw(e, &tick, dOff, &k0, 0, kicks) &&
+                     vuStageDraw(e, &tick, dOff, &k1, 1, kicks);
+                draws += ok ? 2u : 0u;
+            }
+            const RdPipeKeyInt kp = rd__vu_stage_key(RD_VS_VU_TRI_PLANES_PRE, 0xF);
+            ok = ok && vuStageDraw(e, &vcb, dOff, &kp, 0, kicks);
+            if (!ok) {
+                e->rec = 0; /* drawn the old way (its vertices' slots unread) */
+                continue;
+            }
+            draws += 2;
+            triSlots += vuPreTSlots(e);
         }
+        vuRecPassCopy(rowsV, usedT, muted);
+        passes++;
     }
-    g_rdPerf.vuPrePasses = 1;
+    g_rd.passSamples = samples;
+    g_rdPerf.vuPrePasses = passes;
     g_rdPerf.vuPreVertices = verts;
+    g_rdPerf.vuPreSprites = sprites;
+    g_rdPerf.vuTriSlots = triSlots;
     g_rdPerf.vuPreDraws = draws;
 }
 
@@ -1058,9 +1311,10 @@ void rd__vu_prepass_init(const RhiLimits *lim)
                 rhi_adapter_name());
     }
     if (g_rd.vuPrepass) {
-        rd__log("VU pre-pass: on: each mesh and grid vertex evaluated once before the lists, "
-                "%u bytes a vertex in %u RGBA32_UINT targets; [dev] vu_prepass = false draws "
-                "the old way",
+        rd__log("VU pre-pass: on: each mesh and grid vertex and triangle and each sprite "
+                "evaluated once before the lists (two passes), %u bytes a record slot in %u "
+                "RGBA32_UINT targets, two slots a triangle (three under the tick cameras); [dev] "
+                "vu_prepass = false draws the old way",
                 ICO_VU_REC_BYTES, ICO_VU_REC_PLANES);
     } else {
         rd__log("VU pre-pass: off %s: every VU draw evaluates its triangle's corners in the "
@@ -1108,9 +1362,9 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     const uint8_t progVs = src->vs;
     uint8_t vs = progVs;
     if (pre && pre->rec) {
-        /* the triangle stage over the pre-pass's record */
+        /* the main shaders over the pre-passes' record */
         vuPreRecord(pre, &vcb);
-        vs = RD_VS_VU_TRI;
+        vs = pre->particle ? RD_VS_VU_PARTICLE_MAIN : RD_VS_VU_MAIN;
     }
     const RhiBuffer streamBuf = src->streamBuf, indexBuf = src->indexBuf;
     const uint64_t streamBufSize = src->streamBufSize, streamOff = src->streamOff;
