@@ -147,13 +147,13 @@ int ico_audio_sdl_open(IcoAudioRender pull, const char *sync_why);
    vsyncs, doubled after each dry queue up to 120 ms, halved again after
    20 s without one (out_sdl.c). */
 void ico_audio_sdl_push(const int16_t *frames, int count);
-/* Whether an output stream is open (0 without the SDL output). */
+/* Whether an output stream is open (0 without the SDL output); the window's
+   late-present skip runs only with one (pace_policy.h pace_late_skip). */
 int ico_audio_sdl_active(void);
 /* The audio queued on the stream in milliseconds, -1 when no stream is
-   open; and the cushion the queue is kept at, 0 when none is.  The window
-   (pace) reads them: below half the cushion the audio is about to run
-   dry.  The pull path reports the lead its last callback left queued and a
-   cushion of 0, which is never low (pace_policy.h pace_audio_skip). */
+   open; and the cushion the queue is kept at, 0 when none is (diagnostics
+   and tests).  The pull path reports the lead its last callback left queued
+   and a cushion of 0. */
 int ico_audio_sdl_queued_ms(void);
 int ico_audio_sdl_cushion_ms(void);
 void ico_audio_sdl_close(void);

@@ -246,8 +246,12 @@ program under an environment switch ([Environment switches](#environment-switche
   120 Hz and on a display that drifts from its report (`pace_loop`).
 - `pace_policy_test.c`: the slow-present decision, Resolution "auto"'s steps, the gap between
   presents, the vsync lock's n and alphas and its period's sanity, and the vblank clock's laws on a
-  synthetic display, and the audio skip, never for a cushion of 0 (the audio on the device's
-  clock) unless presents are slow (`pace_policy`).
+  synthetic display, and the late-present skip: a whole period behind skips with no audio queue
+  read, less does not, slow presents skip past the deadline, never two frames in a row while the
+  same frame may stay skipped; the timer path's loop under a fake clock keeps a 30 frames a second
+  game on 39 ms presents at real time with no resync, where a frame skipped for one step only fell
+  behind, and a 60 frames a second game on 20 ms presents through the late arm alone
+  (`pace_policy`).
 - `perf_block_test.c`: a block of replays by phase: sums, maxes, the replays over a threshold, the
   longest phase (`perf_block`).
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls

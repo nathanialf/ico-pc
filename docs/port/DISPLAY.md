@@ -218,8 +218,10 @@ presentation modes (`port/platform/window_host.c` (`pace_log`); `port/platform/h
 **The first line** (`window: N presents, ...`): the presents, the movie presents (and how many
 failed), the game frames shown and the frame numbers (which also count the frames the game dropped
 unshown, so a gap between the two is not a slowdown), the block's seconds, presented and game frames
-a second, the vsyncs and the simulated rate, the resyncs and the lag they dropped, the longest
-[replay](ARCHITECTURE.md#terms) and the replay count with how many were over a refresh, the slow
+a second, the vsyncs and the simulated rate, the resyncs and the lag they dropped, the presents the
+timer path skipped (`skipped N presents (late L, slow S)`: the late-present skip by arm,
+[Pacing](#pacing)), the longest [replay](ARCHITECTURE.md#terms) and the replay count with how many
+were over a refresh, the slow
 steps, the frame rate option, the present mode, the display's refresh with presents a refresh, the
 window's pixel size, "step late max" (the latest a simulation step started against when it was due),
 "pump max" (the longest window event pump, [PLATFORM.md](PLATFORM.md#diagnostics)) and the lock's
@@ -310,16 +312,22 @@ with a fake clock and swapchain; `window_host.c` only supplies its I/O (`pace`, 
    present's cost would end past the deadline (`pace`). Presents are slow when the median of the
    last 8 present costs is above `max(refresh, period) + period / 2` (a refresh more with an effects
    program loaded), entering after 3 such presents in a row and leaving below 80 % of it
-   (`port/platform/pace_policy.h` (`pace_slow_present`, `pace_slow_threshold`)). On the game's
-   clock every step queues one vsync of audio, so presents that hold the simulation back drain the
-   audio queue: with the audio playing, a new frame found past its deadline is left unpresented (the
-   next step runs at once and the next present shows the newer frame) when presents are slow or
-   less than half the audio cushion is queued (on the device's clock the audio reports no cushion,
-   which is never low), and never two new frames in a row, so the picture keeps at least every
-   other frame and a single late present never repeats a picture (`port/platform/pace_policy.c`
-   (`pace_audio_skip`), called from `pace` with `s_pres.skippedLast`; "less than half" compares the
-   whole milliseconds the audio reports; [AUDIO.md](AUDIO.md#the-output)). Without audio every new
-   frame is presented.
+   (`port/platform/pace_policy.h` (`pace_slow_present`, `pace_slow_threshold`)). Presents that
+   hold the next step back keep the game below real time until the pacer drops the lag, so with the
+   audio playing a new frame found past its deadline is left unpresented (the next step runs at
+   once and the next present shows the newer frame) when the next step is already a whole period
+   late (the step debt: the time against its due time, as "step late max" measures it; the late
+   arm) or presents are slow (the slow arm); the same frame may stay unpresented at the following
+   steps while that holds, and the frame after a skipped one is always presented, so the picture
+   keeps at least every other frame. A game at 30 frames a second closes a frame every second step,
+   so a frame skipped at one step and presented at the next would save nothing: on a renderer whose
+   presents take longer than two steps (a GPU-bound phone at 2x, 39 ms a present against 33.4 ms)
+   the frames go unshown one at a time and the game keeps real time instead of falling behind until
+   a resync (`pace_policy_test` (`testLateSkipLoop`)). A single late present on a renderer that keeps
+   up, less than a period behind, never skips. The late arm reads the loop's own lateness, not the
+   audio queue, on either audio clock (`port/platform/pace_policy.c` (`pace_late_skip`,
+   `pace_skipped_last`), called from `pace` with `s_pres.skipOpen` and `s_pres.skipFrame`). Without
+   audio every new frame is presented. The first stats line counts the block's skips by arm.
 3. **The vsync lock** (below).
 
 **The present gap** on the timer path: "uncapped" with vsync on is a sixteenth of a refresh less
@@ -592,7 +600,7 @@ is flushed after each drain, every vsync (`perf_drain`).
 | test | checks |
 | --- | --- |
 | `port/platform/test/pace_loop_test.c` | the vsync lock's loop under a fake clock and swapchain (mailbox, FIFO, a FIFO queue, a vblank clock): grid, alphas, phase, drift (`testFifoDrift`), the ratchet (`testFifoRatchet`), D3D12's full queue (`testQueueBlocking`), the skip guard (`testSkipGuard`), clocks left, off the screen, long steps, pauses; FIFO latest ready (`testLatestReady`), the timer path's FIFO hold (`testFifoHold`), the audio's starting ratio (`testNominalRatio`), the log's trace (`testTrace`) |
-| `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the audio skip |
+| `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the late-present skip and its loop under a fake clock |
 | `port/platform/test/perf_block_test.c` | a block's sums and maxima, the replays over the threshold, the longest-phase text, a reset |
 | `port/platform/test/window_video_test.c` | the window mode requests and their readback on SDL's offscreen driver (77 without one) |
 | `port/platform/test/hotkeys_test.c` | F11, F12, the stats period, F12's file names |

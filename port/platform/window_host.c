@@ -146,10 +146,14 @@ static struct {
     Uint64 cost;       /* how long the last rd_present took */
     PaceHist paceHist; /* the last presents' costs (pace_policy.h) */
     bool paceSlow;     /* pace_slow_present after the last present */
-    bool skippedLast;  /* pace left the last new frame unpresented (the audio's skip) */
+    /* a frame pace left unpresented since the last present (pace_late_skip)
+       and its number */
+    bool skipOpen;
+    uint32_t skipFrame;
     /* the rate log */
     Uint64 statAt;
     unsigned statPresents, statFrames;
+    unsigned statSkipLate, statSkipSlow; /* the block's skipped presents by reason */
     /* simulated vsyncs paced, and the lag the pacer dropped (each time
        it was more than RESYNC_NS behind: the simulation ran slower than
        real time by that much) */
@@ -842,7 +846,7 @@ static void lc_pace_reset(void *u)
     s_pres.paceEnd = 0;
     memset(&s_pres.paceHist, 0, sizeof(s_pres.paceHist));
     s_pres.paceSlow = false;
-    s_pres.skippedLast = false;
+    s_pres.skipOpen = false;
     s_pres.cost = 0;
     s_pres.lockN = 0; /* the lock starts again from now */
     s_pres.lastReturn = 0;
@@ -3861,6 +3865,7 @@ static void pace_log(Uint64 now)
         s_pres.statAt = now;
         s_pres.statPresents = s_pres.statFrames = s_pres.statVsyncs = s_pres.statResyncs = 0;
         s_pres.statDropped = 0;
+        s_pres.statSkipLate = s_pres.statSkipSlow = 0;
         s_pres.statFrameNo = rd_frame_number();
         s_pres.statMovie = rd_video_presents(&s_pres.statMovieFail);
         rd_replay_time_max(1, &n);
@@ -3966,24 +3971,26 @@ static void pace_log(Uint64 now)
         s_pres.audioRatio = ratio;
         ico_audio_set_rate_ratio(ratio);
     }
-    fprintf(stderr,
-            "window: %u presents, %u movie presents%s and %u game frames (%u frame numbers) in "
-            "%.1f s: %.1f "
-            "presented fps, %.1f game fps; %u vsyncs (%.1f Hz simulated), %u resyncs dropping "
-            "%.0f ms; longest replay %.1f ms of %u, %u over a refresh; %u steps over %.0f ms; "
-            "framerate %s, present "
-            "%s, display %.2f Hz (%.3f presents a refresh), window %dx%d%s; step late max %.1f "
-            "ms; pump max %.1f ms; %s\n",
-            s_pres.statPresents, movie - s_pres.statMovie, movieFailed, s_pres.statFrames,
-            fn - s_pres.statFrameNo, sec, s_pres.statPresents / sec, s_pres.statFrames / sec,
-            s_pres.statVsyncs, s_pres.statVsyncs / sec, s_pres.statResyncs,
-            (double)s_pres.statDropped / 1e6, maxMs, replays, s_perf.ph.over, s_pres.slowSteps,
-            s_pres.slowMs, ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)),
-            rhi_present_mode_name(), dm != NULL ? (double)dm->refresh_rate : 0.0,
-            dm != NULL && dm->refresh_rate > 1.0f ? s_pres.statPresents / sec / dm->refresh_rate
-                                                  : 0.0,
-            pw, ph, window_fullscreen() ? " fullscreen" : "", (double)s_pres.lateMaxNs / 1e6,
-            s_pres.pumpMaxMs, lock);
+    fprintf(
+        stderr,
+        "window: %u presents, %u movie presents%s and %u game frames (%u frame numbers) in "
+        "%.1f s: %.1f "
+        "presented fps, %.1f game fps; %u vsyncs (%.1f Hz simulated), %u resyncs dropping "
+        "%.0f ms; skipped %u presents (late %u, slow %u); longest replay %.1f ms of %u, %u "
+        "over a refresh; %u steps over %.0f ms; "
+        "framerate %s, present "
+        "%s, display %.2f Hz (%.3f presents a refresh), window %dx%d%s; step late max %.1f "
+        "ms; pump max %.1f ms; %s\n",
+        s_pres.statPresents, movie - s_pres.statMovie, movieFailed, s_pres.statFrames,
+        fn - s_pres.statFrameNo, sec, s_pres.statPresents / sec, s_pres.statFrames / sec,
+        s_pres.statVsyncs, s_pres.statVsyncs / sec, s_pres.statResyncs,
+        (double)s_pres.statDropped / 1e6, s_pres.statSkipLate + s_pres.statSkipSlow,
+        s_pres.statSkipLate, s_pres.statSkipSlow, maxMs, replays, s_perf.ph.over, s_pres.slowSteps,
+        s_pres.slowMs, ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)),
+        rhi_present_mode_name(), dm != NULL ? (double)dm->refresh_rate : 0.0,
+        dm != NULL && dm->refresh_rate > 1.0f ? s_pres.statPresents / sec / dm->refresh_rate : 0.0,
+        pw, ph, window_fullscreen() ? " fullscreen" : "", (double)s_pres.lateMaxNs / 1e6,
+        s_pres.pumpMaxMs, lock);
     /* the audio's 10 s line (out_sdl.c; the pull path's only) */
     ico_audio_sdl_log_summary();
     if (s_pres.lockN > 0) {
@@ -3994,6 +4001,7 @@ static void pace_log(Uint64 now)
     s_pres.statAt = now;
     s_pres.statPresents = s_pres.statFrames = s_pres.statVsyncs = s_pres.statResyncs = 0;
     s_pres.statDropped = 0;
+    s_pres.statSkipLate = s_pres.statSkipSlow = 0;
     s_pres.statFrameNo = fn;
     s_pres.statMovie = movie;
     s_pres.statMovieFail = movieFail;
@@ -4652,23 +4660,33 @@ static void pace(int hz)
     }
     Uint64 tick = s_pres.tickPrev ? s_pres.tickAt - s_pres.tickPrev : 2 * period;
     tick = tick < period ? period : (tick > 4 * period ? 4 * period : tick);
-    /* the audio queued and its cushion, read once a call (audio_host.h
-       ico_audio_sdl_queued_ms: -1 without a stream) */
-    const int audioMs = ico_audio_sdl_queued_ms();
-    const int cushionMs = ico_audio_sdl_cushion_ms();
     for (;;) {
         now = SDL_GetTicksNS();
-        /* the audio skip (pace_policy.h pace_audio_skip): a new frame
+        /* the late-present skip (pace_policy.h pace_late_skip): a new frame
            behind the deadline is left unpresented (the next step at once;
-           the next present shows the newer frame) only with the audio
-           playing and presents slow or the audio about to run dry, never
-           two new frames in a row (s_pres.skippedLast).  Without audio,
-           as below.  No step or audio is dropped, only that present */
-        if (pace_audio_skip(now >= s_deadline, s_pres.presentedFrame != s_pres.frame,
-                            s_pres.skippedLast, s_pres.paceSlow, ico_audio_sdl_active() != 0,
-                            audioMs, cushionMs)) {
-            s_pres.skippedLast = true;
-            break;
+           the next present shows the newer frame) with the audio playing
+           when the next step is already a whole period late (the step
+           debt: now against its due time, s_deadline, as "step late"
+           measures it) or presents are slow; never two frames in a row
+           (pace_skipped_last), the same frame again while it holds.
+           Without audio, as below.  No step or audio is dropped, only
+           presents */
+        {
+            const PaceSkip why = pace_late_skip(
+                s_pres.presentedFrame != s_pres.frame,
+                pace_skipped_last(s_pres.skipOpen, s_pres.skipFrame, s_pres.frame), s_pres.paceSlow,
+                ico_audio_sdl_active() != 0, now, s_deadline, period);
+
+            if (why != PACE_SKIP_NONE) {
+                s_pres.skipOpen = true;
+                s_pres.skipFrame = s_pres.frame;
+                if (why == PACE_SKIP_LATE) {
+                    s_pres.statSkipLate++;
+                } else {
+                    s_pres.statSkipSlow++;
+                }
+                break;
+            }
         }
         /* behind the deadline, or on a renderer slower than a vsync period
            per present (a software driver): one present per new frame, none
@@ -4737,7 +4755,7 @@ static void pace(int hz)
         const int ok = present_once(a, refresh, period);
         now = SDL_GetTicksNS();
         if (ok) {
-            s_pres.skippedLast = false;
+            s_pres.skipOpen = false;
         }
         if (!ok) {
             /* a movie on the output, or nothing closed yet */

@@ -28,8 +28,8 @@
  * line (ico_audio_sdl_log_summary) and the close; it never logs.  Latency:
  * a driver write lands at the next callback (at most a period), then plays
  * after the lead and the device's own buffer: about 25-30 ms at 10 ms
- * periods, constant.  The window reads the lead as the queue and a cushion
- * of 0 (ico_audio_sdl_queued_ms, ico_audio_sdl_cushion_ms).  A device that
+ * periods, constant.  It reports the lead as the queue and a cushion of 0
+ * (ico_audio_sdl_queued_ms, ico_audio_sdl_cushion_ms).  A device that
  * stops asking leaves the SPU2's time standing; audio_host.c's watchdog
  * then falls back to the sync path (ico_audio_sdl_fall_back).
  *
@@ -718,7 +718,7 @@ int ico_audio_sdl_queued_ms(void)
 
 int ico_audio_sdl_cushion_ms(void)
 {
-    /* the pull path keeps no cushion: 0, never low (pace_policy.h) */
+    /* the pull path keeps no cushion: 0 */
     return stream != NULL && pull_render == NULL ? cushion_frames() * 1000 / RATE : 0;
 }
 

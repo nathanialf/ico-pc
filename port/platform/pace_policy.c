@@ -72,13 +72,22 @@ bool pace_fifo_hold(uint64_t nowNs, uint64_t lastReturnNs, uint64_t refreshNs, u
     return lastReturnNs + k * refreshNs > deadlineNs;
 }
 
-bool pace_audio_skip(bool pastDeadline, bool newFrame, bool skippedLast, bool paceSlow,
-                     bool audioActive, int queuedMs, int cushionMs)
+PaceSkip pace_late_skip(bool newFrame, bool skippedLast, bool paceSlow, bool audioActive,
+                        uint64_t nowNs, uint64_t deadlineNs, uint64_t periodNs)
 {
-    /* less than half the cushion queued, in whole ms */
-    const bool audioLow = queuedMs >= 0 && 2 * queuedMs < cushionMs;
+    if (nowNs < deadlineNs || !newFrame || skippedLast || !audioActive) {
+        return PACE_SKIP_NONE;
+    }
+    /* a whole step period or more behind the grid */
+    if (periodNs > 0 && nowNs - deadlineNs >= periodNs) {
+        return PACE_SKIP_LATE;
+    }
+    return paceSlow ? PACE_SKIP_SLOW : PACE_SKIP_NONE;
+}
 
-    return pastDeadline && newFrame && !skippedLast && (paceSlow || audioLow) && audioActive;
+bool pace_skipped_last(bool skipOpen, uint32_t skippedFrame, uint32_t frame)
+{
+    return skipOpen && skippedFrame != frame;
 }
 
 uint64_t pace_next_present(uint64_t nextPresent, uint64_t startNs, uint64_t gap)

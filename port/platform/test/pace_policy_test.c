@@ -12,10 +12,13 @@
  * bound on the measured refresh, and the phase law's sign (the steps
  * follow a display that moves later or earlier, a sixteenth of a refresh
  * after its vblanks).
- * The timer path's audio skip (testAudioSkip*: never two in a row, only
- * when slow or the audio low, never without audio, never a frame already
- * presented, never before the deadline; the audio on the device's clock,
- * a cushion of 0, never low).
+ * The timer path's late-present skip (testLateSkip*: a whole period behind
+ * skips with no audio queue to read, less does not; slow presents skip past
+ * the deadline; never two frames in a row, the same frame again allowed;
+ * never without audio, never a frame already presented, never before the
+ * deadline; testLateSkipLoop: the window's loop under a fake clock, a 30
+ * frames a second game on 39 ms presents keeps real time with no resync and
+ * every other frame at least, the one-step rule fell behind).
  */
 #include <stdio.h>
 #include "pace_policy.h"
@@ -699,98 +702,228 @@ static void testIntervals(void)
     }
 }
 
-/* the audio skip: arguments in pace_audio_skip's order (pastDeadline,
-   newFrame, skippedLast, paceSlow, audioActive, queuedMs, cushionMs); a
-   cushion of 100 ms: low below 50 queued */
-static void testAudioSkipNeverTwice(void)
+/* the late-present skip: pace_late_skip's arguments (newFrame,
+   skippedLast, paceSlow, audioActive, now, deadline, period); times in ms
+   past a deadline at 100 ms */
+static PaceSkip skipAt(bool newFrame, bool skippedLast, bool slow, bool audio, uint64_t pastMs10)
 {
-    /* the frame after a skipped one is presented, slow or low */
-    CHECK(pace_audio_skip(true, true, false, true, true, 100, 100));
-    CHECK(!pace_audio_skip(true, true, true, true, true, 100, 100));
-    CHECK(!pace_audio_skip(true, true, true, false, true, 10, 100));
-    CHECK(!pace_audio_skip(true, true, true, true, true, 10, 100));
-    /* the window's loop: alternate frames past the deadline, slow, keep
-       every other one */
-    bool skippedLast = false;
-    int skips = 0;
-    for (int i = 0; i < 10; i++) {
-        if (pace_audio_skip(true, true, skippedLast, true, true, 10, 100)) {
-            skippedLast = true;
-            skips++;
-        } else {
-            skippedLast = false; /* presented */
+    const uint64_t deadline = 100 * MS;
+
+    return pace_late_skip(newFrame, skippedLast, slow, audio, deadline + pastMs10 * MS / 10,
+                          deadline, PERIOD);
+}
+
+/* late: the next step a whole period (16.683 ms) or more behind its due
+   time skips without slow presents and whatever the audio queue holds (the
+   device's clock keeps none); less than a period behind does not */
+static void testLateSkipLate(void)
+{
+    CHECK(skipAt(true, false, false, true, 167) == PACE_SKIP_LATE);
+    CHECK(skipAt(true, false, false, true, 500) == PACE_SKIP_LATE);
+    CHECK(skipAt(true, false, false, true, 166) == PACE_SKIP_NONE);
+    CHECK(skipAt(true, false, false, true, 0) == PACE_SKIP_NONE);
+    /* exactly a period behind is late */
+    CHECK(pace_late_skip(true, false, false, true, 100 * MS + PERIOD, 100 * MS, PERIOD) ==
+          PACE_SKIP_LATE);
+    CHECK(pace_late_skip(true, false, false, true, 100 * MS + PERIOD - 1, 100 * MS, PERIOD) ==
+          PACE_SKIP_NONE);
+    /* late and slow: named late */
+    CHECK(skipAt(true, false, true, true, 200) == PACE_SKIP_LATE);
+    /* no period: never late */
+    CHECK(pace_late_skip(true, false, false, true, 500 * MS, 100 * MS, 0) == PACE_SKIP_NONE);
+}
+
+/* slow: past the deadline by less than a period, presents slow */
+static void testLateSkipSlow(void)
+{
+    CHECK(skipAt(true, false, true, true, 0) == PACE_SKIP_SLOW);
+    CHECK(skipAt(true, false, true, true, 100) == PACE_SKIP_SLOW);
+    CHECK(skipAt(true, false, false, true, 100) == PACE_SKIP_NONE);
+}
+
+/* never two frames in a row; the same frame again is not two */
+static void testLateSkipNeverTwice(void)
+{
+    /* the frame after a skipped one is presented, late or slow */
+    CHECK(skipAt(true, true, true, true, 500) == PACE_SKIP_NONE);
+    CHECK(skipAt(true, true, false, true, 500) == PACE_SKIP_NONE);
+    CHECK(skipAt(true, true, true, true, 0) == PACE_SKIP_NONE);
+    /* pace_skipped_last: frame 7 skipped, no present since */
+    CHECK(!pace_skipped_last(false, 7, 7));
+    CHECK(!pace_skipped_last(false, 7, 8));
+    CHECK(!pace_skipped_last(true, 7, 7)); /* frame 7 still the newest: it may stay skipped */
+    CHECK(pace_skipped_last(true, 7, 8));  /* frame 8 closed: it is presented */
+    /* a new frame every step, always late: every other one presented */
+    {
+        bool open = false;
+        uint32_t skipped = 0;
+        int skips = 0;
+
+        for (uint32_t f = 1; f <= 10; f++) {
+            if (skipAt(true, pace_skipped_last(open, skipped, f), false, true, 400) !=
+                PACE_SKIP_NONE) {
+                open = true;
+                skipped = f;
+                skips++;
+            } else {
+                open = false; /* presented */
+            }
         }
+        CHECK(skips == 5);
     }
-    CHECK(skips == 5);
 }
 
-static void testAudioSkipSlowOrLow(void)
+static void testLateSkipNoAudio(void)
 {
-    /* neither slow nor low: no skip */
-    CHECK(!pace_audio_skip(true, true, false, false, true, 100, 100));
-    CHECK(!pace_audio_skip(true, true, false, false, true, 50, 100));
-    /* slow, the audio full */
-    CHECK(pace_audio_skip(true, true, false, true, true, 100, 100));
-    /* low: under half the cushion, in whole ms (2 * 49 < 100; 2 * 50 not) */
-    CHECK(pace_audio_skip(true, true, false, false, true, 49, 100));
-    CHECK(pace_audio_skip(true, true, false, false, true, 0, 100));
-    CHECK(pace_audio_skip(true, true, false, false, true, 49, 99));
-    CHECK(!pace_audio_skip(true, true, false, false, true, 50, 99));
-    CHECK(!pace_audio_skip(true, true, false, false, true, 50, 100));
-    /* odd cushion: 2 * 25 < 51 is low, 2 * 26 not */
-    CHECK(pace_audio_skip(true, true, false, false, true, 25, 51));
-    CHECK(!pace_audio_skip(true, true, false, false, true, 26, 51));
-    /* no stream (-1) is never low; no cushion (0) is never low */
-    CHECK(!pace_audio_skip(true, true, false, false, true, -1, 100));
-    CHECK(!pace_audio_skip(true, true, false, false, true, 0, 0));
+    /* without the audio playing, late or slow, every new frame is presented */
+    CHECK(skipAt(true, false, true, false, 500) == PACE_SKIP_NONE);
+    CHECK(skipAt(true, false, false, false, 500) == PACE_SKIP_NONE);
+    CHECK(skipAt(true, false, true, false, 0) == PACE_SKIP_NONE);
 }
 
-/* the audio on the device's clock (out_sdl.c, the pull path): a cushion of
-   0 with any lead queued is never low, so only slow presents skip */
-static void testAudioSkipPullOutput(void)
-{
-    for (int q = 0; q <= 50; q += 10) {
-        CHECK(!pace_audio_skip(true, true, false, false, true, q, 0));
-        CHECK(pace_audio_skip(true, true, false, true, true, q, 0));
-        CHECK(!pace_audio_skip(true, true, true, true, true, q, 0));
-    }
-    CHECK(!pace_audio_skip(false, true, false, true, true, 10, 0));
-}
-
-static void testAudioSkipNoAudio(void)
-{
-    /* without the audio playing, slow or low, every new frame is presented */
-    CHECK(!pace_audio_skip(true, true, false, true, false, 100, 100));
-    CHECK(!pace_audio_skip(true, true, false, false, false, 10, 100));
-    CHECK(!pace_audio_skip(true, true, false, true, false, -1, 0));
-}
-
-static void testAudioSkipPresentedFrame(void)
+static void testLateSkipPresentedFrame(void)
 {
     /* a frame already presented is never skipped here (the paths below
        leave it) */
-    CHECK(!pace_audio_skip(true, false, false, true, true, 100, 100));
-    CHECK(!pace_audio_skip(true, false, false, false, true, 10, 100));
-    CHECK(!pace_audio_skip(true, false, false, true, true, 10, 100));
+    CHECK(skipAt(false, false, true, true, 500) == PACE_SKIP_NONE);
+    CHECK(skipAt(false, false, false, true, 500) == PACE_SKIP_NONE);
+    CHECK(skipAt(false, false, true, true, 0) == PACE_SKIP_NONE);
 }
 
-static void testAudioSkipBeforeDeadline(void)
+static void testLateSkipBeforeDeadline(void)
 {
-    /* before the deadline a new frame is presented, slow or low */
-    CHECK(!pace_audio_skip(false, true, false, true, true, 100, 100));
-    CHECK(!pace_audio_skip(false, true, false, false, true, 10, 100));
-    CHECK(!pace_audio_skip(false, true, false, true, true, 10, 100));
+    /* before the deadline a new frame is presented, slow or not */
+    CHECK(pace_late_skip(true, false, true, true, 99 * MS, 100 * MS, PERIOD) == PACE_SKIP_NONE);
+    CHECK(pace_late_skip(true, false, false, true, 99 * MS, 100 * MS, PERIOD) == PACE_SKIP_NONE);
+    CHECK(pace_late_skip(true, false, true, true, 0, 100 * MS, PERIOD) == PACE_SKIP_NONE);
+}
+
+/* window_host.c pace's timer path under a fake clock (a cap of 60 in
+   mailbox mode on a 120 Hz display, no lock): `steps` simulation steps of
+   stepNs each, a game frame closing every `every` steps, each present
+   costing presentNs; the lag dropped past 100 ms (RESYNC_NS).  The rule:
+   pace_late_skip with pace_skipped_last (SKIP_RULE_NOW), with a skip flag
+   only a present clears, so a frame stays skipped for one step at most
+   (SKIP_RULE_ONE_STEP, the rule before), or without the late arm (period
+   0: SKIP_RULE_NO_LATE, the slow arm alone, as with the audio's arm inert
+   on the device's clock) */
+enum { SKIP_RULE_NOW, SKIP_RULE_ONE_STEP, SKIP_RULE_NO_LATE };
+
+typedef struct SkipRun {
+    unsigned frames, presents, late, slow, resyncs;
+    unsigned unshownRun; /* the most frames in a row never presented */
+} SkipRun;
+
+static SkipRun skipLoop(unsigned steps, unsigned every, uint64_t stepNs, uint64_t presentNs,
+                        int rule)
+{
+    const uint64_t refresh = 8333333ull, gap = 16666667ull, resyncNs = 100 * MS;
+    PaceHist h = {0};
+    SkipRun r = {0};
+    uint64_t t = 0, deadline = 0, next = 0;
+    uint32_t frame = 0, presented = 0, skipFrame = 0;
+    bool skipOpen = false, slow = false;
+
+    for (unsigned k = 0; k < steps; k++) {
+        t += stepNs;
+        if (k % every == 0) {
+            frame++;
+            r.frames++;
+        }
+        deadline += PERIOD;
+        for (;;) {
+            const bool newFrame = presented != frame;
+            const bool last = rule == SKIP_RULE_ONE_STEP
+                                  ? skipOpen
+                                  : pace_skipped_last(skipOpen, skipFrame, frame);
+            const PaceSkip why = pace_late_skip(newFrame, last, slow, true, t, deadline,
+                                                rule == SKIP_RULE_NO_LATE ? 0 : PERIOD);
+
+            if (why != PACE_SKIP_NONE) {
+                skipOpen = true;
+                skipFrame = frame;
+                r.late += why == PACE_SKIP_LATE;
+                r.slow += why == PACE_SKIP_SLOW;
+                break;
+            }
+            if (!newFrame && (t >= deadline || slow || t + presentNs > deadline)) {
+                t = t < deadline ? deadline : t;
+                break;
+            }
+            if (next != 0 && t < next) {
+                if (next >= deadline) {
+                    t = t < deadline ? deadline : t;
+                    break;
+                }
+                t = next;
+                continue;
+            }
+            {
+                const uint64_t start = t;
+
+                t += presentNs;
+                slow = pace_slow_present(&h, presentNs, refresh, PERIOD, false);
+                if (newFrame && frame - presented - 1 > r.unshownRun) {
+                    r.unshownRun = frame - presented - 1;
+                }
+                presented = frame;
+                skipOpen = false;
+                r.presents++;
+                next = pace_next_present(next, start, gap);
+            }
+        }
+        if (t > deadline && t - deadline > resyncNs) {
+            r.resyncs++;
+            deadline = t;
+        }
+    }
+    return r;
+}
+
+/* the loop: a 30 frames a second game on a renderer whose presents take
+   39 ms (a GPU-bound phone at 2x: two steps and a present are 44 ms against
+   33.4) keeps real time by leaving frames unpresented, never two in a row;
+   the rule that skipped a frame for one step only presented every frame
+   and fell behind until the pacer dropped the lag.  At 60 frames a second
+   with 20 ms presents (not slow) the late arm alone keeps real time, and
+   without it the game falls behind.  A fast renderer never skips. */
+static void testLateSkipLoop(void)
+{
+    const uint64_t step = 2400000ull;
+    SkipRun r = skipLoop(600, 2, step, 39 * MS, SKIP_RULE_NOW);
+    SkipRun old = skipLoop(600, 2, step, 39 * MS, SKIP_RULE_ONE_STEP);
+
+    CHECK(r.resyncs == 0);
+    CHECK(r.unshownRun == 1);
+    CHECK(r.presents < r.frames && r.presents >= r.frames / 2);
+    CHECK(r.late > 0 && r.slow > 0);
+    CHECK(old.presents == old.frames && old.resyncs > 0);
+    printf("pace_policy_test: 30 fps, 39 ms presents: %u of %u frames presented, %u late and %u "
+           "slow skips, %u resyncs (skipped for one step only: %u presented, %u resyncs)\n",
+           r.presents, r.frames, r.late, r.slow, r.resyncs, old.presents, old.resyncs);
+
+    r = skipLoop(600, 1, step, 20 * MS, SKIP_RULE_NOW);
+    old = skipLoop(600, 1, step, 20 * MS, SKIP_RULE_NO_LATE);
+    CHECK(r.resyncs == 0 && r.unshownRun == 1 && r.slow == 0 && r.late > 0);
+    CHECK(old.resyncs > 0 && old.presents == old.frames);
+    printf("pace_policy_test: 60 fps, 20 ms presents: %u of %u frames presented, %u late skips, "
+           "%u resyncs (without the late arm: %u presented, %u resyncs)\n",
+           r.presents, r.frames, r.late, r.resyncs, old.presents, old.resyncs);
+
+    r = skipLoop(600, 2, step, 5 * MS, SKIP_RULE_NOW);
+    CHECK(r.late == 0 && r.slow == 0 && r.resyncs == 0 && r.unshownRun == 0);
 }
 
 int main(void)
 {
     PaceHist h = {0};
-    testAudioSkipNeverTwice();
-    testAudioSkipSlowOrLow();
-    testAudioSkipPullOutput();
-    testAudioSkipNoAudio();
-    testAudioSkipPresentedFrame();
-    testAudioSkipBeforeDeadline();
+    testLateSkipLate();
+    testLateSkipSlow();
+    testLateSkipNeverTwice();
+    testLateSkipNoAudio();
+    testLateSkipPresentedFrame();
+    testLateSkipBeforeDeadline();
+    testLateSkipLoop();
     testLockPause();
     testIntervals();
     testFirstPresentPause();

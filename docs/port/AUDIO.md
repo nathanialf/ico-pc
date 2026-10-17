@@ -690,12 +690,10 @@ two ways, the pull path on the device's clock and the push on the game's
 - `ico_audio_sdl_pause` stops the device while the app is in the background (Android) and clears
   the queue on resume, so no stale audio plays (`port/platform/window_lifecycle.c`; the loop is
   paused by the same lifecycle steps, so the driver stops too).
-- The window reads the queue once per vsync it paces (`ico_audio_sdl_active`,
-  `ico_audio_sdl_queued_ms`, `ico_audio_sdl_cushion_ms`): with less than half the cushion queued
-  the audio is about to run dry, one of the two conditions under which the timer path leaves a
-  late new frame unpresented ([DISPLAY.md](DISPLAY.md#pacing); `port/platform/window_host.c`
-  (`pace`)). The pull path reports its lead as the queue and a cushion of 0, which is never low,
-  so there only slow presents skip (`port/platform/pace_policy.h` (`pace_audio_skip`)).
+- The window's late-present skip runs only while a stream is open (`ico_audio_sdl_active`); it
+  judges the loop's own lateness and the presents' cost, not the queue ([DISPLAY.md](DISPLAY.md#pacing);
+  `port/platform/pace_policy.h` (`pace_late_skip`)). `ico_audio_sdl_queued_ms` and
+  `ico_audio_sdl_cushion_ms` report the queue and the cushion (the pull path: its lead and 0).
 
 ### The pull path
 

@@ -407,26 +407,46 @@ double pace_lock_rate_ratio(PaceLock *L);
 bool pace_fifo_hold(uint64_t nowNs, uint64_t lastReturnNs, uint64_t refreshNs, uint64_t deadlineNs,
                     bool frameShown, bool frameHeld);
 
-/* The timer path's audio skip: whether the window leaves a new frame
+/* Why the timer path left a new frame unpresented (pace_late_skip). */
+typedef enum PaceSkip {
+    PACE_SKIP_NONE = 0,
+    PACE_SKIP_LATE, /* the simulation a whole step period or more behind its grid */
+    PACE_SKIP_SLOW  /* presents slow (pace_slow_present) */
+} PaceSkip;
+
+/* The timer path's late-present skip: whether the window leaves a new frame
  * unpresented and runs the next step at once (the next present shows the
- * newer frame).  Each simulation step queues one vsync of audio, so a step
- * held back by presents is audio the device plays out without replacement.
- * True only when all hold: the deadline has passed (pastDeadline), the frame
- * is not presented yet (newFrame), the last new frame was not skipped
- * (skippedLast: never two in a row, so the picture keeps at least every other
- * frame), the audio plays (audioActive), and either presents are slow
- * (paceSlow, pace_slow_present) or the audio is about to run dry.  The audio
- * is low when queuedMs >= 0 (-1: no stream) and 2 * queuedMs < cushionMs, on
- * the whole milliseconds the audio reports (audio_host.h
- * ico_audio_sdl_queued_ms, ico_audio_sdl_cushion_ms; each truncated, not
- * rounded).  A cushion of 0 is never low: the audio on the device's clock
- * (out_sdl.c, the pull path) keeps no cushion and reports 0, since its
- * device renders what it plays whatever the steps do, so there only slow
- * presents skip.  A single late present on a renderer that keeps up, with
- * the audio full, never skips (paceSlow needs three slow presents in a
- * row).  No step or audio is dropped, only that present. */
-bool pace_audio_skip(bool pastDeadline, bool newFrame, bool skippedLast, bool paceSlow,
-                     bool audioActive, int queuedMs, int cushionMs);
+ * newer frame), so the simulation catches up with real time instead of
+ * falling behind until the pacer drops the lag (a resync).  A present that
+ * holds the next step back keeps the game below real time; on a renderer
+ * that cannot present every frame in time (a GPU-bound phone at 2x) that is
+ * the game in slow motion with a jump at every resync.  Not PACE_SKIP_NONE
+ * only when all hold: the next step's due time has passed (nowNs >=
+ * deadlineNs), the frame is not presented yet (newFrame), the frame before
+ * it was presented (skippedLast false, pace_skipped_last: never two frames
+ * in a row, so the picture keeps at least every other frame), the audio
+ * plays (audioActive: without a sound device every new frame is
+ * presented), and either the simulation is a whole step period or more
+ * behind (nowNs - deadlineNs >= periodNs: PACE_SKIP_LATE, the debt the
+ * window's "step late" figure measures at the step's start) or presents are
+ * slow (paceSlow, pace_slow_present: PACE_SKIP_SLOW).  The late arm comes
+ * from the loop's own lateness, not the audio queue: on the device's clock
+ * the audio keeps no queue that a late step drains.  The same frame may be
+ * left unpresented again at the next steps while the condition holds (a
+ * game at 30 frames a second closes a frame every second step; skipping it
+ * at one step and presenting it at the next saves nothing), until a newer
+ * frame closes, which is then presented.  A single late present on a
+ * renderer that keeps up (a FIFO return just past the deadline, less than a
+ * period behind, presents not slow) never skips.  No step or audio is
+ * dropped, only presents. */
+PaceSkip pace_late_skip(bool newFrame, bool skippedLast, bool paceSlow, bool audioActive,
+                        uint64_t nowNs, uint64_t deadlineNs, uint64_t periodNs);
+
+/* pace_late_skip's skippedLast: a frame was left unpresented and none
+ * presented since (skipOpen; a present closes it), and it was an older frame
+ * than the one now newest (skippedFrame != frame).  The same frame skipped
+ * again is not "two in a row". */
+bool pace_skipped_last(bool skipOpen, uint32_t skippedFrame, uint32_t frame);
 
 /* The limiter's grid: when the present after one that started at startNs is
  * due.  nextPresent is when that one was due (0: none yet).  The result is
