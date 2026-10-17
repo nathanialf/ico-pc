@@ -905,7 +905,7 @@ Once a start, after the device line, the self-tests and the window line, the win
 with what a report usually asks:
 
 ```
-ico_pc: summary: version vX.Y.Z (commit 1a2b3c4d); Windows x64; GPU NVIDIA GeForce GTX 1060 (device 10de:1c03; driver NVIDIA 566.36, version 566.36.0.0); Vulkan; Enhanced preset, resolution ..., aspect ..., framerate ...; blend exact (interlock) (self-test: ...); index values dense (marks in the stream); fog inplace (self-test: ...); VU shaders plain and extended; pipelines the start-up set; index values up to 4294967295; robust access off; controller Xbox Series X Controller (DirectInput scan on); disc SCES_507.60; user profile
+ico_pc: summary: version vX.Y.Z (commit 1a2b3c4d); Windows x64; GPU NVIDIA GeForce GTX 1060 (device 10de:1c03; driver NVIDIA 566.36, version 566.36.0.0); Vulkan; Enhanced preset, resolution ..., aspect ..., framerate ...; blend exact (interlock) (self-test: ...); index values dense (marks in the stream); fog inplace (self-test: ...); VU shaders plain and extended; VU pre-pass on (self-test: ok); pipelines the start-up set; index values up to 4294967295; robust access off; controller Xbox Series X Controller (DirectInput scan on); disc SCES_507.60; user profile
 ```
 
 (`port/platform/window_host.c` (`log_summary`); `port/render/rd_core.c` (`rd_summary_text`, from

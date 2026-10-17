@@ -291,6 +291,14 @@ program under an environment switch ([Environment switches](#environment-switche
   targets without the attachment read where it is off, the self-test again at a new scene size;
   its log lines matched plain, sabotaged, under the fake Adreno, with each `ICO_RD_BLEND` and
   without a destination read (`rd_blend_selftest*`).
+- `rd_vuprepass_selftest_test.c` with `rd_vuprepass_selftest.cmake`: the VU vertex pre-pass's
+  start-up self-test in the extended variant (Enhanced, 16:9, scale 2) and the plain one
+  (Original at 4:3 and 1x): the pre-pass left on (it passes on lavapipe), turned off when its
+  first command's records are drawn a texel off (`ICO_RD_VU_PREPASS_SABOTAGE=1`) or not tried when
+  it is off by the settings (`ICO_RD_VU_PREPASS=0`); the summary text, the reachable set made
+  after it (the pre-pass's keys or the programs'), SCENE left to its clear; its log line matched
+  (`rd_vuprepass_selftest`, `rd_vuprepass_selftest_plain`, `rd_vuprepass_selftest_sabotage`,
+  `rd_vuprepass_selftest_off`).
 - `rd_crt_test.c`: the CRT filter's options and its shader (`rd_crt`, `rd_crt_fixed`).
 - `rd_debug_test.c`: `debug.c` on the host, recorded (`rd_debug`).
 - `rd_filter_test.c`: the model viewer's draw filter on synthetic keys (`rd_filter`).
@@ -528,8 +536,9 @@ The script tests under `port/render/test/` run the tool or a test program and ch
 `rd_replay_tool_loss_bisect.cmake`, `rd_replay_tool_pass_split.cmake`,
 `rd_replay_tool_pass_merge.cmake` and `rd_replay_tool_snap_swap.cmake` on the dump `rd_pixel` leaves behind, `rd_depth_copy_dump.cmake` on a player dump with the depth fog (`ICO_FOG_DUMP`), and
 `rd_fog_selftest.cmake`, which matches the `fog: depth path` line of the self-test, and
-`rd_blend_selftest.cmake`, which matches the `blend: ... (self-test: ...)` line of the blend's
-(`port/render/CMakeLists.txt`). The ctest `rd_replay_tool` renders `rd_pixel`'s dump with
+`rd_blend_selftest.cmake`, which matches the `blend: ... (self-test: ...)` line of the blend's,
+and `rd_vuprepass_selftest.cmake`, which matches the `VU pre-pass: on|off (self-test ...)` line
+of the vertex pre-pass's (`port/render/CMakeLists.txt`). The ctest `rd_replay_tool` renders `rd_pixel`'s dump with
 `--present 640x480`; it requires `rd_pixel` to have run first (`FIXTURES_REQUIRED rd_dump`).
 
 ## Tests that need the disc
@@ -584,6 +593,7 @@ switches the tests and their registrations use:
 | `ICO_RD_DEPTH_COPY` | `rd_fog_path.c` | 0 samples the depth in place, 1 copies it |
 | `ICO_RD_FOG_SABOTAGE` | `rd_fog_path.c` | makes named paths fail the self-test (`rd_fog_selftest_fallback`) |
 | `ICO_RD_BLEND_SABOTAGE` | `rd_blend_selftest.c` | makes named blend modes read white in the blend's self-test (`rd_blend_selftest_sabotage*`) |
+| `ICO_RD_VU_PREPASS_SABOTAGE` | `rd_vuprepass_selftest.c`, `rd_replay_vu.c` | 1: the vertex pre-pass's self-test draws its first command's records a texel off, so it fails and the pre-pass is turned off (`rd_vuprepass_selftest_sabotage`) |
 | `ICO_RD_VU_PLAIN` | `rd_pipeline.c` | 1: every VU draw with the VU vertex shaders' plain variants, as on a device of the table (`kVuPlainOnly`); the replay tool's pictures at a wide aspect then show the plain-only picture ([RENDER.md](RENDER.md#the-vu-shader-variants)) |
 | `ICO_RD_VU_EXTENDED` | `rd_pipeline.c` | 1: the extended variants whatever the device table or `ICO_RD_VU_PLAIN` says |
 | `ICO_RD_VU_PREPASS` | `rd_replay_vu.c` | 0: no VU vertex pre-pass, every VU draw the old way (`[dev] vu_prepass = false`); the tests switch it with `rd__set_vu_prepass` ([RENDER.md](RENDER.md#the-vertex-pre-pass)) |

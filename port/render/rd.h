@@ -483,6 +483,13 @@ void rd_set_vu_plain_only(const char *reason);
 /* Whether the run draws every VU draw with the plain variants (after
  * rd_init), and why (NULL when it does not) */
 const char *rd_vu_plain_only(void);
+/* Before rd_init: the run draws without the VU vertex pre-pass
+ * (docs/port/RENDER.md, "The vertex pre-pass"), reason saying why for the
+ * log ("for this start: the last start ended while the graphics driver
+ * compiled its pipelines"); NULL clears it.  The host calls it after a
+ * start that ended inside the pre-pass's compile and in a restart whose
+ * step draws without it (window_host.c, startup_retry.h). */
+void rd_set_vu_prepass_off(const char *reason);
 const RdSettings *rd_get_settings(void);
 /* The scene's scale in force (rd_present.c
  * rd__apply_display, from the settings applied at the last rd_begin_frame):
@@ -613,8 +620,10 @@ bool rd_fog_selftest(void);
  * index values dense (marks in the stream); fog <path> (self-test: ...);
  * VU shaders plain only (issue 107)" or "VU shaders plain and extended" (the
  * policy rd_init chose, rd__vu_policy_init), and ", pass split every N" when
- * on, then "; pipelines the start-up set" or "; pipelines on first use (no
- * start-up set)" (rd_pipelines_lazy). */
+ * on, then "; VU pre-pass on (self-test: ok)" or "off (self-test: <reason>)"
+ * or "off <why> (self-test not run)" (rd_vuprepass_selftest), then ";
+ * pipelines the start-up set" or "; pipelines on first use (no start-up
+ * set)" (rd_pipelines_lazy). */
 void rd_summary_text(char *out, size_t size);
 /* The exact blend's self-test (rd_blend_selftest.c): a frame of its own
  * (never recorded, never presented) draws on SCENE at its real size and
@@ -639,6 +648,23 @@ void rd_summary_text(char *out, size_t size);
  * chosen mode's); after that it runs again whenever SCENE is made at a new
  * size.  Waits for the GPU.  Returns whether the mode in force passed. */
 bool rd_blend_selftest(void);
+/* The VU vertex pre-pass's self-test (rd_vuprepass_selftest.c): a frame of
+ * its own (never recorded, never presented) draws three meshes made for it
+ * (a prelit, a lit and a skinned strip) on SCENE at its real size and
+ * scale, without MSAA, once through the programs' own vertex shaders and
+ * once through the pre-pass, in the VU shader variant the settings draw
+ * with, and compares the two pictures byte for byte.  A difference, a
+ * pipeline the pre-pass could not make (its commands drawn the old way) or
+ * a device error turns the pre-pass off for the run; one log line, "VU
+ * pre-pass: on (self-test: ...)" or "VU pre-pass: off (self-test:
+ * <reason>)", says which, and the summary line carries it.  Nothing runs
+ * when the pre-pass is already off (the settings, the device, the host).
+ * ICO_RD_VU_PREPASS_SABOTAGE=1 (tests) draws the pre-pass's first command's
+ * records one texel off.  The window calls it after rd_blend_selftest and
+ * before rd_precreate_pipelines (the set made is the pre-pass's or the
+ * programs').  Waits for the GPU.  Returns false when it turned the
+ * pre-pass off. */
+bool rd_vuprepass_selftest(void);
 /* The longest frame replay (CPU time of recording, pipeline creation,
  * submit and present) in ms since the last reset, and *count the replays
  * in that time; reset != 0 starts a new period.  For the window's 10 s

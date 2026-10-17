@@ -1325,6 +1325,10 @@ bool rd__vu_policy_init(const RhiLimits *lim);
  *                     RGBA32_UINT targets, no depth, points, no blend */
 void rd__vu_prepass_init(const RhiLimits *lim);
 void rd__set_vu_prepass(bool on);
+/* rd_vuprepass_selftest's sabotage (ICO_RD_VU_PREPASS_SABOTAGE): while on,
+ * the pre-pass draws its first command's records one texel past where the
+ * triangle stage reads them */
+void rd__vu_prepass_sabotage(bool on);
 RdPipeKeyInt rd__vu_pre_key(uint8_t preVs);
 bool rd__vu_ext_reachable(void);
 uint8_t rd__vu_draw_ext(uint32_t drawFlags);
@@ -1999,6 +2003,10 @@ void rd__log_once(int bit, const char *fmt, ...);
  * where their log lines are, "" until then. */
 extern char g_rdSumBlend[288];
 extern char g_rdSumFog[224];
+/* ... and the VU vertex pre-pass's (rd_vuprepass_selftest): "on
+ * (self-test: ok)", "off (self-test: <reason>)", "off <why> (self-test not
+ * run)" */
+extern char g_rdSumPrepass[288];
 /* A recorded command the replay does not model (RDC_WORLD_PRIMS, or a post
  * kind recorded as a stub): counted, and skipped with one log line for the
  * run.  With rd__set_not_implemented_fatal(true), which the render tests set,

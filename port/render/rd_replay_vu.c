@@ -732,6 +732,14 @@ static void vuPreRecord(const VuPre *e, IcoVuCB *v)
 /* the pre-pass's draws' DrawCB */
 static IcoDrawCB s_preDrawCB;
 
+/* rd__vu_prepass_sabotage: the first command's records one texel off */
+static bool s_preSabotage;
+
+void rd__vu_prepass_sabotage(bool on)
+{
+    s_preSabotage = on;
+}
+
 void rd__vu_prepass(const RdFrame *f, int keep)
 {
     s_preN = s_preAt = 0;
@@ -870,6 +878,9 @@ void rd__vu_prepass(const RdFrame *f, int keep)
         }
         IcoVuCB vcb = e->src.vcb;
         vuPreRecord(e, &vcb);
+        if (s_preSabotage && draws == 0) {
+            vcb.rec[0] += 1u; /* rd_vuprepass_selftest's sabotage: written a texel on */
+        }
         const RhiBindGroup g1 = vuGroup(e->src.streamBuf, e->src.streamBufSize, e->src.streamOff,
                                         e->src.streamSize, &vcb.draw[0]);
         const uint64_t vOff = ringCopy(&vcb, sizeof(vcb), ua);
@@ -920,12 +931,22 @@ void rd__vu_prepass_shutdown(void)
     s_preReplay = 0;
 }
 
+/* rd_set_vu_prepass_off's reason ("" none) */
+static char s_preHostWhy[128];
+
+void rd_set_vu_prepass_off(const char *reason)
+{
+    snprintf(s_preHostWhy, sizeof(s_preHostWhy), "%s", reason != NULL ? reason : "");
+}
+
 void rd__vu_prepass_init(const RhiLimits *lim)
 {
     g_rd.vuPrepassWhy[0] = '\0';
     const char *env = getenv("ICO_RD_VU_PREPASS");
     const uint32_t bytes = lim ? lim->colorBytesPerPixel : 0u;
-    if (env && strcmp(env, "0") == 0) {
+    if (s_preHostWhy[0] != '\0') {
+        snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy), "%s", s_preHostWhy);
+    } else if (env && strcmp(env, "0") == 0) {
         snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
                  "by the settings ([dev] vu_prepass = false, ICO_RD_VU_PREPASS=0)");
     } else if (bytes != 0u && bytes < ICO_VU_REC_BYTES) {

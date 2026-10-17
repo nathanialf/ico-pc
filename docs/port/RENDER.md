@@ -18,6 +18,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_mesh.h`, `rd_mesh.c` | the VU mesh path (VU1_PROGRAMS.md) |
 | `port/render/rd_replay.c` | a frame onto the RHI: every command's replay |
 | `port/render/rd_replay_vu.c`, `rd_replay.h` | the replay's VU draws and the vertex pre-pass; what they share with `rd_replay.c` (the replay's state, a draw's setup, its helpers) |
+| `port/render/rd_vuprepass_selftest.c` | the vertex pre-pass's start-up self-test |
 | `port/render/rd_upload.c` | the upload ring and what a replay uploads before its first pass |
 | `port/render/rd_pipeline.c` | pipeline keys from the state block, the pipeline cache, the reachable set |
 | `port/render/rd_dst_read.c` | the exact GS blend read from the destination in the fragment shader |
@@ -951,6 +952,41 @@ bytes a vertex in 3 RGBA32_UINT targets; [dev] vu_prepass = false draws the old 
 pre-pass: off by the settings ([dev] vu_prepass = false, ICO_RD_VU_PREPASS=0): ...` or `off on
 this device (its colour targets hold 32 bytes a pixel together, the record 48: an Apple A9 or A10
 GPU): ...` (`port/render/rd_replay_vu.c` (`rd__vu_prepass_init`)).
+
+**The self-test.** The pre-pass's pipelines are shapes no other draw of the port has (a vertex
+shader writing `PointSize` into a point list, flat `uint4` varyings into three `RGBA32_UINT`
+targets, a texture-to-buffer copy a vertex shader reads in the same list), so a driver that cannot
+make one would leave every VU pipeline to be made on first use (the start-up set holds the
+triangle stage's keys, not the programs'), and one that miscompiles them would draw the scenery
+wrong with no error. `rd_vuprepass_selftest` checks it on the device at start, after the blend's
+self-test and before the start-up set (`port/platform/window_host.c`; in a run without the set,
+after `rd_pipelines_lazy`): a frame of its own, never recorded, on SCENE at its real size and
+scale without MSAA, draws three meshes made for it (`rd_create_vu_mesh`: a prelit strip through
+normal_c code 32, a lit one through normal_l code 32 and a skinned one through cluster code 20
+with two bones, 12 vertices and 8 triangles each, overlapping at other depths, Z GEQUAL with Z
+write, untextured) with `vu1_test`'s scene in VU memory, once with the pre-pass off (the programs'
+entries, the reference) and once with it on, in the VU shader variant the settings draw with, and
+reads the block back after each. It passes when the replay with the pre-pass drew every command
+through it (`RdPerfRecord.vuPrePasses` 1, `vuPreDraws` 3, `vuPreFallbacks` 0) and the two blocks
+are equal byte for byte. A difference, a pipeline the pre-pass could not make or a device error
+turns the pre-pass off for the run, so the start-up set made next holds the programs' keys:
+
+```
+rd: VU pre-pass: on (self-test: prelit, lit and skin byte for byte, 36 vertices in 3 pre-pass draws, <n> of <m> pixels drawn) on SCENE <w>x<h> at <tw>x<th> texels in <t> ms
+rd: VU pre-pass: off (self-test: the pictures differ: <n> of <m> bytes, the first at texel <x>,<y>: <r>,<g>,<b>,<a> want <r>,<g>,<b>,<a>) on SCENE ...
+rd: VU pre-pass: off (self-test: a pipeline could not be made (<d> of 3 commands through the pre-pass, <f> draws the old way)) on SCENE ...
+rd: VU pre-pass: off (self-test: the device failed in the replay with the pre-pass) on SCENE ...
+```
+
+A start whose pre-pass is already off (the settings, the device) runs nothing and logs `rd: VU pre-pass: off (self-test not run)`; a frame
+it could not build, or one in which neither replay drew the meshes, leaves the pre-pass on (`on
+(self-test not run: ...)`, `on (self-test inconclusive: ...)`). The summary line carries the
+verdict (`VU pre-pass on (self-test: ok)`, `VU pre-pass off (self-test: <reason>)`,
+[PLATFORM.md](PLATFORM.md#the-summary-line)). It tests the variant the start draws with:
+a later change of settings that moves the draws to the other variant is not tested again
+(`port/render/rd_vuprepass_selftest.c`; `port/render/rd.h` (`rd_vuprepass_selftest`);
+`ICO_RD_VU_PREPASS_SABOTAGE=1` draws the first command's records a texel off,
+[TESTING.md](TESTING.md#environment-switches)).
 
 **Why the picture is the same.** The pre-pass entry calls the program's vertex function, the same
 source with the same `precise` operations, so each recorded word is the value the old entry

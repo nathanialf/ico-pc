@@ -1801,8 +1801,10 @@ open_window:
            a further end names the pipeline; no further step follows */
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_LAZY);
         rd_pipelines_lazy(why);
-        /* the blend checked on this GPU (rd.h rd_blend_selftest) */
+        /* the blend checked on this GPU (rd.h rd_blend_selftest), then the
+           VU vertex pre-pass (rd_vuprepass_selftest) */
         rd_blend_selftest();
+        rd_vuprepass_selftest();
     } else {
         /* the note of each pipeline in the file while the set is created,
            the file deleted when it is done */
@@ -1811,6 +1813,12 @@ open_window:
            set is made so the set is the chosen way's; logged ("blend: ...
            (self-test: ...)"). A crash in it is noted as the set's would be */
         rd_blend_selftest();
+        /* whether the VU vertex pre-pass draws right on this GPU, tried
+           before the set so the set holds the pre-pass's keys or the
+           programs' ("VU pre-pass: on|off (self-test: ...)"); a crash in
+           it is noted as the set's would be (its pipeline's " pre" or
+           vu_tri note: startup_retry.h's noprepass step) */
+        rd_vuprepass_selftest();
         static PipeScreen screen;
 
         /* a start with a cold driver cache can take many seconds (a phone,

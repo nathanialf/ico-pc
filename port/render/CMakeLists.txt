@@ -134,6 +134,7 @@ add_library(ico_render STATIC
     rd_present.c
     rd_replay.c
     rd_replay_vu.c # the replay's VU draws
+    rd_vuprepass_selftest.c # the VU vertex pre-pass's start-up check on the device
     rd_window.c
     rd_upload.c # the upload ring and the uploads before a replay's first pass
     rd_screen_planes.c # the screen-prim triangles' planes
@@ -490,6 +491,16 @@ target_compile_options(rd_blend_selftest_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${
 target_include_directories(rd_blend_selftest_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_blend_selftest_test PRIVATE ico_render)
 
+# rd_vuprepass_selftest_test: the VU vertex pre-pass's self-test
+# (rd_vuprepass_selftest.c) in either VU shader variant: the pre-pass left
+# on or off, the summary, the reachable set made after it, SCENE left to its
+# clear (the log line is matched by test/rd_vuprepass_selftest.cmake).
+add_executable(rd_vuprepass_selftest_test test/rd_vuprepass_selftest_test.c)
+target_compile_options(rd_vuprepass_selftest_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                       ${ICO_PORT_WARNINGS})
+target_include_directories(rd_vuprepass_selftest_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_vuprepass_selftest_test PRIVATE ico_render)
+
 # fog_lut_test: the depth fog's game side alone, ZFog.c with the renderer
 # calls stubbed: the fog tables and sprites of three player dumps byte for
 # byte, and a sweep of the stage parameters against the integer formula.
@@ -671,7 +682,8 @@ target_link_libraries(rd_stream_audit_test PRIVATE ico_render ico_vu1_ref ico_mi
 # Windows: SDL3.dll beside the programs
 ico_copy_sdl3_dll(texpack_test texpack_e2e_test rd_replay_tool rd_state_test rd_pixel_test
                   rd_layout_test rd_tex_test rd_gsbase_test rd_mesh_test modelpack_test
-                  rd_shadow_test rd_fog_test rd_fog_selftest_test rd_blend_selftest_test rd_blur_test rd_water_test rd_raw_test rd_debug_test
+                  rd_shadow_test rd_fog_test rd_fog_selftest_test rd_blend_selftest_test
+                  rd_vuprepass_selftest_test rd_blur_test rd_water_test rd_raw_test rd_debug_test
                   rd_present_test rd_filter_test rd_interp_test rd_mirror_test rd_msaa_test rd_mip_test
                   rd_perf_test rd_boot_present_test rd_crt_test texpack_load_test gsb_cull_test
                   rd_native_test rd_passring_test rd_stream_audit_test)
@@ -1069,6 +1081,41 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_blend_selftest_moltenvk PROPERTIES ENVIRONMENT "${_bst_env_mvk}")
     set_tests_properties(rd_blend_selftest_moltenvk_storage
                          PROPERTIES ENVIRONMENT "${_bst_env_mvk};ICO_RD_BLEND=storage")
+    # the VU vertex pre-pass's self-test (rd_vuprepass_selftest.c): on
+    # lavapipe the pre-pass draws the self-test's meshes byte for byte as
+    # the programs' entries do and stays on, in the extended variant (a wide
+    # scaled scene) and the plain one (Original at 4:3 and 1x); with its
+    # first command's records drawn a texel off (ICO_RD_VU_PREPASS_SABOTAGE,
+    # a driver whose record goes wrong) the pictures differ and it is
+    # turned off before the set; with it off by the settings
+    # (ICO_RD_VU_PREPASS=0) nothing runs
+    set(_vst "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vuprepass_selftest.cmake")
+    set(_vst_on "on \\(self-test: prelit, lit and skin byte for byte, [0-9]+ vertices in 3 pre-pass draws, [0-9]+ of [0-9]+ pixels drawn\\) on SCENE [0-9]+x[0-9]+ at [0-9]+x[0-9]+ texels in [0-9.]+ ms")
+    set(_vst_off "off \\(self-test: the pictures differ: [0-9]+ of [0-9]+ bytes, the first at texel [0-9]+,[0-9]+: [0-9,]+ want [0-9,]+\\) on SCENE")
+    add_test(NAME rd_vuprepass_selftest
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}" -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_plain
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     -DVARIANT=plain "-DLINE=${_vst_on}" -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_sabotage
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=off
+                     "-DLINE=${_vst_off}"
+                     "-DEXTRA=rd: VU pre-pass: ICO_RD_VU_PREPASS_SABOTAGE: " -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_off
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test>
+                     -DMODE=notrun "-DLINE=off \\(self-test not run\\)" -P "${_vst}")
+    set(_vst_tests rd_vuprepass_selftest rd_vuprepass_selftest_plain
+                   rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off)
+    set_tests_properties(${_vst_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
+    if(_env)
+        set_tests_properties(rd_vuprepass_selftest rd_vuprepass_selftest_plain
+                             PROPERTIES ENVIRONMENT "${_env}")
+    endif()
+    set_tests_properties(rd_vuprepass_selftest_sabotage
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS_SABOTAGE=1")
+    set_tests_properties(rd_vuprepass_selftest_off
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS=0")
     # odd texel counts under MSAA (1935x1080 is 645x360 at scale 3;
     # 2341x1080 at scale 1) and the big scenes: in place passes as at an even
     # width.  Sample counts the device lacks are skipped.  With the buffer path
