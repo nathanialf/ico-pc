@@ -435,7 +435,7 @@ static bool runOnce(const RdFrame *f, RdTargetRec *t, uint8_t *px, size_t size)
  * line's words inside its parentheses after "on (" or "off (self-test: " */
 typedef struct Verdict {
     bool on, pass;
-    char text[200];
+    char text[320];
 } Verdict;
 
 static void readSabotage(void)
