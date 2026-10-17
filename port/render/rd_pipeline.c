@@ -1197,8 +1197,13 @@ uint32_t rd__key_dynamic_bits(const RdPipeKeyInt *k)
         return 0; /* three targets, no depth: every state static */
     }
     uint32_t bits = 0;
-    if (g_rd.dynDepth && k->depthFmt != RHI_FMT_UNKNOWN && k->gs.stencil == RD_STENCIL_OFF) {
-        bits |= RHI_DYN_DEPTH; /* the shadow count's stencil keys stay static */
+    if (g_rd.dynDepth && k->depthFmt != RHI_FMT_UNKNOWN &&
+        (k->gs.stencil == RD_STENCIL_OFF || k->gs.stencil == RD_STENCIL_DATE_TEST0 ||
+         k->gs.stencil == RD_STENCIL_DATE_TEST1)) {
+        /* the shadow count's stencil keys and DATE's two setup keys stay
+         * static; a DATE draw's own key (the stencil test of the bit, the
+         * draw's depth state) takes the dynamic depth like any other draw */
+        bits |= RHI_DYN_DEPTH;
     }
     if (g_rd.dynBlend && k->colorFmt != RHI_FMT_UNKNOWN && k->dst == RHI_DST_READ_NONE) {
         /* one colour target and no destination read (a storage pass has no

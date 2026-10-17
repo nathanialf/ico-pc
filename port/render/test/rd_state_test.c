@@ -1603,9 +1603,9 @@ static void testDynamicNormalise(RdPipeKeyInt *keys)
  * ALWAYS, Z write on and off; 0x3F000 the same under DATM 1; 0x3F001 mask
  * 7 without Z write; 0x5C000 GEQUAL, on and off) x 4 blend paths x 2
  * prims x 2 spaces x 2 fragment shaders = 224, its VU twins at most the
- * static set's GEQUAL VU keys; a DATE twin's depth stays static
- * (rd__key_dynamic_bits: no stencil mode), so dynamic depth leaves the DATE
- * part as it is.  Printed, with the plan's careful-set target (about
+ * static set's GEQUAL VU keys; a DATE draw's twin takes the dynamic depth
+ * (rd__key_dynamic_bits: the two TEST modes), the two setup keys stay static,
+ * so dynamic depth shrinks the DATE part.  Printed, with the plan's careful-set target (about
  * 150-200 keys with dynamic depth and no EDS3) beside them. */
 static bool isVuVs(uint8_t vs)
 {
@@ -1713,9 +1713,8 @@ static void testTilerSet(RdPipeKeyInt *keys)
         CHECK(dateScreen > 0 && dateScreen <= 224u && dateVu > 0 && dateVu <= vuGeq,
               "tiler %s: DATE screen twins %u (at most 224), VU twins %u (at most %u)", kMode[mode],
               dateScreen, dateVu, vuGeq);
-        CHECK(mode != 1 || date == date0,
-              "dynamic depth: DATE's part %u, static %u (its depth "
-              "stays static)",
+        CHECK(mode != 1 || date < date0,
+              "dynamic depth: DATE's part %u, static %u (the TEST twins take the dynamic depth)",
               date, date0);
         CHECK(mode != 2 || date < date0, "dynamic blend: DATE's part %u, static %u", date, date0);
     }
