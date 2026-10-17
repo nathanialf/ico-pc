@@ -1243,6 +1243,8 @@ static void firstUseLine(const RdPipeKeyInt *k, float ms)
     keyFsName(k, fs, sizeof(fs));
     if (list >= 0) {
         snprintf(where, sizeof(where), "list %d", list);
+    } else if (rd__vu_prepass_running()) {
+        snprintf(where, sizeof(where), "the vertex pre-pass (before list 0)");
     } else {
         snprintf(where, sizeof(where), "no draw list (the present, a check)");
     }

@@ -1265,9 +1265,12 @@ uint32_t rd__pipeline_count(void);
  * (rd__get_pipeline; the replay's walk breakdown). */
 double rd__pipeline_create_ms(void);
 /* The draw list the replay is walking (0 .. RD_LIST_COUNT - 1), -1 outside
- * the lists (the present, outside a replay) (rd_perf.c, from the lists'
- * timestamps and rd__passring_list). */
+ * the lists (the vertex pre-pass, the present, outside a replay) (rd_perf.c,
+ * from the lists' timestamps and rd__passring_list). */
 int rd__replay_list(void);
+/* the VU vertex pre-pass is being recorded (rd_replay_vu.c rd__vu_prepass;
+ * the first-use line names it) */
+bool rd__vu_prepass_running(void);
 /* rd_pipelines_lazy was called (the summary's pipelines part) */
 bool rd__pipelines_lazy_on(void);
 const RdPipeKeyInt *rd__pipeline_key_at(uint32_t i);
@@ -1804,10 +1807,10 @@ typedef struct RdContext {
     RdTexRec *textures; /* RD_MAX_TEXTURES */
     RdMeshRec *meshes;  /* RD_MAX_MESHES */
     RdStats stats;
-    /* draws resampled above 1x since rd_init: the staticBlur sprites with
-     * RD_FXF_ABOVE1X (rd_replay.c doBlurSpriteDraw), the sprite passes with
-     * ICO_DF_ABOVE1X (fillDrawCB) and the fog passes above 1x (doFog): 0
-     * while every target is at scale 1 */
+    /* draw passes resampled above 1x since rd_init: the staticBlur sprites
+     * with RD_FXF_ABOVE1X (rd_replay.c doBlurSpriteDraw), the sprite passes
+     * with ICO_DF_ABOVE1X (fillDrawCB, once per planned pass of a draw) and
+     * the fog passes above 1x (doFog): 0 while every target is at scale 1 */
     uint32_t above1xDraws;
     uint32_t onceFlags;
 
@@ -2194,6 +2197,10 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present);
 void rd__perf_collect_gpu(void);
 void rd__perf_end(void);
 void rd__perf_stamp(RhiCommandList cl, uint32_t index);
+/* the walk's end (the vertex pre-pass and the lists recorded, the present
+ * recorded): the slow walk line counts the pipelines and creations from
+ * RD_PERF_TS_PREPASS to here */
+void rd__perf_walk_end(void);
 void rd__perf_post(RhiCommandList cl, int post);
 /* the effect an RDC_POST_STUB of kind RdPostKind belongs to (RD_PERF_POST_*),
    -1 for a kind that is none of them */

@@ -65,7 +65,9 @@ static uint64_t recBytes(uint32_t rows)
 }
 
 /* the record buffer group 1 binds in this replay's frame slot, and its
- * bytes */
+ * bytes: the slot's record, else the 256-byte placeholder, else (it could
+ * not be made: rd__vu_prepass_init said so) the slot's upload ring, which
+ * no shader reads there while the slot has no record */
 static RhiBuffer recBinding(uint64_t *bytes)
 {
     if (s_recBuf[rd__ring_slot()].id) {
@@ -73,8 +75,11 @@ static RhiBuffer recBinding(uint64_t *bytes)
         return s_recBuf[rd__ring_slot()];
     }
     *bytes = 256;
-    return s_recNull;
+    return s_recNull.id ? s_recNull : g_rd.ring[rd__ring_slot()];
 }
+
+/* recEnsure's failures in a row: the second turns the pre-pass off */
+static uint32_t s_recFails;
 
 /* the record's textures and buffers (not s_recNull) */
 static void recFree(void)
@@ -737,10 +742,20 @@ static IcoDrawCB s_preDrawCB;
 /* rd__vu_prepass_sabotage: the first command's records one texel off */
 static bool s_preSabotage;
 
+/* rd__vu_prepass is recording (rd__vu_prepass_running) */
+static bool s_preRunning;
+
+bool rd__vu_prepass_running(void)
+{
+    return s_preRunning;
+}
+
 void rd__vu_prepass_sabotage(bool on)
 {
     s_preSabotage = on;
 }
+
+static void vuPrepassRun(const RdFrame *f, int keep);
 
 void rd__vu_prepass(const RdFrame *f, int keep)
 {
@@ -749,6 +764,13 @@ void rd__vu_prepass(const RdFrame *f, int keep)
     if (!g_rd.vuPrepass) {
         return;
     }
+    s_preRunning = true;
+    vuPrepassRun(f, keep);
+    s_preRunning = false;
+}
+
+static void vuPrepassRun(const RdFrame *f, int keep)
+{
     /* 1. every mesh and grid command: its source and its vertices */
     uint64_t total = 0;
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
@@ -801,15 +823,27 @@ void rd__vu_prepass(const RdFrame *f, int keep)
         }
     }
     if (!recEnsure(rows)) {
-        static bool logged; /* once a run */
-        if (!logged) {
-            logged = true;
-            rd__log("VU pre-pass: the record (%u rows) could not be made: drawn the old way "
-                    "(reported once)",
-                    rows);
+        /* drawn the old way; tried once more at the next replay, then the
+           pre-pass is off for the run (no allocation asked for again a
+           replay) */
+        if (++s_recFails >= 2u) {
+            g_rd.vuPrepass = false;
+            snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
+                     "for the run: its record could not be made");
+            rd__log("VU pre-pass: off for the run: the record (%u rows, %llu KB a frame slot) "
+                    "could not be made twice; every VU draw the old way",
+                    rows, (unsigned long long)(recBytes(rows) / 1024u));
+        } else {
+            static uint32_t s_lines; /* the first 8 */
+            if (s_lines++ < 8u) {
+                rd__log("VU pre-pass: the record (%u rows, %llu KB a frame slot) could not be "
+                        "made: this replay draws the old way, the next tries once more",
+                        rows, (unsigned long long)(recBytes(rows) / 1024u));
+            }
         }
         return;
     }
+    s_recFails = 0;
     const uint64_t cap = (uint64_t)s_recTexRows * ICO_VU_REC_W;
     /* 3. one pass, a draw a command, single-sampled whatever the last
      * pass was (rd__get_pipeline's drawKey) */
@@ -987,6 +1021,21 @@ void rd__vu_prepass_init(const RhiLimits *lim)
         /* group 1's slot 4 before the slot has a record buffer */
         s_recNull = rhi_create_buffer(&(RhiBufferDesc){256, RHI_BUF_STORAGE_READ | RHI_BUF_COPY_DST,
                                                        RHI_MEM_DEVICE, "rd vu record (none)"});
+        if (!s_recNull.id) {
+            rd__log("VU pre-pass: its 256-byte placeholder buffer could not be made; group 1's "
+                    "slot 4 binds the upload ring until a record is made");
+        }
+    }
+    s_recFails = 0;
+    if (lim != NULL && lim->moltenvk && bytes == 0u && rhi_adapter_name() != NULL &&
+        strncmp(rhi_adapter_name(), "Apple ", 6) == 0) {
+        /* rhi_metal_color_bytes does not read this Apple GPU's name: no
+           bound assumed (the families it names grow, never shrink); the
+           self-test turns the pre-pass off if a pipeline of it cannot be
+           made or draws wrong */
+        rd__log("VU pre-pass: the Apple GPU \"%s\" is not one the colour-target table names: "
+                "no bound on its bytes a pixel assumed; the start-up self-test checks it",
+                rhi_adapter_name());
     }
     if (g_rd.vuPrepass) {
         rd__log("VU pre-pass: on: each mesh and grid vertex evaluated once before the lists, "

@@ -772,7 +772,7 @@ void ico_audio_set_rate_ratio(double ratio)
         return;
     }
     rate_ratio = r;
-    applied_ratio = r; /* the trim, if any, again at the next push */
+    applied_ratio = r; /* the trim, if any, again at the next ico_audio_sdl_game_step */
     if (stream != NULL && !SDL_SetAudioStreamFrequencyRatio(stream, r)) {
         fprintf(stderr, "audio: rate ratio: %s\n", SDL_GetError());
     }

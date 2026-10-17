@@ -36,9 +36,11 @@ void ico_config_reset(const char *toml_path, const char *ini_path)
    unknown key is) and logged once a load.  [game] classic_menu_text and
    [game] port_font name a choice of how the game's own words are drawn;
    they always keep their texels. [dev] hand_probe names a log of the
-   characters' hand-holding numbers, which the port does not write. */
+   characters' hand-holding numbers, which the port does not write.
+   [video] effect_glow_size named the glow's size above 1x; the glow is
+   drawn at the PS2's size at every resolution. */
 static const char *const retired_keys[] = {"game.classic_menu_text", "game.port_font",
-                                           "dev.hand_probe"};
+                                           "dev.hand_probe", "video.effect_glow_size"};
 
 static void log_retired(void)
 {

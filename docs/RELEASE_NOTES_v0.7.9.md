@@ -9,5 +9,5 @@
 - On phones and other devices that cannot draw every picture in time at the chosen settings, the game keeps its normal speed by showing fewer pictures, instead of slowing down and catching up in jumps (at every frame rate except Original).
 - On a Mac the game is now fast with anti-aliasing off. It used a slower way of mixing colours, which made the game only feel smooth with anti-aliasing on. The only cost is that a few blended colours can be one shade lighter than on the PlayStation 2.
 - Drawing is cheaper on slow graphics chips: the glow and the other full-screen effects do less work for the same picture, and a few see-through objects are drawn in one pass, as the PlayStation 2 orders them. The gain is on phones, handhelds and older cards; fast cards will not notice.
-- The glow is now drawn at the PlayStation 2's size at every resolution, as on the console, which makes it much cheaper at 2x and above; the Glow size setting is gone.
+- The glow, the depth of field and the screen softening are now drawn at the PlayStation 2's size at every resolution, as on the console, which makes them much cheaper at 2x and above, where they now look as coarse as on the console. The Glow size setting is gone.
 - The 3D scenery is computed once per corner instead of three times, which cuts the drawing time of busy scenes on phones and older cards.

@@ -49,9 +49,11 @@ static uint32_t s_pipelineCreates;
    its start the pipelines' time and count and the RHI's counters
    (walkBreakdown) */
 static bool s_inLists;
-static double s_walkPipeMs;
-static uint32_t s_walkPipes;
-static RhiStats s_walkStats;
+/* the walk's start (RD_PERF_TS_PREPASS) and end (rd__perf_walk_end): the
+   pipelines made at first use (their time and count) and the RHI's stats */
+static double s_walkPipeMs, s_walkEndPipeMs;
+static uint32_t s_walkPipes, s_walkEndPipes;
+static RhiStats s_walkStats, s_walkEndStats;
 /* g_rd.above1xDraws at the replay's start (RdPerfRecord.a1xDraws) */
 static uint32_t s_a1xDraws;
 
@@ -255,16 +257,19 @@ int rd__replay_list(void)
 /* A walk over WALK_SLOW_MS: what in it took the time, one line, the first
  * 8 then every 100th (the host's rate limiter's rule; the renderer does
  * not link it): the pipelines made at first use (rd__get_pipeline), the
- * textures and buffers made (the RHI's createNs: memory and objects, from
- * the lists' start to the replay's end, so the submit and the present
- * too) and the rest.  Texture decodes run in the game's step and the
- * replay's texture and mesh uploads in its upload phase, before the walk. */
+ * textures and buffers made (the RHI's createNs: memory and objects), each
+ * from the walk's start (RD_PERF_TS_PREPASS: the vertex pre-pass, then the
+ * lists) to its end (rd__perf_walk_end, the present recorded), the window
+ * walkMs covers, and the rest.  Texture decodes run in the game's step and
+ * the replay's texture and mesh uploads in its upload phase, before the
+ * walk. */
 #define WALK_SLOW_MS 500.0
 
-static void walkBreakdown(const RdPerfRecord *r, const RhiStats *s)
+static void walkBreakdown(const RdPerfRecord *r)
 {
     static uint32_t s_slow;
-    const double pipeMs = rd__pipeline_create_ms() - s_walkPipeMs;
+    const RhiStats *s = &s_walkEndStats;
+    const double pipeMs = s_walkEndPipeMs - s_walkPipeMs;
     const double createMs = (double)(s->createNs - s_walkStats.createNs) / 1e6;
     const double rest = r->walkMs - pipeMs - createMs;
 
@@ -273,8 +278,8 @@ static void walkBreakdown(const RdPerfRecord *r, const RhiStats *s)
     }
     rd__log("slow walk %.1f ms (replay %u, frame %u): pipelines made %.1f ms (%u), textures and "
             "buffers made %.1f ms (%llu and %llu), the rest %.1f ms (%u so far%s)",
-            r->walkMs, r->replay, r->frame, pipeMs, g_rd.stats.pipelineCreates - s_walkPipes,
-            createMs, (unsigned long long)(s->texturesCreated - s_walkStats.texturesCreated),
+            r->walkMs, r->replay, r->frame, pipeMs, s_walkEndPipes - s_walkPipes, createMs,
+            (unsigned long long)(s->texturesCreated - s_walkStats.texturesCreated),
             (unsigned long long)(s->buffersCreated - s_walkStats.buffersCreated),
             rest > 0.0 ? rest : 0.0, s_slow,
             s_slow == 8u ? "; from here every 100th is written" : "");
@@ -309,7 +314,7 @@ void rd__perf_end(void)
 #undef D
         r->fenceWaitMs = (double)(s.fenceWaitNs - s_last.fenceWaitNs) / 1e6;
         if (r->walkMs > WALK_SLOW_MS) {
-            walkBreakdown(r, &s);
+            walkBreakdown(r);
         }
         s_last = s;
     }
@@ -344,16 +349,27 @@ void rd__perf_stamp(RhiCommandList cl, uint32_t index)
 {
     stamp(cl, index);
     s_post = -1;
-    if (index == RD_PERF_TS_LISTS) {
-        /* the walk starts */
-        s_inLists = true;
-        s_walkPipeMs = rd__pipeline_create_ms();
-        s_walkPipes = g_rd.stats.pipelineCreates;
+    if (index == RD_PERF_TS_PREPASS) {
+        /* the walk starts: the vertex pre-pass, then the lists */
+        s_walkPipeMs = s_walkEndPipeMs = rd__pipeline_create_ms();
+        s_walkPipes = s_walkEndPipes = g_rd.stats.pipelineCreates;
         if (g_rd.hasDevice) {
             rhi_get_stats(&s_walkStats);
+            s_walkEndStats = s_walkStats;
         }
+    } else if (index == RD_PERF_TS_LISTS) {
+        s_inLists = true;
     } else if (index == RD_PERF_TS_LIST0 + RD_LIST_COUNT - 1) {
         s_inLists = false; /* the last list done: the present's draws follow */
+    }
+}
+
+void rd__perf_walk_end(void)
+{
+    s_walkEndPipeMs = rd__pipeline_create_ms();
+    s_walkEndPipes = g_rd.stats.pipelineCreates;
+    if (g_rd.hasDevice) {
+        rhi_get_stats(&s_walkEndStats);
     }
 }
 

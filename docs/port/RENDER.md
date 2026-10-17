@@ -270,16 +270,27 @@ sizes and the B-spline both ways (16). GPU milliseconds of the glow effect, lava
 | scale | fragments: work scale; GS sizes | paste loads (taps): work scale; `--glow-original`; the GS's filter | glow ms: work scale; `--glow-original` | glow ms, the GS's filter |
 | --- | --- | --- | --- | --- |
 | 1x | 1.87 M; the same | 0.92 M (4) in all three | 46.7; the same | the same draws |
-| 2x | 7.47 M; 4.62 M | 7.34 M (8); 14.68 M (16); 3.67 M (4) | 225.0; 181.4 | |
-| 3x | 12.06 M; 9.21 M | 33.03 M (16); 33.03 M (16); 8.26 M (4) | 440.7; 372.0 | |
+| 2x | 7.47 M; 4.62 M | 7.34 M (8); 14.68 M (16); 3.67 M (4) | 225.0; 181.4 | 93.6 |
+| 3x | 12.06 M; 9.21 M | 33.03 M (16); 33.03 M (16); 8.26 M (4) | 440.7; 372.0 | 169.3 |
 
 The work scale and `--glow-original` columns are the tool of 2130df09c; the last is the tool with
 the work buffers at their GS sizes and the GS's filter at the paste. In one series on the same
 host the 2130df09c tool's glow is 42.6 ms at 1x and 35.5 with the paste turned off (`--nop
 7:367`), 175.6 and 68.4 at 2x with `--glow-original`, and 113.6 without the paste at 3x with it:
 the 1x paste (the GS's bilinear over 229,376 texels and SCENE's snapshot) costs 7.1 ms, so at the
-GS's filter it costs about 28 ms at 2x and 64 at 3x there, the glow about 97 ms at 2x and 178 at
-3x against 225 and 441 at the work scale.
+GS's filter it costs about 28 ms at 2x and 64 at 3x there. The last column's 2x and 3x are the
+release's verification run, the tool after the change against 2130df09c's in three interleaved
+pairs of replays on the same host, the fastest of each (GPU ms of the glow, lavapipe):
+
+| frame | 2130df09c | its `--glow-original` | after |
+| --- | --- | --- | --- |
+| title 1x | 45.3 | 45.0 | 42.3 |
+| title 2x | 221.4 | 178.8 | 93.6 |
+| title 3x | 438.1 | 362.9 | 169.3 |
+| Mac 2x | 253.7 | 219.6 | 106.0 |
+| forest 2x | 195.7 | 192.8 | 94.0 |
+
+At 1x every target is equal before and after on the three dumps of that run.
 The other costs above 1x are the frame-sized draws (four, at the scene's scale) and the reduction
 WORK2 -> WORK0, a box of 4 x 8 texels at 2x (`blurAbove1xSteps`).
 
@@ -709,14 +720,15 @@ as those keys' state) and UI-space sprites under the TEST Z GEQUAL every list's 
 the depth target (`ico2/seki/src/GsBase.c` (`gsb_setNormalReg`): a 2D draw of list 11 before
 the list's own TEST write takes it); the whole key in the line names the state if one is still
 missing. The program entries' keys before the pre-pass lacked the same states: every one of them
-has its `vu_tri_vs` twin in the set (`rd_state_test` `testEnumerationPrepass`). A replay whose walk (recording its lists, the
-`walk` phase of the [slow replay line](DISPLAY.md#the-stats-lines)) takes over 500 ms gets one line,
-the first 8 and then every 100th, saying where that time went: the pipelines made at first use, the
-textures and buffers made (the RHI's `createNs`: their memory and objects, counted from the lists'
-start to the replay's end, so the submit and the present too; [RHI.md](RHI.md#the-interface)) and
-the rest. The lists' timestamps mark the walk (`RD_PERF_TS_LISTS` its start, the last list's its
-end), which also gives the list in the first-use line (`port/render/rd_perf.c` (`walkBreakdown`,
-`rd__replay_list`)):
+has its `vu_tri_vs` twin in the set (`rd_state_test` `testEnumerationPrepass`). A pipeline made in
+the vertex pre-pass is `in the vertex pre-pass (before list 0)` (`rd__vu_prepass_running`). A
+replay whose walk (the vertex pre-pass and the recording of its lists, the `walk` phase of the
+[slow replay line](DISPLAY.md#the-stats-lines)) takes over 500 ms gets one line, the first 8 and
+then every 100th, saying where that time went: the pipelines made at first use, the textures and
+buffers made (the RHI's `createNs`: their memory and objects; [RHI.md](RHI.md#the-interface)), each
+counted over the walk alone, from `RD_PERF_TS_PREPASS` to the present recorded
+(`rd__perf_walk_end`), and the rest. The lists' timestamps also give the list in the first-use line
+(`port/render/rd_perf.c` (`walkBreakdown`, `rd__replay_list`)):
 
     rd: slow walk 2639.5 ms (replay 3402, frame 2431): pipelines made 2630.1 ms (1), textures and buffers made 3.2 ms (4 and 0), the rest 6.2 ms (1 so far)
 
@@ -926,7 +938,15 @@ own buffer, so a replay never rewrites what the GPU may still read for the previ
 textures are shared, ordered by their barriers. Both grow by powers of two, from 16 rows (16,384
 vertices) to 1,024, every slot's buffer at once (so the replays after the one that grew them
 create nothing), logged as `rd: VU pre-pass: the record holds 32768 vertices (32 rows, 1536 KB a
-frame slot)`; group 1 binds the record at t4, and a 256-byte buffer before there is one. A
+frame slot)`; group 1 binds the record at t4, and a 256-byte buffer before there is one (the slot's
+upload ring when even that could not be made, logged once: no shader reads t4 then). A record that
+cannot be made draws that replay the old way and is asked for once more at the next replay; a
+second failure in a row turns the pre-pass off for the run (`rd: VU pre-pass: off for the run: the
+record (R rows, K KB a frame slot) could not be made twice; ...`), so no replay asks for it again
+(`recEnsure`, `s_recFails`). `rd_stream_audit` does not model the record's reads: they are in range
+by construction (a command's vertices from its lowest kick less 2, at least 0, to its highest,
+under its vertex count, at consecutive texels under the record's rows: `vuPreRange`,
+`rd__vu_prepass`). A
 command past the record, or one whose pre-pass pipeline is missing, is drawn the old way through
 its program's entry, and so is a draw whose `vu_tri_vs` pipeline cannot be made, each logged
 once (`rd: VU pre-pass: a frame of N vertices past the record's M ...`, `... the pipeline of
@@ -972,7 +992,10 @@ bytes together on Apple A9 and A10 GPUs, 64 on A11 to A13 and 128 from A14 and M
 Set Tables, "Maximum implicit image block size, per pixel, per sample, when using multiple color
 render targets"); the record's 48 bytes do not fit the first, so under MoltenVK on an A9 or A10
 the pre-pass is off (`RhiLimits.colorBytesPerPixel`; `port/rhi/rhi_driver_version.c`
-(`rhi_metal_color_bytes`), from the Metal device's name) and the log says so once. At start the
+(`rhi_metal_color_bytes`), from the Metal device's name) and the log says so once. An Apple GPU
+name the table does not read is taken as unbounded (the families it names only grow), logged as
+`rd: VU pre-pass: the Apple GPU "<name>" is not one the colour-target table names: ...`; a
+pipeline Metal then refuses, or a wrong picture, is the start-up self-test's to catch (below). At start the
 renderer logs `rd: VU pre-pass: on: each mesh and grid vertex evaluated once before the lists, 48
 bytes a vertex in 3 RGBA32_UINT targets; [dev] vu_prepass = false draws the old way`, or `rd: VU
 pre-pass: off by the settings ([dev] vu_prepass = false, ICO_RD_VU_PREPASS=0): ...` or `off on
@@ -1026,7 +1049,9 @@ computed for that corner (the shaders keep the precise flags of `port/shaders/CM
 `precise` forbids contraction and reassociation of each operation it marks). The record carries
 the bits through integer targets and a buffer copy, with no float conversion on the way, and the
 triangle stage reads them back as `asfloat`. The one value recomputed, GS X and Y from `p`, is
-`vu_divide`'s own operation on the same bits. The triangle math (`vu_mesh_out`: the pick, the
+`vu_divide`'s own operation on the same bits, for a finite `p`: a NaN `p` (only a garbage stream
+gives one) converts as each module's `OpConvertFToS` does, which SPIR-V leaves undefined
+(Direct3D makes it 0), so two modules may differ there. The triangle math (`vu_mesh_out`: the pick, the
 region rule, the cut, the ticks, the card test, the corner rule, the planes, the plane distance,
 the later bias) is unchanged and is given the same values, with the program's clip mode, bounds
 and flags from VuCB equal to the constants its entry used. Within the old shaders the three
@@ -1705,8 +1730,10 @@ without the colour attached; `dstSwitches`, the passes ended and begun again on 
 to change between a storage pass and one with the colour (`dstPassMode`; 0 on the attachment read
 and the fixed-function blend); `glowPasses`, the render passes begun while the glow (flare, bloom,
 the sun's eye blur) draws; `snapshots` and `snapSwaps`, target snapshots copied and the staticBlur
-sprites' swaps ([above](#post-passes)); `a1xDraws`, the draws that took the above-1x kernels (the
-box, the B-spline, the fog's table between its entries: [Above 1x](#above-1x)), 0 at scale 1. The
+sprites' swaps ([above](#post-passes)); `a1xDraws`, the draw passes that took the above-1x kernels
+(the box, the B-spline, the fog's table between its entries: [Above 1x](#above-1x); each planned
+pass of a draw counts, so a draw split in two by the AFAIL split or the two-pass blend counts
+twice, and the line's "draws resampled above 1x" are such passes), 0 at scale 1. The
 window's per-replay line carries them after the exact blends:
 
 ```

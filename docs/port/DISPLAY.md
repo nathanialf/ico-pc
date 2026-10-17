@@ -276,7 +276,8 @@ and a step's mean of the region rule's card verdicts the CPU decided while the d
 [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)) (`perf_log`; `port/platform/perf_block.h`
 (`perf_block_max_text`); `port/render/rd.h` (`rd_vu_card_counts`)). The phases are the replay's own:
 `wait` the [frame slot](ARCHITECTURE.md#terms)'s fence (`rhi_wait_frame`), `upload` the ring and the
-uploads, `acquire` the backbuffer, `walk` recording the lists less `bind`, `submit`, `present`;
+uploads, `acquire` the backbuffer, `walk` recording the VU vertex pre-pass and the lists less `bind`,
+`submit`, `present`;
 `fence waits` is the backend's blocked time inside wait and readback (`port/render/rd_replay.c`
 (`replayFrame`); `port/render/rd.h` (`RdPerfRecord`)). Further lines give the GPU time per list and
 per picture effect, the per-replay counts (draws, passes, binds, barriers, uploads) with the block's

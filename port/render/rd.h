@@ -1803,11 +1803,13 @@ typedef struct RdPerfRecord {
      * into the snapshot texture, swapped with the target's, instead of a
      * copy (rd_replay.c doBlurSpriteDraw, blurSwapTarget) */
     uint32_t glowPasses, snapshots, snapSwaps;
-    /* a1xDraws: the draws that took the above-1x kernels (the area box,
-     * the B-spline, the fog's table read between its entries: rd_replay.c
-     * spriteAbove1x, blurAbove1xSteps, doFog), g_rd.above1xDraws counted
-     * per replay; 0 at scale 1.  A work buffer drawn onto the frame is
-     * never among them (rd_internal.h rd__work_class) */
+    /* a1xDraws: the draw passes that took the above-1x kernels (the area
+     * box, the B-spline, the fog's table read between its entries:
+     * rd_replay.c spriteAbove1x, blurAbove1xSteps, doFog), g_rd.above1xDraws
+     * counted per replay; each planned pass of a draw counts (fillDrawCB
+     * runs per pass: the AFAIL split's two, the two-pass blend's two), so a
+     * draw can count twice; 0 at scale 1.  A work buffer drawn onto the
+     * frame is never among them (rd_internal.h rd__work_class) */
     uint32_t a1xDraws;
     /* The VU vertex pre-pass (rd_replay_vu.c rd__vu_prepass; docs/port/RENDER.md,
      * "The vertex pre-pass"): vuPrePasses its render passes (0 or 1),

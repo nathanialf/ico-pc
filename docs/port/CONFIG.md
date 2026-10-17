@@ -79,7 +79,7 @@ anything malformed gives the caller's default (`ico_toml_get_bool`).
 The top-level `version` is `1` (`port/config/config.h` (`ICO_CONFIG_VERSION`)); a file with a
 larger one is read, its unknown keys kept, and a log line says so (`port/config/config.c`
 (`ensure`)). Keys in `retired_keys` (`[game] classic_menu_text`, `[game] port_font`,
-`[dev] hand_probe`) are kept in the file, read by nothing and logged once a load
+`[dev] hand_probe`, `[video] effect_glow_size`) are kept in the file, read by nothing and logged once a load
 (`port/config/config.c` (`retired_keys`, `log_retired`)).
 
 ### When the file is written

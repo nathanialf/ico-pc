@@ -5396,12 +5396,13 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     rd__upload_meshes(f, keep);
     rd__passring_bytes(s_ringOff);
     rd__clear_new_targets();
-    rd__perf_stamp(s_cl, RD_PERF_TS_PREPASS);
-    rd__vu_prepass(f, keep); /* each mesh and grid vertex once (rd_replay_vu.c) */
-    rd__perf_stamp(s_cl, RD_PERF_TS_LISTS);
     g_rdPerf.uploadMs += (t1 = rd__now_ms()) - t;
     t = t1;
     const double bind0 = g_rdPerf.bindMs;
+    /* the walk from here: the vertex pre-pass, then the lists */
+    rd__perf_stamp(s_cl, RD_PERF_TS_PREPASS);
+    rd__vu_prepass(f, keep); /* each mesh and grid vertex once (rd_replay_vu.c) */
+    rd__perf_stamp(s_cl, RD_PERF_TS_LISTS);
 
     g_rd.frameWExact = f->wExact; /* the present's exact width (rd__frame_wexact) */
     if (f->hasCamera) {
@@ -5523,6 +5524,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
         rd__perf_stamp(s_cl, RD_PERF_TS_PRESENT);
     }
     g_rdPerf.walkMs = (t1 = rd__now_ms()) - t - (g_rdPerf.bindMs - bind0);
+    rd__perf_walk_end(); /* the walk's pipelines and creations end here */
     t = t1;
     rhi_end_commands(s_cl);
     rhi_submit(s_cl);

@@ -2083,8 +2083,9 @@ static void buildGalleryBar(void)
                   16 rows 10 apart (Back at 180, its box to 216)
      Effects      from 40, 18 apart, ten rows 16 (Back at 184, its box to 220);
                   eleven or twelve rows 13 (twelve: Back at 183); thirteen
-                  (the pause menu's, with Brightness) from 34, 13 apart
-                  (Back at 190, its box to 226)
+                  (the title's) from 34, 13 apart (Back at 190, its box to
+                  226); fourteen (the pause menu's, with Brightness) from
+                  30, 12 apart (Back at 186, its box to 222)
      the others   from 40, 18 apart */
 static int pagePitch(int page, int n, int *y0)
 {
