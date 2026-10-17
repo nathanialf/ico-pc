@@ -976,7 +976,8 @@ program entry's key is made from is decided once a run, at `rd_init` (`port/rend
 - the extended build `vu_X_vs` on every device but those of the table;
 - the plain build `vu_X_plain_vs` (`port/shaders/vu_common.hlsli`, `ICO_VU_PLAIN`: no card test, no
   tick cameras) on a device of the table (`RhiLimits.vuFallbackPlain`, `kVuPlainOnly` in
-  `port/rhi/vk/vk_device.c`), with `ICO_RD_VU_PLAIN=1`, or after `rd_set_vu_plain_only`; only the
+  `port/rhi/vk/vk_device.c`) or with `ICO_RD_VU_PLAIN=1` (`rd_set_vu_plain_only` is still
+  exported and no host code calls it); only the
   ten mesh entries have it (the particles' `vu_particle_vs` is one build), and its modules are made
   only then. `ICO_RD_VU_EXTENDED=1` gives the extended build whatever the others say.
 

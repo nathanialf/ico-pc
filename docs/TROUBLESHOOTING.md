@@ -150,10 +150,20 @@ settings lower the load the most (Options):
 On a Mac the game runs fast with anti-aliasing on or off: it draws with
 the faster method by default, whatever the anti-aliasing setting.
 
-If it is still slow, play for a minute with your usual settings and send
-`ico-pc.log` with a [problem report](#send-a-problem-report): every 10
-seconds the log says how long the graphics card spent on the scene, the
-glow, the fog and the other effects.
+If it is still slow, play for a minute or two with your usual settings, in
+a place where it is slow, and send `ico-pc.log` with a
+[problem report](#send-a-problem-report) before you start the game again
+(the log of the run before is kept as `ico-pc-previous.log`; the
+[first section](#the-log-file) says where the file is on each system).
+Every 10 seconds the log writes a few lines with how long the graphics
+card spent on the scene, the glow, the fog and the other effects, how many
+drawing steps the game took for each picture and which steps took longest.
+Those lines are what is needed, and the first lines of the log say which
+graphics card and driver you have. If you changed the Resolution or the
+other graphics settings to find what helps, say which ones: the log
+records each change you make to them. If it is slow only at one place or
+after one change, say where or which, and send one run that is slow and, if
+you can, one at Resolution 1x for comparison.
 
 ## Send a problem report
 

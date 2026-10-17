@@ -291,6 +291,48 @@ replay begins, by kind, every replay) and `window: CPU walk ms per replay by lis
 uploaded KB per replay: textures T, meshes M (interpolated I), uniform blocks U, VU streams S,
 other O` (`perf_log`, `perf_passes_add`).
 
+**Reading the lines for a speed report.** Four lines carry the evidence, with the start's
+`ico_pc: summary:` and `rhi_vk:` device lines (`port/platform/window_host.c` (`perf_log`,
+`log_summary`); `port/render/rd_perf.c` (`rd_perf_pass_kinds_text`, `rd_perf_pass_agg_text`)):
+
+- `window: passes per replay N: render passes R (lists L, <effect> E, ...), <kind> K, ...`: N is
+  every piece of GPU work a replay begins, by kind (`uploads`, `VU pre-pass`, `render pass`,
+  `copy`, `snapshot`, `DATE snapshot`, `fog depth read`, `exact blend`, `MSAA resolve`,
+  `stencil clear`, `present`); the render passes split into the lists' (L) and each picture effect's.
+  On a tile-based phone each pass has a fixed cost of about 0.05 to 0.15 ms
+  (`RD_PERF_PASS_SMALL_US`), so N above about 45 at Original 1x says the pass structure is where the
+  time goes. On a tile-based profile `DATE snapshot` and `fog depth read` read 0 where the local read
+  is on (the profile's `DATE stencil` and `fog local on`), and the title frame's glow passes are 26 with
+  the blur fold on (35 without). A storage-path count in the hundreds is the exact blend
+  (the opt-in), not the default.
+- `window: GPU top passes: <label> <target> WxH [N passes] D draws X.XX ms, ... (K of P passes a
+  replay, T timed replays; passes under 0.05 ms: S a replay, Y ms)`: the five most expensive passes
+  of the timed replays, a replay's mean, each timed between stamps outside the render passes. S
+  times about 0.08 ms is the fixed cost of the small passes. A `list 0` `SCENE` entry with hundreds
+  of draws is geometry; a SCENE entry with few draws and a millisecond or more at its native size is
+  a pass broken by a load or store (a copy or a read of the target in the middle of the list); `glow
+  WORK1 256x128` with its pass count is the blur chain.
+- `window: GPU ms per replay: lists 0-12 ...; effects: ...; present ...; VU pre-pass ...` and the
+  replays line's GPU part: the per-list and per-effect times. On a tile-based GPU the work of a pass
+  is done where the pass ends, not where its commands were recorded, so a list's or an effect's time
+  there is where the work ended and not its own cost ([RENDER.md](RENDER.md#the-per-pass-timing));
+  the top passes line and the total are the numbers to compare, and a reporter on such a device
+  should not be asked to explain the lists' split.
+- `window: per replay ...`: the counts (draws, passes, pipeline and bind group binds, barriers,
+  copies, uploads, DATE snapshots). Its exact-blend fields (`exact blends`, `destination-read
+  draws`, `storage passes`, `pass switches for the exact blend`) are 0 unless the player opted into
+  an exact blend with `[dev] blend`; nonzero ones on a log without that setting are a defect.
+  `pipelines created` in the block should be 0 once the set is made (a pipeline made while playing
+  is a hitch).
+
+The device class and its flags are in `ico_pc: summary:` (`profile <class>: fog local on|off, DATE
+stencil|snapshot, depth stores kept, blur fold on|off, local read yes|no, uint views ...`, a
+`([dev])` or `(self-test)` mark on a flag a key set or a self-test turned off) and in the one
+`rd: profile:` line; the blend is in `blend fixed-function (self-test: ...)`. A speed report is
+worth acting on with the `rhi_vk:` device line, the summary, these four lines from one block at
+the slow setting and one at 1x, and the log's start-up lines for the mechanisms (`rd: DATE:`,
+`rd: blur fold:`, `rd: blend:`).
+
 **The slow replay line**
 (`window: slow replay T ms (replay R, frame F, alpha A, about vsync V): ...`) is logged for a replay
 over the display's refresh, at most `SLOW_REPLAY_LINES` (5) a block: its phases with the fence wait
