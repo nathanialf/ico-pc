@@ -69,6 +69,9 @@
     X(cmd_set_index_buffer)                                                                        \
     X(cmd_set_stencil_ref)                                                                         \
     X(cmd_set_blend_constant)                                                                      \
+    X(cmd_set_depth_state)                                                                         \
+    X(cmd_set_blend_state)                                                                         \
+    X(cmd_local_read_barrier)                                                                      \
     X(cmd_draw)                                                                                    \
     X(cmd_draw_indexed)                                                                            \
     X(cmd_copy_buffer)                                                                             \

@@ -354,6 +354,21 @@ void rhi_cmd_set_blend_constant(RhiCommandList cl, const float rgba[4])
     be()->cmd_set_blend_constant(cl, rgba);
 }
 
+void rhi_cmd_set_depth_state(RhiCommandList cl, bool test, bool write, RhiCompare cmp)
+{
+    be()->cmd_set_depth_state(cl, test, write, cmp);
+}
+
+void rhi_cmd_set_blend_state(RhiCommandList cl, const RhiBlendState *blend)
+{
+    be()->cmd_set_blend_state(cl, blend);
+}
+
+void rhi_cmd_local_read_barrier(RhiCommandList cl, uint32_t mask)
+{
+    be()->cmd_local_read_barrier(cl, mask);
+}
+
 void rhi_cmd_draw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
                   uint32_t instanceCount)
 {
