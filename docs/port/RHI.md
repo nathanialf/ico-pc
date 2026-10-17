@@ -71,7 +71,8 @@ formats).
 per-frame ring, persistently mapped) or READBACK. Textures take a size, mip levels, a format, a
 usage mask and a sample count (2, 4 or 8 from `RhiLimits.msaaCounts`: multisampled targets are never
 copied or read back, only resolved by `rhi_cmd_resolve_color` or read by a shader). STORAGE and
-INPUT_ATTACHMENT usages exist for the destination read. Create and destroy are not frame-safe:
+INPUT_ATTACHMENT usages exist for the destination read and the [local read](#local-read). Create
+and destroy are not frame-safe:
 destruction is deferred until the frames that may use the handle have retired (`port/rhi/rhi.h`,
 resources).
 
@@ -264,6 +265,35 @@ compare yes (Vulkan 1.3); blend enable, equation and write mask yes
 (VK_EXT_extended_dynamic_state3)` (or `no`, with why). `ICO_VK_FAKE_NO_DYNAMIC=1` reports both
 false, `=blend` the blend alone, for an A/B of the same frames (`rhi_vk_test`'s dynamic cell draws
 the renderer's depth tests, blends and masks static and dynamic, texel-equal; [Tests](#tests)).
+
+### Local read
+
+Where `RhiLimits.localRead` is true a pass's fragment shaders can read its own attachments as
+input attachments (`RHI_BIND_INPUT_ATTACHMENT`; Vulkan `VK_KHR_dynamic_rendering_local_read`; D3D12
+has none and its limits say false). The texture is made with `RHI_TEX_INPUT_ATTACHMENT` (a colour
+target or a depth-stencil; asked of a device without local read it is ignored) and the pass begins
+it readable: `RhiColorAttachment.readable` or `RhiDepthAttachment.readable`, the texture in
+`RHI_STATE_RENDER_TARGET_READ` (Vulkan `RENDERING_LOCAL_READ`; for a depth-stencil texture the
+barrier's scope is the depth tests' stages and accesses with the fragment shader's input read,
+`vk_cmd.c` (`vkr_state_scope`)). A readable depth is never read-only. The binding names the
+texture: a colour target's view, or a depth-stencil's depth-only view (`RHI_ASPECT_DEPTH`; the
+image gets that view when made with either use). The shader declares a colour attachment with
+`[[vk::input_attachment_index(0)]]` and the depth without an index, the mapping Vulkan gives
+without `VkRenderingInputAttachmentIndexInfoKHR`; the binding is the t register's slot + 16, as
+every texture's.
+
+Between the pass's writes and a read, and between the read and the next writes of the same pixel,
+`rhi_cmd_local_read_barrier(cl, mask)` records one by-region memory barrier inside the pass
+(`vkCmdPipelineBarrier` with `VK_DEPENDENCY_BY_REGION_BIT`, counted in `RhiStats.barriers`):
+`RHI_LOCAL_READ_COLOR` colour attachment output and its writes to the fragment shader's input
+attachment reads, `RHI_LOCAL_READ_DEPTH` the early and late fragment tests and their depth-stencil
+writes to the same reads, `RHI_LOCAL_READ_BACK` those reads to the next draws' depth-stencil and
+colour writes. Outside a pass, or without local read, it records nothing. The exact blend's
+attachment read (`RHI_DST_READ_ATTACHMENT`) reads the colour in rasterization order instead and
+needs no barrier (`port/rhi/rhi.h` (`rhi_cmd_local_read_barrier`); `port/rhi/vk/vk_cmd.c`
+(`rhi_cmd_begin_render_pass`, `rhi_cmd_local_read_barrier`); `port/rhi/vk/vk_pipeline.c`
+(`rhi_create_bind_group`); `port/rhi/vk/vk_resource.c` (`createTexture`)). The renderer reads the
+fog's depth and DATE's alpha this way ([RENDER.md](RENDER.md#the-replay)).
 
 ## Backends in one build
 

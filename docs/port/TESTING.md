@@ -289,7 +289,9 @@ program under an environment switch ([Environment switches](#environment-switche
   buffers drawn back over the frame, the `effects_scaled` shard the seven post modes (the glow's
   and the depth of field's pastes) at Enhanced 2x the same way, no B-spline in either, and every
   scale-1 comparison checks that no sprite took a kernel (`checkAbove1x`, `checkEffectsScaled`,
-  `compareAll`).
+  `compareAll`); the `blur_fold` shard runs the seven post modes with the blur pairs folded
+  (`RdProfile.blurFold`, `fx_blur2_ps`), every target against the CPU model of the two passes
+  exactly, nine folds a chain, every pipeline created enumerated (`checkBlurFold`).
 - `rd_boot_present_test.c`: a saved start-up through the presenter, present by present; needs
   `ICO_BOOT_DUMP_DIR` (`rd_boot_present`).
 - `rd_blend_selftest_test.c` with `rd_blend_selftest.cmake`: the exact blend's start-up self-test
@@ -319,9 +321,13 @@ program under an environment switch ([Environment switches](#environment-switche
 - `rd_filter_test.c`: the model viewer's draw filter on synthetic keys (`rd_filter`).
 - `rd_fog_selftest_test.c` with `rd_fog_selftest.cmake`: the fog's self-test and probe; its log line
   matched for each path, MSAA counts, odd widths and [Full pixel](ARCHITECTURE.md#terms)
-  (`rd_fog_selftest*`).
+  (`rd_fog_selftest*`; the local read's first under `ICO_RD_FOG_PATH=local`,
+  `rd_fog_selftest_local`). With `rd_date_selftest.cmake` and `ICO_RD_DATE_PATH=stencil`, DATE's
+  self-test, which the fog's first run runs first: `DATE: stencil path (self-test: stencil ok 4,
+  snapshot ok 4)` matched once (`rd_date_selftest`).
 - `rd_fog_test.c`: the depth fog of `fog_DrawFog` on the CPU and on the device, every depth path
-  (`rd_fog`, `rd_fog_*`); at 2x a depth ramp's fog alpha equals the above-1x formula (the table
+  (`rd_fog`, `rd_fog_*`; the local read from the start in `rd_fog_local`, the other paths' replays
+  the same bytes); at 2x a depth ramp's fog alpha equals the above-1x formula (the table
   interpolated, the ordered dither) texel for texel, and the 1x cases count no above-1x draw
   (`checkRamp`).
 - `rd_gsbase_test.c`: `GsBase.c`'s host path driving a synthetic scene (`rd_gsbase`); photo mode's
@@ -391,7 +397,10 @@ program under an environment switch ([Environment switches](#environment-switche
   the top-passes text (with a cut to a short buffer) and the passes-by-kind text, to the byte
   (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the
-  dump the tool tests replay (`rd_pixel`).
+  dump the tool tests replay (`rd_pixel`). Its DATE case replays one frame through the stencil bit
+  and through the snapshot (where the device has local read): one DATE command of two overlapping
+  sprites over cells of alpha 0x80 and 0, SCENE the same bytes both ways and the snapshot's
+  semantics within the draw (`testDateStencil`).
 - `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`);
   the targets' scales include the work buffers and shadow levels at their GS sizes at every scale
   and Water reflections' block: its GS size under Original, the scene's scale under Sharp (4x at
@@ -620,7 +629,9 @@ switches the tests and their registrations use:
 | `ICO_VK_ATTACHMENT_READ` | `vk_device.c` | 1 offers the attachment read under `ICO_VK_FAKE_ADRENO` too (`rd_blend_selftest_adreno_forced`) |
 | `ICO_VK_VALIDATION` | `vk_device.c` | the validation layer; the render and RHI tests set it with `VK_ADD_LAYER_PATH` when the layer is in the toolchain |
 | `ICO_VK_GLOBAL_BARRIERS` | `vk_cmd.c` | a global barrier before every pass instead of hazard tracking, for A/B runs |
-| `ICO_RD_FOG_PATH` | `rd_fog_path.c` | `inplace`, `copy` or `buffer` forces the fog's depth path; `test` makes the self-test try every path |
+| `ICO_RD_FOG_PATH` | `rd_fog_path.c`, `rd_profile.c` | `local` (the profile's `fogLocal` on where the device has local read), `inplace`, `copy` or `buffer` forces the fog's depth path; `test` makes the self-test try every path (`rd_fog_local`, `rd_fog_selftest_local`) |
+| `ICO_RD_DATE_PATH` | `rd_profile.c`, `rd_date_selftest.c` | `stencil` DATE through the stencil bit wherever the device has local read, kept whatever the self-test finds; `snapshot` the R8 snapshot (`rd_date_selftest`) |
+| `ICO_RD_BLUR_FOLD` | `rd_profile.c` | 1 folds the staticBlur pairs (`fx_blur2_ps`) on any device, 0 never (the A/B of the replay tool's `--pass-dump`) |
 | `ICO_RD_DEPTH_COPY` | `rd_fog_path.c` | 0 samples the depth in place, 1 copies it |
 | `ICO_RD_FOG_SABOTAGE` | `rd_fog_path.c` | makes named paths fail the self-test (`rd_fog_selftest_fallback`) |
 | `ICO_RD_BLEND_SABOTAGE` | `rd_blend_selftest.c` | makes named blend modes read white in the blend's self-test (`rd_blend_selftest_sabotage*`) |

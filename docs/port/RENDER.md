@@ -417,6 +417,73 @@ anything may have written alpha since, so consecutive DATE draws see each other'
 one draw, overlapping primitives see the snapshot (`port/render/rd_replay.c` (`dateSnapshot`,
 `rd__date_retake`)).
 
+**DATE through the stencil bit.** Where the profile has `dateStencil` ([The device
+profile](#the-device-profile)), a DATE draw of a screen-prim or VU command into a scene-class RGBA8
+target with a depth of its size bound takes no snapshot: inside the draw's own pass (begun with the
+colour readable, `rd__pass_wants_readable`) bit 6 of the stencil (`RD_DATE_STENCIL_BIT`; the shadow
+count keeps bits 0-5, [Shadows](#shadows)) is made the destination alpha's MSB over the area the
+draw can touch: `date_clear_ps` writes 0 into the bit (`RD_STENCIL_DATE_CLEAR`), a by-region
+barrier makes the pass's colour writes visible (`rhi_cmd_local_read_barrier`, colour),
+`date_stencil_ps` reads the alpha as an input attachment and writes 1 into the bit where the MSB is
+set (`RD_STENCIL_DATE_SET`), and a second barrier orders that read before the next writes. The
+draw's passes then test the bit (`RD_STENCIL_DATE_TEST1` for DATM 1, `TEST0` for DATM 0,
+reference 0x40, read mask 0x40, no write) with `DF_DATE` off (`rd__date_stencil_pass`, in
+`expandPasses`; `dstBind` sets the reference). The bit is kept by `rd__date_retake`'s rule on the
+pass's own record (the same pass, target and write serial, the area held), so it is written again
+exactly where a snapshot would be retaken, and the open screen run is drawn before the read.
+Within one draw the alpha is the one before its first primitive: the snapshot's semantics, the
+same bytes. Not inside the MSAA epoch, under the exact blend's storage read, on another target or
+without a depth: the snapshot. The DATE self-test decides per device ([The fog path and its
+self-test](#the-fog-path-and-its-self-test)) (`port/render/rd_replay.c` (`dateStencilFor`,
+`prepareDrawEx`, `bindDrawEx`); `port/render/rd_replay_tiler.c` (`rd__replay_date_take`);
+`port/render/rd_pipeline.c` (`shadowStencil`,
+`rd__date_setup_key`, `rd__enumerate_reachable_date`); `port/shaders/sprite.hlsl`
+(`date_clear_ps`, `date_stencil_ps`)). `--stats`: `DATE snapshots N, DATE stencil draws M (K
+setups)`.
+
+**The fog's table.** The replay's upload phase copies the first `RD_POST_FOG` record's 256-entry
+table of the lists it draws into the LUT texture, outside any pass; `doFog` copies a table only
+when its fog's is another (`port/render/rd_replay.c` (`rd__fog_lut_upload`, `fogLutCopy`)).
+
+**The fog's local read.** On the `local` fog path ([The fog path and its
+self-test](#the-fog-path-and-its-self-test)) every pass on a scene-class target with its own
+depth, the depth made for it (`RD_DST_USAGE_LOCAL_DEPTH`), binds the depth readable
+(`RhiDepthAttachment.readable`, the texture in `RHI_STATE_RENDER_TARGET_READ`), and a fog whose
+depth is its colour target's own (SCENE's, at its size) draws in that pass: a by-region barrier
+(depth), `fog_lut_local_ps` reading the fragment's own depth texel as an input attachment, a
+barrier back; the pass is neither ended nor begun again and the depth is not copied, and the
+`fog copy` piece of the per-pass timing is not begun. The depth word and the arithmetic are the
+copy path's (the sprite's UV addresses the fragment's own texel there), so the picture is the same
+bytes. A fog on another depth, inside or before the MSAA epoch, or under an exact blend takes the
+copy (`port/render/rd_replay.c` (`fogLocalFor`, `doFog`, `depthWantsReadable`);
+`port/shaders/fog_lut.hlsl` (`FOG_LOCAL`)). `--stats`: `fog local draws N (fog path local)`.
+
+**The blur pair fold.** Where the profile has `blurFold`, a pair of staticBlur.c's `blur(n)`
+(pass 1 WORK0 -> WORK1 with the rect shrunk, pass 2 WORK1 -> WORK0 with the UVs shrunk) is drawn
+as one pass into WORK0 through `fx_blur2_ps`, which computes each WORK1 texel pass 2 weighs from
+WORK0 as pass 1 writes it (its UV, the four WORK0 taps, `gs_bilerp`, the texture function with
+pass 1's colour, FBA, TEXA): the integers of the two passes in their order, so WORK0 is the same
+bytes. At pass 1 the replay looks ahead over the list (`s_loop`): state commands, pass 2, state
+commands, the next pass 1; it folds when both passes are textured from each other at scale 1
+without a crop (the same size and origin), LINEAR, CLAMP, no blend, alpha test, DATE, destination
+read or depth, the colour mask whole, the same flags, TEXA and TEX0 size, every WORK1 texel pass 2
+weighs (a weight above 0) inside the texels pass 1 covers, and the next pass 1 covers the same
+texels, so the chain's last pair, drawn as two passes, writes WORK1 as the unfolded chain did; the
+loop then skips to pass 2 with the state applied. WORK0 is read through its snapshot (the swap
+where the fold covers it whole). At 4:3 a chain of ten pairs folds nine; on a wider frame the
+shrink's anchor moves the pass-1 coverage between pairs and fewer fold (`port/render/rd_replay.c`
+(`doBlurSprite`); `port/render/rd_replay_tiler.c` (`rd__replay_blur_fold`, `blurFoldPass`,
+`blurFoldOk`); `port/shaders/fx_sprite.hlsl` (`fx_blur2_ps`);
+`port/shaders/shader_consts.h` (`IcoDrawCB.aux0`)). Start line, once: `rd: blur fold: on (<class
+or [dev] blur_fold>): each staticBlur pair but a chain's last drawn as one pass (fx_blur2_ps)`;
+`--stats`: `blur pairs folded N`.
+
+**Store ops.** Every pass stores its colour and depth; the stencil's store follows the shadow
+window (`rd__stencil_ops_packed`). A plan that stores DONT_CARE for a depth or colour nothing reads
+later is not implemented: whether the next recorded frame or a keep replay's retained lists
+(`rd__first_list`) read a target cannot be known at a pass's begin, and nothing proves it there.
+`RdProfile.storePlan` is off on every class and nothing reads it.
+
 **Exact blends.** `RDC_EXACT_BLEND` (from `rd_post` with `exactInt`) runs the GS integer blend
 through `blend_int` on RGBA8_UINT copies of both targets and copies the result back; source and
 destination must be the same size (`port/render/rd_post.c`; `port/render/rd_replay.c`
@@ -1404,7 +1471,7 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan.
 | blend | fixed-function; `[dev] blend` opts into an exact mode | fixed-function; `[dev] blend = storage` opts into the ROV | fixed-function | fixed-function | fixed-function | fixed-function | fixed-function |
 | `fogLocal` | off | off | on where local read is offered | same | same | same | same |
 | `dateStencil` | off | off | on where local read is offered | same | same | same | same |
-| `storePlan` | off | off | on | on | on | on | on |
+| `storePlan` | off | off | off | off | off | off | off |
 | `blurFold` | off | off | on | on | off (the G52 is bound by its ALU) | on | on |
 | robust access | off | its own bounds rules | off | off | off | off | off |
 | `localRead` | as offered | none | as offered | as offered | as offered | as offered | as offered |
@@ -1414,15 +1481,20 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan.
 The blend row is `rd_dst_read.c`'s ([Destination reads and blend
 paths](#destination-reads-and-blend-paths)), robust access the Vulkan backend's
 (`port/rhi/vk/vk_device.c`; [RHI.md](RHI.md#device-loss)); the profile reports both. The other
-flags are decisions only: the fog's local depth read, DATE through the stencil bit, the depth
-store plan, the folded staticBlur passes and the RGBA8_UINT views read them where those
-mechanisms are implemented, and a flag whose mechanism is not implemented changes nothing. Two
-are wired here: a target is made with `RHI_TEX_UINT_VIEW` by class when `uintViewWork` (the work
-buffers, `rd__work_class`) or `uintViewScene` (the scene-class targets) is on
-(`port/render/rd_core.c` (`rd__target_create_gpu`)), and with `RHI_TEX_INPUT_ATTACHMENT` and
-`RD_DST_USAGE_LOCAL_DATE` when `dateStencil` is on and the DATE stencil shader is in the table
-(`rd__dst_target_usage`). `uintView*` are off wherever `RhiLimits.uintView` is false, and
-`fogLocal` and `dateStencil` wherever `RhiLimits.localRead` is.
+flags are decisions: `fogLocal` offers the fog's `local` path, tried first by its self-test,
+`dateStencil` DATE through the stencil bit, decided by its self-test, `blurFold` the folded
+staticBlur pairs ([The replay](#the-replay)); `storePlan` has no mechanism. A target is made with
+`RHI_TEX_UINT_VIEW` by class when `uintViewWork` (the work buffers, `rd__work_class`) or
+`uintViewScene` (the scene-class targets) is on, a scene-class one with
+`RHI_TEX_INPUT_ATTACHMENT` and `RD_DST_USAGE_LOCAL_DATE` when `dateStencil` is on and the DATE
+stencil shader is in the table (`rd__dst_target_usage`, narrowed to the scene class), and a
+scene-class depth with `RHI_TEX_INPUT_ATTACHMENT` and `RD_DST_USAGE_LOCAL_DEPTH` when `fogLocal`
+is on and `fog_lut_local_ps` is in the table (`port/render/rd_core.c` (`rd__target_create_gpu`)).
+`uintView*` are off wherever `RhiLimits.uintView` is false, and `fogLocal` and `dateStencil`
+wherever `RhiLimits.localRead` is. The local read is enabled through
+`VK_KHR_dynamic_rendering_local_read`; the Vulkan 1.4 core feature is queried but the instance's
+version is capped at 1.3, so a 1.4 driver that lists only the core feature has no local read
+(`port/rhi/vk/vk_device.c`).
 
 Each flag has a `[dev]` key, exported by the host ([CONFIG.md](CONFIG.md)): `fog_path = "local"`
 (`ICO_RD_FOG_PATH=local`: `fogLocal` on; `inplace`, `copy` or `buffer`: off), `date_path =
@@ -1435,13 +1507,13 @@ wrong turns the flag off (`rd__profile_self_test_off`): the flag is marked `(sel
 line `rd: profile: <flag> off (self-test)` is logged. The start line, once a run:
 
 ```
-rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function; fog local on; DATE stencil; depth stores planned; blur fold on; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; pipelines the start-up set
+rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function; fog local on; DATE stencil; depth stores kept; blur fold on; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; pipelines the start-up set
 rd: profile: immediate-mode GPU (Mesa, Vulkan): blend fixed-function; fog local off; DATE snapshot; depth stores kept; blur fold off; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; pipelines the start-up set
 ```
 
 and the `ico_pc: summary:` line carries the flags as in force after the blend's text
 (`rd__profile_text`; `port/render/rd_core.c` (`rd_summary_text`)): `profile tile-based GPU
-(Imagination, Vulkan): fog local on, DATE stencil, depth stores planned, blur fold on, local read
+(Imagination, Vulkan): fog local on, DATE stencil, depth stores kept, blur fold on, local read
 yes, uint views off`. The Vulkan version is not in the class name (`RhiLimits` does not carry
 it); the `rhi_vk:` device line has it.
 
@@ -1649,6 +1721,13 @@ decrements (`port/render/rd_shadow.c`; `port/render/rd.h` (`rd_shadow_count_targ
 `rd_shadow_tris`, `rd_shadow_resolve`); `port/render/rd_replay.c` (`doShadowStrip`,
 `doShadowResolve`)).
 
+The stencil's bits: 0-5 the count (`RD_SHADOW_STENCIL_MASK`, the only bits the count writes and
+the resolve reads), 6 DATE's (`RD_DATE_STENCIL_BIT`: its setup writes it alone and its draws read
+it alone, [The replay](#the-replay)), 7 unused. A count's INCR_WRAP or DECR_WRAP through the write
+mask 0x3F leaves bit 6 as it was and gives bits 0-5 the same value whatever bit 6 holds, so the
+two never meet; the shadow reset clears the whole stencil, which DATE's setup writes again in the
+pass that needs it (`port/render/rd_pipeline.c` (`shadowStencil`)).
+
 ## Water and render-to-texture blocks
 
 `puddle.c`, `pool.c` and `queen_barrier_disp.c` draw into the VRAM block `tex_AllocVramAuto` hands
@@ -1770,11 +1849,12 @@ pack on has been dumped; the reporting run's log said `textures: no texture pack
 The depth fog reads SCENE's depth: the GS copies the Z buffer, a PSMT4 view copies the third byte
 of every word into the fourth, and the fog sprite reads the top byte through the 256-entry CLUT,
 so the index is bits 16..23 of the 32-bit Z and only pixels with Z <= 0xFFFFFF are fogged
-(`port/shaders/fog_lut.hlsl`). The replay reads the depth one of three ways
+(`port/shaders/fog_lut.hlsl`). The replay reads the depth one of four ways
 (`port/render/rd_fog_path.c` (`RdFogPath`)):
 
 | path | how |
 | --- | --- |
+| local | inside the scene pass, the pass's own depth as an input attachment (Vulkan local read; offered where the profile has `fogLocal`; [The replay](#the-replay)) |
 | inplace | the depth target sampled where it is |
 | copy | a whole copy into a second depth texture, sampled |
 | buffer | the depth aspect copied into a buffer and back into an R32_UINT texture (Vulkan only) |
@@ -1782,8 +1862,11 @@ so the index is bits 16..23 of the 32-bit Z and only pixels with Z <= 0xFFFFFF a
 `rd_fog_selftest` replays a frame of its own (never recorded or presented) on SCENE at its real
 size and scale: a 16 x 16 grid of cells at known GS Z and the fog with a LUT whose every entry
 differs, read back and compared with the GS arithmetic, for each path in the platform's order
-(desktop: inplace, copy, buffer; tile-based or D24S8: copy, inplace, buffer). The first that passes
-is the path from then on, and one log line `fog: depth path` names it with every result. It runs
+(desktop: inplace, copy, buffer; tile-based or D24S8: copy, inplace, buffer; local first wherever
+it is offered, and left out of the line where not). The first that passes is the path from then
+on, and one log line `fog: depth path` names it with every result (`rd: fog: depth path local
+(self-test: local ok 0, copy not tried, inplace not tried, buffer not tried) on SCENE ...`); a
+local read that fails turns `fogLocal` off (`(self-test)`). It runs
 after `rd_precreate_pipelines` and again whenever SCENE is made at a new size. `ICO_RD_FOG_PATH`
 or `ICO_RD_DEPTH_COPY` names a path to try first; `ICO_RD_FOG_PATH=test` tries every path
 (`port/render/rd_fog_path.c`; `port/render/rd.h` (`rd_fog_selftest`)). The probe logs five
@@ -1792,6 +1875,17 @@ texels' Z, index and colour on the first fogged replay after start and after a n
 each index, not read between entries above 1x, since what they measure is the depth read; the
 probe's frame is one game frame drawn that way (`port/render/rd_fog_path.c` (`rd__fog_exact`),
 `port/render/rd_replay.c` (`doFog`)).
+
+Its first run runs DATE's self-test first, where the profile has `dateStencil`
+(`port/render/rd_date_selftest.c` (`rd_date_selftest`)): a frame of its own on SCENE clears it,
+draws a cell of alpha 0x80 on the left half and one of alpha 0 on the right, then a DATE sprite
+with DATM 1 over the top half and one with DATM 0 over the bottom, through the stencil bit and
+through the snapshot; the quadrants' centres are read back and compared with the GS's outcome,
+every channel exactly. The stencil bit stays only with its four right, else `dateStencil` goes off
+(`(self-test)`) and the snapshot draws DATE; `ICO_RD_DATE_PATH=stencil` keeps it whatever it
+finds. One line: `rd: DATE: stencil path (self-test: stencil ok 4, snapshot ok 4) on SCENE ...`, or
+`rd: DATE: snapshot path (self-test: stencil fail 2 at sample 1: 28C85000 for FAFA0A40, snapshot
+ok 4) ...`.
 
 ## Content tables
 
