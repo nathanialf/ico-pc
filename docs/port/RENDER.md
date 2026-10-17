@@ -709,9 +709,9 @@ flag) and the time it took (`port/render/rd_pipeline.c` (`firstUseLine`)):
 
 `no draw list (the present, a check)` stands for the list outside the replay's lists. The key is the
 one `rd__enumerate_reachable` would need to hold. On a PowerVR DXT-48-1536 a `vu_tri_vs`
-pipeline made so takes about 750 ms (770 and 745 ms for the two keys of a room change in an rc
-build's log, which named only the fields before the comma) and a program entry's up to 3.4 s, a
-visible stall each; a 2D key the driver has cached, under 1 ms. That log's keys matched enumerated
+pipeline made so takes about 750 ms (770 and 745 ms for the two keys of a room change in a phone's
+log that named only the fields before the comma) and a program entry's up to 3.4 s, a visible
+stall each; a 2D key the driver has cached, under 1 ms. That log's keys matched enumerated
 keys in every field it printed, so they differed in one it did not: two `vu_tri_vs` keys (blend 4
 and 12, ABE off) in list 0, and a UI-space sprite (`program 9 blend 4`, `sprite_ui_vs +
 sprite_ps`, with the depth target) in list 11. The set now also holds the pre-pass's keys under
