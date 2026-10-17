@@ -148,7 +148,7 @@ vertices of its triangle, so the per-triangle decisions (region test, scissor) a
 three (`port/render/rd_mesh.h` (`rd_create_vu_mesh`); `port/shaders/vu_common.hlsli`, header
 comment): the vertex pre-pass evaluates each vertex once into a record the triangle stage reads
 its three corners from, or without it the program's entry evaluates all three
-([RENDER.md](RENDER.md#the-vertex-pre-pass)). The morph path rewrites a mesh's stream each [tick](ARCHITECTURE.md#terms)
+([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)). The morph path rewrites a mesh's stream each [tick](ARCHITECTURE.md#terms)
 (`rd_update_vu_mesh`), and a mesh no frame drew for a while may be evicted, which tells the seki
 side to build it again (`rd_vu_mesh_valid`) (`port/render/rd_mesh.h`).
 
@@ -262,6 +262,18 @@ it), each with its own camera's vertices, one z cut, and the picture's and the f
 `rd_replay.c` sets `VU_F_EXTENDED` from `vuExtended` (not the Original preset, a frame wider
 than 512, or a scene scale above 1) and `VU_F_BEHIND_EYE` from the frame camera's `freeCamera`
 (`port/render/rd_replay_vu.c` (`doVuDraw`); `port/render/rd_pipeline.c` (`rd__vu_extended`)).
+
+**Where it is computed.** A command the pre-passes record has the rule evaluated once a triangle,
+before the lists, by the record stages, with the FrameCB its draws bind: `vu_tri_rule_pre_vs`
+steps 1 to 6 up to the tick cameras (the cut only for a triangle not wholly inside) and the card
+test's condition, `vu_tri_tick_pre_vs` one tick's `vu_tick_shown` a draw; the triangle's draws
+then resolve the stored verdicts as integers in each corner (`vu_main_vs`: a tick that showed it
+clips a triangle the blended camera drops, a tick that sent it to the card test sends it there, the
+card verdict decides `VU_RULE_STRIP`). A sprite's drop is evaluated once by `vu_particle_pre_vs`
+and read by `vu_particle_main_vs`. A command drawn the old way evaluates the rule in every corner's
+invocation of the program's entry (`vu_mesh_out`, `vu_particle_vs`). Both give the same verdict
+from the same functions on the same values ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes);
+`port/shaders/vu_tri.hlsl`, `port/shaders/vu_particle.hlsl`).
 
 **Particles.** A sprite the VU skips for its x/y window is, out of the box, not drawn when its quad
 reaches the camera's picture and drawn whole when wholly beside it; under the free camera and in

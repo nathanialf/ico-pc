@@ -79,12 +79,12 @@ each file's header comment):
 | `font.hlsl` | `font_ps`, `font_sheet_ps` | R8 coverage textures (the port's font atlas) read as sprite_ps reads a texel; sheet text in the menu sheets' style |
 | `yuv.hlsl` | `yuv_vs`, `yuv_ps`, `yuv_field_ps` | the FMV picture, 4:2:0 planes to RGB with the [IPU](ARCHITECTURE.md#terms)'s conversion; a field deinterlaced at the picture's size (`port/render/rd_video.c`) |
 | `crt.hlsl` | `crt_vs`, `crt_bloom_ps`, `crt_blur_ps`, `crt_ps` | the CRT filter ([DISPLAY.md](DISPLAY.md)) |
-| `vu_prelit.hlsl` | `vu_prelit_vs`, `vu_prelit_pre_vs`, `vu_ps`, `vu_texa_ps`, `vu_probe_ps` | `normal_c` (codes 32, 34, 36); the pixel shader of every mesh program; the tests' probe output |
+| `vu_prelit.hlsl` | `vu_prelit_vs`, `vu_prelit_pre_vs`, `vu_ps`, `vu_texa_ps`, `vu_legacy_ps`, `vu_legacy_texa_ps`, `vu_probe_ps` | `normal_c` (codes 32, 34, 36); the pixel shader of every VU draw through the main shaders (the planes read from the record) and of the programs' own entries (the planes as flat varyings); the tests' probe output |
 | `vu_lit.hlsl` | `vu_lit_vs`, `vu_lit_spec_vs`, `vu_reflect_vs` and their `_pre_vs` | `normal_l` (codes 32/36, 34, 38) |
 | `vu_skin.hlsl` | `vu_skin_vs`, `vu_skin_spec_vs`, `vu_skin_debug_vs` and their `_pre_vs` | `cluster`, skinned (codes 20, 22, 24) |
 | `vu_grid.hlsl` | `vu_grid_vs`, `vu_grid_lit_vs`, `vu_grid_spec_vs` and their `_pre_vs` | `mesh`, the procedural grids (codes 20, 22, 24) |
-| `vu_tri.hlsl` | `vu_tri_vs`, `vu_pre_ps` | the vertex pre-pass's triangle stage of every mesh program and its record targets' pixel shader ([RENDER.md](RENDER.md#the-vertex-pre-pass)) |
-| `vu_particle.hlsl` | `vu_particle_vs` | `particle`, six vertices a particle, non-indexed |
+| `vu_tri.hlsl` | `vu_main_vs`, `vu_tri_rule_pre_vs`, `vu_tri_tick_pre_vs`, `vu_tri_planes_pre_vs`, `vu_tri_vs`, `vu_pre_ps` | the main vertex shader of every mesh program, the triangle pre-pass's record stages, the triangle stage of the vertex records alone, and the record targets' pixel shader ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)) |
+| `vu_particle.hlsl` | `vu_particle_vs`, `vu_particle_pre_vs`, `vu_particle_main_vs` | `particle`, six vertices a particle, non-indexed; the sprite's record stage and main shader |
 | `common.hlsli`, `gs_math.hlsli`, `sheet_text.hlsli`, `vu_common.hlsli` | none | included headers, below |
 
 The vertex shaders of the VU programs are one per [microprogram](ARCHITECTURE.md#terms) family; the
@@ -92,9 +92,14 @@ CPU references they are tested against are `port/render/vu1_ref/` (`port/shaders
 header comment). Each mesh program also has a pre-pass entry, `vu_X_pre_vs`: its own vertex
 function on vertex `vu_rec.z + SV_VertexID`, the result written as a record (`vu_pre_out`: twelve
 flat `uint` words at the vertex's texel, `PointSize` 1 under SPIR-V) that `vu_pre_ps` stores in
-three `RGBA32_UINT` targets; `vu_tri_vs` reads the record back (`vu_rec_vertex`) and draws the
-triangle as the program's entry does, the program's clip mode, chain and HIDE rule and region
-bounds from VuCB ([RENDER.md](RENDER.md#the-vertex-pre-pass)).
+three `RGBA32_UINT` targets. The record stages (`vu_tri_rule_pre_vs`, `vu_tri_tick_pre_vs`,
+`vu_tri_planes_pre_vs`, `vu_particle_pre_vs`) read it back (`vu_rec_vertex`) and write a
+triangle's or sprite's verdict and attribute planes as records the same way; `vu_main_vs` and
+`vu_particle_main_vs` draw from the two records, the program's clip mode, chain and HIDE rule and
+region bounds from VuCB, and output `VuVSOut2` (position, colour, STQ, plane distance and a flat
+`tri`), which `vu_ps` and `vu_texa_ps` take, reading the planes from the record by `tri`
+(`vu_record_in`); the programs' own entries output `VuVSOut` (the planes as 28 flat floats), which
+`vu_legacy_ps` and `vu_legacy_texa_ps` take ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)).
 
 **Variants.** The same entries are built again under defines (`port/shaders/CMakeLists.txt`):
 
@@ -137,7 +142,7 @@ number the RHI slot (`port/shaders/common.hlsli`, header comment; `port/rhi/rhi.
 | --- | --- | --- |
 | 0 | `b0` | FrameCB, once per frame |
 | 1 | `b1` | DrawCB, per draw or post pass (crt.hlsl's CrtCB takes the same slot) |
-| 1 | `b2`, `b3`, `t0`, `t4` | the VU programs' VuCB and VuBoneCB (bones, card bits), the VU vertex stream, and the vertex pre-pass's record (`vu_rec_buf`, `StructuredBuffer<uint4>`, three planes) |
+| 1 | `b2`, `b3`, `t0`, `t4` | the VU programs' VuCB and VuBoneCB (bones, card bits), the VU vertex stream, and the pre-passes' record (`vu_rec_buf`, `StructuredBuffer<uint4>`, three planes); VuCB and the record are visible to the pixel stage too (`vu_ps` reads the planes) |
 | 2 | `t1`..`t4`, `s1`..`s4` | textures and samplers |
 | 3 | `u0` | the destination read's target (`_dstrov`); `_dstatt` reads binding 16 of set 3 as an input attachment |
 
@@ -207,7 +212,7 @@ packing (each member a 16-byte register or a 64-byte matrix, so the packing is u
 | `IcoSpriteVertex` | vertex | 20 | XY 12.4 (U16x2), Z (U32), RGBA (U8x4, 0x80 = 1.0), UV in texels (F32x2) |
 | `IcoSpriteAa1Vertex`, `IcoSpriteStqVertex` | vertex | 24 | plus the AA1 coverage, or Q |
 | `IcoSpritePlaneVertex` | vertex | 120 | the STQ vertex plus the triangle's colour and STQ planes |
-| `IcoVuCB` | b2 space1 | 816 | VU1 data memory 0..35, draw, batch, the card test's bits' place, the two ticks' camera matrices, the marks' place (`vu_mark`), the vertex pre-pass's record place and the triangle stage's rule (`vu_rec`), its region bounds (`vu_lo`, `vu_hi`) |
+| `IcoVuCB` | b2 space1 | 832 | VU1 data memory 0..35, draw, batch, the card test's bits' place, the two ticks' camera matrices, the marks' place (`vu_mark`), the vertex record's place and the program's triangle rule (`vu_rec`), its region bounds (`vu_lo`, `vu_hi`), the triangle record's slots and a stage draw's tick (`tri`) |
 | `IcoVuBoneCB` | b3 space1 | 3840 | VU memory 16..255, the cluster bones; the card bits after them |
 
 Constants mirrored from the HLSL keep the same values: `ICO_DF_*` (`common.hlsli`),
@@ -437,10 +442,17 @@ in: `vu_prelit_pre_vs` 2,120 words (483 instructions, 36 blocks), `vu_lit_pre_vs
 `vu_lit_spec_pre_vs` 2,171 (487, 29), `vu_reflect_pre_vs` 2,356 (539, 32), `vu_skin_pre_vs` 2,729
 (611, 29), `vu_skin_spec_pre_vs` 2,744 (614, 29), `vu_skin_debug_pre_vs` 2,811 (627, 29),
 `vu_grid_pre_vs` 1,820 (416, 32), `vu_grid_lit_pre_vs` 2,184 (493, 32), `vu_grid_spec_pre_vs`
-2,203 (497, 32); `vu_pre_ps` 183. `spirv_check` holds them to the plain budget and asks no plain
-variant of them (`tools/check_spirv.py`, gates `size per variant` and `variants`). With the
-pre-pass a device compiles `vu_tri_vs` (or its plain variant) and `vu_particle_vs` in place of the
-ten program entries, and the ten small pre-pass entries.
+2,203 (497, 32); `vu_pre_ps` 183. The record stages and the main shaders have one build each
+(words, instructions, blocks; this DXC and the build's flags): `vu_tri_rule_pre_vs` 16,515
+(3,600, 305), `vu_tri_tick_pre_vs` 16,485 (3,426, 202), `vu_tri_planes_pre_vs` 4,269 (972, 90),
+`vu_particle_pre_vs` 8,801 (2,071, 200), `vu_main_vs` 5,890 (1,408, 175), `vu_particle_main_vs`
+3,839 (908, 103); `vu_ps` 5,066 (1,190, 159) and `vu_texa_ps` 12,088 (2,887, 476) with the record
+read, `vu_legacy_ps` and `vu_legacy_texa_ps` the pixel shader on the flat varyings (4,670 and
+11,692). `spirv_check` holds the pre-pass entries, the record stages (`_pre_vs`) and the main
+shaders (`_main_vs`) to the plain budget and asks a plain variant only of the ten mesh programs'
+entries (`tools/check_spirv.py` `PROGRAM_ENTRIES`, gates `size per variant` and `variants`). With
+the pre-passes a device compiles the two main shaders, the ten pre-pass entries and the five
+record stages in place of the program entries, none over 16,515 words.
 
 Every plain module is smaller than the same module of the last set that built on the Adreno 740 in
 words, instructions and blocks.
@@ -458,8 +470,8 @@ variant must give the extended one's picture.
 | `shaders_table` (`port/shaders/test/shaders_table_test.c`) | every embedded entry: SPIR-V with its magic, DXIL a signed DXBC container (none with `ICO_SHADERS_DXIL=OFF`), a known stage and entry, unique names, the expected names present |
 | `gs_math` (`gs_math_test.c`) | `gs_math.hlsli` as C against `port/test/gs_blend_test.c`'s formulas and the GS rules for TEXA, the alpha test and the Z mapping: exhaustive where the domain is small; the shared constants pinned; the [integer forms](#integer-forms) against the operators they replace |
 | `shaders_pixel` (`shaders_pixel_test.c`) | `sprite.hlsl`, `blit.hlsl` and `blend_int.hlsl` through the Vulkan RHI, texel by texel against `gs_math.hlsli` as C: untextured, modulate, the alpha test, dual-source lerps, additive with `DF_PREMUL`, PABE, FBA, tinted blits, three integer blends; `shaders_pixel_nodual` (`--nodual`, `ICO_VK_FAKE_NO_DUAL=1`) the two-pass fallback; `shaders_pixel_mali` under `ICO_VK_FAKE_LIMITS=mali` |
-| `spirv_check` (`tools/check_spirv.py --sizes`) | every compiled SPIR-V module under the build's `shaders/`: a vertex shader without a vector of booleans, `OpAny`/`OpAll` or a boolean select, its opcodes inside the envelope's set (`OpLoopMerge`, `OpDot`, `OpLogicalNotEqual`, `OpUndef` named), every module within its size budget (a VU vertex shader's plain variant and a pre-pass entry within the plain one), every `vu_X_vs` with its `vu_X_plain_vs` (not a pre-pass entry `vu_X_pre_vs`), no array-typed value (OpLoad, OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi, OpSelect, OpCopyObject, OpCopyLogical of an array type) and no local array in a vertex shader ([The envelope](#the-envelope)); the sizes and the shape census printed; the module's binary form decoded in Python, no SPIR-V tool needed |
-| `vu1` (`vu1_test.c`) | the VU program shaders against `port/render/vu1_ref/`: hand traces through the `.vsm` code on the CPU, then on Vulkan every vertex shader's probe output, strips drawn through the shipped entries, and the region rule's clipping with the card verdicts handed over as the renderer does; every case whose draw has neither `VU_F_EXTENDED` nor `VU_F_TICKS` drawn again through the plain variants, its probe and pictures byte for byte the extended ones' ([The variants](#the-variants)); the CPU's card test against the reference on every vertex and strip; every mesh case through the vertex pre-pass (its pre-pass entry into the record, its probe and pictures through `vu_tri_vs` and `vu_tri_plain_vs`), byte for byte the program entry's; `vu1_mali` under the Mali limits |
+| `spirv_check` (`tools/check_spirv.py --sizes`) | every compiled SPIR-V module under the build's `shaders/`: a vertex shader without a vector of booleans, `OpAny`/`OpAll` or a boolean select, its opcodes inside the envelope's set (`OpLoopMerge`, `OpDot`, `OpLogicalNotEqual`, `OpUndef` named), every module within its size budget (a VU vertex shader's plain variant, a pre-pass entry or record stage `_pre_vs` and a main shader `_main_vs` within the plain one), every mesh program's entry with its `vu_X_plain_vs` (`PROGRAM_ENTRIES`), the largest module of each budget class printed last, no array-typed value (OpLoad, OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi, OpSelect, OpCopyObject, OpCopyLogical of an array type) and no local array in a vertex shader ([The envelope](#the-envelope)); the sizes and the shape census printed; the module's binary form decoded in Python, no SPIR-V tool needed |
+| `vu1` (`vu1_test.c`) | the VU program shaders against `port/render/vu1_ref/`: hand traces through the `.vsm` code on the CPU, then on Vulkan every vertex shader's probe output, strips drawn through the shipped entries, and the region rule's clipping with the card verdicts handed over as the renderer does; every case whose draw has neither `VU_F_EXTENDED` nor `VU_F_TICKS` drawn again through the plain variants, its probe and pictures byte for byte the extended ones' ([The variants](#the-variants)); the CPU's card test against the reference on every vertex and strip; every case through the record (a mesh case's vertices through its pre-pass entry and its triangles through the record stages, the tick stage under the tick cameras; a particle case's sprites through `vu_particle_pre_vs`), its probe and pictures through `vu_main_vs` or `vu_particle_main_vs` and `vu_ps`, byte for byte the program entry's with `vu_legacy_ps`, the mesh, particle and tick-camera cases counted (none may be zero); the plain variants for the mesh programs' entries; `vu1_mali` under the Mali limits |
 | `port/test/gs_blend_test.c` | not a ctest: a CPU program (`cc -O2`) printing how far a float blender with round-to-nearest drifts from the GS integer blender under feedback |
 
 The Vulkan tests exit 77 (skipped) without a device (`port/shaders/test/CMakeLists.txt`; each test's

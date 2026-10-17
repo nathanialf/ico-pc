@@ -17,8 +17,8 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_tex.h`, `rd_tex.c` | the texture cache: GS formats decoded into rd textures |
 | `port/render/rd_mesh.h`, `rd_mesh.c` | the VU mesh path (VU1_PROGRAMS.md) |
 | `port/render/rd_replay.c` | a frame onto the RHI: every command's replay |
-| `port/render/rd_replay_vu.c`, `rd_replay.h` | the replay's VU draws and the vertex pre-pass; what they share with `rd_replay.c` (the replay's state, a draw's setup, its helpers) |
-| `port/render/rd_vuprepass_selftest.c` | the vertex pre-pass's start-up self-test |
+| `port/render/rd_replay_vu.c`, `rd_replay.h` | the replay's VU draws and the vertex and triangle pre-passes; what they share with `rd_replay.c` (the replay's state, a draw's setup, its helpers) |
+| `port/render/rd_vuprepass_selftest.c` | the vertex and triangle pre-passes' start-up self-test |
 | `port/render/rd_upload.c` | the upload ring and what a replay uploads before its first pass |
 | `port/render/rd_pipeline.c` | pipeline keys from the state block, the pipeline cache, the reachable set |
 | `port/render/rd_dst_read.c` | the exact GS blend read from the destination in the fragment shader |
@@ -411,8 +411,9 @@ bones for a skinned draw, and sets the draw's flags: a chain clip plane, the fre
 here and marks every triangle of a grid of two strips or more joined, as the draw's own mark
 (`port/render/rd_replay_vu.c` (`rd__replay_vu`, `doVuDraw`); `port/render/rd_pipeline.c` (`rd__vu_extended`)). At start the renderer logs `rd: VU
 index values: dense (marks in the stream)`.
-A mesh or grid command the vertex pre-pass recorded draws its triangles through `vu_tri_vs` over
-that record ([The vertex pre-pass](#the-vertex-pre-pass)).
+A mesh, grid or particle command the pre-passes recorded draws through `vu_main_vs` (or
+`vu_particle_main_vs`) and `vu_ps` over that record ([The vertex and triangle
+pre-passes](#the-vertex-and-triangle-pre-passes)).
 What the flags do is [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule). `ICO_RD_VU_OFFGRID=1`, a
 developer switch, lets the [VU1](ARCHITECTURE.md#terms) programs output X and Y off the GS's 1/16
 grid on a scaled target under the Enhanced preset; otherwise every preset keeps the GS's
@@ -437,8 +438,8 @@ way of reading the multisampled depth passed the fog's self-test, rd draws witho
 
 The replay notes what it gives the GPU in a ring of the last 2048 entries, always on (a few stores
 each): every render pass (`beginPass`), target copy (`doCopy`), snapshot copy (`takeSnap`), exact
-blend (`doExact`), the upload batch before the lists, the VU vertex pre-pass
-(`rd_replay_vu.c` `rd__vu_prepass`) and the present. An entry holds its sequence
+blend (`doExact`), the upload batch before the lists, the VU vertex and triangle pre-passes
+(`rd_replay_vu.c` `rd__vu_prepass`: `RD_PASSK_VU_PRE`, `RD_PASSK_VU_TRI`) and the present. An entry holds its sequence
 number, the replay number (the performance record's, `g_rdPerf.replay`) and frame number, the keep
 flag, the list being walked, the colour and depth target ids and sizes (a copy's source and
 destination; the present's DISPLAY and window sizes), the storage-pass flag, the picture effect
@@ -510,14 +511,14 @@ when it is done ([PLATFORM.md](PLATFORM.md#diagnostics)) (`port/render/rd_dump.c
 `port/platform/diag_host.c` (`ico_diag_loss_bisect`)).
 
 The replay behind it is the pass window (`rd__replay_set_window`): every replay numbers its passes
-in the order they begin (the [vertex pre-pass](#the-vertex-pre-pass) first when it runs, then
+in the order they begin (the [vertex and triangle pre-passes](#the-vertex-and-triangle-pre-passes) first when they run, then
 render passes, copies, snapshots and exact blends: the pass ring's entries other than the uploads
 and the present). With a window [first, last] the draws and the target and snapshot copies of the
 passes outside it are not recorded (the pre-pass's record copies go with its draws, so the slot's
 record buffer keeps what an earlier replay of the frame wrote; the uploads and the fog's depth copy
 are not windowed), the passes themselves still begin, and the walk stops after the
-command that began pass last + 1, which draws nothing. So a loss in the pre-pass is pass 1, not a
-loss with no draw recorded (`port/render/rd_replay_vu.c` (`rd__vu_prepass`,
+command that began pass last + 1, which draws nothing. So a loss in the vertex pre-pass is pass 1
+and one in the triangle pre-pass pass 2, not a loss with no draw recorded (`port/render/rd_replay_vu.c` (`rd__vu_prepass`,
 `rd__replay_pass_push`)). [1, k] is the frame up to pass k, [k, k]
 pass k alone on the targets as an earlier replay left them. `rd_replay_tool --loss-bisect` runs the
 bisect on a dump, `--passes A[-B]` replays a window (`port/render/rd_replay.c` (`passPush`,
@@ -537,9 +538,10 @@ counters test `s_win.first` as before. While it is set, `vuDraw` notes each VU d
 command, mesh name, program, vertex and pixel shader, clip mode, batch, index range, the values'
 span and marked triangles, the texture's id, size, format and mip levels, the pipeline key's words),
 and the window keeps the note of the last draw it recorded (`RdDrawNote`, `rd_draw_note_text`).
-The note's vertex shader is the program's own entry, also for a draw through `vu_tri_vs` and for
-the pre-pass's draws (pass 1, noted by `rd__vu_prepass` with their vertex range), so `VS_ONLY`
-separates the programs as before the pre-pass; the key's words name the pipeline drawn with.
+The note's vertex shader is the program's own entry, also for a draw through a main shader and
+for the pre-passes' draws (passes 1 and 2, noted by `rd__vu_prepass` with their vertex range), so
+`VS_ONLY` separates the programs; the key's words name the pipeline drawn with. `MASK_MARKS`
+masks the record stages' marks too.
 The planner (`port/render/rd_bisect_plan.c`, pure) says which step comes next from the steps so far:
 first the whole pass with the marks masked (the hypothesis test: clean means the marks did it),
 then the prefix search, halving between the longest clean prefix (0) and the shortest lost one (N,
@@ -587,6 +589,11 @@ indices cannot leave (static asserts; `vu_bone_mat` and `vu_strip_card` clamp). 
 failed: the skinned draws' weight addresses (lowest and highest bone) and the draws whose bones fill
 VuBoneCB, which leaves no room for the card bits ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)). Each triangle's
 mark read (`vu_kick_marks`, one qword of the mark bytes after the vertices) is checked the same way.
+The record stages read a triangle record for every kick from a draw's lowest to its highest, the
+kicks its list does not draw included: the audit reads those kicks' marks and vertices too, and
+the record's own texels are in range by construction (a command's slots are counted before the
+pre-passes draw: `rd_replay_vu.c` (`vuPrepassRun`); [The vertex and triangle
+pre-passes](#the-vertex-and-triangle-pre-passes)).
 The audit also reports, per frame, the index span (the lowest and highest value of every indexed VU
 draw, the widest, the draws past 2^24 - 1 by list, the values carrying the old mark bits), and fails
 a span past 2^24 - 1 (Vulkan's least `maxDrawIndexedIndexValue`) and a kick listed twice in a draw
@@ -824,7 +831,7 @@ stage 19,519 and 47,637) ([SHADERS.md](SHADERS.md#the-variants)).
   is accepted: a start with the Enhanced preset, a wide frame or a scene scale above 1 compiles no
   plain VU keys, so a switch in the game to the Original preset at 4:3 and 1x makes the plain ones
   as the frames first need them, up to 74 pipelines with the vertex pre-pass (90 with the exact
-  blend; 176 and 220 without it, [The vertex pre-pass](#the-vertex-pre-pass)), a short pause
+  blend; 176 and 220 without it, [The vertex and triangle pre-passes](#the-vertex-and-triangle-pre-passes)), a short pause
   here and there in the first minutes after the switch; the pipeline cache keeps them for the
   next start. The set is ordered: every 2D key
   first, then the plain VU keys, then the extended ones (`orderSet`), and a batch never mixes
@@ -895,24 +902,27 @@ stage 19,519 and 47,637) ([SHADERS.md](SHADERS.md#the-variants)).
   vu_plain_only = true` keeps it to the plain variants and `[dev] vu_extended = true` gives it the
   extended ones whatever the device table says ([CONFIG.md](CONFIG.md#ico-pcini)).
 
-### The vertex pre-pass
+### The vertex and triangle pre-passes
 
 A mesh program's vertex shader draws the triangle `kick - 2, kick - 1, kick` at index value
 `kick * 4 + corner` ([The stream bounds audit](#the-stream-bounds-audit), `shader_consts.h`
 (`ICO_VU_INDEX`)), so no index repeats and the GPU reuses nothing: each of a triangle's three
-invocations evaluated all three of its corners in full (the program's vertex function: two or
-three matrix products, the lighting, the divide, the conversions), and a VU command drawn twice
-(the AFAIL split, the two passes without dual-source blending) or as two draws a batch (the scissor
-batches' fans and kicks) evaluated them again in each draw. The pre-pass evaluates each vertex of
-a VU command once, before the lists, into a record; the triangle stage reads its three corners
-back and runs the triangle math on them unchanged (`port/render/rd_replay_vu.c` (`rd__vu_prepass`,
-`doVuDraw`); `port/shaders/vu_common.hlsli` (`vu_pre_out`, `vu_rec_vertex`);
-`port/shaders/vu_tri.hlsl`). The meshes (`RDC_MESH`, `RDC_SKINNED`) and the grids (`RDC_GRID`)
-take it; the particles (six invocations a sprite, a few hundred sprites a frame) keep
-`vu_particle_vs`.
+invocations of a program's own entry evaluates all three of its corners in full (the program's
+vertex function: two or three matrix products, the lighting, the divide, the conversions) and the
+whole triangle math (`vu_mesh_out`: the region rule with the cut, the two tick cameras' tests, the
+card test, the corner rule, the attribute planes, the plane distance, the later bias), and a VU
+command drawn twice (the AFAIL split, the two passes without dual-source blending) or as two draws
+a batch (the scissor batches' fans and kicks) does it again in each draw. The pre-passes do each
+vertex's work once and each triangle's once, before the lists, into a record; the main vertex
+shaders read a corner's and its triangle's record back and keep only what differs per corner
+(`port/render/rd_replay_vu.c` (`rd__vu_prepass`, `doVuDraw`); `port/shaders/vu_common.hlsli` (the
+record stages, `vu_pre_out`, `vu_rec_vertex`, `vu_record_in`); `port/shaders/vu_tri.hlsl`,
+`port/shaders/vu_particle.hlsl`). The meshes (`RDC_MESH`, `RDC_SKINNED`), the grids (`RDC_GRID`)
+and the particles (`RDC_PARTICLES`: a sprite's verdict and planes, six invocations a sprite) take
+it.
 
-**The record.** Twelve 32-bit words a vertex, in three planes of `RGBA32_UINT` texels, one texel
-a vertex (`shader_consts.h` (`ICO_VU_REC_*`)):
+**The vertex record.** Twelve 32-bit words a vertex, in three planes of `RGBA32_UINT` texels, one
+texel a vertex (`shader_consts.h` (`ICO_VU_REC_*`)):
 
 | plane | x | y | z | w |
 | --- | --- | --- | --- | --- |
@@ -921,164 +931,249 @@ a vertex (`shader_consts.h` (`ICO_VU_REC_*`)):
 | 2 | S | T | Q | bit 0 the region test (`inside`), bit 1 `gsOk`, bits 2..7 the clip-space flags (`vu_clipw`) |
 
 The floats are their bits (`asuint`), so the record holds exactly what the vertex function
-computed. GS X and Y are not stored: the triangle stage takes them from `p` as `vu_divide` does,
+computed. GS X and Y are not stored: the readers take them from `p` as `vu_divide` does,
 `vu_ftoi4(p.x)`, a multiply by 16 (exact) and a truncation. A vertex's texel is its plane's
 `base + v`, 1024 texels a row (`ICO_VU_REC_W`); `VuVtx` carries the clip-space flags (`clipf`)
 instead of the clip-space position, which only `vu_clipw` read.
 
-**The pass.** After the uploads and the first clears, before list 0, `rd__vu_prepass` walks the
-replayed lists' mesh and grid commands. For each it sets up what `doVuDraw` binds (the stream in
-the mesh arena or the ring, VuCB's VU memory, the bones and card bits in VuBoneCB: `vuSource`,
-shared by both, kept for the command's draws), finds the vertices its index range reads (the
-lowest kick less 2 to the highest, from the CPU's index list; a grid's every strip), and gives
-them consecutive texels. Then one render pass into the three record textures (load don't care,
-store), one draw a command: `n` points through the program's pre-pass entry (`vu_X_pre_vs`, the
-program's own vertex function on vertex `first + SV_VertexID`, its outputs as flat `uint4`
-varyings at the point's texel, `PointSize` 1) and `vu_pre_ps`, which writes them to the three
-targets. The textures go to `COPY_SRC` and each plane's rows are copied into the frame slot's
-record buffer, plane after plane (`rhi_cmd_copy_texture_to_buffer`, which makes the copy visible
-to the vertex shaders that read the buffer: [RHI.md](RHI.md#the-interface)). A frame slot has its
-own buffer, so a replay never rewrites what the GPU may still read for the previous one; the
-textures are shared, ordered by their barriers. Both grow by powers of two, from 16 rows (16,384
-vertices) to 1,024, every slot's buffer at once (so the replays after the one that grew them
-create nothing), logged as `rd: VU pre-pass: the record holds 32768 vertices (32 rows, 1536 KB a
-frame slot)`; group 1 binds the record at t4, and a 256-byte buffer before there is one (the slot's
-upload ring when even that could not be made, logged once: no shader reads t4 then). A record that
-cannot be made draws that replay the old way and is asked for once more at the next replay; a
-second failure in a row turns the pre-pass off for the run (`rd: VU pre-pass: off for the run: the
-record (R rows, K KB a frame slot) could not be made twice; ...`), so no replay asks for it again
-(`recEnsure`, `s_recFails`). `rd_stream_audit` does not model the record's reads: they are in range
-by construction (a command's vertices from its lowest kick less 2, at least 0, to its highest,
-under its vertex count, at consecutive texels under the record's rows: `vuPreRange`,
-`rd__vu_prepass`). A
-command past the record, or one whose pre-pass pipeline is missing, is drawn the old way through
-its program's entry, and so is a draw whose `vu_tri_vs` pipeline cannot be made, each logged
-once (`rd: VU pre-pass: a frame of N vertices past the record's M ...`, `... the pipeline of
-vu_X_pre_vs could not be made ...`, `... a pipeline of vu_tri_vs could not be made ...`) and
-counted (`vuPreFallbacks`); while the loss bisect only names the keys a frame needs
-(`rd__pipeline_gathering`) a missing pipeline is not a fallback, so the pre-pass's and the
-triangle stage's keys are the ones named. The pass ring holds the pass as `VU pre-pass, N
-vertices into the record (1024xR)` with its pipeline ([The pass ring](#the-pass-ring);
-`port/render/rd_replay_vu.c` (`rd__vu_prepass`, `vuSource`, `vuPreRange`, `recEnsure`)).
+**The triangle record.** A record slot is one texel index in each of the three planes; a
+triangle of kick `k` owns slot A at `vu_tri.x + k` and slot B at `vu_tri.y + k`, and under the
+tick cameras (`ICO_VU_TICKS`) slot C at `vu_tri.z + k` (`IcoVuCB.tri`; `vu_tri.z` 0xFFFFFFFF
+without them); a sprite `i` of a particle command owns slot A at `vu_tri.x + i` and slot B at
+`vu_tri.y + i`. 24 words a triangle, 28 with slot C (`vu_common.hlsli` (`VU_TF_*`)):
 
-**The triangle stage.** `vu_tri_vs` (and `vu_tri_plain_vs`, [The VU shader
-variants](#the-vu-shader-variants)) serves every mesh program: it reads the record buffer (t4 in
-group 1, `StructuredBuffer<uint4>`, nine loads an invocation) for `kick - 2`, `kick - 1` and
-`kick`, and calls `vu_mesh_out` as the program's entry did, with the program's own choices passed
-in VuCB instead of written in the entry: `vu_rec.w` holds the clip mode the program uses (normal_c
-takes VuCB's, normal_l's code 32/36 the scissor mode or the region test, codes 34 and 38, the
-cluster and the grids the region test), whether the chain clip plane and the later mark apply
-(normal_c and normal_l) and whether the content table's HIDE mark is tested (normal_c and
-normal_l); `vu_lo` and `vu_hi` hold the region test's bounds (the cluster's VU memory 0 and 1,
-the others 0 and (4094, 4094, 0, 16777214)). The marks, the card bits, the tick cameras, the
-cut, the planes, the plane distance (read from the stream) and the probe are those of the
-program's entry. A pipeline of `vu_tri_vs` does not depend on the program, so the key's program
-is normalised (`RD_PROG_PRELIT`) and the programs share their pipelines.
+| slot, plane | x | y | z | w |
+| --- | --- | --- | --- | --- |
+| A, 0 | the flags | the anchor's RGBA, a byte each, R lowest | `r.x` | `r.y` (the anchor in texels from the target's centre) |
+| A, 1 | S across | T across | Q across | the plane distance across |
+| A, 2 | S down | T down | Q down | the plane distance down |
+| B, 0 | S at the anchor | T | Q | the plane distance at the anchor |
+| B, 1 | R across | G across | B across | A across |
+| B, 2 | R down | G down | B down | A down |
+| C, 0 | tick 0's verdict | tick 1's | | |
 
-**The keys.** With the pre-pass on, the VU keys are those of `vu_tri_vs` and `vu_particle_vs`
-under the VU states (each variant as [The VU shader variants](#the-vu-shader-variants) says), and
-the ten pre-pass keys (`rd__vu_pre_key`: the program's `vu_X_pre_vs` with `vu_pre_ps`, three
-`RGBA32_UINT` targets, no depth, points, no blend); the program entries' keys are made only for a
-command drawn the old way. `[dev] vu_prepass = false` (`ICO_RD_VU_PREPASS=0`,
-[CONFIG.md](CONFIG.md#ico-pcini)) draws every VU command the old way and enumerates the program
-entries' keys, for an A/B on a device.
+The flags: bits 0..1 the region rule at the blended camera up to its tick cameras
+(`VU_RULE_EXACT`, `CLIP`, `DROP`, `STRIP`), bits 2..3 the scissor mode's corner code
+(`vu_triangle_out_pos`'s 0 culled, 1 the GS position, 2 the cut position) before the draw's
+`ICO_VU_CUT_ONLY` / `ICO_VU_KICK_ONLY`, bit 4 the planes hold (scissor and clip mode none), bit 5
+a corner has a clip flag (the scissor mode's cut triangles), bit 6 the card test's verdict
+(`vu_rule_card`'s drop), bit 7 the chain plane culls it (all three distances below 0), bit 8 the
+later bias applies (`vu_later_out`'s condition under the mark), bit 9 the content table hides it
+(`VU_TRI_HIDE`), bits 10..11 the anchor (`vu_plane_anchor`), bit 12 every corner has its GS
+position, bit 13 no corner's X or Y changed by clip mode none's 16-bit wrap, bit 14 a sprite the
+port draws. A tick's verdict is `vu_tick_shown`'s (0 not shown, 1 through the card test, 2
+drawn). The values a plane word holds are those `vu_attr_planes` and `vu_plane_out` (a sprite:
+`vu_attr_planes_at`) compute; the anchor's colour is a whole number 0..255 a channel, so its bytes
+carry it exactly. Each stage takes whole halves of the gradient basis (`vu_grad_basis`): a lane
+nothing reads would be left undefined (`OpUndef`, which the envelope refuses).
+
+**The passes.** After the uploads and the first clears, before list 0, `rd__vu_prepass` walks
+the replayed lists. It follows the state block as the walk does (`rd__apply_state` from the
+frame's start state) and gives each VU command the FrameCB its draws will bind
+(`port/render/rd_replay.c` (`rd__replay_vu_frame`, frameRefresh's: the target, its GS size and
+offset, the depth's Z scale, the command's camera picture)), which the record stages read; it
+sets up what `doVuDraw` binds (the stream in the mesh arena or the ring, VuCB's VU memory, the
+bones and card bits in VuBoneCB: `vuSource`, shared by both, kept for the command's draws), finds
+a mesh or grid command's vertices (the lowest kick less 2 to the highest of its index list, from
+the CPU's list; a grid's every strip) and a particle command's sprites, and numbers the record's
+slots: pass V's rows first (each command's vertices, then two slots a sprite), pass T's after
+them (two slots a kick of the command's range, three under the tick cameras; a position of the
+range that is no kick, a strip start, has its slots and is never read), for the commands in order
+while both fit 1024 rows. Pass V (load don't care, store): a draw a mesh or grid command, `n`
+points through the program's pre-pass entry (`vu_X_pre_vs`, the program's own vertex function on
+vertex `first + SV_VertexID`, its outputs as flat `uint4` varyings at the point's texel,
+`PointSize` 1), and two draws a particle command through `vu_particle_pre_vs` (`vu_tri.w` 0 slot
+A, 1 slot B), all with `vu_pre_ps`, which writes the three targets; the textures go to `COPY_SRC`
+and pass V's rows of each plane are copied into the frame slot's record buffer, plane after plane
+(`rhi_cmd_copy_texture_to_buffer`, which makes the copy visible to the shaders that read the
+buffer: [RHI.md](RHI.md#the-interface)). Pass T (the same textures back to `RENDER_TARGET`, load
+don't care: pass V's rows are in the buffer already) reads the vertex records from the buffer and
+draws, a mesh or grid command, a point a kick through `vu_tri_rule_pre_vs` (slot A), under the
+tick cameras two through `vu_tri_tick_pre_vs` with the colour masks R and G (`vu_tri.w` 0 and 1:
+slot C's x and y, each written without reading the other), and `vu_tri_planes_pre_vs` (slot B);
+its rows are copied after pass V's. A frame slot has its own buffer, so a replay never rewrites
+what the GPU may still read for the previous one; the textures are shared, ordered by their
+barriers. Both grow by powers of two, from 16 rows (16,384 slots) to 1,024, every slot's buffer at
+once (so the replays after the one that grew them create nothing), logged as `rd: VU pre-pass: the
+record holds 32768 slots (32 rows, 1536 KB a frame slot)`; group 1 binds the record at t4 (to the
+vertex and the pixel side), and a 256-byte buffer before there is one (the slot's upload ring when
+even that could not be made, logged once: no shader reads t4 then). A record that cannot be made
+draws that replay the old way and is asked for once more at the next replay; a second failure in
+a row turns the pre-pass off for the run (`rd: VU pre-pass: off for the run: the record (R rows, K
+KB a frame slot) could not be made twice; ...`), so no replay asks for it again (`recEnsure`,
+`s_recFails`). A command past the record's rows (`rd: VU pre-pass: a frame past the record's 1024
+rows: N of its M VU commands are drawn the old way`), one of whose pipelines is missing (its
+pre-pass entry's or a record stage's: `... the pipeline of <entry> could not be made ...`), one
+whose target has no texture, or a draw whose main shader's pipeline cannot be made (`... a
+pipeline of vu_main_vs could not be made ...`) is drawn the old way, each logged once and counted
+(`vuPreFallbacks`); while the loss bisect only names the keys a frame needs
+(`rd__pipeline_gathering`) a missing pipeline is not a fallback, so the pre-passes' and the main
+shaders' keys are the ones named. The pass ring holds the passes as `VU pre-pass, N vertices into
+the record (1024xR)` and `VU triangle pre-pass, N triangle slots into the record (1024xR)`
+(`RD_PASSK_VU_PRE`, `RD_PASSK_VU_TRI`), the loss bisect's window numbers them passes 1 and 2, and
+the per-pass timing has a pre-pass piece for each ([The pass ring](#the-pass-ring), [The per-pass
+timing](#the-per-pass-timing); `port/render/rd_replay_vu.c` (`vuPrepassRun`, `vuSource`,
+`vuPreRange`, `vuPreRecord`, `recEnsure`)).
+
+**The record stages.** `vu_tri_rule_pre_vs` reads the three corners (`vu_rec_vertex`) and the
+kick's marks and evaluates, by the program's clip mode (`vu_rec.w`), the region rule as
+`vu_region_rule` does up to its tick tail (the cut only for a triangle not wholly inside, under
+real branches), the card test's condition, the scissor mode's corner code, or clip mode none's
+wrap test; then `vu_plane_tri`, `vu_attr_planes` and, with the chain clip plane, `vu_plane_out`
+and the three distances. `vu_tri_tick_pre_vs` evaluates `vu_tick_shown` for one tick for a
+triangle not wholly inside of a region-mode draw under the tick cameras, whatever the blended
+verdict (the main shader reads it only where that is `VU_RULE_DROP`), else writes 0.
+`vu_tri_planes_pre_vs` evaluates `vu_plane_tri`, `vu_attr_planes` and `vu_plane_out` again for
+slot B's words. `vu_particle_pre_vs` evaluates `vu_particle` and `vu_particle_vs`'s drop and
+planes. Every stage is a point draw of the pre-pass entries' shape (three `RGBA32_UINT` targets,
+48 bytes a pixel, no depth, no blend).
+
+**The main shaders.** `vu_main_vs` serves every mesh program at index value `kick * 4 + corner`:
+it reads its corner's vertex record (three loads), slot A's flags (one) and, where the blended
+verdict is `VU_RULE_DROP` under the tick cameras, slot C (one); resolves the rule as
+`vu_region_rule`'s tail and `vu_rule_card` do (a tick that drew the triangle clips it, one that
+sent it to the card test sends it there, the card test's verdict decides `VU_RULE_STRIP`), applies
+the scissor draw's `ICO_VU_CUT_ONLY` / `ICO_VU_KICK_ONLY` to the stored corner code, chooses the
+position value by value as `vu_triangle_out_pos` does (`vu_corner_position`: the GS position, the
+cut position, clip mode none's wrapped one), culls past the chain plane and takes its corner's
+distance (`vu_plane_distance`, one stream load), and adds the later bias from the three corners'
+records where the flag says (`vu_later_bias`). The program's choices come from VuCB as for the
+stages: `vu_rec.w` holds the clip mode the program uses (normal_c takes VuCB's, normal_l's code
+32/36 the scissor mode or the region test, codes 34 and 38, the cluster and the grids the region
+test), whether the chain clip plane and the later mark apply (normal_c and normal_l) and whether
+the content table's HIDE mark is tested (normal_c and normal_l); `vu_lo` and `vu_hi` hold the
+region test's bounds (the cluster's VU memory 0 and 1, the others 0 and (4094, 4094, 0,
+16777214)) (`vuTriRule`). Its output (`VuVSOut2`) is the position, the colour, S, T, Q and the
+plane distance, interpolated in screen space, and a flat `tri`: the kick in bits 0..30, bit 31
+set when the triangle's planes hold. `vu_particle_main_vs` draws sprite `vid / 6` from
+`vu_particle` with slot A's verdict (`tri` the sprite's index). `vu_ps` and `vu_texa_ps` read the
+six plane texels by `tri` (`vu_record_in`) and evaluate the planes as before
+(`vu_pixel_attrs`); the programs' own entries draw with `vu_legacy_ps` and `vu_legacy_texa_ps`,
+the same pixel shader on `VuVSOut`'s flat varyings. A main shader's pipeline does not depend on
+the program, so the key's program is normalised (`RD_PROG_PRELIT`) and the programs share their
+pipelines.
+
+**The keys.** With the pre-passes on, the VU keys are those of `vu_main_vs` and
+`vu_particle_main_vs` with `vu_ps` and `vu_texa_ps` under the VU states, the ten pre-pass keys
+(`rd__vu_pre_key`: the program's `vu_X_pre_vs` with `vu_pre_ps`, three `RGBA32_UINT` targets, no
+depth, points, no blend) and the five record stage keys (`rd__vu_stage_key`: the rule, the tick
+stage under the masks R and G, the planes and the sprite stage); the program entries' keys (with
+`vu_legacy_ps`, `vu_legacy_texa_ps`) are made only for a command drawn the old way.
+`[dev] vu_prepass = false` (`ICO_RD_VU_PREPASS=0`, [CONFIG.md](CONFIG.md#ico-pcini)) draws every
+VU command the old way, for an A/B on a device.
 
 **The devices.** Only what every device the port runs on has: render passes into colour targets,
-point lists, vertex shaders reading a read-only storage buffer (as the stream already is), and
-buffer copies. No compute (the RHI has none), no storage writes from a vertex shader
-(`vertexPipelineStoresAndAtomics`, which the port never enables and phones' drivers do not all
-offer), no vertex texture fetch (`tools/check_spirv.py`'s vertex-shader opcode set holds no image
-instruction). `RGBA32_UINT` is a colour attachment and a sampled format on every Vulkan device
-(the specification's required format support) and a render target on Direct3D 12 at feature
-level 11_0; three targets are inside every device's colour attachments (at least 4 in Vulkan, 8
-on Direct3D 12). The one bound the record meets is Metal's: a pixel's colour targets may take 32
-bytes together on Apple A9 and A10 GPUs, 64 on A11 to A13 and 128 from A14 and M1 (Metal Feature
-Set Tables, "Maximum implicit image block size, per pixel, per sample, when using multiple color
-render targets"); the record's 48 bytes do not fit the first, so under MoltenVK on an A9 or A10
-the pre-pass is off (`RhiLimits.colorBytesPerPixel`; `port/rhi/rhi_driver_version.c`
-(`rhi_metal_color_bytes`), from the Metal device's name) and the log says so once. An Apple GPU
-name the table does not read is taken as unbounded (the families it names only grow), logged as
-`rd: VU pre-pass: the Apple GPU "<name>" is not one the colour-target table names: ...`; a
-pipeline Metal then refuses, or a wrong picture, is the start-up self-test's to catch (below). At start the
-renderer logs `rd: VU pre-pass: on: each mesh and grid vertex evaluated once before the lists, 48
-bytes a vertex in 3 RGBA32_UINT targets; [dev] vu_prepass = false draws the old way`, or `rd: VU
-pre-pass: off by the settings ([dev] vu_prepass = false, ICO_RD_VU_PREPASS=0): ...` or `off on
-this device (its colour targets hold 32 bytes a pixel together, the record 48: an Apple A9 or A10
-GPU): ...` (`port/render/rd_replay_vu.c` (`rd__vu_prepass_init`)).
+point lists, a colour write mask of one channel, vertex and pixel shaders reading a read-only
+storage buffer (as the stream already is), and buffer copies. No compute (the RHI has none), no
+storage writes from a vertex shader (`vertexPipelineStoresAndAtomics`, which the port never
+enables and phones' drivers do not all offer), no vertex texture fetch (`tools/check_spirv.py`'s
+vertex-shader opcode set holds no image instruction). `RGBA32_UINT` is a colour attachment and a
+sampled format on every Vulkan device (the specification's required format support) and a render
+target on Direct3D 12 at feature level 11_0; three targets are inside every device's colour
+attachments (at least 4 in Vulkan, 8 on Direct3D 12). The one bound the record meets is Metal's:
+a pixel's colour targets may take 32 bytes together on Apple A9 and A10 GPUs, 64 on A11 to A13 and
+128 from A14 and M1 (Metal Feature Set Tables, "Maximum implicit image block size, per pixel, per
+sample, when using multiple color render targets"); the record's 48 bytes do not fit the first,
+so under MoltenVK on an A9 or A10 the pre-pass is off (`RhiLimits.colorBytesPerPixel`;
+`port/rhi/rhi_driver_version.c` (`rhi_metal_color_bytes`), from the Metal device's name) and the
+log says so once. An Apple GPU name the table does not read is taken as unbounded (the families it
+names only grow), logged as `rd: VU pre-pass: the Apple GPU "<name>" is not one the colour-target
+table names: ...`; a pipeline Metal then refuses, or a wrong picture, is the start-up self-test's
+to catch (below). At start the renderer logs `rd: VU pre-pass: on: each mesh and grid vertex and
+triangle and each sprite evaluated once before the lists (two passes), 48 bytes a record slot in 3
+RGBA32_UINT targets, two slots a triangle (three under the tick cameras); [dev] vu_prepass = false
+draws the old way`, or `rd: VU pre-pass: off by the settings ([dev] vu_prepass = false,
+ICO_RD_VU_PREPASS=0): ...` or `off on this device (its colour targets hold 32 bytes a pixel
+together, the record 48: an Apple A9 or A10 GPU): ...` (`port/render/rd_replay_vu.c`
+(`rd__vu_prepass_init`)).
 
-**The self-test.** The pre-pass's pipelines are shapes no other draw of the port has (a vertex
-shader writing `PointSize` into a point list, flat `uint4` varyings into three `RGBA32_UINT`
-targets, a texture-to-buffer copy a vertex shader reads in the same list), so a driver that cannot
-make one would leave every VU pipeline to be made on first use (the start-up set holds the
-triangle stage's keys, not the programs'), and one that miscompiles them would draw the scenery
-wrong with no error. `rd_vuprepass_selftest` checks it on the device at start, after the blend's
-self-test and before the start-up set (`port/platform/window_host.c`; in a run without the set,
-after `rd_pipelines_lazy`): a frame of its own, never recorded, on SCENE at its real size and
-scale without MSAA, draws three meshes made for it (`rd_create_vu_mesh`: a prelit strip through
-normal_c code 32, a lit one through normal_l code 32 and a skinned one through cluster code 20
-with two bones, 12 vertices and 8 triangles each, overlapping at other depths, Z GEQUAL with Z
-write, untextured) with `vu1_test`'s scene in VU memory, once with the pre-pass off (the programs'
-entries, the reference) and once with it on, in the VU shader variant the settings draw with, and
-reads the block back after each. Their pipelines are made first on the worker threads the start-up
-set uses, named by two replays that draw nothing (`rd__pipeline_gather`,
-`rd__pipeline_create_gathered`, as the loss bisect makes its own): the programs' three entries are
-not in the start-up set with the pre-pass on, and on a cold driver cache a PowerVR DXT-48-1536
-compiles an extended VU program entry in about 1.3 to 3.4 s (its start-up batches in a log), so
-in parallel the self-test costs about the slowest one, and next to nothing once the pipeline cache
-holds them. It passes when the replay with the pre-pass drew every command
-through it (`RdPerfRecord.vuPrePasses` 1, `vuPreDraws` 3, `vuPreFallbacks` 0) and the two blocks
-are equal byte for byte. A difference, a pipeline the pre-pass could not make or a device error
-turns the pre-pass off for the run, so the start-up set made next holds the programs' keys:
+**The self-test.** The pre-passes' pipelines are shapes no other draw of the port has (vertex
+shaders writing `PointSize` into a point list, flat `uint4` varyings into three `RGBA32_UINT`
+targets under a one-channel mask, texture-to-buffer copies the next pass's vertex shaders and the
+main shaders read in the same list, the record read in the pixel shader), so a driver that cannot
+make one would leave every VU pipeline to be made on first use (the start-up set holds the main
+shaders' keys, not the programs'), and one that miscompiles them would draw the scenery wrong with
+no error. `rd_vuprepass_selftest` checks it on the device at start, after the blend's self-test
+and before the start-up set (`port/platform/window_host.c`; in a run without the set, after
+`rd_pipelines_lazy`): a frame of its own, never recorded, on SCENE at its real size and scale
+without MSAA, draws three meshes made for it (`rd_create_vu_mesh`: a prelit strip through normal_c
+code 32, a lit one through normal_l code 32 and a skinned one through cluster code 20 with two
+bones, 12 vertices and 8 triangles each, overlapping at other depths, Z GEQUAL with Z write,
+untextured) with `vu1_test`'s scene in VU memory, the prelit mesh again through a camera blended
+between two ticks' (one vertex of each triangle behind the blended camera's eye, every triangle
+inside at tick 1's camera, so each is drawn clipped through the tick stage, in front of the
+others; left out where the fallback is the plain variant, which has no tick cameras) and four
+particles, once with the pre-passes off (the programs' entries with `vu_legacy_ps`, the
+reference) and once with them on, and reads the block back after each. Their pipelines are made
+first on the worker threads the start-up set uses, named by two replays that draw nothing
+(`rd__pipeline_gather`, `rd__pipeline_create_gathered`, as the loss bisect makes its own): the
+programs' entries are not in the start-up set with the pre-pass on, and on a cold driver cache a
+PowerVR DXT-48-1536 compiles an extended VU program entry in about 1.3 to 3.4 s (its start-up
+batches in a log), so in parallel the self-test costs about the slowest one, and next to nothing
+once the pipeline cache holds them. It passes when the replay with the pre-passes drew every
+command through them (`RdPerfRecord.vuPrePasses` 2, `vuPreDraws` 16, 11 without the tick copy,
+`vuPreSprites` 4, `vuPreFallbacks` 0) and the two blocks are equal byte for byte. A difference, a
+pipeline the pre-passes could not make or a device error turns the pre-pass off for the run, so
+the start-up set made next holds the programs' keys:
 
 ```
-rd: VU pre-pass: on (self-test: prelit, lit and skin byte for byte, 36 vertices in 3 pre-pass draws, <n> of <m> pixels drawn) on SCENE <w>x<h> at <tw>x<th> texels in <t> ms
+rd: VU pre-pass: on (self-test: prelit, lit, skin, the tick cameras and particles byte for byte, 48 vertices and 4 sprites in 16 pre-pass draws (2 passes, 90 triangle slots), <n> of <m> pixels drawn) on SCENE <w>x<h> at <tw>x<th> texels in <t> ms
 rd: VU pre-pass: off (self-test: the pictures differ: <n> of <m> bytes, the first at texel <x>,<y>: <r>,<g>,<b>,<a> want <r>,<g>,<b>,<a>) on SCENE ...
-rd: VU pre-pass: off (self-test: a pipeline could not be made (<d> of 3 commands through the pre-pass, <f> draws the old way)) on SCENE ...
+rd: VU pre-pass: off (self-test: a pipeline could not be made (<p> passes, <d> of <w> pre-pass draws, <s> sprites, <f> draws the old way)) on SCENE ...
 rd: VU pre-pass: off (self-test: the device failed in the replay with the pre-pass) on SCENE ...
 ```
 
 A start whose pre-pass is already off (the settings, the device, the host's
-`rd_set_vu_prepass_off`: a restart step or an end in its compile) runs nothing and logs `rd: VU pre-pass: off (self-test not run)`; a frame
-it could not build, or one in which neither replay drew the meshes, leaves the pre-pass on (`on
-(self-test not run: ...)`, `on (self-test inconclusive: ...)`). The summary line carries the
-verdict (`VU pre-pass on (self-test: ok)`, `VU pre-pass off (self-test: <reason>)`,
-[PLATFORM.md](PLATFORM.md#the-summary-line)). A crash in one of its pipelines is noted as the
-start-up set's would be and takes the crash order's `noprepass` step; a start that ended without a
-word in one of the pre-pass's pipelines or batches makes the next start draw without it, and the
-second such end in a row writes `[dev] vu_prepass = false`; a device loss in a run drawing with
-it takes the loss order's `lossnoprepass` step first ([PLATFORM.md](PLATFORM.md#diagnostics)). It
-tests the variant the start draws with:
-a later change of settings that moves the draws to the other variant is not tested again
-(`port/render/rd_vuprepass_selftest.c`; `port/render/rd.h` (`rd_vuprepass_selftest`);
-`ICO_RD_VU_PREPASS_SABOTAGE=1` draws the first command's records a texel off,
-[TESTING.md](TESTING.md#environment-switches)).
+`rd_set_vu_prepass_off`: a restart step or an end in its compile) runs nothing and logs `rd: VU
+pre-pass: off (self-test not run)`; a frame it could not build, or one in which neither replay
+drew the meshes, leaves the pre-pass on (`on (self-test not run: ...)`, `on (self-test
+inconclusive: ...)`). The summary line carries the verdict (`VU pre-pass on (self-test: ok)`, `VU
+pre-pass off (self-test: <reason>)`, [PLATFORM.md](PLATFORM.md#the-summary-line)). A crash in one
+of its pipelines is noted as the start-up set's would be and takes the crash order's `noprepass`
+step; a start that ended without a word in one of the pre-pass's pipelines or batches makes the
+next start draw without it, and the second such end in a row writes `[dev] vu_prepass = false`; a
+device loss in a run drawing with it takes the loss order's `lossnoprepass` step first
+([PLATFORM.md](PLATFORM.md#diagnostics)) (`port/render/rd_vuprepass_selftest.c`;
+`port/render/rd.h` (`rd_vuprepass_selftest`); `ICO_RD_VU_PREPASS_SABOTAGE=1` draws the first
+command's vertex records a texel off, `=tri` its triangles' slot A a slot off, `=ticks` the tick
+stage's tick 1 at tick 0's camera, [TESTING.md](TESTING.md#environment-switches)).
 
 **Why the picture is the same.** The pre-pass entry calls the program's vertex function, the same
 source with the same `precise` operations, so each recorded word is the value the old entry
 computed for that corner (the shaders keep the precise flags of `port/shaders/CMakeLists.txt`;
-`precise` forbids contraction and reassociation of each operation it marks). The record carries
-the bits through integer targets and a buffer copy, with no float conversion on the way, and the
-triangle stage reads them back as `asfloat`. The one value recomputed, GS X and Y from `p`, is
-`vu_divide`'s own operation on the same bits, for a finite `p`: a NaN `p` (only a garbage stream
-gives one) converts as each module's `OpConvertFToS` does, which SPIR-V leaves undefined
-(Direct3D makes it 0), so two modules may differ there. The triangle math (`vu_mesh_out`: the pick, the
-region rule, the cut, the ticks, the card test, the corner rule, the planes, the plane distance,
-the later bias) is unchanged and is given the same values, with the program's clip mode, bounds
-and flags from VuCB equal to the constants its entry used. Within the old shaders the three
-copies of a vertex (as corner `c` of triangle `k`, `b` of `k + 1`, `a` of `k + 2`) were three
-inlined evaluations of one expression; the record makes them one evaluation. `vu1_test` draws
-every case both ways, probe and pictures, and compares them byte for byte
-([TESTING.md](TESTING.md#portshaderstest)).
+`precise` forbids contraction and reassociation of each operation it marks). The record stages
+call the functions the program's entry calls (`vu_region_rule_cut`, `vu_cut_z` and `vu_cut_rows`
+as the same branchless chain, `vu_tick_shown`, `vu_strip_card`, `vu_plane_anchor`,
+`vu_grad_basis`, `vu_attr_planes`, `vu_plane_out`, `vu_plane_distance`), on the same record bits
+(`vu_rec_vertex`), under the same VuCB, VuBoneCB and FrameCB (the command's draws'); splitting the
+verdict across the stages computes some pure parts the entry skipped (tick 1 when tick 0 drew it,
+the planes of a triangle whose planes do not hold, the tick test for a verdict that is not
+`VU_RULE_DROP`), which nothing reads. The record carries the bits through integer targets and a
+buffer copy with no float conversion (the anchor's colour as bytes of whole numbers), and the
+readers take them back as `asfloat`: the main shader's corner values and the pixel shader's plane
+words are the words the entry's corner computed and its flat varyings carried. The one value
+recomputed from a record, GS X and Y from `p`, is `vu_divide`'s own operation on the same bits,
+for a finite `p`: a NaN `p` (only a garbage stream gives one) converts as each module's
+`OpConvertFToS` does, which SPIR-V leaves undefined (Direct3D makes it 0), so two modules may
+differ there. The cut's `lerp`s and divide carry no `precise`, so a driver may contract them in
+either module: the same exposure the program entries have against each other, which the tests
+pin. The ten mesh programs' entries and the pre-pass entries compile to the same SPIR-V with the
+record stages in the tree, and `vu_legacy_ps` is the pixel shader they drew with, instruction for
+instruction. `vu1_test` draws every case both ways, probe and pictures, and compares them byte for
+byte ([TESTING.md](TESTING.md#portshaderstest)); `rd_vustage_ab` compares every target of the
+dump corpus both ways at Original 4:3 1x and Enhanced 4:3 2x.
 
 **The saving.** Each vertex function runs once a vertex a command instead of three times an index
-of each of the command's draws, and an invocation keeps the triangle math and nine loads. By the
-modules' size (`tools/check_spirv.py --sizes`, instructions) a vertex function with its packing is
-416 (`vu_grid_pre_vs`) to 627 (`vu_skin_debug_pre_vs`) instructions in 29 to 36 blocks, three of
-which an invocation of a program entry ran; `vu_tri_vs` is 10,091 instructions against
-`vu_prelit_vs`'s 10,727 ([SHADERS.md](SHADERS.md#the-variants)). The replay's record counts the
-pre-pass (`RdPerfRecord.vuPreVertices`, `vuPreDraws`, `vuPrePasses`, `vuPreFallbacks`,
-`gpuPrepassMs`); the window's 10 s lines and the replay tool's `--stats` print them, so a log
-shows the pre-pass's own GPU time next to the lists' ([Performance
+of each of the command's draws, and each triangle's verdict and planes once a triangle instead of
+three times a draw; a main shader's invocation keeps its corner's loads, the position forms and
+the chain plane: by the modules' size (`tools/check_spirv.py --sizes`, instructions) `vu_main_vs`
+is 1,408 instructions (5,890 words) against `vu_prelit_vs`'s 10,729 (50,230), the stages 3,600
+(rule, 16,515 words), 3,426 (tick, 16,485), 972 (planes, 4,269) and 2,071 (sprite, 8,801), every
+one under the plain budget ([SHADERS.md](SHADERS.md#the-variants)). The interpolated outputs drop
+from 36 floats to 8 and a flat word. The replay's record counts the pre-passes
+(`RdPerfRecord.vuPreVertices`, `vuPreSprites`, `vuTriSlots`, `vuPreDraws`, `vuPrePasses`,
+`vuPreFallbacks`, `gpuPrepassMs`); the window's 10 s lines and the replay tool's `--stats` print
+them, so a log shows the pre-passes' own GPU time next to the lists' ([Performance
 records](#performance-records)).
 
 ## Destination reads and blend paths
@@ -1754,9 +1849,10 @@ window: per replay 1803 draws, 61 passes, ..., 0.0 DATE snapshots, 0.0 exact ble
 fog and the other effects' milliseconds; the two together say what a slow card spends its replay
 on. `--stats` prints the counts as a second line, `<dump>: stats: D destination-read draws, S
 storage passes, P pass switches for the exact blend; glow N passes; snapshots C copied, W swapped;
-A draws resampled above 1x`, and the VU vertex pre-pass as a third, `<dump>: stats: VU pre-pass
-on: 1 passes, V vertices in D draws; F mesh and grid draws the old way` (`vuPrePasses`,
-`vuPreVertices`, `vuPreDraws`, `vuPreFallbacks`, [The vertex pre-pass](#the-vertex-pre-pass));
+A draws resampled above 1x`, and the VU vertex and triangle pre-passes as a third, `<dump>: stats:
+VU pre-pass on: 2 passes, V vertices in D draws; F mesh and grid draws the old way; S sprites, T
+triangle slots` (`vuPrePasses`, `vuPreVertices`, `vuPreDraws`, `vuPreFallbacks`, `vuPreSprites`,
+`vuTriSlots`, [The vertex and triangle pre-passes](#the-vertex-and-triangle-pre-passes));
 the GPU line (`window: GPU ms per replay: ...`) ends with `; VU pre-pass <ms>`, as `--stats`'s
 `gpu:` line does
 (`port/render/rd.h` (`RdPerfRecord`); `port/platform/window_host.c` (`perf_log`)).

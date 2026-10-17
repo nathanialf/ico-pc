@@ -64,7 +64,7 @@ D32F_S8 (the scene's depth-stencil; the Vulkan backend may back it with D24S8,
 fog), RGBA32 UINT (the VU vertex pre-pass's record planes, a colour target and copy source: a
 colour attachment and sampled on every Vulkan device by the specification's required format
 support, a render target at Direct3D 12 feature level 11_0; D3D12 makes it typeless, viewed UINT,
-[RENDER.md](RENDER.md#the-vertex-pre-pass)). Vertex formats are F32x1..4, U8x4 UNORM and UINT, U16x2 UINT, U32x1 (`port/rhi/rhi.h`,
+[RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)). Vertex formats are F32x1..4, U8x4 UNORM and UINT, U16x2 UINT, U32x1 (`port/rhi/rhi.h`,
 formats).
 
 **Resources.** Buffers have a usage mask and a memory kind: DEVICE (static meshes), UPLOAD (the
@@ -544,7 +544,7 @@ size, per pixel, per sample, when using multiple color render targets" (Metal Fe
 for the Apple GPU the device name gives (`rhi_metal_color_bytes`: `Apple A9 GPU` and `Apple A10 GPU`
 32 bytes, A11 to A13 64, A14 and later and the M-series 128; an Intel or AMD GPU of a Mac 0, no
 bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on an A9 or A10
-([RENDER.md](RENDER.md#the-vertex-pre-pass); `port/rhi/rhi_driver_version.c`;
+([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes); `port/rhi/rhi_driver_version.c`;
 `port/rhi/vk/vk_device.c` (`vkr_fill_limits`)).
 
 ## Tests

@@ -621,7 +621,7 @@ phase in ms, the backend's fence wait, the creation, bind, draw, barrier, copy a
 the upload bytes, `gpu_valid`, the GPU total, uploads, each list `gpu_list<N>_ms`, the present, the
 replay's start, alpha, `first_of_tick`, each picture effect `gpu_<effect>_ms`,
 `gpu_effects_partial`, the VU vertex pre-pass's `gpu_prepass_ms`, `vu_pre_vertices`,
-`vu_pre_draws` and `vu_pre_fallbacks` ([RENDER.md](RENDER.md#the-vertex-pre-pass)), the walk's
+`vu_pre_draws` and `vu_pre_fallbacks` ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)), the walk's
 CPU time by list `walk_list<N>_ms`, the upload bytes by what they carry `upload_texture_bytes`,
 `upload_uniform_bytes`, `upload_interp_bytes` (of the mesh bytes) and `upload_stream_bytes`, and
 the per-pass timing's `passes` (the pieces begun), `pass_timed` and `pass_count`

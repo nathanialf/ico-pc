@@ -382,7 +382,7 @@ on the second such end in a row: below). The steps come in order, each taken onl
 tries again), `noprepass` (the note names a pipeline of the VU vertex pre-pass: a ` pre` key, a
 `vu_X_pre_vs` module or the triangle stage's `vu_tri_vs` or `vu_tri_plain_vs`,
 `startup_retry_note_has_vu_pre`; the same backend without the pre-pass, `ICO_RD_VU_PREPASS=0`
-from `ico_ini_export`, which makes none of them, [RENDER.md](RENDER.md#the-vertex-pre-pass)),
+from `ico_ini_export`, which makes none of them, [RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)),
 `fixedblend` (the note names a pipeline whose `dst` field is nonzero, an exact-blend
 pass with a fragment shader interlock or rasterizer-ordered view entry: the same backend with the
 fixed-function blend, `ICO_RD_BLEND=fixed` from `ico_ini_export` as for the loss steps, which builds
