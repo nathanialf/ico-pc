@@ -66,12 +66,12 @@ foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:sk
 endforeach()
 ico_add_shader(vu_pre_ps vu_tri.hlsl vu_pre_ps fragment)
 ico_add_shader(vu_tri_vs vu_tri.hlsl vu_tri_vs vertex)
-# the plain variants (ICO_VU_PLAIN, vu_common.hlsli): no card test and no
-# tick cameras, for the draws with neither (rd_replay_vu.c vuDraw); about half
-# the size (issue 107: the Adreno 740's compiler hangs the device on the
-# extended ones)
+# the ten mesh program entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli):
+# no card test and no tick cameras, the fallback's entries on a device of the
+# table (rd_pipeline.c rd__vu_policy_init, g_rd.vsFallback; issue 107: the
+# Adreno 740's compiler hung the device on the extended ones)
 foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:skin skin_debug:skin
-        grid:grid grid_lit:grid grid_spec:grid particle:particle tri:tri)
+        grid:grid grid_lit:grid grid_spec:grid)
     string(REGEX REPLACE ":.*" "" _e "${_v}")
     string(REGEX REPLACE ".*:" "" _f "${_v}")
     ico_add_shader(vu_${_e}_plain_vs vu_${_f}.hlsl vu_${_e}_vs vertex DEFINES ICO_VU_PLAIN=1)

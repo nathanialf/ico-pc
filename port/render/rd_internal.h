@@ -1061,8 +1061,9 @@ typedef enum RdVsId {
     RD_VS_COUNT
 } RdVsId;
 
-/* the VU vertex shaders with a plain and an extended variant (issue 107):
- * the programs' entries and the pre-pass's triangle stage */
+/* the VU program entries (the fallback's, docs/port/RENDER.md "The fallback
+ * entries"; the ten mesh entries have a plain variant, g_rd.vsFallback) and
+ * the old triangle stage */
 #define RD_VS_VU_FIRST RD_VS_VU_PRELIT
 #define RD_VS_VU_LAST RD_VS_VU_TRI
 #define RD_VS_VU_PRE_FIRST RD_VS_VU_PRE_PRELIT
@@ -1082,6 +1083,22 @@ static inline uint8_t rd__vu_pre_vs(uint8_t vs)
 static inline bool rd__vs_is_vu_pre(uint8_t vs)
 {
     return vs >= RD_VS_VU_PRE_FIRST && vs <= RD_VS_VU_PRE_LAST;
+}
+
+/* the record path's point stages (vu_tri_rule_pre_vs .. vu_particle_pre_vs:
+ * points into the record's three RGBA32_UINT targets through vu_pre_ps, as
+ * the vertex pre-pass's entries; rd__vu_stage_key) */
+static inline bool rd__vs_is_vu_stage(uint8_t vs)
+{
+    return vs >= RD_VS_VU_TRI_RULE_PRE && vs <= RD_VS_VU_PARTICLE_PRE;
+}
+
+/* the record path's two drawing vertex shaders (vu_main_vs,
+ * vu_particle_main_vs): group 1 = layoutVu, no vertex input, as the
+ * program entries */
+static inline bool rd__vs_is_vu_main(uint8_t vs)
+{
+    return vs == RD_VS_VU_MAIN || vs == RD_VS_VU_PARTICLE_MAIN;
 }
 
 typedef enum RdFsId {
@@ -1170,11 +1187,6 @@ typedef struct RdPipeKeyInt {
     /* RhiDstRead: the exact blend's destination read (rd_dst_read.c); the
      * fragment entry is its _dstrov or _dstatt twin, blending off */
     uint8_t dst;
-    /* a VU key's vertex shader variant (issue 107; vu_common.hlsli
-     * ICO_VU_PLAIN): 1 the extended one (vu_*_vs: the card test and the
-     * tick cameras), 0 the plain one (vu_*_plain_vs); 0 for every other
-     * key.  rd_replay_vu.c vuDraw sets it (rd__vu_draw_ext) */
-    uint8_t vuExt;
 } RdPipeKeyInt;
 
 /* One hardware draw of a screen-prim command (the AFAIL split makes two). */
@@ -1327,12 +1339,24 @@ RdPipeKeyInt rd__post_key(RdVsId vs, RdFsId fs, RhiFormat colorFmt);
 RdPipeKeyInt rd__present_depth_key(RhiFormat colorFmt);
 /* The pipeline for k, created on first use.  0 without a device. */
 RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k);
-/* v0.7.10: binds p and sets the dynamic state the key asks for where the
- * device left it dynamic (RhiLimits.dynamicDepth / dynamicBlend: the
- * depth test, write and compare, the blend and the colour mask, from the
- * UN-normalised key).  Every draw binds through this, never through
+/* Binds p and sets the dynamic state the key asks for where the device
+ * left it dynamic (RhiLimits.dynamicDepth / dynamicBlend: the depth test,
+ * write and compare, the blend and the colour mask), from the
+ * UN-normalised key k, the one rd__get_pipeline was given (NULL: the bind
+ * alone).  Every draw binds through this, never through
  * rhi_cmd_set_pipeline directly (rd_pipeline.c). */
 void rd__set_pipeline(RhiCommandList cl, RhiPipeline p, const RdPipeKeyInt *k);
+/* The dynamic state's key normalisation (docs/port/RENDER.md "Pipelines"):
+ * with g_rd.dynDepth, a key with a depth attachment and no stencil mode
+ * gets ztst ALWAYS and zwrite OFF; with g_rd.dynBlend, a key with one
+ * colour target and no destination read (not a point stage) gets blend
+ * RD_BLEND_COUNT and colour mask 0xF.  Those fields then come from
+ * the draw (rd__set_pipeline), so keys that differed only in them share one
+ * pipeline.  rd__get_pipeline (drawKey) and rd__enumerate_reachable apply
+ * it; rd__key_dynamic_bits says which groups a key leaves dynamic (the
+ * same conditions, RHI_DYN_*). */
+void rd__key_dynamic_normalise(RdPipeKeyInt *k);
+uint32_t rd__key_dynamic_bits(const RdPipeKeyInt *k);
 /* the key's words ("program 0 blend 4 vs 5 fs 5 fmt 1/8 msaa 0 dst 0") */
 void rd__pipe_key_text(const RdPipeKeyInt *k, char *out, size_t size);
 /* The crash report's note (rd_set_activity_fn) around a pipeline made
@@ -1383,29 +1407,23 @@ uint32_t rd__add_pipe_key(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdP
 /* The screen and post families alone (rd_state_test holds them under 400,
  * and the whole set under RD_PIPELINE_REACHABLE_MAX). */
 uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max);
-/* The VU program families (rd_mesh.c): each VU vertex shader
- * under the states the mesh lists draw with.  Appends to out[0..n). */
+/* The VU program families (rd_mesh.c): with the vertex pre-pass the record
+ * path's two drawing shaders under the states the mesh lists draw with and
+ * the ten pre-pass and five stage keys; without it the eleven program
+ * entries with the legacy pixel shaders.  Appends to out[0..n). */
 uint32_t rd__enumerate_reachable_vu(RdPipeKeyInt *out, uint32_t max, uint32_t n);
-/* The VU shader variants (issue 107; docs/port/RENDER.md, "The VU shader
- * variants"), rd_pipeline.c.
- * rd__vu_policy_init  at rd_init, after the shaders: creates the plain
- *                     variants' modules (false when one is missing), and
- *                     whether this run
- *                     draws every VU draw with the plain variants
- *                     (g_rd.vuPlainOnly: the device table,
- *                     RhiLimits.vuPlainOnly; ICO_RD_VU_PLAIN=1, [dev]
- *                     vu_plain_only; rd_set_vu_plain_only), ICO_RD_VU_EXTENDED=1
- *                     overriding them; logs the device's compiler line and
- *                     the policy, once per rd_init
- * rd__vu_ext_reachable  whether the settings can produce a draw that
- *                     wants the extended variant (the Enhanced preset, a
- *                     frame wider than 4:3 or a wider aspect, a scene
- *                     scale above 1, the interpolation on), and the device
- *                     takes it: the start-up set has the extended keys
- * rd__vu_draw_ext     the variant of a VU draw with the VU_F_* flags
- *                     drawFlags (vu_draw.z): 1 when it has VU_F_EXTENDED or
- *                     VU_F_TICKS and the device takes it (else 0, logged
- *                     once per run when a draw wanted it)
+/* The VU modules (docs/port/RENDER.md, "The fallback entries"),
+ * rd_pipeline.c.
+ * rd__vu_policy_init  at rd_init, after the shaders: which program entries
+ *                     the fallback draws through (g_rd.vsFallback: the
+ *                     plain ones on a device of the table,
+ *                     RhiLimits.vuFallbackPlain, with ICO_RD_VU_PLAIN=1 or
+ *                     after rd_set_vu_plain_only; the extended ones
+ *                     elsewhere or with ICO_RD_VU_EXTENDED=1; their modules
+ *                     made then), the dynamic state in force (g_rd.dynDepth,
+ *                     dynBlend from RhiLimits); logs the device's compiler
+ *                     line, the modules and the dynamic state, once per
+ *                     rd_init.  false only without a device's limits.
  * rd__shader_words    a module's size in 32-bit words (its SPIR-V), 0 when
  *                     the table has no such module
  * rd__shader_instructions  its SPIR-V instruction count (the header's five
@@ -1430,8 +1448,16 @@ void rd__set_vu_prepass(bool on);
  * triangle stage reads them */
 void rd__vu_prepass_sabotage(bool on);
 RdPipeKeyInt rd__vu_pre_key(uint8_t preVs);
-bool rd__vu_ext_reachable(void);
-uint8_t rd__vu_draw_ext(uint32_t drawFlags);
+/* The key of a record stage's point draw (rd_replay_vu.c, pass V's particle
+ * stage and pass T; docs/port/RENDER.md "The vertex and triangle
+ * pre-passes"): vs one of RD_VS_VU_TRI_RULE_PRE .. RD_VS_VU_PARTICLE_PRE,
+ * rd__vu_pre_key's fields (vu_pre_ps into the three RGBA32_UINT targets,
+ * points, no depth, no blend) with colour mask colorMask on each target
+ * (0xF; the tick stage 0x1 or 0x2, its R or G).  rd__enumerate_reachable_vu
+ * holds the five the draws ask for: rule 0xF, tick 0x1, tick 0x2, planes
+ * 0xF, particle 0xF. */
+RdPipeKeyInt rd__vu_stage_key(uint8_t vs, uint8_t colorMask);
+#define RD_HAVE_VU_STAGE_KEY 1
 uint32_t rd__shader_words(const char *name);
 uint32_t rd__shader_instructions(const char *name);
 
@@ -1916,13 +1942,21 @@ typedef struct RdContext {
     RhiBindGroupLayout layoutVu; /* t0 stream, b1 DrawCB, b2 VuCB, b3 VuBoneCB */
     RhiShader vs[RD_VS_COUNT], fs[RD_FS_COUNT];
     RdProfile profile; /* rd__profile_init */
-    /* the VU vertex shaders' plain variants (vu_*_plain_vs, indexed by
-     * RD_VS_*; 0 for the others), and whether every VU draw takes them
-     * (rd__vu_policy_init) and why ("on this device (Adreno 740, issue
-     * 107)") */
+    /* the fallback's program entries (rd__vu_policy_init; docs/port/RENDER.md
+     * "The fallback entries"): vsPlain the ten mesh entries' plain variants
+     * (vu_X_plain_vs, made only when the fallback takes them; 0
+     * otherwise), vsFallback the module each program entry's key draws
+     * through (vsPlain[v] or vs[v]; RD_VS_VU_PRELIT .. RD_VS_VU_PARTICLE),
+     * vuFallbackPlain whether they are the plain ones and why ("on this
+     * device (Adreno 740, issue 107)") */
     RhiShader vsPlain[RD_VS_COUNT];
-    bool vuPlainOnly;
+    RhiShader vsFallback[RD_VS_COUNT];
+    bool vuFallbackPlain;
     char vuPlainWhy[160];
+    /* the dynamic state in force (rd__vu_policy_init from
+     * RhiLimits.dynamicDepth / dynamicBlend; rd__key_dynamic_normalise,
+     * rd__set_pipeline) */
+    bool dynDepth, dynBlend;
     /* the VU vertex pre-pass (rd_replay_vu.c rd__vu_prepass, rd__vu_prepass_init;
      * docs/port/RENDER.md, "The vertex pre-pass"): on unless the settings
      * ([dev] vu_prepass = false, ICO_RD_VU_PREPASS=0) or the device

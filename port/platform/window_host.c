@@ -1801,8 +1801,8 @@ open_window:
        that ended inside it (pipePolicy): each pipeline is then built when
        a frame first needs it, the title comes at once, and the pipeline
        cache is written after each batch of them (rd_pipelines_lazy) */
-    const char *devLazy = rhi_limits() != NULL ? rhi_limits()->lazyPipelines : NULL;
-    const char *devVuPlain = rhi_limits() != NULL ? rhi_limits()->vuPlainOnly : NULL;
+    const char *devLazy = rhi_limits() != NULL ? rhi_limits()->carefulPipelines : NULL;
+    const char *devVuPlain = rhi_limits() != NULL ? rhi_limits()->vuFallbackPlain : NULL;
     /* an end while preparing the graphics, by kind: the first's line, the
        second's setting for good, neither on a device whose table entry
        already rules that kind (the lazy column for the pipelines, the

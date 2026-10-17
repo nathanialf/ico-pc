@@ -507,6 +507,9 @@ typedef struct RdPipelineSetPolicy {
 
 void rd_set_pipeline_policy(const RdPipelineSetPolicy *p);
 const RdPipelineSetPolicy *rd_pipeline_policy(void);
+/* the careful values (batch 8, one worker thread, a 128 MB budget, the cache
+ * after each batch) for a device of RhiLimits.carefulPipelines */
+const RdPipelineSetPolicy *rd_pipeline_policy_careful(void);
 /* Whether the run draws with the VU vertex pre-pass now (after rd_init and
  * rd_vuprepass_selftest) */
 bool rd_vu_prepass_on(void);
@@ -1832,6 +1835,7 @@ typedef struct RdPerfRecord {
     double fenceWaitMs; /* the backend's blocked time on GPU completion (inside wait, readback) */
     uint32_t buffersCreated, buffersDestroyed, texturesCreated, texturesDestroyed;
     uint32_t memoryAllocs, memoryFrees, bindGroups, pipelineBinds, bindGroupBinds;
+    uint32_t dynamicSets; /* dynamic depth and blend commands (RhiStats.dynamicSets) */
     uint32_t draws, renderPasses, barriers, copies, fenceWaits, waitIdles, readbacks;
     uint32_t textureUploads, meshUploads, tempClears, dateSnapshots, exactBlends;
     uint32_t pipelineCreates; /* pipelines created (a key the start-up set missed) */

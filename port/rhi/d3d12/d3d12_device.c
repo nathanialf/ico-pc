@@ -665,8 +665,8 @@ static void dx_fill_limits(void)
     /* RGBA8 textures are TYPELESS resources: a UINT SRV of any of them
      * (d3d12_pipeline.c, RHI_ASPECT_UINT) */
     o->uintView = true;
-    o->vuPlainOnly = NULL;
-    o->lazyPipelines = NULL;
+    o->vuFallbackPlain = NULL;
+    o->carefulPipelines = NULL;
     o->compilerVersion = NULL;
 }
 

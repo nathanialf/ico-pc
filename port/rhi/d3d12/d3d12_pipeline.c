@@ -781,6 +781,9 @@ uint32_t rhi_create_pipelines(const RhiPipelineDesc *descs, uint32_t n, RhiPipel
         if (want > n) {
             want = n;
         }
+        if (batch && batch->maxThreads > 0 && want > batch->maxThreads) {
+            want = batch->maxThreads; /* the careful set: one compile at a time */
+        }
         w.wake = CreateEventW(NULL, FALSE, FALSE, NULL);
         /* kernel32's CreateThread by address: the game's PS2 kernel defines a
          * CreateThread of its own (port/platform/kernel_host.c), so the name

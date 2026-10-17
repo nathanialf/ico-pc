@@ -102,7 +102,7 @@ void rd_summary_text(char *out, size_t size)
              g_rdSumBlend[0] ? g_rdSumBlend : "(self-test not reached)",
              rd__profile_text()[0] ? rd__profile_text() : "(not decided)",
              g_rdSumFog[0] ? g_rdSumFog : "(self-test not reached)",
-             g_rd.vuPlainOnly ? "plain only (issue 107)" : "plain and extended", split,
+             g_rd.vuFallbackPlain ? "one set, fallback plain (issue 107)" : "one set", split,
              g_rdSumPrepass[0] ? g_rdSumPrepass : "(self-test not reached)",
              rd__pipelines_lazy_on() ? "on first use (no start-up set)" : "the start-up set");
 }

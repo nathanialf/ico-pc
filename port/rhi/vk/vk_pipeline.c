@@ -534,16 +534,13 @@ RhiBindGroup rhi_create_bind_group(const RhiBindGroupDesc *desc)
 }
 
 /* -------------------------------------------------------------- pipelines */
-static VkPipelineColorBlendAttachmentState vkr_blend(const RhiBlendState *b, RhiFormat fmt)
+/* b as Vulkan's attachment state; blending off on an integer target (the
+ * pipeline's and rhi_cmd_set_blend_state's, vk_cmd.c) */
+VkPipelineColorBlendAttachmentState vkr_blend_state(const RhiBlendState *b, bool intTarget)
 {
     VkPipelineColorBlendAttachmentState s = {0};
     s.colorWriteMask = (VkColorComponentFlags)(b->writeMask & 0xFu);
-    bool enable = b->enable;
-    if (enable && vkr_formatMap[fmt].isInteger) {
-        VKR_LOG("pipeline: blending on an integer target is ignored");
-        enable = false;
-    }
-    if (!enable) {
+    if (!b->enable || intTarget) {
         return s;
     }
     s.blendEnable = VK_TRUE;
@@ -554,6 +551,30 @@ static VkPipelineColorBlendAttachmentState vkr_blend(const RhiBlendState *b, Rhi
     s.dstAlphaBlendFactor = vkr_blendFactorMap[b->dstAlpha].vk;
     s.alphaBlendOp = vkr_blendOpMap[b->alphaOp].vk;
     return s;
+}
+
+/* the dynamic blend values of attachment state a, as the pipeline's
+ * defaults and rhi_cmd_set_blend_state make them (vk_cmd.c
+ * vkr_flush_dynamic) */
+void vkr_blend_dyn(const VkPipelineColorBlendAttachmentState *a, VkrBlendDyn *out)
+{
+    memset(out, 0, sizeof(*out));
+    out->enable = a->blendEnable;
+    out->eq.srcColorBlendFactor = a->srcColorBlendFactor;
+    out->eq.dstColorBlendFactor = a->dstColorBlendFactor;
+    out->eq.colorBlendOp = a->colorBlendOp;
+    out->eq.srcAlphaBlendFactor = a->srcAlphaBlendFactor;
+    out->eq.dstAlphaBlendFactor = a->dstAlphaBlendFactor;
+    out->eq.alphaBlendOp = a->alphaBlendOp;
+    out->mask = a->colorWriteMask;
+}
+
+static VkPipelineColorBlendAttachmentState vkr_blend(const RhiBlendState *b, RhiFormat fmt)
+{
+    if (b->enable && vkr_formatMap[fmt].isInteger) {
+        VKR_LOG("pipeline: blending on an integer target is ignored");
+    }
+    return vkr_blend_state(b, vkr_formatMap[fmt].isInteger);
 }
 
 static VkStencilOpState vkr_stencil(const RhiStencilFace *f, const RhiDepthStencilState *ds)
@@ -774,6 +795,7 @@ typedef struct VkrPipeJob {
     VkPipelineColorBlendAttachmentState cba[RHI_MAX_COLOR_TARGETS];
     VkFormat colorFormats[RHI_MAX_COLOR_TARGETS];
     VkPipelineColorBlendStateCreateInfo cb;
+    VkDynamicState dynStates[10];
     VkPipelineDynamicStateCreateInfo dy;
     VkPipelineRenderingCreateInfo ri;
     VkGraphicsPipelineCreateInfo ci;
@@ -782,6 +804,17 @@ typedef struct VkrPipeJob {
 static const VkDynamicState vkr_pipe_dynamic[] = {
     VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_STENCIL_REFERENCE,
     VK_DYNAMIC_STATE_BLEND_CONSTANTS};
+
+/* RHI_DYN_DEPTH and RHI_DYN_BLEND (rhi.h RhiPipelineDesc.dynamic): the
+ * states a pipeline leaves to the draw where the device has them
+ * (g_vkr.dynDepth, dynBlend; vk_device.c), the description's values staying
+ * the static ones a draw gets until a set (vk_cmd.c vkr_flush_dynamic) */
+static const VkDynamicState vkr_pipe_dynamic_depth[] = {VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
+                                                        VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
+                                                        VK_DYNAMIC_STATE_DEPTH_COMPARE_OP};
+static const VkDynamicState vkr_pipe_dynamic_blend[] = {VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT,
+                                                        VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT,
+                                                        VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT};
 
 static bool vkr_pipe_prepare(const RhiPipelineDesc *d, VkrPipeJob *j)
 {
@@ -828,6 +861,16 @@ static bool vkr_pipe_prepare(const RhiPipelineDesc *d, VkrPipeJob *j)
     }
     p->layoutCount = d->layoutCount;
     p->dstRead = (uint8_t)d->dstRead;
+    /* the dynamic groups this device takes; the blend only with one colour
+     * target (rhi_cmd_set_blend_state sets attachment 0) */
+    p->dynamic = 0;
+    if ((d->dynamic & RHI_DYN_DEPTH) && g_vkr.dynDepth && d->depthFormat != RHI_FMT_UNKNOWN) {
+        p->dynamic |= RHI_DYN_DEPTH;
+    }
+    if ((d->dynamic & RHI_DYN_BLEND) && g_vkr.dynBlend && d->colorCount == 1) {
+        p->dynamic |= RHI_DYN_BLEND;
+    }
+    p->intTarget = d->colorCount > 0 && vkr_formatMap[d->colorFormats[0]].isInteger;
     j->id = id;
     j->layout = p->layout;
 
@@ -903,6 +946,12 @@ static bool vkr_pipe_prepare(const RhiPipelineDesc *d, VkrPipeJob *j)
         j->cba[i] = vkr_blend(&d->blend[i], d->colorFormats[i]);
         j->colorFormats[i] = vkr_vk_format(d->colorFormats[i]);
     }
+    /* the static values, a dynamic pipeline's draw's until a set */
+    memset(&p->depthDefault, 0, sizeof(p->depthDefault));
+    p->depthDefault.test = j->ds.depthTestEnable;
+    p->depthDefault.write = j->ds.depthWriteEnable;
+    p->depthDefault.compare = j->ds.depthCompareOp;
+    vkr_blend_dyn(&j->cba[0], &p->blendDefault);
     j->cb = (VkPipelineColorBlendStateCreateInfo){
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
         /* the attachment read as an input attachment in rasterization
@@ -914,10 +963,20 @@ static bool vkr_pipe_prepare(const RhiPipelineDesc *d, VkrPipeJob *j)
         .attachmentCount = d->colorCount,
         .pAttachments = j->cba,
     };
+    uint32_t nDyn = 0;
+    for (size_t i = 0; i < sizeof(vkr_pipe_dynamic) / sizeof(vkr_pipe_dynamic[0]); i++) {
+        j->dynStates[nDyn++] = vkr_pipe_dynamic[i];
+    }
+    for (size_t i = 0; (p->dynamic & RHI_DYN_DEPTH) && i < 3; i++) {
+        j->dynStates[nDyn++] = vkr_pipe_dynamic_depth[i];
+    }
+    for (size_t i = 0; (p->dynamic & RHI_DYN_BLEND) && i < 3; i++) {
+        j->dynStates[nDyn++] = vkr_pipe_dynamic_blend[i];
+    }
     j->dy = (VkPipelineDynamicStateCreateInfo){
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        .dynamicStateCount = (uint32_t)(sizeof(vkr_pipe_dynamic) / sizeof(vkr_pipe_dynamic[0])),
-        .pDynamicStates = vkr_pipe_dynamic,
+        .dynamicStateCount = nDyn,
+        .pDynamicStates = j->dynStates,
     };
     VkFormat depthFmt = vkr_vk_format(d->depthFormat);
     j->ri = (VkPipelineRenderingCreateInfo){
@@ -1076,7 +1135,10 @@ uint32_t rhi_create_pipelines(const RhiPipelineDesc *descs, uint32_t n, RhiPipel
     if (n > 1 || (batch && batch->wait)) {
         SDL_Thread *th[RHI_PIPELINE_THREADS_MAX];
         uint32_t started = 0;
-        const uint32_t want = vkr_pipe_threads_for(n);
+        uint32_t want = vkr_pipe_threads_for(n);
+        if (batch && batch->maxThreads > 0 && want > batch->maxThreads) {
+            want = batch->maxThreads; /* the careful set: one compile at a time */
+        }
         SDL_SetAtomicInt(&w.next, 0);
         SDL_SetAtomicInt(&w.finished, 0);
         w.wake = SDL_CreateSemaphore(0);

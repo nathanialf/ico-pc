@@ -1409,7 +1409,7 @@ static void msaaFullscreen(RdFsId fs, RhiFormat colorFmt, RhiTexture src, RhiVie
     if (!g2.id) {
         return;
     }
-    rhi_cmd_set_pipeline(s_cl, pipe);
+    rd__set_pipeline(s_cl, pipe, &k);
     rd__bind_uniform(s_cl, 0, rd__frame_group(w, h, 0.0f, 0.0f));
     rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
     rhi_cmd_set_bind_group(s_cl, 2, g2);
@@ -3244,7 +3244,7 @@ static void flushScreenRun(Replay *r)
         r->sc = q->sc;
         rhi_cmd_set_scissor(s_cl, &q->sc);
         rhi_cmd_set_vertex_buffer(s_cl, 0, g_rd.ring[s_slot], off);
-        rhi_cmd_set_pipeline(s_cl, q->pipe);
+        rd__set_pipeline(s_cl, q->pipe, &q->key);
         rd__bind_uniform(s_cl, 0, q->frame);
         rd__bind_uniform(s_cl, 1, rd__draw_group(&q->cb));
         rhi_cmd_set_bind_group(s_cl, 2, q->g2);
@@ -3252,7 +3252,7 @@ static void flushScreenRun(Replay *r)
         drawCmd(s_cl, q->count, 0, 1);
         if (q->passes == 2 && q->pipe2.id) {
             /* the two-pass fallback's alpha pass over the same vertices */
-            rhi_cmd_set_pipeline(s_cl, q->pipe2);
+            rd__set_pipeline(s_cl, q->pipe2, &q->key2);
             rd__bind_uniform(s_cl, 0, q->frame);
             rd__bind_uniform(s_cl, 1, rd__draw_group(&q->cb2));
             rhi_cmd_set_bind_group(s_cl, 2, q->g2);
@@ -3397,7 +3397,7 @@ static bool drawExpanded(Replay *r, const RdDrawPass *pass, const DrawSetup *ds,
         IcoDrawCB cb;
         fillDrawCB(r, &ex[j], ds, &cb);
         dstPassMode(r, &ex[j].key); /* a storage pass for a storage destination read */
-        rhi_cmd_set_pipeline(s_cl, p);
+        rd__set_pipeline(s_cl, p, &ex[j].key);
         rd__bind_uniform(s_cl, 0, r->frameBG);
         rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
         rhi_cmd_set_bind_group(s_cl, 2, g2);
@@ -3768,7 +3768,7 @@ void rd__overlay_draw(RhiCommandList cl, RhiFormat fmt, RdUniform frame, uint8_t
         if (dp[i].key.fs == RD_FS_FONT_SHEET) {
             sheetParam(rd__tex_rec(tex), cb.param);
         }
-        rhi_cmd_set_pipeline(cl, p);
+        rd__set_pipeline(cl, p, &dp[i].key);
         rd__bind_uniform(cl, 0, frame);
         rd__bind_uniform(cl, 1, rd__draw_group(&cb));
         rhi_cmd_set_bind_group(cl, 2, g2);
@@ -4063,7 +4063,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
                                       drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.s, 0),
                                       drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.t, 1), ds.mipmapped,
                                       ds.replacement);
-    rhi_cmd_set_pipeline(s_cl, pa);
+    rd__set_pipeline(s_cl, pa, NULL); /* wrapPipeline: every state static */
     rd__bind_uniform(s_cl, 0, frameGroupOf(tc, ox, oy, rd__target_z_scale(ds.tdId)));
     rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
     rhi_cmd_set_bind_group(s_cl, 2, rd__tex_group(ds.tex, smp));
@@ -4077,7 +4077,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     rhi_cmd_set_scissor(s_cl, &sc);
     IcoDrawCB rb;
     memset(&rb, 0, sizeof(rb));
-    rhi_cmd_set_pipeline(s_cl, pr);
+    rd__set_pipeline(s_cl, pr, NULL); /* wrapPipeline: every state static */
     rd__bind_uniform(s_cl, 0, rd__frame_group(tc->tw, tc->th, 0.0f, 0.0f));
     rd__bind_uniform(s_cl, 1, rd__draw_group(&rb));
     rhi_cmd_set_bind_group(s_cl, 2,
@@ -4158,7 +4158,7 @@ static void doExact(Replay *r, const RdCmd *c)
     b[1].type = RHI_BIND_SAMPLED_TEXTURE;
     b[1].texture = cd->tex;
     if (pipe.id) {
-        rhi_cmd_set_pipeline(s_cl, pipe);
+        rd__set_pipeline(s_cl, pipe, &k);
         rd__bind_uniform(s_cl, 0, rd__frame_group(w, h, 0.0f, 0.0f));
         rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
         rhi_cmd_set_bind_group(s_cl, 2, bindGroup(g_rd.layoutInt, b, 2));
@@ -4352,7 +4352,7 @@ static void doShadowStrip(Replay *r, const RdFrame *f, const RdCmd *c)
         const RdPipeKeyInt k = rd__shadow_volume_key(&r->st, ds.tc->format, decr);
         RhiPipeline p = rd__get_pipeline(&k);
         if (p.id) {
-            rhi_cmd_set_pipeline(s_cl, p);
+            rd__set_pipeline(s_cl, p, &k);
             rd__bind_uniform(s_cl, 0, r->frameBG);
             rd__bind_uniform(s_cl, 1, g1);
             rhi_cmd_set_bind_group(s_cl, 2, g2);
@@ -4431,7 +4431,7 @@ static void shadowReduce(Replay *r, RdTargetRec *tc)
         cb.param[0] = tc->sx;
         cb.scale[2] = tc->ox;
     }
-    rhi_cmd_set_pipeline(s_cl, pipe);
+    rd__set_pipeline(s_cl, pipe, &k);
     rd__bind_uniform(s_cl, 0, rd__frame_group(tc->w, tc->h, 0.0f, 0.0f));
     rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
     rhi_cmd_set_bind_group(
@@ -4475,7 +4475,7 @@ static void doShadowResolve(Replay *r)
         }
         cb.uvRect[2] = cb.uvRect[3] = 1.0f;
         cb.tex[0] = cb.tex[1] = cb.tex[2] = cb.tex[3] = 1.0f;
-        rhi_cmd_set_pipeline(s_cl, p);
+        rd__set_pipeline(s_cl, p, &k);
         rd__bind_uniform(s_cl, 0, g0);
         rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
         rhi_cmd_set_bind_group(s_cl, 2, g2);
@@ -5815,7 +5815,7 @@ bool rd__camera_probe(const RdCamera *cam, const float p[4], float out[3][4])
             memcpy(cb.param, p, sizeof(cb.param));
             cb.uvRect[2] = cb.uvRect[3] = 1.0f;
             cb.tex[0] = cb.tex[1] = cb.tex[2] = cb.tex[3] = 1.0f;
-            rhi_cmd_set_pipeline(s_cl, pipe);
+            rd__set_pipeline(s_cl, pipe, &k);
             rd__bind_uniform(s_cl, 0, rd__frame_group(PW, PH, 0.0f, 0.0f));
             rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
             rhi_cmd_set_bind_group(

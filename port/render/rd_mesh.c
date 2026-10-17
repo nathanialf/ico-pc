@@ -2330,13 +2330,13 @@ void rd_draw_vu_mesh(RdMesh mesh, const RdVuDraw *d, RdKey key)
         p.materialCount = m->materialCount;
     }
     /* the card verdicts of the draw's free-standing strips, in a state
-     * other than out of the box (rd_mesh.h RdVuCards); none where every VU
-     * draw takes the plain shaders, which have no card test
-     * (g_rd.vuPlainOnly; a dump fills them, rd__vu_cards_fill_frame) */
+     * other than out of the box (rd_mesh.h RdVuCards), on every device (the
+     * record path has the card test everywhere; a dump fills them,
+     * rd__vu_cards_fill_frame) */
     const uint8_t *cards = NULL;
     uint32_t cardBytes = 0;
     const int kind = cardKind(p.prog, p.clip);
-    if (kind >= 0 && m->cardStripCount && rd__vu_extended() && !g_rd.vuPlainOnly &&
+    if (kind >= 0 && m->cardStripCount && rd__vu_extended() &&
         (kind != VU1REF_CARD_CLUSTER || (d->bones && p.boneQw >= 240u))) {
         cards = meshCards(m, first, n, kind, (const float (*)[4])d->vu.mem,
                           kind == VU1REF_CARD_CLUSTER ? d->bones : NULL, &cardBytes);
@@ -2376,11 +2376,10 @@ void rd_draw_vu_grid(const RdVuGridDraw *d, RdKey key)
     float sx = 0.0f, sy = 0.0f;
     rd__grid_screen_st_take(&kind, &sx, &sy);
     /* a grid of one strip: its card verdict (rd_mesh.h RdVuCards; a grid
-     * of two strips or more is joined); none with the plain shaders only,
-     * as rd_draw_vu's */
+     * of two strips or more is joined), as rd_draw_vu's */
     const uint8_t *cards = NULL;
     uint32_t cardBytes = 0;
-    if (d->strips == 1 && rd__vu_extended() && !g_rd.vuPlainOnly) {
+    if (d->strips == 1 && rd__vu_extended()) {
         cards =
             gridCards((const float (*)[4])d->vu.mem, d->qw, p.qwPerVertex, d->stripLen, &cardBytes);
     }
@@ -2433,46 +2432,60 @@ void rd_draw_vu_particles(const RdVuParticleDraw *d, RdKey key)
 }
 
 /* ------------------------------------------------------------ pipelines
- * The VU families: each VU vertex shader with vu_ps under the states the
- * mesh lists draw with (rd.h's list defaults and the game's register
- * packets): TEST Z GEQUAL with ATE off (lists 0, 6-9, 0x50000), the list 1/2
- * default 0x5140D and Texture.c's per-texture TEST (ATE GREATER, AFAIL
- * FB_ONLY: the split pair), the list 4 default 0x5C000 (DATE, normalised
- * out); Z write on and off; ALPHA off and the material, dissolve,
- * specular, reflection and particle equations 0x44, 0x48, 0x42, 0x68, 0x62
- * (four hardware paths); SCENE's D32F_S8 (render-to-texture targets have
- * depth too).  The scissor batches' cut pass forces ABE on: the same set.
- * With the vertex pre-pass (g_rd.vuPrepass) the mesh programs draw through
- * vu_tri_vs, whose keys carry RD_PROG_PRELIT whatever the program
- * (rd_replay.c vuDraw), and the particles through their own entry; without
- * it every program entry, under the same states (so every program entry's
- * key has its vu_tri_vs twin; rd_state_test testEnumerationPrepass).  With
- * the pre-pass the two shaders' keys are also made under TEST Z ALWAYS
- * (0x30000), Z write on and off: a VU draw after the game turned the Z
- * test off (queen_barrier_disp.c MakeRefractTexture before the barrier
- * mesh, pool.c copyToWork, staticBlur.c addWork1ToFBWithZ; on a PowerVR a
- * vu_tri_vs pipeline made on first use stalls the picture about 750 ms);
- * the eleven program entries' keys keep the three tests above, which would
- * pass RD_PIPELINE_REACHABLE_MAX with both variants doubled. */
-static uint32_t enumerateVuVariant(RdPipeKeyInt *out, uint32_t max, uint32_t n, uint8_t ext)
+ * The VU families: each drawing VU vertex shader with vu_ps under the
+ * states the mesh lists draw with (rd.h's list defaults and the game's
+ * register packets): TEST Z GEQUAL with ATE off (lists 0, 6-9, 0x50000),
+ * the list 1/2 default 0x5140D and Texture.c's per-texture TEST (ATE
+ * GREATER, AFAIL FB_ONLY: the split pair), the list 4 default 0x5C000
+ * (DATE, normalised out); Z write on and off; ALPHA off and the material,
+ * dissolve, specular, reflection and particle equations 0x44, 0x48, 0x42,
+ * 0x68, 0x62 (four hardware paths); SCENE's D32F_S8 (render-to-texture
+ * targets have depth too).  The scissor batches' cut pass forces ABE on:
+ * the same set.
+ * With the vertex pre-pass (g_rd.vuPrepass, the record path; docs/port/
+ * RENDER.md "The vertex and triangle pre-passes") the meshes and grids
+ * draw through vu_main_vs, whose keys carry RD_PROG_PRELIT whatever the
+ * program, and the particles through vu_particle_main_vs (RD_PROG_PARTICLE,
+ * the particles' program), each also under TEST Z ALWAYS (0x30000), Z
+ * write on and off: a VU draw after the game turned the Z test off
+ * (queen_barrier_disp.c MakeRefractTexture before the barrier mesh, pool.c
+ * copyToWork, staticBlur.c addWork1ToFBWithZ; on a PowerVR a VU pipeline
+ * made on first use stalls the picture about 750 ms): 32 keys each.  The
+ * program entries draw only the fallback then (the plain or extended
+ * module, g_rd.vsFallback), made on first use.  Without the pre-pass every
+ * VU draw is the old way: the eleven program entries with the legacy pixel
+ * shaders (vu_legacy_ps, vu_legacy_texa_ps) under the three tests above,
+ * 16 keys each. */
+static uint32_t enumerateVuDraws(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 {
     static const uint64_t kTests[] = {RD_TEST_Z_GEQUAL, RD_TEST_AT_GT64_FBONLY,
                                       RD_TEST_DATE1_Z_GEQUAL, RD_TEST_Z_ALWAYS};
     static const int kBlends[] = {-1, RD_BLEND_LERP_AS, RD_BLEND_CS_AS_ADD_CD,
                                   RD_BLEND_CD_SUB_CS_AS};
-    for (uint8_t vs = RD_VS_VU_FIRST; vs <= RD_VS_VU_LAST; vs++) {
-        const bool tri = vs == RD_VS_VU_TRI;
-        if (g_rd.vuPrepass ? !tri && vs != RD_VS_VU_PARTICLE : tri) {
-            continue;
-        }
-        uint8_t prog = RD_PROG_PRELIT;
-        for (size_t i = 0; i < sizeof(kRows) / sizeof(kRows[0]) && !tri; i++) {
-            if (kRows[i].vs == vs) {
-                prog = kRows[i].prog;
+    uint8_t vsList[RD_VS_VU_PARTICLE - RD_VS_VU_PRELIT + 1], progList[sizeof(vsList)];
+    uint32_t nv = 0;
+    if (g_rd.vuPrepass) {
+        vsList[nv] = RD_VS_VU_MAIN;
+        progList[nv++] = RD_PROG_PRELIT;
+        vsList[nv] = RD_VS_VU_PARTICLE_MAIN;
+        progList[nv++] = RD_PROG_PARTICLE;
+    } else {
+        for (uint8_t vs = RD_VS_VU_PRELIT; vs <= RD_VS_VU_PARTICLE; vs++) {
+            uint8_t prog = RD_PROG_PRELIT;
+            for (size_t i = 0; i < sizeof(kRows) / sizeof(kRows[0]); i++) {
+                if (kRows[i].vs == vs) {
+                    prog = kRows[i].prog;
+                }
             }
+            vsList[nv] = vs;
+            progList[nv++] = prog;
         }
-        /* Z ALWAYS (the last test) for the pre-pass's two shaders only */
-        const size_t nt = sizeof(kTests) / sizeof(kTests[0]) - (g_rd.vuPrepass ? 0u : 1u);
+    }
+    /* Z ALWAYS (the last test) for the record path's two shaders only */
+    const size_t nt = sizeof(kTests) / sizeof(kTests[0]) - (g_rd.vuPrepass ? 0u : 1u);
+    const uint8_t fsPlain = g_rd.vuPrepass ? RD_FS_VU : RD_FS_VU_LEGACY;
+    const uint8_t fsTexa = g_rd.vuPrepass ? RD_FS_VU_TEXA : RD_FS_VU_LEGACY_TEXA;
+    for (uint32_t v = 0; v < nv; v++) {
         for (size_t t = 0; t < nt; t++) {
             for (int zw = 0; zw < 2; zw++) {
                 for (size_t b = 0; b < sizeof(kBlends) / sizeof(kBlends[0]); b++) {
@@ -2486,13 +2499,12 @@ static uint32_t enumerateVuVariant(RdPipeKeyInt *out, uint32_t max, uint32_t n, 
                     int np = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD,
                                                   RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
                     /* vu_ps and, for a 24- or 16-bit texture
-                     * under AEM, vu_texa_ps */
+                     * under AEM, vu_texa_ps (their legacy twins) */
                     for (int i = 0; i < np * 2; i++) {
                         RdPipeKeyInt k = dp[i / 2].key;
-                        k.gs.program = prog;
-                        k.vs = vs;
-                        k.fs = (i & 1) ? RD_FS_VU_TEXA : RD_FS_VU;
-                        k.vuExt = ext;
+                        k.gs.program = progList[v];
+                        k.vs = vsList[v];
+                        k.fs = (i & 1) ? fsTexa : fsPlain;
                         n = rd__add_pipe_key(out, max, n, &k);
                     }
                 }
@@ -2502,23 +2514,30 @@ static uint32_t enumerateVuVariant(RdPipeKeyInt *out, uint32_t max, uint32_t n, 
     return n;
 }
 
-/* the plain variants unless no draw can take them, the extended ones (vuExt
- * 1) when the settings can draw with them on a device that takes them
- * (rd__vu_ext_reachable; rd_pipeline.c puts them after every other key).
- * In a state other than out of the box (rd__vu_extended: the Enhanced
- * preset, a frame wider than 4:3, a scene scale above 1) every VU draw has
- * ICO_VU_EXTENDED (rd_replay.c) and so the extended variant
- * (rd__vu_draw_ext), unless the device or the settings keep it to the
- * plain ones (g_rd.vuPlainOnly) */
+/* With the pre-pass the pre-pass's ten entries (rd__vu_pre_key) and the
+ * record stages' five point keys (rd__vu_stage_key: the rule, the tick
+ * camera test under R and under G, the colour planes, the particles'
+ * stage), then the drawing keys (enumerateVuDraws).  One module set on
+ * every device and in every state: no variant to choose. */
 uint32_t rd__enumerate_reachable_vu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 {
-    /* the vertex pre-pass's entries, one key each (rd__vu_pre_key) */
     for (uint8_t v = RD_VS_VU_PRE_FIRST; g_rd.vuPrepass && v <= RD_VS_VU_PRE_LAST; v++) {
         const RdPipeKeyInt k = rd__vu_pre_key(v);
         n = rd__add_pipe_key(out, max, n, &k);
     }
-    if (!rd__vu_extended() || g_rd.vuPlainOnly) {
-        n = enumerateVuVariant(out, max, n, 0);
+    if (g_rd.vuPrepass) {
+        static const struct {
+            uint8_t vs, mask;
+        } kStages[] = {{RD_VS_VU_TRI_RULE_PRE, 0xF},
+                       {RD_VS_VU_TRI_TICK_PRE, 0x1},
+                       {RD_VS_VU_TRI_TICK_PRE, 0x2},
+                       {RD_VS_VU_TRI_PLANES_PRE, 0xF},
+                       {RD_VS_VU_PARTICLE_PRE, 0xF}};
+
+        for (size_t i = 0; i < sizeof(kStages) / sizeof(kStages[0]); i++) {
+            const RdPipeKeyInt k = rd__vu_stage_key(kStages[i].vs, kStages[i].mask);
+            n = rd__add_pipe_key(out, max, n, &k);
+        }
     }
-    return rd__vu_ext_reachable() ? enumerateVuVariant(out, max, n, 1) : n;
+    return enumerateVuDraws(out, max, n);
 }

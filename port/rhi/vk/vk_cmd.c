@@ -1117,7 +1117,14 @@ void rhi_cmd_set_pipeline(RhiCommandList cl, RhiPipeline p)
         vkr_flush_barriers(c);
         vkCmdBindPipeline(c->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pp->pipeline);
         g_vkr.stats.pipelineBinds++;
+        /* a group the new pipeline has static: its own values replaced the
+         * ones set before, which a later dynamic pipeline must set again */
+        c->dynValid &= pp->dynamic;
     }
+    /* the next draw's dynamic values: the pipeline's own until a set */
+    c->dynSet = 0;
+    c->depthWant = pp->depthDefault;
+    c->blendWant = pp->blendDefault;
 }
 
 void rhi_cmd_set_bind_group_offsets(RhiCommandList cl, uint32_t group, RhiBindGroup bg,
@@ -1216,20 +1223,102 @@ void rhi_cmd_set_blend_constant(RhiCommandList cl, const float rgba[4])
     }
 }
 
-/* v0.7.10 dynamic state and local read (rhi.h): no-ops until the backend
- * takes them (RhiLimits.dynamicDepth, dynamicBlend, localRead's barrier) */
+/* The dynamic depth and blend state (rhi.h RhiPipelineDesc.dynamic;
+ * docs/port/RHI.md "Dynamic state").  The sets keep what the next draw
+ * needs (only for a bound pipeline with that group dynamic; for any other
+ * they do nothing, its own values are in force); the draw emits what
+ * differs from the values the command buffer holds, every command of a
+ * group after a bind of a pipeline with the group static (that bind
+ * replaced them), nothing that is already in force.  So a draw gets exactly
+ * the values a pipeline with every state static would have given it, and
+ * RhiStats.dynamicSets counts the commands recorded. */
 void rhi_cmd_set_depth_state(RhiCommandList cl, bool test, bool write, RhiCompare cmp)
 {
-    (void)cl;
-    (void)test;
-    (void)write;
-    (void)cmp;
+    VkrCmdList *c = vkr_get_cmd(cl);
+    if (!c || !c->pipeline || !(c->pipeline->dynamic & RHI_DYN_DEPTH)) {
+        return;
+    }
+    memset(&c->depthWant, 0, sizeof(c->depthWant));
+    c->depthWant.test = test ? VK_TRUE : VK_FALSE;
+    c->depthWant.write = test && write ? VK_TRUE : VK_FALSE;
+    c->depthWant.compare = vkr_compareMap[cmp].vk;
+    c->dynSet |= RHI_DYN_DEPTH;
 }
 
 void rhi_cmd_set_blend_state(RhiCommandList cl, const RhiBlendState *blend)
 {
-    (void)cl;
-    (void)blend;
+    VkrCmdList *c = vkr_get_cmd(cl);
+    if (!c || !blend || !c->pipeline || !(c->pipeline->dynamic & RHI_DYN_BLEND)) {
+        return;
+    }
+    const VkPipelineColorBlendAttachmentState a = vkr_blend_state(blend, c->pipeline->intTarget);
+    vkr_blend_dyn(&a, &c->blendWant);
+    c->dynSet |= RHI_DYN_BLEND;
+}
+
+/* before a draw: the bound pipeline's dynamic groups as the draw needs
+ * them (rhi_cmd_set_depth_state's comment) */
+static void vkr_flush_dynamic(VkrCmdList *c)
+{
+    const uint8_t dyn = c->pipeline->dynamic;
+    if (!dyn) {
+        return;
+    }
+    if ((dyn & ~c->dynSet) != 0u) {
+        /* a bind site that does not set the state (rd binds through
+         * rd__set_pipeline, which always does): the pipeline's own values,
+         * which are the key's normalised ones, not the draw's (once a run) */
+        static bool logged;
+        if (!logged) {
+            logged = true;
+            VKR_LOG("dynamic state: a draw with its pipeline's %s%s%s left unset since the bind "
+                    "(the pipeline's own values used; reported once)",
+                    (dyn & ~c->dynSet & RHI_DYN_DEPTH) ? "depth" : "",
+                    (dyn & ~c->dynSet) == (RHI_DYN_DEPTH | RHI_DYN_BLEND) ? " and " : "",
+                    (dyn & ~c->dynSet & RHI_DYN_BLEND) ? "blend" : "");
+        }
+    }
+    if (dyn & RHI_DYN_DEPTH) {
+        const bool all = !(c->dynValid & RHI_DYN_DEPTH);
+        const VkrDepthDyn *w = &c->depthWant, *h = &c->depthHave;
+        if (all || w->test != h->test) {
+            g_vkr.cmdSetDepthTestEnable(c->cb, w->test);
+            g_vkr.stats.dynamicSets++;
+        }
+        if (all || w->write != h->write) {
+            g_vkr.cmdSetDepthWriteEnable(c->cb, w->write);
+            g_vkr.stats.dynamicSets++;
+        }
+        if (all || w->compare != h->compare) {
+            g_vkr.cmdSetDepthCompareOp(c->cb, w->compare);
+            g_vkr.stats.dynamicSets++;
+        }
+        c->depthHave = *w;
+        c->dynValid |= RHI_DYN_DEPTH;
+    }
+    if (dyn & RHI_DYN_BLEND) {
+        const bool all = !(c->dynValid & RHI_DYN_BLEND);
+        const VkrBlendDyn *w = &c->blendWant;
+        VkrBlendDyn *h = &c->blendHave;
+        if (all || w->enable != h->enable) {
+            g_vkr.cmdSetColorBlendEnable(c->cb, 0, 1, &w->enable);
+            g_vkr.stats.dynamicSets++;
+            h->enable = w->enable;
+        }
+        /* the equation matters only while blending: one left over from an
+         * earlier draw stays until a blended draw needs another */
+        if (all || (w->enable && memcmp(&w->eq, &h->eq, sizeof(w->eq)) != 0)) {
+            g_vkr.cmdSetColorBlendEquation(c->cb, 0, 1, &w->eq);
+            g_vkr.stats.dynamicSets++;
+            h->eq = w->eq;
+        }
+        if (all || w->mask != h->mask) {
+            g_vkr.cmdSetColorWriteMask(c->cb, 0, 1, &w->mask);
+            g_vkr.stats.dynamicSets++;
+            h->mask = w->mask;
+        }
+        c->dynValid |= RHI_DYN_BLEND;
+    }
 }
 
 void rhi_cmd_local_read_barrier(RhiCommandList cl, uint32_t mask)
@@ -1283,6 +1372,7 @@ void rhi_cmd_draw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
     vkr_flush_barriers(c);
     vkr_dst_order(c);
     vkr_flush_bind_groups(c);
+    vkr_flush_dynamic(c);
     vkCmdDraw(c->cb, vertexCount, instanceCount ? instanceCount : 1u, firstVertex, 0);
     g_vkr.stats.draws++;
 }
@@ -1297,6 +1387,7 @@ void rhi_cmd_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t first
     vkr_flush_barriers(c);
     vkr_dst_order(c);
     vkr_flush_bind_groups(c);
+    vkr_flush_dynamic(c);
     vkCmdDrawIndexed(c->cb, indexCount, instanceCount ? instanceCount : 1u, firstIndex,
                      vertexOffset, 0);
     g_vkr.stats.draws++;

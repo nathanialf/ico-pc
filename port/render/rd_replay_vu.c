@@ -341,11 +341,9 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     RdDrawPass pl[2], dp[8];
     const int npl = rd__plan_screen_draw(s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, ds->tc->format,
                                          ds->depthFmt, pl);
-    const uint8_t vuExt = rd__vu_draw_ext(vcb->draw[2]); /* the VS variant */
     for (int i = 0; i < npl; i++) {
         pl[i].key.gs.program = vs == RD_VS_VU_TRI ? RD_PROG_PRELIT : prog;
         pl[i].key.vs = vs;
-        pl[i].key.vuExt = vuExt;
         /* the planner's sprite_texa_ps becomes vu_texa_ps */
         pl[i].key.fs = pl[i].key.fs == RD_FS_SPRITE_TEXA ? RD_FS_VU_TEXA : RD_FS_VU;
         if (vcb->batch[2] != 0u) {
@@ -464,7 +462,7 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
     RdVuCards cards;
     const uint8_t *pay = f->payload + c->u[1];
     const uint32_t cardWords = rd__vu_cards_at(pay, c->u[2], &cards);
-    const bool cardsRead = cardWords && cards.any && rd__vu_extended() && !g_rd.vuPlainOnly;
+    const bool cardsRead = cardWords && cards.any && rd__vu_extended();
     const bool withCards = cardsRead && (c->type != RDC_SKINNED || (m && m->boneQwUsed < 240u));
     if (cardsRead && !withCards && c->type == RDC_SKINNED) {
         /* bones reaching bone 59 (address 252; the game allows 0..59,

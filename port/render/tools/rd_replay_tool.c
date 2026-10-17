@@ -1419,6 +1419,11 @@ int main(int argc, char **argv)
         printf("%s: stats: texa draws %u (TEXA per texel), %u GS-level draws on the GS's grid; "
                "%u staticBlur sprites through the UINT views\n",
                dump, pr->texaDraws, pr->gridDraws, pr->uintDraws);
+        /* the dynamic state (rd_pipeline.c rd__set_pipeline): the depth and
+         * blend commands the binds above needed, none where every state is
+         * static */
+        printf("%s: stats: %u dynamic state sets (dynamic depth %s, blend %s)\n", dump,
+               pr->dynamicSets, g_rd.dynDepth ? "on" : "off", g_rd.dynBlend ? "on" : "off");
         /* the VU vertex pre-pass (rd_replay_vu.c rd__vu_prepass): each mesh and grid
          * vertex once, before the lists */
         printf("%s: stats: VU pre-pass %s: %u passes, %u vertices in %u draws; %u mesh and grid "
