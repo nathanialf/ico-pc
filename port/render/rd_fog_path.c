@@ -897,6 +897,8 @@ static bool runSelftest(void)
         bool drewLocal = false;
         if (!stRun(&f, t, &err[p], &worst[p], &drewLocal)) {
             result[p] = ST_ERROR;
+            /* under MSAA nothing says the local read itself was at fault */
+            localMsaa = localMsaa || (p == RD_FOG_LOCAL && s_st.samples > 1u);
         } else {
             result[p] = err[p] <= ST_TOLERANCE ? ST_OK : ST_FAIL;
             if (p == RD_FOG_LOCAL && !drewLocal) {
