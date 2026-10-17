@@ -1452,23 +1452,31 @@ storage passes, P pass switches for the exact blend; glow N passes; snapshots C 
 The [integer forms](SHADERS.md#integer-forms) (REPEAT's mask, `fx_sprite_ps`'s division and its
 coverage at scale 1) give the same bytes and shorten the executed path of `fx_sprite_ps`,
 `sprite_texa_ps`, `vu_texa_ps` and the GS-mipmapped sprite entries. Their timings, from
-`rd_replay_tool DUMP out.png --stats` on lavapipe (Mesa 25.0.7, `ICO_RD_BLEND=fixed`, three serial
-runs, the fastest): the issue 95 title frame (`loss-20261015-100428-lost.rddump`, Original 1x
-4:3) and the issue 102 Mac frame (`frame-20261015-161933-v4251.rddump`, 688x448 16:9). GPU
-milliseconds a replay; lists 0, 3, 4, 7 and 11; the effects glow, fog and motion blur (the
-sprite alone: its list's end ends it, [above](#performance-records)). The first column was taken
-on a host at a load average of 4.5 to 6 on four cores and runs high and uneven (the same title
-frame measured 139 to 142 ms on a quiet host); the second is taken at the same load as the first
-it is compared with.
+`rd_replay_tool DUMP out.png --stats` on lavapipe (Mesa 25.0.7, `ICO_RD_BLEND=fixed`): the issue 95
+title frame (`loss-20261015-100428-lost.rddump`, Original 1x 4:3) and the issue 102 Mac frame
+(`frame-20261015-161933-v4251.rddump`, 688x448 16:9). The tool without the cuts (8c97d3cd8) and the
+tool with them ran interleaved, three pairs per setting on the same host, the fastest of each: a
+lavapipe timing is wall time on shared cores, so only an interleaved pair is comparable (a first
+"after" run taken beside other work came out 2.4 times slower than its "before" on the Mac frame).
+GPU milliseconds a replay; lists 0, 3, 4, 7 and 11; the effects glow and fog. The motion blur's
+effect time is not comparable across the pair: without the cuts it took lists 8 to 11 with it
+(the attribution ended at the next TARGET, [above](#performance-records)); list 7 holds the
+sprite on both sides.
 
-| frame, setting | without the cuts: total; lists 0, 3, 4, 7, 11; glow, fog, motion blur | with the cuts |
+| frame, setting | without the cuts: total; lists 0, 3, 4, 7, 11; glow, fog | with the cuts |
 | --- | --- | --- |
-| title, Original 1x | 148.4; 50.0, 15.3, 11.3, 62.6, 2.5; 54.1, 11.2, 8.4 | (to measure) |
-| title, Original 1x, `ICO_RD_NO_DUAL=1` | 231.3; 69.8, 31.0, 20.2, 90.5, 7.1; 77.3, 20.1, 13.1 | (to measure) |
-| title, `--enhanced --resolution 2x --present 1376x896` | 478.6; 45.4, 59.3, 32.3, 311.5, 7.8; 283.9, 32.2, 27.3 | (to measure) |
-| Mac, Original 1x | 775.4; 191.7, 37.4, 202.3, 189.1, 106.8; 159.2, 202.3, 29.8 | (to measure) |
-| Mac, `--enhanced --resolution 2x --present 1376x896` | 820.8; 80.3, 75.1, 127.9, 342.3, 142.1; 305.4, 127.9, 36.6 | (to measure) |
-| Mac, the same with `--glow-original` | 783.5; 78.0, 72.0, 128.4, 321.1, 135.5; 283.0, 128.4, 37.8 | (to measure) |
+| title, Original 1x | 131.9; 43.6, 11.4, 8.6, 60.6, 2.0; 53.4, 8.5 | 123.2; 48.1, 11.6, 5.3, 50.6, 1.9; 44.4, 5.2 |
+| title, Original 1x, `ICO_RD_NO_DUAL=1` | 158.4; 56.0, 16.8, 10.6, 62.9, 4.2; 55.1, 10.5 | 150.5; 59.8, 20.4, 9.8, 48.5, 4.7; 42.7, 9.8 |
+| title, `--enhanced --resolution 2x --present 1376x896` | 467.9; 47.1, 55.5, 30.1, 308.3, 8.2; 277.9, 30.0 | 416.0; 45.4, 63.2, 24.2, 257.2, 7.4; 234.3, 24.2 |
+| Mac, Original 1x | 284.9; 77.6, 15.3, 67.9, 68.4, 36.3; 57.3, 67.9 | 247.0; 90.4, 14.8, 39.6, 51.0, 36.7; 43.2, 39.6 |
+| Mac, `--enhanced --resolution 2x --present 1376x896` | 809.2; 89.5, 70.7, 120.2, 343.1, 141.3; 303.1, 120.2 | 686.6; 74.7, 75.0, 72.1, 290.6, 132.8; 250.3, 72.0 |
+| Mac, the same with `--glow-original` | 771.8; 77.5, 71.6, 124.0, 322.7, 135.1; 283.6, 123.9 | 666.7; 79.6, 77.0, 70.2, 260.4, 134.4; 229.2, 70.1 |
+
+On this proxy the glow chain (list 7) runs 16 to 25 percent shorter, the fog's list 4 (the fog
+sprite and the depth copy's read) 20 to 45 percent, the whole frame 5 to 15 percent; the 3D
+lists 0 and 3 move inside the run-to-run spread (no vertex shader changed; list 0's draws are
+the same). The alpha-test merge (the AFAIL split under [Pipelines](#pipelines)) is in the "with" column
+too: 9 fewer draws on the title frame, 42 on the Mac frame, the pictures byte for byte the same.
 
 The module sizes (`tools/check_spirv.py --sizes`, words / instructions / blocks):
 `fx_sprite_ps` 8,536 / 2,058 / 350 without the cuts, 9,323 / 2,260 / 390 with them;
