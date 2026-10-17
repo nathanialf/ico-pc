@@ -55,7 +55,7 @@ ico_add_shader(vu_grid_lit_vs vu_grid.hlsl vu_grid_lit_vs vertex)
 ico_add_shader(vu_grid_spec_vs vu_grid.hlsl vu_grid_spec_vs vertex)
 ico_add_shader(vu_particle_vs vu_particle.hlsl vu_particle_vs vertex)
 # the vertex pre-pass (docs/port/RENDER.md, "The vertex pre-pass";
-# rd_replay.c vuPrepass): each mesh program's vertices once, as records
+# rd_replay_vu.c rd__vu_prepass): each mesh program's vertices once, as records
 # (vu_X_pre_vs, vu_pre_ps into three RGBA32_UINT targets), and the triangle
 # stage of every mesh program reading them back (vu_tri_vs)
 foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:skin skin_debug:skin

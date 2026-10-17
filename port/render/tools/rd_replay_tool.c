@@ -113,13 +113,15 @@
  *                         passes and pass switches, the glow's passes, the
  *                         target snapshots copied and swapped, the draws
  *                         through the above-1x kernels (rd.h
- *                         RdPerfRecord); on a device
+ *                         RdPerfRecord); a third: the VU vertex pre-pass,
+ *                         on or off, its passes, vertices and draws and the
+ *                         mesh and grid draws drawn the old way; on a device
  *                         with GPU timestamps, after the picture is written,
  *                         the frame is replayed RHI_FRAMES_IN_FLIGHT + 2
  *                         more times and the last replay's GPU times are
  *                         printed: the uploads, each list, each picture
  *                         effect (rd.h RD_PERF_POST_*, inside the lists'
- *                         times) and the present
+ *                         times), the present and the VU pre-pass
  *   --prev DUMP           (repeatable, oldest first) replays DUMP in the same
  *                         context before <dump>, so the targets a frame
  *                         reads back from the frame before (the motion
@@ -1402,6 +1404,12 @@ int main(int argc, char **argv)
                "above 1x\n",
                dump, pr->dstDraws, pr->storagePasses, pr->dstSwitches, pr->glowPasses,
                pr->snapshots, pr->snapSwaps, pr->a1xDraws);
+        /* the VU vertex pre-pass (rd_replay_vu.c rd__vu_prepass): each mesh and grid
+         * vertex once, before the lists */
+        printf("%s: stats: VU pre-pass %s: %u passes, %u vertices in %u draws; %u mesh and grid "
+               "draws the old way\n",
+               dump, g_rd.vuPrepass ? "on" : "off", pr->vuPrePasses, pr->vuPreVertices,
+               pr->vuPreDraws, pr->vuPreFallbacks);
     }
     if (replayed && passDir) {
         /* One frame, every target: the renderer keeps each target's contents
@@ -1504,8 +1512,9 @@ int main(int argc, char **argv)
             for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
                 printf("%s %s %.3f", p ? "," : "", rd_perf_post_name(p), last.gpuPostMs[p]);
             }
-            printf("%s; present %.3f\n", last.gpuPostPartial ? " (not all timed apart)" : "",
-                   last.gpuPresentMs);
+            printf("%s; present %.3f; VU pre-pass %.3f\n",
+                   last.gpuPostPartial ? " (not all timed apart)" : "", last.gpuPresentMs,
+                   last.gpuPrepassMs);
         } else {
             printf("%s: gpu: no timestamps came back\n", dump);
         }

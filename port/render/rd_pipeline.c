@@ -690,6 +690,33 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
         {9, 0, RHI_VTX_F32x4, offsetof(IcoSpritePlaneVertex, sx)},
         {10, 0, RHI_VTX_F32x4, offsetof(IcoSpritePlaneVertex, sy)},
     };
+    if (rd__vs_is_vu_pre(k->vs)) {
+        /* the vertex pre-pass (rd_replay_vu.c rd__vu_prepass): the program's
+         * pre-pass entry reads group 1 as the VU programs do; points into
+         * the record's three RGBA32_UINT targets through vu_pre_ps, no
+         * depth, no blend */
+        layouts[0] = g_rd.layoutFrame;
+        layouts[1] = g_rd.layoutVu;
+        layouts[2] = g_rd.layoutTex;
+        memset(d, 0, sizeof(*d));
+        d->vertex = g_rd.vs[k->vs];
+        d->fragment = g_rd.fs[RD_FS_VU_PRE];
+        if (!d->vertex.id || !d->fragment.id) {
+            return false;
+        }
+        d->layouts = layouts;
+        d->layoutCount = 3;
+        d->topology = RHI_TOPO_POINT_LIST;
+        d->cullNone = true;
+        for (uint32_t i = 0; i < ICO_VU_REC_PLANES; i++) {
+            d->blend[i].writeMask = 0xF;
+            d->colorFormats[i] = RHI_FMT_RGBA32_UINT;
+        }
+        d->colorCount = ICO_VU_REC_PLANES;
+        d->depthFormat = RHI_FMT_UNKNOWN;
+        d->debugName = "rd vu pre-pass";
+        return true;
+    }
     const int vu = k->vs >= RD_VS_VU_FIRST && k->vs <= RD_VS_VU_LAST;
     /* the VU program shaders read the stream, VuCB and
      * VuBoneCB from group 1 next to DrawCB, and have no vertex input */
@@ -878,7 +905,9 @@ static void keyWords(const RdPipeKeyInt *k, char *out, size_t size)
 {
     snprintf(out, size, "program %u blend %u vs %u fs %u fmt %u/%u msaa %u dst %u%s", k->gs.program,
              k->gs.blend, k->vs, k->fs, k->colorFmt, k->depthFmt, k->gs.msaa, (unsigned)k->dst,
-             keyIsVu(k) ? (k->vuExt ? " ext 1" : " ext 0") : "");
+             keyIsVu(k)                ? (k->vuExt ? " ext 1" : " ext 0")
+             : rd__vs_is_vu_pre(k->vs) ? " pre"
+                                       : "");
 }
 
 /* the modules a key's pipeline is made of, as pipelineDesc picks them: the
@@ -1713,6 +1742,11 @@ uint32_t rd_precreate_pipelines(void)
     return s_count - before;
 }
 
+bool rd__pipeline_gathering(void)
+{
+    return s_gatherOn;
+}
+
 void rd__pipeline_gather(bool on)
 {
     s_gatherOn = on;
@@ -1993,6 +2027,25 @@ uint8_t rd__vu_draw_ext(uint32_t drawFlags)
     return 1;
 }
 
+RdPipeKeyInt rd__vu_pre_key(uint8_t preVs)
+{
+    /* normalised as every key (rd_state_test testEnumeration): no alpha
+     * test, no blend; the program is the one the triangle stage's keys
+     * carry (rd_replay.c vuDraw) */
+    RdPipeKeyInt k;
+    memset(&k, 0, sizeof(k));
+    k.gs.program = RD_PROG_PRELIT;
+    k.gs.blend = RD_BLEND_COUNT;
+    k.gs.atst = RD_ATST_ALWAYS;
+    k.gs.colorMask = 0xF;
+    k.gs.prim = RD_PRIM_POINTS;
+    k.vs = preVs;
+    k.fs = RD_FS_VU_PRE;
+    k.colorFmt = RHI_FMT_RGBA32_UINT;
+    k.depthFmt = RHI_FMT_UNKNOWN;
+    return k;
+}
+
 /* The start-up set's order (issue 107): the 2D keys, then the VU keys with
  * the plain variant, then those with the extended one, each in its
  * enumeration order, so a driver that cannot build the extended ones has
@@ -2000,7 +2053,9 @@ uint8_t rd__vu_draw_ext(uint32_t drawFlags)
  * the class of the batch it died in */
 static uint32_t keyClass(const RdPipeKeyInt *k)
 {
-    return keyIsVu(k) ? (k->vuExt ? 2u : 1u) : 0u;
+    /* the vertex pre-pass's keys (each a program's vertex function alone)
+     * with the plain VU keys */
+    return keyIsVu(k) ? (k->vuExt ? 2u : 1u) : rd__vs_is_vu_pre(k->vs) ? 1u : 0u;
 }
 
 static void orderSet(RdPipeKeyInt *out, uint32_t n)

@@ -76,7 +76,7 @@ typedef struct {
 
 #define RHI_NULL_ID 0u
 /* the colour targets of one pass or pipeline: the VU vertex pre-pass's
- * three record planes (port/render/rd_replay.c vuPrepass); every other
+ * three record planes (port/render/rd_replay_vu.c rd__vu_prepass); every other
  * pass draws into one */
 #define RHI_MAX_COLOR_TARGETS 3
 #define RHI_MAX_BIND_SLOTS 8
@@ -112,7 +112,7 @@ typedef enum RhiFormat {
      * (rd_fog_path.c).  Sampled (Load only) and copied, never a target. */
     RHI_FMT_R32_UINT,
     /* four 32-bit unsigned words a texel: the VU vertex pre-pass's record
-     * planes (port/render/rd_replay.c vuPrepass), a colour target and a
+     * planes (port/render/rd_replay_vu.c rd__vu_prepass), a colour target and a
      * copy source, never blended (Vulkan: a colour attachment and sampled
      * on every device, the specification's required format support;
      * D3D12: a render target at feature level 11_0) */
@@ -648,7 +648,7 @@ typedef struct RhiLimits {
      * block a pixel on an Apple GPU (rhi_driver_version.h
      * rhi_metal_color_bytes): 32 on the A9 and A10, 64 on the A11 to A13,
      * 128 from the A14 and the M1; the VU vertex pre-pass's 48 bytes need
-     * the second (port/render/rd_replay.c rd__vu_prepass_init). */
+     * the second (port/render/rd_replay_vu.c rd__vu_prepass_init). */
     uint32_t colorBytesPerPixel;
     /* For the start's summary line (diag_host.h ico_diag_set_summary),
      * NULL where unknown: driverText, the device line's driver part
@@ -862,7 +862,7 @@ void rhi_cmd_copy_texture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, 
  * copy is ordered as rhi_cmd_copy_buffer's: it waits for every earlier
  * read of the buffer, and the written range is visible to every later
  * vertex, index, uniform, storage and copy read (the VU vertex pre-pass's
- * record, port/render/rd_replay.c vuPrepass).  Into any other buffer (a
+ * record, port/render/rd_replay_vu.c rd__vu_prepass).  Into any other buffer (a
  * readback, a copy staging buffer) only later copies and the host see it. */
 void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAspect aspect,
                                     RhiRect region, RhiBuffer dst, uint64_t dstOffset,

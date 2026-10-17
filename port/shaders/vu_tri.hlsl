@@ -1,5 +1,5 @@
 // vu_tri.hlsl: the vertex pre-pass's two other stages (docs/port/RENDER.md,
-// "The vertex pre-pass"; rd_replay.c vuPrepass, doVuDraw).  vu_pre_ps writes
+// "The vertex pre-pass"; rd_replay_vu.c rd__vu_prepass, doVuDraw).  vu_pre_ps writes
 // a pre-pass point's record (vu_common.hlsli vu_pre_out) into the three
 // RGBA32_UINT targets.  vu_tri_vs is the triangle stage of every mesh
 // program (normal_c, normal_l, cluster, mesh): the triangle kick-2, kick-1,

@@ -87,6 +87,7 @@ static const char *const s_vsNames[RD_VS_COUNT] = {"sprite_ui_vs" /* indexed by 
                                                    "vu_grid_lit_vs",
                                                    "vu_grid_spec_vs",
                                                    "vu_particle_vs",
+                                                   "vu_tri_vs",
                                                    "fx_rect_vs",
                                                    "sprite_aa1_ui_vs",
                                                    "sprite_aa1_world_vs",
@@ -96,7 +97,17 @@ static const char *const s_vsNames[RD_VS_COUNT] = {"sprite_ui_vs" /* indexed by 
                                                    "sprite_plane_ui_vs",
                                                    "sprite_plane_world_vs",
                                                    "sprite_stq_plane_ui_vs",
-                                                   "sprite_stq_plane_world_vs"};
+                                                   "sprite_stq_plane_world_vs",
+                                                   "vu_prelit_pre_vs",
+                                                   "vu_lit_pre_vs",
+                                                   "vu_lit_spec_pre_vs",
+                                                   "vu_reflect_pre_vs",
+                                                   "vu_skin_pre_vs",
+                                                   "vu_skin_spec_pre_vs",
+                                                   "vu_skin_debug_pre_vs",
+                                                   "vu_grid_pre_vs",
+                                                   "vu_grid_lit_pre_vs",
+                                                   "vu_grid_spec_pre_vs"};
 
 const char *rd__vs_name(uint8_t vs)
 {
@@ -128,7 +139,8 @@ static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps" /* indexed by RD_
                                                    "aa_reduce_ps",
                                                    "fog_lut_ms_ps",
                                                    "depth_resolve_ps",
-                                                   "depth_upsample_ps"};
+                                                   "depth_upsample_ps",
+                                                   "vu_pre_ps"};
 
 const char *rd__fs_name(uint8_t fs)
 {
@@ -223,12 +235,14 @@ bool rd__gpu_init(void *sdlWindow)
     g_rd.layoutDraw = makeLayout(s1, 1, "rd draw");
     g_rd.layoutTex = makeLayout(s2, 3, "rd tex");
     g_rd.layoutInt = makeLayout(s3, 2, "rd int");
-    /* the VU programs' group 1 (vu_common.hlsli) */
-    static const RhiBindSlot s4[4] = {{0, RHI_BIND_STORAGE_BUFFER, VS},
+    /* the VU programs' group 1 (vu_common.hlsli): the stream, DrawCB,
+     * VuCB, VuBoneCB and the vertex pre-pass's record (vu_rec_buf) */
+    static const RhiBindSlot s4[5] = {{0, RHI_BIND_STORAGE_BUFFER, VS},
                                       {1, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS},
                                       {2, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS},
-                                      {3, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS}};
-    g_rd.layoutVu = makeLayout(s4, 4, "rd vu");
+                                      {3, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS},
+                                      {4, RHI_BIND_STORAGE_BUFFER, VS}};
+    g_rd.layoutVu = makeLayout(s4, 5, "rd vu");
     bool ok = g_rd.layoutFrame.id && g_rd.layoutDraw.id && g_rd.layoutTex.id && g_rd.layoutInt.id &&
               g_rd.layoutVu.id;
     /* the exact blend's group 3 (rd_dst_read.c): the target as a storage
@@ -329,6 +343,7 @@ bool rd__gpu_init(void *sdlWindow)
     g_rd.dummy = rhi_create_texture(&(RhiTextureDesc){
         1, 1, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd dummy", 0});
     g_rd.dummyState = RHI_STATE_UNDEFINED;
+    rd__vu_prepass_init(lim); /* the vertex pre-pass: on or off, why */
     return ok && g_rd.dummy.id;
 }
 
@@ -349,11 +364,12 @@ void rd__gpu_shutdown(void)
         }
     }
     rd__pipeline_cache_clear();
-    rd__mesh_gpu_shutdown(); /* the mesh arena */
-    rd__fog_shutdown();      /* the fog LUT */
-    rd__shadow_shutdown();   /* the box-reduced shadow count */
-    rd__wrap_shutdown();     /* the COLCLAMP 0 wrap's pipelines and accumulator */
-    rd__msaa_free();         /* the MSAA scene pair */
+    rd__mesh_gpu_shutdown();   /* the mesh arena */
+    rd__vu_prepass_shutdown(); /* the vertex pre-pass's record (rd_replay_vu.c) */
+    rd__fog_shutdown();        /* the fog LUT */
+    rd__shadow_shutdown();     /* the box-reduced shadow count */
+    rd__wrap_shutdown();       /* the COLCLAMP 0 wrap's pipelines and accumulator */
+    rd__msaa_free();           /* the MSAA scene pair */
     if (g_rd.dummy.id) {
         rhi_destroy_texture(g_rd.dummy);
     }
@@ -5380,6 +5396,8 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     rd__upload_meshes(f, keep);
     rd__passring_bytes(s_ringOff);
     rd__clear_new_targets();
+    rd__perf_stamp(s_cl, RD_PERF_TS_PREPASS);
+    rd__vu_prepass(f, keep); /* each mesh and grid vertex once (rd_replay_vu.c) */
     rd__perf_stamp(s_cl, RD_PERF_TS_LISTS);
     g_rdPerf.uploadMs += (t1 = rd__now_ms()) - t;
     t = t1;

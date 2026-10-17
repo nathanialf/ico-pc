@@ -1,7 +1,8 @@
 /* rd_replay.h: what rd_replay.c shares with rd_replay_vu.c, its VU draws:
  * the replay's state (Replay, ScreenRun), a draw's setup (DrawSetup), the
  * replay's helpers the VU draws call (rd__replay_*, each the function of
- * rd_replay.c named beside it) and the VU draw itself. */
+ * rd_replay.c named beside it), the VU draw itself and the vertex
+ * pre-pass. */
 #ifndef PORT_RENDER_RD_REPLAY_H
 #define PORT_RENDER_RD_REPLAY_H
 
@@ -117,7 +118,17 @@ void rd__replay_fill_draw_cb(const Replay *r, const RdDrawPass *dp, const DrawSe
                              IcoDrawCB *cb);
 bool rd__replay_prepare_draw(Replay *r, DrawSetup *ds, const RhiRect *dateArea);
 uint32_t rd__replay_msaa_want(void);
-/* rd_replay_vu.c: a VU draw under its camera's picture */
+/* rd_replay_vu.c.
+ * rd__replay_vu       a VU draw under its camera's picture
+ * rd__vu_prepass      before list 0 (replayFrame, after the uploads and
+ *                     the first clears): the vertex pre-pass (docs/port/
+ *                     RENDER.md, "The vertex pre-pass"), every mesh and
+ *                     grid command's vertices into the record, copied into
+ *                     the frame slot's record buffer
+ * rd__vu_prepass_shutdown  the record's textures and buffers, the entries
+ *                     (rd__gpu_shutdown) */
 void rd__replay_vu(Replay *r, const RdFrame *f, const RdCmd *c);
+void rd__vu_prepass(const RdFrame *f, int keep);
+void rd__vu_prepass_shutdown(void);
 
 #endif /* PORT_RENDER_RD_REPLAY_H */

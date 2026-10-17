@@ -956,6 +956,10 @@ typedef enum RdVsId {
     RD_VS_VU_GRID_LIT,
     RD_VS_VU_GRID_SPEC,
     RD_VS_VU_PARTICLE,
+    /* vu_tri_vs, the vertex pre-pass's triangle stage of every mesh
+     * program (docs/port/RENDER.md, "The vertex pre-pass"): a VU vertex
+     * shader with its two variants as the program entries above */
+    RD_VS_VU_TRI,
     RD_VS_FX_RECT, /* fx_rect_vs, the fullscreen triangle at the sprite's Z */
     /* PRIM.AA1 lines and triangles, IcoSpriteAa1Vertex (the sprite vertex
      * and its coverage) */
@@ -972,11 +976,44 @@ typedef enum RdVsId {
     RD_VS_SPRITE_PLANE_WORLD,
     RD_VS_SPRITE_STQ_PLANE_UI,
     RD_VS_SPRITE_STQ_PLANE_WORLD,
+    /* the vertex pre-pass's entries (vu_X_pre_vs), in the order of
+     * RD_VS_VU_PRELIT .. RD_VS_VU_GRID_SPEC (rd__vu_pre_vs): one variant,
+     * group 1 = layoutVu, drawn with vu_pre_ps into the record's three
+     * targets (rd_pipeline.c rd__vu_pre_key) */
+    RD_VS_VU_PRE_PRELIT,
+    RD_VS_VU_PRE_LIT,
+    RD_VS_VU_PRE_LIT_SPEC,
+    RD_VS_VU_PRE_REFLECT,
+    RD_VS_VU_PRE_SKIN,
+    RD_VS_VU_PRE_SKIN_SPEC,
+    RD_VS_VU_PRE_SKIN_DEBUG,
+    RD_VS_VU_PRE_GRID,
+    RD_VS_VU_PRE_GRID_LIT,
+    RD_VS_VU_PRE_GRID_SPEC,
     RD_VS_COUNT
 } RdVsId;
 
+/* the VU vertex shaders with a plain and an extended variant (issue 107):
+ * the programs' entries and the pre-pass's triangle stage */
 #define RD_VS_VU_FIRST RD_VS_VU_PRELIT
-#define RD_VS_VU_LAST RD_VS_VU_PARTICLE
+#define RD_VS_VU_LAST RD_VS_VU_TRI
+#define RD_VS_VU_PRE_FIRST RD_VS_VU_PRE_PRELIT
+#define RD_VS_VU_PRE_LAST RD_VS_VU_PRE_GRID_SPEC
+
+/* a mesh program entry's pre-pass entry (RD_VS_VU_PRELIT ..
+ * RD_VS_VU_GRID_SPEC), 0 for any other vertex shader (the particles have
+ * no pre-pass) */
+static inline uint8_t rd__vu_pre_vs(uint8_t vs)
+{
+    return vs >= RD_VS_VU_PRELIT && vs <= RD_VS_VU_GRID_SPEC
+               ? (uint8_t)(RD_VS_VU_PRE_PRELIT + (vs - RD_VS_VU_PRELIT))
+               : 0u;
+}
+
+static inline bool rd__vs_is_vu_pre(uint8_t vs)
+{
+    return vs >= RD_VS_VU_PRE_FIRST && vs <= RD_VS_VU_PRE_LAST;
+}
 
 typedef enum RdFsId {
     RD_FS_SPRITE = 0,
@@ -1021,6 +1058,9 @@ typedef enum RdFsId {
     RD_FS_FOG_MS,
     RD_FS_DEPTH_RESOLVE,
     RD_FS_DEPTH_UPSAMPLE,
+    /* vu_pre_ps: the vertex pre-pass's records into its three RGBA32_UINT
+     * targets (rd_replay_vu.c rd__vu_prepass) */
+    RD_FS_VU_PRE,
     RD_FS_COUNT
 } RdFsId;
 
@@ -1215,6 +1255,10 @@ void rd__pipeline_cache_clear(void);
  * returns the count noted, *stopped when the progress function stopped it.
  * on clears the notes. */
 void rd__pipeline_gather(bool on);
+/* whether rd__get_pipeline is only naming keys (rd__pipeline_gather):
+ * a key it returns no pipeline for is not missing (rd_replay.c keeps the
+ * vertex pre-pass's choices, which would otherwise fall back) */
+bool rd__pipeline_gathering(void);
 uint32_t rd__pipeline_create_gathered(bool *stopped);
 uint32_t rd__pipeline_count(void);
 /* The time the pipelines made at first use took, in all, ms
@@ -1267,6 +1311,21 @@ uint32_t rd__enumerate_reachable_vu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
  * rd__shader_instructions  its SPIR-V instruction count (the header's five
  *                     words left out), 0 when there is none */
 bool rd__vu_policy_init(const RhiLimits *lim);
+/* The vertex pre-pass (docs/port/RENDER.md, "The vertex pre-pass").
+ * rd__vu_prepass_init  at rd_init, after the shaders (rd_replay_vu.c): whether
+ *                     it draws (g_rd.vuPrepass: ICO_RD_VU_PREPASS=0, [dev]
+ *                     vu_prepass = false, keeps it off, as does a device
+ *                     whose colour targets cannot hold the record,
+ *                     RhiLimits.colorBytesPerPixel), logged once
+ * rd__set_vu_prepass  the tests' switch: on (where the device takes it) or
+ *                     off from the next replay, the start-up set's keys
+ *                     following it
+ * rd__vu_pre_key      the pipeline key of a pre-pass entry (RD_VS_VU_PRE_*;
+ *                     rd_pipeline.c): vu_pre_ps into the three
+ *                     RGBA32_UINT targets, no depth, points, no blend */
+void rd__vu_prepass_init(const RhiLimits *lim);
+void rd__set_vu_prepass(bool on);
+RdPipeKeyInt rd__vu_pre_key(uint8_t preVs);
 bool rd__vu_ext_reachable(void);
 uint8_t rd__vu_draw_ext(uint32_t drawFlags);
 uint32_t rd__shader_words(const char *name);
@@ -1759,6 +1818,13 @@ typedef struct RdContext {
     RhiShader vsPlain[RD_VS_COUNT];
     bool vuPlainOnly;
     char vuPlainWhy[160];
+    /* the VU vertex pre-pass (rd_replay_vu.c rd__vu_prepass, rd__vu_prepass_init;
+     * docs/port/RENDER.md, "The vertex pre-pass"): on unless the settings
+     * ([dev] vu_prepass = false, ICO_RD_VU_PREPASS=0) or the device
+     * (RhiLimits.colorBytesPerPixel under the record's bytes) keep it off,
+     * and why not */
+    bool vuPrepass;
+    char vuPrepassWhy[160];
     /* the *_nodual twins of the gs_dual_out entries (0 for the
      * others), and whether the two-pass blend is in force (no dualSrcBlend,
      * ICO_RD_NO_DUAL or rd_set_no_dual) */
@@ -2100,9 +2166,10 @@ void rd__set_a1x_gs_keep(bool on);
  * so: RdPerfRecord.gpuPostPartial). */
 enum {
     RD_PERF_TS_BEGIN = 0, /* after rhi_wait_frame, before the uploads */
-    RD_PERF_TS_LISTS = 1, /* the uploads done, list 0 starts */
+    RD_PERF_TS_LISTS = 1, /* the uploads and the VU vertex pre-pass done, list 0 starts */
     RD_PERF_TS_LIST0 = 2, /* + l: list l done */
     RD_PERF_TS_PRESENT = RD_PERF_TS_LIST0 + RD_LIST_COUNT, /* the present blits done */
+    RD_PERF_TS_PREPASS, /* the uploads done, the VU vertex pre-pass starts */
     RD_PERF_TS_COUNT
 };
 

@@ -1780,6 +1780,16 @@ typedef struct RdPerfRecord {
      * per replay; 0 at scale 1.  A work buffer drawn onto the frame is
      * never among them (rd_internal.h rd__work_class) */
     uint32_t a1xDraws;
+    /* The VU vertex pre-pass (rd_replay_vu.c rd__vu_prepass; docs/port/RENDER.md,
+     * "The vertex pre-pass"): vuPrePasses its render passes (0 or 1),
+     * vuPreVertices the vertices it recorded, vuPreDraws its draws (a VU
+     * command each), vuPreFallbacks the mesh and grid draws drawn the old
+     * way while it is on (a command past the record, a pipeline missing; 0
+     * in a usual replay), gpuPrepassMs its GPU time (the pass and the copies
+     * into the record buffer, between the uploads and list 0; inside gpuMs,
+     * not in gpuUploadMs) */
+    uint32_t vuPrePasses, vuPreVertices, vuPreDraws, vuPreFallbacks;
+    double gpuPrepassMs;
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are

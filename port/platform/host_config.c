@@ -501,6 +501,9 @@ static const struct {
        rd__vu_policy_init) */
     {"dev.vu_plain_only", "vu_plain_only"},
     {"dev.vu_extended", "vu_extended"},
+    /* false: the VU vertex pre-pass off, every VU draw the old way (an
+       A/B; port/render/rd_replay_vu.c rd__vu_prepass_init) */
+    {"dev.vu_prepass", "vu_prepass"},
     /* false: SDL's DirectInput controller scan off (issue 105; window_host.c
        joystick_scan_hints) */
     {"dev.joystick_directinput", "joystick_directinput"},
@@ -527,6 +530,9 @@ static const struct {
     /* port/render/rd_pipeline.c rd__vu_policy_init */
     {"vu_plain_only", "ICO_RD_VU_PLAIN"},
     {"vu_extended", "ICO_RD_VU_EXTENDED"},
+    /* port/render/rd_replay_vu.c rd__vu_prepass_init: 0 draws without the
+       vertex pre-pass */
+    {"vu_prepass", "ICO_RD_VU_PREPASS"},
     /* port/platform/window_host.c joystick_scan_hints: 0 sets
        SDL_HINT_JOYSTICK_DIRECTINPUT to 0 before SDL_Init */
     {"joystick_directinput", "ICO_JOYSTICK_DIRECTINPUT"},

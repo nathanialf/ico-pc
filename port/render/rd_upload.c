@@ -81,7 +81,7 @@ uint64_t rd__estimate_ring(const RdFrame *f, int keep)
 {
     const uint64_t align = rhi_limits()->uniformAlign;
     const uint64_t pitchA = rhi_limits()->copyRowPitchAlign;
-    uint64_t total = 64 * 1024;
+    uint64_t total = 64 * 1024; /* the vertex pre-pass's DrawCB among it */
     /* with PRIM.AA1 anywhere in the frame, room for every
      * screen command's AA1 geometry too (at most 7 vertices per expanded
      * vertex, 21 per vertex of a triangle strip) */
@@ -120,6 +120,8 @@ uint64_t rd__estimate_ring(const RdFrame *f, int keep)
                 const uint64_t passes = 4 * (2 * (uint64_t)(p.batchCount ? p.batchCount : 1) + 1);
                 total += passes * (sizeof(IcoDrawCB) + sizeof(IcoVuCB) + 2 * align);
                 total += sizeof(IcoVuBoneCB) + align + (uint64_t)p.streamQw * 16 + align;
+                /* the vertex pre-pass's VuCB (rd_replay_vu.c rd__vu_prepass) */
+                total += sizeof(IcoVuCB) + align;
                 total += (uint64_t)p.batchCount * (p.vertsPerBatch + 1) * 12 + 16;
                 const RdMeshRec *m = c->type <= RDC_SKINNED ? rd__mesh_rec(c->u[0]) : NULL;
                 if (m) {

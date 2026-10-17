@@ -25,7 +25,7 @@
 // particle program is drawn non-indexed, six vertices per particle.
 //
 // The vertex pre-pass (docs/port/RENDER.md, "The vertex pre-pass";
-// rd_replay.c vuPrepass): a mesh program's vu_X_pre_vs evaluates each
+// rd_replay_vu.c rd__vu_prepass): a mesh program's vu_X_pre_vs evaluates each
 // vertex of a draw once, its VuVtx written as a record (vu_pre_out) one
 // point a vertex into three RGBA32_UINT targets, which the replay copies
 // into the record buffer; vu_tri.hlsl vu_tri_vs then draws the triangles

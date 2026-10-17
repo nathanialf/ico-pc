@@ -269,7 +269,7 @@ static struct {
     RdPerfRecord longest;
     unsigned longestVsync;
     int longestShown;
-    double gpu, maxGpu, gpuList[GPU_LISTS], gpuUpload, gpuPresent;
+    double gpu, maxGpu, gpuList[GPU_LISTS], gpuUpload, gpuPresent, gpuPrepass;
     double gpuPost[RD_PERF_POST_COUNT]; /* per picture effect (rd.h RD_PERF_POST_*) */
     unsigned gpuPostPartial;            /* replays whose effects were not all timed apart */
     uint64_t draws, passes, pipeBinds, groupBinds, groups, barriers, copies, bytes, meshBytes;
@@ -280,6 +280,9 @@ static struct {
     /* the draws through the above-1x kernels (rd.h RdPerfRecord.a1xDraws) */
     uint64_t a1xDraws;
     uint64_t msaaResolves;
+    /* the VU vertex pre-pass's vertices, draws and the mesh and grid draws
+       drawn the old way (rd.h RdPerfRecord.vuPre*) */
+    uint64_t vuPreVerts, vuPreDraws, vuPreFallbacks;
     /* draws that read a water block at a scale other than the scene's
        (rd.h RdPerfRecord.blockOtherScaleReads, issue 106) */
     uint64_t blockOtherScale;
@@ -3402,7 +3405,8 @@ static void perf_csv_open(void)
         }
         fprintf(s_perf.csv, ",gpu_%s_ms", name);
     }
-    fprintf(s_perf.csv, ",gpu_effects_partial\n");
+    fprintf(s_perf.csv,
+            ",gpu_effects_partial,gpu_prepass_ms,vu_pre_vertices,vu_pre_draws,vu_pre_fallbacks\n");
 }
 
 static void perf_csv_line(const RdPerfRecord *r)
@@ -3428,7 +3432,8 @@ static void perf_csv_line(const RdPerfRecord *r)
     for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
         fprintf(f, ",%.3f", r->gpuPostMs[p]);
     }
-    fprintf(f, ",%u\n", r->gpuPostPartial);
+    fprintf(f, ",%u,%.3f,%u,%u,%u\n", r->gpuPostPartial, r->gpuPrepassMs, r->vuPreVertices,
+            r->vuPreDraws, r->vuPreFallbacks);
 }
 
 /* A presented replay's cost for resolution "auto": its GPU
@@ -3553,6 +3558,7 @@ static void perf_drain(void)
             s_perf.maxGpu = r.gpuMs > s_perf.maxGpu ? r.gpuMs : s_perf.maxGpu;
             s_perf.gpuUpload += r.gpuUploadMs;
             s_perf.gpuPresent += r.gpuPresentMs;
+            s_perf.gpuPrepass += r.gpuPrepassMs;
             for (int l = 0; l < GPU_LISTS; l++) {
                 s_perf.gpuList[l] += r.gpuListMs[l];
             }
@@ -3582,6 +3588,9 @@ static void perf_drain(void)
         s_perf.snapshots += r.snapshots;
         s_perf.snapSwaps += r.snapSwaps;
         s_perf.a1xDraws += r.a1xDraws;
+        s_perf.vuPreVerts += r.vuPreVertices;
+        s_perf.vuPreDraws += r.vuPreDraws;
+        s_perf.vuPreFallbacks += r.vuPreFallbacks;
         s_perf.pipeCreates += r.pipelineCreates;
         s_perf.msaaResolves += r.msaaResolves;
         if (r.msaaSamples > s_perf.msaaSamples) {
@@ -3679,8 +3688,10 @@ static void perf_log(void)
             snprintf(partial, sizeof(partial), " (not all timed apart in %u replays)",
                      s_perf.gpuPostPartial);
         }
-        fprintf(stderr, "window: GPU ms per replay: lists 0-12 %s; effects: %s%s; present %.2f\n",
-                lists, posts, partial, s_perf.gpuPresent / g);
+        fprintf(stderr,
+                "window: GPU ms per replay: lists 0-12 %s; effects: %s%s; present %.2f; VU "
+                "pre-pass %.2f\n",
+                lists, posts, partial, s_perf.gpuPresent / g, s_perf.gpuPrepass / g);
     }
     fprintf(stderr,
             "window: per replay %.0f draws, %.0f passes, %.0f pipeline and %.0f bind group binds, "
@@ -3688,15 +3699,17 @@ static void perf_log(void)
             "%.1f textures and %.1f meshes uploaded, %.1f DATE snapshots, %.1f exact blends, "
             "%.0f destination-read draws, %.0f storage passes, %.0f pass switches for the exact "
             "blend, glow %.0f passes, %.1f snapshots copied and %.1f swapped, %.1f draws "
-            "resampled above 1x; in the block %llu buffers and %llu textures created, %llu and "
-            "%llu destroyed, %llu memory allocations, %llu pipelines created, %llu fence waits, "
+            "resampled above 1x, VU pre-pass %.0f vertices in %.0f draws (%.1f draws the old "
+            "way); in the block %llu buffers and %llu textures created, %llu and %llu "
+            "destroyed, %llu memory allocations, %llu pipelines created, %llu fence waits, "
             "%llu wait-idles, %llu readbacks\n",
             s_perf.draws / n, s_perf.passes / n, s_perf.pipeBinds / n, s_perf.groupBinds / n,
             s_perf.groups / n, s_perf.barriers / n, s_perf.copies / n, s_perf.bytes / n / 1024.0,
             s_perf.meshBytes / n / 1024.0, s_perf.texUploads / n, s_perf.meshUploads / n,
             s_perf.dateSnaps / n, s_perf.exact / n, s_perf.dstDraws / n, s_perf.storagePasses / n,
             s_perf.dstSwitches / n, s_perf.glowPasses / n, s_perf.snapshots / n,
-            s_perf.snapSwaps / n, s_perf.a1xDraws / n, (unsigned long long)s_perf.bufCreated,
+            s_perf.snapSwaps / n, s_perf.a1xDraws / n, s_perf.vuPreVerts / n, s_perf.vuPreDraws / n,
+            s_perf.vuPreFallbacks / n, (unsigned long long)s_perf.bufCreated,
             (unsigned long long)s_perf.texCreated, (unsigned long long)s_perf.bufDestroyed,
             (unsigned long long)s_perf.texDestroyed, (unsigned long long)s_perf.allocs,
             (unsigned long long)s_perf.pipeCreates, (unsigned long long)s_perf.fenceWaits,

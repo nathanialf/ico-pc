@@ -2441,7 +2441,11 @@ void rd_draw_vu_particles(const RdVuParticleDraw *d, RdKey key)
  * out); Z write on and off; ALPHA off and the material, dissolve,
  * specular, reflection and particle equations 0x44, 0x48, 0x42, 0x68, 0x62
  * (four hardware paths); SCENE's D32F_S8 (render-to-texture targets have
- * depth too).  The scissor batches' cut pass forces ABE on: the same set. */
+ * depth too).  The scissor batches' cut pass forces ABE on: the same set.
+ * With the vertex pre-pass (g_rd.vuPrepass) the mesh programs draw through
+ * vu_tri_vs, whose keys carry RD_PROG_PRELIT whatever the program
+ * (rd_replay.c vuDraw), and the particles through their own entry; without
+ * it every program entry. */
 static uint32_t enumerateVuVariant(RdPipeKeyInt *out, uint32_t max, uint32_t n, uint8_t ext)
 {
     static const uint64_t kTests[] = {RD_TEST_Z_GEQUAL, RD_TEST_AT_GT64_FBONLY,
@@ -2449,8 +2453,12 @@ static uint32_t enumerateVuVariant(RdPipeKeyInt *out, uint32_t max, uint32_t n, 
     static const int kBlends[] = {-1, RD_BLEND_LERP_AS, RD_BLEND_CS_AS_ADD_CD,
                                   RD_BLEND_CD_SUB_CS_AS};
     for (uint8_t vs = RD_VS_VU_FIRST; vs <= RD_VS_VU_LAST; vs++) {
-        uint8_t prog = 0;
-        for (size_t i = 0; i < sizeof(kRows) / sizeof(kRows[0]); i++) {
+        const bool tri = vs == RD_VS_VU_TRI;
+        if (g_rd.vuPrepass ? !tri && vs != RD_VS_VU_PARTICLE : tri) {
+            continue;
+        }
+        uint8_t prog = RD_PROG_PRELIT;
+        for (size_t i = 0; i < sizeof(kRows) / sizeof(kRows[0]) && !tri; i++) {
             if (kRows[i].vs == vs) {
                 prog = kRows[i].prog;
             }
@@ -2494,6 +2502,11 @@ static uint32_t enumerateVuVariant(RdPipeKeyInt *out, uint32_t max, uint32_t n, 
  * plain ones (g_rd.vuPlainOnly) */
 uint32_t rd__enumerate_reachable_vu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 {
+    /* the vertex pre-pass's entries, one key each (rd__vu_pre_key) */
+    for (uint8_t v = RD_VS_VU_PRE_FIRST; g_rd.vuPrepass && v <= RD_VS_VU_PRE_LAST; v++) {
+        const RdPipeKeyInt k = rd__vu_pre_key(v);
+        n = rd__add_pipe_key(out, max, n, &k);
+    }
     if (!rd__vu_extended() || g_rd.vuPlainOnly) {
         n = enumerateVuVariant(out, max, n, 0);
     }

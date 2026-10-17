@@ -206,6 +206,7 @@ void rd__perf_collect_gpu(void)
         const uint64_t t0 = ts[RD_PERF_TS_BEGIN];
         uint64_t prev = t0, last = t0;
         double stretch = 0.0; /* since the last RD_PERF_TS_* stamp */
+        bool prepass = false; /* RD_PERF_TS_PREPASS came: LISTS ends the pre-pass */
         for (uint32_t k = 0; k < ps->count; k++) {
             const uint32_t i = ps->order[k];
             if (i == RD_PERF_TS_BEGIN || i >= n || ts[i] == 0 || ts[i] < prev) {
@@ -216,8 +217,15 @@ void rd__perf_collect_gpu(void)
                 r->gpuPostMs[ps->post[i]] += ms;
             }
             stretch += ms;
-            if (i == RD_PERF_TS_LISTS) {
+            if (i == RD_PERF_TS_PREPASS) {
                 r->gpuUploadMs = stretch;
+                prepass = true;
+            } else if (i == RD_PERF_TS_LISTS) {
+                if (prepass) {
+                    r->gpuPrepassMs = stretch;
+                } else {
+                    r->gpuUploadMs = stretch;
+                }
             } else if (i == RD_PERF_TS_PRESENT) {
                 r->gpuPresentMs = stretch;
             } else if (i >= RD_PERF_TS_LIST0 && i < RD_PERF_TS_LIST0 + RD_LIST_COUNT) {

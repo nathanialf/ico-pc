@@ -509,6 +509,13 @@ static void test_dev_env(void)
     CHECK(ico_dev_env_value("pipeline_set", "true") == NULL);
     CHECK(ico_dev_env_value("pipeline_set", "") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.pipeline_set"), "pipeline_set") == 0);
+    /* vu_prepass: the VU vertex pre-pass's A/B switch (port/render/rd_replay_vu.c
+       rd__vu_prepass_init) */
+    CHECK(strcmp(ico_dev_env_name("vu_prepass"), "ICO_RD_VU_PREPASS") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_prepass", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_prepass", "true"), "1") == 0);
+    CHECK(ico_dev_env_value("vu_prepass", "maybe") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.vu_prepass"), "vu_prepass") == 0);
     /* audio_sync: the audio on the game's clock (port/audio/audio_host.h) */
     CHECK(strcmp(ico_dev_env_name("audio_sync"), "ICO_AUDIO_SYNC") == 0);
     CHECK(strcmp(ico_dev_env_value("audio_sync", "true"), "1") == 0);

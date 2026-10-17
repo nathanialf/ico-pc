@@ -336,7 +336,7 @@ _Static_assert(sizeof(IcoSpriteStqVertex) == 24, "STQ vertex size");
  *          the marks every triangle of the draw carries (a grid of two
  *          strips or more: ICO_VU_MARK_JOINED), the mark bytes' qwords (0:
  *          none, the draw's mesh has no marked triangle), 0
- *   rec    the vertex pre-pass (rd_replay.c vuPrepass; vu_common.hlsli
+ *   rec    the vertex pre-pass (rd_replay_vu.c rd__vu_prepass; vu_common.hlsli
  *          vu_rec_vertex, vu_pre_out): the draw's first record texel less
  *          its first vertex (wrapping), the texels of a record plane, the
  *          pre-pass draw's first vertex, the triangle stage's program rule

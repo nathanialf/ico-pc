@@ -72,7 +72,7 @@ void rd__passring_pipeline(uint32_t id, uint8_t vs, uint8_t fs, uint8_t dst)
         return;
     }
     RdPassRec *e = &s_ring[(s_seq - 1) % RD_PASSRING_SIZE];
-    if (e->kind != RD_PASSK_PASS && e->kind != RD_PASSK_EXACT) {
+    if (e->kind != RD_PASSK_PASS && e->kind != RD_PASSK_EXACT && e->kind != RD_PASSK_VU_PRE) {
         return;
     }
     e->pipeline = id;
@@ -164,8 +164,8 @@ uint32_t rd_passring_print_start(void)
 
 static const char *kindName(uint8_t k)
 {
-    static const char *const names[RD_PASSK_COUNT] = {"pass",        "copy",    "snapshot",
-                                                      "exact blend", "uploads", "present"};
+    static const char *const names[RD_PASSK_COUNT] = {
+        "pass", "copy", "snapshot", "exact blend", "uploads", "present", "VU pre-pass"};
     return k < RD_PASSK_COUNT ? names[k] : "?";
 }
 
@@ -203,6 +203,10 @@ static void entryText(const RdPassRec *e, const char *(*postName)(int), EntryTex
         snprintf(t->target, sizeof(t->target), "from target %u (%ux%u) to %ux%u",
                  (unsigned)e->color, (unsigned)e->cw, (unsigned)e->ch, (unsigned)e->dw,
                  (unsigned)e->dh);
+        break;
+    case RD_PASSK_VU_PRE:
+        snprintf(t->target, sizeof(t->target), "%u vertices into the record (%ux%u)",
+                 (unsigned)e->dw, (unsigned)e->cw, (unsigned)e->ch);
         break;
     default:
         if (e->depth) {
