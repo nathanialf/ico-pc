@@ -5,7 +5,9 @@
 // ST, colour (pac_makeClusterStrip). Bones: VuBoneCB = VU memory 16..255
 // (SET_CLUSTER_MATRIX); world to GS screen = vu_mem[4..7]; L1, L2 in
 // vu_mem[28..35] (SET_CLUSTER_LIGHT's vf13..vf20). Always the region test
-// against vu_mem[0] and vu_mem[1].
+// against vu_mem[0] and vu_mem[1].  vu_skin_pre_vs, vu_skin_spec_pre_vs and
+// vu_skin_debug_pre_vs: their vertices for the vertex pre-pass
+// (vu_common.hlsli vu_pre_out).
 #include "vu_common.hlsli"
 
 #define VU_SKIN 0u
@@ -106,4 +108,20 @@ VuVSOut vu_skin_spec_vs(uint vid : SV_VertexID)
 VuVSOut vu_skin_debug_vs(uint vid : SV_VertexID)
 {
     return vu_skin_main(vid, VU_SKIN_DEBUG);
+}
+
+// The vertex pre-pass: vertex vu_rec.z + id of each variant
+VuPreOut vu_skin_pre_vs(uint id : SV_VertexID)
+{
+    return vu_pre_out(id, vu_skin_vertex(vu_rec.z + id, VU_SKIN));
+}
+
+VuPreOut vu_skin_spec_pre_vs(uint id : SV_VertexID)
+{
+    return vu_pre_out(id, vu_skin_vertex(vu_rec.z + id, VU_SKIN_SPEC));
+}
+
+VuPreOut vu_skin_debug_pre_vs(uint id : SV_VertexID)
+{
+    return vu_pre_out(id, vu_skin_vertex(vu_rec.z + id, VU_SKIN_DEBUG));
 }

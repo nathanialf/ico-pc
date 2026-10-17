@@ -12,6 +12,8 @@
 //   b2  VuCB       the VU1 data memory 0..35 the program reads (see below)
 //   b3  VuBoneCB   cluster: VU memory 16..255, the bones; every mesh
 //                  program: the card bits after them (vu_strip_card)
+//   t4  vu_rec_buf the vertex pre-pass's record (vu_rec_vertex), read by
+//                  the triangle stage (vu_tri.hlsl)
 //
 // Drawing: the mesh programs are drawn as an indexed triangle list whose
 // index value (SV_VertexID; vertexOffset / BaseVertexLocation must be 0) is
@@ -21,6 +23,14 @@
 // invocation evaluates all three vertices so the per-triangle
 // decisions (region test, scissor) come out the same in all three. The
 // particle program is drawn non-indexed, six vertices per particle.
+//
+// The vertex pre-pass (docs/port/RENDER.md, "The vertex pre-pass";
+// rd_replay.c vuPrepass): a mesh program's vu_X_pre_vs evaluates each
+// vertex of a draw once, its VuVtx written as a record (vu_pre_out) one
+// point a vertex into three RGBA32_UINT targets, which the replay copies
+// into the record buffer; vu_tri.hlsl vu_tri_vs then draws the triangles
+// of every mesh program with the three corners read back (vu_rec_vertex)
+// through vu_mesh_out, as the program's entry above does.
 //
 // The forms (docs/port/SHADERS.md, The envelope): the vertex shaders are
 // written as v0.5.2's, the last set that built on every device the port
@@ -87,6 +97,16 @@
 //          mark bytes after vu_draw.x, y the marks of every triangle of the
 //          draw (a grid of two strips or more: VU_MARK_JOINED), z the mark
 //          bytes' qwords (0: none)
+// vu_rec   the vertex pre-pass: x the draw's first record texel less its
+//          first vertex (vertex v's texel is x + v, wrapping), y the texels
+//          of a record plane (the buffer's plane stride, a multiple of
+//          VU_REC_W), z the pre-pass's first vertex (vu_X_pre_vs's vertex
+//          is z + SV_VertexID), w the triangle stage's program rule: bits
+//          0..1 the clip mode the program uses (VU_CLIP_*), VU_TRI_CHAIN,
+//          VU_TRI_HIDE
+// vu_lo, vu_hi  the triangle stage: the program's region test bounds
+//          (vu_inside; the cluster's VU memory 0 and 1, the others VU_LO0
+//          and VU_HI4094)
 cbuffer VuCB : register(b2, space1)
 {
     float4 vu_mem[36];
@@ -95,6 +115,9 @@ cbuffer VuCB : register(b2, space1)
     uint4 vu_strip;
     float4 vu_ticks[8];
     uint4 vu_mark;
+    uint4 vu_rec;
+    float4 vu_lo;
+    float4 vu_hi;
 };
 
 // VU memory 16..255: the cluster program's bones (vu_skin.hlsl), and for
@@ -152,6 +175,17 @@ StructuredBuffer<float4> vu_stream : register(t0, space1);
 #define VU_MARK_JOINED 1u
 #define VU_MARK_HIDE 2u
 #define VU_MARK_LATER 4u
+
+// vu_rec.w, the triangle stage's program rule (shader_consts.h
+// ICO_VU_TRI_*), above its clip mode in bits 0..1: VU_TRI_CHAIN the chain
+// clip plane and the later mark (normal_c, normal_l: vu_mesh_out's chain),
+// VU_TRI_HIDE the content table's mark tested (normal_c, normal_l)
+#define VU_TRI_CHAIN 4u
+#define VU_TRI_HIDE 8u
+// The record: VU_REC_W texels a row of the pre-pass's targets
+// (shader_consts.h ICO_VU_REC_SHIFT)
+#define VU_REC_SHIFT 10u
+#define VU_REC_W 1024u
 
 // The marks of the triangle of kick k: the draw's own, and its byte when
 // the draw has mark bytes (sixteen kicks a qword, four a word; the qword
@@ -282,7 +316,8 @@ struct VuVtx {
     uint4 rgba;  // RGBAQ, 0..255
     float3 stq;  // PACKED ST
     uint inside; // the region test: 1 inside (or no test), 0 outside
-    float4 clip; // scissor programs: model to clip space (mem[20..23]) times pos
+    uint clipf;  // scissor programs: vu_clipw of the position in clip space
+                 // (mem[20..23] times pos); 0 for the others
     uint gsOk;   // vu_has_gs_position
 };
 
@@ -291,7 +326,6 @@ VuVtx vu_vtx_init()
     VuVtx o = (VuVtx)0;
     o.h = float4(0.0, 0.0, 0.0, 1.0);
     o.inside = 1u;
-    o.clip = o.h;
     o.gsOk = 1u;
     return o;
 }
@@ -1341,7 +1375,7 @@ VuVSOut vu_triangle_out_pos(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode, uint
     } else {
         // VU_CLIP_SCISSOR, the PS2's (RegistPacket.c also gives it the
         // packets whose own box fails)
-        uint fa = vu_clipw(a.clip), fb = vu_clipw(b.clip), fc = vu_clipw(c.clip);
+        uint fa = a.clipf, fb = b.clipf, fc = c.clipf;
         bool cut = (fa | fb | fc) != 0u;
         if ((cut && (vu_draw.z & VU_F_KICK_ONLY) != 0u) ||
             (!cut && (vu_draw.z & VU_F_CUT_ONLY) != 0u)) {
@@ -1466,7 +1500,7 @@ uint vu_probe_field(VuVtx v, uint field)
     } else if (field == 7u) {
         r = v.inside;
     } else if (field == 8u) {
-        r = vu_clipw(v.clip);
+        r = v.clipf;
     }
     return r;
 }
@@ -1494,6 +1528,70 @@ VuVSOut vu_mesh_out(VuVtx a, VuVtx b, VuVtx c, uint kick, uint corner, uint mark
             o = vu_later_out(o, a, b, c);
         }
     }
+    return o;
+}
+
+// ------------------------------------------------- the vertex pre-pass
+// A vertex's record (docs/port/RENDER.md, "The vertex pre-pass"): twelve
+// words in three planes of RGBA32_UINT texels, its VuVtx as computed, the
+// floats as their bits: plane 0 h; plane 1 p.x, p.y, GS Z, RGBA (a byte a
+// channel, R lowest); plane 2 S, T, Q and the flags (bit 0 inside, bit 1
+// gsOk, bits 2..7 clipf).  GS X and Y are vu_divide's vu_ftoi4 of p.
+StructuredBuffer<uint4> vu_rec_buf : register(t4, space1);
+
+// Vertex v of the draw as the pre-pass recorded it (vu_rec.x + v, a
+// texel of each plane, vu_rec.y texels apart)
+VuVtx vu_rec_vertex(uint v)
+{
+    uint t = vu_rec.x + v;
+    uint4 r0 = vu_rec_buf[t];
+    uint4 r1 = vu_rec_buf[vu_rec.y + t];
+    uint4 r2 = vu_rec_buf[vu_rec.y * 2u + t];
+    VuVtx o = vu_vtx_init();
+    o.h = asfloat(r0);
+    o.p = asfloat(r1.xy);
+    o.gx = vu_ftoi4(o.p.x);
+    o.gy = vu_ftoi4(o.p.y);
+    o.gz = asint(r1.z);
+    o.rgba = uint4(r1.w & 255u, (r1.w >> 8) & 255u, (r1.w >> 16) & 255u, r1.w >> 24);
+    o.stq = asfloat(r2.xyz);
+    o.inside = r2.w & 1u;
+    o.gsOk = (r2.w >> 1) & 1u;
+    o.clipf = (r2.w >> 2) & 63u;
+    return o;
+}
+
+// The pre-pass's point: vertex vu_rec.z + id at its record texel
+// (vu_rec.x + vu_rec.z + id), a pixel of the VU_REC_W x vu_rec.y / VU_REC_W
+// targets (the viewport the replay sets), the record as flat varyings
+struct VuPreOut {
+    float4 pos : SV_Position;
+    VK_LOC(0) nointerpolation uint4 r0 : TEXCOORD0;
+    VK_LOC(1) nointerpolation uint4 r1 : TEXCOORD1;
+    VK_LOC(2) nointerpolation uint4 r2 : TEXCOORD2;
+#ifdef __spirv__
+    // a point is one pixel (Vulkan takes the size from the shader;
+    // Direct3D's points are one pixel)
+    [[vk::builtin("PointSize")]] float size : PSIZE;
+#endif
+};
+
+VuPreOut vu_pre_out(uint id, VuVtx v)
+{
+    VuPreOut o;
+    uint t = vu_rec.x + vu_rec.z + id;
+    float rows = float(vu_rec.y >> VU_REC_SHIFT);
+    float px = float(t & (VU_REC_W - 1u)) + 0.5;
+    float py = float(t >> VU_REC_SHIFT) + 0.5;
+    o.pos = float4(px * (2.0 / float(VU_REC_W)) - 1.0, 1.0 - py * 2.0 / rows, 0.0, 1.0);
+    o.r0 = asuint(v.h);
+    o.r1 = uint4(asuint(v.p.x), asuint(v.p.y), asuint(v.gz),
+                 v.rgba.x | (v.rgba.y << 8) | (v.rgba.z << 16) | (v.rgba.w << 24));
+    o.r2 = uint4(asuint(v.stq.x), asuint(v.stq.y), asuint(v.stq.z),
+                 v.inside | (v.gsOk << 1) | (v.clipf << 2));
+#ifdef __spirv__
+    o.size = 1.0;
+#endif
     return o;
 }
 

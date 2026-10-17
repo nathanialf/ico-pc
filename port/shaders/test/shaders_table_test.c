@@ -33,7 +33,17 @@ static const char *const expectedPlain[] = {
     "vu_prelit_plain_vs",     "vu_lit_plain_vs",      "vu_lit_spec_plain_vs",
     "vu_reflect_plain_vs",    "vu_skin_plain_vs",     "vu_skin_spec_plain_vs",
     "vu_skin_debug_plain_vs", "vu_grid_plain_vs",     "vu_grid_lit_plain_vs",
-    "vu_grid_spec_plain_vs",  "vu_particle_plain_vs",
+    "vu_grid_spec_plain_vs",  "vu_particle_plain_vs", "vu_tri_plain_vs",
+};
+
+/* the vertex pre-pass (vu_tri.hlsl; docs/port/RENDER.md "The vertex
+ * pre-pass"): each mesh program's pre-pass entry, its pixel shader and the
+ * triangle stage */
+static const char *const expectedPrepass[] = {
+    "vu_prelit_pre_vs",     "vu_lit_pre_vs",  "vu_lit_spec_pre_vs",
+    "vu_reflect_pre_vs",    "vu_skin_pre_vs", "vu_skin_spec_pre_vs",
+    "vu_skin_debug_pre_vs", "vu_grid_pre_vs", "vu_grid_lit_pre_vs",
+    "vu_grid_spec_pre_vs",  "vu_pre_ps",      "vu_tri_vs",
 };
 
 /* the anti-aliasing's (rd_present.c, rd_replay.c's MSAA epoch) */
@@ -164,6 +174,13 @@ int main(void)
             failures++;
         }
     }
+    const size_t nPrepass = sizeof(expectedPrepass) / sizeof(expectedPrepass[0]);
+    for (size_t i = 0; i < nPrepass; i++) {
+        if (!ico_find_shader(expectedPrepass[i])) {
+            printf("FAIL %s: not in the table\n", expectedPrepass[i]);
+            failures++;
+        }
+    }
     const size_t nDst = sizeof(expectedDst) / sizeof(expectedDst[0]);
     for (size_t i = 0; i < nDst; i++) {
         if (!ico_find_shader(expectedDst[i])) {
@@ -171,11 +188,10 @@ int main(void)
             failures++;
         }
     }
-    if (g_icoShaderCount != sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants +
-                                nDst + nPlanes + nPlain) {
-        printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount,
-               sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst + nPlanes +
-                   nPlain);
+    const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
+                        nPlanes + nPlain + nPrepass;
+    if (g_icoShaderCount != nAll) {
+        printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;
     }
     printf("shaders_table_test: %s\n", failures ? "FAILED" : "ok");

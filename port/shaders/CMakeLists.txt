@@ -54,12 +54,24 @@ ico_add_shader(vu_grid_vs vu_grid.hlsl vu_grid_vs vertex)
 ico_add_shader(vu_grid_lit_vs vu_grid.hlsl vu_grid_lit_vs vertex)
 ico_add_shader(vu_grid_spec_vs vu_grid.hlsl vu_grid_spec_vs vertex)
 ico_add_shader(vu_particle_vs vu_particle.hlsl vu_particle_vs vertex)
+# the vertex pre-pass (docs/port/RENDER.md, "The vertex pre-pass";
+# rd_replay.c vuPrepass): each mesh program's vertices once, as records
+# (vu_X_pre_vs, vu_pre_ps into three RGBA32_UINT targets), and the triangle
+# stage of every mesh program reading them back (vu_tri_vs)
+foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:skin skin_debug:skin
+        grid:grid grid_lit:grid grid_spec:grid)
+    string(REGEX REPLACE ":.*" "" _e "${_v}")
+    string(REGEX REPLACE ".*:" "" _f "${_v}")
+    ico_add_shader(vu_${_e}_pre_vs vu_${_f}.hlsl vu_${_e}_pre_vs vertex)
+endforeach()
+ico_add_shader(vu_pre_ps vu_tri.hlsl vu_pre_ps fragment)
+ico_add_shader(vu_tri_vs vu_tri.hlsl vu_tri_vs vertex)
 # the plain variants (ICO_VU_PLAIN, vu_common.hlsli): no card test and no
 # tick cameras, for the draws with neither (rd_replay.c vuDraw); about half
 # the size (issue 107: the Adreno 740's compiler hangs the device on the
 # extended ones)
 foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:skin skin_debug:skin
-        grid:grid grid_lit:grid grid_spec:grid particle:particle)
+        grid:grid grid_lit:grid grid_spec:grid particle:particle tri:tri)
     string(REGEX REPLACE ":.*" "" _e "${_v}")
     string(REGEX REPLACE ".*:" "" _f "${_v}")
     ico_add_shader(vu_${_e}_plain_vs vu_${_f}.hlsl vu_${_e}_vs vertex DEFINES ICO_VU_PLAIN=1)

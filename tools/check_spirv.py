@@ -63,6 +63,10 @@ Gates:
              (46,470 words and up): the plain variant is what such a
              device compiles, so it stays well inside the size that
              built (docs/port/SHADERS.md, The size history).
+             The vertex pre-pass's entries (vu_*_pre_vs: a program's
+             vertex function alone, no triangle, no card test, no tick
+             cameras; docs/port/RENDER.md, The vertex pre-pass) are held
+             to VS_PLAIN_BUDGET too: every device compiles them.
              The VU vertex shaders by release (git archive <tag>
              port/shaders, this DXC and flags; words, and vu_prelit_vs's
              instructions / blocks), and the Adreno 740 with them:
@@ -73,7 +77,9 @@ Gates:
                v0.7.7  10,000 to 51,005 (10,692 / 861)         hung (issue 107)
   variants   every VU vertex shader vu_X_vs in the directories given has
              its plain variant vu_X_plain_vs beside it (only when a
-             directory, not single files, is given).
+             directory, not single files, is given); a pre-pass entry
+             vu_X_pre_vs has none (the variants differ only in the triangle
+             rule, which it does not hold).
   aggregate  no instruction produces or stores a whole array: no OpLoad,
              OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi,
              OpSelect, OpCopyObject or OpCopyLogical whose type is an array
@@ -244,10 +250,11 @@ def check(path, sizes=None):
         if other:
             out.append("envelope: opcodes outside the vertex-shader set: " + other)
     plain = os.path.basename(path).endswith("_plain_vs.spv")
-    budget = (VS_PLAIN_BUDGET if plain else VS_BUDGET) if vertex else PS_BUDGET
+    pre = os.path.basename(path).endswith("_pre_vs.spv")
+    budget = (VS_PLAIN_BUDGET if plain or pre else VS_BUDGET) if vertex else PS_BUDGET
     if nwords > budget:
         out.append("size: %d words, over the %s budget of %d" %
-                   (nwords, "plain vertex" if plain and vertex else
+                   (nwords, "plain vertex" if (plain or pre) and vertex else
                     "vertex" if vertex else "pixel", budget))
     if sizes is not None:
         sizes.append("%-32s %-2s %7d words %6d insts %5d blocks %5d phis %3d loops %3d dot "
@@ -285,7 +292,7 @@ def main(argv):
         names = {os.path.basename(f) for f in files}
         for n in sorted(names):
             if (n.startswith("vu_") and n.endswith("_vs.spv") and
-                    not n.endswith("_plain_vs.spv") and
+                    not n.endswith("_plain_vs.spv") and not n.endswith("_pre_vs.spv") and
                     n[:-len("_vs.spv")] + "_plain_vs.spv" not in names):
                 print("%s: variants: no plain variant %s" %
                       (n, n[:-len("_vs.spv")] + "_plain_vs.spv"))

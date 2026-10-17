@@ -306,7 +306,7 @@ _Static_assert(sizeof(IcoSpriteStqVertex) == 24, "STQ vertex size");
  * stream (float4 quadwords as the VIF unpacked them), b2 = IcoVuCB,
  * b3 = IcoVuBoneCB (the cluster's bones; every mesh program's card bits). */
 
-/* VuCB: group 1, slot 2 (register b2, space1). 768 bytes.
+/* VuCB: group 1, slot 2 (register b2, space1). 816 bytes.
  *   mem    VU1 data memory 0..35 as the program reads it: 0..15 the common
  *          block (RdVuCommon), 16..27 the per-object matrices, 28..35 the
  *          light matrices (vu_common.hlsli lists what each program keeps
@@ -335,7 +335,15 @@ _Static_assert(sizeof(IcoSpriteStqVertex) == 24, "STQ vertex size");
  *          vu_draw.x (the stream's vertex count times its qwords a vertex),
  *          the marks every triangle of the draw carries (a grid of two
  *          strips or more: ICO_VU_MARK_JOINED), the mark bytes' qwords (0:
- *          none, the draw's mesh has no marked triangle), 0 */
+ *          none, the draw's mesh has no marked triangle), 0
+ *   rec    the vertex pre-pass (rd_replay.c vuPrepass; vu_common.hlsli
+ *          vu_rec_vertex, vu_pre_out): the draw's first record texel less
+ *          its first vertex (wrapping), the texels of a record plane, the
+ *          pre-pass draw's first vertex, the triangle stage's program rule
+ *          (its clip mode, ICO_VU_TRI_*)
+ *   lo, hi the triangle stage: the program's region test bounds (the
+ *          cluster's VU memory 0 and 1, the others 0 and (4094, 4094, 0,
+ *          16777214)) */
 typedef struct IcoVuCB {
     float mem[36][4];
     uint32_t draw[4];
@@ -343,6 +351,9 @@ typedef struct IcoVuCB {
     uint32_t strip[4];
     float ticks[8][4];
     uint32_t mark[4];
+    uint32_t rec[4];
+    float lo[4];
+    float hi[4];
 } IcoVuCB;
 
 /* VuBoneCB: group 1, slot 3 (register b3, space1): VU memory 16..255, the
@@ -430,6 +441,20 @@ enum {
  * vertices */
 #define ICO_VU_INDEX_KICK_LIMIT (1u << 26)
 #define ICO_VU_PROBE_FIELDS 16
+/* The vertex pre-pass's record (docs/port/RENDER.md, "The vertex
+ * pre-pass"; vu_common.hlsli VU_REC_*): ICO_VU_REC_W texels a row of its
+ * targets, ICO_VU_REC_PLANES planes of RGBA32_UINT, a texel a vertex in
+ * each (ICO_VU_REC_BYTES a vertex) */
+#define ICO_VU_REC_SHIFT 10u
+#define ICO_VU_REC_W (1u << ICO_VU_REC_SHIFT)
+#define ICO_VU_REC_PLANES 3u
+#define ICO_VU_REC_BYTES (ICO_VU_REC_PLANES * 16u)
+/* IcoVuCB.rec[3], the triangle stage's program rule (vu_common.hlsli
+ * VU_TRI_*), above the clip mode the program uses (ICO_VU_CLIP_MASK):
+ * the chain clip plane and the later mark (normal_c, normal_l), the
+ * content table's HIDE mark tested (normal_c, normal_l) */
+#define ICO_VU_TRI_CHAIN 4u
+#define ICO_VU_TRI_HIDE 8u
 
 _Static_assert(offsetof(IcoVuCB, mem) == 0, "vu mem");
 
@@ -440,7 +465,10 @@ _Static_assert(offsetof(IcoVuCB, strip) == 608, "vu strip");
 
 _Static_assert(offsetof(IcoVuCB, ticks) == 624, "vu ticks");
 _Static_assert(offsetof(IcoVuCB, mark) == 752, "vu mark");
-_Static_assert(sizeof(IcoVuCB) == 768, "VuCB size");
+_Static_assert(offsetof(IcoVuCB, rec) == 768, "vu rec");
+_Static_assert(offsetof(IcoVuCB, lo) == 784, "vu lo");
+_Static_assert(offsetof(IcoVuCB, hi) == 800, "vu hi");
+_Static_assert(sizeof(IcoVuCB) == 816, "VuCB size");
 
 _Static_assert(sizeof(IcoVuBoneCB) == 3840, "VuBoneCB size");
 

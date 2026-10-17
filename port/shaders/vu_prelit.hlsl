@@ -1,8 +1,9 @@
 // vu_prelit.hlsl: normal_c (RD_PROG_PRELIT), codes 32 (region test), 34
 // (no test) and 36 (scissor), chosen by vu_draw.z's clip mode. Vertex: pos,
-// ST, colour (pac_makeNormalStrip). Also vu_ps, the pixel shader of every
-// mesh program (vu_texa_ps for the 24- and 16-bit textures under AEM), and
-// vu_probe_ps, the tests' probe output.
+// ST, colour (pac_makeNormalStrip). vu_prelit_pre_vs: its vertices for the
+// vertex pre-pass (vu_common.hlsli vu_pre_out). Also vu_ps, the pixel
+// shader of every mesh program (vu_texa_ps for the 24- and 16-bit textures
+// under AEM), and vu_probe_ps, the tests' probe output.
 #include "vu_common.hlsli"
 
 // One vertex of START_NORMAL_C / _NOCLIP (normal_c.vsm:135-269) or
@@ -18,7 +19,7 @@ VuVtx vu_prelit_vertex(uint v, uint mode)
     float w = mode == VU_CLIP_SCISSOR ? pos.w : 1.0;
     o.h = vu_matm(16u, pos, w);
     if (mode == VU_CLIP_SCISSOR) {
-        o.clip = vu_matm(20u, pos, pos.w);
+        o.clipf = vu_clipw(vu_matm(20u, pos, pos.w));
     }
     float q = vu_divide(o);
     if (mode == VU_CLIP_REGION) {
@@ -49,6 +50,13 @@ VuVSOut vu_prelit_vs(uint vid : SV_VertexID)
     VuVtx b = vu_prelit_vertex(kick - 1u, mode);
     VuVtx c = vu_prelit_vertex(kick, mode);
     return vu_mesh_out(a, b, c, kick, vid & 3u, marks, mode, VU_LO0, VU_HI4094, true);
+}
+
+// The vertex pre-pass: vertex vu_rec.z + id, the clip mode vu_prelit_vs
+// takes
+VuPreOut vu_prelit_pre_vs(uint id : SV_VertexID)
+{
+    return vu_pre_out(id, vu_prelit_vertex(vu_rec.z + id, vu_draw.z & VU_CLIP_MASK));
 }
 
 GS_PS_ATTR GS_PS_OUT vu_ps(VuVSOut i)

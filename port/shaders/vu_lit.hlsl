@@ -1,7 +1,9 @@
 // vu_lit.hlsl: normal_l. vu_lit_vs = codes 32 (region test) and 36
 // (scissor) by vu_draw.z's clip mode (RD_PROG_LIT); vu_lit_spec_vs = code
 // 34 (RD_PROG_LIT_SPEC); vu_reflect_vs = code 38 (RD_PROG_REFLECT).
-// Vertex: pos, normal, ST, colour.
+// Vertex: pos, normal, ST, colour.  vu_lit_pre_vs, vu_lit_spec_pre_vs and
+// vu_reflect_pre_vs: their vertices for the vertex pre-pass
+// (vu_common.hlsli vu_pre_out).
 #include "vu_common.hlsli"
 
 #define VU_LIT 0u
@@ -72,7 +74,7 @@ VuVtx vu_lit_vertex(uint v, uint mode, uint variant)
     bool scissor = mode == VU_CLIP_SCISSOR;
     o.h = vu_matm(16u, pos, scissor ? pos.w : 1.0);
     if (scissor) {
-        o.clip = vu_matm(20u, pos, pos.w);
+        o.clipf = vu_clipw(vu_matm(20u, pos, pos.w));
     }
     float q = vu_divide(o);
     if (!scissor) {
@@ -92,12 +94,17 @@ VuVtx vu_lit_vertex(uint v, uint mode, uint variant)
     return o;
 }
 
+// The clip mode a variant uses: codes 34 and 38 have no scissor variant,
+// always the region test
+uint vu_lit_mode(uint variant)
+{
+    return variant == VU_LIT && (vu_draw.z & VU_CLIP_MASK) == VU_CLIP_SCISSOR ? VU_CLIP_SCISSOR
+                                                                              : VU_CLIP_REGION;
+}
+
 VuVSOut vu_lit_main(uint vid, uint variant)
 {
-    // codes 34 and 38 have no scissor variant: always the region test
-    uint mode = variant == VU_LIT && (vu_draw.z & VU_CLIP_MASK) == VU_CLIP_SCISSOR
-                    ? VU_CLIP_SCISSOR
-                    : VU_CLIP_REGION;
+    uint mode = vu_lit_mode(variant);
     bool probe = (vu_draw.z & VU_F_PROBE) != 0u;
     uint kick = vid >> 2;
     // the triangle's first corner, or the tests' probe vertex
@@ -127,4 +134,20 @@ VuVSOut vu_lit_spec_vs(uint vid : SV_VertexID)
 VuVSOut vu_reflect_vs(uint vid : SV_VertexID)
 {
     return vu_lit_main(vid, VU_REFLECT);
+}
+
+// The vertex pre-pass: vertex vu_rec.z + id of each variant
+VuPreOut vu_lit_pre_vs(uint id : SV_VertexID)
+{
+    return vu_pre_out(id, vu_lit_vertex(vu_rec.z + id, vu_lit_mode(VU_LIT), VU_LIT));
+}
+
+VuPreOut vu_lit_spec_pre_vs(uint id : SV_VertexID)
+{
+    return vu_pre_out(id, vu_lit_vertex(vu_rec.z + id, vu_lit_mode(VU_LIT_SPEC), VU_LIT_SPEC));
+}
+
+VuPreOut vu_reflect_pre_vs(uint id : SV_VertexID)
+{
+    return vu_pre_out(id, vu_lit_vertex(vu_rec.z + id, vu_lit_mode(VU_REFLECT), VU_REFLECT));
 }

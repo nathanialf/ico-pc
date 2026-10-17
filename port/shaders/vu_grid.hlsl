@@ -7,7 +7,9 @@
 // VIF and MSCNT qwords), then per vertex pos, [normal,] ST; vu_draw.w =
 // vertices per batch. The
 // matrix is vu_mem[16..19] (SET_MESH_MATRIX's vf01..vf04), the lights
-// vu_mem[28..35] (SET_MESH_LIGHT). Always the region test.
+// vu_mem[28..35] (SET_MESH_LIGHT). Always the region test.  vu_grid_pre_vs,
+// vu_grid_lit_pre_vs and vu_grid_spec_pre_vs: their vertices for the
+// vertex pre-pass (vu_common.hlsli vu_pre_out).
 #include "vu_common.hlsli"
 
 #define VU_GRID 0u
@@ -80,4 +82,20 @@ VuVSOut vu_grid_lit_vs(uint vid : SV_VertexID)
 VuVSOut vu_grid_spec_vs(uint vid : SV_VertexID)
 {
     return vu_grid_main(vid, VU_GRID_SPEC);
+}
+
+// The vertex pre-pass: vertex vu_rec.z + id of each variant
+VuPreOut vu_grid_pre_vs(uint id : SV_VertexID)
+{
+    return vu_pre_out(id, vu_grid_vertex(vu_rec.z + id, VU_GRID));
+}
+
+VuPreOut vu_grid_lit_pre_vs(uint id : SV_VertexID)
+{
+    return vu_pre_out(id, vu_grid_vertex(vu_rec.z + id, VU_GRID_LIT));
+}
+
+VuPreOut vu_grid_spec_pre_vs(uint id : SV_VertexID)
+{
+    return vu_pre_out(id, vu_grid_vertex(vu_rec.z + id, VU_GRID_SPEC));
 }
