@@ -71,6 +71,12 @@ typedef struct IcoDrawCB {
                         * left-out texels, ox, in the shadow reduce blit
                         * (shadowReduce; blit.hlsl box_reduce_ps); else 0;
                         * w reserved (0) */
+    /* v0.7.10: two spare blocks.  aux0 (the tiler-pass package): the folded
+     * blur pair's second rectangle and UV rectangle; aux1 (the pixel-cut
+     * package): the GS divide's reciprocals and the per-draw texel sizes.
+     * Zero in every other draw. */
+    uint32_t aux0[4];
+    uint32_t aux1[4];
 } IcoDrawCB;
 
 /* crt.hlsl's CrtCB, group 1, slot 1 (register b1, space1),
@@ -90,6 +96,7 @@ typedef struct IcoCrtCB {
     float tone[4]; /* vignette, gamma in, gamma out, strength */
     float pass[4]; /* x mirror, y unused (the slot's row gain is per pixel: crt.hlsl
                     * rowGainOf), zw 1 / the blurred target's size */
+    float pad[8];  /* keeps the slot's size with IcoDrawCB (its aux blocks) */
 } IcoCrtCB;
 
 /* DrawCB.mode[0] flags (DF_* in common.hlsli). */
@@ -283,7 +290,7 @@ _Static_assert(offsetof(IcoDrawCB, param) == 80, "param");
 
 _Static_assert(offsetof(IcoDrawCB, scale) == 96, "scale");
 
-_Static_assert(sizeof(IcoDrawCB) == 112, "DrawCB size");
+_Static_assert(sizeof(IcoDrawCB) == 144, "DrawCB size");
 
 _Static_assert(sizeof(IcoCrtCB) == sizeof(IcoDrawCB), "CrtCB shares DrawCB's slot and size");
 
@@ -354,6 +361,10 @@ typedef struct IcoVuCB {
     uint32_t rec[4];
     float lo[4];
     float hi[4];
+    /* v0.7.10, the per-triangle record stage (rd_replay_vu.c; vu_common.hlsli
+     * vu_tri): x, y, z the record texel of kick 0's slot A, B and C (C
+     * 0xFFFFFFFF: no tick slots), w the tick a tick-stage draw tests */
+    uint32_t tri[4];
 } IcoVuCB;
 
 /* VuBoneCB: group 1, slot 3 (register b3, space1): VU memory 16..255, the
@@ -468,7 +479,7 @@ _Static_assert(offsetof(IcoVuCB, mark) == 752, "vu mark");
 _Static_assert(offsetof(IcoVuCB, rec) == 768, "vu rec");
 _Static_assert(offsetof(IcoVuCB, lo) == 784, "vu lo");
 _Static_assert(offsetof(IcoVuCB, hi) == 800, "vu hi");
-_Static_assert(sizeof(IcoVuCB) == 816, "VuCB size");
+_Static_assert(sizeof(IcoVuCB) == 832, "VuCB size");
 
 _Static_assert(sizeof(IcoVuBoneCB) == 3840, "VuBoneCB size");
 

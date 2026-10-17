@@ -1746,6 +1746,13 @@ static void vkr_fill_limits(void)
     o->rasterOrderAttachment = g_vkr.rasterOrder;
     o->rasterOrderOff = g_vkr.rasterOrderOff[0] ? g_vkr.rasterOrderOff : NULL;
     o->moltenvk = g_vkr.moltenvk;
+    /* v0.7.10: the device profile's facts (rhi.h); the dynamic state and
+     * the UINT view are false until the backend implements them */
+    o->localRead = g_vkr.localRead;
+    o->vendorId = g_vkr.props.vendorID;
+    o->dynamicDepth = false;
+    o->dynamicBlend = false;
+    o->uintView = false;
     /* the VU shader variants' device table (kVuPlainOnly) and the
      * compiler's line, for the renderer's log (rd__vu_policy_init) */
     vkr_vu_plain_only();

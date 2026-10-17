@@ -490,6 +490,23 @@ const char *rd_vu_plain_only(void);
  * start that ended inside the pre-pass's compile and in a restart whose
  * step draws without it (window_host.c, startup_retry.h). */
 void rd_set_vu_prepass_off(const char *reason);
+
+/* v0.7.10: how the start-up pipeline set is made (rd_precreate_pipelines;
+ * docs/port/RENDER.md "The start-up set"): the batch size, the worker
+ * threads (0: the backend's choice), the process-memory growth in MB past
+ * which the set stops and the rest is made on first use (0: no bound), and
+ * whether the pipeline cache is written after every batch.  Zero fields
+ * are the defaults; the window sets it from the device profile before
+ * rd_precreate_pipelines. */
+typedef struct RdPipelineSetPolicy {
+    uint32_t batch;
+    uint32_t maxThreads;
+    uint32_t memoryBudgetMB;
+    bool cacheEachBatch;
+} RdPipelineSetPolicy;
+
+void rd_set_pipeline_policy(const RdPipelineSetPolicy *p);
+const RdPipelineSetPolicy *rd_pipeline_policy(void);
 /* Whether the run draws with the VU vertex pre-pass now (after rd_init and
  * rd_vuprepass_selftest) */
 bool rd_vu_prepass_on(void);

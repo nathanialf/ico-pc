@@ -938,6 +938,32 @@ void rd__mesh_shutdown(void);
  * stale meshes (rd_vu_mesh_retire) no frame from three back on drew */
 void rd__vu_mesh_sweep_stale(void);
 
+/* ------------------------------------------------------------ profile
+ * The device profile (rd_profile.c; docs/port/RENDER.md): what this device
+ * class gets, decided once after rhi_init from RhiLimits, the backend and
+ * the platform, read everywhere as g_rd.profile.<flag>, overridden one flag
+ * at a time by the [dev] keys and turned off by a self-test that fails
+ * (each says so in its line).  One renderer: the flags are the only
+ * vendor-dependent thing in it. */
+typedef struct RdProfile {
+    bool tiler;         /* RhiLimits.tiler: a tile-based GPU */
+    bool localRead;     /* RhiLimits.localRead */
+    bool fogLocal;      /* the fog reads the depth in the scene pass (RD_FOG_LOCAL first) */
+    bool dateStencil;   /* DATE through the stencil bit, not the R8 snapshot */
+    bool storePlan;     /* store-op DONT_CARE for depth and targets nothing reads later */
+    bool blurFold;      /* the staticBlur pairs folded into one pass each */
+    bool uintViewWork;  /* the work-class targets get the RGBA8_UINT view */
+    bool uintViewScene; /* SCENE, WORK2 and DISPLAY too (immediate-mode GPUs) */
+    bool carefulSet;    /* the start-up set under RdPipelineSetPolicy's careful values */
+    char text[256];     /* the start line's and the summary's words, as in force */
+} RdProfile;
+
+/* fills g_rd.profile from the device (rd_profile.c); called by rd_init after
+ * rd__gpu_init, before the self-tests; logs "rd: profile: ..." */
+void rd__profile_init(void);
+/* the profile's words for the summary line ("profile tiler: fog local, ...") */
+const char *rd__profile_text(void);
+
 /* ------------------------------------------------------------ pipelines */
 typedef enum RdVsId {
     RD_VS_SPRITE_UI = 0,
@@ -990,6 +1016,16 @@ typedef enum RdVsId {
     RD_VS_VU_PRE_GRID,
     RD_VS_VU_PRE_GRID_LIT,
     RD_VS_VU_PRE_GRID_SPEC,
+    /* v0.7.10 (docs/port/RENDER.md, the per-triangle record stage): the
+     * ids from RD_VS_V0710_FIRST are the effort's new vertex shaders; until
+     * every package has landed a missing module of theirs is not an init
+     * failure (rd_replay.c rd__gpu_init: the fence) */
+    RD_VS_VU_MAIN,           /* vu_main_vs: every mesh and grid draw from the records */
+    RD_VS_VU_PARTICLE_MAIN,  /* vu_particle_main_vs: the sprites from their records */
+    RD_VS_VU_TRI_RULE_PRE,   /* vu_tri_rule_pre_vs: one point a triangle: the verdict, STQ plane */
+    RD_VS_VU_TRI_TICK_PRE,   /* vu_tri_tick_pre_vs: one tick camera's test a triangle */
+    RD_VS_VU_TRI_PLANES_PRE, /* vu_tri_planes_pre_vs: the colour planes a triangle */
+    RD_VS_VU_PARTICLE_PRE,   /* vu_particle_pre_vs: one point a sprite: verdict and planes */
     RD_VS_COUNT
 } RdVsId;
 
@@ -999,6 +1035,7 @@ typedef enum RdVsId {
 #define RD_VS_VU_LAST RD_VS_VU_TRI
 #define RD_VS_VU_PRE_FIRST RD_VS_VU_PRE_PRELIT
 #define RD_VS_VU_PRE_LAST RD_VS_VU_PRE_GRID_SPEC
+#define RD_VS_V0710_FIRST RD_VS_VU_MAIN
 
 /* a mesh program entry's pre-pass entry (RD_VS_VU_PRELIT ..
  * RD_VS_VU_GRID_SPEC), 0 for any other vertex shader (the particles have
@@ -1061,8 +1098,22 @@ typedef enum RdFsId {
     /* vu_pre_ps: the vertex pre-pass's records into its three RGBA32_UINT
      * targets (rd_replay_vu.c rd__vu_prepass) */
     RD_FS_VU_PRE,
+    /* v0.7.10: from RD_FS_V0710_FIRST the effort's new fragment shaders
+     * (the same fence as the vertex ids) */
+    RD_FS_VU_LEGACY, /* vu_legacy_ps: today's VuVSOut planes-in-varyings pixel side (the fallback) */
+    RD_FS_VU_LEGACY_TEXA,     /* vu_legacy_texa_ps */
+    RD_FS_SPRITE_PLANES,      /* sprite_ps_planes: the screen-prim triangles' plane build */
+    RD_FS_SPRITE_TEXA_PLANES, /* sprite_texa_ps_planes */
+    RD_FS_SPRITE_STQ_PLANES,  /* sprite_stq_ps_planes */
+    RD_FS_FOG_LOCAL,          /* fog_lut_local_ps: the depth as an input attachment (local read) */
+    RD_FS_FX_SPRITE_UINT,     /* fx_sprite_u_ps: the work targets through their UINT view */
+    RD_FS_FX_BLUR2,           /* fx_blur2_ps: a staticBlur pair folded into one pass */
+    RD_FS_DATE_CLEAR,         /* date_clear_ps: DATE's stencil bit cleared over the draw */
+    RD_FS_DATE_STENCIL,       /* date_stencil_ps: DATE's test from the attachment into the bit */
     RD_FS_COUNT
 } RdFsId;
+
+#define RD_FS_V0710_FIRST RD_FS_VU_LEGACY
 
 /* How an RdBlend equation reaches the hardware. */
 typedef enum RdBlendPath {
@@ -1236,6 +1287,12 @@ RdPipeKeyInt rd__post_key(RdVsId vs, RdFsId fs, RhiFormat colorFmt);
 RdPipeKeyInt rd__present_depth_key(RhiFormat colorFmt);
 /* The pipeline for k, created on first use.  0 without a device. */
 RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k);
+/* v0.7.10: binds p and sets the dynamic state the key asks for where the
+ * device left it dynamic (RhiLimits.dynamicDepth / dynamicBlend: the
+ * depth test, write and compare, the blend and the colour mask, from the
+ * UN-normalised key).  Every draw binds through this, never through
+ * rhi_cmd_set_pipeline directly (rd_pipeline.c). */
+void rd__set_pipeline(RhiCommandList cl, RhiPipeline p, const RdPipeKeyInt *k);
 /* the key's words ("program 0 blend 4 vs 5 fs 5 fmt 1/8 msaa 0 dst 0") */
 void rd__pipe_key_text(const RdPipeKeyInt *k, char *out, size_t size);
 /* The crash report's note (rd_set_activity_fn) around a pipeline made
@@ -1818,6 +1875,7 @@ typedef struct RdContext {
     RhiBindGroupLayout layoutFrame, layoutDraw, layoutTex, layoutInt;
     RhiBindGroupLayout layoutVu; /* t0 stream, b1 DrawCB, b2 VuCB, b3 VuBoneCB */
     RhiShader vs[RD_VS_COUNT], fs[RD_FS_COUNT];
+    RdProfile profile; /* rd__profile_init */
     /* the VU vertex shaders' plain variants (vu_*_plain_vs, indexed by
      * RD_VS_*; 0 for the others), and whether every VU draw takes them
      * (rd__vu_policy_init) and why ("on this device (Adreno 740, issue

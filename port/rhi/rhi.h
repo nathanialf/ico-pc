@@ -176,7 +176,12 @@ typedef enum RhiTextureUsage {
      * target a pass can read as RHI_BIND_INPUT_ATTACHMENT (Vulkan, only
      * with RhiLimits.rasterOrderAttachment; ignored by D3D12). */
     RHI_TEX_STORAGE = 1 << 5,
-    RHI_TEX_INPUT_ATTACHMENT = 1 << 6
+    RHI_TEX_INPUT_ATTACHMENT = 1 << 6,
+    /* an RGBA8_UNORM texture also viewed as RGBA8_UINT (RHI_ASPECT_UINT: the
+     * integer texel without a float conversion; Vulkan a mutable-format
+     * image with a second view, D3D12 a typeless resource).  A backend
+     * without the view leaves RhiLimits.uintView false and ignores the bit. */
+    RHI_TEX_UINT_VIEW = 1 << 7
 } RhiTextureUsage;
 
 typedef struct RhiTextureDesc {
@@ -197,7 +202,11 @@ typedef struct RhiTextureDesc {
  * never as stencil; an RGBA8 target can be viewed as RGB24-with-TA0 by the
  * shader, which is a shader concern, not a view.  So one view kind is enough
  * beyond the default: the depth aspect. */
-typedef enum RhiViewAspect { RHI_ASPECT_COLOR = 0, RHI_ASPECT_DEPTH = 1 } RhiViewAspect;
+typedef enum RhiViewAspect {
+    RHI_ASPECT_COLOR = 0,
+    RHI_ASPECT_DEPTH = 1,
+    RHI_ASPECT_UINT = 2 /* the RGBA8_UINT view of an RHI_TEX_UINT_VIEW texture */
+} RhiViewAspect;
 
 typedef enum RhiFilter { RHI_FILTER_NEAREST = 0, RHI_FILTER_LINEAR = 1 } RhiFilter;
 
@@ -460,7 +469,14 @@ typedef struct RhiPipelineDesc {
      * RhiTextureDesc.samples of the targets it draws into */
     uint32_t samples;
     RhiDstRead dstRead; /* RHI_DST_READ_NONE (0) for every ordinary pipeline */
+    /* RHI_DYN_* bits: the fixed-function state the pipeline leaves to
+     * rhi_cmd_set_depth_state / rhi_cmd_set_blend_state (only where
+     * RhiLimits.dynamicDepth / dynamicBlend); the static values are the
+     * defaults until a set.  0 for a pipeline with every state static. */
+    uint32_t dynamic;
 } RhiPipelineDesc;
+
+enum { RHI_DYN_DEPTH = 1u, RHI_DYN_BLEND = 2u };
 
 /* ------------------------------------------------------------- passes */
 typedef enum RhiLoadOp {
@@ -499,6 +515,10 @@ typedef struct RhiDepthAttachment {
         readOnlyDepth; /* depth test without write and the same texture bound for sampling is NOT allowed; use a copy */
     RhiStoreOp store;        /* the depth aspect */
     RhiStoreOp stencilStore; /* the stencil aspect (a format with one); zero stores it */
+    /* the depth can be read by the pass's own fragment shaders as an input
+     * attachment after rhi_cmd_local_read_barrier (Vulkan dynamic rendering
+     * local read, RhiLimits.localRead; D3D12 ignores it) */
+    bool readable;
 } RhiDepthAttachment;
 
 typedef struct RhiRenderPassDesc {
@@ -618,6 +638,22 @@ typedef struct RhiLimits {
      * (port/render/rd_dst_read.c; [dev] blend still forces any mode).
      * ICO_VK_FAKE_LIMITS=moltenvk reports it on any device. */
     bool moltenvk;
+    /* v0.7.10 (docs/port/RENDER.md, the device profile).  localRead: Vulkan
+     * dynamicRenderingLocalRead (VK_KHR_dynamic_rendering_local_read or
+     * Vulkan 1.4), whatever the destination read says: a pass's own
+     * attachments can be read as input attachments after
+     * rhi_cmd_local_read_barrier.  vendorId: the PCI vendor id (0 where
+     * unknown).  dynamicDepth: pipelines may leave the depth test, write and
+     * compare to rhi_cmd_set_depth_state (Vulkan 1.3 or
+     * VK_EXT_extended_dynamic_state); dynamicBlend: the blend enable,
+     * equation and write mask to rhi_cmd_set_blend_state
+     * (VK_EXT_extended_dynamic_state3); both false on D3D12.  uintView:
+     * RHI_TEX_UINT_VIEW textures get their RGBA8_UINT view. */
+    bool localRead;
+    uint32_t vendorId;
+    bool dynamicDepth;
+    bool dynamicBlend;
+    bool uintView;
     /* Why the VU vertex shaders' extended variants are refused on this
      * device ("Adreno 740, issue 107": the driver hangs the whole device
      * compiling them; Vulkan, vk_device.c kVuPlainOnly), NULL otherwise;
@@ -780,6 +816,9 @@ typedef struct RhiPipelineBatch {
     float *ms;
     /* out: the threads that compiled (1: the calling thread) */
     uint32_t threads;
+    /* in, optional: at most this many worker threads (0: the backend's
+     * choice); a device whose driver dies compiling in parallel takes 1 */
+    uint32_t maxThreads;
 } RhiPipelineBatch;
 
 #define RHI_PIPELINE_WAIT_MS 50u
@@ -835,6 +874,22 @@ void rhi_cmd_set_vertex_buffer(RhiCommandList cl, uint32_t binding, RhiBuffer b,
 void rhi_cmd_set_index_buffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, bool u32);
 void rhi_cmd_set_stencil_ref(RhiCommandList cl, uint8_t ref);
 void rhi_cmd_set_blend_constant(RhiCommandList cl, const float rgba[4]);
+/* v0.7.10 dynamic state (RhiPipelineDesc.dynamic): the depth test, write
+ * and compare of a RHI_DYN_DEPTH pipeline, the attachment-0 blend of a
+ * RHI_DYN_BLEND one; a no-op on a backend whose limits say false.  The
+ * backend skips a set equal to the last one and re-emits after a bind. */
+void rhi_cmd_set_depth_state(RhiCommandList cl, bool test, bool write, RhiCompare cmp);
+void rhi_cmd_set_blend_state(RhiCommandList cl, const RhiBlendState *blend);
+
+/* A by-region barrier inside the open pass between the attachments'
+ * writes so far and their reads as input attachments by the draws that
+ * follow (RHI_LOCAL_READ_COLOR: colour writes -> fragment reads;
+ * RHI_LOCAL_READ_DEPTH: depth writes -> fragment reads; RHI_LOCAL_READ_BACK:
+ * fragment reads -> the next draws' depth writes).  Vulkan dynamic
+ * rendering local read; a no-op on D3D12. */
+enum { RHI_LOCAL_READ_COLOR = 1u, RHI_LOCAL_READ_DEPTH = 2u, RHI_LOCAL_READ_BACK = 4u };
+
+void rhi_cmd_local_read_barrier(RhiCommandList cl, uint32_t mask);
 void rhi_cmd_draw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
                   uint32_t instanceCount);
 void rhi_cmd_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIndex,

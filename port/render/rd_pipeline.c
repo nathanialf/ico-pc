@@ -1254,6 +1254,30 @@ static void firstUseLine(const RdPipeKeyInt *k, float ms)
             s_firstUse == 8u ? "; from here every 100th is written" : "");
 }
 
+/* v0.7.10 (rd_internal.h): the bind and its dynamic state.  Until the
+ * dynamic-state package lands every state is static and this is the bind. */
+void rd__set_pipeline(RhiCommandList cl, RhiPipeline p, const RdPipeKeyInt *k)
+{
+    (void)k;
+    rhi_cmd_set_pipeline(cl, p);
+}
+
+static RdPipelineSetPolicy s_setPolicy;
+
+void rd_set_pipeline_policy(const RdPipelineSetPolicy *p)
+{
+    if (p) {
+        s_setPolicy = *p;
+    } else {
+        memset(&s_setPolicy, 0, sizeof(s_setPolicy));
+    }
+}
+
+const RdPipelineSetPolicy *rd_pipeline_policy(void)
+{
+    return &s_setPolicy;
+}
+
 RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
 {
     RdPipeKeyInt tmp;
@@ -1651,7 +1675,7 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             if (s_activityFn != NULL) {
                 s_activityFn(s_batchNote);
             }
-            RhiPipelineBatch batch = {preWait, &pb, bms, 1};
+            RhiPipelineBatch batch = {preWait, &pb, bms, 1, 0};
             pb.base = first;
             const double bt0 = rd__now_ms();
             rhi_create_pipelines(bd, nb, bp, &batch);

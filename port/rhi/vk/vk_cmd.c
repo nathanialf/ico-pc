@@ -1216,6 +1216,28 @@ void rhi_cmd_set_blend_constant(RhiCommandList cl, const float rgba[4])
     }
 }
 
+/* v0.7.10 dynamic state and local read (rhi.h): no-ops until the backend
+ * takes them (RhiLimits.dynamicDepth, dynamicBlend, localRead's barrier) */
+void rhi_cmd_set_depth_state(RhiCommandList cl, bool test, bool write, RhiCompare cmp)
+{
+    (void)cl;
+    (void)test;
+    (void)write;
+    (void)cmp;
+}
+
+void rhi_cmd_set_blend_state(RhiCommandList cl, const RhiBlendState *blend)
+{
+    (void)cl;
+    (void)blend;
+}
+
+void rhi_cmd_local_read_barrier(RhiCommandList cl, uint32_t mask)
+{
+    (void)cl;
+    (void)mask;
+}
+
 /* A destination-read draw (rhi.h RhiDstRead) needs no barrier before it:
  * the interlock orders a storage draw's critical sections after the
  * pass's earlier ones (primitive order, the image Coherent), and the

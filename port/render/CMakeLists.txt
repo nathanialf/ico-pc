@@ -123,6 +123,7 @@ add_library(ico_render STATIC
     rd_join.c
     rd_mesh.c
     rd_passring.c # the last passes recorded, for the device-loss report
+    rd_profile.c # the device profile: what this device class gets (v0.7.10)
     rd_content_hide.c # the content table: stage geometry made for the 4:3 picture
     rd_content_extend.c # the content table's sheets: overlays continued to the frame's edges
     rd_content_chain.c # Natural chains: the chains a stage animation lets down

@@ -72,75 +72,34 @@
 /* the snapshots taken, copies and swaps alike (rd__blur_snapshot_count) */
 static uint64_t s_blurSnapCount;
 
-static const char *const s_vsNames[RD_VS_COUNT] = {"sprite_ui_vs" /* indexed by RD_VS_* */,
-                                                   "sprite_world_vs",
-                                                   "blit_vs",
-                                                   "blend_int_vs",
-                                                   "vu_prelit_vs",
-                                                   "vu_lit_vs",
-                                                   "vu_lit_spec_vs",
-                                                   "vu_reflect_vs",
-                                                   "vu_skin_vs",
-                                                   "vu_skin_spec_vs",
-                                                   "vu_skin_debug_vs",
-                                                   "vu_grid_vs",
-                                                   "vu_grid_lit_vs",
-                                                   "vu_grid_spec_vs",
-                                                   "vu_particle_vs",
-                                                   "vu_tri_vs",
-                                                   "fx_rect_vs",
-                                                   "sprite_aa1_ui_vs",
-                                                   "sprite_aa1_world_vs",
-                                                   "sprite_stq_ui_vs",
-                                                   "sprite_stq_world_vs",
-                                                   "crt_vs",
-                                                   "sprite_plane_ui_vs",
-                                                   "sprite_plane_world_vs",
-                                                   "sprite_stq_plane_ui_vs",
-                                                   "sprite_stq_plane_world_vs",
-                                                   "vu_prelit_pre_vs",
-                                                   "vu_lit_pre_vs",
-                                                   "vu_lit_spec_pre_vs",
-                                                   "vu_reflect_pre_vs",
-                                                   "vu_skin_pre_vs",
-                                                   "vu_skin_spec_pre_vs",
-                                                   "vu_skin_debug_pre_vs",
-                                                   "vu_grid_pre_vs",
-                                                   "vu_grid_lit_pre_vs",
-                                                   "vu_grid_spec_pre_vs"};
+static const char *const s_vsNames[RD_VS_COUNT] = {
+    "sprite_ui_vs" /* indexed by RD_VS_* */, "sprite_world_vs", "blit_vs", "blend_int_vs",
+    "vu_prelit_vs", "vu_lit_vs", "vu_lit_spec_vs", "vu_reflect_vs", "vu_skin_vs", "vu_skin_spec_vs",
+    "vu_skin_debug_vs", "vu_grid_vs", "vu_grid_lit_vs", "vu_grid_spec_vs", "vu_particle_vs",
+    "vu_tri_vs", "fx_rect_vs", "sprite_aa1_ui_vs", "sprite_aa1_world_vs", "sprite_stq_ui_vs",
+    "sprite_stq_world_vs", "crt_vs", "sprite_plane_ui_vs", "sprite_plane_world_vs",
+    "sprite_stq_plane_ui_vs", "sprite_stq_plane_world_vs", "vu_prelit_pre_vs", "vu_lit_pre_vs",
+    "vu_lit_spec_pre_vs", "vu_reflect_pre_vs", "vu_skin_pre_vs", "vu_skin_spec_pre_vs",
+    "vu_skin_debug_pre_vs", "vu_grid_pre_vs", "vu_grid_lit_pre_vs", "vu_grid_spec_pre_vs",
+    /* v0.7.10, RD_VS_V0710_FIRST on */
+    "vu_main_vs", "vu_particle_main_vs", "vu_tri_rule_pre_vs", "vu_tri_tick_pre_vs",
+    "vu_tri_planes_pre_vs", "vu_particle_pre_vs"};
 
 const char *rd__vs_name(uint8_t vs)
 {
     return vs < RD_VS_COUNT ? s_vsNames[vs] : "?";
 }
 
-static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps" /* indexed by RD_FS_* */,
-                                                   "blit_ps",
-                                                   "blend_int_ps",
-                                                   "date_snap_ps",
-                                                   "camera_probe_ps",
-                                                   "vu_ps",
-                                                   "fog_lut_ps",
-                                                   "fx_sprite_ps",
-                                                   "wrap_acc_ps",
-                                                   "wrap_resolve_ps",
-                                                   "font_ps",
-                                                   "font_sheet_ps",
-                                                   "sprite_aa1_ps",
-                                                   "box_reduce_ps",
-                                                   "sprite_stq_ps",
-                                                   "crt_bloom_ps",
-                                                   "crt_blur_ps",
-                                                   "crt_ps",
-                                                   "sprite_texa_ps",
-                                                   "vu_texa_ps",
-                                                   "blit_depth_ps",
-                                                   "fog_lut_buffer_ps",
-                                                   "aa_reduce_ps",
-                                                   "fog_lut_ms_ps",
-                                                   "depth_resolve_ps",
-                                                   "depth_upsample_ps",
-                                                   "vu_pre_ps"};
+static const char *const s_fsNames[RD_FS_COUNT] = {
+    "sprite_ps" /* indexed by RD_FS_* */, "blit_ps", "blend_int_ps", "date_snap_ps",
+    "camera_probe_ps", "vu_ps", "fog_lut_ps", "fx_sprite_ps", "wrap_acc_ps", "wrap_resolve_ps",
+    "font_ps", "font_sheet_ps", "sprite_aa1_ps", "box_reduce_ps", "sprite_stq_ps", "crt_bloom_ps",
+    "crt_blur_ps", "crt_ps", "sprite_texa_ps", "vu_texa_ps", "blit_depth_ps", "fog_lut_buffer_ps",
+    "aa_reduce_ps", "fog_lut_ms_ps", "depth_resolve_ps", "depth_upsample_ps", "vu_pre_ps",
+    /* v0.7.10, RD_FS_V0710_FIRST on */
+    "vu_legacy_ps", "vu_legacy_texa_ps", "sprite_ps_planes", "sprite_texa_ps_planes",
+    "sprite_stq_ps_planes", "fog_lut_local_ps", "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps",
+    "date_stencil_ps"};
 
 const char *rd__fs_name(uint8_t fs)
 {
@@ -239,9 +198,11 @@ bool rd__gpu_init(void *sdlWindow)
      * VuCB, VuBoneCB and the vertex pre-pass's record (vu_rec_buf) */
     static const RhiBindSlot s4[5] = {{0, RHI_BIND_STORAGE_BUFFER, VS},
                                       {1, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS},
-                                      {2, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS},
+                                      /* VuCB and the record also to the pixel side: the
+                                       * per-triangle planes are read there (v0.7.10) */
+                                      {2, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS},
                                       {3, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS},
-                                      {4, RHI_BIND_STORAGE_BUFFER, VS}};
+                                      {4, RHI_BIND_STORAGE_BUFFER, VS | FS}};
     g_rd.layoutVu = makeLayout(s4, 5, "rd vu");
     bool ok = g_rd.layoutFrame.id && g_rd.layoutDraw.id && g_rd.layoutTex.id && g_rd.layoutInt.id &&
               g_rd.layoutVu.id;
@@ -278,6 +239,11 @@ bool rd__gpu_init(void *sdlWindow)
         }
     }
     for (int i = 0; i < RD_VS_COUNT; i++) {
+        /* the v0.7.10 fence: a module of the effort not yet in the table
+         * leaves its id empty (its draws take their fallback) */
+        if (i >= RD_VS_V0710_FIRST && !ico_find_shader(s_vsNames[i])) {
+            continue;
+        }
         g_rd.vs[i] = rd__make_shader(s_vsNames[i]);
         ok = ok && g_rd.vs[i].id;
     }
@@ -287,6 +253,9 @@ bool rd__gpu_init(void *sdlWindow)
          * sample-rate shading takes it (else it is never asked for) */
         if (i == RD_FS_FOG_MS && !lim->sampleRateShading) {
             continue;
+        }
+        if (i >= RD_FS_V0710_FIRST && !ico_find_shader(s_fsNames[i])) {
+            continue; /* the v0.7.10 fence, as the vertex loop's */
         }
         /* without dual-source blending the gs_dual_out entries are not
          * created (their second output needs the feature); their *_nodual

@@ -658,6 +658,11 @@ static void dx_fill_limits(void)
     o->rasterOrderAttachment = false;
     o->rasterOrderOff = NULL;
     o->moltenvk = false;
+    o->localRead = false;
+    o->vendorId = 0;
+    o->dynamicDepth = false;
+    o->dynamicBlend = false;
+    o->uintView = false;
     o->vuPlainOnly = NULL;
     o->lazyPipelines = NULL;
     o->compilerVersion = NULL;

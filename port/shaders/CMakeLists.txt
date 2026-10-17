@@ -148,3 +148,19 @@ ico_shaders_library(ico_shaders)
 if(TARGET ico_shaders)
     add_subdirectory(test)
 endif()
+
+# ---- v0.7.10 (docs/port/RENDER.md): each package adds its entries inside its
+# own fence and nowhere else, so the packages merge without conflicts.  The
+# ids and names are rd_internal.h's RD_VS_V0710_FIRST / RD_FS_V0710_FIRST on
+# (rd_replay.c s_vsNames, s_fsNames); a module missing from the table leaves
+# its id empty until its package lands (rd__gpu_init's fence).
+# ---- G1 record stages (vu_main_vs, vu_particle_main_vs, vu_tri_rule_pre_vs,
+#      vu_tri_tick_pre_vs, vu_tri_planes_pre_vs, vu_particle_pre_vs,
+#      vu_legacy_ps, vu_legacy_texa_ps and their twins) ----
+# ---- G1 end ----
+# ---- G2 2D varying diet (sprite_*_ps_planes and their twins) ----
+# ---- G2 end ----
+# ---- X2 tiler passes (fog_lut_local_ps, fx_blur2_ps, date_clear_ps, date_stencil_ps) ----
+# ---- X2 end ----
+# ---- X3 pixel cuts (fx_sprite_u_ps) ----
+# ---- X3 end ----

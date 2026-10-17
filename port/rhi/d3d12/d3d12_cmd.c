@@ -785,6 +785,28 @@ void rhi_cmd_set_blend_constant(RhiCommandList cl, const float rgba[4])
     }
 }
 
+/* v0.7.10 dynamic state and local read (rhi.h): D3D12 has neither (its
+ * limits say false), so these are no-ops */
+void rhi_cmd_set_depth_state(RhiCommandList cl, bool test, bool write, RhiCompare cmp)
+{
+    (void)cl;
+    (void)test;
+    (void)write;
+    (void)cmp;
+}
+
+void rhi_cmd_set_blend_state(RhiCommandList cl, const RhiBlendState *blend)
+{
+    (void)cl;
+    (void)blend;
+}
+
+void rhi_cmd_local_read_barrier(RhiCommandList cl, uint32_t mask)
+{
+    (void)cl;
+    (void)mask;
+}
+
 void rhi_cmd_draw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
                   uint32_t instanceCount)
 {

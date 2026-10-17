@@ -118,6 +118,8 @@ cbuffer VuCB : register(b2, space1)
     uint4 vu_rec;
     float4 vu_lo;
     float4 vu_hi;
+    // v0.7.10 (shader_consts.h IcoVuCB.tri): the per-triangle record's slots
+    uint4 vu_tri;
 };
 
 // VU memory 16..255: the cluster program's bones (vu_skin.hlsl), and for

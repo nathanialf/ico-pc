@@ -1583,6 +1583,7 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
         return false;
     }
     g_rd.hasDevice = true;
+    rd__profile_init(); /* the device profile (rd_profile.c) */
     /* the two-pass blend without dual-source blending (a
      * device without dualSrcBlend; ICO_RD_NO_DUAL=1 forces it for tests) */
     const char *noDual = getenv("ICO_RD_NO_DUAL");
