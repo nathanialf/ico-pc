@@ -843,6 +843,113 @@ are 6,183 to 23,305 words, the extended ones 10,011 to 51,238
   vu_plain_only = true` keeps it to the plain variants and `[dev] vu_extended = true` gives it the
   extended ones whatever the device table says ([CONFIG.md](CONFIG.md#ico-pcini)).
 
+### The vertex pre-pass
+
+A mesh program's vertex shader draws the triangle `kick - 2, kick - 1, kick` at index value
+`kick * 4 + corner` ([The stream bounds audit](#the-stream-bounds-audit), `shader_consts.h`
+(`ICO_VU_INDEX`)), so no index repeats and the GPU reuses nothing: each of a triangle's three
+invocations evaluated all three of its corners in full (the program's vertex function: two or
+three matrix products, the lighting, the divide, the conversions), and a VU command drawn twice
+(the AFAIL split, the two passes without dual-source blending) or as two draws a batch (the scissor
+batches' fans and kicks) evaluated them again in each draw. The pre-pass evaluates each vertex of
+a VU command once, before the lists, into a record; the triangle stage reads its three corners
+back and runs the triangle math on them unchanged (`port/render/rd_replay.c` (`vuPrepass`,
+`doVuDraw`); `port/shaders/vu_common.hlsli` (`vu_pre_out`, `vu_rec_vertex`);
+`port/shaders/vu_tri.hlsl`). The meshes (`RDC_MESH`, `RDC_SKINNED`) and the grids (`RDC_GRID`)
+take it; the particles (six invocations a sprite, a few hundred sprites a frame) keep
+`vu_particle_vs`.
+
+**The record.** Twelve 32-bit words a vertex, in three planes of `RGBA32_UINT` texels, one texel
+a vertex (`shader_consts.h` (`ICO_VU_REC_*`)):
+
+| plane | x | y | z | w |
+| --- | --- | --- | --- | --- |
+| 0 | `h.x` | `h.y` | `h.z` | `h.w` (the clip w) |
+| 1 | `p.x` | `p.y` | GS Z (`gz`) | RGBA, a byte each, R lowest |
+| 2 | S | T | Q | bit 0 the region test (`inside`), bit 1 `gsOk`, bits 2..7 the clip-space flags (`vu_clipw`) |
+
+The floats are their bits (`asuint`), so the record holds exactly what the vertex function
+computed. GS X and Y are not stored: the triangle stage takes them from `p` as `vu_divide` does,
+`vu_ftoi4(p.x)`, a multiply by 16 (exact) and a truncation. A vertex's texel is its plane's
+`base + v`, 1024 texels a row (`ICO_VU_REC_W`); `VuVtx` carries the clip-space flags (`clipf`)
+instead of the clip-space position, which only `vu_clipw` read.
+
+**The pass.** After the uploads and the first clears, before list 0, `vuPrepass` walks the
+replayed lists' mesh and grid commands. For each it sets up what `doVuDraw` binds (the stream in
+the mesh arena or the ring, VuCB's VU memory, the bones and card bits in VuBoneCB: `vuSource`,
+shared by both, kept for the command's draws), finds the vertices its index range reads (the
+lowest kick less 2 to the highest, from the CPU's index list; a grid's every strip), and gives
+them consecutive texels. Then one render pass into the three record textures (load don't care,
+store), one draw a command: `n` points through the program's pre-pass entry (`vu_X_pre_vs`, the
+program's own vertex function on vertex `first + SV_VertexID`, its outputs as flat `uint4`
+varyings at the point's texel, `PointSize` 1) and `vu_pre_ps`, which writes them to the three
+targets. The textures go to `COPY_SRC` and each plane's rows are copied into the frame slot's
+record buffer, plane after plane (`rhi_cmd_copy_texture_to_buffer`, which makes the copy visible
+to the vertex shaders that read the buffer: [RHI.md](RHI.md#the-interface)). A frame slot has its
+own buffer, so a replay never rewrites what the GPU may still read for the previous one; the
+textures are shared, ordered by their barriers. Both grow by powers of two, from 16 rows (16,384
+vertices) to 1,024; a command past that, or one whose pre-pass pipeline is missing, is drawn the
+old way (`vuPrepass`).
+
+**The triangle stage.** `vu_tri_vs` (and `vu_tri_plain_vs`, [The VU shader
+variants](#the-vu-shader-variants)) serves every mesh program: it reads the record buffer (t4 in
+group 1, `StructuredBuffer<uint4>`, nine loads an invocation) for `kick - 2`, `kick - 1` and
+`kick`, and calls `vu_mesh_out` as the program's entry did, with the program's own choices passed
+in VuCB instead of written in the entry: `vu_rec.w` holds the clip mode the program uses (normal_c
+takes VuCB's, normal_l's code 32/36 the scissor mode or the region test, codes 34 and 38, the
+cluster and the grids the region test), whether the chain clip plane and the later mark apply
+(normal_c and normal_l) and whether the content table's HIDE mark is tested (normal_c and
+normal_l); `vu_lo` and `vu_hi` hold the region test's bounds (the cluster's VU memory 0 and 1,
+the others 0 and (4094, 4094, 0, 16777214)). The marks, the card bits, the tick cameras, the
+cut, the planes, the plane distance (read from the stream) and the probe are those of the
+program's entry. A pipeline of `vu_tri_vs` does not depend on the program, so the key's program
+is normalised (`RD_PROG_PRELIT`) and the programs share their pipelines.
+
+**The keys.** With the pre-pass on, the VU keys are those of `vu_tri_vs` and `vu_particle_vs`
+under the VU states (each variant as [The VU shader variants](#the-vu-shader-variants) says), and
+the ten pre-pass keys (`rd__vu_pre_key`: the program's `vu_X_pre_vs` with `vu_pre_ps`, three
+`RGBA32_UINT` targets, no depth, points, no blend); the program entries' keys are made only for a
+command drawn the old way. `[dev] vu_prepass = false` (`ICO_RD_VU_PREPASS=0`,
+[CONFIG.md](CONFIG.md#ico-pcini)) draws every VU command the old way and enumerates the program
+entries' keys, for an A/B on a device.
+
+**The devices.** Only what every device the port runs on has: render passes into colour targets,
+point lists, vertex shaders reading a read-only storage buffer (as the stream already is), and
+buffer copies. No compute (the RHI has none), no storage writes from a vertex shader
+(`vertexPipelineStoresAndAtomics`, which the port never enables and phones' drivers do not all
+offer), no vertex texture fetch (`tools/check_spirv.py`'s vertex-shader opcode set holds no image
+instruction). `RGBA32_UINT` is a colour attachment and a sampled format on every Vulkan device
+(the specification's required format support) and a render target on Direct3D 12 at feature
+level 11_0; three targets are inside every device's colour attachments (at least 4 in Vulkan, 8
+on Direct3D 12). The one bound the record meets is Metal's: a pixel's colour targets may take 32
+bytes together on Apple A9 and A10 GPUs, 64 on A11 to A13 and 128 from A14 and M1 (Metal Feature
+Set Tables, "Maximum implicit image block size, per pixel, per sample, when using multiple color
+render targets"); the record's 48 bytes do not fit the first, so under MoltenVK on an A9 or A10
+the pre-pass is off (`RhiLimits.colorBytesPerPixel`, `rhi_metal_color_bytes`) and the log says
+so once.
+
+**Why the picture is the same.** The pre-pass entry calls the program's vertex function, the same
+source with the same `precise` operations, so each recorded word is the value the old entry
+computed for that corner (the shaders keep the precise flags of `port/shaders/CMakeLists.txt`;
+`precise` forbids contraction and reassociation of each operation it marks). The record carries
+the bits through integer targets and a buffer copy, with no float conversion on the way, and the
+triangle stage reads them back as `asfloat`. The one value recomputed, GS X and Y from `p`, is
+`vu_divide`'s own operation on the same bits. The triangle math (`vu_mesh_out`: the pick, the
+region rule, the cut, the ticks, the card test, the corner rule, the planes, the plane distance,
+the later bias) is unchanged and is given the same values, with the program's clip mode, bounds
+and flags from VuCB equal to the constants its entry used. Within the old shaders the three
+copies of a vertex (as corner `c` of triangle `k`, `b` of `k + 1`, `a` of `k + 2`) were three
+inlined evaluations of one expression; the record makes them one evaluation. `vu1_test` draws
+every case both ways, probe and pictures, and compares them byte for byte
+([TESTING.md](TESTING.md#portshaderstest)).
+
+**The saving.** Each vertex function runs once a vertex a command instead of three times an index
+of each of its draws, and an invocation keeps the triangle math and nine loads. The replay's
+record counts the pre-pass (`RdPerfRecord.vuPreVertices`, `vuPreDraws`, `vuPrePasses`,
+`vuPreFallbacks`, `gpuPrepassMs`); the window's 10 s lines and the replay tool's `--stats` print
+them, so a log shows the pre-pass's own GPU time next to the lists' ([Performance
+records](#performance-records)).
+
 ## Destination reads and blend paths
 
 The GS blends in integers with an arithmetic shift, no clamp of C, then COLCLAMP, PABE and FBA;
@@ -1564,13 +1671,6 @@ Measured or worked out, not done:
   over directly, exactly, but needs images made with a mutable format (Vulkan's
   `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT` and a view format list; a typeless resource on D3D12),
   which the RHI does not make ([RHI.md](RHI.md)).
-- **A vertex pre-pass for the VU programs.** A mesh program's vertex shader evaluates its
-  triangle's three corners in full at each of the triangle's three invocations (`vu_mesh_out`:
-  the lit vertex, the pick, the triangle's position and attribute planes), and the index is
-  `kick * 4 + corner`, so nothing is reused: about three times the per-vertex work. A pass that
-  evaluates each vertex once into a buffer, read by a light triangle shader, would cut that, at
-  the cost of a storage buffer, a compute or vertex-only pass and a new pair of entries per
-  program.
 - **One pass for a constant-alpha lerp without dual-source blending.** On such a device a LERP
   is two passes (`rd__expand_no_dual`). Where As is the same over the draw (untextured;
   textured with TCC RGB; a mesh whose vertex alphas are all equal) the blend factors could be
