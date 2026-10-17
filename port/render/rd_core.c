@@ -764,6 +764,35 @@ const char *rd__target_name(uint32_t id)
     return slot < RD_TARGET_COUNT ? s_targetNames[slot] : "temporary";
 }
 
+uint8_t rd__target_code(uint32_t id)
+{
+    const RdTargetRec *t = rd__target_rec(id);
+    if (!t) {
+        return RD_PERF_TARGET_NONE;
+    }
+    if (t->block) {
+        return RD_PERF_TARGET_BLOCK;
+    }
+    const uint32_t slot = (id & 0xFFFF) - 1;
+    return slot < RD_TARGET_COUNT ? (uint8_t)slot : RD_PERF_TARGET_TEMP;
+}
+
+const char *rd_perf_target_name(int code)
+{
+    switch (code) {
+    case RD_PERF_TARGET_BLOCK:
+        return "block";
+    case RD_PERF_TARGET_TEMP:
+        return "temporary";
+    case RD_PERF_TARGET_WINDOW:
+        return "window";
+    case RD_PERF_TARGET_RECORD:
+        return "record";
+    default:
+        return code >= 0 && code < RD_TARGET_COUNT ? s_targetNames[code] : "none";
+    }
+}
+
 RdTargetRec *rd__target_rec(uint32_t id)
 {
     uint32_t slot = (id & 0xFFFF) - 1;

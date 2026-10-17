@@ -122,6 +122,13 @@
  *                         printed: the uploads, each list, each picture
  *                         effect (rd.h RD_PERF_POST_*, inside the lists'
  *                         times), the present and the VU pre-pass
+ *   --pass-times          (implies --stats) every replay timed pass by pass
+ *                         ([dev] perf_passes, rd_perf.c): after the gpu line
+ *                         the warm replay's passes, one line each ("pass N:
+ *                         <label> <target> WxH, list L, D draws, B
+ *                         pipeline binds, GPU <us> us, CPU <us> us"), then
+ *                         the window's top-passes text over that replay and
+ *                         its passes by kind
  *   --prev DUMP           (repeatable, oldest first) replays DUMP in the same
  *                         context before <dump>, so the targets a frame
  *                         reads back from the frame before (the motion
@@ -966,7 +973,8 @@ int main(int argc, char **argv)
                 "[--aspect A] [--resolution WxH|Nx] [--full-height] [--full-pixel] "
                 "[--border-mask] [--water-sharp] [--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
-                "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-dump DIR] "
+                "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
+                "[--pass-dump DIR] "
                 "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject]]\n"
                 "       [--loss-bisect] [--passes A[-B]] [--draws A[-B]] [--mask-marks]\n"
                 "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
@@ -980,7 +988,7 @@ int main(int argc, char **argv)
     uint32_t pw = 0, ph = 0;
     /* the display options */
     RdSettings s;
-    bool list = false, overlay = false, stats = false;
+    bool list = false, overlay = false, stats = false, passTimes = false;
     bool noDevice = false, aspectGiven = false;
     int vuRefL[8], vuRefCount = 0;
     uint32_t vuRefI[8];
@@ -1071,6 +1079,8 @@ int main(int argc, char **argv)
             overlay = true;
         } else if (strcmp(argv[i], "--stats") == 0) {
             stats = true;
+        } else if (strcmp(argv[i], "--pass-times") == 0) {
+            stats = passTimes = true;
         } else if (strcmp(argv[i], "--no-aa1") == 0) {
             noAa1 = true;
         } else if (strcmp(argv[i], "--interp-any") == 0) {
@@ -1493,13 +1503,22 @@ int main(int argc, char **argv)
            complete record printed (a warm replay) */
         RdPerfRecord pr, last;
         bool have = false;
+        static RdPerfPass passes[RHI_MAX_TIMESTAMPS];
+        uint32_t passCount = 0;
         memset(&last, 0, sizeof(last));
+        rd__set_perf_passes(passTimes);
         for (int k = 0; k < RHI_FRAMES_IN_FLIGHT + 2; k++) {
             rd__replay_frame(rf, (int)rf->keep, pw != 0);
             while (rd_perf_pop(&pr)) {
                 if (pr.gpuValid) {
                     last = pr;
                     have = true;
+                    const RdPerfPass *pp;
+                    const uint32_t pn = rd_perf_passes_of(pr.replay, &pp);
+                    if (pn) {
+                        memcpy(passes, pp, (size_t)pn * sizeof(passes[0]));
+                    }
+                    passCount = pn;
                 }
             }
         }
@@ -1515,6 +1534,35 @@ int main(int argc, char **argv)
             printf("%s; present %.3f; VU pre-pass %.3f\n",
                    last.gpuPostPartial ? " (not all timed apart)" : "", last.gpuPresentMs,
                    last.gpuPrepassMs);
+            if (passTimes) {
+                /* the warm replay pass by pass, then the window's texts */
+                static RdPerfPassAgg agg;
+                char label[32], text[1024];
+                double kinds[RD_PERF_PASS_KIND_COUNT], effects[RD_PERF_POST_COUNT];
+                for (uint32_t k = 0; k < passCount; k++) {
+                    const RdPerfPass *q = &passes[k];
+                    rd_perf_pass_label(q, label, sizeof(label));
+                    printf("%s: pass %u: %s %s %ux%u, list %d, %u draws, %u pipeline binds, GPU "
+                           "%.1f us, CPU %.1f us\n",
+                           dump, k, label, rd_perf_target_name(q->target), (unsigned)q->w,
+                           (unsigned)q->h, (int)q->list, q->draws, q->pipelineBinds,
+                           (double)q->gpuUs, (double)q->cpuUs);
+                }
+                rd_perf_pass_agg_reset(&agg);
+                rd_perf_pass_agg_add(&agg, passes, passCount);
+                rd_perf_pass_agg_text(&agg, 5, text, sizeof(text));
+                printf("%s: gpu top passes: %s%s\n", dump, text,
+                       last.passPartial ? " (more passes than stamps: the last timed together)"
+                                        : "");
+                for (int k = 0; k < RD_PERF_PASS_KIND_COUNT; k++) {
+                    kinds[k] = last.passKinds[k];
+                }
+                for (int k = 0; k < RD_PERF_POST_COUNT; k++) {
+                    effects[k] = last.passEffects[k];
+                }
+                rd_perf_pass_kinds_text(kinds, effects, 1.0, text, sizeof(text));
+                printf("%s: passes %s\n", dump, text);
+            }
         } else {
             printf("%s: gpu: no timestamps came back\n", dump);
         }

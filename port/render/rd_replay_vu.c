@@ -38,6 +38,17 @@ static uint64_t ringCopy(const void *data, uint64_t size, uint64_t align)
     return off;
 }
 
+/* a uniform block (DrawCB, VuCB, VuBoneCB) into the ring, counted as one
+   (RdPerfRecord.uploadUniformBytes) */
+static uint64_t cbCopy(const void *data, uint64_t size, uint64_t align)
+{
+    const uint64_t off = ringCopy(data, size, align);
+    if (off != ~0ull) {
+        g_rdPerf.uploadUniformBytes += size;
+    }
+    return off;
+}
+
 /* ------------------------------------------------ the record's buffers
  * The vertex pre-pass (docs/port/RENDER.md, "The vertex pre-pass";
  * rd__vu_prepass below) draws a record per vertex into three RGBA32_UINT
@@ -369,8 +380,8 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         }
         IcoDrawCB cb;
         rd__replay_fill_draw_cb(r, &dp[i], ds, &cb);
-        const uint64_t dOff = ringCopy(&cb, sizeof(cb), ua);
-        const uint64_t vOff = ringCopy(vcb, sizeof(*vcb), ua);
+        const uint64_t dOff = cbCopy(&cb, sizeof(cb), ua);
+        const uint64_t vOff = cbCopy(vcb, sizeof(*vcb), ua);
         if (dOff == ~0ull || vOff == ~0ull) {
             continue;
         }
@@ -496,11 +507,11 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
             const uint32_t words = (cardKicks + 15u) / 16u;
             memcpy(bc.bone[cardQw], pay + cardWords, (size_t)words * 4u);
         }
-        bonesOff = ringCopy(&bc, sizeof(bc), ua);
+        bonesOff = cbCopy(&bc, sizeof(bc), ua);
     } else {
         if (s_zeroBonesFor != g_rd.replayCounter) {
             static const IcoVuBoneCB zero;
-            s_zeroBones = ringCopy(&zero, sizeof(zero), ua);
+            s_zeroBones = cbCopy(&zero, sizeof(zero), ua);
             s_zeroBonesFor = g_rd.replayCounter;
         }
         bonesOff = s_zeroBones;
@@ -530,6 +541,10 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
             m->replaySeen = g_rd.replayCounter;
             g_rdPerf.meshUploads++;
             g_rdPerf.meshUploadBytes += vb + mb + (uint64_t)m->indexCount * 4;
+            if (m->transient) {
+                /* the interpolation's blended copy, made for this present */
+                g_rdPerf.uploadInterpBytes += vb + mb + (uint64_t)m->indexCount * 4;
+            }
         }
         streamOff = m->ringStream;
         streamSize = vb + mb;
@@ -538,6 +553,7 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
     } else {
         streamSize = (uint64_t)p.streamQw * 16;
         streamOff = ringCopy(stream, streamSize, ua);
+        g_rdPerf.uploadStreamBytes += streamSize;
         vcb.draw[1] = p.qwPerVertex;
     }
     if (bonesOff == ~0ull || streamOff == ~0ull || indexOff == ~0ull) {
@@ -873,7 +889,7 @@ static void vuPrepassRun(const RdFrame *f, int keep)
     /* the draws' DrawCB (b1 of group 1; no pre-pass entry reads it) */
     const uint64_t ua = rhi_limits()->uniformAlign;
     memset(&s_preDrawCB, 0, sizeof(s_preDrawCB));
-    const uint64_t dOff = usedRows ? ringCopy(&s_preDrawCB, sizeof(s_preDrawCB), ua) : ~0ull;
+    const uint64_t dOff = usedRows ? cbCopy(&s_preDrawCB, sizeof(s_preDrawCB), ua) : ~0ull;
     if (dOff == ~0ull) {
         for (uint32_t i = 0; i < s_preN; i++) {
             s_pre[i].rec = 0; /* the ring is full: drawn the old way */
@@ -881,6 +897,10 @@ static void vuPrepassRun(const RdFrame *f, int keep)
         g_rd.passSamples = samples;
         return;
     }
+    /* a piece of the GPU timing (rd_perf.c rd__perf_pass): the pass and the
+     * copies into the record buffer */
+    rd__perf_pass(rd__replay_cl(), RD_PERF_PASS_PREPASS, RD_PERF_ID_RECORD, ICO_VU_REC_W, usedRows,
+                  -1);
     for (uint32_t k = 0; k < ICO_VU_REC_PLANES; k++) {
         rd__transition(rd__replay_cl(), s_recTex[k], &s_recTexState[k], RHI_STATE_RENDER_TARGET);
     }
@@ -923,7 +943,7 @@ static void vuPrepassRun(const RdFrame *f, int keep)
         }
         const RhiBindGroup g1 = vuGroup(e->src.streamBuf, e->src.streamBufSize, e->src.streamOff,
                                         e->src.streamSize, &vcb.draw[0]);
-        const uint64_t vOff = ringCopy(&vcb, sizeof(vcb), ua);
+        const uint64_t vOff = cbCopy(&vcb, sizeof(vcb), ua);
         const RdPipeKeyInt key = rd__vu_pre_key(e->preVs);
         const RhiPipeline p = rd__get_pipeline(&key);
         if (!g1.id || vOff == ~0ull || (!p.id && !rd__pipeline_gathering())) {
@@ -1117,6 +1137,7 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         if (iOff == ~0ull) {
             return;
         }
+        g_rdPerf.uploadStreamBytes += (uint64_t)ni * 4;
         uint32_t *idx = (uint32_t *)(g_rd.ringMap[rd__ring_slot()] + iOff);
         if (g_rdWin.first && g_rdWin.drawLast) {
             g_rdVuCur.index = idx;

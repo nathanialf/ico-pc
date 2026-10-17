@@ -1739,6 +1739,74 @@ enum {
 /* A RD_PERF_POST_* in plain words ("reduction", "depth of field", ...) */
 const char *rd_perf_post_name(int post);
 
+/* The pieces of GPU work the per-pass timing tells apart (RdPerfPass.kind,
+ * RdPerfRecord.passKinds; rd_perf.c rd__perf_pass, docs/port/RENDER.md,
+ * "Performance records"), each begun outside any render pass: UPLOAD the
+ * uploads at the replay's head (textures, meshes, the new targets' clears),
+ * PREPASS the VU vertex pre-pass and its copies into the record buffer,
+ * RENDER a render pass of the lists (rd_replay.c beginPass: a draw's, a
+ * clear's own, the COLCLAMP 0 wrap's, the shadow count's reduction), COPY a
+ * target copied into another (RDC_COPY), SNAP a target copied into its
+ * snapshot (a draw that reads the target it draws into), DATE the DATE
+ * snapshot's pass, FOG_COPY the fog's depth read made ready (the copy of
+ * the depth on the copy path, the buffer path's two transfers, the fog
+ * table's upload), EXACT the exact blend's copies and pass, MSAA the MSAA
+ * epoch's resolves and spreads, STENCIL a shadow reset's stencil clear as a
+ * pass of its own, PRESENT the present (DISPLAY onto the window, the CRT
+ * filter). */
+enum {
+    RD_PERF_PASS_UPLOAD = 0,
+    RD_PERF_PASS_PREPASS,
+    RD_PERF_PASS_RENDER,
+    RD_PERF_PASS_COPY,
+    RD_PERF_PASS_SNAP,
+    RD_PERF_PASS_DATE,
+    RD_PERF_PASS_FOG_COPY,
+    RD_PERF_PASS_EXACT,
+    RD_PERF_PASS_MSAA,
+    RD_PERF_PASS_STENCIL,
+    RD_PERF_PASS_PRESENT,
+    RD_PERF_PASS_KIND_COUNT
+};
+
+/* A RD_PERF_PASS_* in plain words ("uploads", "DATE snapshot", ...) */
+const char *rd_perf_pass_kind_name(int kind);
+
+/* RdPerfPass.target: a named target (RdTargetId: SCENE, WORK0, ...) or one
+ * of these */
+enum {
+    RD_PERF_TARGET_BLOCK = RD_TARGET_COUNT, /* a render-to-texture block */
+    RD_PERF_TARGET_TEMP,                    /* another temporary target */
+    RD_PERF_TARGET_NONE,                    /* none (the uploads), or gone */
+    RD_PERF_TARGET_WINDOW,                  /* the window (the present) */
+    RD_PERF_TARGET_RECORD                   /* the VU pre-pass's record */
+};
+
+/* RdPerfPass.target as text: "SCENE", "block", "window", ... */
+const char *rd_perf_target_name(int code);
+
+/* One piece of a timed replay's GPU work (rd_perf_passes_of): what it is,
+ * the list walked and the effect in force when it began, its colour target
+ * and size in texels (a copy's source; the present: the window), the draws
+ * and pipeline binds the RHI recorded in it, its GPU time (from its
+ * timestamp to the next one, so the barriers before it and any work the
+ * replay did not name in between count for it; -1 when a stamp is missing)
+ * and the CPU time the replay took to record it, in microseconds. */
+typedef struct RdPerfPass {
+    uint8_t kind;   /* RD_PERF_PASS_* */
+    uint8_t target; /* RdTargetId or RD_PERF_TARGET_* */
+    int8_t list;    /* 0 .. RD_LIST_COUNT - 1; -1: the uploads, the pre-pass, the present */
+    int8_t post;    /* RD_PERF_POST_*, -1 none */
+    uint16_t w, h;
+    uint32_t draws, pipelineBinds;
+    float gpuUs, cpuUs;
+} RdPerfPass;
+
+/* A piece's label as the window's summary writes it: the effect for a
+ * render pass of one, "list N" for another render pass, else the kind
+ * ("DATE snapshot"); the length written, as snprintf */
+int rd_perf_pass_label(const RdPerfPass *p, char *buf, size_t n);
+
 typedef struct RdPerfRecord {
     uint32_t replay; /* 1, 2, ... */
     uint32_t frame;  /* the replayed frame's number */
@@ -1821,6 +1889,29 @@ typedef struct RdPerfRecord {
      * not in gpuUploadMs) */
     uint32_t vuPrePasses, vuPreVertices, vuPreDraws, vuPreFallbacks;
     double gpuPrepassMs;
+    /* The per-pass timing (rd_perf_passes_of; docs/port/RENDER.md,
+     * "Performance records").  passKinds: the pieces of GPU work begun, by
+     * RD_PERF_PASS_* (every replay); passEffects: of the render passes, those
+     * begun while a picture effect was in force, by RD_PERF_POST_*.
+     * passTimed: the replay was timed piece by piece (every replay with
+     * [dev] perf_passes, else one every 250 ms), passCount its pieces,
+     * passPartial: it began more than the stamps allow (223) and the later
+     * ones were timed with the last. */
+    uint16_t passKinds[RD_PERF_PASS_KIND_COUNT];
+    uint16_t passEffects[RD_PERF_POST_COUNT];
+    uint8_t passTimed, passPartial;
+    uint16_t passCount;
+    /* The walk's CPU time by list, ms (from the lists' start to each list's
+     * end: the binds made in it included), 0 for a list not walked */
+    double walkListMs[RD_LIST_COUNT];
+    /* Of uploadBytes: the textures (their levels, the white texel),
+     * the uniform blocks (DrawCB, VuCB, VuBoneCB, FrameCB: rd_replay.c
+     * uniformGroup, rd_replay_vu.c cbCopy), the interpolation's scratch
+     * meshes (of meshUploadBytes: the transient meshes rd_interp.c blends
+     * for each present), the VU streams without a mesh and the grids' index
+     * lists; the rest is the screen prims' vertices, the fog's table and the
+     * alignment between them */
+    uint64_t uploadTextureBytes, uploadUniformBytes, uploadInterpBytes, uploadStreamBytes;
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are
@@ -1831,6 +1922,63 @@ bool rd_perf_pop(RdPerfRecord *out);
  * popped or not): with interpolation off the window's pacing reads the
  * frame's one replay, rd_end_frame's present, after the step. */
 double rd_last_replay_ms(void);
+
+/* The pieces of timed replay `replay` (RdPerfRecord.passTimed): their
+ * count, *out pointing at them until the next replay; 0 when that replay was
+ * not timed or its pieces were dropped (the queue holds 8 replays).  Pieces
+ * of earlier replays still queued are dropped.  Call it after rd_perf_pop
+ * handed out the record. */
+uint32_t rd_perf_passes_of(uint32_t replay, const RdPerfPass **out);
+
+/* [dev] perf_passes (ICO_RD_PERF_PASSES=1): every replay is timed piece by
+ * piece (the window writes ico-pc-passes.csv) */
+bool rd_perf_passes_mode(void);
+
+/* The CSV of the pieces (the window's ico-pc-passes.csv): the header line
+ * and one piece's line, each with its newline; the length written, as
+ * snprintf */
+int rd_perf_pass_csv_header(char *buf, size_t n);
+int rd_perf_pass_csv_line(uint32_t replay, uint32_t frame, uint32_t index, const RdPerfPass *p,
+                          char *buf, size_t n);
+
+/* The window's 10 s summary of the timed replays' pieces: the pieces summed
+ * by what they are (kind, list, effect, target and size), the most
+ * expensive first.  Zero-initialise or rd_perf_pass_agg_reset. */
+#define RD_PERF_PASS_AGG_MAX 128
+
+typedef struct RdPerfPassAggEntry {
+    uint8_t kind, target;
+    int8_t list, post;
+    uint16_t w, h;
+    uint64_t passes, draws;
+    double gpuMs, cpuMs;
+} RdPerfPassAggEntry;
+
+typedef struct RdPerfPassAgg {
+    uint32_t replays;      /* timed replays added */
+    uint32_t count;        /* entries */
+    uint64_t passes;       /* their pieces */
+    uint64_t small;        /* of them, under 0.05 ms on the GPU */
+    uint64_t dropped;      /* pieces whose entry found no room (in passes only) */
+    double gpuMs, smallMs; /* the pieces' GPU time, and the small ones' */
+    RdPerfPassAggEntry e[RD_PERF_PASS_AGG_MAX];
+} RdPerfPassAgg;
+
+void rd_perf_pass_agg_reset(RdPerfPassAgg *a);
+void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n);
+/* "list 0 SCENE 848x448 420 draws 4.12 ms, glow WORK1 256x128 10.0 passes
+ * 10 draws 1.21 ms, ... (5 of 47.0 passes a replay, 16 timed replays;
+ * passes under 0.05 ms: 31.0 a replay, 0.62 ms)": the top entries by GPU
+ * time, per timed replay ("N passes" only where an entry is not one pass a
+ * replay); the length of the text in buf (cut to fit n) */
+int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_t n);
+/* "47.0: render passes 32.0 (lists 9.0, fog 1.0, glow 17.0, ...), DATE
+ * snapshot 1.5, ...": RdPerfRecord.passKinds and passEffects summed over
+ * `replays` replays, as means (kinds and effects never begun left out); the
+ * length of the text in buf (cut to fit n) */
+int rd_perf_pass_kinds_text(const double kinds[RD_PERF_PASS_KIND_COUNT],
+                            const double effects[RD_PERF_POST_COUNT], double replays, char *buf,
+                            size_t n);
 
 #ifdef __cplusplus
 }

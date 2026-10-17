@@ -258,10 +258,23 @@ static struct {
 
 /* The renderer's per-replay records (rd.h RdPerfRecord): summed over
    the 10 s block for the window's second line, and with [dev] perf_log =
-   true written one line each into logs/ico-pc-perf.csv */
+   true written one line each into logs/ico-pc-perf.csv; the timed replays'
+   pieces (rd_perf_passes_of) summed for the block's top passes, and with
+   [dev] perf_passes = true written one line each into
+   logs/ico-pc-passes.csv */
 static struct {
     int csvTried;
     FILE *csv;
+    int passCsvTried;
+    FILE *passCsv;
+    RdPerfPassAgg passAgg; /* the timed replays' pieces (rd.h rd_perf_pass_agg_*) */
+    /* the pieces begun by kind and the render passes by effect, the walk's
+       CPU time by list, and of the bytes uploaded the textures, the uniform
+       blocks, the interpolated meshes and the VU streams (rd.h
+       RdPerfRecord.passKinds, passEffects, walkListMs, upload*Bytes) */
+    double passKinds[RD_PERF_PASS_KIND_COUNT], passEffects[RD_PERF_POST_COUNT];
+    double walkList[RD_LIST_COUNT];
+    double texBytes, uniformBytes, interpBytes, streamBytes;
     unsigned gpuN;
     PerfBlock ph;        /* the CPU phases (perf_block.h) */
     unsigned slowLogged; /* slow-replay lines logged in the block */
@@ -3454,7 +3467,12 @@ static void perf_csv_open(void)
         fprintf(s_perf.csv, ",gpu_%s_ms", name);
     }
     fprintf(s_perf.csv,
-            ",gpu_effects_partial,gpu_prepass_ms,vu_pre_vertices,vu_pre_draws,vu_pre_fallbacks\n");
+            ",gpu_effects_partial,gpu_prepass_ms,vu_pre_vertices,vu_pre_draws,vu_pre_fallbacks");
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        fprintf(s_perf.csv, ",walk_list%d_ms", l);
+    }
+    fprintf(s_perf.csv, ",upload_texture_bytes,upload_uniform_bytes,upload_interp_bytes,"
+                        "upload_stream_bytes,passes,pass_timed,pass_count\n");
 }
 
 static void perf_csv_line(const RdPerfRecord *r)
@@ -3480,8 +3498,67 @@ static void perf_csv_line(const RdPerfRecord *r)
     for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
         fprintf(f, ",%.3f", r->gpuPostMs[p]);
     }
-    fprintf(f, ",%u,%.3f,%u,%u,%u\n", r->gpuPostPartial, r->gpuPrepassMs, r->vuPreVertices,
+    fprintf(f, ",%u,%.3f,%u,%u,%u", r->gpuPostPartial, r->gpuPrepassMs, r->vuPreVertices,
             r->vuPreDraws, r->vuPreFallbacks);
+    unsigned passes = 0;
+    for (int k = 0; k < RD_PERF_PASS_KIND_COUNT; k++) {
+        passes += r->passKinds[k];
+    }
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        fprintf(f, ",%.3f", r->walkListMs[l]);
+    }
+    fprintf(f, ",%llu,%llu,%llu,%llu,%u,%u,%u\n", (unsigned long long)r->uploadTextureBytes,
+            (unsigned long long)r->uploadUniformBytes, (unsigned long long)r->uploadInterpBytes,
+            (unsigned long long)r->uploadStreamBytes, passes, r->passTimed, r->passCount);
+}
+
+/* ico-pc-passes.csv beside ico-pc-perf.csv, opened on the first timed
+   replay when [dev] perf_passes is true (rd_perf_passes_mode): one line per
+   piece of every replay's GPU work (rd.h RdPerfPass) */
+static void perf_pass_csv_open(void)
+{
+    char logs[ICO_PATH_MAX], path[ICO_PATH_MAX], head[160];
+
+    s_perf.passCsvTried = 1;
+    if (!rd_perf_passes_mode()) {
+        return;
+    }
+    if (ico_host_logs_dir(logs, sizeof(logs)) != 0 ||
+        ico_path_join(path, sizeof(path), logs, "ico-pc-passes.csv") != 0) {
+        fprintf(stderr, "window: perf_passes: the path is too long\n");
+        return;
+    }
+    s_perf.passCsv = ico_fopen(path, "w"); /* a UTF-8 path (host_fs.h) */
+    if (s_perf.passCsv == NULL) {
+        fprintf(stderr, "window: perf_passes: cannot write %s\n", path);
+        return;
+    }
+    fprintf(stderr, "window: perf_passes: one line per pass of every replay in %s\n", path);
+    rd_perf_pass_csv_header(head, sizeof(head));
+    fputs(head, s_perf.passCsv);
+}
+
+/* A timed replay's pieces into the block's top passes and the CSV */
+static void perf_passes_add(const RdPerfRecord *r)
+{
+    const RdPerfPass *p;
+    const uint32_t n = rd_perf_passes_of(r->replay, &p);
+
+    if (n == 0) {
+        return;
+    }
+    rd_perf_pass_agg_add(&s_perf.passAgg, p, n);
+    if (!s_perf.passCsvTried) {
+        perf_pass_csv_open();
+    }
+    if (s_perf.passCsv != NULL) {
+        char line[192];
+
+        for (uint32_t i = 0; i < n; i++) {
+            rd_perf_pass_csv_line(r->replay, r->frame, i, &p[i], line, sizeof(line));
+            fputs(line, s_perf.passCsv);
+        }
+    }
 }
 
 /* A presented replay's cost for resolution "auto": its GPU
@@ -3585,6 +3662,22 @@ static void perf_drain(void)
         if (s_perf.csv != NULL) {
             perf_csv_line(&r);
         }
+        if (r.passTimed) {
+            perf_passes_add(&r);
+        }
+        for (int k = 0; k < RD_PERF_PASS_KIND_COUNT; k++) {
+            s_perf.passKinds[k] += r.passKinds[k];
+        }
+        for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
+            s_perf.passEffects[p] += r.passEffects[p];
+        }
+        for (int l = 0; l < RD_LIST_COUNT; l++) {
+            s_perf.walkList[l] += r.walkListMs[l];
+        }
+        s_perf.texBytes += (double)r.uploadTextureBytes;
+        s_perf.uniformBytes += (double)r.uploadUniformBytes;
+        s_perf.interpBytes += (double)r.uploadInterpBytes;
+        s_perf.streamBytes += (double)r.uploadStreamBytes;
         {
             const double ph[PERF_PH_COUNT] = {
                 [PERF_PH_INTERP] = r.interpMs,     [PERF_PH_WAIT] = r.waitMs,
@@ -3656,17 +3749,22 @@ static void perf_drain(void)
     if (s_perf.csv != NULL) {
         fflush(s_perf.csv);
     }
+    if (s_perf.passCsv != NULL) {
+        fflush(s_perf.passCsv);
+    }
 }
 
-/* A new block's sums (the CSV stays open) */
+/* A new block's sums (the CSVs stay open) */
 static void perf_reset(void)
 {
-    FILE *csv = s_perf.csv;
-    const int tried = s_perf.csvTried;
+    FILE *csv = s_perf.csv, *passCsv = s_perf.passCsv;
+    const int tried = s_perf.csvTried, passTried = s_perf.passCsvTried;
 
     memset(&s_perf, 0, sizeof(s_perf));
     s_perf.csv = csv;
     s_perf.csvTried = tried;
+    s_perf.passCsv = passCsv;
+    s_perf.passCsvTried = passTried;
     s_pres.stepSumMs = s_pres.stepMaxMs = 0.0;
     s_pres.stepCount = 0;
     rd_vu_card_counts(&s_pres.cardStrips, &s_pres.cardTris, &s_pres.cardMs);
@@ -3740,6 +3838,37 @@ static void perf_log(void)
                 "window: GPU ms per replay: lists 0-12 %s; effects: %s%s; present %.2f; VU "
                 "pre-pass %.2f\n",
                 lists, posts, partial, s_perf.gpuPresent / g, s_perf.gpuPrepass / g);
+    }
+    if (s_perf.passAgg.replays) {
+        /* the timed replays' most expensive passes, each timed between
+           stamps outside the render passes (rd_perf.c, the passes) */
+        char top[1024];
+
+        rd_perf_pass_agg_text(&s_perf.passAgg, 5, top, sizeof(top));
+        fprintf(stderr, "window: GPU top passes: %s\n", top);
+    }
+    {
+        /* what a replay begins (the passes' count, for the tilers' fixed
+           cost of a pass), the walk's CPU time by list and what the
+           uploads carry */
+        char kinds[512], walk[192];
+        int at = 0;
+
+        rd_perf_pass_kinds_text(s_perf.passKinds, s_perf.passEffects, n, kinds, sizeof(kinds));
+        for (int l = 0; l < RD_LIST_COUNT && at < (int)sizeof(walk); l++) {
+            at += snprintf(walk + at, sizeof(walk) - (size_t)at, "%s%.2f", l ? " " : "",
+                           s_perf.walkList[l] / n);
+        }
+        const double other = s_perf.bytes - s_perf.texBytes - s_perf.meshBytes -
+                             s_perf.uniformBytes - s_perf.streamBytes;
+        fprintf(stderr, "window: passes per replay %s\n", kinds);
+        fprintf(stderr,
+                "window: CPU walk ms per replay by list 0-12: %s; uploaded KB per replay: "
+                "textures %.0f, meshes %.0f (interpolated %.0f), uniform blocks %.0f, VU streams "
+                "%.0f, other %.0f\n",
+                walk, s_perf.texBytes / n / 1024.0, s_perf.meshBytes / n / 1024.0,
+                s_perf.interpBytes / n / 1024.0, s_perf.uniformBytes / n / 1024.0,
+                s_perf.streamBytes / n / 1024.0, (other > 0.0 ? other : 0.0) / n / 1024.0);
     }
     fprintf(stderr,
             "window: per replay %.0f draws, %.0f passes, %.0f pipeline and %.0f bind group binds, "

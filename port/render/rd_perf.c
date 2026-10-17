@@ -16,8 +16,13 @@
  *
  * The lists' timestamps also mark the walk: RD_PERF_TS_LISTS its start,
  * the last list's its end, so rd__replay_list says which list a draw is
- * recorded in, and a walk over WALK_SLOW_MS gets the line of what took its
- * time (walkBreakdown). */
+ * recorded in, each list's CPU time (RdPerfRecord.walkListMs), and a walk
+ * over WALK_SLOW_MS gets the line of what took its time (walkBreakdown).
+ *
+ * The pieces (rd__perf_pass, "the passes" below) time a replay's GPU work
+ * pass by pass. */
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_passring.h"
@@ -57,14 +62,23 @@ static RhiStats s_walkStats, s_walkEndStats;
 /* g_rd.above1xDraws at the replay's start (RdPerfRecord.a1xDraws) */
 static uint32_t s_a1xDraws;
 
-/* the timestamps of one replay: their indices in the order written, and for
-   each index the effect (RD_PERF_POST_*, -1 none) of the stretch it ends */
+/* the list and effect timestamps of one replay (indices below
+   RD_PERF_TS_PASS0): their indices in the order written, and for each index
+   the effect (RD_PERF_POST_*, -1 none) of the stretch it ends */
 typedef struct PerfStamps {
-    uint8_t order[RHI_MAX_TIMESTAMPS];
-    int8_t post[RHI_MAX_TIMESTAMPS];
+    uint8_t order[RD_PERF_TS_PASS0];
+    int8_t post[RD_PERF_TS_PASS0];
     uint32_t count;
     uint32_t written; /* bit i: index i written */
 } PerfStamps;
+
+_Static_assert(RD_PERF_TS_COUNT < RD_PERF_TS_PASS0 && RD_PERF_TS_PASS0 <= 32u,
+               "the list and effect stamps fit PerfStamps.written");
+_Static_assert(RD_PERF_TS_PASS0 + 2u <= RHI_MAX_TIMESTAMPS, "room for a piece and its end");
+
+/* the walk's list timing: the CPU clock at the lists' start or the last
+   list's end */
+static double s_listMs0;
 
 static PerfStamps s_stamps; /* the replay being recorded */
 
@@ -82,6 +96,27 @@ static const char *const s_postNames[RD_PERF_POST_COUNT] = {
 const char *rd_perf_post_name(int post)
 {
     return post >= 0 && post < RD_PERF_POST_COUNT ? s_postNames[post] : "none";
+}
+
+static const char *const s_passKindNames[RD_PERF_PASS_KIND_COUNT] = {
+    "uploads",        "VU pre-pass", "render pass",  "copy",          "snapshot", "DATE snapshot",
+    "fog depth read", "exact blend", "MSAA resolve", "stencil clear", "present",
+};
+
+const char *rd_perf_pass_kind_name(int kind)
+{
+    return kind >= 0 && kind < RD_PERF_PASS_KIND_COUNT ? s_passKindNames[kind] : "none";
+}
+
+int rd_perf_pass_label(const RdPerfPass *p, char *buf, size_t n)
+{
+    if (p->kind == RD_PERF_PASS_RENDER) {
+        if (p->post >= 0 && p->post < RD_PERF_POST_COUNT) {
+            return snprintf(buf, n, "%s", rd_perf_post_name(p->post));
+        }
+        return snprintf(buf, n, "list %d", (int)p->list);
+    }
+    return snprintf(buf, n, "%s", rd_perf_pass_kind_name(p->kind));
 }
 
 int rd__perf_post_of_kind(uint32_t kind)
@@ -129,6 +164,198 @@ bool rd_perf_pop(RdPerfRecord *out)
     return true;
 }
 
+/* ------------------------------------------------------------ the passes
+ * The replay names each piece of GPU work as it begins it, outside any
+ * render pass (rd__perf_pass: the uploads, the VU pre-pass, every render
+ * pass, copy, snapshot, DATE snapshot, the fog's depth read, the exact
+ * blend, the MSAA resolves, the present; rd.h RD_PERF_PASS_*), and every
+ * replay counts them by kind (RdPerfRecord.passKinds, passEffects).  A
+ * timed replay also writes a timestamp at each piece's start
+ * (RD_PERF_TS_PASS0 + its index, keeping the held-back barriers held, so
+ * the barriers recorded are those of an untimed replay) and one after the
+ * last (rd__perf_pass_end), and keeps each piece's draws and pipeline binds
+ * (the RHI's counters between two starts) and the CPU time the replay took
+ * to record it; the piece's GPU time is its stamp to the next one's
+ * (rd__perf_collect_gpu, RHI_FRAMES_IN_FLIGHT replays later), and its
+ * record waits in a queue of RD_PERF_PASS_QUEUE for rd_perf_passes_of.
+ * Timed: every replay with [dev] perf_passes (ICO_RD_PERF_PASSES=1), else
+ * the first replay at least RD_PERF_PASS_EVERY_MS after the last timed one
+ * (at most 40 in a 10 s block: the window's summary).  Not on iOS (as the
+ * effects' stamps, rd__perf_post).  A replay that begins more pieces than
+ * RD_PERF_PASS_MAX times the later ones with the last
+ * (RdPerfRecord.passPartial). */
+#define RD_PERF_PASS_QUEUE 8u
+
+typedef struct PassTable {
+    uint32_t replay;
+    uint32_t count;
+    bool closed; /* rd__perf_pass_end wrote the stamp after the last piece */
+    RdPerfPass pass[RD_PERF_PASS_MAX];
+} PassTable;
+
+static bool s_passesMode;            /* every replay timed */
+static bool s_passOn;                /* the replay being recorded is timed */
+static double s_passLastMs = -1.0e9; /* the last timed replay's start */
+static PassTable s_passRec;          /* the replay being recorded */
+static PassTable s_passPending[RHI_FRAMES_IN_FLIGHT];
+static PassTable s_passQueue[RD_PERF_PASS_QUEUE];
+static uint32_t s_passHead, s_passCount;
+static RhiStats s_passStats; /* the RHI's counters at the open piece's start */
+static double s_passCpu0;    /* the CPU clock at the open piece's start */
+
+void rd__perf_passes_init(void)
+{
+    const char *env = getenv("ICO_RD_PERF_PASSES");
+    s_passesMode = env && env[0] == '1';
+#ifdef ICO_IOS
+    rd__log("GPU pass timing: off on iOS");
+    return;
+#endif
+    if (!rhi_timestamps_supported()) {
+        rd__log("GPU pass timing: off (no GPU timestamps)");
+    } else if (s_passesMode) {
+        rd__log("GPU pass timing: every replay, each pass timed apart ([dev] perf_passes = true, "
+                "ICO_RD_PERF_PASSES=1; the window writes ico-pc-passes.csv)");
+    } else {
+        rd__log("GPU pass timing: one replay every %.0f ms, each pass timed apart, for the 10 s "
+                "summary; [dev] perf_passes = true times every replay",
+                RD_PERF_PASS_EVERY_MS);
+    }
+}
+
+void rd__set_perf_passes(bool on)
+{
+    s_passesMode = on;
+}
+
+bool rd_perf_passes_mode(void)
+{
+    return s_passesMode;
+}
+
+static uint16_t clamp16(uint32_t v)
+{
+    return v > 65535u ? (uint16_t)65535u : (uint16_t)v;
+}
+
+/* the open piece's counters and CPU time end here */
+static void passClose(const RhiStats *st, double nowMs)
+{
+    if (s_passRec.count == 0) {
+        return;
+    }
+    RdPerfPass *p = &s_passRec.pass[s_passRec.count - 1];
+    p->draws = (uint32_t)(st->draws - s_passStats.draws);
+    p->pipelineBinds = (uint32_t)(st->pipelineBinds - s_passStats.pipelineBinds);
+    p->cpuUs = (float)((nowMs - s_passCpu0) * 1000.0);
+}
+
+static uint8_t passTarget(uint32_t id)
+{
+    if (id == 0) {
+        return RD_PERF_TARGET_NONE;
+    }
+    if (id == RD_PERF_ID_RECORD) {
+        return RD_PERF_TARGET_RECORD;
+    }
+    if (id == RD_PERF_ID_WINDOW) {
+        return RD_PERF_TARGET_WINDOW;
+    }
+    return rd__target_code(id);
+}
+
+void rd__perf_pass(RhiCommandList cl, int kind, uint32_t target, uint32_t w, uint32_t h, int post)
+{
+    if (kind < 0 || kind >= RD_PERF_PASS_KIND_COUNT) {
+        return;
+    }
+    if (g_rdPerf.passKinds[kind] < UINT16_MAX) {
+        g_rdPerf.passKinds[kind]++;
+    }
+    if (kind == RD_PERF_PASS_RENDER && post >= 0 && post < RD_PERF_POST_COUNT &&
+        g_rdPerf.passEffects[post] < UINT16_MAX) {
+        g_rdPerf.passEffects[post]++;
+    }
+    if (!s_passOn) {
+        return;
+    }
+    if (s_passRec.count >= RD_PERF_PASS_MAX) {
+        g_rdPerf.passPartial = 1; /* timed with the piece before */
+        return;
+    }
+    const double now = rd__now_ms();
+    RhiStats st;
+    rhi_get_stats(&st);
+    passClose(&st, now);
+    rhi_cmd_write_timestamp(cl, (RD_PERF_TS_PASS0 + s_passRec.count) | RHI_TIMESTAMP_KEEP_BARRIERS);
+    RdPerfPass *p = &s_passRec.pass[s_passRec.count++];
+    memset(p, 0, sizeof(*p));
+    p->kind = (uint8_t)kind;
+    p->target = passTarget(target);
+    p->list = (int8_t)rd__replay_list();
+    p->post = (int8_t)(post >= 0 && post < RD_PERF_POST_COUNT ? post : -1);
+    p->w = clamp16(w);
+    p->h = clamp16(h);
+    p->gpuUs = -1.0f;
+    s_passStats = st;
+    s_passCpu0 = now;
+}
+
+void rd__perf_pass_end(RhiCommandList cl)
+{
+    if (!s_passOn || s_passRec.count == 0 || s_passRec.closed) {
+        return;
+    }
+    RhiStats st;
+    rhi_get_stats(&st);
+    passClose(&st, rd__now_ms());
+    rhi_cmd_write_timestamp(cl, (RD_PERF_TS_PASS0 + s_passRec.count) | RHI_TIMESTAMP_KEEP_BARRIERS);
+    s_passRec.closed = true;
+}
+
+/* a timed replay's pieces, their GPU times from its slot's stamps, into the
+   queue (the oldest dropped when nobody takes them) */
+static void passFinish(PassTable *t, const uint64_t *ts, uint32_t n)
+{
+    for (uint32_t k = 0; k < t->count; k++) {
+        const uint32_t a = RD_PERF_TS_PASS0 + k, b = a + 1u;
+        RdPerfPass *p = &t->pass[k];
+        p->gpuUs = -1.0f;
+        if (b < n && ts[a] != 0 && ts[b] != 0 && ts[b] >= ts[a] &&
+            (k + 1u < t->count || t->closed)) {
+            p->gpuUs = (float)((double)(ts[b] - ts[a]) / 1e3);
+        }
+    }
+    if (s_passCount == RD_PERF_PASS_QUEUE) {
+        s_passHead = (s_passHead + 1u) % RD_PERF_PASS_QUEUE;
+        s_passCount--;
+    }
+    PassTable *q = &s_passQueue[(s_passHead + s_passCount) % RD_PERF_PASS_QUEUE];
+    q->replay = t->replay;
+    q->count = t->count;
+    q->closed = t->closed;
+    memcpy(q->pass, t->pass, (size_t)t->count * sizeof(t->pass[0]));
+    s_passCount++;
+}
+
+uint32_t rd_perf_passes_of(uint32_t replay, const RdPerfPass **out)
+{
+    *out = NULL;
+    while (s_passCount) {
+        const PassTable *t = &s_passQueue[s_passHead];
+        if (t->replay > replay) {
+            return 0; /* a later replay's: kept for its record */
+        }
+        s_passHead = (s_passHead + 1u) % RD_PERF_PASS_QUEUE;
+        s_passCount--;
+        if (t->replay == replay) {
+            *out = t->pass; /* the slot is written again only by a later replay */
+            return t->count;
+        }
+    }
+    return 0;
+}
+
 void rd__perf_reset(void)
 {
     s_head = s_count = 0;
@@ -136,6 +363,9 @@ void rd__perf_reset(void)
     memset(s_pendingStamps, 0, sizeof(s_pendingStamps));
     s_haveLast = false;
     s_interpMs = s_readbackMs = 0.0;
+    s_passHead = s_passCount = 0;
+    s_passOn = false;
+    s_passLastMs = -1.0e9;
 }
 
 void rd__perf_interp_ms(double ms)
@@ -186,6 +416,18 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
     s_postPartial = false;
     s_t0 = rd__now_ms();
     g_rdPerf.startMs = s_t0;
+    s_listMs0 = s_t0;
+    s_passRec.count = 0;
+    s_passRec.closed = false;
+    s_passRec.replay = g_rdPerf.replay;
+    s_passOn = false;
+#ifndef ICO_IOS
+    if (g_rd.hasDevice && rhi_timestamps_supported() &&
+        (s_passesMode || s_t0 - s_passLastMs >= RD_PERF_PASS_EVERY_MS)) {
+        s_passOn = true;
+        s_passLastMs = s_t0;
+    }
+#endif
 }
 
 /* timestamps of the slot just recycled: the replay RHI_FRAMES_IN_FLIGHT ago */
@@ -240,6 +482,9 @@ void rd__perf_collect_gpu(void)
         }
         r->gpuMs = (double)(last - t0) / 1e6;
         r->gpuValid = 1;
+    }
+    if (r->passTimed) {
+        passFinish(&s_passPending[slot], ts, n);
     }
     push(r);
 }
@@ -321,9 +566,20 @@ void rd__perf_end(void)
     s_inLists = false;
     const uint32_t slot = rhi_frame_slot();
     if (s_pendingValid[slot]) {
-        push(&s_pending[slot]); /* its timestamps never came: queued without */
+        s_pending[slot].passTimed = 0; /* its pieces are dropped with its times */
+        push(&s_pending[slot]);        /* its timestamps never came: queued without */
     }
     r->gpuPostPartial = (uint8_t)s_postPartial;
+    r->passTimed = (uint8_t)(s_passOn && s_passRec.count > 0);
+    r->passCount = (uint16_t)(r->passTimed ? s_passRec.count : 0u);
+    if (r->passTimed) {
+        PassTable *t = &s_passPending[slot];
+        t->replay = s_passRec.replay;
+        t->count = s_passRec.count;
+        t->closed = s_passRec.closed;
+        memcpy(t->pass, s_passRec.pass, (size_t)s_passRec.count * sizeof(s_passRec.pass[0]));
+    }
+    s_passOn = false;
     s_pending[slot] = *r;
     s_pendingStamps[slot] = s_stamps;
     s_pendingValid[slot] = true;
@@ -335,7 +591,7 @@ void rd__perf_end(void)
    without them */
 static void stamp(RhiCommandList cl, uint32_t index)
 {
-    if (!g_rd.hasDevice || index >= RHI_MAX_TIMESTAMPS || (s_stamps.written & (1u << index))) {
+    if (!g_rd.hasDevice || index >= RD_PERF_TS_PASS0 || (s_stamps.written & (1u << index))) {
         return;
     }
     rhi_cmd_write_timestamp(cl, index >= RD_PERF_TS_COUNT ? index | RHI_TIMESTAMP_KEEP_BARRIERS
@@ -349,6 +605,12 @@ void rd__perf_stamp(RhiCommandList cl, uint32_t index)
 {
     stamp(cl, index);
     s_post = -1;
+    if (index >= RD_PERF_TS_LIST0 && index < RD_PERF_TS_LIST0 + RD_LIST_COUNT) {
+        /* the list's CPU time: from the lists' start or the list before */
+        const double now = rd__now_ms();
+        g_rdPerf.walkListMs[index - RD_PERF_TS_LIST0] = now - s_listMs0;
+        s_listMs0 = now;
+    }
     if (index == RD_PERF_TS_PREPASS) {
         /* the walk starts: the vertex pre-pass, then the lists */
         s_walkPipeMs = s_walkEndPipeMs = rd__pipeline_create_ms();
@@ -358,6 +620,7 @@ void rd__perf_stamp(RhiCommandList cl, uint32_t index)
             s_walkEndStats = s_walkStats;
         }
     } else if (index == RD_PERF_TS_LISTS) {
+        s_listMs0 = rd__now_ms(); /* list 0's CPU time starts */
         s_inLists = true;
     } else if (index == RD_PERF_TS_LIST0 + RD_LIST_COUNT - 1) {
         s_inLists = false; /* the last list done: the present's draws follow */
@@ -381,10 +644,171 @@ void rd__perf_post(RhiCommandList cl, int post)
     if (post == s_post || !g_rd.hasDevice) {
         return;
     }
-    if (s_nextTs >= RHI_MAX_TIMESTAMPS) {
+    if (s_nextTs >= RD_PERF_TS_PASS0) {
         s_postPartial = true;
         return;
     }
     stamp(cl, s_nextTs++);
     s_post = post;
+}
+
+/* ------------------------------------------------- the pieces as text
+ * The window's ico-pc-passes.csv (rd_perf_pass_csv_*) and its 10 s
+ * summary (rd_perf_pass_agg_*, rd_perf_pass_kinds_text); pure: no device,
+ * no renderer state (rd_perf_test's text checks). */
+int rd_perf_pass_csv_header(char *buf, size_t n)
+{
+    return snprintf(buf, n,
+                    "replay,frame,pass,kind,list,effect,target,width,height,draws,pipeline_binds,"
+                    "gpu_us,cpu_us\n");
+}
+
+int rd_perf_pass_csv_line(uint32_t replay, uint32_t frame, uint32_t index, const RdPerfPass *p,
+                          char *buf, size_t n)
+{
+    return snprintf(buf, n, "%u,%u,%u,%s,%d,%s,%s,%u,%u,%u,%u,%.1f,%.1f\n", replay, frame, index,
+                    rd_perf_pass_kind_name(p->kind), (int)p->list, rd_perf_post_name(p->post),
+                    rd_perf_target_name(p->target), (unsigned)p->w, (unsigned)p->h, p->draws,
+                    p->pipelineBinds, (double)p->gpuUs, (double)p->cpuUs);
+}
+
+/* a piece under this GPU time counts as small (the tilers' fixed cost of a
+   render pass is about 0.05 to 0.15 ms) */
+#define RD_PERF_PASS_SMALL_US 50.0f
+
+void rd_perf_pass_agg_reset(RdPerfPassAgg *a)
+{
+    memset(a, 0, sizeof(*a));
+}
+
+void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n)
+{
+    a->replays++;
+    for (uint32_t k = 0; k < n; k++) {
+        const RdPerfPass *q = &p[k];
+        const double ms = q->gpuUs >= 0.0f ? (double)q->gpuUs / 1e3 : 0.0;
+        a->passes++;
+        a->gpuMs += ms;
+        if (q->gpuUs >= 0.0f && q->gpuUs < RD_PERF_PASS_SMALL_US) {
+            a->small++;
+            a->smallMs += ms;
+        }
+        RdPerfPassAggEntry *e = NULL;
+        for (uint32_t i = 0; i < a->count; i++) {
+            RdPerfPassAggEntry *c = &a->e[i];
+            if (c->kind == q->kind && c->target == q->target && c->list == q->list &&
+                c->post == q->post && c->w == q->w && c->h == q->h) {
+                e = c;
+                break;
+            }
+        }
+        if (!e) {
+            if (a->count == RD_PERF_PASS_AGG_MAX) {
+                a->dropped++;
+                continue;
+            }
+            e = &a->e[a->count++];
+            memset(e, 0, sizeof(*e));
+            e->kind = q->kind;
+            e->target = q->target;
+            e->list = q->list;
+            e->post = q->post;
+            e->w = q->w;
+            e->h = q->h;
+        }
+        e->passes++;
+        e->draws += q->draws;
+        e->gpuMs += ms;
+        e->cpuMs += (double)q->cpuUs / 1e3;
+    }
+}
+
+int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_t n)
+{
+    if (n == 0) {
+        return 0;
+    }
+    buf[0] = '\0';
+    if (a->replays == 0) {
+        return snprintf(buf, n, "no replay timed");
+    }
+    const double r = (double)a->replays;
+    bool used[RD_PERF_PASS_AGG_MAX];
+    memset(used, 0, sizeof(used));
+    size_t at = 0;
+    unsigned shown = 0;
+    for (; shown < top && shown < a->count; shown++) {
+        int best = -1;
+        for (uint32_t i = 0; i < a->count; i++) {
+            if (!used[i] && (best < 0 || a->e[i].gpuMs > a->e[best].gpuMs)) {
+                best = (int)i;
+            }
+        }
+        used[best] = true;
+        const RdPerfPassAggEntry *e = &a->e[best];
+        const RdPerfPass lp = {.kind = e->kind, .list = e->list, .post = e->post};
+        char label[32], passes[32] = "";
+        rd_perf_pass_label(&lp, label, sizeof(label));
+        const double pr = (double)e->passes / r;
+        if (pr < 0.95 || pr > 1.05) {
+            snprintf(passes, sizeof(passes), " %.1f passes", pr);
+        }
+        const int w =
+            snprintf(buf + at, n - at, "%s%s %s %ux%u%s %.0f draws %.2f ms", shown ? ", " : "",
+                     label, rd_perf_target_name(e->target), (unsigned)e->w, (unsigned)e->h, passes,
+                     (double)e->draws / r, e->gpuMs / r);
+        if (w < 0 || (size_t)w >= n - at) {
+            at = n - 1;
+            break;
+        }
+        at += (size_t)w;
+    }
+    if (at + 1 < n) {
+        snprintf(buf + at, n - at,
+                 " (%u of %.1f passes a replay, %u timed replays; passes under 0.05 ms: %.1f a "
+                 "replay, %.2f ms)",
+                 shown, (double)a->passes / r, a->replays, (double)a->small / r, a->smallMs / r);
+    }
+    return (int)strlen(buf);
+}
+
+int rd_perf_pass_kinds_text(const double kinds[RD_PERF_PASS_KIND_COUNT],
+                            const double effects[RD_PERF_POST_COUNT], double replays, char *buf,
+                            size_t n)
+{
+    const double r = replays > 0.0 ? replays : 1.0;
+    double all = 0.0, fx = 0.0;
+    for (int k = 0; k < RD_PERF_PASS_KIND_COUNT; k++) {
+        all += kinds[k];
+    }
+    for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
+        fx += effects[p];
+    }
+    if (n == 0) {
+        return 0;
+    }
+    size_t at = 0;
+    int w = snprintf(buf, n, "%.1f: render passes %.1f (lists %.1f", all / r,
+                     kinds[RD_PERF_PASS_RENDER] / r, (kinds[RD_PERF_PASS_RENDER] - fx) / r);
+#define ADD(...)                                                                                   \
+    do {                                                                                           \
+        if (w < 0 || (size_t)w >= n - at) {                                                        \
+            return (int)strlen(buf);                                                               \
+        }                                                                                          \
+        at += (size_t)w;                                                                           \
+        w = snprintf(buf + at, n - at, __VA_ARGS__);                                               \
+    } while (0)
+    for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
+        if (effects[p] > 0.0) {
+            ADD(", %s %.1f", rd_perf_post_name(p), effects[p] / r);
+        }
+    }
+    ADD(")");
+    for (int k = 0; k < RD_PERF_PASS_KIND_COUNT; k++) {
+        if (k != RD_PERF_PASS_RENDER && kinds[k] > 0.0) {
+            ADD(", %s %.1f", rd_perf_pass_kind_name(k), kinds[k] / r);
+        }
+    }
+#undef ADD
+    return (int)strlen(buf);
 }

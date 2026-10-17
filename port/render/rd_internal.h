@@ -2191,6 +2191,21 @@ enum {
     RD_PERF_TS_COUNT
 };
 
+/* The effects' indices run from RD_PERF_TS_COUNT to RD_PERF_TS_PASS0; a
+ * timed replay's pieces (rd__perf_pass) take RD_PERF_TS_PASS0 + their index
+ * and the stamp after the last one the next index, up to
+ * RHI_MAX_TIMESTAMPS - 1 (223 pieces). */
+#define RD_PERF_TS_PASS0 32u
+#define RD_PERF_PASS_MAX (RHI_MAX_TIMESTAMPS - RD_PERF_TS_PASS0 - 1u)
+/* without [dev] perf_passes a replay is timed piece by piece when the last
+ * timed one started at least this long before (rd_perf.c rd__perf_begin) */
+#define RD_PERF_PASS_EVERY_MS 250.0
+
+/* rd__perf_pass's target for the pieces without a target id: the VU
+ * pre-pass's record, the window */
+#define RD_PERF_ID_RECORD 0xFFFFFFF0u
+#define RD_PERF_ID_WINDOW 0xFFFFFFF1u
+
 extern RdPerfRecord g_rdPerf;
 void rd__perf_reset(void); /* a new device: its counters start at 0 */
 void rd__perf_begin(const RdFrame *f, int keep, bool present);
@@ -2210,6 +2225,21 @@ void rd__perf_interp_ms(double ms);
 void rd__perf_alpha(float alpha, int firstOfTick); /* the next replay is a present at alpha */
 /* a synchronous readback's time (rd_replay.c readTexture), charged likewise */
 void rd__perf_readback_ms(double ms);
+/* A piece of GPU work begins (rd.h RD_PERF_PASS_*; called outside any
+ * render pass, before the piece records anything): counted by kind, and in
+ * a timed replay its timestamp written and its record opened (the colour
+ * target id or RD_PERF_ID_*, its size in texels, the effect in force).
+ * rd__perf_pass_end closes the last piece with one more stamp, before the
+ * replay's list ends (rd_replay.c replayFrame).  docs/port/RENDER.md,
+ * "Performance records". */
+void rd__perf_pass(RhiCommandList cl, int kind, uint32_t target, uint32_t w, uint32_t h, int post);
+void rd__perf_pass_end(RhiCommandList cl);
+/* [dev] perf_passes from ICO_RD_PERF_PASSES, logged once (rd_replay.c's
+ * device start); rd__set_perf_passes sets it (tests, the replay tool) */
+void rd__perf_passes_init(void);
+void rd__set_perf_passes(bool on);
+/* RdPerfPass.target for target id `id` (rd_core.c) */
+uint8_t rd__target_code(uint32_t id);
 /* rd_set_host_call's hook, or fn(arg) directly (rd_core.c) */
 void rd__on_host(void (*fn)(void *arg), void *arg);
 /* a monotonic clock in ms (rd_core.c), for the replay and start-up timings */

@@ -344,6 +344,7 @@ bool rd__gpu_init(void *sdlWindow)
         1, 1, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd dummy", 0});
     g_rd.dummyState = RHI_STATE_UNDEFINED;
     rd__vu_prepass_init(lim); /* the vertex pre-pass: on or off, why */
+    rd__perf_passes_init();   /* the per-pass timing: every replay or sampled */
     return ok && g_rd.dummy.id;
 }
 
@@ -737,6 +738,7 @@ static RdUniform uniformGroup(RhiBindGroupLayout layout, uint32_t slot, const vo
         return (RdUniform){{0}, 0};
     }
     memcpy(g_rd.ringMap[s_slot] + off, data, size);
+    g_rdPerf.uploadUniformBytes += size;
     u.offset = (uint32_t)off;
     if (e) {
         e->epoch = s_bindEpoch;
@@ -1140,6 +1142,7 @@ static void flushStencilClear(void)
                                : RHI_STORE_DONT_CARE;
     p.width = tc->tw;
     p.height = tc->th;
+    rd__perf_pass(s_cl, RD_PERF_PASS_STENCIL, s_stencil.color, tc->tw, tc->th, -1);
     rhi_cmd_begin_render_pass(s_cl, &p);
     rhi_cmd_end_render_pass(s_cl);
 }
@@ -1253,6 +1256,7 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
     }
     p.width = c->tw;
     p.height = c->th;
+    rd__perf_pass(s_cl, RD_PERF_PASS_RENDER, cid, c->tw, c->th, r->perfPost);
     rhi_cmd_begin_render_pass(s_cl, &p);
     rhi_cmd_checkpoint(s_cl, passPush(RD_PASSK_PASS, cid, c->tw, c->th, d ? did : 0, d ? d->tw : 0,
                                       d ? d->th : 0, storage, r->perfPost));
@@ -1462,6 +1466,8 @@ static void msaaUpsample(RdTargetRec *ts, int depth)
     }
     p.width = s_ms.w;
     p.height = s_ms.h;
+    rd__perf_pass(s_cl, RD_PERF_PASS_MSAA, RD_TARGET_SCENE + 1u, s_ms.w, s_ms.h,
+                  s_ms.r ? s_ms.r->perfPost : -1);
     rhi_cmd_begin_render_pass(s_cl, &p);
     setViewport(s_ms.w, s_ms.h);
     g_rd.passSamples = (uint8_t)s_ms.samples;
@@ -1517,6 +1523,7 @@ static void msaaEnd(struct Replay *r)
         return;
     }
     s_ms.internal = true;
+    rd__perf_pass(s_cl, RD_PERF_PASS_MSAA, RD_TARGET_SCENE + 1u, ts->tw, ts->th, RD_PERF_POST_MSAA);
     rd__perf_post(s_cl, RD_PERF_POST_MSAA); /* the resolves' GPU time */
     if (s_ms.colorLive) {
         rd__transition(s_cl, s_ms.color, &s_ms.colorState, RHI_STATE_COPY_SRC);
@@ -2101,6 +2108,8 @@ static bool takeSnap(Replay *r, RdTargetRec *tc, RhiRect area)
     if (!snapEnsure(tc)) {
         return false;
     }
+    rd__perf_pass(s_cl, RD_PERF_PASS_SNAP, (uint32_t)(tc - g_rd.targets) + 1u, area.w, area.h,
+                  r->perfPost);
     g_rdPerf.snapshots++;
     s_blurSnapCount++;
     rd__transition(s_cl, tc->color, &tc->colorState, RHI_STATE_COPY_SRC);
@@ -2231,6 +2240,7 @@ static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId, const 
         take = (RhiRect){0, 0, w, h};
     }
     endPass(r);
+    rd__perf_pass(s_cl, RD_PERF_PASS_DATE, tcId, take.w, take.h, r->perfPost);
     g_rdPerf.dateSnapshots++;
     rd__date_snap(tc, s_ms.active && !s_ms.internal, s_ms.ended);
     rd__transition(s_cl, tc->color, &tc->colorState, RHI_STATE_SHADER_READ);
@@ -4033,6 +4043,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     p.width = tc->tw;
     p.height = tc->th;
+    rd__perf_pass(s_cl, RD_PERF_PASS_RENDER, r->st.color, tc->tw, tc->th, r->perfPost);
     rhi_cmd_begin_render_pass(s_cl, &p);
     setViewport(tc->tw, tc->th);
     rhi_cmd_set_scissor(s_cl, &sc);
@@ -4086,6 +4097,7 @@ static void doExact(Replay *r, const RdCmd *c)
         return;
     }
     endPass(r);
+    rd__perf_pass(s_cl, RD_PERF_PASS_EXACT, c->u[1], dst->tw, dst->th, r->perfPost);
     rhi_cmd_checkpoint(s_cl, passPush(RD_PASSK_EXACT, c->u[0], src->tw, src->th, c->u[1], dst->tw,
                                       dst->th, 0, r->perfPost));
     r->writeSerial++;
@@ -4215,6 +4227,7 @@ static void doCopy(Replay *r, const RdFrame *f, const RdCmd *c)
         return;
     }
     endPass(r);
+    rd__perf_pass(s_cl, RD_PERF_PASS_COPY, c->u[0], w, h, r->perfPost);
     r->writeSerial++;
     rd__transition(s_cl, src->color, &src->colorState, RHI_STATE_COPY_SRC);
     rd__transition(s_cl, dst->color, &dst->colorState, RHI_STATE_COPY_DST);
@@ -4398,6 +4411,7 @@ static void shadowReduce(Replay *r, RdTargetRec *tc)
     p.colorCount = 1;
     p.width = tc->w;
     p.height = tc->h;
+    rd__perf_pass(s_cl, RD_PERF_PASS_RENDER, 0, tc->w, tc->h, r->perfPost);
     rhi_cmd_begin_render_pass(s_cl, &p);
     setViewport(tc->w, tc->h);
     const RhiRect all = {0, 0, tc->w, tc->h};
@@ -4595,6 +4609,9 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
      * picture stands in for that one on a device without sample-rate
      * shading, so it blends the same way rather than exactly */
     const bool fogEpoch = s_ms.active && zid == scene && r->st.color == scene;
+    /* the depth read made ready (the copy path's copy, the buffer path's
+     * transfers) and the table's upload, a piece of their own */
+    rd__perf_pass(s_cl, RD_PERF_PASS_FOG_COPY, zid, tz->tw, tz->th, r->perfPost);
     const bool fogMs = !s_fogResolvedForced && s_ms.active && s_ms.depthLive && zid == scene &&
                        r->st.color == scene && !buffer && rhi_limits()->sampleRateShading &&
                        g_rd.fs[RD_FS_FOG_MS].id &&
@@ -5391,7 +5408,10 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     /* no shadow window from another replay (rd__clear_new_targets reads it) */
     memset(&s_stencil, 0, sizeof(s_stencil));
     rhi_cmd_checkpoint(s_cl, rd__passring_push(RD_PASSK_UPLOAD, 0, 0, 0, 0, 0, 0, 0, -1));
+    rd__perf_pass(s_cl, RD_PERF_PASS_UPLOAD, 0, 0, 0, -1);
+    const uint64_t texOff = s_ringOff;
     rd__upload_dirty_textures();
+    g_rdPerf.uploadTextureBytes = s_ringOff - texOff;
     rd__join_parts(f, keep); /* the card test over a part's packets (rd_join.c) */
     rd__upload_meshes(f, keep);
     rd__passring_bytes(s_ringOff);
@@ -5520,9 +5540,11 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
         rhi_cmd_checkpoint(s_cl,
                            rd__passring_push(RD_PASSK_PRESENT, RD_TARGET_DISPLAY + 1,
                                              dt ? dt->tw : 0, dt ? dt->th : 0, 0, sw, sh, 0, -1));
+        rd__perf_pass(s_cl, RD_PERF_PASS_PRESENT, RD_PERF_ID_WINDOW, sw, sh, -1);
         rd__present_record(s_cl);
         rd__perf_stamp(s_cl, RD_PERF_TS_PRESENT);
     }
+    rd__perf_pass_end(s_cl); /* the last piece's end (rd_perf.c) */
     g_rdPerf.walkMs = (t1 = rd__now_ms()) - t - (g_rdPerf.bindMs - bind0);
     rd__perf_walk_end(); /* the walk's pipelines and creations end here */
     t = t1;
