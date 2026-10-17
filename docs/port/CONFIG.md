@@ -278,10 +278,14 @@ under the same name (below). Read through the store:
 | `unlock_credits` | bool | `false` | Extras > Credits unlocked (`port/game/credits.c`) |
 | `perf_log` | bool | `false` | `ico-pc-perf.csv` in the logs folder, one line per [replayed](ARCHITECTURE.md#terms) frame (`port/platform/window_host.c` (`perf_csv_open`)) |
 | `slow_step_ms` | float | `8` | the slow-step log threshold; 0 is off (`port/platform/window_host.c` (`ico_window_open`)) |
-| `blend` | string | (none) | the A/B switches below, as their ini keys |
+| `blend` | string | (none: `fixed`) | the A/B switches below, as their ini keys |
 | `fog_path` | string | (none) | |
+| `date_path` | string | (none) | |
+| `store_plan` | bool | (the device profile's) | |
+| `blur_fold` | bool | (the device profile's) | |
+| `uint_view` | bool or `work` | (the device profile's) | |
 | `gpu_checkpoints` | bool | `false` | |
-| `gpu_robust` | bool | `false` (`true` on Android) | |
+| `gpu_robust` | bool | `false` | |
 | `pass_split` | int | `0` | |
 | `attachment_read` | bool | `false` | |
 | `storage_pass_merge` | bool | `false` | |
@@ -325,10 +329,14 @@ store (`backend`, `unlock_credits`):
 | `dump_every`, `dump_dir`, `dump_interp`, `dump_from` | [rd](ARCHITECTURE.md#terms) frame dumps every N frames into a folder beside the ini (`export_dump_keys`) |
 | `start_stage`, `switch_to`, `switch_at` | the stage Main starts in; one forced stage change (exported) |
 | `popup_test` | test popups from Main tick 100 (exported as `ICO_UI_POPUP_TEST`) |
-| `blend` | `fixed`: the GS blend on the fixed-function path instead of the exact destination read; `attachment` or `storage`: that destination read, kept whatever the start-up blend self-test finds (exported as `ICO_RD_BLEND`; `exact`, the default, exports nothing: the first path that passes the self-test) ([RENDER.md](RENDER.md#destination-reads-and-blend-paths)) |
-| `fog_path` | `inplace`, `copy` or `buffer`: the fog's depth path, tried first (exported as `ICO_RD_FOG_PATH`) ([RENDER.md](RENDER.md#the-fog-path-and-its-self-test)) |
+| `blend` | the GS blend's path: `fixed`, the default (nothing set exports nothing), the GPU's fixed-function blender on every device; `attachment` or `storage` opts into that exact destination read where the device has it, kept whatever the start-up blend self-test finds; `exact` opts into the best one the device has (the attachment read, else the storage read), logged `rd: blend: [dev] blend = exact: the exact blend is an opt-in; attachment tried` (exported as `ICO_RD_BLEND`) ([RENDER.md](RENDER.md#destination-reads-and-blend-paths)) |
+| `fog_path` | `inplace`, `copy` or `buffer`: the fog's depth path, tried first; `local`: the device profile's `fogLocal` on (the fog reads the depth in the scene pass by local read), where the device has local read; `inplace`, `copy` and `buffer` turn `fogLocal` off (exported as `ICO_RD_FOG_PATH`) ([RENDER.md](RENDER.md#the-fog-path-and-its-self-test), [RENDER.md](RENDER.md#the-device-profile)) |
+| `date_path` | `stencil`: the device profile's `dateStencil` on (DATE through the stencil bit, by local read), where the device has local read; `snapshot`: off, the R8 DATE snapshot (exported as `ICO_RD_DATE_PATH`) ([RENDER.md](RENDER.md#the-device-profile)) |
+| `store_plan` | `true` / `false`: the device profile's `storePlan` (store-op DONT_CARE for depth and targets nothing reads later) on or off (exported as `ICO_RD_STORE_PLAN=1` / `0`) ([RENDER.md](RENDER.md#the-device-profile)) |
+| `blur_fold` | `true` / `false`: the device profile's `blurFold` (the staticBlur passes folded in pairs) on or off (exported as `ICO_RD_BLUR_FOLD=1` / `0`) ([RENDER.md](RENDER.md#the-device-profile)) |
+| `uint_view` | `true`: the RGBA8_UINT views of the work buffers and the scene-class targets; `work`: the work buffers' only; `false`: none; only where the backend has the view (exported as `ICO_RD_UINT_VIEW=1`, `work` or `0`) ([RENDER.md](RENDER.md#the-device-profile)) |
 | `gpu_checkpoints` | `true`: GPU checkpoints, resource addresses (Vulkan) and DRED (D3D12) for the device-loss report (exported as `ICO_GPU_CHECKPOINTS=1`) ([RHI.md](RHI.md#device-loss)) |
-| `gpu_robust` | `true`: robust buffer and image access (Vulkan; exported as `ICO_GPU_ROBUST=1`), with null descriptors; robust buffer and image access (`VK_EXT_robustness2` where offered) is on by default on Android, where `false` turns it off (exported as `ICO_GPU_ROBUST=0`) ([RHI.md](RHI.md#device-loss)) |
+| `gpu_robust` | `true`: robust buffer and image access (Vulkan; `VK_EXT_robustness2` where offered; exported as `ICO_GPU_ROBUST=1`), with null descriptors; `false`, the default on every platform, exports `0`. The device-loss order's `robust` step exports `1` for its run whatever the key says ([RHI.md](RHI.md#device-loss), [PLATFORM.md](PLATFORM.md#diagnostics)) |
 | `pass_split` | N: a render pass of VU draws ends and begins again after every N of them, the picture the same (exported as `ICO_RD_PASS_SPLIT`; 0 or `off`, the default: none) ([RENDER.md](RENDER.md#the-loss-bisect)) |
 | `attachment_read` | `true`: the attachment read offered on Qualcomm's Adreno driver too, where it is off because it draws wrong colours (exported as `ICO_VK_ATTACHMENT_READ=1`) ([RENDER.md](RENDER.md#destination-reads-and-blend-paths)) |
 | `storage_pass_merge` | `true`: the storage destination read (the interlock or ROV path) keeps an open storage pass open and draws in it, through the read, the draws it does not need the read for when the shader stores the same bytes, instead of ending the pass for each of them (exported as `ICO_RD_PASS_MERGE=1`; `false`, the default, exports `0`: every such draw ends the storage pass) ([RENDER.md](RENDER.md#the-storage-pass-merge)) |

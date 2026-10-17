@@ -269,7 +269,14 @@ fourth 6, Intel's Windows driver as major 18 bits and minor 14, every other driv
 version packing; `VkDriverId` decides, and the vendor id alone when it is 0
 (`port/rhi/rhi_driver_version.h`; `port/rhi/vk/vk_device.c` (`vkr_driver_text`)). Only the features
 used are enabled; the destination read takes `VK_EXT_fragment_shader_interlock` or
-rasterization-order attachment access with `VK_KHR_dynamic_rendering_local_read`. The attachment
+rasterization-order attachment access with `VK_KHR_dynamic_rendering_local_read`. Local read
+itself (`RhiLimits.localRead`: a pass's own attachments read as input attachments after
+`rhi_cmd_local_read_barrier`) is enabled wherever the device offers it, whatever the destination
+read: `VK_KHR_dynamic_rendering_local_read`, or on a Vulkan 1.4 device without the extension
+`VkPhysicalDeviceVulkan14Features.dynamicRenderingLocalRead` (the effective version is the
+instance's at most, 1.3, so that branch waits for the instance to ask for 1.4), and the device line
+ends `; local read yes|no` (`yes (Vulkan 1.4)` for the core feature) (`port/rhi/vk/vk_device.c`
+(`vkr_create_device`)). `ICO_VK_FAKE_NO_DST` leaves it off too. D3D12 reports none. The attachment
 read is not offered on Qualcomm's own Adreno driver (vendor 0x5143, `VkDriverId`
 `QUALCOMM_PROPRIETARY` or unknown; not Mesa's Turnip): its reads return wrong colours (issue 89,
 Adreno 830 on driver 512.800.72), and the device line says `rasterization-order attachment read off
@@ -284,11 +291,11 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_VALIDATION` | 1 adds `VK_LAYER_KHRONOS_validation` and debug utils; 0 keeps them off |
 | `ICO_VK_DEVICE` | an index or a substring of the device name forces the pick |
 | `ICO_VK_FAKE_LIMITS` | `mali` clamps the limits to a Mali-G68's (4 descriptor sets, 128 bytes of push constants, 16 sampled images a stage, 4096 allocations, ...); `min` holds the alignment, texture, render target, dynamic uniform, storage range and anisotropy limits to 256, 4096, 4096, 8, 2^27 and 16 |
-| `ICO_VK_FAKE_LIMITS=moltenvk` | no limit clamped: the device is reported as MoltenVK (`RhiLimits.moltenvk`) without the attachment read (`rd_blend_selftest_moltenvk*`) |
+| `ICO_VK_FAKE_LIMITS=moltenvk` | no limit clamped: the device is reported as MoltenVK (`RhiLimits.moltenvk`) without the attachment read (`rd_blend_selftest_moltenvk_storage`) |
 | `ICO_VK_FAKE_D24S8` | 1 takes D24S8 where the device has it |
 | `ICO_VK_FAKE_NO_DUAL` | 1 leaves dual-source blending off |
 | `ICO_VK_FAKE_NO_MSAA` | 1 reports single sampling only |
-| `ICO_VK_FAKE_NO_DST` | 1 reports no destination read |
+| `ICO_VK_FAKE_NO_DST` | 1 reports no destination read and no local read |
 | `ICO_VK_FAKE_ADRENO` | 1 takes the Qualcomm driver's branch: the attachment read not offered |
 | `ICO_VK_ATTACHMENT_READ` | 1 offers the attachment read on Qualcomm's driver too; ico-pc.ini `attachment_read` |
 | `ICO_VK_STORAGE_BARRIERS` | 1 puts the by-region barrier before a destination-read draw that only the validation layer needs |
@@ -296,7 +303,7 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_PRESENT_WAIT` | 1 uses `VK_KHR_present_id` and `VK_KHR_present_wait` where offered (off otherwise) |
 | `ICO_VK_FIFO_LATEST_READY` | 1 uses `VK_PRESENT_MODE_FIFO_LATEST_READY_EXT` where FIFO would be taken, when offered |
 | `ICO_VK_POLL_SURFACE` | 1 polls the surface size after presents, as Android always does (`vk_swapchain.c`) |
-| `ICO_GPU_ROBUST` | 1 enables `robustBufferAccess`, and `robustImageAccess2` and `nullDescriptor` where `VK_EXT_robustness2` offers them; 0 disables; unset: `robustBufferAccess` alone on Android, off elsewhere ([Device loss](#device-loss)); ico-pc.ini `gpu_robust` |
+| `ICO_GPU_ROBUST` | 1 enables `robustBufferAccess`, and `robustImageAccess2` and `nullDescriptor` where `VK_EXT_robustness2` offers them; 0 or unset: off, on every platform ([Device loss](#device-loss)); ico-pc.ini `gpu_robust`; the loss order's `robust` step sets 1 for its run |
 | `ICO_GPU_CHECKPOINTS` | 1 enables `VK_NV_device_diagnostic_checkpoints` and `VK_EXT_device_address_binding_report` where offered ([Device loss](#device-loss)); ico-pc.ini `gpu_checkpoints` |
 
 (`port/rhi/vk/vk_device.c` (`vkr_fake_limits`, `vkr_choose_depth_stencil`, `vkr_pick_device`);
@@ -509,14 +516,18 @@ per resource, so they stay off unless asked for; the fault report costs nothing 
 **Robust access** (`gpu_robust`, Vulkan): `robustBufferAccess`, plus `robustBufferAccess2` and
 `robustImageAccess2` where `VK_EXT_robustness2` offers them, so an access out of a buffer's or
 image's range reads zero and writes nothing instead of reaching other memory; an A/B switch for a
-loss that an out-of-range access could explain. It is on by default on Android, the robustness2
-parts with it when offered (a Mali GPU reads storage buffers through plain pointers, so an
-out-of-range read there loses the device instead of reading zero; issue 95); `nullDescriptor` comes
-only with `gpu_robust=true`. It is off by default on the desktop; `gpu_robust` overrides either way
-(`gpu_robust=false` turns all of it off on Android). One start-up line says what is on:
+loss that an out-of-range access could explain. It is off by default on every platform: a Mali GPU
+reads storage buffers through plain pointers, so an out-of-range read there loses the device
+instead of reading zero (issue 95), but the VU path's reads that went out of range are gone since
+its index values are dense (marks in the stream), and the bounds checks cost every
+StructuredBuffer read of that path. `gpu_robust = true` turns it on with `nullDescriptor`; the
+device-loss order's `robust` step (`port/platform/startup_retry.h`) exports `ICO_GPU_ROBUST=1` for
+its run, which only a platform that can start the game again reaches, and only a run whose caller
+sets `StartupRetryRun.robustOffDefault`. One start-up line says what is on:
 `rhi_vk: loss diagnostics: fault report on|not offered; checkpoints ...; resource addresses ...;
-robust access ...` (`on, buffers (robustness2) and images (robustness2) (the Android default)`
-when the default turned it on and the device offers the extension) (`port/rhi/vk/vk_device.c` (`vkr_create_device`)). Both switches come from the
+robust access ...` (`off (the default; gpu_robust = true turns it on)`, `off (gpu_robust)`, or `on,
+buffers (robustness2) and images (robustness2) (gpu_robust)`, `(the restart after the graphics card
+stopped responding)` at the robust step) (`port/rhi/vk/vk_device.c` (`vkr_create_device`)). Both switches come from the
 environment (`ICO_GPU_CHECKPOINTS`, `ICO_GPU_ROBUST`) or ico-pc.ini's `[dev]` keys
 ([CONFIG.md](CONFIG.md#dev)).
 
@@ -535,9 +546,9 @@ SHA-256, the licences of the libraries compiled into it, and builds a static SDL
 
 `RhiLimits.moltenvk` is true on MoltenVK (`rhi_driver_is_moltenvk`: `VK_DRIVER_ID_MOLTENVK`, or
 vendor 0x106B with the id unknown under `ICO_RHI_MOLTENVK`) and is logged as `; MoltenVK` on the
-`rhi_vk:` device line. The renderer reads it for its default blend: fixed-function, because the
-exact blend's pass switching costs 3 to 4 times the frame there
-([RENDER.md](RENDER.md#destination-reads-and-blend-paths), issue 102).
+`rhi_vk:` device line. The renderer's device profile reads it for the Apple / MoltenVK class
+([RENDER.md](RENDER.md#the-device-profile)); the blend is the fixed-function one there as
+everywhere ([RENDER.md](RENDER.md#destination-reads-and-blend-paths)).
 
 `RhiLimits.colorBytesPerPixel` under MoltenVK is the Metal family's "Maximum implicit image block
 size, per pixel, per sample, when using multiple color render targets" (Metal Feature Set Tables)

@@ -1116,10 +1116,11 @@ records](#performance-records)).
 
 The GS blends in integers with an arithmetic shift, no clamp of C, then COLCLAMP, PABE and FBA;
 the GPU's fixed-function blender computes in float and rounds to nearest, one level above the GS
-on many LERP channels. The destination read computes the GS result in the fragment shader from the
-pixel's own destination, read in rasterization order, with blending off
-(`gs_dst_channel`, `port/shaders/gs_math.hlsli`) (`port/render/rd_dst_read.c`). Two realisations
-(`port/rhi/rhi.h` (`RhiDstRead`); `port/render/rd_dst_read.c`):
+on about half the channels of a LERP ([DIVERGENCES.md](DIVERGENCES.md) VD-7). The destination
+read computes the GS result in the fragment shader from the pixel's own destination, read in
+rasterization order, with blending off (`gs_dst_channel`, `port/shaders/gs_math.hlsli`)
+(`port/render/rd_dst_read.c`). Two realisations (`port/rhi/rhi.h` (`RhiDstRead`);
+`port/render/rd_dst_read.c`):
 
 - **attachment**: the colour attachment read as an input attachment in rasterization order
   (Vulkan rasterization-order attachment access over dynamic rendering local read). Depth,
@@ -1131,94 +1132,107 @@ pixel's own destination, read in rasterization order, with blending off
   into colour without Z write then a depth-only pass when its Z test is ALWAYS; under
   GEQUAL/GREATER it stays on the fixed-function blend (logged once).
 
-The preference is attachment, then storage, then the fixed-function blend. What goes through it:
-the screen prims, the VU meshes and the fog sprite whose fixed-function blend is not the GS's (the
-LERPs, mode 3, the Ad forms, mode 11, PABE on the premultiplied forms, COLCLAMP 0) on RGBA8
-targets. What stays on the fixed-function blend: the premultiplied forms, the MSAA epoch's passes,
-targets other than RGBA8, the port's presentation overlay. Of the premultiplied forms the adds
-(modes 0 and 5) are exact on the blender (the shader writes the GS term `(Cs F) >> 7` and the
-blender adds two whole levels); the subtracts (modes 1 and 6) are one level above the GS wherever
-`Cs F` is not a multiple of 128, because the GS's term is `(0 - Cs) F >> 7`, an arithmetic shift
-that rounds the negative product down, while the blender subtracts the truncated `(Cs F) >> 7`
-(`port/shaders/common.hlsli` (`gs_dual_out`); `port/shaders/gs_math.hlsli` (`gs_blend_ch`)). The staticBlur sprites
-and `blend_int` keep their own exact paths (`port/render/rd_dst_read.c`; `port/render/rd_replay.c`
-(`dstPassMode`, `rd__pass_wants_readable`)).
+**The exact blend is an opt-in.** The fixed-function blend is the default on every device and
+backend. Only `[dev] blend` / `ICO_RD_BLEND` ([CONFIG.md](CONFIG.md)) set to `attachment` or
+`storage` (also `interlock`, `rov`) opts into a destination read, and only where the device has
+it; `exact` takes the device's best (the attachment read, else the storage read) and logs
+`rd: blend: [dev] blend = exact: the exact blend is an opt-in; attachment tried`; `fixed` (also
+`off`, `0`) pins the default. The ask is read before the shader modules exist
+(`port/render/rd_dst_read.c` (`rd__dst_asked_env`)), so `rd__gpu_init` makes the group-3 layout
+and the `_dstrov` / `_dstatt` twins of the asked mode alone (`port/render/rd_replay.c`
+(`rd__gpu_init`)), `g_rd.dstModes` holds at most the fixed-function blend and that mode
+(`madeModes`), no RGBA8 target is made with `RHI_TEX_STORAGE` or `RHI_TEX_INPUT_ATTACHMENT` for the
+blend unless asked (`rd__dst_target_usage`, `RdTargetRec.dstUsage` bits `RD_DST_USAGE_STORAGE` and
+`RD_DST_USAGE_ATTACHMENT`; `RD_DST_USAGE_LOCAL_DATE` is DATE's local read, not the blend's), and
+the start-up pipeline set has no destination-read key: `rd__enumerate_reachable` takes its
+`enumerateAll` path when the mode is the fixed-function blend and the dual-source blend is in use
+(`port/render/rd_pipeline.c`), and `rd__enumerate_dst` returns at once for it. The start line is
+`rd: blend: fixed-function (the default; [dev] blend = attachment|storage opts into an exact
+mode)`, `rd: blend: fixed-function ([dev] blend = fixed)` or `rd: blend: exact (attachment read)
+([dev] blend)`; a word that is none of these or a mode the device lacks logs `rd: blend:
+ICO_RD_BLEND=<v> is not fixed, attachment or storage; fixed-function` or `... is not on this
+device; fixed-function` and keeps the default (`rd__dst_init`).
 
-`ICO_RD_BLEND` (`[dev] blend`, [CONFIG.md](CONFIG.md)) names the path instead: `fixed` (also
-`off`, `0`), `storage` (also `interlock`, `rov`) or `attachment`; a value that is none of these or a
-path the device lacks logs `rd: blend: ICO_RD_BLEND=<v> is not fixed, storage or attachment` or
-`... is not on this device` and keeps the default (`port/render/rd_dst_read.c` (`rd__dst_init`)).
+Every place that branches on the mode stays and is inert at the fixed-function blend: the pass's
+mode (`dstModeFor`) is the fixed-function blend, `expandPassesMode` and `rd__expand_dst` copy the
+passes, `dstPassMode` begins no storage pass (the `window: per replay` line's destination-read
+draws, storage passes and pass switches read 0), `rd__pass_wants_readable` is false, the MSAA
+epoch's exclusion and the fog drawn in it change nothing (`port/render/rd_replay.c`), and the
+restart steps that take the fixed-function blend after a crash or a loss are skipped because the
+run already drew with it (`port/platform/startup_retry.h`). A nonzero exact-blend field in
+`window: per replay` means the player opted in.
 
-**The Qualcomm rule.** The attachment read is not offered on Qualcomm's own Adreno driver
-(vendor 0x5143 with `VK_DRIVER_ID_QUALCOMM_PROPRIETARY`, or with the id unknown; Mesa's Turnip on
-the same GPUs reports its own id and keeps it). On the Odin 3 (Adreno 830, driver 512.800.72,
-issue 89) it returned wrong destination colours: white boxes around the leaves' clear texels, the
-title washed out, the menu panels white on white; the same title frame replays through the same
-path on lavapipe with no validation error and within one level of `ICO_RD_BLEND=fixed`, so the
-driver is wrong, not the port's use. The device line says so,
+What the exact blend draws when opted into: the screen prims, the VU meshes and the fog sprite
+whose fixed-function blend is not the GS's (the LERPs, mode 3, the Ad forms, mode 11, PABE on the
+premultiplied forms, COLCLAMP 0) on RGBA8 targets. What stays on the fixed-function blend: the
+premultiplied forms, the MSAA epoch's passes, targets other than RGBA8, the port's presentation
+overlay. Of the premultiplied forms the adds (modes 0 and 5) are exact on the blender (the shader
+writes the GS term `(Cs F) >> 7` and the blender adds two whole levels); the subtracts (modes 1
+and 6) are one level above the GS wherever `Cs F` is not a multiple of 128, because the GS's term
+is `(0 - Cs) F >> 7`, an arithmetic shift that rounds the negative product down, while the blender
+subtracts the truncated `(Cs F) >> 7` (`port/shaders/common.hlsli` (`gs_dual_out`);
+`port/shaders/gs_math.hlsli` (`gs_blend_ch`)). The staticBlur sprites and `blend_int` keep their
+own exact paths (`port/render/rd_dst_read.c`; `port/render/rd_replay.c` (`dstPassMode`,
+`rd__pass_wants_readable`)).
+
+Why the opt-in: the storage read ends and begins a pass at every switch between a shader-blended
+and a hardware-blended draw (`dstPassMode`): 887 passes a replay on an RTX 3090 against 53 to 75
+with the fixed-function blend, 432 against 40 on a GTX 1650, and on a contributor's M1 (MoltenVK,
+interlock) 54 ms and 750 passes a replay against 14 ms and 49 with `ICO_RD_BLEND=fixed` (issue
+102), for the last level of rounding on the LERP channels. Between the attachment read and the
+fixed-function blend (`rd_replay_tool --pass-dump` of a corpus frame at Original 4:3 1x, each
+way), about 95 % of SCENE's pixels differ, by one level on most, two on about one in eight, at
+most 5 or 6 where several blend steps add up; WORK0 to WORK3 and the shadow levels are identical.
+
+**The attachment read on Qualcomm's driver.** The attachment read is not offered on Qualcomm's own
+Adreno driver (vendor 0x5143 with `VK_DRIVER_ID_QUALCOMM_PROPRIETARY`, or with the id unknown;
+Mesa's Turnip on the same GPUs reports its own id and keeps it). On the Odin 3 (Adreno 830, driver
+512.800.72, issue 89) it returned wrong destination colours: white boxes around the leaves' clear
+texels, the title washed out, the menu panels white on white; the same title frame replays
+through the same path on lavapipe with no validation error and within one level of
+`ICO_RD_BLEND=fixed`, so the driver is wrong, not the port's use. The device line says so,
 `rhi_vk: destination read: interlock no, rasterization-order attachment read off on this driver
-(Qualcomm driver 512.800.72: wrong results on Adreno; ICO_VK_ATTACHMENT_READ=1 tries it)`, and the
-blend line carries the reason, `rd: blend: fixed-function (rounds up) (attachment read off:
-Qualcomm driver 512.800.72)`. No target is then made with the input attachment usage and no pass
-is begun readable: the picture is the fixed-function blend's. `ICO_VK_ATTACHMENT_READ=1`
-(`[dev] attachment_read = true`) offers the read anyway; `ICO_VK_FAKE_ADRENO=1` takes the branch on
-any device, for tests (`port/rhi/vk/vk_device.c`; `port/rhi/rhi_driver_version.h`
-(`rhi_driver_is_qualcomm_proprietary`); `port/rhi/rhi.h` (`RhiLimits.rasterOrderOff`)).
+(Qualcomm driver 512.800.72: wrong results on Adreno; ICO_VK_ATTACHMENT_READ=1 tries it); local
+read yes`, so `[dev] blend = attachment` is refused there (`is not on this device`).
+`ICO_VK_ATTACHMENT_READ=1` (`[dev] attachment_read = true`) offers the read anyway;
+`ICO_VK_FAKE_ADRENO=1` takes the branch on any device, for tests (`port/rhi/vk/vk_device.c`;
+`port/rhi/rhi_driver_version.h` (`rhi_driver_is_qualcomm_proprietary`); `port/rhi/rhi.h`
+(`RhiLimits.rasterOrderOff`)). On MoltenVK (`RhiLimits.moltenvk`, `; MoltenVK` on the `rhi_vk:`
+device line) the default is the same fixed-function blend as everywhere; an opt-in there behaves
+as on any other device. `ICO_VK_FAKE_LIMITS=moltenvk` reports MoltenVK, with no attachment read, on
+any device (`rd_blend_selftest_moltenvk_storage`).
 
-**The MoltenVK rule.** On MoltenVK (macOS and iOS; `VK_DRIVER_ID_MOLTENVK`, or Apple's vendor
-0x106B with the id unknown on the builds that link MoltenVK; `RhiLimits.moltenvk`, shown as
-`; MoltenVK` on the `rhi_vk:` device line) the default blend is the fixed-function one even though
-the interlock is offered (the reporter's M2 Pro, MoltenVK 1.4.2: `interlock yes,
-rasterization-order attachment read no`, issue 102). The exact path's cost is its pass switching
-(`dstPassMode`, `port/render/rd_replay.c`): a contributor's M1 replay of the reporter's dump took
-54 ms and 750 passes with MSAA off and the interlock, 16.7 ms and 59 with MSAA 2x (which draws
-fixed-function), and 14 ms and 49 with MSAA off and `ICO_RD_BLEND=fixed`: 3 to 4 times the frame
-for the exact blend's last level of rounding. iOS already had the rule (a `setenv` in
-`port/platform/ios/main_ios.c`, A14: the interlock also regressed the picture); it is now this one,
-in `rd__dst_init`, for both. The line is `rd: blend: fixed-function (rounds up) (MoltenVK: the exact
-blend's pass switching costs 3 to 4 times the frame; [dev] blend = storage keeps it)`, and the
-`ico_pc: summary:` line's blend text is the self-test's, `fixed-function (rounds up) (self-test:
-exact modes not tried: MoltenVK default is fixed-function; fixed-function ok N)`: only the
-fixed-function reference runs (A14's interlock regressed the picture, and the exact modes'
-pipelines would be compiled for nothing). The start-up pipeline set holds no destination-read keys
-on it: `rd__enumerate_reachable` adds them only when the mode in force is not OFF, and
-`rd__dst_init` and the self-test settle the mode before the set is made. The destination-read
-shader modules (`_dstrov`) are still created with the device, as before.
-`[dev] blend` / `ICO_RD_BLEND` forces any mode as everywhere (the init line then ends `(forced:
-MoltenVK's default is fixed-function)`, and the self-test tries the forced mode as everywhere).
-`ICO_VK_FAKE_LIMITS=moltenvk` reports MoltenVK, with no
-attachment read, on any device (`rd_blend_selftest_moltenvk`, `rd_blend_selftest_moltenvk_storage`).
-
-**The blend self-test.** A driver whose read returns the wrong colour draws a wrong picture with no
-error anywhere, so `rd_blend_selftest` checks the modes on the device at start, as the fog's
-self-test checks its depth reads ([The fog path and its self-test](#the-fog-path-and-its-self-test)). A frame of its
-own (never recorded or presented) is drawn on SCENE at its real size and scale, MSAA held off, in a
-256 x 64 GS pixel block in its middle: eight cells of PCSX2's forest pixels under the forest's tint
-sprite (`rd_pixel_test.c` `kTint`), a textured LERP quad whose clear texel must leave the colour
-behind it (the leaf case), two overlapping LERP draws (the second must blend over the first's
-result) and a glyph through the text sheet's shader. Nineteen samples are copied out and read back.
-The fixed-function blend runs first as the reference (within 2 levels of the GS arithmetic; if it
-fails, the two-pass fallback is tried and kept when it passes), then the exact modes the device has
-in the order above, each within 1 level of the GS arithmetic and of the reference's glyph. The
-first exact mode that passes is the one in force; none passing leaves the fixed-function blend. The
-window runs it before the start-up pipeline set (so the set is the chosen mode's), and again
-whenever SCENE is made at a new size. One line names the choice and every result:
+**The blend self-test.** A driver whose read or dual-source blend returns the wrong colour draws a
+wrong picture with no error anywhere, so `rd_blend_selftest` checks the blend in force on the
+device at start, on every device, as the fog's self-test checks its depth reads ([The fog path and
+its self-test](#the-fog-path-and-its-self-test)). A frame of its own (never recorded or
+presented) is drawn on SCENE at its real size and scale, MSAA held off, in a 256 x 64 GS pixel
+block in its middle: eight cells of PCSX2's forest pixels under the forest's tint sprite
+(`rd_pixel_test.c` `kTint`), a textured LERP quad whose clear texel must leave the colour behind it
+(the leaf case), two overlapping LERP draws (the second must blend over the first's result) and a
+glyph through the text sheet's shader. Nineteen samples are copied out and read back (one
+256 x 64 block, one readback; its pipelines are keys of the start-up set). The fixed-function
+blend runs first, the reference, within 2 levels of the GS arithmetic; if it fails, the two-pass
+fallback (`rd_set_no_dual`) is tried and kept when it passes. Then, only when `[dev] blend` opted
+into an exact mode the device has (`rd__dst_asked`), that mode runs, within 1 level of the GS
+arithmetic and of the reference's glyph, and is kept whatever its result. The window runs it
+before the start-up pipeline set and again whenever SCENE is made at a new size. One line names the
+blend in force and every result:
 
 ```
-rd: blend: exact (attachment read) (self-test: attachment ok 1, storage not on this device, fixed-function ok 1) on SCENE 640x448 at 1920x1344 texels in 318.3 ms
+rd: blend: fixed-function (self-test: fixed-function ok 1; exact modes not asked for: [dev] blend = attachment|storage tries one) on SCENE 640x448 at 1920x1344 texels in T ms
+rd: blend: exact (attachment read) (self-test: attachment ok 1, fixed-function ok 1; kept by [dev] blend) on SCENE 640x448 at 1920x1344 texels in T ms
+rd: blend: fixed-function (self-test: fixed-function fail N -> two-pass ok 1; exact modes not asked for: [dev] blend = attachment|storage tries one) on SCENE ...
 ```
 
-(lavapipe at 3x: the glyph one level off the fixed-function reference, the blender's rounding;
-the time is mostly the first compile of its pipelines, a run at a new scene size takes 50 to 90 ms
-there). A failing mode's worst sample, and a passing one's when it is not exact, gets a line of its
-own, `rd: blend: self-test: attachment fail 241 at tint cell 0 (texel 625,625): 255,255,255,4
-want 21,28,14,4` (read white by `ICO_RD_BLEND_SABOTAGE=attachment`). An `ICO_RD_BLEND` of `attachment` or `storage` is kept whatever its result (the
-line adds `; kept by ICO_RD_BLEND`); `ICO_RD_BLEND=fixed` (also what the restart after a crash in a
-destination-read pipeline sets) and a device without an exact mode run nothing
-(`rd: blend: fixed-function (rounds up) (self-test not run: ...)`). `ICO_RD_BLEND_SABOTAGE=`
-`attachment,storage,fixed` makes those modes' samples read white, for the fallback's tests
-(`port/render/rd_blend_selftest.c`; `port/render/rd.h` (`rd_blend_selftest`);
-`port/platform/window_host.c`).
+and the `ico_pc: summary:` line carries `blend fixed-function (self-test: fixed-function ok 1)`.
+A failing entry's worst sample, and a passing one's when it is not exact, gets a line of its own,
+`rd: blend: self-test: attachment fail 241 at tint cell 0 (texel 625,625): 255,255,255,4 want
+21,28,14,4` (read white by `ICO_RD_BLEND_SABOTAGE=attachment`). `ICO_RD_BLEND_SABOTAGE=`
+`attachment,storage,fixed,twopass` makes those entries' samples read white, for the fallback's
+tests; a run that took the two-pass fallback starts from the dual-source blend again at the next
+SCENE size, so each line is whole (`port/render/rd_blend_selftest.c`; `port/render/rd.h`
+(`rd_blend_selftest`); `port/platform/window_host.c`).
 
 ### The storage pass merge
 
@@ -1252,6 +1266,64 @@ lavapipe has no fragment shader interlock, so the tests that compare the merge's
 storage read; the release check is the shot list on an interlock card with and without the key
 (`port/render/rd_dst_read.c` (`rd__dst_merge_ok`, `rd__dst_merge`); `port/render/rd_replay.c`
 (`expandPasses`, `dstPassMode`)).
+
+## The device profile
+
+One renderer with device-class profiles: after `rd__gpu_init`, `rd__profile_init` decides
+`g_rd.profile` (`RdProfile`, `port/render/rd_internal.h`) once from `RhiLimits` (`tiler`,
+`localRead`, `vendorId`, `moltenvk`, `uintView`, `driverText`) and the backend, and every
+vendor-dependent choice of the renderer reads one of its flags; no other file of the renderer
+branches on a vendor (`port/render/rd_profile.c`). The classes: D3D12 (the backend), Apple /
+MoltenVK (`RhiLimits.moltenvk`), Adreno on Qualcomm's driver and Adreno on Turnip (vendor 0x5143;
+Turnip names itself in the driver text), Mali (0x13B5), PowerVR (0x1010), any other tile-based GPU
+(`RhiLimits.tiler`: Samsung, Broadcom, every Android GPU) on the PowerVR row, and the desktop
+immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan.
+
+| flag | desktop Vulkan | D3D12 | Adreno (Qualcomm's driver) | Adreno (Turnip) | Mali | PowerVR, other tile-based | Apple / MoltenVK |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| blend | fixed-function; `[dev] blend` opts into an exact mode | fixed-function; `[dev] blend = storage` opts into the ROV | fixed-function | fixed-function | fixed-function | fixed-function | fixed-function |
+| `fogLocal` | off | off | on where local read is offered | same | same | same | same |
+| `dateStencil` | off | off | on where local read is offered | same | same | same | same |
+| `storePlan` | off | off | on | on | on | on | on |
+| `blurFold` | off | off | on | on | off (the G52 is bound by its ALU) | on | on |
+| robust access | off | its own bounds rules | off | off | off | off | off |
+| `localRead` | as offered | none | as offered | as offered | as offered | as offered | as offered |
+| `uintViewWork`, `uintViewScene` | on where the backend has the view | on where the backend has the view | off | off | off | off | off |
+| `carefulSet` | off | off | off | off | off | off | off |
+
+The blend row is `rd_dst_read.c`'s ([Destination reads and blend
+paths](#destination-reads-and-blend-paths)), robust access the Vulkan backend's
+(`port/rhi/vk/vk_device.c`; [RHI.md](RHI.md#device-loss)); the profile reports both. The other
+flags are decisions only: the fog's local depth read, DATE through the stencil bit, the depth
+store plan, the folded staticBlur passes and the RGBA8_UINT views read them where those
+mechanisms are implemented, and a flag whose mechanism is not implemented changes nothing. Two
+are wired here: a target is made with `RHI_TEX_UINT_VIEW` by class when `uintViewWork` (the work
+buffers, `rd__work_class`) or `uintViewScene` (the scene-class targets) is on
+(`port/render/rd_core.c` (`rd__target_create_gpu`)), and with `RHI_TEX_INPUT_ATTACHMENT` and
+`RD_DST_USAGE_LOCAL_DATE` when `dateStencil` is on and the DATE stencil shader is in the table
+(`rd__dst_target_usage`). `uintView*` are off wherever `RhiLimits.uintView` is false, and
+`fogLocal` and `dateStencil` wherever `RhiLimits.localRead` is.
+
+Each flag has a `[dev]` key, exported by the host ([CONFIG.md](CONFIG.md)): `fog_path = "local"`
+(`ICO_RD_FOG_PATH=local`: `fogLocal` on; `inplace`, `copy` or `buffer`: off), `date_path =
+"stencil"|"snapshot"` (`ICO_RD_DATE_PATH`), `store_plan` (`ICO_RD_STORE_PLAN=1|0`), `blur_fold`
+(`ICO_RD_BLUR_FOLD=1|0`), `uint_view` (`ICO_RD_UINT_VIEW=1|work|0`: both views, the work buffers'
+only, none), `gpu_robust` (`ICO_GPU_ROBUST`). A flag a key set is marked `([dev])`; a key that
+asks for what the device lacks leaves the flag off and logs `rd: profile: [dev] fog_path = local
+(no local read): not on this device, the flag stays off`. A self-test that finds its mechanism
+wrong turns the flag off (`rd__profile_self_test_off`): the flag is marked `(self-test)` and the
+line `rd: profile: <flag> off (self-test)` is logged. The start line, once a run:
+
+```
+rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function; fog local on; DATE stencil; depth stores planned; blur fold on; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; pipelines the start-up set
+rd: profile: immediate-mode GPU (Mesa, Vulkan): blend fixed-function; fog local off; DATE snapshot; depth stores kept; blur fold off; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; pipelines the start-up set
+```
+
+and the `ico_pc: summary:` line carries the flags as in force after the blend's text
+(`rd__profile_text`; `port/render/rd_core.c` (`rd_summary_text`)): `profile tile-based GPU
+(Imagination, Vulkan): fog local on, DATE stencil, depth stores planned, blur fold on, local read
+yes, uint views off`. The Vulkan version is not in the class name (`RhiLimits` does not carry
+it); the `rhi_vk:` device line has it.
 
 ## Post passes
 
