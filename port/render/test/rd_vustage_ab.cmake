@@ -1,21 +1,22 @@
 # rd_vustage_ab: the per-triangle record against the old way, byte for byte
 # (docs/port/RENDER.md, "The vertex and triangle pre-passes").  For every
-# dump the list names (one path a line, relative to ROOT unless absolute,
-# '#' comments), at the Original preset at 4:3 and 1x and at the Enhanced
+# dump the list names (tools/vustage_dumps.txt: one path a line, relative to
+# the list's folder unless absolute, '*' globs, '#' comments), at the Original preset at 4:3 and 1x and at the Enhanced
 # preset at 4:3 and 2x, rd_replay_tool's --pass-dump with --stats twice
 # under ICO_RD_BLEND=fixed: with ICO_RD_VU_PREPASS=0 (every VU draw through
-# its program's entry and vu_legacy_ps) and with the pre-passes (vu_main_vs,
+# its program's entry and vu_ps) and with the pre-passes (vu_main_vs,
 # vu_particle_main_vs and vu_ps over the record); every named target's PNG
 # must be equal byte for byte, the run with the pre-passes must report two
 # passes (one where a dump draws no triangle) and no VU draw the old way.
 # Each run's stats lines are printed as the release's structural record.  A
 # missing list or dump is named and skipped; no dump read, or no device:
 # SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DROOT=<repo root> -DOUT=<a folder the test may write>
+# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
 if(NOT EXISTS "${LIST}")
   message(STATUS "SKIP: ${LIST}: no dump list")
   return()
 endif()
+get_filename_component(listDir "${LIST}" DIRECTORY)
 file(STRINGS "${LIST}" lines)
 set(dumps "")
 foreach(l IN LISTS lines)
@@ -24,9 +25,17 @@ foreach(l IN LISTS lines)
     continue()
   endif()
   if(NOT IS_ABSOLUTE "${l}")
-    set(l "${ROOT}/${l}")
+    set(l "${listDir}/${l}")
   endif()
-  if(EXISTS "${l}")
+  if(l MATCHES "[*]")
+    file(GLOB matched "${l}")
+    list(SORT matched)
+    if(matched)
+      list(APPEND dumps ${matched})
+    else()
+      message(STATUS "${l}: no dump matches, skipped")
+    endif()
+  elseif(EXISTS "${l}")
     list(APPEND dumps "${l}")
   else()
     message(STATUS "${l}: no such dump, skipped")

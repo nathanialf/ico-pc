@@ -1,0 +1,19 @@
+# Dump list for rd_vustage_ab (port/render/test/rd_vustage_ab.cmake: the
+# per-triangle record against the old way, byte for byte).  MACHINE-LOCAL:
+# these are paths on the maintainer's machine; the dumps themselves are never
+# committed.  Missing files are reported and skipped (no dump at all: SKIP).
+# Relative paths are relative to this file; '*' globs are allowed.
+#
+# the 2026-10-07 captures
+/primary/dev/ico-dumps/*.rddump
+# the corpus frames without VU commands (2D only: no record pass)
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/lightning/rd-00100.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/plain/rd-00100.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/puddle/rd-00100.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/queen/rd-00100.rddump
+# a Mac reporter's 16:9 frame, a device-loss frame, the deja vu 48:9 frame
+/primary/dev/ico-pc/build-host/tmp/evidence-v079/102/frame-20261015-161933-v4251.rddump
+/primary/dev/ico-pc/build-host/tmp/evidence-v079/95/loss-20261015-100428-lost.rddump
+/primary/dev/ico-pc/build-host/tmp/issue-drafts/deja/frame-20261013-125037-v2227.rddump
+# the forest (the field half pixel of a later SCENE target)
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port/keep/rd-00720.rddump

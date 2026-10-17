@@ -1264,16 +1264,17 @@ if(ICO_RUN_TESTS)
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS_SABOTAGE=ticks")
     set_tests_properties(rd_vuprepass_selftest_sabotage_tri
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS_SABOTAGE=tri")
-    # rd_vustage_ab (test/rd_vustage_ab.cmake): every dump of the corpus
-    # list (build-host/tmp/v0710/before/dumps.txt) replayed the old way (ICO_RD_VU_PREPASS=0, the programs'
-    # entries) and through the record, at Original 4:3 1x and Enhanced 4:3
-    # 2x under ICO_RD_BLEND=fixed: every named target byte for byte; SKIP
-    # without the list, its dumps or a device
+    # rd_vustage_ab (test/rd_vustage_ab.cmake): every dump of the
+    # machine-local list tools/vustage_dumps.txt replayed the old way
+    # (ICO_RD_VU_PREPASS=0, the programs' entries) and through the record,
+    # at Original 4:3 1x and Enhanced 4:3 2x under ICO_RD_BLEND=fixed: every
+    # named target byte for byte; SKIP without the list, its dumps or a
+    # device
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vustage_ab")
     add_test(NAME rd_vustage_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/build-host/tmp/v0710/before/dumps.txt"
-                     "-DROOT=${CMAKE_SOURCE_DIR}" "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vustage_ab"
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vustage_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vustage_ab.cmake")
     set_tests_properties(rd_vustage_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
     if(_env)
