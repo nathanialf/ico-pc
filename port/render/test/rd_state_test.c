@@ -1233,6 +1233,60 @@ static void countVu(const RdPipeKeyInt *keys, uint32_t n, uint32_t *plain, uint3
     }
 }
 
+/* The VU keys of the start-up set with the vertex pre-pass
+ * (rd__set_vu_prepass; docs/port/RENDER.md, "The vertex pre-pass"), in the
+ * Enhanced preset (the extended variant): the triangle stage's keys
+ * (vu_tri_vs, RD_PROG_PRELIT) and the particles' under the VU states, so
+ * two of the eleven VU vertex shaders' keys without it (perVariant, as
+ * enumerated without the pre-pass), and the ten pre-pass keys
+ * (rd__vu_pre_key), each once; no program entry's key but the particles';
+ * the whole set under RD_PIPELINE_REACHABLE_MAX.  The pre-pass is off
+ * again after. */
+static void testEnumerationPrepass(RdPipeKeyInt *keys, uint32_t perVariant)
+{
+    const bool keepPrepass = g_rd.vuPrepass;
+    const uint32_t nOff = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
+    rd__set_vu_prepass(true);
+    const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
+    uint32_t tri = 0, particle = 0, entries = 0, plain, ext;
+    countVu(keys, n, &plain, &ext);
+    for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+        tri += keys[i].vs == RD_VS_VU_TRI;
+        particle += keys[i].vs == RD_VS_VU_PARTICLE;
+        entries += keys[i].vs >= RD_VS_VU_PRELIT && keys[i].vs <= RD_VS_VU_GRID_SPEC;
+        if (keys[i].vs == RD_VS_VU_TRI) {
+            CHECK(keys[i].gs.program == RD_PROG_PRELIT,
+                  "pre-pass: key %u of vu_tri_vs carries "
+                  "program %u",
+                  i, keys[i].gs.program);
+        }
+    }
+    uint32_t pre = 0;
+    for (uint8_t v = RD_VS_VU_PRE_FIRST; v <= RD_VS_VU_PRE_LAST; v++) {
+        const RdPipeKeyInt k = rd__vu_pre_key(v);
+        uint32_t found = 0;
+        for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+            found += rd__pipe_key_equal(&keys[i], &k);
+        }
+        CHECK(found == 1, "pre-pass: the key of %s enumerated %u times", rd__vs_name(v), found);
+        pre += found == 1;
+        CHECK(k.gs.atst == RD_ATST_ALWAYS && k.fs == RD_FS_VU_PRE &&
+                  k.colorFmt == RHI_FMT_RGBA32_UINT && k.depthFmt == RHI_FMT_UNKNOWN,
+              "pre-pass: the key of %s", rd__vs_name(v));
+    }
+    printf("  with the vertex pre-pass: %u keys (%u without), vu_tri_vs %u, vu_particle_vs %u, "
+           "program entries %u, pre-pass %u\n",
+           n, nOff, tri, particle, entries, pre);
+    CHECK(entries == 0, "pre-pass: %u program entries' keys enumerated", entries);
+    CHECK(tri > 0 && tri == particle && (tri + particle) * 11u == perVariant * 2u,
+          "pre-pass: vu_tri_vs %u and vu_particle_vs %u keys, %u for the eleven shaders without",
+          tri, particle, perVariant);
+    CHECK(pre == RD_VS_VU_PRE_LAST - RD_VS_VU_PRE_FIRST + 1, "pre-pass: %u pre-pass keys", pre);
+    CHECK(n == nOff - perVariant + tri + particle + pre && n < RD_PIPELINE_REACHABLE_MAX,
+          "pre-pass: %u keys, %u without the pre-pass", n, nOff);
+    rd__set_vu_prepass(keepPrepass);
+}
+
 /* The VU keys of the start-up set (rd__enumerate_reachable_vu): out of the
  * box (the Original preset, 4:3, 1x, the original framerate) the plain
  * variants only; in a state other than out of the box (rd__vu_extended:
@@ -1267,6 +1321,7 @@ static void testEnumerationVu(RdPipeKeyInt *keys)
     CHECK(p1 == 0 && e1 > 0, "Enhanced: the extended VU keys only (%u/%u)", p1, e1);
     CHECK(p2 > 0 && e2 == 0, "Enhanced, plain only: the plain VU keys only (%u/%u)", p2, e2);
     CHECK(!box || (p0 == p2 && p0 == e1), "the variants' key counts (%u, %u, %u)", p0, p2, e1);
+    testEnumerationPrepass(keys, p1 + e1);
     g_rd.settings.preset = keepPreset;
     g_rd.settings.interpolate = keepInterp;
     g_rd.vuPlainOnly = keepPlain;

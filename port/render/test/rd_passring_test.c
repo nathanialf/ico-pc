@@ -9,10 +9,11 @@
  *             entries (whole at 430 entries a replay), never more than
  *             the ring holds
  *   markers   the marker push returns is the entry's sequence number
- *   pipeline  only a render pass or exact blend takes the pipeline asked
+ *   pipeline  only a render pass, exact blend or VU pre-pass takes the pipeline asked
  *             for; an upload batch takes its bytes
  *   format    a pass, a copy and the present as the loss report prints
- *             them
+ *             them; the VU vertex pre-pass with its vertices and record
+ *             and the pipeline it asked for
  *   bisect    the loss bisect's line for a pass, a copy and a pass of
  *             unknown count, in the same words */
 #include "rd_passring.h"
@@ -168,6 +169,22 @@ static void testFormat(void)
     CHECK(strlen(small) == 7);
 }
 
+static void testVuPre(void)
+{
+    /* before list 0: no list in force */
+    rd__passring_reset();
+    rd__passring_frame(9, 40, 0);
+    rd__passring_push(RD_PASSK_VU_PRE, 0, 1024, 2, 0, 1200, 0, 0, -1);
+    rd__passring_pipeline(3, 30, 26, 0);
+    char line[320];
+    rd_passring_format(rd_passring_get(0), NULL, line, sizeof(line));
+    CHECK(strcmp(line, "#1 replay 9 frame 40 list -: VU pre-pass, 1200 vertices into the record "
+                       "(1024x2), pipeline 3 (vs 30 fs 26 dst 0)") == 0);
+    if (strstr(line, "VU pre-pass, 1200") == NULL) {
+        fprintf(stderr, "got: %s\n", line);
+    }
+}
+
 static void testBisect(void)
 {
     rd__passring_reset();
@@ -198,6 +215,7 @@ int main(void)
     testWrap();
     testPrintStart();
     testFormat();
+    testVuPre();
     testBisect();
     printf("rd_passring_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;

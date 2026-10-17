@@ -11,7 +11,9 @@
  * Cases:
  *   prelit   a normal_c model (four strips, two VU batches, a strip restart
  *            inside a batch) through p2o_MakePacket and reg_DispObj, region
- *            test (code 32)
+ *            test (code 32); this case and the four below are also replayed
+ *            with the VU vertex pre-pass switched, the picture byte for byte
+ *            the same (gpuCase)
  *   scissor  the same model with the clip type that gives code 36: two draws
  *            a batch (cut with ABE forced on, then kick)
  *   cluster  a skinned model (two bones) through reg_dispCObj (code 20)
@@ -659,7 +661,7 @@ static void applyState(const RdStateBlock *s)
     rd_uv_offset(0.0f, 0.0f);
 }
 
-static uint8_t s_imgA[512 * 512 * 4], s_imgB[512 * 512 * 4];
+static uint8_t s_imgA[512 * 512 * 4], s_imgB[512 * 512 * 4], s_imgC[512 * 512 * 4];
 
 /* Frame 2: the reference triangles (or sprites) in the state the mesh draw
  * had, over the same clear. */
@@ -694,7 +696,10 @@ static void compare(const char *what, int minCover)
     CHECK(cover >= minCover, "%s: only %d pixels drawn", what, cover);
 }
 
-/* One case on the device: the game path, then the reference. */
+/* One case on the device: the game path, then the reference.  The game
+ * path's frame is replayed again with the VU vertex pre-pass switched
+ * (rd__set_vu_prepass; on by default on the device): the picture byte for
+ * byte the same either way. */
 static void gpuCase(const char *what, void (*record)(void), void (*ref)(void), RdPrim prim,
                     int minCover)
 {
@@ -702,6 +707,16 @@ static void gpuCase(const char *what, void (*record)(void), void (*ref)(void), R
     if (!readScene(s_imgA)) {
         CHECK(0, "%s: SCENE readback", what);
         return;
+    }
+    {
+        const bool on = g_rd.vuPrepass;
+        rd__set_vu_prepass(!on);
+        rd__replay_frame(rd__last_frame(), 0, false);
+        const bool read = readScene(s_imgC);
+        rd__set_vu_prepass(on);
+        CHECK(read && memcmp(s_imgA, s_imgC, sizeof(s_imgA)) == 0,
+              "%s: the picture with the VU vertex pre-pass %s differs from the one with it %s",
+              what, on ? "off" : "on", on ? "on" : "off");
     }
     Found fd;
     walkFrame(rd__last_frame(), &fd);
@@ -3543,19 +3558,31 @@ int main(int argc, char **argv)
         stretchSamePixels();
     }
 
-    /* every pipeline created is in the enumerated reachable set */
-    static RdPipeKeyInt keys[RD_PIPELINE_REACHABLE_MAX];
+    /* every pipeline created is in the enumerated reachable set: the set
+     * with the VU vertex pre-pass as the device has it, and the set with it
+     * switched (gpuCase drew each case both ways) */
+    static RdPipeKeyInt keys[2 * RD_PIPELINE_REACHABLE_MAX];
     const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
     const uint32_t ns = rd__enumerate_reachable_screen(keys, RD_PIPELINE_REACHABLE_MAX);
     rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
-    printf("  pipelines: %u created, %u reachable (%u screen and post)\n", rd__pipeline_count(), n,
-           ns);
-    CHECK(n < RD_PIPELINE_REACHABLE_MAX && ns < 400, "reachable pipelines %u (screen %u)", n, ns);
+    const bool prepassOn = g_rd.vuPrepass;
+    rd__set_vu_prepass(!prepassOn);
+    const uint32_t n2 =
+        rd__enumerate_reachable(keys + RD_PIPELINE_REACHABLE_MAX, RD_PIPELINE_REACHABLE_MAX);
+    rd__set_vu_prepass(prepassOn);
+    printf("  pipelines: %u created, %u reachable (%u screen and post; %u with the vertex "
+           "pre-pass switched)\n",
+           rd__pipeline_count(), n, ns, n2);
+    CHECK(n < RD_PIPELINE_REACHABLE_MAX && n2 < RD_PIPELINE_REACHABLE_MAX && ns < 400,
+          "reachable pipelines %u and %u (screen %u)", n, n2, ns);
     for (uint32_t i = 0; i < rd__pipeline_count(); i++) {
         const RdPipeKeyInt *k = rd__pipeline_key_at(i);
         int found = 0;
         for (uint32_t j = 0; j < n && j < RD_PIPELINE_REACHABLE_MAX; j++) {
             found |= rd__pipe_key_equal(&keys[j], k);
+        }
+        for (uint32_t j = 0; j < n2 && j < RD_PIPELINE_REACHABLE_MAX; j++) {
+            found |= rd__pipe_key_equal(&keys[RD_PIPELINE_REACHABLE_MAX + j], k);
         }
         CHECK(found, "created pipeline %u (prog %u vs %u blend %u z %u/%u) is not enumerated", i,
               k->gs.program, k->vs, k->gs.blend, k->gs.ztst, k->gs.zwrite);

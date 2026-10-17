@@ -23,6 +23,14 @@
  *             replays each): from the fifth on, when the frame ring and the
  *             temporary target pool are warm, nothing is created or
  *             destroyed either, and only the morphing mesh is uploaded.
+ *   Both run without the VU vertex pre-pass (rd__set_vu_prepass), whose
+ *   pass and copies the barrier counts leave out;
+ *   prepass   the replay's frame replayed 200 times with it: after the
+ *             first two replays nothing is created or destroyed, every
+ *             replay records one pre-pass with the same vertices, draws
+ *             every mesh command through it (no draw the old way) and the
+ *             same barriers, and the picture is the one drawn without it,
+ *             byte for byte.  The reachable set below is made with it.
  *
  * With a dump instead (a measurement tool):
  *   rd_perf_test --dump FILE [--enhanced] [--resolution N] [--full-height]
@@ -271,6 +279,11 @@ typedef struct Sum {
     /* screen-prim draws per replay, one per command and merged
      * (least, most) */
     uint32_t screenCmdMin, screenCmdMax, screenDrawMin, screenDrawMax;
+    /* the VU vertex pre-pass (rd.h RdPerfRecord.vuPre*): its passes, draws
+     * and the draws drawn the old way, summed; its vertices a replay
+     * (least, most) */
+    uint64_t prePasses, preDraws, preFallbacks;
+    uint32_t preVertMin, preVertMax;
 } Sum;
 
 static void add(Sum *s, const RdPerfRecord *r)
@@ -322,6 +335,15 @@ static void add(Sum *s, const RdPerfRecord *r)
     s->groups += r->bindGroups;
     s->uniformGroups += r->uniformGroups;
     s->textureGroups += r->textureGroups;
+    s->prePasses += r->vuPrePasses;
+    s->preDraws += r->vuPreDraws;
+    s->preFallbacks += r->vuPreFallbacks;
+    if (s->n == 1 || r->vuPreVertices < s->preVertMin) {
+        s->preVertMin = r->vuPreVertices;
+    }
+    if (s->n == 1 || r->vuPreVertices > s->preVertMax) {
+        s->preVertMax = r->vuPreVertices;
+    }
 }
 
 static void print(const char *what, const Sum *s)
@@ -612,6 +634,10 @@ static int synthetic(void)
         return 77;
     }
     makeAssets();
+    /* the counts below are those of a replay without the vertex pre-pass
+     * (the prepass phase after them measures it) */
+    const bool prepassDevice = g_rd.vuPrepass;
+    rd__set_vu_prepass(false);
 
     /* replay: one recording, 200 replays (rd_end_frame replays it once) */
     recordFrame(0);
@@ -663,6 +689,52 @@ static int synthetic(void)
     checkBarriers("replay", &rest, BARRIERS_REPLAY, BARRIERS_REPLAY_GLOBAL);
     checkScreen("replay", &rest);
 
+    /* prepass: the same frame with the VU vertex pre-pass (rd_replay_vu.c
+     * rd__vu_prepass), where the device takes it */
+    if (prepassDevice) {
+        const uint32_t barriersOff = rest.barrierMax;
+        rd__set_vu_prepass(true);
+        memset(&first, 0, sizeof(first));
+        memset(&rest, 0, sizeof(rest));
+        seen = 0;
+        const RdFrame *pf = rd__last_frame();
+        for (int i = 0; i < 200 && pf; i++) {
+            rd__replay_frame(pf, 0, true);
+            drain(&first, &rest, 2, &seen);
+        }
+        for (int i = 0; i < RHI_FRAMES_IN_FLIGHT + 1; i++) {
+            rd__replay_frame(pf, 0, true);
+            drain(&first, &rest, 2, &seen);
+        }
+        uint8_t *withPre = readDisplay();
+        samePixels("the VU vertex pre-pass", ref, withPre);
+        free(withPre);
+        print("prepass (first 2)", &first);
+        print("prepass (steady)", &rest);
+        printf("prepass: %u..%u vertices a replay, %.1f draws a replay, %llu draws the old way; "
+               "barriers %u..%u against %u without\n",
+               rest.preVertMin, rest.preVertMax, rest.n ? (double)rest.preDraws / rest.n : 0.0,
+               (unsigned long long)rest.preFallbacks, rest.barrierMin, rest.barrierMax,
+               barriersOff);
+        CHECK(rest.created == 0 && rest.destroyed == 0 && rest.allocs == 0,
+              "prepass: %llu created, %llu destroyed, %llu allocations after the first two",
+              (unsigned long long)rest.created, (unsigned long long)rest.destroyed,
+              (unsigned long long)rest.allocs);
+        CHECK(rest.n > 0 && rest.prePasses == rest.n && rest.preVertMin > 0 &&
+                  rest.preVertMin == rest.preVertMax && rest.preDraws >= (uint64_t)DRAWS * rest.n,
+              "prepass: %llu passes in %u replays, %u..%u vertices, %llu draws",
+              (unsigned long long)rest.prePasses, rest.n, rest.preVertMin, rest.preVertMax,
+              (unsigned long long)rest.preDraws);
+        CHECK(rest.preFallbacks == 0, "prepass: %llu mesh draws drawn the old way",
+              (unsigned long long)rest.preFallbacks);
+        CHECK(rest.n > 0 && rest.barrierMin == rest.barrierMax && rest.barrierMin > barriersOff,
+              "prepass: %u..%u barriers a replay (%u without the pre-pass)", rest.barrierMin,
+              rest.barrierMax, barriersOff);
+        checkGroups("prepass", &rest);
+        checkScreen("prepass", &rest);
+        rd__set_vu_prepass(false);
+    }
+
     /* record: 200 frames as the game makes them */
     memset(&first, 0, sizeof(first));
     memset(&rest, 0, sizeof(rest));
@@ -703,9 +775,11 @@ static int synthetic(void)
     checkScreen("record", &rest);
 
     /* the reachable set, as the window creates it at
-       start-up (rd_precreate_pipelines): every key makes a pipeline.
+       start-up (rd_precreate_pipelines): every key makes a pipeline, the
+       vertex pre-pass's among them where the device takes it.
        rd_perf_mali runs this on a Mali-G68's limits (ICO_VK_FAKE_LIMITS=
        mali), where a key past them would be refused by the limit's name */
+    rd__set_vu_prepass(prepassDevice);
     {
         static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
         const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_CACHE_MAX);
