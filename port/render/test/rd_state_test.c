@@ -453,6 +453,29 @@ static void testAlphaMerge(void)
                     CHECK(rd__plan_screen_draw(&off, RD_PRIM_TRIANGLES, RD_SPACE_WORLD,
                                                RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, ref) == 1,
                           "alpha merge: the plan without the test is one draw");
+                    /* the merge adds no pipeline key: every key of the
+                     * merged plan is a key of the split's (the merged draw
+                     * is the passing draw's key, which the failing one
+                     * shares where the merge applies), so the enumerated
+                     * sets are the same either way */
+                    {
+                        RdDrawPass sp[2];
+                        rd__set_alpha_merge(false);
+                        const int ns =
+                            rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD,
+                                                 RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, sp);
+                        rd__set_alpha_merge(true);
+                        for (int i = 0; i < n; i++) {
+                            int found = 0;
+                            for (int j = 0; j < ns; j++) {
+                                found |= rd__pipe_key_equal(&dp[i].key, &sp[j].key);
+                            }
+                            CHECK(found,
+                                  "alpha merge: zwrite %d afail %d ate %d alpha %s: draw %d's "
+                                  "key is not a key of the split plan",
+                                  zw, afail, ate, am ? "masked" : "written", i);
+                        }
+                    }
                     int want;
                     const int merged =
                         ate && !zw &&
@@ -487,6 +510,36 @@ static void testAlphaMerge(void)
                               zw, afail, am ? "masked" : "written");
                     }
                 }
+            }
+        }
+    }
+    /* the game's FB_ONLY state (TEST 0x5140D) with Z write off, with and
+     * without a depth target, every enumerated blend: the merged draw's key
+     * is in the screen set (rd__enumerate_reachable_screen) */
+    {
+        static RdPipeKeyInt keys[RD_PIPELINE_REACHABLE_MAX];
+        const uint32_t nk = rd__enumerate_reachable_screen(keys, RD_PIPELINE_REACHABLE_MAX);
+        static const int kBlends[] = {-1, 0, 1, 2, 4, 5, 6, 7};
+        for (int dz = 0; dz < 2; dz++) {
+            for (size_t b = 0; b < sizeof(kBlends) / sizeof(kBlends[0]); b++) {
+                RdStateBlock s;
+                RdDrawPass dp[2];
+                rd__reset_state_block(&s);
+                s.ds.test = rd_test_from_gs(RD_TEST_AT_GT64_FBONLY);
+                s.ds.zwrite = RD_ZWRITE_OFF;
+                s.ds.abe = kBlends[b] >= 0;
+                s.ds.blend = (uint8_t)(kBlends[b] >= 0 ? kBlends[b] : 0);
+                const int n =
+                    rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, RHI_FMT_RGBA8_UNORM,
+                                         dz ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN, dp);
+                int found = 0;
+                for (uint32_t j = 0; j < nk && j < RD_PIPELINE_REACHABLE_MAX && n == 1; j++) {
+                    found |= rd__pipe_key_equal(&dp[0].key, &keys[j]);
+                }
+                CHECK(n == 1 && found,
+                      "alpha merge: FB_ONLY without Z write (depth %d, blend %d): %d draws, "
+                      "enumerated %d",
+                      dz, kBlends[b], n, found);
             }
         }
     }

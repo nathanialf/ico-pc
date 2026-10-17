@@ -507,7 +507,8 @@ static void testRailing(int fba)
  * passing one writes, so the GS draws A, then B over it: the overlap is
  * red.  The split draws the passing fragments (B) first and the
  * failing ones (A) after, and the overlap is green.  RGB_ONLY with FBMSK
- * masking alpha is the same case, the alpha left at the clear's. */
+ * masking alpha is the same case, the alpha left at the clear's (drawn in
+ * UI space, where the game reaches colour mask 7). */
 static void testAlphaOrder(int rgbOnly, int merge)
 {
     static const uint8_t clr[4] = {0, 0, 0, 0x11};
@@ -535,7 +536,10 @@ static void testAlphaOrder(int rgbOnly, int merge)
                             vtx(ox + 96 * 16, oy + 64 * 16, drawZ, green, 0.0f, 0.0f),
                             vtx(ox + 64 * 16, oy + 32 * 16, drawZ, red, 0.0f, 0.0f),
                             vtx(ox + 128 * 16, oy + 64 * 16, drawZ, red, 0.0f, 0.0f)};
-        rd_screen_prims(RD_PRIM_SPRITES, v, 4, RD_SPACE_WORLD, 1, 0);
+        /* RGB_ONLY in UI space: colour mask 7 is reachable there only (the
+         * dark volume's FBMSK on the list-11 2D draws), so the pipeline is
+         * in the enumerated set testPipelines checks */
+        rd_screen_prims(RD_PRIM_SPRITES, v, 4, rgbOnly ? RD_SPACE_UI : RD_SPACE_WORLD, 1, 0);
     }
     rd_color_mask(0u);
     rd_end_frame(0);

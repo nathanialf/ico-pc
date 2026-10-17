@@ -588,7 +588,9 @@ write and turns RGB_ONLY without alpha into FB_ONLY ("Failing alpha test is a NO
 `GSRendererHW.cpp`). The split had drawn every failing fragment after every passing one, so where a
 failing and a passing fragment of one draw met on a pixel the later one in the GS's order did not
 always win (issues 95 and 103). DATE, FBA, PABE and the blend ride on the one draw as
-on both. The scissor batches' two draws (code 36: the clipped fans with ABE forced on, then the
+on both. The merged draw's key is the passing draw's, which the failing draw
+shares wherever the merge applies, so the merge adds and removes no pipeline key: the dual,
+no-dual and exact-blend sets keep their counts. The scissor batches' two draws (code 36: the clipped fans with ABE forced on, then the
 strip's kicks) are another state and another set of triangles, not this condition, and stay two
 (`port/render/rd_replay.c` (`doVuDraw`)). The split still orders the passing fragments first where
 it remains: Z write on (each draw writes other buffers), RGB_ONLY with alpha written, ZB_ONLY with
@@ -598,7 +600,7 @@ sprites of list 11 on the title frame; there 6 VU commands and 2 screen prims, o
 whose other 166 alpha-tested ones write Z. The log says once that the rule is in effect: `rd: alpha test: a draw with Z write off
 whose failing pixels write what its passing pixels write (AFAIL FB_ONLY, RGB_ONLY without alpha) is
 one draw without the test, in the GS's order (reported once)`; `rd__set_alpha_merge(false)` plans the
-two draws (tests: ctest `rd_state` `testAlphaMerge`, the condition table; ctest `rd_pixel`
+two draws (tests: ctest `rd_state` `testAlphaMerge`, the condition table, each merged key a key of the split plan, and the game's FB_ONLY state without Z write in the screen set; ctest `rd_pixel`
 `testAlphaOrder`, an overlap the split drew in the other order).
 
 The cache holds `RD_PIPELINE_CACHE_MAX` keys, four times `RD_PIPELINE_REACHABLE_MAX` (1024, the
