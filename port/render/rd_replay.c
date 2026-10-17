@@ -2670,6 +2670,28 @@ static void frameRefresh(Replay *r, const DrawSetup *ds)
     }
 }
 
+RdUniform rd__replay_vu_frame(const RdStateBlock *st, uint32_t picture)
+{
+    /* frameRefresh's FrameCB for a VU draw (no screen copy: the target's
+     * own offset) under the state st, prepareDraw's target and depth */
+    const RdTargetRec *tc = rd__target_rec(st->color);
+    if (!tc || !tc->color.id) {
+        return (RdUniform){{0}, 0};
+    }
+    const RdTargetRec *td = rd__target_rec(st->depth);
+    const uint32_t tdId = td && td->withDepth ? st->depth : 0u;
+    const float ox = 2048.0f - (float)(st->gsW >> 1);
+    float oy = 2048.0f - (float)(st->gsH >> 1);
+    if (st->useOffset & RD_TARGET_HALF_Y) {
+        oy += 0.5f;
+    }
+    s_framePicture = picture;
+    s_framePictureFrameH = st->gsH;
+    const RdUniform u = frameGroupOf(tc, ox, oy, rd__target_z_scale(tdId));
+    s_framePicture = s_framePictureFrameH = 0;
+    return u;
+}
+
 /* The scissor, the pass and FrameCB; returns the texture group, id 0 when
  * the scissor leaves nothing to draw.  With scOut the scissor is returned
  * (doScreen sets it when it draws) instead of set, and the sampler's id

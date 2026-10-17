@@ -685,6 +685,9 @@ typedef struct VuPre {
     uint8_t particle;      /* RDC_PARTICLES */
     uint8_t ticks;         /* ICO_VU_TICKS: slot C, the tick stage's draws */
     uint8_t rec;           /* drawn into the record */
+    /* the FrameCB its draws bind (rd__replay_vu_frame: the walk's state
+     * at the command), which the record stages read too */
+    RdUniform frame;
 } VuPre;
 
 static VuPre *s_pre;
@@ -893,9 +896,10 @@ void rd__vu_prepass(const RdFrame *f, int keep)
     s_preRunning = false;
 }
 
-/* one stage draw of entry e into the record (pass V's sprite stage, pass
- * T's stages): its VuCB with vu_tri.w = w, the key, count points; false
- * when it could not be recorded (the ring full, a pipeline missing) */
+/* one draw of entry e into the record (pass V's vertex and sprite stages,
+ * pass T's stages): its VuCB with vu_tri.w = w, its draws' FrameCB, the
+ * key, count points; false when it could not be recorded (the ring full, a
+ * pipeline missing) */
 static bool vuStageDraw(const VuPre *e, IcoVuCB *vcb, uint64_t dOff, const RdPipeKeyInt *key,
                         uint32_t w, uint32_t count)
 {
@@ -912,6 +916,7 @@ static bool vuStageDraw(const VuPre *e, IcoVuCB *vcb, uint64_t dOff, const RdPip
     }
     const uint32_t offs[3] = {(uint32_t)dOff, (uint32_t)vOff, (uint32_t)e->src.bonesOff};
     rd__set_pipeline(rd__replay_cl(), p, key);
+    rd__bind_uniform(rd__replay_cl(), 0, e->frame); /* the command's draws' FrameCB */
     rhi_cmd_set_bind_group_offsets(rd__replay_cl(), 1, g1, offs, 3);
     if (g_rdWin.first && g_rdWin.drawLast && g_rdWin.passes == g_rdWin.last) {
         /* the draw note: the command's, its class the program's own
@@ -977,11 +982,21 @@ static void vuRecPassCopy(uint32_t row0, uint32_t rows, bool muted)
 static void vuPrepassRun(const RdFrame *f, int keep)
 {
     /* 1. every mesh, grid and particle command: its source, its vertices
-     * or sprites */
+     * or sprites, the FrameCB of its draws (the state block followed as
+     * the walk does, replayFrame: rd__apply_state from the frame's start
+     * state; consecutive commands of one target, size, offset, depth and
+     * picture share one) */
+    RdStateBlock st = f->startState;
+    RdUniform frame = {{0}, 0};
+    uint32_t frameKey[6];
+    memset(frameKey, 0xFF, sizeof(frameKey));
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
         const RdCmdList *list = &f->lists[l];
         for (uint32_t i = 0; i < list->count; i++) {
             const RdCmd *c = &list->cmds[i];
+            if (rd__apply_state(&st, c)) {
+                continue;
+            }
             if (c->type != RDC_MESH && c->type != RDC_SKINNED && c->type != RDC_GRID &&
                 c->type != RDC_PARTICLES) {
                 continue;
@@ -1002,6 +1017,13 @@ static void vuPrepassRun(const RdFrame *f, int keep)
             }
             e->cmd = c;
             e->slotC = ~0u;
+            const uint32_t picture = (uint32_t)c->b[3] | ((uint32_t)c->b[6] << 8);
+            const uint32_t fk[6] = {st.color, st.depth, st.gsW, st.gsH, st.useOffset, picture};
+            if (memcmp(fk, frameKey, sizeof(fk)) != 0) {
+                frame = rd__replay_vu_frame(&st, picture);
+                memcpy(frameKey, fk, sizeof(fk));
+            }
+            e->frame = frame;
             if (c->type == RDC_PARTICLES) {
                 e->particle = 1;
                 e->count = e->src.p.vertsPerBatch;
@@ -1012,6 +1034,9 @@ static void vuPrepassRun(const RdFrame *f, int keep)
                 if (!e->preVs || e->count < 3u) {
                     e->count = 0; /* no triangle: the old way */
                 }
+            }
+            if (!e->frame.group.id) {
+                e->count = 0; /* no FrameCB for its target: the old way */
             }
             s_preN++;
         }

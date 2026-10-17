@@ -123,13 +123,21 @@ bool rd__replay_prepare_draw(Replay *r, DrawSetup *ds, const RhiRect *dateArea);
 uint32_t rd__replay_msaa_want(void);
 const void *rd__replay_pass_push(RdPassKind kind, uint32_t color, uint32_t cw, uint32_t ch,
                                  uint32_t depth, uint32_t dw, uint32_t dh, int storage, int post);
+/* rd_replay.c frameRefresh's FrameCB of a VU draw of the camera picture
+ * picture (RdCmd b[3] | b[6] << 8) under the state st (its target, size,
+ * offset and depth), for the record stages of rd_replay_vu.c rd__vu_prepass
+ * to evaluate a command's triangles as its draw's vertex shader would; id
+ * 0 when the target has no texture */
+RdUniform rd__replay_vu_frame(const RdStateBlock *st, uint32_t picture);
 /* rd_replay_vu.c.
  * rd__replay_vu       a VU draw under its camera's picture
  * rd__vu_prepass      before list 0 (replayFrame, after the uploads and
- *                     the first clears): the vertex pre-pass (docs/port/
- *                     RENDER.md, "The vertex pre-pass"), every mesh and
- *                     grid command's vertices into the record, copied into
- *                     the frame slot's record buffer
+ *                     the first clears): the vertex and triangle pre-passes
+ *                     (docs/port/RENDER.md, "The vertex and triangle
+ *                     pre-passes"), every mesh and grid command's vertices
+ *                     and triangles and every particle command's sprites
+ *                     into the record, copied into the frame slot's record
+ *                     buffer
  * rd__vu_prepass_shutdown  the record's textures and buffers, the entries
  *                     (rd__gpu_shutdown) */
 void rd__replay_vu(Replay *r, const RdFrame *f, const RdCmd *c);
