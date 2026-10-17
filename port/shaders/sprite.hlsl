@@ -476,3 +476,47 @@ float date_snap_ps(DateSnapIn i) : SV_Target0
     float a = g_texture.Load(int3(int2(i.pos.xy), 0)).a;
     return a * 255.0 >= 127.5 ? 1.0 : 0.0;
 }
+
+// DATE through the stencil (rd_replay_tiler.c rd__replay_date_take: a DATE draw's
+// destination alpha test without the R8 snapshot, inside the draw's own
+// pass; RD_DATE_STENCIL_BIT). Both drawn with blit_vs over the area the
+// draw can touch (the scissor), colour mask 0, the scene depth bound with
+// its test ALWAYS and no write:
+//   date_clear_ps    no output and no read: the pipeline's stencil
+//                    (RD_STENCIL_DATE_CLEAR) writes 0 into bit 6 over the
+//                    area
+//   date_stencil_ps  the colour attachment read as an input attachment
+//                    (Vulkan local read, after the colour barrier): the
+//                    fragment is kept where the alpha's MSB is set, as
+//                    date_snap_ps writes 1 into the snapshot, and the
+//                    pipeline's stencil (RD_STENCIL_DATE_SET) writes 1 into
+//                    bit 6 there. Group 2 rd's layoutLocal (t1 the input
+//                    attachment). Its DXIL reads t1 as a texture (never
+//                    used: D3D12 has no local read). Built with
+//                    ICO_DATE_STENCIL=1 (the other entries keep no input
+//                    attachment).
+// The DATE draw then tests bit 6 (RD_STENCIL_DATE_TEST0 / TEST1 for DATM 0
+// / 1) with DF_DATE off, so it sees the alpha as it was before its first
+// primitive, as the snapshot did.
+void date_clear_ps(DateSnapIn i)
+{
+}
+
+// built with ICO_DATE_STENCIL=1 alone: the input attachment's declaration
+// adds the InputAttachment capability to every entry of the file
+#if defined(ICO_DATE_STENCIL) && defined(__spirv__)
+[[vk::input_attachment_index(0)]] SubpassInput<float4> g_dateIn : register(t1, space2);
+#define DATE_LOCAL_READ 1
+#endif
+
+void date_stencil_ps(DateSnapIn i)
+{
+#ifdef DATE_LOCAL_READ
+    float a = g_dateIn.SubpassLoad().a;
+#else
+    float a = g_texture.Load(int3(int2(i.pos.xy), 0)).a;
+#endif
+    if (!(a * 255.0 >= 127.5)) {
+        discard;
+    }
+}

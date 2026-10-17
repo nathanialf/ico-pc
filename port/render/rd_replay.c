@@ -224,6 +224,13 @@ bool rd__gpu_init(void *sdlWindow)
         static const RhiBindSlot sa[1] = {{0, RHI_BIND_INPUT_ATTACHMENT, FS}};
         g_rd.layoutDstAttach = makeLayout(sa, 1, "rd dst attachment");
     }
+    /* group 2 of the passes' own reads by local read (rd__fs_local_read:
+     * the fog's depth, DATE's colour), wherever the device has local read */
+    if (lim->localRead) {
+        static const RhiBindSlot sl[2] = {{1, RHI_BIND_INPUT_ATTACHMENT, FS},
+                                          {2, RHI_BIND_SAMPLED_TEXTURE, FS}};
+        g_rd.layoutLocal = makeLayout(sl, 2, "rd local read");
+    }
     {
         /* the embedded modules' size, once a run (a phone's driver
            compiles the start-up set in time about proportional to it;
@@ -374,10 +381,10 @@ void rd__gpu_shutdown(void)
             rhi_destroy_shader(g_rd.fsDstAtt[i]);
         }
     }
-    RhiBindGroupLayout ls[7] = {g_rd.layoutFrame,    g_rd.layoutDraw, g_rd.layoutTex,
-                                g_rd.layoutInt,      g_rd.layoutVu,   g_rd.layoutDstStorage,
-                                g_rd.layoutDstAttach};
-    for (int i = 0; i < 7; i++) {
+    RhiBindGroupLayout ls[8] = {g_rd.layoutFrame,     g_rd.layoutDraw, g_rd.layoutTex,
+                                g_rd.layoutInt,       g_rd.layoutVu,   g_rd.layoutDstStorage,
+                                g_rd.layoutDstAttach, g_rd.layoutLocal};
+    for (int i = 0; i < 8; i++) {
         if (ls[i].id) {
             rhi_destroy_bind_group_layout(ls[i]);
         }
@@ -1042,6 +1049,8 @@ static bool msaaPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, ui
 static void msaaAttach(RdTargetRec *c, RdTargetRec *d, RhiLoadOp colorLoad, RhiLoadOp depthLoad,
                        RhiTexture *colorTex, RhiTexture *depthTex);
 
+static bool depthWantsReadable(const RdTargetRec *c, const RdTargetRec *d);
+
 static void endPass(Replay *r)
 {
     flushScreenRun(r); /* the run's draw goes before anything after it */
@@ -1055,7 +1064,7 @@ static void endPass(Replay *r)
             rd__transition(s_cl, tc->color, &tc->colorState, RHI_STATE_RENDER_TARGET);
         }
     }
-    r->passStorage = r->passReadable = 0;
+    r->passStorage = r->passReadable = r->passDepthReadable = 0;
     g_rd.passSamples = 1;
     /* whoever ends a pass is about to record something else (a copy,
      * another pass): a pending clear goes first, unless beginPass took it */
@@ -1097,9 +1106,11 @@ static void flushStencilClear(void)
         return;
     }
     const bool readable = rd__pass_wants_readable(tc); /* the state of its passes */
+    const bool depthRead = depthWantsReadable(tc, td);
     rd__transition(s_cl, tc->color, &tc->colorState,
                    readable ? RHI_STATE_RENDER_TARGET_READ : RHI_STATE_RENDER_TARGET);
-    rd__transition(s_cl, td->depth, &td->depthState, RHI_STATE_DEPTH_WRITE);
+    rd__transition(s_cl, td->depth, &td->depthState,
+                   depthRead ? RHI_STATE_RENDER_TARGET_READ : RHI_STATE_DEPTH_WRITE);
     RhiRenderPassDesc p;
     memset(&p, 0, sizeof(p));
     p.color[0].texture = tc->color;
@@ -1107,6 +1118,7 @@ static void flushStencilClear(void)
     p.color[0].readable = readable;
     p.colorCount = 1;
     p.depth.texture = td->depth;
+    p.depth.readable = depthRead;
     p.depth.depthLoad = RHI_LOAD_LOAD;
     p.depth.stencilLoad = RHI_LOAD_CLEAR;
     p.depth.clearStencil = 0;
@@ -1141,10 +1153,31 @@ static void flushClear(void)
 
 /* the exact blend's attachment read: every pass on an RGBA8 target made
  * for it is begun readable (outside the MSAA epoch) */
+static bool exactReadable(const RdTargetRec *c)
+{
+    return g_rd.dstMode == RD_BLEND_EXACT_ATTACHMENT && (c->dstUsage & RD_DST_USAGE_ATTACHMENT) &&
+           c->format == RHI_FMT_RGBA8_UNORM;
+}
+
+/* readable: the exact blend's attachment read, or DATE through the stencil
+ * bit (RdProfile.dateStencil: its setup reads the alpha, rd__replay_date_take),
+ * on an RGBA8 target made for it (rd_core.c: the scene class) */
 bool rd__pass_wants_readable(const RdTargetRec *c)
 {
-    return g_rd.dstMode == RD_BLEND_EXACT_ATTACHMENT && (c->dstUsage & 2u) != 0 &&
-           c->format == RHI_FMT_RGBA8_UNORM;
+    return exactReadable(c) ||
+           (g_rd.profile.dateStencil && (c->dstUsage & RD_DST_USAGE_LOCAL_DATE) &&
+            c->format == RHI_FMT_RGBA8_UNORM);
+}
+
+/* The depth begun readable (RhiDepthAttachment.readable, the texture in
+ * RHI_STATE_RENDER_TARGET_READ): every pass on a target with its own depth,
+ * the depth made for the fog's local read (RD_DST_USAGE_LOCAL_DEPTH), while
+ * the fog's path is RD_FOG_LOCAL: the pass the fog lands in is not known
+ * when a pass begins */
+static bool depthWantsReadable(const RdTargetRec *c, const RdTargetRec *d)
+{
+    return d && c == d && g_rd.fogPath == RD_FOG_LOCAL && g_rd.profile.fogLocal &&
+           (d->dstUsage & RD_DST_USAGE_LOCAL_DEPTH) != 0;
 }
 
 static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, uint32_t did,
@@ -1159,11 +1192,14 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
     const bool wantReadable = !storage && rd__pass_wants_readable(c);
     /* the pending clear as this pass's load op when it can take it
      * (the same clear values, the same render area: the whole target); a
-     * storage pass has no colour attachment and a readable one does not
-     * read the attachment a load op cleared (rd_dst_read.c): their clear is
-     * a pass of its own (endPass below records it) */
+     * storage pass has no colour attachment and the exact blend's readable
+     * one does not read the attachment a load op cleared (rd_dst_read.c):
+     * their clear is a pass of its own (endPass below records it).  DATE's
+     * stencil setup reads the attachment after a barrier that holds the
+     * load op's write (vk_cmd.c rhi_cmd_local_read_barrier), so its
+     * readable passes take the clear */
     float pendColor[4];
-    if (s_pend.p.target && !storage && !wantReadable &&
+    if (s_pend.p.target && !storage && !(wantReadable && exactReadable(c)) &&
         rd__take_pending_clear(&s_pend.p, cid, d ? did : 0, &colorLoad, &depthLoad)) {
         memcpy(pendColor, s_pend.p.color, sizeof(pendColor));
         clear = pendColor;
@@ -1197,6 +1233,7 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
     }
     RhiTexture colorTex = c->color, depthTex = d ? d->depth : (RhiTexture){0};
     const bool readable = wantReadable && !ms;
+    const bool depthRead = !ms && !storage && depthWantsReadable(c, d);
     if (ms) {
         msaaAttach(c, d, colorLoad, depthLoad, &colorTex, &depthTex);
     } else {
@@ -1205,7 +1242,8 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
                        : readable ? RHI_STATE_RENDER_TARGET_READ
                                   : RHI_STATE_RENDER_TARGET);
         if (d) {
-            rd__transition(s_cl, d->depth, &d->depthState, RHI_STATE_DEPTH_WRITE);
+            rd__transition(s_cl, d->depth, &d->depthState,
+                           depthRead ? RHI_STATE_RENDER_TARGET_READ : RHI_STATE_DEPTH_WRITE);
         }
     }
     RhiRenderPassDesc p;
@@ -1226,6 +1264,7 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
         p.depth.stencilStore = stencilStore;
         p.depth.clearDepth = clearDepth;
         p.depth.clearStencil = 0;
+        p.depth.readable = depthRead;
     }
     p.width = c->tw;
     p.height = c->th;
@@ -1246,6 +1285,7 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
     r->passSerial++;
     r->passStorage = storage;
     r->passReadable = readable;
+    r->passDepthReadable = depthRead;
     g_rd.passSamples = ms ? (uint8_t)s_ms.samples : 1;
 }
 
@@ -1615,7 +1655,9 @@ static void pendClear(Replay *r, uint32_t id, RdTargetRec *t, const float col[4]
                        rd__pass_wants_readable(t) ? RHI_STATE_RENDER_TARGET_READ
                                                   : RHI_STATE_RENDER_TARGET);
         if (depth) {
-            rd__transition(s_cl, t->depth, &t->depthState, RHI_STATE_DEPTH_WRITE);
+            rd__transition(s_cl, t->depth, &t->depthState,
+                           depthWantsReadable(t, t) ? RHI_STATE_RENDER_TARGET_READ
+                                                    : RHI_STATE_DEPTH_WRITE);
         }
     }
     s_pend.r = r;
@@ -2596,24 +2638,58 @@ static int drawGsLevels(const Replay *r, const DrawSetup *ds)
     return t->mipLevels < t->gsLevels ? t->mipLevels : t->gsLevels;
 }
 
+/* DATE through the stencil bit for a draw into tc with the depth of td
+ * (RdProfile.dateStencil; docs/port/RENDER.md, "The replay"): the target
+ * made for DATE's local read (rd_core.c: RGBA8 of the scene class), a
+ * depth of its size bound (the bit lives in its stencil, which then covers
+ * every texel of the draw), the setup's pipelines, no MSAA epoch open or
+ * able to open (SCENE_MS is no readable target) and no exact blend's
+ * storage pass (no colour attachment to read).  Otherwise the R8 snapshot */
+static bool dateStencilFor(const RdTargetRec *tc, const RdTargetRec *td)
+{
+    if (!g_rd.profile.dateStencil || !td || !g_rd.layoutLocal.id ||
+        !(tc->dstUsage & RD_DST_USAGE_LOCAL_DATE) || tc->format != RHI_FMT_RGBA8_UNORM ||
+        td->tw != tc->tw || td->th != tc->th || s_ms.active || (s_ms.want > 1u && !s_ms.ended) ||
+        g_rd.dstMode == RD_BLEND_EXACT_STORAGE) {
+        return false;
+    }
+    const RdPipeKeyInt kc = rd__date_setup_key(RD_STENCIL_DATE_CLEAR, tc->format);
+    const RdPipeKeyInt ks = rd__date_setup_key(RD_STENCIL_DATE_SET, tc->format);
+    const bool made = rd__get_pipeline(&kc).id != 0 && rd__get_pipeline(&ks).id != 0;
+    /* gathering (rd__pipeline_gather): the keys are only named, so the
+     * draw's twins are named too */
+    return made || rd__pipeline_gathering();
+}
+
 /* The target, the DATE snapshot and the texture (each may end the open
  * pass: they run before the draw's pass begins).  dateArea: the texels the
- * draw can touch, for the DATE snapshot (NULL: the whole target) */
-static bool prepareDraw(Replay *r, DrawSetup *ds, const RhiRect *dateArea)
+ * draw can touch, for the DATE snapshot (NULL: the whole target).
+ * dateStencil: the caller draws its passes through expandPasses and
+ * bindDrawEx (doScreen, the VU draws), so DATE may take the stencil bit
+ * instead of the snapshot (dateStencilFor; r->dateStNow) */
+static bool prepareDrawEx(Replay *r, DrawSetup *ds, const RhiRect *dateArea, bool dateStencil)
 {
     memset(ds, 0, sizeof(*ds));
     r->mirror = 0; /* likewise */
+    r->dateStNow = 0;
     ds->tc = rd__target_rec(r->st.color);
     if (!ds->tc || !ds->tc->color.id) {
         return false;
     }
-    ds->dateTex = g_rd.dummy;
-    if (r->st.ds.test.date != RD_DATE_OFF) {
-        ds->dateTex = dateSnapshot(r, ds->tc, r->st.color, dateArea);
-    }
     RdTargetRec *td = rd__target_rec(r->st.depth);
     if (td && !td->withDepth) {
         td = NULL;
+    }
+    ds->dateTex = g_rd.dummy;
+    if (r->st.ds.test.date != RD_DATE_OFF) {
+        if (dateStencil && dateStencilFor(ds->tc, td)) {
+            ds->dateStencil = 1;
+            ds->dateWantAll = dateArea == NULL;
+            ds->dateWant = dateArea ? *dateArea : (RhiRect){0, 0, ds->tc->tw, ds->tc->th};
+            r->dateStNow = 1;
+        } else {
+            ds->dateTex = dateSnapshot(r, ds->tc, r->st.color, dateArea);
+        }
     }
     ds->tdId = td ? r->st.depth : 0;
     ds->depthFmt = td ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN;
@@ -2623,6 +2699,11 @@ static bool prepareDraw(Replay *r, DrawSetup *ds, const RhiRect *dateArea)
     replacementUv(r->st.tex, ds);
     ds->gsLevels = drawGsLevels(r, ds);
     return true;
+}
+
+static bool prepareDraw(Replay *r, DrawSetup *ds, const RhiRect *dateArea)
+{
+    return prepareDrawEx(r, ds, dateArea, false);
 }
 
 /* A texture with GS levels: the level is the shader's (DF_GS_LOD, given to
@@ -2725,9 +2806,12 @@ static RhiBindGroup bindDrawEx(Replay *r, const DrawSetup *ds, RhiRect *scOut, u
      * choose the pass kind per draw (keepStorage: doScreen, the VU draws,
      * the fog); every other draw needs the colour attachment */
     if (!r->passOpen || r->passColor != r->st.color || r->passDepth != ds->tdId ||
-        (r->passStorage && !keepStorage)) {
+        (r->passStorage && !keepStorage) || (ds->dateStencil && !r->passReadable)) {
         beginPass(r, tc, ds->tdId ? rd__target_rec(ds->tdId) : NULL, r->st.color, ds->tdId,
                   RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD, 0.0f, false);
+    }
+    if (ds->dateStencil && !rd__replay_date_take(r, ds)) {
+        return (RhiBindGroup){0}; /* the bit could not be written: nothing drawn */
     }
     frameRefresh(r, ds);
     if (scOut) {
@@ -2806,8 +2890,17 @@ static int expandPassesMode(const RdDrawPass *in, int n, int mode, bool merge, R
 static int expandPasses(const Replay *r, const RdDrawPass *in, int n, RdDrawPass out[8])
 {
     const int mode = dstModeFor(r);
-    return expandPassesMode(
+    const int m = expandPassesMode(
         in, n, mode, g_rd.passMerge && r->passStorage && mode == RD_BLEND_EXACT_STORAGE, out);
+    if (r->dateStNow) {
+        /* DATE through the stencil bit (prepareDrawEx): each pass as drawn
+         * tests the bit with DF_DATE off (the exact blend's and the
+         * two-pass fallback's images alike) */
+        for (int i = 0; i < m; i++) {
+            (void)rd__date_stencil_pass(&out[i]);
+        }
+    }
+    return m;
 }
 
 /* The open pass as the kind a pass's key draws in: a storage pass for a
@@ -2838,6 +2931,11 @@ static void dstPassMode(Replay *r, const RdPipeKeyInt *k)
  * texture or as its input attachment; nothing for the other keys */
 static void dstBind(Replay *r, const RdPipeKeyInt *k)
 {
+    if (k->gs.stencil == RD_STENCIL_DATE_TEST0 || k->gs.stencil == RD_STENCIL_DATE_TEST1) {
+        /* DATE's stencil bit (every caller draws right after) */
+        rhi_cmd_set_stencil_ref(s_cl, RD_DATE_STENCIL_BIT);
+        g_rdPerf.dateStencilDraws++;
+    }
     if (k->dst == RHI_DST_READ_NONE || !r->passOpen) {
         return;
     }
@@ -3490,7 +3588,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     v = extendFullFrame(r, rd__target_rec(r->st.color), v, n, c->b[0], c->b[1]);
     RhiRect dateArea;
     const RhiRect *dateAt = dateAreaFor(r, c, v, n, &dateArea) ? &dateArea : NULL;
-    if (!prepareDraw(r, &ds, dateAt)) {
+    if (!prepareDrawEx(r, &ds, dateAt, true)) {
         return;
     }
     ds.screenCopy = screenCopy(r, &ds, c->b[0], c->b[1]);
@@ -4571,8 +4669,84 @@ void rd__fog_shutdown(void)
     rd__fog_path_shutdown(); /* the buffer path's objects and the probe's */
 }
 
+/* the table the replay's upload phase copied into s_fogLut
+ * (rd__fog_lut_upload): the replay (g_rd.replayCounter after it began),
+ * the frame and the payload offset it holds; doFog copies another one */
+static struct {
+    uint32_t replay;
+    const RdFrame *f;
+    uint32_t lutOffset;
+} s_fogLutHeld;
+
+static bool fogLutMake(void)
+{
+    if (!s_fogLut.id) {
+        s_fogLut = rhi_create_texture(&(RhiTextureDesc){
+            256, 1, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd fog lut", 0});
+        s_fogLutState = RHI_STATE_UNDEFINED;
+    }
+    return s_fogLut.id != 0;
+}
+
+/* the LUT at payload offset lutOffset of f into s_fogLut (outside a pass) */
+static bool fogLutCopy(const RdFrame *f, uint32_t lutOffset)
+{
+    const uint32_t pitchA = rhi_limits()->copyRowPitchAlign;
+    const uint32_t lutPitch = (256 * 4 + pitchA - 1) / pitchA * pitchA;
+    const uint64_t lOff = rd__ring_alloc(lutPitch, rhi_limits()->copyOffsetAlign);
+    if (lOff == ~0ull || !fogLutMake()) {
+        return false;
+    }
+    memcpy(g_rd.ringMap[s_slot] + lOff, f->payload + lutOffset, 256 * 4);
+    rd__transition(s_cl, s_fogLut, &s_fogLutState, RHI_STATE_COPY_DST);
+    rhi_cmd_copy_buffer_to_texture(s_cl, g_rd.ring[s_slot], lOff, lutPitch, s_fogLut, 0,
+                                   (RhiRect){0, 0, 256, 1});
+    rd__transition(s_cl, s_fogLut, &s_fogLutState, RHI_STATE_SHADER_READ);
+    s_fogLutHeld.replay = g_rd.replayCounter;
+    s_fogLutHeld.f = f;
+    s_fogLutHeld.lutOffset = lutOffset;
+    return true;
+}
+
+void rd__fog_lut_upload(const RdFrame *f, int keep)
+{
+    for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
+        const RdCmdList *list = &f->lists[l];
+        for (uint32_t i = 0; i < list->count; i++) {
+            const RdCmd *c = &list->cmds[i];
+            if (c->type != RDC_POST_STUB || c->b[0] != RD_POST_FOG) {
+                continue;
+            }
+            RdPostRec p;
+            memcpy(&p, f->payload + c->u[1], sizeof(p));
+            if (p.lutOffset != ~0u) {
+                (void)fogLutCopy(f, p.lutOffset);
+            }
+            return; /* the first fog's: a frame fogs once */
+        }
+    }
+}
+
+/* The fog's local read (RD_FOG_LOCAL; fog_lut_local_ps): its depth is the
+ * colour target's own (SCENE's, zid == the colour's, the same size: every
+ * fogged game frame; the depth made for it, RD_DST_USAGE_LOCAL_DEPTH), the
+ * shader and the group there, no MSAA epoch open or able to open (the
+ * probe then copies its texels from the depth itself), the fixed-function
+ * blend (an exact blend opted into draws the fog's LERP through its own
+ * twins, which have no local build: the copy then).  Then the fog
+ * draws in the scene pass with the depth readable (begun so by beginPass,
+ * depthWantsReadable), and nothing ends the pass or copies the depth */
+static bool fogLocalFor(const Replay *r, uint32_t zid, const RdTargetRec *tz, const RdTargetRec *tc)
+{
+    return g_rd.fogPath == RD_FOG_LOCAL && zid == r->st.color && tz == tc &&
+           depthWantsReadable(tc, tz) && g_rd.layoutLocal.id && g_rd.fs[RD_FS_FOG_LOCAL].id &&
+           (!g_rd.noDual || g_rd.fsNoDual[RD_FS_FOG_LOCAL].id) && !s_ms.active &&
+           !(s_ms.want > 1u && !s_ms.ended) && g_rd.dstMode == RD_BLEND_EXACT_OFF;
+}
+
 static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
 {
+    r->dateStNow = 0; /* no DATE here: the passes keep their own tests */
     RdPostRec p;
     memcpy(&p, f->payload + c->u[1], sizeof(p));
     uint32_t zid = r->st.depth;
@@ -4588,7 +4762,9 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     RdDrawPass pl[2], dp[8];
     const int buffer = g_rd.fogPath == RD_FOG_BUFFER;
-    const int npl = rd__fog_plan(&r->st, tc->format, buffer, pl);
+    const bool local = fogLocalFor(r, zid, tz, tc);
+    const int npl = rd__fog_plan(
+        &r->st, tc->format, local ? RD_FOG_LOCAL : (buffer ? RD_FOG_BUFFER : RD_FOG_INPLACE), pl);
     if (npl == 0) {
         return;
     }
@@ -4607,10 +4783,7 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     static const float noOff[2] = {0.0f, 0.0f};
     const uint64_t vOff = rd__ring_alloc(6 * sizeof(IcoSpriteVertex), 16);
-    const uint32_t pitchA = rhi_limits()->copyRowPitchAlign;
-    const uint32_t lutPitch = (256 * 4 + pitchA - 1) / pitchA * pitchA;
-    const uint64_t lOff = rd__ring_alloc(lutPitch, rhi_limits()->copyOffsetAlign);
-    if (vOff == ~0ull || lOff == ~0ull) {
+    if (vOff == ~0ull) {
         return;
     }
     uint8_t topo;
@@ -4618,23 +4791,28 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     setUvShift(tc->sx, tc->sy); /* the fog sprite on a scaled target */
     const uint32_t nv = expand(v, 2, RD_PRIM_SPRITES, 1, (float)tz->w, (float)tz->h, noOff, out,
                                &topo, r->st.gouraud != 0);
-    memcpy(g_rd.ringMap[s_slot] + lOff, f->payload + p.lutOffset, 256 * 4);
+    /* the table: the one the upload phase copied (rd__fog_lut_upload), or
+     * copied here, outside a pass */
+    const bool lutHeld = s_fogLut.id && s_fogLutHeld.replay == g_rd.replayCounter &&
+                         s_fogLutHeld.f == f && s_fogLutHeld.lutOffset == p.lutOffset;
 
-    endPass(r);
-    if (!s_fogLut.id) {
-        s_fogLut = rhi_create_texture(&(RhiTextureDesc){
-            256, 1, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd fog lut", 0});
-        s_fogLutState = RHI_STATE_UNDEFINED;
+    if (!local) {
+        endPass(r);
     }
-    if (!s_fogLut.id) {
-        return;
+    if (!lutHeld) {
+        endPass(r);
+        if (!fogLutCopy(f, p.lutOffset)) {
+            return;
+        }
     }
     /* the GS's BITBLT of the Z buffer to 0x2800: the depth in place, its
-     * copy, or its words (g_rd.fogPath); the pass below binds the colour
-     * target alone whichever it is.  Inside the MSAA epoch, with sample-rate
-     * shading and SCENE's depth drawn in it, the fog runs per sample on
-     * SCENE_MS reading its depth (fog_lut_ms_ps) and the epoch stays open;
-     * otherwise the read below closes it (the fog of the resolved picture) */
+     * copy, its words or the pass's own depth attachment (g_rd.fogPath);
+     * the pass below binds the colour target alone but on the local read,
+     * where it is the scene pass with the depth.  Inside the MSAA epoch,
+     * with sample-rate shading and SCENE's depth drawn in it, the fog runs
+     * per sample on SCENE_MS reading its depth (fog_lut_ms_ps) and the
+     * epoch stays open; otherwise the read below closes it (the fog of the
+     * resolved picture) */
     RdFogSource src;
     const uint32_t scene = RD_TARGET_SCENE + 1u;
     /* a fog on SCENE while the MSAA epoch is open blends fixed-function
@@ -4644,13 +4822,17 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
      * shading, so it blends the same way rather than exactly */
     const bool fogEpoch = s_ms.active && zid == scene && r->st.color == scene;
     /* the depth read made ready (the copy path's copy, the buffer path's
-     * transfers) and the table's upload, a piece of their own */
-    rd__perf_pass(s_cl, RD_PERF_PASS_FOG_COPY, zid, tz->tw, tz->th, r->perfPost);
-    const bool fogMs = !s_fogResolvedForced && s_ms.active && s_ms.depthLive && zid == scene &&
-                       r->st.color == scene && !buffer && rhi_limits()->sampleRateShading &&
-                       g_rd.fs[RD_FS_FOG_MS].id &&
+     * transfers), a piece of its own; none on the local read */
+    if (!local) {
+        rd__perf_pass(s_cl, RD_PERF_PASS_FOG_COPY, zid, tz->tw, tz->th, r->perfPost);
+    }
+    const bool fogMs = !local && !s_fogResolvedForced && s_ms.active && s_ms.depthLive &&
+                       zid == scene && r->st.color == scene && !buffer &&
+                       rhi_limits()->sampleRateShading && g_rd.fs[RD_FS_FOG_MS].id &&
                        (!g_rd.noDual || g_rd.fsNoDual[RD_FS_FOG_MS].id) && !rd__fog_probe_wanted();
-    if (fogMs) {
+    if (local) {
+        rd__fog_source_local(tz, &src);
+    } else if (fogMs) {
         memset(&src, 0, sizeof(src));
         rd__transition(s_cl, s_ms.depth, &s_ms.depthState, RHI_STATE_SHADER_READ);
         src.tex = s_ms.depth;
@@ -4662,15 +4844,14 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     } else if (!rd__fog_source(s_cl, tz, &s_fogDepth, &src) || src.buffer != buffer) {
         return;
     }
-    rd__transition(s_cl, s_fogLut, &s_fogLutState, RHI_STATE_COPY_DST);
-    rhi_cmd_copy_buffer_to_texture(s_cl, g_rd.ring[s_slot], lOff, lutPitch, s_fogLut, 0,
-                                   (RhiRect){0, 0, 256, 1});
-    rd__transition(s_cl, s_fogLut, &s_fogLutState, RHI_STATE_SHADER_READ);
 
-    /* the pass on the colour target alone, FrameCB and the scissor */
+    /* the pass on the colour target alone (on the local read the scene pass
+     * with its depth, readable), FrameCB and the scissor */
     DrawSetup ds;
     memset(&ds, 0, sizeof(ds));
     ds.tc = tc;
+    ds.tdId = local ? zid : 0;
+    ds.depthFmt = local ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN;
     ds.tex = g_rd.dummy;
     ds.dateTex = g_rd.dummy;
     ds.tw = tz->w;
@@ -4682,7 +4863,20 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
      * the previous draw's mirror (scissorRect) is not inherited.  The fog
      * sprite covers the native frame as drawn */
     r->mirror = 0;
+    if (local && r->passOpen && r->passColor == r->st.color && r->passDepth == zid &&
+        !r->passDepthReadable) {
+        endPass(r); /* begun before the path was the local read's: begun again readable */
+    }
     if (!bindDrawKeep(r, &ds).id) {
+        return;
+    }
+    if (local && !r->passDepthReadable) {
+        static bool logged; /* once a run */
+        if (!logged) {
+            logged = true;
+            rd__log("fog: the scene pass did not bind its depth readable: the fog is skipped "
+                    "(reported once)");
+        }
         return;
     }
     /* the planned passes as drawn in this pass: the exact blend's (the fog
@@ -4699,21 +4893,40 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     memcpy(g_rd.ringMap[s_slot] + vOff, out, (size_t)nv * sizeof(out[0]));
     RhiBinding b[3];
     memset(b, 0, sizeof(b));
-    b[0].slot = 1;
-    b[0].type = RHI_BIND_SAMPLED_TEXTURE;
-    b[0].texture = src.tex;
-    b[0].aspect = src.aspect;
-    b[1].slot = 1;
-    b[1].type = RHI_BIND_SAMPLER;
-    b[1].sampler = rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-    b[2].slot = 2;
-    b[2].type = RHI_BIND_SAMPLED_TEXTURE;
-    b[2].texture = s_fogLut;
-    const RhiBindGroup g2 = bindGroup(g_rd.layoutTex, b, 3);
+    RhiBindGroup g2;
+    if (local) {
+        /* the pass's depth as its input attachment (the depth-only view),
+         * the table at t2 (rd's layoutLocal) */
+        b[0].slot = 1;
+        b[0].type = RHI_BIND_INPUT_ATTACHMENT;
+        b[0].texture = src.tex;
+        b[0].aspect = RHI_ASPECT_DEPTH;
+        b[1].slot = 2;
+        b[1].type = RHI_BIND_SAMPLED_TEXTURE;
+        b[1].texture = s_fogLut;
+        g2 = bindGroup(g_rd.layoutLocal, b, 2);
+    } else {
+        b[0].slot = 1;
+        b[0].type = RHI_BIND_SAMPLED_TEXTURE;
+        b[0].texture = src.tex;
+        b[0].aspect = src.aspect;
+        b[1].slot = 1;
+        b[1].type = RHI_BIND_SAMPLER;
+        b[1].sampler =
+            rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+        b[2].slot = 2;
+        b[2].type = RHI_BIND_SAMPLED_TEXTURE;
+        b[2].texture = s_fogLut;
+        g2 = bindGroup(g_rd.layoutTex, b, 3);
+    }
     if (!g2.id) {
         return;
     }
     rhi_cmd_set_vertex_buffer(s_cl, 0, g_rd.ring[s_slot], vOff);
+    /* the local read: the pass's depth writes so far visible to the reads */
+    if (local) {
+        rhi_cmd_local_read_barrier(s_cl, RHI_LOCAL_READ_DEPTH);
+    }
     /* above 1x: the colour or the depth target scaled (never at scale 1);
      * the self-test's and the probe's fog read the exact entry
      * (rd_fog_path.c rd__fog_exact): they measure the depth read */
@@ -4753,10 +4966,17 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         drawCmd(s_cl, nv, 0, 1);
         if (!rd__no_dual_second(dp, i)) {
             g_rd.stats.draws++;
+            if (local) {
+                g_rdPerf.fogLocalDraws++;
+            }
         }
         if (dp[i].key.gs.colorMask & 8) {
             r->writeSerial++;
         }
+    }
+    /* the reads before the next draws' depth and colour writes */
+    if (local) {
+        rhi_cmd_local_read_barrier(s_cl, RHI_LOCAL_READ_BACK);
     }
     /* the first fogged replay after start or a new scene size: what the
      * fog read and what it drew, for the log (after the draw, so the read
@@ -5384,6 +5604,9 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
  * clear sprite before it is not textured and covers everything already. */
 static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
 {
+    if (rd__replay_blur_fold(r, f, c)) {
+        return; /* a pair folded into one pass (rd_replay_tiler.c) */
+    }
     if (!borderOpen() || c->b[0] != RD_POST_REDUCTION || !r->st.ds.texEnabled) {
         doBlurSpriteDraw(r, f, c);
         return;
@@ -5528,7 +5751,8 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     const uint64_t texOff = s_ringOff;
     rd__upload_dirty_textures();
     g_rdPerf.uploadTextureBytes = s_ringOff - texOff;
-    rd__join_parts(f, keep); /* the card test over a part's packets (rd_join.c) */
+    rd__fog_lut_upload(f, keep); /* the fog's table, outside any pass (doFog) */
+    rd__join_parts(f, keep);     /* the card test over a part's packets (rd_join.c) */
     rd__upload_meshes(f, keep);
     rd__passring_bytes(s_ringOff);
     rd__clear_new_targets();
@@ -5554,8 +5778,11 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
         const RdCmdList *list = &f->lists[l];
         rd__passring_list(l);
+        /* the list for the blur fold's look-ahead (rd_replay_tiler.c) */
+        rd__replay_fold_list(list->cmds, list->count, l, headHalf);
         for (uint32_t i = 0; i < list->count; i++) {
             const RdCmd *c = &list->cmds[i];
+            rd__replay_fold_at(i);
             if (g_rdWin.first) {
                 /* the draw note's place (rd__replay_set_window_draws) */
                 g_rdWin.list = (int8_t)l;
@@ -5629,10 +5856,13 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
                 rd__not_implemented(stubName(c->type));
                 break;
             }
+            /* the commands a fold consumed (their state applied) */
+            i += rd__replay_fold_skip();
             if (g_rdWin.stop) {
                 break; /* the pass window's end: this command began the next pass */
             }
         }
+        rd__replay_fold_list(NULL, 0, l, headHalf);
         flushScreenRun(&r); /* a run does not cross a list (its timestamp) */
         rd__perf_stamp(s_cl, RD_PERF_TS_LIST0 + (uint32_t)l);
         /* the next list's work is the effect of the target in force, not
@@ -5961,10 +6191,73 @@ void rd__replay_fill_draw_cb(const Replay *r, const RdDrawPass *dp, const DrawSe
 
 bool rd__replay_prepare_draw(Replay *r, DrawSetup *ds, const RhiRect *dateArea)
 {
-    return prepareDraw(r, ds, dateArea);
+    return prepareDrawEx(r, ds, dateArea, true); /* the VU draws: DATE may take the stencil */
 }
 
 uint32_t rd__replay_msaa_want(void)
 {
     return s_ms.want;
+}
+
+/* rd_replay_tiler.c's helpers (rd_replay.h): the functions of this file
+ * named beside them */
+void rd__replay_flush_run(Replay *r)
+{
+    flushScreenRun(r);
+}
+
+RhiBindGroup rd__replay_bind_draw(Replay *r, const DrawSetup *ds)
+{
+    return bindDraw(r, ds);
+}
+
+bool rd__replay_scissor(const Replay *r, const RdTargetRec *tc, RhiRect *sc)
+{
+    return scissorRect(r, tc, sc);
+}
+
+uint32_t rd__replay_blur_flags(const RdDrawState *d, uint32_t lines, int textured, int dstRead)
+{
+    return blurFlags(d, lines, textured, dstRead);
+}
+
+void rd__replay_blur_aux1(IcoDrawCB *cb)
+{
+    blurAux1(cb);
+}
+
+bool rd__replay_blur_covers(const Replay *r, const RdTargetRec *tc, const RdPostRec *p,
+                            const RdDrawState *d, const RdPipeKeyInt *key, int useDepth)
+{
+    return blurCoversTarget(r, tc, p, d, key, useDepth);
+}
+
+bool rd__replay_blur_swap(Replay *r, RdTargetRec *tc)
+{
+    return blurSwapTarget(r, tc);
+}
+
+bool rd__replay_take_snap(Replay *r, RdTargetRec *tc, RhiRect area)
+{
+    return takeSnap(r, tc, area);
+}
+
+int rd__replay_perf_target_post(const Replay *r, const RdCmd *c)
+{
+    return perfTargetPost(r, c);
+}
+
+int rd__replay_scene_keeps_half(RdStateBlock *st, int list, uint32_t headHalf)
+{
+    return sceneKeepsHalf(st, list, headHalf);
+}
+
+void rd__replay_perf_post(Replay *r, int post)
+{
+    perfPost(r, post);
+}
+
+bool rd__replay_blur_fix128_skip(void)
+{
+    return s_blurFix128Skip;
 }

@@ -185,6 +185,11 @@ static inline int rd__cmd_is_state(uint8_t type)
 #define RD_SHADOW_TRIS 1
 /* The stencil bits the shadow count keeps: n mod 64, as 4 n mod 256 wraps. */
 #define RD_SHADOW_STENCIL_MASK 0x3Fu
+/* The stencil bit DATE's stencil path keeps the destination alpha's MSB in
+ * (rd_replay_tiler.c rd__replay_date_take; RD_STENCIL_DATE_*): the count writes bits
+ * 0-5 only (RD_SHADOW_STENCIL_MASK) and its resolve reads no other, so bit
+ * 6 is free; bit 7 is unused. */
+#define RD_DATE_STENCIL_BIT 0x40u
 /* rd_shadow_tris tags every vertex with the place (1-based) its triangle
  * had in the call, in RdScreenVtx.rgba (little-endian; the volume draw
  * writes no colour), since the split into increments and decrements loses
@@ -355,6 +360,10 @@ void rd__walk(const RdFrame *f, int keep, RdStateBlock *state, RdWalkFn fn, void
 #define RD_DST_USAGE_STORAGE 1u    /* the exact blend's storage read */
 #define RD_DST_USAGE_ATTACHMENT 2u /* the exact blend's attachment read */
 #define RD_DST_USAGE_LOCAL_DATE 4u /* DATE's local read of the colour (not the blend) */
+/* the fog's local read of the depth (RD_FOG_LOCAL): the depth texture made
+ * an input attachment too (rd_core.c rd__target_create_gpu, a scene-class
+ * target with depth under RdProfile.fogLocal) */
+#define RD_DST_USAGE_LOCAL_DEPTH 8u
 
 /* ------------------------------------------------------------- targets
  * Ids: named target n (RdTargetId) is n + 1; temporary targets are
@@ -402,7 +411,8 @@ typedef struct RdTargetRec {
     /* the reads the colour texture was made for (rd__dst_target_usage):
      * RD_DST_USAGE_STORAGE and RD_DST_USAGE_ATTACHMENT the exact blend's
      * (only the mode [dev] blend opted into), RD_DST_USAGE_LOCAL_DATE
-     * DATE's local read (RdProfile.dateStencil); 0 none */
+     * DATE's local read (RdProfile.dateStencil, scene-class targets only),
+     * RD_DST_USAGE_LOCAL_DEPTH the fog's of the depth; 0 none */
     uint8_t dstUsage;
     /* the colour texture (and its snapshot) has the RGBA8_UINT view
      * (RHI_TEX_UINT_VIEW: rd_core.c rd__target_create_gpu, under
@@ -1512,8 +1522,10 @@ uint32_t rd__enumerate_reachable_shadow(RdPipeKeyInt *out, uint32_t max, uint32_
 /* The depth fog: the draws of an RD_POST_FOG under state s, as
  * rd__plan_screen_draw plans a fullscreen sprite without a depth attachment
  * (fog_lut_ps does the Z test against the depth it reads), with fog_lut_ps
- * as the fragment shader, or fog_lut_buffer_ps with buffer (RD_FOG_BUFFER). */
-int rd__fog_plan(const RdStateBlock *s, RhiFormat colorFmt, int buffer, RdDrawPass out[2]);
+ * as the fragment shader, fog_lut_buffer_ps for path RD_FOG_BUFFER, or
+ * fog_lut_local_ps for RD_FOG_LOCAL with the scene depth attached (its test
+ * ALWAYS, no write: the shader reads it as the input attachment). */
+int rd__fog_plan(const RdStateBlock *s, RhiFormat colorFmt, int path, RdDrawPass out[2]);
 /* The fog under ZFog.c's state (TEST 0x50000, ZMSK, ALPHA 0x44 with ABE),
  * with both fragment shaders; appends to out[0..n). */
 uint32_t rd__enumerate_reachable_fog(RdPipeKeyInt *out, uint32_t max, uint32_t n);
@@ -1982,6 +1994,11 @@ typedef struct RdContext {
     uint8_t dstModes;
     RhiShader fsDstRov[RD_FS_COUNT], fsDstAtt[RD_FS_COUNT];
     RhiBindGroupLayout layoutDstStorage, layoutDstAttach;
+    /* group 2 of the passes' own reads by local read (RhiLimits.localRead
+     * only): slot 1 an input attachment (the fog's depth, DATE's colour),
+     * slot 2 a sampled texture (the fog's LUT; DATE's setup the dummy):
+     * fog_lut_local_ps and date_stencil_ps (rd__fs_local_read) */
+    RhiBindGroupLayout layoutLocal;
     /* The scene depth is read through a copy (rd__sampled_depth) and every
      * pass keeps its stencil (loaded and stored) whenever
      * the fog's depth path (fogPath) is not RD_FOG_INPLACE.  Off, the fog
@@ -2556,14 +2573,22 @@ typedef enum RdFogPath {
     RD_FOG_INPLACE = 0,
     RD_FOG_COPY = 1,
     RD_FOG_BUFFER = 2,
+    /* the depth read inside the scene pass, the pass's own depth attachment
+     * as an input attachment (local read: fog_lut_local_ps, rd_replay.c
+     * doFog), where the fog's depth is SCENE's own at its size; otherwise
+     * (and on D3D12) the copy.  Only where RdProfile.fogLocal */
+    RD_FOG_LOCAL = 3,
     RD_FOG_PATH_COUNT
 } RdFogPath;
 
-/* "inplace", "copy", "buffer" */
+/* "inplace", "copy", "buffer", "local" */
 const char *rd__fog_path_name(int path);
 /* The device can take the path (in place: a sampleable depth; buffer:
- * the Vulkan backend). */
+ * the Vulkan backend; local: rd__fog_local_offered). */
 bool rd__fog_path_supported(int path);
+/* The local read is offered: the profile's fogLocal, the device's local
+ * read on Vulkan, fog_lut_local_ps and g_rd.layoutLocal made */
+bool rd__fog_local_offered(void);
 /* Sets g_rd.fogPath, and g_rd.depthCopy with it (on unless in place). */
 void rd__set_fog_path(int path);
 /* rd_init, before the targets are made: the platform's path (in place on
@@ -2588,6 +2613,10 @@ typedef struct RdFogSource {
 } RdFogSource;
 
 bool rd__fog_source(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *copy, RdFogSource *out);
+/* The local read's source (RD_FOG_LOCAL): t's depth itself, read by its own
+ * pass as an input attachment (no transition, no copy); sabotaged as
+ * ICO_RD_FOG_SABOTAGE names "local" */
+void rd__fog_source_local(RdTargetRec *t, RdFogSource *out);
 /* The buffer path's buffer and texture (SCENE's caches: freed with them). */
 void rd__fog_buffer_free(void);
 
@@ -2718,6 +2747,31 @@ RdStencilWindow *rd__replay_stencil(void);
  * rd__stencil_ops with the depth copy's stencil load and store. */
 int rd__mip_boost(const RdTexRec *t, uint8_t *ref);
 bool rd__pass_wants_readable(const RdTargetRec *c);
+/* The local read's fragment entries (fog_lut_local_ps, date_stencil_ps):
+ * group 2 is g_rd.layoutLocal (rd_pipeline.c pipelineDesc) */
+bool rd__fs_local_read(uint8_t fs);
+/* The fog's table, uploaded at the replay's upload phase (replayFrame,
+ * after the textures): the first RD_POST_FOG record of the lists the
+ * replay draws, copied into the LUT texture once, outside any pass, so
+ * doFog draws without a copy (and inside the scene pass on the local
+ * path); a fog whose table is another is copied in doFog as before */
+void rd__fog_lut_upload(const RdFrame *f, int keep);
+/* DATE's stencil path (rd_replay.c; RdProfile.dateStencil): the setup's
+ * keys, date_clear_ps (mode RD_STENCIL_DATE_CLEAR) and date_stencil_ps
+ * (RD_STENCIL_DATE_SET), through blit_vs into colorFmt with the scene depth,
+ * colour mask 0 (rd_pipeline.c), and the DATE draws' twins of an enumerated
+ * key (rd__enumerate_reachable_date) */
+RdPipeKeyInt rd__date_setup_key(uint8_t mode, RhiFormat colorFmt);
+uint32_t rd__enumerate_reachable_date(RdPipeKeyInt *out, uint32_t max, uint32_t n);
+/* DATE's twin of a planned draw pass: the stencil bit's test
+ * (RD_STENCIL_DATE_TEST0 / TEST1 by DF_DATM), the shader's DF_DATE and
+ * DF_DATM off (the planner keeps DATE in the flags, the key's date off).
+ * False (unchanged) for a pass without DF_DATE, with a stencil mode of its
+ * own or without a depth attachment */
+bool rd__date_stencil_pass(RdDrawPass *p);
+/* the fold's key of a staticBlur pair (fx_blur2_ps over colorFmt, no depth;
+ * rd_replay_tiler.c rd__replay_blur_fold) */
+RdPipeKeyInt rd__blur_fold_key(const RdStateBlock *s, RhiFormat colorFmt);
 bool rd__stencil_ops_packed(RdStencilWindow *w, uint32_t depth, bool whole, RhiLoadOp depthLoad,
                             RhiLoadOp *stencilLoad, RhiStoreOp *stencilStore);
 /* rd_upload.c, for the replay: the ring a frame needs (its commands, plus

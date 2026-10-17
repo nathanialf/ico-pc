@@ -1424,6 +1424,12 @@ int main(int argc, char **argv)
          * static */
         printf("%s: stats: %u dynamic state sets (dynamic depth %s, blend %s)\n", dump,
                pr->dynamicSets, g_rd.dynDepth ? "on" : "off", g_rd.dynBlend ? "on" : "off");
+        /* the tiler passes (rd_replay.c: DATE through the stencil bit, the
+         * fog's local read, the blur pairs folded) */
+        printf("%s: stats: DATE snapshots %u, DATE stencil draws %u (%u setups); fog local draws "
+               "%u (fog path %s); blur pairs folded %u\n",
+               dump, pr->dateSnapshots, pr->dateStencilDraws, pr->dateStencilTakes,
+               pr->fogLocalDraws, rd__fog_path_name(g_rd.fogPath), pr->blurFolds);
         /* the VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass):
          * each mesh and grid vertex and triangle and each sprite once, before
          * the lists */

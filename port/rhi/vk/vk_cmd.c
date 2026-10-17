@@ -501,12 +501,32 @@ static void vkr_flush_barriers(VkrCmdList *c)
     c->pendMemDst = 0;
 }
 
+/* The stages and accesses of t in state s (a barrier's scope on that
+ * side): the state map's, but for a depth-stencil texture in
+ * RHI_STATE_RENDER_TARGET_READ, the depth attachment a pass's fragment
+ * shaders also read as an input attachment (RhiDepthAttachment.readable,
+ * dynamic rendering local read: the same layout as the colour's, the depth
+ * tests' stages and accesses with the fragment shader's read) */
+static void vkr_state_scope(RhiState s, const VkrTexture *t, VkPipelineStageFlags *stages,
+                            VkAccessFlags *access)
+{
+    if (s == RHI_STATE_RENDER_TARGET_READ && (t->aspects & VK_IMAGE_ASPECT_DEPTH_BIT)) {
+        *stages = VKR_DEPTH_STAGES | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        *access = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                  VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+        return;
+    }
+    *stages = vkr_stateMap[s].stages;
+    *access = vkr_stateMap[s].access;
+}
+
 void vkr_image_barrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState after)
 {
-    const VkrStateMap *b = &vkr_stateMap[before];
-    const VkrStateMap *a = &vkr_stateMap[after];
-    VkPipelineStageFlags src = b->stages;
-    VkAccessFlags srcAccess = b->access;
+    VkPipelineStageFlags src, dst;
+    VkAccessFlags srcAccess, dstAccess;
+    vkr_state_scope(before, t, &src, &srcAccess);
+    vkr_state_scope(after, t, &dst, &dstAccess);
     if (t->swapchain && (before == RHI_STATE_UNDEFINED || before == RHI_STATE_PRESENT)) {
         /* a swapchain image's first barrier after an acquire: the submit
          * waits on the acquire semaphore at COLOR_ATTACHMENT_OUTPUT
@@ -537,7 +557,7 @@ void vkr_image_barrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState a
     VkImageMemoryBarrier ib = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .srcAccessMask = srcAccess,
-        .dstAccessMask = a->access,
+        .dstAccessMask = dstAccess,
         .oldLayout = vkr_state_layout(before, t->rhiFormat),
         .newLayout = vkr_state_layout(after, t->rhiFormat),
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -545,7 +565,6 @@ void vkr_image_barrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState a
         .image = t->image,
         .subresourceRange = {t->aspects, 0, t->mips, 0, 1},
     };
-    VkPipelineStageFlags dst = a->stages;
     if (after == RHI_STATE_PRESENT) {
         dst = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
         if (t->swapchain) {
@@ -928,8 +947,11 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         } else {
             memcpy(cv.color.float32, a->clear, sizeof(cv.color.float32));
         }
-        if (a->readable && !g_vkr.rasterOrder) {
-            VKR_LOG("render pass: a readable colour target without the attachment read");
+        /* readable: the exact blend's attachment read (rasterization
+         * order, rasterOrder) or a read after rhi_cmd_local_read_barrier
+         * (DATE's stencil setup), both through local read */
+        if (a->readable && !g_vkr.localRead) {
+            VKR_LOG("render pass: a readable colour target without local read");
             return;
         }
         color[i] = (VkRenderingAttachmentInfo){
@@ -954,9 +976,18 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
             VKR_LOG("render pass: invalid depth target");
             return;
         }
-        VkImageLayout layout = pass->depth.readOnlyDepth
-                                   ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
-                                   : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        if (pass->depth.readable && (!g_vkr.localRead || pass->depth.readOnlyDepth)) {
+            VKR_LOG("render pass: a readable depth target without local read, or read-only");
+            return;
+        }
+        /* readable: the pass's fragment shaders read the depth as an input
+         * attachment after rhi_cmd_local_read_barrier (the fog's local
+         * read), the texture in RHI_STATE_RENDER_TARGET_READ
+         * (RENDERING_LOCAL_READ, vkr_state_scope) */
+        VkImageLayout layout =
+            pass->depth.readOnlyDepth ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+            : pass->depth.readable    ? VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR
+                                      : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         VkClearValue cv = {.depthStencil = {pass->depth.clearDepth, pass->depth.clearStencil}};
         hasDepth = true;
         depthTex = t;
@@ -1032,9 +1063,13 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
                           depth.loadOp != VK_ATTACHMENT_LOAD_OP_LOAD ||
                           (hasStencil && (stencil.storeOp != VK_ATTACHMENT_STORE_OP_NONE ||
                                           stencil.loadOp != VK_ATTACHMENT_LOAD_OP_LOAD));
-            vkr_hz_image(&h, c, depthTex, depth.imageLayout, VKR_DEPTH_STAGES,
+            /* a readable depth is also read by the fragment shaders */
+            const bool rdz = pass->depth.readable;
+            vkr_hz_image(&h, c, depthTex, depth.imageLayout,
+                         VKR_DEPTH_STAGES | (rdz ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT : 0u),
                          VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                             (depthWrites ? VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT : 0),
+                             (depthWrites ? VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT : 0) |
+                             (rdz ? VK_ACCESS_INPUT_ATTACHMENT_READ_BIT : 0u),
                          depthWrites ? ~0u : 0u);
         }
         vkr_hz_flush(c->cb, &h);
@@ -1321,10 +1356,45 @@ static void vkr_flush_dynamic(VkrCmdList *c)
     }
 }
 
+/* Inside the open pass (dynamic rendering local read): one by-region
+ * memory barrier holding the masks asked for, counted in stats.barriers.
+ *   COLOR  colour attachment writes -> the fragment shaders' input
+ *          attachment reads (DATE's setup draw reads the alpha);
+ *   DEPTH  the depth tests' writes -> the fragment shaders' input
+ *          attachment reads (the fog reads the depth);
+ *   BACK   those reads -> the next draws' depth and colour writes (the
+ *          write after the read of the same pixel).
+ * Nothing outside a pass, or without local read. */
 void rhi_cmd_local_read_barrier(RhiCommandList cl, uint32_t mask)
 {
-    (void)cl;
-    (void)mask;
+    VkrCmdList *c = vkr_get_cmd(cl);
+    if (!c || !c->inPass || !g_vkr.localRead || mask == 0u) {
+        return;
+    }
+    VkMemoryBarrier mb = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    VkPipelineStageFlags src = 0, dst = 0;
+    if (mask & RHI_LOCAL_READ_COLOR) {
+        src |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        mb.srcAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        dst |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        mb.dstAccessMask |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    }
+    if (mask & RHI_LOCAL_READ_DEPTH) {
+        src |= VKR_DEPTH_STAGES;
+        mb.srcAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        dst |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        mb.dstAccessMask |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    }
+    if (mask & RHI_LOCAL_READ_BACK) {
+        src |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        mb.srcAccessMask |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+        dst |= VKR_DEPTH_STAGES | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        mb.dstAccessMask |=
+            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    }
+    vkr_flush_barriers(c);
+    vkCmdPipelineBarrier(c->cb, src, dst, VK_DEPENDENCY_BY_REGION_BIT, 1, &mb, 0, NULL, 0, NULL);
+    g_vkr.stats.barriers++;
 }
 
 /* A destination-read draw (rhi.h RhiDstRead) needs no barrier before it:

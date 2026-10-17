@@ -270,3 +270,144 @@ float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
     }
     return float4(res) * (1.0 / 255.0);
 }
+
+// fx_blur2_ps: a pair of the blur's passes (staticBlur.c blur(n): pass 1
+// WORK0 -> WORK1 with the rect shrunk, pass 2 WORK1 -> WORK0 with the UVs
+// shrunk) drawn as one pass into WORK0 (rd_replay_tiler.c rd__replay_blur_fold, the
+// profile's blurFold). For a pixel of pass 2 it computes what fx_sprite_ps
+// computes, where each of its four WORK1 taps is not loaded but computed:
+// pass 1's sprite at that WORK1 texel (its UV from its rect, the four WORK0
+// taps, gs_bilerp, the texture function with pass 1's colour, FBA), then
+// TEXA as pass 2's fetch applies it. The integers are the two passes', in
+// their order: the same bytes. The replay folds a pair only where that
+// holds by construction: scale 1 and no crop on both targets (the same
+// size, the same origin), both passes textured from the other target,
+// LINEAR, CLAMP, no blend, no alpha test, no DATE, no destination read, the
+// colour mask whole, no depth, the same flags, TEXA, TEX0 size and origin;
+// every WORK1 tap pass 2 weighs (a weight above 0) inside the texels pass 1
+// covers; and the next pair's pass 1 covering the same texels, so the pair
+// drawn last as two passes leaves WORK1 as the chain did. The two textures
+// may differ in size (WORK1 is 256 x 256, WORK0 256 x 128): each fetch
+// clamps on its own.
+// Bindings: t1 WORK0 as it was before the pair (its snapshot), t2 unused.
+// DrawCB: pass 2's fields as fx_sprite_ps reads them (g_param its rect,
+// g_uvRect its UVs, g_col its colour, g_aux1 its reciprocals and fx_texel's
+// TEX0 size, the same for both, g_tex.zw WORK1's size), and pass 1's:
+//   g_aux0   x x0 | y0 << 16, y x1 | y1 << 16 (its rect, 12.4),
+//            z u0 | v0 << 16, w u1 | v1 << 16 (its UVs, 12.4)
+//   g_scale  xy WORK0's size (its texture, t1: the clamp of its fetch),
+//            z R + 256 G, w B + 256 A of its colour (integers held as
+//            floats; at scale 1 without a crop fx_sprite_ps reads neither)
+#ifndef ICO_UINT_SRC
+// fx_texel's addressing at scale 1 without a crop on a texture of asz
+// texels (g_scale holds pass 1's here)
+int2 fx2_addr(int2 c, uint flags, int2 asz)
+{
+    const int2 lsz = int2(g_aux1.zw);
+    c.x = (flags & FXF_CLAMP_S) != 0u ? clamp(c.x, 0, lsz.x - 1) : gs_wrap_repeat(c.x, lsz.x);
+    c.y = (flags & FXF_CLAMP_T) != 0u ? clamp(c.y, 0, lsz.y - 1) : gs_wrap_repeat(c.y, lsz.y);
+    return clamp(c, int2(0, 0), asz - 1);
+}
+
+// pass 1's fetch of WORK0 (t1, g_scale.xy texels)
+uint4 fx2_texel(int2 c, uint flags)
+{
+    const uint4 t = fx_load(g_texture, fx2_addr(c, flags, int2(g_scale.xy)));
+    return gs_texa_expand(t, g_mode.y & 0xFFu, g_mode.y >> 8);
+}
+
+// fx_sprite_ps's texture function
+uint4 fx2_tfx(uint4 t, uint4 col, uint flags)
+{
+    const uint tfx = (flags >> FXF_TFX_SHIFT) & 3u;
+    const bool tcc = (flags & FXF_TCC) != 0u;
+    uint4 o;
+    if (tfx == 1u) {
+        o.rgb = t.rgb;
+        o.a = tcc ? t.a : col.a;
+    } else {
+        o.rgb = min((t.rgb * col.rgb) >> 7, uint3(255, 255, 255));
+        if (tfx >= 2u) {
+            o.rgb = min(o.rgb + col.aaa, uint3(255, 255, 255));
+        }
+        if (!tcc) {
+            o.a = col.a;
+        } else if (tfx == 0u) {
+            o.a = min((t.a * col.a) >> 7, 255u);
+        } else if (tfx == 2u) {
+            o.a = min(t.a + col.a, 255u);
+        } else {
+            o.a = t.a;
+        }
+    }
+    return o;
+}
+
+// pass 1's pixel at WORK1 texel c (its GS window coordinate o + 16 c at
+// scale 1), as WORK1 would hold it: fx_sprite_ps's arithmetic with pass
+// 1's rect, UVs and colour (the UV divides exact, gs_div_trunc: the same
+// truncated quotients as the reciprocal form), TEXA as pass 2's fetch
+// applies it to the stored texel
+uint4 fx2_pass1(int2 c, int2 o, uint flags)
+{
+    const int x0 = int(g_aux0.x & 0xFFFFu), y0 = int(g_aux0.x >> 16);
+    const int x1 = int(g_aux0.y & 0xFFFFu), y1 = int(g_aux0.y >> 16);
+    const int u0 = int(g_aux0.z & 0xFFFFu), v0 = int(g_aux0.z >> 16);
+    const int u1 = int(g_aux0.w & 0xFFFFu), v1 = int(g_aux0.w >> 16);
+    const int X = o.x + c.x * 16;
+    const int Y = o.y + c.y * 16;
+    const int u = u0 + gs_div_trunc((X - x0) * (u1 - u0), x1 - x0);
+    const int v = v0 + gs_div_trunc((Y - y0) * (v1 - v0), y1 - y0);
+    const int uu = u - 8, vv = v - 8;
+    const int2 i0 = int2(uu >> 4, vv >> 4);
+    const uint fu = uint(uu & 15), fv = uint(vv & 15);
+    const uint4 a = fx2_texel(i0, flags);
+    const uint4 b = fx2_texel(i0 + int2(1, 0), flags);
+    const uint4 cc = fx2_texel(i0 + int2(0, 1), flags);
+    const uint4 d = fx2_texel(i0 + int2(1, 1), flags);
+    const uint rg = uint(g_scale.z), ba = uint(g_scale.w);
+    const uint4 col = uint4(rg & 255u, rg >> 8, ba & 255u, ba >> 8);
+    uint4 res = fx2_tfx(gs_bilerp(a, b, cc, d, fu, fv), col, flags);
+    res.a = res.a | ((flags & FXF_FBA) != 0u ? 0x80u : 0u);
+    return gs_texa_expand(res, g_mode.y & 0xFFu, g_mode.y >> 8);
+}
+
+float4 fx_blur2_ps(float4 pos : SV_Position) : SV_Target0
+{
+    const uint flags = g_mode.x;
+    // pass 2's pixel as fx_sprite_ps has it (scale 1: ts is 1, g_vpo.z 0)
+    const float2 ts = float2(g_z.y > 0.0 ? g_z.y : 1.0, g_z.z > 0.0 ? g_z.z : 1.0);
+    const float2 fp = pos.xy + float2(g_vpo.z, 0.0);
+    float2 fb = fp - 0.5, fc = fp;
+    [branch] if (ts.x != 1.0 || ts.y != 1.0) {
+        fb = fb / ts;
+        fc = fc / ts;
+    }
+    const int2 gb = int2(floor(fb)) * 16;
+    const int2 gp = int2(floor((fc - 0.5) * 16.0 + 0.5));
+    const int ox = int(round(g_origin.x * 16.0)), oy = int(round(g_origin.y * 16.0));
+    const int X = ox + gp.x;
+    const int Y = oy + gp.y;
+    const int x0 = int(g_param.x), y0 = int(g_param.y), x1 = int(g_param.z), y1 = int(g_param.w);
+    if (ox + gb.x < x0 || ox + gb.x >= x1 || oy + gb.y < y0 || oy + gb.y >= y1) {
+        discard;
+    }
+    const int u0 = int(g_uvRect.x), v0 = int(g_uvRect.y);
+    const int u1 = int(g_uvRect.z), v1 = int(g_uvRect.w);
+    const int u = u0 + gs_div_trunc_rcp((X - x0) * (u1 - u0), x1 - x0, asfloat(g_aux1.x));
+    const int v = v0 + gs_div_trunc_rcp((Y - y0) * (v1 - v0), y1 - y0, asfloat(g_aux1.y));
+    // LINEAR (the fold's condition), at scale 1: su = u, sv = v
+    const int uu = u - 8, vv = v - 8;
+    const int2 i0 = int2(uu >> 4, vv >> 4);
+    const uint fu = uint(uu & 15), fv = uint(vv & 15);
+    // pass 2's fetch of WORK1 (g_tex.zw texels), each texel pass 1's pixel
+    const int2 o = int2(ox, oy), w1 = int2(g_tex.zw);
+    const uint4 a = fx2_pass1(fx2_addr(i0, flags, w1), o, flags);
+    const uint4 b = fx2_pass1(fx2_addr(i0 + int2(1, 0), flags, w1), o, flags);
+    const uint4 c = fx2_pass1(fx2_addr(i0 + int2(0, 1), flags, w1), o, flags);
+    const uint4 d = fx2_pass1(fx2_addr(i0 + int2(1, 1), flags, w1), o, flags);
+    uint4 res = fx2_tfx(gs_bilerp(a, b, c, d, fu, fv), g_col, flags);
+    res.a = res.a | ((flags & FXF_FBA) != 0u ? 0x80u : 0u);
+    return float4(res) * (1.0 / 255.0);
+}
+#endif

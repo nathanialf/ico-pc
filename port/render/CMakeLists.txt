@@ -115,6 +115,7 @@ add_library(ico_render STATIC
     rd_blur.c # staticBlur.c's sprites
     rd_core.c
     rd_crt.c # the CRT filter at present time
+    rd_date_selftest.c # DATE through the stencil bit: the start-up check on the device
     rd_dst_read.c # the exact GS blend: the destination read
     rd_dump.c
     rd_fog_path.c # how the fog reads the depth: the paths, the probe, the self-test
@@ -134,6 +135,7 @@ add_library(ico_render STATIC
     rd_post.c
     rd_present.c
     rd_replay.c
+    rd_replay_tiler.c # the replay's tiler passes: DATE through the stencil bit, the blur fold
     rd_replay_vu.c # the replay's VU draws
     rd_vuprepass_selftest.c # the VU vertex pre-pass's start-up check on the device
     rd_window.c
@@ -1310,3 +1312,37 @@ if(ICO_RUN_TESTS)
                                     ENVIRONMENT "${_env_blend_attachment}")
 endif()
 # ---- X1 end ----
+
+# ---- X2: the tiler passes (rd_replay.c: the fog's local read, DATE through
+# the stencil bit, the blur pair fold) ----
+# The fog's depth read inside the scene pass (ICO_RD_FOG_PATH=local: the
+# profile's local read on lavapipe, which has it): rd_fog_test's grid, edge
+# and above-1x cases on the local path, and case d's replays on the other
+# paths the same pixels byte for byte; the fog's self-test tries local first
+# and takes it (a scaled, wide Full pixel SCENE), its probe logged; DATE's
+# self-test (ICO_RD_DATE_PATH=stencil) finds the stencil bit and the
+# snapshot right on every sample.  rd_pixel's DATE case and rd_blur's fold
+# case (b) run in their own tests.
+if(ICO_RUN_TESTS)
+    set(_env_fog_local ${_env} "ICO_RD_FOG_PATH=local")
+    set(_fl "${CMAKE_CURRENT_BINARY_DIR}/fog_local")
+    file(MAKE_DIRECTORY "${_fl}")
+    add_test(NAME rd_fog_local COMMAND rd_fog_test)
+    set_tests_properties(rd_fog_local PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_fl}"
+                                                 ENVIRONMENT "${_env_fog_local}")
+    add_test(NAME rd_fog_selftest_local
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
+                     -DFOG_PATH=local
+                     "-DRESULTS=local ok [0-2], copy not tried, inplace not tried, buffer not tried"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fog_selftest.cmake")
+    set_tests_properties(rd_fog_selftest_local PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                          ENVIRONMENT "${_env_fog_local}")
+    set(_env_date_stencil ${_env} "ICO_RD_DATE_PATH=stencil")
+    add_test(NAME rd_date_selftest
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test> -DPATH=stencil
+                     "-DRESULTS=stencil ok 4, snapshot ok 4"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_date_selftest.cmake")
+    set_tests_properties(rd_date_selftest PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                     ENVIRONMENT "${_env_date_stencil}")
+endif()
+# ---- X2 end ----

@@ -662,6 +662,115 @@ static void testDateFlat(void)
           tri[2]);
 }
 
+/* ------------------------------------------- DATE through the stencil bit */
+
+/* DATE through the stencil bit (rd_replay_tiler.c rd__replay_date_take, RdProfile
+ * .dateStencil; local read) against the R8 snapshot, on SCENE with its
+ * depth (the scene class: the targets made again with DATE's usage).
+ * SCENE's left half gets alpha 0x80, its right half 0; one DATE (DATM 1)
+ * command of two overlapping sprites: A over columns 0..255 of rows 0..63
+ * writing alpha 0, B over columns 128..383 of rows 32..95.  Within one draw
+ * both test the alpha as it was before the draw (the snapshot's semantics,
+ * docs/port/DIVERGENCES.md): A lands on all of its pixels, B on columns
+ * 128..255 (not on the right half) and, over A, on rows 32..63 there,
+ * though A cleared that alpha.  The frame replayed through the stencil bit and through the
+ * snapshot gives SCENE byte for byte the same, the stencil run with no
+ * snapshot taken and DATE draws through the bit, the snapshot run with no
+ * stencil draws. */
+static void testDateStencil(void)
+{
+    if (!rhi_limits()->localRead || !g_rd.fs[RD_FS_DATE_STENCIL].id ||
+        !g_rd.fs[RD_FS_DATE_CLEAR].id || !g_rd.layoutLocal.id) {
+        printf("  DATE stencil: skipped (no local read or no DATE stencil shaders)\n");
+        return;
+    }
+    static const uint8_t a0[4] = {10, 10, 10, 0}, a1[4] = {20, 20, 20, 0x80};
+    static const uint8_t red[4] = {200, 0, 0, 0x00}, green[4] = {0, 200, 0, 0x40};
+    const bool was = g_rd.profile.dateStencil;
+    g_rd.profile.dateStencil = true;
+    rd_reset_scene(512, 512); /* SCENE made with DATE's local read */
+    const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
+    CHECK(t && (t->dstUsage & RD_DST_USAGE_LOCAL_DATE), "DATE stencil: SCENE has DATE's usage");
+    const RdTarget scene = rd_target(RD_TARGET_SCENE);
+    rd_begin_frame();
+    rd_select_list(5);
+    rd_set_target(scene, scene, 512, 512, 0);
+    opaque2D();
+    rd_texture_off();
+    sprite(512, 512, 0, 0, 256 * 16, 128 * 16, a1, 0, 0, 0, 0);
+    sprite(512, 512, 256 * 16, 0, 512 * 16, 128 * 16, a0, 0, 0, 0, 0);
+    rd_test_gs(0x3C000); /* DATE DATM 1, Z ALWAYS */
+    {
+        const int32_t ox = (2048 - 256) * 16, oy = (2048 - 256) * 16;
+        RdScreenVtx v[4] = {vtx(ox + 0, oy + 0, 0, red, 0, 0),
+                            vtx(ox + 256 * 16, oy + 64 * 16, 0, red, 0, 0),
+                            vtx(ox + 128 * 16, oy + 32 * 16, 0, green, 0, 0),
+                            vtx(ox + 384 * 16, oy + 96 * 16, 0, green, 0, 0)};
+        rd_screen_prims(RD_PRIM_SPRITES, v, 4, RD_SPACE_UI, 1, 0);
+    }
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_end_frame(0);
+    const RdFrame *f = rd__last_frame();
+    static uint8_t viaBit[512 * 512 * 4], viaSnap[512 * 512 * 4];
+    uint32_t w = 0, h = 0, bitDraws = 0, bitSnaps = 0, snapDraws = 0, snapSnaps = 0;
+    bool okBit = false, okSnap = false;
+    if (f) {
+        okBit = rd__replay_frame(f, 0, false);
+        rhi_wait_idle();
+        bitDraws = g_rdPerf.dateStencilDraws;
+        bitSnaps = g_rdPerf.dateSnapshots;
+        const uint8_t *img = readTarget(RD_TARGET_SCENE, &w, &h);
+        if (img && w * h * 4 <= sizeof(viaBit)) {
+            memcpy(viaBit, img, (size_t)w * h * 4);
+        }
+        g_rd.profile.dateStencil = false;
+        okSnap = rd__replay_frame(f, 0, false);
+        rhi_wait_idle();
+        snapDraws = g_rdPerf.dateStencilDraws;
+        snapSnaps = g_rdPerf.dateSnapshots;
+        img = readTarget(RD_TARGET_SCENE, &w, &h);
+        if (img && w * h * 4 <= sizeof(viaSnap)) {
+            memcpy(viaSnap, img, (size_t)w * h * 4);
+        }
+    }
+    CHECK(f && okBit && okSnap, "DATE stencil: the two replays");
+    int diff = 0;
+    for (size_t i = 0; i < (size_t)w * h * 4; i++) {
+        diff += viaBit[i] != viaSnap[i];
+    }
+
+    /* the snapshot's semantics, both ways: (x, y) -> the colour */
+    static const struct {
+        uint32_t x, y;
+        const uint8_t *c;
+    } kWant[] = {{60, 10, red}, {200, 10, red},   {200, 50, green}, {300, 50, a0},
+                 {60, 80, a1},  {200, 80, green}, {300, 110, a0},   {450, 50, a0}};
+
+    int bad = 0;
+    for (size_t k = 0; k < sizeof(kWant) / sizeof(kWant[0]) && w; k++) {
+        const uint8_t *p = &viaBit[(kWant[k].y * w + kWant[k].x) * 4];
+        if (memcmp(p, kWant[k].c, 4) != 0) {
+            printf("  DATE stencil (%u,%u): %u,%u,%u,%u, want %u,%u,%u,%u\n", kWant[k].x,
+                   kWant[k].y, p[0], p[1], p[2], p[3], kWant[k].c[0], kWant[k].c[1], kWant[k].c[2],
+                   kWant[k].c[3]);
+            bad++;
+        }
+    }
+    printf("  DATE stencil: %d bytes differ from the snapshot's; through the bit %u DATE draws, "
+           "%u snapshots; the snapshot's %u, %u\n",
+           diff, bitDraws, bitSnaps, snapDraws, snapSnaps);
+    CHECK(diff == 0, "DATE stencil: SCENE through the bit equals the snapshot's (%d bytes)", diff);
+    CHECK(bad == 0, "DATE stencil: %d samples off the snapshot's semantics", bad);
+    CHECK(bitDraws > 0 && bitSnaps == 0, "DATE stencil: %u draws through the bit, %u snapshots",
+          bitDraws, bitSnaps);
+    CHECK(snapDraws == 0 && snapSnaps > 0, "DATE snapshot: %u draws through the bit, %u snapshots",
+          snapDraws, snapSnaps);
+    g_rd.profile.dateStencil = was;
+    rd_reset_scene(512, 512);
+    rhi_wait_idle();
+    rd__pipeline_cache_clear(); /* the bit's keys are outside the reachable set again */
+}
+
 /* ------------------------------------------------------- screen-prim runs */
 
 /* Consecutive screen-prim commands under the same state are one
@@ -4611,6 +4720,7 @@ int main(int argc, char **argv)
     testAlphaOrder(1, 1);
     testAlphaOrder(1, 0);
     testDateFlat();
+    testDateStencil();
     testScreenRuns();
     testSprites();
     testTexa();

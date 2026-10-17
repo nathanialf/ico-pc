@@ -512,6 +512,7 @@ bool rd__fs_has_no_dual(uint8_t fs)
     case RD_FS_FOG:
     case RD_FS_FOG_BUFFER:
     case RD_FS_FOG_MS:
+    case RD_FS_FOG_LOCAL:
     case RD_FS_VU:
     case RD_FS_VU_TEXA:
     case RD_FS_VU_LEGACY:
@@ -523,6 +524,11 @@ bool rd__fs_has_no_dual(uint8_t fs)
     default:
         return false;
     }
+}
+
+bool rd__fs_local_read(uint8_t fs)
+{
+    return fs == RD_FS_FOG_LOCAL || fs == RD_FS_DATE_STENCIL;
 }
 
 static RdBlendPath keyBlendPath(const RdPipeKeyInt *k)
@@ -658,7 +664,15 @@ static RhiCompare depthCompare(uint8_t ztst)
  * written through RD_SHADOW_STENCIL_MASK, so the stencil holds n mod 64 as
  * 4 n mod 256 wraps.  Resolve bit k: EQUAL to the reference 1 << k under
  * read mask 1 << k; resolve A: NOTEQUAL 0 under the count's mask.  The
- * resolve passes write no stencil. */
+ * resolve passes write no stencil.
+ * DATE's stencil bit (RD_DATE_STENCIL_BIT, the reference
+ * RD_DATE_STENCIL_BIT for every one of them, rd_replay.c): CLEAR replaces
+ * the bit with the reference 0 the setup sets (ALWAYS), SET with the
+ * reference's 1 where the fragment survives date_stencil_ps (ALWAYS), both
+ * through the write mask of the bit alone; TEST1 passes where the bit is 1
+ * (EQUAL to the reference under the bit's read mask), TEST0 where it is 0
+ * (NOTEQUAL), writing nothing.  None of them reads or writes bits 0-5, the
+ * count's. */
 static void shadowStencil(uint8_t mode, RhiDepthStencilState *ds)
 {
     RhiStencilFace f = {RHI_CMP_ALWAYS, RHI_SO_KEEP, RHI_SO_KEEP, RHI_SO_KEEP};
@@ -674,6 +688,18 @@ static void shadowStencil(uint8_t mode, RhiDepthStencilState *ds)
     case RD_STENCIL_TEST_NONZERO:
         f.compare = RHI_CMP_NOTEQUAL;
         ds->stencilReadMask = RD_SHADOW_STENCIL_MASK;
+        ds->stencilWriteMask = 0;
+        break;
+    case RD_STENCIL_DATE_CLEAR:
+    case RD_STENCIL_DATE_SET:
+        f.pass = RHI_SO_REPLACE;
+        ds->stencilReadMask = 0;
+        ds->stencilWriteMask = RD_DATE_STENCIL_BIT;
+        break;
+    case RD_STENCIL_DATE_TEST0:
+    case RD_STENCIL_DATE_TEST1:
+        f.compare = mode == RD_STENCIL_DATE_TEST1 ? RHI_CMP_EQUAL : RHI_CMP_NOTEQUAL;
+        ds->stencilReadMask = RD_DATE_STENCIL_BIT;
         ds->stencilWriteMask = 0;
         break;
     default:
@@ -769,7 +795,9 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
     const bool dstAttach = k->dst == RHI_DST_READ_ATTACHMENT;
     layouts[0] = g_rd.layoutFrame;
     layouts[1] = vu ? g_rd.layoutVu : g_rd.layoutDraw;
-    layouts[2] = k->fs == RD_FS_BLEND_INT ? g_rd.layoutInt : g_rd.layoutTex;
+    layouts[2] = k->fs == RD_FS_BLEND_INT   ? g_rd.layoutInt
+                 : rd__fs_local_read(k->fs) ? g_rd.layoutLocal
+                                            : g_rd.layoutTex;
     layouts[3] = dstStorage ? g_rd.layoutDstStorage : g_rd.layoutDstAttach;
     memset(d, 0, sizeof(*d));
     /* a program entry's key: the fallback's module (rd__vu_policy_init,
@@ -2415,6 +2443,7 @@ static uint32_t enumerateAll(RdPipeKeyInt *out, uint32_t max)
     n = rd__enumerate_reachable_fog(out, max, n);
     n = rd__enumerate_reachable_water(out, max, n);
     n = rd__enumerate_reachable_crt(out, max, n);
+    n = rd__enumerate_reachable_date(out, max, n); /* after every family that draws DATE */
     return rd__enumerate_reachable_blur(out, max, n);
 }
 
@@ -2491,13 +2520,22 @@ uint32_t rd__enumerate_reachable_crt(RdPipeKeyInt *out, uint32_t max, uint32_t n
 
 /* ------------------------------------------------------------------- fog */
 
-int rd__fog_plan(const RdStateBlock *s, RhiFormat colorFmt, int buffer, RdDrawPass out[2])
+int rd__fog_plan(const RdStateBlock *s, RhiFormat colorFmt, int path, RdDrawPass out[2])
 {
     const int np = rd__plan_screen_draw(s, RD_PRIM_TRIANGLES, RD_SPACE_FULLFRAME, colorFmt,
                                         RHI_FMT_UNKNOWN, out);
     for (int i = 0; i < np; i++) {
         out[i].key.gs.program = RD_PROG_POST;
-        out[i].key.fs = buffer ? RD_FS_FOG_BUFFER : RD_FS_FOG;
+        out[i].key.fs = path == RD_FOG_BUFFER  ? RD_FS_FOG_BUFFER
+                        : path == RD_FOG_LOCAL ? RD_FS_FOG_LOCAL
+                                               : RD_FS_FOG;
+        if (path == RD_FOG_LOCAL) {
+            /* the scene pass's depth bound (the input attachment the shader
+             * reads), its test ALWAYS and no write: the shader tests Z */
+            out[i].key.depthFmt = RHI_FMT_D32F_S8;
+            out[i].key.gs.ztst = RD_ZTST_ALWAYS;
+            out[i].key.gs.zwrite = RD_ZWRITE_OFF;
+        }
     }
     return np;
 }
@@ -2512,15 +2550,117 @@ uint32_t rd__enumerate_reachable_fog(RdPipeKeyInt *out, uint32_t max, uint32_t n
     s.ds.zwrite = RD_ZWRITE_OFF;
     s.ds.abe = 1;
     s.ds.blend = RD_BLEND_LERP_AS;
-    /* the shader of the path the self-test picks, or the override */
-    for (int buffer = 0; buffer < 2; buffer++) {
+    /* the shader of the path the self-test picks, or the override; the
+     * local read's where the profile has it (rd_fog_path.c) */
+    const int local = g_rd.profile.fogLocal && g_rd.fs[RD_FS_FOG_LOCAL].id != 0;
+    static const int kPaths[3] = {RD_FOG_INPLACE, RD_FOG_BUFFER, RD_FOG_LOCAL};
+    for (int j = 0; j < 2 + local; j++) {
         RdDrawPass dp[2];
-        const int np = rd__fog_plan(&s, RHI_FMT_RGBA8_UNORM, buffer, dp);
+        const int np = rd__fog_plan(&s, RHI_FMT_RGBA8_UNORM, kPaths[j], dp);
         for (int i = 0; i < np; i++) {
             n = rd__add_pipe_key(out, max, n, &dp[i].key);
         }
     }
     return n;
+}
+
+/* --------------------------------------------------------------- DATE */
+
+RdPipeKeyInt rd__date_setup_key(uint8_t mode, RhiFormat colorFmt)
+{
+    RdPipeKeyInt k = rd__post_key(
+        RD_VS_BLIT, mode == RD_STENCIL_DATE_CLEAR ? RD_FS_DATE_CLEAR : RD_FS_DATE_STENCIL,
+        colorFmt);
+    k.depthFmt = RHI_FMT_D32F_S8;
+    k.gs.ztst = RD_ZTST_ALWAYS;
+    k.gs.zwrite = RD_ZWRITE_OFF;
+    k.gs.colorMask = 0;
+    k.gs.stencil = mode;
+    return k;
+}
+
+bool rd__date_stencil_pass(RdDrawPass *p)
+{
+    RdPipeKeyInt *k = &p->key;
+    /* the planner keeps the key's date off and DATE in the flags (rd__plan_screen_draw) */
+    if (!(p->flags & ICO_DF_DATE) || k->gs.stencil != RD_STENCIL_OFF ||
+        k->depthFmt == RHI_FMT_UNKNOWN) {
+        return false;
+    }
+    k->gs.stencil = (p->flags & ICO_DF_DATM) ? RD_STENCIL_DATE_TEST1 : RD_STENCIL_DATE_TEST0;
+    k->gs.date = RD_DATE_OFF;
+    p->flags &= ~(uint32_t)(ICO_DF_DATE | ICO_DF_DATM);
+    return true;
+}
+
+/* DATE through the stencil bit (RdProfile.dateStencil, its shaders in the
+ * table): the twins of rd__date_stencil_pass of the draws the game makes
+ * with DATE (rd_state.h's literal TEST words with DATE: the shadow
+ * composite's 0x3400D, the aura's 0x34000 and 0x34003, the puddle's
+ * 0x3F000 and 0x3F001, Z ALWAYS; the list 4 default 0x5C000, Z GEQUAL)
+ * through the screen families' planner (UI and world space, triangles and
+ * lines, Z write on and off, every blend the families list, the scene
+ * depth, sprite_ps and its TEXA twin); the VU draws' twins of the
+ * enumerated VU keys under Z GEQUAL with the scene depth (the list 4
+ * default: DATM 1); and the two setup keys (RGBA8: the scene class).
+ * Keys missing here are made on first use. */
+uint32_t rd__enumerate_reachable_date(RdPipeKeyInt *out, uint32_t max, uint32_t n)
+{
+    if (!g_rd.profile.dateStencil || !g_rd.fs[RD_FS_DATE_STENCIL].id ||
+        !g_rd.fs[RD_FS_DATE_CLEAR].id) {
+        return n;
+    }
+    static const uint64_t kTests[] = {RD_TEST_AT_GT0_DATE0,        RD_TEST_DATE0,
+                                      RD_TEST_AT_ALWAYS_DATE0,     RD_TEST_RGBONLY_DATE1,
+                                      RD_TEST_NEVER_RGBONLY_DATE1, RD_TEST_DATE1_Z_GEQUAL};
+    static const int kBlends[] = {-1, 0, 1, 2, 4, 5, 6, 7};
+    static const uint8_t kPrims[] = {RD_PRIM_TRIANGLES, RD_PRIM_LINES};
+    const uint32_t n0 = n < max ? n : max;
+    for (size_t t = 0; t < sizeof(kTests) / sizeof(kTests[0]); t++) {
+        for (int space = 0; space < 2; space++) {
+            for (int zw = 0; zw < 2; zw++) {
+                for (size_t b = 0; b < sizeof(kBlends) / sizeof(kBlends[0]); b++) {
+                    for (size_t pr = 0; pr < sizeof(kPrims); pr++) {
+                        RdStateBlock st;
+                        rd__reset_state_block(&st);
+                        st.ds.test = rd_test_from_gs(kTests[t]);
+                        st.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
+                        st.ds.abe = kBlends[b] >= 0;
+                        st.ds.blend = (uint8_t)(kBlends[b] >= 0 ? kBlends[b] : 0);
+                        RdDrawPass dp[2];
+                        const int np = rd__plan_screen_draw(
+                            &st, kPrims[pr], space ? RD_SPACE_WORLD : RD_SPACE_UI,
+                            RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
+                        for (int i = 0; i < np; i++) {
+                            RdDrawPass kt = dp[i];
+                            kt.key.fs = RD_FS_SPRITE_TEXA;
+                            if (rd__date_stencil_pass(&dp[i])) {
+                                n = rd__add_pipe_key(out, max, n, &dp[i].key);
+                            }
+                            if (rd__date_stencil_pass(&kt)) {
+                                n = rd__add_pipe_key(out, max, n, &kt.key);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for (uint32_t i = 0; i < n0; i++) {
+        const RdPipeKeyInt *k = &out[i];
+        const int vu =
+            (k->vs >= RD_VS_VU_FIRST && k->vs <= RD_VS_VU_LAST) || rd__vs_is_vu_main(k->vs);
+        if (vu && k->depthFmt != RHI_FMT_UNKNOWN && k->gs.stencil == RD_STENCIL_OFF &&
+            k->gs.ztst == RD_ZTST_GEQUAL && k->dst == RHI_DST_READ_NONE) {
+            RdPipeKeyInt t = *k;
+            t.gs.stencil = RD_STENCIL_DATE_TEST1;
+            n = rd__add_pipe_key(out, max, n, &t);
+        }
+    }
+    const RdPipeKeyInt clear = rd__date_setup_key(RD_STENCIL_DATE_CLEAR, RHI_FMT_RGBA8_UNORM);
+    const RdPipeKeyInt set = rd__date_setup_key(RD_STENCIL_DATE_SET, RHI_FMT_RGBA8_UNORM);
+    n = rd__add_pipe_key(out, max, n, &clear);
+    return rd__add_pipe_key(out, max, n, &set);
 }
 
 /* --------------------------------------------------------------- shadows */
@@ -2841,5 +2981,20 @@ uint32_t rd__enumerate_reachable_blur(RdPipeKeyInt *out, uint32_t max, uint32_t 
             }
         }
     }
+    /* the fold of a blur pair (rd_replay_tiler.c rd__replay_blur_fold) where the profile
+     * folds: Z ALWAYS, no Z write, no depth, colour mask whole */
+    if (g_rd.profile.blurFold && g_rd.fs[RD_FS_FX_BLUR2].id) {
+        s.ds.test = rd_test_from_gs(RD_TEST_Z_ALWAYS);
+        s.ds.zwrite = RD_ZWRITE_OFF;
+        const RdPipeKeyInt k = rd__blur_fold_key(&s, RHI_FMT_RGBA8_UNORM);
+        n = rd__add_pipe_key(out, max, n, &k);
+    }
     return n;
+}
+
+RdPipeKeyInt rd__blur_fold_key(const RdStateBlock *s, RhiFormat colorFmt)
+{
+    RdPipeKeyInt k = rd__blur_key(s, colorFmt, RHI_FMT_UNKNOWN, NULL, 0);
+    k.fs = RD_FS_FX_BLUR2;
+    return k;
 }

@@ -186,6 +186,17 @@ foreach(_e sprite_ps sprite_texa_ps sprite_stq_ps)
 endforeach()
 # ---- G2 end ----
 # ---- X2 tiler passes (fog_lut_local_ps, fx_blur2_ps, date_clear_ps, date_stencil_ps) ----
+# the fog's depth read inside the scene pass by local read (RD_FOG_LOCAL,
+# rd_replay.c doFog), with its two-pass twin; DATE through the stencil bit's
+# setup (rd_replay_tiler.c rd__replay_date_take); a staticBlur pair folded into one pass
+# (rd_replay_tiler.c rd__replay_blur_fold). Vulkan only in use; their DXIL is a plain
+# build, never used
+ico_add_shader(fog_lut_local_ps fog_lut.hlsl fog_lut_ps fragment DEFINES FOG_LOCAL=1)
+ico_add_shader(fog_lut_local_ps fog_lut.hlsl fog_lut_ps fragment
+               DEFINES FOG_LOCAL=1 ICO_NO_DUAL=1 SUFFIX _nodual)
+ico_add_shader(date_clear_ps sprite.hlsl date_clear_ps fragment)
+ico_add_shader(date_stencil_ps sprite.hlsl date_stencil_ps fragment DEFINES ICO_DATE_STENCIL=1)
+ico_add_shader(fx_blur2_ps fx_sprite.hlsl fx_blur2_ps fragment)
 # ---- X2 end ----
 # ---- X3 pixel cuts (fx_sprite_u_ps) ----
 # fx_sprite_ps reading its textures through their RGBA8_UINT views

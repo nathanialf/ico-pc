@@ -158,7 +158,16 @@ typedef enum RdStencilMode {
     RD_STENCIL_TEST_NONZERO, /* shadow resolve */
     /* the resolve's bit passes, RD_STENCIL_RESOLVE_BIT0 + k for count
      * bit k (0..5): stencil EQUAL with read mask 1 << k */
-    RD_STENCIL_RESOLVE_BIT0
+    RD_STENCIL_RESOLVE_BIT0,
+    /* DATE through the stencil (rd_replay_tiler.c rd__replay_date_take; the count
+     * leaves bit 6, RD_DATE_STENCIL_BIT, alone): CLEAR writes 0 into bit 6,
+     * SET writes 1 where date_stencil_ps keeps the fragment (the
+     * destination alpha's MSB), TEST0 and TEST1 pass where bit 6 is 0
+     * (DATM 0) or 1 (DATM 1) and write nothing */
+    RD_STENCIL_DATE_CLEAR = RD_STENCIL_RESOLVE_BIT0 + 6,
+    RD_STENCIL_DATE_SET,
+    RD_STENCIL_DATE_TEST0,
+    RD_STENCIL_DATE_TEST1
 } RdStencilMode;
 
 typedef enum RdTargetFormat {
@@ -629,8 +638,10 @@ void rd_index_span_text(char *out, size_t size);
 /* The depth fog's self-test (rd_fog_path.c): a frame of its own (never
  * recorded, never presented, no frame number) draws a grid of cells at
  * known GS Z on SCENE at its real size and scale and fogs it with a known
- * LUT, through one way of reading the depth (in place, a copy, a buffer)
- * after another in the platform's order, stopping at the first that
+ * LUT, through one way of reading the depth (inside the scene pass by
+ * local read, in place, a copy, a buffer) after another in the platform's
+ * order (local first on a tile-based GPU whose profile has it), stopping at
+ * the first that
  * passes; the fogged pixels are read back and compared with the GS
  * arithmetic.  That first way is the one the fog takes from then on (an
  * ICO_RD_FOG_PATH or ICO_RD_DEPTH_COPY override is tried first and
@@ -638,9 +649,22 @@ void rd_index_span_text(char *out, size_t size);
  * developer switch) asks for every one.  One log line, "fog: depth path",
  * names it with every result ("not tried" for the rest).
  * The window calls it after rd_precreate_pipelines; after that it runs
- * again whenever SCENE is made at a new size.  Waits for the GPU.  Returns
- * whether the path in force passed. */
+ * again whenever SCENE is made at a new size.  Its first run runs
+ * rd_date_selftest first.  Waits for the GPU.  Returns whether the path in
+ * force passed. */
 bool rd_fog_selftest(void);
+/* DATE's self-test (rd_date_selftest.c), where the profile asks for DATE
+ * through the stencil bit (RdProfile.dateStencil): a frame of its own on
+ * SCENE draws a cell of destination alpha 0x80 and one of 0x00, then a
+ * DATE sprite with DATM 1 and one with DATM 0 over both, through the
+ * stencil path and through the R8 snapshot; four samples each are read back
+ * and compared with the GS's outcome.  The stencil path stays only when its
+ * four are right ("DATE: stencil path (self-test: stencil ok 4, snapshot ok
+ * 4)"); else the profile's flag goes off (self-test) and the snapshot draws
+ * DATE ("DATE: snapshot path (self-test: stencil fail 2 at sample 1: ...)").
+ * ICO_RD_DATE_PATH=stencil keeps the stencil whatever it finds.  Nothing to
+ * do (true) where the profile has the snapshot.  Waits for the GPU. */
+bool rd_date_selftest(void);
 /* What the renderer decided at its start, for the window's summary line
  * (diag_host.h ico_diag_set_summary): "blend <mode> (self-test: ...);
  * profile <device class>: fog local, DATE stencil, ... (rd_profile.c, the
@@ -1912,6 +1936,15 @@ typedef struct RdPerfRecord {
      * uintDraws: the staticBlur sprites drawn through fx_sprite_u_ps (the
      * UINT views, rd_replay.c doBlurSpriteDraw) */
     uint32_t texaDraws, gridDraws, uintDraws;
+    /* The tiler passes (docs/port/RENDER.md, "The replay"): dateStencilDraws
+     * the DATE draw passes tested through the stencil bit instead of the R8
+     * snapshot (each planned pass, as fillDrawCB counts), dateStencilTakes
+     * the setups that wrote the bit (two draws and two barriers each,
+     * rd_replay_tiler.c rd__replay_date_take); fogLocalDraws the fog draws that read
+     * the depth inside the scene pass (RD_FOG_LOCAL); blurFolds the
+     * staticBlur pairs drawn as one pass (fx_blur2_ps, rd_replay.c
+     * rd__replay_blur_fold) */
+    uint32_t dateStencilDraws, dateStencilTakes, fogLocalDraws, blurFolds;
     /* The VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass;
      * docs/port/RENDER.md, "The vertex and triangle pre-passes"):
      * vuPrePasses their render passes (0, 1: the vertices and sprites, or 2:

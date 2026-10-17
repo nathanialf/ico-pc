@@ -30,8 +30,11 @@
  *      replayed once more on each other way of reading the depth the device
  *      has (rd_fog_path.c: in place, a copy of the depth, the path of
  *      tile-based GPUs and D24S8, and the depth's words through a buffer)
- *      it gives the same pixels byte for byte.  rd_fog_depth_copy runs the
- *      whole test with the copy from the start (ICO_RD_DEPTH_COPY=1),
+ *      it gives the same pixels byte for byte.  rd_fog_local runs the whole
+ *      test with the depth read inside the scene pass from the start
+ *      (ICO_RD_FOG_PATH=local: the profile's local read on a device with
+ *      it), so case d compares every other path with it; rd_fog_depth_copy
+ *      runs the whole test with the copy from the start (ICO_RD_DEPTH_COPY=1),
  *      rd_fog_buffer and rd_fog_buffer_d24s8 with the buffer path
  *      (ICO_RD_FOG_PATH=buffer), and the D24S8 runs start in place
  *      (ICO_RD_DEPTH_COPY=0), so the compare runs on the 24-bit depth too;
@@ -1120,9 +1123,14 @@ int main(void)
         const bool d24 = ds && strcmp(ds, "D24S8") == 0;
         int want = d24 || rhi_limits()->tiler ? RD_FOG_COPY : RD_FOG_INPLACE;
         if (fp && fp[0]) {
-            want = strcmp(fp, "buffer") == 0 ? RD_FOG_BUFFER
-                   : strcmp(fp, "copy") == 0 ? RD_FOG_COPY
-                                             : RD_FOG_INPLACE;
+            /* local: the profile's local read where the device has it
+             * (rd_fog_local), else the platform's first path */
+            want = strcmp(fp, "buffer") == 0  ? RD_FOG_BUFFER
+                   : strcmp(fp, "copy") == 0  ? RD_FOG_COPY
+                   : strcmp(fp, "local") == 0 ? (rd__fog_local_offered()      ? RD_FOG_LOCAL
+                                                 : d24 || rhi_limits()->tiler ? RD_FOG_COPY
+                                                                              : RD_FOG_INPLACE)
+                                              : RD_FOG_INPLACE;
         } else if (dc && dc[0]) {
             want = dc[0] != '0' ? RD_FOG_COPY : RD_FOG_INPLACE;
         }

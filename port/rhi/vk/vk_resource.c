@@ -637,8 +637,12 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
         desc->samples <= 1u) {
         usage |= VK_IMAGE_USAGE_STORAGE_BIT;
     }
-    if ((desc->usage & RHI_TEX_INPUT_ATTACHMENT) && g_vkr.rasterOrder &&
-        (desc->usage & RHI_TEX_RENDER_TARGET)) {
+    /* an attachment its pass reads as an input attachment: the colour
+     * (the exact blend's attachment read, DATE's stencil setup) or the
+     * depth (the fog's local read), wherever the device has local read
+     * (the attachment read implies it) */
+    if ((desc->usage & RHI_TEX_INPUT_ATTACHMENT) && g_vkr.localRead &&
+        (desc->usage & (RHI_TEX_RENDER_TARGET | RHI_TEX_DEPTH_STENCIL))) {
         usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
     }
     /* rhi_readback_texture works on any texture */
@@ -713,8 +717,11 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
         !vkr_create_view(t->image, vkFmt, fm->aspect, mips, &t->view)) {
         goto fail;
     }
-    if ((fm->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) && (desc->usage & RHI_TEX_SAMPLED)) {
-        /* a depth-stencil view cannot be sampled; sampling sees depth only */
+    if ((fm->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) &&
+        ((desc->usage & RHI_TEX_SAMPLED) || (usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT))) {
+        /* a depth-stencil view cannot be sampled, nor read as an input
+         * attachment (one aspect a descriptor): sampling and the fog's
+         * local read see depth only */
         if (!vkr_create_view(t->image, vkFmt, VK_IMAGE_ASPECT_DEPTH_BIT, mips, &t->depthView)) {
             goto fail;
         }

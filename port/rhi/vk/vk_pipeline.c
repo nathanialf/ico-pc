@@ -503,16 +503,23 @@ RhiBindGroup rhi_create_bind_group(const RhiBindGroupDesc *desc)
         case RHI_BIND_STORAGE_TEXTURE:
         case RHI_BIND_INPUT_ATTACHMENT: {
             /* the destination read: the target in RHI_STATE_STORAGE
-             * (GENERAL) or RHI_STATE_RENDER_TARGET_READ (RENDERING_LOCAL_READ) */
+             * (GENERAL) or RHI_STATE_RENDER_TARGET_READ (RENDERING_LOCAL_READ);
+             * an input attachment is any of the pass's attachments under
+             * local read (the exact blend's colour in rasterization order,
+             * DATE's colour and the fog's depth after a barrier), a
+             * depth-stencil one through its depth-only view (RHI_ASPECT_DEPTH) */
             VkrTexture *t = vkr_get_texture(b->texture);
             const bool storage = b->type == RHI_BIND_STORAGE_TEXTURE;
-            if (!t || !t->view || t->samples > 1u ||
-                (storage ? !g_vkr.interlock : !g_vkr.rasterOrder)) {
+            const bool depthIn = !storage && b->aspect == RHI_ASPECT_DEPTH;
+            const VkImageView v = t && depthIn ? (t->depthView ? t->depthView : VK_NULL_HANDLE)
+                                  : t          ? t->view
+                                               : VK_NULL_HANDLE;
+            if (!t || !v || t->samples > 1u || (storage ? !g_vkr.interlock : !g_vkr.localRead)) {
                 VKR_LOG("bind group: slot %u: invalid destination-read texture", b->slot);
                 continue;
             }
             ii[n] = (VkDescriptorImageInfo){
-                VK_NULL_HANDLE, t->view,
+                VK_NULL_HANDLE, v,
                 vkr_state_layout(storage ? RHI_STATE_STORAGE : RHI_STATE_RENDER_TARGET_READ,
                                  t->rhiFormat)};
             w[n].pImageInfo = &ii[n];

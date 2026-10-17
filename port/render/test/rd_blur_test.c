@@ -101,6 +101,12 @@
  *      through fx_sprite_u_ps (RdPerfRecord.uintDraws) and every pipeline
  *      created enumerated; then the targets made again without the views
  *      (skipped where the device has no view).
+ *   b  the blur pairs folded (RdProfile.blurFold, fx_blur2_ps:
+ *      rd_replay_tiler.c rd__replay_blur_fold): post modes 1..7 as e runs them with the
+ *      fold on, every target against the CPU model of the two passes
+ *      exactly (WORK0 and WORK1 too: blur(n), n = 10..19, nine pairs a
+ *      chain folded and the last drawn as two passes), the folds counted
+ *      (RdPerfRecord.blurFolds) and every pipeline created enumerated.
  * Tolerance 0 everywhere (but q's scaled runs).  Every pipeline created is enumerated; no
  * validation errors; no stubbed command replayed. */
 #include <math.h>
@@ -3441,6 +3447,38 @@ static void checkUintView(void)
     rd__pipeline_cache_clear(); /* the twins are outside the reachable set again */
 }
 
+/* ============================================== (b) the blur pair fold */
+
+static void checkBlurFold(void)
+{
+    if (!g_rd.fs[RD_FS_FX_BLUR2].id) {
+        printf("  (b) the blur fold: skipped (no fx_blur2_ps)\n");
+        return;
+    }
+    const bool was = g_rd.profile.blurFold;
+    g_rd.profile.blurFold = true;
+    InitStaticBlur(0, (float[4]){0.3f, -0.2f, -1.0f, 0.0f});
+    uint32_t folds = 0, frames = 0;
+    int worst = 0;
+    for (int post = 1; post <= 7; post++) {
+        const int d = effectsFrame(post, post == 1);
+        worst = d > worst ? d : worst;
+        folds += g_rdPerf.blurFolds; /* the frame's replay (runFrame) */
+        frames += g_rdPerf.blurFolds > 0;
+    }
+    InitializeStaticBlur(); /* sun off */
+    CHECK(folds > 0, "(b) no blur pair folded");
+    CHECK(folds % 9 == 0, "(b) %u pairs folded: nine a chain expected", folds);
+    printf("  (b) the blur fold: %u pairs folded in %u frames, max difference %d\n", folds, frames,
+           worst);
+    checkPipelines(); /* the fold's key enumerated while the profile folds */
+    CHECK(rhi_vk_validation_error_count() == 0, "(b) %u validation errors",
+          rhi_vk_validation_error_count());
+    g_rd.profile.blurFold = was;
+    rhi_wait_idle();
+    rd__pipeline_cache_clear(); /* the fold's key is outside the reachable set again */
+}
+
 static void checkPipelines(void)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_REACHABLE_MAX];
@@ -3473,6 +3511,7 @@ static const IcoShardCase k_cases[] = {
     {"motion_blur_presents", 40},
     {"fix128_skip", 1},
     {"uint_view", 2},
+    {"blur_fold", 2},
     {"queen_mirage", 10},
     {"queen_presents", 1},
     {"motion_blur_presents_scaled", 41},
@@ -3599,6 +3638,9 @@ int main(int argc, char **argv)
     CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
     if (ico_shard_take("uint_view")) {
         checkUintView(); /* makes the targets again, with the views and without */
+    }
+    if (ico_shard_take("blur_fold")) {
+        checkBlurFold();
     }
     if (ico_shard_take("queen_mirage")) {
         checkQueenMirage(); /* re-initialises rd (NTSC, 1x, 4x) */

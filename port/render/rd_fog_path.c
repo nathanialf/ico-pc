@@ -2,6 +2,13 @@
  * depth, and the two checks that say what that read gives on the device.
  *
  * The paths (RdFogPath):
+ *   local    the depth read inside the scene pass, the pass's own depth
+ *            attachment as an input attachment (Vulkan local read,
+ *            RhiLimits.localRead; fog_lut_local_ps, rd_replay.c doFog):
+ *            no pass ends and nothing is copied.  Offered where the
+ *            device profile has it (RdProfile.fogLocal: a tile-based GPU
+ *            with local read), tried first there; a fog whose depth is not
+ *            its colour target's own at that size takes the copy;
  *   inplace  the depth target sampled where it is (RHI_STATE_DEPTH_READ);
  *   copy     a whole copy of it (vkCmdCopyImage into a second depth-stencil
  *            texture) sampled instead (rd_core.c rd__sampled_depth);
@@ -31,9 +38,14 @@
  * the GS arithmetic (index = Z >> 16, LUT, MODULATE by 0x80, the LERP with
  * As, alpha As; rd_fog_test's model) for each path in the platform's order
  * (desktop: inplace, copy, buffer; tile-based or D24S8: copy, inplace,
- * buffer).  The first that passes is the path from then on; none passing,
- * buffer is kept (if the device has it) and the log says so loudly:
+ * buffer; local first wherever the profile offers it).  The first that
+ * passes is the path from then on; none passing, buffer is kept (if the
+ * device has it) and the log says so loudly:
  *   fog: depth path <name> (self-test: inplace ok 0, copy ok 0, buffer ok 0)
+ * A path the profile does not offer (local on a desktop GPU) is left out of
+ * the line.  The local path failing turns the profile's fogLocal off
+ * ("(self-test)", rd__profile_self_test_off).  The first run runs DATE's
+ * self-test (rd_date_selftest.c) before its own.
  */
 #include <math.h>
 #include <stdio.h>
@@ -42,12 +54,16 @@
 
 #include "rd_internal.h"
 
-static const char *const s_pathNames[RD_FOG_PATH_COUNT] = {"inplace", "copy", "buffer"};
+static const char *const s_pathNames[RD_FOG_PATH_COUNT] = {"inplace", "copy", "buffer", "local"};
 
-/* the order the self-test tries the paths in */
-static const uint8_t kOrderDesktop[RD_FOG_PATH_COUNT] = {RD_FOG_INPLACE, RD_FOG_COPY,
-                                                         RD_FOG_BUFFER};
-static const uint8_t kOrderTiler[RD_FOG_PATH_COUNT] = {RD_FOG_COPY, RD_FOG_INPLACE, RD_FOG_BUFFER};
+/* the order the self-test tries the paths in (local last where the profile
+ * does not offer it: never tried, left out of the line) */
+static const uint8_t kOrderDesktop[RD_FOG_PATH_COUNT] = {RD_FOG_INPLACE, RD_FOG_COPY, RD_FOG_BUFFER,
+                                                         RD_FOG_LOCAL};
+static const uint8_t kOrderTiler[RD_FOG_PATH_COUNT] = {RD_FOG_COPY, RD_FOG_INPLACE, RD_FOG_BUFFER,
+                                                       RD_FOG_LOCAL};
+static const uint8_t kOrderLocal[RD_FOG_PATH_COUNT] = {RD_FOG_LOCAL, RD_FOG_COPY, RD_FOG_INPLACE,
+                                                       RD_FOG_BUFFER};
 
 /* the environment, read at rd__fog_path_init */
 static int s_override = -1; /* the path ICO_RD_FOG_PATH or ICO_RD_DEPTH_COPY names */
@@ -103,9 +119,20 @@ bool rd__fog_path_supported(int path)
         return rhi_limits()->depthSampled;
     case RD_FOG_BUFFER:
         return rhi_backend() == RHI_BACKEND_VULKAN;
+    case RD_FOG_LOCAL:
+        return rd__fog_local_offered();
     default:
         return false;
     }
+}
+
+/* the local read where the profile has it, with the pieces it needs (the
+ * device's local read, the shader, rd_replay.c's layout) */
+bool rd__fog_local_offered(void)
+{
+    return g_rd.hasDevice && g_rd.profile.fogLocal && rhi_limits()->localRead &&
+           rhi_backend() == RHI_BACKEND_VULKAN && g_rd.fs[RD_FS_FOG_LOCAL].id &&
+           g_rd.layoutLocal.id;
 }
 
 void rd__set_fog_path(int path)
@@ -125,6 +152,9 @@ static bool depthIs24(void)
 
 static const uint8_t *platformOrder(void)
 {
+    if (rd__fog_local_offered()) {
+        return kOrderLocal;
+    }
     const bool tiler = g_rd.hasDevice && rhi_limits()->tiler;
     return tiler || depthIs24() ? kOrderTiler : kOrderDesktop;
 }
@@ -154,7 +184,8 @@ void rd__fog_path_init(void)
     } else if (fp && fp[0]) {
         s_override = pathOf(fp, strlen(fp));
         if (s_override < 0) {
-            rd__log("fog: ICO_RD_FOG_PATH=%s is not inplace, copy, buffer or test: ignored", fp);
+            rd__log("fog: ICO_RD_FOG_PATH=%s is not local, inplace, copy, buffer or test: ignored",
+                    fp);
         } else {
             s_overrideWhy = "ICO_RD_FOG_PATH";
         }
@@ -175,6 +206,7 @@ void rd__fog_path_init(void)
     const uint8_t *order = platformOrder();
     int path = s_override >= 0 ? s_override : order[0];
     const char *why = s_override >= 0                         ? s_overrideWhy
+                      : rd__fog_local_offered()               ? "the profile's local read"
                       : g_rd.hasDevice && rhi_limits()->tiler ? "tile-based GPU"
                       : depthIs24()                           ? "D24S8"
                                                               : "desktop GPU";
@@ -192,9 +224,9 @@ void rd__fog_path_init(void)
     rd__set_fog_path(path);
     rd__log("fog: depth path %s at start (%s)", rd__fog_path_name(path), why);
     if (s_sabotage) {
-        rd__log("fog: ICO_RD_FOG_SABOTAGE: the depth reads of%s%s%s give 0",
+        rd__log("fog: ICO_RD_FOG_SABOTAGE: the depth reads of%s%s%s%s give 0",
                 (s_sabotage & 1) ? " inplace" : "", (s_sabotage & 2) ? " copy" : "",
-                (s_sabotage & 4) ? " buffer" : "");
+                (s_sabotage & 4) ? " buffer" : "", (s_sabotage & 8) ? " local" : "");
     }
     memset(&s_st, 0, sizeof(s_st));
     s_probe.armed = true;
@@ -212,6 +244,15 @@ void rd__fog_buffer_free(void)
         rhi_destroy_texture(s_buf.tex);
     }
     memset(&s_buf, 0, sizeof(s_buf));
+}
+
+void rd__fog_source_local(RdTargetRec *t, RdFogSource *out)
+{
+    memset(out, 0, sizeof(*out));
+    out->sabotaged = (uint8_t)((s_sabotage >> RD_FOG_LOCAL) & 1u);
+    out->tex = t->depth;
+    out->state = &t->depthState;
+    out->aspect = RHI_ASPECT_DEPTH;
 }
 
 /* the row pitch of w words, as the backend's buffer copies want it */
@@ -865,18 +906,28 @@ static bool runSelftest(void)
         chosen = rd__fog_path_supported(RD_FOG_BUFFER) ? RD_FOG_BUFFER : before;
     }
     rd__set_fog_path(chosen);
+    /* the local read wrong on this device (and not forced): the profile's
+     * flag off, so no pass binds its depth readable from now on */
+    const bool localOffered = rd__fog_local_offered();
+    if (localOffered && chosen != RD_FOG_LOCAL &&
+        (result[RD_FOG_LOCAL] == ST_FAIL || result[RD_FOG_LOCAL] == ST_ERROR)) {
+        rd__profile_self_test_off(RD_PROFILE_FOG_LOCAL);
+    }
     /* the reconciliation: the sampled paths were tried first on the MSAA
        scene; the buffer path cannot read multisampled depth, so if it is
        all that passed there is no MSAA on this device */
     if (s_st.samples > 1u && chosen == RD_FOG_BUFFER) {
         g_rd.msaaBlocked = true;
     }
-    char res[160];
+    char res[200];
     size_t n = 0;
     res[0] = '\0';
-    for (int i = 0; i < RD_FOG_PATH_COUNT; i++) {
+    for (int i = 0, shown = 0; i < RD_FOG_PATH_COUNT; i++) {
         const int p = order[i];
-        const char *sep = i ? ", " : "";
+        if (p == RD_FOG_LOCAL && !localOffered) {
+            continue; /* not offered on this device: not a result */
+        }
+        const char *sep = shown++ ? ", " : "";
         switch (result[p]) {
         case ST_OK:
             n += (size_t)snprintf(res + n, sizeof(res) - n, "%s%s ok %d", sep, rd__fog_path_name(p),
@@ -929,6 +980,11 @@ bool rd_fog_selftest(void)
 {
     if (!g_rd.inited || !g_rd.hasDevice) {
         return false;
+    }
+    static bool dateRan; /* DATE's self-test once a run, before the fog's first */
+    if (!dateRan) {
+        dateRan = true;
+        (void)rd_date_selftest();
     }
     s_st.armed = true;
     return runSelftest();

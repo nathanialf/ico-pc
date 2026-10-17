@@ -52,6 +52,18 @@
 // the multisampled scene depth (Texture2DMS) and the shader runs per sample
 // (SV_SampleIndex), reading that sample's depth, so the fog of each sample
 // is the fog of its own surface (rd_replay.c doFog).
+// fog_lut_local_ps (FOG_LOCAL, Vulkan: VK_KHR_dynamic_rendering_local
+// read): the fog drawn inside the scene pass, its depth the pass's own
+// depth attachment read as an input attachment (SubpassLoad: the stored
+// depth of the fragment's own texel, after rhi_cmd_local_read_barrier made
+// the pass's depth writes visible), group 2 rd's layoutLocal (t1 the input
+// attachment, t2 the LUT). It is taken only where the fog's depth is the
+// colour target's own at the same size (rd_replay.c doFog), where the
+// texel the sprite's UV addresses below is the fragment's own: the same
+// stored word the copy path's Load returns, through the same arithmetic.
+// The pipeline binds the depth with its test ALWAYS and no write (the test
+// is done here, as on every path). Its DXIL is the plain entry's (never
+// used: D3D12 has no local read).
 // The Z test is done here because the depth buffer being read cannot also be
 // the bound attachment; it compares the same depth values the pipeline
 // would (gs_z_to_depth of the sprite Z against the stored depth).
@@ -67,7 +79,12 @@ struct FogPSIn {
 #endif
 };
 
-#ifdef FOG_MS
+#if defined(FOG_LOCAL) && defined(__spirv__)
+// the depth attachment: no InputAttachmentIndex (the depth's mapping
+// without VkRenderingInputAttachmentIndexInfoKHR); binding 17 = t1
+SubpassInput<float> g_fogDepthIn : register(t1, space2);
+#define FOG_LOCAL_READ 1
+#elif defined(FOG_MS)
 Texture2DMS<float> g_fogDepth : register(t1, space2);
 #elif defined(FOG_BUFFER)
 Texture2D<uint> g_fogDepth : register(t1, space2);
@@ -98,6 +115,7 @@ GS_PS_ATTR GS_PS_OUT fog_lut_ps(FogPSIn i)
 {
     // the texel the sprite's UV addresses, nearest (ZFog.c writes TEX1 0);
     // in the depth target's own texels (g_scale, 1 in Original)
+#ifndef FOG_LOCAL_READ
     float2 sc = float2(g_scale.x > 0.0 ? g_scale.x : 1.0, g_scale.y > 0.0 ? g_scale.y : 1.0);
     float2 fsize = g_tex.xy * sc;
     if (g_scale.z != 0.0) {
@@ -114,7 +132,10 @@ GS_PS_ATTR GS_PS_OUT fog_lut_ps(FogPSIn i)
     }
     int2 size = int2(round(fsize));
     int2 tc = clamp(int2(floor(i.uv * fsize)), int2(0, 0), size - 1);
-#ifdef FOG_MS
+#endif
+#ifdef FOG_LOCAL_READ
+    float d = g_fogDepthIn.SubpassLoad();
+#elif defined(FOG_MS)
     float d = g_fogDepth.Load(tc, int(i.sampleIndex));
 #elif defined(FOG_BUFFER)
     uint raw = g_fogDepth.Load(int3(tc, 0));

@@ -73,6 +73,17 @@ typedef struct Replay {
      * both axes (doBlurSpriteDraw: blurAbove1xSteps 0), so spriteAbove1x
      * leaves its flag off */
     int a1xGs;
+    /* the tiler passes (rd_replay.c).  passDepthReadable: the open pass
+     * binds its depth readable (the fog's local read, beginPass).  DATE
+     * through the stencil bit: dateStNow the draw being planned takes it
+     * (prepareDraw: expandPasses turns its passes into the bit's tests),
+     * and what bit 6 holds in the open pass: the destination alpha's MSB of
+     * target dateStFor over dateStArea as of write serial dateStSerial, in
+     * the pass of serial dateStPass (rd__replay_date_take) */
+    int passDepthReadable;
+    int dateStNow;
+    uint32_t dateStFor, dateStSerial, dateStPass;
+    RhiRect dateStArea;
 } Replay;
 
 /* What a draw binds besides its geometry: doScreen and the VU draws. */
@@ -97,6 +108,12 @@ typedef struct DrawSetup {
      * first period of a REPEAT (rd__screen_repeat_kept): Full pixel keeps
      * the game's wrap there (drawWrap) */
     uint32_t repeatKept;
+    /* DATE through the stencil bit (prepareDraw): bindDrawEx writes the
+     * bit over dateWant (the texels the draw can touch, the whole target
+     * when dateWantAll) in the draw's pass before it (rd__replay_date_take);
+     * no R8 snapshot (dateTex the dummy) */
+    int dateStencil, dateWantAll;
+    RhiRect dateWant;
 } DrawSetup;
 
 /* rd_replay.c: beginPass, bindDrawKeep, bindGroup, s_bindEpoch, drawCmd,
@@ -135,6 +152,38 @@ RdUniform rd__replay_vu_frame(const RdStateBlock *st, uint32_t picture);
  * adds to a later SCENE target set with the screen offset (1: added) */
 uint32_t rd__replay_scene_head_half(const RdFrame *f);
 int rd__replay_scene_keeps_half(RdStateBlock *st, int list, uint32_t headHalf);
+/* rd_replay.c for rd_replay_tiler.c: flushScreenRun, bindDraw,
+ * scissorRect, blurFlags, blurAux1, blurCoversTarget, blurSwapTarget,
+ * takeSnap, perfTargetPost, sceneKeepsHalf, perfPost and the FIX 128 skip
+ * (rd__set_blur_fix128_skip) */
+void rd__replay_flush_run(Replay *r);
+RhiBindGroup rd__replay_bind_draw(Replay *r, const DrawSetup *ds);
+bool rd__replay_scissor(const Replay *r, const RdTargetRec *tc, RhiRect *sc);
+uint32_t rd__replay_blur_flags(const RdDrawState *d, uint32_t lines, int textured, int dstRead);
+void rd__replay_blur_aux1(IcoDrawCB *cb);
+bool rd__replay_blur_covers(const Replay *r, const RdTargetRec *tc, const RdPostRec *p,
+                            const RdDrawState *d, const RdPipeKeyInt *key, int useDepth);
+bool rd__replay_blur_swap(Replay *r, RdTargetRec *tc);
+bool rd__replay_take_snap(Replay *r, RdTargetRec *tc, RhiRect area);
+int rd__replay_perf_target_post(const Replay *r, const RdCmd *c);
+void rd__replay_perf_post(Replay *r, int post);
+bool rd__replay_blur_fix128_skip(void);
+/* rd_replay_tiler.c (docs/port/RENDER.md, "The replay").
+ * rd__replay_date_take  DATE's stencil bit written in the draw's pass
+ *                       (bindDrawEx, a draw with DrawSetup.dateStencil);
+ *                       false: the draw is skipped
+ * rd__replay_blur_fold  a staticBlur pair at its pass 1 c drawn as one pass
+ *                       (doBlurSprite); true: drawn, and the loop skips
+ *                       rd__replay_fold_skip() commands with their state
+ *                       applied
+ * rd__replay_fold_list  the list the loop walks (NULL at its end), the
+ *                       list number and the frame head's half pixel;
+ *                       rd__replay_fold_at the command being replayed */
+bool rd__replay_date_take(Replay *r, const DrawSetup *ds);
+bool rd__replay_blur_fold(Replay *r, const RdFrame *f, const RdCmd *c);
+void rd__replay_fold_list(const RdCmd *cmds, uint32_t count, int list, uint32_t headHalf);
+void rd__replay_fold_at(uint32_t index);
+uint32_t rd__replay_fold_skip(void);
 /* rd_replay_vu.c.
  * rd__replay_vu       a VU draw under its camera's picture
  * rd__vu_prepass      before list 0 (replayFrame, after the uploads and

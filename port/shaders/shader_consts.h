@@ -71,10 +71,12 @@ typedef struct IcoDrawCB {
                         * left-out texels, ox, in the shadow reduce blit
                         * (shadowReduce; blit.hlsl box_reduce_ps); else 0;
                         * w reserved (0) */
-    /* v0.7.10: two spare blocks.  aux0 (the tiler-pass package): the folded
-     * blur pair's second rectangle and UV rectangle; aux1 (the pixel-cut
-     * package): the GS divide's reciprocals and the per-draw texel sizes.
-     * Zero in every other draw. */
+    /* Two spare blocks.  aux0: fx_blur2_ps's pass 1 of a folded blur pair
+     * (rd_replay_tiler.c rd__replay_blur_fold; the draw's other fields are pass 2's), its
+     * 12.4 rect and UVs as 16-bit pairs: x x0 | y0 << 16, y x1 | y1 << 16,
+     * z u0 | v0 << 16, w u1 | v1 << 16 (its colour in scale.zw, R + 256 G
+     * and B + 256 A); aux1: the GS divide's reciprocals and the per-draw
+     * texel sizes (fx_sprite.hlsl).  Zero in every other draw. */
     uint32_t aux0[4];
     uint32_t aux1[4];
 } IcoDrawCB;

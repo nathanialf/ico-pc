@@ -824,6 +824,19 @@ bool rd__target_create_gpu(RdTargetRec *t, const char *name)
     /* the opted-in exact blend's destination read and DATE's local read
      * (rd_dst_read.c) */
     usage |= rd__dst_target_usage(t->format, &t->dstUsage);
+    /* DATE's local read on the scene-class targets alone (the passes of a
+     * target made for it begin readable, rd_replay.c
+     * rd__pass_wants_readable): a DATE draw on any other target takes the
+     * R8 snapshot */
+    const int namedSlot = t->named && t >= g_rd.targets && t < g_rd.targets + RD_TARGET_COUNT
+                              ? (int)(t - g_rd.targets)
+                              : -1;
+    if ((t->dstUsage & RD_DST_USAGE_LOCAL_DATE) && !(namedSlot >= 0 && sceneClass(namedSlot))) {
+        t->dstUsage &= (uint8_t)~RD_DST_USAGE_LOCAL_DATE;
+        if (!(t->dstUsage & RD_DST_USAGE_ATTACHMENT)) {
+            usage &= ~(uint32_t)RHI_TEX_INPUT_ATTACHMENT;
+        }
+    }
     /* the RGBA8_UINT view fx_sprite_u_ps reads (rd_replay.c
      * doBlurSpriteDraw): the work class under the profile's uintViewWork,
      * the scene class under uintViewScene, on a device with the view */
@@ -857,8 +870,15 @@ bool rd__target_create_gpu(RdTargetRec *t, const char *name)
          * (rd_fog_path.c): sampled in place, a copy source for its copy and
          * for the buffer path, so a change of path needs no new targets */
         const bool sampled = rhi_limits()->depthSampled;
-        const uint32_t dsUsage =
+        uint32_t dsUsage =
             RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_SRC | (sampled ? (uint32_t)RHI_TEX_SAMPLED : 0u);
+        /* the fog's local read (RD_FOG_LOCAL): the scene-class depth read
+         * by its own pass as an input attachment, where the profile has it */
+        if (g_rd.profile.fogLocal && rhi_limits()->localRead && namedSlot >= 0 &&
+            sceneClass(namedSlot) && g_rd.fs[RD_FS_FOG_LOCAL].id) {
+            dsUsage |= RHI_TEX_INPUT_ATTACHMENT;
+            t->dstUsage |= RD_DST_USAGE_LOCAL_DEPTH;
+        }
         t->depth = rhi_create_texture(
             &(RhiTextureDesc){t->tw, t->th, 1, RHI_FMT_D32F_S8, dsUsage, name, 0});
         t->depthState = RHI_STATE_UNDEFINED;
