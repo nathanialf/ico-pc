@@ -1224,14 +1224,21 @@ double rd__pipeline_create_ms(void)
  * stall. */
 static void firstUseLine(const RdPipeKeyInt *k, float ms)
 {
-    char key[160], vs[48], fs[48], where[40];
+    char key[256], vs[48], fs[48], where[40];
     const int list = rd__replay_list();
 
     s_firstUse++;
     if (s_firstUse > 8u && s_firstUse % 100u != 0u) {
         return;
     }
-    keyWords(k, key, sizeof(key));
+    /* the key's words and every other field of it, so the line names the
+       state the start-up set lacks (rd__enumerate_reachable) */
+    keyWords(k, key, sizeof(key) - 96u);
+    const size_t at = strlen(key);
+    snprintf(key + at, sizeof(key) - at,
+             ", ztst %u zwrite %u mask %u target %u prim %u stencil %u aa1 %u nodual %u",
+             k->gs.ztst, k->gs.zwrite, k->gs.colorMask, k->gs.targetFmt, k->gs.prim, k->gs.stencil,
+             k->gs.aa1, k->gs.nodual);
     keyVsName(k, vs, sizeof(vs));
     keyFsName(k, fs, sizeof(fs));
     if (list >= 0) {
@@ -2350,6 +2357,30 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
                         }
                     }
                 }
+            }
+        }
+    }
+    /* UI-space sprites under TEST Z GEQUAL with the depth target, Z write
+       on and off, colour mask F, every blend: every list's head writes
+       that TEST (GsBase.c gsb_setNormalReg, lists 0 and 7-12), so a 2D draw
+       of list 11 before the list's first TEST write takes it (the phone's
+       first-use line: program 9 blend 4, sprite_ui_vs + sprite_ps, fmt
+       1/8) */
+    for (int zw = 0; zw < 2; zw++) {
+        for (size_t b = 0; b < sizeof(kBlends) / sizeof(kBlends[0]); b++) {
+            RdStateBlock s;
+            rd__reset_state_block(&s);
+            s.ds.test = rd_test_from_gs(RD_TEST_Z_GEQUAL);
+            s.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
+            s.ds.abe = kBlends[b] >= 0;
+            s.ds.blend = (uint8_t)(kBlends[b] >= 0 ? kBlends[b] : 0);
+            RdDrawPass dp[2];
+            const int np = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI,
+                                                RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
+            for (int i = 0; i < np; i++) {
+                n = rd__add_pipe_key(out, max, n, &dp[i].key);
+                dp[i].key.fs = RD_FS_SPRITE_TEXA; /* TEXA per texel */
+                n = rd__add_pipe_key(out, max, n, &dp[i].key);
             }
         }
     }

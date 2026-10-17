@@ -2445,11 +2445,19 @@ void rd_draw_vu_particles(const RdVuParticleDraw *d, RdKey key)
  * With the vertex pre-pass (g_rd.vuPrepass) the mesh programs draw through
  * vu_tri_vs, whose keys carry RD_PROG_PRELIT whatever the program
  * (rd_replay.c vuDraw), and the particles through their own entry; without
- * it every program entry. */
+ * it every program entry, under the same states (so every program entry's
+ * key has its vu_tri_vs twin; rd_state_test testEnumerationPrepass).  With
+ * the pre-pass the two shaders' keys are also made under TEST Z ALWAYS
+ * (0x30000), Z write on and off: a VU draw after the game turned the Z
+ * test off (queen_barrier_disp.c MakeRefractTexture before the barrier
+ * mesh, pool.c copyToWork, staticBlur.c addWork1ToFBWithZ; on a PowerVR a
+ * vu_tri_vs pipeline made on first use stalls the picture about 750 ms);
+ * the eleven program entries' keys keep the three tests above, which would
+ * pass RD_PIPELINE_REACHABLE_MAX with both variants doubled. */
 static uint32_t enumerateVuVariant(RdPipeKeyInt *out, uint32_t max, uint32_t n, uint8_t ext)
 {
     static const uint64_t kTests[] = {RD_TEST_Z_GEQUAL, RD_TEST_AT_GT64_FBONLY,
-                                      RD_TEST_DATE1_Z_GEQUAL};
+                                      RD_TEST_DATE1_Z_GEQUAL, RD_TEST_Z_ALWAYS};
     static const int kBlends[] = {-1, RD_BLEND_LERP_AS, RD_BLEND_CS_AS_ADD_CD,
                                   RD_BLEND_CD_SUB_CS_AS};
     for (uint8_t vs = RD_VS_VU_FIRST; vs <= RD_VS_VU_LAST; vs++) {
@@ -2463,7 +2471,9 @@ static uint32_t enumerateVuVariant(RdPipeKeyInt *out, uint32_t max, uint32_t n, 
                 prog = kRows[i].prog;
             }
         }
-        for (size_t t = 0; t < sizeof(kTests) / sizeof(kTests[0]); t++) {
+        /* Z ALWAYS (the last test) for the pre-pass's two shaders only */
+        const size_t nt = sizeof(kTests) / sizeof(kTests[0]) - (g_rd.vuPrepass ? 0u : 1u);
+        for (size_t t = 0; t < nt; t++) {
             for (int zw = 0; zw < 2; zw++) {
                 for (size_t b = 0; b < sizeof(kBlends) / sizeof(kBlends[0]); b++) {
                     RdStateBlock s;

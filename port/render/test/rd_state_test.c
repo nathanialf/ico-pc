@@ -1233,19 +1233,59 @@ static void countVu(const RdPipeKeyInt *keys, uint32_t n, uint32_t *plain, uint3
     }
 }
 
+/* whether keys[0..n) holds k */
+static bool keyIn(const RdPipeKeyInt *keys, uint32_t n, const RdPipeKeyInt *k)
+{
+    for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+        if (rd__pipe_key_equal(&keys[i], k)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* the key a VU draw of vertex shader vs (variant ext) plans under TEST
+ * test, Z write zw and blend (-1: ABE off) on SCENE's formats, as
+ * rd_replay_vu.c vuDraw makes it */
+static RdPipeKeyInt vuKey(uint8_t vs, uint8_t ext, uint64_t test, int zw, int blend)
+{
+    RdStateBlock st;
+    rd__reset_state_block(&st);
+    st.ds.test = rd_test_from_gs(test);
+    st.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
+    st.ds.abe = blend >= 0;
+    st.ds.blend = (uint8_t)(blend >= 0 ? blend : 0);
+    RdDrawPass dp[2];
+    rd__plan_screen_draw(&st, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, RHI_FMT_RGBA8_UNORM,
+                         RHI_FMT_D32F_S8, dp);
+    RdPipeKeyInt k = dp[0].key;
+    k.gs.program = RD_PROG_PRELIT;
+    k.vs = vs;
+    k.fs = RD_FS_VU;
+    k.vuExt = ext;
+    return k;
+}
+
 /* The VU keys of the start-up set with the vertex pre-pass
  * (rd__set_vu_prepass; docs/port/RENDER.md, "The vertex pre-pass"), in the
  * Enhanced preset (the extended variant): the triangle stage's keys
- * (vu_tri_vs, RD_PROG_PRELIT) and the particles' under the VU states, so
- * two of the eleven VU vertex shaders' keys without it (perVariant, as
- * enumerated without the pre-pass), and the ten pre-pass keys
- * (rd__vu_pre_key), each once; no program entry's key but the particles';
- * the whole set under RD_PIPELINE_REACHABLE_MAX.  The pre-pass is off
- * again after. */
+ * (vu_tri_vs, RD_PROG_PRELIT) and the particles' under the VU states and
+ * TEST Z ALWAYS too, so twice two of the eleven VU vertex shaders' keys
+ * without it (perVariant, as enumerated without the pre-pass), and the ten
+ * pre-pass keys (rd__vu_pre_key), each once; no program entry's key but the
+ * particles'; every program entry's key enumerated without the pre-pass
+ * has its vu_tri_vs twin (program RD_PROG_PRELIT) in the set, and every
+ * particle key its own; the phone's first-use keys (rc2, PowerVR: program 0
+ * blend 4 and 12 vs vu_tri_vs fs vu_ps fmt 1/8 ext 1, under Z ALWAYS) and
+ * the 2D one (program 9 blend 4, sprite_ui_vs + sprite_ps, fmt 1/8, under
+ * the list head's Z GEQUAL) are in it; the whole set under
+ * RD_PIPELINE_REACHABLE_MAX.  The pre-pass is off again after. */
 static void testEnumerationPrepass(RdPipeKeyInt *keys, uint32_t perVariant)
 {
+    static RdPipeKeyInt off[RD_PIPELINE_REACHABLE_MAX];
     const bool keepPrepass = g_rd.vuPrepass;
     const uint32_t nOff = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
+    memcpy(off, keys, sizeof(off));
     rd__set_vu_prepass(true);
     const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
     uint32_t tri = 0, particle = 0, entries = 0, plain, ext;
@@ -1278,9 +1318,67 @@ static void testEnumerationPrepass(RdPipeKeyInt *keys, uint32_t perVariant)
            "program entries %u, pre-pass %u\n",
            n, nOff, tri, particle, entries, pre);
     CHECK(entries == 0, "pre-pass: %u program entries' keys enumerated", entries);
-    CHECK(tri > 0 && tri == particle && (tri + particle) * 11u == perVariant * 2u,
+    CHECK(tri > 0 && tri == particle && (tri + particle) * 11u == perVariant * 4u,
           "pre-pass: vu_tri_vs %u and vu_particle_vs %u keys, %u for the eleven shaders without",
           tri, particle, perVariant);
+    /* every VU key without the pre-pass has its twin with it */
+    uint32_t twins = 0, missing = 0;
+    for (uint32_t i = 0; i < nOff && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+        if (off[i].vs < RD_VS_VU_FIRST || off[i].vs > RD_VS_VU_LAST) {
+            continue;
+        }
+        RdPipeKeyInt t = off[i];
+        if (t.vs != RD_VS_VU_PARTICLE) {
+            t.vs = RD_VS_VU_TRI;
+            t.gs.program = RD_PROG_PRELIT;
+        }
+        twins++;
+        if (!keyIn(keys, n, &t)) {
+            if (missing++ < 4) {
+                char w[160];
+                rd__pipe_key_text(&off[i], w, sizeof(w));
+                CHECK(0, "pre-pass: no vu_tri_vs twin of %s", w);
+            }
+        }
+    }
+    printf("  every program entry's key (%u) has its twin with the pre-pass: %u missing\n", twins,
+           missing);
+    CHECK(twins == perVariant && missing == 0, "pre-pass: %u of %u VU keys without a twin", missing,
+          twins);
+    /* the phone's first-use keys: vu_tri_vs under Z ALWAYS, ABE off (blend
+       12) and LERP_AS (blend 4), Z write on and off; the 2D sprite under
+       the list head's Z GEQUAL */
+    for (int zw = 0; zw < 2; zw++) {
+        for (int b = 0; b < 2; b++) {
+            const RdPipeKeyInt k =
+                vuKey(RD_VS_VU_TRI, 1, RD_TEST_Z_ALWAYS, zw, b ? RD_BLEND_LERP_AS : -1);
+            CHECK(k.gs.blend == (b ? 4 : 12) && k.vs == RD_VS_VU_TRI && k.fs == RD_FS_VU &&
+                      k.colorFmt == RHI_FMT_RGBA8_UNORM && k.depthFmt == RHI_FMT_D32F_S8,
+                  "pre-pass: the first-use key's fields");
+            CHECK(keyIn(keys, n, &k), "pre-pass: vu_tri_vs blend %u under Z ALWAYS, Z write %d",
+                  k.gs.blend, zw);
+            const RdPipeKeyInt p =
+                vuKey(RD_VS_VU_PARTICLE, 1, RD_TEST_Z_ALWAYS, zw, b ? RD_BLEND_LERP_AS : -1);
+            RdPipeKeyInt pk = p;
+            pk.gs.program = RD_PROG_PARTICLE;
+            CHECK(keyIn(keys, n, &pk), "pre-pass: vu_particle_vs blend %u under Z ALWAYS",
+                  pk.gs.blend);
+        }
+    }
+    {
+        RdStateBlock st;
+        rd__reset_state_block(&st);
+        st.ds.test = rd_test_from_gs(RD_TEST_Z_GEQUAL);
+        st.ds.abe = 1;
+        st.ds.blend = RD_BLEND_LERP_AS;
+        RdDrawPass dp[2];
+        rd__plan_screen_draw(&st, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
+                             RHI_FMT_D32F_S8, dp);
+        CHECK(dp[0].key.gs.program == RD_PROG_SCREEN && dp[0].key.gs.blend == 4 &&
+                  dp[0].key.vs == RD_VS_SPRITE_UI && dp[0].key.fs == RD_FS_SPRITE,
+              "the 2D first-use key's fields");
+        CHECK(keyIn(keys, n, &dp[0].key), "the 2D sprite under Z GEQUAL with depth, blend 4");
+    }
     CHECK(pre == RD_VS_VU_PRE_LAST - RD_VS_VU_PRE_FIRST + 1, "pre-pass: %u pre-pass keys", pre);
     CHECK(n == nOff - perVariant + tri + particle + pre && n < RD_PIPELINE_REACHABLE_MAX,
           "pre-pass: %u keys, %u without the pre-pass", n, nOff);

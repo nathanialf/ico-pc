@@ -402,7 +402,9 @@ program under an environment switch ([Environment switches](#environment-switche
 - `rd_state_test.c`: the recording half of rd without a GPU: list order, defaults, state leakage,
   the alpha test's plan for every Z write, AFAIL, ATE and alpha mask (one draw where the test decides
   nothing, `testAlphaMerge`), the start-up set's VU keys by variant and with the VU vertex
-  pre-pass (`testEnumerationVu`, `testEnumerationPrepass`), and a dump's menu text sheets loading as the renderer makes them, a sheet with its halo made on
+  pre-pass (`testEnumerationVu`, `testEnumerationPrepass`: every program entry's key without the
+  pre-pass has its `vu_tri_vs` twin with it, and the keys a phone made on first use, `vu_tri_vs`
+  blend 4 and 12 under Z ALWAYS and the UI sprite under Z GEQUAL, are in the set), and a dump's menu text sheets loading as the renderer makes them, a sheet with its halo made on
 - `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, each in a child process; the symbolizer, the report file and `ico_log_limited` (above)
 - `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and a text texture
   that could not be uploaded named once in the log, the game's own textures never

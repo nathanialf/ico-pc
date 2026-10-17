@@ -683,12 +683,26 @@ With the set made, a pipeline a draw needs later is a key the set did not hold, 
 that draws while the replay waits; on a driver that takes seconds a pipeline (up to 3.4 s for a VU
 one on a PowerVR DXT-48-1536) that is a stall of the picture and of the game behind it. Each such
 key is logged once (the cache keeps it), the first 8 and then every 100th, with the draw list the
-replay was in and the time it took (`port/render/rd_pipeline.c` (`firstUseLine`)):
+replay was in, the whole key (the fields of the batch notes, then the Z test, the Z write, the
+colour mask, the target format, the topology, the stencil mode, PRIM.AA1 and the two-pass blend's
+flag) and the time it took (`port/render/rd_pipeline.c` (`firstUseLine`)):
 
-    rd: pipelines: made on first use in list 0: program 1 blend 4 vs 5 fs 19 fmt 1/8 msaa 0 dst 0 ext 1 (vu_lit_vs + vu_texa_ps) in 2630.1 ms (not in the start-up set; 1 so far)
+    rd: pipelines: made on first use in list 0: program 0 blend 4 vs 15 fs 5 fmt 1/8 msaa 0 dst 0 ext 1, ztst <z> zwrite <w> mask <m> target <t> prim <p> stencil <s> aa1 <a> nodual <n> (vu_tri_vs + vu_ps) in 769.8 ms (not in the start-up set; 2 so far)
 
 `no draw list (the present, a check)` stands for the list outside the replay's lists. The key is the
-one `rd__enumerate_reachable` would need to hold. A replay whose walk (recording its lists, the
+one `rd__enumerate_reachable` would need to hold. On a PowerVR DXT-48-1536 a `vu_tri_vs`
+pipeline made so takes about 750 ms (770 and 745 ms for the two keys of a room change in an rc
+build's log, which named only the fields before the comma) and a program entry's up to 3.4 s, a
+visible stall each; a 2D key the driver has cached, under 1 ms. That log's keys matched enumerated
+keys in every field it printed, so they differed in one it did not: two `vu_tri_vs` keys (blend 4
+and 12, ABE off) in list 0, and a UI-space sprite (`program 9 blend 4`, `sprite_ui_vs +
+sprite_ps`, with the depth target) in list 11. The set now also holds the pre-pass's keys under
+TEST Z ALWAYS (the one Z test a VU draw is seen to get that the set lacked, below; not confirmed
+as those keys' state) and UI-space sprites under the TEST Z GEQUAL every list's head writes, with
+the depth target (`ico2/seki/src/GsBase.c` (`gsb_setNormalReg`): a 2D draw of list 11 before
+the list's own TEST write takes it); the whole key in the line names the state if one is still
+missing. The program entries' keys before the pre-pass lacked the same states: every one of them
+has its `vu_tri_vs` twin in the set (`rd_state_test` `testEnumerationPrepass`). A replay whose walk (recording its lists, the
 `walk` phase of the [slow replay line](DISPLAY.md#the-stats-lines)) takes over 500 ms gets one line,
 the first 8 and then every 100th, saying where that time went: the pipelines made at first use, the
 textures and buffers made (the RHI's `createNs`: their memory and objects, counted from the lists'
@@ -786,7 +800,7 @@ stage 19,519 and 47,637) ([SHADERS.md](SHADERS.md#the-variants)).
   that wants them creates them as the frames first need them. That holds the other way too, and
   is accepted: a start with the Enhanced preset, a wide frame or a scene scale above 1 compiles no
   plain VU keys, so a switch in the game to the Original preset at 4:3 and 1x makes the plain ones
-  as the frames first need them, up to 42 pipelines with the vertex pre-pass (50 with the exact
+  as the frames first need them, up to 74 pipelines with the vertex pre-pass (90 with the exact
   blend; 176 and 220 without it, [The vertex pre-pass](#the-vertex-pre-pass)), a short pause
   here and there in the first minutes after the switch; the pipeline cache keeps them for the
   next start. The set is ordered: every 2D key
@@ -796,10 +810,15 @@ stage 19,519 and 47,637) ([SHADERS.md](SHADERS.md#the-variants)).
   phones' usual path) the set is 351 2D keys and 176 plain VU keys, 527 in all, and 703 with both
   variants (the interpolation at the Original preset, 4:3 and 1x); with the exact blend 438 and
   220, 658 in all, and 878 with both (`RD_PIPELINE_REACHABLE_MAX`, 1024): eleven VU vertex
-  shaders, 16 keys each (20 with the exact blend). With the pre-pass (the default) a variant has
-  `vu_tri_vs`'s and `vu_particle_vs`'s keys, 32 (40), and the ten pre-pass keys join the plain
-  ones' class, so the set is 134 keys smaller with one variant (170 with the exact blend) and 278
-  (350) with both (`rd_state_test` prints both counts, `testEnumerationPrepass`). Each variant has as many keys, so a set
+  shaders, 16 keys each (20 with the exact blend): TEST Z GEQUAL (the three tests of
+  `rd_mesh.c` `enumerateVuVariant` give one Z test), Z write on and off, four blends, `vu_ps` and
+  `vu_texa_ps`. With the pre-pass (the default) a variant has `vu_tri_vs`'s and `vu_particle_vs`'s
+  keys under TEST Z ALWAYS as well (a VU draw after the game turned the Z test off:
+  `queen_barrier_disp.c` `MakeRefractTexture` before the barrier mesh, `pool.c` `copyToWork`), 32
+  each (40), 64 (80), and the ten pre-pass keys join the plain ones' class, so the set is 102 keys
+  smaller with one variant (130 with the exact blend) and 214 (270) with both, derived from those
+  counts (`rd_state_test` prints them, `testEnumerationPrepass`). The program entries keep the Z
+  GEQUAL states: doubled, both variants would pass `RD_PIPELINE_REACHABLE_MAX`. Each variant has as many keys, so a set
   with the extended ones alone has as many VU keys as the Original 4:3 set. With the
   interpolation on at 4:3 and 1x a still camera's draw has neither flag and takes the plain ones,
   so that state compiles both.
