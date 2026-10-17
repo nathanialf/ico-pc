@@ -417,14 +417,15 @@ strip.
 
 ### The variants
 
-Every VU vertex shader has two variants (issue 107): the extended one, `vu_X_vs`, the file as it
-reads, and the plain one, `vu_X_plain_vs`, the same entry compiled with `ICO_VU_PLAIN=1`
-(`port/shaders/CMakeLists.txt`), which leaves out the card test's step of the region rule
-(`vu_region_rule_cut`'s `VU_F_EXTENDED` branch) and the two tick cameras (`vu_tick_shown`,
-`vu_particle_tick_shown`). A draw with neither `VU_F_EXTENDED` nor `VU_F_TICKS` runs the same
-instructions on the same values through either, so the renderer gives it the plain one
-([RENDER.md](RENDER.md#the-vu-shader-variants)). The cut against the camera's picture stays in
-both: at 4:3 a triangle wholly beside the picture is drawn, clipped, as before.
+The record path's modules have one build each, on every device. The ten mesh program entries,
+which only the fallback draws through, have two (issue 107): the extended one, `vu_X_vs`, the file
+as it reads, and the plain one, `vu_X_plain_vs`, the same entry compiled with `ICO_VU_PLAIN=1`
+(`port/shaders/CMakeLists.txt`, the ten mesh entries only), which leaves out the card test's step
+of the region rule (`vu_region_rule_cut`'s `VU_F_EXTENDED` branch) and the two tick cameras
+(`vu_tick_shown`). The renderer takes the plain ones for the fallback on a device of the table and
+the extended ones everywhere else, once a run ([RENDER.md](RENDER.md#the-fallback-entries));
+`vu_particle_vs` and `vu_tri_vs` have the one build. The cut against the camera's picture stays in
+both: at 4:3 a triangle wholly beside the picture is drawn, clipped, as in the extended one.
 
 | module | plain words | instructions | blocks | extended words | instructions | blocks | the set that built on the Adreno 740 (words) |
 | --- | --- | --- | --- | --- | --- | --- | --- |

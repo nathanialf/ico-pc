@@ -289,7 +289,7 @@ plain ones (the Adreno 740, whose driver froze the whole device compiling the ex
 `[dev] vu_plain_only`) draws every state with the plain variant: there a triangle that reaches into
 the picture and fails the region test is not drawn in any state (no card test: the wide picture's
 edge at the old 4:3 border may open), and the pictures between two ticks take the blended camera's
-rule alone ([RENDER.md](RENDER.md#the-vu-shader-variants)).
+rule alone ([RENDER.md](RENDER.md#the-fallback-entries)).
 
 ## The card test
 
@@ -308,7 +308,7 @@ grid's batch is one strip, and only a grid of one strip can be a card (`port/ren
 
 **The verdicts.** `rd_draw_vu_mesh` and `rd_draw_vu_grid`, in any state but out of the box
 (`rd__vu_extended`, the state `VU_F_EXTENDED` stands for) and not where every VU draw takes the plain
-shaders, which have no card test (`g_rd.vuPlainOnly`, [RENDER.md](RENDER.md#the-vu-shader-variants)),
+shaders, which have no card test (`g_rd.vuPlainOnly`, [RENDER.md](RENDER.md#the-fallback-entries)),
 test each free-standing strip of the
 draw's batches at the draw's camera (its `RdVuBlock`, and a skinned draw's bones) with the vertex
 shaders' region test (`vu1ref_region_inside`: single precision rounded to nearest as on the GPU, the

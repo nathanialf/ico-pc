@@ -593,7 +593,7 @@ start ended while the graphics driver compiled the largest 3D shaders (the VU ex
 this start and every start after it use the smaller ones only ([dev] vu_plain_only = true in
 <path>): the wide-screen rule is off; delete that line to try the larger ones again`
 (`vu_plain_persist`). Either start builds the set as usual, not lazily
-([RENDER.md](RENDER.md#the-vu-shader-variants); `port/platform/window_host.c`,
+([RENDER.md](RENDER.md#the-fallback-entries); `port/platform/window_host.c`,
 `ico_diag_startup_activity_prev`). While the set is created the heartbeat line ends with the note
 in flight (`| creating pipelines ...`), so a log that stops mid-set says what the driver was
 compiling; a VU batch's note names each vertex shader with its words and SPIR-V instructions and

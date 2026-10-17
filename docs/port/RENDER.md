@@ -704,9 +704,8 @@ both. The progress function runs while a batch compiles (about every 50 ms, with
 and between batches, and a nonzero return stops the set after the batch in flight; the rest is
 created as the frames need it. The activity note names the batch: `creating pipelines 321-352 of
 702: <first key> to <last key>; vertex <module> <words> words, ...; largest fragment <module>
-<words> words` (a VU key's words end with ` ext 0` or ` ext 1`, its variant: [The VU shader
-variants](#the-vu-shader-variants)), put back after any pipeline the progress screen's frame creates in
-the middle of it. The log line after the set adds the compiles, the threads and the longest compile:
+<words> words` (a point key's words, the vertex pre-pass's and the record stages', end with
+` pre`), put back after any pipeline the progress screen's frame creates in the middle of it. The log line after the set adds the compiles, the threads and the longest compile:
 `pipelines: <made> of the reachable set's <n> created at start-up in <t> ms (<f> failed); <c>
 compiled on <k> threads, the longest <s> s`, and two lines say where the time went, from the
 workers' own times (`RhiPipelineBatch.ms`): `pipelines: the slowest: <s> s <key>; ...` (the ten
@@ -716,6 +715,33 @@ the threads, the largest first) (`port/render/rd.h` (`rd_precreate_pipelines`,
 At start the renderer logs the embedded modules' count and the largest, `shaders: <n> modules,
 largest <entry> <words> words`: a driver's compile time grows with a module's size, which
 `spirv_check` holds to a budget ([SHADERS.md](SHADERS.md#the-envelope); `port/render/rd_replay.c`).
+
+**Dynamic state.** Where the device has it the Z test, the Z write, the blend and the colour mask
+are set at each draw instead of being part of the pipeline ([RHI.md](RHI.md#dynamic-state);
+`RhiLimits.dynamicDepth`: Vulkan 1.3 or `VK_EXT_extended_dynamic_state`; `RhiLimits.dynamicBlend`:
+`VK_EXT_extended_dynamic_state3`; D3D12 neither). The cache then holds the keys with those fields
+normalised away (`port/render/rd_pipeline.c` (`rd__key_dynamic_normalise`)): a key with a depth
+attachment and no stencil mode takes `ztst` ALWAYS and `zwrite` OFF, a key with one colour target
+and no destination read takes `blend` `RD_BLEND_COUNT` and mask `0xF`; the shadow count's stencil
+keys keep their depth state, the point keys (the vertex pre-pass's and the record stages', three
+targets) every state, and `nodual` stays in the key (it picks the fragment module).
+`rd__get_pipeline` normalises the key it is given (`drawKey`), the start-up set is enumerated
+normalised (`rd__enumerate_reachable`, after the two-pass and destination-read expansions, so the
+set holds the keys the draws' pipelines are made from), and every draw binds through
+`rd__set_pipeline(cl, p, key)` with the key it planned, un-normalised: it binds and sets the depth
+state and the blend state from that key through `depthCompare` and `blendState`, the functions the
+static state is made with, so each draw gets the fixed-function tuple a pipeline of its own key
+would have had and the picture is the same byte for byte. `rd__pipe_key_equal` compares two keys
+modulo the normalisation (a key as a planner made it matches the set's). The draws that differed
+only in those fields (the AFAIL halves, the Z-write alternations, the blend paths of one shader)
+share one pipeline, so the set is smaller and fewer binds change the pipeline; `rd_replay_tool
+--stats` prints `<n> dynamic state sets (dynamic depth on|off, blend on|off)`, the commands
+recorded (`RhiStats.dynamicSets`). The log says which at `rd_init`, `rd: pipelines: dynamic state:
+depth and blend (the Z test, Z write, blend and colour mask set at each draw, out of the pipeline
+keys)` (or `depth (...)`, `blend (...)`, `none (every state in the pipeline keys)`), and the
+start-up set's line carries ` (dynamic depth, blend)` after `created at start-up`; the first-use
+line prints the normalised key. `ICO_VK_FAKE_NO_DYNAMIC=1` (`=blend`: the blend alone) turns it off
+on a device that has it, for an A/B of the same frames.
 
 ### The start-up set
 
@@ -773,14 +799,31 @@ step (the `slow step` line's `texture decodes`) and the replay's texture and mes
 
 | the set is skipped | `<why>` in the line |
 | --- | --- |
-| on a device of the table (`RhiLimits.lazyPipelines`, the lazy column of `kVuPlainOnly` in `port/rhi/vk/vk_device.c`); `[dev] pipeline_set = "full"` does not override it (a `window:` line says so) | `on this device (Adreno 740, issues 93 and 107)` |
+| on a device of the table (`RhiLimits.carefulPipelines`, the careful column of `kVuPlainOnly` in `port/rhi/vk/vk_device.c`); `[dev] pipeline_set = "full"` does not override it (a `window:` line says so) | `on this device (Adreno 740, issues 93 and 107)` |
+| the set under a policy with a memory budget (below) grew the process past it, or a batch took over 10 s: the rest of the set | `(memory budget: the process grew <g> MB, from <a> to <b> MB, past the policy's <m> MB, after <i> of <n> keys)` or `(memory budget: a batch of <k> took <t> s, past 10 s; ...)` |
 | `[dev] pipeline_set = "lazy"` (`ICO_PIPELINE_SET=lazy`, [CONFIG.md](CONFIG.md#ico-pcini)) | `by the settings ([dev] pipeline_set = "lazy")` |
 | the previous start, of any version, ended without a word in the foreground while a pipeline was being made, the first such end in a row: this start only, nothing written ([PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them; for this start only)` |
 | the same, the second end in a row: the setting is written once the device is made, not on a device of the table ([PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them; [dev] pipeline_set = "lazy" from now on)` |
 | the last run, of the same version, ran without the set and ended, or exited from it | `(the last run made them that way)` |
 | the crash order's `lazy` step | `(a restart after a graphics driver crash)` |
 
-The table's row (`port/rhi/vk/vk_device.c` `kVuPlainOnly`; the plain-only rule of the next section
+**The policy.** `rd_set_pipeline_policy(&p)` before `rd_precreate_pipelines` sets how the set is
+made (`port/render/rd.h` (`RdPipelineSetPolicy`); `port/render/rd_pipeline.c` (`createKeys`)); zero
+fields are the defaults. `batch`: keys a batch (`RD_PIPE_BATCH`, 32, and no more); `maxThreads`:
+`RhiPipelineBatch.maxThreads`, the workers a batch may use (0: the backend's count,
+[RHI.md](RHI.md#the-interface)); `cacheEachBatch`: the pipeline cache written after every batch, on
+any platform (`cacheKeptPerBatch`); `memoryBudgetMB`: the process's resident memory is read before
+and after every batch (`rd_set_memory_fn`), and once it has grown past the budget over its size
+when the set began, or a batch took over `RD_SET_SLOW_BATCH_MS` (10 s), the set stops after that
+batch and the rest goes the first-use way (`rd_pipelines_lazy` with the reason in the table
+above). `rd_pipeline_policy_careful()` is the careful set: batches of 8, one worker thread, a 128
+MB budget, the cache after each batch, the values for a device of `RhiLimits.carefulPipelines`.
+A policy other than the defaults is logged once before the set, `rd: pipelines: the start-up set's
+policy: batch 8, threads 1, budget 128 MB, cache each batch; with a budget the set stops past it or
+after a batch over 10 s, the rest made on first use`, and each batch's line ends with `; policy
+batch 8, threads 1, budget 128 MB, cache each batch`.
+
+The table's row (`port/rhi/vk/vk_device.c` `kVuPlainOnly`; the fallback rule of the next section
 stays on the same device):
 
 | device | match | reason |
@@ -826,105 +869,64 @@ on Direct3D 12) on a phone or a tablet, on the lazy path and on a device of the 
 cache 3104 KB`), `not measured` in a desktop's set (the paragraph above). A start the system ended shows whether the memory grew with the batches, and the
 next start logs the last one again as `ico_pc: the previous run's last finished batch: <line>`.
 
-### The VU shader variants
+### The fallback entries
 
-Every VU vertex shader is built twice (issue 107; `port/shaders/vu_common.hlsli`, `ICO_VU_PLAIN`):
-the extended variant (`vu_X_vs`) and the plain one (`vu_X_plain_vs`). The plain one leaves out the
-two steps of the region rule that only a picture other than the PS2's out of the box takes: the
-card test (`VU_F_EXTENDED`, [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule)) and the two tick
-cameras (`VU_F_TICKS`, the interpolation's pictures between two ticks); every other line is the
-same code, so a draw with neither flag gives the same picture through either. The plain modules
-are 6,216 to 23,199 words, the extended ones 10,044 to 51,132 (the vertex pre-pass's triangle
-stage 19,519 and 47,637) ([SHADERS.md](SHADERS.md#the-variants)).
+Every device draws the VU programs through one module set, the record path's: `vu_main_vs` and
+`vu_particle_main_vs` with `vu_ps` / `vu_texa_ps`, the vertex pre-pass's ten `vu_X_pre_vs` and the
+record stages' four point entries ([The vertex pre-pass](#the-vertex-pre-pass)), each with the
+region rule's every step (the card test, the tick cameras); there is no per-draw variant and no key
+field for one. A draw the record path cannot take (a command past the record, a stage pipeline that
+could not be made, a failed self-test, the pre-pass off) draws the old way, through its program's
+own entry with the legacy pixel shaders (`vu_legacy_ps`, `vu_legacy_texa_ps`). Which module a
+program entry's key is made from is decided once a run, at `rd_init` (`port/render/rd_pipeline.c`
+(`rd__vu_policy_init`), `g_rd.vsFallback`):
 
-- **The key.** `RdPipeKeyInt.vuExt` is 1 for the extended variant, 0 for the plain one and for
-  every key without a VU vertex shader. `vuDraw` takes the plain one unless the draw has
-  `VU_F_EXTENDED` or `VU_F_TICKS` (`rd__vu_draw_ext`); the camera blend still reaches a plain
-  draw through its blended matrices.
-- **The start-up set.** The extended VU keys when the settings can make a draw that wants them
-  (`rd__vu_ext_reachable`): the Enhanced preset, an aspect or a frame wider than 4:3, a scene scale
-  above 1, or the interpolation on (a framerate other than `original`, which draws through the
-  tick cameras whenever the camera moves). The plain ones unless no draw can take them: in a state
-  other than out of the box (`rd__vu_extended`: the Enhanced preset, a frame wider than 4:3, a
-  scene scale above 1) every VU draw has `VU_F_EXTENDED` and so the extended variant, so the plain
-  keys are enumerated only out of the box or where the device or the settings keep the plain ones
-  (`g_rd.vuPlainOnly`; `rd__enumerate_reachable_vu`). The Original preset at 4:3 and 1x with the
-  original framerate compiles only plain VU shaders; the Enhanced preset or a wide frame only
-  extended ones; the Original preset at 4:3 and 1x with the interpolation on both. A setting changed later to one
-  that wants them creates them as the frames first need them. That holds the other way too, and
-  is accepted: a start with the Enhanced preset, a wide frame or a scene scale above 1 compiles no
-  plain VU keys, so a switch in the game to the Original preset at 4:3 and 1x makes the plain ones
-  as the frames first need them, up to 74 pipelines with the vertex pre-pass (90 with the exact
-  blend; 176 and 220 without it, [The vertex pre-pass](#the-vertex-pre-pass)), a short pause
-  here and there in the first minutes after the switch; the pipeline cache keeps them for the
-  next start. The set is ordered: every 2D key
-  first, then the plain VU keys, then the extended ones (`orderSet`), and a batch never mixes
-  extended VU keys with others, so the activity note's ` ext 1` field names a batch of them.
-  The VU keys: eleven VU vertex shaders, 16 keys each (20 with the exact blend): TEST Z GEQUAL
-  (the three tests of `rd_mesh.c` `enumerateVuVariant` give one Z test), Z write on and off, four
-  blends, `vu_ps` and `vu_texa_ps`. With the pre-pass (the default) a variant has `vu_tri_vs`'s and
-  `vu_particle_vs`'s keys under TEST Z ALWAYS as well (a VU draw after the game turned the Z test
-  off: `queen_barrier_disp.c` `MakeRefractTexture` before the barrier mesh, `pool.c`
-  `copyToWork`), 32 each, 64 in all, and the ten pre-pass keys join the plain ones' class. With
-  the fixed-function blend (the phones' usual path) and one variant the set is 367 2D keys and 176
-  VU keys, 543 in all, without the pre-pass (`[dev] vu_prepass = false`), and 441 with it (367,
-  64 and 10), as `rd_state_test` prints them (`testEnumerationPrepass`); with both variants (the
-  interpolation at the Original preset, 4:3 and 1x) 719 and 505. The exact blend adds the
-  destination-read images of the blended keys, 2D and VU (`rd_state_test`'s `testEnumeration`
-  prints the totals). The program entries keep the Z GEQUAL states: doubled, both variants would
-  pass `RD_PIPELINE_REACHABLE_MAX` (1024). Each variant has as many keys, so a set
-  with the extended ones alone has as many VU keys as the Original 4:3 set. With the
-  interpolation on at 4:3 and 1x a still camera's draw has neither flag and takes the plain ones,
-  so that state compiles both.
-- **The device table** (`port/rhi/vk/vk_device.c` `kVuPlainOnly`, `RhiLimits.vuPlainOnly`): a
-  device whose driver cannot build the extended ones draws every VU draw with the plain ones,
-  logged once as `rd: VU shaders: plain only on this device (Adreno 740, issue 107): the
-  wide-screen rule is off`; triangles that the extended picture would clip at the 4:3 picture's
-  edge are dropped as at 4:3, and the pictures between two ticks keep the blended camera's rule.
+- the extended build `vu_X_vs` on every device but those of the table;
+- the plain build `vu_X_plain_vs` (`port/shaders/vu_common.hlsli`, `ICO_VU_PLAIN`: no card test, no
+  tick cameras) on a device of the table (`RhiLimits.vuFallbackPlain`, `kVuPlainOnly` in
+  `port/rhi/vk/vk_device.c`), with `ICO_RD_VU_PLAIN=1`, or after `rd_set_vu_plain_only`; only the
+  ten mesh entries have it (the particles' `vu_particle_vs` is one build), and its modules are made
+  only then. `ICO_RD_VU_EXTENDED=1` gives the extended build whatever the others say.
 
-  | device | match | reason |
-  | --- | --- | --- |
-  | Qualcomm Adreno 740 on Qualcomm's own driver (not Turnip) | vendor 0x5143, device 0x43050A01 (what both devices report; not Mesa's other 0x4305xxxx ids: 0x43050A00 the Adreno A32, 0x43050B00 the 740v3, 0x43051401 the Adreno 750) | issue 107 (AYN Thor) and issue 93 (AYN Odin 2 Portal), driver 512.676.53, compiler E031.41.03.47: the whole device froze, needing a reboot, while the driver compiled the first pipelines with a VU vertex shader of 46,470 words and up; a set of at most 32,709 words built ([SHADERS.md](SHADERS.md#the-envelope)) |
+The program entries' keys are in the start-up set only with the pre-pass off (then every VU draw is
+the old way: the eleven entries with the legacy pixel shaders, 16 keys each, 176); with it they are
+made on first use, by the fallback alone. The set at Original 4:3 with the fixed-function blend and
+every state static is the 2D keys, `vu_main_vs`'s 32 and `vu_particle_main_vs`'s 32 (TEST Z
+GEQUAL and Z ALWAYS, Z write on and off, four blends, `vu_ps` and `vu_texa_ps`; the particles' keys
+carry `RD_PROG_PARTICLE`, the meshes' `RD_PROG_PRELIT`), the ten pre-pass keys and the five stage
+keys (`rd__vu_stage_key`: the rule, the tick test under colour mask R and under G, the colour planes,
+the particles' stage): the 2D part + 32 + 32 + 10 + 5, 446 with a 2D part of 367 (the VU part is
+79 whatever the 2D part; `rd_state_test` prints both); with dynamic depth ([Pipelines](#pipelines)) the two drawing shaders' keys fall to 8 each,
+with dynamic depth and blend to 2 each, the point keys staying 15 (`rd_state_test`
+`testEnumerationPrepass`, `testDynamicNormalise` print each set with its 2D part).
 
-- **After a freeze.** A batch's note goes to the disc before the batch starts (fsync,
-  `port/platform/diag_host.c` `act_sync_note`). A start that ended without a word, in the
-  foreground, inside a batch of extended VU keys (`startup_retry_note_has_vu_ext` on the activity
-  file's note) makes the next start draw with the plain ones for that start only, nothing written
-  (`ico_pc: the previous start ended while the graphics driver compiled the largest 3D shaders (the
-  VU extended variants); this start only uses the smaller ones ...`); the next start that compiles
-  them and ends there again writes `[dev] vu_plain_only = true` to `config.toml` and draws with the
-  plain ones at every later start (`port/platform/window_host.c`, `diag_host.h`
-  `ico_diag_startup_end_persist`): `ico_pc: the previous start ended while the graphics driver
-  compiled the largest 3D shaders (the VU extended variants); this start and every start after it
-  use the smaller ones only ...`. Nothing is written on a device of the table (`RhiLimits.vuPlainOnly`). Those starts build
-  their set as usual (the cause is out of it), not lazily. A restart after a crash report takes its
-  own step, and an end in the background is not counted ([PLATFORM.md](PLATFORM.md#diagnostics)).
-- **Overrides.** `ICO_RD_VU_PLAIN=1` (`[dev] vu_plain_only`) keeps any device to the plain
-  ones; `ICO_RD_VU_EXTENDED=1` (`[dev] vu_extended`) gives the extended ones whatever the table or
-  the setting says (`rd__vu_policy_init`).
-- **The log.** At `rd_init`: `rd: device compiler: Compiler Version: E031.41.03.47` (the driver's
-  own line, Vulkan; `the driver names none` without one) and `rd: VU shaders: plain for the draws
-  of the Original preset at 4:3 and 1x without interpolation (largest vu_lit_plain_vs 23305
-  words), extended for the others (largest vu_lit_vs 51238 words)`, or the plain-only line with its
-  reason. While the set is created the heartbeat line ends with the batch in flight (`| creating
-  pipelines 329-360 of 702: <first key> to <last key>; vertex vu_prelit_vs 50325 words (9801
-  instructions); largest fragment vu_texa_ps <n> words; compiler E031.41.03.47`: each vertex
-  shader's SPIR-V words and instructions, `rd__shader_instructions`, and on a VU batch the driver's
-  compiler), and each batch with a VU vertex shader is logged as it starts (`rd: pipelines:
-  compiling 329-360 of 702 (extended VU): ...`) and as it completes, with every pipeline's compile
-  time as the worker measured it: `rd: pipelines: compiled VU batch 329-360 of 702 (extended,
-  compiler E031.41.03.47): 32 pipelines 0.41-2.10 s, mean 1.29 s, 12.3 s on 4 threads; memory 185
-  MB (most 194 MB), pipeline cache 3104 KB; vu_prelit_vs 50325 words 9801 instructions: 8 x
-  1.10-2.10 s mean 1.62 s; ...; each (s): 1.10 1.22 ...` (`batchTimes`; the 2D batches' lines:
-  [The start-up set](#the-start-up-set)). The same line without the times goes to the start-up activity file as a
-  `compiled: ` line ([PLATFORM.md](PLATFORM.md#diagnostics), `rd_set_batch_fn`), so the start after
-  a freeze logs every batch the frozen one finished: a device that compiles the plain batches and
-  dies on the first extended one shows its size boundary, and one that dies on plain shows it there.
-  After the set the ten slowest compiles carry their modules (`(vu_lit_vs 51238 words + vu_ps <n>
-  words)`) and the time by vertex shader each module's size. A log that stops inside the set names
-  the module the driver was compiling. To test the size boundary on a device by hand, `[dev]
-  vu_plain_only = true` keeps it to the plain variants and `[dev] vu_extended = true` gives it the
-  extended ones whatever the device table says ([CONFIG.md](CONFIG.md#ico-pcini)).
+The table:
+
+| device | match | reason |
+| --- | --- | --- |
+| Qualcomm Adreno 740 on Qualcomm's own driver (not Turnip) | vendor 0x5143, device 0x43050A01 (what both devices report; not Mesa's other 0x4305xxxx ids: 0x43050A00 the Adreno A32, 0x43050B00 the 740v3, 0x43051401 the Adreno 750) | issue 107 (AYN Thor) and issue 93 (AYN Odin 2 Portal), driver 512.676.53, compiler E031.41.03.47: the whole device froze, needing a reboot, while the driver compiled the first pipelines with a VU vertex shader of 46,470 words and up; a set of at most 32,709 words built ([SHADERS.md](SHADERS.md#the-envelope)) |
+
+The log at `rd_init`: `rd: device compiler: Compiler Version: E031.41.03.47` (the driver's own line,
+Vulkan; `the driver names none` without one), then `rd: VU shaders: the record path's modules on
+every device (largest <module> <words> words); the fallback's program entries extended (largest
+vu_lit_vs <words> words), in the start-up set only with the vertex pre-pass off`, or `... entries
+plain on this device (Adreno 740, issue 107): no wide-screen rule and no tick cameras on those
+draws (largest vu_lit_plain_vs 23305 words) ...`. While the set is created the heartbeat line ends
+with the batch in flight (`| creating pipelines 329-360 of 446: <first key> to <last key>; vertex
+vu_main_vs <words> words (<n> instructions); largest fragment vu_texa_ps <n> words; compiler
+E031.41.03.47`: each vertex shader's SPIR-V words and instructions, `rd__shader_instructions`, and
+on a VU batch the driver's compiler), and each batch with a VU vertex shader is logged as it starts
+(`rd: pipelines: compiling 329-360 of 446 (VU): ...`) and as it completes, with every pipeline's
+compile time as the worker measured it: `rd: pipelines: compiled VU batch 329-360 of 446 (compiler
+E031.41.03.47): 32 pipelines 0.41-2.10 s, mean 1.29 s, 12.3 s on 4 threads; memory 185 MB (most
+194 MB), pipeline cache 3104 KB; vu_main_vs <words> words <n> instructions: 16 x 1.10-2.10 s mean
+1.62 s; ...; each (s): 1.10 1.22 ...` (`batchTimes`; the 2D batches' lines: [The start-up
+set](#the-start-up-set)). The same line without the times goes to the start-up activity file as a
+`compiled: ` line ([PLATFORM.md](PLATFORM.md#diagnostics), `rd_set_batch_fn`), so the start after a
+freeze logs every batch the frozen one finished. After the set the ten slowest compiles carry their
+modules and the time by vertex shader each module's size; a log that stops inside the set names
+the module the driver was compiling. The set is ordered: every 2D key first, then the VU keys
+(`orderSet`).
 
 ### The vertex pre-pass
 
@@ -992,8 +994,8 @@ triangle stage's keys are the ones named. The pass ring holds the pass as `VU pr
 vertices into the record (1024xR)` with its pipeline ([The pass ring](#the-pass-ring);
 `port/render/rd_replay_vu.c` (`rd__vu_prepass`, `vuSource`, `vuPreRange`, `recEnsure`)).
 
-**The triangle stage.** `vu_tri_vs` (and `vu_tri_plain_vs`, [The VU shader
-variants](#the-vu-shader-variants)) serves every mesh program: it reads the record buffer (t4 in
+**The triangle stage.** `vu_tri_vs` (the program entries' twin, [The fallback
+entries](#the-fallback-entries)) serves every mesh program: it reads the record buffer (t4 in
 group 1, `StructuredBuffer<uint4>`, nine loads an invocation) for `kick - 2`, `kick - 1` and
 `kick`, and calls `vu_mesh_out` as the program's entry did, with the program's own choices passed
 in VuCB instead of written in the entry: `vu_rec.w` holds the clip mode the program uses (normal_c
@@ -1007,7 +1009,7 @@ program's entry. A pipeline of `vu_tri_vs` does not depend on the program, so th
 is normalised (`RD_PROG_PRELIT`) and the programs share their pipelines.
 
 **The keys.** With the pre-pass on, the VU keys are those of `vu_tri_vs` and `vu_particle_vs`
-under the VU states (each variant as [The VU shader variants](#the-vu-shader-variants) says), and
+under the VU states ([The fallback entries](#the-fallback-entries)), and
 the ten pre-pass keys (`rd__vu_pre_key`: the program's `vu_X_pre_vs` with `vu_pre_ps`, three
 `RGBA32_UINT` targets, no depth, points, no blend); the program entries' keys are made only for a
 command drawn the old way. `[dev] vu_prepass = false` (`ICO_RD_VU_PREPASS=0`,

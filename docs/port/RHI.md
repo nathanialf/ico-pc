@@ -123,7 +123,8 @@ as `rhi_create_pipeline` logs it, and the call returns the count made. The optio
 `RHI_PIPELINE_WAIT_MS` (50) with the number finished; it may use the RHI meanwhile (the renderer's
 start-up screen presents frames from it), since the workers touch nothing but the driver. It hands
 back each pipeline's compile time as the worker measured it around the driver call, and the threads
-used. `rhi_create_pipeline` stays the single creation, the same three steps on the calling thread
+used; its `maxThreads` (0: the count above) caps the workers on both backends, the renderer's
+careful start-up set taking 1 ([RENDER.md](RENDER.md#the-start-up-set)). `rhi_create_pipeline` stays the single creation, the same three steps on the calling thread
 (`port/rhi/rhi.h` (`rhi_create_pipelines`); `port/rhi/vk/vk_pipeline.c`,
 `port/rhi/d3d12/d3d12_pipeline.c`).
 
@@ -144,7 +145,12 @@ destination read's three bits: `fragmentInterlock` (Vulkan), `rov` (D3D12) and
 `rasterOrderAttachment` (Vulkan), and `rasterOrderOff`, why the attachment read is off on a device
 that has it (`attachment read off: Qualcomm driver <version>`, NULL otherwise), and
 `colorBytesPerPixel`, the bytes one pixel of a pass's colour targets may take together: 0 (no
-bound) on D3D12 and Vulkan, under MoltenVK the Apple GPU's Metal implicit image block (below)
+bound) on D3D12 and Vulkan, under MoltenVK the Apple GPU's Metal implicit image block (below),
+`dynamicDepth` and `dynamicBlend` ([Dynamic state](#dynamic-state)), and the device table's two
+reasons (Vulkan, `kVuPlainOnly` in `port/rhi/vk/vk_device.c`; NULL elsewhere and on D3D12):
+`vuFallbackPlain`, why the renderer's VU fallback takes the plain program entries on this device,
+and `carefulPipelines`, why its start-up set is made under the careful policy
+([RENDER.md](RENDER.md#the-fallback-entries), [RENDER.md](RENDER.md#the-start-up-set))
 (`port/rhi/rhi.h` (`RhiLimits`)).
 
 **Device and swapchain.** `rhi_init` takes an `SDL_Window` (NULL: headless, no swapchain),
@@ -225,6 +231,40 @@ builds reject another loader), `rhi_injector_name` ("ReShade" or "vkBasalt") and
 `rhi_overlay_from_layer_name` and `rhi_layer_switched_on`, which reads a layer's enable and disable
 variables as the loader does (`port/rhi/rhi.h`; `port/rhi/rhi_backend.c`).
 
+### Dynamic state
+
+A pipeline whose `RhiPipelineDesc.dynamic` has `RHI_DYN_DEPTH` leaves the depth test, write and
+compare to the draw, one with `RHI_DYN_BLEND` the blend enable, the blend equation and the colour
+write mask of its one colour target, where the limits say the device takes them
+(`RhiLimits.dynamicDepth`, `dynamicBlend`; a bit the device lacks, or blend on a pipeline with other
+than one colour target, is dropped and the description's value is static). The description's values
+are the draw's until a set: `rhi_cmd_set_depth_state(cl, test, write, cmp)` and
+`rhi_cmd_set_blend_state(cl, &blend)` after the bind give the next draws their own (a set on a
+pipeline without that group does nothing). D3D12 has neither: its limits say false and the sets are
+no-ops (`port/rhi/d3d12/d3d12_cmd.c`).
+
+Vulkan (`port/rhi/vk/vk_device.c` (`vkr_create_device`), `vk_pipeline.c` (`vkr_pipe_prepare`),
+`vk_cmd.c` (`vkr_flush_dynamic`)): depth is Vulkan 1.3's core states, or on a 1.2 device
+`VK_EXT_extended_dynamic_state` with `extendedDynamicState`; blend is
+`VK_EXT_extended_dynamic_state3` with `extendedDynamicState3ColorBlendEnable`,
+`extendedDynamicState3ColorBlendEquation` and `extendedDynamicState3ColorWriteMask`, only those
+enabled. A pipeline's dynamic states are the four always dynamic (viewport, scissor, stencil
+reference, blend constants) and `VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE`, `DEPTH_WRITE_ENABLE`,
+`DEPTH_COMPARE_OP` and `COLOR_BLEND_ENABLE_EXT`, `COLOR_BLEND_EQUATION_EXT`,
+`COLOR_WRITE_MASK_EXT` for its groups; the commands are found through `vkGetDeviceProcAddr` (the
+core names on 1.3, the EXT ones otherwise). The sets keep the values the next draw needs; the draw
+records only what differs from the values the command buffer holds, and every command of a group
+after the bind of a pipeline with that group static (that bind replaced them). So binds of two
+dynamic pipelines with the same values record nothing more, and a draw gets exactly the values a
+static pipeline of its state would have given it. `RhiStats.dynamicSets` counts the commands
+recorded. A draw on a dynamic pipeline whose sets were not made since its bind takes the
+pipeline's own values and is logged once (`rhi_vk: dynamic state: a draw with its pipeline's depth
+left unset since the bind ...`). The device's line: `rhi_vk: dynamic state: depth test, write and
+compare yes (Vulkan 1.3); blend enable, equation and write mask yes
+(VK_EXT_extended_dynamic_state3)` (or `no`, with why). `ICO_VK_FAKE_NO_DYNAMIC=1` reports both
+false, `=blend` the blend alone, for an A/B of the same frames (`rhi_vk_test`'s dynamic cell draws
+the renderer's depth tests, blends and masks static and dynamic, texel-equal; [Tests](#tests)).
+
 ## Backends in one build
 
 Each backend library is compiled with `RHI_BACKEND_PREFIX` set to its short name (`vk`, `d3d12`).
@@ -294,6 +334,7 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_FAKE_LIMITS=moltenvk` | no limit clamped: the device is reported as MoltenVK (`RhiLimits.moltenvk`) without the attachment read (`rd_blend_selftest_moltenvk_storage`) |
 | `ICO_VK_FAKE_D24S8` | 1 takes D24S8 where the device has it |
 | `ICO_VK_FAKE_NO_DUAL` | 1 leaves dual-source blending off |
+| `ICO_VK_FAKE_NO_DYNAMIC` | 1 leaves the dynamic depth and blend state off, `blend` the blend alone ([Dynamic state](#dynamic-state)) |
 | `ICO_VK_FAKE_NO_MSAA` | 1 reports single sampling only |
 | `ICO_VK_FAKE_NO_DST` | 1 reports no destination read and no local read |
 | `ICO_VK_FAKE_ADRENO` | 1 takes the Qualcomm driver's branch: the attachment read not offered |
@@ -562,7 +603,7 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 
 | test | checks |
 | --- | --- |
-| `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames; seven of the cells' pipelines come from one `rhi_create_pipelines` call with an uncreatable description among them (only that one fails, the ids are distinct, the finished count never goes back) |
+| `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames; seven of the cells' pipelines come from one `rhi_create_pipelines` call with an uncreatable description among them (only that one fails, the ids are distinct, the finished count never goes back); the dynamic state cell (`dynamicCell`: sixteen cells of the renderer's depth tests, Z writes, blends and masks drawn with every state static, from one `rhi_create_pipelines` batch with `maxThreads` 1 on one thread, then with the device's dynamic groups set after each bind: texel-equal, three commands a group after each static bind, none for a repeat; skipped but for the static pass without dynamic state) |
 | `rhi_vk_test.c` | the common cells on Vulkan, a hazard-tracking cell, the render-area check (a pass wider than its colour target, one taller than its depth: each clamped and counted, no validation error; a fitting pass untouched), and the pipeline cache file (written while up by `rhi_pipeline_cache_save` and at shutdown, read back, another device's or garbage ignored); ctest `rhi_vk`, and `rhi_vk_nodual`, `rhi_vk_d24s8`, `rhi_vk_mali` under the fake switches |
 | `rhi_vk_swapchain_test.c` | the window path on SDL's offscreen driver: frames, readback order, surface release and recreation, suboptimal and lost presents, resizes, the surface poll, submits per frame, the present-wait stand-in and a hanging wait; ctest `rhi_vk_swapchain` |
 | `rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` over the mode sets drivers offer, and `vkr_present_wait_wanted`; ctest `rhi_vk_present_mode` |
