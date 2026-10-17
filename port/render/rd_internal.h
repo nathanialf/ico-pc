@@ -971,7 +971,7 @@ typedef struct RdProfile {
      * turned it off (rd__profile_self_test_off) */
     char cls[96];
     uint16_t devSet, selfTestOff;
-    char text[256]; /* the summary's words, as in force */
+    char text[384]; /* the summary's words, as in force */
 } RdProfile;
 
 /* RdProfile's flags, for its marks (devSet, selfTestOff) */
