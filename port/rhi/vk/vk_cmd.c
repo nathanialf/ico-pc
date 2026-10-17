@@ -272,6 +272,7 @@ RhiCommandList rhi_begin_commands(void)
     c->recording = true;
     c->pendCount = 0;
     c->pendSrc = c->pendDst = 0;
+    c->pendMemDst = 0;
     c->presentImage = VK_NULL_HANDLE;
     /* a new hazard-tracking epoch ("Hazards") */
     c->epoch = ++g_vkr.hzEpoch;
@@ -477,14 +478,20 @@ bool vkr_submit_present_signal(void)
  * at once.  stats.barriers counts vkCmdPipelineBarrier calls. */
 static void vkr_flush_barriers(VkrCmdList *c)
 {
-    if (c->pendCount == 0) {
+    if (c->pendCount == 0 && c->pendMemDst == 0) {
         return;
     }
-    vkCmdPipelineBarrier(c->cb, c->pendSrc, c->pendDst, 0, 0, NULL, 0, NULL, c->pendCount,
-                         c->pendImg);
+    const VkMemoryBarrier mb = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask = c->pendMemDst,
+    };
+    vkCmdPipelineBarrier(c->cb, c->pendSrc, c->pendDst, 0, c->pendMemDst ? 1u : 0u, &mb, 0, NULL,
+                         c->pendCount, c->pendImg);
     g_vkr.stats.barriers++;
     c->pendCount = 0;
     c->pendSrc = c->pendDst = 0;
+    c->pendMemDst = 0;
 }
 
 void vkr_image_barrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState after)
@@ -658,6 +665,11 @@ typedef struct VkrHz {
     VkBufferMemoryBarrier buf[2];
     uint32_t imgCount, bufCount;
     VkPipelineStageFlags src, dst;
+    /* the list's pending memory barrier (VkrCmdList.pendMemDst), and an
+     * execution dependency with no barrier of its own (a copy into a
+     * buffer shaders read waits for their earlier reads) */
+    VkAccessFlags memDst;
+    bool force;
 } VkrHz;
 
 /* The list's deferred image barriers into h, so they go out in the call h
@@ -672,8 +684,10 @@ static void vkr_hz_take_pending(VkrHz *h, VkrCmdList *c)
     }
     h->src |= c->pendSrc;
     h->dst |= c->pendDst;
+    h->memDst |= c->pendMemDst;
     c->pendCount = 0;
     c->pendSrc = c->pendDst = 0;
+    c->pendMemDst = 0;
 }
 
 static void vkr_hz_touch(const VkrCmdList *c, VkrTexture *t)
@@ -764,10 +778,16 @@ static void vkr_hz_buffer(VkrHz *h, const VkrCmdList *c, VkrBuffer *b, bool writ
 
 static void vkr_hz_flush(VkCommandBuffer cb, const VkrHz *h)
 {
-    if (h->imgCount + h->bufCount == 0) {
+    if (h->imgCount + h->bufCount == 0 && h->memDst == 0 && !h->force) {
         return;
     }
-    vkCmdPipelineBarrier(cb, h->src, h->dst, 0, 0, NULL, h->bufCount, h->buf, h->imgCount, h->img);
+    const VkMemoryBarrier mb = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask = h->memDst,
+    };
+    vkCmdPipelineBarrier(cb, h->src, h->dst, 0, h->memDst ? 1u : 0u, &mb, h->bufCount, h->buf,
+                         h->imgCount, h->img);
     g_vkr.stats.barriers++;
 }
 
@@ -788,7 +808,17 @@ static void vkr_hz_copy(VkrCmdList *c, VkrTexture *srcTex, VkrBuffer *srcBuf, Vk
     VkrHz h;
     h.imgCount = h.bufCount = 0;
     h.src = h.dst = 0;
+    h.memDst = 0;
+    h.force = false;
     vkr_hz_take_pending(&h, c);
+    if (dstBuf && dstBuf->shaderRead) {
+        /* rhi.h: a copy into a buffer shaders read waits for their earlier
+         * reads, as rhi_cmd_copy_buffer does */
+        h.src |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        h.dst |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+        h.force = true;
+    }
     if (srcTex) {
         vkr_hz_image(&h, c, srcTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT, 0);
@@ -972,6 +1002,8 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         VkrHz h;
         h.imgCount = h.bufCount = 0;
         h.src = h.dst = 0;
+        h.memDst = 0;
+        h.force = false;
         vkr_hz_take_pending(&h, c);
         for (uint32_t i = 0; i < pass->colorCount; i++) {
             /* a readable attachment is also read by the fragment shaders */
@@ -1393,42 +1425,37 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
         .imageExtent = {region.w, region.h, 1},
     };
     vkr_hz_copy(c, t, NULL, NULL, 0, d);
-    if (d->shaderRead) {
-        /* rhi.h: into a buffer shaders read, ordered as
-         * rhi_cmd_copy_buffer: after every earlier read of it ... */
+    const VkAccessFlags reads = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT |
+                                VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT |
+                                VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+    const VkPipelineStageFlags readStages =
+        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT;
+    if (d->shaderRead && c->globalOrder) {
+        /* rhi.h: into a buffer shaders read, after their earlier reads (the
+         * hazard path folds this into vkr_hz_copy's barrier) */
         VkMemoryBarrier pre = {
             .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
             .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
             .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
         };
-        vkCmdPipelineBarrier(c->cb,
-                             VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
-                                 VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                             VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &pre, 0, NULL, 0, NULL);
+        vkCmdPipelineBarrier(c->cb, readStages, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &pre, 0, NULL,
+                             0, NULL);
         g_vkr.stats.barriers++;
     }
     vkCmdCopyImageToBuffer(c->cb, t->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, d->buffer, 1, &r);
     g_vkr.stats.copies++;
     if (d->shaderRead) {
         /* ... and visible to every later read (the VU vertex pre-pass's
-         * record, read by the triangle stage's vertex shader) */
-        VkMemoryBarrier mb = {
-            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-            .dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT |
-                             VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT |
-                             VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
-        };
-        vkCmdPipelineBarrier(
-            c->cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0, 1, &mb, 0, NULL, 0, NULL);
-        g_vkr.stats.barriers++;
-        /* the barrier covers the copy's write (vkr_hz_buffer's record) */
-        d->hzXferWrite = false;
-        d->hzXferRead = false;
+         * record, read by the triangle stage's vertex shader): a memory
+         * barrier held back with the image barriers, so the copies of a
+         * batch and the next pass share their barriers */
+        c->pendMemDst |= reads;
+        c->pendSrc |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+        c->pendDst |= readStages;
+        if (c->globalOrder) {
+            vkr_flush_barriers(c);
+        }
     }
 }
 

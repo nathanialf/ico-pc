@@ -168,6 +168,11 @@ typedef struct VkrCmdList {
     VkImageMemoryBarrier pendImg[VKR_PENDING_BARRIERS];
     uint32_t pendCount;
     VkPipelineStageFlags pendSrc, pendDst;
+    /* the accesses a copy into a buffer shaders read must be made visible
+     * to (rhi.h rhi_cmd_copy_texture_to_buffer), 0 for none: a memory
+     * barrier from the transfer writes, issued with the pending image
+     * barriers */
+    VkAccessFlags pendMemDst;
     /* the swapchain image the list moves to RHI_STATE_PRESENT
      * (VK_NULL_HANDLE: none): its submit signals the present semaphore
      * (rhi_submit) */
