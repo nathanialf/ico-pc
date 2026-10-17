@@ -645,6 +645,7 @@ static void dx_fill_limits(void)
     /* the summary line's (s_driverText starts "; " when known) */
     o->driverText = s_driverText[0] == ';' ? s_driverText + 2 : NULL;
     o->robustText = NULL;
+    o->robustDefaultOff = false; /* its own bounds rules: no robust step */
     /* texture packs: BC1/2/3/7 are required of every D3D12 device
      * (feature level 11_0) */
     o->bcTextures = true;
@@ -663,8 +664,11 @@ static void dx_fill_limits(void)
     o->dynamicDepth = false;
     o->dynamicBlend = false;
     /* RGBA8 textures are TYPELESS resources: a UINT SRV of any of them
-     * (d3d12_pipeline.c, RHI_ASPECT_UINT) */
-    o->uintView = true;
+     * (d3d12_pipeline.c, RHI_ASPECT_UINT) is implemented, but off: it has
+     * never run on a Windows machine (the CI only cross-compiles), and a
+     * mistake in it would draw a wrong glow on the whole backend; true once
+     * a D3D12 run's glow has been checked against Vulkan's */
+    o->uintView = false;
     o->vuFallbackPlain = NULL;
     o->carefulPipelines = NULL;
     o->compilerVersion = NULL;

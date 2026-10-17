@@ -698,9 +698,14 @@ typedef struct RhiLimits {
      * in force (Vulkan: "off (the default; gpu_robust = true turns it on)",
      * the default on every platform, "off (gpu_robust)", or "on, buffers
      * (robustness2) ... (gpu_robust)"; D3D12 NULL: its own bounds rules
-     * always apply). */
+     * always apply). robustDefaultOff: robustText's "off (the default; ...)"
+     * as a flag, made where that text is (Vulkan; D3D12 false): robust access
+     * off by the platform's default, not by gpu_robust, so a device loss can
+     * take the loss order's robust step (port/platform/window_host.c
+     * ico_diag_set_robust_off_default) whatever the text's wording. */
     const char *driverText;
     const char *robustText;
+    bool robustDefaultOff;
 } RhiLimits;
 
 typedef struct RhiDeviceDesc {

@@ -575,7 +575,7 @@ int ico_diag_loss_bisect2(const char *dump_zip, uint32_t pass, uint32_t draws, u
    0 until set. */
 void ico_diag_set_vu_prepass(int on);
 /* Whether the run draws with robust access off by the device's default
-   (port/rhi/rhi.h RhiLimits.robustText "off (the default; ..."), not by
+   (port/rhi/rhi.h RhiLimits.robustDefaultOff), not by
    gpu_robust or ICO_GPU_ROBUST: a device loss then takes the loss order's
    robust step (startup_retry.h StartupRetryRun.robustOffDefault). The
    window sets it once the device is made; 0 until set. */

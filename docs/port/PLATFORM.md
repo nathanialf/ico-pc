@@ -425,8 +425,9 @@ lost the device: `lossnoprepass` (the same backend without the VU vertex pre-pas
 `ico_diag_set_vu_prepass`, `StartupRetryRun.prepassWasOn`), `robust` (the same backend with robust
 buffer and image access, `ICO_GPU_ROBUST=1`, when the losing run drew with it off by the device's
 default, `StartupRetryRun.robustOffDefault`: the window sets it once the device is made from
-`RhiLimits.robustText` starting `off (the default` (`ico_diag_set_robust_off_default`), so every
-Vulkan run without `gpu_robust` takes it and Direct3D 12, whose text is NULL, never does; the
+`RhiLimits.robustDefaultOff`, which the Vulkan backend sets where it makes `robustText`'s `off (the
+default; ...)` (`ico_diag_set_robust_off_default`), so every Vulkan run without `gpu_robust` takes it
+and Direct3D 12, whose flag is false, never does; the
 step's run sets `ICO_GPU_ROBUST_AFTER_LOSS=1` before the device is made, as the window has already
 dropped `ICO_STARTUP_RETRY`, so its device line says `robust access on, ... (the restart after the
 graphics card stopped responding)` (`port/rhi/vk/vk_device.c`)), `blend` (the same backend with the fixed-function blend, `ICO_RD_BLEND=fixed`, so

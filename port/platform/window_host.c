@@ -1815,13 +1815,7 @@ open_window:
     /* a device loss takes the loss order's robust step when robust access
        is off by the device's default, not by gpu_robust (startup_retry.h
        StartupRetryRun.robustOffDefault; Direct3D 12: NULL, its own rules) */
-    {
-        const char *rt = rhi_limits() != NULL ? rhi_limits()->robustText : NULL;
-        static const char offDefault[] = "off (the default";
-
-        ico_diag_set_robust_off_default(rt != NULL &&
-                                        strncmp(rt, offDefault, sizeof offDefault - 1) == 0);
-    }
+    ico_diag_set_robust_off_default(rhi_limits() != NULL && rhi_limits()->robustDefaultOff);
 #ifdef ICO_IOS
     s_background = 0;
 #endif

@@ -1481,7 +1481,7 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan.
 | `blurFold` | off | off | on | on | off (the G52 is bound by its ALU) | on | on |
 | robust access | off | its own bounds rules | off | off | off | off | off |
 | `localRead` | as offered | none | as offered | as offered | as offered | as offered | as offered |
-| `uintViewWork`, `uintViewScene` | on where the backend has the view | on where the backend has the view | off | off | off | off | off |
+| `uintViewWork`, `uintViewScene` | on where the backend has the view | off (`RhiLimits.uintView` false on D3D12) | off | off | off | off | off |
 | `carefulSet` | off | off | off | off | off | off | off |
 
 The blend row is `rd_dst_read.c`'s ([Destination reads and blend
@@ -2239,8 +2239,11 @@ it back into an integer (`floor(x * 255 + 0.5)` a channel, `fx_load`), which giv
 for every byte. A target made with `RHI_TEX_UINT_VIEW` has an `RGBA8_UINT` view of the same image
 as well (Vulkan: `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT` with the two formats listed and a second,
 sampled-only view, `port/rhi/vk/vk_resource.c` (`vkr_create_uint_view`); D3D12: the RGBA8 resources
-are typeless already and the view is a UINT SRV, `port/rhi/d3d12/d3d12_pipeline.c`;
-`RhiLimits.uintView` on both), bound with `RHI_ASPECT_UINT`. Which targets have it is the
+are typeless already and the view is a UINT SRV, `port/rhi/d3d12/d3d12_pipeline.c`), bound with
+`RHI_ASPECT_UINT`. `RhiLimits.uintView` is true on Vulkan and false on D3D12: the D3D12 view is
+implemented but has not run on a Windows machine (the CI only cross-compiles it), so no D3D12 target
+has it and `[dev] uint_view` asks for it there in vain (`port/rhi/d3d12/d3d12_device.c`
+(`dx_fill_limits`)). Which targets have it is the
 profile's (`port/render/rd_core.c` (`rd__target_create_gpu`)): the work class under
 `RdProfile.uintViewWork`, the scene class under `uintViewScene` (a tiler's driver may give up its
 compression on a mutable-format image, so a frame-sized target takes it only where the profile
