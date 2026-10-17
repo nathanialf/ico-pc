@@ -879,7 +879,8 @@ as those keys' state) and UI-space sprites under the TEST Z GEQUAL every list's 
 the depth target (`ico2/seki/src/GsBase.c` (`gsb_setNormalReg`): a 2D draw of list 11 before
 the list's own TEST write takes it); the whole key in the line names the state if one is still
 missing. The program entries' keys before the pre-pass lacked the same states: every one of them
-has its `vu_tri_vs` twin in the set (`rd_state_test` `testEnumerationPrepass`). A pipeline made in
+has its `vu_main_vs` or `vu_particle_main_vs` twin in the set (`rd_state_test`
+`testEnumerationPrepass`). A pipeline made in
 the vertex pre-pass is `in the vertex pre-pass (before list 0)` (`rd__vu_prepass_running`). A
 replay whose walk (the vertex pre-pass and the recording of its lists, the `walk` phase of the
 [slow replay line](DISPLAY.md#the-stats-lines)) takes over 500 ms gets one line, the first 8 and
@@ -974,7 +975,7 @@ record stages' four point entries ([The vertex pre-pass](#the-vertex-and-triangl
 region rule's every step (the card test, the tick cameras); there is no per-draw variant and no key
 field for one. A draw the record path cannot take (a command past the record, a stage pipeline that
 could not be made, a failed self-test, the pre-pass off) draws the old way, through its program's
-own entry with the legacy pixel shaders (`vu_legacy_ps`, `vu_legacy_texa_ps`). Which module a
+own entry with the same pixel shaders (`vu_ps`, `vu_texa_ps`). Which module a
 program entry's key is made from is decided once a run, at `rd_init` (`port/render/rd_pipeline.c`
 (`rd__vu_policy_init`), `g_rd.vsFallback`):
 
@@ -1040,7 +1041,7 @@ a batch (the scissor batches' fans and kicks) does it again in each draw. The pr
 vertex's work once and each triangle's once, before the lists, into a record; the main vertex
 shaders read a corner's and its triangle's record back and keep only what differs per corner
 (`port/render/rd_replay_vu.c` (`rd__vu_prepass`, `doVuDraw`); `port/shaders/vu_common.hlsli` (the
-record stages, `vu_pre_out`, `vu_rec_vertex`, `vu_record_in`); `port/shaders/vu_tri.hlsl`,
+record stages, `vu_pre_out`, `vu_rec_vertex`, `vu_rec_planes`); `port/shaders/vu_tri.hlsl`,
 `port/shaders/vu_particle.hlsl`). The meshes (`RDC_MESH`, `RDC_SKINNED`), the grids (`RDC_GRID`)
 and the particles (`RDC_PARTICLES`: a sprite's verdict and planes, six invocations a sprite) take
 it.
@@ -1150,16 +1151,26 @@ kick's marks and evaluates, by the program's clip mode (`vu_rec.w`), the region 
 real branches), the card test's condition, the scissor mode's corner code, or clip mode none's
 wrap test; then `vu_plane_tri`, `vu_attr_planes` and, with the chain clip plane, `vu_plane_out`
 and the three distances. `vu_tri_tick_pre_vs` evaluates `vu_tick_shown` for one tick for a
-triangle not wholly inside of a region-mode draw under the tick cameras, whatever the blended
-verdict (the main shader reads it only where that is `VU_RULE_DROP`), else writes 0.
+triangle of a region-mode draw under the tick cameras whose blended verdict can be
+`VU_RULE_DROP`, else writes 0 (the main shader reads slot C only where the verdict is
+`VU_RULE_DROP`). It cannot read slot A, which the rule stage writes in the same pass, so it tests
+the verdict's conditions without the cut: not wholly inside, not `ICO_VU_BEHIND_EYE`, and not under
+the card test (`ICO_VU_EXTENDED`, `vu_strip.y`) with every corner's `h.w > 0`, where
+`vu_region_rule_cut` gives `VU_RULE_CLIP` or `VU_RULE_STRIP` whatever the cut says (a NaN `h.w`
+fails the comparison and keeps the test). Under `ICO_VU_EXTENDED` (every setting but the Original
+preset at 4:3 and 1x: `port/render/rd_pipeline.c` (`rd__vu_extended`)) that leaves the tick tests to the triangles with a corner at or behind the eye: the triangles beside the
+4:3 picture in front of the eye, about half the visible ones on a wide frame, take none. The cut
+itself is not repeated there: it would put the stage over the plain budget
+([SHADERS.md](SHADERS.md#the-envelope)) and a second module's cut could round apart from the rule
+stage's.
 `vu_tri_planes_pre_vs` evaluates `vu_plane_tri`, `vu_attr_planes` and `vu_plane_out` again for
 slot B's words. `vu_particle_pre_vs` evaluates `vu_particle` and `vu_particle_vs`'s drop and
 planes. Every stage is a point draw of the pre-pass entries' shape (three `RGBA32_UINT` targets,
 48 bytes a pixel, no depth, no blend).
 
 **The main shaders.** `vu_main_vs` serves every mesh program at index value `kick * 4 + corner`:
-it reads its corner's vertex record (three loads), slot A's flags (one) and, where the blended
-verdict is `VU_RULE_DROP` under the tick cameras, slot C (one); resolves the rule as
+it reads its corner's vertex record (three loads), slot A's first texel (one: the flags) and,
+where the blended verdict is `VU_RULE_DROP` under the tick cameras, slot C (one); resolves the rule as
 `vu_region_rule`'s tail and `vu_rule_card` do (a tick that drew the triangle clips it, one that
 sent it to the card test sends it there, the card test's verdict decides `VU_RULE_STRIP`), applies
 the scissor draw's `ICO_VU_CUT_ONLY` / `ICO_VU_KICK_ONLY` to the stored corner code, chooses the
@@ -1172,13 +1183,16 @@ stages: `vu_rec.w` holds the clip mode the program uses (normal_c takes VuCB's, 
 test), whether the chain clip plane and the later mark apply (normal_c and normal_l) and whether
 the content table's HIDE mark is tested (normal_c and normal_l); `vu_lo` and `vu_hi` hold the
 region test's bounds (the cluster's VU memory 0 and 1, the others 0 and (4094, 4094, 0,
-16777214)) (`vuTriRule`). Its output (`VuVSOut2`) is the position, the colour, S, T, Q and the
-plane distance, interpolated in screen space, and a flat `tri`: the kick in bits 0..30, bit 31
-set when the triangle's planes hold. `vu_particle_main_vs` draws sprite `vid / 6` from
-`vu_particle` with slot A's verdict (`tri` the sprite's index). `vu_ps` and `vu_texa_ps` read the
-six plane texels by `tri` (`vu_record_in`) and evaluate the planes as before
-(`vu_pixel_attrs`); the programs' own entries draw with `vu_legacy_ps` and `vu_legacy_texa_ps`,
-the same pixel shader on `VuVSOut`'s flat varyings. A main shader's pipeline does not depend on
+16777214)) (`vuTriRule`). Its output is the programs' entries' `VuVSOut`: the position, the
+colour, S, T, Q and the plane distance, interpolated in screen space, and, where the triangle's
+planes hold (`exact` and the exact viewport, as `vu_attr_planes` makes them), the planes as flat
+varyings: the five other plane texels of slots A and B read once a vertex (`vu_rec_planes`: slot
+A's anchor RGBA bytes and `r`, `x1`, `y1`, slot B's `a1`, `x0`, `y0`), the words the stages wrote,
+bit for bit. A flat varying stays in the tile on a tile-based GPU; a read by the triangle in every
+pixel (six buffer loads a fragment) would cost the fill-heavy scenes most. `vu_particle_main_vs`
+draws sprite `vid / 6` from `vu_particle` with slot A's verdict and the sprite's planes the same
+way. `vu_ps` and `vu_texa_ps` take `VuVSOut` from either the main shaders or the programs' own
+entries and evaluate the planes (`vu_pixel_attrs`). A main shader's pipeline does not depend on
 the program, so the key's program is normalised (`RD_PROG_PRELIT`) and the programs share their
 pipelines.
 
@@ -1187,7 +1201,7 @@ pipelines.
 (`rd__vu_pre_key`: the program's `vu_X_pre_vs` with `vu_pre_ps`, three `RGBA32_UINT` targets, no
 depth, points, no blend) and the five record stage keys (`rd__vu_stage_key`: the rule, the tick
 stage under the masks R and G, the planes and the sprite stage); the program entries' keys (with
-`vu_legacy_ps`, `vu_legacy_texa_ps`) are made only for a command drawn the old way.
+the same `vu_ps`, `vu_texa_ps`) are made only for a command drawn the old way.
 `[dev] vu_prepass = false` (`ICO_RD_VU_PREPASS=0`, [CONFIG.md](CONFIG.md#ico-pcini)) draws every
 VU command the old way, for an A/B on a device.
 
@@ -1232,7 +1246,7 @@ untextured) with `vu1_test`'s scene in VU memory, the prelit mesh again through 
 between two ticks' (one vertex of each triangle behind the blended camera's eye, every triangle
 inside at tick 1's camera, so each is drawn clipped through the tick stage, in front of the
 others; left out where the fallback is the plain variant, which has no tick cameras) and four
-particles, once with the pre-passes off (the programs' entries with `vu_legacy_ps`, the
+particles, once with the pre-passes off (the programs' entries, the
 reference) and once with them on, and reads the block back after each. Their pipelines are made
 first on the worker threads the start-up set uses, named by two replays that draw nothing
 (`rd__pipeline_gather`, `rd__pipeline_create_gathered`, as the loss bisect makes its own): the
@@ -1287,8 +1301,9 @@ for a finite `p`: a NaN `p` (only a garbage stream gives one) converts as each m
 differ there. The cut's `lerp`s and divide carry no `precise`, so a driver may contract them in
 either module: the same exposure the program entries have against each other, which the tests
 pin. The ten mesh programs' entries and the pre-pass entries compile to the same SPIR-V with the
-record stages in the tree, and `vu_legacy_ps` is the pixel shader they drew with, instruction for
-instruction. `vu1_test` draws every case both ways, probe and pictures, and compares them byte for
+record stages in the tree, and both ways draw with the one `vu_ps` (and `vu_texa_ps`) on the same
+flat varyings: the main shaders hand over the very words the programs' entries computed and
+carried. `vu1_test` draws every case both ways, probe and pictures, and compares them byte for
 byte ([TESTING.md](TESTING.md#portshaderstest)); `rd_vustage_ab` compares every target of the
 dump corpus both ways at Original 4:3 1x and Enhanced 4:3 2x.
 

@@ -266,7 +266,9 @@ than 512, or a scene scale above 1) and `VU_F_BEHIND_EYE` from the frame camera'
 **Where it is computed.** A command the pre-passes record has the rule evaluated once a triangle,
 before the lists, by the record stages, with the FrameCB its draws bind: `vu_tri_rule_pre_vs`
 steps 1 to 6 up to the tick cameras (the cut only for a triangle not wholly inside) and the card
-test's condition, `vu_tri_tick_pre_vs` one tick's `vu_tick_shown` a draw; the triangle's draws
+test's condition, `vu_tri_tick_pre_vs` one tick's `vu_tick_shown` a draw where the blended
+verdict can be `VU_RULE_DROP` (not under the card test with every corner in front of the eye); the
+triangle's draws
 then resolve the stored verdicts as integers in each corner (`vu_main_vs`: a tick that showed it
 clips a triangle the blended camera drops, a tick that sent it to the card test sends it there, the
 card verdict decides `VU_RULE_STRIP`). A sprite's drop is evaluated once by `vu_particle_pre_vs`

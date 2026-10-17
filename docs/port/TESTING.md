@@ -320,9 +320,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rd_vuprepass_selftest_plain`, `rd_vuprepass_selftest_sabotage`,
   `rd_vuprepass_selftest_sabotage_tri`, `rd_vuprepass_selftest_ticks`,
   `rd_vuprepass_selftest_off`).
-- `rd_vustage_ab.cmake`: every dump of `build-host/tmp/v0710/before/dumps.txt` (the dump corpus,
-  machine-local) replayed by `rd_replay_tool --pass-dump --stats` under `ICO_RD_BLEND=fixed` the
-  old way (`ICO_RD_VU_PREPASS=0`: the programs' entries with `vu_legacy_ps`) and through the record
+- `rd_vustage_ab.cmake`: every dump of `tools/vustage_dumps.txt` (the dump corpus, machine-local
+  paths, `*` globs, a missing dump named and skipped, none at all `SKIP`) replayed by
+  `rd_replay_tool --pass-dump --stats` under `ICO_RD_BLEND=fixed` the
+  old way (`ICO_RD_VU_PREPASS=0`: the programs' entries) and through the record
   (the pre-passes, the main shaders, `vu_ps`), at Original 4:3 1x and Enhanced 4:3 2x: every named
   target's PNG byte for byte, no VU draw the old way with the record, the stats lines printed;
   A dump with no VU command (the four 2D dumps of the corpus) records no pre-pass and passes with 0
@@ -461,11 +462,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the alpha test's plan for every Z write, AFAIL, ATE and alpha mask (one draw where the test decides
   nothing, `testAlphaMerge`), the start-up set's VU keys by variant and with the VU vertex
   pre-pass (`testEnumerationVu`, `testEnumerationPrepass`: every program entry's key without the
-  pre-pass has its `vu_tri_vs` twin with it, and the keys a phone made on first use, `vu_tri_vs`
-  blend 4 and 12 under Z ALWAYS and the UI sprite under Z GEQUAL, are in the set), the tile-based
+  pre-pass has its `vu_main_vs` or `vu_particle_main_vs` twin with it, and the keys a phone made on
+  first use, blend 4 and 12 under Z ALWAYS (as `vu_main_vs` keys) and the UI sprite under Z GEQUAL, are in the set), the tile-based
   profile's set against the desktop one, static, with dynamic depth and with dynamic depth and
   blend, with and without local read (`testTilerSet`: the desktop keys and exactly DATE's, the fog's
-  local key and the fold key, none twice; printed beside the careful-set target), and a dump's menu text sheets loading as the renderer makes them, a sheet with its halo made on
+  local key and the fold key, none twice; printed beside the careful-set target), and a dump's menu text sheets loading as the renderer makes them, a sheet with
 - `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, each in a child process; the symbolizer, the report file and `ico_log_limited` (above)
 - `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and a text texture
   that could not be uploaded named once in the log, the game's own textures never
@@ -523,7 +524,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the reference; the record: every mesh case's vertices through its pre-pass entry and its
   triangles through the record stages (the tick stage under the tick cameras), every particle
   case's sprites through `vu_particle_pre_vs`, and its probe and pictures through `vu_main_vs` or
-  `vu_particle_main_vs` and `vu_ps` byte for byte the program entry's with `vu_legacy_ps`, the
+  `vu_particle_main_vs` and `vu_ps` byte for byte the program entry's (with the same `vu_ps`), the
   probe within the CPU reference's bounds, the mesh, particle and tick-camera cases counted (part
   b (4)); the pictures use the plain mapping (no exact viewport), so the planes stay the GPU's
   there (`vu1`, `vu1_mali`).

@@ -79,11 +79,11 @@ each file's header comment):
 | `font.hlsl` | `font_ps`, `font_sheet_ps` | R8 coverage textures (the port's font atlas) read as sprite_ps reads a texel; sheet text in the menu sheets' style |
 | `yuv.hlsl` | `yuv_vs`, `yuv_ps`, `yuv_field_ps` | the FMV picture, 4:2:0 planes to RGB with the [IPU](ARCHITECTURE.md#terms)'s conversion; a field deinterlaced at the picture's size (`port/render/rd_video.c`) |
 | `crt.hlsl` | `crt_vs`, `crt_bloom_ps`, `crt_blur_ps`, `crt_ps` | the CRT filter ([DISPLAY.md](DISPLAY.md)) |
-| `vu_prelit.hlsl` | `vu_prelit_vs`, `vu_prelit_pre_vs`, `vu_ps`, `vu_texa_ps`, `vu_legacy_ps`, `vu_legacy_texa_ps`, `vu_probe_ps` | `normal_c` (codes 32, 34, 36); the pixel shader of every VU draw through the main shaders (the planes read from the record) and of the programs' own entries (the planes as flat varyings); the tests' probe output |
+| `vu_prelit.hlsl` | `vu_prelit_vs`, `vu_prelit_pre_vs`, `vu_ps`, `vu_texa_ps`, `vu_probe_ps` | `normal_c` (codes 32, 34, 36); the pixel shader of every VU draw, through the main shaders and the programs' own entries alike (the planes as flat varyings); the tests' probe output |
 | `vu_lit.hlsl` | `vu_lit_vs`, `vu_lit_spec_vs`, `vu_reflect_vs` and their `_pre_vs` | `normal_l` (codes 32/36, 34, 38) |
 | `vu_skin.hlsl` | `vu_skin_vs`, `vu_skin_spec_vs`, `vu_skin_debug_vs` and their `_pre_vs` | `cluster`, skinned (codes 20, 22, 24) |
 | `vu_grid.hlsl` | `vu_grid_vs`, `vu_grid_lit_vs`, `vu_grid_spec_vs` and their `_pre_vs` | `mesh`, the procedural grids (codes 20, 22, 24) |
-| `vu_tri.hlsl` | `vu_main_vs`, `vu_tri_rule_pre_vs`, `vu_tri_tick_pre_vs`, `vu_tri_planes_pre_vs`, `vu_tri_vs`, `vu_pre_ps` | the main vertex shader of every mesh program, the triangle pre-pass's record stages, the triangle stage of the vertex records alone, and the record targets' pixel shader ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)) |
+| `vu_tri.hlsl` | `vu_main_vs`, `vu_tri_rule_pre_vs`, `vu_tri_tick_pre_vs`, `vu_tri_planes_pre_vs`, `vu_pre_ps` | the main vertex shader of every mesh program, the triangle pre-pass's record stages and the record targets' pixel shader ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)) |
 | `vu_particle.hlsl` | `vu_particle_vs`, `vu_particle_pre_vs`, `vu_particle_main_vs` | `particle`, six vertices a particle, non-indexed; the sprite's record stage and main shader |
 | `common.hlsli`, `gs_math.hlsli`, `sheet_text.hlsli`, `vu_common.hlsli` | none | included headers, below |
 
@@ -96,10 +96,10 @@ three `RGBA32_UINT` targets. The record stages (`vu_tri_rule_pre_vs`, `vu_tri_ti
 `vu_tri_planes_pre_vs`, `vu_particle_pre_vs`) read it back (`vu_rec_vertex`) and write a
 triangle's or sprite's verdict and attribute planes as records the same way; `vu_main_vs` and
 `vu_particle_main_vs` draw from the two records, the program's clip mode, chain and HIDE rule and
-region bounds from VuCB, and output `VuVSOut2` (position, colour, STQ, plane distance and a flat
-`tri`), which `vu_ps` and `vu_texa_ps` take, reading the planes from the record by `tri`
-(`vu_record_in`); the programs' own entries output `VuVSOut` (the planes as 28 flat floats), which
-`vu_legacy_ps` and `vu_legacy_texa_ps` take ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)).
+region bounds from VuCB, and output `VuVSOut` as the programs' own entries do (position, colour,
+STQ, plane distance and the planes as 28 flat floats: the main shaders read the planes' words from
+the record once a vertex, `vu_rec_planes`, where the planes hold), which `vu_ps` and `vu_texa_ps`
+take from either ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)).
 
 **Variants.** The same entries are built again under defines (`port/shaders/CMakeLists.txt`):
 
@@ -438,7 +438,7 @@ as it reads, and the plain one, `vu_X_plain_vs`, the same entry compiled with `I
 of the region rule (`vu_region_rule_cut`'s `VU_F_EXTENDED` branch) and the two tick cameras
 (`vu_tick_shown`). The renderer takes the plain ones for the fallback on a device of the table and
 the extended ones everywhere else, once a run ([RENDER.md](RENDER.md#the-fallback-entries));
-`vu_particle_vs` and `vu_tri_vs` have the one build. The cut against the camera's picture stays in
+`vu_particle_vs` has the one build. The cut against the camera's picture stays in
 both: at 4:3 a triangle wholly beside the picture is drawn, clipped, as in the extended one.
 
 | module | plain words | instructions | blocks | extended words | instructions | blocks | the set that built on the Adreno 740 (words) |
@@ -454,7 +454,6 @@ both: at 4:3 a triangle wholly beside the picture is drawn, clipped, as in the e
 | `vu_grid_lit_vs` | 19,293 | 4,227 | 346 | 47,226 | 9,962 | 714 | 22,576 |
 | `vu_grid_spec_vs` | 19,344 | 4,237 | 346 | 47,277 | 9,972 | 714 | 22,659 |
 | `vu_particle_vs` | 6,216 | 1,438 | 134 | 10,044 | 2,352 | 232 | 8,200 |
-| `vu_tri_vs` | 19,519 | 4,318 | 401 | 47,637 | 10,091 | 769 | |
 
 The vertex pre-pass's entries have one build each, without the triangle rule the variants differ
 in: `vu_prelit_pre_vs` 2,120 words (483 instructions, 36 blocks), `vu_lit_pre_vs` 2,518 (568, 36),
@@ -463,11 +462,10 @@ in: `vu_prelit_pre_vs` 2,120 words (483 instructions, 36 blocks), `vu_lit_pre_vs
 `vu_grid_pre_vs` 1,820 (416, 32), `vu_grid_lit_pre_vs` 2,184 (493, 32), `vu_grid_spec_pre_vs`
 2,203 (497, 32); `vu_pre_ps` 183. The record stages and the main shaders have one build each
 (words, instructions, blocks; this DXC and the build's flags): `vu_tri_rule_pre_vs` 16,515
-(3,600, 305), `vu_tri_tick_pre_vs` 16,485 (3,426, 202), `vu_tri_planes_pre_vs` 4,269 (972, 90),
-`vu_particle_pre_vs` 8,801 (2,071, 200), `vu_main_vs` 5,890 (1,408, 175), `vu_particle_main_vs`
-3,839 (908, 103); `vu_ps` 5,066 (1,190, 159) and `vu_texa_ps` 12,088 (2,887, 476) with the record
-read, `vu_legacy_ps` and `vu_legacy_texa_ps` the pixel shader on the flat varyings (4,670 and
-11,692). `spirv_check` holds the pre-pass entries, the record stages (`_pre_vs`) and the main
+(3,600, 305), `vu_tri_tick_pre_vs` 16,614 (3,462, 212), `vu_tri_planes_pre_vs` 4,269 (972, 90),
+`vu_particle_pre_vs` 8,801 (2,071, 200), `vu_main_vs` 6,277 (1,481, 174), `vu_particle_main_vs`
+4,249 (986, 102); `vu_ps` 5,523 (1,310, 188) and `vu_texa_ps` 11,688 (2,807, 474), the one pixel
+shader of both ways. `spirv_check` holds the pre-pass entries, the record stages (`_pre_vs`) and the main
 shaders (`_main_vs`) to the plain budget and asks a plain variant only of the ten mesh programs'
 entries (`tools/check_spirv.py` `PROGRAM_ENTRIES`, gates `size per variant` and `variants`). With
 the pre-passes a device compiles the two main shaders, the ten pre-pass entries and the five
