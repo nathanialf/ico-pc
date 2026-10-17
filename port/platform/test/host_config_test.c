@@ -673,7 +673,8 @@ static void test_retry_blend(void)
     CHECK(ico_dev_env_export_value("blend", NULL, "lazy:vulkan") == NULL);
     CHECK(ico_dev_env_export_value("blend", NULL, "d3d12:d3d12") == NULL);
     CHECK(ico_dev_env_export_value("blend", NULL, "cache:vulkan") == NULL);
-    CHECK(ico_dev_env_export_value("blend", "exact", NULL) == NULL);
+    CHECK(strcmp(ico_dev_env_export_value("blend", "exact", NULL), "exact") ==
+          0); /* the opt-in word (rd_dst_read.c rd__dst_asked_env) */
     CHECK(strcmp(ico_dev_env_export_value("blend", "fixed", NULL), "fixed") == 0);
     /* the other switches are not touched by the restart */
     CHECK(ico_dev_env_export_value("fog_path", NULL, "blend:vulkan") == NULL);

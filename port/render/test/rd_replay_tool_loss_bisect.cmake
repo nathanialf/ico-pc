@@ -60,7 +60,7 @@ endif()
 if(passes GREATER 1)
   execute_process(COMMAND "${TOOL}" "${DUMP}" "${OUT}/one.png" --target DISPLAY --passes 1
                   RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
-  if(NOT rc EQUAL 0 OR NOT out MATCHES "passes 1-1 of the 2 begun \\(the walk stopped after the window\\)")
+  if(NOT rc EQUAL 0 OR NOT out MATCHES "passes 1-1 of the ${passes} begun \\(the walk stopped after the window\\)")
     message(FATAL_ERROR "--passes 1: exit ${rc}, want the walk stopped at pass 2:\n${out}\n${err}")
   endif()
 endif()

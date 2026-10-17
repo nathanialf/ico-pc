@@ -48,6 +48,10 @@ static const char *const expectedPlanes[] = {
 /* the staticBlur sprites' UINT-view twin (fx_sprite.hlsl ICO_UINT_SRC; rd_replay.c doBlurSpriteDraw) */
 static const char *const expectedUint[] = {"fx_sprite_u_ps"};
 
+/* the tiler passes (rd_replay_tiler.c): DATE's stencil bit, the fog's local read and the folded blur pair */
+static const char *const expectedTiler[] = {"date_clear_ps", "date_stencil_ps", "fog_lut_local_ps",
+                                            "fog_lut_local_ps_nodual", "fx_blur2_ps"};
+
 /* the mesh programs' entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli:
  * the fallback's on a device of the table) */
 static const char *const expectedPlain[] = {
@@ -209,6 +213,13 @@ int main(void)
     for (size_t i = 0; i < nUint; i++) {
         if (!ico_find_shader(expectedUint[i])) {
             printf("FAIL %s: not in the table\n", expectedUint[i]);
+            failures++;
+        }
+    }
+    const size_t nTiler = sizeof(expectedTiler) / sizeof(expectedTiler[0]);
+    for (size_t i = 0; i < nTiler; i++) {
+        if (!ico_find_shader(expectedTiler[i])) {
+            printf("FAIL %s: not in the table\n", expectedTiler[i]);
             failures++;
         }
     }
