@@ -3410,13 +3410,16 @@ static void checkUintView(void)
     }
     g_rd.profile.uintViewWork = g_rd.profile.uintViewScene = true;
     rd_reset_scene(W, H);
-    int views = 0;
+    /* every compared target is a named RGBA8 one of the work or the scene
+       class, so each has the view */
+    int views = 0, rgba8 = 0;
     for (size_t k = 0; k < sizeof(kCompared) / sizeof(kCompared[0]); k++) {
         const RdTargetRec *t = rd__target_rec(rd_target((RdTargetId)kCompared[k]).id);
+        rgba8 += t && t->format == RHI_FMT_RGBA8_UNORM;
         views += t && t->uintView;
     }
-    CHECK(views == (int)(sizeof(kCompared) / sizeof(kCompared[0])),
-          "(u) %d of the compared targets made with the UINT view", views);
+    CHECK(views > 0 && views == rgba8, "(u) %d of the %d RGBA8 compared targets have the UINT view",
+          views, rgba8);
     InitStaticBlur(0, (float[4]){0.3f, -0.2f, -1.0f, 0.0f});
     uint32_t sprites = 0;
     int worst = 0;
