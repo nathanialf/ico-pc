@@ -282,7 +282,14 @@ uploads, `acquire` the backbuffer, `walk` recording the VU vertex pre-pass and t
 (`replayFrame`); `port/render/rd.h` (`RdPerfRecord`)). Further lines give the GPU time per list and
 per picture effect, the per-replay counts (draws, passes, binds, barriers, uploads) with the block's
 creations, the MSAA samples and resolves, and the graphics allocations against the device's limit
-with the process's memory (`perf_log`).
+with the process's memory (`perf_log`). Three lines come from the per-pass timing
+([RENDER.md](RENDER.md#the-per-pass-timing)): `window: GPU top passes: ...` (the most expensive
+passes of the block's timed replays, each timed between stamps outside the render passes, with
+the count of passes a replay and of those under 0.05 ms; only with GPU timestamps),
+`window: passes per replay N: render passes R (lists L, <effect> E, ...), <kind> K, ...` (what a
+replay begins, by kind, every replay) and `window: CPU walk ms per replay by list 0-12: ...;
+uploaded KB per replay: textures T, meshes M (interpolated I), uniform blocks U, VU streams S,
+other O` (`perf_log`, `perf_passes_add`).
 
 **The slow replay line**
 (`window: slow replay T ms (replay R, frame F, alpha A, about vsync V): ...`) is logged for a replay
@@ -613,10 +620,27 @@ iOS) and logs its path (`port/platform/host_config.c` (`ico_host_logs_dir`)). Th
 phase in ms, the backend's fence wait, the creation, bind, draw, barrier, copy and upload counts,
 the upload bytes, `gpu_valid`, the GPU total, uploads, each list `gpu_list<N>_ms`, the present, the
 replay's start, alpha, `first_of_tick`, each picture effect `gpu_<effect>_ms`,
-`gpu_effects_partial`, and the VU vertex pre-pass's `gpu_prepass_ms`, `vu_pre_vertices`,
-`vu_pre_draws` and `vu_pre_fallbacks` ([RENDER.md](RENDER.md#the-vertex-pre-pass))
+`gpu_effects_partial`, the VU vertex pre-pass's `gpu_prepass_ms`, `vu_pre_vertices`,
+`vu_pre_draws` and `vu_pre_fallbacks` ([RENDER.md](RENDER.md#the-vertex-pre-pass)), the walk's
+CPU time by list `walk_list<N>_ms`, the upload bytes by what they carry `upload_texture_bytes`,
+`upload_uniform_bytes`, `upload_interp_bytes` (of the mesh bytes) and `upload_stream_bytes`, and
+the per-pass timing's `passes` (the pieces begun), `pass_timed` and `pass_count`
+([RENDER.md](RENDER.md#the-per-pass-timing))
 (`port/platform/window_host.c` (`perf_csv_open`, `perf_csv_line`)). The file
 is flushed after each drain, every vsync (`perf_drain`).
+
+With `[dev] perf_passes = true` (`ICO_RD_PERF_PASSES=1`) every replay is timed pass by pass and the
+window writes `ico-pc-passes.csv` beside it, logging `window: perf_passes: one line per pass of
+every replay in <path>`: one line per piece of GPU work, `replay,frame,pass,kind,list,effect,
+target,width,height,draws,pipeline_binds,gpu_us,cpu_us` (the kind in words: `uploads`, `VU
+pre-pass`, `render pass`, `copy`, `snapshot`, `DATE snapshot`, `fog depth read`, `exact blend`,
+`MSAA resolve`, `stencil clear`, `present`; the list -1 outside the lists; the effect `none` or
+its name; the target `SCENE`, `WORK0`, ..., `block`, `temporary`, `window`, `record` or `none`;
+`gpu_us` -1 when a stamp is missing), the replay and frame numbers those of the perf CSV's line
+(`port/platform/window_host.c` (`perf_pass_csv_open`, `perf_passes_add`); `port/render/rd_perf.c`
+(`rd_perf_pass_csv_header`, `rd_perf_pass_csv_line`)). Timing every pass adds a timestamp between
+every two passes, which on a tile-based GPU can stop one pass's geometry overlapping the last
+one's pixels: for a measurement, not for play.
 
 ## Tests
 

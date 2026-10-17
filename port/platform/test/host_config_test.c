@@ -516,6 +516,13 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("vu_prepass", "true"), "1") == 0);
     CHECK(ico_dev_env_value("vu_prepass", "maybe") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.vu_prepass"), "vu_prepass") == 0);
+    /* perf_passes: every replay timed pass by pass (port/render/rd_perf.c
+       rd__perf_passes_init) */
+    CHECK(strcmp(ico_dev_env_name("perf_passes"), "ICO_RD_PERF_PASSES") == 0);
+    CHECK(strcmp(ico_dev_env_value("perf_passes", "true"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("perf_passes", "false"), "0") == 0);
+    CHECK(ico_dev_env_value("perf_passes", "maybe") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.perf_passes"), "perf_passes") == 0);
     /* audio_sync: the audio on the game's clock (port/audio/audio_host.h) */
     CHECK(strcmp(ico_dev_env_name("audio_sync"), "ICO_AUDIO_SYNC") == 0);
     CHECK(strcmp(ico_dev_env_value("audio_sync", "true"), "1") == 0);

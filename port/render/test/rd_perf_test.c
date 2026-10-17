@@ -33,6 +33,22 @@
  *             every mesh command through it (no draw the old way) and the
  *             same barriers, and the picture is the one drawn without it,
  *             byte for byte.  The reachable set below is made with it.
+ *   passes    the record phase's last frame with every replay timed pass
+ *             by pass ([dev] perf_passes, rd_perf.c rd__perf_pass): each
+ *             timed record's pieces begin with the uploads (then the
+ *             pre-pass where the device takes it) and end with the
+ *             present; the pieces the pass ring also notes (render passes,
+ *             copies, snapshots, exact blends, the uploads, the pre-pass,
+ *             the present) are its entries of that replay one for one, in
+ *             order, a render pass at the ring's size; the pieces' draws
+ *             and pipeline binds add up to the record's, their GPU times
+ *             are all there and add up to the record's GPU time (within
+ *             10 percent and 0.5 ms), and the record's counts by kind are
+ *             the pieces'; then without the key a replay is timed only
+ *             RD_PERF_PASS_EVERY_MS after the last timed one, an untimed
+ *             one has no pieces, and every replay still counts its pieces
+ *             by kind.  Before any device: the CSV header and line and the
+ *             window's two summary texts on fixed pieces, to the byte.
  *
  * With a dump instead (a measurement tool):
  *   rd_perf_test --dump FILE [--enhanced] [--resolution N] [--full-height]
@@ -47,6 +63,7 @@
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "rd_passring.h"
 
 static int s_fail;
 
@@ -643,6 +660,227 @@ static void checkPipelineProgress(void)
     CHECK(p.calls == calls, "pipeline progress: called %u times after it was cleared", p.calls);
 }
 
+/* ---------------------------------------------- the pieces' texts (pure) */
+
+static void checkPassTexts(void)
+{
+    char buf[1024];
+    rd_perf_pass_csv_header(buf, sizeof(buf));
+    CHECK(strcmp(buf, "replay,frame,pass,kind,list,effect,target,width,height,draws,"
+                      "pipeline_binds,gpu_us,cpu_us\n") == 0,
+          "csv header: %s", buf);
+    const RdPerfPass p[4] = {
+        {RD_PERF_PASS_RENDER, RD_TARGET_SCENE, 0, -1, 848, 448, 420, 300, 4120.0f, 900.0f},
+        {RD_PERF_PASS_RENDER, RD_TARGET_WORK1, 7, RD_PERF_POST_GLOW, 256, 128, 1, 1, 60.0f, 5.0f},
+        {RD_PERF_PASS_RENDER, RD_TARGET_WORK1, 7, RD_PERF_POST_GLOW, 256, 128, 1, 1, 40.0f, 5.0f},
+        {RD_PERF_PASS_DATE, RD_TARGET_SCENE, 3, -1, 848, 448, 1, 1, 30.0f, 2.0f},
+    };
+    rd_perf_pass_csv_line(12, 34, 1, &p[1], buf, sizeof(buf));
+    CHECK(strcmp(buf, "12,34,1,render pass,7,glow,WORK1,256,128,1,1,60.0,5.0\n") == 0,
+          "csv line: %s", buf);
+    static RdPerfPassAgg agg;
+    rd_perf_pass_agg_reset(&agg);
+    rd_perf_pass_agg_add(&agg, p, 4);
+    rd_perf_pass_agg_add(&agg, p, 4);
+    rd_perf_pass_agg_text(&agg, 5, buf, sizeof(buf));
+    CHECK(strcmp(buf, "list 0 SCENE 848x448 420 draws 4.12 ms, glow WORK1 256x128 2.0 passes 2 "
+                      "draws 0.10 ms, DATE snapshot SCENE 848x448 1 draws 0.03 ms (3 of 4.0 "
+                      "passes a replay, 2 timed replays; passes under 0.05 ms: 2.0 a replay, "
+                      "0.07 ms)") == 0,
+          "top passes: %s", buf);
+    double kinds[RD_PERF_PASS_KIND_COUNT] = {0}, effects[RD_PERF_POST_COUNT] = {0};
+    kinds[RD_PERF_PASS_RENDER] = 6.0;
+    kinds[RD_PERF_PASS_DATE] = 2.0;
+    kinds[RD_PERF_PASS_UPLOAD] = 2.0;
+    effects[RD_PERF_POST_GLOW] = 4.0;
+    rd_perf_pass_kinds_text(kinds, effects, 2.0, buf, sizeof(buf));
+    CHECK(strcmp(buf, "5.0: render passes 3.0 (lists 1.0, glow 2.0), uploads 1.0, DATE snapshot "
+                      "1.0") == 0,
+          "passes by kind: %s", buf);
+    /* cut to the buffer, never past it */
+    char small[24];
+    memset(small, 'x', sizeof(small));
+    const int n = rd_perf_pass_agg_text(&agg, 5, small, 20);
+    CHECK(n == 19 && small[19] == '\0' && small[20] == 'x', "top passes cut: %d", n);
+}
+
+/* ------------------------------------------------ the pieces on the device */
+
+/* the pass ring's kind as a piece's (-1: none) */
+static int ringPiece(uint8_t kind)
+{
+    switch (kind) {
+    case RD_PASSK_PASS:
+        return RD_PERF_PASS_RENDER;
+    case RD_PASSK_COPY:
+        return RD_PERF_PASS_COPY;
+    case RD_PASSK_SNAP:
+        return RD_PERF_PASS_SNAP;
+    case RD_PASSK_EXACT:
+        return RD_PERF_PASS_EXACT;
+    case RD_PASSK_UPLOAD:
+        return RD_PERF_PASS_UPLOAD;
+    case RD_PASSK_PRESENT:
+        return RD_PERF_PASS_PRESENT;
+    case RD_PASSK_VU_PRE:
+        return RD_PERF_PASS_PREPASS;
+    default:
+        return -1;
+    }
+}
+
+static bool ringKind(int piece)
+{
+    return piece == RD_PERF_PASS_RENDER || piece == RD_PERF_PASS_COPY ||
+           piece == RD_PERF_PASS_SNAP || piece == RD_PERF_PASS_EXACT ||
+           piece == RD_PERF_PASS_UPLOAD || piece == RD_PERF_PASS_PRESENT ||
+           piece == RD_PERF_PASS_PREPASS;
+}
+
+/* one timed record's pieces against the record and the pass ring */
+static void checkPieces(const RdPerfRecord *r, const RdPerfPass *p, uint32_t n, bool prepass)
+{
+    CHECK(n > 0 && n == r->passCount, "passes: replay %u: %u pieces, the record says %u", r->replay,
+          n, r->passCount);
+    if (n == 0) {
+        return;
+    }
+    CHECK(p[0].kind == RD_PERF_PASS_UPLOAD, "passes: replay %u begins with %s", r->replay,
+          rd_perf_pass_kind_name(p[0].kind));
+    CHECK(!prepass || (n > 1 && p[1].kind == RD_PERF_PASS_PREPASS),
+          "passes: replay %u: no pre-pass second", r->replay);
+    CHECK(p[n - 1].kind == RD_PERF_PASS_PRESENT, "passes: replay %u ends with %s", r->replay,
+          rd_perf_pass_kind_name(p[n - 1].kind));
+    /* the pass ring's entries of the replay, one for one, in order */
+    uint32_t k = 0, matched = 0, entries = 0;
+    for (uint32_t i = 0; i < rd_passring_count(); i++) {
+        const RdPassRec *e = rd_passring_get(i);
+        if (e->replay != r->replay) {
+            continue;
+        }
+        const int want = ringPiece(e->kind);
+        if (want < 0) {
+            continue;
+        }
+        entries++;
+        /* the next piece the ring notes (a render pass without a target,
+           the shadow count's reduction, is not in the ring) */
+        while (k < n && (!ringKind(p[k].kind) || (p[k].kind == RD_PERF_PASS_RENDER &&
+                                                  p[k].target == RD_PERF_TARGET_NONE))) {
+            k++;
+        }
+        if (k == n) {
+            break;
+        }
+        CHECK(p[k].kind == want, "passes: replay %u entry %u is a %s, piece %u a %s", r->replay,
+              entries, rd_perf_pass_kind_name(want), k, rd_perf_pass_kind_name(p[k].kind));
+        if (want == RD_PERF_PASS_RENDER) {
+            CHECK(p[k].w == e->cw && p[k].h == e->ch,
+                  "passes: replay %u piece %u is %ux%u, the ring's pass %ux%u", r->replay, k,
+                  (unsigned)p[k].w, (unsigned)p[k].h, e->cw, e->ch);
+        }
+        matched += p[k].kind == want;
+        k++;
+    }
+    for (; k < n; k++) {
+        CHECK(!ringKind(p[k].kind) ||
+                  (p[k].kind == RD_PERF_PASS_RENDER && p[k].target == RD_PERF_TARGET_NONE),
+              "passes: replay %u piece %u (%s) has no ring entry", r->replay, k,
+              rd_perf_pass_kind_name(p[k].kind));
+    }
+    CHECK(entries > 0 && matched == entries, "passes: replay %u: %u of %u ring entries matched",
+          r->replay, matched, entries);
+    /* the counters and times add up */
+    uint64_t draws = 0, binds = 0;
+    double gpu = 0.0;
+    uint32_t untimed = 0, kinds[RD_PERF_PASS_KIND_COUNT] = {0};
+    for (uint32_t i = 0; i < n; i++) {
+        draws += p[i].draws;
+        binds += p[i].pipelineBinds;
+        if (p[i].gpuUs < 0.0f) {
+            untimed++;
+        } else {
+            gpu += p[i].gpuUs;
+        }
+        CHECK(p[i].cpuUs >= 0.0f, "passes: replay %u piece %u CPU %.1f us", r->replay, i,
+              (double)p[i].cpuUs);
+        kinds[p[i].kind]++;
+    }
+    CHECK(draws == r->draws && binds == r->pipelineBinds,
+          "passes: replay %u: pieces %llu draws and %llu pipeline binds, the record %u and %u",
+          r->replay, (unsigned long long)draws, (unsigned long long)binds, r->draws,
+          r->pipelineBinds);
+    for (int t = 0; t < RD_PERF_PASS_KIND_COUNT; t++) {
+        CHECK(kinds[t] == r->passKinds[t], "passes: replay %u: %u pieces of %s, counted %u",
+              r->replay, kinds[t], rd_perf_pass_kind_name(t), (unsigned)r->passKinds[t]);
+    }
+    if (r->gpuValid) {
+        const double total = r->gpuMs * 1000.0;
+        CHECK(untimed == 0, "passes: replay %u: %u pieces without a GPU time", r->replay, untimed);
+        CHECK(gpu <= total * 1.1 + 500.0 && gpu >= total * 0.9 - 500.0,
+              "passes: replay %u: the pieces' GPU %.1f us against the record's %.1f us", r->replay,
+              gpu, total);
+    }
+}
+
+static void checkPasses(const RdFrame *f, bool prepass)
+{
+    /* every record and pieces of the replays before: drained */
+    for (int i = 0; i < RHI_FRAMES_IN_FLIGHT + 1; i++) {
+        rd__replay_frame(f, 0, true);
+    }
+    RdPerfRecord r;
+    const RdPerfPass *p;
+    while (rd_perf_pop(&r)) {
+        rd_perf_passes_of(r.replay, &p);
+    }
+    rd__set_perf_passes(true);
+    uint32_t timed = 0, records = 0;
+    for (int i = 0; i < 8 + RHI_FRAMES_IN_FLIGHT; i++) {
+        rd__replay_frame(f, 0, true);
+        while (rd_perf_pop(&r)) {
+            const uint32_t n = rd_perf_passes_of(r.replay, &p);
+            records++;
+            timed += r.passTimed;
+            checkPieces(&r, p, n, prepass);
+        }
+    }
+    printf("passes: every replay: %u of %u records timed pass by pass\n", timed, records);
+    CHECK(records > 0 && timed == records, "passes: %u of %u records timed", timed, records);
+    /* sampled: a timed replay RD_PERF_PASS_EVERY_MS after the last */
+    rd__set_perf_passes(false);
+    for (int i = 0; i < RHI_FRAMES_IN_FLIGHT + 1; i++) {
+        rd__replay_frame(f, 0, true);
+    }
+    while (rd_perf_pop(&r)) {
+        rd_perf_passes_of(r.replay, &p);
+    }
+    double lastTimed = -1.0;
+    uint32_t sampled = 0, untimed = 0;
+    for (int i = 0; i < 40; i++) {
+        rd__replay_frame(f, 0, true);
+        while (rd_perf_pop(&r)) {
+            const uint32_t n = rd_perf_passes_of(r.replay, &p);
+            CHECK(r.passKinds[RD_PERF_PASS_UPLOAD] == 1 && r.passKinds[RD_PERF_PASS_PRESENT] == 1,
+                  "passes: replay %u counted %u uploads and %u presents", r.replay,
+                  (unsigned)r.passKinds[RD_PERF_PASS_UPLOAD],
+                  (unsigned)r.passKinds[RD_PERF_PASS_PRESENT]);
+            if (!r.passTimed) {
+                untimed++;
+                CHECK(n == 0 && r.passCount == 0, "passes: untimed replay %u has %u pieces",
+                      r.replay, n);
+                continue;
+            }
+            CHECK(lastTimed < 0.0 || r.startMs - lastTimed >= RD_PERF_PASS_EVERY_MS,
+                  "passes: replays timed %.1f ms apart", r.startMs - lastTimed);
+            lastTimed = r.startMs;
+            sampled++;
+            checkPieces(&r, p, n, prepass);
+        }
+    }
+    printf("passes: sampled: %u timed, %u not\n", sampled, untimed);
+}
+
 static int synthetic(void)
 {
     RdSettings st;
@@ -804,6 +1042,15 @@ static int synthetic(void)
     checkBarriers("record", &rest, BARRIERS_RECORD, BARRIERS_RECORD_GLOBAL);
     checkScreen("record", &rest);
 
+    /* passes: the record phase's last frame timed pass by pass, with the
+       pre-pass where the device takes it */
+    rd__set_vu_prepass(prepassDevice);
+    if (rhi_timestamps_supported()) {
+        checkPasses(rd__last_frame(), prepassDevice);
+    } else {
+        printf("passes: no GPU timestamps: skipped\n");
+    }
+
     /* the reachable set, as the window creates it at
        start-up (rd_precreate_pipelines): every key makes a pipeline, the
        vertex pre-pass's among them where the device takes it.
@@ -935,6 +1182,7 @@ int main(int argc, char **argv)
     if (argc > 1) {
         return dumpMode(argc, argv);
     }
+    checkPassTexts(); /* pure: before any device */
     const int rc = synthetic();
     if (rc != 0) {
         return rc;

@@ -1761,6 +1761,82 @@ the GPU line (`window: GPU ms per replay: ...`) ends with `; VU pre-pass <ms>`, 
 `gpu:` line does
 (`port/render/rd.h` (`RdPerfRecord`); `port/platform/window_host.c` (`perf_log`)).
 
+### The per-pass timing
+
+The list and effect stamps are written where a list or an effect changes, which is often inside
+an open render pass (a pass on SCENE runs on across lists 0 to 2 and into list 4). A GPU that
+draws a pass's pixels after the pass ends (a tile-based phone GPU; lavapipe) then puts that work
+in the stretch where the pass ends, not where it was recorded. Measured on lavapipe with the
+issue 102 Mac frame at Original 1x: the fog effect reads 39.6 ms, while removing the fog's command
+(`--nop 4:17`) leaves the frame's total where it was (248.6 against 248.7 ms) and removing it with
+the sprite after it (`--nop 4:17 --nop 4:23`) takes 6.8 ms off; the list-4 stretch still reads
+33.4 ms with both gone. So a list's or an effect's time on such a GPU is not its own cost.
+
+The per-pass timing measures each piece of GPU work between stamps written outside any render
+pass. The replay names each piece as it begins it (`rd__perf_pass`, before the piece records
+anything): the uploads at the head (`uploads`), the VU vertex pre-pass and its copies
+(`VU pre-pass`), every render pass of the lists (`render pass`: `beginPass`, a clear's own pass,
+the COLCLAMP 0 wrap's, the shadow count's reduction above 1x), a target copied into another
+(`copy`, `doCopy`), a target copied into its snapshot (`snapshot`, `takeSnap`), the DATE
+snapshot's pass (`DATE snapshot`, `dateSnapshot`), the fog's depth read made ready (`fog depth
+read`: the copy path's copy, the buffer path's transfers, the table's upload, before the fog's
+pass), the exact blend (`exact blend`, `doExact`), the MSAA epoch's spreads and resolves (`MSAA
+resolve`, `msaaUpsample`, `msaaEnd`), a shadow reset's stencil clear as a pass of its own
+(`stencil clear`) and the present (`present`: DISPLAY onto the window and the CRT filter)
+(`port/render/rd.h` (`RD_PERF_PASS_*`, `RdPerfPass`); `port/render/rd_replay.c`,
+`port/render/rd_replay_vu.c` (`rd__vu_prepass`)). Every replay counts its pieces by kind and its
+render passes by effect (`RdPerfRecord.passKinds`, `passEffects`). A timed replay also writes a
+timestamp at each piece's start, `RD_PERF_TS_PASS0` (32) plus the piece's index, keeping the
+barriers the backend holds back held (so the barriers recorded are an untimed replay's), and one
+after the last piece (`rd__perf_pass_end`, before the list ends); a piece's GPU time is its stamp
+to the next one's, so it includes the barriers before its first command and nothing of another
+piece. Its draws and pipeline binds are the RHI's counters between the two, its CPU time the
+replay's recording of it. Each frame slot has 256 timestamps (`RHI_MAX_TIMESTAMPS`,
+[RHI.md](RHI.md#the-interface)), so a replay times up to 223 pieces; a replay that begins more times
+the rest with the last and says so (`passPartial`). The pieces wait for their times with the
+record and then in a queue of 8 replays for `rd_perf_passes_of` (`port/render/rd_perf.c`, "the
+passes").
+
+Which replays are timed: every replay with `[dev] perf_passes = true` (`ICO_RD_PERF_PASSES=1`,
+[CONFIG.md](CONFIG.md)); otherwise the first replay at least 250 ms after the last timed one
+(`RD_PERF_PASS_EVERY_MS`), at most 40 in a 10 s block, for the window's summary. Not on iOS (as
+the effect stamps). At start the renderer says which:
+
+```
+rd: GPU pass timing: one replay every 250 ms, each pass timed apart, for the 10 s summary; [dev] perf_passes = true times every replay
+rd: GPU pass timing: every replay, each pass timed apart ([dev] perf_passes = true, ICO_RD_PERF_PASSES=1; the window writes ico-pc-passes.csv)
+rd: GPU pass timing: off (no GPU timestamps)
+```
+
+The window's 10 s block has three lines from it, after the `GPU ms per replay` line
+(`port/platform/window_host.c` (`perf_log`, `perf_passes_add`); `port/render/rd_perf.c`
+(`rd_perf_pass_agg_text`, `rd_perf_pass_kinds_text`)):
+
+```
+window: GPU top passes: list 0 SCENE 848x448 420 draws 4.12 ms, glow WORK1 256x128 10.0 passes 10 draws 1.21 ms, ... (5 of 47.0 passes a replay, 16 timed replays; passes under 0.05 ms: 31.0 a replay, 0.62 ms)
+window: passes per replay 47.0: render passes 32.0 (lists 9.0, reduction 1.0, fog 1.0, glow 17.0), uploads 1.0, VU pre-pass 1.0, copy 15.0, snapshot 0.5, DATE snapshot 1.5, fog depth read 1.0, present 1.0
+window: CPU walk ms per replay by list 0-12: 1.10 0.05 ... 0.20; uploaded KB per replay: textures 57, meshes 27 (interpolated 20), uniform blocks 820, VU streams 30, other 61
+```
+
+(the numbers show the fields, not a measurement). The top passes are the timed replays' pieces
+summed by what they are (label, target, size; the label is the effect for a render pass of one,
+`list N` for another render pass, else the kind), the five most expensive, each per timed replay
+with its passes (where it is not one a replay) and draws; the tail says how many pieces a replay
+has and how many of them took under 0.05 ms, the size of a tile-based GPU's fixed cost of a pass.
+The second line is the count by kind for every replay (no timestamps needed), from which the
+fixed part of a tiler's frame can be worked out. The third splits the walk's CPU time by list
+(each list from the lists' start or the list before to its end, binds included:
+`RdPerfRecord.walkListMs`) and the upload ring's bytes by what they carry (`uploadTextureBytes`,
+`meshUploadBytes` and of it `uploadInterpBytes`, the interpolation's scratch meshes,
+`uploadUniformBytes`: every DrawCB, VuCB, VuBoneCB and FrameCB written (`uniformGroup`,
+`rd_replay_vu.c` `cbCopy`), `uploadStreamBytes`: the VU streams without a mesh and the grids'
+index lists; other: the screen prims' vertices, the fog's table, alignment). With `[dev]
+perf_passes` the window also writes every piece of every replay to `ico-pc-passes.csv`
+([DISPLAY.md](DISPLAY.md#the-perf-csv)). The replay tool's `--pass-times` (with `--stats`) times
+the warm replay pass by pass and prints one line a piece, `<dump>: pass N: <label> <target> WxH,
+list L, D draws, B pipeline binds, GPU <us> us, CPU <us> us`, then `<dump>: gpu top passes: ...`
+and `<dump>: passes ...` as the window has them (`port/render/tools/rd_replay_tool.c`).
+
 ### The pixel cuts' records
 
 The [integer forms](SHADERS.md#integer-forms) (REPEAT's mask, `fx_sprite_ps`'s division and its
@@ -1884,6 +1960,7 @@ it headless (`port/render/tools/rd_replay_tool.c`, usage comment):
 | `--mesh NAME` | a VU mesh vertex by vertex, with the kick, overlap and joined marks |
 | `--dump-textures DIR` | every image texture as decoded |
 | `--stats` | the replay's performance record, with GPU times |
+| `--pass-times` | with `--stats`, the warm replay timed pass by pass ([The per-pass timing](#the-per-pass-timing)) |
 | `--prev DUMP` | replays earlier dumps first so retained targets hold the run's pictures |
 | `--no-half`, `--no-aa1` | the frame without the field's half pixel or without PRIM.AA1 |
 | `--interp T PREV` | the frame the presenter builds between PREV and the dump at alpha T |

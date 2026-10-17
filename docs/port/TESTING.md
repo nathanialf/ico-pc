@@ -368,8 +368,17 @@ program under an environment switch ([Environment switches](#environment-switche
   pending from before the switch dropped by replay number, since a record is pushed
   `RHI_FRAMES_IN_FLIGHT` replays after its own; nothing created after the phase's first two
   replays, one pre-pass a replay with the same vertices, every mesh command through it, steady
-  barriers, DISPLAY byte for byte the picture without it), and the reachable set is made with it
-  (`rd_perf`, `rd_perf_mali`).
+  barriers, DISPLAY byte for byte the picture without it), a `passes` phase times the record
+  phase's last frame pass by pass (`rd__set_perf_passes`): each timed record's pieces begin with
+  the uploads (the pre-pass second where the device takes it) and end with the present, the
+  pieces the pass ring also notes are its entries of that replay one for one and in order (a
+  render pass at the ring's size), the pieces' draws and pipeline binds add up to the record's,
+  their counts by kind are the record's `passKinds`, every piece has a GPU time and they add up
+  to the record's GPU time within 10 percent and 0.5 ms; without the key a replay is timed only
+  250 ms after the last timed one (`RD_PERF_PASS_EVERY_MS`), an untimed one has no pieces, and
+  every replay counts one upload and one present; before any device, the CSV header and line,
+  the top-passes text (with a cut to a short buffer) and the passes-by-kind text, to the byte
+  (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the
   dump the tool tests replay (`rd_pixel`).
 - `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`);
@@ -605,6 +614,7 @@ switches the tests and their registrations use:
 | `ICO_RD_VU_PLAIN` | `rd_pipeline.c` | 1: every VU draw with the VU vertex shaders' plain variants, as on a device of the table (`kVuPlainOnly`); the replay tool's pictures at a wide aspect then show the plain-only picture ([RENDER.md](RENDER.md#the-vu-shader-variants)) |
 | `ICO_RD_VU_EXTENDED` | `rd_pipeline.c` | 1: the extended variants whatever the device table or `ICO_RD_VU_PLAIN` says |
 | `ICO_RD_VU_PREPASS` | `rd_replay_vu.c` | 0: no VU vertex pre-pass, every VU draw the old way (`[dev] vu_prepass = false`); the tests switch it with `rd__set_vu_prepass` ([RENDER.md](RENDER.md#the-vertex-pre-pass)) |
+| `ICO_RD_PERF_PASSES` | `rd_perf.c` | 1: every replay timed pass by pass (`[dev] perf_passes = true`; the window writes `ico-pc-passes.csv`); `rd_perf_test` and the replay tool's `--pass-times` switch it with `rd__set_perf_passes` ([RENDER.md](RENDER.md#the-per-pass-timing)) |
 | `ICO_RHI_BACKEND`, `ICO_VK_DEVICE`, `ICO_D3D12_ADAPTER` | `rhi_backend.c`, `vk_device.c`, `d3d12_device.c` | pick the backend, the Vulkan device, the D3D12 adapter (`warp`) |
 | `ICO_FIXED_CLOCK` | `clock.c` | the wall clock fixed at 2002-01-01 unless `0` |
 | `ICO_GALLERY_PLAY` | `gallery.c` | a play script for the music gallery |
