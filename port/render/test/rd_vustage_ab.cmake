@@ -52,14 +52,14 @@ foreach(dump IN LISTS dumps)
     file(REMOVE_RECURSE "${dirOld}" "${dirNew}")
     file(MAKE_DIRECTORY "${dirOld}" "${dirNew}")
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_VU_PREPASS=0
-                            "${TOOL}" "${dump}" - --pass-dump "${dirOld}" --stats ${args_${s}}
+                            "${TOOL}" "${dump}" /dev/null --pass-dump "${dirOld}" --stats ${args_${s}}
                     RESULT_VARIABLE rcOld OUTPUT_VARIABLE outOld ERROR_VARIABLE errOld)
     if(rcOld EQUAL 77)
       message(STATUS "SKIP: no device: ${errOld}")
       return()
     endif()
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed
-                            "${TOOL}" "${dump}" - --pass-dump "${dirNew}" --stats ${args_${s}}
+                            "${TOOL}" "${dump}" /dev/null --pass-dump "${dirNew}" --stats ${args_${s}}
                     RESULT_VARIABLE rcNew OUTPUT_VARIABLE outNew ERROR_VARIABLE errNew)
     if(NOT rcOld EQUAL 0 OR NOT rcNew EQUAL 0)
       message(SEND_ERROR "${dump} ${s}: exit ${rcOld} (old way) and ${rcNew} (the record):\n"
@@ -67,12 +67,13 @@ foreach(dump IN LISTS dumps)
       math(EXPR failures "${failures} + 1")
       continue()
     endif()
+    # a frame without a VU command records nothing (0 passes): still "0 ... the old way"
     # counted as list items: a ";" in a line would split one
     string(REPLACE ";" "," flatNew "${outNew}")
     string(REGEX MATCHALL "[^\n]*: stats: [^\n]*" statsNew "${flatNew}")
     string(REPLACE ";" "\n" statsText "${statsNew}")
     message(STATUS "${dump} ${s} with the record:\n${statsText}")
-    if(NOT outNew MATCHES "stats: VU pre-pass on: [12] passes, [0-9]+ vertices in [0-9]+ draws; 0 mesh and grid draws the old way")
+    if(NOT outNew MATCHES "stats: VU pre-pass on: [012] passes, [0-9]+ vertices in [0-9]+ draws; 0 mesh and grid draws the old way")
       message(SEND_ERROR "${dump} ${s}: the pre-passes did not draw every VU command:\n${statsText}")
       math(EXPR failures "${failures} + 1")
     endif()
