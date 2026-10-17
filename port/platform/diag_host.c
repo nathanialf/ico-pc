@@ -1134,6 +1134,12 @@ static char act_version[128];
    the next start finds it; "" none */
 static char act_loss[1100];
 static const char act_loss_prefix[] = "loss dump: ";
+/* this start's set is made under the careful policy
+   (ico_diag_startup_activity_careful): the file's line after the note
+   while it records; the previous run's, read by begin */
+static int act_careful;
+static const char act_set_careful[] = "set: careful";
+static int act_prev_careful;
 static const char act_loss_none[] = "graphics device lost, no loss dump";
 /* the loss dump the previous run left for this one's bisect
    (ico_diag_startup_activity_begin), "" none */
@@ -1210,18 +1216,16 @@ static void act_close(void)
    107: the Adreno 740 froze the whole device while its driver compiled a
    batch, and after the reboot a note still in the system's cache would be
    gone): a start-up batch's note ("creating pipelines ...", about 20 a
-   cold start, a few ms each), any note naming an extended VU pipeline
-   (startup_retry_note_has_vu_ext: a lazy run's) or one of the VU vertex
-   pre-pass (startup_retry_note_has_vu_pre: its self-test's, before the
-   set), and in a lazy run each
+   cold start, a few ms each), any note naming a pipeline of the VU vertex
+   pre-pass or the record path (startup_retry_note_has_vu_pre: its
+   self-test's, before the set, or a lazy run's), and in a lazy run each
    pipeline's note (issues 93 and 107: the Adreno 740 makes every pipeline
    that way, and a freeze in one must still name it; each such creation
    takes far longer than the write). Not the single pipelines of the
    progress screen's frames. */
 static int act_sync_note(const char *note)
 {
-    return strncmp(note, "creating pipelines ", 19) == 0 || startup_retry_note_has_vu_ext(note) ||
-           startup_retry_note_has_vu_pre(note) ||
+    return strncmp(note, "creating pipelines ", 19) == 0 || startup_retry_note_has_vu_pre(note) ||
            (act_mode == ICO_DIAG_ACTIVITY_LAZY && strncmp(note, "creating pipeline ", 18) == 0);
 }
 
@@ -1248,14 +1252,17 @@ static int act_unsynced;
    batch's line (0: it goes with the next note's sync, one sync a batch) */
 static void act_write_sync(const char *note, int sync)
 {
-    /* the version's line, then the note, then this run's loss when there
-       was one, then the batches' lines; room for the NULs over a longer
-       text before it (one past the longest text) */
-    static char text[sizeof act_version + 1 + sizeof activity + 1 + sizeof act_loss + 1 +
-                     ACT_BATCHES_TEXT + 1];
+    /* the version's line, then the note, then the careful set's line
+       while it records, then this run's loss when there was one, then the
+       batches' lines; room for the NULs over a longer text before it (one
+       past the longest text) */
+    static char text[sizeof act_version + 1 + sizeof activity + 1 + sizeof act_set_careful + 1 +
+                     sizeof act_loss + 1 + ACT_BATCHES_TEXT + 1];
     const size_t cap = sizeof text - 1;
-    int len = snprintf(text, cap, "%s\n%s%s%s", act_version, note, act_loss[0] != '\0' ? "\n" : "",
-                       act_loss);
+    int len = snprintf(text, cap, "%s\n%s%s%s%s%s", act_version, note,
+                       act_careful && act_mode != 0 ? "\n" : "",
+                       act_careful && act_mode != 0 ? act_set_careful : "",
+                       act_loss[0] != '\0' ? "\n" : "", act_loss);
     {
         const unsigned int nb = act_nbatches;
         const unsigned int first =
@@ -1335,12 +1342,9 @@ static const char act_lazy_exit_once[] =
     "exited with the pipelines created as the frames needed them for that start only";
 /* this start's lazy run is for this start only */
 static int act_once;
-/* this run built an extended VU pipeline or batch (its note while
-   recording): its clean end clears the count of ends inside one
-   (ends_clean) */
-static int act_saw_vu_ext;
-/* ... and a pipeline or batch of the VU vertex pre-pass
-   (startup_retry_note_has_vu_pre) */
+/* this run built a pipeline or batch of the VU vertex pre-pass or the
+   record path (startup_retry_note_has_vu_pre; its note while recording):
+   its clean end clears the count of ends inside one (ends_clean) */
 static int act_saw_vu_pre;
 
 static const char *act_between_note(void)
@@ -1372,9 +1376,6 @@ void ico_diag_set_activity(const char *fmt, ...)
         (act_mode == ICO_DIAG_ACTIVITY_STARTUP &&
          strncmp(activity, "creating the start-up pipelines", 31) != 0)) {
         act_write(activity);
-    }
-    if (act_mode != 0 && !act_saw_vu_ext && startup_retry_note_has_vu_ext(activity)) {
-        act_saw_vu_ext = 1;
     }
     if (act_mode != 0 && !act_saw_vu_pre && startup_retry_note_has_vu_pre(activity)) {
         act_saw_vu_pre = 1;
@@ -1423,8 +1424,10 @@ static volatile unsigned int pipes_made;
 
 /* Beside the activity file (its name without ".txt", then the suffix):
    "-ends.txt" counts the starts in a row that ended without a word while
-   preparing the graphics, by kind (ico_diag_startup_end_count: "pipelines
-   <n>", "vu_ext <n>", "vu_pre <n>"); "-background.txt" is the mark of a run in the
+   preparing the graphics, by kind, and those that lost the graphics device
+   (ico_diag_startup_end_count: "pipelines <n>", "vu_pre <n>", "loss <n>",
+   and "loss_robust 1" while the start that ran with robust access on for a
+   loss has not been followed by the next); "-background.txt" is the mark of a run in the
    background while it records (ico_diag_startup_activity_background), with
    the system's signals that came there. Both read as untrusted. */
 static char act_ends_path[1024 + 16];
@@ -1449,13 +1452,20 @@ static void act_sibling(char *out, size_t size, const char *suffix)
 }
 
 #define ACT_END_KINDS 3
+/* the counts file's slots: the kinds (ICO_DIAG_END_*), then the mark of a
+   start that ran with robust access on for a loss
+   (ico_diag_startup_end_persist), which the next start's loss_count_prev
+   reads and clears */
+#define ACT_END_ROBUST_ONCE 3
+#define ACT_END_SLOTS 4
 
-/* the counts by kind (ICO_DIAG_END_*), 0 when none or unreadable */
-static void ends_read(unsigned int n[ACT_END_KINDS])
+/* the counts by kind (ICO_DIAG_END_*), 0 when none or unreadable; an
+   older version's "vu_ext <n>" (the retired extended VU kind) is dropped */
+static void ends_read(unsigned int n[ACT_END_SLOTS])
 {
     char line[64];
     FILE *f;
-    n[0] = n[1] = n[2] = 0;
+    n[0] = n[1] = n[2] = n[3] = 0;
     if (act_ends_path[0] == '\0' || (f = ico_fopen(act_ends_path, "rb")) == NULL) {
         return;
     }
@@ -1463,10 +1473,12 @@ static void ends_read(unsigned int n[ACT_END_KINDS])
         unsigned int v;
         if (sscanf(line, "pipelines %u", &v) == 1) {
             n[ICO_DIAG_END_PIPELINES] = v > 9 ? 9 : v;
-        } else if (sscanf(line, "vu_ext %u", &v) == 1) {
-            n[ICO_DIAG_END_VU_EXT] = v > 9 ? 9 : v;
         } else if (sscanf(line, "vu_pre %u", &v) == 1) {
             n[ICO_DIAG_END_VU_PRE] = v > 9 ? 9 : v;
+        } else if (sscanf(line, "loss_robust %u", &v) == 1) {
+            n[ACT_END_ROBUST_ONCE] = v != 0;
+        } else if (sscanf(line, "loss %u", &v) == 1) {
+            n[ICO_DIAG_END_LOSS] = v > 9 ? 9 : v;
         }
     }
     fclose(f);
@@ -1474,7 +1486,7 @@ static void ends_read(unsigned int n[ACT_END_KINDS])
 
 /* the counts written (all 0: the file deleted); a write that fails is
    logged once a run */
-static void ends_write(const unsigned int n[ACT_END_KINDS])
+static void ends_write(const unsigned int n[ACT_END_SLOTS])
 {
     static int logged;
     FILE *f;
@@ -1482,21 +1494,23 @@ static void ends_write(const unsigned int n[ACT_END_KINDS])
     if (act_ends_path[0] == '\0') {
         return;
     }
-    if (n[0] == 0 && n[1] == 0 && n[2] == 0) {
+    if (n[0] == 0 && n[1] == 0 && n[2] == 0 && n[3] == 0) {
         (void)ico_remove(act_ends_path);
         return;
     }
     f = ico_fopen(act_ends_path, "wb");
-    ok = f != NULL && fprintf(f, "pipelines %u\nvu_ext %u\nvu_pre %u\n", n[0], n[1], n[2]) > 0;
+    ok = f != NULL &&
+         fprintf(f, "pipelines %u\nvu_pre %u\nloss %u\nloss_robust %u\n", n[ICO_DIAG_END_PIPELINES],
+                 n[ICO_DIAG_END_VU_PRE], n[ICO_DIAG_END_LOSS], n[ACT_END_ROBUST_ONCE]) > 0;
     if (f != NULL && fclose(f) != 0) {
         ok = 0;
     }
     if (!ok && !logged) {
         logged = 1;
         ico_diag_log("ico_pc: the count of starts that ended while preparing the graphics could "
-                     "not be written to %s (pipelines %u, extended VU shaders %u, vertex pre-pass "
-                     "%u)",
-                     act_ends_path, n[0], n[1], n[2]);
+                     "not be written to %s (pipelines %u, vertex pre-pass %u, device losses %u)",
+                     act_ends_path, n[ICO_DIAG_END_PIPELINES], n[ICO_DIAG_END_VU_PRE],
+                     n[ICO_DIAG_END_LOSS]);
     }
 }
 
@@ -1504,10 +1518,21 @@ static void ends_write(const unsigned int n[ACT_END_KINDS])
    device table already rules it) */
 static void ends_clear_kind(int kind)
 {
-    unsigned int n[ACT_END_KINDS];
+    unsigned int n[ACT_END_SLOTS];
     ends_read(n);
     if (n[kind] != 0) {
         n[kind] = 0;
+        ends_write(n);
+    }
+}
+
+/* one slot set to v in the file */
+static void ends_set_slot(int slot, unsigned int v)
+{
+    unsigned int n[ACT_END_SLOTS];
+    ends_read(n);
+    if (n[slot] != v) {
+        n[slot] = v;
         ends_write(n);
     }
 }
@@ -1527,9 +1552,7 @@ static unsigned int act_end_n[ACT_END_KINDS];
 
 static const char *end_kind_name(int kind)
 {
-    return kind == ICO_DIAG_END_VU_EXT   ? "the extended VU shaders"
-           : kind == ICO_DIAG_END_VU_PRE ? "the vertex pre-pass"
-                                         : "the pipelines";
+    return kind == ICO_DIAG_END_VU_PRE ? "the vertex pre-pass" : "the pipelines";
 }
 
 /* ico_diag_startup_activity_begin: the previous run's end into the counts
@@ -1540,23 +1563,22 @@ static const char *end_kind_name(int kind)
    before the device is made leaves it for the next end. An end of a kind
    in the background breaks the row of that kind. Any other note (the run ended outside a creation)
    breaks the row of ends while making the pipelines; the row of ends
-   inside an extended VU batch stays across the runs that build none (the
-   plain run its first end gives), and is cleared by a run that built
-   extended ones and finished (ends_clean). A restart after a crash report
-   counts nothing: its own step decides. */
+   inside the vertex pre-pass stays across the runs that build none of its
+   pipelines (the run without it its first end gives), and is cleared by a
+   run that built one and finished (ends_clean). A restart after a crash
+   report counts nothing: its own step decides. The losses are
+   loss_count_prev's. */
 static void ends_count_prev(const char *prev, int relaunched)
 {
-    unsigned int n[ACT_END_KINDS], was[ACT_END_KINDS];
+    unsigned int n[ACT_END_SLOTS], was[ACT_END_SLOTS];
     int kind = -1;
-    act_end_n[0] = act_end_n[1] = act_end_n[2] = 0;
+    act_end_n[ICO_DIAG_END_PIPELINES] = act_end_n[ICO_DIAG_END_VU_PRE] = 0;
     if (relaunched || act_ends_path[0] == '\0' || prev[0] == '\0') {
         return;
     }
-    /* an extended VU batch first (issue 107's plain variants), then one of
-       the vertex pre-pass (its plain triangle stage, its entries) */
-    if (startup_retry_note_has_vu_ext(prev)) {
-        kind = ICO_DIAG_END_VU_EXT;
-    } else if (startup_retry_note_has_vu_pre(prev)) {
+    /* a pipeline of the vertex pre-pass or the record path first (the
+       next start draws without them), then any other */
+    if (startup_retry_note_has_vu_pre(prev)) {
         kind = ICO_DIAG_END_VU_PRE;
     } else if (note_is_pipelines(prev)) {
         kind = ICO_DIAG_END_PIPELINES;
@@ -1587,22 +1609,49 @@ int ico_diag_startup_end_count(int kind)
 }
 
 /* a clean end of this run (the start-up set finished, a lazy run's normal
-   exit): the row of ends while making the pipelines is broken, the row of
-   ends inside an extended VU batch when this run built one, and the row
+   exit): the row of ends while making the pipelines is broken, and the row
    of ends inside the vertex pre-pass's when this run built one of its */
 static void ends_clean(void)
 {
-    unsigned int n[ACT_END_KINDS];
+    unsigned int n[ACT_END_SLOTS];
     ends_read(n);
-    if (n[ICO_DIAG_END_PIPELINES] != 0 || (act_saw_vu_ext && n[ICO_DIAG_END_VU_EXT] != 0) ||
-        (act_saw_vu_pre && n[ICO_DIAG_END_VU_PRE] != 0)) {
+    if (n[ICO_DIAG_END_PIPELINES] != 0 || (act_saw_vu_pre && n[ICO_DIAG_END_VU_PRE] != 0)) {
         n[ICO_DIAG_END_PIPELINES] = 0;
-        if (act_saw_vu_ext) {
-            n[ICO_DIAG_END_VU_EXT] = 0;
-        }
         if (act_saw_vu_pre) {
             n[ICO_DIAG_END_VU_PRE] = 0;
         }
+        ends_write(n);
+    }
+}
+
+/* ico_diag_startup_activity_begin: the previous run's device loss
+   (prev_loss: its file's loss line) into the row of starts that lost it.
+   A loss counts one more, whatever the version or the note; a start
+   without one breaks the row, except the start that ran with robust access
+   on because of the row (its mark, ACT_END_ROBUST_ONCE, set by
+   ico_diag_startup_end_persist), which leaves it: the start after that
+   one, with robust access off again, losing the device is the second in a
+   row. A restart after a crash report or a loss (relaunched: the desktop's
+   loss order took its own step) counts nothing. */
+static void loss_count_prev(int prev_loss, int relaunched)
+{
+    unsigned int n[ACT_END_SLOTS], was[ACT_END_SLOTS];
+    act_end_n[ICO_DIAG_END_LOSS] = 0;
+    if (relaunched || act_ends_path[0] == '\0') {
+        return;
+    }
+    ends_read(n);
+    memcpy(was, n, sizeof was);
+    if (prev_loss) {
+        n[ICO_DIAG_END_LOSS]++;
+        act_end_n[ICO_DIAG_END_LOSS] = n[ICO_DIAG_END_LOSS];
+        ico_diag_log("ico_pc: starts in a row that lost the graphics device: %u",
+                     n[ICO_DIAG_END_LOSS]);
+    } else if (!n[ACT_END_ROBUST_ONCE]) {
+        n[ICO_DIAG_END_LOSS] = 0;
+    }
+    n[ACT_END_ROBUST_ONCE] = 0;
+    if (memcmp(n, was, sizeof was) != 0) {
         ends_write(n);
     }
 }
@@ -1888,7 +1937,8 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     act_prev[0] = '\0';
     loss_pending[0] = '\0';
     act_once = 0;
-    act_saw_vu_ext = 0;
+    act_careful = 0;
+    act_prev_careful = 0;
     act_saw_vu_pre = 0;
     act_unsynced = 0;
     act_end_n[0] = act_end_n[1] = act_end_n[2] = 0;
@@ -1931,6 +1981,8 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
 #endif
     f = ico_fopen(act_path, "rb");
     if (f == NULL) {
+        /* no file: the previous run lost no device (a loss keeps it) */
+        loss_count_prev(0, relaunched);
         return 0;
     }
     n = fread(buf, 1, sizeof buf - 1, f);
@@ -1977,6 +2029,9 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
                     memset(dup, ' ', strlen(line));
                 }
             }
+        } else if (strcmp(line, act_set_careful) == 0) {
+            /* the ended start's set was the careful one */
+            act_prev_careful = 1;
         } else if (loss == NULL && line[0] != '\0') {
             loss = line;
         }
@@ -2005,6 +2060,10 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     snprintf(act_prev, sizeof act_prev, "%.*s", (int)(sizeof act_prev - 1), prev);
     act_remove();
     ends_count_prev(prev, relaunched);
+    loss_count_prev(loss != NULL &&
+                        (strcmp(loss, act_loss_none) == 0 ||
+                         strncmp(loss, act_loss_prefix, sizeof act_loss_prefix - 1) == 0),
+                    relaunched);
     if (act_prev_background && (relaunched || !note_is_pipelines(prev))) {
         /* the mark of a run that ended in the background outside a
            creation (a lazy run between two, a bisect): said, nothing
@@ -2097,10 +2156,16 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     return relaunched ? 0 : 1;
 }
 
+/* this start makes the set under the careful policy for this start only
+   (ICO_DIAG_PIPESET_CAREFUL_ONCE): the first end's line says so */
+static int act_careful_once;
+
 int ico_diag_startup_pipeline_set(int relaunched, int file_lazy, const char *setting,
                                   const char *config_name)
 {
+    const int careful = setting != NULL && strcmp(setting, "careful") == 0;
     (void)config_name;
+    act_careful_once = 0;
     if (setting != NULL && strcmp(setting, "lazy") == 0) {
         /* the setting already rules: no count kept towards it (a deleted
            setting starts the count again) */
@@ -2109,36 +2174,36 @@ int ico_diag_startup_pipeline_set(int relaunched, int file_lazy, const char *set
         }
         return ICO_DIAG_PIPESET_LAZY_SETTING;
     }
-    /* an extended VU batch's end makes the plain variants the rule instead
-       (ico_diag_startup_vu_plain), one of the vertex pre-pass's a start
-       without it (ico_diag_startup_vu_prepass), and that start builds the
-       set */
-    if (startup_retry_note_has_vu_ext(act_prev) || startup_retry_note_has_vu_pre(act_prev)) {
-        return ICO_DIAG_PIPESET_FULL;
+    /* an end inside the vertex pre-pass's (or the record path's) pipelines
+       makes a start without it the rule instead
+       (ico_diag_startup_vu_prepass), and that start builds the set */
+    if (startup_retry_note_has_vu_pre(act_prev)) {
+        return careful ? ICO_DIAG_PIPESET_CAREFUL_SETTING : ICO_DIAG_PIPESET_FULL;
     }
     /* a restart after a crash report takes its own step (startup_retry.h);
        an end in the background is not counted (begin said so) */
     if (relaunched || act_end_n[ICO_DIAG_END_PIPELINES] == 0) {
-        return file_lazy ? ICO_DIAG_PIPESET_LAZY_FILE : ICO_DIAG_PIPESET_FULL;
+        return file_lazy ? ICO_DIAG_PIPESET_LAZY_FILE
+               : careful ? ICO_DIAG_PIPESET_CAREFUL_SETTING
+                         : ICO_DIAG_PIPESET_FULL;
     }
     if (act_end_n[ICO_DIAG_END_PIPELINES] >= 2) {
-        /* the second in a row: written after the device is made
-           (ico_diag_startup_end_persist) */
+        /* the second in a row, whatever the ended start's set: written
+           after the device is made (ico_diag_startup_end_persist) */
         return ICO_DIAG_PIPESET_LAZY_NOW;
     }
     /* the first: an end the user or the system may have caused (a swipe
        from the recent apps, Task Manager), so this start only; its line
-       comes after the device is made (ico_diag_startup_end_persist: the
-       device table may already rule it) */
+       comes after the device is made (ico_diag_startup_end_persist). The
+       ended start's own set says how far this one steps back: from the
+       full set (or none, a lazy run or an older version's file without
+       the line) to the careful set, from the careful set to none */
+    if (!act_prev_careful) {
+        act_careful_once = 1;
+        return ICO_DIAG_PIPESET_CAREFUL_ONCE;
+    }
     act_once = 1;
     return ICO_DIAG_PIPESET_LAZY_ONCE;
-}
-
-int ico_diag_startup_vu_plain(const char *config_name)
-{
-    const unsigned int n = act_end_n[ICO_DIAG_END_VU_EXT];
-    (void)config_name;
-    return n > 2 ? 2 : (int)n;
 }
 
 int ico_diag_startup_vu_prepass(void)
@@ -2151,30 +2216,29 @@ int ico_diag_startup_end_persist(int kind, const char *table, int (*persist)(voi
                                  const char *config_name)
 {
     const char *cfg = config_name != NULL ? config_name : "config.toml";
-    const int vu = kind == ICO_DIAG_END_VU_EXT;
     const int pre = kind == ICO_DIAG_END_VU_PRE;
-    const char *setting = vu    ? "[dev] vu_plain_only = true"
-                          : pre ? "[dev] vu_prepass = false"
-                                : "[dev] pipeline_set = \"lazy\"";
-    const char *rule = vu    ? "the device table already draws with the smaller 3D shaders (the VU "
-                               "plain variants) only on this device"
-                       : pre ? "the device already draws without the 3D vertex pre-pass"
-                             : "the device table already makes the pipelines as the game needs "
-                               "them on this device";
+    const int loss = kind == ICO_DIAG_END_LOSS;
+    const char *setting = pre ? "[dev] vu_prepass = false" : "[dev] pipeline_set = \"lazy\"";
+    const char *rule = pre ? "the device already draws without the 3D vertex pre-pass"
+                           : "the device table already makes the pipelines as the game needs "
+                             "them on this device";
     int saved;
     if (kind < 0 || kind >= ACT_END_KINDS || act_end_n[kind] == 0) {
         return 0;
     }
     if (table != NULL) {
-        /* the device table's rule already holds here: the setting would
-           be redundant, and it would outlive a change of the table; the
-           row is cleared, and a lazy run follows the table, not "this
-           start only" */
+        /* the rule already holds here: the setting would be redundant, and
+           it would outlive a change of the rule; the row is cleared, and a
+           lazy run follows the rule, not "this start only" */
         ends_clear_kind(kind);
         if (kind == ICO_DIAG_END_PIPELINES) {
             act_once = 0;
         }
-        if (act_end_n[kind] >= 2) {
+        if (loss) {
+            ico_diag_log("ico_pc: the previous start lost the graphics device; nothing is counted "
+                         "or written to %s: robust access is as the settings say (%s)",
+                         cfg, table);
+        } else if (act_end_n[kind] >= 2) {
             ico_diag_log("ico_pc: the second start in a row ended while preparing the graphics "
                          "(%s); %s is not written to %s: %s (%s)",
                          act_prev, setting, cfg, rule, table);
@@ -2186,19 +2250,28 @@ int ico_diag_startup_end_persist(int kind, const char *table, int (*persist)(voi
         return 0;
     }
     if (act_end_n[kind] == 1) {
-        if (pre) {
+        if (loss) {
+            /* this start runs with robust access on: its end without a
+               loss leaves the row (loss_count_prev) */
+            ends_set_slot(ACT_END_ROBUST_ONCE, 1);
+            ico_diag_log("ico_pc: the previous start lost the graphics device; this start only "
+                         "checks the bounds of every buffer and image read (robust access; "
+                         "nothing is written to %s); if a start loses it again before one runs "
+                         "without a loss, [dev] gpu_robust = true is written for good",
+                         cfg);
+        } else if (pre) {
             ico_diag_log("ico_pc: the previous start ended while the graphics driver compiled the "
                          "3D vertex pre-pass's shaders (%s); this start only draws without it "
                          "(nothing is written to %s); if a start that compiles them ends there "
                          "again, [dev] vu_prepass = false is written for good",
                          act_prev, cfg);
-        } else if (vu) {
-            ico_diag_log("ico_pc: the previous start ended while the graphics driver compiled the "
-                         "largest 3D shaders (the VU extended variants); this start only uses "
-                         "the smaller ones (nothing is written to %s): the wide-screen rule is off "
-                         "for this start; if a start that compiles them ends there again, [dev] "
-                         "vu_plain_only = true is written for good",
-                         cfg);
+        } else if (act_careful_once) {
+            ico_diag_log("ico_pc: the previous start ended while preparing the graphics (%s); this "
+                         "start only makes the start-up set the careful way (small batches on one "
+                         "thread, the pipeline cache written after each; nothing is written to "
+                         "%s); if this start also ends while preparing them, [dev] pipeline_set = "
+                         "\"lazy\" is written for good",
+                         act_prev, cfg);
         } else {
             ico_diag_log("ico_pc: the previous start ended while preparing the graphics (%s); this "
                          "start only makes the pipelines as the game needs them, with no start-up "
@@ -2218,19 +2291,22 @@ int ico_diag_startup_end_persist(int kind, const char *table, int (*persist)(voi
            and the next start tries the set again; the count stays, so a
            further end is due again */
         act_once = 1;
+    } else if (loss) {
+        /* not written: robust access for this start only, as at the first
+           (the count stays) */
+        ends_set_slot(ACT_END_ROBUST_ONCE, 1);
     }
-    if (pre) {
+    if (loss) {
+        ico_diag_log("ico_pc: the graphics device was lost in two starts in a row; this start and "
+                     "every start after it check the bounds of every buffer and image read ([dev] "
+                     "gpu_robust = true in %s%s); delete that line to turn it off again",
+                     cfg, saved ? "" : ", which could not be written: this start only");
+    } else if (pre) {
         ico_diag_log("ico_pc: the previous start ended while the graphics driver compiled the 3D "
                      "vertex pre-pass's shaders (%s); this start and every start after it draw "
                      "without it ([dev] vu_prepass = false in %s%s); delete that line to try it "
                      "again",
                      act_prev, cfg, saved ? "" : ", which could not be written: this start only");
-    } else if (vu) {
-        ico_diag_log("ico_pc: the previous start ended while the graphics driver compiled the "
-                     "largest 3D shaders (the VU extended variants); this start and every start "
-                     "after it use the smaller ones only ([dev] vu_plain_only = true in %s%s): the "
-                     "wide-screen rule is off; delete that line to try the larger ones again",
-                     cfg, saved ? "" : ", which could not be written: this start only");
     } else {
         ico_diag_log("ico_pc: the previous start ended while preparing the graphics (%s); this "
                      "start and every start after it make the pipelines as the game needs them, "
@@ -2263,8 +2339,9 @@ void ico_diag_startup_activity_record(int mode)
     const int was = act_mode;
     act_mode = mode;
     if (mode == 0) {
-        /* the set is done: its batches' times are no news */
+        /* the set is done: its batches' times are no news, nor its policy */
         act_nbatches = 0;
+        act_careful = 0;
         if (act_bg) {
             (void)bg_remove();
         }
@@ -2287,6 +2364,29 @@ void ico_diag_startup_activity_record(int mode)
     if (mode != 0 && was == 0 && act_in_bg) {
         bg_mark(1);
     }
+}
+
+void ico_diag_startup_activity_careful(int on)
+{
+    act_careful = on != 0;
+    if (act_mode != 0) {
+        act_write(act_current());
+    }
+}
+
+void ico_diag_startup_activity_budget_stop(void)
+{
+    if (act_mode != ICO_DIAG_ACTIVITY_STARTUP) {
+        return;
+    }
+    /* the set ended as it should (stopped by its policy): its row is
+       broken as at its finish; the rest of the run is a lazy run's, for
+       this start only (the careful line kept) */
+    act_nbatches = 0;
+    ends_clean();
+    act_once = 1;
+    ico_diag_clear_activity();
+    ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_LAZY);
 }
 
 void ico_diag_note_device_loss(const char *dump_zip)
@@ -2793,6 +2893,9 @@ static int retry_cache_loaded;
 static char retry_cache_path[1024];
 /* ico_diag_set_vu_prepass: the run draws with the VU vertex pre-pass */
 static int retry_prepass_on;
+/* ico_diag_set_robust_off_default: robust access off by the device's
+   default */
+static int retry_robust_off;
 #ifdef _WIN32
 static wchar_t retry_cache_wpath[1024];
 #endif
@@ -2811,6 +2914,11 @@ void ico_diag_set_startup_retry(int step, int have_d3d12, int backend_explicit, 
 void ico_diag_set_vu_prepass(int on)
 {
     retry_prepass_on = on != 0;
+}
+
+void ico_diag_set_robust_off_default(int on)
+{
+    retry_robust_off = on != 0;
 }
 
 void ico_diag_forget_startup_retry_env(void)
@@ -3122,6 +3230,7 @@ int ico_diag_device_lost_restart(int blend_was_fixed)
         .blendExplicit = retry_blend_explicit != 0,
         .blendWasFixed = blend_was_fixed != 0,
         .prepassWasOn = retry_prepass_on != 0,
+        .robustOffDefault = retry_robust_off != 0,
         .backendName = retry_backend,
     };
     const StartupRetry next = startup_retry_next(&run, reason, sizeof reason);

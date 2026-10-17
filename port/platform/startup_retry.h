@@ -50,17 +50,17 @@
  *
  * An end without a crash report (the system ends the app, the device
  * freezes, the user swipes it away) never reaches these steps: the
- * start-up activity file names it at the next start, which takes lazy for
- * that start only (diag_host.h ico_diag_startup_pipeline_set), after an
- * extended VU batch draws with the plain variants for that start only
- * (ico_diag_startup_vu_plain), and after a batch of the VU vertex pre-pass
- * (startup_retry_note_has_vu_pre, not an extended one) draws without the
- * pre-pass for that start only (ico_diag_startup_vu_prepass). The second
- * such end in a row, in the foreground, makes it last ([dev] pipeline_set =
- * "lazy", [dev] vu_plain_only = true or [dev] vu_prepass = false written to
- * config.toml, ico_diag_startup_end_persist, not on a device the table
- * already makes lazy); an end in the background is not counted
- * (ico_diag_startup_activity_background).
+ * start-up activity file names it at the next start (diag_host.h
+ * ico_diag_startup_pipeline_set).  After a batch or pipeline of the VU
+ * vertex pre-pass or the record path's drawing shaders
+ * (startup_retry_note_has_vu_pre) that start draws without the pre-pass
+ * (ico_diag_startup_vu_prepass); after any other pipeline the next start
+ * makes the set under the careful policy when the ended one made no
+ * careful set (the full set, or none), and makes no set (lazy) when the
+ * ended one was careful.  The second such end in a row, in the foreground,
+ * makes it last ([dev] vu_prepass = false or [dev] pipeline_set = "lazy"
+ * written to config.toml, ico_diag_startup_end_persist); an end in the
+ * background is not counted (ico_diag_startup_activity_background).
  *
  * After a device loss (STARTUP_RETRY_LOSS) the steps, in order; each is
  * taken only when the run before lost the device:
@@ -69,9 +69,9 @@
  *   robust   the same backend with robust buffer and image access
  *            (ICO_GPU_ROBUST=1, host_config.c ico_ini_export;
  *            port/rhi/vk/vk_device.c), when the losing run drew with it
- *            off by default (robustOffDefault: the caller's to set, where
- *            the robust access default is off and the player did not set
- *            gpu_robust; no caller sets it yet, see the note below);
+ *            off by default (robustOffDefault: the window sets it,
+ *            ico_diag_set_robust_off_default, when the device's robust
+ *            access is off by the default and not by gpu_robust);
  *   blend    the same backend with the fixed-function blend
  *            (ICO_RD_BLEND=fixed, port/render/rd_dst_read.c rd__dst_init:
  *            no destination-read passes, so no fragment shader interlock
@@ -94,11 +94,12 @@
  * a fresh launch: what was not saved was lost with the card, as at a quit.
  *
  * Android and iOS cannot start the game again (canRelaunch false): the box.
- * So the robust step, whose reason is the Android default (robust access
- * off there since the VU index values are dense), is never reached on
- * Android through this order: a run there would need the next start to
- * take it (diag_host.h's start-up activity file, as the lazy pipeline
- * set), which is not built.
+ * On Android the next start takes the robust step's measure instead: the
+ * start-up activity file's loss line makes that start draw with robust
+ * access on (ICO_GPU_ROBUST=1 for that start only), and the second start
+ * in a row with robust access off that loses the device writes [dev]
+ * gpu_robust = true (diag_host.h ico_diag_startup_end_count's
+ * ICO_DIAG_END_LOSS; window_host.c).
  *
  * Pure functions: no I/O, no allocation (the crash handler calls them).
  */
@@ -241,29 +242,19 @@ static inline bool startup_retry_value_no_prepass(const char *value)
  * allocation. */
 bool startup_retry_note_has_dst(const char *note);
 
-/* Whether an activity note names a pipeline with a VU vertex shader's
- * extended variant (issue 107; port/render/rd_pipeline.c keyWords: a VU
- * key's " ext N" field, N nonzero; a batch's keys are all such keys or
- * none is).  window_host.c: a start that ended without a word inside such
- * a batch (the device froze, the system ended the app) makes the next
- * start draw with the plain variants only, and the second such end in a
- * row every start after it ([dev] vu_plain_only = true in config.toml,
- * diag_host.h ico_diag_startup_vu_plain).  Tolerant as
- * startup_retry_note_has_dst. */
-bool startup_retry_note_has_vu_ext(const char *note);
-
 /* Whether an activity note names a pipeline of the VU vertex pre-pass
  * (port/render/rd_replay_vu.c; docs/port/RENDER.md, "The vertex
- * pre-pass"): it starts with "creating pipeline " or "creating pipelines "
- * and names a pre-pass key (port/render/rd_pipeline.c keyWords' " pre"
- * field) or module ("_pre_vs") or the triangle stage's module ("vu_tri_",
- * vu_tri_vs and vu_tri_plain_vs).  The crash order's noprepass step reads
- * it; window_host.c: a start that ended without a word inside such a
- * batch, not an extended one (startup_retry_note_has_vu_ext, issue 107's
- * plain variants first), makes the next start draw without the pre-pass,
- * and the second such end in a row every start after it ([dev] vu_prepass
- * = false, diag_host.h ico_diag_startup_vu_prepass).  Tolerant as
- * startup_retry_note_has_dst. */
+ * pre-pass") or of the record path that draws from it: it starts with
+ * "creating pipeline " or "creating pipelines " and names a pre-pass or
+ * record-stage key (port/render/rd_pipeline.c keyWords' " pre" field), a
+ * module of theirs ("_pre_vs", and "vu_tri_" for the old triangle stage's
+ * vu_tri_vs and vu_tri_plain_vs) or a drawing shader of the record path
+ * ("_main_vs": vu_main_vs, vu_particle_main_vs, made only with the
+ * pre-pass).  The crash order's noprepass step reads it; window_host.c: a
+ * start that ended without a word inside such a batch makes the next start
+ * draw without the pre-pass, and the second such end in a row every start
+ * after it ([dev] vu_prepass = false, diag_host.h
+ * ico_diag_startup_vu_prepass).  Tolerant as startup_retry_note_has_dst. */
 bool startup_retry_note_has_vu_pre(const char *note);
 
 /* The step after the run described by run ended (run->why): the crash or

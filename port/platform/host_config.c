@@ -501,10 +501,10 @@ static const struct {
     {"dev.pass_split", "pass_split"},
     {"dev.attachment_read", "attachment_read"},
     {"dev.storage_pass_merge", "storage_pass_merge"},
-    /* the VU vertex shaders' plain variants only (issue 107; written by
-       window_host.c after a start that ended inside their compile), and the
-       developer's override of the device table (port/render/rd_pipeline.c
-       rd__vu_policy_init) */
+    /* retired: the VU vertex shaders' plain variants only and the override
+       of the device table (one module set on every device now); read so a
+       file that holds them gets its line (ico_ini_export, retired_dev), not
+       exported */
     {"dev.vu_plain_only", "vu_plain_only"},
     {"dev.vu_extended", "vu_extended"},
     /* false: the VU vertex pre-pass off, every VU draw the old way (an
@@ -521,7 +521,9 @@ static const struct {
     {"dev.joystick_directinput", "joystick_directinput"},
     /* "lazy": no start-up set, the pipelines made as the game needs them
        (issues 93 and 107; written by window_host.c after a start that
-       ended while preparing them), "full" the set (the default) */
+       ended while preparing them), "careful" the set under the careful
+       policy (small batches on one thread), "full" the set (the default;
+       the careful one on a device of the table) */
     {"dev.pipeline_set", "pipeline_set"},
 };
 
@@ -544,9 +546,6 @@ static const struct {
     {"attachment_read", "ICO_VK_ATTACHMENT_READ"}, /* port/rhi/vk/vk_device.c */
     /* port/render/rd_dst_read.c rd__dst_merge_ok, rd_core.c rd_init */
     {"storage_pass_merge", "ICO_RD_PASS_MERGE"},
-    /* port/render/rd_pipeline.c rd__vu_policy_init */
-    {"vu_plain_only", "ICO_RD_VU_PLAIN"},
-    {"vu_extended", "ICO_RD_VU_EXTENDED"},
     /* port/render/rd_replay_vu.c rd__vu_prepass_init: 0 draws without the
        vertex pre-pass */
     {"vu_prepass", "ICO_RD_VU_PREPASS"},
@@ -559,12 +558,22 @@ static const struct {
     /* port/platform/window_host.c joystick_scan_hints: 0 sets
        SDL_HINT_JOYSTICK_DIRECTINPUT to 0 before SDL_Init */
     {"joystick_directinput", "ICO_JOYSTICK_DIRECTINPUT"},
-    /* port/platform/window_host.c: "lazy" skips the start-up set */
+    /* port/platform/window_host.c: "lazy" skips the start-up set,
+       "careful" makes it under the careful policy */
     {"pipeline_set", "ICO_PIPELINE_SET"},
     /* port/audio/audio_host.c ico_audio_host_init: 1 renders the audio on
        the game's clock (the sync path) instead of the device's */
     {"audio_sync", "ICO_AUDIO_SYNC"},
 };
+
+/* [dev] keys a file may hold that nothing reads now: read (ini_map) and
+   ignored with one line each (ico_ini_export). vu_plain_only and
+   vu_extended chose between the VU vertex shaders' plain and extended
+   variants (issue 107); every device compiles one module set now, the
+   window writes neither, and a file that holds one (the window wrote
+   vu_plain_only = true after two starts that ended inside an extended
+   batch) draws as without it. */
+static const char *const retired_dev[] = {"vu_plain_only", "vu_extended"};
 
 static int value_is(const char *v, const char *const *words)
 {
@@ -595,7 +604,7 @@ const char *ico_dev_env_value(const char *key, const char *value)
     static const char *const paths[] = {"local", "inplace", "copy", "buffer", NULL};
     static const char *const blends[] = {"fixed", "attachment", "storage", "exact", NULL};
     static const char *const datePaths[] = {"stencil", "snapshot", NULL};
-    static const char *const sets[] = {"full", "lazy", NULL};
+    static const char *const sets[] = {"full", "careful", "lazy", NULL};
 
     if (key == NULL || value == NULL || ico_dev_env_name(key) == NULL) {
         return NULL;
@@ -792,6 +801,17 @@ void ico_ini_export(const IcoIni *ini, const char *path, int r)
            environment of its own to set them in) */
         {
             size_t i;
+
+            for (i = 0; i < sizeof(retired_dev) / sizeof(retired_dev[0]); i++) {
+                const char *v = ico_ini_get(ini, retired_dev[i]);
+
+                if (v != NULL && v[0] != '\0') {
+                    fprintf(stderr,
+                            "ico_pc: [dev] %s = %s is not used (every device compiles one set "
+                            "of 3D shaders); ignored\n",
+                            retired_dev[i], v);
+                }
+            }
 
             for (i = 0; i < sizeof(dev_env) / sizeof(dev_env[0]); i++) {
                 const char *v = ico_dev_env_value(dev_env[i].key, ico_ini_get(ini, dev_env[i].key));

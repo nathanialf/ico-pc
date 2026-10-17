@@ -127,21 +127,24 @@ const char *ico_config_ini_key(const char *toml_path);
 /* The [dev] A/B switches (blend=, fog_path=, date_path=, store_plan=,
    blur_fold=, uint_view=, gpu_checkpoints=,
    gpu_robust=, pass_split=, attachment_read=, storage_pass_merge=,
-   vu_plain_only=, vu_extended=, vu_prepass=, joystick_directinput=,
-   pipeline_set=): ico_dev_env_name gives the environment variable a key is
-   exported as (ICO_RD_BLEND, ICO_RD_FOG_PATH, ICO_RD_DATE_PATH,
-   ICO_RD_STORE_PLAN, ICO_RD_BLUR_FOLD, ICO_RD_UINT_VIEW, ICO_GPU_CHECKPOINTS,
-   ICO_GPU_ROBUST, ICO_RD_PASS_SPLIT, ICO_VK_ATTACHMENT_READ,
-   ICO_RD_PASS_MERGE, ICO_RD_VU_PLAIN, ICO_RD_VU_EXTENDED, ICO_RD_VU_PREPASS,
-   ICO_JOYSTICK_DIRECTINPUT, ICO_PIPELINE_SET), NULL for any other key; ico_dev_env_value the
+   vu_prepass=, joystick_directinput=, pipeline_set=): ico_dev_env_name
+   gives the environment variable a key is exported as (ICO_RD_BLEND,
+   ICO_RD_FOG_PATH, ICO_RD_DATE_PATH, ICO_RD_STORE_PLAN, ICO_RD_BLUR_FOLD,
+   ICO_RD_UINT_VIEW, ICO_GPU_CHECKPOINTS, ICO_GPU_ROBUST, ICO_RD_PASS_SPLIT,
+   ICO_VK_ATTACHMENT_READ, ICO_RD_PASS_MERGE, ICO_RD_VU_PREPASS,
+   ICO_JOYSTICK_DIRECTINPUT, ICO_PIPELINE_SET), NULL for any other key (the
+   retired vu_plain_only= and vu_extended= among them: read, logged by
+   ico_ini_export as "ico_pc: [dev] <key> = <value> is not used (every
+   device compiles one set of 3D shaders); ignored", not exported);
+   ico_dev_env_value the
    value exported for an ini value, NULL when nothing is set: blend
    "fixed", "attachment", "storage" or "exact" as they are (the
    fixed-function blend is the default: nothing set; exact opts into the
    device's best exact mode); fog_path local, inplace, copy or buffer as
    they are; date_path stencil or snapshot as they are; uint_view "work" as
-   it is; pipeline_set full or lazy as they are; pass_split a count;
-   gpu_*, attachment_read, storage_pass_merge, store_plan, blur_fold,
-   uint_view, vu_* and joystick_directinput 1/true/on/yes ->
+   it is; pipeline_set full, careful or lazy as they are; pass_split a
+   count; gpu_*, attachment_read, storage_pass_merge, store_plan,
+   blur_fold, uint_view, vu_prepass and joystick_directinput 1/true/on/yes ->
    "1", 0/false/off/no -> "0". ico_ini_export sets them. */
 const char *ico_dev_env_name(const char *key);
 const char *ico_dev_env_value(const char *key, const char *value);

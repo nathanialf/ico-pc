@@ -92,6 +92,10 @@ char g_rdSumPrepass[352];
 void rd_summary_text(char *out, size_t size)
 {
     char split[48] = "";
+    /* the window's careful policy (rd_set_pipeline_policy) */
+    const RdPipelineSetPolicy *pol = rd_pipeline_policy();
+    const bool careful =
+        pol->batch || pol->maxThreads || pol->memoryBudgetMB || pol->cacheEachBatch;
 
     if (g_rd.passSplit) {
         snprintf(split, sizeof split, ", pass split every %u VU draws", g_rd.passSplit);
@@ -104,7 +108,11 @@ void rd_summary_text(char *out, size_t size)
              g_rdSumFog[0] ? g_rdSumFog : "(self-test not reached)",
              g_rd.vuFallbackPlain ? "one set, fallback plain (issue 107)" : "one set", split,
              g_rdSumPrepass[0] ? g_rdSumPrepass : "(self-test not reached)",
-             rd__pipelines_lazy_on() ? "on first use (no start-up set)" : "the start-up set");
+             careful && rd__pipelines_lazy_on()
+                 ? "the careful start-up set, stopped at its budget (the rest on first use)"
+             : rd__pipelines_lazy_on() ? "on first use (no start-up set)"
+             : careful                 ? "the careful start-up set"
+                                       : "the start-up set");
 }
 
 /* ------------------------------------------------ the VU index spans

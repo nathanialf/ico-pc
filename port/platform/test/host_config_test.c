@@ -511,6 +511,17 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_name("pipeline_set"), "ICO_PIPELINE_SET") == 0);
     CHECK(strcmp(ico_dev_env_value("pipeline_set", "lazy"), "lazy") == 0);
     CHECK(strcmp(ico_dev_env_value("pipeline_set", "full"), "full") == 0);
+    /* ... and the careful set (window_host.c: rd_pipeline_policy_careful) */
+    CHECK(strcmp(ico_dev_env_value("pipeline_set", "careful"), "careful") == 0);
+    CHECK(ico_dev_env_value("pipeline_set", "slow") == NULL);
+    /* the retired vu_plain_only and vu_extended: still read (an ini key,
+       config.toml's [dev] path), never exported */
+    CHECK(ico_dev_env_name("vu_plain_only") == NULL);
+    CHECK(ico_dev_env_name("vu_extended") == NULL);
+    CHECK(ico_dev_env_value("vu_plain_only", "true") == NULL);
+    CHECK(ico_dev_env_value("vu_extended", "1") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.vu_plain_only"), "vu_plain_only") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.vu_extended"), "vu_extended") == 0);
     CHECK(ico_dev_env_value("pipeline_set", "true") == NULL);
     CHECK(ico_dev_env_value("pipeline_set", "") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.pipeline_set"), "pipeline_set") == 0);
@@ -596,6 +607,14 @@ static void test_dev_env(void)
     for (i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
         unset_env(vars[i]);
     }
+    /* the retired keys are logged ("ico_pc: [dev] vu_plain_only = true is not
+       used ...; ignored") and set nothing */
+    unset_env("ICO_RD_VU_PLAIN");
+    unset_env("ICO_RD_VU_EXTENDED");
+    ico_ini_parse(&ini, "[dev]\nvu_plain_only = true\nvu_extended = 1\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_VU_PLAIN", NULL));
+    CHECK(env_is("ICO_RD_VU_EXTENDED", NULL));
     /* blend=attachment and attachment_read=true (config.toml's [dev]) */
     ico_ini_parse(&ini, "[dev]\nblend = attachment\nattachment_read = true\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);

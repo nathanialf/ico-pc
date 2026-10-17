@@ -150,38 +150,6 @@ bool startup_retry_note_has_dst(const char *note)
     return digits && nonzero && (p[i] == '\0' || p[i] == ' ');
 }
 
-bool startup_retry_note_has_vu_ext(const char *note)
-{
-    static const char head[] = "creating pipeline";
-    static const char field[] = " ext ";
-    const char *p;
-    size_t i;
-    bool digits = false, nonzero = false;
-    if (note == NULL || strncmp(note, head, sizeof head - 1) != 0) {
-        return false;
-    }
-    p = note + (sizeof head - 1);
-    if (*p == 's') {
-        p++;
-    }
-    if (*p != ' ') {
-        return false;
-    }
-    /* the first " ext " field: a batch's keys are all extended VU keys or
-       none is (rd_pipeline.c createKeys), so its first such field is the
-       batch's */
-    p = strstr(p, field);
-    if (p == NULL) {
-        return false;
-    }
-    p += sizeof field - 1;
-    for (i = 0; p[i] >= '0' && p[i] <= '9'; i++) {
-        digits = true;
-        nonzero = nonzero || p[i] != '0';
-    }
-    return digits && nonzero && (p[i] == '\0' || p[i] == ' ');
-}
-
 bool startup_retry_note_has_vu_pre(const char *note)
 {
     static const char head[] = "creating pipeline";
@@ -196,9 +164,10 @@ bool startup_retry_note_has_vu_pre(const char *note)
     if (*p != ' ') {
         return false;
     }
-    /* a module of the pre-pass or the triangle stage (keyModules,
-       batchModules) */
-    if (strstr(p, "_pre_vs") != NULL || strstr(p, "vu_tri_") != NULL) {
+    /* a module of the pre-pass, a record stage or the old triangle stage,
+       or a drawing shader of the record path (keyModules, batchModules) */
+    if (strstr(p, "_pre_vs") != NULL || strstr(p, "vu_tri_") != NULL ||
+        strstr(p, "_main_vs") != NULL) {
         return true;
     }
     /* a pre-pass key's field (keyWords: " pre" after the dst field), a

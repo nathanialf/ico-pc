@@ -1409,8 +1409,12 @@ static bool vkr_create_device(void)
         /* what is on, and whether gpu_robust named it or it is the
            platform's default */
         char robustSay[160];
+        /* the loss order's robust step, or the next start after a loss on
+           Android: the window sets ICO_GPU_ROBUST_AFTER_LOSS=1 for the
+           run (it forgets ICO_STARTUP_RETRY before the device is made) */
         const char *retry = getenv("ICO_STARTUP_RETRY");
-        const bool robustRetry = retry != NULL && strncmp(retry, "robust:", 7) == 0;
+        const bool robustRetry = (retry != NULL && strncmp(retry, "robust:", 7) == 0) ||
+                                 vkr_env_on("ICO_GPU_ROBUST_AFTER_LOSS");
         if (!g_vkr.robust) {
             snprintf(robustSay, sizeof robustSay, "%s",
                      wantRobust        ? "asked for, not offered"

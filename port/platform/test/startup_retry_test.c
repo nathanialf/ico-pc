@@ -26,7 +26,9 @@
  *     it, with and without a destination-read pipeline in the note, and
  *     the player's blend= skipping fixedblend;
  *   - the note's dst field read from the renderer's note text, and its
- *     pre-pass keys and modules;
+ *     pre-pass keys and modules (the record path's vu_main_vs and
+ *     vu_particle_main_vs among them; an extended program entry's note
+ *     not);
  *   - the loss chains on Windows from Vulkan and from D3D12, on Linux and
  *     macOS, on Android and iOS, with blend= or backend= in the settings,
  *     and a loss after a crash restart;
@@ -384,48 +386,13 @@ static void test_note(void)
     CHECK(!startup_retry_note_has_dst(NULL));
 }
 
-/* the same notes read for a VU key's variant (issue 107: " ext 1", the
-   extended VU vertex shaders) */
-static void test_note_vu_ext(void)
-{
-    static const struct {
-        const char *note;
-        bool ext;
-    } notes[] = {
-        {"creating pipeline program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 ext 1 "
-         "(vu_prelit_vs 50325 words + vu_ps 9000 words)",
-         true},
-        {"creating pipeline program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 ext 0 "
-         "(vu_prelit_plain_vs 22392 words + vu_ps 9000 words)",
-         false},
-        {"creating pipelines 329-360 of 702: program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 "
-         "ext 1 to program 0 blend 4 vs 5 fs 19 fmt 1/8 msaa 0 dst 0 ext 1; vertex vu_prelit_vs "
-         "50325 words",
-         true},
-        {"creating pipelines 297-328 of 702: program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 "
-         "ext 0 to program 0 blend 4 vs 5 fs 19 fmt 1/8 msaa 0 dst 0 ext 0",
-         false},
-        /* a 2D batch: no field */
-        {"creating pipelines 1-32 of 702: program 5 blend 1 vs 0 fs 0 fmt 1/8 msaa 0 dst 0 to "
-         "program 6 blend 1 vs 1 fs 0 fmt 1/8 msaa 0 dst 0; vertex sprite_ui_vs 900 words",
-         false},
-        {"creating pipeline program 0 ext 1x", false},
-        {"creating pipeline program 0 ext ", false},
-        {"loading the title ext 1", false},
-        {"creating the start-up pipelines (12 of 400)", false},
-        {"", false},
-    };
-
-    for (size_t i = 0; i < sizeof notes / sizeof notes[0]; i++) {
-        CHECK(startup_retry_note_has_vu_ext(notes[i].note) == notes[i].ext, "\"%s\"",
-              notes[i].note);
-    }
-    CHECK(!startup_retry_note_has_vu_ext(NULL));
-}
-
 /* the same notes read for the VU vertex pre-pass's pipelines: a " pre"
-   key (rd_pipeline.c keyWords), a vu_X_pre_vs module, the triangle
-   stage's vu_tri_vs or vu_tri_plain_vs (keyModules, batchModules) */
+   key (rd_pipeline.c keyWords), a vu_X_pre_vs module, a record stage's
+   vu_tri_*_pre_vs or vu_particle_pre_vs, the record path's drawing shaders
+   vu_main_vs and vu_particle_main_vs (made only with the pre-pass: the
+   retired extended VU kind folds into this one), the old triangle stage's
+   vu_tri_vs or vu_tri_plain_vs (keyModules, batchModules); an older
+   version's extended program entry (" ext 1", vu_prelit_vs) is not one */
 static void test_note_vu_pre(void)
 {
     static const struct {
@@ -451,6 +418,22 @@ static void test_note_vu_pre(void)
          "ext 0 to program 0 blend 4 vs 30 fs 19 fmt 1/8 msaa 0 dst 0 ext 0; vertex "
          "vu_tri_plain_vs 19519 words",
          true},
+        /* the record path's drawing shaders and stages */
+        {"creating pipeline program 0 blend 12 vs 41 fs 5 fmt 1/8 msaa 0 dst 0 "
+         "(vu_main_vs 20000 words + vu_ps 9000 words)",
+         true},
+        {"creating pipelines 300-307 of 220: program 0 blend 12 vs 41 fs 5 fmt 1/8 msaa 0 dst 0 "
+         "to program 0 blend 4 vs 42 fs 19 fmt 1/8 msaa 0 dst 0; vertex vu_main_vs 20000 words "
+         "(4000 instructions), vu_particle_main_vs 9000 words (2000 instructions); largest "
+         "fragment vu_texa_ps 11666 words; compiler E031.41.03.47",
+         true},
+        {"creating pipeline program 0 blend 0 vs 43 fs 41 fmt 3/0 msaa 0 dst 0 pre "
+         "(vu_tri_rule_pre_vs 3000 words + vu_pre_ps 300 words)",
+         true},
+        {"creating pipeline program 0 blend 0 vs 46 fs 41 fmt 3/0 msaa 0 dst 0 "
+         "(vu_particle_pre_vs 2000 words + vu_pre_ps 300 words)",
+         true},
+        {"loading vu_main_vs", false},
         /* the programs' own entries, a 2D batch: none of the pre-pass */
         {"creating pipeline program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 ext 0 "
          "(vu_prelit_plain_vs 22392 words + vu_ps 9000 words)",
@@ -909,7 +892,6 @@ int main(void)
     test_loss_chain();
     test_dst_chain();
     test_note();
-    test_note_vu_ext();
     test_note_vu_pre();
     test_prepass_chain();
     test_values();

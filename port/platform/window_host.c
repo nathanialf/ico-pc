@@ -1405,12 +1405,25 @@ static int pipeline_set_persist_lazy(void)
                                                                                             : -1;
 }
 
-/* [dev] vu_plain_only = true in config.toml, for good (issue 107: the
-   second start in a row that ended inside an extended VU batch): 0 when
-   written */
-static int vu_plain_persist(void)
+#ifdef __ANDROID__
+/* [dev] gpu_robust = true in config.toml, for good (Android: the second
+   start in a row with robust access off that lost the graphics device;
+   diag_host.h ICO_DIAG_END_LOSS): 0 when written */
+static int gpu_robust_persist(void)
 {
-    return ico_config_set_bool("dev.vu_plain_only", 1) == 0 && ico_config_save() == 0 ? 0 : -1;
+    return ico_config_set_bool("dev.gpu_robust", 1) == 0 && ico_config_save() == 0 ? 0 : -1;
+}
+#endif
+
+/* a variable for this process, read by the renderer's backend when the
+   device is made (port/rhi/vk/vk_device.c) */
+static void window_setenv(const char *name, const char *value)
+{
+#ifdef _WIN32
+    _putenv_s(name, value);
+#else
+    setenv(name, value, 1);
+#endif
 }
 
 /* [dev] vu_prepass = false (the second start in a row that ended inside the
@@ -1478,38 +1491,18 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
             lazyStart = ico_diag_startup_activity_begin(act, retry != STARTUP_RETRY_NONE) != 0;
         }
     }
-    /* issue 107: a start that ended without a word while the graphics
-       driver compiled the VU vertex shaders' extended variants (the
-       Adreno 740 froze the whole device on them; the activity file names
-       the batch, startup_retry_note_has_vu_ext) makes this start draw with
-       the plain variants (rd_set_vu_plain_only); the first such end in a
-       row for this start only, the second also every start after it ([dev]
-       vu_plain_only = true in config.toml, read back as ICO_RD_VU_PLAIN at
-       the next start; both lines and the write come after rd_init, and
-       neither is written when the device table already draws this device
-       with the plain ones, RhiLimits.vuPlainOnly,
-       ico_diag_startup_end_persist). An end in the
-       background is not counted (diag_host.h
-       ico_diag_startup_activity_background). The cause is then out of the
-       set, so this start builds the set as usual (not lazily). A restart
-       after a crash report takes its own step instead (its count is 0). */
     const char *cfgName = ico_config_toml_path() ? ico_config_toml_path() : "config.toml";
-    const int vuEnds = retry == STARTUP_RETRY_NONE ? ico_diag_startup_vu_plain(cfgName) : 0;
-    if (vuEnds > 0) {
-        rd_set_vu_plain_only(vuEnds == 1 ? "[dev] vu_plain_only for this start: the last start "
-                                           "ended while the graphics driver compiled the "
-                                           "extended ones, issue 107"
-                                         : "[dev] vu_plain_only: the last two starts ended "
-                                           "while the graphics driver compiled the extended "
-                                           "ones, issue 107");
-        lazyStart = false;
-    }
-    /* the same for a start that ended inside a batch or pipeline of the VU
-       vertex pre-pass (not an extended VU batch, above; startup_retry.h
-       startup_retry_note_has_vu_pre): this start draws without it
-       (rd_set_vu_prepass_off), the first such end for this start only, the
-       second also every start after it ([dev] vu_prepass = false, written
-       after rd_init); and a restart whose step draws without it
+    /* a start that ended without a word inside a batch or pipeline of the
+       VU vertex pre-pass or of the record path that draws from it
+       (startup_retry.h startup_retry_note_has_vu_pre; the largest VU
+       modules, vu_main_vs among them, are made only with the pre-pass):
+       this start draws without it (rd_set_vu_prepass_off), the first such
+       end for this start only, the second also every start after it ([dev]
+       vu_prepass = false, written after rd_init); an end in the background
+       is not counted (diag_host.h ico_diag_startup_activity_background).
+       The cause is then out of the set, so this start builds the set as
+       usual (not lazily). A restart after a crash report takes its own
+       step instead (its count is 0); and a restart whose step draws without it
        (startup_retry_draws_no_prepass: the crash order's noprepass and the
        steps after it, every loss step) */
     const int preEnds = retry == STARTUP_RETRY_NONE ? ico_diag_startup_vu_prepass() : 0;
@@ -1529,15 +1522,16 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                                               : "a graphics driver crash");
         rd_set_vu_prepass_off(why);
     }
-    /* issues 93 and 107: the start-up set or none. [dev] pipeline_set =
-       "lazy" (ICO_PIPELINE_SET), or a previous start of any version that
-       ended in the foreground without a word while a pipeline was being
-       made (not inside an extended VU batch, above): this start makes the
-       pipelines as the game needs them, the first such end in a row for
-       this start only, the second also every start after it (the line and
-       the setting after rd_init, neither when the device table already
-       makes this device lazy). The device table's rule
-       (RhiLimits.lazyPipelines) is read after rd_init. */
+    /* issues 93 and 107: the start-up set, the careful one or none. [dev]
+       pipeline_set = "lazy" or "careful" (ICO_PIPELINE_SET); a previous
+       start of any version that ended in the foreground without a word
+       while a pipeline was being made (not one of the pre-pass's, above):
+       the first such end in a row makes this start only careful when the
+       ended start made the full set, lazy when it made the careful one
+       (its activity file's "set: careful"), the second also every start
+       after it lazy ([dev] pipeline_set = "lazy"; the lines and the
+       setting after rd_init). The device table's careful rule
+       (RhiLimits.carefulPipelines) is read after rd_init. */
     const char *pipeSetting = getenv("ICO_PIPELINE_SET");
     const int pipePolicy =
         ico_diag_startup_pipeline_set(retry != STARTUP_RETRY_NONE, lazyStart, pipeSetting, cfgName);
@@ -1702,8 +1696,48 @@ open_window:
                          ico_diag_loss_dump());
         }
     }
+    /* the loss order's robust step: the device line says why robust
+       access is on (ICO_GPU_ROBUST=1 came from ico_ini_export; the step's
+       variable is forgotten above) */
+    if (retry == STARTUP_RETRY_LOSS_ROBUST) {
+        window_setenv("ICO_GPU_ROBUST_AFTER_LOSS", "1");
+    }
+#ifdef __ANDROID__
+    /* Android cannot start the game again after a device loss (no loss
+       step, startup_retry.h): the next start takes the robust step's
+       measure instead, after the loss bisect (which replays the lost frame
+       as it was drawn). The previous start lost the device (the activity
+       file's loss line, diag_host.h ICO_DIAG_END_LOSS): this start draws
+       with robust access on (ICO_GPU_ROBUST=1, the device line "on, ...
+       (the restart after the graphics card stopped responding)"), the
+       first loss in a row for this start only, the second (a start with it
+       off losing it again) also every start after it ([dev] gpu_robust =
+       true written). Nothing when the player set gpu_robust (or
+       ICO_GPU_ROBUST): the setting rules, and the row is cleared. */
+    static bool s_lossRobustDone;
+    if (!s_lossRobustDone && retry == STARTUP_RETRY_NONE &&
+        ico_diag_startup_end_count(ICO_DIAG_END_LOSS) > 0) {
+        const char *said = getenv("ICO_GPU_ROBUST");
+
+        s_lossRobustDone = true;
+        if (said != NULL && said[0] != '\0') {
+            (void)ico_diag_startup_end_persist(ICO_DIAG_END_LOSS, "[dev] gpu_robust", NULL,
+                                               cfgName);
+        } else {
+            const int saved =
+                ico_diag_startup_end_persist(ICO_DIAG_END_LOSS, NULL, gpu_robust_persist, cfgName);
+
+            window_setenv("ICO_GPU_ROBUST", "1");
+            if (!saved) {
+                window_setenv("ICO_GPU_ROBUST_AFTER_LOSS", "1");
+            }
+        }
+    }
+#endif
     rd_set_activity_fn(window_activity);
     rd_set_batch_fn(ico_diag_startup_activity_batch);
+    /* before the set: the careful policy's budget reads the process's
+       memory around each batch (rd_pipeline.c createKeys) */
     rd_set_memory_fn(ico_diag_process_memory);
     bool up = rd_init(gsW, gsH, &rs, s_window);
 #ifdef __ANDROID__
@@ -1778,6 +1812,16 @@ open_window:
     }
     /* whether the crash handler's first step would be to delete the file */
     ico_diag_set_pipeline_cache(rhi_pipeline_cache_loaded(), NULL);
+    /* a device loss takes the loss order's robust step when robust access
+       is off by the device's default, not by gpu_robust (startup_retry.h
+       StartupRetryRun.robustOffDefault; Direct3D 12: NULL, its own rules) */
+    {
+        const char *rt = rhi_limits() != NULL ? rhi_limits()->robustText : NULL;
+        static const char offDefault[] = "off (the default";
+
+        ico_diag_set_robust_off_default(rt != NULL &&
+                                        strncmp(rt, offDefault, sizeof offDefault - 1) == 0);
+    }
 #ifdef ICO_IOS
     s_background = 0;
 #endif
@@ -1795,49 +1839,44 @@ open_window:
     /* the whole reachable pipeline set before the first frame and after
        rd_init (which makes the device), so the game never waits on a
        pipeline compile (tens of ms each on a GPU driver); the time is
-       logged. Not after a driver crash in it (the lazy step), not on a
-       device of the table (RhiLimits.lazyPipelines: the Adreno 740 dies
-       inside it, issues 93 and 107), not by the settings or after a start
-       that ended inside it (pipePolicy): each pipeline is then built when
+       logged. On a device of the table (RhiLimits.carefulPipelines: the
+       Adreno 740 died inside the blind set, issues 93 and 107), by the
+       settings or after a full set's end (pipePolicy) the set is made under
+       the careful policy (rd_pipeline_policy_careful: small batches on one
+       thread, the cache written after each, stopped at its memory budget,
+       the rest then made on first use). Not after a driver crash in it
+       (the lazy step), not by the settings or after a careful set's end or
+       a second end in a row (pipePolicy): each pipeline is then built when
        a frame first needs it, the title comes at once, and the pipeline
        cache is written after each batch of them (rd_pipelines_lazy) */
-    const char *devLazy = rhi_limits() != NULL ? rhi_limits()->carefulPipelines : NULL;
-    const char *devVuPlain = rhi_limits() != NULL ? rhi_limits()->vuFallbackPlain : NULL;
+    const char *devCareful = rhi_limits() != NULL ? rhi_limits()->carefulPipelines : NULL;
     /* an end while preparing the graphics, by kind: the first's line, the
-       second's setting for good, neither on a device whose table entry
-       already rules that kind (the lazy column for the pipelines, the
-       plain variants for the VU kind; diag_host.h
-       ico_diag_startup_end_persist says which) */
+       second's setting for good (diag_host.h ico_diag_startup_end_persist;
+       no table rule holds for either kind: the device table's careful set
+       is not the lazy one the setting writes) */
     int pipeSaved = 0;
-    if (pipePolicy == ICO_DIAG_PIPESET_LAZY_ONCE || pipePolicy == ICO_DIAG_PIPESET_LAZY_NOW) {
-        pipeSaved = ico_diag_startup_end_persist(ICO_DIAG_END_PIPELINES, devLazy,
+    if (pipePolicy == ICO_DIAG_PIPESET_LAZY_ONCE || pipePolicy == ICO_DIAG_PIPESET_LAZY_NOW ||
+        pipePolicy == ICO_DIAG_PIPESET_CAREFUL_ONCE) {
+        pipeSaved = ico_diag_startup_end_persist(ICO_DIAG_END_PIPELINES, NULL,
                                                  pipeline_set_persist_lazy, cfgName);
-    }
-    if (vuEnds >= 1) {
-        (void)ico_diag_startup_end_persist(ICO_DIAG_END_VU_EXT, devVuPlain, vu_plain_persist,
-                                           cfgName);
     }
     if (preEnds >= 1) {
         (void)ico_diag_startup_end_persist(ICO_DIAG_END_VU_PRE, NULL, vu_prepass_persist, cfgName);
     }
-    if (retry == STARTUP_RETRY_LAZY || pipePolicy != ICO_DIAG_PIPESET_FULL || devLazy != NULL) {
+    const bool carefulPolicy = pipePolicy == ICO_DIAG_PIPESET_FULL ||
+                               pipePolicy == ICO_DIAG_PIPESET_CAREFUL_ONCE ||
+                               pipePolicy == ICO_DIAG_PIPESET_CAREFUL_SETTING;
+    if (retry == STARTUP_RETRY_LAZY || !carefulPolicy) {
         char why[160];
 
-        if (devLazy != NULL) {
-            snprintf(why, sizeof(why), "on this device (%s)", devLazy);
-            if (pipeSetting != NULL && strcmp(pipeSetting, "full") == 0) {
-                fprintf(stderr,
-                        "window: [dev] pipeline_set = \"full\" does not override the "
-                        "device table (%s)\n",
-                        devLazy);
-            }
-        } else if (retry == STARTUP_RETRY_LAZY) {
+        if (retry == STARTUP_RETRY_LAZY) {
             snprintf(why, sizeof(why), "(a restart after a graphics driver crash)");
         } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_SETTING) {
             snprintf(why, sizeof(why), "by the settings ([dev] pipeline_set = \"lazy\")");
         } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_ONCE) {
             snprintf(why, sizeof(why),
-                     "(the previous start ended while preparing them; for this start only)");
+                     "(the previous start ended while preparing them in the careful set; for "
+                     "this start only)");
         } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_NOW && pipeSaved) {
             snprintf(why, sizeof(why),
                      "(the previous start ended while preparing them; [dev] pipeline_set = "
@@ -1858,6 +1897,37 @@ open_window:
         rd_blend_selftest();
         rd_vuprepass_selftest();
     } else {
+        /* the careful policy: on a device of the table, by the settings, or
+           after the full set's end (for this start only) */
+        char why[160] = "";
+        const RdPipelineSetPolicy *careful = rd_pipeline_policy_careful();
+
+        if (devCareful != NULL) {
+            snprintf(why, sizeof(why), "on this device (%s)", devCareful);
+            if (pipeSetting != NULL && strcmp(pipeSetting, "full") == 0) {
+                fprintf(stderr,
+                        "window: [dev] pipeline_set = \"full\" does not override the "
+                        "device table (%s): the careful set\n",
+                        devCareful);
+            }
+        } else if (pipePolicy == ICO_DIAG_PIPESET_CAREFUL_SETTING) {
+            snprintf(why, sizeof(why), "by the settings ([dev] pipeline_set = \"careful\")");
+        } else if (pipePolicy == ICO_DIAG_PIPESET_CAREFUL_ONCE) {
+            snprintf(why, sizeof(why),
+                     "(the previous start ended while preparing them; for this start only)");
+        }
+        if (why[0] != '\0') {
+            rd_set_pipeline_policy(careful);
+            fprintf(stderr,
+                    "window: pipelines: careful start-up set %s: batches of %u on %u thread%s%s, "
+                    "stopped past %u MB of growth\n",
+                    why, careful->batch, careful->maxThreads, careful->maxThreads == 1 ? "" : "s",
+                    careful->cacheEachBatch ? ", the cache written after each" : "",
+                    careful->memoryBudgetMB);
+            /* the file says so: an end inside it makes the next start
+               lazy, not careful again */
+            ico_diag_startup_activity_careful(1);
+        }
         /* the note of each pipeline in the file while the set is created,
            the file deleted when it is done */
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
@@ -1886,7 +1956,13 @@ open_window:
         rd_precreate_pipelines();
         rd_set_pipeline_progress(NULL, NULL);
         ico_diag_set_pipelines(0, 0, 0);
-        ico_diag_startup_activity_record(0);
+        if (rd_pipelines_lazy_on()) {
+            /* the careful policy's budget stopped the set: the rest of the
+               run is recorded as a lazy run's, for this start only */
+            ico_diag_startup_activity_budget_stop();
+        } else {
+            ico_diag_startup_activity_record(0);
+        }
         /* the set in the pipeline cache file now, not only at a clean exit:
            a phone's system ends the app without one, and a lost device
            skips it, so the next start would compile the set cold again
@@ -2277,8 +2353,9 @@ static int device_lost_quit(void)
         snprintf(text, sizeof(text), "%s%s",
                  startup_retry_is_loss(s_retry)
                      ? "The graphics card stopped responding (its driver was reset or updated, or "
-                       "the card was removed).\n\nThe game restarted itself with simpler "
-                       "blending and the card still stopped responding.\n\nThe game has to "
+                       "the card was removed).\n\nThe game restarted itself with safer "
+                       "graphics settings and the card still stopped responding.\n\nThe game "
+                       "has to "
                        "close. Your last save is kept; the log says why.\n\nIf the graphics "
                        "card is overclocked, try its stock clocks first."
                      : "The graphics card stopped responding (its driver was reset or updated, or "

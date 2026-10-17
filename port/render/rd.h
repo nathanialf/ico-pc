@@ -473,12 +473,11 @@ void rd_shutdown(void);
 void rd_reset_scene(uint32_t gsWidth, uint32_t gsHeight);
 /* Settings menu: applies at the next rd_begin_frame. */
 void rd_set_settings(const RdSettings *settings);
-/* Before rd_init: every VU draw of the run takes the VU vertex shaders'
- * plain variants (issue 107; docs/port/RENDER.md, "The VU shader
- * variants"), reason saying why for the log ("[dev] vu_plain_only: the
- * last start ended while the driver compiled them"); NULL clears it.  The
- * host calls it after a start that ended inside the extended variants'
- * compile (window_host.c); ICO_RD_VU_EXTENDED=1 overrides it. */
+/* Before rd_init: the fallback's program entries take the plain variants
+ * (issue 107; docs/port/RENDER.md, "The fallback entries"), reason saying
+ * why for the log; NULL clears it; ICO_RD_VU_EXTENDED=1 overrides it.  No
+ * caller in the tree: the window's went with [dev] vu_plain_only, which is
+ * read and ignored (port/platform/host_config.c retired_dev). */
 void rd_set_vu_plain_only(const char *reason);
 /* Whether the run draws every VU draw with the plain variants (after
  * rd_init), and why (NULL when it does not) */
@@ -610,6 +609,10 @@ void rd_set_memory_fn(RdMemoryFn fn);
  * (rhi_pipeline_cache_save, its size logged), the batch's line to the log
  * and to rd_set_batch_fn. */
 void rd_pipelines_lazy(const char *why);
+/* Whether the run makes its pipelines on first use (rd_pipelines_lazy was
+ * called: by the window, or by rd_precreate_pipelines when the careful
+ * policy's budget stopped the set). */
+bool rd_pipelines_lazy_on(void);
 /* Once a frame (the window's pump), on the thread that draws: closes the
  * open lazy batch once no pipeline was made for 0.5 s or 2 s after its
  * first.  Nothing outside rd_pipelines_lazy's runs. */

@@ -201,7 +201,9 @@ const char *ico_diag_activity(void);
    start what it was doing.
    ico_diag_startup_activity_begin, once before the renderer starts: keeps
    path for the writes, reads what the previous run left there and deletes
-   the file. A non-empty text is logged as "ico_pc: the previous run ended
+   the file. A start-up set made under the careful policy (the window's
+   choice, ico_diag_startup_activity_careful) adds the line "set: careful"
+   after the note, which the next start reads (ico_diag_startup_pipeline_set). A non-empty text is logged as "ico_pc: the previous run ended
    while: <note>" and the result is 1: this run creates its pipelines as
    the frames need them. relaunched != 0 (a restart after a driver crash,
    ICO_STARTUP_RETRY) logs and deletes it the same way but returns 0: the
@@ -225,10 +227,10 @@ const char *ico_diag_activity(void);
    (ico_diag_startup_end_count). */
 int ico_diag_startup_activity_begin(const char *path, int relaunched);
 /* A start-up batch's compile times (rd.h rd_set_batch_fn: one line per
-   batch, "VU batch 329-360 of 702 (extended, ...): 32 pipelines 0.41-2.10
+   batch, "VU batch 329-336 of 702 (compiler ...): 8 pipelines 0.41-2.10
    s, mean 1.29 s, ...; memory 185 MB (most 194 MB), pipeline cache 3104
-   KB; vu_prelit_vs 50325 words 9801 instructions: 8 x 1.10-2.10 s mean
-   1.62 s; ...", "2D batch 193-224 of 527 ...", and a run without the set
+   KB; policy batch 8, ...; vu_main_vs <w> words <i> instructions: 8 x
+   1.10-2.10 s mean 1.62 s", "2D batch 193-224 of 527 ...", and a run without the set
    its lazy batches' "lazy batch 3, pipelines 41-57 of this run ..."): kept
    as the activity file's "compiled: " lines after the note, among the
    "system: " lines of ico_diag_note_low_memory (the last
@@ -245,79 +247,92 @@ void ico_diag_startup_activity_batch(const char *line);
    graphics (issues 93 and 107, and the ambiguous ends: a swipe from the
    recent apps, the system ending an app in the background, Task Manager),
    counted by ico_diag_startup_activity_begin from the previous run's note,
-   by kind: ICO_DIAG_END_PIPELINES (the note names a pipeline being made,
-   "creating pipeline ...", "creating pipelines ...", "creating the
-   start-up pipelines", and neither of the others), ICO_DIAG_END_VU_EXT
-   (the note names an extended VU variant, startup_retry_note_has_vu_ext)
-   and ICO_DIAG_END_VU_PRE (else a pipeline of the VU vertex pre-pass,
-   startup_retry_note_has_vu_pre). The counts live in
-   "<activity file without .txt>-ends.txt" (a write that fails is logged
-   once a run: "ico_pc: the count of starts that ended while preparing the
-   graphics could not be written to <path> (pipelines <n>, extended VU
-   shaders <n>, vertex pre-pass <n>)"). An end in the foreground counts one more and logs
+   by kind: ICO_DIAG_END_VU_PRE (the note names a pipeline of the VU vertex
+   pre-pass or of the record path that draws from it,
+   startup_retry_note_has_vu_pre) and ICO_DIAG_END_PIPELINES (else a
+   pipeline being made, "creating pipeline ...", "creating pipelines ...",
+   "creating the start-up pipelines"). A third count, ICO_DIAG_END_LOSS,
+   is the starts in a row that lost the graphics device (the activity
+   file's loss line, ico_diag_note_device_loss), whatever the note: a start
+   without a loss breaks it, except the one start that ran with robust
+   access on because of it (ico_diag_startup_end_persist), which leaves it.
+   The counts live in "<activity file without .txt>-ends.txt" ("pipelines
+   <n>", "vu_pre <n>", "loss <n>", "loss_robust <0|1>"; an older file's
+   "vu_ext <n>" is dropped; a write that fails is logged once a run:
+   "ico_pc: the count of starts that ended while preparing the graphics
+   could not be written to <path> (pipelines <n>, vertex pre-pass <n>,
+   device losses <n>)"). An end in the foreground counts one more and logs
    "ico_pc: starts in a row that ended while preparing the graphics (the
-   pipelines): 1"; the second in a row is due, and the count stays until
+   pipelines): 1" (a loss: "ico_pc: starts in a row that lost the graphics
+   device: 1"); the second in a row is due, and the count stays until
    ico_diag_startup_end_persist writes the setting or finds the device
    table rules that kind (a start that fails before the device is made
    leaves it for the next end).
-   Not counted: a restart after a crash report (relaunched), an end while
-   the app was in the background (its mark, ico_diag_startup_activity_
-   background; it breaks the row of its kind). Any other ended note breaks
-   the row of the pipelines' ends; a finished start-up set or a lazy run's
-   normal exit clears it, and clears the extended VU row when the run
-   built extended VU pipelines (a plain run in between leaves that row),
-   and the pre-pass's row when it built one of its pipelines (a run
-   without the pre-pass leaves it).
+   Not counted: a restart after a crash report or a device loss
+   (relaunched), an end while the app was in the background (its mark,
+   ico_diag_startup_activity_background; it breaks the row of its kind).
+   Any other ended note breaks the row of the pipelines' ends; a finished
+   start-up set or a lazy run's normal exit clears it, and clears the
+   pre-pass's row when it built one of its pipelines (a run without the
+   pre-pass leaves it).
    ico_diag_startup_end_count: this start's count of a kind, 0 (not
    counted), 1 (the first: the setting for this start only) or 2 (the
    second in a row: written by ico_diag_startup_end_persist). */
 #define ICO_DIAG_END_PIPELINES 0
-#define ICO_DIAG_END_VU_EXT 1
-#define ICO_DIAG_END_VU_PRE 2
+#define ICO_DIAG_END_VU_PRE 1
+#define ICO_DIAG_END_LOSS 2
 int ico_diag_startup_end_count(int kind);
 /* The start-up set's policy for this start (issues 93 and 107), after
    ico_diag_startup_activity_begin (file_lazy: its result) and before the
-   renderer starts; setting: [dev] pipeline_set ("full", "lazy", NULL when
-   not set); config_name: the config file's name for the lines.
-     ICO_DIAG_PIPESET_LAZY_SETTING  setting is "lazy";
-     ICO_DIAG_PIPESET_LAZY_ONCE     the previous start ended in the
-                                    foreground while a pipeline was being
-                                    made (not inside an extended VU batch,
-                                    ico_diag_startup_vu_plain) and it was
-                                    the first in a row
-                                    (ico_diag_startup_end_count): this
-                                    start only, nothing written, and the
-                                    lazy run's notes say so (the next start
-                                    tries the set again); its line comes
-                                    after the device is made
-                                    (ico_diag_startup_end_persist);
-     ICO_DIAG_PIPESET_LAZY_NOW      the same end, the second in a row: the
-                                    window writes the setting after the
-                                    device is made
-                                    (ico_diag_startup_end_persist);
-     ICO_DIAG_PIPESET_LAZY_FILE     file_lazy (the previous run of this
-                                    version ended in a lazy run, or exited
-                                    lazy, without a "this start only");
-     ICO_DIAG_PIPESET_FULL          the start-up set.
-   The device table's lazy rule (port/rhi/rhi.h RhiLimits.lazyPipelines)
-   is the window's, after the device is made. With setting "lazy" the
-   pipelines' count is cleared (a deleted setting starts it again). */
+   renderer starts; setting: [dev] pipeline_set ("full", "careful",
+   "lazy", NULL when not set); config_name: the config file's name for the
+   lines.
+     ICO_DIAG_PIPESET_LAZY_SETTING    setting is "lazy";
+     ICO_DIAG_PIPESET_CAREFUL_ONCE    the previous start ended in the
+                                      foreground while a pipeline was being
+                                      made (not one of the VU vertex
+                                      pre-pass's, ico_diag_startup_vu_prepass),
+                                      the first in a row
+                                      (ico_diag_startup_end_count), and its
+                                      file has no "set: careful" line (it
+                                      made the full set, or none): this
+                                      start only makes the set under the
+                                      careful policy, nothing written; its
+                                      line comes after the device is made
+                                      (ico_diag_startup_end_persist);
+     ICO_DIAG_PIPESET_LAZY_ONCE       the same end, the first in a row, of a
+                                      start whose file says "set: careful":
+                                      this start only makes no set, nothing
+                                      written, and the lazy run's notes say
+                                      so (the next start tries the set
+                                      again); its line likewise;
+     ICO_DIAG_PIPESET_LAZY_NOW        the same end, the second in a row
+                                      (whatever the ended start's set): the
+                                      window writes [dev] pipeline_set =
+                                      "lazy" after the device is made
+                                      (ico_diag_startup_end_persist);
+     ICO_DIAG_PIPESET_LAZY_FILE       file_lazy (the previous run of this
+                                      version ended in a lazy run, or exited
+                                      lazy, without a "this start only");
+     ICO_DIAG_PIPESET_CAREFUL_SETTING setting is "careful" (and none of the
+                                      above);
+     ICO_DIAG_PIPESET_FULL            the start-up set.
+   The device table's careful rule (port/rhi/rhi.h
+   RhiLimits.carefulPipelines) is the window's, after the device is made:
+   FULL there is the careful set. With setting "lazy" the pipelines' count
+   is cleared (a deleted setting starts it again). */
 #define ICO_DIAG_PIPESET_FULL 0
 #define ICO_DIAG_PIPESET_LAZY_FILE 1
 #define ICO_DIAG_PIPESET_LAZY_SETTING 2
 #define ICO_DIAG_PIPESET_LAZY_NOW 3
 #define ICO_DIAG_PIPESET_LAZY_ONCE 4
+#define ICO_DIAG_PIPESET_CAREFUL_ONCE 5
+#define ICO_DIAG_PIPESET_CAREFUL_SETTING 6
 int ico_diag_startup_pipeline_set(int relaunched, int file_lazy, const char *setting,
                                   const char *config_name);
-/* The plain VU variants after an end inside an extended VU batch (issue
-   107): this start's ICO_DIAG_END_VU_EXT count. 1: the first in a row,
-   this start draws with the plain ones only and nothing is written; 2:
-   the second, the window writes [dev] vu_plain_only after the device is
-   made; both lines come from ico_diag_startup_end_persist; 0: neither.
-   config_name is unused (the lines are the persist call's). */
-int ico_diag_startup_vu_plain(const char *config_name);
 /* The VU vertex pre-pass off after an end inside one of its batches or
-   pipelines (not an extended VU batch: ico_diag_startup_vu_plain first):
+   pipelines, or of the record path that draws from it
+   (startup_retry_note_has_vu_pre):
    this start's ICO_DIAG_END_VU_PRE count. 1: the first in a row, this
    start draws without the pre-pass (rd.h rd_set_vu_prepass_off) and
    nothing is written; 2: the second, the window writes [dev] vu_prepass =
@@ -331,41 +346,50 @@ int ico_diag_startup_vu_plain(const char *config_name);
    line to try it again"); 0: neither. */
 int ico_diag_startup_vu_prepass(void);
 /* After the device is made, for a kind this start counted (else nothing,
-   0): the window calls it for the pipelines on ICO_DIAG_PIPESET_LAZY_ONCE
-   and ICO_DIAG_PIPESET_LAZY_NOW, for the VU kind when
-   ico_diag_startup_vu_plain was 1 or 2, for the pre-pass's kind when
-   ico_diag_startup_vu_prepass was. table: the device table's rule
-   for that kind (RhiLimits.lazyPipelines for the pipelines,
-   RhiLimits.vuPlainOnly for the VU kind, none for the pre-pass's; NULL
-   when the table leaves the device alone). With a table rule nothing is written and the count is
-   cleared (the setting would be redundant, and would outlive a change of
-   the table), the pipelines' lazy run no longer "for this start only":
-   the first end "ico_pc: the previous start ended while preparing the
-   graphics (<note>); nothing is counted or written to <config_name>: the
-   device table already makes the pipelines as the game needs them on this
-   device (<table>)", the second "ico_pc: the second start in a row ended
-   while preparing the graphics (<note>); [dev] pipeline_set = "lazy" is
-   not written to <config_name>: the device table already makes ..."
-   (for the VU kind "[dev] vu_plain_only = true ... the device table
-   already draws with the smaller 3D shaders (the VU plain variants) only
-   on this device (<table>)"). Without one, the first logs what this
-   start does ("ico_pc: the previous start ended while preparing the
-   graphics (<note>); this start only makes the pipelines as the game
-   needs them, with no start-up set (nothing is written to
+   0): the window calls it for the pipelines on ICO_DIAG_PIPESET_CAREFUL_ONCE,
+   ICO_DIAG_PIPESET_LAZY_ONCE and ICO_DIAG_PIPESET_LAZY_NOW, for the
+   pre-pass's kind when ico_diag_startup_vu_prepass was 1 or 2, and on
+   Android for the losses when ico_diag_startup_end_count(ICO_DIAG_END_LOSS)
+   was (before the renderer starts). table: a rule that already holds for
+   that kind (NULL when none does; the window passes none for the pipelines
+   and the pre-pass, and for the losses "[dev] gpu_robust" when the player
+   set it). With a rule nothing is written and the count is cleared (the
+   setting would be redundant, and would outlive a change of the rule), the
+   pipelines' lazy run no longer "for this start only": the first end
+   "ico_pc: the previous start ended while preparing the graphics (<note>);
+   nothing is counted or written to <config_name>: <rule> (<table>)", the
+   second "ico_pc: the second start in a row ended while preparing the
+   graphics (<note>); <setting> is not written to <config_name>: <rule>
+   (<table>)" (the losses: "ico_pc: the previous start lost the graphics
+   device; nothing is counted or written to <config_name>: robust access
+   is as the settings say (<table>)"). Without one, the first logs what this
+   start does: the pipelines on CAREFUL_ONCE "ico_pc: the previous start
+   ended while preparing the graphics (<note>); this start only makes the
+   start-up set the careful way (small batches on one thread, the pipeline
+   cache written after each; nothing is written to <config_name>); if this
+   start also ends while preparing them, [dev] pipeline_set = "lazy" is
+   written for good", on LAZY_ONCE "ico_pc: the previous start ended while
+   preparing the graphics (<note>); this start only makes the pipelines as
+   the game needs them, with no start-up set (nothing is written to
    <config_name>); if this start also ends while preparing them, [dev]
-   pipeline_set = "lazy" is written for good", the VU kind "ico_pc: the
-   previous start ended while the graphics driver compiled the largest 3D
-   shaders (the VU extended variants); this start only uses the smaller
-   ones (nothing is written to <config_name>): ..."); the second calls
-   persist() to write the setting (0 when it did; the count is then
-   cleared) and one line says so ("ico_pc: the previous start ended while
-   preparing the graphics (<note>); this start and every start after it
-   make the pipelines as the game needs them, with no start-up set ([dev]
-   pipeline_set = "lazy" in <config_name>); delete that line to try the
-   start-up set again", or the VU line "... use the smaller ones only
-   ([dev] vu_plain_only = true in <config_name>) ..."; ", which could not
-   be written: this start only" when it failed: the count stays, and the
-   pipelines' lazy run says "for this start only"). 1 when written. */
+   pipeline_set = "lazy" is written for good", the losses "ico_pc: the
+   previous start lost the graphics device; this start only checks the
+   bounds of every buffer and image read (robust access; nothing is written
+   to <config_name>); if a start loses it again before one runs without a
+   loss, [dev] gpu_robust = true is written for good" (and the count's file
+   notes that this start ran with it, so its end without a loss leaves the
+   row); the second calls persist() to write the setting (0 when it did;
+   the count is then cleared) and one line says so ("ico_pc: the previous
+   start ended while preparing the graphics (<note>); this start and every
+   start after it make the pipelines as the game needs them, with no
+   start-up set ([dev] pipeline_set = "lazy" in <config_name>); delete that
+   line to try the start-up set again", the losses "ico_pc: the graphics
+   device was lost in two starts in a row; this start and every start after
+   it check the bounds of every buffer and image read ([dev] gpu_robust =
+   true in <config_name>); delete that line to turn it off again"; ", which
+   could not be written: this start only" when it failed: the count stays,
+   and the pipelines' lazy run says "for this start only"). 1 when
+   written. */
 int ico_diag_startup_end_persist(int kind, const char *table, int (*persist)(void),
                                  const char *config_name);
 /* The app went to the background (background != 0: Android's and iOS's
@@ -415,12 +439,24 @@ void ico_diag_startup_activity_poll(void);
    set. Any thread. */
 void ico_diag_set_pipelines_made(unsigned int n);
 /* The note the file held when ico_diag_startup_activity_begin read it,
-   whatever its version ("" none): window_host.c asks
-   startup_retry_note_has_vu_ext of it (issue 107).  A batch's note and
-   any note naming an extended VU pipeline is written through to the disc
+   whatever its version ("" none).  A batch's note and any note naming a
+   pipeline of the VU vertex pre-pass is written through to the disc
    before the batch starts (fsync), so it survives a device that froze and
    was rebooted. */
 const char *ico_diag_startup_activity_prev(void);
+/* This start's set is made under the careful policy (on != 0; the window,
+   before ICO_DIAG_ACTIVITY_STARTUP): while the file records it holds the
+   line "set: careful" after the note, so an end inside that set makes the
+   next start lazy rather than careful again (ico_diag_startup_pipeline_set).
+   Cleared when the recording stops. */
+void ico_diag_startup_activity_careful(int on);
+/* The careful set stopped at its memory budget (rd_precreate_pipelines
+   called rd_pipelines_lazy): the set's row of ends is cleared as at its
+   finish, and the rest of the run records as a lazy run for this start
+   only (ICO_DIAG_ACTIVITY_LAZY, its notes and exit saying "for this start
+   only", the "set: careful" line kept), so a freeze in a later creation is
+   named and counted while the next start tries the set again. */
+void ico_diag_startup_activity_budget_stop(void);
 /* The running version's text (the "ico_pc: version" log line's: "<label>
    (commit <c>)" or "development build (commit <c>)"); copied, at most 127
    bytes. */
@@ -538,6 +574,12 @@ int ico_diag_loss_bisect2(const char *dump_zip, uint32_t pass, uint32_t draws, u
    lossnoprepass step first (startup_retry.h StartupRetryRun.prepassWasOn).
    0 until set. */
 void ico_diag_set_vu_prepass(int on);
+/* Whether the run draws with robust access off by the device's default
+   (port/rhi/rhi.h RhiLimits.robustText "off (the default; ..."), not by
+   gpu_robust or ICO_GPU_ROBUST: a device loss then takes the loss order's
+   robust step (startup_retry.h StartupRetryRun.robustOffDefault). The
+   window sets it once the device is made; 0 until set. */
+void ico_diag_set_robust_off_default(int on);
 void ico_diag_set_startup_retry(int step, int have_d3d12, int backend_explicit, int blend_explicit,
                                 const char *backend);
 /* The graphics device was lost (window_host.c device_lost_quit; the normal

@@ -1322,6 +1322,11 @@ bool rd__pipelines_lazy_on(void)
     return s_lazy.on;
 }
 
+bool rd_pipelines_lazy_on(void)
+{
+    return s_lazy.on;
+}
+
 static void lazyCount(const RdPipeKeyInt *k, float ms)
 {
     const double now = rd__now_ms();

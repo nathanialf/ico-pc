@@ -61,7 +61,17 @@
  *               is not lazy; a file another version wrote is not lazy; a
  *               lazy run's clean exit is logged as such at the next start,
  *               not as an ended run; a file cut short after a write (the
- *               NUL padding) reads as the new note;
+ *               NUL padding) reads as the new note; the careful set: a full
+ *               set's first end makes the next start careful for that start
+ *               (its file "set: careful"), a careful set's lazy, the second
+ *               end in a row writes pipeline_set = "lazy", a set stopped at
+ *               its budget records as a lazy run for that start only; the
+ *               record path's vu_main_vs batch is the pre-pass's kind;
+ *               Android's next start after a device loss: robust access for
+ *               that start, the second loss in a row with it off (or in the
+ *               robust start) writes gpu_robust = true, a start without a
+ *               loss that did not run robust ends the row, the player's
+ *               gpu_robust rules, a restart counts nothing;
  *   - loss:     the restart after a device loss (ico_diag_device_lost_restart)
  *               with the relaunch prepared and stubbed (no new process):
  *               lossstep, the first loss: the blend step, the restarted
@@ -69,7 +79,8 @@
  *               the fixed-function blend, the value host_config.c exports
  *               ICO_RD_BLEND=fixed for), handed over at exit after the
  *               normal quit path's steps; lossbackend, the next loss on a
- *               build with D3D12: backend:d3d12; lossnone, no step left:
+ *               build with D3D12: backend:d3d12; lossrobust, robust access
+ *               off by the device's default: robust:<backend>; lossnone, no step left:
  *               0 (the window's box), nothing at exit; lossunprepared, no
  *               relaunch prepared: 0; lossfail, the relaunch fails: the box
  *               saying the game could not start itself again;
@@ -208,8 +219,9 @@ static void segv_thread(void *arg)
     "creating pipelines 1-4 of 9: program 5 blend 1 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 to program 6 "  \
     "blend 1 vs 7 fs 19 fmt 1/8 msaa 0 dst 0"
 
-/* a batch of the VU vertex shaders' extended variants (issue 107;
-   rd_pipeline.c keyWords " ext 1", batchModules) and one of the plain ones */
+/* an older version's batch of the VU vertex shaders' extended variants
+   (issue 107; its keyWords " ext 1", batchModules): the retired kind, now
+   an end of the pipelines' kind; and one of the plain ones */
 #define VU_EXT_NOTE                                                                                \
     "creating pipelines 329-360 of 702: program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 ext 1 "  \
     "to program 0 blend 4 vs 4 fs 19 fmt 1/8 msaa 0 dst 0 ext 1; vertex vu_prelit_vs 50325 "       \
@@ -229,6 +241,13 @@ static void segv_thread(void *arg)
     "creating pipelines 297-328 of 702: program 0 blend 0 vs 31 fs 41 fmt 3/0 msaa 0 dst 0 pre "   \
     "to program 0 blend 4 vs 30 fs 19 fmt 1/8 msaa 0 dst 0 ext 0; vertex vu_prelit_pre_vs 1820 "   \
     "words, vu_tri_plain_vs 19519 words; largest fragment vu_texa_ps 21000 words"
+/* a batch of the record path's drawing shaders (rd_pipeline.c
+   batchModules: vu_main_vs, made only with the pre-pass): the pre-pass's
+   kind */
+#define VU_MAIN_NOTE                                                                               \
+    "creating pipelines 201-208 of 220: program 0 blend 12 vs 41 fs 5 fmt 1/8 msaa 0 dst 0 to "    \
+    "program 0 blend 4 vs 41 fs 19 fmt 1/8 msaa 0 dst 0; vertex vu_main_vs 20000 words (4000 "     \
+    "instructions); largest fragment vu_texa_ps 11666 words; compiler E031.41.03.47"
 #define VU_PLAIN_NOTE                                                                              \
     "creating pipelines 297-328 of 702: program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 ext 0 "  \
     "to program 0 blend 4 vs 4 fs 19 fmt 1/8 msaa 0 dst 0 ext 0; vertex vu_prelit_plain_vs "       \
@@ -496,10 +515,10 @@ static int persist_lazy_stub(void)
     return getenv("ICO_TEST_PERSIST_FAIL") != NULL ? -1 : 0;
 }
 
-/* window_host.c vu_plain_persist, stubbed the same way */
-static int persist_vu_stub(void)
+/* window_host.c gpu_robust_persist, stubbed the same way */
+static int persist_robust_stub(void)
 {
-    ico_diag_log("test: config write dev.vu_plain_only = true");
+    ico_diag_log("test: config write dev.gpu_robust = true");
     return getenv("ICO_TEST_PERSIST_FAIL") != NULL ? -1 : 0;
 }
 
@@ -511,24 +530,30 @@ static int persist_pre_stub(void)
 }
 
 /* The run after the policy (ICO_TEST_THEN): "die" ends it without a word
-   inside a pipeline ("dievu": an extended VU batch), "between" between two
-   creations of a lazy run ("betweenbg": there in the background), "clean" ends it cleanly (a lazy run's exit, or
-   the set finished), "cleanvu" the set finished after an extended VU
-   batch ("cleanvupre": after a batch of the vertex pre-pass); unset: no
-   run (the file stays deleted) */
+   inside a pipeline, "between" between two creations of a lazy run
+   ("betweenbg": there in the background), "clean" ends it cleanly (a lazy
+   run's exit, or the set finished), "cleanvupre" the set finished after a
+   batch of the vertex pre-pass, "budget" the careful set stopped at its
+   memory budget and the run then ended inside a first-use pipeline
+   ("budgetclean": exited cleanly); unset: no run (the file stays deleted).
+   The set is the careful one when the policy says so or the device table
+   would (ICO_TEST_TABLE_CAREFUL), as window_host.c makes it */
 static void pipeset_then(int set)
 {
     const char *then = getenv("ICO_TEST_THEN");
-    const int lazy = set != ICO_DIAG_PIPESET_FULL;
+    const int lazy = set >= ICO_DIAG_PIPESET_LAZY_FILE && set <= ICO_DIAG_PIPESET_LAZY_ONCE;
+    const int careful =
+        !lazy && (set == ICO_DIAG_PIPESET_CAREFUL_ONCE || set == ICO_DIAG_PIPESET_CAREFUL_SETTING ||
+                  getenv("ICO_TEST_TABLE_CAREFUL") != NULL);
     if (then == NULL) {
         return;
+    }
+    if (careful) {
+        ico_diag_startup_activity_careful(1);
     }
     ico_diag_startup_activity_record(lazy ? ICO_DIAG_ACTIVITY_LAZY : ICO_DIAG_ACTIVITY_STARTUP);
     if (strcmp(then, "die") == 0) {
         ico_diag_set_activity(lazy ? "creating pipeline fog test" : NOTE_2D);
-        _exit(0);
-    } else if (strcmp(then, "dievu") == 0) {
-        ico_diag_set_activity(VU_EXT_NOTE);
         _exit(0);
     } else if (strcmp(then, "between") == 0 || strcmp(then, "betweenbg") == 0) {
         ico_diag_set_activity("creating pipeline fog test");
@@ -537,8 +562,18 @@ static void pipeset_then(int set)
             ico_diag_startup_activity_background(1);
         }
         _exit(0);
-    } else if (strcmp(then, "cleanvu") == 0) {
-        ico_diag_set_activity(VU_EXT_NOTE);
+    } else if (strcmp(then, "budget") == 0 || strcmp(then, "budgetclean") == 0) {
+        /* rd_precreate_pipelines stopped the set (rd_pipelines_lazy), the
+           window's budget_stop, then the frames' first-use pipelines */
+        ico_diag_set_activity(NOTE_2D);
+        ico_diag_startup_activity_budget_stop();
+        ico_diag_set_activity("creating pipeline fog test");
+        if (strcmp(then, "budget") == 0) {
+            _exit(0);
+        }
+        ico_diag_clear_activity();
+        ico_diag_startup_activity_exit();
+        return;
     } else if (strcmp(then, "cleanvupre") == 0) {
         ico_diag_set_activity(VU_PRE_NOTE);
     } else if (lazy) {
@@ -564,9 +599,6 @@ static void activity_child(const char *mode, const char *log)
     lazy = ico_diag_startup_activity_begin(path, strcmp(mode, "actrelaunch") == 0 ||
                                                      strcmp(mode, "actpipesetrelaunch") == 0);
     ico_diag_log("test: lazy %d", lazy);
-    /* what window_host.c asks of the previous note (issue 107) */
-    ico_diag_log("test: previous vu ext %d",
-                 startup_retry_note_has_vu_ext(ico_diag_startup_activity_prev()) ? 1 : 0);
     if (strcmp(mode, "actrecord") == 0) {
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
         /* the set's own note before a batch is not written */
@@ -644,14 +676,15 @@ static void activity_child(const char *mode, const char *log)
         ico_diag_startup_activity_record(0);
         child_quit(0);
     } else if (strcmp(mode, "actvuext") == 0 || strcmp(mode, "actvuplain") == 0 ||
-               strcmp(mode, "actvupre") == 0) {
+               strcmp(mode, "actvupre") == 0 || strcmp(mode, "actvumain") == 0) {
         /* the start-up set ended without a word inside a VU batch (the
            device froze): the batch's note is in the file */
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
         ico_diag_set_activity(BATCH_NOTE);
-        ico_diag_set_activity(strcmp(mode, "actvuext") == 0   ? VU_EXT_NOTE
-                              : strcmp(mode, "actvupre") == 0 ? VU_PRE_NOTE
-                                                              : VU_PLAIN_NOTE);
+        ico_diag_set_activity(strcmp(mode, "actvuext") == 0    ? VU_EXT_NOTE
+                              : strcmp(mode, "actvupre") == 0  ? VU_PRE_NOTE
+                              : strcmp(mode, "actvumain") == 0 ? VU_MAIN_NOTE
+                                                               : VU_PLAIN_NOTE);
         _exit(0);
     } else if (strcmp(mode, "actvutimes") == 0) {
         /* the plain batches compiled (their times kept as the file's
@@ -673,12 +706,17 @@ static void activity_child(const char *mode, const char *log)
         /* issues 93 and 107: a 2D batch finished (its line with the
            memory), then the system ended the start in the next one; with
            ICO_TEST_LOW_MEMORY a low-memory signal came first (Android's
-           onTrimMemory, level 15) */
+           onTrimMemory, level 15). The set is the careful one (the Adreno
+           740's, RhiLimits.carefulPipelines: its file says "set: careful")
+           unless ICO_TEST_FULL_SET (the full set of any other device) */
         /* "early": the app went to the background before the recording
            began (Home during the renderer's start) */
         if (getenv("ICO_TEST_BACKGROUND") != NULL &&
             strcmp(getenv("ICO_TEST_BACKGROUND"), "early") == 0) {
             ico_diag_startup_activity_background(1);
+        }
+        if (getenv("ICO_TEST_FULL_SET") == NULL) {
+            ico_diag_startup_activity_careful(1);
         }
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
         ico_diag_set_pipelines(192, 527, 210);
@@ -716,32 +754,50 @@ static void activity_child(const char *mode, const char *log)
         _exit(0);
     } else if (strcmp(mode, "actpipeset") == 0 || strcmp(mode, "actpipesetrelaunch") == 0) {
         /* the next start's policy (window_host.c ico_window_open): the
-           plain VU variants, the set, then after the device is made the
-           lines and settings of an end in a row (ICO_TEST_TABLE_LAZY: the
-           device table's lazy rule, RhiLimits.lazyPipelines;
-           ICO_TEST_TABLE_VU: its plain VU rule, RhiLimits.vuPlainOnly) */
+           pre-pass's, the set's, then after the device is made the lines
+           and settings of an end in a row (ICO_TEST_TABLE_LAZY: a rule that
+           already holds for the pipelines, kept to test the rule's lines;
+           the window passes none) */
         const int relaunch = strcmp(mode, "actpipesetrelaunch") == 0;
-        const int vu = relaunch ? 0 : ico_diag_startup_vu_plain("config.toml");
         const int pre = relaunch ? 0 : ico_diag_startup_vu_prepass();
-        const int set = ico_diag_startup_pipeline_set(relaunch, vu > 0 || pre > 0 ? 0 : lazy,
+        const int set = ico_diag_startup_pipeline_set(relaunch, pre > 0 ? 0 : lazy,
                                                       getenv("ICO_TEST_PIPESET"), "config.toml");
-        if (set == ICO_DIAG_PIPESET_LAZY_ONCE || set == ICO_DIAG_PIPESET_LAZY_NOW) {
+        if (set == ICO_DIAG_PIPESET_LAZY_ONCE || set == ICO_DIAG_PIPESET_LAZY_NOW ||
+            set == ICO_DIAG_PIPESET_CAREFUL_ONCE) {
             (void)ico_diag_startup_end_persist(ICO_DIAG_END_PIPELINES,
                                                getenv("ICO_TEST_TABLE_LAZY"), persist_lazy_stub,
                                                "config.toml");
-        }
-        if (vu >= 1) {
-            (void)ico_diag_startup_end_persist(ICO_DIAG_END_VU_EXT, getenv("ICO_TEST_TABLE_VU"),
-                                               persist_vu_stub, "config.toml");
         }
         if (pre >= 1) {
             (void)ico_diag_startup_end_persist(ICO_DIAG_END_VU_PRE, NULL, persist_pre_stub,
                                                "config.toml");
         }
-        ico_diag_log("test: vu plain %d", vu);
         ico_diag_log("test: vu prepass %d", pre);
         ico_diag_log("test: pipeline set %d", set);
         pipeset_then(set);
+        child_quit(0);
+    } else if (strcmp(mode, "actlossnext") == 0) {
+        /* Android's next start after a device loss (window_host.c, before
+           the renderer starts): the row's count, then robust access for
+           this start or for good, or the player's gpu_robust
+           (ICO_TEST_ROBUST_SAID) rules; then the run: a loss again
+           (ICO_TEST_THEN=loss), or none (the set finished, a clean exit) */
+        const int n = ico_diag_startup_end_count(ICO_DIAG_END_LOSS);
+        int saved = 0;
+        if (n > 0) {
+            saved = ico_diag_startup_end_persist(ICO_DIAG_END_LOSS, getenv("ICO_TEST_ROBUST_SAID"),
+                                                 persist_robust_stub, "config.toml");
+        }
+        ico_diag_log("test: losses %d, robust %s", n,
+                     n == 0 || getenv("ICO_TEST_ROBUST_SAID") != NULL ? "as set"
+                     : saved                                          ? "for good"
+                                                                      : "this start");
+        ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
+        ico_diag_startup_activity_record(0);
+        if (getenv("ICO_TEST_THEN") != NULL && strcmp(getenv("ICO_TEST_THEN"), "loss") == 0) {
+            ico_diag_note_device_loss(NULL);
+            _exit(0);
+        }
         child_quit(0);
     } else if (strcmp(mode, "actclean") == 0) {
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
@@ -801,6 +857,11 @@ static void loss_child(const char *mode, const char *log)
         ico_diag_set_startup_retry(STARTUP_RETRY_LOSS_BLEND, 1, 0, 0, "vulkan");
     } else if (strcmp(mode, "lossnone") == 0) {
         ico_diag_set_startup_retry(STARTUP_RETRY_LOSS_BLEND, 0, 0, 0, "vulkan");
+    } else if (strcmp(mode, "lossrobust") == 0) {
+        /* the window's robustOffDefault: the device's robust access off by
+           its default (desktop Vulkan) */
+        ico_diag_set_startup_retry(STARTUP_RETRY_NONE, 0, 0, 0, "vulkan");
+        ico_diag_set_robust_off_default(1);
     } else {
         ico_diag_set_startup_retry(STARTUP_RETRY_NONE, 0, 0, 0, "vulkan");
     }
@@ -1770,10 +1831,11 @@ int main(int argc, char **argv)
                 fclose(f);
             }
         }
-        /* issue 107: a start that ended inside a batch of the extended VU
-           variants: the next start reads the note (any version, relaunch
-           or not) and names it; window_host.c then writes [dev]
-           vu_plain_only. A plain batch's note does not count */
+        /* a start that ended inside a batch of an older version's extended
+           VU variants (the retired kind): the next start reads the note
+           (any version, relaunch or not) and names it; another version's
+           tries the set again, the same version's is lazy, as any
+           pipeline's end (the counted kind, below) */
         r = run(argv[0], "actvuext", log);
         CHECK(r == 0);
         s = read_file(act);
@@ -1782,24 +1844,22 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(r == 0);
         CHECK(strstr(s, "ico_pc: the previous run ended while: " VU_EXT_NOTE "\n") != NULL);
-        CHECK(strstr(s, "test: previous vu ext 1") != NULL);
+        CHECK(strstr(s, "test: lazy 1") != NULL);
         run(argv[0], "actvuext", log);
         setenv("ICO_TEST_ACT_VERSION", "test 2", 1);
         r = run(argv[0], "actnext", log);
         unsetenv("ICO_TEST_ACT_VERSION");
         s = read_file(log);
-        CHECK(strstr(s, "test: previous vu ext 1") != NULL);
         CHECK(strstr(s, "test: lazy 0") != NULL);
         run(argv[0], "actvuplain", log);
         r = run(argv[0], "actnext", log);
         s = read_file(log);
         CHECK(strstr(s, "ico_pc: the previous run ended while: " VU_PLAIN_NOTE "\n") != NULL);
-        CHECK(strstr(s, "test: previous vu ext 0") != NULL);
         CHECK(strstr(s, "test: lazy 1") != NULL);
         /* the next start found no file */
         r = run(argv[0], "actnext", log);
         s = read_file(log);
-        CHECK(strstr(s, "test: previous vu ext 0") != NULL);
+        CHECK(strstr(s, "test: lazy 0") != NULL);
         /* the plain batches' compile times survive the freeze in an
            extended one: the file holds them after the note, and the next
            start logs each with the version, then the note */
@@ -1816,7 +1876,6 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "ico_pc: the previous run (version test 1) compiled: " VU_TIMES_2 "\n") !=
               NULL);
         CHECK(strstr(s, "ico_pc: the previous run ended while: " VU_EXT_NOTE "\n") != NULL);
-        CHECK(strstr(s, "test: previous vu ext 1") != NULL);
         /* a set that completed leaves no file and no times */
         run(argv[0], "actvutimesdone", log);
         r = run(argv[0], "actnext", log);
@@ -1832,7 +1891,7 @@ int main(int argc, char **argv)
         r = run(argv[0], "act2dbatch", log);
         CHECK(r == 0);
         s = read_file(act);
-        CHECK(strcmp(s, "test 1\n" NOTE_2D "\ncompiled: " TIMES_2D) == 0);
+        CHECK(strcmp(s, "test 1\n" NOTE_2D "\nset: careful\ncompiled: " TIMES_2D) == 0);
         setenv("ICO_TEST_THEN", "die", 1);
         r = run(argv[0], "actpipeset", log);
         unsetenv("ICO_TEST_THEN");
@@ -1930,11 +1989,10 @@ int main(int argc, char **argv)
         s = read_file(log);
         {
             char want[512];
-            snprintf(
-                want, sizeof want,
-                "ico_pc: the count of starts that ended while preparing the graphics could "
-                "not be written to %s (pipelines 1, extended VU shaders 0, vertex pre-pass 0)\n",
-                ends);
+            snprintf(want, sizeof want,
+                     "ico_pc: the count of starts that ended while preparing the graphics could "
+                     "not be written to %s (pipelines 1, vertex pre-pass 0, device losses 0)\n",
+                     ends);
             CHECK(strstr(s, want) != NULL);
         }
         CHECK(strstr(s, "test: pipeline set 4\n") != NULL);
@@ -2063,9 +2121,11 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(strstr(s, "in the background (") == NULL);
         CHECK(strstr(s, "test: pipeline set 4\n") != NULL);
-        /* a device the table already makes lazy (RhiLimits.lazyPipelines):
-           the second end in a row writes nothing and says why, and the
-           row is cleared */
+        /* a rule that already holds for the pipelines (the persist call's
+           table; the window passes none now that the device table's rule
+           is the careful set, so this keeps the rule's lines tested): the
+           second end in a row writes nothing and says why, and the row is
+           cleared */
         run(argv[0], "act2dbatch", log);
         setenv("ICO_TEST_TABLE_LAZY", "Adreno 740, issues 93 and 107", 1);
         r = run(argv[0], "actpipeset", log);
@@ -2126,71 +2186,228 @@ int main(int argc, char **argv)
               NULL);
         CHECK(strstr(s, "starts in a row") == NULL);
         CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
-        /* an extended VU batch's end makes the plain variants this start's
-           instead (nothing written, the set as usual); a plain run in
-           between leaves the row, and the next end inside an extended
-           batch writes [dev] vu_plain_only for good */
+        /* the careful set (window_host.c): a full set's end makes the next
+           start, and only it, make the set the careful way (nothing
+           written); that careful start's file says so, and its end too is
+           the second in a row: [dev] pipeline_set = "lazy" for good */
         remove(ends);
-        run(argv[0], "actvuext", log);
+        setenv("ICO_TEST_FULL_SET", "1", 1);
+        r = run(argv[0], "act2dbatch", log);
+        unsetenv("ICO_TEST_FULL_SET");
+        s = read_file(act);
+        CHECK(strcmp(s, "test 1\n" NOTE_2D "\ncompiled: " TIMES_2D) == 0);
+        setenv("ICO_TEST_THEN", "die", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "ico_pc: starts in a row that ended while preparing the graphics (the "
+                        "pipelines): 1\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous start ended while preparing the graphics (" NOTE_2D
+                        "); this start only makes the start-up set the careful way (small "
+                        "batches on one thread, the pipeline cache written after each; nothing "
+                        "is written to config.toml); if this start also ends while preparing "
+                        "them, [dev] pipeline_set = \"lazy\" is written for good\n") != NULL);
+        CHECK(strstr(s, "test: config write") == NULL);
+        CHECK(strstr(s, "test: pipeline set 5\n") != NULL);
+        s = read_file(act);
+        CHECK(strcmp(s, "test 1\n" NOTE_2D "\nset: careful") == 0);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: starts in a row that ended while preparing the graphics (the "
+                        "pipelines): 2\n") != NULL);
+        CHECK(strstr(s, "test: config write dev.pipeline_set = lazy\n") != NULL);
+        CHECK(strstr(s, "test: pipeline set 3\n") != NULL);
+        CHECK(read_file(ends)[0] == '\0');
+        /* ... the careful start finished: the row is cleared, the file
+           deleted, and the start after makes the full set again */
+        setenv("ICO_TEST_FULL_SET", "1", 1);
+        run(argv[0], "act2dbatch", log);
+        unsetenv("ICO_TEST_FULL_SET");
         setenv("ICO_TEST_THEN", "clean", 1);
         r = run(argv[0], "actpipeset", log);
         unsetenv("ICO_TEST_THEN");
         s = read_file(log);
+        CHECK(strstr(s, "test: pipeline set 5\n") != NULL);
+        CHECK(read_file(act)[0] == '\0');
+        CHECK(read_file(ends)[0] == '\0');
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "starts in a row") == NULL);
+        CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
+        /* ... a careful set's first end (its file says "set: careful", the
+           device table's or the setting's) makes the next start lazy, for
+           that start only (above: pipeline set 4); with [dev] pipeline_set
+           = "careful" and no end: the careful set */
+        setenv("ICO_TEST_PIPESET", "careful", 1);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: pipeline set 6\n") != NULL);
+        run(argv[0], "act2dbatch", log);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_PIPESET");
+        s = read_file(log);
+        CHECK(strstr(s, "test: pipeline set 4\n") != NULL);
+        CHECK(strstr(s, "this start only makes the pipelines as the game needs them") != NULL);
+        /* ... an older version's file without the line (an end inside its
+           extended VU batch, the retired kind, counts as the pipelines'):
+           the careful set for that start */
+        remove(ends);
+        run(argv[0], "actvuext", log);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
         CHECK(strstr(s, "ico_pc: starts in a row that ended while preparing the graphics (the "
-                        "extended VU shaders): 1\n") != NULL);
-        CHECK(strstr(s, "ico_pc: the previous start ended while the graphics driver compiled the "
-                        "largest 3D shaders (the VU extended variants); this start only uses the "
-                        "smaller ones (nothing is written to config.toml): the wide-screen rule "
-                        "is off for this start; if a start that compiles them ends there again, "
-                        "[dev] vu_plain_only = true is written for good\n") != NULL);
-        CHECK(strstr(s, "test: config write") == NULL);
-        CHECK(strstr(s, "test: vu plain 1\n") != NULL);
-        CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
-        run(argv[0], "actvuext", log);
+                        "pipelines): 1\n") != NULL);
+        CHECK(strstr(s, "test: vu prepass 0\n") != NULL);
+        CHECK(strstr(s, "test: pipeline set 5\n") != NULL);
+        /* ... the careful set stopped at its memory budget: the rest of
+           the run records as a lazy run for that start only, the careful
+           line kept; an end in a first-use pipeline is then the first in a
+           row (the stop cleared it) and makes the next start lazy for that
+           start only; a clean exit makes the next one try the set again */
+        remove(ends);
+        setenv("ICO_TEST_PIPESET", "careful", 1);
+        setenv("ICO_TEST_THEN", "budget", 1);
         r = run(argv[0], "actpipeset", log);
-        s = read_file(log);
-        CHECK(strstr(s, "test: config write dev.vu_plain_only = true\n") != NULL);
-        CHECK(strstr(s, "ico_pc: the previous start ended while the graphics driver compiled the "
-                        "largest 3D shaders (the VU extended variants); this start and every "
-                        "start after it use the smaller ones only ([dev] vu_plain_only = true in "
-                        "config.toml): the wide-screen rule is off; delete that line to try the "
-                        "larger ones again\n") != NULL);
-        CHECK(strstr(s, "test: vu plain 2\n") != NULL);
-        CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
-        /* ... a run that compiled the extended ones and finished clears
-           the row */
-        run(argv[0], "actvuext", log);
-        setenv("ICO_TEST_THEN", "cleanvu", 1);
-        run(argv[0], "actpipeset", log);
         unsetenv("ICO_TEST_THEN");
-        run(argv[0], "actvuext", log);
+        s = read_file(act);
+        CHECK(strcmp(s, "test 1\ncreating pipeline fog test\nset: careful") == 0);
+        CHECK(read_file(ends)[0] == '\0');
         r = run(argv[0], "actpipeset", log);
         s = read_file(log);
+        CHECK(strstr(s, "ico_pc: starts in a row that ended while preparing the graphics (the "
+                        "pipelines): 1\n") != NULL);
+        CHECK(strstr(s, "test: pipeline set 4\n") != NULL);
+        remove(ends);
+        setenv("ICO_TEST_THEN", "budgetclean", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
+        s = read_file(act);
+        CHECK(strcmp(s, "test 1\nexited with the pipelines created as the frames needed them for "
+                        "that start only\nset: careful") == 0);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_PIPESET");
+        s = read_file(log);
+        CHECK(strstr(s, "this one tries the start-up set again") != NULL);
+        CHECK(strstr(s, "test: pipeline set 6\n") != NULL);
+        remove(act);
+        /* the record path's drawing shaders (vu_main_vs): the pre-pass's
+           kind (the retired extended VU kind folds into it) */
+        remove(ends);
+        run(argv[0], "actvumain", log);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: starts in a row that ended while preparing the graphics (the "
+                        "vertex pre-pass): 1\n") != NULL);
+        CHECK(strstr(s, "test: vu prepass 1\n") != NULL);
+        CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
+        remove(ends);
+        /* Android's next start after a device loss: robust access for that
+           start only; its end without a loss leaves the row, the start
+           after (robust access off again) losing it is the second in a
+           row: [dev] gpu_robust = true for good, the row cleared */
+        remove(act);
+        run(argv[0], "actlossnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: losses 0, robust as set\n") != NULL);
+        CHECK(strstr(s, "lost the graphics device: ") == NULL);
+        setenv("ICO_TEST_THEN", "loss", 1);
+        run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_THEN");
+        CHECK(strcmp(read_file(act), "test 1\n\ngraphics device lost, no loss dump") == 0);
+        r = run(argv[0], "actlossnext", log);
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "ico_pc: starts in a row that lost the graphics device: 1\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous start lost the graphics device; this start only "
+                        "checks the bounds of every buffer and image read (robust access; "
+                        "nothing is written to config.toml); if a start loses it again before "
+                        "one runs without a loss, [dev] gpu_robust = true is written for "
+                        "good\n") != NULL);
         CHECK(strstr(s, "test: config write") == NULL);
-        CHECK(strstr(s, "test: vu plain 1\n") != NULL);
-        /* ... and on a device the table draws with the plain ones only
-           (RhiLimits.vuPlainOnly) nothing is written; its lazy rule alone
-           does not stop the write */
-        run(argv[0], "actvuext", log);
-        setenv("ICO_TEST_TABLE_VU", "Adreno 740, issue 107", 1);
-        r = run(argv[0], "actpipeset", log);
-        unsetenv("ICO_TEST_TABLE_VU");
+        CHECK(strstr(s, "test: losses 1, robust this start\n") != NULL);
+        CHECK(strstr(read_file(ends), "loss 1\n") != NULL);
+        CHECK(strstr(read_file(ends), "loss_robust 1\n") != NULL);
+        setenv("ICO_TEST_THEN", "loss", 1);
+        r = run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_THEN");
         s = read_file(log);
+        CHECK(strstr(s, "test: losses 0, robust as set\n") != NULL);
+        CHECK(strstr(read_file(ends), "loss 1\n") != NULL);
+        CHECK(strstr(read_file(ends), "loss_robust 0\n") != NULL);
+        r = run(argv[0], "actlossnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: starts in a row that lost the graphics device: 2\n") != NULL);
+        CHECK(strstr(s, "test: config write dev.gpu_robust = true\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the graphics device was lost in two starts in a row; this start "
+                        "and every start after it check the bounds of every buffer and image "
+                        "read ([dev] gpu_robust = true in config.toml); delete that line to turn "
+                        "it off again\n") != NULL);
+        CHECK(strstr(s, "test: losses 2, robust for good\n") != NULL);
+        CHECK(read_file(ends)[0] == '\0');
+        /* ... the robust start itself losing it is the second too */
+        setenv("ICO_TEST_THEN", "loss", 1);
+        run(argv[0], "actlossnext", log);
+        r = run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_THEN");
+        CHECK(strstr(read_file(log), "test: losses 1, robust this start\n") != NULL);
+        r = run(argv[0], "actlossnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: starts in a row that lost the graphics device: 2\n") != NULL);
+        CHECK(strstr(s, "test: losses 2, robust for good\n") != NULL);
+        /* ... a start without a loss that did not run robust breaks the
+           row: the start after the robust one keeps it (that one ran with
+           robust access), the start after that one clears it */
+        setenv("ICO_TEST_THEN", "loss", 1);
+        run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_THEN");
+        run(argv[0], "actlossnext", log); /* robust for this start, no loss */
+        run(argv[0], "actlossnext", log); /* robust off, no loss */
+        s = read_file(log);
+        CHECK(strstr(s, "test: losses 0, robust as set\n") != NULL);
+        CHECK(strstr(read_file(ends), "loss 1\n") != NULL);
+        run(argv[0], "actlossnext", log);
+        CHECK(read_file(ends)[0] == '\0');
+        /* ... the write fails: robust access for this start only, the
+           count stays */
+        setenv("ICO_TEST_THEN", "loss", 1);
+        run(argv[0], "actlossnext", log);
+        run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_THEN");
+        setenv("ICO_TEST_PERSIST_FAIL", "1", 1);
+        r = run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_PERSIST_FAIL");
+        s = read_file(log);
+        CHECK(strstr(s, "([dev] gpu_robust = true in config.toml, which could not be written: "
+                        "this start only)") != NULL);
+        CHECK(strstr(s, "test: losses 2, robust this start\n") != NULL);
+        CHECK(strstr(read_file(ends), "loss 2\n") != NULL);
+        remove(ends);
+        /* ... the player set gpu_robust: nothing counted or written */
+        setenv("ICO_TEST_THEN", "loss", 1);
+        run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_THEN");
+        setenv("ICO_TEST_ROBUST_SAID", "[dev] gpu_robust", 1);
+        r = run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_ROBUST_SAID");
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous start lost the graphics device; nothing is counted "
+                        "or written to config.toml: robust access is as the settings say ([dev] "
+                        "gpu_robust)\n") != NULL);
         CHECK(strstr(s, "test: config write") == NULL);
-        CHECK(strstr(s, "[dev] vu_plain_only = true is not written to config.toml: the device "
-                        "table already draws with the smaller 3D shaders (the VU plain variants) "
-                        "only on this device (Adreno 740, issue 107)\n") != NULL);
-        CHECK(strstr(s, "test: vu plain 2\n") != NULL);
-        run(argv[0], "actvuext", log);
-        run(argv[0], "actpipeset", log);
-        run(argv[0], "actvuext", log);
-        setenv("ICO_TEST_TABLE_LAZY", "Adreno 740, issues 93 and 107", 1);
-        r = run(argv[0], "actpipeset", log);
-        unsetenv("ICO_TEST_TABLE_LAZY");
+        CHECK(read_file(ends)[0] == '\0');
+        /* ... a restart after a loss (the desktop's loss order) counts
+           nothing */
+        setenv("ICO_TEST_THEN", "loss", 1);
+        run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_THEN");
+        r = run(argv[0], "actrelaunch", log);
         s = read_file(log);
-        CHECK(strstr(s, "test: config write dev.vu_plain_only = true\n") != NULL);
-        CHECK(strstr(s, "test: vu plain 2\n") != NULL);
-        /* a batch of the vertex pre-pass's (not an extended one): this
+        CHECK(strstr(s, "lost the graphics device: ") == NULL);
+        CHECK(read_file(ends)[0] == '\0');
+        remove(act);
+        remove(ends);
+        /* a batch of the vertex pre-pass's: this
            start draws without it (nothing written, the set as usual); the
            second end in a row writes [dev] vu_prepass = false; a run that
            built the pre-pass's pipelines and finished clears the row */
@@ -2209,7 +2426,6 @@ int main(int argc, char **argv)
               NULL);
         CHECK(strstr(s, "test: config write") == NULL);
         CHECK(strstr(s, "test: vu prepass 1\n") != NULL);
-        CHECK(strstr(s, "test: vu plain 0\n") != NULL);
         CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
         run(argv[0], "actvupre", log);
         r = run(argv[0], "actpipeset", log);
@@ -2230,14 +2446,6 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(strstr(s, "test: config write") == NULL);
         CHECK(strstr(s, "test: vu prepass 1\n") != NULL);
-        /* an extended VU batch's end is issue 107's kind, not the
-           pre-pass's */
-        remove(ends);
-        run(argv[0], "actvuext", log);
-        r = run(argv[0], "actpipeset", log);
-        s = read_file(log);
-        CHECK(strstr(s, "test: vu plain 1\n") != NULL);
-        CHECK(strstr(s, "test: vu prepass 0\n") != NULL);
         remove(ends);
         /* no file: the set; the setting "lazy": none, nothing written */
         r = run(argv[0], "actpipeset", log);
@@ -2263,10 +2471,10 @@ int main(int argc, char **argv)
                         "pipelines 201 of 527 of the start-up set; memory ") != NULL);
         s = read_file(act);
         CHECK(strncmp(s,
-                      "test 1\n" NOTE_2D "\ncompiled: " TIMES_2D
+                      "test 1\n" NOTE_2D "\nset: careful\ncompiled: " TIMES_2D
                       "\nsystem: low memory (onTrimMemory level 15, running critical; signal 1 "
                       "of this run) at pipelines 201 of 527 of the start-up set; memory ",
-                      strlen("test 1\n" NOTE_2D "\ncompiled: " TIMES_2D
+                      strlen("test 1\n" NOTE_2D "\nset: careful\ncompiled: " TIMES_2D
                              "\nsystem: low memory (onTrimMemory level 15, running critical; "
                              "signal 1 of this run) at pipelines 201 of 527 of the start-up set; "
                              "memory ")) == 0);
@@ -2330,7 +2538,7 @@ int main(int argc, char **argv)
     CHECK(strstr(s, "the game starts again at the title when this run has closed, with "
                     "ICO_STARTUP_RETRY=blend:vulkan: ") != NULL);
     CHECK(strstr(s, "test: restart 1\n") != NULL);
-    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=blend:vulkan (parse 0, step 7, backend "
+    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=blend:vulkan (parse 0, step 8, backend "
                     "vulkan, blend fixed)\n") != NULL);
     /* the normal quit path first, then the relaunch */
     CHECK(strstr(s, "test: restart 1") != NULL && strstr(s, "test: the end-of-run steps") != NULL &&
@@ -2350,11 +2558,24 @@ int main(int argc, char **argv)
     s = read_file(log);
     CHECK(r == 0);
     CHECK(strstr(s, "test: restart 1\n") != NULL);
-    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=backend:d3d12 (parse 0, step 8, backend "
+    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=backend:d3d12 (parse 0, step 9, backend "
                     "d3d12, blend fixed)\n") != NULL);
     CHECK(strstr(s, "ico_pc: started the game again") != NULL);
     if (fails) {
         printf("--- lossbackend log ---\n%s\n", s);
+    }
+    /* robust access off by the device's default (the window's
+       ico_diag_set_robust_off_default on desktop Vulkan): the robust step
+       first, its run with robust access on (host_config.c ICO_GPU_ROBUST=1)
+       and the blend as before */
+    r = run(argv[0], "lossrobust", log);
+    s = read_file(log);
+    CHECK(r == 0);
+    CHECK(strstr(s, "test: restart 1\n") != NULL);
+    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=robust:vulkan (parse 0, step 7, backend "
+                    "vulkan, blend not fixed)\n") != NULL);
+    if (fails) {
+        printf("--- lossrobust log ---\n%s\n", s);
     }
     /* no step left: 0 (the window shows its box), nothing at exit */
     r = run(argv[0], "lossnone", log);
