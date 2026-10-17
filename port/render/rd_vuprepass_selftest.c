@@ -1,16 +1,18 @@
-/* rd_vuprepass_selftest.c: the VU vertex pre-pass's self-test (rd.h
- * rd_vuprepass_selftest).
+/* rd_vuprepass_selftest.c: the VU vertex and triangle pre-passes'
+ * self-test (rd.h rd_vuprepass_selftest).
  *
- * The vertex pre-pass (rd_replay_vu.c rd__vu_prepass; docs/port/RENDER.md,
- * "The vertex pre-pass") draws with pipelines no other draw of the port
- * has: a vertex shader writing PointSize into a point list, flat uint4
- * varyings into three RGBA32_UINT targets (48 bytes a pixel), a
- * texture-to-buffer copy a vertex shader reads in the same list, and the
- * triangle stage's record reads.  A driver that cannot make one of those
- * pipelines would leave every VU pipeline to be made on first use (the
- * start-up set holds the triangle stage's keys, not the programs'), and one
- * that miscompiles them would draw the 3D scenery wrong with no error
- * anywhere.  So the pre-pass is checked on the device itself at start.
+ * The pre-passes (rd_replay_vu.c rd__vu_prepass; docs/port/RENDER.md, "The
+ * vertex and triangle pre-passes") draw with pipelines no other draw of the
+ * port has: vertex shaders writing PointSize into a point list, flat uint4
+ * varyings into three RGBA32_UINT targets (48 bytes a pixel) under a colour
+ * mask of one channel (the tick stage), texture-to-buffer copies a vertex
+ * shader of the next pass and the main shaders read in the same list, and
+ * the record's reads in the pixel shader (vu_ps).  A driver that cannot make
+ * one of those pipelines would leave every VU pipeline to be made on first
+ * use (the start-up set holds the main shaders' keys, not the programs'),
+ * and one that miscompiles them would draw the 3D scenery wrong with no
+ * error anywhere.  So the pre-passes are checked on the device itself at
+ * start.
  *
  * The frame, built here and never recorded (rd_fog_path.c's helpers), on
  * SCENE at its real size and scale, list 0, Z GEQUAL with Z write, no
@@ -23,31 +25,48 @@
  *   skin    cluster code 20 (RD_PROG_SKIN, two bones)
  * with vu1_test.c's scene in VU memory (model to GS screen x' = 16x +
  * 2048z, y' = 16y + 2048z, z' = 3 * 2^20 (z - 1), w' = z; its two light
- * matrices).  The pipelines of both replays are made first on the worker
- * threads (two replays that draw nothing name them, rd__pipeline_gather;
+ * matrices); then
+ *   ticks   the prelit mesh again, drawn through a camera blended between
+ *           two ticks' (RdFrame.tickCams, RD_VU_TICK_CAMERAS): at the
+ *           blended camera (w' = z - 2.22, x' = 0.16x + 2048w', y' = 0.16y +
+ *           2048w', z' = 4 * 10^6 z - 8.92 * 10^6) one vertex of each
+ *           triangle is behind the eye, so the region rule drops it, and
+ *           tick 1's camera is the scene's (tick 0's the blended one), where
+ *           every triangle is inside: each is drawn clipped through the tick
+ *           stage (vu_common.hlsli vu_region_rule), in front of the others;
+ *           left out where the fallback is the plain variant (no tick
+ *           cameras there: the two would differ by design)
+ *   sprites four particles (RD_PROG_PARTICLE) across the block in front.
+ * The pipelines of both replays are made first on the worker threads (two
+ * replays that draw nothing name them, rd__pipeline_gather;
  * rd__pipeline_create_gathered).  The frame is replayed without the
- * pre-pass (the programs' entries: the reference) and with it, in the VU shader variant the
- * settings draw with (rd__vu_draw_ext), and the block is read back after
- * each.  The pre-pass passes when its replay drew every command through it
- * (one pre-pass, a pre-pass draw a command, no draw the old way) and the
- * two blocks are equal byte for byte.  A difference, a pipeline that could
- * not be made (its draws then take their programs' entries) or a device
- * error turns the pre-pass off for the run (g_rd.vuPrepass); the window
- * calls this before the start-up set, so the set then holds the programs'
- * keys.  MSAA is held off while it runs, and SCENE is left to start from
- * its clear.  A start whose pre-pass is off (by the settings, the device or
- * the host, rd_set_vu_prepass_off) runs nothing.
+ * pre-passes (the programs' entries with vu_legacy_ps: the reference) and
+ * with them, and the block is read back after each.  The pre-passes pass
+ * when their replay drew every command through them (two passes, the draws
+ * the frame's commands make: a vertex draw a mesh, two a particle command,
+ * the rule and planes stages a mesh and the tick stage's two for the ticks
+ * copy; no draw the old way) and the two blocks are equal byte for byte.
+ * A difference, a pipeline that could not be made (its draws then take
+ * their programs' entries) or a device error turns the pre-passes off for
+ * the run (g_rd.vuPrepass); the window calls this before the start-up set,
+ * so the set then holds the programs' keys.  MSAA is held off while it
+ * runs, and SCENE is left to start from its clear.  A start whose pre-pass
+ * is off (by the settings, the device or the host, rd_set_vu_prepass_off)
+ * runs nothing.
  *
- *   rd: VU pre-pass: on (self-test: prelit, lit and skin byte for byte, 36
- *     vertices in 3 pre-pass draws, N of M pixels drawn) on SCENE WxH at
- *     TWxTH texels in T ms
+ *   rd: VU pre-pass: on (self-test: prelit, lit, skin, the tick cameras and
+ *     particles byte for byte, 48 vertices and 4 sprites in 16 pre-pass
+ *     draws (2 passes, 90 triangle slots), N of M pixels drawn) on SCENE
+ *     WxH at TWxTH texels in T ms
  *   rd: VU pre-pass: off (self-test: the pictures differ: N of M bytes, the
  *     first at texel X,Y: R,G,B,A want R,G,B,A) on SCENE ...
  *
- * ICO_RD_VU_PREPASS_SABOTAGE=1 (tests): the replay with the pre-pass draws
- * its first command's records one texel off (rd__vu_prepass_sabotage), as a
- * driver whose record write or read went wrong would, so the fallback can
- * be run where the pre-pass is right.
+ * ICO_RD_VU_PREPASS_SABOTAGE (tests): the replay with the pre-passes draws
+ * wrong, as a driver whose record write or read went wrong would, so the
+ * fallback can be run where the pre-passes are right
+ * (rd__vu_prepass_sabotage): 1 the first mesh's vertex records one texel
+ * off, tri its triangles' slot A one slot off, ticks the tick stage's tick
+ * 1 tested at tick 0's camera (the ticks copy is then dropped).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,6 +80,8 @@
 #define ST_VERTS 12 /* a mesh's vertices: two strips of 6 */
 
 enum { M_PRELIT, M_LIT, M_SKIN, M_COUNT };
+
+#define ST_SPRITES 4 /* the particle command's */
 
 static const uint8_t kProg[M_COUNT] = {RD_PROG_PRELIT, RD_PROG_LIT, RD_PROG_SKIN};
 static const uint8_t kCode[M_COUNT] = {32, 32, 20};
@@ -180,9 +201,61 @@ static RdMesh makeMesh(int i)
     return rd_create_vu_mesh(&d);
 }
 
+/* the ticks copy's blended camera (the file comment): model to GS screen
+ * as columns (VU memory 16..19, vu_matm) */
+static const double kTickCam[4][4] = {{0.16, 0.0, 0.0, 0.0},
+                                      {0.0, 0.16, 0.0, 0.0},
+                                      {2048.0, 2048.0, 4.0e6, 1.0},
+                                      {-2048.0 * 2.22, -2048.0 * 2.22, -8.92e6, -2.22}};
+
+/* the ticks' cameras (RdFrame.tickCams, vu_common.hlsli vu_ticks: R_k = S_k
+ * St^-1 as four columns): tick 0 the blended camera itself (the identity),
+ * tick 1 the scene's camera (sceneBlock's 16..19) times the blended one's
+ * inverse, so tick 1 sees the mesh as the prelit one is drawn */
+static void tickCams(float out[2][16])
+{
+    memset(out, 0, 2 * 16 * sizeof(float));
+    for (int i = 0; i < 4; i++) {
+        out[0][i * 4 + i] = 1.0f;
+    }
+    /* St (rows r, columns c: St[r][c] = kTickCam[c][r]) is the 2 x 2 block
+     * [[0.16, 0, 2048, -4546.56], [0, 0.16, 2048, -4546.56], [0, 0, 4e6,
+     * -8.92e6], [0, 0, 1, -2.22]]; its inverse by its blocks */
+    double inv[4][4];
+    memset(inv, 0, sizeof(inv));
+    const double a = kTickCam[2][2], b = kTickCam[3][2], c = kTickCam[2][3], d = kTickCam[3][3];
+    const double det = a * d - b * c;
+    /* (z, 1) from (z', w') */
+    const double zz = d / det, zw = -b / det, oz = -c / det, ow = a / det;
+    /* x = (x' - 2048 z - x0 * 1) / 0.16, the same for y */
+    for (int r = 0; r < 2; r++) {
+        const double s = kTickCam[r][r], k2 = kTickCam[2][r], k3 = kTickCam[3][r];
+        inv[r][r] = 1.0 / s;
+        inv[r][2] = -(k2 * zz + k3 * oz) / s;
+        inv[r][3] = -(k2 * zw + k3 * ow) / s;
+    }
+    inv[2][2] = zz;
+    inv[2][3] = zw;
+    inv[3][2] = oz;
+    inv[3][3] = ow;
+    RdVuBlock vb;
+    sceneBlock(&vb);
+    /* R = S inv: column c of R (out[1][c * 4 + r]) */
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) {
+            double v = 0.0;
+            for (int k = 0; k < 4; k++) {
+                v += (double)vb.mem[16 + k][r] * inv[k][c];
+            }
+            out[1][c * 4 + r] = (float)v;
+        }
+    }
+}
+
 /* mesh i's command: RdVuPayload, its VU memory and, for the cluster, the
- * bones (rd_mesh.h's payload; no card verdicts) */
-static bool pushMesh(RdFrame *f, int i, RdMesh mesh)
+ * bones (rd_mesh.h's payload; no card verdicts); ticks: the prelit mesh
+ * through the blended camera, its draw RD_VU_TICK_CAMERAS */
+static bool pushMesh(RdFrame *f, int i, RdMesh mesh, bool ticks)
 {
     uint8_t buf[sizeof(RdVuPayload) + sizeof(RdVuBlock) + sizeof(s_bones)];
     RdVuPayload p;
@@ -195,6 +268,13 @@ static bool pushMesh(RdFrame *f, int i, RdMesh mesh)
     p.boneQw = i == M_SKIN ? 8u : 0u;
     p.qwPerVertex = kQpv[i];
     sceneBlock(&vu);
+    if (ticks) {
+        for (int k = 0; k < 4; k++) {
+            for (int r = 0; r < 4; r++) {
+                vu.mem[16 + k][r] = (float)kTickCam[k][r];
+            }
+        }
+    }
     memcpy(buf, &p, sizeof(p));
     memcpy(buf + sizeof(p), &vu, sizeof(vu));
     memcpy(buf + sizeof(p) + sizeof(vu), s_bones, sizeof(s_bones));
@@ -210,8 +290,60 @@ static bool pushMesh(RdFrame *f, int i, RdMesh mesh)
     c->u[0] = mesh.id;
     c->u[1] = off;
     c->u[2] = size;
-    c->keyLo = (uint32_t)i + 1u;
+    c->u[3] = ticks ? RD_VU_TICK_CAMERAS : 0u;
+    c->keyLo = (uint32_t)i + 1u + (ticks ? 8u : 0u);
     return true;
+}
+
+/* the particle command (rd_mesh.c rd_draw_vu_particles' payload, the
+ * stream as vu_particle.hlsl reads it): four sprites of grey 100, alpha
+ * 128, 2.5 units in front, across the block at GS X 2048 + 6.4 x, half
+ * extent 6 GS pixels, inside the x/y window */
+static bool pushSprites(RdFrame *f)
+{
+    float q[6 + 2 * ST_SPRITES][4];
+    memset(q, 0, sizeof(q));
+    q[0][0] = fbits(ST_SPRITES);
+    qw(q[3], 1024.0f, 1024.0f, 0.0f, 0.1f);      /* clip minimum: x, y, -, w */
+    qw(q[4], 3071.0f, 3071.0f, 0.0f, 100000.0f); /* clip maximum */
+    qw(q[5], 1.0f, 0.1f, 0.1f, 0.0f);            /* size scale, du, dv */
+    for (int k = 0; k < ST_SPRITES; k++) {
+        qw(q[6 + 2 * k], -6.0f + 4.0f * (float)k, 0.0f, 2.5f, 960.0f);
+        qw(q[7 + 2 * k], 0.25f * (float)k, 0.0f, 100.0f, 128.0f);
+    }
+    RdVuPayload p;
+    RdVuBlock vu;
+    memset(&p, 0, sizeof(p));
+    p.code = 18;
+    p.clip = RD_VU_CLIP_REGION;
+    p.prog = RD_PROG_PARTICLE;
+    p.vertsPerBatch = ST_SPRITES;
+    p.qwPerVertex = RD_VU_QW_PARTICLE;
+    p.streamQw = 6 + 2 * ST_SPRITES;
+    sceneBlock(&vu);
+    uint8_t buf[sizeof(RdVuPayload) + sizeof(RdVuBlock) + sizeof(q)];
+    memcpy(buf, &p, sizeof(p));
+    memcpy(buf + sizeof(p), &vu, sizeof(vu));
+    memcpy(buf + sizeof(p) + sizeof(vu), q, sizeof(q));
+    const uint32_t off = rd__frame_payload(f, buf, (uint32_t)sizeof(buf));
+    RdCmd *c = rd__st_push(f, 0, RDC_PARTICLES);
+    if (!c) {
+        return false;
+    }
+    c->b[0] = p.prog;
+    c->b[1] = p.code;
+    c->b[2] = p.clip;
+    c->u[1] = off;
+    c->u[2] = (uint32_t)sizeof(buf);
+    c->keyLo = 16u;
+    return true;
+}
+
+/* whether the old way's VU shaders are the plain ones (no tick cameras: the
+ * ticks copy is left out) */
+static bool fallbackPlain(void)
+{
+    return g_rd.vuPlainOnly;
 }
 
 static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, const RdMesh *m)
@@ -237,9 +369,14 @@ static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, const
          rd__st_push1(f, 0, RDC_PABE, 0) && rd__st_push1(f, 0, RDC_COLCLAMP, 1) &&
          rd__st_push1(f, 0, RDC_SHADE, 1);
     for (int i = 0; i < M_COUNT && ok; i++) {
-        ok = pushMesh(f, i, m[i]);
+        ok = pushMesh(f, i, m[i], false);
     }
-    return ok;
+    if (ok && !fallbackPlain()) {
+        f->hasTickCams = 1;
+        tickCams(f->tickCams);
+        ok = pushMesh(f, M_PRELIT, m[M_PRELIT], true);
+    }
+    return ok && pushSprites(f);
 }
 
 /* ------------------------------------------------------------- the runs */
@@ -248,7 +385,7 @@ static struct {
     RhiTexture read;
     RhiState readState;
     RhiRect rect; /* the block's texels in SCENE */
-    bool sabotage;
+    int sabotage; /* RD_VU_SABOTAGE_* */
 } s_vt;
 
 /* the block's texels in SCENE (rd_blend_selftest.c texelOf's mapping) */
@@ -303,11 +440,24 @@ typedef struct Verdict {
 
 static void readSabotage(void)
 {
+    static const char *const kWhat[] = {"",
+                                        "the first command's vertex records are drawn one "
+                                        "texel off",
+                                        "the first command's triangles' slot A is drawn one "
+                                        "slot off",
+                                        "the tick stage tests tick 1 at tick 0's camera"};
     const char *sb = getenv("ICO_RD_VU_PREPASS_SABOTAGE");
-    s_vt.sabotage = sb != NULL && sb[0] != '\0' && sb[0] != '0';
-    if (s_vt.sabotage) {
-        rd__log("VU pre-pass: ICO_RD_VU_PREPASS_SABOTAGE: the self-test's first command's "
-                "records are drawn one texel off");
+    s_vt.sabotage = RD_VU_SABOTAGE_OFF;
+    if (sb != NULL && strcmp(sb, "tri") == 0) {
+        s_vt.sabotage = RD_VU_SABOTAGE_TRI;
+    } else if (sb != NULL && strcmp(sb, "ticks") == 0) {
+        s_vt.sabotage = RD_VU_SABOTAGE_TICKS;
+    } else if (sb != NULL && sb[0] != '\0' && sb[0] != '0') {
+        s_vt.sabotage = RD_VU_SABOTAGE_VERTEX;
+    }
+    if (s_vt.sabotage != RD_VU_SABOTAGE_OFF) {
+        rd__log("VU pre-pass: ICO_RD_VU_PREPASS_SABOTAGE: in the self-test %s",
+                kWhat[s_vt.sabotage]);
     }
 }
 
@@ -358,19 +508,25 @@ static void runSelftest(RdTargetRec *t, Verdict *v)
         g_rd.vuPrepass = true;
         rd__vu_prepass_sabotage(s_vt.sabotage);
         const bool preOk = refOk && runOnce(&f, t, pre, size);
-        rd__vu_prepass_sabotage(false);
+        rd__vu_prepass_sabotage(RD_VU_SABOTAGE_OFF);
         const RdPerfRecord r = g_rdPerf; /* the record the replay with it closed */
+        /* the draws the frame makes through the pre-passes: pass V a vertex
+         * draw a mesh and two for the sprites, pass T the rule and planes
+         * stages a mesh and the tick stage's two for the ticks copy */
+        const uint32_t meshes = M_COUNT + (fallbackPlain() ? 0u : 1u);
+        const uint32_t wantDraws = meshes + 2u + 2u * meshes + (meshes > M_COUNT ? 2u : 0u);
         g_rd.msaaBlocked = wasBlocked;
         if (!refOk || !preOk) {
             v->on = false;
             snprintf(v->text, sizeof v->text, "the device failed in the replay %s the pre-pass",
                      refOk ? "with" : "without");
-        } else if (r.vuPrePasses != 1 || r.vuPreDraws != M_COUNT || r.vuPreFallbacks != 0) {
+        } else if (r.vuPrePasses != 2 || r.vuPreDraws != wantDraws || r.vuPreFallbacks != 0 ||
+                   r.vuPreSprites != ST_SPRITES) {
             v->on = false;
             snprintf(v->text, sizeof v->text,
-                     "a pipeline could not be made (%u of %d commands through the pre-pass, %u "
-                     "draws the old way)",
-                     r.vuPreDraws, M_COUNT, r.vuPreFallbacks);
+                     "a pipeline could not be made (%u passes, %u of %u pre-pass draws, %u "
+                     "sprites, %u draws the old way)",
+                     r.vuPrePasses, r.vuPreDraws, wantDraws, r.vuPreSprites, r.vuPreFallbacks);
         } else {
             size_t diff = 0, first = 0, drawn = 0;
             for (size_t i = 0; i < size; i++) {
@@ -397,9 +553,12 @@ static void runSelftest(RdTargetRec *t, Verdict *v)
             } else {
                 v->pass = true;
                 snprintf(v->text, sizeof v->text,
-                         "self-test: prelit, lit and skin byte for byte, %u vertices in %u "
-                         "pre-pass draws, %zu of %zu pixels drawn",
-                         r.vuPreVertices, r.vuPreDraws, drawn, size / 4u);
+                         "self-test: prelit, lit, skin%s and particles byte for byte, %u vertices "
+                         "and %u sprites in %u pre-pass draws (%u passes, %u triangle slots), "
+                         "%zu of %zu pixels drawn",
+                         meshes > M_COUNT ? ", the tick cameras" : "", r.vuPreVertices,
+                         r.vuPreSprites, r.vuPreDraws, r.vuPrePasses, r.vuTriSlots, drawn,
+                         size / 4u);
             }
         }
     }

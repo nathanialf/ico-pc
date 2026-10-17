@@ -1,24 +1,24 @@
-/* rd_vuprepass_selftest_test.c: the VU vertex pre-pass's self-test
- * (rd_vuprepass_selftest.c).
+/* rd_vuprepass_selftest_test.c: the VU vertex and triangle pre-passes'
+ * self-test (rd_vuprepass_selftest.c).
  *
  *   rd_vuprepass_selftest_test <on|off|notrun> [plain]
  *
  * <mode> what the self-test must leave: on (it passed), off (it failed:
- * ICO_RD_VU_PREPASS_SABOTAGE=1) or notrun (the pre-pass already off:
- * ICO_RD_VU_PREPASS=0).  On a Vulkan device (77 without one), at a wide
- * scaled scene (the Enhanced preset, 16:9, Full pixel, scale 2: the VU
- * shaders' extended variant) or, with plain, at the Original preset's 4:3
- * and 1x (the plain variant):
+ * ICO_RD_VU_PREPASS_SABOTAGE=1, tri or ticks) or notrun (the pre-pass
+ * already off: ICO_RD_VU_PREPASS=0).  On a Vulkan device (77 without one),
+ * at a wide scaled scene (the Enhanced preset, 16:9, Full pixel, scale 2)
+ * or, with plain, at the Original preset's 4:3 and 1x:
  *   1. rd_vuprepass_selftest leaves the pre-pass on or off as <mode> says
  *      (g_rd.vuPrepass) and returns false only when it turned it off;
  *   2. the summary text (rd_summary_text) says so: "VU pre-pass on
  *      (self-test: ok)", "VU pre-pass off (self-test: the pictures differ"
  *      or "VU pre-pass off by the settings";
  *   3. the reachable set (rd__enumerate_reachable, what the window makes
- *      after it) holds the pre-pass's keys (vu_tri_vs's and the
- *      vu_X_pre_vs entries') and no program entry's mesh key with the
- *      pre-pass on, and none of the pre-pass's keys but the programs'
- *      entries' with it off;
+ *      after it) holds, with the pre-pass on, the main shaders' keys
+ *      (vu_main_vs, vu_particle_main_vs), the vu_X_pre_vs entries' and the
+ *      five record stage keys once each (rule, tick R, tick G, planes,
+ *      sprite), and no program entry's or vu_tri_vs's; with it off none of
+ *      the pre-passes' keys;
  *   4. a frame drawn after it starts SCENE from its clear (no pixel of the
  *      self-test's block is left);
  *   5. no validation error.
@@ -47,25 +47,26 @@ static void checkSet(bool on)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
     const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_CACHE_MAX);
-    uint32_t tri = 0, pre = 0, prog = 0;
+    uint32_t main = 0, pre = 0, stage = 0, prog = 0, tri = 0;
     for (uint32_t i = 0; i < n; i++) {
         const uint8_t vs = keys[i].vs;
-        tri += vs == RD_VS_VU_TRI;
+        main += vs == RD_VS_VU_MAIN || vs == RD_VS_VU_PARTICLE_MAIN;
         pre += rd__vs_is_vu_pre(vs);
-        prog += vs >= RD_VS_VU_FIRST && vs <= RD_VS_VU_LAST && vs != RD_VS_VU_TRI &&
-                vs != RD_VS_VU_PARTICLE;
+        stage += vs >= RD_VS_VU_TRI_RULE_PRE && vs <= RD_VS_VU_PARTICLE_PRE;
+        tri += vs == RD_VS_VU_TRI;
+        prog += vs >= RD_VS_VU_FIRST && vs <= RD_VS_VU_LAST && vs != RD_VS_VU_TRI;
     }
-    printf("  the reachable set: %u keys, %u of vu_tri_vs, %u pre-pass entries, %u of the "
-           "programs' entries\n",
-           n, tri, pre, prog);
+    printf("  the reachable set: %u keys, %u of the main shaders, %u pre-pass entries, %u record "
+           "stages, %u of vu_tri_vs, %u of the programs' entries\n",
+           n, main, pre, stage, tri, prog);
     if (on) {
-        CHECK(tri > 0 && pre > 0 && prog == 0,
-              "with the pre-pass: %u vu_tri_vs keys, %u pre-pass keys, %u program keys", tri, pre,
-              prog);
+        CHECK(main > 0 && pre == 10 && stage == 5 && prog == 0 && tri == 0,
+              "with the pre-pass: %u main keys, %u pre-pass keys, %u stage keys (5), %u program "
+              "keys, %u vu_tri_vs keys",
+              main, pre, stage, prog, tri);
     } else {
-        CHECK(tri == 0 && pre == 0 && prog > 0,
-              "without the pre-pass: %u vu_tri_vs keys, %u pre-pass keys, %u program keys", tri,
-              pre, prog);
+        CHECK(pre == 0 && stage == 0, "without the pre-pass: %u pre-pass keys, %u stage keys", pre,
+              stage);
     }
 }
 

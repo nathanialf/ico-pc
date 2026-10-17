@@ -1091,7 +1091,7 @@ if(ICO_RUN_TESTS)
     # turned off before the set; with it off by the settings
     # (ICO_RD_VU_PREPASS=0) nothing runs
     set(_vst "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vuprepass_selftest.cmake")
-    set(_vst_on "on \\(self-test: prelit, lit and skin byte for byte, [0-9]+ vertices in 3 pre-pass draws, [0-9]+ of [0-9]+ pixels drawn\\) on SCENE [0-9]+x[0-9]+ at [0-9]+x[0-9]+ texels in [0-9.]+ ms")
+    set(_vst_on "on \\(self-test: prelit, lit, skin(, the tick cameras)? and particles byte for byte, [0-9]+ vertices and 4 sprites in [0-9]+ pre-pass draws \\(2 passes, [0-9]+ triangle slots\\), [0-9]+ of [0-9]+ pixels drawn\\) on SCENE [0-9]+x[0-9]+ at [0-9]+x[0-9]+ texels in [0-9.]+ ms")
     set(_vst_off "off \\(self-test: the pictures differ: [0-9]+ of [0-9]+ bytes, the first at texel [0-9]+,[0-9]+: [0-9,]+ want [0-9,]+\\) on SCENE")
     add_test(NAME rd_vuprepass_selftest
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
@@ -1241,4 +1241,43 @@ if(ICO_RUN_TESTS)
                          rd_interp_minlimits
                          PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_mn}"
                                     ENVIRONMENT "${_env_minlimits}")
+endif()
+
+# G1: the per-triangle record's tests.
+if(ICO_RUN_TESTS)
+    # the pre-passes' self-test with the tick stage's verdicts wrong (tick 1
+    # tested at tick 0's camera: the self-test's ticks copy is dropped) and
+    # with the triangles' slot A drawn a slot off: the pictures differ and the
+    # pre-passes are turned off before the set
+    add_test(NAME rd_vuprepass_selftest_ticks
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=off
+                     "-DLINE=${_vst_off}"
+                     "-DEXTRA=rd: VU pre-pass: ICO_RD_VU_PREPASS_SABOTAGE: in the self-test the tick stage"
+                     -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_sabotage_tri
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=off
+                     "-DLINE=${_vst_off}"
+                     "-DEXTRA=rd: VU pre-pass: ICO_RD_VU_PREPASS_SABOTAGE: in the self-test the first command's triangles"
+                     -P "${_vst}")
+    set_tests_properties(rd_vuprepass_selftest_ticks rd_vuprepass_selftest_sabotage_tri
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
+    set_tests_properties(rd_vuprepass_selftest_ticks
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS_SABOTAGE=ticks")
+    set_tests_properties(rd_vuprepass_selftest_sabotage_tri
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS_SABOTAGE=tri")
+    # rd_vustage_ab (test/rd_vustage_ab.cmake): every dump of the corpus
+    # list (build-host/tmp/v0710/before/dumps.txt) replayed the old way (ICO_RD_VU_PREPASS=0, the programs'
+    # entries) and through the record, at Original 4:3 1x and Enhanced 4:3
+    # 2x under ICO_RD_BLEND=fixed: every named target byte for byte; SKIP
+    # without the list, its dumps or a device
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vustage_ab")
+    add_test(NAME rd_vustage_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/build-host/tmp/v0710/before/dumps.txt"
+                     "-DROOT=${CMAKE_SOURCE_DIR}" "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vustage_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vustage_ab.cmake")
+    set_tests_properties(rd_vustage_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
+    if(_env)
+        set_tests_properties(rd_vustage_ab PROPERTIES ENVIRONMENT "${_env}")
+    endif()
 endif()
