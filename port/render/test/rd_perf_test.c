@@ -25,8 +25,10 @@
  *             destroyed either, and only the morphing mesh is uploaded.
  *   Both run without the VU vertex pre-pass (rd__set_vu_prepass), whose
  *   pass and copies the barrier counts leave out;
- *   prepass   the replay's frame replayed 200 times with it: after the
- *             first two replays nothing is created or destroyed, every
+ *   prepass   the replay's frame replayed 200 times with it (the records
+ *             of the replays before the switch, still pending, dropped by
+ *             replay number): after the phase's first two replays nothing
+ *             is created or destroyed, every
  *             replay records one pre-pass with the same vertices, draws
  *             every mesh command through it (no draw the old way) and the
  *             same barriers, and the picture is the one drawn without it,
@@ -375,6 +377,25 @@ static void drain(Sum *first, Sum *rest, unsigned skip, unsigned *seen)
     }
 }
 
+/* drain for a phase that starts with a switch: a record is pushed
+   RHI_FRAMES_IN_FLIGHT replays after its own (rd_perf.c
+   rd__perf_collect_gpu), so the first ones popped after the switch are the
+   replays before it; those (replay number at or below after) are dropped
+   and counted in *stale, and the first skip of the phase's own go to first */
+static void drainAfter(Sum *first, Sum *rest, unsigned skip, unsigned *seen, uint32_t after,
+                       unsigned *stale)
+{
+    RdPerfRecord r;
+    while (rd_perf_pop(&r)) {
+        if (r.replay <= after) {
+            (*stale)++;
+            continue;
+        }
+        add(*seen < skip ? first : rest, &r);
+        (*seen)++;
+    }
+}
+
 /* DISPLAY's pixels (W x H/2 RGBA8) into a new buffer; NULL on failure */
 static uint8_t *readDisplay(void)
 {
@@ -693,6 +714,11 @@ static int synthetic(void)
      * rd__vu_prepass), where the device takes it */
     if (prepassDevice) {
         const uint32_t barriersOff = rest.barrierMax;
+        /* the records still pending are replays without the pre-pass: they
+           are dropped, so the first pre-pass replay's creations (the record's
+           textures and buffers) land in the first two */
+        const uint32_t lastOff = g_rdPerf.replay;
+        unsigned stale = 0;
         rd__set_vu_prepass(true);
         memset(&first, 0, sizeof(first));
         memset(&rest, 0, sizeof(rest));
@@ -700,15 +726,19 @@ static int synthetic(void)
         const RdFrame *pf = rd__last_frame();
         for (int i = 0; i < 200 && pf; i++) {
             rd__replay_frame(pf, 0, true);
-            drain(&first, &rest, 2, &seen);
+            drainAfter(&first, &rest, 2, &seen, lastOff, &stale);
         }
         for (int i = 0; i < RHI_FRAMES_IN_FLIGHT + 1; i++) {
             rd__replay_frame(pf, 0, true);
-            drain(&first, &rest, 2, &seen);
+            drainAfter(&first, &rest, 2, &seen, lastOff, &stale);
         }
         uint8_t *withPre = readDisplay();
         samePixels("the VU vertex pre-pass", ref, withPre);
         free(withPre);
+        printf("prepass: %u records from before the switch dropped\n", stale);
+        CHECK(stale <= RHI_FRAMES_IN_FLIGHT,
+              "prepass: %u records from before the switch (at most %d pending)", stale,
+              RHI_FRAMES_IN_FLIGHT);
         print("prepass (first 2)", &first);
         print("prepass (steady)", &rest);
         printf("prepass: %u..%u vertices a replay, %.1f draws a replay, %llu draws the old way; "

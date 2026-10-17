@@ -350,10 +350,12 @@ program under an environment switch ([Environment switches](#environment-switche
   device has (none under the fixed-function blend, no storage pass or switch under the attachment
   read) and, under the storage read, the storage pass merge's DISPLAY bytes equal to the unmerged
   ones with no more passes or switches; the replay and record phases run without the VU vertex
-  pre-pass (their barrier counts), a `prepass` phase replays the frame with it (nothing created
-  after two replays, one pre-pass a replay with the same vertices, every mesh command through it,
-  steady barriers, DISPLAY byte for byte the picture without it), and the reachable set is made
-  with it (`rd_perf`, `rd_perf_mali`).
+  pre-pass (their barrier counts), a `prepass` phase replays the frame with it (the records still
+  pending from before the switch dropped by replay number, since a record is pushed
+  `RHI_FRAMES_IN_FLIGHT` replays after its own; nothing created after the phase's first two
+  replays, one pre-pass a replay with the same vertices, every mesh command through it, steady
+  barriers, DISPLAY byte for byte the picture without it), and the reachable set is made with it
+  (`rd_perf`, `rd_perf_mali`).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the
   dump the tool tests replay (`rd_pixel`).
 - `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`);
