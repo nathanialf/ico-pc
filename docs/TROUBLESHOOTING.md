@@ -50,21 +50,25 @@ on this screen, see [The game closes by itself](#the-game-closes-by-itself).
 
 If the game stops while it says **Preparing graphics** (it closes, or the
 phone takes you back to its home screen), start it again. The game sees
-that the last start stopped there and, for that one start, takes a
-different path: it skips this screen and prepares each piece of graphics
-the first time the game needs it. The title comes at once; the first
-minutes of play can pause for a moment here and there while graphics are
-prepared, and the game keeps what it prepared, so later starts pause less.
-The start after that tries this screen again, because the stop may not
+that the last start stopped there and, for that one start, prepares the
+graphics more carefully: in small steps, one at a time, writing down what
+it has finished after each step, so nothing finished is prepared twice. If
+the device runs short of memory meanwhile, the game stops preparing, goes
+on to the title and prepares the rest the first time the game needs it.
+The start after that tries the usual way again, because the stop may not
 have been the graphics' fault (closing the game with Task Manager on a
-computer looks the same to it). If the game stops while preparing
-graphics two starts in a row, it keeps to the different path from then on
-and writes that into `config.toml`. On a phone, a stop while the game was
+computer looks the same to it). If the careful start stops there too, the
+game skips this screen from then on and prepares each piece of graphics
+the first time the game needs it, and writes that into `config.toml`. The
+title then comes at once; the first minutes of play can pause for a moment
+here and there while graphics are prepared, and the game keeps what it
+prepared, so later starts pause less. On a phone, a stop while the game was
 in the background (you switched to another app, or closed the game from
-the recent apps) does not count. On the AYN Thor
-and the AYN Odin 2 Portal the game takes the different path on every
-start, and writes nothing. You can also tell the game yourself: close it,
-open `config.toml` from the folder with your saves
+the recent apps) does not count. On the AYN Thor and the AYN Odin 2 Portal
+the game prepares the graphics the careful way on every start; if a start
+stops there, the next one skips this screen for that start, and a second
+stop in a row makes that last. You can also tell the game yourself: close
+it, open `config.toml` from the folder with your saves
 ([where that is](PORTABLE_MODE.md#where-your-saves-are)) in a text editor
 and add these two lines at the end (if the file already has a `[dev]`
 line, add only the second line under it):
@@ -74,37 +78,26 @@ line, add only the second line under it):
 pipeline_set = "lazy"
 ```
 
+With `pipeline_set = "careful"` instead the game keeps this screen but
+always prepares the graphics the careful way.
 To have the game prepare everything at the start again, delete that line.
 If the game still stops, send the log of the start that stopped and the
 log of the start after it: they say what was being prepared and how much
 memory the game was using.
 
 If the whole phone or handheld freezes on **Preparing graphics** and you
-have to restart it, its graphics driver stopped while it got the game's
-largest 3D graphics ready. Restart the device and start the game again:
-the game sees that the last start stopped there and, for that start,
-uses smaller 3D graphics that such a device can prepare. Wide screens then
-show a little less at the old 4:3 edges. If a later start freezes there
-again, the game uses the smaller graphics from then on and writes that
-into `config.toml`. On the AYN Thor and the AYN Odin 2 Portal the game
-uses the smaller graphics from the first start, and prepares them as it
-goes rather than on this screen. If it keeps freezing, send the log from
+have to restart it, restart the device and start the game again: the game
+sees where the last start stopped and, for that start, prepares the
+graphics the careful way, or, when it stopped on the 3D graphics, draws 3D
+scenes another way that looks the same. If a later
+start freezes at the same place again, the game keeps to that from then on
+and writes it into `config.toml`. If it keeps freezing, send the log from
 the start after the freeze: it lists how long each group of graphics took
-to prepare before the freeze.
+to prepare before the freeze and how much memory the game was using.
 
-You can also tell the game to use the smaller 3D graphics yourself, for
-example when the log of the start that froze ends with a line that has
-`creating pipelines` in it. Close the game, open `config.toml` from the
-folder with your saves ([where that is](PORTABLE_MODE.md#where-your-saves-are))
-in a text editor and add these two lines at the end (if the file already
-has a `[dev]` line, add only the second line under it):
-
-```toml
-[dev]
-vu_plain_only = true
-```
-
-To try the larger graphics again, delete that line.
+If your `config.toml` has a line `vu_plain_only = true` or
+`vu_extended = true`, the game ignores it: every device now prepares the
+same 3D graphics. You can delete the line.
 
 ## The screen stays black
 
@@ -282,8 +275,10 @@ image.
 
 **The game closed and started again at the title screen.** The graphics
 card stopped responding while you played. On Windows, Linux and Mac the
-game then starts itself again with simpler blending, which some cards
-handle better when pushed hard; if that card stops again, on Windows it
+game then starts itself again with safer graphics settings, one more each
+time the card stops: first a simpler way of drawing 3D scenes that looks
+the same, then extra checks on every read the graphics card makes, which
+some cards need when pushed hard; if that card stops again, on Windows it
 tries the other graphics driver type. It starts at the title screen, so
 anything you had not saved is lost, as when you quit. Nothing is changed
 in your settings: the next start is normal again. If it keeps happening,
@@ -312,15 +307,20 @@ left off if it was not finished, and the game then starts as usual.
 
 **"The graphics driver stopped responding while the game was drawing ..."**
 (on a phone) The phone's graphics driver failed while drawing a picture,
-and the game has to close; your last save is kept. Start the game again. If
-it happens every time at the same place, report it and attach the newest
-file in `logs` that starts with `report-` (the message names it): it shows
-what was being drawn.
+and the game has to close; your last save is kept. Start the game again.
+That start has the graphics driver check every read it makes, for that
+start only, which can keep it from stopping (the game may run a little
+slower). If the graphics driver stops again in that start or in the one
+after it, the game keeps the checks on from then on and writes
+`gpu_robust = true` into `config.toml`; delete that line to turn them off
+again. If it happens every time at the same place, report it and attach
+the newest file in `logs` that starts with `report-` (the message names
+it): it shows what was being drawn.
 
 **"The graphics card stopped responding ..."** The graphics driver was
 reset, updated or crashed while you played, and the game has to close.
-When the message also says the game restarted itself with simpler blending
-and the card still stopped, the game already tried that. Your last save is
+When the message also says the game restarted itself with safer graphics
+settings and the card still stopped, the game already tried those. Your last save is
 kept, and the log says why. The message stays until you close it. Start
 the game again. This is usually a driver reset: if it keeps happening,
 update the graphics driver and send the newest file in `logs` that starts
@@ -343,9 +343,10 @@ afterwards:
 - `gpu_checkpoints=true` makes the log say more exactly what the graphics
   card was doing when it stopped. The game may run a little slower with it.
 - `gpu_robust=true` makes the graphics card check every read and write the
-  game asks for. The game may run a little slower with it. On a phone or
-  tablet part of it is on already: `gpu_robust=true` turns all of it on,
-  `gpu_robust=false` turns it off.
+  game asks for. The game may run a little slower with it. It is off unless
+  you turn it on; on a phone the game turns it on by itself for one start
+  after the graphics driver stopped responding (see above), and
+  `gpu_robust=false` keeps it off.
 
 ## The game closes by itself
 

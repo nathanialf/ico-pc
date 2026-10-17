@@ -758,8 +758,27 @@ start-up screen, unless one of the rules below skips it (`port/platform/window_h
 `rd: pipelines: no start-up set <why>: pipelines are made as the game needs them`; there is no
 start-up screen (the title comes at once), and each pipeline is made when a frame first needs it,
 on the thread that draws, the frame waiting for its compile (`rd__get_pipeline`). The summary line's
-renderer part ends with `pipelines the start-up set` or `pipelines on first use (no start-up set)`
-(`rd_summary_text`).
+renderer part ends with `pipelines the start-up set`, `pipelines the careful start-up set`,
+`pipelines the careful start-up set, stopped at its budget (the rest on first use)` or `pipelines
+on first use (no start-up set)` (`rd_summary_text`).
+
+The window's choice (`port/platform/window_host.c` (`ico_window_open`)), once the device is made:
+the careful set on a device of the table (`RhiLimits.carefulPipelines`), by `[dev] pipeline_set =
+"careful"`, or for one start after a full set's end ([PLATFORM.md](PLATFORM.md#diagnostics));
+no set for the rows of the table below; else the full set. For the careful set it calls
+`rd_set_pipeline_policy(rd_pipeline_policy_careful())` before `rd_precreate_pipelines` (the memory
+function, `rd_set_memory_fn(ico_diag_process_memory)`, is set before `rd_init`) and logs one line
+with the policy's values, `<why>` as in the table's lines:
+
+    window: pipelines: careful start-up set on this device (Adreno 740, issues 93 and 107): batches of 8 on 1 thread, the cache written after each, stopped past 128 MB of growth
+
+(`by the settings ([dev] pipeline_set = "careful")`, `(the previous start ended while preparing
+them; for this start only)`). `[dev] pipeline_set = "full"` does not override the table (`window:
+[dev] pipeline_set = "full" does not override the device table (<reason>): the careful set`). The
+start-up activity file then says `set: careful`, so an end inside the careful set makes the next
+start lazy rather than careful again. When the budget stops the set (`rd_pipelines_lazy_on`), the
+rest of the run is recorded as a lazy run's for that start only
+(`ico_diag_startup_activity_budget_stop`).
 
 With the set made, a pipeline a draw needs later is a key the set did not hold, made on the thread
 that draws while the replay waits; on a driver that takes seconds a pipeline (up to 3.4 s for a VU
@@ -806,11 +825,10 @@ step (the `slow step` line's `texture decodes`) and the replay's texture and mes
 
 | the set is skipped | `<why>` in the line |
 | --- | --- |
-| on a device of the table (`RhiLimits.carefulPipelines`, the careful column of `kVuPlainOnly` in `port/rhi/vk/vk_device.c`); `[dev] pipeline_set = "full"` does not override it (a `window:` line says so) | `on this device (Adreno 740, issues 93 and 107)` |
 | the set under a policy with a memory budget (below) grew the process past it, or a batch took over 10 s: the rest of the set | `(memory budget: the process grew <g> MB, from <a> to <b> MB, past the policy's <m> MB, after <i> of <n> keys)` or `(memory budget: a batch of <k> took <t> s, past 10 s; ...)` |
 | `[dev] pipeline_set = "lazy"` (`ICO_PIPELINE_SET=lazy`, [CONFIG.md](CONFIG.md#ico-pcini)) | `by the settings ([dev] pipeline_set = "lazy")` |
-| the previous start, of any version, ended without a word in the foreground while a pipeline was being made, the first such end in a row: this start only, nothing written ([PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them; for this start only)` |
-| the same, the second end in a row: the setting is written once the device is made, not on a device of the table ([PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them; [dev] pipeline_set = "lazy" from now on)` |
+| the previous start, of any version, ended without a word in the foreground while a pipeline of its careful set was being made (its activity file says `set: careful`), the first such end in a row: this start only, nothing written (after a full set's end the next start is careful instead, above; [PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them in the careful set; for this start only)` |
+| such an end, whatever the set, the second in a row: the setting is written once the device is made ([PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them; [dev] pipeline_set = "lazy" from now on)` |
 | the last run, of the same version, ran without the set and ended, or exited from it | `(the last run made them that way)` |
 | the crash order's `lazy` step | `(a restart after a graphics driver crash)` |
 
@@ -835,7 +853,7 @@ stays on the same device):
 
 | device | match | reason |
 | --- | --- | --- |
-| Qualcomm Adreno 740 on Qualcomm's own driver (not Turnip) | vendor 0x5143, device 0x43050A01 (what both devices report; not Mesa's other 0x4305xxxx ids: 0x43050A00 the Adreno A32, 0x43050B00 the 740v3, 0x43051401 the Adreno 750) | issue 93 (AYN Odin 2 Portal) and issue 107 (AYN Thor), driver 512.676.53: both logs ended inside the set's 2D keys. The set was then ordered as enumerated: the 327 screen keys, the 176 VU keys, then the 24 shadow, fog, water, CRT and blur keys (527 at Original 4:3 with the fixed-function blend). The Odin 2 Portal stopped at 201 finished (the batch of keys 193 to 224 in flight), its memory falling from 194 MB to 47 MB over 22 s without progress until the system ended the app, with no crash report; the Thor froze the whole device at 307 or later (the batch of keys 289 to 320). No one module explains it (the font sheet's fragment shader, 70,444 words, and the movie decoder's, 47,609 words, were as large in a release that started on the Thor), so on this device the set is not made at all |
+| Qualcomm Adreno 740 on Qualcomm's own driver (not Turnip) | vendor 0x5143, device 0x43050A01 (what both devices report; not Mesa's other 0x4305xxxx ids: 0x43050A00 the Adreno A32, 0x43050B00 the 740v3, 0x43051401 the Adreno 750) | issue 93 (AYN Odin 2 Portal) and issue 107 (AYN Thor), driver 512.676.53: both logs ended inside the set's 2D keys. The set was then ordered as enumerated: the 327 screen keys, the 176 VU keys, then the 24 shadow, fog, water, CRT and blur keys (527 at Original 4:3 with the fixed-function blend). The Odin 2 Portal stopped at 201 finished (the batch of keys 193 to 224 in flight), its memory falling from 194 MB to 47 MB over 22 s without progress until the system ended the app, with no crash report; the Thor froze the whole device at 307 or later (the batch of keys 289 to 320). No one module explains it (the font sheet's fragment shader, 70,444 words, and the movie decoder's, 47,609 words, were as large in a release that started on the Thor), so on this device the set is made under the careful policy (above) |
 
 **The pipeline cache.** Without the set the creations are counted into batches: a batch closes at
 the window's next pump once no pipeline was made for 0.5 s, or 2 s after its first

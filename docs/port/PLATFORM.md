@@ -379,9 +379,11 @@ Windows, Linux and macOS the handler then starts the program again at once, with
 folder or the settings (an end without a crash report has a step of its own, which writes one
 on the second such end in a row: below). The steps come in order, each taken only when the run before crashed:
 `cache` (the crashed run had loaded the pipeline cache file: it is deleted and the same backend
-tries again), `noprepass` (the note names a pipeline of the VU vertex pre-pass: a ` pre` key, a
-`vu_X_pre_vs` module or the triangle stage's `vu_tri_vs` or `vu_tri_plain_vs`,
-`startup_retry_note_has_vu_pre`; the same backend without the pre-pass, `ICO_RD_VU_PREPASS=0`
+tries again), `noprepass` (the note names a pipeline of the VU vertex pre-pass or of the record
+path that draws from it: a ` pre` key, a `_pre_vs` module (the pre-pass's entries, the record
+stages' `vu_tri_*_pre_vs` and `vu_particle_pre_vs`), a `_main_vs` module (`vu_main_vs`,
+`vu_particle_main_vs`, made only with the pre-pass) or the old triangle stage's `vu_tri_vs` or
+`vu_tri_plain_vs`, `startup_retry_note_has_vu_pre`; the same backend without the pre-pass, `ICO_RD_VU_PREPASS=0`
 from `ico_ini_export`, which makes none of them, [RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)),
 `fixedblend` (the note names a pipeline whose `dst` field is nonzero, an exact-blend
 pass with a fragment shader interlock or rasterizer-ordered view entry: the same backend with the
@@ -421,9 +423,13 @@ logs the loss and the renderer's pass ring, then asks for the loss step
 lost the device: `lossnoprepass` (the same backend without the VU vertex pre-pass,
 `ICO_RD_VU_PREPASS=0`, when the losing run drew with it after its self-test:
 `ico_diag_set_vu_prepass`, `StartupRetryRun.prepassWasOn`), `robust` (the same backend with robust
-buffer and image access, `ICO_GPU_ROBUST=1`, when the losing run drew with it off by the platform's
-default, `StartupRetryRun.robustOffDefault`, which no caller sets: the default is off on every
-platform, and Android, where it was the reason, does not relaunch), `blend` (the same backend with the fixed-function blend, `ICO_RD_BLEND=fixed`, so
+buffer and image access, `ICO_GPU_ROBUST=1`, when the losing run drew with it off by the device's
+default, `StartupRetryRun.robustOffDefault`: the window sets it once the device is made from
+`RhiLimits.robustText` starting `off (the default` (`ico_diag_set_robust_off_default`), so every
+Vulkan run without `gpu_robust` takes it and Direct3D 12, whose text is NULL, never does; the
+step's run sets `ICO_GPU_ROBUST_AFTER_LOSS=1` before the device is made, as the window has already
+dropped `ICO_STARTUP_RETRY`, so its device line says `robust access on, ... (the restart after the
+graphics card stopped responding)` (`port/rhi/vk/vk_device.c`)), `blend` (the same backend with the fixed-function blend, `ICO_RD_BLEND=fixed`, so
 no fragment shader interlock or rasterizer-ordered view passes; skipped when the losing run already
 drew with it, the default, or the player chose the blending with `blend=` or `ICO_RD_BLEND`), `backend` (the
 other backend, Direct3D 12 from Vulkan or Vulkan from Direct3D 12, with the fixed-function blend; in
@@ -437,7 +443,8 @@ again at exit, after the end-of-run steps, with `ICO_STARTUP_RETRY=blend:<backen
 handler registered before the end-of-run steps (`port/platform/diag_host.c`
 (`loss_relaunch_at_exit`, `loss_relaunch_register`)). When it cannot start the program, Windows and
 Linux show a box. Without a step the window shows its box, which says the game already restarted
-itself with simpler blending when the run was a loss step's. Android and iOS keep the box. The new
+itself when the run was a loss step's. Android and iOS keep the box; Android's next start takes
+the `robust` step's measure itself (below). The new
 run starts at the title as a fresh launch (what was not saved was lost with the card, as at a quit),
 appends to the log, logs
 `ico_pc: restarted after the graphics card stopped responding: <what this run does>`, and gets
@@ -460,15 +467,16 @@ relaunch fails (`port/platform/test/diag_test.c` (`loss_child`)).
 An end without a crash report (the system or the driver ends the process) is caught by the start-up
 activity file, `logs/startup-activity.txt`: the version's line, then the activity note. While the
 start-up pipeline set is created (`ICO_DIAG_ACTIVITY_STARTUP`) each batch's note (its range of the
-set and its first and last key, [RENDER.md](RENDER.md#pipelines)) replaces the text, and the file is
-deleted when the set is done; a lazy run (`ICO_DIAG_ACTIVITY_LAZY`) records
+set and its first and last key, [RENDER.md](RENDER.md#pipelines)) replaces the text (a careful
+set's file adds `set: careful` after it), and the file is deleted when the set is done; a lazy run (`ICO_DIAG_ACTIVITY_LAZY`) records
 every first-use pipeline and a line between them for the whole run. The file is opened once when
 the recording starts and closed when it ends; each note is one write at the file's start, padded
 with NULs over a longer text before it, then the file is cut to the note, so it reads as one whole
 note even when the process is ended between the two (`port/platform/diag_host.c` (`act_write`,
 `act_open`, `act_close`)). The next start of the same version logs
-`ico_pc: the previous run ended while: <note>` and creates the pipelines as the frames need them
-(for how long: the chain's step below);
+`ico_pc: the previous run ended while: <note>` and makes the pipelines as the chain's step below
+says (carefully or as the frames need them; a note that is no end while making them, as the frames
+need them while the file says the run was lazy);
 another version's file is logged (`ico_pc: the previous run ended while: <note> (version <old>);
 trying the start-up set again on <new>`, without the last clause when the note is an end while
 making the pipelines, which the chain's step below counts whatever the version); a lazy run's clean
@@ -482,59 +490,104 @@ the driver may have killed the process, or the player swiped the app away, the s
 the background, or Task Manager did. So the first one changes one start only, and the second in a
 row makes it last. A note that names a pipeline being made (`creating pipeline ...`, `creating
 pipelines ...` or `creating the start-up pipelines`), from a start of any version that was not a
-restart after a crash report and was in the foreground, counts one end in a row of its kind: an
-extended VU batch's (` ext 1`, `startup_retry_note_has_vu_ext`), else the VU vertex pre-pass's (a
-` pre` key or a `vu_X_pre_vs` or `vu_tri` module, `startup_retry_note_has_vu_pre`), or else the
-pipelines'. The counts live beside the activity file in `logs/startup-activity-ends.txt`
-(`pipelines <n>`, `vu_ext <n>`, `vu_pre <n>`), and each counted end logs `ico_pc: starts in a row
-that ended while preparing the graphics (the pipelines): 1` (`(the extended VU shaders)` and `(the
-vertex pre-pass)` for the others) (`port/platform/diag_host.h` (`ico_diag_startup_end_count`);
-`port/platform/diag_host.c` (`ends_count_prev`)). A count file that cannot be written is logged
-once a run: `ico_pc: the count of starts that ended while preparing the graphics could not be
-written to <path> (pipelines <n>, extended VU shaders <n>, vertex pre-pass <n>)` (`ends_write`).
-The pre-pass's kind works as the extended VU kind does: the first end makes the next start, and
-only that one, draw without the pre-pass (`ico_diag_startup_vu_prepass`, `rd_set_vu_prepass_off`;
-its self-test is then not run) and logs `ico_pc: the previous start ended while the graphics
-driver compiled the 3D vertex pre-pass's shaders (<note>); this start only draws without it
-(nothing is written to <path>); if a start that compiles them ends there again, [dev] vu_prepass =
-false is written for good`; the second in a row writes `[dev] vu_prepass = false` to
-`config.toml` (`port/platform/window_host.c` (`vu_prepass_persist`)) and logs `... this start and
-every start after it draw without it ([dev] vu_prepass = false in <path>); delete that line to try
-it again`. That start builds the set as usual, and its notes and the self-test's pipelines are
-written through to the disc before each is made (`act_sync_note`). The first pipelines' end makes the next start, and only that one, skip the
-start-up set (`ico_diag_startup_pipeline_set`, `ICO_DIAG_PIPESET_LAZY_ONCE`); once the device is
-made it logs `ico_pc: the previous start ended while preparing the graphics (<note>); this start
-only makes the pipelines as the game needs them, with no start-up set (nothing is written to
-<path>); if this start also ends while preparing them, [dev] pipeline_set = "lazy" is written for
-good` (`ico_diag_startup_end_persist`); its notes between two creations and its clean exit say
-`for this start only`, so the start after a clean exit logs `ico_pc: the previous run made the
-pipelines as the frames needed them for that start only; this one tries the start-up set again`,
-and the start after one ended between two creations `ico_pc: the previous run ended while: running
-with the pipelines created as the frames need them for this start only (none was being created);
-that lazy run was for that start only, so this one tries the start-up set again`. A second end in
-a row (that lazy start also ended inside a pipeline) writes `[dev] pipeline_set = "lazy"` to
-`config.toml` once the device is made and logs `ico_pc: the previous start ended while preparing
-the graphics (<note>); this start and every start after it make the pipelines as the game needs
-them, with no start-up set ([dev] pipeline_set = "lazy" in <path>); delete that line to try the
-start-up set again` (`ico_diag_startup_end_persist`; `port/platform/window_host.c`
-(`pipeline_set_persist_lazy`)), and the renderer's line says `[dev] pipeline_set = "lazy" from now
-on`. The count stays in the file until then: a start that is due but fails before the device is
-made leaves it, and the next end in a row is due again. When the write fails the line ends `,
-which could not be written: this start only`, the renderer's line says `[dev] pipeline_set =
-"lazy" could not be written, so for this start only`, the lazy run's notes say `for this start
-only`, and the count stays, so a further end is due again. With `[dev] pipeline_set = "lazy"`
-already set the pipelines' count is cleared and no line about it follows. It is the crash order's `lazy` step made to last, for the ends a
-crash handler never sees (the system ending the app, a device that freezes); a crash with a report
-keeps its own order above. The setting outlives the version, as `[dev] vu_plain_only` does; deleting
-the line makes the next start try the set again ([RENDER.md](RENDER.md#the-start-up-set)).
+restart after a crash report and was in the foreground, counts one end in a row of its kind: the
+VU vertex pre-pass's (`startup_retry_note_has_vu_pre`, the modules of the `noprepass` step above,
+`vu_main_vs` among them: a batch of the largest VU modules is this kind), or else the pipelines'.
+An end inside an extended VU batch of a release that had them (` ext 1`, `vu_X_vs`) names none of
+those modules and counts as the pipelines'. The counts live beside the activity file in
+`logs/startup-activity-ends.txt` (`pipelines <n>`, `vu_pre <n>`, `loss <n>`, `loss_robust
+<0|1>`; an older file's `vu_ext <n>` line is dropped), and each counted end logs `ico_pc: starts in
+a row that ended while preparing the graphics (the pipelines): 1` (`(the vertex pre-pass)` for the
+other) (`port/platform/diag_host.h` (`ico_diag_startup_end_count`); `port/platform/diag_host.c`
+(`ends_count_prev`, `loss_count_prev`)). A count file that cannot be written is logged once a run:
+`ico_pc: the count of starts that ended while preparing the graphics could not be written to
+<path> (pipelines <n>, vertex pre-pass <n>, device losses <n>)` (`ends_write`).
+
+The next start's step, by kind (`ico_diag_startup_pipeline_set`, `ico_diag_startup_vu_prepass`,
+`ico_diag_startup_end_persist`; `port/platform/window_host.c` (`ico_window_open`)):
+
+| the previous start | the first in a row: this start only, nothing written | the second in a row: written to `config.toml` |
+| --- | --- | --- |
+| ended inside a pipeline or batch of the pre-pass or the record path | draws without the pre-pass (`rd_set_vu_prepass_off`; its self-test not run), builds the set as the device does | `[dev] vu_prepass = false` (`vu_prepass_persist`) |
+| ended inside any other pipeline, its file without `set: careful` (the full set, a lazy run, a file of a release without the line) | makes the set under the careful policy (`ICO_DIAG_PIPESET_CAREFUL_ONCE`, `rd_pipeline_policy_careful`) | `[dev] pipeline_set = "lazy"` (`pipeline_set_persist_lazy`), this start lazy (`ICO_DIAG_PIPESET_LAZY_NOW`) |
+| ended inside any other pipeline, its file with `set: careful` (the device table's careful set, `pipeline_set = "careful"`, or the careful start the row above gave) | makes no set: lazy (`ICO_DIAG_PIPESET_LAZY_ONCE`), its notes and clean exit saying `for this start only` | the same |
+| lost the graphics device, on Android, `gpu_robust` not set | draws with robust access on (`ICO_GPU_ROBUST=1`, `ICO_GPU_ROBUST_AFTER_LOSS=1`) | `[dev] gpu_robust = true` (`gpu_robust_persist`), this start robust |
+
+The careful set's start writes `set: careful` after the note in the activity file
+(`ico_diag_startup_activity_careful`), which is how the next start tells the two apart, so the
+first end of a full set makes the next start careful and the first end of a careful set makes it
+lazy; the second end in a row writes `lazy` whatever the set was. The lines: the pre-pass's kind
+`ico_pc: the previous start ended while the graphics driver compiled the 3D vertex pre-pass's
+shaders (<note>); this start only draws without it (nothing is written to <path>); if a start that
+compiles them ends there again, [dev] vu_prepass = false is written for good`, the second `...
+this start and every start after it draw without it ([dev] vu_prepass = false in <path>); delete
+that line to try it again`; the pipelines' careful step `ico_pc: the previous start ended while
+preparing the graphics (<note>); this start only makes the start-up set the careful way (small
+batches on one thread, the pipeline cache written after each; nothing is written to <path>); if
+this start also ends while preparing them, [dev] pipeline_set = "lazy" is written for good`, the
+renderer's `window: pipelines: careful start-up set (the previous start ended while preparing them; for
+this start only): batches of 8 on 1 thread, the cache written after each, stopped past 128 MB of
+growth`; the lazy step `ico_pc: the previous start ended while preparing the graphics (<note>);
+this start only makes the pipelines as the game needs them, with no start-up set (nothing is
+written to <path>); if this start also ends while preparing them, [dev] pipeline_set = "lazy" is
+written for good`, the renderer's `rd: pipelines: no start-up set (the previous start ended while
+preparing them in the careful set; for this start only): ...`; the second `ico_pc: the previous
+start ended while preparing the graphics (<note>); this start and every start after it make the
+pipelines as the game needs them, with no start-up set ([dev] pipeline_set = "lazy" in <path>);
+delete that line to try the start-up set again` and the renderer's `[dev] pipeline_set = "lazy"
+from now on`. The lazy run's notes between two creations and its clean exit say `for this start
+only`, so the start after a clean exit logs `ico_pc: the previous run made the pipelines as the
+frames needed them for that start only; this one tries the start-up set again`, and the start
+after one ended between two creations `ico_pc: the previous run ended while: running with the
+pipelines created as the frames need them for this start only (none was being created); that lazy
+run was for that start only, so this one tries the start-up set again`. All of these lines come
+once the device is made, but the loss's (before it). The count stays in the file until the second
+writes its setting: a start that is due but fails before the device is made leaves it, and the
+next end in a row is due again. When the write fails the line ends `, which could not be written:
+this start only`, the renderer's line says `[dev] pipeline_set = "lazy" could not be written, so
+for this start only`, the lazy run's notes say `for this start only`, and the count stays, so a
+further end is due again. With `[dev] pipeline_set = "lazy"` already set the pipelines' count is
+cleared and no line about it follows. It is the crash order's `lazy` step made to last, for the
+ends a crash handler never sees (the system ending the app, a device that freezes); a crash with a
+report keeps its own order above. The setting outlives the version; deleting the line makes the
+next start try the set again ([RENDER.md](RENDER.md#the-start-up-set)).
+
+A careful set that its memory budget stopped (`rd_precreate_pipelines` called `rd_pipelines_lazy`,
+`rd_pipelines_lazy_on`) is a set that ended as it should: the window calls
+`ico_diag_startup_activity_budget_stop`, which clears the pipelines' row as a finished set does and
+records the rest of the run as a lazy run for this start only (`ICO_DIAG_ACTIVITY_LAZY`, the
+`set: careful` line kept), so a freeze in a later first-use pipeline is named and counted (the
+next start lazy for that start) and a clean exit makes the next start try the set again.
+
+Android cannot start the game again after a device loss, so the `robust` loss step's measure
+comes at the next start instead (`port/platform/window_host.c`, `#ifdef __ANDROID__`): the
+activity file's loss line (`loss dump: <zip>` or `graphics device lost, no loss dump`,
+`ico_diag_note_device_loss`) counts one more in the row of starts that lost the device, whatever
+the version or the note (`ico_pc: starts in a row that lost the graphics device: 1`;
+`loss_count_prev`); after the loss bisect and before the renderer starts, the first in a row sets
+`ICO_GPU_ROBUST=1` and `ICO_GPU_ROBUST_AFTER_LOSS=1` for this start (`ico_pc: the previous start
+lost the graphics device; this start only checks the bounds of every buffer and image read
+(robust access; nothing is written to <path>); if a start loses it again before one runs without a
+loss, [dev] gpu_robust = true is written for good`) and marks the count file (`loss_robust 1`);
+that start's end without a loss leaves the row (the mark is read and cleared), any other start
+without a loss ends it. So the second in a row is a loss in the robust start itself or in the
+start after it, with robust access off again: it writes `[dev] gpu_robust = true` and logs `ico_pc:
+the graphics device was lost in two starts in a row; this start and every start after it check the
+bounds of every buffer and image read ([dev] gpu_robust = true in <path>); delete that line to turn
+it off again`. With `gpu_robust` set by the player (the variable already in the environment)
+nothing is written and the row is cleared (`ico_pc: the previous start lost the graphics device;
+nothing is counted or written to <path>: robust access is as the settings say ([dev]
+gpu_robust)`). A restart after a crash or a loss (desktop) counts nothing. The rest of the row's
+rules are the ends': the count file, the failed write (`, which could not be written: this start
+only`, robust access for that start only, the count kept).
 
 What breaks a row: an end in the background (below) breaks the row of its kind; any other note in
 the file (the run ended between two creations, or in the loss bisect) breaks the pipelines' row; a
-start-up set that finished, or a lazy run's normal exit, clears the pipelines' row, the extended
-VU row too when that run built extended VU pipelines, and the pre-pass's row when it built one of
-the pre-pass's (`ends_clean`). The plain run an extended VU
-end gives builds none, so it leaves that row as it was, and the next start that compiles them and
-ends there again is the second. A restart after a crash report counts nothing.
+start-up set that finished (or stopped at its budget), or a lazy run's normal exit, clears the
+pipelines' row, and the pre-pass's row when it built one of the pre-pass's or the record path's
+pipelines (`ends_clean`). The start without the pre-pass that its first end gives builds none, so
+it leaves that row as it was, and the next start that compiles them and ends there again is the
+second. A restart after a crash report counts nothing.
 
 The background mark (Android and iOS only: the desktops send no lifecycle events, so an end there
 in the background counts): while the activity file records, the app going to the background (the
@@ -562,46 +615,28 @@ background: <line>` (`ico_diag_startup_activity_background`). A mark beside any 
 run ended between two creations, a restart after a crash report) is logged as `ico_pc: the
 previous run was in the background when it ended (<line>)` and decides nothing.
 
-On a device whose table entry already rules a kind nothing is ever written for it, and its count
-is cleared: the setting would be redundant and would outlive a change of the table. For the
-pipelines that is the lazy column (`RhiLimits.lazyPipelines`, the Adreno 740 row of
-`port/rhi/vk/vk_device.c`); the first end logs `ico_pc: the previous start ended while preparing
-the graphics (<note>); nothing is counted or written to <path>: the device table already makes the
-pipelines as the game needs them on this device (Adreno 740, issues 93 and 107)`, and its lazy run
-follows the table, its notes without `for this start only`; the second in a row logs `ico_pc: the
-second start in a row ended while preparing the graphics (<note>); [dev] pipeline_set = "lazy" is
-not written to <path>: the device table already makes the pipelines as the game needs them on this
-device (Adreno 740, issues 93 and 107)`. For the extended VU kind it is the plain-only column
-(`RhiLimits.vuPlainOnly`): `... [dev] vu_plain_only = true is not written to <path>: the device
-table already draws with the smaller 3D shaders (the VU plain variants) only on this device
-(Adreno 740, issue 107)`.
+`ico_diag_startup_end_persist` takes a rule that already holds for a kind (`table`): nothing is
+then written and the count is cleared, with `ico_pc: the previous start ended while preparing the
+graphics (<note>); nothing is counted or written to <path>: <rule> (<table>)` or, for the second,
+`ico_pc: the second start in a row ended while preparing the graphics (<note>); <setting> is not
+written to <path>: <rule> (<table>)`. The window passes none for the pipelines and the pre-pass
+(the device table's careful set is not the lazy one the setting writes) and `[dev] gpu_robust` for
+the losses when the player set it (`port/platform/test/diag_test.c` keeps the rule's lines
+tested).
 
-A batch's note, and any note naming an extended VU pipeline, is written through to the disc
-(fsync, `act_sync_note`) before the driver starts on it, and in a lazy run every first-use
-pipeline's note, so it is still there after a device that froze was rebooted (issue 107). Each
-batch costs one sync: its `compiled: ` line (below) is written without one and goes to the disc
-with the next note's sync (`act_write_sync`, `act_unsynced`). An end inside a batch of the VU
-vertex shaders' extended variants follows the same rule with its own count and setting: the first
-makes the next start, unless it is a restart after a crash report, draw with the plain variants
-for that start only (`ico_pc: the previous start ended while the graphics driver compiled the
-largest 3D shaders (the VU extended variants); this start only uses the smaller ones (nothing is
-written to <path>): the wide-screen rule is off for this start; if a start that compiles them ends
-there again, [dev] vu_plain_only = true is written for good`, logged once the device is made,
-`ico_diag_startup_vu_plain`, `ico_diag_startup_end_persist`); the
-second in a row writes `[dev] vu_plain_only = true` to `config.toml` and logs `ico_pc: the previous
-start ended while the graphics driver compiled the largest 3D shaders (the VU extended variants);
-this start and every start after it use the smaller ones only ([dev] vu_plain_only = true in
-<path>): the wide-screen rule is off; delete that line to try the larger ones again`
-(`vu_plain_persist`). Either start builds the set as usual, not lazily
-([RENDER.md](RENDER.md#the-fallback-entries); `port/platform/window_host.c`,
-`ico_diag_startup_activity_prev`). While the set is created the heartbeat line ends with the note
+A batch's note, and any note naming a pipeline of the pre-pass or the record path, is written
+through to the disc (fsync, `act_sync_note`) before the driver starts on it, and in a lazy run
+every first-use pipeline's note, so it is still there after a device that froze was rebooted
+(issue 107). Each batch costs one sync: its `compiled: ` line (below) is written without one and
+goes to the disc with the next note's sync (`act_write_sync`, `act_unsynced`). While the set is created the heartbeat line ends with the note
 in flight (`| creating pipelines ...`), so a log that stops mid-set says what the driver was
 compiling; a VU batch's note names each vertex shader with its words and SPIR-V instructions and
 ends with the device's compiler (`; compiler E031.41.03.47`). Each finished batch adds a
 `compiled: ` line after the note (the last 24 lines, written at once, so on the disc with the next
 batch's note): its range, kind (2D, or VU with its variant), compiler, pipeline count, the compile
 times' minimum, maximum and mean, the batch's wall time and threads, the process's memory and the
-pipeline cache's size after it, then a VU batch's times by vertex shader with its words and
+pipeline cache's size after it, the policy under a careful set (`; policy batch 8, threads 1,
+budget 128 MB, cache each batch`), then a VU batch's times by vertex shader with its words and
 instructions or a 2D batch's slowest pipeline with its modules; a run without the set adds its lazy
 batches' lines the same way ([RENDER.md](RENDER.md#the-start-up-set); `rd.h` `rd_set_batch_fn`,
 `diag_host.h` `ico_diag_startup_activity_batch`). The next start logs each as `ico_pc: the previous
@@ -935,7 +970,7 @@ Once a start, after the device line, the self-tests and the window line, the win
 with what a report usually asks:
 
 ```
-ico_pc: summary: version vX.Y.Z (commit 1a2b3c4d); Windows x64; GPU NVIDIA GeForce GTX 1060 (device 10de:1c03; driver NVIDIA 566.36, version 566.36.0.0); Vulkan; Enhanced preset, resolution ..., aspect ..., framerate ...; blend fixed-function (self-test: fixed-function ok 1); profile immediate-mode GPU (NVIDIA, Vulkan): fog local off, DATE snapshot, depth stores kept, blur fold off, local read yes, uint views off; index values dense (marks in the stream); fog inplace (self-test: ...); VU shaders plain and extended; VU pre-pass on (self-test: ok); pipelines the start-up set; index values up to 4294967295; robust access off (the default; gpu_robust = true turns it on); controller Xbox Series X Controller (DirectInput scan on); disc SCES_507.60; user profile
+ico_pc: summary: version vX.Y.Z (commit 1a2b3c4d); Windows x64; GPU NVIDIA GeForce GTX 1060 (device 10de:1c03; driver NVIDIA 566.36, version 566.36.0.0); Vulkan; Enhanced preset, resolution ..., aspect ..., framerate ...; blend fixed-function (self-test: fixed-function ok 1); profile immediate-mode GPU (NVIDIA, Vulkan): fog local off, DATE snapshot, depth stores kept, blur fold off, local read yes, uint views off; index values dense (marks in the stream); fog inplace (self-test: ...); VU shaders one set; VU pre-pass on (self-test: ok); pipelines the start-up set; index values up to 4294967295; robust access off (the default; gpu_robust = true turns it on); controller Xbox Series X Controller (DirectInput scan on); disc SCES_507.60; user profile
 ```
 
 (`port/platform/window_host.c` (`log_summary`); `port/render/rd_core.c` (`rd_summary_text`, from
@@ -947,9 +982,11 @@ its flags as in force, `([dev])` after one a `[dev]` key set and `(self-test)` a
 turned off ([RENDER.md](RENDER.md#the-device-profile)). The controller
 is what SDL has connected then ("none yet" when the pad arrives later; its own `input: gamepad`
 line follows), on Windows with whether SDL's DirectInput scan is on (`[dev] joystick_directinput`);
-the VU shaders are `plain only (issue 107)` on a device or setting that keeps them to the plain
-variants, and the pipelines `on first use (no start-up set)` where the set is skipped
-([RENDER.md](RENDER.md#the-start-up-set)); on Android the disc is mounted after the window ("not mounted yet").
+the VU shaders are `one set, fallback plain (issue 107)` on a device whose fallback takes the
+plain program entries (`RhiLimits.vuFallbackPlain`), and the pipelines `the careful start-up set`
+under the careful policy, `the careful start-up set, stopped at its budget (the rest on first use)`
+when its budget stopped it, and `on first use (no start-up set)` where the set is skipped
+(`port/render/rd_core.c` (`rd_summary_text`); [RENDER.md](RENDER.md#the-start-up-set)); on Android the disc is mounted after the window ("not mounted yet").
 `ico_diag_set_summary` flushes the C library's held lines first, so on Windows the line follows the
 device and window lines in the file, and keeps the text for the report file. The 10 s block's
 `window: memory:` line has the graphics memory in use and its peak where the backend counts it
