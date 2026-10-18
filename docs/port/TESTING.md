@@ -313,7 +313,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   constant fold's channels over every blend mode, FIX, COLCLAMP, PABE and a set of RGBAQ against
   `gs_dst_channel` for every Cd and Ad, the premultiplied term through the fixed-function add and
   reverse subtract against `gs_blend_reg_ch` for every Cs, C and Cd of the four forms, and the keys
-  `rd__fx_enumerate` adds (`rd_fx_frame`).
+  `rd__fx_enumerate` adds (none with the plan off, the constant fold's six without the frame and
+  local modules), with no draw made without a device (`rd_fx_frame`).
 - `rd_boot_present_test.c`: a saved start-up through the presenter, present by present; needs
   `ICO_BOOT_DUMP_DIR` (`rd_boot_present`).
 - `rd_blend_selftest_test.c` with `rd_blend_selftest.cmake`: the exact blend's start-up self-test

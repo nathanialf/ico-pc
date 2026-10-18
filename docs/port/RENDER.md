@@ -1558,13 +1558,22 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan.
 | `carefulSet` | off | off | off | off | off | off | off |
 | the record path (the triangle pre-pass, `[dev] vu_prepass`) | on | on | off (the pictures between two ticks shook on a PowerVR phone; `[dev] vu_prepass = true` turns it on) | off | off | off | off |
 | dynamic state (`[dev] dynamic_state`) | on where offered | none | off (the same phone; `[dev] dynamic_state = true` turns it on) | off | off | off | off |
+| `alphaPlan` (`[dev] alpha_plan`) | on | on | on | on | on | on | on |
+| `fxPlan` (`[dev] fx_plan`) | on | on | on | on | on | on | on |
+| `fxDstLocal` (`[dev] fx_dst_local`) | off | off | on where local read is offered | same | same | same | same |
+| `vuPlanesFrac` (`[dev] vu_planes`) | on | on | on | on | on | on | on |
 
 The blend row is `rd_dst_read.c`'s ([Destination reads and blend
 paths](#destination-reads-and-blend-paths)), robust access the Vulkan backend's
 (`port/rhi/vk/vk_device.c`; [RHI.md](RHI.md#device-loss)); the profile reports both. The other
 flags are decisions: `fogLocal` offers the fog's `local` path, tried first by its self-test,
 `dateStencil` DATE through the stencil bit, decided by its self-test, `blurFold` the folded
-staticBlur pairs ([The replay](#the-replay)); `storePlan` has no mechanism. A target is made with
+staticBlur pairs ([The replay](#the-replay)); `storePlan` has no mechanism. `alphaPlan` offers the alpha/blend
+planner ([The alpha plan](#pipelines)), `fxPlan` the frame-size post sprites drawn without their snapshot
+([Post passes](#post-passes)), `fxDstLocal` the post sprites that read their destination by the local read
+inside the open pass (tile-based classes where the device has local read; it needs `fx_local_ps` and is decided
+by its self-test), and `vuPlanesFrac` the 3D pixel shaders without the attribute planes on a target at a
+fractional scale ([Screen planes](#screen-planes)). A target is made with
 `RHI_TEX_UINT_VIEW` by class when `uintViewWork` (the work buffers, `rd__work_class`) or
 `uintViewScene` (the scene-class targets) is on, a scene-class one with
 `RHI_TEX_INPUT_ATTACHMENT` and `RD_DST_USAGE_LOCAL_DATE` when `dateStencil` is on and the DATE
@@ -1581,21 +1590,25 @@ Each flag has a `[dev]` key, exported by the host ([CONFIG.md](CONFIG.md)): `fog
 (`ICO_RD_FOG_PATH=local`: `fogLocal` on; `inplace`, `copy` or `buffer`: off), `date_path =
 "stencil"|"snapshot"` (`ICO_RD_DATE_PATH`), `store_plan` (`ICO_RD_STORE_PLAN=1|0`), `blur_fold`
 (`ICO_RD_BLUR_FOLD=1|0`), `uint_view` (`ICO_RD_UINT_VIEW=1|work|0`: both views, the work buffers'
-only, none), `gpu_robust` (`ICO_GPU_ROBUST`). A flag a key set is marked `([dev])`; a key that
+only, none), `alpha_plan` (`ICO_RD_ALPHA_PLAN=1|0`), `fx_plan` (`ICO_RD_FX_PLAN=1|0`), `fx_dst_local`
+(`ICO_RD_FX_DST_LOCAL=1|0`), `vu_planes` (`ICO_RD_VU_PLANES=1|0`: 1 is `vuPlanesFrac` on, the planes dropped at a
+fractional scale), `gpu_robust` (`ICO_GPU_ROBUST`). A flag a key set is marked `([dev])`; a key that
 asks for what the device lacks leaves the flag off and logs `rd: profile: [dev] fog_path = local
-(no local read): not on this device, the flag stays off`. A self-test that finds its mechanism
+(no local read): not on this device, the flag stays off` (`fx_dst_local` asked for without local read logs the same
+line with `[dev] fx_dst_local (no local read)`). A self-test that finds its mechanism
 wrong turns the flag off (`rd__profile_self_test_off`): the flag is marked `(self-test)` and the
 line `rd: profile: <flag> off (self-test)` is logged. The start line, once a run:
 
 ```
-rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function; fog local on; DATE stencil; depth stores kept; blur fold on; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; pipelines the start-up set
-rd: profile: immediate-mode GPU (Mesa, Vulkan): blend fixed-function; fog local off; DATE snapshot; depth stores kept; blur fold off; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views work and scene; pipelines the start-up set
+rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function; fog local on; DATE stencil; depth stores kept; blur fold on; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; alpha plan on; fx plan on; fx local read on; VU planes whole scales only; pipelines the start-up set
+rd: profile: immediate-mode GPU (Mesa, Vulkan): blend fixed-function; fog local off; DATE snapshot; depth stores kept; blur fold off; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views work and scene; alpha plan on; fx plan on; fx local read off; VU planes whole scales only; pipelines the start-up set
 ```
 
 and the `ico_pc: summary:` line carries the flags as in force after the blend's text
 (`rd__profile_text`; `port/render/rd_core.c` (`rd_summary_text`)): `profile tile-based GPU
 (Imagination, Vulkan): fog local on, DATE stencil, depth stores kept, blur fold on, local read
-yes, uint views off`. The Vulkan version is not in the class name (`RhiLimits` does not carry
+yes, uint views off, alpha plan on, fx plan on, fx local on, VU planes whole scales only`. The four planner flags read
+`on`/`off` and `whole scales only`/`every scale` (`vuPlanesFrac` off); a flag a key or a self-test changed is marked as the others are. The Vulkan version is not in the class name (`RhiLimits` does not carry
 it); the `rhi_vk:` device line has it.
 
 ## Post passes
@@ -2123,7 +2136,7 @@ are whole numbers. On a target whose scale is not a whole number on both axes (E
 window's own size, 2364x1080 is 2.8125 x 2.41 a GS pixel) the planes buy nothing, and the
 GPU's screen-space (noperspective) interpolation of the corners' values gives the same values
 to a few ulp (a colour a level apart within about 3e-5 of a .5 boundary, an alpha-tested edge
-pixel within a level of AREF on the other side; [DIVERGENCES.md](DIVERGENCES.md)). There, under
+pixel within a level of AREF on the other side; [DIVERGENCES.md](DIVERGENCES.md#video) VD-19). There, under
 the Enhanced preset with the device profile's `vuPlanesFrac` (`[dev] vu_planes`), a VU pass of
 `vu_ps` draws with `vu_np_ps` (its build without the planes' inputs, `ICO_VU_NO_PLANES`) and a
 screen-prim triangle command with the plain sprite build. The planes stay for a draw with both
@@ -2252,6 +2265,19 @@ triangle slots` (`vuPrePasses`, `vuPreVertices`, `vuPreDraws`, `vuPreFallbacks`,
 the GPU line (`window: GPU ms per replay: ...`) ends with `; VU pre-pass <ms>`, as `--stats`'s
 `gpu:` line does
 (`port/render/rd.h` (`RdPerfRecord`); `port/platform/window_host.c` (`perf_log`)).
+
+The pixel diet's six counts are in the record too: `alphaOnePass` and `alphaOpaque` (draws the alpha plan
+drew in one pass where the plan had two, and without the test and the blending), `fxConstant`,
+`fxAdditive` and `fxLocal` (the post sprites drawn by the constant fold with the black sprite's clear, the
+premultiplied forms and the local read: [Post passes](#post-passes)) and `vuNoPlanes` (the VU passes drawn
+through the no-planes pixel shaders: [Screen planes](#screen-planes)). Each is 0 with its flag off or where
+its mechanism does not apply. `rd_replay_tool --stats` prints one line, `<dump>: stats: pixel diet: alpha plan
+N one-pass, M opaque; fx plan C constant, A additive, L local; vu no-planes D`, and the 10 s block prints
+`window: pixel diet per replay: alpha plan N one-pass, M opaque; fx plan C constant, A additive, L local; vu
+no-planes D` after the `window: per replay` line, every block
+(`port/render/rd.h` (`RdPerfRecord`); `port/render/tools/rd_replay_tool.c`; `port/platform/window_host.c`
+(`perf_log`)). With the profile line (`rd: profile: ... alpha plan on; fx plan on; fx local read ...; VU
+planes ...`) the two say from a log alone which of the steps a device took.
 
 ### The per-pass timing
 

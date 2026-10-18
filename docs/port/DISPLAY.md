@@ -325,6 +325,10 @@ other O` (`perf_log`, `perf_passes_add`).
   an exact blend with `[dev] blend`; nonzero ones on a log without that setting are a defect.
   `pipelines created` in the block should be 0 once the set is made (a pipeline made while playing
   is a hitch).
+- `window: pixel diet per replay ...`: how many draws a replay took the pixel diet's steps for (the
+  alpha plan's one-pass and opaque draws, the post sprites drawn by the constant fold, the
+  premultiplied forms and the local read, the 3D passes drawn without the planes), each 0 where its
+  flag is off ([RENDER.md](RENDER.md#performance-records); the flags are in the `rd: profile:` line).
 
 The device class and its flags are in `ico_pc: summary:` (`profile <class>: fog local on|off, DATE
 stencil|snapshot, depth stores kept, blur fold on|off, local read yes|no, uint views ...`, a

@@ -650,7 +650,8 @@ void rd_index_span_text(char *out, size_t size);
  * names it with every result ("not tried" for the rest).
  * The window calls it after rd_precreate_pipelines; after that it runs
  * again whenever SCENE is made at a new size.  Its first run runs
- * rd_date_selftest first.  Waits for the GPU.  Returns whether the path in
+ * rd_date_selftest first, then rd__fx_local_selftest (the post sprites' local
+ * read, rd_fx_plan.c).  Waits for the GPU.  Returns whether the path in
  * force passed. */
 bool rd_fog_selftest(void);
 /* DATE's self-test (rd_date_selftest.c), where the profile asks for DATE

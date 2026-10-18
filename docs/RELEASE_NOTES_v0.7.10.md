@@ -2,6 +2,7 @@
 
 - The log now lists, every 10 seconds, how many drawing steps the game takes for each picture, which steps take the graphics card longest, and what kind of graphics card the game found (named in the first lines). If the game is slow, send the log with your report.
 - On Android phones and handhelds and on Apple Silicon Macs, the fog, some see-through effects and the glow blur are drawn in fewer steps, with the same picture.
+- The 3D scenery, the shadows and the glow are drawn in fewer steps that give the same picture; the game's log says which steps each device takes.
 
 ## Fixed
 

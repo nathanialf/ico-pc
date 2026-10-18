@@ -130,6 +130,13 @@ take from either ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)).
   VU vertex shader's output, so the main shaders and the programs' own entries feed it unchanged
   (DXC packs the prefix as the whole signature packs it: the same D3D12 registers). No
   destination-read twins: under an exact blend the draws keep `vu_ps`.
+- the frame-size sprite builds (`port/render/rd_fx_plan.c`): `fx_sprite_ps` built again with
+  `ICO_FX_FRAME=1` as `fx_frame_ps` (the open pass's forms: `FXF_ALPHA_ONLY`, the alpha alone;
+  `FXF_OUT_PREMUL`, the premultiplied term for the fixed-function add or subtract; no blend and no
+  destination read of its own) and with `ICO_FX_DST_LOCAL=1` as `fx_local_ps` (the destination by
+  `SubpassLoad` of the input attachment, `layoutLocal`: slot 1 the attachment, slot 2 the texture).
+  Neither has a `_nodual` or destination-read twin: `fx_local_ps` is in `rd__fs_local_read`, and
+  an exact blend keeps the snapshot ([RENDER.md](RENDER.md#post-passes)).
 
 The replay looks entries up by the names in `s_vsNames` and `s_fsNames` (`port/render/rd_replay.c`).
 
@@ -474,7 +481,10 @@ in: `vu_prelit_pre_vs` 2,120 words (483 instructions, 36 blocks), `vu_lit_pre_vs
 `vu_particle_pre_vs` 8,801 (2,071, 200), `vu_main_vs` 6,277 (1,481, 174), `vu_particle_main_vs`
 4,249 (986, 102); `vu_ps` 5,512 (1,311, 191) and `vu_texa_ps` 11,655 (2,804, 477), the one pixel
 shader of both ways, and the no-planes builds `vu_np_ps` 4,887 (1,176, 187) and `vu_texa_np_ps`
-11,023 (2,668, 473). By the live-path walk (the SPIR-V executed for one pixel, its arithmetic
+11,023 (2,668, 473), and their `_nodual` twins `vu_np_ps_nodual` 4,952 (1,196, 193) and
+`vu_texa_np_ps_nodual` 11,088 (2,688, 479). The frame-size sprite modules (words, instructions,
+blocks): `fx_sprite_ps` 8,557 (2,087, 360), `fx_frame_ps` 11,439 (2,771, 476), `fx_local_ps` 8,561
+(2,088, 360), `fx_blur2_ps` 14,883 (3,491, 558). By the live-path walk (the SPIR-V executed for one pixel, its arithmetic
 weighted by components) an opaque textured pixel of `vu_ps` runs 168 instructions and 127
 lane-operations, of `vu_np_ps` 124 and 80. The pixel side's colour arithmetic runs on the GS's
 integers held as floats (`vu_common.hlsli` `vu_col_int`, `vu_texel_int`,
