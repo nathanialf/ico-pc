@@ -1626,6 +1626,11 @@ uint32_t rd__enumerate_reachable_blur(RdPipeKeyInt *out, uint32_t max, uint32_t 
  * (fx_frame_ps, fx_local_ps, the fixed-function forms), added after
  * rd__enumerate_reachable_blur's; returns the new count */
 uint32_t rd__fx_enumerate(RdPipeKeyInt *out, uint32_t max, uint32_t n);
+/* rd_fx_plan.c: fx_local_ps's self-test on SCENE where the profile has
+ * fxDstLocal (rd_fog_selftest runs it after DATE's); its flag goes off on
+ * a wrong pixel.  Waits for the GPU.  True when it passed or had nothing
+ * to check. */
+bool rd__fx_local_selftest(void);
 /* The CRT filter's pipelines (the two RGBA16F glow passes, the
  * composite on the headless output and the swapchain) */
 uint32_t rd__enumerate_reachable_crt(RdPipeKeyInt *out, uint32_t max, uint32_t n);

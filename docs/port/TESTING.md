@@ -303,7 +303,17 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   scale-1 comparison checks that no sprite took a kernel (`checkAbove1x`, `checkEffectsScaled`,
   `compareAll`); the `blur_fold` shard runs the seven post modes with the blur pairs folded
   (`RdProfile.blurFold`, `fx_blur2_ps`), every target against the CPU model of the two passes
-  exactly, nine folds a chain, every pipeline created enumerated (`checkBlurFold`).
+  exactly, nine folds a chain, every pipeline created enumerated (`checkBlurFold`); the `fx_plan`
+  shard runs the seven post modes and 40 motion blur frames with the frame-size sprites' plan
+  (`rd_fx_plan.c`), every target against the CPU model exactly, the constant fold and the
+  premultiplied paste counted, then with the scene passes readable and the destination by local
+  read (`fx_local_ps`) where the device has local read, its self-test passing (`checkFxPlan`); the
+  `fix128_skip` shard holds the plan off (it counts the skip's snapshots).
+- `rd_fx_frame_test.c`: the frame-size sprites' plan on the CPU against `gs_math.hlsli`: the
+  constant fold's channels over every blend mode, FIX, COLCLAMP, PABE and a set of RGBAQ against
+  `gs_dst_channel` for every Cd and Ad, the premultiplied term through the fixed-function add and
+  reverse subtract against `gs_blend_reg_ch` for every Cs, C and Cd of the four forms, and the keys
+  `rd__fx_enumerate` adds (`rd_fx_frame`).
 - `rd_boot_present_test.c`: a saved start-up through the presenter, present by present; needs
   `ICO_BOOT_DUMP_DIR` (`rd_boot_present`).
 - `rd_blend_selftest_test.c` with `rd_blend_selftest.cmake`: the exact blend's start-up self-test
@@ -529,7 +539,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `shaders_pixel_test.c`: sprite, blit and blend shaders through the Vulkan RHI
   (`shaders_pixel`, `_nodual`, `_mali`); first, on the CPU, `common.hlsli`'s above-1x kernels
   compiled as C against `above1x_ref.c`: the Bayer matrix, the B-spline's weights, the box, the
-  axes and the separable combine, and the fog's `gs_fog_channel` (`checkAbove1xKernels`).
+  axes and the separable combine, and the fog's `gs_fog_channel` (`checkAbove1xKernels`); on the
+  device, `sprite_ps` above 1x over a magnified, a decimated and a mixed noise texture with the
+  steps from `DrawCB.scale[3]` against the steps from the pixel's footprint, at most 2 levels apart
+  (`checkAbove1xSteps`).
 - `vu1_test.c`: the [VU1](ARCHITECTURE.md#terms) program shaders against their CPU references and
   hand traces, the card verdicts handed over as the renderer does, and the CPU's card test against
   the reference; the record: every mesh case's vertices through its pre-pass entry and its

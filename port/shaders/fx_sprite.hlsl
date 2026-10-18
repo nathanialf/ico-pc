@@ -13,15 +13,35 @@
 //                floor(x * 255 + 0.5), which gives k for every k; so the
 //                two write the same bytes (rd_replay.c doBlurSpriteDraw
 //                picks it when both textures have the view)
-//   fx_frame_ps  (ICO_FX_FRAME=1) the frame-size forms: FXF_ALPHA_ONLY
-//                and FXF_OUT_PREMUL (port/render/rd_fx_plan.c)
-//   fx_local_ps  (ICO_FX_DST_LOCAL=1) the destination read inside the
-//                open pass by local read (port/render/rd_fx_plan.c)
+//   fx_frame_ps  (ICO_FX_FRAME=1) fx_sprite_ps with the frame-size forms
+//                port/render/rd_fx_plan.c draws the open pass's sprites
+//                with, each an identity of fx_sprite_ps's bytes:
+//                FXF_ALPHA_ONLY  the texel's alpha alone, RGB 0: set only
+//                                for MODULATE with RGBAQ's RGB 0 and no
+//                                blend, where (t * 0) >> 7 is 0 and the
+//                                blend leaves Cs (the glow's mask)
+//                FXF_OUT_PREMUL  the ALPHA register's (A - B) C >> 7 with
+//                                Cd's term 0, its magnitude at most 255,
+//                                for a pipeline that adds Cd (ONE, ONE) or
+//                                takes it from Cd (reverse subtract): set
+//                                only for the four forms A, B in {Cs, 0},
+//                                C in {As, FIX}, D Cd, COLCLAMP 1, no PABE
+//                                (the paste's Cs + Cd)
+//   fx_local_ps  (ICO_FX_DST_LOCAL=1) fx_sprite_ps reading the destination
+//                inside the open pass by local read: t1 the bound target
+//                as an input attachment (SubpassLoad: the fragment's own
+//                texel as the pass holds it after the by-region barrier
+//                rd_fx_plan.c records before the draw, the value the
+//                snapshot's Load returns: fx_rect_vs draws one triangle,
+//                so no other fragment of the sprite wrote it), t2 the
+//                texture (rd's layoutLocal); never a self-sampling sprite.
+//                Its DXIL reads t1 as a texture (never used: D3D12 has no
+//                local read)
 //
 // Bindings: t1 the texture (UNORM8, read with Load; its UINT view in
 // fx_sprite_u_ps), t2 the destination as it was before the sprite (a copy
 // of the bound target; with FXF_DST only; in fx_sprite_u_ps t1 again when
-// unused), s1 unused.
+// unused), s1 unused; fx_local_ps as above.
 // DrawCB:
 //   g_col    RGBAQ 0..255
 //   g_mode   x FXF_* flags, y TEXA mode | TEXFMT << 8,
@@ -102,6 +122,20 @@ uint4 fx_load(Texture2D<uint4> t, int2 c)
 {
     return t.Load(int3(c, 0));
 }
+#elif defined(ICO_FX_DST_LOCAL)
+// fx_local_ps: rd's layoutLocal (t1 the input attachment, t2 the texture)
+Texture2D<float4> g_texture : register(t2, space2);
+#ifdef __spirv__
+[[vk::input_attachment_index(0)]] SubpassInput<float4> g_destIn : register(t1, space2);
+#define FX_DST_LOCAL_READ 1
+#else
+Texture2D<float4> g_dest : register(t1, space2);
+#endif
+
+uint4 fx_load(Texture2D<float4> t, int2 c)
+{
+    return uint4(floor(t.Load(int3(c, 0)) * 255.0 + 0.5));
+}
 #else
 Texture2D<float4> g_texture : register(t1, space2);
 SamplerState g_sampler : register(s1, space2);
@@ -112,6 +146,21 @@ uint4 fx_load(Texture2D<float4> t, int2 c)
     return uint4(floor(t.Load(int3(c, 0)) * 255.0 + 0.5));
 }
 #endif
+
+#if defined(ICO_FX_FRAME) && (defined(ICO_UINT_SRC) || defined(ICO_FX_DST_LOCAL))
+#error "fx_frame_ps is the UNORM build with its textures in t1, t2"
+#endif
+
+// The destination at the fragment's texel px, 0..255: the snapshot's, or
+// the open pass's own by local read (fx_local_ps)
+uint4 fx_dest(int2 px)
+{
+#ifdef FX_DST_LOCAL_READ
+    return uint4(floor(g_destIn.SubpassLoad() * 255.0 + 0.5));
+#else
+    return fx_load(g_dest, px);
+#endif
+}
 
 // t1 texels per GS texel, 1 when unset.
 float2 fx_src_scale()
@@ -126,26 +175,176 @@ int fx_src_crop16()
     return g_scale.z != 0.0 ? int(round(g_scale.z * g_tex.z * 16.0)) : 0;
 }
 
-// One texel at integer texel coordinates: CLAMP or REPEAT on the TEX0 size,
-// then clamped to the texture that backs it, then TEXA.  On a Full pixel
-// crop c is in the crop's texels, the wrap and the clamp in the frame's
-// (the crop's whole texels added back).
+// fx_texel's addressing on one axis, which the other axis does not change:
+// CLAMP (clampAxis) or REPEAT on the TEX0 size lsz (max(1, round(g_tex.xy
+// * fx_src_scale())), per draw: g_aux1.zw), then clamped to the asz texels
+// of the texture that backs it.  k: a Full pixel crop's whole texels (the
+// x axis; 0 on y): c is in the crop's texels, the wrap and the clamp in the
+// frame's (the crop's texels added back).  REPEAT: lsz is 2^TW x 2^TH at
+// scale 1 and at an integer scale that is a power of two (gs_wrap_repeat's
+// mask), any size otherwise.
+int fx_axis(int c, bool clampAxis, int lsz, int asz, int k)
+{
+    c += k;
+    c = clampAxis ? clamp(c, 0, lsz - 1) : gs_wrap_repeat(c, lsz);
+    return clamp(c - k, 0, asz - 1);
+}
+
+int fx_axis_x(int c, uint flags)
+{
+    return fx_axis(c, (flags & FXF_CLAMP_S) != 0u, int(g_aux1.z), int(g_tex.z),
+                   fx_src_crop16() >> 4);
+}
+
+int fx_axis_y(int c, uint flags)
+{
+    return fx_axis(c, (flags & FXF_CLAMP_T) != 0u, int(g_aux1.w), int(g_tex.w), 0);
+}
+
+// The texel at addressed coordinates (fx_axis_x, fx_axis_y), after TEXA
+uint4 fx_texel_at(int x, int y)
+{
+    return gs_texa_expand(fx_load(g_texture, int2(x, y)), g_mode.y & 0xFFu, g_mode.y >> 8);
+}
+
+// One texel at integer texel coordinates: addressed (fx_axis_x,
+// fx_axis_y), then TEXA.
 uint4 fx_texel(int2 c, uint flags)
 {
-    // max(1, round(g_tex.xy * fx_src_scale())), per draw (g_aux1.zw)
-    const int2 lsz = int2(g_aux1.zw);
-    const int2 asz = int2(g_tex.zw);
-    const int k = fx_src_crop16() >> 4;
-    c.x += k;
-    // REPEAT: lsz is 2^TW x 2^TH at scale 1 and at an integer scale that
-    // is a power of two (gs_wrap_repeat's mask), any size otherwise
-    c.x = (flags & FXF_CLAMP_S) != 0u ? clamp(c.x, 0, lsz.x - 1) : gs_wrap_repeat(c.x, lsz.x);
-    c.y = (flags & FXF_CLAMP_T) != 0u ? clamp(c.y, 0, lsz.y - 1) : gs_wrap_repeat(c.y, lsz.y);
-    c.x -= k;
-    c = clamp(c, int2(0, 0), asz - 1);
-    uint4 t = fx_load(g_texture, c);
-    return gs_texa_expand(t, g_mode.y & 0xFFu, g_mode.y >> 8);
+    return fx_texel_at(fx_axis_x(c.x, flags), fx_axis_y(c.y, flags));
 }
+
+#ifdef ICO_FX_FRAME
+// fx_texel_at's alpha alone: TEXA reads RGB only for a 24- or 16-bit source
+// (gs_texa_expand returns an RGBA32 texel as it is)
+uint fx_texel_alpha(int x, int y)
+{
+    const float4 t = g_texture.Load(int3(x, y, 0));
+    const uint fmt = g_mode.y >> 8;
+    [branch] if (fmt == TEXFMT_RGBA32) {
+        return uint(floor(t.a * 255.0 + 0.5));
+    }
+    const uint4 u = uint4(floor(t * 255.0 + 0.5));
+    return gs_texa_alpha(u.r, u.g, u.b, u.a, g_mode.y & 0xFFu, fmt);
+}
+
+// gs_bilerp's step on one channel: a + (((b - a) f) >> 4)
+int fx_lerp16(int a, int b, uint f)
+{
+    return a + (((b - a) * int(f)) >> 4);
+}
+
+// FXF_OUT_PREMUL: per colour channel |((A - B) C) >> 7| of the ALPHA register
+// reg with Cd's term 0 (A, B in {Cs, 0}: the CPU's condition), at most 255:
+// the add's (A Cs, B 0) is >= 0, the subtract's (A 0, B Cs) <= 0, an
+// arithmetic shift as the GS's, so the pipeline's Cd + it (ONE, ONE) or
+// Cd - it (reverse subtract), clamped to 0..255 by the UNORM target, is
+// the GS's clamped ((A - B) C >> 7) + Cd
+uint3 fx_premul(uint4 cs, uint reg, uint fix)
+{
+    const int c = gs_blend_factor((reg >> 4) & 3u, int(cs.a), 0, int(fix));
+    const int3 s = int3(cs.rgb);
+    int3 v;
+    v.r = ((gs_blend_term(reg & 3u, s.r, 0) - gs_blend_term((reg >> 2) & 3u, s.r, 0)) * c) >> 7;
+    v.g = ((gs_blend_term(reg & 3u, s.g, 0) - gs_blend_term((reg >> 2) & 3u, s.g, 0)) * c) >> 7;
+    v.b = ((gs_blend_term(reg & 3u, s.b, 0) - gs_blend_term((reg >> 2) & 3u, s.b, 0)) * c) >> 7;
+    return uint3(min(abs(v), int3(255, 255, 255)));
+}
+#endif
+
+// The sprite's texel at (su, sv), t1's 12.4 texels: above 1x the step's
+// kernel (FXF_ABOVE1X, g_scale.w), else the GS's bilinear (FXF_LINEAR) or
+// nearest texel, each tap addressed by fx_texel's rules and TEXA'd before
+// filtering
+uint4 fx_sprite_texel(int su, int sv, uint flags)
+{
+    uint4 t;
+    if ((flags & FXF_ABOVE1X) != 0u) {
+        const uint steps = uint(g_scale.w);
+        const bool lin = (flags & FXF_LINEAR) != 0u;
+        const GsAxis ax = gs_resample_axis(su, int(steps >> 12), lin);
+        const GsAxis ay = gs_resample_axis(sv, int(steps & 4095u), lin);
+        const uint dx = gs_resample_div(ax), dy = gs_resample_div(ay);
+        uint4 sum = uint4(0u, 0u, 0u, 0u);
+        const int nx = min(ax.count, GS_RS_TAPS_MAX), ny = min(ay.count, GS_RS_TAPS_MAX);
+        [loop] for (int j = 0; j < ny; j++) {
+            uint4 row = uint4(0u, 0u, 0u, 0u);
+            [loop] for (int i = 0; i < nx; i++) {
+                row += fx_texel(int2(ax.first + i, ay.first + j), flags) *
+                       gs_resample_weight(ax, i);
+            }
+            sum += ((row * 16u + dx / 2u) / dx) * gs_resample_weight(ay, j);
+        }
+        t = (sum + 8u * dy) / (16u * dy);
+    } else if ((flags & FXF_LINEAR) != 0u) {
+        // the four taps' addressing per axis: each column and row once
+        const int uu = su - 8, vv = sv - 8;
+        const int x0 = fx_axis_x(uu >> 4, flags), x1 = fx_axis_x((uu >> 4) + 1, flags);
+        const int y0 = fx_axis_y(vv >> 4, flags), y1 = fx_axis_y((vv >> 4) + 1, flags);
+        const uint fu = uint(uu & 15), fv = uint(vv & 15);
+        const uint4 a = fx_texel_at(x0, y0);
+        const uint4 b = fx_texel_at(x1, y0);
+        const uint4 c = fx_texel_at(x0, y1);
+        const uint4 d = fx_texel_at(x1, y1);
+        t = gs_bilerp(a, b, c, d, fu, fv);
+    } else {
+        t = fx_texel(int2(su >> 4, sv >> 4), flags);
+    }
+    return t;
+}
+
+// The texture function (TFX, TCC) of texel t with RGBAQ col
+uint4 fx_tfx(uint4 t, uint4 col, uint flags)
+{
+    const uint tfx = (flags >> FXF_TFX_SHIFT) & 3u;
+    const bool tcc = (flags & FXF_TCC) != 0u;
+    uint4 o;
+    if (tfx == 1u) {
+        o.rgb = t.rgb;
+        o.a = tcc ? t.a : col.a;
+    } else {
+        o.rgb = min((t.rgb * col.rgb) >> 7, uint3(255, 255, 255));
+        if (tfx >= 2u) {
+            o.rgb = min(o.rgb + col.aaa, uint3(255, 255, 255));
+        }
+        if (!tcc) {
+            o.a = col.a;
+        } else if (tfx == 0u) {
+            o.a = min((t.a * col.a) >> 7, 255u);
+        } else if (tfx == 2u) {
+            o.a = min(t.a + col.a, 255u);
+        } else {
+            o.a = t.a;
+        }
+    }
+    return o;
+}
+
+#ifdef ICO_FX_FRAME
+// FXF_ALPHA_ONLY below 1x (the kernels' path takes the whole texel): the
+// sprite's alpha where MODULATE's RGB is (t * 0) >> 7 = 0: (t.a a) >> 7
+// with TCC, the texel's alpha by the GS's bilinear (FXF_LINEAR, gs_bilerp
+// on that channel) or nearest; RGBAQ's a without
+uint fx_alpha_only(int su, int sv, uint a, uint flags)
+{
+    if ((flags & FXF_TCC) == 0u) {
+        return a;
+    }
+    uint ta;
+    if ((flags & FXF_LINEAR) != 0u) {
+        const int uu = su - 8, vv = sv - 8;
+        const int x0 = fx_axis_x(uu >> 4, flags), x1 = fx_axis_x((uu >> 4) + 1, flags);
+        const int y0 = fx_axis_y(vv >> 4, flags), y1 = fx_axis_y((vv >> 4) + 1, flags);
+        const uint fu = uint(uu & 15), fv = uint(vv & 15);
+        const int top = fx_lerp16(int(fx_texel_alpha(x0, y0)), int(fx_texel_alpha(x1, y0)), fu);
+        const int bot = fx_lerp16(int(fx_texel_alpha(x0, y1)), int(fx_texel_alpha(x1, y1)), fu);
+        ta = uint(fx_lerp16(top, bot, fv));
+    } else {
+        ta = fx_texel_alpha(fx_axis_x(su >> 4, flags), fx_axis_y(sv >> 4, flags));
+    }
+    return min((ta * a) >> 7, 255u);
+}
+#endif
 
 float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
 {
@@ -185,62 +384,18 @@ float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
         // operands' bounds, the reciprocals the CPU rounded)
         const int u = u0 + gs_div_trunc_rcp((X - x0) * (u1 - u0), x1 - x0, asfloat(g_aux1.x));
         const int v = v0 + gs_div_trunc_rcp((Y - y0) * (v1 - v0), y1 - y0, asfloat(g_aux1.y));
-        uint4 t;
         // the UV in t1's own texels, 12.4 (u, v at scale 1)
         const float2 ss = fx_src_scale();
         const int su = int(round(float(u) * ss.x)) - fx_src_crop16();
         const int sv = int(round(float(v) * ss.y));
-        if ((flags & FXF_ABOVE1X) != 0u) {
-            const uint steps = uint(g_scale.w);
-            const bool lin = (flags & FXF_LINEAR) != 0u;
-            const GsAxis ax = gs_resample_axis(su, int(steps >> 12), lin);
-            const GsAxis ay = gs_resample_axis(sv, int(steps & 4095u), lin);
-            const uint dx = gs_resample_div(ax), dy = gs_resample_div(ay);
-            uint4 sum = uint4(0u, 0u, 0u, 0u);
-            const int nx = min(ax.count, GS_RS_TAPS_MAX), ny = min(ay.count, GS_RS_TAPS_MAX);
-            [loop] for (int j = 0; j < ny; j++) {
-                uint4 row = uint4(0u, 0u, 0u, 0u);
-                [loop] for (int i = 0; i < nx; i++) {
-                    row += fx_texel(int2(ax.first + i, ay.first + j), flags) *
-                           gs_resample_weight(ax, i);
-                }
-                sum += ((row * 16u + dx / 2u) / dx) * gs_resample_weight(ay, j);
-            }
-            t = (sum + 8u * dy) / (16u * dy);
-        } else if ((flags & FXF_LINEAR) != 0u) {
-            const int uu = su - 8, vv = sv - 8;
-            const int2 i0 = int2(uu >> 4, vv >> 4);
-            const uint fu = uint(uu & 15), fv = uint(vv & 15);
-            const uint4 a = fx_texel(i0, flags);
-            const uint4 b = fx_texel(i0 + int2(1, 0), flags);
-            const uint4 c = fx_texel(i0 + int2(0, 1), flags);
-            const uint4 d = fx_texel(i0 + int2(1, 1), flags);
-            t = gs_bilerp(a, b, c, d, fu, fv);
-        } else {
-            t = fx_texel(int2(su >> 4, sv >> 4), flags);
+#ifdef ICO_FX_FRAME
+        if ((flags & (FXF_ALPHA_ONLY | FXF_ABOVE1X)) == FXF_ALPHA_ONLY) {
+            col = uint4(0u, 0u, 0u, fx_alpha_only(su, sv, col.a, flags));
+        } else
+#endif
+        {
+            col = fx_tfx(fx_sprite_texel(su, sv, flags), col, flags);
         }
-        const uint tfx = (flags >> FXF_TFX_SHIFT) & 3u;
-        const bool tcc = (flags & FXF_TCC) != 0u;
-        uint4 o;
-        if (tfx == 1u) {
-            o.rgb = t.rgb;
-            o.a = tcc ? t.a : col.a;
-        } else {
-            o.rgb = min((t.rgb * col.rgb) >> 7, uint3(255, 255, 255));
-            if (tfx >= 2u) {
-                o.rgb = min(o.rgb + col.aaa, uint3(255, 255, 255));
-            }
-            if (!tcc) {
-                o.a = col.a;
-            } else if (tfx == 0u) {
-                o.a = min((t.a * col.a) >> 7, 255u);
-            } else if (tfx == 2u) {
-                o.a = min(t.a + col.a, 255u);
-            } else {
-                o.a = t.a;
-            }
-        }
-        col = o;
     }
 
     // alpha test
@@ -256,7 +411,7 @@ float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
 
     uint4 dst = uint4(0, 0, 0, 0);
     if ((flags & FXF_DST) != 0u) {
-        dst = fx_load(g_dest, px);
+        dst = fx_dest(px);
     }
     if ((flags & FXF_DATE) != 0u) {
         const bool msb = (dst.a & 0x80u) != 0u;
@@ -267,6 +422,11 @@ float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
 
     uint4 res = col;
     const bool pabeOff = (flags & FXF_PABE) != 0u && (col.a & 0x80u) == 0u;
+#ifdef ICO_FX_FRAME
+    if ((flags & FXF_OUT_PREMUL) != 0u) {
+        res.rgb = fx_premul(col, g_blend.x, g_blend.y); // the pipeline adds or takes Cd
+    } else
+#endif
     if ((flags & FXF_ABE) != 0u && !pabeOff) {
         res.rgb = gs_blend_int(col, dst, g_blend.x, g_blend.y, g_blend.z).rgb;
     }

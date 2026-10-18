@@ -1023,6 +1023,7 @@ bool rd_fog_selftest(void)
     if (!dateRan) {
         dateRan = true;
         (void)rd_date_selftest();
+        (void)rd__fx_local_selftest(); /* it reads the readable passes DATE's path keeps */
     }
     s_st.armed = true;
     return runSelftest();

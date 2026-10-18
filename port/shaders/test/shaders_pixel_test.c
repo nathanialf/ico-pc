@@ -36,6 +36,13 @@
  *           sum, rounded) against the GS's truncating steps (gs_bilerp)
  *           over every pair of 4-bit weights and texel values in steps of
  *           17: 0 to 2 levels above, never below, the histogram printed
+ *   a1x steps  sprite_ps above 1x (DF_ABOVE1X) over a noise texture
+ *           magnified (both axes the B-spline: sprite_bspline4's table),
+ *           decimated (both the box) and mixed, drawn with the steps from
+ *           DrawCB.scale.w as rd_fx_plan.c rd__a1x_sprite_steps computes
+ *           them and with scale.w 0 (the steps from the pixel's
+ *           footprint): within 2 levels of each other (sprite.hlsl
+ *           sprite_above1x; the count of differing pixels printed)
  *
  * --nodual (ctest shaders_pixel_nodual): sprite_ps_nodual (and
  * sprite_ps_planes_nodual for the planes pass),
@@ -55,6 +62,7 @@
 #include "shader_consts.h"
 #include "shaders_gen.h"
 #include "vk/rhi_vk.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -519,6 +527,181 @@ static SpritePipes makeSpritePipes(RhiShader vsUi, RhiShader vsWorld, RhiShader 
                                     pl ? "planes alphaWorld" : "alphaWorld");
     }
     return o;
+}
+
+/* a1x steps: one 64x16 target per case and form, a 256x64 noise texture
+ * (CLAMP, bilinear), one sprite over the target, its UV span the case's */
+#define A1W 64
+#define A1H 16
+#define A1TW 256
+#define A1TH 64
+
+static void checkAbove1xSteps(RhiBindGroupLayout l0, RhiBindGroupLayout l1, RhiBindGroupLayout l2a,
+                              RhiPipeline opaque)
+{
+    static const struct {
+        const char *name;
+        float us, vs; /* the UV span in texels over the 64 x 16 target */
+    } kCases[3] = {{"magnified (B-spline)", 16.0f, 4.0f},
+                   {"decimated (box)", 256.0f, 64.0f},
+                   {"mixed (B-spline x, box y)", 16.0f, 64.0f}};
+
+    const uint64_t offV = 0, offTex = 1024, offU = offTex + A1TW * A1TH * 4;
+    const uint64_t size = offU + 8 * 512;
+    RhiBuffer ring = rhi_create_buffer(&(RhiBufferDesc){
+        size, RHI_BUF_VERTEX | RHI_BUF_UNIFORM | RHI_BUF_COPY_SRC, RHI_MEM_UPLOAD, "a1x ring"});
+    uint8_t *map = rhi_map_buffer(ring);
+    RhiTexture tex = rhi_create_texture(&(RhiTextureDesc){
+        A1TW, A1TH, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "a1x noise", 0});
+    RhiTexture rt[6];
+    for (int i = 0; i < 6; i++) {
+        rt[i] = rhi_create_texture(&(RhiTextureDesc){A1W, A1H, 1, RHI_FMT_RGBA8_UNORM,
+                                                     RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC,
+                                                     "a1x target", 0});
+    }
+    RhiSampler smp = rhi_create_sampler(&(RhiSamplerDesc){RHI_FILTER_LINEAR, RHI_FILTER_LINEAR,
+                                                          RHI_FILTER_NEAREST, RHI_WRAP_CLAMP,
+                                                          RHI_WRAP_CLAMP, 1.0f, 0.0f, 0.0f, 0.0f});
+    if (!ring.id || !map || !tex.id || !rt[5].id || !smp.id) {
+        printf("FAIL a1x steps: resources\n");
+        failures++;
+        return;
+    }
+    for (int y = 0; y < A1TH; y++) {
+        for (int x = 0; x < A1TW; x++) {
+            for (int ch = 0; ch < 4; ch++) {
+                map[offTex + ((size_t)y * A1TW + (size_t)x) * 4 + (size_t)ch] =
+                    (uint8_t)a1xNoise(x, y, ch);
+            }
+        }
+    }
+    IcoFrameCB fcb;
+    memset(&fcb, 0, sizeof(fcb));
+    fcb.target[0] = A1W;
+    fcb.target[1] = A1H;
+    fcb.target[2] = 1.0f / A1W;
+    fcb.target[3] = 1.0f / A1H;
+    fcb.frame[0] = 1.0f;
+    fcb.z[0] = 1.0f / 16777216.0f;
+    memcpy(map + offU, &fcb, sizeof(fcb));
+    RhiBinding fb = {0};
+    fb.slot = 0;
+    fb.type = RHI_BIND_UNIFORM_BUFFER;
+    fb.buffer = ring;
+    fb.offset = offU;
+    fb.size = sizeof(IcoFrameCB);
+    RhiBindGroup g0 = rhi_create_bind_group(&(RhiBindGroupDesc){l0, &fb, 1});
+    RhiBinding tb[3] = {{0}, {0}, {0}};
+    tb[0].slot = 1;
+    tb[0].type = RHI_BIND_SAMPLED_TEXTURE;
+    tb[0].texture = tex;
+    tb[1].slot = 1;
+    tb[1].type = RHI_BIND_SAMPLER;
+    tb[1].sampler = smp;
+    tb[2].slot = 2;
+    tb[2].type = RHI_BIND_SAMPLED_TEXTURE;
+    tb[2].texture = tex;
+    RhiBindGroup g2 = rhi_create_bind_group(&(RhiBindGroupDesc){l2a, tb, 3});
+    RhiBindGroup g1[6];
+    IcoSpriteVertex v[3 * 6];
+    for (int c = 0; c < 3; c++) {
+        const uint32_t px[6] = {0, A1W * 16, 0, 0, A1W * 16, A1W * 16};
+        const uint32_t py[6] = {0, 0, A1H * 16, A1H * 16, 0, A1H * 16};
+        const float pu[6] = {0, kCases[c].us, 0, 0, kCases[c].us, kCases[c].us};
+        const float pv[6] = {0, 0, kCases[c].vs, kCases[c].vs, 0, kCases[c].vs};
+        for (int i = 0; i < 6; i++) {
+            v[c * 6 + i] =
+                (IcoSpriteVertex){(uint16_t)px[i],          (uint16_t)py[i], 0,
+                                  {0x80, 0x80, 0x80, 0x80}, pu[i] + 3.0f,    pv[i] + 1.0f};
+        }
+        /* rd__a1x_sprite_steps: the texels a bound texel (scale 1: a GS
+         * pixel) steps over, in 1/32, rounded */
+        const uint32_t sx = (uint32_t)floor((double)kCases[c].us / A1W * 32.0 + 0.5);
+        const uint32_t sy = (uint32_t)floor((double)kCases[c].vs / A1H * 32.0 + 0.5);
+        for (int form = 0; form < 2; form++) {
+            IcoDrawCB cb;
+            memset(&cb, 0, sizeof(cb));
+            cb.mode[0] = ICO_DF_TEXTURED | ICO_DF_TCC_RGBA | ICO_DF_ABOVE1X | ICO_DF_TEXA_CLAMP_S |
+                         ICO_DF_TEXA_CLAMP_T;
+            cb.mode[2] = ATST_ALWAYS;
+            setTex(&cb, A1TW, A1TH);
+            cb.scale[3] = form ? (float)(sx * 4096u + sy) : 0.0f;
+            const uint64_t at = offU + (uint64_t)(1 + c * 2 + form) * 512;
+            memcpy(map + at, &cb, sizeof(cb));
+            RhiBinding b = {0};
+            b.slot = 1;
+            b.type = RHI_BIND_UNIFORM_BUFFER;
+            b.buffer = ring;
+            b.offset = at;
+            b.size = sizeof(IcoDrawCB);
+            g1[c * 2 + form] = rhi_create_bind_group(&(RhiBindGroupDesc){l1, &b, 1});
+        }
+    }
+    memcpy(map + offV, v, sizeof(v));
+    RhiCommandList cl = rhi_begin_commands();
+    if (!cl.id || !g0.id || !g2.id || !g1[5].id) {
+        printf("FAIL a1x steps: setup\n");
+        failures++;
+        return;
+    }
+    RhiTextureBarrier up = {tex, RHI_STATE_UNDEFINED, RHI_STATE_COPY_DST};
+    rhi_cmd_barrier(cl, &up, 1);
+    rhi_cmd_copy_buffer_to_texture(cl, ring, offTex, A1TW * 4, tex, 0, (RhiRect){0, 0, A1TW, A1TH});
+    RhiTextureBarrier rd = {tex, RHI_STATE_COPY_DST, RHI_STATE_SHADER_READ};
+    rhi_cmd_barrier(cl, &rd, 1);
+    for (int i = 0; i < 6; i++) {
+        RhiTextureBarrier b = {rt[i], RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
+        rhi_cmd_barrier(cl, &b, 1);
+        RhiRenderPassDesc rp = {0};
+        rp.color[0] = (RhiColorAttachment){rt[i], RHI_LOAD_CLEAR, {0}, RHI_STORE_STORE, false};
+        rp.colorCount = 1;
+        rp.width = A1W;
+        rp.height = A1H;
+        rhi_cmd_begin_render_pass(cl, &rp);
+        rhi_cmd_set_vertex_buffer(cl, 0, ring, offV);
+        rhi_cmd_set_pipeline(cl, opaque);
+        rhi_cmd_set_bind_group(cl, 0, g0);
+        rhi_cmd_set_bind_group(cl, 1, g1[i]);
+        rhi_cmd_set_bind_group(cl, 2, g2);
+        rhi_cmd_draw(cl, 6, (uint32_t)(i / 2) * 6, 1);
+        rhi_cmd_end_render_pass(cl);
+        RhiTextureBarrier a = {rt[i], RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
+        rhi_cmd_barrier(cl, &a, 1);
+    }
+    rhi_end_commands(cl);
+    rhi_submit(cl);
+    for (int c = 0; c < 3; c++) {
+        static uint8_t img[2][A1W * A1H * 4];
+        uint32_t pitch[2] = {0, 0};
+        if (!rhi_readback_texture(rt[c * 2], RHI_ASPECT_COLOR, img[0], sizeof(img[0]), &pitch[0]) ||
+            !rhi_readback_texture(rt[c * 2 + 1], RHI_ASPECT_COLOR, img[1], sizeof(img[1]),
+                                  &pitch[1])) {
+            printf("FAIL a1x steps: readback\n");
+            failures++;
+            return;
+        }
+        int differ = 0, worst = 0;
+        for (int y = 0; y < A1H; y++) {
+            for (int x = 0; x < A1W; x++) {
+                const uint8_t *s = img[0] + (size_t)y * pitch[0] + (size_t)x * 4;
+                const uint8_t *t = img[1] + (size_t)y * pitch[1] + (size_t)x * 4;
+                int d = 0;
+                for (int k = 0; k < 4; k++) {
+                    const int e = abs((int)s[k] - (int)t[k]);
+                    d = e > d ? e : d;
+                }
+                differ += d > 0;
+                worst = d > worst ? d : worst;
+            }
+        }
+        printf("  a1x steps %s: the CPU's steps against the footprint's: %d of %d pixels differ, "
+               "max %d\n",
+               kCases[c].name, differ, A1W * A1H, worst);
+        if (worst > 2) {
+            printf("FAIL a1x steps %s: %d levels apart (2 allowed)\n", kCases[c].name, worst);
+            failures++;
+        }
+    }
 }
 
 int main(int argc, char **argv)
@@ -1029,6 +1212,9 @@ int main(int argc, char **argv)
                 expect("blend_int", u, up2, i % 4, i / 4, want[0], want[1], want[2], s[3], 0);
             }
         }
+    }
+    if (!nodual) {
+        checkAbove1xSteps(l0, l1, l2a, sp.opaque);
     }
     if (rhi_vk_validation_error_count() != 0) {
         printf("FAIL %u validation errors\n", (unsigned)rhi_vk_validation_error_count());

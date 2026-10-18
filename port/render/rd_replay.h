@@ -114,6 +114,10 @@ typedef struct DrawSetup {
      * no R8 snapshot (dateTex the dummy) */
     int dateStencil, dateWantAll;
     RhiRect dateWant;
+    /* above 1x: a sprite command's steps (rd_fx_plan.c rd__a1x_sprite_steps,
+     * doScreen), DrawCB.scale.w of its sprite_above1x passes; 0 the pixel's
+     * footprint */
+    uint32_t a1xSteps;
 } DrawSetup;
 
 /* rd_replay.c: beginPass, bindDrawKeep, bindGroup, s_bindEpoch, drawCmd,
@@ -198,6 +202,21 @@ typedef struct RdFxDraw {
 } RdFxDraw;
 
 bool rd__fx_plan_draw(Replay *r, const RdFxDraw *x);
+/* rd_fx_plan.c's other parts:
+ * rd__fx_fold        an untextured sprite's blend per colour channel: true
+ *                    when each is the destination for every Cd and Ad (bit
+ *                    ch of *identity) or one value for every Cd and Ad
+ *                    (rgb[ch]); RGBAQ rgba
+ * rd__a1x_sprite_steps  a sprite command's above-1x steps (DrawSetup.a1xSteps)
+ * rd__fx_reduction_clears  the reduction's black sprite on a scaled target
+ *                    (the pair v as doBlurSpriteDraw draws it) is the clear
+ *                    of colour col (doBlurSpriteDraw records it)
+ * rd__replay_end_pass  rd_replay.c endPass */
+bool rd__fx_fold(const RdDrawState *d, const uint8_t rgba[4], uint8_t *identity, uint8_t rgb[3]);
+uint32_t rd__a1x_sprite_steps(const Replay *r, const DrawSetup *ds, const IcoSpriteVertex *v,
+                              uint32_t nv, uint8_t prim);
+bool rd__fx_reduction_clears(Replay *r, const RdScreenVtx v[2], float col[4]);
+void rd__replay_end_pass(Replay *r);
 void rd__fill_draw_cb_extra(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds,
                             IcoDrawCB *cb);
 /* rd_replay_tiler.c (docs/port/RENDER.md, "The replay").
