@@ -793,7 +793,10 @@ uniform; the factor-one key is the state's with ABE off, which the VU and screen
 left writing nothing (mask 0, no Z write) is dropped. Not planned: DATE, PRIM.AA1, the text
 shaders (their alpha is not As), and for the factor rules PABE over a range with and without the MSB,
 COLCLAMP 0, mode 3, the Ad forms, mode 11 and the exact blend (`g_rd.dstMode`, whose passes blend
-in the shader).
+in the shader). One residual: a texel sampled at a coordinate that is not a number (a degenerate
+triangle whose Q interpolates to 0 under the anisotropic sampler) tested as alpha 0 on the unplanned
+path, where the plan trusts the range; two pixels of one 16:9 frame at the phone's scale, none at a
+whole scale.
 
 The range is the texture function of the texel's alpha and the vertex's: MODULATE `min((t * c) >>
 7, 255)` is monotonic in both, DECAL with TCC takes the texel's, TCC RGB the vertex's. The

@@ -2544,14 +2544,22 @@ static bool exactRun(float aspect, uint32_t outW, uint32_t outH, int full, Exact
 /* the columns of a and b (rows 0..h) that differ: a's x0 + i against b's
  * y0 + i for i < n */
 static uint32_t colsDiffer(const uint8_t *a, uint32_t aw, uint32_t x0, const uint8_t *b,
-                           uint32_t bw, uint32_t y0, uint32_t n, uint32_t h, uint32_t *first)
+                           uint32_t bw, uint32_t y0, uint32_t n, uint32_t h, uint32_t *first,
+                           uint32_t *maxd)
 {
     uint32_t bad = 0;
     *first = ~0u;
+    *maxd = 0;
     for (uint32_t i = 0; i < n; i++) {
         int d = 0;
-        for (uint32_t y = 0; y < h && !d; y++) {
-            d = memcmp(&a[((size_t)y * aw + x0 + i) * 4], &b[((size_t)y * bw + y0 + i) * 4], 3);
+        for (uint32_t y = 0; y < h; y++) {
+            const uint8_t *pa = &a[((size_t)y * aw + x0 + i) * 4];
+            const uint8_t *pb = &b[((size_t)y * bw + y0 + i) * 4];
+            for (int c = 0; c < 3; c++) {
+                const uint32_t dd = (uint32_t)abs((int)pa[c] - (int)pb[c]);
+                d |= dd != 0;
+                *maxd = dd > *maxd ? dd : *maxd;
+            }
         }
         if (d) {
             bad++;
@@ -2625,7 +2633,11 @@ static void checkExactEdges(const char *name, const ExactRun *a, uint32_t outW, 
  * (checkMaskAgainst); where the frame is its exact width (48:9) off is
  * the GS's own border, no mask, the zeroed RdSettings' run byte for
  * byte. */
-static void checkExactWindow(const char *name, float aspect, uint32_t outW, uint32_t outH)
+/* tolerance: 0 = the columns byte for byte (the planes kept); 2 = within the
+ * GS rounding (the device's default drops the planes on a target at a
+ * fractional scale, every window here: RdProfile.vuPlanesFrac) */
+static void checkExactWindow(const char *name, float aspect, uint32_t outW, uint32_t outH,
+                             uint32_t tolerance)
 {
     ExactRun a, b, c;
     if (!exactRun(aspect, outW, outH, 1, &a)) {
@@ -2664,17 +2676,29 @@ static void checkExactWindow(const char *name, float aspect, uint32_t outW, uint
     if (b.sw == w43 && b.sh == a.sh && a.sw >= w43) {
         /* the frame's centre, GS 2048, is texel floor(w / 2) of each */
         const uint32_t off = a.sw / 2u - b.sw / 2u;
-        uint32_t first;
-        uint32_t bad = colsDiffer(a.scene, a.sw, off, b.scene, b.sw, 0, b.sw, b.sh, &first);
-        CHECK(bad == 0,
-              "%s: SCENE's 4:3 columns (%u..%u) are the 4:3 picture's byte for byte (%u differ, "
-              "the first %u)",
-              name, off, off + b.sw - 1, bad, first);
+        uint32_t first, maxd;
+        /* with the planes kept (the attributes from each triangle's planes at
+           the pixel's offset) the columns are the 4:3 picture's byte for byte
+           at every scale; with the planes dropped on a target at a fractional
+           scale (RdProfile.vuPlanesFrac, the GPU's interpolation) they are
+           within the GS rounding, one or two levels, never more (the gate) */
+        const bool dropped = tolerance != 0;
+        const uint32_t tol = dropped ? 2u : 0u;
+        const char *how = dropped ? "within 2 levels (the planes dropped at a fractional scale)"
+                                  : "byte for byte";
+        uint32_t bad = colsDiffer(a.scene, a.sw, off, b.scene, b.sw, 0, b.sw, b.sh, &first, &maxd);
+        CHECK(maxd <= tol,
+              "%s: SCENE's 4:3 columns (%u..%u) are the 4:3 picture's %s (%u differ, the first %u, "
+              "at most %u levels)",
+              name, off, off + b.sw - 1, how, bad, first, maxd);
         const uint32_t edge = 8;
-        bad =
-            colsDiffer(a.disp, a.dw, off + edge, b.disp, b.dw, edge, b.dw - 2 * edge, b.dh, &first);
-        CHECK(bad == 0, "%s: DISPLAY's 4:3 columns are the 4:3 picture's (%u differ, the first %u)",
-              name, bad, first);
+        bad = colsDiffer(a.disp, a.dw, off + edge, b.disp, b.dw, edge, b.dw - 2 * edge, b.dh,
+                         &first, &maxd);
+        CHECK(
+            maxd <= tol,
+            "%s: DISPLAY's 4:3 columns are the 4:3 picture's %s (%u differ, the first %u, at most "
+            "%u levels)",
+            name, how, bad, first, maxd);
     } else {
         CHECK(0, "%s: the 4:3 picture is %ux%u (%ux%u wanted)", name, b.sw, b.sh, w43, a.sh);
     }
@@ -2851,13 +2875,34 @@ static void checkFullPixelOnPins(void)
                         0x7cfce9bed9c31c45ull);
 }
 
+static void testSetEnv(const char *name, const char *value);
+
 static void checkExactWindows(void)
 {
-    checkExactWindow("exact 1920x1080 16:9", 16.0f / 9.0f, 1920, 1080);
-    checkExactWindow("exact 2560x1440 16:9", 16.0f / 9.0f, 2560, 1440);
-    checkExactWindow("exact 3840x2160 16:9", 16.0f / 9.0f, 3840, 2160);
-    checkExactWindow("exact 3840x720 48:9", 48.0f / 9.0f, 3840, 720);
-    checkExactWindow("exact 2341x1080 odd", 2341.0f / 1080.0f, 2341, 1080);
+    /* twice: the planes kept everywhere (byte for byte), then the device's
+       default (the planes dropped at a fractional scale where the profile
+       says so: within 2 levels) */
+    /* each run re-initialises the renderer, whose profile reads the
+       setting's export at init: the first pass asks for the planes kept
+       through it, the second restores the process's own */
+    const char *had = getenv("ICO_RD_VU_PLANES");
+    char keep[16] = "";
+    if (had) {
+        snprintf(keep, sizeof(keep), "%s", had);
+    }
+    for (int pass = 0; pass < 2; pass++) {
+        testSetEnv("ICO_RD_VU_PLANES", pass == 0 ? "0" : had ? keep : NULL);
+        checkExactWindow(pass ? "exact 1920x1080 16:9" : "exact 1920x1080 16:9 (planes)",
+                         16.0f / 9.0f, 1920, 1080, pass ? 2u : 0u);
+        checkExactWindow(pass ? "exact 2560x1440 16:9" : "exact 2560x1440 16:9 (planes)",
+                         16.0f / 9.0f, 2560, 1440, pass ? 2u : 0u);
+        checkExactWindow(pass ? "exact 3840x2160 16:9" : "exact 3840x2160 16:9 (planes)",
+                         16.0f / 9.0f, 3840, 2160, pass ? 2u : 0u);
+        checkExactWindow(pass ? "exact 3840x720 48:9" : "exact 3840x720 48:9 (planes)",
+                         48.0f / 9.0f, 3840, 720, pass ? 2u : 0u);
+        checkExactWindow(pass ? "exact 2341x1080 odd" : "exact 2341x1080 odd (planes)",
+                         2341.0f / 1080.0f, 2341, 1080, pass ? 2u : 0u);
+    }
 }
 
 /* Full pixel: SCENE red through the reduction pass (which leaves its border

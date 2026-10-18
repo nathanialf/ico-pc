@@ -1,3 +1,5 @@
+**Please note:** this release changes how the game draws nearly everything, and it has had only limited testing: one phone and automated checks. It may run slower, or look wrong, on a computer, phone or Mac it has not been tried on. If it does, keep the previous version and send the game's log file with a short description of what you saw. The log says what the game chose for your device.
+
 ## New
 
 - The log now lists, every 10 seconds, how many drawing steps the game takes for each picture, which steps take the graphics card longest, and what kind of graphics card the game found (named in the first lines). If the game is slow, send the log with your report.
