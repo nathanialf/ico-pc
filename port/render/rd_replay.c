@@ -3663,7 +3663,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     /* the exact viewport: a triangle command's triangles with their planes
      * (rd_screen_planes.c); sprites and points keep their axis-aligned path */
     if (!aa1 && s_vpExact && topo == RD_PRIM_TRIANGLES && c->b[0] != RD_PRIM_SPRITES &&
-        c->b[0] != RD_PRIM_POINTS && nv % 3 == 0) {
+        c->b[0] != RD_PRIM_POINTS && nv % 3 == 0 && rd__screen_planes_want(&r->st, ds.tc, dp)) {
         RdDrawPass pp[2];
         int planes = 1;
         memcpy(pp, dp, sizeof(pp));
