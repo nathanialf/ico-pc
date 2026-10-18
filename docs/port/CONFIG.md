@@ -284,7 +284,7 @@ under the same name (below). Read through the store:
 | `store_plan` | bool | (the device profile's) | |
 | `blur_fold` | bool | (the device profile's) | |
 | `uint_view` | bool or `work` | (the device profile's) | |
-| `dynamic_state` | bool or `depth` | `true` | |
+| `dynamic_state` | bool or `depth` | `true` (off on a tile-based GPU unless set) | |
 | `gpu_checkpoints` | bool | `false` | |
 | `gpu_robust` | bool | `false` | |
 | `pass_split` | int | `0` | |
@@ -292,7 +292,7 @@ under the same name (below). Read through the store:
 | `storage_pass_merge` | bool | `false` | |
 | `vu_plain_only` | bool | (retired) | |
 | `vu_extended` | bool | (retired) | |
-| `vu_prepass` | bool | `true` | |
+| `vu_prepass` | bool | `true` (off on a tile-based GPU unless set) | |
 | `perf_passes` | bool | `false` | |
 | `perf_list_stamps` | bool | `true` | |
 | `joystick_directinput` | bool | `true` | |

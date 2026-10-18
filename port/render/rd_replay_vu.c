@@ -1298,6 +1298,16 @@ void rd__vu_prepass_init(const RhiLimits *lim)
     } else if (env && strcmp(env, "0") == 0) {
         snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
                  "by the settings ([dev] vu_prepass = false, ICO_RD_VU_PREPASS=0)");
+    } else if (lim != NULL && lim->tiler && !(env && strcmp(env, "1") == 0)) {
+        /* a PowerVR phone's pictures shook between two ticks through the
+         * record path and were steady through the programs' entries (the
+         * replay is byte-identical on lavapipe both ways, so it is the
+         * device's side: a visibility between the record's copies and the
+         * stages' reads, not found yet); the programs' entries draw there
+         * until it is */
+        snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
+                 "on a tile-based GPU (the pictures between two ticks shook through it on a "
+                 "PowerVR phone; [dev] vu_prepass = true turns it on)");
     } else if (bytes != 0u && bytes < ICO_VU_REC_BYTES) {
         snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
                  "on this device (its colour targets hold %u bytes a pixel together, the record "

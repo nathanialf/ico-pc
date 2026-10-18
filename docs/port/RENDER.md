@@ -1498,6 +1498,8 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan.
 | `localRead` | as offered | none | as offered | as offered | as offered | as offered | as offered |
 | `uintViewWork`, `uintViewScene` | on where the backend has the view | off (`RhiLimits.uintView` false on D3D12) | off | off | off | off | off |
 | `carefulSet` | off | off | off | off | off | off | off |
+| the record path (the triangle pre-pass, `[dev] vu_prepass`) | on | on | off (the pictures between two ticks shook on a PowerVR phone; `[dev] vu_prepass = true` turns it on) | off | off | off | off |
+| dynamic state (`[dev] dynamic_state`) | on where offered | none | off (the same phone; `[dev] dynamic_state = true` turns it on) | off | off | off | off |
 
 The blend row is `rd_dst_read.c`'s ([Destination reads and blend
 paths](#destination-reads-and-blend-paths)), robust access the Vulkan backend's

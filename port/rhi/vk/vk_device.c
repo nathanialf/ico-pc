@@ -1021,6 +1021,8 @@ static uint32_t vkr_msaa_counts(void)
     return counts | 1u;
 }
 
+static bool vkr_is_tiler(uint32_t vendor); /* below, with the vendor table */
+
 static bool vkr_create_device(void)
 {
     bool core13 = vkr_core13(g_vkr.props.apiVersion);
@@ -1468,6 +1470,18 @@ static bool vkr_create_device(void)
         const bool fakeBlendOnly = fakeDyn && strcmp(fakeDyn, "blend") == 0;
         const bool fakeAll = fakeDyn && fakeDyn[0] && fakeDyn[0] != '0' && !fakeBlendOnly;
         const bool fakeBlend = fakeAll || fakeBlendOnly;
+        /* off by default on a tile-based GPU: a PowerVR phone's pictures shook
+         * between two ticks with it on and were steady with it off (the
+         * replay is byte-identical on lavapipe either way, so it is the
+         * driver's handling); [dev] dynamic_state = true (exported as
+         * ICO_VK_FAKE_NO_DYNAMIC=0) turns it on there */
+#ifdef __ANDROID__
+        const bool tilerDevice = true;
+#else
+        const bool tilerDevice = vkr_is_tiler(g_vkr.props.vendorID);
+#endif
+        const bool forcedOn = fakeDyn && strcmp(fakeDyn, "0") == 0;
+        const bool tilerOff = tilerDevice && !forcedOn && !fakeAll;
         const bool hasEds =
             !core13 && vkr_device_has_ext(g_vkr.phys, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
         const bool hasEds3 =
@@ -1487,20 +1501,23 @@ static bool vkr_create_device(void)
             vkGetPhysicalDeviceFeatures2(g_vkr.phys, &q);
         }
         edsExt = !fakeAll && hasEds && qEds.extendedDynamicState;
-        g_vkr.dynDepth = !fakeAll && (core13 || edsExt);
+        g_vkr.dynDepth = !fakeAll && !tilerOff && (core13 || edsExt);
         const bool eds3 = hasEds3 && qEds3.extendedDynamicState3ColorBlendEnable &&
                           qEds3.extendedDynamicState3ColorBlendEquation &&
                           qEds3.extendedDynamicState3ColorWriteMask;
-        g_vkr.dynBlend = !fakeBlend && eds3;
+        g_vkr.dynBlend = !fakeBlend && !tilerOff && eds3;
         const char *depthSay =
             g_vkr.dynDepth ? (core13 ? "yes (Vulkan 1.3)" : "yes (VK_EXT_extended_dynamic_state)")
             : fakeAll      ? "no ([dev] dynamic_state = false, ICO_VK_FAKE_NO_DYNAMIC=1)"
+            : tilerOff     ? "no (tile-based GPU; [dev] dynamic_state = true turns it on)"
                            : "no";
         const char *blendSay = g_vkr.dynBlend      ? "yes (VK_EXT_extended_dynamic_state3)"
                                : fakeBlend && eds3 ? (fakeAll ? "no ([dev] dynamic_state = false, "
                                                                 "ICO_VK_FAKE_NO_DYNAMIC=1)"
                                                               : "no ([dev] dynamic_state = depth, "
                                                                 "ICO_VK_FAKE_NO_DYNAMIC=blend)")
+                               : tilerOff && eds3
+                                   ? "no (tile-based GPU; [dev] dynamic_state = true turns it on)"
                                : hasEds3 ? "no (VK_EXT_extended_dynamic_state3 without the three "
                                            "features)"
                                          : "no";
