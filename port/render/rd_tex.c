@@ -331,6 +331,78 @@ void rdtex_keep_alpha_coverage(const uint8_t *base, uint32_t w, uint32_t h, uint
     }
 }
 
+/* ------------------------------------------------------- alpha range */
+
+void rdtex_alpha_scan_begin(RdTexAlphaScan *a)
+{
+    a->any = 0;
+    a->aLo = a->rLo = a->gLo = a->bLo = 255;
+    a->aHi = 0;
+}
+
+void rdtex_alpha_scan(RdTexAlphaScan *a, const uint8_t *rgba, size_t n)
+{
+    uint8_t aLo = a->aLo, aHi = a->aHi, rLo = a->rLo, gLo = a->gLo, bLo = a->bLo;
+    for (size_t i = 0; i < n; i++, rgba += 4) {
+        rLo = rgba[0] < rLo ? rgba[0] : rLo;
+        gLo = rgba[1] < gLo ? rgba[1] : gLo;
+        bLo = rgba[2] < bLo ? rgba[2] : bLo;
+        aLo = rgba[3] < aLo ? rgba[3] : aLo;
+        aHi = rgba[3] > aHi ? rgba[3] : aHi;
+    }
+    a->aLo = aLo;
+    a->aHi = aHi;
+    a->rLo = rLo;
+    a->gLo = gLo;
+    a->bLo = bLo;
+    a->any |= (uint8_t)(n != 0);
+}
+
+int rdtex_alpha_range(const RdTexAlphaScan *a, RdTexSrc src, int texa, uint8_t *lo, uint8_t *hi)
+{
+    if (!a->any || texa < 0 || texa >= RD_TEXA_COUNT) {
+        return 0;
+    }
+    if (src == RD_TEXSRC_RGBA32) {
+        *lo = a->aLo; /* the alpha byte as it is (gs_texa_expand) */
+        *hi = a->aHi;
+        return 1;
+    }
+    if (src != RD_TEXSRC_RGB24 && src != RD_TEXSRC_RGBA16) {
+        return 0;
+    }
+    /* gs_texa_alpha (gs_math.hlsli): TA0, TA1 for a 16-bit texel with its
+     * A bit, 0 under AEM where R, G and B are 0 */
+    const uint8_t ta0 = texa == RD_TEXA_7F_81_AEM ? 0x7Fu : 0x80u;
+    const uint8_t ta1 = texa == RD_TEXA_7F_81_AEM ? 0x81u : 0x80u;
+    const int aem = texa == RD_TEXA_7F_81_AEM || texa == RD_TEXA_80_80_AEM;
+    /* a filtered texel's channel is at least the channel's least texel: it
+     * is black only where all three can be 0 */
+    const int black = aem && a->rLo == 0 && a->gLo == 0 && a->bLo == 0;
+    /* the 16-bit A bit (0 or 1) filtered is 0 only where a texel holds 0,
+     * set only where one holds it */
+    const int with0 = src == RD_TEXSRC_RGB24 || a->aLo == 0;
+    const int with1 = src == RD_TEXSRC_RGBA16 && a->aHi != 0;
+    uint8_t l = 255, h = 0;
+    if (with0) {
+        l = ta0 < l ? ta0 : l;
+        h = ta0 > h ? ta0 : h;
+    }
+    if (with1) {
+        l = ta1 < l ? ta1 : l;
+        h = ta1 > h ? ta1 : h;
+    }
+    if (black) {
+        l = 0;
+    }
+    if (l > h) {
+        return 0;
+    }
+    *lo = l;
+    *hi = h;
+    return 1;
+}
+
 /* --------------------------------------------------------------- cache */
 
 #define RDTEX_MAX_ENTRIES 1024

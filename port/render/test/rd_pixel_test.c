@@ -99,6 +99,14 @@
  *            scissor change each end a run; two AFAIL FB_ONLY sprites
  *            without Z write are one draw each without the test and join
  *            one (draws counted)
+ *   alpha plan one frame replayed with the alpha/blend planner off and
+ *            on (rd_alpha_plan.c): prelit quads of vertex alpha 0x80, 0x70
+ *            and 0x40 under the railing's state (one pass without the test
+ *            and the blending, one pass blended, the failing pixels' pass
+ *            alone), a LERP FIX 0x80 sprite and a LERP sprite of As 0:
+ *            SCENE's colour and depth the same bytes, three draws counted
+ *            one-pass and the opaque ones (none under the exact blend);
+ *            the railing's lattice keeps its split (counted neither)
  *   alpha order an alpha-tested draw with Z write off whose failing
  *            pixels write what its passing ones write (FB_ONLY; RGB_ONLY
  *            with the alpha channel masked): two overlapping sprites in one
@@ -469,6 +477,11 @@ static void testRailing(int fba)
         rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
     }
     rd_end_frame(0);
+    /* the lattice's alpha (0 and 0x80) times the vertex's 0x80 is a range
+     * the test does not decide: the alpha plan keeps the split */
+    CHECK(g_rdPerf.alphaOnePass == 0 && g_rdPerf.alphaOpaque == 0,
+          "railing (FBA %d): the alpha plan re-planned it (%u one-pass, %u opaque)", fba,
+          g_rdPerf.alphaOnePass, g_rdPerf.alphaOpaque);
 
     uint32_t w, h;
     uint8_t *img = readTarget(RD_TARGET_SCENE, &w, &h);
@@ -4670,6 +4683,138 @@ static void testVuOverlap(const char *mode)
     rd_destroy_texture(t);
 }
 
+/* ----------------------------------------------------------- alpha plan */
+/* The alpha/blend planner (rd_alpha_plan.c) against the plan without it:
+ * one frame replayed with RdProfile.alphaPlan off and on.  Under the
+ * forest's state (TEST 0x5160D: ATE GREATER 0x60, AFAIL FB_ONLY, Z GEQUAL;
+ * Z write; ALPHA 0x44 with ABE) three prelit quads of vertex alpha 0x80
+ * (every pixel passes, factor one: one pass, no test, no blending), 0x70
+ * (one pass, blended) and 0x40 (every pixel fails: the failing pixels'
+ * pass alone), then a LERP FIX 0x80 sprite (factor one) and a LERP sprite
+ * of As 0 (factor zero where the blend is dynamic state): SCENE's colour
+ * and depth the same bytes both ways, the
+ * draws counted one-pass and opaque only with the plan on. */
+static RdMesh planQuad(float x0, float y0, float x1, float y1, float z, const uint8_t c[4])
+{
+    const float pos[4][2] = {{x0, y0}, {x1, y0}, {x0, y1}, {x1, y1}};
+    float qw[1 + 4 * 3][4];
+    memset(qw, 0, sizeof(qw));
+    const uint32_t tag = 0x8000u | 4u; /* NLOOP 4, EOP */
+    memcpy(&qw[0][0], &tag, 4);
+    for (int k = 0; k < 4; k++) {
+        qw[1 + k * 3][0] = pos[k][0];
+        qw[1 + k * 3][1] = pos[k][1];
+        qw[1 + k * 3][2] = z;
+        qw[1 + k * 3][3] = 1.0f;
+        qw[1 + k * 3 + 1][2] = 1.0f;
+        qw[1 + k * 3 + 1][3] = k == 0 ? 0.0f : 1.0f; /* the strip starts at vertex 0 */
+        for (int i = 0; i < 4; i++) {
+            qw[1 + k * 3 + 2][i] = (float)c[i];
+        }
+    }
+    const RdVuBatchDesc bd = {0, 0, 0};
+    RdVuMeshDesc md;
+    memset(&md, 0, sizeof(md));
+    md.qw = (const float (*)[4])qw;
+    md.qwCount = 1 + 4 * 3;
+    md.qwPerVertex = RD_VU_QW_PRELIT;
+    md.batchCount = 1;
+    md.batches = &bd;
+    const RdMesh m = rd_create_vu_mesh(&md);
+    CHECK(m.id != 0, "alpha plan: rd_create_vu_mesh");
+    return m;
+}
+
+static void testAlphaPlan(void)
+{
+    static const uint8_t clr[4] = {0x40, 0x40, 0x40, 0x22};
+    static const uint8_t a80[4] = {200, 30, 30, 0x80}, a70[4] = {30, 200, 30, 0x70};
+    static const uint8_t a40[4] = {30, 30, 200, 0x40}, fix80[4] = {90, 10, 160, 0x30};
+    static const uint8_t as0[4] = {250, 250, 10, 0x00};
+    const int32_t ox = (2048 - 256) * 16, oy = (2048 - 256) * 16;
+    const RdMesh q[3] = {planQuad(40.0f, 40.0f, 200.0f, 120.0f, 600000.0f, a80),
+                         planQuad(60.0f, 60.0f, 220.0f, 140.0f, 700000.0f, a70),
+                         planQuad(80.0f, 100.0f, 240.0f, 230.0f, 800000.0f, a40)};
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), clr, 1, 0);
+    rd_select_list(1);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_test_gs(0x5160D);
+    rd_z_write(1);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_gouraud(1);
+    rd_texture_off();
+    for (int i = 0; i < 3; i++) {
+        seamVuDraw(q[i], 32, 1.0, 0.0, 0.0, 0.0, 100 + i);
+    }
+    rd_select_list(2);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_test_gs(RD_TEST_Z_GEQUAL);
+    rd_z_write(0);
+    rd_blend(RD_BLEND_LERP_FIX, 0x80, 1);
+    {
+        RdScreenVtx v[2] = {vtx(ox + 100 * 16, oy + 20 * 16, 0xC0000000u, fix80, 0.0f, 0.0f),
+                            vtx(ox + 300 * 16, oy + 300 * 16, 0xC0000000u, fix80, 0.0f, 0.0f)};
+        rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+    }
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 1);
+    {
+        RdScreenVtx v[2] = {vtx(ox + 20 * 16, oy + 250 * 16, 0xC0000000u, as0, 0.0f, 0.0f),
+                            vtx(ox + 400 * 16, oy + 400 * 16, 0xC0000000u, as0, 0.0f, 0.0f)};
+        rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+    }
+    rd_end_frame(0);
+    const RdFrame *f = rd__last_frame();
+    static uint8_t img[2][512 * 512 * 4];
+    static float depth[2][512 * 512];
+    uint32_t one[2] = {0, 0}, opq[2] = {0, 0};
+    bool ok[2] = {false, false};
+    const bool was = g_rd.profile.alphaPlan;
+    for (int k = 0; k < 2 && f; k++) {
+        g_rd.profile.alphaPlan = k == 1;
+        rd__replay_frame(f, 0, false);
+        one[k] = g_rdPerf.alphaOnePass;
+        opq[k] = g_rdPerf.alphaOpaque;
+        uint32_t w = 0, h = 0, dw = 0, dh = 0;
+        ok[k] = rd__read_target(rd_target(RD_TARGET_SCENE), img[k], sizeof(img[k]), &w, &h) &&
+                rd__read_target_depth(rd_target(RD_TARGET_SCENE), depth[k], sizeof(depth[k]), &dw,
+                                      &dh) &&
+                w == 512 && h == 512 && dw == w && dh == h;
+    }
+    g_rd.profile.alphaPlan = was;
+    CHECK(f && ok[0] && ok[1], "alpha plan: replay and readback");
+    if (f && ok[0] && ok[1]) {
+        int colour = 0, z = 0, drawn = 0;
+        for (size_t i = 0; i < (size_t)512 * 512; i++) {
+            colour += memcmp(&img[0][i * 4], &img[1][i * 4], 4) != 0;
+            z += memcmp(&depth[0][i], &depth[1][i], sizeof(float)) != 0;
+            drawn += memcmp(&img[0][i * 4], clr, 4) != 0;
+        }
+        /* opaque where the blend is not the exact blend's (rd_alpha_plan.c
+         * blendRule): the 0x80 quad and the FIX sprite, and the As 0 sprite
+         * with the blend as dynamic state */
+        const uint32_t wantOpaque =
+            g_rd.dstMode == RD_BLEND_EXACT_OFF ? 2u + (g_rd.dynBlend ? 1u : 0u) : 0u;
+        printf("  alpha plan: %d pixels drawn; with the plan %d differ in colour, %d in depth; "
+               "%u one-pass and %u opaque draws (without it %u, %u)\n",
+               drawn, colour, z, one[1], opq[1], one[0], opq[0]);
+        CHECK(drawn > 20000, "alpha plan: only %d pixels drawn", drawn);
+        CHECK(colour == 0 && z == 0, "alpha plan: %d pixels differ in colour, %d in depth", colour,
+              z);
+        CHECK(one[0] == 0 && opq[0] == 0, "alpha plan off: counted %u one-pass, %u opaque", one[0],
+              opq[0]);
+        CHECK(one[1] == 3 && opq[1] == wantOpaque,
+              "alpha plan: %u one-pass draws (want 3), %u opaque (want %u)", one[1], opq[1],
+              wantOpaque);
+    }
+    for (int i = 0; i < 3; i++) {
+        rd_destroy_vu_mesh(q[i]);
+    }
+}
+
 static void testVuPathsAt(const char *mode, RdPreset preset, float scale, int check34)
 {
     RdSettings s;
@@ -4719,6 +4864,7 @@ int main(int argc, char **argv)
     testAlphaOrder(0, 0);
     testAlphaOrder(1, 1);
     testAlphaOrder(1, 0);
+    testAlphaPlan();
     testDateFlat();
     testDateStencil();
     testScreenRuns();

@@ -165,6 +165,40 @@ size_t rdtex_mip_chain_bytes(uint32_t w, uint32_t h);
 void rdtex_keep_alpha_coverage(const uint8_t *base, uint32_t w, uint32_t h, uint8_t *chain,
                                uint32_t levels, uint8_t ref);
 
+/* ------------------------------------------------------- alpha range
+ * What a texture's texels can give a draw's alpha, for the alpha/blend
+ * planner (rd_alpha_plan.c).  rd_upload.c scans every texel of every level
+ * it copies to the graphics card (the base with its zero padding, the box
+ * chain after rdtex_keep_alpha_coverage, the GS levels, a pack
+ * replacement's RGBA8 levels) and keeps the scan with the texture until
+ * the texture changes (rd__tex_alpha_scan). */
+typedef struct RdTexAlphaScan {
+    uint8_t any;           /* 1: texels were scanned */
+    uint8_t aLo, aHi;      /* the alpha byte's least and largest value */
+    uint8_t rLo, gLo, bLo; /* each colour channel's least value */
+} RdTexAlphaScan;
+
+/* An empty scan, and n RGBA8 texels added to it. */
+void rdtex_alpha_scan_begin(RdTexAlphaScan *a);
+void rdtex_alpha_scan(RdTexAlphaScan *a, const uint8_t *rgba, size_t n);
+/* The alpha a draw's texture lookup gives, before the texture function,
+ * for a texture whose alpha byte holds source format src (rd.h RdTexSrc)
+ * under TEXA mode texa (the shaders' gs_texa_expand: gs_texa_alpha in
+ * gs_math.hlsli for the 24- and 16-bit sources, the byte itself for
+ * RGBA32), lo..hi: every filter the draws have (the sampler's bilinear,
+ * trilinear and anisotropic, the GS's 4-bit steps, the GS levels blended
+ * in 256ths) weights texels by non-negative weights, so its result lies
+ * between the least and the largest texel, and a filtered RGB is black
+ * only where each channel's least is 0.  1, or 0 when nothing was scanned
+ * or texa is no RdTexA mode. */
+int rdtex_alpha_range(const RdTexAlphaScan *a, RdTexSrc src, int texa, uint8_t *lo, uint8_t *hi);
+/* The scan of the texels rd texture id holds on the graphics card
+ * (rd_upload.c), into *out: true only for a live image texture whose
+ * uploads are all done (not dirty) and whose every level was scanned when
+ * it was last uploaded, in the state a draw binds it in (resolveTexture
+ * binds the texture itself then, never the white placeholder). */
+bool rd__tex_alpha_scan(uint32_t id, RdTexAlphaScan *out);
+
 /* --------------------------------------------------------------- cache */
 
 /* The entry for (id, gen, texa), or {0}. */

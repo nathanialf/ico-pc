@@ -221,13 +221,54 @@ bool rd__ensure_ring(uint64_t need)
     return true;
 }
 
+/* The alpha scans of the textures as uploaded (rd_tex.h rdtex_alpha_scan,
+ * rd__tex_alpha_scan), one a texture slot: the texture's id and RHI
+ * texture when its every level was copied and scanned, else 0.  Written by
+ * every upload that clears a texture's dirty flag (the only place that
+ * clears it), so a texture that is not dirty holds its last upload's scan. */
+typedef struct TexAlpha {
+    uint32_t id, rhi;
+    RdTexAlphaScan scan;
+} TexAlpha;
+
+static TexAlpha s_texAlpha[RD_MAX_TEXTURES];
+
+/* slot i's texture t uploaded: its scan a, NULL when not every level it
+ * holds was scanned */
+static void texAlphaKeep(uint32_t i, const RdTexRec *t, const RdTexAlphaScan *a)
+{
+    TexAlpha *e = &s_texAlpha[i];
+    e->id = a ? (t->gen << 16) | (i + 1u) : 0u;
+    e->rhi = a ? t->rhi.id : 0u;
+    if (a) {
+        e->scan = *a;
+    } else {
+        rdtex_alpha_scan_begin(&e->scan);
+    }
+}
+
+bool rd__tex_alpha_scan(uint32_t id, RdTexAlphaScan *out)
+{
+    const RdTexRec *t = rd__tex_rec(id);
+    if (!t || t->kind != RD_TEXKIND_IMAGE || t->dirty || t->refused || !t->rhi.id ||
+        t->state != RHI_STATE_SHADER_READ) {
+        return false;
+    }
+    const TexAlpha *e = &s_texAlpha[(id & 0xFFFFu) - 1u];
+    if (e->id != id || e->rhi != t->rhi.id || !e->scan.any) {
+        return false;
+    }
+    *out = e->scan;
+    return true;
+}
+
 /* Levels 1.. of a game texture: its GS levels when it has them
  * (RdTexRec.gsChain, the TIM2's own pictures), else 2x2 box filtered from
  * the base (rdtex_build_mip_chain; colour weighted by alpha when the alpha
  * byte is the draws' alpha), alpha coverage kept (rdtex_keep_alpha_coverage)
  * for the textures rd__mip_boost names, at their draws' reference, each level
  * copied into the ring and onto its subresource. */
-static void uploadMips(RdTexRec *t, uint8_t levels)
+static bool uploadMips(RdTexRec *t, uint8_t levels, RdTexAlphaScan *scan)
 {
     const uint32_t pitchA = rhi_limits()->copyRowPitchAlign;
     const uint32_t offA = rhi_limits()->copyOffsetAlign;
@@ -244,7 +285,7 @@ static void uploadMips(RdTexRec *t, uint8_t levels)
     } else {
         chain = malloc(rdtex_mip_chain_bytes(t->w, t->h) + 4);
         if (!chain) {
-            return;
+            return false;
         }
         n = rdtex_build_mip_chain(t->pixels, t->w, t->h, chain, t->src == RD_TEXSRC_RGBA32);
         uint8_t ref;
@@ -256,7 +297,8 @@ static void uploadMips(RdTexRec *t, uint8_t levels)
         src = chain;
     }
     uint32_t w = t->w, h = t->h;
-    for (uint32_t l = 1; l < levels && l <= n; l++) {
+    uint32_t l = 1;
+    for (; l < levels && l <= n; l++) {
         w = w > 1 ? w / 2 : 1;
         h = h > 1 ? h / 2 : 1;
         const uint32_t pitch = (w * 4 + pitchA - 1) / pitchA * pitchA;
@@ -264,6 +306,7 @@ static void uploadMips(RdTexRec *t, uint8_t levels)
         if (off == ~0ull) {
             break;
         }
+        rdtex_alpha_scan(scan, src, (size_t)w * h); /* the level as the device gets it */
         for (uint32_t y = 0; y < h; y++) {
             memcpy(g_rd.ringMap[rd__ring_slot()] + off + (uint64_t)y * pitch,
                    src + (size_t)y * w * 4, (size_t)w * 4);
@@ -273,6 +316,7 @@ static void uploadMips(RdTexRec *t, uint8_t levels)
         src += (size_t)w * h * 4;
     }
     free(chain);
+    return l == levels; /* every level the texture has holds what was scanned */
 }
 
 /* Texture packs: a replacement's RHI texture and every level of its
@@ -301,6 +345,7 @@ static int uploadReplacement(RdTexRec *t)
                     "texture is shown instead",
                     t->name, t->w, t->h);
             t->refused = 1;
+            texAlphaKeep((uint32_t)(t - g_rd.textures), t, NULL);
             rd__free_pending(t);
             return 1;
         }
@@ -333,6 +378,11 @@ static int uploadReplacement(RdTexRec *t)
         src = own;
     }
     rd__transition(rd__replay_cl(), t->rhi, &t->state, RHI_STATE_COPY_DST);
+    /* the levels' alpha (an RGBA8 image; a compressed one is not scanned) */
+    RdTexAlphaScan scan;
+    rdtex_alpha_scan_begin(&scan);
+    bool scanned = t->format == RD_TEXEL_RGBA8;
+    uint32_t copied = 0;
     for (uint32_t l = 0; l < p->levels; l++) {
         const TexpackImageLevel *lv = &p->lv[l];
         const uint64_t pitch = replacementLevelPitch(t, lv->w);
@@ -352,10 +402,16 @@ static int uploadReplacement(RdTexRec *t)
         }
         for (uint32_t y = 0; y < rows; y++) {
             memcpy(map + off + (uint64_t)y * pitch, lv->data + (size_t)y * lv->pitch, rowBytes);
+            if (scanned) {
+                rdtex_alpha_scan(&scan, lv->data + (size_t)y * lv->pitch, lv->w);
+            }
         }
         rhi_cmd_copy_buffer_to_texture(rd__replay_cl(), src, off, (uint32_t)pitch, t->rhi, l,
                                        (RhiRect){0, 0, lv->w, lv->h});
+        copied++;
     }
+    texAlphaKeep((uint32_t)(t - g_rd.textures), t,
+                 scanned && copied == p->levels && copied == t->mipLevels ? &scan : NULL);
     rd__transition(rd__replay_cl(), t->rhi, &t->state, RHI_STATE_SHADER_READ);
     if (own.id) {
         rhi_destroy_buffer(own);
@@ -455,9 +511,20 @@ void rd__upload_dirty_textures(void)
         rd__transition(rd__replay_cl(), t->rhi, &t->state, RHI_STATE_COPY_DST);
         rhi_cmd_copy_buffer_to_texture(rd__replay_cl(), g_rd.ring[rd__ring_slot()], off, pitch,
                                        t->rhi, 0, (RhiRect){(int32_t)rx, (int32_t)ry, rw, rh});
-        if (levels > 1) {
-            uploadMips(t, levels);
+        /* the alpha of every texel the device now holds: level 0 whole (the
+         * texels outside the rectangle are the earlier uploads'), padding
+         * included, and every further level as uploadMips copies it */
+        RdTexAlphaScan scan;
+        rdtex_alpha_scan_begin(&scan);
+        const bool rgba8 = t->format == RD_TEXEL_RGBA8;
+        if (rgba8) {
+            rdtex_alpha_scan(&scan, t->pixels, (size_t)t->w * t->h);
         }
+        bool allLevels = true;
+        if (levels > 1) {
+            allLevels = uploadMips(t, levels, &scan);
+        }
+        texAlphaKeep(i, t, rgba8 && allLevels ? &scan : NULL);
         rd__transition(rd__replay_cl(), t->rhi, &t->state, RHI_STATE_SHADER_READ);
         t->dirty = 0;
         t->dirtyX0 = t->dirtyY0 = t->dirtyX1 = t->dirtyY1 = 0;
