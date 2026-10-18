@@ -1945,6 +1945,15 @@ typedef struct RdPerfRecord {
      * staticBlur pairs drawn as one pass (fx_blur2_ps, rd_replay.c
      * rd__replay_blur_fold) */
     uint32_t dateStencilDraws, dateStencilTakes, fogLocalDraws, blurFolds;
+    /* The pixel diet (docs/port/RENDER.md, "The device profile"):
+     * alphaOnePass the draws the alpha/blend planner drew in one pass where
+     * their plan had the alpha test's two, alphaOpaque those it drew
+     * without the test and the blending (rd_alpha_plan.c); fxConstant,
+     * fxAdditive and fxLocal the staticBlur sprites the frame-size plan drew
+     * as a constant fold, through the fixed-function premultiplied add, and
+     * reading their destination by local read (rd_fx_plan.c); vuNoPlanes
+     * the VU draw passes through vu_np_ps or vu_texa_np_ps (rd_pixel_plan.c) */
+    uint32_t alphaOnePass, alphaOpaque, fxConstant, fxAdditive, fxLocal, vuNoPlanes;
     /* The VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass;
      * docs/port/RENDER.md, "The vertex and triangle pre-passes"):
      * vuPrePasses their render passes (0, 1: the vertices and sprites, or 2:

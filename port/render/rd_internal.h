@@ -980,12 +980,22 @@ typedef struct RdProfile {
     bool uintViewWork;  /* the work-class targets get the RGBA8_UINT view */
     bool uintViewScene; /* SCENE, WORK2 and DISPLAY too (immediate-mode GPUs) */
     bool carefulSet;    /* the start-up set under RdPipelineSetPolicy's careful values */
+    /* the pixel diet (docs/port/RENDER.md "The device profile"): alphaPlan
+     * the alpha/blend planner (rd_alpha_plan.c rd__plan_screen_draw_alpha),
+     * fxPlan the frame-size post sprites' plan (rd_fx_plan.c
+     * rd__fx_plan_draw), fxDstLocal its destination read by local read
+     * (fx_local_ps), vuPlanesFrac the VU pixel side drops the planes at a
+     * fractional scale (rd_pixel_plan.c rd__vu_pixel_fs) */
+    bool alphaPlan;
+    bool fxPlan;
+    bool fxDstLocal;
+    bool vuPlanesFrac;
     /* rd_profile.c: the device class's name for the lines; per flag
      * (RD_PROFILE_*) whether a [dev] key set it and whether a self-test
      * turned it off (rd__profile_self_test_off) */
     char cls[96];
     uint16_t devSet, selfTestOff;
-    char text[384]; /* the summary's words, as in force */
+    char text[512]; /* the summary's words, as in force */
 } RdProfile;
 
 /* RdProfile's flags, for its marks (devSet, selfTestOff) */
@@ -996,6 +1006,10 @@ enum {
     RD_PROFILE_BLUR_FOLD = 1u << 3,
     RD_PROFILE_UINT_WORK = 1u << 4,
     RD_PROFILE_UINT_SCENE = 1u << 5,
+    RD_PROFILE_ALPHA_PLAN = 1u << 6,
+    RD_PROFILE_FX_PLAN = 1u << 7,
+    RD_PROFILE_FX_DST_LOCAL = 1u << 8,
+    RD_PROFILE_VU_PLANES = 1u << 9,
 };
 
 /* fills g_rd.profile from the device (rd_profile.c); called by rd_init after
@@ -1166,6 +1180,19 @@ typedef enum RdFsId {
     RD_FS_FX_BLUR2,           /* fx_blur2_ps: a staticBlur pair folded into one pass */
     RD_FS_DATE_CLEAR,         /* date_clear_ps: DATE's stencil bit cleared over the draw */
     RD_FS_DATE_STENCIL,       /* date_stencil_ps: DATE's test from the attachment into the bit */
+    /* the pixel side at a fractional scale (rd_pixel_plan.c rd__vu_pixel_fs):
+     * vu_ps and vu_texa_ps without the planes' inputs (ICO_VU_NO_PLANES),
+     * each with its *_nodual twin (fsNoDual) and no exact-blend twins */
+    RD_FS_VU_NP,      /* vu_np_ps */
+    RD_FS_VU_TEXA_NP, /* vu_texa_np_ps */
+    /* the frame-size post sprites (rd_fx_plan.c rd__fx_plan_draw), no
+     * twins as fx_sprite_ps: fx_frame_ps its constant, alpha-only and
+     * premultiplied forms (ICO_FX_FRAME; RD_FXF_ALPHA_ONLY,
+     * RD_FXF_OUT_PREMUL), fx_local_ps the destination as an input
+     * attachment by local read (ICO_FX_DST_LOCAL; layoutLocal,
+     * rd__fs_local_read) */
+    RD_FS_FX_FRAME,
+    RD_FS_FX_LOCAL,
     RD_FS_COUNT
 } RdFsId;
 
@@ -1227,6 +1254,62 @@ int rd__plan_screen_draw(const RdStateBlock *s, uint8_t prim, uint8_t space, Rhi
  * rd__plan_screen_draw is aa1 0. */
 int rd__plan_screen_draw_ex(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t space,
                             RhiFormat colorFmt, RhiFormat depthFmt, RdDrawPass out[2]);
+
+/* ------------------------------------------------ the alpha/blend planner
+ * rd_alpha_plan.c (RdProfile.alphaPlan).  RdAlphaRange: the source alpha
+ * As a draw's pixels can take before the alpha test, lo..hi inclusive
+ * (0..255; [0, 255] decides nothing).  RdAlphaSrc: what the draw's alpha
+ * comes from, as its call site has it: kind RD_ALPHA_SRC_VU (rd_replay_vu.c
+ * doVuDraw: the command f/c of type cmdType, RDC_MESH, RDC_SKINNED, RDC_GRID
+ * or RDC_PARTICLES; its mesh, NULL but for RDC_MESH and RDC_SKINNED; its
+ * VuCB with the VU memory; the program RdVuPayload.prog) or
+ * RD_ALPHA_SRC_SCREEN (rd_replay.c doScreen: the command f/c and its n
+ * vertices v as the replay draws them).  The state s gives the texture
+ * (s->tex, s->ds.texEnabled), TEXA, TFX and TCC.
+ * rd__alpha_range_of_draw  the range of a draw into *out
+ * rd__plan_screen_draw_alpha  passes out[0 .. *n) planned for s (by
+ *                          rd__plan_screen_draw / _ex, before the VU
+ *                          draw's shader ids) re-planned for the range as:
+ *                          true when it changed them (*n may change, to 0,
+ *                          1 or 2), false when they stay as they are */
+typedef struct RdAlphaRange {
+    uint8_t lo, hi;
+} RdAlphaRange;
+
+enum { RD_ALPHA_SRC_VU = 0, RD_ALPHA_SRC_SCREEN = 1 };
+struct IcoVuCB;
+
+typedef struct RdAlphaSrc {
+    uint8_t kind; /* RD_ALPHA_SRC_* */
+    uint8_t prog; /* RD_ALPHA_SRC_VU: RdVuPayload.prog */
+    uint16_t cmdType;
+    const RdFrame *f;
+    const RdCmd *c;
+    const RdMeshRec *mesh;
+    const struct IcoVuCB *vcb;
+    const RdScreenVtx *v;
+    uint32_t n;
+} RdAlphaSrc;
+
+void rd__alpha_range_of_draw(const RdStateBlock *s, const RdAlphaSrc *src, RdAlphaRange *out);
+bool rd__plan_screen_draw_alpha(const RdStateBlock *s, RdAlphaRange as, RdDrawPass out[2], int *n);
+
+/* ------------------------------------------------ the VU pixel side
+ * rd_pixel_plan.c (RdProfile.vuPlanesFrac).
+ * rd__vu_pixel_fs       the fragment entry of a VU draw pass p under state
+ *                       s into colour target tc: today (RD_FS_VU or
+ *                       RD_FS_VU_TEXA, vuDraw's choice) or its twin
+ *                       without the planes (RD_FS_VU_NP, RD_FS_VU_TEXA_NP;
+ *                       their *_nodual twins follow key.gs.nodual).  The
+ *                       twins have no exact-blend twins: under an exact
+ *                       blend (g_rd.dstMode) it returns today
+ * rd__vu_pixel_fs_enum  after each VU drawing key k of the start-up set
+ *                       (rd_mesh.c enumerateVuDraws): the twin keys the
+ *                       current scale can draw, added to out (at most max),
+ *                       n the count so far; returns the new count */
+RdFsId rd__vu_pixel_fs(RdFsId today, const RdStateBlock *s, const RdTargetRec *tc,
+                       const RdDrawPass *p);
+uint32_t rd__vu_pixel_fs_enum(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPipeKeyInt *k);
 /* An alpha-tested draw with Z write off whose failing fragments write what
  * its passing ones write (AFAIL FB_ONLY, or RGB_ONLY with the alpha channel
  * masked) is one draw without the test, every fragment in the GS's
@@ -1539,6 +1622,10 @@ void rd__shadow_shutdown(void); /* frees the reduced shadow count */
 RdPipeKeyInt rd__blur_key(const RdStateBlock *s, RhiFormat colorFmt, RhiFormat depthFmt,
                           int *useDepth, int uintSrc);
 uint32_t rd__enumerate_reachable_blur(RdPipeKeyInt *out, uint32_t max, uint32_t n);
+/* rd_fx_plan.c: the frame-size post sprites' keys the profile can draw
+ * (fx_frame_ps, fx_local_ps, the fixed-function forms), added after
+ * rd__enumerate_reachable_blur's; returns the new count */
+uint32_t rd__fx_enumerate(RdPipeKeyInt *out, uint32_t max, uint32_t n);
 /* The CRT filter's pipelines (the two RGBA16F glow passes, the
  * composite on the headless output and the swapchain) */
 uint32_t rd__enumerate_reachable_crt(RdPipeKeyInt *out, uint32_t max, uint32_t n);
@@ -1898,7 +1985,12 @@ enum {
     /* above 1x: the resampling kernels, the steps in DrawCB.scale[3]
      * (rd_replay.c doBlurSpriteDraw); never set when every target involved
      * is at scale 1 */
-    RD_FXF_ABOVE1X = 8192
+    RD_FXF_ABOVE1X = 8192,
+    /* fx_frame_ps (rd_fx_plan.c): only the alpha computed, RGB 0 by
+     * construction (the glow's mask); the result premultiplied for the
+     * fixed-function ONE, ONE blender (RD_BP_PREMUL_ADD) */
+    RD_FXF_ALPHA_ONLY = 16384,
+    RD_FXF_OUT_PREMUL = 32768
 };
 
 /* The steps at which fx_sprite_ps leaves the GS's own filter above 1x, in
@@ -1994,7 +2086,7 @@ typedef struct RdContext {
     /* group 2 of the passes' own reads by local read (RhiLimits.localRead
      * only): slot 1 an input attachment (the fog's depth, DATE's colour),
      * slot 2 a sampled texture (the fog's LUT; DATE's setup the dummy):
-     * fog_lut_local_ps and date_stencil_ps (rd__fs_local_read) */
+     * fog_lut_local_ps, date_stencil_ps and fx_local_ps (rd__fs_local_read) */
     RhiBindGroupLayout layoutLocal;
     /* The scene depth is read through a copy (rd__sampled_depth) and every
      * pass keeps its stencil (loaded and stored) whenever
@@ -2744,8 +2836,8 @@ RdStencilWindow *rd__replay_stencil(void);
  * rd__stencil_ops with the depth copy's stencil load and store. */
 int rd__mip_boost(const RdTexRec *t, uint8_t *ref);
 bool rd__pass_wants_readable(const RdTargetRec *c);
-/* The local read's fragment entries (fog_lut_local_ps, date_stencil_ps):
- * group 2 is g_rd.layoutLocal (rd_pipeline.c pipelineDesc) */
+/* The local read's fragment entries (fog_lut_local_ps, date_stencil_ps,
+ * fx_local_ps): group 2 is g_rd.layoutLocal (rd_pipeline.c pipelineDesc) */
 bool rd__fs_local_read(uint8_t fs);
 /* The fog's table, uploaded at the replay's upload phase (replayFrame,
  * after the textures): the first RD_POST_FOG record of the lists the

@@ -111,6 +111,7 @@ if(NOT TARGET ico_shaders OR NOT TARGET ico_rhi_vk)
 endif()
 
 add_library(ico_render STATIC
+    rd_alpha_plan.c # the alpha/blend planner: the passes a draw's alpha range can need
     rd_blend_selftest.c # the exact blend's start-up check on the device (issue 89)
     rd_blur.c # staticBlur.c's sprites
     rd_core.c
@@ -120,6 +121,7 @@ add_library(ico_render STATIC
     rd_dump.c
     rd_fog_path.c # how the fog reads the depth: the paths, the probe, the self-test
     rd_frame.c
+    rd_fx_plan.c # the frame-size post sprites' plan: fixed-function forms, local read
     rd_interp.c # interpolation between the retained frames
     rd_join.c
     rd_mesh.c
@@ -130,6 +132,7 @@ add_library(ico_render STATIC
     rd_content_chain.c # Natural chains: the chains a stage animation lets down
     modelpack.c # model packs, the index, the glTF conversion, the dump
     rd_perf.c # per-replay performance records
+    rd_pixel_plan.c # the VU pixel side at a fractional scale
     rd_pipeline.c
     rd_png.c
     rd_post.c
@@ -366,6 +369,18 @@ add_executable(rd_perf_test test/rd_perf_test.c)
 target_compile_options(rd_perf_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_perf_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_perf_test PRIVATE ico_render)
+
+# rd_alpha_plan_test, rd_fx_frame_test, rd_vu_frac_test: the pixel diet's
+# planners (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c), CPU only: each
+# checks that its planner leaves every draw as it is, then exits 77 (its own
+# cases are not written).
+foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac)
+    add_executable(${_t}_test test/${_t}_test.c)
+    target_compile_options(${_t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_include_directories(${_t}_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi"
+                               "${CMAKE_SOURCE_DIR}/port/shaders")
+    target_link_libraries(${_t}_test PRIVATE ico_render)
+endforeach()
 
 # rd_boot_present_test: a saved start-up (rd-NNNNN.rddump, dump_every=1)
 # through the window's present path in order, several presents a tick, each
@@ -689,7 +704,8 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test rd_replay_tool rd_state_test rd_
                   rd_vuprepass_selftest_test rd_blur_test rd_water_test rd_raw_test rd_debug_test
                   rd_present_test rd_filter_test rd_interp_test rd_mirror_test rd_msaa_test rd_mip_test
                   rd_perf_test rd_boot_present_test rd_crt_test texpack_load_test gsb_cull_test
-                  rd_native_test rd_passring_test rd_stream_audit_test)
+                  rd_native_test rd_passring_test rd_stream_audit_test rd_alpha_plan_test
+                  rd_fx_frame_test rd_vu_frac_test)
 
 if(ICO_RUN_TESTS)
     add_test(NAME rd_state COMMAND rd_state_test "${CMAKE_CURRENT_BINARY_DIR}")
@@ -854,6 +870,10 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_msaa PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_perf COMMAND rd_perf_test)
     set_tests_properties(rd_perf PROPERTIES SKIP_RETURN_CODE 77)
+    foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac)
+        add_test(NAME ${_t} COMMAND ${_t}_test)
+        set_tests_properties(${_t} PROPERTIES SKIP_RETURN_CODE 77)
+    endforeach()
     add_test(NAME rd_boot_present COMMAND rd_boot_present_test "${ICO_BOOT_DUMP_DIR}")
     set_tests_properties(rd_boot_present PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1500)
     if(ICO_BOOT_DUMP_OLD)

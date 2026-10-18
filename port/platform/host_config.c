@@ -491,11 +491,17 @@ static const struct {
     {"dev.blend", "blend"},
     {"dev.fog_path", "fog_path"},
     /* the device profile's flags, one at a time (port/render/rd_profile.c):
-       DATE's path, the depth store plan, the folded blur, the UINT views */
+       DATE's path, the depth store plan, the folded blur, the UINT views,
+       the alpha/blend planner, the frame-size post sprites' plan and their
+       destination by local read, the VU planes at a fractional scale */
     {"dev.date_path", "date_path"},
     {"dev.store_plan", "store_plan"},
     {"dev.blur_fold", "blur_fold"},
     {"dev.uint_view", "uint_view"},
+    {"dev.alpha_plan", "alpha_plan"},
+    {"dev.fx_plan", "fx_plan"},
+    {"dev.fx_dst_local", "fx_dst_local"},
+    {"dev.vu_planes", "vu_planes"},
     /* the Vulkan dynamic depth and blend state: true (the default) as the
        device offers it, depth the depth alone, false neither (every
        pipeline static; port/rhi/vk/vk_device.c) */
@@ -544,6 +550,10 @@ static const struct {
     {"store_plan", "ICO_RD_STORE_PLAN"},
     {"blur_fold", "ICO_RD_BLUR_FOLD"},
     {"uint_view", "ICO_RD_UINT_VIEW"},
+    {"alpha_plan", "ICO_RD_ALPHA_PLAN"},
+    {"fx_plan", "ICO_RD_FX_PLAN"},
+    {"fx_dst_local", "ICO_RD_FX_DST_LOCAL"},
+    {"vu_planes", "ICO_RD_VU_PLANES"},
     /* port/rhi/vk/vk_device.c (the dynamic state): 1 both static, blend the
        blend static, 0 as the device offers */
     {"dynamic_state", "ICO_VK_FAKE_NO_DYNAMIC"},

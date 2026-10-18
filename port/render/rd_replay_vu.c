@@ -274,6 +274,9 @@ static uint8_t vuVs(uint8_t prog, uint8_t code)
  * begun again is readable as before, and the next DATE draw takes the bit
  * again in it (rd__replay_date_take's per-pass rule). */
 static uint32_t s_splitSerial, s_splitCount;
+/* the As range of the VU command being drawn (doVuDraw), which its
+ * vuDraw calls plan with (rd_alpha_plan.c) */
+static RdAlphaRange s_vuAlpha = {0, 255};
 
 static void passSplit(Replay *r)
 {
@@ -349,8 +352,9 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     }
     const uint64_t ua = rhi_limits()->uniformAlign;
     RdDrawPass pl[2], dp[8];
-    const int npl = rd__plan_screen_draw(s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, ds->tc->format,
-                                         ds->depthFmt, pl);
+    int npl = rd__plan_screen_draw(s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, ds->tc->format,
+                                   ds->depthFmt, pl);
+    rd__plan_screen_draw_alpha(s, s_vuAlpha, pl, &npl); /* the command's As range (doVuDraw) */
     for (int i = 0; i < npl; i++) {
         /* the meshes' main shader serves every program (RD_PROG_PRELIT);
          * the sprites' keeps the particles' program */
@@ -364,6 +368,8 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
              * passDiscards) */
             pl[i].flags |= ICO_DF_PLANE;
         }
+        /* the pixel side at a fractional scale (rd_pixel_plan.c) */
+        pl[i].key.fs = (uint8_t)rd__vu_pixel_fs((RdFsId)pl[i].key.fs, s, ds->tc, &pl[i]);
     }
     /* the exact blend's passes, two passes without dual-source blend */
     const int np = rd__replay_expand_passes(r, pl, npl, dp);
@@ -1384,6 +1390,15 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     const RdVuPayload p = src->p;
     RdMeshRec *m = src->m;
     IcoVuCB vcb = src->vcb;
+    rd__alpha_range_of_draw(&r->st,
+                            &(RdAlphaSrc){.kind = RD_ALPHA_SRC_VU,
+                                          .prog = p.prog,
+                                          .cmdType = c->type,
+                                          .f = f,
+                                          .c = c,
+                                          .mesh = m,
+                                          .vcb = &vcb},
+                            &s_vuAlpha);
     const uint8_t progVs = src->vs;
     uint8_t vs = progVs;
     if (pre && pre->rec) {

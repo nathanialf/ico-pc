@@ -6,7 +6,10 @@
 // AEM), through the main vertex shaders (vu_tri.hlsl vu_main_vs,
 // vu_particle.hlsl vu_particle_main_vs) and the programs' own entries (the
 // fallback, rd_replay_vu.c vuDraw) alike: VuVSOut, the planes as flat
-// varyings; and vu_probe_ps, the tests' probe output.
+// varyings; and vu_probe_ps, the tests' probe output. vu_np_ps and
+// vu_texa_np_ps are vu_ps and vu_texa_ps built with ICO_VU_NO_PLANES=1, the
+// pixel side at a fractional scale (port/render/rd_pixel_plan.c
+// rd__vu_pixel_fs).
 #include "vu_common.hlsli"
 
 // One vertex of START_NORMAL_C / _NOCLIP (normal_c.vsm:135-269) or

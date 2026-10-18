@@ -26,6 +26,12 @@
  *                 RhiLimits.uintView)
  *   carefulSet    false here (the start-up set's careful policy is
  *                 RdPipelineSetPolicy's, rd_pipeline.c)
+ *   alphaPlan     on on every class (rd_alpha_plan.c)
+ *   fxPlan        on on every class (rd_fx_plan.c)
+ *   fxDstLocal    off      off     on where the device has local read
+ *                 (fx_local_ps, rd_fx_plan.c)
+ *   vuPlanesFrac  on on every class: the VU pixel side without the planes
+ *                 at a fractional scale (rd_pixel_plan.c)
  *
  * The Mali row keeps the blur fold off: the G52 is bound by its ALU, which
  * the fold does not spare.  A tile-based GPU of another vendor (Samsung,
@@ -39,7 +45,8 @@
  * host exports (port/platform/host_config.c): ICO_RD_FOG_PATH=local
  * (fogLocal on; inplace, copy or buffer: off), ICO_RD_DATE_PATH=stencil|
  * snapshot, ICO_RD_STORE_PLAN=1|0, ICO_RD_BLUR_FOLD=1|0, ICO_RD_UINT_VIEW=
- * 1|work|0 (both views, the work buffers' only, none).  A flag a [dev] key
+ * 1|work|0 (both views, the work buffers' only, none), ICO_RD_ALPHA_PLAN=
+ * 1|0, ICO_RD_FX_PLAN=1|0, ICO_RD_FX_DST_LOCAL=1|0, ICO_RD_VU_PLANES=1|0.  A flag a [dev] key
  * set carries "([dev])" in the lines; one the device cannot do stays off
  * and gets a line of its own.  A self-test that finds its mechanism wrong
  * turns the flag off (rd__profile_self_test_off: "(self-test)").
@@ -47,11 +54,13 @@
  *   rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function;
  *     fog local on; DATE stencil; depth stores planned; blur fold on; robust
  *     access off (the default; gpu_robust = true turns it on); local read
- *     yes; uint views off; pipelines the start-up set
+ *     yes; uint views off; alpha plan on; fx plan on; fx local read on;
+ *     VU planes whole scales only; pipelines the start-up set
  *
  * and the summary's words (rd__profile_text, after the blend's):
  *   tile-based GPU (Imagination, Vulkan): fog local on, DATE stencil, depth
- *   stores planned, blur fold on, local read yes, uint views off
+ *   stores planned, blur fold on, local read yes, uint views off, alpha
+ *   plan on, fx plan on, fx local on, VU planes whole scales only
  */
 #include <stddef.h>
 #include <stdio.h>
@@ -187,17 +196,26 @@ static const char *uintWords(const RdProfile *p)
                                                : "off";
 }
 
+/* the VU planes' words: vuPlanesFrac drops them at a fractional scale */
+static const char *planesWords(const RdProfile *p)
+{
+    return p->vuPlanesFrac ? "whole scales only" : "every scale";
+}
+
 /* the summary's words, as in force */
 static void makeText(RdProfile *p)
 {
     snprintf(p->text, sizeof p->text,
              "%s: fog local %s%s, DATE %s%s, depth stores %s%s, blur fold %s%s, local read %s, "
-             "uint views %s%s",
+             "uint views %s%s, alpha plan %s%s, fx plan %s%s, fx local %s%s, VU planes %s%s",
              p->cls, p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
              p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL),
              p->storePlan ? "planned" : "kept", mark(p, RD_PROFILE_STORE_PLAN),
              p->blurFold ? "on" : "off", mark(p, RD_PROFILE_BLUR_FOLD), p->localRead ? "yes" : "no",
-             uintWords(p), mark(p, UINT_BITS));
+             uintWords(p), mark(p, UINT_BITS), p->alphaPlan ? "on" : "off",
+             mark(p, RD_PROFILE_ALPHA_PLAN), p->fxPlan ? "on" : "off", mark(p, RD_PROFILE_FX_PLAN),
+             p->fxDstLocal ? "on" : "off", mark(p, RD_PROFILE_FX_DST_LOCAL), planesWords(p),
+             mark(p, RD_PROFILE_VU_PLANES));
 }
 
 void rd__profile_init(void)
@@ -219,6 +237,10 @@ void rd__profile_init(void)
     p->uintViewWork = !tile && lim->uintView;
     p->uintViewScene = !tile && lim->uintView;
     p->carefulSet = false;
+    p->alphaPlan = true;
+    p->fxPlan = true;
+    p->fxDstLocal = tile && p->localRead;
+    p->vuPlanesFrac = true;
 
     /* the [dev] keys, through the host's environment */
     const char *notHere = NULL; /* a [dev] key asked for what the device lacks */
@@ -261,6 +283,27 @@ void rd__profile_init(void)
         notHere = (work || all) && !lim->uintView ? "[dev] uint_view (no UINT view on this backend)"
                                                   : notHere;
     }
+    const int alpha = envBool("ICO_RD_ALPHA_PLAN");
+    if (alpha >= 0) {
+        p->alphaPlan = alpha == 1;
+        p->devSet |= RD_PROFILE_ALPHA_PLAN;
+    }
+    const int fx = envBool("ICO_RD_FX_PLAN");
+    if (fx >= 0) {
+        p->fxPlan = fx == 1;
+        p->devSet |= RD_PROFILE_FX_PLAN;
+    }
+    const int fxLocal = envBool("ICO_RD_FX_DST_LOCAL");
+    if (fxLocal >= 0) {
+        p->fxDstLocal = fxLocal == 1 && p->localRead;
+        p->devSet |= RD_PROFILE_FX_DST_LOCAL;
+        notHere = fxLocal == 1 && !p->localRead ? "[dev] fx_dst_local (no local read)" : notHere;
+    }
+    const int planes = envBool("ICO_RD_VU_PLANES");
+    if (planes >= 0) {
+        p->vuPlanesFrac = planes == 1;
+        p->devSet |= RD_PROFILE_VU_PLANES;
+    }
 
     /* the class's name: "tile-based GPU (Imagination, Vulkan)" */
     {
@@ -282,8 +325,8 @@ void rd__profile_init(void)
     const bool exact = (asked == RD_BLEND_EXACT_ATTACHMENT && lim->rasterOrderAttachment) ||
                        (asked == RD_BLEND_EXACT_STORAGE && (lim->fragmentInterlock || lim->rov));
     rd__log("profile: %s: blend %s%s; fog local %s%s; DATE %s%s; depth stores %s%s; blur fold "
-            "%s%s; robust access %s; local read %s; uint views %s%s; pipelines the start-up "
-            "set%s",
+            "%s%s; robust access %s; local read %s; uint views %s%s; alpha plan %s%s; fx plan "
+            "%s%s; fx local read %s%s; VU planes %s%s; pipelines the start-up set%s",
             p->cls, exact ? rd__blend_exact_name(asked) : "fixed-function", exact ? " ([dev])" : "",
             p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
             p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL),
@@ -295,7 +338,10 @@ void rd__profile_init(void)
             d3d12          ? "n/a"
             : p->localRead ? "yes"
                            : "no",
-            uintWords(p), mark(p, UINT_BITS), p->carefulSet ? " (careful)" : "");
+            uintWords(p), mark(p, UINT_BITS), p->alphaPlan ? "on" : "off",
+            mark(p, RD_PROFILE_ALPHA_PLAN), p->fxPlan ? "on" : "off", mark(p, RD_PROFILE_FX_PLAN),
+            p->fxDstLocal ? "on" : "off", mark(p, RD_PROFILE_FX_DST_LOCAL), planesWords(p),
+            mark(p, RD_PROFILE_VU_PLANES), p->carefulSet ? " (careful)" : "");
     if (notHere) {
         rd__log("profile: %s: not on this device, the flag stays off", notHere);
     }
@@ -316,6 +362,10 @@ void rd__profile_self_test_off(unsigned flag)
         {RD_PROFILE_BLUR_FOLD, offsetof(RdProfile, blurFold), "blur fold"},
         {RD_PROFILE_UINT_WORK, offsetof(RdProfile, uintViewWork), "uint view (work)"},
         {RD_PROFILE_UINT_SCENE, offsetof(RdProfile, uintViewScene), "uint view (scene)"},
+        {RD_PROFILE_ALPHA_PLAN, offsetof(RdProfile, alphaPlan), "alpha plan"},
+        {RD_PROFILE_FX_PLAN, offsetof(RdProfile, fxPlan), "fx plan"},
+        {RD_PROFILE_FX_DST_LOCAL, offsetof(RdProfile, fxDstLocal), "fx local read"},
+        {RD_PROFILE_VU_PLANES, offsetof(RdProfile, vuPlanesFrac), "VU planes rule"},
     };
 
     for (size_t i = 0; i < sizeof kFlags / sizeof kFlags[0]; i++) {

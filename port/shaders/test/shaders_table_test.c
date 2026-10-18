@@ -52,6 +52,13 @@ static const char *const expectedUint[] = {"fx_sprite_u_ps"};
 static const char *const expectedTiler[] = {"date_clear_ps", "date_stencil_ps", "fog_lut_local_ps",
                                             "fog_lut_local_ps_nodual", "fx_blur2_ps"};
 
+/* the pixel-diet builds: vu_ps and vu_texa_ps without the planes' inputs
+ * (ICO_VU_NO_PLANES, with their two-pass twins) and fx_sprite_ps's
+ * frame-size and local-read forms (ICO_FX_FRAME, ICO_FX_DST_LOCAL) */
+static const char *const expectedDiet[] = {"vu_np_ps",      "vu_np_ps_nodual",
+                                           "vu_texa_np_ps", "vu_texa_np_ps_nodual",
+                                           "fx_frame_ps",   "fx_local_ps"};
+
 /* the mesh programs' entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli:
  * the fallback's on a device of the table) */
 static const char *const expectedPlain[] = {
@@ -225,6 +232,13 @@ int main(void)
             failures++;
         }
     }
+    const size_t nDiet = sizeof(expectedDiet) / sizeof(expectedDiet[0]);
+    for (size_t i = 0; i < nDiet; i++) {
+        if (!ico_find_shader(expectedDiet[i])) {
+            printf("FAIL %s: not in the table\n", expectedDiet[i]);
+            failures++;
+        }
+    }
     const size_t nPlain = sizeof(expectedPlain) / sizeof(expectedPlain[0]);
     for (size_t i = 0; i < nPlain; i++) {
         if (!ico_find_shader(expectedPlain[i])) {
@@ -253,7 +267,7 @@ int main(void)
         }
     }
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
-                        nUint + nTiler + nPlanes + nPlain + nPrepass;
+                        nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass;
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;

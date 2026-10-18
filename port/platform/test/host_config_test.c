@@ -442,11 +442,12 @@ static int env_is(const char *name, const char *want)
    other than the executable's own: the export block alone) */
 static void test_dev_env(void)
 {
-    static const char *const vars[] = {"ICO_RD_BLEND",           "ICO_RD_FOG_PATH",
-                                       "ICO_GPU_CHECKPOINTS",    "ICO_GPU_ROBUST",
-                                       "ICO_VK_ATTACHMENT_READ", "ICO_RD_DATE_PATH",
-                                       "ICO_RD_STORE_PLAN",      "ICO_RD_BLUR_FOLD",
-                                       "ICO_RD_UINT_VIEW",       "ICO_VK_FAKE_NO_DYNAMIC"};
+    static const char *const vars[] = {
+        "ICO_RD_BLEND",           "ICO_RD_FOG_PATH",        "ICO_GPU_CHECKPOINTS",
+        "ICO_GPU_ROBUST",         "ICO_VK_ATTACHMENT_READ", "ICO_RD_DATE_PATH",
+        "ICO_RD_STORE_PLAN",      "ICO_RD_BLUR_FOLD",       "ICO_RD_UINT_VIEW",
+        "ICO_VK_FAKE_NO_DYNAMIC", "ICO_RD_ALPHA_PLAN",      "ICO_RD_FX_PLAN",
+        "ICO_RD_FX_DST_LOCAL",    "ICO_RD_VU_PLANES"};
     IcoIni ini;
     size_t i;
 
@@ -570,6 +571,28 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("uint_view", "work"), "work") == 0);
     CHECK(ico_dev_env_value("uint_view", "scene") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.uint_view"), "uint_view") == 0);
+    /* the pixel diet's flags: alpha_plan, fx_plan, fx_dst_local and
+       vu_planes on/off */
+    CHECK(strcmp(ico_dev_env_name("alpha_plan"), "ICO_RD_ALPHA_PLAN") == 0);
+    CHECK(strcmp(ico_dev_env_value("alpha_plan", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("alpha_plan", "on"), "1") == 0);
+    CHECK(ico_dev_env_value("alpha_plan", "planned") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.alpha_plan"), "alpha_plan") == 0);
+    CHECK(strcmp(ico_dev_env_name("fx_plan"), "ICO_RD_FX_PLAN") == 0);
+    CHECK(strcmp(ico_dev_env_value("fx_plan", "off"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("fx_plan", "true"), "1") == 0);
+    CHECK(ico_dev_env_value("fx_plan", "constant") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.fx_plan"), "fx_plan") == 0);
+    CHECK(strcmp(ico_dev_env_name("fx_dst_local"), "ICO_RD_FX_DST_LOCAL") == 0);
+    CHECK(strcmp(ico_dev_env_value("fx_dst_local", "no"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("fx_dst_local", "yes"), "1") == 0);
+    CHECK(ico_dev_env_value("fx_dst_local", "local") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.fx_dst_local"), "fx_dst_local") == 0);
+    CHECK(strcmp(ico_dev_env_name("vu_planes"), "ICO_RD_VU_PLANES") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_planes", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_planes", "1"), "1") == 0);
+    CHECK(ico_dev_env_value("vu_planes", "fractional") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.vu_planes"), "vu_planes") == 0);
     /* dynamic_state: the variable names what is static (vk_device.c) */
     CHECK(strcmp(ico_dev_env_name("dynamic_state"), "ICO_VK_FAKE_NO_DYNAMIC") == 0);
     CHECK(strcmp(ico_dev_env_value("dynamic_state", "true"), "0") == 0);
@@ -641,6 +664,16 @@ static void test_dev_env(void)
     CHECK(env_is("ICO_RD_STORE_PLAN", "0"));
     CHECK(env_is("ICO_RD_BLUR_FOLD", "1"));
     CHECK(env_is("ICO_RD_UINT_VIEW", "work"));
+    for (i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
+        unset_env(vars[i]);
+    }
+    ico_ini_parse(&ini, "[dev]\nalpha_plan = false\nfx_plan = true\nfx_dst_local = on\n"
+                        "vu_planes = off\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_ALPHA_PLAN", "0"));
+    CHECK(env_is("ICO_RD_FX_PLAN", "1"));
+    CHECK(env_is("ICO_RD_FX_DST_LOCAL", "1"));
+    CHECK(env_is("ICO_RD_VU_PLANES", "0"));
     for (i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
         unset_env(vars[i]);
     }

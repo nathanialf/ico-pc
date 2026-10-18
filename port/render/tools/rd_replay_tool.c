@@ -1430,6 +1430,11 @@ int main(int argc, char **argv)
                "%u (fog path %s); blur pairs folded %u\n",
                dump, pr->dateSnapshots, pr->dateStencilDraws, pr->dateStencilTakes,
                pr->fogLocalDraws, rd__fog_path_name(g_rd.fogPath), pr->blurFolds);
+        /* the pixel diet (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c) */
+        printf("%s: stats: pixel diet: alpha plan %u one-pass, %u opaque; fx plan %u constant, %u "
+               "additive, %u local; vu no-planes %u\n",
+               dump, pr->alphaOnePass, pr->alphaOpaque, pr->fxConstant, pr->fxAdditive, pr->fxLocal,
+               pr->vuNoPlanes);
         /* the VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass):
          * each mesh and grid vertex and triangle and each sprite once, before
          * the lists */

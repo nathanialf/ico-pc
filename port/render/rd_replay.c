@@ -98,7 +98,8 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     "aa_reduce_ps", "fog_lut_ms_ps", "depth_resolve_ps", "depth_upsample_ps", "vu_pre_ps",
     /* RD_FS_OPTIONAL_FIRST on */
     "sprite_ps_planes", "sprite_texa_ps_planes", "sprite_stq_ps_planes", "fog_lut_local_ps",
-    "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps", "date_stencil_ps"};
+    "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps", "date_stencil_ps", "vu_np_ps",
+    "vu_texa_np_ps", "fx_frame_ps", "fx_local_ps"};
 
 const char *rd__fs_name(uint8_t fs)
 {
@@ -3138,6 +3139,7 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
     if (dp->key.fs == RD_FS_FONT_SHEET) {
         sheetParam(rd__tex_rec(r->st.tex), cb->param);
     }
+    rd__fill_draw_cb_extra(r, dp, ds, cb); /* rd_pixel_plan.c */
 }
 
 /* -------------------------------------------------------------- PRIM.AA1
@@ -3615,8 +3617,11 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     /* PRIM.AA1 on a line or triangle command */
     const int aa1 = r->st.aa1 && aa1Prim(c->b[0]);
     RdDrawPass dp[2];
-    const int np =
-        rd__plan_screen_draw_ex(&r->st, topo, aa1, c->b[1], ds.tc->format, ds.depthFmt, dp);
+    int np = rd__plan_screen_draw_ex(&r->st, topo, aa1, c->b[1], ds.tc->format, ds.depthFmt, dp);
+    RdAlphaRange as; /* the alpha/blend planner (rd_alpha_plan.c) */
+    rd__alpha_range_of_draw(
+        &r->st, &(RdAlphaSrc){RD_ALPHA_SRC_SCREEN, .f = f, .c = c, .v = v, .n = n}, &as);
+    rd__plan_screen_draw_alpha(&r->st, as, dp, &np);
     if (np == 0) {
         return;
     }
@@ -3627,7 +3632,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     /* a textured STQ triangle command with Q != 1 draws with
      * the STQ shaders, its vertices rewritten (24 bytes each) */
     if (!aa1 && !c->b[2] && ds.textured) {
-        float *qv;
+        float *qv = NULL; /* set wherever nq != 0 (qOrder) */
         const uint32_t nq = qOrder(v, n, c->b[0], &qv);
         RdDrawPass sp[2];
         int stq = nq == nv;
@@ -5483,6 +5488,11 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     /* above 1x: a target source and a scaled target (blurAbove1xSteps) */
     const uint32_t steps =
         textured ? blurAbove1xSteps(tc, src, p.uv, p.rect, d->magFilter == RD_FILTER_LINEAR) : 0;
+    /* the frame-size post sprites' plan (rd_fx_plan.c): drawn without the snapshot */
+    if (rd__fx_plan_draw(r, &(RdFxDraw){f, c, &p, d, tc, td, src, srcTex, &key, uv, tw, th, tfmt,
+                                        steps, useDepth, textured, dstRead, selfSample})) {
+        return;
+    }
     RhiRect need = {0, 0, tc->tw, tc->th};
     if (dstRead || selfSample) {
         /* the texels the sprite reads from the snapshot: the destination

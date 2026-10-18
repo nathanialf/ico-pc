@@ -297,6 +297,10 @@ static struct {
     /* the VU vertex pre-pass's vertices, draws and the mesh and grid draws
        drawn the old way (rd.h RdPerfRecord.vuPre*) */
     uint64_t vuPreVerts, vuPreDraws, vuPreFallbacks;
+    /* the pixel diet's draws: the alpha/blend planner's one-pass and
+       opaque draws, the frame-size plan's constant, additive and local-read
+       sprites, the VU passes without the planes (rd.h RdPerfRecord) */
+    uint64_t alphaOnePass, alphaOpaque, fxConstant, fxAdditive, fxLocal, vuNoPlanes;
     /* draws that read a water block at a scale other than the scene's
        (rd.h RdPerfRecord.blockOtherScaleReads, issue 106) */
     uint64_t blockOtherScale;
@@ -3806,6 +3810,12 @@ static void perf_drain(void)
         s_perf.vuPreVerts += r.vuPreVertices;
         s_perf.vuPreDraws += r.vuPreDraws;
         s_perf.vuPreFallbacks += r.vuPreFallbacks;
+        s_perf.alphaOnePass += r.alphaOnePass;
+        s_perf.alphaOpaque += r.alphaOpaque;
+        s_perf.fxConstant += r.fxConstant;
+        s_perf.fxAdditive += r.fxAdditive;
+        s_perf.fxLocal += r.fxLocal;
+        s_perf.vuNoPlanes += r.vuNoPlanes;
         s_perf.pipeCreates += r.pipelineCreates;
         s_perf.msaaResolves += r.msaaResolves;
         if (r.msaaSamples > s_perf.msaaSamples) {
@@ -3965,6 +3975,13 @@ static void perf_log(void)
             (unsigned long long)s_perf.texDestroyed, (unsigned long long)s_perf.allocs,
             (unsigned long long)s_perf.pipeCreates, (unsigned long long)s_perf.fenceWaits,
             (unsigned long long)s_perf.waitIdles, (unsigned long long)s_perf.readbacks);
+    /* the pixel diet (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c; the
+       flags are the rd: profile line's) */
+    fprintf(stderr,
+            "window: pixel diet per replay: alpha plan %.1f one-pass, %.1f opaque; fx plan %.1f "
+            "constant, %.1f additive, %.1f local; vu no-planes %.1f\n",
+            s_perf.alphaOnePass / n, s_perf.alphaOpaque / n, s_perf.fxConstant / n,
+            s_perf.fxAdditive / n, s_perf.fxLocal / n, s_perf.vuNoPlanes / n);
     if (s_perf.msaaSamples) {
         /* the anti-aliasing's cost: its resolves' GPU time is the effects'
            "MSAA resolve" above */

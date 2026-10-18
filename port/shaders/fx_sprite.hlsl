@@ -13,6 +13,10 @@
 //                floor(x * 255 + 0.5), which gives k for every k; so the
 //                two write the same bytes (rd_replay.c doBlurSpriteDraw
 //                picks it when both textures have the view)
+//   fx_frame_ps  (ICO_FX_FRAME=1) the frame-size forms: FXF_ALPHA_ONLY
+//                and FXF_OUT_PREMUL (port/render/rd_fx_plan.c)
+//   fx_local_ps  (ICO_FX_DST_LOCAL=1) the destination read inside the
+//                open pass by local read (port/render/rd_fx_plan.c)
 //
 // Bindings: t1 the texture (UNORM8, read with Load; its UINT view in
 // fx_sprite_u_ps), t2 the destination as it was before the sprite (a copy
@@ -71,6 +75,8 @@
 #define FXF_DATM 2048u
 #define FXF_DST 4096u
 #define FXF_ABOVE1X 8192u
+#define FXF_ALPHA_ONLY 16384u
+#define FXF_OUT_PREMUL 32768u
 
 #define AFAIL_KEEP 0u
 #define AFAIL_FB_ONLY 1u

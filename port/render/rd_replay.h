@@ -170,6 +170,36 @@ void rd__replay_perf_post(Replay *r, int post);
 bool rd__replay_blur_fix128_skip(void);
 /* the target's passes readable for the exact blend's attachment read (exactReadable) */
 bool rd__replay_exact_readable(uint32_t target);
+
+/* The pixel diet's replay hooks.
+ * rd__fx_plan_draw  rd_fx_plan.c (RdProfile.fxPlan, fxDstLocal): a
+ *                   staticBlur sprite as doBlurSpriteDraw has it before its
+ *                   snapshot (RdFxDraw) drawn another way (a constant fold,
+ *                   the fixed-function premultiplied add, the destination by
+ *                   local read); true: drawn (doBlurSpriteDraw returns),
+ *                   false: doBlurSpriteDraw draws it (the snapshot path)
+ * rd__fill_draw_cb_extra  rd_pixel_plan.c: what a draw pass's DrawCB needs
+ *                   besides fillDrawCB's fields, at its end (every planned
+ *                   pass of the screen prims and the VU draws) */
+typedef struct RdFxDraw {
+    const RdFrame *f;
+    const RdCmd *c;
+    const RdPostRec *p;      /* the sprite's record */
+    const RdDrawState *d;    /* the GS state (FIX 128 normalised: ABE off) */
+    RdTargetRec *tc;         /* the colour target (RGBA8) */
+    RdTargetRec *td;         /* its depth target, NULL when it has none of its size */
+    RdTargetRec *src;        /* the source target, NULL for an image or none */
+    RhiTexture srcTex;       /* the image, the source target's colour or g_rd.dummy */
+    const RdPipeKeyInt *key; /* rd__blur_key's (fx_sprite_ps) */
+    const float *uv;         /* rd__blur_uv_rect's four UVs */
+    uint32_t tw, th, tfmt;   /* the texture's size and TEXFMT */
+    uint32_t steps;          /* blurAbove1xSteps (0: the GS's own filter) */
+    int useDepth, textured, dstRead, selfSample;
+} RdFxDraw;
+
+bool rd__fx_plan_draw(Replay *r, const RdFxDraw *x);
+void rd__fill_draw_cb_extra(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds,
+                            IcoDrawCB *cb);
 /* rd_replay_tiler.c (docs/port/RENDER.md, "The replay").
  * rd__replay_date_take  DATE's stencil bit written in the draw's pass
  *                       (bindDrawEx, a draw with DrawSetup.dateStencil);

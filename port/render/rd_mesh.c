@@ -2504,6 +2504,7 @@ static uint32_t enumerateVuDraws(RdPipeKeyInt *out, uint32_t max, uint32_t n)
                         k.vs = vsList[v];
                         k.fs = (i & 1) ? RD_FS_VU_TEXA : RD_FS_VU;
                         n = rd__add_pipe_key(out, max, n, &k);
+                        n = rd__vu_pixel_fs_enum(out, max, n, &k); /* rd_pixel_plan.c */
                     }
                 }
             }

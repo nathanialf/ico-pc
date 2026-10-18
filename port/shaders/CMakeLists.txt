@@ -187,6 +187,21 @@ ico_add_shader(fx_blur2_ps fx_sprite.hlsl fx_blur2_ps fragment)
 # fx_sprite_ps reading its textures through their RGBA8_UINT views
 # (RHI_TEX_UINT_VIEW; rd_replay.c doBlurSpriteDraw)
 ico_add_shader(fx_sprite_u_ps fx_sprite.hlsl fx_sprite_ps fragment DEFINES ICO_UINT_SRC=1)
+# The pixel-diet builds (vu_np_ps, vu_texa_np_ps, fx_frame_ps, fx_local_ps)
+# vu_ps and vu_texa_ps without the planes' inputs, for a target at a
+# fractional scale (ICO_VU_NO_PLANES; port/render/rd_pixel_plan.c
+# rd__vu_pixel_fs), with their two-pass twins; fx_sprite_ps's frame-size
+# forms (ICO_FX_FRAME: the alpha-only and premultiplied outputs) and its
+# destination read by local read (ICO_FX_DST_LOCAL; port/render/rd_fx_plan.c
+# rd__fx_plan_draw). No exact-blend twins
+ico_add_shader(vu_np_ps vu_prelit.hlsl vu_ps fragment DEFINES ICO_VU_NO_PLANES=1)
+ico_add_shader(vu_np_ps vu_prelit.hlsl vu_ps fragment DEFINES ICO_VU_NO_PLANES=1 ICO_NO_DUAL=1
+               SUFFIX _nodual)
+ico_add_shader(vu_texa_np_ps vu_prelit.hlsl vu_texa_ps fragment DEFINES ICO_VU_NO_PLANES=1)
+ico_add_shader(vu_texa_np_ps vu_prelit.hlsl vu_texa_ps fragment DEFINES ICO_VU_NO_PLANES=1
+               ICO_NO_DUAL=1 SUFFIX _nodual)
+ico_add_shader(fx_frame_ps fx_sprite.hlsl fx_sprite_ps fragment DEFINES ICO_FX_FRAME=1)
+ico_add_shader(fx_local_ps fx_sprite.hlsl fx_sprite_ps fragment DEFINES ICO_FX_DST_LOCAL=1)
 
 # the table of every entry above, the fences included (ico_shaders_library reads
 # the manifest where it is called: it must come after every ico_add_shader)

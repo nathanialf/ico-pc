@@ -518,6 +518,8 @@ bool rd__fs_has_no_dual(uint8_t fs)
     case RD_FS_SPRITE_PLANES:
     case RD_FS_SPRITE_TEXA_PLANES:
     case RD_FS_SPRITE_STQ_PLANES:
+    case RD_FS_VU_NP:
+    case RD_FS_VU_TEXA_NP:
         return true;
     default:
         return false;
@@ -526,7 +528,7 @@ bool rd__fs_has_no_dual(uint8_t fs)
 
 bool rd__fs_local_read(uint8_t fs)
 {
-    return fs == RD_FS_FOG_LOCAL || fs == RD_FS_DATE_STENCIL;
+    return fs == RD_FS_FOG_LOCAL || fs == RD_FS_DATE_STENCIL || fs == RD_FS_FX_LOCAL;
 }
 
 static RdBlendPath keyBlendPath(const RdPipeKeyInt *k)
@@ -2997,7 +2999,7 @@ uint32_t rd__enumerate_reachable_blur(RdPipeKeyInt *out, uint32_t max, uint32_t 
         const RdPipeKeyInt k = rd__blur_fold_key(&s, RHI_FMT_RGBA8_UNORM);
         n = rd__add_pipe_key(out, max, n, &k);
     }
-    return n;
+    return rd__fx_enumerate(out, max, n); /* the frame-size post sprites (rd_fx_plan.c) */
 }
 
 RdPipeKeyInt rd__blur_fold_key(const RdStateBlock *s, RhiFormat colorFmt)
