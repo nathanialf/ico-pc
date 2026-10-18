@@ -185,16 +185,58 @@ SamplerState g_sampler : register(s1, space2);
 // 1x1 dummy is bound and never fetched.
 Texture2D<float> g_dateSnap : register(t2, space2);
 
+// gs_bspline_bilinear4 with its weights and places from kSpriteBspline
+float4 sprite_bspline4(float2 tc, float2 size)
+{
+    // gs_bspline_bilinear4's per-fraction terms, one row per 4-bit fraction f:
+    // x, y the two taps' weights (w0 + w1) / 24576 and (w2 + w3) / 24576, z, w
+    // their places inside their texel pairs w1 / (w0 + w1) and
+    // w3 / max(w2 + w3, 1) (gs_bspline_w's weights), each the float the
+    // division rounds to
+    static const float4 kSpriteBspline[16] = {
+        float4(0.833333313, 0.166666672, 0.800000012, 0.0),
+        float4(0.800211608, 0.199788406, 0.828384042, 0.000203665986),
+        float4(0.763671875, 0.236328125, 0.853793681, 0.00137741049),
+        float4(0.724202454, 0.275797516, 0.876559138, 0.00398347573),
+        float4(0.682291687, 0.317708343, 0.896946549, 0.00819672085),
+        float4(0.638427734, 0.361572266, 0.915168881, 0.0140670715),
+        float4(0.593098938, 0.406901032, 0.9313941, 0.0216000006),
+        float4(0.54679364, 0.45320639, 0.945750833, 0.0307954755),
+        float4(0.5, 0.5, 0.958333313, 0.0416666679),
+        float4(0.45320639, 0.54679364, 0.969204545, 0.0542491451),
+        float4(0.406901032, 0.593098938, 0.978399992, 0.0686059296),
+        float4(0.361572266, 0.638427734, 0.985932946, 0.0848311037),
+        float4(0.317708343, 0.682291687, 0.991803288, 0.103053436),
+        float4(0.275797516, 0.724202454, 0.996016502, 0.123440839),
+        float4(0.236328125, 0.763671875, 0.998622596, 0.146206304),
+        float4(0.199788406, 0.800211608, 0.999796331, 0.171615988)
+    };
+    const int2 c16 = int2(floor(tc * 16.0 + 0.5));
+    const int2 i0 = (c16 - 8) >> 4;
+    const uint2 f = uint2((c16 - 8) & 15);
+    const float4 wx = kSpriteBspline[f.x], wy = kSpriteBspline[f.y];
+    const float2 g0 = float2(wx.x, wy.x), g1 = float2(wx.y, wy.y);
+    const float2 h0 = float2(i0) - 1.0 + float2(wx.z, wy.z) + 0.5;
+    const float2 h1 = float2(i0) + 1.0 + float2(wx.w, wy.w) + 0.5;
+    const float2 inv = 1.0 / size;
+    return g0.y * (g0.x * g_texture.SampleLevel(g_sampler, float2(h0.x, h0.y) * inv, 0.0) +
+                   g1.x * g_texture.SampleLevel(g_sampler, float2(h1.x, h0.y) * inv, 0.0)) +
+           g1.y * (g0.x * g_texture.SampleLevel(g_sampler, float2(h0.x, h1.y) * inv, 0.0) +
+                   g1.x * g_texture.SampleLevel(g_sampler, float2(h1.x, h1.y) * inv, 0.0));
+}
+
 // Above 1x (DF_ABOVE1X: a bilinear draw sampling a target at another scale
 // than the bound target's, rd_replay.c fillDrawCB): the texel at the
 // normalised uv, after TEXA, resampled by the step, in t1's texels per
-// bound texel per axis (the footprint of the pixel, ddx/ddy of the texel
-// coordinate: constant over a sprite) through common.hlsli's kernels about
-// the sample point (the coordinate in t1's 12.4 texels, as
-// gs_texa_texture rounds it):
+// bound texel per axis (g_scale.w, step32x * 4096 + step32y, the sprite
+// command's from the CPU: rd_fx_plan.c rd__a1x_sprite_steps; 0: the
+// footprint of the pixel, ddx/ddy of the texel coordinate) through
+// common.hlsli's kernels about the sample point (the coordinate in t1's
+// 12.4 texels, as gs_texa_texture rounds it):
 //   both axes under half a texel  the cubic B-spline as four bilinear taps
 //                                 of the draw's own sampler
-//                                 (gs_bspline_bilinear4), TEXA after
+//                                 (sprite_bspline4: gs_bspline_bilinear4
+//                                 with its terms from a table), TEXA after
 //   an axis over two texels       the area box on that axis (the other
 //                                 axis its own kernel), every tap loaded
 //                                 with the draw's wrap reproduced on t1's
@@ -213,15 +255,20 @@ bool sprite_above1x(float2 uv, out uint4 t)
     g_texture.GetDimensions(w, h);
     const int2 size = max(int2(int(w), int(h)), int2(1, 1));
     const float2 tc = uv * float2(size);
-    const float2 dx = ddx(tc), dy = ddy(tc);
-    const float2 k = max(abs(dx), abs(dy)) * 32.0 + 0.5;
-    const int sx = int(min(floor(k.x), 4095.0)), sy = int(min(floor(k.y), 4095.0));
+    const uint steps = uint(g_scale.w);
+    int sx = int(steps >> 12), sy = int(steps & 4095u);
+    [branch] if (steps == 0u) {
+        const float2 dx = ddx(tc), dy = ddy(tc);
+        const float2 k = max(abs(dx), abs(dy)) * 32.0 + 0.5;
+        sx = int(min(floor(k.x), 4095.0));
+        sy = int(min(floor(k.y), 4095.0));
+    }
     const int kx = gs_rs_kind(sx, 1u), ky = gs_rs_kind(sy, 1u);
     if (kx == GS_RS_GS && ky == GS_RS_GS) {
         return false;
     }
     if (kx == GS_RS_BSPLINE && ky == GS_RS_BSPLINE) {
-        const float4 f = gs_bspline_bilinear4(g_texture, g_sampler, tc, float2(size));
+        const float4 f = sprite_bspline4(tc, float2(size));
         t = gs_texa_expand(uint4(floor(saturate(f) * 255.0 + 0.5)), g_mode.y & 0xFFu,
                            g_mode.y >> 8);
         return true;

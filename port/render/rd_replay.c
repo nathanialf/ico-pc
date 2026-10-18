@@ -3117,6 +3117,7 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
                                                                            : 0u) |
             (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t, 1) != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_T
                                                                            : 0u);
+        cb->scale[3] = (float)ds->a1xSteps; /* the steps from the CPU, 0 the footprint's */
         g_rd.above1xDraws++;
     }
     cb->mode[2] = dp->modeZ;
@@ -3614,6 +3615,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     if (mirrorUi(r, c->b[1])) {
         mirrorDraw(r, ds.tc, out, nv, topo); /* the mirror mode's UI flip */
     }
+    ds.a1xSteps = rd__a1x_sprite_steps(r, &ds, out, nv, c->b[0]); /* rd_fx_plan.c */
     /* PRIM.AA1 on a line or triangle command */
     const int aa1 = r->st.aa1 && aa1Prim(c->b[0]);
     RdDrawPass dp[2];
@@ -5393,6 +5395,11 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
          * a frame of its own: the recorded pair stays as it is */
         RdScreenVtx snap[2];
         memcpy(snap, f->payload + screenVtx, sizeof(snap));
+        float clr[4]; /* the black sprite as its clear (rd_fx_plan.c) */
+        if (rd__fx_reduction_clears(r, snap, clr)) {
+            pendClear(r, r->st.color, rd__target_rec(r->st.color), clr, 0, 0);
+            return;
+        }
         rd__blur_snap_verts(&r->st, snap);
         RdFrame sf = *f;
         sf.payload = (uint8_t *)snap;
@@ -6208,11 +6215,16 @@ uint32_t rd__replay_msaa_want(void)
     return s_ms.want;
 }
 
-/* rd_replay_tiler.c's helpers (rd_replay.h): the functions of this file
- * named beside them */
+/* rd_replay_tiler.c's and rd_fx_plan.c's helpers (rd_replay.h): the
+ * functions of this file named beside them */
 void rd__replay_flush_run(Replay *r)
 {
     flushScreenRun(r);
+}
+
+void rd__replay_end_pass(Replay *r)
+{
+    endPass(r);
 }
 
 RhiBindGroup rd__replay_bind_draw(Replay *r, const DrawSetup *ds)

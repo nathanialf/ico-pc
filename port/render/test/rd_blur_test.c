@@ -107,6 +107,17 @@
  *      exactly (WORK0 and WORK1 too: blur(n), n = 10..19, nine pairs a
  *      chain folded and the last drawn as two passes), the folds counted
  *      (RdPerfRecord.blurFolds) and every pipeline created enumerated.
+ *   l  the frame-size post sprites' plan (rd_fx_plan.c, RdProfile.fxPlan, on
+ *      in every other case): post modes 1..7 as e runs them and 40 motion
+ *      blur frames as m runs them, every target against the CPU model
+ *      exactly, the constant fold (cleanUpFB, the WORK0 fill) and the
+ *      premultiplied paste counted (RdPerfRecord.fxConstant, fxAdditive);
+ *      then, where the device has local read, the same with the scene
+ *      passes readable (RdProfile.dateStencil) and fxDstLocal on: the
+ *      motion blur's destination by local read (fxLocal), every target the
+ *      model's, rd__fx_local_selftest passing, every pipeline created
+ *      enumerated.  f holds the plan off: it counts the FIX 128 skip's
+ *      snapshots alone.
  * Tolerance 0 everywhere (but q's scaled runs).  Every pipeline created is enumerated; no
  * validation errors; no stubbed command replayed. */
 #include <math.h>
@@ -2134,6 +2145,10 @@ static uint64_t fixReplay(const char *what, const RdFrame *f, int skip, uint8_t 
 static void checkFix128Skip(void)
 {
     static uint8_t on[W * H * 4], off[W * H * 4];
+    /* the skip's snapshots alone: the fx plan would draw the untextured
+       LERP FIX 128 without the skip as a constant fold, no snapshot */
+    const bool plan = g_rd.profile.fxPlan;
+    g_rd.profile.fxPlan = false;
     /* ZTE, ZTST ALWAYS; DATE (DATM 0); ATE, ATST GEQUAL, AREF 0x40, AFAIL RGB_ONLY */
     const uint64_t z = 0x30000, date = 1u << 14, rgbOnly = 1 | (5 << 1) | (0x40 << 4) | (3 << 12);
 
@@ -2184,6 +2199,7 @@ static void checkFix128Skip(void)
               (unsigned long long)cOn, (unsigned long long)cOff);
     }
     rd__set_blur_fix128_skip(true);
+    g_rd.profile.fxPlan = plan;
 }
 
 /* ========== (n) the motion blur presented many times a tick
@@ -3479,6 +3495,83 @@ static void checkBlurFold(void)
     rd__pipeline_cache_clear(); /* the fold's key is outside the reachable set again */
 }
 
+/* ============================================== (l) the fx plan */
+
+/* post modes 1..7 and 40 motion blur frames, the plan's counters summed */
+static void fxPlanFrames(const char *what, uint32_t sum[3], int *worst)
+{
+    InitStaticBlur(0, (float[4]){0.3f, -0.2f, -1.0f, 0.0f});
+    for (int post = 1; post <= 7; post++) {
+        const int d = effectsFrame(post, post == 1);
+        *worst = d > *worst ? d : *worst;
+        sum[0] += g_rdPerf.fxConstant; /* the frame's replay (runFrame) */
+        sum[1] += g_rdPerf.fxAdditive;
+        sum[2] += g_rdPerf.fxLocal;
+    }
+    InitializeStaticBlur(); /* sun off */
+    setStage(0, 0, 0);
+    currentScreenWidth = 0;
+    clearAll();
+    for (int n = 0; n < 40; n++) {
+        makeImage((uint32_t)n, 1); /* noise */
+        rd_update_texture(s_imgTex, s_img);
+        putScene();
+        dl_SetDLPriority(7);
+        rd_sampler_filter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
+        rd_sampler_wrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+        SetMotionBlur(0x40);
+        MotionBlur();
+        putReduction();
+        char f[64];
+        snprintf(f, sizeof(f), "%s motion blur frame %d", what, n);
+        const int d = runFrame(f, failures < 10);
+        *worst = d > *worst ? d : *worst;
+        sum[0] += g_rdPerf.fxConstant;
+        sum[1] += g_rdPerf.fxAdditive;
+        sum[2] += g_rdPerf.fxLocal;
+    }
+}
+
+static void checkFxPlan(void)
+{
+    const RdProfile was = g_rd.profile;
+    g_rd.profile.fxPlan = true;
+    g_rd.profile.fxDstLocal = false;
+    uint32_t sum[3] = {0, 0, 0};
+    int worst = 0;
+    fxPlanFrames("(l)", sum, &worst);
+    CHECK(sum[0] > 0 && sum[1] > 0 && sum[2] == 0,
+          "(l) the plan drew %u constant, %u additive, %u local", sum[0], sum[1], sum[2]);
+    printf("  (l) the fx plan: %u constant, %u additive sprites, max difference %d\n", sum[0],
+           sum[1], worst);
+    checkPipelines();
+    if (!rhi_limits()->localRead || !g_rd.fs[RD_FS_FX_LOCAL].id ||
+        !g_rd.fs[RD_FS_DATE_STENCIL].id || !g_rd.layoutLocal.id) {
+        printf("  (l) the local read: skipped (no local read on this device)\n");
+    } else {
+        /* the scene passes readable (the scene targets made again with the
+           input attachment) and the destination by local read */
+        g_rd.profile.dateStencil = true;
+        g_rd.profile.fxDstLocal = true;
+        rd_reset_scene(W, H);
+        uint32_t sl[3] = {0, 0, 0};
+        int wl = 0;
+        fxPlanFrames("(l) local", sl, &wl);
+        CHECK(sl[2] > 0, "(l) no sprite took the local read");
+        printf("  (l) the local read: %u sprites by local read (%u constant, %u additive), max "
+               "difference %d\n",
+               sl[2], sl[0], sl[1], wl);
+        checkPipelines(); /* fx_local_ps's keys enumerated while the profile has them */
+        CHECK(rd__fx_local_selftest() && g_rd.profile.fxDstLocal, "(l) the local read's self-test");
+    }
+    CHECK(rhi_vk_validation_error_count() == 0, "(l) %u validation errors",
+          rhi_vk_validation_error_count());
+    g_rd.profile = was;
+    rd_reset_scene(W, H);
+    rhi_wait_idle();
+    rd__pipeline_cache_clear(); /* the local keys are outside the reachable set again */
+}
+
 static void checkPipelines(void)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_REACHABLE_MAX];
@@ -3512,6 +3605,7 @@ static const IcoShardCase k_cases[] = {
     {"fix128_skip", 1},
     {"uint_view", 2},
     {"blur_fold", 2},
+    {"fx_plan", 8},
     {"queen_mirage", 10},
     {"queen_presents", 1},
     {"motion_blur_presents_scaled", 41},
@@ -3641,6 +3735,9 @@ int main(int argc, char **argv)
     }
     if (ico_shard_take("blur_fold")) {
         checkBlurFold();
+    }
+    if (ico_shard_take("fx_plan")) {
+        checkFxPlan(); /* makes the targets again with the scene passes readable, then without */
     }
     if (ico_shard_take("queen_mirage")) {
         checkQueenMirage(); /* re-initialises rd (NTSC, 1x, 4x) */
