@@ -122,6 +122,14 @@ take from either ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)).
   locations, the layout `font.hlsl`, `fog_lut.hlsl` (`FogPSIn`) and `raw_wrap.hlsl` (`WrapAccIn`)
   declare, since D3D12 refuses a pixel input the vertex shader does not write. A pass takes both
   halves of the planes build together (`port/render/rd_screen_planes.c` (`rd__plane_pass`)).
+- the no-planes build (`ICO_VU_NO_PLANES=1`): `vu_ps` and `vu_texa_ps` built again as `vu_np_ps`
+  and `vu_texa_np_ps`, each with its `_nodual` twin, for a target at a fractional scale
+  (`port/render/rd_pixel_plan.c` (`rd__vu_pixel_fs`), [RENDER.md](RENDER.md#screen-planes)). Their
+  input is `VuPSIn` (`vu_common.hlsli`): locations 0 to 2 of `VuVSOut` alone (the colour, S, T, Q
+  and the plane distance; 12 input components with the position, against 40), a prefix of every
+  VU vertex shader's output, so the main shaders and the programs' own entries feed it unchanged
+  (DXC packs the prefix as the whole signature packs it: the same D3D12 registers). No
+  destination-read twins: under an exact blend the draws keep `vu_ps`.
 
 The replay looks entries up by the names in `s_vsNames` and `s_fsNames` (`port/render/rd_replay.c`).
 
@@ -464,8 +472,17 @@ in: `vu_prelit_pre_vs` 2,120 words (483 instructions, 36 blocks), `vu_lit_pre_vs
 (words, instructions, blocks; this DXC and the build's flags): `vu_tri_rule_pre_vs` 16,515
 (3,600, 305), `vu_tri_tick_pre_vs` 16,614 (3,462, 212), `vu_tri_planes_pre_vs` 4,269 (972, 90),
 `vu_particle_pre_vs` 8,801 (2,071, 200), `vu_main_vs` 6,277 (1,481, 174), `vu_particle_main_vs`
-4,249 (986, 102); `vu_ps` 5,523 (1,310, 188) and `vu_texa_ps` 11,688 (2,807, 474), the one pixel
-shader of both ways. `spirv_check` holds the pre-pass entries, the record stages (`_pre_vs`) and the main
+4,249 (986, 102); `vu_ps` 5,512 (1,311, 191) and `vu_texa_ps` 11,655 (2,804, 477), the one pixel
+shader of both ways, and the no-planes builds `vu_np_ps` 4,887 (1,176, 187) and `vu_texa_np_ps`
+11,023 (2,668, 473). By the live-path walk (the SPIR-V executed for one pixel, its arithmetic
+weighted by components) an opaque textured pixel of `vu_ps` runs 168 instructions and 127
+lane-operations, of `vu_np_ps` 124 and 80. The pixel side's colour arithmetic runs on the GS's
+integers held as floats (`vu_common.hlsli` `vu_col_int`, `vu_texel_int`,
+`vu_texture_function_f`, `vu_dual_out_f`): every value an integer under 2^16, so each step is exact
+and the result is the integer form's (`gs_texture_function`, `gs_dual_out`) bit for bit, without
+the conversions between the two. A NaN texel (sampled at a NaN UV, where Q is 0) and a NaN colour
+of the planes become 0, as the integer form's conversion gives them (`max(., 0)`; HLSL's `min`
+would pass a NaN as its other operand, 255). `spirv_check` holds the pre-pass entries, the record stages (`_pre_vs`) and the main
 shaders (`_main_vs`) to the plain budget and asks a plain variant only of the ten mesh programs'
 entries (`tools/check_spirv.py` `PROGRAM_ENTRIES`, gates `size per variant` and `variants`). With
 the pre-passes a device compiles the two main shaders, the ten pre-pass entries and the five

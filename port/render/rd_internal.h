@@ -1309,6 +1309,11 @@ bool rd__plan_screen_draw_alpha(const RdStateBlock *s, RdAlphaRange as, RdDrawPa
  *                       n the count so far; returns the new count */
 RdFsId rd__vu_pixel_fs(RdFsId today, const RdStateBlock *s, const RdTargetRec *tc,
                        const RdDrawPass *p);
+/* Whether a draw under state s into target tc drops the attribute planes:
+ * RdProfile.vuPlanesFrac, Enhanced, tc's scale not a whole number on both
+ * axes, and neither both filters nearest nor a texture with GS levels (the
+ * rule rd__vu_pixel_fs and rd__screen_planes_want apply) */
+bool rd__planes_dropped(const RdStateBlock *s, const RdTargetRec *tc);
 uint32_t rd__vu_pixel_fs_enum(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPipeKeyInt *k);
 /* An alpha-tested draw with Z write off whose failing fragments write what
  * its passing ones write (AFAIL FB_ONLY, or RGB_ONLY with the alpha channel
@@ -1410,6 +1415,10 @@ int rd__stq_pass(RdDrawPass *dp);
  * kept until the next call; NULL when it cannot be had. */
 int rd__plane_pass(RdDrawPass *dp);
 const struct IcoSpritePlaneVertex *rd__screen_planes(const void *vb, uint32_t stride, uint32_t n);
+/* Whether doScreen gives a triangle command under state s into target tc,
+ * planned as dp, its planes: not where the planes are dropped
+ * (rd__planes_dropped; its STQ passes keep them) */
+int rd__screen_planes_want(const RdStateBlock *s, const RdTargetRec *tc, const RdDrawPass *dp);
 /* Whether a draw under this state samples a PSMCT24 or
  * PSMCT16 texture (or one with a 24- or 16-bit CLUT: RdTexRec.src not
  * RGBA32) under a TEXA with AEM through a linear MAG or MIN filter, the

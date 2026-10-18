@@ -1249,7 +1249,8 @@ bit for bit. A flat varying stays in the tile on a tile-based GPU; a read by the
 pixel (six buffer loads a fragment) would cost the fill-heavy scenes most. `vu_particle_main_vs`
 draws sprite `vid / 6` from `vu_particle` with slot A's verdict and the sprite's planes the same
 way. `vu_ps` and `vu_texa_ps` take `VuVSOut` from either the main shaders or the programs' own
-entries and evaluate the planes (`vu_pixel_attrs`). A main shader's pipeline does not depend on
+entries and evaluate the planes (`vu_pixel_attrs`); at a fractional scale `vu_np_ps` reads its
+first three locations alone (`VuPSIn`, [Screen planes](#screen-planes)). A main shader's pipeline does not depend on
 the program, so the key's program is normalised (`RD_PROG_PRELIT`) and the programs share their
 pipelines.
 
@@ -2115,6 +2116,29 @@ the position, the colour and uv or stq, two input locations. The plain build is 
 with the planes' zeros removed (the plain vertex shaders wrote zeros, and `sprite_plane_attrs`
 returned at `p5.w == 0`), so the two builds draw the same bytes. The plane keys of the start-up set
 are the same keys with the planes build's fragment id; their count does not change.
+
+**Where the planes are used.** The planes' exactness holds at a whole scale: corners on the 1/16
+grid and pixel centres on k + 0.5 give exact offsets only when the target's texels per GS pixel
+are whole numbers. On a target whose scale is not a whole number on both axes (Enhanced at the
+window's own size, 2364x1080 is 2.8125 x 2.41 a GS pixel) the planes buy nothing, and the
+GPU's screen-space (noperspective) interpolation of the corners' values gives the same values
+to a few ulp (a colour a level apart within about 3e-5 of a .5 boundary, an alpha-tested edge
+pixel within a level of AREF on the other side; [DIVERGENCES.md](DIVERGENCES.md)). There, under
+the Enhanced preset with the device profile's `vuPlanesFrac` (`[dev] vu_planes`), a VU pass of
+`vu_ps` draws with `vu_np_ps` (its build without the planes' inputs, `ICO_VU_NO_PLANES`) and a
+screen-prim triangle command with the plain sprite build. The planes stay for a draw with both
+filters nearest (the GS's texel at a texel boundary), a texture with GS levels (the level by Q),
+a VU draw with a chain clip plane (the discard at distance 0), `vu_texa_ps`'s draws, the STQ
+screen triangles (their plain keys are not in the start-up set) and every draw under an exact
+blend (the twin has no destination-read build) (`port/render/rd_pixel_plan.c`
+(`rd__planes_dropped`, `rd__vu_pixel_fs`); `port/render/rd_screen_planes.c`
+(`rd__screen_planes_want`)). Every whole scale, Original's 1x among them, keeps the planes
+everywhere, so its pictures are unchanged. At a fractional scene scale (`g_rd.sceneSx`,
+`sceneSy` at the start-up set) each `vu_ps` key of the start-up set has its `vu_np_ps` twin
+(`rd__vu_pixel_fs_enum`); a scale reached later makes the twins on first use. The log: the
+profile's start line (`VU planes whole scales only`, or `every scale`), one `planes:` line a run
+the first time a target drops them, and `vu no-planes N` (the VU passes drawn through `vu_np_ps`)
+in `--stats` and the 10 s `window:` line.
 
 ## Camera blending
 

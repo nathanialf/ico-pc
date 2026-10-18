@@ -65,16 +65,18 @@ VuPreOut vu_prelit_pre_vs(uint id : SV_VertexID)
     return vu_pre_out(id, vu_prelit_vertex(vu_rec.z + id, vu_draw.z & VU_CLIP_MASK));
 }
 
-GS_PS_ATTR GS_PS_OUT vu_ps(VuVSOut i)
+// VuPSIn: VuVSOut, or its first three locations alone under
+// ICO_VU_NO_PLANES (vu_common.hlsli)
+GS_PS_ATTR GS_PS_OUT vu_ps(VuPSIn i)
 {
-    const uint4 col = vu_pixel(i);
-    GS_RETURN(col, i.pos);
+    const float4 col = vu_pixel(i);
+    VU_RETURN(col, i.pos);
 }
 
-GS_PS_ATTR GS_PS_OUT vu_texa_ps(VuVSOut i)
+GS_PS_ATTR GS_PS_OUT vu_texa_ps(VuPSIn i)
 {
-    const uint4 col = vu_pixel_texa(i);
-    GS_RETURN(col, i.pos);
+    const float4 col = vu_pixel_texa(i);
+    VU_RETURN(col, i.pos);
 }
 
 // The probe's input: the position and the colour (location 0 of VuVSOut)

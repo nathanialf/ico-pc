@@ -371,9 +371,10 @@ target_include_directories(rd_perf_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_perf_test PRIVATE ico_render)
 
 # rd_alpha_plan_test, rd_fx_frame_test, rd_vu_frac_test: the pixel diet's
-# planners (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c), CPU only: each
-# checks that its planner leaves every draw as it is, then exits 77 (its own
-# cases are not written).
+# planners (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c), CPU only: the
+# alpha range's truth table and the blend identities, the frame-size fold and
+# the premultiplied identity, the planes rule's truth table and the VS->PS
+# prefix match.
 foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac)
     add_executable(${_t}_test test/${_t}_test.c)
     target_compile_options(${_t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

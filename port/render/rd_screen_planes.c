@@ -16,7 +16,14 @@
  * values at every width, as the VU programs' triangles (vu_common.hlsli
  * vu_attr_planes).  The GS's colours and STQ run linearly in screen space,
  * which the planes are.  Sprites (two corners, axis-aligned) keep their
- * own path: their colour is flat. */
+ * own path: their colour is flat.
+ *
+ * At a scale that is not a whole number (rd_pixel_plan.c rd__planes_dropped)
+ * the planes buy no exactness: a triangle command draws with the plain
+ * sprite build there, the GPU's screen-space interpolation of its corners
+ * (rd__screen_planes_want), but for the STQ triangles (the lightning's
+ * strips), whose plain keys the start-up set does not hold beside the
+ * planes ones (rd_pipeline.c rd__enumerate_reachable_screen). */
 #include <stdlib.h>
 #include <string.h>
 
@@ -48,6 +55,14 @@ int rd__plane_pass(RdDrawPass *dp)
         return 1;
     }
     return 0;
+}
+
+int rd__screen_planes_want(const RdStateBlock *s, const RdTargetRec *tc, const RdDrawPass *dp)
+{
+    if (dp && (dp->key.fs == RD_FS_SPRITE_STQ || dp->key.fs == RD_FS_SPRITE_STQ_PLANES)) {
+        return 1;
+    }
+    return !rd__planes_dropped(s, tc);
 }
 
 /* the change per GS pixel across (gx) and down (gy) of values va, vb, vc at

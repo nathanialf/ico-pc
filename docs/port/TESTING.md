@@ -492,6 +492,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and a text texture
   that could not be uploaded named once in the log, the game's own textures never
   (`textUploadLogChecks`) (`rd_tex`).
+- `rd_vu_frac_test.c`: the pixel side at a fractional scale, CPU only (`rd_vu_frac`): the truth
+  table of `rd__vu_pixel_fs`, `rd__planes_dropped` and `rd__screen_planes_want` over the profile
+  flag, the preset, the exact blend, nine scales (whole and fractional on either axis), the two
+  filters, a texture with and without GS levels, the chain clip plane and the entries; the
+  start-up set at 2.8125 x 2.41071 being the 2x set and one `vu_np_ps` twin per `vu_ps` key; the
+  `vuNoPlanes` count; and in the embedded SPIR-V every input of `vu_np_ps`, `vu_texa_np_ps` and
+  their `_nodual` builds at location 0, 1 or 2 with `vu_ps`'s type and interpolation there, and
+  `vu_ps`'s inputs matching the outputs of every VU vertex shader that draws (the main shaders,
+  the programs' entries and their plain builds).
 - `rd_water_test.c`: the surfaces that render to and sample from textures (`rd_water`).
 - `texpack_disc_test.c`: the PCSX2 names of every texture on the disc, and how many of a pack's
   files they reach (`texpack_disc`).
