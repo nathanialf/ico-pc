@@ -287,6 +287,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   scale with the width; with the disc, a stage (`gsb_cull`, `gsb_cull_stage`).
 - `modelpack_test.c`: model packs end to end on synthetic models under the build tree
   (`modelpack`).
+- `rd_alpha_plan_test.c`: the alpha/blend planner on the CPU ([RENDER.md](RENDER.md#pipelines),
+  the alpha plan): every ATST x AREF x As range under AFAIL KEEP and the FB_ONLY split against
+  `gs_alpha_pass` over every As of the range, the other AFAIL shapes pixel by pixel, the blend
+  identities over every Cs and Cd (`gs_blend_reg_ch`, `gs_dst_channel`), a model of the
+  fixed-function path over every blend mode, PABE, FBA, COLCLAMP, FIX and range (the planned
+  passes store the pixel the plan before stores), the ranges of screen prims, meshes, grids and
+  particles, and `rdtex_alpha_range` against every texel and two- and three-texel blends
+  (`rd_alpha_plan`).
 - `rd_blur_test.c`: `staticBlur.c`'s full-screen effects on rd (`rd_blur`, sharded); the
   `above1x` shard runs the aura's chain at Enhanced 4x against the CPU model with the above-1x
   box (`above1x_ref.c`) for the decimations and the GS's bilinear at the finer grid for the work
@@ -424,7 +432,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   dump the tool tests replay (`rd_pixel`). Its DATE case replays one frame through the stencil bit
   and through the snapshot (where the device has local read): one DATE command of two overlapping
   sprites over cells of alpha 0x80 and 0, SCENE the same bytes both ways and the snapshot's
-  semantics within the draw (`testDateStencil`).
+  semantics within the draw (`testDateStencil`). Its alpha plan case replays one frame with the
+  alpha/blend planner off and on: prelit quads of vertex alpha 0x80, 0x70 and 0x40 under the
+  railing's state, a LERP FIX 0x80 sprite and a LERP sprite of As 0, SCENE's colour and depth the
+  same bytes, three draws counted one-pass (`testAlphaPlan`); the railing keeps its split.
 - `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`);
   the targets' scales include the work buffers and shadow levels at their GS sizes at every scale
   and Water reflections' block: its GS size under Original, the scene's scale under Sharp (4x at

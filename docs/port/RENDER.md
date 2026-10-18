@@ -772,6 +772,63 @@ one draw without the test, in the GS's order (reported once)`; `rd__set_alpha_me
 two draws (tests: ctest `rd_state` `testAlphaMerge`, the condition table, each merged key a key of the split plan, and the game's FB_ONLY state without Z write in the screen set; ctest `rd_pixel`
 `testAlphaOrder`, an overlap the split drew in the other order).
 
+**The alpha plan.** The planned passes above assume any source alpha; where the range of As a
+draw's pixels can take decides the test or the blend for every pixel, the alpha/blend planner
+draws only what that outcome needs, byte for byte what the planned passes write
+(`port/render/rd_alpha_plan.c` (`rd__alpha_range_of_draw`, `rd__plan_screen_draw_alpha`), called
+after the plan by `port/render/rd_replay_vu.c` (`vuDraw`, the range once a command in `doVuDraw`)
+and `port/render/rd_replay.c` (`doScreen`), before the exact blend's and the two-pass blend's
+expansions). The rules, each a fact of the GS's integer arithmetic and of the fixed-function path:
+
+| rule | condition over the range lo..hi | the plan | why the bytes are the same |
+| --- | --- | --- | --- |
+| every pixel passes | the test passes for every As (`gs_alpha_pass`) | the pass of the passing pixels without the test; the failing pixels' pass dropped | `gs_alpha_discard` keeps every pixel in the first and none in the second |
+| every pixel fails | the test fails for every As | the failing pixels' pass without the test; the passing pixels' pass (and AFAIL KEEP's one pass) dropped | the other way round |
+| factor one | a LERP with FIX 0x80 or As 0x80 over the range, or PABE with every As below 0x80 | blending off (the ABE-off pass) | `((Cs - Cd) * 0x80 >> 7) + Cd = Cs`, PABE writes Cs unblended (`gs_dst_channel`); the blender's `Cs * 1 + Cd * 0` is Cs; alpha is As whatever the equation |
+| factor zero | a LERP or a premultiplied add or subtract (modes 0, 1, 2, 4, 5, 6, 7) with factor 0 | R, G and B masked, blending off | `((A - B) * 0 >> 7) + Cd = Cd`, the shader's `(Cs * 0) >> 7` is 0; alpha As |
+
+The factor-zero rule applies only where the blend and the mask are dynamic state (`g_rd.dynBlend`), so the mask
+makes no pipeline the start-up set lacks; the other rules give keys the plan already has (the test is a
+uniform; the factor-one key is the state's with ABE off, which the VU and screen families enumerate). A pass
+left writing nothing (mask 0, no Z write) is dropped. Not planned: DATE, PRIM.AA1, the text
+shaders (their alpha is not As), and for the factor rules PABE over a range with and without the MSB,
+COLCLAMP 0, mode 3, the Ad forms, mode 11 and the exact blend (`g_rd.dstMode`, whose passes blend
+in the shader).
+
+The range is the texture function of the texel's alpha and the vertex's: MODULATE `min((t * c) >>
+7, 255)` is monotonic in both, DECAL with TCC takes the texel's, TCC RGB the vertex's. The
+texel's is the least and the largest alpha over every texel of every level the device holds:
+`rd_upload.c` scans each upload of a game texture (level 0 whole with its zero padding, which
+REPEAT reaches, then each level `uploadMips` copies, after `rdtex_keep_alpha_coverage`, or the GS
+levels) and of a pack replacement's RGBA8 levels, and keeps the scan with the texture's slot,
+its id and its RHI texture (`port/render/rd_upload.c` (`texAlphaKeep`, `rd__tex_alpha_scan`));
+a texture that is dirty (a CLUT scroll's new generation, a coverage change, a new level count),
+refused, compressed, a render target or not uploaded in full is not known. The 24- and 16-bit
+sources expand under the TEXA in force, as the shaders do (`port/render/rd_tex.c`
+(`rdtex_alpha_range`): TA0, TA1 for a set A bit, 0 under AEM only where all three colour
+channels' least texel is 0, since a filtered channel is at least its least texel). Every filter
+the draws use weights texels with non-negative weights (bilinear, trilinear, anisotropic, the
+GS's 4-bit steps of `gs_bilerp`, the levels in 256ths), so its result lies within that range. The
+vertex's is the least and the largest alpha the vertex shader computes over the draw's vertices:
+`vu_rgba`'s low byte of `vu_ftoi` of quadword 2's w (prelit), 3's (lit, specular, reflection) and
+4's (skinned) after `min(w, 255)` where the program clamps, every vertex of the mesh's stream as
+the replay finds it (one scan a mesh a replay, so a stream that blends between ticks is scanned
+for each present), a grid's batch colours and a particle batch's alphas from the frame's payload,
+a screen prim's vertices as drawn; under the cluster's code 24 (`vu_skin_vertex` scales by
+`mem[2].w`, the product `precise`) both floats around an inexact product, the one a device's
+multiply gives among them; a NaN is not known. The interpolation, the GPU's or the planes' (`vu_pixel_attrs`), is a convex
+combination of the corners, and a vertex range whose ends differ is widened by one each way
+against its float rounding. Anything not known is [0, 255], which decides nothing.
+
+`[dev] alpha_plan = false` (`ICO_RD_ALPHA_PLAN=0`) turns the planner off (`RdProfile.alphaPlan`,
+on in every class). `rd_replay_tool --stats` and the window's 10 s line count the draws it drew in
+one pass where the plan had two and those it drew without the test and the blending (`pixel diet:
+alpha plan N one-pass, M opaque`; `RdPerfRecord.alphaOnePass`, `alphaOpaque`). Tests: ctest
+`rd_alpha_plan` (every ATST x AREF x range against `gs_alpha_pass`, the blend identities over every
+Cs and Cd, a model of the fixed-function path over the blend modes, the ranges), ctest `rd_pixel`
+`testAlphaPlan` (one frame replayed with the planner off and on, SCENE's colour and depth the same
+bytes) and `testRailing` (the lattice keeps its split).
+
 The cache holds `RD_PIPELINE_CACHE_MAX` keys, four times `RD_PIPELINE_REACHABLE_MAX` (1024, the
 ceiling the tests hold the reachable set under, `rd__enumerate_reachable`); a key past it or one
 whose creation failed is logged once and drawn as nothing, never an abort (`port/render/rd_state.h`;
