@@ -1735,13 +1735,168 @@ float2 vu_uv(float3 stq)
     return uv;
 }
 
-// sprite_ps with STQ: the texel at S/Q, T/Q (the texture is padded to
-// 2^TW x 2^TH, so STQ is normalised already; a texture with GS levels at
-// the GS's level by Q, gs_sample), texture function, TEXA, alpha test,
-// DATE; the entry (vu_prelit.hlsl) writes the result (GS_RETURN).
-uint4 vu_pixel(VuVSOut i)
+// ------------------------------------------- the pixel side's integers
+// The GS's colour arithmetic on integers 0..255, held as floats: every
+// value below is an integer under 2^16 (a product of two of them included),
+// which float32 holds exactly, and every operation on it gives the exact
+// integer result (a multiply by 1/128 or by 255 is exact, floor of an exact
+// value is exact).  So each helper returns, as a float, exactly the integer
+// the uint form of common.hlsli returns for the same input (gs_tfx_mod,
+// gs_texture_function, gs_texa_expand, gs_dual_out), on every GPU, whatever
+// its evaluation order or fused multiply-add: no operation here rounds.
+// They spare the float-to-integer conversions and back (four lanes each, at
+// the colour, the texel and the output) and the integer multiplies.  The
+// colour is in 0..255 at every pixel inside its triangle (the planes and
+// the GPU's interpolation stay in the corners' convex hull, vu_rgba's bytes);
+// an extrapolated value below -0.5 (a multisampled edge pixel's centre
+// outside the triangle) has no defined integer form either.
+
+// floor(c + 0.5): the GS's integer of an interpolated colour
+float4 vu_col_int(float4 c)
 {
-    i = vu_pixel_attrs(i);
+    return floor(c + 0.5);
+}
+
+// a sampled UNORM texel to its byte, as gs_texa_load's form
+float4 vu_texel_int(float4 t)
+{
+    return floor(t * 255.0 + 0.5);
+}
+
+// gs_texa_expand: TEXA's alpha for the 24- and 16-bit sources (the
+// integer form there); RGBA32 texels as they are
+float4 vu_texa_expand_f(float4 t, uint mode, uint fmt)
+{
+    if (fmt == TEXFMT_RGBA32) {
+        return t;
+    }
+    const uint4 u = uint4(t);
+    return float4(t.rgb, float(gs_texa_alpha(u.r, u.g, u.b, u.a, mode, fmt)));
+}
+
+// gs_tfx_mod per lane: (t c) >> 7, at most 255
+float4 vu_tfx_modulate_f(float4 t, float4 c)
+{
+    return min(floor(t * c * (1.0 / 128.0)), 255.0);
+}
+
+// gs_texture_function: MODULATE or DECAL with TCC
+float4 vu_texture_function_f(float4 tex, float4 col, uint flags)
+{
+    float4 o;
+    if ((flags & DF_DECAL) != 0u) {
+        o.rgb = tex.rgb;
+        o.a = (flags & DF_TCC_RGBA) != 0u ? tex.a : col.a;
+    } else {
+        const float4 m = vu_tfx_modulate_f(tex, col);
+        o.rgb = m.rgb;
+        o.a = (flags & DF_TCC_RGBA) != 0u ? m.a : col.a;
+    }
+    return o;
+}
+
+#if ICO_DST_MODE == 0
+// gs_dual_out on the integers above: the same c0 and c1, float for float
+// (c0 = the byte / 255, c1 = the factor / 128).  The alpha's MSB tests (PABE,
+// FBA) on the integer itself.
+DualOut vu_dual_out_f(float4 col, uint flags, uint fix)
+{
+    const float f = (flags & DF_FIX_FACTOR) != 0u ? float(fix) : col.a;
+    const uint ia = uint(col.a);
+    const bool unblended = (flags & DF_PABE) != 0u && (ia & 0x80u) == 0u;
+    float a = col.a;
+    if ((flags & DF_FBA) != 0u) {
+        a = float(ia | 0x80u);
+    }
+    DualOut o;
+#ifdef ICO_NO_DUAL
+    if ((flags & DF_NODUAL_ALPHA_PASS) != 0u) {
+        o.c0 = float4(col.rgb, a) * (1.0 / 255.0);
+        return o;
+    }
+    const bool factor = (flags & DF_NODUAL_FACTOR) != 0u;
+    if (unblended) {
+        const float c1 = (flags & DF_C1_DST) != 0u ? 0.0 : 1.0;
+        o.c0 = float4(col.rgb, a) * (1.0 / 255.0);
+        if (factor) {
+            o.c0.a = c1;
+        }
+        return o;
+    }
+    if ((flags & DF_PREMUL) != 0u) {
+        const float3 p = min(floor(col.rgb * f * (1.0 / 128.0)), 255.0);
+        o.c0 = float4(p, a) * (1.0 / 255.0);
+        return o;
+    }
+    o.c0 = float4(col.rgb, a) * (1.0 / 255.0);
+    if (factor) {
+        o.c0.a = f * (1.0 / 128.0);
+    }
+#else
+    if (unblended) {
+        const float c1 = (flags & DF_C1_DST) != 0u ? 0.0 : 1.0;
+        o.c0 = float4(col.rgb, a) * (1.0 / 255.0);
+        o.c1 = float4(c1, c1, c1, c1);
+        return o;
+    }
+    if ((flags & DF_PREMUL) != 0u) {
+        const float3 p = min(floor(col.rgb * f * (1.0 / 128.0)), 255.0);
+        o.c0 = float4(p, a) * (1.0 / 255.0);
+        o.c1 = float4(1.0, 1.0, 1.0, 1.0);
+        return o;
+    }
+    o.c0 = float4(col.rgb, a) * (1.0 / 255.0);
+    // the factor once, in every lane (SRC1_COLOR and SRC1_ALPHA agree)
+    const float c1 = f * (1.0 / 128.0);
+    o.c1 = float4(c1, c1, c1, c1);
+#endif
+    return o;
+}
+
+// the entry's output: the fixed-function blend's c0 and c1
+#define VU_RETURN(col, pos) return vu_dual_out_f(col, g_mode.x, g_blend.y)
+#else
+// the destination-read builds blend in the shader (gs_dst_pixel), on the
+// integers
+#define VU_RETURN(col, pos) GS_RETURN(uint4(col), pos)
+#endif
+
+// ------------------------------------------------------ the pixel's input
+// vu_ps's and vu_texa_ps's input: VuVSOut, the planes as flat varyings
+// (vu_pixel_attrs evaluates them).  The builds without the planes
+// (ICO_VU_NO_PLANES: vu_np_ps, vu_texa_np_ps, for a target at a fractional
+// scale, port/render/rd_pixel_plan.c) read VuPSIn, locations 0 to 2 of
+// VuVSOut alone (the same types, interpolation and order, its prefix): every
+// VU vertex shader (vu_main_vs, vu_particle_main_vs and the programs' own
+// entries) feeds it unchanged, the plane outputs unread (Vulkan matches the
+// fragment inputs by location; DXC packs a prefix of a signature as the
+// whole packs it, so D3D12's registers agree as well).  The colour, STQ and
+// plane distance are then the GPU's interpolation of the corners' values,
+// linear in screen space as the planes are: the same values to a few ulp.
+#ifdef ICO_VU_NO_PLANES
+struct VuPSIn {
+    float4 pos : SV_Position;
+    VK_LOC(0) noperspective float4 col : COLOR0;
+    VK_LOC(1) noperspective float3 stq : TEXCOORD0;
+    VK_LOC(2) noperspective float plane : TEXCOORD1;
+};
+
+VuPSIn vu_pixel_in(VuPSIn i)
+{
+    return i;
+}
+#else
+typedef VuVSOut VuPSIn;
+
+VuPSIn vu_pixel_in(VuPSIn i)
+{
+    return vu_pixel_attrs(i);
+}
+#endif
+
+// The clip plane's and DATE's discards
+void vu_pixel_tests(VuPSIn i)
+{
     if ((g_mode.x & DF_PLANE) != 0u && i.plane < 0.0) {
         GS_DISCARD;
     }
@@ -1750,14 +1905,25 @@ uint4 vu_pixel(VuVSOut i)
             GS_DISCARD;
         }
     }
-    uint4 col = uint4(floor(i.col + 0.5));
+}
+
+// sprite_ps with STQ: the texel at S/Q, T/Q (the texture is padded to
+// 2^TW x 2^TH, so STQ is normalised already; a texture with GS levels at
+// the GS's level by Q, gs_sample), texture function, TEXA, alpha test,
+// DATE; the colour as the integers above, which the entry (vu_prelit.hlsl)
+// writes (VU_RETURN).
+float4 vu_pixel(VuPSIn i)
+{
+    i = vu_pixel_in(i);
+    vu_pixel_tests(i);
+    float4 col = vu_col_int(i.col);
     if ((g_mode.x & DF_TEXTURED) != 0u) {
         float2 uv = vu_uv(i.stq);
-        uint4 t = uint4(floor(gs_sample(g_texture, g_sampler, uv, i.stq.z) * 255.0 + 0.5));
-        t = gs_texa_expand(t, g_mode.y & 0xFFu, g_mode.y >> 8);
-        col = gs_texture_function(t, col, g_mode.x);
+        float4 t = vu_texel_int(gs_sample(g_texture, g_sampler, uv, i.stq.z));
+        t = vu_texa_expand_f(t, g_mode.y & 0xFFu, g_mode.y >> 8);
+        col = vu_texture_function_f(t, col, g_mode.x);
     }
-    if (gs_alpha_discard(g_mode.z, g_mode.w, col.a)) {
+    if (gs_alpha_discard(g_mode.z, g_mode.w, uint(col.a))) {
         GS_DISCARD;
     }
     return col;
@@ -1766,26 +1932,19 @@ uint4 vu_pixel(VuVSOut i)
 // vu_texa_ps: vu_pixel with TEXA per texel before the
 // bilinear weights (gs_texa_texture), for the draws rd_replay.c's VU
 // planner gives it (the texture formats and TEXA modes of sprite_texa_ps).
-uint4 vu_pixel_texa(VuVSOut i)
+float4 vu_pixel_texa(VuPSIn i)
 {
-    i = vu_pixel_attrs(i);
-    if ((g_mode.x & DF_PLANE) != 0u && i.plane < 0.0) {
-        GS_DISCARD;
-    }
-    if ((g_mode.x & DF_DATE) != 0u) {
-        if (gs_date_discard(g_mode.x, g_dateSnap.Load(int3(int2(i.pos.xy), 0)))) {
-            GS_DISCARD;
-        }
-    }
-    uint4 col = uint4(floor(i.col + 0.5));
+    i = vu_pixel_in(i);
+    vu_pixel_tests(i);
+    float4 col = vu_col_int(i.col);
     if ((g_mode.x & DF_TEXTURED) != 0u) {
         float2 uv = vu_uv(i.stq);
         uint4 t = (g_mode.x & DF_GS_LOD) != 0u
                       ? gs_texa_texture_lod(g_texture, uv, i.stq.z, g_mode.x)
                       : gs_texa_texture(g_texture, g_sampler, uv, g_mode.x);
-        col = gs_texture_function(t, col, g_mode.x);
+        col = vu_texture_function_f(float4(t), col, g_mode.x);
     }
-    if (gs_alpha_discard(g_mode.z, g_mode.w, col.a)) {
+    if (gs_alpha_discard(g_mode.z, g_mode.w, uint(col.a))) {
         GS_DISCARD;
     }
     return col;
