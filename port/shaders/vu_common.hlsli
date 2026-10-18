@@ -1750,17 +1750,31 @@ float2 vu_uv(float3 stq)
 // the GPU's interpolation stay in the corners' convex hull, vu_rgba's bytes);
 // an extrapolated value below -0.5 (a multisampled edge pixel's centre
 // outside the triangle) has no defined integer form either.
+// A NaN is the one input outside that range a frame gives: a texel sampled
+// at a NaN UV (Q interpolated to 0 at a sliver's pixel: S/Q, T/Q, and the
+// anisotropic filter's weights from them; measured on the Mac frame at
+// Enhanced 1x, list 0 command 450) and a colour from the planes of a
+// triangle whose gradient overflows.  The integer form converts it to 0 (the
+// conversion D3D defines and the GPUs and lavapipe give), where NaN would
+// pass min() as 255 here (HLSL min and max return the operand that is not
+// NaN): max(., 0) gives the 0, which every step after keeps (0 times
+// anything, a DECAL texel, the alpha test's and the MSB tests' integer).
 
-// floor(c + 0.5): the GS's integer of an interpolated colour
+// floor(c + 0.5): the GS's integer of an interpolated colour; a NaN of the
+// planes 0 (the GPU's interpolation of the corners' bytes has none)
 float4 vu_col_int(float4 c)
 {
+#ifdef ICO_VU_NO_PLANES
     return floor(c + 0.5);
+#else
+    return max(floor(c + 0.5), 0.0);
+#endif
 }
 
-// a sampled UNORM texel to its byte, as gs_texa_load's form
+// a sampled UNORM texel to its byte, as gs_texa_load's form; a NaN 0
 float4 vu_texel_int(float4 t)
 {
-    return floor(t * 255.0 + 0.5);
+    return max(floor(t * 255.0 + 0.5), 0.0);
 }
 
 // gs_texa_expand: TEXA's alpha for the 24- and 16-bit sources (the

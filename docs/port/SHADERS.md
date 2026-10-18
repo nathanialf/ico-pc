@@ -472,15 +472,17 @@ in: `vu_prelit_pre_vs` 2,120 words (483 instructions, 36 blocks), `vu_lit_pre_vs
 (words, instructions, blocks; this DXC and the build's flags): `vu_tri_rule_pre_vs` 16,515
 (3,600, 305), `vu_tri_tick_pre_vs` 16,614 (3,462, 212), `vu_tri_planes_pre_vs` 4,269 (972, 90),
 `vu_particle_pre_vs` 8,801 (2,071, 200), `vu_main_vs` 6,277 (1,481, 174), `vu_particle_main_vs`
-4,249 (986, 102); `vu_ps` 5,491 (1,308, 191) and `vu_texa_ps` 11,641 (2,802, 477), the one pixel
-shader of both ways, and the no-planes builds `vu_np_ps` 4,873 (1,174, 187) and `vu_texa_np_ps`
+4,249 (986, 102); `vu_ps` 5,512 (1,311, 191) and `vu_texa_ps` 11,655 (2,804, 477), the one pixel
+shader of both ways, and the no-planes builds `vu_np_ps` 4,887 (1,176, 187) and `vu_texa_np_ps`
 11,023 (2,668, 473). By the live-path walk (the SPIR-V executed for one pixel, its arithmetic
-weighted by components) an opaque textured pixel of `vu_ps` runs 166 instructions and 119
-lane-operations, of `vu_np_ps` 123 and 76. The pixel side's colour arithmetic runs on the GS's
+weighted by components) an opaque textured pixel of `vu_ps` runs 168 instructions and 127
+lane-operations, of `vu_np_ps` 124 and 80. The pixel side's colour arithmetic runs on the GS's
 integers held as floats (`vu_common.hlsli` `vu_col_int`, `vu_texel_int`,
 `vu_texture_function_f`, `vu_dual_out_f`): every value an integer under 2^16, so each step is exact
 and the result is the integer form's (`gs_texture_function`, `gs_dual_out`) bit for bit, without
-the conversions between the two. `spirv_check` holds the pre-pass entries, the record stages (`_pre_vs`) and the main
+the conversions between the two. A NaN texel (sampled at a NaN UV, where Q is 0) and a NaN colour
+of the planes become 0, as the integer form's conversion gives them (`max(., 0)`; HLSL's `min`
+would pass a NaN as its other operand, 255). `spirv_check` holds the pre-pass entries, the record stages (`_pre_vs`) and the main
 shaders (`_main_vs`) to the plain budget and asks a plain variant only of the ten mesh programs'
 entries (`tools/check_spirv.py` `PROGRAM_ENTRIES`, gates `size per variant` and `variants`). With
 the pre-passes a device compiles the two main shaders, the ten pre-pass entries and the five
