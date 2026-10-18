@@ -1602,6 +1602,44 @@ same picture: `RdSettings.borderMask`, `rd__frame_cropped`,
 reduction's textured sprite is drawn with the whole target as scissor and both axes clamped, so the
 border shows the picture SCENE holds (`port/render/rd_replay.c` (`borderOpen`, `doBlurSprite`)).
 
+**The frame-size sprites' plan.** Before its snapshot, `doBlurSpriteDraw` hands the sprite to
+`rd__fx_plan_draw` (`RdProfile.fxPlan`, on in every class; `[dev] fx_plan`, `ICO_RD_FX_PLAN=1|0`),
+which draws it inside the open pass, without the snapshot, where the same bytes come another way
+(`port/render/rd_fx_plan.c`, file comment):
+
+| sprite | condition | how it is drawn |
+| --- | --- | --- |
+| cleanUpFB's two sprites into SCENE, the glow's WORK0 fill | untextured, blending, no DATE, no AFAIL RGB_ONLY, and each colour channel's blend the destination for every Cd and Ad or one value for every Cd and Ad (`rd__fx_fold`, over the 256 values of each) | `fx_sprite_ps` without the blend and the destination read, the constant channels as RGBAQ, the destination channels masked (the colour mask A alone or whole), the depth state the sprite's |
+| the glow's paste WORK3 into SCENE | Cs * FIX + Cd, Cs * As + Cd, Cd - Cs * FIX or Cd - Cs * As, COLCLAMP 1, no PABE, no DATE, no AFAIL RGB_ONLY | `fx_frame_ps` writing the magnitude of `(A - B) C >> 7` (`FXF_OUT_PREMUL`) through the premultiplied add (ONE, ONE) or reverse subtract, alpha ONE, ZERO: the UNORM8 sum is the GS's clamped integer sum, the subtract's term the GS's `ceil(Cs C / 128)` |
+| the motion blur DISPLAY into SCENE, any other destination read | `RdProfile.fxDstLocal` and the target's passes readable (the scene class under `dateStencil`), not sampling its own target | `fx_local_ps`, the destination as the input attachment (`SubpassLoad`) inside the open pass after a by-region barrier (`RHI_LOCAL_READ_COLOR`; `RHI_LOCAL_READ_BACK` after it); `fx_rect_vs` draws one triangle, so the texel read is the one before the sprite |
+| the glow's mask SCENE into WORK2 | MODULATE with RGBAQ's RGB 0, no blend, no destination read | `fx_frame_ps` computing the alpha alone (`FXF_ALPHA_ONLY`): RGB is `(t * 0) >> 7`, 0 |
+
+A sprite that samples its own target keeps the snapshot; so does every sprite that reads its
+destination under an exact blend the player opted into or in a frame with the MSAA epoch, and one
+whose key the pipeline cache cannot give (looked up before anything is recorded). The four forms
+share `fx_sprite_ps`'s coverage, UV and tests (`port/shaders/fx_sprite.hlsl`). Their keys are in the
+start-up set (`rd__fx_enumerate`: the colour mask A of `fx_sprite_ps`, `fx_frame_ps` without blend
+and with the premultiplied add and subtract, `fx_local_ps` where the profile has it, each in
+`rd__enumerate_reachable_blur`'s depth states). `fxDstLocal` is on for the tile-based classes with
+local read (`[dev] fx_dst_local`, `ICO_RD_FX_DST_LOCAL=1|0`); its self-test runs after DATE's
+(`rd_fog_selftest`): a frame on SCENE of four cells under an untextured LERP FIX 0x20 sprite,
+replayed with the local read and through the snapshot, the cells' centres read back against the
+GS's arithmetic; a wrong pixel turns the flag off (`port/render/rd_fx_plan.c`
+(`rd__fx_local_selftest`)). The reduction's black sprite on a scaled DISPLAY (a hardware sprite,
+`rd__blur_screen_fallback`) is its clear where it covers every texel with nothing else in force
+(no texture, blend, test, FBA, depth, the colour mask and the scissor whole, no Full pixel crop),
+its corners on the exact viewport's texel centres counted with the top-left rule; the next pass on
+DISPLAY takes the clear as its load op (`port/render/rd_fx_plan.c` (`rd__fx_reduction_clears`),
+`port/render/rd_replay.c` (`doBlurSpriteDraw`)). Each replay's record counts the sprites drawn
+each way (`RdPerfRecord.fxConstant` with the black sprite's clear, `fxAdditive`, `fxLocal`;
+`rd_replay_tool --stats` `pixel diet:` line), and the log has one line a run per way:
+
+```
+rd: fx plan: a staticBlur sprite drawn by the constant fold (a masked draw in the open pass), without its snapshot (reported once)
+rd: fx plan: the reduction's black sprite on a scaled DISPLAY drawn as its clear (reported once)
+rd: fx local read: on (self-test: local ok 4, snapshot ok 4) on SCENE 512x512 at 1024x1024 texels
+```
+
 ## Above 1x
 
 At scale 1 every pass samples as the GS does. On a scaled target a pass that steps over many
@@ -1669,14 +1707,21 @@ into DISPLAY on a scaled target, `rd__blur_screen_fallback`) when an axis leaves
 its steps as `blurAbove1xSteps` computes them; at full height and scale 1 DISPLAY has twice the GS's
 rows (sy 2) and the reduction steps one SCENE row a DISPLAY row, the GS's filter on both axes, so
 the flag stays off there (`Replay.a1xGs`; `port/render/rd_replay.c` (`doBlurSpriteDraw`)). The
-shader takes the step of each axis
-from the pixel's footprint (`ddx`/`ddy` of the texel coordinate, constant over a sprite, so a draw
-of several sprites gets each one's own step), in 1/32 texel (`port/shaders/sprite.hlsl`
-(`sprite_above1x`)):
+shader takes the step of each axis, in 1/32 texel, from `DrawCB.scale[3]` (`step32x * 4096 +
+step32y`): the sprite command's, which `doScreen` computes on the CPU from its expanded corners,
+the texture's normalisation and size and the bound target's scale, when the frame-size plan is on
+(`RdProfile.fxPlan`) and every sprite of the command has the same (`port/render/rd_fx_plan.c` (`rd__a1x_sprite_steps`),
+`DrawSetup.a1xSteps`, `fillDrawCB`); 0 for any other command, whose pixels take the step from
+their footprint (`ddx`/`ddy` of the texel coordinate, constant over a sprite)
+(`port/shaders/sprite.hlsl` (`sprite_above1x`)). The CPU's quotient is exact where the
+footprint's carries the interpolation's rounding, so the two differ only within that rounding of
+a half step:
 
 - both axes below half a texel: the B-spline as four bilinear taps of the draw's own sampler
-  (`gs_bspline_bilinear4`), TEXA after, as `sprite_ps` applies it; within 2 LSB of the integer
-  kernel;
+  (`sprite_bspline4`: `gs_bspline_bilinear4` with each 4-bit fraction's two weights and two tap
+  places from a 16-row table of the floats its divisions round to, `kSpriteBspline`), TEXA after,
+  as `sprite_ps` applies it; within 2 LSB of the integer kernel
+  ([DIVERGENCES.md](DIVERGENCES.md#video) VD-18);
 - an axis above two texels: the area box on that axis, every tap loaded with the wrap reproduced on
   the texture's size and TEXA per texel (`gs_texa_load`), combined separably as `fx_sprite_ps`
   combines them, exact;
