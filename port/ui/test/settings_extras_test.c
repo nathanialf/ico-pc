@@ -232,8 +232,8 @@ static void testExtras(void)
         testCredits(mainL, exL);
     }
 
-    /* the strings, five languages */
-    static const char *const want[5][5] = {
+    /* the strings, six languages */
+    static const char *const want[UI_LANG_COUNT][5] = {
         {"Extras", "Music", "Models", "Credits", "Finish the game to unlock"},
         {"Extras", "Musique", "Mod\xC3\xA8les",
          "Cr\xC3\xA9"
@@ -244,7 +244,10 @@ static void testExtras(void)
         {"Extras", "M\xC3\xBAsica", "Modelos",
          "Cr\xC3\xA9"
          "ditos",
-         NULL}};
+         NULL},
+        {"\xE3\x81\x8A\xE3\x81\xBE\xE3\x81\x91", "\xE9\x9F\xB3\xE6\xA5\xBD",
+         "\xE3\x83\xA2\xE3\x83\x87\xE3\x83\xAB",
+         "\xE3\x82\xAF\xE3\x83\xAC\xE3\x82\xB8\xE3\x83\x83\xE3\x83\x88", NULL}};
     static const int ids[5] = {UI_STR_EXTRAS, UI_STR_EXTRAS_MUSIC, UI_STR_EXTRAS_MODELS,
                                UI_STR_EXTRAS_CREDITS, UI_STR_EXTRAS_LOCKED_NOTE};
     for (int l = 0; l < UI_LANG_COUNT; l++) {

@@ -5,6 +5,7 @@
  */
 #include "popup.h"
 
+#include <stdint.h>
 #include <string.h>
 
 #ifdef ICO_RD
@@ -57,6 +58,47 @@ static void copyText(char *dst, const char *src)
     dst[n] = '\0';
 }
 
+/* The Japanese text's line breaks in a body (UI_POPUP_TEXT bytes): a line
+   wider than the panel's widest body takes a line break at the last place
+   between two characters where one may go (strings.h ui_break_before),
+   while the text has room for it.  Latin text keeps its lines as written:
+   ui_break_before gives no place between two Latin characters. */
+static void wrapWide(char *s)
+{
+    const float width = MAX_W - 2.0f * PAD_X;
+    size_t n = strlen(s), lineStart = 0, lastBreak = 0;
+    uint32_t prev = 0;
+    for (size_t i = 0; i < n;) {
+        const char *q = s + i;
+        const uint32_t cp = ui_utf8_next(&q);
+        const size_t len = (size_t)(q - (s + i));
+        if (cp == '\n') {
+            lineStart = i + 1;
+            prev = 0;
+            i += len;
+            continue;
+        }
+        if (i > lineStart && ui_break_before(prev, cp)) {
+            lastBreak = i;
+        }
+        prev = cp;
+        i += len;
+        if (lastBreak > lineStart && n + 1 < UI_POPUP_TEXT) {
+            const char saved = s[i];
+            s[i] = '\0';
+            const float w = ui_measure_menu_text(BODY_SIZE, s + lineStart);
+            s[i] = saved;
+            if (w > width) {
+                memmove(s + lastBreak + 1, s + lastBreak, n - lastBreak + 1);
+                s[lastBreak] = '\n';
+                n++;
+                i++;
+                lineStart = lastBreak + 1;
+            }
+        }
+    }
+}
+
 int ui_popup_push(const char *title, const char *body)
 {
     if (s_count == UI_POPUP_QUEUE) {
@@ -65,6 +107,7 @@ int ui_popup_push(const char *title, const char *body)
     Popup *p = &s_queue[(s_head + s_count) % UI_POPUP_QUEUE];
     copyText(p->title, title);
     copyText(p->body, body);
+    wrapWide(p->body);
     if (s_count == 0) {
         s_age = 0;
     }

@@ -1,4 +1,4 @@
-/* font_coverage_test.c: every character of the five languages has a glyph
+/* font_coverage_test.c: every character of the six languages has a glyph
  * in the port's faces.
  *
  * CPU only: font.c's cmap, no device.  Walks
@@ -15,8 +15,11 @@
  * C1 control other than '\n', an empty entry, a corpus file that is missing.
  * The fallback ('?' for a missing glyph, logged once) is checked last.
  *
- * Arimo is the only face (the menus' text is Arimo in the sheets' look);
- * the report lists the characters it serves.
+ * Arimo is the first face (the menus' text is Arimo in the sheets' look),
+ * Noto Sans JP's subset the second, for the characters Arimo has none for
+ * (the Japanese table, the language names, the button marks); the report
+ * lists the characters the two serve.  A Japanese character is the second
+ * face's own glyph, not the fallback.
  *
  *   font_coverage_test CORPUS_DIR [BASE_ELF]
  * Exit 0, 1 on a failure, 77 for a BASE_ELF that is named and absent.
@@ -61,9 +64,9 @@ static int s_lang; /* the language the walk is in */
         }                                                                                          \
     } while (0)
 
-static const char *const kLangs[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es"};
+static const char *const kLangs[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja"};
 
-#define BMP_SEEN 0x3000
+#define BMP_SEEN 0x10000
 static unsigned char s_seen[UI_LANG_COUNT][BMP_SEEN]; /* distinct code points a language draws */
 static int s_visits[UI_LANG_COUNT];
 static int s_codepoints; /* code points checked, all */
@@ -91,8 +94,8 @@ static void checkText(int lang, const char *src, const char *what)
             continue;
         }
         if (!ui_font_has_glyph(cp)) {
-            CHECK(0, "%s (%s): Arimo has no U+%04X in \"%.40s\"", what, kLangs[lang], (unsigned)cp,
-                  src);
+            CHECK(0, "%s (%s): neither font has U+%04X in \"%.40s\"", what, kLangs[lang],
+                  (unsigned)cp, src);
         }
         if (cp < BMP_SEEN) {
             s_seen[lang][cp] = 1;
@@ -239,8 +242,8 @@ static void putCp(char *out, size_t *n, size_t cap, uint32_t cp)
     }
 }
 
-/* the characters the five languages draw (tables, the roll's port lines,
-   corpus) that Arimo serves */
+/* the characters the six languages draw (tables, the roll's port lines,
+   corpus) that the fonts serve (Arimo, then Noto Sans JP's subset) */
 static void reportFaces(void)
 {
     static char line[8192];
@@ -257,7 +260,7 @@ static void reportFaces(void)
             arimo++;
         }
     }
-    printf("font_coverage: Arimo, %d characters: %s\n", arimo, line);
+    printf("font_coverage: the fonts, %d characters: %s\n", arimo, line);
 }
 
 int main(int argc, char **argv)
@@ -299,18 +302,28 @@ int main(int argc, char **argv)
     checkCorpus(argv[1]);
     reportFaces();
 
-    /* the fallback: a code point outside the subset draws as '?', logged once */
+    /* the fallback: a code point outside both subsets draws as '?', logged
+       once (U+0E01, a Thai letter: in neither font) */
     {
         UiGlyph q, cjk, cjk2;
         uint32_t seen[8];
-        CHECK(!ui_font_has_glyph(0x4E2D), "U+4E2D is outside the subset (the test's probe)");
+        CHECK(!ui_font_has_glyph(0x0E01), "U+0E01 is outside the subsets (the test's probe)");
         int before = ui_font_missing_seen(NULL, 0);
-        CHECK(ui_font_glyph('?', 20, &q) && ui_font_glyph(0x4E2D, 20, &cjk), "glyphs at 20 px");
+        CHECK(ui_font_glyph('?', 20, &q) && ui_font_glyph(0x0E01, 20, &cjk), "glyphs at 20 px");
         CHECK(cjk.w == q.w && cjk.h == q.h && cjk.advance == q.advance,
-              "U+4E2D at 20 px is the '?' glyph");
-        CHECK(ui_font_glyph(0x4E2D, 30, &cjk2), "glyph at 30 px");
-        CHECK(ui_font_missing_seen(seen, 8) == before + 1 && seen[before] == 0x4E2D,
+              "U+0E01 at 20 px is the '?' glyph");
+        CHECK(ui_font_glyph(0x0E01, 30, &cjk2), "glyph at 30 px");
+        CHECK(ui_font_missing_seen(seen, 8) == before + 1 && seen[before] == 0x0E01,
               "the missing code point is recorded once, not per size or draw");
+    }
+    /* the second font: a Japanese character is its glyph, a Latin one
+       Arimo's (U+4E2D in the Japanese table, as "middle") */
+    {
+        UiGlyph q, ja;
+        CHECK(ui_font_has_glyph(0x4E2D) && ui_font_has_glyph(0x3042), "the Japanese font's glyphs");
+        CHECK(ui_font_glyph('?', 20, &q) && ui_font_glyph(0x4E2D, 20, &ja) &&
+                  (ja.w != q.w || ja.advance != q.advance) && ja.advance > 15.0f,
+              "U+4E2D at 20 px is its own glyph, a full em wide (%.1f)", (double)ja.advance);
     }
 
     int total = 0;

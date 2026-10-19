@@ -9,7 +9,7 @@
  *     kind, model and layout row inside the game's tables;
  *   - rows MV_ROW_ICO and MV_ROW_YORDA (Settings > Extras > Characters)
  *     are the boy and the girl;
- *   - its name, and the viewer's words, are non-empty in the five
+ *   - its name, and the viewer's words, are non-empty in the six
  *     languages, different from the other models' in each, and every
  *     character has a glyph in the port font (ui_font_has_glyph).
  * Exit 0, 1 on a mismatch. */
@@ -39,7 +39,7 @@ static int failures;
 #define MODELS 1637
 #define LAYOUT_ROWS 3759
 
-static const char *const kLang[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es"};
+static const char *const kLang[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja"};
 
 /* the next code point of a UTF-8 string, 0 at the end, -1 if malformed */
 static int32_t next(const char **s)
@@ -87,7 +87,7 @@ static void checkText(int id, const char *what)
         if (l != UI_LANG_EN) {
             /* a translation of its own, not the English fallback */
             const char *const *table[UI_LANG_COUNT] = {ui_strings_en, ui_strings_fr, ui_strings_de,
-                                                       ui_strings_it, ui_strings_es};
+                                                       ui_strings_it, ui_strings_es, ui_strings_ja};
             CHECK(table[l][id] != NULL, "%s (%d): no %s entry", what, id, kLang[l]);
         }
         const char *p = s;

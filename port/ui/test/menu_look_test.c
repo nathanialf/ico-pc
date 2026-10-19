@@ -118,11 +118,11 @@
 
 /* The survey's expectations (testSurvey): what the scratch survey measured on
    the PAL sheets, per language EN FR DE IT ES. */
-static const float kExpFill[UI_LANG_COUNT] = {254.7f, 253.7f, 253.3f, 254.4f, 253.5f};
-static const float kExpRim[UI_LANG_COUNT] = {23.9f, 61.1f, 55.7f, 60.8f, 61.7f};
+static const float kExpFill[UI_LANG_PAL_COUNT] = {254.7f, 253.7f, 253.3f, 254.4f, 253.5f};
+static const float kExpRim[UI_LANG_PAL_COUNT] = {23.9f, 61.1f, 55.7f, 60.8f, 61.7f};
 /* the first six texels' alpha, summed: left and right averaged, above and below averaged */
-static const float kExpMassX[UI_LANG_COUNT] = {3.10f, 3.73f, 3.99f, 3.78f, 3.64f};
-static const float kExpMassY[UI_LANG_COUNT] = {2.15f, 2.83f, 2.99f, 2.90f, 2.74f};
+static const float kExpMassX[UI_LANG_PAL_COUNT] = {3.10f, 3.73f, 3.99f, 3.78f, 3.64f};
+static const float kExpMassY[UI_LANG_PAL_COUNT] = {2.15f, 2.83f, 2.99f, 2.90f, 2.74f};
 #define TOL_LEVEL 0.6f /* grey levels */
 #define TOL_MASS 0.08f
 /* the rim's falloff (ICO_SHEET_WX / WY, per mille) against the English
@@ -141,7 +141,7 @@ static int failures;
         }                                                                                          \
     } while (0)
 
-static const char *const kLang[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es"};
+static const char *const kLang[UI_LANG_PAL_COUNT] = {"en", "fr", "de", "it", "es"};
 
 /* ------------------------------------------------------------- the rects */
 
@@ -155,8 +155,8 @@ typedef struct Rect {
 } Rect;
 
 static IcoVfs *s_vfs;
-static Rect *s_rect[UI_LANG_COUNT];
-static int s_nrect[UI_LANG_COUNT];
+static Rect *s_rect[UI_LANG_PAL_COUNT];
+static int s_nrect[UI_LANG_PAL_COUNT];
 
 static int rowOfItem(int item)
 {
@@ -171,7 +171,7 @@ static int rowOfItem(int item)
 static void collect(void)
 {
     const int texFiles = ms_tex_file_count();
-    for (int lang = 0; lang < UI_LANG_COUNT; lang++) {
+    for (int lang = 0; lang < UI_LANG_PAL_COUNT; lang++) {
         s_rect[lang] = calloc((size_t)ui_menu_text_item_count, sizeof(Rect));
         for (int i = 0; i < ui_menu_text_item_count; i++) {
             const UiMenuTextItem *it = &ui_menu_text_items[i];
@@ -396,10 +396,10 @@ static void survey(int lang, Survey *out)
 
 static void testSurvey(void)
 {
-    Survey sv[UI_LANG_COUNT];
+    Survey sv[UI_LANG_PAL_COUNT];
     double meanX = 0, meanY = 0;
-    int steps[UI_LANG_COUNT * 16], nsteps = 0;
-    for (int l = 0; l < UI_LANG_COUNT; l++) {
+    int steps[UI_LANG_PAL_COUNT * 16], nsteps = 0;
+    for (int l = 0; l < UI_LANG_PAL_COUNT; l++) {
         survey(l, &sv[l]);
         const UiSheetInk *ink = ui_menu_sheet_ink(l);
         printf("menu_look: survey %s: fill %.1f rim %.1f massX %.2f massY %.2f, %d sheets, steps",
@@ -433,8 +433,8 @@ static void testSurvey(void)
               kLang[l], ink->rimLevel, sv[l].rim);
         CHECK(fabs(sv[l].fill - (double)ink->fillLevel) <= 3.0,
               "%s: kSheetInk fill %d, measured %.1f", kLang[l], ink->fillLevel, sv[l].fill);
-        meanX += sv[l].massX / UI_LANG_COUNT;
-        meanY += sv[l].massY / UI_LANG_COUNT;
+        meanX += sv[l].massX / UI_LANG_PAL_COUNT;
+        meanY += sv[l].massY / UI_LANG_PAL_COUNT;
     }
     /* German's rim is grey like the Romance languages', not the English black */
     CHECK(sv[UI_LANG_DE].rim > 40.0 && sv[UI_LANG_EN].rim < 40.0,
@@ -754,8 +754,8 @@ typedef struct Geo {
     float v[G_N][GEO_ITEMS];
 } Geo;
 
-static Geo s_geo[UI_LANG_COUNT][GEO_SHEETS + 1]; /* [GEO_SHEETS]: the language's all */
-static float s_geoMed[UI_LANG_COUNT][G_N];       /* the language's medians */
+static Geo s_geo[UI_LANG_PAL_COUNT][GEO_SHEETS + 1]; /* [GEO_SHEETS]: the language's all */
+static float s_geoMed[UI_LANG_PAL_COUNT][G_N];       /* the language's medians */
 
 static int cmpFloat(const void *a, const void *b)
 {
@@ -849,8 +849,8 @@ static void geoPrint(int lang)
    ink ratio, the worst share */
 enum { S_BLUR, S_PLAIN, S_EDGE, S_LINE, S_INK, S_SHARE, S_N };
 
-static float s_stat[UI_LANG_COUNT][S_N][GEO_ITEMS];
-static int s_statMulti[UI_LANG_COUNT][GEO_ITEMS];
+static float s_stat[UI_LANG_PAL_COUNT][S_N][GEO_ITEMS];
+static int s_statMulti[UI_LANG_PAL_COUNT][GEO_ITEMS];
 
 static void statPrint(int lang, int n)
 {
@@ -954,7 +954,7 @@ static void testCompareItems(const char *outDir)
 {
     int total = 0, bad = 0, skipped = 0;
     double worstBlur = 0.0, worstPlain = 0.0;
-    for (int lang = 0; lang < UI_LANG_COUNT; lang++) {
+    for (int lang = 0; lang < UI_LANG_PAL_COUNT; lang++) {
         writeDirs(outDir, lang);
         int langBad = 0, langN = 0, contactH = 0, contactW = 0;
         for (int k = 0; k < s_nrect[lang]; k++) {
@@ -1175,10 +1175,10 @@ static void geoFit(int fixedWidth)
 
     enum { NP = 5 };
 
-    static double res[UI_LANG_COUNT][512][NP + 2];
-    static int has[UI_LANG_COUNT][512];
+    static double res[UI_LANG_PAL_COUNT][512][NP + 2];
+    static int has[UI_LANG_PAL_COUNT][512];
     memset(has, 0, sizeof(has));
-    for (int lang = 0; lang < UI_LANG_COUNT; lang++) {
+    for (int lang = 0; lang < UI_LANG_PAL_COUNT; lang++) {
         for (int k = 0; k < s_nrect[lang]; k++) {
             const Rect *r = &s_rect[lang][k];
             const int n = r->w * r->h;
@@ -1287,9 +1287,9 @@ static void geoFit(int fixedWidth)
     /* per item over the languages: the medians (the table's em and x are
        per item, y per language) */
     for (int i = 0; i < ui_menu_text_item_count; i++) {
-        double v[NP + 2][UI_LANG_COUNT];
+        double v[NP + 2][UI_LANG_PAL_COUNT];
         int m = 0;
-        for (int l = 0; l < UI_LANG_COUNT; l++) {
+        for (int l = 0; l < UI_LANG_PAL_COUNT; l++) {
             if (has[l][i]) {
                 for (int q = 0; q < NP + 2; q++) {
                     v[q][m] = res[l][i][q];
@@ -1305,7 +1305,7 @@ static void geoFit(int fixedWidth)
                i, rowOfItem(i), medianD(v[0], m), medianD(v[1], m),
                ui_menu_text_items[i].em[0] * medianD(v[1], m), medianD(v[2], m), medianD(v[NP], m),
                medianD(v[NP + 1], m));
-        for (int l = 0; l < UI_LANG_COUNT; l++) {
+        for (int l = 0; l < UI_LANG_PAL_COUNT; l++) {
             if (has[l][i]) {
                 printf(" %s %+.2f", kLang[l], res[l][i][3]);
             }
@@ -1315,9 +1315,9 @@ static void geoFit(int fixedWidth)
     /* per sheet: the medians over its items and languages */
     for (int pass = 0; pass < 16; pass++) {
         const char *name = NULL;
-        double v[NP + 2][UI_LANG_COUNT * 512];
+        double v[NP + 2][UI_LANG_PAL_COUNT * 512];
         int m = 0;
-        for (int l = 0; l < UI_LANG_COUNT; l++) {
+        for (int l = 0; l < UI_LANG_PAL_COUNT; l++) {
             for (int k = 0; k < s_nrect[l]; k++) {
                 const Rect *r = &s_rect[l][k];
                 const char *base = strrchr(r->sheet, '/');
@@ -1447,7 +1447,7 @@ static void fit(void)
 
     enum { MAXI = 160 };
 
-    for (int lang = 0; lang < UI_LANG_COUNT; lang++) {
+    for (int lang = 0; lang < UI_LANG_PAL_COUNT; lang++) {
         FitItem fi[MAXI];
         int n = 0;
         for (int k = 0; k < s_nrect[lang] && n < MAXI; k++) {
@@ -1596,7 +1596,7 @@ int main(int argc, char **argv)
     }
     collect();
     int n = 0;
-    for (int l = 0; l < UI_LANG_COUNT; l++) {
+    for (int l = 0; l < UI_LANG_PAL_COUNT; l++) {
         n += s_nrect[l];
     }
     if (n == 0) {
@@ -1627,7 +1627,7 @@ int main(int argc, char **argv)
         testFitCopy();
         testCompareItems(argv[3]);
     }
-    for (int l = 0; l < UI_LANG_COUNT; l++) {
+    for (int l = 0; l < UI_LANG_PAL_COUNT; l++) {
         for (int k = 0; k < s_nrect[l]; k++) {
             free(s_rect[l][k].grey);
             free(s_rect[l][k].alpha);

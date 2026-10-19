@@ -187,6 +187,47 @@ static void test_config(const char *dir)
     ico_opt_reload();
 }
 
+/* [ui] language: auto (-1) by default and for a value that is not one of
+   the six; each name its UiLang number (port/ui/strings.h order); the
+   setter and the names the Settings menu writes */
+static void test_ui_language(const char *dir)
+{
+    static const char *const names[6] = {"en", "fr", "de", "it", "es", "ja"};
+    char path[512];
+    char text[64];
+    FILE *f;
+
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    CHECK(ico_opt_ui_language() == -1);
+    CHECK(strcmp(ico_opt_ui_language_name(-1), "auto") == 0);
+    snprintf(path, sizeof(path), "%s/options_test.toml", dir);
+    for (int i = 0; i < 6 + 2; i++) {
+        const char *v = i < 6 ? names[i] : i == 6 ? "auto" : "klingon";
+        f = fopen(path, "wb");
+        if (f == NULL) {
+            fprintf(stderr, "cannot write %s\n", path);
+            failures++;
+            return;
+        }
+        snprintf(text, sizeof(text), "[ui]\nlanguage = \"%s\"\n", v);
+        fputs(text, f);
+        fclose(f);
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_opt_reload();
+        CHECK(ico_opt_ui_language() == (i < 6 ? i : -1));
+        CHECK(strcmp(ico_opt_ui_language_name(ico_opt_ui_language()), i < 6 ? v : "auto") == 0);
+    }
+    remove(path);
+    ico_opt_set_ui_language(5);
+    CHECK(ico_opt_ui_language() == 5);
+    ico_opt_set_ui_language(9);
+    CHECK(ico_opt_ui_language() == -1);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    CHECK(ico_opt_ui_language() == -1);
+}
+
 static void test_brain(void)
 {
     EBSlot *p;
@@ -928,6 +969,7 @@ int main(int argc, char **argv)
     test_config(argc > 1 ? argv[1] : ".");
     test_mirror_slots(argc > 1 ? argv[1] : ".");
     test_brain();
+    test_ui_language(argc > 1 ? argv[1] : ".");
     test_video_effects(argc > 1 ? argv[1] : ".");
     test_video_effects_depth(argc > 1 ? argv[1] : ".");
     test_video_full_pixel(argc > 1 ? argv[1] : ".");

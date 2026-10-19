@@ -2791,7 +2791,8 @@ static void testList(void)
    the main page in developer mode only, and the [video] keys' round trip
    through the config. */
 /* the texture pack note sits on the Display page, whose notes must stay one
-   line to keep clear of Back: checked in all five languages */
+   line to keep clear of Back: checked in the European disc's five
+   languages (the game's language picks the port's) */
 static void testTexturePackNoteLines(void)
 {
     int mainL = enterMain(1);
@@ -2801,7 +2802,7 @@ static void testTexturePackNoteLines(void)
     openPage(mainL, 0, UI_PAGE_DISPLAY);
     tn = rowWithPrefix(UI_PAGE_DISPLAY, "PCSX2 packs:");
     CHECK(tn >= 0, "the texture pack note on the Display page");
-    for (int lang = 0; lang < UI_LANG_COUNT && tn >= 0; lang++) {
+    for (int lang = 0; lang < UI_LANG_PAL_COUNT && tn >= 0; lang++) {
         const char *want = ui_str_in((UiLang)lang, UI_STR_TEXTURE_PACK_NOTE);
         NonLinearCameraMove = 2 + lang; /* the game's language: 2 EN .. 6 ES */
         frame(0);
