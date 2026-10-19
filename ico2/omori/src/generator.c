@@ -53,19 +53,11 @@ typedef struct GenWork {        /* field names derived */
     int timer;     /* 0x64 */
 } GenWork;         /* derived name */
 
-#ifdef VERSION_JPN
-
-/* the generator packet: 11208 bytes, three per objLayout record, are read
-   into it, which is what GetsizeGeneratorPacket returns, the whole buffer */
-static int generatorPacket[2802]; /* derived name */
-
-#else
-
 /* the generator packet: 11277 bytes are read into it, which is what
-   GetsizeGeneratorPacket returns, three under the buffer */
+   GetsizeGeneratorPacket returns, three under the buffer; the Japanese disc reads
+   11208 bytes, three per objLayout record, into its 2802 words (the European size serves
+   both) */
 static int generatorPacket[2820]; /* derived name */
-
-#endif
 
 #include "generator.h"
 #include <string.h>

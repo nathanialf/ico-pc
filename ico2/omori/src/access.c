@@ -2,16 +2,9 @@
 #include <stdio.h>
 #include "access.h"
 
-/* the path sprintf builds and this file hands back */
-#ifdef VERSION_JPN
-
-static char accessPath[512]; /* derived name */
-
-#else
-
+/* the path sprintf builds and this file hands back (the European size; the Japanese
+   disc's is 512) */
 static char accessPath[528]; /* derived name */
-
-#endif
 
 /* Callers pass the stage and the DF flag (StageManager.c, icoMisc.c), which
    goes straight through to GetDataFileName2.  The DEBUG build reads the data
