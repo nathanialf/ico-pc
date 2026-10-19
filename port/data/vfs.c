@@ -103,6 +103,39 @@ int ico_vfs_normalize(const char *in, char *out, size_t outsz)
     return 0;
 }
 
+/* SYSTEM.CNF's BOOT2 line ("BOOT2 = cdrom0:\\SCPS_560.01;1") as the boot file's
+   normalized name ("SCPS_560.01"); 0 on success, -1 when the line is absent or
+   too long (boot is then empty). Lives here, not in discs.c, because it needs
+   ico_vfs_normalize and discs.c stays plain data for the tests that compile it
+   alone (port/core/region_select_test). */
+int ico_disc_cnf_boot(const char *cnf, char *boot, size_t size)
+{
+    const char *p;
+    char line[64];
+    size_t n;
+
+    boot[0] = '\0';
+    p = cnf != NULL ? strstr(cnf, "BOOT2") : NULL;
+    if (p == NULL || (p = strchr(p, '=')) == NULL) {
+        return 0;
+    }
+    p++;
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    n = strcspn(p, "\r\n");
+    if (n >= sizeof(line)) {
+        return -1;
+    }
+    memcpy(line, p, n);
+    line[n] = '\0';
+    if (ico_vfs_normalize(line, boot, size) != 0) {
+        boot[0] = '\0';
+        return -1;
+    }
+    return 0;
+}
+
 int ico_vfs_stat(IcoVfs *vfs, const char *path, IcoVfsEntry *out)
 {
     char norm[ICO_VFS_PATH_MAX];

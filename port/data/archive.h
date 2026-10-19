@@ -107,10 +107,6 @@ const char *ico_disc_image_names_text(const char *ext);
 const char *ico_disc_boots_text(void);
 const char *ico_disc_archive_names_text(void);
 
-/* SYSTEM.CNF's BOOT2 file out of the file's text (NUL-terminated),
-   normalized ("SCES_507.60"); "" when absent.  0, or -1 if it does not fit. */
-int ico_disc_cnf_boot(const char *cnf, char *boot, size_t size);
-
 /* The rules the extractor accepts an image by (extract.h). */
 #define ICO_RULE_ISO_SHA1 "iso-sha1"
 #define ICO_RULE_ELF_DATADF "elf-sha1+datadf-crc"

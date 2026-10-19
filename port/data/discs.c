@@ -388,34 +388,6 @@ const IcoDiscInfo *ico_disc_by_slug(const char *slug)
     return NULL;
 }
 
-int ico_disc_cnf_boot(const char *cnf, char *boot, size_t size)
-{
-    const char *p;
-    char line[64];
-    size_t n;
-
-    boot[0] = '\0';
-    p = cnf != NULL ? strstr(cnf, "BOOT2") : NULL;
-    if (p == NULL || (p = strchr(p, '=')) == NULL) {
-        return 0;
-    }
-    p++;
-    while (*p == ' ' || *p == '\t') {
-        p++;
-    }
-    n = strcspn(p, "\r\n");
-    if (n >= sizeof(line)) {
-        return -1;
-    }
-    memcpy(line, p, n);
-    line[n] = '\0';
-    if (ico_vfs_normalize(line, boot, size) != 0) {
-        boot[0] = '\0';
-        return -1;
-    }
-    return 0;
-}
-
 /* Wording over the rows: "a, b or c". */
 #define JOIN_MAX 512
 

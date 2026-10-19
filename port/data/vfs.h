@@ -124,6 +124,9 @@ IcoVfs *ico_vfs_disc(void);
    ";<version>" suffix, maps '\\' to '/', and upper-cases.  Returns 0, or -1
    if the result does not fit in `outsz`. */
 int ico_vfs_normalize(const char *in, char *out, size_t outsz);
+/* SYSTEM.CNF's BOOT2 line as the boot file's normalized name ("SCPS_560.01"); 0, or -1
+   (boot empty) when the line is absent or too long. */
+int ico_disc_cnf_boot(const char *cnf, char *boot, size_t size);
 
 /* Look a path up in any of the accepted spellings; 0 if found. */
 int ico_vfs_stat(IcoVfs *vfs, const char *path, IcoVfsEntry *out);
