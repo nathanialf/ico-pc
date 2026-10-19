@@ -303,9 +303,10 @@ Options once you have finished the game:
   of its own.
 - **Menu language** is the language of the menus this port adds (Options,
   the extras, photo mode's help, the messages): English, French, German,
-  Italian, Spanish or Japanese. It starts on Auto: Japanese with the Japanese
-  disc, and with the European disc the game's language. It does not
-  change the game's own text, which is always the disc's.
+  Italian, Spanish, Japanese (日本語) or Korean (한국어). It starts on Auto:
+  Japanese with the Japanese disc, Korean with the Korean disc, and with the
+  European disc the game's language. It does not change the game's own
+  text, which is always the disc's.
 - **Disc** shows only when both discs are set up. It is the disc the game
   plays: Europe (SCES-50760) or Japan (SCPS-11003). A change
   takes effect the next time you start the game. It is the same setting as

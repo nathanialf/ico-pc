@@ -200,7 +200,7 @@ Settings menu changes the running values and the file (`port/platform/host_confi
 
 | key | type | default | read by |
 | --- | --- | --- | --- |
-| `language` | string | `"auto"` | the language of the port's own text (its menus, photo mode's help, the messages): `en`, `fr`, `de`, `it`, `es`, `ja`; `auto` follows the disc: Japanese on the Japanese disc, the game's own language on the European disc; any other word is `auto`, logged (`port/game/options.h` (`ico_opt_ui_language`); `port/ui/ui_lang.h` (`ui_settings_resolve_language`)). The game's own text is always the disc's |
+| `language` | string | `"auto"` | the language of the port's own text (its menus, photo mode's help, the messages): `en`, `fr`, `de`, `it`, `es`, `ja`, `ko`; `auto` follows the disc: its region row's `ui_lang_default` (Japanese on the Japanese disc, Korean on the Korean disc), the game's own language on the European disc; any other word is `auto`, logged (`port/game/options.h` (`ico_opt_ui_language`); `port/ui/ui_lang.h` (`ui_settings_resolve_language`)). The game's own text is always the disc's |
 
 ### [gameplay]
 
