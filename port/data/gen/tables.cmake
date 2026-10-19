@@ -80,7 +80,7 @@ set(ICO_TABLE_SYMBOLS
     spiderDef
     wayGroupSheet
 )
-set(ICO_TABLE_SLUGS pal jpn)
+set(ICO_TABLE_SLUGS pal jpn kor)
 set(ICO_TABLE_SOURCES "${CMAKE_CURRENT_LIST_DIR}/table_defs.c"
     "${CMAKE_CURRENT_LIST_DIR}/table_sets.c")
 set(ICO_TABLE_EE_SYMBOLS "")

@@ -173,10 +173,11 @@ typedef struct IcoTableSet {
     uint32_t object_count;
 } IcoTableSet;
 
-#define ICO_TABLE_SET_COUNT 2
+#define ICO_TABLE_SET_COUNT 3
 
 extern const IcoTableSet ico_table_set_pal;
 extern const IcoTableSet ico_table_set_jpn;
+extern const IcoTableSet ico_table_set_kor;
 
 /* The sets in config/regions.txt's order (port/data/gen/table_sets.c): the
    index is the region's row. */
