@@ -7,9 +7,16 @@
  *   archive_test synth <dir>         vfs_test's synthetic ISO9660 image,
  *                                    extracted into <dir> and compared with
  *                                    the ISO backend (no disc needed)
+ *   archive_test shift <dir>         a synthetic image whose directory lists
+ *                                    DATA.DF 5 sectors before its real start
+ *                                    (the Korean disc's layout, df_lsn_shift
+ *                                    in archive.h): the ISO backend's
+ *                                    shifted entry, the libcdvd search, the
+ *                                    extraction and the archive (no disc)
  *   archive_test disc <iso> <dir> [slug]
  *                                    the user's image of the disc `slug`
- *                                    (pal, the default, or jpn): extract
+ *                                    (a slug of config/regions.txt, pal by
+ *                                    default): extract
  *                                    into a temporary archive (in $TMPDIR
  *                                    when set, else <dir>), mount it and
  *                                    compare it with the image; 77
@@ -233,7 +240,7 @@ static int run_synth(const char *dir)
         fclose(fp);
     }
 
-    /* 1. neither disc: refused, nothing left behind; the reason names both */
+    /* 1. none of the discs: refused, nothing left behind; the reason names the discs */
     CHECK(ico_extract_archive(iso_path, ar_path, 0, NULL, NULL, &res, why, sizeof(why)) != 0);
     printf("archive_test synth: refused as expected: %s\n", why);
     CHECK(strstr(why, "is not a disc image this port plays") != NULL &&
@@ -300,7 +307,8 @@ static int run_synth(const char *dir)
         snprintf(good.elf_sha1, sizeof(good.elf_sha1), "%s", d->elf_sha1);
         CHECK(ico_archive_info_acceptable(&good, why, sizeof(why)));
         /* the other disc's boot ELF under this disc's id */
-        snprintf(good.elf_sha1, sizeof(good.elf_sha1), "%s", ico_discs[1 - di].elf_sha1);
+        snprintf(good.elf_sha1, sizeof(good.elf_sha1), "%s",
+                 ico_discs[(di + 1) % ICO_REGION_COUNT].elf_sha1);
         CHECK(!ico_archive_info_acceptable(&good, why, sizeof(why)));
         snprintf(good.elf_sha1, sizeof(good.elf_sha1), "%s", d->elf_sha1);
         good.version = ICO_ARCHIVE_VERSION + 1;
@@ -320,6 +328,8 @@ static int run_synth(const char *dir)
     CHECK(ico_disc_by_boot("SCES_507.60") == &ico_discs[0] &&
           ico_disc_by_boot("SCPS_110.03") == &ico_discs[1] && ico_disc_by_boot("") == NULL);
     CHECK(ico_discs[0].df_count == 193 && ico_discs[1].df_count == 183);
+    /* only a disc with a shifted DATA.DF carries a shift (the Korean disc) */
+    CHECK(ico_discs[0].df_lsn_shift == 0 && ico_discs[1].df_lsn_shift == 0);
 
     /* the entries are stored, the boot file has its tail */
     {
@@ -506,6 +516,32 @@ static int run_disc_archive(const char *iso_path, const char *dir, const char *s
     }
     CHECK(ico_vfs_volume_sectors(ar) == ico_vfs_volume_sectors(iso));
     printf("archive_test disc: volume %u sectors on both\n", (unsigned)ico_vfs_volume_sectors(ar));
+    /* DATA.DF: the volume reports the entry the archive header starts (the
+       row's df_lsn_shift past the directory's LSN, the size that much
+       shorter): the header decodes to the manifest's member count, and the
+       size is the manifest's */
+    {
+        IcoVfsFile dfi;
+        unsigned char head[4];
+
+        CHECK(ico_vfs_open(iso, "DFDATAS/DATA.DF", &dfi) == 0);
+        CHECK(dfi.entry.size == disc->df_size);
+        CHECK(ico_vfs_read(&dfi, 0, head, 4) == 4 && rd32(head) == disc->df_count);
+        /* the directory's own record lies df_lsn_shift sectors earlier */
+        ico_vfs_iso9660_force_df_shift(0);
+        {
+            IcoVfs *raw = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
+            IcoVfsEntry rawe;
+
+            CHECK(raw != NULL && ico_vfs_stat(raw, "DFDATAS/DATA.DF", &rawe) == 0);
+            if (raw != NULL) {
+                CHECK(rawe.lsn + disc->df_lsn_shift == dfi.entry.lsn);
+                CHECK(rawe.size == dfi.entry.size + disc->df_lsn_shift * ICO_VFS_SECTOR);
+                ico_vfs_unmount(raw);
+            }
+        }
+        ico_vfs_iso9660_force_df_shift(-1);
+    }
 
     /* the boot ELF read back from the archive */
     CHECK(ico_vfs_open(ar, search, &fa) == 0);
@@ -525,7 +561,7 @@ static int run_disc_archive(const char *iso_path, const char *dir, const char *s
     CHECK(strcmp(hex, disc->elf_sha1) == 0);
 
     /* look-ups and the small files, sector for sector: the root files each
-       disc has (the Japanese disc has no MCXMAN, MCXSERV, PANICSYS or
+       disc has (the Japanese and Korean discs have no MCXMAN, MCXSERV, PANICSYS or
        DUMMY.TXT; its IOPRP224.IMG is not stored) */
     {
         static const char *const pal[] = {
@@ -545,24 +581,27 @@ static int run_disc_archive(const char *iso_path, const char *dir, const char *s
             "PANICSYS.IRX",
             "DUMMY.TXT",
         };
-        static const char *const jpn[] = {
-            "",           "DFDATAS",     "DFDATAS/DATA.DF",
-            "SYSTEM.CNF", "SCPS_110.03", "SNDN2DRV.IRX",
-            "LIBSD.IRX",  "SIO2MAN.IRX", "PADMAN.IRX",
-            "MCMAN.IRX",  "MCSERV.IRX",
+        /* the discs without those files (jpn, kor): the boot file is the
+           row's, the fifth path */
+        char bootPath[32];
+        const char *other[] = {
+            "",           "DFDATAS",      "DFDATAS/DATA.DF", "SYSTEM.CNF",
+            bootPath,     "SNDN2DRV.IRX", "LIBSD.IRX",       "SIO2MAN.IRX",
+            "PADMAN.IRX", "MCMAN.IRX",    "MCSERV.IRX",
         };
         const int isPal = disc == &ico_discs[0];
-        const char *const *paths = isPal ? pal : jpn;
+        const char *const *paths = isPal ? pal : other;
         const uint32_t n = isPal ? (uint32_t)(sizeof(pal) / sizeof(pal[0]))
-                                 : (uint32_t)(sizeof(jpn) / sizeof(jpn[0]));
+                                 : (uint32_t)(sizeof(other) / sizeof(other[0]));
 
+        snprintf(bootPath, sizeof(bootPath), "%s", disc->boot_elf);
         for (i = 0; i < n; i++) {
             same_stat(iso, ar, paths[i]);
             if (i >= 3) {
                 CHECK(same_file_sectors(iso, ar, paths[i]));
             }
         }
-        /* the 9 files stored from the Japanese disc: 8 in the root and DATA.DF */
+        /* the 9 files stored from the Japanese and Korean discs: 8 in the root and DATA.DF */
         if (!isPal) {
             CHECK(res.files == 9);
             CHECK(ico_vfs_stat(ar, "MCXMAN.IRX", NULL) != 0 &&
@@ -660,6 +699,207 @@ static int run_disc_archive(const char *iso_path, const char *dir, const char *s
     ico_vfs_unmount(iso);
     remove(ar_path);
     printf("archive_test disc: %s\n", failures ? "FAILED" : "ok");
+    return failures ? 1 : 0;
+}
+
+/* --- a DATA.DF the directory lists too early ------------------------------------ */
+
+/* The Korean disc's layout in miniature: the directory puts DATA.DF at
+   SH_DIR_LSN, the archive header lies SH_SHIFT sectors later (the sectors
+   between are filler), and the directory keeps the size of the whole span.
+   The image names no disc of the table (SLUS_000.00), so the shift is the
+   test's own (ico_vfs_iso9660_force_df_shift). */
+#define SH_SHIFT 5
+#define SH_SECTORS 30
+#define SH_ROOT 18
+#define SH_DFDATAS 19
+#define SH_CNF 20
+#define SH_BOOT 21
+#define SH_DIR_LSN 22
+#define SH_REAL (SH_DIR_LSN + SH_SHIFT)
+#define SH_REAL_SIZE 5000
+#define SH_BOOT_SIZE 100
+
+static int build_shifted(const char *path)
+{
+    static unsigned char img[SH_SECTORS * 2048];
+    unsigned char *s;
+    unsigned o, d;
+    uint32_t i, rootSize;
+    FILE *fp;
+
+    memset(img, 0, sizeof(img));
+
+    s = img + SH_ROOT * 2048;
+    o = 0;
+    o += put_rec(s + o, SH_ROOT, 0, 1, "\0", 1);
+    o += put_rec(s + o, SH_ROOT, 0, 1, "\1", 1);
+    o += put_named(s + o, SH_DFDATAS, 0, 1, "DFDATAS");
+    o += put_named(s + o, SH_BOOT, SH_BOOT_SIZE, 0, "SLUS_000.00;1");
+    o += put_named(s + o, SH_CNF, (uint32_t)strlen(synCnf), 0, "SYSTEM.CNF;1");
+    rootSize = o;
+    put32both(s + 10, rootSize);
+    put32both(s + 34 + 10, rootSize);
+
+    s = img + SH_DFDATAS * 2048;
+    d = 0;
+    d += put_rec(s + d, SH_DFDATAS, 0, 1, "\0", 1);
+    d += put_rec(s + d, SH_ROOT, rootSize, 1, "\1", 1);
+    d += put_named(s + d, SH_DIR_LSN, SH_SHIFT * 2048u + SH_REAL_SIZE, 0, "DATA.DF;1");
+    put32both(s + 10, d);
+    put32both(img + SH_ROOT * 2048 + 34 + 34 + 10, d);
+
+    s = img + 16 * 2048;
+    s[0] = 1;
+    memcpy(s + 1, "CD001", 5);
+    s[6] = 1;
+    put32both(s + 80, SH_SECTORS);
+    s[128] = 0x00;
+    s[129] = 0x08;
+    put_rec(s + 156, SH_ROOT, rootSize, 1, "\0", 1);
+    s = img + 17 * 2048;
+    s[0] = 255;
+    memcpy(s + 1, "CD001", 5);
+    s[6] = 1;
+
+    memcpy(img + SH_CNF * 2048, synCnf, strlen(synCnf));
+    for (i = 0; i < SH_BOOT_SIZE; i++) {
+        img[SH_BOOT * 2048 + i] = synthByte(SH_BOOT, i);
+    }
+    /* the filler before the archive: nonzero, and not a directory */
+    memset(img + SH_DIR_LSN * 2048, 0xEE, SH_SHIFT * 2048);
+    /* the archive: a unifile directory of one member at offset 2048 */
+    s = img + SH_REAL * 2048;
+    put32le(s, 1);
+    strcpy((char *)s + 4, "alpha.pak");
+    put32le(s + 4 + 32, 2048);
+    put32le(s + 4 + 36, 100);
+    for (i = 2048; i < SH_REAL_SIZE; i++) {
+        s[i] = synthByte(SH_REAL, i);
+    }
+
+    fp = fopen(path, "wb");
+    if (fp == NULL) {
+        return -1;
+    }
+    if (fwrite(img, 1, sizeof(img), fp) != sizeof(img)) {
+        fclose(fp);
+        return -1;
+    }
+    return fclose(fp);
+}
+
+static int run_shift(const char *dir)
+{
+    char iso_path[1024], ar_path[1024], why[1024];
+    unsigned char buf[2048];
+    IcoVfs *iso, *ar;
+    IcoVfsEntry e, ea;
+    IcoVfsFile f;
+    IcoExtractResult res;
+    IcoArchiveInfo info;
+    sceCdlFILE fp;
+    uint32_t i;
+    int ok;
+
+    snprintf(iso_path, sizeof(iso_path), "%s/archive_test_shift.iso", dir);
+    snprintf(ar_path, sizeof(ar_path), "%s/archive_test_shift.o2r", dir);
+    remove(ar_path);
+    if (build_shifted(iso_path) != 0) {
+        fprintf(stderr, "cannot write %s\n", iso_path);
+        return 1;
+    }
+
+    /* a disc not in the table: the directory's entry as it is */
+    ico_vfs_iso9660_force_df_shift(-1);
+    iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
+    CHECK(iso != NULL);
+    if (iso == NULL) {
+        return 1;
+    }
+    CHECK(ico_vfs_stat(iso, "DFDATAS/DATA.DF", &e) == 0);
+    CHECK(e.lsn == SH_DIR_LSN && e.size == SH_SHIFT * 2048u + SH_REAL_SIZE);
+    CHECK(ico_vfs_read_sectors(iso, e.lsn, 1, buf) == 0 && buf[0] == 0xEE);
+    ico_vfs_unmount(iso);
+
+    /* the shift: lsn + SH_SHIFT, size - SH_SHIFT sectors, whatever the spelling */
+    ico_vfs_iso9660_force_df_shift(SH_SHIFT);
+    iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
+    CHECK(iso != NULL);
+    if (iso == NULL) {
+        ico_vfs_iso9660_force_df_shift(-1);
+        return 1;
+    }
+    CHECK(ico_vfs_stat(iso, "DFDATAS/DATA.DF", &e) == 0);
+    CHECK(e.lsn == SH_REAL && e.size == SH_REAL_SIZE);
+    CHECK(ico_vfs_stat(iso, "\\DFDATAS\\DATA.DF;1", &ea) == 0 && ea.lsn == SH_REAL &&
+          ea.size == SH_REAL_SIZE);
+    CHECK(ico_vfs_stat(iso, "dfdatas/data.df", &ea) == 0 && ea.lsn == SH_REAL);
+    /* nothing else moves */
+    CHECK(ico_vfs_stat(iso, "SYSTEM.CNF", &ea) == 0 && ea.lsn == SH_CNF);
+    CHECK(ico_vfs_stat(iso, "SLUS_000.00", &ea) == 0 && ea.lsn == SH_BOOT);
+    CHECK(ico_vfs_stat(iso, "DFDATAS", &ea) == 0 && ea.lsn == SH_DFDATAS);
+    /* the archive header and a member's bytes */
+    CHECK(ico_vfs_open(iso, "DFDATAS/DATA.DF", &f) == 0);
+    CHECK(ico_vfs_read(&f, 0, buf, 44) == 44);
+    CHECK(rd32(buf) == 1 && memcmp(buf + 4, "alpha.pak", 10) == 0);
+    CHECK(rd32(buf + 4 + 32) == 2048 && rd32(buf + 4 + 36) == 100);
+    ok = ico_vfs_read(&f, 2048, buf, 100) == 100;
+    for (i = 0; i < 100; i++) {
+        ok &= buf[i] == synthByte(SH_REAL, 2048 + i);
+    }
+    CHECK(ok);
+    CHECK(ico_vfs_read(&f, 4900, buf, 500) == 100); /* short at the file's end */
+    CHECK(ico_vfs_read(&f, SH_REAL_SIZE, buf, 10) == 0);
+
+    /* libcdvd answers the search with the shifted span */
+    ico_cdvd_host_reset();
+    ico_vfs_set_disc(iso);
+    memset(&fp, 0xEE, sizeof(fp));
+    CHECK(sceCdSearchFile((struct sceCdlFILE *)&fp, "\\DFDATAS\\DATA.DF;1") == 1);
+    CHECK(fp.lsn == SH_REAL && fp.size == SH_REAL_SIZE);
+    ico_vfs_set_disc(NULL);
+    ico_cdvd_host_reset();
+    ico_vfs_unmount(iso);
+
+    /* a shift the directory's size cannot hold: no entry */
+    ico_vfs_iso9660_force_df_shift(1000);
+    iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
+    CHECK(iso != NULL);
+    if (iso != NULL) {
+        CHECK(ico_vfs_stat(iso, "DFDATAS/DATA.DF", NULL) != 0);
+        ico_vfs_unmount(iso);
+    }
+
+    /* the extraction: the archive holds the shifted span at the shifted LSN */
+    ico_vfs_iso9660_force_df_shift(SH_SHIFT);
+    CHECK(ico_extract_archive(iso_path, ar_path, ICO_EXTRACT_NO_VERIFY, NULL, NULL, &res, why,
+                              sizeof(why)) == 0);
+    if (failures) {
+        fprintf(stderr, "archive_test shift: extraction failed: %s\n", why);
+    }
+    CHECK(res.files == 3); /* SYSTEM.CNF, SLUS_000.00, DFDATAS/DATA.DF */
+    CHECK(res.bytes == strlen(synCnf) + SH_BOOT_SIZE + SH_REAL_SIZE);
+    CHECK(ico_archive_read_info(ar_path, &info, why, sizeof(why)) == 0);
+    CHECK(info.volume_sectors == SH_SECTORS);
+    iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
+    ar = ico_vfs_mount_archive(ar_path);
+    CHECK(iso != NULL && ar != NULL);
+    if (iso != NULL && ar != NULL) {
+        CHECK(ico_vfs_stat(ar, "DFDATAS/DATA.DF", &ea) == 0 && ea.lsn == SH_REAL &&
+              ea.size == SH_REAL_SIZE);
+        same_stat(iso, ar, "DFDATAS/DATA.DF");
+        CHECK(same_file_sectors(iso, ar, "DFDATAS/DATA.DF"));
+        CHECK(ico_vfs_open(ar, "DFDATAS/DATA.DF", &f) == 0);
+        CHECK(ico_vfs_read(&f, 0, buf, 4) == 4 && rd32(buf) == 1);
+        same_search(iso, ar, "\\DFDATAS\\DATA.DF;1");
+    }
+    ico_vfs_unmount(iso);
+    ico_vfs_unmount(ar);
+    ico_vfs_iso9660_force_df_shift(-1);
+    remove(ar_path);
+    remove(iso_path);
+    printf("archive_test shift: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }
 
@@ -797,6 +1037,9 @@ int main(int argc, char **argv)
     if ((argc == 4 || argc == 5) && strcmp(argv[1], "disc") == 0) {
         return run_disc_archive(argv[2], argv[3], argc == 5 ? argv[4] : "pal");
     }
+    if (argc == 3 && strcmp(argv[1], "shift") == 0) {
+        return run_shift(argv[2]);
+    }
     if (argc == 3 && strcmp(argv[1], "manifest") == 0) {
         return run_manifest("pal", argv[2]);
     }
@@ -807,8 +1050,8 @@ int main(int argc, char **argv)
         return run_manifest_check(argv[2], argv[3], argv[4]);
     }
     fprintf(stderr,
-            "usage: %s synth <dir> | disc <iso> <dir> [pal|jpn] | manifest [--region pal|jpn] "
-            "<iso> | manifest-check <pal|jpn> <iso> <discs.c>\n",
+            "usage: %s synth <dir> | shift <dir> | disc <iso> <dir> [slug] | manifest [--region "
+            "slug] <iso> | manifest-check <slug> <iso> <discs.c>\n",
             argv[0]);
     return 2;
 }

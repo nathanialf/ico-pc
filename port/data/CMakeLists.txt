@@ -149,7 +149,8 @@ endif()
 # The archive: extraction into
 # a temporary archive and mount, compared with the ISO backend. `synth` uses
 # vfs_test's synthetic image and runs everywhere; `disc` reads the user's
-# image and is skipped (77) without it.
+# image and is skipped (77) without it; `shift` is a synthetic image whose
+# DATA.DF lies df_lsn_shift sectors after its directory entry.
 add_executable(archive_test test/archive_test.c ../platform/host_config.c)
 target_include_directories(archive_test PRIVATE "${ICO_COMPAT_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/platform")
@@ -157,6 +158,9 @@ target_compile_options(archive_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_W
 target_link_libraries(archive_test PRIVATE ico_port_data)
 if(ICO_RUN_TESTS)
     add_test(NAME archive_synthetic COMMAND archive_test synth "${CMAKE_CURRENT_BINARY_DIR}")
+    # a DATA.DF listed df_lsn_shift sectors before its archive (the Korean
+    # disc's layout) in a synthetic image: no disc needed
+    add_test(NAME archive_shift COMMAND archive_test shift "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME archive_disc COMMAND archive_test disc "${ICO_DISC_IMAGE}"
                                        "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(archive_disc PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)

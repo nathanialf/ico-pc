@@ -10,8 +10,8 @@
  *                           (a DVD CHD and a CD CHD, plus refused ones)
  *   vfs_test disc <iso> [slug]
  *                           checks the user's image of the disc `slug`
- *                           (pal, the default, or jpn: archive.h's
- *                           ico_discs) at run time, an .iso, a .chd, a raw
+ *                           (a slug of config/regions.txt, pal by default:
+ *                           archive.h's ico_discs) at run time, an .iso, a .chd, a raw
  *                           .bin on its own or the .cue naming it; exits
  *                           77 (skipped) when the image is absent
  *   vfs_test same <iso> <image> [slug]
@@ -1165,6 +1165,8 @@ static int run_disc(const char *iso, const char *slug)
     snprintf(boot, sizeof(boot), "cdrom0:\\%s;1", disc->boot_elf);
     CHECK(ico_vfs_stat(vfs, boot, &e) == 0 && !e.is_dir);
     CHECK(ico_vfs_stat(vfs, "\\DFDATAS\\DATA.DF;1", &e) == 0 && !e.is_dir);
+    /* the entry as the row says (a shifted DATA.DF: the span of the archive) */
+    CHECK(e.size == disc->df_size);
     /* the six modules FileManager.c loads on the PS2, and the IOP image */
     CHECK(ico_vfs_stat(vfs, "cdrom0:\\IOPRP224.IMG;1", NULL) == 0);
     CHECK(ico_vfs_stat(vfs, "cdrom0:\\SIO2MAN.IRX;1", NULL) == 0);
@@ -1411,7 +1413,7 @@ int main(int argc, char **argv)
     if ((argc == 4 || argc == 5) && strcmp(argv[1], "same") == 0) {
         return run_same(argv[2], argv[3], argc == 5 ? argv[4] : "pal");
     }
-    fprintf(stderr, "usage: %s synth <dir> | disc <iso> [pal|jpn] | same <iso> <image> [pal|jpn]\n",
+    fprintf(stderr, "usage: %s synth <dir> | disc <iso> [slug] | same <iso> <image> [slug]\n",
             argv[0]);
     return 2;
 }

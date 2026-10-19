@@ -728,6 +728,8 @@ static int iso_read_raw(Iso *iso, uint32_t lsn, uint32_t count, void *dst)
 
 static int iso_lookup(void *state, const char *path, IcoVfsEntry *out);
 
+static int64_t forcedShift = -1; /* ico_vfs_iso9660_force_df_shift */
+
 /* The disc SYSTEM.CNF's BOOT2 file names decides the DATA.DF shift (archive.h). */
 static void iso_find_df_shift(Iso *iso)
 {
@@ -738,6 +740,10 @@ static void iso_find_df_shift(Iso *iso)
     uint32_t n;
     unsigned char sec[ICO_VFS_SECTOR];
 
+    if (forcedShift >= 0) {
+        iso->df_shift = (uint32_t)forcedShift;
+        return;
+    }
     if (iso_lookup(iso, "SYSTEM.CNF", &e) != 0 || e.is_dir || e.size == 0 ||
         e.lsn >= iso->volume_sectors || iso_read_raw(iso, e.lsn, 1, sec) != 0) {
         return;
@@ -754,15 +760,9 @@ static void iso_find_df_shift(Iso *iso)
     }
 }
 
-int ico_vfs_iso9660_set_df_shift(IcoVfs *vfs, uint32_t sectors)
+void ico_vfs_iso9660_force_df_shift(int64_t sectors)
 {
-    Iso *iso = ico_vfs_backend_state(vfs, &ico_vfs_iso9660);
-
-    if (iso == NULL) {
-        return -1;
-    }
-    iso->df_shift = sectors;
-    return 0;
+    forcedShift = sectors;
 }
 
 static int iso_mount(void **state, const char *location)

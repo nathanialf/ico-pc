@@ -73,13 +73,10 @@ extern const IcoVfsBackend ico_vfs_iso9660;
    backend finds the disc by SYSTEM.CNF's BOOT2 file when it mounts and
    answers a lookup of DFDATAS/DATA.DF with the shifted entry: lsn + shift,
    size - shift * 2048 (a lookup fails if the directory's size is smaller).
-   This forces the shift on a mounted iso9660 volume (the synthetic images
-   of the tests); 0 on success, -1 if `vfs` is not an iso9660 volume. */
-int ico_vfs_iso9660_set_df_shift(IcoVfs *vfs, uint32_t sectors);
-
-/* The backend's own state record of a mounted volume, or NULL when `vfs`
-   is not `backend`'s. */
-void *ico_vfs_backend_state(IcoVfs *vfs, const IcoVfsBackend *backend);
+   For the tests' synthetic images, which name no disc of the table: this
+   makes every volume mounted afterwards use `sectors` instead of the
+   table's value; a negative value goes back to the table. */
+void ico_vfs_iso9660_force_df_shift(int64_t sectors);
 
 /* A disc image's logical bytes, whatever the container: an .iso file as it
    is, or the ISO image a .chd or .bin holds (its SHA-1 and size are the
