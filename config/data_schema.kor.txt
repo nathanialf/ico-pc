@@ -1,0 +1,156 @@
+# config/data_schema.kor.txt -- the data-only members written as C.
+#
+# One row per (member, section) of config/data_members.kor.txt that
+# tools/gen_data_c.py writes as one C translation unit instead of assembly.
+# The row holds facts about the member's type, never its values: the build
+# reads the values from the user's own baserom/kor/baseelf.elf and writes
+# build/kor/data/<member>.c, which ninja compiles with the game's flags
+# (tools/compile_c.sh). Nothing generated is committed (docs/LEGAL.md).
+#
+# Columns: <member> <section> <type> <header> <count> <symbols> [hex=<field>,...]
+#   member    the member's name in config/data_members.kor.txt
+#   section   data, rodata or sdata: the table row the definition fills;
+#             rodata rows are defined const
+#   type      the element type: a typedef or a struct tag the header
+#             defines, or a C base type with its words joined by '_'
+#             (unsigned_short), with a trailing '*' for a pointer to it
+#             (char*) or a trailing [N] for an array of N (char[32])
+#   header    the header that defines it, repo-relative
+#   count     the number of elements the member holds, or '-' for a single
+#             object
+#   symbols   the PAL member's names, <name>@<element index>; each names one
+#             array, and the arrays follow each other in the order given
+#             from the offset the table gives the first name (0 when it
+#             gives none)
+#   hex=      fields spelled in hex because they hold masks (dotted paths for
+#             nested fields); every other number is decimal
+#   count-of= <array>[-<k>]: a single int whose value is derived, not read
+#             from the disc: the element count of an array the member
+#             defines before it, less k, written as sizeof over that array
+#
+# The rows are PAL's (config/data_schema.pal.txt) with each count re-derived
+# from this ELF: the member's span over the record stride, less the trailing
+# fill PAL's row leaves. The counts that differ from PAL's: obj-action 944,
+# obj-layout 3736, tex-property 406, model-path 1621, texture-layout 76,
+# unmapped_0055FBD0 2, moviefile 5, stage-all 104, stage-anim-model 1357,
+# stage-anim 950, texture-path 53. Every count but tex-property's equals
+# the Japanese build's (config/data_schema.jpn.txt on the jpn branch); the
+# Korean tex-property has six rows fewer than the Japanese 412.
+#
+# Two records are not PAL's, and their headers need this target's type
+# before the generator's ROM check can pass:
+#   motion-def    MotionDef is 0x190 bytes here (PAL 0x194): the same fields
+#                 up to 0x140, PAL's palSpeedRatio (0x15c) absent, and the
+#                 fields from 0x144 in another order (PAL offset -> here:
+#                 0x144->0x150, 0x148->0x14c, 0x14c->0x148, 0x150->0x164,
+#                 0x154->0x144, 0x158->0x170, 0x160->0x174, 0x164->0x154,
+#                 0x168->0x178, 0x16c->0x160, 0x170->0x168, 0x174->0x158,
+#                 0x178->0x15c, 0x17c->0x16c; the shorts and bit words from
+#                 0x17c on are not mapped yet).
+#   texture-path  a 0x30-byte record, char path[48] with no cameraMove word
+#                 (PAL's TexRec is 0x34), defined in .rodata (const).
+#
+# A table row of the member with no schema row here is its own string pool
+# (staffroll_dat's .rodata, and the head of its .sdata): the char pointers
+# into it are written as string literals and the compiler lays the pool out.
+# staffroll_dat's count, staffRollNameDataNum, is the table's 964 entries
+# less its two null entries at the end, as in PAL.
+#
+# A label some source spells inside the member (build/kor/data_labels.txt, the
+# D_<VMA> placeholders) is not an array of its own: gen_data_c.py binds it to
+# the member's first symbol plus its offset in build/kor/data/<member>.alias.ld.
+
+unmapped_002ADBA0 data HintDef ico2/omori/include/lws_kyomi.h 28 hintTable@0 hex=flags
+accessary data AccessaryRec ico2/sugipon/include/box.h 26 accessary@0
+act-data-tbl data IdleRangeRec ico2/fumi/include/commonact.h 3 actDataTbl@0
+act-intrlist data IntrMail ico2/fumi/include/act.h 875 actIntrList@0 hex=flags
+camera-set data char[32] ico2/omori/include/camera-ico2.h 87 cameraSetList@0
+game-param data float ico2/fumi/include/act-game.h 44 gameParam@0
+motion-orient data MotionOrientEntry ico2/sugipon/include/motionOrientManager.h 2468 motionOrient@0
+node-fix-ofs data ClingRec ico2/fumi/include/commonact.h 15 clingData@0
+obj-action data OaRecB ico2/common/include/typedef.h 944 objAction@0 hex=flags
+obj-kind-data data ObjKindEnt ico2/common/include/typedef.h 70 objKindData@0
+obj-layout data GenGeo ico2/common/include/typedef.h 3736 objLayout@0 hex=procPri,flags
+parallel-motion-tbl data ParallelMotionRow ico2/fumi/include/act-parallel-control.h 86 parallelMotionTbl@0
+sekind data unsigned_short ico2/fumi/include/s_init.h 1420 seKind@0
+tex-property data LtProperty ico2/common/include/layout_texture.h 406 texProperty@0
+weapon-def data WeaponDef ico2/sugipon/include/weapon.h 10 weaponKind@0
+staffroll_dat data char* ico2/common/include/staffroll.h 964 staffRollNameData@0
+item-kind-def data ItemBreakRec ico2/sugipon/include/item.h 7 itemKind@0 hex=flags
+mirror-motion-def data MotOriAlt ico2/sugipon/include/motionOrientManager.h 6 mirrorMotionTable@0
+model-path data PObjMdl ico2/common/include/charFileManager.h 1621 modelData@0
+prog-se-link data SePackage ico2/sugipon/include/frameDependSequence.h 128 progSELink@0
+unmapped_00533FC0 data MotSyncPair ico2/sugipon/include/boy.h 5 motSyncPairs@0
+texture-layout data LtProp ico2/common/include/layout_texture.h 76 texLayout@0
+way-point data WaySrcPt ico2/fumi/include/way_tool.h 2924 wayPointSheet@0
+weapon-fumble-def data FumbleRow ico2/sugipon/include/weapon.h 21 weaponFumbleGeo@0
+act-mode-def rodata ActModeRec ico2/fumi/include/act.h 120 actModeTbl@0
+adpcmfile rodata AdpcmDataRec ico2/fumi/include/adpcm_init.h 105 adpcmFile@0
+attack-def rodata AttackKindEntry ico2/omori/include/attackhit.h 20 attackData@0
+auto-escort rodata EscortPoint ico2/fumi/include/girl_act.h 98 autoEscortData@0
+exit-data rodata ExitData ico2/common/include/typedef.h 261 exitData@0
+generator-sub-position rodata SafePosOffset ico2/omori/include/generator.h 7 generatorSubPosition@0
+girl-warp-list rodata WarpRec ico2/script/include/script.h 25 girlWarpList@0
+iconfile rodata IconFile ico2/fumi/include/mcard.h 5 iconFile@0
+idle-mot-def rodata IdlingDef ico2/fumi/include/commonact.h 11 idlingDef@0
+init-func rodata PackKind ico2/fumi/include/cdvd.h 26 initFunc@0
+unmapped_0055FBD0 rodata JimakuFileName ico2/fumi/include/jimaku.h 2 jimakuFileName@0
+look-target-data rodata LookTarget ico2/fumi/include/act-game.h 27 lookTargetData@0
+motion-def rodata MotionDef ico2/sugipon/include/motionOrientManager.h 1148 motionKind@0 hex=modeBits.word,flags.word,flags2.word
+motion-ik-eff-def rodata HandModeRow ico2/sugipon/include/handManager.h 7 motionIKEffKind@0
+motion-orient-def rodata MotOriName ico2/sugipon/include/motionOrientManager.h 327 motionOriKind@0
+motion-random-def rodata int ico2/fumi/include/act-parallel-control.h 100 randomMotionKind@0
+moviefile rodata MotOriName ico2/sugipon/include/motionOrientManager.h 5 movieFile@0
+obj-light rodata ObjLight ico2/seki/include/Light.h 3 objectLight@0
+pair-motion rodata BecPair ico2/fumi/include/commonact.h 31 pairMotion@0
+param-escape-run rodata EscapeRange ico2/fumi/include/girl_act.h 8 paramEscapeRun@0
+se-env rodata SeEnvDef ico2/fumi/include/s_init.h 425 seEnv@0
+sedef rodata SeDef ico2/fumi/include/s_init.h 1426 seDef@0
+sefile rodata SeBank ico2/fumi/include/s_init.h 104 seFile@0
+selist rodata SeKind ico2/fumi/include/s_init.h 3837 seList@0
+shocklist rodata PadActDef ico2/fumi/include/pad.h 28 shockList@0
+stage-all rodata StgPre ico2/common/include/typedef.h 104 stageData@0
+stage-anim-model rodata StgObjDat ico2/seki/include/StageAnimation.h 1357 objTableScene@0
+stage-anim rodata StageAnimDef ico2/seki/include/StageAnimation.h 950 stageTable@0
+stream-motion-def rodata StreamMotionFile ico2/sugipon/include/streamMotionManager.h 10 streamMotion@0
+blend-motion-def rodata MotOriSub ico2/sugipon/include/motionOrientManager.h 321 blendMotionKind@0
+enemy-def rodata EnemyDef ico2/sugipon/include/enemy.h 45 enemyKind@0 hex=attr
+enemy-model-grp rodata EnemyMdlRec ico2/common/include/sceneManager.h 10 enemymodelGroup@0
+enemy-model-tbl rodata int ico2/common/include/sceneManager.h 25 enemymodelTable@0
+enemy-random-def rodata EnemyKindRange ico2/sugipon/include/enemy.h 22 randomEnemyKind@0
+enemy-random-variation-def rodata int ico2/sugipon/include/enemy.h 86 randomEnemyVariationKind@0
+layout-cloth-def rodata LayoutClothDef ico2/sugipon/include/attackCheckBoundary.h 36 layoutClothDef@0 hex=attr
+motion-eff-condition-def rodata VibCondEntry ico2/sugipon/include/frameDependSequence.h 51 motEffCondKind@0
+motion-eff-def rodata EffEntry ico2/sugipon/include/frameDependSequence.h 25 motionEffKind@0 hex=flags
+motion-eff-random-def rodata int ico2/sugipon/include/frameDependSequence.h 10 randomEffKind@0
+motion-limit-def rodata MotOriLimit ico2/sugipon/include/motionOrientManager.h 48 motionLimitDef@0
+motion-se-condition-def rodata SECondEntry ico2/sugipon/include/frameDependSequence.h 211 motSECondKind@0
+motion-se-random-def rodata SERandEntry ico2/sugipon/include/frameDependSequence.h 1151 randomSEKind@0
+obj-trigger-def rodata int ico2/omori/include/objact.h 11 objTriggerDef@0
+obj-trigger rodata ObjActMailEnt ico2/omori/include/objact.h 33 objTrigger@0
+parallel-motion-orient rodata MotOriParallelEnt ico2/sugipon/include/motionOrientManager.h 54 parallelMotionOrient@0
+particle-effect rodata ParticleEffectFile ico2/sugipon/include/particleEffect.h 61 particleEffectFile@0
+spider-def rodata SpiderKindRec ico2/sugipon/include/spider.h 6 spiderDef@0
+texture-path rodata TexRec ico2/common/include/charFileManager.h 53 texFile@0
+way-group rodata WaySrcGrp ico2/fumi/include/way_tool.h 723 wayGroupSheet@0
+staffroll_dat sdata int ico2/common/include/staffroll.h - staffRollNameDataNum@0 count-of=staffRollNameData-2
+
+# ---- The port (this section only; the rows above are upstream's, unchanged).
+# The port compiles no member: the host keeps PAL's layout of every record
+# (the port's headers), tools/gen_data_desc.py writes the loader's second
+# descriptor set (port/data/gen/kor/) from the rows above,
+# config/ee_layout.kor.txt (this disc's records, from upstream's headers) and
+# config/motion_bits.kor.txt, and tools/gen_data_c.py --version kor writes
+# the loader test's reference from the user's baserom/kor/baseelf.elf.
+#
+# default <member> <field>=<value>: a field of PAL's host record that this
+# disc's record lacks takes the value (the loader's ICO_TF_DEFAULT field and
+# the reference's initialiser). Both are read only by PAL-only code
+# (upstream's #ifndef VERSION_JPN):
+#   palSpeedRatio  motionOrientManager.c's frame step multiplies by it when
+#                  systemStatus[0] is set (50 Hz), which it never is on this
+#                  disc; 1.0 is the multiplication's identity all the same
+#   cameraMove     charFileManager.c compares it with NonLinearCameraMove (the
+#                  PAL language), a word the Korean ELF does not have
+default motion-def palSpeedRatio=1.0
+default texture-path cameraMove=0

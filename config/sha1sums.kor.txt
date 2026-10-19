@@ -1,0 +1,7 @@
+# Format: <SHA-1>  <filename>
+# Target kor. ICO Korean retail disc (SCPS-56001).
+# Files live under baserom/kor/ (gitignored); the names below are basenames.
+# baseelf.elf: EE boot ELF extracted from the Korean retail disc.
+# baseelf.rom: objcopy -O binary --gap-fill=0x00 view; build/kor/ico.rom must have this SHA-1.
+f9b00596d133c698df20c8ffe4ca2d7107e236bb  baseelf.elf
+f438c8f841a84837231d79cab0c761bfb211259b  baseelf.rom

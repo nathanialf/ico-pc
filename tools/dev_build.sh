@@ -12,7 +12,7 @@
 # What it does, and nothing else:
 #  1. configures <worktree>/build-host/linux-x64 with the linux-x64 preset once
 #     and -DICO_LINK_EXE=ON, as CI and the main checkout do (a worktree with no baserom/ also gets -DICO_DISC_IMAGE=/nonexistent
-#     -DICO_BASE_ELF=/nonexistent and the same for their _JPN twins, so no test can start the game);
+#     -DICO_BASE_ELF=/nonexistent and the same for their _JPN and _KOR twins, so no test can start the game);
 #  2. builds exactly the named targets at -j4 under flock on the shared build
 #     lock (<worktree>/build-host/tmp/build.lock; ICO_BUILD_LOCK overrides);
 #  3. runs ctest on that directory with the arguments after `--`
@@ -62,7 +62,8 @@ if [[ ! -f "$dir/CMakeCache.txt" ]]; then
     extra=(-DICO_LINK_EXE=ON)
     if [[ ! -e "$root/baserom" ]]; then
         extra+=(-DICO_DISC_IMAGE=/nonexistent -DICO_BASE_ELF=/nonexistent
-            -DICO_DISC_IMAGE_JPN=/nonexistent -DICO_BASE_ELF_JPN=/nonexistent)
+            -DICO_DISC_IMAGE_JPN=/nonexistent -DICO_BASE_ELF_JPN=/nonexistent
+            -DICO_DISC_IMAGE_KOR=/nonexistent -DICO_BASE_ELF_KOR=/nonexistent)
     fi
     flock "$lock" "$cmake" --preset linux-x64 "${extra[@]}"
 fi

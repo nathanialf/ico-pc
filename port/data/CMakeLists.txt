@@ -225,6 +225,8 @@ set(ICO_BASE_ELF "${CMAKE_SOURCE_DIR}/baserom/pal/baseelf.elf" CACHE FILEPATH
     "The PAL base ELF the loader test's reference tables are written from")
 set(ICO_BASE_ELF_JPN "${CMAKE_SOURCE_DIR}/baserom/jpn/baseelf.elf" CACHE FILEPATH
     "The Japanese base ELF the loader test's reference tables are written from")
+set(ICO_BASE_ELF_KOR "${CMAKE_SOURCE_DIR}/baserom/kor/baseelf.elf" CACHE FILEPATH
+    "The Korean base ELF the loader test's reference tables are written from")
 set(_ico_have_elftools 1)
 if(ICO_DATA_PYTHON)
     execute_process(COMMAND "${ICO_DATA_PYTHON}" -c "import elftools"

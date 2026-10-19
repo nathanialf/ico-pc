@@ -1,0 +1,57 @@
+# config/stubs.kor.txt -- the functions and data runs still built from the base ELF.
+#
+# Campaign scaffolding. A row names a range of the base ELF that no tracked
+# source produces yet; tools/gen_stub_s.py writes it as build/kor/stubs/<stem>.s
+# from the user's own baserom/kor/baseelf.elf at build time (nothing of the
+# ROM is tracked, docs/LEGAL.md), and the TU the row names includes it with
+# `INCLUDE_ASM(stem);` at the function's place in the file, with the macro
+# from build/kor/stubs/include_asm.h, which gen_stub_s.py writes beside the
+# stubs. tools/check_dev_native.py refuses an INCLUDE_ASM whose stem has no
+# row here. The list has no rows, so the mechanism is idle, as it is on main:
+# every object of the Korean link is built from source.
+#
+# Columns: <section> <name> <vma_lo> <vma_hi> <tu> [local] [align=N] [lines=N] [file=<stem>]
+#          [in=<file.c.inc>] [inline] [def]
+#   section   text, rodata, data or sdata: the base ELF section of the range;
+#             lit4, rdlit or sdlit: the constants a text row's function brings
+#             into .lit4, .rodata or .sdata (the assembler's li.s and li.d
+#             pools, gcc's strings, constant runs, jump tables and the
+#             function's own statics), written after the function's text
+#             (a constant moved in a data section moves the code too: every
+#             address of one in an instruction is a relocated field)
+#   name      the symbol the stub defines (a literal row: its text row's name)
+#   vma_lo/hi the range [lo, hi) in the base ELF, hex (a text row ends at the
+#             function's last instruction, not at the fill after it)
+#   tu        the C source under ico2/ or sce/ that includes the stub (its
+#             object reads it, also when the line lives in an in= file)
+#   local     the name is a static in the C (no .globl; not on a literal row)
+#   align=N   the stub's alignment in bytes (default: the largest power of two
+#             dividing vma_lo, at most 8; a lit4 row aligns to 4)
+#   lines=N   the stubbed body spanned N source lines (for the TU's `#line`
+#             after INCLUDE_ASM when it uses __LINE__; nothing reads it yet)
+#   file=stem the stub's file and INCLUDE_ASM name when two statics in two TUs
+#             share a name (default: the name); a literal row carries its text
+#             row's
+#   in=path   the .c.inc the TU includes where the function is defined: its
+#             INCLUDE_ASM line lives there (not on a literal row)
+#   inline    with in=: an inline function of that .c.inc, whose INCLUDE_ASM
+#             line stands at the end of the TU, where gcc emits it; its
+#             INCLUDE_ASM_LIT and kept declaration stay in the .c.inc
+#             (--carve writes it)
+#   def       an rdlit or sdlit row written where the function is defined,
+#             not after its text: build/kor/stubs/<stem>.lit.s, which the file
+#             includes with `INCLUDE_ASM_LIT(stem);` in the definition's place
+#             (a stubbed inline function's strings and gcc's other constants;
+#             its code, .lit4 floats, li.d doubles and jump tables follow
+#             INCLUDE_ASM at the end of the file)
+#
+# tools/gen_stub_s.py --carve NAME replaces the function's definition in its
+# TU (or its in= file) with the INCLUDE_ASM line (an inline function's line
+# goes to the end of the TU, and INCLUDE_ASM_LIT takes the definition's
+# place when the row has def rows), writes lines=N, and derives the literal
+# rows (--literals, from the compiled TU and the base ELF's words;
+# --no-literals leaves them alone, and a later --literals that adds a def
+# row places the INCLUDE_ASM_LIT line); --restore NAME puts the definition
+# back from main; --carve-all and --restore-all do every text row.
+# tools/object_check.py compares each object's .text with the base and a
+# TU's function order with the target's after a link.
