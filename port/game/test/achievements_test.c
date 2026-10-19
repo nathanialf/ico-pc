@@ -23,6 +23,7 @@
 #include "options.h"
 #include "popup.h"
 #include "region.h" /* port/core: the selected disc and its keys */
+#define R (ico_region_cur())
 #include "strings.h"
 
 static int failures;
@@ -112,7 +113,7 @@ static void fresh_world(void)
     g.stage_no = 2;
     g.system_status[0] = 1;
     g.system_status[1] = 2;
-    g.layout = 54;
+    g.layout = R->layout_play;
     g.actors_valid = 1;
     g.boy_present = 1;
     g.stage_name = "title";
@@ -154,9 +155,9 @@ static IcoAchState st(const char *id)
 static void new_game(void)
 {
     g.stage_no = 1;
-    flag(382, 0);
+    flag(R->gflag_new_game, 0);
     ticks(1);
-    flag(382, 1);
+    flag(R->gflag_new_game, 1);
     ticks(1);
 }
 
@@ -228,7 +229,7 @@ static void test_view(void)
 
         g.stage_no = 0x11223344;
         g.gflags[1] = 0xA5;
-        g.layout = 41;
+        g.layout = R->layout_save_complete;
         ticks(1);
         CHECK(ico_gs_peek(stageNo, 4, &v) == 0 && v == 0x11223344u);
         CHECK(ico_gs_peek(stageNo + 1, 2, &v) == 0 && v == 0x2233u);
@@ -238,7 +239,8 @@ static void test_view(void)
         CHECK(ico_gs_peek(gflags + 49, 1, &v) == 0);
         CHECK(ico_gs_peek(gflags + 50, 1, &v) == -1);
         CHECK(ico_gs_peek(gameClear, 4, &v) == 0 && v == 1u); /* gFlagGameClear */
-        CHECK(ico_gs_peek(layout, 4, &v) == 0 && v == 41u);   /* current_layout_id */
+        CHECK(ico_gs_peek(layout, 4, &v) == 0 &&
+              v == (unsigned)R->layout_save_complete); /* current_layout_id */
         CHECK(ico_gs_peek(preview + 8, 4, &v) == 0 && v == 50u * 3725u);
         if (!ICO_JPN) {
             CHECK(ico_gs_peek(0x00639EA4u, 4, &v) == -1); /* boyGObj: a pointer, not served */
@@ -275,10 +277,10 @@ static void test_signals(void)
     CHECK(ico_gs_signals_dropped() == 2);
 
     /* polled: a save (layout 38 then 41), a load (25), a new game (382) */
-    g.layout = 38;
+    g.layout = R->layout_pause; /* any layout before the save-complete one */
     g.mc_preview[3] = 1203;
     ticks(1);
-    g.layout = 41;
+    g.layout = R->layout_save_complete;
     ticks(1);
     CHECK(ico_gs_signaled(ICO_GS_EV_SAVE_DONE) == 1 &&
           ico_gs_signal_arg(ICO_GS_EV_SAVE_DONE) == 1203);
@@ -286,7 +288,7 @@ static void test_signals(void)
     CHECK(ico_gs_signaled(ICO_GS_EV_SAVE_DONE) == 0 && ico_gs_saves() == 1);
     new_game();
     CHECK(ico_gs_run_fresh());
-    g.layout = 25;
+    g.layout = R->layout_load;
     ticks(1);
     CHECK(ico_gs_signaled(ICO_GS_EV_LOAD) && !ico_gs_run_fresh());
 
@@ -408,12 +410,12 @@ static void hand_until_one_short(unsigned long long ms)
 
 static void save_on(int sofa)
 {
-    g.layout = 38;
+    g.layout = R->layout_pause; /* any layout before the save-complete one */
     ticks(1);
     g.mc_preview[3] = sofa;
-    g.layout = 41;
+    g.layout = R->layout_save_complete;
     ticks(1);
-    g.layout = 54;
+    g.layout = R->layout_play;
     ticks(1);
 }
 
@@ -557,9 +559,9 @@ static void test_each(void)
     CHECK(st("finish_again") == ICO_ACH_LOCKED);
     /* a loaded game is not a run from a new game */
     new_game();
-    g.layout = 25;
+    g.layout = R->layout_load;
     ticks(1);
-    g.layout = 54;
+    g.layout = R->layout_play;
     ending(0, 3600);
     CHECK(st("never_taken") == ICO_ACH_LOCKED && st("unbroken") == ICO_ACH_LOCKED);
     CHECK(st("swift") == ICO_ACH_UNLOCKED);
@@ -789,9 +791,9 @@ static void test_run_slots(void)
     fresh_world();
     ticks(1);
     CHECK(ico_gs_run_fresh() == 0 && ico_gs_run_captures() == 0);
-    g.layout = 25; /* la_load_processing */
+    g.layout = R->layout_load; /* la_load_processing */
     ticks(1);
-    g.layout = 54;
+    g.layout = R->layout_play;
     ticks(1);
     CHECK(ico_ach_slot_loaded(3, 0xFFFFFFF0u) == 1);
     ico_gs_run_get(&r);

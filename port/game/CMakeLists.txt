@@ -297,6 +297,7 @@ endif()
 # title's menu; the game's globals and the menus' answers stubbed. CPU only.
 add_executable(title_logo_test test/title_logo_test.c title_logo.c)
 target_include_directories(title_logo_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(title_logo_test PRIVATE ico_region) # title_logo.c reads the region's title rows
 # port/ui's "settings.h" by -iquote, so <strings.h> stays the C library's
 target_compile_options(title_logo_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
                        -iquote "${CMAKE_SOURCE_DIR}/port/ui")
