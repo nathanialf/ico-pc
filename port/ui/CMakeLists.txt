@@ -279,19 +279,24 @@ if(NOT WIN32)
 endif()
 if(ICO_RUN_TESTS)
     add_test(NAME model_viewer COMMAND model_viewer_test)
-    # the table's Japanese model column against both ELFs' modelData
-    # (tools/gen_mv_jpn.py --check; tools/gen_data_c.py reads the ELFs, so
-    # pyelftools: the repository's .venv when there is one)
+    # the table's Japanese model column against the PAL ELF's and each other
+    # disc's modelData (tools/gen_mv_region.py --check; the Korean disc reads
+    # the Japanese column; tools/gen_data_c.py reads the ELFs, so pyelftools:
+    # the repository's .venv when there is one)
     set(_mv_py "${Python3_EXECUTABLE}")
     if(EXISTS "${CMAKE_SOURCE_DIR}/.venv/bin/python")
         set(_mv_py "${CMAKE_SOURCE_DIR}/.venv/bin/python")
     endif()
     if(_mv_py)
-        add_test(NAME model_viewer_jpn
-                 COMMAND "${_mv_py}" "${CMAKE_SOURCE_DIR}/tools/gen_mv_jpn.py" --check
-                         --pal-elf "${ICO_BASE_ELF}" --jpn-elf "${ICO_BASE_ELF_JPN}"
-                 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-        set_tests_properties(model_viewer_jpn PROPERTIES SKIP_RETURN_CODE 77)
+        foreach(_slug jpn kor)
+            string(TOUPPER "${_slug}" _up)
+            add_test(NAME model_viewer_${_slug}
+                     COMMAND "${_mv_py}" "${CMAKE_SOURCE_DIR}/tools/gen_mv_region.py" --check
+                             --region ${_slug} --pal-elf "${ICO_BASE_ELF}"
+                             --elf "${ICO_BASE_ELF_${_up}}"
+                     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+            set_tests_properties(model_viewer_${_slug} PROPERTIES SKIP_RETURN_CODE 77)
+        endforeach()
     endif()
 endif()
 

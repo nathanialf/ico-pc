@@ -203,7 +203,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `model_viewer_cam_test.c`: the viewer's camera step without the game (`model_viewer_cam`).
 - `model_viewer_test.c`: the viewer's table against its motion-kind blocks and the game's table
   sizes, its names in five languages (`model_viewer`); its Japanese model column is checked by
-  `tools/gen_mv_jpn.py --check` against both ELFs' `modelData` (`model_viewer_jpn`).
+  `tools/gen_mv_region.py --check` against the PAL ELF's and the Japanese ELF's `modelData`
+  (`model_viewer_jpn`) and, since the Korean disc reads the same column, the Korean ELF's
+  (`model_viewer_kor`).
 - `model_viewer_effects_test.c`: a motion's effects with no stage animation loaded
   (`frameDependSequence.c` and `stageMultiBgaManager.c` compiled in over stubs): the stage
   animation entries' guard (no write, the slot kept, its log line once), and every motion of every
@@ -719,8 +721,8 @@ has their defaults; the registrations are in `port/*/CMakeLists.txt`):
   `baserom/jpn/baseelf.elf`, `baserom/Ico_JPN.iso`): `tables_loader_jpn` (through the image when
   present) and `tables_manifest_jpn`, both skipped without the ELF; `menu_text_jpn`,
   `menu_look_jpn` and `gallery_jpn` (with the PAL ELF too) skip without it, and
-  `model_viewer_jpn` (`tools/gen_mv_jpn.py --check`, both ELFs through `gen_data_c.py`, so
-  pyelftools) checks the model viewer's Japanese column.
+  `model_viewer_jpn` (`tools/gen_mv_region.py --region jpn --check`, both ELFs through
+  `gen_data_c.py`, so pyelftools) checks the model viewer's Japanese column.
 - `ICO_TEXPACK_DIR`, a PCSX2 pack's replacements folder: `texpack_disc`, `texpack_e2e`,
   `texpack_pack_files`.
 - `ICO_FOG_DUMP`, a player dump with the depth fog: `rd_fog_depth_copy_dump` and `_d24s8` (skipped

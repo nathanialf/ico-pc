@@ -38,7 +38,7 @@ extern "C" {
 typedef struct MvModel {
     int nameStr;           /* its name, a UiStrId (port/ui/strings.h) */
     int pal_id;            /* the model: its modelData row on the European disc */
-    int jpn_id;            /* and on the Japanese disc (tools/gen_mv_jpn.py) */
+    int jpn_id;            /* and on the Japanese and Korean discs (tools/gen_mv_region.py) */
     int kind;              /* the object kind (objKindData row) */
     int label;             /* the layout row (objLayout), -1: the first of kind and model */
     int stage;             /* the host stage */
@@ -49,7 +49,8 @@ typedef struct MvModel {
 extern const MvModel mv_models[];
 extern const int mv_modelCount;
 /* A model's modelData row and its host stage on the running disc
-   (port/core/region.h: pal_id or jpn_id; the stage through
+   (the column model_viewer_table.c mv_id_column names for ico_region:
+   pal_id or jpn_id; the stage through
    ico_region_stage) */
 int mv_model_id(const MvModel *m);
 int mv_model_stage(const MvModel *m);

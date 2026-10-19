@@ -13,7 +13,7 @@
  */
 #include "model_viewer.h"
 
-#include "../core/region.h" /* ICO_JPN, ico_region_stage */
+#include "../core/region.h" /* ico_region, ico_region_stage */
 
 #include "strings.h"
 
@@ -30,8 +30,8 @@ const MvBlock mv_blocks[] = {
 const int mv_blockCount = (int)(sizeof(mv_blocks) / sizeof(mv_blocks[0]));
 
 /* name, model (the European disc's modelData row, the Japanese disc's:
-   tools/gen_mv_jpn.py derives that column, ctest model_viewer_jpn checks
-   it), kind, layout row (-1: the first of kind and model), host stage (the
+   tools/gen_mv_region.py derives that column, ctests model_viewer_jpn and
+   model_viewer_kor check it), kind, layout row (-1: the first of kind and model), host stage (the
    European disc's stageData row, region.h ico_region_stage on the other),
    motions [first, last), motion-orient rows [from, to).  Kinds: 1 the
    boy, 2 the girl, 4 a shadow, 6 a demo actor, 14 a weapon, 16 a stone
@@ -64,9 +64,17 @@ const MvModel mv_models[] = {
 };
 const int mv_modelCount = (int)(sizeof(mv_models) / sizeof(mv_models[0]));
 
+/* The id column each row of config/regions.txt reads: 0 pal_id, 1 jpn_id.
+   The Korean disc's modelData is the Japanese one row for row (its
+   model-path member equals the Japanese ELF's), so kor reads jpn_id
+   (tools/gen_mv_region.py --region kor --check, ctest model_viewer_kor). */
+static const unsigned char mv_id_column[ICO_REGION_COUNT] = {0, 1, 1};
+
 int mv_model_id(const MvModel *m)
 {
-    return ICO_JPN ? m->jpn_id : m->pal_id;
+    int r = ico_region >= 0 && ico_region < ICO_REGION_COUNT ? ico_region : 0;
+
+    return mv_id_column[r] ? m->jpn_id : m->pal_id;
 }
 
 int mv_model_stage(const MvModel *m)
