@@ -2257,7 +2257,9 @@ int debug_SnapShot(int idx)
     unsigned int y;
 
     size = ScreenWidth * ScreenHeight * 4;
-    if (debug_snapshot_size == 0) {
+    /* the European disc's SnapSize 0 is None; the Japanese disc's is
+       Normal (debugSnapSizeName_jpn), which takes one like every size */
+    if (!ICO_JPN && debug_snapshot_size == 0) {
         return -1;
     }
     /* PC port: the PS2 stored the scene buffer
@@ -2266,8 +2268,9 @@ int debug_SnapShot(int idx)
        host0:snapshot/.  The host reads back rd's DISPLAY target (the frame
        last presented) and writes it whole as a PNG to
        <pref>/dev/screenshots/snapNNNNNNN.png, the first free number, on
-       every call; SnapSize only gates it (None: nothing) and SnapForm is
-       ignored.  The headless build has no frame: nothing is written. */
+       every call; SnapSize only gates it (the European disc's None:
+       nothing; every Japanese size takes one) and SnapForm is ignored.
+       The headless build has no frame: nothing is written. */
     (void)name;
     (void)mask;
     (void)i;
