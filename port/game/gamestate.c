@@ -538,7 +538,8 @@ int ico_gs_achievements_suspended(void)
    for the main.c and gamesys.c globals; for the rest the retail code's own
    address arithmetic.  JPN sources: config/symbol_addrs.jpn.data.txt (the
    decompilation's link of the Japanese ELF), each address also in its link
-   map (build/jpn/ico.jpn.map) but gflags, a static. */
+   map (build/jpn/ico.jpn.map) but gflags, a static. KOR sources the same:
+   config/symbol_addrs.kor.data.txt and build/kor/ico.kor.map. */
 typedef struct PeekRow {
     IcoGsPeekEntry e;
     size_t offset;
@@ -582,6 +583,24 @@ static const PeekRow s_peek_jpn[] = {
     ROW(0x006350BCu, layout, "current_layout_id"),                  /* jpn.data.txt, map */
 };
 
+/* The Korean disc (SCPS-56001): the Japanese program's globals, at the
+   Korean link's addresses (no NonLinearCameraMove either) */
+static const PeekRow s_peek_kor[] = {
+    ROW(0x002A3040u, gflags, "gflags"),                             /* kor.data.txt (static) */
+    ROW(0x0028D440u, system_status, "systemStatus"),                /* kor.data.txt, map */
+    ROW(0x00299940u, mc_preview, "IosMcPreviewInfo"),               /* kor.data.txt, map */
+    ROW(0x006335E0u, frame_count, "frame_count"),                   /* kor.data.txt, map */
+    ROW(0x00633610u, stage_no, "stage_no"),                         /* kor.data.txt, map */
+    ROW(0x00633620u, before_stage_no, "before_stage_no"),           /* kor.data.txt, map */
+    ROW(0x006337A4u, gameover_flag, "gameover_flag"),               /* kor.data.txt, map */
+    ROW(0x006337A8u, gameover_layout_flag, "gameover_layout_flag"), /* kor.data.txt, map */
+    ROW(0x006337C4u, current_stage_no, "current_stage_no"),         /* kor.data.txt, map */
+    ROW(0x006342D8u, game_clear, "gFlagGameClear"),                 /* kor.data.txt, map */
+    ROW(0x006342DCu, save_stage, "gFlagSaveStage"),                 /* kor.data.txt, map */
+    ROW(0x00634CDCu, time_count, "gamesysTimeCount"),               /* kor.data.txt, map */
+    ROW(0x00634ECCu, layout, "current_layout_id"),                  /* kor.data.txt, map */
+};
+
 typedef struct PeekTable {
     const PeekRow *rows;
     int count;
@@ -591,12 +610,15 @@ typedef struct PeekTable {
 _Static_assert(sizeof(s_peek_jpn) / sizeof(s_peek_jpn[0]) <=
                    sizeof(s_peek_pal) / sizeof(s_peek_pal[0]),
                "peek rows");
+_Static_assert(sizeof(s_peek_kor) / sizeof(s_peek_kor[0]) <=
+                   sizeof(s_peek_pal) / sizeof(s_peek_pal[0]),
+               "peek rows");
 
 /* config/regions.txt's order */
 static const PeekTable s_peek_tables[ICO_REGION_COUNT] = {
     {s_peek_pal, (int)(sizeof(s_peek_pal) / sizeof(s_peek_pal[0]))},
     {s_peek_jpn, (int)(sizeof(s_peek_jpn) / sizeof(s_peek_jpn[0]))},
-    {s_peek_jpn, (int)(sizeof(s_peek_jpn) / sizeof(s_peek_jpn[0]))}, /* K1: s_peek_kor */
+    {s_peek_kor, (int)(sizeof(s_peek_kor) / sizeof(s_peek_kor[0]))},
 };
 
 static const PeekTable *peek_table(void)
