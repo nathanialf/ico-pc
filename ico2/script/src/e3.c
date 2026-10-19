@@ -1199,7 +1199,7 @@ static void actE3St09aBrgDown(GObj *volatile self)
 void actE3Warning(GObj *volatile self)
 {
     GObj *x = self;
-    Act *sub = (Act *)actInitialize(self); /* only the Japanese arm reads it */
+    Act *sub = (Act *)actInitialize(self); /* only the Japanese and Korean arm reads it */
 
     scpFadeOut(255.0f, 0, 0, 0);
 

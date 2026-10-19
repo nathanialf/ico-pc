@@ -400,14 +400,14 @@ static void wordRow(IcoVfs *vfs, const char *what, int row, Ink *all, int *rows)
    antialiased texels), rim 34 34 34 (34.3: black-grey, as the English
    sheets' 24 rather than the other European languages' 56..62), one
    antialiasing step (alpha 231) where the European sheets have three.
-   Korean, SCPS-56001: not yet measured by this test. The expectation is
-   the offline estimate made with the Korean text and font (the decoded
-   SCPS-56001 sheets, UI.md "The Japanese and Korean sheets' geometry"): this survey's rule applied to the decoded Korean
-   words, 249.7 / 42.2, plus the 1.0 / 0.7 by which the same rule falls
-   short of this test's own result on the Japanese words (250.5 / 33.6
-   against 251.5 / 34.3), gives fill 250.7 and rim 42.9 (title 254 / 45.6,
-   mc04 245 / 40.2, option 252.7 / 41.1), kSheetInk[UI_SHEET_KO] =
-   {1, 43, 251, 1, 0}. The first run on the disc fixes these two numbers. */
+   Korean, measured on SCPS-56001 (menu_look_kor, the title, mc04 and
+   option words): fill 252.8, rim 41.8, kSheetInk[UI_SHEET_KO] =
+   {1, 42, 253, 1, 0}. Before that run the expectation was an offline
+   estimate (the decoded SCPS-56001 sheets, UI.md "The Japanese and Korean
+   sheets' geometry"): this survey's rule on the decoded Korean words,
+   249.7 / 42.2, plus the 1.0 / 0.7 by which the same rule falls short of
+   this test's own result on the Japanese words (250.5 / 33.6 against
+   251.5 / 34.3), gave fill 250.7 and rim 42.9. */
 typedef struct InkExpect {
     const char *slug;
     double fill, rim;

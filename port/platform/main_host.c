@@ -227,7 +227,7 @@ static void usage(FILE *out, const char *prog)
 {
     say(out,
         "usage: %s [options]   (none needed: see ico-pc.ini)\n"
-        "  --iso PATH         the disc image (one of the discs %s)\n"
+        "  --iso PATH         the disc image (%s)\n"
         "  --pad-script FILE  plug a scripted DualShock into controller port 1;\n"
         "                     lines: <tick> <buttons-hex> [lx ly rx ry]\n"
         "  --trace FILE|none  the per-Main-tick trace (logs/trace-<time>.txt by\n"
@@ -1189,7 +1189,8 @@ static void android_name_image(const char *exe_dir, char *iso, size_t size)
     }
 }
 
-/* whether iso is one of the app's own Ico_PAL or Ico_JPN images in the files folder */
+/* whether iso is one of the app's own images in the files folder (every row's
+   image_base, Ico_PAL, Ico_JPN, Ico_KOR, with each image extension) */
 static int android_own_image(const char *exe_dir, const char *iso)
 {
     char own[ICO_PATH_MAX];
@@ -1205,8 +1206,8 @@ static int android_own_image(const char *exe_dir, const char *iso)
     return 0;
 }
 
-/* The extractor refused the app's own image (unreadable, or not the PAL
-   disc): it goes, so the next start asks for the image again instead of
+/* The extractor refused the app's own image (unreadable, or none of the
+   discs): it goes, so the next start asks for the image again instead of
    finding this one. */
 static void android_drop_refused_image(const char *exe_dir, const char *iso)
 {
@@ -1529,8 +1530,8 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
             ico_host_fatal(log_file(),
                            "%s is an image of %s (%s), but disc = \"%s\" in config.toml asks "
                            "for %s (%s).\n"
-                           "Set disc = \"auto\" to play this disc, or give the image of the "
-                           "other one.",
+                           "Set disc = \"auto\" to play this disc, or give that disc's "
+                           "image.",
                            iso, is->product_name, is->id, setting->slug, setting->product_name,
                            setting->id);
         }

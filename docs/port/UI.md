@@ -402,7 +402,7 @@ code points it holds are listed on the `subset:` line of `embed_font.cmake`, whi
 
 A character Arimo has no glyph for is drawn from a second embedded font, a subset of Noto Sans JP
 Regular (SIL OFL 1.1; `port/assets/fonts/NotoSansJP-Regular-subset.ttf` into `ui_font_ja_ttf[]`,
-140,928 bytes, 746 code points): the Japanese table, the language names and the PlayStation
+142,792 bytes, 752 code points): the Japanese table, the language names and the PlayStation
 button marks □ △ ○ (`port/ui/font.c` (`fontGlyph`)). Its metrics are scaled to Arimo's em (`jaK`),
 a pair across the two fonts has no kerning, and every line keeps Arimo's ascent and line height,
 so Latin text draws as before; the sheet rasteriser (`ui__sheet_raster_line`, the menus' look)
@@ -482,9 +482,8 @@ title words of `Tex_menu01`'s sheets: fill 251.5, so the level is 252, the lette
 being fcfcfc on these sheets where the European ones have ffffff; rim 34.3, a black-grey near the
 English sheets' 24; one antialiasing step where the European sheets have three, which the shared
 `ICO_SHEET_LEVELS` covers; `{1, 34, 252, 1, 0}`; and `UI_SHEET_KO`, the Korean disc's,
-`{1, 43, 251, 1, 0}`, measured off line on the decoded title, mc04 and option words with
-`menu_region_test.c`'s rule and corrected by the difference the same rule shows on the Japanese
-words, until `menu_look_kor` measures it on the disc), and a change restyles the
+`{1, 42, 253, 1, 0}`, measured by `menu_look_kor` on the disc's title, mc04 and option words: fill
+252.8, rim 41.8 (the off-line estimate was 250.7 / 42.9)), and a change restyles the
 pages without rasterising again (`port/ui/menu_font.h` (`ui_menu_sheet_ink`, `ui_menu_item_ink`)).
 
 ### The Japanese and Korean sheets' geometry

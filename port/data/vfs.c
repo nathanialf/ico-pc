@@ -117,7 +117,7 @@ int ico_disc_cnf_boot(const char *cnf, char *boot, size_t size)
     boot[0] = '\0';
     p = cnf != NULL ? strstr(cnf, "BOOT2") : NULL;
     if (p == NULL || (p = strchr(p, '=')) == NULL) {
-        return 0;
+        return -1;
     }
     p++;
     while (*p == ' ' || *p == '\t') {

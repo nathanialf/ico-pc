@@ -127,8 +127,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   with the disc its first argument selects: the European disc's `BESCES-50760ico` and 0x1F0-byte
   product record (`save`), the Japanese disc's `BISCPS-11003ico` and 0x1E8-byte record, the same
   bytes up to 0x1E8 (`save_jpn`), the Korean disc's `BISCPS-56001ico` with the same 0x1E8 record
-  (`save_kor`); each imports a card holding every directory side by side and the other disc's
-  `.psu` beside their own ([SAVES.md](SAVES.md#tests)).
+  (`save_kor`); each imports a card holding its directory and one other disc's side by side and
+  the other disc's `.psu` beside their own ([SAVES.md](SAVES.md#tests)).
 
 ### port/core/test
 
@@ -635,8 +635,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   layouts, rows and glyph rows against that disc's ELF tables, no row from the menu text table
   (`menu_text_jpn`, `menu_text_kor`); with the disc's image, the glyph rectangles' ink, the
   sheets' light ink held to `kSheetInk[UI_SHEET_JA]` or `kSheetInk[UI_SHEET_KO]`, and the port's
-  words' boxes against the disc's rows (`menu_look_jpn`, `menu_look_kor`; the Korean ink 250.7
-  fill, 42.9 rim is an estimate from the decoded sheets until the first run on the disc).
+  words' boxes against the disc's rows (`menu_look_jpn`, `menu_look_kor`; the Korean ink 252.8
+  fill, 41.8 rim, measured on the disc).
 - `menu_look_test.c`: the menus' Arimo text against the game's menu sheets from the disc
   (`menu_look`); `menu_sheets.c`/`.h` decode the sheets.
 - `menu_text_test.c`: the game's menu words and the port's rows drawn in the sheets' look

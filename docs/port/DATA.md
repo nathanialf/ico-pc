@@ -128,7 +128,8 @@ lists. `ico_vfs_iso9660_force_df_shift` (`vfs.h`) overrides the table in a test.
 `archive_shift` test (`archive_test shift`, no disc needed) covers the look-up, and `archive_disc_kor`
 and `vfs_disc_kor` check a real image (the entry's size equals the row's `df_size`, the header's
 count the row's `df_count`, the raw directory's sector plus the shift the entry's). The Korean
-disc has not been booted through the port yet: these checks read the disc, they do not play it.
+disc has been booted headless to the title once in the container (identified as SCPS-56001, its
+tables loaded, the boot signs, the opening movie, the title); it has not been played yet.
 
 ## Disc images
 

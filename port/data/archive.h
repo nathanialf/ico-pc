@@ -82,9 +82,9 @@ typedef struct IcoDiscInfo {
 } IcoDiscInfo;
 
 /* [ICO_REGION_PAL] the European release SCES-50760 (a DVD),
-   [ICO_REGION_JPN] the Japanese release SCPS-11003 (a CD) and, once
-   config/regions.txt has it, the Korean release SCPS-56001 (a DVD); defined
-   in discs.c with the manifests */
+   [ICO_REGION_JPN] the Japanese release SCPS-11003 (a CD) and
+   [ICO_REGION_KOR] the Korean release SCPS-56001 (a DVD); defined in
+   discs.c with the manifests */
 extern const IcoDiscInfo ico_discs[ICO_REGION_COUNT];
 
 /* The row whose id ("SCPS-11003"), boot file ("SCPS_110.03", as
