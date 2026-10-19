@@ -81,6 +81,7 @@ add_library(ico_port_data STATIC
     archive.c
     cdvd_host.c
     df_pack.c
+    discs.c
     extract.c
     iop_ram.c
     iso9660.c
@@ -106,8 +107,10 @@ if(TARGET ico_pc)
     target_link_libraries(ico_pc PRIVATE ico_port_data)
 endif()
 
-add_executable(vfs_test test/vfs_test.c)
-target_include_directories(vfs_test PRIVATE "${ICO_COMPAT_DIR}")
+# (host_config.c: the SHA-1 extract.c's ico_extract_image_sha1 hashes with,
+# for the `same` mode)
+add_executable(vfs_test test/vfs_test.c ../platform/host_config.c)
+target_include_directories(vfs_test PRIVATE "${ICO_COMPAT_DIR}" "${CMAKE_SOURCE_DIR}/port/platform")
 target_compile_options(vfs_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(vfs_test PRIVATE ico_port_data)
 if(ICO_RUN_TESTS)
@@ -116,6 +119,31 @@ if(ICO_RUN_TESTS)
     # the user's disc, read at run time; skipped (77) when it is absent
     add_test(NAME vfs_disc COMMAND vfs_test disc "${ICO_DISC_IMAGE}")
     set_tests_properties(vfs_disc PROPERTIES SKIP_RETURN_CODE 77)
+    # the Japanese disc (a CD): its .iso, then a raw MODE2/2352 .bin on its
+    # own (what Android's picker hands over), the .cue naming it and a CD
+    # .chd made from the .cue (skipped without chdman), each against the
+    # .iso (vfs_test same); the .bin and .cue are made from the .iso at test
+    # time into the build folder (test/make_raw_cd.py, kept for the next run)
+    add_test(NAME vfs_disc_jpn COMMAND vfs_test disc "${ICO_DISC_IMAGE_JPN}" jpn)
+    set_tests_properties(vfs_disc_jpn PROPERTIES SKIP_RETURN_CODE 77)
+    set(_ico_raw_python "${Python3_EXECUTABLE}")
+    if(NOT _ico_raw_python)
+        find_program(_ico_raw_python NAMES python3 python)
+    endif()
+    if(_ico_raw_python)
+        foreach(kind bin cue chd)
+            add_test(NAME vfs_disc_jpn_${kind}
+                     COMMAND "${CMAKE_COMMAND}" "-DPYTHON=${_ico_raw_python}"
+                             "-DHELPER=${CMAKE_CURRENT_SOURCE_DIR}/test/make_raw_cd.py"
+                             "-DVFS_TEST=$<TARGET_FILE:vfs_test>" "-DISO=${ICO_DISC_IMAGE_JPN}"
+                             "-DDIR=${CMAKE_CURRENT_BINARY_DIR}/disc_jpn_raw" -DNAME=Ico_JPN
+                             -DSLUG=jpn -DKIND=${kind}
+                             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/disc_raw_test.cmake")
+            # one maker of the shared .bin at a time
+            set_tests_properties(vfs_disc_jpn_${kind} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIPPED"
+                                 RESOURCE_LOCK ico_disc_jpn_raw TIMEOUT 900)
+        endforeach()
+    endif()
 endif()
 
 # The archive: extraction into
@@ -132,6 +160,15 @@ if(ICO_RUN_TESTS)
     add_test(NAME archive_disc COMMAND archive_test disc "${ICO_DISC_IMAGE}"
                                        "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(archive_disc PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+    add_test(NAME archive_disc_jpn COMMAND archive_test disc "${ICO_DISC_IMAGE_JPN}"
+                                           "${CMAKE_CURRENT_BINARY_DIR}" jpn)
+    set_tests_properties(archive_disc_jpn PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+    # the Japanese DATA.DF manifest discs.c holds, against the image
+    # (regenerate with `archive_test manifest --region jpn <iso>`)
+    add_test(NAME archive_manifest_jpn
+             COMMAND archive_test manifest-check jpn "${ICO_DISC_IMAGE_JPN}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/discs.c")
+    set_tests_properties(archive_manifest_jpn PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
 endif()
 
 # iso_import_test: the Android first start's copy of the

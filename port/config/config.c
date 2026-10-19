@@ -5,6 +5,7 @@
  * and writing are host_config.c's.
  */
 #include "config.h"
+#include "../core/region.h" /* [game] disc and last_disc: the regions' slugs */
 #include "host_config.h"
 #include "host_fs.h"
 #include <stdio.h>
@@ -21,6 +22,8 @@ static IcoIni ini;
 /* a setter changed the copy in memory since it was read or saved
    (ico_config_dirty) */
 static int dirty;
+/* [game] disc's unknown value was logged this load */
+static int disc_logged;
 
 void ico_config_reset(const char *toml_path, const char *ini_path)
 {
@@ -28,6 +31,7 @@ void ico_config_reset(const char *toml_path, const char *ini_path)
     toml = NULL;
     loaded = 0;
     dirty = 0;
+    disc_logged = 0;
     snprintf(want_toml, sizeof(want_toml), "%s", toml_path != NULL ? toml_path : "");
     snprintf(want_ini, sizeof(want_ini), "%s", ini_path != NULL ? ini_path : "");
 }
@@ -277,7 +281,7 @@ static const char first_run_text[] =
     "iso = \"\"\n"
 #ifdef __ANDROID__
     "# true keeps the copy of the disc image the first start makes in this\n"
-    "# folder (Ico_PAL.iso, .chd, .bin or .cue); false deletes it once the game is ready,\n"
+    "# folder (Ico_PAL or Ico_JPN, .iso, .chd or .bin); false deletes it once the game is ready,\n"
     "# which gives its space back.\n"
     "keep_image = false\n"
 #endif
@@ -291,16 +295,19 @@ static const char first_run_text[] =
     "# fullscreen\n"
     "window_mode = \"windowed\"\n"
     "fullscreen = false\n"
-    "# A PCSX2 texture pack: copy its SCES-50760 folder into a folder named\n"
+    "# A PCSX2 texture pack: copy its SCES-50760 folder (SCPS-11003 for the\n"
+    "# Japanese disc) into a folder named\n"
     "# textures beside the program or in your user folder. false shows the\n"
     "# game's own textures.\n"
     "texture_pack = true\n"
-    "# A model pack: copy its SCES-50760 folder into a folder named models\n"
+    "# A model pack: copy its SCES-50760 folder (SCPS-11003 for the Japanese\n"
+    "# disc) into a folder named models\n"
     "# beside the program or in your user folder. false shows the game's own\n"
     "# models.\n"
     "model_pack = true\n"
     "# For pack makers: true saves each model part as a glTF file in\n"
-    "# models/SCES-50760/dumps in your user folder. Needs Developer mode.\n"
+    "# models/SCES-50760/dumps (SCPS-11003 for the Japanese disc) in your user\n"
+    "# folder. Needs Developer mode.\n"
     "dump_models = false\n"
     "# The three texture pack lines below are switched off by the # in front:\n"
     "# to change one, remove its #, or add the line under [video] when the\n"
@@ -359,6 +366,10 @@ static const char first_run_text[] =
     "[game]\n"
     "# \"auto\" follows the system; or en, fr, de, it, es.\n"
     "language = \"auto\"\n"
+    "# \"pal\" (the European disc, SCES-50760) or \"jpn\" (the Japanese disc,\n"
+    "# SCPS-11003) pins the disc when both are set up; \"auto\" plays the\n"
+    "# disc image given, else the one played last. From the next start.\n"
+    "disc = \"auto\"\n"
     "\n"
     "[gameplay]\n"
     "# true: a chain that comes down for Ico keeps its links the right size\n"
@@ -413,4 +424,50 @@ int ico_config_write_first_run(void)
     }
     fprintf(stderr, "config: wrote %s (first run)\n", toml_file);
     return 0;
+}
+
+/* the row of a region slug, or -1 */
+static int region_row(const char *slug)
+{
+    int i;
+
+    for (i = 0; slug != NULL && i < ico_region_count(); i++) {
+        if (strcmp(ico_region_at(i)->slug, slug) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int ico_config_disc_pin(void)
+{
+    const char *v = ico_config_get_string("game.disc", "auto");
+    int row = region_row(v);
+
+    if (row < 0 && strcmp(v, "auto") != 0 && !disc_logged) {
+        char names[128] = "";
+        int i;
+
+        disc_logged = 1;
+        for (i = 0; i < ico_region_count(); i++) {
+            size_t n = strlen(names);
+
+            snprintf(names + n, sizeof(names) - n, ", %s", ico_region_at(i)->slug);
+        }
+        fprintf(stderr, "config: [game] disc = \"%s\" is not one of auto%s; auto\n", v, names);
+    }
+    return row;
+}
+
+int ico_config_last_disc(void)
+{
+    return region_row(ico_config_get_string("game.last_disc", ""));
+}
+
+int ico_config_set_last_disc(const char *slug)
+{
+    if (region_row(slug) < 0) {
+        return -1;
+    }
+    return ico_config_set_string("game.last_disc", slug);
 }

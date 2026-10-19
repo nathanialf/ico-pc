@@ -745,6 +745,9 @@ static void build_text(const IcoReportInputs *in)
         (void)each_line(path, ach_line, NULL);
     }
     text_kv("achievements.toml: ", s_stages[0] != '\0' ? s_stages : "(no stages line)");
+    text_kv("disc: ", in->disc != NULL && in->disc[0] != '\0'
+                          ? in->disc
+                          : "(not identified: the run ended before the disc image was read)");
     text_kv("summary: ", in->summary != NULL && in->summary[0] != '\0'
                              ? in->summary
                              : "(not reached: the run ended before the renderer started)");

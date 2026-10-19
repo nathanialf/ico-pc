@@ -21,11 +21,21 @@
  *      and with ECC spares, and a synthetic .psu, all built here: the
  *      game's files read back through the folder card byte for byte, other
  *      games' entries skipped and named; tools/mc_import (argv[1]) on the
- *      same files; and the second card in port 1.
+ *      same files; the other disc's directory beside it; and the second card
+ *      in port 1.
  *
  * All three run on simulated vsyncs, as host_loop.c drives the hooks. No game
  * data is needed.
+ *
+ * The first argument selects the disc (port/core region.h, a slug of
+ * config/regions.txt): pal, the European disc, its save directory
+ * BESCES-50760ico and a 0x1F0-byte product file; jpn, the Japanese disc,
+ * BISCPS-11003ico and a 0x1E8-byte product file, the same record's first
+ * 0x1E8 bytes (cameraMove and palMode, its last two words, are the European
+ * disc's only). game.00N is 25,600 bytes on both. Part C also imports a card
+ * holding both discs' directories, each into its own folder.
  */
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,6 +65,9 @@
 #include "cdvd.h"
 #include "mc_host.h"
 #include "mc_import.h"
+/* the region table (port/core/region.h, by its path: the game's include
+   directories hold the game's own region.h) */
+#include "../../core/region.h"
 #include "mcard.h"
 #include "mcdata.h"
 #include "memory.h"
@@ -249,7 +262,18 @@ static void bg_manager(void)
 #define CARD_I "save_test_card_i" /* imports, part C */
 #define CARD_J "save_test_card_j"
 #define CARD_K "save_test_card_k"
-#define PRODUCT "BESCES-50760ico"
+#define CARD_L "save_test_card_l" /* both discs' directories, part C */
+#define CARD_M "save_test_card_m"
+/* the selected disc's save directory (fumi/ios/mcard.c's product name, the
+   region table's mc_save_dir: BESCES-50760ico, BISCPS-11003ico) and its
+   product file's size before the 4-byte sum (mc_product_size: 0x1F0, the
+   Japanese disc's 0x1E8, the first 0x1E8 bytes of the same record) */
+#define PRODUCT (ico_region_cur()->mc_save_dir)
+#define PSIZE (ico_region_cur()->mc_product_size)
+/* the game block, 25,588 bytes, then optionScreenMode and girlControlMode
+   and the sum: the same on both discs (gameblock_write has no region
+   block upstream, fumi/ios/mcard.c:182-188) */
+#define GAME_FILE 25600
 
 static long file_size(const char *path)
 {
@@ -271,19 +295,68 @@ static int slurp(const char *path, unsigned char *buf, size_t max)
     return (int)n;
 }
 
+/* card/<the selected disc's save directory>[/name], in one of four
+   rotating buffers (a check names up to two) */
+static char *cpath(const char *card, const char *name)
+{
+    static char buf[4][256];
+    static int k;
+    char *out = buf[k++ & 3];
+
+    snprintf(out, sizeof(buf[0]), "%s/%s%s%s", card, PRODUCT, name != NULL ? "/" : "",
+             name != NULL ? name : "");
+    return out;
+}
+
+/* the card's own path, /<save directory>[/name] */
+static char *mpath(const char *name)
+{
+    return cpath("", name);
+}
+
+/* card/<the save directory with every letter's case swapped>[/name]
+   (besces-50760ICO, biscps-11003ICO): a folder copied with other capitals */
+static const char *cpath_cased(const char *card, const char *name)
+{
+    static char buf[2][256];
+    static int k;
+    char *out = buf[k++ & 1];
+    char *p;
+
+    snprintf(out, sizeof(buf[0]), "%s/%s%s%s", card, PRODUCT, name != NULL ? "/" : "",
+             name != NULL ? name : "");
+    for (p = out + strlen(card) + 1; *p != '\0' && *p != '/'; p++) {
+        if (*p >= 'a' && *p <= 'z') {
+            *p = (char)(*p - 'a' + 'A');
+        } else if (*p >= 'A' && *p <= 'Z') {
+            *p = (char)(*p - 'A' + 'a');
+        }
+    }
+    return out;
+}
+
+/* every disc's save directory in the card folder, and the folder */
 static void rm_card(const char *card)
 {
-    static const char *const files[] = {"icon.sys", "boy_blk.ico", PRODUCT,    "game.000",
-                                        "game.001", "game.002",    "game.003", "extra"};
+    static const char *const files[] = {"icon.sys", "boy_blk.ico", "game.000",
+                                        "game.001", "game.002",    "game.003",
+                                        "game.004", "extra",       "empty"};
     char path[256];
     size_t i;
+    int r;
 
-    for (i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
-        snprintf(path, sizeof(path), "%s/" PRODUCT "/%s", card, files[i]);
+    for (r = 0; r < ico_region_count(); r++) {
+        const char *d = ico_region_at(r)->mc_save_dir;
+
+        for (i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
+            snprintf(path, sizeof(path), "%s/%s/%s", card, d, files[i]);
+            remove(path);
+        }
+        snprintf(path, sizeof(path), "%s/%s/%s", card, d, d);
         remove(path);
+        snprintf(path, sizeof(path), "%s/%s", card, d);
+        RMDIR(path);
     }
-    snprintf(path, sizeof(path), "%s/" PRODUCT, card);
-    RMDIR(path);
     RMDIR(card);
 }
 
@@ -435,26 +508,26 @@ static void test_libmc(void)
         struct stat st;
         CHECK(stat(CARD_A, &st) != 0);
     }
-    CHECK(c_chdir("/" PRODUCT, NULL) == sceMcResNoEntry);
-    CHECK(c_open("/" PRODUCT "/game.001", 1) == sceMcResNoEntry);
+    CHECK(c_chdir(mpath(NULL), NULL) == sceMcResNoEntry);
+    CHECK(c_open(mpath("game.001"), 1) == sceMcResNoEntry);
     CHECK(c_getdir("game.*", dir, 20) == 0);
-    CHECK(c_getdir("/" PRODUCT "/game.*", dir, 20) == sceMcResNoEntry);
-    CHECK(sceMcOpen(1, 0, "/" PRODUCT "/game.001", 1) == 0);
+    CHECK(c_getdir(mpath("game.*"), dir, 20) == sceMcResNoEntry);
+    CHECK(sceMcOpen(1, 0, mpath("game.001"), 1) == 0);
     CHECK(finish(sceMcFuncNoOpen) == sceMcResFailDetect);
 
     /* the first save: Mkdir (a second time: -4, which the game tolerates),
        Chdir, the three file kinds */
-    CHECK(c_mkdir("/" PRODUCT) == 0);
-    CHECK(c_mkdir("/" PRODUCT) == sceMcResNoEntry);
-    CHECK(c_chdir("/" PRODUCT, pwd) == 0);
-    CHECK(strcmp(pwd, "/" PRODUCT) == 0);
+    CHECK(c_mkdir(mpath(NULL)) == 0);
+    CHECK(c_mkdir(mpath(NULL)) == sceMcResNoEntry);
+    CHECK(c_chdir(mpath(NULL), pwd) == 0);
+    CHECK(strcmp(pwd, mpath(NULL)) == 0);
     save_file("icon.sys", data, 964);
     save_file("boy_blk.ico", data + 1, 3000);
-    save_file(PRODUCT, data + 2, 496);
+    save_file(PRODUCT, data + 2, PSIZE);
     save_file("game.001", data, 25596);
-    CHECK(file_size(CARD_A "/" PRODUCT "/game.001") == 25600);
-    CHECK(file_size(CARD_A "/" PRODUCT "/icon.sys") == 968);
-    CHECK(file_size(CARD_A "/" PRODUCT "/" PRODUCT) == 500);
+    CHECK(file_size(cpath(CARD_A, "game.001")) == 25600);
+    CHECK(file_size(cpath(CARD_A, "icon.sys")) == 968);
+    CHECK(file_size(cpath(CARD_A, PRODUCT)) == PSIZE + 4);
 
     /* the card now lists the save, and the free space has dropped by what
        the files take (1 KB clusters, a directory one) */
@@ -466,7 +539,8 @@ static void test_libmc(void)
     CHECK(dir[0].FileSizeByte == 25600);
     CHECK(dir[0].AttrFile == 0x8497);
     CHECK(c_getdir("*", dir, 20) ==
-          6); /* . .. then sorted: BESCES.., boy_blk.ico, game.001, icon.sys */
+          6); /* . .. then sorted: the product file (BESCES.., BISCPS..), boy_blk.ico,
+                 game.001, icon.sys */
     CHECK(c_getdir("/*", dir, 20) == 1);
     CHECK(strcmp((char *)dir[0].EntryName, PRODUCT) == 0 && dir[0].AttrFile == 0x8427);
 
@@ -489,19 +563,19 @@ static void test_libmc(void)
     CHECK(c_close(fd) == sceMcResDeniedPermit);
 
     /* re-save: the same bytes, the same file; the open does not truncate */
-    CHECK(slurp(CARD_A "/" PRODUCT "/game.001", first, sizeof(first)) == 25600);
+    CHECK(slurp(cpath(CARD_A, "game.001"), first, sizeof(first)) == 25600);
     save_file("game.001", data, 25596);
-    CHECK(slurp(CARD_A "/" PRODUCT "/game.001", back, sizeof(back)) == 25600);
+    CHECK(slurp(cpath(CARD_A, "game.001"), back, sizeof(back)) == 25600);
     CHECK(memcmp(first, back, 25600) == 0);
     /* a shorter write over it leaves the rest, as a card does; with SCE_TRUNC
        the file is cut */
     fd = c_open("game.001", 0x203);
     CHECK(c_write(fd, data, 10) == 10);
     CHECK(c_close(fd) == 0);
-    CHECK(file_size(CARD_A "/" PRODUCT "/game.001") == 25600);
+    CHECK(file_size(cpath(CARD_A, "game.001")) == 25600);
     fd = c_open("game.001", SCE_WRONLY | SCE_TRUNC);
     CHECK(c_close(fd) == 0);
-    CHECK(file_size(CARD_A "/" PRODUCT "/game.001") == 0);
+    CHECK(file_size(cpath(CARD_A, "game.001")) == 0);
     save_file("game.001", data, 25596);
 
     /* handles: three at a time */
@@ -520,7 +594,8 @@ static void test_libmc(void)
     CHECK(c_close(0) == 0);
     CHECK(c_open("a\\b", 0x203) == sceMcResNoEntry);
     CHECK(c_open("/nodir/file", 0x203) == sceMcResNoEntry);
-    CHECK(c_open("/../" PRODUCT "/game.001", 1) == 0); /* ".." stops at the root */
+    snprintf(path, sizeof(path), "/..%s", mpath("game.001"));
+    CHECK(c_open(path, 1) == 0); /* ".." stops at the root */
     CHECK(c_close(0) == 0);
     CHECK(c_open("this-name-is-longer-than-thirty-one-bytes", 0x203) == sceMcResNoEntry);
     snprintf(path, sizeof(path), "%s/.DS_Store", CARD_A);
@@ -539,10 +614,10 @@ static void test_libmc(void)
     CHECK(c_delete("game.002") == sceMcResNoEntry);
     CHECK(c_delete("game.001") == 0);
     CHECK(c_getdir("game.*", dir, 20) == 0);
-    CHECK(c_delete("/" PRODUCT) == sceMcResNotEmpty);
+    CHECK(c_delete(mpath(NULL)) == sceMcResNotEmpty);
     CHECK(c_delete("icon.sys") == 0 && c_delete("boy_blk.ico") == 0 && c_delete(PRODUCT) == 0);
-    CHECK(c_delete("/" PRODUCT) == 0);
-    CHECK(c_chdir("/" PRODUCT, NULL) == sceMcResNoEntry);
+    CHECK(c_delete(mpath(NULL)) == 0);
+    CHECK(c_chdir(mpath(NULL), NULL) == sceMcResNoEntry);
 
     /* unformat and format change what the card says, never what is on it */
     CHECK(sceMcUnformat(0, 0) == 0);
@@ -605,7 +680,7 @@ static void wait_request(void)
     }
 }
 
-/* the product file as the card holds it: 0x1F0 bytes then their byte sum */
+/* the product file as the card holds it: PSIZE bytes then their byte sum */
 static void le32(unsigned char *p, uint32_t v)
 {
     p[0] = (unsigned char)v;
@@ -662,7 +737,16 @@ static void driver(void *arg)
     int n;
 
     (void)arg;
+    /* the in-memory record is the European layout on both discs; the
+       Japanese disc's card file is its first 0x1E8 bytes, everything
+       before cameraMove and palMode (port/core/region_jpn.c) */
     CHECK(sizeof(McProductFile) == 0x1F0);
+    CHECK((int)sizeof(McProductFile) == ico_region_info_pal.mc_product_size);
+    CHECK(offsetof(McProductFile, cameraMove) == 0x1E8 &&
+          offsetof(McProductFile, palMode) == 0x1EC);
+    CHECK(ico_region_info_jpn.mc_product_size == (int)offsetof(McProductFile, cameraMove));
+    printf("part B: the %s disc, %s/, a product file of %d + 4 bytes\n", ico_region_cur()->slug,
+           PRODUCT, PSIZE);
     rm_card(CARD_B);
     ico_mc_host_set_root(CARD_B);
 
@@ -690,19 +774,19 @@ static void driver(void *arg)
        block are then all zeros but for their layout */
     memset(buf, 0, sizeof(buf));
     do_save(1, buf);
-    CHECK(file_size(CARD_B "/" PRODUCT "/icon.sys") == 964);
-    CHECK(file_size(CARD_B "/" PRODUCT "/boy_blk.ico") == 3000);
-    n = slurp(CARD_B "/" PRODUCT "/" PRODUCT, file, sizeof(file));
-    CHECK(n == 0x1F0 + 4);
+    CHECK(file_size(cpath(CARD_B, "icon.sys")) == 964);
+    CHECK(file_size(cpath(CARD_B, "boy_blk.ico")) == 3000);
+    n = slurp(cpath(CARD_B, PRODUCT), file, sizeof(file));
+    CHECK(n == PSIZE + 4);
     memset(want, 0, sizeof(want));
-    CHECK(n == 500 && memcmp(file, want, 500) == 0);
-    n = slurp(CARD_B "/" PRODUCT "/game.001", file, sizeof(file));
+    CHECK(n == PSIZE + 4 && memcmp(file, want, (size_t)PSIZE + 4) == 0);
+    n = slurp(cpath(CARD_B, "game.001"), file, sizeof(file));
     CHECK(n == 25588 + 4 + 4 + 4); /* the block, the two option words, the sum */
-    CHECK(n == 25600 && memcmp(file, want, 25600) == 0);
+    CHECK(n == GAME_FILE && memcmp(file, want, GAME_FILE) == 0);
     /* the icon files are the disc's bytes as mcdata.c's background read
        hands them to the handler (a 2048-byte rounded read, the file's size
        written), and have no sum */
-    n = slurp(CARD_B "/" PRODUCT "/icon.sys", file, sizeof(file));
+    n = slurp(cpath(CARD_B, "icon.sys"), file, sizeof(file));
     CHECK(n == 964);
     for (i = 0; i < n; i++) {
         if (file[i] != icon_byte("icon.sys", i)) {
@@ -711,7 +795,7 @@ static void driver(void *arg)
             break;
         }
     }
-    n = slurp(CARD_B "/" PRODUCT "/boy_blk.ico", file, sizeof(file));
+    n = slurp(cpath(CARD_B, "boy_blk.ico"), file, sizeof(file));
     CHECK(n == 3000);
     for (i = 0; i < n; i++) {
         if (file[i] != icon_byte("boy_blk.ico", i)) {
@@ -771,18 +855,22 @@ static void driver(void *arg)
     }
     le32(want + 0x1E0, 1);
     le32(want + 0x1E4, 0xCAFE);
-    le32(want + 0x1E8, 4);
-    le32(want + 0x1EC, 1);
-    le32(want + 0x1F0, sum_bytes(want, 0x1F0));
-    n = slurp(CARD_B "/" PRODUCT "/" PRODUCT, file, sizeof(file));
-    CHECK(n == 500 && memcmp(file, want, 500) == 0);
+    if (!ICO_JPN) {
+        /* the European disc's last two words; the Japanese disc's record
+           ends before them and its file is the same bytes up to 0x1E8 */
+        le32(want + 0x1E8, 4);
+        le32(want + 0x1EC, 1);
+    }
+    le32(want + PSIZE, sum_bytes(want, PSIZE));
+    n = slurp(cpath(CARD_B, PRODUCT), file, sizeof(file));
+    CHECK(n == PSIZE + 4 && memcmp(file, want, (size_t)PSIZE + 4) == 0);
 
     memset(want, 0, sizeof(want));
     memcpy(want, buf, 25588);
     le32(want + 25588, 0x01020304);
     le32(want + 25592, 0x0A0B0C0D);
     le32(want + 25596, sum_bytes(want, 25596));
-    n = slurp(CARD_B "/" PRODUCT "/game.001", file, sizeof(file));
+    n = slurp(cpath(CARD_B, "game.001"), file, sizeof(file));
     CHECK(n == 25600 && memcmp(file, want, 25600) == 0);
     memcpy(again, file, 25600);
 
@@ -806,8 +894,14 @@ static void driver(void *arg)
     wait_request();
     CHECK(req.result == 0);
     CHECK(IosMcProductFile[0].file[0].stage == 7 && IosMcProductFile[0].file[0].playTime == 1234);
-    CHECK(IosMcProductFile[0].serial == 0xCAFE && IosMcProductFile[0].palMode == 1);
-    CHECK(IosMcProductFile[0].cameraMove == 4);
+    if (ICO_JPN) {
+        /* not on the Japanese disc's card: left as they were */
+        CHECK(IosMcProductFile[0].serial == 0xCAFE && IosMcProductFile[0].palMode == 0);
+        CHECK(IosMcProductFile[0].cameraMove == 0);
+    } else {
+        CHECK(IosMcProductFile[0].serial == 0xCAFE && IosMcProductFile[0].palMode == 1);
+        CHECK(IosMcProductFile[0].cameraMove == 4);
+    }
     req.fileNo = 1;
     iosMcLoadGameBlock(&req, back);
     wait_request();
@@ -819,14 +913,14 @@ static void driver(void *arg)
 
     /* re-save the loaded state: the same files, byte for byte */
     do_save(1, back);
-    n = slurp(CARD_B "/" PRODUCT "/game.001", file, sizeof(file));
+    n = slurp(cpath(CARD_B, "game.001"), file, sizeof(file));
     CHECK(n == 25600 && memcmp(file, again, 25600) == 0);
-    n = slurp(CARD_B "/" PRODUCT "/" PRODUCT, file, sizeof(file));
-    CHECK(n == 500);
+    n = slurp(cpath(CARD_B, PRODUCT), file, sizeof(file));
+    CHECK(n == PSIZE + 4);
 
     /* a flipped byte fails the checksum: -16 */
     {
-        FILE *f = fopen(CARD_B "/" PRODUCT "/game.001", "r+b");
+        FILE *f = fopen(cpath(CARD_B, "game.001"), "r+b");
         CHECK(f != NULL);
         if (f != NULL) {
             fseek(f, 100, SEEK_SET);
@@ -860,7 +954,7 @@ static void driver(void *arg)
     iosMcGetBlockSaveInfo(&req);
     wait_request();
     CHECK(req.result == 0 && req.dirCount == 0 && req.mask == 0);
-    CHECK(file_size(CARD_B "/" PRODUCT "/game.001") < 0);
+    CHECK(file_size(cpath(CARD_B, "game.001")) < 0);
 
     /* Saves as they reach a phone (Android).
        A save folder copied or renamed with other capitals: on a file
@@ -871,10 +965,10 @@ static void driver(void *arg)
         buf[i] = (unsigned char)(i * 13 + 1);
     }
     do_save(3, buf);
-    CHECK(rename(CARD_B "/" PRODUCT, CARD_B "/besces-50760ICO") == 0);
+    CHECK(rename(cpath(CARD_B, NULL), cpath_cased(CARD_B, NULL)) == 0);
     {
         struct stat st;
-        const int folds = stat(CARD_B "/" PRODUCT, &st) != 0; /* the system tells case apart */
+        const int folds = stat(cpath(CARD_B, NULL), &st) != 0; /* the system tells case apart */
 
         req.port = 0;
         req.flags.ll &= ~2;
@@ -892,20 +986,20 @@ static void driver(void *arg)
         CHECK(req.result == 0 && memcmp(back, buf, sizeof(buf)) == 0);
         /* a re-save goes into that folder, not a second one */
         do_save(3, back);
-        CHECK(file_size(CARD_B "/besces-50760ICO/game.003") == 25600);
+        CHECK(file_size(cpath_cased(CARD_B, "game.003")) == 25600);
         if (folds) {
-            CHECK(stat(CARD_B "/" PRODUCT, &st) != 0);
+            CHECK(stat(cpath(CARD_B, NULL), &st) != 0);
         }
         printf("part B: a save folder in other capitals loads (%s)\n",
                folds ? "the file system tells case apart" : "the file system ignores case");
     }
-    CHECK(rename(CARD_B "/besces-50760ICO", CARD_B "/" PRODUCT) == 0);
+    CHECK(rename(cpath_cased(CARD_B, NULL), cpath(CARD_B, NULL)) == 0);
 
     /* An empty product file (a copy cut short): the card check reads it as
        no save (-15, which _la_memory_card_check turns into -14), and the
        load of a game file of 0 bytes fails with -15, not a crash */
     {
-        FILE *f = fopen(CARD_B "/" PRODUCT "/" PRODUCT, "wb");
+        FILE *f = fopen(cpath(CARD_B, PRODUCT), "wb");
 
         CHECK(f != NULL);
         if (f != NULL) {
@@ -914,7 +1008,7 @@ static void driver(void *arg)
         iosMcLoadProductBlock(&req);
         wait_request();
         CHECK(req.result == -15);
-        f = fopen(CARD_B "/" PRODUCT "/game.003", "wb");
+        f = fopen(cpath(CARD_B, "game.003"), "wb");
         CHECK(f != NULL);
         if (f != NULL) {
             fclose(f);
@@ -930,7 +1024,7 @@ static void driver(void *arg)
        (sceMcResDeniedPermit, -5 here) and the files stay as they were.
        root writes anyway: then only the load is checked. */
     do_save(3, buf);
-    CHECK(chmod(CARD_B "/" PRODUCT, 0555) == 0);
+    CHECK(chmod(cpath(CARD_B, NULL), 0555) == 0);
     {
         const int asRoot = geteuid() == 0;
 
@@ -949,15 +1043,15 @@ static void driver(void *arg)
             iosMcSaveGameBlock(&req, back);
             wait_request();
             CHECK(req.result < 0);
-            n = slurp(CARD_B "/" PRODUCT "/game.003", file, sizeof(file));
+            n = slurp(cpath(CARD_B, "game.003"), file, sizeof(file));
             CHECK(n == 25600);
         }
         printf("part B: a card folder that cannot be written: the load works%s\n",
                asRoot ? " (root: the refused save is not checked)" : ", the save is refused");
     }
-    CHECK(chmod(CARD_B "/" PRODUCT, 0755) == 0);
+    CHECK(chmod(cpath(CARD_B, NULL), 0755) == 0);
 #endif
-    remove(CARD_B "/" PRODUCT "/game.003");
+    remove(cpath(CARD_B, "game.003"));
 
     /* port 1 is empty: the game's "no card" path (type 0, result -9) */
     req.port = 1;
@@ -978,9 +1072,9 @@ static void driver(void *arg)
     CHECK(req.result == -14 && req.type == 2 && req.format == 1 && req.free >= 360);
     memset(buf, 0, sizeof(buf));
     do_save_on(1, 4, buf);
-    CHECK(file_size(CARD_C "/" PRODUCT "/game.004") == 25600);
-    CHECK(file_size(CARD_C "/" PRODUCT "/" PRODUCT) == 500);
-    CHECK(file_size(CARD_B "/" PRODUCT "/game.004") < 0);
+    CHECK(file_size(cpath(CARD_C, "game.004")) == 25600);
+    CHECK(file_size(cpath(CARD_C, PRODUCT)) == PSIZE + 4);
+    CHECK(file_size(cpath(CARD_B, "game.004")) < 0);
     req.port = 1;
     strcpy(req.path, "game.");
     iosMcGetBlockSaveInfo(&req);
@@ -1000,7 +1094,7 @@ static void driver(void *arg)
     {
         char path[64];
 
-        snprintf(path, sizeof(path), CARD_C "/" PRODUCT "/game.004");
+        snprintf(path, sizeof(path), "%s", cpath(CARD_C, "game.004"));
         remove(path);
     }
     rm_card(CARD_C);
@@ -1084,9 +1178,25 @@ typedef struct {
     uint32_t len;
 } TFile;
 
-/* the game's directory: the shapes mcard.c writes, and an empty file */
-static const TFile tfiles[] = {{"icon.sys", 964},   {"boy_blk.ico", 3000}, {PRODUCT, 500},
-                               {"game.000", 25600}, {"game.003", 25600},   {"empty", 0}};
+/* the game's directory: the shapes mcard.c writes, and an empty file; the
+   product file is named after the directory and is the disc's size
+   (tfiles_init) */
+static TFile tfiles[] = {{"icon.sys", 964},   {"boy_blk.ico", 3000}, {NULL, 0},
+                         {"game.000", 25600}, {"game.003", 25600},   {"empty", 0}};
+
+#define TF_PRODUCT 2
+
+static void tfiles_init(void)
+{
+    tfiles[TF_PRODUCT].name = PRODUCT;
+    tfiles[TF_PRODUCT].len = (uint32_t)PSIZE + 4;
+}
+
+/* file f's name in the save directory dir */
+static const char *tname(int f, const char *dir)
+{
+    return f == TF_PRODUCT ? dir : tfiles[f].name;
+}
 
 #define NTF ((int)(sizeof(tfiles) / sizeof(tfiles[0])))
 
@@ -1155,7 +1265,10 @@ static void dirent(unsigned char *e, unsigned mode, uint32_t len, uint32_t clust
     memcpy(e + 0x40, name, strlen(name));
 }
 
-static void build_image(void)
+/* the card: another game's save and ICO's (the selected disc's directory);
+   with second, also the directory of the other disc, region `second`
+   (the same files under its names), as a card both discs saved to */
+static void build_image(int second)
 {
     static unsigned char file[26000];
     static unsigned char dir[16 * 512];
@@ -1163,6 +1276,7 @@ static void build_image(void)
     uint32_t cl[NTF];
     uint32_t other;
     uint32_t ico;
+    uint32_t ico2 = 0;
     uint32_t i;
     int f;
 
@@ -1210,14 +1324,28 @@ static void build_image(void)
         dirent(dir + (3 + f) * 512, 0x8497, tfiles[f].len, cl[f], tfiles[f].name);
     }
     ico = img_alloc(dir, (NTF + 3) * 512);
-    /* the root: ".", "..", the other game, a deleted ICO entry, ICO's */
-    dirent(dir, 0x8427, 5, 0, ".");
+    if (second >= 0) {
+        const char *d2 = ico_region_at(second)->mc_save_dir;
+
+        dirent(dir, 0x8427, NTF + 2, 0, ".");
+        dirent(dir + 512, 0x8427, 0, 0, "..");
+        for (f = 0; f < NTF; f++) {
+            dirent(dir + (2 + f) * 512, 0x8497, tfiles[f].len, cl[f], tname(f, d2));
+        }
+        ico2 = img_alloc(dir, (NTF + 2) * 512);
+    }
+    /* the root: ".", "..", the other game, a deleted ICO entry, ICO's (and
+       the other disc's) */
+    dirent(dir, 0x8427, second >= 0 ? 6 : 5, 0, ".");
     dirent(dir + 512, 0x8427, 0, 0, "..");
     dirent(dir + 1024, 0x8427, 3, other, OTHER);
     dirent(dir + 1536, 0x0427, 3, other, PRODUCT);
     dirent(dir + 2048, 0x8427, NTF + 3, ico, PRODUCT);
+    if (second >= 0) {
+        dirent(dir + 2560, 0x8427, NTF + 2, ico2, ico_region_at(second)->mc_save_dir);
+    }
     imgNext = 0;
-    CHECK(img_alloc(dir, 5 * 512) == 0);
+    CHECK(img_alloc(dir, (second >= 0 ? 6 : 5) * 512) == 0);
 }
 
 static int write_blob(const char *path, const unsigned char *p, size_t n)
@@ -1278,7 +1406,7 @@ static int write_psu(const char *path, const char *dirname)
         uint32_t padded = (tfiles[f].len + 1023) / 1024 * 1024;
 
         tfill(f, file);
-        dirent(e, 0x8497, tfiles[f].len, 0, tfiles[f].name);
+        dirent(e, 0x8497, tfiles[f].len, 0, tname(f, dirname));
         ok = ok && fwrite(e, 1, 512, fp) == 512;
         ok = ok && fwrite(file, 1, tfiles[f].len, fp) == tfiles[f].len;
         ok = ok && fwrite(pad, 1, padded - tfiles[f].len, fp) == padded - tfiles[f].len;
@@ -1289,15 +1417,11 @@ static int write_psu(const char *path, const char *dirname)
 
 static void rm_import(const char *card)
 {
-    char path[256];
-
-    snprintf(path, sizeof(path), "%s/" PRODUCT "/empty", card);
-    remove(path);
-    rm_card(card);
+    rm_card(card); /* every disc's directory, "empty" among the files */
 }
 
-/* every file of the game's directory, on disk, is the synthetic bytes */
-static void check_folder(const char *card)
+/* every file of the save directory dir, on disk, is the synthetic bytes */
+static void check_dir(const char *card, const char *dir)
 {
     static unsigned char want[26000];
     static unsigned char got[26100];
@@ -1307,7 +1431,7 @@ static void check_folder(const char *card)
     for (f = 0; f < NTF; f++) {
         int n;
 
-        snprintf(path, sizeof(path), "%s/" PRODUCT "/%s", card, tfiles[f].name);
+        snprintf(path, sizeof(path), "%s/%s/%s", card, dir, tname(f, dir));
         tfill(f, want);
         n = slurp(path, got, sizeof(got));
         if (n != (int)tfiles[f].len || memcmp(got, want, tfiles[f].len) != 0) {
@@ -1316,6 +1440,12 @@ static void check_folder(const char *card)
             fails++;
         }
     }
+}
+
+/* the selected disc's directory */
+static void check_folder(const char *card)
+{
+    check_dir(card, PRODUCT);
 }
 
 /* every file read back through the folder card on port, byte for byte */
@@ -1331,7 +1461,7 @@ static void check_card(int port)
         int total = 0;
         int n;
 
-        snprintf(path, sizeof(path), "/" PRODUCT "/%s", tfiles[f].name);
+        snprintf(path, sizeof(path), "%s", mpath(tfiles[f].name));
         CHECK(sceMcOpen(port, 0, path, SCE_RDONLY) == 0);
         fd = finish(sceMcFuncNoOpen);
         CHECK(fd >= 0);
@@ -1369,8 +1499,24 @@ static int run_cli(const char *exe, const char *args)
     return r;
 }
 
+/* the file's text, NUL-terminated (at most size - 1 bytes) */
+static int slurp_text(const char *path, char *buf, size_t size)
+{
+    int n = slurp(path, (unsigned char *)buf, size - 1);
+
+    buf[n > 0 ? n : 0] = '\0';
+    return n;
+}
+
 static void test_import(const char *cli)
 {
+    /* the other disc's region (the table has two rows): its directory
+       imports beside the selected one's */
+    const int otherRegion = ico_region == 0 ? 1 : 0;
+    const char *otherDir = ico_region_at(otherRegion)->mc_save_dir;
+    const unsigned both = (1u << ico_region) | (1u << otherRegion);
+    char text[1024];
+    char want[256];
     IcoMcImport res;
     sceMcTblGetDir dir[20];
     int type;
@@ -1383,10 +1529,13 @@ static void test_import(const char *cli)
     if (img == NULL) {
         return;
     }
-    build_image();
+    build_image(-1);
     CHECK(write_blob("save_test_card.ps2", img, IMG_SIZE) == 0);
     CHECK(write_ecc("save_test_card_ecc.ps2") == 0);
+    build_image(otherRegion);
+    CHECK(write_blob("save_test_card_both.ps2", img, IMG_SIZE) == 0);
     CHECK(write_psu("save_test_save.psu", PRODUCT) == 0);
+    CHECK(write_psu("save_test_other_disc.psu", otherDir) == 0);
     CHECK(write_psu("save_test_other.psu", OTHER) == 0);
     CHECK(write_blob("save_test_save.max", (const unsigned char *)"Ps2PowerSave\0\0\0\0", 16) == 0);
     free(img);
@@ -1394,6 +1543,8 @@ static void test_import(const char *cli)
     rm_import(CARD_I);
     rm_import(CARD_J);
     rm_import(CARD_K);
+    rm_import(CARD_L);
+    rm_import(CARD_M);
 
     CHECK(ico_mc_import_detect("save_test_card.ps2") == ICO_MC_FMT_RAW);
     CHECK(ico_mc_import_detect("save_test_card_ecc.ps2") == ICO_MC_FMT_RAW);
@@ -1404,9 +1555,10 @@ static void test_import(const char *cli)
        directory skipped and named, the deleted entries ignored */
     CHECK(ico_mc_import("save_test_card.ps2", CARD_I, 0, &res) == 0);
     CHECK(res.format == ICO_MC_FMT_RAW && res.files == NTF);
+    CHECK(res.regions == 1u << ico_region);
     CHECK(res.skipped == 1 && strcmp(res.skippedName[0], OTHER) == 0);
     check_folder(CARD_I);
-    CHECK(file_size(CARD_I "/" PRODUCT "/game.001") < 0);
+    CHECK(file_size(cpath(CARD_I, "game.001")) < 0);
     /* again: refused without overwrite, nothing changed; then replaced */
     CHECK(ico_mc_import("save_test_card.ps2", CARD_I, 0, &res) == -1);
     CHECK(strstr(res.why, "already holds") != NULL && res.files == 0);
@@ -1435,8 +1587,45 @@ static void test_import(const char *cli)
     }
     CHECK(ico_mc_import("save_test_other.psu", CARD_K, 0, &res) == 1);
     CHECK(res.skipped == 1 && strcmp(res.skippedName[0], OTHER) == 0);
+    CHECK(res.regions == 0);
+    CHECK(strcmp(res.why,
+                 "no ICO save (BESCES-50760ico or BISCPS-11003ico) in save_test_other.psu") == 0);
     CHECK(ico_mc_import("save_test_save.max", CARD_K, 0, &res) == -1);
     CHECK(res.format == ICO_MC_FMT_MAX);
+
+    /* the other disc's .psu imports as its own directory, beside this
+       disc's save, which it leaves alone */
+    CHECK(ico_mc_import("save_test_other_disc.psu", CARD_K, 0, &res) == 0);
+    CHECK(res.format == ICO_MC_FMT_PSU && res.files == NTF && res.regions == 1u << otherRegion);
+    check_dir(CARD_K, otherDir);
+    check_folder(CARD_K);
+
+    /* one card both discs saved to: both directories, each into its own
+       folder (BESCES-50760ico and BISCPS-11003ico side by side) */
+    CHECK(ico_mc_import("save_test_card_both.ps2", CARD_L, 0, &res) == 0);
+    CHECK(res.format == ICO_MC_FMT_RAW && res.files == 2 * NTF && res.regions == both);
+    CHECK(res.regions == 3u);
+    CHECK(res.skipped == 1 && strcmp(res.skippedName[0], OTHER) == 0);
+    check_dir(CARD_L, ico_region_at(0)->mc_save_dir);
+    check_dir(CARD_L, ico_region_at(1)->mc_save_dir);
+    /* the command line says which directories it wrote, in the table's
+       order */
+    if (cli != NULL) {
+        CHECK(run_cli(cli, "--to " CARD_M " save_test_card_both.ps2 > save_test_cli.txt") == 0);
+        CHECK(slurp_text("save_test_cli.txt", text, sizeof(text)) > 0);
+        snprintf(want, sizeof(want), "imported %d file(s) into " CARD_M ": %s %s\n", 2 * NTF,
+                 ico_region_at(0)->mc_save_dir, ico_region_at(1)->mc_save_dir);
+        CHECK(strstr(text, want) != NULL);
+        CHECK(strstr(text, "imported 12 file(s) into " CARD_M
+                           ": BESCES-50760ico BISCPS-11003ico\n") != NULL);
+        check_dir(CARD_M, ico_region_at(0)->mc_save_dir);
+        check_dir(CARD_M, ico_region_at(1)->mc_save_dir);
+        CHECK(run_cli(cli, "--to " CARD_K " save_test_other.psu > save_test_cli.txt") == 1);
+        CHECK(slurp_text("save_test_cli.txt", text, sizeof(text)) > 0);
+        CHECK(strstr(text, "no ICO save (BESCES-50760ico or BISCPS-11003ico) in "
+                           "save_test_other.psu\n") != NULL);
+        remove("save_test_cli.txt");
+    }
 
     /* two cards: card I in port 0, card J in port 1; both formatted PS2
        cards with the same save, read back byte for byte through libmc */
@@ -1448,7 +1637,7 @@ static void test_import(const char *cli)
         CHECK(finish(sceMcFuncNoCardInfo) == sceMcResChangedCard);
         CHECK(type == 2 && format == 1 && freeCl > 360 && freeCl < ICO_MC_HOST_CLUSTERS);
         check_card(i);
-        CHECK(sceMcChdir(i, 0, "/" PRODUCT, NULL) == 0);
+        CHECK(sceMcChdir(i, 0, mpath(NULL), NULL) == 0);
         CHECK(finish(sceMcFuncNoChDir) == 0);
         CHECK(sceMcGetDir(i, 0, "game.*", 0, 20, dir) == 0);
         CHECK(finish(sceMcFuncNoGetDir) == 2);
@@ -1458,8 +1647,8 @@ static void test_import(const char *cli)
     /* a write on port 1 lands in card J only */
     CHECK(sceMcDelete(1, 0, "game.003") == 0);
     CHECK(finish(sceMcFuncNoDelete) == 0);
-    CHECK(file_size(CARD_J "/" PRODUCT "/game.003") < 0);
-    CHECK(file_size(CARD_I "/" PRODUCT "/game.003") == 25600);
+    CHECK(file_size(cpath(CARD_J, "game.003")) < 0);
+    CHECK(file_size(cpath(CARD_I, "game.003")) == 25600);
     /* no folder for port 1: no card again */
     ico_mc_host_set_port_root(1, NULL);
     CHECK(sceMcGetInfo(1, 0, &type, &freeCl, &format) == 0);
@@ -1469,17 +1658,29 @@ static void test_import(const char *cli)
     rm_import(CARD_I);
     rm_import(CARD_J);
     rm_import(CARD_K);
+    rm_import(CARD_L);
+    rm_import(CARD_M);
     remove("save_test_card.ps2");
+    remove("save_test_card_both.ps2");
+    remove("save_test_other_disc.psu");
     remove("save_test_card_ecc.ps2");
     remove("save_test_save.psu");
     remove("save_test_other.psu");
     remove("save_test_save.max");
 }
 
+/* save_test SLUG MC_IMPORT: SLUG the region to play (config/regions.txt,
+   pal or jpn), MC_IMPORT tools/mc_import (ctest passes both) */
 int main(int argc, char **argv)
 {
+    if (argc < 2 || ico_region_select(argv[1]) != 0) {
+        printf("FAIL usage: save_test pal|jpn MC_IMPORT\n");
+        return 1;
+    }
+    printf("save_test: the %s disc (%s)\n", ico_region_cur()->slug, ico_region_cur()->disc_id);
+    tfiles_init();
     test_libmc();
-    test_import(argc > 1 ? argv[1] : NULL);
+    test_import(argc > 2 ? argv[2] : NULL);
     test_mcard();
     if (fails != 0) {
         printf("%d failure(s)\n", fails);

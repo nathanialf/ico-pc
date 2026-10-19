@@ -9,7 +9,7 @@ target_include_directories(ico_config
     PRIVATE "${ICO_COMPAT_DIR}" "${CMAKE_SOURCE_DIR}/port/platform")
 target_compile_options(ico_config PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 # sysconf.c attaches the EE timers (platform/clock.c)
-target_link_libraries(ico_config PUBLIC ico_platform)
+target_link_libraries(ico_config PUBLIC ico_platform ico_region)
 
 # the window build: SDL's preferred locales and preference folder
 # (SDL3 is found by port/render, which comes first)

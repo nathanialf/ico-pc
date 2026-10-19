@@ -656,6 +656,15 @@ void ico_diag_set_symbols_fd(int fd, long long offset, long long length, int gzi
    after the renderer's start and its self-tests): "ico_pc: summary:
    <text>", kept for the report file's report.txt. */
 void ico_diag_set_summary(const char *fmt, ...) ICO_DIAG_PRINTF(1, 2);
+/* The disc this run plays, as the summary and the report file name it
+   ("SCPS-11003 (the Japanese disc)"; copied, at most 95 bytes), set once
+   the disc image is identified (main_host.c select_disc). A summary
+   logged before that (Android opens the window first) names the disc as
+   ICO_DIAG_DISC_UNKNOWN; it is logged again with the disc in its place.
+   ico_diag_disc: the text, "" before. */
+#define ICO_DIAG_DISC_UNKNOWN "not mounted yet"
+void ico_diag_set_disc(const char *text);
+const char *ico_diag_disc(void);
 /* The version text ico_diag_set_version took ("unknown" before). */
 const char *ico_diag_version(void);
 

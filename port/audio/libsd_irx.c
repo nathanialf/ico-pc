@@ -146,7 +146,7 @@ int ico_libsd_load(void)
     } else if (ico_vfs_open(disc, ICO_LIBSD_IRX_PATH, &f) != 0) {
         why = "the disc has no " ICO_LIBSD_IRX_PATH;
     } else if (ico_vfs_size(&f) != ICO_LIBSD_IRX_SIZE) {
-        why = ICO_LIBSD_IRX_PATH " is not the PAL disc's (size)";
+        why = ICO_LIBSD_IRX_PATH " is not the disc's (size)";
     } else if ((buf = malloc(ICO_LIBSD_IRX_SIZE)) == NULL) {
         why = "out of memory";
     } else if (ico_vfs_read(&f, 0, buf, ICO_LIBSD_IRX_SIZE) != (int64_t)ICO_LIBSD_IRX_SIZE) {

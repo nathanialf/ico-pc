@@ -1971,18 +1971,24 @@ static void sourcesText(const IcoBindings *b, int t, int gamepad, char *buf, siz
     }
 }
 
-/* Breaks text into lines of at most width x units at size (a note). */
+/* Breaks text into lines of at most width x units at size (a note): at a
+   space, or for the Japanese text between two characters where a line may
+   break (strings.h ui_break_before), a line break put in there. */
 static void wrapText(const char *text, float size, float width, char *out, unsigned outSize)
 {
-    unsigned n = 0, lineStart = 0, lastSpace = 0;
+    unsigned n = 0, lineStart = 0, lastSpace = 0, lastBreak = 0;
+    uint32_t prev = 0;
     for (const char *p = text; *p;) {
         /* a whole UTF-8 sequence at a time: the line is measured only on a
            character's end (a cut "'" measured as U+FFFD) */
         const char *next = p;
-        ui_utf8_next(&next);
+        const uint32_t cp = ui_utf8_next(&next);
         const unsigned len = (unsigned)(next - p);
         if (n + len + 1 > outSize) {
             break;
+        }
+        if (n > lineStart && ui_break_before(prev, cp)) {
+            lastBreak = n;
         }
         memcpy(out + n, p, len);
         out[n + len] = '\0';
@@ -1991,9 +1997,18 @@ static void wrapText(const char *text, float size, float width, char *out, unsig
         }
         n += len;
         p = next;
-        if (lastSpace > lineStart && ui_measure_menu_text(size, out + lineStart) > width) {
-            out[lastSpace] = '\n';
-            lineStart = lastSpace + 1;
+        prev = cp;
+        if ((lastSpace > lineStart || lastBreak > lineStart) &&
+            ui_measure_menu_text(size, out + lineStart) > width) {
+            if (lastSpace > lineStart && lastSpace >= lastBreak) {
+                out[lastSpace] = '\n';
+                lineStart = lastSpace + 1;
+            } else if (n + 2 <= outSize) {
+                memmove(out + lastBreak + 1, out + lastBreak, n - lastBreak + 1);
+                out[lastBreak] = '\n';
+                n++;
+                lineStart = lastBreak + 1;
+            }
         }
     }
     out[n] = '\0';

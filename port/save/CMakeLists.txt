@@ -16,13 +16,13 @@ if(TARGET ico_pc)
     target_link_libraries(ico_pc PRIVATE ico_save)
 endif()
 
-# ICO's save out of a raw card image (.ps2/.bin) or a .psu into a
-# card folder, and its command line,
+# ICO's saves (each disc's directory, port/core's mc_save_dir) out of a raw
+# card image (.ps2/.bin) or a .psu into a card folder, and its command line,
 # tools/mc_import.c. Needs only the UTF-8 file calls.
 add_library(ico_save_import STATIC mc_import.c)
 target_include_directories(ico_save_import PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(ico_save_import PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-target_link_libraries(ico_save_import PUBLIC ico_host_fs)
+target_link_libraries(ico_save_import PUBLIC ico_host_fs ico_region)
 add_executable(mc_import "${CMAKE_SOURCE_DIR}/tools/mc_import.c")
 target_compile_options(mc_import PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(mc_import PRIVATE ico_save_import)
@@ -45,6 +45,19 @@ target_compile_options(save_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYO
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(save_test PRIVATE ico_save ico_save_import ico_platform ico_options)
 if(ICO_RUN_TESTS)
-    # the importer's command line, run by the test on its synthetic files
-    add_test(NAME save COMMAND save_test $<TARGET_FILE:mc_import>)
+    # one run per disc (the region's slug; the importer's command line, run
+    # by the test on its synthetic files), each in its own folder, since the
+    # test's card folders sit in the working directory: save (the European
+    # disc, BESCES-50760ico) and save_jpn (the Japanese disc,
+    # BISCPS-11003ico, a 0x1E8-byte product file)
+    foreach(_slug pal jpn)
+        if(_slug STREQUAL "pal")
+            set(_name save)
+        else()
+            set(_name save_${_slug})
+        endif()
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${_name}")
+        add_test(NAME ${_name} COMMAND save_test ${_slug} $<TARGET_FILE:mc_import>
+                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${_name}")
+    endforeach()
 endif()

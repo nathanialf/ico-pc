@@ -13,13 +13,16 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/ui/settings.h`, `settings.c` | the Settings menu: the pages, the entry rows, the New Game and Quit screens, the values and their setters, the saves |
 | `port/ui/ui_list.h`, `ui_list.c` | the scrolling list pages (Achievements, Remap, Music) |
 | `port/ui/ui_hint.h`, `ui_hint.c` | a line of button prompts (glyphs and words) |
-| `port/ui/strings.h`, `strings.c`, `strings_{en,fr,de,it,es}.c` | the UI strings, one table per language |
-| `port/ui/font.h`, `font.c` | Arimo through stb_truetype: atlases, measuring, plain text, the presentation overlay mode, the sheet rasteriser |
+| `port/ui/strings.h`, `strings.c`, `strings_{en,fr,de,it,es,ja}.c` | the UI strings, one table per language; the serial notes; the Japanese line-break rules |
+| `port/ui/ui_lang.h`, `ui_lang.c` | the port text's language from `[ui] language` and the running disc |
+| `port/ui/font.h`, `font.c` | Arimo, then Noto Sans JP, through stb_truetype: atlases, measuring, plain text, the presentation overlay mode, the sheet rasteriser |
 | `port/ui/menu_font.h`, `menu_font.c` | the menus' text in the look of the game's menu sheets: strip pages, inks, rims |
 | `port/ui/menu_text.h`, `menu_text.c` | the table of the game's menu words, measured from the PAL sheets |
 | `port/ui/ui_internal.h` | font.c's and menu_font.c's internals shared with `ui_host.c` and the tests |
-| `port/ui/embed_font.cmake` | the font file as a C array at build time |
+| `port/ui/embed_font.cmake` | a font file as a C array at build time; the two subsets' code points |
 | `port/assets/fonts/Arimo-Regular.ttf`, `OFL.txt` | the font and its licence |
+| `port/assets/fonts/NotoSansJP-Regular-subset.ttf`, `NotoSansJP-OFL.txt` | the second font (the characters Arimo lacks) and its licence |
+| `tools/subset_font_ja.py` | makes and checks the second font's subset |
 | `port/ui/popup.h`, `popup.c` | the notification popups |
 | `port/ui/touch_ui.h`, `touch_ui.c` | the touch overlay's drawing |
 | `port/ui/ui_mouse.h`, `ui_mouse.c`, `ui_mouse_geom.h`, `ui_mouse_geom.c` | the mouse pointer in menus: the glue and the arithmetic |
@@ -280,16 +283,64 @@ handler, the Characters host (the model viewer's panel) (`port/ui/settings.h`
 ## Strings and languages
 
 Every word the port draws is a `UiStrId` into one table per language, `strings_en.c`, `fr`, `de`,
-`it` and `es`, each `UI_STR_COUNT` UTF-8 entries written with designated initialisers; the tables
-also hold the game's own menu words transcribed from the PAL sheets (`UI_STR_MT_*`)
-(`port/ui/strings.h`, header comment). `ui_str` answers in the current language and falls back to
-English for a missing entry (`port/ui/strings.c` (`ui_str_in`)).
+`it`, `es` and `ja`, `UI_LANG_COUNT` tables of `UI_STR_COUNT` UTF-8 entries written with designated
+initialisers; the tables also hold the game's own menu words (`UI_STR_MT_*`) as each disc's sheets
+letter them (`port/ui/strings.h`, header comment). `ui_str` answers in the current language and
+falls back to English for a missing entry (`port/ui/strings.c` (`ui_str_in`)); ctest
+`strings_complete` fails on a missing or empty entry, and on an entry whose printf conversions are
+not the English one's, so the fallback never shows (`port/ui/test/strings_complete_test.c`). Every
+table names the languages in their own words (English, Français, Deutsch, Italiano, Español,
+日本語), so a player finds theirs whatever the menus are in.
 
-The current language follows the game's: `NonLinearCameraMove` holds 2..6 after the boot (English,
-French, German, Italian, Spanish), and `ui_lang_from_game` maps it to `UiLang`; `settingsProc` and
-`ui_host.c`'s sync set it every tick, so a change on the Language row shows at once
-(`port/ui/strings.c` (`ui_lang_from_game`); `port/ui/ui_host.c` (`sync`)). The row also writes
-`[game] language` (`port/config/sysconf.h` (`ico_sysconf_set_language`)).
+The first five languages, `UI_LANG_PAL_COUNT`, are the European disc's, in the order of the game's
+language numbers; Japanese (`UI_LANG_JA`) is the port's own text, the Japanese disc's words being
+its sheets. The current language follows the game's at the call sites: `NonLinearCameraMove` holds
+2..6 after the boot (English, French, German, Italian, Spanish), and `ui_lang_from_game` maps it to
+`UiLang`; `settingsProc` and `ui_host.c`'s sync set it every tick, so a change on the Language row
+shows at once (`port/ui/strings.c` (`ui_lang_from_game`); `port/ui/ui_host.c` (`sync`)). The row
+also writes `[game] language` (`port/config/sysconf.h` (`ico_sysconf_set_language`)).
+
+The menu language, `[ui] language` (`auto`, `en`, `fr`, `de`, `it`, `es` or `ja`;
+`port/game/options.h` (`ico_opt_ui_language`)), is resolved by `ui_settings_resolve_language`: a
+chosen language wins on both discs; `auto`, the default, follows the disc: Japanese on the Japanese
+disc, the game's own language on a disc whose game picks one (`IcoRegionInfo.has_game_language`,
+the European disc), else English. The host's system language is not consulted
+(`port/ui/ui_lang.h`; the rule over its inputs is `ui_lang_resolve`, which `strings_complete`
+tests).
+
+The sheet language is kept apart from the port text's: the language of the sheets the game's
+menus show, one of the European disc's five or `UI_SHEET_JA` (the Japanese disc's sheets;
+`UI_LANG_SHEET_COUNT` in all). The look of the port's text in the sheets' style and the game's
+menu words follow it whatever the port's text is in; until `ui_set_sheet_language` is called it
+follows the port's language while that is a European one, else English (`port/ui/strings.h`
+(`ui_set_sheet_language`, `ui_sheet_language`)).
+
+Four strings name the running disc's pack folder, its PCSX2 serial (SCES-50760, SCPS-11003): the
+texture and model pack notes and the two dump notes. Their entries are printf formats with one
+`%s`; `ui_str_serial` writes one in the current language with the selected region's
+`pack_serial` (`port/core/region.h`), and `ui_str_takes_serial` names the four
+(`port/ui/strings.c`).
+
+The Japanese text has no spaces to break at. The notes' wrap (`port/ui/settings.c` (`wrapText`))
+and a popup body wider than the panel (`port/ui/popup.c` (`wrapWide`)) also break between two
+characters where `ui_break_before` allows: a wide character on either side (`ui_wide_char`: the CJK
+blocks and the fullwidth forms), never before closing punctuation, the prolonged sound mark, the
+middle dot, the ellipsis, a sound or iteration mark or a small kana, never after an opening
+bracket (`port/ui/strings.h` (`ui_break_before`)). Latin text breaks at its spaces only, as
+before: two Latin characters never give a break, so the European languages' lines are unchanged.
+
+The Japanese table (`strings_ja.c`) takes the Japanese disc's own word wherever its menu sheets
+letter one for the same thing (`Tex_menu01/option.tm2`, `title.tm2`, `mc01.tm2`, `mc02.tm2`,
+`mc04.tm2`): はじめから and つづきから, オプション, もどる, キーコンフィグ, 手つなぎ設定,
+バイブレーション, ノイズレベル (the film effect, photo mode's too), 明るさ調整, プレイ人数,
+こうげき, おりる, てをつなぐ／よぶ, 決定, ゲーム終了, and the memory card messages' wording; the
+port's rows for the same settings use the same words, and every "back" a button or prompt names
+is もどる. Otherwise it is a console menu's register: nouns for rows, the katakana loanwords
+Japanese games use, the sticks as 左スティック and 右スティック, the PlayStation buttons as
+○ボタン, ×ボタン, □ボタン and △ボタン in sentences and the bare marks on buttons and prompts,
+and full-width brackets with no space before them. A popup title is one line, so the titles are
+short. The disc's save screen names no places (it shows the stage number), so the area names
+(`UI_STR_MT_LOC_*`) are the port's own.
 
 ## Text: the font and the sheet look
 
@@ -300,6 +351,28 @@ The port's text is Arimo Regular (SIL OFL 1.1), embedded in the program: `embed_
 the program (`port/ui/embed_font.cmake`; `port/ui/CMakeLists.txt`). The font is a subset; the
 code points it holds are listed on the `subset:` line of `embed_font.cmake`, which
 `tools/font_audit.py` checks the port's text against.
+
+A character Arimo has no glyph for is drawn from a second embedded font, a subset of Noto Sans JP
+Regular (SIL OFL 1.1; `port/assets/fonts/NotoSansJP-Regular-subset.ttf` into `ui_font_ja_ttf[]`,
+140,928 bytes, 746 code points): the Japanese table, the language names and the PlayStation
+button marks □ △ ○ (`port/ui/font.c` (`fontGlyph`)). Its metrics are scaled to Arimo's em (`jaK`),
+a pair across the two fonts has no kerning, and every line keeps Arimo's ascent and line height,
+so Latin text draws as before; the sheet rasteriser (`ui__sheet_raster_line`, the menus' look)
+takes the same glyphs. Both fonts are for the port's own text only: every word of the game's is
+the disc's own picture, on both discs.
+
+The subset pipeline: `tools/fetch_deps.sh` (section 7, `SKIP_NOTO_JP=1` skips it) fetches the
+variable `NotoSansJP[wght].ttf` of `google/fonts` at a pinned commit into
+`tools/toolchain/deps/noto-sans-jp/`, SHA-256 checked; `tools/subset_font_ja.py` makes the subset
+from it with fontTools 4.63.0: the wght 400 instance, ASCII, the CJK punctuation, hiragana and
+katakana, the fullwidth forms, the button marks and every character of the string tables, the
+model viewer's names and the font corpus outside Arimo's subset, hinting and the layout tables
+dropped, the source's timestamps kept so the same input makes the same bytes. It writes the
+`subset-ja:` line of `embed_font.cmake`, which `font_audit.py` checks together with the `subset:`
+line. After a change to a table, `tools/subset_font_ja.py --check` (ctest `font_subset_ja`) fails
+until the tool is run again: it compares the recorded line with the characters the tables use,
+the committed font's cmap with the line, and, with the download, the committed font with the
+tool's output byte for byte. The build reads only the committed subset, never the download.
 
 `font.c` rasterises it with stb_truetype into 8-bit coverage atlases, one set per pixel size, built
 on demand; up to 32 size sets live at once, the one drawn least recently going once 4
@@ -337,9 +410,10 @@ least recently once no recent frame can name it (`port/ui/menu_font.c` (`MF_PAGE
 
 The inks (`UiMenuTextInk`): light letters with the dark rim (the menu rows; the port's text always
 has the full rim), and dark, plain and grey letters without one (the white panel's prompts, the
-save screens' play time and slot numbers). The light ink's rim level and fill are per language
-(`kSheetInk`, `ui_menu_sheet_ink`), and a language change restyles the pages without rasterising
-again (`port/ui/menu_font.h` (`ui_menu_sheet_ink`, `ui_menu_item_ink`)).
+save screens' play time and slot numbers). The light ink's rim level and fill are per sheet
+language (`kSheetInk`, `ui_menu_sheet_ink`: the European disc's five measured on their sheets, a
+row for `UI_SHEET_JA` the Japanese sheets' measurement fills), and a change restyles the pages
+without rasterising again (`port/ui/menu_font.h` (`ui_menu_sheet_ink`, `ui_menu_item_ink`)).
 
 ### The game's own menu words
 
@@ -372,7 +446,8 @@ presentation overlay (`rd_set_present_overlay`) at every [present](ARCHITECTURE.
 box blit and at the output's resolution: outside the game's frame, so a frame the GS keeps never
 shows one twice, and never mirrored (`port/ui/popup.h`, header comment; `port/ui/ui_host.c`
 (`hostOverlay`)). The panel's text uses the menus' look with the full rim and room for it
-(`port/ui/popup.c` (`PAD_Y`)). `[dev] popup_test` queues a test popup from Main tick 100 and every
+(`port/ui/popup.c` (`PAD_Y`)). A Japanese body wider than the panel takes line breaks
+([Strings and languages](#strings-and-languages)); a title is one line. `[dev] popup_test` queues a test popup from Main tick 100 and every
 150 ticks after (`ui_popup_dev_tick`).
 
 ## Hints and lists
@@ -504,8 +579,11 @@ popup test switch and the quit handler; `ui_host_vsync` runs the popup clock onc
 
 Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
 
-- `ui` (`test/ui_test.c`): the embedded font, UTF-8 decoding, measuring, the string tables, the
-  layout extension through the real `layout_texture.c`.
+- `ui` (`test/ui_test.c`): the embedded fonts, UTF-8 decoding, measuring, the string tables, the
+  layout extension through the real `layout_texture.c`, a Japanese popup body's line break.
+- `strings_complete` (`test/strings_complete_test.c`): every table defines every id with the
+  English entry's conversions, the serial notes on both discs, the sheet language, the menu
+  language's rule, the Japanese line-break rules.
 - `settings` (`test/settings_test.c`): the menu over fake PAL-shaped tables: pages and labels, the
   entry repoint, the title and pause rows' places, navigation through the real `layout_texture.c`,
   the game's settings on the pages, what is written.
@@ -522,7 +600,9 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
 - `menu_look` (`test/menu_look_test.c`, `test/menu_sheets.c`): the menus' strips against the
   player's sheets through the sheet shader's CPU reference; pins the sheet constants.
 - `font_coverage` (`test/font_coverage_test.c`, `test/font_corpus/`): every character the port
-  draws has a glyph.
+  draws, in the six languages, has a glyph in one of the two fonts; a Japanese character is Noto
+  Sans JP's own glyph. `font_audit` and `font_subset_ja` (`port/test/CMakeLists.txt`) check the
+  subsets' recorded code points without a build.
 - `font_edge` (`test/font_edge_test.c`): plain text on the output at Enhanced 1080p and 4K, and
   the overlay unmirrored.
 - `gallery` (`test/gallery_test.c`): the music gallery's list from the base ELF's tables.

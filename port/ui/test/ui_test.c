@@ -353,10 +353,14 @@ static void testStrings(void)
        language writes it */
     {
         const char *const *tables[UI_LANG_COUNT] = {ui_strings_en, ui_strings_fr, ui_strings_de,
-                                                    ui_strings_it, ui_strings_es};
+                                                    ui_strings_it, ui_strings_es, ui_strings_ja};
         static const char *const deja[UI_LANG_COUNT] = {
-            "Deja vu", "D\xc3\xa9j\xc3\xa0 vu", "D\xc3\xa9j\xc3\xa0-vu", "D\xc3\xa9j\xc3\xa0 vu",
-            "D\xc3\xa9j\xc3\xa0 vu"};
+            "Deja vu",
+            "D\xc3\xa9j\xc3\xa0 vu",
+            "D\xc3\xa9j\xc3\xa0-vu",
+            "D\xc3\xa9j\xc3\xa0 vu",
+            "D\xc3\xa9j\xc3\xa0 vu",
+            "\xe3\x83\x87\xe3\x82\xb8\xe3\x83\xa3\xe3\x83\xb4"};
         for (int l = 0; l < UI_LANG_COUNT; l++) {
             const char *t = tables[l][UI_STR_PHOTO_FILM_DEJA];
             CHECK(t != NULL && strcmp(t, deja[l]) == 0, "language %d: Deja vu is \"%s\"", l,
@@ -584,6 +588,29 @@ static void testPopups(void)
     CHECK(ui_popup_push("x", "y") == -1, "the queue is bounded");
     ui_popup_reset();
     ui_popup_set_dev_test(0);
+
+    /* a Japanese body wider than the panel breaks between its characters
+       (strings.h ui_break_before) and the panel takes the second line; a
+       Latin body keeps its one line */
+    {
+        float h[3], w[3];
+        const char *bodies[3] = {"B", ui_str_in(UI_LANG_EN, UI_STR_ACH_NO_CAPTURE_DESC),
+                                 ui_str_in(UI_LANG_JA, UI_STR_ACH_NO_CAPTURE_DESC)};
+        for (int k = 0; k < 3; k++) {
+            ui_popup_reset();
+            ui_popup_push("A", bodies[k]);
+            for (int i = 0; i < UI_POPUP_SLIDE_VSYNCS; i++) {
+                ui_popup_vsync();
+            }
+            CHECK(ui_popup_panel(r), "body %d: a panel", k);
+            h[k] = r[3] - r[1];
+            w[k] = r[2] - r[0];
+        }
+        CHECK(h[1] == h[0] && h[2] > h[0] && w[2] <= UI_GRID_W - 36.0f + 0.01f,
+              "the panels: one line %g, English %g, Japanese %g high and %g wide", (double)h[0],
+              (double)h[1], (double)h[2], (double)w[2]);
+        ui_popup_reset();
+    }
 }
 
 /* ---------------------------------------------------------- the overlay */

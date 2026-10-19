@@ -5,8 +5,9 @@
  * XXH3-64 over the part's tagless VU stream), written as 16 lower-case hex
  * digits.  The files (gltf.h has the layout and the reader's rules):
  *
- *   folders   <user folder>/models/SCES-50760/replacements, then
- *             <program folder>/models/SCES-50760/replacements, then the
+ *   folders   <user folder>/models/<serial>/replacements, then
+ *             <program folder>/models/<serial>/replacements (<serial> the
+ *             disc's: SCES-50760, SCPS-11003), then the
  *             tolerant layouts (models/replacements, files directly under
  *             models/) of both, as texture packs (texpack.h); walked
  *             recursively, ".gltf" and ".glb" in any case; the first file
@@ -16,7 +17,7 @@
  *   names     <hash16>.gltf / .glb, or <anything>-<hash16>.gltf / .glb (the
  *             last 16 characters before the extension, lower-case hex);
  *             any other .gltf / .glb is counted as "not a model name".
- *   dumps     <user folder>/models/SCES-50760/dumps/<hash16>.gltf + .bin,
+ *   dumps     <user folder>/models/<serial>/dumps/<hash16>.gltf + .bin,
  *             and one line per part in dumps/models.txt (hash, model, part,
  *             ordinal, layout, vertices, batches, bones).
  *
@@ -75,7 +76,7 @@ extern "C" {
 typedef struct ModelpackConfig {
     const char *userDir;    /* the user folder (ico_pref_dir), or NULL: no dumps */
     const char *programDir; /* the program's folder, or NULL */
-    const char *serial;     /* "SCES-50760" (NULL: that) */
+    const char *serial;     /* "SCES-50760" (NULL: the selected disc's pack_serial) */
     int developer;          /* gameplay.developer_mode: a log line per replacement made */
     int dumpEnabled;        /* video.dump_models: dump every part drawn (developer mode) */
 } ModelpackConfig;

@@ -23,7 +23,8 @@ how the dumps that pack makers start from are written. The player's side is
 
 ## Texture names
 
-A texture is named as PCSX2 names it, so a PCSX2 pack for SCES-50760 loads unchanged
+A texture is named as PCSX2 names it, so a PCSX2 pack for SCES-50760 (or, on the Japanese disc,
+SCPS-11003) loads unchanged
 (`port/render/texpack_name.h`, header comment, which cites the PCSX2 functions each rule comes
 from):
 
@@ -68,9 +69,14 @@ indexed and the option on, or the dump on.
 
 ### Folders
 
-`texpack_init` walks, in order, in the [user folder](ARCHITECTURE.md#terms) and the program folder:
-`<user folder>/textures/SCES-50760/replacements`, then
-`<program folder>/textures/SCES-50760/replacements`, then for each of the two
+Each disc has its own serial folder, the one PCSX2 uses for it: `SCES-50760` for the European
+disc, `SCPS-11003` for the Japanese one. The serial is the selected disc's `pack_serial`
+(`port/core/region.h`), which `main_host.c` passes as `TexpackConfig.serial` once the disc is
+identified (`open_texture_pack`; a `NULL` serial is also the selected disc's); a pack in the other
+disc's folder is not read. `texpack_init` walks, in order, in the
+[user folder](ARCHITECTURE.md#terms) and the program folder:
+`<user folder>/textures/<serial>/replacements`, then
+`<program folder>/textures/<serial>/replacements`, then for each of the two
 `textures/replacements` and the loose files directly in `textures/` (a root that is both, in
 portable mode, is walked once). The two `replacements` folders are walked with every folder below
 them, up to 16 deep; `textures/` itself gives only its own files, since below it are the serial
@@ -196,7 +202,8 @@ tagless VU stream, written as 16 lower-case hex digits.
 ### Folders and names
 
 The folders are those of texture packs with `models` for `textures`:
-`<user folder>/models/SCES-50760/replacements`, then the program folder's, then for each of the two
+`<user folder>/models/<serial>/replacements` (the selected disc's serial, as for textures), then
+the program folder's, then for each of the two
 `models/replacements` and the loose files directly in `models/`; the `replacements` folders with
 every folder below them, `.gltf` and `.glb` in any case (`port/render/modelpack.c`
 (`modelpack_init`, `walkFolder`)). The first file of a hash wins
@@ -302,11 +309,11 @@ Both dumps need developer mode as well as their key (`port/platform/window_host.
 
 - **`[video] dump_textures`** writes the bound level of each texture the game decodes as PNG under
   every name a pack would give it at that level, one per TEXA mode when the name depends on TEXA,
-  into `<user folder>/textures/SCES-50760/dumps/<name>.png`; a file already there is kept. The
+  into `<user folder>/textures/<serial>/dumps/<name>.png` (the selected disc's serial); a file already there is kept. The
   texels are the decoded, padded RGBA8 with raw GS alpha, what a PCSX2 dump holds
   (`port/render/texpack.h` (`texpack_dump`)). It works without a pack.
 - **`[video] dump_models`** writes each part drawn, once per hash a session, as
-  `<user folder>/models/SCES-50760/dumps/<hash16>.gltf` and `.bin`, and appends a line to
+  `<user folder>/models/<serial>/dumps/<hash16>.gltf` and `.bin`, and appends a line to
   `dumps/models.txt` (hash, model, part, ordinal, layout, vertices, batches, bones); a file on disk
   is kept (`port/render/modelpack.h` (`modelpack_dump`)). The dump's layout is the contract with
   pack makers: node 0 the mesh with the node matrix, joints named `bone_00`, `bone_01`, ...,

@@ -18,8 +18,15 @@
 #   ico_ui_font_rd      font.c alone with ICO_RD, for the render tests and
 #                       rd_replay_tool
 #
-# The font file is embedded as a C array generated at build time
-# (embed_font.cmake), so the program needs no file beside it.
+# The font files (Arimo, and Noto Sans JP's subset for the characters
+# Arimo has no glyph for: the Japanese text, the language names, the button
+# marks) are embedded as C arrays generated at build time
+# (embed_font.cmake), so the program needs no file beside them.
+# _ui_font_srcs: both, in every program that compiles font.c.
+#
+# The string tables (strings.c and strings_<lang>.c, _ui_string_srcs) read
+# the selected disc's pack serial (port/core), so every program that
+# compiles them links ico_region.
 
 set(_ui_font "${CMAKE_SOURCE_DIR}/port/assets/fonts/Arimo-Regular.ttf")
 set(_ui_font_c "${CMAKE_CURRENT_BINARY_DIR}/ui_font_data.c")
@@ -30,6 +37,20 @@ add_custom_command(
     DEPENDS "${_ui_font}" "${CMAKE_CURRENT_SOURCE_DIR}/embed_font.cmake"
     COMMENT "Embedding the UI font"
     VERBATIM)
+# the Japanese text's font (Noto Sans JP, the subset tools/subset_font_ja.py
+# makes): the characters Arimo has no glyph for (font.c)
+set(_ui_font_ja "${CMAKE_SOURCE_DIR}/port/assets/fonts/NotoSansJP-Regular-subset.ttf")
+set(_ui_font_ja_c "${CMAKE_CURRENT_BINARY_DIR}/ui_font_ja_data.c")
+add_custom_command(
+    OUTPUT "${_ui_font_ja_c}"
+    COMMAND "${CMAKE_COMMAND}" "-DIN=${_ui_font_ja}" "-DOUT=${_ui_font_ja_c}" -DNAME=ui_font_ja_ttf
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/embed_font.cmake"
+    DEPENDS "${_ui_font_ja}" "${CMAKE_CURRENT_SOURCE_DIR}/embed_font.cmake"
+    COMMENT "Embedding the UI font for Japanese"
+    VERBATIM)
+set(_ui_font_srcs "${_ui_font_c}" "${_ui_font_ja_c}")
+set(_ui_string_srcs strings.c strings_en.c strings_fr.c strings_de.c strings_it.c strings_es.c
+                    strings_ja.c)
 
 set(_ui_sources
     font.c
@@ -37,13 +58,8 @@ set(_ui_sources
     menu_font.c
     menu_text.c
     popup.c
-    strings.c
-    strings_en.c
-    strings_fr.c
-    strings_de.c
-    strings_it.c
-    strings_es.c
-    "${_ui_font_c}")
+    ${_ui_string_srcs}
+    ${_ui_font_srcs})
 
 # layout_ext.h includes the game's layout_texture.h (LtProp, LtProperty),
 # whose typedef.h has unprototyped declarations the port warnings reject
@@ -58,6 +74,8 @@ function(ico_ui_library name rd)
                                PRIVATE "${CMAKE_SOURCE_DIR}/port/third_party/stb"
                                        ${_ico_ui_game_incs})
     target_compile_definitions(${name} PRIVATE ICO_HOST=1)
+    # the selected disc's pack serial (strings.c); the programs link it
+    target_link_libraries(${name} PUBLIC ico_region)
     # the game's record layout (LtProperty's bit-fields: -mno-ms-bitfields on
     # Windows), since layout_ext.c shares the game's tables
     target_compile_options(${name} PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
@@ -76,9 +94,10 @@ target_include_directories(ico_common PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 set(_ui_settings_deps ico_achievements ico_audio ico_input ico_options ico_config)
 function(ico_ui_settings name)
     # the mouse pointer in the menus (ui_mouse.c, its arithmetic
-    # in ui_mouse_geom.c; the pointer's state is port/input's pointer.c)
+    # in ui_mouse_geom.c; the pointer's state is port/input's pointer.c);
+    # the port text's language from [ui] language and the disc (ui_lang.c)
     target_sources(${name} PRIVATE settings.c ui_list.c ui_hint.c gallery.c photo_ui.c ui_mouse.c
-                                   ui_mouse_geom.c)
+                                   ui_mouse_geom.c ui_lang.c)
     foreach(_lib ${_ui_settings_deps})
         target_include_directories(${name} PRIVATE
                                    $<TARGET_PROPERTY:${_lib},INTERFACE_INCLUDE_DIRECTORIES>)
@@ -176,9 +195,8 @@ endif()
 # names, the glyphs; with the disc image, the streams on the disc and every
 # listed bank in a pack. Exit 77 without the ELF.
 set(_gal_data "${CMAKE_SOURCE_DIR}/port/data")
-add_executable(gallery_test test/gallery_test.c gallery.c font.c strings.c strings_en.c
-    strings_fr.c strings_de.c strings_it.c strings_es.c "${_ui_font_c}"
-    "${_gal_data}/tables.c" ${ICO_TABLE_SOURCES})
+add_executable(gallery_test test/gallery_test.c gallery.c font.c ${_ui_string_srcs}
+    ${_ui_font_srcs} "${_gal_data}/tables.c" ${ICO_TABLE_SOURCES})
 ico_include_dirs(sugipon _ico_gal_incs)
 target_include_directories(gallery_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" ${_ico_gal_incs}
                            "${_gal_data}" "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/port/audio"
@@ -191,7 +209,7 @@ set_source_files_properties(${ICO_TABLE_EE_SYMBOLS} TARGET_DIRECTORY gallery_tes
                             PROPERTIES COMPILE_DEFINITIONS ICO_EE_SYMBOLS_STUBS=1)
 target_compile_options(gallery_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-target_link_libraries(gallery_test PRIVATE ico_port_data)
+target_link_libraries(gallery_test PRIVATE ico_port_data ico_region)
 if(NOT WIN32)
     target_link_libraries(gallery_test PRIVATE m)
 endif()
@@ -226,16 +244,17 @@ endif()
 
 # model_viewer_test (port/game/test): the model viewer's table
 # (port/game/model_viewer_table.c) against its motion-kind blocks and the
-# game's table sizes, and its names and words in the five languages with a
+# game's table sizes, and its names and words in the six languages with a
 # glyph for every character in the port font. CPU only.
 add_executable(model_viewer_test "${CMAKE_SOURCE_DIR}/port/game/test/model_viewer_test.c"
-    "${CMAKE_SOURCE_DIR}/port/game/model_viewer_table.c" font.c strings.c strings_en.c
-    strings_fr.c strings_de.c strings_it.c strings_es.c "${_ui_font_c}")
+    "${CMAKE_SOURCE_DIR}/port/game/model_viewer_table.c" font.c ${_ui_string_srcs}
+    ${_ui_font_srcs})
 target_include_directories(model_viewer_test PRIVATE "${CMAKE_SOURCE_DIR}/port/game"
                            "${CMAKE_SOURCE_DIR}/port/third_party/stb")
 # port/ui's "strings.h" by -iquote, so <strings.h> stays the C library's
 target_compile_options(model_viewer_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
                        -iquote "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(model_viewer_test PRIVATE ico_region)
 if(NOT WIN32)
     target_link_libraries(model_viewer_test PRIVATE m)
 endif()
@@ -255,6 +274,23 @@ if(NOT WIN32)
 endif()
 if(ICO_RUN_TESTS)
     add_test(NAME model_viewer_cam COMMAND model_viewer_cam_test)
+endif()
+
+# strings_complete: every language's table defines every UiStrId with the
+# English entry's printf conversions (ui_str_in would fall back to English
+# without a word), the serial notes with each disc's serial (ui_str_serial),
+# the sheet language, the port text's language from [ui] language and the
+# disc (ui_lang.c, its two inputs stubbed), the Japanese line-break rules.
+# CPU only, no game data.
+add_executable(strings_complete_test test/strings_complete_test.c ui_lang.c ${_ui_string_srcs})
+# port/ui's "strings.h" and port/game's "options.h" by -iquote, so
+# <strings.h> stays the C library's
+target_compile_options(strings_complete_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
+                       "SHELL:-iquote ${CMAKE_CURRENT_SOURCE_DIR}"
+                       "SHELL:-iquote ${CMAKE_SOURCE_DIR}/port/game")
+target_link_libraries(strings_complete_test PRIVATE ico_region)
+if(ICO_RUN_TESTS)
+    add_test(NAME strings_complete COMMAND strings_complete_test)
 endif()
 
 # model_viewer_effects (port/game/test, issue 104): a motion's effects with
@@ -322,7 +358,7 @@ endif()
 # check (port/render/CMakeLists.txt) draws a glyph through its
 # overlay mode; rd_replay_tool's overlay test draws text through it;
 # font_edge_test (below) draws both
-add_library(ico_ui_font_rd OBJECT font.c "${_ui_font_c}")
+add_library(ico_ui_font_rd OBJECT font.c ${_ui_font_srcs})
 target_include_directories(ico_ui_font_rd PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
                            PRIVATE "${CMAKE_SOURCE_DIR}/port/third_party/stb")
 target_compile_definitions(ico_ui_font_rd PRIVATE ICO_HOST=1 ICO_RD=1)
@@ -357,7 +393,7 @@ target_compile_options(ui_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT
                        ${ICO_GAME_WARNINGS})
 # the menus' sheet strips checked against
 # font_sheet_ps's CPU reference (port/render/test/sheet_ref.h)
-target_link_libraries(ui_test PRIVATE ico_render ico_math ico_sheet_ref)
+target_link_libraries(ui_test PRIVATE ico_render ico_math ico_sheet_ref ico_region)
 
 # settings_render: settings_photo_test.c with SETTINGS_RENDER, the Settings
 # screens through the real layout code and rd on a Vulkan device, each
@@ -381,7 +417,7 @@ target_compile_definitions(settings_render PRIVATE ICO_HOST=1 ICO_RD=1 SETTINGS_
 target_compile_options(settings_render PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(settings_render PRIVATE ico_render ico_math ${_ui_settings_deps}
-                      ico_platform)
+                      ico_platform ico_region)
 # menu_text_test: the menu text table (against the disc's
 # texProperty when the image is there), the strings, the hook through the real
 # layout_texture.c (the table's rows a text strip, the others their texture
@@ -399,17 +435,18 @@ target_include_directories(menu_text_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
 target_compile_definitions(menu_text_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(menu_text_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-target_link_libraries(menu_text_test PRIVATE ico_render ico_math)
+target_link_libraries(menu_text_test PRIVATE ico_render ico_math ico_region)
 # font_coverage_test: every character of the
-# text the port draws (the five languages' tables, the port's roll lines and
-# the corpus, test/font_corpus) has a glyph in the embedded subset; with the
+# text the port draws (the six languages' tables, the port's roll lines and
+# the corpus, test/font_corpus) has a glyph in one of the embedded subsets
+# (Arimo, Noto Sans JP), a Japanese character the second's own; with the
 # base ELF, the sound names too. CPU only. The strings and
 # the font are compiled again here (font.c from ico_ui_font_rd) so the test
 # needs nothing of the game but the ELF's table loader.
 ico_include_dirs(common _ico_cov_incs)
 ico_include_dirs(sugipon _ico_cov_data_incs)
 add_executable(font_coverage_test test/font_coverage_test.c $<TARGET_OBJECTS:ico_ui_font_rd>
-    strings.c strings_en.c strings_fr.c strings_de.c strings_it.c strings_es.c
+    ${_ui_string_srcs}
     "${CMAKE_SOURCE_DIR}/port/game/credits.c" "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
 target_include_directories(font_coverage_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_CURRENT_SOURCE_DIR}/test" ${_ico_cov_incs} "${CMAKE_SOURCE_DIR}/port/include"
@@ -419,7 +456,7 @@ set_source_files_properties(test/font_coverage_test.c PROPERTIES COMPILE_OPTIONS
 target_compile_definitions(font_coverage_test PRIVATE ICO_HOST=1)
 target_compile_options(font_coverage_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-target_link_libraries(font_coverage_test PRIVATE ico_render ico_config ico_platform)
+target_link_libraries(font_coverage_test PRIVATE ico_render ico_config ico_platform ico_region)
 set(_ico_cov_elf "")
 if(DEFINED ICO_BASE_ELF AND EXISTS "${ICO_BASE_ELF}")
     set(_ico_cov_elf "${ICO_BASE_ELF}")
@@ -449,8 +486,7 @@ endif()
 # <build>/menu_look/<lang>/.  ICO_MENU_LOOK_FIT=1 runs the constants' search.
 if(_ico_cov_elf AND TARGET ico_sheet_ref)
     add_executable(menu_look_test test/menu_look_test.c test/menu_sheets.c menu_font.c menu_text.c
-        strings.c strings_en.c strings_fr.c strings_de.c strings_it.c strings_es.c
-        $<TARGET_OBJECTS:ico_ui_font_rd>
+        ${_ui_string_srcs} $<TARGET_OBJECTS:ico_ui_font_rd>
         "${CMAKE_SOURCE_DIR}/port/data/tables.c" ${ICO_TABLE_SOURCES})
     # ee_symbols.c's ICO_EE_SYMBOLS_STUBS and menu_font.c/menu_text.c's
     # -Wno-strict-prototypes are set above, in this directory
@@ -466,7 +502,8 @@ if(_ico_cov_elf AND TARGET ico_sheet_ref)
     target_compile_definitions(menu_look_test PRIVATE ICO_HOST=1 ${ICO_GAME_DEFINITIONS})
     target_compile_options(menu_look_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                            ${ICO_GAME_WARNINGS})
-    target_link_libraries(menu_look_test PRIVATE ico_render ico_sheet_ref ico_port_data ico_platform)
+    target_link_libraries(menu_look_test PRIVATE ico_render ico_sheet_ref ico_port_data ico_platform
+                          ico_region)
     if(NOT WIN32)
         target_link_libraries(menu_look_test PRIVATE m)
     endif()

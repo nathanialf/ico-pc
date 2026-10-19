@@ -15,6 +15,7 @@
 #include "host_config.h"
 #include "ico_gamestate.h"
 #include "popup.h"
+#include "region.h" /* port/core: the disc's stage ids, story flags and keys */
 #include "strings.h"
 #if defined(__ANDROID__) || defined(ICO_IOS)
 #include "host_loop.h"
@@ -24,23 +25,48 @@
  * Each returns nonzero when its achievement's condition holds.  They read
  * only the game-state view and the counters below. */
 
-/* stages (stageData order; the names are the game's) */
-#define ST_GATE 11       /* st04a (GATE_1ST) */
-#define ST_GRAVE 13      /* st18a (GRAVE) */
-#define ST_WINDMILL 15   /* st09a (WINDMILL) */
-#define ST_SYMMETRY_L 18 /* st04b (SYMMETRY_L) */
-#define ST_WATERFALL 22  /* st02a (WATERFALL) */
-#define ST_GONDOLA 25    /* st20a (GONDOLA) */
-#define ST_WATERTOWER 26 /* st10r (WATERTOWER) */
-#define ST_SYMMETRY_R 27 /* st05b (SYMMETRY_R) */
-#define ST_CLIFF 31      /* st22a (CLIFF) */
-#define ST_QUEEN 37      /* st25a (QUEEN) */
-#define ST_BEACH 39      /* st27a (BEACH) */
-#define STAGE_BITS 128
+/* stages (stageData rows; the names are the game's), the disc's own
+   numbers from the region table (port/core/region.h ach_stages, in this
+   order; the same rows on both discs, 11 .. 39) */
+enum {
+    AS_GATE,       /* st04a (GATE_1ST), 11 */
+    AS_GRAVE,      /* st18a (GRAVE), 13 */
+    AS_WINDMILL,   /* st09a (WINDMILL), 15 */
+    AS_SYMMETRY_L, /* st04b (SYMMETRY_L), 18 */
+    AS_WATERFALL,  /* st02a (WATERFALL), 22 */
+    AS_GONDOLA,    /* st20a (GONDOLA), 25 */
+    AS_WATERTOWER, /* st10r (WATERTOWER), 26 */
+    AS_SYMMETRY_R, /* st05b (SYMMETRY_R), 27 */
+    AS_CLIFF,      /* st22a (CLIFF), 31 */
+    AS_QUEEN,      /* st25a (QUEEN), 37 */
+    AS_BEACH,      /* st27a (BEACH), 39 */
+    AS_COUNT
+};
 
-/* story flags */
-#define GF_QUEEN_DEAD 338   /* actSt25aQueenDeadChk, st25a.c:565 */
-#define GF_BEACH_SECRET 354 /* actSt27aEndChk, end.c:1061: item kind 3 held */
+_Static_assert(AS_COUNT == ICO_REGION_ACH_STAGES, "region.h ach_stages is this list");
+#define ST(as) (ico_region_cur()->ach_stages[as])
+#define ST_GATE ST(AS_GATE)
+#define ST_GRAVE ST(AS_GRAVE)
+#define ST_WINDMILL ST(AS_WINDMILL)
+#define ST_SYMMETRY_L ST(AS_SYMMETRY_L)
+#define ST_WATERFALL ST(AS_WATERFALL)
+#define ST_GONDOLA ST(AS_GONDOLA)
+#define ST_WATERTOWER ST(AS_WATERTOWER)
+#define ST_SYMMETRY_R ST(AS_SYMMETRY_R)
+#define ST_CLIFF ST(AS_CLIFF)
+#define ST_QUEEN ST(AS_QUEEN)
+#define ST_BEACH ST(AS_BEACH)
+/* the visited set's bits: every disc's stageData fits (106 rows on the
+   European disc, the most; 104 on the Japanese); a disc's set holds its
+   own rows only, 0 .. stage_count - 1 */
+#define STAGE_BITS 128
+_Static_assert(STAGE_BITS >= 106, "the European disc's stageData rows fit");
+
+/* story flags, the disc's (region.h; 338 and 354 on both discs) */
+#define GF_QUEEN_DEAD (ico_region_cur()->gflag_queen_dead) /* actSt25aQueenDeadChk */
+#define GF_BEACH_SECRET                                                                            \
+    (ico_region_cur()->gflag_beach_secret) /* actSt27aEndChk: item
+                                                                  kind 3 held */
 
 /* weapon kinds (weaponKind[10]) */
 #define WK_SWORD 4
@@ -61,9 +87,17 @@ static int s_stats_dirty;
 static unsigned int s_stats_written_tick;
 static unsigned int s_hand_rem; /* hand_ms's sub-millisecond carry, in 1/hz ms */
 
+/* the disc's stageData rows (at most STAGE_BITS) */
+static int stage_rows(void)
+{
+    int n = ico_region_cur()->stage_count;
+
+    return n > 0 && n < STAGE_BITS ? n : STAGE_BITS;
+}
+
 static int visited(const unsigned long long *set, int stage)
 {
-    return stage >= 0 && stage < STAGE_BITS && ((set[stage >> 6] >> (stage & 63)) & 1u);
+    return stage >= 0 && stage < stage_rows() && ((set[stage >> 6] >> (stage & 63)) & 1u);
 }
 
 static int in_stage(int stage)
@@ -359,7 +393,8 @@ static long long parse_time(const char *s)
 /* --- the file --------------------------------------------------------------
  *   version = 2
  *   [stats]  enemies, hand_ms, saves, clears, couches ("id,id,..."),
- *            stages (128-bit hex)
+ *            stages (128-bit hex, the European disc's stageData rows),
+ *            stages_jpn (the Japanese disc's: its rows are other numbers)
  *   [unlocked.<id>]  time = "2026-10-05T12:00:00Z", play_time = <seconds>.
  * Unknown keys are ignored.
  */
@@ -459,7 +494,11 @@ static int write_file(void)
     sofa_list(s_sofa, s_stats.sofas, buf, sizeof(buf));
     ico_toml_set_string(t, "stats.couches", buf);
     hex_set(s_visited, buf, sizeof(buf));
-    ico_toml_set_string(t, "stats.stages", buf);
+    /* the disc's own set (the region's key_suffix): the other disc's key
+       stays as the file has it */
+    if (ico_region_key_suffixed("stats.stages", key, (int)sizeof(key)) == 0) {
+        ico_toml_set_string(t, key, buf);
+    }
     for (i = 0; i < ACH_COUNT; i++) {
         if (!s_rec[i].unlocked) {
             continue;
@@ -497,7 +536,11 @@ static void read_file(void)
     s_stats.saves = (unsigned int)get_counter(t, "saves", 0, 0xFFFFFFFFLL);
     s_stats.clears = (unsigned int)get_counter(t, "clears", 0, 0xFFFFFFFFLL);
     s_stats.sofas = sofa_parse(get_counter_str(t, "couches"), s_sofa);
-    hex_parse(get_counter_str(t, "stages"), s_visited);
+    /* stats.stages is the European disc's, stats.stages_jpn the Japanese
+       disc's: the stage numbers differ */
+    if (ico_region_key_suffixed("stats.stages", key, (int)sizeof(key)) == 0) {
+        hex_parse(ico_toml_get(t, key), s_visited);
+    }
     for (i = 0; i < ACH_COUNT; i++) {
         snprintf(key, sizeof(key), "unlocked.%s.time", s_defs[i].id);
         /* an unlock is a record with a time */
@@ -525,11 +568,16 @@ static int s_run_slot = -1; /* the slot the run was last loaded from or saved to
 
 static int run_key(int slot, const char *name, char *key, size_t size)
 {
+    char base[64];
+
     if (slot < 0 || slot > 99) {
         return -1;
     }
-    snprintf(key, size, "run.slot_%d%s", slot, name);
-    return 0;
+    /* run.slot_N_* for the European disc's saves, run.jpn_slot_N_* for the
+       Japanese disc's (the region's key_prefix), as options.c keeps
+       [mirror] */
+    snprintf(base, sizeof(base), "slot_%d%s", slot, name);
+    return ico_region_key_prefixed("run", base, key, (int)size);
 }
 
 static void run_slot_write(int slot, const IcoGsRun *run, long long sum)
@@ -755,7 +803,7 @@ static void add_sofa(int *set, int *n, int id)
 
 static void mark_stage(unsigned long long *set, int stage)
 {
-    if (stage >= 0 && stage < STAGE_BITS) {
+    if (stage >= 0 && stage < stage_rows()) {
         set[stage >> 6] |= 1ull << (stage & 63);
     }
 }
@@ -869,6 +917,13 @@ static void wrap(const char *in, char *out, size_t size)
     out[o] = '\0';
 }
 
+int ico_ach_popup_gap_ticks(void)
+{
+    int hz = ico_gs_tick_hz();
+
+    return 5 * (hz > 0 ? hz : 25);
+}
+
 static void pump_popups(void)
 {
     unsigned int now = ico_gs_ticks();
@@ -878,7 +933,7 @@ static void pump_popups(void)
     if (s_popq_n == 0) {
         return;
     }
-    if (s_pushed_any && now - s_last_push_tick < ICO_ACH_POPUP_GAP_TICKS) {
+    if (s_pushed_any && now - s_last_push_tick < (unsigned int)ico_ach_popup_gap_ticks()) {
         return;
     }
     i = s_popq[0];

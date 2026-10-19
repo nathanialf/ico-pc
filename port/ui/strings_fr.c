@@ -37,6 +37,7 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_LANG_DE] = "Deutsch",
     [UI_STR_LANG_IT] = "Italiano",
     [UI_STR_LANG_ES] = "Español",
+    [UI_STR_LANG_JA] = "日本語",
     [UI_STR_OPT_DEVELOPER_MODE] = "Mode développeur",
     [UI_STR_DEVELOPER_NOTE] = "Succès suspendus en mode développeur",
     [UI_STR_POPUP_TEST_TITLE] = "Fenêtre de test",
@@ -116,9 +117,13 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_VAL_ANISOTROPIC] = "Anisotrope",
     [UI_STR_LANGUAGE_NOTE] =
         "Les sous-titres et les textes du jeu changent au prochain chargement.",
+    [UI_STR_OPT_MENU_LANGUAGE] = "Langue des menus",
+    [UI_STR_MENU_LANGUAGE_NOTE] =
+        "La langue de ces menus, de l’aide du mode photo et des messages. Le texte du jeu reste celui du disque.",
     [UI_STR_REMAP_KEYBOARD] = "Clavier",
     [UI_STR_REMAP_GAMEPAD] = "Manette",
     [UI_STR_REMAP_HINT] = "Croix : modifier    Carré : effacer    Triangle : retour",
+    [UI_STR_REMAP_HINT_CIRCLE] = "Rond : modifier    Carré : effacer    Triangle : retour",
     [UI_STR_REMAP_MENU_NOTE] =
         "Dans les menus, les boutons de face et la croix de la manette suivent leur position.",
     [UI_STR_REMAP_PRESS] = "Appuyez sur une touche ou un bouton…",
@@ -380,15 +385,15 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
         "La disposition des touches du jeu, gardée dans la sauvegarde. Elle s’applique en plus de Configurer les touches.",
     [UI_STR_OPT_TEXTURE_PACK] = "Pack de textures",
     [UI_STR_VAL_NONE_INSTALLED] = "Aucun installé",
-    [UI_STR_TEXTURE_PACK_NOTE] = "Packs PCSX2 : copiez SCES-50760 dans textures.",
+    [UI_STR_TEXTURE_PACK_NOTE] = "Packs PCSX2 : copiez %s dans textures.",
     [UI_STR_OPT_DUMP_TEXTURES] = "Extraire les textures",
     [UI_STR_DUMP_TEXTURES_NOTE] =
-        "Pour les créateurs de packs : chaque texture sous son nom PCSX2, dans textures/SCES-50760/dumps du dossier utilisateur.",
+        "Pour les créateurs de packs : chaque texture sous son nom PCSX2, dans textures/%s/dumps du dossier utilisateur.",
     [UI_STR_OPT_MODEL_PACK] = "Pack de modèles",
-    [UI_STR_MODEL_PACK_NOTE] = "Packs de modèles : copiez SCES-50760 dans models.",
+    [UI_STR_MODEL_PACK_NOTE] = "Packs de modèles : copiez %s dans models.",
     [UI_STR_OPT_DUMP_MODELS] = "Extraire les modèles",
     [UI_STR_DUMP_MODELS_NOTE] =
-        "Pour les créateurs de packs : chaque partie de modèle en fichier glTF, dans models/SCES-50760/dumps du dossier utilisateur.",
+        "Pour les créateurs de packs : chaque partie de modèle en fichier glTF, dans models/%s/dumps du dossier utilisateur.",
     [UI_STR_SECTION_EFFECTS] = "Effets",
     [UI_STR_OPT_EFFECT_GLOW] = "Lueur",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Profondeur de champ",

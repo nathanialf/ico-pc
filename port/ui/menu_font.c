@@ -107,12 +107,15 @@ enum { MF_LIGHT = 0, MF_FAINT = 1, MF_PLAIN = 2, MF_CLASSES };
             matches the sheets better with the fitted geometry
             (shader_consts.h).
    ctest menu_look's survey re-measures these numbers within 0.1. */
-static const UiSheetInk kSheetInk[UI_LANG_COUNT] = {
+static const UiSheetInk kSheetInk[UI_LANG_SHEET_COUNT] = {
     {1, 24, 255, 1, 0}, /* English */
     {1, 61, 255, 1, 0}, /* French */
     {1, 56, 255, 1, 0}, /* German */
     {1, 61, 255, 1, 0}, /* Italian */
     {1, 62, 255, 1, 0}, /* Spanish */
+    /* the Japanese disc's sheets (UI_SHEET_JA): zero until menu_look_jpn
+       measures them */
+    {0, 0, 0, 0, 0},
 };
 /* the dark, plain and grey inks and the light words without a halo: no
    rim, a white fill (the vertex colour makes them black, white or grey) */
@@ -153,7 +156,7 @@ static struct {
 
 const UiSheetInk *ui_menu_sheet_ink(int lang)
 {
-    return &kSheetInk[lang >= 0 && lang < UI_LANG_COUNT ? lang : UI_LANG_EN];
+    return &kSheetInk[lang >= 0 && lang < UI_LANG_SHEET_COUNT ? lang : UI_LANG_EN];
 }
 
 /* the class of an item's words: its ink and its rim on the sheet */
@@ -167,7 +170,7 @@ static int classOf(int ink, int rim)
 
 static const UiSheetInk *classInk(int cls, int lang)
 {
-    static UiSheetInk faint[UI_LANG_COUNT];
+    static UiSheetInk faint[UI_LANG_SHEET_COUNT];
     if (cls == MF_PLAIN) {
         return &kPlainInk;
     }
@@ -345,7 +348,8 @@ static void rasterItem(const UiMenuTextItem *it, int lang, uint8_t *cov, int sca
 
 int ui__menu_strip_raster(const UiMenuTextItem *it, int lang, uint8_t *out, int w, int h)
 {
-    if (!it || !out || w != it->w || h != it->h || lang < 0 || lang >= UI_LANG_COUNT) {
+    /* an item's geometry is per European sheet language (menu_text.h) */
+    if (!it || !out || w != it->w || h != it->h || lang < 0 || lang >= UI_LANG_PAL_COUNT) {
         return -1;
     }
     memset(out, 0, (size_t)w * (size_t)h);
@@ -977,8 +981,8 @@ void ui_draw_menu_text(float x, float y, float size, const uint8_t rgba[4], cons
         !inkColour(ink, UI_RIM_FULL, rgba, (flags & UI_ADDITIVE) != 0, &cls, col)) {
         return;
     }
-    UiLang lang = ui_get_language();
-    lang = (int)lang >= 0 && lang < UI_LANG_COUNT ? lang : UI_LANG_EN;
+    int lang = ui_sheet_language();
+    lang = lang >= 0 && lang < UI_LANG_SHEET_COUNT ? lang : UI_LANG_EN;
     if (cls != MF_PLAIN) {
         styleLight((int)lang);
     }
@@ -1059,11 +1063,12 @@ void ui_menu_word_draw(const UiMenuTextItem *it, int lang, const int box[4], con
     int cls;
     uint8_t col[4];
     if (!it || !box || !uv || uv[2] <= 0 || uv[3] <= 0 || !ui_font_init() ||
-        !inkColour(it->ink, it->rim[lang >= 0 && lang < UI_LANG_COUNT ? lang : UI_LANG_EN], rgba,
-                   glow, &cls, col)) {
+        !inkColour(it->ink, it->rim[lang >= 0 && lang < UI_LANG_PAL_COUNT ? lang : UI_LANG_EN],
+                   rgba, glow, &cls, col)) {
         return;
     }
-    lang = lang >= 0 && lang < UI_LANG_COUNT ? lang : UI_LANG_EN;
+    /* an item is a European sheet's word: its geometry per those languages */
+    lang = lang >= 0 && lang < UI_LANG_PAL_COUNT ? lang : UI_LANG_EN;
     if (cls != MF_PLAIN) {
         styleLight(lang);
     }

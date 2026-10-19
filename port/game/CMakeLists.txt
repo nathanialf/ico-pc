@@ -16,7 +16,8 @@ add_library(ico_options STATIC options.c video_options.c photo_mode.c appearance
 target_include_directories(ico_options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/render")
 target_compile_options(ico_options PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-target_link_libraries(ico_options PUBLIC ico_config)
+# ico_region: the per-disc [mirror] keys (port/core/region.h)
+target_link_libraries(ico_options PUBLIC ico_config ico_region)
 if(TARGET ico_pc)
     target_link_libraries(ico_pc PRIVATE ico_options)
 endif()
@@ -34,7 +35,11 @@ target_compile_options(options_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_L
                        -Wno-unused-function)
 target_link_libraries(options_test PRIVATE ico_options)
 if(ICO_RUN_TESTS)
-    add_test(NAME options COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}")
+    # one run per disc: the [mirror] keys are the disc's (slot_N, jpn_slot_N);
+    # each in its own folder (the test's config files sit in it)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/options_jpn")
+    add_test(NAME options COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}" pal)
+    add_test(NAME options_jpn COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}/options_jpn" jpn)
 endif()
 
 # IsPointIsInScreen's x bound (ico2/omori/src/poly-flat.c, compiled into the
@@ -233,15 +238,21 @@ endif()
 # trip and the popup rate limit. CPU only.
 add_executable(achievements_test test/achievements_test.c gamestate.c
     ../ui/strings.c ../ui/strings_en.c ../ui/strings_fr.c ../ui/strings_de.c
-    ../ui/strings_it.c ../ui/strings_es.c ../platform/host_config.c)
+    ../ui/strings_it.c ../ui/strings_es.c ../ui/strings_ja.c ../platform/host_config.c)
 target_include_directories(achievements_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
 target_compile_options(achievements_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
                        -iquote "${CMAKE_SOURCE_DIR}/port/ui")
 # gamestate.c reads ico_region (region.h) and no ico2/ source is compiled
-# here, so ico_link_region's scan does not reach this program
+# here, so ico_link_region's scan does not reach this program; the strings
+# read the selected disc's pack serial too
 target_link_libraries(achievements_test PRIVATE ico_achievements ico_region)
 if(ICO_RUN_TESTS)
-    add_test(NAME achievements COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}")
+    # one run per disc (stats.stages / stats.stages_jpn, run.slot_N_* /
+    # run.jpn_slot_N_*), each in its own folder (the test's files sit in it)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/achievements_jpn")
+    add_test(NAME achievements COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}" pal)
+    add_test(NAME achievements_jpn
+             COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}/achievements_jpn" jpn)
 endif()
 
 # --- The model viewer -----------------------------------

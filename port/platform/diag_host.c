@@ -3559,6 +3559,30 @@ void ico_diag_set_summary(const char *fmt, ...)
     ico_diag_log("ico_pc: summary: %s", summary_text);
 }
 
+static char disc_text[96];
+
+void ico_diag_set_disc(const char *text)
+{
+    static const char unknown[] = "disc " ICO_DIAG_DISC_UNKNOWN;
+    char *at;
+
+    snprintf(disc_text, sizeof disc_text, "%s", text != NULL ? text : "");
+    at = strstr(summary_text, unknown);
+    if (at != NULL && disc_text[0] != '\0') {
+        char rest[sizeof summary_text];
+
+        snprintf(rest, sizeof rest, "%s", at + sizeof unknown - 1);
+        snprintf(at, sizeof summary_text - (size_t)(at - summary_text), "disc %s%s", disc_text,
+                 rest);
+        ico_diag_log("ico_pc: summary: %s", summary_text);
+    }
+}
+
+const char *ico_diag_disc(void)
+{
+    return disc_text;
+}
+
 const char *ico_diag_version(void)
 {
     return act_version[0] != '\0' ? act_version : "unknown";
@@ -3591,6 +3615,7 @@ static void report_file(const char *what, int fatal)
     in.what = what;
     in.log_path = log_path_copy[0] != '\0' ? log_path_copy : NULL;
     in.summary = summary_text;
+    in.disc = disc_text;
     in.uptime_s = ico_diag_uptime();
     /* this run's loss dump, else the one the previous run left */
     if (strncmp(act_loss, act_loss_prefix, np) == 0) {

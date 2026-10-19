@@ -10,6 +10,7 @@
 
 #include "appearance.h"
 #include "config.h"
+#include "region.h" /* port/core: the per-disc keys (ico_region_key_prefixed) */
 
 /* options.h: the model viewer is up */
 int ico_mv_active;
@@ -22,6 +23,7 @@ static int s_natural_chains = -1;
 static int s_mirror = -1;
 static int s_developer_mode = -1;
 static int s_circle_back = -1;
+static int s_ui_language = -2; /* -2: not read yet */
 
 static int get_or(int *v, const char *path, int def)
 {
@@ -122,17 +124,25 @@ void ico_opt_set_mirror_listener(void (*fn)(int on))
     }
 }
 
-/* [mirror] slot_N, slot_N_sum (options.h) */
+/* [mirror] slot_N, slot_N_sum; jpn_slot_N, jpn_slot_N_sum (options.h) */
 #define MIRROR_NO_SUM (-1LL - 0xFFFFFFFFLL) /* outside the uint32 range */
 
 static int slot_keys(int slot, char *flag, char *sum, size_t size)
 {
+    char base[24];
+
     if (slot < 0 || slot > 99) {
         return -1;
     }
-    snprintf(flag, size, "mirror.slot_%d", slot);
-    snprintf(sum, size, "mirror.slot_%d_sum", slot);
-    return 0;
+    /* per disc, since each disc's saves are another card directory:
+       slot_N for the European disc (the keys as always), jpn_slot_N for
+       the Japanese one (the region's key_prefix) */
+    snprintf(base, sizeof(base), "slot_%d", slot);
+    if (ico_region_key_prefixed("mirror", base, flag, (int)size) != 0) {
+        return -1;
+    }
+    snprintf(base, sizeof(base), "slot_%d_sum", slot);
+    return ico_region_key_prefixed("mirror", base, sum, (int)size);
 }
 
 int ico_mirror_slot_get(int slot, unsigned int sum)
@@ -191,6 +201,41 @@ int ico_opt_circle_back(void)
 void ico_opt_set_circle_back(int on)
 {
     s_circle_back = on != 0;
+}
+
+/* [ui] language's names, UiLang order (port/ui/strings.h) */
+static const char *const kUiLanguages[] = {"en", "fr", "de", "it", "es", "ja"};
+#define UI_LANGUAGES ((int)(sizeof(kUiLanguages) / sizeof(kUiLanguages[0])))
+
+int ico_opt_ui_language(void)
+{
+    if (s_ui_language < -1) {
+        const char *v = ico_config_get_string("ui.language", "auto");
+        int i;
+
+        s_ui_language = -1;
+        for (i = 0; v != NULL && i < UI_LANGUAGES; i++) {
+            if (strcmp(v, kUiLanguages[i]) == 0) {
+                s_ui_language = i;
+            }
+        }
+        if (s_ui_language < 0 && v != NULL && strcmp(v, "auto") != 0) {
+            fprintf(stderr,
+                    "options: [ui] language = \"%s\" is not one of auto, en, fr, de, it, es, ja\n",
+                    v);
+        }
+    }
+    return s_ui_language;
+}
+
+void ico_opt_set_ui_language(int lang)
+{
+    s_ui_language = lang >= 0 && lang < UI_LANGUAGES ? lang : -1;
+}
+
+const char *ico_opt_ui_language_name(int lang)
+{
+    return lang >= 0 && lang < UI_LANGUAGES ? kUiLanguages[lang] : "auto";
 }
 
 int ico_opt_debug_option(void)
@@ -269,6 +314,7 @@ void ico_opt_reload(void)
     s_stick_fix = s_yorda_safe = s_door_fix = s_mirror = s_developer_mode = s_circle_back = -1;
     s_natural_chains = -1;
     s_output = -2;
+    s_ui_language = -2;
     /* the characters' colours ([characters], appearance.h) */
     ico_appearance_reload();
 }

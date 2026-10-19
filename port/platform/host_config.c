@@ -1213,7 +1213,7 @@ int ico_host_pick_iso(char *out, size_t size)
         L"ICO disc image (*.iso, *.chd, *.bin, *.cue)\0*.iso;*.chd;*.bin;*.cue\0All files\0*.*\0";
     ofn.lpstrFile = path;
     ofn.nMaxFile = (DWORD)(sizeof(path) / sizeof(path[0]));
-    ofn.lpstrTitle = L"Choose your ICO (PAL, SCES-50760) disc image";
+    ofn.lpstrTitle = L"Choose your ICO disc image (European SCES-50760 or Japanese SCPS-11003)";
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
     if (!GetOpenFileNameW(&ofn) || ico_narrow(path, utf8, sizeof(utf8)) != 0) {
         return -1;
@@ -2267,4 +2267,34 @@ int ico_host_saves_dir(char *out, size_t size)
         copy(out, size, "memcard");
     }
     return r;
+}
+
+int ico_host_choose_disc(int pin, int given, unsigned have, int last, int count, const char **why)
+{
+    const char *rule = "the European disc";
+    int row = 0, i, n = 0, only = -1;
+
+    for (i = 0; i < count && i < 32; i++) {
+        if (have & (1u << i)) {
+            n++;
+            only = i;
+        }
+    }
+    if (pin >= 0 && pin < count) {
+        row = pin;
+        rule = "[game] disc";
+    } else if (given >= 0 && given < count) {
+        row = given;
+        rule = "the disc image given";
+    } else if (n == 1) {
+        row = only;
+        rule = "the only game data there";
+    } else if (last >= 0 && last < count) {
+        row = last;
+        rule = "the disc played last";
+    }
+    if (why != NULL) {
+        *why = rule;
+    }
+    return row;
 }

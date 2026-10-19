@@ -42,9 +42,13 @@
 
 #include "ui_internal.h"
 
-/* the font file, embedded at build time (port/ui/embed_font.cmake) */
+/* the font files, embedded at build time (port/ui/embed_font.cmake): Arimo,
+   and Noto Sans JP's subset for the characters Arimo has no glyph for (the
+   Japanese table, the language names, the PlayStation button marks) */
 extern const unsigned char ui_font_ttf[];
 extern const unsigned int ui_font_ttf_size;
+extern const unsigned char ui_font_ja_ttf[];
+extern const unsigned int ui_font_ja_ttf_size;
 
 /* A size's pages are PAGE_MIN to PAGE_MAX texels wide, wider for big
    pixel sizes (an Enhanced 4K output rasterises the menu's 27 units at
@@ -95,7 +99,10 @@ typedef struct SizeSet {
 static struct {
     int inited, failed;
     stbtt_fontinfo info;
-    int ascent, descent, lineGap, capHeight; /* font units */
+    stbtt_fontinfo ja; /* the second font (hasJa) */
+    int hasJa;
+    float jaK; /* its em scale over Arimo's: Arimo's units per one of its own */
+    int ascent, descent, lineGap, capHeight; /* font units (Arimo's: every line's metrics) */
     UiGsFrame frame;
     float scale;
     SizeSet sizes[MAX_SIZES];
@@ -179,6 +186,14 @@ bool ui_font_init(void)
         } else {
             s_font.capHeight = s_font.ascent * 2 / 3;
         }
+    }
+    off = ui_font_ja_ttf_size < 12 ? -1 : stbtt_GetFontOffsetForIndex(ui_font_ja_ttf, 0);
+    if (off >= 0 && stbtt_InitFont(&s_font.ja, ui_font_ja_ttf, off)) {
+        s_font.hasJa = 1;
+        s_font.jaK = stbtt_ScaleForMappingEmToPixels(&s_font.ja, 1.0f) /
+                     stbtt_ScaleForMappingEmToPixels(&s_font.info, 1.0f);
+    } else {
+        fprintf(stderr, "ui: the embedded Japanese font does not parse; Japanese drawn as '?'\n");
     }
     s_font.inited = 1;
     return true;
@@ -476,14 +491,50 @@ static void noteMissing(uint32_t cp)
     }
 }
 
-static int glyphIndex(uint32_t cp)
+/* A character's glyph: Arimo's, else the second font's (k its scale over
+   Arimo's, so its metrics in Arimo's units are its own times k), else
+   Arimo's '?' (noted once) */
+typedef struct FontGlyph {
+    const stbtt_fontinfo *info;
+    int g;
+    float k;
+} FontGlyph;
+
+static FontGlyph fontGlyph(uint32_t cp)
 {
-    int g = stbtt_FindGlyphIndex(&s_font.info, (int)cp);
-    if (g == 0 && cp != '?') {
-        noteMissing(cp);
-        g = stbtt_FindGlyphIndex(&s_font.info, '?');
+    FontGlyph f = {&s_font.info, stbtt_FindGlyphIndex(&s_font.info, (int)cp), 1.0f};
+    if (f.g == 0 && cp != '?' && s_font.hasJa) {
+        const int g = stbtt_FindGlyphIndex(&s_font.ja, (int)cp);
+        if (g != 0) {
+            f.info = &s_font.ja;
+            f.g = g;
+            f.k = s_font.jaK;
+            return f;
+        }
     }
-    return g;
+    if (f.g == 0 && cp != '?') {
+        noteMissing(cp);
+        f.g = stbtt_FindGlyphIndex(&s_font.info, '?');
+    }
+    return f;
+}
+
+/* a glyph's advance and a pair's kerning in Arimo's font units (a pair
+   across the two fonts has none) */
+static float advanceUnits(FontGlyph f)
+{
+    int adv, lsb;
+    stbtt_GetGlyphHMetrics(f.info, f.g, &adv, &lsb);
+    return (float)adv * f.k;
+}
+
+static float kernUnits(uint32_t a, uint32_t b)
+{
+    const FontGlyph x = fontGlyph(a), y = fontGlyph(b);
+    if (x.info != y.info) {
+        return 0.0f;
+    }
+    return (float)stbtt_GetGlyphKernAdvance(x.info, x.g, y.g) * x.k;
 }
 
 static const UiGlyph *glyphIn(SizeSet *z, uint32_t cp)
@@ -504,13 +555,13 @@ static const UiGlyph *glyphIn(SizeSet *z, uint32_t cp)
     if (!slot) {
         return NULL;
     }
-    int g = glyphIndex(cp);
-    int adv, lsb, x0, y0, x1, y1;
-    stbtt_GetGlyphHMetrics(&s_font.info, g, &adv, &lsb);
-    stbtt_GetGlyphBitmapBox(&s_font.info, g, z->scale, z->scale, &x0, &y0, &x1, &y1);
+    const FontGlyph f = fontGlyph(cp);
+    const float gs = z->scale * f.k;
+    int x0, y0, x1, y1;
+    stbtt_GetGlyphBitmapBox(f.info, f.g, gs, gs, &x0, &y0, &x1, &y1);
     UiGlyph out;
     memset(&out, 0, sizeof(out));
-    out.advance = (float)adv * z->scale;
+    out.advance = advanceUnits(f) * z->scale;
     out.xoff = (float)x0;
     out.yoff = (float)y0;
     int w = x1 - x0, hgt = y1 - y0;
@@ -520,8 +571,8 @@ static const UiGlyph *glyphIn(SizeSet *z, uint32_t cp)
             return NULL;
         }
         Page *p = &z->pages[page];
-        stbtt_MakeGlyphBitmap(&s_font.info, p->cov + (size_t)y * (size_t)z->pageW + (size_t)x, w,
-                              hgt, z->pageW, z->scale, z->scale, g);
+        stbtt_MakeGlyphBitmap(f.info, p->cov + (size_t)y * (size_t)z->pageW + (size_t)x, w, hgt,
+                              z->pageW, gs, gs, f.g);
 #ifdef ICO_RD
         /* R8: a page already on the GPU gets the glyph's cell alone; a page
            not yet drawn is created whole when it is (pageTexture) */
@@ -570,7 +621,7 @@ float ui_font_kern(uint32_t a, uint32_t b, int px)
         return 0.0f;
     }
     float sc = stbtt_ScaleForMappingEmToPixels(&s_font.info, (float)px);
-    return (float)stbtt_GetGlyphKernAdvance(&s_font.info, glyphIndex(a), glyphIndex(b)) * sc;
+    return kernUnits(a, b) * sc;
 }
 
 int ui_font_missing_seen(uint32_t *cps, int cap)
@@ -583,7 +634,8 @@ int ui_font_missing_seen(uint32_t *cps, int cap)
 
 bool ui_font_has_glyph(uint32_t cp)
 {
-    return ui_font_init() && stbtt_FindGlyphIndex(&s_font.info, (int)cp) != 0;
+    return ui_font_init() && (stbtt_FindGlyphIndex(&s_font.info, (int)cp) != 0 ||
+                              (s_font.hasJa && stbtt_FindGlyphIndex(&s_font.ja, (int)cp) != 0));
 }
 
 const uint8_t *ui_font_page(int px, int page, int *w, int *h)
@@ -715,9 +767,7 @@ static float layoutRun(SizeSet *z, const char *utf8, GlyphFn fn, void *user, flo
             continue;
         }
         if (prev) {
-            penX +=
-                (float)stbtt_GetGlyphKernAdvance(&s_font.info, glyphIndex(prev), glyphIndex(cp)) *
-                z->scale;
+            penX += kernUnits(prev, cp) * z->scale;
         }
         const UiGlyph *g = glyphIn(z, cp);
         if (g) {
@@ -743,9 +793,7 @@ static float layoutRun(SizeSet *z, const char *utf8, GlyphFn fn, void *user, flo
 /* a glyph's advance at stb scale sc, atlas pixels (glyphIn's) */
 static float advanceAt(uint32_t cp, float sc)
 {
-    int adv, lsb;
-    stbtt_GetGlyphHMetrics(&s_font.info, glyphIndex(cp), &adv, &lsb);
-    return (float)adv * sc;
+    return advanceUnits(fontGlyph(cp)) * sc;
 }
 
 /* layoutRun's widest line without the atlas: the advances and the kerning
@@ -763,9 +811,7 @@ static float measureRun(const char *utf8, float sc)
             continue;
         }
         if (prev) {
-            penX +=
-                (float)stbtt_GetGlyphKernAdvance(&s_font.info, glyphIndex(prev), glyphIndex(cp)) *
-                sc;
+            penX += kernUnits(prev, cp) * sc;
         }
         penX += advanceAt(cp, sc);
         prev = cp;
@@ -1208,13 +1254,11 @@ float ui__sheet_line_width(float emRows, float wx, float track, const char *utf8
     float pen = 0.0f;
     uint32_t prev = 0, cp;
     while (s < end && (cp = ui_utf8_next(&s)) != 0) {
-        const int g = glyphIndex(cp);
+        const FontGlyph f = fontGlyph(cp);
         if (prev) {
-            pen += (float)stbtt_GetGlyphKernAdvance(&s_font.info, glyphIndex(prev), g) * sx + track;
+            pen += kernUnits(prev, cp) * sx + track;
         }
-        int adv, lsb;
-        stbtt_GetGlyphHMetrics(&s_font.info, g, &adv, &lsb);
-        pen += (float)adv * sx;
+        pen += advanceUnits(f) * sx;
         prev = cp;
     }
     return pen;
@@ -1245,19 +1289,17 @@ void ui__sheet_raster_line(uint8_t *cov, int w, int h, int stride, float emRows,
     uint8_t *tmp = NULL;
     size_t tmpSize = 0;
     while (s < end && (cp = ui_utf8_next(&s)) != 0) {
-        const int g = glyphIndex(cp);
+        const FontGlyph f = fontGlyph(cp);
         if (prev) {
-            penX +=
-                (float)stbtt_GetGlyphKernAdvance(&s_font.info, glyphIndex(prev), g) * sx + track;
+            penX += kernUnits(prev, cp) * sx + track;
         }
         prev = cp;
-        int adv, lsb;
-        stbtt_GetGlyphHMetrics(&s_font.info, g, &adv, &lsb);
         /* the glyph at its fractional pen: the whole part places the
            bitmap, the fraction shifts the outline inside it */
         const float bx = floorf(penX), fx = penX - bx;
         int x0, y0, x1, y1;
-        stbtt_GetGlyphBitmapBoxSubpixel(&s_font.info, g, sx, sy, fx, fy, &x0, &y0, &x1, &y1);
+        stbtt_GetGlyphBitmapBoxSubpixel(f.info, f.g, sx * f.k, sy * f.k, fx, fy, &x0, &y0, &x1,
+                                        &y1);
         const int gw = x1 - x0, gh = y1 - y0;
         if (gw > 0 && gh > 0) {
             const size_t need = (size_t)gw * (size_t)gh;
@@ -1269,7 +1311,7 @@ void ui__sheet_raster_line(uint8_t *cov, int w, int h, int stride, float emRows,
                 tmp = t;
                 tmpSize = need;
             }
-            stbtt_MakeGlyphBitmapSubpixel(&s_font.info, tmp, gw, gh, gw, sx, sy, fx, fy, g);
+            stbtt_MakeGlyphBitmapSubpixel(f.info, tmp, gw, gh, gw, sx * f.k, sy * f.k, fx, fy, f.g);
             const int ox = (int)bx + x0, oy = (int)by + y0;
             for (int r = 0; r < gh; r++) {
                 const int yy = oy + r;
@@ -1290,7 +1332,7 @@ void ui__sheet_raster_line(uint8_t *cov, int w, int h, int stride, float emRows,
                 }
             }
         }
-        penX += (float)adv * sx;
+        penX += advanceUnits(f) * sx;
     }
     free(tmp);
 }

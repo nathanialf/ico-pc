@@ -1293,7 +1293,9 @@ static void log_summary(const IcoVideoOptions *o, const char *res, const char *f
     int n = 0;
     SDL_JoystickID *ids = SDL_GetGamepads(&n);
     const RhiLimits *l = rhi_limits();
-    const char *disc = ico_cdvd_host_boot_name();
+    /* the disc main_host.c identified (select_disc), else Android's
+       window before the disc: ico_diag_set_disc logs the line again */
+    const char *disc = ico_diag_disc()[0] != '\0' ? ico_diag_disc() : NULL;
     size_t used = 0;
 
     pads[0] = '\0';
@@ -1321,7 +1323,7 @@ static void log_summary(const IcoVideoOptions *o, const char *res, const char *f
         l->robustText != NULL ? l->robustText
                               : (rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12's own" : "off"),
         pads[0] != '\0' ? pads : "none yet", summary_joystick_scan(),
-        disc != NULL ? disc : "not mounted yet",
+        disc != NULL ? disc : ICO_DIAG_DISC_UNKNOWN,
         ico_host_pref_is_portable() ? "portable" : "user profile", ico_audio_mode_text());
 }
 

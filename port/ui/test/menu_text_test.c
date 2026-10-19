@@ -225,7 +225,7 @@ static void testTable(void)
               it->h);
         /* a digit tile's figure fills it (capitals 13 of 15
            texels: an em of 18) */
-        for (int l = 0; l < UI_LANG_COUNT; l++) {
+        for (int l = 0; l < UI_LANG_PAL_COUNT; l++) {
             CHECK(it->x[l] >= 0.0f && it->x[l] <= (float)it->w && it->em[l] > 0.0f &&
                       it->em[l] <= (float)it->h * 1.25f && it->wx[l] > 0.7f && it->wx[l] < 1.4f,
                   "item %d language %d: anchor %g, em %g, width %g inside %ux%u", i, l, it->x[l],
@@ -235,7 +235,7 @@ static void testTable(void)
         CHECK(it->align == UI_ALIGN_LEFT || it->align == UI_ALIGN_CENTER ||
                   it->align == UI_ALIGN_RIGHT,
               "item %d: alignment %u", i, it->align);
-        for (int l = 0; l < UI_LANG_COUNT; l++) {
+        for (int l = 0; l < UI_LANG_PAL_COUNT; l++) {
             const char *s = ui_str_in((UiLang)l, (UiStrId)it->str);
             int lines = 1;
             for (const char *p = s; *p; p++) {
@@ -258,9 +258,11 @@ static void testStrings(void)
         const int id = ui_menu_text_items[i].str;
         CHECK(id > UI_STR_NONE && id < UI_STR_COUNT, "item %d: string id %d", i, id);
         for (int l = 0; l < UI_LANG_COUNT; l++) {
-            /* each language's own table, no fallback to English */
-            const char *const *tables[UI_LANG_COUNT] = {ui_strings_en, ui_strings_fr, ui_strings_de,
-                                                        ui_strings_it, ui_strings_es};
+            /* each language's own table, no fallback to English (the
+               Japanese table's menu words are the Japanese disc's) */
+            const char *const *tables[UI_LANG_COUNT] = {ui_strings_en, ui_strings_fr,
+                                                        ui_strings_de, ui_strings_it,
+                                                        ui_strings_es, ui_strings_ja};
             const char *s = tables[l][id];
             CHECK(s != NULL && s[0] != '\0', "item %d: string %d missing in language %d", i, id, l);
             uint32_t cp;

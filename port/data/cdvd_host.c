@@ -30,6 +30,7 @@
  * image is mounted.
  */
 #include "cdvd_host.h"
+#include "archive.h"
 #include "clock.h"
 #include "iop_ram.h"
 #include "vfs.h"
@@ -166,8 +167,8 @@ static IcoVfs *disc(void)
 
         cd.defaultTried = 1;
         if (ico_cdvd_host_mount_iso(path) != 0) {
-            fprintf(stderr, "cdvd: no disc: cannot open %s (set ICO_ISO to the SCES-50760 image)\n",
-                    path);
+            fprintf(stderr, "cdvd: no disc: cannot open %s (set ICO_ISO to the %s or %s image)\n",
+                    path, ico_discs[0].id, ico_discs[1].id);
         }
         vfs = ico_vfs_disc();
     }
@@ -225,8 +226,12 @@ static void identify(IcoVfs *vfs)
                 base = strrchr(norm, '/');
                 base = base != NULL ? base + 1 : norm;
                 if (strlen(base) < sizeof(cd.bootName)) {
+                    const IcoDiscInfo *row = ico_disc_by_boot(base);
+
                     strcpy(cd.bootName, base);
-                    cd.diskType = ICO_CD_TYPE_PS2DVD;
+                    /* the drive's answer for the disc: the Japanese
+                       release is a CD, which its cdvd.c waits for (18) */
+                    cd.diskType = row != NULL ? row->cd_type : ICO_CD_TYPE_PS2DVD;
                 }
             }
             break;

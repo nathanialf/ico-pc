@@ -3,8 +3,9 @@
  * texpack_name.h; the texture cache (rd_tex.h rdtex_create_replacement,
  * rdtex_replace) puts a loaded image in place of the game's texture.
  *
- *   folders   <user folder>/textures/SCES-50760/replacements, then
- *             <program folder>/textures/SCES-50760/replacements, then the
+ *   folders   <user folder>/textures/<serial>/replacements, then
+ *             <program folder>/textures/<serial>/replacements (<serial> the
+ *             disc's: SCES-50760, SCPS-11003), then the
  *             tolerant layouts (textures/replacements, files directly
  *             under textures/) of both; walked recursively, "png" and
  *             "dds" in any case; the first file of a name wins, later ones
@@ -107,7 +108,7 @@ uint32_t texpack_max_side(void);
 typedef struct TexpackConfig {
     const char *userDir;     /* the user folder (ico_pref_dir), or null */
     const char *programDir;  /* the program's folder, or null */
-    const char *serial;      /* "SCES-50760" */
+    const char *serial;      /* "SCES-50760", "SCPS-11003" (NULL: the selected disc's) */
     uint32_t budgetMb;       /* video.texture_pack_budget_mb: graphics memory */
     uint32_t cacheMb;        /* video.texture_pack_cache_mb: the RAM cache (0: half the
                                computer's memory; Android: an eighth, at most 512 MB) */

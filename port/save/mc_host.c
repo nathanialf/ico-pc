@@ -5,9 +5,15 @@
  * card whose root is the card folder; port 1 is a second card on its own
  * folder when [paths] saves2 names one, else empty. The files are
  * stored as the card holds them, byte for byte, in the folder layout PCSX2's
- * folder memory cards use: <card>/BESCES-50760ico/{icon.sys, boy_blk.ico,
- * BESCES-50760ico, game.000 ...}. Nothing else is written, and nothing at
- * all before the game's first Mkdir.
+ * folder memory cards use: <card>/<save directory>/{icon.sys, boy_blk.ico,
+ * <save directory>, game.000 ...}, the directory the game names (port/core
+ * region.h mc_save_dir: BESCES-50760ico for the European disc,
+ * BISCPS-11003ico for the Japanese one), so both discs' saves share a card
+ * as on a PS2. The host names no directory and checks no file's size: the
+ * product file is the region's mc_product_size and its 4-byte sum (0x1F0
+ * on the European disc, 0x1E8 on the Japanese one), as the game writes it.
+ * Nothing else is written, and nothing at all before the game's first
+ * Mkdir.
  *
  * Asynchrony as port/data/cdvd_host.c: a request does its work when it is
  * issued, and completes at the next simulated vsync, when sceMcSync(1)

@@ -6,7 +6,9 @@
 #ifndef ICO_SAVE_MC_HOST_H
 #define ICO_SAVE_MC_HOST_H
 
-/* The card folder (port 0): PATH/BESCES-50760ico/ holds the game's files.
+/* The card folder (port 0): PATH/BESCES-50760ico/ holds the European
+   disc's files, PATH/BISCPS-11003ico/ the Japanese disc's (the directory
+   the game names, port/core/region.h mc_save_dir).
    Call before sceMcInit; without it sceMcInit asks ico_host_saves_dir
    (host_config.h: saves= in ico-pc.ini, else <pref dir>/memcard). The
    folder is created by the game's first Mkdir, never before. */

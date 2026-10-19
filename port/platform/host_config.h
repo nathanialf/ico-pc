@@ -29,12 +29,14 @@
  *                    as a WAV; audio_dump=1 is logs/audio.wav
  *   audio=0          window build: no audio device (the driver still runs)
  *   saves=PATH       the memory card folder (port/save):
- *                    the game's files are PATH/BESCES-50760ico/; default
- *                    memcard beside the per-user folder
+ *                    the game's files are PATH/BESCES-50760ico/ (the
+ *                    European disc; PATH/BISCPS-11003ico/ for the Japanese
+ *                    one); default memcard beside the per-user folder
  *   saves2=PATH      a second card folder, the card in port 1; absent or
  *                    empty: port 1 has no card (the original behaviour)
  *   keep_image=1     Android: keep the copy of the disc image the first
- *                    start made in the app's folder (Ico_PAL.iso, .chd, .bin or .cue);
+ *                    start made in the app's folder (Ico_PAL or Ico_JPN:
+ *                    .iso, .chd or .bin);
  *                    by default it is deleted once the game's data is
  *                    ready, which gives its space back (main_host.c)
  */
@@ -253,6 +255,17 @@ void ico_host_log_flush_all(void);
 /* Windows: the file-open dialog for the disc image; 0 and the path, or -1
    if cancelled. Elsewhere: -1. */
 int ico_host_pick_iso(char *out, size_t size);
+
+/* The disc a start plays (main_host.c), by the first rule that names one:
+   the [game] disc pin (pin, a row of config/regions.txt, or -1 for auto),
+   the disc image the player gave (given: its row by its boot file, or -1),
+   the only game data there is (have: bit i set when row i's archive is
+   there), the disc played last ([game] last_disc: last, or -1), else row
+   0, the European disc. count is the number of rows; a value outside
+   0..count-1 names none. The row, and in *why (when given) the rule's
+   words for the log ("[game] disc", "the disc image given", "the only game
+   data there", "the disc played last", "the European disc"). */
+int ico_host_choose_disc(int pin, int given, unsigned have, int last, int count, const char **why);
 
 /* Windows GUI program (-mwindows): stdout and stderr go nowhere until a
    console is attached. Attaches the console of the program that started

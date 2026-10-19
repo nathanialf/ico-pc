@@ -32,6 +32,9 @@
 #                          never linked or shipped
 #   deps/libmpeg2/         Ittiam libmpeg2 (Apache-2.0) source tree, the FMV
 #                          decoder; compiled by port/fmv/CMakeLists.txt
+#   deps/noto-sans-jp/     Noto Sans JP (SIL OFL 1.1), the variable font the
+#                          port's Japanese text subset is made from
+#                          (tools/subset_font_ja.py); never built or shipped
 #   deps/libchdr/          libchdr (BSD-3-Clause) source tree with its bundled
 #                          LZMA, miniz and zstd decoders, the .chd disc image
 #                          reader; compiled by port/data/CMakeLists.txt
@@ -46,7 +49,8 @@
 #   LIBMPEG2_TAG, LIBMPEG2_COMMIT, LIBMPEG2_TAR_SHA256
 #   LIBCHDR_TAG, LIBCHDR_COMMIT, LIBCHDR_TAR_SHA256, ZSTD_LICENSE_SHA256
 #   SKIP_SDL3_LINUX=1, SKIP_SDL3_MINGW=1, SKIP_VALIDATION_LAYER=1, SKIP_DXC=1,
-#   SKIP_LIBMPEG2=1, SKIP_LIBCHDR=1
+#   SKIP_LIBMPEG2=1, SKIP_LIBCHDR=1, SKIP_NOTO_JP=1
+#   NOTO_JP_COMMIT, NOTO_JP_SHA256, NOTO_JP_OFL_SHA256
 #   DEB_SNAPSHOT     snapshot.debian.org fallback for the Debian packages
 #   ICO_CMAKE        the CMake used for the SDL3 source build (default: the
 #                    pinned one in tools/toolchain/cmake, else the PATH's)
@@ -645,5 +649,31 @@ else
     cp "$TMP/zstd-LICENSE" "$LIBCHDR_DIR/deps/zstd-1.5.7/LICENSE"
     echo "$LIBCHDR_COMMIT" > "$LIBCHDR_DIR/.ico-release"
     echo "==> libchdr ${LIBCHDR_TAG} at $LIBCHDR_DIR"
+fi
+
+# --- 7. Noto Sans JP (the port's Japanese text) ---------------------------------
+# google/fonts (SIL OFL 1.1) ofl/notosansjp/NotoSansJP[wght].ttf and its
+# OFL.txt at commit 295d98a7a0c17c68f1341eaeea354e7960ea70d3 (2022-11-03, the
+# file's last change): the source tools/subset_font_ja.py makes the
+# vendored subset port/assets/fonts/NotoSansJP-Regular-subset.ttf from; the
+# build reads only the subset, so a build never needs this download.
+NOTO_JP_COMMIT="${NOTO_JP_COMMIT:-295d98a7a0c17c68f1341eaeea354e7960ea70d3}"
+NOTO_JP_SHA256="${NOTO_JP_SHA256:-c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f}"
+NOTO_JP_OFL_SHA256="${NOTO_JP_OFL_SHA256:-1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9}"
+NOTO_JP_DIR="$DEST/noto-sans-jp"
+if [[ "${SKIP_NOTO_JP:-0}" == "1" ]]; then
+    echo "==> SKIP_NOTO_JP=1; not fetching Noto Sans JP"
+elif stamped "$NOTO_JP_DIR" "$NOTO_JP_COMMIT"; then
+    echo "==> Noto Sans JP already at $NOTO_JP_DIR"
+else
+    base="https://raw.githubusercontent.com/google/fonts/${NOTO_JP_COMMIT}/ofl/notosansjp"
+    fetch "${base}/NotoSansJP%5Bwght%5D.ttf" "$NOTO_JP_SHA256" "$TMP/NotoSansJP-wght.ttf"
+    fetch "${base}/OFL.txt" "$NOTO_JP_OFL_SHA256" "$TMP/NotoSansJP-OFL.txt"
+    rm -rf "$NOTO_JP_DIR"
+    mkdir -p "$NOTO_JP_DIR"
+    cp "$TMP/NotoSansJP-wght.ttf" "$NOTO_JP_DIR/NotoSansJP[wght].ttf"
+    cp "$TMP/NotoSansJP-OFL.txt" "$NOTO_JP_DIR/OFL.txt"
+    echo "$NOTO_JP_COMMIT" > "$NOTO_JP_DIR/.ico-release"
+    echo "==> Noto Sans JP at $NOTO_JP_DIR"
 fi
 echo "==> deps done: $DEST"

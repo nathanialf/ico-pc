@@ -8,12 +8,27 @@
  *                           everything against it (no disc needed), then
  *                           the same image wrapped in .chd files it writes
  *                           (a DVD CHD and a CD CHD, plus refused ones)
- *   vfs_test disc <iso>     checks the user's PAL disc image at run time;
- *                           exits 77 (skipped) when the image is absent
+ *   vfs_test disc <iso> [slug]
+ *                           checks the user's image of the disc `slug`
+ *                           (pal, the default, or jpn: archive.h's
+ *                           ico_discs) at run time, an .iso, a .chd, a raw
+ *                           .bin on its own or the .cue naming it; exits
+ *                           77 (skipped) when the image is absent
+ *   vfs_test same <iso> <image> [slug]
+ *                           the disc `slug`'s .iso against another image of
+ *                           it (a .bin, a .cue, a .chd made from it): the
+ *                           same files (every directory record of the root
+ *                           and DFDATAS, with its size and first sector),
+ *                           the same SHA-1 of the boot ELF and of DATA.DF
+ *                           through the VFS, and the same image SHA-1
+ *                           (extract.h ico_extract_image_sha1); 77 when
+ *                           either is absent
  *
  * No byte of the disc is reproduced here: the disc test only compares
  * hashes and structure.
  */
+#include "archive.h"
+#include "extract.h"
 #include "cdvd_host.h"
 #include "iop_ram.h"
 #include "sif_host.h"
@@ -1110,10 +1125,11 @@ static int run_synthetic(const char *dir)
 
 /* --- the user's disc ----------------------------------------------------- */
 
-#define PAL_ELF_SHA1 "da3644c54c26fe760f3b6a591a5fc2eab396ed2b"
-
-static int run_disc(const char *iso)
+static int run_disc(const char *iso, const char *slug)
 {
+    const IcoDiscInfo *disc = NULL;
+    char boot[80];
+    int i;
     static unsigned char chunk[64 * 2048];
     IcoVfs *vfs;
     IcoVfsFile f;
@@ -1125,9 +1141,18 @@ static int run_disc(const char *iso)
     FILE *probe;
     int count;
 
+    for (i = 0; i < ICO_REGION_COUNT; i++) {
+        if (strcmp(ico_discs[i].slug, slug) == 0) {
+            disc = &ico_discs[i];
+        }
+    }
+    if (disc == NULL) {
+        fprintf(stderr, "vfs_test disc: no disc row '%s'\n", slug);
+        return 2;
+    }
     probe = fopen(iso, "rb");
     if (probe == NULL) {
-        printf("vfs_test disc: SKIPPED: %s is absent (put the SCES-50760 image there)\n", iso);
+        printf("vfs_test disc: SKIPPED: %s is absent (put the %s image there)\n", iso, disc->id);
         return SKIP;
     }
     fclose(probe);
@@ -1137,7 +1162,8 @@ static int run_disc(const char *iso)
         return 1;
     }
     CHECK(ico_vfs_stat(vfs, "SYSTEM.CNF", &e) == 0 && !e.is_dir);
-    CHECK(ico_vfs_stat(vfs, "cdrom0:\\SCES_507.60;1", &e) == 0 && !e.is_dir);
+    snprintf(boot, sizeof(boot), "cdrom0:\\%s;1", disc->boot_elf);
+    CHECK(ico_vfs_stat(vfs, boot, &e) == 0 && !e.is_dir);
     CHECK(ico_vfs_stat(vfs, "\\DFDATAS\\DATA.DF;1", &e) == 0 && !e.is_dir);
     /* the six modules FileManager.c loads on the PS2, and the IOP image */
     CHECK(ico_vfs_stat(vfs, "cdrom0:\\IOPRP224.IMG;1", NULL) == 0);
@@ -1148,8 +1174,8 @@ static int run_disc(const char *iso)
     CHECK(ico_vfs_stat(vfs, "cdrom0:\\LIBSD.IRX;1", NULL) == 0);
     CHECK(ico_vfs_stat(vfs, "cdrom0:\\SNDN2DRV.IRX;1", NULL) == 0);
 
-    /* the boot ELF through the VFS hashes to config/sha1sums.pal.txt's value */
-    CHECK(ico_vfs_open(vfs, "SCES_507.60", &f) == 0);
+    /* the boot ELF through the VFS hashes to config/sha1sums.<slug>.txt's value */
+    CHECK(ico_vfs_open(vfs, disc->boot_elf, &f) == 0);
     sha1_init(&sha);
     for (off = 0; off < f.entry.size;) {
         int64_t n = ico_vfs_read(&f, off, chunk, sizeof(chunk));
@@ -1162,21 +1188,23 @@ static int run_disc(const char *iso)
         off += (uint64_t)n;
     }
     sha1_final_hex(&sha, hex);
-    printf("vfs_test disc: SCES_507.60 via the VFS: %u bytes, SHA-1 %s\n", (unsigned)f.entry.size,
-           hex);
-    CHECK(strcmp(hex, PAL_ELF_SHA1) == 0);
+    printf("vfs_test disc: %s via the VFS: %u bytes, SHA-1 %s\n", disc->boot_elf,
+           (unsigned)f.entry.size, hex);
+    CHECK(strcmp(hex, disc->elf_sha1) == 0);
 
     count = check_unifile(vfs, -1);
-    CHECK(count > 0);
+    CHECK(count == (int)disc->df_count);
     printf("vfs_test disc: DATA.DF directory: %d entries, all inside DATA.DF\n", count);
 
     /* the libcdvd layer on the real disc */
     ico_cdvd_host_reset();
     ico_vfs_set_disc(vfs);
-    CHECK(sceCdGetDiskType() == ICO_CD_TYPE_PS2DVD);
+    /* the European disc is a DVD, the Japanese a CD (its cdvd.c waits for 18) */
+    CHECK(sceCdGetDiskType() == disc->cd_type);
     CHECK(ico_cdvd_host_boot_name() != NULL &&
-          strcmp(ico_cdvd_host_boot_name(), "SCES_507.60") == 0);
-    CHECK(sceCdSearchFile((struct sceCdlFILE *)&fp, "\\SCES_507.60;1") == 1);
+          strcmp(ico_cdvd_host_boot_name(), disc->boot_elf) == 0);
+    snprintf(boot, sizeof(boot), "\\%s;1", disc->boot_elf);
+    CHECK(sceCdSearchFile((struct sceCdlFILE *)&fp, boot) == 1);
     CHECK(fp.size == f.entry.size && fp.lsn == f.entry.lsn);
     CHECK(sceCdSearchFile((struct sceCdlFILE *)&fp, "\\DFDATAS\\DATA.DF;1") == 1);
     ico_vfs_set_disc(NULL);
@@ -1186,14 +1214,204 @@ static int run_disc(const char *iso)
     return failures ? 1 : 0;
 }
 
+/* --- one disc, two images ------------------------------------------------- */
+
+/* The directory records of `lsn`'s directory (size bytes) and of its
+   subdirectories, as lines "<path> <size> <lsn> <d|f>\n" appended to out
+   (the ISO's own record order). 0, or -1 when a record does not read. */
+static int list_dir(IcoVfs *vfs, const char *prefix, uint32_t lsn, uint32_t size, char *out,
+                    size_t cap, int depth)
+{
+    unsigned char sec[2048]; /* each level its own: the walk recurses */
+    uint32_t s, nsec = ico_vfs_size_to_sectors(size);
+
+    if (depth > 4) {
+        return -1;
+    }
+    for (s = 0; s < nsec; s++) {
+        unsigned off = 0;
+
+        if (ico_vfs_read_sectors(vfs, lsn + s, 1, sec) != 0) {
+            return -1;
+        }
+        while (off + 33 < 2048 && sec[off] != 0) {
+            const unsigned char *r = sec + off;
+            const unsigned len = r[0], nlen = r[32];
+            const uint32_t elsn =
+                (uint32_t)r[2] | (uint32_t)r[3] << 8 | (uint32_t)r[4] << 16 | (uint32_t)r[5] << 24;
+            const uint32_t esize = (uint32_t)r[10] | (uint32_t)r[11] << 8 | (uint32_t)r[12] << 16 |
+                                   (uint32_t)r[13] << 24;
+            const int dir = (r[25] & 2) != 0;
+            char name[300];
+
+            if (len < 34 || off + len > 2048 || 33u + nlen > len) {
+                return -1;
+            }
+            off += len;
+            if (nlen == 1 && (r[33] == 0 || r[33] == 1)) {
+                continue; /* . and .. */
+            }
+            snprintf(name, sizeof(name), "%s%.*s", prefix, (int)nlen, (const char *)r + 33);
+            {
+                size_t n = strlen(out);
+
+                snprintf(out + n, cap - n, "%s %u %u %c\n", name, (unsigned)esize, (unsigned)elsn,
+                         dir ? 'd' : 'f');
+            }
+            if (dir) {
+                char sub[sizeof(name) + 2];
+
+                snprintf(sub, sizeof(sub), "%s/", name);
+                if (list_dir(vfs, sub, elsn, esize, out, cap, depth + 1) != 0) {
+                    return -1;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+/* the volume's files (list_dir from the root of the primary descriptor) */
+static int list_volume(IcoVfs *vfs, char *out, size_t cap)
+{
+    static unsigned char pvd[2048];
+
+    out[0] = '\0';
+    if (ico_vfs_read_sectors(vfs, 16, 1, pvd) != 0 || pvd[0] != 1 ||
+        memcmp(pvd + 1, "CD001", 5) != 0) {
+        return -1;
+    }
+    {
+        const unsigned char *r = pvd + 156;
+        const uint32_t lsn =
+            (uint32_t)r[2] | (uint32_t)r[3] << 8 | (uint32_t)r[4] << 16 | (uint32_t)r[5] << 24;
+        const uint32_t size =
+            (uint32_t)r[10] | (uint32_t)r[11] << 8 | (uint32_t)r[12] << 16 | (uint32_t)r[13] << 24;
+
+        return list_dir(vfs, "", lsn, size, out, cap, 0);
+    }
+}
+
+/* path's SHA-1 through the VFS into hex ("" when it does not open) */
+static void vfs_file_sha1(IcoVfs *vfs, const char *path, char hex[41], uint32_t *size)
+{
+    static unsigned char chunk[64 * 2048];
+    IcoVfsFile f;
+    Sha1 sha;
+    uint64_t off;
+
+    hex[0] = '\0';
+    *size = 0;
+    if (ico_vfs_open(vfs, path, &f) != 0) {
+        return;
+    }
+    sha1_init(&sha);
+    for (off = 0; off < f.entry.size;) {
+        int64_t n = ico_vfs_read(&f, off, chunk, sizeof(chunk));
+
+        if (n <= 0) {
+            return;
+        }
+        sha1_update(&sha, chunk, (size_t)n);
+        off += (uint64_t)n;
+    }
+    sha1_final_hex(&sha, hex);
+    *size = f.entry.size;
+}
+
+static int run_same(const char *iso, const char *image, const char *slug)
+{
+    static char list_a[1 << 16], list_b[1 << 16];
+    const IcoDiscInfo *disc = ico_disc_by_slug(slug);
+    const char *const files[2] = {disc != NULL ? disc->boot_elf : "", "DFDATAS/DATA.DF"};
+    char why[256];
+    IcoVfs *a, *b;
+    FILE *probe;
+    int i, lines = 0;
+
+    if (disc == NULL) {
+        fprintf(stderr, "vfs_test same: no disc row '%s'\n", slug);
+        return 2;
+    }
+    for (i = 0; i < 2; i++) {
+        probe = fopen(i == 0 ? iso : image, "rb");
+        if (probe == NULL) {
+            printf("vfs_test same: SKIPPED: %s is absent\n", i == 0 ? iso : image);
+            return SKIP;
+        }
+        fclose(probe);
+    }
+    a = ico_vfs_mount(&ico_vfs_iso9660, iso);
+    b = ico_vfs_mount(&ico_vfs_iso9660, image);
+    CHECK(a != NULL && b != NULL);
+    if (a == NULL || b == NULL) {
+        ico_vfs_unmount(a);
+        ico_vfs_unmount(b);
+        return 1;
+    }
+    /* the same volume and the same files */
+    CHECK(ico_vfs_volume_sectors(a) == ico_vfs_volume_sectors(b));
+    CHECK(list_volume(a, list_a, sizeof(list_a)) == 0);
+    CHECK(list_volume(b, list_b, sizeof(list_b)) == 0);
+    CHECK(list_a[0] != '\0' && strcmp(list_a, list_b) == 0);
+    for (i = 0; list_a[i] != '\0'; i++) {
+        lines += list_a[i] == '\n';
+    }
+    printf("vfs_test same: %d directory records, the same in both (%u sectors)\n", lines,
+           (unsigned)ico_vfs_volume_sectors(a));
+    /* the walk saw the root's files and DFDATAS's: SYSTEM.CNF, the boot
+       ELF, DATA.DF */
+    CHECK(strstr(list_a, "SYSTEM.CNF;1 ") != NULL && strstr(list_a, "DFDATAS/DATA.DF;1 ") != NULL);
+    {
+        char elf[48];
+
+        snprintf(elf, sizeof(elf), "\n%s;1 ", disc->boot_elf);
+        CHECK(strstr(list_a, elf) != NULL);
+    }
+    /* the boot ELF and DATA.DF, byte for byte */
+    for (i = 0; i < 2; i++) {
+        char ha[41], hb[41];
+        uint32_t sa, sb;
+
+        vfs_file_sha1(a, files[i], ha, &sa);
+        vfs_file_sha1(b, files[i], hb, &sb);
+        printf("vfs_test same: %s: %u bytes, SHA-1 %s (the image: %u bytes, %s)\n", files[i],
+               (unsigned)sa, ha, (unsigned)sb, hb);
+        CHECK(ha[0] != '\0' && sa > 0 && sa == sb && strcmp(ha, hb) == 0);
+        if (i == 0) {
+            CHECK(strcmp(ha, disc->elf_sha1) == 0);
+        }
+    }
+    ico_vfs_unmount(a);
+    ico_vfs_unmount(b);
+    /* the ISO the image holds hashes as the .iso does */
+    {
+        char ha[41], hb[41];
+        uint64_t na = 0, nb = 0;
+
+        CHECK(ico_extract_image_sha1(iso, ha, &na, why, sizeof(why)) == 0);
+        CHECK(ico_extract_image_sha1(image, hb, &nb, why, sizeof(why)) == 0);
+        printf("vfs_test same: image SHA-1 %s, %llu bytes (the image: %s, %llu bytes)\n", ha,
+               (unsigned long long)na, hb, (unsigned long long)nb);
+        CHECK(na == nb && strcmp(ha, hb) == 0);
+        CHECK(strcmp(ha, disc->iso_sha1) == 0 && na == disc->iso_bytes);
+    }
+    printf("vfs_test same %s: %s\n", image, failures ? "FAILED" : "ok");
+    return failures ? 1 : 0;
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 3 && strcmp(argv[1], "synth") == 0) {
         return run_synthetic(argv[2]);
     }
-    if (argc == 3 && strcmp(argv[1], "disc") == 0) {
-        return run_disc(argv[2]);
+    if ((argc == 3 || argc == 4) && strcmp(argv[1], "disc") == 0) {
+        return run_disc(argv[2], argc == 4 ? argv[3] : "pal");
     }
-    fprintf(stderr, "usage: %s synth <dir> | disc <iso>\n", argv[0]);
+    if ((argc == 4 || argc == 5) && strcmp(argv[1], "same") == 0) {
+        return run_same(argv[2], argv[3], argc == 5 ? argv[4] : "pal");
+    }
+    fprintf(stderr, "usage: %s synth <dir> | disc <iso> [pal|jpn] | same <iso> <image> [pal|jpn]\n",
+            argv[0]);
     return 2;
 }

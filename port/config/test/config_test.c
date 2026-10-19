@@ -17,6 +17,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#include <io.h> /* _dup, _dup2: stderr to a file for a stretch */
+#define dup _dup
+#define dup2 _dup2
+#define close _close
+#else
+#include <unistd.h>
+#endif
 
 #include "host_loop.h"
 
@@ -627,6 +635,82 @@ static void test_language(void)
     remove(toml);
 }
 
+/* [game] disc and last_disc (main_host.c's disc choice): "auto" and
+   absent are -1, the slugs their rows, anything else auto with one log
+   line a load; the template writes "auto" and no last_disc; last_disc
+   round trips and refuses a slug that is not a row */
+static void test_disc_keys(void)
+{
+    char toml[ICO_PATH_MAX];
+    char log[ICO_PATH_MAX];
+    char *text;
+    int saved;
+
+    path_in(toml, "disc.toml");
+    write_file(toml, "");
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_disc_pin() == -1 && ico_config_last_disc() == -1);
+    write_file(toml, "[game]\ndisc = \"auto\"\n");
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_disc_pin() == -1);
+    write_file(toml, "[game]\ndisc = \"pal\"\nlast_disc = \"jpn\"\n");
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_disc_pin() == 0 && ico_config_last_disc() == 1);
+    write_file(toml, "[game]\ndisc = \"jpn\"\nlast_disc = \"pal\"\n");
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_disc_pin() == 1 && ico_config_last_disc() == 0);
+    /* not a row: auto, and the log names the values, once a load */
+    path_in(log, "disc.log");
+    fflush(stderr);
+    saved = dup(2);
+    CHECK(saved >= 0 && freopen(log, "w", stderr) != NULL);
+    write_file(toml, "[game]\ndisc = \"usa\"\nlast_disc = \"SCPS-11003\"\n");
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_disc_pin() == -1 && ico_config_disc_pin() == -1);
+    CHECK(ico_config_last_disc() == -1);
+    write_file(toml, "[game]\ndisc = \"JPN\"\n");
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_disc_pin() == -1);
+    fflush(stderr);
+    /* back to the stderr the test had */
+    dup2(saved, 2);
+    close(saved);
+    clearerr(stderr);
+    text = read_file(log);
+    CHECK(text != NULL &&
+          strstr(text, "config: [game] disc = \"usa\" is not one of auto, pal, jpn; auto\n") !=
+              NULL &&
+          strstr(text, "config: [game] disc = \"JPN\" is not one of auto, pal, jpn; auto\n") !=
+              NULL);
+    if (text != NULL) {
+        /* once a load: two reads of "usa", one line */
+        const char *first = strstr(text, "\"usa\"");
+        CHECK(first != NULL && strstr(first + 1, "\"usa\"") == NULL);
+    }
+    free(text);
+    remove(log);
+    /* last_disc: set and saved, a slug only */
+    write_file(toml, "");
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_set_last_disc("SCPS-11003") == -1 && ico_config_set_last_disc(NULL) == -1);
+    CHECK(ico_config_set_last_disc("jpn") == 0 && ico_config_save() == 0);
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_last_disc() == 1);
+    CHECK_STR(ico_config_get_string("game.last_disc", "?"), "jpn");
+    /* the template: disc = "auto", no last_disc */
+    remove(toml);
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_write_first_run() == 0);
+    ico_config_reset(toml, "no-such.ini");
+    CHECK_STR(ico_config_get_string("game.disc", "?"), "auto");
+    CHECK_STR(ico_config_get_string("game.last_disc", "none"), "none");
+    CHECK(ico_config_disc_pin() == -1 && ico_config_last_disc() == -1);
+    text = read_file(toml);
+    CHECK(text != NULL && strstr(text, "SCPS-11003") != NULL && strstr(text, "last_disc") == NULL);
+    free(text);
+    remove(toml);
+}
+
 static int bcd(int v)
 {
     return (v / 10) << 4 | (v % 10);
@@ -784,6 +868,7 @@ int main(int argc, char **argv)
     test_dump_interp();
     test_fixed_clock_rule();
     test_language();
+    test_disc_keys();
     test_clock();
     test_timers();
     printf("config_test: %s\n", failures ? "FAILED" : "ok");

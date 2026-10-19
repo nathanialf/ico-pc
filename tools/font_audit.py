@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """font_audit.py: every code point the port's text uses is inside the unicode
-ranges the embedded font subset was built with.
+ranges the embedded font subsets were built with (Arimo's, and the Japanese
+text's font's for the characters Arimo has none for).
 
 Collects the code points of the string literals of port/ui/strings_*.c and
 port/game/model_viewer_table.c, and of the corpus
 (port/ui/test/font_corpus/*.txt, '#' lines are provenance), and compares them
-with the ranges recorded in port/ui/embed_font.cmake ("# subset:" line).
+with the ranges recorded in port/ui/embed_font.cmake (the "# subset:" line,
+Arimo's, and the "# subset-ja:" line, Noto Sans JP's subset that
+tools/subset_font_ja.py writes; the Japanese table, strings_ja.c, must be
+inside them both together).
 The check on the font's own cmap
 is font_coverage (it asks the embedded font for each code point); this one
 runs without a build and names the code points to add to the subset.
@@ -84,11 +88,11 @@ def parse_ranges(text):
     return out
 
 
-def cmake_ranges(path):
+def cmake_ranges(path, key="subset"):
     with open(path, encoding="utf-8") as f:
-        lines = [l for l in f if l.startswith("# subset:")]
+        lines = [l for l in f if l.startswith("# %s:" % key)]
     if len(lines) != 1:
-        raise ValueError("%s: expected one '# subset:' line" % path)
+        raise ValueError("%s: expected one '# %s:' line" % (path, key))
     return lines[0].split(":", 1)[1].strip()
 
 
@@ -96,7 +100,7 @@ def main():
     cmake = os.path.join(ROOT, "port/ui/embed_font.cmake")
     try:
         ranges = cmake_ranges(cmake)
-        covered = parse_ranges(ranges)
+        covered = parse_ranges(ranges) | parse_ranges(cmake_ranges(cmake, "subset-ja"))
     except (ValueError, OSError) as e:
         print("font_audit: %s" % e)
         return 2
@@ -113,7 +117,7 @@ def main():
         for lit in literals(p):
             add(lit, os.path.relpath(p, ROOT))
     corpus = sorted(glob.glob(os.path.join(ROOT, "port/ui/test/font_corpus/*.txt")))
-    if len(corpus) < 5:
+    if len(corpus) < 6:
         print("font_audit: %d corpus files, expected one per language" % len(corpus))
         return 1
     for p in corpus:

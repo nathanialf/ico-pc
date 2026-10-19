@@ -33,6 +33,16 @@ if(Python3_FOUND)
     add_test(NAME font_audit COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/font_audit.py")
 endif()
 
+# font_subset_ja: the Japanese text's font (tools/subset_font_ja.py --check):
+# the recorded subset line is the code points the tables and the corpus use
+# outside Arimo's; with fontTools the committed font maps exactly those; with
+# fontTools 4.63.0 and the source font (tools/fetch_deps.sh) it is byte for
+# byte the tool's output (a check it cannot run is named as skipped)
+if(Python3_FOUND)
+    add_test(NAME font_subset_ja
+             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/subset_font_ja.py" --check)
+endif()
+
 # content_table_chains: the Natural chains table
 # (port/render/rd_content_chain.c) against the disc's stage animations, and
 # every stage animation scanned for another chain let down by scaling

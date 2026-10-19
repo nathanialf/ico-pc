@@ -26,7 +26,13 @@
  *                                 debug options
  *   [game] circle_back     true   Circle backs out of the game's menus as
  *                                 Triangle does;
- *                                 false is the PS2's behaviour
+ *                                 false is the PS2's behaviour (the
+ *                                 European disc's; the Japanese disc's
+ *                                 menus confirm with Circle)
+ *   [ui] language          auto   the language of the port's own text:
+ *                                 auto (Japanese on the Japanese disc,
+ *                                 the game's language on the European
+ *                                 one) or en, fr, de, it, es, ja
  *   [dev] debug_option     0      with developer mode: non-zero loads the
  *                                 debug option table the Debug Mode page saves
  *
@@ -81,7 +87,10 @@ void ico_opt_mirror_reset(void);
    files:
      [mirror] slot_N = true/false     the run's flag when slot N was saved
               slot_N_sum = <uint32>   that save's game-block checksum
-   N is the save file's number (game.00N, 0..9).  The checksum ties the
+   N is the save file's number (game.00N, 0..9).  Each disc has its own
+   keys, its saves being another card directory: slot_N and slot_N_sum
+   for the European disc, jpn_slot_N and jpn_slot_N_sum for the Japanese
+   one (port/core/region.h key_prefix, by the selected region).  The checksum ties the
    entry to the save it was written for: a slot overwritten elsewhere (a
    PS2 save copied in, another folder card) has another sum and reads Off.
    ico_mirror_slot_saved writes both keys from the run's value and saves
@@ -112,6 +121,16 @@ int ico_opt_debug_option(void);
    the value to port/ui (lt_ext_set_circle_back) at install and on a change. */
 int ico_opt_circle_back(void);
 void ico_opt_set_circle_back(int on);
+/* [ui] language: the language of the port's own text (the menus it adds,
+   photo mode's help, the messages): "auto" (-1, the default: the disc's,
+   port/ui/ui_lang.h ui_settings_resolve_language) or "en", "fr", "de",
+   "it", "es", "ja" (0..5, port/ui/strings.h UiLang order); another value
+   is "auto", logged once.  The game's own text is always the disc's.
+   ico_opt_ui_language_name gives the config value of one ("auto" for -1;
+   the Settings menu writes it). */
+int ico_opt_ui_language(void);
+void ico_opt_set_ui_language(int lang);
+const char *ico_opt_ui_language_name(int lang);
 /* [audio] output: the
    PS2's stereo or mono choice, the game's soundOutputModeGet value (0
    stereo, 1 mono), which the memory card's system file keeps and the

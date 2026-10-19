@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "gltf.h"
+#include "../core/region.h" /* the selected disc's pack folder */
 #include "host_fs.h"
 #include "rd_internal.h"
 #include "xxh3.h"
@@ -753,7 +754,8 @@ int modelpack_init(const ModelpackConfig *cfg)
     if (!cfg) {
         return 0;
     }
-    snprintf(s_mp.serial, sizeof(s_mp.serial), "%s", cfg->serial ? cfg->serial : "SCES-50760");
+    snprintf(s_mp.serial, sizeof(s_mp.serial), "%s",
+             cfg->serial ? cfg->serial : ico_region_cur()->pack_serial);
     snprintf(s_mp.userDir, sizeof(s_mp.userDir), "%s", cfg->userDir ? cfg->userDir : "");
     s_mp.developer = cfg->developer != 0;
     s_mp.dumpEnabled = cfg->dumpEnabled != 0;

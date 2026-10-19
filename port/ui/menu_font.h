@@ -74,8 +74,9 @@ typedef struct UiSheetInk {
     uint8_t rimOn, rimLevel, fillLevel, dither, rimWeight;
 } UiSheetInk;
 
-/* The light ink's style in language lang (UiLang; out of range: English):
-   kSheetInk, menu_font.c, the one place the levels live. */
+/* The light ink's style for sheet language lang (strings.h: a European
+   language's UiLang, or UI_SHEET_JA; out of range: English): kSheetInk,
+   menu_font.c, the one place the levels live. */
 const UiSheetInk *ui_menu_sheet_ink(int lang);
 
 /* The rim a game row's words have on its sheet (UiMenuTextItem.rim, per
@@ -108,7 +109,8 @@ void ui_draw_menu_text(float x, float y, float size, const uint8_t rgba[4], cons
                        unsigned flags, int ink, const UiXform *xf);
 
 /* A game row's words where its sprite would be: it the row's item, lang
-   its language (UiLang), box and uv the sprite's rectangle (x, y, w, h:
+   its sheet language (ui_sheet_language: one of the European disc's
+   UiLangs, the item table's columns; any other value draws English), box and uv the sprite's rectangle (x, y, w, h:
    1/16 pixel and 1/16 field line from the screen centre) and texel
    rectangle (1/16 texel) as the caller hands them to
    gif_SpriteSensitiveOffset, rgba the sprite colour.  glow != 0: the glow

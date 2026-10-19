@@ -55,8 +55,9 @@ static int under(const char *path, const char *dir)
     return strncmp(path, dir, n) == 0 && (path[n] == '\0' || path[n] == '/');
 }
 
-int ico_android_layout(const char *files, const char *cache, IcoAndroidPaths *p)
+int ico_android_layout(const char *files, const char *cache, const char *serial, IcoAndroidPaths *p)
 {
+    char textures[64];
     int bad = 0;
 
     memset(p, 0, sizeof(*p));
@@ -72,7 +73,12 @@ int ico_android_layout(const char *files, const char *cache, IcoAndroidPaths *p)
     bad |= join(p->logs, sizeof(p->logs), p->files, "logs");
     bad |= join(p->log, sizeof(p->log), p->files, "logs/ico-pc.log");
     bad |= join(p->dumps, sizeof(p->dumps), p->files, "dumps");
-    bad |= join(p->textures, sizeof(p->textures), p->files, "textures/SCES-50760/replacements");
+    if (serial == NULL) {
+        serial = "SCES-50760";
+    }
+    bad |= snprintf(textures, sizeof(textures), "textures/%s/replacements", serial) >=
+           (int)sizeof(textures);
+    bad |= join(p->textures, sizeof(p->textures), p->files, textures);
     bad |= join(p->pipeline_cache, sizeof(p->pipeline_cache), p->cache, "pipelines.vkcache");
     if (bad) {
         memset(p, 0, sizeof(*p));
@@ -81,7 +87,8 @@ int ico_android_layout(const char *files, const char *cache, IcoAndroidPaths *p)
     return 0;
 }
 
-int ico_android_image_path(const IcoAndroidPaths *p, const char *ext, char *out, size_t size)
+int ico_android_image_path(const IcoAndroidPaths *p, const char *base, const char *ext, char *out,
+                           size_t size)
 {
     char name[32];
     int n;
@@ -89,7 +96,7 @@ int ico_android_image_path(const IcoAndroidPaths *p, const char *ext, char *out,
     if (size == 0) {
         return -1;
     }
-    n = snprintf(name, sizeof(name), "Ico_PAL.%s", ext);
+    n = snprintf(name, sizeof(name), "%s.%s", base != NULL ? base : "Ico_PAL", ext);
     if (p->files[0] == '\0' || n < 0 || (size_t)n >= sizeof(name)) {
         out[0] = '\0';
         return -1;

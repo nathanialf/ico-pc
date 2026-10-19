@@ -824,8 +824,45 @@ static void test_retry_prepass(void)
     unset_env("ICO_GPU_ROBUST"); /* the robust step's */
 }
 
+/* ico_host_choose_disc: the rules in order (pin, the image given, the only
+   archive, the disc played last, the European disc) and the words for the
+   log; values outside the rows name none */
+static void test_choose_disc(void)
+{
+    const char *why = NULL;
+
+    /* nothing: the European disc */
+    CHECK(ico_host_choose_disc(-1, -1, 0u, -1, 2, &why) == 0 &&
+          strcmp(why, "the European disc") == 0);
+    /* the pin wins over everything */
+    CHECK(ico_host_choose_disc(1, 0, 1u, 0, 2, &why) == 1 && strcmp(why, "[game] disc") == 0);
+    CHECK(ico_host_choose_disc(0, 1, 2u, 1, 2, &why) == 0 && strcmp(why, "[game] disc") == 0);
+    /* then the image given, over the archives and the last disc */
+    CHECK(ico_host_choose_disc(-1, 1, 1u, 0, 2, &why) == 1 &&
+          strcmp(why, "the disc image given") == 0);
+    CHECK(ico_host_choose_disc(-1, 0, 3u, 1, 2, &why) == 0 &&
+          strcmp(why, "the disc image given") == 0);
+    /* then the only archive there */
+    CHECK(ico_host_choose_disc(-1, -1, 2u, 0, 2, &why) == 1 &&
+          strcmp(why, "the only game data there") == 0);
+    CHECK(ico_host_choose_disc(-1, -1, 1u, 1, 2, &why) == 0 &&
+          strcmp(why, "the only game data there") == 0);
+    /* both archives (or none): the disc played last, else the European one */
+    CHECK(ico_host_choose_disc(-1, -1, 3u, 1, 2, &why) == 1 &&
+          strcmp(why, "the disc played last") == 0);
+    CHECK(ico_host_choose_disc(-1, -1, 0u, 1, 2, &why) == 1 &&
+          strcmp(why, "the disc played last") == 0);
+    CHECK(ico_host_choose_disc(-1, -1, 3u, -1, 2, &why) == 0 &&
+          strcmp(why, "the European disc") == 0);
+    /* rows that are not there name none; an archive bit past the rows does
+       not count; NULL words are allowed */
+    CHECK(ico_host_choose_disc(2, 5, 4u, 7, 2, &why) == 0 && strcmp(why, "the European disc") == 0);
+    CHECK(ico_host_choose_disc(-1, -1, 2u | 4u, -1, 2, NULL) == 1);
+}
+
 int main(void)
 {
+    test_choose_disc();
     test_sha1();
     test_ini();
     test_join_overflow();

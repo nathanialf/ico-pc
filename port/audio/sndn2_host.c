@@ -28,7 +28,8 @@
 #include "stream_watch.h"
 #include "vfs.h"
 
-/* SNDN2DRV.IRX on the PAL disc, its size, and the pitch table's file
+/* SNDN2DRV.IRX on the disc (byte-identical on the European and the
+   Japanese disc), its size, and the pitch table's file
    offset and size in it. */
 #define IRX_PATH "SNDN2DRV.IRX"
 #define IRX_SIZE 20941u
@@ -126,7 +127,7 @@ int ico_sndn2_pitch_load(void)
     } else if (ico_vfs_open(disc, IRX_PATH, &f) != 0) {
         why = "the disc has no " IRX_PATH;
     } else if (ico_vfs_size(&f) != IRX_SIZE) {
-        why = IRX_PATH " is not the PAL disc's (size)";
+        why = IRX_PATH " is not the disc's (size)";
     } else if (ico_vfs_read(&f, IRX_PITCH_OFFSET, raw, sizeof(raw)) != (int64_t)sizeof(raw)) {
         why = IRX_PATH " cannot be read";
     } else {

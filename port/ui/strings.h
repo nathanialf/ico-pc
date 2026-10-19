@@ -1,9 +1,9 @@
 /*
  * port/ui/strings.h
  *
- * The port's UI strings in the game's five languages: one table per
- * language (port/ui/strings_<lang>.c), indexed by UiStrId, UTF-8. Every
- * word the port draws (the Settings menu, the popups, the achievements, the
+ * The port's UI strings in the European disc's five languages and in
+ * Japanese: one table per language (port/ui/strings_<lang>.c), indexed by
+ * UiStrId, UTF-8. Every word the port draws (the Settings menu, the popups, the achievements, the
  * galleries, photo mode, the model viewer, Characters, the Graphics driver
  * page), and the menus' words transcribed from the PAL sheets
  * (UI_STR_MT_*).
@@ -11,21 +11,40 @@
 #ifndef PORT_UI_STRINGS_H
 #define PORT_UI_STRINGS_H
 
+#include <stddef.h>
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* The game's language numbers, as NonLinearCameraMove holds them after the
+/* The port's languages: the European disc's five, in the order of the
+   game's language numbers as NonLinearCameraMove holds them after the
    boot screen (kanbanBoot.c 101-102) and texFile names them (2 EG, 3 FR,
-   4 GR, 5 IT, 6 SP); UI_LANG_COUNT tables. */
+   4 GR, 5 IT, 6 SP), then Japanese (the port's own text: the Japanese
+   disc's own words are its sheets); UI_LANG_COUNT tables, each defining
+   every UiStrId (ctest strings_complete). */
 typedef enum UiLang {
     UI_LANG_EN = 0,
     UI_LANG_FR,
     UI_LANG_DE,
     UI_LANG_IT,
     UI_LANG_ES,
+    UI_LANG_JA,
     UI_LANG_COUNT
 } UiLang;
+
+/* The European disc's languages (UI_LANG_EN .. UI_LANG_ES): its sheets
+   letter the menus in each, and the menu text table's geometry
+   (menu_text.h UiMenuTextItem) is measured per each. */
+#define UI_LANG_PAL_COUNT 5
+
+/* The sheet languages, the language of the sheets the game's menus show:
+   the European disc's five (their UiLang numbers) and the Japanese disc's
+   sheets, UI_SHEET_JA.  The look of the port's text drawn in the sheets'
+   style (menu_font.c kSheetInk) is measured per sheet language. */
+#define UI_SHEET_JA 5
+#define UI_LANG_SHEET_COUNT 6
 
 typedef enum UiStrId {
     UI_STR_NONE = 0, /* "" */
@@ -64,6 +83,7 @@ typedef enum UiStrId {
     UI_STR_LANG_DE,
     UI_STR_LANG_IT,
     UI_STR_LANG_ES,
+    UI_STR_LANG_JA,
     /* Developer mode */
     UI_STR_OPT_DEVELOPER_MODE,
     UI_STR_DEVELOPER_NOTE,
@@ -146,10 +166,13 @@ typedef enum UiStrId {
     UI_STR_VAL_TRILINEAR,
     UI_STR_VAL_ANISOTROPIC,
     UI_STR_LANGUAGE_NOTE,
+    UI_STR_OPT_MENU_LANGUAGE,  /* the Menu language row ([ui] language) */
+    UI_STR_MENU_LANGUAGE_NOTE, /* its explanation */
     UI_STR_REMAP_KEYBOARD,
     UI_STR_REMAP_GAMEPAD,
     UI_STR_REMAP_HINT,
-    UI_STR_REMAP_MENU_NOTE, /* Remap controls: the menus keep the gamepad's buttons by position */
+    UI_STR_REMAP_HINT_CIRCLE, /* the same where Circle confirms (the Japanese disc) */
+    UI_STR_REMAP_MENU_NOTE,   /* Remap controls: the menus keep the gamepad's buttons by position */
     UI_STR_REMAP_PRESS,
     UI_STR_REMAP_RESET,
     /* Settings > Controls, the touch overlay's rows (shown
@@ -607,6 +630,15 @@ typedef enum UiStrId {
 
 void ui_set_language(UiLang lang);
 UiLang ui_get_language(void);
+/* The sheet language (UI_LANG_EN .. UI_LANG_ES, or UI_SHEET_JA): the look
+   of the port's text in the sheets' style (menu_font.c's ink per sheet
+   language) and the menu text table's geometry follow it, whatever
+   language the port's own text is in.  Until ui_set_sheet_language is
+   called it follows ui_set_language (the port's language when that is one
+   of the European disc's, else English); a value outside the sheet
+   languages is ignored. */
+void ui_set_sheet_language(int sheetLang);
+int ui_sheet_language(void);
 /* the game's language number (2..6) to a UiLang; English otherwise */
 UiLang ui_lang_from_game(int nonLinearCameraMove);
 /* the string of id in the current language; "" for an unknown id; a
@@ -614,6 +646,28 @@ UiLang ui_lang_from_game(int nonLinearCameraMove);
 const char *ui_str(UiStrId id);
 /* the same in a given language (tests, the Language section) */
 const char *ui_str_in(UiLang lang, UiStrId id);
+
+/* Line breaking for the Japanese text, which has no spaces: whether cp is
+   a wide (CJK, fullwidth) character, and whether a line may break between
+   prev and cp without a space (a wide character on either side, not before
+   closing punctuation, the prolonged sound mark, small kana or an iteration
+   mark, not after an opening bracket: the usual line-start and line-end
+   rules).  Latin text breaks at its spaces only, as always: two Latin
+   characters never give a break.  settings.c's notes and the popups
+   (popup.c) break with these. */
+int ui_wide_char(uint32_t cp);
+int ui_break_before(uint32_t prev, uint32_t cp);
+
+/* The strings that name the running disc's pack folder (its PCSX2 serial,
+   port/core/region.h IcoRegionInfo.pack_serial: SCES-50760, SCPS-11003):
+   the texture and model pack notes and the two dump notes.  Each table's
+   text for them is a printf format with one %s, the serial, and no other
+   conversion (ctest strings_complete checks it); ui_str_takes_serial says
+   which ids these are, and ui_str_serial writes id's text in the current
+   language with the selected region's serial into buf (n bytes, cut at a
+   character's end), any other id's text unchanged; it returns buf. */
+int ui_str_takes_serial(UiStrId id);
+const char *ui_str_serial(UiStrId id, char *buf, size_t n);
 
 /* Every string the port draws from a table, for the font coverage test:
    fn(lang, utf8, user) once for each non-empty entry of each language's
@@ -631,6 +685,7 @@ extern const char *const ui_strings_fr[UI_STR_COUNT];
 extern const char *const ui_strings_de[UI_STR_COUNT];
 extern const char *const ui_strings_it[UI_STR_COUNT];
 extern const char *const ui_strings_es[UI_STR_COUNT];
+extern const char *const ui_strings_ja[UI_STR_COUNT];
 
 #ifdef __cplusplus
 }

@@ -1,16 +1,17 @@
 /*
  * port/save/mc_import.h
  *
- * Imports ICO's save from a PS2 memory card image or a save archive into a
- * card folder (mc_host.c's layout: <saves>/BESCES-50760ico/...).
+ * Imports ICO's saves from a PS2 memory card image or a save archive into a
+ * card folder (mc_host.c's layout: <saves>/<save directory>/...): the
+ * European disc's directory BESCES-50760ico and the Japanese disc's
+ * BISCPS-11003ico (port/core/region.h mc_save_dir), whichever the source
+ * holds; a card with a BISCPS-11003ico folder imports as the Japanese
+ * disc's save.
  */
 #ifndef ICO_SAVE_MC_IMPORT_H
 #define ICO_SAVE_MC_IMPORT_H
 
 #include <stddef.h>
-
-/* the game's save directory on the card (fumi/ios/mcard.c's product name) */
-#define ICO_MC_SAVE_DIR "BESCES-50760ico"
 
 enum {
     ICO_MC_FMT_UNKNOWN = 0,
@@ -26,9 +27,10 @@ enum {
 #define ICO_MC_IMPORT_LIST 32
 
 typedef struct IcoMcImport {
-    int format;  /* ICO_MC_FMT_* */
-    int files;   /* files written into <saves>/BESCES-50760ico */
-    int skipped; /* other entries in the source, not imported */
+    int format;       /* ICO_MC_FMT_* */
+    int files;        /* files written into <saves>/<save directory> */
+    unsigned regions; /* bit r: files of ico_region_at(r)'s directory were written */
+    int skipped;      /* other entries in the source, not imported */
     /* the first ICO_MC_IMPORT_LIST of them, by name */
     char skippedName[ICO_MC_IMPORT_LIST][64]; /* a subdirectory as DIR/NAME */
     char why[256]; /* the reason, when the import failed or found nothing */
