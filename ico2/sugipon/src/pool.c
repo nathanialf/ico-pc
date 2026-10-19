@@ -780,15 +780,11 @@ static void dispPool(GObj *self)
 
     if (w->dobj != 0) {
         CopyMatrix(MatrixDrive_GetMatrix(), &w->dobj->matrix);
-        switch (stage_no) {
-#ifdef VERSION_JPN
-        case 99:
-#else
-        case 101:
-#endif
+        /* the spinning stage is 101 on the European disc, 99 on the Japanese
+           one (stages from 58 two lower); stage 15 is the same on both */
+        if (stage_no == PAL_JPN(101, 99)) {
             MatrixDrive_RotMatrixZ((w->spin << 16) / 1600);
-            break;
-        case 15:
+        } else if (stage_no == 15) {
             MatrixDrive_RotMatrixZ(-(w->spin << 16) / 1600);
         }
 

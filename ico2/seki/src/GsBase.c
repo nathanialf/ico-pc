@@ -299,15 +299,14 @@ static int reductionGreen; /* derived name */
 
 static int reductionBlue; /* derived name */
 
-#ifdef VERSION_JPN
-
-/* Reduce the frame into the feedback area: one 22 qword GIF packet, built on
- * the stack and sent down the GIF channel by hand, that first clears the
- * half height frame in black and then draws it back over itself through the
- * texture at 0x800 in the reduction tint, and last the tint this stage's
- * current target asks for. */
-void gsb_Reduction(void)
+/* The Japanese disc's reduction: the same packet but for its order and its
+ * crop.  The clear sprite goes before TEST and ZBUF are written, the border
+ * crop keeps every line (the European body crops 2 or 8 lines top and
+ * bottom), and no path sync precedes the cache flush.  PC port: the European
+ * body's seams (FRAME's native width, the kick left to gsbHostReduction). */
+static void gsb_Reduction_jpn(void)
 {
+    const int fw = gsFrame.w;
     long long pk[44] = {
         0x1000000000008015LL,
         0xE,
@@ -315,26 +314,26 @@ void gsb_Reduction(void)
         0x4A,
         0x8000000048LL,
         0x42,
-        (long long)((ScreenWidth >> 6) & 0x3F) << 16,
+        (long long)(gsFrame.fbw & 0x3F) << 16,
         0x4C,
-        ((long long)(0x800 - ScreenWidth / 2) << 4) | ((long long)(0x800 - ScreenHeight / 4) << 36),
+        ((long long)(0x800 - fw / 2) << 4) | ((long long)(0x800 - ScreenHeight / 4) << 36),
         0x18,
-        ((long long)(ScreenWidth - 1) << 16) | ((long long)(ScreenHeight / 2 - 1) << 48),
+        ((long long)(fw - 1) << 16) | ((long long)(ScreenHeight / 2 - 1) << 48),
         0x40,
         0x106,
         0,
         0,
         1,
-        (long long)(-ScreenWidth / 2 * 16 + 0x8000 - 4) |
+        (long long)(-fw / 2 * 16 + 0x8000 - 4) |
             ((long long)(-ScreenHeight / 4 * 16 + 0x8000 - 4) << 16) | (-1LL << 32),
         5,
-        (long long)(-ScreenWidth / 2 * 16 + 0x8000 + ScreenWidth * 16 - 4) |
+        (long long)(-fw / 2 * 16 + 0x8000 + fw * 16 - 4) |
             ((long long)(-ScreenHeight / 4 * 16 + 0x8000 + ScreenHeight / 2 * 16 - 4) << 16) |
             (-1LL << 32),
         5,
-        ((long long)(ScreenWidth - 3) << 16) | 2 | ((long long)(ScreenHeight / 2 - 1) << 48),
+        ((long long)(fw - 3) << 16) | 2 | ((long long)(ScreenHeight / 2 - 1) << 48),
         0x40,
-        ((long long)(ScreenWidth / 64) << 14) | 0x664000800LL,
+        ((long long)gsFrame.fbw << 14) | ((long long)ico_frame_tw(fw) << 26) | 0x640000800LL,
         6,
         0x60,
         0x14,
@@ -349,23 +348,20 @@ void gsb_Reduction(void)
         1,
         0x80008,
         3,
-        (long long)(-ScreenWidth / 2 * 16 + 0x8000 - 4) |
+        (long long)(-fw / 2 * 16 + 0x8000 - 4) |
             ((long long)(-ScreenHeight / 4 * 16 + 0x8000 - 4) << 16) | (-1LL << 32),
         5,
-        (long long)(ScreenWidth * 16 + 8) | ((long long)(ScreenHeight * 16 + 8) << 16),
+        (long long)(fw * 16 + 8) | ((long long)(ScreenHeight * 16 + 8) << 16),
         3,
-        (long long)(-ScreenWidth / 2 * 16 + 0x8000 + ScreenWidth * 16 - 4) |
+        (long long)(-fw / 2 * 16 + 0x8000 + fw * 16 - 4) |
             ((long long)(-ScreenHeight / 4 * 16 + 0x8000 + ScreenHeight / 2 * 16 - 4) << 16) |
             (-1LL << 32),
         5,
-        ((long long)ScreenWidth << 16) | ((long long)ScreenHeight << 48),
+        ((long long)fw << 16) | ((long long)ScreenHeight << 48),
         0x40,
     };
 
     FlushCache(0);
-    *D2_QWC = 22;
-    *D2_MADR = (int)pk & 0x0FFFFFFF;
-    *D2_CHCR = 0x101;
     sceGsSyncPath(0, 0);
     if (pad[0].flags & 0x20) {
         debug_StdPrintfDummy("Film Noise:%d\n", optionScreenMode);
@@ -381,8 +377,6 @@ void gsb_Reduction(void)
     }
 }
 
-#else
-
 /* Reduce the frame into the feedback area: one 22 qword GIF packet, built on
  * the stack and sent down the GIF channel by hand, that first clears the
  * half height frame in black and then draws it back over itself through the
@@ -390,6 +384,11 @@ void gsb_Reduction(void)
  * current target asks for. */
 void gsb_Reduction(void)
 {
+    if (ICO_JPN) {
+        gsb_Reduction_jpn();
+        return;
+    }
+
     /* PC port: the frame's extents in this packet are FRAME: the native
        width fw and its FBW (gsFrame.fbw, (fw + 63) / 64); 512 and 8 at 4:3,
        the same words as ever.  The scissor keeps its 2 .. fw - 3 columns, the
@@ -468,8 +467,6 @@ void gsb_Reduction(void)
         reductionBlue = fbKeep ? 128 : GlobalStageSetting.reductionCol[2];
     }
 }
-
-#endif
 
 /* the colour the kept frame is drawn back in */
 static const unsigned char keepFrameColor[4] = {112, 112, 112, 128}; /* derived name */
@@ -674,15 +671,13 @@ void gsb_SetMotionBlur(void)
 
 /* gsb_scissorOnDemo's state: the demo state it last saw, the band level and
    its step */
-#ifdef VERSION_JPN
 
-static int scissorLastState = 51; /* derived name */
+static int scissorLastState_jpn = 51; /* derived name */
 
-#else
+static int scissorLastState_pal = 54; /* derived name */
 
-static int scissorLastState = 54; /* derived name */
-
-#endif
+/* the first state differs as the layout ids do (the Japanese ids 3 lower) */
+#define scissorLastState (*PAL_JPN(&scissorLastState_pal, &scissorLastState_jpn))
 
 static float scissorLevel = 0.0f; /* derived name */
 
@@ -1176,15 +1171,12 @@ static void gsb_filmNoise(void)
 }
 
 /* the stage animation group each film noise target loops, -1 for none */
-#ifdef VERSION_JPN
 
-static const int filmNoiseGroup[] = {-1, 63, 64, 65, 66}; /* derived name */
+static const int filmNoiseGroup_jpn[] = {-1, 63, 64, 65, 66}; /* derived name */
 
-#else
+static const int filmNoiseGroup_pal[] = {-1, 67, 68, 69, 70}; /* derived name */
 
-static const int filmNoiseGroup[] = {-1, 67, 68, 69, 70}; /* derived name */
-
-#endif
+#define filmNoiseGroup PAL_JPN(filmNoiseGroup_pal, filmNoiseGroup_jpn)
 
 inline void gsb_ResetFilmNoise(void)
 {

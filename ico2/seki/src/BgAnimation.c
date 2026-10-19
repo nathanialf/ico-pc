@@ -555,19 +555,15 @@ static void bga_noteLastKey(const char *fn, float f, int linear, const int *next
 }
 
 #define BGA_NOTE_LAST_KEY(fn, k, f) bga_noteLastKey((fn), (f), (k)->linear, &((k) + 1)->linear)
-/* PC port: the three bga_GetMotion* store each angle as (short)(int)(f), not
-   (short)(f): the int rot[] is then sign-tested (_RotTransCurrentMatrixYXZ's
-   SIGNF), and a float converted straight to short and widened to int is
-   one conversion to int for clang, so an angle past 180 degrees kept its
-   unwrapped value and the sine its wrong sign on arm64 (the opening's
-   trunk shot was seen mirrored).  The int is in range; its
-   conversion to short wraps as the EE's and gcc's code did. */
-#ifdef VERSION_JPN
 
-static void bga_GetMotion(float *pos, float *rot, float *col, BgaPtMotion *m)
+/* The Japanese disc's one motion sampler, for every object type: the frame at
+   the display rate, the rotation in degrees (bga_CalcObject turns it into
+   bgaRot's angles), no wrap of a linear angle step past 180 degrees. */
+static void bga_GetMotion_jpn(float *pos, float *rot, float *col, BgaPtMotion *m)
 {
     BgaPtKey *k;
     BgaPtKey *k1;
+    BgaPtKey lastKey;
     float f;
     float u;
     float s0;
@@ -581,7 +577,7 @@ static void bga_GetMotion(float *pos, float *rot, float *col, BgaPtMotion *m)
     f = m->frame * (30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
 
     if (m->n == 1) {
-        BgaPtKey *p = m->key;
+        BgaPtKey *p = ICO_EEPTR(BgaPtKey *, m->key);
 
         pos[0] = p->pos[0];
         pos[1] = p->pos[1];
@@ -596,14 +592,25 @@ static void bga_GetMotion(float *pos, float *rot, float *col, BgaPtMotion *m)
         return;
     }
 
-    k = m->key;
+    k = ICO_EEPTR(BgaPtKey *, m->key);
     s0 = 0.0f;
     s1 = 0.0f;
     k = &k[bga_findPtKey(k, m->n, f)];
+    /* PC port: at the last key, a copy of it for k1 and u = 0, as in
+       bga_GetMotion */
     k1 = k + 1;
     f -= (float)k->time;
-    d = k1->time - k->time;
-    u = f / (float)d;
+    if (k1 == ICO_EEPTR(BgaPtKey *, m->key) + m->n) {
+        BGA_NOTE_LAST_KEY("bga_GetMotion_jpn", k, f);
+        lastKey = *k;
+        lastKey.time = (int)m->len > k->time ? (int)m->len : k->time + 1;
+        k1 = &lastKey;
+        d = k1->time - k->time;
+        u = 0.0f;
+    } else {
+        d = k1->time - k->time;
+        u = f / (float)d;
+    }
 
     if (k1->linear == 0) {
         float h00;
@@ -686,8 +693,13 @@ static void bga_GetMotion(float *pos, float *rot, float *col, BgaPtMotion *m)
     col[3] = 1.0f;
 }
 
-#else
-
+/* PC port: the three bga_GetMotion* store each angle as (short)(int)(f), not
+   (short)(f): the int rot[] is then sign-tested (_RotTransCurrentMatrixYXZ's
+   SIGNF), and a float converted straight to short and widened to int is
+   one conversion to int for clang, so an angle past 180 degrees kept its
+   unwrapped value and the sine its wrong sign on arm64 (the opening's
+   trunk shot was seen mirrored).  The int is in range; its
+   conversion to short wraps as the EE's and gcc's code did. */
 static void bga_GetMotion(float *pos, int *rot, float *col, BgaPtMotion *m)
 {
     BgaPtKey *k;
@@ -1156,8 +1168,6 @@ static void bga_GetMotionLightning(float *pos, int *rot, float *col, BgaPtMotion
     col[3] = 1.0f;
 }
 
-#endif
-
 static inline int bga_findExtKey(BgaExtKey *k, int n, float f) /* derived name */
 {
     int lo = 0;
@@ -1443,12 +1453,11 @@ typedef union { /* field names derived */
 /* The flag bga_CalcObject tests before translating by the pivot. */
 static int bgaPivotFlag = 0; /* derived name */
 
-#ifdef VERSION_JPN
-
-/* Set a motion's frame (set 1: to f, held between 0 and the motion's length)
-   or step it by dt and, once it runs past the length, wrap it to 0 when
-   looping or hold it at the end; the length is in 30 Hz frames, scaled to
-   the display rate. */
+/* The Japanese disc's motion step (the European disc's are bga_stepEnvelope,
+   bga_stepMotion and bga_clampCount). Set a motion's frame (set 1: to f, held
+   between 0 and the motion's length) or step it by dt and, once it runs past
+   the length, wrap it to 0 when looping or hold it at the end; the length is
+   in 30 Hz frames, scaled to the display rate. */
 static void bga_updateMotionFrame(BgaExtMotion *m, float dt, int set, float f,
                                   int loop) /* derived name */
 {
@@ -1481,8 +1490,6 @@ static void bga_updateMotionFrame(BgaExtMotion *m, float dt, int set, float f,
     }
 }
 
-#else
-
 static inline float bga_palFrame(float f) /* derived name */
 {
     if (systemStatus[0]) {
@@ -1508,8 +1515,6 @@ static inline void bga_stepEnvelope(BgaEnvEnt *e, float dt, int loop) /* derived
         }
     }
 }
-
-#endif
 
 /* Apply a node's envelopes: each entry's type says
  * what its motion drives, the node work record's float for the object, the
@@ -1777,17 +1782,15 @@ static void bga_CalcObject(BgaDObjEnt *d, float dt, float frame, int cut, int pl
 {
     BgaPtMotion *m = (BgaPtMotion *)&d->motion;
     int save;
-#ifdef VERSION_JPN
-    float s;
-#else
-    float *pos;
-#endif
+    float s;    /* the Japanese disc's particle scale sum */
+    float *pos; /* the European disc's particle position */
 
     if (ICO_JPN) {
-        bga_GetMotion(bgaPos, bgaRotDeg, bgaScale, m);
-        bgaRot[0] = (short)(bgaRotDeg[0] * (65536.0f / 360.0f));
-        bgaRot[1] = (short)(bgaRotDeg[1] * (65536.0f / 360.0f));
-        bgaRot[2] = (short)(bgaRotDeg[2] * (65536.0f / 360.0f));
+        bga_GetMotion_jpn(bgaPos, bgaRotDeg, bgaScale, m);
+        /* PC port: (short)(int), as the European samplers store the angles */
+        bgaRot[0] = (short)(int)(bgaRotDeg[0] * (65536.0f / 360.0f));
+        bgaRot[1] = (short)(int)(bgaRotDeg[1] * (65536.0f / 360.0f));
+        bgaRot[2] = (short)(int)(bgaRotDeg[2] * (65536.0f / 360.0f));
     } else {
         switch (d->type) {
         case 13:
@@ -1885,39 +1888,41 @@ static void bga_CalcObject(BgaDObjEnt *d, float dt, float frame, int cut, int pl
             s = bgaScale[0] + bgaScale[1] + bgaScale[2];
         }
         CopyQuaternion(BGA_OBJ(BgaParticleEnt *, d->u.obj)->quat, GetCurrentQuaternion());
-#ifdef VERSION_JPN
-        _CopyVector(BGA_OBJ(BgaParticleEnt *, d->u.obj)->pos, bgaPos);
-        if (4.0f < s) {
-            BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.eff =
-                SetParticleEffectActiveSensing(BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.id,
-                                               BGA_OBJ(BgaParticleEnt *, d->u.obj)->pos,
-                                               BGA_OBJ(BgaParticleEnt *, d->u.obj)->quat);
-        } else if (0.0f < s) {
-            BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.eff = SetParticleEffect(
-                BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.id, bgaPos, GetCurrentQuaternion());
-#else
-        _CopyVector(BGA_OBJ(BgaParticleEnt *, d->u.obj)->pos, pos);
-        if (systemStatus[0] == 0) {
-            if (0.0f < bgaScale[1]) {
+        if (ICO_JPN) {
+            _CopyVector(BGA_OBJ(BgaParticleEnt *, d->u.obj)->pos, bgaPos);
+            if (4.0f < s) {
                 BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.eff =
                     SetParticleEffectActiveSensing(BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.id,
                                                    BGA_OBJ(BgaParticleEnt *, d->u.obj)->pos,
                                                    BGA_OBJ(BgaParticleEnt *, d->u.obj)->quat);
-            } else if (0.0f < bgaScale[0]) {
-                BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.eff = SetParticleEffect(
-                    BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.id, pos, GetCurrentQuaternion());
-            }
-        } else {
-            if (0.41406468f <= bgaScale[1]) {
-                BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.eff =
-                    SetParticleEffectActiveSensing(BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.id,
-                                                   BGA_OBJ(BgaParticleEnt *, d->u.obj)->pos,
-                                                   BGA_OBJ(BgaParticleEnt *, d->u.obj)->quat);
-            } else if (0.41406468f <= bgaScale[0]) {
+            } else if (0.0f < s) {
                 BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.eff = SetParticleEffect(
                     BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.id, bgaPos, GetCurrentQuaternion());
             }
-#endif
+        } else {
+            _CopyVector(BGA_OBJ(BgaParticleEnt *, d->u.obj)->pos, pos);
+            if (systemStatus[0] == 0) {
+                if (0.0f < bgaScale[1]) {
+                    BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.eff =
+                        SetParticleEffectActiveSensing(BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.id,
+                                                       BGA_OBJ(BgaParticleEnt *, d->u.obj)->pos,
+                                                       BGA_OBJ(BgaParticleEnt *, d->u.obj)->quat);
+                } else if (0.0f < bgaScale[0]) {
+                    BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.eff = SetParticleEffect(
+                        BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.id, pos, GetCurrentQuaternion());
+                }
+            } else {
+                if (0.41406468f <= bgaScale[1]) {
+                    BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.eff =
+                        SetParticleEffectActiveSensing(BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.id,
+                                                       BGA_OBJ(BgaParticleEnt *, d->u.obj)->pos,
+                                                       BGA_OBJ(BgaParticleEnt *, d->u.obj)->quat);
+                } else if (0.41406468f <= bgaScale[0]) {
+                    BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.eff =
+                        SetParticleEffect(BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.id, bgaPos,
+                                          GetCurrentQuaternion());
+                }
+            }
         }
         break;
     case 14:
@@ -2032,29 +2037,27 @@ typedef struct BgaCntNode { /* field names derived */
     /* 0x34 */ BgaCount count;
 } BgaCntNode; /* derived name */
 
-#ifdef VERSION_JPN
-
-static void bga_resetObjectCounter(BgaCntNode *o, float f, int loop)
+/* The Japanese disc's counter reset: each counter set through
+   bga_updateMotionFrame (the European disc's clamps with bga_clampCount). */
+static void bga_resetObjectCounter_jpn(BgaCntNode *o, float f, int loop)
 {
     BgaCountEnt *e;
 
-    e = o->ents;
+    e = ICO_EEPTR(BgaCountEnt *, o->ents);
     if (e != 0) {
         while (e->obj != 0) {
-            bga_updateMotionFrame((BgaExtMotion *)e->obj, 0.0f, 1, f, loop);
+            bga_updateMotionFrame(ICO_EEPTR(BgaExtMotion *, e->obj), 0.0f, 1, f, loop);
             e++;
         }
     }
     if (o->child != 0) {
-        bga_resetObjectCounter(o->child, f, loop);
+        bga_resetObjectCounter_jpn(ICO_EEPTR(BgaCntNode *, o->child), f, loop);
     }
     if (o->sibling != 0) {
-        bga_resetObjectCounter(o->sibling, f, loop);
+        bga_resetObjectCounter_jpn(ICO_EEPTR(BgaCntNode *, o->sibling), f, loop);
     }
     bga_updateMotionFrame((BgaExtMotion *)&o->count, 0.0f, 1, f, loop);
 }
-
-#else
 
 static inline void bga_clampCount(BgaCount *o, float f) /* derived name */
 {
@@ -2082,6 +2085,11 @@ static void bga_resetObjectCounter(BgaCntNode *o, float f, int loop)
 {
     BgaCountEnt *e;
 
+    if (ICO_JPN) {
+        bga_resetObjectCounter_jpn(o, f, loop);
+        return;
+    }
+
     e = ICO_EEPTR(BgaCountEnt *, o->ents);
     if (e != 0) {
         while (e->obj != 0) {
@@ -2098,8 +2106,6 @@ static void bga_resetObjectCounter(BgaCntNode *o, float f, int loop)
     bga_clampCount(&o->count, f);
 }
 
-#endif
-
 void bga_SetFrame(BgaHeader *p, int frame, int mode, int loop)
 {
     float f;
@@ -2111,12 +2117,12 @@ void bga_SetFrame(BgaHeader *p, int frame, int mode, int loop)
             bgaStreamSync = 1;
         }
         _CopyVector(bgaLastCameraPos, bgaCameraMatrix[3]);
-#ifdef VERSION_JPN
     }
-    start = p->start;
-    if (start < 0) {
-        start = 0;
-#endif
+    if (ICO_JPN) {
+        start = p->start;
+        if (start < 0) {
+            start = 0;
+        }
     }
     switch (frame) {
     case 0:
@@ -2146,16 +2152,12 @@ void bga_SetFrame(BgaHeader *p, int frame, int mode, int loop)
         return;
     default:
         f = (float)frame;
-#ifdef VERSION_JPN
-        p->frame = f * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f);
-        if (frame < start) {
-            p->frame =
-                (float)start * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f);
-#else
-        p->frame = bga_palFrame(f);
-        if (f < p->start) {
-            p->frame = bga_palFrame(p->start);
-#endif
+        p->frame = PAL_JPN(bga_palFrame(f),
+                           f * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f));
+        if (PAL_JPN(f < p->start, frame < start)) {
+            p->frame = PAL_JPN(
+                bga_palFrame(p->start),
+                (float)start * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f));
         } else if (p->end < f) {
             p->frame =
                 PAL_JPN(bga_palFrame(p->end),
@@ -2648,11 +2650,12 @@ inline int bga_CheckAnimationFinish(BgaHeader *p)
     float t = p->frame;
     int r = 0;
 
-#ifdef VERSION_JPN
-    if (f * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) <= t || p->mode != 1) {
-        r = 1;
-#else
-    if (systemStatus[0]) {
+    if (ICO_JPN) {
+        if (f * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) <= t ||
+            p->mode != 1) {
+            r = 1;
+        }
+    } else if (systemStatus[0]) {
         if (f * 0.82812935f <= t || p->mode != 1) {
             r = 1;
         }
@@ -2660,7 +2663,6 @@ inline int bga_CheckAnimationFinish(BgaHeader *p)
         if (f <= t || p->mode != 1) {
             r = 1;
         }
-#endif
     }
     return r;
 }
@@ -2671,12 +2673,12 @@ inline int bga_CheckAnimationFrame(BgaHeader *p, int frame, int reset)
     float t = p->frame;
     int r = 0;
 
-#ifdef VERSION_JPN
-    if (f * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) <= p->frame ||
-        p->mode != 1) {
-        r = 1;
-#else
-    if (systemStatus[0]) {
+    if (ICO_JPN) {
+        if (f * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) <= p->frame ||
+            p->mode != 1) {
+            r = 1;
+        }
+    } else if (systemStatus[0]) {
         if (f * 0.82812935f <= t || p->mode != 1) {
             r = 1;
         }
@@ -2684,7 +2686,6 @@ inline int bga_CheckAnimationFrame(BgaHeader *p, int frame, int reset)
         if (f <= t || p->mode != 1) {
             r = 1;
         }
-#endif
     }
     if (r && reset) {
         p->mode = 0;

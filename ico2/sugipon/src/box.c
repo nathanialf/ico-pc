@@ -1837,13 +1837,10 @@ static inline int checkItemHit(GObj *obj, float *dir) /* derived name */
 
 static int moveBoxAutoMatic(GObj *self, int dir)
 {
-#ifdef VERSION_JPN
-    static float v[4] = {0.0f, 0.0f, 0.5f, 0.0f};
-    static float v2[4] = {0.0f, 0.0f, -0.5f, 0.0f};
-#else
+    /* the Japanese build's v and v2 are static constants, the push without
+       the frame-rate scale w */
     float v[4];
     float v2[4];
-#endif
     BoxWork *p = GOBJ_SUB(self)->work;
     float t = 30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
     float w = t * t;
@@ -1855,18 +1852,14 @@ static int moveBoxAutoMatic(GObj *self, int dir)
         AddVectorXYZ(p->vel, p->vel, ZeroVector);
         break;
     case 1:
-        if (!ICO_JPN) {
-            memset(v, 0, 16);
-            v[2] = w * 0.5f;
-        }
+        memset(v, 0, 16);
+        v[2] = PAL_JPN(w * 0.5f, 0.5f);
         p->friction = 0.98f;
         AddVectorXYZ(p->vel, p->vel, v);
         break;
     case -1:
-        if (!ICO_JPN) {
-            memset(v2, 0, 16);
-            v2[2] = w * -0.5f;
-        }
+        memset(v2, 0, 16);
+        v2[2] = PAL_JPN(w * -0.5f, -0.5f);
         p->friction = 0.98f;
         AddVectorXYZ(p->vel, p->vel, v2);
         break;

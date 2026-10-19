@@ -125,9 +125,11 @@ static inline void _advanceRing(int amt) /* derived name */
     }
 }
 
-#ifdef VERSION_JPN
-
-static int _infoUpdate(void)
+/* The Japanese disc's stream clock: a tick adds 1500 / the tick rate (50 at
+   30 ticks a second) and a stream frame costs 50; no early cut switch on a
+   header flag and no frame counter (the European body: 2997 a stream frame,
+   2997 or 3619 a tick). */
+static int _infoUpdate_jpn(void)
 {
     int top;
     int i;
@@ -186,13 +188,15 @@ static int _infoUpdate(void)
     return 0;
 }
 
-#else
-
 static int _infoUpdate(void)
 {
     int top;
     int n;
     int i;
+
+    if (ICO_JPN) {
+        return _infoUpdate_jpn();
+    }
 
     if (headerRead == 0) {
         if (_checkRing(4096)) {
@@ -275,8 +279,6 @@ static int _infoUpdate(void)
     frameTime += systemStatus[0] == 0 ? 2997 : 3619;
     return 0;
 }
-
-#endif
 
 void PlayStreamMotion(void)
 {

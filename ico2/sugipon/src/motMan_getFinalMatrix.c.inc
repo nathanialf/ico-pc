@@ -1046,48 +1046,9 @@ static void _getFinalMatrix(int id)
     case 45:
     case 49:
         if (skelRoot->lifting != 0) {
-#ifdef VERSION_JPN
-            GET_NODE_ROT(q, dq);
-            {
-                int i;
-                int flag;
-                SkelNode *cn;
-                int ci;
-                float len[2];
-                float p[4];
-                float sv[4];
-                float d;
-                float dd;
-                float d2;
-                float aa;
-                float bb;
-                float (*m)[4];
-
-                flag = 0;
-                MatrixDrive_PushMatrix();
-                CopyVector((void *)(MatrixDrive_GetMatrix()[3]), ZeroPoint);
-                MultiMatrixByQuaternion(dq);
-                MatrixDrive_PushMatrix();
-                for (i = 0, cn = node; i < 2; i++) {
-                    ci = cn->child;
-                    if (ci == -1) {
-                        flag = 1;
-                        break;
-                    }
-                    cn = &skelNode[ci];
-                    sceVu0ScaleVectorXYZ(sv, cn->pos, skelScale);
-                    MatrixDrive_TransMatrixV(sv);
-                    MultiMatrixByQuaternion(skelMotion + ci * 32 + 16);
-                    len[i] = skelScale * VectorLength(cn->pos);
-                }
-                CopyVector(p, (void *)(MatrixDrive_GetMatrix()[3]));
-                switch (node->kind) {
-                case 45:
-                    p[1] += skelRoot->lift[0];
-                    break;
-                case 49:
-                    p[1] += skelRoot->lift[1];
-#else
+            /* one body for both discs: the Japanese build's text takes the
+               node rotation before these declarations, inside a block, and
+               stores ikRotY without the (short)(int) casts, the same values */
             int i;
             int flag;
             SkelNode *cn;
@@ -1112,34 +1073,8 @@ static void _getFinalMatrix(int id)
                 ci = cn->child;
                 if (ci == -1) {
                     flag = 1;
-#endif
                     break;
                 }
-#ifdef VERSION_JPN
-                d = VectorLength(p);
-                MatrixDrive_PopMatrix();
-                dd = d * d;
-                m = MatrixDrive_GetMatrix();
-                sceVu0TransposeMatrix(m, m);
-                sceVu0ApplyMatrix(p, m, p);
-                sceVu0Normalize(p, p);
-                ikRotZ = asinf(p[1]) * 10430.378f;
-                ikRotY = -asinf(p[2]) * 10430.378f;
-                aa = len[0] * len[0];
-                bb = len[1] * len[1];
-                d2 = d + d;
-                ikBend0 = acosf((dd + aa - bb) / (d2 * len[0])) * 10430.378f;
-                ikBend1 = acosf((dd + bb - aa) / (d2 * len[1])) * 10430.378f;
-                MatrixDrive_PopMatrix();
-                if (flag == 0) {
-                    MultiQuaternion(q, q, dq);
-                    RotQuaternionZ(q, ikRotZ);
-                    RotQuaternionY(q, ikRotY);
-                    RotQuaternionZ(q, -ikBend0);
-                } else {
-                    MultiQuaternion(q, q, dq);
-                }
-#else
                 cn = &skelNode[ci];
                 sceVu0ScaleVectorXYZ(sv, cn->pos, skelScale);
                 MatrixDrive_TransMatrixV(sv);
@@ -1179,7 +1114,6 @@ static void _getFinalMatrix(int id)
                 RotQuaternionZ(q, -ikBend0);
             } else {
                 MultiQuaternion(q, q, dq);
-#endif
             }
             APPLY_ROT(q);
             break;
