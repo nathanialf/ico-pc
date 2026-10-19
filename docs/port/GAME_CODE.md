@@ -455,12 +455,14 @@ row `port/core/region_<slug>.c` defining `ico_region_info_<slug>`, a fresh
 `port/data/discs.c` naming the slug; for every non-PAL row
 `config/ee_layout.<slug>.txt` (once any `config/ee_layout.*.txt` exists) and
 `port/data/gen/<slug>/table_desc.c`, with `ico_table_sets[]` in `port/data/gen/table_sets.c` in
-the table's order (once that file exists). A missing piece names its recipe step. With no
-`config/regions.txt` and no `region.h`, a tree that names none of the macros passes. Exit 0: every
-rule holds and no block is left; exit 2: raw blocks remain and every one is a hand item (listed);
-exit 1: a rule misfired or the tree needs `convert`, `gen-header` or `gen-table` (listed). CI
-requires exit 0. The pre-commit hook (step 8) fails on exit 1 and on exit 2 only warns, printing
-the count, so the hand list after a merge can be worked one commit at a time.
+the table's order (once that file exists). A missing piece is a `glue` line naming its recipe
+step. With no `config/regions.txt` and no `region.h`, a tree that names none of the macros passes.
+Exit 0: every rule holds, no block is left and no glue piece is missing; exit 2: raw blocks remain
+and every one is a hand item, or a row's glue piece is missing (listed: the to-do list of a target
+joining); exit 1: a rule misfired or the tree needs `convert`, `gen-header` or `gen-table`
+(listed). CI requires exit 0. The pre-commit hook (step 8) fails on exit 1 and on exit 2 only
+warns, printing the counts, so the hand list after a merge and the glue of a new row can be worked
+one commit at a time.
 
 `gen-table` writes `port/core/region_table.c` from the table: an `extern` for each row's
 `ico_region_info_<slug>` and `ico_region_info[ICO_REGION_COUNT]` in the table's order (`gen_table`);

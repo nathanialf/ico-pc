@@ -90,7 +90,8 @@ The files are EUC-JP: the tool reads and writes bytes and never decodes.
   tools/region_blocks.py check [--root DIR]
                          exit 0: no region block, every rule holds;
                          exit 2: raw blocks remain and every one is a hand
-                         item (listed); exit 1: a rule misfired (listed)
+                         item, or a row's glue piece is missing (listed);
+                         exit 1: a rule misfired (listed)
   tools/region_blocks.py rename [--root DIR] [--check] [--set SLUGS]
                          rewrite the two-row spelling under ico2/ and sce/
                          for the rows sharing the Japanese arm (every named
@@ -354,13 +355,18 @@ def gen_table(regions):
     return ("\n".join(out) + "\n").encode("ascii")
 
 
-def glue_problems(root, regions):
+def glue_problems(root, regions, todo=None):
     """The pieces "Adding a build target" names, per row of the table. A
     piece is looked for only once its mechanism is in the tree: the region
     files once port/core/ exists, the EE layouts once any
     config/ee_layout.<slug>.txt exists, the descriptor sets once
-    port/data/gen/table_sets.c exists."""
+    port/data/gen/table_sets.c exists. A piece that is missing (a row's
+    file, entry or set not written yet) goes to `todo` when it is given (the
+    to-do list of a target joining: `check` exits 2 on it, as on a hand
+    item); a stale region_table.c or a region file defining the wrong name
+    is a problem."""
     problems = []
+    missing = problems if todo is None else todo
     recipe = 'docs/port/GAME_CODE.md "Adding a build target"'
     core = os.path.join(root, "port", "core")
     if os.path.isdir(core):
@@ -368,7 +374,7 @@ def glue_problems(root, regions):
             path = os.path.join(core, "region_%s.c" % r.slug)
             want = re.compile(rb"\bconst\s+IcoRegionInfo\s+ico_region_info_%s\s*=" % r.slug.encode())
             if not os.path.exists(path):
-                problems.append("port/core/region_%s.c is missing (%s, step 2)" % (r.slug, recipe))
+                missing.append("port/core/region_%s.c is missing (%s, step 2)" % (r.slug, recipe))
             elif not want.search(read(path)):
                 problems.append("port/core/region_%s.c defines no ico_region_info_%s (%s, step 2)"
                                 % (r.slug, r.slug, recipe))
@@ -380,7 +386,7 @@ def glue_problems(root, regions):
     if os.path.isdir(config) and any(re.match(r"ee_layout\.\w+\.txt$", f) for f in os.listdir(config)):
         for r in regions[1:]:
             if not os.path.exists(os.path.join(config, "ee_layout.%s.txt" % r.slug)):
-                problems.append("config/ee_layout.%s.txt is missing (%s, step 3)" % (r.slug, recipe))
+                missing.append("config/ee_layout.%s.txt is missing (%s, step 3)" % (r.slug, recipe))
     discs = os.path.join(root, DISCS_C)
     if os.path.exists(discs):
         text = read(discs)
@@ -390,17 +396,17 @@ def glue_problems(root, regions):
             entry = re.search(rb"\[\s*ICO_REGION_%s\s*\]\s*=\s*\{(.*?)(?=\[\s*ICO_REGION_|\Z)"
                               % r.upper.encode(), body, re.S)
             if entry is None or b'"%s"' % r.slug.encode() not in entry.group(1):
-                problems.append("%s: ico_discs[] has no [ICO_REGION_%s] entry naming \"%s\" (%s, step 2)"
+                missing.append("%s: ico_discs[] has no [ICO_REGION_%s] entry naming \"%s\" (%s, step 2)"
                                 % (DISCS_C, r.upper, r.slug, recipe))
     sets = os.path.join(root, TABLE_SETS)
     if os.path.exists(sets):
         for r in regions[1:]:
             if not os.path.exists(os.path.join(root, "port", "data", "gen", r.slug, "table_desc.c")):
-                problems.append("port/data/gen/%s/table_desc.c is missing (%s, step 3)" % (r.slug, recipe))
+                missing.append("port/data/gen/%s/table_desc.c is missing (%s, step 3)" % (r.slug, recipe))
         m = re.search(rb"ico_table_sets\s*\[[^\]]*\]\s*=\s*\{(.*?)\}\s*;", read(sets), re.S)
         order = [x.decode() for x in re.findall(rb"ico_table_set_(\w+)", m.group(1))] if m else None
         if order != [r.slug for r in regions]:
-            problems.append("%s: ico_table_sets[] is %s, not the table's order %s (%s, step 3)"
+            missing.append("%s: ico_table_sets[] is %s, not the table's order %s (%s, step 3)"
                             % (TABLE_SETS, order, [r.slug for r in regions], recipe))
     return problems
 
@@ -2862,8 +2868,9 @@ def cmd_check(root, quiet=False):
             if not graph.covered(os.path.normpath(p), header):
                 problems.append("%s: names the region macros but does not reach %s (typedef.h includes it)"
                                 % (rel(root, p), HEADER))
+    todo = []
     if have_table:
-        problems.extend(glue_problems(root, regions))
+        problems.extend(glue_problems(root, regions, todo))
     # the twins table
     for path, fn, tw, n in twins:
         have = defined_functions.get(path)
@@ -2876,6 +2883,8 @@ def cmd_check(root, quiet=False):
     if not quiet:
         for p in problems:
             print("problem: %s" % p)
+        for p in todo:
+            print("glue: %s" % p)
         for h in sorted(hand, key=lambda x: (x.path, x.line)):
             print(h.row())
     if problems:
@@ -2883,10 +2892,11 @@ def cmd_check(root, quiet=False):
             print("region_blocks: %d problem(s): a rule misfired or the tree needs `convert`/`gen-header`"
                   % len(problems))
         return 1
-    if hand:
+    if hand or todo:
         if not quiet:
             print("region_blocks: %d raw region block(s) remain, every one a hand item "
-                  "(tools/region_blocks.py report lists them)" % len(hand))
+                  "(tools/region_blocks.py report lists them); %d glue piece(s) of a row missing"
+                  % (len(hand), len(todo)))
         return 2
     if not quiet:
         print("region_blocks: no region block under %s; the region forms are in order" % ", ".join(DIRS))

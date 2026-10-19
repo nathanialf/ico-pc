@@ -356,7 +356,20 @@ class Set:
 
 
 def all_sets():
-    return [Set(r) for r in g.regions()]
+    """A set per row of config/regions.txt. A non-PAL row whose manifest is
+    not written yet (a target joining: docs/port/GAME_CODE.md "Adding a
+    build target", step 3) has no set until it is: it is named on stderr,
+    and tools/region_blocks.py check lists the missing set as glue (exit 2;
+    CI requires 0). A manifest that exists is always read."""
+    sets = []
+    for r in g.regions():
+        if r["slug"] != "pal" and not manifest_path(r["slug"]).exists():
+            print(f"gen_data_desc: {r['slug']}: no {manifest_path(r['slug']).relative_to(ROOT)} "
+                  "yet: no descriptor set for it (run --manifest --version "
+                  f"{r['slug']})", file=sys.stderr)
+            continue
+        sets.append(Set(r))
+    return sets
 
 
 # ------------------------------------------------------- the bit audit -------
