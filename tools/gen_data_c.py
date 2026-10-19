@@ -37,7 +37,7 @@ One member per run (MEMBER is the name in the schema):
       target lacks takes the schema's `default` row, and the bit words of
       MotionDef are permuted by the same map the loader uses
       (tools/gen_ee_layout.py, config/motion_bits.<slug>.txt). This is the
-      reference of the loader's second descriptor set (tables_loader_jpn).
+      reference of the loader's other descriptor sets (tables_loader_<slug>).
 
 A symbol the member defines in .rodata is written `const`, as the developers
 compiled it, unless its header declares it `extern` without const: a table

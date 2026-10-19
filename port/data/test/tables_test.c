@@ -19,12 +19,13 @@
  *
  * With DISC_IMAGE the loader reads the set's boot ELF (SCES_507.60) through
  * the VFS, as ico_pc does; without it (or when the image is absent) it reads
- * BASE_ELF. --set jpn loads the Japanese disc's descriptor set and compares
- * with the Japanese reference (ico_ref_jpn_<name>: gen_data_c.py --version
- * jpn, the Japanese bytes in the PAL record's form by config/ee_layout.jpn.txt,
- * with the defaults and the permuted bit words), each table's records past
- * the disc's count zero; then OTHER_ELF (the PAL ELF) is refused by the
- * Japanese set and BASE_ELF by the PAL set, each naming the disc it expects.
+ * BASE_ELF. --set SLUG (jpn, kor) loads that disc's descriptor set and
+ * compares with its reference (ico_ref_<slug>_<name>: gen_data_c.py --version
+ * <slug>, the disc's bytes in the PAL record's form by
+ * config/ee_layout.<slug>.txt, with the defaults and the permuted bit words),
+ * each table's records past the disc's count zero; then OTHER_ELF (the PAL
+ * ELF) is refused by the disc's set and BASE_ELF by the PAL set, each naming
+ * the disc it expects.
  * It exits 77 (skipped) when BASE_ELF is absent or the reference was not
  * built.
  */
@@ -53,6 +54,8 @@ static const Sym syms_pal[] = {
 #undef X
 };
 
+/* The other discs' references, each built when its ELF was present at
+   configure (port/data/CMakeLists.txt defines ICO_TABLES_TEST_<SLUG>). */
 #ifdef ICO_TABLES_TEST_JPN
 #define X(name) extern char ico_ref_jpn_##name[];
 ICO_TABLE_SYMBOLS(X)
@@ -64,6 +67,33 @@ static const Sym syms_jpn[] = {
 #undef X
 };
 #endif
+
+#ifdef ICO_TABLES_TEST_KOR
+#define X(name) extern char ico_ref_kor_##name[];
+ICO_TABLE_SYMBOLS(X)
+#undef X
+
+static const Sym syms_kor[] = {
+#define X(name) {#name, name, ico_ref_kor_##name},
+    ICO_TABLE_SYMBOLS(X)
+#undef X
+};
+#endif
+
+typedef struct RefSet {
+    const char *slug;
+    const Sym *syms;
+} RefSet;
+
+static const RefSet ref_sets[] = {
+#ifdef ICO_TABLES_TEST_JPN
+    {"jpn", syms_jpn},
+#endif
+#ifdef ICO_TABLES_TEST_KOR
+    {"kor", syms_kor},
+#endif
+    {NULL, NULL},
+};
 
 static int failures;
 
@@ -197,11 +227,11 @@ static int main_set(const IcoTableSet *set, const char *elf_path, const char *im
     uint32_t i;
     int rc;
 
-#ifdef ICO_TABLES_TEST_JPN
-    if (strcmp(set->slug, "jpn") == 0) {
-        syms = syms_jpn;
+    for (i = 0; ref_sets[i].slug != NULL; i++) {
+        if (strcmp(set->slug, ref_sets[i].slug) == 0) {
+            syms = ref_sets[i].syms;
+        }
     }
-#endif
     if (syms == NULL) {
         printf("tables_test: no %s reference was built (the ELF was absent at configure): "
                "skipped\n",
