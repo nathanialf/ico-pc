@@ -4,7 +4,7 @@
 # .data/.rodata/.sdata but no .text, plus three runs in the same data-only
 # territory that MAIN.MAP does not list (member name unmapped_<VMA>).
 # Each member, typed by config/data_schema.pal.txt, is written as one C
-# translation unit by tools/gen_data_c.py (build/data/<member>.c, its rows the
+# translation unit by tools/gen_data_c.py (build/pal/data/<member>.c, its rows the
 # sections of that one object), which reads this table and the user's own
 # baserom/pal/baseelf.elf; the bytes are never committed.
 #

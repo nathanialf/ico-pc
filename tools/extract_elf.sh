@@ -3,7 +3,7 @@
 # tools/extract_elf.sh
 #
 # Extracts this branch's EE-side boot ELF from the user's ICO disc image and
-# records its SHA-1 to config/sha1sums.txt (creating the entry on first run,
+# records its SHA-1 to config/sha1sums.<version>.txt (creating the entry on first run,
 # verifying against the existing entry on subsequent runs). Which disc and
 # where the outputs land follow the branch's target (tools/ico_version.py):
 #   main / pal : baserom/Ico_PAL.iso        -> baserom/pal/baseelf.elf

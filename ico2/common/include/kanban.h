@@ -19,7 +19,7 @@ typedef struct { /* field names derived */
 typedef struct Kanban {  /* field names derived */
     LtProp *layout;      /* 0x00, the texLayout row shown, 0 for a free entry */
     int pri;             /* 0x04, the list is kept in ascending order of it */
-    int key;             /* 0x08, this frame's key: 1 cross, 2 triangle, 0 none */
+    int key;             /* 0x08, this frame's key: 1 cross, 2 triangle (JPN 1 circle, 2 cross), 0 none */
     int flags;           /* 0x0C, bit 0: fading out */
     float alpha;         /* 0x10, 0 to 127 */
     KanbanCol col;       /* 0x14 */

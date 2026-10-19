@@ -456,7 +456,10 @@ against one converted line, and the next merge has an upstream commit as its bas
    converted `if`/`else` against a host form gets the seams in both arms; a raw hand block against
    port text: the PAL arm with the seams, the Japanese arm dropped when it is a layout item, else
    kept raw with the seams in the PAL arm. Upstream's names, types and fixes win
-   ([The decompilation](#the-decompilation)).
+   ([The decompilation](#the-decompilation)). Upstream's files that serve only its PS2 build
+   (its build and ELF-check scripts, progress pages, per-target notes) stay deleted here; its
+   [docs/TARGETS.md](https://github.com/nathanialf/ico/blob/main/docs/TARGETS.md) is the
+   inventory of where each target's build differs from PAL's, the reading for a hand item.
 4. `python3 tools/region_blocks.py report` on the merged tree is the hand list; work it with the
    patterns above, adding each twin to `config/region_twins.txt`.
 5. `check` exits 0 (the include walk also finds upstream files the port's tree must change, such as a

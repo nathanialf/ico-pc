@@ -107,7 +107,12 @@ extern void gif_StartPacketPri(int pri);
 
 static void init_textures_of_specified_property(int first, int last);
 
+#ifdef VERSION_JPN
+
+static inline char *get_texture_base_name(const char *src) /* derived name */
+#else
 static inline char *get_texture_base_name(char *src) /* derived name */
+#endif
 {
     /* the result points into it, so on the host it outlives the call */
     static char buf[256];
@@ -134,7 +139,11 @@ static inline char *get_texture_base_name(char *src) /* derived name */
 static inline int get_texture_no_of_property(int idx) /* derived name */
 {
     int n;
+#ifdef VERSION_JPN
+    const char *src;
+#else
     char *src;
+#endif
     char *name;
     int no;
 
@@ -145,10 +154,12 @@ static inline int get_texture_no_of_property(int idx) /* derived name */
     no = tex_GetTextureNo(name);
 
     if (no < 0) {
-        debug_StdPrintfDummy("tex_id %d\n", n);
+        if (!ICO_JPN) {
+            debug_StdPrintfDummy("tex_id %d\n", n);
+        }
         debug_StdPrintfDummy("no texture loaded.(%s)\n", src);
-        debug_assert(__FILE__, 272);
-        __assert(__FILE__, 272, "0");
+        debug_assert(__FILE__, LN(272, 265));
+        __assert(__FILE__, LN(272, 265), "0");
     }
     return no;
 }
@@ -178,10 +189,10 @@ static inline int kanban_layout_key(LtProp *pr) /* derived name */
     } else {
         unsigned long long button = pad[0].flags;
 
-        if (button & 0x40) {
+        if (button & PAL_JPN(0x40, 0x20)) {
             ret = 1;
         } else {
-            ret = (button & 0x10) ? 2 : 0;
+            ret = (button & PAL_JPN(0x10, 0x40)) ? 2 : 0;
         }
     }
     return ret;
@@ -305,7 +316,9 @@ static void init_textures_of_specified_property(int first, int last)
     int no;
 
     for (i = first; i < last; i++) {
-        debug_StdPrintfDummy("propertyId %d\n", i);
+        if (!ICO_JPN) {
+            debug_StdPrintfDummy("propertyId %d\n", i);
+        }
         no = get_texture_no_of_property(i);
         /* the EE's stride and texData-before-texNo offset are 32-bit only */
         texProperty[i].texNo = no;
@@ -319,7 +332,7 @@ void kanbanInit(int no)
     if (no != 0) {
         init_textures_of_property_range(stageData[no].layoutFirst, stageData[no].layoutLast);
     } else {
-        init_textures_of_property_range(0, 1);
+        init_textures_of_property_range(0, PAL_JPN(1, 4));
         kanbanReqAllDel();
         kanbanCommonRead = 1;
     }
@@ -388,7 +401,7 @@ static void display_texture(LtProp *pr, LtProperty *e, KanbanCol *col)
         gif_StartPacketPri(11);
         gif_SetZTest(0);
 
-        for (i = 0; i < r[2] * r[3] / 300; i++) {
+        for (i = 0; i < r[2] * r[3] / PAL_JPN(300, 1200); i++) {
             pt[0] = r[0] + rand() % r[2];
             pt[1] = r[1] + rand() % r[3];
             alpha = rand() % 127 + 32;

@@ -16,7 +16,7 @@ typedef struct VoTag {      /* field names derived */
     char packet[5][157440]; /* 0x40, the per-field image transfer packets */
 } VoTag; /* derived name */
 
-/* One decoded picture: 720 x 576 RGBA32. */
+/* One decoded picture: 720 x 576 RGBA32 (JPN 720 x 480). */
 typedef struct VoData { /* field names derived */
     unsigned int pixel[414720];
 } VoData; /* derived name */

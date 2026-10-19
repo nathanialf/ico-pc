@@ -41,7 +41,7 @@ static IosSema jimakuShownSema; /* derived name */
 static IosSema jimakuFrameSema; /* derived name */
 
 #include "jimaku.h"
-#include "layout_texture.h" /* texProperty: jimaku's entries are 434 and 435 */
+#include "layout_texture.h" /* texProperty: jimaku's entries are 434 and 435 (JPN 410 and 411) */
 #include "gflag.h"
 
 typedef struct JimCol { /* field names derived */
@@ -217,25 +217,29 @@ static void jimakuMgrBegin(JimakuArg *p)
     jimakuRing[0].state = 3;
     jimakuRing[0].tex = -1;
     sub->ringPos = 1;
-    switch (NonLinearCameraMove) {
-    case 2:
-        st = 0;
-        break;
-    case 3:
-        st = 2;
-        break;
-    case 4:
-        st = 4;
-        break;
-    case 5:
-        st = 6;
-        break;
-    case 6:
-        st = 8;
-        break;
-    }
-    if (gFlagGameClear != 0) {
-        st = st + 1;
+    if (ICO_JPN) {
+        st = gFlagGameClear != 0;
+    } else {
+        switch (NonLinearCameraMove) {
+        case 2:
+            st = 0;
+            break;
+        case 3:
+            st = 2;
+            break;
+        case 4:
+            st = 4;
+            break;
+        case 5:
+            st = 6;
+            break;
+        case 6:
+            st = 8;
+            break;
+        }
+        if (gFlagGameClear != 0) {
+            st = st + 1;
+        }
     }
     sub->bg =
         (void *)iosCdvdBackGroundMgrAdd(jimakuFileName[st].path, jimakuHandler, p, 0, 0, 0, 0, 0);
@@ -283,8 +287,8 @@ static void jimakuMgrNext(JimakuArg *p)
     g->node->stamp = lock_execIcoMisc;
     if (g->node->tex == -1) {
         debug_StdPrintfDummy("already exist\n");
-        debug_assert(__FILE__, 688);
-        __assert(__FILE__, 688, "0");
+        debug_assert(__FILE__, LN(688, 655));
+        __assert(__FILE__, LN(688, 655), "0");
     }
     sub->n = (sub->n + 1) % 4;
     if (iosSemaWait(&jimakuShownSema) < 0) {
@@ -430,16 +434,16 @@ void jimakuDisp(JimakuArg *msg)
     }
     if (jimakuDispOn != 0) {
         int v = g->tex;
-        texProperty[435].texNo = v;
-        texProperty[434].texNo = v;
+        texProperty[PAL_JPN(435, 411)].texNo = v;
+        texProperty[PAL_JPN(434, 410)].texNo = v;
         if (v < 0) {
             return;
         }
         if (jimakuOn != 0) {
             JIM_HOST_KEY(g, 0);
-            display_texture(&texProperty[434]);
+            display_texture(&texProperty[PAL_JPN(434, 410)]);
             JIM_HOST_KEY(g, 1);
-            display_texture(&texProperty[435]);
+            display_texture(&texProperty[PAL_JPN(435, 411)]);
             JIM_HOST_KEY(0, 0);
         }
     }

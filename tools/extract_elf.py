@@ -38,7 +38,7 @@ import pycdlib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ico_version import (  # noqa: E402
-    detect_version, baserom_dir, baseelf_path,
+    detect_version, baserom_dir, baseelf_path, sha1sums_path,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -50,7 +50,7 @@ DISC_DIR = REPO_ROOT / "baserom"
 # otherwise (see tools/ico_version.py).
 OUT_DIR = baserom_dir(REPO_ROOT, VERSION)
 ELF = baseelf_path(REPO_ROOT, VERSION)
-SHA1SUMS = REPO_ROOT / "config" / "sha1sums.txt"
+SHA1SUMS = sha1sums_path(REPO_ROOT, VERSION)
 
 # Per-target disc recipe.
 #   image  : the ISO9660 image pycdlib reads. For a raw .bin/.cue pair this is
@@ -191,7 +191,7 @@ def sha1_of(path: Path) -> str:
 
 
 def update_sha1sums(name: str, sha1: str) -> str | None:
-    """Record (or verify) sha1 for `name` in config/sha1sums.txt.
+    """Record (or verify) sha1 for `name` in config/sha1sums.<version>.txt.
     Returns the existing hash if there was a mismatch, else None.
     """
     lines: list[str] = []
@@ -329,7 +329,7 @@ def main() -> int:
         print("extract_elf: extraction produced empty ELF", file=sys.stderr)
         return 2
 
-    # 3. SHA-1 record / verify. sha1sums.txt is keyed by BASENAME on every
+    # 3. SHA-1 record / verify. sha1sums.<version>.txt is keyed by BASENAME on every
     #    branch (each branch records only its own target's hashes).
     sha1 = sha1_of(ELF)
     print(f"==> {ELF.name} SHA-1: {sha1}")

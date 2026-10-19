@@ -64,7 +64,7 @@ static int playSE(int no)
         if (((GObj *)fdsGObj)->drawMask != 0) {
             if (fdsLayout != 0 && fdsLayout->seMute != 0) {
                 /* EUC-JP: "gObj:(%p) has its motion SE stopped" */
-                debug_StdPrintfDummy("gObj:(%p) ¤Ï¥â¡¼¥·¥ç¥óSE¤¬Ää»ß¤·¤Æ¤¤¤Þ¤¹\n", fdsGObj);
+                debug_StdPrintfDummy("gObj:(%p) ã¯ãƒ¢ãƒ¼ã‚·ãƒ§ãƒ³SEãŒåœæ­¢ã—ã¦ã„ã¾ã™\n", fdsGObj);
                 return 1;
             }
 
@@ -79,7 +79,7 @@ static int playSE(int no)
             if (ret == -2) {
                 if (debug_seslotdisp_flag != 0) {
                     /* EUC-JP: "SE \"%s\" is not loaded" */
-                    debug_StdPrintfDummy("SE \033[36m\"%s\"\033[m ¤Ï¥í¡¼¥É¤µ¤ì¤Æ¤¤¤Þ¤»¤ó\n",
+                    debug_StdPrintfDummy("SE \033[36m\"%s\"\033[m ã¯ãƒ­ãƒ¼ãƒ‰ã•ã‚Œã¦ã„ã¾ã›ã‚“\n",
                                          &seDef[no]);
                 }
                 return 0;
@@ -183,7 +183,7 @@ static inline int execSE(int no, void *entry)
     /* the bad-ID report, switched off */
     if (0) {
         /* EUC-JP: "an SE with a strange ID(%d) was called" */
-        debug_StdPrintfDummy("¤ª¤«¤·¤ÊID(%d)¤ÎSE¤¬¥³¡¼¥ë¤µ¤ì¤Þ¤·¤¿\n", no);
+        debug_StdPrintfDummy("ãŠã‹ã—ãªID(%d)ã®SEãŒã‚³ãƒ¼ãƒ«ã•ã‚Œã¾ã—ãŸ\n", no);
     }
 }
 
@@ -214,7 +214,7 @@ static void playEff(int no)
             GetRootMatrix(MatrixDrive_GetMatrix(), (GObj *)fdsGObj);
             /* EUC-JP: "note: the node of a node-specified motion effect was not found" */
             debug_StdPrintfDummy(
-                "Ãí°Õ¡§¥Î¡¼¥É»ØÄê¤Î¥â¡¼¥·¥ç¥ó¥¨¥Õ¥§¥¯¥È¤Ç¥Î¡¼¥É¤¬¸«¤Ä¤«¤ê¤Þ¤»¤ó¤Ç¤·¤¿\n");
+                "æ³¨æ„ï¼šãƒŽãƒ¼ãƒ‰æŒ‡å®šã®ãƒ¢ãƒ¼ã‚·ãƒ§ãƒ³ã‚¨ãƒ•ã‚§ã‚¯ãƒˆã§ãƒŽãƒ¼ãƒ‰ãŒè¦‹ã¤ã‹ã‚Šã¾ã›ã‚“ã§ã—ãŸ\n");
         } else {
             GetRootQuaternion(q, (GObj *)fdsGObj);
             CopyMatrix(MatrixDrive_GetMatrix(), (char *)GOBJ_SUB(fdsGObj)->nodeMtx + (node << 6));
@@ -303,7 +303,7 @@ static void execVibCondition(int no, int *entry)
 {
     if (girlControlMode != 0) {
         /* EUC-JP: "controller-2 vibration condition detect mode" */
-        debug_StdPrintfDummy("2¥³¥ó¿¶Æ°¾ò·ï¸¡ÃÎ¥â¡¼¥É\n");
+        debug_StdPrintfDummy("2ã‚³ãƒ³æŒ¯å‹•æ¡ä»¶æ¤œçŸ¥ãƒ¢ãƒ¼ãƒ‰\n");
         if (motEffCondKind[no].kind != 0) {
             if (fdsFlags != 0) {
                 StopFDSVibration(fdsFlags);

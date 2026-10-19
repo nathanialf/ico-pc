@@ -33,8 +33,17 @@ int IosMcLock = -1;
 
 char *iconName[3] = {"boy_blk.ico", "boy_blk.ico", "boy_blk.ico"};
 
+#ifdef VERSION_JPN
+
+char *iOSMcSaveSeg[6] = {"BISCPS-11003ico", "icon.sys",    "boy_blk.ico",
+                         "boy_blk.ico",     "boy_blk.ico", "game."};
+
+#else
+
 char *iOSMcSaveSeg[6] = {"BESCES-50760ico", "icon.sys",    "boy_blk.ico",
                          "boy_blk.ico",     "boy_blk.ico", "game."};
+
+#endif
 
 static int mcLockCount = 0; /* derived name */
 
@@ -160,8 +169,10 @@ static inline int product_write(McMgr *self)
     (IosMcProductFile + self->port)->outputMode = soundOutputModeGet();
     (IosMcProductFile + self->port)->vibration = iosPadActRequestEnable;
     (IosMcProductFile + self->port)->controlType = optionControlType;
-    (IosMcProductFile + self->port)->cameraMove = NonLinearCameraMove;
-    (IosMcProductFile + self->port)->palMode = systemStatus[0];
+    if (!ICO_JPN) {
+        (IosMcProductFile + self->port)->cameraMove = NonLinearCameraMove;
+        (IosMcProductFile + self->port)->palMode = systemStatus[0];
+    }
     *(McBlk *)(IosMcProductFile + self->port)->padConf = *(McBlk *)iosPadConfCustom.bit;
     iosMcHandlerWrite(self, (unsigned char *)(IosMcProductFile + self->port),
                       sizeof(McProductFile));
@@ -498,14 +509,14 @@ retry:
     }
 
     if (mp->flags.ll & 2) {
-        *(McName *)mp->path = *(McName *)"/BESCES-50760ico";
+        *(McName *)mp->path = *(McName *)PAL_JPN("/BESCES-50760ico", "/BISCPS-11003ico");
         iosMcMgrMkdir(mp);
         if (mp->result != 0 && mp->result != -4) {
             return;
         }
     }
 
-    *(McName *)mp->dirName = *(McName *)"/BESCES-50760ico";
+    *(McName *)mp->dirName = *(McName *)PAL_JPN("/BESCES-50760ico", "/BISCPS-11003ico");
     iosMcMgrChdir(mp);
 
     if (mp->result != 0) {

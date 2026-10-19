@@ -54,7 +54,7 @@ typedef struct { /* field names derived */
     long long w;
 } __attribute__((packed)) U64ag; /* derived name */
 
-/* The 0x194-byte-per-entry motion record table, indexed by the object's
+/* The 0x194-byte-per-entry (JPN 0x190) motion record table, indexed by the object's
    current motion id (obj->0x15C->0x4A0); the fields this TU reads, named as
    motionOrientManager.h's MotionDef. */
 typedef struct { /* field names derived */
@@ -843,8 +843,8 @@ inline void ACTGameView_Add(GObj *self, GObj *target)
     int n = actGameView.num++;
     if (n >= 100) {
         debug_StdPrintfDummy("too many view check object");
-        debug_assert("src/act-game.c", 1791);
-        __assert("src/act-game.c", 1791, "0");
+        debug_assert("src/act-game.c", LN(1791, 1788));
+        __assert("src/act-game.c", LN(1791, 1788), "0");
     }
     actGameView.obj[n] = target;
     actGameView.view[n] = 0;
@@ -972,7 +972,7 @@ static void ACTGame_LwsEffectProcess(GObj *self)
 {
     BgaDisp *m = GOBJ_ACT(self)->enemy->lwsEffect;
     if (m != 0) {
-        DispMultiBgaManagerWithKind(0x1F8, m, 1);
+        DispMultiBgaManagerWithKind(PAL_JPN(0x1F8, 500), m, 1);
     }
 }
 
@@ -990,8 +990,8 @@ inline void ACTGame_LwsEffect_Guard(GObj *self)
     _OrientXZGV(v, test_CURRENTROOT(boyGObj), test_CURRENTROOT(self));
     ActGame_GetOrientQ(q, v, 0);
 
-    stage_SetLoopFlag(504, 0);
-    stage_SetFrameStep(0x1F8, 1);
+    stage_SetLoopFlag(PAL_JPN(504, 500), 0);
+    stage_SetFrameStep(PAL_JPN(0x1F8, 500), 1);
     p = GOBJ_ACT(self)->enemy;
     EntryMultiBgaManager(p->lwsEffect, 0, -1, test_CURRENTROOT(self), q);
 }
@@ -1711,7 +1711,7 @@ void ACTGame_BeforeFunc(GObj *self)
         ACTGame_GirlBeforeFunc(self);
     }
 
-    if (((struct GObj *)self)->labelId == 0xEAD) {
+    if (((struct GObj *)self)->labelId == PAL_JPN(0xEAD, 3734)) {
         if ((60 - systemStatus[0] * 10) / systemStatus[1] * 2 < s->frame) {
             if (!(((char *)girlGObj) != 0 && GOBJ_ACT(((char *)girlGObj))->actMode == 0x6F &&
                   GOBJ_ACT(girlGObj)->carrier == self)) {
@@ -2997,7 +2997,10 @@ static void ACTItemThrow(Act *sub, GObj *self)
     if (sub->heldItem.i == 0) {
         return;
     }
-    sceVu0ScaleVector(v, test_CURRENTORIENT(self), _ACTGame_GetParamF(9) + _ACTGame_GetParamF(9));
+    sceVu0ScaleVector(v, test_CURRENTORIENT(self),
+                      PAL_JPN(_ACTGame_GetParamF(9) + _ACTGame_GetParamF(9),
+                              _ACTGame_GetParamF(9) * 60.0f /
+                                  (float)((60 - systemStatus[0] * 10) / systemStatus[1])));
     kind = GetItemKind(sub->heldItem.p);
     if (kind == 1 || kind == 6) {
         debug_StdPrintfDummy("BOMB!!\n");
@@ -3171,8 +3174,8 @@ void RequestChangeHandMode(GObj *self, int mode, int pri, int flag, GObj *p5, in
         hmc = (HandModeCmd *)&GOBJ_ACT(self)->enemy->handDisconnect;
         break;
     default:
-        debug_assert("src/act-game.c", 4727);
-        __assert("src/act-game.c", 4727, "0");
+        debug_assert("src/act-game.c", LN(4727, 4723));
+        __assert("src/act-game.c", LN(4727, 4723), "0");
         break;
     }
     if (pri < 3) {
@@ -3235,8 +3238,8 @@ inline int ACTChkAttackIgnore_ENEMY(GObj *self, GObj *actor)
         break;
 
     case 6:
-        if (((int)(s->flags18.ll >> 57) & 1) && stage_no != 0x56 && stage_no != 3 &&
-            stage_no != 0x2E) {
+        if (((int)(s->flags18.ll >> 57) & 1) && stage_no != PAL_JPN(0x56, 84) && stage_no != 3 &&
+            stage_no != PAL_JPN(0x2E, 46)) {
             return 1;
         }
         break;

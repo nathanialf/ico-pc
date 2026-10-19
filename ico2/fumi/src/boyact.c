@@ -154,12 +154,20 @@ static void findChainInJump(void *self)
         RequestChangeHandMode(self, 1, 2, 0, 0, 0, 0);
     }
 
+#ifdef VERSION_JPN
+    if ((rside != 0 || lside != 0) &&
+        motionKind[GOBJ_SUB(self)->ctrl.motion].flags2.bits.chainIkRate) {
+        ((BoyVal *)((char *)GOBJ_SUB(self) + 0x45C))->f = 0.8f;
+        ((BoyVal *)((char *)GOBJ_SUB(self) + 0x464))->f = 0.8f;
+        ((BoyVal *)((char *)GOBJ_SUB(self) + 0x468))->f = 0.8f;
+#else
     if ((rside != 0 || lside != 0) && ((CHAINROW(self)->flags2.word >> 5) & 1) != 0) {
         float sp = (systemStatus[0] == 1) ? 0.5f : 0.8f;
 
         ((BoyVal *)&GOBJ_SUB(self)->root.ikRate0)->f = sp;
         ((BoyVal *)&GOBJ_SUB(self)->root.ikRate1)->f = sp;
         ((BoyVal *)&GOBJ_SUB(self)->root.ikRate2)->f = sp;
+#endif
     }
 
     if (rside != 0 || lside != 0) {
@@ -708,13 +716,23 @@ static BoyWork boyInfoDefault = {{0, 0, 0xFFFFFFFF}}; /* derived name */
 static BoyKidnapWork characterPacketDefault = {{0, 0, 0, 0, 0, -1, -1}}; /* derived name */
 
 static BgaEntry boyBgaTable[] = {
-    /* derived name */
+/* derived name */
+#ifdef VERSION_JPN
+    {476, 0.0f, 7.0f, 1, 70, 1, 1, 1.0f},
+    {477, 0.0f, 0.0f, 0, 70, 0, 1, 1.0f},
+    {481, 0.0f, 0.0f, 0, 0, 0, 0, -1.0f},
+    {482, -10.0f, 23.0f, 1, 70, 1, 1, -1.0f},
+    {-1},
+}; /* derived name */
+
+#else
     {480, 0.0f, 7.0f, 1, 70, 1, 1, 1.0f},
     {481, 0.0f, 0.0f, 0, 70, 0, 1, 1.0f},
     {485, 0.0f, 0.0f, 0, 0, 0, 0, -1.0f},
     {486, -10.0f, 23.0f, 1, 70, 1, 1, -1.0f},
     {-1},
 }; /* derived name */
+#endif
 
 /* PrivInsCam's initial value: subBoyCollision copies it whole into
    privInsCam. */
@@ -766,8 +784,8 @@ static void BoyBgaManager(void *self, int id, void *dst)
             goto found;
         }
     }
-    debug_assert(__FILE__, 1731);
-    __assert(__FILE__, 1731, "0");
+    debug_assert(__FILE__, LN(1731, 1724));
+    __assert(__FILE__, LN(1731, 1724), "0");
     p = 0;
 found:
     v = *(int *)dst;
@@ -867,8 +885,12 @@ static int GetChainSlope(void)
         return 0;
     }
     ratio = (float)*motionTable[GOBJ_SUB(g)->ctrl.motion] / (c * 0.5f);
-    ACTGame_SetMotionPlaySpeedRatio_Reserve(
-        g, ratio * (float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f, 7);
+    if (ICO_JPN) {
+        ACTGame_SetMotionPlaySpeedRatio_Reserve(g, ratio, 7);
+    } else {
+        ACTGame_SetMotionPlaySpeedRatio_Reserve(
+            g, ratio * (float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f, 7);
+    }
     if (debug_font_flag & 1) {
         debug_Printf(10, 140, 0x0FFFFFFF, "speed = %f (%f)\n", fptodp(ratio), fptodp(c));
     }
@@ -1709,8 +1731,8 @@ static inline int SwapBoyWeapon(void *oldW, void *newW, void *boy) /* derived na
         return 0;
     }
     if (newW == 0) {
-        debug_assert(__FILE__, 3007);
-        __assert(__FILE__, 3007, "next");
+        debug_assert(__FILE__, LN(3007, 3000));
+        __assert(__FILE__, LN(3007, 3000), "next");
         return 0;
     }
     PickupWeapon(newW, boy, 0x16);
@@ -1757,11 +1779,11 @@ static void OtherStageGirlPinchCamera_After(float t)
 
 void ACTDispLwsBoyStonize_InQueenStage(void *self)
 {
-    BoyBgaManager(self, 0x1E0, (char *)&GOBJ_ACT(self)->enemy->stonePair);
-    BoyBgaManager(self, 0x1E1, (char *)&GOBJ_ACT(self)->enemy->word2A4);
-    BoyBgaManager(self, 0x1E5, (char *)&GOBJ_ACT(self)->enemy->word2B0);
-    BoyBgaManager(self, 0x1E5, (char *)&GOBJ_ACT(self)->enemy->stoneHitWeapon);
-    BoyBgaManager(self, 0x1E6, (char *)&GOBJ_ACT(self)->enemy->stoneHitNoWeapon);
+    BoyBgaManager(self, PAL_JPN(0x1E0, 476), (char *)&GOBJ_ACT(self)->enemy->stonePair);
+    BoyBgaManager(self, PAL_JPN(0x1E1, 477), (char *)&GOBJ_ACT(self)->enemy->word2A4);
+    BoyBgaManager(self, PAL_JPN(0x1E5, 481), (char *)&GOBJ_ACT(self)->enemy->word2B0);
+    BoyBgaManager(self, PAL_JPN(0x1E5, 481), (char *)&GOBJ_ACT(self)->enemy->stoneHitWeapon);
+    BoyBgaManager(self, PAL_JPN(0x1E6, 482), (char *)&GOBJ_ACT(self)->enemy->stoneHitNoWeapon);
 }
 
 static int characterPacket[8]; /* derived name */
@@ -2124,7 +2146,8 @@ void subBoyCollision(GObj *volatile self)
                     ((float *)tgt2)[2] = test_CURRENTROOT(girlGObj)[2];
                     see = 1;
                     onGirl = 1;
-                } else if ((stage_no == 0x56 || stage_no == 0x3 || stage_no == 0x2E) &&
+                } else if ((stage_no == PAL_JPN(0x56, 84) || stage_no == PAL_JPN(0x3, 3) ||
+                            stage_no == PAL_JPN(0x2E, 46)) &&
                            ((int)(sub->flags20.ll >> 24) & 3)) {
                     see = 1;
                     onGirl = 0;
@@ -2302,7 +2325,7 @@ void subBoyCollision(GObj *volatile self)
                 GOBJ_ACT(girlGObj)->actMode == GOBJ_ACT(boyGObj)->actMode) {
                 if (0x3C < sitCount++) {
                     if (sitLayoutDone == 0) {
-                        lt_switch_layout(0x1C);
+                        lt_switch_layout(PAL_JPN(0x1C, 25));
                         sitLayoutDone = 1;
                     }
                 }
@@ -3373,7 +3396,7 @@ void actBoyStart(GObj *self)
             ClipWall(&cw);
             if (cw.wall.elem == 0) {
                 /* "!!! cannot find the sofa's wall !!!" */
-                debug_StdPrintfDummy("¡ª¡ª¡ª¥½¥Õ¥¡¤ÎÊÉ¤ò¸«ÉÕ¤±¤ë¤³¤È¤¬¤Ç¤­¤Þ¤»¤ó¡ª¡ª¡ª\n");
+                debug_StdPrintfDummy("ï¼ï¼ï¼ã‚½ãƒ•ã‚¡ã®å£ã‚’è¦‹ä»˜ã‘ã‚‹ã“ã¨ãŒã§ãã¾ã›ã‚“ï¼ï¼ï¼\n");
             } else {
                 startOnSofa = 1;
                 sitLayoutDone = 1;
@@ -3643,8 +3666,8 @@ inline int IsBoyStatus_EnemyMustWait(void)
     unsigned int st;
 
     if (boyGObj == 0) {
-        debug_assert(__FILE__, 5795);
-        __assert(__FILE__, 5795, "0");
+        debug_assert(__FILE__, LN(5795, 5779));
+        __assert(__FILE__, LN(5795, 5779), "0");
         return 0;
     }
     sub = GOBJ_ACT(boyGObj);

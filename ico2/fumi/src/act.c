@@ -234,7 +234,7 @@ typedef union { /* field names derived */
 } ActFWord; /* derived name */
 
 /* The extended work block hung off the work block at +0x688; the three
-   ten-entry histories at 0x900, 0x928 and 0x950 are read back in BeforeFunc. */
+   ten-entry histories at 0x900, 0x928 and 0x950 (JPN 0x8F0, 0x918 and 0x940) are read back in BeforeFunc. */
 typedef struct { /* field names derived */
     char pad0[2304];
     int a900[10];
@@ -263,7 +263,7 @@ void actInitialize_only_charcter(char *self)
     for (i = 0; i < 10; i++) {
         q->modeHist[i] = 0;
         q->frameHist[i] = 0;
-        q->prevHist[i] = 0x1A2;
+        q->prevHist[i] = PAL_JPN(0x1A2, 418);
     }
 }
 

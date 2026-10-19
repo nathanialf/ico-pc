@@ -107,8 +107,8 @@ void ReadModelFile(void *h, ICO_WORD name, int size, int id, int kind, int word0
         sprintf(buf, "Illegal Model ID number: %d (\"%s\")\n", id, name);
         /* please raise MAX_CHARS in commmon/include/charFileName.h */
         debug_StdPrintfDummy("commmon/include/charFileName.hのMAX_CHARSを増やしてください\n");
-        debug_assertMessage(__FILE__, 130, buf);
-        __assert(__FILE__, 130, "e");
+        debug_assertMessage(__FILE__, LN(130, 129), buf);
+        __assert(__FILE__, LN(130, 129), "e");
     }
 
     if (charFiles[id].pObj != 0) {
@@ -124,7 +124,7 @@ void ReadModelFile(void *h, ICO_WORD name, int size, int id, int kind, int word0
     }
 
     charFiles[id].state = part;
-    p = iosMallocDebug(ios_partition_seki, size, __FILE__, 145);
+    p = iosMallocDebug(ios_partition_seki, size, __FILE__, LN(145, 144));
     iosCdvdHandlerRead(h, p, size);
     debug_StdPrintfDummy("ReadModelFile:loaded::(id:%d)%s(addr:%p/size:%d)\n", id, name, p, size);
     charFiles[id].pObj = InitPObj(p, name, id);
@@ -146,12 +146,12 @@ void ReadVolumeModelFile(void *h, ICO_WORD name, int size, int id, int kind, int
     } else {
         malloc_SetPartition(1);
     }
-    buf = iosMallocDebug(ios_partition_seki, size, __FILE__, 190);
+    buf = iosMallocDebug(ios_partition_seki, size, __FILE__, LN(190, 189));
     if (id >= MAX_CHARS) {
         debug_StdPrintfDummy("Illegal Volume ID number. %d\n", id);
         debug_StdPrintfDummy("commmon/include/charFileName.hのMAX_CHARSを増やしてください\n");
-        debug_assert(__FILE__, 195);
-        __assert(__FILE__, 195, "0");
+        debug_assert(__FILE__, LN(195, 194));
+        __assert(__FILE__, LN(195, 194), "0");
     }
     if (charFiles[id].pObj != 0) {
         debug_StdPrintfDummy("ReadVolumeModelFile:Already loaded. (id:%d)%s\n", id, name);
@@ -186,10 +186,10 @@ void ReadShadowModelFile(void *h, ICO_WORD name, int size, int id, int kind, int
     if (id >= MAX_CHARS) {
         debug_StdPrintfDummy("Illegal Shadow ID number. %d\n", id);
         debug_StdPrintfDummy("commmon/include/charFileName.hのMAX_CHARSを増やしてください\n");
-        debug_assert(__FILE__, 235);
-        __assert(__FILE__, 235, "0");
+        debug_assert(__FILE__, LN(235, 234));
+        __assert(__FILE__, LN(235, 234), "0");
     }
-    buf = iosMallocDebug(ios_partition_seki, size, __FILE__, 239);
+    buf = iosMallocDebug(ios_partition_seki, size, __FILE__, LN(239, 238));
     if (charFiles[id].pShadow != 0) {
         debug_StdPrintfDummy("ReadShadowModelFile:Already loaded. (id:%d)%s\n", id, name);
         iosCdvdHandlerRead(h, 0, size);
@@ -217,20 +217,24 @@ void ReadTextureFile(void *h, char *name, int size, int id, int kind, int word08
     } else {
         malloc_SetPartition(1);
     }
-    buf = iosMallocDebug(ios_partition_seki, size, __FILE__, 276);
+    buf = iosMallocDebug(ios_partition_seki, size, __FILE__, LN(276, 274));
     if (size == 0) {
         debug_StdPrintfDummy("ReadTextureFile:texture size is zero.%s\n", name);
         iosCdvdHandlerRead(h, 0, 0);
         return;
     }
     iosCdvdHandlerRead(h, buf, size);
-    if (kind == 55 && seg == 1 && texFile[id].cameraMove != 0) {
-        if (texFile[id].cameraMove != NonLinearCameraMove) {
-            flag = seg;
-        }
-    }
-    if (flag == 0) {
+    if (ICO_JPN) {
         rv = tex_InitTexture(name, buf);
+    } else {
+        if (kind == 55 && seg == 1 && texFile[id].cameraMove != 0) {
+            if (texFile[id].cameraMove != NonLinearCameraMove) {
+                flag = seg;
+            }
+        }
+        if (flag == 0) {
+            rv = tex_InitTexture(name, buf);
+        }
     }
     debug_StdPrintfDummy("ReadTextureFile:loaded::(%d)%s(addr:%p/size:%d)\n", rv, name, buf, size);
     iosFree(buf);
@@ -293,8 +297,8 @@ void ReadSkeltonFile(void *h, char *name, int size, int id, int kind, int word08
     }
     if (p == 0) {
         debug_StdPrintfDummy("ReadSkeltonFile:Skelton file is not applied. %s\n", name);
-        debug_assert(__FILE__, 362);
-        __assert(__FILE__, 362, "FALSE");
+        debug_assert(__FILE__, LN(362, 349));
+        __assert(__FILE__, LN(362, 349), "FALSE");
     }
 }
 
@@ -366,8 +370,8 @@ void ReadCollisionFile(void *h, char *name, int size, int id, int kind, int word
         }
     }
     debug_StdPrintfDummy("ReadCollisionFile:Collision file is not applied. %s\n", name);
-    debug_assert(__FILE__, 466);
-    __assert(__FILE__, 466, "FALSE");
+    debug_assert(__FILE__, LN(466, 453));
+    __assert(__FILE__, LN(466, 453), "FALSE");
 }
 
 void ReadStageAnimationFile(void *h, char *name, int size, int id, int kind, int word08, int seg)
@@ -380,8 +384,8 @@ void ReadStageAnimationFile(void *h, char *name, int size, int id, int kind, int
     }
     if (seg == 0) {
         malloc_SetPartition(0);
-        debug_assert(__FILE__, 487);
-        __assert(__FILE__, 487, "0");
+        debug_assert(__FILE__, LN(487, 474));
+        __assert(__FILE__, LN(487, 474), "0");
     } else {
         malloc_SetPartition(1);
     }
@@ -408,24 +412,24 @@ void ReadMotionFile(void *h, char *name, int size, int id, int kind, int word08,
     }
     switch (motionKind[id].area) {
     case 0:
-        motionTable[id] = iosMallocDebug(ios_partition_smotion, size, __FILE__, 515);
+        motionTable[id] = iosMallocDebug(ios_partition_smotion, size, __FILE__, LN(515, 502));
         break;
     case 4:
-        motionTable[id] = iosMallocDebug(ios_partition_dmotion, size, __FILE__, 518);
+        motionTable[id] = iosMallocDebug(ios_partition_dmotion, size, __FILE__, LN(518, 505));
         if (motionTable[id] == 0) {
             /* not enough memory in the dynamic motion area */
             debug_StdPrintfDummy("ダイナミックモーション領域のメモリが足りません。\n");
-            debug_assertMessage(__FILE__, 521, "LACK OF DYNAMIC MOTION MEMORY.\n");
-            __assert(__FILE__, 521, "e");
+            debug_assertMessage(__FILE__, LN(521, 508), "LACK OF DYNAMIC MOTION MEMORY.\n");
+            __assert(__FILE__, LN(521, 508), "e");
         }
         break;
     default:
-        motionTable[id] = iosMallocDebug(ios_partition_s2motion, size, __FILE__, 526);
+        motionTable[id] = iosMallocDebug(ios_partition_s2motion, size, __FILE__, LN(526, 513));
         if (motionTable[id] == 0) {
             /* not enough memory in the motion swap area */
             debug_StdPrintfDummy("モーションスワップ領域のメモリが足りません。\n");
-            debug_assertMessage(__FILE__, 529, "LACK OF SWAP MOTION MEMORY.\n");
-            __assert(__FILE__, 529, "e");
+            debug_assertMessage(__FILE__, LN(529, 516), "LACK OF SWAP MOTION MEMORY.\n");
+            __assert(__FILE__, LN(529, 516), "e");
         }
         break;
     }
@@ -438,7 +442,7 @@ void ReadMotionFile(void *h, char *name, int size, int id, int kind, int word08,
 
 void ReadParticleEffectFile(void *h, ICO_WORD name, int size, int id)
 {
-    int *buf = iosMallocDebug(ios_partition_sugipon, size, __FILE__, 552);
+    int *buf = iosMallocDebug(ios_partition_sugipon, size, __FILE__, LN(552, 539));
     systemStatus[8]++;
     iosCdvdHandlerRead(h, buf, size);
     SetParticleEffectPackage(id, buf, size);
@@ -453,7 +457,7 @@ void ReadSoundBdFile(void *h, ICO_WORD name, int size, int id, int kind, int wor
     if (size == 0) {
         return;
     }
-    buf = iosMallocDebug(ios_partition_seki, size, __FILE__, 578);
+    buf = iosMallocDebug(ios_partition_seki, size, __FILE__, LN(578, 565));
     iosCdvdHandlerRead(h, buf, size);
     switch (kind) {
     case 11: {
@@ -475,8 +479,8 @@ void ReadSoundBdFile(void *h, ICO_WORD name, int size, int id, int kind, int wor
         }
         break;
     default:
-        debug_assert(__FILE__, 606);
-        __assert(__FILE__, 606, "0");
+        debug_assert(__FILE__, LN(606, 593));
+        __assert(__FILE__, LN(606, 593), "0");
     }
     iosFree(buf);
     debug_StdPrintfDummy("ReadSoundBdFile:loaded::[%d]%s  (size:%d)\n", id, name, size);
@@ -512,15 +516,15 @@ void ReadSoundHdFile(void *h, ICO_WORD name, int size, int id, int kind, int wor
         info.bank = sndInitBgmCancelFlag;
         break;
     default:
-        debug_assert(__FILE__, 642);
-        __assert(__FILE__, 642, "0");
+        debug_assert(__FILE__, LN(642, 629));
+        __assert(__FILE__, LN(642, 629), "0");
     }
     if (info.bank == 0) {
         if (seFile[id].loaded != 1) {
             if (seg == 0) {
-                buf = iosMallocDebug(ios_partition_smotion, size, __FILE__, 650);
+                buf = iosMallocDebug(ios_partition_smotion, size, __FILE__, LN(650, 637));
             } else {
-                buf = iosMallocDebug(ios_partition_sound, size, __FILE__, 652);
+                buf = iosMallocDebug(ios_partition_sound, size, __FILE__, LN(652, 639));
             }
         } else {
             seg = 2;
@@ -530,7 +534,8 @@ void ReadSoundHdFile(void *h, ICO_WORD name, int size, int id, int kind, int wor
                 if (semiCommonHdBuf != 0) {
                     iosFree(semiCommonHdBuf);
                 }
-                semiCommonHdBuf = iosMallocDebug(ios_partition_sound_semi, size, __FILE__, 663);
+                semiCommonHdBuf =
+                    iosMallocDebug(ios_partition_sound_semi, size, __FILE__, LN(663, 650));
                 buf = semiCommonHdBuf;
             }
         }
@@ -574,14 +579,14 @@ inline void ReadSoundSqFile(void *h, ICO_WORD name, int size, int id, int kind, 
         info.bank = sndInitBgmCancelFlag;
         break;
     default:
-        debug_assert(__FILE__, 709);
-        __assert(__FILE__, 709, "0");
+        debug_assert(__FILE__, LN(709, 696));
+        __assert(__FILE__, LN(709, 696), "0");
     }
     if (info.bank == 0) {
         if (seg == 0) {
-            buf = iosMallocDebug(ios_partition_smotion, size, __FILE__, 715);
+            buf = iosMallocDebug(ios_partition_smotion, size, __FILE__, LN(715, 702));
         } else {
-            buf = iosMallocDebug(ios_partition_sound, size, __FILE__, 717);
+            buf = iosMallocDebug(ios_partition_sound, size, __FILE__, LN(717, 704));
         }
     } else {
         buf = 0;
@@ -607,7 +612,7 @@ inline void ReadSoundAdpcmFile(void *h, ICO_WORD name, int size, int id, int kin
     hi = kind << 16;
     key = (id & 0xFFFF) | hi;
     if (soundDataAreaSearch(&key) == 0) {
-        p = iosMallocDebug(ios_partition_smotion, size, __FILE__, 757);
+        p = iosMallocDebug(ios_partition_smotion, size, __FILE__, LN(757, 744));
         iosCdvdHandlerRead(h, p, size);
         debug_StdPrintfDummy("ReadAdpcmFile:loaded::[%d]%s  (size:%d)\n", id, name, size);
         q = adpcmDataSet(p, id, kind, seg, size, AdpcmIopBuffAlloc(), 0);
@@ -628,7 +633,8 @@ void ReadShockFile(void *h, ICO_WORD name, int size, int id, int kind, int word0
         if (size == 0) {
             p = 0;
         } else {
-            p = iosMallocDebug(ios_partition_shock, size + sizeof(ShockVoiceFile), __FILE__, 788);
+            p = iosMallocDebug(ios_partition_shock, size + sizeof(ShockVoiceFile), __FILE__,
+                               LN(788, 775));
             iosCdvdHandlerRead(h, p->image, size);
             Init_ShockVoiceSet(&p->set, p->image);
         }
@@ -651,12 +657,12 @@ void ReadCamerasetFile(void *h, ICO_WORD name, int size, int id)
 {
     char *buf;
 
-    buf = iosMallocDebug(ios_partition_oomori, size, __FILE__, 820);
+    buf = iosMallocDebug(ios_partition_oomori, size, __FILE__, LN(820, 807));
     if (buf == 0) {
         /* not enough memory to load the camera data */
         debug_StdPrintfDummy("カメラデータをロードするためのメモリが足りません\n");
-        debug_assert(__FILE__, 825);
-        __assert(__FILE__, 825, "0");
+        debug_assert(__FILE__, LN(825, 812));
+        __assert(__FILE__, LN(825, 812), "0");
     }
     systemStatus[8]++;
     iosCdvdHandlerRead(h, buf, size);
@@ -666,7 +672,7 @@ void ReadCamerasetFile(void *h, ICO_WORD name, int size, int id)
 
 void ReadEndCheckFile(void *h, ICO_WORD name, int size)
 {
-    char *buf = iosMallocDebug(ios_partition_oomori, size, __FILE__, 854);
+    char *buf = iosMallocDebug(ios_partition_oomori, size, __FILE__, LN(854, 841));
     systemStatus[8]++;
     iosCdvdHandlerRead(h, buf, size);
     iosFree(buf);
@@ -677,7 +683,7 @@ void ReadStageSettingFile(void *h, ICO_WORD name, int size)
     char *buf;
 
     systemStatus[8]++;
-    buf = iosMallocDebug(ios_partition_seki, size, __FILE__, 905);
+    buf = iosMallocDebug(ios_partition_seki, size, __FILE__, LN(905, 892));
     iosCdvdHandlerRead(h, buf, size);
     /* port: the copy has no bound; every .ssb on the disc fits */
     if (size > (int)sizeof(GlobalStageSetting)) {
@@ -696,8 +702,8 @@ void CSVSYSTEM_ReadCharFiles(Sub15C *rec, int id)
     if (id >= MAX_CHARS) {
         debug_StdPrintfDummy("Illegal Char ID Number. %d\n");
         debug_StdPrintfDummy("commmon/include/charFileName.hのMAX_CHARSを増やしてください\n");
-        debug_assert(__FILE__, 927);
-        __assert(__FILE__, 927, "0");
+        debug_assert(__FILE__, LN(927, 914));
+        __assert(__FILE__, LN(927, 914), "0");
     }
     rec->modelId = id;
     debug_StdPrintfDummy("Link polygon & skelton & collision -> DObj. %d\n", id);

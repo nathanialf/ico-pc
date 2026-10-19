@@ -379,7 +379,16 @@ static char *debugBarName[] = {"Off", "Low-Deco", "High-Deco"}; /* derived name 
 
 static char *debugProfileName[] = {"Variable", "Process"}; /* derived name */
 
+#ifdef VERSION_JPN
+
+static char *debugSnapSizeName[] = {"Normal", "Half",     "Double",  "Double+Wide",
+                                    "4x4",    "4x4+Wide", "XYOFFSET"}; /* derived name */
+
+#else
+
 static char *debugSnapSizeName[] = {"None", "1x1", "2x2", "4x4", "8x8"}; /* derived name */
+
+#endif
 
 static char *debugSnapFormName[] = {"TIM2", "BMP"}; /* derived name */
 
@@ -405,6 +414,93 @@ static char *debugMotionTargetName[] = {"BOY", "GIRL", "BIRD", "ENEMY", "QUEEN"}
 
 /* the debug options: name, colour, value, range, value names and the function
    called on a change, in the order debug_Mode pages through them */
+#ifdef VERSION_JPN
+
+static const DbgOpt debugOption[76] = {
+    {" FrameStep          ", 0x0080FF80, &systemStatus[1], 1, 2, debugFrameStepName,
+     (void (*)(int))gsResetFunc},
+    {" NTSC/PAL           ", 0x0080FF80, &systemStatus[0], 0, 1, debugNtscPalName,
+     (void (*)(int))gsResetFunc},
+    {" IgnoreDemoCamera   ", 0xC0C0C080, &debug_ignore_demo_camera, 0, 1, debugOffOnName, 0},
+    {" DebugFrameStep     ", 0xC0C0C080, &debug_frame, 0, 60, 0, 0},
+    {" DebugFont          ", 0xC0C0C080, &debug_font_flag, 0, 3, debugFontName, 0},
+    {" DebugFont2         ", 0xC0C0C080, &debug_font_flag2, 0, 1, debugOffOnName, 0},
+    {" DebugFont3         ", 0xC0C0C080, &debug_font_flag3, 0, 1, debugOffOnName, 0},
+    {" Printf             ", 0xC0C0C080, &debug_printf_flag, 0, 1, debugOffOnName, 0},
+    {" MemPartition       ", 0xC0C0C080, &debug_mem_partition_flag, 0, 1, debugOffOnName, 0},
+    {" WireString         ", 0xC0C0C080, &debug_wire_string, 0, 1, debugOffOnName, 0},
+    {" KIND ROUTINE OLD   ", 0xC0C0C080, &debugKindOld, 0, 1, debugOffOnName, 0},
+    {" DebugBar           ", 0xFF808080, &debug_bar_flag, 0, 2, debugBarName, 0},
+    {" DebugBarProfileType", 0xFF808080, &debug_profile_type, 0, 1, debugProfileName, 0},
+    {" DebugBarStartItem  ", 0xFF808080, &debug_debug_bar_start_item, 0, 1000, 0, 0},
+    {" DebugBarScale      ", 0xFF808080, &debug_debug_bar_multiply, -9, 4, debugBarScaleName, 0},
+    {" DebugMemoryBar     ", 0xFF808080, &debug_memory_bar, 0, 1, debugOffOnName, 0},
+    {" ADPCM PLAY         ", 0xFFC0C080, &debugAdpcmOn, 0, 1, debugOffOnName, 0},
+    {" SE SLOT DISP       ", 0xFFC0C080, &debug_seslotdisp_flag, 0, 1, debugOffOnName, 0},
+    {" WallCheck          ", 0x90C0FF80, &debug_wallcheck_flag, 0, 1, debugOffOnName, 0},
+    {" WallHitColDisp     ", 0x90C0FF80, &debug_wallhitcoldisp, 0, 1, debugOffOnName, 0},
+    {" FieldCollision     ", 0x90C0FF80, &debug_fieldcollision_flag, 0, 1, debugOffOnName, 0},
+    {" CollisionRayDisp   ", 0x90C0FF80, &debug_col_ray_disp, 0, 1, debugOffOnName,
+     (void (*)(int))ChangeFieldCollisionDebugMode},
+    {" CollisionOldProc   ", 0x90C0FF80, &debug_col_old_proc, 0, 1, debugOffOnName, 0},
+    {" Skelton            ", 0x80FFC080, &debug_skel_flag, 0, 1, debugOffOnName, 0},
+    {" ClothInfo          ", 0x80FFC080, &debug_cloth_info, 0, 1, debugOffOnName, 0},
+    {" HairTightLevel     ", 0x80FFC080, &debug_hair_tight_level, 0, 100, 0, 0},
+    {" HairGravityLevel   ", 0x80FFC080, &debug_hair_gravity_level, 0, 500, 0, 0},
+    {" HairBendAngle      ", 0x80FFC080, &debug_hair_bend_angle, 0, 512, 0, 0},
+    {" HairCollision      ", 0x80FFC080, &debug_hair_collision, 0, 1, debugOffOnName, 0},
+    {" FaceWInterpRatio   ", 0x80FFC080, &debug_face_rot_w_ratio, 0, 100, 0, 0},
+    {" CharaTarget        ", 0x80FFC080, &debug_chara_target, 0, 1, debugOffOnName, 0},
+    {" MotionActNode      ", 0x80FFC080, &debug_actnode_flag, 0, 1, debugOffOnName, 0},
+    {" MotionInterporate  ", 0x80FFC080, &debug_motion_interporate, 0, 1, debugOffOnName, 0},
+    {" MotionDebugWin     ", 0x80FFC080, &debug_window_flag, 0, 1, debugOffOnName, 0},
+    {" MotionDebugTgt     ", 0x80FFC080, &debug_mot_debug_target, 0, 4, debugMotionTargetName, 0},
+    {" MotionSlopeInterp  ", 0x80FFC080, &debug_mot_slope_interp, 0, 10, 0, 0},
+    {" Fly Limit Info     ", 0x80FFC080, &debug_fly_limit_test, 0, 1, debugOffOnName, 0},
+    {" BrainBar           ", 0xFF80FF80, &debug_brain_bar_flag, 0, 1, debugOffOnName, 0},
+    {" BrainOnOff         ", 0xFF80FF80, &debug_brain_flag, 0, 1, debugOffOnName, 0},
+    {" GBrainInfo         ", 0xFF80FF80, &debug_gbrain_info_flag, 0, 1, debugOffOnName, 0},
+    {" WayTool            ", 0xFF80FF80, &debug_wayline, 0, 1, debugOffOnName, 0},
+    {" SnapShotNum        ", 0xC0C0C080, &debug_snapshot_num, 0, 3000000, 0, 0},
+    {" SnapSize           ", 0xC0C0C080, &debug_snapshot_size, 0, 6, debugSnapSizeName, 0},
+    {" SnapForm           ", 0xC0C0C080, &debug_snapshot_format, 0, 1, debugSnapFormName, 0},
+    {" Jimaku Test        ", 0xC0C0C080, &debug_jimaku, 0, 1, debugOffOnName, 0},
+    {" Camera             ", 0xC0C0C080, &debug_camera_flag, 0, 1, debugOffOnName, 0},
+    {" RippleRoughness    ", 0xFFFF8080, &debug_ripple_roughness, 0, 100, 0, 0},
+    {" Bounding           ", 0xFFFF8080, &debug_bounding_flag, 0, 3, debugBoundingName, 0},
+    {" Specular           ", 0xFFFF8080, &debug_specular_flag, 0, 2, debugSpecularName, 0},
+    {" LightVolume        ", 0xFFFF8080, &debug_ambient_volume, 0, 3, debugLightVolumeName, 0},
+    {" ShadowOff          ", 0xFFFF8080, &debug_shadow_flag, 0, 3, debugShadowName, 0},
+    {" Scissoring         ", 0xFFFF8080, &debug_scissor, 0, 3, debugScissorName, 0},
+    {" FullScreenEffect   ", 0xFFFF8080, &debug_fullscreen_effect, 0, 1, debugOffOnName, 0},
+    {" DispClusterModel   ", 0xFFFF8080, &debug_disp_cluster, 0, 1, debugOffOnName, 0},
+    {" DispNormalModel    ", 0xFFFF8080, &debug_disp_normal, 0, 1, debugOffOnName, 0},
+    {" DispLwsModel       ", 0xFFFF8080, &debug_disp_lws, 0, 1, debugOffOnName, 0},
+    {" DispParticle       ", 0xFFFF8080, &debug_disp_particle, 0, 1, debugOffOnName, 0},
+    {" DispMesh           ", 0xFFFF8080, &debug_disp_mesh, 0, 1, debugOffOnName, 0},
+    {" DISPLAY BRIGHTNESS ", 0xFFFF8080, &systemStatus[11], 0, 15, 0, 0},
+    {" STICK INPUT        ", 0xC0C0C080, &debug_stick_input, 0, 1, debugOffOnName, 0},
+    {" STICK SIMULATE     ", 0xC0C0C080, &debug_stick_simulate, 0, 1, debugOffOnName, 0},
+    {" DEBUG SUB THREAD   ", 0xC0C0C080, &debug_act_sub_thread, 0, 1, debugOffOnName, 0},
+    {" NEW QUEEN BATTLE   ", 0xC0C0C080, &debug_use_new_queen_battle, 0, 1, debugOffOnName, 0},
+    {" CHAIN CYCLE SPEED  ", 0xC0C0C080, &debug_chain_cycle_speed, 1, 10, 0, 0},
+    {" CHAIN SLOW  SPEED  ", 0xC0C0C080, &debug_chain_slow_speed, 1, 10, 0, 0},
+    {" DISP ENEMY STATE   ", 0x80C0FF80, &debug_disp_enemy_state, 0, 1, debugOffOnName, 0},
+    {" ENEMY BATTLE TYPE  ", 0x80C0FF80, &debug_enemy_battle_type, 0, 3, debugEnemyBattleName, 0},
+    {" ENEMY FLY WITH GIRL", 0x80C0FF80, &debug_enemy_fly_with_girl, 0, 1, 0, 0},
+    {" DISP ESCORT BALL   ", 0xC0C0C080, &debug_disp_escort_ball, 0, 1, debugOffOnName, 0},
+    {" GIRL DETOUR        ", 0xC0C0C080, &debug_girl_detour_flag, 0, 1, debugOffOnName, 0},
+    {" LWSKYOMI LOOKONLY  ", 0xC0C0C080, &debug_lwskyomi_lookonly, 0, 1, debugOffOnName, 0},
+    {" ONE HIT ONLY       ", 0xC0C0C080, &debug_one_hit_only, 0, 1, debugOffOnName, 0},
+    {" IGNORE DODGE       ", 0xC0C0C080, &debug_ignore_dodge, 0, 1, debugOffOnName, 0},
+    {" GAME CLEAR COUNT   ", 0xC0C0C080, &gFlagGameClear, 0, 9, 0, 0},
+    {" GIRL PAD CONTROL   ", 0xC0C0C080, &debug_girl_pad_control, 0, 1, debugOffOnName,
+     ChangeGirlControlMode},
+    {" NO BREAST HANG     ", 0xC0C0C080, &debug_no_breast_hang, 0, 1, debugOffOnName, 0},
+}; /* derived name */
+
+#else
+
 static const DbgOpt debugOption[76] = {
     {" FrameStep          ", 0x0080FF80, &systemStatus[1], 1, 2, debugFrameStepName,
      (void (*)(int))gsResetFunc},
@@ -487,6 +583,8 @@ static const DbgOpt debugOption[76] = {
      ChangeGirlControlMode},
     {" NO BREAST HANG     ", 0xC0C0C080, &debug_no_breast_hang, 0, 1, debugOffOnName, 0},
 }; /* derived name */
+
+#endif
 
 /* the font window's line count */
 static int fontWindowLine = 0; /* derived name */
@@ -811,10 +909,10 @@ void debug_Assert(char *fmt, ...)
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-    debug_assertMessage("src/debug.c", 1392, buf);
-    __assert("src/debug.c", 1392, "e");
-    debug_assert("src/debug.c", 1393);
-    __assert("src/debug.c", 1393, "0");
+    debug_assertMessage("src/debug.c", LN(1392, 1389), buf);
+    __assert("src/debug.c", LN(1392, 1389), "e");
+    debug_assert("src/debug.c", LN(1393, 1390));
+    __assert("src/debug.c", LN(1393, 1390), "0");
 }
 
 /* the host log file (the DEBUG build opens it) */
@@ -1040,7 +1138,7 @@ void debug_VariableInit(void)
     debug_zoom_per = 100;
     debug_debug_bar_start_item = 0;
     debug_ripple_roughness = 25;
-    debug_snapshot_num = 100;
+    debug_snapshot_num = PAL_JPN(100, 1);
     debug_snapshot_size = 0;
     debug_snapshot_format = 0;
     debug_ambient_volume = 0;
@@ -1157,61 +1255,61 @@ int debug_Load(char **dst, char *name, int kind)
         switch (kind) {
         case 0:
         default:
-            *dst = iosMallocDebug(ios_partition_seki, sz, "src/debug.c", 1958);
+            *dst = iosMallocDebug(ios_partition_seki, sz, "src/debug.c", LN(1958, 1955));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_seki->start) * 100.0f / 10059776.0f);
             break;
         case 1:
-            *dst = iosMallocDebug(ios_partition_sugipon, sz, "src/debug.c", 1965);
+            *dst = iosMallocDebug(ios_partition_sugipon, sz, "src/debug.c", LN(1965, 1962));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 524288.0f,
                                  (*dst + sz - ios_partition_sugipon->start) * 100.0f / 524288.0f);
             break;
         case 2:
-            *dst = iosMallocDebug(ios_partition_common, sz, "src/debug.c", 1973);
+            *dst = iosMallocDebug(ios_partition_common, sz, "src/debug.c", LN(1973, 1970));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to static object area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 2.0f,
                                  (*dst + sz - ios_partition_common->start) * 100.0f / 2.0f);
             break;
         case 3:
-            *dst = iosMallocDebug(ios_partition_smotion, sz, "src/debug.c", 1982);
+            *dst = iosMallocDebug(ios_partition_smotion, sz, "src/debug.c", LN(1982, 1979));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to static motion area.(%2.1f%%/%2.1f%%)\n",
                                  sz * 100.0f / 1179648.0f,
                                  (*dst + sz - ios_partition_smotion->start) * 100.0f / 1179648.0f);
             break;
         case 5:
-            *dst = iosMallocDebug(ios_partition_dmotion, sz, "src/debug.c", 1991);
+            *dst = iosMallocDebug(ios_partition_dmotion, sz, "src/debug.c", LN(1991, 1988));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to dynamic motion area.(%2.1f%%/%2.1f%%)\n",
                                  sz * 100.0f / 3670016.0f,
                                  (*dst + sz - ios_partition_dmotion->start) * 100.0f / 3670016.0f);
             break;
         case 6:
-            *dst = iosMallocDebug(ios_partition_hara, sz, "src/debug.c", 2000);
+            *dst = iosMallocDebug(ios_partition_hara, sz, "src/debug.c", LN(2000, 1997));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_hara->start) * 100.0f);
             break;
         case 7:
-            *dst = iosMallocDebug(ios_partition_oomori, sz, "src/debug.c", 2007);
+            *dst = iosMallocDebug(ios_partition_oomori, sz, "src/debug.c", LN(2007, 2004));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_oomori->start) * 100.0f / 327680.0f);
             break;
         case 8:
-            *dst = iosMallocDebug(ios_partition_horagai, sz, "src/debug.c", 2014);
+            *dst = iosMallocDebug(ios_partition_horagai, sz, "src/debug.c", LN(2014, 2011));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to horagai-area.\n");
             break;
         case 9:
-            *dst = iosMallocDebug(ios_partition_sound, sz, "src/debug.c", 2019);
+            *dst = iosMallocDebug(ios_partition_sound, sz, "src/debug.c", LN(2019, 2016));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to sound-area.\n");
             break;
         case 10:
-            *dst = iosMallocDebug(ios_partition_sound_semi, sz, "src/debug.c", 2024);
+            *dst = iosMallocDebug(ios_partition_sound_semi, sz, "src/debug.c", LN(2024, 2021));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to sound_semi-area.\n");
             break;
@@ -1807,7 +1905,7 @@ static void debug_DrawBar(void)
     int len;
 
     flip = 0;
-    scale = 1.0f / (270000.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+    scale = 1.0f / (270000.0f / PAL_JPN((float)((60 - systemStatus[0] * 10) / systemStatus[1]), 30.0f));
 
 
 
@@ -2038,7 +2136,7 @@ void debug_DispBar(void)
     int va;
     int vb;
     int n;
-    inv = 1.0f / (270000.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+    inv = 1.0f / (270000.0f / PAL_JPN((float)((60 - systemStatus[0] * 10) / systemStatus[1]), 30.0f));
     vb = (float)(debugBars[debugBarCount - 1].count * 100) * inv;
     va = (float)(drawTimerCount * 100) * inv;
 
@@ -2763,7 +2861,7 @@ static int debug_SelectStageMain(int ret, int stage)
 int debug_SelectStage(void)
 {
     return debug_SelectStageMain(debug_SelectCsvWindowWithLine("stage select", 10, 80, 11, stageData,
-                                                               404, 0x20, 0, 106, &stageSelectNo),
+                                                               404, 0x20, 0, PAL_JPN(106, 104), &stageSelectNo),
                                  stageSelectNo);
 }
 
@@ -3834,7 +3932,7 @@ static int menuArg = 0; /* derived name */
 static inline void debug_MenuBlink(void) /* derived name */
 {
     if (menuBlink >> 4) {
-        debug_PrintfDummy(220, 60, 0x80C0FF80u, "DISC VER.%s %s", "Jan 17 2002", "15:37:26");
+        debug_PrintfDummy(220, 60, 0x80C0FF80u, "DISC VER.%s %s", PAL_JPN("Jan 17 2002", "Nov  2 2001"), PAL_JPN("15:37:26", "17:26:01"));
     }
     menuBlink++;
     if (menuBlink >= 0x41) {

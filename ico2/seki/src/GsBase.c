@@ -8,6 +8,7 @@
 #include "Texture.h"
 #include "staticBlur.h"
 #include <libvu0.h>
+#include <math.h>
 #include <eekernel.h>
 #include <sifdev.h>
 #include <stdio.h>
@@ -177,10 +178,10 @@ void gsb_SetFrame(sceGsDBuff *db, int a1, int a2, int psm, short zbp)
     sceGsSetDefDispEnv(disp1, 0, w, h, 0, 0);
 }
 
-/* Bring the GS up for the frame size the stage record asks for: 512 by 448
- * interlaced, 512 by 512 in the tall mode and 512 by 448 otherwise, then set
- * the double buffer up, hand the first frame over and put the view scale back
- * to one. */
+/* Bring the GS up and set the double buffer up (JPN: the other way round)
+ * for the frame size the stage record asks for: 512 by 448 interlaced,
+ * 512 by 512 in the tall mode and 512 by 448 otherwise, then hand the first
+ * frame over and put the view scale back to one. */
 void gsb_Init(void *db)
 {
     int omode = 2;
@@ -199,11 +200,16 @@ void gsb_Init(void *db)
         omode = 3;
         break;
     }
-    sceGsResetGraph(0, systemStatus[1] == 1, omode, 1);
+    if (!ICO_JPN) {
+        sceGsResetGraph(0, systemStatus[1] == 1, omode, 1);
+    }
     /* FRAME: the native width; the latch below sets this boot's (the stub
        records nothing, port/null/gfx_null.c) */
     sceGsSetDefDBuff(db, 0, gsFrame.w, ScreenHeight, 2, 0x30, fbClear);
     gsb_SetFrame(db, 0, 0, 0x30, 2);
+    if (ICO_JPN) {
+        sceGsResetGraph(0, systemStatus[1] == 1, omode, 1);
+    }
     sceGsSyncV(0);
     buffer_ID = 0;
     FlushCache(0);
@@ -293,6 +299,90 @@ static int reductionGreen; /* derived name */
 
 static int reductionBlue; /* derived name */
 
+#ifdef VERSION_JPN
+
+/* Reduce the frame into the feedback area: one 22 qword GIF packet, built on
+ * the stack and sent down the GIF channel by hand, that first clears the
+ * half height frame in black and then draws it back over itself through the
+ * texture at 0x800 in the reduction tint, and last the tint this stage's
+ * current target asks for. */
+void gsb_Reduction(void)
+{
+    long long pk[44] = {
+        0x1000000000008015LL,
+        0xE,
+        0,
+        0x4A,
+        0x8000000048LL,
+        0x42,
+        (long long)((ScreenWidth >> 6) & 0x3F) << 16,
+        0x4C,
+        ((long long)(0x800 - ScreenWidth / 2) << 4) | ((long long)(0x800 - ScreenHeight / 4) << 36),
+        0x18,
+        ((long long)(ScreenWidth - 1) << 16) | ((long long)(ScreenHeight / 2 - 1) << 48),
+        0x40,
+        0x106,
+        0,
+        0,
+        1,
+        (long long)(-ScreenWidth / 2 * 16 + 0x8000 - 4) |
+            ((long long)(-ScreenHeight / 4 * 16 + 0x8000 - 4) << 16) | (-1LL << 32),
+        5,
+        (long long)(-ScreenWidth / 2 * 16 + 0x8000 + ScreenWidth * 16 - 4) |
+            ((long long)(-ScreenHeight / 4 * 16 + 0x8000 + ScreenHeight / 2 * 16 - 4) << 16) |
+            (-1LL << 32),
+        5,
+        ((long long)(ScreenWidth - 3) << 16) | 2 | ((long long)(ScreenHeight / 2 - 1) << 48),
+        0x40,
+        ((long long)(ScreenWidth / 64) << 14) | 0x664000800LL,
+        6,
+        0x60,
+        0x14,
+        0x30000,
+        0x47,
+        0x1300000C0LL,
+        0x4E,
+        0x116,
+        0,
+        (long long)reductionRed |
+            ((long long)reductionBlue << 16 | (long long)reductionGreen << 8 | 0x80000000LL),
+        1,
+        0x80008,
+        3,
+        (long long)(-ScreenWidth / 2 * 16 + 0x8000 - 4) |
+            ((long long)(-ScreenHeight / 4 * 16 + 0x8000 - 4) << 16) | (-1LL << 32),
+        5,
+        (long long)(ScreenWidth * 16 + 8) | ((long long)(ScreenHeight * 16 + 8) << 16),
+        3,
+        (long long)(-ScreenWidth / 2 * 16 + 0x8000 + ScreenWidth * 16 - 4) |
+            ((long long)(-ScreenHeight / 4 * 16 + 0x8000 + ScreenHeight / 2 * 16 - 4) << 16) |
+            (-1LL << 32),
+        5,
+        ((long long)ScreenWidth << 16) | ((long long)ScreenHeight << 48),
+        0x40,
+    };
+
+    FlushCache(0);
+    *D2_QWC = 22;
+    *D2_MADR = (int)pk & 0x0FFFFFFF;
+    *D2_CHCR = 0x101;
+    sceGsSyncPath(0, 0);
+    if (pad[0].flags & 0x20) {
+        debug_StdPrintfDummy("Film Noise:%d\n", optionScreenMode);
+    }
+    if (optionScreenMode) {
+        reductionRed = fbKeep ? 128 : GlobalStageSetting.targetCol[optionScreenMode - 1][0];
+        reductionGreen = fbKeep ? 128 : GlobalStageSetting.targetCol[optionScreenMode - 1][1];
+        reductionBlue = fbKeep ? 128 : GlobalStageSetting.targetCol[optionScreenMode - 1][2];
+    } else {
+        reductionRed = fbKeep ? 128 : GlobalStageSetting.reductionCol[0];
+        reductionGreen = fbKeep ? 128 : GlobalStageSetting.reductionCol[1];
+        reductionBlue = fbKeep ? 128 : GlobalStageSetting.reductionCol[2];
+    }
+}
+
+#else
+
 /* Reduce the frame into the feedback area: one 22 qword GIF packet, built on
  * the stack and sent down the GIF channel by hand, that first clears the
  * half height frame in black and then draws it back over itself through the
@@ -378,6 +468,8 @@ void gsb_Reduction(void)
         reductionBlue = fbKeep ? 128 : GlobalStageSetting.reductionCol[2];
     }
 }
+
+#endif
 
 /* the colour the kept frame is drawn back in */
 static const unsigned char keepFrameColor[4] = {112, 112, 112, 128}; /* derived name */
@@ -475,7 +567,7 @@ static void gsb_KeepFrameBuffer(void)
 }
 
 /* the fade level gsb_fade steps from 0 to 128 and gsb_PostEffect prints,
-   then one word nothing reads or writes */
+   then (PAL) one word nothing reads or writes */
 static float fadeLevel; /* derived name */
 
 static int gsbUnusedWord; /* derived name */
@@ -582,7 +674,15 @@ void gsb_SetMotionBlur(void)
 
 /* gsb_scissorOnDemo's state: the demo state it last saw, the band level and
    its step */
+#ifdef VERSION_JPN
+
+static int scissorLastState = 51; /* derived name */
+
+#else
+
 static int scissorLastState = 54; /* derived name */
+
+#endif
 
 static float scissorLevel = 0.0f; /* derived name */
 
@@ -592,7 +692,7 @@ static float scissorStep = 0.0f; /* derived name */
 extern void gif_EndPacketPath1(void);
 
 /* The letterbox the demo scenes fade in: two black bars, top and bottom,
- * whose alpha eases to 128 while the scene is state 55 and back to 0
+ * whose alpha eases to 128 while the scene is state 55 (JPN layout 52) and back to 0
  * otherwise.  While the bars are visible they are drawn and the motion blur
  * is left alone; once they are gone the stage record's blur setting is
  * restored.  Each bar is drawn by a macro inside the two-iteration loop,
@@ -606,7 +706,7 @@ static void gsb_scissorOnDemo(void)
     unsigned char col[4];
     int i;
 
-    if (current_layout_id == 55 && scissorLastState != current_layout_id) {
+    if (current_layout_id == PAL_JPN(55, 52) && scissorLastState != current_layout_id) {
         scissorStep = 2.5f;
     } else if (scissorLastState != current_layout_id) {
         scissorStep = -2.5f;
@@ -1076,7 +1176,15 @@ static void gsb_filmNoise(void)
 }
 
 /* the stage animation group each film noise target loops, -1 for none */
+#ifdef VERSION_JPN
+
+static const int filmNoiseGroup[] = {-1, 63, 64, 65, 66}; /* derived name */
+
+#else
+
 static const int filmNoiseGroup[] = {-1, 67, 68, 69, 70}; /* derived name */
+
+#endif
 
 inline void gsb_ResetFilmNoise(void)
 {
@@ -1594,10 +1702,14 @@ void gsb_SetVSMatrix(int w, int h, float d)
     float zoom;
 
     center_X = center_Y = 2048.0f;
-    if (d == 0.0f) {
-        d = (float)currentFocusDistance;
-    } else {
+    if (ICO_JPN) {
         currentFocusDistance = d;
+    } else {
+        if (d == 0.0f) {
+            d = (float)currentFocusDistance;
+        } else {
+            currentFocusDistance = d;
+        }
     }
     /* PC port (photo mode): the full-screen camera's distance (SCALE: the
        full screen is w == ScreenWidth at every aspect) */
@@ -1616,8 +1728,10 @@ void gsb_SetVSMatrix(int w, int h, float d)
     zoom = (float)GlobalStageSetting.viewScale * zoomCurrent * d * (float)debug_zoom_per *
            (float)ScreenWidth / 640.0f / 100.0f / 100.0f;
     vsParam[0] = zoom;
-    if (debug_snapshot_reserve != 0 || (pad[1].now & 0x800) != 0) {
-        vsParam[0] = zoom * (float)debug_snapshot_num / 100.0f;
+    if (!ICO_JPN) {
+        if (debug_snapshot_reserve != 0 || (pad[1].now & 0x800) != 0) {
+            vsParam[0] = zoom * (float)debug_snapshot_num / 100.0f;
+        }
     }
     tex_UpdateMipMapLevel((float)GlobalStageSetting.viewScale * zoomCurrent *
                           (float)debug_zoom_per * (float)ScreenWidth / 640.0f / 100.0f);
@@ -1634,6 +1748,19 @@ void gsb_SetVSMatrix(int w, int h, float d)
                        (float *)(matrixptr + 0x240), (float *)(matrixptr + 0x340), vsParam);
     gsbHostCullMargin((float *)(matrixptr + 0x240));
     gsbHostCullMargin((float *)(matrixptr + 0x680));
+    if (ICO_JPN) {
+        /* The field of view print of the January debug listing (SRCFILE.TXT,
+         * GsBase.c 2305-2306); the release build keeps its two tests.  The
+         * format text is derived: it is on no disc. */
+        if (gsSystemReady != 0) {
+            if (debug_font_flag3 != 0 || (debug_font_flag & 1)) {
+#ifdef DEBUG
+                debug_Printf(340, ScreenHeight / 2 - 38, 0xFFFFFF80, "FOV %f",
+                             atan2f((float)ScreenWidth, vsParam[0]) * 180.0f / 3.1415927f);
+#endif
+            }
+        }
+    }
 }
 
 /* PC port: the native and in-between cull.  Two projections cull:

@@ -19,7 +19,7 @@
 #                      run of them the order is MAIN.MAP's: its sections keep
 #                      their ROM order and interleave by member name.
 #
-# Token after a path:
+# Tokens after a path:
 #   align.<sec>=16     the ROM starts this object's <sec> (data or rodata)
 #                      16-aligned after fill that its own section alignment
 #                      does not produce. While any line carries one,
@@ -28,6 +28,13 @@
 #                      INCLUDEs) with an ALIGN before the object; otherwise
 #                      the file is empty and the script's wildcards alone
 #                      place the section.
+#   overlay-fill=N     on a .dsm line: the byte, decimal 0 to 255, that
+#                      dvp-as repeats over the program's constant-address
+#                      overlay section (--overlay-fill=N, from
+#                      tools/binutils-dvp-overlay-fill.patch). It is the
+#                      period assembler's uninitialised heap memory, measured
+#                      on the disc's ELF, not a feature of the source.
+#                      Absent means 0, PAL's byte, so no line here has one.
 #
 # No object owns these zero runs (ROM offsets, VMA minus 0x100000): 0x18ECB0,
 # the 80 bytes after .vutext (.reginfo is not allocated, the gap is fill);

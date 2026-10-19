@@ -1148,7 +1148,7 @@ static int run_disc(const char *iso)
     CHECK(ico_vfs_stat(vfs, "cdrom0:\\LIBSD.IRX;1", NULL) == 0);
     CHECK(ico_vfs_stat(vfs, "cdrom0:\\SNDN2DRV.IRX;1", NULL) == 0);
 
-    /* the boot ELF through the VFS hashes to config/sha1sums.txt's value */
+    /* the boot ELF through the VFS hashes to config/sha1sums.pal.txt's value */
     CHECK(ico_vfs_open(vfs, "SCES_507.60", &f) == 0);
     sha1_init(&sha);
     for (off = 0; off < f.entry.size;) {

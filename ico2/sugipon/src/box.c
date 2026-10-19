@@ -171,9 +171,13 @@ static int checkFieldContact(GObj *self, float lim)
     int r;
 
     GetRootPosition(pos, self);
-    CopyVector(v, pos);
-    v[1] -= GOBJ_SUB(self)->root.move[1];
-    GetLowerPlaneCollision(&w, v);
+    if (ICO_JPN) {
+        GetLowerPlaneCollision(&w, pos);
+    } else {
+        CopyVector(v, pos);
+        v[1] -= GOBJ_SUB(self)->root.move[1];
+        GetLowerPlaneCollision(&w, v);
+    }
     r = CheckFieldContact(&w, self, pos, lim);
     if (GOBJ_SUB(self)->parent.obj != 0) {
         UnlinkParentOfDObj(self);
@@ -324,7 +328,7 @@ static int execNormalMove(GObj *self, int stop)
                         GetSlerpQuaternion(p->tiltQuat, rot, p->tiltQuat, 0.5f);
                     } else {
                         /* EUC-JP: "this terrain is wrong (it is not divided into 100 cm)" */
-                        debug_StdPrintfDummy("§≥§Œ√œ∑¡§œ§™§´§∑§§§«§π(100cm§À∂Ë¿⁄§È§Ï§∆§§§ﬁ§ª§Û)\n");
+                        debug_StdPrintfDummy("„Åì„ÅÆÂú∞ÂΩ¢„ÅØ„Åä„Åã„Åó„ÅÑ„Åß„Åô(100cm„Å´Âå∫Âàá„Çâ„Çå„Å¶„ÅÑ„Åæ„Åõ„Çì)\n");
                         GetSlerpQuaternion(p->tiltQuat, IdentityQuaternion, p->tiltQuat, 0.5f);
                     }
                 }
@@ -427,7 +431,7 @@ static void initWheels(GObj *self, SObjSimpleSetting *lay)
     int i;
 
     if (objLayout[self->labelId].accessary == 26 ||
-        accessary[GOBJ_SUB(self)->accessary].model == 0x610) {
+        accessary[GOBJ_SUB(self)->accessary].model == PAL_JPN(0x610, 1548)) {
         w->wheelDObj = 0;
     } else {
         w->wheelDObj = CSVSYSTEM_InitDObj(accessary[GOBJ_SUB(self)->accessary].model, lay);
@@ -439,13 +443,15 @@ static void initWheels(GObj *self, SObjSimpleSetting *lay)
         }
         w->wheelDObj->nodeMtx = 0;
         w->wheelDObj->nodeQuat = 0;
-        w->wheelDObj->nodeMtx = (ICO_WORD)iosMallocDebug(ios_partition_seki, 128, __FILE__, 560);
-        w->wheelDObj->nodeQuat = (ICO_WORD)iosMallocDebug(ios_partition_seki, 32, __FILE__, 560);
+        w->wheelDObj->nodeMtx =
+            (ICO_WORD)iosMallocDebug(ios_partition_seki, 128, __FILE__, LN(560, 557));
+        w->wheelDObj->nodeQuat =
+            (ICO_WORD)iosMallocDebug(ios_partition_seki, 32, __FILE__, LN(560, 557));
         w->wheelDObj->nodeNum = 2;
         if (w->wheelDObj->nodes != 0) {
             iosFree((void *)(ICO_PHYS(ICO_ADDR(w->wheelDObj->nodes))));
         }
-        w->wheelDObj->nodes = iosMallocDebug(ios_partition_seki, 160, __FILE__, 560);
+        w->wheelDObj->nodes = iosMallocDebug(ios_partition_seki, 160, __FILE__, LN(560, 557));
 
         for (i = 0; i < 2; i++) {
             {
@@ -1281,7 +1287,7 @@ static void execFloating(GObj *self)
     if (w->floatPhase == 0) {
         CopyVector(cw.pt[0], pos);
         cw.pt[0][1] = w->waterHeight[0];
-        EntryStageMultiBgaManager(491, cw.pt[0], IdentityQuaternion);
+        EntryStageMultiBgaManager(PAL_JPN(491, 487), cw.pt[0], IdentityQuaternion);
     }
 }
 
@@ -1469,12 +1475,16 @@ static void action(GObj *self)
             v.f[2] = 1.0f;
             _ApplyMatrix(GOBJ_SUB(self)->ctrl.dir, (void *)GOBJ_SUB(self)->nodeMtx, &v);
         }
-        CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
+        if (!ICO_JPN) {
+            CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
+        }
         break;
     case 1:
     case 6:
         execAutoMove(self);
-        CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
+        if (!ICO_JPN) {
+            CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
+        }
         break;
     case 2:
     case 3:
@@ -1482,7 +1492,9 @@ static void action(GObj *self)
         break;
     case 4:
         playBoxAnimation(self, v.f);
-        CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
+        if (!ICO_JPN) {
+            CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
+        }
         break;
     case 5:
         execFloating(self);
@@ -1490,7 +1502,9 @@ static void action(GObj *self)
     case -1:
     default:
         debug_StdPrintfDummy("box die!!!\n");
-        CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
+        if (!ICO_JPN) {
+            CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
+        }
         break;
     }
     if (p->mode != 6) {
@@ -1823,8 +1837,13 @@ static inline int checkItemHit(GObj *obj, float *dir) /* derived name */
 
 static int moveBoxAutoMatic(GObj *self, int dir)
 {
+#ifdef VERSION_JPN
+    static float v[4] = {0.0f, 0.0f, 0.5f, 0.0f};
+    static float v2[4] = {0.0f, 0.0f, -0.5f, 0.0f};
+#else
     float v[4];
     float v2[4];
+#endif
     BoxWork *p = GOBJ_SUB(self)->work;
     float t = 30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
     float w = t * t;
@@ -1836,14 +1855,18 @@ static int moveBoxAutoMatic(GObj *self, int dir)
         AddVectorXYZ(p->vel, p->vel, ZeroVector);
         break;
     case 1:
-        memset(v, 0, 16);
-        v[2] = w * 0.5f;
+        if (!ICO_JPN) {
+            memset(v, 0, 16);
+            v[2] = w * 0.5f;
+        }
         p->friction = 0.98f;
         AddVectorXYZ(p->vel, p->vel, v);
         break;
     case -1:
-        memset(v2, 0, 16);
-        v2[2] = w * -0.5f;
+        if (!ICO_JPN) {
+            memset(v2, 0, 16);
+            v2[2] = w * -0.5f;
+        }
         p->friction = 0.98f;
         AddVectorXYZ(p->vel, p->vel, v2);
         break;
@@ -2003,7 +2026,7 @@ void ReInitBoxGeo(GObj *self)
     if (checkFieldContact(self, 100000.0f) == 0) {
         /* EUC-JP: "the box is placed where there is no ground; its behaviour cannot be guaranteed (is the box before the collision definition?)" */
         debug_StdPrintfDummy(
-            "\033[36m»¢§¨√œÃÃ§ŒÃµ§§§»§≥§Ì§ÀΩÈ¥¸«€√÷§µ§Ï§∆§§§ﬁ§π°£\n∆∞∫Ó§¨ ›æ⁄§«§≠§ﬁ§ª§Û(•≥•Í•∏•Á•ÛƒÍµ¡§Ë§Í¡∞§À»¢§¨§¢§Í§ﬁ§ª§Û§´?)\033[m\n");
+            "\033[36mÁÆ±„ÅåÂú∞Èù¢„ÅÆÁÑ°„ÅÑ„Å®„Åì„Çç„Å´ÂàùÊúüÈÖçÁΩÆ„Åï„Çå„Å¶„ÅÑ„Åæ„Åô„ÄÇ\nÂãï‰Ωú„Åå‰øùË®º„Åß„Åç„Åæ„Åõ„Çì(„Ç≥„É™„Ç∏„Éß„É≥ÂÆöÁæ©„Çà„ÇäÂâç„Å´ÁÆ±„Åå„ÅÇ„Çä„Åæ„Åõ„Çì„Åã?)\033[m\n");
     } else {
         int m = GOBJ_SUB(self)->ctrl.floorAttr;
 
@@ -2011,13 +2034,13 @@ void ReInitBoxGeo(GObj *self)
             initFloating(self);
             p->mode = 5;
             /* EUC-JP: "box initially placed on the water bottom" */
-            debug_StdPrintfDummy("»¢ΩÈ¥¸øÂƒÏ«€√÷\n");
+            debug_StdPrintfDummy("ÁÆ±ÂàùÊúüÊ∞¥Â∫ïÈÖçÁΩÆ\n");
         } else {
             p->mode = 0;
             AlignBox(self, 100.0f);
             execNormalMove(self, 1);
             /* EUC-JP: "box initially placed normally" */
-            debug_StdPrintfDummy("»¢ΩÈ¥¸ƒÃæÔ«€√÷\n");
+            debug_StdPrintfDummy("ÁÆ±ÂàùÊúüÈÄöÂ∏∏ÈÖçÁΩÆ\n");
         }
     }
     UpdateRootMatrix(self);
@@ -2030,7 +2053,8 @@ static unsigned char boxSerial = 0; /* derived name */
    and the sub-box model in its high half */
 BoxWork *InitBoxGeo(GObj *self, SObjSimpleSetting *lay)
 {
-    BoxWork *w = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(BoxWork, 416), __FILE__, 2017);
+    BoxWork *w =
+        iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(BoxWork, 416), __FILE__, LN(2017, 2003));
     GObj *o;
     GObj *g;
     int sub;

@@ -285,9 +285,9 @@ archive made from any other file: the game's data is written to a
 temporary file and kept as the local archive only when the check passes
 (`ico.o2r` for the European disc, `ico-jpn.o2r` for the Japanese disc, so
 both can sit in the same user folder); the
-maintainers' ELF extraction checks `config/sha1sums.txt`. A SHA-1 is a
-fingerprint, not a copy of the work; the disc image and the ELF remain the
-property of their rightsholders.
+maintainers' ELF extraction checks `config/sha1sums.pal.txt` (`config/sha1sums.jpn.txt` for
+the Japanese disc). A SHA-1 is a fingerprint, not a copy of the work; the disc image and the
+ELF remain the property of their rightsholders.
 
 This project gives no instructions for obtaining a disc image. The only
 legitimate source is a personal dump of a disc you own, made in compliance

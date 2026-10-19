@@ -31,12 +31,21 @@
 #include <string.h>
 #include "ico_gamestate.h" /* port: achievement signals */
 
-/* main.c's .data globals, each with an initialiser. systemStatus starts in PAL mode (word 0)
+/* main.c's .data globals, each with an initialiser. systemStatus starts in PAL mode (word 0;
+   NTSC on JPN)
    at a frame step of 2 (word 1). db is the GS double buffer (libgraph's
    sceGsDBuff, 0x230 B), stageMgrMsg the stage manager's message (main.h's
    StgMgrMsg, 0x18 B) and SchedulerMsgQ the scheduler's queue (message.c's
    IosMsgQueue, 0x30 B). */
+#ifdef VERSION_JPN
+
+int systemStatus[12] = {0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7};
+
+#else
+
 int systemStatus[12] = {1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7};
+
+#endif
 
 sceGsDBuff db = {{{0}}};
 
@@ -237,7 +246,9 @@ void Main(void)
     debug_StdPrintfDummy("SYSTEM_FRAMERATE: \x1b[33m%d\x1b[m\n",
                          (60 - systemStatus[0] * 10) / systemStatus[1]);
     *T0_COUNT = 0;
-    NonLinearCameraMove = 3;
+    if (!ICO_JPN) {
+        NonLinearCameraMove = 3;
+    }
     stage_no = 0;
     exit_no = 0;
     interlace = 1;
@@ -250,7 +261,7 @@ void Main(void)
        stages: 64 to 87, 89, 90, 92 to 102) loads nothing and dies building
        its objects. Refused as debug_SelectStageMain refuses the NOCD_ rows;
        the boot runs instead. */
-    if (n > 1 && n < 106 &&
+    if (n > 1 && n < PAL_JPN(106, 104) &&
         (strstr(stageData[n].dataFile, "NOCD_") != 0 ||
          strstr(stageData[n].dataFile, "ONLYSAMPLE_") != 0)) {
         ico_diag_milestone("start_stage %d (%s) refused: its data file %s is not on the disc; "
@@ -258,7 +269,7 @@ void Main(void)
                            n, stageData[n].name, stageData[n].dataFile);
         n = -1;
     }
-    thisIsYourStartStage = n < 106 ? n : 105;
+    thisIsYourStartStage = n < PAL_JPN(106, 104) ? n : PAL_JPN(105, 103);
     if (thisIsYourStartStage <= 0) {
         thisIsYourStartStage = 1;
     }
@@ -292,7 +303,9 @@ void Main(void)
     while (1) {
         iosThreadCancelWakeup(0);
         iosThreadSleep();
-        gsb_ResetSnap();
+        if (!ICO_JPN) {
+            gsb_ResetSnap();
+        }
         if (mpegPlay != 0) {
             if (mpegInitDone == 0) {
                 continue;
@@ -303,8 +316,8 @@ void Main(void)
             ios_partition_mpeg = ios_partition_isys;
             AdpcmStreamFree();
             soundAllocIopFree();
-            movie_init(&movieFile[mpegPlay * 0x20], 720, systemStatus[0] ? 576 : 480, 36, 12,
-                       soundOutputModeGet() == 1, mpegPlayInitColor);
+            movie_init(&movieFile[mpegPlay * 0x20], 720, PAL_JPN(systemStatus[0] ? 576 : 480, 480),
+                       36, 12, soundOutputModeGet() == 1, mpegPlayInitColor);
             ret = movie_proc(movie_abort_check);
             ico_gs_signal(ICO_GS_EV_FMV_END, ret == 1);
             sceGsSyncV(0);
@@ -363,7 +376,9 @@ void Main(void)
         ico_photo_view_tick();
         iosOmCreateDL();
         ExecDelayFree();
-        gsb_TakeSnap();
+        if (!ICO_JPN) {
+            gsb_TakeSnap();
+        }
         frameReady = 1;
         ico_host_main_tick();
         if (systemFault != 0) {
@@ -565,10 +580,10 @@ int main(void)
     return 0;
 }
 
-/* main.c's .sdata globals.  The PAL build adds six (marked derived): one
-   quadword after game_pause and the girl-control block before boyGObj.  Each
-   is a 4-byte scalar; the ones marked QWORD open a 16-byte quadword of their
-   own, the rest of which stays empty. */
+/* main.c's .sdata globals.  Both builds add six to the January map's (marked
+   derived): one quadword after game_pause and the girl-control block before
+   boyGObj.  Each is a 4-byte scalar; the ones marked QWORD open a 16-byte
+   quadword of their own, the rest of which stays empty. */
 #define QWORD __attribute__((aligned(16)))
 
 int buffer_ID QWORD = 0;
@@ -605,7 +620,7 @@ int game_pause QWORD = 0;
 
 int data_loading QWORD = 0;
 
-/* the PAL build's inserted, unreferenced quadword */
+/* the inserted, unreferenced quadword */
 static int reservedWord QWORD = 0; /* derived name */
 
 int screen_offset_x QWORD = 0;

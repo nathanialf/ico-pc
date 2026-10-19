@@ -125,6 +125,69 @@ static inline void _advanceRing(int amt) /* derived name */
     }
 }
 
+#ifdef VERSION_JPN
+
+static int _infoUpdate(void)
+{
+    int top;
+    int i;
+
+    if (headerRead == 0) {
+        if (_checkRing(4096)) {
+            headerSize = 0;
+            for (i = 0; i < streamNum; i++) {
+                int a = ringRead + headerSize;
+
+                streamEntry[i].nodeNum = *(unsigned char *)(ringBuf + (a + 2) % 163840);
+                streamEntry[i].shapeNum = *(unsigned char *)(ringBuf + (a + 3) % 163840);
+                streamEntry[i].size = 16 + streamEntry[i].nodeNum * 8 + streamEntry[i].shapeNum * 4;
+                headerSize += streamEntry[i].size;
+            }
+            frameTime = 1500 / ((60 - systemStatus[0] * 10) / systemStatus[1]);
+            headerRead = 1;
+        } else {
+            /* the data had not arrived in time when the stream motion started */
+            debug_StdPrintfDummy(
+                "ストリームモーション開始時にデータの転送が間に合っていませんでした。\n");
+            iosCdvdStDelayCnt++;
+            return 0;
+        }
+    }
+    top = ringRead;
+    framePlayed = 0;
+    while (frameTime >= 50) {
+        if (!_checkRing(headerSize)) {
+            /* the stream motion data transfer is not keeping up */
+            debug_StdPrintfDummy("ストリームモーションのデータ転送が間に合っていません。\n");
+            iosCdvdStDelayCnt++;
+            return 0;
+        }
+        if (*(unsigned char *)(ringBuf + ringRead) == 0xFF) {
+            return 1;
+        }
+        top = ringRead;
+        _setEntryOffsets();
+        _advanceRing(headerSize);
+        if (_checkRing(headerSize) && *(unsigned char *)(ringBuf + ringRead) == 0) {
+            _setNextEntryOffsets(ringRead);
+        }
+        frameTime -= 50;
+    }
+    if (currentScreenWidth != 0) {
+        if (*(unsigned char *)(ringBuf + top) == 1) {
+            debug_StdPrintfDummy("\033[36mSTREAM MOTION SYNCHRONIZE OK\033[m\n");
+        } else {
+            debug_StdPrintfDummy("\033[33mSTREAM MOTION SYNCHRONIZE NG\033[m\n");
+        }
+        frameTime = 0;
+    }
+    framePlayed = frameTime;
+    frameTime += 1500 / ((60 - systemStatus[0] * 10) / systemStatus[1]);
+    return 0;
+}
+
+#else
+
 static int _infoUpdate(void)
 {
     int top;
@@ -212,6 +275,8 @@ static int _infoUpdate(void)
     frameTime += systemStatus[0] == 0 ? 2997 : 3619;
     return 0;
 }
+
+#endif
 
 void PlayStreamMotion(void)
 {
@@ -341,7 +406,7 @@ inline float GetStreamMotionData(char *dst, int no)
         return -1.0f;
     }
     getStreamMotionData(dst, streamEntry[no].cur, no);
-    return (float)framePlayed / 2997.0f;
+    return (float)framePlayed / PAL_JPN(2997.0f, 50.0f);
 }
 
 static void _transRingBuf(int *idx_p, char *dst, int size, char *src, int amt)
@@ -414,8 +479,10 @@ void ExecStreamMotionManager(void)
 
 void MallocStreamMotionBuffer(void)
 {
-    ringBuf = iosMallocDebug(ios_partition_sugipon, 163840, "src/streamMotionManager.c", 602);
-    readBufRaw = iosMallocDebug(ios_partition_sugipon, 163904, "src/streamMotionManager.c", 604);
+    ringBuf =
+        iosMallocDebug(ios_partition_sugipon, 163840, "src/streamMotionManager.c", LN(602, 570));
+    readBufRaw =
+        iosMallocDebug(ios_partition_sugipon, 163904, "src/streamMotionManager.c", LN(604, 572));
     readBuf = (char *)((ICO_WORD)(readBufRaw + 63) & ~(ICO_WORD)63);
     if (ringBuf == 0 || readBuf == 0) {
         /* "could not allocate the stream buffer memory" */

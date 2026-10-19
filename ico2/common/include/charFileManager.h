@@ -27,8 +27,8 @@ void CSVSYSTEM_ReadCharFiles(struct Sub15C *rec, int id);
 /* the loaded model of a character file id (enemy.c's setup) */
 struct PObjModel *GetPObjAddress(int id);
 
-/* texture-path: one texture file, 0x34 bytes. Readers:
- * ico2/common/src/charFileManager.c (TexRec), kanban.c, layout_texture.c.
+/* texture-path: one texture file, 0x34 bytes (JPN 0x30, in .rodata). Readers:
+ * ico2/common/src/charFileManager.c (TexRec, PAL), kanban.c, layout_texture.c.
  * Owner: ico2/common/include/charFileManager.h. */
 typedef struct {    /* field names derived */
     char path[48];  /* 0x00 */

@@ -167,8 +167,8 @@ static void StartPendulum(GObj *gobj, GObj *owner, float *pos)
         }
     }
     if (nearestNode == -1) {
-        debug_assert(__FILE__, 563);
-        __assert(__FILE__, 563, "nearestNode!=-1");
+        debug_assert(__FILE__, LN(563, 557));
+        __assert(__FILE__, LN(563, 557), "nearestNode!=-1");
     }
     cw->holdNode = nearestNode;
     cw->holdNode =
@@ -293,11 +293,14 @@ static void chain_simulate_term_swingready(GObj *gobj)
         debug_Printf(10, chainDebugY, 0x0FFFFFFF, "chain_simulate_term_swingready\n");
     }
     if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(0.5)) < 0) {
-        cw->pdl.ampSpeed = -0.29999998f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
+        cw->pdl.ampSpeed =
+            PAL_JPN(-0.29999998f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.01f);
     } else if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(1.0)) < 0) {
-        cw->pdl.ampSpeed = -1.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
+        cw->pdl.ampSpeed =
+            PAL_JPN(-1.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.05f);
     } else {
-        cw->pdl.ampSpeed = -4.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
+        cw->pdl.ampSpeed =
+            PAL_JPN(-4.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.15f);
     }
     chain_simulate_term_simple(gobj);
 }
@@ -316,15 +319,18 @@ static void chain_simulate_term_swingstart(GObj *gobj)
 
     if (h < 20.0f) {
         if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(0.3)) < 0) {
-            cw->pdl.ampSpeed =
-                -0.29999998f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
+            cw->pdl.ampSpeed = PAL_JPN(
+                -0.29999998f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.01f);
         } else if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(1.0)) < 0) {
-            cw->pdl.ampSpeed = -6.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
+            cw->pdl.ampSpeed =
+                PAL_JPN(-6.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.2f);
         } else {
-            cw->pdl.ampSpeed = -9.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
+            cw->pdl.ampSpeed =
+                PAL_JPN(-9.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.3f);
         }
     } else {
-        if (ico_dcmp(ico_f2d(h), ICO_D(20.0)) >= 0 && ico_dcmp(ico_f2d(h), ICO_D(21.5)) < 0) {
+        if (PAL_JPN(ico_dcmp(ico_f2d(h), ICO_D(20.0)) >= 0 && ico_dcmp(ico_f2d(h), ICO_D(21.5)) < 0,
+                    h == 20.0f)) {
             cw->pdl.phase = 0.0f;
             cw->pdl.ampLimit = 360.0f;
         }
@@ -332,8 +338,9 @@ static void chain_simulate_term_swingstart(GObj *gobj)
         cw->pdl.amp = 3.0f;
 
         cw->pdl.phase = cw->pdl.phase - 1.0f +
-                        cw->pdl.cycle * 0.5f / 41.0f * 30.0f /
-                            (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
+                        PAL_JPN(cw->pdl.cycle * 0.5f / 41.0f * 30.0f /
+                                    (float)((60 - systemStatus[0] * 10) / systemStatus[1]),
+                                cw->pdl.cycle * 0.5f / 40.0f);
     }
     chain_simulate_term_simple(gobj);
 }
@@ -445,7 +452,8 @@ static void chain_simulate_hangstart(GObj *gobj)
         chainDebugY = chainDebugY + 10;
         debug_Printf(10, chainDebugY, 0x0FFFFFFF, "chain_simulate_hangstart\n");
     }
-    cw->pdl.ampSpeed = -1.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
+    cw->pdl.ampSpeed =
+        PAL_JPN(-1.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.05f);
     chain_simulate_term_simple(gobj);
 }
 
@@ -694,11 +702,12 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
     if (n < 2) {
         /* "the chain is too short (set it with the Y-scale of the placement table)" */
         debug_StdPrintfDummy("鎖の長さが短かすぎます(配置表のY-scaleで指定します)");
-        debug_assert(__FILE__, 1178);
-        __assert(__FILE__, 1178, "0");
+        debug_assert(__FILE__, LN(1178, 1172));
+        __assert(__FILE__, LN(1178, 1172), "0");
     }
 
-    cw = iosMallocDebug(ios_partition_sugipon, (n << 5) + sizeof(ChainRecord), __FILE__, 1181);
+    cw = iosMallocDebug(ios_partition_sugipon, (n << 5) + sizeof(ChainRecord), __FILE__,
+                        LN(1181, 1175));
 
     /* the record is wider here (8-byte pointers): copy the typed template */
     *cw = chainRecordDefault;
@@ -771,15 +780,15 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
 
     *(char **)&((ChainExtPtr *)&gobj->dobj)->sub->nodeQuat = 0;
     *(char **)&((ChainExtPtr *)&gobj->dobj)->sub->nodeMtx =
-        (char *)iosMallocDebug(ios_partition_seki, (cw->nodes - 1) << 6, __FILE__, 1245);
+        (char *)iosMallocDebug(ios_partition_seki, (cw->nodes - 1) << 6, __FILE__, LN(1245, 1239));
     *(char **)&((ChainExtPtr *)&gobj->dobj)->sub->nodeQuat =
-        (char *)iosMallocDebug(ios_partition_seki, (cw->nodes - 1) << 4, __FILE__, 1245);
+        (char *)iosMallocDebug(ios_partition_seki, (cw->nodes - 1) << 4, __FILE__, LN(1245, 1239));
     ((ChainExtPtr *)&gobj->dobj)->sub->nodeNum = cw->nodes - 1;
     if (((ChainExtPtr *)&gobj->dobj)->sub->nodes != 0) {
         iosFree((void *)ICO_PHYS(ICO_ADDR(((ChainExtPtr *)&gobj->dobj)->sub->nodes)));
     }
     ((ChainExtPtr *)&gobj->dobj)->sub->nodes =
-        iosMallocDebug(ios_partition_seki, (cw->nodes - 1) * 80, __FILE__, 1245);
+        iosMallocDebug(ios_partition_seki, (cw->nodes - 1) * 80, __FILE__, LN(1245, 1239));
 
     for (i = 0; i < cw->nodes - 1; i++) {
         ((ChainExtPtr *)&gobj->dobj)->sub->nodes[i].flags.ll &= ~1;
@@ -837,8 +846,9 @@ static void chain_set_charachara(GObj *gobj, float amp)
     cw->count = cw->count + 1;
 }
 
-/* The enemy parameter table, one 404-byte row per motion id; ChainGeo reads
- * only the flag word at 0x18C.  Same record enemy_act.c reads as EnemyParaRow. */
+/* The enemy parameter table, one 404-byte row (JPN 400) per motion id; ChainGeo
+ * reads only the flag word at 0x18C (JPN 0x188).  Same record enemy_act.c reads
+ * as EnemyParaRow. */
 typedef struct { /* field names derived */
     char pad00[396];
     unsigned int flags; /* bit 11: a motion the hand hangs on the chain from */
@@ -1214,8 +1224,8 @@ static void PlumbPointUpdateChain(GObj *gobj, float *pos)
         }
     }
     if (nearestNode == -1) {
-        debug_assert(__FILE__, 1675);
-        __assert(__FILE__, 1675, "nearestNode!=-1");
+        debug_assert(__FILE__, LN(1675, 1669));
+        __assert(__FILE__, LN(1675, 1669), "nearestNode!=-1");
     }
     cw->holdNode = nearestNode;
     cw->holdNode =
@@ -1232,7 +1242,11 @@ static void PlumbPointUpdateChain(GObj *gobj, float *pos)
 typedef struct { /* field names derived */
     /* 0x00 */ sceVu0FVECTOR node;
     /* 0x10 */ sceVu0FVECTOR target;
+#ifdef VERSION_JPN
+    /* 0x20 */ int phase;
+#else
     /* 0x20 */ float phase;
+#endif
     /* 0x24 */ int frames;
     /* 0x28 */ int prev;
 } ChainClimbWork; /* derived name */
@@ -1327,19 +1341,23 @@ static void TestChainUpDown(GObj *gobj, GObj *boy)
         org[0] = test_CURRENTROOT(boyGObj)[0]; org[1] = test_CURRENTROOT(boyGObj)[1]; org[2] = test_CURRENTROOT(boyGObj)[2];
 
         rec = (ChainClimbWork *)chainClimb; if (rec->prev != mode) {
-            rec->phase = 0.0f;
+            rec->phase = PAL_JPN(0.0f, 0);
             rec->frames = (int)(float)*motionTable[((ChainExtPtr *)&boy->dobj)->sub->ctrl.motion];
             SetChainClimbNodePoint(boy, rec);
             rec->target[0] = rec->node[0]; rec->target[2] = rec->node[2];
             rec->target[1] = rec->node[1] - 100.0f;
         }
-        _InterGV(v, rec->node, rec->target, rec->phase, (float)rec->frames - rec->phase);
+        if (ICO_JPN) {
+            _InterGV(v, rec->node, rec->target, (float)rec->phase, (float)(rec->frames - rec->phase));
+        } else {
+            _InterGV(v, rec->node, rec->target, rec->phase, (float)rec->frames - rec->phase);
+        }
 
         v[1] = v[1] < cw->rootPos[1] ? cw->rootPos[1] : (cw->endPos[1] < v[1] ? cw->endPos[1] : v[1]);
 
         PushChainClimbRoot(boy, v, w, d, -10.0f, 3.0f);
 
-        ((ChainClimbWork *)chainClimb)->phase = ((ChainClimbWork *)chainClimb)->phase + 1.0f;
+        ((ChainClimbWork *)chainClimb)->phase = ((ChainClimbWork *)chainClimb)->phase + PAL_JPN(1.0f, 1);
 
         w[0] = test_CURRENTROOT(boyGObj)[0]; w[1] = test_CURRENTROOT(boyGObj)[1]; w[2] = test_CURRENTROOT(boyGObj)[2];
         w[1] = org[1] + ((ChainExtPtr *)&boyGObj->dobj)->sub->root.step[1];
@@ -1354,13 +1372,17 @@ static void TestChainUpDown(GObj *gobj, GObj *boy)
         org[0] = test_CURRENTROOT(boyGObj)[0]; org[1] = test_CURRENTROOT(boyGObj)[1]; org[2] = test_CURRENTROOT(boyGObj)[2];
 
         rec = (ChainClimbWork *)chainClimb; if (rec->prev != mode) {
-            rec->phase = 0.0f;
+            rec->phase = PAL_JPN(0.0f, 0);
             rec->frames = (int)(float)*motionTable[((ChainExtPtr *)&boy->dobj)->sub->ctrl.motion];
             SetChainClimbNodePoint(boy, rec);
             rec->target[0] = rec->node[0]; rec->target[2] = rec->node[2];
             rec->target[1] = rec->node[1] - 100.0f;
         }
-        _InterGV(v, rec->node, rec->target, rec->phase, (float)rec->frames - rec->phase);
+        if (ICO_JPN) {
+            _InterGV(v, rec->node, rec->target, (float)rec->phase, (float)(rec->frames - rec->phase));
+        } else {
+            _InterGV(v, rec->node, rec->target, rec->phase, (float)rec->frames - rec->phase);
+        }
 
         GetPositionOnTheChain(v, gobj, v);
 
@@ -1368,7 +1390,7 @@ static void TestChainUpDown(GObj *gobj, GObj *boy)
 
         PushChainClimbRoot(boy, v, w, d, mode == 0 ? -15.0f : -10.0f, mode == 0 ? -3.0f : -10.0f);
 
-        ((ChainClimbWork *)chainClimb)->phase = ((ChainClimbWork *)chainClimb)->phase + 30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
+        ((ChainClimbWork *)chainClimb)->phase = ((ChainClimbWork *)chainClimb)->phase + PAL_JPN(30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), 1);
 
         w[0] = test_CURRENTROOT(boyGObj)[0]; w[1] = test_CURRENTROOT(boyGObj)[1]; w[2] = test_CURRENTROOT(boyGObj)[2];
         w[1] = org[1] + ((ChainExtPtr *)&boyGObj->dobj)->sub->root.step[1];
@@ -1381,21 +1403,25 @@ static void TestChainUpDown(GObj *gobj, GObj *boy)
     case 2: case 3: {
         ChainClimbWork *rec;
         rec = (ChainClimbWork *)chainClimb; if (rec->prev != mode) {
-            rec->phase = 0.0f;
+            rec->phase = PAL_JPN(0.0f, 0);
             rec->frames = (int)(float)*motionTable[((ChainExtPtr *)&boy->dobj)->sub->ctrl.motion];
             SetChainClimbNodePoint(boy, rec);
             rec->target[0] = rec->node[0]; rec->target[2] = rec->node[2];
             rec->target[1] = rec->node[1] + 200.0f;
         }
 
-        _InterGV(v, rec->node, rec->target, rec->phase, (float)rec->frames - rec->phase);
+        if (ICO_JPN) {
+            _InterGV(v, rec->node, rec->target, (float)rec->phase, (float)(rec->frames - rec->phase));
+        } else {
+            _InterGV(v, rec->node, rec->target, rec->phase, (float)rec->frames - rec->phase);
+        }
 
         GetPositionOnTheChain(v, gobj, v);
 
         v[1] = v[1] < cw->node2Pos[1] ? cw->node2Pos[1] : (cw->endPos[1] < v[1] ? cw->endPos[1] : v[1]);
 
         PushChainClimbRoot(boy, v, hw, hd, -20.0f, -5.0f);
-        ((ChainClimbWork *)chainClimb)->phase = ((ChainClimbWork *)chainClimb)->phase + 1.0f;
+        ((ChainClimbWork *)chainClimb)->phase = ((ChainClimbWork *)chainClimb)->phase + PAL_JPN(1.0f, 1);
         PlumbPointUpdateChain(gobj, v);
     } break;
     default: { ChainClimbWork *rec;

@@ -7,6 +7,10 @@
 #ifndef CHARFILENAME_H
 #define CHARFILENAME_H
 
+#ifdef VERSION_JPN
+#define MAX_CHARS 1621
+#else
 #define MAX_CHARS 1637
+#endif
 
 #endif

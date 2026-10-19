@@ -1018,14 +1018,14 @@ OFF(OaRecB, word8, 0x8);
 OFF(OaRecB, mode, 0xC);
 OFF(OaRecB, flags, 0x10);
 
-/* McFileInfo: save, ico2/common/include/typedef.h:1448 */
+/* McFileInfo: save, ico2/common/include/typedef.h:1451 */
 OFF(McFileInfo, stage, 0x0);
 OFF(McFileInfo, cleared, 0x4);
 OFF(McFileInfo, playTime, 0x8);
 OFF(McFileInfo, sofa, 0xC);
 OFF(McFileInfo, word10, 0x10);
 
-/* McProductFile: save, ico2/common/include/typedef.h:1456 */
+/* McProductFile: save, ico2/common/include/typedef.h:1459 */
 OFF(McProductFile, file, 0x0);
 OFF(McProductFile, soundMode, 0x190);
 OFF(McProductFile, outputMode, 0x194);
@@ -1038,7 +1038,7 @@ OFF(McProductFile, cameraMove, 0x1E8);
 OFF(McProductFile, palMode, 0x1EC);
 SIZE(McProductFile, 0x1F0); /* config */
 
-/* McMgr: runtime, ico2/common/include/typedef.h:1489 */
+/* McMgr: runtime, ico2/common/include/typedef.h:1492 */
 #if ICO_LAYOUT_EE
 OFF(McMgr, flags, 0x0);
 OFF(McMgr, port, 0x8);

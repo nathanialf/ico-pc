@@ -8,7 +8,7 @@
 #ifndef ACT_GAME_H
 #define ACT_GAME_H
 
-#include "typedef.h" /* WayRequest, which ActWork carries at 0x580 */
+#include "typedef.h" /* WayRequest, which ActWork carries at 0x580 (JPN 0x570) */
 #include "clipCollisionManager.h"
 
 struct GObj;

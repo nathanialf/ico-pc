@@ -247,8 +247,8 @@ static int controler_stable_check(IosPadDevRec *dev)
             dev->phase = -1;
             dev->errCount = cnt;
             dev->lastTermId = id;
-            debug_assert(__FILE__, 468);
-            __assert(__FILE__, 468, "0");
+            debug_assert(__FILE__, LN(468, 465));
+            __assert(__FILE__, LN(468, 465), "0");
             return -1;
         }
         if (state == 6 || state == 2) {
@@ -280,8 +280,8 @@ int iosPadDevInit(void *desc)
 
     if (scePadInit(0) != 1) {
         debug_StdPrintfDummy("pad:init error\n");
-        debug_assert(__FILE__, 553);
-        __assert(__FILE__, 553, "0");
+        debug_assert(__FILE__, LN(553, 550));
+        __assert(__FILE__, LN(553, 550), "0");
         return 0;
     }
     for (i = 0; i < 2; i++) {
@@ -294,8 +294,8 @@ int iosPadDevInit(void *desc)
         dev->state = 0xFFFF;
         if (scePadPortOpen(i, 0, dev->dmaBuf) == 0) {
             debug_StdPrintfDummy("ERROR: scePadPortOpen port%d slot%d\n", i, 0);
-            debug_assert(__FILE__, 569);
-            __assert(__FILE__, 569, "0");
+            debug_assert(__FILE__, LN(569, 566));
+            __assert(__FILE__, LN(569, 566), "0");
         }
     }
     iosPadConfCustom = iosPadConfDefault;
@@ -325,10 +325,15 @@ static int iosPadDevReadFunc(void)
             }
         } else {
             if (scePadRead(dev->port, dev->slot, &dev->buf[dev->idx]) == 0) {
-                debug_StdPrintfDummy("err %d\n", scePadGetState(dev->port, dev->slot));
-                if (scePadGetState(dev->port, dev->slot) == 0) {
+                if (ICO_JPN) {
                     dev->phase = 0;
                     dev->error = 1;
+                } else {
+                    debug_StdPrintfDummy("err %d\n", scePadGetState(dev->port, dev->slot));
+                    if (scePadGetState(dev->port, dev->slot) == 0) {
+                        dev->phase = 0;
+                        dev->error = 1;
+                    }
                 }
             } else {
                 IosPadBuf *b = &dev->buf[dev->idx];

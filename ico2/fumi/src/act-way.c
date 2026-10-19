@@ -306,6 +306,12 @@ int ACTWayMove_NextDetail(GObj *self, float *node, float *goal, unsigned char d,
     float dy;
     int n;
 
+    if (ICO_JPN) {
+        /* disabled in retail: the way-begin-position (WBP) report */
+        if (0) {
+            debug_StdPrintfDummy("WBP <<begin>>\n");
+        }
+    }
     *(WayStep *)&act->wayNodeX = wayStepClear;
     act->wayNodeX = node[0];
     act->wayNodeY = node[1];

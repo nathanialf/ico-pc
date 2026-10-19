@@ -186,8 +186,8 @@ inline int IsEnemyBrainToGenerator(GObj *self, GObj **out)
         return 0;
     *out = ((ActWork *)b->work)->genTarget;
     if (*out == 0) {
-        debug_assert("src/enemy_act.c", 0x341);
-        __assert("src/enemy_act.c", 0x341, "*generator_gop!=NULL");
+        debug_assert("src/enemy_act.c", PAL_JPN(0x341, 830));
+        __assert("src/enemy_act.c", PAL_JPN(0x341, 830), "*generator_gop!=NULL");
     }
     return 1;
 }
@@ -226,8 +226,8 @@ static void setBattleStatus(GObj *self)
         GOBJ_ACT(self)->enemy->flags.ll |= 2LL;
         break;
     default:
-        debug_assert("src/enemy_act.c", 0x36B);
-        __assert("src/enemy_act.c", 0x36B, "0");
+        debug_assert("src/enemy_act.c", PAL_JPN(0x36B, 872));
+        __assert("src/enemy_act.c", PAL_JPN(0x36B, 872), "0");
     }
 }
 
@@ -622,7 +622,7 @@ void subEnemyCollision(GObj *volatile self)
                 }
             }
         }
-        DispMultiBgaManagerWithKind(0x1FA, GOBJ_WORK(self)->bga, 1);
+        DispMultiBgaManagerWithKind(PAL_JPN(0x1FA, 502), GOBJ_WORK(self)->bga, 1);
         idx = (int)GetEnemyDefParaIndex((void *)self);
         if ((unsigned int)(idx - 1) < 4) {
             _ACTParaStatus_Set(self, idx + 0x1C);
@@ -780,8 +780,8 @@ inline int actEnemyFlagCheckDead(GObj *self)
 inline int isEnemyActive(GObj *self)
 {
     if (self == 0 || self->kind != 4) {
-        debug_assert("src/enemy_act.c", 0x827);
-        __assert("src/enemy_act.c", 0x827, "ASSERTMSG__GOP_IS_NOT_ENEMY(gop)");
+        debug_assert("src/enemy_act.c", PAL_JPN(0x827, 2084));
+        __assert("src/enemy_act.c", PAL_JPN(0x827, 2084), "ASSERTMSG__GOP_IS_NOT_ENEMY(gop)");
     }
     return actEnemyFlagCheckActive(self);
 }
@@ -884,8 +884,8 @@ void actEnemyRestart(GObj *self, float *pos, float *dir, int kind, GObj *mother)
         idx = 3;
         break;
     default:
-        debug_assert("src/enemy_act.c", 2161);
-        __assert("src/enemy_act.c", 2161, "0");
+        debug_assert("src/enemy_act.c", LN(2161, 2158));
+        __assert("src/enemy_act.c", LN(2161, 2158), "0");
     }
     GOBJ_ACT(self)->enemy->battleType = idx;
     setBattleStatus(self);
@@ -1115,7 +1115,7 @@ void actEnemyKidnapEnd(GObj *volatile self)
                             if ((char *)girlGObj != 0) {
                                 girlGObj->active = 0;
                             }
-                            stage_SetParentOfGObj(502, &q);
+                            stage_SetParentOfGObj(PAL_JPN(502, 498), &q);
                             n = (GetEfStageCameraTargetID() != 0) ? 120 : 300;
                             r = n * ((60 - systemStatus[0] * 10) / systemStatus[1]) / 60;
                             StartGameOverEffect(test_CURRENTROOT(target),
@@ -1447,8 +1447,8 @@ void actEnemyPickupBegin(GObj *volatile self)
 
 inline void actEnemyCarry(GObj *volatile self)
 {
-    debug_assert("src/enemy_act.c", 0xB75);
-    __assert("src/enemy_act.c", 0xB75, "0");
+    debug_assert("src/enemy_act.c", PAL_JPN(0xB75, 2930));
+    __assert("src/enemy_act.c", PAL_JPN(0xB75, 2930), "0");
 }
 
 inline int EnemyBrainStatus_Boy(GObj *self)
@@ -1583,8 +1583,8 @@ static void BrainMode_Requset(void *self, int req, ICO_WORD_PTR(GObj *) arg)
         break;
     default:
         debug_StdPrintfDummy("undefined mode [%d]\n", req);
-        debug_assert("src/enemy_act.c", 3102);
-        __assert("src/enemy_act.c", 3102, "0");
+        debug_assert("src/enemy_act.c", LN(3102, 3099));
+        __assert("src/enemy_act.c", LN(3102, 3099), "0");
         break;
     }
 }
@@ -2136,7 +2136,7 @@ static void NakaBoss(GObj *self, void *tgt, float distArg)
     float dist;
     Act *sub;
 
-    if (stage_no != 86 && stage_no != 3 && stage_no != 46) {
+    if (stage_no != PAL_JPN(86, 84) && stage_no != 3 && stage_no != 46) {
         if (tgt != 0) {
             enemy_dodge_to_boy(self);
         }
@@ -2316,7 +2316,7 @@ void subEnemyBrain_ToBoy(GObj *volatile self)
         }
     result:
         debug_StdPrintfDummy("toboy ra is [%d]\n", mode);
-        if (stage_no == 86 || stage_no == 3 || stage_no == 46) {
+        if (stage_no == PAL_JPN(86, 84) || stage_no == 3 || stage_no == 46) {
             if (mode == 4 || mode == 5) {
                 mode = 3;
             }
@@ -2351,7 +2351,7 @@ void subEnemyBrain_ToBoy(GObj *volatile self)
         sub->dir[0] = 0.0f;
         sub->dir[1] = 0.0f;
         sub->dir[2] = 0.0f;
-        for (j = 0; j < (60 - systemStatus[0] * 10) / systemStatus[1] * 90 / 60; j++) {
+        for (j = 0; j < PAL_JPN((60 - systemStatus[0] * 10) / systemStatus[1] * 90 / 60, 45); j++) {
             if (mode == 5) {
                 if (EnemyUtil_isOtherStatus(self, 0) == 0) {
                     ChangeBrain_ToAttack(self);
@@ -2565,7 +2565,7 @@ static int _ApproachTarget_Way(GObj *self, void *tgt, void *pos, void *fn, float
 
     GetRootProjectionPosOfGObj(p0, tgt);
     GetRootProjectionPosOfGObj(p1, self);
-    for (i = 0; i < (60 - systemStatus[0] * 10) / systemStatus[1] * 40 / 60; i++) {
+    for (i = 0; i < PAL_JPN((60 - systemStatus[0] * 10) / systemStatus[1] * 40 / 60, 20); i++) {
         if (IsSelectID_EnemyCtrl(ICO_RAW(int, self, 8, ((GObj *)self)->labelId)) != 0) {
             break;
         }
@@ -2616,7 +2616,7 @@ static int _ApproachTarget_Way(GObj *self, void *tgt, void *pos, void *fn, float
             }
             FlyMail(self);
         }
-        if (ICO_RAW(int, self, 8, ((GObj *)self)->labelId) == 0xEAD &&
+        if (ICO_RAW(int, self, 8, ((GObj *)self)->labelId) == PAL_JPN(0xEAD, 3734) &&
             (((int)(sub->flags20.ll >> 39)) & 1)) {
             FlyMail(self);
         }
@@ -2711,7 +2711,7 @@ void actEnemyStart(GObj *self)
     actInitialize_ext_charcter(self);
     actInitialize_only_charcter((char *)self);
     actInitialize_geo(self);
-    if (ICO_RAW(int, self, 8, ((GObj *)self)->labelId) == 3757) {
+    if (ICO_RAW(int, self, 8, ((GObj *)self)->labelId) == PAL_JPN(3757, 3734)) {
         act->flags20.ll = act->flags20.ll | 0x40000000;
     }
     ACTGame_LwsEffectInit(self);

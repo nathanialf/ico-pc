@@ -3767,6 +3767,7 @@ void actGirlHand(GObj *volatile self)
     float turn;
     float h;
     float rate;
+    int dbg = 0; /* local debug switch, see the test after v60 is set below */
 
     sub = GOBJ_ACT(self);
     cnt = 0;
@@ -3886,6 +3887,15 @@ void actGirlHand(GObj *volatile self)
             }
             sceVu0ScaleVector(v60, dir, 300.0f);
             sceVu0AddVector(v60, test_CURRENTROOT((void *)self), v60);
+            if (ICO_JPN) {
+                /* a local debug switch, off: mark v60, the point 300 ahead along
+                   the pull direction (nothing else reads it). The ROM's stack slot
+                   order needs the block here, and the January listing has eleven
+                   code-less lines (3261-3271) in its place; the text is derived. */
+                if (dbg) {
+                    debug_NMarker(v60, 255, 0, 0, 100.0f);
+                }
+            }
             if (handmgr.turned != 0) {
                 if (handmgr.far100 != 0) {
                     float goal = 30.0f;
@@ -4210,7 +4220,7 @@ inline void actGirlHang(GObj *volatile self)
     /* rope-hang detected from the ACT parameter block */
     int hang = 0;
 
-    if (((int *)GOBJ_WORK(self)->modeHist)[1] == 0x5A) {
+    if (((int *)GOBJ_WORK(self)->modeHist)[1] == PAL_JPN(0x5A, 90)) {
         hang = ((int *)GOBJ_WORK(self)->modeHist)[0] == 4;
     }
     /* the debug/free camera forces the pull mail on regardless */
@@ -4234,7 +4244,7 @@ inline void actGirlBHang(GObj *volatile self)
     Act *s = GOBJ_ACT(self);
     int rope = 0;
 
-    if (((int *)GOBJ_WORK(self)->modeHist)[1] == 0x5A) {
+    if (((int *)GOBJ_WORK(self)->modeHist)[1] == PAL_JPN(0x5A, 90)) {
         rope = ((int *)GOBJ_WORK(self)->modeHist)[0] == 4;
     }
     ACTAdjustPlane((void *)self, &GOBJ_WORK(self)->intrReq.a.wall);
@@ -4286,7 +4296,9 @@ void actGirlReadyMove(GObj *volatile self)
     float dir[4];
     int n;
 
-    n = (int)((float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 80.0f / 60.0f);
+    if (!ICO_JPN) {
+        n = (int)((float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 80.0f / 60.0f);
+    }
     dst[0] = GOBJ_ACT(self)->enemy->readyPosX;
     dst[1] = GOBJ_ACT(self)->enemy->readyPosY;
     dst[2] = GOBJ_ACT(self)->enemy->readyPosZ;
@@ -4294,7 +4306,7 @@ void actGirlReadyMove(GObj *volatile self)
     dir[1] = GOBJ_ACT(self)->enemy->readyDirY;
     dir[2] = GOBJ_ACT(self)->enemy->readyDirZ;
     dst[1] = test_CURRENTROOT((void *)self)[1];
-    StartCorrectPosition((void *)self, dst, dir, 1, (float)n);
+    StartCorrectPosition((void *)self, dst, dir, 1, PAL_JPN((float)n, 40.0f));
     while (IsCorrectPosition((void *)self)) {
         debug_Arrow(100.0f, test_CURRENTROOT((void *)self), dir, 0xFF, 0, 0xFF);
         ContinueCorrectPosition((void *)self);

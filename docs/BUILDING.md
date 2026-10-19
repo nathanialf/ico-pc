@@ -676,6 +676,6 @@ The loader's reference test and `gen_data_desc.py --manifest` read the boot
 ELF from `baserom/pal/baseelf.elf`, which `tools/extract_elf.sh` writes from
 `baserom/Ico_PAL.iso` (the disc's `SCES_507.60`, SHA-1
 `da3644c54c26fe760f3b6a591a5fc2eab396ed2b`, checked against
-`config/sha1sums.txt`; it needs pycdlib, from `tools/requirements.txt`, and no MIPS tools).
+`config/sha1sums.<slug>.txt`; it needs pycdlib, from `tools/requirements.txt`, and no MIPS tools).
 Nothing under `baserom/` is committed ([`LEGAL.md`](LEGAL.md)). Without it
 those two tests are not built, and CI never has it.

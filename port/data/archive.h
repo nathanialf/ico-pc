@@ -36,7 +36,7 @@
 #define ICO_ARCHIVE_EXTRACTOR "ico-pc extract 1"
 #define ICO_ARCHIVE_META "meta.json"
 
-/* The disc this build plays, and its verification values (config/sha1sums.txt). */
+/* The disc this build plays, and its verification values (config/sha1sums.pal.txt). */
 #define ICO_DISC_ID "SCES-50760"
 #define ICO_DISC_ISO_SHA1 "1017b53f6e80f41f823369b0be1d8c69f7e16dc6"
 #define ICO_DISC_ELF_SHA1 "da3644c54c26fe760f3b6a591a5fc2eab396ed2b"

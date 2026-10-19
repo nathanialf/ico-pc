@@ -14,7 +14,7 @@ NormalCMicroProgram:
 	.EndDmaData
 	DMAend
 ;
-; One of ICO's five VU1 microprograms (PAL 0x0028B380, 5856 bytes), sent to
+; One of ICO's five VU1 microprograms (PAL 0x0028B380, JPN 0x00289290, 5856 bytes), sent to
 ; VU1 by mc_TransMicroCode (MicroCode.o): a DMAret tag whose VIF half
 ; carries MPG 0, the program, then a DMAend tag. dvp-as writes the tags,
 ; a new MPG every 256 instructions and the .DVP overlay tables. Each overlay
@@ -23,6 +23,6 @@ NormalCMicroProgram:
 ; the text it is in, "" for standard input, vusrc/<name>.h in an include.
 ;
 ; Re-derived from published VU0/VU1 documentation; .vutext is identical
-; in the Aug-6-2001 prototype, USA and PAL retail. The labels are the DVP
-; assembler's own, from the PAL listing's .vutext symbol table (spelled
-; _$NAME there, the copy dvp-as makes), each at the listing's address.
+; in the Aug-6-2001 prototype and the USA, PAL and Japanese retail. The
+; labels are the DVP assembler's own, from the PAL listing's .vutext table
+; (spelled _$NAME there, the copy dvp-as makes), each at the listing's address.

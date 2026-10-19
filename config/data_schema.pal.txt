@@ -34,9 +34,9 @@
 # staffroll_dat's count, staffRollNameDataNum, is the table's 964 entries
 # less its two null entries at the end.
 #
-# A label some source spells inside the member (build/data_labels.txt, the
+# A label some source spells inside the member (build/pal/data_labels.txt, the
 # D_<VMA> placeholders) is not an array of its own: gen_data_c.py binds it to
-# the member's first symbol plus its offset in build/data/<member>.alias.ld.
+# the member's first symbol plus its offset in build/pal/data/<member>.alias.ld.
 
 accessary data AccessaryRec ico2/sugipon/include/box.h 26 accessary@0
 act-data-tbl data IdleRangeRec ico2/fumi/include/commonact.h 3 actDataTbl@0

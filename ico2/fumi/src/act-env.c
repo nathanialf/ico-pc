@@ -43,6 +43,13 @@ static float ditchCheckBase[4] = {226.0f, -2328.0f, 343.0f, 1.0f}; /* derived na
 
 static float ditchCheckDir[4] = {0.642799f, 0.0f, -0.765893f, 0.0f}; /* derived name */
 
+#ifdef VERSION_JPN
+
+/* where the first carrier stands in the stage 8 ditch below the -3000 line */
+static float ditchCarryPos[4] = {747.0f, -3775.0f, 2601.0f, 1.0f}; /* derived name */
+
+#endif
+
 static float ditchCarryTarget[4] = {602.0f, -3775.0f, 2480.0f, 1.0f}; /* derived name */
 
 static float ditchSofaTarget[4] = {749.0f, -3775.0f, 2650.0f, 1.0f}; /* derived name */
@@ -77,9 +84,13 @@ inline void GetSofaPosition(GObj *self, GObj *sofa)
                       &v);
 }
 
+#ifndef VERSION_JPN
+
 /* Where the first carrier stands in the stage 8 ditch below the -3000 line
    (the .rodata's second object). */
 static const VECTOR ditchCarryPos = {767.0f, -3775.0f, 2621.0f, 1.0f}; /* derived name */
+
+#endif
 
 static inline int getDitchCarryMode(void) /* derived name */
 {
@@ -148,13 +159,22 @@ static void getDitchDistTbl(float **tbl, float *range, int *sofa, float *pos, vo
             }
         } else {
             if (mode == 1) {
-                v = ditchCarryPos;
+                if (!ICO_JPN) {
+                    v = ditchCarryPos;
+                }
 
                 *tbl = ditchDistTblCarry;
-                pos[0] = v.x;
-                pos[1] = v.y;
-                pos[2] = v.z;
-                _OrientXZGV(obj, ditchCarryTarget, &v.x);
+                if (ICO_JPN) {
+                    pos[0] = ditchCarryPos[0];
+                    pos[1] = ditchCarryPos[1];
+                    pos[2] = ditchCarryPos[2];
+                    _OrientXZGV(obj, ditchCarryTarget, ditchCarryPos);
+                } else {
+                    pos[0] = v.x;
+                    pos[1] = v.y;
+                    pos[2] = v.z;
+                    _OrientXZGV(obj, ditchCarryTarget, &v.x);
+                }
 
                 *carry = mode;
             } else {
@@ -812,7 +832,7 @@ void ACTGetEnvironment(void *self, void *dir, float *orient, EnvFlag *flags, Act
     if (dist < 200.0f) {
         int b = (dist < 40.0f) ? 1 : 0;
 
-        if (!((stage_no == 86 || stage_no == 3 || stage_no == 46) && ((struct GObj *)self)->kind == 4) &&
+        if (!((stage_no == PAL_JPN(86, 84) || stage_no == 3 || stage_no == 46) && ((struct GObj *)self)->kind == 4) &&
             CheckPureWallAttribute(self, 0x400)) {
             flags[2].bit.b24 = b;
             flags[2].w |= 0x800000;
@@ -1081,7 +1101,7 @@ void ACTGetEnvironment(void *self, void *dir, float *orient, EnvFlag *flags, Act
             flags[0].w |= 0x8000000;
         }
         if (hh < 40.0f) {
-            if (!((stage_no == 86 || stage_no == 3 || stage_no == 46) && ((struct GObj *)self)->kind == 4) &&
+            if (!((stage_no == PAL_JPN(86, 84) || stage_no == 3 || stage_no == 46) && ((struct GObj *)self)->kind == 4) &&
                 CheckPureCliffAttribute(self, 0x400) && 60.0f < f26) {
                 env->edgeOrient[0] = env->cliffOrient[0];
                 env->edgeOrient[1] = env->cliffOrient[1];
@@ -1229,8 +1249,8 @@ void ACTGetEnvironment(void *self, void *dir, float *orient, EnvFlag *flags, Act
                         sub->wish2.ll |= 0x200;
                         break;
                     default:
-                        debug_assert("src/act-env.c", 2633);
-                        __assert("src/act-env.c", 2633, "0");
+                        debug_assert("src/act-env.c", LN(2633, 2623));
+                        __assert("src/act-env.c", LN(2633, 2623), "0");
                         break;
                     }
                 }

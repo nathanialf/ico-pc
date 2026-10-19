@@ -92,6 +92,8 @@ static char printBuf[128]; /* derived name */
 
 inline void ExitIcoMisc(void) {}
 
+inline void DummyIcoMisc(void) {} /* derived name */
+
 /* two-dimensional screen position handed to Draw2DLine */
 typedef struct { /* field names derived */
     int x;
@@ -303,7 +305,7 @@ void ExecIcoMisc(void)
         ExecGameOverEffect();
         seEnvMute = 0;
     } else {
-        if (current_layout_id == 28) {
+        if (current_layout_id == PAL_JPN(28, 25)) {
             seEnvMute = 1;
         }
         if (seEnvMute != 0) {
@@ -334,12 +336,12 @@ void ExecIcoMisc(void)
     if (fall_death_active != 0) {
         if (boyGObj != 0) {
             if (GOBJ_SUB(boyGObj)->ctrl.fallHeight > 1000.0f) {
-                lt_switch_layout(62);
+                lt_switch_layout(PAL_JPN(62, 59));
             }
         }
         if (girlGObj != 0) {
             if (GOBJ_SUB(girlGObj)->ctrl.fallHeight > 1000.0f) {
-                lt_switch_layout(62);
+                lt_switch_layout(PAL_JPN(62, 59));
             }
         }
     }

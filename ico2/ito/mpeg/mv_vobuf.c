@@ -19,12 +19,12 @@ int voBufCreate(VoBuf *self)
     int tag;
     int i;
 
-    data = alloc_zeroed(8294400, 64);
+    data = alloc_zeroed(PAL_JPN(8294400, 6912000), 64);
     if (data == 0) {
         return -1;
     }
     self->data = (VoData *)uncached_accel_addr(data);
-    tag = alloc_zeroed(3936320, 64);
+    tag = alloc_zeroed(PAL_JPN(3936320, 3289920), 64);
     self->tag = (VoTag *)tag;
     if (tag == 0) {
         return -1;

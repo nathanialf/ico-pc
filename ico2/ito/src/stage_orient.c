@@ -56,7 +56,15 @@ static const StageOrientDef stageOrientDefs[41] = {
 };
 
 /* the orient index each stage resolves to, -1 where the stage has none */
+#ifdef VERSION_JPN
+
+static short stageOrientIdx[104]; /* derived name */
+
+#else
+
 static short stageOrientIdx[128]; /* derived name */
+
+#endif
 
 #include "stage_orient.h"
 #include <stdio.h>
@@ -67,7 +75,7 @@ inline void StageOrientInit(void)
     int i, j;
     char buf[64];
 
-    for (i = 0; i < 106; i++) {
+    for (i = 0; i < PAL_JPN(106, 104); i++) {
         sscanf(stageData[i].name, "%s", buf);
         stageOrientIdx[i] = -1;
         for (j = 0; j < sizeof(stageOrientDefs) / sizeof(stageOrientDefs[0]); j++) {

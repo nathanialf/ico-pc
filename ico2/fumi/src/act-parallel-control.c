@@ -63,7 +63,7 @@ void ActPara_InitSystem(void)
        and its "0" in .sdata */
     if (0) {
         /* too many parallel motions (way too many) */
-        debug_StdPrintfDummy("ÊÂÎó¥â¡¼¥·¥ç¥ó¤¬Áı¤¨¤¹¤®¤Ş¤·¤¿¡ÊÂç¿¹¡Ë");
+        debug_StdPrintfDummy("ä¸¦åˆ—ãƒ¢ãƒ¼ã‚·ãƒ§ãƒ³ãŒå¢—ãˆã™ãã¾ã—ãŸï¼ˆå¤§æ£®ï¼‰");
         debug_assert(__FILE__, 103);
         __assert(__FILE__, 103, "0");
     }
