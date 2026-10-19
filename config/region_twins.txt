@@ -9,3 +9,5 @@ ico2/seki/src/GsBase.c	gsb_Reduction	gsb_Reduction_jpn
 ico2/sugipon/src/streamMotionManager.c	_infoUpdate	_infoUpdate_jpn
 ico2/seki/src/BgAnimation.c	bga_GetMotion	bga_GetMotion_jpn
 ico2/seki/src/BgAnimation.c	bga_resetObjectCounter	bga_resetObjectCounter_jpn
+ico2/script/src/e3.c	actE3TitleFrameChk	actE3TitleFrameChk_jpn
+ico2/script/src/e3.c	actE3Inst1Chk	actE3Inst1Chk_jpn

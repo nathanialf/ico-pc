@@ -185,9 +185,9 @@ void actE3TitleChk(GObj *volatile self)
     RequestStageChange(1, boyGObj, 0, 255.0f, 16.0f);
 }
 
-#ifdef VERSION_JPN
-
-void actE3TitleFrameChk(GObj *volatile self)
+/* the Japanese disc's title frame: no per-language logo animation, and its own stage
+   numbers */
+static void actE3TitleFrameChk_jpn(GObj *volatile self)
 {
     int i;
 
@@ -227,14 +227,17 @@ void actE3TitleFrameChk(GObj *volatile self)
     }
 }
 
-#else
-
 void actE3TitleFrameChk(GObj *volatile self)
 {
     int intro = 943;
     int loop = 938;
     int outro = 948;
     int i;
+
+    if (ICO_JPN) {
+        actE3TitleFrameChk_jpn(self);
+        return;
+    }
 
     stage_SetAnimation(935, 1, 0);
 
@@ -321,10 +324,9 @@ void actE3TitleFrameChk(GObj *volatile self)
     }
 }
 
-#endif
-#ifdef VERSION_JPN
-
-void actE3Inst1Chk(GObj *volatile self)
+/* the Japanese disc's instruction screen: no per-language animation, and it ends on pad bits
+   0x820 */
+static void actE3Inst1Chk_jpn(GObj *volatile self)
 {
     GObj *x = self;
     int i;
@@ -348,13 +350,16 @@ void actE3Inst1Chk(GObj *volatile self)
     RequestStageChange(1, boyGObj, 0, 255.0f, 16.0f);
 }
 
-#else
-
 void actE3Inst1Chk(GObj *volatile self)
 {
     GObj *x = self;
     int anim;
     int i;
+
+    if (ICO_JPN) {
+        actE3Inst1Chk_jpn(self);
+        return;
+    }
 
     actInitialize(self);
     _ACTWait(1);
@@ -393,8 +398,6 @@ void actE3Inst1Chk(GObj *volatile self)
 
     RequestStageChange(1, boyGObj, 0, 255.0f, 16.0f);
 }
-
-#endif
 
 void actE3Capsule(GObj *volatile self)
 {
@@ -1196,11 +1199,7 @@ static void actE3St09aBrgDown(GObj *volatile self)
 void actE3Warning(GObj *volatile self)
 {
     GObj *x = self;
-#ifdef VERSION_JPN
-    Act *sub = (Act *)actInitialize(self);
-#else
-    actInitialize(self);
-#endif
+    Act *sub = (Act *)actInitialize(self); /* only the Japanese arm reads it */
 
     scpFadeOut(255.0f, 0, 0, 0);
 
