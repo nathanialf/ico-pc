@@ -489,7 +489,11 @@ also inside a `#define`; comments and strings stay, and a second run changes not
 the assumption is that each target after the Japanese one is a build of the Japanese program, as
 the Korean one is (a row outside the set would take PAL's value in `LN`). `--check` prints per file
 what would change and exits 1 if anything would. On main before the Korean merge it rewrites 98
-files: 2543 `PAL_JPN(`, 168 `ICO_JPN` (one more sits in a comment) and 194 `LN(`.
+files: 2543 `PAL_JPN(`, 168 `ICO_JPN` (one more sits in a comment) and 194 `LN(`. It belongs to the
+spelling commit before the merge only: after the merge, `rename --check` lists the sites only the
+Japanese disc runs, which keep `PAL_JPN` and `ICO_JPN` (after the Korean merge six, in
+`cdvd.c` (the disc type and the two `sceCdStatus` waits), `ios.c` (the media mode), `pad.c` (the
+failed read) and `e3.c` (`viewScale`)), and is not run again.
 
 ### Merging upstream
 
