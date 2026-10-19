@@ -413,7 +413,7 @@ pattern:
 | --- | --- | --- |
 | `layout-typedef` | a struct or typedef whose layouts differ, or a block inside one | the PAL arm |
 | `define` | a `#define` per region | the PAL arm when it sizes something (`MAX_CHARS 1637`), else a selector at the uses |
-| `data-twin` | file-scope data with different initialisers, a block inside a file-scope initialiser, a static local's initialiser, a name two file-scope blocks define | `name_pal[]` and `name_jpn[]` and `#define name PAL_JPN(name_pal, name_jpn)` (a scalar: `(*PAL_JPN(&a, &b))`); `check` refuses `sizeof(name)`, `&name` and a shift count |
+| `data-twin` | file-scope data with different initialisers, a block inside a file-scope initialiser, a static local's initialiser, a name two file-scope blocks define | `name_pal[]` and `name_jpn[]` and `#define name PAL_JPN(name_pal, name_jpn)` (a scalar: `(*PAL_JPN(&a, &b))`); a body two rows share keeps the `_jpn` name under `PAL_JPNKOR`, a third body is `name_kor[]` under `PAL_JPN_KOR(name_pal, name_jpn, name_kor)` (`stamp_str`, `iOSMcSaveSeg`, `screenModeItem`); `check` refuses `sizeof(name)`, `&name` and a shift count |
 | `extern-init` | a scalar defined with a different initialiser | the PAL initialiser, and `name = PAL_JPN(p, j);` first thing in its owner's init |
 | `array-size` | an array dimensioned per region | the larger dimension |
 | `function-twin` | a whole function per region with one name | the PAL body keeps the name, the other body becomes `static ... name_<set>(...)` (`name_jpn`, `name_jpnkor` for a shared arm, `name_kor`), the PAL function opens `if (ICO_JPN) { return name_jpn(args); }` (or `ICO_JPNKOR`), and the pair goes into `config/region_twins.txt`. The seven `_jpn` twins made before the Korean disc keep their names: each is the Japanese build's text, shared by the Korean disc after the rename below (`if (ICO_JPNKOR) { return name_jpn(args); }`) |
@@ -509,14 +509,35 @@ against one converted line, and the next merge has an upstream commit as its bas
    Then B, the previous upstream base (the merge base of `main` and upstream/main) converted with
    the current table and renamed the same way, in its own worktree and committed with
    `--no-verify`; T, upstream/main converted (steps 1 and 2). For `ico2/` and `sce/`, a three-way
-   merge with base B: `git read-tree -m -u B HEAD T` restricted to those paths (an index file of
-   its own, `GIT_INDEX_FILE`, from trees narrowed to `ico2` and `sce`, or `git merge-file` per
-   file), then `git merge-index -o git-merge-one-file -a`, so each conflict is upstream's change
-   against a host edit. The other paths (tools, config, docs, `.github`) come from upstream/main
-   directly, as a plain merge would take them: the port's tools are ours, upstream's
-   `config/*.<slug>.*` theirs. The result is committed with `git commit-tree <tree> -p main -p
-   upstream/main` (never with B or T as a parent), so the next merge has upstream/main as its
-   base. In `ico2/`, a
+   merge with base B, per file with `git merge-file` on the stored blobs (git's UTF-8 form, so
+   the EUC-JP files merge as text and reach the worktree through `git checkout-index`, which
+   applies `working-tree-encoding`; `git-merge-one-file` would write the blob's UTF-8 into the
+   worktree). On the branch after the spelling commit (`B` and `T` the two converted
+   branches):
+
+   ```sh
+   for f in $(git diff --name-only $B $T -- ico2 sce); do
+       if git diff --quiet $B HEAD -- "$f"; then git checkout $T -- "$f"; continue; fi
+       git cat-file blob HEAD:"$f" >o; git cat-file blob $B:"$f" >b; git cat-file blob $T:"$f" >t
+       git merge-file --diff3 -L ours -L base -L theirs o b t   # exit status: the conflicts
+       git update-index --cacheinfo 100644,$(git hash-object -w --no-filters o),"$f"
+       git checkout-index -f -- "$f"
+   done
+   ```
+
+   (B and T held the same files; a file added or deleted on one side only is taken from that
+   side.) Each conflict is then upstream's change against a host edit. A hunk whose theirs side
+   is its base side but for upstream's new directive spelling (`#if defined(VERSION_JPN) ||
+   defined(VERSION_KOR)` for `#ifdef VERSION_JPN`, a raw block upstream left raw and the port
+   had resolved by hand) is ours (the Korean merge: 114 hunks in 51 files, 92 of that kind). The
+   other paths (tools, config, docs, `.github`) come from upstream/main directly, as a plain
+   merge would take them: the port's tools are ours (with upstream's new rows of
+   `tools/ico_version.py`'s `VERSIONS` and `DISCS` taken into the port's file), upstream's
+   `config/*.<slug>.*` theirs. The result is committed with `git add ico2 sce`, `git write-tree`
+   and `git commit-tree <tree> -p HEAD -p upstream/main`, then `git reset --hard` to the new
+   commit (never with B or T as a parent), so the next merge has upstream/main as its base
+   (`git merge-base HEAD upstream/main` is upstream/main). `git commit-tree` runs no hook: run
+   the hook's checks by hand first. In `ico2/`, a
    converted line against a host form keeps the port's form and carries the selector tokens into
    it (a `layout` PAL-only line against a port field access: the port's form outright); a
    converted `if`/`else` against a host form gets the seams in both arms; a raw hand block against
