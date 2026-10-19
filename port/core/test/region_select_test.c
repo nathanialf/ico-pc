@@ -1,14 +1,14 @@
 /*
  * port/core/test/region_select_test.c
  *
- * The region selection and the region table (port/core/region.h): both
- * slugs select their row and the game's index ico_region follows, nothing
- * else selects; the disc ids map to their rows; the per-disc config keys;
- * the stage rows on each disc (ico_region_stage); ico_region_info[] in
- * config/regions.txt's order (the file, the program's argument, read at
- * test time); and every Japanese value the table was resolved
- * to (region_jpn.c), so a change to one is a change made on purpose.
- * CPU only.
+ * The region selection and the region table (port/core/region.h): every
+ * slug selects its row and the game's index ico_region follows, nothing
+ * else selects; the selectors and LN on each row; the disc ids map to their
+ * rows; the per-disc config keys; the stage rows on each disc
+ * (ico_region_stage); ico_region_info[] in config/regions.txt's order (the
+ * file, the program's argument, read at test time); and every Japanese and
+ * Korean value the table was resolved to (region_jpn.c, region_kor.c), so a
+ * change to one is a change made on purpose. CPU only.
  */
 #include <stdio.h>
 #include <string.h>
@@ -24,25 +24,39 @@ static void test_select(void)
     CHECK(ico_region == ICO_REGION_PAL && ico_region_cur() == &ico_region_info_pal);
     CHECK(ico_region_select("jpn") == 0);
     CHECK(ico_region == ICO_REGION_JPN && ico_region_cur() == &ico_region_info_jpn);
-    CHECK(ICO_JPN && !ICO_PAL && PAL_JPN(1, 2) == 2 && LN(10, 20) == 20);
+    CHECK(ICO_JPN && !ICO_PAL && !ICO_KOR && ICO_JPNKOR && PAL_JPN(1, 2) == 2 &&
+          PAL_KOR(1, 3) == 1 && PAL_JPNKOR(1, 2) == 2 && PAL_JPN_KOR(1, 2, 3) == 2 &&
+          LN(10, 20, 30) == 20);
+    CHECK(ico_region_select("kor") == 0);
+    CHECK(ico_region == ICO_REGION_KOR && ico_region_cur() == &ico_region_info_kor);
+    CHECK(ICO_KOR && !ICO_PAL && !ICO_JPN && ICO_JPNKOR && PAL_JPN(1, 2) == 1 &&
+          PAL_KOR(1, 3) == 3 && PAL_JPNKOR(1, 2) == 2 && PAL_JPN_KOR(1, 2, 3) == 3 &&
+          LN(10, 20, 30) == 30);
+    CHECK(ico_region_select("jpn") == 0 && ico_region == ICO_REGION_JPN);
     /* an unknown slug, a disc id and NULL keep the selection */
     CHECK(ico_region_select("usa") == -1 && ico_region == ICO_REGION_JPN);
     CHECK(ico_region_select("SCES-50760") == -1 && ico_region == ICO_REGION_JPN);
     CHECK(ico_region_select(NULL) == -1 && ico_region == ICO_REGION_JPN);
     CHECK(ico_region_select("pal") == 0);
     CHECK(ico_region == ICO_REGION_PAL && ico_region_cur() == &ico_region_info_pal);
-    CHECK(ICO_PAL && !ICO_JPN && PAL_JPN(1, 2) == 1 && LN(10, 20) == 10);
+    CHECK(ICO_PAL && !ICO_JPN && !ICO_KOR && !ICO_JPNKOR && PAL_JPN(1, 2) == 1 &&
+          PAL_KOR(1, 3) == 1 && PAL_JPNKOR(1, 2) == 1 && PAL_JPN_KOR(1, 2, 3) == 1 &&
+          LN(10, 20, 30) == 10);
 
-    CHECK(ico_region_count() == ICO_REGION_COUNT && ICO_REGION_COUNT == 2);
+    CHECK(ico_region_count() == ICO_REGION_COUNT && ICO_REGION_COUNT == 3);
     CHECK(ico_region_at(0) == &ico_region_info_pal && ico_region_at(1) == &ico_region_info_jpn &&
-          ico_region_at(2) == NULL && ico_region_at(-1) == NULL);
+          ico_region_at(2) == &ico_region_info_kor && ico_region_at(3) == NULL &&
+          ico_region_at(-1) == NULL);
     CHECK(ico_region_info[ICO_REGION_PAL] == &ico_region_info_pal &&
-          ico_region_info[ICO_REGION_JPN] == &ico_region_info_jpn);
+          ico_region_info[ICO_REGION_JPN] == &ico_region_info_jpn &&
+          ico_region_info[ICO_REGION_KOR] == &ico_region_info_kor);
     CHECK(ico_region_by_slug("pal") == &ico_region_info_pal &&
-          ico_region_by_slug("jpn") == &ico_region_info_jpn && ico_region_by_slug("usa") == NULL &&
+          ico_region_by_slug("jpn") == &ico_region_info_jpn &&
+          ico_region_by_slug("kor") == &ico_region_info_kor && ico_region_by_slug("usa") == NULL &&
           ico_region_by_slug(NULL) == NULL);
     CHECK(ico_region_by_disc_id("SCES-50760") == &ico_region_info_pal &&
           ico_region_by_disc_id("SCPS-11003") == &ico_region_info_jpn &&
+          ico_region_by_disc_id("SCPS-56001") == &ico_region_info_kor &&
           ico_region_by_disc_id("SCUS-97113") == NULL && ico_region_by_disc_id("jpn") == NULL &&
           ico_region_by_disc_id(NULL) == NULL);
 }
@@ -109,7 +123,7 @@ static void test_consistency(void)
         int g;
 
         CHECK(strcmp(r->pack_serial, r->disc_id) == 0);
-        /* the save directory: B + E (Europe) or I (Japan) + the serial + "ico" */
+        /* the save directory: B + E (Europe) or I (Japan, Korea) + the serial + "ico" */
         CHECK(strlen(r->mc_save_dir) == 15 && strncmp(r->mc_save_dir + 2, r->disc_id, 10) == 0 &&
               strcmp(r->mc_save_dir + 12, "ico") == 0);
         CHECK(r->stage_credits < r->stage_count && r->stage_end < r->stage_count &&
@@ -129,6 +143,10 @@ static void test_consistency(void)
           strcmp(ico_region_info_pal.key_suffix, "") == 0);
     CHECK(strcmp(ico_region_info_jpn.key_prefix, ico_region_info_pal.key_prefix) != 0 &&
           strcmp(ico_region_info_jpn.key_suffix, ico_region_info_pal.key_suffix) != 0);
+    CHECK(strcmp(ico_region_info_kor.key_prefix, ico_region_info_pal.key_prefix) != 0 &&
+          strcmp(ico_region_info_kor.key_prefix, ico_region_info_jpn.key_prefix) != 0 &&
+          strcmp(ico_region_info_kor.key_suffix, ico_region_info_pal.key_suffix) != 0 &&
+          strcmp(ico_region_info_kor.key_suffix, ico_region_info_jpn.key_suffix) != 0);
     CHECK(ico_region_info_pal.mc_product_size == 0x1F0);
     CHECK(ico_region_info_pal.reduction_crops_rows == 1);
 }
@@ -157,6 +175,8 @@ static void test_jpn_values(void)
     NUM(mc_product_size, 0x1E8);
     NUM(has_50hz_row, 0);
     NUM(has_game_language, 0);
+    NUM(ui_lang_default, 5);
+    NUM(menu_sheet, 5);
     NUM(fixed_60hz, 1);
     NUM(pad_confirm, 0x20);
     NUM(pad_back, 0x40);
@@ -242,6 +262,129 @@ static void test_jpn_values(void)
     }
 }
 
+/* the Korean values, as region_kor.c resolved them by name: the disc's own
+   fields, the texProperty rows (6 lower than the Japanese ones in every row
+   the table names), and every other field the Japanese one (the Korean ELF's
+   other tables equal the Japanese ELF's) */
+static void test_kor_values(void)
+{
+    const IcoRegionInfo *k = &ico_region_info_kor;
+    const IcoRegionInfo *j = &ico_region_info_jpn;
+    int i;
+
+#define STR(f, v) CHECK_STR(k->f, v)
+#define NUM(f, v) CHECK(k->f == (v))
+#define SAME(f) CHECK(k->f == j->f, "kor " #f " %d, jpn %d", (int)k->f, (int)j->f)
+#define GLYPH(g, r, u_, v_, w_, h_, d_)                                                            \
+    CHECK(k->glyph[g].row == (r) && k->glyph[g].u == (u_) && k->glyph[g].v == (v_) &&              \
+          k->glyph[g].w == (w_) && k->glyph[g].h == (h_) && k->glyph[g].disp_h == (d_))
+    STR(slug, "kor");
+    STR(disc_id, "SCPS-56001");
+    STR(boot_elf, "SCPS_560.01");
+    STR(pack_serial, "SCPS-56001");
+    STR(archive_name, "ico-kor.o2r");
+    STR(image_base, "Ico_KOR");
+    STR(key_prefix, "kor_");
+    STR(key_suffix, "_kor");
+    STR(mc_save_dir, "BISCPS-56001ico");
+    NUM(mc_product_size, 0x1E8);
+    NUM(ui_lang_default, 6);
+    NUM(menu_sheet, 6);
+    NUM(property_count, 406);
+    NUM(row_pause_options, 265);
+    NUM(row_pause_back, 266);
+    NUM(row_pause_end, 267);
+    NUM(row_mc_picture, 17);
+    NUM(row_mc_item, 27);
+    NUM(area_name_row_base, 99);
+    NUM(row_title_continue, 14);
+    NUM(row_title_new, 15);
+    NUM(row_title_new_only, 16);
+    NUM(row_title_copyright, 12);
+    NUM(row_title_copyright2, 13);
+    NUM(pause_first, 263);
+    NUM(pause_last, 268);
+    GLYPH(ICO_GLYPH_CROSS, 149, 224, 240, 32, 15, 30);
+    GLYPH(ICO_GLYPH_CIRCLE, 315, 192, 240, 32, 15, 30);
+    GLYPH(ICO_GLYPH_SQUARE, 314, 160, 240, 32, 15, 30);
+    GLYPH(ICO_GLYPH_TRIANGLE, 313, 128, 240, 32, 15, 30);
+    GLYPH(ICO_GLYPH_L1, 320, 0, 160, 64, 20, 40);
+    GLYPH(ICO_GLYPH_R1, 317, 128, 160, 64, 20, 40);
+    GLYPH(ICO_GLYPH_L2, 319, 64, 160, 64, 20, 40);
+    GLYPH(ICO_GLYPH_R2, 318, 192, 160, 64, 20, 40);
+    GLYPH(ICO_GLYPH_LEFT, 272, 198, 20, 20, 20, 40);
+    GLYPH(ICO_GLYPH_RIGHT, 273, 230, 20, 20, 20, 40);
+    /* each named row 6 below the Japanese one */
+    CHECK(k->row_pause_options == j->row_pause_options - 6 &&
+          k->row_title_copyright == j->row_title_copyright - 6 &&
+          k->area_name_row_base == j->area_name_row_base - 6);
+    for (i = 0; i < ICO_GLYPH_COUNT; i++) {
+        CHECK(k->glyph[i].row == j->glyph[i].row - 6 && k->glyph[i].u == j->glyph[i].u &&
+              k->glyph[i].v == j->glyph[i].v && k->glyph[i].disp_h == j->glyph[i].disp_h);
+    }
+    SAME(has_50hz_row);
+    SAME(has_game_language);
+    SAME(fixed_60hz);
+    SAME(pad_confirm);
+    SAME(pad_back);
+    SAME(reduction_crops_rows);
+    SAME(stage_count);
+    SAME(stage_title);
+    SAME(stage_credits);
+    SAME(stage_end);
+    SAME(stage_veil);
+    SAME(gallery_first);
+    SAME(gallery_last);
+    SAME(last_shipped_stage);
+    SAME(area_name_end_as);
+    SAME(start_stage_max);
+    SAME(layout_count);
+    SAME(layout_pause);
+    SAME(layout_title_continue);
+    SAME(layout_title_new);
+    SAME(layout_options);
+    SAME(layout_key_config);
+    SAME(layout_vibe);
+    SAME(layout_play);
+    SAME(layout_scene);
+    SAME(layout_mc_files);
+    SAME(layout_load);
+    SAME(layout_save_complete);
+    SAME(anim_none);
+    SAME(chain_group_st10l);
+    SAME(chain_group_st19a);
+    SAME(veil_model);
+    SAME(veil_kind);
+    SAME(reel_row);
+    SAME(veil_anim_row);
+    SAME(mv_motion_kinds);
+    SAME(mv_orient_rows);
+    SAME(gflag_new_game);
+    SAME(gflag_queen_dead);
+    SAME(gflag_beach_secret);
+    SAME(gflag_count);
+    SAME(credits_song);
+    SAME(credits_roll_ms);
+    SAME(credits_entrance_exit);
+    SAME(credits_boy_label);
+    SAME(n_adpcm);
+    SAME(n_sefile);
+    SAME(n_sedef);
+    SAME(n_selist);
+    SAME(n_seenv);
+    SAME(stream_music_last);
+    SAME(stream_voice_first);
+    SAME(stream_voice_last);
+    SAME(gallery_title_theme);
+#undef STR
+#undef NUM
+#undef SAME
+#undef GLYPH
+    for (i = 0; i < ICO_REGION_ACH_STAGES; i++) {
+        CHECK(k->ach_stages[i] == j->ach_stages[i]);
+    }
+}
+
 static void test_keys(void)
 {
     char k[64];
@@ -257,6 +400,11 @@ static void test_keys(void)
           strcmp(k, "mirror.jpn_slot_3") == 0);
     CHECK(ico_region_key_suffixed("stats.stages", k, sizeof(k)) == 0 &&
           strcmp(k, "stats.stages_jpn") == 0);
+    CHECK(ico_region_select("kor") == 0);
+    CHECK(ico_region_key_prefixed("mirror", "slot_3", k, sizeof(k)) == 0 &&
+          strcmp(k, "mirror.kor_slot_3") == 0);
+    CHECK(ico_region_key_suffixed("stats.stages", k, sizeof(k)) == 0 &&
+          strcmp(k, "stats.stages_kor") == 0);
     CHECK(ico_region_key_prefixed("run", "slot_0", k, 8) == -1);
     CHECK(ico_region_key_suffixed("stats.stages", k, 12) == -1);
     CHECK(ico_region_select("pal") == 0);
@@ -276,6 +424,12 @@ static void test_stage(void)
     CHECK(ico_region_stage(ico_region_info_pal.start_stage_max) ==
           ico_region_info_jpn.start_stage_max);
     CHECK(ico_region_stage(ico_region_info_pal.stage_veil) == ico_region_info_jpn.stage_veil);
+    /* the Korean disc's stageData is the Japanese one */
+    CHECK(ico_region_select("kor") == 0);
+    CHECK(ico_region_stage(0) == 0 && ico_region_stage(57) == 57 && ico_region_stage(58) == 56 &&
+          ico_region_stage(105) == 103);
+    CHECK(ico_region_stage(ico_region_info_pal.stage_credits) == ico_region_info_kor.stage_credits);
+    CHECK(ico_region_stage(ico_region_info_pal.stage_end) == ico_region_info_kor.stage_end);
     CHECK(ico_region_select("pal") == 0);
 }
 
@@ -285,6 +439,7 @@ int main(int argc, char **argv)
     test_regions_txt(argc > 1 ? argv[1] : NULL);
     test_consistency();
     test_jpn_values();
+    test_kor_values();
     test_keys();
     test_stage();
     return ico_check_summary("region_select_test");

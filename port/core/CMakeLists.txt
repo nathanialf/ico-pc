@@ -14,10 +14,11 @@ target_include_directories(ico_region PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
                                              "${CMAKE_SOURCE_DIR}/ico2/common/include")
 target_compile_options(ico_region PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 
-# region_select_test: both slugs select and ico_region follows, nothing else
-# selects; the disc ids; the per-disc config keys; the stage rows on each
-# disc; ico_region_info[] in config/regions.txt's order (read at test time);
-# every value of the Japanese row (CPU only); the disc table ico_discs
+# region_select_test: every slug selects and ico_region follows, nothing else
+# selects; the selectors and LN on each row; the disc ids; the per-disc config
+# keys; the stage rows on each disc; ico_region_info[] in config/regions.txt's
+# order (read at test time); every value of the Japanese and Korean rows (CPU
+# only); the disc table ico_discs
 # (port/data/discs.c, plain data, compiled in) against the same rows. The
 # argument: the table.
 add_executable(region_select_test test/region_select_test.c "${CMAKE_SOURCE_DIR}/port/data/discs.c")
