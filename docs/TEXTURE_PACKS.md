@@ -19,8 +19,11 @@ number printed on the disc:
 - `SCPS-11003` for the Japanese disc.
 
 Put a pack in the folder of the disc it was made for; the pack's own
-folder name usually says which. The game reads only the folder of the
-disc you play, so you can keep a pack in each.
+folder name usually says which. Of these two folders, the game reads only
+the one of the disc you play, so you can keep a pack in each. The other
+places a pack can go (`textures/replacements`, and picture files loose in
+`textures`, below) are read for both discs: a pack there shows on either
+disc, so keep it in its disc's folder instead.
 
 ## Put a texture pack in
 
@@ -50,7 +53,8 @@ x64\textures\SCES-50760\replacements\some-picture.dds
 
 The pack's own folders inside `replacements` can stay as they are. If the
 pack's `replacements` folder ends up straight inside `textures`, or its
-picture files sit loose in `textures`, the game finds them too. Other
+picture files sit loose in `textures`, the game finds them too, for both
+discs. Other
 folders of the pack put straight into `textures` are not searched: move
 them into `textures/SCES-50760/replacements`.
 

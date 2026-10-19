@@ -17,7 +17,10 @@ the `textures` folder. It is already there, with a short note inside it.
 Each disc has its own folder for packs, named after the number printed on
 the disc: `SCES-50760` for the European disc and `SCPS-11003` for the
 Japanese disc. A pack goes in the folder of the disc it was made for, and
-the game reads only the folder of the disc you play. The steps below use
+of these two folders the game reads only the one of the disc you play.
+The other places below (`models/replacements`, and files loose in
+`models`) are read for both discs, so a pack there shows on either disc.
+The steps below use
 the European disc's folder; for the Japanese disc, read `SCPS-11003`
 instead of `SCES-50760`.
 
@@ -58,8 +61,8 @@ Documents folder, the same folder the disc image goes in, which you reach
 through LiveContainer.
 
 If the pack's files were copied loose straight into `models`, or its
-`replacements` folder was copied into `models`, the game finds them too.
-Other folders of the pack put straight into `models` are not searched:
+`replacements` folder was copied into `models`, the game finds them too,
+for both discs. Other folders of the pack put straight into `models` are not searched:
 move them into `models/SCES-50760/replacements`.
 
 The game's log file, `ico-pc.log` ([where to find it](TROUBLESHOOTING.md#the-log-file)),
