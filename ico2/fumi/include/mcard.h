@@ -14,7 +14,7 @@ struct McMgr;
 extern int IosMcMgrSleep;
 extern int IosMcLock;
 extern char *iconName[];
-extern char *iOSMcSaveSeg[];
+extern char *iOSMcSaveSeg_pal[], *iOSMcSaveSeg_jpn[]; /* mcard.c: iOSMcSaveSeg per disc */
 extern int IosMcPreviewInfo[];
 extern struct IosMsgQueue McMsgQ;
 /* mcard.c's `inline` functions, in the order of their definitions'

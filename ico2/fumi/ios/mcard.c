@@ -3,6 +3,7 @@
 #include "pad.h"
 #include "main.h"
 #include "mcdata.h"
+#include <stddef.h>
 #include <string.h>
 #include "mcard.h"
 #include <eekernel.h>
@@ -33,17 +34,14 @@ int IosMcLock = -1;
 
 char *iconName[3] = {"boy_blk.ico", "boy_blk.ico", "boy_blk.ico"};
 
-#ifdef VERSION_JPN
+/* the save segment names per disc: segment 0 is the disc's save directory */
+char *iOSMcSaveSeg_pal[6] = {"BESCES-50760ico", "icon.sys",    "boy_blk.ico",
+                             "boy_blk.ico",     "boy_blk.ico", "game."};
 
-char *iOSMcSaveSeg[6] = {"BISCPS-11003ico", "icon.sys",    "boy_blk.ico",
-                         "boy_blk.ico",     "boy_blk.ico", "game."};
+char *iOSMcSaveSeg_jpn[6] = {"BISCPS-11003ico", "icon.sys",    "boy_blk.ico",
+                             "boy_blk.ico",     "boy_blk.ico", "game."};
 
-#else
-
-char *iOSMcSaveSeg[6] = {"BESCES-50760ico", "icon.sys",    "boy_blk.ico",
-                         "boy_blk.ico",     "boy_blk.ico", "game."};
-
-#endif
+#define iOSMcSaveSeg PAL_JPN(iOSMcSaveSeg_pal, iOSMcSaveSeg_jpn)
 
 static int mcLockCount = 0; /* derived name */
 
@@ -163,6 +161,16 @@ typedef struct { /* field names derived */
     char b[64];
 } McBlk; /* derived name */
 
+/* the Japanese disc's product file is the first 0x1E8 bytes of the European one: it ends
+   before cameraMove and palMode (typedef.h McProductFile) */
+#define MC_PRODUCT_FILE_JPN_SIZE 0x1E8
+
+_Static_assert(offsetof(McProductFile, cameraMove) == MC_PRODUCT_FILE_JPN_SIZE,
+               "McProductFile: the Japanese record ends at cameraMove");
+
+_Static_assert(offsetof(McProductFile, palMode) == 0x1EC,
+               "McProductFile: palMode is the last European word");
+
 static inline int product_write(McMgr *self)
 {
     (IosMcProductFile + self->port)->soundMode = systemStatus[11];
@@ -175,14 +183,15 @@ static inline int product_write(McMgr *self)
     }
     *(McBlk *)(IosMcProductFile + self->port)->padConf = *(McBlk *)iosPadConfCustom.bit;
     iosMcHandlerWrite(self, (unsigned char *)(IosMcProductFile + self->port),
-                      sizeof(McProductFile));
+                      PAL_JPN(sizeof(McProductFile), MC_PRODUCT_FILE_JPN_SIZE));
     return 0;
 }
 
 static inline int product_read(McMgr *self)
 {
     int idx = self->port;
-    iosMcHandlerRead(self, (unsigned char *)&IosMcProductFile[idx], sizeof(McProductFile));
+    iosMcHandlerRead(self, (unsigned char *)&IosMcProductFile[idx],
+                     PAL_JPN(sizeof(McProductFile), MC_PRODUCT_FILE_JPN_SIZE));
     return self->result;
 }
 
