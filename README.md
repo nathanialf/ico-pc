@@ -180,8 +180,9 @@ original releases' own:
 - **Video mode.** The European disc offers 50 Hz or 60 Hz; the Japanese
   disc is always 60 Hz.
 - **The port's own menus** (Options, the extras, photo mode) can be shown in
-  English, French, German, Italian, Spanish or Japanese, with **Menu
-  language** under [Options > Language](docs/OPTIONS.md#language).
+  English, French, German, Italian, Spanish or Japanese, with the **Menu
+  language** row on the first page of the Options menu
+  ([more](docs/OPTIONS.md#language)).
 
 Achievements, the music and models galleries, photo mode and the model
 viewer work with both discs. Saves, texture packs and model packs are kept
