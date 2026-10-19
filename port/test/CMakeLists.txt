@@ -66,6 +66,11 @@ if(Python3_FOUND)
              COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/content_table_check.py"
                      --version jpn --disc "${ICO_DISC_IMAGE_JPN}" chains)
     set_tests_properties(content_table_chains_jpn PROPERTIES SKIP_RETURN_CODE 77)
+    # and against the Korean disc (its tables' port/data/gen/kor/table_desc.c)
+    add_test(NAME content_table_chains_kor
+             COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/content_table_check.py"
+                     --version kor --disc "${ICO_DISC_IMAGE_KOR}" chains)
+    set_tests_properties(content_table_chains_kor PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
 # offset_audit: every raw EE-offset access the host

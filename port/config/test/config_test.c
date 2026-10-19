@@ -659,6 +659,12 @@ static void test_disc_keys(void)
     write_file(toml, "[game]\ndisc = \"jpn\"\nlast_disc = \"pal\"\n");
     ico_config_reset(toml, "no-such.ini");
     CHECK(ico_config_disc_pin() == 1 && ico_config_last_disc() == 0);
+    write_file(toml, "[game]\ndisc = \"kor\"\nlast_disc = \"kor\"\n");
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_disc_pin() == 2 && ico_config_last_disc() == 2);
+    write_file(toml, "[game]\ndisc = \"auto\"\nlast_disc = \"pal\"\n");
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_disc_pin() == -1 && ico_config_last_disc() == 0);
     /* not a row: auto, and the log names the values, once a load */
     path_in(log, "disc.log");
     fflush(stderr);
@@ -678,9 +684,9 @@ static void test_disc_keys(void)
     clearerr(stderr);
     text = read_file(log);
     CHECK(text != NULL &&
-          strstr(text, "config: [game] disc = \"usa\" is not one of auto, pal, jpn; auto\n") !=
+          strstr(text, "config: [game] disc = \"usa\" is not one of auto, pal, jpn, kor; auto\n") !=
               NULL &&
-          strstr(text, "config: [game] disc = \"JPN\" is not one of auto, pal, jpn; auto\n") !=
+          strstr(text, "config: [game] disc = \"JPN\" is not one of auto, pal, jpn, kor; auto\n") !=
               NULL);
     if (text != NULL) {
         /* once a load: two reads of "usa", one line */
@@ -697,6 +703,10 @@ static void test_disc_keys(void)
     ico_config_reset(toml, "no-such.ini");
     CHECK(ico_config_last_disc() == 1);
     CHECK_STR(ico_config_get_string("game.last_disc", "?"), "jpn");
+    CHECK(ico_config_set_last_disc("kor") == 0 && ico_config_save() == 0);
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_last_disc() == 2);
+    CHECK_STR(ico_config_get_string("game.last_disc", "?"), "kor");
     /* the template: disc = "auto", no last_disc */
     remove(toml);
     ico_config_reset(toml, "no-such.ini");

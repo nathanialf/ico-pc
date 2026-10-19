@@ -323,13 +323,20 @@ static int run_synth(const char *dir)
     }
     /* the table: distinct ids, boot files and archives; look-ups both ways */
     CHECK(strcmp(ico_discs[0].archive_name, ico_discs[1].archive_name) != 0);
+    CHECK(strcmp(ico_discs[0].archive_name, ico_discs[2].archive_name) != 0);
+    CHECK(strcmp(ico_discs[1].archive_name, ico_discs[2].archive_name) != 0);
     CHECK(ico_disc_by_id("SCES-50760") == &ico_discs[0] &&
-          ico_disc_by_id("SCPS-11003") == &ico_discs[1] && ico_disc_by_id("SLUS-20000") == NULL);
+          ico_disc_by_id("SCPS-11003") == &ico_discs[1] &&
+          ico_disc_by_id("SCPS-56001") == &ico_discs[2] && ico_disc_by_id("SLUS-20000") == NULL);
     CHECK(ico_disc_by_boot("SCES_507.60") == &ico_discs[0] &&
-          ico_disc_by_boot("SCPS_110.03") == &ico_discs[1] && ico_disc_by_boot("") == NULL);
-    CHECK(ico_discs[0].df_count == 193 && ico_discs[1].df_count == 183);
+          ico_disc_by_boot("SCPS_110.03") == &ico_discs[1] &&
+          ico_disc_by_boot("SCPS_560.01") == &ico_discs[2] && ico_disc_by_boot("") == NULL);
+    CHECK(ico_discs[0].df_count == 193 && ico_discs[1].df_count == 183 &&
+          ico_discs[2].df_count == 183);
     /* only a disc with a shifted DATA.DF carries a shift (the Korean disc) */
-    CHECK(ico_discs[0].df_lsn_shift == 0 && ico_discs[1].df_lsn_shift == 0);
+    CHECK(ico_discs[0].df_lsn_shift == 0 && ico_discs[1].df_lsn_shift == 0 &&
+          ico_discs[2].df_lsn_shift == 153600);
+    CHECK(ico_discs[2].df_size == 866859008u - 153600u * 2048u);
 
     /* the entries are stored, the boot file has its tail */
     {

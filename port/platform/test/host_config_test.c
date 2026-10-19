@@ -859,6 +859,16 @@ static void test_choose_disc(void)
        not count; NULL words are allowed */
     CHECK(ico_host_choose_disc(2, 5, 4u, 7, 2, &why) == 0 && strcmp(why, "the European disc") == 0);
     CHECK(ico_host_choose_disc(-1, -1, 2u | 4u, -1, 2, NULL) == 1);
+    /* three rows: the Korean disc as the pin, the image given, the only
+       archive and the disc played last */
+    CHECK(ico_host_choose_disc(2, 0, 1u, 1, 3, &why) == 2 && strcmp(why, "[game] disc") == 0);
+    CHECK(ico_host_choose_disc(-1, 2, 7u, 0, 3, &why) == 2 &&
+          strcmp(why, "the disc image given") == 0);
+    CHECK(ico_host_choose_disc(-1, -1, 4u, 0, 3, &why) == 2 && why != NULL);
+    CHECK(ico_host_choose_disc(-1, -1, 7u, 2, 3, &why) == 2 &&
+          strcmp(why, "the disc played last") == 0);
+    CHECK(ico_host_choose_disc(-1, -1, 7u, -1, 3, &why) == 0 &&
+          strcmp(why, "the European disc") == 0);
 
     /* ico_host_choose_image (find_beside, both images and no pin): the
        image whose disc has no game data yet first, so a second disc's

@@ -10,11 +10,13 @@ Version-aware (tools/ico_version.py picks the branch's target):
     pal   baserom/Ico_PAL.iso            baserom/pal/baseelf.elf
           (plain 2048-byte-sector ISO)   + MAIN.MAP SRCFILE.TXT TRFILE.TXT
                                            SYSTEM.CNF (disc reference files)
+    kor   baserom/Ico_KOR.iso            baserom/kor/baseelf.elf + SYSTEM.CNF
+          (plain 2048-byte-sector ISO)
     us    baserom/Ico_USA.bin + .cue     baserom/baseelf.elf
           (raw MODE1/2352 or MODE2/2352)
 
 The boot ELF's name is never hard-coded: it comes from the disc's SYSTEM.CNF
-`BOOT2` line (SCES_507.60 on PAL, SCUS_971.13 on the USA disc).
+`BOOT2` line (SCES_507.60 on PAL, SCPS_560.01 on the Korean disc, SCUS_971.13 on the USA disc).
 
 Raw .bin sectors are cooked by extracting the 2048-byte user data of each
 sector and feeding the resulting ISO9660 image to pycdlib; an image that is
@@ -68,6 +70,14 @@ DISCS = {
         # The PAL disc ships the 2002-01-16 EU master's linker map and source
         # listings. Reference only, and gitignored with the rest of baserom/.
         "extras": ("MAIN.MAP", "SRCFILE.TXT", "TRFILE.TXT", "SYSTEM.CNF"),
+    },
+    "kor": {
+        "image": DISC_DIR / "Ico_KOR.iso",
+        "raw_bin": None,
+        "raw_cue": None,
+        # The Korean disc ships no map or listing (SCPS_560.01, a plain
+        # 2048-byte-sector ISO like the PAL one).
+        "extras": ("SYSTEM.CNF",),
     },
     "us": {
         "image": DISC_DIR / "Ico_USA.iso",     # cooked cache (gitignored)

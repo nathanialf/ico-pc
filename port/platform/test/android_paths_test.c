@@ -63,6 +63,11 @@ static void test_layout(void)
           strcmp(img, FILES "/Ico_JPN.bin") == 0);
     CHECK(ico_android_image_path(&p, "Ico_PAL", "chd", img, sizeof(img)) == 0 &&
           strcmp(img, FILES "/Ico_PAL.chd") == 0);
+    /* the Korean disc likewise */
+    CHECK(ico_android_layout(FILES, CACHE, "SCPS-56001", &p) == 0);
+    CHECK(strcmp(p.textures, FILES "/textures/SCPS-56001/replacements") == 0);
+    CHECK(ico_android_image_path(&p, "Ico_KOR", "iso", img, sizeof(img)) == 0 &&
+          strcmp(img, FILES "/Ico_KOR.iso") == 0);
     CHECK(ico_android_layout(FILES, CACHE, "SCES-50760", &p) == 0);
     CHECK(strcmp(p.textures, FILES "/textures/SCES-50760/replacements") == 0);
     /* the external folder may be missing (no shared storage): the internal

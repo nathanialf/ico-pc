@@ -126,6 +126,11 @@ if(ICO_RUN_TESTS)
     # time into the build folder (test/make_raw_cd.py, kept for the next run)
     add_test(NAME vfs_disc_jpn COMMAND vfs_test disc "${ICO_DISC_IMAGE_JPN}" jpn)
     set_tests_properties(vfs_disc_jpn PROPERTIES SKIP_RETURN_CODE 77)
+    # the Korean disc (a DVD, as the European one): its .iso only, with its
+    # DATA.DF 153600 sectors after the directory's LSN (archive.h
+    # df_lsn_shift); the CD bin/cue/chd twins do not apply
+    add_test(NAME vfs_disc_kor COMMAND vfs_test disc "${ICO_DISC_IMAGE_KOR}" kor)
+    set_tests_properties(vfs_disc_kor PROPERTIES SKIP_RETURN_CODE 77)
     set(_ico_raw_python "${Python3_EXECUTABLE}")
     if(NOT _ico_raw_python)
         find_program(_ico_raw_python NAMES python3 python)
@@ -167,12 +172,22 @@ if(ICO_RUN_TESTS)
     add_test(NAME archive_disc_jpn COMMAND archive_test disc "${ICO_DISC_IMAGE_JPN}"
                                            "${CMAKE_CURRENT_BINARY_DIR}" jpn)
     set_tests_properties(archive_disc_jpn PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+    add_test(NAME archive_disc_kor COMMAND archive_test disc "${ICO_DISC_IMAGE_KOR}"
+                                           "${CMAKE_CURRENT_BINARY_DIR}" kor)
+    set_tests_properties(archive_disc_kor PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
     # the Japanese DATA.DF manifest discs.c holds, against the image
     # (regenerate with `archive_test manifest --region jpn <iso>`)
     add_test(NAME archive_manifest_jpn
              COMMAND archive_test manifest-check jpn "${ICO_DISC_IMAGE_JPN}"
                      "${CMAKE_CURRENT_SOURCE_DIR}/discs.c")
     set_tests_properties(archive_manifest_jpn PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+    # the Korean one (the shifted DATA.DF's span; computed by
+    # build-host/tmp/kor/df_manifest.py, regenerated with
+    # `archive_test manifest --region kor <iso>`)
+    add_test(NAME archive_manifest_kor
+             COMMAND archive_test manifest-check kor "${ICO_DISC_IMAGE_KOR}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/discs.c")
+    set_tests_properties(archive_manifest_kor PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
 endif()
 
 # iso_import_test: the Android first start's copy of the
