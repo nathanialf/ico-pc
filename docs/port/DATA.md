@@ -21,14 +21,15 @@ disc's boot ELF, and the port's own reads of DATA.DF. The repository holds no di
 | `port/data/sifdev_host.c` | `sceOpen` and the other sifdev file calls, for the development kit's `host0:` device |
 | `port/data/iop_ram.h`, `iop_ram.c` | `ico_iop_ram`, the 2 MB of IOP RAM, and the IOP heap allocator |
 | `port/data/tables.h`, `tables.c` | the runtime loader of the 73 data tables |
-| `port/data/gen/` | the generated table definitions, descriptors and address registry (`table_defs.c`, `table_desc.c`, `table_desc.h`, `ee_symbols.c`, `tables.cmake`) |
+| `port/data/gen/` | the generated table definitions (`table_defs.c`), descriptor types (`table_desc.h`), the sets' list (`table_sets.c`, `tables.cmake`) and one descriptor set per disc (`pal/`, `jpn/`: `table_desc.c`, `ee_symbols.c`, `tables.cmake`) |
 | `port/data/df_pack.h`, `df_pack.c` | reads of DATA.DF's loose files and pack members for the port's own screens |
 | `port/data/json.h`, `json.c` | the JSON reader (`ico_json`) |
 | `port/data/chdr_miniz_names.h` | prefixes the second miniz copy inside libchdr |
 | `port/data/CMakeLists.txt` | the libraries (`ico_port_data`, `ico_miniz`, `ico_libchdr`, `ico_json`) and the tests |
 | `port/platform/android/iso_import.h`, `iso_import.c` | the Android first start's copy of the chosen image |
 | `ico2/fumi/ios/cdvd.c`, `ico2/seki/src/FileManager.c` | the game's side: the cdvd manager and the boot loader |
-| `config/tables_manifest.txt` | the CRC-32 of every table row and the addresses the tables' pointers hold |
+| `config/tables_manifest.txt`, `tables_manifest.jpn.txt` | per disc, the CRC-32 of every table row and the addresses the tables' pointers hold |
+| `config/ee_layout.jpn.txt`, `motion_bits.jpn.txt` | the Japanese disc's record layouts and MotionDef's shift-read bits (`tools/gen_ee_layout.py`) |
 
 ## Layers
 
@@ -265,26 +266,105 @@ Descriptors are the lowest free number from 0, as the kit handed them out.
 
 ## The data tables
 
-The game's 73 data tables are defined empty on the host (`port/data/gen/table_defs.c`) and filled
-before the game starts by `load_tables` (`main_host.c`), which calls `ico_tables_load_vfs`
-(`port/data/tables.h`): it reads `SCES_507.60` from the mounted disc and decodes every record field
-by field into the host layout that `port/data/gen/table_desc.c` describes (`IcoTableRow`,
-`IcoTableRecord`, `IcoTableField`):
+The game's 73 data tables are defined empty on the host (`port/data/gen/table_defs.c`) in one
+layout, PAL's (the port's headers), and filled before the game starts by `load_tables`
+(`main_host.c`), which calls `ico_tables_load_vfs(vfs, set, ...)` (`port/data/tables.h`): it reads
+the set's boot ELF (`SCES_507.60`, `SCPS_110.03`) from the mounted disc and decodes every record
+field by field into the host layout, as the disc's descriptor set describes it
+(`port/data/gen/<slug>/table_desc.c`: `IcoTableSet`, `IcoTableRow`, `IcoTableRecord`,
+`IcoTableField`):
 
 | field kind | how it is filled |
 | --- | --- |
 | `ICO_TF_INT`, `ICO_TF_FLOAT`, `ICO_TF_BYTES` | copied (the EE is little-endian, as every host the port builds for; `tables.c` refuses to compile otherwise) |
 | `ICO_TF_BITS` | extracted from its unit and stored through the field's setter |
-| `ICO_TF_FUNC` | the host function the address registry (`port/data/gen/ee_symbols.c`) names at that EE address |
+| `ICO_TF_FUNC` | the host function the set's address registry (`port/data/gen/<slug>/ee_symbols.c`) names at that EE address |
 | `ICO_TF_DATA` | the member's own string pool (`staffroll_dat`), else the registry's host object |
+| `ICO_TF_BITMAP` | (Japanese set) a 4-byte host bit word built bit by bit: host bit i is bit `map[i]` of the disc's bit words, 0xFF leaves it 0 |
+| `ICO_TF_DEFAULT` | (Japanese set) a PAL field the disc's record lacks: its declared value |
 
 `ico_tables_load_elf` finds the `.data`, `.rodata` and `.sdata` sections, checks every row's range
-and its CRC-32 against `config/tables_manifest.txt` before writing anything, copies the string pools
-first, then decodes the records. An address the registry does not know fails the load with the
-table, index, field and both addresses (`tables: <member> <symbol>[i].<field>: no function is known
-at 0x...`); `main_host.c` logs it and ends the run with `Cannot read the game's data from <source>`.
-A good load logs `ico_pc: N data table rows (N records) loaded from SCES_507.60`.
-[GAME_CODE.md](GAME_CODE.md#data-tables) covers the generator and the maintainer's reference test.
+and its CRC-32 against the set's manifest before writing anything, copies the string pools first
+(zeroing the rest of the host buffer), then decodes the records, zeroing a host array's records past
+the disc's count. An address the registry does not know fails the load with the table, index, field
+and both addresses (`tables: <member> <symbol>[i].<field>: no function is known at 0x...`); another
+disc's ELF fails on its first row's CRC, naming the disc the set reads (`... the ELF is not the boot
+file of the Japanese disc (SCPS_110.03, SCPS-11003)`). `main_host.c` logs it and ends the run with
+`Cannot read the game's data from <source>`. A good load logs `ico_pc: N data table rows (N
+records) loaded from SCES_507.60`. `ico_tables_count(ICO_TID_<symbol>)` gives the records a table
+received (`texProperty` 436 on the European disc, 412 on the Japanese), `ico_tables_loaded_set()`
+the set. [GAME_CODE.md](GAME_CODE.md#data-tables) covers the generator and the maintainer's
+reference test.
+
+### The two descriptor sets
+
+`ico_table_sets[]` (`port/data/gen/table_sets.c`) holds one `IcoTableSet` per row of
+`config/regions.txt`, in its order: `ico_table_set_pal` and `ico_table_set_jpn`, each with its boot
+file, product name, rows and registry. `load_tables` takes row 0 until the disc identification
+picks the row. Every set fills the same host arrays: PAL's counts are the largest of every table
+(the Japanese disc has 944 `objAction`, 3736 `objLayout`, 412 `texProperty`, 1621 `modelData`, 76
+`texLayout`, 2 `jimakuFileName`, 5 `movieFile`, 104 `stageData`, 1357 `objTableScene`, 950
+`stageTable`, 53 `texFile`); a string pool's buffer is the largest set's (`staffroll_dat`'s
+`.rodata` is 3808 bytes on the Japanese disc, 3792 on the European).
+
+The Japanese set maps each field of the disc's record **by path name** onto PAL's host struct
+(`tools/gen_data_desc.py`): its EE offset and size come from `config/ee_layout.jpn.txt`, its host
+offset from `offsetof` as for PAL. That file is written by `tools/gen_ee_layout.py --version jpn
+--upstream <rev>` from upstream's headers at a recorded revision (`git show`), their
+`#ifdef VERSION_JPN` blocks resolved (`gen_data_c.version_lines`): one `record` line per type, a
+`field` line per leaf (`kind=int|float|bytes|bitword|bits|funcword|dataword`), a `bitfield` line per
+named bit of a bit word. A Japanese field with no PAL name, a size or kind that differs, or a PAL
+field with neither a Japanese field nor a default, stops the generator. Two records differ:
+`MotionDef` (0x190 bytes, its words from 0x144 reordered, no `palSpeedRatio`) and `TexRec` (0x30,
+no `cameraMove`). The PAL fields the disc lacks take the `default` rows of
+`config/data_schema.jpn.txt`: `palSpeedRatio=1.0` (read only by PAL code under `systemStatus[0]`,
+the 50 Hz mode, and the identity of the multiplication there) and `cameraMove=0` (compared only by
+PAL code with `NonLinearCameraMove`, a word the Japanese ELF does not have).
+
+`MotionDef`'s three bit words (`modeBits`, `flags`, `flags2`, at 0x184/0x188/0x18C on the Japanese
+disc, 0x188/0x18C/0x190 on the European) keep their bits in other places, and one named bit moves
+words (`dropNode4Turn`: `flags` bit 9 on the Japanese disc, `flags2` bit 9 on the European). Each
+host word is an `ICO_TF_BITMAP` field whose map comes from the named bit-fields (by path, else by
+name over the record's bit words) and from `config/motion_bits.jpn.txt`: the bits game code reads by
+shift or mask (`modeBits.word >> 19 & 7`, `->flags2 >> 3 & 1`, a view's `modeBits.h.hi & 7`, the
+sign test `(int)->flags >= 0`). `tools/gen_ee_layout.py --bits` writes that file from upstream's
+sources: each `VERSION_JPN` block's reads are paired with its PAL arm's, read for read, a read
+outside any block is the same bit on both discs, the few blocks it cannot pair are listed and
+checked by hand (`UNPAIRED`), and a bit no code reads is mapped only by hand with its evidence
+(`HAND_ROWS`). The European set copies the three unions' bytes as before. On the two ELFs the
+mapped Japanese `motionKind` equals the European one in every copied field and every mapped bit of
+all 1148 motions; only `palSpeedRatio` differs (1.0 against 0.85 in 6 motions).
+
+`gen_data_desc.py --check` (the `data_desc_fresh` test) also audits the game sources: each read of
+MotionDef's bit words by shift or mask in `ico2/` must name host bits every non-PAL set fills; a
+shift by `PAL_JPN(` is an error (a bit position is a layout, and the host's is PAL's); and so is such
+a read inside a region's own arm (`if (ICO_JPN) { ... }`, the arguments after the first of
+`PAL_JPN(`), which would read the disc's position in the PAL host word.
+
+### Adding a target's set
+
+For a new row of `config/regions.txt`, the data step of adding a target ([GAME_CODE.md](GAME_CODE.md)
+has the rest):
+
+1. `tools/gen_ee_layout.py --version <slug> --upstream <rev>` writes `config/ee_layout.<slug>.txt`
+   (upstream's `config/data_schema.<slug>.txt` and `data_members.<slug>.txt` copied into
+   `config/` first, unchanged, with the port's `default` rows appended to the schema).
+2. `tools/gen_symbol_addrs.py --region <slug> --elf <decomp>/build/<slug>/ico.syms.elf --map
+   <decomp>/build/<slug>/ico.<slug>.map` writes `config/symbol_addrs.<slug>{,.data}.txt`.
+3. `tools/gen_data_desc.py --manifest --version <slug> --elf baserom/<slug>/baseelf.elf` writes
+   `config/tables_manifest.<slug>.txt`.
+4. If its bit words differ: `tools/gen_ee_layout.py --version <slug> --upstream <rev> --bits`
+   writes `config/motion_bits.<slug>.txt`.
+5. `tools/gen_data_desc.py` writes `port/data/gen/<slug>/` and the shared files; each error names
+   the field, default or bit to settle.
+6. `port/data/CMakeLists.txt`: a `tables_loader_<slug>` and `tables_manifest_<slug>` test beside
+   the Japanese ones, with the slug's reference (`gen_data_c.py --version <slug>`).
+
+`gen_ee_layout.py --version pal --upstream <rev>` lays upstream's PAL arm out against the port's
+headers, field by field, as a check at each merge (no PAL layout file is committed: the port's
+headers are PAL's layout, asserted against the EE by `port/data/gen/pal/table_desc.c`).
+`gen_ee_layout.py --version jpn --check` compares the committed layout with its recorded revision
+when that revision is in the clone.
 
 ## DATA.DF for the port's own screens
 
@@ -321,7 +401,8 @@ mark, no comments, trailing commas, leading zeros, `NaN` or control characters, 
 | `archive_synthetic`, `archive_disc` | extraction into a temporary archive and its mount, compared with the ISO backend (`archive_disc` reads the player's disc and is skipped, 77, without it) |
 | `iso_import` | the Android copy on Linux with SDL's memory streams: byte for byte, cancel, write failure, the space arithmetic (Linux window build) |
 | `json` | numbers, nesting and the depth limit, escapes, malformed input |
-| `data_desc_fresh` | `port/data/gen/` is what `tools/gen_data_desc.py` writes |
+| `data_desc_fresh` | `port/data/gen/` is what `tools/gen_data_desc.py` writes, every set at once, and the audit of MotionDef's bit reads |
 | `tables_loader`, `tables_manifest` | the loader against reference tables generated from the base ELF, and the manifest against the ELF (built only with `ICO_BASE_ELF` and pyelftools) |
+| `tables_loader_jpn`, `tables_manifest_jpn` | the Japanese set against `ICO_BASE_ELF_JPN` (through `ICO_DISC_IMAGE_JPN` when present): every table byte for byte against the reference `gen_data_c.py --version jpn` writes in the PAL record's form, the records past the disc's count zero, and each disc's ELF refused by the other's set, naming the disc expected; the Japanese manifest against that ELF (skipped without it) |
 
 All are registered in `port/data/CMakeLists.txt`.

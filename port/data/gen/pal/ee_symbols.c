@@ -3,14 +3,15 @@
  * config/tables_manifest.txt. Types, offsets, sizes and names only: no
  * disc data. Do not edit; rerun the script. */
 
-/* The registry of the EE addresses the tables' pointer words hold: each
- * names a game function or object by the committed symbol lists, and the
- * loader stores the host's address of that symbol (port/data/tables.c).
+/* The registry of the EE addresses this set's tables' pointer words hold:
+ * each names a game function or object by the committed symbol lists, and
+ * the loader stores the host's address of that symbol (port/data/tables.c).
  * The declarations are deliberately loose (the real prototypes live in
  * the game's headers); only the addresses are used.
  *
- * ICO_EE_SYMBOLS_STUBS (the loader test only) also defines every symbol,
- * each a distinct function or object, so the test links without the game. */
+ * ICO_EE_SYMBOLS_STUBS (the loader test only) also defines every symbol
+ * no earlier set's registry defines (config/regions.txt's order), each a
+ * distinct function or object, so the test links without the game. */
 
 #include <stddef.h>
 #include <stdint.h>
@@ -5503,7 +5504,7 @@ void ObjectBeforeFunc(void)
 char scpDummyGObj[16] __attribute__((aligned(16)));
 #endif
 
-const IcoEeFunc ico_ee_funcs[] = {
+const IcoEeFunc ico_ee_funcs_pal[] = {
     {0x0010B2C8u, InitPoolGeo, "InitPoolGeo"},
     {0x0010C588u, PoolDL, "PoolDL"},
     {0x0010D038u, PoolGeo, "PoolGeo"},
@@ -6419,10 +6420,10 @@ const IcoEeFunc ico_ee_funcs[] = {
     {0x00257310u, ObjectBeforeFunc, "ObjectBeforeFunc"},
 };
 
-const uint32_t ico_ee_func_count = sizeof(ico_ee_funcs) / sizeof(ico_ee_funcs[0]);
+_Static_assert(sizeof(ico_ee_funcs_pal) / sizeof(ico_ee_funcs_pal[0]) == 913, "pal: functions");
 
-const IcoEeObject ico_ee_objects[] = {
+const IcoEeObject ico_ee_objects_pal[] = {
     {0x0063AA20u, scpDummyGObj, "scpDummyGObj"},
 };
 
-const uint32_t ico_ee_object_count = sizeof(ico_ee_objects) / sizeof(ico_ee_objects[0]);
+_Static_assert(sizeof(ico_ee_objects_pal) / sizeof(ico_ee_objects_pal[0]) == 1, "pal: objects");

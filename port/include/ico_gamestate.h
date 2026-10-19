@@ -200,14 +200,15 @@ int ico_gs_achievements_suspended(void);
 
 /* --- retail addresses ---------------------------------------------------- */
 
-/* Reads size (1, 2 or 4) bytes at the retail PAL EE address addr into *out
+/* Reads size (1, 2 or 4) bytes at the retail EE address addr of the disc
+   being played (the PAL or the Japanese ELF's, by ico_region) into *out
    (little endian, as the EE), from this tick's snapshot: the fixed globals
-   listed there.  0, or -1 for an address outside them (heap objects,
+   listed there (the Japanese disc has no NonLinearCameraMove).  0, or -1 for an address outside them (heap objects,
    pointers, anything else: not addressable).  Shaped for an rcheevos memory
    callback; the tests call it. */
 int ico_gs_peek(unsigned int addr, unsigned int size, unsigned int *out);
 
-/* the table, for documentation and tests */
+/* the disc's table, for documentation and tests */
 typedef struct IcoGsPeekEntry {
     unsigned int addr;
     unsigned int size;

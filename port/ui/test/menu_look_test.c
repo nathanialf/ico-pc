@@ -1583,7 +1583,7 @@ int main(int argc, char **argv)
         return 77;
     }
     char err[512];
-    const int rc = ico_tables_load_elf(elf, size, err, sizeof(err));
+    const int rc = ico_tables_load_elf(&ico_table_set_pal, elf, size, err, sizeof(err));
     free(elf);
     if (rc != 0) {
         printf("menu_look: the ELF's tables do not load: %s\n", err);

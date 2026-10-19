@@ -1374,16 +1374,18 @@ static int open_window(void)
    (port/data/tables.h) */
 static void load_tables(const char *source)
 {
+    /* P1: selected by the identified disc */
+    const IcoTableSet *set = ico_table_sets[0];
     char why[512];
 
-    if (ico_tables_load_vfs(ico_vfs_disc(), why, sizeof(why)) != 0) {
+    if (ico_tables_load_vfs(ico_vfs_disc(), set, why, sizeof(why)) != 0) {
         fprintf(stderr, "ico_pc: the data tables: %s\n", why);
         ico_host_fatal(log_file(), "Cannot read the game's data from %s.\nThe log says why.",
                        source);
     }
     fprintf(stderr, "ico_pc: %u data table rows (%u records) loaded from %s\n",
             (unsigned)ico_tables_loaded_rows(), (unsigned)ico_tables_loaded_records(),
-            ICO_TABLES_BOOT_ELF);
+            set->boot_elf);
 }
 
 #ifndef ICO_HEADLESS

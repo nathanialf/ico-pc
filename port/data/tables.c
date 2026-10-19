@@ -3,8 +3,8 @@
  *
  * The runtime loader of the 73 data tables: tables.h says what it does.
  * Every fact about a table (its EE range, record type, fields, CRC) comes
- * from the generated
- * port/data/gen/table_desc.c; nothing here knows a table by name.
+ * from a generated descriptor set, port/data/gen/<slug>/table_desc.c, one per
+ * disc of config/regions.txt; nothing here knows a table or a disc by name.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +19,8 @@
 #endif
 
 static uint32_t loaded_rows, loaded_records;
+static uint32_t loaded_count[ICO_TID_COUNT];
+static const IcoTableSet *loaded_set;
 
 static const char *const section_names[] = {".data", ".rodata", ".sdata"};
 
@@ -53,14 +55,14 @@ typedef struct Section {
     const uint8_t *bytes;
 } Section;
 
-static int find_sections(const uint8_t *elf, size_t size, Section out[3], char *err, size_t errsz)
+static int find_sections(const IcoTableSet *set, const uint8_t *elf, size_t size, Section out[3],
+                         char *err, size_t errsz)
 {
     uint32_t shoff, shentsize, shnum, shstrndx, stroff, strsize, i;
     int k;
 
     if (size < 52 || memcmp(elf, "\177ELF\001\001", 6) != 0 || ico_le16(elf + 0x12) != 8) {
-        snprintf(err, errsz, "tables: %s is not a 32-bit little-endian MIPS ELF",
-                 ICO_TABLES_BOOT_ELF);
+        snprintf(err, errsz, "tables: %s is not a 32-bit little-endian MIPS ELF", set->boot_elf);
         return -1;
     }
     shoff = ico_le32(elf + 0x20);
@@ -69,13 +71,13 @@ static int find_sections(const uint8_t *elf, size_t size, Section out[3], char *
     shstrndx = ico_le16(elf + 0x32);
     if (shentsize < 40 || shstrndx >= shnum || shoff > size ||
         (uint64_t)shnum * shentsize > size - shoff) {
-        snprintf(err, errsz, "tables: %s has no readable section headers", ICO_TABLES_BOOT_ELF);
+        snprintf(err, errsz, "tables: %s has no readable section headers", set->boot_elf);
         return -1;
     }
     stroff = ico_le32(elf + shoff + shstrndx * shentsize + 0x10);
     strsize = ico_le32(elf + shoff + shstrndx * shentsize + 0x14);
     if (stroff > size || strsize > size - stroff) {
-        snprintf(err, errsz, "tables: %s's section names lie outside it", ICO_TABLES_BOOT_ELF);
+        snprintf(err, errsz, "tables: %s's section names lie outside it", set->boot_elf);
         return -1;
     }
     memset(out, 0, 3 * sizeof(*out));
@@ -94,8 +96,8 @@ static int find_sections(const uint8_t *elf, size_t size, Section out[3], char *
             if (name + len < strsize &&
                 memcmp(elf + stroff + name, section_names[k], len + 1) == 0) {
                 if (ico_le32(sh + 4) != 1 /* SHT_PROGBITS */ || off > size || sz > size - off) {
-                    snprintf(err, errsz, "tables: %s's %s section is not readable",
-                             ICO_TABLES_BOOT_ELF, section_names[k]);
+                    snprintf(err, errsz, "tables: %s's %s section is not readable", set->boot_elf,
+                             section_names[k]);
                     return -1;
                 }
                 out[k].addr = ico_le32(sh + 0x0C);
@@ -106,8 +108,7 @@ static int find_sections(const uint8_t *elf, size_t size, Section out[3], char *
     }
     for (k = 0; k < 3; k++) {
         if (out[k].bytes == NULL) {
-            snprintf(err, errsz, "tables: %s has no %s section", ICO_TABLES_BOOT_ELF,
-                     section_names[k]);
+            snprintf(err, errsz, "tables: %s has no %s section", set->boot_elf, section_names[k]);
             return -1;
         }
     }
@@ -125,17 +126,17 @@ static const uint8_t *row_bytes(const IcoTableRow *row, const Section *secs)
     return s->bytes + (row->ee_lo - s->addr);
 }
 
-static const IcoEeFunc *find_func(uint32_t addr)
+static const IcoEeFunc *find_func(const IcoTableSet *set, uint32_t addr)
 {
-    uint32_t lo = 0, hi = ico_ee_func_count;
+    uint32_t lo = 0, hi = set->func_count;
 
     while (lo < hi) {
         uint32_t mid = lo + (hi - lo) / 2;
 
-        if (ico_ee_funcs[mid].addr == addr) {
-            return &ico_ee_funcs[mid];
+        if (set->funcs[mid].addr == addr) {
+            return &set->funcs[mid];
         }
-        if (ico_ee_funcs[mid].addr < addr) {
+        if (set->funcs[mid].addr < addr) {
             lo = mid + 1;
         } else {
             hi = mid;
@@ -144,17 +145,17 @@ static const IcoEeFunc *find_func(uint32_t addr)
     return NULL;
 }
 
-static const IcoEeObject *find_object(uint32_t addr)
+static const IcoEeObject *find_object(const IcoTableSet *set, uint32_t addr)
 {
-    uint32_t lo = 0, hi = ico_ee_object_count;
+    uint32_t lo = 0, hi = set->object_count;
 
     while (lo < hi) {
         uint32_t mid = lo + (hi - lo) / 2;
 
-        if (ico_ee_objects[mid].addr == addr) {
-            return &ico_ee_objects[mid];
+        if (set->objects[mid].addr == addr) {
+            return &set->objects[mid];
         }
-        if (ico_ee_objects[mid].addr < addr) {
+        if (set->objects[mid].addr < addr) {
             lo = mid + 1;
         } else {
             hi = mid;
@@ -164,23 +165,23 @@ static const IcoEeObject *find_object(uint32_t addr)
 }
 
 /* An object pointer word: the member's string pool first, then the registry. */
-static void *resolve_data(const IcoTableRow *row, uint32_t v)
+static void *resolve_data(const IcoTableSet *set, const IcoTableRow *row, uint32_t v)
 {
     const IcoTableRow *p;
     const IcoEeObject *o;
 
-    for (p = ico_table_rows; p < ico_table_rows + ico_table_row_count; p++) {
+    for (p = set->rows; p < set->rows + set->row_count; p++) {
         if (p->record == NULL && strcmp(p->member, row->member) == 0 && v >= p->ee_lo &&
             v < p->ee_hi) {
             return (char *)p->host + (v - p->ee_lo);
         }
     }
-    o = find_object(v);
+    o = find_object(set, v);
     return o != NULL ? o->obj : NULL;
 }
 
-static int decode_record(const IcoTableRow *row, uint32_t index, const uint8_t *ee, char *host,
-                         char *err, size_t errsz)
+static int decode_record(const IcoTableSet *set, const IcoTableRow *row, uint32_t index,
+                         const uint8_t *ee, char *host, char *err, size_t errsz)
 {
     const IcoTableRecord *rec = row->record;
     uint32_t i;
@@ -216,7 +217,7 @@ static int decode_record(const IcoTableRow *row, uint32_t index, const uint8_t *
 
             v = ico_le32(src);
             if (v != 0) {
-                const IcoEeFunc *e = find_func(v);
+                const IcoEeFunc *e = find_func(set, v);
 
                 if (e == NULL) {
                     snprintf(
@@ -237,7 +238,7 @@ static int decode_record(const IcoTableRow *row, uint32_t index, const uint8_t *
 
             v = ico_le32(src);
             if (v != 0) {
-                p = resolve_data(row, v);
+                p = resolve_data(set, row, v);
                 if (p == NULL) {
                     snprintf(
                         err, errsz,
@@ -251,6 +252,26 @@ static int decode_record(const IcoTableRow *row, uint32_t index, const uint8_t *
             memcpy(dst, &p, sizeof(p));
             break;
         }
+        case ICO_TF_BITMAP: {
+            /* host bit i from bit map[i] of the disc's ee_size bytes (another
+               disc's bit words keep their bits elsewhere) */
+            uint32_t word = 0, b;
+
+            for (b = 0; b < 32; b++) {
+                uint32_t k = f->map[b];
+
+                if (k != 0xFF && k < 8u * f->ee_size && (src[k >> 3] >> (k & 7) & 1)) {
+                    word |= 1u << b;
+                }
+            }
+            memcpy(dst, &word, sizeof(word));
+            break;
+        }
+        case ICO_TF_DEFAULT:
+            /* a field this disc's record lacks: its declared value (the low
+               host_size bytes, little-endian as the host) */
+            memcpy(dst, &f->value, f->host_size);
+            break;
         default:
             snprintf(err, errsz, "tables: %s %s: field %s has an unknown kind %u", row->member,
                      row->symbol, f->path, (unsigned)f->kind);
@@ -260,100 +281,139 @@ static int decode_record(const IcoTableRow *row, uint32_t index, const uint8_t *
     return 0;
 }
 
-int ico_tables_load_elf(const uint8_t *elf, size_t size, char *err, size_t errsz)
+/* The load's header line for a refused ELF: which disc this set reads. */
+static void wrong_disc(const IcoTableSet *set, char *err, size_t errsz, const char *what)
+{
+    snprintf(err, errsz, "tables: %s: the ELF is not the boot file of %s (%s, %s)", what,
+             set->product, set->boot_elf, set->disc_id);
+}
+
+int ico_tables_load_elf(const IcoTableSet *set, const uint8_t *elf, size_t size, char *err,
+                        size_t errsz)
 {
     Section secs[3];
     uint32_t r, i, records = 0;
 
-    if (find_sections(elf, size, secs, err, errsz) != 0) {
+    if (set == NULL) {
+        snprintf(err, errsz, "tables: no descriptor set to load with");
+        return -1;
+    }
+    if (find_sections(set, elf, size, secs, err, errsz) != 0) {
         return -1;
     }
     /* every row checked before any is written */
-    for (r = 0; r < ico_table_row_count; r++) {
-        const IcoTableRow *row = &ico_table_rows[r];
+    for (r = 0; r < set->row_count; r++) {
+        const IcoTableRow *row = &set->rows[r];
         const uint8_t *b = row_bytes(row, secs);
         uint32_t crc;
 
         if (b == NULL) {
-            snprintf(err, errsz, "tables: %s's %s range 0x%08X..0x%08X is not in %s's %s",
+            char what[160];
+
+            snprintf(what, sizeof(what), "%s's %s range 0x%08X..0x%08X is outside its %s",
                      row->member, section_names[row->section], (unsigned)row->ee_lo,
-                     (unsigned)row->ee_hi, ICO_TABLES_BOOT_ELF, section_names[row->section]);
+                     (unsigned)row->ee_hi, section_names[row->section]);
+            wrong_disc(set, err, errsz, what);
             return -1;
         }
         crc = ico_tables_crc32(b, row->ee_hi - row->ee_lo);
         if (crc != row->crc32) {
             snprintf(err, errsz,
-                     "tables: %s (%s 0x%08X..0x%08X) has CRC-32 %08X, expected %08X: %s is not "
-                     "the PAL retail boot ELF (SCES-50760)",
+                     "tables: %s (%s 0x%08X..0x%08X) has CRC-32 %08X, expected %08X: the ELF is "
+                     "not the boot file of %s (%s, %s)",
                      row->member, section_names[row->section], (unsigned)row->ee_lo,
-                     (unsigned)row->ee_hi, (unsigned)crc, (unsigned)row->crc32,
-                     ICO_TABLES_BOOT_ELF);
+                     (unsigned)row->ee_hi, (unsigned)crc, (unsigned)row->crc32, set->product,
+                     set->boot_elf, set->disc_id);
             return -1;
         }
         if (row->record != NULL &&
-            (uint64_t)row->start + (uint64_t)row->count * row->record->ee_size >
-                row->ee_hi - row->ee_lo) {
+            ((uint64_t)row->start + (uint64_t)row->count * row->record->ee_size >
+                 row->ee_hi - row->ee_lo ||
+             row->count > row->host_count)) {
             snprintf(err, errsz, "tables: %s: %u records do not fit its range", row->member,
                      (unsigned)row->count);
             return -1;
         }
-    }
-    /* the pools first: the pointer words resolve into them */
-    for (r = 0; r < ico_table_row_count; r++) {
-        const IcoTableRow *row = &ico_table_rows[r];
-
-        if (row->record == NULL) {
-            memcpy(row->host, row_bytes(row, secs), row->ee_hi - row->ee_lo);
+        if (row->record == NULL && row->ee_hi - row->ee_lo > row->host_count) {
+            snprintf(err, errsz, "tables: %s: its %u-byte pool does not fit the host's %u",
+                     row->member, (unsigned)(row->ee_hi - row->ee_lo), (unsigned)row->host_count);
+            return -1;
         }
     }
-    for (r = 0; r < ico_table_row_count; r++) {
-        const IcoTableRow *row = &ico_table_rows[r];
+    /* the pools first: the pointer words resolve into them */
+    for (r = 0; r < set->row_count; r++) {
+        const IcoTableRow *row = &set->rows[r];
+
+        if (row->record == NULL) {
+            uint32_t n = row->ee_hi - row->ee_lo;
+
+            memcpy(row->host, row_bytes(row, secs), n);
+            memset((char *)row->host + n, 0, row->host_count - n);
+        }
+    }
+    memset(loaded_count, 0, sizeof(loaded_count));
+    for (r = 0; r < set->row_count; r++) {
+        const IcoTableRow *row = &set->rows[r];
         const uint8_t *b = row_bytes(row, secs);
 
         if (row->record == NULL) {
             continue;
         }
         for (i = 0; i < row->count; i++) {
-            if (decode_record(row, i, b + row->start + i * row->record->ee_size,
+            if (decode_record(set, row, i, b + row->start + i * row->record->ee_size,
                               (char *)row->host + (size_t)i * row->record->host_size, err,
                               errsz) != 0) {
+                loaded_set = NULL;
                 return -1;
             }
         }
+        /* a disc with fewer records than the host array holds: the rest
+           are zero, whatever an earlier load left */
+        memset((char *)row->host + (size_t)row->count * row->record->host_size, 0,
+               (size_t)(row->host_count - row->count) * row->record->host_size);
+        if (row->id < ICO_TID_COUNT) {
+            loaded_count[row->id] = row->count;
+        }
         records += row->count;
     }
-    loaded_rows = ico_table_row_count;
+    loaded_rows = set->row_count;
     loaded_records = records;
+    loaded_set = set;
     return 0;
 }
 
-int ico_tables_load_vfs(IcoVfs *vfs, char *err, size_t errsz)
+int ico_tables_load_vfs(IcoVfs *vfs, const IcoTableSet *set, char *err, size_t errsz)
 {
     IcoVfsFile f;
     uint8_t *buf;
     uint32_t size;
     int rc;
 
-    if (vfs == NULL) {
-        snprintf(err, errsz, "tables: no disc to read %s from", ICO_TABLES_BOOT_ELF);
+    if (set == NULL) {
+        snprintf(err, errsz, "tables: no descriptor set to load with");
         return -1;
     }
-    if (ico_vfs_open(vfs, ICO_TABLES_BOOT_ELF, &f) != 0) {
-        snprintf(err, errsz, "tables: the disc has no %s", ICO_TABLES_BOOT_ELF);
+    if (vfs == NULL) {
+        snprintf(err, errsz, "tables: no disc to read %s from", set->boot_elf);
+        return -1;
+    }
+    if (ico_vfs_open(vfs, set->boot_elf, &f) != 0) {
+        snprintf(err, errsz, "tables: the disc has no %s, so it is not %s (%s)", set->boot_elf,
+                 set->product, set->disc_id);
         return -1;
     }
     size = ico_vfs_size(&f);
     buf = malloc(size ? size : 1);
     if (buf == NULL) {
-        snprintf(err, errsz, "tables: out of memory reading %s", ICO_TABLES_BOOT_ELF);
+        snprintf(err, errsz, "tables: out of memory reading %s", set->boot_elf);
         return -1;
     }
     if (ico_vfs_read(&f, 0, buf, size) != (int64_t)size) {
-        snprintf(err, errsz, "tables: cannot read %s from the disc", ICO_TABLES_BOOT_ELF);
+        snprintf(err, errsz, "tables: cannot read %s from the disc", set->boot_elf);
         free(buf);
         return -1;
     }
-    rc = ico_tables_load_elf(buf, size, err, errsz);
+    rc = ico_tables_load_elf(set, buf, size, err, errsz);
     free(buf);
     return rc;
 }
@@ -366,4 +426,14 @@ uint32_t ico_tables_loaded_rows(void)
 uint32_t ico_tables_loaded_records(void)
 {
     return loaded_records;
+}
+
+uint32_t ico_tables_count(IcoTableId id)
+{
+    return (unsigned)id < ICO_TID_COUNT ? loaded_count[id] : 0;
+}
+
+const IcoTableSet *ico_tables_loaded_set(void)
+{
+    return loaded_set;
 }

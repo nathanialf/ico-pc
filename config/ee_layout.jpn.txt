@@ -1,0 +1,623 @@
+# config/ee_layout.jpn.txt -- the EE layout of the data tables' record types on
+# the Japanese disc (SCPS-11003): per record type of
+# config/data_schema.jpn.txt, its size and every field's offset, size and kind.
+# Written by tools/gen_ee_layout.py --version jpn from upstream's headers with
+# their VERSION_ blocks resolved for VERSION_JPN; types and offsets only, no
+# disc bytes. Do not edit: rerun the script at each upstream merge.
+#   record <type> size=<bytes> header=<path>
+#   field <path> off=<offset> size=<element bytes> count=<elements> kind=<kind> ...
+#       kind: int float bytes (a union copied whole) bitword (a 4-byte union of a
+#       word and named bit-fields) bits (a struct bit-field) funcword dataword
+#   bitfield <union>.<path> bit=<from the union's first bit> width=<bits>
+# 72 record types.
+upstream 3496140f784fdf2d0b10e30b3b3024046c586ce1
+record HintDef size=0x10 header=ico2/omori/include/lws_kyomi.h
+field stage off=0x0 size=4 count=1 kind=int signed=1
+field no off=0x4 size=4 count=1 kind=int signed=1
+field time off=0x8 size=4 count=1 kind=float
+field flags off=0xC size=4 count=1 kind=int signed=1
+record AccessaryRec size=0x28 header=ico2/sugipon/include/box.h
+field model off=0x0 size=4 count=1 kind=int signed=1
+field model2 off=0x4 size=4 count=1 kind=int signed=1
+field subModel off=0x8 size=4 count=1 kind=int signed=1
+field pivot off=0xC size=4 count=3 kind=float
+field subPos off=0x18 size=4 count=3 kind=float
+field subRotY off=0x24 size=4 count=1 kind=float
+record IdleRangeRec size=0x14 header=ico2/fumi/include/commonact.h
+field idleMotion off=0x0 size=4 count=1 kind=int signed=1
+field orientRow off=0x4 size=4 count=1 kind=int signed=1
+field orientRow2 off=0x8 size=4 count=1 kind=int signed=1
+field orientFirst off=0xC size=4 count=1 kind=int signed=1
+field orientEnd off=0x10 size=4 count=1 kind=int signed=1
+record IntrMail size=0x18 header=ico2/fumi/include/act.h
+field motion off=0x0 size=4 count=1 kind=funcword
+field extra off=0x4 size=4 count=1 kind=funcword
+field handler off=0x8 size=4 count=1 kind=funcword
+field accept off=0xC size=4 count=1 kind=funcword
+field kind off=0x10 size=2 count=1 kind=int signed=0
+field mode off=0x12 size=2 count=1 kind=int signed=1
+field flags off=0x14 size=4 count=1 kind=int signed=0
+record char[32] size=0x20 header=ico2/omori/include/camera-ico2.h
+field - off=0x0 size=1 count=32 kind=int signed=1
+record float size=0x4 header=ico2/fumi/include/act-game.h
+field - off=0x0 size=4 count=1 kind=float
+record MotionOrientEntry size=0x18 header=ico2/sugipon/include/motionOrientManager.h
+field id off=0x0 size=4 count=1 kind=int signed=1
+field kind off=0x4 size=4 count=1 kind=int signed=1
+field nextId off=0x8 size=4 count=1 kind=int signed=1
+field shiftFrom off=0xC size=4 count=1 kind=int signed=1
+field shiftMode off=0x10 size=4 count=1 kind=int signed=1
+field word14 off=0x14 size=4 count=1 kind=int signed=1
+record ClingRec size=0x24 header=ico2/fumi/include/commonact.h
+field rot off=0x0 size=4 count=3 kind=int signed=1
+field pos off=0xC size=4 count=3 kind=float
+field mode off=0x18 size=4 count=1 kind=int signed=1
+field motion off=0x1C size=4 count=1 kind=int signed=1
+field node off=0x20 size=4 count=1 kind=int signed=1
+record OaRecB size=0x14 header=ico2/common/include/typedef.h
+field baseMode off=0x0 size=4 count=1 kind=int signed=1
+field anim2 off=0x4 size=4 count=1 kind=int signed=1
+field word8 off=0x8 size=4 count=1 kind=int signed=1
+field mode off=0xC size=4 count=1 kind=int signed=1
+field flags off=0x10 size=4 count=1 kind=int signed=1
+record ObjKindEnt size=0x64 header=ico2/common/include/typedef.h
+field name off=0x0 size=1 count=36 kind=int signed=1
+field targetTime off=0x24 size=4 count=1 kind=float
+field brainCapStep off=0x28 size=4 count=1 kind=float
+field brainRate off=0x2C size=4 count=1 kind=float
+field brainLevel off=0x30 size=4 count=1 kind=int signed=1
+field infoLoad off=0x34 size=4 count=1 kind=funcword
+field infoInit off=0x38 size=4 count=1 kind=funcword
+field uniqDataSet off=0x3C size=4 count=1 kind=funcword
+field start off=0x40 size=4 count=1 kind=funcword
+field layouted off=0x44 size=4 count=1 kind=int signed=1
+field dl off=0x48 size=4 count=1 kind=funcword
+field afterGeo off=0x4C size=4 count=1 kind=funcword
+field geo off=0x50 size=4 count=1 kind=funcword
+field hotInit off=0x54 size=4 count=1 kind=funcword
+field create off=0x58 size=4 count=1 kind=funcword
+field ai off=0x5C size=4 count=1 kind=funcword
+field before off=0x60 size=4 count=1 kind=funcword
+record GenGeo size=0x4C header=ico2/common/include/typedef.h
+field scale off=0x0 size=4 count=3 kind=float
+field rot off=0xC size=4 count=3 kind=float
+field pos off=0x18 size=4 count=3 kind=float
+field proc off=0x24 size=4 count=1 kind=funcword
+field outGObj off=0x28 size=4 count=1 kind=dataword
+field mdl off=0x2C size=4 count=1 kind=int signed=1
+field accessary off=0x30 size=4 count=1 kind=int signed=1
+field action off=0x34 size=4 count=1 kind=int signed=1
+field initArg off=0x38 size=4 count=1 kind=int signed=1
+field word3C off=0x3C size=4 count=1 kind=int signed=1
+field procPri off=0x40 size=2 count=1 kind=int signed=0
+field reviveCount off=0x42 size=2 count=1 kind=int signed=1
+field parent off=0x44 size=2 count=1 kind=int signed=0
+field kind off=0x46 size=1 count=1 kind=int signed=0
+field light off=0x47 size=1 count=1 kind=int signed=0
+field flags off=0x48 size=4 count=1 kind=int signed=0
+record ParallelMotionRow size=0xB0 header=ico2/fumi/include/act-parallel-control.h
+field motion off=0x0 size=4 count=44 kind=int signed=1
+record unsigned_short size=0x2 header=ico2/fumi/include/s_init.h
+field - off=0x0 size=2 count=1 kind=int signed=0
+record LtProperty size=0x70 header=ico2/common/include/layout_texture.h
+field word0 off=0x0 size=4 count=1 kind=int signed=1
+field word4 off=0x4 size=4 count=1 kind=int signed=1
+field word8 off=0x8 size=4 count=1 kind=int signed=1
+field wordC off=0xC size=4 count=1 kind=int signed=1
+field ownerItem off=0x10 size=4 count=1 kind=int signed=1
+field word14 off=0x14 size=4 count=1 kind=int signed=1
+field texData off=0x18 size=4 count=1 kind=dataword
+field texNo off=0x1C size=4 count=1 kind=int signed=1
+field up off=0x20 size=4 count=1 kind=int signed=1
+field down off=0x24 size=4 count=1 kind=int signed=1
+field left off=0x28 size=4 count=1 kind=int signed=1
+field right off=0x2C size=4 count=1 kind=int signed=1
+field rightItem off=0x30 size=4 count=1 kind=int signed=1
+field leftItem off=0x34 size=4 count=1 kind=int signed=1
+field downItem off=0x38 size=4 count=1 kind=int signed=1
+field upItem off=0x3C size=4 count=1 kind=int signed=1
+field word40 off=0x40 size=4 count=1 kind=int signed=1
+field centerX off=0x44 size=4 count=1 kind=int signed=1
+field dispH off=0x48 size=4 count=1 kind=int signed=1
+field dispW off=0x4C size=4 count=1 kind=int signed=1
+field dispY off=0x50 size=4 count=1 kind=int signed=1
+field dispX off=0x54 size=4 count=1 kind=int signed=1
+field texFileNo off=0x58 size=4 count=1 kind=int signed=1
+field texU off=0x5C size=4 count=1 kind=int signed=1
+field texH off=0x60 size=4 count=1 kind=int signed=1
+field texW off=0x64 size=4 count=1 kind=int signed=1
+field texV off=0x68 size=4 count=1 kind=int signed=1
+field selectMode off=0x6C size=4 count=1 kind=bits bit=0 width=2 signed=0
+field fade_cancel off=0x6C size=4 count=1 kind=bits bit=2 width=1 signed=0
+field selectable off=0x6C size=4 count=1 kind=bits bit=3 width=1 signed=0
+field masked off=0x6C size=4 count=1 kind=bits bit=4 width=1 signed=0
+field defaultMask off=0x6C size=4 count=1 kind=bits bit=5 width=1 signed=0
+record WeaponDef size=0x24 header=ico2/sugipon/include/weapon.h
+field length off=0x0 size=4 count=1 kind=float
+field grip off=0x4 size=4 count=1 kind=float
+field power off=0x8 size=4 count=1 kind=float
+field weight off=0xC size=4 count=1 kind=int signed=1
+field word10 off=0x10 size=4 count=1 kind=int signed=1
+field blur off=0x14 size=4 count=1 kind=int signed=1
+field color off=0x18 size=1 count=4 kind=int signed=0
+field motOrient off=0x1C size=4 count=1 kind=int signed=1
+field flags off=0x20 size=4 count=1 kind=int signed=0
+record char* size=0x4 header=ico2/common/include/staffroll.h
+field - off=0x0 size=4 count=1 kind=dataword
+record ItemBreakRec size=0x20 header=ico2/sugipon/include/item.h
+field stayAnim off=0x0 size=4 count=1 kind=int signed=1
+field stayMode off=0x4 size=4 count=1 kind=int signed=1
+field breakAnim off=0x8 size=4 count=1 kind=int signed=1
+field breakMode off=0xC size=4 count=1 kind=int signed=1
+field dropAnim off=0x10 size=4 count=1 kind=int signed=1
+field hitAnim off=0x14 size=4 count=1 kind=int signed=1
+field hitMode off=0x18 size=4 count=1 kind=int signed=1
+field flags off=0x1C size=4 count=1 kind=int signed=0
+record MotOriAlt size=0x8 header=ico2/sugipon/include/motionOrientManager.h
+field req off=0x0 size=4 count=1 kind=int signed=1
+field alt off=0x4 size=4 count=1 kind=int signed=1
+record PObjMdl size=0x8C header=ico2/common/include/charFileManager.h
+field path off=0x0 size=1 count=48 kind=int signed=1
+field collPath off=0x30 size=1 count=64 kind=int signed=1
+field offset off=0x70 size=4 count=3 kind=float
+field lightScale off=0x7C size=4 count=1 kind=float
+field ambientScale off=0x80 size=4 count=1 kind=float
+field shadowLength off=0x84 size=4 count=1 kind=float
+field pktKind off=0x88 size=4 count=1 kind=bits bit=0 width=4 signed=0
+field shade off=0x88 size=4 count=1 kind=bits bit=4 width=4 signed=0
+field lod off=0x88 size=4 count=1 kind=bits bit=8 width=4 signed=0
+record SePackage size=0xC header=ico2/sugipon/include/frameDependSequence.h
+field se off=0x0 size=4 count=2 kind=int signed=1
+field id off=0x8 size=4 count=1 kind=int signed=1
+record MotSyncPair size=0x8 header=ico2/sugipon/include/boy.h
+field girl off=0x0 size=4 count=1 kind=int signed=1
+field boy off=0x4 size=4 count=1 kind=int signed=1
+record LtProp size=0x38 header=ico2/common/include/layout_texture.h
+field first off=0x0 size=4 count=1 kind=int signed=1
+field last off=0x4 size=4 count=1 kind=int signed=1
+field fadeInTime off=0x8 size=4 count=1 kind=float
+field fadeOutTime off=0xC size=4 count=1 kind=float
+field colR off=0x10 size=4 count=1 kind=float
+field colG off=0x14 size=4 count=1 kind=float
+field colB off=0x18 size=4 count=1 kind=float
+field colA off=0x1C size=4 count=1 kind=float
+field proc off=0x20 size=4 count=1 kind=funcword
+field procFirst off=0x24 size=4 count=1 kind=int signed=1
+field defaultItem off=0x28 size=4 count=1 kind=int signed=1
+field curItem off=0x2C size=4 count=1 kind=int signed=1
+field link off=0x30 size=4 count=1 kind=int signed=1
+field word34 off=0x34 size=4 count=1 kind=int signed=1
+record WaySrcPt size=0x1C header=ico2/fumi/include/way_tool.h
+field pos off=0x0 size=4 count=3 kind=float
+field radius off=0xC size=4 count=1 kind=float
+field escape off=0x10 size=4 count=1 kind=int signed=1
+field float14 off=0x14 size=4 count=1 kind=float
+field bridgeEnd off=0x18 size=4 count=1 kind=int signed=1
+record FumbleRow size=0x18 header=ico2/sugipon/include/weapon.h
+field pos off=0x0 size=4 count=3 kind=float
+field rotY off=0xC size=4 count=1 kind=float
+field rotX off=0x10 size=4 count=1 kind=float
+field rotZ off=0x14 size=4 count=1 kind=float
+record ActModeRec size=0x50 header=ico2/fumi/include/act.h
+field ent[0].act off=0x0 size=4 count=1 kind=funcword
+field ent[0].word4 off=0x4 size=4 count=1 kind=int signed=1
+field ent[0].word8 off=0x8 size=4 count=1 kind=int signed=1
+field ent[1].act off=0xC size=4 count=1 kind=funcword
+field ent[1].word4 off=0x10 size=4 count=1 kind=int signed=1
+field ent[1].word8 off=0x14 size=4 count=1 kind=int signed=1
+field ent[2].act off=0x18 size=4 count=1 kind=funcword
+field ent[2].word4 off=0x1C size=4 count=1 kind=int signed=1
+field ent[2].word8 off=0x20 size=4 count=1 kind=int signed=1
+field name off=0x24 size=1 count=32 kind=int signed=1
+field intrList off=0x44 size=4 count=1 kind=int signed=1
+field mail off=0x48 size=4 count=1 kind=int signed=1
+field carried off=0x4C size=4 count=1 kind=bits bit=0 width=1 signed=0
+field bit1 off=0x4C size=4 count=1 kind=bits bit=1 width=1 signed=0
+field onChain off=0x4C size=4 count=1 kind=bits bit=2 width=1 signed=0
+field attractWait off=0x4C size=4 count=1 kind=bits bit=3 width=1 signed=0
+field hintCount off=0x4C size=4 count=1 kind=bits bit=4 width=1 signed=0
+field bit5 off=0x4C size=4 count=1 kind=bits bit=5 width=1 signed=0
+field keepHand off=0x4C size=4 count=1 kind=bits bit=6 width=1 signed=0
+field bit7 off=0x4C size=4 count=1 kind=bits bit=7 width=1 signed=0
+field softIk off=0x4C size=4 count=1 kind=bits bit=8 width=1 signed=0
+field bit9 off=0x4C size=4 count=1 kind=bits bit=9 width=1 signed=0
+field bit10 off=0x4C size=4 count=1 kind=bits bit=10 width=1 signed=0
+field skipMarked off=0x4C size=4 count=1 kind=bits bit=11 width=1 signed=0
+field bit12 off=0x4C size=4 count=1 kind=bits bit=12 width=1 signed=0
+field escort off=0x4C size=4 count=1 kind=bits bit=13 width=1 signed=0
+field bit14 off=0x4C size=4 count=1 kind=bits bit=14 width=1 signed=0
+record AdpcmDataRec size=0x40 header=ico2/fumi/include/adpcm_init.h
+field path off=0x0 size=1 count=48 kind=int signed=1
+field loopStart off=0x30 size=4 count=1 kind=int signed=1
+field sectors off=0x34 size=4 count=1 kind=int signed=1
+field pitch off=0x38 size=4 count=1 kind=int signed=1
+field channels off=0x3C size=4 count=1 kind=int signed=1
+record AttackKindEntry size=0x24 header=ico2/omori/include/attackhit.h
+field word0 off=0x0 size=4 count=4 kind=int signed=1
+field motion off=0x10 size=4 count=1 kind=int signed=1
+field focusNode off=0x14 size=4 count=1 kind=int signed=1
+field radius off=0x18 size=4 count=1 kind=float
+field power off=0x1C size=4 count=1 kind=float
+field weapon off=0x20 size=4 count=1 kind=bits bit=0 width=1 signed=0
+field down off=0x20 size=4 count=1 kind=bits bit=1 width=1 signed=0
+field unguardable off=0x20 size=4 count=1 kind=bits bit=2 width=1 signed=0
+field stone off=0x20 size=4 count=1 kind=bits bit=3 width=1 signed=0
+field toRoot off=0x20 size=4 count=1 kind=bits bit=4 width=1 signed=0
+field padBits off=0x20 size=4 count=1 kind=bits bit=5 width=27 signed=0
+record EscortPoint size=0x1C header=ico2/fumi/include/girl_act.h
+field pos off=0x0 size=4 count=3 kind=float
+field area off=0xC size=4 count=1 kind=int signed=1
+field point off=0x10 size=4 count=1 kind=int signed=1
+field range off=0x14 size=4 count=1 kind=float
+field rate off=0x18 size=4 count=1 kind=float
+record ExitData size=0x28 header=ico2/common/include/typedef.h
+field pos off=0x0 size=4 count=3 kind=float
+field rot off=0xC size=4 count=3 kind=float
+field firstWalk0 off=0x18 size=4 count=1 kind=int signed=1
+field firstWalk1 off=0x1C size=4 count=1 kind=int signed=1
+field firstWalk2 off=0x20 size=4 count=1 kind=int signed=1
+field nextStage off=0x24 size=4 count=1 kind=int signed=1
+record SafePosOffset size=0x10 header=ico2/omori/include/generator.h
+field x off=0x0 size=4 count=1 kind=float
+field y off=0x4 size=4 count=1 kind=float
+field z off=0x8 size=4 count=1 kind=float
+field kind off=0xC size=4 count=1 kind=int signed=1
+record WarpRec size=0x58 header=ico2/script/include/script.h
+field arrive2 off=0x0 size=4 count=4 kind=float
+field arrive1 off=0x10 size=4 count=4 kind=float
+field arrive0 off=0x20 size=4 count=4 kind=float
+field gflag off=0x30 size=4 count=1 kind=int signed=1
+field box0 off=0x34 size=4 count=3 kind=float
+field box1 off=0x40 size=4 count=3 kind=float
+field to0 off=0x4C size=2 count=1 kind=int signed=0
+field to1 off=0x4E size=2 count=1 kind=int signed=0
+field to2 off=0x50 size=2 count=1 kind=int signed=0
+field from off=0x52 size=2 count=1 kind=int signed=0
+field kind off=0x54 size=1 count=1 kind=int signed=0
+field pad55 off=0x55 size=1 count=3 kind=int signed=1
+record IconFile size=0x24 header=ico2/fumi/include/mcard.h
+field name off=0x0 size=1 count=32 kind=int signed=1
+field size off=0x20 size=4 count=1 kind=int signed=1
+record IdlingDef size=0xC header=ico2/fumi/include/commonact.h
+field motion off=0x0 size=4 count=3 kind=int signed=1
+record PackKind size=0x24 header=ico2/fumi/include/cdvd.h
+field ext off=0x0 size=1 count=32 kind=int signed=1
+field func off=0x20 size=4 count=1 kind=funcword
+record JimakuFileName size=0x20 header=ico2/fumi/include/jimaku.h
+field path off=0x0 size=1 count=32 kind=int signed=1
+record LookTarget size=0xC header=ico2/fumi/include/act-game.h
+field kind off=0x0 size=4 count=3 kind=int signed=1
+record MotionDef size=0x190 header=ico2/sugipon/include/motionOrientManager.h
+field eff[0].t off=0x0 size=4 count=1 kind=float
+field eff[0].no off=0x4 size=4 count=1 kind=int signed=1
+field eff[1].t off=0x8 size=4 count=1 kind=float
+field eff[1].no off=0xC size=4 count=1 kind=int signed=1
+field eff[2].t off=0x10 size=4 count=1 kind=float
+field eff[2].no off=0x14 size=4 count=1 kind=int signed=1
+field eff[3].t off=0x18 size=4 count=1 kind=float
+field eff[3].no off=0x1C size=4 count=1 kind=int signed=1
+field eff[4].t off=0x20 size=4 count=1 kind=float
+field eff[4].no off=0x24 size=4 count=1 kind=int signed=1
+field eff[5].t off=0x28 size=4 count=1 kind=float
+field eff[5].no off=0x2C size=4 count=1 kind=int signed=1
+field eff[6].t off=0x30 size=4 count=1 kind=float
+field eff[6].no off=0x34 size=4 count=1 kind=int signed=1
+field eff[7].t off=0x38 size=4 count=1 kind=float
+field eff[7].no off=0x3C size=4 count=1 kind=int signed=1
+field eff[8].t off=0x40 size=4 count=1 kind=float
+field eff[8].no off=0x44 size=4 count=1 kind=int signed=1
+field eff[9].t off=0x48 size=4 count=1 kind=float
+field eff[9].no off=0x4C size=4 count=1 kind=int signed=1
+field eff[10].t off=0x50 size=4 count=1 kind=float
+field eff[10].no off=0x54 size=4 count=1 kind=int signed=1
+field eff[11].t off=0x58 size=4 count=1 kind=float
+field eff[11].no off=0x5C size=4 count=1 kind=int signed=1
+field se[0].t off=0x60 size=4 count=1 kind=float
+field se[0].no off=0x64 size=4 count=1 kind=int signed=1
+field se[1].t off=0x68 size=4 count=1 kind=float
+field se[1].no off=0x6C size=4 count=1 kind=int signed=1
+field se[2].t off=0x70 size=4 count=1 kind=float
+field se[2].no off=0x74 size=4 count=1 kind=int signed=1
+field se[3].t off=0x78 size=4 count=1 kind=float
+field se[3].no off=0x7C size=4 count=1 kind=int signed=1
+field se[4].t off=0x80 size=4 count=1 kind=float
+field se[4].no off=0x84 size=4 count=1 kind=int signed=1
+field se[5].t off=0x88 size=4 count=1 kind=float
+field se[5].no off=0x8C size=4 count=1 kind=int signed=1
+field se[6].t off=0x90 size=4 count=1 kind=float
+field se[6].no off=0x94 size=4 count=1 kind=int signed=1
+field se[7].t off=0x98 size=4 count=1 kind=float
+field se[7].no off=0x9C size=4 count=1 kind=int signed=1
+field se[8].t off=0xA0 size=4 count=1 kind=float
+field se[8].no off=0xA4 size=4 count=1 kind=int signed=1
+field se[9].t off=0xA8 size=4 count=1 kind=float
+field se[9].no off=0xAC size=4 count=1 kind=int signed=1
+field se[10].t off=0xB0 size=4 count=1 kind=float
+field se[10].no off=0xB4 size=4 count=1 kind=int signed=1
+field se[11].t off=0xB8 size=4 count=1 kind=float
+field se[11].no off=0xBC size=4 count=1 kind=int signed=1
+field name off=0xC0 size=1 count=48 kind=int signed=1
+field vib[0].t off=0xF0 size=4 count=1 kind=float
+field vib[0].no off=0xF4 size=4 count=1 kind=int signed=1
+field vib[1].t off=0xF8 size=4 count=1 kind=float
+field vib[1].no off=0xFC size=4 count=1 kind=int signed=1
+field word100 off=0x100 size=4 count=1 kind=int signed=1
+field cylinder off=0x104 size=4 count=1 kind=int signed=1
+field adjustAngle off=0x108 size=4 count=1 kind=int signed=1
+field slopeIK off=0x10C size=4 count=1 kind=int signed=1
+field gravity off=0x110 size=4 count=1 kind=int signed=1
+field noStepSearch off=0x114 size=4 count=1 kind=int signed=1
+field rootUpdateMode off=0x118 size=4 count=1 kind=int signed=1
+field stepNode off=0x11C size=4 count=1 kind=int signed=1
+field landFrame off=0x120 size=4 count=1 kind=float
+field rootOffset off=0x124 size=4 count=3 kind=float
+field wallFeedback off=0x130 size=4 count=1 kind=int signed=1
+field area off=0x134 size=4 count=1 kind=int signed=1
+field weaponFrame off=0x138 size=4 count=1 kind=float
+field shiftStart off=0x13C size=4 count=1 kind=int signed=1
+field shiftLength off=0x140 size=4 count=1 kind=int signed=1
+field trigger2End off=0x144 size=4 count=1 kind=int signed=1
+field trigger2Start off=0x148 size=4 count=1 kind=int signed=1
+field triggerEnd off=0x14C size=4 count=1 kind=int signed=1
+field triggerStart off=0x150 size=4 count=1 kind=int signed=1
+field clipRadius off=0x154 size=4 count=1 kind=float
+field playSpeedRatio off=0x158 size=4 count=1 kind=float
+field blendKind off=0x15C size=4 count=1 kind=int signed=1
+field fieldWall off=0x160 size=4 count=1 kind=int signed=1
+field playMode off=0x164 size=4 count=1 kind=int signed=1
+field lookIK off=0x168 size=4 count=1 kind=int signed=1
+field handTurnIK off=0x16C size=4 count=1 kind=int signed=1
+field faceRotRatio off=0x170 size=4 count=1 kind=float
+field rate0 off=0x174 size=4 count=1 kind=float
+field rate1 off=0x178 size=4 count=1 kind=float
+field girlDirFrames off=0x17C size=2 count=1 kind=int signed=1
+field dirFrames off=0x17E size=2 count=1 kind=int signed=1
+field priInputBegin off=0x180 size=2 count=1 kind=int signed=1
+field priInputEnd off=0x182 size=2 count=1 kind=int signed=1
+field modeBits off=0x184 size=4 count=1 kind=bitword
+bitfield modeBits.bits.fuchiMode bit=24 width=2
+bitfield modeBits.bits.dirAdjust bit=28 width=2
+bitfield modeBits.bits.handIK bit=30 width=2
+field flags off=0x188 size=4 count=1 kind=bitword
+bitfield flags.bits.carried bit=1 width=1
+bitfield flags.bits.dropNode4Turn bit=9 width=1
+bitfield flags.bits.shiftInside bit=12 width=1
+bitfield flags.bits.parallel bit=13 width=1
+bitfield flags.bits.chainHang bit=14 width=1
+bitfield flags.bits.jumpHit bit=16 width=1
+bitfield flags.bits.adjustRoot bit=21 width=1
+bitfield flags.bits.intr10Live bit=25 width=1
+bitfield flags.bits.stairStep bit=26 width=1
+bitfield flags.bits.avgWallPlane bit=27 width=1
+bitfield flags.bits.loop bit=28 width=1
+bitfield flags.bits.clothPlane bit=29 width=1
+field flags2 off=0x18C size=4 count=1 kind=bitword
+bitfield flags2.bits.weaponSwing bit=5 width=1
+bitfield flags2.bits.chainIkRate bit=6 width=1
+record HandModeRow size=0x10 header=ico2/sugipon/include/handManager.h
+field dir off=0x0 size=4 count=3 kind=float
+field mode off=0xC size=4 count=1 kind=int signed=1
+record MotOriName size=0x20 header=ico2/sugipon/include/motionOrientManager.h
+field s off=0x0 size=1 count=32 kind=int signed=1
+record int size=0x4 header=ico2/fumi/include/act-parallel-control.h
+field - off=0x0 size=4 count=1 kind=int signed=1
+record ObjLight size=0x10 header=ico2/seki/include/Light.h
+field col off=0x0 size=4 count=3 kind=float
+field range off=0xC size=4 count=1 kind=float
+record BecPair size=0x8 header=ico2/fumi/include/commonact.h
+field mot off=0x0 size=4 count=1 kind=int signed=1
+field req off=0x4 size=4 count=1 kind=int signed=1
+record EscapeRange size=0x8 header=ico2/fumi/include/girl_act.h
+field lo off=0x0 size=4 count=1 kind=int signed=1
+field hi off=0x4 size=4 count=1 kind=int signed=1
+record SeEnvDef size=0x1C header=ico2/fumi/include/s_init.h
+field se off=0x0 size=4 count=1 kind=int signed=1
+field proc off=0x4 size=4 count=1 kind=funcword
+field volumeRate off=0x8 size=4 count=1 kind=float
+field maxVolumeRange off=0xC size=4 count=1 kind=float
+field attenuator off=0x10 size=4 count=1 kind=float
+field volumeLength off=0x14 size=4 count=1 kind=float
+field ownPos off=0x18 size=4 count=1 kind=bits bit=0 width=1 signed=0
+field levelHeight off=0x18 size=4 count=1 kind=bits bit=1 width=1 signed=0
+field stereo off=0x18 size=4 count=1 kind=bits bit=2 width=1 signed=0
+field maxVolumeType off=0x18 size=4 count=1 kind=bits bit=3 width=1 signed=0
+record SeDef size=0x3C header=ico2/fumi/include/s_init.h
+field name off=0x0 size=1 count=32 kind=int signed=1
+field kind off=0x20 size=4 count=1 kind=int signed=1
+field volume off=0x24 size=4 count=1 kind=float
+field mail off=0x28 size=4 count=1 kind=int signed=1
+field check off=0x2C size=4 count=1 kind=funcword
+field range off=0x30 size=4 count=1 kind=int signed=1
+field mailArg off=0x34 size=2 count=1 kind=int signed=0
+field shock off=0x36 size=2 count=1 kind=int signed=0
+field mailMode off=0x38 size=4 count=1 kind=bits bit=0 width=4 signed=0
+field playMode off=0x38 size=4 count=1 kind=bits bit=4 width=2 signed=0
+field shockStop off=0x38 size=4 count=1 kind=bits bit=6 width=1 signed=0
+field audible off=0x38 size=4 count=1 kind=bits bit=7 width=1 signed=0
+field procRan off=0x38 size=4 count=1 kind=bits bit=8 width=1 signed=0
+field waitSkip off=0x38 size=4 count=1 kind=bits bit=9 width=1 signed=0
+record SeBank size=0x64 header=ico2/fumi/include/s_init.h
+field hdPath off=0x0 size=1 count=48 kind=int signed=1
+field bdPath off=0x30 size=1 count=48 kind=int signed=1
+field loaded off=0x60 size=4 count=1 kind=bits bit=0 width=1 signed=0
+record SeKind size=0x8 header=ico2/fumi/include/s_init.h
+field num off=0x0 size=2 count=1 kind=int signed=1
+field prog off=0x2 size=2 count=1 kind=int signed=1
+field tone off=0x4 size=2 count=1 kind=int signed=1
+field idx off=0x6 size=2 count=1 kind=int signed=1
+record PadActDef size=0x8 header=ico2/fumi/include/pad.h
+field word0 off=0x0 size=4 count=1 kind=int signed=1
+field voice off=0x4 size=2 count=1 kind=int signed=1
+field life off=0x6 size=2 count=1 kind=int signed=1
+record StgPre size=0x194 header=ico2/common/include/typedef.h
+field key off=0x0 size=1 count=32 kind=int signed=1
+field name off=0x20 size=1 count=32 kind=int signed=1
+field key2 off=0x40 size=1 count=32 kind=int signed=1
+field fog off=0x60 size=4 count=8 kind=float
+field dataFile off=0x80 size=1 count=32 kind=int signed=1
+field ent off=0xA0 size=2 count=16 kind=int signed=1
+field windDir off=0xC0 size=4 count=3 kind=float
+field windPos off=0xCC size=4 count=3 kind=float
+field bgCol off=0xD8 size=4 count=3 kind=float
+field ambientCol off=0xE4 size=4 count=3 kind=float
+field flatLightCol off=0xF0 size=4 count=3 kind=float
+field flatLightDir off=0xFC size=4 count=3 kind=float
+field seSegFirst off=0x108 size=4 count=1 kind=int signed=1
+field seSegLast off=0x10C size=4 count=1 kind=int signed=1
+field seEnvFirst off=0x110 size=4 count=1 kind=int signed=1
+field seEnvLast off=0x114 size=4 count=1 kind=int signed=1
+field camSetId off=0x118 size=4 count=1 kind=int signed=1
+field word11C off=0x11C size=4 count=1 kind=int signed=1
+field animLayoutFirst off=0x120 size=4 count=1 kind=int signed=1
+field animLayoutLast off=0x124 size=4 count=1 kind=int signed=1
+field labelTop off=0x128 size=4 count=1 kind=int signed=1
+field labelEnd off=0x12C size=4 count=1 kind=int signed=1
+field layoutFirst off=0x130 size=4 count=1 kind=int signed=1
+field layoutLast off=0x134 size=4 count=1 kind=int signed=1
+field mdl off=0x138 size=4 count=4 kind=int signed=1
+field word148 off=0x148 size=4 count=1 kind=int signed=1
+field mot off=0x14C size=4 count=1 kind=int signed=1
+field endproc off=0x150 size=4 count=1 kind=funcword
+field initproc off=0x154 size=4 count=1 kind=funcword
+field windAmp off=0x158 size=4 count=1 kind=float
+field windSpeed off=0x15C size=4 count=1 kind=float
+field word160 off=0x160 size=4 count=1 kind=int signed=1
+field wayGroupEnd off=0x164 size=4 count=1 kind=int signed=1
+field seSegData1 off=0x168 size=4 count=1 kind=int signed=1
+field seSegData2 off=0x16C size=4 count=1 kind=int signed=1
+field wayGroupStart off=0x170 size=4 count=1 kind=int signed=1
+field word174 off=0x174 size=4 count=1 kind=int signed=1
+field word178 off=0x178 size=4 count=1 kind=int signed=1
+field word17C off=0x17C size=4 count=1 kind=int signed=1
+field ledgeRange off=0x180 size=4 count=1 kind=float
+field handCameraRate off=0x184 size=4 count=1 kind=float
+field shadowDepth off=0x188 size=2 count=1 kind=int signed=1
+field pad18A off=0x18A size=1 count=2 kind=int signed=0
+field reverbDepth off=0x18C size=4 count=1 kind=bits bit=0 width=16 signed=0
+field kidnapSeconds off=0x18C size=4 count=1 kind=bits bit=16 width=9 signed=0
+field mpegNo off=0x18C size=4 count=1 kind=bits bit=25 width=6 signed=0
+field attrTop off=0x18C size=4 count=1 kind=bits bit=31 width=1 signed=0
+field flag0 off=0x190 size=4 count=1 kind=bits bit=0 width=1 signed=0
+field flag1 off=0x190 size=4 count=1 kind=bits bit=1 width=1 signed=0
+field flag2 off=0x190 size=4 count=1 kind=bits bit=2 width=1 signed=0
+field flag3 off=0x190 size=4 count=1 kind=bits bit=3 width=1 signed=0
+record StgObjDat size=0x8 header=ico2/seki/include/StageAnimation.h
+field kind off=0x0 size=4 count=1 kind=int signed=1
+field aux off=0x4 size=4 count=1 kind=int signed=1
+record StageAnimDef size=0x5C header=ico2/seki/include/StageAnimation.h
+field path off=0x0 size=1 count=64 kind=int signed=1
+field objFirst off=0x40 size=4 count=1 kind=int signed=1
+field objLast off=0x44 size=4 count=1 kind=int signed=1
+field group off=0x48 size=4 count=1 kind=int signed=1
+field cut off=0x4C size=1 count=1 kind=int signed=0
+field pad4D off=0x4D size=1 count=3 kind=int signed=1
+field loop off=0x50 size=4 count=1 kind=int signed=1
+field data off=0x54 size=4 count=1 kind=dataword
+field no off=0x58 size=4 count=1 kind=int signed=1
+record StreamMotionFile size=0x30 header=ico2/sugipon/include/streamMotionManager.h
+field path off=0x0 size=1 count=48 kind=int signed=1
+record MotOriSub size=0x10 header=ico2/sugipon/include/motionOrientManager.h
+field motion off=0x0 size=4 count=1 kind=int signed=1
+field node off=0x4 size=4 count=1 kind=int signed=1
+field rate off=0x8 size=4 count=1 kind=float
+field frames off=0xC size=4 count=1 kind=int signed=1
+record EnemyDef size=0x1C header=ico2/sugipon/include/enemy.h
+field model off=0x0 size=4 count=1 kind=int signed=1
+field particle off=0x4 size=4 count=1 kind=int signed=1
+field life off=0x8 size=4 count=1 kind=float
+field float0C off=0xC size=4 count=1 kind=float
+field scale off=0x10 size=4 count=1 kind=float
+field dodge off=0x14 size=4 count=1 kind=float
+field paraIndex off=0x18 size=4 count=1 kind=bits bit=0 width=8 signed=1
+field flyType off=0x18 size=4 count=1 kind=bits bit=8 width=2 signed=0
+field battleType off=0x18 size=4 count=1 kind=bits bit=10 width=2 signed=0
+record EnemyMdlRec size=0x28 header=ico2/common/include/sceneManager.h
+field name off=0x0 size=1 count=32 kind=int signed=1
+field first off=0x20 size=4 count=1 kind=int signed=1
+field last off=0x24 size=4 count=1 kind=int signed=1
+record int size=0x4 header=ico2/common/include/sceneManager.h
+field - off=0x0 size=4 count=1 kind=int signed=1
+record EnemyKindRange size=0x8 header=ico2/sugipon/include/enemy.h
+field first off=0x0 size=4 count=1 kind=int signed=1
+field last off=0x4 size=4 count=1 kind=int signed=1
+record int size=0x4 header=ico2/sugipon/include/enemy.h
+field - off=0x0 size=4 count=1 kind=int signed=1
+record LayoutClothDef size=0x68 header=ico2/sugipon/include/attackCheckBoundary.h
+field name off=0x0 size=1 count=32 kind=int signed=1
+field pt[0] off=0x20 size=4 count=3 kind=float
+field pt[1] off=0x2C size=4 count=3 kind=float
+field pt[2] off=0x38 size=4 count=3 kind=float
+field pt[3] off=0x44 size=4 count=3 kind=float
+field kind off=0x50 size=4 count=1 kind=int signed=1
+field attr off=0x54 size=4 count=1 kind=int signed=0
+field rows off=0x58 size=4 count=1 kind=int signed=1
+field count off=0x5C size=4 count=1 kind=int signed=1
+field length off=0x60 size=4 count=1 kind=float
+field weight off=0x64 size=4 count=1 kind=float
+record VibCondEntry size=0xC header=ico2/sugipon/include/frameDependSequence.h
+field kind off=0x0 size=4 count=1 kind=int signed=1
+field cond off=0x4 size=4 count=1 kind=int signed=1
+field actId off=0x8 size=4 count=1 kind=int signed=1
+record EffEntry size=0x24 header=ico2/sugipon/include/frameDependSequence.h
+field x off=0x0 size=4 count=1 kind=float
+field y off=0x4 size=4 count=1 kind=float
+field z off=0x8 size=4 count=1 kind=float
+field rx off=0xC size=4 count=1 kind=float
+field ry off=0x10 size=4 count=1 kind=float
+field rz off=0x14 size=4 count=1 kind=float
+field eff off=0x18 size=4 count=1 kind=int signed=1
+field node off=0x1C size=4 count=1 kind=int signed=1
+field flags off=0x20 size=4 count=1 kind=int signed=0
+record int size=0x4 header=ico2/sugipon/include/frameDependSequence.h
+field - off=0x0 size=4 count=1 kind=int signed=1
+record MotOriLimit size=0x30 header=ico2/sugipon/include/motionOrientManager.h
+field lo.x off=0x0 size=4 count=1 kind=float
+field lo.y off=0x4 size=4 count=1 kind=float
+field lo.z off=0x8 size=4 count=1 kind=float
+field mid.x off=0xC size=4 count=1 kind=float
+field mid.y off=0x10 size=4 count=1 kind=float
+field mid.z off=0x14 size=4 count=1 kind=float
+field hi.x off=0x18 size=4 count=1 kind=float
+field hi.y off=0x1C size=4 count=1 kind=float
+field hi.z off=0x20 size=4 count=1 kind=float
+field node off=0x24 size=4 count=1 kind=int signed=1
+field float28 off=0x28 size=4 count=1 kind=float
+field word2C off=0x2C size=4 count=1 kind=int signed=1
+record SECondEntry size=0xC header=ico2/sugipon/include/frameDependSequence.h
+field kind off=0x0 size=4 count=1 kind=int signed=1
+field cond off=0x4 size=4 count=1 kind=int signed=1
+field se off=0x8 size=4 count=1 kind=int signed=1
+record SERandEntry size=0x8 header=ico2/sugipon/include/frameDependSequence.h
+field se off=0x0 size=4 count=1 kind=int signed=1
+field rate off=0x4 size=4 count=1 kind=float
+record int size=0x4 header=ico2/omori/include/objact.h
+field - off=0x0 size=4 count=1 kind=int signed=1
+record ObjActMailEnt size=0x8 header=ico2/omori/include/objact.h
+field labelId off=0x0 size=4 count=1 kind=int signed=1
+field triggerNo off=0x4 size=4 count=1 kind=int signed=1
+record MotOriParallelEnt size=0x14 header=ico2/sugipon/include/motionOrientManager.h
+field id off=0x0 size=4 count=1 kind=int signed=1
+field kind off=0x4 size=4 count=1 kind=int signed=1
+field nextId off=0x8 size=4 count=1 kind=int signed=1
+field shiftFrom off=0xC size=4 count=1 kind=int signed=1
+field shiftMode off=0x10 size=4 count=1 kind=int signed=1
+record ParticleEffectFile size=0x50 header=ico2/sugipon/include/particleEffect.h
+field name off=0x0 size=1 count=32 kind=int signed=1
+field path off=0x20 size=1 count=48 kind=int signed=1
+record SpiderKindRec size=0x20 header=ico2/sugipon/include/spider.h
+field jump off=0x0 size=4 count=3 kind=float
+field layout off=0xC size=4 count=1 kind=int signed=1
+field count off=0x10 size=4 count=1 kind=int signed=1
+field targetGirl off=0x14 size=4 count=1 kind=int signed=1
+field upZ off=0x18 size=4 count=1 kind=float
+field attack off=0x1C size=4 count=1 kind=float
+record TexRec size=0x30 header=ico2/common/include/charFileManager.h
+field path off=0x0 size=1 count=48 kind=int signed=1
+record WaySrcGrp size=0x3C header=ico2/fumi/include/way_tool.h
+field name off=0x0 size=1 count=32 kind=int signed=1
+field firstPoint off=0x20 size=4 count=1 kind=int signed=1
+field lastPoint off=0x24 size=4 count=1 kind=int signed=1
+field closed off=0x28 size=4 count=1 kind=int signed=1
+field bridge off=0x2C size=4 count=1 kind=int signed=1
+field bridgeEnd off=0x30 size=4 count=2 kind=int signed=1
+field active off=0x38 size=4 count=1 kind=int signed=1

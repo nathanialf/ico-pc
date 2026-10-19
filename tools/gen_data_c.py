@@ -26,6 +26,19 @@ One member per run (MEMBER is the name in the schema):
       port/data/CMakeLists.txt writes the loader test's reference copy of
       each member this way (tables_test).
 
+  --version SLUG --c MEMBER --symbol-map [--elf ELF] --out F.c
+      the same for another target of config/regions.txt (jpn): its member
+      table, schema and symbol lists are config/data_members.<slug>.txt,
+      config/data_schema.<slug>.txt and config/symbol_addrs.<slug>*.txt, its
+      ELF baserom/<slug>/baseelf.elf. The host keeps one layout, PAL's (the
+      port's headers), so the C is written in the PAL record's form: each
+      field's value is read from the target's bytes where
+      config/ee_layout.<slug>.txt places the field of that name, a field the
+      target lacks takes the schema's `default` row, and the bit words of
+      MotionDef are permuted by the same map the loader uses
+      (tools/gen_ee_layout.py, config/motion_bits.<slug>.txt). This is the
+      reference of the loader's second descriptor set (tables_loader_jpn).
+
 A symbol the member defines in .rodata is written `const`, as the developers
 compiled it, unless its header declares it `extern` without const: a table
 the game writes (the EE has no page protection, so those stores worked on
@@ -40,6 +53,11 @@ function), arrays, nested structs and bit-fields, laid out by the EE's rules (4-
 pointers and ints, 8-byte long long and double, bit-fields from the low bit
 of their declared type's unit). A base type with a trailing [N] is an array
 element (char[32]: the C defines `char name[count][32]`).
+
+The port's headers carry no `#ifdef VERSION_<SLUG>` block: the converter
+(tools/region_blocks.py) removes them at each upstream merge, so strip_c,
+which drops every `#` line, sees one layout. Upstream's headers, read from
+git by tools/gen_ee_layout.py, go through version_lines first.
 """
 
 import argparse
@@ -51,9 +69,39 @@ from pathlib import Path
 from elftools.elf.elffile import ELFFile
 
 ROOT = Path(__file__).resolve().parent.parent
-SCHEMA = ROOT / "config/data_schema.pal.txt"
-TABLE = ROOT / "config/data_members.pal.txt"
-BASE_ELF = ROOT / "baserom/pal/baseelf.elf"
+REGIONS = ROOT / "config/regions.txt"
+
+
+def regions():
+    """config/regions.txt's rows in order: dicts of slug, macro, disc_id,
+    boot_elf and product (the rest of the line)."""
+    out = []
+    for n, line in enumerate(REGIONS.read_text().splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        f = line.split(None, 4)
+        if len(f) != 5:
+            fail(f"{REGIONS}:{n}: expected 'slug macro disc-id boot-elf product name'")
+        out.append(dict(slug=f[0], macro=f[1], disc_id=f[2], boot_elf=f[3], product=f[4].strip()))
+    if not out or out[0]["slug"] != "pal":
+        fail(f"{REGIONS}: row 0 must be pal (the host layout)")
+    return out
+
+
+def set_version(version):
+    """Point the module's per-target paths at a slug of config/regions.txt.
+    PAL's files keep their names (the host layout's own); every other
+    target's carry its slug."""
+    global VERSION, SCHEMA, TABLE, BASE_ELF, SYMBOL_LISTS
+    VERSION = version
+    SCHEMA = ROOT / f"config/data_schema.{version}.txt"
+    TABLE = ROOT / f"config/data_members.{version}.txt"
+    BASE_ELF = ROOT / f"baserom/{version}/baseelf.elf"
+    SYMBOL_LISTS = [ROOT / f"config/symbol_addrs.{version}.txt",
+                    ROOT / f"config/symbol_addrs.{version}.data.txt"]
+
+
+set_version("pal")
 
 
 def fail(msg):
@@ -62,8 +110,10 @@ def fail(msg):
 
 # ----------------------------------------------------------------- table ----
 
-def parse_table(path=TABLE):
-    """config/data_members.pal.txt's rows: one per (member, section)."""
+def parse_table(path=None):
+    """The member table's rows (config/data_members.<slug>.txt): one per
+    (member, section)."""
+    path = TABLE if path is None else path
     rows = []
     for n, line in enumerate(path.read_text().splitlines(), 1):
         line = line.split("#", 1)[0].strip()
@@ -97,12 +147,14 @@ def rom_bytes(elf, lo, hi, section):
 
 # ---------------------------------------------------------------- schema ----
 
-def parse_schema(path=SCHEMA):
-    """The schema's rows, by member: one row per section the member's C defines."""
+def parse_schema(path=None):
+    """The schema's rows, by member: one row per section the member's C defines.
+    `default` rows (parse_defaults) are skipped."""
+    path = SCHEMA if path is None else path
     rows = {}
     for n, line in enumerate(path.read_text().splitlines(), 1):
         f = line.split("#", 1)[0].split()
-        if not f:
+        if not f or f[0] == "default":
             continue
         if len(f) not in (6, 7) or f[1] not in ("data", "rodata", "sdata"):
             fail(f"{path}:{n}: expected '<member> <section> <type> <header> <count> <symbols> [hex=... | count-of=...]'")
@@ -129,6 +181,23 @@ def parse_schema(path=SCHEMA):
             fail(f"{path}:{n}: {f[0]} has a second .{f[1]} row")
         rows.setdefault(f[0], []).append(r)
     return rows
+
+
+def parse_defaults(path=None):
+    """The schema's `default <member> <field>=<value>` rows: the value a field
+    of the host (PAL) record takes when the target's record has no field of
+    that name. {(member, field): value text}."""
+    path = SCHEMA if path is None else path
+    out = {}
+    for n, line in enumerate(path.read_text().splitlines(), 1):
+        f = line.split("#", 1)[0].split()
+        if not f or f[0] != "default":
+            continue
+        if len(f) != 3 or "=" not in f[2]:
+            fail(f"{path}:{n}: expected 'default <member> <field>=<value>'")
+        field, value = f[2].split("=", 1)
+        out[(f[1], field)] = value
+    return out
 
 
 def member_rows(name):
@@ -189,7 +258,45 @@ def c_base(name):
     return name.replace("_", " ")
 
 
+_DIRECTIVE = re.compile(r"\s*#\s*(ifdef|ifndef|if|else|endif)\b\s*(\S*)")
+
+
+def version_lines(text, version):
+    """text with its #ifdef/#ifndef VERSION_<SLUG> blocks resolved for the
+    target `version` (a slug of config/regions.txt; pal takes every #else
+    arm): the arm it compiles is kept, the other arm and the directives go.
+    Other conditionals are left for strip_c. Adopted from upstream's
+    tools/gen_data_c.py, with the target an argument (the port compiles no
+    VERSION_ macro)."""
+    out = []
+    stack = []  # (is a VERSION_ block, this arm is live, an arm was taken)
+    want = f"VERSION_{version.upper()}"
+    for line in text.splitlines():
+        m = _DIRECTIVE.match(line)
+        live = all(f[1] for f in stack)
+        if m:
+            kw, arg = m.groups()
+            if kw in ("ifdef", "ifndef") and arg.startswith("VERSION_"):
+                taken = (arg == want) == (kw == "ifdef")
+                stack.append((True, taken, taken))
+                continue
+            if kw in ("if", "ifdef", "ifndef"):
+                stack.append((False, True, True))
+            elif kw == "else" and stack and stack[-1][0]:
+                stack[-1] = (True, not stack[-1][2], True)
+                continue
+            elif kw == "endif" and stack:
+                if stack.pop()[0]:
+                    continue
+        if live:
+            out.append(line)
+    return "\n".join(out)
+
+
 def strip_c(text):
+    """text without comments and preprocessor lines. The port's headers hold
+    no VERSION_ block (the converter removes them); a header read from
+    upstream goes through version_lines first."""
     text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
     text = re.sub(r"//[^\n]*", " ", text)
     return "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
@@ -200,9 +307,14 @@ def tokenize(text):
 
 
 class Header:
-    def __init__(self, path):
+    def __init__(self, path, text=None):
+        """The header at path in the tree, or (text given) that text, read as
+        latin-1 under the name path (tools/gen_ee_layout.py reads upstream's
+        headers from git)."""
         self.path = path
-        self.toks = tokenize(strip_c((ROOT / path).read_text(encoding="latin-1")))
+        if text is None:
+            text = (ROOT / path).read_text(encoding="latin-1")
+        self.toks = tokenize(strip_c(text))
         self.cache = {}
 
     def typedef(self, name):
@@ -525,14 +637,16 @@ class Layout:
         return None, f"several globals at 0x{addr:08X}: {', '.join(names)}"
 
 
-SYMBOL_LISTS = [ROOT / "config/symbol_addrs.pal.txt", ROOT / "config/symbol_addrs.pal.data.txt"]
-
 # Globals a data member points at that neither symbol list names, at the
-# address the period layout link gave them. Each entry belongs in
-# config/symbol_addrs.pal.data.txt (not yet listed there).
-SUPPLEMENT = [
-    ("scpDummyGObj", 0x0063AA20, False),  # ico2/script/src/script.c .sdata
-]
+# address the period layout link gave them, per target. Each PAL entry
+# belongs in config/symbol_addrs.pal.data.txt (not yet listed there); a
+# target whose lists come from its own link's symbol table
+# (tools/gen_symbol_addrs.py) needs none.
+SUPPLEMENT = {
+    "pal": [
+        ("scpDummyGObj", 0x0063AA20, False),  # ico2/script/src/script.c .sdata
+    ],
+}
 
 SPLAT_LINE = re.compile(r"\s*([A-Za-z_]\w*)\s*=\s*(0x[0-9A-Fa-f]+)\s*;(.*)")
 
@@ -541,8 +655,8 @@ class SymbolMap(Layout):
     """The layout link's view of addresses, built without the period link:
     every name the committed symbol lists (splat's `name = 0xADDR; // type:func`
     lines; a line marked can_be_referenced:False is skipped), the data
-    members' own symbols (config/data_members.pal.txt), the SUPPLEMENT above
-    and any extra list place at a retail address. The retail ELF is stripped
+    members' own symbols (config/data_members.<slug>.txt), the target's
+    SUPPLEMENT entries and any extra list place at a retail address. The retail ELF is stripped
     (no .symtab), so it has no symbol information of its own to read."""
 
     def __init__(self, extra=()):
@@ -556,7 +670,7 @@ class SymbolMap(Layout):
         for r in parse_table(TABLE):
             for name, off in r["syms"]:
                 self.add(name, r["lo"] + off, False)
-        for name, addr, func in SUPPLEMENT:
+        for name, addr, func in SUPPLEMENT.get(VERSION, ()):
             self.add(name, addr, func)
 
 
@@ -713,6 +827,65 @@ class Writer:
         fail(f"cannot write a value of kind {ty.kind} ({path})")
 
 
+class MappedWriter(Writer):
+    """A Writer of the host (PAL) record's form from another target's bytes:
+    each leaf of the PAL type is read where config/ee_layout.<slug>.txt puts
+    the field of that path (gen_ee_layout.record_map, the map the loader's
+    descriptor set is written from), a field the target lacks takes its
+    default, and a bit word is built by its bit map."""
+
+    def __init__(self, data, base, layout, hexf, pool, maps):
+        super().__init__(data, base, layout, hexf, pool)
+        self.maps = maps  # {host path: gen_ee_layout.Mapped}
+
+    def record(self, ty, rbase):
+        return self.mapped(ty, rbase, "", "")
+
+    def mapped(self, ty, rbase, path, lpath):
+        mp = self.maps.get(lpath)
+        if mp is not None:
+            if mp.how == "copy":
+                return self.value(ty, rbase + mp.src.ee_off, path, mp.src.bit)
+            if mp.how == "default":
+                if ty.kind == "float":
+                    return float_text(struct.pack("<f", float(mp.value)))
+                return int_text(int(mp.value, 0), ty, path in self.hexf)
+            src = self.data[rbase + mp.base:rbase + mp.base + mp.span]
+            word = 0
+            for i, b in enumerate(mp.bits):
+                if b is not None and src[b >> 3] >> (b & 7) & 1:
+                    word |= 1 << i
+            name, f, _, _ = ty.fields[0]
+            sub = f"{path}.{name}" if path else name
+            return "{" + int_text(word, f, sub in self.hexf) + "}"
+        if ty.kind == "struct" and not ty.union:
+            return "{" + ", ".join(self.mapped(f, rbase, f"{path}.{name}" if path else name,
+                                               f"{lpath}.{name}" if lpath else name)
+                                   for name, f, o, b in ty.fields) + "}"
+        if ty.kind == "array" and ty.elem.kind not in ("int", "float"):
+            return "{" + ", ".join(self.mapped(ty.elem, rbase, f"{path}[]", f"{lpath}[{i}]")
+                                   for i in range(ty.n)) + "}"
+        fail(f"{lpath or '(element)'}: no field of the host record's map")
+
+
+def target_maps(rows):
+    """{type: ({host path: Mapped}, the target's record size)} of the
+    member's record rows, for the current non-PAL VERSION."""
+    import gen_ee_layout as L
+    recs, _ = L.parse_layout(VERSION)
+    defaults, bits = parse_defaults(), L.parse_bits(VERSION)
+    out = {}
+    for s, _ in rows:
+        if s is None or s["count_of"] or s["type"] in out:
+            continue
+        ty = Header(s["header"]).typedef(s["type"])
+        hf = []
+        L.flatten(ty, "", 0, hf, words=True)
+        maps = L.record_map(VERSION, s["type"], s["member"], hf, recs, defaults, bits)
+        out[s["type"]] = ({m.host.path: m for m in maps}, recs[s["type"]].size)
+    return out
+
+
 def c_type(ty, spelled):
     """The C spelling of an element type the schema names: its base, the stars
     before the object's name and the bounds after its own."""
@@ -747,6 +920,7 @@ def declared_writable(header, name):
 
 def write_c(member, rows, datas, layout):
     pool = [(r["lo"], r["hi"], datas[r["section"]]) for _, r in rows]
+    tmaps = target_maps(rows) if VERSION != "pal" else {}
     defs, headers, funcs, objs = [], [], {}, {}
     arrays = {}
     for s, row in rows:
@@ -769,13 +943,24 @@ def write_c(member, rows, datas, layout):
         ty = Header(s["header"]).typedef(s["type"])
         start = start_of(s, row)
         n = s["count"] or 1
-        size = ty.size * n
+        stride = tmaps[s["type"]][1] if tmaps else ty.size
+        size = stride * n
         span = row["hi"] - row["lo"] - start
         if size > span or any(data[start + size:]):
-            fail(f"{member}: {n} x {s['type']} ({ty.size} B) = {size} B from offset {start}, "
+            fail(f"{member}: {n} x {s['type']} ({stride} B) = {size} B from offset {start}, "
                  f"but the ROM's .{row['section']} range holds {span} B" +
                  (" with nonzero bytes after it" if size <= span else ""))
-        w = Writer(data[start:], row["lo"] + start, layout, s["hex"], pool)
+        if tmaps:
+            w = MappedWriter(data[start:], row["lo"] + start, layout, s["hex"], pool,
+                             tmaps[s["type"]][0])
+
+            def one(off, w=w, ty=ty):
+                return w.record(ty, off)
+        else:
+            w = Writer(data[start:], row["lo"] + start, layout, s["hex"], pool)
+
+            def one(off, w=w, ty=ty):
+                return w.value(ty, off, '')
         bounds = [i for _, i in s["syms"]] + [n]
         tname, star, dims = c_type(ty, s["type"])
         for (name, first), last in zip(s["syms"], bounds[1:]):
@@ -784,11 +969,11 @@ def write_c(member, rows, datas, layout):
             const = ("const " if row["section"] == "rodata" and
                      not declared_writable(s["header"], name) else "")
             if s["count"] is None:
-                defs.append(f"{const}{tname} {star}{name}{dims} = {w.value(ty, 0, '')};")
+                defs.append(f"{const}{tname} {star}{name}{dims} = {one(0)};")
             else:
                 arrays[name] = last - first
                 defs.append(f"{const}{tname} {star}{name}[{last - first}]{dims} = {{")
-                defs.extend(f"    {w.value(ty, i * ty.size, '')}," for i in range(first, last))
+                defs.extend(f"    {one(i * stride)}," for i in range(first, last))
                 defs.append("};")
             defs.append("")
         if w.errors:
@@ -801,8 +986,10 @@ def write_c(member, rows, datas, layout):
         if s["header"] not in headers:
             headers.append(s["header"])
     out = [
-        f"/* {member}.o, written by tools/gen_data_c.py from baserom/pal/baseelf.elf",
-        " * and config/data_schema.pal.txt. Generated: do not commit. */",
+        f"/* {member}.o, written by tools/gen_data_c.py from {BASE_ELF.relative_to(ROOT).as_posix()}",
+        f" * and {SCHEMA.relative_to(ROOT).as_posix()}"
+        + ("" if VERSION == "pal" else f", in the PAL record's form (config/ee_layout.{VERSION}.txt)")
+        + ". Generated: do not commit. */",
         "",
     ]
     out += [f'#include "{(Path("../..") / h).as_posix()}"' for h in headers]
@@ -828,13 +1015,21 @@ def write_if_changed(path, text):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--c", required=True, metavar="MEMBER")
-    ap.add_argument("--elf", type=Path, default=BASE_ELF)
+    ap.add_argument("--version", default="pal", metavar="SLUG",
+                    help="the target, a slug of config/regions.txt (default pal)")
+    ap.add_argument("--elf", type=Path, default=None,
+                    help="the target's base ELF (default baserom/<slug>/baseelf.elf)")
     ap.add_argument("--symbol-map", action="store_true", required=True,
                     help="name pointers from the committed symbol lists")
     ap.add_argument("--extra-symbols", type=Path, action="append", default=[],
                     help="another splat-format list (repeatable)")
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
+    if a.version not in [r["slug"] for r in regions()]:
+        fail(f"{a.version} is not a slug of {REGIONS.relative_to(ROOT)}")
+    set_version(a.version)
+    if a.elf is None:
+        a.elf = BASE_ELF
     member = a.c
     rows = member_rows(member)
     a.out.parent.mkdir(parents=True, exist_ok=True)

@@ -575,7 +575,7 @@ static int loadElf(const char *path)
     }
     fclose(f);
     char err[256] = "";
-    int r = ico_tables_load_elf(buf, (size_t)n, err, sizeof err);
+    int r = ico_tables_load_elf(&ico_table_set_pal, buf, (size_t)n, err, sizeof err);
     free(buf);
     if (r != 0) {
         printf("the table loader refused %s: %s\n", path, err);

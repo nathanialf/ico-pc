@@ -169,9 +169,10 @@ mounts the image directly, the default of the headless build (`port/platform/mai
 
 The binary holds no disc data. The 73 data-only members the PS2 build compiled from the ELF are
 uninitialised arrays on the host, filled before the game starts from the boot ELF
-(`SCES_507.60`) on the player's disc: each record is decoded field by field into the host layout,
-pointer words resolved through an address registry, every row checked against a CRC first
-(`port/data/tables.h` (`ico_tables_load_vfs`); `CMakeLists.txt` (the data tables section)).
+(`SCES_507.60`, `SCPS_110.03`) on the player's disc: each record is decoded field by field into the
+host layout, PAL's for both discs, through that disc's descriptor set, pointer words resolved
+through an address registry, every row checked against a CRC first (`port/data/tables.h`
+(`ico_tables_load_vfs`); `CMakeLists.txt` (the data tables section)).
 [DATA.md](DATA.md) covers the disc, the archive and the tables.
 
 ## VU0

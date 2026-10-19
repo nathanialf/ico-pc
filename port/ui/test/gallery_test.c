@@ -264,7 +264,7 @@ int main(int argc, char **argv)
         printf("gallery_test: no base ELF (%s); skipped\n", argc > 1 ? argv[1] : "none given");
         return 77;
     }
-    if (ico_tables_load_elf(elf, size, err, sizeof(err)) != 0) {
+    if (ico_tables_load_elf(&ico_table_set_pal, elf, size, err, sizeof(err)) != 0) {
         printf("gallery_test: the table loader refused the ELF: %s\n", err);
         return 1;
     }

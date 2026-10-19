@@ -1,0 +1,51 @@
+# config/motion_bits.jpn.txt -- the bits of MotionDef's bit words (modeBits, flags,
+# flags2) that game code reads by shift or mask, where the Japanese disc
+# (SCPS-11003) keeps them. Written by tools/gen_ee_layout.py --bits from
+# upstream's sources: a VERSION_JPN block's reads are paired with its PAL arm's,
+# read for read; a read outside any block is the same bit on both discs. The named
+# bit-fields map by name (config/ee_layout.jpn.txt) and are not listed. The loader's
+# bit map (ICO_TF_BITMAP, tools/gen_data_desc.py) builds each PAL host word from these.
+#   MotionDef <pal word> pal=<first bit> width=<bits> jpn=<word>:<first bit>
+#   (pal=- declares a target bit no host bit takes; jpn=- a PAL bit written 0)
+upstream 3496140f784fdf2d0b10e30b3b3024046c586ce1
+# Blocks not paired read for read, checked by hand (UNPAIRED in the script):
+#   ico2/fumi/src/act-game.c:3124: masked by `mode &= 7` after: PAL bits 19-21, the row pal=19 width=3
+#   ico2/fumi/src/commonact.c:778: PAL flags bit 24 (byte 0x18F bit 0) = intr10Live, named on both
+#   ico2/fumi/src/commonact.c:2260: PAL flags bit 16 (MotRecJ's halfword 0x18E) = jumpHit, named on both
+#   ico2/fumi/src/commonact.c:3588: PAL flags bit 7 (CarryMot's byte 0x18C) = carried, named on both
+MotionDef modeBits pal=0 width=8 jpn=modeBits:0  # ico2/fumi/src/act-game.c:3129
+MotionDef modeBits pal=8 width=4 jpn=modeBits:8  # ico2/fumi/src/act-game.c:2628, ico2/fumi/src/act-game.c:2651, ico2/sugipon/src/handManager.c:237
+MotionDef modeBits pal=12 width=4 jpn=modeBits:12  # ico2/fumi/src/act-game.c:2621, ico2/fumi/src/act-game.c:2638, ico2/sugipon/src/handManager.c:234
+MotionDef modeBits pal=16 width=3 jpn=modeBits:19  # ico2/fumi/src/act-game.c:452
+MotionDef modeBits pal=19 width=3 jpn=modeBits:16  # ico2/fumi/src/act-env.c:693, ico2/fumi/src/act-env.c:1540, ico2/fumi/src/act-game.c:212, ico2/fumi/src/commonact.c:426
+MotionDef modeBits pal=22 width=2 jpn=modeBits:22  # ico2/fumi/src/girl_act.c:3731
+MotionDef modeBits pal=24 width=2 jpn=modeBits:26  # ico2/fumi/src/act-env.c:870
+MotionDef flags2 pal=0 width=1 jpn=flags2:1  # ico2/fumi/src/act-game.c:2813
+MotionDef flags2 pal=1 width=1 jpn=flags2:2  # ico2/fumi/src/commonact.c:3458
+MotionDef flags2 pal=2 width=1 jpn=flags2:3  # ico2/fumi/src/act-game.c:2299
+MotionDef flags2 pal=3 width=1 jpn=flags2:4  # ico2/fumi/src/act-game.c:2333
+MotionDef flags2 pal=5 width=1 jpn=flags2:6  # ico2/fumi/src/boyact.c:157
+MotionDef flags2 pal=6 width=1 jpn=flags2:7  # ico2/fumi/src/boyact.c:143
+MotionDef flags2 pal=7 width=1 jpn=flags2:8  # ico2/fumi/src/act-game.c:2691
+MotionDef flags2 pal=8 width=1 jpn=flags2:9  # ico2/fumi/src/boyact.c:94
+MotionDef flags pal=0 width=1 jpn=flags:8  # ico2/fumi/src/girl_act.c:3545
+MotionDef flags pal=1 width=1 jpn=flags:7  # ico2/fumi/src/act.c:594
+MotionDef flags pal=2 width=1 jpn=flags:6  # by hand: no reader in either tree; the same 7 motions (834, 839, 840, 848-851) set PAL bit 2 and JPN bit 6 in the two ELFs
+MotionDef flags pal=3 width=1 jpn=flags:5  # ico2/fumi/src/enemy_act.c:352, ico2/fumi/src/enemy_act.c:368
+MotionDef flags pal=4 width=1 jpn=flags:4  # ico2/fumi/src/commonact.c:918, ico2/fumi/src/commonact.c:4230
+MotionDef flags pal=5 width=1 jpn=flags:3  # ico2/fumi/src/commonact.c:322, ico2/fumi/src/commonact.c:333
+MotionDef flags pal=6 width=1 jpn=flags:2  # ico2/fumi/src/commonact.c:3313
+MotionDef flags pal=8 width=1 jpn=flags:0  # ico2/fumi/src/boyact.c:3432
+MotionDef flags pal=9 width=1 jpn=flags:10  # ico2/fumi/src/commonact.c:289
+MotionDef flags pal=10 width=1 jpn=flags:11  # ico2/fumi/src/act-game.c:1578
+MotionDef flags pal=12 width=1 jpn=flags:15  # ico2/fumi/src/act-way.c:111
+MotionDef flags pal=13 width=1 jpn=flags:19  # ico2/fumi/src/boyact.c:2316
+MotionDef flags pal=14 width=1 jpn=flags:18  # ico2/fumi/src/act-game.c:1733
+MotionDef flags pal=15 width=1 jpn=flags:17  # ico2/fumi/src/girl_act.c:1660
+MotionDef flags pal=18 width=1 jpn=flags:20  # ico2/fumi/src/act-game.c:199
+MotionDef flags pal=25 width=1 jpn=flags:24  # ico2/fumi/src/commonact.c:449
+MotionDef flags pal=26 width=1 jpn=flags:23  # ico2/fumi/src/act-game.c:1437
+MotionDef flags pal=28 width=1 jpn=flags:30  # ico2/fumi/src/act-env.c:699
+MotionDef flags pal=29 width=1 jpn=flags:31  # ico2/fumi/src/commonact.c:3858, ico2/fumi/src/girl_act.c:4009
+MotionDef flags pal=30 width=1 jpn=flags:22  # ico2/fumi/src/act-game.c:1428
+MotionDef flags pal=31 width=1 jpn=flags2:0  # ico2/fumi/src/act-game.c:1629

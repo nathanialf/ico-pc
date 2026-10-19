@@ -94,7 +94,10 @@ TOKEN_RE = re.compile(
 
 def strip_preprocessor(text):
     """Blank out preprocessor lines, keeping only the branches a host build
-    with DEFINED takes. Line numbers are kept."""
+    with DEFINED takes. Line numbers are kept. A non-ICO_ #ifdef is taken
+    (an include guard); upstream's #ifdef VERSION_<SLUG> blocks never reach
+    here: the converter (tools/region_blocks.py) removes them from ico2/ at
+    each merge, and the host has one layout, PAL's."""
     out = []
     stack = []  # (taking, any_taken)
     lines = text.split("\n")

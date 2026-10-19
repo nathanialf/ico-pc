@@ -15,9 +15,18 @@
  * refused, naming that table, and the tables are left as they were.
  *
  *   tables_test BASE_ELF [DISC_IMAGE]
+ *   tables_test --set SLUG BASE_ELF [DISC_IMAGE] [--other OTHER_ELF]
  *
- * With DISC_IMAGE the loader reads SCES_507.60 through the VFS, as ico_pc
- * does; without it (or when the image is absent) it reads BASE_ELF.
+ * With DISC_IMAGE the loader reads the set's boot ELF (SCES_507.60) through
+ * the VFS, as ico_pc does; without it (or when the image is absent) it reads
+ * BASE_ELF. --set jpn loads the Japanese disc's descriptor set and compares
+ * with the Japanese reference (ico_ref_jpn_<name>: gen_data_c.py --version
+ * jpn, the Japanese bytes in the PAL record's form by config/ee_layout.jpn.txt,
+ * with the defaults and the permuted bit words), each table's records past
+ * the disc's count zero; then OTHER_ELF (the PAL ELF) is refused by the
+ * Japanese set and BASE_ELF by the PAL set, each naming the disc it expects.
+ * It exits 77 (skipped) when BASE_ELF is absent or the reference was not
+ * built.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,11 +45,25 @@ typedef struct Sym {
     const char *ref;
 } Sym;
 
-static const Sym syms[] = {
+#define ICO_SYM_COUNT (sizeof(syms_pal) / sizeof(syms_pal[0]))
+
+static const Sym syms_pal[] = {
 #define X(name) {#name, name, ico_ref_##name},
     ICO_TABLE_SYMBOLS(X)
 #undef X
 };
+
+#ifdef ICO_TABLES_TEST_JPN
+#define X(name) extern char ico_ref_jpn_##name[];
+ICO_TABLE_SYMBOLS(X)
+#undef X
+
+static const Sym syms_jpn[] = {
+#define X(name) {#name, name, ico_ref_jpn_##name},
+    ICO_TABLE_SYMBOLS(X)
+#undef X
+};
+#endif
 
 static int failures;
 
@@ -75,26 +98,41 @@ static uint8_t *read_file(const char *path, size_t *size)
     return buf;
 }
 
-static const IcoTableRow *row_of(const char *symbol)
+static const IcoTableRow *row_of(const IcoTableSet *set, const char *symbol)
 {
     uint32_t i;
 
-    for (i = 0; i < ico_table_row_count; i++) {
-        if (ico_table_rows[i].symbol != NULL && strcmp(ico_table_rows[i].symbol, symbol) == 0) {
-            return &ico_table_rows[i];
+    for (i = 0; i < set->row_count; i++) {
+        if (set->rows[i].symbol != NULL && strcmp(set->rows[i].symbol, symbol) == 0) {
+            return &set->rows[i];
         }
     }
     return NULL;
 }
 
-/* Every table against its compiled reference; the number that differ. */
-static int compare_all(int verbose)
+/* The host bytes from `from` to the array's end are zero (the records a disc
+   with fewer than the host array holds leaves empty). */
+static int zero_tail(const IcoTableRow *row, const char *host, size_t from)
+{
+    size_t k, end = (size_t)row->host_count * row->record->host_size;
+
+    for (k = from; k < end; k++) {
+        if (host[k] != 0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* Every table of the set against its compiled reference; the number that
+   differ. */
+static int compare_all(const IcoTableSet *set, const Sym *syms, int verbose)
 {
     size_t i;
     int bad = 0;
 
-    for (i = 0; i < sizeof(syms) / sizeof(syms[0]); i++) {
-        const IcoTableRow *row = row_of(syms[i].name);
+    for (i = 0; i < ICO_SYM_COUNT; i++) {
+        const IcoTableRow *row = row_of(set, syms[i].name);
         size_t size;
         int same;
 
@@ -121,7 +159,13 @@ static int compare_all(int verbose)
         } else {
             size = (size_t)row->count * row->record->host_size;
             same = memcmp(syms[i].host, syms[i].ref, size) == 0;
-            if (!same && verbose) {
+            if (same && row->count < row->host_count && !zero_tail(row, syms[i].host, size)) {
+                if (verbose) {
+                    printf("     %s: records %u.. are not zero\n", syms[i].name,
+                           (unsigned)row->count);
+                }
+                same = 0;
+            } else if (!same && verbose) {
                 size_t k = 0;
 
                 while (syms[i].host[k] == syms[i].ref[k]) {
@@ -140,17 +184,133 @@ static int compare_all(int verbose)
     return bad;
 }
 
+/* The loader on a non-PAL set: its reference, its counts, and the refusal of
+   each disc's ELF by the other's set. */
+static int main_set(const IcoTableSet *set, const char *elf_path, const char *image,
+                    const char *other_path)
+{
+    char err[512];
+    uint8_t *elf, *other;
+    size_t size, osize;
+    IcoVfs *vfs = NULL;
+    const Sym *syms = NULL;
+    uint32_t i;
+    int rc;
+
+#ifdef ICO_TABLES_TEST_JPN
+    if (strcmp(set->slug, "jpn") == 0) {
+        syms = syms_jpn;
+    }
+#endif
+    if (syms == NULL) {
+        printf("tables_test: no %s reference was built (the ELF was absent at configure): "
+               "skipped\n",
+               set->slug);
+        return 77;
+    }
+    elf = read_file(elf_path, &size);
+    if (elf == NULL) {
+        printf("tables_test: no %s: skipped\n", elf_path);
+        return 77;
+    }
+    rc = compare_all(set, syms, 0);
+    printf("     before loading, %d of %d tables differ from the %s reference\n", rc,
+           (int)ICO_SYM_COUNT, set->slug);
+    check(rc > 0, "before loading, the host tables are not the reference (the binary holds none)");
+    if (image != NULL) {
+        FILE *f = fopen(image, "rb");
+
+        if (f != NULL) {
+            fclose(f);
+            vfs = ico_vfs_mount(&ico_vfs_iso9660, image);
+        }
+    }
+    if (vfs != NULL) {
+        rc = ico_tables_load_vfs(vfs, set, err, sizeof(err));
+        printf("     loaded %s through the VFS from %s\n", set->boot_elf, image);
+    } else {
+        rc = ico_tables_load_elf(set, elf, size, err, sizeof(err));
+        printf("     loaded %s (no disc image)\n", elf_path);
+    }
+    if (rc != 0) {
+        printf("     %s\n", err);
+    }
+    check(rc == 0, "the loader accepts the set's retail ELF");
+    check(ico_tables_loaded_set() == set, "the loaded set is the one asked for");
+    printf("     %u rows, %u records\n", (unsigned)ico_tables_loaded_rows(),
+           (unsigned)ico_tables_loaded_records());
+    for (i = 0; i < set->row_count; i++) {
+        const IcoTableRow *row = &set->rows[i];
+
+        if (row->record != NULL && row->count != row->host_count) {
+            printf("     %-24s %5u of the host's %5u records\n", row->symbol,
+                   (unsigned)ico_tables_count((IcoTableId)row->id), (unsigned)row->host_count);
+        }
+    }
+    check(compare_all(set, syms, 1) == 0,
+          "every table equals the reference in the PAL record's form, the rest zero");
+
+    /* each disc's ELF under the other's set: refused, naming the disc expected */
+    other = other_path != NULL ? read_file(other_path, &osize) : NULL;
+    if (other != NULL) {
+        rc = ico_tables_load_elf(set, other, osize, err, sizeof(err));
+        printf("     %s\n", err);
+        check(rc != 0 && strstr(err, set->product) != NULL,
+              "the other disc's ELF is refused by this set, naming this set's disc");
+        check(compare_all(set, syms, 0) == 0, "a refused ELF leaves the tables as they were");
+        rc = ico_tables_load_elf(ico_table_sets[0], elf, size, err, sizeof(err));
+        printf("     %s\n", err);
+        check(rc != 0 && strstr(err, ico_table_sets[0]->product) != NULL,
+              "this ELF is refused by the PAL set, naming the European disc");
+        free(other);
+    } else {
+        printf("     (no --other ELF: the cross refusals are not checked)\n");
+    }
+    free(elf);
+    if (vfs != NULL) {
+        ico_vfs_unmount(vfs);
+    }
+    printf("%s\n", failures ? "FAILED" : "all passed");
+    return failures ? 1 : 0;
+}
+
 int main(int argc, char **argv)
 {
     char err[512];
     uint8_t *elf, *bad;
     size_t size;
     const IcoTableRow *row;
+    const IcoTableSet *set = &ico_table_set_pal;
+    const Sym *syms = syms_pal;
     IcoVfs *vfs = NULL;
     int rc;
 
+    if (argc >= 4 && strcmp(argv[1], "--set") == 0) {
+        const char *other = NULL, *image = NULL;
+        int k;
+
+        set = NULL;
+        for (k = 0; k < ICO_TABLE_SET_COUNT; k++) {
+            if (strcmp(ico_table_sets[k]->slug, argv[2]) == 0) {
+                set = ico_table_sets[k];
+            }
+        }
+        if (set == NULL) {
+            fprintf(stderr, "tables_test: no descriptor set %s\n", argv[2]);
+            return 2;
+        }
+        for (k = 4; k < argc; k++) {
+            if (strcmp(argv[k], "--other") == 0 && k + 1 < argc) {
+                other = argv[++k];
+            } else {
+                image = argv[k];
+            }
+        }
+        return main_set(set, argv[3], image, other);
+    }
     if (argc < 2) {
-        fprintf(stderr, "usage: tables_test BASE_ELF [DISC_IMAGE]\n");
+        fprintf(stderr, "usage: tables_test BASE_ELF [DISC_IMAGE]\n"
+                        "       tables_test --set SLUG BASE_ELF [DISC_IMAGE] [--other ELF]\n");
         return 2;
     }
     elf = read_file(argv[1], &size);
@@ -158,9 +318,9 @@ int main(int argc, char **argv)
         fprintf(stderr, "tables_test: cannot read %s\n", argv[1]);
         return 2;
     }
-    rc = compare_all(0);
+    rc = compare_all(set, syms, 0);
     printf("     before loading, %d of %d tables differ from the reference\n", rc,
-           (int)(sizeof(syms) / sizeof(syms[0])));
+           (int)ICO_SYM_COUNT);
     check(rc > 0, "before loading, the host tables are not the reference (the binary holds none)");
 
     if (argc > 2) {
@@ -172,10 +332,10 @@ int main(int argc, char **argv)
         }
     }
     if (vfs != NULL) {
-        rc = ico_tables_load_vfs(vfs, err, sizeof(err));
-        printf("     loaded %s through the VFS from %s\n", ICO_TABLES_BOOT_ELF, argv[2]);
+        rc = ico_tables_load_vfs(vfs, set, err, sizeof(err));
+        printf("     loaded %s through the VFS from %s\n", set->boot_elf, argv[2]);
     } else {
-        rc = ico_tables_load_elf(elf, size, err, sizeof(err));
+        rc = ico_tables_load_elf(set, elf, size, err, sizeof(err));
         printf("     loaded %s (no disc image)\n", argv[1]);
     }
     if (rc != 0) {
@@ -184,12 +344,12 @@ int main(int argc, char **argv)
     check(rc == 0, "the loader accepts the retail ELF");
     printf("     %u rows, %u records\n", (unsigned)ico_tables_loaded_rows(),
            (unsigned)ico_tables_loaded_records());
-    check(compare_all(1) == 0, "every table equals the PS2 build's compiled table");
+    check(compare_all(set, syms, 1) == 0, "every table equals the PS2 build's compiled table");
 
     /* one byte of one table changed: refused, nothing written */
     bad = malloc(size);
     memcpy(bad, elf, size);
-    row = row_of("seDef");
+    row = row_of(set, "seDef");
     {
         /* the ELF's file offset of the row: .rodata's address and offset */
         uint32_t shoff = (uint32_t)bad[0x20] | (uint32_t)bad[0x21] << 8 |
@@ -213,15 +373,15 @@ int main(int argc, char **argv)
         check(patched, "patched one byte of seDef in a copy of the ELF");
     }
     memset(err, 0, sizeof(err));
-    rc = ico_tables_load_elf(bad, size, err, sizeof(err));
+    rc = ico_tables_load_elf(set, bad, size, err, sizeof(err));
     printf("     %s\n", err);
     check(rc != 0 && strstr(err, "sedef") != NULL && strstr(err, "CRC-32") != NULL,
           "the manifest CRC refuses the modified ELF, naming the table");
-    check(compare_all(0) == 0, "a refused ELF leaves the tables as they were");
+    check(compare_all(set, syms, 0) == 0, "a refused ELF leaves the tables as they were");
 
     /* not an ELF at all */
     memset(bad, 0, 64);
-    rc = ico_tables_load_elf(bad, size, err, sizeof(err));
+    rc = ico_tables_load_elf(set, bad, size, err, sizeof(err));
     check(rc != 0, "a file that is not an ELF is refused");
 
     free(bad);

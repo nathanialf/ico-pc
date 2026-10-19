@@ -126,14 +126,17 @@ set_source_files_properties("${CMAKE_SOURCE_DIR}/ico2/common/src/main.c" TARGET_
 # --- The data tables --------------------------------------------------------
 # The binary holds no disc data (docs/LEGAL.md). The 73 data-only members
 # the PS2 build compiles from the user's ELF (tools/gen_data_c.py) are, here,
-# uninitialised arrays (port/data/gen/table_defs.c) that port/data/tables.c
-# fills at boot from the boot ELF on the user's disc, decoding each record
-# field by field through the generated descriptors (port/data/gen/
-# table_desc.c) and resolving pointer words through the address registry
-# (port/data/gen/ee_symbols.c). Those files hold only types, offsets, sizes,
-# names and the CRCs of config/tables_manifest.txt; tools/gen_data_desc.py
-# writes them and the data_desc_fresh test keeps them current. Configuring
-# and building need no ELF.
+# uninitialised arrays in PAL's layout (port/data/gen/table_defs.c) that
+# port/data/tables.c fills at boot from the boot ELF on the user's disc,
+# decoding each record field by field through the disc's generated
+# descriptor set (port/data/gen/<slug>/table_desc.c, one per row of
+# config/regions.txt) and resolving pointer words through that set's address
+# registry (port/data/gen/<slug>/ee_symbols.c). Those files hold only types,
+# offsets, sizes, names and the CRCs of the manifests
+# (config/tables_manifest*.txt); tools/gen_data_desc.py writes them and the
+# data_desc_fresh test keeps them current. port/data/gen/tables.cmake lists
+# them (ICO_TABLE_SOURCES) for every program that loads the tables.
+# Configuring and building need no ELF.
 #
 # No table is const on the host: the loader writes them all, and the game
 # writes three of the PS2 build's const .rodata tables (stageTable,
@@ -144,11 +147,8 @@ set_source_files_properties("${CMAKE_SOURCE_DIR}/ico2/common/src/main.c" TARGET_
 # object declared const (motionLimitDef's header declares it without const
 # for that; tools/check_const_writes.py looks for others).
 set(ICO_DATA_GEN_DIR "${CMAKE_SOURCE_DIR}/port/data/gen")
-add_library(ico_data OBJECT
-    "${ICO_DATA_GEN_DIR}/table_defs.c"
-    "${ICO_DATA_GEN_DIR}/table_desc.c"
-    "${ICO_DATA_GEN_DIR}/ee_symbols.c"
-    "${CMAKE_SOURCE_DIR}/port/data/tables.c")
+include("${ICO_DATA_GEN_DIR}/tables.cmake")
+add_library(ico_data OBJECT ${ICO_TABLE_SOURCES} "${CMAKE_SOURCE_DIR}/port/data/tables.c")
 ico_include_dirs(sugipon incs)
 # the generated files spell the record headers repo-relative ("ico2/...")
 target_include_directories(ico_data PRIVATE ${incs} "${CMAKE_SOURCE_DIR}/port/data"

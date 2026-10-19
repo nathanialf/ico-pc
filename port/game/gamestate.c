@@ -18,6 +18,10 @@
 
 #include "options.h"
 
+/* the disc's row of config/regions.txt (0 PAL, 1 JPN), set at disc mount
+   (ico2/common/include/region.h once it is on main) */
+extern int ico_region;
+
 #ifdef ICO_GS_LIVE
 #include "typedef.h"
 
@@ -28,7 +32,7 @@ extern int current_stage_no;                /* common/src/main.c */
 extern int gameover_flag;                   /* common/src/main.c */
 extern int gameover_layout_flag;            /* common/src/main.c */
 extern int frame_count;                     /* common/src/main.c */
-extern int NonLinearCameraMove;             /* common/src/main.c */
+extern int NonLinearCameraMove;             /* common/src/main.c (PAL only) */
 extern int systemStatus[12];                /* common/src/main.c */
 extern PadState pad[16];                    /* common/src/main.c, main.h */
 extern GObj *boyGObj;                       /* common/src/main.c */
@@ -60,7 +64,9 @@ void ico_gs_sample_live(IcoGsSnapshot *s)
     s->gameover_flag = gameover_flag;
     s->gameover_layout_flag = gameover_layout_flag;
     s->frame_count = frame_count;
-    s->language = NonLinearCameraMove; /* the game keeps the language here */
+    /* the game keeps the language here; the Japanese disc has no such word
+       (its ELF defines none, and no JPN code reads one) */
+    s->language = ico_region == 0 ? NonLinearCameraMove : -1;
     s->time_count = gamesysTimeCount;
     s->game_clear = gFlagGameClear;
     s->save_stage = gFlagSaveStage;
@@ -525,9 +531,13 @@ int ico_gs_achievements_suspended(void)
 
 /* --- retail addresses ---------------------------------------------------- */
 
-/* Each entry: the retail PAL address and size, and where this tick's copy
-   sits in the snapshot.  Sources: config/symbol_addrs.pal.data.txt for the main.c and gamesys.c
-   globals; for the rest the retail code's own address arithmetic. */
+/* Each entry: the retail address and size on a disc, and where this tick's
+   copy sits in the snapshot; one table per row of config/regions.txt, picked
+   by ico_region at the read.  PAL sources: config/symbol_addrs.pal.data.txt
+   for the main.c and gamesys.c globals; for the rest the retail code's own
+   address arithmetic.  JPN sources: config/symbol_addrs.jpn.data.txt (the
+   decompilation's link of the Japanese ELF), each address also in its link
+   map (build/jpn/ico.jpn.map) but gflags, a static. */
 typedef struct PeekRow {
     IcoGsPeekEntry e;
     size_t offset;
@@ -536,7 +546,7 @@ typedef struct PeekRow {
 #define ROW(addr, field, name)                                                                     \
     {{(addr), sizeof(((IcoGsSnapshot *)0)->field), (name)}, offsetof(IcoGsSnapshot, field)}
 
-static const PeekRow s_peek[] = {
+static const PeekRow s_peek_pal[] = {
     ROW(0x002A50C0u, gflags, "gflags"),                             /* gflagChk 0x00181A48 */
     ROW(0x0028F4C0u, system_status, "systemStatus"),                /* la_game_loading */
     ROW(0x0029B9D0u, mc_preview, "IosMcPreviewInfo"),               /* la_playtime_count */
@@ -553,17 +563,57 @@ static const PeekRow s_peek[] = {
     ROW(0x0063B60Cu, layout, "current_layout_id"),                  /* lt_switch_layout, gp-21732 */
 };
 
-#define PEEK_ROWS ((int)(sizeof(s_peek) / sizeof(s_peek[0])))
+/* The Japanese disc (SCPS-11003): no NonLinearCameraMove (the snapshot's
+   language reads -1) */
+static const PeekRow s_peek_jpn[] = {
+    ROW(0x002A2FC0u, gflags, "gflags"),                             /* jpn.data.txt (static) */
+    ROW(0x0028D3C0u, system_status, "systemStatus"),                /* jpn.data.txt, map */
+    ROW(0x002998C0u, mc_preview, "IosMcPreviewInfo"),               /* jpn.data.txt, map */
+    ROW(0x006337E0u, frame_count, "frame_count"),                   /* jpn.data.txt, map */
+    ROW(0x00633810u, stage_no, "stage_no"),                         /* jpn.data.txt, map */
+    ROW(0x00633820u, before_stage_no, "before_stage_no"),           /* jpn.data.txt, map */
+    ROW(0x006339A4u, gameover_flag, "gameover_flag"),               /* jpn.data.txt, map */
+    ROW(0x006339A8u, gameover_layout_flag, "gameover_layout_flag"), /* jpn.data.txt, map */
+    ROW(0x006339C4u, current_stage_no, "current_stage_no"),         /* jpn.data.txt, map */
+    ROW(0x006344C8u, game_clear, "gFlagGameClear"),                 /* jpn.data.txt, map */
+    ROW(0x006344CCu, save_stage, "gFlagSaveStage"),                 /* jpn.data.txt, map */
+    ROW(0x00634ECCu, time_count, "gamesysTimeCount"),               /* jpn.data.txt, map */
+    ROW(0x006350BCu, layout, "current_layout_id"),                  /* jpn.data.txt, map */
+};
+
+typedef struct PeekTable {
+    const PeekRow *rows;
+    int count;
+} PeekTable;
+
+/* ico_gs_peek_table's copy holds PAL's rows, the most */
+_Static_assert(sizeof(s_peek_jpn) / sizeof(s_peek_jpn[0]) <=
+                   sizeof(s_peek_pal) / sizeof(s_peek_pal[0]),
+               "peek rows");
+
+/* config/regions.txt's order */
+static const PeekTable s_peek_tables[] = {
+    {s_peek_pal, (int)(sizeof(s_peek_pal) / sizeof(s_peek_pal[0]))},
+    {s_peek_jpn, (int)(sizeof(s_peek_jpn) / sizeof(s_peek_jpn[0]))},
+};
+
+static const PeekTable *peek_table(void)
+{
+    int n = (int)(sizeof(s_peek_tables) / sizeof(s_peek_tables[0]));
+
+    return &s_peek_tables[ico_region >= 0 && ico_region < n ? ico_region : 0];
+}
 
 int ico_gs_peek(unsigned int addr, unsigned int size, unsigned int *out)
 {
+    const PeekTable *t = peek_table();
     int i;
 
     if (out == NULL || (size != 1 && size != 2 && size != 4)) {
         return -1;
     }
-    for (i = 0; i < PEEK_ROWS; i++) {
-        const PeekRow *r = &s_peek[i];
+    for (i = 0; i < t->count; i++) {
+        const PeekRow *r = &t->rows[i];
 
         if (addr >= r->e.addr && addr - r->e.addr + size <= r->e.size) {
             const unsigned char *p =
@@ -585,14 +635,15 @@ int ico_gs_peek(unsigned int addr, unsigned int size, unsigned int *out)
 
 int ico_gs_peek_table(const IcoGsPeekEntry **out)
 {
-    static IcoGsPeekEntry table[sizeof(s_peek) / sizeof(s_peek[0])];
+    static IcoGsPeekEntry table[sizeof(s_peek_pal) / sizeof(s_peek_pal[0])];
+    const PeekTable *t = peek_table();
     int i;
 
-    for (i = 0; i < PEEK_ROWS; i++) {
-        table[i] = s_peek[i].e;
+    for (i = 0; i < t->count; i++) {
+        table[i] = t->rows[i].e;
     }
     if (out != NULL) {
         *out = table;
     }
-    return PEEK_ROWS;
+    return t->count;
 }

@@ -6,7 +6,7 @@
 #       refuses an ELF whose table bytes differ (a wrong or modified disc)
 #   func|obj <address> <name>
 #       an address a table's pointer word holds and the symbol the
-#       committed symbol lists name there (port/data/gen/ee_symbols.c)
+#       committed symbol lists name there (port/data/gen/pal/ee_symbols.c)
 # 75 rows, 913 functions, 1 objects.
 row accessary data 0x002a79b8 0x002a7dc8 crc32=0xff4c9175
 row act-data-tbl data 0x002a7dc8 0x002a7e04 crc32=0x06f0fcc8

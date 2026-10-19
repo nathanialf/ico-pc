@@ -158,16 +158,19 @@ endif()
 
 # --- The data tables' runtime loader --
 # The game's copy (port/data/tables.c and port/data/gen/) is compiled into
-# ico_game by the top-level CMakeLists.txt. Here: its tests.
-include("${CMAKE_CURRENT_SOURCE_DIR}/gen/tables.cmake")
+# ico_game by the top-level CMakeLists.txt, which includes
+# port/data/gen/tables.cmake (ICO_TABLE_SOURCES, ICO_TABLE_SYMBOLS). Here:
+# its tests.
 set(ICO_DATA_PYTHON "${Python3_EXECUTABLE}")
 if(EXISTS "${CMAKE_SOURCE_DIR}/.venv/bin/python")
     set(ICO_DATA_PYTHON "${CMAKE_SOURCE_DIR}/.venv/bin/python")
 endif()
 if(ICO_DATA_PYTHON)
     # port/data/gen/ must be what the generator writes from the committed
-    # schema, headers, symbol lists and manifest. --check never opens the ELF,
-    # so this also shows the generated files carry no disc bytes.
+    # schemas, headers, layouts, symbol lists and manifests, every descriptor
+    # set at once (config/regions.txt), with its audit of MotionDef's bit
+    # reads. --check never opens an ELF, so this also shows the generated
+    # files carry no disc bytes.
     add_test(NAME data_desc_fresh
              COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_data_desc.py" --check
              WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -176,8 +179,11 @@ endif()
 # The reference: the PS2 build's tables, written by tools/gen_data_c.py from
 # the user's base ELF (never committed) and compiled under renamed symbols
 # (ico_ref_<name>), against which tables_test compares every byte the loader
-# writes. Built only where the ELF and pyelftools are present; the game's
-# build needs neither.
+# writes. With the Japanese ELF too, a second reference (ico_ref_jpn_<name>,
+# gen_data_c.py --version jpn) of the Japanese disc's tables in the PAL
+# record's form (config/ee_layout.jpn.txt's map, the defaults, the bit words
+# permuted), for tables_test --set jpn. Built only where the PAL ELF and
+# pyelftools are present; the game's build needs neither.
 set(ICO_BASE_ELF "${CMAKE_SOURCE_DIR}/baserom/pal/baseelf.elf" CACHE FILEPATH
     "The PAL base ELF the loader test's reference tables are written from")
 set(ICO_BASE_ELF_JPN "${CMAKE_SOURCE_DIR}/baserom/jpn/baseelf.elf" CACHE FILEPATH
@@ -212,13 +218,44 @@ if(ICO_DATA_PYTHON AND _ico_have_elftools EQUAL 0 AND EXISTS "${ICO_BASE_ELF}")
         list(APPEND _renames "${sym}=ico_ref_${sym}")
     endforeach()
     set_source_files_properties(${_refs} PROPERTIES COMPILE_DEFINITIONS "${_renames}")
-    add_executable(tables_test test/tables_test.c tables.c gen/table_defs.c gen/table_desc.c
-                               gen/ee_symbols.c ${_refs})
+    # the Japanese reference, when that ELF is present
+    set(_refs_jpn "")
+    if(EXISTS "${ICO_BASE_ELF_JPN}")
+        set(_deps_jpn "${_gen}" "${CMAKE_SOURCE_DIR}/tools/gen_ee_layout.py" "${ICO_BASE_ELF_JPN}"
+            "${CMAKE_SOURCE_DIR}/config/data_schema.jpn.txt"
+            "${CMAKE_SOURCE_DIR}/config/data_members.jpn.txt"
+            "${CMAKE_SOURCE_DIR}/config/ee_layout.jpn.txt"
+            "${CMAKE_SOURCE_DIR}/config/motion_bits.jpn.txt"
+            "${CMAKE_SOURCE_DIR}/config/symbol_addrs.jpn.txt"
+            "${CMAKE_SOURCE_DIR}/config/symbol_addrs.jpn.data.txt")
+        foreach(m ${ICO_DATA_MEMBERS})
+            set(out "${CMAKE_CURRENT_BINARY_DIR}/ref_jpn/${m}.c")
+            add_custom_command(
+                OUTPUT "${out}"
+                COMMAND "${ICO_DATA_PYTHON}" "${_gen}" --version jpn --c "${m}" --symbol-map
+                        --elf "${ICO_BASE_ELF_JPN}" --out "${out}"
+                DEPENDS ${_deps_jpn}
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+                COMMENT "Generating the Japanese reference data table ${m}"
+                VERBATIM)
+            list(APPEND _refs_jpn "${out}")
+        endforeach()
+        set(_renames_jpn "")
+        foreach(sym ${ICO_TABLE_SYMBOLS})
+            list(APPEND _renames_jpn "${sym}=ico_ref_jpn_${sym}")
+        endforeach()
+        set_source_files_properties(${_refs_jpn} PROPERTIES COMPILE_DEFINITIONS "${_renames_jpn}")
+    endif()
+    add_executable(tables_test test/tables_test.c tables.c ${ICO_TABLE_SOURCES} ${_refs}
+                               ${_refs_jpn})
+    if(_refs_jpn)
+        target_compile_definitions(tables_test PRIVATE ICO_TABLES_TEST_JPN=1)
+    endif()
     ico_include_dirs(sugipon _incs)
     target_include_directories(tables_test PRIVATE ${_incs} "${CMAKE_CURRENT_SOURCE_DIR}"
                                "${CMAKE_SOURCE_DIR}")
     target_compile_definitions(tables_test PRIVATE ${ICO_GAME_DEFINITIONS})
-    set_source_files_properties(gen/ee_symbols.c TARGET_DIRECTORY tables_test
+    set_source_files_properties(${ICO_TABLE_EE_SYMBOLS} TARGET_DIRECTORY tables_test
                                 PROPERTIES COMPILE_DEFINITIONS ICO_EE_SYMBOLS_STUBS=1)
     target_compile_options(tables_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                            ${ICO_GAME_WARNINGS})
@@ -231,6 +268,23 @@ if(ICO_DATA_PYTHON AND _ico_have_elftools EQUAL 0 AND EXISTS "${ICO_BASE_ELF}")
                  COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_data_desc.py"
                          --check-manifest --elf "${ICO_BASE_ELF}"
                  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+        # the Japanese set against the Japanese ELF (through the VFS when its
+        # image is present), each ELF refused by the other's set; skipped
+        # (77) without the Japanese ELF
+        add_test(NAME tables_loader_jpn
+                 COMMAND tables_test --set jpn "${ICO_BASE_ELF_JPN}" "${ICO_DISC_IMAGE_JPN}"
+                         --other "${ICO_BASE_ELF}")
+        set_tests_properties(tables_loader_jpn PROPERTIES SKIP_RETURN_CODE 77)
+        if(EXISTS "${ICO_BASE_ELF_JPN}")
+            add_test(NAME tables_manifest_jpn
+                     COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_data_desc.py"
+                             --check-manifest --version jpn --elf "${ICO_BASE_ELF_JPN}"
+                     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+        else()
+            add_test(NAME tables_manifest_jpn COMMAND "${CMAKE_COMMAND}" -E echo
+                     "tables_manifest_jpn: no ${ICO_BASE_ELF_JPN}: skipped")
+            set_tests_properties(tables_manifest_jpn PROPERTIES DISABLED TRUE)
+        endif()
     endif()
 else()
     message(STATUS "ico: no base ELF or pyelftools: the table loader's reference test is not built")

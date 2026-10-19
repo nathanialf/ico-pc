@@ -567,7 +567,7 @@ def cmd_report(args, groups):
 # ------------------------------------------------------------------ chains
 
 CHAIN_TABLE = os.path.join(ROOT, "port", "render", "rd_content_chain.c")
-TABLE_DESC = os.path.join(ROOT, "port", "data", "gen", "table_desc.c")
+TABLE_DESC = os.path.join(ROOT, "port", "data", "gen", "pal", "table_desc.c")  # the PAL set
 
 
 def read_chains(path=CHAIN_TABLE):
@@ -585,7 +585,7 @@ def read_chains(path=CHAIN_TABLE):
 
 
 def table_range(name):
-    """(EE address, record count) of a table in port/data/gen/table_desc.c."""
+    """(EE address, record count) of a table in port/data/gen/pal/table_desc.c."""
     src = open(TABLE_DESC, encoding="utf-8").read()
     m = re.search(r'\{"[^"]*",\s*"%s",\s*\w+,\s*(0x[0-9A-Fa-f]+)u,\s*0x[0-9A-Fa-f]+u,\s*'
                   r'0x[0-9A-Fa-f]+u,\s*\d+,\s*(\d+)' % name, src)

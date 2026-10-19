@@ -195,12 +195,12 @@ void ms_sheet_name(const char *path, int lang, char *out, size_t size)
     }
 }
 
-/* texFile's rows (the table descriptor's count: the array is defined in
+/* texFile's rows (the PAL descriptor set's count: the array is defined in
    port/data/gen/table_defs.c, its size unknown here) */
 int ms_tex_file_count(void)
 {
-    for (uint32_t i = 0; i < ico_table_row_count; i++) {
-        const IcoTableRow *r = &ico_table_rows[i];
+    for (uint32_t i = 0; i < ico_table_set_pal.row_count; i++) {
+        const IcoTableRow *r = &ico_table_set_pal.rows[i];
         if (r->host == (void *)texFile && r->record) {
             return (int)r->count;
         }

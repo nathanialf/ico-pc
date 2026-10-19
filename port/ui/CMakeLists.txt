@@ -178,9 +178,7 @@ endif()
 set(_gal_data "${CMAKE_SOURCE_DIR}/port/data")
 add_executable(gallery_test test/gallery_test.c gallery.c font.c strings.c strings_en.c
     strings_fr.c strings_de.c strings_it.c strings_es.c "${_ui_font_c}"
-    "${_gal_data}/tables.c"
-    "${_gal_data}/gen/table_defs.c" "${_gal_data}/gen/table_desc.c"
-    "${_gal_data}/gen/ee_symbols.c")
+    "${_gal_data}/tables.c" ${ICO_TABLE_SOURCES})
 ico_include_dirs(sugipon _ico_gal_incs)
 target_include_directories(gallery_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" ${_ico_gal_incs}
                            "${_gal_data}" "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/port/audio"
@@ -189,7 +187,7 @@ target_include_directories(gallery_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" ${
 set(_gal_defs ${ICO_GAME_DEFINITIONS})
 list(REMOVE_ITEM _gal_defs ICO_RD=1)
 target_compile_definitions(gallery_test PRIVATE ${_gal_defs} ICO_HOST=1)
-set_source_files_properties("${_gal_data}/gen/ee_symbols.c" TARGET_DIRECTORY gallery_test
+set_source_files_properties(${ICO_TABLE_EE_SYMBOLS} TARGET_DIRECTORY gallery_test
                             PROPERTIES COMPILE_DEFINITIONS ICO_EE_SYMBOLS_STUBS=1)
 target_compile_options(gallery_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
@@ -276,8 +274,7 @@ add_executable(model_viewer_effects_test
     "${CMAKE_SOURCE_DIR}/port/game/model_viewer_table.c"
     "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/frameDependSequence.c"
     "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/stageMultiBgaManager.c"
-    "${_mve_data}/tables.c" "${_mve_data}/gen/table_defs.c"
-    "${_mve_data}/gen/table_desc.c" "${_mve_data}/gen/ee_symbols.c")
+    "${_mve_data}/tables.c" ${ICO_TABLE_SOURCES})
 ico_include_dirs(sugipon _ico_mve_incs)
 target_include_directories(model_viewer_effects_test PRIVATE ${_ico_mve_incs}
                            "${CMAKE_SOURCE_DIR}/port/game" "${_mve_data}" "${CMAKE_SOURCE_DIR}")
@@ -285,7 +282,7 @@ target_include_directories(model_viewer_effects_test PRIVATE ${_ico_mve_incs}
 set(_mve_defs ${ICO_GAME_DEFINITIONS})
 list(REMOVE_ITEM _mve_defs ICO_RD=1)
 target_compile_definitions(model_viewer_effects_test PRIVATE ${_mve_defs} ICO_HOST=1)
-set_source_files_properties("${_mve_data}/gen/ee_symbols.c" TARGET_DIRECTORY
+set_source_files_properties(${ICO_TABLE_EE_SYMBOLS} TARGET_DIRECTORY
                             model_viewer_effects_test PROPERTIES COMPILE_DEFINITIONS
                             ICO_EE_SYMBOLS_STUBS=1)
 # port/ui's "strings.h" (model_viewer_table.c) by -iquote, so <strings.h>
@@ -427,10 +424,8 @@ set(_ico_cov_elf "")
 if(DEFINED ICO_BASE_ELF AND EXISTS "${ICO_BASE_ELF}")
     set(_ico_cov_elf "${ICO_BASE_ELF}")
     target_sources(font_coverage_test PRIVATE
-        "${CMAKE_SOURCE_DIR}/port/data/tables.c" "${CMAKE_SOURCE_DIR}/port/data/gen/table_defs.c"
-        "${CMAKE_SOURCE_DIR}/port/data/gen/table_desc.c"
-        "${CMAKE_SOURCE_DIR}/port/data/gen/ee_symbols.c")
-    set_source_files_properties("${CMAKE_SOURCE_DIR}/port/data/gen/ee_symbols.c" PROPERTIES
+        "${CMAKE_SOURCE_DIR}/port/data/tables.c" ${ICO_TABLE_SOURCES})
+    set_source_files_properties(${ICO_TABLE_EE_SYMBOLS} PROPERTIES
                                 COMPILE_DEFINITIONS ICO_EE_SYMBOLS_STUBS=1)
     target_include_directories(font_coverage_test PRIVATE ${_ico_cov_data_incs}
                                "${CMAKE_SOURCE_DIR}/port/data" "${CMAKE_SOURCE_DIR}")
@@ -456,9 +451,7 @@ if(_ico_cov_elf AND TARGET ico_sheet_ref)
     add_executable(menu_look_test test/menu_look_test.c test/menu_sheets.c menu_font.c menu_text.c
         strings.c strings_en.c strings_fr.c strings_de.c strings_it.c strings_es.c
         $<TARGET_OBJECTS:ico_ui_font_rd>
-        "${CMAKE_SOURCE_DIR}/port/data/tables.c" "${CMAKE_SOURCE_DIR}/port/data/gen/table_defs.c"
-        "${CMAKE_SOURCE_DIR}/port/data/gen/table_desc.c"
-        "${CMAKE_SOURCE_DIR}/port/data/gen/ee_symbols.c")
+        "${CMAKE_SOURCE_DIR}/port/data/tables.c" ${ICO_TABLE_SOURCES})
     # ee_symbols.c's ICO_EE_SYMBOLS_STUBS and menu_font.c/menu_text.c's
     # -Wno-strict-prototypes are set above, in this directory
     set_source_files_properties(test/menu_look_test.c test/menu_sheets.c

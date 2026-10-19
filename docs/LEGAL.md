@@ -71,10 +71,14 @@ The host binary holds none of their bytes. It defines each of the 73 tables
 as an empty array (`port/data/gen/table_defs.c`), and at start-up the
 runtime loader (`port/data/tables.c`)
 fills them from the boot ELF on the user's own disc, checked against the
-committed manifest of CRCs (`config/tables_manifest.txt`). The committed
+committed manifest of CRCs (`config/tables_manifest.txt`, and
+`config/tables_manifest.jpn.txt` for the Japanese disc). The committed
 descriptors under `port/data/gen/` (`tools/gen_data_desc.py`), the schema
 (`config/data_schema.pal.txt`) and the record types in the owners' headers
-hold only types, element counts, offsets and symbol names. The configuration
+hold only types, element counts, offsets and symbol names; so do the Japanese
+disc's record layouts (`config/ee_layout.jpn.txt`, written from upstream's
+headers) and its bit-position map (`config/motion_bits.jpn.txt`, written from
+upstream's sources). The configuration
 files hold member names, address ranges, record types and the names MAIN.MAP
 gives the symbols, and nothing of the tables' content. The loader's
 reference test, a maintainer step, generates each member as C from the
@@ -93,10 +97,14 @@ generator as `sizeof` over the table, not read from the disc.
 Two kinds of committed content look like what the list above forbids and
 are allowed, each for the reason given. Nothing else is exempt.
 
-### The loader's address registry, `port/data/gen/ee_symbols.c`
+### The loader's address registries, `port/data/gen/<slug>/ee_symbols.c`
 
 The PC program compiles in a table of 914 entries (913 functions, one object), each
-`{EE address, host symbol, name string}`, sorted by address. The "no bulk symbol tables" rule above
+`{EE address, host symbol, name string}`, sorted by address (`pal/ee_symbols.c`), and the
+Japanese disc's of the same shape (`jpn/ee_symbols.c`, 913 functions and one object, at that ELF's
+addresses, every name one the PAL registry also names; the names and addresses are the `func` /
+`obj` lines of `config/tables_manifest.jpn.txt` and pairs of `config/symbol_addrs.jpn.txt`, the
+decompilation's link of that ELF). What follows holds for both. The "no bulk symbol tables" rule above
 (and "Identifiers as references") does not apply to it, for these reasons:
 
 - **What it holds.** Only the addresses that the data tables' pointer words

@@ -195,7 +195,8 @@ static int checkElf(const char *path)
     char err[512];
     CHECK(elf && fread(elf, 1, (size_t)size, f) == (size_t)size, "read %s", path);
     fclose(f);
-    CHECK(ico_tables_load_elf(elf, (size_t)size, err, sizeof(err)) == 0, "load tables: %s", err);
+    CHECK(ico_tables_load_elf(&ico_table_set_pal, elf, (size_t)size, err, sizeof(err)) == 0,
+          "load tables: %s", err);
     free(elf);
     int names = 0;
     for (int i = 0; i < 105; i++) {

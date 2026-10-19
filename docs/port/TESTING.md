@@ -141,7 +141,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `json_test.c`: `port/data/json.h`: numbers, strings, nesting, the depth limit, malformed input
   (`json`).
 - `tables_test.c`: the runtime table loader against the PS2 build's tables generated from the base
-  ELF (`tables_loader`, with `ICO_BASE_ELF`).
+  ELF (`tables_loader`, with `ICO_BASE_ELF`); `--set jpn` the Japanese descriptor set against the
+  Japanese reference, and each disc's ELF refused by the other's set (`tables_loader_jpn`, with
+  `ICO_BASE_ELF_JPN`, skipped without it).
 - `vfs_test.c`: the [VFS](ARCHITECTURE.md#terms) and its ISO9660 backend, the
   [libcdvd](ARCHITECTURE.md#terms), [SIF](ARCHITECTURE.md#terms) and [IOP](ARCHITECTURE.md#terms)
   RAM layers (`vfs_synthetic`, `vfs_disc`).
@@ -660,6 +662,9 @@ has their defaults; the registrations are in `port/*/CMakeLists.txt`):
   `rd_mesh` run only their synthetic part, and `tables_loader` reads the base ELF instead.
 - `ICO_BASE_ELF`, the PAL base ELF: with pyelftools, `tables_loader` and `tables_manifest` are
   built from it (`port/data/CMakeLists.txt`); `gallery` reads its tables.
+- `ICO_BASE_ELF_JPN` and `ICO_DISC_IMAGE_JPN`, the Japanese base ELF and image (defaults
+  `baserom/jpn/baseelf.elf`, `baserom/Ico_JPN.iso`): `tables_loader_jpn` (through the image when
+  present) and `tables_manifest_jpn`, both skipped without the ELF.
 - `ICO_TEXPACK_DIR`, a PCSX2 pack's replacements folder: `texpack_disc`, `texpack_e2e`,
   `texpack_pack_files`.
 - `ICO_FOG_DUMP`, a player dump with the depth fog: `rd_fog_depth_copy_dump` and `_d24s8` (skipped
@@ -792,8 +797,9 @@ The audits over the game sources are tools, some run as ctests on native builds 
 `const_write_audit` on native clang builds only, and the rest in the pre-commit hook and CI; what
 each refuses is in [GAME_CODE.md](GAME_CODE.md#audits). Other tests check generated files and
 tables: `layout_asserts` (a program compiled from the generated asserts), `layout_asserts_fresh`,
-`font_audit` and `content_table_chains` (`port/test/CMakeLists.txt`), `data_desc_fresh` and
-`tables_manifest` (`port/data/CMakeLists.txt`), and the package staging (`package_textures`,
+`font_audit` and `content_table_chains` (`port/test/CMakeLists.txt`), `data_desc_fresh` (with the
+audit of MotionDef's bit reads), `tables_manifest` and `tables_manifest_jpn`
+(`port/data/CMakeLists.txt`), and the package staging (`package_textures`,
 [PACKS.md](PACKS.md#tests)).
 
 `docs_check` runs `tools/check_docs.py` over README.md, `docs/*.md` and `docs/port/*.md`: relative
