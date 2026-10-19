@@ -115,24 +115,11 @@ int IosCdvdMgrSleep = 0;
 
 static int srhBuffCnt = 0; /* derived name */
 
-#ifdef VERSION_JPN
-
-int iosCdvdMediaType = 1;
-
-#else
-
+/* the European disc's values; the disc's own are set at run time, the media mode in
+   iosInitialize (ios.c), the disc type in iosCdvdManager */
 int iosCdvdMediaType = 2;
 
-#endif
-#ifdef VERSION_JPN
-
-static int cdDiskType = 18; /* derived name */
-
-#else
-
 static int cdDiskType = 20; /* derived name */
-
-#endif
 
 static unsigned char cdSpindlCtrl = 1; /* derived name */
 
@@ -841,6 +828,7 @@ void iosCdvdManager(void)
     IosCdvdHandle *msg;
     IosCdvdHandle *req;
 
+    cdDiskType = PAL_JPN(20, 18); /* JPN: a PlayStation 2 CD */
     sceCdInit(0);
     sceCdMmode(iosCdvdMediaType);
     sceFsReset();
