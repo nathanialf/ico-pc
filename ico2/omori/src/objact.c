@@ -31,21 +31,13 @@ inline void ObjAction_Init(void)
 static inline void objActionCorrectFlag(OaRecB *p) /* derived name */
 {
     if ((p->flags & 1) == 1u) {
-#ifdef VERSION_JPN
-        p->mode = 949;
-#else
-        p->mode = 972;
-#endif
+        p->mode = PAL_JPN(972, 949);
     }
 }
 
 static inline void objActionCorrectMode(OaRecB *p) /* derived name */
 {
-#ifdef VERSION_JPN
-    if (p->mode == 949) {
-#else
-    if (p->mode == 972) {
-#endif
+    if (p->mode == PAL_JPN(972, 949)) {
         p->mode = p->baseMode;
     }
 }

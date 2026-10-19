@@ -116,15 +116,22 @@ int IosCdvdMgrSleep = 0;
 static int srhBuffCnt = 0; /* derived name */
 
 #ifdef VERSION_JPN
-int iosCdvdMediaType = 1;
-#else
-int iosCdvdMediaType = 2;
-#endif
 
-#ifdef VERSION_JPN
-static int cdDiskType = 18; /* derived name */
+int iosCdvdMediaType = 1;
+
 #else
+
+int iosCdvdMediaType = 2;
+
+#endif
+#ifdef VERSION_JPN
+
+static int cdDiskType = 18; /* derived name */
+
+#else
+
 static int cdDiskType = 20; /* derived name */
+
 #endif
 
 static unsigned char cdSpindlCtrl = 1; /* derived name */
@@ -308,17 +315,10 @@ static inline void iosCdvdDiskReadyBlock(void)
     if (sceCdDiskReady(1) != 2) {
         sceCdlFILE fp;
         char file[32];
-#ifdef VERSION_JPN
-        strcpy(file, "SCPS_110.03");
-#else
-        strcpy(file, "SCES_507.60");
-#endif
+        strcpy(file, PAL_JPN("SCES_507.60", "SCPS_110.03"));
         iosCdvdChgFileName(file);
-#ifdef VERSION_JPN
-        debug_StdPrintfDummy("wait insert ico disk %s %s\n", "SCPS_110.03", file);
-#else
-        debug_StdPrintfDummy("wait insert ico disk %s %s\n", "SCES_507.60", file);
-#endif
+        debug_StdPrintfDummy("wait insert ico disk %s %s\n", PAL_JPN("SCES_507.60", "SCPS_110.03"),
+                             file);
         do {
             sceCdDiskReady(0);
         } while (sceCdGetDiskType() != cdDiskType || sceCdSearchFile(&fp, file) == 0);
@@ -1017,11 +1017,7 @@ static void cdWait(int *busy)
                 systemStatus[0x14 / 4] = 1;
                 cdWaitParamSet = 1;
             }
-#ifdef VERSION_JPN
-            strcpy(file, "SCPS_110.03");
-#else
-            strcpy(file, "SCES_507.60");
-#endif
+            strcpy(file, PAL_JPN("SCES_507.60", "SCPS_110.03"));
             chgFileName(file);
             r = sceCdDiskReady(1);
             if (r == 2 && sceCdGetDiskType() == cdDiskType && sceCdSearchFile(&fp, file) != 0) {
@@ -1064,11 +1060,8 @@ int iosCdvdBackGroundRead(CdvdBgReq *self, void *buf, int size)
     bgReadCnt++;
     while (1) {
         flag = 0;
-#ifdef VERSION_JPN
-        while (sceCdStatus() != 10 || sceCdDiskReady(1) != 2) {
-#else
-        while ((iosCdvdMediaType == 1 && sceCdStatus() != 10) || sceCdDiskReady(1) != 2) {
-#endif
+        while (PAL_JPN((iosCdvdMediaType == 1 && sceCdStatus() != 10), sceCdStatus() != 10) ||
+               sceCdDiskReady(1) != 2) {
             cdWait(&flag);
         }
         while (sceCdRead(self->lsn + self->pos / 2048, size / 2048, buf, &bgReadMode) == 0) {
@@ -1109,11 +1102,8 @@ int iosCdvdBackGroundReadIOPm(CdvdBgReq *self, void *buf, int size)
     bgReadCnt++;
     while (1) {
         flag = 0;
-#ifdef VERSION_JPN
-        while (sceCdStatus() != 10 || sceCdDiskReady(1) != 2) {
-#else
-        while ((iosCdvdMediaType == 1 && sceCdStatus() != 10) || sceCdDiskReady(1) != 2) {
-#endif
+        while (PAL_JPN((iosCdvdMediaType == 1 && sceCdStatus() != 10), sceCdStatus() != 10) ||
+               sceCdDiskReady(1) != 2) {
             cdWait(&flag);
         }
         while (sceCdReadIOPm(self->lsn + self->pos / 2048, size / 2048, buf, &bgReadMode) == 0) {

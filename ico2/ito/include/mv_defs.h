@@ -18,6 +18,8 @@
  * Free, the release that goes with it, is defined in each mpeg file that
  * calls it.
  */
+#include "typedef.h" /* LN */
+
 #ifndef MV_DEFS_H
 #define MV_DEFS_H
 

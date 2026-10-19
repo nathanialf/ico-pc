@@ -91,13 +91,8 @@ static void findChainInJump(void *self)
     int lside = 0;
 
     sub = GOBJ_ACT(self);
-#ifdef VERSION_JPN
-    r = ((CHAINROW(self)->flags2.word >> 9) & 1) ? 300.0f : 100.0f;
-    r2 = ((CHAINROW(self)->flags2.word >> 9) & 1) ? 90.0f : 120.0f;
-#else
     r = ((CHAINROW(self)->flags2.word >> 8) & 1) ? 300.0f : 100.0f;
     r2 = ((CHAINROW(self)->flags2.word >> 8) & 1) ? 90.0f : 120.0f;
-#endif
 
     for (g = isysGObjSearchFromObjKindID_begin(0x15); g != 0;
          g = isysGObjSearchFromObjKindID_next(g)) {
@@ -140,13 +135,8 @@ static void findChainInJump(void *self)
     lv[3] = 0.0f;
     sceVu0ApplyMatrix(lv, mtx, lv);
 
-#ifdef VERSION_JPN
-    if (((CHAINROW(self)->flags2.word >> 7) & 1) == 0 && (rside != 0 || lside != 0) &&
-        (lv[2] < 0.0f ? -lv[2] : lv[2]) < 150.0f) {
-#else
     if (((CHAINROW(self)->flags2.word >> 6) & 1) == 0 && (rside != 0 || lside != 0) &&
         (lv[2] < 0.0f ? -lv[2] : lv[2]) < 150.0f) {
-#endif
         RequestChangeHandMode(self, 0, 2, 1, g, 0, w);
         RequestChangeHandMode(self, 1, 2, 1, g, 0, w);
     } else {
@@ -855,12 +845,12 @@ static int GetChainSlope(void)
         return 0;
     }
     ratio = (float)*motionTable[GOBJ_SUB(g)->ctrl.motion] / (c * 0.5f);
-#ifdef VERSION_JPN
-    ACTGame_SetMotionPlaySpeedRatio_Reserve(g, ratio, 7);
-#else
-    ACTGame_SetMotionPlaySpeedRatio_Reserve(
-        g, ratio * (float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f, 7);
-#endif
+    if (ICO_JPN) {
+        ACTGame_SetMotionPlaySpeedRatio_Reserve(g, ratio, 7);
+    } else {
+        ACTGame_SetMotionPlaySpeedRatio_Reserve(
+            g, ratio * (float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f, 7);
+    }
     if (debug_font_flag & 1) {
         debug_Printf(10, 140, 0x0FFFFFFF, "speed = %f (%f)\n", fptodp(ratio), fptodp(c));
     }
@@ -1214,13 +1204,8 @@ void subBoyControl(GObj *volatile self)
             break;
         case 26:
             if (0.1f < s->stick.mag && !((unsigned int)(s->stick.angle + 134) < 269)) {
-#ifdef VERSION_JPN
-                sceVu0ScaleVector(GOBJ_WORK(self)->fallDir, (char *)GOBJ_ACT(self)->work + 0x8C0,
-                                  -1.0f);
-#else
                 sceVu0ScaleVector(GOBJ_WORK(self)->fallDir, (char *)GOBJ_ACT(self)->work + 0x8D0,
                                   -1.0f);
-#endif
                 ACTSendMailCorrect(self, 0x139);
             }
             break;
@@ -1743,19 +1728,11 @@ static void OtherStageGirlPinchCamera_After(float t)
 
 void ACTDispLwsBoyStonize_InQueenStage(void *self)
 {
-#ifdef VERSION_JPN
-    BoyBgaManager(self, 476, (char *)GOBJ_ACT(self)->enemy + 0x2A0);
-    BoyBgaManager(self, 477, (char *)GOBJ_ACT(self)->enemy + 0x2A4);
-    BoyBgaManager(self, 481, (char *)GOBJ_ACT(self)->enemy + 0x2B0);
-    BoyBgaManager(self, 481, (char *)GOBJ_ACT(self)->enemy + 0x2AC);
-    BoyBgaManager(self, 482, (char *)GOBJ_ACT(self)->enemy + 0x2A8);
-#else
-    BoyBgaManager(self, 0x1E0, (char *)GOBJ_ACT(self)->enemy + 0x2A0);
-    BoyBgaManager(self, 0x1E1, (char *)GOBJ_ACT(self)->enemy + 0x2A4);
-    BoyBgaManager(self, 0x1E5, (char *)GOBJ_ACT(self)->enemy + 0x2B0);
-    BoyBgaManager(self, 0x1E5, (char *)GOBJ_ACT(self)->enemy + 0x2AC);
-    BoyBgaManager(self, 0x1E6, (char *)GOBJ_ACT(self)->enemy + 0x2A8);
-#endif
+    BoyBgaManager(self, PAL_JPN(0x1E0, 476), (char *)GOBJ_ACT(self)->enemy + 0x2A0);
+    BoyBgaManager(self, PAL_JPN(0x1E1, 477), (char *)GOBJ_ACT(self)->enemy + 0x2A4);
+    BoyBgaManager(self, PAL_JPN(0x1E5, 481), (char *)GOBJ_ACT(self)->enemy + 0x2B0);
+    BoyBgaManager(self, PAL_JPN(0x1E5, 481), (char *)GOBJ_ACT(self)->enemy + 0x2AC);
+    BoyBgaManager(self, PAL_JPN(0x1E6, 482), (char *)GOBJ_ACT(self)->enemy + 0x2A8);
 }
 
 static int characterPacket[8]; /* derived name */
@@ -2099,13 +2076,9 @@ void subBoyCollision(GObj *volatile self)
                     ((float *)tgt2)[2] = test_CURRENTROOT(girlGObj)[2];
                     see = 1;
                     onGirl = 1;
-#ifdef VERSION_JPN
-                } else if ((stage_no == 84 || stage_no == 3 || stage_no == 46) &&
+                } else if ((stage_no == PAL_JPN(0x56, 84) || stage_no == PAL_JPN(0x3, 3) ||
+                            stage_no == PAL_JPN(0x2E, 46)) &&
                            ((int)(sub->flags20.ll >> 24) & 3)) {
-#else
-                } else if ((stage_no == 0x56 || stage_no == 0x3 || stage_no == 0x2E) &&
-                           ((int)(sub->flags20.ll >> 24) & 3)) {
-#endif
                     see = 1;
                     onGirl = 0;
                     ScpCallCameraGetTarget((float *)tgt2);
@@ -2294,11 +2267,7 @@ void subBoyCollision(GObj *volatile self)
                 GOBJ_ACT(girlGObj)->actMode == GOBJ_ACT(boyGObj)->actMode) {
                 if (0x3C < sitCount++) {
                     if (sitLayoutDone == 0) {
-#ifdef VERSION_JPN
-                        lt_switch_layout(25);
-#else
-                        lt_switch_layout(0x1C);
-#endif
+                        lt_switch_layout(PAL_JPN(0x1C, 25));
                         sitLayoutDone = 1;
                     }
                 }
@@ -2313,11 +2282,7 @@ void subBoyCollision(GObj *volatile self)
             }
             sub->flags18.ll = (sub->flags18.ll & ~0x20000000000LL) |
                               ((unsigned long long)(ACTGame_FLAG_TETSUNAGI() & 1) << 41);
-#ifdef VERSION_JPN
-            if (((CHAINROW(self)->flags.word >> 19) & 1) && ACTGame_FLAG_TETSUNAGI() == 0) {
-#else
             if (((CHAINROW(self)->flags.word >> 13) & 1) && ACTGame_FLAG_TETSUNAGI() == 0) {
-#endif
                 ACTSendMailCorrect(self, 0x1AA);
             }
             if ((int)(sub->flags18.ll >> 38) & 1) {
@@ -2603,13 +2568,8 @@ void actBoyCliffHesitate(GObj *volatile self)
     int hit = 0;
 
     ACTAdjustPlane(self, &GOBJ_WORK(self)->intrReq.b.wall);
-#ifdef VERSION_JPN
-    GetOrientOfWall(BOY_WALL(self) + 0x8C0, GOBJ_WORK(self)->intrReq.b.wall.elem,
-                    &GOBJ_WORK(self)->intrReq.b.wall.o);
-#else
     GetOrientOfWall(BOY_WALL(self) + 0x8D0, GOBJ_WORK(self)->intrReq.b.wall.elem,
                     &GOBJ_WORK(self)->intrReq.b.wall.o);
-#endif
     if (CompareAttribute(((FcWallEnt *)GOBJ_WORK(self)->intrReq.b.wall.elem)->attr, 0x400)) {
         hit = 1;
         GOBJ_WORK(self)->cliffReq.b = GOBJ_WORK(self)->intrReq.b;
@@ -2777,11 +2737,7 @@ void actBoyPullupReady(GObj *volatile self)
     }
     Act *sub = GOBJ_ACT(self);
 
-#ifdef VERSION_JPN
-    ACTAdjustPlane(self, BOY_WALL(self) + 0x8B0);
-#else
     ACTAdjustPlane(self, BOY_WALL(self) + 0x8C0);
-#endif
     while (1) {
         if (GOBJ_WORK(self)->boxSideSet && motionKind[GOBJ_SUB(self)->ctrl.motion].playMode != 1) {
             _MoveGV(mv, test_CURRENTROOT(self), GOBJ_WORK(self)->boxSidePos, 3.0f);
@@ -3062,11 +3018,7 @@ void actBoyDitch3mReady(GObj *volatile self)
     int a;
     int b;
 
-#ifdef VERSION_JPN
-    ACTAdjustPlane(self, BOY_WALL(self) + 0x8B0);
-#else
     ACTAdjustPlane(self, BOY_WALL(self) + 0x8C0);
-#endif
     _ACTWait(1);
     ResetMotionProgramInterpInfo(self, 35);
     ResetMotionProgramInterpInfo(self, 1);
@@ -3429,11 +3381,7 @@ inline void actBoyStand(GObj *volatile self)
 {
     MotionDef *row = GOBJ_SUB(self)->ctrl.motion + motionKind;
 
-#ifdef VERSION_JPN
-    if (row->flags.word & 1) {
-#else
     if ((row->flags.word >> 8) & 1) {
-#endif
         ACTAdjustPlane(self, &GOBJ_WORK(self)->intrReq.a.wall);
     }
     while (1) {

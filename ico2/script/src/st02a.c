@@ -80,17 +80,9 @@ void actSt02aInit(void)
 {
     if (gflagChk(118) == 0) {
         SetWayGroupActive(26, 0);
-#ifdef VERSION_JPN
-        stage_SetAnimation(95, 0, 0);
-#else
-        stage_SetAnimation(99, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(99, 95), 0, 0);
     } else {
-#ifdef VERSION_JPN
-        stage_SetAnimation(95, 0, -1);
-#else
-        stage_SetAnimation(99, 0, -1);
-#endif
+        stage_SetAnimation(PAL_JPN(99, 95), 0, -1);
     }
 }
 
@@ -102,22 +94,14 @@ void actSt02aDoor(GObj *volatile self)
     _ACTWait(1);
     if (scpTriggerBall(self, boyGObj, 200.0f) != 0 ||
         (girlGObj != 0 && scpTriggerBall(self, girlGObj, 400.0f) != 0)) {
-#ifdef VERSION_JPN
-        stage_SetAnimation(94, 0, 0);
-#else
-        stage_SetAnimation(98, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(98, 94), 0, 0);
         _ACTWait(60);
         door_down_start_mail[0].func = actSt02aDoorDownChk;
         act->mail = door_down_start_mail;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-#ifdef VERSION_JPN
-        stage_SetAnimation(93, 0, 0);
-#else
-        stage_SetAnimation(97, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(97, 93), 0, 0);
         door_up_start_mail[0].func = actSt02aDoorUpChk;
         act->mail = door_up_start_mail;
         ACTSendMailCorrect(self, 430);
@@ -169,11 +153,7 @@ void actSt02aDoorUpChk(GObj *volatile self)
     _ACTWait(15);
     actCreateSubThread(actSt02aDoorUpEffect, 21);
     scpWakeupItemWithBoundary(-1827.0f, -1072.0f, 2285.0f, 100.0f);
-#ifdef VERSION_JPN
-    stage_SetAnimation(93, 1, 0);
-#else
-    stage_SetAnimation(97, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(97, 93), 1, 0);
     pos = doorSePos;
     soundSeDefPlay(1220, 0, pos.f, 1);
     _ACTWait(30);
@@ -181,11 +161,7 @@ void actSt02aDoorUpChk(GObj *volatile self)
     _ACTWait(30);
     soundSeDefStop(h);
     soundSeDefPlay(1222, 0, pos.f, 1);
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(93) == 0) {
-#else
-    while (stage_CheckAnimationFinish(97) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(97, 93)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -207,11 +183,7 @@ void actSt02aDoorDownChk(GObj *volatile self)
     _ACTWait(15);
     actCreateSubThread(actSt02aDoorDownEffect, 21);
     scpWakeupItemWithBoundary(-1827.0f, -1072.0f, 2285.0f, 100.0f);
-#ifdef VERSION_JPN
-    stage_SetAnimation(94, 1, 0);
-#else
-    stage_SetAnimation(98, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(98, 94), 1, 0);
     pos = doorSePos;
     soundSeDefPlay(1220, 0, pos.f, 1);
     _ACTWait(30);
@@ -219,11 +191,7 @@ void actSt02aDoorDownChk(GObj *volatile self)
     _ACTWait(30);
     soundSeDefStop(h);
     soundSeDefPlay(1222, 0, pos.f, 1);
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(94) == 0) {
-#else
-    while (stage_CheckAnimationFinish(98) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(98, 94)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -268,13 +236,8 @@ void actSt02aFenceOpen(GObj *volatile self)
         while (lt_fade_status() != 2) {
             _ACTWait(1);
         }
-#ifdef VERSION_JPN
-        stage_SetAnimation(95, 0, -1);
-        stage_SetAnimation(96, 0, -1);
-#else
-        stage_SetAnimation(99, 0, -1);
-        stage_SetAnimation(100, 0, -1);
-#endif
+        stage_SetAnimation(PAL_JPN(99, 95), 0, -1);
+        stage_SetAnimation(PAL_JPN(100, 96), 0, -1);
         SetCameraFlag_GamecamCutBack();
         scpFadeIn(8.0f);
         while (scpFadeChk() != 0) {
@@ -283,11 +246,7 @@ void actSt02aFenceOpen(GObj *volatile self)
     }
     SetWayGroupActive(26, 1);
     scpBoyControlReadDisable = 0;
-#ifdef VERSION_JPN
-    lt_switch_layout(51);
-#else
-    lt_switch_layout(54);
-#endif
+    lt_switch_layout(PAL_JPN(54, 51));
     scpWakeupEnemyAll();
 }
 
@@ -348,11 +307,7 @@ void actSt02aWaterFallChk(GObj *volatile self)
     DeleteParticleLayout(scpSearchGobj(1723));
     DeleteParticleLayout(scpSearchGobj(1724));
     DeleteParticleLayout(scpSearchGobj(1725));
-#ifdef VERSION_JPN
-    stage_SetAnimation(387, -1, -2);
-#else
-    stage_SetAnimation(391, -1, -2);
-#endif
+    stage_SetAnimation(PAL_JPN(391, 387), -1, -2);
     scpTransGObj(scpSearchGobj(1705), 0.0f, -200.0f, 0.0f);
     scpTransGObj(scpSearchGobj(1707), 0.0f, -200.0f, 0.0f);
     _ACTWait(5);
@@ -373,29 +328,17 @@ void actSt02aGondolaUp(GObj *volatile self)
     }
 
     _ACTWait(16);
-#ifdef VERSION_JPN
-    stage_SetAnimation(97, 1, 0);
-#else
-    stage_SetAnimation(101, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(101, 97), 1, 0);
     gflagOn(119);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFrame(97, 140, 0) == 0) {
-#else
-    while (stage_CheckAnimationFrame(101, 140, 0) == 0) {
-#endif
+    while (stage_CheckAnimationFrame(PAL_JPN(101, 97), 140, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     iosPadActRequest(boyPad, 16);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFrame(97, 149, 1) == 0) {
-#else
-    while (stage_CheckAnimationFrame(101, 149, 1) == 0) {
-#endif
+    while (stage_CheckAnimationFrame(PAL_JPN(101, 97), 149, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -405,11 +348,7 @@ void actSt02aGondolaUp(GObj *volatile self)
         scpAdpcmCloseFunc(&gondola);
     }
 
-#ifdef VERSION_JPN
-    lt_switch_layout(51);
-#else
-    lt_switch_layout(54);
-#endif
+    lt_switch_layout(PAL_JPN(54, 51));
     scpBoyControlReadDisable = 0;
     scpWakeupEnemyAll();
 
@@ -431,29 +370,17 @@ void actSt02aGondolaDown(GObj *volatile self)
         _ACTWait(1);
     }
 
-#ifdef VERSION_JPN
-    stage_SetAnimation(97, 1, 150);
-#else
-    stage_SetAnimation(101, 1, 150);
-#endif
+    stage_SetAnimation(PAL_JPN(101, 97), 1, 150);
     gflagOff(119);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFrame(97, 295, 0) == 0) {
-#else
-    while (stage_CheckAnimationFrame(101, 295, 0) == 0) {
-#endif
+    while (stage_CheckAnimationFrame(PAL_JPN(101, 97), 295, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     iosPadActRequest(boyPad, 16);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFrame(97, 300, 1) == 0) {
-#else
-    while (stage_CheckAnimationFrame(101, 300, 1) == 0) {
-#endif
+    while (stage_CheckAnimationFrame(PAL_JPN(101, 97), 300, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -463,11 +390,7 @@ void actSt02aGondolaDown(GObj *volatile self)
         scpAdpcmCloseFunc(&gondola_test);
     }
 
-#ifdef VERSION_JPN
-    lt_switch_layout(51);
-#else
-    lt_switch_layout(54);
-#endif
+    lt_switch_layout(PAL_JPN(54, 51));
     scpBoyControlReadDisable = 0;
     scpWakeupEnemyAll();
 
@@ -511,23 +434,11 @@ void actSt02aGondola(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(119) != 0) {
-#ifdef VERSION_JPN
-        stage_SetAnimation(97, 0, 0);
-#else
-        stage_SetAnimation(101, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(101, 97), 0, 0);
         _ACTWait(10);
-#ifdef VERSION_JPN
-        stage_SetAnimation(97, 0, 149);
-#else
-        stage_SetAnimation(101, 0, 149);
-#endif
+        stage_SetAnimation(PAL_JPN(101, 97), 0, 149);
     } else {
-#ifdef VERSION_JPN
-        stage_SetAnimation(97, 0, 300);
-#else
-        stage_SetAnimation(101, 0, 300);
-#endif
+        stage_SetAnimation(PAL_JPN(101, 97), 0, 300);
     }
 
     gondola_mail[0].func = actSt02aGondolaMain;
@@ -650,11 +561,8 @@ void actSt02aSekizo(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
-#ifdef VERSION_JPN
-    scpSekizou(self, 123, 98, 0, 18, 900.0f, 1828.0f, 1150.0f, 800.0f, 1828.0f, 1150.0f);
-#else
-    scpSekizou(self, 123, 102, 0, 18, 900.0f, 1828.0f, 1150.0f, 800.0f, 1828.0f, 1150.0f);
-#endif
+    scpSekizou(self, 123, PAL_JPN(102, 98), 0, 18, 900.0f, 1828.0f, 1150.0f, 800.0f, 1828.0f,
+               1150.0f);
 }
 
 void actSt02aWay(GObj *volatile self)
@@ -775,11 +683,7 @@ void actSt02aFenceSwitch(GObj *volatile self)
     Act *sub = GOBJ_ACT(self);
 
     sub->mainMail = 0;
-#ifdef VERSION_JPN
-    lt_switch_layout(52);
-#else
-    lt_switch_layout(55);
-#endif
+    lt_switch_layout(PAL_JPN(55, 52));
     scpBoyControlReadDisable = 1;
 
     fence_switch_mail[0].func = actSt02aFenceOpen;
@@ -793,15 +697,9 @@ static void actSt02aFenceOpenSub(GObj *volatile self)
     while (st02a_fence == 0) {
         _ACTWait(1);
     }
-#ifdef VERSION_JPN
-    stage_SetAnimation(95, 1, 0);
-    stage_SetAnimation(96, 1, 0);
-    while (stage_CheckAnimationFinish(96) == 0) {
-#else
-    stage_SetAnimation(99, 1, 0);
-    stage_SetAnimation(100, 1, 0);
-    while (stage_CheckAnimationFinish(100) == 0) {
-#endif
+    stage_SetAnimation(PAL_JPN(99, 95), 1, 0);
+    stage_SetAnimation(PAL_JPN(100, 96), 1, 0);
+    while (stage_CheckAnimationFinish(PAL_JPN(100, 96)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -825,11 +723,7 @@ void actSt02aGondolaSwitch(GObj *volatile self)
     Act *sub = GOBJ_ACT(self);
 
     sub->mainMail = 0;
-#ifdef VERSION_JPN
-    lt_switch_layout(52);
-#else
-    lt_switch_layout(55);
-#endif
+    lt_switch_layout(PAL_JPN(55, 52));
     scpBoyControlReadDisable = 1;
     scpSleepEnemyAll();
 

@@ -39,18 +39,22 @@ typedef struct { /* field names derived */
 } StgSlot; /* derived name */
 
 #ifdef VERSION_JPN
+
 /* .data, all zero: the preload buffer, 896 sectors of 2048
    bytes, the cap stgmgrNextStagePreLoad clamps a read to and the ring cdvd.c's
    stream reads through; the stage manager's message queue record; and the exit
    positions of the fifteen entrances stgmgrNextStagePreLoadEntry collects.
    The buffer is 64-byte aligned for the CD's DMA, as cdvd.c's iosCdvd is. */
 char stagePreLoadBuff[896 * 2048] __attribute__((aligned(64))) = {0};
+
 #else
+
 /* .data, all zero: the preload buffer, 896 sectors of 2048
    bytes, the cap stgmgrNextStagePreLoad clamps a read to and the ring cdvd.c's
    stream reads through; the stage manager's message queue record; and the exit
    positions of the fifteen entrances stgmgrNextStagePreLoadEntry collects. */
 char stagePreLoadBuff[896 * 2048] = {0};
+
 #endif
 
 IosMsgQueue stageMgrMsgQ = {0};
@@ -429,11 +433,7 @@ void StageManager(void)
         stagePreLoadMgrEntry = 0;
         if (msg->stage <= 0xFFFF) {
             exit_stage(msg->stage);
-#ifdef VERSION_JPN
-            lt_switch_layout(50);
-#else
-            lt_switch_layout(0x35);
-#endif
+            lt_switch_layout(PAL_JPN(0x35, 50));
             systemStatus[6] = 1;
             systemStatus[5] = 1;
             stgMgrWakeupRequest = 1;

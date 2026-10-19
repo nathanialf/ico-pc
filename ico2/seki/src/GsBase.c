@@ -8,11 +8,7 @@
 #include "Texture.h"
 #include "staticBlur.h"
 #include <libvu0.h>
-
-#ifdef VERSION_JPN
 #include <math.h>
-#endif
-
 #include <eekernel.h>
 #include <sifdev.h>
 #include <stdio.h>
@@ -126,14 +122,14 @@ void gsb_Init(void *db)
         omode = 3;
         break;
     }
-#ifndef VERSION_JPN
-    sceGsResetGraph(0, systemStatus[1] == 1, omode, 1);
-#endif
+    if (!ICO_JPN) {
+        sceGsResetGraph(0, systemStatus[1] == 1, omode, 1);
+    }
     sceGsSetDefDBuff(db, 0, ScreenWidth, ScreenHeight, 2, 0x30, fbClear);
     gsb_SetFrame(db, 0, 0, 0x30, 2);
-#ifdef VERSION_JPN
-    sceGsResetGraph(0, systemStatus[1] == 1, omode, 1);
-#endif
+    if (ICO_JPN) {
+        sceGsResetGraph(0, systemStatus[1] == 1, omode, 1);
+    }
     sceGsSyncV(0);
     buffer_ID = 0;
     FlushCache(0);
@@ -216,6 +212,7 @@ static int reductionGreen; /* derived name */
 static int reductionBlue; /* derived name */
 
 #ifdef VERSION_JPN
+
 /* Reduce the frame into the feedback area: one 22 qword GIF packet, built on
  * the stack and sent down the GIF channel by hand, that first clears the
  * half height frame in black and then draws it back over itself through the
@@ -295,7 +292,9 @@ void gsb_Reduction(void)
         reductionBlue = fbKeep ? 128 : GlobalStageSetting.reductionCol[2];
     }
 }
+
 #else
+
 /* Reduce the frame into the feedback area: one 22 qword GIF packet, built on
  * the stack and sent down the GIF channel by hand, that first clears the
  * half height frame in black and then draws it back over itself through the
@@ -378,6 +377,7 @@ void gsb_Reduction(void)
         reductionBlue = fbKeep ? 128 : GlobalStageSetting.reductionCol[2];
     }
 }
+
 #endif
 
 /* the colour the kept frame is drawn back in */
@@ -467,9 +467,7 @@ static void gsb_KeepFrameBuffer(void)
    then (PAL) one word nothing reads or writes */
 static float fadeLevel; /* derived name */
 
-#ifndef VERSION_JPN
 static int gsbUnusedWord; /* derived name */
-#endif
 
 /* as in GifPacket.h, which this TU does not include */
 extern void gif_StartPacketPri(int pri);
@@ -554,9 +552,13 @@ void gsb_SetMotionBlur(void)
 /* gsb_scissorOnDemo's state: the demo state it last saw, the band level and
    its step */
 #ifdef VERSION_JPN
+
 static int scissorLastState = 51; /* derived name */
+
 #else
+
 static int scissorLastState = 54; /* derived name */
+
 #endif
 
 static float scissorLevel = 0.0f; /* derived name */
@@ -580,11 +582,7 @@ static void gsb_scissorOnDemo(void)
     unsigned char col[4];
     int i;
 
-#ifdef VERSION_JPN
-    if (current_layout_id == 52 && scissorLastState != current_layout_id) {
-#else
-    if (current_layout_id == 55 && scissorLastState != current_layout_id) {
-#endif
+    if (current_layout_id == PAL_JPN(55, 52) && scissorLastState != current_layout_id) {
         scissorStep = 2.5f;
     } else if (scissorLastState != current_layout_id) {
         scissorStep = -2.5f;
@@ -926,9 +924,13 @@ static void gsb_filmNoise(void)
 
 /* the stage animation group each film noise target loops, -1 for none */
 #ifdef VERSION_JPN
+
 static const int filmNoiseGroup[] = {-1, 63, 64, 65, 66}; /* derived name */
+
 #else
+
 static const int filmNoiseGroup[] = {-1, 67, 68, 69, 70}; /* derived name */
+
 #endif
 
 inline void gsb_ResetFilmNoise(void)
@@ -1027,7 +1029,6 @@ void gsb_InitGSSystem(void)
     screenOffsetX = screenOffsetY = 0;
 }
 
-#ifndef VERSION_JPN
 /* Six zero words between gsb_InitGSSystem's flag and gsb_SyncGSSystem's
    counter: nothing reads or writes them. */
 static int gsbUnused0 = 0; /* derived name */
@@ -1045,7 +1046,6 @@ static int gsbUnused5 = 0; /* derived name */
 inline int gsb_ResetSnap(void) {}
 
 inline int gsb_TakeSnap(void) {}
-#endif
 
 /* the frames gsb_SyncGSSystem has waited on the GS */
 static int syncRetry = 0; /* derived name */
@@ -1251,15 +1251,15 @@ void gsb_SetVSMatrix(int w, int h, float d)
     float zoom;
 
     center_X = center_Y = 2048.0f;
-#ifdef VERSION_JPN
-    currentFocusDistance = d;
-#else
-    if (d == 0.0f) {
-        d = (float)currentFocusDistance;
-    } else {
+    if (ICO_JPN) {
         currentFocusDistance = d;
+    } else {
+        if (d == 0.0f) {
+            d = (float)currentFocusDistance;
+        } else {
+            currentFocusDistance = d;
+        }
     }
-#endif
     vsWidth = w;
     vsHeight = h;
     if (zoomTarget != zoomCurrent) {
@@ -1271,11 +1271,11 @@ void gsb_SetVSMatrix(int w, int h, float d)
     zoom = (float)GlobalStageSetting.viewScale * zoomCurrent * d * (float)debug_zoom_per *
            (float)ScreenWidth / 640.0f / 100.0f / 100.0f;
     vsParam[0] = zoom;
-#ifndef VERSION_JPN
-    if (debug_snapshot_reserve != 0 || (pad[1].now & 0x800) != 0) {
-        vsParam[0] = zoom * (float)debug_snapshot_num / 100.0f;
+    if (!ICO_JPN) {
+        if (debug_snapshot_reserve != 0 || (pad[1].now & 0x800) != 0) {
+            vsParam[0] = zoom * (float)debug_snapshot_num / 100.0f;
+        }
     }
-#endif
     tex_UpdateMipMapLevel((float)GlobalStageSetting.viewScale * zoomCurrent *
                           (float)debug_zoom_per * (float)ScreenWidth / 640.0f / 100.0f);
     vsParam[3] = center_X;
@@ -1289,19 +1289,19 @@ void gsb_SetVSMatrix(int w, int h, float d)
         (float)ScreenHeight * 4.0f / ((float)ScreenWidth * 3.0f) * (float)h / (float)ScreenHeight;
     gsb_SetVSMatrixSub((float *)(matrixptr + 0xC0), (float *)(matrixptr + 0x1C0),
                        (float *)(matrixptr + 0x240), (float *)(matrixptr + 0x340), vsParam);
-#ifdef VERSION_JPN
-    /* The field of view print of the January debug listing (SRCFILE.TXT,
-     * GsBase.c 2305-2306); the release build keeps its two tests.  The
-     * format text is derived: it is on no disc. */
-    if (gsSystemReady != 0) {
-        if (debug_font_flag3 != 0 || (debug_font_flag & 1)) {
+    if (ICO_JPN) {
+        /* The field of view print of the January debug listing (SRCFILE.TXT,
+         * GsBase.c 2305-2306); the release build keeps its two tests.  The
+         * format text is derived: it is on no disc. */
+        if (gsSystemReady != 0) {
+            if (debug_font_flag3 != 0 || (debug_font_flag & 1)) {
 #ifdef DEBUG
-            debug_Printf(340, ScreenHeight / 2 - 38, 0xFFFFFF80, "FOV %f",
-                         atan2f((float)ScreenWidth, vsParam[0]) * 180.0f / 3.1415927f);
+                debug_Printf(340, ScreenHeight / 2 - 38, 0xFFFFFF80, "FOV %f",
+                             atan2f((float)ScreenWidth, vsParam[0]) * 180.0f / 3.1415927f);
 #endif
+            }
         }
     }
-#endif
 }
 
 /* Clip a box against the current matrix: transform its eight corners with the

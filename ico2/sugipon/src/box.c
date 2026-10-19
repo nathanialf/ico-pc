@@ -160,19 +160,17 @@ static int checkFieldContact(GObj *self, float lim)
 {
     ClipWork w;
     float pos[4];
-#ifndef VERSION_JPN
     float v[4];
-#endif
     int r;
 
     GetRootPosition(pos, self);
-#ifdef VERSION_JPN
-    GetLowerPlaneCollision(&w, pos);
-#else
-    CopyVector(v, pos);
-    v[1] -= GOBJ_SUB(self)->root.move[1];
-    GetLowerPlaneCollision(&w, v);
-#endif
+    if (ICO_JPN) {
+        GetLowerPlaneCollision(&w, pos);
+    } else {
+        CopyVector(v, pos);
+        v[1] -= GOBJ_SUB(self)->root.move[1];
+        GetLowerPlaneCollision(&w, v);
+    }
     r = CheckFieldContact(&w, self, pos, lim);
     if (GOBJ_SUB(self)->parent.obj != 0) {
         UnlinkParentOfDObj(self);
@@ -426,13 +424,8 @@ static void initWheels(GObj *self, SObjSimpleSetting *lay)
     BoxWork *w = GOBJ_SUB(self)->work;
     int i;
 
-#ifdef VERSION_JPN
     if (objLayout[self->labelId].accessary == 26 ||
-        accessary[GOBJ_SUB(self)->accessary].model == 1548) {
-#else
-    if (objLayout[self->labelId].accessary == 26 ||
-        accessary[GOBJ_SUB(self)->accessary].model == 0x610) {
-#endif
+        accessary[GOBJ_SUB(self)->accessary].model == PAL_JPN(0x610, 1548)) {
         w->wheelDObj = 0;
     } else {
         w->wheelDObj = CSVSYSTEM_InitDObj(accessary[GOBJ_SUB(self)->accessary].model, lay);
@@ -1289,11 +1282,7 @@ static void execFloating(GObj *self)
     if (w->floatPhase == 0) {
         CopyVector(cw.pt[0], pos);
         cw.pt[0][1] = w->waterHeight[0];
-#ifdef VERSION_JPN
-        EntryStageMultiBgaManager(487, cw.pt[0], IdentityQuaternion);
-#else
-        EntryStageMultiBgaManager(491, cw.pt[0], IdentityQuaternion);
-#endif
+        EntryStageMultiBgaManager(PAL_JPN(491, 487), cw.pt[0], IdentityQuaternion);
     }
 }
 
@@ -1481,16 +1470,16 @@ static void action(GObj *self)
             v.f[2] = 1.0f;
             _ApplyMatrix(GOBJ_SUB(self)->ctrl.dir, (void *)GOBJ_SUB(self)->nodeMtx, &v);
         }
-#ifndef VERSION_JPN
-        CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
-#endif
+        if (!ICO_JPN) {
+            CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
+        }
         break;
     case 1:
     case 6:
         execAutoMove(self);
-#ifndef VERSION_JPN
-        CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
-#endif
+        if (!ICO_JPN) {
+            CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
+        }
         break;
     case 2:
     case 3:
@@ -1498,9 +1487,9 @@ static void action(GObj *self)
         break;
     case 4:
         playBoxAnimation(self, v.f);
-#ifndef VERSION_JPN
-        CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
-#endif
+        if (!ICO_JPN) {
+            CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
+        }
         break;
     case 5:
         execFloating(self);
@@ -1508,9 +1497,9 @@ static void action(GObj *self)
     case -1:
     default:
         debug_StdPrintfDummy("box die!!!\n");
-#ifndef VERSION_JPN
-        CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
-#endif
+        if (!ICO_JPN) {
+            CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
+        }
         break;
     }
     if (p->mode != 6) {
@@ -1861,10 +1850,8 @@ static int moveBoxAutoMatic(GObj *self, int dir)
     float v2[4];
 #endif
     BoxWork *p = GOBJ_SUB(self)->work;
-#ifndef VERSION_JPN
     float t = 30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
     float w = t * t;
-#endif
     int r;
 
     switch (dir) {
@@ -1873,18 +1860,18 @@ static int moveBoxAutoMatic(GObj *self, int dir)
         AddVectorXYZ(p->vel, p->vel, ZeroVector);
         break;
     case 1:
-#ifndef VERSION_JPN
-        memset(v, 0, 16);
-        v[2] = w * 0.5f;
-#endif
+        if (!ICO_JPN) {
+            memset(v, 0, 16);
+            v[2] = w * 0.5f;
+        }
         p->friction = 0.98f;
         AddVectorXYZ(p->vel, p->vel, v);
         break;
     case -1:
-#ifndef VERSION_JPN
-        memset(v2, 0, 16);
-        v2[2] = w * -0.5f;
-#endif
+        if (!ICO_JPN) {
+            memset(v2, 0, 16);
+            v2[2] = w * -0.5f;
+        }
         p->friction = 0.98f;
         AddVectorXYZ(p->vel, p->vel, v2);
         break;

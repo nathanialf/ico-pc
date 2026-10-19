@@ -36,9 +36,13 @@
    StgMgrMsg, 0x18 B) and SchedulerMsgQ the scheduler's queue (message.c's
    IosMsgQueue, 0x30 B). */
 #ifdef VERSION_JPN
+
 int systemStatus[12] = {0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7};
+
 #else
+
 int systemStatus[12] = {1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7};
+
 #endif
 
 sceGsDBuff db = {{{0}}};
@@ -126,9 +130,9 @@ void Main(void)
     debug_StdPrintfDummy("SYSTEM_FRAMERATE: \x1b[33m%d\x1b[m\n",
                          (60 - systemStatus[0] * 10) / systemStatus[1]);
     *T0_COUNT = 0;
-#ifndef VERSION_JPN
-    NonLinearCameraMove = 3;
-#endif
+    if (!ICO_JPN) {
+        NonLinearCameraMove = 3;
+    }
     stage_no = 0;
     exit_no = 0;
     interlace = 1;
@@ -136,11 +140,7 @@ void Main(void)
     systemFault = 0;
     lock_execIcoMisc = 0;
     n = debug_TryToGetStartStage();
-#ifdef VERSION_JPN
-    thisIsYourStartStage = n < 104 ? n : 103;
-#else
-    thisIsYourStartStage = n < 106 ? n : 105;
-#endif
+    thisIsYourStartStage = n < PAL_JPN(106, 104) ? n : PAL_JPN(105, 103);
     if (thisIsYourStartStage <= 0) {
         thisIsYourStartStage = 1;
     }
@@ -163,9 +163,9 @@ void Main(void)
     while (1) {
         iosThreadCancelWakeup(0);
         iosThreadSleep();
-#ifndef VERSION_JPN
-        gsb_ResetSnap();
-#endif
+        if (!ICO_JPN) {
+            gsb_ResetSnap();
+        }
         if (mpegPlay != 0) {
             if (mpegInitDone == 0) {
                 continue;
@@ -176,13 +176,8 @@ void Main(void)
             ios_partition_mpeg = ios_partition_isys;
             AdpcmStreamFree();
             soundAllocIopFree();
-#ifdef VERSION_JPN
-            movie_init(&movieFile[mpegPlay * 0x20], 720, 480, 36, 12, soundOutputModeGet() == 1,
-                       mpegPlayInitColor);
-#else
-            movie_init(&movieFile[mpegPlay * 0x20], 720, systemStatus[0] ? 576 : 480, 36, 12,
-                       soundOutputModeGet() == 1, mpegPlayInitColor);
-#endif
+            movie_init(&movieFile[mpegPlay * 0x20], 720, PAL_JPN(systemStatus[0] ? 576 : 480, 480),
+                       36, 12, soundOutputModeGet() == 1, mpegPlayInitColor);
             ret = movie_proc(movie_abort_check);
             sceGsSyncV(0);
             soundAllocIopHeap();
@@ -213,9 +208,9 @@ void Main(void)
         }
         iosOmCreateDL();
         ExecDelayFree();
-#ifndef VERSION_JPN
-        gsb_TakeSnap();
-#endif
+        if (!ICO_JPN) {
+            gsb_TakeSnap();
+        }
         frameReady = 1;
         if (systemFault != 0) {
             break;
@@ -374,9 +369,7 @@ int movie_abort_check(void)
     return ret;
 }
 
-#ifndef VERSION_JPN
 void demoEnd(void) {}
-#endif
 
 /* the boot thread's kernel id */
 static int bootThreadId; /* derived name */
@@ -419,9 +412,7 @@ int interlace QWORD = 0;
 
 int thisIsYourStartStage QWORD = 0;
 
-#ifndef VERSION_JPN
 int NonLinearCameraMove QWORD = 0;
-#endif
 
 int GlobalTimer QWORD = 0;
 

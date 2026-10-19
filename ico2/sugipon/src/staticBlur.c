@@ -1180,15 +1180,15 @@ void FullScreenEffectBefore(void)
     workBase[2] = 0x2E00;
     workBase[3] = 0x3000;
 
-#ifdef VERSION_JPN
-    tex_LockHeadTBP(0x3800, 8);
-#else
-    if (systemStatus[0] == 1) {
-        tex_LockHeadTBP(0x3A00, 8);
-    } else {
+    if (ICO_JPN) {
         tex_LockHeadTBP(0x3800, 8);
+    } else {
+        if (systemStatus[0] == 1) {
+            tex_LockHeadTBP(0x3A00, 8);
+        } else {
+            tex_LockHeadTBP(0x3800, 8);
+        }
     }
-#endif
 
     if (sunOn) {
         calcSun();

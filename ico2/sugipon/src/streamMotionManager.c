@@ -49,9 +49,7 @@ static int framePlayed = 0; /* derived name */
 
 static int frameTime = 0; /* derived name */
 
-#ifndef VERSION_JPN
 static int frameCount = 0; /* derived name */
-#endif
 
 /* One character's stream: the node and shape counts the frame header gives,
    the frame's size, the ring offsets of the current and the next frame, the
@@ -128,6 +126,7 @@ static inline void _advanceRing(int amt) /* derived name */
 }
 
 #ifdef VERSION_JPN
+
 static int _infoUpdate(void)
 {
     int top;
@@ -186,7 +185,9 @@ static int _infoUpdate(void)
     frameTime += 1500 / ((60 - systemStatus[0] * 10) / systemStatus[1]);
     return 0;
 }
+
 #else
+
 static int _infoUpdate(void)
 {
     int top;
@@ -274,6 +275,7 @@ static int _infoUpdate(void)
     frameTime += systemStatus[0] == 0 ? 2997 : 3619;
     return 0;
 }
+
 #endif
 
 void PlayStreamMotion(void)
@@ -404,11 +406,7 @@ inline float GetStreamMotionData(char *dst, int no)
         return -1.0f;
     }
     getStreamMotionData(dst, streamEntry[no].cur, no);
-#ifdef VERSION_JPN
-    return (float)framePlayed / 50.0f;
-#else
-    return (float)framePlayed / 2997.0f;
-#endif
+    return (float)framePlayed / PAL_JPN(2997.0f, 50.0f);
 }
 
 static void _transRingBuf(int *idx_p, char *dst, int size, char *src, int amt)

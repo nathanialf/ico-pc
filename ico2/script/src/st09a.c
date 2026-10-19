@@ -57,17 +57,9 @@ SqEntry *st09a_brg = 0;
 void actSt09aInit(void)
 {
     if (gflagChk(86) == 0) {
-#ifdef VERSION_JPN
-        stage_SetAnimation(374, 0, 0);
-#else
-        stage_SetAnimation(378, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(378, 374), 0, 0);
     } else {
-#ifdef VERSION_JPN
-        stage_SetAnimation(374, 0, -1);
-#else
-        stage_SetAnimation(378, 0, -1);
-#endif
+        stage_SetAnimation(PAL_JPN(378, 374), 0, -1);
     }
 }
 
@@ -78,28 +70,16 @@ void actSt09aElvDown(GObj *volatile self)
        the animation wait and read again for soundSeDefStop */
     volatile int se;
 
-#ifdef VERSION_JPN
-    lt_switch_layout(52);
-#else
-    lt_switch_layout(55);
-#endif
+    lt_switch_layout(PAL_JPN(55, 52));
     LockForceGroundParent(boyGObj);
 
-#ifdef VERSION_JPN
-    stage_SetAnimation(371, 1, 0);
-#else
-    stage_SetAnimation(375, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(375, 371), 1, 0);
 
     se = soundSeDefPlay(1217, 0, 0, 1);
 
     gflagOn(83);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFrame(371, 210, 1) == 0) {
-#else
-    while (stage_CheckAnimationFrame(375, 210, 1) == 0) {
-#endif
+    while (stage_CheckAnimationFrame(PAL_JPN(375, 371), 210, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -108,11 +88,7 @@ void actSt09aElvDown(GObj *volatile self)
 
     UnlockForceGroundParent(boyGObj);
 
-#ifdef VERSION_JPN
-    lt_switch_layout(51);
-#else
-    lt_switch_layout(54);
-#endif
+    lt_switch_layout(PAL_JPN(54, 51));
 
     elvDown_mes[0].func = actSt09aElvMain;
     act->mail = elvDown_mes;
@@ -124,11 +100,7 @@ void actSt09aBrgDown(GObj *volatile self)
 {
     GProc *th;
 
-#ifdef VERSION_JPN
-    lt_switch_layout(52);
-#else
-    lt_switch_layout(55);
-#endif
+    lt_switch_layout(PAL_JPN(55, 52));
     gflagOn(86);
     scpAdpcmPlayRequestFunc(90, &st09a_brg, 1, 1, 1);
 
@@ -157,11 +129,7 @@ void actSt09aBrgDown(GObj *volatile self)
             _ACTWait(1);
         }
 
-#ifdef VERSION_JPN
-        stage_SetAnimation(374, 0, -1);
-#else
-        stage_SetAnimation(378, 0, -1);
-#endif
+        stage_SetAnimation(PAL_JPN(378, 374), 0, -1);
         scpFadeIn(5.0f);
 
         while (scpFadeChk() != 0) {
@@ -169,11 +137,7 @@ void actSt09aBrgDown(GObj *volatile self)
         }
     }
     scpBoyControlReadDisable = 0;
-#ifdef VERSION_JPN
-    lt_switch_layout(51);
-#else
-    lt_switch_layout(54);
-#endif
+    lt_switch_layout(PAL_JPN(54, 51));
 }
 
 void actSt09aElv(GObj *volatile self)
@@ -184,17 +148,9 @@ void actSt09aElv(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(83) != 0) {
-#ifdef VERSION_JPN
-        stage_SetAnimation(371, 0, 210);
-#else
-        stage_SetAnimation(375, 0, 210);
-#endif
+        stage_SetAnimation(PAL_JPN(375, 371), 0, 210);
     } else {
-#ifdef VERSION_JPN
-        stage_SetAnimation(371, 0, 0);
-#else
-        stage_SetAnimation(375, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(375, 371), 0, 0);
     }
 
     elv_mes[0].func = actSt09aElvMain;
@@ -214,11 +170,8 @@ void actSt09aSekizo(GObj *volatile self)
     soundSeDefPlay(1347, 0, sekizoPos, 1);
     soundSeDefPlay(1348, 0, sekizoPos, 1);
 
-#ifdef VERSION_JPN
-    scpSekizou(self, 84, 372, 0, 18, -1350.0f, -100.0f, 1515.0f, -1450.0f, -100.0f, 1515.0f);
-#else
-    scpSekizou(self, 84, 376, 0, 18, -1350.0f, -100.0f, 1515.0f, -1450.0f, -100.0f, 1515.0f);
-#endif
+    scpSekizou(self, 84, PAL_JPN(376, 372), 0, 18, -1350.0f, -100.0f, 1515.0f, -1450.0f, -100.0f,
+               1515.0f);
 }
 
 void actSt09aIntro(GObj *volatile self)
@@ -326,38 +279,22 @@ void actSt09aElvUp(GObj *volatile self)
        the animation wait and read again for soundSeDefStop */
     volatile int se;
 
-#ifdef VERSION_JPN
-    lt_switch_layout(52);
-#else
-    lt_switch_layout(55);
-#endif
+    lt_switch_layout(PAL_JPN(55, 52));
 
-#ifdef VERSION_JPN
-    stage_SetAnimation(371, 1, 211);
-#else
-    stage_SetAnimation(375, 1, 211);
-#endif
+    stage_SetAnimation(PAL_JPN(375, 371), 1, 211);
 
     se = soundSeDefPlay(1217, 0, 0, 1);
 
     gflagOff(83);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFrame(371, 420, 1) == 0) {
-#else
-    while (stage_CheckAnimationFrame(375, 420, 1) == 0) {
-#endif
+    while (stage_CheckAnimationFrame(PAL_JPN(375, 371), 420, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     soundSeDefStop(se);
 
-#ifdef VERSION_JPN
-    lt_switch_layout(51);
-#else
-    lt_switch_layout(54);
-#endif
+    lt_switch_layout(PAL_JPN(54, 51));
 
     elvUp_mes[0].func = actSt09aElvMain;
     act->mail = elvUp_mes;
@@ -372,36 +309,20 @@ void actSt09aSekizoEvent(int x)
 
 void actSt09aIntroChk(GObj *volatile self)
 {
-#ifdef VERSION_JPN
-    lt_switch_layout(52);
-#else
-    lt_switch_layout(55);
-#endif
+    lt_switch_layout(PAL_JPN(55, 52));
     gflagOn(85);
 
     scpBoyControlReadDisable = 1;
     _ACTWait(1);
 
-#ifdef VERSION_JPN
-    stage_SetAnimation(373, 1, 0);
-#else
-    stage_SetAnimation(377, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(377, 373), 1, 0);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(373) == 0) {
-#else
-    while (stage_CheckAnimationFinish(377) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(377, 373)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
-#ifdef VERSION_JPN
-    lt_switch_layout(51);
-#else
-    lt_switch_layout(54);
-#endif
+    lt_switch_layout(PAL_JPN(54, 51));
 
     scpBoyControlReadDisable = 0;
 }
@@ -433,39 +354,23 @@ void actSt09aBrgSwitch(GObj *volatile self)
 
 static void actSt09aBrgDownSub(GObj *volatile self)
 {
-#ifdef VERSION_JPN
-    stage_SetAnimation(374, 1, 0);
-#else
-    stage_SetAnimation(378, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(378, 374), 1, 0);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFrame(374, 115, 0) == 0) {
-#else
-    while (stage_CheckAnimationFrame(378, 115, 0) == 0) {
-#endif
+    while (stage_CheckAnimationFrame(PAL_JPN(378, 374), 115, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     iosPadActRequest(boyPad, 17);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFrame(374, 165, 0) == 0) {
-#else
-    while (stage_CheckAnimationFrame(378, 165, 0) == 0) {
-#endif
+    while (stage_CheckAnimationFrame(PAL_JPN(378, 374), 165, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     iosPadActRequest(boyPad, 16);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(374) == 0) {
-#else
-    while (stage_CheckAnimationFinish(378) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(378, 374)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);

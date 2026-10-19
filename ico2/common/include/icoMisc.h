@@ -11,9 +11,7 @@
 /* icoMisc.c's `inline` functions, in the order of their definitions'
  * out-of-line copies at the end of the object (first-declaration order). */
 void ExitIcoMisc(void);
-#ifdef VERSION_JPN
 void DummyIcoMisc(void);
-#endif
 void DispIcoMisc(void);
 void InitIcoMisc(int *arg);
 void ExecIcoMisc(void);

@@ -325,16 +325,16 @@ static int iosPadDevReadFunc(void)
             }
         } else {
             if (scePadRead(dev->port, dev->slot, &dev->buf[dev->idx]) == 0) {
-#ifdef VERSION_JPN
-                dev->phase = 0;
-                dev->error = 1;
-#else
-                debug_StdPrintfDummy("err %d\n", scePadGetState(dev->port, dev->slot));
-                if (scePadGetState(dev->port, dev->slot) == 0) {
+                if (ICO_JPN) {
                     dev->phase = 0;
                     dev->error = 1;
+                } else {
+                    debug_StdPrintfDummy("err %d\n", scePadGetState(dev->port, dev->slot));
+                    if (scePadGetState(dev->port, dev->slot) == 0) {
+                        dev->phase = 0;
+                        dev->error = 1;
+                    }
                 }
-#endif
             } else {
                 IosPadBuf *b = &dev->buf[dev->idx];
                 unsigned int t = (*(unsigned int *)b >> 12) & 0xF;

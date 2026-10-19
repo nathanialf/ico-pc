@@ -87,9 +87,7 @@ static char printBuf[128]; /* derived name */
 
 inline void ExitIcoMisc(void) {}
 
-#ifdef VERSION_JPN
 inline void DummyIcoMisc(void) {} /* derived name */
-#endif
 
 /* two-dimensional screen position handed to Draw2DLine */
 typedef struct { /* field names derived */
@@ -299,11 +297,7 @@ void ExecIcoMisc(void)
         ExecGameOverEffect();
         seEnvMute = 0;
     } else {
-#ifdef VERSION_JPN
-        if (current_layout_id == 25) {
-#else
-        if (current_layout_id == 28) {
-#endif
+        if (current_layout_id == PAL_JPN(28, 25)) {
             seEnvMute = 1;
         }
         if (seEnvMute != 0) {
@@ -334,20 +328,12 @@ void ExecIcoMisc(void)
     if (fall_death_active != 0) {
         if (boyGObj != 0) {
             if (GOBJ_SUB(boyGObj)->ctrl.fallHeight > 1000.0f) {
-#ifdef VERSION_JPN
-                lt_switch_layout(59);
-#else
-                lt_switch_layout(62);
-#endif
+                lt_switch_layout(PAL_JPN(62, 59));
             }
         }
         if (girlGObj != 0) {
             if (GOBJ_SUB(girlGObj)->ctrl.fallHeight > 1000.0f) {
-#ifdef VERSION_JPN
-                lt_switch_layout(59);
-#else
-                lt_switch_layout(62);
-#endif
+                lt_switch_layout(PAL_JPN(62, 59));
             }
         }
     }

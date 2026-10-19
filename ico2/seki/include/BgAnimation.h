@@ -47,12 +47,10 @@ typedef struct BgaHeader { /* field names derived */
     BgaAnim *anim;             /* 0x24 */
 } BgaHeader;                   /* derived name */
 
-#ifndef VERSION_JPN
 /* set when an animation's camera cut restarts the global timer; the stream
    motion player resynchronises on it and clears it */
 extern int bgaStreamSync;
 
-#endif
 /* BgAnimation.c's `inline` functions, in the order of their definitions'
    out-of-line copies at the end of the object (first-declaration order). */
 void bga_ResetCamera(void);

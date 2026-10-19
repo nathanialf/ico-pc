@@ -36,19 +36,11 @@ static void DetourCheck(GObj *self, float *out)
         return;
     }
     GetSkeltonOrient(orient, self, 0x2C);
-#ifdef VERSION_JPN
-    if (*(int *)((char *)GOBJ_ACT(self)->work + 0x8D0) != 0) {
-        out[0] = *(float *)((char *)GOBJ_ACT(self)->work + 0x8E0);
-        out[1] = *(float *)((char *)GOBJ_ACT(self)->work + 0x8E4);
-        out[2] = *(float *)((char *)GOBJ_ACT(self)->work + 0x8E8);
-        *(int *)((char *)GOBJ_ACT(self)->work + 0x8D0) -= 1;
-#else
     if (*(int *)((char *)GOBJ_ACT(self)->work + 0x8E0) != 0) {
         out[0] = *(float *)((char *)GOBJ_ACT(self)->work + 0x8F0);
         out[1] = *(float *)((char *)GOBJ_ACT(self)->work + 0x8F4);
         out[2] = *(float *)((char *)GOBJ_ACT(self)->work + 0x8F8);
         *(int *)((char *)GOBJ_ACT(self)->work + 0x8E0) -= 1;
-#endif
         return;
     }
     /* two identical case bodies */
@@ -79,17 +71,10 @@ static void DetourCheck(GObj *self, float *out)
         sceVu0ScaleVector(tmp, dir, 100.0f);
         sceVu0AddVector(tmp, cur, tmp);
         if (ACTCheckCollis_WAY(10.0f, cur, tmp, 0, 0) == 0) {
-#ifdef VERSION_JPN
-            *(float *)((char *)GOBJ_ACT(self)->work + 0x8E0) = dir[0];
-            *(float *)((char *)GOBJ_ACT(self)->work + 0x8E4) = dir[1];
-            *(float *)((char *)GOBJ_ACT(self)->work + 0x8E8) = dir[2];
-            *(int *)((char *)GOBJ_ACT(self)->work + 0x8D0) = wait;
-#else
             *(float *)((char *)GOBJ_ACT(self)->work + 0x8F0) = dir[0];
             *(float *)((char *)GOBJ_ACT(self)->work + 0x8F4) = dir[1];
             *(float *)((char *)GOBJ_ACT(self)->work + 0x8F8) = dir[2];
             *(int *)((char *)GOBJ_ACT(self)->work + 0x8E0) = wait;
-#endif
             return;
         }
     }
@@ -108,13 +93,8 @@ static int checkPositionIllegal(GObj *self, float *pos)
     if (act->actMode == 0x70) {
         return 1;
     }
-#ifdef VERSION_JPN
-    if (act->actMode == 0x26 ||
-        (((GOBJ_SUB(self)->ctrl.motion + motionKind)->flags.word >> 15) & 1)) {
-#else
     if (act->actMode == 0x26 ||
         (((GOBJ_SUB(self)->ctrl.motion + motionKind)->flags.word >> 12) & 1)) {
-#endif
         return 1;
     }
     v[0] = pos[0];
@@ -265,11 +245,7 @@ int ACTWayMove_BeginDetail(GObj *self, float *goal, float *from, void *tgt, void
     act->wayState.flags &= ~0x10000;
     act->wayState.flags &= ~0x1E0000;
     *(int *)((char *)act + 0x430) = 0;
-#ifdef VERSION_JPN
-    *(int *)((char *)GOBJ_ACT(self)->work + 0x8D0) = 0;
-#else
     *(int *)((char *)GOBJ_ACT(self)->work + 0x8E0) = 0;
-#endif
     if (act->way.chk.start != 0 && act->way.chk.cross == 0) {
         if (_DistxzSqGV(act->way.chk.start->pos, goal) < 40000.0f) {
             act->wayFlags |= 0x40000;
@@ -313,12 +289,12 @@ int ACTWayMove_NextDetail(GObj *self, float *node, float *goal, unsigned char d,
     float dy;
     int n;
 
-#ifdef VERSION_JPN
-    /* disabled in retail: the way-begin-position (WBP) report */
-    if (0) {
-        debug_StdPrintfDummy("WBP <<begin>>\n");
+    if (ICO_JPN) {
+        /* disabled in retail: the way-begin-position (WBP) report */
+        if (0) {
+            debug_StdPrintfDummy("WBP <<begin>>\n");
+        }
     }
-#endif
     *(WayStep *)((char *)act + 0x3E0) = wayStepClear;
     act->wayNodeX = node[0];
     act->wayNodeY = node[1];

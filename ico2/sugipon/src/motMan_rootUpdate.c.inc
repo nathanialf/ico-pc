@@ -804,16 +804,16 @@ static ObjNode rootUpdateXZ(int kind, int no)
         ClipWork w;
 
         if (skelRoot->gravity != 0) {
-#ifdef VERSION_JPN
-            skelRoot->move[1] += 60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) *
-                                 0.5f *
-                                 (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
-#else
-            skelRoot->move[1] += 60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) *
-                                 0.5f *
-                                 (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1])) *
-                                 (systemStatus[0] != 0 ? 0.7f : 1.0f);
-#endif
+            if (ICO_JPN) {
+                skelRoot->move[1] +=
+                    60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f *
+                    (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+            } else {
+                skelRoot->move[1] +=
+                    60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f *
+                    (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1])) *
+                    (systemStatus[0] != 0 ? 0.7f : 1.0f);
+            }
             AddVectorXYZ(skelRoot->pos, skelRoot->pos, skelRoot->move);
             WALL_COLLISION_AND_WAVE_FORCE();
         } else {
@@ -891,13 +891,13 @@ static ObjNode rootUpdateXZ_MotPos(int kind, int no)
     if (no != -1) {
         CopyVector(skelRoot->delta, rootDelta);
     } else {
-#ifndef VERSION_JPN
-        if (skelMotCtrl->justShifted != 0) {
-            if (systemStatus[0] == 1) {
-                AddVectorXYZ(skelRoot->pos, skelRoot->pos, skelRoot->move);
+        if (!ICO_JPN) {
+            if (skelMotCtrl->justShifted != 0) {
+                if (systemStatus[0] == 1) {
+                    AddVectorXYZ(skelRoot->pos, skelRoot->pos, skelRoot->move);
+                }
             }
         }
-#endif
         if (skelMotCtrl->motion == 21) {
             lim = -(60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 10.0f);
             if (skelRoot->delta[1] < lim) {

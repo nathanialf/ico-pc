@@ -53,13 +53,17 @@ typedef struct GenWork {        /* field names derived */
 } GenWork;         /* derived name */
 
 #ifdef VERSION_JPN
+
 /* the generator packet: 11208 bytes, three per objLayout record, are read
    into it, which is what GetsizeGeneratorPacket returns, the whole buffer */
 static int generatorPacket[2802]; /* derived name */
+
 #else
+
 /* the generator packet: 11277 bytes are read into it, which is what
    GetsizeGeneratorPacket returns, three under the buffer */
 static int generatorPacket[2820]; /* derived name */
+
 #endif
 
 #include "generator.h"
@@ -283,18 +287,10 @@ static GObj *IsNeedGeneratorHard(GObj *mother)
     int count = 0;
     int isCalling = (w->status == 1);
 
-#ifdef VERSION_JPN
-    if (mother != 0 && mother->labelId == 3735) {
-#else
-    if (mother != 0 && mother->labelId == 3758) {
-#endif
+    if (mother != 0 && mother->labelId == PAL_JPN(3758, 3735)) {
         int found = 0;
 
-#ifdef VERSION_JPN
-        g = isysGObjSearchFromObjLayoutID(3734);
-#else
-        g = isysGObjSearchFromObjLayoutID(3757);
-#endif
+        g = isysGObjSearchFromObjLayoutID(PAL_JPN(3757, 3734));
         if (g != 0) {
             GenGeo *gv = &objLayout[g->labelId];
 
@@ -342,11 +338,7 @@ static GObj *IsNeedGeneratorHard(GObj *mother)
         Act *p = GOBJ_ACT(g);
         GenGeo *gv = &objLayout[g->labelId];
 
-#ifdef VERSION_JPN
-        if (g->labelId == 3734) {
-#else
-        if (g->labelId == 3757) {
-#endif
+        if (g->labelId == PAL_JPN(3757, 3734)) {
             continue;
         }
         if ((unsigned int)(p->flags18.ll >> 34) & 1) {
@@ -408,11 +400,7 @@ inline GObj *IsEnableCallEnemy(GObj *self)
         int no = g->labelId;
         GenGeo *gg = &objLayout[no];
 
-#ifdef VERSION_JPN
-        if (self != 0 && self->labelId == 3735 && no != 3734) {
-#else
-        if (self != 0 && self->labelId == 3758 && no != 3757) {
-#endif
+        if (self != 0 && self->labelId == PAL_JPN(3758, 3735) && no != PAL_JPN(3757, 3734)) {
             continue;
         }
         if (objLayout[no].parent != 0 && self != 0 && objLayout[no].parent != self->labelId) {
@@ -486,11 +474,7 @@ inline void RestoreReviveCount(GObj *gobj)
         int lim = ((g->flags >> 5) & 0x1F) + 1;
         n = (lim < n) ? lim : n;
         g->reviveCount = n;
-#ifdef VERSION_JPN
-        if (gobj->labelId == 3734) {
-#else
-        if (gobj->labelId == 3757) {
-#endif
+        if (gobj->labelId == PAL_JPN(3757, 3734)) {
             g->reviveCount = (g->reviveCount < 0) ? 0 : ((g->reviveCount > 1) ? 1 : g->reviveCount);
         }
     }
@@ -548,13 +532,8 @@ int GetMotherGenerator(int label)
     int best;
     int ret;
 
-#ifdef VERSION_JPN
-    if (label == 3734) {
-        return 3735;
-#else
-    if (label == 3757) {
-        return 3758;
-#endif
+    if (label == PAL_JPN(3757, 3734)) {
+        return PAL_JPN(3758, 3735);
     }
 
     GetKidnapInfo(&info[0], &info[1]);
@@ -599,11 +578,7 @@ inline void SetMotherGenerator(int no, int label)
     int i;
     int cnt;
 
-#ifdef VERSION_JPN
-    if (no == 3734) {
-#else
-    if (no == 3757) {
-#endif
+    if (no == PAL_JPN(3757, 3734)) {
         return;
     }
     cnt = 0;
@@ -624,11 +599,7 @@ inline void Generator_Init(void)
 {
     int i;
 
-#ifdef VERSION_JPN
-    for (i = 0; i < 3736; i++) {
-#else
-    for (i = 0; i < 3759; i++) {
-#endif
+    for (i = 0; i < PAL_JPN(3759, 3736); i++) {
         GenGeo *g = &objLayout[i];
         unsigned int x = g->flags & 0xFFDFFFFF;
         unsigned int y = x & 0xFFFBFFFF;
@@ -669,11 +640,7 @@ inline int *GetbufpGeneratorPacket(void)
 
 inline int GetsizeGeneratorPacket(void)
 {
-#ifdef VERSION_JPN
-    return 11208;
-#else
-    return 11277;
-#endif
+    return PAL_JPN(11277, 11208);
 }
 
 void ReadGeneratorPacket(void)
@@ -681,11 +648,7 @@ void ReadGeneratorPacket(void)
     unsigned char *p = (unsigned char *)GetbufpGeneratorPacket();
     int i;
 
-#ifdef VERSION_JPN
-    for (i = 0; i < 3736; i++) {
-#else
-    for (i = 0; i < 3759; i++) {
-#endif
+    for (i = 0; i < PAL_JPN(3759, 3736); i++) {
         GenGeo *g = &objLayout[i];
         unsigned int b = *p++;
         unsigned int x = (b >> 4) << 10;
@@ -694,22 +657,14 @@ void ReadGeneratorPacket(void)
         g->flags = (g->flags & ~0x200000) | ((b & 1) << 21);
     }
 
-#ifdef VERSION_JPN
-    for (i = 0; i < 3736; i++) {
-#else
-    for (i = 0; i < 3759; i++) {
-#endif
+    for (i = 0; i < PAL_JPN(3759, 3736); i++) {
         GenGeo *g = &objLayout[i];
         char c = *(char *)p++;
 
         g->flags = (g->flags & ~0x40000) | ((c & 1) << 18);
     }
 
-#ifdef VERSION_JPN
-    for (i = 0; i < 3736; i++) {
-#else
-    for (i = 0; i < 3759; i++) {
-#endif
+    for (i = 0; i < PAL_JPN(3759, 3736); i++) {
         objLayout[i].reviveCount = (char)*p;
         p++;
     }
@@ -720,27 +675,15 @@ void MakeGeneratorPacket(void)
     char *p = (char *)GetbufpGeneratorPacket();
     int i;
 
-#ifdef VERSION_JPN
-    for (i = 0; i < 3736; i++) {
-#else
-    for (i = 0; i < 3759; i++) {
-#endif
+    for (i = 0; i < PAL_JPN(3759, 3736); i++) {
         *p++ = (((int)(objLayout[i].flags << 18) >> 28) << 4) | ((objLayout[i].flags >> 21) & 1);
     }
 
-#ifdef VERSION_JPN
-    for (i = 0; i < 3736; i++) {
-#else
-    for (i = 0; i < 3759; i++) {
-#endif
+    for (i = 0; i < PAL_JPN(3759, 3736); i++) {
         *p++ = (objLayout[i].flags >> 18) & 1;
     }
 
-#ifdef VERSION_JPN
-    for (i = 0; i < 3736; i++) {
-#else
-    for (i = 0; i < 3759; i++) {
-#endif
+    for (i = 0; i < PAL_JPN(3759, 3736); i++) {
         *p++ = objLayout[i].reviveCount;
     }
 }
@@ -752,11 +695,7 @@ inline void ResetReviveCountEnemy(GObj *gobj)
 
 inline void SetInfoSpKidnapEnemy(short *work)
 {
-#ifdef VERSION_JPN
-    GenGeo *info = &objLayout[3734]; /* the kidnap enemy's layout record */
-#else
-    GenGeo *info = &objLayout[3757]; /* the kidnap enemy's layout record */
-#endif
+    GenGeo *info = &objLayout[PAL_JPN(3757, 3734)]; /* the kidnap enemy's layout record */
     info->flags |= 0x200000;
     info->flags &= ~0x40000;
     info->reviveCount = 0;
@@ -1091,23 +1030,12 @@ void GeneratorDL(GObj *gobj)
     SetGeneratorBgaRootPosition(gobj, tbl);
 
     if (w->active) {
-#ifdef VERSION_JPN
-        DispMultiBgaManagerWithKind(504, w->bga[1].p, 1);
-#else
-        DispMultiBgaManagerWithKind(508, w->bga[1].p, 1);
-#endif
+        DispMultiBgaManagerWithKind(PAL_JPN(508, 504), w->bga[1].p, 1);
     } else {
-#ifdef VERSION_JPN
-        DispMultiBgaManagerWithKind(503, w->bga[0].p, 1);
-        DispMultiBgaManagerWithKind(504, w->bga[1].p, 1);
-        DispMultiBgaManagerWithKind(505, w->bga[2].p, 1);
-        DispMultiBgaManagerWithKind(502, w->bga[3].p, 1);
-#else
-        DispMultiBgaManagerWithKind(507, w->bga[0].p, 1);
-        DispMultiBgaManagerWithKind(508, w->bga[1].p, 1);
-        DispMultiBgaManagerWithKind(509, w->bga[2].p, 1);
-        DispMultiBgaManagerWithKind(506, w->bga[3].p, 1);
-#endif
+        DispMultiBgaManagerWithKind(PAL_JPN(507, 503), w->bga[0].p, 1);
+        DispMultiBgaManagerWithKind(PAL_JPN(508, 504), w->bga[1].p, 1);
+        DispMultiBgaManagerWithKind(PAL_JPN(509, 505), w->bga[2].p, 1);
+        DispMultiBgaManagerWithKind(PAL_JPN(506, 502), w->bga[3].p, 1);
     }
 
     idx = w->cur;

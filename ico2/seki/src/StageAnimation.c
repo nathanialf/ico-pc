@@ -152,11 +152,7 @@ void stage_ApplyData(char *name, char *data)
                 for (j = 0; j < 2; j++) {
                     id = ent->anim[j];
                     obj = &stageTable[id];
-#ifdef VERSION_JPN
-                    if (id != 949) {
-#else
-                    if (id != 972) {
-#endif
+                    if (id != PAL_JPN(972, 949)) {
                         if (strcmp(name, obj->path) == 0) {
                             if (strncmp(data, "BGA", 3) == 0) {
                                 obj->data = bga_InitData(data);
@@ -239,11 +235,7 @@ int stage_Init(void)
                 for (k = 0; k < 2; k++) {
                     id = ent->anim[k];
                     obj = &stageTable[id];
-#ifdef VERSION_JPN
-                    if (id != 949) {
-#else
-                    if (id != 972) {
-#endif
+                    if (id != PAL_JPN(972, 949)) {
                         if (strncmp(obj->data, "BGA", 3) == 0) {
                             /* the DEBUG-build trace */
                             stageAnimDebugHook();
@@ -585,25 +577,25 @@ void stage_CalcAnimationNoParent(void)
                     char *o = *(char **)(objs + (k << 2));
 
                     GOBJ_SUB(o)->disp = 0;
-#ifndef VERSION_JPN
-                    if (GOBJ_SUB(o)->nodeNum != 0) {
-                        *(int *)((int *)*(int *)(o + 0x15C))[0xC / 4] = 0;
+                    if (!ICO_JPN) {
+                        if (GOBJ_SUB(o)->nodeNum != 0) {
+                            *(int *)((int *)*(int *)(o + 0x15C))[0xC / 4] = 0;
+                        }
                     }
-#endif
                 }
                 break;
             }
             case 0:
                 break;
             case 1:
-#ifndef VERSION_JPN
-                if (lock != 0) {
-                    if (debug_font_flag & 1) {
-                        debug_Printf(0, ScreenHeight / 2 - 28, 0xCCCCCC00,
-                                     "\033[32mCamera LWS : %s\033[0m\n", e->entry1->path);
+                if (!ICO_JPN) {
+                    if (lock != 0) {
+                        if (debug_font_flag & 1) {
+                            debug_Printf(0, ScreenHeight / 2 - 28, 0xCCCCCC00,
+                                         "\033[32mCamera LWS : %s\033[0m\n", e->entry1->path);
+                        }
                     }
                 }
-#endif
                 _InitCurrentMatrix();
                 bga_CalcAnimation(e->entry2, e->entry1->loop, 0);
                 break;
@@ -661,11 +653,11 @@ void stage_CalcAnimationParent(void)
                 char *objs = (char *)e->obj;
                 char *o = *(char **)(objs + (k << 2));
                 GOBJ_SUB(o)->disp = 0;
-#ifndef VERSION_JPN
-                if (GOBJ_SUB(o)->nodeNum != 0) {
-                    *(int *)((int *)*(int *)(o + 0x15C))[0xC / 4] = 0;
+                if (!ICO_JPN) {
+                    if (GOBJ_SUB(o)->nodeNum != 0) {
+                        *(int *)((int *)*(int *)(o + 0x15C))[0xC / 4] = 0;
+                    }
                 }
-#endif
             }
             break;
         }
@@ -697,11 +689,7 @@ void stage_DispAnimation(void)
         signed char lv;
         int k;
 
-#ifdef VERSION_JPN
-        if (entry1->no == 62) {
-#else
-        if (entry1->no == 0x42) {
-#endif
+        if (entry1->no == PAL_JPN(0x42, 62)) {
             continue;
         }
         if ((e->flags.i >> 30) != 0) {
@@ -845,9 +833,7 @@ float stage_PlayBgAnimation(int key, float t, void *v, void *q)
     int k;
     int n = stageAnimCount;
     float r = t;
-#ifndef VERSION_JPN
     float f;
-#endif
     StageAnim *e;
 
     if (n == 0) {
@@ -872,16 +858,16 @@ float stage_PlayBgAnimation(int key, float t, void *v, void *q)
         if (systemStatus[0x14 / 4] != 0) {
             break;
         }
-#ifdef VERSION_JPN
-        r = t + e->entry2->step * (30.0f / ((60 - systemStatus[0] * 10) / systemStatus[1]));
-#else
-        f = e->entry2->step;
-        if (systemStatus[0] != 0) {
-            r = t + f * 1.2075409f;
+        if (ICO_JPN) {
+            r = t + e->entry2->step * (30.0f / ((60 - systemStatus[0] * 10) / systemStatus[1]));
         } else {
-            r = t + f;
+            f = e->entry2->step;
+            if (systemStatus[0] != 0) {
+                r = t + f * 1.2075409f;
+            } else {
+                r = t + f;
+            }
         }
-#endif
         if (e->entry2->end <= r) {
             r = e->entry1->loop != 0 ? e->entry2->start : -1.0f;
         }
@@ -913,9 +899,7 @@ float stage_PlayBgAnimationDissolve(int key, void *v, void *q, float t, float dv
     int k;
     int m;
     float r = t;
-#ifndef VERSION_JPN
     float f;
-#endif
     StageAnim *e;
 
     if (stageAnimCount == 0) {
@@ -937,16 +921,16 @@ float stage_PlayBgAnimationDissolve(int key, void *v, void *q, float t, float dv
         if (systemStatus[0x14 / 4] != 0) {
             break;
         }
-#ifdef VERSION_JPN
-        r = t + e->entry2->step * (30.0f / ((60 - systemStatus[0] * 10) / systemStatus[1]));
-#else
-        f = e->entry2->step;
-        if (systemStatus[0] != 0) {
-            r = t + f * 1.2075409f;
+        if (ICO_JPN) {
+            r = t + e->entry2->step * (30.0f / ((60 - systemStatus[0] * 10) / systemStatus[1]));
         } else {
-            r = t + f;
+            f = e->entry2->step;
+            if (systemStatus[0] != 0) {
+                r = t + f * 1.2075409f;
+            } else {
+                r = t + f;
+            }
         }
-#endif
         if (e->entry2->end <= r) {
             r = e->entry1->loop != 0 ? e->entry2->start : -1.0f;
         }

@@ -1,3 +1,4 @@
+#include "typedef.h"
 #include "debug.h"
 #include "cdvd.h"
 #include "memory.h"

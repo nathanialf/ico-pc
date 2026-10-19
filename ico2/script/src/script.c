@@ -153,6 +153,7 @@ struct WoodBoxEnt { /* derived name */ /* field names derived */
 /* .data: the wood-bridge trigger table, one row per bridge object, walked by
    object id. */
 #ifdef VERSION_JPN
+
 static struct WoodBoxEnt woodBoxTbl[11] = {
     {276, 6, {0}, {0.0f, -100.0f, 100.0f, 0.0f}, 1068.0f, -135.0f, 200.0f, 580.0f},
     {1710, 0, {0}, {-100.0f, -200.0f, 0.0f, 0.0f}, -1410.0f, 1000.0f, 0.0f, 0.0f},
@@ -166,7 +167,9 @@ static struct WoodBoxEnt woodBoxTbl[11] = {
     {1626, 1, {0}, {100.0f, -200.0f, 0.0f, 0.0f}, 680.0f, 230.0f, 0.0f, 0.0f},
     {3271, 9, {0}, {-100.0f, -200.0f, 0.0f, 0.0f}, 0.0f, 0.0f, 0.0f, 0.0f},
 }; /* derived name */
+
 #else
+
 static struct WoodBoxEnt woodBoxTbl[11] = {
     {276, 6, {0}, {0.0f, -100.0f, 100.0f, 0.0f}, 1068.0f, -135.0f, 200.0f, 580.0f},
     {1710, 0, {0}, {-100.0f, -200.0f, 0.0f, 0.0f}, -1410.0f, 1000.0f, 0.0f, 0.0f},
@@ -180,6 +183,7 @@ static struct WoodBoxEnt woodBoxTbl[11] = {
     {1626, 1, {0}, {100.0f, -200.0f, 0.0f, 0.0f}, 680.0f, 230.0f, 0.0f, 0.0f},
     {3294, 9, {0}, {-100.0f, -200.0f, 0.0f, 0.0f}, 0.0f, 0.0f, 0.0f, 0.0f},
 }; /* derived name */
+
 #endif
 
 /* .sbss: a stage change has been requested and no further one is
@@ -210,34 +214,21 @@ inline void actSubSekizoSe(GObj *volatile self)
     if (gflagChk(332) == 0) {
         ScpCallCameraSetTarget(3834.0f, -888.0f, 0.0f);
         scpSearchGobj(2149)->active = 0;
-#ifdef VERSION_JPN
-        stage_SetLoopFlag(551, 0);
-#else
-        stage_SetLoopFlag(555, 0);
-#endif
+        stage_SetLoopFlag(PAL_JPN(555, 551), 0);
         queen_appear_mes[0].func = actSt25aQueenAppearChk;
         act->mail = queen_appear_mes;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
         return;
     }
-#ifdef VERSION_JPN
-    scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(47, 0, 551, 0);
-#else
-    scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(47, 0, 555, 0);
-#endif
+    scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(47, 0, PAL_JPN(555, 551), 0);
     scpSearchGobj(2149)->active = 1;
     scpPlayMot(scpSearchGobj(2149), 1104);
     tex_SetUVScroll(faceShadowTex, 0.0f, 0.0f, 0.25f, 0.0625f, 0.8f, 0.8f, 1);
     tex_SetUVScroll(faceShadowTex00, 0.0f, 0.0f, 0.25f, 0.0625f, 0.45f, 0.45f, 1);
     ScpCallCameraSetTarget(3834.0f, -888.0f, 0.0f);
-#ifdef VERSION_JPN
-    stage_SetAnimation(152, 0, -1);
-    stage_SetAnimation(155, 1, 0);
-#else
-    stage_SetAnimation(156, 0, -1);
-    stage_SetAnimation(159, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(156, 152), 0, -1);
+    stage_SetAnimation(PAL_JPN(159, 155), 1, 0);
 }
 
 inline void scpDispOffAllWithKind(int kind)
@@ -472,17 +463,11 @@ void scpPlayMotDir(GObj *self, float *dir)
 void scpPlayMotDirSmz(GObj *self, float *dir)
 {
     sceVu0Normalize(dir, dir);
-#ifdef VERSION_JPN
     SetMotionDirectionSmooze(
         self, dir,
-        (float)((struct MotTblRec *)(GOBJ_SUB(self)->ctrl.motion * 400 + (char *)motionKind))
+        (float)((struct MotTblRec *)(GOBJ_SUB(self)->ctrl.motion * PAL_JPN(404, 400) +
+                                     (char *)motionKind))
             ->smzAngle);
-#else
-    SetMotionDirectionSmooze(
-        self, dir,
-        (float)((struct MotTblRec *)(GOBJ_SUB(self)->ctrl.motion * 404 + (char *)motionKind))
-            ->smzAngle);
-#endif
 }
 
 inline void scpPlayMotNode(void *self, int mot, void *obj, int node)
@@ -1343,11 +1328,7 @@ void scpSekizou(GObj *self, int flag, int anim, int anim2, int kind, float bx, f
         scpFadeOut(255.0f, 0, 0, 0);
     }
     stgmgrNextStagePreLoadForceStageSet(0);
-#ifdef VERSION_JPN
-    lt_switch_layout(52);
-#else
-    lt_switch_layout(55);
-#endif
+    lt_switch_layout(PAL_JPN(55, 52));
     scpBoyControlReadDisable = 1;
     scpAdpcmPlayRequestFunc(kind, &sekizo_common, 1, 1, 0);
     while (sekizo_common == 0) {
@@ -1406,11 +1387,7 @@ void scpSekizou(GObj *self, int flag, int anim, int anim2, int kind, float bx, f
     _ACTWait(1);
     scpPlayMot(girlGObj, 532);
     scpPlayEnd(girlGObj);
-#ifdef VERSION_JPN
-    lt_switch_layout(51);
-#else
-    lt_switch_layout(54);
-#endif
+    lt_switch_layout(PAL_JPN(54, 51));
     scpBoyControlReadDisable = 0;
 }
 

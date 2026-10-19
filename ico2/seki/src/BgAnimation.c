@@ -80,11 +80,9 @@ typedef struct BgaMotion { /* field names derived */
 /* The words the file's functions share, four on JPN and six on PAL.  PAL's
    bgaStreamSync is read and cleared by streamMotionManager.c (_infoUpdate),
    so it is global. */
-#ifndef VERSION_JPN
 int bgaStreamSync = 0; /* derived name */
 
 static int bgaFrame = 0; /* derived name */
-#endif
 
 static float bgaZoom = 0.0f; /* derived name */
 
@@ -557,6 +555,7 @@ static inline int bga_findPtKey(BgaPtKey *k, int n, float f) /* derived name */
 }
 
 #ifdef VERSION_JPN
+
 static void bga_GetMotion(float *pos, float *rot, float *col, BgaPtMotion *m)
 {
     BgaPtKey *k;
@@ -678,7 +677,9 @@ static void bga_GetMotion(float *pos, float *rot, float *col, BgaPtMotion *m)
     pos[3] = 1.0f;
     col[3] = 1.0f;
 }
+
 #else
+
 static void bga_GetMotion(float *pos, int *rot, float *col, BgaPtMotion *m)
 {
     BgaPtKey *k;
@@ -1096,6 +1097,7 @@ static void bga_GetMotionLightning(float *pos, int *rot, float *col, BgaPtMotion
     pos[3] = 1.0f;
     col[3] = 1.0f;
 }
+
 #endif
 
 typedef struct BgaExtKey { /* field names derived */
@@ -1155,14 +1157,14 @@ static float bga_GetExtMotion(BgaExtMotion *m)
     int i;
     int d;
 
-#ifdef VERSION_JPN
-    f = m->frame * (30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
-#else
-    f = m->frame;
-    if (systemStatus[0]) {
-        f *= 1.2075409f;
+    if (ICO_JPN) {
+        f = m->frame * (30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+    } else {
+        f = m->frame;
+        if (systemStatus[0]) {
+            f *= 1.2075409f;
+        }
     }
-#endif
     if (m->n == 1) {
         return m->key->value;
     }
@@ -1230,14 +1232,14 @@ static void bga_GetGizmoMotion(BgaMotion *m, float *dst)
     int i;
     int d;
 
-#ifdef VERSION_JPN
-    f = m->frame * (30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
-#else
-    f = m->frame;
-    if (systemStatus[0]) {
-        f *= 1.2075409f;
+    if (ICO_JPN) {
+        f = m->frame * (30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+    } else {
+        f = m->frame;
+        if (systemStatus[0]) {
+            f *= 1.2075409f;
+        }
     }
-#endif
 
     if (m->n == 1) {
         float *src = (float *)m->key;
@@ -1335,11 +1337,9 @@ static float bgaPos[4]; /* derived name */
 
 static float bgaScale[4]; /* derived name */
 
-#ifdef VERSION_JPN
 /* the rotation bga_GetMotion returns in degrees, which bga_CalcObject
    turns into the 16-bit angles of bgaRot */
 static float bgaRotDeg[4]; /* derived name */
-#endif
 
 static int bgaRot[4]; /* derived name */
 
@@ -1356,6 +1356,7 @@ typedef union { /* field names derived */
 static int bgaPivotFlag = 0; /* derived name */
 
 #ifdef VERSION_JPN
+
 /* Set a motion's frame (set 1: to f, held between 0 and the motion's length)
    or step it by dt and, once it runs past the length, wrap it to 0 when
    looping or hold it at the end; the length is in 30 Hz frames, scaled to
@@ -1391,7 +1392,9 @@ static void bga_updateMotionFrame(BgaExtMotion *m, float dt, int set, float f,
         }
     }
 }
+
 #else
+
 static inline float bga_palFrame(float f) /* derived name */
 {
     if (systemStatus[0]) {
@@ -1417,6 +1420,7 @@ static inline void bga_stepEnvelope(BgaEnvEnt *e, float dt, int loop) /* derived
         }
     }
 }
+
 #endif
 
 /* Apply a node's envelopes: each entry's type says
@@ -1441,11 +1445,11 @@ static void bga_calcEnvelope(BgaDObjEnt *p, float dt, float w, int cut, int loop
                 ((Sub15C *)p->u.obj)->nodes[p->num].fade =
                     bga_GetExtMotion((BgaExtMotion *)e->data);
                 ((Sub15C *)p->u.obj)->nodes[p->num].flags.ll |= 1;
-#ifdef VERSION_JPN
-                bga_updateMotionFrame((BgaExtMotion *)e->data, dt, 0, w, loop);
-#else
-                bga_stepEnvelope(e, dt, loop);
-#endif
+                if (ICO_JPN) {
+                    bga_updateMotionFrame((BgaExtMotion *)e->data, dt, 0, w, loop);
+                } else {
+                    bga_stepEnvelope(e, dt, loop);
+                }
             }
             break;
         case 1:
@@ -1455,11 +1459,11 @@ static void bga_calcEnvelope(BgaDObjEnt *p, float dt, float w, int cut, int loop
                         bga_GetExtMotion((BgaExtMotion *)e->data) * (float)ScreenWidth / 2.66f;
                 }
             }
-#ifdef VERSION_JPN
-            bga_updateMotionFrame((BgaExtMotion *)e->data, dt, 0, w, loop);
-#else
-            bga_stepEnvelope(e, dt, loop);
-#endif
+            if (ICO_JPN) {
+                bga_updateMotionFrame((BgaExtMotion *)e->data, dt, 0, w, loop);
+            } else {
+                bga_stepEnvelope(e, dt, loop);
+            }
             break;
         case 2:
             v = bga_GetExtMotion((BgaExtMotion *)e->data);
@@ -1467,20 +1471,20 @@ static void bga_calcEnvelope(BgaDObjEnt *p, float dt, float w, int cut, int loop
             case 6:
             case 11:
                 *(float *)((char *)p->u.obj + 0x30) = v;
-#ifdef VERSION_JPN
-                bga_updateMotionFrame((BgaExtMotion *)e->data, dt, 0, w, loop);
-#else
-                bga_stepEnvelope(e, dt, loop);
-#endif
+                if (ICO_JPN) {
+                    bga_updateMotionFrame((BgaExtMotion *)e->data, dt, 0, w, loop);
+                } else {
+                    bga_stepEnvelope(e, dt, loop);
+                }
                 break;
             case 8:
             case 9:
                 *(float *)((char *)p->u.obj + 0x80) = v;
-#ifdef VERSION_JPN
-                bga_updateMotionFrame((BgaExtMotion *)e->data, dt, 0, w, loop);
-#else
-                bga_stepEnvelope(e, dt, loop);
-#endif
+                if (ICO_JPN) {
+                    bga_updateMotionFrame((BgaExtMotion *)e->data, dt, 0, w, loop);
+                } else {
+                    bga_stepEnvelope(e, dt, loop);
+                }
                 break;
             }
             break;
@@ -1490,11 +1494,11 @@ static void bga_calcEnvelope(BgaDObjEnt *p, float dt, float w, int cut, int loop
             case 6:
             case 11:
                 *(float *)((char *)p->u.obj + 0x34) = v;
-#ifdef VERSION_JPN
-                bga_updateMotionFrame((BgaExtMotion *)e->data, dt, 0, w, loop);
-#else
-                bga_stepEnvelope(e, dt, loop);
-#endif
+                if (ICO_JPN) {
+                    bga_updateMotionFrame((BgaExtMotion *)e->data, dt, 0, w, loop);
+                } else {
+                    bga_stepEnvelope(e, dt, loop);
+                }
                 break;
             }
             break;
@@ -1504,11 +1508,11 @@ static void bga_calcEnvelope(BgaDObjEnt *p, float dt, float w, int cut, int loop
         case 6:
             if (p->u.obj != 0) {
                 bga_GetGizmoMotion((BgaMotion *)e->data, ((Sub15C *)p->u.obj)->morphWeight);
-#ifdef VERSION_JPN
-                bga_updateMotionFrame((BgaExtMotion *)e->data, dt, 0, w, loop);
-#else
-                bga_stepEnvelope(e, dt, loop);
-#endif
+                if (ICO_JPN) {
+                    bga_updateMotionFrame((BgaExtMotion *)e->data, dt, 0, w, loop);
+                } else {
+                    bga_stepEnvelope(e, dt, loop);
+                }
             }
             break;
         case 7:
@@ -1738,7 +1742,6 @@ static inline void bga_checkCameraDistance(void) /* derived name */
     }
 }
 
-#ifndef VERSION_JPN
 static inline void bga_stepMotion(BgaExtMotion *m, float dt, int reset) /* derived name */
 {
     m->frame += dt;
@@ -1750,13 +1753,10 @@ static inline void bga_stepMotion(BgaExtMotion *m, float dt, int reset) /* deriv
         }
     }
 }
-#endif
 
 static void bga_CalcObject(BgaDObjEnt *d, float dt, float frame, int cut, int play, int loop)
 {
-#ifdef VERSION_JPN
     BgaPtMotion *m = (BgaPtMotion *)&d->motion;
-#endif
     int save;
 #ifdef VERSION_JPN
     float s;
@@ -1764,26 +1764,26 @@ static void bga_CalcObject(BgaDObjEnt *d, float dt, float frame, int cut, int pl
     float *pos;
 #endif
 
-#ifdef VERSION_JPN
-    bga_GetMotion(bgaPos, bgaRotDeg, bgaScale, m);
-    bgaRot[0] = (short)(bgaRotDeg[0] * (65536.0f / 360.0f));
-    bgaRot[1] = (short)(bgaRotDeg[1] * (65536.0f / 360.0f));
-    bgaRot[2] = (short)(bgaRotDeg[2] * (65536.0f / 360.0f));
-#else
-    switch (d->type) {
-    case 13:
-        bga_GetMotionParticle(bgaPos, bgaRot, bgaScale, (BgaPtMotion *)&d->motion);
-        break;
-    case 14:
-    case 15:
-    case 16:
-        bga_GetMotionLightning(bgaPos, bgaRot, bgaScale, (BgaPtMotion *)&d->motion);
-        break;
-    default:
-        bga_GetMotion(bgaPos, bgaRot, bgaScale, (BgaPtMotion *)&d->motion);
-        break;
+    if (ICO_JPN) {
+        bga_GetMotion(bgaPos, bgaRotDeg, bgaScale, m);
+        bgaRot[0] = (short)(bgaRotDeg[0] * (65536.0f / 360.0f));
+        bgaRot[1] = (short)(bgaRotDeg[1] * (65536.0f / 360.0f));
+        bgaRot[2] = (short)(bgaRotDeg[2] * (65536.0f / 360.0f));
+    } else {
+        switch (d->type) {
+        case 13:
+            bga_GetMotionParticle(bgaPos, bgaRot, bgaScale, (BgaPtMotion *)&d->motion);
+            break;
+        case 14:
+        case 15:
+        case 16:
+            bga_GetMotionLightning(bgaPos, bgaRot, bgaScale, (BgaPtMotion *)&d->motion);
+            break;
+        default:
+            bga_GetMotion(bgaPos, bgaRot, bgaScale, (BgaPtMotion *)&d->motion);
+            break;
+        }
     }
-#endif
 
     switch (d->type) {
     case 6:
@@ -1845,28 +1845,24 @@ static void bga_CalcObject(BgaDObjEnt *d, float dt, float frame, int cut, int pl
             debug_StdPrintfDummy("不明なパーティクル\n");
             break;
         }
-#ifndef VERSION_JPN
-        /* pos is bgaPos for the calls below; the PAL SetParticleEffect call
-           names bgaPos itself */
-        pos = bgaPos;
-#endif
+        if (!ICO_JPN) {
+            /* pos is bgaPos for the calls below; the PAL SetParticleEffect call
+               names bgaPos itself */
+            pos = bgaPos;
+        }
         if (bgaUniqAnimationFlag == 0 && ((BgaParticleEnt *)d->u.obj)->u.b.loop) {
             /* "a PBGA-type animation cannot use looping particles" */
             debug_StdPrintfDummy(
                 "PBGAタイプのアニメーションではループのパーティクルは使用できません.\n");
             break;
         }
-#ifdef VERSION_JPN
-        _GetCurrentMatrixTrans(bgaPos);
-#else
-        _GetCurrentMatrixTrans(pos);
-#endif
+        _GetCurrentMatrixTrans(PAL_JPN(pos, bgaPos));
         if (systemStatus[5] != 0) {
             break;
         }
-#ifdef VERSION_JPN
-        s = bgaScale[0] + bgaScale[1] + bgaScale[2];
-#endif
+        if (ICO_JPN) {
+            s = bgaScale[0] + bgaScale[1] + bgaScale[2];
+        }
         CopyQuaternion(((BgaParticleEnt *)d->u.obj)->quat, GetCurrentQuaternion());
 #ifdef VERSION_JPN
         _CopyVector(((BgaParticleEnt *)d->u.obj)->pos, bgaPos);
@@ -1954,11 +1950,11 @@ static void bga_CalcObject(BgaDObjEnt *d, float dt, float frame, int cut, int pl
     if (d->sibling != 0) {
         bga_CalcObject(d->sibling, dt, frame, cut, play, loop);
     }
-#ifdef VERSION_JPN
-    bga_updateMotionFrame((BgaExtMotion *)m, dt, 0, frame, loop);
-#else
-    bga_stepMotion((BgaExtMotion *)&d->motion, dt, loop);
-#endif
+    if (ICO_JPN) {
+        bga_updateMotionFrame((BgaExtMotion *)m, dt, 0, frame, loop);
+    } else {
+        bga_stepMotion((BgaExtMotion *)&d->motion, dt, loop);
+    }
 }
 
 typedef struct { /* field names derived */
@@ -1982,6 +1978,7 @@ typedef struct BgaCntNode { /* field names derived */
 } BgaCntNode; /* derived name */
 
 #ifdef VERSION_JPN
+
 static void bga_resetObjectCounter(BgaCntNode *o, float f, int loop)
 {
     BgaCountEnt *e;
@@ -2001,7 +1998,9 @@ static void bga_resetObjectCounter(BgaCntNode *o, float f, int loop)
     }
     bga_updateMotionFrame((BgaExtMotion *)&o->count, 0.0f, 1, f, loop);
 }
+
 #else
+
 static inline void bga_clampCount(BgaCount *o, float f) /* derived name */
 {
     if (f >= 0.0f) {
@@ -2043,20 +2042,19 @@ static void bga_resetObjectCounter(BgaCntNode *o, float f, int loop)
     }
     bga_clampCount(&o->count, f);
 }
+
 #endif
 
 void bga_SetFrame(BgaHeader *p, int frame, int mode, int loop)
 {
     float f;
-#ifdef VERSION_JPN
     int start;
-#endif
 
     if (p->cut) {
         GlobalTimer = 1;
-#ifndef VERSION_JPN
-        bgaStreamSync = 1;
-#endif
+        if (!ICO_JPN) {
+            bgaStreamSync = 1;
+        }
         _CopyVector(bgaLastCameraPos, bgaCameraMatrix[3]);
 #ifdef VERSION_JPN
     }
@@ -2067,29 +2065,28 @@ void bga_SetFrame(BgaHeader *p, int frame, int mode, int loop)
     }
     switch (frame) {
     case 0:
-#ifdef VERSION_JPN
-        p->frame = (float)start * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f);
-#else
-        p->frame = bga_palFrame(p->start);
-#endif
+        p->frame = PAL_JPN(bga_palFrame(p->start),
+                           (float)start *
+                               ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f));
         p->mode = mode;
         break;
     case -1:
-#ifdef VERSION_JPN
-        p->frame = p->end * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f);
-#else
-        debug_StdPrintfDummy("lws animation last %s\n", (char *)p->dobjs + 4);
-        p->frame = bga_palFrame(p->end);
-#endif
+        if (ICO_JPN) {
+            p->frame = p->end * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f);
+        } else {
+            debug_StdPrintfDummy("lws animation last %s\n", (char *)p->dobjs + 4);
+            p->frame = bga_palFrame(p->end);
+        }
         p->mode = mode;
         break;
     case -2:
-#ifdef VERSION_JPN
-        p->frame = (float)start * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f);
-#else
-        debug_StdPrintfDummy("lws animation off %s\n", (char *)p->dobjs + 4);
-        p->frame = bga_palFrame(p->start);
-#endif
+        if (ICO_JPN) {
+            p->frame =
+                (float)start * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f);
+        } else {
+            debug_StdPrintfDummy("lws animation off %s\n", (char *)p->dobjs + 4);
+            p->frame = bga_palFrame(p->start);
+        }
         p->mode = -1;
         return;
     default:
@@ -2105,11 +2102,9 @@ void bga_SetFrame(BgaHeader *p, int frame, int mode, int loop)
             p->frame = bga_palFrame(p->start);
 #endif
         } else if (p->end < f) {
-#ifdef VERSION_JPN
-            p->frame = p->end * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f);
-#else
-            p->frame = bga_palFrame(p->end);
-#endif
+            p->frame =
+                PAL_JPN(bga_palFrame(p->end),
+                        p->end * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f));
         }
         p->mode = mode;
         break;
@@ -2187,31 +2182,24 @@ void bga_CalcAnimation(BgaHeader *p, int loop, int reset)
         PopQuaternion();
     }
 
-#ifndef VERSION_JPN
-    bgaFrame = (int)p->frame;
-#endif
+    if (!ICO_JPN) {
+        bgaFrame = (int)p->frame;
+    }
     if (reset) {
         return;
     }
 
     if (p->mode == 1) {
-#ifndef VERSION_JPN
         float end = p->end;
 
-#endif
         p->frame += p->step;
-#ifdef VERSION_JPN
-        if (p->end * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) < p->frame) {
-#else
-        if (systemStatus[0] ? end * 0.82812935f < p->frame : end < p->frame) {
-#endif
+        if (PAL_JPN(systemStatus[0] ? end * 0.82812935f < p->frame : end < p->frame,
+                    p->end * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) <
+                        p->frame)) {
             if (loop == 0) {
-#ifdef VERSION_JPN
-                p->frame =
-                    p->end * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f);
-#else
-                p->frame = bga_palFrame(p->end);
-#endif
+                p->frame = PAL_JPN(
+                    bga_palFrame(p->end),
+                    p->end * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f));
                 p->mode = 0;
             } else {
                 p->frame = 0.0f;
@@ -2220,7 +2208,6 @@ void bga_CalcAnimation(BgaHeader *p, int loop, int reset)
     }
 }
 
-#ifndef VERSION_JPN
 /* the PAL frame counter read back on the 60 Hz timeline: the reciprocal of
    bga_palFrame's 0.82812935f. */
 static inline float bga_ntscFrame(float f) /* derived name */
@@ -2230,7 +2217,6 @@ static inline float bga_ntscFrame(float f) /* derived name */
     }
     return f;
 }
-#endif
 
 /* The record is read through its fields.  Both frame-rate scales are the
  * display rate over 30 on JPN and `x * (PAL ? k : 1.0f)` on PAL, and each
@@ -2249,34 +2235,25 @@ void bga_CalcSdfCamera(char *data, int loop)
         return;
     }
     bgaCameraActive = 1;
-#ifdef VERSION_JPN
-    if (p->frame * (30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1])) >
-        (float)p->num) {
-#else
-    if ((float)p->num * (systemStatus[0] ? 0.82812935f : 1.0f) < p->frame) {
-#endif
+    if (PAL_JPN((float)p->num * (systemStatus[0] ? 0.82812935f : 1.0f) < p->frame,
+                p->frame * (30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1])) >
+                    (float)p->num)) {
         if (loop == 0) {
-#ifdef VERSION_JPN
-            p->frame =
-                (float)p->num * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f);
-#else
-            p->frame = bga_palFrame((float)p->num);
-#endif
+            p->frame = PAL_JPN(
+                bga_palFrame((float)p->num),
+                (float)p->num * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f));
             p->mode = 0;
             return;
         }
         p->frame = 0.0f;
     }
 
-#ifndef VERSION_JPN
-    bgaFrame = (int)(p->frame * (systemStatus[0] ? 1.2075409f : 1.0f));
-#endif
+    if (!ICO_JPN) {
+        bgaFrame = (int)(p->frame * (systemStatus[0] ? 1.2075409f : 1.0f));
+    }
     _PushCurrentMatrix();
-#ifdef VERSION_JPN
-    fr = p->frame * (30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
-#else
-    fr = bga_ntscFrame(p->frame);
-#endif
+    fr = PAL_JPN(bga_ntscFrame(p->frame),
+                 p->frame * (30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1])));
     i = (int)fr;
     i1 = i + 1;
     if (i > p->num - 1) {
@@ -2577,23 +2554,15 @@ inline void bga_SetCamFrame(char *data, int frame, int mode, int loop)
     bgaCameraActive = 1;
     if (mode == 1) {
         GlobalTimer = mode;
-#ifndef VERSION_JPN
-        bgaStreamSync = mode;
-#endif
+        if (!ICO_JPN) {
+            bgaStreamSync = mode;
+        }
         _CopyVector(bgaLastCameraPos, bgaCameraMatrix[3]);
     }
     if (frame == -1) {
-#ifdef VERSION_JPN
-        p->frame = p->num;
-#else
-        p->frame = bga_palFrame(p->num);
-#endif
+        p->frame = PAL_JPN(bga_palFrame(p->num), p->num);
     } else {
-#ifdef VERSION_JPN
-        p->frame = frame;
-#else
-        p->frame = bga_palFrame(frame);
-#endif
+        p->frame = PAL_JPN(bga_palFrame(frame), frame);
     }
 }
 
@@ -2623,9 +2592,7 @@ inline int bga_CheckAnimationFinish(BgaHeader *p)
 inline int bga_CheckAnimationFrame(BgaHeader *p, int frame, int reset)
 {
     float f = frame;
-#ifndef VERSION_JPN
     float t = p->frame;
-#endif
     int r = 0;
 
 #ifdef VERSION_JPN
@@ -2652,23 +2619,16 @@ inline int bga_CheckAnimationFrame(BgaHeader *p, int frame, int reset)
 inline int bga_CheckAnimationFrameIn(BgaHeader *p, int in, int out)
 {
     float a = in;
-#ifndef VERSION_JPN
     float t = p->frame;
-#endif
     int r = 0;
 
-#ifdef VERSION_JPN
-    if (a * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) < p->frame) {
-#else
-    if (systemStatus[0] ? a * 0.82812935f <= t : a <= t) {
-#endif
+    if (PAL_JPN(systemStatus[0] ? a * 0.82812935f <= t : a <= t,
+                a * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) < p->frame)) {
         float b = out;
 
-#ifdef VERSION_JPN
-        if (p->frame < b * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f)) {
-#else
-        if (systemStatus[0] ? t < b * 0.82812935f : t < b) {
-#endif
+        if (PAL_JPN(systemStatus[0] ? t < b * 0.82812935f : t < b,
+                    p->frame <
+                        b * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f))) {
             r = p->mode == 1;
         }
     }
@@ -2681,34 +2641,32 @@ inline int bga_CheckSdfCameraFinish(char *data)
     float f = p->num;
     float t = p->frame;
 
-#ifdef VERSION_JPN
-    return f * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) <= t;
-#else
-    if (systemStatus[0]) {
-        return f * 0.82812935f <= t;
+    if (ICO_JPN) {
+        return f * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) <= t;
+    } else {
+        if (systemStatus[0]) {
+            return f * 0.82812935f <= t;
+        }
+        return f <= t;
     }
-    return f <= t;
-#endif
 }
 
 inline int bga_CheckSdfCameraFrame(char *data, int frame, int reset)
 {
     BgaSdfCam *p = (BgaSdfCam *)data;
     float f = frame;
-#ifndef VERSION_JPN
     float t = p->frame;
-#endif
     int r;
 
-#ifdef VERSION_JPN
-    r = f * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) <= p->frame;
-#else
-    if (systemStatus[0]) {
-        r = f * 0.82812935f <= t;
+    if (ICO_JPN) {
+        r = f * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) <= p->frame;
     } else {
-        r = f <= t;
+        if (systemStatus[0]) {
+            r = f * 0.82812935f <= t;
+        } else {
+            r = f <= t;
+        }
     }
-#endif
     if (r && reset) {
         p->mode = 0;
     }
@@ -2718,24 +2676,17 @@ inline int bga_CheckSdfCameraFrame(char *data, int frame, int reset)
 inline int bga_CheckSdfCameraFrameIn(char *data, int in, int out)
 {
     BgaSdfCam *p = (BgaSdfCam *)data;
-#ifndef VERSION_JPN
     float t = p->frame;
-#endif
     float a = in;
     int r = 0;
 
-#ifdef VERSION_JPN
-    if (a * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) <= p->frame) {
-#else
-    if (systemStatus[0] ? a * 0.82812935f <= t : a <= t) {
-#endif
+    if (PAL_JPN(systemStatus[0] ? a * 0.82812935f <= t : a <= t,
+                a * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) <= p->frame)) {
         float b = out;
 
-#ifdef VERSION_JPN
-        if (p->frame < b * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f)) {
-#else
-        if (systemStatus[0] ? t < b * 0.82812935f : t < b) {
-#endif
+        if (PAL_JPN(systemStatus[0] ? t < b * 0.82812935f : t < b,
+                    p->frame <
+                        b * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f))) {
             r = 1;
         }
     }

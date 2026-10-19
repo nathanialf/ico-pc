@@ -2,19 +2,12 @@
 #include "layout_texture.h"
 #include "gobj.h"
 #include "kanbanBoot.h"
-
-#ifndef VERSION_JPN
 #include <libscf.h>
-#endif
-
 #include "kanban.h"
 #include "GsBase.h"
 #include "main.h"
 #include "Basic.h"
-
-#ifndef VERSION_JPN
 #include "debug.h"
-#endif
 
 /* .sdata: the boot sequence's step, the
    card check's step, the start request, the card retry count, the boot sign's
@@ -27,9 +20,7 @@ static int bootStarted = 0; /* derived name */
 
 static int mcRetryCount = 10; /* derived name */
 
-#ifndef VERSION_JPN
 static int bootKanbanDone = 0; /* derived name */
-#endif
 
 int kanbanBootEnd = 0;
 
@@ -56,21 +47,17 @@ static int mcKanbanId; /* derived name */
 
 static int mcPort; /* derived name */ /* the card slot being checked, 0 then 1 */
 
-#ifndef VERSION_JPN
 static int bootVideoMode; /* derived name */ /* the video mode in force when the sign went up */
-#endif
 
 /* mcard.c's request entry points; they return iosMsgSend's result, which
    this TU reads only from iosMcSync: it declares the others void, which its
    calls pin, so it does not include mcard.h */
 extern void iosMcChdirProduct(McMgr *mp);
 extern int iosMcSync(McMgr *mp);
-
-#ifndef VERSION_JPN
 extern void iosMcLoadProductBlock(McMgr *mp);
-#endif
 
 #ifdef VERSION_JPN
+
 static int kanbanBootMcCheck(void)
 {
     McMgr *mc = &bootMcReq;
@@ -155,7 +142,9 @@ static int kanbanBootMcCheck(void)
     }
     return ret;
 }
+
 #else
+
 static int kanbanBootMcCheck(void)
 {
     McMgr *mc = &bootMcReq;
@@ -392,6 +381,7 @@ static int kanbanBootMcCheck(void)
     }
     return ret;
 }
+
 #endif
 
 static Kanban *waitKanban; /* derived name */ /* the "please wait" sign */
@@ -417,11 +407,7 @@ void kanbanBootMain(void)
             return;
         }
         kanbanReqAllDelFade();
-#ifdef VERSION_JPN
-        waitKanban = kanbanReqAdd(0, 1);
-#else
-        waitKanban = kanbanReqAdd(2, 1);
-#endif
+        waitKanban = kanbanReqAdd(PAL_JPN(2, 0), 1);
         bootStep++;
         break;
     case 3:

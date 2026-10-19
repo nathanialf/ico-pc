@@ -50,11 +50,8 @@ float staffRollCenterOffsetXDest = 0.0f;
 void staffRollStart(float t, int alpha)
 {
     staffRollStartFlag = 1;
-#ifdef VERSION_JPN
-    rollSpeed = t + t;
-#else
-    rollSpeed = (t + t) * 30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
-#endif
+    rollSpeed =
+        PAL_JPN((t + t) * 30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), t + t);
     staffRollAlpha = alpha;
     rollNameIdx = 0;
     rollOffset = 0.0f;

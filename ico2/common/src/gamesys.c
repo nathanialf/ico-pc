@@ -46,9 +46,13 @@ static void gamesysCharacterInfoSave(GamesysMemCursor *self);
    the zero pair; the per-stage exit times; the object-info records; the save
    image itself.  The buffers are zero-initialised, so they sit in .data. */
 #ifdef VERSION_JPN
+
 char stamp_str[] = "10/23/01 02:02:43";
+
 #else
+
 char stamp_str[] = "12/12/01 17:53:37";
+
 #endif
 
 void *gameSysMemoryFuncList[] = {
@@ -73,9 +77,13 @@ void *gameSysMemoryFuncList[] = {
 };
 
 #ifdef VERSION_JPN
+
 int gamesysStageExitTime[104] = {0};
+
 #else
+
 int gamesysStageExitTime[106] = {0};
+
 #endif
 
 /* the save records as gamesys keeps them, on quadword boundaries: pos and rot
@@ -111,11 +119,7 @@ void gamesysObjInfoInit(void)
         gameSysObjInfo[i].stage = 0xFFFF;
     }
 
-#ifdef VERSION_JPN
-    memset((char *)gamesysStageExitTime, 0, 0x1A0);
-#else
-    memset((char *)gamesysStageExitTime, 0, 0x1A8);
-#endif
+    memset((char *)gamesysStageExitTime, 0, PAL_JPN(0x1A8, 0x1A0));
     backStageProcessInit();
 }
 
@@ -141,22 +145,14 @@ void gamesysObjInfoSave(GamesysMemCursor *h)
 
     *(long long *)(p + 0x40) = (*(long long *)(p + 0x40) & -3) | ((long long)save << 1);
 
-#ifdef VERSION_JPN
-    gamesysMemoryHandlerWrite(h, gamesysStageExitTime, 0x1A0);
-#else
-    gamesysMemoryHandlerWrite(h, gamesysStageExitTime, 0x1A8);
-#endif
+    gamesysMemoryHandlerWrite(h, gamesysStageExitTime, PAL_JPN(0x1A8, 0x1A0));
 }
 
 void gamesysObjInfoLoad(GamesysMemCursor *h)
 {
     gamesysMemoryHandlerRead(h, &gamesysTimeCount, 4);
     gamesysMemoryHandlerRead(h, gameSysObjInfo, 0x2D80);
-#ifdef VERSION_JPN
-    gamesysMemoryHandlerRead(h, gamesysStageExitTime, 0x1A0);
-#else
-    gamesysMemoryHandlerRead(h, gamesysStageExitTime, 0x1A8);
-#endif
+    gamesysMemoryHandlerRead(h, gamesysStageExitTime, PAL_JPN(0x1A8, 0x1A0));
 }
 
 /* unsigned */

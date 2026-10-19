@@ -214,15 +214,9 @@ void ReadShadowModelFile(void *h, int name, int size, int id, int kind, int word
 
 void ReadTextureFile(void *h, char *name, int size, int id, int kind, int word08, int seg)
 {
-#ifdef VERSION_JPN
-    int rv;
-#else
     int rv = 0;
-#endif
     char *buf;
-#ifndef VERSION_JPN
     int flag = 0;
-#endif
 
     systemStatus[8]++;
     if (seg == 0) {
@@ -237,18 +231,18 @@ void ReadTextureFile(void *h, char *name, int size, int id, int kind, int word08
         return;
     }
     iosCdvdHandlerRead(h, buf, size);
-#ifdef VERSION_JPN
-    rv = tex_InitTexture(name, buf);
-#else
-    if (kind == 55 && seg == 1 && texFile[id].cameraMove != 0) {
-        if (texFile[id].cameraMove != NonLinearCameraMove) {
-            flag = seg;
+    if (ICO_JPN) {
+        rv = tex_InitTexture(name, buf);
+    } else {
+        if (kind == 55 && seg == 1 && texFile[id].cameraMove != 0) {
+            if (texFile[id].cameraMove != NonLinearCameraMove) {
+                flag = seg;
+            }
+        }
+        if (flag == 0) {
+            rv = tex_InitTexture(name, buf);
         }
     }
-    if (flag == 0) {
-        rv = tex_InitTexture(name, buf);
-    }
-#endif
     debug_StdPrintfDummy("ReadTextureFile:loaded::(%d)%s(addr:%p/size:%d)\n", rv, name, buf, size);
     iosFree(buf);
 }

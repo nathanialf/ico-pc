@@ -50,22 +50,14 @@ void actSt05dDoor2(GObj *volatile self)
 
     if (scpTriggerBall(self, boyGObj, 400.0f) != 0 ||
         (girlGObj != 0 && scpTriggerBall(self, girlGObj, 400.0f) != 0)) {
-#ifdef VERSION_JPN
-        stage_SetAnimation(345, 0, 0);
-#else
-        stage_SetAnimation(349, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(349, 345), 0, 0);
         _ACTWait(60);
         door2Down_mes[0].func = actSt05dDoor2DownChk;
         act->mail = door2Down_mes;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-#ifdef VERSION_JPN
-        stage_SetAnimation(344, 0, 0);
-#else
-        stage_SetAnimation(348, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(348, 344), 0, 0);
         door2Up_mes[0].func = actSt05dDoor2UpChk;
         act->mail = door2Up_mes;
         ACTSendMailCorrect(self, 430);
@@ -87,11 +79,7 @@ void actSt05dDoor2UpChk(GObj *volatile self)
 
     ReviveAllCarryableItemsWithNonSleepFrame(60);
 
-#ifdef VERSION_JPN
-    stage_SetAnimation(344, 1, 0);
-#else
-    stage_SetAnimation(348, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(348, 344), 1, 0);
 
     buf[0] = door2UpChkPos.d[0];
     buf[1] = door2UpChkPos.d[1];
@@ -101,11 +89,7 @@ void actSt05dDoor2UpChk(GObj *volatile self)
     _ACTWait(30);
     soundSeDefPlay(1222, 0, (float *)buf, 1);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(344) == 0) {
-#else
-    while (stage_CheckAnimationFinish(348) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(348, 344)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -130,11 +114,7 @@ void actSt05dDoor2DownChk(GObj *volatile self)
 
     ReviveAllCarryableItemsWithNonSleepFrame(60);
 
-#ifdef VERSION_JPN
-    stage_SetAnimation(345, 1, 0);
-#else
-    stage_SetAnimation(349, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(349, 345), 1, 0);
 
     buf[0] = door2UpChkPos.d[0];
     buf[1] = door2UpChkPos.d[1];
@@ -144,11 +124,7 @@ void actSt05dDoor2DownChk(GObj *volatile self)
     _ACTWait(30);
     soundSeDefPlay(1222, 0, (float *)buf, 1);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(345) == 0) {
-#else
-    while (stage_CheckAnimationFinish(349) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(349, 345)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);

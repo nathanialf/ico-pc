@@ -37,11 +37,7 @@ void actSt05eWaterStop(GObj *volatile self)
 {
     GProc *th;
 
-#ifdef VERSION_JPN
-    lt_switch_layout(52);
-#else
-    lt_switch_layout(55);
-#endif
+    lt_switch_layout(PAL_JPN(55, 52));
 
     demoEnd = 0;
     demoSkipped = 0;
@@ -64,13 +60,8 @@ void actSt05eWaterStop(GObj *volatile self)
         while (lt_fade_status() != 2) {
             _ACTWait(1);
         }
-#ifdef VERSION_JPN
-        stage_SetAnimation(263, 0, -1);
-        stage_SetAnimation(262, -1, -2);
-#else
-        stage_SetAnimation(267, 0, -1);
-        stage_SetAnimation(266, -1, -2);
-#endif
+        stage_SetAnimation(PAL_JPN(267, 263), 0, -1);
+        stage_SetAnimation(PAL_JPN(266, 262), -1, -2);
         scpFadeIn(3.0f);
     }
 
@@ -78,11 +69,7 @@ void actSt05eWaterStop(GObj *volatile self)
     scpSearchGobj(1554)->active = 0;
 
     scpBoyControlReadDisable = 0;
-#ifdef VERSION_JPN
-    lt_switch_layout(51);
-#else
-    lt_switch_layout(54);
-#endif
+    lt_switch_layout(PAL_JPN(54, 51));
 
     scpWakeupEnemyAll();
 
@@ -105,28 +92,16 @@ void actSt05eSolarChk(GObj *volatile self)
     FinishHint(26);
 
     if (gflagChk(243) == 0 || gflagChk(244) == 0 || gflagChk(245) == 0) {
-#ifdef VERSION_JPN
-        lt_switch_layout(52);
-#else
-        lt_switch_layout(55);
-#endif
+        lt_switch_layout(PAL_JPN(55, 52));
         scpBoyControlReadDisable = 1;
 
         scpSleepEnemyAll();
 
         scpAdpcmPlayRequestFunc(54, &solar, 1, 1, 1);
 
-#ifdef VERSION_JPN
-        stage_SetAnimation(264, 1, 0);
-#else
-        stage_SetAnimation(268, 1, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(268, 264), 1, 0);
 
-#ifdef VERSION_JPN
-        while (stage_CheckAnimationFinish(264) == 0) {
-#else
-        while (stage_CheckAnimationFinish(268) == 0) {
-#endif
+        while (stage_CheckAnimationFinish(PAL_JPN(268, 264)) == 0) {
             if ((pad[0].flags & 0x800) && scpAdpcmPlayRequestNum() == 0) {
                 scpFadeOut(16.0f, 0, 0, 0);
                 while (scpFadeChk() != 0) {
@@ -135,11 +110,7 @@ void actSt05eSolarChk(GObj *volatile self)
                 while (lt_fade_status() != 2) {
                     _ACTWait(1);
                 }
-#ifdef VERSION_JPN
-                stage_SetAnimation(264, 0, -1);
-#else
-                stage_SetAnimation(268, 0, -1);
-#endif
+                stage_SetAnimation(PAL_JPN(268, 264), 0, -1);
                 scpFadeIn(3.0f);
                 break;
             }
@@ -150,11 +121,7 @@ void actSt05eSolarChk(GObj *volatile self)
             scpAdpcmFadeCloseFunc(&solar, 80);
         }
 
-#ifdef VERSION_JPN
-        lt_switch_layout(51);
-#else
-        lt_switch_layout(54);
-#endif
+        lt_switch_layout(PAL_JPN(54, 51));
 
         scpBoyControlReadDisable = 0;
         scpWakeupEnemyAll();
@@ -185,11 +152,7 @@ void actSt05eWater(GObj *volatile self)
     } else {
         scpSearchGobj(1554)->active = 0;
 
-#ifdef VERSION_JPN
-        stage_SetAnimation(262, -1, -2);
-#else
-        stage_SetAnimation(266, -1, -2);
-#endif
+        stage_SetAnimation(PAL_JPN(266, 262), -1, -2);
     }
 }
 
@@ -258,23 +221,11 @@ static void actSt05eWaterStopSub(GObj *volatile self)
 {
     _ACTWait(60);
 
-#ifdef VERSION_JPN
-    stage_SetAnimation(263, 1, 0);
-#else
-    stage_SetAnimation(267, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(267, 263), 1, 0);
 
-#ifdef VERSION_JPN
-    stage_SetAnimation(262, -1, -2);
-#else
-    stage_SetAnimation(266, -1, -2);
-#endif
+    stage_SetAnimation(PAL_JPN(266, 262), -1, -2);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(263) == 0) {
-#else
-    while (stage_CheckAnimationFinish(267) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(267, 263)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);

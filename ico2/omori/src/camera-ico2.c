@@ -320,10 +320,8 @@ static void monitorMonitorCamera(CamWork *cam, CamWork *out)
     float d;
     float d1;
     float d2;
-#ifndef VERSION_JPN
     float r1;
     float r2;
-#endif
 
     flag = 0;
     for (i = 0; i < 3; i++) {
@@ -372,23 +370,20 @@ static void monitorMonitorCamera(CamWork *cam, CamWork *out)
 #endif
         }
         if (monitorCamera.moveDist < len) {
-#ifdef VERSION_JPN
-            len = monitorCamera.moveDist + handCameraEyeRate / 30.0f;
-#else
             len = monitorCamera.moveDist +
-                  handCameraEyeRate * 30.0f /
-                      (float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f;
-#endif
+                  PAL_JPN(handCameraEyeRate * 30.0f /
+                              (float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f,
+                          handCameraEyeRate / 30.0f);
             sceVu0Normalize(vEye, vEye);
             sceVu0ScaleVector(vEye, vEye, len);
             sceVu0AddVector(out, &monitorCamera.work, vEye);
         } else {
-#ifdef VERSION_JPN
-            len = handCameraEyeRate;
-#else
-            len =
-                handCameraEyeRate * 30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
-#endif
+            if (ICO_JPN) {
+                len = handCameraEyeRate;
+            } else {
+                len = handCameraEyeRate * 30.0f /
+                      (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
+            }
             sceVu0Normalize(vEye, vEye);
             sceVu0ScaleVector(vEye, vEye, len);
             sceVu0AddVector(out, &monitorCamera.work, vEye);
@@ -405,11 +400,11 @@ static void monitorMonitorCamera(CamWork *cam, CamWork *out)
     scePrintf("monitor camera move %f at %f %f %f\n", t, vSpare[0], vSpare[1], vSpare[2]);
 #endif
     held = 0;
-#ifdef VERSION_JPN
-    d = handCameraAtRate;
-#else
-    d = handCameraAtRate * 30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
-#endif
+    if (ICO_JPN) {
+        d = handCameraAtRate;
+    } else {
+        d = handCameraAtRate * 30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
+    }
     if (d < 0.0f) {
         d = -d;
     }
@@ -441,13 +436,13 @@ static void monitorMonitorCamera(CamWork *cam, CamWork *out)
                 mode = 4;
             }
         }
-#ifdef VERSION_JPN
-        _InterGV(out->at.f, cam->at.f, monitorCamera.work.at.f, mode, 1.0f);
-#else
-        _InterGV(out->at.f, cam->at.f, monitorCamera.work.at.f,
-                 mode * (float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f,
-                 30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
-#endif
+        if (ICO_JPN) {
+            _InterGV(out->at.f, cam->at.f, monitorCamera.work.at.f, mode, 1.0f);
+        } else {
+            _InterGV(out->at.f, cam->at.f, monitorCamera.work.at.f,
+                     mode * (float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f,
+                     30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+        }
         sceVu0SubVector(vAt, &out->at, &monitorCamera.work.at);
         len = FSqrt(vAt[0] * vAt[0] + vAt[1] * vAt[1] + vAt[2] * vAt[2]);
         if (d < len) {
@@ -471,17 +466,17 @@ static void monitorMonitorCamera(CamWork *cam, CamWork *out)
         }
     }
     if (insertCameraBlendTimer != 0) {
-#ifdef VERSION_JPN
-        _InterGV(out->eye.f, cam->eye.f, monitorCamera.work.eye.f, 1.0f, 0.1f);
-        _InterGV(out->at.f, cam->at.f, monitorCamera.work.at.f, 1.0f, 0.1f);
-        out->ext.f[0] = (cam->ext.f[0] * 0.1 + monitorCamera.work.ext.f[0]) / 1.1;
-#else
-        r1 = (float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0;
-        r2 = 3.0 / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
-        _InterGV(out->eye.f, cam->eye.f, monitorCamera.work.eye.f, r1, r2);
-        _InterGV(out->at.f, cam->at.f, monitorCamera.work.at.f, r1, r2);
-        out->ext.f[0] = (cam->ext.f[0] * r2 + monitorCamera.work.ext.f[0] * r1) / (r1 + r2);
-#endif
+        if (ICO_JPN) {
+            _InterGV(out->eye.f, cam->eye.f, monitorCamera.work.eye.f, 1.0f, 0.1f);
+            _InterGV(out->at.f, cam->at.f, monitorCamera.work.at.f, 1.0f, 0.1f);
+            out->ext.f[0] = (cam->ext.f[0] * 0.1 + monitorCamera.work.ext.f[0]) / 1.1;
+        } else {
+            r1 = (float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0;
+            r2 = 3.0 / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
+            _InterGV(out->eye.f, cam->eye.f, monitorCamera.work.eye.f, r1, r2);
+            _InterGV(out->at.f, cam->at.f, monitorCamera.work.at.f, r1, r2);
+            out->ext.f[0] = (cam->ext.f[0] * r2 + monitorCamera.work.ext.f[0] * r1) / (r1 + r2);
+        }
     }
     monitorCamera.work = *out;
     monitorCamera.dbgA[0] = vDbg[0];

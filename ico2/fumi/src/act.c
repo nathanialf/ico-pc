@@ -254,19 +254,11 @@ typedef struct { /* field names derived */
 void actInitialize_only_charcter(char *self)
 {
     Act *g = GOBJ_ACT(self);
-#ifdef VERSION_JPN
-    char *p = (char *)iosMallocDebug(ios_partition_seki, 0x970, __FILE__, 907);
-#else
     char *p = (char *)iosMallocDebug(ios_partition_seki, 0x980, __FILE__, 907);
-#endif
     Vec4 *q;
     int i;
 
-#ifdef VERSION_JPN
-    memset(p, 0, 0x970);
-#else
     memset(p, 0, 0x980);
-#endif
     g->work = (int)p;
     q = (Vec4 *)*(char **)(*(char **)(self + 0x164) + 0x688);
     ((Vec4 *)((char *)q + 0x320))->f[0] = GOBJ_SUB(self)->root.ikRate0;
@@ -275,21 +267,11 @@ void actInitialize_only_charcter(char *self)
     ((ActFWord *)((char *)q + 0x330))->f = -1.0f;
     ((ActFWord *)((char *)q + 0x334))->f = 1.0f;
     ((ActFWord *)((char *)q + 0x348))->f = 3.0f;
-#ifdef VERSION_JPN
-    *(int *)((char *)q + 0x7F0) = 0;
-#else
     *(int *)((char *)q + 0x800) = 0;
-#endif
     for (i = 0; i < 10; i++) {
-#ifdef VERSION_JPN
-        ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->modeHist[i] = 0;
-        ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->frameHist[i] = 0;
-        ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->intrKindHist[i] = 418;
-#else
         ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->a900[i] = 0;
         ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->a928[i] = 0;
-        ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->a950[i] = 0x1A2;
-#endif
+        ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->a950[i] = PAL_JPN(0x1A2, 418);
     }
 }
 
@@ -429,11 +411,7 @@ static IntrMail *act_check_intr_list(void *self, IntrMail *m, void **out)
                     w->intrMot = mot;
                     *(void **)((char *)w + 0x2C) = k->ent[i].f4;
                     *(char **)((char *)w + 0x30) = GetMailAdditionalData(self, i);
-#ifdef VERSION_JPN
-                    *(MotOriReq *)(*(char **)((int)GOBJ_ACT(self) + 0x688) + 0x8A0) = buf;
-#else
                     *(MotOriReq *)(*(char **)((int)GOBJ_ACT(self) + 0x688) + 0x8B0) = buf;
-#endif
                     *out = &k->ent[i];
                     return m;
                 }
@@ -591,15 +569,9 @@ void BeforeFunc(GObj *self)
     }
     g = *(char **)((char *)self + 0x15C);
     *(char **)((char *)w + 0x40) = *(char **)(g + 0x540);
-#ifdef VERSION_JPN
-    if ((((&motionKind[*(int *)(*(char **)((char *)self + 0x15C) + 0x4A0)])->flags.word >> 7) &
-         1) != 0 &&
-        GOBJ_SUB(self)->ctrl.animFrame < 3.0f) {
-#else
     if ((((&motionKind[*(int *)(*(char **)((char *)self + 0x15C) + 0x4A0)])->flags.word >> 1) &
          1) != 0 &&
         GOBJ_SUB(self)->ctrl.animFrame < 3.0f) {
-#endif
         w->flags20.ll |= 1LL << 18;
     }
     if (intr != 0) {
@@ -614,31 +586,16 @@ void BeforeFunc(GObj *self)
             }
             w->modeFrame = 0;
             for (i = 9; i > 0; i--) {
-#ifdef VERSION_JPN
-                ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->modeHist[i] =
-                    ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->modeHist[i - 1];
-                ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->frameHist[i] =
-                    ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->frameHist[i - 1];
-                ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->intrKindHist[i] =
-                    ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->intrKindHist[i - 1];
-#else
                 ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->a900[i] =
                     ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->a900[i - 1];
                 ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->a928[i] =
                     ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->a928[i - 1];
                 ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->a950[i] =
                     ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->a950[i - 1];
-#endif
             }
-#ifdef VERSION_JPN
-            ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->modeHist[0] = w->actMode;
-            ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->frameHist[0] = w->frame;
-            ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->intrKindHist[0] = old;
-#else
             ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->a900[0] = w->actMode;
             ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->a928[0] = w->frame;
             ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->a950[0] = old;
-#endif
             w->actMode = intr->mode;
             w->flags18.ll = (w->flags18.ll & ~(1LL << 39)) |
                             ((unsigned long long)actModeTbl[w->actMode].bit10 << 39);

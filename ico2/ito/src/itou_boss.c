@@ -266,11 +266,7 @@ static void effect_end_func(int id)
 
     if (isysGObjSearchFromObjKindID_begin(65) != 0) {
         e = &capsule[GetParticleEffectData(id)->user.capsule];
-#ifdef VERSION_JPN
-        pbga_start(&e->bga, 548);
-#else
-        pbga_start(&e->bga, 552);
-#endif
+        pbga_start(&e->bga, PAL_JPN(552, 548));
         _CopyVector(e->bga->pos, e->pos);
         CopyQuaternion(e->bga->rot, e->quat);
         e->state = 2;
@@ -323,13 +319,8 @@ void bossCtrlBeforeFunc(GObj *self)
 inline int InqCapsuleGhostBossStage(void)
 {
     int r = 0;
-#ifdef VERSION_JPN
-    if (stage_no == 84 || stage_no == 3 || stage_no == 46)
+    if (stage_no == PAL_JPN(86, 84) || stage_no == 3 || stage_no == 46)
         r = 1;
-#else
-    if (stage_no == 86 || stage_no == 3 || stage_no == 46)
-        r = 1;
-#endif
     return r;
 }
 
@@ -423,11 +414,7 @@ static void gene_enemy(volatile int gobj)
     for (;; _ACTWait(1)) {
         total = 0;
         alive = 0;
-#ifdef VERSION_JPN
-        if (stage_no == 84) {
-#else
-        if (stage_no == 86) {
-#endif
+        if (stage_no == PAL_JPN(86, 84)) {
             if ((pad[0].flags & 0x40) != 0) {
                 gflag[0] = 1;
             }
@@ -609,11 +596,7 @@ void BossCtrlDL(void)
         e = &base[k];
         if (e->state >= 2) {
             if (stage_DispBgAnimation(&e->bga) != 0) {
-#ifdef VERSION_JPN
-                pbga_start(&e->bga, 549);
-#else
-                pbga_start(&e->bga, 553);
-#endif
+                pbga_start(&e->bga, PAL_JPN(553, 549));
                 _CopyVector(e->bga->pos, e->pos);
                 CopyQuaternion(e->bga->rot, e->quat);
             }

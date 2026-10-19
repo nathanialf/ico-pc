@@ -195,12 +195,12 @@ void ThrowItem(GObj *gobj, void *vel)
     p->released = 1;
     p->held = 0;
     p->thrown = 1;
-#ifdef VERSION_JPN
-    CopyVector(GOBJ_SUB(gobj)->root.move, vel);
-#else
-    _ScaleVectorXYZ(*(char **)&gobj->dobj + 0x130, vel,
-                    30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
-#endif
+    if (ICO_JPN) {
+        CopyVector(GOBJ_SUB(gobj)->root.move, vel);
+    } else {
+        _ScaleVectorXYZ(*(char **)&gobj->dobj + 0x130, vel,
+                        30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+    }
     SetIdentityQuaternion(*(char **)&gobj->dobj + 0x150);
 }
 
@@ -321,11 +321,7 @@ static inline int entryBreakBgAnimation(int id, float *pos, float *dir, int arg)
     float rot[4];
     float d[4];
 
-#ifdef VERSION_JPN
-    if (id != 949) {
-#else
-    if (id != 972) {
-#endif
+    if (id != PAL_JPN(972, 949)) {
         memset(&rot, 0, 16);
         rot[3] = 1.0f;
         CopyVector(d, dir);
@@ -354,11 +350,7 @@ static inline int breakItemOnWallHit(GObj *gobj, float len, float *pos,
     if (5.0f < len) {
         int id = itemKind[p->kind].stayAnim;
 
-#ifdef VERSION_JPN
-        if (id != 949) {
-#else
-        if (id != 972) {
-#endif
+        if (id != PAL_JPN(972, 949)) {
             memset(&rot, 0, 16);
             rot[3] = 1.0f;
             CopyVector(d, vel);
@@ -464,11 +456,7 @@ static void uncarriedItemGeo(GObj *gobj)
             if (p->wave == 0) {
                 CopyVector(q, pos);
                 q[1] = GOBJ_SUB(gobj)->ctrl.waterY;
-#ifdef VERSION_JPN
-                EntryStageMultiBgaManager(488, q, IdentityQuaternion);
-#else
-                EntryStageMultiBgaManager(492, q, IdentityQuaternion);
-#endif
+                EntryStageMultiBgaManager(PAL_JPN(492, 488), q, IdentityQuaternion);
             }
         } else if (0.0f < d) {
             vel[1] -= ITEM_DT * 0.5f * ITEM_DT * 1.2f;
@@ -648,13 +636,8 @@ static void execBombGeo(GObj *gobj)
         break;
     case 2:
         rec->fuse.animMode = 0;
-#ifdef VERSION_JPN
-        stage_SetLoopFlag(507, 0);
-        stage_SetFrameStep(507, 1);
-#else
-        stage_SetLoopFlag(511, 0);
-        stage_SetFrameStep(511, 1);
-#endif
+        stage_SetLoopFlag(PAL_JPN(511, 507), 0);
+        stage_SetFrameStep(PAL_JPN(511, 507), 1);
         GetRootPosition(q->pos, gobj);
         _AttackCenter(gobj, 17, q->pos, 0, 200.0f, 0);
         LightTorchOff(q->torch);
@@ -662,13 +645,8 @@ static void execBombGeo(GObj *gobj)
         rec->released = 0;
         StopSEPackage(gobj);
         bombExplodeSE(gobj);
-#ifdef VERSION_JPN
-        stage_KillPlayBgAnimationIfOverMaxCount(507, 1);
-        q->anim = stage_MakePlayBgAnimation(507);
-#else
-        stage_KillPlayBgAnimationIfOverMaxCount(511, 1);
-        q->anim = stage_MakePlayBgAnimation(511);
-#endif
+        stage_KillPlayBgAnimationIfOverMaxCount(PAL_JPN(511, 507), 1);
+        q->anim = stage_MakePlayBgAnimation(PAL_JPN(511, 507));
         q->anim->frame = 1.0f;
         _CopyVector(q->anim->pos, q->pos);
         CopyQuaternion(q->anim->rot, IdentityQuaternion);

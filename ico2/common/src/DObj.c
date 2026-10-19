@@ -74,13 +74,17 @@ typedef struct { /* field names derived */
 } DObjRecord; /* derived name */
 
 #ifdef VERSION_JPN
+
 static DObjRecord emptyDObj = {
     {0, -1}, {0}, 0, 1, 1, 1, 0, 1548, {0}, 0, -1, {0},
 }; /* derived name */
+
 #else
+
 static DObjRecord emptyDObj = {
     {0, -1}, {0}, 0, 1, 1, 1, 0, 1552, {0}, 0, -1, {0},
 }; /* derived name */
+
 #endif
 
 /* One entry of the rotation element array at 0x80c: a zero vector then
@@ -421,11 +425,7 @@ Sub15C *CSVSYSTEM_InitDObj(int id, SObjSimpleSetting *lay)
 
     d = iosMallocDebug(ios_partition_seki, sizeof(DObjRecord), __FILE__, 463);
     *(DObjRecord *)d = emptyDObj;
-#ifdef VERSION_JPN
-    if (id != 1548) {
-#else
-    if (id != 1552) {
-#endif
+    if (id != PAL_JPN(1552, 1548)) {
         CSVSYSTEM_ReadCharFiles(d, id);
     }
     debug_StdPrintfDummy("\x1b[35mALLOCED DOBJ\x1b[m\n");

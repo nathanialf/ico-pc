@@ -25,22 +25,14 @@ void actSt04dDoor1(GObj *volatile self)
 
     if (scpTriggerBall(self, boyGObj, 400.0f) != 0 ||
         (girlGObj != 0 && scpTriggerBall(self, girlGObj, 400.0f) != 0)) {
-#ifdef VERSION_JPN
-        stage_SetAnimation(251, 0, 0);
-#else
-        stage_SetAnimation(255, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(255, 251), 0, 0);
         _ACTWait(60);
         door1_down_mes[0].func = actSt04dDoor1DownChk;
         act->mail = door1_down_mes;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-#ifdef VERSION_JPN
-        stage_SetAnimation(250, 0, 0);
-#else
-        stage_SetAnimation(254, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(254, 250), 0, 0);
         door1_up_mes[0].func = actSt04dDoor1UpChk;
         act->mail = door1_up_mes;
         ACTSendMailCorrect(self, 430);
@@ -70,11 +62,7 @@ void actSt04dDoor1UpChk(GObj *volatile self)
 
     actCreateSubThread(actSt04dDoor1UpEffect, 21);
 
-#ifdef VERSION_JPN
-    stage_SetAnimation(250, 1, 0);
-#else
-    stage_SetAnimation(254, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(254, 250), 1, 0);
 
     buf[0] = door1SoundPos.d[0];
     buf[1] = door1SoundPos.d[1];
@@ -84,11 +72,7 @@ void actSt04dDoor1UpChk(GObj *volatile self)
     _ACTWait(30);
     soundSeDefPlay(1222, 0, (float *)buf, 1);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(250) == 0) {
-#else
-    while (stage_CheckAnimationFinish(254) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(254, 250)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -161,11 +145,7 @@ void actSt04dDoor1DownChk(GObj *volatile self)
 
     actCreateSubThread(actSt04dDoor1DownEffect, 21);
 
-#ifdef VERSION_JPN
-    stage_SetAnimation(251, 1, 0);
-#else
-    stage_SetAnimation(255, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(255, 251), 1, 0);
 
     buf[0] = door1SoundPos.d[0];
     buf[1] = door1SoundPos.d[1];
@@ -175,11 +155,7 @@ void actSt04dDoor1DownChk(GObj *volatile self)
     _ACTWait(30);
     soundSeDefPlay(1222, 0, (float *)buf, 1);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(251) == 0) {
-#else
-    while (stage_CheckAnimationFinish(255) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(255, 251)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -208,22 +184,14 @@ void actSt04dDoor2(GObj *volatile self)
 
     if (scpTriggerBall(self, boyGObj, 400.0f) != 0 ||
         (girlGObj != 0 && scpTriggerBall(self, girlGObj, 400.0f) != 0)) {
-#ifdef VERSION_JPN
-        stage_SetAnimation(253, 0, 0);
-#else
-        stage_SetAnimation(257, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(257, 253), 0, 0);
         _ACTWait(60);
         door2_down_mes[0].func = actSt04dDoor2DownChk;
         act->mail = door2_down_mes;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-#ifdef VERSION_JPN
-        stage_SetAnimation(252, 0, 0);
-#else
-        stage_SetAnimation(256, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(256, 252), 0, 0);
         door2_up_mes[0].func = actSt04dDoor2UpChk;
         act->mail = door2_up_mes;
         ACTSendMailCorrect(self, 430);
@@ -253,11 +221,7 @@ void actSt04dDoor2UpChk(GObj *volatile self)
 
     actCreateSubThread(actSt04dDoor2UpEffect, 21);
 
-#ifdef VERSION_JPN
-    stage_SetAnimation(252, 1, 0);
-#else
-    stage_SetAnimation(256, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(256, 252), 1, 0);
 
     buf[0] = door2SoundPos.d[0];
     buf[1] = door2SoundPos.d[1];
@@ -267,11 +231,7 @@ void actSt04dDoor2UpChk(GObj *volatile self)
     _ACTWait(30);
     soundSeDefPlay(1222, 0, (float *)buf, 1);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(252) == 0) {
-#else
-    while (stage_CheckAnimationFinish(256) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(256, 252)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -344,11 +304,7 @@ void actSt04dDoor2DownChk(GObj *volatile self)
 
     actCreateSubThread(actSt04dDoor2DownEffect, 21);
 
-#ifdef VERSION_JPN
-    stage_SetAnimation(253, 1, 0);
-#else
-    stage_SetAnimation(257, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(257, 253), 1, 0);
 
     buf[0] = door2SoundPos.d[0];
     buf[1] = door2SoundPos.d[1];
@@ -358,11 +314,7 @@ void actSt04dDoor2DownChk(GObj *volatile self)
     _ACTWait(30);
     soundSeDefPlay(1222, 0, (float *)buf, 1);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(253) == 0) {
-#else
-    while (stage_CheckAnimationFinish(257) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(257, 253)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);

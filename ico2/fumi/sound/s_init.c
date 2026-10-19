@@ -1293,9 +1293,13 @@ void soundSeEnvPlay(void)
 
 /* &stageData[0].seEnvFirst, the range soundSeEnvNotUseClose walks */
 #ifdef VERSION_JPN
+
 extern char D_005EFE10[];
+
 #else
+
 extern char D_005F5E60[];
+
 #endif
 
 void soundSeEnvNotUseClose(int a, int b)
@@ -1353,17 +1357,10 @@ void soundSeEnvNotUseClose(int a, int b)
     for (m = 0; m < 48; m++) {
         e = &seSlotTbl[m];
         req = e->req;
-#ifdef VERSION_JPN
-        first = (int *)&D_005EFE10[a * 404];
-#else
-        first = (int *)&D_005F5E60[a * 404];
-#endif
+        first = (int *)PAL_JPN(&D_005F5E60[a * 404], &D_005EFE10[a * 404]);
         if (req != 0 && req->mode == 0 && e->owner == 0xFFFFFFFF) {
-#ifdef VERSION_JPN
-            for (j = *first; j < *(int *)&D_005EFE10[a * 404 + 4]; j++) {
-#else
-            for (j = *first; j < *(int *)&D_005F5E60[a * 404 + 4]; j++) {
-#endif
+            for (j = *first;
+                 j < *(int *)PAL_JPN(&D_005F5E60[a * 404 + 4], &D_005EFE10[a * 404 + 4]); j++) {
                 if (e->src == &seDef[seEnv[j].se]) {
                     if (ok == 0 || seFile[seList[seKind[e->src->kind]].num].loaded != 1) {
                         goto next;

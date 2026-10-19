@@ -738,11 +738,7 @@ void BoyGeo(GObj *gobj)
     synchronizeMotionOutputOriginForGirl(gobj);
     execClothes(gobj);
     ExecuteSlipProc(gobj);
-#ifdef VERSION_JPN
-    SetActressLight(gobj, 35, 44, 467);
-#else
-    SetActressLight(gobj, 35, 44, 471);
-#endif
+    SetActressLight(gobj, 35, 44, PAL_JPN(471, 467));
     if (CylinderCollision(gobj, 4, 50.0f, 50.0f, 0.7f) != 0) {
         iosOmSendMail(gobj, 6, gobj);
     }
@@ -816,11 +812,7 @@ void BoyDL(GObj *gobj)
         GetRootPosition(pos, gobj);
         GetRootQuaternion(quat, gobj);
         RotQuaternionY(quat, -32768);
-#ifdef VERSION_JPN
-        r = (int)stage_PlayBgAnimation(484, (float)w->stoneAnim, pos, quat);
-#else
-        r = (int)stage_PlayBgAnimation(488, (float)w->stoneAnim, pos, quat);
-#endif
+        r = (int)stage_PlayBgAnimation(PAL_JPN(488, 484), (float)w->stoneAnim, pos, quat);
         if (systemStatus[5] == 0 && r != -1) {
             w->stoneAnim = r;
         }

@@ -56,11 +56,7 @@ void actSt04eWaterStop(GObj *volatile self)
 {
     GProc *th;
 
-#ifdef VERSION_JPN
-    lt_switch_layout(52);
-#else
-    lt_switch_layout(55);
-#endif
+    lt_switch_layout(PAL_JPN(55, 52));
 
     demoEnd = 0;
     demoSkipped = 0;
@@ -88,13 +84,8 @@ void actSt04eWaterStop(GObj *volatile self)
             _ACTWait(1);
         }
 
-#ifdef VERSION_JPN
-        stage_SetAnimation(258, 0, -1);
-        stage_SetAnimation(257, -1, -2);
-#else
-        stage_SetAnimation(262, 0, -1);
-        stage_SetAnimation(261, -1, -2);
-#endif
+        stage_SetAnimation(PAL_JPN(262, 258), 0, -1);
+        stage_SetAnimation(PAL_JPN(261, 257), -1, -2);
         scpFadeIn(3.0f);
     }
 
@@ -102,11 +93,7 @@ void actSt04eWaterStop(GObj *volatile self)
     scpSearchGobj(1272)->active = 0;
 
     scpBoyControlReadDisable = 0;
-#ifdef VERSION_JPN
-    lt_switch_layout(51);
-#else
-    lt_switch_layout(54);
-#endif
+    lt_switch_layout(PAL_JPN(54, 51));
 
     scpWakeupEnemyAll();
 
@@ -151,21 +138,13 @@ static void actSt04eFuchi1(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(227) == 0) {
-#ifdef VERSION_JPN
-        stage_SetAnimation(259, 0, 0);
-#else
-        stage_SetAnimation(263, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(263, 259), 0, 0);
         fuchi1_mes[0].func = actSt04eFuchi1Chk;
         act->mail = fuchi1_mes;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-#ifdef VERSION_JPN
-        stage_SetAnimation(259, 0, -1);
-#else
-        stage_SetAnimation(263, 0, -1);
-#endif
+        stage_SetAnimation(PAL_JPN(263, 259), 0, -1);
     }
 }
 
@@ -176,21 +155,13 @@ static void actSt04eFuchi2(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(228) == 0) {
-#ifdef VERSION_JPN
-        stage_SetAnimation(260, 0, 0);
-#else
-        stage_SetAnimation(264, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(264, 260), 0, 0);
         fuchi2_mes[0].func = actSt04eFuchi2Chk;
         act->mail = fuchi2_mes;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-#ifdef VERSION_JPN
-        stage_SetAnimation(260, 0, -1);
-#else
-        stage_SetAnimation(264, 0, -1);
-#endif
+        stage_SetAnimation(PAL_JPN(264, 260), 0, -1);
     }
 }
 
@@ -201,21 +172,13 @@ static void actSt04eFuchi3(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(229) == 0) {
-#ifdef VERSION_JPN
-        stage_SetAnimation(261, 0, 0);
-#else
-        stage_SetAnimation(265, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(265, 261), 0, 0);
         fuchi3_mes[0].func = actSt04eFuchi3Chk;
         act->mail = fuchi3_mes;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-#ifdef VERSION_JPN
-        stage_SetAnimation(261, 0, -1);
-#else
-        stage_SetAnimation(265, 0, -1);
-#endif
+        stage_SetAnimation(PAL_JPN(265, 261), 0, -1);
     }
 }
 
@@ -247,11 +210,7 @@ void actSt04eWater(GObj *volatile self)
         _ACTWait(0);
     } else {
         scpSearchGobj(1272)->active = 0;
-#ifdef VERSION_JPN
-        stage_SetAnimation(257, -1, -2);
-#else
-        stage_SetAnimation(261, -1, -2);
-#endif
+        stage_SetAnimation(PAL_JPN(261, 257), -1, -2);
     }
 }
 
@@ -300,19 +259,10 @@ static void actSt04eWaterStopSub(GObj *volatile self)
 {
     _ACTWait(60);
 
-#ifdef VERSION_JPN
-    stage_SetAnimation(258, 1, 0);
-    stage_SetAnimation(257, -1, -2);
-#else
-    stage_SetAnimation(262, 1, 0);
-    stage_SetAnimation(261, -1, -2);
-#endif
+    stage_SetAnimation(PAL_JPN(262, 258), 1, 0);
+    stage_SetAnimation(PAL_JPN(261, 257), -1, -2);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(258) == 0) {
-#else
-    while (stage_CheckAnimationFinish(262) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(262, 258)) == 0) {
         _ACTWait(1);
     }
 
@@ -341,18 +291,10 @@ static void actSt04eFuchi1Chk(GObj *volatile self)
 
     gflagOn(227);
     _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1]);
-#ifdef VERSION_JPN
-    stage_SetAnimation(259, 1, 0);
-#else
-    stage_SetAnimation(263, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(263, 259), 1, 0);
     soundSeDefPlay(1342, 0, 0, 1);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(259) == 0) {
-#else
-    while (stage_CheckAnimationFinish(263) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(263, 259)) == 0) {
         _ACTWait(1);
     }
 
@@ -367,18 +309,10 @@ static void actSt04eFuchi2Chk(GObj *volatile self)
 
     gflagOn(228);
     _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1]);
-#ifdef VERSION_JPN
-    stage_SetAnimation(260, 1, 0);
-#else
-    stage_SetAnimation(264, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(264, 260), 1, 0);
     soundSeDefPlay(1342, 0, 0, 1);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(260) == 0) {
-#else
-    while (stage_CheckAnimationFinish(264) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(264, 260)) == 0) {
         _ACTWait(1);
     }
 
@@ -393,18 +327,10 @@ static void actSt04eFuchi3Chk(GObj *volatile self)
 
     gflagOn(229);
     _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1]);
-#ifdef VERSION_JPN
-    stage_SetAnimation(261, 1, 0);
-#else
-    stage_SetAnimation(265, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(265, 261), 1, 0);
     soundSeDefPlay(1342, 0, 0, 1);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(261) == 0) {
-#else
-    while (stage_CheckAnimationFinish(265) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(265, 261)) == 0) {
         _ACTWait(1);
     }
 

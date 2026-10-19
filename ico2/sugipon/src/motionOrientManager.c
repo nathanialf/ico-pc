@@ -274,11 +274,11 @@ int UpdateFrameCounter(void *self)
     if (motionFrameUpdate == 1) {
         t = w->speedRatio * motionKind[w->motion].playSpeedRatio * w->playRate *
             (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f);
-#ifndef VERSION_JPN
-        if (systemStatus[0] != 0) {
-            t = t * motionKind[w->motion].palSpeedRatio;
+        if (!ICO_JPN) {
+            if (systemStatus[0] != 0) {
+                t = t * motionKind[w->motion].palSpeedRatio;
+            }
         }
-#endif
         if (w->waterDrag != 0) {
             switch (w->rootUpdateMode) {
             case 1:
@@ -533,11 +533,7 @@ static void shiftMotionData(int obj, int motion, int request, int shiftMode)
     mw->fieldWall = motionKind[mot].fieldWall;
     mw->cylinder = motionKind[mot].cylinder;
     mw->avgWallPlane = motionKind[mot].flags.bits.avgWallPlane;
-#ifdef VERSION_JPN
-    mw->flag330 = motionKind[mot].flags.bits.dropNode4Turn;
-#else
     mw->flag330 = motionKind[mot].flags2.bits.dropNode4Turn;
-#endif
     w->updateModeChanged = 0;
     if (w->keepUpdateMode == 0) {
         if (w->rootUpdateMode != motionKind[mot].rootUpdateMode) {

@@ -61,19 +61,11 @@ void actSt04bSekizoChk(GObj *volatile self)
         _ACTWait(1);
     }
 
-#ifdef VERSION_JPN
-    lt_switch_layout(52);
-#else
-    lt_switch_layout(55);
-#endif
+    lt_switch_layout(PAL_JPN(55, 52));
     scpBoyControlReadDisable = 1;
     brainLockGirl();
 
-#ifdef VERSION_JPN
-    scpKillEnemyOne(3734);
-#else
-    scpKillEnemyOne(3757);
-#endif
+    scpKillEnemyOne(PAL_JPN(3757, 3734));
     scpMaskGeneratorAll();
 
     scpAdpcmPlayRequestFunc(18, &sekizo4b, 1, 1, 1);
@@ -83,11 +75,7 @@ void actSt04bSekizoChk(GObj *volatile self)
 
     gflagOn(390);
 
-#ifdef VERSION_JPN
-    stage_SetAnimation(187, 1, 0);
-#else
-    stage_SetAnimation(191, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(191, 187), 1, 0);
 
     ReviveAllCarryableItemsWithNonSleepFrame(250);
 
@@ -121,11 +109,7 @@ void actSt04bSekizoChk(GObj *volatile self)
 
     soundSeDefStop(se);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFrame(187, 151, 0) == 0) {
-#else
-    while (stage_CheckAnimationFrame(191, 151, 0) == 0) {
-#endif
+    while (stage_CheckAnimationFrame(PAL_JPN(191, 187), 151, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -146,20 +130,12 @@ void actSt04bSekizoChk(GObj *volatile self)
 
     ScpCallCameraSetTarget(10793.0f, 2122.0f, 0.0f);
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(187) == 0) {
-#else
-    while (stage_CheckAnimationFinish(191) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(191, 187)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
-#ifdef VERSION_JPN
-    lt_switch_layout(51);
-#else
-    lt_switch_layout(54);
-#endif
+    lt_switch_layout(PAL_JPN(54, 51));
     scpBoyControlReadDisable = 0;
 }
 
@@ -174,18 +150,10 @@ void actSt04bEne1Chk(GObj *volatile self)
         _ACTWait(1);
     }
 
-#ifdef VERSION_JPN
-    lt_switch_layout(52);
-#else
-    lt_switch_layout(55);
-#endif
+    lt_switch_layout(PAL_JPN(55, 52));
     scpBoyControlReadDisable = 1;
 
-#ifdef VERSION_JPN
-    scpSleepEnemyOne(3734);
-#else
-    scpSleepEnemyOne(3757);
-#endif
+    scpSleepEnemyOne(PAL_JPN(3757, 3734));
 
     gflagOff(391);
 
@@ -194,33 +162,17 @@ void actSt04bEne1Chk(GObj *volatile self)
     gflagOn(157);
     gflagOn(158);
 
-#ifdef VERSION_JPN
-    stage_SetAnimation(180, 1, 0);
-#else
-    stage_SetAnimation(184, 1, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(184, 180), 1, 0);
     SetCameraFlag_LwsCutBack();
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFinish(180) == 0) {
-#else
-    while (stage_CheckAnimationFinish(184) == 0) {
-#endif
+    while (stage_CheckAnimationFinish(PAL_JPN(184, 180)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
-#ifdef VERSION_JPN
-    lt_switch_layout(51);
-#else
-    lt_switch_layout(54);
-#endif
+    lt_switch_layout(PAL_JPN(54, 51));
     scpBoyControlReadDisable = 0;
 
-#ifdef VERSION_JPN
-    scpWakeupEnemyOne(3734);
-#else
-    scpWakeupEnemyOne(3757);
-#endif
+    scpWakeupEnemyOne(PAL_JPN(3757, 3734));
 }
 
 void actSt04bCrest01XL(GObj *volatile self)
@@ -231,21 +183,11 @@ void actSt04bCrest01XL(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(174) == 0) {
-#ifdef VERSION_JPN
-        stage_SetAnimation(181, 0, 0);
-        stage_SetAnimation(182, 0, 0);
-#else
-        stage_SetAnimation(185, 0, 0);
-        stage_SetAnimation(186, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(185, 181), 0, 0);
+        stage_SetAnimation(PAL_JPN(186, 182), 0, 0);
     } else {
-#ifdef VERSION_JPN
-        stage_SetAnimation(181, 0, -1);
-        stage_SetAnimation(182, 0, -1);
-#else
-        stage_SetAnimation(185, 0, -1);
-        stage_SetAnimation(186, 0, -1);
-#endif
+        stage_SetAnimation(PAL_JPN(185, 181), 0, -1);
+        stage_SetAnimation(PAL_JPN(186, 182), 0, -1);
         scpTorchLightOn(1056);
         scpTorchLightOn(1057);
     }
@@ -257,11 +199,7 @@ void actSt04bDoorXL(GObj *volatile self)
 
     actInitialize(self);
     _ACTWait(1);
-#ifdef VERSION_JPN
-    stage_SetAnimation(245, 0, 0);
-#else
-    stage_SetAnimation(249, 0, 0);
-#endif
+    stage_SetAnimation(PAL_JPN(249, 245), 0, 0);
 }
 
 void actSt04bMonyoDoorXL(GObj *volatile self)
@@ -272,17 +210,9 @@ void actSt04bMonyoDoorXL(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(174) == 0) {
-#ifdef VERSION_JPN
-        stage_SetAnimation(246, 0, 0);
-#else
-        stage_SetAnimation(250, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(250, 246), 0, 0);
     } else {
-#ifdef VERSION_JPN
-        stage_SetAnimation(246, 0, -1);
-#else
-        stage_SetAnimation(250, 0, -1);
-#endif
+        stage_SetAnimation(PAL_JPN(250, 246), 0, -1);
     }
 }
 
@@ -293,21 +223,13 @@ void actSt04bSekizo(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(159) == 0) {
-#ifdef VERSION_JPN
-        stage_SetAnimation(187, 0, 0);
-#else
-        stage_SetAnimation(191, 0, 0);
-#endif
+        stage_SetAnimation(PAL_JPN(191, 187), 0, 0);
         sekizo_mes[0].func = actSt04bSekizoChk;
         act->mail = sekizo_mes;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-#ifdef VERSION_JPN
-        stage_SetAnimation(187, 0, -1);
-#else
-        stage_SetAnimation(191, 0, -1);
-#endif
+        stage_SetAnimation(PAL_JPN(191, 187), 0, -1);
         if (gflagChk(174) == 0) {
             ScpCallCameraSetTarget(10793.0f, 2122.0f, 0.0f);
         }
@@ -376,17 +298,9 @@ void actSt04bBallXL(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(138) == 0) {
-#ifdef VERSION_JPN
-        stage_SetAnimation(295, -1, -2);
-#else
-        stage_SetAnimation(299, -1, -2);
-#endif
+        stage_SetAnimation(PAL_JPN(299, 295), -1, -2);
     } else {
-#ifdef VERSION_JPN
-        stage_SetAnimation(293, -1, -2);
-#else
-        stage_SetAnimation(297, -1, -2);
-#endif
+        stage_SetAnimation(PAL_JPN(297, 293), -1, -2);
     }
 }
 
@@ -398,13 +312,13 @@ void actSt04bSolarXL(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(138) == 0) {
-#ifdef VERSION_JPN
-        stage_SetAnimation(297, -1, -2);
-#endif
+        if (ICO_JPN) {
+            stage_SetAnimation(297, -1, -2);
+        }
         stage_SetAnimation(301, -1, -2);
-#ifndef VERSION_JPN
-        stage_SetAnimation(305, -1, -2);
-#endif
+        if (!ICO_JPN) {
+            stage_SetAnimation(305, -1, -2);
+        }
     }
 }
 

@@ -359,10 +359,14 @@ static char *debugBarName[] = {"Off", "Low-Deco", "High-Deco"}; /* derived name 
 static char *debugProfileName[] = {"Variable", "Process"}; /* derived name */
 
 #ifdef VERSION_JPN
+
 static char *debugSnapSizeName[] = {"Normal", "Half",     "Double",  "Double+Wide",
                                     "4x4",    "4x4+Wide", "XYOFFSET"}; /* derived name */
+
 #else
+
 static char *debugSnapSizeName[] = {"None", "1x1", "2x2", "4x4", "8x8"}; /* derived name */
+
 #endif
 
 static char *debugSnapFormName[] = {"TIM2", "BMP"}; /* derived name */
@@ -390,6 +394,7 @@ static char *debugMotionTargetName[] = {"BOY", "GIRL", "BIRD", "ENEMY", "QUEEN"}
 /* the debug options: name, colour, value, range, value names and the function
    called on a change, in the order debug_Mode pages through them */
 #ifdef VERSION_JPN
+
 static const DbgOpt debugOption[76] = {
     {" FrameStep          ", 0x0080FF80, &systemStatus[1], 1, 2, debugFrameStepName,
      (void (*)(int))gsResetFunc},
@@ -472,7 +477,9 @@ static const DbgOpt debugOption[76] = {
      ChangeGirlControlMode},
     {" NO BREAST HANG     ", 0xC0C0C080, &debug_no_breast_hang, 0, 1, debugOffOnName, 0},
 }; /* derived name */
+
 #else
+
 static const DbgOpt debugOption[76] = {
     {" FrameStep          ", 0x0080FF80, &systemStatus[1], 1, 2, debugFrameStepName,
      (void (*)(int))gsResetFunc},
@@ -555,6 +562,7 @@ static const DbgOpt debugOption[76] = {
      ChangeGirlControlMode},
     {" NO BREAST HANG     ", 0xC0C0C080, &debug_no_breast_hang, 0, 1, debugOffOnName, 0},
 }; /* derived name */
+
 #endif
 
 /* the font window's line count */
@@ -1076,11 +1084,7 @@ void debug_VariableInit(void)
     debug_zoom_per = 100;
     debug_debug_bar_start_item = 0;
     debug_ripple_roughness = 25;
-#ifdef VERSION_JPN
-    debug_snapshot_num = 1;
-#else
-    debug_snapshot_num = 100;
-#endif
+    debug_snapshot_num = PAL_JPN(100, 1);
     debug_snapshot_size = 0;
     debug_snapshot_format = 0;
     debug_ambient_volume = 0;
@@ -1267,11 +1271,14 @@ int debug_Load(char **dst, char *name, int kind)
 }
 
 #ifdef VERSION_JPN
+
 /* the GIF tag debug_MakeFont copies ahead of each font packet, as
    debug_exception's fontTag: the two 64-bit words the packet takes it in,
    which the copy moves one doubleword at a time */
 static unsigned long long debugFontTag[2] = {0x2000400000008000LL, 0x51}; /* derived name */
+
 #else
+
 /* a GIF tag as the two 64-bit words the packet takes it in, on the
    quadword boundary the GIF reads it at */
 typedef unsigned long long GifTag[2] __attribute__((aligned(16))); /* derived name */
@@ -1279,6 +1286,7 @@ typedef unsigned long long GifTag[2] __attribute__((aligned(16))); /* derived na
 /* the GIF tag debug_MakeFont copies ahead of each font packet, as
    debug_exception's fontTag */
 static GifTag debugFontTag = {0x2000400000008000LL, 0x51}; /* derived name */
+
 #endif
 
 /* clang-format off */
@@ -1712,11 +1720,7 @@ static void debug_DrawBar(void)
 
 
     flip = 0;
-#ifdef VERSION_JPN
-    scale = 1.0f / (270000.0f / 30.0f);
-#else
-    scale = 1.0f / (270000.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
-#endif
+    scale = 1.0f / (270000.0f / PAL_JPN((float)((60 - systemStatus[0] * 10) / systemStatus[1]), 30.0f));
 
 
 
@@ -1947,11 +1951,7 @@ void debug_DispBar(void)
     int va;
     int vb;
     int n;
-#ifdef VERSION_JPN
-    inv = 1.0f / (270000.0f / 30.0f);
-#else
-    inv = 1.0f / (270000.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
-#endif
+    inv = 1.0f / (270000.0f / PAL_JPN((float)((60 - systemStatus[0] * 10) / systemStatus[1]), 30.0f));
     vb = (float)(debugBars[debugBarCount - 1].count * 100) * inv;
     va = (float)(drawTimerCount * 100) * inv;
 
@@ -2145,38 +2145,30 @@ int debug_SnapShot(int idx)
     unsigned int y;
 #endif
 
-#ifndef VERSION_JPN
-    size = ScreenWidth * ScreenHeight * 4;
-    if (debug_snapshot_size == 0) {
-        return -1;
+    if (!ICO_JPN) {
+        size = ScreenWidth * ScreenHeight * 4;
+        if (debug_snapshot_size == 0) {
+            return -1;
+        }
+        mask = 1 << (debug_snapshot_size - 1);
     }
-    mask = 1 << (debug_snapshot_size - 1);
-#endif
     debugBackGroundDisableFlag = 1;
     if (snapFirst != 0) {
         if (iosCdvdBackGroundMgrRunning != 0) {
-#ifdef VERSION_JPN
-            return 1;
-#else
-            return -1;
-#endif
+            return PAL_JPN(-1, 1);
         }
         snapFirst = 0;
     }
     sceGsSyncPath(0, 0);
-#ifdef VERSION_JPN
-    src = (int *)(0x2000000 + ofs);
-    debug_StdPrintfDummy("Snapx4:%d:%p\n", idx, src);
-#else
-    debug_StdPrintfDummy("Snap:%d:%p\n", idx, 0x2000000);
-#endif
+    if (ICO_JPN) {
+        src = (int *)(0x2000000 + ofs);
+        debug_StdPrintfDummy("Snapx4:%d:%p\n", idx, src);
+    } else {
+        debug_StdPrintfDummy("Snap:%d:%p\n", idx, 0x2000000);
+    }
     sceGsSetDefStoreImage(&si, 0x800, ScreenWidth / 64, 0, 0, 0, ScreenWidth, ScreenHeight);
     FlushCache(0);
-#ifdef VERSION_JPN
-    sceGsExecStoreImage(&si, src);
-#else
-    sceGsExecStoreImage(&si, (void *)0x2000000);
-#endif
+    sceGsExecStoreImage(&si, PAL_JPN((void *)0x2000000, src));
     sceGsSyncPath(0, 0);
 #ifdef VERSION_JPN
     switch (idx) {
@@ -2953,15 +2945,9 @@ static int debug_SelectStageMain(int ret, int stage)
 
 int debug_SelectStage(void)
 {
-#ifdef VERSION_JPN
     return debug_SelectStageMain(debug_SelectCsvWindowWithLine("stage select", 10, 80, 11, stageData,
-                                                               404, 0x20, 0, 104, &stageSelectNo),
+                                                               404, 0x20, 0, PAL_JPN(106, 104), &stageSelectNo),
                                  stageSelectNo);
-#else
-    return debug_SelectStageMain(debug_SelectCsvWindowWithLine("stage select", 10, 80, 11, stageData,
-                                                               404, 0x20, 0, 106, &stageSelectNo),
-                                 stageSelectNo);
-#endif
 }
 
 static inline int debug_mcConfirm(char *msg) /* derived name */
@@ -4028,11 +4014,7 @@ static int menuArg = 0; /* derived name */
 static inline void debug_MenuBlink(void) /* derived name */
 {
     if (menuBlink >> 4) {
-#ifdef VERSION_JPN
-        debug_PrintfDummy(220, 60, 0x80C0FF80u, "DISC VER.%s %s", "Nov  2 2001", "17:26:01");
-#else
-        debug_PrintfDummy(220, 60, 0x80C0FF80u, "DISC VER.%s %s", "Jan 17 2002", "15:37:26");
-#endif
+        debug_PrintfDummy(220, 60, 0x80C0FF80u, "DISC VER.%s %s", PAL_JPN("Jan 17 2002", "Nov  2 2001"), PAL_JPN("15:37:26", "17:26:01"));
     }
     menuBlink++;
     if (menuBlink >= 0x41) {
