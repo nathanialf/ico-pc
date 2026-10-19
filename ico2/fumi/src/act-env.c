@@ -43,12 +43,9 @@ static float ditchCheckBase[4] = {226.0f, -2328.0f, 343.0f, 1.0f}; /* derived na
 
 static float ditchCheckDir[4] = {0.642799f, 0.0f, -0.765893f, 0.0f}; /* derived name */
 
-#ifdef VERSION_JPN
-
-/* where the first carrier stands in the stage 8 ditch below the -3000 line */
-static float ditchCarryPos[4] = {747.0f, -3775.0f, 2601.0f, 1.0f}; /* derived name */
-
-#endif
+/* the Japanese disc's spot where the first carrier stands in the stage 8 ditch below the
+   -3000 line, a .data array 20 units off the European .rodata vector (ditchCarryPos) */
+static float ditchCarryPos_jpn[4] = {747.0f, -3775.0f, 2601.0f, 1.0f}; /* derived name */
 
 static float ditchCarryTarget[4] = {602.0f, -3775.0f, 2480.0f, 1.0f}; /* derived name */
 
@@ -84,13 +81,9 @@ inline void GetSofaPosition(GObj *self, GObj *sofa)
                       &v);
 }
 
-#ifndef VERSION_JPN
-
 /* Where the first carrier stands in the stage 8 ditch below the -3000 line
-   (the .rodata's second object). */
+   (the .rodata's second object); the Japanese disc's is ditchCarryPos_jpn. */
 static const VECTOR ditchCarryPos = {767.0f, -3775.0f, 2621.0f, 1.0f}; /* derived name */
-
-#endif
 
 static inline int getDitchCarryMode(void) /* derived name */
 {
@@ -165,10 +158,10 @@ static void getDitchDistTbl(float **tbl, float *range, int *sofa, float *pos, vo
 
                 *tbl = ditchDistTblCarry;
                 if (ICO_JPN) {
-                    pos[0] = ditchCarryPos[0];
-                    pos[1] = ditchCarryPos[1];
-                    pos[2] = ditchCarryPos[2];
-                    _OrientXZGV(obj, ditchCarryTarget, ditchCarryPos);
+                    pos[0] = ditchCarryPos_jpn[0];
+                    pos[1] = ditchCarryPos_jpn[1];
+                    pos[2] = ditchCarryPos_jpn[2];
+                    _OrientXZGV(obj, ditchCarryTarget, ditchCarryPos_jpn);
                 } else {
                     pos[0] = v.x;
                     pos[1] = v.y;
