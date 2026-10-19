@@ -40,9 +40,10 @@ cat > "$HOOK" <<'EOF'
 #                                          the host in ico2/
 #   8. tools/region_blocks.py --selftest, then tools/region_blocks.py check
 #                                          the converter matches its fixture;
-#                                          no VERSION_ block in ico2/ or sce/,
-#                                          the region forms are legal and
-#                                          region.h is fresh
+#                                          the region forms are legal, region.h
+#                                          and the region glue are fresh; raw
+#                                          VERSION_ blocks that are all hand
+#                                          items (exit 2) only warn
 set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 
@@ -90,11 +91,17 @@ done
     echo "pre-commit: tools/region_blocks.py no longer converts its fixture (tools/test/region_blocks)" >&2
     exit 1
 }
-"$PY" "$ROOT/tools/region_blocks.py" check >/dev/null || {
-    "$PY" "$ROOT/tools/region_blocks.py" check
+# exit 2 (raw region blocks remain, every one a hand item) warns and passes,
+# so the hand list can be worked commit by commit; CI requires exit 0
+rc=0
+"$PY" "$ROOT/tools/region_blocks.py" check >/dev/null || rc=$?
+if [[ $rc == 2 ]]; then
+    echo "pre-commit: warning: $("$PY" "$ROOT/tools/region_blocks.py" check | tail -n 1 || true); CI fails until none remain" >&2
+elif [[ $rc != 0 ]]; then
+    "$PY" "$ROOT/tools/region_blocks.py" check || true
     echo "pre-commit: ico2/ breaks a region rule: write the run-time form (docs/port/GAME_CODE.md \"Regions\")" >&2
     exit 1
-}
+fi
 EOF
 chmod +x "$HOOK"
 echo "Installed pre-commit hook at $HOOK"

@@ -1,8 +1,8 @@
 /*
  * port/core/region.c
  *
- * The selected region (region.h): the game's index ico_region, the table
- * of every row in config/regions.txt's order, and the look-ups. Plain
+ * The selected region (region.h): the game's index ico_region and the
+ * look-ups over the table of every row (region_table.c, generated). Plain
  * data: no log (the program's select_disc logs the disc it plays).
  */
 #include "region.h"
@@ -12,11 +12,8 @@
 
 int ico_region = 0;
 
-/* config/regions.txt, row for row (region_select checks the order) */
-const IcoRegionInfo *const ico_region_info[ICO_REGION_COUNT] = {
-    &ico_region_info_pal,
-    &ico_region_info_jpn,
-};
+/* ico_region_info[] is region_table.c's, generated from config/regions.txt
+   (tools/region_blocks.py gen-table; region_select checks the order). */
 
 const IcoRegionInfo *ico_region_cur(void)
 {

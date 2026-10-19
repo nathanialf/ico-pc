@@ -227,7 +227,7 @@ matches nothing, so they cannot go stale; `check_call_types.py`'s does not.
 | tool | refuses | runs in |
 | --- | --- | --- |
 | `tools/strip_host_gates.py --check` | any `ICO_HOST` conditional under `ico2/` or `sce/` | pre-commit, CI |
-| `tools/region_blocks.py check` | a `VERSION_` block or word under `ico2/` or `sce/`, a conditional on the region, a selector macro in a constant context, a file naming the region macros that does not reach `region.h`, a stale `region.h`, a stale `config/region_twins.txt` row ([Regions](#regions)); `--selftest` runs `tools/test/region_blocks/` | pre-commit, CI |
+| `tools/region_blocks.py check` | a `VERSION_` block or word under `ico2/` or `sce/`, a conditional on the region, a selector macro in a constant context, a file naming the region macros that does not reach `region.h`, a stale `region.h` or `port/core/region_table.c`, a missing per-region piece, a stale `config/region_twins.txt` row ([Regions](#regions)); `--selftest` runs `tools/test/region_blocks/`. The hook passes raw blocks that are all hand items with a warning; CI does not | pre-commit, CI |
 | `tools/stack_overread_audit.py` | a call that reads or writes more bytes through a pointer to a local than the local holds (a 64-byte matrix copy from a 48-byte local), and a local that is only written: code that relied on the period compiler's stack layout. Allow list `tools/stack_overread_allow.txt`; `--selftest` runs `tools/test/stack_overread/` | pre-commit, CI |
 | `tools/struct_cast_audit.py` | a fixed array or smaller variable cast to a struct larger on the host than it (a buffer sized for the EE's 0xC0-byte `ClipWork`, which is 0xF0 on the host); sizes come from compiling the file with probes. Allow list `tools/struct_cast_allow.txt`; `--selftest` runs `tools/test/struct_cast/` | pre-commit, CI |
 | `tools/check_call_types.py` | a call through a function-pointer cast passing fewer arguments than the function reads, and an `extern` in an `ico2/` `.c` file whose parameter count, integer widths or return width differ from the definition (a missing argument is whatever the register held on x86-64 and arm64). Allow list `tools/check_call_types_allow.txt` | pre-commit, CI |
@@ -415,14 +415,27 @@ selector or `LN` after `>>` or `<<`, inside `sizeof`, in an array dimension, a `
 static local's initialiser or at file scope; every file naming the macros reaches `region.h`
 through its includes, resolved in `ico_include_dirs` order (`CMakeLists.txt`), or is included only
 by files that do; `region.h` equal to what `gen-header` writes; the twins rows; and `convert`
-changing nothing. With no `config/regions.txt` and no `region.h`, a tree that names none of the
-macros passes. Exit 0: every rule holds and no block is left; exit 2: raw blocks remain and every
-one is a hand item (listed); exit 1: a rule misfired or the tree needs `convert` or `gen-header`
-(listed). `--selftest` converts `tools/test/region_blocks/fixture.c` in a scratch tree with that
+changing nothing; and the glue "Adding a build target" names, each piece looked for once its
+mechanism is in the tree (`glue_problems`): for every row `port/core/region_<slug>.c` defining
+`ico_region_info_<slug>` and a fresh `port/core/region_table.c`; for every non-PAL row
+`config/ee_layout.<slug>.txt` (once any `config/ee_layout.*.txt` exists) and
+`port/data/gen/<slug>/table_desc.c`, with `ico_table_sets[]` in `port/data/gen/table_sets.c` in
+the table's order (once that file exists). A missing piece names its recipe step. With no
+`config/regions.txt` and no `region.h`, a tree that names none of the macros passes. Exit 0: every
+rule holds and no block is left; exit 2: raw blocks remain and every one is a hand item (listed);
+exit 1: a rule misfired or the tree needs `convert`, `gen-header` or `gen-table` (listed). CI
+requires exit 0. The pre-commit hook (step 8) fails on exit 1 and on exit 2 only warns, printing
+the count, so the hand list after a merge can be worked one commit at a time.
+
+`gen-table` writes `port/core/region_table.c` from the table: an `extern` for each row's
+`ico_region_info_<slug>` and `ico_region_info[ICO_REGION_COUNT]` in the table's order (`gen_table`);
+`region.c` holds the look-ups over it.
+
+`--selftest` converts `tools/test/region_blocks/fixture.c` in a scratch tree with that
 directory's three-row `regions.txt` and `region_twins.txt`, compares the result, `report --all` and
 `report --bits` with `expected.c`, `expected_report.tsv` and `expected_bits.txt`, converts again
 (nothing may change), runs `check` (exit 2), feeds the parser its four malformed shapes, checks
-`gen-header`'s `PAL_US` and `PAL_JPN_US`, and runs `gcc -fsyntax-only` on the result with and
+`gen-header`'s `PAL_US` and `PAL_JPN_US` and `gen-table`'s third row, and runs `gcc -fsyntax-only` on the result with and
 without `-DVERSION_JPN`.
 
 ### Merging upstream
@@ -446,20 +459,24 @@ against one converted line, and the next merge has an upstream commit as its bas
    ([The decompilation](#the-decompilation)).
 4. `python3 tools/region_blocks.py report` on the merged tree is the hand list; work it with the
    patterns above, adding each twin to `config/region_twins.txt`.
-5. `check` exits 0; then `strip_host_gates.py --check`, the generators' `--check`,
+5. `check` exits 0 (the include walk also finds upstream files the port's tree must change, such as a
+   game source naming `LN` without reaching `typedef.h`); then `strip_host_gates.py --check`, the generators' `--check`,
    `tools/format.sh`, and `gcc -fsyntax-only` over every game file (a name only a hand block's
    Japanese arm declares, or a selector in a constant context, shows as an error).
 
 ### Adding a build target
 
 1. Add the row to `config/regions.txt` (slug, upstream macro, disc id, boot ELF, product name) and
-   run `tools/region_blocks.py gen-header`: `region.h` gains `ICO_REGION_<SLUG>`, `ICO_<SLUG>` and
-   the selectors naming the new row; nothing existing changes.
-2. The region's row of the port's region table (its numbers resolved by name against that disc's
-   tables), its disc row and manifest, the `baserom/<slug>/baseelf.elf` and `baserom/Ico_<SLUG>.iso`
-   links and their cache variables.
-3. Data: the target's EE layout file, symbol tables, table manifest and descriptor set, defaults for
-   the fields it lacks, and `config/motion_bits.<slug>.txt` from `report --bits` when its bit words
+   run `tools/region_blocks.py gen-header` and `gen-table`: `region.h` gains `ICO_REGION_<SLUG>`,
+   `ICO_<SLUG>` and the selectors naming the new row, `port/core/region_table.c` the row's entry;
+   nothing existing changes. From here `check` names each missing piece with its step.
+2. `port/core/region_<slug>.c` with `const IcoRegionInfo ico_region_info_<slug>` (its numbers
+   resolved by name against that disc's tables, as `region_jpn.c` documents per field), listed in
+   `port/core/CMakeLists.txt` and declared in `port/core/region.h`; the disc row and manifest, the
+   `baserom/<slug>/baseelf.elf` and `baserom/Ico_<SLUG>.iso` links and their cache variables.
+3. Data: the target's EE layout file `config/ee_layout.<slug>.txt`, symbol tables, table manifest,
+   descriptor set `port/data/gen/<slug>/` and its entry in `ico_table_sets[]`, defaults for the
+   fields it lacks, and `config/motion_bits.<slug>.txt` from `report --bits` when its bit words
    differ ([DATA.md](DATA.md)).
 4. Game code: the merge above. Upstream's `#elif defined(VERSION_<SLUG>)` arms convert to the new
    selectors and to `else if (ICO_<SLUG>)` chains; the hand list takes the same patterns, twins

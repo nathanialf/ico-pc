@@ -37,8 +37,10 @@ that fails, in this order:
 6. `tools/check_call_types.py`: calls and declarations agree with the definitions.
 7. `tools/struct_cast_audit.py`: no buffer cast to a struct wider on the host.
 8. `tools/region_blocks.py --selftest`, then `tools/region_blocks.py check`: the converter still
-   converts its fixture, and no `VERSION_` block or region conditional is in `ico2/` or `sce/`
-   ([Region forms](#region-forms)).
+   converts its fixture, no region conditional is in `ico2/` or `sce/`, and `region.h` and the
+   region glue are fresh ([Region forms](#region-forms)). Raw `VERSION_` blocks that are all hand
+   items (`check`'s exit 2) only print a warning with their count, so a merge's hand list can be
+   worked commit by commit; CI requires exit 0.
 
 Steps 4 to 8 are described in [GAME_CODE.md](GAME_CODE.md#audits). CI runs the same checks
 ([BUILDING.md](../BUILDING.md#continuous-integration)). Rerun `tools/install_hooks.sh` after its

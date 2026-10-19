@@ -801,8 +801,8 @@ that kind (pre-commit step 8, CI's `No compile-time region block in the game sou
 block per class, a three-target block, `LN`, the deny-listed forms, both kinds of switch, a twin)
 and compares it, the report and the bit rows with the files beside it, then compiles the result
 with `gcc -fsyntax-only`; `python3 -I tools/region_blocks.py check` holds `ico2/` and `sce/` to the
-region rules and exits 0, 2 (raw blocks remain, all hand items) or 1 (a rule broken)
-([GAME_CODE.md](GAME_CODE.md#regions)). Other tests check generated files and
+region rules and the region glue and exits 0, 2 (raw blocks remain, all hand items; the hook
+warns, CI fails) or 1 (a rule broken) ([GAME_CODE.md](GAME_CODE.md#regions)). Other tests check generated files and
 tables: `layout_asserts` (a program compiled from the generated asserts), `layout_asserts_fresh`,
 `font_audit` and `content_table_chains` (`port/test/CMakeLists.txt`), `data_desc_fresh` (with the
 audit of MotionDef's bit reads), `tables_manifest` and `tables_manifest_jpn`
