@@ -6,10 +6,19 @@
  * docs/TARGETS.md "Korean retail": shared VERSION_JPN || VERSION_KOR arms,
  * the Japanese records, ids, NTSC timing and memory map); its one
  * renumbering is the tex-property table (406 rows, JPN 412: property ids
- * 3-6 lower than JPN's). The disc fields below are the Korean disc's; every
- * id row is copied from region_jpn.c (whose comments cite the Japanese
- * tables) until package K1 resolves it by name against kor's own tables:
- * each row marked K1 is one of those.
+ * 3-6 lower than JPN's, 6 lower from JPN row 13 on). Each id below was
+ * resolved by name on the Korean boot ELF's tables, read with
+ * tools/gen_data_c.py --version kor (the C of each member, in the PAL
+ * record's form) beside the Japanese ELF's (--version jpn): a layout by its
+ * proc, a menu row by its layout and its place in it (the same texture
+ * rectangle and screen place as the Japanese row), a stage by its stageData
+ * name, an animation by its .bga, a stream by its file. Of the 75 member
+ * rows only tex-property, texture-layout (its property ranges and default
+ * items) and staffroll_dat's .rodata (the copyright year 2002) differ from
+ * the Japanese ELF's (config/data_members.kor.txt), so every stage,
+ * animation, model, sound and stream id is the Japanese one; a sample of
+ * each was read again by name (the comments say which). Game-code line
+ * numbers are the merged tree's (upstream c2f4ed40e converted).
  */
 #include "region.h"
 
@@ -38,13 +47,15 @@ const IcoRegionInfo ico_region_info_kor = {
 
     .reduction_crops_rows = 0, /* GsBase.c gsb_Reduction_jpn (JPN||KOR): SCISSOR rows 0 .. H/2-1 */
 
-    /* K1: verify by name against kor's tables */
-    /* stageData: rows 0..57 are the same; memoryPAL (58) and memoryPAL576
-       (59) are gone, so the rows from staff1 on are 2 lower */
+    /* stageData: the Japanese table, row for row (the kor and jpn C of
+       stage-all are equal); read by name on the Korean ELF: 1 logo, 40 deja,
+       56 26b4demo2, 58 staff1 "STAFF1 (st13b)", 61 end "END", and the
+       achievement stages below. As the Japanese table, memoryPAL (58) and
+       memoryPAL576 (59) are gone, so the rows from staff1 on are PAL's - 2 */
     .stage_count = 104,  /* data_schema.kor.txt stage-all */
     .stage_title = 1,    /* stageData[1] logo, as PAL */
     .stage_credits = 58, /* stageData[58] staff1 STAFF1 (st13b) */
-    .stage_end = 61,     /* stageData[61] end; layout_action.c:1115 */
+    .stage_end = 61,     /* stageData[61] end; layout_action.c:1117 PAL_JPNKOR(63, 61) */
     .stage_veil = 40,    /* stageData[40] deja, as PAL */
     .gallery_first = 1,  /* rows 1..39 as PAL (logo .. beach) */
     .gallery_last = 39,
@@ -52,12 +63,15 @@ const IcoRegionInfo ico_region_info_kor = {
     /* gate 11, grave 13, windmill 15, symmetry_L 18, taki 22, gondola 25,
        watertower 26, symmetry_R 27, cliff 31, queen 37, beach 39: as PAL */
     .ach_stages = {11, 13, 15, 18, 22, 25, 26, 27, 31, 37, 39},
-    .area_name_row_base = 105, /* layout_action.c:1127 lt_mask_property(n + 105) */
-    .area_name_end_as = 38,    /* layout_action.c:1115-1116 */
+    .area_name_row_base = 99, /* layout_action.c:1129 lt_mask_property(n + PAL_JPN_KOR(134,
+                                 105, 99)): la_mc_preview_info's row 99 (JPN 105) */
+    .area_name_end_as = 38,   /* layout_action.c:1117-1118 */
     .start_stage_max = 103,
 
-    /* K1: verify by name against kor's tables */
-    /* texLayout: 76 rows; the procs from la_vibe_select on are 3 lower */
+    /* texLayout: 76 rows, every row's proc the Japanese row's (the kor and
+       jpn texture-layout C name the same proc at every index; only the
+       property ranges and default items move); as the Japanese table, the
+       procs from la_vibe_select on are PAL's - 3 */
     .layout_count = 76,         /* data_schema.kor.txt texture-layout 76 */
     .layout_pause = 54,         /* texLayout[54] la_game_pause */
     .layout_title_continue = 9, /* texLayout[9] la_title_continue_or_new */
@@ -71,52 +85,61 @@ const IcoRegionInfo ico_region_info_kor = {
     .layout_load = 22,          /* texLayout[22] la_load_processing */
     .layout_save_complete = 38, /* texLayout[38] la_save_confirm_complete */
 
-    /* K1: verify by name against kor's tables */
-    /* texProperty: 406 rows (JPN 412: six of the Japanese rows 2..12 are
-       missing, so the ids are 3..6 lower than JPN's); the rows below are
-       still the Japanese numbers */
+    /* texProperty: 406 rows (JPN 412). The Korean la_boot_no_memory_card
+       and la_boot_no_free_area hold 2 rows each where the Japanese hold 5
+       (texLayout[1] {1, 3}, [2] {3, 5}; JPN {1, 6}, {6, 11}), so every row
+       from the Japanese 11 on is 6 lower: each layout's range, matched row
+       for row with the Japanese one, has the same texture rectangle and
+       screen place in every row the fields below name (the rows that differ,
+       la_mc_preview_info's digits at texV 185 for 180, and some option and
+       adjust-screen labels, are Korean lettering widths none of them use).
+       The game code's PAL_JPN_KOR ids say the same (layout_action.c) */
     .property_count = 406,    /* data_schema.kor.txt tex-property 406 */
-    .row_pause_options = 271, /* la_game_pause's rows 269..273, its 3rd..5th */
-    .row_pause_back = 272,    /* (the layout's default item, texLayout[54]) */
-    .row_pause_end = 273,
-    .row_mc_picture = 23, /* layout_action.c:1033 i + 23 */
-    .row_mc_item = 33,    /* layout_action.c:1032 i + 33 */
-    /* K1: verify by name against kor's tables (option.tm2 rows) */
+    .row_pause_options = 265, /* la_game_pause's rows 263..267, its 3rd..5th */
+    .row_pause_back = 266,    /* (the layout's default item, texLayout[54]) */
+    .row_pause_end = 267,
+    .row_mc_picture = 17, /* layout_action.c:1033 i + PAL_JPN_KOR(52, 23, 17) */
+    .row_mc_item = 27,    /* layout_action.c:1032 i + PAL_JPN_KOR(62, 33, 27) */
     .glyph =
         {
-            /* Tex_menu01/option.tm2. The key config's button rows 319..326
-           (layout_action.c:2879 i * 8 + 319 + slot: Triangle, Square,
-           Circle, Cross, R1, R2, L2, L1 as PAL's 342..349); Cross is the
-           save prompts' Back glyph (155, as PAL's Triangle 184 there: the
-           Japanese menus cancel with Cross); the arrows are la_game_option's
-           value arrows 278/279 (PAL 301/302). disp_h is each row's own
-           dispH in the Japanese texProperty (30 for the 32 x 15 buttons,
-           40 for the 64 x 20 shoulder labels and the arrows), as PAL's
-           column is its rows' */
-            [ICO_GLYPH_CROSS] = {155, 224, 240, 32, 15, 30},
-            [ICO_GLYPH_CIRCLE] = {321, 192, 240, 32, 15, 30},
-            [ICO_GLYPH_SQUARE] = {320, 160, 240, 32, 15, 30},
-            [ICO_GLYPH_TRIANGLE] = {319, 128, 240, 32, 15, 30},
-            [ICO_GLYPH_L1] = {326, 0, 160, 64, 20, 40},
-            [ICO_GLYPH_R1] = {323, 128, 160, 64, 20, 40},
-            [ICO_GLYPH_L2] = {325, 64, 160, 64, 20, 40},
-            [ICO_GLYPH_R2] = {324, 192, 160, 64, 20, 40},
-            [ICO_GLYPH_LEFT] = {278, 198, 20, 20, 20, 40},
-            [ICO_GLYPH_RIGHT] = {279, 230, 20, 20, 20, 40},
+            /* Tex_menu01/option.tm2. The key config's button rows 313..320
+           (layout_action.c:2885 i * 8 + PAL_JPN_KOR(342, 319, 313) + slot:
+           Triangle, Square, Circle, Cross, R1, R2, L2, L1, the Japanese
+           319..326); Cross is the save prompts' Back glyph (149, JPN 155:
+           la_mc_load_current_slot_select's row, the Korean menus cancel with
+           Cross as the Japanese do); the arrows are la_game_option's value
+           arrows 272/273 (JPN 278/279). Each row's rectangle and dispH are
+           the Japanese row's (30 for the 32 x 15 buttons, 40 for the 64 x 20
+           shoulder labels and the arrows) */
+            [ICO_GLYPH_CROSS] = {149, 224, 240, 32, 15, 30},
+            [ICO_GLYPH_CIRCLE] = {315, 192, 240, 32, 15, 30},
+            [ICO_GLYPH_SQUARE] = {314, 160, 240, 32, 15, 30},
+            [ICO_GLYPH_TRIANGLE] = {313, 128, 240, 32, 15, 30},
+            [ICO_GLYPH_L1] = {320, 0, 160, 64, 20, 40},
+            [ICO_GLYPH_R1] = {317, 128, 160, 64, 20, 40},
+            [ICO_GLYPH_L2] = {319, 64, 160, 64, 20, 40},
+            [ICO_GLYPH_R2] = {318, 192, 160, 64, 20, 40},
+            [ICO_GLYPH_LEFT] = {272, 198, 20, 20, 20, 40},
+            [ICO_GLYPH_RIGHT] = {273, 230, 20, 20, 20, 40},
         },
-    /* K1: verify by name against kor's tables */
-    /* texLayout[9] {20, 22} and [10] {22, 23}: Continue 20 at y 135, New
-       Game 21 and 22 at 165 (PAL 49, 50, 51); the copyright line is two
-       halves on this disc, 18 and 19 at y 195 (dispX 64 and 319) */
-    .row_title_continue = 20,
-    .row_title_new = 21,
-    .row_title_new_only = 22,
-    .row_title_copyright = 18,
-    .row_title_copyright2 = 19,
-    .pause_first = 269, /* texLayout[54] {269, 274} */
-    .pause_last = 274,
+    /* texLayout[9] {14, 16} and [10] {16, 17} (JPN {20, 22}, {22, 23}):
+       Continue 14 at y 135, New Game 15 and 16 at 165 (layout_action.c:832,
+       901 PAL_JPN_KOR(49, 20, 14) .. (51, 22, 16)); the copyright line is
+       two halves as on the Japanese disc, 12 and 13 at y 195 (dispX 64 and
+       319) in texLayout[8] {12, 14} */
+    .row_title_continue = 14,
+    .row_title_new = 15,
+    .row_title_new_only = 16,
+    .row_title_copyright = 12,
+    .row_title_copyright2 = 13,
+    .pause_first = 263, /* texLayout[54] {263, 268} (JPN {269, 274}) */
+    .pause_last = 268,
 
-    /* K1: verify by name against kor's tables */
+    /* stageTable, objTableScene and modelData: the Japanese tables (the
+       kor and jpn C equal); read by name on the Korean ELF: stageTable[949]
+       "NULL" (group -1), [66] film_noise_l4.bga, [75] deja_lightning.bga
+       (objects 165..177), [140] st19a_chain.bga group 636, [380]
+       st10l_chain_down.bga group 731, objTableScene[175] {1598, 35} */
     .anim_none = 949,         /* stage-anim 950 rows, the last */
     .chain_group_st10l = 731, /* stageTable st10l_chain_down.bga: group 731 as PAL
                                       (its row id is 380, PAL 384) */
@@ -130,13 +153,17 @@ const IcoRegionInfo ico_region_info_kor = {
     .mv_motion_kinds = 1145,  /* motion-def 1148 rows as PAL */
     .mv_orient_rows = 2468,   /* motion-orient 2468 rows as PAL */
 
-    /* K1: verify by name against kor's tables */
-    .gflag_new_game = 382,     /* targets/jpn/.../layout_action.c:747 */
-    .gflag_queen_dead = 338,   /* targets/jpn/ico2/script/src/st25a.c:565 */
-    .gflag_beach_secret = 354, /* targets/jpn/ico2/script/src/end.c:1063 */
-    .gflag_count = 400,        /* gflag.c is not overlaid */
+    /* the story flags: no selector at any of these sites in the merged
+       tree, so the Korean program's ids are the Japanese (and PAL) ones */
+    .gflag_new_game = 382,     /* layout_action.c:746,775 gflagOn(382) */
+    .gflag_queen_dead = 338,   /* st25a.c:654 gflagOn(338) */
+    .gflag_beach_secret = 354, /* end.c:1075 gflagOn(354) */
+    .gflag_count = 400,        /* gflag.c has no region block */
 
-    /* K1: verify by name against kor's tables */
+    /* the ending: adpcmFile and exitData the Japanese tables (the kor and
+       jpn C equal), read by name on the Korean ELF; end.c's scene chain is
+       the Japanese one (no Korean block in end.c or BgAnimation.c), so the
+       roll's song position is the Japanese value */
     .credits_song = 47, /* adpcmFile[47] event/39_8.int, the table as PAL */
     /* the song's position at the roll at 30 Hz: the Japanese end.c runs
        the same scene chain as PAL's (the ids aside), each scene a stage
@@ -147,18 +174,22 @@ const IcoRegionInfo ico_region_info_kor = {
        119656, two after actEndDemo06's layout 55 at 119654; the roll
        starts at 124183, between layouts 54 and 55 of actStaff1): 4527
        ticks of 2 NTSC fields, 151,051 ms (PAL's 25 Hz run: 3777 ticks,
-       151,080 ms). Not yet run on the Japanese core (the user's rc check) */
+       151,080 ms). Not yet run on the Japanese or Korean disc (the user's
+       rc check) */
     .credits_roll_ms = 151050,
-    .credits_entrance_exit = 216, /* exitData[216] leads to 58 (STAFF1); PAL's to 60 */
+    .credits_entrance_exit = 216, /* exitData[216] leads to 58 (STAFF1) on the Korean ELF */
     .credits_boy_label = 54,      /* act-game.c ACTGame_SetActors_Debug, unchanged */
 
-    /* K1: verify by name against kor's tables */
-    .n_adpcm = 105, /* data_schema.jpn.txt: these five as PAL */
+    /* sound: data_schema.kor.txt's counts are the Japanese (and PAL) ones,
+       the tables equal to the Japanese ELF's; adpcmFile read by name on the
+       Korean ELF: [56] event2/50.int, [100] event2/88.int, [101]
+       event2/hint1_1.int .. [104] event2/hint2_2.int */
+    .n_adpcm = 105,
     .n_sefile = 104,
     .n_sedef = 1426,
     .n_selist = 3837,
     .n_seenv = 425,
-    .stream_music_last = 100,  /* adpcmFile names as PAL's, row for row */
+    .stream_music_last = 100,  /* adpcmFile[100] event2/88.int, the last scene stream */
     .stream_voice_first = 101, /* event2/hint1_1.int .. hint2_2.int */
     .stream_voice_last = 104,
     .gallery_title_theme = 56, /* adpcmFile[56] event2/50.int as PAL */
