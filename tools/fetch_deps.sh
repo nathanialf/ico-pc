@@ -35,6 +35,9 @@
 #   deps/noto-sans-jp/     Noto Sans JP (SIL OFL 1.1), the variable font the
 #                          port's Japanese text subset is made from
 #                          (tools/subset_font_ja.py); never built or shipped
+#   deps/noto-sans-kr/     Noto Sans KR (SIL OFL 1.1), the variable font the
+#                          port's Korean text subset is made from
+#                          (tools/subset_font_ko.py); never built or shipped
 #   deps/libchdr/          libchdr (BSD-3-Clause) source tree with its bundled
 #                          LZMA, miniz and zstd decoders, the .chd disc image
 #                          reader; compiled by port/data/CMakeLists.txt
@@ -49,8 +52,9 @@
 #   LIBMPEG2_TAG, LIBMPEG2_COMMIT, LIBMPEG2_TAR_SHA256
 #   LIBCHDR_TAG, LIBCHDR_COMMIT, LIBCHDR_TAR_SHA256, ZSTD_LICENSE_SHA256
 #   SKIP_SDL3_LINUX=1, SKIP_SDL3_MINGW=1, SKIP_VALIDATION_LAYER=1, SKIP_DXC=1,
-#   SKIP_LIBMPEG2=1, SKIP_LIBCHDR=1, SKIP_NOTO_JP=1
+#   SKIP_LIBMPEG2=1, SKIP_LIBCHDR=1, SKIP_NOTO_JP=1, SKIP_NOTO_KR=1
 #   NOTO_JP_COMMIT, NOTO_JP_SHA256, NOTO_JP_OFL_SHA256
+#   NOTO_KR_COMMIT, NOTO_KR_SHA256, NOTO_KR_OFL_SHA256
 #   DEB_SNAPSHOT     snapshot.debian.org fallback for the Debian packages
 #   ICO_CMAKE        the CMake used for the SDL3 source build (default: the
 #                    pinned one in tools/toolchain/cmake, else the PATH's)
@@ -675,5 +679,32 @@ else
     cp "$TMP/NotoSansJP-OFL.txt" "$NOTO_JP_DIR/OFL.txt"
     echo "$NOTO_JP_COMMIT" > "$NOTO_JP_DIR/.ico-release"
     echo "==> Noto Sans JP at $NOTO_JP_DIR"
+fi
+
+# --- 8. Noto Sans KR (the port's Korean text) ---------------------------------
+# google/fonts (SIL OFL 1.1) ofl/notosanskr/NotoSansKR[wght].ttf and its
+# OFL.txt at commit 4efc2774c63917927efe769ca845def6bd6debae (2022-12-09,
+# "Noto Sans KR hotfix2", the file's last change): the source
+# tools/subset_font_ko.py makes the vendored subset
+# port/assets/fonts/NotoSansKR-Regular-subset.ttf from; the build reads only
+# the subset, so a build never needs this download.
+NOTO_KR_COMMIT="${NOTO_KR_COMMIT:-4efc2774c63917927efe769ca845def6bd6debae}"
+NOTO_KR_SHA256="${NOTO_KR_SHA256:-194018e6b2b293a7964f037b25c0249ce1418bc9ab3c971060a03aa57861e252}"
+NOTO_KR_OFL_SHA256="${NOTO_KR_OFL_SHA256:-1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9}"
+NOTO_KR_DIR="$DEST/noto-sans-kr"
+if [[ "${SKIP_NOTO_KR:-0}" == "1" ]]; then
+    echo "==> SKIP_NOTO_KR=1; not fetching Noto Sans KR"
+elif stamped "$NOTO_KR_DIR" "$NOTO_KR_COMMIT"; then
+    echo "==> Noto Sans KR already at $NOTO_KR_DIR"
+else
+    base="https://raw.githubusercontent.com/google/fonts/${NOTO_KR_COMMIT}/ofl/notosanskr"
+    fetch "${base}/NotoSansKR%5Bwght%5D.ttf" "$NOTO_KR_SHA256" "$TMP/NotoSansKR-wght.ttf"
+    fetch "${base}/OFL.txt" "$NOTO_KR_OFL_SHA256" "$TMP/NotoSansKR-OFL.txt"
+    rm -rf "$NOTO_KR_DIR"
+    mkdir -p "$NOTO_KR_DIR"
+    cp "$TMP/NotoSansKR-wght.ttf" "$NOTO_KR_DIR/NotoSansKR[wght].ttf"
+    cp "$TMP/NotoSansKR-OFL.txt" "$NOTO_KR_DIR/OFL.txt"
+    echo "$NOTO_KR_COMMIT" > "$NOTO_KR_DIR/.ico-release"
+    echo "==> Noto Sans KR at $NOTO_KR_DIR"
 fi
 echo "==> deps done: $DEST"

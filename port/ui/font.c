@@ -43,12 +43,16 @@
 #include "ui_internal.h"
 
 /* the font files, embedded at build time (port/ui/embed_font.cmake): Arimo,
-   and Noto Sans JP's subset for the characters Arimo has no glyph for (the
-   Japanese table, the language names, the PlayStation button marks) */
+   Noto Sans JP's subset for the characters Arimo has no glyph for (the
+   Japanese table, the language names, the PlayStation button marks) and
+   Noto Sans KR's for those neither has (the Korean table's Hangul, 한국어
+   in every table) */
 extern const unsigned char ui_font_ttf[];
 extern const unsigned int ui_font_ttf_size;
 extern const unsigned char ui_font_ja_ttf[];
 extern const unsigned int ui_font_ja_ttf_size;
+extern const unsigned char ui_font_ko_ttf[];
+extern const unsigned int ui_font_ko_ttf_size;
 
 /* A size's pages are PAGE_MIN to PAGE_MAX texels wide, wider for big
    pixel sizes (an Enhanced 4K output rasterises the menu's 27 units at
@@ -101,7 +105,10 @@ static struct {
     stbtt_fontinfo info;
     stbtt_fontinfo ja; /* the second font (hasJa) */
     int hasJa;
-    float jaK; /* its em scale over Arimo's: Arimo's units per one of its own */
+    float jaK;         /* its em scale over Arimo's: Arimo's units per one of its own */
+    stbtt_fontinfo ko; /* the third font (hasKo) */
+    int hasKo;
+    float koK;                               /* its em scale over Arimo's */
     int ascent, descent, lineGap, capHeight; /* font units (Arimo's: every line's metrics) */
     UiGsFrame frame;
     float scale;
@@ -194,6 +201,14 @@ bool ui_font_init(void)
                      stbtt_ScaleForMappingEmToPixels(&s_font.info, 1.0f);
     } else {
         fprintf(stderr, "ui: the embedded Japanese font does not parse; Japanese drawn as '?'\n");
+    }
+    off = ui_font_ko_ttf_size < 12 ? -1 : stbtt_GetFontOffsetForIndex(ui_font_ko_ttf, 0);
+    if (off >= 0 && stbtt_InitFont(&s_font.ko, ui_font_ko_ttf, off)) {
+        s_font.hasKo = 1;
+        s_font.koK = stbtt_ScaleForMappingEmToPixels(&s_font.ko, 1.0f) /
+                     stbtt_ScaleForMappingEmToPixels(&s_font.info, 1.0f);
+    } else {
+        fprintf(stderr, "ui: the embedded Korean font does not parse; Hangul drawn as '?'\n");
     }
     s_font.inited = 1;
     return true;
@@ -492,8 +507,8 @@ static void noteMissing(uint32_t cp)
 }
 
 /* A character's glyph: Arimo's, else the second font's (k its scale over
-   Arimo's, so its metrics in Arimo's units are its own times k), else
-   Arimo's '?' (noted once) */
+   Arimo's, so its metrics in Arimo's units are its own times k), else the
+   third's (Hangul), else Arimo's '?' (noted once) */
 typedef struct FontGlyph {
     const stbtt_fontinfo *info;
     int g;
@@ -509,6 +524,15 @@ static FontGlyph fontGlyph(uint32_t cp)
             f.info = &s_font.ja;
             f.g = g;
             f.k = s_font.jaK;
+            return f;
+        }
+    }
+    if (f.g == 0 && cp != '?' && s_font.hasKo) {
+        const int g = stbtt_FindGlyphIndex(&s_font.ko, (int)cp);
+        if (g != 0) {
+            f.info = &s_font.ko;
+            f.g = g;
+            f.k = s_font.koK;
             return f;
         }
     }
@@ -635,7 +659,8 @@ int ui_font_missing_seen(uint32_t *cps, int cap)
 bool ui_font_has_glyph(uint32_t cp)
 {
     return ui_font_init() && (stbtt_FindGlyphIndex(&s_font.info, (int)cp) != 0 ||
-                              (s_font.hasJa && stbtt_FindGlyphIndex(&s_font.ja, (int)cp) != 0));
+                              (s_font.hasJa && stbtt_FindGlyphIndex(&s_font.ja, (int)cp) != 0) ||
+                              (s_font.hasKo && stbtt_FindGlyphIndex(&s_font.ko, (int)cp) != 0));
 }
 
 const uint8_t *ui_font_page(int px, int page, int *w, int *h)
@@ -1215,8 +1240,8 @@ float ui__sheet_set_width(float k)
     return old;
 }
 
-/* The Japanese glyphs set proportionally (ui_internal.h
-   ui__sheet_set_kana_gap): below 0 off, else each Noto Sans JP glyph with
+/* The Japanese and Korean glyphs set proportionally (ui_internal.h
+   ui__sheet_set_kana_gap): below 0 off, else each Noto Sans JP or KR glyph with
    an outline advances by its outline's width plus this many texels, its
    ink starting at the pen */
 static float s_kanaGap = -1.0f;
@@ -1230,11 +1255,11 @@ float ui__sheet_set_kana_gap(float gap)
 
 /* a glyph's advance in texels at the horizontal scale sx (scale strip
    texels a sheet texel), and in *lead the texels its outline is moved left
-   by (the proportional Japanese glyphs: their left bearing) */
+   by (the proportional Japanese and Korean glyphs: their left bearing) */
 static float sheetAdvance(FontGlyph f, float sx, int scale, float *lead)
 {
     *lead = 0.0f;
-    if (s_kanaGap >= 0.0f && f.info == &s_font.ja) {
+    if (s_kanaGap >= 0.0f && (f.info == &s_font.ja || f.info == &s_font.ko)) {
         int x0, y0, x1, y1;
         if (stbtt_GetGlyphBox(f.info, f.g, &x0, &y0, &x1, &y1) && x1 > x0) {
             *lead = (float)x0 * f.k * sx;

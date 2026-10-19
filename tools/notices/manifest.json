@@ -156,6 +156,13 @@
       "texts": [{"file": "port/assets/fonts/NotoSansJP-OFL.txt"}]
     },
     {
+      "name": "Noto Sans KR Regular (font)",
+      "version": "google/fonts commit 4efc2774c63917927efe769ca845def6bd6debae, wght 400 instance subset to the port's Korean text (a modified version, OFL 1.1 section 3)",
+      "licence": "SIL Open Font License 1.1",
+      "used_for": "the port's own text where neither Arimo nor Noto Sans JP has a glyph (the Korean menu language's Hangul, the language name), embedded in the program",
+      "texts": [{"file": "port/assets/fonts/NotoSansKR-OFL.txt"}]
+    },
+    {
       "name": "minicoro",
       "version": "v0.2.0, unmodified",
       "licence": "Unlicense or MIT-0",

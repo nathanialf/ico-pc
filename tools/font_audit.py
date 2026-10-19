@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """font_audit.py: every code point the port's text uses is inside the unicode
-ranges the embedded font subsets were built with (Arimo's, and the Japanese
-text's font's for the characters Arimo has none for).
+ranges the embedded font subsets were built with (Arimo's, the Japanese
+text's font's for the characters Arimo has none for, and the Korean text's
+font's for Hangul).
 
 Collects the code points of the string literals of port/ui/strings_*.c and
 port/game/model_viewer_table.c, and of the corpus
 (port/ui/test/font_corpus/*.txt, '#' lines are provenance), and compares them
 with the ranges recorded in port/ui/embed_font.cmake (the "# subset:" line,
-Arimo's, and the "# subset-ja:" line, Noto Sans JP's subset that
-tools/subset_font_ja.py writes; the Japanese table, strings_ja.c, must be
-inside them both together).
+Arimo's, the "# subset-ja:" line, Noto Sans JP's subset that
+tools/subset_font_ja.py writes, and the "# subset-ko:" line, Noto Sans KR's
+subset that tools/subset_font_ko.py writes; the Japanese table, strings_ja.c,
+and the Korean one, strings_ko.c, must be inside the three together).
 The check on the font's own cmap
 is font_coverage (it asks the embedded font for each code point); this one
 runs without a build and names the code points to add to the subset.
@@ -88,6 +90,18 @@ def parse_ranges(text):
     return out
 
 
+# Hangul: the jamo, the compatibility jamo, the extended jamo and the
+# syllables. The Korean text's font (tools/subset_font_ko.py) holds the ones
+# the port's text uses; the Japanese text's font (tools/subset_font_ja.py)
+# none, whatever table they are in (the language names put 한국어 in all).
+HANGUL = [(0x1100, 0x11FF), (0x3130, 0x318F), (0xA960, 0xA97F), (0xAC00, 0xD7AF),
+          (0xD7B0, 0xD7FF)]
+
+
+def is_hangul(cp):
+    return any(lo <= cp <= hi for lo, hi in HANGUL)
+
+
 def cmake_ranges(path, key="subset"):
     with open(path, encoding="utf-8") as f:
         lines = [l for l in f if l.startswith("# %s:" % key)]
@@ -100,7 +114,8 @@ def main():
     cmake = os.path.join(ROOT, "port/ui/embed_font.cmake")
     try:
         ranges = cmake_ranges(cmake)
-        covered = parse_ranges(ranges) | parse_ranges(cmake_ranges(cmake, "subset-ja"))
+        covered = (parse_ranges(ranges) | parse_ranges(cmake_ranges(cmake, "subset-ja"))
+                   | parse_ranges(cmake_ranges(cmake, "subset-ko")))
     except (ValueError, OSError) as e:
         print("font_audit: %s" % e)
         return 2
@@ -117,7 +132,7 @@ def main():
         for lit in literals(p):
             add(lit, os.path.relpath(p, ROOT))
     corpus = sorted(glob.glob(os.path.join(ROOT, "port/ui/test/font_corpus/*.txt")))
-    if len(corpus) < 6:
+    if len(corpus) < 7:
         print("font_audit: %d corpus files, expected one per language" % len(corpus))
         return 1
     for p in corpus:

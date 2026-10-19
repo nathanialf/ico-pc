@@ -1,4 +1,4 @@
-/* font_coverage_test.c: every character of the six languages has a glyph
+/* font_coverage_test.c: every character of the seven languages has a glyph
  * in the port's faces.
  *
  * CPU only: font.c's cmap, no device.  Walks
@@ -17,9 +17,11 @@
  *
  * Arimo is the first face (the menus' text is Arimo in the sheets' look),
  * Noto Sans JP's subset the second, for the characters Arimo has none for
- * (the Japanese table, the language names, the button marks); the report
- * lists the characters the two serve.  A Japanese character is the second
- * face's own glyph, not the fallback.
+ * (the Japanese table, the language names, the button marks), Noto Sans
+ * KR's the third, for the Hangul neither has (the Korean table, 한국어);
+ * the report lists the characters the three serve.  A Japanese character
+ * is the second face's own glyph, a Hangul one the third's, not the
+ * fallback.
  *
  *   font_coverage_test CORPUS_DIR [BASE_ELF]
  * Exit 0, 1 on a failure, 77 for a BASE_ELF that is named and absent.
@@ -242,8 +244,9 @@ static void putCp(char *out, size_t *n, size_t cap, uint32_t cp)
     }
 }
 
-/* the characters the six languages draw (tables, the roll's port lines,
-   corpus) that the fonts serve (Arimo, then Noto Sans JP's subset) */
+/* the characters the seven languages draw (tables, the roll's port lines,
+   corpus) that the fonts serve (Arimo, then Noto Sans JP's subset, then
+   Noto Sans KR's) */
 static void reportFaces(void)
 {
     static char line[8192];
@@ -302,7 +305,7 @@ int main(int argc, char **argv)
     checkCorpus(argv[1]);
     reportFaces();
 
-    /* the fallback: a code point outside both subsets draws as '?', logged
+    /* the fallback: a code point outside the subsets draws as '?', logged
        once (U+0E01, a Thai letter: in neither font) */
     {
         UiGlyph q, cjk, cjk2;
@@ -324,6 +327,17 @@ int main(int argc, char **argv)
         CHECK(ui_font_glyph('?', 20, &q) && ui_font_glyph(0x4E2D, 20, &ja) &&
                   (ja.w != q.w || ja.advance != q.advance) && ja.advance > 15.0f,
               "U+4E2D at 20 px is its own glyph, a full em wide (%.1f)", (double)ja.advance);
+    }
+    /* the third font: a Hangul syllable is its glyph (U+D55C, the first of
+       한국어, in every table), a full em wide; a compatibility jamo or a
+       syllable no table uses is outside the subset */
+    {
+        UiGlyph q, ko;
+        CHECK(ui_font_has_glyph(0xD55C) && ui_font_has_glyph(0xC5B4), "the Korean font's glyphs");
+        CHECK(ui_font_glyph('?', 20, &q) && ui_font_glyph(0xD55C, 20, &ko) &&
+                  (ko.w != q.w || ko.advance != q.advance) && ko.advance > 15.0f,
+              "U+D55C at 20 px is its own glyph, a full em wide (%.1f)", (double)ko.advance);
+        CHECK(!ui_font_has_glyph(0xD7A3), "U+D7A3, a syllable no table uses, is not in the subset");
     }
 
     int total = 0;

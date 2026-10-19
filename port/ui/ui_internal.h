@@ -94,12 +94,13 @@ void ui__sheet_raster_line(uint8_t *cov, int w, int h, int stride, float emRows,
 /* Tests: the lettering's width factor (UI_SHEET_WIDTH) set; returns the
    previous one */
 float ui__sheet_set_width(float k);
-/* The Japanese glyphs (Noto Sans JP's) set proportionally, as the Japanese
-   disc's lettering is: gap >= 0 advances each glyph with an outline by the
-   outline's width plus gap texels, its ink at the pen (a space keeps its
-   advance); below 0 (the default) every glyph keeps its advance.  Returns
-   the previous gap.  menu_font.c sets it around the Japanese sheet
-   language's text (its geometry's gap). */
+/* The Japanese and Korean glyphs (Noto Sans JP's and KR's) set
+   proportionally, as the Japanese and Korean discs' lettering is: gap >= 0
+   advances each glyph with an outline by the outline's width plus gap
+   texels, its ink at the pen (a space keeps its advance); below 0 (the
+   default) every glyph keeps its advance.  Returns the previous gap.
+   menu_font.c sets it around the Japanese and Korean sheet languages' text
+   (their geometry's gap). */
 float ui__sheet_set_kana_gap(float gap);
 uint64_t ui__text_key(const char *utf8, unsigned flags, int page);
 /* Tests (menu_look): the coverage strip of a menu text item in language lang

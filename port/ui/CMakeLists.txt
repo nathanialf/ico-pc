@@ -18,11 +18,12 @@
 #   ico_ui_font_rd      font.c alone with ICO_RD, for the render tests and
 #                       rd_replay_tool
 #
-# The font files (Arimo, and Noto Sans JP's subset for the characters
-# Arimo has no glyph for: the Japanese text, the language names, the button
-# marks) are embedded as C arrays generated at build time
-# (embed_font.cmake), so the program needs no file beside them.
-# _ui_font_srcs: both, in every program that compiles font.c.
+# The font files (Arimo, Noto Sans JP's subset for the characters Arimo
+# has no glyph for: the Japanese text, the language names, the button
+# marks, and Noto Sans KR's for the Hangul neither has: the Korean text) are
+# embedded as C arrays generated at build time (embed_font.cmake), so the
+# program needs no file beside them. _ui_font_srcs: the three, in every
+# program that compiles font.c.
 #
 # The string tables (strings.c and strings_<lang>.c, _ui_string_srcs) read
 # the selected disc's pack serial (port/core), so every program that
@@ -48,7 +49,18 @@ add_custom_command(
     DEPENDS "${_ui_font_ja}" "${CMAKE_CURRENT_SOURCE_DIR}/embed_font.cmake"
     COMMENT "Embedding the UI font for Japanese"
     VERBATIM)
-set(_ui_font_srcs "${_ui_font_c}" "${_ui_font_ja_c}")
+# the Korean text's font (Noto Sans KR, the subset tools/subset_font_ko.py
+# makes): the Hangul neither Arimo nor the Japanese font has (font.c)
+set(_ui_font_ko "${CMAKE_SOURCE_DIR}/port/assets/fonts/NotoSansKR-Regular-subset.ttf")
+set(_ui_font_ko_c "${CMAKE_CURRENT_BINARY_DIR}/ui_font_ko_data.c")
+add_custom_command(
+    OUTPUT "${_ui_font_ko_c}"
+    COMMAND "${CMAKE_COMMAND}" "-DIN=${_ui_font_ko}" "-DOUT=${_ui_font_ko_c}" -DNAME=ui_font_ko_ttf
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/embed_font.cmake"
+    DEPENDS "${_ui_font_ko}" "${CMAKE_CURRENT_SOURCE_DIR}/embed_font.cmake"
+    COMMENT "Embedding the UI font for Korean"
+    VERBATIM)
+set(_ui_font_srcs "${_ui_font_c}" "${_ui_font_ja_c}" "${_ui_font_ko_c}")
 set(_ui_string_srcs strings.c strings_en.c strings_fr.c strings_de.c strings_it.c strings_es.c
                     strings_ja.c strings_ko.c)
 

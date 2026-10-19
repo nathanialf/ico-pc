@@ -6,8 +6,8 @@ the messages) with Arimo (port/assets/fonts/Arimo-Regular.ttf); a character
 Arimo has no glyph for is drawn from this second font (port/ui/font.c), which
 holds the Japanese table's characters (port/ui/strings_ja.c) and the few
 other non-Latin ones the tables use (the language names, the PlayStation
-button marks). The game's own text is never drawn with either: it is the
-disc's.
+button marks); Hangul is the third font's (tools/subset_font_ko.py). The
+game's own text is never drawn with any of them: it is the disc's.
 
     tools/subset_font_ja.py [--src FONT] [--check]
 
@@ -35,7 +35,8 @@ PlayStation button marks (U+25A1 square, U+25B3 triangle, U+25CB circle),
 and every character outside Arimo's subset (embed_font.cmake's "# subset:"
 line) of the string tables (port/ui/strings_*.c), the model viewer's names
 (port/game/model_viewer_table.c) and the corpus (port/ui/test/font_corpus/
-*.txt, '#' lines are provenance).
+*.txt, '#' lines are provenance), but Hangul (font_audit.HANGUL: the Korean
+text's font holds it).
 """
 import argparse
 import glob
@@ -68,7 +69,7 @@ def used_outside_arimo():
     for text in texts:
         for ch in text:
             cp = ord(ch)
-            if cp >= 0x20 and cp not in arimo:
+            if cp >= 0x20 and cp not in arimo and not font_audit.is_hangul(cp):
                 out.add(cp)
     return out
 
