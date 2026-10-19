@@ -73,7 +73,8 @@ A texture pack is a set of sharper pictures that fans made to replace the
 game's own. The game comes with a `textures` folder for one.
 
 1. Copy the pack's `SCES-50760` folder (a pack for the European disc) or
-   `SCPS-11003` folder (a pack for the Japanese disc) into the `textures`
+   `SCPS-11003` folder (a pack for the Japanese disc) or `SCPS-56001` folder
+   (a pack for the Korean disc) into the `textures`
    folder beside the program. On Windows that is inside the `x64` folder.
    On a Mac or an iPhone the download has no such folder: [the full
    guide](TEXTURE_PACKS.md) shows where to make one.
@@ -192,42 +193,44 @@ it.
 
 ## Which disc image works?
 
-The European release of ICO, numbered SCES-50760, or the Japanese release,
-numbered SCPS-11003, as a `.iso`, `.chd` or `.bin` file (a `.cue` file that
+The European release of ICO, numbered SCES-50760, the Japanese release,
+numbered SCPS-11003, or the Korean release, numbered SCPS-56001, as a `.iso`,
+`.chd` or `.bin` file (a `.cue` file that
 points to the `.bin` works too). The Japanese release is a CD, so its image
 is usually a `.bin` with a `.cue`. The American release and later editions
-do not work. If the image is not one of the two, the game says so in a
+do not work. If the image is not one of the three, the game says so in a
 message when you start it, and the log says so too.
-[What is different between the two](../README.md#the-two-discs).
+[What is different between the three](../README.md#the-three-discs).
 
-## Can I play both discs?
+## Can I play more than one disc?
 
 Yes. Each disc gets its own copy of the game's files, its own saves and its
-own folders for texture and model packs, so setting up the second disc
-does not touch the first one's.
+own folders for texture and model packs, so setting up another disc
+does not touch the others.
 
-To add the second disc, give the game its image the same way as the first
+To add another disc, give the game its image the same way as the first
 time: on Windows and Linux, put it beside the program named `Ico_PAL.iso`
-(European) or `Ico_JPN.iso` (Japanese), or put its full path on the `iso=`
+(European), `Ico_JPN.iso` (Japanese) or `Ico_KOR.iso` (Korean), or put its full path on the `iso=`
 line of `ico-pc.ini`; on an iPhone, copy it into ICO's Documents folder
-with that name. The first disc's image can stay where it is: when both
-images are there, the game starts the disc that is not set up yet and
-copies its files out once, as at the first start. After that, with both
+with that name. The first disc's image can stay where it is: when more
+than one image is there, the game starts a disc that is not set up yet and
+copies its files out once, as at the first start. After that, with the
 discs set up, the game starts the disc you played last.
 
 On an Android phone the file picker only opens while no disc is set up,
-so it does not ask for the second disc. Do one of these:
+so it does not ask for another disc. Do one of these:
 
 - With a USB cable or the Files app, copy the image into the game's
   folder (`Android/data/com.defnf.icopc/files`), named `Ico_JPN.iso`
-  (Japanese) or `Ico_PAL.iso` (European), and start the game.
+  (Japanese), `Ico_KOR.iso` (Korean) or `Ico_PAL.iso` (European), and start
+  the game.
 - Set `disc` in the `[game]` part of `config.toml` in that folder to
-  `"jpn"` or `"pal"`. The next start opens the file picker for that disc.
+  `"jpn"`, `"kor"` or `"pal"`. The next start opens the file picker for that disc.
 
 To keep one disc whichever images are around, set `disc` in the `[game]`
-part of `config.toml` to `"pal"` (European) or `"jpn"` (Japanese);
-`"auto"` lets the game choose.
-With both discs set up, the **Disc** row in Options does the same
+part of `config.toml` to `"pal"` (European), `"jpn"` (Japanese) or `"kor"`
+(Korean); `"auto"` lets the game choose.
+With more than one disc set up, the **Disc** row in Options does the same
 ([more](OPTIONS.md#language)).
 
 ## How do I take a photo?

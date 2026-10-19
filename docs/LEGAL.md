@@ -45,6 +45,15 @@ respective owners.
   `config/symbol_addrs.jpn.txt` and `config/symbol_addrs.jpn.data.txt` (the
   names and addresses of the decompilation's byte-matching link of that ELF,
   a record of that link as the European files are of theirs).
+- The same configuration for the Korean disc (SCPS-56001), of the same kinds
+  and on the same terms, under the same names with `kor` in place of `jpn`
+  (`config/link_order.kor.txt`, `config/link.kor.ld`,
+  `config/data_members.kor.txt`, `config/data_schema.kor.txt`,
+  `config/ee_layout.kor.txt`, `config/motion_bits.kor.txt`,
+  `config/tables_manifest.kor.txt`, `config/sha1sums.kor.txt`,
+  `config/stubs.kor.txt`, `config/symbol_addrs.kor.txt` and
+  `config/symbol_addrs.kor.data.txt`). Its layouts and bit positions come
+  from upstream's headers and sources as the Japanese disc's do.
 
 ## What is not in this repository, and must never be added
 
@@ -86,7 +95,8 @@ as an empty array (`port/data/gen/table_defs.c`), and at start-up the
 runtime loader (`port/data/tables.c`)
 fills them from the boot ELF on the user's own disc, checked against the
 committed manifest of CRCs (`config/tables_manifest.txt`, and
-`config/tables_manifest.jpn.txt` for the Japanese disc). The committed
+`config/tables_manifest.jpn.txt` for the Japanese disc and
+`config/tables_manifest.kor.txt` for the Korean disc). The committed
 descriptors under `port/data/gen/` (`tools/gen_data_desc.py`), the schema
 (`config/data_schema.pal.txt`) and the record types in the owners' headers
 hold only types, element counts, offsets and symbol names; so do the Japanese
@@ -118,7 +128,9 @@ The PC program compiles in a table of 914 entries (913 functions, one object), e
 Japanese disc's of the same shape (`jpn/ee_symbols.c`, 913 functions and one object, at that ELF's
 addresses, every name one the PAL registry also names; the names and addresses are the `func` /
 `obj` lines of `config/tables_manifest.jpn.txt` and pairs of `config/symbol_addrs.jpn.txt`, the
-decompilation's link of that ELF). What follows holds for both. The "no bulk symbol tables" rule above
+decompilation's link of that ELF); the Korean disc's (`kor/ee_symbols.c`, 913 functions and one
+object) is built the same way from `config/tables_manifest.kor.txt` and `config/symbol_addrs.kor.txt`.
+What follows holds for all three. The "no bulk symbol tables" rule above
 (and "Identifiers as references") does not apply to it, for these reasons:
 
 - **What it holds.** Only the addresses that the data tables' pointer words
@@ -291,16 +303,19 @@ source and leaked SDKs stay forbidden on every branch.
 
 You must legally own a copy of *ICO* for the PlayStation 2 and supply the
 disc image yourself: the European release (`SCES-50760`, boot ELF
-`SCES_507.60`) or the Japanese release (`SCPS-11003`, boot ELF
-`SCPS_110.03`). The build needs no disc data. On its first run the
+`SCES_507.60`) the Japanese release (`SCPS-11003`, boot ELF
+`SCPS_110.03`) or the Korean release (`SCPS-56001`, boot ELF `SCPS_560.01`).
+From each disc the program reads `SYSTEM.CNF`, the boot ELF, the big data
+file `DATA.DF` and the sound driver files (the IRX files), the same files
+for all three. The build needs no disc data. On its first run the
 program checks the image's SHA-1 against that disc's (or, for a re-dump,
 the boot ELF's SHA-1 and the manifest of the data file) and keeps no
 archive made from any other file: the game's data is written to a
 temporary file and kept as the local archive only when the check passes
-(`ico.o2r` for the European disc, `ico-jpn.o2r` for the Japanese disc, so
-both can sit in the same user folder); the
+(`ico.o2r` for the European disc, `ico-jpn.o2r` for the Japanese disc,
+`ico-kor.o2r` for the Korean disc, so all three can sit in the same user folder); the
 maintainers' ELF extraction checks `config/sha1sums.pal.txt` (`config/sha1sums.jpn.txt` for
-the Japanese disc). A SHA-1 is a fingerprint, not a copy of the work; the disc image and the
+the Japanese disc, `config/sha1sums.kor.txt` for the Korean disc). A SHA-1 is a fingerprint, not a copy of the work; the disc image and the
 ELF remain the property of their rightsholders.
 
 This project gives no instructions for obtaining a disc image. The only

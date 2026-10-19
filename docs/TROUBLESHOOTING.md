@@ -27,11 +27,11 @@ goes on with the date and time, ending in `.zip` (for example
 before, your settings and a short summary, so it is the one file a
 problem report needs. The message the game shows names it. The five
 newest are kept. Whenever you report a problem, also say which disc you
-play, the European or the Japanese.
+play, the European, the Japanese or the Korean.
 
 The first lines of the log say which version of the game you have and
 which disc it is playing (SCES-50760 for the European disc, SCPS-11003 for
-the Japanese disc). The log also records your display settings, every
+the Japanese disc, SCPS-56001 for the Korean disc). The log also records your display settings, every
 change you make to them, and
 every 10 seconds how fast the game is running (every second for 30 seconds
 after you press F11). When something goes wrong, it says what.
@@ -174,7 +174,7 @@ you can, one at Resolution 1x for comparison.
    [issues page](https://github.com/nathanialf/ico-pc/issues).
 2. Say what happened and what you were doing.
 3. Say which version of the game you have, and whether you play the
-   European or the Japanese disc. A downloaded release shows its version
+   European, the Japanese or the Korean disc. A downloaded release shows its version
    in the top-right corner of the Options menu's first page, and the log
    says both at the top.
 4. Attach the newest file in `logs` that starts with `report-`, when the
@@ -240,15 +240,15 @@ mean.
 
 **"No ICO disc image was found or chosen."** The game needs your disc
 image the first time. Start it again and choose the file, or put the image
-beside the program named `Ico_PAL.iso` for the European disc or
-`Ico_JPN.iso` for the Japanese disc (on Windows inside the `x64`
+beside the program named `Ico_PAL.iso` for the European disc,
+`Ico_JPN.iso` for the Japanese disc or `Ico_KOR.iso` for the Korean disc (on Windows inside the `x64`
 folder; on a Mac, add a line `iso=` with the image's full path to
 `ico-pc.ini` in the user folder instead,
 [where that is](PORTABLE_MODE.md#where-your-saves-are)).
 
 **"... is not a disc image this port plays."** The file is not the
-European release of ICO (SCES-50760) or the Japanese release
-(SCPS-11003), or it is damaged or changed. The American release and other
+European release of ICO (SCES-50760), the Japanese release
+(SCPS-11003) or the Korean release (SCPS-56001), or it is damaged or changed. The American release and other
 editions do not work. 
 
 **"Cannot read the disc image ..."** The file is incomplete or not a disc
@@ -317,7 +317,7 @@ carries on where it left off (it gives up after a few starts). Then the
 game starts as usual, whatever it found. If you report the problem, attach
 the newest file in `logs` that starts with `report-` (it holds the `loss-`
 file) together with the log of the start after it, and say which disc
-you play, the European or the Japanese.
+you play, the European, the Japanese or the Korean.
 
 **"The game checked why the graphics stopped last time, and the graphics
 driver needs a fresh start now."** The check above stopped the graphics
@@ -410,7 +410,7 @@ while it is starting, 60 seconds once it is running. Windows and Android
 show a message that says so. The log then has a line of `=` signs, and the
 line after it has `WATCHDOG:` in it and says what the game was doing.
 Send the newest file in `logs` that starts with `report-`, and say which
-disc you play, the European or the Japanese.
+disc you play, the European, the Japanese or the Korean.
 With [ReShade](RESHADE.md) loaded, the game gives itself 60 seconds to
 start as well, as ReShade takes a while to get ready.
 
@@ -459,9 +459,10 @@ newer. Keep `ico_pc` and `libSDL3.so.0` in the same folder.
 The window that asks for your disc image comes from your desktop's own
 file window, or from the small program `zenity`. If no window shows up,
 put the image beside `ico_pc` named `Ico_PAL.iso` (or `Ico_PAL.chd`,
-`Ico_PAL.bin` or `Ico_PAL.cue`) for the European disc, or `Ico_JPN.iso`
-(or `Ico_JPN.chd`, `Ico_JPN.bin` or `Ico_JPN.cue`) for the Japanese disc,
-instead.
+`Ico_PAL.bin` or `Ico_PAL.cue`) for the European disc, `Ico_JPN.iso`
+(or `Ico_JPN.chd`, `Ico_JPN.bin` or `Ico_JPN.cue`) for the Japanese disc, or
+`Ico_KOR.iso` (or `Ico_KOR.chd`, `Ico_KOR.bin` or `Ico_KOR.cue`) for the
+Korean disc, instead.
 
 While the game runs, it asks your desktop not to lock the screen or put the
 computer to sleep. If the computer still goes to sleep while you play with a
@@ -474,7 +475,8 @@ game uses).
    folder.
 2. Start `ico_pc` once in Desktop Mode, so it can ask for your disc image
    and set itself up. Or put the image beside `ico_pc` named
-   `Ico_PAL.iso` (European disc) or `Ico_JPN.iso` (Japanese disc) and skip
+   `Ico_PAL.iso` (European disc), `Ico_JPN.iso` (Japanese disc) or
+   `Ico_KOR.iso` (Korean disc) and skip
    the question.
 3. Close Steam, start the game, and choose Options > Extras > Add to Steam on the
    title screen

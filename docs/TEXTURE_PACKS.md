@@ -16,32 +16,35 @@ A pack is made for one disc. Each disc has its own folder, named after the
 number printed on the disc:
 
 - `SCES-50760` for the European disc;
-- `SCPS-11003` for the Japanese disc.
+- `SCPS-11003` for the Japanese disc;
+- `SCPS-56001` for the Korean disc.
 
 Put a pack in the folder of the disc it was made for; the pack's own
-folder name usually says which. Of these two folders, the game reads only
+folder name usually says which. Of these three folders, the game reads only
 the one of the disc you play, so you can keep a pack in each. The other
 places a pack can go (`textures/replacements`, and picture files loose in
-`textures`, below) are read for both discs: a pack there shows on either
+`textures`, below) are read for every disc: a pack there shows on any
 disc, so keep it in its disc's folder instead.
 
 ## Put a texture pack in
 
 The game comes with a folder for a pack for each disc:
 
-- Windows: `x64\textures\SCES-50760\replacements` and
-  `x64\textures\SCPS-11003\replacements`
-- Linux and Steam Deck: `textures/SCES-50760/replacements` and
-  `textures/SCPS-11003/replacements`, next to `ico_pc`
+- Windows: `x64\textures\SCES-50760\replacements`,
+  `x64\textures\SCPS-11003\replacements` and
+  `x64\textures\SCPS-56001\replacements`
+- Linux and Steam Deck: `textures/SCES-50760/replacements`,
+  `textures/SCPS-11003/replacements` and `textures/SCPS-56001/replacements`,
+  next to `ico_pc`
 - Android: see [the Android guide](ANDROID.md#where-your-files-are)
 - Mac and iPhone: the download has no such folder; make one as shown in
   [Other places a pack can go](#other-places-a-pack-can-go)
 
 A note named `README.txt` sits inside each to show you the right place.
 The examples below use the European disc's `SCES-50760`; for a pack for
-the Japanese disc, read `SCPS-11003` instead.
+the Japanese disc, read `SCPS-11003` instead (`SCPS-56001` for the Korean disc).
 
-A pack you download usually has a `SCES-50760` (or `SCPS-11003`) folder of
+A pack you download usually has a `SCES-50760` (or `SCPS-11003` or `SCPS-56001`) folder of
 its own, with a `replacements` folder inside. Copy the pack so that its
 files end up inside the game's `replacements` folder for the same disc.
 For example, on Windows a file from a pack for the European disc should
@@ -154,7 +157,8 @@ To see which file name the game expects for a texture:
 
 The game saves each texture as a PNG picture, under the same name PCSX2
 uses, in `textures/SCES-50760/dumps` (European disc) or
-`textures/SCPS-11003/dumps` (Japanese disc) in the folder with your saves.
+`textures/SCPS-11003/dumps` (Japanese disc) or
+`textures/SCPS-56001/dumps` (Korean disc) in the folder with your saves.
 Give your picture that name, put it in the `replacements` folder for the
 same disc, and the game uses it the next time you start it.
 
