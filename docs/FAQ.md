@@ -210,11 +210,23 @@ To add the second disc, give the game its image the same way as the first
 time: on Windows and Linux, put it beside the program named `Ico_PAL.iso`
 (European) or `Ico_JPN.iso` (Japanese), or put its full path on the `iso=`
 line of `ico-pc.ini`; on an iPhone, copy it into ICO's Documents folder
-with that name. The game copies the new disc's files out once, as at the
-first start. The image the game is set to decides which disc starts. To keep one
-of them whichever images are around, set `disc` in the `[game]` part of
-`config.toml` to `"pal"` (European) or `"jpn"` (Japanese); `"auto"` lets
-the game choose.
+with that name. The first disc's image can stay where it is: when both
+images are there, the game starts the disc that is not set up yet and
+copies its files out once, as at the first start. After that, with both
+discs set up, the game starts the disc you played last.
+
+On an Android phone the file picker only opens while no disc is set up,
+so it does not ask for the second disc. Do one of these:
+
+- With a USB cable or the Files app, copy the image into the game's
+  folder (`Android/data/com.defnf.icopc/files`), named `Ico_JPN.iso`
+  (Japanese) or `Ico_PAL.iso` (European), and start the game.
+- Set `disc` in the `[game]` part of `config.toml` in that folder to
+  `"jpn"` or `"pal"`. The next start opens the file picker for that disc.
+
+To keep one disc whichever images are around, set `disc` in the `[game]`
+part of `config.toml` to `"pal"` (European) or `"jpn"` (Japanese);
+`"auto"` lets the game choose.
 With both discs set up, the **Disc** row in Options does the same
 ([more](OPTIONS.md#language)).
 

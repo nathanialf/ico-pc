@@ -266,6 +266,18 @@ int ico_host_pick_iso(char *out, size_t size);
    words for the log ("[game] disc", "the disc image given", "the only game
    data there", "the disc played last", "the European disc"). */
 int ico_host_choose_disc(int pin, int given, unsigned have, int last, int count, const char **why);
+/* The disc image beside the program to use when no disc is pinned and
+   several discs' images are there (main_host.c find_beside): found has bit
+   i set when row i's image is there, have when row i's game data
+   (archive) is. Among the images whose disc has no game data yet (the disc
+   just added, set up at this start), else among them all: the only one;
+   else the disc played last (last, or -1) when it is one of them; else the
+   lowest row (0, the European disc, when its image is there). count is the
+   number of rows. The row, or -1 when found names none; in *why (when
+   given) the rule's words for the log ("the disc not set up yet", "the
+   disc played last", "the European disc", "the only image there", joined
+   with ", " when two apply, "no image"). */
+int ico_host_choose_image(unsigned found, unsigned have, int last, int count, const char **why);
 /* Whether a disc's game data is there: archive_name (port/core/region.h's
    archive_name, "ico.o2r", "ico-jpn.o2r") in the per-user folder
    (ico_host_pref_dir) or beside the program (ico_host_exe_dir). The `have`

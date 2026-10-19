@@ -39,7 +39,8 @@
  *                            headless build, so trace runs and tests read
  *                            the disc image itself
  *   disc image               Ico_PAL or Ico_JPN (.iso, .chd, .bin or .cue)
- *                            beside the executable (both there: the disc
+ *                            beside the executable (both there: the one
+ *                            whose disc has no archive yet, else the disc
  *                            played last, else Ico_PAL), else ini iso=,
  *                            else $ICO_ISO, else baserom/Ico_PAL.iso (or
  *                            .chd, .bin, .cue, then Ico_JPN's) under the working
@@ -693,14 +694,21 @@ static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, i
 #endif
 
 /* The disc images' names beside the program (Android: in the app's files
-   folder), each disc's plain image first: of two copies, the one read
-   without decoding. The first IMAGE_EXT_COUNT are the European disc's
-   (ico_discs[0].image_base), the next the Japanese disc's. */
-static const char *const image_names[] = {"Ico_PAL.iso", "Ico_PAL.chd", "Ico_PAL.bin",
-                                          "Ico_PAL.cue", "Ico_JPN.iso", "Ico_JPN.chd",
-                                          "Ico_JPN.bin", "Ico_JPN.cue"};
-#define IMAGE_NAME_COUNT ((int)(sizeof(image_names) / sizeof(image_names[0])))
-#define IMAGE_EXT_COUNT 4
+   folder): each disc's image_base (port/data/discs.c, "Ico_PAL",
+   "Ico_JPN") with each of image_exts, the plain image first: of two copies,
+   the one read without decoding. Name k is disc k / IMAGE_EXT_COUNT's, so
+   a row added to config/regions.txt gets its names here with no edit. */
+static const char *const image_exts[] = {".iso", ".chd", ".bin", ".cue"};
+#define IMAGE_EXT_COUNT ((int)(sizeof(image_exts) / sizeof(image_exts[0])))
+#define IMAGE_NAME_COUNT (ICO_REGION_COUNT * IMAGE_EXT_COUNT)
+
+/* name k of IMAGE_NAME_COUNT ("Ico_JPN.cue") into out */
+static const char *image_name(int k, char *out, size_t size)
+{
+    snprintf(out, size, "%s%s", ico_discs[k / IMAGE_EXT_COUNT].image_base,
+             image_exts[k % IMAGE_EXT_COUNT]);
+    return out;
+}
 
 /* config.toml [game] disc: the disc it pins ("pal", "jpn"), or NULL for
    "auto" (the default; an unknown value is logged as auto) */
@@ -720,40 +728,58 @@ static const IcoDiscInfo *last_disc(void)
 }
 
 /* The image beside the program (exe_dir) for `want` (NULL: either). With
-   both discs' images there and no wish, the one played last wins, else the
-   European one; the log says which. 0 with the path in iso, or -1. */
+   several discs' images there and no wish (ico_host_choose_image): the one
+   whose disc has no game data yet (the disc just added is set up at this
+   start), else the one played last, else the European one; the log says
+   which and why. 0 with the path in iso, or -1. */
 static int find_beside(const char *exe_dir, const IcoDiscInfo *want, char *iso)
 {
-    int found[ICO_REGION_COUNT] = {-1, -1};
+    int found[ICO_REGION_COUNT];
     const IcoDiscInfo *last = last_disc();
-    int d, i, pick = -1;
+    unsigned seen = 0, have = 0;
+    int d, i, n = 0, pick = -1;
     char path[ICO_PATH_MAX];
+    char name[64];
 
+    _Static_assert(ICO_REGION_COUNT <= 32, "find_beside's disc masks hold 32 rows");
     for (d = 0; d < ICO_REGION_COUNT; d++) {
+        found[d] = -1;
         for (i = 0; i < IMAGE_EXT_COUNT && found[d] < 0; i++) {
             const int k = d * IMAGE_EXT_COUNT + i;
 
-            if (ico_path_join(path, sizeof(path), exe_dir, image_names[k]) == 0 &&
+            if (ico_path_join(path, sizeof(path), exe_dir, image_name(k, name, sizeof(name))) ==
+                    0 &&
                 ico_file_exists(path)) {
                 found[d] = k;
+                seen |= 1u << d;
+                n++;
             }
+        }
+        if (ico_host_disc_archive_present(ico_discs[d].archive_name)) {
+            have |= 1u << d;
         }
     }
     if (want != NULL) {
         pick = found[want - ico_discs];
-    } else if (found[0] >= 0 && found[1] >= 0) {
-        pick = found[last != NULL ? last - ico_discs : 0];
-        fprintf(stderr,
-                "ico_pc: both discs' images are beside the program; %s is used (%s); "
-                "[game] disc in config.toml picks the other\n",
-                image_names[pick], last != NULL ? "the disc played last" : "the European disc");
     } else {
-        pick = found[0] >= 0 ? found[0] : found[1];
+        const char *rule = NULL;
+        const int row = ico_host_choose_image(
+            seen, have, last != NULL ? (int)(last - ico_discs) : -1, ICO_REGION_COUNT, &rule);
+
+        if (row >= 0) {
+            pick = found[row];
+        }
+        if (n > 1) {
+            fprintf(stderr,
+                    "ico_pc: several discs' images are beside the program; %s is used (by %s); "
+                    "[game] disc in config.toml picks another\n",
+                    image_name(pick, name, sizeof(name)), rule);
+        }
     }
     if (pick < 0) {
         return -1;
     }
-    ico_path_join(iso, ICO_PATH_MAX, exe_dir, image_names[pick]);
+    ico_path_join(iso, ICO_PATH_MAX, exe_dir, image_name(pick, name, sizeof(name)));
     return 0;
 }
 
@@ -806,7 +832,9 @@ static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char 
         return 0;
     }
     for (i = 0; i < IMAGE_NAME_COUNT; i++) {
-        snprintf(iso, ICO_PATH_MAX, "baserom/%s", image_names[i]);
+        char name[64];
+
+        snprintf(iso, ICO_PATH_MAX, "baserom/%s", image_name(i, name, sizeof(name)));
         if (ico_file_exists(iso)) {
             fprintf(stderr, "ico_pc: disc image from the working folder: %s\n", iso);
             return 0;
@@ -1069,7 +1097,8 @@ static int extract_progress(void *ctx, const char *phase, uint64_t done, uint64_
 
 /* Android's find_iso: Ico_PAL.iso (or .chd, .bin, .cue) in the app's files folder (a
    copy kept with keep_image=1, or one put there with a cable or the Files
-   app), then ini iso= when that file is there, else the system's picker
+   app), then ini iso= when that file is there (and, with [game] disc, is
+   that disc), else the system's picker
    and a copy of the chosen file into the files folder (iso_import.h). */
 static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, int *picked)
 {
@@ -1086,11 +1115,22 @@ static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, i
     }
     v = ico_ini_get(ini, "iso");
     if (v != NULL && v[0] != '\0') {
+        const IcoDiscInfo *pin = disc_setting();
+
         if (ico_path_join(iso, ICO_PATH_MAX, exe_dir, v) == 0 && ico_file_exists(iso)) {
-            fprintf(stderr, "ico_pc: disc image from ico-pc.ini: %s\n", iso);
-            return 0;
+            /* [game] disc naming the other disc than the kept image's
+               (keep_image=1): ask for the pinned disc's image instead */
+            if (pin == NULL || ico_extract_identify(iso, NULL, 0) == pin) {
+                fprintf(stderr, "ico_pc: disc image from ico-pc.ini: %s\n", iso);
+                return 0;
+            }
+            fprintf(stderr,
+                    "ico_pc: iso=%s in ico-pc.ini is not %s ([game] disc); asking for its "
+                    "image\n",
+                    v, pin->id);
+        } else {
+            fprintf(stderr, "ico_pc: iso=%s in ico-pc.ini is not there; asking for the image\n", v);
         }
-        fprintf(stderr, "ico_pc: iso=%s in ico-pc.ini is not there; asking for the image\n", v);
     }
     if (pick_iso_sdl(uri, sizeof(uri)) != 0) {
         ico_host_fatal(log_file(),
@@ -1145,10 +1185,11 @@ static void android_name_image(const char *exe_dir, char *iso, size_t size)
 static int android_own_image(const char *exe_dir, const char *iso)
 {
     char own[ICO_PATH_MAX];
+    char name[64];
     int i;
 
     for (i = 0; i < IMAGE_NAME_COUNT; i++) {
-        if (ico_path_join(own, sizeof(own), exe_dir, image_names[i]) == 0 &&
+        if (ico_path_join(own, sizeof(own), exe_dir, image_name(i, name, sizeof(name))) == 0 &&
             strcmp(own, iso) == 0) {
             return 1;
         }

@@ -2284,6 +2284,46 @@ int ico_host_disc_archive_present(const char *archive_name)
     return ico_path_join(path, sizeof(path), dir, archive_name) == 0 && ico_file_exists(path);
 }
 
+int ico_host_choose_image(unsigned found, unsigned have, int last, int count, const char **why)
+{
+    const unsigned rows = count >= 32 ? 0xFFFFFFFFu : count > 0 ? (1u << count) - 1u : 0u;
+    unsigned pool = found & rows & ~have;
+    const char *rule = "the disc not set up yet";
+    int row = -1, i, n = 0;
+
+    if (pool == 0) {
+        pool = found & rows;
+        rule = NULL;
+    }
+    for (i = 0; i < count && i < 32; i++) {
+        if (pool & (1u << i)) {
+            if (row < 0) {
+                row = i;
+            }
+            n++;
+        }
+    }
+    if (n > 1) {
+        if (last >= 0 && last < count && (pool & (1u << last))) {
+            row = last;
+            rule = rule != NULL ? "the disc not set up yet, the disc played last"
+                                : "the disc played last";
+        } else {
+            const char *first = row == 0 ? "the European disc" : "the first row there";
+
+            rule = rule != NULL ? (row == 0 ? "the disc not set up yet, the European disc"
+                                            : "the disc not set up yet, the first row there")
+                                : first;
+        }
+    } else if (rule == NULL) {
+        rule = "the only image there";
+    }
+    if (why != NULL) {
+        *why = row >= 0 ? rule : "no image";
+    }
+    return row;
+}
+
 int ico_host_choose_disc(int pin, int given, unsigned have, int last, int count, const char **why)
 {
     const char *rule = "the European disc";

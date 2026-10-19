@@ -826,7 +826,8 @@ static void test_retry_prepass(void)
 
 /* ico_host_choose_disc: the rules in order (pin, the image given, the only
    archive, the disc played last, the European disc) and the words for the
-   log; values outside the rows name none */
+   log; values outside the rows name none. ico_host_choose_image: the image
+   used when several discs' images are beside the program. */
 static void test_choose_disc(void)
 {
     const char *why = NULL;
@@ -858,6 +859,36 @@ static void test_choose_disc(void)
        not count; NULL words are allowed */
     CHECK(ico_host_choose_disc(2, 5, 4u, 7, 2, &why) == 0 && strcmp(why, "the European disc") == 0);
     CHECK(ico_host_choose_disc(-1, -1, 2u | 4u, -1, 2, NULL) == 1);
+
+    /* ico_host_choose_image (find_beside, both images and no pin): the
+       image whose disc has no game data yet first, so a second disc's
+       image put beside the first one's is set up at the next start */
+    CHECK(ico_host_choose_image(3u, 1u, -1, 2, &why) == 1 &&
+          strcmp(why, "the disc not set up yet") == 0);
+    CHECK(ico_host_choose_image(3u, 2u, 1, 2, &why) == 0 &&
+          strcmp(why, "the disc not set up yet") == 0);
+    /* neither set up: the disc played last, else the European one */
+    CHECK(ico_host_choose_image(3u, 0u, 1, 2, &why) == 1 &&
+          strcmp(why, "the disc not set up yet, the disc played last") == 0);
+    CHECK(ico_host_choose_image(3u, 0u, -1, 2, &why) == 0 &&
+          strcmp(why, "the disc not set up yet, the European disc") == 0);
+    /* both set up: the disc played last, else the European one */
+    CHECK(ico_host_choose_image(3u, 3u, 1, 2, &why) == 1 &&
+          strcmp(why, "the disc played last") == 0);
+    CHECK(ico_host_choose_image(3u, 3u, -1, 2, &why) == 0 && strcmp(why, "the European disc") == 0);
+    CHECK(ico_host_choose_image(3u, 3u, 7, 2, &why) == 0 && strcmp(why, "the European disc") == 0);
+    /* one image: that one, set up or not */
+    CHECK(ico_host_choose_image(2u, 3u, 0, 2, &why) == 1 &&
+          strcmp(why, "the only image there") == 0);
+    CHECK(ico_host_choose_image(1u, 0u, 1, 2, &why) == 0 &&
+          strcmp(why, "the disc not set up yet") == 0);
+    /* none (or only bits past the rows): -1 */
+    CHECK(ico_host_choose_image(0u, 3u, 0, 2, &why) == -1 && strcmp(why, "no image") == 0);
+    CHECK(ico_host_choose_image(4u, 0u, 0, 2, NULL) == -1);
+    /* a third row: the first one not set up, the last one among those */
+    CHECK(ico_host_choose_image(7u, 1u, -1, 3, &why) == 1 &&
+          strcmp(why, "the disc not set up yet, the first row there") == 0);
+    CHECK(ico_host_choose_image(7u, 1u, 2, 3, &why) == 2);
 }
 
 int main(void)

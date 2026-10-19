@@ -477,6 +477,13 @@ against one converted line, and the next merge has an upstream commit as its bas
    resolved by name against that disc's tables, as `region_jpn.c` documents per field), listed in
    `port/core/CMakeLists.txt` and declared in `port/core/region.h`; the disc row and manifest, the
    `baserom/<slug>/baseelf.elf` and `baserom/Ico_<SLUG>.iso` links and their cache variables.
+   The host takes the row in these pieces: the `ico_discs[]` row in `port/data/discs.c` (disc id,
+   boot ELF and its SHA-1s, DATA.DF manifest, archive name, and the image base `Ico_<SLUG>` from
+   which `main_host.c` builds the image names it looks for beside the program, `.iso`, `.chd`,
+   `.bin`, `.cue`), `port/core/region_<slug>.c` above, and the Settings Disc row's value strings
+   (`port/ui/settings.c`, whose `_Static_assert(ICO_REGION_COUNT == 2 ...)` fails the build until
+   they are added); the disc choice (`ico_host_choose_disc`, `find_beside` with
+   `ico_host_choose_image`) takes any number of rows.
 3. Data: the target's EE layout file `config/ee_layout.<slug>.txt`, symbol tables, table manifest,
    descriptor set `port/data/gen/<slug>/` and its entry in `ico_table_sets[]`, defaults for the
    fields it lacks, and `config/motion_bits.<slug>.txt` from `report --bits` when its bit words

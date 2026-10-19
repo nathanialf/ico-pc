@@ -359,8 +359,14 @@ The log says which rule decided (`ico_pc: disc SCPS-11003 (the Japanese disc), b
 given; game data there: SCES-50760`). Both archives can be there side by side; a first run with
 the other disc's image writes its archive beside the first. A pinned disc whose archive is missing
 takes the first run, and an image of the other disc then ends the start with a box naming both.
-With both discs' images beside the program and no pin, `find_beside` takes the one played last,
-else `Ico_PAL`. In `use_iso` mode the mounted image's boot file decides and a pin is logged as
+With several discs' images beside the program and no pin, `find_beside` takes the one whose disc
+has no archive yet (the disc just added, so its image is set up at this start), else the one
+played last, else `Ico_PAL` (`ico_host_choose_image` in `host_config.c`), and logs it
+(`ico_pc: several discs' images are beside the program; Ico_JPN.iso is used (by the disc not set
+up yet); [game] disc in config.toml picks another`). On Android the system's file picker opens
+only when the chosen disc has no archive, so with one disc set up it does not open by itself: an
+image copied into the files folder (rule 2 with the rule above), or `[game] disc` naming the other
+disc (rule 1, then the first run asks for its image), sets the second disc up. In `use_iso` mode the mounted image's boot file decides and a pin is logged as
 ignored.
 
 `select_disc` (`main_host.c`) then, before the data tables load, the packs open, the options and
