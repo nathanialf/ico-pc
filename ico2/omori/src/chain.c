@@ -1242,11 +1242,8 @@ static void PlumbPointUpdateChain(GObj *gobj, float *pos)
 typedef struct { /* field names derived */
     /* 0x00 */ sceVu0FVECTOR node;
     /* 0x10 */ sceVu0FVECTOR target;
-#ifdef VERSION_JPN
-    /* 0x20 */ int phase;
-#else
-    /* 0x20 */ float phase;
-#endif
+    /* 0x20 */ float phase; /* the Japanese disc's is an int stepped by 1 from 0: a whole
+                               number of frames, exact as a float, so one field serves both */
     /* 0x24 */ int frames;
     /* 0x28 */ int prev;
 } ChainClimbWork; /* derived name */
