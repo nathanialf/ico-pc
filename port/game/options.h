@@ -90,7 +90,8 @@ void ico_opt_mirror_reset(void);
    N is the save file's number (game.00N, 0..9).  Each disc has its own
    keys, its saves being another card directory: slot_N and slot_N_sum
    for the European disc, jpn_slot_N and jpn_slot_N_sum for the Japanese
-   one (port/core/region.h key_prefix, by the selected region).  The checksum ties the
+   one, kor_slot_N and kor_slot_N_sum for the Korean one (port/core/region.h
+   key_prefix, by the selected region).  The checksum ties the
    entry to the save it was written for: a slot overwritten elsewhere (a
    PS2 save copied in, another folder card) has another sum and reads Off.
    ico_mirror_slot_saved writes both keys from the run's value and saves

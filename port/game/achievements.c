@@ -395,7 +395,7 @@ static long long parse_time(const char *s)
  *   version = 2
  *   [stats]  enemies, hand_ms, saves, clears, couches ("id,id,..."),
  *            stages (128-bit hex, the European disc's stageData rows),
- *            stages_jpn (the Japanese disc's: its rows are other numbers)
+ *            stages_jpn, stages_kor (the other discs': their rows are other numbers)
  *   [unlocked.<id>]  time = "2026-10-05T12:00:00Z", play_time = <seconds>.
  * Unknown keys are ignored.
  */
@@ -537,8 +537,8 @@ static void read_file(void)
     s_stats.saves = (unsigned int)get_counter(t, "saves", 0, 0xFFFFFFFFLL);
     s_stats.clears = (unsigned int)get_counter(t, "clears", 0, 0xFFFFFFFFLL);
     s_stats.sofas = sofa_parse(get_counter_str(t, "couches"), s_sofa);
-    /* stats.stages is the European disc's, stats.stages_jpn the Japanese
-       disc's: the stage numbers differ */
+    /* stats.stages is the European disc's, stats.stages_jpn and
+       stats.stages_kor the Japanese and Korean discs': the stage numbers differ */
     if (ico_region_key_suffixed("stats.stages", key, (int)sizeof(key)) == 0) {
         hex_parse(ico_toml_get(t, key), s_visited);
     }
@@ -574,8 +574,8 @@ static int run_key(int slot, const char *name, char *key, size_t size)
     if (slot < 0 || slot > 99) {
         return -1;
     }
-    /* run.slot_N_* for the European disc's saves, run.jpn_slot_N_* for the
-       Japanese disc's (the region's key_prefix), as options.c keeps
+    /* run.slot_N_* for the European disc's saves, run.jpn_slot_N_* and
+       run.kor_slot_N_* for the Japanese and Korean discs' (the region's key_prefix), as options.c keeps
        [mirror] */
     snprintf(base, sizeof(base), "slot_%d%s", slot, name);
     return ico_region_key_prefixed("run", base, key, (int)size);

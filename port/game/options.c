@@ -124,7 +124,8 @@ void ico_opt_set_mirror_listener(void (*fn)(int on))
     }
 }
 
-/* [mirror] slot_N, slot_N_sum; jpn_slot_N, jpn_slot_N_sum (options.h) */
+/* [mirror] slot_N, slot_N_sum; jpn_slot_N, jpn_slot_N_sum; kor_slot_N,
+   kor_slot_N_sum (options.h) */
 #define MIRROR_NO_SUM (-1LL - 0xFFFFFFFFLL) /* outside the uint32 range */
 
 static int slot_keys(int slot, char *flag, char *sum, size_t size)
@@ -135,8 +136,8 @@ static int slot_keys(int slot, char *flag, char *sum, size_t size)
         return -1;
     }
     /* per disc, since each disc's saves are another card directory:
-       slot_N for the European disc (the keys as always), jpn_slot_N for
-       the Japanese one (the region's key_prefix) */
+       slot_N for the European disc (the keys as always), jpn_slot_N and
+       kor_slot_N for the Japanese and Korean ones (the region's key_prefix) */
     snprintf(base, sizeof(base), "slot_%d", slot);
     if (ico_region_key_prefixed("mirror", base, flag, (int)size) != 0) {
         return -1;

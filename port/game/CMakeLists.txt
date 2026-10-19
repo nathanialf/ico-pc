@@ -35,11 +35,13 @@ target_compile_options(options_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_L
                        -Wno-unused-function)
 target_link_libraries(options_test PRIVATE ico_options)
 if(ICO_RUN_TESTS)
-    # one run per disc: the [mirror] keys are the disc's (slot_N, jpn_slot_N);
-    # each in its own folder (the test's config files sit in it)
+    # one run per disc: the [mirror] keys are the disc's (slot_N, jpn_slot_N,
+    # kor_slot_N); each in its own folder (the test's config files sit in it)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/options_jpn")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/options_kor")
     add_test(NAME options COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}" pal)
     add_test(NAME options_jpn COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}/options_jpn" jpn)
+    add_test(NAME options_kor COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}/options_kor" kor)
 endif()
 
 # IsPointIsInScreen's x bound (ico2/omori/src/poly-flat.c, compiled into the
@@ -252,12 +254,16 @@ target_compile_options(achievements_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_P
 # read the selected disc's pack serial too
 target_link_libraries(achievements_test PRIVATE ico_achievements ico_region)
 if(ICO_RUN_TESTS)
-    # one run per disc (stats.stages / stats.stages_jpn, run.slot_N_* /
-    # run.jpn_slot_N_*), each in its own folder (the test's files sit in it)
+    # one run per disc (stats.stages / stats.stages_jpn / stats.stages_kor,
+    # run.slot_N_* / run.jpn_slot_N_* / run.kor_slot_N_*), each in its own
+    # folder (the test's files sit in it)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/achievements_jpn")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/achievements_kor")
     add_test(NAME achievements COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}" pal)
     add_test(NAME achievements_jpn
              COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}/achievements_jpn" jpn)
+    add_test(NAME achievements_kor
+             COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}/achievements_kor" kor)
 endif()
 
 # --- The model viewer -----------------------------------

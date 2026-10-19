@@ -6,8 +6,8 @@
  * condition through crafted transitions (unlocked once, suspended in developer
  * mode, yorda_safe counting), the achievements.toml round trip, the
  * popup rate limit and [game] achievements = false; the two discs' keys
- * in one file (stats.stages / stats.stages_jpn, run.slot_N_* /
- * run.jpn_slot_N_*, one set of unlocks) and the popup gap in Main ticks.
+ * in one file (stats.stages / stats.stages_jpn / stats.stages_kor, run.slot_N_* /
+ * run.jpn_slot_N_* / run.kor_slot_N_*, one set of unlocks) and the popup gap in Main ticks.
  * argv[1]: a writable folder; argv[2]: the disc (a slug of
  * config/regions.txt, pal by default).
  */
@@ -183,6 +183,19 @@ static int file_count(const char *needle)
 
 /* --- the view ------------------------------------------------------------------ */
 
+/* the address of the table row `name` (ico_gs_peek_table), 0 when absent */
+static unsigned int peek_named(const IcoGsPeekEntry *tab, int n, const char *name)
+{
+    int i;
+
+    for (i = 0; i < n; i++) {
+        if (strcmp(tab[i].name, name) == 0) {
+            return tab[i].addr;
+        }
+    }
+    return 0;
+}
+
 static void test_view(void)
 {
     unsigned int v;
@@ -219,13 +232,27 @@ static void test_view(void)
     g.system_status[0] = 1;
 
     /* the retail addresses, the selected disc's (gamestate.c s_peek_pal,
-       s_peek_jpn: the Japanese disc has no NonLinearCameraMove row) */
+       s_peek_jpn: the Japanese disc has no NonLinearCameraMove row). PAL
+       and JPN are checked against their literals; any other disc (kor) has
+       its addresses from its own table by name (ico_gs_peek_table), which
+       the test does not hold literals for: the check is that the snapshot
+       fields answer at the table's addresses */
     {
-        const unsigned int stageNo = ICO_JPN ? 0x00633810u : 0x00639D10u;
-        const unsigned int gflags = ICO_JPN ? 0x002A2FC0u : 0x002A50C0u;
-        const unsigned int gameClear = ICO_JPN ? 0x006344C8u : 0x0063AA00u;
-        const unsigned int layout = ICO_JPN ? 0x006350BCu : 0x0063B60Cu;
-        const unsigned int preview = ICO_JPN ? 0x002998C0u : 0x0029B9D0u;
+        const int pal = ico_region == ICO_REGION_PAL;
+        const int jpn = ico_region == ICO_REGION_JPN;
+        const int known = pal || jpn;
+        const IcoGsPeekEntry *tab = NULL;
+        const int tabN = ico_gs_peek_table(&tab);
+        const unsigned int stageNo =
+            known ? (jpn ? 0x00633810u : 0x00639D10u) : peek_named(tab, tabN, "stage_no");
+        const unsigned int gflags =
+            known ? (jpn ? 0x002A2FC0u : 0x002A50C0u) : peek_named(tab, tabN, "gflags");
+        const unsigned int gameClear =
+            known ? (jpn ? 0x006344C8u : 0x0063AA00u) : peek_named(tab, tabN, "gFlagGameClear");
+        const unsigned int layout =
+            known ? (jpn ? 0x006350BCu : 0x0063B60Cu) : peek_named(tab, tabN, "current_layout_id");
+        const unsigned int preview =
+            known ? (jpn ? 0x002998C0u : 0x0029B9D0u) : peek_named(tab, tabN, "IosMcPreviewInfo");
 
         g.stage_no = 0x11223344;
         g.gflags[1] = 0xA5;
@@ -242,13 +269,15 @@ static void test_view(void)
         CHECK(ico_gs_peek(layout, 4, &v) == 0 &&
               v == (unsigned)R->layout_save_complete); /* current_layout_id */
         CHECK(ico_gs_peek(preview + 8, 4, &v) == 0 && v == 50u * 3725u);
-        if (!ICO_JPN) {
+        if (pal) {
             CHECK(ico_gs_peek(0x00639EA4u, 4, &v) == -1); /* boyGObj: a pointer, not served */
         }
         CHECK(ico_gs_peek(0x01000000u, 4, &v) == -1); /* heap */
         CHECK(ico_gs_peek(stageNo, 3, &v) == -1);
         n = ico_gs_peek_table(&table);
-        CHECK(n == (ICO_JPN ? 13 : 14) && table[0].addr == gflags && table[0].size == 50);
+        /* PAL's 14 rows; the Japanese (and the Korean, its layout) 13: no
+           NonLinearCameraMove row */
+        CHECK(n == (pal ? 14 : 13) && table[0].addr == gflags && table[0].size == 50);
     }
 }
 
@@ -1064,9 +1093,17 @@ static void test_discs(void)
     /* the unlock keys carry no disc */
     CHECK(file_count("[unlocked.gate]") == 1 && file_count("[unlocked.windmill]") == 1);
     CHECK(file_count("unlocked.jpn") == 0 && file_count("_jpn]") == 0);
-    /* the Japanese disc's keys by name */
-    CHECK(file_count("\nstages_jpn = \"") == 1 && file_count("\nstages = \"") == 1);
-    CHECK(file_count("\njpn_slot_") >= 1 && file_count("\nslot_") >= 1);
+    CHECK(file_count("unlocked.kor") == 0 && file_count("_kor]") == 0);
+    /* the two discs' keys by name: the selected one's and the other's
+       (PAL's are the bare names, the others' carry the slug) */
+    snprintf(want, sizeof(want), "\nstages%s = \"", meSfx);
+    CHECK(file_count(want) == 1);
+    snprintf(want, sizeof(want), "\nstages%s = \"", otherSfx);
+    CHECK(file_count(want) == 1);
+    snprintf(want, sizeof(want), "\n%sslot_", mePfx);
+    CHECK(file_count(want) >= 1);
+    snprintf(want, sizeof(want), "\n%sslot_", otherPfx);
+    CHECK(file_count(want) >= 1);
 
     /* the other disc reads its own: its slot 3 answers, this disc's slot 5
        does not, and its set is its own (stage 0, then 3: 0x9) */

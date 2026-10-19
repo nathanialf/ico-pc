@@ -359,7 +359,8 @@ static void test_mirror_slots(const char *dir)
         size_t n = fread(buf, 1, sizeof(buf) - 1, f);
         buf[n] = '\0';
         fclose(f);
-        /* the selected disc's keys: slot_N (European), jpn_slot_N */
+        /* the selected disc's keys: slot_N (European), jpn_slot_N,
+           kor_slot_N (the region's key_prefix) */
         CHECK(strstr(buf, "[mirror]") != NULL);
         snprintf(want, sizeof(want), "\n%sslot_3 = false", ico_region_cur()->key_prefix);
         CHECK(strstr(buf, want) != NULL);
@@ -368,10 +369,17 @@ static void test_mirror_slots(const char *dir)
         snprintf(want, sizeof(want), "\n%sslot_5_sum = 4294967280", ico_region_cur()->key_prefix);
         CHECK(strstr(buf, want) != NULL);
         /* and no other disc's */
-        if (ICO_JPN) {
-            CHECK(strstr(buf, "\nslot_") == NULL);
-        } else {
-            CHECK(strstr(buf, "jpn_slot") == NULL);
+        {
+            int r;
+
+            for (r = 0; r < ico_region_count(); r++) {
+                const char *pfx = ico_region_at(r)->key_prefix;
+
+                if (strcmp(pfx, ico_region_cur()->key_prefix) != 0) {
+                    snprintf(want, sizeof(want), "\n%sslot_", pfx);
+                    CHECK(strstr(buf, want) == NULL);
+                }
+            }
         }
     }
     /* the title: back to [gameplay] mirror (absent: Off) */
@@ -425,16 +433,16 @@ static void test_mirror_discs(const char *dir)
 
         text[n] = '\0';
         fclose(f);
-        /* the European disc's keys as they always were, the Japanese
-           disc's with its prefix */
-        snprintf(want, sizeof(want), "\n%sslot_3 = %s", ico_region_at(0)->key_prefix,
-                 me == 0 ? "false" : "true");
+        /* each disc under its own prefix (the European disc's keys as they
+           always were): this one Off, the other still On */
+        snprintf(want, sizeof(want), "\n%sslot_3 = false", ico_region_at(me)->key_prefix);
         CHECK(strstr(text, want) != NULL);
-        snprintf(want, sizeof(want), "\n%sslot_3 = %s", ico_region_at(1)->key_prefix,
-                 me == 1 ? "false" : "true");
+        snprintf(want, sizeof(want), "\n%sslot_3 = true", ico_region_at(other)->key_prefix);
         CHECK(strstr(text, want) != NULL);
-        CHECK(strstr(text, "\nslot_3_sum = 4369") != NULL);
-        CHECK(strstr(text, "\njpn_slot_3_sum = 4369") != NULL);
+        snprintf(want, sizeof(want), "\n%sslot_3_sum = 4369", ico_region_at(me)->key_prefix);
+        CHECK(strstr(text, want) != NULL);
+        snprintf(want, sizeof(want), "\n%sslot_3_sum = 4369", ico_region_at(other)->key_prefix);
+        CHECK(strstr(text, want) != NULL);
     }
     ico_opt_mirror_reset();
     remove(path);
@@ -1036,7 +1044,7 @@ static void test_video_interpolate(void)
 }
 
 /* options_test DIR [SLUG]: SLUG the selected disc (config/regions.txt: pal,
-   the default, or jpn) */
+   the default, jpn or kor) */
 int main(int argc, char **argv)
 {
     if (argc > 2 && ico_region_select(argv[2]) != 0) {
