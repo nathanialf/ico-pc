@@ -121,7 +121,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
         "El idioma de estos menús, de la ayuda del modo foto y de los mensajes. El texto del juego es siempre el del disco.",
     [UI_STR_OPT_DISC] = "Disco",
     [UI_STR_DISC_NOTE] =
-        "El disco que se juega cuando están instalados los dos. Se aplica en el próximo inicio.",
+        "El disco que se juega cuando hay más de uno instalado. Se aplica en el próximo inicio.",
     [UI_STR_DISC_PAL] = "Europa (SCES-50760)",
     [UI_STR_DISC_JPN] = "Japón (SCPS-11003)",
     [UI_STR_DISC_KOR] = "Corea (SCPS-56001)",

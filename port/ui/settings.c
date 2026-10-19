@@ -670,13 +670,16 @@ void ui_settings_set_steam_handler(int (*fn)(void))
 /* Main > Disc: the host's answer for each disc's game data, asked once */
 static int (*s_discFn)(const char *archiveName);
 static int s_discShown = -1;
+static unsigned int s_discPresent; /* bit i: row i's game data is there (discRowShown) */
 
-void ui_settings_set_disc_handler(int (*fn)(const char *archive_name))
+void ui_settings_set_disc_handler(int (*fn)(const char *archiveName))
 {
     s_discFn = fn;
     s_discShown = -1;
 }
 
+/* the Disc row shows once two or more discs' game data are there (any two of
+   config/regions.txt's rows); s_discPresent remembers which, for the step */
 static int discRowShown(void)
 {
     if (s_discFn == NULL) {
@@ -684,15 +687,19 @@ static int discRowShown(void)
     }
     if (s_discShown < 0) {
         int n = 0;
+        s_discPresent = 0;
         for (int i = 0; i < ico_region_count(); i++) {
-            n += s_discFn(ico_region_at(i)->archive_name) != 0;
+            if (s_discFn(ico_region_at(i)->archive_name) != 0) {
+                s_discPresent |= 1u << i;
+                n++;
+            }
         }
-        s_discShown = n == ico_region_count() && n > 1;
+        s_discShown = n > 1;
     }
     return s_discShown;
 }
 
-/* the disc the row shows: [game] disc's, else the one playing (with both
+/* the disc the row shows: [game] disc's, else the one playing (with several
    discs' game data and no pin the next start plays the disc played last,
    this one) */
 static int discRow(void)
@@ -1877,8 +1884,16 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         break;
     }
     case UI_OPT_DISC: {
-        /* [game] disc, read at the next start (main_host.c mount_game_data) */
-        const int i = stepIndex(discRow(), ico_region_count(), dir);
+        /* [game] disc, read at the next start (main_host.c mount_game_data):
+           the next disc whose game data is there (discRowShown), wrapping */
+        const int n = ico_region_count();
+        int i = discRow();
+        for (int k = 0; k < n; k++) {
+            i = stepIndex(i, n, dir);
+            if (discRowShown() && (s_discPresent >> i) & 1u) {
+                break;
+            }
+        }
         ico_config_set_string("game.disc", ico_region_at(i)->slug);
         s_dirtyConfig = 1;
         break;

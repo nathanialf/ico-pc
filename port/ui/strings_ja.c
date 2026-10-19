@@ -121,7 +121,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
         "このメニュー、フォトモードの説明、メッセージの言語です。ゲーム本来の文字はディスクのままです。",
     [UI_STR_OPT_DISC] = "ディスク",
     [UI_STR_DISC_NOTE] =
-        "両方のディスクのデータがあるとき、どちらで遊ぶかを選びます。次回の起動から使われます。",
+        "複数のディスクのデータがあるとき、どれで遊ぶかを選びます。次回の起動から使われます。",
     [UI_STR_DISC_PAL] = "欧州版（SCES-50760）",
     [UI_STR_DISC_JPN] = "日本版（SCPS-11003）",
     [UI_STR_DISC_KOR] = "韓国版（SCPS-56001）",

@@ -638,7 +638,9 @@ static void testPopups(void)
         float h[5], w[5];
         const char *bodies[5] = {"B", ui_str_in(UI_LANG_EN, UI_STR_ACH_NO_CAPTURE_DESC),
                                  ui_str_in(UI_LANG_JA, UI_STR_ACH_NO_CAPTURE_DESC),
-                                 ui_str_in(UI_LANG_KO, UI_STR_ACH_NO_CAPTURE_DESC), longWord};
+                                 /* the Korean achievement line fits one line; a note
+                                    long enough to wrap at its spaces */
+                                 ui_str_in(UI_LANG_KO, UI_STR_OPT_AA_NOTE), longWord};
         for (int k = 0; k < 5; k++) {
             ui_popup_reset();
             ui_popup_push("A", bodies[k]);

@@ -127,9 +127,9 @@ static const UiSheetInk kSheetInk[UI_LANG_SHEET_COUNT] = {
        measures 251.5 and 34.3: fill 249.7 + 1.0, rim 42.2 + 0.7 (each
        sheet's own: title 254 / 45.6, mc04 245 / 40.2, option 252.7 / 41.1),
        one antialiasing step (alpha 232 on the title, 252 on mc04) as the
-       Japanese sheets'.  ctest menu_look_kor (menu_region_test.c) re-measures it
-       on the disc (kInkExpect there holds the same estimate). */
-    {1, 43, 251, 1, 0},
+       Japanese sheets'.  ctest menu_look_kor (menu_region_test.c) measured the
+       disc at fill 252.8, rim 41.8 (kInkExpect there): the values here. */
+    {1, 42, 253, 1, 0},
 };
 /* the dark, plain and grey inks and the light words without a halo: no
    rim, a white fill (the vertex colour makes them black, white or grey) */

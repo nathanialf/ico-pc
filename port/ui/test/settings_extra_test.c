@@ -583,7 +583,7 @@ static int fakeDiscPresent(const char *archiveName)
 }
 
 /* Main > Disc: hidden without a host and with one disc's game data, shown
-   with both, after Menu language; European disc / Japanese disc, written
+   with two or more (the step visits only discs with game data), after Menu language; European disc / Japanese disc, written
    to [game] disc (read at the next start) with its note; with no pin it
    shows the disc playing.  With every Main row shown (the Graphics driver
    link, Language, Disc and the two developer rows: fifteen) the rows are

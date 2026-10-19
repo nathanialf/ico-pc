@@ -122,7 +122,7 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
         "La langue de ces menus, de l’aide du mode photo et des messages. Le texte du jeu reste celui du disque.",
     [UI_STR_OPT_DISC] = "Disque",
     [UI_STR_DISC_NOTE] =
-        "Le disque joué quand les deux sont installés. Appliqué au prochain démarrage.",
+        "Le disque joué quand plusieurs sont installés. Appliqué au prochain démarrage.",
     [UI_STR_DISC_PAL] = "Europe (SCES-50760)",
     [UI_STR_DISC_JPN] = "Japon (SCPS-11003)",
     [UI_STR_DISC_KOR] = "Corée (SCPS-56001)",

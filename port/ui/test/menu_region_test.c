@@ -413,7 +413,7 @@ typedef struct InkExpect {
     double fill, rim;
 } InkExpect;
 
-static const InkExpect kInkExpect[] = {{"jpn", 251.5, 34.3}, {"kor", 250.7, 42.9}};
+static const InkExpect kInkExpect[] = {{"jpn", 251.5, 34.3}, {"kor", 252.8, 41.8}};
 #define TOL_LEVEL 0.6 /* menu_look_test's: grey levels */
 
 static void testLook(IcoVfs *vfs)

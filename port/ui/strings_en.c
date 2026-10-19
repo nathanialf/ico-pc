@@ -120,7 +120,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "The language of these menus, photo mode’s help and the messages. The game’s own text is always the disc’s.",
     [UI_STR_OPT_DISC] = "Disc",
     [UI_STR_DISC_NOTE] =
-        "Which disc to play when both are installed. Takes effect at the next start.",
+        "Which disc to play when more than one is installed. Takes effect at the next start.",
     [UI_STR_DISC_PAL] = "Europe (SCES-50760)",
     [UI_STR_DISC_JPN] = "Japan (SCPS-11003)",
     [UI_STR_DISC_KOR] = "Korea (SCPS-56001)",
