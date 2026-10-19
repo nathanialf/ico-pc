@@ -323,7 +323,10 @@ def gen_header(regions):
     out.append("")
     out.append("/* LN(%s): upstream's per-target __LINE__ values for the debug allocators and asserts. */"
                % ln_params(regions))
-    out.append("#define LN(%s) %s(%s)" % (ln_params(regions), selector_name(regions[1:]), ln_params(regions)))
+    if len(regions) > 1:
+        out.append("#define LN(%s) %s(%s)" % (ln_params(regions), selector_name(regions[1:]), ln_params(regions)))
+    else:
+        out.append("#define LN(pal) (pal)")
     out.append("")
     out.append("#endif /* ICO_REGION_H */")
     return ("\n".join(out) + "\n").encode("ascii")
