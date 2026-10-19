@@ -241,21 +241,19 @@ void actSt04aGateChk(GObj *volatile self)
     if (n != 0) {
         {
             /* the gate-open animations, in the order they start */
-#ifdef VERSION_JPN
-            static const AnimList28 gateOpenAnims = {{551, 485, 644, 645, 646, 647, 648, 649,
-                                                      650, 651, 652, 653, 654, 655, 656, 657,
-                                                      658, 659, 660, 661, 662, 663, 664, 665,
-                                                      666, 667, 668, 669}}; /* derived name */
-#else
-            static const AnimList28 gateOpenAnims = {{555, 489, 648, 649, 650, 651, 652, 653,
-                                                      654, 655, 656, 657, 658, 659, 660, 661,
-                                                      662, 663, 664, 665, 666, 667, 668, 669,
-                                                      670, 671, 672, 673}}; /* derived name */
-#endif
+            /* the Japanese disc's ids are 4 lower */
+            static const AnimList28 gateOpenAnims_pal = {{555, 489, 648, 649, 650, 651, 652, 653,
+                                                          654, 655, 656, 657, 658, 659, 660, 661,
+                                                          662, 663, 664, 665, 666, 667, 668, 669,
+                                                          670, 671, 672, 673}}; /* derived name */
+            static const AnimList28 gateOpenAnims_jpn = {{551, 485, 644, 645, 646, 647, 648, 649,
+                                                          650, 651, 652, 653, 654, 655, 656, 657,
+                                                          658, 659, 660, 661, 662, 663, 664, 665,
+                                                          666, 667, 668, 669}}; /* derived name */
             AnimList28 anim;
             unsigned int j;
 
-            anim = gateOpenAnims;
+            anim = PAL_JPN(gateOpenAnims_pal, gateOpenAnims_jpn);
             for (j = 0; j < 28; j++) {
                 stage_SetAnimation(anim.v[j], 1, -1);
                 _ACTWait(1);
@@ -484,27 +482,27 @@ void actSt04aConte06(GObj *volatile self)
     }
 
     while (stage_ContinueAnimation(668, 669) == 0) {
-#ifndef VERSION_JPN
         _ACTWait(1);
     }
 
-    scpSearchGobj(590)->active = 0;
+    if (!ICO_JPN) {
+        scpSearchGobj(590)->active = 0;
 
-    stage_SetLoopFlag(555, 0);
-    stage_SetAnimation(555, -1, -2);
+        stage_SetLoopFlag(555, 0);
+        stage_SetAnimation(555, -1, -2);
 
-    while (stage_ContinueAnimation(669, 670) == 0) {
-        _ACTWait(1);
-    }
-    while (stage_ContinueAnimation(670, 671) == 0) {
-        _ACTWait(1);
-    }
-    while (stage_ContinueAnimation(671, 672) == 0) {
-        _ACTWait(1);
-    }
-    while (stage_ContinueAnimation(672, 673) == 0) {
-#endif
-        _ACTWait(1);
+        while (stage_ContinueAnimation(669, 670) == 0) {
+            _ACTWait(1);
+        }
+        while (stage_ContinueAnimation(670, 671) == 0) {
+            _ACTWait(1);
+        }
+        while (stage_ContinueAnimation(671, 672) == 0) {
+            _ACTWait(1);
+        }
+        while (stage_ContinueAnimation(672, 673) == 0) {
+            _ACTWait(1);
+        }
     }
 
     SetCameraFlag_LwsCutBack();
@@ -772,17 +770,17 @@ void actSt04aGateOpenChk(GObj *volatile self)
     if (n != 0) {
         {
             /* the second gate's animations, in the order they start */
-#ifdef VERSION_JPN
-            static const AnimList gateOpen2Anims = {{708, 709, 710, 711, 712, 713, 714, 715, 716,
-                                                     717, 718, 719, 720}}; /* derived name */
-#else
-            static const AnimList gateOpen2Anims = {{712, 713, 714, 715, 716, 717, 718, 719, 720,
-                                                     721, 722, 723, 724}}; /* derived name */
-#endif
+            /* the Japanese disc's ids are 4 lower */
+            static const AnimList gateOpen2Anims_pal = {{712, 713, 714, 715, 716, 717, 718, 719,
+                                                         720, 721, 722, 723,
+                                                         724}}; /* derived name */
+            static const AnimList gateOpen2Anims_jpn = {{708, 709, 710, 711, 712, 713, 714, 715,
+                                                         716, 717, 718, 719,
+                                                         720}}; /* derived name */
             AnimList anim;
             unsigned int j;
 
-            anim = gateOpen2Anims;
+            anim = PAL_JPN(gateOpen2Anims_pal, gateOpen2Anims_jpn);
             for (j = 0; j < 13; j++) {
                 stage_SetAnimation(anim.v[j], 1, -1);
                 _ACTWait(1);
@@ -1148,21 +1146,22 @@ void actConte09_2(GObj *volatile self)
     }
 
     while (stage_ContinueAnimation(736, 737) == 0) {
-#ifndef VERSION_JPN
         _ACTWait(1);
     }
-    while (stage_ContinueAnimation(737, 738) == 0) {
-        _ACTWait(1);
-    }
-    while (stage_ContinueAnimation(738, 739) == 0) {
-        _ACTWait(1);
-    }
-    while (stage_ContinueAnimation(739, 740) == 0) {
-        _ACTWait(1);
-    }
-    while (stage_ContinueAnimation(740, 741) == 0) {
-#endif
-        _ACTWait(1);
+
+    if (!ICO_JPN) {
+        while (stage_ContinueAnimation(737, 738) == 0) {
+            _ACTWait(1);
+        }
+        while (stage_ContinueAnimation(738, 739) == 0) {
+            _ACTWait(1);
+        }
+        while (stage_ContinueAnimation(739, 740) == 0) {
+            _ACTWait(1);
+        }
+        while (stage_ContinueAnimation(740, 741) == 0) {
+            _ACTWait(1);
+        }
     }
 
     ClearStreamMotionEntry(girlGObj);
@@ -1352,15 +1351,13 @@ void actConte09_3(GObj *volatile self)
         stage_SetAnimation(742, 1, 0);
     }
 
-#ifdef VERSION_JPN
-    while (stage_ContinueAnimation(738, 739) == 0) {
-#else
-    _ACTWait(1);
+    if (!ICO_JPN) {
+        _ACTWait(1);
 
-    stage_SetAnimation(273, 1, 502);
+        stage_SetAnimation(273, 1, 502);
+    }
 
-    while (stage_ContinueAnimation(742, 743) == 0) {
-#endif
+    while (stage_ContinueAnimation(PAL_JPN(742, 738), PAL_JPN(743, 739)) == 0) {
         _ACTWait(1);
     }
 
