@@ -379,16 +379,10 @@ static char *debugBarName[] = {"Off", "Low-Deco", "High-Deco"}; /* derived name 
 
 static char *debugProfileName[] = {"Variable", "Process"}; /* derived name */
 
-#ifdef VERSION_JPN
-
-static char *debugSnapSizeName[] = {"Normal", "Half",     "Double",  "Double+Wide",
-                                    "4x4",    "4x4+Wide", "XYOFFSET"}; /* derived name */
-
-#else
+static char *debugSnapSizeName_jpn[] = {"Normal", "Half",     "Double",  "Double+Wide",
+                                        "4x4",    "4x4+Wide", "XYOFFSET"}; /* derived name */
 
 static char *debugSnapSizeName[] = {"None", "1x1", "2x2", "4x4", "8x8"}; /* derived name */
-
-#endif
 
 static char *debugSnapFormName[] = {"TIM2", "BMP"}; /* derived name */
 
@@ -414,9 +408,8 @@ static char *debugMotionTargetName[] = {"BOY", "GIRL", "BIRD", "ENEMY", "QUEEN"}
 
 /* the debug options: name, colour, value, range, value names and the function
    called on a change, in the order debug_Mode pages through them */
-#ifdef VERSION_JPN
 
-static const DbgOpt debugOption[76] = {
+static const DbgOpt debugOption_jpn[76] = {
     {" FrameStep          ", 0x0080FF80, &systemStatus[1], 1, 2, debugFrameStepName,
      (void (*)(int))gsResetFunc},
     {" NTSC/PAL           ", 0x0080FF80, &systemStatus[0], 0, 1, debugNtscPalName,
@@ -462,7 +455,7 @@ static const DbgOpt debugOption[76] = {
     {" GBrainInfo         ", 0xFF80FF80, &debug_gbrain_info_flag, 0, 1, debugOffOnName, 0},
     {" WayTool            ", 0xFF80FF80, &debug_wayline, 0, 1, debugOffOnName, 0},
     {" SnapShotNum        ", 0xC0C0C080, &debug_snapshot_num, 0, 3000000, 0, 0},
-    {" SnapSize           ", 0xC0C0C080, &debug_snapshot_size, 0, 6, debugSnapSizeName, 0},
+    {" SnapSize           ", 0xC0C0C080, &debug_snapshot_size, 0, 6, debugSnapSizeName_jpn, 0},
     {" SnapForm           ", 0xC0C0C080, &debug_snapshot_format, 0, 1, debugSnapFormName, 0},
     {" Jimaku Test        ", 0xC0C0C080, &debug_jimaku, 0, 1, debugOffOnName, 0},
     {" Camera             ", 0xC0C0C080, &debug_camera_flag, 0, 1, debugOffOnName, 0},
@@ -499,9 +492,7 @@ static const DbgOpt debugOption[76] = {
     {" NO BREAST HANG     ", 0xC0C0C080, &debug_no_breast_hang, 0, 1, debugOffOnName, 0},
 }; /* derived name */
 
-#else
-
-static const DbgOpt debugOption[76] = {
+static const DbgOpt debugOption_pal[76] = {
     {" FrameStep          ", 0x0080FF80, &systemStatus[1], 1, 2, debugFrameStepName,
      (void (*)(int))gsResetFunc},
     {" NTSC/PAL           ", 0x0080FF80, &systemStatus[0], 0, 1, debugNtscPalName,
@@ -584,7 +575,9 @@ static const DbgOpt debugOption[76] = {
     {" NO BREAST HANG     ", 0xC0C0C080, &debug_no_breast_hang, 0, 1, debugOffOnName, 0},
 }; /* derived name */
 
-#endif
+/* The two discs page through different SnapShot rows (the Japanese disc names
+   seven sizes and counts snapshots up from 0); every other row is the same. */
+#define debugOption PAL_JPN(debugOption_pal, debugOption_jpn)
 
 /* the font window's line count */
 static int fontWindowLine = 0; /* derived name */

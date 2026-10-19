@@ -19,7 +19,8 @@ typedef struct GamesysMemCursor { /* field names derived */
 } GamesysMemCursor; /* derived name */
 
 /* gamesys.c's .data globals */
-extern char stamp_str[];
+extern char stamp_str_pal[];
+extern char stamp_str_jpn[];
 extern void *gameSysMemoryFuncList[];
 extern int gamesysStageExitTime[];
 extern GamesysObjInfo gameSysObjInfo[];

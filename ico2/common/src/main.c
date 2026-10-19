@@ -31,21 +31,16 @@
 #include <string.h>
 #include "ico_gamestate.h" /* port: achievement signals */
 
-/* main.c's .data globals, each with an initialiser. systemStatus starts in PAL mode (word 0;
-   NTSC on JPN)
-   at a frame step of 2 (word 1). db is the GS double buffer (libgraph's
+/* main.c's .data globals, each with an initialiser. systemStatus starts in PAL
+   mode (word 0) at a frame step of 2 (word 1); the Japanese ELF starts word 0
+   at 0 (NTSC). One initialiser serves both discs: the host sets word 0 per disc
+   before the first tick, 0 on a fixed 60 Hz disc in main_host.c's select_disc,
+   and Main writes ico_boot_video_mode() (port/config/sysconf.c, 0 on that disc)
+   over it. db is the GS double buffer (libgraph's
    sceGsDBuff, 0x230 B), stageMgrMsg the stage manager's message (main.h's
    StgMgrMsg, 0x18 B) and SchedulerMsgQ the scheduler's queue (message.c's
    IosMsgQueue, 0x30 B). */
-#ifdef VERSION_JPN
-
-int systemStatus[12] = {0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7};
-
-#else
-
 int systemStatus[12] = {1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7};
-
-#endif
 
 sceGsDBuff db = {{{0}}};
 

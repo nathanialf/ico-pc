@@ -116,13 +116,8 @@ void dispClear(MvDispEnv *self, unsigned int col)
 void setDispEnv(MvDispEnv *self, int imageW, int imageH, int dbx, int dby)
 {
     int *p;
-#ifdef VERSION_JPN
-    int w = imageW;
-    int h = imageH / 2;
-#else
-    int w = 720;
-    int h = 288;
-#endif
+    int w = PAL_JPN(720, imageW);
+    int h = PAL_JPN(288, imageH / 2);
 
     self->fbp[0] = 0;
     self->fbp[1] = PAL_JPN(108, (w + 63) / 64 * 64 * ((h + 31) / 32 * 32) >> 11);

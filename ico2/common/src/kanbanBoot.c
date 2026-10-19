@@ -84,9 +84,10 @@ int ico_kanban_boot_holds_keep(void)
     return bootStep == 2;
 }
 
-#ifdef VERSION_JPN
-
-static int kanbanBootMcCheck(void)
+/* The Japanese disc's card check: no language, camera or video-mode steps;
+   the card warning (sign 3, with sign 1 no card or 2 full) goes up at step
+   100, which lets go of the kept frame as the European step 301 does. */
+static int kanbanBootMcCheck_jpn(void)
 {
     McMgr *mc = &bootMcReq;
     int ret = 0;
@@ -171,8 +172,6 @@ static int kanbanBootMcCheck(void)
     return ret;
 }
 
-#else
-
 static int kanbanBootMcCheck(void)
 {
     McMgr *mc = &bootMcReq;
@@ -180,6 +179,10 @@ static int kanbanBootMcCheck(void)
     int *lp;
     int lang;
     int ret = 0;
+
+    if (ICO_JPN) {
+        return kanbanBootMcCheck_jpn();
+    }
 
     switch (mcCheckStep) {
     case 0:
@@ -421,8 +424,6 @@ static int kanbanBootMcCheck(void)
     }
     return ret;
 }
-
-#endif
 
 static Kanban *waitKanban; /* derived name */ /* the "please wait" sign */
 

@@ -818,12 +818,8 @@ void lt_host_point_item(int no, int item)
 /* sce/'s string.h does not declare it */
 extern char *strtok(char *s, const char *sep);
 
-#ifdef VERSION_JPN
-
-static inline char *lt_texture_base_name(const char *src) /* derived name */
-#else
+/* the Japanese build takes a const char *: the same code */
 static inline char *lt_texture_base_name(char *src) /* derived name */
-#endif
 {
     /* the result points into it, so on the host it outlives the call */
     static char buf[256];
@@ -850,11 +846,7 @@ static inline char *lt_texture_base_name(char *src) /* derived name */
 static inline int lt_texture_no_of_property(int idx) /* derived name */
 {
     int n;
-#ifdef VERSION_JPN
-    const char *src;
-#else
-    char *src;
-#endif
+    char *src; /* const in the Japanese build: the same code */
     char *name;
     int no;
 

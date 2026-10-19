@@ -1011,21 +1011,25 @@ typedef struct QueenGenTable { /* field names derived */
 /* The layout ids gene_enemy picks a spawn point from, one list per stage set. */
 static const int genEnemyLayoutSt25[6] = {2152, 2153, 2154, 2155, 2156, 2157}; /* derived name */
 
-#ifdef VERSION_JPN
-
-static const int genEnemyLayoutDefault[6] = {3512, 3513, 3514, 3515, 3516, 3517}; /* derived name */
-
-#else
+static const int genEnemyLayoutDefault_jpn[6] = {3512, 3513, 3514,
+                                                 3515, 3516, 3517}; /* derived name */
 
 static const int genEnemyLayoutDefault[6] = {3535, 3536, 3537, 3538, 3539, 3540}; /* derived name */
 
-#endif
+/* one table per disc, the Japanese disc's default layout ids 23 lower */
+static const QueenGenTable genEnemyTable_jpn[2] = {
+    /* derived name */
+    {6, genEnemyLayoutSt25},
+    {6, genEnemyLayoutDefault_jpn},
+};
 
-static const QueenGenTable genEnemyTable[2] = {
+static const QueenGenTable genEnemyTable_pal[2] = {
     /* derived name */
     {6, genEnemyLayoutSt25},
     {6, genEnemyLayoutDefault},
 };
+
+#define genEnemyTable PAL_JPN(genEnemyTable_pal, genEnemyTable_jpn)
 
 static const char genEnemyStatFmt[] = "n_enemy_max:%d n_enemy:%d counter:%d"; /* derived name */
 
@@ -1360,15 +1364,12 @@ static const char queenBarrierAttackedMsg[] = "queen barrier attacked\n"; /* der
 /* the barrier's own spawn layout id, one per stage set */
 static const int barrierLayoutSt25[] = {2150}; /* derived name */
 
-#ifdef VERSION_JPN
+static const int barrierLayoutDefault_jpn[] = {3504}; /* derived name */
 
-static const int barrierLayoutDefault[] = {3504}; /* derived name */
+static const int barrierLayoutDefault_pal[] = {3527}; /* derived name */
 
-#else
-
-static const int barrierLayoutDefault[] = {3527}; /* derived name */
-
-#endif
+/* the Japanese disc's layout ids are 23 lower */
+#define barrierLayoutDefault PAL_JPN(barrierLayoutDefault_pal, barrierLayoutDefault_jpn)
 
 static const char damageFmt[] = "damage:%d"; /* derived name */
 

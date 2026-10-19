@@ -45,15 +45,13 @@ static void gamesysCharacterInfoSave(GamesysMemCursor *self);
    handler per record, which gamesysMemoryLoad and gamesysMemorySave walk to
    the zero pair; the per-stage exit times; the object-info records; the save
    image itself.  The buffers are zero-initialised, so they sit in .data. */
-#ifdef VERSION_JPN
 
-char stamp_str[] = "10/23/01 02:02:43";
+char stamp_str_jpn[] = "10/23/01 02:02:43";
 
-#else
+char stamp_str_pal[] = "12/12/01 17:53:37";
 
-char stamp_str[] = "12/12/01 17:53:37";
-
-#endif
+/* each disc compares its own build stamp against the save area's */
+#define stamp_str PAL_JPN(stamp_str_pal, stamp_str_jpn)
 
 void *gameSysMemoryFuncList[] = {
     gamesysVersionLoad,
@@ -76,15 +74,9 @@ void *gameSysMemoryFuncList[] = {
     0,
 };
 
-#ifdef VERSION_JPN
-
-int gamesysStageExitTime[104] = {0};
-
-#else
-
+/* Sized for the European disc's 106 stages; the Japanese disc has 104 and saves
+   0x1A0 bytes of it (gamesysObjInfoSave, gamesysObjInfoLoad). */
 int gamesysStageExitTime[106] = {0};
-
-#endif
 
 /* the save records as gamesys keeps them, on quadword boundaries: pos and rot
    are vectors */

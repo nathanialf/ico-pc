@@ -4,3 +4,4 @@
 # report writes a `twin` line for a block upstream puts inside either body;
 # check fails on a row whose path or functions do not exist.
 # path<TAB>function<TAB>twin
+ico2/common/src/kanbanBoot.c	kanbanBootMcCheck	kanbanBootMcCheck_jpn

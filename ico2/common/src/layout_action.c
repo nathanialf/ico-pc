@@ -1040,51 +1040,27 @@ int la_mc_file_select(int first)
     return (pad[0].flags & PAL_JPN(0x40 | LA_BACK, 0x30)) ? curFile : -1;
 }
 
-#ifdef VERSION_JPN
-
+/* the two discs' bodies differ only in the property ids, 29 lower on the
+   Japanese disc, as in _la_set_preview_info */
 static void _la_mask_preview_info(void)
 {
     int i;
 
     for (i = 0; i < 10; i++) {
-        lt_mask_property(i + 47, 1);
-        lt_mask_property(i + 57, 1);
-        lt_mask_property(i + 67, 1);
-        lt_mask_property(i + 77, 1);
-        lt_mask_property(i + 87, 1);
-        lt_mask_property(i + 97, 1);
+        lt_mask_property(i + PAL_JPN(76, 47), 1);
+        lt_mask_property(i + PAL_JPN(86, 57), 1);
+        lt_mask_property(i + PAL_JPN(96, 67), 1);
+        lt_mask_property(i + PAL_JPN(106, 77), 1);
+        lt_mask_property(i + PAL_JPN(116, 87), 1);
+        lt_mask_property(i + PAL_JPN(126, 97), 1);
     }
-    lt_mask_property(45, 1);
-    lt_mask_property(46, 1);
+    lt_mask_property(PAL_JPN(74, 45), 1);
+    lt_mask_property(PAL_JPN(75, 46), 1);
     for (i = 0; i < 39; i++) {
-        lt_mask_property(i + 108, 1);
+        lt_mask_property(i + PAL_JPN(137, 108), 1);
     }
-    lt_mask_property(107, 1);
+    lt_mask_property(PAL_JPN(136, 107), 1);
 }
-
-#else
-
-static void _la_mask_preview_info(void)
-{
-    int i;
-
-    for (i = 0; i < 10; i++) {
-        lt_mask_property(i + 76, 1);
-        lt_mask_property(i + 86, 1);
-        lt_mask_property(i + 96, 1);
-        lt_mask_property(i + 106, 1);
-        lt_mask_property(i + 116, 1);
-        lt_mask_property(i + 126, 1);
-    }
-    lt_mask_property(74, 1);
-    lt_mask_property(75, 1);
-    for (i = 0; i < 39; i++) {
-        lt_mask_property(i + 137, 1);
-    }
-    lt_mask_property(136, 1);
-}
-
-#endif
 
 /* the play time of a save record split into hours, minutes and seconds and
    clamped to 99:59:59, inlined into _la_set_preview_info, la_load_processing
@@ -2943,33 +2919,22 @@ int la_key_config(int first)
    animation each mode plays (-1 for none), and the two choices of the control
    type (item 318, JPN 295) followed by the two of the setting item 325 (JPN 302) toggles, in one
    table; the code reaches the second pair through an offset pointer */
-#ifdef VERSION_JPN
 
-static const int screenModeItem[5] = {280, 281, 282, 283, 284}; /* derived name */
+static const int screenModeItem_jpn[5] = {280, 281, 282, 283, 284}; /* derived name */
 
-#else
+static const int screenModeItem_pal[5] = {303, 304, 305, 306, 307}; /* derived name */
 
-static const int screenModeItem[5] = {303, 304, 305, 306, 307}; /* derived name */
+static const int screenModeAnim_jpn[5] = {-1, 63, 64, 65, 66}; /* derived name */
 
-#endif
-#ifdef VERSION_JPN
+static const int screenModeAnim_pal[5] = {-1, 67, 68, 69, 70}; /* derived name */
 
-static const int screenModeAnim[5] = {-1, 63, 64, 65, 66}; /* derived name */
+static const int choiceItem_jpn[4] = {298, 299, 305, 306}; /* derived name */
 
-#else
+static const int choiceItem_pal[4] = {321, 322, 328, 329}; /* derived name */
 
-static const int screenModeAnim[5] = {-1, 67, 68, 69, 70}; /* derived name */
-
-#endif
-#ifdef VERSION_JPN
-
-static const int choiceItem[4] = {298, 299, 305, 306}; /* derived name */
-
-#else
-
-static const int choiceItem[4] = {321, 322, 328, 329}; /* derived name */
-
-#endif
+#define screenModeItem PAL_JPN(screenModeItem_pal, screenModeItem_jpn)
+#define screenModeAnim PAL_JPN(screenModeAnim_pal, screenModeAnim_jpn)
+#define choiceItem PAL_JPN(choiceItem_pal, choiceItem_jpn)
 
 int la_game_option(void)
 {

@@ -55,16 +55,9 @@ static const StageOrientDef stageOrientDefs[41] = {
     {"E3_st13b", 3.14159f, {-24850.0f, -430.0f, 450.0f}, {-24850.0f, -900.0f, 450.0f}},
 };
 
-/* the orient index each stage resolves to, -1 where the stage has none */
-#ifdef VERSION_JPN
-
-static short stageOrientIdx[104]; /* derived name */
-
-#else
-
+/* the orient index each stage resolves to, -1 where the stage has none; the
+   European size, larger than the Japanese ELF's 104 */
 static short stageOrientIdx[128]; /* derived name */
-
-#endif
 
 #include "stage_orient.h"
 #include <stdio.h>

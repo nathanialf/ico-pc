@@ -6,11 +6,7 @@
  */
 #ifndef CHARFILENAME_H
 #define CHARFILENAME_H
-
-#ifdef VERSION_JPN
-#define MAX_CHARS 1621
-#else
+/* The European bound on every disc: the in-memory table is PAL's, and the
+ * Japanese disc's ids stay below its own bound of 1621. */
 #define MAX_CHARS 1637
-#endif
-
 #endif

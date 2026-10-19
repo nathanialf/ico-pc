@@ -107,12 +107,8 @@ extern void gif_StartPacketPri(int pri);
 
 static void init_textures_of_specified_property(int first, int last);
 
-#ifdef VERSION_JPN
-
-static inline char *get_texture_base_name(const char *src) /* derived name */
-#else
+/* the Japanese build takes a const char *: the same code */
 static inline char *get_texture_base_name(char *src) /* derived name */
-#endif
 {
     /* the result points into it, so on the host it outlives the call */
     static char buf[256];
@@ -139,11 +135,7 @@ static inline char *get_texture_base_name(char *src) /* derived name */
 static inline int get_texture_no_of_property(int idx) /* derived name */
 {
     int n;
-#ifdef VERSION_JPN
-    const char *src;
-#else
-    char *src;
-#endif
+    char *src; /* const in the Japanese build: the same code */
     char *name;
     int no;
 
