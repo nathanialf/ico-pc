@@ -258,30 +258,73 @@ def c_base(name):
     return name.replace("_", " ")
 
 
-_DIRECTIVE = re.compile(r"\s*#\s*(ifdef|ifndef|if|else|endif)\b\s*(\S*)")
+# Upstream's version-condition forms (tools/check_targets.py at upstream
+# e8a8ebf90, version_condition / condition_holds, adopted as they are):
+#     #ifdef VERSION_A                     #ifndef VERSION_A
+#     #if defined(VERSION_A) || defined(VERSION_B)
+#     #if !defined(VERSION_A) && !defined(VERSION_B)
+#     #elif defined(VERSION_A) [|| defined(VERSION_B)]
+#     #else                                #endif
+_DIRECTIVE = re.compile(r"\s*#\s*(ifdef|ifndef|if|elif|else|endif)\b(.*)$")
+_DEFINED = r"defined\(VERSION_([A-Z0-9_]+)\)"
+_ANY_OF = re.compile(rf"{_DEFINED}(?:\s+\|\|\s+{_DEFINED})*")
+_NONE_OF = re.compile(rf"!{_DEFINED}(?:\s+&&\s+!{_DEFINED})*")
+
+
+def version_condition(line):
+    """A preprocessor line read as a version block's directive: (kw, slugs,
+    positive) for a version condition (kw "if" or "elif", slugs the
+    lower-case targets it tests, positive False when the arm is taken for
+    the targets it does not name: #ifndef, the !defined form); (kw, None,
+    None) for #else and #endif and for a conditional that names no VERSION_;
+    None for a line that is no conditional directive. Raises ValueError for a
+    conditional naming a VERSION_ in any other form."""
+    m = _DIRECTIVE.match(line)
+    if not m:
+        return None
+    kw, rest = m.group(1), m.group(2).split("/*", 1)[0].strip()
+    if "VERSION_" not in rest:
+        return (kw, None, None)
+    names = re.findall(r"VERSION_([A-Z0-9_]+)", rest)
+    if kw in ("ifdef", "ifndef") and re.fullmatch(r"VERSION_[A-Z0-9_]+", rest):
+        return ("if", frozenset(n.lower() for n in names), kw == "ifdef")
+    if kw in ("if", "elif") and _ANY_OF.fullmatch(rest):
+        return (kw, frozenset(n.lower() for n in names), True)
+    if kw == "if" and _NONE_OF.fullmatch(rest):
+        return (kw, frozenset(n.lower() for n in names), False)
+    raise ValueError(f"#{kw} {rest}: not a version condition form")
+
+
+def condition_holds(slugs, positive, slug):
+    """Whether a version condition's arm is the one target `slug` compiles
+    (pal is named by no condition: it takes every #else arm)."""
+    return (slug in slugs) == positive
 
 
 def version_lines(text, version):
-    """text with its #ifdef/#ifndef VERSION_<SLUG> blocks resolved for the
-    target `version` (a slug of config/regions.txt; pal takes every #else
-    arm): the arm it compiles is kept, the other arm and the directives go.
-    Other conditionals are left for strip_c. Adopted from upstream's
-    tools/gen_data_c.py, with the target an argument (the port compiles no
-    VERSION_ macro)."""
+    """text with its version blocks resolved for the target `version` (a slug
+    of config/regions.txt): the arm it compiles is kept, the other arms and
+    the blocks' directives go; a nested block resolves inside its arm. The
+    condition forms are upstream's (version_condition). Other conditionals
+    are left for strip_c. Adopted from upstream's tools/gen_data_c.py, with
+    the target an argument (the port compiles no VERSION_ macro)."""
     out = []
     stack = []  # (is a VERSION_ block, this arm is live, an arm was taken)
-    want = f"VERSION_{version.upper()}"
     for line in text.splitlines():
-        m = _DIRECTIVE.match(line)
+        v = version_condition(line)
         live = all(f[1] for f in stack)
-        if m:
-            kw, arg = m.groups()
-            if kw in ("ifdef", "ifndef") and arg.startswith("VERSION_"):
-                taken = (arg == want) == (kw == "ifdef")
+        if v:
+            kw, slugs, positive = v
+            if kw in ("if", "ifdef", "ifndef") and slugs is not None:
+                taken = condition_holds(slugs, positive, version)
                 stack.append((True, taken, taken))
                 continue
             if kw in ("if", "ifdef", "ifndef"):
                 stack.append((False, True, True))
+            elif kw == "elif" and stack and stack[-1][0]:
+                taken = not stack[-1][2] and condition_holds(slugs, positive, version)
+                stack[-1] = (True, taken, stack[-1][2] or taken)
+                continue
             elif kw == "else" and stack and stack[-1][0]:
                 stack[-1] = (True, not stack[-1][2], True)
                 continue
@@ -291,6 +334,37 @@ def version_lines(text, version):
         if live:
             out.append(line)
     return "\n".join(out)
+
+
+# (text, {target: the kept lines joined by spaces}): upstream's cases
+VERSION_LINES_SELF_TEST = (
+    ("a\n#ifdef VERSION_JPN\nj\n#else\np\n#endif\nz",
+     {"pal": "a p z", "jpn": "a j z", "kor": "a p z"}),
+    ("#ifndef VERSION_JPN\np\n#endif", {"pal": "p", "jpn": "", "kor": "p"}),
+    ("#if defined(VERSION_JPN) || defined(VERSION_KOR)\njk\n#else\np\n#endif",
+     {"pal": "p", "jpn": "jk", "kor": "jk"}),
+    ("#if !defined(VERSION_JPN) && !defined(VERSION_KOR)\np\n#endif",
+     {"pal": "p", "jpn": "", "kor": ""}),
+    ("#ifdef VERSION_KOR\nk\n#elif defined(VERSION_JPN)\nj\n#else\np\n#endif",
+     {"pal": "p", "jpn": "j", "kor": "k"}),
+    ("#if defined(VERSION_JPN) || defined(VERSION_KOR)\nx\n#ifdef VERSION_KOR\nk\n#else\nj\n#endif\n"
+     "#else\np\n#endif", {"pal": "p", "jpn": "x j", "kor": "x k"}),
+    ("#if 0\nx\n#ifdef VERSION_JPN\nj\n#endif\n#elif 1\ny\n#else\nw\n#endif",
+     {"pal": "#if 0 x #elif 1 y #else w #endif", "jpn": "#if 0 x j #elif 1 y #else w #endif"}),
+    ("#ifdef VERSION_JPN\n#if 1\nj\n#else\nq\n#endif\n#endif",
+     {"pal": "", "jpn": "#if 1 j #else q #endif"}),
+)
+
+
+def version_lines_self_test():
+    """[failures] of version_lines on VERSION_LINES_SELF_TEST."""
+    bad = []
+    for text, want in VERSION_LINES_SELF_TEST:
+        for slug, kept in want.items():
+            got = " ".join(version_lines(text, slug).split())
+            if got != kept:
+                bad.append(f"version_lines({text!r}, {slug}) kept {got!r}, want {kept!r}")
+    return bad
 
 
 def strip_c(text):

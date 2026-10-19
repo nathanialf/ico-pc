@@ -70,9 +70,10 @@ Modes:
 The audit (every run): each read of MotionDef's bit words in ico2/ by shift
 or mask (`modeBits.word >> 19 & 7`, `->flags2 >> 3 & 1`, a view's
 `modeBits.h.hi`) names host bits every non-PAL set fills from the disc (a
-named bit-field or a motion_bits row); no `>> PAL_JPN(` (the shift is a
-layout: the host's is PAL's); and no such read sits in a region's own arm
-(`if (ICO_JPN) {...}`, the arguments after the first of `PAL_JPN(`), which
+named bit-field or a motion_bits row); no `>> PAL_JPN(` or any other
+selector (the shift is a layout: the host's is PAL's); and no such read sits
+in a region's own arm (`if (ICO_JPN) {...}`, `if (ICO_JPNKOR) {...}`, the
+arguments after the first of any selector, `PAL_JPN(`, `PAL_JPN_KOR(`), which
 would read the disc's bit position in the PAL host word.
 """
 
@@ -361,8 +362,9 @@ def all_sets():
 # ------------------------------------------------------- the bit audit -------
 
 def region_arm_spans(text):
-    """Spans of a non-PAL region's own text: `if (ICO_<SLUG>) {...}` bodies and
-    the arguments after the first of a selector macro (PAL_JPN(p, j))."""
+    """Spans of a non-PAL region's own text: `if (ICO_<SLUG>) {...}` and `if
+    (ICO_<SET>) {...}` bodies, and the arguments after the first of any
+    selector macro (PAL_JPN(p, j), PAL_JPNKOR(p, jk), PAL_JPN_KOR(p, j, k))."""
     spans = []
     for m in re.finditer(r"\bif\s*\(\s*ICO_(?!PAL\b)[A-Z]+\s*\)\s*\{", text):
         depth, k = 0, m.end() - 1
@@ -375,7 +377,7 @@ def region_arm_spans(text):
                     break
             k += 1
         spans.append((m.end(), k))
-    for m in re.finditer(r"\bPAL_[A-Z_]+\s*\(", text):
+    for m in re.finditer(r"\bPAL_\w+\s*\(", text):
         depth, k, comma = 0, m.end() - 1, None
         while k < len(text):
             ch = text[k]
@@ -410,8 +412,8 @@ def audit_bits(sets, root=ROOT):
             continue
         rel = p.relative_to(root).as_posix()
         folded = L.fold(text)
-        for m in re.finditer(r">>\s*PAL_[A-Z_]+\s*\(", folded):
-            errs.append(f"{rel}:{folded.count(chr(10), 0, m.start()) + 1}: a shift by PAL_JPN(): "
+        for m in re.finditer(r">>\s*PAL_\w+\s*\(", folded):
+            errs.append(f"{rel}:{folded.count(chr(10), 0, m.start()) + 1}: a shift by a selector, PAL_...(): "
                         "a bit position is a layout, and the host's is PAL's (take the PAL arm)")
         spans = region_arm_spans(folded)
         for line, pos, w, bits, name in L.motion_reads(text, positions=True):

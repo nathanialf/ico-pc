@@ -46,6 +46,14 @@ Modes:
   tools/gen_ee_layout.py --version jpn --check
       exit 1 if the committed file differs from what its recorded revision
       gives (exit 0 with a note when that revision is not in this clone)
+  tools/gen_ee_layout.py --version jpn --check --upstream REV
+      exit 1 unless REV gives the committed file but for its `upstream <sha>`
+      line (a newer upstream that leaves the target's layout alone, read
+      with its newer condition forms), and the same for
+      config/motion_bits.<slug>.txt with --bits
+  tools/gen_ee_layout.py --selftest
+      the version-block readers (gen_data_c.version_lines, region_lines) on
+      fixed cases of upstream's condition forms
   tools/gen_ee_layout.py --version jpn --upstream REV --bits
       write config/motion_bits.jpn.txt from upstream's game sources at REV
   tools/gen_ee_layout.py --version pal --upstream REV
@@ -579,40 +587,66 @@ def motion_reads(text, positions=False):
 
 # ----------------------------------------------------- upstream's blocks -----
 
-BLOCK_DIRECTIVE = re.compile(r"\s*#\s*(ifdef|ifndef|else|endif|if)\b\s*(\w*)")
-
-
-def region_lines(text, macro):
-    """Each line of text tagged 'both', 'J' (the target's arm of a VERSION_
-    block for macro) or 'P' (PAL's arm), and the blocks as
-    [(first line, J text, P text)]. Upstream's blocks never nest
-    (docs/BUILDING.md); other conditionals pass through."""
-    tags, blocks, cur = [], [], None
+def region_lines(text, slug):
+    """Each line of text tagged 'both' (compiled by the target and by PAL
+    alike), 'J' (the target's text of a VERSION_ block), 'P' (PAL's), '#' (a
+    version block's directive) or '-' (an arm neither compiles), and the
+    blocks whose two texts differ as [(first line, J text, P text)]. The
+    condition forms are upstream's (gen_data_c.version_condition: || of
+    defined(), the !defined pair, #elif, one block nested in another's arm);
+    other conditionals pass through. A block whose target text is PAL's (a
+    Korean-only block read for jpn) is 'both'."""
+    tags, blocks = [], []
+    stack = []   # (a VERSION_ block, target live, pal live, target took an arm, pal took an arm)
+    cur = None   # [first line, [(tag lines)]] of the outermost version block
     for n, line in enumerate(text.splitlines(), 1):
-        m = BLOCK_DIRECTIVE.match(line)
-        if m and m.group(1) in ("ifdef", "ifndef") and m.group(2) == macro:
-            cur = [n, [], [], "J" if m.group(1) == "ifdef" else "P", 0]
+        v = g.version_condition(line)
+        if v and v[1] is not None or v and stack and stack[-1][0] and v[0] in ("elif", "else", "endif"):
+            kw, slugs, positive = v
+            if kw in ("if", "ifdef", "ifndef"):
+                t = g.condition_holds(slugs, positive, slug)
+                p = g.condition_holds(slugs, positive, "pal")
+                if not any(f[0] for f in stack):
+                    cur = [n, []]
+                stack.append((True, t, p, t, p))
+            elif kw == "elif":
+                _, _, _, tt, pt = stack[-1]
+                t = not tt and g.condition_holds(slugs, positive, slug)
+                p = not pt and g.condition_holds(slugs, positive, "pal")
+                stack[-1] = (True, t, p, tt or t, pt or p)
+            elif kw == "else":
+                _, _, _, tt, pt = stack[-1]
+                stack[-1] = (True, not tt, not pt, True, True)
+            elif kw == "endif":
+                stack.pop()
             tags.append("#")
+            if cur is not None:
+                cur[1].append(("#", line))
+            if kw == "endif" and cur is not None and not any(f[0] for f in stack):
+                jt = "\n".join(x for k, x in cur[1] if k in ("J", "both"))
+                pt = "\n".join(x for k, x in cur[1] if k in ("P", "both"))
+                first, body = cur[0], cur[1]
+                start = len(tags) - len(body)
+                if jt == pt:
+                    for i, (k, _) in enumerate(body):
+                        if k != "#":
+                            tags[start + i] = "both" if k in ("J", "P", "both") else "-"
+                else:
+                    blocks.append((first, jt, pt))
+                cur = None
             continue
-        if cur is not None and m:
-            if m.group(1) in ("if", "ifdef", "ifndef"):
-                cur[4] += 1
-            elif m.group(1) == "else" and cur[4] == 0:
-                cur[3] = "P" if cur[3] == "J" else "J"
-                tags.append("#")
-                continue
-            elif m.group(1) == "endif":
-                if cur[4] == 0:
-                    blocks.append((cur[0], "\n".join(cur[1]), "\n".join(cur[2])))
-                    cur = None
-                    tags.append("#")
-                    continue
-                cur[4] -= 1
+        if v and v[0] in ("if", "ifdef", "ifndef"):
+            stack.append((False, True, True, True, True))
+        elif v and v[0] == "endif" and stack:
+            stack.pop()
+        t = all(f[1] for f in stack if f[0])
+        p = all(f[2] for f in stack if f[0])
+        tag = "both" if t and p else "J" if t else "P" if p else "-"
         if cur is None:
-            tags.append("both")
+            tag = "both"
         else:
-            (cur[1] if cur[3] == "J" else cur[2]).append(line)
-            tags.append(cur[3])
+            cur[1].append((tag, line))
+        tags.append(tag)
     return tags, blocks
 
 
@@ -667,7 +701,6 @@ def scan_bits(slug, rev):
     """The rows of config/motion_bits.<slug>.txt from upstream's sources at
     rev, and the notes (pairs that agree with the named bits, reads that do
     not pair)."""
-    macro = {r["slug"]: r for r in g.regions()}[slug]["macro"]
     sha = rev_sha(rev)
     if sha is None:
         fail(f"{rev} is not a commit in this clone")
@@ -703,7 +736,7 @@ def scan_bits(slug, rev):
         text = git_show(sha, path)
         if "modeBits" not in text and "flags" not in text:
             continue
-        tags, blocks = region_lines(text, macro)
+        tags, blocks = region_lines(text, slug)
         lines = text.splitlines()
         both = "\n".join(l if t == "both" else "" for l, t in zip(lines, tags))
         for line, w, bits, name in motion_reads(both):
@@ -821,13 +854,76 @@ def pal_self_check(rev):
     return diffs
 
 
+def drop_sha(text):
+    return [line for line in text.splitlines() if not line.startswith("upstream ")]
+
+
+def same_but_sha(slug, rev, bits):
+    """Exit status of --check --upstream: REV gives the committed file but
+    for its upstream line."""
+    if rev_sha(rev) is None:
+        fail(f"{rev} is not a commit in this clone")
+    if bits:
+        path = bits_path(slug)
+        rows, notes, sha = scan_bits(slug, rev)
+        got = bits_text(slug, rows, sha, notes)
+    else:
+        path = layout_path(slug)
+        got = layout_text(slug, rev)
+    want = path.read_text()
+    name = path.relative_to(ROOT)
+    if drop_sha(got) == drop_sha(want):
+        print(f"gen_ee_layout: {rev} gives {name} but for its upstream line")
+        return 0
+    import difflib
+    sys.stderr.writelines(difflib.unified_diff(want.splitlines(True), got.splitlines(True),
+                                               str(name), f"{rev}", n=1))
+    print(f"gen_ee_layout: {rev} does not give {name}", file=sys.stderr)
+    return 1
+
+
+# (text, slug, the 'both' lines, [(first line, J text, P text)])
+REGION_LINES_SELF_TEST = (
+    ("a\n#ifdef VERSION_JPN\nj\n#else\np\n#endif\nz", "jpn", "a z", [(2, "j", "p")]),
+    ("a\n#ifdef VERSION_JPN\nj\n#else\np\n#endif\nz", "kor", "a p z", []),
+    ("#if defined(VERSION_JPN) || defined(VERSION_KOR)\njk\n#else\np\n#endif", "kor", "", [(1, "jk", "p")]),
+    ("#if !defined(VERSION_JPN) && !defined(VERSION_KOR)\np\n#endif", "jpn", "", [(1, "", "p")]),
+    ("#ifdef VERSION_KOR\nk\n#else\np\n#endif", "jpn", "p", []),
+    ("#if defined(VERSION_JPN) || defined(VERSION_KOR)\nx\n#ifdef VERSION_KOR\nk\n#else\nj\n#endif\n"
+     "#else\np\n#endif", "kor", "", [(1, "x\nk", "p")]),
+    ("#if defined(VERSION_JPN) || defined(VERSION_KOR)\nx\n#ifdef VERSION_KOR\nk\n#else\nj\n#endif\n"
+     "#else\np\n#endif", "jpn", "", [(1, "x\nj", "p")]),
+    ("#ifdef VERSION_KOR\nk\n#elif defined(VERSION_JPN)\nj\n#else\np\n#endif", "jpn", "", [(1, "j", "p")]),
+    ("#ifdef VERSION_JPN\n#if 1\nj\n#endif\n#endif\nz", "jpn", "z", [(1, "#if 1\nj\n#endif", "")]),
+)
+
+
+def region_lines_self_test():
+    bad = []
+    for text, slug, both, blocks in REGION_LINES_SELF_TEST:
+        tags, got = region_lines(text, slug)
+        kept = " ".join(l for l, t in zip(text.splitlines(), tags) if t == "both")
+        if kept != both or got != blocks:
+            bad.append(f"region_lines({text!r}, {slug}): both {kept!r} blocks {got}, want {both!r} {blocks}")
+    return bad
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--version", required=True, help="a slug of config/regions.txt")
+    ap.add_argument("--version", help="a slug of config/regions.txt")
+    ap.add_argument("--selftest", action="store_true", help="test the version-block readers")
     ap.add_argument("--upstream", help="the upstream revision to read (upstream/main)")
     ap.add_argument("--check", action="store_true", help="exit 1 if the layout file is stale")
     ap.add_argument("--bits", action="store_true", help="write config/motion_bits.<slug>.txt")
     a = ap.parse_args()
+    if a.selftest:
+        bad = g.version_lines_self_test() + region_lines_self_test()
+        for x in bad:
+            print(f"gen_ee_layout: selftest: {x}", file=sys.stderr)
+        print(f"gen_ee_layout: selftest {'FAILED' if bad else 'passed'}")
+        return 1 if bad else 0
+    if not a.version:
+        fail("give --version <slug> (or --selftest)")
     slugs = [r["slug"] for r in g.regions()]
     if a.version not in slugs:
         fail(f"{a.version} is not a slug of config/regions.txt ({', '.join(slugs)})")
@@ -841,6 +937,8 @@ def main():
               f"{'agree' if not diffs else f'{len(diffs)} differences'} "
               f"over {len(schema_records('pal'))} record types")
         return 1 if diffs else 0
+    if a.check and a.upstream:
+        return same_but_sha(a.version, a.upstream, a.bits)
     if a.bits:
         if not a.upstream:
             fail("--bits needs --upstream")
