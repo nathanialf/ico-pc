@@ -183,18 +183,24 @@ static int file_count(const char *needle)
 
 /* --- the view ------------------------------------------------------------------ */
 
-/* the address of the table row `name` (ico_gs_peek_table), 0 when absent */
-static unsigned int peek_named(const IcoGsPeekEntry *tab, int n, const char *name)
-{
-    int i;
+/* Each disc's retail addresses the view test peeks at, as literals (not
+   read back from gamestate.c's tables, which are under test): the European
+   (s_peek_pal's sources: config/symbol_addrs.pal.data.txt and the code
+   that reads them), the Japanese (config/symbol_addrs.jpn.data.txt) and
+   the Korean (config/symbol_addrs.kor.data.txt: gflags 0x002A3040, stage_no
+   0x00633610, gFlagGameClear 0x006342D8, current_layout_id 0x00634ECC,
+   IosMcPreviewInfo 0x00299940), in config/regions.txt's order */
+typedef struct PeekWant {
+    unsigned int stageNo, gflags, gameClear, layout, preview;
+} PeekWant;
 
-    for (i = 0; i < n; i++) {
-        if (strcmp(tab[i].name, name) == 0) {
-            return tab[i].addr;
-        }
-    }
-    return 0;
-}
+static const PeekWant kPeekWant[] = {
+    {0x00639D10u, 0x002A50C0u, 0x0063AA00u, 0x0063B60Cu, 0x0029B9D0u}, /* pal */
+    {0x00633810u, 0x002A2FC0u, 0x006344C8u, 0x006350BCu, 0x002998C0u}, /* jpn */
+    {0x00633610u, 0x002A3040u, 0x006342D8u, 0x00634ECCu, 0x00299940u}, /* kor */
+};
+_Static_assert(sizeof(kPeekWant) / sizeof(kPeekWant[0]) == ICO_REGION_COUNT,
+               "a row of retail addresses for each row of config/regions.txt");
 
 static void test_view(void)
 {
@@ -232,27 +238,16 @@ static void test_view(void)
     g.system_status[0] = 1;
 
     /* the retail addresses, the selected disc's (gamestate.c s_peek_pal,
-       s_peek_jpn: the Japanese disc has no NonLinearCameraMove row). PAL
-       and JPN are checked against their literals; any other disc (kor) has
-       its addresses from its own table by name (ico_gs_peek_table), which
-       the test does not hold literals for: the check is that the snapshot
-       fields answer at the table's addresses */
+       s_peek_jpn, s_peek_kor: the Japanese and Korean discs have no
+       NonLinearCameraMove row), each checked against kPeekWant's literals */
     {
         const int pal = ico_region == ICO_REGION_PAL;
-        const int jpn = ico_region == ICO_REGION_JPN;
-        const int known = pal || jpn;
-        const IcoGsPeekEntry *tab = NULL;
-        const int tabN = ico_gs_peek_table(&tab);
-        const unsigned int stageNo =
-            known ? (jpn ? 0x00633810u : 0x00639D10u) : peek_named(tab, tabN, "stage_no");
-        const unsigned int gflags =
-            known ? (jpn ? 0x002A2FC0u : 0x002A50C0u) : peek_named(tab, tabN, "gflags");
-        const unsigned int gameClear =
-            known ? (jpn ? 0x006344C8u : 0x0063AA00u) : peek_named(tab, tabN, "gFlagGameClear");
-        const unsigned int layout =
-            known ? (jpn ? 0x006350BCu : 0x0063B60Cu) : peek_named(tab, tabN, "current_layout_id");
-        const unsigned int preview =
-            known ? (jpn ? 0x002998C0u : 0x0029B9D0u) : peek_named(tab, tabN, "IosMcPreviewInfo");
+        const PeekWant *w = &kPeekWant[ico_region];
+        const unsigned int stageNo = w->stageNo;
+        const unsigned int gflags = w->gflags;
+        const unsigned int gameClear = w->gameClear;
+        const unsigned int layout = w->layout;
+        const unsigned int preview = w->preview;
 
         g.stage_no = 0x11223344;
         g.gflags[1] = 0xA5;

@@ -69,6 +69,7 @@ const int mv_modelCount = (int)(sizeof(mv_models) / sizeof(mv_models[0]));
    model-path member equals the Japanese ELF's), so kor reads jpn_id
    (tools/gen_mv_region.py --region kor --check, ctest model_viewer_kor). */
 static const unsigned char mv_id_column[ICO_REGION_COUNT] = {0, 1, 1};
+_Static_assert(ICO_REGION_COUNT == 3, "an id column for each row of config/regions.txt");
 
 int mv_model_id(const MvModel *m)
 {

@@ -64,8 +64,9 @@ static void copyText(char *dst, const char *src)
    the last place between two characters where one may go (strings.h
    ui_break_before), or, Korean, at the last space after a Hangul character
    (the space becomes the break), or, a Korean word alone wider than the
-   panel, between two of its Hangul characters (ui_hangul_char), while the
-   text has room for it.  Latin text keeps its lines as written:
+   panel, between two of its Hangul characters (ui_hangul_char).  A space
+   becomes the break in place, so it needs no room; an inserted break needs
+   a byte the text has room for.  Latin text keeps its lines as written:
    ui_break_before gives no place between two Latin characters. */
 static void wrapWide(char *s)
 {
@@ -93,8 +94,7 @@ static void wrapWide(char *s)
         }
         prev = cp;
         i += len;
-        if ((lastBreak > lineStart || lastSpace > lineStart || lastInWord > lineStart) &&
-            n + 1 < UI_POPUP_TEXT) {
+        if (lastBreak > lineStart || lastSpace > lineStart || lastInWord > lineStart) {
             const char saved = s[i];
             s[i] = '\0';
             const float w = ui_measure_menu_text(BODY_SIZE, s + lineStart);
@@ -102,7 +102,7 @@ static void wrapWide(char *s)
             if (w > width && lastSpace > lineStart && lastSpace >= lastBreak) {
                 s[lastSpace] = '\n';
                 lineStart = lastSpace + 1;
-            } else if (w > width) {
+            } else if (w > width && n + 1 < UI_POPUP_TEXT) {
                 const size_t at = lastBreak > lineStart ? lastBreak : lastInWord;
                 memmove(s + at + 1, s + at, n - at + 1);
                 s[at] = '\n';
