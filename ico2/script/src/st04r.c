@@ -172,50 +172,48 @@ void actSt05eEnd(void)
     }
 }
 
-#ifdef VERSION_JPN
-
 void actSt05cInit(void)
 {
     if (gflagChk(274) == 0) {
-        stage_SetAnimation(333, 0, 0);
+        stage_SetAnimation(PAL_JPN(337, 333), 0, 0);
     } else {
-        stage_SetAnimation(333, 0, -1);
+        stage_SetAnimation(PAL_JPN(337, 333), 0, -1);
     }
 
     if (gflagChk(275) == 0) {
-        stage_SetAnimation(334, 0, 0);
+        stage_SetAnimation(PAL_JPN(338, 334), 0, 0);
     } else {
-        stage_SetAnimation(334, 0, -1);
+        stage_SetAnimation(PAL_JPN(338, 334), 0, -1);
     }
 
     if (gflagChk(276) == 0) {
-        stage_SetAnimation(335, 0, 0);
+        stage_SetAnimation(PAL_JPN(339, 335), 0, 0);
     } else {
-        stage_SetAnimation(335, 0, -1);
+        stage_SetAnimation(PAL_JPN(339, 335), 0, -1);
     }
 
     if (gflagChk(277) == 0) {
-        stage_SetAnimation(336, 0, 0);
+        stage_SetAnimation(PAL_JPN(340, 336), 0, 0);
     } else {
-        stage_SetAnimation(336, 0, -1);
+        stage_SetAnimation(PAL_JPN(340, 336), 0, -1);
     }
 
     if (gflagChk(278) == 0) {
-        stage_SetAnimation(337, 0, 0);
+        stage_SetAnimation(PAL_JPN(341, 337), 0, 0);
     } else {
-        stage_SetAnimation(337, 0, -1);
+        stage_SetAnimation(PAL_JPN(341, 337), 0, -1);
     }
 
     if (gflagChk(279) == 0) {
-        stage_SetAnimation(338, 0, 0);
+        stage_SetAnimation(PAL_JPN(342, 338), 0, 0);
     } else {
-        stage_SetAnimation(338, 0, -1);
+        stage_SetAnimation(PAL_JPN(342, 338), 0, -1);
     }
 
     if (gflagChk(280) == 0) {
-        stage_SetAnimation(339, 0, 0);
+        stage_SetAnimation(PAL_JPN(343, 339), 0, 0);
     } else {
-        stage_SetAnimation(339, 0, -1);
+        stage_SetAnimation(PAL_JPN(343, 339), 0, -1);
     }
 
     if (gflagChk(254) == 0) {
@@ -225,15 +223,15 @@ void actSt05cInit(void)
     }
 
     if (gflagChk(259) == 0) {
-        stage_SetAnimation(324, 0, 0);
+        stage_SetAnimation(PAL_JPN(328, 324), 0, 0);
     } else {
-        stage_SetAnimation(324, 0, -1);
+        stage_SetAnimation(PAL_JPN(328, 324), 0, -1);
     }
 
     if (gflagChk(260) == 0) {
-        stage_SetAnimation(325, 0, 0);
+        stage_SetAnimation(PAL_JPN(329, 325), 0, 0);
     } else {
-        stage_SetAnimation(325, 0, -1);
+        stage_SetAnimation(PAL_JPN(329, 325), 0, -1);
     }
 
     if (gflagChk(253) == 0) {
@@ -241,259 +239,94 @@ void actSt05cInit(void)
     }
 }
 
-#else
-
-void actSt05cInit(void)
-{
-    if (gflagChk(274) == 0) {
-        stage_SetAnimation(337, 0, 0);
-    } else {
-        stage_SetAnimation(337, 0, -1);
-    }
-
-    if (gflagChk(275) == 0) {
-        stage_SetAnimation(338, 0, 0);
-    } else {
-        stage_SetAnimation(338, 0, -1);
-    }
-
-    if (gflagChk(276) == 0) {
-        stage_SetAnimation(339, 0, 0);
-    } else {
-        stage_SetAnimation(339, 0, -1);
-    }
-
-    if (gflagChk(277) == 0) {
-        stage_SetAnimation(340, 0, 0);
-    } else {
-        stage_SetAnimation(340, 0, -1);
-    }
-
-    if (gflagChk(278) == 0) {
-        stage_SetAnimation(341, 0, 0);
-    } else {
-        stage_SetAnimation(341, 0, -1);
-    }
-
-    if (gflagChk(279) == 0) {
-        stage_SetAnimation(342, 0, 0);
-    } else {
-        stage_SetAnimation(342, 0, -1);
-    }
-
-    if (gflagChk(280) == 0) {
-        stage_SetAnimation(343, 0, 0);
-    } else {
-        stage_SetAnimation(343, 0, -1);
-    }
-
-    if (gflagChk(254) == 0) {
-        SetWayGroupActive(1, 0);
-    } else {
-        SetWayGroupActive(1, 1);
-    }
-
-    if (gflagChk(259) == 0) {
-        stage_SetAnimation(328, 0, 0);
-    } else {
-        stage_SetAnimation(328, 0, -1);
-    }
-
-    if (gflagChk(260) == 0) {
-        stage_SetAnimation(329, 0, 0);
-    } else {
-        stage_SetAnimation(329, 0, -1);
-    }
-
-    if (gflagChk(253) == 0) {
-        scpSearchGobj(1379)->active = 0;
-    }
-}
-
-#endif
-#ifdef VERSION_JPN
-
 void actSt05dInit(void)
 {
     if (gflagChk(259) == 0) {
-        stage_SetAnimation(324, 0, 0);
+        stage_SetAnimation(PAL_JPN(328, 324), 0, 0);
 
         SetWayGroupActive(3, 0);
     } else {
-        stage_SetAnimation(324, 0, -1);
+        stage_SetAnimation(PAL_JPN(328, 324), 0, -1);
 
         SetWayGroupActive(3, 1);
     }
 
     if (gflagChk(260) == 0) {
-        stage_SetAnimation(325, 0, 0);
+        stage_SetAnimation(PAL_JPN(329, 325), 0, 0);
 
         SetWayGroupActive(4, 0);
     } else {
-        stage_SetAnimation(325, 0, -1);
+        stage_SetAnimation(PAL_JPN(329, 325), 0, -1);
 
         SetWayGroupActive(4, 1);
     }
 
     if (gflagChk(253) == 0) {
-        stage_SetAnimation(326, 0, 0);
-        stage_SetAnimation(346, 0, 0);
+        stage_SetAnimation(PAL_JPN(330, 326), 0, 0);
+        stage_SetAnimation(PAL_JPN(350, 346), 0, 0);
     } else {
-        stage_SetAnimation(326, 0, -1);
-        stage_SetAnimation(346, 0, -1);
+        stage_SetAnimation(PAL_JPN(330, 326), 0, -1);
+        stage_SetAnimation(PAL_JPN(350, 346), 0, -1);
 
         FinishHint(24);
     }
 
     if (gflagChk(274) == 0) {
-        stage_SetAnimation(333, 0, 0);
+        stage_SetAnimation(PAL_JPN(337, 333), 0, 0);
     } else {
-        stage_SetAnimation(333, 0, -1);
+        stage_SetAnimation(PAL_JPN(337, 333), 0, -1);
     }
 
     if (gflagChk(275) == 0) {
-        stage_SetAnimation(334, 0, 0);
+        stage_SetAnimation(PAL_JPN(338, 334), 0, 0);
     } else {
-        stage_SetAnimation(334, 0, -1);
+        stage_SetAnimation(PAL_JPN(338, 334), 0, -1);
     }
 
     if (gflagChk(276) == 0) {
-        stage_SetAnimation(335, 0, 0);
+        stage_SetAnimation(PAL_JPN(339, 335), 0, 0);
     } else {
-        stage_SetAnimation(335, 0, -1);
+        stage_SetAnimation(PAL_JPN(339, 335), 0, -1);
     }
 
     if (gflagChk(277) == 0) {
-        stage_SetAnimation(336, 0, 0);
+        stage_SetAnimation(PAL_JPN(340, 336), 0, 0);
     } else {
-        stage_SetAnimation(336, 0, -1);
+        stage_SetAnimation(PAL_JPN(340, 336), 0, -1);
     }
 
     if (gflagChk(278) == 0) {
-        stage_SetAnimation(337, 0, 0);
+        stage_SetAnimation(PAL_JPN(341, 337), 0, 0);
     } else {
-        stage_SetAnimation(337, 0, -1);
+        stage_SetAnimation(PAL_JPN(341, 337), 0, -1);
     }
 
     if (gflagChk(279) == 0) {
-        stage_SetAnimation(338, 0, 0);
+        stage_SetAnimation(PAL_JPN(342, 338), 0, 0);
     } else {
-        stage_SetAnimation(338, 0, -1);
+        stage_SetAnimation(PAL_JPN(342, 338), 0, -1);
     }
 
     if (gflagChk(280) == 0) {
-        stage_SetAnimation(339, 0, 0);
+        stage_SetAnimation(PAL_JPN(343, 339), 0, 0);
     } else {
-        stage_SetAnimation(339, 0, -1);
+        stage_SetAnimation(PAL_JPN(343, 339), 0, -1);
     }
 
     if (gflagChk(165) != 0 && gflagChk(234) == 0) {
-        stage_SetAnimation(343, 0, -1);
+        stage_SetAnimation(PAL_JPN(347, 343), 0, -1);
     }
 
     if (gflagChk(165) == 0 || gflagChk(234) != 0) {
-        stage_SetAnimation(343, 0, 0);
+        stage_SetAnimation(PAL_JPN(347, 343), 0, 0);
     }
 
     if (gflagChk(282) != 0) {
-        stage_SetAnimation(225, 0, 200);
+        stage_SetAnimation(PAL_JPN(229, 225), 0, 200);
     } else {
-        stage_SetAnimation(225, 0, 0);
+        stage_SetAnimation(PAL_JPN(229, 225), 0, 0);
     }
 }
-
-#else
-
-void actSt05dInit(void)
-{
-    if (gflagChk(259) == 0) {
-        stage_SetAnimation(328, 0, 0);
-
-        SetWayGroupActive(3, 0);
-    } else {
-        stage_SetAnimation(328, 0, -1);
-
-        SetWayGroupActive(3, 1);
-    }
-
-    if (gflagChk(260) == 0) {
-        stage_SetAnimation(329, 0, 0);
-
-        SetWayGroupActive(4, 0);
-    } else {
-        stage_SetAnimation(329, 0, -1);
-
-        SetWayGroupActive(4, 1);
-    }
-
-    if (gflagChk(253) == 0) {
-        stage_SetAnimation(330, 0, 0);
-        stage_SetAnimation(350, 0, 0);
-    } else {
-        stage_SetAnimation(330, 0, -1);
-        stage_SetAnimation(350, 0, -1);
-
-        FinishHint(24);
-    }
-
-    if (gflagChk(274) == 0) {
-        stage_SetAnimation(337, 0, 0);
-    } else {
-        stage_SetAnimation(337, 0, -1);
-    }
-
-    if (gflagChk(275) == 0) {
-        stage_SetAnimation(338, 0, 0);
-    } else {
-        stage_SetAnimation(338, 0, -1);
-    }
-
-    if (gflagChk(276) == 0) {
-        stage_SetAnimation(339, 0, 0);
-    } else {
-        stage_SetAnimation(339, 0, -1);
-    }
-
-    if (gflagChk(277) == 0) {
-        stage_SetAnimation(340, 0, 0);
-    } else {
-        stage_SetAnimation(340, 0, -1);
-    }
-
-    if (gflagChk(278) == 0) {
-        stage_SetAnimation(341, 0, 0);
-    } else {
-        stage_SetAnimation(341, 0, -1);
-    }
-
-    if (gflagChk(279) == 0) {
-        stage_SetAnimation(342, 0, 0);
-    } else {
-        stage_SetAnimation(342, 0, -1);
-    }
-
-    if (gflagChk(280) == 0) {
-        stage_SetAnimation(343, 0, 0);
-    } else {
-        stage_SetAnimation(343, 0, -1);
-    }
-
-    if (gflagChk(165) != 0 && gflagChk(234) == 0) {
-        stage_SetAnimation(347, 0, -1);
-    }
-
-    if (gflagChk(165) == 0 || gflagChk(234) != 0) {
-        stage_SetAnimation(347, 0, 0);
-    }
-
-    if (gflagChk(282) != 0) {
-        stage_SetAnimation(229, 0, 200);
-    } else {
-        stage_SetAnimation(229, 0, 0);
-    }
-}
-
-#endif
 
 void actSt05eInit(void)
 {
