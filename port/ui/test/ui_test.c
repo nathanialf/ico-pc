@@ -1547,13 +1547,13 @@ static void testSizeSets(void)
     ui_font_forget_textures();
 }
 
-/* ui_test jpn (ctest ui_jpn): the layout extension's glyphs and pad
-   convention on the Japanese disc (port/core/region_jpn.c): each glyph row
+/* ui_test SLUG (ctests ui_jpn, ui_kor): the layout extension's glyphs and pad
+   convention on the Japanese or Korean disc (port/core/region_<slug>.c): each glyph row
    and rectangle the region's (Tex_menu01/option.tm2), its height the row's
    own dispH, the confirm Circle and its picture, the back buttons */
-static void testJapanese(void)
+static void testOtherDisc(const char *slug)
 {
-    CHECK(ico_region_select("jpn") == 0, "the Japanese disc selected");
+    CHECK(ico_region_select(slug) == 0, "the %s disc selected", slug);
     for (int g = 0; g < LT_GLYPH_COUNT; g++) {
         int uv[4], w, h;
         const IcoGlyphRow *k = &ico_region_cur()->glyph[g];
@@ -1563,9 +1563,14 @@ static void testJapanese(void)
         lt_ext_glyph_box(g, UI_MENU_TEXT_SIZE, &w, &h);
         CHECK(w > 0 && h > 0, "glyph %d: a box (%d x %d)", g, w, h);
     }
-    CHECK(lt_ext_glyph_source(LT_GLYPH_CIRCLE, NULL) == 321 &&
-              lt_ext_glyph_source(LT_GLYPH_CROSS, NULL) == 155,
-          "Circle 321, Cross 155");
+    /* Circle 321 and Cross 155 on the Japanese disc; the glyph rows are the row's whatever
+       the numbers (the Korean disc's property ids come from its own table) */
+    CHECK(lt_ext_glyph_source(LT_GLYPH_CIRCLE, NULL) ==
+                  ico_region_cur()->glyph[ICO_GLYPH_CIRCLE].row &&
+              lt_ext_glyph_source(LT_GLYPH_CROSS, NULL) ==
+                  ico_region_cur()->glyph[ICO_GLYPH_CROSS].row,
+          "Circle %d, Cross %d", ico_region_cur()->glyph[ICO_GLYPH_CIRCLE].row,
+          ico_region_cur()->glyph[ICO_GLYPH_CROSS].row);
     CHECK(lt_ext_confirm_button() == LT_PAD_CIRCLE && lt_ext_confirm_glyph() == LT_GLYPH_CIRCLE,
           "Circle confirms");
     CHECK(lt_ext_port_back_buttons() == (LT_PAD_TRIANGLE | LT_PAD_CROSS) &&
@@ -1573,8 +1578,10 @@ static void testJapanese(void)
           "the port's pages back with Triangle and Cross, the game's menus with Cross");
     lt_ext_set_circle_back(1);
     CHECK(lt_ext_back_buttons() == LT_PAD_CROSS, "[game] circle_back does not apply");
-    CHECK(lt_ext_game_layout_count() == 76 && lt_ext_game_property_count() == 412,
-          "the tables' sizes 76 and 412");
+    CHECK(lt_ext_game_layout_count() == ico_region_cur()->layout_count &&
+              lt_ext_game_property_count() == ico_region_cur()->property_count,
+          "the tables' sizes %d and %d (JPN 76 and 412, KOR 76 and 406)",
+          ico_region_cur()->layout_count, ico_region_cur()->property_count);
     CHECK(ico_region_select("pal") == 0 && lt_ext_game_property_count() == 436 &&
               lt_ext_confirm_button() == LT_PAD_CROSS,
           "the European disc again");
@@ -1582,9 +1589,9 @@ static void testJapanese(void)
 
 int main(int argc, char **argv)
 {
-    if (argc > 1 && strcmp(argv[1], "jpn") == 0) {
-        testJapanese();
-        printf("ui_test jpn: %s\n", failures ? "failed" : "ok");
+    if (argc > 1) {
+        testOtherDisc(argv[1]);
+        printf("ui_test %s: %s\n", argv[1], failures ? "failed" : "ok");
         return failures ? 1 : 0;
     }
     testGlyphs();

@@ -22,13 +22,14 @@
  * (port/data/df_pack.h).  Exit 77 without the ELF.
  *
  *   gallery_test BASE_ELF [DISC_IMAGE]
- *   gallery_test --jpn BASE_ELF_PAL BASE_ELF_JPN [DISC_IMAGE_JPN]
+ *   gallery_test --region SLUG BASE_ELF_PAL BASE_ELF_SLUG [DISC_IMAGE_SLUG]
  *
- * --jpn (ctest gallery_jpn): the names are keyed by the adpcmFile row
- * (gallery.c), so both discs' 105 stream paths must be equal row for row:
- * each ELF's table loaded through its own descriptor set and compared;
- * then the list is built and checked as above from the Japanese disc's
- * tables, the region's counts and streams (port/core/region_jpn.c).
+ * --region SLUG (ctests gallery_jpn, gallery_kor; --jpn is --region jpn):
+ * the names are keyed by the adpcmFile row (gallery.c), so the European
+ * and the other disc's 105 stream paths must be equal row for row: each
+ * ELF's table loaded through its own descriptor set and compared; then the
+ * list is built and checked as above from that disc's tables, the region's
+ * counts and streams (port/core/region_<slug>.c).
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -269,16 +270,33 @@ int main(int argc, char **argv)
     }
     char err[512];
     size_t size;
-    const int jpn = argc > 1 && strcmp(argv[1], "--jpn") == 0;
-    if (jpn) {
-        /* the European disc's paths, then the Japanese disc's tables */
-        unsigned char *pal = argc > 2 ? readFile(argv[2], &size) : NULL;
+    const int viaRegion = argc > 2 && strcmp(argv[1], "--region") == 0;
+    const char *slug = viaRegion                                   ? argv[2]
+                       : argc > 1 && strcmp(argv[1], "--jpn") == 0 ? "jpn"
+                                                                   : NULL;
+    const int other = slug != NULL;
+    if (other) {
+        /* the European disc's paths, then the other disc's tables */
+        const IcoTableSet *otherSet = NULL;
+        for (int i = 0; i < ico_region_count(); i++) {
+            if (strcmp(ico_region_at(i)->slug, slug) == 0) {
+                otherSet = ico_table_sets[i];
+            }
+        }
+        if (otherSet == NULL) {
+            printf("gallery_test: no region %s\n", slug);
+            return 1;
+        }
+        argv += viaRegion ? 2 : 1; /* from here as --jpn: argv[1] is the European ELF */
+        argc -= viaRegion ? 2 : 1;
+        unsigned char *pal = argc > 1 ? readFile(argv[1], &size) : NULL;
         if (pal == NULL) {
-            printf("gallery_jpn: no European base ELF (%s); skipped\n", argc > 2 ? argv[2] : "");
+            printf("gallery_%s: no European base ELF (%s); skipped\n", slug,
+                   argc > 1 ? argv[1] : "");
             return 77;
         }
         if (ico_tables_load_elf(&ico_table_set_pal, pal, size, err, sizeof(err)) != 0) {
-            printf("gallery_jpn: the table loader refused the European ELF: %s\n", err);
+            printf("gallery_%s: the table loader refused the European ELF: %s\n", slug, err);
             return 1;
         }
         free(pal);
@@ -287,34 +305,36 @@ int main(int argc, char **argv)
         for (int i = 0; i < nPal && i < 128; i++) {
             memcpy(palPath[i], adpcmFile[i].path, sizeof(palPath[i]));
         }
-        argv += 2; /* from here as gallery_test BASE_ELF_JPN [DISC_IMAGE_JPN] */
-        argc -= 2;
+        argv += 1; /* from here as gallery_test BASE_ELF_SLUG [DISC_IMAGE_SLUG] */
+        argc -= 1;
         unsigned char *j = argc > 1 ? readFile(argv[1], &size) : NULL;
         if (j == NULL) {
-            printf("gallery_jpn: no Japanese base ELF (%s); skipped\n", argc > 1 ? argv[1] : "");
+            printf("gallery_%s: no base ELF of the %s disc (%s); skipped\n", slug, slug,
+                   argc > 1 ? argv[1] : "");
             return 77;
         }
-        if (ico_tables_load_elf(&ico_table_set_jpn, j, size, err, sizeof(err)) != 0) {
-            printf("gallery_jpn: the table loader refused the Japanese ELF: %s\n", err);
+        if (ico_tables_load_elf(otherSet, j, size, err, sizeof(err)) != 0) {
+            printf("gallery_%s: the table loader refused the %s ELF: %s\n", slug, slug, err);
             return 1;
         }
         free(j);
-        CHECK(ico_region_select("jpn") == 0, "the Japanese region");
-        const int nJpn = (int)ico_tables_count(ICO_TID_adpcmFile);
-        CHECK(nPal == 105 && nJpn == nPal && nJpn == ico_region_cur()->n_adpcm,
-              "adpcmFile: %d rows on the European disc, %d on the Japanese (the region %d)", nPal,
-              nJpn, ico_region_cur()->n_adpcm);
+        CHECK(ico_region_select(slug) == 0, "the %s region", slug);
+        const int nOther = (int)ico_tables_count(ICO_TID_adpcmFile);
+        CHECK(nPal == ico_region_info_pal.n_adpcm && nOther == nPal &&
+                  nOther == ico_region_cur()->n_adpcm,
+              "adpcmFile: %d rows on the European disc, %d on the %s (the region %d)", nPal, nOther,
+              slug, ico_region_cur()->n_adpcm);
         int differ = 0;
-        for (int i = 0; i < nPal && i < nJpn && i < 128; i++) {
+        for (int i = 0; i < nPal && i < nOther && i < 128; i++) {
             if (strncmp(palPath[i], adpcmFile[i].path, sizeof(palPath[i])) != 0) {
                 differ++;
-                printf("FAIL adpcmFile[%d]: \"%s\" on the European disc, \"%s\" on the Japanese\n",
-                       i, palPath[i], adpcmFile[i].path);
+                printf("FAIL adpcmFile[%d]: \"%s\" on the European disc, \"%s\" on the %s\n", i,
+                       palPath[i], adpcmFile[i].path, slug);
             }
         }
         failures += differ;
-        printf("gallery_jpn: %d adpcmFile paths compared row for row, %d differ\n",
-               nPal < nJpn ? nPal : nJpn, differ);
+        printf("gallery_%s: %d adpcmFile paths compared row for row, %d differ\n", slug,
+               nPal < nOther ? nPal : nOther, differ);
     }
     const IcoRegionInfo *rg = ico_region_cur();
     unsigned char *elf = argc > 1 ? readFile(argv[1], &size) : NULL;
@@ -322,7 +342,7 @@ int main(int argc, char **argv)
         printf("gallery_test: no base ELF (%s); skipped\n", argc > 1 ? argv[1] : "none given");
         return 77;
     }
-    if (!jpn && ico_tables_load_elf(&ico_table_set_pal, elf, size, err, sizeof(err)) != 0) {
+    if (!other && ico_tables_load_elf(&ico_table_set_pal, elf, size, err, sizeof(err)) != 0) {
         printf("gallery_test: the table loader refused the ELF: %s\n", err);
         return 1;
     }

@@ -378,51 +378,69 @@ void setLayout(int i, int first, int last, int def, int link)
     l->link = link;
 }
 
-/* The fixture's tables are the European disc's numbers; on the Japanese
-   disc's region (a test's "jpn" run) the same rows at that disc's numbers
-   (port/core/region_jpn.c): the layouts the fixture builds, and the rows
-   of the title, the vibration screen and the pause, Options and button
-   configuration screens (from the pause menu on 23 lower). */
+/* The fixture's tables are the European disc's numbers; on another disc's
+   region (a test's "jpn" or "kor" run) the same rows at that disc's
+   numbers, read from its row (port/core/region_<slug>.c): the layouts the
+   fixture builds (the vibration, title, play, scene, pause, options and
+   key config layouts; the Japanese title's extra layout and the two after
+   key config sit at the same distance from them as on the Japanese disc,
+   where layout 8 precedes la_title_continue_or_new and 60, 61 follow
+   la_key_config), and the rows of the title, the vibration screen (the
+   copyright's row less 4 .. 2, as on the Japanese disc: 14 .. 16 against
+   18) and the pause, Options and button configuration screens (the rows
+   from 292 on move with the pause menu's Options row). */
 int fxLayout(int pal)
 {
-    static const int kMap[][2] = {{9, 6},   {11, 8},  {12, 9},  {13, 10}, {54, 51}, {55, 52},
-                                  {57, 54}, {58, 55}, {59, 56}, {60, 57}, {61, 58}};
-    if (!ICO_JPN) {
+    const IcoRegionInfo *r = ico_region_cur();
+    switch (pal) {
+    case 9:
+        return r->layout_vibe;
+    case 11:
+        return r->layout_title_continue - 1;
+    case 12:
+        return r->layout_title_continue;
+    case 13:
+        return r->layout_title_new;
+    case 54:
+        return r->layout_play;
+    case 55:
+        return r->layout_scene;
+    case 57:
+        return r->layout_pause;
+    case 58:
+        return r->layout_options;
+    case 59:
+        return r->layout_key_config;
+    case 60:
+        return r->layout_key_config + 1;
+    case 61:
+        return r->layout_key_config + 2;
+    default:
         return pal;
     }
-    for (unsigned i = 0; i < sizeof(kMap) / sizeof(kMap[0]); i++) {
-        if (kMap[i][0] == pal) {
-            return kMap[i][1];
-        }
-    }
-    return pal;
 }
 
 int fxRow(int pal)
 {
-    if (!ICO_JPN) {
-        return pal;
-    }
+    const IcoRegionInfo *r = ico_region_cur();
     if (pal >= 292 && pal <= 392) {
-        return pal - 23;
+        return pal + (r->row_pause_options - 294);
     }
     switch (pal) {
     case 44:
-        return 14; /* la_vibe_select's 13..16, its default 14 */
     case 45:
-        return 15;
     case 46:
-        return 16;
+        return r->row_title_copyright + (pal - 48); /* la_vibe_select's rows, its default the 2nd */
     case 48:
-        return 18; /* the copyright line's first half */
+        return r->row_title_copyright; /* the copyright line's first half */
     case 49:
-        return 20;
+        return r->row_title_continue;
     case 50:
-        return 21;
+        return r->row_title_new;
     case 51:
-        return 22;
+        return r->row_title_new_only;
     case 52:
-        return 23; /* la_title_new_game_only's end */
+        return r->row_title_new_only + 1; /* la_title_new_game_only's end */
     default:
         return pal;
     }
@@ -484,13 +502,13 @@ void fakeTables(void)
         texProperty[fxRow(i)].centerX = 1;
         texProperty[fxRow(i)].defaultMask = i != 48;
     }
-    if (ICO_JPN) {
-        /* the Japanese title's copyright line is two halves (18, 19), its
-           layout 8 the two rows */
-        setRow(19, -1, -1, -1, -1, -1, -1, 195);
-        texProperty[19].dispW = 0;
-        texProperty[19].centerX = 1;
-        setLayout(8, 18, 20, -1, -1);
+    if (ico_region_cur()->row_title_copyright2 >= 0) {
+        /* the Japanese program's title: the copyright line is two halves (the
+           layout fxLayout(11) holds both, set above) */
+        const int h2 = ico_region_cur()->row_title_copyright2;
+        setRow(h2, -1, -1, -1, -1, -1, -1, 195);
+        texProperty[h2].dispW = 0;
+        texProperty[h2].centerX = 1;
     }
     /* the button glyphs' rows (layout_ext.h): their PAL rectangles, and a
        texture number per sheet (1 buttons.tm2, 2 menu_PAL_02, 3

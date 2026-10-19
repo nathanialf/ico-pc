@@ -1,52 +1,57 @@
-/* menu_jpn_test.c: the Japanese disc's menus as the port reads them.
+/* menu_region_test.c: the Japanese and Korean discs' menus as the port reads them.
  *
  * The port names the game's menus by number (a layout, a row, a button
- * glyph's rectangle); on the Japanese disc they are its own numbers, the
- * region table's (port/core/region_jpn.c).  Over the Japanese boot ELF's
- * tables (the loader's JPN copy, port/data/gen/jpn/):
+ * glyph's rectangle); on the Japanese and Korean discs they are the disc's
+ * own numbers, the region table's (port/core/region_jpn.c, region_kor.c;
+ * the Korean build is the Japanese program with its own tex-property
+ * table).  Over the disc's boot ELF's tables (the loader's copy of that
+ * disc, port/data/gen/<slug>/):
  *
  *   text  every layout the region names runs the procedure it is named
  *         for; the title's, pause menu's and memory card screen's rows are
  *         where the Settings menu and the mouse expect them; the glyph rows'
  *         texel rectangles and heights (IcoGlyphRow) are the table's; the
- *         tables' sizes are the region's counts; and no row of the Japanese
+ *         tables' sizes are the region's counts; and no row of the disc's
  *         tables is drawn from the menu text table (the European sheets'
- *         words): the Japanese menu words keep their own texels.
+ *         words): the disc's menu words keep their own texels.
  *   look  with the disc image: the sheets decoded through the disc's packs
  *         (menu_sheets.c, as menu_look_test does on the European disc):
  *         each glyph's rectangle (its ink and the box of it), the light
  *         words of the pause menu and the title (their fill and their
- *         rim), and over them the Japanese sheets' ink, the port's own rows
- *         over these sheets are drawn with (menu_font.c
- *         kSheetInk[UI_SHEET_JA]), printed and held to that table within
- *         menu_look's tolerances; and the port's geometry for the Japanese
- *         sheet language (menu_font.c sheetGeo): the title's and pause
- *         menu's words drawn by the port against the disc's rows of the
- *         same words, the ink's height within a texel and its width within
- *         10 % (17 % on the sheets other than the title's;
+ *         rim), and over them the disc's sheet ink, the port's own rows
+ *         over these sheets are drawn with (menu_font.c kSheetInk[the
+ *         row's menu_sheet]: UI_SHEET_JA, UI_SHEET_KO), printed and held to
+ *         that table within menu_look's tolerances; and the port's geometry
+ *         for the sheet language (menu_font.c sheetGeo): the title's and
+ *         pause menu's words drawn by the port against the disc's rows of
+ *         the same words, the ink's height within a texel and its width
+ *         within 10 % (17 % on the Japanese sheets other than the title's
+ *         and on the Korean pause menu's End Game, the condensed mc04 word;
  *         ICO_MENU_LOOK_JPN_FIT=1 searches the numbers).
  *
- *   dump  with the disc image, pictures to compare the port's Japanese
- *         words with the disc's lettering (not a ctest; no checks):
+ *   dump  with the disc image, pictures to compare the port's words
+ *         with the disc's lettering (not a ctest; no checks):
  *         OUT_DIR/sheets/<file>.png every sheet the rows name, whole;
  *         OUT_DIR/rows/<row>.png every row with ink, x4 nearest, its number
  *         above, and rows_contact.png of them all at x2;
  *         OUT_DIR/port/<id>.png every UI_STR_MT_* string and the port's
- *         title, pause and Settings page title words in Japanese, drawn
- *         as ui_draw_menu_text strips them (ui__menu_text_raster) in the
- *         Japanese sheets' light ink, x4, and port_contact.png at x2;
+ *         title, pause and Settings page title words in the disc's
+ *         language, drawn as ui_draw_menu_text strips them
+ *         (ui__menu_text_raster) in the sheets' light ink, x4, and
+ *         port_contact.png at x2;
  *         OUT_DIR/compare.png each UI_STR_MT_* string beside the rows it
  *         transcribes (the region table's title and pause rows, and with
  *         the European ELF the European layouts' rows of menu_text.c),
  *         x4; OUT_DIR/index.txt the sheets, the rows (sheet, rectangle,
  *         word), the strings and what has no partner.
  *
- *   menu_jpn_test text BASE_ELF_JPN
- *   menu_jpn_test look BASE_ELF_JPN DISC_IMAGE_JPN
- *   menu_jpn_test dump BASE_ELF_JPN DISC_IMAGE_JPN OUT_DIR [BASE_ELF_PAL]
+ *   menu_region_test text SLUG BASE_ELF
+ *   menu_region_test look SLUG BASE_ELF DISC_IMAGE
+ *   menu_region_test dump SLUG BASE_ELF DISC_IMAGE OUT_DIR [BASE_ELF_PAL]
  *
- * Exit 0, 1 on a failure, 77 without the ELF (or, for look and dump, the
- * disc).
+ * SLUG is "jpn" or "kor" (ctests menu_text_jpn, menu_look_jpn, menu_text_kor,
+ * menu_look_kor).  Exit 0, 1 on a failure, 77 without the ELF (or, for look
+ * and dump, the disc).
  */
 #include <math.h>
 #include <stdio.h>
@@ -69,7 +74,7 @@
 #include "gen/table_desc.h"
 
 /* the procedures the region's layouts are named for (the loader's stubs:
-   port/data/gen/jpn/ee_symbols.c with ICO_EE_SYMBOLS_STUBS) */
+   port/data/gen/<slug>/ee_symbols.c with ICO_EE_SYMBOLS_STUBS) */
 void la_game_pause(void);
 void la_title_continue_or_new(void);
 void la_title_new_game_only(void);
@@ -112,11 +117,14 @@ static uint8_t *readAll(const char *path, size_t *size)
     return b;
 }
 
-/* a table's row count as the loader describes it (the Japanese set) */
+/* the descriptor set of the disc under test (main) */
+static const IcoTableSet *s_set;
+
+/* a table's row count as the loader describes it (the disc's set) */
 static int rowsOf(const void *host)
 {
-    for (uint32_t i = 0; i < ico_table_set_jpn.row_count; i++) {
-        const IcoTableRow *r = &ico_table_set_jpn.rows[i];
+    for (uint32_t i = 0; i < s_set->row_count; i++) {
+        const IcoTableRow *r = &s_set->rows[i];
         if (r->host == host && r->record) {
             return (int)r->count;
         }
@@ -206,15 +214,15 @@ static void testText(void)
               e->dispH, k->disp_h);
     }
 
-    /* the menu text table is the European sheets': no Japanese row */
-    CHECK(!ui_menu_text_applies(), "the menu text table applies to the Japanese disc");
+    /* the menu text table is the European sheets': no row of this disc */
+    CHECK(!ui_menu_text_applies(), "the menu text table applies to the %s disc", r->slug);
     int drawn = 0;
     for (int i = 0; i < r->property_count; i++) {
         drawn += ui_menu_text_item_of(&texProperty[i]) != NULL;
     }
-    CHECK(drawn == 0, "%d Japanese rows would be drawn from the European words", drawn);
-    printf("menu_jpn: %d layouts, %d rows; the region's layouts, rows and glyphs checked\n",
-           r->layout_count, r->property_count);
+    CHECK(drawn == 0, "%d rows of the disc would be drawn from the European words", drawn);
+    printf("menu_text_%s: %d layouts, %d rows; the region's layouts, rows and glyphs checked\n",
+           r->slug, r->layout_count, r->property_count);
 }
 
 /* The measures over one rectangle of a sheet, as menu_look_test's survey
@@ -363,40 +371,62 @@ static void wordRow(IcoVfs *vfs, const char *what, int row, Ink *all, int *rows)
     if (!s || e->texW < 8 || e->texH < 8) {
         /* la_game_pause's first two rows are 1 x 1 texels of mc01.tm2 (the
            cursor's and the panel's colour), no word */
-        printf("menu_look_jpn: %s row %d: no word (%dx%d)\n", what, row, e->texW, e->texH);
+        printf("menu_look_%s: %s row %d: no word (%dx%d)\n", ico_region_cur()->slug, what, row,
+               e->texW, e->texH);
         return;
     }
     Ink k;
     memset(&k, 0, sizeof(k));
     inkAdd(s, e->texU, e->texV, e->texW, e->texH, &k);
-    printf("menu_look_jpn: %s row %d fill %.0f %.0f %.0f rim %.0f %.0f %.0f (%s %d,%d %dx%d)\n",
-           what, row, inkFill(&k, 0), inkFill(&k, 1), inkFill(&k, 2), inkRim(&k, 0), inkRim(&k, 1),
-           inkRim(&k, 2), s->name, e->texU, e->texV, e->texW, e->texH);
+    printf("menu_look_%s: %s row %d fill %.0f %.0f %.0f rim %.0f %.0f %.0f (%s %d,%d %dx%d)\n",
+           ico_region_cur()->slug, what, row, inkFill(&k, 0), inkFill(&k, 1), inkFill(&k, 2),
+           inkRim(&k, 0), inkRim(&k, 1), inkRim(&k, 2), s->name, e->texU, e->texV, e->texW,
+           e->texH);
     if (k.fillW > 0) {
         inkMerge(all, &k);
         (*rows)++;
     }
 }
 
-/* The Japanese sheets' light ink, measured over the pause menu's and the
+/* The disc's sheets' light ink, measured over the pause menu's and the
    title's words (the rows the port's own rows sit among: the pause menu's
    Photo mode row, the title's Settings and Quit rows), in kSheetInk's terms
    (menu_font.h UiSheetInk: rimOn, rimLevel, fillLevel, dither, rimWeight).
    The values the table holds; the test fails when the sheets measure
    otherwise (menu_look's tolerances: the rim within 1 level of the
-   measure, the fill within 3). Measured on SCPS-11003 (menu_jpn_test look,
+   measure, the fill within 3). Japanese, measured on SCPS-11003 (menu_look_jpn,
    8 words: pause 271..273, title 18..22): fill 252 252 252 (the letters'
    palette white is fcfcfc, not the European sheets' ffffff; 251.5 with the
    antialiased texels), rim 34 34 34 (34.3: black-grey, as the English
    sheets' 24 rather than the other European languages' 56..62), one
-   antialiasing step (alpha 231) where the European sheets have three. */
-#define EXP_FILL 251.5
-#define EXP_RIM 34.3
+   antialiasing step (alpha 231) where the European sheets have three.
+   Korean, SCPS-56001: not yet measured by this test. The expectation is
+   the offline estimate made with the Korean text and font (the decoded
+   SCPS-56001 sheets, UI.md "The Japanese and Korean sheets' geometry"): this survey's rule applied to the decoded Korean
+   words, 249.7 / 42.2, plus the 1.0 / 0.7 by which the same rule falls
+   short of this test's own result on the Japanese words (250.5 / 33.6
+   against 251.5 / 34.3), gives fill 250.7 and rim 42.9 (title 254 / 45.6,
+   mc04 245 / 40.2, option 252.7 / 41.1), kSheetInk[UI_SHEET_KO] =
+   {1, 43, 251, 1, 0}. The first run on the disc fixes these two numbers. */
+typedef struct InkExpect {
+    const char *slug;
+    double fill, rim;
+} InkExpect;
+
+static const InkExpect kInkExpect[] = {{"jpn", 251.5, 34.3}, {"kor", 250.7, 42.9}};
 #define TOL_LEVEL 0.6 /* menu_look_test's: grey levels */
 
 static void testLook(IcoVfs *vfs)
 {
     const IcoRegionInfo *r = ico_region_cur();
+    double expFill = -1.0, expRim = -1.0;
+    for (size_t i = 0; i < sizeof(kInkExpect) / sizeof(kInkExpect[0]); i++) {
+        if (strcmp(kInkExpect[i].slug, r->slug) == 0) {
+            expFill = kInkExpect[i].fill;
+            expRim = kInkExpect[i].rim;
+        }
+    }
+    CHECK(expFill > 0.0, "no ink expectation for the region %s", r->slug);
     static const char *const kName[ICO_GLYPH_COUNT] = {
         "Cross", "Circle", "Square", "Triangle", "L1", "R1", "L2", "R2", "Left", "Right"};
     for (int g = 0; g < ICO_GLYPH_COUNT; g++) {
@@ -423,8 +453,8 @@ static void testLook(IcoVfs *vfs)
                 }
             }
         }
-        printf("menu_look_jpn: glyph %s row %d rect %d,%d,%d,%d ink %.1f%% bbox %d,%d,%d,%d (%s)\n",
-               kName[g], k->row, k->u, k->v, k->w, k->h, 100.0 * ink / (k->w * k->h),
+        printf("menu_look_%s: glyph %s row %d rect %d,%d,%d,%d ink %.1f%% bbox %d,%d,%d,%d (%s)\n",
+               r->slug, kName[g], k->row, k->u, k->v, k->w, k->h, 100.0 * ink / (k->w * k->h),
                x1 >= 0 ? x0 : 0, x1 >= 0 ? y0 : 0, x1 >= 0 ? x1 - x0 + 1 : 0,
                x1 >= 0 ? y1 - y0 + 1 : 0, s->name);
         /* a picture, not an empty corner of the sheet: 5 % of the rectangle
@@ -453,39 +483,40 @@ static void testLook(IcoVfs *vfs)
     const double fill = (inkFill(&all, 0) + inkFill(&all, 1) + inkFill(&all, 2)) / 3.0;
     const double rim = (inkRim(&all, 0) + inkRim(&all, 1) + inkRim(&all, 2)) / 3.0;
     const int rimOn = all.rimW > 0;
-    printf("menu_look_jpn: sheet ink jpn fill %.0f %.0f %.0f rim %.0f %.0f %.0f levels",
+    printf("menu_look_%s: sheet ink fill %.0f %.0f %.0f rim %.0f %.0f %.0f levels", r->slug,
            inkFill(&all, 0), inkFill(&all, 1), inkFill(&all, 2), inkRim(&all, 0), inkRim(&all, 1),
            inkRim(&all, 2));
     for (int i = 0; i < steps && i < 8; i++) {
         printf(" %d", lv[i]);
     }
-    printf(" (%d steps, %d rows; kSheetInk[UI_SHEET_JA] = {%d, %d, %d, 1, 0})\n", steps, rows,
+    printf(" (%d steps, %d rows; kSheetInk[%d] = {%d, %d, %d, 1, 0})\n", steps, rows, r->menu_sheet,
            rimOn, rimOn ? (int)(rim + 0.5) : 0, (int)(fill + 0.5));
 
-    /* the table holds the measure (menu_font.c kSheetInk[UI_SHEET_JA]) */
-    const UiSheetInk *ink = ui_menu_sheet_ink(UI_SHEET_JA);
+    /* the table holds the measure (menu_font.c kSheetInk[the row's menu_sheet]) */
+    const UiSheetInk *ink = ui_menu_sheet_ink(r->menu_sheet);
     CHECK(rows >= 4, "only %d light words measured", rows);
-    CHECK(fabs(fill - EXP_FILL) <= TOL_LEVEL, "fill %.1f, expected %.1f", fill, EXP_FILL);
-    CHECK(fabs(rim - EXP_RIM) <= TOL_LEVEL, "rim %.1f, expected %.1f", rim, EXP_RIM);
-    CHECK(ink->rimOn == rimOn, "kSheetInk[UI_SHEET_JA] rimOn %d, the sheets %d", ink->rimOn, rimOn);
-    CHECK(!rimOn || fabs(rim - (double)ink->rimLevel) <= 1.0,
-          "kSheetInk[UI_SHEET_JA] rim %d, measured %.1f", ink->rimLevel, rim);
-    CHECK(fabs(fill - (double)ink->fillLevel) <= 3.0,
-          "kSheetInk[UI_SHEET_JA] fill %d, measured %.1f", ink->fillLevel, fill);
-    CHECK(ink->dither == 1, "kSheetInk[UI_SHEET_JA] dithers as the European rows do");
+    CHECK(fabs(fill - expFill) <= TOL_LEVEL, "fill %.1f, expected %.1f", fill, expFill);
+    CHECK(fabs(rim - expRim) <= TOL_LEVEL, "rim %.1f, expected %.1f", rim, expRim);
+    CHECK(ink->rimOn == rimOn, "kSheetInk[%d] rimOn %d, the sheets %d", r->menu_sheet, ink->rimOn,
+          rimOn);
+    CHECK(!rimOn || fabs(rim - (double)ink->rimLevel) <= 1.0, "kSheetInk[%d] rim %d, measured %.1f",
+          r->menu_sheet, ink->rimLevel, rim);
+    CHECK(fabs(fill - (double)ink->fillLevel) <= 3.0, "kSheetInk[%d] fill %d, measured %.1f",
+          r->menu_sheet, ink->fillLevel, fill);
+    CHECK(ink->dither == 1, "kSheetInk[%d] dithers as the European rows do", r->menu_sheet);
     ms_sheets_free();
 }
 
 /* ---------------------------------------------------------------- dump */
 
-/* The pictures for comparing the port's Japanese words with the disc's
+/* The pictures for comparing the port's words with the disc's
    (dump mode; no checks, no ctest): the sheets, every row with ink on
    them at x4, the port's strings in the sheets' look at x4, and the pairs
    of a game word's transcription (UI_STR_MT_*) and the row it transcribes.
    A row's word is found through the region table's rows (the title's and
    the pause menu's) and, with the European ELF, through the European
    layout of the same procedure: a layout with as many rows on both discs
-   takes the European row's word (menu_text.c's table) for the Japanese row
+   takes the European row's word (menu_text.c's table) for the disc's row
    at the same place. */
 
 #define DUMP_BG 128 /* the pictures' backdrop grey (menu_look's) */
@@ -527,7 +558,7 @@ static void imgPut(Img *m, int x, int y, int r, int g, int b)
 static void imgWrite(const Img *m, const char *path)
 {
     if (!rd_write_png(path, m->p, (uint32_t)m->w, (uint32_t)m->h, (uint32_t)m->w * 4, 0)) {
-        printf("menu_jpn dump: cannot write %s\n", path);
+        printf("menu_region dump: cannot write %s\n", path);
     }
 }
 
@@ -732,8 +763,8 @@ static const PortStr kPortStr[] = {
 #define MT_COUNT (UI_STR_MT_PLAYERS_2 - UI_STR_MT_LANG_ENGLISH + 1)
 _Static_assert(MT_COUNT == 95, "kPortStr starts with every UI_STR_MT_* id, in order");
 
-/* a port string rendered as ui_draw_menu_text draws it in the Japanese
-   sheets' light ink (kSheetInk[UI_SHEET_JA], the full rim), unlit sprite
+/* a port string rendered as ui_draw_menu_text draws it in the disc's
+   sheets' light ink (kSheetInk[menu_sheet], the full rim), unlit sprite
    colour 0x80: grey and alpha 0..255, malloc'd */
 typedef struct Rendered {
     uint8_t *grey, *alpha;
@@ -744,7 +775,7 @@ typedef struct Rendered {
 static int renderPort(const PortStr *ps, Rendered *out)
 {
     memset(out, 0, sizeof(*out));
-    const char *text = ui_str_in(UI_LANG_JA, (UiStrId)ps->id);
+    const char *text = ui_str_in((UiLang)ico_region_cur()->ui_lang_default, (UiStrId)ps->id);
     float size = ps->size > 0.0f ? ps->size : UI_MENU_TEXT_SIZE;
     if (ps->box > 0) {
         /* layout_ext.c: a label wider than its box is set smaller, to 60 % */
@@ -759,7 +790,7 @@ static int renderPort(const PortStr *ps, Rendered *out)
     if (ui__menu_text_raster(text, size, UI_ALIGN_LEFT | UI_VALIGN_MIDDLE, &cov, &w, &h) != 0) {
         return 0;
     }
-    const UiSheetInk *k = ui_menu_item_ink(UI_INK_LIGHT, UI_RIM_FULL, UI_SHEET_JA);
+    const UiSheetInk *k = ui_menu_item_ink(UI_INK_LIGHT, UI_RIM_FULL, ico_region_cur()->menu_sheet);
     const RdSheetStyle st = {k->rimOn, k->rimLevel, k->fillLevel, k->dither, k->rimWeight, 1};
     out->grey = malloc((size_t)w * (size_t)h);
     out->alpha = malloc((size_t)w * (size_t)h);
@@ -787,27 +818,34 @@ static int renderPort(const PortStr *ps, Rendered *out)
 
 /* ------------------------------------------------------------ geometry */
 
-/* The port's Japanese words against the disc's: the ink box of a word's
+/* The port's words against the disc's: the ink box of a word's
    letters (the fill texels, grey >= 200 and alpha >= 0.7, as the survey
    counts them; the rim and its halo are not the letters), and its columns
    with ink (the letters' width without the gaps between them), on the
    disc's row and on the port's strip of the same word (ui__menu_text_raster at
-   UI_MENU_TEXT_SIZE in kSheetInk[UI_SHEET_JA], renderPort), with the
+   UI_MENU_TEXT_SIZE in kSheetInk[menu_sheet], renderPort), with the
    fill's texel count, in the geometry of the word's sheet: the title's
-   (UI_SHEET_JA_TITLE: つづきから, はじめから) or the other screens'
-   (UI_SHEET_JA: the pause menu's オプション, もどる, ゲーム終了 and
-   Options' ズーム, キーコンフィグ).  Those are held to the disc: the
-   ink height within GEO_TOL_H texels, the width within GEO_TOL_W of the
-   disc's on the title sheet and GEO_TOL_W_OTHER on the others (their
-   words are spaced unevenly: もどる and ズーム tighter than オプション, so
-   one geometry with the disc's letter widths sets those wide); more of
-   Options' words are printed beside them. */
+   (Japanese: UI_SHEET_JA_TITLE: つづきから, はじめから) or the other
+   screens' (UI_SHEET_JA: the pause menu's オプション, もどる, ゲーム終了 and
+   Options' ズーム, キーコンフィグ).  Korean has one geometry, UI_SHEET_KO,
+   for every sheet (no title variant: 새로 시작하기, 불러오기 on the title,
+   옵션, 게임으로, 게임을 종료함 on the pause menu, 줌, 조작 설정 on
+   Options).  Those are held to the disc: the ink height within GEO_TOL_H
+   texels, the width within GEO_TOL_W of the disc's on the title sheet
+   and GEO_TOL_W_OTHER on the others (their words are spaced unevenly:
+   もどる and ズーム tighter than オプション, so one geometry with the
+   disc's letter widths sets those wide), on the Korean disc GEO_TOL_W
+   except GEO_TOL_W_OTHER for the condensed mc04 word, End Game
+   (the offline fit has it +9.4 %, the rest within 4 %); more of Options' words are
+   printed beside them. */
 typedef struct GeoWord {
     int id;
     const char *name;
-    int row;   /* the Japanese table's row */
-    int sheet; /* UI_SHEET_JA_TITLE or UI_SHEET_JA */
+    int row;   /* the disc's table's row */
+    int sheet; /* the geometry's sheet: UI_SHEET_JA_TITLE or UI_SHEET_JA, UI_SHEET_KO */
     int held;
+    int title;   /* the title screen's word (ui_menu_text_set_title) */
+    double tolW; /* the width gate, a fraction of the disc's */
 } GeoWord;
 
 typedef struct GeoBox {
@@ -914,7 +952,7 @@ static double geoScore(const GeoWord *wd, int n, const GeoBox *disc, int sheet, 
         if (disc[i].w <= 0 || (sheet >= 0 && wd[i].sheet != sheet) || (!verbose && !wd[i].held)) {
             continue;
         }
-        const int was = ui_menu_text_set_title(wd[i].sheet == UI_SHEET_JA_TITLE);
+        const int was = ui_menu_text_set_title(wd[i].title);
         GeoBox p;
         const int ok0 = geoPortBox(wd[i].id, &p);
         ui_menu_text_set_title(was);
@@ -925,21 +963,19 @@ static double geoScore(const GeoWord *wd, int n, const GeoBox *disc, int sheet, 
         const double dw = (double)(p.w - disc[i].w) / (double)disc[i].w;
         const double da = disc[i].fill > 0 ? (double)p.fill / (double)disc[i].fill - 1.0 : 0.0;
         const double dc = (double)(p.cols - disc[i].cols) / (double)disc[i].w;
-        const int ok = abs(p.h - disc[i].h) <= GEO_TOL_H &&
-                       fabs(dw) <= (wd[i].sheet == UI_SHEET_JA_TITLE ? GEO_TOL_W : GEO_TOL_W_OTHER);
+        const int ok = abs(p.h - disc[i].h) <= GEO_TOL_H && fabs(dw) <= wd[i].tolW;
         if (wd[i].held) {
             score += dh * dh + 100.0 * dw * dw + 100.0 * dc * dc + 4.0 * da * da;
             *bad += !ok;
         }
         if (verbose) {
-            printf(
-                "menu_look_jpn: geometry %-5s %-13s row %3d disc %3d x %2d (%3d inked) fill %3d, "
-                "port %3d x %2d (%3d inked) fill %3d: height %+d, width %+.1f %%, fill %+.0f "
-                "%%%s\n",
-                wd[i].sheet == UI_SHEET_JA_TITLE ? "title" : "other", wd[i].name, wd[i].row,
-                disc[i].w, disc[i].h, disc[i].cols, disc[i].fill, p.w, p.h, p.cols, p.fill,
-                p.h - disc[i].h, 100.0 * dw, 100.0 * da,
-                wd[i].held ? (ok ? "" : " (off)") : " (printed)");
+            printf("menu_look_%s: geometry %-5s %-13s row %3d disc %3d x %2d (%3d inked) fill %3d, "
+                   "port %3d x %2d (%3d inked) fill %3d: height %+d, width %+.1f %%, fill %+.0f "
+                   "%%%s\n",
+                   ico_region_cur()->slug, wd[i].title ? "title" : "other", wd[i].name, wd[i].row,
+                   disc[i].w, disc[i].h, disc[i].cols, disc[i].fill, p.w, p.h, p.cols, p.fill,
+                   p.h - disc[i].h, 100.0 * dw, 100.0 * da,
+                   wd[i].held ? (ok ? "" : " (off)") : " (printed)");
         }
     }
     return score;
@@ -948,24 +984,34 @@ static double geoScore(const GeoWord *wd, int n, const GeoBox *disc, int sheet, 
 static void testGeometry(IcoVfs *vfs)
 {
     const IcoRegionInfo *r = ico_region_cur();
-    const int T = UI_SHEET_JA_TITLE, O = UI_SHEET_JA;
+    /* the sheets' geometry: the Japanese disc has the title's own (T) and
+       the other screens' (O); the Korean disc one (UI_SHEET_KO) */
+    const int kor = r->menu_sheet == UI_SHEET_KO;
+    const int T = kor ? UI_SHEET_KO : UI_SHEET_JA_TITLE, O = kor ? UI_SHEET_KO : r->menu_sheet;
+    const double tolT = GEO_TOL_W, tolO = kor ? GEO_TOL_W : GEO_TOL_W_OTHER;
+    /* Options' words: the Japanese disc's rows (zoom 318, button config 300, sound 285 ...)
+       moved by the distance of the pause menu's Options row from the Japanese disc's 271.
+       Evidence for the Korean disc: its tex-property table is 406 rows, every row from the
+       title's copyright line (JPN 18) on 6 lower (the glyph rows 321 -> 315, 155 -> 149, the
+       pause rows 271 -> 265: region_kor.c, region_select_test's Korean values) */
+    const int d = r->row_pause_options - 271;
     const GeoWord wd[] = {
-        {UI_STR_MT_CONTINUE, "CONTINUE", r->row_title_continue, T, 1},
-        {UI_STR_MT_NEW_GAME, "NEW_GAME", r->row_title_new, T, 1},
-        {UI_STR_MT_OPTIONS, "OPTIONS", r->row_pause_options, O, 1},
-        {UI_STR_MT_PAUSE_BACK, "PAUSE_BACK", r->row_pause_back, O, 1},
-        {UI_STR_MT_END_GAME, "END_GAME", r->row_pause_end, O, 1},
-        /* Options' words (the Japanese table's rows; their halo is the
-           Options page's dark glow) */
-        {UI_STR_MT_ZOOM, "ZOOM", 318, O, 1},
-        {UI_STR_MT_BUTTON_CONFIG, "BUTTON_CONFIG", 300, O, 1},
-        {UI_STR_MT_SOUND, "SOUND", 285, O, 0},
-        {UI_STR_MT_STEREO, "STEREO", 288, O, 0},
-        {UI_STR_MT_MONO, "MONO", 289, O, 0},
-        {UI_STR_MT_VIBRATION, "VIBRATION", 290, O, 0},
-        {UI_STR_MT_BRIGHTNESS, "BRIGHTNESS", 301, O, 0},
-        {UI_STR_MT_JUMP, "JUMP", 313, O, 0},
-        {UI_STR_MT_ACTION, "ACTION", 315, O, 0},
+        {UI_STR_MT_CONTINUE, "CONTINUE", r->row_title_continue, T, 1, 1, tolT},
+        {UI_STR_MT_NEW_GAME, "NEW_GAME", r->row_title_new, T, 1, 1, tolT},
+        {UI_STR_MT_OPTIONS, "OPTIONS", r->row_pause_options, O, 1, 0, tolO},
+        {UI_STR_MT_PAUSE_BACK, "PAUSE_BACK", r->row_pause_back, O, 1, 0, tolO},
+        /* the condensed mc04 word: the offline Korean fit has it +9.4 % wide */
+        {UI_STR_MT_END_GAME, "END_GAME", r->row_pause_end, O, 1, 0, GEO_TOL_W_OTHER},
+        /* Options' words (their halo is the Options page's dark glow) */
+        {UI_STR_MT_ZOOM, "ZOOM", 318 + d, O, 1, 0, tolO},
+        {UI_STR_MT_BUTTON_CONFIG, "BUTTON_CONFIG", 300 + d, O, 1, 0, tolO},
+        {UI_STR_MT_SOUND, "SOUND", 285 + d, O, 0, 0, tolO},
+        {UI_STR_MT_STEREO, "STEREO", 288 + d, O, 0, 0, tolO},
+        {UI_STR_MT_MONO, "MONO", 289 + d, O, 0, 0, tolO},
+        {UI_STR_MT_VIBRATION, "VIBRATION", 290 + d, O, 0, 0, tolO},
+        {UI_STR_MT_BRIGHTNESS, "BRIGHTNESS", 301 + d, O, 0, 0, tolO},
+        {UI_STR_MT_JUMP, "JUMP", 313 + d, O, 0, 0, tolO},
+        {UI_STR_MT_ACTION, "ACTION", 315 + d, O, 0, 0, tolO},
     };
     const int n = (int)(sizeof(wd) / sizeof(wd[0]));
     GeoBox disc[sizeof(wd) / sizeof(wd[0])];
@@ -975,12 +1021,15 @@ static void testGeometry(IcoVfs *vfs)
             wd[i].row >= 0 && wd[i].row < r->property_count && geoRowBox(vfs, wd[i].row, &disc[i]);
         CHECK(ok || !wd[i].held, "geometry: no word on row %d (%s)", wd[i].row, wd[i].name);
     }
-    ui_set_sheet_language(UI_SHEET_JA);
+    ui_set_sheet_language(r->menu_sheet);
     const int sheets[2] = {T, O};
     const char *fit = getenv("ICO_MENU_LOOK_JPN_FIT");
-    for (int k = 0; k < 2; k++) {
+    if (fit == NULL) {
+        fit = getenv("ICO_MENU_LOOK_FIT");
+    }
+    for (int k = 0; k < (T == O ? 1 : 2); k++) {
         const int sh = sheets[k];
-        const char *name = sh == T ? "title" : "other";
+        const char *name = T == O ? "all" : sh == T ? "title" : "other";
         float em, wx, gap, bx, by;
         ui__menu_ja_geometry(sh, &em, &wx, &gap, &bx, &by);
         if (fit && *fit == '1') {
@@ -988,9 +1037,9 @@ static void testGeometry(IcoVfs *vfs)
                first, then the smallest misses */
             double best = 1e30;
             float be = em, bw = wx, bg = gap, bb = bx;
-            for (float e = 0.90f; e <= 1.0601f; e += 0.02f) {
+            for (float e = 0.90f; e <= 1.2001f; e += 0.02f) {
                 for (float x = 0.50f; x <= 1.1001f; x += 0.02f) {
-                    for (float q = 0.0f; q <= 8.0001f; q += 0.5f) {
+                    for (float q = 0.0f; q <= 10.0001f; q += 0.5f) {
                         for (float b = 0.0f; b <= 0.3001f; b += 0.15f) {
                             ui__menu_set_ja_geometry(sh, e, x, q, b, b);
                             int bad;
@@ -1006,21 +1055,21 @@ static void testGeometry(IcoVfs *vfs)
                     }
                 }
             }
-            printf("menu_look_jpn: geometry fit %s em %.2f wx %.2f gap %.2f bold %.2f (score "
+            printf("menu_look_%s: geometry fit %s em %.2f wx %.2f gap %.2f bold %.2f (score "
                    "%.2f)\n",
-                   name, be, bw, bg, bb, best);
+                   r->slug, name, be, bw, bg, bb, best);
             ui__menu_set_ja_geometry(sh, be, bw, bg, bb, bb);
             int bad;
             (void)geoScore(wd, n, disc, sh, 1, &bad);
             ui__menu_set_ja_geometry(sh, em, wx, gap, bx, by);
         }
-        printf("menu_look_jpn: geometry %s: em %.2f wx %.2f gap %.2f bold %.2f %.2f\n", name, em,
-               wx, gap, bx, by);
+        printf("menu_look_%s: geometry %s: em %.2f wx %.2f gap %.2f bold %.2f %.2f\n", r->slug,
+               name, em, wx, gap, bx, by);
         int bad;
         (void)geoScore(wd, n, disc, sh, 1, &bad);
         CHECK(bad == 0,
               "geometry %s: %d words off the disc's (height within %d texel, width within %.0f %%)",
-              name, bad, GEO_TOL_H, 100.0 * (sh == T ? GEO_TOL_W : GEO_TOL_W_OTHER));
+              name, bad, GEO_TOL_H, 100.0 * (sh == T ? tolT : tolO));
     }
     ms_sheets_free();
 }
@@ -1072,7 +1121,7 @@ static int rowHasInk(const MsSheet *s, const LtProperty *e)
     return sum2 / (double)n - mean * mean >= 64.0;
 }
 
-/* the European layouts kept before the Japanese tables are loaded */
+/* the European layouts kept before the disc's tables are loaded */
 static LtProperty *s_palProp;
 static LtProp *s_palLayout;
 static int s_palPropN, s_palLayoutN;
@@ -1099,7 +1148,7 @@ static int loadSet(const IcoTableSet *set, const char *path)
     const int rc = ico_tables_load_elf(set, elf, size, err, sizeof(err));
     free(elf);
     if (rc != 0) {
-        printf("menu_jpn dump: %s: %s\n", path, err);
+        printf("menu_region dump: %s: %s\n", path, err);
     }
     return rc == 0;
 }
@@ -1137,7 +1186,7 @@ static void mapByLayout(int *word, char (*how)[48])
         if (n != s_palLayout[p].last - s_palLayout[p].first) {
             unequal++;
             printf(
-                "menu_jpn dump: layout %d (%d rows) and the European %d (%d rows): not aligned\n",
+                "menu_region dump: layout %d (%d rows) and the European %d (%d rows): not aligned\n",
                 j, n, p, s_palLayout[p].last - s_palLayout[p].first);
             continue;
         }
@@ -1157,7 +1206,7 @@ static void mapByLayout(int *word, char (*how)[48])
             }
         }
     }
-    printf("menu_jpn dump: %d layouts aligned with the European ones, %d of unequal rows\n",
+    printf("menu_region dump: %d layouts aligned with the European ones, %d of unequal rows\n",
            matched, unequal);
 }
 
@@ -1194,9 +1243,10 @@ static void flow(const int *cw, const int *ch, int n, int maxW, int *xy, int *W,
 
 static int dump(IcoVfs *vfs, const char *outDir)
 {
-    /* the port's words as drawn over the Japanese sheets (menu_font.c sheetGeo) */
-    ui_set_sheet_language(UI_SHEET_JA);
+    /* the port's words as drawn over the disc's sheets (menu_font.c sheetGeo) */
     const IcoRegionInfo *r = ico_region_cur();
+    const UiLang lang = (UiLang)r->ui_lang_default;
+    ui_set_sheet_language(r->menu_sheet);
     const int nRows = r->property_count;
     char path[1200];
     ico_mkdir(outDir);
@@ -1209,7 +1259,7 @@ static int dump(IcoVfs *vfs, const char *outDir)
     snprintf(path, sizeof(path), "%s/index.txt", outDir);
     FILE *ix = fopen(path, "w");
     if (!ix) {
-        printf("menu_jpn dump: cannot write %s\n", path);
+        printf("menu_region dump: cannot write %s\n", path);
         return 1;
     }
 
@@ -1298,8 +1348,8 @@ static int dump(IcoVfs *vfs, const char *outDir)
         }
         const PortStr *ps = word[i] >= 0 ? portOf(word[i]) : NULL;
         fprintf(ix, "%d %s %d,%d %dx%d %s%s%s%s\n", i, s->name, e->texU, e->texV, e->texW, e->texH,
-                ps ? ps->name : "-", ps ? " \"" : "",
-                ps ? ui_str_in(UI_LANG_JA, (UiStrId)word[i]) : "", ps ? "\"" : "");
+                ps ? ps->name : "-", ps ? " \"" : "", ps ? ui_str_in(lang, (UiStrId)word[i]) : "",
+                ps ? "\"" : "");
         if (ps) {
             fprintf(ix, "    (%s)\n", how[i]);
         }
@@ -1339,7 +1389,7 @@ static int dump(IcoVfs *vfs, const char *outDir)
     /* (3) the port's strings */
     Rendered *rend = calloc((size_t)PORT_STR_COUNT, sizeof(Rendered));
     int nPort = 0;
-    fprintf(ix, "\n# port strings (ui_str_in(UI_LANG_JA), the Japanese sheets' light ink): name "
+    fprintf(ix, "\n# port strings (ui_str_in of the disc's language, the sheets' light ink): name "
                 "em box text rows\n");
     for (int i = 0; rend && i < PORT_STR_COUNT; i++) {
         const PortStr *ps = &kPortStr[i];
@@ -1370,7 +1420,8 @@ static int dump(IcoVfs *vfs, const char *outDir)
             }
         }
         fprintf(ix, "%s %.1f %d \"%s\"%s rows %s\n", ps->name, rend[i].size, ps->box,
-                ui_str_in(UI_LANG_JA, (UiStrId)ps->id), ui_strings_ja[ps->id] ? "" : " (English)",
+                ui_str_in(lang, (UiStrId)ps->id),
+                (lang == UI_LANG_KO ? ui_strings_ko : ui_strings_ja)[ps->id] ? "" : " (English)",
                 at ? rows : "-");
     }
     {
@@ -1474,7 +1525,7 @@ static int dump(IcoVfs *vfs, const char *outDir)
     }
     fprintf(ix, "\n");
     fclose(ix);
-    printf("menu_jpn dump: %d sheets, %d rows with ink (%d without a port id), %d port strings, "
+    printf("menu_region dump: %d sheets, %d rows with ink (%d without a port id), %d port strings, "
            "%d pairs (%d MT ids without a row) in %s\n",
            sheets, nInked, noId, nPort, pairs, noRow, outDir);
     for (int i = 0; rend && i < PORT_STR_COUNT; i++) {
@@ -1491,18 +1542,31 @@ static int dump(IcoVfs *vfs, const char *outDir)
 
 int main(int argc, char **argv)
 {
+    /* menu_region_test MODE SLUG ELF [DISC [OUT_DIR [PAL_ELF]]] */
     const int isDump = argc > 1 && strcmp(argv[1], "dump") == 0;
-    if (argc < 3 || (strcmp(argv[1], "text") != 0 && strcmp(argv[1], "look") != 0 && !isDump) ||
-        (isDump && argc < 5)) {
-        fprintf(stderr, "usage: menu_jpn_test text|look BASE_ELF_JPN [DISC_IMAGE_JPN]\n"
-                        "       menu_jpn_test dump BASE_ELF_JPN DISC_IMAGE_JPN OUT_DIR "
+    if (argc < 4 || (strcmp(argv[1], "text") != 0 && strcmp(argv[1], "look") != 0 && !isDump) ||
+        (isDump && argc < 6)) {
+        fprintf(stderr, "usage: menu_region_test text|look SLUG BASE_ELF [DISC_IMAGE]\n"
+                        "       menu_region_test dump SLUG BASE_ELF DISC_IMAGE OUT_DIR "
                         "[BASE_ELF_PAL]\n");
         return 2;
     }
-    if (isDump && argc > 5) {
+    const char *slug = argv[2];
+    const char *elfPath = argv[3];
+    const char *discPath = argc > 4 ? argv[4] : NULL;
+    for (int i = 0; i < ico_region_count(); i++) {
+        if (strcmp(ico_region_at(i)->slug, slug) == 0) {
+            s_set = ico_table_sets[i];
+        }
+    }
+    if (s_set == NULL || strcmp(slug, "pal") == 0) {
+        fprintf(stderr, "menu_region_test: no region %s (jpn or kor)\n", slug);
+        return 2;
+    }
+    if (isDump && argc > 6) {
         /* the European layouts, kept for the row alignment, before the
-           Japanese tables replace them */
-        if (loadSet(&ico_table_set_pal, argv[5])) {
+           disc's tables replace them */
+        if (loadSet(&ico_table_set_pal, argv[6])) {
             s_palPropN = rowsIn(&ico_table_set_pal, texProperty);
             s_palLayoutN = rowsIn(&ico_table_set_pal, texLayout);
             s_palProp = malloc(sizeof(LtProperty) * (size_t)s_palPropN);
@@ -1512,49 +1576,51 @@ int main(int argc, char **argv)
                 memcpy(s_palLayout, texLayout, sizeof(LtProp) * (size_t)s_palLayoutN);
             }
         } else {
-            printf("menu_jpn dump: no European ELF (%s): the region table's rows only\n", argv[5]);
+            printf("menu_region dump: no European ELF (%s): the region table's rows only\n",
+                   argv[6]);
         }
     }
     size_t size;
-    uint8_t *elf = readAll(argv[2], &size);
+    uint8_t *elf = readAll(elfPath, &size);
     if (!elf) {
-        printf("menu_jpn: no Japanese base ELF (%s): skipped\n", argv[2]);
+        printf("menu_region_test %s: no base ELF (%s): skipped\n", slug, elfPath);
         return 77;
     }
     char err[512];
-    const int rc = ico_tables_load_elf(&ico_table_set_jpn, elf, size, err, sizeof(err));
+    const int rc = ico_tables_load_elf(s_set, elf, size, err, sizeof(err));
     free(elf);
     if (rc != 0) {
-        printf("menu_jpn: the ELF's tables do not load: %s\n", err);
+        printf("menu_region_test %s: the ELF's tables do not load: %s\n", slug, err);
         return 1;
     }
-    if (ico_region_select("jpn") != 0) {
-        printf("menu_jpn: no Japanese region\n");
+    if (ico_region_select(slug) != 0) {
+        printf("menu_region_test: no region %s\n", slug);
         return 1;
     }
     if (strcmp(argv[1], "text") == 0) {
         testText();
     } else if (isDump) {
-        IcoVfs *vfs = ico_vfs_mount(&ico_vfs_iso9660, argv[3]);
+        IcoVfs *vfs = ico_vfs_mount(&ico_vfs_iso9660, discPath);
         if (!vfs) {
-            printf("menu_jpn: no Japanese disc image (%s): skipped\n", argv[3]);
+            printf("menu_region_test %s: no disc image (%s): skipped\n", slug, discPath);
             return 77;
         }
-        const int rc = dump(vfs, argv[4]);
+        const int drc = dump(vfs, argv[5]);
         ico_vfs_unmount(vfs);
         free(s_palProp);
         free(s_palLayout);
-        return rc;
+        return drc;
     } else {
-        IcoVfs *vfs = argc > 3 ? ico_vfs_mount(&ico_vfs_iso9660, argv[3]) : NULL;
+        IcoVfs *vfs = discPath ? ico_vfs_mount(&ico_vfs_iso9660, discPath) : NULL;
         if (!vfs) {
-            printf("menu_jpn: no Japanese disc image (%s): skipped\n", argc > 3 ? argv[3] : "");
+            printf("menu_region_test %s: no disc image (%s): skipped\n", slug,
+                   discPath ? discPath : "");
             return 77;
         }
         testLook(vfs);
         testGeometry(vfs);
         ico_vfs_unmount(vfs);
     }
-    printf("menu_jpn: %d failures\n", failures);
+    printf("menu_region_test %s: %d failures\n", slug, failures);
     return failures ? 1 : 0;
 }

@@ -200,7 +200,7 @@ void ms_sheet_name(const char *path, int lang, char *out, size_t size)
    port/data/gen/table_defs.c, its size unknown here) */
 int ms_tex_file_count(void)
 {
-    /* the loaded set's (the Japanese one in menu_jpn_test) */
+    /* the loaded set's (the Japanese or Korean one in menu_region_test) */
     const IcoTableSet *set = ico_tables_loaded_set() ? ico_tables_loaded_set() : &ico_table_set_pal;
     for (uint32_t i = 0; i < set->row_count; i++) {
         const IcoTableRow *r = &set->rows[i];

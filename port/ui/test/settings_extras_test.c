@@ -1145,12 +1145,12 @@ static void testCharacters(void)
     useConfig("version = 1\n");
 }
 
-/* settings_extras_test DIR jpn (ctest settings_extras_jpn): Extras on the
-   Japanese disc: opened with Circle from the title, its rows, Music opened
+/* settings_extras_test DIR SLUG (ctests settings_extras_jpn, settings_extras_kor):
+   Extras on the Japanese or Korean disc: opened with Circle from the title, its rows, Music opened
    with Circle and left with Cross, Extras left with Triangle */
-static void testJapaneseExtras(void)
+static void testOtherDiscExtras(const char *slug)
 {
-    CHECK(ico_region_select("jpn") == 0, "the Japanese region");
+    CHECK(ico_region_select(slug) == 0, "the %s region", slug);
     const int mainL = enterMain(1);
     int labels[16];
     const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
@@ -1182,9 +1182,9 @@ int main(int argc, char **argv)
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
     setEnv("LC_ALL", NULL);
     setEnv("LANG", "en_GB.UTF-8");
-    if (argc > 2 && strcmp(argv[2], "jpn") == 0) {
-        testJapaneseExtras();
-        printf("settings_extras_test jpn: %s\n", failures ? "failed" : "ok");
+    if (argc > 2) {
+        testOtherDiscExtras(argv[2]);
+        printf("settings_extras_test %s: %s\n", argv[2], failures ? "failed" : "ok");
         return failures ? 1 : 0;
     }
     testExtras();

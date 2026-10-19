@@ -106,9 +106,9 @@ static void testSerial(void)
     char buf[256];
     CHECK(!ui_str_takes_serial(UI_STR_SETTINGS) && !ui_str_takes_serial(UI_STR_MV_SAVED_FMT),
           "only the four pack notes take the serial");
-    for (int r = 0; r < 2; r++) {
-        const char *slug = r ? "jpn" : "pal";
-        const char *serial = r ? "SCPS-11003" : "SCES-50760";
+    for (int r = 0; r < ico_region_count(); r++) {
+        const char *slug = ico_region_at(r)->slug;
+        const char *serial = ico_region_at(r)->pack_serial;
         CHECK(ico_region_select(slug) == 0, "select %s", slug);
         for (int l = 0; l < UI_LANG_COUNT; l++) {
             ui_set_language((UiLang)l);
@@ -188,6 +188,9 @@ static void testResolve(void)
     CHECK(ico_region_select("jpn") == 0 && ico_region_cur()->ui_lang_default == UI_LANG_JA &&
               ico_region_cur()->menu_sheet == UI_SHEET_JA,
           "the Japanese disc: Japanese text over the Japanese sheets");
+    CHECK(ico_region_select("kor") == 0 && ico_region_cur()->ui_lang_default == UI_LANG_KO &&
+              ico_region_cur()->menu_sheet == UI_SHEET_KO,
+          "the Korean disc: Korean text over the Korean sheets");
     ico_region_select("pal");
     /* through the running disc */
     ico_region_select("pal");
@@ -198,6 +201,11 @@ static void testResolve(void)
     CHECK(ui_settings_resolve_language() == UI_LANG_JA, "the Japanese disc: Japanese");
     s_choice = UI_LANG_EN;
     CHECK(ui_settings_resolve_language() == UI_LANG_EN, "the Japanese disc, English chosen");
+    ico_region_select("kor");
+    s_choice = -1;
+    CHECK(ui_settings_resolve_language() == UI_LANG_KO, "the Korean disc: Korean");
+    s_choice = UI_LANG_EN;
+    CHECK(ui_settings_resolve_language() == UI_LANG_EN, "the Korean disc, English chosen");
     ico_region_select("pal");
     s_choice = UI_LANG_JA;
     CHECK(ui_settings_resolve_language() == UI_LANG_JA, "the European disc, Japanese chosen");

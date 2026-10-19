@@ -32,7 +32,7 @@
  *   dump v10   the native frame (aspect, wExact, cullW) after gsH round-trips
  *              and peeks (rd__dump_peek); a version 9 dump loads as the 4:3
  *              frame; a header the renderer cannot size is refused; the
- *              version 12 region slug ("pal", "jpn", "pal" for version 11,
+ *              version 12 region slug ("pal", "jpn", "kor", "pal" for version 11,
  *              no row refused)
  *   dump sheet a version 11 dump's sheets round-trip (1x the coverage
  *              alone, 2x over rd_sheet_rim's rim); one with a halo made on
@@ -961,8 +961,9 @@ static void testDumpBlock(const char *dir)
  * alone; a header the renderer cannot size (an aspect under 4:3, a visible
  * width past the native one, a cull width that is not the frame's) is
  * refused.  Version 12's region slug after them: "pal" in this run and in a
- * version 11 dump, "jpn" for a frame dumped with the Japanese disc
- * selected, a slug that is no row refused. */
+ * version 11 dump, the slug of the disc selected for a frame dumped
+ * on the Japanese or the Korean disc ("jpn", "kor"), a slug that is no row
+ * refused. */
 static void testDumpV10(const char *dir)
 {
     CHECK(RD_DUMP_VERSION >= 10u, "the dump version is 10 or later (%u)", RD_DUMP_VERSION);
@@ -1031,8 +1032,8 @@ static void testDumpV10(const char *dir)
         free(b9);
         /* version 12: the region after cullW; this run's is the European
            disc's, a version 11 dump (the same less the slug) is "pal", a
-           frame drawn on the Japanese disc says so, and a slug that is no
-           row is refused */
+           frame drawn on the Japanese or Korean disc says so, and a slug that
+           is no row is refused */
         CHECK(rd__dump_peek(path, &info) && strcmp(info.region, "pal") == 0 &&
                   memcmp(buf + V12_REGION_AT, "pal\0\0\0\0\0", RD_DUMP_REGION_BYTES) == 0,
               "v12 region peeked (%s)", info.region);
@@ -1056,24 +1057,35 @@ static void testDumpV10(const char *dir)
             }
             remove(path11);
             free(b11);
-            CHECK(ico_region_select("jpn") == 0, "region jpn selected");
-            snprintf(pathJ, sizeof(pathJ), "%s/rd_state_test_jpn.rddump", dir);
-            CHECK(rd__dump_frame(f, pathJ) && rd__dump_peek(pathJ, &info) &&
-                      strcmp(info.region, "jpn") == 0,
-                  "a frame dumped on the Japanese disc peeks as jpn (%s)", info.region);
-            ico_region_select("pal");
-            long sizeJ = 0;
-            uint8_t *bj = slurp(pathJ, &sizeJ);
-            if (bj) {
-                memcpy(bj + V12_REGION_AT, "xx\0\0\0\0\0\0", RD_DUMP_REGION_BYTES);
-                CHECK(spit(pathJ, bj, sizeJ) && !rd__dump_peek(pathJ, &info) &&
-                          !rd__load_frame(pathJ, &g),
-                      "a region that is no row is refused");
-                free(bj);
-            } else {
-                CHECK(0, "jpn dump read back");
+            /* a frame drawn on each other disc says so (jpn, kor); each file
+               is then refused with its slug rewritten */
+            for (int ri = 1; ri < ico_region_count(); ri++) {
+                const char *slug = ico_region_at(ri)->slug;
+                CHECK(ico_region_select(slug) == 0, "region %s selected", slug);
+                snprintf(pathJ, sizeof(pathJ), "%s/rd_state_test_%s.rddump", dir, slug);
+                CHECK(rd__dump_frame(f, pathJ) && rd__dump_peek(pathJ, &info) &&
+                          strcmp(info.region, slug) == 0,
+                      "a frame dumped on the %s disc peeks as %s (%s)", slug, slug, info.region);
+                if (rd__load_frame(pathJ, &g)) {
+                    CHECK(g.cullW == 1376u, "the %s dump loads", slug);
+                    rd__frame_free(&g);
+                } else {
+                    CHECK(0, "the %s dump loaded", slug);
+                }
+                ico_region_select("pal");
+                long sizeJ = 0;
+                uint8_t *bj = slurp(pathJ, &sizeJ);
+                if (bj) {
+                    memcpy(bj + V12_REGION_AT, "xx\0\0\0\0\0\0", RD_DUMP_REGION_BYTES);
+                    CHECK(spit(pathJ, bj, sizeJ) && !rd__dump_peek(pathJ, &info) &&
+                              !rd__load_frame(pathJ, &g),
+                          "a region that is no row is refused (%s's file)", slug);
+                    free(bj);
+                } else {
+                    CHECK(0, "%s dump read back", slug);
+                }
+                remove(pathJ);
             }
-            remove(pathJ);
         }
         /* refused: an aspect under 4:3, a cull width other than gsW, a
            visible width past the native one */

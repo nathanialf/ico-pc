@@ -28,7 +28,7 @@
  *     that sees the load's end and, the other order the threads can take,
  *     between the tick before it and that tick's kick.  The step ticks are
  *     the log's.
- * With "jpn" (ctest kanban_boot_jpn) the same runs on the Japanese disc,
+ * With a region slug ("jpn", "kor": ctests kanban_boot_jpn, kanban_boot_kor) the same runs on that disc,
  * whose card check is kanbanBootMcCheck_jpn: no language step, no video
  * step, no read of the card's system file (so neither cameraMove nor
  * palMode), NonLinearCameraMove 0 (the disc has no language word) and
@@ -50,7 +50,7 @@
 #include "../../../ico2/common/src/kanbanBoot.c"
 
 static int failures;
-static int s_jpn; /* the Japanese disc's run */
+static int s_jpn; /* the Japanese program's run (the Japanese and Korean discs) */
 
 /* the language main.c sets from [game] language "de": German (4) on the
    European disc, 0 on the Japanese one (no language word) */
@@ -365,13 +365,14 @@ int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
     char p[1100];
-    if (argc > 2 && strcmp(argv[2], "jpn") == 0) {
-        s_jpn = 1;
-        if (ico_region_select("jpn") != 0) {
-            printf("kanban_boot_test: no region jpn\n");
+    if (argc > 2) {
+        if (ico_region_select(argv[2]) != 0) {
+            printf("kanban_boot_test: no region %s\n", argv[2]);
             return 1;
         }
-        /* select_disc (main_host.c): the Japanese game's word starts at 0 */
+        /* s_jpn: the Japanese program (the Japanese and Korean discs: ICO_JPNKOR) */
+        s_jpn = ICO_JPNKOR;
+        /* select_disc (main_host.c): the Japanese program's word starts at 0 */
         systemStatus[0] = 0;
     }
     snprintf(p, sizeof(p), "%s/kanban_boot_test.toml", dir);
@@ -384,9 +385,9 @@ int main(int argc, char **argv)
     bootOverLoad("over the load, the stage manager after the tick", 1);
     remove(p);
     if (failures) {
-        printf("kanban_boot_test%s: %d failures\n", s_jpn ? " jpn" : "", failures);
+        printf("kanban_boot_test %s: %d failures\n", ico_region_cur()->slug, failures);
         return 1;
     }
-    printf("kanban_boot_test%s: ok\n", s_jpn ? " jpn" : "");
+    printf("kanban_boot_test %s: ok\n", ico_region_cur()->slug);
     return 0;
 }

@@ -3262,19 +3262,22 @@ static int jpnRowShown(UiSettingsPage page, UiSettingsOpt opt)
     return -1;
 }
 
-/* settings_test DIR jpn: the Japanese disc (port/core/region_jpn.c) over the
-   fixture's tables at that disc's numbers: the rows it has not (Video
+/* settings_test DIR SLUG: the Japanese or Korean disc (ctests settings_jpn,
+   settings_kor; port/core/region_<slug>.c) over the fixture's tables at that
+   disc's numbers (the region row's title, pause and layout fields): the rows it has not (Video
    mode, Language, Circle goes back) and the one both have (Menu language);
    Circle confirms, Cross and Triangle go back on the port's pages, Circle
-   does not; the title's rows (Continue 20, New Game 21 and 22, the
-   copyright's halves 18 and 19) placed on the menu's pitch; the pack and
-   dump notes naming SCPS-11003 */
-static void testJapanese(void)
+   does not; the title's rows (Continue, New Game twice, the
+   copyright's two halves) placed on the menu's pitch; the pack and
+   dump notes naming the disc's serial */
+static void testOtherDisc(void)
 {
-    CHECK(lt_ext_confirm_button() == 0x20 && lt_ext_port_back_buttons() == 0x50 &&
-              lt_ext_back_buttons() == 0x40,
-          "the Japanese pad convention (confirm %#x, the port's back %#x, the game's %#x)",
-          lt_ext_confirm_button(), lt_ext_port_back_buttons(), lt_ext_back_buttons());
+    const IcoRegionInfo *ri = ico_region_cur();
+    CHECK(
+        lt_ext_confirm_button() == 0x20 && lt_ext_port_back_buttons() == 0x50 &&
+            lt_ext_back_buttons() == 0x40,
+        "the Japanese program's pad convention (confirm %#x, the port's back %#x, the game's %#x)",
+        lt_ext_confirm_button(), lt_ext_port_back_buttons(), lt_ext_back_buttons());
     int mainL = enterMain(1);
     for (int k = 0; k < 4; k++) {
         frame(0);
@@ -3283,10 +3286,10 @@ static void testJapanese(void)
           jpnRowShown(UI_PAGE_MAIN, UI_OPT_LANGUAGE));
     CHECK(jpnRowShown(UI_PAGE_MAIN, UI_OPT_MENU_LANGUAGE) == 1, "the Menu language row (%d)",
           jpnRowShown(UI_PAGE_MAIN, UI_OPT_MENU_LANGUAGE));
-    /* the port's text follows the disc: Japanese (Auto) */
-    CHECK(ui_get_language() == UI_LANG_JA && ui_sheet_language() == UI_SHEET_JA,
-          "Auto: the port's text Japanese (%d), the sheets the Japanese ones (%d)",
-          ui_get_language(), ui_sheet_language());
+    /* the port's text follows the disc: the row's language (Auto) */
+    CHECK(ui_get_language() == ri->ui_lang_default && ui_sheet_language() == ri->menu_sheet,
+          "Auto: the port's text the disc's (%d), the sheets the disc's (%d)", ui_get_language(),
+          ui_sheet_language());
     CHECK(!ui_settings_opt_shown(UI_OPT_VIDEO_MODE) && !ui_settings_opt_shown(UI_OPT_LANGUAGE) &&
               !ui_settings_opt_shown(UI_OPT_CIRCLE_BACK) &&
               ui_settings_opt_shown(UI_OPT_MENU_LANGUAGE),
@@ -3310,36 +3313,42 @@ static void testJapanese(void)
     CHECK(settle(dispL, 60), "Circle opens Display again");
     press(0x10);
     CHECK(settle(mainL, 60), "Triangle goes back from Display");
-    /* the pack and dump notes name the Japanese disc's folder */
+    /* the pack and dump notes name the disc's folder */
     int named = 0, literal = 0;
     for (int i = LT_GAME_PROPERTY_COUNT; i < LT_GAME_PROPERTY_COUNT + lt_ext_prop_count(); i++) {
         const char *t = lt_ext_row_text(i);
-        named += strstr(t, "SCPS-11003") != NULL;
+        named += strstr(t, ri->pack_serial) != NULL;
         literal += strstr(t, "%s") != NULL || strstr(t, "SCES-50760") != NULL;
     }
     CHECK(named >= 2 && literal == 0,
-          "the notes name SCPS-11003 (%d rows, %d with %%s or the "
+          "the notes name %s (%d rows, %d with %%s or the "
           "European serial)",
-          named, literal);
+          ri->pack_serial, named, literal);
 
     /* the title: its rows on the menu's pitch, the copyright's two halves
        together (settings.c placeTitle over the region's rows) */
     const int t = fxLayout(13);
-    CHECK(t == 10 && ui_settings_entry_row(t) >= LT_GAME_PROPERTY_COUNT &&
+    CHECK(t == ri->layout_title_new && ui_settings_entry_row(t) >= LT_GAME_PROPERTY_COUNT &&
               ui_settings_quit_row(t) >= LT_GAME_PROPERTY_COUNT,
-          "the title's Settings and Quit rows on la_title_new_game_only (10)");
-    const int pitch = texProperty[21].dispY - texProperty[20].dispY;
-    CHECK(pitch > 0 && texProperty[22].dispY == texProperty[21].dispY &&
-              lt_ext_prop(ui_settings_entry_row(t))->dispY == texProperty[21].dispY + pitch &&
-              lt_ext_prop(ui_settings_quit_row(t))->dispY == texProperty[21].dispY + 2 * pitch,
-          "Continue %d, New Game %d and %d, Settings %d, Quit %d", texProperty[20].dispY,
-          texProperty[21].dispY, texProperty[22].dispY,
-          lt_ext_prop(ui_settings_entry_row(t))->dispY,
+          "the title's Settings and Quit rows on la_title_new_game_only");
+    const int pitch =
+        texProperty[ri->row_title_new].dispY - texProperty[ri->row_title_continue].dispY;
+    CHECK(pitch > 0 &&
+              texProperty[ri->row_title_new_only].dispY == texProperty[ri->row_title_new].dispY &&
+              lt_ext_prop(ui_settings_entry_row(t))->dispY ==
+                  texProperty[ri->row_title_new].dispY + pitch &&
+              lt_ext_prop(ui_settings_quit_row(t))->dispY ==
+                  texProperty[ri->row_title_new].dispY + 2 * pitch,
+          "Continue %d, New Game %d and %d, Settings %d, Quit %d",
+          texProperty[ri->row_title_continue].dispY, texProperty[ri->row_title_new].dispY,
+          texProperty[ri->row_title_new_only].dispY, lt_ext_prop(ui_settings_entry_row(t))->dispY,
           lt_ext_prop(ui_settings_quit_row(t))->dispY);
-    CHECK(texProperty[18].dispY == texProperty[19].dispY &&
-              texProperty[18].dispY > lt_ext_prop(ui_settings_quit_row(t))->dispY,
-          "the copyright's halves together below Quit (%d, %d)", texProperty[18].dispY,
-          texProperty[19].dispY);
+    CHECK(texProperty[ri->row_title_copyright].dispY ==
+                  texProperty[ri->row_title_copyright2].dispY &&
+              texProperty[ri->row_title_copyright].dispY >
+                  lt_ext_prop(ui_settings_quit_row(t))->dispY,
+          "the copyright's halves together below Quit (%d, %d)",
+          texProperty[ri->row_title_copyright].dispY, texProperty[ri->row_title_copyright2].dispY);
     /* the European rows are not touched */
     CHECK(texProperty[49].dispY == 0 && texProperty[48].dispY == 0 &&
               texProperty[294].right != mainL,
@@ -3350,8 +3359,9 @@ static void testJapanese(void)
     CHECK(settle(t, 60), "Cross goes back to the title (%d)", current_layout_id);
     /* the pause menu's Options opens the menu: rows 271 .. 273 */
     lt_switch_layout(fxLayout(57));
-    CHECK(settle(54, 40), "the Japanese pause menu (54)");
-    CHECK(texProperty[271].right == mainL, "Options (271) opens the menu");
+    CHECK(settle(ri->layout_pause, 40), "the pause menu (%d)", ri->layout_pause);
+    CHECK(texProperty[ri->row_pause_options].right == mainL, "Options (%d) opens the menu",
+          ri->row_pause_options);
     ui_set_language(UI_LANG_EN);
 }
 
@@ -3360,11 +3370,11 @@ int main(int argc, char **argv)
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
     setEnv("LC_ALL", NULL);
     setEnv("LANG", "en_GB.UTF-8");
-    if (argc > 2 && strcmp(argv[2], "jpn") == 0) {
-        /* the Japanese disc's run (ctest settings_jpn) */
-        CHECK(ico_region_select("jpn") == 0, "the Japanese region");
-        testJapanese();
-        printf("settings_test jpn: %s\n", failures ? "failed" : "ok");
+    if (argc > 2) {
+        /* another disc's run (ctests settings_jpn, settings_kor) */
+        CHECK(ico_region_select(argv[2]) == 0, "the %s region", argv[2]);
+        testOtherDisc();
+        printf("settings_test %s: %s\n", argv[2], failures ? "failed" : "ok");
         return failures ? 1 : 0;
     }
     testBuild();

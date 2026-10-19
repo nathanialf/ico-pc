@@ -42,7 +42,7 @@
 #include "ui_hint.h"
 #include "ui_list.h"
 #include "video_options.h"
-#include "../../core/region.h" /* ICO_JPN: the tests' Japanese runs */
+#include "../../core/region.h" /* ico_region_cur: the tests' other-disc runs */
 
 #ifdef SETTINGS_RENDER
 

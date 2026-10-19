@@ -1009,15 +1009,18 @@ static int render(void)
     return failures ? 1 : 0;
 }
 
-/* settings_render DIR jpn (ctest settings_render_jpn): the Japanese disc's
-   title and main page over the fixture's tables at that disc's numbers:
-   the title's Settings and Quit rows on the menu's pitch under Continue (20)
-   and New Game (21, 22), the copyright's two halves (18, 19) below; the
-   port's text in Japanese (Noto Sans JP's subset) in the Japanese sheets'
-   look; the menu text table not drawn (the game's words keep their
-   texels). Pictures settings_title_jpn.png, settings_main_jpn.png. */
-static int renderJpn(void)
+/* settings_render DIR SLUG (ctests settings_render_jpn, settings_render_kor):
+   the Japanese or Korean disc's title and main page over the fixture's
+   tables at that disc's numbers (the region row's): the title's Settings
+   and Quit rows on the menu's pitch under Continue and New Game, the
+   copyright's two halves below; the port's text in the disc's language
+   (Noto Sans JP's or KR's subset) in the disc's sheets' look; the menu
+   text table not drawn (the game's words keep their texels). Pictures
+   settings_title_<slug>.png, settings_main_<slug>.png. */
+static int renderOtherDisc(const char *slug)
 {
+    const IcoRegionInfo *ri = ico_region_cur();
+    char png[64];
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;
@@ -1036,13 +1039,14 @@ static int renderJpn(void)
     GlobalStageSetting.reductionCol[0] = GlobalStageSetting.reductionCol[1] =
         GlobalStageSetting.reductionCol[2] = 0x80;
     const int mainL = enterMain(1);
-    CHECK(ui_get_language() == UI_LANG_JA && ui_sheet_language() == UI_SHEET_JA,
-          "the port's text Japanese, the sheets the Japanese ones (%d, %d)", ui_get_language(),
+    CHECK(ui_get_language() == ri->ui_lang_default && ui_sheet_language() == ri->menu_sheet,
+          "the port's text the disc's, the sheets the disc's (%d, %d)", ui_get_language(),
           ui_sheet_language());
     for (int i = 0; i < 4; i++) {
         frame(0);
     }
-    snap("settings_main_jpn.png");
+    snprintf(png, sizeof(png), "settings_main_%s.png", slug);
+    snap(png);
     press(0x40); /* Cross: back to the title */
     const int t = fxLayout(13);
     CHECK(settle(t, 60), "the title (%d)", current_layout_id);
@@ -1051,22 +1055,27 @@ static int renderJpn(void)
     ui_settings_title_mask(0);
     texLayout[t].curItem = opt;
     frame(0);
-    snap("settings_title_jpn.png");
+    snprintf(png, sizeof(png), "settings_title_%s.png", slug);
+    snap(png);
     const int pitch = lt_ext_prop(quit)->dispY - lt_ext_prop(opt)->dispY;
-    CHECK(pitch > 0 && lt_ext_prop(opt)->dispY - texProperty[22].dispY == pitch &&
-              texProperty[22].dispY - texProperty[20].dispY == pitch &&
-              texProperty[18].dispY == texProperty[19].dispY &&
-              texProperty[18].dispY > lt_ext_prop(quit)->dispY,
-          "the title's rows: Continue %d, New Game %d, Settings %d, Quit %d, copyright %d %d",
-          texProperty[20].dispY, texProperty[22].dispY, lt_ext_prop(opt)->dispY,
-          lt_ext_prop(quit)->dispY, texProperty[18].dispY, texProperty[19].dispY);
+    CHECK(
+        pitch > 0 && lt_ext_prop(opt)->dispY - texProperty[ri->row_title_new_only].dispY == pitch &&
+            texProperty[ri->row_title_new_only].dispY - texProperty[ri->row_title_continue].dispY ==
+                pitch &&
+            texProperty[ri->row_title_copyright].dispY ==
+                texProperty[ri->row_title_copyright2].dispY &&
+            texProperty[ri->row_title_copyright].dispY > lt_ext_prop(quit)->dispY,
+        "the title's rows: Continue %d, New Game %d, Settings %d, Quit %d, copyright %d %d",
+        texProperty[ri->row_title_continue].dispY, texProperty[ri->row_title_new_only].dispY,
+        lt_ext_prop(opt)->dispY, lt_ext_prop(quit)->dispY,
+        texProperty[ri->row_title_copyright].dispY, texProperty[ri->row_title_copyright2].dispY);
     CHECK(menuTextDraws() > 0, "the port's rows drawn in the sheets' look (%d)", menuTextDraws());
     CHECK(ui_menu_text_item_of(&texProperty[fxRow(294)]) == NULL,
-          "no Japanese row from the menu text table");
+          "no row of the disc's own from the menu text table");
     lt_ext_prop(opt)->defaultMask = lt_ext_prop(quit)->defaultMask = 1;
     ui_settings_title_mask(1);
     rd_shutdown();
-    printf("settings_render jpn: %s\n", failures ? "failed" : "ok");
+    printf("settings_render %s: %s\n", slug, failures ? "failed" : "ok");
     return failures ? 1 : 0;
 }
 
@@ -1075,9 +1084,9 @@ int main(int argc, char **argv)
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
     setEnv("LC_ALL", NULL);
     setEnv("LANG", "en_GB.UTF-8");
-    if (argc > 2 && strcmp(argv[2], "jpn") == 0) {
-        CHECK(ico_region_select("jpn") == 0, "the Japanese region");
-        return renderJpn();
+    if (argc > 2) {
+        CHECK(ico_region_select(argv[2]) == 0, "the %s region", argv[2]);
+        return renderOtherDisc(argv[2]);
     }
     return render();
 }

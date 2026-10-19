@@ -632,9 +632,12 @@ static void testDiscRow(void)
             ui_measure_menu_text(UI_MENU_TEXT_SIZE, ui_str_in((UiLang)g, UI_STR_DISC_PAL));
         const float jw =
             ui_measure_menu_text(UI_MENU_TEXT_SIZE, ui_str_in((UiLang)g, UI_STR_DISC_JPN));
-        CHECK(lw * 0.6f <= 300.0f && pw * 0.6f <= 176.0f && jw * 0.6f <= 176.0f,
-              "disc: language %d: the label and values fit (%.1f, %.1f, %.1f)", g, (double)lw,
-              (double)pw, (double)jw);
+        const float kw =
+            ui_measure_menu_text(UI_MENU_TEXT_SIZE, ui_str_in((UiLang)g, UI_STR_DISC_KOR));
+        CHECK(lw * 0.6f <= 300.0f && pw * 0.6f <= 176.0f && jw * 0.6f <= 176.0f &&
+                  kw * 0.6f <= 176.0f,
+              "disc: language %d: the label and values fit (%.1f, %.1f, %.1f, %.1f)", g, (double)lw,
+              (double)pw, (double)jw, (double)kw);
     }
     CHECK(strcmp(ui_settings_value_text(UI_OPT_DISC), "Europe (SCES-50760)") == 0,
           "disc: no pin, the disc playing: %s", ui_settings_value_text(UI_OPT_DISC));
@@ -656,6 +659,31 @@ static void testDiscRow(void)
     CHECK(strcmp(ui_settings_value_text(UI_OPT_DISC), "Japan (SCPS-11003)") == 0,
           "disc: no pin on the Japanese disc: %s", ui_settings_value_text(UI_OPT_DISC));
     CHECK(ico_region_select("pal") == 0, "disc: the European disc again");
+
+    /* all three discs' game data: pal -> jpn -> kor -> pal in the table's order */
+    s_discHave = 7u;
+    ui_settings_set_disc_handler(fakeDiscPresent);
+    useConfig("version = 1\n");
+    enterMain(1);
+    frame(0);
+    ui_settings_step(UI_OPT_DISC, 1);
+    ui_settings_step(UI_OPT_DISC, 1);
+    CHECK(strcmp(ico_config_get_string("game.disc", ""), "kor") == 0 &&
+              ico_config_disc_pin() == ICO_REGION_KOR &&
+              strcmp(ui_settings_value_text(UI_OPT_DISC), "Korea (SCPS-56001)") == 0,
+          "disc: two steps pin the Korean disc (%s, %s)", ico_config_get_string("game.disc", ""),
+          ui_settings_value_text(UI_OPT_DISC));
+    ui_settings_step(UI_OPT_DISC, 1);
+    CHECK(strcmp(ico_config_get_string("game.disc", ""), "pal") == 0,
+          "disc: and the third wraps to the European one (%s)",
+          ico_config_get_string("game.disc", ""));
+    useConfig("version = 1\n");
+    CHECK(ico_region_select("kor") == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_DISC), "Korea (SCPS-56001)") == 0,
+          "disc: no pin on the Korean disc: %s", ui_settings_value_text(UI_OPT_DISC));
+    CHECK(ico_region_select("pal") == 0, "disc: the European disc once more");
+    s_discHave = 3u;
+    ui_settings_set_disc_handler(fakeDiscPresent);
 
     /* every Main row: fifteen, 10 apart, Back's box inside the page */
     s_gpuN = 0;
@@ -2365,15 +2393,17 @@ static void testMenuLanguage(void)
     CHECK(ui_get_language() == UI_LANG_EN, "back to English");
 }
 
-/* the Japanese disc (port/core/region.h): its pad convention, the rows it
-   has not, the packs' folder; switched back to the European disc */
-static void testJapaneseDisc(void)
+/* the Japanese or Korean disc (port/core/region.h; both are the Japanese
+   program): its pad convention, the rows it has not, the packs' folder;
+   switched back to the European disc */
+static void testOtherDisc(const char *slug)
 {
     char note[256];
     CHECK(lt_ext_confirm_button() == 0x40 && lt_ext_port_back_buttons() == 0x30 &&
               lt_ext_confirm_glyph() == LT_GLYPH_CROSS && lt_ext_has_circle_back(),
           "the European disc: Cross confirms, Triangle and Circle go back");
-    CHECK(ico_region_select("jpn") == 0, "the Japanese disc selected");
+    CHECK(ico_region_select(slug) == 0, "the %s disc selected", slug);
+    const IcoRegionInfo *ri = ico_region_cur();
     lt_ext_set_circle_back(1);
     CHECK(lt_ext_back_buttons() == 0x40, "the game menus cancel with Cross (%#x)",
           lt_ext_back_buttons());
@@ -2390,19 +2420,19 @@ static void testJapaneseDisc(void)
               ui_settings_opt_shown(UI_OPT_MENU_LANGUAGE),
           "no Circle goes back, game language or 50 Hz row; the Menu language row");
     ico_opt_set_ui_language(-1);
-    CHECK(ui_settings_resolve_language() == UI_LANG_JA, "Auto: Japanese on the Japanese disc (%d)",
-          ui_settings_resolve_language());
+    CHECK(ui_settings_resolve_language() == ri->ui_lang_default,
+          "Auto: the disc's language on the disc (%d)", ui_settings_resolve_language());
     ui_settings_apply_language();
-    CHECK(ui_get_language() == UI_LANG_JA && ui_sheet_language() == UI_SHEET_JA,
-          "the port's text Japanese, the sheets' look the Japanese sheets' (%d, %d)",
+    CHECK(ui_get_language() == ri->ui_lang_default && ui_sheet_language() == ri->menu_sheet,
+          "the port's text the disc's, the sheets' look the disc's sheets' (%d, %d)",
           ui_get_language(), ui_sheet_language());
     ico_opt_set_ui_language(UI_LANG_EN);
     ui_settings_apply_language();
-    CHECK(ui_get_language() == UI_LANG_EN && ui_sheet_language() == UI_SHEET_JA,
-          "English chosen: the sheets' look stays the Japanese sheets'");
+    CHECK(ui_get_language() == UI_LANG_EN && ui_sheet_language() == ri->menu_sheet,
+          "English chosen: the sheets' look stays the disc's sheets'");
     ico_opt_set_ui_language(-1);
     ui_str_serial(UI_STR_TEXTURE_PACK_NOTE, note, sizeof(note));
-    CHECK(strstr(note, "SCPS-11003") != NULL && strstr(note, "%s") == NULL,
+    CHECK(strstr(note, ri->pack_serial) != NULL && strstr(note, "%s") == NULL,
           "the pack note names the disc's folder: %s", note);
     CHECK(ico_region_select("pal") == 0 && lt_ext_confirm_button() == 0x40 &&
               lt_ext_back_buttons() == 0x30 && ui_settings_opt_shown(UI_OPT_CIRCLE_BACK) &&
@@ -2411,12 +2441,12 @@ static void testJapaneseDisc(void)
     ui_settings_apply_language();
 }
 
-/* the prompts on the Japanese disc: a Cross in a prompt line is the
+/* the prompts on the Japanese or Korean disc: a Cross in a prompt line is the
    disc's confirm, drawn as Circle's picture (ui_hint.c), and Triangle
    stays Triangle */
-static void testJapaneseHints(void)
+static void testOtherDiscHints(const char *slug)
 {
-    CHECK(ico_region_select("jpn") == 0, "the Japanese disc selected");
+    CHECK(ico_region_select(slug) == 0, "the %s disc selected", slug);
     enterMain(1);
     static const UiHintItem items[] = {{LT_GLYPH_CROSS, -1, UI_STR_HINT_PLAY},
                                        {LT_GLYPH_TRIANGLE, -1, UI_STR_BACK}};
@@ -2425,21 +2455,22 @@ static void testJapaneseHints(void)
     int uv[4];
     const int circleRow = lt_ext_glyph_source(LT_GLYPH_CIRCLE, uv);
     const LtProperty *g = lt_ext_prop(h.glyphRow[0][0]);
-    CHECK(circleRow == 321 && h.item[0].glyph == LT_GLYPH_CIRCLE && g->texU == uv[0] &&
-              g->texV == uv[1] && g->texW == uv[2] && g->texH == uv[3],
+    CHECK(circleRow == ico_region_cur()->glyph[ICO_GLYPH_CIRCLE].row &&
+              h.item[0].glyph == LT_GLYPH_CIRCLE && g->texU == uv[0] && g->texV == uv[1] &&
+              g->texW == uv[2] && g->texH == uv[3],
           "the play prompt shows Circle (row %d, %d,%d %dx%d)", circleRow, g->texU, g->texV,
           g->texW, g->texH);
     CHECK(h.item[1].glyph == LT_GLYPH_TRIANGLE, "Back keeps Triangle");
     CHECK(ico_region_select("pal") == 0, "the European disc again");
 }
 
-/* the mouse on the Japanese disc: a click on an item is its confirm
+/* the mouse on the Japanese or Korean disc: a click on an item is its confirm
    (Circle, 0x20: the page opens rather than the menu going back), and the
    mouse's Cross and Circle trade places while a menu is up (pointer.h
    ico_pointer_swap_face), not in play */
-static void testJapanesePointer(void)
+static void testOtherDiscPointer(const char *slug)
 {
-    CHECK(ico_region_select("jpn") == 0, "the Japanese disc selected");
+    CHECK(ico_region_select(slug) == 0, "the %s disc selected", slug);
     ui_mouse_reset();
     ui_mouse_set_view(640, 480, 0, 0, 640, 480);
     const int mainL = enterMain(1);
@@ -2473,13 +2504,13 @@ int main(int argc, char **argv)
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
     setEnv("LC_ALL", NULL);
     setEnv("LANG", "en_GB.UTF-8");
-    if (argc > 2 && strcmp(argv[2], "jpn") == 0) {
-        /* ctest settings_extra_jpn: the European disc, then the Japanese
-           disc's pad, rows, languages and notes, then back */
-        testJapaneseDisc();
-        testJapanesePointer();
-        testJapaneseHints();
-        printf("settings_extra_test jpn: %s\n", failures ? "failed" : "ok");
+    if (argc > 2) {
+        /* ctests settings_extra_jpn, settings_extra_kor: the European disc,
+           then the other disc's pad, rows, languages and notes, then back */
+        testOtherDisc(argv[2]);
+        testOtherDiscPointer(argv[2]);
+        testOtherDiscHints(argv[2]);
+        printf("settings_extra_test %s: %s\n", argv[2], failures ? "failed" : "ok");
         return failures ? 1 : 0;
     }
     testFixture();
@@ -2521,9 +2552,10 @@ int main(int argc, char **argv)
     testNaturalChains();
     /* the version in the Options menu */
     testVersion();
-    /* Menu language, the Japanese disc */
+    /* Menu language, the Japanese and Korean discs */
     testMenuLanguage();
-    testJapaneseDisc();
+    testOtherDisc("jpn");
+    testOtherDisc("kor");
     if (failures) {
         printf("settings_extra_test: %d failure(s)\n", failures);
         return 1;

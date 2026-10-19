@@ -413,6 +413,8 @@ static void test_engine_failure(void)
    empty layout a scene switches to (port/core/region.h) */
 static void test_region(int jpn)
 {
+    /* jpn: the Japanese program (the Japanese and Korean discs share STAFF1 58, scene 52 and the
+       151050 ms roll: region_kor.c's rows copy region_jpn.c's, TARGETS.md "Korean retail") */
     CHECK(ICO_CREDITS_STAGE == (jpn ? 58 : 60));
     CHECK(ICO_CREDITS_TITLE_STAGE == 1);
     CHECK(ico_region_cur()->credits_song == 47);
@@ -424,12 +426,11 @@ static void test_region(int jpn)
 
 int main(int argc, char **argv)
 {
-    /* credits_test DIR [jpn]: the Japanese disc's region (ctest credits_jpn) */
-    const int jpn = argc > 2 && strcmp(argv[2], "jpn") == 0;
-    if (jpn) {
-        CHECK(ico_region_select("jpn") == 0);
+    /* credits_test DIR [SLUG]: that disc's region (ctests credits_jpn, credits_kor) */
+    if (argc > 2) {
+        CHECK(ico_region_select(argv[2]) == 0);
     }
-    test_region(jpn);
+    test_region(!ICO_PAL);
     test_roll();
     test_lock(argc > 1 ? argv[1] : ".");
     test_engine_failure();

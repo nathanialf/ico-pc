@@ -3774,13 +3774,22 @@ static void checkBordersOff(void)
     /* 50 Hz: 8 of 256 rows, 33.75 pixels at 1080 */
     checkBorderOff("border 1920x1080 16:9 50 Hz", 16.0f / 9.0f, 1920, 1080, 512);
     checkBorderOff("border 3840x2160 16:9 50 Hz", 16.0f / 9.0f, 3840, 2160, 512);
-    /* the Japanese disc: gsb_Reduction_jpn crops no rows (region.h
-     * reduction_crops_rows), so the bands are the side columns alone */
-    ico_region_select("jpn");
-    CHECK(rd__reduction_crop(448) == 0 && rd__reduction_crop(512) == 0,
-          "border jpn: the reduction crops no rows (%u, %u)", rd__reduction_crop(448),
-          rd__reduction_crop(512));
-    checkBorderOff("border 1920x1080 16:9 Japanese disc", 16.0f / 9.0f, 1920, 1080, 448);
+    /* the Japanese and Korean discs: gsb_Reduction_jpn (JPN || KOR) crops no
+     * rows (region.h reduction_crops_rows 0), so the bands are the side
+     * columns alone; every row's crop follows its field */
+    for (int i = 0; i < ico_region_count(); i++) {
+        const IcoRegionInfo *ri = ico_region_at(i);
+        char what[96];
+        ico_region_select(ri->slug);
+        CHECK(rd__reduction_crop(448) == (ri->reduction_crops_rows ? 2u : 0u) &&
+                  rd__reduction_crop(512) == (ri->reduction_crops_rows ? 8u : 0u),
+              "border %s: the reduction crops by the row's field (%u, %u)", ri->slug,
+              rd__reduction_crop(448), rd__reduction_crop(512));
+        if (!ri->reduction_crops_rows) {
+            snprintf(what, sizeof(what), "border 1920x1080 16:9 %s disc", ri->slug);
+            checkBorderOff(what, 16.0f / 9.0f, 1920, 1080, 448);
+        }
+    }
     ico_region_select("pal");
     CHECK(rd__reduction_crop(448) == 2 && rd__reduction_crop(512) == 8,
           "border pal: the reduction crops 2 of 224 rows, 8 of 256 (%u, %u)",
