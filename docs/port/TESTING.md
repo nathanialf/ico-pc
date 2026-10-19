@@ -126,8 +126,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `mcdata.c` themselves on the [fiber](ARCHITECTURE.md#terms) scheduler, then the card importer,
   with the disc its first argument selects: the European disc's `BESCES-50760ico` and 0x1F0-byte
   product record (`save`), the Japanese disc's `BISCPS-11003ico` and 0x1E8-byte record, the same
-  bytes up to 0x1E8 (`save_jpn`); both import a card holding both directories side by side and
-  the other disc's `.psu` beside their own ([SAVES.md](SAVES.md#tests)).
+  bytes up to 0x1E8 (`save_jpn`), the Korean disc's `BISCPS-56001ico` with the same 0x1E8 record
+  (`save_kor`); each imports a card holding every directory side by side and the other disc's
+  `.psu` beside their own ([SAVES.md](SAVES.md#tests)).
 
 ### port/core/test
 
@@ -179,16 +180,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 
 - `achievements_test.c`: the game-state view over a synthetic snapshot, every achievement's
   condition, suspension, `achievements.toml` round trips, the popup gap (125 Main ticks at 25 Hz,
-  150 at 30 Hz) and both discs' keys in one file (`stats.stages` / `stats.stages_jpn`,
-  `run.slot_N_*` / `run.jpn_slot_N_*`, one set of unlocks), with the disc its second argument
-  selects (`achievements`, `achievements_jpn`).
+  150 at 30 Hz) and both discs' keys in one file (`stats.stages` / `stats.stages_jpn` / `stats.stages_kor`,
+  `run.slot_N_*` / `run.jpn_slot_N_*` / `run.kor_slot_N_*`, one set of unlocks), with the disc its
+  second argument selects (`achievements`, `achievements_jpn`, `achievements_kor`).
 - `appearance_disc_test.c`: the characters' colours against the disc's CLUTs (`appearance_disc`).
 - `appearance_test.c`: the recolour on synthetic CLUTs: identity, coverage, swatches, randomize
   (`appearance`).
 - `credits_test.c`: `staffroll.c` over a short table with the port credit appended, and the
-  credits row's lock (`credits`); with `jpn`, the same on the Japanese disc's region: STAFF1 58,
-  the song 47, the scene layout 52, the roll offset 151,050 ms, the roll start's log line
-  (`credits_jpn`).
+  credits row's lock (`credits`); with `jpn` or `kor`, the same on that disc's region: STAFF1 58,
+  the song 47, the scene layout 52, the roll offset 151,050 ms (the Korean build is the Japanese
+  program), the roll start's log line, which names the disc (`credits_jpn`, `credits_kor`).
 - `door_grace_test.c`: the doorway fix's arm and grace and a copy of the exit check's guard
   (`door_grace`).
 - `hand_ik_test.c`: the hand records as `ACTGame_ConnectHand` sets them through the real
@@ -197,9 +198,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `ico_frame_test.c`: the [native frame](ARCHITECTURE.md#terms)'s widths for each aspect and the
   options' frame (`ico_frame`).
 - `kanban_boot_test.c`: the boot's card check and signs (`kanbanBoot.c`) for a first and a later
-  boot (`kanban_boot`); with `jpn`, the Japanese disc's check (`kanbanBootMcCheck_jpn`): no
-  language or video step, no read of the card's system file, the language word 0 and 60 Hz
-  throughout (`kanban_boot_jpn`).
+  boot (`kanban_boot`); with `jpn` or `kor`, the Japanese program's check (`kanbanBootMcCheck_jpn`,
+  which the Korean disc runs too): no language or video step, no read of the card's system file,
+  the language word 0 and 60 Hz throughout (`kanban_boot_jpn`, `kanban_boot_kor`).
 - `model_viewer_cam_test.c`: the viewer's camera step without the game (`model_viewer_cam`).
 - `model_viewer_test.c`: the viewer's table against its motion-kind blocks and the game's table
   sizes, its names in five languages (`model_viewer`); its Japanese model column is checked by
@@ -219,8 +220,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   reflections' `effect_water_sharp` off by default, saved, outside the preset; a leftover
   `effect_glow_size` read by nothing and not written), `[ui] language` (auto by default and for
   an unknown word, each name its language), `eBrainGetTarget` with Yorda safe off and on, and the
-  `[mirror]` keys of the disc its second argument selects (`slot_N`, `jpn_slot_N`), the other
-  disc's left as they were (`options`, `options_jpn`).
+  `[mirror]` keys of the disc its second argument selects (`slot_N`, `jpn_slot_N`, `kor_slot_N`),
+  the other discs' left as they were (`options`, `options_jpn`, `options_kor`).
 - `photo_test.c`: photo mode's state and both cameras, identity, moves, limits; the Film effect's
   cycle off, 1 to 4, Deja vu (5), off, `film_effect = 5` read back as Deja vu and a value past it
   as off (`photo`).
@@ -619,12 +620,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `gallery_sweep.py`: every stream and a sample of every bank in one headless run
   (`gallery_sweep`).
 - `gallery_test.c`: the music gallery's list from the base ELF's tables (`gallery`); with
-  `--jpn`, both discs' 105 `adpcmFile` paths compared row for row, then the list from the
-  Japanese tables and image (`gallery_jpn`).
-- `menu_jpn_test.c`: the Japanese disc's menus: the region's layouts, rows and glyph rows against
-  the Japanese ELF's tables, no row from the menu text table (`menu_text_jpn`); with the Japanese
-  image, the glyph rectangles' ink and the Japanese sheets' light ink, held to
-  `kSheetInk[UI_SHEET_JA]` (`menu_look_jpn`).
+  `--region jpn` or `--region kor` (`--jpn` is `--region jpn`), the European and that disc's 105
+  `adpcmFile` paths compared row for row, then the list from that disc's tables and image
+  (`gallery_jpn`, `gallery_kor`).
+- `menu_region_test.c` (`text|look <slug>`): the Japanese and Korean discs' menus: the region's
+  layouts, rows and glyph rows against that disc's ELF tables, no row from the menu text table
+  (`menu_text_jpn`, `menu_text_kor`); with the disc's image, the glyph rectangles' ink, the
+  sheets' light ink held to `kSheetInk[UI_SHEET_JA]` or `kSheetInk[UI_SHEET_KO]`, and the port's
+  words' boxes against the disc's rows (`menu_look_jpn`, `menu_look_kor`; the Korean ink 250.7
+  fill, 42.9 rim is an estimate from the decoded sheets until the first run on the disc).
 - `menu_look_test.c`: the menus' Arimo text against the game's menu sheets from the disc
   (`menu_look`); `menu_sheets.c`/`.h` decode the sheets.
 - `menu_text_test.c`: the game's menu words and the port's rows drawn in the sheets' look
@@ -636,12 +640,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   note, its key and the page's fourteen rows (`testWaterReflections`), and Main's Disc row
   (`testDiscRow`: shown with both discs' game data only, its values and `[game] disc`, the page
   with all fifteen rows). Each also runs with `jpn`
-  as the Japanese disc over the fixture's tables at that disc's numbers (`settings_jpn`,
-  `settings_extra_jpn`, `settings_extras_jpn`): the rows it has not, Menu language, Circle
+  as the Japanese or Korean disc over the fixture's tables at that disc's numbers (`settings_jpn`,
+  `settings_extra_jpn`, `settings_extras_jpn`; `kor` the same, `settings_kor`, `settings_extra_kor`,
+  `settings_extras_kor`, with the numbers from the Korean region row): the rows it has not, Menu language, Circle
   confirming, Cross and Triangle going back, the title's rows, the notes' serial, the mouse and
   the prompts.
 - `settings_photo_test.c`: the Settings screens through rd on a device, written as PNGs
-  (`settings_render`); with `jpn`, the Japanese disc's title and main page (`settings_render_jpn`).
+  (`settings_render`); with `jpn` or `kor`, that disc's title and main page (`settings_render_jpn`,
+  `settings_render_kor`).
 - `strings_complete_test.c`: every language's table defines every `UiStrId`, none empty but
   `UI_STR_NONE`, each with the English entry's printf conversions; the four pack notes filled
   with each disc's serial (`ui_str_serial`); the sheet language's default and setter; the menu
@@ -651,8 +657,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `ui_test.c`: the embedded fonts, UTF-8, the runtime text; each language's own Deja vu string
   (`UI_STR_PHOTO_FILM_DEJA`); a Japanese popup body wider than the panel takes a second line, an
   English one keeps its one; the popups' timing in seconds at the default 50 Hz and at 60 Hz
-  (`ui_popup_set_vsync_hz`) (`ui`); with `jpn`, the glyph rows, the table sizes and the pad
-  convention on the Japanese disc (`ui_jpn`).
+  (`ui_popup_set_vsync_hz`) (`ui`); with `jpn` or `kor`, the glyph rows, the table sizes and the pad
+  convention on that disc (`ui_jpn`, `ui_kor`).
 - Helpers: `settings_fixture.c`/`.h`, `headless_common.py`.
 
 ## Render gates
@@ -711,6 +717,8 @@ has their defaults; the registrations are in `port/*/CMakeLists.txt`):
   `fmv_fields`, `gsb_cull_stage`, `texpack_disc`, `menu_look`, `menu_text`, `gallery`,
   `content_table_chains` and the headless game runs below skip; `sndn2`, `fmv`, `shadow_spawn` and
   `rd_mesh` run only their synthetic part, and `tables_loader` reads the base ELF instead.
+- `ICO_DISC_IMAGE_KOR`, the Korean image (`baserom/Ico_KOR.iso`). Without it `menu_look_kor` and
+  `gallery_kor` (which then leaves out the disc checks) skip, as the Japanese rows below do.
 - `ICO_DISC_IMAGE_JPN`, the Japanese image (`baserom/Ico_JPN.iso`). Without it `vfs_disc_jpn`,
   `vfs_disc_jpn_bin`, `vfs_disc_jpn_cue`, `vfs_disc_jpn_chd`, `archive_disc_jpn`,
   `archive_manifest_jpn`, `menu_look_jpn` and `content_table_chains_jpn` skip, and `gallery_jpn`
@@ -720,9 +728,11 @@ has their defaults; the registrations are in `port/*/CMakeLists.txt`):
 - `ICO_BASE_ELF_JPN` and `ICO_DISC_IMAGE_JPN`, the Japanese base ELF and image (defaults
   `baserom/jpn/baseelf.elf`, `baserom/Ico_JPN.iso`): `tables_loader_jpn` (through the image when
   present) and `tables_manifest_jpn`, both skipped without the ELF; `menu_text_jpn`,
-  `menu_look_jpn` and `gallery_jpn` (with the PAL ELF too) skip without it, and
-  `model_viewer_jpn` (`tools/gen_mv_region.py --region jpn --check`, both ELFs through
-  `gen_data_c.py`, so pyelftools) checks the model viewer's Japanese column.
+  `menu_look_jpn` and `gallery_jpn` (with the PAL ELF too) skip without it, `menu_text_kor`,
+  `menu_look_kor` and `gallery_kor` likewise without `ICO_BASE_ELF_KOR` (default
+  `baserom/kor/baseelf.elf`), and `model_viewer_jpn` / `model_viewer_kor`
+  (`tools/gen_mv_region.py --region <slug> --check`, both ELFs through `gen_data_c.py`, so
+  pyelftools) check the model viewer's Japanese column, which the Korean disc shares.
 - `ICO_TEXPACK_DIR`, a PCSX2 pack's replacements folder: `texpack_disc`, `texpack_e2e`,
   `texpack_pack_files`.
 - `ICO_FOG_DUMP`, a player dump with the depth fog: `rd_fog_depth_copy_dump` and `_d24s8` (skipped

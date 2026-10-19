@@ -483,8 +483,8 @@ being fcfcfc on these sheets where the European ones have ffffff; rim 34.3, a bl
 English sheets' 24; one antialiasing step where the European sheets have three, which the shared
 `ICO_SHEET_LEVELS` covers; `{1, 34, 252, 1, 0}`; and `UI_SHEET_KO`, the Korean disc's,
 `{1, 43, 251, 1, 0}`, measured off line on the decoded title, mc04 and option words with
-`menu_jpn_test.c`'s rule and corrected by the difference the same rule shows on the Japanese
-words, until a Korean twin of `menu_look_jpn` measures it on the disc), and a change restyles the
+`menu_region_test.c`'s rule and corrected by the difference the same rule shows on the Japanese
+words, until `menu_look_kor` measures it on the disc), and a change restyles the
 pages without rasterising again (`port/ui/menu_font.h` (`ui_menu_sheet_ink`, `ui_menu_item_ink`)).
 
 ### The Japanese and Korean sheets' geometry
@@ -511,7 +511,7 @@ Japanese geometry (オプション -11 %, もどる +14 %, ズーム +13 %, は�
 words together. Disc and port (width x height): 옵션 32 x 14 and 32 x 13, 게임으로 71 x 14 and
 72 x 13, 조작 설정 81 x 13 and 78 x 13, 줌 12 x 13 and 12 x 13, 게임을 종료함 106 x 12 and
 116 x 13, 새로 시작하기 116 x 13 and 118 x 14, 불러오기 72 x 14 and 71 x 14: every height within
-a texel and every width within 10 %. A Korean twin of `menu_look_jpn` holds the numbers on the
+a texel and every width within 10 %. `menu_look_kor` holds the numbers on the
 disc.
 
 ### The game's own menu words
@@ -764,12 +764,13 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   string drawable, the hook through the real `layout_texture.c`.
 - `menu_look` (`test/menu_look_test.c`, `test/menu_sheets.c`): the menus' strips against the
   player's sheets through the sheet shader's CPU reference; pins the sheet constants.
-- `menu_text_jpn`, `menu_look_jpn` (`test/menu_jpn_test.c`, with `test/menu_sheets.c`): over the
-  Japanese boot ELF's tables (`ICO_BASE_ELF_JPN`), the region's layouts by their procedures, the
-  title, pause and memory card rows, the glyph rows' rectangles and heights, no row drawn from the
-  menu text table; with the Japanese image (`ICO_DISC_IMAGE_JPN`) each glyph rectangle's ink, the
-  pause and title words' fill and rim, and `kSheetInk[UI_SHEET_JA]` held to them. 77 without
-  them.
+- `menu_text_jpn`, `menu_look_jpn`, `menu_text_kor`, `menu_look_kor` (`test/menu_region_test.c`
+  with a slug, and `test/menu_sheets.c`): over the disc's boot ELF's tables (`ICO_BASE_ELF_JPN`,
+  `ICO_BASE_ELF_KOR`), the region's layouts by their procedures, the title, pause and memory card
+  rows, the glyph rows' rectangles and heights, no row drawn from the menu text table; with the
+  disc's image (`ICO_DISC_IMAGE_JPN`, `ICO_DISC_IMAGE_KOR`) each glyph rectangle's ink, the pause
+  and title words' fill and rim, `kSheetInk[UI_SHEET_JA]` or `kSheetInk[UI_SHEET_KO]` held to
+  them, and the port's words' box against the disc's rows. 77 without them.
 - `font_coverage` (`test/font_coverage_test.c`, `test/font_corpus/`): every character the port
   draws, in the seven languages, has a glyph in one of the three fonts; a Japanese character is
   Noto Sans JP's own glyph, a Hangul one Noto Sans KR's. `font_audit`, `font_subset_ja` and
