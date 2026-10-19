@@ -29,9 +29,9 @@ int ScreenWidth = 512, ScreenHeight = 512;
 
 float center_X = 2048.0f, center_Y = 2048.0f;
 
-LtProp texLayout[LT_GAME_LAYOUT_COUNT];
+LtProp texLayout[LT_GAME_LAYOUT_COUNT_MAX];
 
-LtProperty texProperty[LT_GAME_PROPERTY_COUNT];
+LtProperty texProperty[LT_GAME_PROPERTY_COUNT_MAX];
 
 TexRec texFile[1];
 
@@ -378,6 +378,56 @@ void setLayout(int i, int first, int last, int def, int link)
     l->link = link;
 }
 
+/* The fixture's tables are the European disc's numbers; on the Japanese
+   disc's region (a test's "jpn" run) the same rows at that disc's numbers
+   (port/core/region_jpn.c): the layouts the fixture builds, and the rows
+   of the title, the vibration screen and the pause, Options and button
+   configuration screens (from the pause menu on 23 lower). */
+int fxLayout(int pal)
+{
+    static const int kMap[][2] = {{9, 6},   {11, 8},  {12, 9},  {13, 10}, {54, 51}, {55, 52},
+                                  {57, 54}, {58, 55}, {59, 56}, {60, 57}, {61, 58}};
+    if (!ICO_JPN) {
+        return pal;
+    }
+    for (unsigned i = 0; i < sizeof(kMap) / sizeof(kMap[0]); i++) {
+        if (kMap[i][0] == pal) {
+            return kMap[i][1];
+        }
+    }
+    return pal;
+}
+
+int fxRow(int pal)
+{
+    if (!ICO_JPN) {
+        return pal;
+    }
+    if (pal >= 292 && pal <= 392) {
+        return pal - 23;
+    }
+    switch (pal) {
+    case 44:
+        return 14; /* la_vibe_select's 13..16, its default 14 */
+    case 45:
+        return 15;
+    case 46:
+        return 16;
+    case 48:
+        return 18; /* the copyright line's first half */
+    case 49:
+        return 20;
+    case 50:
+        return 21;
+    case 51:
+        return 22;
+    case 52:
+        return 23; /* la_title_new_game_only's end */
+    default:
+        return pal;
+    }
+}
+
 /* the PAL rows the entry touches, with their shipped links (tex-property.c) */
 void fakeTables(void)
 {
@@ -386,51 +436,61 @@ void fakeTables(void)
     for (int i = 0; i < LT_GAME_PROPERTY_COUNT; i++) {
         setRow(i, -1, -1, -1, -1, -1, -1, 0);
     }
-    setLayout(54, 292, 292, -1, -1);
-    texLayout[54].fadeInTime = 0.0f;
-    texLayout[54].fadeOutTime = 0.0f;
-    setLayout(57, 292, 297, 295, -1);
-    setLayout(58, 297, 333, 308, -1);
-    setLayout(59, 333, 392, 336, -1); /* the game's button configuration */
-    setRow(336, -1, -1, -1, -1, -1, -1, 52);
+    setLayout(fxLayout(54), fxRow(292), fxRow(292), -1, -1);
+    texLayout[fxLayout(54)].fadeInTime = 0.0f;
+    texLayout[fxLayout(54)].fadeOutTime = 0.0f;
+    setLayout(fxLayout(57), fxRow(292), fxRow(297), fxRow(295), -1);
+    setLayout(fxLayout(58), fxRow(297), fxRow(333), fxRow(308), -1);
+    setLayout(fxLayout(59), fxRow(333), fxRow(392), fxRow(336),
+              -1); /* the game's button configuration */
+    setRow(fxRow(336), -1, -1, -1, -1, -1, -1, 52);
     /* the pause menu: Options (opens 58 in the PAL data), Back, End
        Game, their letters 7 texels into rectangles at x 40 */
-    setRow(294, -1, -1, 295, -1, -1, 58, 50);
-    setRow(295, -1, -1, 296, 294, -1, -1, 70);
-    setRow(296, -1, -1, -1, 295, -1, 61, 120);
+    setRow(fxRow(294), -1, -1, fxRow(295), -1, -1, fxLayout(58), 50);
+    setRow(fxRow(295), -1, -1, fxRow(296), fxRow(294), -1, -1, 70);
+    setRow(fxRow(296), -1, -1, -1, fxRow(295), -1, fxLayout(61), 120);
     for (int i = 294; i <= 296; i++) {
-        texProperty[i].dispX = 40;
+        texProperty[fxRow(i)].dispX = 40;
     }
-    setLayout(11, 48, 49, -1, -1);
-    setLayout(12, 49, 51, 49, 11);
-    setLayout(13, 51, 52, 51, 11);
-    setLayout(9, 44, 46, 44, -1); /* the vibration screen (its Triangle goes back) */
-    setRow(44, -1, -1, 45, -1, -1, -1, 100);
-    setRow(45, -1, -1, -1, 44, -1, -1, 120);
+    setLayout(fxLayout(11), fxRow(48), fxRow(49), -1, -1);
+    setLayout(fxLayout(12), fxRow(49), fxRow(51), fxRow(49), fxLayout(11));
+    setLayout(fxLayout(13), fxRow(51), fxRow(52), fxRow(51), fxLayout(11));
+    setLayout(fxLayout(9), fxRow(44), fxRow(46), fxRow(44),
+              -1); /* the vibration screen (its Triangle goes back) */
+    setRow(fxRow(44), -1, -1, fxRow(45), -1, -1, -1, 100);
+    setRow(fxRow(45), -1, -1, -1, fxRow(44), -1, -1, 120);
     /* Options: 300 screen mode and 325 girl control are shown only after
        the game is cleared (layout_texture.c lt_property_visible) */
-    setRow(300, -1, -1, 308, 325, 57, -1, 45);
-    setRow(308, -1, -1, 313, 300, 57, -1, 65);
-    setRow(313, -1, -1, 318, 308, 57, -1, 85);
-    setRow(318, -1, -1, 323, 313, 57, -1, 105);
-    setRow(323, -1, -1, 324, 318, 57, 59, 125);
-    setRow(324, -1, -1, 325, 323, 57, 60, 145);
-    setRow(325, -1, -1, 300, 324, 57, -1, 165);
-    setRow(330, -1, -1, 300, 324, 57, 57, 1);
+    setRow(fxRow(300), -1, -1, fxRow(308), fxRow(325), fxLayout(57), -1, 45);
+    setRow(fxRow(308), -1, -1, fxRow(313), fxRow(300), fxLayout(57), -1, 65);
+    setRow(fxRow(313), -1, -1, fxRow(318), fxRow(308), fxLayout(57), -1, 85);
+    setRow(fxRow(318), -1, -1, fxRow(323), fxRow(313), fxLayout(57), -1, 105);
+    setRow(fxRow(323), -1, -1, fxRow(324), fxRow(318), fxLayout(57), fxLayout(59), 125);
+    setRow(fxRow(324), -1, -1, fxRow(325), fxRow(323), fxLayout(57), fxLayout(60), 145);
+    setRow(fxRow(325), -1, -1, fxRow(300), fxRow(324), fxLayout(57), -1, 165);
+    setRow(fxRow(330), -1, -1, fxRow(300), fxRow(324), fxLayout(57), fxLayout(57), 1);
     /* the labels' x (the Settings row ends where their letters end) */
-    texProperty[323].dispX = 108;
-    texProperty[324].dispX = 236;
-    texProperty[325].dispX = 236;
+    texProperty[fxRow(323)].dispX = 108;
+    texProperty[fxRow(324)].dispX = 236;
+    texProperty[fxRow(325)].dispX = 236;
     /* title: the copyright line (48), Continue (49) and New Game (50, 51),
        centred in 20-field-line boxes; 49..51 masked by default */
-    setRow(48, -1, -1, -1, -1, -1, -1, 195);
-    setRow(49, -1, -1, 50, -1, -1, -1, 135);
-    setRow(50, -1, -1, -1, 49, -1, -1, 165);
-    setRow(51, -1, -1, -1, -1, -1, -1, 165);
+    setRow(fxRow(48), -1, -1, -1, -1, -1, -1, 195);
+    setRow(fxRow(49), -1, -1, fxRow(50), -1, -1, -1, 135);
+    setRow(fxRow(50), -1, -1, -1, fxRow(49), -1, -1, 165);
+    setRow(fxRow(51), -1, -1, -1, -1, -1, -1, 165);
     for (int i = 48; i <= 51; i++) {
-        texProperty[i].dispW = 0;
-        texProperty[i].centerX = 1;
-        texProperty[i].defaultMask = i != 48;
+        texProperty[fxRow(i)].dispW = 0;
+        texProperty[fxRow(i)].centerX = 1;
+        texProperty[fxRow(i)].defaultMask = i != 48;
+    }
+    if (ICO_JPN) {
+        /* the Japanese title's copyright line is two halves (18, 19), its
+           layout 8 the two rows */
+        setRow(19, -1, -1, -1, -1, -1, -1, 195);
+        texProperty[19].dispW = 0;
+        texProperty[19].centerX = 1;
+        setLayout(8, 18, 20, -1, -1);
     }
     /* the button glyphs' rows (layout_ext.h): their PAL rectangles, and a
        texture number per sheet (1 buttons.tm2, 2 menu_PAL_02, 3
@@ -446,11 +506,11 @@ void fakeTables(void)
     }
     /* the pause menu's Options (294): its PAL rectangle on menu_PAL_01, a
        row of the menu text table (drawn as text in the sheets' look) */
-    texProperty[294].texU = 384;
-    texProperty[294].texV = 120;
-    texProperty[294].texW = 128;
-    texProperty[294].texH = 20;
-    texProperty[294].texNo = 3;
+    texProperty[fxRow(294)].texU = 384;
+    texProperty[fxRow(294)].texV = 120;
+    texProperty[fxRow(294)].texW = 128;
+    texProperty[fxRow(294)].texH = 20;
+    texProperty[fxRow(294)].texNo = 3;
 }
 
 /* ------------------------------------------------------- frames */
@@ -558,10 +618,10 @@ int labelsAre(UiSettingsPage page, const int *opts, const int *strs, int n)
 /* Settings from the pause menu: 57 with the cursor on Options (294), Cross */
 void pauseToMain(void)
 {
-    lt_switch_layout(57);
-    CHECK(settle(57, 40), "the pause menu");
-    texLayout[57].curItem = 294;
-    press(0x40);
+    lt_switch_layout(fxLayout(57));
+    CHECK(settle(fxLayout(57), 40), "the pause menu");
+    texLayout[fxLayout(57)].curItem = fxRow(294);
+    press(lt_ext_confirm_button());
     CHECK(settle(ui_settings_page_layout(UI_PAGE_MAIN), 60), "Options: the menu (%d)",
           current_layout_id);
 }
@@ -588,13 +648,14 @@ int enterMainKeep(int title)
     NonLinearCameraMove = 2;
     ui_set_language(UI_LANG_EN);
     init_layout_texture(2);
-    settle(54, 4);
+    settle(fxLayout(54), 4);
     if (title) {
-        lt_switch_layout(13);
-        CHECK(settle(13, 60), "the title");
+        const int t = fxLayout(13);
+        lt_switch_layout(t);
+        CHECK(settle(t, 60), "the title");
         press(0x4000);
-        CHECK(texLayout[13].curItem == ui_settings_entry_row(13), "on Settings");
-        press(0x40);
+        CHECK(texLayout[t].curItem == ui_settings_entry_row(t), "on Settings");
+        press(lt_ext_confirm_button());
     } else {
         pauseToMain();
     }
@@ -607,9 +668,20 @@ int enterMainKeep(int title)
 int openPage(int mainL, int mainRow, UiSettingsPage page)
 {
     int labels[16];
-    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    const int want = ui_settings_page_layout(page);
+    /* the row that opens the page (mainRow, or the one whose link it is:
+       the main page's rows moved when Menu language came in) */
+    if (mainRow < 0 || mainRow >= n || lt_ext_prop(labels[mainRow])->right != want) {
+        for (int i = 0; i < n; i++) {
+            if (lt_ext_prop(labels[i])->right == want) {
+                mainRow = i;
+                break;
+            }
+        }
+    }
     lt_ext_layout(mainL)->curItem = labels[mainRow];
-    press(0x40);
+    press(lt_ext_confirm_button());
     const int l = ui_settings_page_layout(page);
     CHECK(settle(l, 60), "page %d opens (%d)", page, current_layout_id);
     return l;
@@ -651,7 +723,12 @@ void checkPageFits(UiSettingsPage page, const char *what)
     }
     /* Controls is the page that grows past the others (pagePitch) */
     const int tall = page == UI_PAGE_CONTROLS ? 12 : 13;
-    const int gap = shown > 15 && page == UI_PAGE_CONTROLS ? 10 : shown > tall ? 11 : 13;
+    /* the Main page's thirteen rows (Menu language, developer mode and
+       both dumps) 12 apart (pagePitch) */
+    const int gap = shown > 15 && page == UI_PAGE_CONTROLS ? 10
+                    : shown > tall                         ? 11
+                    : shown == 13 && page == UI_PAGE_MAIN  ? 12
+                                                           : 13;
     const int top = shown > tall ? 30 : 34;
     for (int i = 0; i < n; i++) {
         const LtProperty *r = lt_ext_prop(labels[i]);

@@ -45,7 +45,9 @@ extern "C" {
 
 typedef struct RdChain {
     const char *bga; /* the stage animation's file name, for the reader */
-    int group;       /* its BgaHeader.group (stageTable's group, unique to it) */
+    int group;       /* its BgaHeader.group (stageTable's group, unique to it): the
+                        European disc's; rd_chain_find matches the running disc's
+                        (port/core/region.h chain_group_*) */
     int null;        /* the Null's node number (BgaDObjEnt.num, type 1) */
     int axis;        /* the chain's length along the Null's 0 x, 1 y, 2 z */
     float anchor;    /* the top link's node along the axis (unscaled) */

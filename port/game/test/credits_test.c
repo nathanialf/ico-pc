@@ -29,6 +29,7 @@
 #include "achievements.h"
 #include "config.h"
 #include "ico_credits.h"
+#include "../../core/region.h"
 #include "staffroll.h"
 
 static int failures;
@@ -361,8 +362,13 @@ static void test_engine_failure(void)
     s_gflags[10] = 1;
     gameSysMainSaveBuff[0] = 'C';
     s_loads = 0;
-    CHECK(ico_credits_start() >= 0 && ico_credits_active() && s_switchTo == 60);
+    const int to = ico_credits_start();
+    CHECK(to == ico_region_cur()->layout_scene && ico_credits_active() &&
+          s_switchTo == ICO_CREDITS_STAGE);
     CHECK(s_world == 216); /* the boy at the ending's entrance */
+    /* the roll's start logs the song's place against the table's (the
+       engine's roll: no song opened here, so -1) */
+    ico_roll_started(3);
     systemStatus[6] = 1;
     s_gflags[10] = 0; /* what the staff scenes would change */
     s_gflags[20] = 1;
@@ -375,7 +381,7 @@ static void test_engine_failure(void)
     CHECK(s_simpleTo == 1 && ico_credits_active() && s_loads == 0);
     /* a late STAFF1 entry does not end it; the title's does, the state put
        back */
-    ico_credits_stage_enter(60);
+    ico_credits_stage_enter(ICO_CREDITS_STAGE);
     CHECK(ico_credits_active());
     stage_no = 1;
     systemStatus[6] = 0;
@@ -403,8 +409,27 @@ static void test_engine_failure(void)
     ico_credits_set_engine(NULL);
 }
 
+/* the region's numbers the playback runs on: STAFF1, the ending's song, the
+   empty layout a scene switches to (port/core/region.h) */
+static void test_region(int jpn)
+{
+    CHECK(ICO_CREDITS_STAGE == (jpn ? 58 : 60));
+    CHECK(ICO_CREDITS_TITLE_STAGE == 1);
+    CHECK(ico_region_cur()->credits_song == 47);
+    CHECK(ico_region_cur()->layout_scene == (jpn ? 52 : 55));
+    CHECK(ico_region_cur()->credits_roll_ms == (jpn ? 151050 : 151080));
+    CHECK(ico_region_cur()->credits_entrance_exit == 216 &&
+          ico_region_cur()->credits_boy_label == 54);
+}
+
 int main(int argc, char **argv)
 {
+    /* credits_test DIR [jpn]: the Japanese disc's region (ctest credits_jpn) */
+    const int jpn = argc > 2 && strcmp(argv[2], "jpn") == 0;
+    if (jpn) {
+        CHECK(ico_region_select("jpn") == 0);
+    }
+    test_region(jpn);
     test_roll();
     test_lock(argc > 1 ? argv[1] : ".");
     test_engine_failure();
@@ -412,6 +437,6 @@ int main(int argc, char **argv)
         fprintf(stderr, "credits_test: %d failure(s)\n", failures);
         return 1;
     }
-    printf("credits_test: ok\n");
+    printf("credits_test: ok (%s)\n", ico_region_cur()->disc_id);
     return 0;
 }

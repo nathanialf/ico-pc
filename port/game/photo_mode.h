@@ -55,8 +55,10 @@
  *   Square          the help panel shown or hidden, saved as hide_ui
  *   Right (d-pad)   the Film effect: Off, 1, 2, 3, 4, Deja vu, Off ... (saved
  *                   as film_effect; shown whether or not the game is cleared)
- *   Cross           a capture (ico_photo_take_capture)
- *   Triangle, Circle, Start  leave (the proc goes back to the pause menu)
+ *   Cross           a capture (ico_photo_take_capture); Circle on the
+ *                   Japanese disc, whose menus confirm with it
+ *   Triangle, Circle, Start  leave (the proc goes back to the pause menu);
+ *                   Cross for Circle on the Japanese disc
  * The pivot is the game camera's look-at point: the point of its forward
  * axis nearest the object the camera follows (ico_photo_set_subject; the
  * photo screen gives camera-root.c's default_cameratarget_gobj's root), or
@@ -148,9 +150,15 @@ int ico_photo_active(void);
 int ico_photo_left(void);
 void ico_photo_set_left(int left);
 /* One Main tick (1 / ico_photo_tick_hz s) of pad input; returns 1 when
-   the pad asks to leave (Triangle, Circle, Start pressed), else 0.  Does
+   the pad asks to leave (Triangle, Start or ico_photo_back_button: Circle,
+   Cross on the Japanese disc), else 0.  Does
    nothing (0) while inactive. */
 int ico_photo_update(const IcoPhotoPad *pad);
+/* The button that saves a picture, the disc's confirm (ICO_PHOTO_CROSS;
+   ICO_PHOTO_CIRCLE on the Japanese disc, port/core/region.h pad_confirm),
+   and the other of the two, which leaves as Triangle and Start do. */
+unsigned int ico_photo_save_button(void);
+unsigned int ico_photo_back_button(void);
 /* The mouse's look for this tick, degrees, signed as its
    stick pushed right and up: the free camera's fyaw and fpitch (turns
    right, looks up), the orbit camera's yaw and pitch (the eye goes right

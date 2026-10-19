@@ -170,6 +170,8 @@ function(ico_settings_test name main_c)
     if(ICO_RUN_TESTS)
         string(REGEX REPLACE "_test$" "" _test "${name}")
         add_test(NAME ${_test} COMMAND ${name} "${CMAKE_CURRENT_BINARY_DIR}")
+        # the Japanese disc's run (the fixture's tables at its numbers)
+        add_test(NAME ${_test}_jpn COMMAND ${name} "${CMAKE_CURRENT_BINARY_DIR}" jpn)
     endif()
 endfunction()
 ico_settings_test(settings_test test/settings_test.c)
@@ -184,8 +186,8 @@ ico_settings_test(settings_extra_test test/settings_extra_test.c)
 if(ICO_RUN_TESTS)
     # the four settings executables write the same settings_test.toml in
     # this directory: never in parallel
-    set_tests_properties(settings settings_extras settings_extra PROPERTIES RESOURCE_LOCK
-                         settings_toml)
+    set_tests_properties(settings settings_extras settings_extra settings_jpn settings_extras_jpn
+                         settings_extra_jpn PROPERTIES RESOURCE_LOCK settings_toml)
 endif()
 
 # --- gallery_test (CPU) --------------------------------------------------------
@@ -216,6 +218,11 @@ endif()
 if(ICO_RUN_TESTS)
     add_test(NAME gallery COMMAND gallery_test "${ICO_BASE_ELF}" "${ICO_DISC_IMAGE}")
     set_tests_properties(gallery PROPERTIES SKIP_RETURN_CODE 77)
+    # both discs' stream paths equal row for row (the names are keyed by the
+    # row), then the list from the Japanese disc's tables and image
+    add_test(NAME gallery_jpn COMMAND gallery_test --jpn "${ICO_BASE_ELF}" "${ICO_BASE_ELF_JPN}"
+                                      "${ICO_DISC_IMAGE_JPN}")
+    set_tests_properties(gallery_jpn PROPERTIES SKIP_RETURN_CODE 77)
     # the gallery in the headless game: needs the disc image and the
     # headless program
     if(TARGET ico_pc AND ICO_HEADLESS AND Python3_EXECUTABLE)
@@ -260,6 +267,20 @@ if(NOT WIN32)
 endif()
 if(ICO_RUN_TESTS)
     add_test(NAME model_viewer COMMAND model_viewer_test)
+    # the table's Japanese model column against both ELFs' modelData
+    # (tools/gen_mv_jpn.py --check; tools/gen_data_c.py reads the ELFs, so
+    # pyelftools: the repository's .venv when there is one)
+    set(_mv_py "${Python3_EXECUTABLE}")
+    if(EXISTS "${CMAKE_SOURCE_DIR}/.venv/bin/python")
+        set(_mv_py "${CMAKE_SOURCE_DIR}/.venv/bin/python")
+    endif()
+    if(_mv_py)
+        add_test(NAME model_viewer_jpn
+                 COMMAND "${_mv_py}" "${CMAKE_SOURCE_DIR}/tools/gen_mv_jpn.py" --check
+                         --pal-elf "${ICO_BASE_ELF}" --jpn-elf "${ICO_BASE_ELF_JPN}"
+                 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+        set_tests_properties(model_viewer_jpn PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
 endif()
 
 # model_viewer_cam (port/game/test): the viewer's camera step
@@ -513,6 +534,42 @@ if(_ico_cov_elf AND TARGET ico_sheet_ref)
         set_tests_properties(menu_look PROPERTIES SKIP_RETURN_CODE 77)
     endif()
 endif()
+# menu_jpn_test: the Japanese disc's menus as the port reads them, over the
+# Japanese boot ELF's tables (the loader's Japanese set): text, the
+# layouts the region table names run their procedures, the title, pause and
+# memory card rows and the glyph rows are where port/core/region_jpn.c says,
+# and no Japanese row is drawn from the menu text table; look, with the
+# Japanese disc image: each glyph rectangle holds a picture, and the
+# Japanese sheets' light ink measured and held to menu_font.c's
+# kSheetInk[UI_SHEET_JA]. Exit 77 without the ELF (or, for look, the disc).
+if(ICO_BASE_ELF_JPN AND TARGET ico_sheet_ref)
+    add_executable(menu_jpn_test test/menu_jpn_test.c test/menu_sheets.c menu_font.c menu_text.c
+        ${_ui_string_srcs} $<TARGET_OBJECTS:ico_ui_font_rd>
+        "${CMAKE_SOURCE_DIR}/port/data/tables.c" ${ICO_TABLE_SOURCES})
+    set_source_files_properties(test/menu_jpn_test.c PROPERTIES COMPILE_OPTIONS
+                                "-Wno-strict-prototypes")
+    target_include_directories(menu_jpn_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                               "${CMAKE_CURRENT_SOURCE_DIR}/test" ${_ico_cov_incs}
+                               ${_ico_cov_data_incs} "${CMAKE_SOURCE_DIR}/port/data"
+                               "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/port/include"
+                               "${CMAKE_SOURCE_DIR}/port/platform" "${CMAKE_SOURCE_DIR}/port/render"
+                               "${CMAKE_SOURCE_DIR}/port/rhi" "${CMAKE_SOURCE_DIR}/port/shaders"
+                               "${CMAKE_SOURCE_DIR}/port/math")
+    target_compile_definitions(menu_jpn_test PRIVATE ICO_HOST=1 ${ICO_GAME_DEFINITIONS})
+    target_compile_options(menu_jpn_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                           ${ICO_GAME_WARNINGS})
+    target_link_libraries(menu_jpn_test PRIVATE ico_render ico_sheet_ref ico_port_data ico_platform
+                          ico_region)
+    if(NOT WIN32)
+        target_link_libraries(menu_jpn_test PRIVATE m)
+    endif()
+    if(ICO_RUN_TESTS)
+        add_test(NAME menu_text_jpn COMMAND menu_jpn_test text "${ICO_BASE_ELF_JPN}")
+        add_test(NAME menu_look_jpn COMMAND menu_jpn_test look "${ICO_BASE_ELF_JPN}"
+                 "${ICO_DISC_IMAGE_JPN}")
+        set_tests_properties(menu_text_jpn menu_look_jpn PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
+endif()
 # font_edge_test: an overlay line of text presented at Enhanced
 # 1920 x 1080 and 3840 x 2160, each glyph edge at most one pixel between
 # background and ink, and the mirror mode
@@ -526,10 +583,17 @@ ico_copy_sdl3_dll(font_edge_test ui_test)
 if(ICO_RUN_TESTS)
     add_test(NAME ui COMMAND ui_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(ui PROPERTIES SKIP_RETURN_CODE 77)
+    # the glyphs and the pad convention on the Japanese disc (CPU)
+    add_test(NAME ui_jpn COMMAND ui_test jpn WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME settings_render COMMAND settings_render "${CMAKE_CURRENT_BINARY_DIR}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(settings_render PROPERTIES RESOURCE_LOCK settings_toml)
     set_tests_properties(settings_render PROPERTIES SKIP_RETURN_CODE 77)
+    # the Japanese disc's title and main page (the fixture at its numbers)
+    add_test(NAME settings_render_jpn COMMAND settings_render "${CMAKE_CURRENT_BINARY_DIR}" jpn
+             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(settings_render_jpn PROPERTIES RESOURCE_LOCK settings_toml
+                         SKIP_RETURN_CODE 77)
     add_test(NAME menu_text COMMAND menu_text_test "${ICO_DISC_IMAGE}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(menu_text PROPERTIES SKIP_RETURN_CODE 77)

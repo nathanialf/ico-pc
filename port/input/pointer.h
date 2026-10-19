@@ -49,6 +49,14 @@ int ico_pointer_take(IcoPointerTick *t);
 /* whether a menu the pointer can use is up (ui_mouse.c, once a Main tick) */
 void ico_pointer_set_menu(int on);
 int ico_pointer_menu(void);
+/* whether the mouse's Cross and Circle buttons trade places: set (once a
+   Main tick, ui_mouse.c) on the Japanese disc while a menu or photo mode
+   is up, where Circle confirms and Cross goes back, so the mouse works as
+   on the European disc (the right button goes back; photo mode's left
+   button saves).  The device layer swaps the two rows of the mouse's
+   bindings for the step. */
+void ico_pointer_set_swap_face(int on);
+int ico_pointer_swap_face(void);
 /* everything back to the start (no place, nothing pending, no menu) */
 void ico_pointer_reset(void);
 

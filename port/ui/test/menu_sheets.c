@@ -22,6 +22,7 @@
 #include "charFileManager.h" /* texFile */
 #include "df_pack.h"
 #include "gen/table_desc.h"
+#include "tables.h" /* ico_tables_loaded_set */
 #include "../../include/ico_endian.h"
 
 static const char *const s_langDir[5] = {"EG", "FR", "GR", "IT", "SP"};
@@ -199,8 +200,10 @@ void ms_sheet_name(const char *path, int lang, char *out, size_t size)
    port/data/gen/table_defs.c, its size unknown here) */
 int ms_tex_file_count(void)
 {
-    for (uint32_t i = 0; i < ico_table_set_pal.row_count; i++) {
-        const IcoTableRow *r = &ico_table_set_pal.rows[i];
+    /* the loaded set's (the Japanese one in menu_jpn_test) */
+    const IcoTableSet *set = ico_tables_loaded_set() ? ico_tables_loaded_set() : &ico_table_set_pal;
+    for (uint32_t i = 0; i < set->row_count; i++) {
+        const IcoTableRow *r = &set->rows[i];
         if (r->host == (void *)texFile && r->record) {
             return (int)r->count;
         }

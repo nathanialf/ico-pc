@@ -6,16 +6,18 @@
 #include <string.h>
 
 #include "title_logo.h"
+#include "../core/region.h" /* ico_region_cur */
 #include "model_viewer.h"
 #include "settings.h"
 
 extern int stage_no;          /* common/src/main.c */
 extern int current_layout_id; /* common/src/layout_texture.c */
 
-#define TITLE_STAGE 1
-/* the title's menu: Continue and New Game, New Game only */
-#define LAYOUT_TITLE_CONTINUE 12
-#define LAYOUT_TITLE_NEW 13
+/* the title's stage and menu (Continue and New Game, New Game only): the
+   running disc's (port/core/region.h; 1, 12 and 13 on the European disc) */
+#define TITLE_STAGE (ico_region_cur()->stage_title)
+#define LAYOUT_TITLE_CONTINUE (ico_region_cur()->layout_title_continue)
+#define LAYOUT_TITLE_NEW (ico_region_cur()->layout_title_new)
 
 int ico_title_logo_model(const char *model)
 {

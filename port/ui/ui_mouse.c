@@ -9,7 +9,9 @@
 
 #include <string.h>
 
+#include "../core/region.h" /* ico_region_cur */
 #include "layout_ext.h"
+#include "photo_mode.h" /* ico_photo_active */
 #include "pointer.h"
 #include "settings.h"
 #include "ui_mouse_geom.h"
@@ -27,15 +29,18 @@ extern PadState pad[16];
    slot 0..9 although its item row is masked (an empty slot on the Save screen) */
 extern int la_host_mc_slot_pickable(int slot);
 
-/* play and its scenes (layout_texture.c init_layout_texture; mouse_look.h) */
-#define LAYOUT_PLAY 54
-#define LAYOUT_SCENE 55
-/* the memory card file select (layout_action.c): file i's picture is row 52 + i,
-   its item row 62 + i */
-#define LAYOUT_MC_FILES 14
+/* play and its scenes (layout_texture.c init_layout_texture; mouse_look.h),
+   the running disc's (port/core/region.h: 54 and 55 on the European disc) */
+#define LAYOUT_PLAY (ico_region_cur()->layout_play)
+#define LAYOUT_SCENE (ico_region_cur()->layout_scene)
+/* the memory card file select (layout_action.c, 14): file i's picture is
+   row 52 + i, its item row 62 + i (23 + i and 33 + i on the Japanese disc) */
+#define LAYOUT_MC_FILES (ico_region_cur()->layout_mc_files)
+#define ROW_MC_PICTURE (ico_region_cur()->row_mc_picture)
+#define ROW_MC_ITEM (ico_region_cur()->row_mc_item)
 
 #define CHAIN_MAX 16
-#define ROWS_MAX (LT_EXT_MAX_PROPERTIES + LT_GAME_PROPERTY_COUNT)
+#define ROWS_MAX (LT_EXT_MAX_PROPERTIES + LT_GAME_PROPERTY_COUNT_MAX)
 #define WHEEL_QUEUE 3
 
 static struct {
@@ -145,9 +150,9 @@ static int gatherRows(void)
             r->ownerItem = e->ownerItem;
             /* on the Save screen an empty slot's item row is masked but its picture
                is shown, and the pad saves there: the picture is that item */
-            if (owner == LAYOUT_MC_FILES && j >= 52 && j < 62 && r->ownerItem < 0 && !r->masked &&
-                la_host_mc_slot_pickable(j - 52)) {
-                r->ownerItem = j + 10;
+            if (owner == LAYOUT_MC_FILES && j >= ROW_MC_PICTURE && j < ROW_MC_PICTURE + 10 &&
+                r->ownerItem < 0 && !r->masked && la_host_mc_slot_pickable(j - ROW_MC_PICTURE)) {
+                r->ownerItem = j - ROW_MC_PICTURE + ROW_MC_ITEM;
             }
         }
     }
@@ -189,6 +194,10 @@ void ui_mouse_tick(void)
 
     s_m.active = menuUp();
     ico_pointer_set_menu(s_m.active);
+    /* the Japanese disc: the mouse's Cross and Circle trade places in its
+       menus and photo mode, where Circle confirms (pointer.h) */
+    ico_pointer_set_swap_face(lt_ext_confirm_button() == LT_PAD_CIRCLE &&
+                              (s_m.active || ico_photo_active()));
     /* a key or a pad button (not one of the mouse's own, which arrive as
        pad buttons in the same or the next tick) hides the pointer until the
        mouse is used again */
@@ -220,9 +229,11 @@ void ui_mouse_tick(void)
         if (hitAt(t.x, t.y, &hit)) {
             lt_host_point_item(hit.layout, hit.item);
             if (t.clicks > 0) {
+                /* a click on an item is the disc's confirm (Cross, Circle
+                   on the Japanese disc) */
                 pad[0].flags |= hit.action == UI_MOUSE_ACT_LEFT    ? LT_PAD_LEFT
                                 : hit.action == UI_MOUSE_ACT_RIGHT ? LT_PAD_RIGHT
-                                                                   : LT_PAD_CROSS;
+                                                                   : lt_ext_confirm_button();
             }
         }
     }

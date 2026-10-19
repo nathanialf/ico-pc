@@ -20,6 +20,8 @@
 
 #include <stddef.h>
 
+#include "../core/region.h" /* the running disc's groups */
+
 const RdChain rd__chains[] = {
     /* the Stone Pillar (stage 17, st10l): actSt10lChainMove plays it
      * (stage_SetAnimation(384, 1, 0), 240 frames); Null 21 at (-1050,
@@ -37,11 +39,21 @@ const RdChain rd__chains[] = {
 };
 
 const int rd__chain_count = (int)(sizeof(rd__chains) / sizeof(rd__chains[0]));
+_Static_assert(sizeof(rd__chains) / sizeof(rd__chains[0]) == 2,
+               "chainGroup names each row's region.h field");
+
+/* A row's group on the running disc (port/core/region.h: the European
+   disc's are the table's, and the Japanese disc's are the same numbers) */
+static int chainGroup(int i)
+{
+    const IcoRegionInfo *r = ico_region_cur();
+    return i == 0 ? r->chain_group_st10l : i == 1 ? r->chain_group_st19a : rd__chains[i].group;
+}
 
 const RdChain *rd_chain_find(int group)
 {
     for (int i = 0; i < rd__chain_count; i++) {
-        if (rd__chains[i].group == group) {
+        if (chainGroup(i) == group) {
             return &rd__chains[i];
         }
     }

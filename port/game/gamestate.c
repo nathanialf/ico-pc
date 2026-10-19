@@ -18,7 +18,7 @@
 
 #include "options.h"
 
-#include "region.h" /* ico_region: the disc's row of config/regions.txt */
+#include "../core/region.h" /* ico_region, ico_region_cur: the disc's row of config/regions.txt */
 
 #ifdef ICO_GS_LIVE
 #include "typedef.h"
@@ -46,7 +46,7 @@ int gflagChk(int bit_idx);                  /* script/src/gflag.c */
 int CheckWeaponKind(struct GObj *self);     /* sugipon/src/weapon.c */
 unsigned char ACTGame_FLAG_TETSUNAGI(void); /* fumi/src/act-game.c */
 
-#define STAGE_COUNT 106  /* stageData[106] */
+#define STAGE_COUNT (ico_region_cur()->stage_count) /* stageData[106], 104 on the Japanese disc */
 #define ENEMY_KIND 4     /* GObj.kind of an enemy (isEnemyActive, enemy_act.c) */
 #define ACT_CARRIED 0x6F /* the girl's carried action (enemy_act.c:1153) */
 
@@ -218,10 +218,13 @@ static int flag_in(const IcoGsSnapshot *s, int n)
 }
 
 /* layout ids (texLayout procs in the retail tables) */
-#define LAYOUT_LOAD_PROCESSING 25 /* la_load_processing */
-#define LAYOUT_SAVE_COMPLETE 41   /* la_save_confirm_complete, la_save_processing's success */
-#define GFLAG_NEW_GAME 382        /* gflagOn(382), layout_action.c:738 */
-#define STAGE_TITLE 1
+/* the running disc's (port/core/region.h; 25, 41, 382 and 1 on the
+   European disc) */
+#define LAYOUT_LOAD_PROCESSING (ico_region_cur()->layout_load) /* la_load_processing */
+/* la_save_confirm_complete, la_save_processing's success */
+#define LAYOUT_SAVE_COMPLETE (ico_region_cur()->layout_save_complete)
+#define GFLAG_NEW_GAME (ico_region_cur()->gflag_new_game) /* gflagOn(382), layout_action.c:738 */
+#define STAGE_TITLE (ico_region_cur()->stage_title)
 
 void ico_gs_tick(void)
 {
@@ -507,7 +510,7 @@ int ico_gs_yorda_safe(void)
 int ico_gs_start_stage_used(void)
 {
     /* the value debug_TryToGetStartStage (common/src/debug.c) takes: 2..105
-       starts somewhere other than the boot */
+       (2..103 on the Japanese disc) starts somewhere other than the boot */
     const char *v = getenv("ICO_START_STAGE");
     char *end;
     long n;
@@ -516,7 +519,7 @@ int ico_gs_start_stage_used(void)
         return 0;
     }
     n = strtol(v, &end, 10);
-    return *end == '\0' && n > 1 && n <= 105;
+    return *end == '\0' && n > 1 && n <= ico_region_cur()->start_stage_max;
 }
 
 int ico_gs_achievements_suspended(void)

@@ -79,6 +79,7 @@
 #include <stddef.h>
 
 #include "font.h"
+#include "../core/region.h" /* ico_region_cur */
 #include "layout_ext.h"
 #include "strings.h"
 
@@ -436,8 +437,9 @@ const UiMenuTextRow ui_menu_text_rows[] = {
 const int ui_menu_text_row_count = (int)(sizeof(ui_menu_text_rows) / sizeof(ui_menu_text_rows[0]));
 /* clang-format on */
 
-/* the row -> item map, built on first use: -1 for a row not in the table */
-#define MT_GAME_ROWS LT_GAME_PROPERTY_COUNT
+/* the row -> item map, built on first use: -1 for a row not in the table
+   (the European disc's rows: its table is the larger) */
+#define MT_GAME_ROWS LT_GAME_PROPERTY_COUNT_MAX
 static short s_itemOf[MT_GAME_ROWS];
 static int s_mapBuilt;
 
@@ -455,9 +457,16 @@ static void buildMap(void)
     s_mapBuilt = 1;
 }
 
+int ui_menu_text_applies(void)
+{
+    return ICO_PAL;
+}
+
 const UiMenuTextItem *ui_menu_text_item_of(const LtProperty *e)
 {
-    if (!e || e < texProperty || e >= texProperty + MT_GAME_ROWS) {
+    /* the rows and rectangles are the European disc's sheets; every other
+       disc's menu words keep their texels (the Japanese sheets) */
+    if (!ui_menu_text_applies() || !e || e < texProperty || e >= texProperty + MT_GAME_ROWS) {
         return NULL;
     }
     if (!s_mapBuilt) {

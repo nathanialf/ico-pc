@@ -675,7 +675,7 @@ static int render(void)
     } pages[] = {{0, 0, "settings_display.png"},     {0, 8, "settings_display_videomode.png"},
                  {1, 0, "settings_effects.png"},     {3, 0, "settings_audio.png"},
                  {4, 1, "settings_controls.png"},    {5, 0, "settings_gameplay.png"},
-                 {7, 0, "settings_achievements.png"}};
+                 {8, 0, "settings_achievements.png"}};
 
     int labels[16];
     ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
@@ -807,11 +807,11 @@ static int render(void)
         CHECK(settle(mainL, 60), "the menu from the title");
         int ml[16];
         ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
-        lt_ext_layout(mainL)->curItem = ml[7];
+        lt_ext_layout(mainL)->curItem = ml[8];
         frame(0);
         frame(0);
         snap4("settings_main_title_4x.png");
-        lt_ext_layout(mainL)->curItem = ml[8];
+        lt_ext_layout(mainL)->curItem = ml[9];
         press(0x40);
         int exL = ui_settings_page_layout(UI_PAGE_EXTRAS);
         CHECK(settle(exL, 60), "Extras at 4x");
@@ -900,8 +900,8 @@ static int render(void)
             const char *name;
         } pg[] = {{0, 0, "settings_display"},  {1, 0, "settings_effects"},
                   {3, 0, "settings_audio"},    {4, 1, "settings_controls"},
-                  {5, 0, "settings_gameplay"}, {7, 0, "settings_achievements"},
-                  {8, 2, "settings_extras"}};
+                  {5, 0, "settings_gameplay"}, {8, 0, "settings_achievements"},
+                  {9, 2, "settings_extras"}};
 
         for (unsigned i = 0; i < sizeof(pg) / sizeof(pg[0]); i++) {
             lt_ext_layout(mainL)->curItem = ml[pg[i].row];
@@ -975,7 +975,7 @@ static int render(void)
             press(0x4000);
             press(0x40);
             CHECK(settle(mainL, 60), "the menu from the title at 1080p");
-            lt_ext_layout(mainL)->curItem = ml[8];
+            lt_ext_layout(mainL)->curItem = ml[9];
             press(0x40);
             int exL = ui_settings_page_layout(UI_PAGE_EXTRAS);
             CHECK(settle(exL, 60), "Extras at 1080p");
@@ -1009,10 +1009,75 @@ static int render(void)
     return failures ? 1 : 0;
 }
 
+/* settings_render DIR jpn (ctest settings_render_jpn): the Japanese disc's
+   title and main page over the fixture's tables at that disc's numbers:
+   the title's Settings and Quit rows on the menu's pitch under Continue (20)
+   and New Game (21, 22), the copyright's two halves (18, 19) below; the
+   port's text in Japanese (Noto Sans JP's subset) in the Japanese sheets'
+   look; the menu text table not drawn (the game's words keep their
+   texels). Pictures settings_title_jpn.png, settings_main_jpn.png. */
+static int renderJpn(void)
+{
+    RdSettings st;
+    memset(&st, 0, sizeof(st));
+    st.preset = RD_PRESET_ORIGINAL;
+    if (!rd_init(512, 512, &st, NULL)) {
+        printf("settings_render: SKIP: no usable Vulkan device\n");
+        return 77;
+    }
+    ui_font_forget_textures();
+    UiGsFrame fr = {512, 512, 2048.0f, 2048.0f, UI_LAYOUT_Z};
+    ui_set_gs_frame(&fr);
+    ui_set_scale(1.0f);
+    ui__set_record_hook(gif_HostFlush);
+    makeSheets();
+    gif_HostSetTex0Resolver(sheetResolve);
+    dl_Init();
+    GlobalStageSetting.reductionCol[0] = GlobalStageSetting.reductionCol[1] =
+        GlobalStageSetting.reductionCol[2] = 0x80;
+    const int mainL = enterMain(1);
+    CHECK(ui_get_language() == UI_LANG_JA && ui_sheet_language() == UI_SHEET_JA,
+          "the port's text Japanese, the sheets the Japanese ones (%d, %d)", ui_get_language(),
+          ui_sheet_language());
+    for (int i = 0; i < 4; i++) {
+        frame(0);
+    }
+    snap("settings_main_jpn.png");
+    press(0x40); /* Cross: back to the title */
+    const int t = fxLayout(13);
+    CHECK(settle(t, 60), "the title (%d)", current_layout_id);
+    const int opt = ui_settings_entry_row(t), quit = ui_settings_quit_row(t);
+    lt_ext_prop(opt)->defaultMask = lt_ext_prop(quit)->defaultMask = 0;
+    ui_settings_title_mask(0);
+    texLayout[t].curItem = opt;
+    frame(0);
+    snap("settings_title_jpn.png");
+    const int pitch = lt_ext_prop(quit)->dispY - lt_ext_prop(opt)->dispY;
+    CHECK(pitch > 0 && lt_ext_prop(opt)->dispY - texProperty[22].dispY == pitch &&
+              texProperty[22].dispY - texProperty[20].dispY == pitch &&
+              texProperty[18].dispY == texProperty[19].dispY &&
+              texProperty[18].dispY > lt_ext_prop(quit)->dispY,
+          "the title's rows: Continue %d, New Game %d, Settings %d, Quit %d, copyright %d %d",
+          texProperty[20].dispY, texProperty[22].dispY, lt_ext_prop(opt)->dispY,
+          lt_ext_prop(quit)->dispY, texProperty[18].dispY, texProperty[19].dispY);
+    CHECK(menuTextDraws() > 0, "the port's rows drawn in the sheets' look (%d)", menuTextDraws());
+    CHECK(ui_menu_text_item_of(&texProperty[fxRow(294)]) == NULL,
+          "no Japanese row from the menu text table");
+    lt_ext_prop(opt)->defaultMask = lt_ext_prop(quit)->defaultMask = 1;
+    ui_settings_title_mask(1);
+    rd_shutdown();
+    printf("settings_render jpn: %s\n", failures ? "failed" : "ok");
+    return failures ? 1 : 0;
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
     setEnv("LC_ALL", NULL);
     setEnv("LANG", "en_GB.UTF-8");
+    if (argc > 2 && strcmp(argv[2], "jpn") == 0) {
+        CHECK(ico_region_select("jpn") == 0, "the Japanese region");
+        return renderJpn();
+    }
     return render();
 }

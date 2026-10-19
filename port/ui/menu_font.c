@@ -113,9 +113,11 @@ static const UiSheetInk kSheetInk[UI_LANG_SHEET_COUNT] = {
     {1, 56, 255, 1, 0}, /* German */
     {1, 61, 255, 1, 0}, /* Italian */
     {1, 62, 255, 1, 0}, /* Spanish */
-    /* the Japanese disc's sheets (UI_SHEET_JA): zero until menu_look_jpn
-       measures them */
-    {0, 0, 0, 0, 0},
+    /* the Japanese disc's sheets (UI_SHEET_JA), measured by ctest
+       menu_look_jpn (menu_jpn_test.c) on Tex_menu01's option, mc04, title
+       and scei sheets: fill 251.5 (the letters' palette white is fcfcfc,
+       252), rim 34.3, one antialiasing step */
+    {1, 34, 252, 1, 0},
 };
 /* the dark, plain and grey inks and the light words without a halo: no
    rim, a white fill (the vertex colour makes them black, white or grey) */

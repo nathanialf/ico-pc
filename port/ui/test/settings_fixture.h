@@ -42,6 +42,7 @@
 #include "ui_hint.h"
 #include "ui_list.h"
 #include "video_options.h"
+#include "../../core/region.h" /* ICO_JPN: the tests' Japanese runs */
 
 #ifdef SETTINGS_RENDER
 
@@ -89,6 +90,9 @@ void setEnv(const char *k, const char *v);
 void setRow(int i, int up, int down, int downItem, int upItem, int left, int right, int y);
 void setLayout(int i, int first, int last, int def, int link);
 void fakeTables(void);
+/* the fixture's European numbers on the selected region (fakeTables) */
+int fxLayout(int palLayout);
+int fxRow(int palRow);
 void frame(int flags);
 int settle(int layout, int max);
 void press(int flags);

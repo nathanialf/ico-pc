@@ -69,8 +69,14 @@ void ui_hint_build(UiHint *h, int y, float size, const UiHintItem *items, int n)
     h->scale = 1.0f;
     for (int i = 0; i < h->n; i++) {
         h->item[i] = items[i];
+        /* Cross in these lines is the confirm: the disc's own (Circle on
+           the Japanese disc, layout_ext.h lt_ext_confirm_glyph) */
+        if (h->item[i].glyph == LT_GLYPH_CROSS) {
+            h->item[i].glyph = lt_ext_confirm_glyph();
+        }
         h->shown[i] = 1;
-        h->glyphRow[i][0] = items[i].glyph >= 0 ? lt_ext_add_glyph(items[i].glyph, 0, y, size) : -1;
+        h->glyphRow[i][0] =
+            h->item[i].glyph >= 0 ? lt_ext_add_glyph(h->item[i].glyph, 0, y, size) : -1;
         h->glyphRow[i][1] =
             items[i].glyph2 >= 0 ? lt_ext_add_glyph(items[i].glyph2, 0, y, size) : -1;
         h->textRow[i] = ui_settings_add_row(0, y, 100, TEXT_BOX_H, 0, -1, items[i].strId, NULL,

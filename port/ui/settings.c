@@ -38,6 +38,8 @@
 #include "ui_hint.h"
 #include "ui_list.h"
 #include "video_options.h"
+#include "../core/region.h" /* ico_region_cur: the running disc */
+#include "ui_lang.h"        /* ui_settings_resolve_language */
 
 #ifdef ICO_RD
 #include "rd.h" /* rd_set_mirror */
@@ -80,25 +82,42 @@ extern void la_host_film_effect(int mode);
    clock the seed of Extras > Characters' Randomize */
 extern unsigned int ico_host_main_ticks(void);
 
-/* on the port's screens Circle goes back as Triangle does, whatever
-   [game] circle_back says (that switch is for the game's own menus,
-   layout_ext.h lt_ext_back_buttons): no PS2 behaviour to keep here, and
-   Circle has no other use on them (a remap capture takes it before this
-   check) */
-#define PAD_BACK (LT_PAD_TRIANGLE | LT_PAD_CIRCLE)
+/* on the port's screens the face button that does not confirm goes back
+   as Triangle does (Circle on the European disc, Cross on the Japanese:
+   layout_ext.h lt_ext_port_back_buttons), whatever [game] circle_back says
+   (that switch is for the game's own menus, lt_ext_back_buttons): no PS2
+   behaviour to keep here, and the button has no other use on them (a
+   remap capture takes it before this check); they confirm with the
+   disc's confirm (lt_ext_confirm_button: Cross, Circle on the Japanese
+   disc) */
+#define PAD_BACK (lt_ext_port_back_buttons())
+#define PAD_OK (lt_ext_confirm_button())
 
-/* the game layouts the menu is entered from */
-#define LAYOUT_PAUSE 57
-#define LAYOUT_TITLE_CONTINUE 12
-#define LAYOUT_TITLE_NEW 13
-/* the game's Options screen (not reached) and its button
-   configuration screen (Settings > Controls opens it) */
-#define LAYOUT_GAME_OPTIONS 58
-#define LAYOUT_KEY_CONFIG 59
-/* the pause menu's rows: Options (opens Settings), Back, End Game */
-#define ROW_PAUSE_OPTIONS 294
-#define ROW_PAUSE_BACK 295
-#define ROW_PAUSE_END 296
+/* The game's numbers are the running disc's (port/core/region.h
+   ico_region; the European disc's in the comments).  The game layouts the
+   menu is entered from: the pause menu (57), the title's Continue and New
+   Game (12) and New Game only (13) */
+#define LAYOUT_PAUSE (ico_region_cur()->layout_pause)
+#define LAYOUT_TITLE_CONTINUE (ico_region_cur()->layout_title_continue)
+#define LAYOUT_TITLE_NEW (ico_region_cur()->layout_title_new)
+/* the game's Options screen (58: not reached, but la_key_config's way
+   back when the pause menu was left as the game's) and its button
+   configuration screen (59: Settings > Controls opens it) */
+#define LAYOUT_GAME_OPTIONS (ico_region_cur()->layout_options)
+#define LAYOUT_KEY_CONFIG (ico_region_cur()->layout_key_config)
+/* the pause menu's rows: Options (opens Settings, 294), Back (295), End
+   Game (296), and the layout's range (292 .. 297) */
+#define ROW_PAUSE_OPTIONS (ico_region_cur()->row_pause_options)
+#define ROW_PAUSE_BACK (ico_region_cur()->row_pause_back)
+#define ROW_PAUSE_END (ico_region_cur()->row_pause_end)
+/* the title's rows: Continue (49), New Game (50; 51 on the New-Game-only
+   layout), the copyright line (48, and on the Japanese disc its second
+   half) */
+#define ROW_TITLE_CONTINUE (ico_region_cur()->row_title_continue)
+#define ROW_TITLE_NEW (ico_region_cur()->row_title_new)
+#define ROW_TITLE_NEW_ONLY (ico_region_cur()->row_title_new_only)
+#define ROW_TITLE_COPYRIGHT (ico_region_cur()->row_title_copyright)
+#define ROW_TITLE_COPYRIGHT2 (ico_region_cur()->row_title_copyright2)
 /* the pause menu's pitch in the PAL data (Options 50, Back 70) */
 #define PAUSE_PITCH 20
 
@@ -111,7 +130,13 @@ extern unsigned int ico_host_main_ticks(void);
 
 enum { ENTRY_PAUSE, ENTRY_TITLE12, ENTRY_TITLE13, ENTRY_COUNT };
 
-static const int kEntryGame[ENTRY_COUNT] = {LAYOUT_PAUSE, LAYOUT_TITLE_CONTINUE, LAYOUT_TITLE_NEW};
+/* the game layout of an entry */
+static int entryGame(int e)
+{
+    return e == ENTRY_PAUSE     ? LAYOUT_PAUSE
+           : e == ENTRY_TITLE12 ? LAYOUT_TITLE_CONTINUE
+                                : LAYOUT_TITLE_NEW;
+}
 
 /* geometry, in the layout grid (dispX pixels of 640, dispY field lines of 226) */
 #define HEADER_Y 12
@@ -238,7 +263,7 @@ enum {
 static int s_statsBuilt;
 static int s_statBack = -1;
 static int s_statLabel[STAT_LINES], s_statValue[STAT_LINES];
-static int s_origin = LAYOUT_PAUSE; /* the game layout the menu returns to */
+static int s_origin = -1; /* the game layout the menu returns to (the pause menu from install) */
 
 /* The video mode arms the tick rate (the game's timers are armed at the
    rate in force), so it changes only when Settings was opened from the
@@ -697,6 +722,44 @@ static int modelPackInstalled(void)
 static const char *onOff(int v)
 {
     return ui_str(v ? UI_STR_ON : UI_STR_OFF);
+}
+
+/* The game's own language (NonLinearCameraMove, 2..6), -1 on a disc that
+   has none (port/core/region.h has_game_language: the Japanese one) */
+static int gameLanguage(void)
+{
+    if (ico_region_cur()->has_game_language) {
+        return NonLinearCameraMove;
+    }
+    return -1;
+}
+
+static void setGameLanguage(int game)
+{
+    if (ico_region_cur()->has_game_language) {
+        NonLinearCameraMove = game;
+    }
+}
+
+/* a UiLang's own name (the Menu language row) */
+static const char *menuLanguageName(int lang)
+{
+    static const int ids[UI_LANG_COUNT] = {UI_STR_LANG_EN, UI_STR_LANG_FR, UI_STR_LANG_DE,
+                                           UI_STR_LANG_IT, UI_STR_LANG_ES, UI_STR_LANG_JA};
+    return ui_str((UiStrId)ids[lang >= 0 && lang < UI_LANG_COUNT ? lang : 0]);
+}
+
+void ui_settings_apply_language(void)
+{
+    /* the port's text: [ui] language, else the disc's (ui_lang.c) */
+    ui_set_language(ui_settings_resolve_language());
+    /* the look of the port's words over the disc's sheets: the Japanese
+       sheets' on the Japanese disc (menu_font.c kSheetInk[UI_SHEET_JA]),
+       else the game's own language's (the European disc's five sheets),
+       whatever language the port's text is in */
+    ui_set_sheet_language(ICO_JPN               ? UI_SHEET_JA
+                          : gameLanguage() >= 0 ? (int)ui_lang_from_game(gameLanguage())
+                                                : (int)UI_LANG_EN);
 }
 
 static const char *languageName(int game)
@@ -1283,7 +1346,11 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_NATURAL_CHAINS:
         return onOff(ico_opt_natural_chains());
     case UI_OPT_LANGUAGE:
-        return languageName(NonLinearCameraMove);
+        return languageName(gameLanguage());
+    case UI_OPT_MENU_LANGUAGE: {
+        const int pref = ico_opt_ui_language();
+        return pref < 0 ? ui_str(UI_STR_VAL_AUTO) : menuLanguageName(pref);
+    }
     case UI_OPT_DEVELOPER:
         return onOff(ico_opt_developer_mode());
     case UI_OPT_EXTRAS_CREDITS:
@@ -1305,6 +1372,10 @@ static int isGameOpt(int opt)
 
 static int optShown(int opt, int link)
 {
+    if (opt == UI_OPT_CIRCLE_BACK) {
+        /* the European disc's: Circle confirms on the Japanese one */
+        return lt_ext_has_circle_back();
+    }
     if (opt == UI_OPT_LINK && link == UI_PAGE_GPU_DRIVER) {
         /* only where a host answers for the driver, and only on an Adreno
            chip, the one kind a driver package exists for (the page is
@@ -1350,6 +1421,13 @@ static int optShown(int opt, int link)
         opt == UI_OPT_MOUSE_SPEED || opt == UI_OPT_MOUSE_RANGE || opt == UI_OPT_MOUSE_RETURN) {
         return !ico_video_android(); /* no mouse camera on a phone */
     }
+    if (opt == UI_OPT_VIDEO_MODE && !ico_region_cur()->has_50hz_row) {
+        return 0; /* the Japanese disc is 60 Hz only */
+    }
+    if (opt == UI_OPT_LANGUAGE) {
+        /* the game's own language: the European disc's five */
+        return ico_region_cur()->has_game_language;
+    }
     if (opt == UI_OPT_VIDEO_MODE || opt == UI_OPT_MODEL_PACK) {
         /* it changes only from the title (onTitle); the pause menu's
            Display page has no room for a row that cannot step once Texture
@@ -1358,6 +1436,11 @@ static int optShown(int opt, int link)
         return onTitle();
     }
     return 1;
+}
+
+int ui_settings_opt_shown(UiSettingsOpt opt)
+{
+    return optShown((int)opt, -1);
 }
 
 static int steppable(int opt)
@@ -1731,12 +1814,25 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         break;
     case UI_OPT_LANGUAGE: {
         /* as kanbanBoot.c step 102 stores it; the game's text and subtitles
-           follow at their next load, the port's strings at once */
-        int i = NonLinearCameraMove - ICO_GAME_LANGUAGE_ENGLISH;
+           follow at their next load, the port's strings at once while the
+           menu language is Auto */
+        int i = gameLanguage() - ICO_GAME_LANGUAGE_ENGLISH;
+        if (gameLanguage() < 0) {
+            break; /* no language of the game's own (the row is hidden) */
+        }
         i = i < 0 || i > 4 ? 0 : stepIndex(i, 5, dir);
-        NonLinearCameraMove = ICO_GAME_LANGUAGE_ENGLISH + i;
-        ui_set_language(ui_lang_from_game(NonLinearCameraMove));
-        ico_sysconf_set_language(ico_game_to_scf_language(NonLinearCameraMove));
+        setGameLanguage(ICO_GAME_LANGUAGE_ENGLISH + i);
+        ui_settings_apply_language();
+        ico_sysconf_set_language(ico_game_to_scf_language(gameLanguage()));
+        s_dirtyConfig = 1;
+        break;
+    }
+    case UI_OPT_MENU_LANGUAGE: {
+        /* Auto, then the six tables (UiLang order): [ui] language */
+        const int i = stepIndex(ico_opt_ui_language() + 1, UI_LANG_COUNT + 1, dir) - 1;
+        ico_opt_set_ui_language(i);
+        ico_config_set_string("ui.language", ico_opt_ui_language_name(i));
+        ui_settings_apply_language();
         s_dirtyConfig = 1;
         break;
     }
@@ -2019,15 +2115,26 @@ static void wrapText(const char *text, float size, float width, char *out, unsig
 static int s_noteStr[LT_EXT_MAX_PROPERTIES];
 static int s_noteLang[LT_EXT_MAX_PROPERTIES];
 
+/* A note's words: the pack and dump notes name the running disc's folder
+   (its serial, port/core/region.h pack_serial: SCES-50760 or SCPS-11003)
+   through their %s (strings.h ui_str_serial) */
+static const char *noteText(int strId, char *out, size_t size)
+{
+    if (ui_str_takes_serial((UiStrId)strId)) {
+        return ui_str_serial((UiStrId)strId, out, size);
+    }
+    return ui_str((UiStrId)strId);
+}
+
 static void setNote(int row, int strId)
 {
-    char buf[256];
+    char buf[256], text[256];
     int i = row - LT_GAME_PROPERTY_COUNT;
     if (i >= 0 && i < LT_EXT_MAX_PROPERTIES && s_noteStr[i] == strId &&
         s_noteLang[i] == (int)ui_get_language() + 1) {
         return;
     }
-    wrapText(ui_str((UiStrId)strId), NOTE_SIZE, 580.0f, buf, sizeof(buf));
+    wrapText(noteText(strId, text, sizeof(text)), NOTE_SIZE, 580.0f, buf, sizeof(buf));
     lt_ext_set_text(row, buf);
     if (i >= 0 && i < LT_EXT_MAX_PROPERTIES) {
         s_noteStr[i] = strId;
@@ -2090,8 +2197,8 @@ static void buildGalleryBar(void)
      Characters   from 40, 13 apart (twelve rows: Back at 183, its box to
                   219); inside the model viewer CV_ROW_Y0 and CV_ROW_PITCH
      Main         from 40: up to 8 rows 19 apart, 9 rows 17, 10 rows 15,
-                  11 rows 14, 12 rows 13, 13 or more 12 (thirteen rows:
-                  Back at 184, its box to 224)
+                  11 rows 14, 12 rows 13, 13 rows 12 (Back at 184, its
+                  box to 224), 14 rows 11 (Back at 183, its box to 223)
      Controls     from 40, up to 9 rows 18 apart, 10 or 11 rows 16, 12 rows
                   13 (Back at 183, its box to 219); 13 to 15 from
                   30, 11 apart (Back at 184, its box to 220);
@@ -2136,7 +2243,7 @@ static int pagePitch(int page, int n, int *y0)
         return 13;
     }
     if (page == UI_PAGE_MAIN) {
-        return n > 12 ? 12 : n > 11 ? 13 : n > 10 ? 14 : n > 9 ? 15 : n > 8 ? 17 : 19;
+        return n > 13 ? 11 : n > 12 ? 12 : n > 11 ? 13 : n > 10 ? 14 : n > 9 ? 15 : n > 8 ? 17 : 19;
     }
     if (page == UI_PAGE_CONTROLS && n > 9) {
         /* the touch rows, the mouse rows and the game's pause-menu rows
@@ -2280,6 +2387,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     case UI_PAGE_MAIN:
         addVersion(pg);
         addNote(pg, UI_OPT_LANGUAGE, UI_STR_LANGUAGE_NOTE);
+        addNote(pg, UI_OPT_MENU_LANGUAGE, UI_STR_MENU_LANGUAGE_NOTE);
         addNote(pg, UI_OPT_DEVELOPER, UI_STR_DEVELOPER_NOTE);
         addNote(pg, UI_OPT_DUMP_TEXTURES, UI_STR_DUMP_TEXTURES_NOTE);
         addNote(pg, UI_OPT_DUMP_MODELS, UI_STR_DUMP_MODELS_NOTE);
@@ -2526,14 +2634,19 @@ static void playTimeText(unsigned int frames, char *buf, size_t size)
    developer labels, not for players) */
 static const char *areaName(int stage)
 {
-    if (stage == 63) {
-        stage = 38; /* as the save screen maps it */
+    /* the running disc's end stage (63, 61 on the Japanese disc) as the
+       save screen maps it; stages 3 .. 38 are the same rows on both discs,
+       and the menu text table's rows (the European disc's, stage + 134)
+       name them in the port's text, in the port's language (these lines
+       are the port's, not a sheet's) */
+    if (stage == ico_region_cur()->stage_end) {
+        stage = ico_region_cur()->area_name_end_as;
     }
     if (stage < 3 || stage > 38) {
         return NULL;
     }
     for (int i = 0; i < ui_menu_text_row_count; i++) {
-        if (ui_menu_text_rows[i].row == stage + 134) {
+        if (ui_menu_text_rows[i].row == stage + ico_region_info_pal.area_name_row_base) {
             return ui_str((UiStrId)ui_menu_text_items[ui_menu_text_rows[i].item].str);
         }
     }
@@ -2565,7 +2678,7 @@ static void pauseStats(int show)
         return;
     }
     if (show) {
-        ui_set_language(ui_lang_from_game(NonLinearCameraMove));
+        ui_settings_apply_language();
         const int got = achUnlocked();
         const int n = ico_ach_count();
         playTimeText(ico_gs_play_frames(), text[STAT_PLAY_TIME], sizeof(text[0]));
@@ -2685,28 +2798,23 @@ static void build(void)
        Models and Credits only from the title, layoutPage) */
     /* Dump textures under Developer mode, shown while it is on */
     static const int mainOpts[] = {
-        UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK, UI_OPT_LINK, UI_OPT_LINK,
-        UI_OPT_LINK,          UI_OPT_LANGUAGE,    UI_OPT_LINK, UI_OPT_LINK, UI_OPT_DEVELOPER,
-        UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
-    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
-                                   UI_STR_SECTION_EFFECTS,
-                                   UI_STR_SECTION_GPU_DRIVER,
-                                   UI_STR_SECTION_AUDIO,
-                                   UI_STR_SECTION_CONTROLS,
-                                   UI_STR_SECTION_GAMEPLAY,
-                                   UI_STR_SECTION_LANGUAGE,
-                                   UI_STR_SECTION_ACHIEVEMENTS,
-                                   UI_STR_EXTRAS,
-                                   UI_STR_OPT_DEVELOPER_MODE,
-                                   UI_STR_OPT_DUMP_TEXTURES,
-                                   UI_STR_OPT_DUMP_MODELS,
-                                   UI_STR_BACK};
+        UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LINK,          UI_OPT_LINK, UI_OPT_LINK,
+        UI_OPT_LINK,      UI_OPT_LANGUAGE,      UI_OPT_MENU_LANGUAGE, UI_OPT_LINK, UI_OPT_LINK,
+        UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS,   UI_OPT_BACK};
+    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,      UI_STR_SECTION_EFFECTS,
+                                   UI_STR_SECTION_GPU_DRIVER,   UI_STR_SECTION_AUDIO,
+                                   UI_STR_SECTION_CONTROLS,     UI_STR_SECTION_GAMEPLAY,
+                                   UI_STR_SECTION_LANGUAGE,     UI_STR_OPT_MENU_LANGUAGE,
+                                   UI_STR_SECTION_ACHIEVEMENTS, UI_STR_EXTRAS,
+                                   UI_STR_OPT_DEVELOPER_MODE,   UI_STR_OPT_DUMP_TEXTURES,
+                                   UI_STR_OPT_DUMP_MODELS,      UI_STR_BACK};
     static const int mainLinks[] = {UI_PAGE_DISPLAY,
                                     UI_PAGE_EFFECTS,
                                     UI_PAGE_GPU_DRIVER,
                                     UI_PAGE_AUDIO,
                                     UI_PAGE_CONTROLS,
                                     UI_PAGE_GAMEPLAY,
+                                    -1,
                                     -1,
                                     UI_PAGE_ACHIEVEMENTS,
                                     UI_PAGE_EXTRAS,
@@ -2943,7 +3051,7 @@ static int s_newGameNote = -1;
 static int s_newGameChosen;
 static int s_mirrorChoice, s_ngpChoice; /* each row's Off (0) or On (1) */
 
-#define LAYOUT_VIBE_SELECT 9 /* la_vibe_select's screen */
+#define LAYOUT_VIBE_SELECT (ico_region_cur()->layout_vibe) /* la_vibe_select's screen (9) */
 #define NEW_GAME_ROW_Y 112
 #define NEW_GAME_ROW_H 34
 #define NEW_GAME_NOTE_Y 182 /* with its 30 lines, clear of the layout's bottom (212) */
@@ -3038,7 +3146,7 @@ int ui_new_game_screen_row(int row, int on)
 static int newGameScreenProc(int first, int item)
 {
     (void)item;
-    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
+    ui_settings_apply_language();
     if (first) {
         s_newGameChosen = 0;
     }
@@ -3049,7 +3157,7 @@ static int newGameScreenProc(int first, int item)
         return -1;
     }
     int flags = pad[0].flags;
-    if (flags & (LT_PAD_CROSS | LT_PAD_START)) {
+    if (flags & (PAD_OK | LT_PAD_START)) {
         s_newGameChosen = 1;
         POSITIVE_SE();
         ico_opt_set_mirror(s_mirrorChoice);
@@ -3186,7 +3294,7 @@ static void requestQuit(void)
 static int quitScreenProc(int first, int item)
 {
     (void)item;
-    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
+    ui_settings_apply_language();
     LtProp *l = lt_ext_layout(s_quitLayout);
     if (first) {
         s_quitChosen = 0; /* the switch put the cursor on No (the default) */
@@ -3196,13 +3304,13 @@ static int quitScreenProc(int first, int item)
     }
     int flags = pad[0].flags;
     int to = s_origin == LAYOUT_TITLE_CONTINUE ? LAYOUT_TITLE_CONTINUE : LAYOUT_TITLE_NEW;
-    if ((flags & LT_PAD_CROSS) && l->curItem == s_quitYesNo[1]) {
+    if ((flags & PAD_OK) && l->curItem == s_quitYesNo[1]) {
         s_quitChosen = 1;
         POSITIVE_SE();
         requestQuit();
         return -1;
     }
-    if (flags & (LT_PAD_CROSS | PAD_BACK)) {
+    if (flags & (PAD_OK | PAD_BACK)) {
         NEGATIVE_SE();
         la_host_leave();
         gameCursorOn(to, s_quitRow[to == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12]);
@@ -3214,8 +3322,11 @@ static int quitScreenProc(int first, int item)
 /* whether the title's game rows are at (Continue, New Game, copyright) */
 static int titleRowsAt(int cont, int newGame, int copyright)
 {
-    return texProperty[49].dispY == cont && texProperty[50].dispY == newGame &&
-           texProperty[51].dispY == newGame && texProperty[48].dispY == copyright;
+    return texProperty[ROW_TITLE_CONTINUE].dispY == cont &&
+           texProperty[ROW_TITLE_NEW].dispY == newGame &&
+           texProperty[ROW_TITLE_NEW_ONLY].dispY == newGame &&
+           texProperty[ROW_TITLE_COPYRIGHT].dispY == copyright &&
+           (ROW_TITLE_COPYRIGHT2 < 0 || texProperty[ROW_TITLE_COPYRIGHT2].dispY == copyright);
 }
 
 /* The title's rows on one pitch (TITLE_Y): the game's rows moved in the
@@ -3227,15 +3338,18 @@ static int titleRowsAt(int cont, int newGame, int copyright)
    them in the fade-cancel check). */
 static void placeTitle(void)
 {
-    texProperty[49].dispY = TITLE_Y(0);
-    texProperty[50].dispY = texProperty[51].dispY = TITLE_Y(1);
-    texProperty[48].dispY = TITLE_COPYRIGHT_Y;
+    texProperty[ROW_TITLE_CONTINUE].dispY = TITLE_Y(0);
+    texProperty[ROW_TITLE_NEW].dispY = texProperty[ROW_TITLE_NEW_ONLY].dispY = TITLE_Y(1);
+    texProperty[ROW_TITLE_COPYRIGHT].dispY = TITLE_COPYRIGHT_Y;
+    if (ROW_TITLE_COPYRIGHT2 >= 0) {
+        texProperty[ROW_TITLE_COPYRIGHT2].dispY = TITLE_COPYRIGHT_Y;
+    }
     for (int e = ENTRY_TITLE12; e <= ENTRY_TITLE13; e++) {
         const int rows[2] = {s_entryRow[e], s_quitRow[e]};
         for (int i = 0; i < 2; i++) {
             if (rows[i] >= 0) {
                 P(rows[i])->dispY = TITLE_Y(2 + i);
-                P(rows[i])->dispH = texProperty[50].dispH;
+                P(rows[i])->dispH = texProperty[ROW_TITLE_NEW].dispH;
             }
         }
     }
@@ -3274,7 +3388,8 @@ static int pauseRowsOk(void)
 {
     const LtProperty *o = &texProperty[ROW_PAUSE_OPTIONS], *b = &texProperty[ROW_PAUSE_BACK];
     const int ph = s_photoRow;
-    return texLayout[LAYOUT_PAUSE].first == 292 && texLayout[LAYOUT_PAUSE].last == 297 &&
+    return texLayout[LAYOUT_PAUSE].first == ico_region_cur()->pause_first &&
+           texLayout[LAYOUT_PAUSE].last == ico_region_cur()->pause_last &&
            (o->right == LAYOUT_GAME_OPTIONS || o->right == s_pages[UI_PAGE_MAIN].layout) &&
            (o->downItem == ROW_PAUSE_BACK || o->downItem == ph) &&
            (b->upItem == ROW_PAUSE_OPTIONS || b->upItem == ph) &&
@@ -3287,8 +3402,8 @@ static int pauseRowsOk(void)
    alone (logged once). */
 static void repoint(void)
 {
-    if (!pauseRowsOk() || texLayout[LAYOUT_TITLE_CONTINUE].first != 49 ||
-        texLayout[LAYOUT_TITLE_NEW].first != 51 ||
+    if (!pauseRowsOk() || texLayout[LAYOUT_TITLE_CONTINUE].first != ROW_TITLE_CONTINUE ||
+        texLayout[LAYOUT_TITLE_NEW].first != ROW_TITLE_NEW_ONLY ||
         !(titleRowsAt(PAL_CONTINUE_Y, PAL_NEW_GAME_Y, PAL_COPYRIGHT_Y) ||
           titleRowsAt(TITLE_Y(0), TITLE_Y(1), TITLE_COPYRIGHT_Y))) {
         if (!s_warned) {
@@ -3302,9 +3417,9 @@ static void repoint(void)
        screen, 58, is not reached: its settings are on the pages) */
     texProperty[ROW_PAUSE_OPTIONS].right = s_pages[UI_PAGE_MAIN].layout;
     placePause();
-    static const int gameRow[ENTRY_COUNT] = {0, 50, 51};
+    const int gameRow[ENTRY_COUNT] = {0, ROW_TITLE_NEW, ROW_TITLE_NEW_ONLY};
     for (int e = 0; e < ENTRY_COUNT; e++) {
-        int g = kEntryGame[e];
+        int g = entryGame(e);
         if (e != ENTRY_PAUSE) {
             texProperty[gameRow[e]].downItem = s_entryRow[e];
             P(s_entryRow[e])->upItem = gameRow[e];
@@ -3328,6 +3443,11 @@ void ui_settings_install(void)
 {
     /* [game] circle_back, before the game's menus read a press */
     lt_ext_set_circle_back(ico_opt_circle_back());
+    if (s_origin < 0) {
+        s_origin = LAYOUT_PAUSE;
+    }
+    /* the port's text in the menu language ([ui] language) */
+    ui_settings_apply_language();
     /* [audio] output: an explicit stereo or mono is the game's from the
        start (the card's system file is read later: fumi/ios/mcard.c's hook) */
     applyOutputMode(0);
@@ -3446,7 +3566,7 @@ void ui_settings_title_mask(int masked)
 static int entryOf(int gameLayout)
 {
     for (int e = 0; e < ENTRY_COUNT; e++) {
-        if (kEntryGame[e] == gameLayout) {
+        if (entryGame(e) == gameLayout) {
             return e;
         }
     }
@@ -3733,7 +3853,7 @@ static int achInput(void *user, int d, int flags)
     (void)user;
     Page *pg = &s_pages[UI_PAGE_ACHIEVEMENTS];
     const int n = ico_ach_count();
-    if ((flags & PAD_BACK) || ((flags & LT_PAD_CROSS) && d == n + 1)) {
+    if ((flags & PAD_BACK) || ((flags & PAD_OK) && d == n + 1)) {
         return leaveTo(UI_PAGE_ACHIEVEMENTS, parentLayout(pg));
     }
     if (d == 0 && (flags & (LT_PAD_LEFT | LT_PAD_RIGHT))) {
@@ -3778,8 +3898,10 @@ static void remapDecorate(void *user, int d)
 {
     (void)user;
     (void)d;
-    setNote(s_pages[UI_PAGE_REMAP].list.status,
-            s_capture.active ? UI_STR_REMAP_PRESS : UI_STR_REMAP_HINT);
+    setNote(s_pages[UI_PAGE_REMAP].list.status, s_capture.active ? UI_STR_REMAP_PRESS
+                                                : lt_ext_confirm_glyph() == LT_GLYPH_CIRCLE
+                                                    ? UI_STR_REMAP_HINT_CIRCLE
+                                                    : UI_STR_REMAP_HINT);
 }
 
 static int remapInput(void *user, int d, int flags)
@@ -3807,7 +3929,7 @@ static int remapInput(void *user, int d, int flags)
         return leaveTo(UI_PAGE_REMAP, parentLayout(pg));
     }
     if (d >= 0 && d < ICO_T_COUNT) {
-        if (flags & LT_PAD_CROSS) {
+        if (flags & PAD_OK) {
             POSITIVE_SE();
             ui_remap_capture_start(&s_capture, kRemapOrder[d]);
             lt_item_select_disable = 1;
@@ -3819,7 +3941,7 @@ static int remapInput(void *user, int d, int flags)
             s_dirtyBindings = 1;
             return -1;
         }
-    } else if (d == ICO_T_COUNT && (flags & LT_PAD_CROSS)) {
+    } else if (d == ICO_T_COUNT && (flags & PAD_OK)) {
         /* the bindings only; sensitivity and the other [input] values stay */
         IcoBindings def, *b = liveBindings();
         ico_bindings_defaults(&def);
@@ -3830,7 +3952,7 @@ static int remapInput(void *user, int d, int flags)
         s_dirtyBindings = 1;
         POSITIVE_SE();
         return -1;
-    } else if (d == ICO_T_COUNT + 1 && (flags & LT_PAD_CROSS)) {
+    } else if (d == ICO_T_COUNT + 1 && (flags & PAD_OK)) {
         return leaveTo(UI_PAGE_REMAP, parentLayout(pg));
     }
     return UI_LIST_PASS;
@@ -3951,10 +4073,10 @@ static int galInput(void *user, int d, int flags)
     (void)user;
     Page *pg = &s_pages[UI_PAGE_MUSIC];
     const GalleryItem *it = gallery_item(d);
-    if ((flags & PAD_BACK) || ((flags & LT_PAD_CROSS) && it != NULL && it->kind == GAL_K_BACK)) {
+    if ((flags & PAD_BACK) || ((flags & PAD_OK) && it != NULL && it->kind == GAL_K_BACK)) {
         return galLeave();
     }
-    if ((flags & LT_PAD_CROSS) && it != NULL && it->kind != GAL_K_HEADING) {
+    if ((flags & PAD_OK) && it != NULL && it->kind != GAL_K_HEADING) {
         gallery_toggle(d);
         return -1;
     }
@@ -4238,7 +4360,7 @@ static int settingsProc(int first, int item)
         return -1;
     }
     /* the port's strings follow the game's language (ui_host.c does too) */
-    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
+    ui_settings_apply_language();
     gpuPoll(); /* an install the page started, on any page */
     if (id == UI_PAGE_MUSIC) {
         gallery_tick(); /* the engine, once a Main tick while the page is up */
@@ -4267,7 +4389,7 @@ static int settingsProc(int first, int item)
         if (charsShown() < 0) {
             return -1; /* a model loading, or the viewer leaving */
         }
-        const int cross = flags & LT_PAD_CROSS;
+        const int cross = flags & PAD_OK;
         if ((flags & PAD_BACK) ||
             (cross && lay->curItem == ui_settings_row_of(UI_PAGE_CHARACTERS, UI_OPT_BACK))) {
             /* Triangle, or Back: to the title, what changed written */
@@ -4313,8 +4435,7 @@ static int settingsProc(int first, int item)
             CUR_SE();
             refreshPage(pg, id, lay->curItem);
         }
-        if ((flags & LT_PAD_CROSS) &&
-            (r->opt == UI_OPT_CHAR_RANDOMIZE || r->opt == UI_OPT_CHAR_RESET)) {
+        if ((flags & PAD_OK) && (r->opt == UI_OPT_CHAR_RANDOMIZE || r->opt == UI_OPT_CHAR_RESET)) {
             /* in the viewer only the character shown, from the
                pause menu both */
             const int c = charsRowsFor();
@@ -4334,7 +4455,7 @@ static int settingsProc(int first, int item)
             POSITIVE_SE();
             refreshPage(pg, id, lay->curItem);
         }
-        if ((flags & LT_PAD_CROSS) && r->opt == UI_OPT_LINK && r->link == UI_PAGE_CHARACTERS &&
+        if ((flags & PAD_OK) && r->opt == UI_OPT_LINK && r->link == UI_PAGE_CHARACTERS &&
             onTitle() && charsHosted()) {
             /* Characters from the title, inside the model viewer */
             int to = charsEnter();
@@ -4343,23 +4464,23 @@ static int settingsProc(int first, int item)
                 return to;
             }
         }
-        if ((flags & LT_PAD_CROSS) && r->opt == UI_OPT_EXTRAS_STEAM) {
+        if ((flags & PAD_OK) && r->opt == UI_OPT_EXTRAS_STEAM) {
             POSITIVE_SE();
             steamAdd();
         }
-        if ((flags & LT_PAD_CROSS) && r->opt == UI_OPT_GPU_ADD) {
+        if ((flags & PAD_OK) && r->opt == UI_OPT_GPU_ADD) {
             POSITIVE_SE();
             gpuAdd();
         }
-        if ((flags & LT_PAD_CROSS) && r->opt == UI_OPT_GPU_REMOVE) {
+        if ((flags & PAD_OK) && r->opt == UI_OPT_GPU_REMOVE) {
             POSITIVE_SE();
             gpuRemove();
             refreshPage(pg, id, lay->curItem);
         }
-        if ((flags & LT_PAD_CROSS) && r->opt == UI_OPT_BACK) {
+        if ((flags & PAD_OK) && r->opt == UI_OPT_BACK) {
             return leaveTo(id, parentLayout(pg));
         }
-        if ((flags & LT_PAD_CROSS) && isExtrasOpt(r->opt)) {
+        if ((flags & PAD_OK) && isExtrasOpt(r->opt)) {
             int to = extrasOpen(r->opt);
             if (to >= 0) {
                 POSITIVE_SE();

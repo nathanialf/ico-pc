@@ -115,7 +115,6 @@
 extern PadState pad[16];
 extern int stage_no;
 extern int systemStatus[12];
-extern int NonLinearCameraMove;
 extern int enable_game_pause; /* layout_action.c */
 extern MotionDef motionKind[];
 extern GenGeo objLayout[]; /* the layout rows (gamesys.h) */
@@ -161,16 +160,17 @@ unsigned int ico_host_main_ticks(void); /* trace_host.c */
 /* the pad's trigger bits (keyInput.c's logical word) */
 #define PAD_L1 0x0004
 #define PAD_R1 0x0008
-#define PAD_TRIANGLE 0x0010
-#define PAD_CIRCLE 0x0020
 #define PAD_SELECT 0x0100 /* ICO_PAD_SELECT (pad_script.h) */
-#define PAD_CROSS 0x0040
 #define PAD_SQUARE 0x0080
 #define PAD_UP 0x1000
 #define PAD_DOWN 0x4000
-#define PAD_BACK (PAD_TRIANGLE | PAD_CIRCLE)
+/* the disc's confirm (Cross, Circle on the Japanese disc) and the port
+   screens' back buttons (Triangle and the other of Cross and Circle):
+   layout_ext.h, as the Settings pages */
+#define PAD_OK (lt_ext_confirm_button())
+#define PAD_BACK (lt_ext_port_back_buttons())
 
-#define TITLE_STAGE 1
+#define TITLE_STAGE (ico_region_cur()->stage_title) /* 1 on both discs */
 /* modeMessage's "RotOnly" */
 #define ROOT_ROT_ONLY 19
 /* the backdrop: a neutral grey, dark enough for the menu's light text */
@@ -191,8 +191,9 @@ unsigned int ico_host_main_ticks(void); /* trace_host.c */
 /* the title's menu after Characters (10 s at 25 ticks a second):
    past this Settings is not opened again (a log line) */
 #define RETURN_TIMEOUT_TICKS 250u
-#define LAYOUT_TITLE_CONTINUE 12
-#define LAYOUT_TITLE_NEW 13
+#define LAYOUT_TITLE_CONTINUE                                                                      \
+    (ico_region_cur()->layout_title_continue)                 /* 12, 9 on the Japanese disc */
+#define LAYOUT_TITLE_NEW (ico_region_cur()->layout_title_new) /* 13, 10 on the Japanese disc */
 
 enum { MV_OFF, MV_LOADING, MV_VIEW, MV_LIST, MV_LEAVING };
 
@@ -334,7 +335,7 @@ static int listInput(void *user, int d, int flags)
         }
         return to;
     }
-    if ((flags & PAD_CROSS) && d >= 0 && d < mv_modelCount) {
+    if ((flags & PAD_OK) && d >= 0 && d < mv_modelCount) {
         POSITIVE_SE();
         la_host_leave();
         mvStart(d);
@@ -418,7 +419,7 @@ static int listProc(int first, int item)
 {
     LtProp *lay = lt_ext_layout(s_listLayout);
     (void)item;
-    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
+    ui_settings_apply_language();
     if (first) {
         ui_list_reset(&s_list);
         if (s_model >= 0 && s_model < mv_modelCount) {
@@ -473,7 +474,7 @@ static int viewProc(int first, int item)
 {
     (void)first;
     (void)item;
-    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
+    ui_settings_apply_language();
     lt_item_select_disable = 1;
     refreshView();
     return -1;
@@ -588,12 +589,13 @@ static void mvStart(int row)
     freeAnims();
     ico_mv_active = 1;
     setState(MV_LOADING);
-    fprintf(stderr, "model_viewer: loading stage %d for \"%s\"\n", m->stage, modelNameEn(row));
+    fprintf(stderr, "model_viewer: loading stage %d for \"%s\"\n", mv_model_stage(m),
+            modelNameEn(row));
     /* the boy and the girl are built where the game's object records put
        them: there, as a start_stage boot puts them (its gflag 394 is one
        End Game's gflagInit clears) */
-    ACTGame_SetActors_Debug(m->stage, 0);
-    stgmgrForceSwitchWithFade(m->stage, 1.0f, 8.0f);
+    ACTGame_SetActors_Debug(mv_model_stage(m), 0);
+    stgmgrForceSwitchWithFade(mv_model_stage(m), 1.0f, 8.0f);
 }
 
 /* the viewer off: the draw filter, the pause menu and the flag given back */
@@ -696,12 +698,13 @@ static GObj *findObject(const MvModel *m)
     GObj *g;
     if (m->label > 0) {
         g = isysGObjSearchFromObjLayoutID(m->label);
-        if (g != NULL && g->kind == m->kind && g->dobj != NULL && g->dobj->modelId == m->charId) {
+        if (g != NULL && g->kind == m->kind && g->dobj != NULL &&
+            g->dobj->modelId == mv_model_id(m)) {
             return g;
         }
     }
     for (g = isysGObjGetExist_begin(); g != NULL; g = isysGObjGetExist_next(g)) {
-        if (g->kind == m->kind && g->dobj != NULL && g->dobj->modelId == m->charId) {
+        if (g->kind == m->kind && g->dobj != NULL && g->dobj->modelId == mv_model_id(m)) {
             return g;
         }
     }
@@ -984,7 +987,7 @@ static void setup(void)
     fprintf(stderr,
             "model_viewer: stage %d loaded id %d \"%s\" (%d animations); the stage's picture "
             "effects: post %d, feedback %d colour %d %d %d %d\n",
-            stage_no, m->charId, modelNameEn(s_model), s_animCount,
+            stage_no, mv_model_id(m), modelNameEn(s_model), s_animCount,
             (int)GlobalStageSetting.postEffect, (int)GlobalStageSetting.feedbackEffect,
             (int)GlobalStageSetting.feedbackCol[0], (int)GlobalStageSetting.feedbackCol[1],
             (int)GlobalStageSetting.feedbackCol[2], (int)GlobalStageSetting.feedbackCol[3]);
@@ -1044,7 +1047,7 @@ static int savedFmtOk(const char *f)
 static void saveDone(int n)
 {
     char body[UI_POPUP_TEXT];
-    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
+    ui_settings_apply_language();
     if (n > 0) {
         const char *fmt = ui_str(UI_STR_MV_SAVED_FMT);
         if (!savedFmtOk(fmt)) {
@@ -1097,7 +1100,7 @@ static void viewInput(void)
         s_sel = (s_sel + 1) % s_animCount;
         CUR_SE();
     }
-    if (flags & PAD_CROSS) {
+    if (flags & PAD_OK) {
         POSITIVE_SE();
         play();
     }
@@ -1206,7 +1209,8 @@ void ico_mv_tick(void)
             rd_set_draw_filter(true, NULL, 0);
 #endif
         }
-        if (s_sawChange && systemStatus[6] == 0 && stage_no == mv_models[s_model].stage) {
+        if (s_sawChange && systemStatus[6] == 0 &&
+            stage_no == mv_model_stage(&mv_models[s_model])) {
             setup();
         } else if (now - s_since > LOAD_TIMEOUT_TICKS) {
             mvFailed("the stage did not load");
@@ -1214,7 +1218,7 @@ void ico_mv_tick(void)
         return;
     case MV_VIEW:
     case MV_LIST:
-        if (stage_no != mv_models[s_model].stage || systemStatus[6] != 0) {
+        if (stage_no != mv_model_stage(&mv_models[s_model]) || systemStatus[6] != 0) {
             /* a stage change the viewer did not ask for: its objects are
                gone; the host stage again starts it over, any other stage
                times out to the title */

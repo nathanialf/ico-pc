@@ -119,6 +119,7 @@
 #include "video_options.h"
 #include "photo_mode.h"
 #include "photo_view.h"
+#include "../../core/region.h" /* the scene layout (la_game_demo) */
 
 static int failures;
 
@@ -1918,7 +1919,7 @@ static int letterRef(int x, int y, int k, void *user)
 
 static void checkLetterbox(void)
 {
-    current_layout_id = 55;
+    current_layout_id = ico_region_cur()->layout_scene; /* la_game_demo: 55 */
     for (int i = 0; i < 10; i++) {
         drawScene(s_tex, RD_FILTER_NEAREST);
         tick();
@@ -2088,7 +2089,7 @@ static void checkCinematicBars(void)
         o.effectCinematicBars = on;
         ico_video_set(&o);
         CHECK(ico_video_effect_cinematic_bars() == on, "bars: the switch reads %d", on);
-        current_layout_id = 55;
+        current_layout_id = ico_region_cur()->layout_scene; /* la_game_demo: 55 */
         s_blurCalls = 0;
         for (int i = 0; i < 10; i++) {
             tick();
@@ -2112,7 +2113,7 @@ static void checkCinematicBars(void)
     ico_video_get(&o);
     o.effectCinematicBars = 1;
     ico_video_set(&o);
-    current_layout_id = 55;
+    current_layout_id = ico_region_cur()->layout_scene; /* la_game_demo: 55 */
     for (int i = 0; i < 5; i++) {
         tick();
     }

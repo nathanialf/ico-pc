@@ -27,11 +27,15 @@ extern "C" {
 #endif
 
 /* the stageData row the playback starts in: STAFF1 (st13b), where
-   actStaff1 starts the roll (actStaff1Demo, staffRollStart) */
-#define ICO_CREDITS_STAGE 60
+   actStaff1 starts the roll (actStaff1Demo, staffRollStart): the running
+   disc's (port/core/region.h stage_credits: 60, 58 on the Japanese disc;
+   credits.c) */
+int ico_credits_stage(void);
+#define ICO_CREDITS_STAGE (ico_credits_stage())
 /* the stage the playback returns to: the boot logo and title (stage 1), as
    the End Game path and actEndingSave go */
-#define ICO_CREDITS_TITLE_STAGE 1
+#define ICO_CREDITS_TITLE_STAGE (ico_credits_title_stage())
+int ico_credits_title_stage(void); /* region.h stage_title: 1 on both discs */
 
 /* nonzero from the Extras row's start until the title is up again */
 int ico_credits_active(void);
@@ -57,10 +61,14 @@ void ico_roll_started(int discLines);
 int ico_credits_unlocked(void);
 
 /* the engine the program installs (credits_live.c): begin starts the
-   stage change from the title, 0 or -1; poll runs once per vsync after the
-   game's threads (port/platform/host_loop.c) */
+   stage change from the title, 0 or -1; roll, at the roll's start
+   (ico_roll_started, the real ending's and the playback's), logs where the
+   ending's song is then against the table's place (region.h
+   credits_roll_ms), or is NULL; poll runs once per vsync after the game's
+   threads (port/platform/host_loop.c) */
 typedef struct IcoCreditsEngine {
     int (*begin)(void);
+    void (*roll)(void);
 } IcoCreditsEngine;
 
 void ico_credits_set_engine(const IcoCreditsEngine *e);

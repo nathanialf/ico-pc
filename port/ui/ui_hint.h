@@ -26,7 +26,9 @@ extern "C" {
 #define UI_HINT_WIDTH 600.0f
 
 typedef struct UiHintItem {
-    int glyph;  /* LtExtGlyph, or -1: the word alone */
+    int glyph;  /* LtExtGlyph, or -1: the word alone; LT_GLYPH_CROSS stands for the
+                   disc's confirm (ui_hint_build puts Circle there on the Japanese
+                   disc, lt_ext_confirm_glyph) */
     int glyph2; /* a second glyph after the first (L1 then R1), or -1 */
     int strId;  /* the word (strings.h) */
 } UiHintItem;

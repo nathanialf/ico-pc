@@ -38,8 +38,16 @@
 extern "C" {
 #endif
 
-#define LT_GAME_LAYOUT_COUNT 80
-#define LT_GAME_PROPERTY_COUNT 436
+/* The game's table sizes, the running disc's (port/core/region.h:
+   texLayout[80] and texProperty[436] on the European disc, 76 and 412 on
+   the Japanese one); the _MAX values are the larger, for arrays sized at
+   build time. */
+#define LT_GAME_LAYOUT_COUNT (lt_ext_game_layout_count())
+#define LT_GAME_PROPERTY_COUNT (lt_ext_game_property_count())
+#define LT_GAME_LAYOUT_COUNT_MAX 80
+#define LT_GAME_PROPERTY_COUNT_MAX 436
+int lt_ext_game_layout_count(void);
+int lt_ext_game_property_count(void);
 #define LT_EXT_MAX_LAYOUTS 32
 #define LT_EXT_MAX_PROPERTIES                                                                      \
     768 /* room for every page's rows, the mouse rows and the Android driver page among them */
@@ -177,12 +185,23 @@ void lt_ext_draw_text_row(const LtProperty *e, const int box[4], const int uv[4]
                           const unsigned char rgba[4], int glow);
 
 /* The pad bits that take the game menus' back action, where the game
-   checks Triangle for it (default_item_select's left link in
-   layout_texture.c, the la_* procs' cancels in layout_action.c).  Triangle
-   (0x10), plus Circle (0x20) while the alias is on ([game] circle_back,
-   default on; the Settings module sets it from port/game/options.h at
-   install and on a change).  Off, it is 0x10 alone: the PS2's checks
-   exactly.  lt_ext_circle_back reads the alias back (tests). */
+   checks its cancel button for it (default_item_select's left link in
+   layout_texture.c, the la_* procs' cancels in layout_action.c).  On the
+   European disc Triangle (0x10), plus Circle (0x20) while the alias is on
+   ([game] circle_back, default on; the Settings module sets it from
+   port/game/options.h at install and on a change); off, it is 0x10 alone:
+   the PS2's checks exactly.  On the Japanese disc Cross (0x40), the disc's
+   own cancel (region.h pad_back; Circle confirms there, so there is no
+   alias and lt_ext_has_circle_back is 0).  lt_ext_circle_back reads the
+   alias back (tests).
+
+   lt_ext_confirm_button is the disc's confirm (region.h pad_confirm: Cross
+   0x40, Circle 0x20 on the Japanese disc), the button the port's own
+   screens confirm with and a mouse click on an item gives;
+   lt_ext_confirm_glyph its picture (LT_GLYPH_CROSS or LT_GLYPH_CIRCLE);
+   lt_ext_port_back_buttons the port's own screens' back buttons: Triangle
+   and the one of Cross and Circle that does not confirm, whatever [game]
+   circle_back says (that switch is for the game's own menus). */
 #define LT_PAD_TRIANGLE 0x0010
 #define LT_PAD_CIRCLE 0x0020
 /* the other trigger bits of the pad word (keyInput.c's logical word) the
@@ -197,6 +216,10 @@ void lt_ext_draw_text_row(const LtProperty *e, const int box[4], const int uv[4]
 #define LT_PAD_DOWN 0x4000
 #define LT_PAD_LEFT 0x8000
 int lt_ext_back_buttons(void);
+int lt_ext_confirm_button(void);
+int lt_ext_confirm_glyph(void);
+int lt_ext_port_back_buttons(void);
+int lt_ext_has_circle_back(void);
 void lt_ext_set_circle_back(int on);
 int lt_ext_circle_back(void);
 

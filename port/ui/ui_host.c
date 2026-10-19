@@ -31,7 +31,6 @@ extern int ScreenWidth;
 extern int ScreenHeight;
 extern float center_X;
 extern float center_Y;
-extern int NonLinearCameraMove; /* the language the boot screen chose, 2..6 */
 #ifdef ICO_RD
 extern void gif_HostFlush(void); /* GifHost.h */
 
@@ -70,7 +69,7 @@ static void sync(void)
     f.centerY = center_Y;
     f.z = UI_LAYOUT_Z;
     ui_set_gs_frame(&f);
-    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
+    ui_settings_apply_language();
 #ifdef ICO_RD
     const RdSettings *s = rd_get_settings();
     if (s) {

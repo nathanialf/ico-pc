@@ -47,7 +47,13 @@
  * left, 0x2000 right (common/src/kanban.c kanban_layout_key, fumi/ios/pad.c
  * iosPadGetStick_func); 0x0040 confirms and 0x0010 cancels (kanban.c
  * kanban_layout_key, layout_action.c PSH_POSITIVE_OR_NEGATIVE, the PAL
- * release's CROSS and TRIANGLE).
+ * release's CROSS and TRIANGLE). The Japanese release confirms on 0x0020
+ * (CIRCLE) and cancels on 0x0040 (CROSS) (targets/jpn/.../layout_action.c
+ * PSH_POSITIVE_OR_NEGATIVE; port/core/region.h pad_confirm, pad_back). The
+ * recording format is the same for both discs: the word holds the
+ * buttons pressed, never their meaning, so a script recorded on one disc
+ * presses the same buttons on the other (and means the other thing in
+ * the menus).
  */
 #ifndef ICO_PORT_INPUT_PAD_SCRIPT_H
 #define ICO_PORT_INPUT_PAD_SCRIPT_H

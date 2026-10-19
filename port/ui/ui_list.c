@@ -13,8 +13,10 @@
 /* layout_action.c: the menus' sound */
 extern void CUR_SE(void);
 
-/* Triangle or Circle, as settings.c's PAD_BACK */
-#define PAD_BACK (LT_PAD_TRIANGLE | LT_PAD_CIRCLE)
+/* Triangle or the face button that does not confirm, and the disc's
+   confirm, as settings.c's PAD_BACK and PAD_OK */
+#define PAD_BACK (lt_ext_port_back_buttons())
+#define PAD_OK (lt_ext_confirm_button())
 
 static LtProperty *P(int index)
 {
@@ -169,7 +171,7 @@ static void scrollList(UiList *l, LtProp *lay, int flags)
     int s = ui_list_slot_of(l, lay->curItem);
     int shown = ui_list_shown(l);
     int wrapped = 0;
-    if (s < 0 || shown == 0 || (flags & (LT_PAD_CROSS | PAD_BACK))) {
+    if (s < 0 || shown == 0 || (flags & (PAD_OK | PAD_BACK))) {
         return;
     }
     if ((flags & LT_PAD_DOWN) && s == shown - 1) {

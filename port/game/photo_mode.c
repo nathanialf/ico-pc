@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "config.h"
+#include "../core/region.h" /* ico_region_cur: the disc's confirm */
 
 #define PI_F 3.14159265358979f
 #define DEG(d) ((d) * PI_F / 180.0f)
@@ -455,12 +456,22 @@ void ico_photo_mouse_look(float yawDeg, float pitchDeg)
     clampStep(st, &before);
 }
 
+unsigned int ico_photo_save_button(void)
+{
+    return (unsigned int)ico_region_cur()->pad_confirm;
+}
+
+unsigned int ico_photo_back_button(void)
+{
+    return (ICO_PHOTO_CROSS | ICO_PHOTO_CIRCLE) & ~ico_photo_save_button();
+}
+
 int ico_photo_update(const IcoPhotoPad *pad)
 {
     if (!s.st.active || !pad) {
         return 0;
     }
-    if (pad->pressed & (ICO_PHOTO_TRIANGLE | ICO_PHOTO_CIRCLE | ICO_PHOTO_START)) {
+    if (pad->pressed & (ICO_PHOTO_TRIANGLE | ICO_PHOTO_START | ico_photo_back_button())) {
         return 1;
     }
     const float dt = 1.0f / (float)(s.tickHz > 0 ? s.tickHz : 25);
@@ -549,7 +560,7 @@ int ico_photo_update(const IcoPhotoPad *pad)
             fprintf(stderr, "photo: could not save film_effect\n");
         }
     }
-    if (pad->pressed & ICO_PHOTO_CROSS) {
+    if (pad->pressed & ico_photo_save_button()) {
         s.capturePending++;
         st->captures++;
         fprintf(stderr, "photo: capture %u asked\n", st->captures);

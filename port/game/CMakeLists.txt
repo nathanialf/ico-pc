@@ -331,4 +331,6 @@ target_compile_options(credits_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_L
 target_link_libraries(credits_test PRIVATE ico_config ico_platform)
 if(ICO_RUN_TESTS)
     add_test(NAME credits COMMAND credits_test "${CMAKE_CURRENT_BINARY_DIR}")
+    # the same on the Japanese disc's region (STAFF1 58, the scene layout 52)
+    add_test(NAME credits_jpn COMMAND credits_test "${CMAKE_CURRENT_BINARY_DIR}" jpn)
 endif()

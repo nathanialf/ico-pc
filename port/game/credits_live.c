@@ -37,6 +37,7 @@
 #include <stdio.h>
 
 #include "ico_credits.h"
+#include "../core/region.h" /* ico_region_cur */
 
 #include <string.h>
 
@@ -67,9 +68,12 @@ extern int RequestStageChangeSimple(int no, float speed, float wait, unsigned ch
    of the scenes before it, the real ending opened it at Main tick 122 and
    started the roll at Main tick 3899: 3777 ticks at PAL's 25 Hz, 151.1 s
    into the song, so 114.5 s of it are left when the roll starts and it
-   ends 12 s into the third scene (STAFF3, whose own piece starts there). */
-#define SONG 47
-#define SONG_AT_ROLL_MS 151080
+   ends 12 s into the third scene (STAFF3, whose own piece starts there).
+   The Japanese disc's ending runs at its fixed 30 Hz (region.h
+   credits_roll_ms, the value and how it was found).  Both from the running
+   disc's table (port/core/region.h). */
+#define SONG (ico_region_cur()->credits_song)
+#define SONG_AT_ROLL_MS (ico_region_cur()->credits_roll_ms)
 /* the playback requests it in actStaff1Chk, on the roll's tick, and the
    script daemon has it playing two Main ticks later (the headless run) */
 #define SONG_OPEN_MS 80
@@ -77,12 +81,13 @@ extern int RequestStageChangeSimple(int no, float speed, float wait, unsigned ch
 /* the real ending's way into STAFF1: 26b4demo2's sixth exit (actConte14_13,
    RequestStageChange(6, ...)), and the boy's object record (label 54, kind
    1: ACTGame_SetActors_Debug's first row) */
-#define ENTRANCE_EXIT 216
-#define BOY_LABEL 54
+#define ENTRANCE_EXIT (ico_region_cur()->credits_entrance_exit) /* 216 on both discs */
+#define BOY_LABEL (ico_region_cur()->credits_boy_label)         /* 54 on both discs */
 #define BOY_KIND 1
 
-/* the story flags: gflag.c's 50-byte bitmap */
+/* the story flags: gflag.c's 50-byte bitmap (the same on both discs) */
 #define GFLAG_COUNT 400
+_Static_assert(GFLAG_COUNT == 400, "region.h gflag_count: 400 on both discs");
 /* Main ticks the stage change may take before it counts as failed (the
    load of STAFF1 takes a few hundred): REACH_TICKS with no stage change
    running, REACH_LIMIT whatever runs; then RETURN_TICKS for the title's
@@ -107,6 +112,11 @@ static unsigned int s_returnTick;
 static int s_lastStage;
 static unsigned int s_songTick;
 static int s_songSeen;
+static int s_songStartMs; /* the playback's start of the song, ms into it (sector-rounded) */
+/* the ending's song (end.c sea) as the poll last saw it, and the Main tick
+   it opened at: the real ending's measure of the song at the roll */
+static int s_seaOpen;
+static unsigned int s_seaTick;
 
 static void keepState(void)
 {
@@ -221,6 +231,10 @@ static void failStart(void)
 
 void ico_credits_host_poll(void)
 {
+    if ((sea != 0) != s_seaOpen) {
+        s_seaOpen = sea != 0;
+        s_seaTick = ico_host_main_ticks();
+    }
     if (s_phase == PH_IDLE) {
         return;
     }
@@ -265,6 +279,9 @@ int ico_credits_song_start(void)
     int bytes = (int)(blocks * 16 * f->channels) & ~0x7FF;
 
     ico_adpcm_set_start(SONG, bytes);
+    s_songStartMs =
+        (int)((long long)bytes / (16 * f->channels) * 28 * 1000 / (f->pitch > 0 ? f->pitch : 1)) -
+        SONG_OPEN_MS;
     s_songTick = ico_host_main_ticks();
     s_songSeen = 0;
     fprintf(stderr,
@@ -273,7 +290,29 @@ int ico_credits_song_start(void)
     return SONG;
 }
 
-static const IcoCreditsEngine kEngine = {begin};
+/* The roll's start: where the ending's song is, by the Main ticks since it
+   opened (the real ending: end.c's sea, actEndDemo06Chk) or since the
+   playback started it at its table place (Extras > Credits), a tick
+   systemStatus[1] fields of 50 Hz or 59.94 Hz (systemStatus[0]); the
+   table's credits_roll_ms beside it, so a log of the real ending on a disc
+   measures the value its region row should hold. -1: the song is not open. */
+static void roll(void)
+{
+    const unsigned int now = ico_host_main_ticks();
+    const int fields = systemStatus[1] > 0 ? systemStatus[1] : 2;
+    const double tickMs = fields * (systemStatus[0] ? 20.0 : 1001.0 / 60.0);
+    int at = -1;
+
+    if (ico_credits_active() && s_songTick != 0) {
+        at = s_songStartMs + (int)((now - s_songTick) * tickMs + 0.5);
+    } else if (s_seaOpen) {
+        at = (int)((now - s_seaTick) * tickMs + 0.5);
+    }
+    fprintf(stderr, "credits: roll start at Main tick %u, song at %d ms (table %d ms)\n", now, at,
+            SONG_AT_ROLL_MS);
+}
+
+static const IcoCreditsEngine kEngine = {begin, roll};
 
 void ico_credits_engine_install(void)
 {

@@ -69,6 +69,7 @@
 #include "df_pack.h"
 #include "fightSound.h"
 #include "gallery.h"
+#include "../core/region.h" /* ico_region_cur */
 #include "s_init.h"
 #include "spu2.h"
 #include "spu2_sd.h"
@@ -95,12 +96,16 @@ extern void iosFree(void *p);
 #define SPU_SEG_TOP 0x1D9020 /* s_init.c: the top of segment 1 */
 #define MAX_EVICT 16         /* the title's stage banks closed for the gallery's (it has 1) */
 
-#define N_ADPCM 105
-#define N_SEFILE 104
-#define N_SEDEF 1426
-#define N_SELIST 3837
-#define N_SEENV 425
-#define N_STAGE 106
+/* the tables' sizes, the running disc's (port/core/region.h; the stage
+   count is 104 on the Japanese disc) */
+#define N_ADPCM (ico_region_cur()->n_adpcm)
+#define N_SEFILE (ico_region_cur()->n_sefile)
+#define N_SEDEF (ico_region_cur()->n_sedef)
+#define N_SELIST (ico_region_cur()->n_selist)
+#define N_SEENV (ico_region_cur()->n_seenv)
+#define N_STAGE (ico_region_cur()->stage_count)
+/* the streams' audible flags: adpcmFile's rows (105 on both discs) */
+#define N_ADPCM_MAX 128
 
 static const GalleryItem *s_cur;
 /* streams */
@@ -203,14 +208,14 @@ static int readSector(void *user, uint64_t off, uint8_t *buf)
     return ico_df_read(ico_vfs_disc(), base, off, buf, GALLERY_SECTOR) == GALLERY_SECTOR ? 0 : -1;
 }
 
-static double s_audible[N_ADPCM];
-static unsigned char s_audibleKnown[N_ADPCM];
+static double s_audible[N_ADPCM_MAX];
+static unsigned char s_audibleKnown[N_ADPCM_MAX];
 
 static double audibleBytes(int no)
 {
     const double pass = gallery_stream_bytes(&adpcmFile[no]);
     IcoVfs *vfs = ico_vfs_disc();
-    if (no <= 0 || no >= N_ADPCM || vfs == NULL) {
+    if (no <= 0 || no >= N_ADPCM || no >= N_ADPCM_MAX || vfs == NULL) {
         return pass;
     }
     if (s_audibleKnown[no]) {

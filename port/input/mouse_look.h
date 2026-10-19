@@ -18,13 +18,16 @@
  *
  * The same state decides what Escape (and Android's Back) presses: Start
  * in play, so the pause menu opens, nothing on the game's Button
- * configuration screen, Triangle (back) everywhere else.
+ * configuration screen, the disc's back (Triangle, Cross on the Japanese
+ * disc) everywhere else.
  *
  * The game runs on a fiber of the window's thread, so the accumulator needs
  * no lock.
  */
 #ifndef ICO_PORT_INPUT_MOUSE_LOOK_H
 #define ICO_PORT_INPUT_MOUSE_LOOK_H
+
+#include "../core/region.h" /* ico_region_cur */
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,13 +36,14 @@ extern "C" {
 enum { ICO_CAPTURE_OFF = 0, ICO_CAPTURE_STICK = 1, ICO_CAPTURE_DELTA = 2 };
 
 /* The game layout play runs on (layout_texture.c init_layout_texture), and
-   the one of its scenes. */
-#define ICO_CAPTURE_LAYOUT_PLAY 54
-#define ICO_CAPTURE_LAYOUT_SCENE 55
-/* The game's Button configuration screen (la_key_config): any single
-   button there is assigned to the highlighted action, and the screen is
-   left through its OK row. */
-#define ICO_CAPTURE_LAYOUT_KEY_CONFIG 59
+   the one of its scenes: the running disc's (port/core/region.h; 54 and 55
+   on the European disc, 51 and 52 on the Japanese one). */
+#define ICO_CAPTURE_LAYOUT_PLAY (ico_region_cur()->layout_play)
+#define ICO_CAPTURE_LAYOUT_SCENE (ico_region_cur()->layout_scene)
+/* The game's Button configuration screen (la_key_config; 59, 56 on the
+   Japanese disc): any single button there is assigned to the highlighted
+   action, and the screen is left through its OK row. */
+#define ICO_CAPTURE_LAYOUT_KEY_CONFIG (ico_region_cur()->layout_key_config)
 
 typedef struct IcoCaptureState {
     int focus;   /* the window has the keyboard focus */
@@ -75,8 +79,9 @@ int ico_mouse_capture_rule(const IcoCaptureState *s);
    Button configuration screen (ICO_CAPTURE_LAYOUT_KEY_CONFIG, where
    Triangle would be assigned to the highlighted action), ICO_T_START in
    play (the same test as ICO_CAPTURE_STICK, without the focus and mouse
-   camera conditions), ICO_T_TRIANGLE anywhere else (the pause menu, the
-   title, the port's pages, photo mode). The quit is the title's row or the
+   camera conditions), the disc's back anywhere else (the pause menu, the
+   title, the port's pages, photo mode): ICO_T_TRIANGLE, ICO_T_CROSS on the
+   Japanese disc, whose menus cancel with Cross (region.h pad_back). The quit is the title's row or the
    window's close button, never Escape. */
 int ico_escape_target(const IcoCaptureState *s);
 

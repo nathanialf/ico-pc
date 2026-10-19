@@ -61,6 +61,7 @@
 /* port/ui */
 #include "font.h"
 #include "layout_ext.h"
+#include "../../core/region.h"
 #include "menu_font.h"
 #include "sheet_ref.h"
 #include "popup.h"
@@ -88,8 +89,8 @@ void *ios_partition_common;
 void *dmaVif;
 
 /* the game's tables: fake rows, no disc data */
-LtProp texLayout[LT_GAME_LAYOUT_COUNT];
-LtProperty texProperty[LT_GAME_PROPERTY_COUNT];
+LtProp texLayout[LT_GAME_LAYOUT_COUNT_MAX];
+LtProperty texProperty[LT_GAME_PROPERTY_COUNT_MAX];
 TexRec texFile[1];
 const StgPre stageData[1];
 PadState pad[16];
@@ -1500,8 +1501,46 @@ static void testSizeSets(void)
     ui_font_forget_textures();
 }
 
-int main(void)
+/* ui_test jpn (ctest ui_jpn): the layout extension's glyphs and pad
+   convention on the Japanese disc (port/core/region_jpn.c): each glyph row
+   and rectangle the region's (Tex_menu01/option.tm2), its height the row's
+   own dispH, the confirm Circle and its picture, the back buttons */
+static void testJapanese(void)
 {
+    CHECK(ico_region_select("jpn") == 0, "the Japanese disc selected");
+    for (int g = 0; g < LT_GLYPH_COUNT; g++) {
+        int uv[4], w, h;
+        const IcoGlyphRow *k = &ico_region_cur()->glyph[g];
+        CHECK(lt_ext_glyph_source(g, uv) == k->row && uv[0] == k->u && uv[1] == k->v &&
+                  uv[2] == k->w && uv[3] == k->h,
+              "glyph %d: row %d %d,%d %dx%d", g, k->row, uv[0], uv[1], uv[2], uv[3]);
+        lt_ext_glyph_box(g, UI_MENU_TEXT_SIZE, &w, &h);
+        CHECK(w > 0 && h > 0, "glyph %d: a box (%d x %d)", g, w, h);
+    }
+    CHECK(lt_ext_glyph_source(LT_GLYPH_CIRCLE, NULL) == 321 &&
+              lt_ext_glyph_source(LT_GLYPH_CROSS, NULL) == 155,
+          "Circle 321, Cross 155");
+    CHECK(lt_ext_confirm_button() == LT_PAD_CIRCLE && lt_ext_confirm_glyph() == LT_GLYPH_CIRCLE,
+          "Circle confirms");
+    CHECK(lt_ext_port_back_buttons() == (LT_PAD_TRIANGLE | LT_PAD_CROSS) &&
+              lt_ext_back_buttons() == LT_PAD_CROSS && !lt_ext_has_circle_back(),
+          "the port's pages back with Triangle and Cross, the game's menus with Cross");
+    lt_ext_set_circle_back(1);
+    CHECK(lt_ext_back_buttons() == LT_PAD_CROSS, "[game] circle_back does not apply");
+    CHECK(lt_ext_game_layout_count() == 76 && lt_ext_game_property_count() == 412,
+          "the tables' sizes 76 and 412");
+    CHECK(ico_region_select("pal") == 0 && lt_ext_game_property_count() == 436 &&
+              lt_ext_confirm_button() == LT_PAD_CROSS,
+          "the European disc again");
+}
+
+int main(int argc, char **argv)
+{
+    if (argc > 1 && strcmp(argv[1], "jpn") == 0) {
+        testJapanese();
+        printf("ui_test jpn: %s\n", failures ? "failed" : "ok");
+        return failures ? 1 : 0;
+    }
     testGlyphs();
     testUtf8();
     testMeasure();

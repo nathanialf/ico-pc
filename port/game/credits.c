@@ -11,6 +11,7 @@
 
 #include "achievements.h"
 #include "config.h"
+#include "../core/region.h" /* ico_region_cur */
 
 /* --- the roll's port credit ------------------------------------------------
  * In the roll's own forms (staffRollNameData, read from the PAL ELF): a
@@ -20,6 +21,8 @@
  * colour code ({#FFFFFF80}) is set once by the first line and holds; {R}
  * sets the right alignment again after the closing lines' {C}.  ASCII only:
  * the roll draws with font_Print's bitmap font. */
+static const IcoCreditsEngine *s_engine; /* the program's (ico_credits_set_engine) */
+
 static char s_blank[] = " ";
 static char s_heading[] = "{R}< Decompilation and PC Port > ";
 static char s_name[] = "{R}Nathanial Fine ";
@@ -58,15 +61,28 @@ void ico_roll_started(int discLines)
 {
     fprintf(stderr, "credits: roll start, %d lines from the disc and %d of the port's (%s)\n",
             discLines, PORT_LINES, ico_credits_active() ? "Extras > Credits" : "the ending");
+    if (s_engine != NULL && s_engine->roll != NULL) {
+        s_engine->roll(); /* the song's place (credits_live.c) */
+    }
 }
 
 /* --- the playback -------------------------------------------------------- */
 
-/* the game's empty layout, the one the scripts switch to for a scene */
-#define LAYOUT_NONE 55
+/* the game's empty layout, the one the scripts switch to for a scene (55,
+   52 on the Japanese disc: port/core/region.h) */
+#define LAYOUT_NONE (ico_region_cur()->layout_scene)
+
+int ico_credits_stage(void)
+{
+    return ico_region_cur()->stage_credits;
+}
+
+int ico_credits_title_stage(void)
+{
+    return ico_region_cur()->stage_title;
+}
 
 static int s_active;
-static const IcoCreditsEngine *s_engine;
 
 int ico_credits_active(void)
 {

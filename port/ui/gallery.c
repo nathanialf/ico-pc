@@ -12,16 +12,18 @@
 #include <string.h>
 
 #include "strings.h"
+#include "../core/region.h" /* ico_region_cur */
 
-/* the streams: 1..100 music and scenes, 101..104 Yorda's hint voices */
-#define LAST_MUSIC_STREAM 100
-#define FIRST_VOICE_STREAM 101
-#define LAST_VOICE_STREAM 104
-/* stageData rows of the game itself (1 logo, 2 title, 3..39 the stages);
+/* the running disc's (port/core/region.h; the same on both discs): the
+   streams 1..100 music and scenes, 101..104 Yorda's hint voices; the
+   stageData rows of the game itself (1 logo, 2 title, 3..39 the stages);
    40..56 are the cutscene stages, which load the same banks */
-#define FIRST_GAME_STAGE 1
-#define LAST_GAME_STAGE 39
-#define LAST_SHIPPED_STAGE 56
+#define LAST_MUSIC_STREAM (ico_region_cur()->stream_music_last)
+#define FIRST_VOICE_STREAM (ico_region_cur()->stream_voice_first)
+#define LAST_VOICE_STREAM (ico_region_cur()->stream_voice_last)
+#define FIRST_GAME_STAGE (ico_region_cur()->gallery_first)
+#define LAST_GAME_STAGE (ico_region_cur()->gallery_last)
+#define LAST_SHIPPED_STAGE (ico_region_cur()->last_shipped_stage)
 /* seFile: 1..6 the common banks (COMMON.DF), 5 the voices */
 #define FIRST_COMMON_BANK 1
 #define LAST_COMMON_BANK 6

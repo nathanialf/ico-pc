@@ -604,6 +604,11 @@ static void checkRecordingModes(void)
                 CHECK(tap == 5, "%s: AURA_TAP 128 x 128: clear and four taps (%d)", what, tap);
             }
         }
+        /* staticBlur.c: 0x3A00 at 50 Hz (systemStatus[0] 1), 0x3800 at 60 Hz.
+           The Japanese disc's source locks 0x3800 alone, which is the
+           60 Hz arm: its systemStatus[0] is 0 from the mount (region.h
+           fixed_60hz), so the PAL test of the word covers both discs and
+           no region field is needed. */
         CHECK(s_lockBase == 0x3A00, "%s: PAL texture lock base 0x3A00", what);
     }
 }

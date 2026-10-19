@@ -71,10 +71,14 @@ extern const int ui_menu_text_item_count;
 extern const UiMenuTextRow ui_menu_text_rows[];
 extern const int ui_menu_text_row_count;
 
+/* Whether the table applies to the running disc: the European one, whose
+   five sheets it was measured on (port/core/region.h ico_region).  The
+   Japanese disc's menu words keep their own texels. */
+int ui_menu_text_applies(void);
 /* The item game row e is drawn from: NULL for a row not in the table (or
-   not a game row) and for a row whose texel rectangle is not the one the
+   not a game row), for a row whose texel rectangle is not the one the
    table was measured on (tables that are not the PAL ones), which then
-   draws its texture. */
+   draws its texture, and on a disc the table does not apply to. */
 const UiMenuTextItem *ui_menu_text_item_of(const LtProperty *e);
 
 #ifdef __cplusplus

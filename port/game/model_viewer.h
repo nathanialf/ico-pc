@@ -29,13 +29,16 @@
 #ifndef PORT_GAME_MODEL_VIEWER_H
 #define PORT_GAME_MODEL_VIEWER_H
 
+#include "../core/region.h" /* ico_region_cur: the tables' sizes */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct MvModel {
     int nameStr;           /* its name, a UiStrId (port/ui/strings.h) */
-    int charId;            /* the model (modelData / charFiles row) */
+    int pal_id;            /* the model: its modelData row on the European disc */
+    int jpn_id;            /* and on the Japanese disc (tools/gen_mv_jpn.py) */
     int kind;              /* the object kind (objKindData row) */
     int label;             /* the layout row (objLayout), -1: the first of kind and model */
     int stage;             /* the host stage */
@@ -45,6 +48,11 @@ typedef struct MvModel {
 
 extern const MvModel mv_models[];
 extern const int mv_modelCount;
+/* A model's modelData row and its host stage on the running disc
+   (port/core/region.h: pal_id or jpn_id; the stage through
+   ico_region_stage) */
+int mv_model_id(const MvModel *m);
+int mv_model_stage(const MvModel *m);
 /* the table's first two rows, the characters Settings > Extras >
    Characters shows (appearance.h ico_appearance_character's numbers) */
 #define MV_ROW_ICO 0
@@ -63,9 +71,10 @@ typedef struct MvBlock {
 extern const MvBlock mv_blocks[];
 extern const int mv_blockCount;
 /* the motion-kind table's size (motionKind[1148]: 1145 motions, then
-   KEEP, ALWAYS and NULL) and the motion-orient table's (motionOrient[2468]) */
-#define MV_MOTION_KINDS 1145
-#define MV_ORIENT_ROWS 2468
+   KEEP, ALWAYS and NULL) and the motion-orient table's (motionOrient[2468])
+   (the running disc's, port/core/region.h: the same on both discs) */
+#define MV_MOTION_KINDS (ico_region_cur()->mv_motion_kinds)
+#define MV_ORIENT_ROWS (ico_region_cur()->mv_orient_rows)
 
 /* --- the game side (model_viewer.c, ico_pc only) --------------------------- */
 

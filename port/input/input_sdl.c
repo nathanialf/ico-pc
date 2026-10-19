@@ -34,6 +34,16 @@ static void ico_host_vibrate(int amplitude, int ms)
 }
 #endif
 
+/* the mouse rows of Cross and Circle exchanged (ico_pointer_swap_face) */
+static void swap_mouse_face(IcoBindings *b)
+{
+    unsigned char t[ICO_BIND_MAX];
+
+    memcpy(t, b->mouse[ICO_T_CROSS], sizeof(t));
+    memcpy(b->mouse[ICO_T_CROSS], b->mouse[ICO_T_CIRCLE], sizeof(t));
+    memcpy(b->mouse[ICO_T_CIRCLE], t, sizeof(t));
+}
+
 #define MAX_PADS 8
 #define PAD_ID_TEXT 256
 #define RUMBLE_MS 250
@@ -772,7 +782,17 @@ void ico_input_sdl_update(void)
         player_raw = s_raw;
         memcpy(player_raw.gp, s_pad_raw[0].gp, sizeof(player_raw.gp));
         memcpy(player_raw.axis, s_pad_raw[0].axis, sizeof(player_raw.axis));
+        /* the Japanese disc's menus and photo mode: the mouse's Cross and
+           Circle trade places for the step (pointer.h), so the right
+           button goes back there as on the European disc */
+        const int swap = ico_pointer_swap_face();
+        if (swap) {
+            swap_mouse_face(&s_bind);
+        }
         ico_bindings_step(&s_bind, &player_raw, &v);
+        if (swap) {
+            swap_mouse_face(&s_bind);
+        }
         start_src = ico_bindings_start_sources(&s_bind, &s_raw);
         s_raw.mouse[1] = left;
     }

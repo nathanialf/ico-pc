@@ -5,6 +5,7 @@
  */
 #include "achievements.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -880,9 +881,36 @@ static void unlock(int i)
     }
 }
 
-/* Breaks text into lines of at most POPUP_LINE code points at spaces (the
-   popup does not wrap). */
+/* Breaks text into lines of at most POPUP_LINE columns at spaces, a wide
+   (CJK, fullwidth) character two columns (strings.h ui_wide_char), so a
+   Japanese line is half as many characters as a Latin one.  Text with no
+   space to break at (Japanese) is left to the popup, which breaks a body
+   wider than its panel by the Japanese line rules (popup.c). */
 #define POPUP_LINE 44
+
+/* the code point of the UTF-8 sequence at s (its lead byte) */
+static uint32_t lead_cp(const unsigned char *s)
+{
+    if (s[0] < 0x80) {
+        return s[0];
+    }
+    if ((s[0] & 0xE0) == 0xC0 && s[1]) {
+        return ((uint32_t)(s[0] & 0x1F) << 6) | (s[1] & 0x3F);
+    }
+    if ((s[0] & 0xF0) == 0xE0 && s[1] && s[2]) {
+        return ((uint32_t)(s[0] & 0x0F) << 12) | ((uint32_t)(s[1] & 0x3F) << 6) | (s[2] & 0x3F);
+    }
+    if ((s[0] & 0xF8) == 0xF0 && s[1] && s[2] && s[3]) {
+        return ((uint32_t)(s[0] & 0x07) << 18) | ((uint32_t)(s[1] & 0x3F) << 12) |
+               ((uint32_t)(s[2] & 0x3F) << 6) | (s[3] & 0x3F);
+    }
+    return 0xFFFD;
+}
+
+static int columns(const unsigned char *s)
+{
+    return ui_wide_char(lead_cp(s)) ? 2 : 1;
+}
 
 static void wrap(const char *in, char *out, size_t size)
 {
@@ -901,14 +929,18 @@ static void wrap(const char *in, char *out, size_t size)
             if (c == ' ') {
                 last_space = o;
             }
-            if (++col > POPUP_LINE && last_space != (size_t)-1) {
+            col += columns((const unsigned char *)in);
+            if (col > POPUP_LINE && last_space != (size_t)-1) {
                 size_t k;
 
                 out[last_space] = '\n';
                 col = 0;
-                for (k = last_space + 1; k <= o; k++) {
-                    col += ((unsigned char)out[k] & 0xC0) != 0x80;
+                for (k = last_space + 1; k < o; k++) {
+                    if (((unsigned char)out[k] & 0xC0) != 0x80) {
+                        col += columns((const unsigned char *)&out[k]);
+                    }
                 }
+                col += columns((const unsigned char *)in);
                 last_space = (size_t)-1;
             }
         }

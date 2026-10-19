@@ -38,6 +38,7 @@
 #include "adpcm_init.h"
 #include "s_init.h"
 #include "typedef.h"
+#include "../core/region.h" /* ico_region_cur */
 
 #ifdef __cplusplus
 extern "C" {
@@ -82,7 +83,7 @@ typedef struct GalleryTables {
     const SeEnvDef *seEnv;
     int seEnvCount; /* 425 */
     const StgPre *stage;
-    int stageCount; /* 106 */
+    int stageCount; /* 106 (104 on the Japanese disc: region.h stage_count) */
     /* whether the stream's file is on the disc (the four e3/ streams are
        not); NULL: every stream */
     int (*streamOnDisc)(int no);
@@ -163,7 +164,7 @@ long gallery_stream_end_block(const uint8_t *buf, size_t n, int channels);
 #define GALLERY_SECTOR 0x800
 /* the title theme's stream (op.c actTitleShortCut's request, kind 56,
    titleAdpcm) */
-#define GALLERY_TITLE_THEME 56
+#define GALLERY_TITLE_THEME (ico_region_cur()->gallery_title_theme) /* 56 on both discs */
 
 /* Where a stream's blank tail starts: the first of the sectors, up to the
    pass's end (`pass` bytes), that hold an end block (gallery_stream_end_block)

@@ -10,6 +10,9 @@
 #include "popup.h"
 #include "pointer.h"
 #include "ui_mouse.h"
+#include "ui_lang.h"
+#include "../../core/region.h"
+#include "photo_mode.h"
 
 /* the fixture builds a layout and the menu opens */
 static void testFixture(void)
@@ -508,7 +511,7 @@ static void testGpuDriver(void)
     CHECK(an22bLink() >= 0 && !lt_ext_prop(an22bLink())->defaultMask,
           "Adreno again: the link shows");
 
-    /* the Main page with the link and Developer mode: thirteen rows fit */
+    /* the Main page with the link and Developer mode: fourteen rows fit */
     ico_opt_set_developer_mode(1);
     for (int k = 0; k < 4; k++) {
         frame(0);
@@ -521,14 +524,14 @@ static void testGpuDriver(void)
             if (r->defaultMask) {
                 continue;
             }
-            CHECK(prev < 0 ? r->dispY >= 34 : r->dispY >= prev + 12, "row %d at y %d after %d", i,
+            CHECK(prev < 0 ? r->dispY >= 34 : r->dispY >= prev + 11, "row %d at y %d after %d", i,
                   r->dispY, prev);
             prev = r->dispY;
             last = labels[i];
             shown++;
         }
-        CHECK(shown == 13, "thirteen rows shown (%d)", shown);
-        CHECK(last >= 0 && lt_ext_prop(last)->dispY == 40 + 12 * 12 &&
+        CHECK(shown == 14, "fourteen rows shown (%d)", shown);
+        CHECK(last >= 0 && lt_ext_prop(last)->dispY == 40 + 11 * 13 &&
                   lt_ext_prop(last)->dispY + lt_ext_prop(last)->dispH <= 226,
               "Back at %d ends at %d", last >= 0 ? lt_ext_prop(last)->dispY : -1,
               last >= 0 ? lt_ext_prop(last)->dispY + lt_ext_prop(last)->dispH : -1);
@@ -2187,11 +2190,167 @@ static void testVersion(void)
     ui_settings_set_version(NULL);
 }
 
+/* the Menu language row ([ui] language): Auto follows the game's language
+   on the European disc, a language of its own does not; the game's words
+   (the sheet language) follow the game whatever the menu language is */
+static void testMenuLanguage(void)
+{
+    useConfig("version = 1\n");
+    const int mainL = enterMain(1);
+    (void)mainL;
+    NonLinearCameraMove = 4; /* German */
+    ico_opt_set_ui_language(-1);
+    frame(0);
+    CHECK(ui_get_language() == UI_LANG_DE && ui_sheet_language() == UI_LANG_DE,
+          "Auto: the game's German (%d, sheets %d)", ui_get_language(), ui_sheet_language());
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE), "Automatisch") == 0 ||
+              ui_settings_value_text(UI_OPT_MENU_LANGUAGE)[0] != '\0',
+          "the row's value: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
+    /* Auto, en, fr, de, it, es, ja, Auto */
+    ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
+    CHECK(ico_opt_ui_language() == UI_LANG_EN && ui_get_language() == UI_LANG_EN &&
+              ui_sheet_language() == UI_LANG_DE,
+          "English menus over the German game (%d, sheets %d)", ui_get_language(),
+          ui_sheet_language());
+    for (int i = 0; i < 5; i++) {
+        ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
+    }
+    CHECK(ico_opt_ui_language() == UI_LANG_JA && ui_get_language() == UI_LANG_JA,
+          "Japanese menus (%d)", ui_get_language());
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE),
+                 "\xE6\x97\xA5\xE6\x9C\xAC\xE8\xAA\x9E") == 0,
+          "the row names Japanese in Japanese: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
+    ui_settings_step(UI_OPT_LANGUAGE, 1); /* the game to Italian: the menus stay Japanese */
+    CHECK(NonLinearCameraMove == 5 && ui_get_language() == UI_LANG_JA &&
+              ui_sheet_language() == UI_LANG_IT,
+          "the game's Italian under Japanese menus (%d, %d)", ui_get_language(),
+          ui_sheet_language());
+    ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
+    CHECK(ico_opt_ui_language() == -1 && ui_get_language() == UI_LANG_IT, "Auto again: Italian");
+    CHECK(ui_settings_save() == 0, "saved");
+    NonLinearCameraMove = 2;
+    ico_opt_set_ui_language(-1);
+    ui_settings_apply_language();
+    CHECK(ui_get_language() == UI_LANG_EN, "back to English");
+}
+
+/* the Japanese disc (port/core/region.h): its pad convention, the rows it
+   has not, the packs' folder; switched back to the European disc */
+static void testJapaneseDisc(void)
+{
+    char note[256];
+    CHECK(lt_ext_confirm_button() == 0x40 && lt_ext_port_back_buttons() == 0x30 &&
+              lt_ext_confirm_glyph() == LT_GLYPH_CROSS && lt_ext_has_circle_back(),
+          "the European disc: Cross confirms, Triangle and Circle go back");
+    CHECK(ico_region_select("jpn") == 0, "the Japanese disc selected");
+    lt_ext_set_circle_back(1);
+    CHECK(lt_ext_back_buttons() == 0x40, "the game menus cancel with Cross (%#x)",
+          lt_ext_back_buttons());
+    lt_ext_set_circle_back(0);
+    CHECK(lt_ext_back_buttons() == 0x40, "circle_back does not apply (%#x)", lt_ext_back_buttons());
+    lt_ext_set_circle_back(1);
+    CHECK(lt_ext_confirm_button() == 0x20 && lt_ext_port_back_buttons() == 0x50 &&
+              lt_ext_confirm_glyph() == LT_GLYPH_CIRCLE && !lt_ext_has_circle_back(),
+          "Circle confirms, Triangle and Cross go back on the port's pages");
+    CHECK(ico_photo_save_button() == 0x20 && ico_photo_back_button() == 0x40,
+          "photo mode: Circle saves, Cross leaves");
+    CHECK(!ui_settings_opt_shown(UI_OPT_CIRCLE_BACK) && !ui_settings_opt_shown(UI_OPT_LANGUAGE) &&
+              !ui_settings_opt_shown(UI_OPT_VIDEO_MODE) &&
+              ui_settings_opt_shown(UI_OPT_MENU_LANGUAGE),
+          "no Circle goes back, game language or 50 Hz row; the Menu language row");
+    ico_opt_set_ui_language(-1);
+    CHECK(ui_settings_resolve_language() == UI_LANG_JA, "Auto: Japanese on the Japanese disc (%d)",
+          ui_settings_resolve_language());
+    ui_settings_apply_language();
+    CHECK(ui_get_language() == UI_LANG_JA && ui_sheet_language() == UI_SHEET_JA,
+          "the port's text Japanese, the sheets' look the Japanese sheets' (%d, %d)",
+          ui_get_language(), ui_sheet_language());
+    ico_opt_set_ui_language(UI_LANG_EN);
+    ui_settings_apply_language();
+    CHECK(ui_get_language() == UI_LANG_EN && ui_sheet_language() == UI_SHEET_JA,
+          "English chosen: the sheets' look stays the Japanese sheets'");
+    ico_opt_set_ui_language(-1);
+    ui_str_serial(UI_STR_TEXTURE_PACK_NOTE, note, sizeof(note));
+    CHECK(strstr(note, "SCPS-11003") != NULL && strstr(note, "%s") == NULL,
+          "the pack note names the disc's folder: %s", note);
+    CHECK(ico_region_select("pal") == 0 && lt_ext_confirm_button() == 0x40 &&
+              lt_ext_back_buttons() == 0x30 && ui_settings_opt_shown(UI_OPT_CIRCLE_BACK) &&
+              ui_settings_opt_shown(UI_OPT_LANGUAGE),
+          "the European disc again");
+    ui_settings_apply_language();
+}
+
+/* the prompts on the Japanese disc: a Cross in a prompt line is the
+   disc's confirm, drawn as Circle's picture (ui_hint.c), and Triangle
+   stays Triangle */
+static void testJapaneseHints(void)
+{
+    CHECK(ico_region_select("jpn") == 0, "the Japanese disc selected");
+    enterMain(1);
+    static const UiHintItem items[] = {{LT_GLYPH_CROSS, -1, UI_STR_HINT_PLAY},
+                                       {LT_GLYPH_TRIANGLE, -1, UI_STR_BACK}};
+    UiHint h;
+    ui_hint_build(&h, 200, 18.0f, items, 2);
+    int uv[4];
+    const int circleRow = lt_ext_glyph_source(LT_GLYPH_CIRCLE, uv);
+    const LtProperty *g = lt_ext_prop(h.glyphRow[0][0]);
+    CHECK(circleRow == 321 && h.item[0].glyph == LT_GLYPH_CIRCLE && g->texU == uv[0] &&
+              g->texV == uv[1] && g->texW == uv[2] && g->texH == uv[3],
+          "the play prompt shows Circle (row %d, %d,%d %dx%d)", circleRow, g->texU, g->texV,
+          g->texW, g->texH);
+    CHECK(h.item[1].glyph == LT_GLYPH_TRIANGLE, "Back keeps Triangle");
+    CHECK(ico_region_select("pal") == 0, "the European disc again");
+}
+
+/* the mouse on the Japanese disc: a click on an item is its confirm
+   (Circle, 0x20: the page opens rather than the menu going back), and the
+   mouse's Cross and Circle trade places while a menu is up (pointer.h
+   ico_pointer_swap_face), not in play */
+static void testJapanesePointer(void)
+{
+    CHECK(ico_region_select("jpn") == 0, "the Japanese disc selected");
+    ui_mouse_reset();
+    ui_mouse_set_view(640, 480, 0, 0, 640, 480);
+    const int mainL = enterMain(1);
+    int labels[16];
+    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    const int iDisp = i17bMainIndex(UI_STR_SECTION_DISPLAY);
+    CHECK(iDisp >= 0, "the Display row");
+    mouseFrame();
+    mouseFrame();
+    CHECK(ui_mouse_menu_active() && ico_pointer_swap_face() == 1,
+          "the main page: the mouse's Cross and Circle traded (%d)", ico_pointer_swap_face());
+    pointAt(labels[iDisp]);
+    mouseFrame();
+    click();
+    mouseFrame();
+    CHECK(settle(ui_settings_page_layout(UI_PAGE_DISPLAY), 60),
+          "a click on Display opens it (layout %d)", current_layout_id);
+    lt_switch_layout(fxLayout(54));
+    settle(fxLayout(54), 60);
+    mouseFrame();
+    CHECK(!ui_mouse_menu_active() && ico_pointer_swap_face() == 0,
+          "in play the mouse keeps its buttons (%d)", ico_pointer_swap_face());
+    (void)mainL;
+    CHECK(ico_region_select("pal") == 0, "the European disc again");
+    mouseFrame();
+    CHECK(ico_pointer_swap_face() == 0, "the European disc never trades them");
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
     setEnv("LC_ALL", NULL);
     setEnv("LANG", "en_GB.UTF-8");
+    if (argc > 2 && strcmp(argv[2], "jpn") == 0) {
+        /* ctest settings_extra_jpn: the European disc, then the Japanese
+           disc's pad, rows, languages and notes, then back */
+        testJapaneseDisc();
+        testJapanesePointer();
+        testJapaneseHints();
+        printf("settings_extra_test jpn: %s\n", failures ? "failed" : "ok");
+        return failures ? 1 : 0;
+    }
     testFixture();
     /* Display > Window mode */
     testWindowMode();
@@ -2229,6 +2388,9 @@ int main(int argc, char **argv)
     testNaturalChains();
     /* the version in the Options menu */
     testVersion();
+    /* Menu language, the Japanese disc */
+    testMenuLanguage();
+    testJapaneseDisc();
     if (failures) {
         printf("settings_extra_test: %d failure(s)\n", failures);
         return 1;

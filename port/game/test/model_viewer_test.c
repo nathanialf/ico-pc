@@ -37,6 +37,7 @@ static int failures;
    modelData[1637], objLayout[3759] */
 #define KINDS 70
 #define MODELS 1637
+#define MODELS_JPN 1621 /* the Japanese disc's (data_schema.jpn.txt model-path) */
 #define LAYOUT_ROWS 3759
 
 static const char *const kLang[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja"};
@@ -143,7 +144,11 @@ int main(void)
         }
         CHECK(dataStage(m->stage), "%s: host stage %d", en, m->stage);
         CHECK(m->kind >= 1 && m->kind < KINDS, "%s: kind %d", en, m->kind);
-        CHECK(m->charId >= 0 && m->charId < MODELS, "%s: model %d", en, m->charId);
+        CHECK(m->pal_id >= 0 && m->pal_id < MODELS, "%s: model %d", en, m->pal_id);
+        /* the Japanese disc's modelData has 1621 rows (ctest model_viewer_jpn
+           derives the column from both ELFs) */
+        CHECK(m->jpn_id >= 0 && m->jpn_id < MODELS_JPN && m->jpn_id <= m->pal_id,
+              "%s: Japanese model %d", en, m->jpn_id);
         CHECK(m->label == -1 || (m->label > 0 && m->label < LAYOUT_ROWS), "%s: layout row %d", en,
               m->label);
         if (m->motFirst == m->motLast) {

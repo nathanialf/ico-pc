@@ -59,7 +59,7 @@ static int fakeCreditsBegin(void)
 
 static void testCredits(int mainL, int exL)
 {
-    static const IcoCreditsEngine kFake = {fakeCreditsBegin};
+    static const IcoCreditsEngine kFake = {fakeCreditsBegin, NULL};
     char log[512];
     int el[8], eo[8], ev[8];
 
@@ -123,17 +123,17 @@ static void testExtras(void)
         }
         /* Dump textures (developer mode only, hidden here) before
            Back */
-        CHECK(n == 13 && idx == 8, "Extras is the row after Achievements (index %d of %d)", idx, n);
+        CHECK(n == 14 && idx == 9, "Extras is the row after Achievements (index %d of %d)", idx, n);
         CHECK(lt_ext_prop(ex)->right == ui_settings_page_layout(UI_PAGE_EXTRAS), "Extras opens");
         CHECK(lt_ext_prop(ex)->defaultMask == 0, "title %d: the Extras row is shown", title);
         /* the cursor: Achievements, Down */
-        lt_ext_layout(mainL)->curItem = labels[7];
+        lt_ext_layout(mainL)->curItem = labels[8];
         press(0x4000);
         CHECK(lt_ext_layout(mainL)->curItem == ex,
               "title %d: Down from Achievements lands on Extras", title);
-        /* the rows below follow: Back's y, ten rows on both entries */
-        CHECK(lt_ext_prop(labels[12])->dispY == 40 + 15 * 9, "title %d: Back at y %d", title,
-              lt_ext_prop(labels[12])->dispY);
+        /* the rows below follow: Back's y, eleven rows on both entries */
+        CHECK(lt_ext_prop(labels[13])->dispY == 40 + 14 * 10, "title %d: Back at y %d", title,
+              lt_ext_prop(labels[13])->dispY);
         if (!title) {
             continue;
         }
@@ -1141,11 +1141,48 @@ static void testCharacters(void)
     useConfig("version = 1\n");
 }
 
+/* settings_extras_test DIR jpn (ctest settings_extras_jpn): Extras on the
+   Japanese disc: opened with Circle from the title, its rows, Music opened
+   with Circle and left with Cross, Extras left with Triangle */
+static void testJapaneseExtras(void)
+{
+    CHECK(ico_region_select("jpn") == 0, "the Japanese region");
+    const int mainL = enterMain(1);
+    int labels[16];
+    const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    const int exL = ui_settings_page_layout(UI_PAGE_EXTRAS);
+    int ex = -1;
+    for (int i = 0; i < n; i++) {
+        ex = lt_ext_prop(labels[i])->right == exL ? labels[i] : ex;
+    }
+    CHECK(ex >= 0, "an Extras row on the main page");
+    lt_ext_layout(mainL)->curItem = ex;
+    press(0x20);
+    CHECK(settle(exL, 60), "Circle opens Extras");
+    const int music = ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_MUSIC);
+    CHECK(music >= 0, "the Music row");
+    if (music >= 0) {
+        lt_ext_layout(exL)->curItem = music;
+        press(0x20);
+        CHECK(settle(ui_settings_page_layout(UI_PAGE_MUSIC), 60), "Circle opens Music");
+        press(0x40);
+        CHECK(settle(exL, 60), "Cross leaves Music");
+    }
+    press(0x10);
+    CHECK(settle(mainL, 60), "Triangle leaves Extras");
+    CHECK(ico_region_select("pal") == 0, "the European region again");
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
     setEnv("LC_ALL", NULL);
     setEnv("LANG", "en_GB.UTF-8");
+    if (argc > 2 && strcmp(argv[2], "jpn") == 0) {
+        testJapaneseExtras();
+        printf("settings_extras_test jpn: %s\n", failures ? "failed" : "ok");
+        return failures ? 1 : 0;
+    }
     testExtras();
     testCoversTitle();
     testCharacters();

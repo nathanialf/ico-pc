@@ -76,8 +76,8 @@ void *ios_partition_common;
 void *dmaVif;
 
 /* the game's tables: rows shaped like the PAL title's, no disc data */
-LtProp texLayout[LT_GAME_LAYOUT_COUNT];
-LtProperty texProperty[LT_GAME_PROPERTY_COUNT];
+LtProp texLayout[LT_GAME_LAYOUT_COUNT_MAX];
+LtProperty texProperty[LT_GAME_PROPERTY_COUNT_MAX];
 TexRec texFile[1];
 const StgPre stageData[1];
 PadState pad[16];

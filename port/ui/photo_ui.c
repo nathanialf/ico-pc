@@ -34,9 +34,8 @@ extern unsigned int tex_HostTextureId(int idx);
 
 /* the game's side */
 extern PadState pad[16];
-extern int stage_no;            /* common/src/main.c: 1 is the boot and title */
-extern int NonLinearCameraMove; /* the language, 2..6 */
-extern int systemStatus[12];    /* [0]: 1 PAL 50 Hz, 0 60 Hz; [1]: the frame step */
+extern int stage_no;         /* common/src/main.c: 1 is the boot and title */
+extern int systemStatus[12]; /* [0]: 1 PAL 50 Hz, 0 60 Hz; [1]: the frame step */
 extern void NEGATIVE_SE(void);
 extern void la_host_leave(void);
 /* the object the game camera follows (omori/src/camera-root.c) and its root
@@ -147,7 +146,7 @@ static int photoProc(int first, int item)
     if (!leave && ico_photo_film() != film) {
         /* Right cycled the Film effect: say which */
         char val[16];
-        ui_set_language(ui_lang_from_game(NonLinearCameraMove));
+        ui_settings_apply_language();
         ui_popup_push(ui_str(UI_STR_OPT_FILM_EFFECT),
                       ui__photo_film_word(ico_photo_film(), val, sizeof(val)));
     }
@@ -163,7 +162,7 @@ static int photoProc(int first, int item)
 
 void ui_photo_capture_done(int ok, const char *name)
 {
-    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
+    ui_settings_apply_language();
     ui_popup_push(ui_str(ok ? UI_STR_PHOTO_SAVED : UI_STR_PHOTO_FAILED), name ? name : "");
     fprintf(stderr, "photo: %s %s\n", ok ? "saved" : "not saved", name ? name : "");
 }
@@ -227,6 +226,7 @@ typedef enum HudBtn {
     BTN_R3,
     BTN_SELECT,
     BTN_CROSS,
+    BTN_CIRCLE,
     BTN_SQUARE,
     BTN_TRIANGLE,
     BTN_NONE
@@ -255,6 +255,7 @@ static const struct {
     {-1, -1, "R3", ICO_T_R3},
     {-1, UI_STR_BTN_SELECT, NULL, ICO_T_SELECT},
     {LT_GLYPH_CROSS, UI_STR_BTN_CROSS, NULL, ICO_T_CROSS},
+    {LT_GLYPH_CIRCLE, UI_STR_BTN_CIRCLE, NULL, ICO_T_CIRCLE},
     {LT_GLYPH_SQUARE, UI_STR_BTN_SQUARE, NULL, ICO_T_SQUARE},
     {LT_GLYPH_TRIANGLE, UI_STR_BTN_TRIANGLE, NULL, ICO_T_TRIANGLE},
 };
@@ -366,7 +367,10 @@ void ui__photo_hud_build(UiHudSet *set, int freeCam, int keyboard, const char *t
     addItem(set, 2, UI_STR_PHOTO_ACT_SWITCH, BTN_L3, BTN_NONE, keyboard);
     addItem(set, 2, UI_STR_PHOTO_ACT_SPEED, BTN_R3, BTN_NONE, keyboard);
     addItem(set, 2, UI_STR_PHOTO_ACT_RESET, BTN_SELECT, BTN_NONE, keyboard);
-    addItem(set, 3, UI_STR_PHOTO_ACT_SAVE, BTN_CROSS, BTN_NONE, keyboard);
+    /* the save is the disc's confirm (photo_mode.h ico_photo_save_button) */
+    addItem(set, 3, UI_STR_PHOTO_ACT_SAVE,
+            ico_photo_save_button() == ICO_PHOTO_CIRCLE ? BTN_CIRCLE : BTN_CROSS, BTN_NONE,
+            keyboard);
     addItem(set, 3, UI_STR_PHOTO_ACT_HIDE, BTN_SQUARE, BTN_NONE, keyboard);
     addItem(set, 3, UI_STR_PHOTO_ACT_BACK, BTN_TRIANGLE, BTN_NONE, keyboard);
     addItem(set, 3, UI_STR_PHOTO_ACT_FILM, BTN_RIGHT, BTN_NONE, keyboard);
@@ -500,7 +504,7 @@ void ui_photo_draw_overlay(const struct RdOverlayCtx *ctx)
     if (!ctx || !ico_photo_hud() || !ui_font_init()) {
         return;
     }
-    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
+    ui_settings_apply_language();
     IcoPhotoState st;
     ico_photo_get(&st);
     char fov[96] = "";

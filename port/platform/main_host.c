@@ -1262,6 +1262,11 @@ static void select_disc(const IcoDiscInfo *disc)
             fprintf(stderr, "ico_pc: cannot remember the disc in config.toml\n");
         }
     }
+#ifndef ICO_HEADLESS
+    /* the UI may be up already (Android opens the window first): the port's
+       text and the sheets' look follow the disc from here (settings.h) */
+    ui_settings_apply_language();
+#endif
 }
 
 /* Checks an archive (meta.json, one of the discs, `want`'s when given, the

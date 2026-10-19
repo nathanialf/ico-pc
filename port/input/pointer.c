@@ -16,6 +16,7 @@ static struct {
     float wheel;
     int activity;
     int menu;
+    int swapFace;
 } s_p;
 
 void ico_pointer_move(float nx, float ny)
@@ -85,6 +86,16 @@ void ico_pointer_set_menu(int on)
 int ico_pointer_menu(void)
 {
     return s_p.menu;
+}
+
+void ico_pointer_set_swap_face(int on)
+{
+    s_p.swapFace = on != 0;
+}
+
+int ico_pointer_swap_face(void)
+{
+    return s_p.swapFace;
 }
 
 void ico_pointer_reset(void)

@@ -38,7 +38,9 @@ int ico_escape_target(const IcoCaptureState *s)
         return ICO_ESCAPE_NONE;
     }
     if (s == 0 || s->photo || !in_play(s)) {
-        return ICO_T_TRIANGLE;
+        /* the disc's cancel: Triangle (0x10), Cross (0x40) on the Japanese
+           disc, where Triangle backs out of the port's pages only */
+        return ico_region_cur()->pad_back == 0x40 ? ICO_T_CROSS : ICO_T_TRIANGLE;
     }
     return ICO_T_START;
 }

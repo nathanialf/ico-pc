@@ -20,12 +20,22 @@
  * With the disc image as well (argv[2]), the streams not on the disc are
  * left out and every listed bank's .hd and .bd are found in a pack
  * (port/data/df_pack.h).  Exit 77 without the ELF.
+ *
+ *   gallery_test BASE_ELF [DISC_IMAGE]
+ *   gallery_test --jpn BASE_ELF_PAL BASE_ELF_JPN [DISC_IMAGE_JPN]
+ *
+ * --jpn (ctest gallery_jpn): the names are keyed by the adpcmFile row
+ * (gallery.c), so both discs' 105 stream paths must be equal row for row:
+ * each ELF's table loaded through its own descriptor set and compared;
+ * then the list is built and checked as above from the Japanese disc's
+ * tables, the region's counts and streams (port/core/region_jpn.c).
  */
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "../../core/region.h"
 #include "df_pack.h"
 #include "font.h"
 #include "gallery.h"
@@ -259,12 +269,60 @@ int main(int argc, char **argv)
     }
     char err[512];
     size_t size;
+    const int jpn = argc > 1 && strcmp(argv[1], "--jpn") == 0;
+    if (jpn) {
+        /* the European disc's paths, then the Japanese disc's tables */
+        unsigned char *pal = argc > 2 ? readFile(argv[2], &size) : NULL;
+        if (pal == NULL) {
+            printf("gallery_jpn: no European base ELF (%s); skipped\n", argc > 2 ? argv[2] : "");
+            return 77;
+        }
+        if (ico_tables_load_elf(&ico_table_set_pal, pal, size, err, sizeof(err)) != 0) {
+            printf("gallery_jpn: the table loader refused the European ELF: %s\n", err);
+            return 1;
+        }
+        free(pal);
+        static char palPath[128][sizeof(adpcmFile[0].path)];
+        const int nPal = (int)ico_tables_count(ICO_TID_adpcmFile);
+        for (int i = 0; i < nPal && i < 128; i++) {
+            memcpy(palPath[i], adpcmFile[i].path, sizeof(palPath[i]));
+        }
+        argv += 2; /* from here as gallery_test BASE_ELF_JPN [DISC_IMAGE_JPN] */
+        argc -= 2;
+        unsigned char *j = argc > 1 ? readFile(argv[1], &size) : NULL;
+        if (j == NULL) {
+            printf("gallery_jpn: no Japanese base ELF (%s); skipped\n", argc > 1 ? argv[1] : "");
+            return 77;
+        }
+        if (ico_tables_load_elf(&ico_table_set_jpn, j, size, err, sizeof(err)) != 0) {
+            printf("gallery_jpn: the table loader refused the Japanese ELF: %s\n", err);
+            return 1;
+        }
+        free(j);
+        CHECK(ico_region_select("jpn") == 0, "the Japanese region");
+        const int nJpn = (int)ico_tables_count(ICO_TID_adpcmFile);
+        CHECK(nPal == 105 && nJpn == nPal && nJpn == ico_region_cur()->n_adpcm,
+              "adpcmFile: %d rows on the European disc, %d on the Japanese (the region %d)", nPal,
+              nJpn, ico_region_cur()->n_adpcm);
+        int differ = 0;
+        for (int i = 0; i < nPal && i < nJpn && i < 128; i++) {
+            if (strncmp(palPath[i], adpcmFile[i].path, sizeof(palPath[i])) != 0) {
+                differ++;
+                printf("FAIL adpcmFile[%d]: \"%s\" on the European disc, \"%s\" on the Japanese\n",
+                       i, palPath[i], adpcmFile[i].path);
+            }
+        }
+        failures += differ;
+        printf("gallery_jpn: %d adpcmFile paths compared row for row, %d differ\n",
+               nPal < nJpn ? nPal : nJpn, differ);
+    }
+    const IcoRegionInfo *rg = ico_region_cur();
     unsigned char *elf = argc > 1 ? readFile(argv[1], &size) : NULL;
     if (elf == NULL) {
         printf("gallery_test: no base ELF (%s); skipped\n", argc > 1 ? argv[1] : "none given");
         return 77;
     }
-    if (ico_tables_load_elf(&ico_table_set_pal, elf, size, err, sizeof(err)) != 0) {
+    if (!jpn && ico_tables_load_elf(&ico_table_set_pal, elf, size, err, sizeof(err)) != 0) {
         printf("gallery_test: the table loader refused the ELF: %s\n", err);
         return 1;
     }
@@ -276,17 +334,17 @@ int main(int argc, char **argv)
         }
     }
     GalleryTables t = {adpcmFile,
-                       105,
+                       rg->n_adpcm,
                        seFile,
-                       104,
+                       rg->n_sefile,
                        seDef,
-                       1426,
+                       rg->n_sedef,
                        seList,
-                       3837,
+                       rg->n_selist,
                        seEnv,
-                       425,
+                       rg->n_seenv,
                        stageData,
-                       106,
+                       rg->stage_count,
                        s_vfs ? onDisc : NULL,
                        s_vfs ? seInBank : NULL};
     int n = gallery_build(&t);
@@ -310,27 +368,28 @@ int main(int argc, char **argv)
             headings[it->group]++;
             section = i;
             if (it->group == GAL_G_SE) {
-                CHECK(it->bank > 0 && it->bank < 104, "item %d: an effects heading names a bank",
-                      i);
+                CHECK(it->bank > 0 && it->bank < rg->n_sefile,
+                      "item %d: an effects heading names a bank", i);
             }
             continue;
         }
         items[it->group]++;
         if (it->kind == GAL_K_STREAM) {
-            CHECK(it->key >= 1 && it->key <= 104 && adpcmFile[it->key].channels > 0,
+            CHECK(it->key >= 1 && it->key <= rg->stream_voice_last &&
+                      adpcmFile[it->key].channels > 0,
                   "item %d: stream %d", i, it->key);
-            CHECK(it->group == (it->key > 100 ? GAL_G_VOICE : it->group),
+            CHECK(it->group == (it->key > rg->stream_music_last ? GAL_G_VOICE : it->group),
                   "item %d: stream %d in group %d", i, it->key, it->group);
             if (s_vfs) {
                 CHECK(onDisc(it->key), "item %d: stream %d is on the disc", i, it->key);
             }
         } else if (it->kind == GAL_K_SE) {
-            CHECK(it->key > 0 && it->key < 1426 && it->bank > 0 && it->bank < 104,
+            CHECK(it->key > 0 && it->key < rg->n_sedef && it->bank > 0 && it->bank < rg->n_sefile,
                   "item %d: effect %d bank %d", i, it->key, it->bank);
             CHECK(listRowOf(it->bank, seDef[it->key].kind) >= 0,
                   "item %d: bank %d has effect %d's kind", i, it->bank, it->key);
             if (it->group == GAL_G_AMBIENCE) {
-                CHECK(it->env >= 0 && it->env < 425 && seEnv[it->env].se == it->key &&
+                CHECK(it->env >= 0 && it->env < rg->n_seenv && seEnv[it->env].se == it->key &&
                           it->stage > 0 && it->env >= stageData[it->stage].seEnvFirst &&
                           it->env < stageData[it->stage].seEnvLast,
                       "item %d: ambience %d from seEnv %d of stage %d", i, it->key, it->env,
@@ -377,7 +436,7 @@ int main(int argc, char **argv)
         CHECK(strcmp(gallery_label(i, buf, sizeof(buf)), want) == 0,
               "stream %d is named \"%s\" (\"%s\")", it->key, want, buf);
         CHECK(gallery_col_a(i, buf2, sizeof(buf2))[0] == '\0', "stream %d has no column", it->key);
-        if (it->key <= 100) {
+        if (it->key <= rg->stream_music_last) {
             int scene = strstr(path, "/event2/") != NULL && it->key != 56;
             CHECK(it->group == (scene ? GAL_G_SCENE : GAL_G_SOUNDTRACK),
                   "stream %d (%s) in group %d", it->key, path, it->group);
@@ -484,7 +543,7 @@ int main(int argc, char **argv)
                s_hdRefused);
         CHECK(s_hdRefused > 0, "some rows are not in their bank's header (%d)", s_hdRefused);
         int ended = 0;
-        for (int no = 1; no <= 104; no++) {
+        for (int no = 1; no <= rg->stream_voice_last; no++) {
             const char *b = strrchr(adpcmFile[no].path, '/');
             b = b ? b + 1 : adpcmFile[no].path;
             if (!onDisc(no)) {

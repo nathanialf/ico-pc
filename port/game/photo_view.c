@@ -23,6 +23,7 @@
 
 #include "photo_mode.h"
 #include "photo_view.h"
+#include "../core/region.h" /* ico_region_cur */
 #include "rd.h"
 #include "video_options.h"
 
@@ -177,9 +178,12 @@ void ico_photo_view_tick(void)
  * the draw, and the display list priority is put back after it.  In stage
  * 40 the stage draws the veil itself: nothing here.  Nothing is allocated
  * or loaded. */
-#define VEIL_STAGE 40   /* deja */
-#define VEIL_MODEL 1614 /* sandstorm.p2o's model id */
-#define VEIL_KIND 35    /* the stage animation objects' kind (objTableScene) */
+/* the running disc's (port/core/region.h): deja's stage (40), sandstorm.p2o's
+   model id (1614; 1598 on the Japanese disc), the stage animation objects'
+   kind (35, objTableScene) */
+#define VEIL_STAGE (ico_region_cur()->stage_veil)
+#define VEIL_MODEL (ico_region_cur()->veil_model)
+#define VEIL_KIND (ico_region_cur()->veil_kind)
 
 static const struct {
     float z;    /* the node's depth in the camera's space */
@@ -247,8 +251,8 @@ static Sub15C *veilObject(void)
  * (ico_photo_view_veil) each noise object is borrowed with the kept nodes
  * for one reg_DispObj, before the veil as list 5 holds them in stage 40.
  * In stage 40 the stage draws the reel itself: nothing here. */
-#define REEL_ROW 70   /* film_noise_l4.bga */
-#define REEL_LOOP 1   /* deja_lightning.bga's row 79 loops */
+#define REEL_ROW (ico_region_cur()->reel_row) /* film_noise_l4.bga: 70, 66 on the Japanese disc */
+#define REEL_LOOP 1   /* deja_lightning.bga's row (79, region.h veil_anim_row) loops */
 #define REEL_NODES 24 /* the row's nodes kept (it has 13) */
 #define REEL_ENVS 4   /* envelopes a node */
 #define REEL_OBJS 8   /* the objects the row drives (it has 7) */

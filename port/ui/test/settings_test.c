@@ -32,9 +32,9 @@
 static void testBuild(void)
 {
     static const int mainOpts[] = {
-        UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK, UI_OPT_LINK, UI_OPT_LINK,
-        UI_OPT_LINK,          UI_OPT_LANGUAGE,    UI_OPT_LINK, UI_OPT_LINK, UI_OPT_DEVELOPER,
-        UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
+        UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LINK,          UI_OPT_LINK, UI_OPT_LINK,
+        UI_OPT_LINK,      UI_OPT_LANGUAGE,      UI_OPT_MENU_LANGUAGE, UI_OPT_LINK, UI_OPT_LINK,
+        UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS,   UI_OPT_BACK};
     static const int fxOpts[] = {UI_OPT_FULL_HEIGHT,
                                  UI_OPT_FILTER,
                                  UI_OPT_BRIGHTNESS,
@@ -63,19 +63,13 @@ static void testBuild(void)
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_STR_OPT_FULL_PIXEL,
                                  UI_STR_BACK};
-    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
-                                   UI_STR_SECTION_EFFECTS,
-                                   UI_STR_SECTION_GPU_DRIVER,
-                                   UI_STR_SECTION_AUDIO,
-                                   UI_STR_SECTION_CONTROLS,
-                                   UI_STR_SECTION_GAMEPLAY,
-                                   UI_STR_SECTION_LANGUAGE,
-                                   UI_STR_SECTION_ACHIEVEMENTS,
-                                   UI_STR_EXTRAS,
-                                   UI_STR_OPT_DEVELOPER_MODE,
-                                   UI_STR_OPT_DUMP_TEXTURES,
-                                   UI_STR_OPT_DUMP_MODELS,
-                                   UI_STR_BACK};
+    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,      UI_STR_SECTION_EFFECTS,
+                                   UI_STR_SECTION_GPU_DRIVER,   UI_STR_SECTION_AUDIO,
+                                   UI_STR_SECTION_CONTROLS,     UI_STR_SECTION_GAMEPLAY,
+                                   UI_STR_SECTION_LANGUAGE,     UI_STR_OPT_MENU_LANGUAGE,
+                                   UI_STR_SECTION_ACHIEVEMENTS, UI_STR_EXTRAS,
+                                   UI_STR_OPT_DEVELOPER_MODE,   UI_STR_OPT_DUMP_TEXTURES,
+                                   UI_STR_OPT_DUMP_MODELS,      UI_STR_BACK};
     static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION,  UI_OPT_ASPECT,
                                    UI_OPT_ANTI_ALIAS,   UI_OPT_WINDOW_MODE, UI_OPT_VSYNC,
                                    UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,  UI_OPT_FRAMERATE,
@@ -128,7 +122,7 @@ static void testBuild(void)
     ui_settings_reset();
     ui_set_language(UI_LANG_EN);
     ui_settings_install();
-    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 13), "main page rows");
+    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 14), "main page rows");
     CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 14), "effects rows");
     {
         /* Characters (a link), then Add to Steam (hidden without a host
@@ -1428,7 +1422,7 @@ static void testCirclePortScreens(void)
         int row; /* main page row */
         UiSettingsPage page;
     } kPages[] = {{0, UI_PAGE_DISPLAY},  {1, UI_PAGE_EFFECTS},  {3, UI_PAGE_AUDIO},
-                  {4, UI_PAGE_CONTROLS}, {5, UI_PAGE_GAMEPLAY}, {7, UI_PAGE_ACHIEVEMENTS}};
+                  {4, UI_PAGE_CONTROLS}, {5, UI_PAGE_GAMEPLAY}, {8, UI_PAGE_ACHIEVEMENTS}};
 
     int labels[16];
     ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
@@ -2273,7 +2267,7 @@ static void testGallery(void)
     int mainL = enterMain(1);
     int ml[16];
     ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
-    lt_ext_layout(mainL)->curItem = ml[8];
+    lt_ext_layout(mainL)->curItem = ml[9]; /* Extras */
     press(0x40);
     int exL = ui_settings_page_layout(UI_PAGE_EXTRAS);
     CHECK(settle(exL, 60), "gallery: Extras");
@@ -2945,7 +2939,7 @@ static void testTexturePack(void)
         int labels[16];
         const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
         const LtProperty *back = lt_ext_prop(labels[n - 1]);
-        CHECK(back->dispY == 40 + 13 * 11, "twelve rows 13 lines apart: Back at %d", back->dispY);
+        CHECK(back->dispY == 40 + 12 * 12, "thirteen rows 12 lines apart: Back at %d", back->dispY);
         CHECK(back->dispY + back->dispH <= 226, "Back's box ends at %d", back->dispY + back->dispH);
         checkPageFits(UI_PAGE_MAIN, "Main (title, developer mode)");
     }
@@ -3240,11 +3234,125 @@ static void testTouch(void)
     ico_input_reload_bindings(b);
 }
 
+/* whether opt has a row on page that the frame shows (its label row not
+   masked by default): -1 for no row of opt on the page */
+static int jpnRowShown(UiSettingsPage page, UiSettingsOpt opt)
+{
+    int labels[32], opts[32];
+    const int n = ui_settings_page_rows(page, labels, opts, NULL, 32);
+    for (int i = 0; i < n; i++) {
+        if (opts[i] == (int)opt) {
+            return !lt_ext_prop(labels[i])->defaultMask;
+        }
+    }
+    return -1;
+}
+
+/* settings_test DIR jpn: the Japanese disc (port/core/region_jpn.c) over the
+   fixture's tables at that disc's numbers: the rows it has not (Video
+   mode, Language, Circle goes back) and the one both have (Menu language);
+   Circle confirms, Cross and Triangle go back on the port's pages, Circle
+   does not; the title's rows (Continue 20, New Game 21 and 22, the
+   copyright's halves 18 and 19) placed on the menu's pitch; the pack and
+   dump notes naming SCPS-11003 */
+static void testJapanese(void)
+{
+    CHECK(lt_ext_confirm_button() == 0x20 && lt_ext_port_back_buttons() == 0x50 &&
+              lt_ext_back_buttons() == 0x40,
+          "the Japanese pad convention (confirm %#x, the port's back %#x, the game's %#x)",
+          lt_ext_confirm_button(), lt_ext_port_back_buttons(), lt_ext_back_buttons());
+    int mainL = enterMain(1);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    CHECK(jpnRowShown(UI_PAGE_MAIN, UI_OPT_LANGUAGE) == 0, "no game language row (%d)",
+          jpnRowShown(UI_PAGE_MAIN, UI_OPT_LANGUAGE));
+    CHECK(jpnRowShown(UI_PAGE_MAIN, UI_OPT_MENU_LANGUAGE) == 1, "the Menu language row (%d)",
+          jpnRowShown(UI_PAGE_MAIN, UI_OPT_MENU_LANGUAGE));
+    /* the port's text follows the disc: Japanese (Auto) */
+    CHECK(ui_get_language() == UI_LANG_JA && ui_sheet_language() == UI_SHEET_JA,
+          "Auto: the port's text Japanese (%d), the sheets the Japanese ones (%d)",
+          ui_get_language(), ui_sheet_language());
+    CHECK(!ui_settings_opt_shown(UI_OPT_VIDEO_MODE) && !ui_settings_opt_shown(UI_OPT_LANGUAGE) &&
+              !ui_settings_opt_shown(UI_OPT_CIRCLE_BACK) &&
+              ui_settings_opt_shown(UI_OPT_MENU_LANGUAGE),
+          "no Video mode, Language or Circle goes back row; Menu language");
+    /* Circle opens Display, Cross goes back; Circle opens it again,
+       Triangle goes back; Cross on the main page goes back to the title */
+    int labels[16];
+    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    const int dispL = ui_settings_page_layout(UI_PAGE_DISPLAY);
+    lt_ext_layout(mainL)->curItem = labels[0];
+    press(0x20);
+    CHECK(settle(dispL, 60), "Circle opens Display");
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    CHECK(jpnRowShown(UI_PAGE_DISPLAY, UI_OPT_VIDEO_MODE) <= 0, "no Video mode row from the title");
+    press(0x40);
+    CHECK(settle(mainL, 60), "Cross goes back from Display");
+    lt_ext_layout(mainL)->curItem = labels[0];
+    press(0x20);
+    CHECK(settle(dispL, 60), "Circle opens Display again");
+    press(0x10);
+    CHECK(settle(mainL, 60), "Triangle goes back from Display");
+    /* the pack and dump notes name the Japanese disc's folder */
+    int named = 0, literal = 0;
+    for (int i = LT_GAME_PROPERTY_COUNT; i < LT_GAME_PROPERTY_COUNT + lt_ext_prop_count(); i++) {
+        const char *t = lt_ext_row_text(i);
+        named += strstr(t, "SCPS-11003") != NULL;
+        literal += strstr(t, "%s") != NULL || strstr(t, "SCES-50760") != NULL;
+    }
+    CHECK(named >= 2 && literal == 0,
+          "the notes name SCPS-11003 (%d rows, %d with %%s or the "
+          "European serial)",
+          named, literal);
+
+    /* the title: its rows on the menu's pitch, the copyright's two halves
+       together (settings.c placeTitle over the region's rows) */
+    const int t = fxLayout(13);
+    CHECK(t == 10 && ui_settings_entry_row(t) >= LT_GAME_PROPERTY_COUNT &&
+              ui_settings_quit_row(t) >= LT_GAME_PROPERTY_COUNT,
+          "the title's Settings and Quit rows on la_title_new_game_only (10)");
+    const int pitch = texProperty[21].dispY - texProperty[20].dispY;
+    CHECK(pitch > 0 && texProperty[22].dispY == texProperty[21].dispY &&
+              lt_ext_prop(ui_settings_entry_row(t))->dispY == texProperty[21].dispY + pitch &&
+              lt_ext_prop(ui_settings_quit_row(t))->dispY == texProperty[21].dispY + 2 * pitch,
+          "Continue %d, New Game %d and %d, Settings %d, Quit %d", texProperty[20].dispY,
+          texProperty[21].dispY, texProperty[22].dispY,
+          lt_ext_prop(ui_settings_entry_row(t))->dispY,
+          lt_ext_prop(ui_settings_quit_row(t))->dispY);
+    CHECK(texProperty[18].dispY == texProperty[19].dispY &&
+              texProperty[18].dispY > lt_ext_prop(ui_settings_quit_row(t))->dispY,
+          "the copyright's halves together below Quit (%d, %d)", texProperty[18].dispY,
+          texProperty[19].dispY);
+    /* the European rows are not touched */
+    CHECK(texProperty[49].dispY == 0 && texProperty[48].dispY == 0 &&
+              texProperty[294].right != mainL,
+          "no European title or pause row moved");
+    /* Cross on the main page: back to the title */
+    lt_ext_layout(mainL)->curItem = labels[0];
+    press(0x40);
+    CHECK(settle(t, 60), "Cross goes back to the title (%d)", current_layout_id);
+    /* the pause menu's Options opens the menu: rows 271 .. 273 */
+    lt_switch_layout(fxLayout(57));
+    CHECK(settle(54, 40), "the Japanese pause menu (54)");
+    CHECK(texProperty[271].right == mainL, "Options (271) opens the menu");
+    ui_set_language(UI_LANG_EN);
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
     setEnv("LC_ALL", NULL);
     setEnv("LANG", "en_GB.UTF-8");
+    if (argc > 2 && strcmp(argv[2], "jpn") == 0) {
+        /* the Japanese disc's run (ctest settings_jpn) */
+        CHECK(ico_region_select("jpn") == 0, "the Japanese region");
+        testJapanese();
+        printf("settings_test jpn: %s\n", failures ? "failed" : "ok");
+        return failures ? 1 : 0;
+    }
     testBuild();
     testBudget();
     testRepoint();

@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "font.h"
+#include "../core/region.h" /* ico_region_cur: the running disc */
 #include "menu_font.h"
 #include "menu_text.h"
 #include "strings.h"
@@ -218,40 +219,36 @@ float lt_ext_row_size(int index)
     return r->text.size > 0.0f ? r->text.size : UI_MENU_TEXT_SIZE;
 }
 
-/* The glyphs' sources in the PAL tables (texProperty rows, checked against
-   the boot ELF's table: rows 182 and 184 are the save prompts' Cross and
-   Triangle beside OK (181) and Back (183), 343 and 344 the key config
-   screen's Square and Circle, 349, 346, 348 and 347 its L1, R1, L2 and R2
-   labels, 301 and 302 the Options screen's value arrows) and the height
-   each has beside the game's 27-unit labels (dispH, y units; the width is
-   the rectangle's, a pixel a texel). */
-static const struct {
-    short row, u, v, w, h, dispH;
-} kGlyph[LT_GLYPH_COUNT] = {
-    {182, 32, 30, 32, 30, 30},   /* Cross, text/buttons.tm2 */
-    {344, 0, 30, 32, 30, 30},    /* Circle */
-    {343, 32, 0, 32, 30, 30},    /* Square */
-    {184, 0, 0, 32, 30, 30},     /* Triangle */
-    {349, 420, 240, 40, 15, 30}, /* L1, menu_PAL_02 */
-    {346, 340, 240, 40, 15, 30}, /* R1 */
-    {348, 460, 240, 40, 15, 30}, /* L2 */
-    {347, 380, 240, 40, 15, 30}, /* R2 */
-    {301, 490, 130, 20, 20, 40}, /* Left, menu_PAL_01 */
-    {302, 490, 150, 20, 20, 40}, /* Right */
-};
+/* The glyphs' sources: the running disc's rows (port/core/region.h
+   IcoRegionInfo.glyph, in LtExtGlyph order).  On the European disc rows 182
+   and 184 are the save prompts' Cross and Triangle beside OK (181) and Back
+   (183), 343 and 344 the key config screen's Square and Circle, 349, 346,
+   348 and 347 its L1, R1, L2 and R2 labels, 301 and 302 the Options
+   screen's value arrows; disp_h is the height each row has beside the
+   game's 27-unit labels (its dispH, y units; the width is the rectangle's,
+   a pixel a texel). */
+_Static_assert((int)LT_GLYPH_COUNT == (int)ICO_GLYPH_COUNT &&
+                   (int)LT_GLYPH_CROSS == ICO_GLYPH_CROSS && (int)LT_GLYPH_RIGHT == ICO_GLYPH_RIGHT,
+               "layout_ext.h's glyphs are region.h's");
+
+static const IcoGlyphRow *glyphOf(int g)
+{
+    return &ico_region_cur()->glyph[g];
+}
 
 int lt_ext_glyph_source(int glyph, int uvwh[4])
 {
     if (glyph < 0 || glyph >= LT_GLYPH_COUNT) {
         return -1;
     }
+    const IcoGlyphRow *g = glyphOf(glyph);
     if (uvwh) {
-        uvwh[0] = kGlyph[glyph].u;
-        uvwh[1] = kGlyph[glyph].v;
-        uvwh[2] = kGlyph[glyph].w;
-        uvwh[3] = kGlyph[glyph].h;
+        uvwh[0] = g->u;
+        uvwh[1] = g->v;
+        uvwh[2] = g->w;
+        uvwh[3] = g->h;
     }
-    return kGlyph[glyph].row;
+    return g->row;
 }
 
 void lt_ext_glyph_box(int glyph, float size, int *w, int *h)
@@ -261,10 +258,10 @@ void lt_ext_glyph_box(int glyph, float size, int *w, int *h)
         glyph = 0;
     }
     if (w) {
-        *w = (int)((float)kGlyph[glyph].w * k + 0.5f);
+        *w = (int)((float)glyphOf(glyph)->w * k + 0.5f);
     }
     if (h) {
-        *h = (int)((float)kGlyph[glyph].dispH * k + 0.5f);
+        *h = (int)((float)glyphOf(glyph)->disp_h * k + 0.5f);
     }
 }
 
@@ -283,10 +280,10 @@ int lt_ext_add_glyph(int glyph, int x, int y, float size)
     r.dispX = x;
     r.dispY = y;
     lt_ext_glyph_box(glyph, size, &r.dispW, &r.dispH);
-    r.texU = kGlyph[glyph].u;
-    r.texV = kGlyph[glyph].v;
-    r.texW = kGlyph[glyph].w;
-    r.texH = kGlyph[glyph].h;
+    r.texU = glyphOf(glyph)->u;
+    r.texV = glyphOf(glyph)->v;
+    r.texW = glyphOf(glyph)->w;
+    r.texH = glyphOf(glyph)->h;
     /* never looked up (no stage range reaches a port row); a value of its
        own, so the fade-cancel check pairs no two glyph rows */
     r.texFileNo = 0x7000 + s_propCount;
@@ -317,9 +314,13 @@ int lt_ext_glyph_texture(int g)
     if (g < 0 || g >= LT_GLYPH_COUNT) {
         return -1;
     }
-    const LtProperty *src = &texProperty[kGlyph[g].row];
-    if (src->texU != kGlyph[g].u || src->texV != kGlyph[g].v || src->texW != kGlyph[g].w ||
-        src->texH != kGlyph[g].h || src->texNo < 0) {
+    const IcoGlyphRow *k = glyphOf(g);
+    if (k->row < 0 || k->row >= LT_GAME_PROPERTY_COUNT) {
+        return -1;
+    }
+    const LtProperty *src = &texProperty[k->row];
+    if (src->texU != k->u || src->texV != k->v || src->texW != k->w || src->texH != k->h ||
+        src->texNo < 0) {
         return -1;
     }
     return src->texNo;
@@ -573,12 +574,46 @@ void lt_ext_draw_text_row(const LtProperty *e, const int box[4], const int uv[4]
     /* keyed by the row and the pass (the words, the glow), as the port's
        rows are, so the presenter blends a row that moves or fades */
     const uint64_t owner = ui_set_draw_key(rowKey(e, glow));
-    ui_menu_word_draw(it, (int)ui_get_language(), box, uv, rgba, glow);
+    ui_menu_word_draw(it, (int)ui_sheet_language(), box, uv, rgba, glow);
     ui_set_draw_key(owner);
+}
+
+int lt_ext_game_layout_count(void)
+{
+    return ico_region_cur()->layout_count;
+}
+
+int lt_ext_game_property_count(void)
+{
+    return ico_region_cur()->property_count;
+}
+
+int lt_ext_confirm_button(void)
+{
+    return ico_region_cur()->pad_confirm;
+}
+
+int lt_ext_confirm_glyph(void)
+{
+    return ico_region_cur()->pad_confirm == LT_PAD_CIRCLE ? LT_GLYPH_CIRCLE : LT_GLYPH_CROSS;
+}
+
+int lt_ext_has_circle_back(void)
+{
+    return ico_region_cur()->pad_back == LT_PAD_TRIANGLE;
+}
+
+int lt_ext_port_back_buttons(void)
+{
+    /* Triangle, and the one of Cross and Circle that does not confirm */
+    return LT_PAD_TRIANGLE | ((LT_PAD_CROSS | LT_PAD_CIRCLE) & ~ico_region_cur()->pad_confirm);
 }
 
 int lt_ext_back_buttons(void)
 {
+    if (!lt_ext_has_circle_back()) {
+        return ico_region_cur()->pad_back; /* the disc's own cancel, alone */
+    }
     return LT_PAD_TRIANGLE | (s_circleBack ? LT_PAD_CIRCLE : 0);
 }
 

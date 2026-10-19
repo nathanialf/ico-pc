@@ -25,7 +25,8 @@
  *   link:        57 -> photo layout; 12 and 13 -> row layout -> 11 (was 11)
  *
  * Changes apply at once through the existing setters (ico_video_set,
- * ico_opt_set_*, the live binding table, NonLinearCameraMove,
+ * ico_opt_set_*, the live binding table, NonLinearCameraMove (the
+ * European disc's language),
  * systemStatus[0] with gsResetFunc) and are written with ico_video_save /
  * ico_config_save when a screen is left.  The game's own settings
  * (Brightness, Vibration, Hold type, Film effect, Players) are its
@@ -308,7 +309,8 @@ typedef enum UiSettingsOpt {
     UI_OPT_ACH_POPUPS,     /* [game] achievements, On/Off: the achievement pop-ups, on the
                               Achievements page before Back */
     /* Main */
-    UI_OPT_LANGUAGE,
+    UI_OPT_LANGUAGE,      /* the game's own language (the European disc only) */
+    UI_OPT_MENU_LANGUAGE, /* [ui] language: the port's text, Auto or a UiLang */
     UI_OPT_DUMP_TEXTURES, /* [video] dump_textures, for pack authors (developer mode) */
     UI_OPT_DUMP_MODELS,   /* [video] dump_models, for pack makers (developer mode) */
     /* Extras > Characters, one row per IcoAppPart in its order
@@ -369,6 +371,18 @@ int ui_settings_photo_back(void);
    configuration, or the game's Options screen (58) when the pause menu
    still opens it (before the build, or tables not the PAL ones). */
 int ui_settings_key_config_back(void);
+/* Sets the language of the port's text (ui_set_language) by the Menu
+   language row's rule (ui_lang.h ui_settings_resolve_language: [ui]
+   language, else Japanese on the Japanese disc, the game's own language on
+   the European disc, else English) and the sheets' look language
+   (ui_set_sheet_language: UI_SHEET_JA on the Japanese disc, the game's
+   language on the European one); every screen of the port calls it before
+   it draws its words, so a change of either language shows at once. */
+void ui_settings_apply_language(void);
+/* Whether a row of opt is shown now (its page masks it otherwise): the
+   running disc, the platform, the entry and the game's state decide
+   (tests). */
+int ui_settings_opt_shown(UiSettingsOpt opt);
 int ui_settings_page_layout(UiSettingsPage page);
 /* A page's navigable rows in order: the label row of each, its option, its
    value row (-1 for none).  Returns the count (tests). */
