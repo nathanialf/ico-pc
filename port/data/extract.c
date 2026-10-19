@@ -41,6 +41,12 @@
 /* --- helpers ----------------------------------------------------------------- */
 
 static void say(char *why, size_t n, const char *fmt, ...)
+#ifdef __GNUC__
+    __attribute__((format(printf, 3, 4)))
+#endif
+    ;
+
+static void say(char *why, size_t n, const char *fmt, ...)
 {
     va_list ap;
 
@@ -830,7 +836,7 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
     x.iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
     if (x.iso == NULL) {
         res->unreadable = 1;
-        say(why, whysize, ICO_UNREADABLE_DISC_TEXT, iso_path);
+        say(why, whysize, ICO_UNREADABLE_DISC_TEXT, iso_path, ico_disc_list_text());
         return -1;
     }
     x.items = calloc(ITEMS_MAX, sizeof(*x.items));

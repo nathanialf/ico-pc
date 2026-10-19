@@ -261,6 +261,9 @@ static int run_synth(const char *dir)
         fclose(fp);
         CHECK(ico_extract_archive(bad_path, ar_path, 0, NULL, NULL, &res, why, sizeof(why)) != 0);
         CHECK(res.unreadable && !res.wrong_disc);
+        /* the box text: the image's path, then every disc's name (both %s filled) */
+        CHECK(strstr(why, "Cannot read the disc image") != NULL &&
+              strstr(why, "SCPS-56001") != NULL);
         CHECK(!file_exists(ar_path) && !file_exists(tmp_path));
         remove(bad_path);
     }
