@@ -26,15 +26,7 @@
 #include "ico_gamestate.h" /* port: achievement signals */
 #include "ico_credits.h"   /* port: Extras > Credits */
 
-#ifdef VERSION_JPN
-
-static void actEndLogoChk(GObj *volatile self);
-
-#else
-
 static void actEndingSave(GObj *volatile self);
-
-#endif
 
 /* .sdata: the ending scenes' stream handles (ed5 and happy_end unused), then
    the staff roll's, the fourteenth demo's and the st27a ending's. */
@@ -1212,16 +1204,11 @@ void actSt27aEndDemo(GObj *volatile self)
     }
 }
 
-#ifdef VERSION_JPN
-
-/* The November build's step between the logo and the save; January named it
-   actEndLogoChk and added the per-language logo animation before the wait. */
-void actEndLogoFade(GObj *volatile self) /* derived name */
-{
-#else
+/* The step between the logo and the save. The Japanese disc (the November build) names it
+   actEndLogoFade and has no per-language logo animation before the wait (the !ICO_JPN
+   block); the body is one for both discs under the European name. */
 void actEndLogoChk(GObj *volatile self)
 {
-#endif
     GObj *x = self;
     Act *act = actInitialize(self);
     int id = 60;
@@ -1270,7 +1257,7 @@ void actEndLogoChk(GObj *volatile self)
 
     scpFadeIn(6.0f);
 
-    end_mes[0].func = PAL_JPN(actEndingSave, actEndLogoChk);
+    end_mes[0].func = actEndingSave;
     act->mail = end_mes;
     ACTSendMailCorrect(self, 430);
     _ACTWait(0);
@@ -1428,7 +1415,7 @@ void actEndLogo(GObj *volatile self)
 
     _ACTWait(1);
 
-    logo_mes[0].func = PAL_JPN(actEndLogoChk, actEndLogoFade);
+    logo_mes[0].func = actEndLogoChk;
     act->mail = logo_mes;
     ACTSendMailCorrect(self, 430);
     _ACTWait(0);
@@ -1745,22 +1732,12 @@ void actEndDemo14Chk(GObj *volatile self)
     actCreateSubThread(actConte14_14, 21);
 }
 
-#ifdef VERSION_JPN
-
-/* The ending's save step.  The November build still calls it actEndLogoChk, its name
-   in the Aug-6 disc's TRFILE (the last function of end.c there too);
-   January renamed it actEndingSave and gave the name to the step before it.
-   The bytes show the November name: actEndLogoFade hoists the %hi parts of
-   end_mes and of this function above its fade loop, and gcse numbers them
-   in hash-bucket order (31 buckets), which puts this one in s0 only when
-   its name hashes before end_mes's, as actEndLogoChk does and actEndingSave
-   (the last bucket) cannot. */
-static void actEndLogoChk(GObj *volatile self)
-{
-#else
+/* The ending's save step, one body for both discs under the European name. The
+   Japanese disc (the November build) still calls it actEndLogoChk, its name in the Aug-6
+   disc's TRFILE (the last function of end.c there too); January renamed it actEndingSave
+   and gave the name to the step before it. */
 static void actEndingSave(GObj *volatile self)
 {
-#endif
     /* PC port: the Extras credits never get here (they end
        at actStaff3RollChk); if they did, no ending signal and no save */
     if (ico_credits_active()) {

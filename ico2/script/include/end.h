@@ -46,11 +46,7 @@ void actEndDemo11Chk(GObj *volatile self);
 void actEndDemo12Chk(GObj *volatile self);
 void actEndDemo13Chk(GObj *volatile self);
 void actEndDemo14Chk(GObj *volatile self);
-#ifdef VERSION_JPN
-void actEndLogoFade(GObj *volatile self);
-#else
-void actEndLogoChk(GObj *volatile self);
-#endif
+void actEndLogoChk(GObj *volatile self); /* the Japanese disc's actEndLogoFade */
 void actSt27aEndChk(GObj *volatile self);
 void actSt27aEndDemo(GObj *volatile self);
 void actStaff1Chk(GObj *volatile self);
