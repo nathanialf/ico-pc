@@ -43,7 +43,7 @@ rectangle, its box on screen, its item links); on the Japanese disc `texLayout[7
 `texProperty[412]`, and the extension starts there (`LT_GAME_LAYOUT_COUNT` and
 `LT_GAME_PROPERTY_COUNT` are the running disc's, `lt_ext_game_layout_count` and
 `lt_ext_game_property_count`; arrays sized at build time take the larger, `_MAX` 80 and 436;
-[The two discs](#the-two-discs)). Every property row is used, and the empty layout
+[The Japanese and Korean discs](#the-japanese-and-korean-discs)). Every property row is used, and the empty layout
 rows 66..79 sit inside every stage's layout range, whose textures the game initialises at each
 stage load, so a port row there would be looked up as a texture file. The port therefore extends
 both tables past their ends: layouts `80 ..` and properties `436 ..`, up to
@@ -133,7 +133,7 @@ cursor (`ico2/common/src/layout_texture.c` (`display_texture`, `curNo`)).
 `lt_ext_back_buttons` is the pad bits that take the game menus' back action where the game checks
 Triangle: Triangle, plus Circle while `[game] circle_back` is on (the default); off, Triangle alone,
 the PS2's checks. On the Japanese disc it is Cross alone, that disc's cancel, and `[game]
-circle_back` does not apply ([The two discs](#the-two-discs)). `layout_texture.c`'s `default_item_select` uses it as `LT_BACK_BUTTONS` and the
+circle_back` does not apply ([The Japanese and Korean discs](#the-japanese-and-korean-discs)). `layout_texture.c`'s `default_item_select` uses it as `LT_BACK_BUTTONS` and the
 procs of `layout_action.c` as `LA_BACK`, except where Triangle is not a cancel or Circle has a
 meaning of its own (`port/ui/layout_ext.h` (`lt_ext_back_buttons`);
 `ico2/common/src/layout_action.c` (`LA_BACK`)). The port's own screens take Circle as Triangle
@@ -647,7 +647,7 @@ card check has decided, then opens Settings on Extras: `ui_settings_title_return
 the title's rows and hiding the logo meanwhile (`port/ui/settings.h` (`ui_settings_title_return`,
 `ui_settings_reopen_page`)).
 
-## The two discs
+## The Japanese and Korean discs
 
 The port's UI names the game's menus by number, and each number is the running disc's, read from
 the region table at run time (`port/core/region.h` (`IcoRegionInfo`, `ico_region_cur`);
@@ -655,12 +655,18 @@ the region table at run time (`port/core/region.h` (`IcoRegionInfo`, `ico_region
 the pause, title and memory card rows, the button glyphs, the stages, story flags and table sizes
 of the gallery, the achievements, the credits, photo mode and the model viewer, the chain groups
 the renderer lets down. The Japanese values, and what each was resolved against, are
-`port/core/region_jpn.c`'s. On the Japanese disc:
+`port/core/region_jpn.c`'s; the Korean disc's are `port/core/region_kor.c`'s. The Korean disc is
+the Japanese program with Korean text, and every bullet below holds on it as well, with its own
+row numbers (the title's copyright line is rows 12 and 13 there), its own sheets (`UI_SHEET_KO`)
+and Korean in place of Japanese where a bullet names the language; the Korean disc has not been
+run in the port yet, so those numbers are checked by the tests (`ui_kor`, `settings_kor` and the
+other `_kor` rows of [TESTING.md](TESTING.md)) and by reading its tables, not by play. On the
+Japanese disc:
 
 - **Buttons.** Circle confirms and Cross goes back in the game's menus (`pad_confirm` 0x20,
   `pad_back` 0x40). The port follows: `lt_ext_back_buttons` is Cross alone and `[game]
   circle_back` does not apply; the port's pages confirm with Circle and go back with Cross or
-  Triangle (Triangle goes back on the port's pages on both discs); a mouse click on an item is
+  Triangle (Triangle goes back on the port's pages on every disc); a mouse click on an item is
   Circle; photo mode saves with Circle and leaves with Cross, Triangle or Start; Escape (and
   Android's Back) presses Cross where it pressed Triangle (`port/ui/layout_ext.h`;
   `port/game/photo_mode.h` (`ico_photo_save_button`); `port/input/mouse_look.h`
@@ -669,21 +675,22 @@ the renderer lets down. The Japanese values, and what each was resolved against,
   mouse's Cross and Circle buttons trade places, so the right button still goes back and photo
   mode's left button still saves (`port/input/pointer.h` (`ico_pointer_set_swap_face`), set by
   `port/ui/ui_mouse.c`; `port/input/input_sdl.c` (`swap_mouse_face`)). The keyboard and the
-  gamepad keep their bindings: they press the same PlayStation buttons on both discs, so the
+  gamepad keep their bindings: they press the same PlayStation buttons on every disc, so the
   gamepad's right face button (Circle) confirms and the bottom one (Cross) goes back, as on a
   Japanese PS2. The recorded pad scripts hold buttons, not meanings (`port/input/pad_script.h`).
   [DIVERGENCES.md](DIVERGENCES.md) GL-11 records the convention.
 - **Rows.** The Circle goes back row, the 50 Hz Video mode row and the game's Language row are not
   shown (`lt_ext_has_circle_back`, `has_50hz_row`, `has_game_language`); the Menu language row is
-  shown on both discs (`port/ui/settings.c` (`optShown`, `ui_settings_opt_shown`)).
-- **Disc.** Main's Disc row, after Menu language, shows on both discs when both discs' game data
+  shown on every disc (`port/ui/settings.c` (`optShown`, `ui_settings_opt_shown`)).
+- **Disc.** Main's Disc row, after Menu language, shows on every disc when more than one disc's game data
   is there: the window host passes `ico_host_disc_archive_present` (`port/platform/host_config.h`:
   each region's `archive_name` in the per-user folder or beside the program, the same test
   `main_host.c`'s `mount_game_data` makes for `ico_host_choose_disc`) to
-  `ui_settings_set_disc_handler`, asked once after each call. Its values, `UI_STR_DISC_PAL` and
-  `UI_STR_DISC_JPN` ("Europe (SCES-50760)", "Japan (SCPS-11003)" in English), step through
+  `ui_settings_set_disc_handler`, asked once after each call. Its values, `UI_STR_DISC_PAL`,
+  `UI_STR_DISC_JPN` and `UI_STR_DISC_KOR` ("Europe (SCES-50760)", "Japan (SCPS-11003)", "Korea
+  (SCPS-56001)" in English), step through
   `config/regions.txt`'s rows and write `[game] disc` (`ico_config_disc_pin`), read at the next
-  start; with no pin the row shows the disc playing, which with both discs' data and no pin is the
+  start; with no pin the row shows the disc playing, which with several discs' data and no pin is the
   one the next start picks (the disc played last). Its note is `UI_STR_DISC_NOTE` ("Takes effect at
   the next start"). With every Main row shown (the Graphics driver link, Language, Disc and the
   two developer rows) the page has fifteen rows, 10 lines apart (`pagePitch`). ctest
@@ -695,7 +702,7 @@ the renderer lets down. The Japanese values, and what each was resolved against,
   `IcoRegionInfo.glyph`, whose order `_Static_assert` ties to `LtExtGlyph`). The touch overlay's
   buttons keep their physical labels and draw these pictures through the same calls.
 - **Text.** The game's menu words keep their texels; the port's pages, notes, prompts and popups
-  are in the menu language (Japanese unless another is chosen) in the sheets' look with the
+  are in the menu language (Japanese, or Korean on the Korean disc, unless another is chosen) in the sheets' look with the
   Japanese sheets' ink, `kSheetInk[UI_SHEET_JA]` ([The menus' look](#the-menus-look)). The title's
   copyright line is two rows on this disc (18 and 19), placed together (`ROW_TITLE_COPYRIGHT2`).
 
@@ -741,7 +748,7 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   `ui_jpn` (`ui_test jpn`): the glyph rows and rectangles, the table sizes and the pad convention
   on the Japanese disc.
 - `strings_complete` (`test/strings_complete_test.c`): every table defines every id with the
-  English entry's conversions, the serial notes on both discs, the sheet language, the menu
+  English entry's conversions, the serial notes on every disc, the sheet language, the menu
   language's rule, the Japanese line-break rules.
 - `settings` (`test/settings_test.c`): the menu over fake PAL-shaped tables: pages and labels, the
   entry repoint, the title and pause rows' places, navigation through the real `layout_texture.c`,
@@ -779,7 +786,7 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
 - `font_edge` (`test/font_edge_test.c`): plain text on the output at Enhanced 1080p and 4K, and
   the overlay unmirrored.
 - `gallery` (`test/gallery_test.c`): the music gallery's list from the base ELF's tables.
-  `gallery_jpn` (`gallery_test --jpn`): both discs' 105 `adpcmFile` paths equal row for row (the
+  `gallery_jpn` (`gallery_test --jpn`): every disc's 105 `adpcmFile` paths equal row for row (the
   names are keyed by the row), then the list from the Japanese tables and image.
 - `gallery_sweep` (`test/gallery_sweep.py`), `credits_headless` (`test/credits_headless.py`, with
   `test/headless_common.py`): the headless game through Extras > Music and Extras > Credits.

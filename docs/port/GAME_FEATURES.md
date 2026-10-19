@@ -209,11 +209,11 @@ once per [vsync](ARCHITECTURE.md#terms), which runs `ico_ach_tick` once per new
 counters' write every 750 ticks when changed (`port/platform/host_loop.c`;
 `port/game/achievements.h` (`ICO_ACH_STATS_FLUSH_TICKS`)). Popups are at least 5 seconds of Main
 ticks apart, `5 * ico_gs_tick_hz()`: 125 ticks at 25 Hz (the European disc's 50 Hz mode), 150 at
-30 Hz (the Japanese disc, and the European disc's 60 Hz mode); they can be turned off with
+30 Hz (the Japanese and Korean discs, and the European disc's 60 Hz mode); they can be turned off with
 `[game] achievements = false`, and unlocks are recorded either way
 (`port/game/achievements.h` (`ico_ach_popup_gap_ticks`, `ico_ach_popups_enabled`)). The stages and
 story flags the conditions name are the disc's, from the region table (`port/core/region.h`
-(`ach_stages`, `gflag_queen_dead`, `gflag_beach_secret`); the same numbers on both discs).
+(`ach_stages`, `gflag_queen_dead`, `gflag_beach_secret`); the Korean disc's equal the Japanese disc's.
 
 To add one: a row in `s_defs` (`ACH(id, NAME, c_fn, hidden)`, `port/game/achievements.c`), its
 condition `c_fn` over the game-state view, and the strings `UI_STR_ACH_<NAME>` and
@@ -233,9 +233,9 @@ The run state of each save slot is kept there too, keyed by the save's checksum 
 flag is: `la_save_processing` calls `ico_ach_slot_saved` and `la_load_processing`
 `ico_ach_slot_loaded` (`ico2/common/src/layout_action.c`). The visited stages and the slots are
 per disc, as the stage rows and the saves are: `stats.stages` and `run.slot_N_*` for the European
-disc, `stats.stages_jpn` and `run.jpn_slot_N_*` for the Japanese one; the unlocks and the other
-counters are one set for the player ([SAVES.md](SAVES.md#two-discs); `port/game/achievements.c`
-(`run_key`, `write_file`, `read_file`)). The ctests `achievements` and `achievements_jpn` run the
+disc, `stats.stages_jpn` and `run.jpn_slot_N_*` for the Japanese one, `stats.stages_kor` and `run.kor_slot_N_*` for the Korean one; the unlocks and the other
+counters are one set for the player ([SAVES.md](SAVES.md#three-discs); `port/game/achievements.c`
+(`run_key`, `write_file`, `read_file`)). The ctests `achievements`, `achievements_jpn` and `achievements_kor` run the
 same program with each disc selected (`port/game/test/achievements_test.c`, `test_discs`).
 
 Achievements are suspended, no counter advancing and nothing unlocking, while developer mode or

@@ -169,8 +169,8 @@ mounts the image directly, the default of the headless build (`port/platform/mai
 
 The binary holds no disc data. The 73 data-only members the PS2 build compiled from the ELF are
 uninitialised arrays on the host, filled before the game starts from the boot ELF
-(`SCES_507.60`, `SCPS_110.03`) on the player's disc: each record is decoded field by field into the
-host layout, PAL's for both discs, through that disc's descriptor set, pointer words resolved
+(`SCES_507.60`, `SCPS_110.03`, `SCPS_560.01`) on the player's disc: each record is decoded field by field into the
+host layout, PAL's for all three discs, through that disc's descriptor set, pointer words resolved
 through an address registry, every row checked against a CRC first (`port/data/tables.h`
 (`ico_tables_load_vfs`); `CMakeLists.txt` (the data tables section)).
 [DATA.md](DATA.md) covers the disc, the archive and the tables.
@@ -314,15 +314,16 @@ single-precision code, with the additions and subtractions of the trigonometric 
 adder model (`port/math/newlib/ico_libm.c` (header comment)). [MATH.md](MATH.md) lists every
 function and where it is used.
 
-## Two discs, one program
+## Three discs, one program
 
 The port is built to play more than one release of the game from one compiled program: the
-European disc (SCES-50760) and the Japanese disc (SCPS-11003), listed in `config/regions.txt`.
+European disc (SCES-50760), the Japanese disc (SCPS-11003) and the Korean disc (SCPS-56001),
+listed in `config/regions.txt`.
 Their differences are inline blocks in the decompilation's one tree; here each becomes a run-time
 choice on the game's region index, `ico_region`, which is set once, when the disc image is
 identified, and is the European disc's 0 until then. The game code reads it through
 `ICO_<SLUG>` and the selector macros of `ico2/common/include/region.h`, the port's own code through
-`port/core/region.h`'s per-disc tables; one in-memory layout, the European one, serves both.
+`port/core/region.h`'s per-disc tables; one in-memory layout, the European one, serves all three.
 [GAME_CODE.md](GAME_CODE.md#regions) has the forms and the rule for adding a target.
 
 ## The port's own additions

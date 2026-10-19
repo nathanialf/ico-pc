@@ -24,7 +24,7 @@ how the dumps that pack makers start from are written. The player's side is
 ## Texture names
 
 A texture is named as PCSX2 names it, so a PCSX2 pack for SCES-50760 (or, on the Japanese disc,
-SCPS-11003) loads unchanged
+SCPS-11003, and on the Korean disc, SCPS-56001) loads unchanged
 (`port/render/texpack_name.h`, header comment, which cites the PCSX2 functions each rule comes
 from):
 
@@ -70,9 +70,9 @@ indexed and the option on, or the dump on.
 ### Folders
 
 Each disc has its own serial folder, the one PCSX2 uses for it: `SCES-50760` for the European
-disc, `SCPS-11003` for the Japanese one. The serial is the selected disc's `pack_serial`
+disc, `SCPS-11003` for the Japanese one and `SCPS-56001` for the Korean one. The serial is the selected disc's `pack_serial`
 (`port/core/region.h`), which `main_host.c` passes as `TexpackConfig.serial` once the disc is
-identified (`open_texture_pack`; a `NULL` serial is also the selected disc's); a pack in the other
+identified (`open_texture_pack`; a `NULL` serial is also the selected disc's); a pack in another
 disc's folder is not read. `texpack_init` walks, in order, in the
 [user folder](ARCHITECTURE.md#terms) and the program folder:
 `<user folder>/textures/<serial>/replacements`, then
@@ -175,12 +175,14 @@ of "%s" (%ux%u); it waits for a later frame (reported once)` (`port/render/rd_re
 
 ## The shipped README
 
-The release packages stage three folders with a `README.txt` in each, because a zip keeps only
-files and the note is what keeps the folder: `textures/SCES-50760/replacements/`,
-`models/SCES-50760/replacements/` and `reshade/` (`tools/package_textures_lib.sh`
+The release packages stage seven folders with a `README.txt` in each, because a zip keeps only
+files and the note is what keeps the folder: `textures/<serial>/replacements/` and
+`models/<serial>/replacements/` for each of `SCES-50760`, `SCPS-11003` and `SCPS-56001`, and
+`reshade/` (`tools/package_textures_lib.sh`
 (`pkg_stage_folder_notes`, `pkg_note_rels`)). The textures note says the folder is for texture
 packs and playing needs nothing in it; to copy a pack keeping its own folders so its files end up
-under `textures/SCES-50760/replacements/` next to the program, a pack one level too high being
+under that disc's `textures/<serial>/replacements/` next to the program (the examples name
+`SCES-50760`), a pack one level too high being
 found too; that Options > Display > Texture pack then reads On and `logs/ico-pc.log` says how many
 textures were found; that with portable mode the pack may also go in
 `userdata/textures/SCES-50760/replacements/`; and that packs made for PCSX2 work as they are

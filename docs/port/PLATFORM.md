@@ -307,11 +307,11 @@ Three places matter (`port/platform/host_config.h`):
 - the executable's folder (`ico_host_exe_dir`): `ico-pc.ini` and `logs/` beside the program on
   Windows and Linux;
 - the [user folder](ARCHITECTURE.md#terms) (`ico_host_pref_dir`): `config.toml`, the memory cards
-  (`memcard/`), the extracted `ico.o2r` and `ico-jpn.o2r`, `dumps/`, the developer `dev/` folder. In the window build
+  (`memcard/`), the extracted `ico.o2r`, `ico-jpn.o2r` and `ico-kor.o2r`, `dumps/`, the developer `dev/` folder. In the window build
   it is SDL's `SDL_GetPrefPath("ico-pc", "ico-pc")`; in the headless build and the tests, which have
   no SDL, the executable's folder (`port/platform/host_config.c` (`ico_host_pref_dir`);
   `port/config/CMakeLists.txt` (`ICO_HOST_SDL_PREFPATH`));
-- the disc image, found beside the executable (`Ico_PAL` or `Ico_JPN`, `.iso`, `.chd`, `.bin` or
+- the disc image, found beside the executable (`Ico_PAL`, `Ico_JPN` or `Ico_KOR`, `.iso`, `.chd`, `.bin` or
   `.cue`), through `iso=`, `$ICO_ISO`, the same names under `baserom/` in the working folder, or a
   file dialog whose answer is saved as `iso=` (`port/platform/main_host.c` (`find_iso`,
   `image_names`)).
@@ -338,17 +338,17 @@ the files folder (shared storage when writable), the Vulkan pipeline cache in th
 
 ### The disc a start plays
 
-The program plays the European disc (SCES-50760) and the Japanese disc (SCPS-11003); the disc is
+The program plays the European disc (SCES-50760), the Japanese disc (SCPS-11003) and the Korean disc (SCPS-56001); the disc is
 decided once a start, before anything reads the game's data, by the first of these rules that
 names one (`port/platform/host_config.c` (`ico_host_choose_disc`), called from `main_host.c`
 (`mount_game_data`)):
 
-1. `[game] disc` in `config.toml`: `"pal"` or `"jpn"` pins the disc (`ico_config_disc_pin`);
+1. `[game] disc` in `config.toml`: `"pal"`, `"jpn"` or `"kor"` pins the disc (`ico_config_disc_pin`);
    `"auto"`, the default, pins none, and any other value is auto with one log line
-   (`config: [game] disc = "x" is not one of auto, pal, jpn; auto`);
+   (`config: [game] disc = "x" is not one of auto, pal, jpn, kor; auto`);
 2. the disc image the player gave (`--iso`, an image beside the program, `iso=` when that file is
    there, `$ICO_ISO`), identified by its boot file (`ico_extract_identify`) without hashing it;
-3. the only archive there is (`ico.o2r` or `ico-jpn.o2r`, in the user folder or beside the
+3. the only archive there is (`ico.o2r`, `ico-jpn.o2r` or `ico-kor.o2r`, in the user folder or beside the
    program);
 4. `[game] last_disc`, the disc a start last played, which the program writes
    (`ico_config_set_last_disc`; it is not in the template, and a start of the European disc with
@@ -356,22 +356,22 @@ names one (`port/platform/host_config.c` (`ico_host_choose_disc`), called from `
 5. the European disc.
 
 The log says which rule decided (`ico_pc: disc SCPS-11003 (the Japanese disc), by the disc image
-given; game data there: SCES-50760`). Both archives can be there side by side; a first run with
-the other disc's image writes its archive beside the first. A pinned disc whose archive is missing
-takes the first run, and an image of the other disc then ends the start with a box naming both.
+given; game data there: SCES-50760`). The archives can be there side by side; a first run with
+another disc's image writes its archive beside the others. A pinned disc whose archive is missing
+takes the first run, and an image of a different disc then ends the start with a box naming both.
 With several discs' images beside the program and no pin, `find_beside` takes the one whose disc
 has no archive yet (the disc just added, so its image is set up at this start), else the one
 played last, else `Ico_PAL` (`ico_host_choose_image` in `host_config.c`), and logs it
 (`ico_pc: several discs' images are beside the program; Ico_JPN.iso is used (by the disc not set
 up yet); [game] disc in config.toml picks another`). On Android the system's file picker opens
 only when the chosen disc has no archive, so with one disc set up it does not open by itself: an
-image copied into the files folder (rule 2 with the rule above), or `[game] disc` naming the other
-disc (rule 1, then the first run asks for its image), sets the second disc up. In `use_iso` mode the mounted image's boot file decides and a pin is logged as
+image copied into the files folder (rule 2 with the rule above), or `[game] disc` naming another
+disc (rule 1, then the first run asks for its image), sets that disc up. In `use_iso` mode the mounted image's boot file decides and a pin is logged as
 ignored.
 
 `select_disc` (`main_host.c`) then, before the data tables load, the packs open, the options and
 achievements load and the menus' first sync: selects the region (`ico_region_select`,
-[GAME_CODE.md](GAME_CODE.md#regions)); on a disc with no 50 Hz mode (the Japanese one,
+[GAME_CODE.md](GAME_CODE.md#regions)); on a disc with no 50 Hz mode (the Japanese and Korean ones,
 `fixed_60hz`) sets the video mode word `systemStatus[0]` to 0 (`ico_boot_video_mode` returns 0
 there too and logs once that `[video] video_mode = "pal50"` is ignored); on Android points the
 texture pack folder at the disc's serial (`ico_android_select_serial`); logs `ico_pc: playing
@@ -380,8 +380,8 @@ SCPS-11003 (the Japanese disc), boot file SCPS_110.03`; and names the disc for t
 The texture and model packs read `textures/<serial>/` and `models/<serial>/` of the selected disc
 ([PACKS.md](PACKS.md)).
 
-On Android the picker's copy is written as `Ico_PAL.<ext>`; once read as the Japanese disc it is
-renamed `Ico_JPN.<ext>` (`android_name_image`), so each disc's image keeps its own name in the
+On Android the picker's copy is written as `Ico_PAL.<ext>`; once read as the Japanese or Korean disc it is
+renamed `Ico_JPN.<ext>` or `Ico_KOR.<ext>` (`android_name_image`), so each disc's image keeps its own name in the
 files folder. A `.cue` is refused by the picker's copy (only one file comes through); the `.bin`
 beside it is the right pick, read the same on its own.
 

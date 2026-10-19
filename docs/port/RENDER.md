@@ -1638,14 +1638,14 @@ the other post sprites snap (`port/render/rd_post.c` (`s_spriteKey`)).
 | COPY | `gif_MoveImage` | a texture copy |
 | MOTION_BLUR .. EYE_BLUR | `staticBlur.c` | one GS sprite each, recorded by `rd_blur.c` |
 
-**The Japanese disc's reduction.** `gsb_Reduction_jpn` (`ico2/seki/src/GsBase.c`) builds the
+**The Japanese and Korean discs' reduction.** `gsb_Reduction_jpn` (`ico2/seki/src/GsBase.c`; the Korean build runs it too) builds the
 same packet with two differences. Its border-crop scissor keeps every line (rows 0 to H/2 - 1; the
 columns 2 to W - 3 as on the European disc), which the host follows: `rd__reduction_crop` returns
 0 when the running disc's `reduction_crops_rows` is 0 (`port/core/region.h`), so the reduction
 draws the whole height and the border mask, the deferred text's clip and the replay use no rows
 either. And it writes TEST and ZBUF after the black clear sprite, not before, so on the PS2 that
 sprite draws under the TEST and ZBUF the frame left; the host clears under TEST 0x30000 with the Z
-write off on both discs. The textured sprite covers every pixel but the two columns at each side, so
+write off on every disc. The textured sprite covers every pixel but the two columns at each side, so
 only those columns could differ, and only if the leaked test failed the black sprite; not modelled.
 The European picture is unchanged: `reduction_crops_rows` is 1 there and `rd__reduction_crop` is
 the 2 or 8 it was (ctest `rd_present`'s border cases, which compute the expected rows from it).
@@ -2113,7 +2113,9 @@ disc's matrices and no plane (`port/render/rd_chain.h`; `port/render/rd_content_
 `chain_group_st10l`/`chain_group_st19a`; the same two chains, groups 731 and 636). The same run
 reports how many of the stage animation files the disc's `stageTable` names its packs hold: 805
 of 969 on the European disc and 801 of 946 on the Japanese one, every file missing from the
-Japanese disc missing from the European one too (the development stages' rows).
+Japanese disc missing from the European one too (the development stages' rows). The Korean disc
+has its own `--version kor chains` run (its boot ELF, `port/data/gen/kor/table_desc.c` and
+`port/core/region_kor.c`), the test `content_table_chains_kor`; its counts are not recorded here.
 
 ## Strip joining
 
@@ -2494,7 +2496,7 @@ sum of the lists, not one list or effect.
 
 A [.rddump](ARCHITECTURE.md#terms) is the in-memory frame, little-endian, versioned by
 `RD_DUMP_VERSION` (12): the frame's native size and aspect, the disc it was drawn on (its region
-slug, version 12; an older dump is the European disc's), its camera, start and end states, the
+slug (`pal`, `jpn` or `kor`), version 12; an older dump is the European disc's), its camera, start and end states, the
 13 lists, the payload, the textures and temporary targets it references, and its VU meshes. Target
 contents are not written: a frame that reads a retained target replays from what the loading
 context holds. Loading creates the textures and targets anew and rewrites every id, and gives the VU

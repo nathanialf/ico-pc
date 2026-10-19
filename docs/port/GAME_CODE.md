@@ -3,7 +3,7 @@
 How the game's own C under `ico2/` is compiled for the host: which files, with which options and
 warnings, how a host path is written inside the game sources, the record-layout conventions of a
 64-bit build, the audits that guard them, how the tree relates to the decompilation it came
-from, and how the one program plays both discs (the regions).
+from, and how the one program plays every disc (the regions).
 
 ## Files
 
@@ -334,7 +334,7 @@ macro per way to group some of the non-PAL rows into arms, named `PAL_` and the 
 joined by `_`, one argument per arm in table order after the PAL arm: for the rows pal, jpn, kor
 these are `PAL_JPN(pal, jpn)`, `PAL_KOR(pal, kor)`, `PAL_JPNKOR(pal, jpnkor)` (one value for both
 rows) and `PAL_JPN_KOR(pal, jpn, kor)`, whose test chain runs from the last arm down (three named
-rows give 14 selectors; `selector_groupings`). With two rows the header holds `PAL_JPN` alone and is
+rows give 14 selectors; `selector_groupings`: the config's pal, jpn, kor have two named rows and four selectors). With two rows the header holds `PAL_JPN` alone and is
 byte for byte the two-row header. `LN(pal, jpn, kor)` is upstream's per-target `__LINE__` values
 for the debug allocators and asserts, one per row (its arity is the row count; `check` holds
 `region.h` to it), as the selector naming every row. A selector's first argument is the PAL arm; a

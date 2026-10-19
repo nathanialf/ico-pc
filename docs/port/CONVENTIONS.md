@@ -114,21 +114,28 @@ The game sources choose by the disc at run time, never at compile time: no `#if`
 `#ifndef` on the region, its macros or `ico_region` (`tools/region_blocks.py check`;
 [GAME_CODE.md](GAME_CODE.md#regions)). The forms, from `ico2/common/include/region.h`:
 
-- A value: `PAL_JPN(pal, jpn)`, the European disc's value first, then one per named region in
-  `config/regions.txt` order (`PAL_JPN_US(pal, jpn, us)` with a third row); a region the selector
-  does not name takes the first. `framePlayed / PAL_JPN(2997.0f, 50.0f)`, `strcpy(file,
-  PAL_JPN("SCES_507.60", "SCPS_110.03"))`. Never in a constant context: not after `>>` or `<<`,
+- A value: `PAL_JPN(pal, jpn)`, the European disc's value first, then one argument per arm in
+  `config/regions.txt` order. With the Korean row there are four selectors: `PAL_JPN`, `PAL_KOR`,
+  `PAL_JPNKOR(pal, jpnkor)` for a value the Japanese and Korean discs share (a set's name is its
+  rows' slugs joined) and `PAL_JPN_KOR(pal, jpn, kor)` for three different values; a region the
+  selector does not name takes the first. `framePlayed / PAL_JPN(2997.0f, 50.0f)`, `strcpy(file,
+  PAL_JPN_KOR("SCES_507.60", "SCPS_110.03", "SCPS_560.01"))`. Never in a constant context: not after `>>` or `<<`,
   not in `sizeof`, an array dimension, a `case` label, a static initialiser or at file scope.
 - Statements for two arms: `if (ICO_JPN) { ... } else { ... }`, the other region first and the
-  European arm last; statements for the European disc only: `if (!ICO_JPN) { ... }` (`ICO_PAL`
-  is the same test while the table has two rows; `!ICO_JPN` stays right when a row joins, since
-  upstream's `#ifndef VERSION_JPN` arm is every other region's).
+  European arm last (`if (ICO_JPNKOR)` when the Japanese and Korean discs share the arm,
+  `if (ICO_KOR)` for the Korean disc's alone); statements for the European disc only: the
+  negation of the predicate whose arm upstream's block named (`!ICO_JPNKOR` for a block the
+  Japanese and Korean discs share, `!ICO_JPN` for a Japanese-only one; `ICO_PAL` is the same test).
+  `tools/region_blocks.py` writes these forms from upstream's `#if` expressions over
+  `defined(VERSION_X)`, and its `rename` command respells `PAL_JPN` and `ICO_JPN` for a row that
+  shares the Japanese arm (both in [GAME_CODE.md](GAME_CODE.md#the-converter)).
 - `case` labels that shift by one delta: the European labels, and the switch head once,
-  `switch (lt_current_property_item() + PAL_JPN(0, 30)) { /* JPN property ids 30 lower */`.
-- A twin: the European body keeps the name, the other region's body is `name_jpn`, data twins
-  are `name_pal`/`name_jpn` behind `#define name PAL_JPN(name_pal, name_jpn)`; `_pal` only under
-  such a name-overlaying macro. Each function twin is a row of `config/region_twins.txt`.
-- `LN(pal, jpn)`: upstream's per-disc `__LINE__` for the debug allocators and asserts.
+  `switch (lt_current_property_item() + PAL_JPN_KOR(0, 30, 36)) { /* JPN property ids 30 lower, KOR property ids 36 lower */`.
+- A twin: the European body keeps the name, the other region's body is `name_jpn` (`name_kor`
+  for a body of the Korean disc alone), data twins are `name_pal`/`name_jpn` behind `#define name
+  PAL_JPN(name_pal, name_jpn)`, or `name_kor` as a third body behind `PAL_JPN_KOR(name_pal,
+  name_jpn, name_kor)`; `_pal` only under such a name-overlaying macro. Each function twin is a row of `config/region_twins.txt`.
+- `LN(pal, jpn, kor)`: upstream's per-disc `__LINE__` for the debug allocators and asserts.
 - A layout difference is no form at all: the in-memory layout is the European one on every disc,
   so a struct, offset, bit position or member name takes the European arm.
 

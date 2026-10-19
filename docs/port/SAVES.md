@@ -37,7 +37,7 @@ The files are stored byte for byte as the card holds them, in PCSX2's folder-car
 `<card>/<save directory>/` holding `icon.sys`, `boy_blk.ico`, the product file named after the
 directory and the save files `game.000` onward, the names the game itself uses
 (`port/save/mc_host.c`, header comment; `ico2/fumi/ios/mcard.c` (`iOSMcSaveSeg`)). The directory
-is the disc's (see [Two discs](#two-discs)): `BESCES-50760ico` for the European disc,
+is the disc's (see [Three discs](#three-discs)): `BESCES-50760ico` for the European disc,
 `BISCPS-11003ico` for the Japanese one, `BISCPS-56001ico` for the Korean one. The host names no directory and checks no file's size; it
 stores what the game writes. Nothing else is written, and nothing at
 all before the game's first `sceMcMkdir`: until then a card folder that does not exist is an
@@ -45,7 +45,7 @@ empty card, and `sceMcMkdir` creates the card folder and any missing parent
 (`port/save/mc_host.c` (`sceMcGetDir`, `sceMcMkdir`, `make_root`)). The PC-only facts about a
 save, the mirror-mode flag of each slot and the achievements' run state, live outside the card,
 in `config.toml`'s `[mirror]` and `achievements.toml`, keyed by the slot and the save block's
-checksum, one set of keys per disc ([Two discs](#two-discs), [CONFIG.md](CONFIG.md);
+checksum, one set of keys per disc ([Three discs](#three-discs), [CONFIG.md](CONFIG.md);
 `port/game/options.h`, `ico_mirror_slot_saved`; `port/game/achievements.h`,
 `ico_ach_slot_saved`).
 
@@ -66,7 +66,7 @@ macOS ignore case themselves (`port/save/mc_host.c` (`fold_case`)).
 marks the port unformatted until the next `sceMcFormat` (`port/save/mc_host.c` (`sceMcFormat`,
 `sceMcUnformat`)).
 
-## Two discs
+## Three discs
 
 Each disc saves into its own directory on the card, as on a PS2, so one card folder holds the
 discs' saves side by side and no disc sees another's (`port/core/region.h`
@@ -84,7 +84,7 @@ current file and the serial, then on the European disc `cameraMove` (`NonLinearC
 language) at 0x1E8 and `palMode` (`systemStatus[0]`, 50 or 60 Hz) at 0x1EC. The Japanese disc's
 record is the same fields up to 0x1E8 without those two words (upstream's
 `ico2/common/include/typedef.h`, the `VERSION_JPN` arm of `McProductFile`, aligned 8, against
-the European arm's 16). The one record in memory is the European layout on both discs; the
+the European arm's 16). The one record in memory is the European layout on every disc; the
 Japanese disc reads and writes its first 0x1E8 bytes (`port/core/region_jpn.c`
 (`mc_product_size`); `ico2/fumi/ios/mcard.c` (`product_write`, `product_read`)), so the port's
 `BISCPS-11003ico` folder is a real Japanese save. The save file is the same on all discs: the
@@ -101,14 +101,14 @@ save layout is told apart by `mc_product_size`, never by the disc's slug. A Japa
 Korean one: the two directories are separate, and a save copied from one folder to the other is not
 converted or checked for the other disc.
 
-A real card's saves need no conversion: a card or archive with either directory imports into the
+A real card's saves need no conversion: a card or archive with any of the directories imports into the
 card folder as it is ([Importing a PS2 save](#importing-a-ps2-save)). There is no exporter. The
 card folder is the export format: PCSX2 reads it as a folder memory card, and tools such as mymc
 copy a directory from it to a card image or a `.psu`.
 
 The PC-only facts kept beside a save are per disc too, since slot N of one disc is not slot N of
 the other: `config.toml`'s `[mirror] slot_N` and `slot_N_sum` for the European disc and
-`jpn_slot_N` and `jpn_slot_N_sum` for the Japanese one, `kor_slot_N` and `kor_slot_N_sum` for the Korean one, and `achievements.toml`'s `run.slot_N_*`
+`jpn_slot_N` and `jpn_slot_N_sum` for the Japanese one, `kor_slot_N` and `kor_slot_N_sum` for the Korean one, and `achievements.toml`'s `run.slot_N_*`,
 `run.jpn_slot_N_*` and `run.kor_slot_N_*` (`port/core/region.h` (`key_prefix`, `ico_region_key_prefixed`);
 `port/game/options.c` (`slot_keys`); `port/game/achievements.c` (`run_key`)). The visited stages
 are `stats.stages`, `stats.stages_jpn` and `stats.stages_kor` (the discs number their stages differently,
