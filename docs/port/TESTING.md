@@ -192,8 +192,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the first model, an animation and back (`model_viewer_headless`).
 - `options_test.c`: the gameplay options' defaults and setters, the video effects' keys (Water
   reflections' `effect_water_sharp` off by default, saved, outside the preset; a leftover
-  `effect_glow_size` read by nothing and not written), and
-  `eBrainGetTarget` with Yorda safe off and on (`options`).
+  `effect_glow_size` read by nothing and not written), `[ui] language` (auto by default and for
+  an unknown word, each name its language), and `eBrainGetTarget` with Yorda safe off and on
+  (`options`).
 - `photo_test.c`: photo mode's state and both cameras, identity, moves, limits; the Film effect's
   cycle off, 1 to 4, Deja vu (5), off, `film_effect = 5` read back as Deja vu and a value past it
   as off (`photo`).
@@ -582,8 +583,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 ### port/ui/test
 
 - `credits_headless.py`: Extras > Credits in the headless game (`credits_headless`).
-- `font_coverage_test.c`: every character of the five languages has a glyph (`font_coverage`);
-  `font_corpus/` holds the per-language text.
+- `font_coverage_test.c`: every character of the six languages has a glyph in Arimo or in Noto
+  Sans JP's subset, a Japanese character the second font's own (`font_coverage`); `font_corpus/`
+  holds the per-language text, `ja.txt` the Japanese menus' text that no table holds.
 - `font_edge_test.c`: the port's plain text at the output's resolution on a device (`font_edge`).
 - `gallery_sweep.py`: every stream and a sample of every bank in one headless run
   (`gallery_sweep`).
@@ -599,9 +601,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   note, its key and the page's fourteen rows (`testWaterReflections`).
 - `settings_photo_test.c`: the Settings screens through rd on a device, written as PNGs
   (`settings_render`).
+- `strings_complete_test.c`: every language's table defines every `UiStrId`, none empty but
+  `UI_STR_NONE`, each with the English entry's printf conversions; the four pack notes filled
+  with each disc's serial (`ui_str_serial`); the sheet language's default and setter; the menu
+  language's rule (`ui_lang.c`, its two inputs stubbed); the Japanese line-break rules
+  (`strings_complete`).
 - `ui_mouse_test.c`: the pointer's arithmetic in the menus (`ui_mouse`).
-- `ui_test.c`: the embedded font, UTF-8, the runtime text; each language's own Deja vu string
-  (`UI_STR_PHOTO_FILM_DEJA`) (`ui`).
+- `ui_test.c`: the embedded fonts, UTF-8, the runtime text; each language's own Deja vu string
+  (`UI_STR_PHOTO_FILM_DEJA`); a Japanese popup body wider than the panel takes a second line, an
+  English one keeps its one (`ui`).
 - Helpers: `settings_fixture.c`/`.h`, `headless_common.py`.
 
 ## Render gates
@@ -804,8 +812,11 @@ with `gcc -fsyntax-only`; `python3 -I tools/region_blocks.py check` holds `ico2/
 region rules and the region glue and exits 0, 2 (raw blocks remain, all hand items; the hook
 warns, CI fails) or 1 (a rule broken) ([GAME_CODE.md](GAME_CODE.md#regions)). Other tests check generated files and
 tables: `layout_asserts` (a program compiled from the generated asserts), `layout_asserts_fresh`,
-`font_audit` and `content_table_chains` (`port/test/CMakeLists.txt`), `data_desc_fresh` (with the
-audit of MotionDef's bit reads), `tables_manifest` and `tables_manifest_jpn`
+`font_audit`, `font_subset_ja` (`tools/subset_font_ja.py --check`: the Japanese font's recorded
+code points are the tables', its cmap the recorded ones and, with fontTools 4.63.0 and the
+download from `tools/fetch_deps.sh`, the committed file byte for byte the tool's output) and
+`content_table_chains` (`port/test/CMakeLists.txt`), `data_desc_fresh` (with the audit of
+MotionDef's bit reads), `tables_manifest` and `tables_manifest_jpn`
 (`port/data/CMakeLists.txt`), and the package staging (`package_textures`,
 [PACKS.md](PACKS.md#tests)).
 
@@ -832,8 +843,10 @@ hand.
   lists (`port/ui/test/settings_test.c`, `testBuild`), so a new row updates those lists; new
   settings cases go in `port/ui/test/settings_extra_test.c` (its header). `settings_render` draws
   every screen, `menu_text` the rows in the sheets' look, and `font_audit` (every code point inside the
-  font subset, `tools/font_audit.py`) and `font_coverage` (a glyph for each) check the row's text
-  in the five languages. A gameplay option also needs `options`
+  font subsets, `tools/font_audit.py`) and `font_coverage` (a glyph for each) check the row's text
+  in the six languages; `strings_complete` fails until every table has the new strings. A new
+  Japanese character needs `tools/subset_font_ja.py` run again (`font_subset_ja` fails until it
+  is). A gameplay option also needs `options`
   (`port/game/test/options_test.c`).
 - A new config key: `config` (the reader, writer and precedence, `port/config/test/config_test.c`),
   `host_config` when `ico-pc.ini` maps it (`port/platform/host_config.c`, `ini_map`), `settings`

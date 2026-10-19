@@ -14,7 +14,7 @@ files are written, and how libscf's system configuration is answered from them.
 | `port/config/sysconf.h`, `sysconf.c` | libscf (`sceScfGetLanguage`, `sceScfGetTimeZone`, `sceScfGetSummerTime`) and the boot screens' language and video mode |
 | `port/platform/host_config.h`, `host_config.c` | the ini reader, `ini_map` (the toml keys the ini may override), the TOML reader and writer, the user folder, portable mode, the card folders |
 | `port/game/video_options.h` | the `[video]` key table and their reader |
-| `port/game/options.h` | the `[gameplay]`, `[game] circle_back`, `[audio] output`, `[mirror]` and `[dev] debug_option` keys |
+| `port/game/options.h` | the `[gameplay]`, `[game] circle_back`, `[ui] language`, `[audio] output`, `[mirror]` and `[dev] debug_option` keys |
 | `port/input/input_config.c`, `port/input/input.h` | the `[input]` keys and the bindings |
 | `port/game/photo_mode.h` | `[photo]` |
 | `port/game/appearance.h` | `[characters]` |
@@ -193,6 +193,12 @@ Settings menu changes the running values and the file (`port/platform/host_confi
 | `language` | string | `"auto"` | `en`, `fr`, `de`, `it`, `es`; `auto` follows the system ([System configuration](#system-configuration-libscf)) |
 | `circle_back` | bool | `true` | Circle backs out of the game's menus as Triangle does (`port/game/options.h` (`ico_opt_circle_back`)) |
 | `achievements` | bool | `true` | the achievement popups (`port/game/achievements.c` (`ico_ach_init`)) |
+
+### [ui]
+
+| key | type | default | read by |
+| --- | --- | --- | --- |
+| `language` | string | `"auto"` | the language of the port's own text (its menus, photo mode's help, the messages): `en`, `fr`, `de`, `it`, `es`, `ja`; `auto` follows the disc: Japanese on the Japanese disc, the game's own language on the European disc; any other word is `auto`, logged (`port/game/options.h` (`ico_opt_ui_language`); `port/ui/ui_lang.h` (`ui_settings_resolve_language`)). The game's own text is always the disc's |
 
 ### [gameplay]
 
