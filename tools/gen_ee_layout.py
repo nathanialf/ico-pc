@@ -603,6 +603,7 @@ def region_lines(text, slug):
         v = g.version_condition(line)
         if v and v[1] is not None or v and stack and stack[-1][0] and v[0] in ("elif", "else", "endif"):
             kw, slugs, positive = v
+            g.refuse_plain_elif(kw, slugs, bool(stack and stack[-1][0]), n, line)
             if kw in ("if", "ifdef", "ifndef"):
                 t = g.condition_holds(slugs, positive, slug)
                 p = g.condition_holds(slugs, positive, "pal")
@@ -908,6 +909,12 @@ def region_lines_self_test():
         kept = " ".join(l for l, t in zip(text.splitlines(), tags) if t == "both")
         if kept != both or got != blocks:
             bad.append(f"region_lines({text!r}, {slug}): both {kept!r} blocks {got}, want {both!r} {blocks}")
+    for text in g.VERSION_LINES_REFUSED:
+        try:
+            region_lines(text, "jpn")
+            bad.append(f"region_lines({text!r}) read it, want a ValueError")
+        except ValueError:
+            pass
     return bad
 
 

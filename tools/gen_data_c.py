@@ -295,6 +295,16 @@ def version_condition(line):
     raise ValueError(f"#{kw} {rest}: not a version condition form")
 
 
+def refuse_plain_elif(kw, slugs, in_version_block, n, line):
+    """An #elif whose condition names no VERSION_ (#elif 1, #elif FOO) as the
+    next arm of a version block mixes a version test with another one: the
+    readers cannot say which target compiles it, so they stop on it (line n
+    of the text) rather than guess. Upstream has none."""
+    if kw == "elif" and slugs is None and in_version_block:
+        raise ValueError(f"line {n}: {line.strip()}: an #elif naming no VERSION_ inside a "
+                         "version block; write the version test and the other one as two blocks")
+
+
 def condition_holds(slugs, positive, slug):
     """Whether a version condition's arm is the one target `slug` compiles
     (pal is named by no condition: it takes every #else arm)."""
@@ -307,14 +317,17 @@ def version_lines(text, version):
     the blocks' directives go; a nested block resolves inside its arm. The
     condition forms are upstream's (version_condition). Other conditionals
     are left for strip_c. Adopted from upstream's tools/gen_data_c.py, with
-    the target an argument (the port compiles no VERSION_ macro)."""
+    the target an argument (the port compiles no VERSION_ macro). Raises
+    ValueError for an #elif that names no VERSION_ inside a version block
+    (refuse_plain_elif): no target's arm could be told from it."""
     out = []
     stack = []  # (is a VERSION_ block, this arm is live, an arm was taken)
-    for line in text.splitlines():
+    for n, line in enumerate(text.splitlines(), 1):
         v = version_condition(line)
         live = all(f[1] for f in stack)
         if v:
             kw, slugs, positive = v
+            refuse_plain_elif(kw, slugs, bool(stack and stack[-1][0]), n, line)
             if kw in ("if", "ifdef", "ifndef") and slugs is not None:
                 taken = condition_holds(slugs, positive, version)
                 stack.append((True, taken, taken))
@@ -356,14 +369,28 @@ VERSION_LINES_SELF_TEST = (
 )
 
 
+# texts the readers refuse with ValueError (refuse_plain_elif)
+VERSION_LINES_REFUSED = (
+    "#ifdef VERSION_JPN\nj\n#elif 1\nq\n#endif",
+    "#if defined(VERSION_JPN) || defined(VERSION_KOR)\njk\n#elif FOO\nf\n#else\np\n#endif",
+)
+
+
 def version_lines_self_test():
-    """[failures] of version_lines on VERSION_LINES_SELF_TEST."""
+    """[failures] of version_lines on VERSION_LINES_SELF_TEST and
+    VERSION_LINES_REFUSED."""
     bad = []
     for text, want in VERSION_LINES_SELF_TEST:
         for slug, kept in want.items():
             got = " ".join(version_lines(text, slug).split())
             if got != kept:
                 bad.append(f"version_lines({text!r}, {slug}) kept {got!r}, want {kept!r}")
+    for text in VERSION_LINES_REFUSED:
+        try:
+            version_lines(text, "jpn")
+            bad.append(f"version_lines({text!r}) read it, want a ValueError")
+        except ValueError:
+            pass
     return bad
 
 

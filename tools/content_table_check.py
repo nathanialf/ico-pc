@@ -598,15 +598,20 @@ DISCS_C = os.path.join(ROOT, "port", "data", "discs.c")
 
 def disc_df_shift(slug):
     """IcoDiscInfo.df_lsn_shift of the row of port/data/discs.c whose slug this is: the
-    sectors DATA.DF's directory LSN is short of the archive (the Korean disc, 153600);
-    0 for a row without one. Read from the row's initializer, the field after the
-    directory CRC (archive.h)."""
+    sectors DATA.DF's directory LSN is short of the archive (the Korean disc, 153600;
+    0 on the others). Read from the row's initializer, the field after the directory
+    CRC (archive.h). Every row has the field (it is positional), so a row it cannot be
+    read from is a change of the row's form: that stops the check, rather than read
+    the filler before the Korean archive as DATA.DF with shift 0."""
     src = open(DISCS_C, encoding="utf-8").read()
     m = re.search(r'\[ICO_REGION_%s\]\s*=\s*\{(.*?)\},' % slug.upper(), src, re.S)
     if not m:
         raise SystemExit("content_table_check: no ico_discs row for %s in %s" % (slug, DISCS_C))
     f = re.search(r"_DIR_CRC,\s*(\d+)u?\s*,", m.group(1))
-    return int(f.group(1)) if f else 0
+    if not f:
+        raise SystemExit("content_table_check: no df_lsn_shift after the directory CRC in the "
+                         "%s row of %s" % (slug, DISCS_C))
+    return int(f.group(1))
 
 
 def region_groups(slug):
