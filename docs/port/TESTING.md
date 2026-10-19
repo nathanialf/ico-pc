@@ -123,8 +123,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   clock and the [EE](ARCHITECTURE.md#terms) timers (`config`).
 - `null_devices_test.c`: the pad as an empty console answers it (`null_devices`).
 - `save_test.c`: the host memory card through the calls `mcard.c` makes, then `mcard.c` and
-  `mcdata.c` themselves on the [fiber](ARCHITECTURE.md#terms) scheduler, then the card importer
-  (`save`).
+  `mcdata.c` themselves on the [fiber](ARCHITECTURE.md#terms) scheduler, then the card importer,
+  with the disc its first argument selects: the European disc's `BESCES-50760ico` and 0x1F0-byte
+  product record (`save`), the Japanese disc's `BISCPS-11003ico` and 0x1E8-byte record, the same
+  bytes up to 0x1E8 (`save_jpn`); both import a card holding both directories side by side and
+  the other disc's `.psu` beside their own ([SAVES.md](SAVES.md#tests)).
 
 ### port/core/test
 
@@ -175,7 +178,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 ### port/game/test
 
 - `achievements_test.c`: the game-state view over a synthetic snapshot, every achievement's
-  condition, suspension, `achievements.toml` round trips (`achievements`).
+  condition, suspension, `achievements.toml` round trips, the popup gap (125 Main ticks at 25 Hz,
+  150 at 30 Hz) and both discs' keys in one file (`stats.stages` / `stats.stages_jpn`,
+  `run.slot_N_*` / `run.jpn_slot_N_*`, one set of unlocks), with the disc its second argument
+  selects (`achievements`, `achievements_jpn`).
 - `appearance_disc_test.c`: the characters' colours against the disc's CLUTs (`appearance_disc`).
 - `appearance_test.c`: the recolour on synthetic CLUTs: identity, coverage, swatches, randomize
   (`appearance`).
@@ -205,8 +211,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `options_test.c`: the gameplay options' defaults and setters, the video effects' keys (Water
   reflections' `effect_water_sharp` off by default, saved, outside the preset; a leftover
   `effect_glow_size` read by nothing and not written), `[ui] language` (auto by default and for
-  an unknown word, each name its language), and `eBrainGetTarget` with Yorda safe off and on
-  (`options`).
+  an unknown word, each name its language), `eBrainGetTarget` with Yorda safe off and on, and the
+  `[mirror]` keys of the disc its second argument selects (`slot_N`, `jpn_slot_N`), the other
+  disc's left as they were (`options`, `options_jpn`).
 - `photo_test.c`: photo mode's state and both cameras, identity, moves, limits; the Film effect's
   cycle off, 1 to 4, Deja vu (5), off, `film_effect = 5` read back as Deja vu and a value past it
   as off (`photo`).

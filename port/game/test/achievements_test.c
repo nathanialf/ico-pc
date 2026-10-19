@@ -5,8 +5,11 @@
  * view over a synthetic snapshot, the signals, every achievement's
  * condition through crafted transitions (unlocked once, suspended in developer
  * mode, yorda_safe counting), the achievements.toml round trip, the
- * popup rate limit and [game] achievements = false.  argv[1]: a writable
- * folder.
+ * popup rate limit and [game] achievements = false; the two discs' keys
+ * in one file (stats.stages / stats.stages_jpn, run.slot_N_* /
+ * run.jpn_slot_N_*, one set of unlocks) and the popup gap in Main ticks.
+ * argv[1]: a writable folder; argv[2]: the disc (a slug of
+ * config/regions.txt, pal by default).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +22,7 @@
 #include "ico_gamestate.h"
 #include "options.h"
 #include "popup.h"
+#include "region.h" /* port/core: the selected disc and its keys */
 #include "strings.h"
 
 static int failures;
@@ -213,26 +217,37 @@ static void test_view(void)
     CHECK(ico_gs_tick_hz() == 30);
     g.system_status[0] = 1;
 
-    /* the retail addresses */
-    g.stage_no = 0x11223344;
-    g.gflags[1] = 0xA5;
-    g.layout = 41;
-    ticks(1);
-    CHECK(ico_gs_peek(0x00639D10u, 4, &v) == 0 && v == 0x11223344u);
-    CHECK(ico_gs_peek(0x00639D11u, 2, &v) == 0 && v == 0x2233u);
-    CHECK(ico_gs_peek(0x00639D13u, 1, &v) == 0 && v == 0x11u);
-    CHECK(ico_gs_peek(0x00639D13u, 2, &v) == -1); /* runs past stage_no */
-    CHECK(ico_gs_peek(0x002A50C1u, 1, &v) == 0 && v == 0xA5u);
-    CHECK(ico_gs_peek(0x002A50C0u + 49, 1, &v) == 0);
-    CHECK(ico_gs_peek(0x002A50C0u + 50, 1, &v) == -1);
-    CHECK(ico_gs_peek(0x0063AA00u, 4, &v) == 0 && v == 1u);  /* gFlagGameClear */
-    CHECK(ico_gs_peek(0x0063B60Cu, 4, &v) == 0 && v == 41u); /* current_layout_id */
-    CHECK(ico_gs_peek(0x0029B9D0u + 8, 4, &v) == 0 && v == 50u * 3725u);
-    CHECK(ico_gs_peek(0x00639EA4u, 4, &v) == -1); /* boyGObj: a pointer, not served */
-    CHECK(ico_gs_peek(0x01000000u, 4, &v) == -1); /* heap */
-    CHECK(ico_gs_peek(0x00639D10u, 3, &v) == -1);
-    n = ico_gs_peek_table(&table);
-    CHECK(n == 14 && table[0].addr == 0x002A50C0u && table[0].size == 50);
+    /* the retail addresses, the selected disc's (gamestate.c s_peek_pal,
+       s_peek_jpn: the Japanese disc has no NonLinearCameraMove row) */
+    {
+        const unsigned int stageNo = ICO_JPN ? 0x00633810u : 0x00639D10u;
+        const unsigned int gflags = ICO_JPN ? 0x002A2FC0u : 0x002A50C0u;
+        const unsigned int gameClear = ICO_JPN ? 0x006344C8u : 0x0063AA00u;
+        const unsigned int layout = ICO_JPN ? 0x006350BCu : 0x0063B60Cu;
+        const unsigned int preview = ICO_JPN ? 0x002998C0u : 0x0029B9D0u;
+
+        g.stage_no = 0x11223344;
+        g.gflags[1] = 0xA5;
+        g.layout = 41;
+        ticks(1);
+        CHECK(ico_gs_peek(stageNo, 4, &v) == 0 && v == 0x11223344u);
+        CHECK(ico_gs_peek(stageNo + 1, 2, &v) == 0 && v == 0x2233u);
+        CHECK(ico_gs_peek(stageNo + 3, 1, &v) == 0 && v == 0x11u);
+        CHECK(ico_gs_peek(stageNo + 3, 2, &v) == -1); /* runs past stage_no */
+        CHECK(ico_gs_peek(gflags + 1, 1, &v) == 0 && v == 0xA5u);
+        CHECK(ico_gs_peek(gflags + 49, 1, &v) == 0);
+        CHECK(ico_gs_peek(gflags + 50, 1, &v) == -1);
+        CHECK(ico_gs_peek(gameClear, 4, &v) == 0 && v == 1u); /* gFlagGameClear */
+        CHECK(ico_gs_peek(layout, 4, &v) == 0 && v == 41u);   /* current_layout_id */
+        CHECK(ico_gs_peek(preview + 8, 4, &v) == 0 && v == 50u * 3725u);
+        if (!ICO_JPN) {
+            CHECK(ico_gs_peek(0x00639EA4u, 4, &v) == -1); /* boyGObj: a pointer, not served */
+        }
+        CHECK(ico_gs_peek(0x01000000u, 4, &v) == -1); /* heap */
+        CHECK(ico_gs_peek(stageNo, 3, &v) == -1);
+        n = ico_gs_peek_table(&table);
+        CHECK(n == (ICO_JPN ? 13 : 14) && table[0].addr == gflags && table[0].size == 50);
+    }
 }
 
 static void test_signals(void)
@@ -916,9 +931,15 @@ static void test_run_counts(void)
         IcoToml *t = ico_toml_load(s_path);
         CHECK(t != NULL);
         if (t != NULL) {
-            ico_toml_set_int(t, "run.slot_7_sum", 70);
-            ico_toml_set_int(t, "run.slot_7_captures", 2);
-            ico_toml_set_int(t, "run.slot_7_game_overs", 4);
+            char key[64];
+
+            /* the selected disc's keys (run.slot_7_*, run.jpn_slot_7_*) */
+            snprintf(key, sizeof(key), "run.%sslot_7_sum", ico_region_cur()->key_prefix);
+            ico_toml_set_int(t, key, 70);
+            snprintf(key, sizeof(key), "run.%sslot_7_captures", ico_region_cur()->key_prefix);
+            ico_toml_set_int(t, key, 2);
+            snprintf(key, sizeof(key), "run.%sslot_7_game_overs", ico_region_cur()->key_prefix);
+            ico_toml_set_int(t, key, 4);
             CHECK(ico_toml_save(t, s_path) == 0);
             ico_toml_free(t);
         }
@@ -946,6 +967,125 @@ static void test_run_counts(void)
     }
 }
 
+/* --- the two discs ------------------------------------------------------------ */
+
+/* The file holds both discs: each disc's visited stages and per-slot runs
+   are its own keys (its stage rows and its saves are its own), the
+   unlocks and the counters one set for the player. The selected disc
+   reads and writes its keys; the other disc's stay as the file has them. */
+static void test_discs(void)
+{
+    const int me = ico_region;
+    const int other = me == 0 ? 1 : 0;
+    const char *meSfx = ico_region_at(me)->key_suffix;
+    const char *otherSfx = ico_region_at(other)->key_suffix;
+    const char *mePfx = ico_region_at(me)->key_prefix;
+    const char *otherPfx = ico_region_at(other)->key_prefix;
+    char key[96];
+    char want[128];
+    IcoToml *t;
+
+    /* the popup gap is 5 s of Main ticks: 125 at 25 Hz (the European
+       disc's 50 Hz mode), 150 at 30 Hz (60 Hz: the Japanese disc, and the
+       European disc's 60 Hz mode) */
+    start("discs");
+    CHECK(ico_gs_tick_hz() == 25 && ico_ach_popup_gap_ticks() == 125);
+    g.system_status[0] = 0;
+    ticks(1);
+    CHECK(ico_gs_tick_hz() == 30 && ico_ach_popup_gap_ticks() == 150);
+    s_pushes = 0;
+    g.stage_no = 11; /* gate: shown now */
+    ticks(1);
+    g.stage_no = 13; /* grave: waits the gap */
+    ticks(1);
+    CHECK(s_pushes == 1 && ico_ach_pending_popups() == 1);
+    ticks(150 - 2);
+    CHECK(s_pushes == 1);
+    ticks(1);
+    CHECK(s_pushes == 2 && ico_ach_pending_popups() == 0);
+    g.system_status[0] = 1;
+
+    /* the file as the other disc left it: its visited set (stage 0), a run
+       in its slot 3, an unlock */
+    snprintf(s_path, sizeof(s_path), "%s/discs.toml", s_dir);
+    remove(s_path);
+    t = ico_toml_parse("");
+    CHECK(t != NULL);
+    if (t == NULL) {
+        return;
+    }
+    ico_toml_set_int(t, "version", 2);
+    snprintf(key, sizeof(key), "stats.stages%s", otherSfx);
+    ico_toml_set_string(t, key, "00000000000000000000000000000001");
+    snprintf(key, sizeof(key), "run.%sslot_3_sum", otherPfx);
+    ico_toml_set_int(t, key, 4660);
+    snprintf(key, sizeof(key), "run.%sslot_3_captures", otherPfx);
+    ico_toml_set_int(t, key, 2);
+    ico_toml_set_string(t, "unlocked.gate.time", "2025-10-05T12:00:00Z");
+    ico_toml_set_int(t, "unlocked.gate.play_time", 1);
+    CHECK(ico_toml_save(t, s_path) == 0);
+    ico_toml_free(t);
+
+    ico_config_reset(s_no_config, s_no_config);
+    ico_ach_init(s_path);
+    ico_ach_set_clock(fixed_clock);
+    ico_gs_reset();
+    ico_gs_set_sampler(sampler);
+    s_pushes = 0;
+    fresh_world(); /* stage 2 */
+    ticks(1);
+    /* one set of unlocks: the other disc's gate is this disc's too */
+    CHECK(st("gate") == ICO_ACH_UNLOCKED);
+    g.stage_no = 11;
+    ticks(2);
+    CHECK(s_pushes == 0);
+    /* the other disc's slot 3 is not this disc's slot 3 */
+    CHECK(ico_ach_slot_loaded(3, 4660u) == 0);
+    /* this disc visits stage 15 and saves slot 5 */
+    g.stage_no = 15;
+    ticks(1);
+    CHECK(st("windmill") == ICO_ACH_UNLOCKED);
+    save_slot(5, 85u);
+    ico_ach_flush();
+    /* its own keys: stages 2, 11 and 15 (0x8804) in its set, the other
+       disc's set and slot as they were */
+    snprintf(want, sizeof(want), "\nstages%s = \"00000000000000000000000000008804\"", meSfx);
+    CHECK(file_count(want) == 1);
+    snprintf(want, sizeof(want), "\nstages%s = \"00000000000000000000000000000001\"", otherSfx);
+    CHECK(file_count(want) == 1);
+    snprintf(want, sizeof(want), "\n%sslot_5_sum = 85", mePfx);
+    CHECK(file_count(want) == 1);
+    snprintf(want, sizeof(want), "\n%sslot_3_sum = 4660", otherPfx);
+    CHECK(file_count(want) == 1);
+    snprintf(want, sizeof(want), "\n%sslot_5_sum", otherPfx);
+    CHECK(file_count(want) == 0);
+    /* the unlock keys carry no disc */
+    CHECK(file_count("[unlocked.gate]") == 1 && file_count("[unlocked.windmill]") == 1);
+    CHECK(file_count("unlocked.jpn") == 0 && file_count("_jpn]") == 0);
+    /* the Japanese disc's keys by name */
+    CHECK(file_count("\nstages_jpn = \"") == 1 && file_count("\nstages = \"") == 1);
+    CHECK(file_count("\njpn_slot_") >= 1 && file_count("\nslot_") >= 1);
+
+    /* the other disc reads its own: its slot 3 answers, this disc's slot 5
+       does not, and its set is its own (stage 0, then 3: 0x9) */
+    ico_region = other;
+    ico_ach_init(s_path);
+    ico_gs_reset();
+    ico_gs_set_sampler(sampler);
+    fresh_world();
+    g.stage_no = 3;
+    ticks(1);
+    CHECK(ico_ach_slot_loaded(3, 4660u) == 1 && ico_gs_run_captures() == 2);
+    CHECK(ico_ach_slot_loaded(5, 85u) == 0);
+    ico_ach_flush();
+    snprintf(want, sizeof(want), "\nstages%s = \"00000000000000000000000000000009\"", otherSfx);
+    CHECK(file_count(want) == 1);
+    snprintf(want, sizeof(want), "\nstages%s = \"00000000000000000000000000008804\"", meSfx);
+    CHECK(file_count(want) == 1);
+    ico_region = me;
+    remove(s_path);
+}
+
 /* --- popups ---------------------------------------------------------------------- */
 
 static void test_popups(void)
@@ -966,14 +1106,14 @@ static void test_popups(void)
     CHECK(strcmp(s_last_title, ui_str_in(UI_LANG_EN, UI_STR_ACH_GATE)) == 0);
     CHECK(strcmp(s_last_body, ui_str_in(UI_LANG_EN, UI_STR_ACH_GATE_DESC)) == 0);
     CHECK(ico_ach_pending_popups() == 2);
-    ticks(ICO_ACH_POPUP_GAP_TICKS - 3);
+    ticks(ico_ach_popup_gap_ticks() - 3);
     CHECK(s_pushes == 1);
     ticks(1);
     CHECK(s_pushes == 2);
     CHECK(strcmp(s_last_title, ui_str_in(UI_LANG_EN, UI_STR_ACH_WINDMILL)) == 0);
     /* the UI queue full: kept and retried */
     s_push_full = 1;
-    ticks(ICO_ACH_POPUP_GAP_TICKS * 2);
+    ticks(ico_ach_popup_gap_ticks() * 2);
     CHECK(s_pushes == 2 && ico_ach_pending_popups() == 1);
     s_push_full = 0;
     ticks(1);
@@ -981,7 +1121,7 @@ static void test_popups(void)
     /* the language at popup time */
     ui_set_language(UI_LANG_DE);
     g.stage_no = 22;
-    ticks(ICO_ACH_POPUP_GAP_TICKS);
+    ticks(ico_ach_popup_gap_ticks());
     CHECK(strcmp(s_last_title, "Der Wasserfall") == 0);
     ui_set_language(UI_LANG_EN);
     /* a long description is broken into lines of at most 44 letters */
@@ -993,7 +1133,7 @@ static void test_popups(void)
         CHECK(strlen(d) > 44);
         new_game();
         ending(0, 9 * 3600);
-        ticks(ICO_ACH_POPUP_GAP_TICKS * 4);
+        ticks(ico_ach_popup_gap_ticks() * 4);
         b = pushed_body(ui_str_in(UI_LANG_EN, (UiStrId)ico_ach_title_str(i)));
         CHECK(b != NULL);
         if (b != NULL) {
@@ -1023,7 +1163,7 @@ static void test_popups(void)
     fresh_world();
     ticks(1);
     g.stage_no = 31;
-    ticks(ICO_ACH_POPUP_GAP_TICKS * 2);
+    ticks(ico_ach_popup_gap_ticks() * 2);
     CHECK(st("cliff") == ICO_ACH_UNLOCKED);
     CHECK(s_pushes == 0 && ico_ach_pending_popups() == 0);
     ico_config_reset(s_no_config, s_no_config);
@@ -1031,6 +1171,11 @@ static void test_popups(void)
 
 int main(int argc, char **argv)
 {
+    if (argc > 2 && ico_region_select(argv[2]) != 0) {
+        fprintf(stderr, "achievements_test: no region %s\n", argv[2]);
+        return 1;
+    }
+    printf("achievements_test: the %s disc\n", ico_region_cur()->slug);
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
     /* no config.toml or ico-pc.ini of the build folder */
     snprintf(s_no_config, sizeof(s_no_config), "%s/achievements_no_config.toml", s_dir);
@@ -1046,6 +1191,7 @@ int main(int argc, char **argv)
     test_yorda_safe_counts();
     test_persistence();
     test_popups();
+    test_discs();
     if (failures) {
         fprintf(stderr, "achievements_test: %d failure(s)\n", failures);
         return 1;

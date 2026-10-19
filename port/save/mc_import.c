@@ -17,13 +17,16 @@
  *   .max (Action Replay MAX, "Ps2PowerSave" + LZARI) and .cbs (CodeBreaker,
  *     "CFU", encrypted and deflated) are recognised and refused.
  *
- * Only the game's directory (BESCES-50760ico) is imported; every other
+ * Only the game's directories are imported, each disc's (port/core
+ * region.h mc_save_dir: BESCES-50760ico for the European disc,
+ * BISCPS-11003ico for the Japanese one; a card may hold both); every other
  * entry is counted and named in the result. Every file is read before any
  * is written, and each is written to a dot-file copy moved over its name,
  * as mc_host.c writes.
  */
 #include "mc_import.h"
 #include "host_fs.h"
+#include "region.h" /* port/core: each disc's mc_save_dir */
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,14 +50,30 @@ typedef struct {
     char name[NAME_MAX_ + 1];
     unsigned char *data;
     uint32_t len;
+    int region; /* ico_region_at's index: the directory it came from */
 } File;
 
 typedef struct {
     IcoMcImport *res;
     File file[MAX_FILES];
     int nfile;
-    int found; /* the game's directory was in the source */
+    int found;  /* bit r: region r's directory was in the source */
+    int region; /* the directory being read */
 } Job;
+
+/* the region whose save directory is `name` (its row of config/regions.txt),
+   or -1 */
+static int save_dir_region(const char *name)
+{
+    int r;
+
+    for (r = 0; r < ico_region_count(); r++) {
+        if (strcmp(name, ico_region_at(r)->mc_save_dir) == 0) {
+            return r;
+        }
+    }
+    return -1;
+}
 
 static int fail(Job *j, const char *msg, const char *arg)
 {
@@ -107,7 +126,7 @@ static int add_file(Job *j, const char *name, unsigned char *data, uint32_t len)
         return fail(j, "the save holds a file the card folder cannot name: \"%s\"", name);
     }
     for (i = 0; i < j->nfile; i++) {
-        if (strcmp(j->file[i].name, name) == 0) {
+        if (j->file[i].region == j->region && strcmp(j->file[i].name, name) == 0) {
             free(data);
             return fail(j, "the save holds \"%s\" twice", name);
         }
@@ -117,6 +136,7 @@ static int add_file(Job *j, const char *name, unsigned char *data, uint32_t len)
         return fail(j, "the save holds too many files%s", NULL);
     }
     snprintf(j->file[j->nfile].name, sizeof(j->file[0].name), "%s", name);
+    j->file[j->nfile].region = j->region;
     j->file[j->nfile].data = data;
     j->file[j->nfile].len = len;
     j->nfile++;
@@ -293,8 +313,9 @@ static unsigned char *read_dir(Job *j, const Card *c, uint32_t first, uint32_t *
     return read_chain(j, c, first, n * 512);
 }
 
-static int import_save_dir(Job *j, const Card *c, const unsigned char *dirent)
+static int import_save_dir(Job *j, const Card *c, const unsigned char *dirent, int region)
 {
+    const char *dirName = ico_region_at(region)->mc_save_dir;
     uint32_t count;
     unsigned char *ents = read_dir(j, c, ico_le32(dirent + 0x10), &count);
     uint32_t i;
@@ -303,7 +324,8 @@ static int import_save_dir(Job *j, const Card *c, const unsigned char *dirent)
     if (ents == NULL) {
         return -1;
     }
-    j->found = 1;
+    j->found |= 1 << region;
+    j->region = region;
     for (i = 2; i < count && r == 0; i++) {
         const unsigned char *e = ents + (size_t)i * 512;
         uint16_t mode = ico_le16(e);
@@ -315,9 +337,9 @@ static int import_save_dir(Job *j, const Card *c, const unsigned char *dirent)
         }
         entry_name(e, name);
         if ((mode & DF_FILE) == 0) {
-            char full[NAME_MAX_ + 2 + sizeof(ICO_MC_SAVE_DIR)];
+            char full[64]; /* skippedName's size */
 
-            snprintf(full, sizeof(full), ICO_MC_SAVE_DIR "/%s", name);
+            snprintf(full, sizeof(full), "%.15s/%.32s", dirName, name);
             skip(j, full);
             continue;
         }
@@ -377,8 +399,8 @@ static int read_raw(Job *j, const unsigned char *img, size_t size)
             continue;
         }
         entry_name(e, name);
-        if ((ico_le16(e) & DF_DIR) != 0 && strcmp(name, ICO_MC_SAVE_DIR) == 0) {
-            r = import_save_dir(j, &c, e);
+        if ((ico_le16(e) & DF_DIR) != 0 && save_dir_region(name) >= 0) {
+            r = import_save_dir(j, &c, e, save_dir_region(name));
         } else {
             skip(j, name);
         }
@@ -404,11 +426,12 @@ static int read_psu(Job *j, const unsigned char *p, size_t size)
     if (count < 2 || count > MAX_FILES + 2) {
         return fail(j, "the .psu file's directory entry is damaged%s", NULL);
     }
-    if (strcmp(name, ICO_MC_SAVE_DIR) != 0) {
+    if (save_dir_region(name) < 0) {
         skip(j, name);
         return 0;
     }
-    j->found = 1;
+    j->region = save_dir_region(name);
+    j->found |= 1 << j->region;
     for (i = 0; i < count; i++) {
         const unsigned char *e;
         uint16_t mode;
@@ -509,6 +532,15 @@ static int make_dirs(const char *dir)
     return ico_path_kind(path, NULL, NULL) == 1 ? 0 : -1;
 }
 
+/* <saves>/<the file's save directory> */
+static int file_dir(const Job *j, const char *saves, int i, char *dir, size_t size)
+{
+    return snprintf(dir, size, "%s/%s", saves, ico_region_at(j->file[i].region)->mc_save_dir) >=
+                   (int)size
+               ? -1
+               : 0;
+}
+
 static int write_files(Job *j, const char *saves, unsigned flags)
 {
     char dir[1100];
@@ -516,13 +548,13 @@ static int write_files(Job *j, const char *saves, unsigned flags)
     char tmp[1200];
     int i;
 
-    if (snprintf(dir, sizeof(dir), "%s/" ICO_MC_SAVE_DIR, saves) >= (int)sizeof(dir)) {
-        return fail(j, "the card folder's path is too long%s", NULL);
-    }
     /* refuse before writing anything */
     for (i = 0; i < j->nfile; i++) {
         int k;
 
+        if (file_dir(j, saves, i, dir, sizeof(dir)) != 0) {
+            return fail(j, "the card folder's path is too long%s", NULL);
+        }
         snprintf(path, sizeof(path), "%s/%s", dir, j->file[i].name);
         k = ico_path_kind(path, NULL, NULL);
         if (k == 1 || (k == 0 && (flags & ICO_MC_IMPORT_OVERWRITE) == 0)) {
@@ -532,13 +564,14 @@ static int write_files(Job *j, const char *saves, unsigned flags)
                         j->file[i].name);
         }
     }
-    if (make_dirs(dir) != 0) {
-        return fail(j, "cannot make the folder %.200s", dir);
-    }
     for (i = 0; i < j->nfile; i++) {
         FILE *f;
         int ok;
 
+        file_dir(j, saves, i, dir, sizeof(dir));
+        if (make_dirs(dir) != 0) {
+            return fail(j, "cannot make the folder %.200s", dir);
+        }
         snprintf(path, sizeof(path), "%s/%s", dir, j->file[i].name);
         snprintf(tmp, sizeof(tmp), "%s/.%s.tmp", dir, j->file[i].name);
         f = ico_fopen(tmp, "wb");
@@ -553,6 +586,7 @@ static int write_files(Job *j, const char *saves, unsigned flags)
             return fail(j, "cannot write %.200s", path);
         }
         j->res->files++;
+        j->res->regions |= 1u << j->file[i].region;
     }
     return 0;
 }
@@ -599,11 +633,20 @@ int ico_mc_import(const char *src, const char *saves, unsigned flags, IcoMcImpor
     }
     free(buf);
     if (r == 0 && !j.found) {
-        snprintf(res->why, sizeof(res->why), "no %s save in %s", ICO_MC_SAVE_DIR, src);
+        char dirs[160] = "";
+        int k;
+
+        /* every disc's directory: "BESCES-50760ico or BISCPS-11003ico" */
+        for (k = 0; k < ico_region_count(); k++) {
+            size_t len = strlen(dirs);
+
+            snprintf(dirs + len, sizeof(dirs) - len, "%s%s", k > 0 ? " or " : "",
+                     ico_region_at(k)->mc_save_dir);
+        }
+        snprintf(res->why, sizeof(res->why), "no ICO save (%s) in %s", dirs, src);
         r = 1;
     } else if (r == 0 && j.nfile == 0) {
-        snprintf(res->why, sizeof(res->why), "the %s directory in %s is empty", ICO_MC_SAVE_DIR,
-                 src);
+        snprintf(res->why, sizeof(res->why), "the ICO save directory in %s is empty", src);
         r = 1;
     } else if (r == 0) {
         r = write_files(&j, saves, flags);

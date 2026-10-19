@@ -3,12 +3,14 @@
  *
  * mc_import [--overwrite] --to SAVES FILE...
  *
- * Imports ICO's save (BESCES-50760ico) from each PS2 memory card image
+ * Imports ICO's saves (BESCES-50760ico, the European disc's, and
+ * BISCPS-11003ico, the Japanese disc's) from each PS2 memory card image
  * (.ps2, .bin) or .psu archive into the card folder SAVES, the folder
  * [paths] saves (or saves2) names (port/save/mc_import.c). Other games' entries are listed and left alone.
  * Exit 0 when every file gave a save, 1 when one held none, 2 on an error.
  */
 #include "mc_import.h"
+#include "region.h" /* port/core: each disc's mc_save_dir */
 #include <stdio.h>
 #include <string.h>
 
@@ -59,7 +61,15 @@ int main(int argc, char **argv)
         r = ico_mc_import(argv[i], to, flags, &res);
         printf("%s (%s): ", argv[i], fmtName[res.format]);
         if (r == 0) {
-            printf("imported %d file(s) into %s/" ICO_MC_SAVE_DIR "\n", res.files, to);
+            int k;
+
+            printf("imported %d file(s) into %s:", res.files, to);
+            for (k = 0; k < ico_region_count(); k++) {
+                if (res.regions & (1u << k)) {
+                    printf(" %s", ico_region_at(k)->mc_save_dir);
+                }
+            }
+            printf("\n");
         } else {
             printf("%s\n", res.why);
         }

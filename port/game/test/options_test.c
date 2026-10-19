@@ -10,6 +10,9 @@
 #include <string.h>
 #include "config.h"
 #include "options.h"
+/* the region table (port/core/region.h, by its path: the game's include
+   directories hold the game's own region.h) */
+#include "../../core/region.h"
 #include "video_options.h"
 /* the enemy brain, as the game's own source; stubs below satisfy it */
 #include "../../../ico2/omori/src/ebrain.c"
@@ -352,19 +355,88 @@ static void test_mirror_slots(const char *dir)
     CHECK(f != NULL);
     if (f != NULL) {
         char buf[2048];
+        char want[64];
         size_t n = fread(buf, 1, sizeof(buf) - 1, f);
         buf[n] = '\0';
         fclose(f);
+        /* the selected disc's keys: slot_N (European), jpn_slot_N */
         CHECK(strstr(buf, "[mirror]") != NULL);
-        CHECK(strstr(buf, "slot_3 = false") != NULL);
-        CHECK(strstr(buf, "slot_3_sum = 22136") != NULL);
-        CHECK(strstr(buf, "slot_5_sum = 4294967280") != NULL);
+        snprintf(want, sizeof(want), "\n%sslot_3 = false", ico_region_cur()->key_prefix);
+        CHECK(strstr(buf, want) != NULL);
+        snprintf(want, sizeof(want), "\n%sslot_3_sum = 22136", ico_region_cur()->key_prefix);
+        CHECK(strstr(buf, want) != NULL);
+        snprintf(want, sizeof(want), "\n%sslot_5_sum = 4294967280", ico_region_cur()->key_prefix);
+        CHECK(strstr(buf, want) != NULL);
+        /* and no other disc's */
+        if (ICO_JPN) {
+            CHECK(strstr(buf, "\nslot_") == NULL);
+        } else {
+            CHECK(strstr(buf, "jpn_slot") == NULL);
+        }
     }
     /* the title: back to [gameplay] mirror (absent: Off) */
     ico_opt_set_mirror(1);
     ico_opt_mirror_reset();
     CHECK(ico_opt_mirror() == 0 && s_heard == 0);
     ico_opt_set_mirror_listener(NULL);
+    remove(path);
+    ico_opt_reload();
+}
+
+/* The two discs' slots in one file: each disc's saves are another card
+   directory, so slot 3 of one is not slot 3 of the other. The selected
+   disc's write leaves the other's keys as they were, and the other's entry
+   does not answer for it. */
+static void test_mirror_discs(const char *dir)
+{
+    const int me = ico_region;
+    const int other = me == 0 ? 1 : 0;
+    char path[512];
+    char text[2048];
+    char want[64];
+    FILE *f;
+
+    snprintf(path, sizeof(path), "%s/options_mirror_discs_test.toml", dir);
+    remove(path);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    /* the other disc saved slot 3 with Mirror On */
+    ico_region = other;
+    ico_opt_set_mirror(1);
+    CHECK(ico_mirror_slot_saved(3, 0x1111u) == 0);
+    CHECK(ico_mirror_slot_get(3, 0x1111u) == 1);
+    /* the selected disc: slot 3 has no entry, even with the same sum */
+    ico_region = me;
+    CHECK(ico_mirror_slot_get(3, 0x1111u) == -1);
+    CHECK(ico_mirror_slot_loaded(3, 0x1111u) == 0 && ico_opt_mirror() == 0);
+    /* it saves slot 3 Off: its own keys, the other disc's still On */
+    CHECK(ico_mirror_slot_saved(3, 0x1111u) == 0);
+    CHECK(ico_mirror_slot_get(3, 0x1111u) == 0);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    ico_region = other;
+    CHECK(ico_mirror_slot_get(3, 0x1111u) == 1);
+    ico_region = me;
+    CHECK(ico_mirror_slot_get(3, 0x1111u) == 0);
+    f = fopen(path, "rb");
+    CHECK(f != NULL);
+    if (f != NULL) {
+        size_t n = fread(text, 1, sizeof(text) - 1, f);
+
+        text[n] = '\0';
+        fclose(f);
+        /* the European disc's keys as they always were, the Japanese
+           disc's with its prefix */
+        snprintf(want, sizeof(want), "\n%sslot_3 = %s", ico_region_at(0)->key_prefix,
+                 me == 0 ? "false" : "true");
+        CHECK(strstr(text, want) != NULL);
+        snprintf(want, sizeof(want), "\n%sslot_3 = %s", ico_region_at(1)->key_prefix,
+                 me == 1 ? "false" : "true");
+        CHECK(strstr(text, want) != NULL);
+        CHECK(strstr(text, "\nslot_3_sum = 4369") != NULL);
+        CHECK(strstr(text, "\njpn_slot_3_sum = 4369") != NULL);
+    }
+    ico_opt_mirror_reset();
     remove(path);
     ico_opt_reload();
 }
@@ -963,11 +1035,19 @@ static void test_video_interpolate(void)
     ico_video_set(&keep);
 }
 
+/* options_test DIR [SLUG]: SLUG the selected disc (config/regions.txt: pal,
+   the default, or jpn) */
 int main(int argc, char **argv)
 {
+    if (argc > 2 && ico_region_select(argv[2]) != 0) {
+        fprintf(stderr, "options_test: no region %s\n", argv[2]);
+        return 1;
+    }
+    printf("options_test: the %s disc\n", ico_region_cur()->slug);
     test_defaults();
     test_config(argc > 1 ? argv[1] : ".");
     test_mirror_slots(argc > 1 ? argv[1] : ".");
+    test_mirror_discs(argc > 1 ? argv[1] : ".");
     test_brain();
     test_ui_language(argc > 1 ? argv[1] : ".");
     test_video_effects(argc > 1 ? argv[1] : ".");

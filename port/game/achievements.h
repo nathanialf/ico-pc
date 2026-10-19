@@ -19,9 +19,12 @@ extern "C" {
 
 typedef enum IcoAchState { ICO_ACH_LOCKED = 0, ICO_ACH_UNLOCKED = 1 } IcoAchState;
 
-/* Main ticks between two popups (5 s at PAL's 25 Hz Main tick; a popup
-   shows for 230 vsyncs, 115 ticks): further unlocks wait in a queue. */
-#define ICO_ACH_POPUP_GAP_TICKS 125
+/* Main ticks between two popups, 5 s in the video mode in force
+   (5 * ico_gs_tick_hz: 125 at the European disc's 25 Hz Main tick, 150 at
+   30 Hz, the Japanese disc's and the European one's 60 Hz mode); a popup
+   shows for 230 vsyncs, 115 ticks at 25 Hz. Further unlocks wait in a
+   queue. */
+int ico_ach_popup_gap_ticks(void);
 /* Main ticks between two writes of changed counters (30 s); an unlock
    writes at once */
 #define ICO_ACH_STATS_FLUSH_TICKS 750
@@ -35,8 +38,11 @@ void ico_ach_host_poll(unsigned int main_ticks);
 /* One Main tick: ico_gs_tick, then every locked achievement's condition,
    the popup queue, and the counters' write when due. */
 void ico_ach_tick(void);
-/* The run state per save slot (achievements.toml, run.slot_N_*, keyed as
-   options.h's [mirror] slot_N).  saved: the game wrote the block of slot
+/* The run state per save slot (achievements.toml, run.slot_N_* for the
+   European disc's saves, run.jpn_slot_N_* for the Japanese disc's, keyed
+   as options.h's [mirror] slot_N; the unlocks and the counters are one set
+   for both discs, the visited stages one per disc: stats.stages,
+   stats.stages_jpn).  saved: the game wrote the block of slot
    `slot` (checksum `sum`): the run is stored.  loaded: it read that block:
    the run is restored when the stored checksum matches (1), else it stays
    as ico_gs_tick left it, not fresh (0).  A New Game after a load clears

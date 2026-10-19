@@ -10,6 +10,7 @@
 
 #include "appearance.h"
 #include "config.h"
+#include "region.h" /* port/core: the per-disc keys (ico_region_key_prefixed) */
 
 /* options.h: the model viewer is up */
 int ico_mv_active;
@@ -123,17 +124,25 @@ void ico_opt_set_mirror_listener(void (*fn)(int on))
     }
 }
 
-/* [mirror] slot_N, slot_N_sum (options.h) */
+/* [mirror] slot_N, slot_N_sum; jpn_slot_N, jpn_slot_N_sum (options.h) */
 #define MIRROR_NO_SUM (-1LL - 0xFFFFFFFFLL) /* outside the uint32 range */
 
 static int slot_keys(int slot, char *flag, char *sum, size_t size)
 {
+    char base[24];
+
     if (slot < 0 || slot > 99) {
         return -1;
     }
-    snprintf(flag, size, "mirror.slot_%d", slot);
-    snprintf(sum, size, "mirror.slot_%d_sum", slot);
-    return 0;
+    /* per disc, since each disc's saves are another card directory:
+       slot_N for the European disc (the keys as always), jpn_slot_N for
+       the Japanese one (the region's key_prefix) */
+    snprintf(base, sizeof(base), "slot_%d", slot);
+    if (ico_region_key_prefixed("mirror", base, flag, (int)size) != 0) {
+        return -1;
+    }
+    snprintf(base, sizeof(base), "slot_%d_sum", slot);
+    return ico_region_key_prefixed("mirror", base, sum, (int)size);
 }
 
 int ico_mirror_slot_get(int slot, unsigned int sum)

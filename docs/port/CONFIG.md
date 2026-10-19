@@ -224,6 +224,26 @@ original game's behaviour (`port/game/options.h`, header comment).
 whose checksum differs reads Off (`port/game/options.h` (`ico_mirror_slot_saved`,
 `ico_mirror_slot_loaded`)).
 
+Each disc has its own keys, since its saves are another card directory: `slot_N` and `slot_N_sum`
+are the European disc's (no prefix), `jpn_slot_N` and
+`jpn_slot_N_sum` the Japanese disc's, chosen by the disc being played; a disc's write leaves the
+other disc's keys as they are (`port/core/region.h` (`key_prefix`, `ico_region_key_prefixed`);
+`port/game/options.c` (`slot_keys`); [SAVES.md](SAVES.md#two-discs)).
+
+```toml
+[mirror]
+slot_1 = true
+slot_1_sum = 4660
+jpn_slot_1 = false
+jpn_slot_1_sum = 22136
+```
+
+`achievements.toml`, the other per-user file, keys its per-disc entries the same way:
+`run.slot_N_*` and `run.jpn_slot_N_*` for each save slot's run state, `stats.stages` and
+`stats.stages_jpn` for the visited stages; the unlocks (`[unlocked.<id>]`) and the other counters
+are one set for both discs (`port/game/achievements.c` (`run_key`, `write_file`, `read_file`);
+[GAME_FEATURES.md](GAME_FEATURES.md)).
+
 ### [input]
 
 The bindings and the input switches, applied over the defaults at start
