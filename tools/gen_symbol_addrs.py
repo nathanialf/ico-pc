@@ -38,6 +38,10 @@ Usage:
       --elf /primary/dev/ico/build/jpn/ico.syms.elf \\
       --map /primary/dev/ico/build/jpn/ico.jpn.map \\
       --base-elf /primary/dev/ico/baserom/jpn/baseelf.elf
+  tools/gen_symbol_addrs.py --region kor \\
+      --elf /primary/dev/ico/build/kor/ico.syms.elf \\
+      --map /primary/dev/ico/build/kor/ico.kor.map \\
+      --base-elf /primary/dev/ico-pc/baserom/kor/baseelf.elf
 """
 
 import argparse
@@ -59,7 +63,10 @@ FUNC_SECTIONS = (".text",)
 DATA_SECTIONS = (".data", ".rodata", ".sdata", ".lit4", ".sbss", ".bss")
 IDENT = re.compile(r"^[A-Za-z_]\w*$")
 MAP_LINE = re.compile(r"^ (\.\w+)\s+0x([0-9a-f]+)\s+0x([0-9a-f]+)\s+(\S+\.o)\s*$")
-TITLE = {"jpn": "Japanese retail target (SCPS_110.03)"}  # the comment line of the lists it writes
+TITLE = {
+    "jpn": "Japanese retail target (SCPS_110.03)",
+    "kor": "Korean retail target (SCPS_560.01)",
+}  # the comment line of the lists it writes
 
 
 def fail(msg):
