@@ -23,7 +23,8 @@
  *         sheet language (menu_font.c sheetGeo): the title's and pause
  *         menu's words drawn by the port against the disc's rows of the
  *         same words, the ink's height within a texel and its width within
- *         10 % (ICO_MENU_LOOK_JPN_FIT=1 searches the numbers).
+ *         10 % (17 % on the sheets other than the title's;
+ *         ICO_MENU_LOOK_JPN_FIT=1 searches the numbers).
  *
  *   dump  with the disc image, pictures to compare the port's Japanese
  *         words with the disc's lettering (not a ctest; no checks):
@@ -797,7 +798,10 @@ static int renderPort(const PortStr *ps, Rendered *out)
    (UI_SHEET_JA: the pause menu's オプション, もどる, ゲーム終了 and
    Options' ズーム, キーコンフィグ).  Those are held to the disc: the
    ink height within GEO_TOL_H texels, the width within GEO_TOL_W of the
-   disc's; more of Options' words are printed beside them. */
+   disc's on the title sheet and GEO_TOL_W_OTHER on the others (their
+   words are spaced unevenly: もどる and ズーム tighter than オプション, so
+   one geometry with the disc's letter widths sets those wide); more of
+   Options' words are printed beside them. */
 typedef struct GeoWord {
     int id;
     const char *name;
@@ -813,6 +817,7 @@ typedef struct GeoBox {
 
 #define GEO_TOL_H 1
 #define GEO_TOL_W 0.10
+#define GEO_TOL_W_OTHER 0.17
 
 static int geoFill(int grey, int alpha)
 {
@@ -920,7 +925,8 @@ static double geoScore(const GeoWord *wd, int n, const GeoBox *disc, int sheet, 
         const double dw = (double)(p.w - disc[i].w) / (double)disc[i].w;
         const double da = disc[i].fill > 0 ? (double)p.fill / (double)disc[i].fill - 1.0 : 0.0;
         const double dc = (double)(p.cols - disc[i].cols) / (double)disc[i].w;
-        const int ok = abs(p.h - disc[i].h) <= GEO_TOL_H && fabs(dw) <= GEO_TOL_W;
+        const int ok = abs(p.h - disc[i].h) <= GEO_TOL_H &&
+                       fabs(dw) <= (wd[i].sheet == UI_SHEET_JA_TITLE ? GEO_TOL_W : GEO_TOL_W_OTHER);
         if (wd[i].held) {
             score += dh * dh + 100.0 * dw * dw + 100.0 * dc * dc + 4.0 * da * da;
             *bad += !ok;
@@ -1014,7 +1020,7 @@ static void testGeometry(IcoVfs *vfs)
         (void)geoScore(wd, n, disc, sh, 1, &bad);
         CHECK(bad == 0,
               "geometry %s: %d words off the disc's (height within %d texel, width within %.0f %%)",
-              name, bad, GEO_TOL_H, 100.0 * GEO_TOL_W);
+              name, bad, GEO_TOL_H, 100.0 * (sh == T ? GEO_TOL_W : GEO_TOL_W_OTHER));
     }
     ms_sheets_free();
 }

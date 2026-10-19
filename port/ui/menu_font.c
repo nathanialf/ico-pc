@@ -282,10 +282,13 @@ void ui__menu_set_bold(float bx, float by)
    popups).  Each is fitted to its sheet's words by ctest menu_look_jpn
    (menu_jpn_test.c testGeometry, ICO_MENU_LOOK_JPN_FIT=1 for the search),
    which holds every word's ink to the disc's row: the height within a
-   texel, the width within 10 %. */
+   texel, the width within 10 % on the title sheet and 17 % on the others,
+   whose words are spaced unevenly (もどる and ズーム tighter than
+   オプション): their geometry keeps the disc's letter widths and close
+   setting, and the tight words come out up to 15 % wide. */
 #define JA_GEO_EM 0.98f
-#define JA_GEO_WX 0.60f
-#define JA_GEO_GAP 7.5f
+#define JA_GEO_WX 0.86f
+#define JA_GEO_GAP 1.5f
 #define JA_GEO_BOLD 0.15f
 #define JA_TITLE_GEO_EM 1.06f
 #define JA_TITLE_GEO_WX 0.70f
