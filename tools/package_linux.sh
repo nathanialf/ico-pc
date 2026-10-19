@@ -155,7 +155,7 @@ printf 'ico-pc %s\nbuilt %s\ncommit %s\n' "$label" "$date_str" "$commit" > "$sta
 
 # archive, root dir ico-pc-<label>/, files owned by root, names sorted.
 # The files staged above and nothing else: the stage folder is also where
-# the build is tried, so it can hold Ico_PAL.iso (found beside ico_pc),
+# the build is tried, so it can hold Ico_PAL.iso or Ico_JPN.iso (found beside ico_pc),
 # dumps/ (frames from the disc) and logs/, none of which may be shipped.
 # Two archives from the one stage: the normal one (with make_portable.sh)
 # and the portable one (ico-pc.ini with portable=1, a paragraph in the
@@ -166,8 +166,10 @@ for variant in normal portable; do
     pkgroot="$root/build-host/tmp/tar-$label-$variant"
     rm -rf "$pkgroot"; mkdir -p "$pkgroot/ico-pc-$label"
     top="$pkgroot/ico-pc-$label"
-    mkdir -p "$top/tools" "$top/$pkg_textures_rel" "$top/$pkg_models_rel" "$top/$pkg_reshade_rel"
-    files=(ico_pc ico_pc.map libSDL3.so.0 LICENSE NOTICES.txt THIRD_PARTY.md ico-pc.ini README.md VERSION.txt tools/mc_import "$pkg_textures_rel/README.txt" "$pkg_models_rel/README.txt" "$pkg_reshade_rel/README.txt")
+    mkdir -p "$top/tools"
+    for r in "${pkg_note_rels[@]}"; do mkdir -p "$top/$r"; done
+    files=(ico_pc ico_pc.map libSDL3.so.0 LICENSE NOTICES.txt THIRD_PARTY.md ico-pc.ini README.md VERSION.txt tools/mc_import)
+    for r in "${pkg_note_rels[@]}"; do files+=("$r/README.txt"); done
     [[ "$variant" == portable ]] || files+=(make_portable.sh)
     for f in "${files[@]}"; do
         cp -a "$stage/$f" "$top/$f" || fail "stage: no $f"

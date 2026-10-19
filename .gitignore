@@ -25,11 +25,19 @@ SLPM-*
 SCUS-*
 SCES-*
 SCPS-*
+# the boot files' own names (SCES_507.60, SCPS_110.03, ...)
+SLUS_*
+SLES_*
+SLPS_*
+SLPM_*
+SCUS_*
+SCES_*
+SCPS_*
 baserom/
 # the same as symlinks (a git worktree may link them)
 /baserom
 baseelf*
-# The PAL disc's reference files (tools/extract_elf.py copies them to baserom/pal/)
+# The discs' reference files (tools/extract_elf.py copies them to baserom/<slug>/)
 MAIN.MAP
 SRCFILE.TXT
 TRFILE.TXT

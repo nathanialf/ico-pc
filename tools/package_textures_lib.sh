@@ -4,8 +4,27 @@
 # sourced by package_win.sh and package_linux.sh and by
 # tools/test/package_textures_test.sh. Functions only.
 
+# the serial folders: one per disc the game plays, the European (SCES-50760)
+# and the Japanese (SCPS-11003); the game reads the one of the disc it plays
+pkg_serials=(SCES-50760 SCPS-11003)
+
+# pkg_disc_name <serial>: the disc's name in the notes
+pkg_disc_name() {
+    case "$1" in
+        SCPS-11003) echo "the Japanese disc" ;;
+        *) echo "the European disc" ;;
+    esac
+}
+
+# pkg_other_serial <serial>: the other disc's serial
+pkg_other_serial() {
+    if [[ "$1" == SCPS-11003 ]]; then echo SCES-50760; else echo SCPS-11003; fi
+}
+
 # the folder under the program folder the game looks in, and the note in it
+# (the European disc's; the Japanese disc's is the same with its serial)
 pkg_textures_rel="textures/SCES-50760/replacements"
+pkg_textures_rel_jpn="textures/SCPS-11003/replacements"
 
 # pkg_note_eol <file> <crlf|lf>: the notes are written with the Linux
 # wording and forward slashes in their paths (no other slash appears in
@@ -17,48 +36,66 @@ pkg_note_eol() {
     fi
 }
 
-# pkg_stage_textures_readme <dir> <crlf|lf>: writes <dir>/textures/SCES-50760/replacements/README.txt
+# pkg_stage_textures_readme <dir> <crlf|lf> [serial]: writes
+# <dir>/textures/<serial>/replacements/README.txt (serial SCES-50760 when
+# none is given)
 pkg_stage_textures_readme() {
-    local d="$1/$pkg_textures_rel" eol="$2"
+    local serial="${3:-SCES-50760}"
+    local d="$1/textures/$serial/replacements" eol="$2" disc other
+    disc="$(pkg_disc_name "$serial")"
+    other="$(pkg_other_serial "$serial")"
     mkdir -p "$d"
-    cat > "$d/README.txt" <<'TXT'
-This folder is for texture packs: pictures that replace the game's own
-textures. Playing the game needs nothing in it.
+    cat > "$d/README.txt" <<TXT
+This folder is for texture packs for $disc of ICO ($serial):
+pictures that replace the game's own textures. Playing the game needs
+nothing in it. A pack for $(pkg_disc_name "$other") ($other) goes in
+textures/$other/replacements/ instead; the game reads the folder of the
+disc you play.
 Copy a pack here keeping the pack's own folders, so its files end up under
-textures/SCES-50760/replacements/ next to the program. A pack whose
+textures/$serial/replacements/ next to the program. A pack whose
 replacements folder, or loose picture files, ended up straight in
 textures/ is found too; other folders of a pack put straight in textures/
 are not searched.
 Then start the game. Options > Display > Texture pack reads On, and
 logs/ico-pc.log says how many textures were found.
 With portable mode (a userdata folder next to the program) the pack may
-also go in userdata/textures/SCES-50760/replacements/.
+also go in userdata/textures/$serial/replacements/.
 Packs made for PCSX2 work as they are.
 TXT
     pkg_note_eol "$d/README.txt" "$eol"
 }
 
-# the models folder (model packs) and a folder for ReShade presets, with
-# their notes, beside the textures folder
+# the models folders (model packs) and a folder for ReShade presets, with
+# their notes, beside the textures folders
 pkg_models_rel="models/SCES-50760/replacements"
+pkg_models_rel_jpn="models/SCPS-11003/replacements"
 pkg_reshade_rel="reshade"
-pkg_note_rels=("$pkg_textures_rel" "$pkg_models_rel" "$pkg_reshade_rel")
+pkg_note_rels=("$pkg_textures_rel" "$pkg_textures_rel_jpn" "$pkg_models_rel" "$pkg_models_rel_jpn"
+    "$pkg_reshade_rel")
 
-# pkg_stage_models_readme <dir> <crlf|lf>: writes <dir>/models/SCES-50760/replacements/README.txt
+# pkg_stage_models_readme <dir> <crlf|lf> [serial]: writes
+# <dir>/models/<serial>/replacements/README.txt (serial SCES-50760 when none
+# is given)
 pkg_stage_models_readme() {
-    local d="$1/$pkg_models_rel" eol="$2"
+    local serial="${3:-SCES-50760}"
+    local d="$1/models/$serial/replacements" eol="$2" disc other
+    disc="$(pkg_disc_name "$serial")"
+    other="$(pkg_other_serial "$serial")"
     mkdir -p "$d"
-    cat > "$d/README.txt" <<'TXT'
-This folder is for model packs: 3D models that replace the game's own.
-Playing the game needs nothing in it.
+    cat > "$d/README.txt" <<TXT
+This folder is for model packs for $disc of ICO ($serial): 3D
+models that replace the game's own. Playing the game needs nothing in it.
+A pack for $(pkg_disc_name "$other") ($other) goes in
+models/$other/replacements/ instead; the game reads the folder of the disc
+you play.
 Copy a pack here keeping the pack's own folders, so its files end up under
-models/SCES-50760/replacements/ next to the program. A pack whose
+models/$serial/replacements/ next to the program. A pack whose
 replacements folder, or loose files, ended up straight in models/ is found
 too; other folders of a pack put straight in models/ are not searched.
 Then start the game. Options > Display > Model pack (from the title
 screen) reads On, and logs/ico-pc.log says how many models were found.
 With portable mode (a userdata folder next to the program) the pack may
-also go in userdata/models/SCES-50760/replacements/.
+also go in userdata/models/$serial/replacements/.
 To make a pack, see docs/MODEL_PACKS.md in the download's docs folder.
 TXT
     pkg_note_eol "$d/README.txt" "$eol"
@@ -95,10 +132,14 @@ TXT
     pkg_note_eol "$d/README.txt" "$eol"
 }
 
-# pkg_stage_folder_notes <dir> <crlf|lf>: the three folders and their notes
+# pkg_stage_folder_notes <dir> <crlf|lf>: the five folders and their notes
+# (textures and models for each disc, and reshade)
 pkg_stage_folder_notes() {
-    pkg_stage_textures_readme "$1" "$2"
-    pkg_stage_models_readme "$1" "$2"
+    local serial
+    for serial in "${pkg_serials[@]}"; do
+        pkg_stage_textures_readme "$1" "$2" "$serial"
+        pkg_stage_models_readme "$1" "$2" "$serial"
+    done
     pkg_stage_reshade_readme "$1" "$2"
 }
 

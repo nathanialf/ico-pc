@@ -72,8 +72,9 @@ cp "$b/SDL3.dll" "$d/SDL3.dll"
 rm -rf "$d/tools"; mkdir -p "$d/tools"
 cp "$b/port/save/mc_import.exe" "$b/SDL3.dll" "$d/tools/"
 cat > "$d/tools/README.txt" <<'TXT'
-mc_import.exe copies ICO's save out of a PS2 memory card file or save
-archive into the game's save folder. Playing the game does not need it.
+mc_import.exe copies ICO's save (of the European or the Japanese disc) out
+of a PS2 memory card file or save archive into the game's save folder.
+Playing the game does not need it.
 To run it, open a Command Prompt in this folder and give it the file.
 Add --to with the folder to copy into, then the file's name, for example:
   mc_import.exe --to "%APPDATA%\ico-pc\ico-pc\memcard" Mcd001.ps2
@@ -104,7 +105,7 @@ printf 'ico-pc %s\r\nbuilt %s\r\ncommit %s\r\n' "$label" "$date_str" "$commit" >
 
 # zip, root dir ico-pc-<label>/. The files staged above and nothing else:
 # the stage folder is also where the build
-# is tried, so it can hold Ico_PAL.iso (found beside the exe), dumps\
+# is tried, so it can hold Ico_PAL.iso or Ico_JPN.iso (found beside the exe), dumps\
 # (frames from the disc) and logs\, none of which may be shipped.
 # Two archives from the one stage: the normal one (with make_portable.cmd)
 # and the portable one (ico-pc.ini with portable=1, a paragraph in the README,
@@ -115,12 +116,14 @@ for variant in normal portable; do
     pkgroot="$root/build-host/tmp/zip-$label-$variant"
     rm -rf "$pkgroot"
     top="$pkgroot/ico-pc-$label"
-    mkdir -p "$top/$a/tools" "$top/$a/$pkg_textures_rel" "$top/$a/$pkg_models_rel" "$top/$a/$pkg_reshade_rel"
+    mkdir -p "$top/$a/tools"
+    for r in "${pkg_note_rels[@]}"; do mkdir -p "$top/$a/$r"; done
     cp -a "$stage/README.md" "$top/README.md"
     cp -a "$stage/docs" "$top/docs"
     cp -a "$stage/VERSION.txt" "$top/VERSION.txt"
     files=("ico_pc_$a.exe" "ico_pc_$a.map" SDL3.dll ico-pc.ini LICENSE.txt NOTICES.txt
-        tools/mc_import.exe tools/SDL3.dll tools/README.txt "$pkg_textures_rel/README.txt" "$pkg_models_rel/README.txt" "$pkg_reshade_rel/README.txt")
+        tools/mc_import.exe tools/SDL3.dll tools/README.txt)
+    for r in "${pkg_note_rels[@]}"; do files+=("$r/README.txt"); done
     [[ "$variant" == portable ]] || files+=(make_portable.cmd)
     for f in "${files[@]}"; do
         cp -a "$stage/$a/$f" "$top/$a/$f" || fail "stage: no $a/$f"
