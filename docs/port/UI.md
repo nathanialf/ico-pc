@@ -384,7 +384,7 @@ in Hangul (the same `Tex_menu01` members, decoded from SCPS-56001's archive): �
 their line breaks (메모리 카드(PS2)가 / 꽂혀 있지 않습니다, 저장하시겠습니까?, 액세스 중) and the
 stage sheet's place names (낡은 다리, 광차 1, 정문, 서쪽 우상의 계단, 모래사장). Its own rows are
 in the polite register the sheets use (…하시겠습니까?, …해 주십시오, 합니다 in the notes), the
-achievements' descriptions in the past tense Korean trophy lists use (…에 도착했다.), the
+achievements' descriptions as goals in the plain present (…에 도착한다.), the
 PlayStation buttons the bare marks as in the Japanese table, the sticks 왼쪽 스틱 and 오른쪽
 스틱, and ASCII brackets and colons with the spacing Korean takes. Every "back" a button or
 prompt names is 돌아가기. A placeholder takes a noun after it (`%s 폴더를`), so no particle
@@ -408,7 +408,7 @@ a pair across the two fonts has no kerning, and every line keeps Arimo's ascent 
 so Latin text draws as before; the sheet rasteriser (`ui__sheet_raster_line`, the menus' look)
 takes the same glyphs. A character neither has (Hangul) is drawn from a third embedded font, a
 subset of Noto Sans KR Regular (SIL OFL 1.1; `port/assets/fonts/NotoSansKR-Regular-subset.ttf`
-into `ui_font_ko_ttf[]`, 85,828 bytes, 660 code points: the Hangul of every table, 한국어 being
+into `ui_font_ko_ttf[]`, 84,372 bytes, 655 code points: the Hangul of every table, 한국어 being
 in all of them, and the Korean table's other characters outside Arimo), scaled to Arimo's em in
 the same way (`koK`; `port/ui/font.c` (`fontGlyph`)). The order is Arimo, Noto Sans JP, Noto Sans
 KR for every language, so a character two fonts hold (the button marks, the CJK punctuation) comes
