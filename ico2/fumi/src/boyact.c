@@ -154,20 +154,16 @@ static void findChainInJump(void *self)
         RequestChangeHandMode(self, 1, 2, 0, 0, 0, 0);
     }
 
-#ifdef VERSION_JPN
-    if ((rside != 0 || lside != 0) &&
-        motionKind[GOBJ_SUB(self)->ctrl.motion].flags2.bits.chainIkRate) {
-        ((BoyVal *)((char *)GOBJ_SUB(self) + 0x45C))->f = 0.8f;
-        ((BoyVal *)((char *)GOBJ_SUB(self) + 0x464))->f = 0.8f;
-        ((BoyVal *)((char *)GOBJ_SUB(self) + 0x468))->f = 0.8f;
-#else
+    /* the European text serves both discs: the Japanese reads the same flags2 bit by name
+       (chainIkRate, its bit 6, which config/motion_bits.jpn.txt maps to bit 5), the same
+       ikRate words at its own offsets, and sets 0.8, what systemStatus[0] == 0 (60 Hz, fixed
+       on the Japanese disc) gives */
     if ((rside != 0 || lside != 0) && ((CHAINROW(self)->flags2.word >> 5) & 1) != 0) {
         float sp = (systemStatus[0] == 1) ? 0.5f : 0.8f;
 
         ((BoyVal *)&GOBJ_SUB(self)->root.ikRate0)->f = sp;
         ((BoyVal *)&GOBJ_SUB(self)->root.ikRate1)->f = sp;
         ((BoyVal *)&GOBJ_SUB(self)->root.ikRate2)->f = sp;
-#endif
     }
 
     if (rside != 0 || lside != 0) {
@@ -715,9 +711,18 @@ static BoyWork boyInfoDefault = {{0, 0, 0xFFFFFFFF}}; /* derived name */
 
 static BoyKidnapWork characterPacketDefault = {{0, 0, 0, 0, 0, -1, -1}}; /* derived name */
 
-static BgaEntry boyBgaTable[] = {
-/* derived name */
-#ifdef VERSION_JPN
+/* the motion ids per disc (the Japanese ids 4 lower) */
+static BgaEntry boyBgaTable_pal[] = {
+    /* derived name */
+    {480, 0.0f, 7.0f, 1, 70, 1, 1, 1.0f},
+    {481, 0.0f, 0.0f, 0, 70, 0, 1, 1.0f},
+    {485, 0.0f, 0.0f, 0, 0, 0, 0, -1.0f},
+    {486, -10.0f, 23.0f, 1, 70, 1, 1, -1.0f},
+    {-1},
+}; /* derived name */
+
+static BgaEntry boyBgaTable_jpn[] = {
+    /* derived name */
     {476, 0.0f, 7.0f, 1, 70, 1, 1, 1.0f},
     {477, 0.0f, 0.0f, 0, 70, 0, 1, 1.0f},
     {481, 0.0f, 0.0f, 0, 0, 0, 0, -1.0f},
@@ -725,14 +730,7 @@ static BgaEntry boyBgaTable[] = {
     {-1},
 }; /* derived name */
 
-#else
-    {480, 0.0f, 7.0f, 1, 70, 1, 1, 1.0f},
-    {481, 0.0f, 0.0f, 0, 70, 0, 1, 1.0f},
-    {485, 0.0f, 0.0f, 0, 0, 0, 0, -1.0f},
-    {486, -10.0f, 23.0f, 1, 70, 1, 1, -1.0f},
-    {-1},
-}; /* derived name */
-#endif
+#define boyBgaTable PAL_JPN(boyBgaTable_pal, boyBgaTable_jpn)
 
 /* PrivInsCam's initial value: subBoyCollision copies it whole into
    privInsCam. */
