@@ -19,7 +19,8 @@
  *
  * Only the game's directories are imported, each disc's (port/core
  * region.h mc_save_dir: BESCES-50760ico for the European disc,
- * BISCPS-11003ico for the Japanese one; a card may hold both); every other
+ * BISCPS-11003ico for the Japanese one, BISCPS-56001ico for the Korean one;
+ * a card may hold several); every other
  * entry is counted and named in the result. Every file is read before any
  * is written, and each is written to a dot-file copy moved over its name,
  * as mc_host.c writes.
@@ -636,7 +637,7 @@ int ico_mc_import(const char *src, const char *saves, unsigned flags, IcoMcImpor
         char dirs[160] = "";
         int k;
 
-        /* every disc's directory: "BESCES-50760ico or BISCPS-11003ico" */
+        /* every disc's directory: "BESCES-50760ico or BISCPS-11003ico or BISCPS-56001ico" */
         for (k = 0; k < ico_region_count(); k++) {
             size_t len = strlen(dirs);
 

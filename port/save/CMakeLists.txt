@@ -49,8 +49,9 @@ if(ICO_RUN_TESTS)
     # by the test on its synthetic files), each in its own folder, since the
     # test's card folders sit in the working directory: save (the European
     # disc, BESCES-50760ico) and save_jpn (the Japanese disc,
-    # BISCPS-11003ico, a 0x1E8-byte product file)
-    foreach(_slug pal jpn)
+    # BISCPS-11003ico, a 0x1E8-byte product file) and save_kor (the Korean
+    # disc, BISCPS-56001ico, the same 0x1E8 record)
+    foreach(_slug pal jpn kor)
         if(_slug STREQUAL "pal")
             set(_name save)
         else()

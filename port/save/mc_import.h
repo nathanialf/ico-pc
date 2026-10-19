@@ -3,10 +3,10 @@
  *
  * Imports ICO's saves from a PS2 memory card image or a save archive into a
  * card folder (mc_host.c's layout: <saves>/<save directory>/...): the
- * European disc's directory BESCES-50760ico and the Japanese disc's
- * BISCPS-11003ico (port/core/region.h mc_save_dir), whichever the source
- * holds; a card with a BISCPS-11003ico folder imports as the Japanese
- * disc's save.
+ * European disc's directory BESCES-50760ico, the Japanese disc's
+ * BISCPS-11003ico and the Korean disc's BISCPS-56001ico (port/core/region.h
+ * mc_save_dir), whichever the source holds; a card with a BISCPS-56001ico
+ * folder imports as the Korean disc's save.
  */
 #ifndef ICO_SAVE_MC_IMPORT_H
 #define ICO_SAVE_MC_IMPORT_H

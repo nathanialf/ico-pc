@@ -32,8 +32,10 @@
  * BESCES-50760ico and a 0x1F0-byte product file; jpn, the Japanese disc,
  * BISCPS-11003ico and a 0x1E8-byte product file, the same record's first
  * 0x1E8 bytes (cameraMove and palMode, its last two words, are the European
- * disc's only). game.00N is 25,600 bytes on both. Part C also imports a card
- * holding both discs' directories, each into its own folder.
+ * disc's only); kor, the Korean disc, BISCPS-56001ico and the Japanese
+ * record (0x1E8, region_kor.c mc_product_size). game.00N is 25,600 bytes on
+ * all. Part C also imports a card holding two discs' directories (the
+ * selected one and another), each into its own folder.
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -265,9 +267,10 @@ static void bg_manager(void)
 #define CARD_L "save_test_card_l" /* both discs' directories, part C */
 #define CARD_M "save_test_card_m"
 /* the selected disc's save directory (fumi/ios/mcard.c's product name, the
-   region table's mc_save_dir: BESCES-50760ico, BISCPS-11003ico) and its
-   product file's size before the 4-byte sum (mc_product_size: 0x1F0, the
-   Japanese disc's 0x1E8, the first 0x1E8 bytes of the same record) */
+   region table's mc_save_dir: BESCES-50760ico, BISCPS-11003ico,
+   BISCPS-56001ico) and its product file's size before the 4-byte sum
+   (mc_product_size: 0x1F0, the Japanese and Korean discs' 0x1E8, the first
+   0x1E8 bytes of the same record) */
 #define PRODUCT (ico_region_cur()->mc_save_dir)
 #define PSIZE (ico_region_cur()->mc_product_size)
 /* the game block, 25,588 bytes, then optionScreenMode and girlControlMode
@@ -745,6 +748,7 @@ static void driver(void *arg)
     CHECK(offsetof(McProductFile, cameraMove) == 0x1E8 &&
           offsetof(McProductFile, palMode) == 0x1EC);
     CHECK(ico_region_info_jpn.mc_product_size == (int)offsetof(McProductFile, cameraMove));
+    CHECK(ico_region_info_kor.mc_product_size == (int)offsetof(McProductFile, cameraMove));
     printf("part B: the %s disc, %s/, a product file of %d + 4 bytes\n", ico_region_cur()->slug,
            PRODUCT, PSIZE);
     rm_card(CARD_B);
@@ -855,9 +859,10 @@ static void driver(void *arg)
     }
     le32(want + 0x1E0, 1);
     le32(want + 0x1E4, 0xCAFE);
-    if (!ICO_JPN) {
-        /* the European disc's last two words; the Japanese disc's record
-           ends before them and its file is the same bytes up to 0x1E8 */
+    if (PSIZE == (int)sizeof(McProductFile)) {
+        /* the European disc's last two words; the Japanese and Korean
+           discs' record (mc_product_size 0x1E8) ends before them and its
+           file is the same bytes up to 0x1E8 */
         le32(want + 0x1E8, 4);
         le32(want + 0x1EC, 1);
     }
@@ -894,8 +899,8 @@ static void driver(void *arg)
     wait_request();
     CHECK(req.result == 0);
     CHECK(IosMcProductFile[0].file[0].stage == 7 && IosMcProductFile[0].file[0].playTime == 1234);
-    if (ICO_JPN) {
-        /* not on the Japanese disc's card: left as they were */
+    if (PSIZE != (int)sizeof(McProductFile)) {
+        /* not on the Japanese or Korean disc's card: left as they were */
         CHECK(IosMcProductFile[0].serial == 0xCAFE && IosMcProductFile[0].palMode == 0);
         CHECK(IosMcProductFile[0].cameraMove == 0);
     } else {
@@ -1510,13 +1515,18 @@ static int slurp_text(const char *path, char *buf, size_t size)
 
 static void test_import(const char *cli)
 {
-    /* the other disc's region (the table has two rows): its directory
-       imports beside the selected one's */
+    /* another disc's region (the first row that is not the selected one):
+       its directory imports beside the selected one's; lo and hi are the
+       two in the table's order, as the command line lists them */
     const int otherRegion = ico_region == 0 ? 1 : 0;
+    const int lo = ico_region < otherRegion ? ico_region : otherRegion;
+    const int hi = ico_region < otherRegion ? otherRegion : ico_region;
     const char *otherDir = ico_region_at(otherRegion)->mc_save_dir;
     const unsigned both = (1u << ico_region) | (1u << otherRegion);
     char text[1024];
     char want[256];
+    char allDirs[160] = "";
+    char noSave[256];
     IcoMcImport res;
     sceMcTblGetDir dir[20];
     int type;
@@ -1524,6 +1534,14 @@ static void test_import(const char *cli)
     int format;
     int i;
 
+    /* "BESCES-50760ico or BISCPS-11003ico or BISCPS-56001ico": every row */
+    for (i = 0; i < ico_region_count(); i++) {
+        size_t len = strlen(allDirs);
+
+        snprintf(allDirs + len, sizeof(allDirs) - len, "%s%s", i > 0 ? " or " : "",
+                 ico_region_at(i)->mc_save_dir);
+    }
+    snprintf(noSave, sizeof(noSave), "no ICO save (%s) in ", allDirs);
     img = malloc(IMG_SIZE);
     CHECK(img != NULL);
     if (img == NULL) {
@@ -1588,8 +1606,8 @@ static void test_import(const char *cli)
     CHECK(ico_mc_import("save_test_other.psu", CARD_K, 0, &res) == 1);
     CHECK(res.skipped == 1 && strcmp(res.skippedName[0], OTHER) == 0);
     CHECK(res.regions == 0);
-    CHECK(strcmp(res.why,
-                 "no ICO save (BESCES-50760ico or BISCPS-11003ico) in save_test_other.psu") == 0);
+    snprintf(want, sizeof(want), "%ssave_test_other.psu", noSave);
+    CHECK(strcmp(res.why, want) == 0);
     CHECK(ico_mc_import("save_test_save.max", CARD_K, 0, &res) == -1);
     CHECK(res.format == ICO_MC_FMT_MAX);
 
@@ -1601,29 +1619,27 @@ static void test_import(const char *cli)
     check_folder(CARD_K);
 
     /* one card both discs saved to: both directories, each into its own
-       folder (BESCES-50760ico and BISCPS-11003ico side by side) */
+       folder (two of the rows' directories side by side) */
     CHECK(ico_mc_import("save_test_card_both.ps2", CARD_L, 0, &res) == 0);
     CHECK(res.format == ICO_MC_FMT_RAW && res.files == 2 * NTF && res.regions == both);
-    CHECK(res.regions == 3u);
+    CHECK(res.regions == (1u << lo | 1u << hi));
     CHECK(res.skipped == 1 && strcmp(res.skippedName[0], OTHER) == 0);
-    check_dir(CARD_L, ico_region_at(0)->mc_save_dir);
-    check_dir(CARD_L, ico_region_at(1)->mc_save_dir);
+    check_dir(CARD_L, ico_region_at(lo)->mc_save_dir);
+    check_dir(CARD_L, ico_region_at(hi)->mc_save_dir);
     /* the command line says which directories it wrote, in the table's
        order */
     if (cli != NULL) {
         CHECK(run_cli(cli, "--to " CARD_M " save_test_card_both.ps2 > save_test_cli.txt") == 0);
         CHECK(slurp_text("save_test_cli.txt", text, sizeof(text)) > 0);
         snprintf(want, sizeof(want), "imported %d file(s) into " CARD_M ": %s %s\n", 2 * NTF,
-                 ico_region_at(0)->mc_save_dir, ico_region_at(1)->mc_save_dir);
+                 ico_region_at(lo)->mc_save_dir, ico_region_at(hi)->mc_save_dir);
         CHECK(strstr(text, want) != NULL);
-        CHECK(strstr(text, "imported 12 file(s) into " CARD_M
-                           ": BESCES-50760ico BISCPS-11003ico\n") != NULL);
-        check_dir(CARD_M, ico_region_at(0)->mc_save_dir);
-        check_dir(CARD_M, ico_region_at(1)->mc_save_dir);
+        check_dir(CARD_M, ico_region_at(lo)->mc_save_dir);
+        check_dir(CARD_M, ico_region_at(hi)->mc_save_dir);
         CHECK(run_cli(cli, "--to " CARD_K " save_test_other.psu > save_test_cli.txt") == 1);
         CHECK(slurp_text("save_test_cli.txt", text, sizeof(text)) > 0);
-        CHECK(strstr(text, "no ICO save (BESCES-50760ico or BISCPS-11003ico) in "
-                           "save_test_other.psu\n") != NULL);
+        snprintf(want, sizeof(want), "%ssave_test_other.psu\n", noSave);
+        CHECK(strstr(text, want) != NULL);
         remove("save_test_cli.txt");
     }
 
@@ -1670,11 +1686,11 @@ static void test_import(const char *cli)
 }
 
 /* save_test SLUG MC_IMPORT: SLUG the region to play (config/regions.txt,
-   pal or jpn), MC_IMPORT tools/mc_import (ctest passes both) */
+   pal, jpn or kor), MC_IMPORT tools/mc_import (ctest passes both) */
 int main(int argc, char **argv)
 {
     if (argc < 2 || ico_region_select(argv[1]) != 0) {
-        printf("FAIL usage: save_test pal|jpn MC_IMPORT\n");
+        printf("FAIL usage: save_test pal|jpn|kor MC_IMPORT\n");
         return 1;
     }
     printf("save_test: the %s disc (%s)\n", ico_region_cur()->slug, ico_region_cur()->disc_id);
