@@ -686,6 +686,9 @@ HAND_ROWS = [
     ("jpn", "flags", 2, 1, "flags", 6,
      "no reader in either tree; the same 7 motions (834, 839, 840, 848-851) set PAL bit 2 "
      "and JPN bit 6 in the two ELFs"),
+    ("kor", "flags", 2, 1, "flags", 6,
+     "no reader in either tree; the Korean ELF's 1148 flags words equal the Japanese "
+     "ELF's, so the same 7 motions (834, 839, 840, 848-851) set KOR bit 6"),
 ]
 
 
