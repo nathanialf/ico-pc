@@ -667,6 +667,40 @@ void ui_settings_set_steam_handler(int (*fn)(void))
     s_steamFn = fn;
 }
 
+/* Main > Disc: the host's answer for each disc's game data, asked once */
+static int (*s_discFn)(const char *archiveName);
+static int s_discShown = -1;
+
+void ui_settings_set_disc_handler(int (*fn)(const char *archive_name))
+{
+    s_discFn = fn;
+    s_discShown = -1;
+}
+
+static int discRowShown(void)
+{
+    if (s_discFn == NULL) {
+        return 0;
+    }
+    if (s_discShown < 0) {
+        int n = 0;
+        for (int i = 0; i < ico_region_count(); i++) {
+            n += s_discFn(ico_region_at(i)->archive_name) != 0;
+        }
+        s_discShown = n == ico_region_count() && n > 1;
+    }
+    return s_discShown;
+}
+
+/* the disc the row shows: [game] disc's, else the one playing (with both
+   discs' game data and no pin the next start plays the disc played last,
+   this one) */
+static int discRow(void)
+{
+    const int pin = ico_config_disc_pin();
+    return pin >= 0 ? pin : ico_region;
+}
+
 static void steamAdd(void)
 {
     static const struct {
@@ -1351,6 +1385,12 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         const int pref = ico_opt_ui_language();
         return pref < 0 ? ui_str(UI_STR_VAL_AUTO) : menuLanguageName(pref);
     }
+    case UI_OPT_DISC: {
+        static const UiStrId kDisc[ICO_REGION_COUNT] = {UI_STR_DISC_PAL, UI_STR_DISC_JPN};
+        _Static_assert(ICO_REGION_COUNT == 2 && ICO_REGION_PAL == 0 && ICO_REGION_JPN == 1,
+                       "a Disc value for each row of config/regions.txt");
+        return ui_str(kDisc[discRow()]);
+    }
     case UI_OPT_DEVELOPER:
         return onOff(ico_opt_developer_mode());
     case UI_OPT_EXTRAS_CREDITS:
@@ -1423,6 +1463,9 @@ static int optShown(int opt, int link)
     }
     if (opt == UI_OPT_VIDEO_MODE && !ico_region_cur()->has_50hz_row) {
         return 0; /* the Japanese disc is 60 Hz only */
+    }
+    if (opt == UI_OPT_DISC) {
+        return discRowShown(); /* both discs' game data */
     }
     if (opt == UI_OPT_LANGUAGE) {
         /* the game's own language: the European disc's five */
@@ -1827,6 +1870,13 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         s_dirtyConfig = 1;
         break;
     }
+    case UI_OPT_DISC: {
+        /* [game] disc, read at the next start (main_host.c mount_game_data) */
+        const int i = stepIndex(discRow(), ico_region_count(), dir);
+        ico_config_set_string("game.disc", ico_region_at(i)->slug);
+        s_dirtyConfig = 1;
+        break;
+    }
     case UI_OPT_MENU_LANGUAGE: {
         /* Auto, then the six tables (UiLang order): [ui] language */
         const int i = stepIndex(ico_opt_ui_language() + 1, UI_LANG_COUNT + 1, dir) - 1;
@@ -2198,7 +2248,9 @@ static void buildGalleryBar(void)
                   219); inside the model viewer CV_ROW_Y0 and CV_ROW_PITCH
      Main         from 40: up to 8 rows 19 apart, 9 rows 17, 10 rows 15,
                   11 rows 14, 12 rows 13, 13 rows 12 (Back at 184, its
-                  box to 224), 14 rows 11 (Back at 183, its box to 223)
+                  box to 224), 14 rows 11 (Back at 183, its box to 223),
+                  15 rows 10 (Back at 180, its box to 220: the Disc row
+                  with Language, Graphics driver and the developer rows)
      Controls     from 40, up to 9 rows 18 apart, 10 or 11 rows 16, 12 rows
                   13 (Back at 183, its box to 219); 13 to 15 from
                   30, 11 apart (Back at 184, its box to 220);
@@ -2243,7 +2295,14 @@ static int pagePitch(int page, int n, int *y0)
         return 13;
     }
     if (page == UI_PAGE_MAIN) {
-        return n > 13 ? 11 : n > 12 ? 12 : n > 11 ? 13 : n > 10 ? 14 : n > 9 ? 15 : n > 8 ? 17 : 19;
+        return n > 14   ? 10
+               : n > 13 ? 11
+               : n > 12 ? 12
+               : n > 11 ? 13
+               : n > 10 ? 14
+               : n > 9  ? 15
+               : n > 8  ? 17
+                        : 19;
     }
     if (page == UI_PAGE_CONTROLS && n > 9) {
         /* the touch rows, the mouse rows and the game's pause-menu rows
@@ -2388,6 +2447,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addVersion(pg);
         addNote(pg, UI_OPT_LANGUAGE, UI_STR_LANGUAGE_NOTE);
         addNote(pg, UI_OPT_MENU_LANGUAGE, UI_STR_MENU_LANGUAGE_NOTE);
+        addNote(pg, UI_OPT_DISC, UI_STR_DISC_NOTE);
         addNote(pg, UI_OPT_DEVELOPER, UI_STR_DEVELOPER_NOTE);
         addNote(pg, UI_OPT_DUMP_TEXTURES, UI_STR_DUMP_TEXTURES_NOTE);
         addNote(pg, UI_OPT_DUMP_MODELS, UI_STR_DUMP_MODELS_NOTE);
@@ -2798,22 +2858,31 @@ static void build(void)
        Models and Credits only from the title, layoutPage) */
     /* Dump textures under Developer mode, shown while it is on */
     static const int mainOpts[] = {
-        UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LINK,          UI_OPT_LINK, UI_OPT_LINK,
-        UI_OPT_LINK,      UI_OPT_LANGUAGE,      UI_OPT_MENU_LANGUAGE, UI_OPT_LINK, UI_OPT_LINK,
-        UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS,   UI_OPT_BACK};
-    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,      UI_STR_SECTION_EFFECTS,
-                                   UI_STR_SECTION_GPU_DRIVER,   UI_STR_SECTION_AUDIO,
-                                   UI_STR_SECTION_CONTROLS,     UI_STR_SECTION_GAMEPLAY,
-                                   UI_STR_SECTION_LANGUAGE,     UI_STR_OPT_MENU_LANGUAGE,
-                                   UI_STR_SECTION_ACHIEVEMENTS, UI_STR_EXTRAS,
-                                   UI_STR_OPT_DEVELOPER_MODE,   UI_STR_OPT_DUMP_TEXTURES,
-                                   UI_STR_OPT_DUMP_MODELS,      UI_STR_BACK};
+        UI_OPT_LINK, UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,
+        UI_OPT_LINK, UI_OPT_LANGUAGE,  UI_OPT_MENU_LANGUAGE, UI_OPT_DISC,        UI_OPT_LINK,
+        UI_OPT_LINK, UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
+    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
+                                   UI_STR_SECTION_EFFECTS,
+                                   UI_STR_SECTION_GPU_DRIVER,
+                                   UI_STR_SECTION_AUDIO,
+                                   UI_STR_SECTION_CONTROLS,
+                                   UI_STR_SECTION_GAMEPLAY,
+                                   UI_STR_SECTION_LANGUAGE,
+                                   UI_STR_OPT_MENU_LANGUAGE,
+                                   UI_STR_OPT_DISC,
+                                   UI_STR_SECTION_ACHIEVEMENTS,
+                                   UI_STR_EXTRAS,
+                                   UI_STR_OPT_DEVELOPER_MODE,
+                                   UI_STR_OPT_DUMP_TEXTURES,
+                                   UI_STR_OPT_DUMP_MODELS,
+                                   UI_STR_BACK};
     static const int mainLinks[] = {UI_PAGE_DISPLAY,
                                     UI_PAGE_EFFECTS,
                                     UI_PAGE_GPU_DRIVER,
                                     UI_PAGE_AUDIO,
                                     UI_PAGE_CONTROLS,
                                     UI_PAGE_GAMEPLAY,
+                                    -1,
                                     -1,
                                     -1,
                                     UI_PAGE_ACHIEVEMENTS,

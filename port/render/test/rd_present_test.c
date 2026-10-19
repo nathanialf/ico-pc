@@ -60,7 +60,8 @@
  *             1080p, 1440p and 4K, odd sizes): the mask's bands 2 GS
  *             columns at the picture's scale and the reduction's rows,
  *             within a pixel, black; the on picture inside them; DISPLAY
- *             the on one's.  At 4:3 and 48:9 (the frame its exact width):
+ *             the on one's; on the Japanese disc no rows (the side
+ *             bands alone).  At 4:3 and 48:9 (the frame its exact width):
  *             no mask, the GS's own border as v0.7.4 had it
  *   present info  with interpolation off, rd_last_present_info names the
  *             frame rd_end_frame presented
@@ -134,6 +135,7 @@
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_tex.h"
+#include "../../core/region.h" /* the Japanese disc's reduction crop */
 #include "shader_consts.h"
 #include "vk/rhi_vk.h"
 
@@ -2406,7 +2408,7 @@ static void checkMaskAgainst(const char *name, const uint8_t *off, const uint8_t
     const int32_t l = in->x - b->x, t = in->y - b->y;
     const int32_t r = (b->x + (int32_t)b->w) - (in->x + (int32_t)in->w);
     const int32_t bo = (b->y + (int32_t)b->h) - (in->y + (int32_t)in->h);
-    const float crop = m->gsH >= 512u ? 8.0f : 2.0f;
+    const float crop = (float)rd__reduction_crop(m->gsH);
     const float side = 2.0f * (float)b->w / m->we;
     const float rows = (float)b->h * crop / ((float)m->gsH * 0.5f);
     printf("%s: border mask: box %d,%d %ux%u, bands %d left, %d right, %d top, %d bottom (the "
@@ -3644,7 +3646,7 @@ static void checkBorderOff(const char *name, float aspect, uint32_t outW, uint32
     while (bo < outH && DARK(PXB(cx, outH - 1 - bo))) {
         bo++;
     }
-    const float crop = gsH >= 512u ? 8.0f : 2.0f;
+    const float crop = (float)rd__reduction_crop(gsH);
     const float side = (float)b.x + 2.0f * (float)b.w / m.we;
     const float top = (float)b.y + (float)b.h * crop / ((float)gsH * 0.5f);
     printf("%s: off: box %d,%d %ux%u; black %u left, %u right, %u top, %u bottom (the border "
@@ -3772,6 +3774,17 @@ static void checkBordersOff(void)
     /* 50 Hz: 8 of 256 rows, 33.75 pixels at 1080 */
     checkBorderOff("border 1920x1080 16:9 50 Hz", 16.0f / 9.0f, 1920, 1080, 512);
     checkBorderOff("border 3840x2160 16:9 50 Hz", 16.0f / 9.0f, 3840, 2160, 512);
+    /* the Japanese disc: gsb_Reduction_jpn crops no rows (region.h
+     * reduction_crops_rows), so the bands are the side columns alone */
+    ico_region_select("jpn");
+    CHECK(rd__reduction_crop(448) == 0 && rd__reduction_crop(512) == 0,
+          "border jpn: the reduction crops no rows (%u, %u)", rd__reduction_crop(448),
+          rd__reduction_crop(512));
+    checkBorderOff("border 1920x1080 16:9 Japanese disc", 16.0f / 9.0f, 1920, 1080, 448);
+    ico_region_select("pal");
+    CHECK(rd__reduction_crop(448) == 2 && rd__reduction_crop(512) == 8,
+          "border pal: the reduction crops 2 of 224 rows, 8 of 256 (%u, %u)",
+          rd__reduction_crop(448), rd__reduction_crop(512));
     /* the frame its exact width: the GS's own border, v0.7.4's picture */
     checkBorderOwn("border 1440x1080 4:3", 4.0f / 3.0f, 1440, 1080);
     checkBorderOwn("border 1920x1080 4:3 (pillars)", 4.0f / 3.0f, 1920, 1080);

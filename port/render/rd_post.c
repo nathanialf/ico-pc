@@ -75,6 +75,7 @@
  */
 #include <string.h>
 #include "rd_internal.h"
+#include "../core/region.h" /* the running disc's reduction crop */
 
 /* The RdKey the next post sprites carry, so the presenter
  * can interpolate the fade's level and the letterbox bars between ticks
@@ -225,6 +226,10 @@ static void reductionSprite(int32_t x0, int32_t y0, int32_t x1, int32_t y1, cons
 
 uint32_t rd__reduction_crop(uint32_t gsH)
 {
+    /* the Japanese disc's gsb_Reduction_jpn crops no rows (region.h) */
+    if (!ico_region_cur()->reduction_crops_rows) {
+        return 0u;
+    }
     return gsH >= 512 ? 8u : 2u;
 }
 

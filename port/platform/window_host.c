@@ -46,6 +46,7 @@
 #include "touch_ui.h"
 #include "trace_host.h"
 #include "ui_host.h"
+#include "popup.h" /* ui_popup_set_vsync_hz */
 #include "ui_mouse.h"
 #include "video_options.h"
 #include "window_host.h"
@@ -2036,6 +2037,8 @@ open_window:
     /* Extras > Add to Steam (Windows and Linux; see steam_add_handler) */
     ui_settings_set_steam_handler(steam_add_handler);
 #endif
+    /* Main > Disc, shown with both discs' game data */
+    ui_settings_set_disc_handler(ico_host_disc_archive_present);
 #ifdef __ANDROID__
     /* the Graphics driver page, and "Quit game" for the
        title's Quit row (a phone has no desktop to quit to); both before the
@@ -3198,8 +3201,10 @@ int ico_window_pump(void)
         s_pres.pumpInputMs = (double)(SDL_GetTicksNS() - t1) / 1e6;
         pump_slow("pads' reading and rumble (ico_input_sdl_update)", t1);
     }
-    /* the popups' clock; the presenter draws them on its overlay at each
-       present (port/ui/ui_host.c) */
+    /* the popups' clock, at the video mode's rate (it follows a change of
+       the mode); the presenter draws them on its overlay at each present
+       (port/ui/ui_host.c) */
+    ui_popup_set_vsync_hz(ico_host_vsync_hz());
     ui_host_vsync(ico_host_main_ticks());
     s_pres.pumpMs = (double)(SDL_GetTicksNS() - t0) / 1e6;
     if (s_pres.pumpMs > s_pres.pumpMaxMs) {
@@ -5127,6 +5132,7 @@ void ico_window_close(void)
 #if !defined(__ANDROID__) && !defined(ICO_IOS)
     ui_settings_set_steam_handler(NULL);
 #endif
+    ui_settings_set_disc_handler(NULL);
 #ifdef __ANDROID__
     ui_settings_set_gpu_driver_host(NULL);
 #endif

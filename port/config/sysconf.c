@@ -10,7 +10,7 @@
 #include "sysconf.h"
 #include "clock.h"
 #include "config.h"
-#include "../core/region.h" /* the disc's region (fixed_60hz) */
+#include "../core/region.h" /* the disc's region (fixed_60hz, has_game_language) */
 #include <ctype.h>
 #include <libscf.h>
 #include <stdio.h>
@@ -238,6 +238,11 @@ void ico_sysconf_set_video_mode(int pal)
 
 int ico_boot_language(void)
 {
+    /* the Japanese game has no language word and no reader: its
+       NonLinearCameraMove stays 0 (region.h has_game_language) */
+    if (!ico_region_cur()->has_game_language) {
+        return 0;
+    }
     return ico_scf_to_game_language(sceScfGetLanguage());
 }
 

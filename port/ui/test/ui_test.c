@@ -566,17 +566,17 @@ static void testPopups(void)
     CHECK(ui_popup_push("A", "B") == 0, "a second one queues");
     ui_popup_dev_tick(249);
     CHECK(ui_popup_panel(r) && r[0] >= UI_GRID_W, "starts off the right edge (%g)", r[0]);
-    for (int i = 0; i < UI_POPUP_SLIDE_VSYNCS; i++) {
+    for (int i = 0; i < ui_popup_slide_vsyncs(); i++) {
         ui_popup_vsync();
     }
     CHECK(ui_popup_panel(r) && r[2] <= UI_GRID_W && r[0] > 0.0f && r[1] > 0.0f && r[3] < 120.0f,
           "slid in: %g,%g %g,%g", r[0], r[1], r[2], r[3]);
-    for (int i = 0; i < UI_POPUP_HOLD_VSYNCS + UI_POPUP_SLIDE_VSYNCS; i++) {
+    for (int i = 0; i < ui_popup_hold_vsyncs() + ui_popup_slide_vsyncs(); i++) {
         ui_popup_vsync();
     }
     CHECK(ui_popup_active() && ui_popup_panel(r) && r[0] >= UI_GRID_W,
           "the second waits off screen");
-    for (int i = 0; i < 2 * UI_POPUP_SLIDE_VSYNCS + UI_POPUP_HOLD_VSYNCS; i++) {
+    for (int i = 0; i < 2 * ui_popup_slide_vsyncs() + ui_popup_hold_vsyncs(); i++) {
         ui_popup_vsync();
     }
     CHECK(!ui_popup_active(), "both shown once");
@@ -590,6 +590,38 @@ static void testPopups(void)
     ui_popup_reset();
     ui_popup_set_dev_test(0);
 
+    /* the timing in seconds: 0.3 s in, 4 s held, 0.3 s out at the default
+       50 Hz and at 60 Hz (the Japanese disc, and the European one's 60 Hz
+       mode) */
+    CHECK(ui_popup_slide_vsyncs() == 15 && ui_popup_hold_vsyncs() == 200,
+          "50 Hz: 15 + 200 + 15 vsyncs (%d, %d)", ui_popup_slide_vsyncs(), ui_popup_hold_vsyncs());
+    ui_popup_set_vsync_hz(60);
+    CHECK(ui_popup_slide_vsyncs() == 18 && ui_popup_hold_vsyncs() == 240,
+          "60 Hz: 18 + 240 + 18 vsyncs (%d, %d)", ui_popup_slide_vsyncs(), ui_popup_hold_vsyncs());
+    ui_popup_push("A", "B");
+    for (int i = 0; i < 15; i++) {
+        ui_popup_vsync();
+    }
+    float at15[4] = {0}, at18[4] = {0}, at19[4] = {0};
+    CHECK(ui_popup_panel(at15), "60 Hz: a panel at 15 vsyncs");
+    for (int i = 15; i < 18; i++) {
+        ui_popup_vsync();
+    }
+    CHECK(ui_popup_panel(at18), "60 Hz: a panel at 18 vsyncs");
+    ui_popup_vsync();
+    CHECK(ui_popup_panel(at19), "60 Hz: a panel at 19 vsyncs");
+    CHECK(at15[2] > at18[2] && at18[2] == at19[2] && at18[2] <= UI_GRID_W,
+          "60 Hz: still sliding at 15 vsyncs, in from 18 (%g, %g, %g)", at15[2], at18[2], at19[2]);
+    for (int i = 19; i < 2 * 18 + 240 - 1; i++) {
+        ui_popup_vsync();
+    }
+    CHECK(ui_popup_active(), "60 Hz: shown for 275 vsyncs");
+    ui_popup_vsync();
+    CHECK(!ui_popup_active(), "60 Hz: gone after 276 vsyncs (4.6 s)");
+    ui_popup_set_vsync_hz(0);
+    CHECK(ui_popup_slide_vsyncs() == 15, "0 restores the default 50 Hz");
+    ui_popup_reset();
+
     /* a Japanese body wider than the panel breaks between its characters
        (strings.h ui_break_before) and the panel takes the second line; a
        Latin body keeps its one line */
@@ -600,7 +632,7 @@ static void testPopups(void)
         for (int k = 0; k < 3; k++) {
             ui_popup_reset();
             ui_popup_push("A", bodies[k]);
-            for (int i = 0; i < UI_POPUP_SLIDE_VSYNCS; i++) {
+            for (int i = 0; i < ui_popup_slide_vsyncs(); i++) {
                 ui_popup_vsync();
             }
             CHECK(ui_popup_panel(r), "body %d: a panel", k);
@@ -727,7 +759,7 @@ static void checkOverlayPopup(void)
     ui_font_forget_textures();
     ui_popup_reset();
     ui_popup_push("Title", "Body line");
-    for (int i = 0; i < UI_POPUP_SLIDE_VSYNCS; i++) {
+    for (int i = 0; i < ui_popup_slide_vsyncs(); i++) {
         ui_popup_vsync();
     }
     /* a frame without the popup, then the same with it drawn */
@@ -883,7 +915,7 @@ static bool popupPresent(int popup, uint8_t *dst)
     ui_popup_reset();
     if (popup) {
         ui_popup_push("Achievement unlocked", "Éléphant, Größe, señor");
-        for (int i = 0; i < UI_POPUP_SLIDE_VSYNCS; i++) {
+        for (int i = 0; i < ui_popup_slide_vsyncs(); i++) {
             ui_popup_vsync();
         }
     }

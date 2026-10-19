@@ -197,7 +197,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `ico_frame_test.c`: the [native frame](ARCHITECTURE.md#terms)'s widths for each aspect and the
   options' frame (`ico_frame`).
 - `kanban_boot_test.c`: the boot's card check and signs (`kanbanBoot.c`) for a first and a later
-  boot (`kanban_boot`).
+  boot (`kanban_boot`); with `jpn`, the Japanese disc's check (`kanbanBootMcCheck_jpn`): no
+  language or video step, no read of the card's system file, the language word 0 and 60 Hz
+  throughout (`kanban_boot_jpn`).
 - `model_viewer_cam_test.c`: the viewer's camera step without the game (`model_viewer_cam`).
 - `model_viewer_test.c`: the viewer's table against its motion-kind blocks and the game's table
   sizes, its names in five languages (`model_viewer`); its Japanese model column is checked by
@@ -628,7 +630,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   fake tables, CPU only (`settings`, `settings_extra`, `settings_extras`); `settings_test.c` also
   presses Right in photo mode through Deja vu and checks the popup's words (`ui__photo_film_word`);
   `settings_extra_test.c` steps Effects > Water reflections between Original and Sharp, checks its
-  note, its key and the page's fourteen rows (`testWaterReflections`). Each also runs with `jpn`
+  note, its key and the page's fourteen rows (`testWaterReflections`), and Main's Disc row
+  (`testDiscRow`: shown with both discs' game data only, its values and `[game] disc`, the page
+  with all fifteen rows). Each also runs with `jpn`
   as the Japanese disc over the fixture's tables at that disc's numbers (`settings_jpn`,
   `settings_extra_jpn`, `settings_extras_jpn`): the rows it has not, Menu language, Circle
   confirming, Cross and Triangle going back, the title's rows, the notes' serial, the mouse and
@@ -643,7 +647,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `ui_mouse_test.c`: the pointer's arithmetic in the menus (`ui_mouse`).
 - `ui_test.c`: the embedded fonts, UTF-8, the runtime text; each language's own Deja vu string
   (`UI_STR_PHOTO_FILM_DEJA`); a Japanese popup body wider than the panel takes a second line, an
-  English one keeps its one (`ui`); with `jpn`, the glyph rows, the table sizes and the pad
+  English one keeps its one; the popups' timing in seconds at the default 50 Hz and at 60 Hz
+  (`ui_popup_set_vsync_hz`) (`ui`); with `jpn`, the glyph rows, the table sizes and the pad
   convention on the Japanese disc (`ui_jpn`).
 - Helpers: `settings_fixture.c`/`.h`, `headless_common.py`.
 
@@ -705,7 +710,8 @@ has their defaults; the registrations are in `port/*/CMakeLists.txt`):
   `rd_mesh` run only their synthetic part, and `tables_loader` reads the base ELF instead.
 - `ICO_DISC_IMAGE_JPN`, the Japanese image (`baserom/Ico_JPN.iso`). Without it `vfs_disc_jpn`,
   `vfs_disc_jpn_bin`, `vfs_disc_jpn_cue`, `vfs_disc_jpn_chd`, `archive_disc_jpn`,
-  `archive_manifest_jpn` and `menu_look_jpn` skip, and `gallery_jpn` leaves out the disc checks.
+  `archive_manifest_jpn`, `menu_look_jpn` and `content_table_chains_jpn` skip, and `gallery_jpn`
+  leaves out the disc checks.
 - `ICO_BASE_ELF`, the PAL base ELF: with pyelftools, `tables_loader` and `tables_manifest` are
   built from it (`port/data/CMakeLists.txt`); `gallery` reads its tables.
 - `ICO_BASE_ELF_JPN` and `ICO_DISC_IMAGE_JPN`, the Japanese base ELF and image (defaults
@@ -856,7 +862,8 @@ tables: `layout_asserts` (a program compiled from the generated asserts), `layou
 `font_audit`, `font_subset_ja` (`tools/subset_font_ja.py --check`: the Japanese font's recorded
 code points are the tables', its cmap the recorded ones and, with fontTools 4.63.0 and the
 download from `tools/fetch_deps.sh`, the committed file byte for byte the tool's output) and
-`content_table_chains` (`port/test/CMakeLists.txt`), `data_desc_fresh` (with the audit of
+`content_table_chains` and `content_table_chains_jpn` (`--version jpn`: the Japanese disc's boot
+ELF, tables and groups; `port/test/CMakeLists.txt`), `data_desc_fresh` (with the audit of
 MotionDef's bit reads), `tables_manifest` and `tables_manifest_jpn`
 (`port/data/CMakeLists.txt`), and the package staging (`package_textures`,
 [PACKS.md](PACKS.md#tests)).

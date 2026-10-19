@@ -1626,7 +1626,7 @@ the other post sprites snap (`port/render/rd_post.c` (`s_spriteKey`)).
 
 | kind | source | what it records |
 | --- | --- | --- |
-| REDUCTION | `gsb_Reduction` | DISPLAY cleared, SCENE drawn into it at half height, bilinear, tinted, inside the border-crop scissor (2 pixels left and right; 8 lines top and bottom on a 512-line scene, 2 on 448); both sprites through the GS sprite model |
+| REDUCTION | `gsb_Reduction` | DISPLAY cleared, SCENE drawn into it at half height, bilinear, tinted, inside the border-crop scissor (2 pixels left and right; 8 lines top and bottom on a 512-line scene, 2 on 448, none on the Japanese disc: `gsb_Reduction_jpn`, `rd__reduction_crop`); both sprites through the GS sprite model |
 | KEEP | `gsb_KeepFrameBuffer` | DISPLAY read as PSMCT24 drawn back over the scene at 112 grey |
 | FADE | `gsb_fade` | a full-scene sprite, ALPHA 0x44, PABE 0, the fade colour |
 | LETTERBOX | `gsb_scissorOnDemo` | two 58-line bars, ALPHA 0x64 with FIX the band level |
@@ -1637,6 +1637,18 @@ the other post sprites snap (`port/render/rd_post.c` (`s_spriteKey`)).
 | COMPOSITE_FIX | effects | a textured quad with ALPHA and FIX; with `exactInt` an `RDC_EXACT_BLEND` |
 | COPY | `gif_MoveImage` | a texture copy |
 | MOTION_BLUR .. EYE_BLUR | `staticBlur.c` | one GS sprite each, recorded by `rd_blur.c` |
+
+**The Japanese disc's reduction.** `gsb_Reduction_jpn` (`ico2/seki/src/GsBase.c`) builds the
+same packet with two differences. Its border-crop scissor keeps every line (rows 0 to H/2 - 1; the
+columns 2 to W - 3 as on the European disc), which the host follows: `rd__reduction_crop` returns
+0 when the running disc's `reduction_crops_rows` is 0 (`port/core/region.h`), so the reduction
+draws the whole height and the border mask, the deferred text's clip and the replay use no rows
+either. And it writes TEST and ZBUF after the black clear sprite, not before, so on the PS2 that
+sprite draws under the TEST and ZBUF the frame left; the host clears under TEST 0x30000 with the Z
+write off on both discs. The textured sprite covers every pixel but the two columns at each side, so
+only those columns could differ, and only if the leaked test failed the black sprite; not modelled.
+The European picture is unchanged: `reduction_crops_rows` is 1 there and `rd__reduction_crop` is
+the 2 or 8 it was (ctest `rd_present`'s border cases, which compute the expected rows from it).
 
 `RD_POST_SHADOW_RESOLVE`, `RD_POST_BLUR` and `RD_POST_PRESENT_BLIT` are reserved numbers no caller
 issues; `rd_post` records nothing for them (logged once) (`port/render/rd_post.c`).
@@ -2096,7 +2108,12 @@ it instead (`rd_chain_null`), and each link gets a clip plane in its own space w
 squashed top link begins (`rd_chain_link`); the VU shaders discard the pixels past it. Off, the
 disc's matrices and no plane (`port/render/rd_chain.h`; `port/render/rd_content_chain.c`
 (`rd__chains`); `ico2/seki/src/BgAnimation.c`). The table is checked against the disc by
-`tools/content_table_check.py chains`.
+`tools/content_table_check.py chains`, and against the Japanese disc by `--version jpn chains`
+(its boot ELF, `port/data/gen/jpn/table_desc.c` and `port/core/region_jpn.c`'s
+`chain_group_st10l`/`chain_group_st19a`; the same two chains, groups 731 and 636). The same run
+reports how many of the stage animation files the disc's `stageTable` names its packs hold: 805
+of 969 on the European disc and 801 of 946 on the Japanese one, every file missing from the
+Japanese disc missing from the European one too (the development stages' rows).
 
 ## Strip joining
 

@@ -70,8 +70,9 @@ void ico_sysconf_set_video_mode(int pal);
 /* The boot screens' values, which common/src/main.c sets on every boot
    before stage 1 loads and the GS starts (kanbanBoot.c skips the screens,
    and the card's saved values are not applied). Language: sceScfGetLanguage
-   ([game] language, else the system's) mapped to 2..6. Video mode:
-   [video] video_mode, else 0 (60 Hz). */
+   ([game] language, else the system's) mapped to 2..6, 0 on a disc whose
+   game picks no language (the Japanese one). Video mode: [video]
+   video_mode, else 0 (60 Hz); 0 on a disc with no 50 Hz mode. */
 int ico_boot_language(void);
 int ico_boot_video_mode(void);
 

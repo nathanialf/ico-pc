@@ -119,6 +119,11 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_MENU_LANGUAGE] = "メニューの言語",
     [UI_STR_MENU_LANGUAGE_NOTE] =
         "このメニュー、フォトモードの説明、メッセージの言語です。ゲーム本来の文字はディスクのままです。",
+    [UI_STR_OPT_DISC] = "ディスク",
+    [UI_STR_DISC_NOTE] =
+        "両方のディスクのデータがあるとき、どちらで遊ぶかを選びます。次回の起動から使われます。",
+    [UI_STR_DISC_PAL] = "ヨーロッパ（SCES-50760）",
+    [UI_STR_DISC_JPN] = "日本（SCPS-11003）",
     [UI_STR_REMAP_KEYBOARD] = "キーボード",
     [UI_STR_REMAP_GAMEPAD] = "ゲームパッド",
     [UI_STR_REMAP_HINT] = "×：変更    □：消去    △：もどる",

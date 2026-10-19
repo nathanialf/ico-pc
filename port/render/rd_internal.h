@@ -2519,7 +2519,9 @@ void rd__ui_box(uint32_t outW, uint32_t outH, RhiRect *box);
  * DISPLAY's gsH / 2 at the top and bottom (GsBase.c) that it leaves black.
  * Shared with the presenter's deferred text, which keeps off that border
  * unless full pixel is on (the reduction then draws the whole frame), and
- * with the border mask (rd__border_mask). */
+ * with the border mask (rd__border_mask).  The rows are 0 on the Japanese
+ * disc, whose gsb_Reduction_jpn keeps every line (region.h
+ * reduction_crops_rows). */
 uint32_t rd__reduction_crop(uint32_t gsH);
 /* The frame is cropped: gsW is over 512 and its exact width
  * (rd__frame_wexact) under gsW, so step 2 leaves (gsW - wExact) / 2

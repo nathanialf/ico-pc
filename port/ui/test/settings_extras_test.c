@@ -121,19 +121,21 @@ static void testExtras(void)
                 idx = i;
             }
         }
-        /* Dump textures (developer mode only, hidden here) before
+        /* Disc (with both discs' game data only) after Menu language,
+           Dump textures (developer mode only, both hidden here) before
            Back */
-        CHECK(n == 14 && idx == 9, "Extras is the row after Achievements (index %d of %d)", idx, n);
+        CHECK(n == 15 && idx == 10, "Extras is the row after Achievements (index %d of %d)", idx,
+              n);
         CHECK(lt_ext_prop(ex)->right == ui_settings_page_layout(UI_PAGE_EXTRAS), "Extras opens");
         CHECK(lt_ext_prop(ex)->defaultMask == 0, "title %d: the Extras row is shown", title);
         /* the cursor: Achievements, Down */
-        lt_ext_layout(mainL)->curItem = labels[8];
+        lt_ext_layout(mainL)->curItem = labels[9];
         press(0x4000);
         CHECK(lt_ext_layout(mainL)->curItem == ex,
               "title %d: Down from Achievements lands on Extras", title);
         /* the rows below follow: Back's y, eleven rows on both entries */
-        CHECK(lt_ext_prop(labels[13])->dispY == 40 + 14 * 10, "title %d: Back at y %d", title,
-              lt_ext_prop(labels[13])->dispY);
+        CHECK(lt_ext_prop(labels[14])->dispY == 40 + 14 * 10, "title %d: Back at y %d", title,
+              lt_ext_prop(labels[14])->dispY);
         if (!title) {
             continue;
         }

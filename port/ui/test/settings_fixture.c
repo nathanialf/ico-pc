@@ -724,8 +724,10 @@ void checkPageFits(UiSettingsPage page, const char *what)
     /* Controls is the page that grows past the others (pagePitch) */
     const int tall = page == UI_PAGE_CONTROLS ? 12 : 13;
     /* the Main page's thirteen rows (Menu language, developer mode and
-       both dumps) 12 apart (pagePitch) */
+       both dumps) 12 apart, fifteen (the Graphics driver link and Disc
+       too) 10 apart (pagePitch) */
     const int gap = shown > 15 && page == UI_PAGE_CONTROLS ? 10
+                    : shown > 14 && page == UI_PAGE_MAIN   ? 10
                     : shown > tall                         ? 11
                     : shown == 13 && page == UI_PAGE_MAIN  ? 12
                                                            : 13;

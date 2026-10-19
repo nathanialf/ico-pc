@@ -32,9 +32,9 @@
 static void testBuild(void)
 {
     static const int mainOpts[] = {
-        UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LINK,          UI_OPT_LINK, UI_OPT_LINK,
-        UI_OPT_LINK,      UI_OPT_LANGUAGE,      UI_OPT_MENU_LANGUAGE, UI_OPT_LINK, UI_OPT_LINK,
-        UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS,   UI_OPT_BACK};
+        UI_OPT_LINK, UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,
+        UI_OPT_LINK, UI_OPT_LANGUAGE,  UI_OPT_MENU_LANGUAGE, UI_OPT_DISC,        UI_OPT_LINK,
+        UI_OPT_LINK, UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
     static const int fxOpts[] = {UI_OPT_FULL_HEIGHT,
                                  UI_OPT_FILTER,
                                  UI_OPT_BRIGHTNESS,
@@ -63,13 +63,21 @@ static void testBuild(void)
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_STR_OPT_FULL_PIXEL,
                                  UI_STR_BACK};
-    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,      UI_STR_SECTION_EFFECTS,
-                                   UI_STR_SECTION_GPU_DRIVER,   UI_STR_SECTION_AUDIO,
-                                   UI_STR_SECTION_CONTROLS,     UI_STR_SECTION_GAMEPLAY,
-                                   UI_STR_SECTION_LANGUAGE,     UI_STR_OPT_MENU_LANGUAGE,
-                                   UI_STR_SECTION_ACHIEVEMENTS, UI_STR_EXTRAS,
-                                   UI_STR_OPT_DEVELOPER_MODE,   UI_STR_OPT_DUMP_TEXTURES,
-                                   UI_STR_OPT_DUMP_MODELS,      UI_STR_BACK};
+    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
+                                   UI_STR_SECTION_EFFECTS,
+                                   UI_STR_SECTION_GPU_DRIVER,
+                                   UI_STR_SECTION_AUDIO,
+                                   UI_STR_SECTION_CONTROLS,
+                                   UI_STR_SECTION_GAMEPLAY,
+                                   UI_STR_SECTION_LANGUAGE,
+                                   UI_STR_OPT_MENU_LANGUAGE,
+                                   UI_STR_OPT_DISC,
+                                   UI_STR_SECTION_ACHIEVEMENTS,
+                                   UI_STR_EXTRAS,
+                                   UI_STR_OPT_DEVELOPER_MODE,
+                                   UI_STR_OPT_DUMP_TEXTURES,
+                                   UI_STR_OPT_DUMP_MODELS,
+                                   UI_STR_BACK};
     static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION,  UI_OPT_ASPECT,
                                    UI_OPT_ANTI_ALIAS,   UI_OPT_WINDOW_MODE, UI_OPT_VSYNC,
                                    UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,  UI_OPT_FRAMERATE,
@@ -122,7 +130,7 @@ static void testBuild(void)
     ui_settings_reset();
     ui_set_language(UI_LANG_EN);
     ui_settings_install();
-    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 14), "main page rows");
+    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 15), "main page rows");
     CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 14), "effects rows");
     {
         /* Characters (a link), then Add to Steam (hidden without a host
@@ -1422,7 +1430,7 @@ static void testCirclePortScreens(void)
         int row; /* main page row */
         UiSettingsPage page;
     } kPages[] = {{0, UI_PAGE_DISPLAY},  {1, UI_PAGE_EFFECTS},  {3, UI_PAGE_AUDIO},
-                  {4, UI_PAGE_CONTROLS}, {5, UI_PAGE_GAMEPLAY}, {8, UI_PAGE_ACHIEVEMENTS}};
+                  {4, UI_PAGE_CONTROLS}, {5, UI_PAGE_GAMEPLAY}, {9, UI_PAGE_ACHIEVEMENTS}};
 
     int labels[16];
     ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
@@ -1990,6 +1998,12 @@ static void testBootSkip(void)
     CHECK(ico_boot_video_mode() == 0, "video_mode 60hz -> 0");
     useConfig("[game]\nlanguage = \"it\"\n[video]\nvideo_mode = \"pal50\"\n");
     CHECK(ico_boot_language() == 5 && ico_boot_video_mode() == 1, "it, pal50");
+    /* the Japanese disc: no language word (NonLinearCameraMove stays 0) and
+       60 Hz whatever the config says */
+    CHECK(ico_region_select("jpn") == 0, "the Japanese region");
+    CHECK(ico_boot_language() == 0 && ico_boot_video_mode() == 0, "jpn: language 0, 60 Hz");
+    CHECK(ico_region_select("pal") == 0, "the European region");
+    CHECK(ico_boot_language() == 5, "pal again: it -> 5");
     useConfig("[game]\nlanguage = \"auto\"\n");
     setEnv("LC_ALL", "es_ES.UTF-8");
     /* the host's locale (SDL's preferred locales in the window build, the
@@ -2267,7 +2281,7 @@ static void testGallery(void)
     int mainL = enterMain(1);
     int ml[16];
     ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
-    lt_ext_layout(mainL)->curItem = ml[9]; /* Extras */
+    lt_ext_layout(mainL)->curItem = ml[10]; /* Extras */
     press(0x40);
     int exL = ui_settings_page_layout(UI_PAGE_EXTRAS);
     CHECK(settle(exL, 60), "gallery: Extras");

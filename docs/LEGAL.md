@@ -31,6 +31,20 @@ respective owners.
   maintainer step (`port/data/CMakeLists.txt`).
 - `config/ico.pal.yaml`, the splat layout (how the ELF is split into
   members) of the same rebuilt ELF; nothing in the build reads it.
+- The same configuration for the Japanese disc (SCPS-11003), of the same
+  kinds and on the same terms: `config/link_order.jpn.txt` and
+  `config/link.jpn.ld` (its link order and linker script),
+  `config/data_members.jpn.txt` and `config/data_schema.jpn.txt` (its data
+  members and their record types and counts), `config/ee_layout.jpn.txt`
+  (its record layouts, written from upstream's headers),
+  `config/motion_bits.jpn.txt` (its bit positions, written from upstream's
+  sources), `config/tables_manifest.jpn.txt` (the CRCs its tables are checked
+  against), `config/sha1sums.jpn.txt` (the SHA-1s of its expected files),
+  `config/stubs.jpn.txt` (the ranges of its base ELF still built from the
+  user's own copy at build time, as names and addresses), and
+  `config/symbol_addrs.jpn.txt` and `config/symbol_addrs.jpn.data.txt` (the
+  names and addresses of the decompilation's byte-matching link of that ELF,
+  a record of that link as the European files are of theirs).
 
 ## What is not in this repository, and must never be added
 

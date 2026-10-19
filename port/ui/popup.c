@@ -39,7 +39,8 @@ typedef struct Popup {
 
 static Popup s_queue[UI_POPUP_QUEUE];
 static int s_head, s_count;
-static unsigned int s_age; /* vsyncs the head popup has been shown */
+static unsigned int s_age;             /* vsyncs the head popup has been shown */
+static int s_hz = UI_POPUP_DEFAULT_HZ; /* the rate ui_popup_vsync runs at */
 static int s_devTest;
 static unsigned int s_devNext = DEV_TEST_TICK;
 
@@ -127,13 +128,28 @@ int ui_popup_active(void)
     return s_count > 0;
 }
 
+void ui_popup_set_vsync_hz(int hz)
+{
+    s_hz = hz > 0 ? hz : UI_POPUP_DEFAULT_HZ;
+}
+
+int ui_popup_slide_vsyncs(void)
+{
+    return (s_hz * UI_POPUP_SLIDE_TENTHS + 5) / 10;
+}
+
+int ui_popup_hold_vsyncs(void)
+{
+    return s_hz * UI_POPUP_HOLD_SECONDS;
+}
+
 void ui_popup_vsync(void)
 {
     if (s_count == 0) {
         return;
     }
     s_age++;
-    if (s_age >= 2 * UI_POPUP_SLIDE_VSYNCS + UI_POPUP_HOLD_VSYNCS) {
+    if (s_age >= (unsigned int)(2 * ui_popup_slide_vsyncs() + ui_popup_hold_vsyncs())) {
         s_head = (s_head + 1) % UI_POPUP_QUEUE;
         s_count--;
         s_age = 0;
@@ -158,14 +174,15 @@ void ui_popup_dev_tick(unsigned int mainTick)
 /* 0 .. 1: how far in the panel is (smoothstep in, hold, smoothstep out) */
 static float shown(void)
 {
+    const int slide = ui_popup_slide_vsyncs(), hold = ui_popup_hold_vsyncs();
+    const int age = (int)s_age;
     float t;
-    if (s_age < UI_POPUP_SLIDE_VSYNCS) {
-        t = (float)s_age / (float)UI_POPUP_SLIDE_VSYNCS;
-    } else if (s_age < UI_POPUP_SLIDE_VSYNCS + UI_POPUP_HOLD_VSYNCS) {
+    if (age < slide) {
+        t = (float)age / (float)slide;
+    } else if (age < slide + hold) {
         t = 1.0f;
     } else {
-        t = (float)(2 * UI_POPUP_SLIDE_VSYNCS + UI_POPUP_HOLD_VSYNCS - s_age) /
-            (float)UI_POPUP_SLIDE_VSYNCS;
+        t = (float)(2 * slide + hold - age) / (float)slide;
     }
     if (t < 0.0f) {
         t = 0.0f;

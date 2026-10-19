@@ -69,7 +69,8 @@ the picture's own scale, where the PS2's reduction scissor held it black (`port/
 (`postReduction`)): 2 GS columns at each side, `round(2 k)` output pixels with `k` the box's width
 over the exact width (6 at 1080p 16:9, 5.625 exactly; 11 at 4K), and `crop / (h / 2)` of the box's
 height at the top and bottom, `crop` 2 rows, or 8 at 512 lines (`rd__reduction_crop`; 10 rows at
-1080p, 19 at 4K, 34 at 1080p and 50 Hz). The mask is the box blit's scissor inset by the bands, the
+1080p, 19 at 4K, 34 at 1080p and 50 Hz), and none on the Japanese disc, whose reduction keeps every
+line (`port/core/region.h` `reduction_crops_rows`), so its mask is the side columns alone. The mask is the box blit's scissor inset by the bands, the
 viewport the box's, so the cleared black stays in them; the effects depth blit and the CRT filter's
 last pass take the same scissor (the tube's box at its grid's scale), and the deferred text is
 clipped to it (`port/render/rd_present.c` (`rd__border_mask`, `blit`, `depthBlit`, `textRegion`),

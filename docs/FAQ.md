@@ -215,6 +215,8 @@ first start. The image the game is set to decides which disc starts. To keep one
 of them whichever images are around, set `disc` in the `[game]` part of
 `config.toml` to `"pal"` (European) or `"jpn"` (Japanese); `"auto"` lets
 the game choose.
+With both discs set up, the **Disc** row in Options does the same
+([more](OPTIONS.md#language)).
 
 ## How do I take a photo?
 

@@ -22,9 +22,20 @@ extern "C" {
 
 #define UI_POPUP_QUEUE 8
 #define UI_POPUP_TEXT 128
-/* timing, in vsyncs (50 Hz PAL: 0.3 s in, 4 s held, 0.3 s out) */
-#define UI_POPUP_SLIDE_VSYNCS 15
-#define UI_POPUP_HOLD_VSYNCS 200
+/* timing: 0.3 s in, 4 s held, 0.3 s out, counted in vsyncs at the rate
+   ui_popup_set_vsync_hz gives (50 by default: 15, 200, 15; 60: 18, 240, 18) */
+#define UI_POPUP_SLIDE_TENTHS 3
+#define UI_POPUP_HOLD_SECONDS 4
+#define UI_POPUP_DEFAULT_HZ 50
+
+/* The vsync rate ui_popup_vsync is called at: the window host passes
+   ico_host_vsync_hz() (50 on the European disc's PAL mode, 60 otherwise)
+   before each call, so a change of the video mode is followed; 0 or less
+   restores the default. */
+void ui_popup_set_vsync_hz(int hz);
+/* the slide and the hold in vsyncs at that rate */
+int ui_popup_slide_vsyncs(void);
+int ui_popup_hold_vsyncs(void);
 
 /* Queues a popup (copied; UTF-8, '\n' allowed in body); 0, or -1 when the
    queue is full. */

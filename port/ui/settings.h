@@ -176,6 +176,11 @@ void ui_settings_set_gpu_driver_host(const UiGpuDriverHost *host);
 #define UI_STEAM_NO_USER 4   /* no Steam account to add it to */
 #define UI_STEAM_FAILED 5    /* the shortcut list could not be changed */
 void ui_settings_set_steam_handler(int (*fn)(void));
+/* Main > Disc: fn answers whether a disc's game data (its archive_name,
+   port/core/region.h) is there (port/platform/host_config.c
+   ico_host_disc_archive_present); the row shows when every disc's is, and is
+   asked once after each call. NULL (or never called) hides the row. */
+void ui_settings_set_disc_handler(int (*fn)(const char *archive_name));
 /* Settings > Extras > Models opens the layout fn returns
    (port/game/model_viewer.c's model list), or nothing when it returns -1 or
    none is set ("extras: models not available" in the log). */
@@ -311,6 +316,8 @@ typedef enum UiSettingsOpt {
     /* Main */
     UI_OPT_LANGUAGE,      /* the game's own language (the European disc only) */
     UI_OPT_MENU_LANGUAGE, /* [ui] language: the port's text, Auto or a UiLang */
+    UI_OPT_DISC,          /* [game] disc: the disc the next start plays; shown only with both
+                             discs' game data (ui_settings_set_disc_handler) */
     UI_OPT_DUMP_TEXTURES, /* [video] dump_textures, for pack authors (developer mode) */
     UI_OPT_DUMP_MODELS,   /* [video] dump_models, for pack makers (developer mode) */
     /* Extras > Characters, one row per IcoAppPart in its order

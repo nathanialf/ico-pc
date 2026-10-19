@@ -312,7 +312,8 @@ language is `NonLinearCameraMove`, 2..6 after the boot on the European disc (Eng
 German, Italian, Spanish), mapped by `ui_lang_from_game`; the Language row changes it, so the
 menus follow at once while the menu language is Auto, and writes `[game] language`
 (`port/config/sysconf.h` (`ico_sysconf_set_language`)). The Japanese disc has no game language:
-the row is not shown there and the port never writes the word (`gameLanguage` is -1).
+the row is not shown there and the port never writes the word (`gameLanguage` is -1); `Main` sets it
+from `ico_boot_language`, which gives 0 on that disc (`port/config/sysconf.c`), so it stays 0.
 
 The menu language, `[ui] language` (`auto`, `en`, `fr`, `de`, `it`, `es` or `ja`;
 `port/game/options.h` (`ico_opt_ui_language`)), is resolved by `ui_settings_resolve_language`: a
@@ -460,9 +461,11 @@ whole ([Hints](#hints)); the photo panel shrinks its size until the widest line 
 ## Popups
 
 `ui_popup_push` queues a title and body (eight at most); one shows at a time, sliding in from the
-right edge of the 4:3 picture for 15 [vsyncs](ARCHITECTURE.md#terms), held for 200, sliding out for
-15, timed by `ui_popup_vsync` (`port/ui/popup.h` (`UI_POPUP_QUEUE`, `UI_POPUP_SLIDE_VSYNCS`,
-`UI_POPUP_HOLD_VSYNCS`)). Achievements, photo mode, the model viewer, the Graphics driver page and
+right edge of the 4:3 picture for 0.3 s, held for 4 s, sliding out for 0.3 s, counted in
+[vsyncs](ARCHITECTURE.md#terms) by `ui_popup_vsync` at the rate the window host passes before each
+call, `ico_host_vsync_hz()` (15, 200 and 15 at 50 Hz; 18, 240 and 18 at 60 Hz, the Japanese disc's
+and the European disc's 60 Hz mode; `port/ui/popup.h` (`UI_POPUP_QUEUE`, `ui_popup_set_vsync_hz`,
+`ui_popup_slide_vsyncs`, `ui_popup_hold_vsyncs`), 50 Hz by default in the tests). Achievements, photo mode, the model viewer, the Graphics driver page and
 Extras > Add to Steam push them (`port/ui/settings.c` (`steamAdd`)). They are drawn on the
 presentation overlay (`rd_set_present_overlay`) at every [present](ARCHITECTURE.md#terms), after the
 box blit and at the output's resolution: outside the game's frame, so a frame the GS keeps never
@@ -594,6 +597,18 @@ the renderer lets down. The Japanese values, and what each was resolved against,
 - **Rows.** The Circle goes back row, the 50 Hz Video mode row and the game's Language row are not
   shown (`lt_ext_has_circle_back`, `has_50hz_row`, `has_game_language`); the Menu language row is
   shown on both discs (`port/ui/settings.c` (`optShown`, `ui_settings_opt_shown`)).
+- **Disc.** Main's Disc row, after Menu language, shows on both discs when both discs' game data
+  is there: the window host passes `ico_host_disc_archive_present` (`port/platform/host_config.h`:
+  each region's `archive_name` in the per-user folder or beside the program, the same test
+  `main_host.c`'s `mount_game_data` makes for `ico_host_choose_disc`) to
+  `ui_settings_set_disc_handler`, asked once after each call. Its values, `UI_STR_DISC_PAL` and
+  `UI_STR_DISC_JPN` ("Europe (SCES-50760)", "Japan (SCPS-11003)" in English), step through
+  `config/regions.txt`'s rows and write `[game] disc` (`ico_config_disc_pin`), read at the next
+  start; with no pin the row shows the disc playing, which with both discs' data and no pin is the
+  one the next start picks (the disc played last). Its note is `UI_STR_DISC_NOTE` ("Takes effect at
+  the next start"). With every Main row shown (the Graphics driver link, Language, Disc and the
+  two developer rows) the page has fifteen rows, 10 lines apart (`pagePitch`). ctest
+  `settings_extra` (`testDiscRow`).
 - **Glyphs.** The button pictures are the Japanese sheet's (`Tex_menu01/option.tm2`): rows 155,
   321, 320 and 319 (Cross, Circle, Square, Triangle, 32 x 15 texels shown 30 high), 326, 323, 325
   and 324 (L1, R1, L2, R2, 64 x 20 shown 40 high) and the arrows 278 and 279 (20 x 20, 40 high),

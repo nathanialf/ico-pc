@@ -569,6 +569,130 @@ static int fakeSteam(void)
     return s_steamAnswer;
 }
 
+/* the Disc row's host: bit i, row i of config/regions.txt's game data */
+static unsigned s_discHave;
+
+static int fakeDiscPresent(const char *archiveName)
+{
+    for (int i = 0; i < ico_region_count(); i++) {
+        if (strcmp(ico_region_at(i)->archive_name, archiveName) == 0) {
+            return (int)((s_discHave >> i) & 1u);
+        }
+    }
+    return 0;
+}
+
+/* Main > Disc: hidden without a host and with one disc's game data, shown
+   with both, after Menu language; European disc / Japanese disc, written
+   to [game] disc (read at the next start) with its note; with no pin it
+   shows the disc playing.  With every Main row shown (the Graphics driver
+   link, Language, Disc and the two developer rows: fifteen) the rows are
+   10 apart and the page fits. */
+static void testDiscRow(void)
+{
+    useConfig("version = 1\n");
+    ui_settings_set_disc_handler(NULL);
+    enterMain(1);
+    frame(0);
+    CHECK(ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_DISC) >= 0 &&
+              !an22bShown(UI_PAGE_MAIN, UI_OPT_DISC),
+          "disc: no host, the row is hidden");
+    s_discHave = 1u;
+    ui_settings_set_disc_handler(fakeDiscPresent);
+    enterMain(1);
+    frame(0);
+    CHECK(!an22bShown(UI_PAGE_MAIN, UI_OPT_DISC) && !ui_settings_opt_shown(UI_OPT_DISC),
+          "disc: one disc's game data, hidden");
+    s_discHave = 3u;
+    ui_settings_set_disc_handler(fakeDiscPresent);
+    enterMain(1);
+    frame(0);
+    CHECK(an22bShown(UI_PAGE_MAIN, UI_OPT_DISC), "disc: both discs' game data, shown");
+    {
+        int labels[16];
+        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        int at = -1, menu = -1;
+        for (int i = 0; i < n; i++) {
+            at = labels[i] == ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_DISC) ? i : at;
+            menu = labels[i] == ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_MENU_LANGUAGE) ? i : menu;
+        }
+        CHECK(at >= 0 && at == menu + 1, "disc: the row after Menu language (%d, %d)", at, menu);
+        CHECK(strcmp(lt_ext_row_text(ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_DISC)), "Disc") == 0,
+              "disc: the label \"%s\"",
+              lt_ext_row_text(ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_DISC)));
+    }
+    CHECK(ui_settings_note_row_of(UI_PAGE_MAIN, UI_OPT_DISC) >= 0, "disc: the row has its note");
+    /* in every language the label fits its box (300) and both values the
+       value box (176) at 60 % or more (layout_ext.c sets a wider one
+       smaller, down to 60 %) */
+    for (int g = 0; g < UI_LANG_COUNT; g++) {
+        const float lw =
+            ui_measure_menu_text(UI_MENU_TEXT_SIZE, ui_str_in((UiLang)g, UI_STR_OPT_DISC));
+        const float pw =
+            ui_measure_menu_text(UI_MENU_TEXT_SIZE, ui_str_in((UiLang)g, UI_STR_DISC_PAL));
+        const float jw =
+            ui_measure_menu_text(UI_MENU_TEXT_SIZE, ui_str_in((UiLang)g, UI_STR_DISC_JPN));
+        CHECK(lw * 0.6f <= 300.0f && pw * 0.6f <= 176.0f && jw * 0.6f <= 176.0f,
+              "disc: language %d: the label and values fit (%.1f, %.1f, %.1f)", g, (double)lw,
+              (double)pw, (double)jw);
+    }
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_DISC), "Europe (SCES-50760)") == 0,
+          "disc: no pin, the disc playing: %s", ui_settings_value_text(UI_OPT_DISC));
+    ui_settings_step(UI_OPT_DISC, 1);
+    CHECK(strcmp(ico_config_get_string("game.disc", ""), "jpn") == 0 &&
+              ico_config_disc_pin() == ICO_REGION_JPN &&
+              strcmp(ui_settings_value_text(UI_OPT_DISC), "Japan (SCPS-11003)") == 0,
+          "disc: Right pins the Japanese disc (%s, %s)", ico_config_get_string("game.disc", ""),
+          ui_settings_value_text(UI_OPT_DISC));
+    ui_settings_step(UI_OPT_DISC, 1);
+    CHECK(strcmp(ico_config_get_string("game.disc", ""), "pal") == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_DISC), "Europe (SCES-50760)") == 0,
+          "disc: and wraps to the European one (%s)", ico_config_get_string("game.disc", ""));
+    ui_settings_step(UI_OPT_DISC, -1);
+    CHECK(strcmp(ico_config_get_string("game.disc", ""), "jpn") == 0, "disc: Left steps back");
+    /* no pin on the Japanese disc: the row shows it */
+    useConfig("version = 1\n");
+    CHECK(ico_region_select("jpn") == 0, "disc: the Japanese disc selected");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_DISC), "Japan (SCPS-11003)") == 0,
+          "disc: no pin on the Japanese disc: %s", ui_settings_value_text(UI_OPT_DISC));
+    CHECK(ico_region_select("pal") == 0, "disc: the European disc again");
+
+    /* every Main row: fifteen, 10 apart, Back's box inside the page */
+    s_gpuN = 0;
+    s_gpuSel = -1;
+    s_gpuFailed = -1;
+    s_gpuAdreno = 1;
+    ui_settings_set_gpu_driver_host(&kGpuHost);
+    ico_opt_set_developer_mode(1);
+    enterMain(1);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    {
+        int labels[16], shown = 0;
+        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        for (int i = 0; i < n; i++) {
+            const int on = !lt_ext_prop(labels[i])->defaultMask && !lt_ext_prop(labels[i])->masked;
+            shown += on;
+            if (!on) {
+                printf("  disc: hidden: %s\n", lt_ext_row_text(labels[i]));
+            }
+        }
+        const LtProperty *back = lt_ext_prop(labels[n - 1]);
+        CHECK(shown == 15, "disc: every Main row shown (%d of %d)", shown, n);
+        CHECK(back->dispY == 40 + 14 * 10, "disc: fifteen rows 10 apart, Back at %d", back->dispY);
+        CHECK(back->dispY + back->dispH <= 226, "disc: Back's box ends at %d",
+              back->dispY + back->dispH);
+        checkPageFits(UI_PAGE_MAIN, "Main (every row)");
+    }
+    ico_opt_set_developer_mode(0);
+    ui_settings_set_gpu_driver_host(NULL);
+    ui_settings_set_disc_handler(NULL);
+    useConfig("version = 1\n");
+    enterMain(1);
+    frame(0);
+}
+
 static void testAddToSteam(void)
 {
     static const struct {
@@ -2363,6 +2487,8 @@ int main(int argc, char **argv)
     /* Settings > Graphics driver, the Quit game label */
     testGpuDriver();
     testAddToSteam();
+    /* Main > Disc */
+    testDiscRow();
     testQuitGame();
     /* Controls > the mouse camera rows */
     testMouseCamera();

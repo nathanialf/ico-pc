@@ -58,8 +58,15 @@ rd__content_hide_set: "N=off", "N=hide") and ICO_RD_CONTENT_EXTEND
           the picture there should be none.  A report, not a gate.
   all     decide over the dump list, then report (the default)
   chains  the chains table (port/render/rd_content_chain.c, Natural chains)
-          against the disc image (--disc, ICO_DISC_IMAGE or baserom/
-          Ico_PAL.iso; an .iso only): each entry's stage animation row
+          against the disc image of --version SLUG (a row of
+          config/regions.txt, pal by default: its boot ELF, its
+          port/data/gen/SLUG/table_desc.c and its groups,
+          port/core/region_SLUG.c chain_group_*; the image --disc, else
+          ICO_DISC_IMAGE (pal) or ICO_DISC_IMAGE_JPN (jpn), else baserom/
+          Ico_PAL.iso or Ico_JPN.iso; an .iso only): first how many of the
+          stage animation files the disc's stageTable names its packs hold
+          (a report; --missing lists the others), then each entry's stage
+          animation row
           (its group, unique), its Null (type 1, the keyed scale changing on
           the entry's axis alone, below 1 and up to 1), the links under it
           (one model, still, unturned and unscaled, evenly from the anchor to
@@ -71,7 +78,7 @@ rd__content_hide_set: "N=off", "N=hide") and ICO_RD_CONTENT_EXTEND
 
   python3 -I tools/content_table_check.py [--tool T] [--out DIR] [--dumps LIST]
           [decide | report [--mesh NAME ...] [SOURCE ...] | all]
-  python3 -I tools/content_table_check.py [--disc ISO] chains
+  python3 -I tools/content_table_check.py [--version SLUG] [--disc ISO] [--missing] chains
 
 The dump list is tools/native_frame_dumps.txt (or ICO_DUMPS, or --dumps):
 machine-local paths, dumps are never committed.  The report's default
@@ -567,7 +574,36 @@ def cmd_report(args, groups):
 # ------------------------------------------------------------------ chains
 
 CHAIN_TABLE = os.path.join(ROOT, "port", "render", "rd_content_chain.c")
-TABLE_DESC = os.path.join(ROOT, "port", "data", "gen", "pal", "table_desc.c")  # the PAL set
+REGIONS = os.path.join(ROOT, "config", "regions.txt")
+# the chains table's rows in order, by the region.h field holding each one's
+# group on a disc (rd_content_chain.c chainGroup)
+CHAIN_GROUP_FIELDS = ["chain_group_st10l", "chain_group_st19a"]
+
+
+def table_desc(slug):
+    return os.path.join(ROOT, "port", "data", "gen", slug, "table_desc.c")
+
+
+def region_row(slug):
+    """(disc id, boot ELF) of a row of config/regions.txt."""
+    for line in open(REGIONS, encoding="utf-8"):
+        f = line.split("#", 1)[0].split()
+        if len(f) >= 4 and f[0] == slug:
+            return f[2], f[3]
+    raise SystemExit("content_table_check: no row %s in %s" % (slug, REGIONS))
+
+
+def region_groups(slug):
+    """The chain groups port/core/region_SLUG.c gives, in the table's order."""
+    path = os.path.join(ROOT, "port", "core", "region_%s.c" % slug)
+    src = open(path, encoding="utf-8").read()
+    out = []
+    for f in CHAIN_GROUP_FIELDS:
+        m = re.search(r"\.%s\s*=\s*(\d+)" % f, src)
+        if not m:
+            raise SystemExit("content_table_check: no .%s in %s" % (f, path))
+        out.append(int(m.group(1)))
+    return out
 
 
 def read_chains(path=CHAIN_TABLE):
@@ -584,20 +620,22 @@ def read_chains(path=CHAIN_TABLE):
     return out
 
 
-def table_range(name):
-    """(EE address, record count) of a table in port/data/gen/pal/table_desc.c."""
-    src = open(TABLE_DESC, encoding="utf-8").read()
+def table_range(name, slug="pal"):
+    """(EE address, record count) of a table in port/data/gen/SLUG/table_desc.c."""
+    path = table_desc(slug)
+    src = open(path, encoding="utf-8").read()
     m = re.search(r'\{"[^"]*",\s*"%s",\s*\w+,\s*(0x[0-9A-Fa-f]+)u,\s*0x[0-9A-Fa-f]+u,\s*'
                   r'0x[0-9A-Fa-f]+u,\s*\d+,\s*(\d+)' % name, src)
     if not m:
-        raise SystemExit("content_table_check: %s not in %s" % (name, TABLE_DESC))
+        raise SystemExit("content_table_check: %s not in %s" % (name, path))
     return int(m.group(1), 16), int(m.group(2))
 
 
 class Disc:
-    """The PAL disc image (ISO 9660): its files, DATA.DF's packs, the ELF."""
+    """A disc image (ISO 9660): its files, DATA.DF's packs, the boot ELF."""
 
-    def __init__(self, path):
+    def __init__(self, path, boot_elf="SCES_507.60"):
+        self.boot_elf = boot_elf
         self.f = open(path, "rb")
         pvd = self.sectors(16, 1)
         if pvd[1:6] != b"CD001":
@@ -652,7 +690,7 @@ class Disc:
                 at += sz
 
     def elf(self):
-        lsn, size = self.find("SCES_507.60")
+        lsn, size = self.find(self.boot_elf)
         return self.sectors(lsn, (size + 2047) // 2048)[:size]
 
 
@@ -740,24 +778,36 @@ def p2o_reach(b, axis, toward_minus):
 
 
 def cmd_chains(args):
-    path = args.disc or os.environ.get("ICO_DISC_IMAGE") or os.path.join(ROOT, "baserom", "Ico_PAL.iso")
+    slug = args.version
+    disc_id, boot_elf = region_row(slug)
+    env = "ICO_DISC_IMAGE" if slug == "pal" else "ICO_DISC_IMAGE_%s" % slug.upper()
+    path = args.disc or os.environ.get(env) or os.path.join(ROOT, "baserom", "Ico_%s.iso" % slug.upper())
     if not path.lower().endswith(".iso") or not os.path.exists(path):
         say("SKIP chains: no disc image (.iso) at %s" % path)
         return EXIT_SKIP
-    disc = Disc(path)
+    disc = Disc(path, boot_elf)
     read = elf_reader(disc.elf())
-    base, count = table_range("stageTable")
+    base, count = table_range("stageTable", slug)
     rows = []
     for i in range(count):
         r = read(base + i * 0x5C, 0x5C)
         rows.append((r[:64].split(b"\0")[0].decode("latin-1"), struct.unpack_from("<i", r, 0x48)[0]))
+    say("chains: %s (%s, %s), stageTable %d rows from %s" % (disc_id, slug, boot_elf, count,
+                                                            os.path.relpath(table_desc(slug), ROOT)))
     table = read_chains()
     rc = 0
     if not table:
         say("FAIL chains: no entry read from %s" % CHAIN_TABLE)
         return 1
-    bgas, models, found = {}, {}, set()
+    groups = region_groups(slug)
+    if len(groups) != len(table):
+        say("FAIL chains: %d rows in the table, %d groups in region_%s.c" % (len(table), len(groups), slug))
+        return 1
+    for e, g in zip(table, groups):
+        e["group"] = g
+    bgas, models, found, members = {}, {}, set(), set()
     for name, _mid, data in disc.packs():
+        members.add(name)
         if name.endswith(".bga") and name not in bgas:
             bgas[name] = data
             nodes = bga_nodes(data)
@@ -769,6 +819,17 @@ def cmd_chains(args):
                     found.add((name.rsplit("/", 1)[-1][:-4], d["num"]))
         elif name.endswith(".p2o"):
             models.setdefault(name.rsplit("/", 1)[-1][:-4], data)
+    # a report, not a gate: both retail discs keep rows whose files they do
+    # not hold (the development stages' and unused cameras': 164 distinct on
+    # the European disc, 145 on the Japanese one, every one of those also
+    # missing from the European disc)
+    named = [p for p, _g in rows if p and p != "NULL"]
+    missing = sorted(set(p for p in named if p not in members))
+    say("chains: stageTable names %d stage animation files (%d distinct): %d in the disc's packs, "
+        "%d not (--missing lists them)" % (len(named), len(set(named)), len(set(named)) - len(missing),
+                                          len(missing)))
+    for p in missing if args.missing else []:
+        say("chains: not on the disc: %s" % p)
     for e in table:
         where = "chains: %s" % e["bga"]
         hits = [(p, g) for p, g in rows if p.endswith("/%s.bga" % e["bga"])]
@@ -846,6 +907,10 @@ def main():
     p.add_argument("--dumps", default=os.environ.get("ICO_DUMPS") or DEFAULT_LIST)
     p.add_argument("--mesh", action="append", help="report: a mesh name (repeatable)")
     p.add_argument("--disc", help="chains: the disc image (.iso)")
+    p.add_argument("--version", default="pal",
+                   help="chains: the disc, a row of config/regions.txt (pal, jpn)")
+    p.add_argument("--missing", action="store_true",
+                   help="chains: list the stageTable files the disc's packs do not hold")
     p.add_argument("mode", nargs="?", default="all", choices=["decide", "report", "all", "chains"])
     p.add_argument("sources", nargs="*", help="report: dumps, F12 zips or aspect sweep zips")
     args = p.parse_args()

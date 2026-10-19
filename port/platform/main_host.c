@@ -1408,10 +1408,7 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
     /* the archives there are, per disc (the per-user folder, else beside
        the program) */
     for (d = 0; d < ICO_REGION_COUNT; d++) {
-        if ((archive_path(cand[0], sizeof(cand[0]), pref, &ico_discs[d]) == 0 &&
-             ico_file_exists(cand[0])) ||
-            (archive_path(cand[1], sizeof(cand[1]), exe_dir, &ico_discs[d]) == 0 &&
-             ico_file_exists(cand[1]))) {
+        if (ico_host_disc_archive_present(ico_discs[d].archive_name)) {
             have |= 1u << d;
         }
     }

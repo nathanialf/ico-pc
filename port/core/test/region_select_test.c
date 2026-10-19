@@ -130,6 +130,7 @@ static void test_consistency(void)
     CHECK(strcmp(ico_region_info_jpn.key_prefix, ico_region_info_pal.key_prefix) != 0 &&
           strcmp(ico_region_info_jpn.key_suffix, ico_region_info_pal.key_suffix) != 0);
     CHECK(ico_region_info_pal.mc_product_size == 0x1F0);
+    CHECK(ico_region_info_pal.reduction_crops_rows == 1);
 }
 
 /* the Japanese values, as region_jpn.c resolved them by name: every field */
@@ -159,6 +160,7 @@ static void test_jpn_values(void)
     NUM(fixed_60hz, 1);
     NUM(pad_confirm, 0x20);
     NUM(pad_back, 0x40);
+    NUM(reduction_crops_rows, 0);
     NUM(stage_count, 104);
     NUM(stage_title, 1);
     NUM(stage_credits, 58);

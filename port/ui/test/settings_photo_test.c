@@ -807,11 +807,11 @@ static int render(void)
         CHECK(settle(mainL, 60), "the menu from the title");
         int ml[16];
         ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
-        lt_ext_layout(mainL)->curItem = ml[8];
+        lt_ext_layout(mainL)->curItem = ml[9]; /* Achievements */
         frame(0);
         frame(0);
         snap4("settings_main_title_4x.png");
-        lt_ext_layout(mainL)->curItem = ml[9];
+        lt_ext_layout(mainL)->curItem = ml[10]; /* Extras */
         press(0x40);
         int exL = ui_settings_page_layout(UI_PAGE_EXTRAS);
         CHECK(settle(exL, 60), "Extras at 4x");
@@ -975,7 +975,7 @@ static int render(void)
             press(0x4000);
             press(0x40);
             CHECK(settle(mainL, 60), "the menu from the title at 1080p");
-            lt_ext_layout(mainL)->curItem = ml[9];
+            lt_ext_layout(mainL)->curItem = ml[10]; /* Extras */
             press(0x40);
             int exL = ui_settings_page_layout(UI_PAGE_EXTRAS);
             CHECK(settle(exL, 60), "Extras at 1080p");

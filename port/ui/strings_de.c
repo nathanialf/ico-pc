@@ -119,6 +119,11 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_MENU_LANGUAGE] = "Menüsprache",
     [UI_STR_MENU_LANGUAGE_NOTE] =
         "Die Sprache dieser Menüs, der Hilfe im Fotomodus und der Meldungen. Der Text des Spiels bleibt der der Disc.",
+    [UI_STR_OPT_DISC] = "Disc",
+    [UI_STR_DISC_NOTE] =
+        "Welche Disc gespielt wird, wenn beide installiert sind. Gilt ab dem nächsten Start.",
+    [UI_STR_DISC_PAL] = "Europa (SCES-50760)",
+    [UI_STR_DISC_JPN] = "Japan (SCPS-11003)",
     [UI_STR_REMAP_KEYBOARD] = "Tastatur",
     [UI_STR_REMAP_GAMEPAD] = "Gamepad",
     [UI_STR_REMAP_HINT] = "Kreuz: ändern    Quadrat: löschen    Dreieck: zurück",

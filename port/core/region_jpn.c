@@ -36,6 +36,8 @@ const IcoRegionInfo ico_region_info_jpn = {
     .pad_confirm = 0x20,    /* Circle: targets/jpn/.../layout_action.c:148,2464 */
     .pad_back = 0x40,       /* Cross: layout_action.c:150,2494,3066 */
 
+    .reduction_crops_rows = 0, /* GsBase.c gsb_Reduction_jpn: SCISSOR rows 0 .. H/2-1 */
+
     /* stageData: rows 0..57 are the same; memoryPAL (58) and memoryPAL576
        (59) are gone, so the rows from staff1 on are 2 lower */
     .stage_count = 104,  /* data_schema.jpn.txt stage-all */

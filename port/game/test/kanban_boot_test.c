@@ -28,18 +28,36 @@
  *     that sees the load's end and, the other order the threads can take,
  *     between the tick before it and that tick's kick.  The step ticks are
  *     the log's.
+ * With "jpn" (ctest kanban_boot_jpn) the same runs on the Japanese disc,
+ * whose card check is kanbanBootMcCheck_jpn: no language step, no video
+ * step, no read of the card's system file (so neither cameraMove nor
+ * palMode), NonLinearCameraMove 0 (the disc has no language word) and
+ * systemStatus[0] 0 (60 Hz) from the start and throughout, one card check,
+ * the presents sign (its sign 0) once and no card warning (its sign 3);
+ * over the load the check asks for the presents sign within a few ticks,
+ * before the load ends, and every frame from its step 2 to that tick is a
+ * keep frame.
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "config.h"
 #include "sysconf.h"
+#include "../../core/region.h" /* ico_region_select: the Japanese run */
 /* the boot, as the game's own source; stubs below satisfy it (its step
    log, diag_host.c's in ico_platform, is the test's own here) */
 #define ico_host_kanban_step test_kanban_step
 #include "../../../ico2/common/src/kanbanBoot.c"
 
 static int failures;
+static int s_jpn; /* the Japanese disc's run */
+
+/* the language main.c sets from [game] language "de": German (4) on the
+   European disc, 0 on the Japanese one (no language word) */
+#define WANT_LANG (s_jpn ? 0 : 4)
+/* the signs kanbanBoot.c asks for: the presents sign, the card warning */
+#define SIGN_PRESENTS (s_jpn ? 0 : 2)
+#define SIGN_WARNING (s_jpn ? 3 : 5)
 
 #define CHECK(c, ...)                                                                              \
     do {                                                                                           \
@@ -190,22 +208,23 @@ static void boot(const char *what, int savePresent)
     /* kanbanBoot.c's .sdata as the program starts */
     bootStep = mcCheckStep = bootStarted = bootKanbanDone = 0;
     mcRetryCount = 10;
-    /* main.c: the PAL default and its language 3, then the port's values */
-    systemStatus[0] = 1;
-    NonLinearCameraMove = 3;
+    /* main.c: the PAL default and its language 3 (the Japanese disc: 60 Hz
+       from the mount, no language), then the port's values */
+    systemStatus[0] = s_jpn ? 0 : 1;
+    NonLinearCameraMove = s_jpn ? 0 : 3;
     systemStatus[0] = ico_boot_video_mode();
     NonLinearCameraMove = ico_boot_language();
-    CHECK(systemStatus[0] == 0 && NonLinearCameraMove == 4,
-          "%s: 60 Hz and German before the first tick (%d, %d)", what, systemStatus[0],
-          NonLinearCameraMove);
+    CHECK(systemStatus[0] == 0 && NonLinearCameraMove == WANT_LANG,
+          "%s: 60 Hz and language %d before the first tick (%d, %d)", what, WANT_LANG,
+          systemStatus[0], NonLinearCameraMove);
     kanbanBootInit();
     kanbanBootStart();
     while (!kanbanBootEnd && s.ticks < 1000) {
         kanbanBootMain();
         s.ticks++;
-        CHECK(systemStatus[0] == 0 && NonLinearCameraMove == 4,
-              "%s: tick %d: 60 Hz and German stay (%d, %d)", what, s.ticks, systemStatus[0],
-              NonLinearCameraMove);
+        CHECK(systemStatus[0] == 0 && NonLinearCameraMove == WANT_LANG,
+              "%s: tick %d: 60 Hz and language %d stay (%d, %d)", what, s.ticks, WANT_LANG,
+              systemStatus[0], NonLinearCameraMove);
         if (failures > 10) {
             return;
         }
@@ -215,11 +234,20 @@ static void boot(const char *what, int savePresent)
     CHECK(s.layoutSwitches == 0, "%s: no layout switch (%d)", what, s.layoutSwitches);
     CHECK(s.gsResets == 0, "%s: no gsResetFunc (%d)", what, s.gsResets);
     CHECK(s.chdirs == 1, "%s: one card check (%d chdirs)", what, s.chdirs);
-    CHECK(s.loads == savePresent, "%s: the system file loaded %d times", what, s.loads);
-    CHECK(s.adds[0] == 0 && s.adds[1] == 0, "%s: no language or 50/60 Hz sign (%d, %d)", what,
-          s.adds[0], s.adds[1]);
-    CHECK(s.adds[2] == 1, "%s: the presents sign once (%d)", what, s.adds[2]);
-    CHECK(s.adds[5] == 0, "%s: no card warning (%d)", what, s.adds[5]);
+    /* the Japanese check never reads the card's system file: no
+       cameraMove, no palMode */
+    CHECK(s.loads == (s_jpn ? 0 : savePresent), "%s: the system file loaded %d times", what,
+          s.loads);
+    if (s_jpn) {
+        CHECK(s.adds[1] == 0 && s.adds[2] == 0, "%s: no card sign (no card %d, full %d)", what,
+              s.adds[1], s.adds[2]);
+    } else {
+        CHECK(s.adds[0] == 0 && s.adds[1] == 0, "%s: no language or 50/60 Hz sign (%d, %d)", what,
+              s.adds[0], s.adds[1]);
+    }
+    CHECK(s.adds[SIGN_PRESENTS] == 1, "%s: the presents sign once (%d)", what,
+          s.adds[SIGN_PRESENTS]);
+    CHECK(s.adds[SIGN_WARNING] == 0, "%s: no card warning (%d)", what, s.adds[SIGN_WARNING]);
     CHECK(s.badStep == 0, "%s: no tick in steps 102 or 190..202 (%d)", what, s.badStep);
     CHECK(fbKeep == 0, "%s: the frame buffer released", what);
     printf("  %s: %d ticks, %d chdir, %d load, %d reloads, %d gsResetFunc\n", what, s.ticks,
@@ -269,7 +297,7 @@ static void bootOverLoad(const char *what, int releaseLate)
         if (!releaseLate && s.ticks == LOAD_END_TICK) {
             stageManagerLoadEnd();
         }
-        const int signs = s.adds[2] + s.adds[5];
+        const int signs = s.adds[SIGN_PRESENTS] + s.adds[SIGN_WARNING];
         kanbanBootMain();
         if (releaseLate && s.ticks == LOAD_END_TICK - 1) {
             stageManagerLoadEnd();
@@ -277,22 +305,37 @@ static void bootOverLoad(const char *what, int releaseLate)
         if (step2Tick < 0 && bootStep == 2 && mcCheckStep > 2) {
             step2Tick = s.ticks;
         }
-        if (signTick < 0 && s.adds[2] + s.adds[5] != signs) {
+        if (signTick < 0 && s.adds[SIGN_PRESENTS] + s.adds[SIGN_WARNING] != signs) {
             signTick = s.ticks;
         }
         kickKeep[s.ticks] = fbKeep; /* the scheduler's kick at the next vsync */
+        CHECK(systemStatus[0] == 0 && NonLinearCameraMove == WANT_LANG,
+              "%s: tick %d: 60 Hz and language %d stay (%d, %d)", what, s.ticks, WANT_LANG,
+              systemStatus[0], NonLinearCameraMove);
         s.ticks++;
     }
     CHECK(kanbanBootEnd, "%s: the boot ends (%d ticks)", what, s.ticks);
-    CHECK(s.adds[2] == 1 && s.adds[5] == 0, "%s: the presents sign once, no card warning (%d, %d)",
-          what, s.adds[2], s.adds[5]);
-    CHECK(s.at101 == LOAD_END_TICK + 1 && s.at300 == LOAD_END_TICK + 2 &&
-              s.atEnd == LOAD_END_TICK + 3 && s.atBoot3 == LOAD_END_TICK + 4,
-          "%s: steps 101, 300, -1 and bootStep 3 at ticks %d, %d, %d, %d (the log's %d to %d)",
-          what, s.at101, s.at300, s.atEnd, s.atBoot3, LOAD_END_TICK + 1, LOAD_END_TICK + 4);
-    CHECK(step2Tick >= 0 && signTick == LOAD_END_TICK + 3,
-          "%s: the card check from tick %d, the presents sign asked for at tick %d (want %d)", what,
-          step2Tick, signTick, LOAD_END_TICK + 3);
+    CHECK(s.adds[SIGN_PRESENTS] == 1 && s.adds[SIGN_WARNING] == 0,
+          "%s: the presents sign once, no card warning (%d, %d)", what, s.adds[SIGN_PRESENTS],
+          s.adds[SIGN_WARNING]);
+    if (s_jpn) {
+        /* the Japanese check does not wait for the load: a card with the
+           save ends it at step 4, and the presents sign is asked for in the
+           next tick, well before the load's end */
+        CHECK(s.at101 < 0 && s.at300 < 0 && step2Tick >= 0 && signTick > step2Tick &&
+                  signTick < LOAD_END_TICK && s.atEnd == signTick,
+              "%s: no step 101 or 300 (%d, %d); the card check from tick %d, its end and the "
+              "presents sign at ticks %d and %d, before the load's end %d",
+              what, s.at101, s.at300, step2Tick, s.atEnd, signTick, LOAD_END_TICK);
+    } else {
+        CHECK(s.at101 == LOAD_END_TICK + 1 && s.at300 == LOAD_END_TICK + 2 &&
+                  s.atEnd == LOAD_END_TICK + 3 && s.atBoot3 == LOAD_END_TICK + 4,
+              "%s: steps 101, 300, -1 and bootStep 3 at ticks %d, %d, %d, %d (the log's %d to %d)",
+              what, s.at101, s.at300, s.atEnd, s.atBoot3, LOAD_END_TICK + 1, LOAD_END_TICK + 4);
+        CHECK(step2Tick >= 0 && signTick == LOAD_END_TICK + 3,
+              "%s: the card check from tick %d, the presents sign asked for at tick %d (want %d)",
+              what, step2Tick, signTick, LOAD_END_TICK + 3);
+    }
     if (step2Tick < 0 || signTick < 0) {
         return;
     }
@@ -322,6 +365,15 @@ int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
     char p[1100];
+    if (argc > 2 && strcmp(argv[2], "jpn") == 0) {
+        s_jpn = 1;
+        if (ico_region_select("jpn") != 0) {
+            printf("kanban_boot_test: no region jpn\n");
+            return 1;
+        }
+        /* select_disc (main_host.c): the Japanese game's word starts at 0 */
+        systemStatus[0] = 0;
+    }
     snprintf(p, sizeof(p), "%s/kanban_boot_test.toml", dir);
     writeFile(p, "version = 1\n[game]\nlanguage = \"de\"\n");
     ico_config_reset(p, "");
@@ -332,9 +384,9 @@ int main(int argc, char **argv)
     bootOverLoad("over the load, the stage manager after the tick", 1);
     remove(p);
     if (failures) {
-        printf("kanban_boot_test: %d failures\n", failures);
+        printf("kanban_boot_test%s: %d failures\n", s_jpn ? " jpn" : "", failures);
         return 1;
     }
-    printf("kanban_boot_test: ok\n");
+    printf("kanban_boot_test%s: ok\n", s_jpn ? " jpn" : "");
     return 0;
 }

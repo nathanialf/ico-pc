@@ -306,6 +306,10 @@ Options once you have finished the game:
   Italian, Spanish or Japanese. It starts on Auto: Japanese with the Japanese
   disc, and with the European disc the game's language. It does not
   change the game's own text, which is always the disc's.
+- **Disc** shows only when both discs are set up. It is the disc the game
+  plays: Europe (SCES-50760) or Japan (SCPS-11003). A change
+  takes effect the next time you start the game. It is the same setting as
+  `disc` in the `[game]` part of `config.toml`.
 
 ## Achievements
 

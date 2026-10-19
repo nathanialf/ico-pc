@@ -168,6 +168,10 @@ typedef enum UiStrId {
     UI_STR_LANGUAGE_NOTE,
     UI_STR_OPT_MENU_LANGUAGE,  /* the Menu language row ([ui] language) */
     UI_STR_MENU_LANGUAGE_NOTE, /* its explanation */
+    UI_STR_OPT_DISC,           /* the Disc row ([game] disc), with both discs' game data */
+    UI_STR_DISC_NOTE,          /* its explanation */
+    UI_STR_DISC_PAL,           /* its values, in config/regions.txt's order */
+    UI_STR_DISC_JPN,
     UI_STR_REMAP_KEYBOARD,
     UI_STR_REMAP_GAMEPAD,
     UI_STR_REMAP_HINT,

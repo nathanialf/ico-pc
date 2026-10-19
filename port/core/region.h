@@ -80,6 +80,11 @@ typedef struct IcoRegionInfo {
     int pad_confirm;       /* pad[0].flags bit the menus confirm with */
     int pad_back;          /* and cancel with */
 
+    /* --- the picture --------------------------------------------------- */
+    int reduction_crops_rows; /* gsb_Reduction's border crop keeps the top and
+                                 bottom rows black (2 of 224, 8 of 256); 0: it
+                                 keeps every row (rd_post.c rd__reduction_crop) */
+
     /* --- stages (stageData rows) --------------------------------------- */
     int stage_count;   /* rows of stageData */
     int stage_title;   /* the boot logo and title (STAGE_TITLE) */

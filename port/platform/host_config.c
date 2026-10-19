@@ -2269,6 +2269,21 @@ int ico_host_saves_dir(char *out, size_t size)
     return r;
 }
 
+int ico_host_disc_archive_present(const char *archive_name)
+{
+    char dir[ICO_PATH_MAX], path[ICO_PATH_MAX];
+
+    if (archive_name == NULL || archive_name[0] == '\0') {
+        return 0;
+    }
+    ico_host_pref_dir(dir, sizeof(dir));
+    if (ico_path_join(path, sizeof(path), dir, archive_name) == 0 && ico_file_exists(path)) {
+        return 1;
+    }
+    ico_host_exe_dir(dir, sizeof(dir));
+    return ico_path_join(path, sizeof(path), dir, archive_name) == 0 && ico_file_exists(path);
+}
+
 int ico_host_choose_disc(int pin, int given, unsigned have, int last, int count, const char **why)
 {
     const char *rule = "the European disc";

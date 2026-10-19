@@ -28,6 +28,8 @@ const IcoRegionInfo ico_region_info_pal = {
     .pad_confirm = 0x40, /* Cross: layout_action.c:148 */
     .pad_back = 0x10,    /* Triangle: layout_action.c:150 */
 
+    .reduction_crops_rows = 1, /* GsBase.c gsb_Reduction: SCISSOR rows crop .. H/2-1-crop */
+
     .stage_count = 106,       /* data_schema.pal.txt stage-all */
     .stage_title = 1,         /* gamestate.c:220, title_logo.c:15 */
     .stage_credits = 60,      /* ico_credits.h:31 STAFF1 */

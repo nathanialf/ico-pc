@@ -136,6 +136,10 @@ target_compile_options(kanban_boot_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GA
 target_link_libraries(kanban_boot_test PRIVATE ico_config)
 if(ICO_RUN_TESTS)
     add_test(NAME kanban_boot COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}")
+    # the Japanese disc's check (kanbanBootMcCheck_jpn): no language or
+    # video step, no card system file read, the language word 0 and 60 Hz
+    # throughout
+    add_test(NAME kanban_boot_jpn COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" jpn)
 endif()
 
 # The hand records Ico and Yorda hold hands with

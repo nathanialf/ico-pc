@@ -266,6 +266,12 @@ int ico_host_pick_iso(char *out, size_t size);
    words for the log ("[game] disc", "the disc image given", "the only game
    data there", "the disc played last", "the European disc"). */
 int ico_host_choose_disc(int pin, int given, unsigned have, int last, int count, const char **why);
+/* Whether a disc's game data is there: archive_name (port/core/region.h's
+   archive_name, "ico.o2r", "ico-jpn.o2r") in the per-user folder
+   (ico_host_pref_dir) or beside the program (ico_host_exe_dir). The `have`
+   of ico_host_choose_disc (main_host.c mount_game_data) and the Settings
+   menu's Disc row (ui_settings_set_disc_handler). 1 or 0. */
+int ico_host_disc_archive_present(const char *archive_name);
 
 /* Windows GUI program (-mwindows): stdout and stderr go nowhere until a
    console is attached. Attaches the console of the program that started
