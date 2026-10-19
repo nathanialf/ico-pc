@@ -359,6 +359,120 @@ int ui__menu_strip_raster(const UiMenuTextItem *it, int lang, uint8_t *out, int 
     return 0;
 }
 
+/* ---------------------------------------------- a port text's layout */
+
+/* A port text's strip laid out (textStrip's, and the tests' through
+   ui__menu_text_raster): its lines, their pens and the first baseline,
+   the strip's corner and size, sheet texels. */
+typedef struct MfText {
+    const char *start[MF_LINES];
+    size_t len[MF_LINES];
+    int n;
+    float em, b0, step, pen[MF_LINES];
+    int ox, oy, w, h;
+} MfText;
+
+/* 0 when the strip has no size */
+static int textLayout(const char *utf8, float em, unsigned layout, MfText *t)
+{
+    const char *start[MF_LINES];
+    size_t len[MF_LINES];
+    const int n = splitLines(utf8, start, len);
+    float asc = 0.0f, desc = 0.0f, step = 0.0f, cap = 0.0f;
+    ui__sheet_v_metrics(em, &asc, &desc, &step, &cap);
+    float b0;
+    switch (layout & UI_VALIGN_MASK) {
+    case UI_VALIGN_MIDDLE:
+        b0 = cap * 0.5f;
+        break;
+    case UI_VALIGN_BASELINE:
+        b0 = 0.0f;
+        break;
+    default:
+        b0 = asc;
+        break;
+    }
+    float pen[MF_LINES], minX = 0.0f, maxX = 0.0f;
+    for (int i = 0; i < n; i++) {
+        const float w = ui__sheet_line_width(em, 1.0f, 0.0f, start[i], len[i]);
+        switch (layout & UI_ALIGN_MASK) {
+        case UI_ALIGN_CENTER:
+            pen[i] = -w * 0.5f;
+            break;
+        case UI_ALIGN_RIGHT:
+            pen[i] = -w;
+            break;
+        default:
+            pen[i] = 0.0f;
+            break;
+        }
+        if (i == 0 || pen[i] < minX) {
+            minX = pen[i];
+        }
+        if (i == 0 || pen[i] + w > maxX) {
+            maxX = pen[i] + w;
+        }
+    }
+    /* the glyphs' overhang past their advances (italic-free Arimo: a
+       fraction of the em) and the rim */
+    const float padX = ceilf(em * 2.0f * UI_X_PER_Y * 0.12f) + (float)MF_RIM_X;
+    const float padY = ceilf(em * 0.12f) + (float)MF_RIM_Y;
+    const int ox = (int)floorf(minX - padX), oy = (int)floorf(b0 - asc - padY);
+    int w = (int)ceilf(maxX + padX) - ox;
+    int hgt = (int)ceilf(b0 + (float)(n - 1) * step + desc + padY) - oy;
+    w = w > MF_MAX_W ? MF_MAX_W : w;
+    hgt = hgt > MF_MAX_H ? MF_MAX_H : hgt;
+    for (int i = 0; i < n; i++) {
+        t->start[i] = start[i];
+        t->len[i] = len[i];
+        t->pen[i] = pen[i];
+    }
+    t->n = n;
+    t->em = em;
+    t->b0 = b0;
+    t->step = step;
+    t->ox = ox;
+    t->oy = oy;
+    t->w = w;
+    t->h = hgt;
+    return w > 0 && hgt > 0;
+}
+
+/* the laid-out text rasterised at sc strip texels a sheet texel into cov
+   (t->w * sc x t->h * sc bytes, zeroed) and made heavier */
+static void textRaster(const MfText *t, uint8_t *cov, int sc)
+{
+    const int n = t->n, w = t->w, hgt = t->h, ox = t->ox, oy = t->oy;
+    const float em = t->em, b0 = t->b0, step = t->step;
+    const char *const *start = t->start;
+    const size_t *len = t->len;
+    const float *pen = t->pen;
+    for (int i = 0; i < n; i++) {
+        ui__sheet_raster_line(cov, w * sc, hgt * sc, w * sc, em, 1.0f, 0.0f, pen[i] - (float)ox,
+                              b0 + (float)i * step - (float)oy, start[i], len[i], sc);
+    }
+    embolden(cov, w * sc, hgt * sc, sc);
+}
+
+int ui__menu_text_raster(const char *utf8, float size, unsigned layout, uint8_t **out, int *w,
+                         int *h)
+{
+    MfText t;
+    if (!out || !w || !h || !utf8 || !*utf8 || !(size > 0.0f) ||
+        !textLayout(utf8, size * 0.5f, layout & (UI_ALIGN_MASK | UI_VALIGN_MASK), &t)) {
+        return -1;
+    }
+    uint8_t *cov = calloc((size_t)t.w * (size_t)t.h, 1);
+    if (!cov) {
+        return -1;
+    }
+    textRaster(&t, cov, 1);
+    *out = cov;
+    *w = t.w;
+    *h = t.h;
+    return 0;
+}
+
 /* ---------------------------------------------------------------- inks */
 
 #ifdef ICO_RD
@@ -864,56 +978,11 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls, 
             return s;
         }
     }
-    const char *start[MF_LINES];
-    size_t len[MF_LINES];
-    const int n = splitLines(utf8, start, len);
-    float asc = 0.0f, desc = 0.0f, step = 0.0f, cap = 0.0f;
-    ui__sheet_v_metrics(em, &asc, &desc, &step, &cap);
-    float b0;
-    switch (layout & UI_VALIGN_MASK) {
-    case UI_VALIGN_MIDDLE:
-        b0 = cap * 0.5f;
-        break;
-    case UI_VALIGN_BASELINE:
-        b0 = 0.0f;
-        break;
-    default:
-        b0 = asc;
-        break;
-    }
-    float pen[MF_LINES], minX = 0.0f, maxX = 0.0f;
-    for (int i = 0; i < n; i++) {
-        const float w = ui__sheet_line_width(em, 1.0f, 0.0f, start[i], len[i]);
-        switch (layout & UI_ALIGN_MASK) {
-        case UI_ALIGN_CENTER:
-            pen[i] = -w * 0.5f;
-            break;
-        case UI_ALIGN_RIGHT:
-            pen[i] = -w;
-            break;
-        default:
-            pen[i] = 0.0f;
-            break;
-        }
-        if (i == 0 || pen[i] < minX) {
-            minX = pen[i];
-        }
-        if (i == 0 || pen[i] + w > maxX) {
-            maxX = pen[i] + w;
-        }
-    }
-    /* the glyphs' overhang past their advances (italic-free Arimo: a
-       fraction of the em) and the rim */
-    const float padX = ceilf(em * 2.0f * UI_X_PER_Y * 0.12f) + (float)MF_RIM_X;
-    const float padY = ceilf(em * 0.12f) + (float)MF_RIM_Y;
-    const int ox = (int)floorf(minX - padX), oy = (int)floorf(b0 - asc - padY);
-    int w = (int)ceilf(maxX + padX) - ox;
-    int hgt = (int)ceilf(b0 + (float)(n - 1) * step + desc + padY) - oy;
-    w = w > MF_MAX_W ? MF_MAX_W : w;
-    hgt = hgt > MF_MAX_H ? MF_MAX_H : hgt;
-    if (w <= 0 || hgt <= 0) {
+    MfText t;
+    if (!textLayout(utf8, em, layout, &t)) {
         return NULL;
     }
+    const int w = t.w, hgt = t.h, ox = t.ox, oy = t.oy;
     MfStrip *s = newStrip();
     int page, x, y;
     if (!s || !allocCell(cls, sc, w * sc, hgt * sc, &page, &x, &y)) {
@@ -927,11 +996,7 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls, 
         return NULL;
     }
     strcpy(copy, utf8);
-    for (int i = 0; i < n; i++) {
-        ui__sheet_raster_line(cov, w * sc, hgt * sc, w * sc, em, 1.0f, 0.0f, pen[i] - (float)ox,
-                              b0 + (float)i * step - (float)oy, start[i], len[i], sc);
-    }
-    embolden(cov, w * sc, hgt * sc, sc);
+    textRaster(&t, cov, sc);
     memset(s, 0, sizeof(*s));
     s->used = 1;
     s->hash = h;

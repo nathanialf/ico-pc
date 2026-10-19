@@ -101,6 +101,12 @@ uint64_t ui__text_key(const char *utf8, unsigned flags, int page);
    item's. */
 struct UiMenuTextItem;
 int ui__menu_strip_raster(const struct UiMenuTextItem *it, int lang, uint8_t *out, int w, int h);
+/* Tests: a port text's coverage strip at 1x, as ui_draw_menu_text lays it
+   out and caches it (em size y units, layout the font.h alignment flags;
+   the lines, the rim's margin, the weight): *out malloc'd, *w x *h bytes,
+   the caller frees it.  0, or -1 for no text.  No ICO_RD needed. */
+int ui__menu_text_raster(const char *utf8, float size, unsigned layout, uint8_t **out, int *w,
+                         int *h);
 /* Tests: the menus' strips rasterised at scale strip texels a sheet
    texel (1 .. ICO_SHEET_SCALE_MAX) whatever the scene's or the output's
    scale; 0 goes back to those (menu_font.c mfScale) */
