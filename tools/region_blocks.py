@@ -80,7 +80,9 @@ The files are EUC-JP: the tool reads and writes bytes and never decodes.
   tools/region_blocks.py --selftest
                          convert tools/test/region_blocks/fixture.c and
                          compare with expected.c, expected_report.tsv
-                         (report --all) and expected_bits.txt
+                         (report --all) and expected_bits.txt; check
+                         check_contexts.c beside it (exactly its lines
+                         marked "refused" refused)
 """
 
 import argparse
@@ -2270,11 +2272,51 @@ class IncludeGraph:
         return bool(incl) and all(self.covered(i, target, seen) for i in incl)
 
 
+SHIFTS = (b">>", b"<<", b">>=", b"<<=")
+
+
+def shift_count(view, k):
+    """Whether the expression at view index k is (part of) a shift's count:
+    the token before it, or before a grouping parenthesis around it, is a
+    shift (`w >> PAL_JPN(16, 19)`, `w >> (PAL_JPN(16, 19))`,
+    `w >> (8 + PAL_JPN(8, 11))`)."""
+    if view.text(k - 1) in SHIFTS:
+        return True
+    p = view.parent[k]
+    while p is not None and view.text(p) == b"(":
+        before = view.toks[p - 1] if p > 0 else None
+        # a call's or a cast's parenthesis ends the walk
+        if before is not None and (before.kind == "ident" or before.text in (b")", b"]")):
+            return False
+        if view.text(p - 1) in SHIFTS:
+            return True
+        p = view.parent[p]
+    return False
+
+
+def unary_amp(view, k):
+    """Whether the `&` at view index k is the address-of operator (no operand before it)."""
+    before = view.toks[k - 1] if k >= 1 else None
+    if before is not None and before.text == b")" and (k - 1) in view.match:
+        # after a cast, `(Item *)&x`: a parenthesis of type words and `*`
+        # that is no call's
+        o = view.match[k - 1]
+        inner = view.toks[o + 1:k - 1]
+        head = view.toks[o - 1] if o >= 1 else None
+        if inner and all(t.kind == "ident" or t.text == b"*" for t in inner) and \
+                (head is None or not (head.kind == "ident" or head.text in (b")", b"]"))) and \
+                (len(inner) > 1 or inner[0].text in TYPE_WORDS or inner[0].text.endswith(b"_t")):
+            return True
+    return before is None or not (before.kind in ("ident", "number", "string", "char") or
+                                  before.text in (b")", b"]"))
+
+
 def constant_context(view, k):
     """Why a selector at view index k sits in a constant context, or None."""
-    prev = view.text(k - 1)
-    if prev in (b">>", b"<<", b">>=", b"<<="):
+    if shift_count(view, k):
         return "after a shift"
+    if view.text(k - 1) == b"sizeof":
+        return "inside sizeof"
     p = view.parent[k]
     while p is not None:
         tp = view.toks[p].text
@@ -2384,6 +2426,48 @@ def cmd_check(root, quiet=False):
                 why = constant_context(view, k)
                 if why:
                     problems.append("%s:%d: %s %s" % (r, sf.line_of(view.toks[k].start) + 1, word, why))
+        # a name that stands for a selector: a data twin (`#define NAME
+        # PAL_JPN(NAME_pal, NAME_jpn)` or `(*PAL_JPN(&..., &...))` in this
+        # file) is a selector in every rule above, and a plain one is no
+        # lvalue (`&NAME` would take the address of the PAL array's
+        # pointer, or fail); a function of the twins table has no size and
+        # no place in a shift count
+        aliases = {}
+        for s_, e_, text in logical_directives(sf.lines, sf.states):
+            code = split_comment(text)[0]
+            m = re.match(rb"^[ \t]*#[ \t]*define[ \t]+(\w+)[ \t]+(\(?[ \t]*\*[ \t]*)?(\w+)[ \t]*\(", code)
+            if m and (m.group(3).startswith(b"PAL_") or m.group(3) == b"LN") and \
+                    m.group(3).decode("latin-1") in names:
+                aliases[m.group(1)] = "deref" if m.group(2) else "plain"
+        twin_names = set(n.encode() for t in twins for n in (t[1], t[2]))
+        for k, t in enumerate(view.toks):
+            if t.kind != "ident" or (t.text not in aliases and t.text not in twin_names):
+                continue
+            if view.text(k + 1) == b"(" and t.text in aliases:
+                continue  # a function-like use of the same spelling: not this macro
+            word = t.text.decode("latin-1")
+            line = sf.line_of(t.start) + 1
+            if t.text in aliases:
+                why = constant_context(view, k)
+                # `&NAME[i]` and `&NAME->f` take the element's address: fine
+                if why is None and aliases[t.text] == "plain" and view.text(k - 1) == b"&" and \
+                        view.text(k + 1) not in (b"[", b".", b"->") and unary_amp(view, k - 1):
+                    why = "after a unary & (the data twin is a selector, not an lvalue)"
+                if why:
+                    problems.append("%s:%d: the data twin %s %s" % (r, line, word, why))
+            else:
+                if shift_count(view, k):
+                    why = "after a shift"
+                elif view.text(k - 1) == b"sizeof" or (
+                        view.parent[k] is not None and view.text(view.parent[k]) == b"(" and
+                        view.text(view.parent[k] - 1) == b"sizeof"):
+                    why = "inside sizeof"
+                elif view.text(k - 1) == b"&" and view.text(k + 1) != b"(" and unary_amp(view, k - 1):
+                    why = "after a unary & (take the selected function, not one disc's)"
+                else:
+                    why = None
+                if why:
+                    problems.append("%s:%d: the twin %s %s" % (r, line, word, why))
     # region.h
     if have_table:
         want = gen_header(regions)
@@ -2526,6 +2610,23 @@ def selftest():
             code = cmd_check(tmp)
         if code != 2:
             failures.append("check on the converted fixture returned %d, want 2:\n%s" % (code, quiet.text))
+
+        # check's constant contexts: exactly the lines marked "refused"
+        ctx = os.path.join(tmp, "ico2", "common", "src", "check_contexts.c")
+        shutil.copy(os.path.join(FIXTURE_DIR, "check_contexts.c"), ctx)
+        with quiet:
+            cmd_check(tmp)
+        got = set()
+        for line in quiet.text.splitlines():
+            m = re.match(r"problem: ico2/common/src/check_contexts\.c:(\d+): ", line)
+            if m:
+                got.add(int(m.group(1)))
+            elif "check_contexts.c" in line:
+                failures.append("check: unexpected problem: %s" % line)
+        want = set(n for n, line in enumerate(read(ctx).split(b"\n"), 1) if line.rstrip().endswith(b"/* refused */"))
+        if got != want:
+            failures.append("check on check_contexts.c: refused lines %s, want %s" % (sorted(got), sorted(want)))
+        os.remove(ctx)
 
         # the parser's tripwires
         for name, text in (("unknown macro", b"#ifdef VERSION_EU\nint a;\n#endif\n"),

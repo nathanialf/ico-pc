@@ -385,7 +385,7 @@ pattern:
 | --- | --- | --- |
 | `layout-typedef` | a struct or typedef whose layouts differ, or a block inside one | the PAL arm |
 | `define` | a `#define` per region | the PAL arm when it sizes something (`MAX_CHARS 1637`), else a selector at the uses |
-| `data-twin` | file-scope data with different initialisers, a block inside a file-scope initialiser, a static local's initialiser, a name two file-scope blocks define | `name_pal[]` and `name_jpn[]` and `#define name PAL_JPN(name_pal, name_jpn)` (a scalar: `(*PAL_JPN(&a, &b))`); grep the file for `sizeof(name)` and `&name` |
+| `data-twin` | file-scope data with different initialisers, a block inside a file-scope initialiser, a static local's initialiser, a name two file-scope blocks define | `name_pal[]` and `name_jpn[]` and `#define name PAL_JPN(name_pal, name_jpn)` (a scalar: `(*PAL_JPN(&a, &b))`); `check` refuses `sizeof(name)`, `&name` and a shift count |
 | `extern-init` | a scalar defined with a different initialiser | the PAL initialiser, and `name = PAL_JPN(p, j);` first thing in its owner's init |
 | `array-size` | an array dimensioned per region | the larger dimension |
 | `function-twin` | a whole function per region with one name | the PAL body keeps the name, the Japanese body becomes `static ... name_jpn(...)`, the PAL function opens `if (ICO_JPN) { return name_jpn(args); }`, and the pair goes into `config/region_twins.txt` |
@@ -411,8 +411,12 @@ which keeps only the PAL numbers.
 `ico2/` or `sce/` in a `.c`, `.h`, `.inc`, `.s` or `.S` file, comments included, outside a raw
 block's directives; no `#if`, `#ifdef`, `#ifndef` or `#elif` on `LN`, `ICO_<SLUG>`,
 `ICO_REGION_*`, a selector macro or `ico_region`, and no `#define` of them outside `region.h`; no
-selector or `LN` after `>>` or `<<`, inside `sizeof`, in an array dimension, a `case` label, a
-static local's initialiser or at file scope; every file naming the macros reaches `region.h`
+selector or `LN` in a shift count (after `>>` or `<<`, also inside grouping parentheses:
+`w >> (PAL_JPN(16, 19))`, `w >> (8 + PAL_JPN(8, 11))`), inside `sizeof`, in an array dimension, a
+`case` label, a static local's initialiser or at file scope; the same for a data twin (a name the
+file defines as `#define name PAL_JPN(...)` or `(*PAL_JPN(...))`), and no unary `&name` on the
+plain form (`&name[i]` is fine); no function of `config/region_twins.txt` in a shift count, inside
+`sizeof` or after a unary `&` (fixture: `tools/test/region_blocks/check_contexts.c`); every file naming the macros reaches `region.h`
 through its includes, resolved in `ico_include_dirs` order (`CMakeLists.txt`), or is included only
 by files that do; `region.h` equal to what `gen-header` writes; the twins rows; and `convert`
 changing nothing; and the glue "Adding a build target" names, each piece looked for once its
