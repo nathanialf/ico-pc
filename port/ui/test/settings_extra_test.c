@@ -663,8 +663,8 @@ static void testDiscRow(void)
     s_gpuFailed = -1;
     s_gpuAdreno = 1;
     ui_settings_set_gpu_driver_host(&kGpuHost);
-    ico_opt_set_developer_mode(1);
     enterMain(1);
+    ico_opt_set_developer_mode(1); /* after enterMain, which reloads the options */
     for (int k = 0; k < 4; k++) {
         frame(0);
     }
