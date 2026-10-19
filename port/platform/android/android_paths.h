@@ -15,10 +15,10 @@
  *   <files>/memcard/                   the memory cards
  *   <files>/logs/ico-pc.log            the log (+ perf csv, pad recordings)
  *   <files>/dumps/
- *   <files>/textures/<serial>/replacements/   (SCES-50760 or SCPS-11003)
+ *   <files>/textures/<serial>/replacements/   (SCES-50760, SCPS-11003 or SCPS-56001)
  *   <files>/Ico_PAL.<ext>              the picker's copy of the disc image
- *                                      (Ico_JPN.<ext> once read as the
- *                                      Japanese disc)
+ *                                      (Ico_JPN.<ext> or Ico_KOR.<ext>
+ *                                      once read as that disc)
  *   <cache>/pipelines.vkcache
  *
  * Pure C with no Android call, so the layout is unit-tested on every
@@ -49,14 +49,14 @@ typedef struct IcoAndroidPaths {
 
 /* Fills *out from the two folders (absolute; trailing slashes dropped) and
    the disc's serial for the texture pack folder ("SCES-50760",
-   "SCPS-11003"; NULL is SCES-50760, before the disc is known).
+   "SCPS-11003", "SCPS-56001"; NULL is SCES-50760, before the disc is known).
    0, or -1 with *out zeroed when a folder is missing, relative or so long
    that a path in the layout would not fit, or when the cache folder is the
    files folder or inside it (the system may empty the cache). */
 int ico_android_layout(const char *files, const char *cache, const char *serial,
                        IcoAndroidPaths *out);
 
-/* <files>/<base>.<ext> (base "Ico_PAL" or "Ico_JPN", NULL for Ico_PAL; ext
+/* <files>/<base>.<ext> (base "Ico_PAL", "Ico_JPN" or "Ico_KOR", NULL for Ico_PAL; ext
    "iso", "chd" or "bin"): where the picker's copy of the disc image goes.
    0, or -1 (out emptied) when it does not fit. */
 int ico_android_image_path(const IcoAndroidPaths *p, const char *base, const char *ext, char *out,

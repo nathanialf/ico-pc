@@ -46,16 +46,17 @@
 #define ICO_EXTRACT_NO_VERIFY 1u
 
 /* The boxes a player sees for an image that is not one of the discs, and
-   for one that cannot be read (%s: the image's path). One text each, used
-   by the extractor's refusal, main_host.c and the Android import. */
+   for one that cannot be read (first %s: the image's path, second %s:
+   ico_disc_list_text(), the discs of the regions table). One text each,
+   used by the extractor's refusal, main_host.c and the Android import. */
 #define ICO_WRONG_DISC_TEXT                                                                        \
     "%s is not a disc image this port plays.\n"                                                    \
-    "Use a complete, unmodified image of the European disc (SCES-50760) or the Japanese disc "     \
-    "(SCPS-11003), as a .iso, .chd, .bin or .cue file. Other editions do not work."
+    "Use a complete, unmodified image of %s, as a .iso, .chd, .bin or .cue file. Other editions "  \
+    "do not work."
 #define ICO_UNREADABLE_DISC_TEXT                                                                   \
     "Cannot read the disc image %s.\n"                                                             \
-    "Check that the file is complete and is a .iso, .chd, .bin or .cue copy of the European or "   \
-    "the Japanese disc. The log says why."
+    "Check that the file is complete and is a .iso, .chd, .bin or .cue copy of %s. The log says "  \
+    "why."
 
 /* Progress: phase "open" (reading the image's directory; done and total 0),
    "hash" (the image's SHA-1), "extract", then "finish" (writing the archive's

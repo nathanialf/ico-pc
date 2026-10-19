@@ -51,6 +51,11 @@ void ico_vfs_unmount(IcoVfs *vfs)
     free(vfs);
 }
 
+void *ico_vfs_backend_state(IcoVfs *vfs, const IcoVfsBackend *backend)
+{
+    return vfs != NULL && vfs->backend == backend ? vfs->state : NULL;
+}
+
 void ico_vfs_set_disc(IcoVfs *vfs)
 {
     discVfs = vfs;

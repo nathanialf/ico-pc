@@ -68,6 +68,19 @@ typedef struct IcoVfs IcoVfs;
    start) or the .cue sheet that names one. */
 extern const IcoVfsBackend ico_vfs_iso9660;
 
+/* The Korean disc's ISO directory puts DFDATAS/DATA.DF 153,600 sectors
+   before its archive header (archive.h IcoDiscInfo.df_lsn_shift).  The
+   backend finds the disc by SYSTEM.CNF's BOOT2 file when it mounts and
+   answers a lookup of DFDATAS/DATA.DF with the shifted entry: lsn + shift,
+   size - shift * 2048 (a lookup fails if the directory's size is smaller).
+   This forces the shift on a mounted iso9660 volume (the synthetic images
+   of the tests); 0 on success, -1 if `vfs` is not an iso9660 volume. */
+int ico_vfs_iso9660_set_df_shift(IcoVfs *vfs, uint32_t sectors);
+
+/* The backend's own state record of a mounted volume, or NULL when `vfs`
+   is not `backend`'s. */
+void *ico_vfs_backend_state(IcoVfs *vfs, const IcoVfsBackend *backend);
+
 /* A disc image's logical bytes, whatever the container: an .iso file as it
    is, or the ISO image a .chd or .bin holds (its SHA-1 and size are the
    ISO's).

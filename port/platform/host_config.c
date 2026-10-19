@@ -1213,7 +1213,9 @@ int ico_host_pick_iso(char *out, size_t size)
         L"ICO disc image (*.iso, *.chd, *.bin, *.cue)\0*.iso;*.chd;*.bin;*.cue\0All files\0*.*\0";
     ofn.lpstrFile = path;
     ofn.nMaxFile = (DWORD)(sizeof(path) / sizeof(path[0]));
-    ofn.lpstrTitle = L"Choose your ICO disc image (European SCES-50760 or Japanese SCPS-11003)";
+    /* no disc names here: this file is built without the discs table
+       (port/data/discs.c) in several test programs */
+    ofn.lpstrTitle = L"Choose your ICO disc image (one of the supported discs)";
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
     if (!GetOpenFileNameW(&ofn) || ico_narrow(path, utf8, sizeof(utf8)) != 0) {
         return -1;

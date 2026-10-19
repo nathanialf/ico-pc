@@ -489,7 +489,6 @@ static void read_boot_name(IcoVfs *iso, char *boot, size_t size)
     char cnf[1024];
     IcoVfsFile f;
     int64_t n;
-    char *p;
 
     boot[0] = '\0';
     if (ico_vfs_open(iso, CNF_PATH, &f) != 0) {
@@ -500,18 +499,7 @@ static void read_boot_name(IcoVfs *iso, char *boot, size_t size)
         return;
     }
     cnf[n] = '\0';
-    p = strstr(cnf, "BOOT2");
-    if (p == NULL || (p = strchr(p, '=')) == NULL) {
-        return;
-    }
-    p++;
-    while (*p == ' ' || *p == '\t') {
-        p++;
-    }
-    p[strcspn(p, "\r\n")] = '\0';
-    if (ico_vfs_normalize(p, boot, size) != 0) {
-        boot[0] = '\0';
-    }
+    (void)ico_disc_cnf_boot(cnf, boot, size);
 }
 
 const IcoDiscInfo *ico_extract_identify(const char *iso_path, char *boot, size_t size)
@@ -936,11 +924,12 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
         /* the box's text, then what the log needs to tell the cases apart */
         if (x.disc == NULL) {
             say(why, whysize,
-                ICO_WRONG_DISC_TEXT "\n"
-                                    "Its boot file is %s, which is neither disc's (%s, %s); "
-                                    "image SHA-1 %s.",
-                iso_path, x.boot[0] ? x.boot : "(absent)", ico_discs[ICO_REGION_PAL].boot_elf,
-                ico_discs[ICO_REGION_JPN].boot_elf, res->iso_sha1);
+                ICO_WRONG_DISC_TEXT
+                "\n"
+                "Its boot file is %s, which is none of the supported discs' (%s); "
+                "image SHA-1 %s.",
+                iso_path, ico_disc_list_text(), x.boot[0] ? x.boot : "(absent)",
+                ico_disc_boots_text(), res->iso_sha1);
         } else {
             say(why, whysize,
                 ICO_WRONG_DISC_TEXT "\n"
@@ -949,9 +938,9 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
                                     "Image SHA-1 %s (expected %s);\n"
                                     "%s SHA-1 %s (expected %s);\n"
                                     "DATA.DF: %s.",
-                iso_path, x.disc->boot_elf, x.disc->id, res->iso_sha1, x.disc->iso_sha1,
-                x.disc->boot_elf, res->elf_sha1[0] ? res->elf_sha1 : "(absent)", x.disc->elf_sha1,
-                res->datadf_ok ? "matches" : res->datadf_why);
+                iso_path, ico_disc_list_text(), x.disc->boot_elf, x.disc->id, res->iso_sha1,
+                x.disc->iso_sha1, x.disc->boot_elf, res->elf_sha1[0] ? res->elf_sha1 : "(absent)",
+                x.disc->elf_sha1, res->datadf_ok ? "matches" : res->datadf_why);
         }
         goto done;
     }

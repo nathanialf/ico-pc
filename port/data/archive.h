@@ -49,18 +49,30 @@ typedef struct IcoDfManifestEntry {
 
 /* The discs this program plays, one per row of config/regions.txt in its
    order (port/core/region.h's rows), and their verification values
-   (config/sha1sums.pal.txt and sha1sums.jpn.txt for the boot ELFs). Each disc's data goes to
-   its own archive, so both can be extracted side by side. */
+   (config/sha1sums.<slug>.txt for the boot ELFs). Each disc's data goes to
+   its own archive, so all can be extracted side by side.
+
+   df_lsn_shift: the Korean disc's ISO directory lists \DFDATAS\DATA.DF at
+   LSN 3157 with a size of 866,859,008, but the archive header lies 153,600
+   sectors (300 MB of filler) later; the original game adds that to the LSN
+   in its file search and keeps the size.  The port applies the shift once,
+   where the volume answers a lookup of DFDATAS/DATA.DF (iso9660.c, once
+   SYSTEM.CNF names this row): the entry's LSN grows by df_lsn_shift and its
+   size shrinks by df_lsn_shift * 2048, the span that holds exactly the
+   archive.  Everything above the VFS (the extractor, the manifest, the
+   .o2r's meta.json lsn/size, sceCdSearchFile, df_pack, the movie reader)
+   sees the shifted entry; df_size and the manifest are of that span. */
 typedef struct IcoDiscInfo {
-    const char *id;                    /* "SCES-50760" (meta.json's disc_id) */
-    const char *slug;                  /* "pal": the region's row (config/regions.txt) */
-    const char *boot_elf;              /* SYSTEM.CNF's BOOT2 file, "SCES_507.60" */
-    const char *iso_sha1;              /* the whole image's SHA-1 */
-    const char *elf_sha1;              /* the boot ELF's SHA-1 */
-    uint64_t iso_bytes;                /* the image's size */
-    uint32_t df_size;                  /* DATA.DF's size */
-    uint32_t df_count;                 /* its directory's member count */
-    uint32_t df_dir_crc;               /* the CRC-32 of its directory */
+    const char *id;        /* "SCES-50760" (meta.json's disc_id) */
+    const char *slug;      /* "pal": the region's row (config/regions.txt) */
+    const char *boot_elf;  /* SYSTEM.CNF's BOOT2 file, "SCES_507.60" */
+    const char *iso_sha1;  /* the whole image's SHA-1 */
+    const char *elf_sha1;  /* the boot ELF's SHA-1 */
+    uint64_t iso_bytes;    /* the image's size */
+    uint32_t df_size;      /* DATA.DF's size (as the volume reports it, see df_lsn_shift) */
+    uint32_t df_count;     /* its directory's member count */
+    uint32_t df_dir_crc;   /* the CRC-32 of its directory */
+    uint32_t df_lsn_shift; /* 0; 153600 on the Korean disc (see above) */
     const IcoDfManifestEntry *members; /* df_count entries */
     uint32_t member_count;             /* entries in members (df_count) */
     const char *archive_name;          /* "ico.o2r", "ico-jpn.o2r" */
@@ -70,8 +82,9 @@ typedef struct IcoDiscInfo {
 } IcoDiscInfo;
 
 /* [ICO_REGION_PAL] the European release SCES-50760 (a DVD),
-   [ICO_REGION_JPN] the Japanese release SCPS-11003 (a CD); defined in
-   discs.c with the manifests */
+   [ICO_REGION_JPN] the Japanese release SCPS-11003 (a CD) and, once
+   config/regions.txt has it, the Korean release SCPS-56001 (a DVD); defined
+   in discs.c with the manifests */
 extern const IcoDiscInfo ico_discs[ICO_REGION_COUNT];
 
 /* The row whose id ("SCPS-11003"), boot file ("SCPS_110.03", as
@@ -80,6 +93,23 @@ extern const IcoDiscInfo ico_discs[ICO_REGION_COUNT];
 const IcoDiscInfo *ico_disc_by_id(const char *id);
 const IcoDiscInfo *ico_disc_by_boot(const char *boot_elf);
 const IcoDiscInfo *ico_disc_by_slug(const char *slug);
+
+/* Wording built from the rows, so a new row needs no new text.  Each
+   returns a static buffer (filled on first use).
+   ico_disc_list_text: "the European disc (SCES-50760), the Japanese disc
+   (SCPS-11003) or the Korean disc (SCPS-56001)";
+   ico_disc_image_names_text(".iso"): "Ico_PAL.iso, Ico_JPN.iso or
+   Ico_KOR.iso" (ext "" for the bare names);
+   ico_disc_boots_text: "SCES_507.60, SCPS_110.03 or SCPS_560.01";
+   ico_disc_archive_names_text: "ico.o2r, ico-jpn.o2r or ico-kor.o2r". */
+const char *ico_disc_list_text(void);
+const char *ico_disc_image_names_text(const char *ext);
+const char *ico_disc_boots_text(void);
+const char *ico_disc_archive_names_text(void);
+
+/* SYSTEM.CNF's BOOT2 file out of the file's text (NUL-terminated),
+   normalized ("SCES_507.60"); "" when absent.  0, or -1 if it does not fit. */
+int ico_disc_cnf_boot(const char *cnf, char *boot, size_t size);
 
 /* The rules the extractor accepts an image by (extract.h). */
 #define ICO_RULE_ISO_SHA1 "iso-sha1"

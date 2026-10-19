@@ -42,6 +42,7 @@
 #define _FILE_OFFSET_BITS 64
 
 #include "vfs.h"
+#include "archive.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -86,6 +87,7 @@ typedef struct {
     uint32_t root_lsn;
     uint32_t root_size;
     uint8_t root_date[7];
+    uint32_t df_shift; /* sectors: IcoDiscInfo.df_lsn_shift of the disc SYSTEM.CNF names */
 } Iso;
 
 static int seek64(FILE *fp, uint64_t off)
@@ -724,6 +726,45 @@ static int iso_read_raw(Iso *iso, uint32_t lsn, uint32_t count, void *dst)
                                (size_t)count * ICO_VFS_SECTOR);
 }
 
+static int iso_lookup(void *state, const char *path, IcoVfsEntry *out);
+
+/* The disc SYSTEM.CNF's BOOT2 file names decides the DATA.DF shift (archive.h). */
+static void iso_find_df_shift(Iso *iso)
+{
+    IcoVfsEntry e;
+    char cnf[1024];
+    char boot[64];
+    const IcoDiscInfo *disc;
+    uint32_t n;
+    unsigned char sec[ICO_VFS_SECTOR];
+
+    if (iso_lookup(iso, "SYSTEM.CNF", &e) != 0 || e.is_dir || e.size == 0 ||
+        e.lsn >= iso->volume_sectors || iso_read_raw(iso, e.lsn, 1, sec) != 0) {
+        return;
+    }
+    n = e.size < sizeof(cnf) - 1 ? e.size : (uint32_t)sizeof(cnf) - 1;
+    memcpy(cnf, sec, n);
+    cnf[n] = '\0';
+    if (ico_disc_cnf_boot(cnf, boot, sizeof(boot)) != 0) {
+        return;
+    }
+    disc = ico_disc_by_boot(boot);
+    if (disc != NULL) {
+        iso->df_shift = disc->df_lsn_shift;
+    }
+}
+
+int ico_vfs_iso9660_set_df_shift(IcoVfs *vfs, uint32_t sectors)
+{
+    Iso *iso = ico_vfs_backend_state(vfs, &ico_vfs_iso9660);
+
+    if (iso == NULL) {
+        return -1;
+    }
+    iso->df_shift = sectors;
+    return 0;
+}
+
 static int iso_mount(void **state, const char *location)
 {
     unsigned char d[ICO_VFS_SECTOR];
@@ -758,6 +799,7 @@ static int iso_mount(void **state, const char *location)
             iso->root_size = ico_le32(root + 10);
             memcpy(iso->root_date, root + 18, 7);
             *state = iso;
+            iso_find_df_shift(iso);
             return 0;
         }
     }
@@ -892,6 +934,17 @@ static int iso_lookup(void *state, const char *path, IcoVfsEntry *out)
         if (*p == '/') {
             p++;
         }
+    }
+    if (iso->df_shift != 0 && strcmp(path, "DFDATAS/DATA.DF") == 0) {
+        uint64_t skip = (uint64_t)iso->df_shift * ICO_VFS_SECTOR;
+
+        /* the archive header lies df_shift sectors after the directory's LSN
+           and the directory keeps the size of the file as it was laid out */
+        if (cur.size <= skip || (uint64_t)cur.lsn + iso->df_shift > UINT32_MAX) {
+            return -1;
+        }
+        cur.lsn += iso->df_shift;
+        cur.size -= (uint32_t)skip;
     }
     *out = cur;
     return 0;

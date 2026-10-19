@@ -237,12 +237,12 @@ const IcoDiscInfo ico_discs[ICO_REGION_COUNT] = {
     [ICO_REGION_PAL] = {"SCES-50760", "pal", "SCES_507.60",
                         "1017b53f6e80f41f823369b0be1d8c69f7e16dc6",
                         "da3644c54c26fe760f3b6a591a5fc2eab396ed2b", 907706368u, DF_PAL_SIZE,
-                        DF_PAL_COUNT, DF_PAL_DIR_CRC, dfMembersPal, N_MEMBERS(dfMembersPal),
+                        DF_PAL_COUNT, DF_PAL_DIR_CRC, 0u, dfMembersPal, N_MEMBERS(dfMembersPal),
                         "ico.o2r", "Ico_PAL", 0x14 /* SCECdPS2DVD */, "the European disc"},
     [ICO_REGION_JPN] = {"SCPS-11003", "jpn", "SCPS_110.03",
                         "95ee72becbc7fba85e9c0f6aa6fc932c705b37b3",
                         "580da1dcc4c239a1608a10300e7e220fe5d35525", 559693824u, DF_JPN_SIZE,
-                        DF_JPN_COUNT, DF_JPN_DIR_CRC, dfMembersJpn, N_MEMBERS(dfMembersJpn),
+                        DF_JPN_COUNT, DF_JPN_DIR_CRC, 0u, dfMembersJpn, N_MEMBERS(dfMembersJpn),
                         "ico-jpn.o2r", "Ico_JPN", 0x12 /* SCECdPS2CD */, "the Japanese disc"},
 };
 
@@ -280,4 +280,115 @@ const IcoDiscInfo *ico_disc_by_slug(const char *slug)
         }
     }
     return NULL;
+}
+
+int ico_disc_cnf_boot(const char *cnf, char *boot, size_t size)
+{
+    const char *p;
+    char line[64];
+    size_t n;
+
+    boot[0] = '\0';
+    p = cnf != NULL ? strstr(cnf, "BOOT2") : NULL;
+    if (p == NULL || (p = strchr(p, '=')) == NULL) {
+        return 0;
+    }
+    p++;
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    n = strcspn(p, "\r\n");
+    if (n >= sizeof(line)) {
+        return -1;
+    }
+    memcpy(line, p, n);
+    line[n] = '\0';
+    if (ico_vfs_normalize(line, boot, size) != 0) {
+        boot[0] = '\0';
+        return -1;
+    }
+    return 0;
+}
+
+/* Wording over the rows: "a, b or c". */
+#define JOIN_MAX 512
+
+const char *ico_disc_list_text(void)
+{
+    static char text[JOIN_MAX];
+    size_t n = 0;
+    int i;
+
+    text[0] = '\0';
+    for (i = 0; i < ICO_REGION_COUNT; i++) {
+        const char *sep = i == 0 ? "" : (i == ICO_REGION_COUNT - 1 ? " or " : ", ");
+
+        n += (size_t)snprintf(text + n, n < sizeof(text) ? sizeof(text) - n : 0, "%s%s (%s)", sep,
+                              ico_discs[i].product_name, ico_discs[i].id);
+        if (n >= sizeof(text)) {
+            text[sizeof(text) - 1] = '\0';
+            break;
+        }
+    }
+    return text;
+}
+
+const char *ico_disc_image_names_text(const char *ext)
+{
+    static char text[JOIN_MAX];
+    size_t n = 0;
+    int i;
+
+    text[0] = '\0';
+    for (i = 0; i < ICO_REGION_COUNT; i++) {
+        const char *sep = i == 0 ? "" : (i == ICO_REGION_COUNT - 1 ? " or " : ", ");
+
+        n += (size_t)snprintf(text + n, n < sizeof(text) ? sizeof(text) - n : 0, "%s%s%s", sep,
+                              ico_discs[i].image_base, ext != NULL ? ext : "");
+        if (n >= sizeof(text)) {
+            text[sizeof(text) - 1] = '\0';
+            break;
+        }
+    }
+    return text;
+}
+
+const char *ico_disc_boots_text(void)
+{
+    static char text[JOIN_MAX];
+    size_t n = 0;
+    int i;
+
+    text[0] = '\0';
+    for (i = 0; i < ICO_REGION_COUNT; i++) {
+        const char *sep = i == 0 ? "" : (i == ICO_REGION_COUNT - 1 ? " or " : ", ");
+
+        n += (size_t)snprintf(text + n, n < sizeof(text) ? sizeof(text) - n : 0, "%s%s", sep,
+                              ico_discs[i].boot_elf);
+        if (n >= sizeof(text)) {
+            text[sizeof(text) - 1] = '\0';
+            break;
+        }
+    }
+    return text;
+}
+
+const char *ico_disc_archive_names_text(void)
+{
+    static char text[JOIN_MAX];
+    size_t n = 0;
+    int i;
+
+    text[0] = '\0';
+    for (i = 0; i < ICO_REGION_COUNT; i++) {
+        const char *sep = i == 0 ? "" : (i == ICO_REGION_COUNT - 1 ? " or " : ", ");
+
+        n += (size_t)snprintf(text + n, n < sizeof(text) ? sizeof(text) - n : 0, "%s%s", sep,
+                              ico_discs[i].archive_name);
+        if (n >= sizeof(text)) {
+            text[sizeof(text) - 1] = '\0';
+            break;
+        }
+    }
+    return text;
 }

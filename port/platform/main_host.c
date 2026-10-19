@@ -24,9 +24,10 @@
  *                            it on in the window build, trace=0 off
  *   game data                the extracted archive (port/data/archive.h):
  *                            ico.o2r for the European disc, ico-jpn.o2r
- *                            for the Japanese one, in the per-user folder,
+ *                            for the Japanese one, ico-kor.o2r for the
+ *                            Korean one, in the per-user folder,
  *                            else beside the executable. Which disc:
- *                            config.toml [game] disc ("pal", "jpn"; "auto"
+ *                            config.toml [game] disc ("pal", "jpn", "kor"; "auto"
  *                            by default: the image given, by its boot
  *                            file, else the only archive, else [game]
  *                            last_disc). Without one (the first run) the
@@ -38,18 +39,18 @@
  *                            image directly instead: the default of the
  *                            headless build, so trace runs and tests read
  *                            the disc image itself
- *   disc image               Ico_PAL or Ico_JPN (.iso, .chd, .bin or .cue)
- *                            beside the executable (both there: the one
+ *   disc image               Ico_PAL, Ico_JPN or Ico_KOR (.iso, .chd, .bin or .cue)
+ *                            beside the executable (several there: the one
  *                            whose disc has no archive yet, else the disc
  *                            played last, else Ico_PAL), else ini iso=,
  *                            else $ICO_ISO, else baserom/Ico_PAL.iso (or
- *                            .chd, .bin, .cue, then Ico_JPN's) under the working
+ *                            .chd, .bin, .cue, then the other discs') under the working
  *                            folder, else a (Windows: native; Linux window build: SDL3)
  *                            file-open dialog whose answer is saved as iso=
  *                            in ico-pc.ini. A .chd or .bin (or the .cue
  *                            that names it) is read as the ISO it
  *                            holds (port/data/iso9660.c). With use_iso its
- *                            SHA-1 is checked against both discs'
+ *                            SHA-1 is checked against the discs'
  *                            images' (ini
  *                            verify=0 skips it); the extractor always
  *                            verifies
@@ -226,7 +227,7 @@ static void usage(FILE *out, const char *prog)
 {
     say(out,
         "usage: %s [options]   (none needed: see ico-pc.ini)\n"
-        "  --iso PATH         the disc image (European SCES-50760 or Japanese SCPS-11003)\n"
+        "  --iso PATH         the disc image (one of the discs %s)\n"
         "  --pad-script FILE  plug a scripted DualShock into controller port 1;\n"
         "                     lines: <tick> <buttons-hex> [lx ly rx ry]\n"
         "  --trace FILE|none  the per-Main-tick trace (logs/trace-<time>.txt by\n"
@@ -235,7 +236,7 @@ static void usage(FILE *out, const char *prog)
         "  --no-verify        skip the disc image's SHA-1 check\n"
         "  --console          log to the console, not logs/ico-pc.log\n"
         "  --help             this text\n",
-        prog);
+        prog, ico_disc_list_text());
 }
 
 static int parse_count(const char *s, unsigned long *out)
@@ -622,6 +623,18 @@ static void pick_abandon(void)
 
 #ifdef __ANDROID__
 
+/* the picker window's line: the discs from the regions table */
+static const char *pick_prompt(void)
+{
+    static char text[640];
+
+    snprintf(text, sizeof(text),
+             "Choose your ICO disc image: %s, as a .iso, .chd or .bin file (with a .bin and a "
+             ".cue, pick the .bin)",
+             ico_disc_list_text());
+    return text;
+}
+
 /* no filters: Android's picker matches MIME types, and a disc image has
    none it knows (the extractor checks the file) */
 static int pick_iso_sdl(char *out, size_t size)
@@ -630,12 +643,7 @@ static int pick_iso_sdl(char *out, size_t size)
     while (SDL_GetAtomicInt(&s_pick.done) == 0) {
         /* the window keeps drawing behind the picker; Back while it shows
            (the picker did not come up) gives up */
-        if (ico_window_progress("Setting up ICO (first start only)",
-                                "Choose your ICO disc image: the European disc "
-                                "(SCES-50760) or the Japanese disc (SCPS-11003), as a "
-                                ".iso, .chd or .bin file (with a .bin and a .cue, pick the "
-                                ".bin)",
-                                -1)) {
+        if (ico_window_progress("Setting up ICO (first start only)", pick_prompt(), -1)) {
             pick_abandon();
             fprintf(stderr, "ico_pc: stopped while waiting for the file picker\n");
             return -1;
@@ -710,7 +718,7 @@ static const char *image_name(int k, char *out, size_t size)
     return out;
 }
 
-/* config.toml [game] disc: the disc it pins ("pal", "jpn"), or NULL for
+/* config.toml [game] disc: the disc it pins ("pal", "jpn", "kor"), or NULL for
    "auto" (the default; an unknown value is logged as auto) */
 static const IcoDiscInfo *disc_setting(void)
 {
@@ -841,10 +849,12 @@ static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char 
         }
     }
 #ifdef ICO_IOS
-    ico_host_fatal(log_file(), "Game data is missing. Copy ico.o2r (or ico-jpn.o2r) into ICO's "
-                               "Documents folder using LiveContainer's data-folder access, then "
-                               "reopen ICO. A disc image named Ico_PAL or Ico_JPN (.iso, .chd, "
-                               ".bin or .cue) can also be placed there.");
+    ico_host_fatal(log_file(),
+                   "Game data is missing. Copy the disc's .o2r (%s) into ICO's "
+                   "Documents folder using LiveContainer's data-folder access, then "
+                   "reopen ICO. A disc image named %s (.iso, .chd, "
+                   ".bin or .cue) can also be placed there.",
+                   ico_disc_archive_names_text(), ico_disc_image_names_text(""));
     return 1;
 #else
 #if !defined(ICO_HEADLESS) && !defined(_WIN32)
@@ -858,9 +868,9 @@ static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char 
     }
     ico_host_fatal(log_file(),
                    "No ICO disc image was found or chosen. Put your disc image next to the "
-                   "program as Ico_PAL (the European disc, SCES-50760) or Ico_JPN (the "
-                   "Japanese disc, SCPS-11003), as a .iso, .chd, .bin or .cue file, or set "
-                   "iso=<path> in ico-pc.ini.");
+                   "program as %s (for %s), as a .iso, .chd, .bin or .cue file, or set "
+                   "iso=<path> in ico-pc.ini.",
+                   ico_disc_image_names_text(""), ico_disc_list_text());
 #endif
     return 0;
 #endif
@@ -868,7 +878,7 @@ static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char 
 
 /* Which disc the image is, by its boot file (SYSTEM.CNF's BOOT2), then
    its SHA-1 against that disc's: the row, or a box (fatal) for an image
-   that is neither disc or not an unmodified copy of one. */
+   that is none of the discs or not an unmodified copy of one. */
 static const IcoDiscInfo *verify_iso(const char *iso)
 {
     const IcoDiscInfo *disc;
@@ -881,19 +891,19 @@ static const IcoDiscInfo *verify_iso(const char *iso)
 
     disc = ico_extract_identify(iso, boot, sizeof(boot));
     if (disc == NULL) {
-        fprintf(stderr, "ico_pc: the image's boot file is '%s', neither disc's (%s, %s)\n", boot,
-                ico_discs[ICO_REGION_PAL].boot_elf, ico_discs[ICO_REGION_JPN].boot_elf);
+        fprintf(stderr, "ico_pc: the image's boot file is '%s', none of the discs' (%s)\n", boot,
+                ico_disc_boots_text());
         if (boot[0] == '\0') {
             /* no boot file: not a disc image this program reads, or a
                disc without SYSTEM.CNF */
             IcoVfs *v = ico_vfs_mount(&ico_vfs_iso9660, iso);
 
             if (v == NULL) {
-                ico_host_fatal(log_file(), ICO_UNREADABLE_DISC_TEXT, iso);
+                ico_host_fatal(log_file(), ICO_UNREADABLE_DISC_TEXT, iso, ico_disc_list_text());
             }
             ico_vfs_unmount(v);
         }
-        ico_host_fatal(log_file(), ICO_WRONG_DISC_TEXT, iso);
+        ico_host_fatal(log_file(), ICO_WRONG_DISC_TEXT, iso, ico_disc_list_text());
         return NULL;
     }
     fprintf(stderr, "ico_pc: the image's boot file is %s: %s (%s)\n", boot, disc->id,
@@ -902,7 +912,7 @@ static const IcoDiscInfo *verify_iso(const char *iso)
     fprintf(stderr, "ico_pc: checking the disc image's SHA-1...\n");
     if (ico_extract_image_sha1(iso, hex, &bytes, why, sizeof(why)) != 0) {
         fprintf(stderr, "ico_pc: %s\n", why);
-        ico_host_fatal(log_file(), ICO_UNREADABLE_DISC_TEXT, iso);
+        ico_host_fatal(log_file(), ICO_UNREADABLE_DISC_TEXT, iso, ico_disc_list_text());
     }
     secs = (double)(clock() - start) / CLOCKS_PER_SEC;
     fprintf(stderr, "ico_pc: SHA-1 %s, %llu bytes, %.1f s\n", hex, (unsigned long long)bytes, secs);
@@ -910,7 +920,7 @@ static const IcoDiscInfo *verify_iso(const char *iso)
         /* the checksums are for the log; the box says what to use instead */
         fprintf(stderr, "ico_pc: the image's SHA-1 is %s, %s's is %s\n", hex, disc->id,
                 disc->iso_sha1);
-        ico_host_fatal(log_file(), ICO_WRONG_DISC_TEXT, iso);
+        ico_host_fatal(log_file(), ICO_WRONG_DISC_TEXT, iso, ico_disc_list_text());
         return NULL;
     }
     fprintf(stderr, "ico_pc: disc image verified (%s)\n", disc->id);
@@ -1135,12 +1145,10 @@ static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, i
     if (pick_iso_sdl(uri, sizeof(uri)) != 0) {
         ico_host_fatal(log_file(),
                        "No disc image was chosen.\n"
-                       "Start the game again and choose your ICO disc image: the European "
-                       "disc (SCES-50760) or the Japanese disc (SCPS-11003), as a .iso, .chd "
-                       "or .bin file (with a .bin and a .cue, choose the .bin). Or copy it as "
-                       "Ico_PAL.iso (Ico_JPN.iso for the Japanese disc) into %s with a USB "
-                       "cable or the Files app.",
-                       exe_dir);
+                       "Start the game again and choose your ICO disc image: %s, as a .iso, "
+                       ".chd or .bin file (with a .bin and a .cue, choose the .bin). Or copy "
+                       "it into %s with a USB cable or the Files app, named %s for its disc.",
+                       ico_disc_list_text(), exe_dir, ico_disc_image_names_text(".iso"));
     }
     fprintf(stderr, "ico_pc: disc image chosen in the file picker: %s\n", uri);
     memset(&prog, 0, sizeof(prog));
@@ -1422,7 +1430,7 @@ static int archive_path(char *out, size_t size, const char *dir, const IcoDiscIn
 
 /* The archive mode: mount the disc's archive (ico.o2r for the European
    disc, ico-jpn.o2r for the Japanese one), extracting it on the first run;
-   both discs' archives can be there side by side. Which disc
+   the discs' archives can be there side by side. Which disc
    (ico_host_choose_disc): [game] disc when it names one; else the image the
    player gave, by its boot file; else the only archive there is; else the
    disc played last; else the European one. 0, or 1 when the player stopped
@@ -1459,8 +1467,8 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
             fprintf(stderr, "ico_pc: the disc image %s is %s (boot file %s)\n", iso, given->id,
                     boot);
         } else {
-            fprintf(stderr, "ico_pc: the disc image %s is neither disc (boot file '%s')\n", iso,
-                    boot);
+            fprintf(stderr, "ico_pc: the disc image %s is none of the discs (boot file '%s')\n",
+                    iso, boot);
         }
     }
     want = &ico_discs[ico_host_choose_disc(
@@ -1526,10 +1534,10 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
                            iso, is->product_name, is->id, setting->slug, setting->product_name,
                            setting->id);
         }
-        /* neither disc: the extractor refuses it with the reason */
+        /* none of the discs: the extractor refuses it with the reason */
         want = is != NULL ? is : &ico_discs[ICO_REGION_PAL];
         fprintf(stderr, "ico_pc: first run: the image is %s (boot file '%s'%s%s)\n",
-                is != NULL ? is->id : "neither disc", boot, is != NULL ? ", " : "",
+                is != NULL ? is->id : "none of the discs", boot, is != NULL ? ", " : "",
                 is != NULL ? is->product_name : "");
         if (archive_path(cand[0], sizeof(cand[0]), pref, want) != 0) {
             ico_host_fatal(log_file(),
@@ -1570,10 +1578,10 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
 #endif
         /* the box says what to do about it, in verify_iso's words */
         if (res.wrong_disc) {
-            ico_host_fatal(log_file(), ICO_WRONG_DISC_TEXT, iso);
+            ico_host_fatal(log_file(), ICO_WRONG_DISC_TEXT, iso, ico_disc_list_text());
         }
         if (res.unreadable) {
-            ico_host_fatal(log_file(), ICO_UNREADABLE_DISC_TEXT, iso);
+            ico_host_fatal(log_file(), ICO_UNREADABLE_DISC_TEXT, iso, ico_disc_list_text());
         }
         ico_host_fatal(log_file(),
                        "Could not extract the game's data from %s into %s.\n"
@@ -2110,9 +2118,9 @@ static int host_main(int argc, char **argv)
             const IcoDiscInfo *disc = ico_disc_by_boot(ico_cdvd_host_boot_name());
 
             if (disc == NULL) {
-                fprintf(stderr, "ico_pc: the image's boot file '%s' is neither disc's\n",
+                fprintf(stderr, "ico_pc: the image's boot file '%s' is none of the discs'\n",
                         ico_cdvd_host_boot_name() != NULL ? ico_cdvd_host_boot_name() : "");
-                ico_host_fatal(log_file(), ICO_WRONG_DISC_TEXT, source);
+                ico_host_fatal(log_file(), ICO_WRONG_DISC_TEXT, source, ico_disc_list_text());
             }
             if (disc_setting() != NULL && disc_setting() != disc) {
                 fprintf(stderr,

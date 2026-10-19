@@ -31,11 +31,12 @@
  *   saves=PATH       the memory card folder (port/save):
  *                    the game's files are PATH/BESCES-50760ico/ (the
  *                    European disc; PATH/BISCPS-11003ico/ for the Japanese
- *                    one); default memcard beside the per-user folder
+ *                    one, PATH/BISCPS-56001ico/ for the Korean one);
+ *                    default memcard beside the per-user folder
  *   saves2=PATH      a second card folder, the card in port 1; absent or
  *                    empty: port 1 has no card (the original behaviour)
  *   keep_image=1     Android: keep the copy of the disc image the first
- *                    start made in the app's folder (Ico_PAL or Ico_JPN:
+ *                    start made in the app's folder (Ico_PAL, Ico_JPN or Ico_KOR:
  *                    .iso, .chd or .bin);
  *                    by default it is deleted once the game's data is
  *                    ready, which gives its space back (main_host.c)
