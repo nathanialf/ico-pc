@@ -1,6 +1,6 @@
 /* tools/region_blocks.py --selftest input: one block per class. The self test
  * copies it to ico2/common/src/fixture.c in a scratch tree with this
- * directory's regions.txt (three rows: pal, jpn, us) and region_twins.txt,
+ * directory's regions.txt (four rows: pal, jpn, kor, us) and region_twins.txt,
  * converts it, and compares the result with expected.c, the report with
  * expected_report.tsv and `report --bits` with expected_bits.txt. */
 #include "region.h"
@@ -113,7 +113,7 @@ float fx_tokens(char *file)
 #else
     stage_SetAnimation(625);
 #endif
-    alloc(64, LN(560, 557));
+    alloc(64, LN(560, 557, 557, 560));
 #ifdef VERSION_JPN
     return framePlayed / 50.0f;
 #else
@@ -308,12 +308,157 @@ void fx_twin(void)
 #endif
 }
 
+/* the Korean build is the Japanese program: arms shared by two rows
+   (an `#if` naming both macros joined by ||, the set JPNKOR), a KOR
+   block nested in a shared arm (its #else is the Japanese text), a KOR
+   block beside PAL text (its #else serves pal, jpn and us), the negated
+   pair, an #elif with ||, and a JPN-only block the other rows skip */
+#if defined(VERSION_JPN) || defined(VERSION_KOR)
+void DummyIcoKor(void);
+#endif
+#if defined(VERSION_JPN) || defined(VERSION_KOR)
+int saveSeg[3] = {0, 0x1E8, 4};
+#else
+int saveSeg[3] = {0, 0x1F8, 4};
+#endif
+extern int viewScale;
+
+void fx_shared(MotionRec *row, int video, int lsn)
+{
+    /* shared token and span */
+#if defined(VERSION_JPN) || defined(VERSION_KOR)
+    stage_SetAnimation(621);
+#else
+    stage_SetAnimation(625);
+#endif
+#if defined(VERSION_JPN) || defined(VERSION_KOR)
+    movie_init(720, 480, 36);
+#else
+    movie_init(720, video ? 576 : 480, 36);
+#endif
+    /* a bit position in a shared arm: one --bits row per row of the set */
+#if defined(VERSION_JPN) || defined(VERSION_KOR)
+    draw((row->modeBits.word >> 16) & 7, 0);
+#else
+    draw((row->modeBits.word >> 19) & 7, 0);
+#endif
+    /* shared statements, shared one-region, the negated pair */
+#if defined(VERSION_JPN) || defined(VERSION_KOR)
+    set_mode(4);
+#else
+    if (video) {
+        set_mode(5);
+    }
+#endif
+#if defined(VERSION_JPN) || defined(VERSION_KOR)
+    draw(0, 0);
+#endif
+#if !defined(VERSION_JPN) && !defined(VERSION_KOR)
+    gsb_ResetSnap();
+#endif
+    /* KOR nested in a shared arm: the three texts, flat already */
+#if defined(VERSION_JPN) || defined(VERSION_KOR)
+#ifdef VERSION_KOR
+    strcpy_((char *)work, "SCPS_560.01");
+#else
+    strcpy_((char *)work, "SCPS_110.03");
+#endif
+#else
+    strcpy_((char *)work, "SCES_507.60");
+#endif
+    /* KOR nested beside shared lines: rebuilt flat, the shared lines in
+       both arms; a value two rows share takes one argument */
+#if defined(VERSION_JPN) || defined(VERSION_KOR)
+    draw(1, 2);
+#ifdef VERSION_KOR
+    set_mode(5);
+#else
+    set_mode(6);
+#endif
+#else
+    draw(3, 4);
+    set_mode(7);
+#endif
+    /* the same as statements: an else-if chain over the three texts */
+#if defined(VERSION_JPN) || defined(VERSION_KOR)
+    draw(1, 2);
+#ifdef VERSION_KOR
+    gsb_ResetSnap();
+#endif
+#else
+    set_mode(7);
+#endif
+    /* KOR beside PAL: the #else serves pal, jpn and us */
+#ifdef VERSION_KOR
+    set_mode(5);
+#else
+    set_mode(11);
+#endif
+#ifdef VERSION_KOR
+    lsn += 153600;
+#endif
+    /* an #elif with || */
+#ifdef VERSION_US
+    draw(25, 7);
+#elif defined(VERSION_JPN) || defined(VERSION_KOR)
+    draw(26, 9);
+#else
+    draw(29, 9);
+#endif
+    /* JPN only: KOR and US take PAL's (empty) arm */
+#ifdef VERSION_JPN
+    viewScale = 150;
+#endif
+    draw(lsn, 0);
+}
+
+int fx_shared_switch(int stage)
+{
+    /* per-row deltas: KOR's ids 6 lower than JPN's (case-shift per row) */
+    switch (lt_current_property_item()) {
+#if defined(VERSION_JPN) || defined(VERSION_KOR)
+#ifdef VERSION_KOR
+    case 8:
+#else
+    case 14:
+#endif
+#else
+    case 44:
+#endif
+        set_mode(1);
+        break;
+#if defined(VERSION_JPN) || defined(VERSION_KOR)
+#ifdef VERSION_KOR
+    case 9:
+#else
+    case 15:
+#endif
+#else
+    case 45:
+#endif
+        set_mode(0);
+        break;
+    }
+    /* one delta for the shared arm: the set's selector */
+    switch (stage) {
+#if defined(VERSION_JPN) || defined(VERSION_KOR)
+    case 0x14:
+#else
+    case 0x31:
+#endif
+        set_mode(2);
+        break;
+    }
+    return 0;
+}
+
 int fx_use(void)
 {
     TexRec t;
     Layout l = {MAX_CHARS};
 
     demoEnd();
+    DummyIcoKor();
     return mcCheck() + (int)sizeof(t) + l.curItem + stageOrientIdx[0] + systemStatus[0] +
-           iosCdvdMediaType + NonLinearCameraMove;
+           iosCdvdMediaType + NonLinearCameraMove + saveSeg[1];
 }

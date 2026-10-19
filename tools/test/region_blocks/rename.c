@@ -1,0 +1,28 @@
+/* tools/region_blocks.py --selftest input for `rename`, with the table's
+ * first three rows (pal, jpn, kor): the two-row spelling becomes the
+ * spelling of the rows sharing the Japanese arm (rename_expected.c).
+ * Comments and strings keep PAL_JPN(a, b), ICO_JPN and LN(a, b). */
+#include "region.h"
+
+static int items_pal[2], items_jpn[2];
+#define items PAL_JPN(items_pal, items_jpn)
+#define ICO_IS_JPN() (ICO_JPN)
+
+extern void *alloc(int size, int line);
+extern void draw(int x, int y);
+
+int fx_rename(int w)
+{
+    const char *s = "PAL_JPN(1, 2) ICO_JPN LN(3, 4)";
+    int n = PAL_JPN(1, 2) + PAL_JPN (3, PAL_JPN(4, 5));
+
+    if (ICO_JPN && !ICO_JPN) {
+        n++;
+    }
+    alloc(64, LN(560, 557));
+    alloc(64, LN(f(1, 2), PAL_JPN(3, 4)));
+    alloc(LN(1, 2, 2), LN(10,
+                          11));
+    draw(ICO_REGION_JPN, ICO_JPNKOR + PAL_JPNKOR(0, 1) + items[0] + (s != 0));
+    return n + ICO_JPN_EXTRA; /* ICO_JPN_EXTRA is another name */
+}

@@ -39,3 +39,24 @@ ico2/common/src/fixture.c:281	hand	unbalanced	arm jpn opens or closes a bracket 
 ico2/common/src/fixture.c:304	auto	token	1 substituted, 0 kept as PAL
 ico2/common/src/fixture.c:304	twin	fx_twin	inside a region twin (fx_twin / fx_twin_jpn): mirror the change into the other body
 ico2/common/src/fixture.c:307	review	delta	PAL_JPN(7, 6) delta 1
+ico2/common/src/fixture.c:316	auto	file-scope	jpnkor only: DummyIcoKor
+ico2/common/src/fixture.c:319	hand	data-twin	saveSeg: initialisers differ
+ico2/common/src/fixture.c:329	auto	token	1 substituted, 0 kept as PAL
+ico2/common/src/fixture.c:334	auto	span	one span
+ico2/common/src/fixture.c:340	auto	token	0 substituted, 1 kept as PAL
+ico2/common/src/fixture.c:343	layout	shift	PAL 19 kept (shift): PAL_JPNKOR(19, 16)
+ico2/common/src/fixture.c:346	auto	if-else	2 arms
+ico2/common/src/fixture.c:353	auto	one-region	ICO_JPNKOR
+ico2/common/src/fixture.c:356	auto	one-region	!ICO_JPNKOR
+ico2/common/src/fixture.c:360	auto	token	1 substituted, 0 kept as PAL
+ico2/common/src/fixture.c:371	auto	token	3 substituted, 0 kept as PAL
+ico2/common/src/fixture.c:380	review	delta	PAL_JPN_KOR(7, 6, 5) delta 1
+ico2/common/src/fixture.c:383	auto	if-else	3 arms
+ico2/common/src/fixture.c:392	auto	token	1 substituted, 0 kept as PAL
+ico2/common/src/fixture.c:395	review	delta	PAL_KOR(11, 5) delta 6
+ico2/common/src/fixture.c:397	auto	one-region	ICO_KOR
+ico2/common/src/fixture.c:401	auto	token	2 substituted, 0 kept as PAL
+ico2/common/src/fixture.c:409	auto	one-region	ICO_JPN
+ico2/common/src/fixture.c:419	auto	case-shift	0 substituted, 0 kept as PAL
+ico2/common/src/fixture.c:430	auto	case-shift	0 substituted, 0 kept as PAL
+ico2/common/src/fixture.c:444	auto	case-shift	0 substituted, 0 kept as PAL
