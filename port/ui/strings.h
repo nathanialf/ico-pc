@@ -1,8 +1,8 @@
 /*
  * port/ui/strings.h
  *
- * The port's UI strings in the European disc's five languages and in
- * Japanese: one table per language (port/ui/strings_<lang>.c), indexed by
+ * The port's UI strings in the European disc's five languages, in
+ * Japanese and in Korean: one table per language (port/ui/strings_<lang>.c), indexed by
  * UiStrId, UTF-8. Every word the port draws (the Settings menu, the popups, the achievements, the
  * galleries, photo mode, the model viewer, Characters, the Graphics driver
  * page), and the menus' words transcribed from the PAL sheets
@@ -21,9 +21,9 @@ extern "C" {
 /* The port's languages: the European disc's five, in the order of the
    game's language numbers as NonLinearCameraMove holds them after the
    boot screen (kanbanBoot.c 101-102) and texFile names them (2 EG, 3 FR,
-   4 GR, 5 IT, 6 SP), then Japanese (the port's own text: the Japanese
-   disc's own words are its sheets); UI_LANG_COUNT tables, each defining
-   every UiStrId (ctest strings_complete). */
+   4 GR, 5 IT, 6 SP), then Japanese and Korean (the port's own text: the
+   Japanese and Korean discs' own words are their sheets); UI_LANG_COUNT
+   tables, each defining every UiStrId (ctest strings_complete). */
 typedef enum UiLang {
     UI_LANG_EN = 0,
     UI_LANG_FR,
@@ -31,6 +31,7 @@ typedef enum UiLang {
     UI_LANG_IT,
     UI_LANG_ES,
     UI_LANG_JA,
+    UI_LANG_KO,
     UI_LANG_COUNT
 } UiLang;
 
@@ -40,16 +41,22 @@ typedef enum UiLang {
 #define UI_LANG_PAL_COUNT 5
 
 /* The sheet languages, the language of the sheets the game's menus show:
-   the European disc's five (their UiLang numbers) and the Japanese disc's
-   sheets, UI_SHEET_JA.  The look of the port's text drawn in the sheets'
-   style (menu_font.c kSheetInk) is measured per sheet language. */
+   the European disc's five (their UiLang numbers), the Japanese disc's
+   sheets, UI_SHEET_JA, and the Korean disc's, UI_SHEET_KO (their UiLang
+   numbers too).  The look of the port's text drawn in the sheets' style
+   (menu_font.c kSheetInk) is measured per sheet language.  Which one a
+   disc's menus show is its region row's (port/core/region.h
+   IcoRegionInfo.menu_sheet, settings.c ui_settings_apply_language). */
 #define UI_SHEET_JA 5
-#define UI_LANG_SHEET_COUNT 6
+#define UI_SHEET_KO 6
+#define UI_LANG_SHEET_COUNT 7
 /* The Japanese disc's title sheet: not a sheet language (ui_set_sheet_language
    ignores it) but the geometry of the port's rows on the title screen, whose
    words the title sheet spaces apart more than the other sheets
-   (menu_font.c sheetGeo, ui_menu_text_set_title) */
-#define UI_SHEET_JA_TITLE 6
+   (menu_font.c sheetGeo, ui_menu_text_set_title).  The Korean disc's title
+   sheet letters its words as its other sheets do (menu_font.c KO_GEO_*), so
+   it has no title geometry of its own. */
+#define UI_SHEET_JA_TITLE 7
 
 typedef enum UiStrId {
     UI_STR_NONE = 0, /* "" */
@@ -639,12 +646,15 @@ typedef enum UiStrId {
     UI_STR_OPT_EFFECT_WATER,
     UI_STR_VAL_SHARP,
     UI_STR_EFFECT_WATER_NOTE,
+    /* the Korean language's own name, the same in every table (the Menu
+       language row, after UI_STR_LANG_JA) */
+    UI_STR_LANG_KO,
     UI_STR_COUNT
 } UiStrId;
 
 void ui_set_language(UiLang lang);
 UiLang ui_get_language(void);
-/* The sheet language (UI_LANG_EN .. UI_LANG_ES, or UI_SHEET_JA): the look
+/* The sheet language (UI_LANG_EN .. UI_LANG_ES, UI_SHEET_JA or UI_SHEET_KO): the look
    of the port's text in the sheets' style (menu_font.c's ink per sheet
    language) and the menu text table's geometry follow it, whatever
    language the port's own text is in.  Until ui_set_sheet_language is
@@ -700,6 +710,7 @@ extern const char *const ui_strings_de[UI_STR_COUNT];
 extern const char *const ui_strings_it[UI_STR_COUNT];
 extern const char *const ui_strings_es[UI_STR_COUNT];
 extern const char *const ui_strings_ja[UI_STR_COUNT];
+extern const char *const ui_strings_ko[UI_STR_COUNT];
 
 #ifdef __cplusplus
 }

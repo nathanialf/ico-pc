@@ -40,7 +40,7 @@ static int failures;
 #define MODELS_JPN 1621 /* the Japanese disc's (data_schema.jpn.txt model-path) */
 #define LAYOUT_ROWS 3759
 
-static const char *const kLang[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja"};
+static const char *const kLang[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja", "ko"};
 
 /* the next code point of a UTF-8 string, 0 at the end, -1 if malformed */
 static int32_t next(const char **s)
@@ -88,7 +88,8 @@ static void checkText(int id, const char *what)
         if (l != UI_LANG_EN) {
             /* a translation of its own, not the English fallback */
             const char *const *table[UI_LANG_COUNT] = {ui_strings_en, ui_strings_fr, ui_strings_de,
-                                                       ui_strings_it, ui_strings_es, ui_strings_ja};
+                                                       ui_strings_it, ui_strings_es, ui_strings_ja,
+                                                       ui_strings_ko};
             CHECK(table[l][id] != NULL, "%s (%d): no %s entry", what, id, kLang[l]);
         }
         const char *p = s;

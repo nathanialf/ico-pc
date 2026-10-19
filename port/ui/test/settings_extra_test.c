@@ -2330,7 +2330,7 @@ static void testMenuLanguage(void)
     CHECK(strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE), "Automatisch") == 0 ||
               ui_settings_value_text(UI_OPT_MENU_LANGUAGE)[0] != '\0',
           "the row's value: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
-    /* Auto, en, fr, de, it, es, ja, Auto */
+    /* Auto, en, fr, de, it, es, ja, ko, Auto */
     ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
     CHECK(ico_opt_ui_language() == UI_LANG_EN && ui_get_language() == UI_LANG_EN &&
               ui_sheet_language() == UI_LANG_DE,
@@ -2349,6 +2349,13 @@ static void testMenuLanguage(void)
               ui_sheet_language() == UI_LANG_IT,
           "the game's Italian under Japanese menus (%d, %d)", ui_get_language(),
           ui_sheet_language());
+    ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
+    CHECK(ico_opt_ui_language() == UI_LANG_KO && ui_get_language() == UI_LANG_KO &&
+              ui_sheet_language() == UI_LANG_IT,
+          "Korean menus over the Italian game (%d, %d)", ui_get_language(), ui_sheet_language());
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE),
+                 "\xED\x95\x9C\xEA\xB5\xAD\xEC\x96\xB4") == 0,
+          "the row names Korean in Korean: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
     ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
     CHECK(ico_opt_ui_language() == -1 && ui_get_language() == UI_LANG_IT, "Auto again: Italian");
     CHECK(ui_settings_save() == 0, "saved");

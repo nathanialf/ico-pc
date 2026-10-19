@@ -50,7 +50,7 @@ add_custom_command(
     VERBATIM)
 set(_ui_font_srcs "${_ui_font_c}" "${_ui_font_ja_c}")
 set(_ui_string_srcs strings.c strings_en.c strings_fr.c strings_de.c strings_it.c strings_es.c
-                    strings_ja.c)
+                    strings_ja.c strings_ko.c)
 
 set(_ui_sources
     font.c

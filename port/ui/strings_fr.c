@@ -545,4 +545,5 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED] = "Ajout à Steam impossible",
     [UI_STR_STEAM_FAILED_BODY] =
         "La liste des raccourcis n’a pas pu être modifiée.\nLe README explique l’ajout manuel.",
+    [UI_STR_LANG_KO] = "한국어",
 };

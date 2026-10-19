@@ -39,9 +39,10 @@ int ico_opt_ui_language(void)
     return s_choice;
 }
 
-static const char *const kNames[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja"};
+static const char *const kNames[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja", "ko"};
 static const char *const *const kTables[UI_LANG_COUNT] = {
-    ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it, ui_strings_es, ui_strings_ja};
+    ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it,
+    ui_strings_es, ui_strings_ja, ui_strings_ko};
 
 /* s's printf conversions, their letters in order ("%%" is none) */
 static void conversions(const char *s, char *out, size_t n)
@@ -156,15 +157,37 @@ static void testSheetLanguage(void)
 static void testResolve(void)
 {
     /* the rule over its inputs */
-    CHECK(ui_lang_resolve(-1, 1, 0, 3) == UI_LANG_JA, "auto, the Japanese disc: Japanese");
-    CHECK(ui_lang_resolve(-1, 0, 1, 3) == UI_LANG_FR, "auto, the European disc: the game's");
-    CHECK(ui_lang_resolve(-1, 0, 1, 6) == UI_LANG_ES, "auto, the European disc: Spanish");
-    CHECK(ui_lang_resolve(-1, 0, 0, 3) == UI_LANG_EN, "auto, no game language: English");
+    CHECK(ui_lang_resolve(-1, UI_LANG_JA, 0, 3) == UI_LANG_JA, "auto, the Japanese disc: Japanese");
+    CHECK(ui_lang_resolve(-1, UI_LANG_KO, 0, 3) == UI_LANG_KO, "auto, a Korean disc: Korean");
+    CHECK(ui_lang_resolve(-1, -1, 1, 3) == UI_LANG_FR, "auto, the European disc: the game's");
+    CHECK(ui_lang_resolve(-1, -1, 1, 6) == UI_LANG_ES, "auto, the European disc: Spanish");
+    CHECK(ui_lang_resolve(-1, -1, 0, 3) == UI_LANG_EN, "auto, no game language: English");
+    CHECK(ui_lang_resolve(-1, UI_LANG_COUNT, 0, 3) == UI_LANG_EN,
+          "auto, a disc language out of range: English");
     for (int c = 0; c < UI_LANG_COUNT; c++) {
-        CHECK(ui_lang_resolve(c, 1, 0, 3) == (UiLang)c && ui_lang_resolve(c, 0, 1, 4) == (UiLang)c,
-              "a chosen language %s wins on both discs", kNames[c]);
+        CHECK(ui_lang_resolve(c, UI_LANG_JA, 0, 3) == (UiLang)c &&
+                  ui_lang_resolve(c, UI_LANG_KO, 0, 3) == (UiLang)c &&
+                  ui_lang_resolve(c, -1, 1, 4) == (UiLang)c,
+              "a chosen language %s wins on every disc", kNames[c]);
     }
-    CHECK(ui_lang_resolve(UI_LANG_COUNT, 0, 1, 5) == UI_LANG_IT, "out of range is auto");
+    CHECK(ui_lang_resolve(UI_LANG_COUNT, -1, 1, 5) == UI_LANG_IT, "out of range is auto");
+    /* the region rows' port-text fields (port/core/region.h: plain numbers
+       there) are UiLang and sheet-language ids; a disc whose game picks
+       its language names neither, one that does not names both */
+    for (int i = 0; i < ico_region_count(); i++) {
+        const IcoRegionInfo *r = ico_region_at(i);
+        CHECK(r->ui_lang_default >= -1 && r->ui_lang_default < UI_LANG_COUNT &&
+                  r->menu_sheet >= -1 && r->menu_sheet < UI_LANG_SHEET_COUNT &&
+                  r->menu_sheet != UI_SHEET_JA_TITLE,
+              "%s: ui_lang_default %d, menu_sheet %d", r->slug, r->ui_lang_default, r->menu_sheet);
+        CHECK(r->has_game_language ? r->ui_lang_default < 0 && r->menu_sheet < 0
+                                   : r->ui_lang_default >= 0 && r->menu_sheet >= UI_LANG_PAL_COUNT,
+              "%s: the game's language or the disc's own", r->slug);
+    }
+    CHECK(ico_region_select("jpn") == 0 && ico_region_cur()->ui_lang_default == UI_LANG_JA &&
+              ico_region_cur()->menu_sheet == UI_SHEET_JA,
+          "the Japanese disc: Japanese text over the Japanese sheets");
+    ico_region_select("pal");
     /* through the running disc */
     ico_region_select("pal");
     s_choice = -1;

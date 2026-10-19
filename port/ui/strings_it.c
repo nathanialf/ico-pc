@@ -543,4 +543,5 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED] = "Impossibile aggiungere a Steam",
     [UI_STR_STEAM_FAILED_BODY] =
         "L’elenco dei collegamenti non è stato modificato.\nIl README spiega come aggiungerlo a mano.",
+    [UI_STR_LANG_KO] = "한국어",
 };

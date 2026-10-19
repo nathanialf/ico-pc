@@ -540,4 +540,5 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED] = "Could not add to Steam",
     [UI_STR_STEAM_FAILED_BODY] =
         "The shortcut list could not be changed.\nThe README shows how to add it by hand.",
+    [UI_STR_LANG_KO] = "한국어",
 };

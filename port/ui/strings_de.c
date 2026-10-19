@@ -546,4 +546,5 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED] = "Hinzufügen zu Steam fehlgeschlagen",
     [UI_STR_STEAM_FAILED_BODY] =
         "Die Verknüpfungsliste ließ sich nicht ändern.\nDie README zeigt das Hinzufügen von Hand.",
+    [UI_STR_LANG_KO] = "한국어",
 };

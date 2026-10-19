@@ -544,4 +544,5 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED] = "No se pudo añadir a Steam",
     [UI_STR_STEAM_FAILED_BODY] =
         "No se pudo cambiar la lista de accesos directos.\nEl README explica cómo añadirlo a mano.",
+    [UI_STR_LANG_KO] = "한국어",
 };

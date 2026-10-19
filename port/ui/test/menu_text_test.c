@@ -260,9 +260,9 @@ static void testStrings(void)
         for (int l = 0; l < UI_LANG_COUNT; l++) {
             /* each language's own table, no fallback to English (the
                Japanese table's menu words are the Japanese disc's) */
-            const char *const *tables[UI_LANG_COUNT] = {ui_strings_en, ui_strings_fr,
-                                                        ui_strings_de, ui_strings_it,
-                                                        ui_strings_es, ui_strings_ja};
+            const char *const *tables[UI_LANG_COUNT] = {ui_strings_en, ui_strings_fr, ui_strings_de,
+                                                        ui_strings_it, ui_strings_es, ui_strings_ja,
+                                                        ui_strings_ko};
             const char *s = tables[l][id];
             CHECK(s != NULL && s[0] != '\0', "item %d: string %d missing in language %d", i, id, l);
             uint32_t cp;

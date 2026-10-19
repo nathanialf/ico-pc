@@ -380,10 +380,11 @@ int ui_settings_photo_back(void);
 int ui_settings_key_config_back(void);
 /* Sets the language of the port's text (ui_set_language) by the Menu
    language row's rule (ui_lang.h ui_settings_resolve_language: [ui]
-   language, else Japanese on the Japanese disc, the game's own language on
-   the European disc, else English) and the sheets' look language
-   (ui_set_sheet_language: UI_SHEET_JA on the Japanese disc, the game's
-   language on the European one); every screen of the port calls it before
+   language, else the disc's region row's ui_lang_default (Japanese on the
+   Japanese disc), the game's own language on the European disc, else
+   English) and the sheets' look language (ui_set_sheet_language: the
+   region row's menu_sheet, UI_SHEET_JA on the Japanese disc, else the
+   game's language on the European one); every screen of the port calls it before
    it draws its words, so a change of either language shows at once. */
 void ui_settings_apply_language(void);
 /* Whether a row of opt is shown now (its page masks it otherwise): the

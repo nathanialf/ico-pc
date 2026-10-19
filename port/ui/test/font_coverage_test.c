@@ -64,7 +64,7 @@ static int s_lang; /* the language the walk is in */
         }                                                                                          \
     } while (0)
 
-static const char *const kLangs[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja"};
+static const char *const kLangs[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja", "ko"};
 
 #define BMP_SEEN 0x10000
 static unsigned char s_seen[UI_LANG_COUNT][BMP_SEEN]; /* distinct code points a language draws */

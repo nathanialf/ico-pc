@@ -779,7 +779,8 @@ static void setGameLanguage(int game)
 static const char *menuLanguageName(int lang)
 {
     static const int ids[UI_LANG_COUNT] = {UI_STR_LANG_EN, UI_STR_LANG_FR, UI_STR_LANG_DE,
-                                           UI_STR_LANG_IT, UI_STR_LANG_ES, UI_STR_LANG_JA};
+                                           UI_STR_LANG_IT, UI_STR_LANG_ES, UI_STR_LANG_JA,
+                                           UI_STR_LANG_KO};
     return ui_str((UiStrId)ids[lang >= 0 && lang < UI_LANG_COUNT ? lang : 0]);
 }
 
@@ -787,11 +788,13 @@ void ui_settings_apply_language(void)
 {
     /* the port's text: [ui] language, else the disc's (ui_lang.c) */
     ui_set_language(ui_settings_resolve_language());
-    /* the look of the port's words over the disc's sheets: the Japanese
-       sheets' on the Japanese disc (menu_font.c kSheetInk[UI_SHEET_JA]),
-       else the game's own language's (the European disc's five sheets),
-       whatever language the port's text is in */
-    ui_set_sheet_language(ICO_JPN               ? UI_SHEET_JA
+    /* the look of the port's words over the disc's sheets: the sheets the
+       disc's region row names (port/core/region.h menu_sheet: the Japanese
+       disc's, menu_font.c kSheetInk[UI_SHEET_JA]), else the game's own
+       language's (the European disc's five sheets), whatever language the
+       port's text is in */
+    const int sheet = ico_region_cur()->menu_sheet;
+    ui_set_sheet_language(sheet >= 0            ? sheet
                           : gameLanguage() >= 0 ? (int)ui_lang_from_game(gameLanguage())
                                                 : (int)UI_LANG_EN);
 }
@@ -1878,7 +1881,7 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         break;
     }
     case UI_OPT_MENU_LANGUAGE: {
-        /* Auto, then the six tables (UiLang order): [ui] language */
+        /* Auto, then the seven tables (UiLang order): [ui] language */
         const int i = stepIndex(ico_opt_ui_language() + 1, UI_LANG_COUNT + 1, dir) - 1;
         ico_opt_set_ui_language(i);
         ico_config_set_string("ui.language", ico_opt_ui_language_name(i));

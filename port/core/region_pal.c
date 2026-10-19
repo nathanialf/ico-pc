@@ -24,9 +24,11 @@ const IcoRegionInfo ico_region_info_pal = {
 
     .has_50hz_row = 1,
     .has_game_language = 1,
-    .fixed_60hz = 0,     /* systemStatus[0] from the boot's video mode (gamestate.c:359-367) */
-    .pad_confirm = 0x40, /* Cross: layout_action.c:148 */
-    .pad_back = 0x10,    /* Triangle: layout_action.c:150 */
+    .ui_lang_default = -1, /* Auto: the game's language (NonLinearCameraMove) */
+    .menu_sheet = -1,      /* the game's language's sheets, one of the five */
+    .fixed_60hz = 0,       /* systemStatus[0] from the boot's video mode (gamestate.c:359-367) */
+    .pad_confirm = 0x40,   /* Cross: layout_action.c:148 */
+    .pad_back = 0x10,      /* Triangle: layout_action.c:150 */
 
     .reduction_crops_rows = 1, /* GsBase.c gsb_Reduction: SCISSOR rows crop .. H/2-1-crop */
 

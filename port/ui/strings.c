@@ -2,7 +2,7 @@
  * port/ui/strings.c
  *
  * The language switch over the per-language tables, the serial notes and
- * the line-break rules for the Japanese text (strings.h).
+ * the line-break rules for the Japanese and Korean text (strings.h).
  */
 #include "strings.h"
 
@@ -15,7 +15,8 @@ static UiLang s_lang = UI_LANG_EN;
 static int s_sheetLang = -1; /* -1: follows s_lang (ui_sheet_language) */
 
 static const char *const *const s_tables[UI_LANG_COUNT] = {
-    ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it, ui_strings_es, ui_strings_ja,
+    ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it,
+    ui_strings_es, ui_strings_ja, ui_strings_ko,
 };
 
 void ui_set_language(UiLang lang)
