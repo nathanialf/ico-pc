@@ -3,8 +3,9 @@
 This is **ICO** (Sony Computer Entertainment, 2001) made to run as a normal
 program on a Windows or Linux PC, the Steam Deck, 64-bit ARM Linux
 handhelds, Android phones and tablets, iPhones and Apple-silicon Macs. It
-runs the game's own code, so it plays, sounds and feels like the PAL
-PlayStation 2 game. There are extras, such as a sharper picture, widescreen
+runs the game's own code, so it plays, sounds and feels like the
+PlayStation 2 game, from the European disc or the Japanese one. There are
+extras, such as a sharper picture, widescreen
 and smoother motion. The sharper picture, widescreen and the other picture
 extras stay off until you turn them on, and the frame rate is not held to
 the PS2's unless you choose Original. The mouse camera starts on.
@@ -12,19 +13,22 @@ the PS2's unless you choose Original. The mouse camera starts on.
 > [!IMPORTANT]
 > This project is not connected to Sony Interactive Entertainment or Team
 > Ico. *ICO* is a trademark of its owners. The game itself is not included
-> here or in the downloads. You need your own copy of the PAL disc
-> (SCES-50760; the number is printed on the disc and on the case), saved as
-> a disc image file, and the program reads the game from it. More in the
+> here or in the downloads. You need your own copy of the European disc
+> (SCES-50760) or the Japanese disc (SCPS-11003); the number is printed on
+> the disc and on the case. Save it as a disc image file, and the program
+> reads the game from it. More in the
 > [project's legal notes](https://github.com/nathanialf/ico-pc/blob/main/docs/LEGAL.md)
 > (written for developers).
 
 ## What you need
 
-- **Your own disc image of ICO, PAL version (SCES-50760, the number printed
-  on the disc and on the case).** A disc image is
-  one file that holds the whole disc. It ends in `.iso`, `.chd` or `.bin` (a
-  `.bin` can come with a `.cue` file, which also works). Other regions and
-  editions do not work.
+- **Your own disc image of ICO: the European release (SCES-50760) or the
+  Japanese release (SCPS-11003).** The number is printed on the disc and
+  on the case. A disc image is one file that holds the whole disc. It ends
+  in `.iso`, `.chd` or `.bin` (a `.bin` usually comes with a `.cue` file,
+  which also works). The Japanese release is a CD, so its image is most
+  often a `.bin` and a `.cue`. The American release and other editions do
+  not work. [Which disc to pick](#the-two-discs).
 - **Something to play on:**
   - a 64-bit Windows 10 or 11 PC, or a Linux PC, with an up-to-date
     graphics driver (any recent NVIDIA, AMD or Intel graphics card works);
@@ -51,7 +55,8 @@ the PS2's unless you choose Original. The mouse camera starts on.
 | Apple-silicon Mac, macOS 12 or newer | `-macos-arm64.dmg` (or `-macos-arm64.zip`) | Not tested by the maintainer either. The first time, right-click **ICO** and choose **Open** ([how](#mac)). |
 
 Not supported: 32-bit systems, Windows 7 and 8, Intel Macs, and any disc
-other than the PAL release (SCES-50760).
+other than the European release (SCES-50760) and the Japanese release
+(SCPS-11003). Every download plays both discs.
 
 ## Install
 
@@ -129,9 +134,12 @@ up first with its own instructions.
    not seen your disc image yet.
 3. Copy your disc image into ICO's **Documents** folder through
    LiveContainer's data-folder access, and name it `Ico_PAL.iso` (or
-   `Ico_PAL.chd`, `Ico_PAL.bin` or `Ico_PAL.cue`). The iPhone version does
-   not ask for the disc image, so it has to be there with one of those
-   names.
+   `Ico_PAL.chd`, `Ico_PAL.bin` or `Ico_PAL.cue`) for the European disc,
+   or `Ico_JPN.iso` (or `Ico_JPN.chd`, `Ico_JPN.bin` or `Ico_JPN.cue`) for
+   the Japanese disc. With a `.bin` and a `.cue`, copy both, rename only
+   the `.cue`, and leave the `.bin` with the name the `.cue` gives it. The
+   iPhone version does not ask for the disc image, so
+   it has to be there with one of those names.
 4. Start **ICO** again. It copies the game's files out of the image, as
    described in [The first start](#the-first-start).
 
@@ -150,8 +158,35 @@ what the game is doing the whole time
 
 On Windows and Linux you can skip the question. Put the disc image beside
 the program and name it `Ico_PAL.iso` (or `Ico_PAL.chd`, `Ico_PAL.bin` or
-`Ico_PAL.cue`). On Windows, "beside the program" means inside the `x64`
-folder.
+`Ico_PAL.cue`) for the European disc, or `Ico_JPN.iso` (or `Ico_JPN.chd`,
+`Ico_JPN.bin` or `Ico_JPN.cue`) for the Japanese disc. With a `.bin` and a
+`.cue`, put both there, rename only the `.cue`, and leave the `.bin` with
+the name the `.cue` gives it. On Windows, "beside the program" means inside
+the `x64` folder.
+
+## The two discs
+
+The game plays the European release of ICO (SCES-50760) and the Japanese
+release (SCPS-11003). The disc image you give it at the first start decides
+which one you play. Both are the whole game; the differences are the
+original releases' own:
+
+- **The game's text.** The signs, menus and subtitles are the disc's own.
+  The European disc has English, French, German, Italian and Spanish; the
+  Japanese disc has Japanese.
+- **Buttons.** On the Japanese disc, Circle confirms and Cross goes back,
+  as on the Japanese PS2 release, and the menus this port adds do the same.
+  [More in Controls](docs/CONTROLS.md#the-japanese-disc).
+- **Video mode.** The European disc offers 50 Hz or 60 Hz; the Japanese
+  disc is always 60 Hz.
+- **The port's own menus** (Options, the extras, photo mode) can be shown in
+  English, French, German, Italian, Spanish or Japanese, with **Menu
+  language** under [Options > Language](docs/OPTIONS.md#language).
+
+Achievements, the music and models galleries, photo mode and the model
+viewer work with both discs. Saves, texture packs and model packs are kept
+apart for each disc, so you can set up both on the same device: see
+[Can I play both discs?](docs/FAQ.md#can-i-play-both-discs)
 
 ## Questions people ask first
 
@@ -166,6 +201,9 @@ folder.
   [What each one does](docs/OPTIONS.md#effects).
 - **Where are my saves?** In a folder the game makes for you.
   [Where that is](docs/PORTABLE_MODE.md#where-your-saves-are).
+- **Does the Japanese disc work?** Yes, the European disc (SCES-50760)
+  and the Japanese disc (SCPS-11003) both do.
+  [The two discs](#the-two-discs).
 
 [More questions and answers](docs/FAQ.md).
 
@@ -197,9 +235,11 @@ When something goes wrong, the game writes what happened into a file named
   `Android/data/com.defnf.icopc/files/logs`
   ([how to reach it](docs/ANDROID.md#where-your-files-are)).
 
-Open a report on the
-[issues page](https://github.com/nathanialf/ico-pc/issues) and attach that
-file. [When something goes wrong](docs/TROUBLESHOOTING.md) explains the
+When the game closes with an error it also writes a report file in the
+same folder, named `report-` and the date, ending in `.zip`. Open a report
+on the [issues page](https://github.com/nathanialf/ico-pc/issues), say which
+disc you play (the European or the Japanese) and attach the newest report
+file, or `ico-pc.log` if there is none. [When something goes wrong](docs/TROUBLESHOOTING.md) explains the
 error messages and what to try first.
 
 ## How it differs from the PS2
@@ -207,8 +247,9 @@ error messages and what to try first.
 The title screen has an **Options** line and a **Quit to desktop** line
 (**Quit game** on a phone); starting a New Game shows one more screen, with
 **Mirror mode** and **New Game+** ([more about them](docs/OPTIONS.md#starting-a-new-game));
-the language and 50/60 Hz questions the PS2 asks at first start live in
-Options instead, and the language can change in the middle of a game; the
+the language and 50/60 Hz questions the European PS2 disc asks at first
+start live in Options instead, and the language can change in the middle of
+a game; the
 ending credits have one more heading and name, for this project; and the
 pause menu shows your journey's numbers. Everything else is meant to match
 the PS2: if the picture or the timing is different from the console, that

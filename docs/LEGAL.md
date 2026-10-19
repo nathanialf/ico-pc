@@ -268,11 +268,15 @@ source and leaked SDKs stay forbidden on every branch.
 ## What you need to build
 
 You must legally own a copy of *ICO* for the PlayStation 2 and supply the
-PAL disc image yourself. The build needs no disc data. On its first run the
-program checks the image's SHA-1 (or, for a re-dump, the boot ELF's SHA-1
-and the manifest of the data file) and keeps no archive made from any
-other file: the game's data is written to a temporary file and kept as the
-local archive (`ico.o2r`) only when the check passes; the
+disc image yourself: the European release (`SCES-50760`, boot ELF
+`SCES_507.60`) or the Japanese release (`SCPS-11003`, boot ELF
+`SCPS_110.03`). The build needs no disc data. On its first run the
+program checks the image's SHA-1 against that disc's (or, for a re-dump,
+the boot ELF's SHA-1 and the manifest of the data file) and keeps no
+archive made from any other file: the game's data is written to a
+temporary file and kept as the local archive only when the check passes
+(`ico.o2r` for the European disc, `ico-jpn.o2r` for the Japanese disc, so
+both can sit in the same user folder); the
 maintainers' ELF extraction checks `config/sha1sums.txt`. A SHA-1 is a
 fingerprint, not a copy of the work; the disc image and the ELF remain the
 property of their rightsholders.

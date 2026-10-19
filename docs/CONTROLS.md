@@ -14,7 +14,9 @@ bottom face button is always Cross, whether your pad is an Xbox,
 PlayStation or Switch pad. In the menus the gamepad's four face buttons
 and the d-pad always go by position, even after you change them under
 Remap controls: the bottom button confirms, the top button goes back, and
-the d-pad moves. Start, Select, the shoulder buttons, the triggers and the
+the d-pad moves (on the Japanese disc the right button confirms and the
+bottom one goes back, see [The Japanese disc](#the-japanese-disc)). Start,
+Select, the shoulder buttons, the triggers and the
 stick presses follow your changes everywhere, unless you move one of them
 onto a face button or the d-pad. Then the game follows your change in
 play, but the menus still use that face button or d-pad direction for its
@@ -60,6 +62,26 @@ Escape, Alt+Enter, F11, F12 and Shift+F12 cannot be changed. Everything else can
 another action, the two actions swap. If the action you changed had no
 button on that device, the other action is left without one.
 The game's own **Button configuration** applies on top of your changes.
+
+## The Japanese disc
+
+On the Japanese disc (SCPS-11003) the menus swap two buttons, as the
+Japanese PS2 release did: **Circle confirms and Cross goes back**.
+This covers the game's own menus and the
+ones this port adds (Options, the title screen's extras, the model viewer,
+Character Customization), and the button pictures in the menus' hints
+follow it. The buttons and keys themselves stay where they are: the bottom
+face button is still Cross (Space on the keyboard) and the right face
+button is still Circle (E on the keyboard), so on a gamepad the right face
+button confirms and the bottom face button goes back, and on the keyboard E
+confirms and Space goes back (unless you changed them under Remap
+controls). The mouse works the same with both discs: the left button
+chooses, the right button goes back.
+The **Circle goes back** row is not in Options with the Japanese disc,
+since Circle confirms there.
+
+Where this page says to press Cross in a menu, press Circle on the
+Japanese disc, and where it says Circle goes back, press Cross.
 
 ## Look around with the mouse
 

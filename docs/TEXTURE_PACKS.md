@@ -10,24 +10,39 @@ PS2 games on a PC, and most ICO packs are made for it. You do not need to
 rename or convert anything.
 [Sad Origami's ICO PAL HD pack](https://ko-fi.com/s/7c0e3e044f) works with it.
 
+## Which disc a pack is for
+
+A pack is made for one disc. Each disc has its own folder, named after the
+number printed on the disc:
+
+- `SCES-50760` for the European disc;
+- `SCPS-11003` for the Japanese disc.
+
+Put a pack in the folder of the disc it was made for; the pack's own
+folder name usually says which. The game reads only the folder of the
+disc you play, so you can keep a pack in each.
+
 ## Put a texture pack in
 
-The game comes with a folder for a pack:
+The game comes with a folder for a pack for each disc:
 
-- Windows: `x64\textures\SCES-50760\replacements`
-- Linux and Steam Deck: `textures/SCES-50760/replacements`, next to
-  `ico_pc`
+- Windows: `x64\textures\SCES-50760\replacements` and
+  `x64\textures\SCPS-11003\replacements`
+- Linux and Steam Deck: `textures/SCES-50760/replacements` and
+  `textures/SCPS-11003/replacements`, next to `ico_pc`
 - Android: see [the Android guide](ANDROID.md#where-your-files-are)
 - Mac and iPhone: the download has no such folder; make one as shown in
   [Other places a pack can go](#other-places-a-pack-can-go)
 
-A note named `README.txt` sits inside it to show you the right place.
-SCES-50760 is the number of the PAL disc.
+A note named `README.txt` sits inside each to show you the right place.
+The examples below use the European disc's `SCES-50760`; for a pack for
+the Japanese disc, read `SCPS-11003` instead.
 
-A pack you download usually has a `SCES-50760` folder of its own, with a
-`replacements` folder inside. Copy the pack so that its files end up
-inside the game's `replacements` folder. For example, on Windows a file
-from the pack should end up at a place like this:
+A pack you download usually has a `SCES-50760` (or `SCPS-11003`) folder of
+its own, with a `replacements` folder inside. Copy the pack so that its
+files end up inside the game's `replacements` folder for the same disc.
+For example, on Windows a file from a pack for the European disc should
+end up at a place like this:
 
 ```
 x64\textures\SCES-50760\replacements\some-picture.dds
@@ -134,9 +149,10 @@ To see which file name the game expects for a texture:
 3. Play to the place where the texture appears.
 
 The game saves each texture as a PNG picture, under the same name PCSX2
-uses, in `textures/SCES-50760/dumps` in the folder with your saves. Give
-your picture that name, put it in `replacements`, and the game uses it
-the next time you start it.
+uses, in `textures/SCES-50760/dumps` (European disc) or
+`textures/SCPS-11003/dumps` (Japanese disc) in the folder with your saves.
+Give your picture that name, put it in the `replacements` folder for the
+same disc, and the game uses it the next time you start it.
 
 You cannot earn achievements while Developer mode is on, so turn it off
 again when you are done. Achievements stay off until you go back to the

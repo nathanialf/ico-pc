@@ -14,14 +14,23 @@ second half is for people who want to make one.
 Model packs go in the `models` folder that comes with the game, next to
 the `textures` folder. It is already there, with a short note inside it.
 
+Each disc has its own folder for packs, named after the number printed on
+the disc: `SCES-50760` for the European disc and `SCPS-11003` for the
+Japanese disc. A pack goes in the folder of the disc it was made for, and
+the game reads only the folder of the disc you play. The steps below use
+the European disc's folder; for the Japanese disc, read `SCPS-11003`
+instead of `SCES-50760`.
+
 1. Open the `models` folder beside the program. On Windows it is inside
    the `x64` folder:
 
    ```
    x64\models\SCES-50760\replacements\
+   x64\models\SCPS-11003\replacements\
    ```
 
    On Linux and the Steam Deck it is `models/SCES-50760/replacements/`
+   (or `models/SCPS-11003/replacements/`)
    next to `ico_pc`. On a Mac or an iPhone there is no such folder in the
    download: make it in the folder with your saves, as below. On Android,
    [the Android guide](ANDROID.md#where-your-files-are) says where it goes.
@@ -84,7 +93,9 @@ these notes are written for it.
      keyboard). A message says how
      many files it saved and where.
 
-The files go in `models/SCES-50760/dumps` in the folder with your saves.
+The files go in `models/SCES-50760/dumps` (European disc) or
+`models/SCPS-11003/dumps` (Japanese disc) in the folder with your saves.
+Make a pack from the dumps of the disc it is for.
 
 You cannot earn achievements while Developer mode is on, so turn it off
 again when you are done. Achievements stay off until you go back to the
@@ -116,7 +127,9 @@ chunks. All pieces of one file use the same texture.
 4. Give it the same name as the original, for example
    `3f9a07c2b1d4e865.glb`. You can put a word and a dash in front to keep
    track, for example `sword-3f9a07c2b1d4e865.glb`.
-5. Put it in `models/SCES-50760/replacements` and start the game.
+5. Put it in `models/SCES-50760/replacements` (or
+   `models/SCPS-11003/replacements` for the Japanese disc) and start the
+   game.
 
 ### What you can change
 

@@ -24,9 +24,13 @@ In the user folder:
 
 - `memcard` is your memory card. It holds your saves, as normal files.
   PCSX2 can keep a memory card as a folder in the same way, so saves can
-  move between the two.
+  move between the two. The European disc's saves are in the folder
+  `BESCES-50760ico` inside it, the Japanese disc's in `BISCPS-11003ico`,
+  as on a PS2 memory card, so the two never mix.
 - `config.toml` holds your settings.
-- The game's own data, copied from your disc image at the first start.
+- The game's own data, copied from your disc image at the first start: one
+  large file for the European disc and another for the Japanese disc, if
+  you set up both.
 - `screenshots` holds the pictures you take in photo mode.
 - Your achievements, and any texture or model pack you put there.
 
@@ -126,11 +130,14 @@ On Linux, open a terminal in the game's folder and tell it where your
 tools/mc_import --to ~/.local/share/ico-pc/ico-pc/memcard Mcd001.ps2
 ```
 
-It only takes ICO's save and leaves other games alone. It will not replace
-a save that is already there unless you add `--overwrite`.
+It only takes ICO's save and leaves other games alone. It works for a save
+of the European disc and for one of the Japanese disc, and puts each in the
+folder for its disc. It will not replace a save that is already there unless you add
+`--overwrite`.
 
 From a PCSX2 memory card kept as a folder, you do not need the tool. Copy
-the `BESCES-50760ico` folder into `memcard`.
+the `BESCES-50760ico` folder (European disc) or the `BISCPS-11003ico`
+folder (Japanese disc) into `memcard`.
 
 After importing, check that the game lists the save.
 

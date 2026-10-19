@@ -1,0 +1,47 @@
+name: Problem report
+description: Something does not work, looks wrong or runs slowly
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting it. Please say which disc you play and attach the report file: the same problem can differ between the two discs.
+  - type: dropdown
+    id: disc
+    attributes:
+      label: Which disc do you play?
+      description: The number is printed on the disc and on the case. The first lines of the log name it too.
+      options:
+        - the European disc (SCES-50760)
+        - the Japanese disc (SCPS-11003)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version of the game
+      description: Shown in the top-right corner of the Options menu's first page, and at the top of the log.
+      placeholder: "0.8.0"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Your device and system
+      description: The computer, phone or handheld, its system (Windows 11, Ubuntu, Android 14, macOS ...) and its graphics card or phone model.
+      placeholder: "Windows 11, NVIDIA GeForce RTX 3060"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you were doing, what you expected and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Report file
+      description: Drag the newest file in the `logs` folder that starts with `report-` (for example `report-20261016-142301.zip`) into this box. If there is none, attach `logs/ico-pc.log` instead. Where the folder is is explained in "When something goes wrong" in the docs.
+    validations:
+      required: true

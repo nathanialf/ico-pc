@@ -64,17 +64,19 @@ The game is running and only the picture is missing. That points to the
 graphics driver. Update it from the maker's site (NVIDIA, AMD or Intel),
 then start the game again. If the picture is still black, send a report as
 described in [When something goes wrong](TROUBLESHOOTING.md#send-a-problem-report)
-and attach the log.
+and attach the log and say which disc you play, the European or the
+Japanese.
 
 ## How do I use a texture pack?
 
 A texture pack is a set of sharper pictures that fans made to replace the
 game's own. The game comes with a `textures` folder for one.
 
-1. Copy the pack's `SCES-50760` folder into the `textures` folder beside
-   the program. On Windows that is inside the `x64` folder. On a Mac or an
-   iPhone the download has no such folder: [the full guide](TEXTURE_PACKS.md)
-   shows where to make one.
+1. Copy the pack's `SCES-50760` folder (a pack for the European disc) or
+   `SCPS-11003` folder (a pack for the Japanese disc) into the `textures`
+   folder beside the program. On Windows that is inside the `x64` folder.
+   On a Mac or an iPhone the download has no such folder: [the full
+   guide](TEXTURE_PACKS.md) shows where to make one.
 2. Start the game.
 3. Open **Options > Display** and check that **Texture pack** says **On**.
 
@@ -96,8 +98,8 @@ it. To hide it, turn on **Full pixel (exact screen pixels)** in
 **Options > Effects** (it is on by default with the Enhanced Preset).
 It shows the strip of picture the PS2 hid under the border, so the picture
 fills the box. Nothing is cut off or enlarged, and the picture stays as
-sharp as it is without the option. With Video mode at 50 Hz the strip at
-the top and bottom is a little taller.
+sharp as it is without the option. With Video mode at 50 Hz (European
+disc only) the strip at the top and bottom is a little taller.
 [What it does](OPTIONS.md#effects).
 
 ## Why does the CRT filter switch the picture back to the original resolution?
@@ -190,10 +192,29 @@ it.
 
 ## Which disc image works?
 
-Only the PAL version of ICO, numbered SCES-50760, as a `.iso`, `.chd` or `.bin` file (a `.cue` file
-that points to the `.bin` works too). The US, Japanese and later editions do not work. If the image
-is not the right one, the game says so in a message when you start it, and
-the log says so too.
+The European release of ICO, numbered SCES-50760, or the Japanese release,
+numbered SCPS-11003, as a `.iso`, `.chd` or `.bin` file (a `.cue` file that
+points to the `.bin` works too). The Japanese release is a CD, so its image
+is usually a `.bin` with a `.cue`. The American release and later editions
+do not work. If the image is not one of the two, the game says so in a
+message when you start it, and the log says so too.
+[What is different between the two](../README.md#the-two-discs).
+
+## Can I play both discs?
+
+Yes. Each disc gets its own copy of the game's files, its own saves and its
+own folders for texture and model packs, so setting up the second disc
+does not touch the first one's.
+
+To add the second disc, give the game its image the same way as the first
+time: on Windows and Linux, put it beside the program named `Ico_PAL.iso`
+(European) or `Ico_JPN.iso` (Japanese), or put its full path on the `iso=`
+line of `ico-pc.ini`; on an iPhone, copy it into ICO's Documents folder
+with that name. The game copies the new disc's files out once, as at the
+first start. The image the game is set to decides which disc starts. To keep one
+of them whichever images are around, set `disc` in the `[game]` part of
+`config.toml` to `"pal"` (European) or `"jpn"` (Japanese); `"auto"` lets
+the game choose.
 
 ## How do I take a photo?
 
@@ -212,4 +233,6 @@ there. On a computer you can also close the window.
 ## Something went wrong. What now?
 
 Look at [When something goes wrong](TROUBLESHOOTING.md). It explains the
-error messages and how to send a useful report.
+error messages and how to send a useful report. In the report, say which
+disc you play, the European or the Japanese, and attach the newest file
+in the `logs` folder that starts with `report-` (or `ico-pc.log`).

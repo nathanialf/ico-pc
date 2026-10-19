@@ -15,9 +15,12 @@
   a graphics driver package instead, which only helps on a phone with an
   Adreno chip (most phones with a Qualcomm Snapdragon processor; see
   [Using a different graphics driver](#using-a-different-graphics-driver)).
-- **Your own disc image of ICO, PAL version (SCES-50760)**, as a `.iso`,
-  `.chd` or `.bin` file, copied onto the phone or tablet.
-  [What a disc image is](../README.md#what-you-need).
+- **Your own disc image of ICO**, the European release (SCES-50760) or the
+  Japanese release (SCPS-11003), as a `.iso`, `.chd` or `.bin` file,
+  copied onto the phone or tablet. The Japanese release is a CD, so its
+  image is usually a `.bin` with a `.cue` beside it: copy the `.bin`.
+  [What a disc image is](../README.md#what-you-need), and
+  [what differs between the two discs](../README.md#the-two-discs).
 - **Free space** for the first start: the size of the disc image plus
   about 1.2 GB. Once the game is set up, it needs about 1 GB.
 
@@ -49,11 +52,14 @@ first ([where it is](#where-your-files-are)).
    that this happens once after an update. Leave the game open until the
    count is done. Later starts skip it or show it only for a moment. If you
    close the game during it, the next start shows it again.
-2. The game opens your phone's file picker. Find your disc image and tap
-   it. The picker shows every file, so make sure you pick the `.iso`,
-   `.chd` or `.bin`. If you have a `.bin` and a `.cue`, pick the `.bin`; the
-   `.cue` only lists it and is not accepted here.
-3. The game copies the image into its own folder. The screen says **Copying
+2. The game asks you to choose your ICO disc image, the European release
+   (SCES-50760) or the Japanese release (SCPS-11003), and opens your
+   phone's file picker. Find your disc image and tap it. The picker shows
+   every file, so make sure you pick the `.iso`, `.chd`, `.bin` or `.cue`
+   of the disc. If you have a `.bin` and a `.cue` (the usual form of the
+   Japanese disc), pick the `.bin`.
+3. The game copies the image into its own folder, naming the copy
+   `Ico_PAL` or `Ico_JPN` and the file's ending, after the disc it is. The screen says **Copying
    the disc image into the app**, with a bar. With a big image this can take
    a few minutes. At the end it says **Saving the copy** for a few seconds
    while the phone finishes writing the file.
@@ -78,8 +84,10 @@ Once the game is set up, it deletes its copy of the disc image to give the
 space back. Your own file, where you picked it from, is not touched.
 
 **Skipping the picker.** You can also copy the disc image into the game's
-folder yourself, named `Ico_PAL.iso` (or `Ico_PAL.chd` or `Ico_PAL.bin`). The game then
-uses it without asking. It deletes that file too once it is set up.
+folder yourself, named `Ico_PAL.iso` (or `Ico_PAL.chd` or `Ico_PAL.bin`)
+for the European disc, or `Ico_JPN.iso` (or `Ico_JPN.chd` or
+`Ico_JPN.bin`) for the Japanese disc. The game then uses it without
+asking. It deletes that file too once it is set up.
 
 **Keeping the copy.** Most people do not need this. If you want the disc
 image to stay in the game's folder, you need a text file named
@@ -95,7 +103,8 @@ keep_image=1
    now exists.
 2. On a computer, make the text file with Notepad or any text editor.
 3. With the USB cable, copy `ico-pc.ini` and your disc image, named
-   `Ico_PAL.iso`, into the game's folder, and start the game again.
+   `Ico_PAL.iso` (European disc) or `Ico_JPN.iso` (Japanese disc), into
+   the game's folder, and start the game again.
 
 ## Where your files are
 
@@ -110,21 +119,25 @@ storage, then `Android`, `data`, `com.defnf.icopc`, `files`.
 
 In that folder:
 
-- `memcard` holds your saves.
+- `memcard` holds your saves: the European disc's in `BESCES-50760ico`,
+  the Japanese disc's in `BISCPS-11003ico`.
 - `logs` holds the log file, `ico-pc.log`, which helps with problem
   reports. When the graphics driver stops responding, the game also saves
   a copy of the picture it was drawing there, a file whose name starts
   with `loss-` and ends in `.zip` (the three newest are kept).
 - `textures/SCES-50760/replacements` is where a
-  [texture pack](TEXTURE_PACKS.md) goes. The game makes these folders when
-  it starts.
+  [texture pack](TEXTURE_PACKS.md) for the European disc goes, and
+  `textures/SCPS-11003/replacements` one for the Japanese disc. The game
+  makes the folder for the disc you play when it starts.
 - `models/SCES-50760/replacements` is where a
-  [model pack](MODEL_PACKS.md) goes. Make these folders yourself.
+  [model pack](MODEL_PACKS.md) for the European disc goes, and
+  `models/SCPS-11003/replacements` one for the Japanese disc. Make these
+  folders yourself.
 - `screenshots` holds the pictures you take in photo mode.
 - `config.toml` holds your settings.
 - A big file of about 1 GB is the game's data, copied out of your disc
-  image. Do not delete it, or the next start asks for the disc image
-  again.
+  image (one for each disc you set up). Do not delete it, or the next
+  start asks for the disc image again.
 
 If the game cannot write to that folder (it is then missing or empty),
 it uses a private folder instead, which a computer or the Files app cannot

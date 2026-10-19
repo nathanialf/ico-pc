@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=Playfair+Display:wght@700;900&family=JetBrains+Mono:wght@400;500&display=swap">
-<meta name="description" content="ICO PC: the PlayStation 2 game ICO (PAL) rebuilt from its own code for Windows, Linux, the Steam Deck, Android, iPhone and Mac. Download the latest version for your device.">
+<meta name="description" content="ICO PC: the PlayStation 2 game ICO (the European or the Japanese disc) rebuilt from its own code for Windows, Linux, the Steam Deck, Android, iPhone and Mac. Download the latest version for your device.">
 <title>ICO PC download</title>
 <style>
 :root {
@@ -95,7 +95,7 @@ footer p { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint)
   <h1>ICO PC</h1>
 </header>
 <main>
-  <p class="lede">The PlayStation 2 game ICO (PAL), rebuilt from its own code to run on Windows, Linux, the Steam Deck, Android, iPhone and Mac. No emulator: it plays like the PS2 game, with a sharper picture, widescreen and smoother motion when you want them. It needs your own copy of the game disc.</p>
+  <p class="lede">The PlayStation 2 game ICO, from the European or the Japanese disc, rebuilt from its own code to run on Windows, Linux, the Steam Deck, Android, iPhone and Mac. No emulator: it plays like the PS2 game, with a sharper picture, widescreen and smoother motion when you want them. It needs your own copy of the game disc.</p>
 
   <section class="panel" id="get" aria-live="polite">
     <div class="head"><h2>Get the game</h2></div>
@@ -117,18 +117,18 @@ footer p { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint)
       <p class="note" id="install-note"></p>
       <h3 class="sub">What you need</h3>
       <ul class="steps plain">
-        <li><strong>Your own disc image of ICO, PAL version</strong> (SCES-50760, the number printed on the disc and the case): one file ending in <code>.iso</code>, <code>.chd</code> or <code>.bin</code> (a <code>.bin</code> may come with a <code>.cue</code>). Other regions and editions do not work.</li>
+        <li><strong>Your own disc image of ICO</strong>: the European release (SCES-50760) or the Japanese release (SCPS-11003), the number printed on the disc and the case. One file ending in <code>.iso</code>, <code>.chd</code> or <code>.bin</code> (a <code>.bin</code> may come with a <code>.cue</code>; the Japanese release is a CD, so its image is usually a <code>.bin</code> and a <code>.cue</code>). The American release and other editions do not work. Every download plays both discs.</li>
         <li>About 1 GB of free space for the game's files, which the first start copies out of the disc image.</li>
       </ul>
       <h3 class="sub">The first start</h3>
-      <p class="plain">The game asks for your disc image, then copies the game's files out of it. That takes a minute or two and happens once; after it the game runs without the disc image. On Windows and Linux you can skip the question by putting the disc image beside the program (inside the <code>x64</code> folder on Windows) named <code>Ico_PAL.iso</code>, <code>.chd</code>, <code>.bin</code> or <code>.cue</code>.</p>
+      <p class="plain">The game asks for your disc image, then copies the game's files out of it. That takes a minute or two and happens once; after it the game runs without the disc image. On Windows and Linux you can skip the question by putting the disc image beside the program (inside the <code>x64</code> folder on Windows) named <code>Ico_PAL.iso</code>, <code>.chd</code>, <code>.bin</code> or <code>.cue</code> for the European disc, or <code>Ico_JPN.iso</code>, <code>.chd</code>, <code>.bin</code> or <code>.cue</code> for the Japanese disc.</p>
     </div>
   </section>
 
   <section class="panel">
     <div class="head"><h2>Before you start</h2></div>
     <div class="body">
-    <p class="disc">Needs your own copy of the game disc (ICO, PAL version, SCES-50760) saved as a disc image; see the <a href="https://github.com/nathanialf/ico-pc#readme">README</a>.</p>
+    <p class="disc">Needs your own copy of the game disc (ICO, the European release SCES-50760 or the Japanese release SCPS-11003) saved as a disc image; see the <a href="https://github.com/nathanialf/ico-pc#readme">README</a>.</p>
     <p class="thanks" style="margin:12px 0 0">Special thanks: Sad Origami, for the <a href="https://ko-fi.com/s/7c0e3e044f">ICO HD texture pack</a> and for suggesting this page.</p>
     </div>
   </section>
@@ -184,7 +184,7 @@ footer p { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint)
     { id: "android", label: "Android", main: "-android.apk", howto: "android",
       note: "Open the file on your phone or tablet to install it.", steps: ["Download the file whose name ends in <code>-android.apk</code> on your phone or tablet.", "Open it. Your phone may ask you to allow installing apps from your browser or file manager first; say yes.", "Open <strong>ICO</strong> from your apps."], install: "The Android guide in the README explains the first start, the touch controls and where your saves are." },
     { id: "ios", label: "iPhone and iPad", main: "-ios-unsigned.ipa", howto: "iphone",
-      note: "Not in the App Store: it runs inside LiveContainer, or install it with a signing tool.", steps: ["Set up <a href=\"https://github.com/LiveContainer/LiveContainer\">LiveContainer</a> first, with its own instructions. The iPhone version is not in the App Store.", "Download the file whose name ends in <code>-ios-unsigned.ipa</code> on your iPhone, add it to LiveContainer and start <strong>ICO</strong> once. It says the game data is missing and closes; that is expected.", "Copy your disc image into ICO's <strong>Documents</strong> folder through LiveContainer's data-folder access, named <code>Ico_PAL.iso</code> (or <code>.chd</code>, <code>.bin</code>, <code>.cue</code>), then start <strong>ICO</strong> again."], install: "Your saves, settings and logs are in that same Documents folder." }
+      note: "Not in the App Store: it runs inside LiveContainer, or install it with a signing tool.", steps: ["Set up <a href=\"https://github.com/LiveContainer/LiveContainer\">LiveContainer</a> first, with its own instructions. The iPhone version is not in the App Store.", "Download the file whose name ends in <code>-ios-unsigned.ipa</code> on your iPhone, add it to LiveContainer and start <strong>ICO</strong> once. It says the game data is missing and closes; that is expected.", "Copy your disc image into ICO's <strong>Documents</strong> folder through LiveContainer's data-folder access, named <code>Ico_PAL.iso</code> for the European disc or <code>Ico_JPN.iso</code> for the Japanese disc (or <code>.chd</code>, <code>.bin</code>, <code>.cue</code>), then start <strong>ICO</strong> again."], install: "Your saves, settings and logs are in that same Documents folder." }
   ];
 
   var state = { releases: [], plat: null, detected: null, rel: null };

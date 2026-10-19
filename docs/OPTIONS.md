@@ -11,7 +11,10 @@ There are two ways in, and both open the same menu:
 
 Up and Down move between rows. Left and Right change a value. Cross opens
 a page or confirms. Triangle goes back, and so does Circle (see **Circle
-goes back** under [Controls](#controls)).
+goes back** under [Controls](#controls)). On the Japanese disc it is the
+other way round, as on the Japanese PS2 release: Circle opens a page or
+confirms, and Cross goes back
+([more](CONTROLS.md#the-japanese-disc)).
 
 In a released download, the version of the game is shown in small grey
 letters in the top-right corner of the Options menu's first page. Say
@@ -119,7 +122,8 @@ How the picture looks.
   Windows the Direct3D 12 renderer ([Choosing the renderer on
   Windows](#choosing-the-renderer-on-windows)).
 - **Video mode** is PAL 50 Hz or 60 Hz. The normal choice is 60 Hz. This
-  row is only on the title screen's Options.
+  row is only on the title screen's Options, and only with the European
+  disc: the Japanese disc always runs at 60 Hz, as it did on the PS2.
 
 ## Effects
 
@@ -253,6 +257,7 @@ The six mouse rows do not show on phones and tablets.
 
 - **Circle goes back** lets Circle leave the game's own menus, like
   Triangle. It starts On. In the Options menu, Circle always goes back.
+  This row is not there with the Japanese disc, where Circle confirms.
 - **Touch controls, Touch size and Touch opacity** set up the buttons on a
   touch screen. They only show up on a device with one.
   [About touch controls](CONTROLS.md#touch-controls-phones-and-tablets).
@@ -289,10 +294,18 @@ Options once you have finished the game:
 - **Players** is 1 or 2. With 2, a second controller controls Yorda.
 ## Language
 
-English, French, German, Italian or Spanish. The game starts in your
-system's language when it has it. If you change it during play, the menus
-change at once and the game's own text and subtitles change at the next
-area.
+- **Language** is the game's own language: English, French, German,
+  Italian or Spanish. The game starts in your system's language when it
+  has it. If you change it during play, the menus change at once and the
+  game's own text and subtitles change at the next area. This row is only
+  there with the European disc. The Japanese disc's signs, menus and
+  subtitles are in Japanese, as on the PS2, and it has no language choice
+  of its own.
+- **Menu language** is the language of the menus this port adds (Options,
+  the extras, photo mode's help, the messages): English, French, German,
+  Italian, Spanish or Japanese. It starts on Auto: Japanese with the Japanese
+  disc, and with the European disc the game's language. It does not
+  change the game's own text, which is always the disc's.
 
 ## Achievements
 
