@@ -17,6 +17,8 @@ from.
 | `cmake/IcoFlags.cmake` | the semantics options, the record-layout options and both warning sets |
 | `cmake/IcoExclusions.cmake` | game sources left out of the build (both lists empty) |
 | `ico2/common/include/typedef.h` | the host seams every game source sees (`ICO_WORD`, `ICO_PHYS`, `ICO_QW`, ...) |
+| `config/regions.txt`, `ico2/common/include/region.h` | the game regions the program plays and their run-time forms ([Regions](#regions)) |
+| `port/core/` | the region's index `ico_region` and each region's numbers for the port's own code (`IcoRegionInfo`) |
 | `ico2/fumi/include/ee_view.h` | `ICO_RAW`, `ICO_RAWP`, `ICO_MAX_SIZE` and the layout registrations |
 | `port/compat/` | the SDK header names on the host (`assert.h`, `eeregs.h`, `libcdvd.h`, `sifrpc.h`, ...) |
 | `port/test/layout_asserts.c`, `config/struct_classes.txt` | the generated layout asserts and the struct classification they read |
@@ -296,6 +298,47 @@ after, finds them: each shows as a new `-Wpointer-to-int-cast`. The port's own c
 build, `port/`, host paths in `ico2/`) never go up, and nothing here changes a byte the
 decompilation builds. The decompilation's [docs/PORT.md](https://github.com/nathanialf/ico/blob/main/docs/PORT.md)
 states the same contract from its side.
+
+## Regions
+
+One program plays every disc listed in `config/regions.txt`, one row per game region in a fixed
+order: the slug, the decompilation's macro for it, the disc id, the boot ELF and the product name.
+Row 0 is the European disc (`pal`, SCES-50760), the base; row 1 is the Japanese disc (`jpn`,
+`VERSION_JPN`, SCPS-11003). The region is chosen once, when the disc image is identified, before
+any game code runs, and the game reads it as `ico_region`, the row's index (0 until a region is
+selected, so a test that never selects one plays the European disc's code).
+
+The decompilation builds each region's ELF from one tree, with the differences in inline
+`#ifdef VERSION_<SLUG>` blocks. Here they are run-time forms, of three kinds, all from
+`ico2/common/include/region.h` (which `typedef.h` includes):
+
+| form | meaning |
+| --- | --- |
+| `ICO_PAL`, `ICO_JPN` | true on that region (`ico_region == ICO_REGION_<SLUG>`), for a statement that runs on one region: `if (ICO_JPN) { ... }` |
+| `PAL_JPN(pal, jpn)` | a selector: the value of the region being played. The first argument is always the European one (the decompilation's `#else` arm), then one per region the macro names, in the table's order; a region a selector does not name takes the European value |
+| `LN(pal, jpn)` | the decompilation's per-region `__LINE__` numbers for the debug allocators and asserts, the same selector |
+
+They are expressions, so none of them can size an array, label a `case`, or follow `#if`. One
+in-memory layout serves every region: the European one, which is the larger.
+
+`region.h` is generated from `config/regions.txt` by `tools/region_blocks.py gen-header` (the
+conversion tool, which also turns upstream's blocks into these forms at each merge); until that
+tool lands the file is written by hand in the shape it generates. Do not edit it by hand once the
+tool is in the tree.
+
+The port's own code names game data by number in many places (a layout, a menu row, a stage, a
+story flag). Those numbers differ between the discs, so it reads them from the selected region's
+table, `ico_region_cur()` (`port/core/region.h`, an `IcoRegionInfo`; one file per row,
+`port/core/region_<slug>.c`, each value resolved by name against that disc's own tables).
+
+### Adding a build target
+
+Add the row to `config/regions.txt` and regenerate `region.h` (new `ICO_<SLUG>`,
+`ICO_REGION_<SLUG>` and the selector macros that name it; nothing existing changes), then add
+`port/core/region_<slug>.c` with the target's `IcoRegionInfo` and list it in `region.c`'s
+`ico_region_info[]` and `port/core/CMakeLists.txt`. `region_select` checks the table against
+`config/regions.txt` row for row. The data tables, the disc row and the game code's conversion
+follow; their steps are written here as each of them lands.
 
 ## EUC-JP sources
 

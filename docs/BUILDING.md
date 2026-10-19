@@ -315,7 +315,8 @@ and macOS).
 | `ICO_SHADERS_DXIL` | `ON` | also compiles the shaders to DXIL for the Direct3D 12 backend; the arm64 and Apple presets turn it off |
 | `ICO_VERSION_LABEL` | empty | with `ICO_LINK_EXE`: the package label (`vX.Y.Z` or `vX.Y.Z-rcN`). Its numbers go into the Windows version information and the Apple bundles' Info.plist; the label itself, written to `generated/ico_version.h`, is shown in the log header and on the Settings menu's Main page, and is empty (nothing shown) when it does not parse as a version (`CMakeLists.txt`, `ICO_VERSION_LABEL_C`). The package scripts and `android/app/build.gradle` pass it; a build without it has an all-zero version |
 | `ICO_BASE_ELF` | `baserom/pal/baseelf.elf` | the base ELF the data loader's reference tests read; without it they are not built |
-| `ICO_DISC_IMAGE`, `ICO_TEXPACK_DIR` | see [Tests](#tests) | the disc image and the texture pack folder the tests read |
+| `ICO_BASE_ELF_JPN` | `baserom/jpn/baseelf.elf` | the Japanese disc's base ELF (SCPS-11003), for the same tests on that disc |
+| `ICO_DISC_IMAGE`, `ICO_DISC_IMAGE_JPN`, `ICO_TEXPACK_DIR` | see [Tests](#tests) | the disc images and the texture pack folder the tests read |
 | `ICO_DXC`, `ICO_DEPS_DIR` | the fetched copies | the shader compiler and the dependency tree |
 | `ICO_MOLTENVK_ROOT`, `ICO_LIBCHDR_DIR` | the fetched copies | MoltenVK's extracted release and the libchdr source tree (`cmake/IcoMoltenVK.cmake`, `port/data/CMakeLists.txt`) |
 
@@ -401,8 +402,10 @@ which passes ([port/TESTING.md](port/TESTING.md#the-framework)): the disc (`vfs_
 [port/TESTING.md](port/TESTING.md#which-tests-a-change-needs)'s.
 
 - `ICO_DISC_IMAGE` (cache variable, default `baserom/Ico_PAL.iso`) is the PAL disc image the disc
-  tests read. A worktree without `baserom/` configures with `-DICO_DISC_IMAGE=/nonexistent
-  -DICO_BASE_ELF=/nonexistent` (`tools/dev_build.sh` does), so no test can start the game.
+  tests read, and `ICO_DISC_IMAGE_JPN` (default `baserom/Ico_JPN.iso`) the Japanese one
+  (SCPS-11003). A worktree without `baserom/` configures with `-DICO_DISC_IMAGE=/nonexistent
+  -DICO_BASE_ELF=/nonexistent` and the same for `ICO_DISC_IMAGE_JPN` and `ICO_BASE_ELF_JPN`
+  (`tools/dev_build.sh` does), so no test can start the game.
 - `ICO_TEXPACK_DIR` (cache variable, default `build-host/tmp/texpack/SCES-50760/replacements`; the
   environment variable of the same name sets the default at the first configure) is a PCSX2 texture
   pack's replacements folder. When it exists, `texpack_disc`, `texpack_e2e` and `texpack_pack_files`

@@ -125,6 +125,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `mcdata.c` themselves on the [fiber](ARCHITECTURE.md#terms) scheduler, then the card importer
   (`save`).
 
+### port/core/test
+
+- `region_select_test.c`: the game region (`port/core/region.h`): both slugs select their row and
+  `ico_region` follows, an unknown slug or none keeps the selection; the disc ids, the per-disc
+  config keys and the stage rows on each disc; `ico_region_info[]` against `config/regions.txt`
+  (the program's argument) row for row; every value of the Japanese row (`region_select`).
+
 ### port/data/test
 
 - `archive_test.c`: the archive backend and the first-run extractor, on a synthetic image and on

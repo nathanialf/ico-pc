@@ -1,0 +1,6 @@
+# config/regions.txt -- the game regions this program plays, one per row, in a fixed order.
+# Columns: slug  upstream-macro  disc-id  boot-elf  product-name (the rest of the line).
+# Row 0 is the base (PAL): its arm is upstream's #else arm and every selector macro's first argument.
+# Adding a target: add a row, then follow docs/port/GAME_CODE.md "Adding a build target".
+pal  -            SCES-50760  SCES_507.60  the European disc
+jpn  VERSION_JPN  SCPS-11003  SCPS_110.03  the Japanese disc

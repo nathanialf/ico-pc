@@ -1,0 +1,25 @@
+# port/core: the game region of each disc the port plays (region.h; the
+# rows of config/regions.txt).
+#
+#   ico_region  region.c (the game's index ico_region, ico_region_info[] in
+#               the table's order, the selection and the look-ups) and
+#               region_<slug>.c (each row's numbers): plain data, no game
+#               header but ico2/common/include/region.h, compiled once and
+#               linked by the program and by every test program that
+#               compiles game sources (the top-level CMakeLists.txt,
+#               ico_link_region), since the game code reads ico_region
+add_library(ico_region STATIC region.c region_pal.c region_jpn.c)
+target_include_directories(ico_region PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
+                                             "${CMAKE_SOURCE_DIR}/ico2/common/include")
+target_compile_options(ico_region PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+
+# region_select_test: both slugs select and ico_region follows, nothing else
+# selects; the disc ids; the per-disc config keys; the stage rows on each
+# disc; ico_region_info[] in config/regions.txt's order (read at test time);
+# every value of the Japanese row (CPU only). The argument: the table.
+add_executable(region_select_test test/region_select_test.c)
+target_compile_options(region_select_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(region_select_test PRIVATE ico_region)
+if(ICO_RUN_TESTS)
+    add_test(NAME region_select COMMAND region_select_test "${CMAKE_SOURCE_DIR}/config/regions.txt")
+endif()

@@ -108,6 +108,7 @@ extern char ico_scratchpad[16 * 1024] __attribute__((aligned(16)));
 #define ICO_BREAK() __builtin_trap()
 #define ICO_WORD __INTPTR_TYPE__
 #define ICO_WORD_PTR(T) T
+#include "region.h" /* the game region at run time: ico_region, ICO_<SLUG>, PAL_JPN, LN */
 /* ICO_POSTINC(T, p): `((T)(p))++`, a cast used as an lvalue that ee-gcc 2.9
  * allows and the host compiler does not.  Yields (T)p and advances the byte
  * pointer p by sizeof(*(T)p). */

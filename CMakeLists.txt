@@ -185,6 +185,8 @@ foreach(lib ${ICO_GAME_OBJECT_LIBS})
 endforeach()
 add_library(ico_game STATIC ${ICO_GAME_OBJECTS})
 set_target_properties(ico_game PROPERTIES LINKER_LANGUAGE C)
+# the game code reads the region's index, ico_region (port/core)
+target_link_libraries(ico_game PUBLIC ico_region)
 
 if(ICO_LINK_EXE)
     # main_host.c: the program's main and its options; trace_host.c: the
@@ -271,7 +273,7 @@ if(ICO_LINK_EXE)
         target_compile_definitions(ico_pc PRIVATE ICO_HEADLESS=1)
     endif()
     target_compile_options(ico_pc PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-    target_link_libraries(ico_pc PRIVATE ico_game ico_platform)
+    target_link_libraries(ico_pc PRIVATE ico_game ico_platform ico_region)
     if(ANDROID)
         target_link_libraries(ico_pc PRIVATE log android m dl)
     elseif(NOT WIN32)
@@ -315,6 +317,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set(ICO_RUN_TESTS ON)
     set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
         "The PAL disc image (SCES-50760) the disc tests read, never committed")
+    set(ICO_DISC_IMAGE_JPN "${CMAKE_SOURCE_DIR}/baserom/Ico_JPN.iso" CACHE FILEPATH
+        "The Japanese disc image (SCPS-11003) the disc tests read, never committed")
 endif()
 add_executable(fpenv_test port/platform/fpenv_test.c)
 target_compile_options(fpenv_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -379,6 +383,9 @@ set(ICO_DEPS_DIR "${CMAKE_SOURCE_DIR}/tools/toolchain/deps" CACHE PATH
 if(Python3_FOUND AND EXISTS "${ICO_DEPS_DIR}/dxc/bin/dxc")
     add_test(NAME spirv_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_spirv.py" --sizes "${CMAKE_BINARY_DIR}/shaders")
 endif()
+
+# --- port/core: the game region (config/regions.txt) -------------------------
+add_subdirectory(port/core)
 
 # --- port/math: the VU0 maths in C and the newlib copies ---------------------
 add_subdirectory(port/math)
@@ -486,6 +493,40 @@ function(ico_link_host_fs dir)
     endforeach()
 endfunction()
 ico_link_host_fs("${CMAKE_SOURCE_DIR}")
+
+# --- ico_region for every program that compiles game sources -----------------
+# The game code reads the region's index, ico_region (ico2/common/include/
+# region.h), which port/core's ico_region defines: ico_pc has it with
+# ico_game (above), and each test program that compiles a source from ico2/
+# links it here, so one added later is covered (deferred: some directories
+# create their test programs in deferred calls, registered before this one)
+function(ico_link_region dir)
+    get_property(targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(t IN LISTS targets)
+        get_target_property(type ${t} TYPE)
+        if(NOT type MATCHES "^(EXECUTABLE|SHARED_LIBRARY)$")
+            continue()
+        endif()
+        get_target_property(srcs ${t} SOURCES)
+        get_target_property(tdir ${t} SOURCE_DIR)
+        foreach(src IN LISTS srcs)
+            if(src MATCHES "^\\$<")
+                continue()
+            endif()
+            get_filename_component(abs "${src}" ABSOLUTE BASE_DIR "${tdir}")
+            string(FIND "${abs}" "${CMAKE_SOURCE_DIR}/ico2/" at)
+            if(at EQUAL 0)
+                target_link_libraries(${t} PRIVATE ico_region)
+                break()
+            endif()
+        endforeach()
+    endforeach()
+    get_property(subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
+    foreach(d IN LISTS subdirs)
+        ico_link_region("${d}")
+    endforeach()
+endfunction()
+cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL ico_link_region "${CMAKE_SOURCE_DIR}")
 
 # The test programs build with `--target tests`, not with `all` (cmake/IcoTests.cmake)
 # (deferred: some directories create their test programs in deferred calls)

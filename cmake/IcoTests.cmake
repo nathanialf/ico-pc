@@ -15,7 +15,7 @@
 #    `ctest -L render` runs one area, and records the executable targets the
 #    test command names (the program itself, or $<TARGET_FILE:x> in an argument).
 #      render   port/render                 ui        port/ui
-#      platform port/platform, port/input, port/config, the top level
+#      platform port/platform, port/input, port/config, port/core, the top level
 #      audio    port/audio                  game      port/game, port/math, port/null, port/test
 #      data     port/data, port/fmv         rhi       port/rhi, port/shaders
 #      save     port/save

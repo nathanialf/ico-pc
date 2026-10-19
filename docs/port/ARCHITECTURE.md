@@ -24,6 +24,7 @@ the other documents in `docs/port/` go deeper into each part. The glossary is th
 | `port/input/` | libpad and the input layers under it (SDL3 devices, bindings, pad scripts) |
 | `port/save/` | libmc over a folder |
 | `port/config/`, `port/game/`, `port/ui/` | `config.toml`, the options, the port's own menus and features |
+| `port/core/`, `config/regions.txt` | the game region: which disc is being played, and each disc's numbers |
 | `port/include/ico_frame.h` | the native frame's arithmetic, shared by `ico2/` and `port/` |
 | `cmake/IcoFlags.cmake` | the compile options that give the game its EE semantics |
 | `CMakeLists.txt` | the game libraries, the data tables, the program |
@@ -311,6 +312,17 @@ few `double` expressions go through an integer model of libgcc's soft float
 single-precision code, with the additions and subtractions of the trigonometric ones through the EE
 adder model (`port/math/newlib/ico_libm.c` (header comment)). [MATH.md](MATH.md) lists every
 function and where it is used.
+
+## Two discs, one program
+
+The port is built to play more than one release of the game from one compiled program: the
+European disc (SCES-50760) and the Japanese disc (SCPS-11003), listed in `config/regions.txt`.
+Their differences are inline blocks in the decompilation's one tree; here each becomes a run-time
+choice on the game's region index, `ico_region`, which is set once, when the disc image is
+identified, and is the European disc's 0 until then. The game code reads it through
+`ICO_<SLUG>` and the selector macros of `ico2/common/include/region.h`, the port's own code through
+`port/core/region.h`'s per-disc tables; one in-memory layout, the European one, serves both.
+[GAME_CODE.md](GAME_CODE.md#regions) has the forms and the rule for adding a target.
 
 ## The port's own additions
 
