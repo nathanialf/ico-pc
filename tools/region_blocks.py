@@ -2298,7 +2298,7 @@ def analyse(sf, twins=()):
         fn = view.function_name(k) if in_func else None
         defined = [fn] if fn else [it.name for a in block.arms()
                                    for it in (file_scope_items(sf.toks(block, a)) or []) if it.kind == "function"]
-        for name in defined:
+        for name in dict.fromkeys(defined):
             if name in twinned:
                 an.reports.append(Report(sf.path, block.line, "twin", name,
                                          "inside a region twin (%s / %s): mirror the change into the other body"
@@ -2392,6 +2392,15 @@ def need_regions(root):
     return regions
 
 
+def need_twins(root):
+    """The root's twins table; a root without one (upstream's tree) takes the
+    table of the tree this tool is in, so `report --root` still prints the
+    `twin` lines for the port's hand-made twins."""
+    if os.path.abspath(root) != ROOT and not os.path.exists(os.path.join(root, TWINS_TXT)):
+        return load_twins(ROOT)
+    return load_twins(root)
+
+
 def analyse_tree(root, regions, twins, paths=None):
     """[(path, SourceFile, Analysis)] for the files that carry a block, and
     the parse errors."""
@@ -2415,7 +2424,7 @@ def analyse_tree(root, regions, twins, paths=None):
 
 def cmd_convert(root, paths):
     regions = need_regions(root)
-    twins = load_twins(root)
+    twins = need_twins(root)
     results, errors = analyse_tree(root, regions, twins, paths)
     counts = {}
     for p, sf, an in results:
@@ -2439,7 +2448,7 @@ def cmd_convert(root, paths):
 
 def cmd_report(root, show_all, bits):
     regions = need_regions(root)
-    twins = load_twins(root)
+    twins = need_twins(root)
     results, errors = analyse_tree(root, regions, twins)
     if bits:
         for row in bits_rows(results, regions):

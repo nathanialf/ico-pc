@@ -498,7 +498,7 @@ against one converted line, and the next merge has an upstream commit as its bas
 2. From the port's tree, `python3 tools/region_blocks.py report --root ../ico-upconv --bits` for
    `config/motion_bits.<slug>.txt` and `report --root ../ico-upconv` for the hand list, then
    `convert --root ../ico-upconv` (a root without `config/regions.txt` takes the port's,
-   `need_regions`), then `clang-format -i --style=file:<port>/.clang-format` from the port's venv
+   `need_regions`, and one without `config/region_twins.txt` the port's twins, `need_twins`), then `clang-format -i --style=file:<port>/.clang-format` from the port's venv
    over the files it changed, and commit there with `--no-verify` (upstream's tree has no
    `region.h`, and its hooks are upstream's).
 3. Merge with an explicit base, so that a change of spelling on main (a target joining) is not a
