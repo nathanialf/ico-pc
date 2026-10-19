@@ -260,10 +260,10 @@ in `.bss`, in PAL's layout; `port/data/tables.c` fills them at boot from the boo
 player's disc, record by record, as that disc's descriptor set describes
 (`port/data/gen/<slug>/table_desc.c`, one per row of `config/regions.txt`), and resolves pointer
 words through the set's address registry (`port/data/gen/<slug>/ee_symbols.c`). Each of the 75 rows
-of a set's manifest (`config/tables_manifest.txt`, `tables_manifest.jpn.txt`: a member's address
+of a set's manifest (`config/tables_manifest.txt`, `tables_manifest.jpn.txt`, `tables_manifest.kor.txt`: a member's address
 range in a section, three for `staffroll_dat`) carries a CRC-32 the loader checks before writing
-anything. The Japanese set maps the disc's own record layouts (`config/ee_layout.jpn.txt`) onto the
-PAL host structs by field name ([DATA.md](DATA.md#the-two-descriptor-sets)). The generated files hold types, offsets, sizes, names and CRCs only;
+anything. The Japanese and Korean sets map the disc's own record layouts (`config/ee_layout.<slug>.txt`) onto the
+PAL host structs by field name ([DATA.md](DATA.md#the-descriptor-sets)). The generated files hold types, offsets, sizes, names and CRCs only;
 `tools/gen_data_desc.py --check` (the `data_desc_fresh` test, the pre-commit hook and CI) keeps them
 fresh, and never opens an ELF. [DATA.md](DATA.md#the-data-tables) describes the loader.
 
@@ -280,11 +280,11 @@ compiles them under renamed symbols (`ico_ref_<name>`, from `port/data/gen/table
 builds `tables_test`, which compares every byte the loader writes with them (`tables_loader`).
 `tables_manifest` checks the manifest against the ELF (`gen_data_desc.py --check-manifest`), and
 `gen_data_desc.py --manifest` rewrites it. Without the ELF both tests are left out, and configure
-says so. With the Japanese ELF as well (`ICO_BASE_ELF_JPN`, default `baserom/jpn/baseelf.elf`), a
-second reference (`ico_ref_jpn_<name>`, `gen_data_c.py --version jpn --c <member>`: the Japanese
-bytes in the PAL record's form, through the same map the descriptor set is written from) backs
-`tables_loader_jpn` (`tables_test --set jpn`), and `tables_manifest_jpn` checks
-`config/tables_manifest.jpn.txt`; both skip without that ELF.
+says so. With the Japanese or Korean ELF as well (`ICO_BASE_ELF_JPN`, `ICO_BASE_ELF_KOR`, defaults
+`baserom/<slug>/baseelf.elf`), a reference per disc (`ico_ref_<slug>_<name>`, `gen_data_c.py
+--version <slug> --c <member>`: the disc's bytes in the PAL record's form, through the same map the
+descriptor set is written from) backs `tables_loader_<slug>` (`tables_test --set <slug>`), and
+`tables_manifest_<slug>` checks `config/tables_manifest.<slug>.txt`; both skip without that ELF.
 
 ## The decompilation
 

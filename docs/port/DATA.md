@@ -22,15 +22,16 @@ disc's boot ELF, and the port's own reads of DATA.DF. The repository holds no di
 | `port/data/sifdev_host.c` | `sceOpen` and the other sifdev file calls, for the development kit's `host0:` device |
 | `port/data/iop_ram.h`, `iop_ram.c` | `ico_iop_ram`, the 2 MB of IOP RAM, and the IOP heap allocator |
 | `port/data/tables.h`, `tables.c` | the runtime loader of the 73 data tables |
-| `port/data/gen/` | the generated table definitions (`table_defs.c`), descriptor types (`table_desc.h`), the sets' list (`table_sets.c`, `tables.cmake`) and one descriptor set per disc (`pal/`, `jpn/`: `table_desc.c`, `ee_symbols.c`, `tables.cmake`) |
+| `port/data/gen/` | the generated table definitions (`table_defs.c`), descriptor types (`table_desc.h`), the sets' list (`table_sets.c`, `tables.cmake`) and one descriptor set per disc (`pal/`, `jpn/`, `kor/`: `table_desc.c`, `ee_symbols.c`, `tables.cmake`) |
 | `port/data/df_pack.h`, `df_pack.c` | reads of DATA.DF's loose files and pack members for the port's own screens |
 | `port/data/json.h`, `json.c` | the JSON reader (`ico_json`) |
 | `port/data/chdr_miniz_names.h` | prefixes the second miniz copy inside libchdr |
 | `port/data/CMakeLists.txt` | the libraries (`ico_port_data`, `ico_miniz`, `ico_libchdr`, `ico_json`) and the tests |
 | `port/platform/android/iso_import.h`, `iso_import.c` | the Android first start's copy of the chosen image |
 | `ico2/fumi/ios/cdvd.c`, `ico2/seki/src/FileManager.c` | the game's side: the cdvd manager and the boot loader |
-| `config/tables_manifest.txt`, `tables_manifest.jpn.txt` | per disc, the CRC-32 of every table row and the addresses the tables' pointers hold |
-| `config/ee_layout.jpn.txt`, `motion_bits.jpn.txt` | the Japanese disc's record layouts and MotionDef's shift-read bits (`tools/gen_ee_layout.py`) |
+| `config/tables_manifest.txt`, `tables_manifest.jpn.txt`, `tables_manifest.kor.txt` | per disc, the CRC-32 of every table row and the addresses the tables' pointers hold |
+| `config/ee_layout.jpn.txt`, `motion_bits.jpn.txt`, `ee_layout.kor.txt`, `motion_bits.kor.txt` | the Japanese and Korean discs' record layouts and MotionDef's shift-read bits (`tools/gen_ee_layout.py`) |
+| `config/symbol_addrs.jpn{,.data}.txt`, `symbol_addrs.kor{,.data}.txt` | the names at the Japanese and Korean ELFs' addresses (`tools/gen_symbol_addrs.py`) |
 
 ## Layers
 
@@ -339,14 +340,15 @@ names numbers by (`port/core/region.h`: `stage_count`, `layout_count`, `property
 `anim_none` + 1 for `stageTable`, `mv_orient_rows`, the five sound tables) against
 `ico_tables_count`, and ends the run with a box naming the disc when one differs (`ico_pc: the
 data tables: <table> has N records on <disc>, the port expects M`). `ico_tables_count(ICO_TID_<symbol>)` gives the records a table
-received (`texProperty` 436 on the European disc, 412 on the Japanese), `ico_tables_loaded_set()`
+received (`texProperty` 436 on the European disc, 412 on the Japanese, 406 on the Korean), `ico_tables_loaded_set()`
 the set. [GAME_CODE.md](GAME_CODE.md#data-tables) covers the generator and the maintainer's
 reference test.
 
-### The two descriptor sets
+### The descriptor sets
 
 `ico_table_sets[]` (`port/data/gen/table_sets.c`) holds one `IcoTableSet` per row of
-`config/regions.txt`, in its order: `ico_table_set_pal` and `ico_table_set_jpn`, each with its boot
+`config/regions.txt`, in its order: `ico_table_set_pal`, `ico_table_set_jpn` and
+`ico_table_set_kor`, each with its boot
 file, product name, rows and registry. `load_tables` takes row 0 until the disc identification
 picks the row. Every set fills the same host arrays: PAL's counts are the largest of every table
 (the Japanese disc has 944 `objAction`, 3736 `objLayout`, 412 `texProperty`, 1621 `modelData`, 76
@@ -382,6 +384,21 @@ checked by hand (`UNPAIRED`), and a bit no code reads is mapped only by hand wit
 mapped Japanese `motionKind` equals the European one in every copied field and every mapped bit of
 all 1148 motions; only `palSpeedRatio` differs (1.0 against 0.85 in 6 motions).
 
+The Korean set (`port/data/gen/kor/`) is the Japanese one at the Korean link's addresses. The
+Korean build is the Japanese program (upstream's `docs/TARGETS.md`, "Korean retail"), so its record
+layouts are the Japanese ones: `config/ee_layout.kor.txt` and `motion_bits.kor.txt` equal the
+Japanese files but for their headers and recorded revision, and the one hand bit row (`flags` bit 2,
+the disc's bit 6) holds because the Korean ELF's 1148 `flags` words equal the Japanese ELF's. Its
+schema differs from the Japanese one in one count: `texProperty` has 406 rows (412 on the Japanese
+disc), because `la_boot_no_memory_card` and `la_boot_no_free_area` hold two rows each where the
+Japanese hold five, so every property row from the Japanese 11 on is 6 lower and
+`texture-layout`'s 76 ranges and default items move with them. Of the 75 member rows, 72 hold the
+Japanese bytes word for word (a pointer word compared as an address); the others are
+`tex-property`, `texture-layout` and `staffroll_dat`'s `.rodata` (the copyright year 2002 for 2001).
+Every address differs from the Japanese ELF's (`texProperty` 0x30A6D0, `texLayout` 0x530138,
+`stageData` 0x5EFB10, `stageTable` 0x5FC998), and `hintTable` lies after `game-param`, as on the
+European disc. `port/core/region_kor.c` names its rows by these tables.
+
 `gen_data_desc.py --check` (the `data_desc_fresh` test) also audits the game sources: each read of
 MotionDef's bit words by shift or mask in `ico2/` must name host bits every non-PAL set fills; a
 shift by `PAL_JPN(` is an error (a bit position is a layout, and the host's is PAL's); and so is such
@@ -397,21 +414,35 @@ has the rest):
    (upstream's `config/data_schema.<slug>.txt` and `data_members.<slug>.txt` copied into
    `config/` first, unchanged, with the port's `default` rows appended to the schema).
 2. `tools/gen_symbol_addrs.py --region <slug> --elf <decomp>/build/<slug>/ico.syms.elf --map
-   <decomp>/build/<slug>/ico.<slug>.map` writes `config/symbol_addrs.<slug>{,.data}.txt`.
+   <decomp>/build/<slug>/ico.<slug>.map --base-elf baserom/<slug>/baseelf.elf` writes
+   `config/symbol_addrs.<slug>{,.data}.txt` (with a `TITLE` entry for the slug).
 3. `tools/gen_data_desc.py --manifest --version <slug> --elf baserom/<slug>/baseelf.elf` writes
    `config/tables_manifest.<slug>.txt`.
 4. If its bit words differ: `tools/gen_ee_layout.py --version <slug> --upstream <rev> --bits`
    writes `config/motion_bits.<slug>.txt`.
 5. `tools/gen_data_desc.py` writes `port/data/gen/<slug>/` and the shared files; each error names
    the field, default or bit to settle.
-6. `port/data/CMakeLists.txt`: a `tables_loader_<slug>` and `tables_manifest_<slug>` test beside
-   the Japanese ones, with the slug's reference (`gen_data_c.py --version <slug>`).
+6. `port/data/CMakeLists.txt`: the slug in the `foreach(_slug jpn kor)` lists, which build its
+   reference (`gen_data_c.py --version <slug>` from `ICO_BASE_ELF_<SLUG>`) and add
+   `tables_loader_<slug>`, `tables_manifest_<slug>` and `ee_layout_fresh_<slug>`; and its
+   reference in `port/data/test/tables_test.c`'s `ref_sets[]`.
+
+The Korean set was made with these commands (upstream c2f4ed40e):
+
+```
+tools/gen_ee_layout.py --version kor --upstream c2f4ed40e
+tools/gen_ee_layout.py --version kor --upstream c2f4ed40e --bits
+tools/gen_symbol_addrs.py --region kor --elf /primary/dev/ico/build/kor/ico.syms.elf \
+    --map /primary/dev/ico/build/kor/ico.kor.map --base-elf baserom/kor/baseelf.elf
+tools/gen_data_desc.py --manifest --version kor --elf baserom/kor/baseelf.elf
+tools/gen_data_desc.py
+```
 
 `gen_ee_layout.py --version pal --upstream <rev>` lays upstream's PAL arm out against the port's
 headers, field by field, as a check at each merge (no PAL layout file is committed: the port's
 headers are PAL's layout, asserted against the EE by `port/data/gen/pal/table_desc.c`).
-`gen_ee_layout.py --version jpn --check` compares the committed layout with its recorded revision
-when that revision is in the clone.
+`gen_ee_layout.py --version <slug> --check` (the `ee_layout_fresh_<slug>` tests) compares the
+committed layout with its recorded revision when that revision is in the clone.
 
 ## DATA.DF for the port's own screens
 
@@ -452,6 +483,7 @@ mark, no comments, trailing commas, leading zeros, `NaN` or control characters, 
 | `json` | numbers, nesting and the depth limit, escapes, malformed input |
 | `data_desc_fresh` | `port/data/gen/` is what `tools/gen_data_desc.py` writes, every set at once, and the audit of MotionDef's bit reads |
 | `tables_loader`, `tables_manifest` | the loader against reference tables generated from the base ELF, and the manifest against the ELF (built only with `ICO_BASE_ELF` and pyelftools) |
-| `tables_loader_jpn`, `tables_manifest_jpn` | the Japanese set against `ICO_BASE_ELF_JPN` (through `ICO_DISC_IMAGE_JPN` when present): every table byte for byte against the reference `gen_data_c.py --version jpn` writes in the PAL record's form, the records past the disc's count zero, and each disc's ELF refused by the other's set, naming the disc expected; the Japanese manifest against that ELF (skipped without it) |
+| `tables_loader_jpn`, `tables_manifest_jpn`, `tables_loader_kor`, `tables_manifest_kor` | the Japanese (Korean) set against `ICO_BASE_ELF_JPN` (`ICO_BASE_ELF_KOR`), through `ICO_DISC_IMAGE_JPN` (`ICO_DISC_IMAGE_KOR`) when present: every table byte for byte against the reference `gen_data_c.py --version <slug>` writes in the PAL record's form, the records past the disc's count zero, and the disc's ELF and the PAL ELF each refused by the other's set, naming the disc expected; the disc's manifest against that ELF (skipped without it) |
+| `ee_layout_fresh_jpn`, `ee_layout_fresh_kor` | `config/ee_layout.<slug>.txt` is what its recorded upstream revision gives (a note and exit 0 when the revision is not in the clone) |
 
 All are registered in `port/data/CMakeLists.txt`.
