@@ -347,10 +347,17 @@ The calls:
 
 No byte of Sony's modules is in the repository; the two tables the SPU2 needs from them are read
 from the player's disc at start-up (`port/audio/libsd_irx.h`, `port/audio/sndn2_host.h`).
+Both modules are byte-identical on the European disc (SCES-50760) and the Japanese disc
+(SCPS-11003), so one size and one set of addresses serve both:
+
+| file | bytes | SHA-1 (both discs) |
+| --- | --- | --- |
+| `LIBSD.IRX` | 26,285 | `49bbaf50d622b04c02dd645fde1b33972b16567f` |
+| `SNDN2DRV.IRX` | 20,941 | `a8b01a0e88a05b96133bc358f4cb722dd9d5ff58` |
 
 ### LIBSD.IRX
 
-`ico_libsd_load` opens `LIBSD.IRX` on the mounted disc, checks its size against the PAL disc's
+`ico_libsd_load` opens `LIBSD.IRX` on the mounted disc, checks its size against the disc's
 (`ICO_LIBSD_IRX_SIZE`, 26285 bytes), finds the `.data` section by name and reads three tables at
 the module addresses found through the code that reads them: the ten work area sizes at 0x41C8,
 the ten 0x44-byte presets at 0x41F0 (both read by `sceSdSetEffectAttr`), and the 16-byte idle
@@ -375,7 +382,7 @@ The built-in idle block is ps2sdk's `VoiceDataInit`, sixteen 0x07 bytes, the sam
 
 The driver turns a note into a PITCH value through a table of 608 u16 entries in 1/16-semitone
 steps, entry 208 = 0x1000. `ico_sndn2_pitch_load` reads it from `SNDN2DRV.IRX` on the disc (file
-offset 0x3900, 0x4C0 bytes) after checking the file's size against the PAL disc's (20941 bytes);
+offset 0x3900, 0x4C0 bytes) after checking the file's size against the disc's (20941 bytes, the same on both discs);
 a table without 0x1000 at entry 208 is refused. The table is not checked for order: the disc's has
 two entries below their predecessors (64 and 172) (`port/audio/sndn2_host.c`
 (`ico_sndn2_pitch_load`)). The log line on success:

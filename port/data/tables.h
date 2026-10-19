@@ -32,11 +32,6 @@
 #include "gen/table_desc.h" /* IcoTableSet, IcoTableId, ico_table_sets[] */
 #include "vfs.h"
 
-/* The boot ELF's path on the European disc (SYSTEM.CNF's BOOT2), for the
-   callers that check a PAL disc's boot file; the loader names each set's own
-   (IcoTableSet.boot_elf). */
-#define ICO_TABLES_BOOT_ELF "SCES_507.60"
-
 /* Fill the tables from an ELF image in memory with a disc's set (one of
    ico_table_sets[], in config/regions.txt's order).  0 on success; otherwise
    -1 and a one-line reason in err (the table, field and address at fault, and

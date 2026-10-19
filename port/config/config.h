@@ -51,4 +51,16 @@ const char *ico_config_ini_path(void);
    they are read on next use. */
 void ico_config_reset(const char *toml_path, const char *ini_path);
 
+/* [game] disc: the row of config/regions.txt it pins ("pal" 0, "jpn" 1;
+   port/core region.h), or -1 for "auto", the default, which lets the disc
+   image given and the game data there decide (main_host.c). Any other
+   value is auto, logged once a load. */
+int ico_config_disc_pin(void);
+/* [game] last_disc, written by the program (not in the template): the row
+   of the disc a start last played, or -1 (absent, or not a row's slug). */
+int ico_config_last_disc(void);
+/* Sets [game] last_disc to slug in memory (ico_config_save writes it); 0,
+   or -1 for a slug that is not a row. */
+int ico_config_set_last_disc(const char *slug);
+
 #endif /* ICO_CONFIG_CONFIG_H */

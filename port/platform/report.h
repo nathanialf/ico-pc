@@ -7,7 +7,8 @@
  * a player attaches to an issue. It holds
  *
  *   report.txt               what ended the run, the VERSION.txt lines,
- *                            the summary line (diag_host.h
+ *                            the disc played (diag_host.h
+ *                            ico_diag_set_disc), the summary line (diag_host.h
  *                            ico_diag_set_summary), achievements.toml's
  *                            stages line (not the file), the latest
  *                            device, blend, index, fog and shader lines
@@ -54,6 +55,7 @@ typedef struct IcoReportInputs {
     const char *what;     /* "a crash: SIGSEGV ...", "the watchdog", ... */
     const char *log_path; /* the current log (NULL: none) */
     const char *summary;  /* the summary line's text ("" none) */
+    const char *disc;     /* the disc played ("SCPS-11003 (the Japanese disc)"; "" none) */
     const char *loss_zip; /* the newest loss dump's path (NULL: none) */
     double uptime_s;      /* seconds into the run */
     /* text of the host's own for report.txt's end (the window: SDL's log

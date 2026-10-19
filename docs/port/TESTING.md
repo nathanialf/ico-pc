@@ -118,8 +118,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 ### port/config/test, port/null/test, port/save/test
 
 - `config_test.c`: `config.toml`'s reader and writer, round trips, the ini over `config.toml` over
-  default precedence, the language answer, the wall clock and the [EE](ARCHITECTURE.md#terms) timers
-  (`config`).
+  default precedence, the language answer, `[game] disc` (`auto`, the slugs, an unknown value as
+  auto logged once a load) and `[game] last_disc` (read, written, not in the template), the wall
+  clock and the [EE](ARCHITECTURE.md#terms) timers (`config`).
 - `null_devices_test.c`: the pad as an empty console answers it (`null_devices`).
 - `save_test.c`: the host memory card through the calls `mcard.c` makes, then `mcard.c` and
   `mcdata.c` themselves on the [fiber](ARCHITECTURE.md#terms) scheduler, then the card importer
@@ -130,12 +131,22 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `region_select_test.c`: the game region (`port/core/region.h`): both slugs select their row and
   `ico_region` follows, an unknown slug or none keeps the selection; the disc ids, the per-disc
   config keys and the stage rows on each disc; `ico_region_info[]` against `config/regions.txt`
-  (the program's argument) row for row; every value of the Japanese row (`region_select`).
+  (the program's argument) row for row, and the disc table `ico_discs` (`port/data/discs.c`,
+  compiled in) against the same rows: slug, disc id, boot file, product name, archive and image
+  names; every value of the Japanese row (`region_select`).
 
 ### port/data/test
 
-- `archive_test.c`: the archive backend and the first-run extractor, on a synthetic image and on
-  the disc (`archive_synthetic`, `archive_disc`).
+- `archive_test.c`: the archive backend and the first-run extractor, on a synthetic image (the
+  refusal of neither disc with the one wrong-disc text) and on each disc: the identification by
+  `SYSTEM.CNF`'s boot file, both acceptance rules, `meta.json`'s disc id (`archive_synthetic`,
+  `archive_disc`, `archive_disc_jpn`); `manifest-check` compares the Japanese DATA.DF manifest in
+  `discs.c` with the image (`archive_manifest_jpn`).
+- `make_raw_cd.py`, `disc_raw_test.cmake`: a MODE2/2352 `.bin` and its `.cue` made from the
+  Japanese `.iso` into the build folder at test time (zero EDC/ECC, which the reader ignores), and
+  for the `.chd` test a `chdman createcd` of the `.cue` (skipped without `chdman` on `PATH`), each
+  checked by `vfs_test same` against the `.iso` (`vfs_disc_jpn_bin`, `vfs_disc_jpn_cue`,
+  `vfs_disc_jpn_chd`).
 - `iso_import_test.c`: the Android first start's copy of the chosen image over SDL memory streams
   (`iso_import`).
 - `json_test.c`: `port/data/json.h`: numbers, strings, nesting, the depth limit, malformed input
@@ -146,7 +157,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `ICO_BASE_ELF_JPN`, skipped without it).
 - `vfs_test.c`: the [VFS](ARCHITECTURE.md#terms) and its ISO9660 backend, the
   [libcdvd](ARCHITECTURE.md#terms), [SIF](ARCHITECTURE.md#terms) and [IOP](ARCHITECTURE.md#terms)
-  RAM layers (`vfs_synthetic`, `vfs_disc`).
+  RAM layers (`vfs_synthetic`, `vfs_disc`, `vfs_disc_jpn`); `same <iso> <image>`: the same
+  directory records, boot ELF and DATA.DF SHA-1s and image SHA-1 in both.
 - `sha1.h` is the tests' SHA-1.
 
 ### port/fmv/test
@@ -226,7 +238,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 
 ### port/platform/test
 
-- `android_paths_test.c`: the Android file layout on any platform (`android_paths`).
+- `android_paths_test.c`: the Android file layout on any platform, the texture pack folder of
+  each disc's serial and the `Ico_PAL`/`Ico_JPN` image names (`android_paths`).
 - `arena_test.c`: the EE RAM [arena](ARCHITECTURE.md#terms): alignment, zero fill, address mapping,
   heap statistics (`arena`).
 - `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes; a start ended inside a 2D batch: the next start is lazy for that start only, nothing written, and logs the line and the last finished batch with its memory; that lazy start ended inside a pipeline: the start after writes `[dev] pipeline_set = "lazy"` through a stubbed config write, for any version (another version's line then leaves the policy to the count), with a failed write (this start only, its lazy run saying so, and the count kept so the next end writes it); a count file that cannot be written, logged; the "for this start only" run's clean exit and its end between two creations, each with its own line: the next start tries the set again and the row starts over; not after a restart or with the setting already `lazy`; an end in the background, by the lifecycle's event or `onTrimMemory(20)` (the mark set and logged once when both come), or with the app in the background before the recording began, is not counted, its mark written, logged and deleted, and back in the foreground the mark is gone and the end counts; a lazy run ended in the background between two creations, its mark logged; on a device the table makes lazy the first end promises nothing and its lazy run is not "for this start only", the second writes nothing, both clearing the row; the first end of a full set: the next start is careful, once, and the file reads `set: careful` after the note; a careful start that finishes clears the row and the start after it is full again; a careful start's own end makes the next start lazy; `pipeline_set = "careful"` and a careful end; the careful set's budget stop (`creating pipeline fog test` and `set: careful` in the file; its clean exit is "for that start only", then `pipeline_set = "careful"` is kept); a note of the retired extended variants counted as the pipelines' kind; a VU vertex pre-pass batch's end (a `vu_main_vs` batch among them): no pre-pass for that start only, the next such end writes `[dev] vu_prepass = false`, a run that built its pipelines and finished clears the row, the low-memory signal's line at once and as the file's `system: ` line, in the set and in a lazy run, the level-80 one marking the background) cases, Android's start after a device loss (`actlossnext`: robust access for that start, the second loss in a row writing `[dev] gpu_robust = true`, a loss in the robust start itself counting as the second, a start without a loss that did not run robust breaking the row, a failed write keeping the count, the player's `gpu_robust` ruling, a relaunch counting nothing), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it; the restart's steps robust 7, blend 8, backend 9: `lossrobust`, `lossstep`, `lossbackend`) cases, the loss bisect's second level (its state file, the step stubbed: the draw found in 4 starts of at most 3 lost steps each, draw 1 with its classes in 5 starts, killed at step 3 and continued at 4, a renderer that did not start, the step and start bounds, the time budget, files that do not parse) cases, the watchdog and a wait the system holds (the event pump held past the limit without an end, a stall in the game's code after it ended, the bound for one wait, that bound with no limit in force), each in a child process
@@ -241,7 +254,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   card folders read from the ini the game reads (`ico_host_ini_path`), portable mode, the `[dev]`
   keys exported as environment switches (`ico_dev_env_value`, `test_dev_env`), a restart's
   `ICO_RD_BLEND` and `ICO_RD_VU_PREPASS` over the ini's (`test_retry_blend`,
-  `test_retry_prepass`); built again
+  `test_retry_prepass`), the disc choice's rules in order (`ico_host_choose_disc`,
+  `test_choose_disc`); built again
   as `host_config_portable_test` (`host_config`, `host_config_portable`).
 - `host_fs_test.c`: the file helpers on a UTF-8 path outside ASCII (`host_fs`).
 - `hotkeys_test.c`: F12, Shift+F12 and F11, repeats ignored, no other key taken (`hotkeys`).
@@ -661,13 +675,16 @@ of the pre-passes', and `rd_vustage_ab.cmake` over the dump corpus (`port/render
 
 ## Tests that need the disc
 
-Five cache variables point the tests at the player's files ([../BUILDING.md](../BUILDING.md#tests)
+These cache variables point the tests at the player's files ([../BUILDING.md](../BUILDING.md#tests)
 has their defaults; the registrations are in `port/*/CMakeLists.txt`):
 
 - `ICO_DISC_IMAGE`, the PAL image. Without it `vfs_disc`, `archive_disc`, `appearance_disc`,
   `fmv_fields`, `gsb_cull_stage`, `texpack_disc`, `menu_look`, `menu_text`, `gallery`,
   `content_table_chains` and the headless game runs below skip; `sndn2`, `fmv`, `shadow_spawn` and
   `rd_mesh` run only their synthetic part, and `tables_loader` reads the base ELF instead.
+- `ICO_DISC_IMAGE_JPN`, the Japanese image (`baserom/Ico_JPN.iso`). Without it `vfs_disc_jpn`,
+  `vfs_disc_jpn_bin`, `vfs_disc_jpn_cue`, `vfs_disc_jpn_chd`, `archive_disc_jpn` and
+  `archive_manifest_jpn` skip.
 - `ICO_BASE_ELF`, the PAL base ELF: with pyelftools, `tables_loader` and `tables_manifest` are
   built from it (`port/data/CMakeLists.txt`); `gallery` reads its tables.
 - `ICO_BASE_ELF_JPN` and `ICO_DISC_IMAGE_JPN`, the Japanese base ELF and image (defaults

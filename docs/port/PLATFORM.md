@@ -307,13 +307,14 @@ Three places matter (`port/platform/host_config.h`):
 - the executable's folder (`ico_host_exe_dir`): `ico-pc.ini` and `logs/` beside the program on
   Windows and Linux;
 - the [user folder](ARCHITECTURE.md#terms) (`ico_host_pref_dir`): `config.toml`, the memory cards
-  (`memcard/`), the extracted `ico.o2r`, `dumps/`, the developer `dev/` folder. In the window build
+  (`memcard/`), the extracted `ico.o2r` and `ico-jpn.o2r`, `dumps/`, the developer `dev/` folder. In the window build
   it is SDL's `SDL_GetPrefPath("ico-pc", "ico-pc")`; in the headless build and the tests, which have
   no SDL, the executable's folder (`port/platform/host_config.c` (`ico_host_pref_dir`);
   `port/config/CMakeLists.txt` (`ICO_HOST_SDL_PREFPATH`));
-- the disc image, found beside the executable, through `iso=`, `$ICO_ISO`, `baserom/Ico_PAL.iso`
-  under the working folder, or a file dialog whose answer is saved as `iso=`
-  (`port/platform/main_host.c` (`find_iso`)).
+- the disc image, found beside the executable (`Ico_PAL` or `Ico_JPN`, `.iso`, `.chd`, `.bin` or
+  `.cue`), through `iso=`, `$ICO_ISO`, the same names under `baserom/` in the working folder, or a
+  file dialog whose answer is saved as `iso=` (`port/platform/main_host.c` (`find_iso`,
+  `image_names`)).
 
 Per platform:
 
@@ -334,6 +335,49 @@ app's files folder on Android, Documents on iOS), and a `portable=` line is logg
 (`port/platform/host_config.c` (`ico_host_set_portable`); `CMakeLists.txt` (the Android and iOS
 targets)). The Android layout is listed in `port/platform/android/android_paths.h`: everything in
 the files folder (shared storage when writable), the Vulkan pipeline cache in the cache folder.
+
+### The disc a start plays
+
+The program plays the European disc (SCES-50760) and the Japanese disc (SCPS-11003); the disc is
+decided once a start, before anything reads the game's data, by the first of these rules that
+names one (`port/platform/host_config.c` (`ico_host_choose_disc`), called from `main_host.c`
+(`mount_game_data`)):
+
+1. `[game] disc` in `config.toml`: `"pal"` or `"jpn"` pins the disc (`ico_config_disc_pin`);
+   `"auto"`, the default, pins none, and any other value is auto with one log line
+   (`config: [game] disc = "x" is not one of auto, pal, jpn; auto`);
+2. the disc image the player gave (`--iso`, an image beside the program, `iso=` when that file is
+   there, `$ICO_ISO`), identified by its boot file (`ico_extract_identify`) without hashing it;
+3. the only archive there is (`ico.o2r` or `ico-jpn.o2r`, in the user folder or beside the
+   program);
+4. `[game] last_disc`, the disc a start last played, which the program writes
+   (`ico_config_set_last_disc`; it is not in the template, and a start of the European disc with
+   none written leaves `config.toml` as it is);
+5. the European disc.
+
+The log says which rule decided (`ico_pc: disc SCPS-11003 (the Japanese disc), by the disc image
+given; game data there: SCES-50760`). Both archives can be there side by side; a first run with
+the other disc's image writes its archive beside the first. A pinned disc whose archive is missing
+takes the first run, and an image of the other disc then ends the start with a box naming both.
+With both discs' images beside the program and no pin, `find_beside` takes the one played last,
+else `Ico_PAL`. In `use_iso` mode the mounted image's boot file decides and a pin is logged as
+ignored.
+
+`select_disc` (`main_host.c`) then, before the data tables load, the packs open, the options and
+achievements load and the menus' first sync: selects the region (`ico_region_select`,
+[GAME_CODE.md](GAME_CODE.md#regions)); on a disc with no 50 Hz mode (the Japanese one,
+`fixed_60hz`) sets the video mode word `systemStatus[0]` to 0 (`ico_boot_video_mode` returns 0
+there too and logs once that `[video] video_mode = "pal50"` is ignored); on Android points the
+texture pack folder at the disc's serial (`ico_android_select_serial`); logs `ico_pc: playing
+SCPS-11003 (the Japanese disc), boot file SCPS_110.03`; and names the disc for the
+[summary line](#the-summary-line) and the [report file](#the-report-file) (`ico_diag_set_disc`).
+The texture and model packs read `textures/<serial>/` and `models/<serial>/` of the selected disc
+([PACKS.md](PACKS.md)).
+
+On Android the picker's copy is written as `Ico_PAL.<ext>`; once read as the Japanese disc it is
+renamed `Ico_JPN.<ext>` (`android_name_image`), so each disc's image keeps its own name in the
+files folder. A `.cue` is refused by the picker's copy (only one file comes through); the `.bin`
+beside it is the right pick, read the same on its own.
 
 `ico-pc.ini` is `key=value` lines with `#` or `;` comments; a quoted value loses its quotes; a
 relative path is taken from the executable's folder. Its keys win over the matching
@@ -946,7 +990,7 @@ the newest file in logs that starts with report-" and name it (`port/platform/di
 
 | entry | what |
 | --- | --- |
-| `report.txt` | what ended the run and when, the `VERSION.txt` lines (beside the program or one folder up; Android's from the app's assets), `achievements.toml`'s `stages` line (not the file), the [summary line](#the-summary-line), the log's latest device, robust access, blend, VU index, fog, shader and window lines, the last 20 `ico_pc:`, `window:` and `rd:` lines before the report, the report block itself (the crash or watchdog report with its symbol lines), and the window's own part (`IcoReportInputs.extra`, `ico_diag_set_report_extra`: SDL's own log, the last 64 lines) |
+| `report.txt` | what ended the run and when, the `VERSION.txt` lines (beside the program or one folder up; Android's from the app's assets), `achievements.toml`'s `stages` line (not the file), the disc played (`disc: SCPS-11003 (the Japanese disc)`, `ico_diag_set_disc`), the [summary line](#the-summary-line), the log's latest device, robust access, blend, VU index, fog, shader and window lines, the last 20 `ico_pc:`, `window:` and `rd:` lines before the report, the report block itself (the crash or watchdog report with its symbol lines), and the window's own part (`IcoReportInputs.extra`, `ico_diag_set_report_extra`: SDL's own log, the last 64 lines) |
 | `ico-pc.log` | the log so far |
 | `ico-pc-previous.log` | the run before's |
 | `startup-activity.txt` | when there is one |
@@ -971,7 +1015,7 @@ Once a start, after the device line, the self-tests and the window line, the win
 with what a report usually asks:
 
 ```
-ico_pc: summary: version vX.Y.Z (commit 1a2b3c4d); Windows x64; GPU NVIDIA GeForce GTX 1060 (device 10de:1c03; driver NVIDIA 566.36, version 566.36.0.0); Vulkan; Enhanced preset, resolution ..., aspect ..., framerate ...; blend fixed-function (self-test: fixed-function ok 1); profile immediate-mode GPU (NVIDIA, Vulkan): fog local off, DATE snapshot, depth stores kept, blur fold off, local read yes, uint views off; index values dense (marks in the stream); fog inplace (self-test: ...); VU shaders one set; VU pre-pass on (self-test: ok); pipelines the start-up set; index values up to 4294967295; robust access off (the default; gpu_robust = true turns it on); controller Xbox Series X Controller (DirectInput scan on); disc SCES_507.60; user profile
+ico_pc: summary: version vX.Y.Z (commit 1a2b3c4d); Windows x64; GPU NVIDIA GeForce GTX 1060 (device 10de:1c03; driver NVIDIA 566.36, version 566.36.0.0); Vulkan; Enhanced preset, resolution ..., aspect ..., framerate ...; blend fixed-function (self-test: fixed-function ok 1); profile immediate-mode GPU (NVIDIA, Vulkan): fog local off, DATE snapshot, depth stores kept, blur fold off, local read yes, uint views off; index values dense (marks in the stream); fog inplace (self-test: ...); VU shaders one set; VU pre-pass on (self-test: ok); pipelines the start-up set; index values up to 4294967295; robust access off (the default; gpu_robust = true turns it on); controller Xbox Series X Controller (DirectInput scan on); disc SCES-50760 (the European disc); user profile
 ```
 
 (`port/platform/window_host.c` (`log_summary`); `port/render/rd_core.c` (`rd_summary_text`, from
@@ -987,7 +1031,10 @@ the VU shaders are `one set, fallback plain (issue 107)` on a device whose fallb
 plain program entries (`RhiLimits.vuFallbackPlain`), and the pipelines `the careful start-up set`
 under the careful policy, `the careful start-up set, stopped at its budget (the rest on first use)`
 when its budget stopped it, and `on first use (no start-up set)` where the set is skipped
-(`port/render/rd_core.c` (`rd_summary_text`); [RENDER.md](RENDER.md#the-start-up-set)); on Android the disc is mounted after the window ("not mounted yet").
+(`port/render/rd_core.c` (`rd_summary_text`); [RENDER.md](RENDER.md#the-start-up-set)); the disc is the one `select_disc` named (`ico_diag_set_disc`); on
+Android the disc is identified after the window opens, so the line first says `disc not mounted
+yet` and is logged again with the disc in its place once it is known, which the report file's copy
+keeps.
 `ico_diag_set_summary` flushes the C library's held lines first, so on Windows the line follows the
 device and window lines in the file, and keeps the text for the report file. The 10 s block's
 `window: memory:` line has the graphics memory in use and its peak where the backend counts it

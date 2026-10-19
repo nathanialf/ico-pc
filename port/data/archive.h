@@ -1,9 +1,10 @@
 /*
  * port/data/archive.h
  *
- * The extracted game data, `ico.o2r`: a ZIP whose entries are stored, not
- * compressed, written once by the first-run extractor (extract.h) from the
- * user's disc image.
+ * The extracted game data, `ico.o2r` (the European disc) or `ico-jpn.o2r`
+ * (the Japanese disc): a ZIP whose entries are stored, not compressed,
+ * written once by the first-run extractor (extract.h) from the user's disc
+ * image.
  *
  *   disc/<PATH>   the disc file PATH ("DFDATAS/DATA.DF", "SCES_507.60"),
  *                 byte for byte
@@ -27,8 +28,10 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "vfs.h"
+/* ICO_REGION_COUNT (the game's region header, by path: port/core has a
+   region.h too) */
+#include "../../ico2/common/include/region.h"
 
-#define ICO_ARCHIVE_NAME "ico.o2r"
 #define ICO_ARCHIVE_FORMAT "ico.o2r"
 #define ICO_ARCHIVE_VERSION 1
 /* the extractor that wrote the archive; a different major value is refused
@@ -36,10 +39,47 @@
 #define ICO_ARCHIVE_EXTRACTOR "ico-pc extract 1"
 #define ICO_ARCHIVE_META "meta.json"
 
-/* The disc this build plays, and its verification values (config/sha1sums.txt). */
-#define ICO_DISC_ID "SCES-50760"
-#define ICO_DISC_ISO_SHA1 "1017b53f6e80f41f823369b0be1d8c69f7e16dc6"
-#define ICO_DISC_ELF_SHA1 "da3644c54c26fe760f3b6a591a5fc2eab396ed2b"
+/* One entry of a disc's DATA.DF manifest: a member's offset, size and
+   CRC-32 (zlib), in directory order (discs.c). */
+typedef struct IcoDfManifestEntry {
+    uint32_t offset;
+    uint32_t size;
+    uint32_t crc;
+} IcoDfManifestEntry;
+
+/* The discs this program plays, one per row of config/regions.txt in its
+   order (port/core/region.h's rows), and their verification values
+   (config/sha1sums.txt for the European boot ELF). Each disc's data goes to
+   its own archive, so both can be extracted side by side. */
+typedef struct IcoDiscInfo {
+    const char *id;                    /* "SCES-50760" (meta.json's disc_id) */
+    const char *slug;                  /* "pal": the region's row (config/regions.txt) */
+    const char *boot_elf;              /* SYSTEM.CNF's BOOT2 file, "SCES_507.60" */
+    const char *iso_sha1;              /* the whole image's SHA-1 */
+    const char *elf_sha1;              /* the boot ELF's SHA-1 */
+    uint64_t iso_bytes;                /* the image's size */
+    uint32_t df_size;                  /* DATA.DF's size */
+    uint32_t df_count;                 /* its directory's member count */
+    uint32_t df_dir_crc;               /* the CRC-32 of its directory */
+    const IcoDfManifestEntry *members; /* df_count entries */
+    uint32_t member_count;             /* entries in members (df_count) */
+    const char *archive_name;          /* "ico.o2r", "ico-jpn.o2r" */
+    const char *image_base;            /* "Ico_PAL": Ico_PAL.iso, .chd, .bin, .cue */
+    int cd_type;                       /* sceCdGetDiskType's value for it (cdvd_host.h) */
+    const char *product_name;          /* "the European disc": regions.txt's last column */
+} IcoDiscInfo;
+
+/* [ICO_REGION_PAL] the European release SCES-50760 (a DVD),
+   [ICO_REGION_JPN] the Japanese release SCPS-11003 (a CD); defined in
+   discs.c with the manifests */
+extern const IcoDiscInfo ico_discs[ICO_REGION_COUNT];
+
+/* The row whose id ("SCPS-11003"), boot file ("SCPS_110.03", as
+   SYSTEM.CNF names it after normalizing) or slug ("jpn") is given; NULL
+   for none. */
+const IcoDiscInfo *ico_disc_by_id(const char *id);
+const IcoDiscInfo *ico_disc_by_boot(const char *boot_elf);
+const IcoDiscInfo *ico_disc_by_slug(const char *slug);
 
 /* The rules the extractor accepts an image by (extract.h). */
 #define ICO_RULE_ISO_SHA1 "iso-sha1"
@@ -73,10 +113,10 @@ IcoVfs *ico_vfs_mount_archive(const char *path);
    fills *out. 0, or -1 with the reason in why. */
 int ico_archive_read_info(const char *path, IcoArchiveInfo *out, char *why, size_t whysize);
 
-/* Whether the archive was written from this build's disc by an accepted
-   rule: disc id ICO_DISC_ID, the boot ELF's SHA-1 ICO_DISC_ELF_SHA1, the
-   rule iso-sha1 or elf-sha1+datadf-crc, this format version and extractor.
-   1, or 0 with the reason in why. */
+/* Whether the archive was written from one of this build's discs by an
+   accepted rule: a disc id of ico_discs, that row's boot ELF SHA-1 (and,
+   by iso-sha1, its image SHA-1), the rule iso-sha1 or elf-sha1+datadf-crc,
+   this format version and extractor. 1, or 0 with the reason in why. */
 int ico_archive_info_acceptable(const IcoArchiveInfo *info, char *why, size_t whysize);
 
 /* Host file helpers shared with the extractor: fopen, remove and the atomic

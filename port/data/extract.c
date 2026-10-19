@@ -1,12 +1,13 @@
 /*
  * port/data/extract.c
  *
- * The first-run extractor (extract.h): the user's disc image to `ico.o2r`
- * (archive.h). It mounts the image with the ISO9660 backend, walks the root
- * and DFDATAS directories, hashes the whole image, then streams each chosen
- * file into a ZIP written by miniz with no compression, hashing SCES_507.60
- * and taking the CRC-32 of DATA.DF's directory and members on the way, and
- * writes meta.json last, once the image has been accepted.
+ * The first-run extractor (extract.h): the user's disc image to its archive
+ * (archive.h). It mounts the image with the ISO9660 backend, reads which disc
+ * it is from SYSTEM.CNF's boot file (ico_discs), walks the root and DFDATAS
+ * directories, hashes the whole image, then streams each chosen file into a
+ * ZIP written by miniz with no compression, hashing the boot ELF and taking
+ * the CRC-32 of DATA.DF's directory and members on the way, and writes
+ * meta.json last, once the image has been accepted by that disc's rules.
  */
 #define _FILE_OFFSET_BITS 64
 
@@ -28,7 +29,6 @@
 #endif
 
 #define DF_PATH "DFDATAS/DATA.DF"
-#define ELF_PATH "SCES_507.60"
 #define CNF_PATH "SYSTEM.CNF"
 #define STORE_DIR "DFDATAS" /* stored whole, recursively */
 #define ITEMS_MAX 1024
@@ -36,126 +36,7 @@
 #define DIR_REC_MIN 34
 #define DIR_BYTES_MAX (1u << 20)
 #define HASH_CHUNK (1u << 20)
-#define DF_MEMBERS_MAX 4096u /* a sanity bound; the PAL disc has 193 */
-
-/* --- the DATA.DF manifest ------------------------------------------------------
- * The PAL disc's DATA.DF: its size, its directory's member count and the
- * CRC-32 (zlib) of the directory ({count, {name[32], offset, size} x count},
- * 4 + 40 * count bytes), then each member's offset, size and CRC-32 in
- * directory order. Hashes and structure only: no names and no bytes of the
- * file (docs/LEGAL.md). Regenerate with `archive_test manifest <iso>`, whose
- * output replaces the block between the BEGIN and END lines. */
-
-typedef struct DfMember {
-    uint32_t offset;
-    uint32_t size;
-    uint32_t crc;
-} DfMember;
-
-/* BEGIN DATA.DF MANIFEST */
-#define DF_SIZE 867184640u
-#define DF_COUNT 193u
-#define DF_DIR_CRC 0xfb82eea7u
-static const DfMember dfMembers[] = {
-    {8192u, 2365389u, 0xa7442fa6u},        {2373632u, 1256365u, 0xaaf763a3u},
-    {3631104u, 4001634u, 0xe7b52d42u},     {7632896u, 51919u, 0x5f42c211u},
-    {7686144u, 1928900u, 0x5cbd5400u},     {9615360u, 7487547u, 0x0280831au},
-    {17104896u, 3010021u, 0x188be14cu},    {20115456u, 3403790u, 0x0691a3b8u},
-    {23521280u, 4527299u, 0xfd10d6f2u},    {28049408u, 3539794u, 0x68f3d3e4u},
-    {31590400u, 3786639u, 0x4d9de7b6u},    {35377152u, 3351457u, 0x6d4681b9u},
-    {38729728u, 2385789u, 0xba823356u},    {41115648u, 4604019u, 0x915e5a24u},
-    {45721600u, 2300650u, 0x06a090b3u},    {48023552u, 1861159u, 0xfc9f2615u},
-    {49885184u, 1716793u, 0x95a7af30u},    {51603456u, 2363442u, 0x2dbf667cu},
-    {53968896u, 4343953u, 0x58fe4e5du},    {58314752u, 2728365u, 0x26fbdb14u},
-    {61044736u, 2789793u, 0xfacf318fu},    {63836160u, 3005291u, 0x4e457741u},
-    {66842624u, 4908028u, 0xd081d8f3u},    {71751680u, 4146492u, 0x482524ccu},
-    {75898880u, 3554485u, 0xbb873037u},    {79454208u, 770114u, 0x0c258f86u},
-    {80226304u, 36699u, 0xaf8823bdu},      {80263168u, 3664632u, 0xea524198u},
-    {83929088u, 3229179u, 0x61c42de7u},    {87158784u, 4074014u, 0xd6027944u},
-    {91234304u, 4338131u, 0xddff44ecu},    {95574016u, 4908985u, 0x838e669bu},
-    {100483072u, 3965297u, 0x71f1fd1cu},   {104450048u, 4342154u, 0x200842c0u},
-    {108793856u, 4313146u, 0x893950b0u},   {113108992u, 4089014u, 0xf93f4330u},
-    {117198848u, 3963119u, 0xf58f38d5u},   {121163776u, 4407795u, 0x289f146fu},
-    {125573120u, 4003169u, 0x84e3572cu},   {129576960u, 4103202u, 0x73e43f03u},
-    {133681152u, 4531007u, 0x8015ac33u},   {138213376u, 4597403u, 0xca9e701au},
-    {142811136u, 5008097u, 0xa5f1d5b7u},   {147820544u, 4926587u, 0x873f1abau},
-    {152748032u, 4610944u, 0x9184f9dfu},   {157360128u, 4686228u, 0x26102a8fu},
-    {162048000u, 4591591u, 0x88055934u},   {166639616u, 3309224u, 0xc77f5ea9u},
-    {169949184u, 3192736u, 0x7f5df611u},   {173142016u, 5037639u, 0xbd27a677u},
-    {178180096u, 2855484u, 0xb20b56c7u},   {181037056u, 4384838u, 0x8aa36005u},
-    {185423872u, 2818732u, 0xc3702263u},   {188243968u, 3796942u, 0xa472c950u},
-    {192040960u, 4946719u, 0x97f86af3u},   {196988928u, 4074165u, 0xe73bbe82u},
-    {201064448u, 4728586u, 0x26c09827u},   {205793280u, 4015760u, 0x0527ab61u},
-    {209809408u, 3576896u, 0x7feb7869u},   {213387264u, 4291451u, 0x6acfc99cu},
-    {217679872u, 4375432u, 0xbdf95004u},   {222056448u, 3408528u, 0x866a2a4eu},
-    {225466368u, 3356859u, 0xf7f631c2u},   {228825088u, 4234068u, 0x67c873f8u},
-    {233060352u, 3078221u, 0xafb0e023u},   {236140544u, 2786295u, 0x9bd81444u},
-    {238927872u, 4528952u, 0x377874ceu},   {243458048u, 3177701u, 0x3eea6b4cu},
-    {246636544u, 95624u, 0xcdb0a477u},     {246732800u, 1277952u, 0x0710d8feu},
-    {248010752u, 4337664u, 0xec562dfcu},   {252348416u, 2375680u, 0xdb8bcedbu},
-    {254724096u, 4538368u, 0x6e6c79b0u},   {259262464u, 1028096u, 0xa4020997u},
-    {260290560u, 901120u, 0xa4223d4bu},    {261191680u, 901120u, 0x08660208u},
-    {262092800u, 483328u, 0x9b3142f9u},    {262576128u, 1208320u, 0xe434981du},
-    {263784448u, 3125248u, 0xfd8319cdu},   {266909696u, 921600u, 0x0ca4288au},
-    {267831296u, 983040u, 0x52dbb45du},    {268814336u, 987136u, 0x82ffa512u},
-    {269801472u, 1036288u, 0x24df6266u},   {270837760u, 1175552u, 0x51c61723u},
-    {272013312u, 1724416u, 0x28241fd3u},   {273737728u, 1728512u, 0xcb802602u},
-    {275466240u, 1269760u, 0x1a63ee1du},   {276736000u, 974848u, 0x104aa807u},
-    {277710848u, 1007616u, 0x67b15bfdu},   {278718464u, 4206592u, 0x8de6edacu},
-    {282925056u, 1437696u, 0x2beb372bu},   {284362752u, 905216u, 0xcfd8aee6u},
-    {285267968u, 5005312u, 0x06a51956u},   {290273280u, 2277376u, 0x9260deb0u},
-    {292550656u, 3289088u, 0x96839a46u},   {295839744u, 6283264u, 0x738fa681u},
-    {302123008u, 3088384u, 0xd1eaa2f2u},   {305211392u, 1150976u, 0xadabf5d6u},
-    {306362368u, 2539520u, 0xf3cce748u},   {308901888u, 13762560u, 0x68ab2d00u},
-    {322664448u, 598016u, 0x10f5ecbeu},    {323262464u, 10067968u, 0xce38883fu},
-    {333330432u, 1642496u, 0x23a7fef5u},   {334972928u, 847872u, 0x0e23ccdfu},
-    {335820800u, 950272u, 0xfae89fd8u},    {336771072u, 3026944u, 0x8eee62adu},
-    {339798016u, 1335296u, 0x401d91e6u},   {341133312u, 1355776u, 0xa4fef056u},
-    {342489088u, 1200128u, 0xa2747422u},   {343689216u, 1040384u, 0xcc242a09u},
-    {344729600u, 1310720u, 0x59256064u},   {346040320u, 757760u, 0xcc1d0d17u},
-    {346798080u, 630784u, 0x32381d70u},    {347428864u, 802816u, 0xb0558cadu},
-    {348231680u, 755712u, 0x8f8c0382u},    {348987392u, 831488u, 0x5c12a114u},
-    {349818880u, 827392u, 0x18c61163u},    {350646272u, 847872u, 0xb0e04b4du},
-    {351494144u, 1400832u, 0x4836d5c0u},   {352894976u, 1392640u, 0x2bede058u},
-    {354287616u, 765952u, 0x42235eddu},    {355053568u, 1060864u, 0xabdcfc3au},
-    {356114432u, 708608u, 0x34988651u},    {356823040u, 720896u, 0xa4791c6eu},
-    {357543936u, 716800u, 0xaa4a7b6cu},    {358260736u, 872448u, 0x93c8dfdcu},
-    {359133184u, 1171456u, 0xd8c6ce32u},   {360304640u, 913408u, 0xc721cf89u},
-    {361218048u, 888832u, 0x33f47f19u},    {362106880u, 1232896u, 0x55da9176u},
-    {363339776u, 942080u, 0xc38709c2u},    {364281856u, 655360u, 0x41704791u},
-    {364937216u, 696320u, 0x3e551bdbu},    {365633536u, 712704u, 0x176e9058u},
-    {366346240u, 630784u, 0xeb013728u},    {366977024u, 700416u, 0xb6a4a501u},
-    {367677440u, 774144u, 0x3e071182u},    {368451584u, 798720u, 0x04c79688u},
-    {369250304u, 786432u, 0xafbfa914u},    {370036736u, 827392u, 0x30cd6303u},
-    {370864128u, 626688u, 0xc0ff345bu},    {371490816u, 634880u, 0xfd657b3au},
-    {372125696u, 679936u, 0x1099d110u},    {372805632u, 2478080u, 0x70245be9u},
-    {375283712u, 5013504u, 0xe8981923u},   {380297216u, 561152u, 0xad570c36u},
-    {380858368u, 835584u, 0x04ed0debu},    {381693952u, 827392u, 0xd2cbdf1fu},
-    {382521344u, 671744u, 0xc0b23345u},    {383193088u, 651264u, 0x6069ae9au},
-    {383844352u, 4538368u, 0x071cc158u},   {388382720u, 454656u, 0xaa0f4915u},
-    {388837376u, 503808u, 0xb852dda8u},    {389341184u, 471040u, 0x9080b7b4u},
-    {389812224u, 458752u, 0x4f75e902u},    {390270976u, 130301956u, 0xd532ee7au},
-    {520574976u, 130334724u, 0xc48f9011u}, {650911744u, 2815232u, 0x3aaa45e2u},
-    {653727744u, 687232u, 0xa2e600cau},    {654415872u, 964u, 0xe5fa0c6bu},
-    {654417920u, 2662400u, 0x34c81911u},   {657080320u, 3022848u, 0xfe2b76d4u},
-    {660103168u, 3616768u, 0xacf3f715u},   {663719936u, 6213632u, 0x474ac58fu},
-    {669933568u, 1789952u, 0x437d572au},   {671723520u, 4202496u, 0x17b056d2u},
-    {675926016u, 1089536u, 0xe457c5a6u},   {677015552u, 876544u, 0x575cf3e7u},
-    {677892096u, 1811680u, 0xf5e5792eu},   {679704576u, 3567616u, 0x848d1aefu},
-    {683272192u, 2075320u, 0xe8882aa8u},   {685348864u, 2887680u, 0xc0396b7eu},
-    {688236544u, 2688000u, 0x73e284f7u},   {690925568u, 4440064u, 0x00e7c349u},
-    {695365632u, 725760u, 0x25bf4f45u},    {696092672u, 3567616u, 0x848d1aefu},
-    {699660288u, 2961408u, 0x62da9193u},   {702621696u, 1467648u, 0x5ab03c76u},
-    {704090112u, 4521984u, 0xc7f92f55u},   {708612096u, 2129792u, 0xb63d558eu},
-    {710742016u, 4038656u, 0x5a030ffau},   {714780672u, 4038656u, 0x11a4d5d7u},
-    {718819328u, 4038656u, 0xf94a9efau},   {722857984u, 4038656u, 0x19c7ed41u},
-    {726896640u, 4038656u, 0x84d6f662u},   {730935296u, 4038656u, 0x0dad1b41u},
-    {734973952u, 4038656u, 0xea152a5du},   {739012608u, 4038656u, 0x87c4355du},
-    {743051264u, 4038656u, 0x480b6c1eu},   {747089920u, 4038656u, 0xed475180u},
-    {751128576u, 6746112u, 0xa41b7661u},   {757874688u, 4907760u, 0xefaeee71u},
-    {762783744u, 104398852u, 0x0b670315u},
-};
-/* END DATA.DF MANIFEST */
+#define DF_MEMBERS_MAX 4096u /* a sanity bound; the PAL disc has 193, the Japanese 183 */
 
 /* --- helpers ----------------------------------------------------------------- */
 
@@ -281,8 +162,8 @@ typedef struct DfState {
     uint32_t count;
     uint32_t dir_len; /* 4 + 40 * count */
     uint32_t dir_crc;
-    DfMember *m;   /* offset and size from the image's directory, crc running */
-    uint64_t next; /* the next byte expected (the CRCs need order) */
+    IcoDfManifestEntry *m; /* offset and size from the image's directory, crc running */
+    uint64_t next;         /* the next byte expected (the CRCs need order) */
     int out_of_order;
 } DfState;
 
@@ -366,8 +247,8 @@ static void df_update(DfState *df, uint64_t o, const unsigned char *p, size_t n)
     }
 }
 
-/* Whether the image's DATA.DF is the manifest's. */
-static int df_matches(const DfState *df, char *why, size_t whysize)
+/* Whether the image's DATA.DF is the disc's manifest's. */
+static int df_matches(const DfState *df, const IcoDiscInfo *disc, char *why, size_t whysize)
 {
     uint32_t i;
 
@@ -379,27 +260,27 @@ static int df_matches(const DfState *df, char *why, size_t whysize)
         say(why, whysize, "DATA.DF was not read through in order");
         return 0;
     }
-    if (DF_COUNT == 0) {
-        say(why, whysize, "this build has no DATA.DF manifest");
+    if (disc == NULL || disc->df_count == 0) {
+        say(why, whysize, "the disc is not one this build has a DATA.DF manifest for");
         return 0;
     }
-    if (df->size != DF_SIZE) {
-        say(why, whysize, "DATA.DF is %u bytes, the PAL disc's is %u", (unsigned)df->size,
-            (unsigned)DF_SIZE);
+    if (df->size != disc->df_size) {
+        say(why, whysize, "DATA.DF is %u bytes, the %s disc's is %u", (unsigned)df->size, disc->id,
+            (unsigned)disc->df_size);
         return 0;
     }
-    if (df->count != DF_COUNT) {
-        say(why, whysize, "DATA.DF has %u members, the PAL disc's %u", (unsigned)df->count,
-            (unsigned)DF_COUNT);
+    if (df->count != disc->df_count) {
+        say(why, whysize, "DATA.DF has %u members, the %s disc's %u", (unsigned)df->count, disc->id,
+            (unsigned)disc->df_count);
         return 0;
     }
-    if (df->dir_crc != DF_DIR_CRC) {
+    if (df->dir_crc != disc->df_dir_crc) {
         say(why, whysize, "DATA.DF's directory CRC-32 %08x, expected %08x", (unsigned)df->dir_crc,
-            (unsigned)DF_DIR_CRC);
+            (unsigned)disc->df_dir_crc);
         return 0;
     }
     for (i = 0; i < df->count; i++) {
-        const DfMember *w = &dfMembers[i];
+        const IcoDfManifestEntry *w = &disc->members[i];
 
         if (df->m[i].offset != w->offset || df->m[i].size != w->size || df->m[i].crc != w->crc) {
             say(why, whysize,
@@ -412,13 +293,10 @@ static int df_matches(const DfState *df, char *why, size_t whysize)
     return 1;
 }
 
-uint32_t ico_extract_datadf_manifest_count(void)
+int ico_extract_print_datadf_manifest(IcoVfs *iso, const char *slug, FILE *out)
 {
-    return DF_COUNT;
-}
-
-int ico_extract_print_datadf_manifest(IcoVfs *iso, FILE *out)
-{
+    char up[16], camel[16];
+    size_t k;
     static unsigned char chunk[HASH_CHUNK];
     IcoVfsFile f;
     DfState df;
@@ -426,6 +304,11 @@ int ico_extract_print_datadf_manifest(IcoVfs *iso, FILE *out)
     uint64_t o;
     uint32_t i;
 
+    for (k = 0; slug[k] != '\0' && k + 1 < sizeof(up); k++) {
+        up[k] = (slug[k] >= 'a' && slug[k] <= 'z') ? (char)(slug[k] - 'a' + 'A') : slug[k];
+        camel[k] = k == 0 ? up[k] : slug[k];
+    }
+    up[k] = camel[k] = '\0';
     if (df_begin(&df, iso, why, sizeof(why)) != 0 || ico_vfs_open(iso, DF_PATH, &f) != 0) {
         fprintf(stderr, "manifest: %s\n", why);
         free(df.m);
@@ -442,15 +325,15 @@ int ico_extract_print_datadf_manifest(IcoVfs *iso, FILE *out)
         o += (uint64_t)n;
     }
     fprintf(out,
-            "/* BEGIN DATA.DF MANIFEST */\n"
-            "#define DF_SIZE %uu\n#define DF_COUNT %uu\n#define DF_DIR_CRC 0x%08xu\n"
-            "static const DfMember dfMembers[] = {\n",
-            (unsigned)df.size, (unsigned)df.count, (unsigned)df.dir_crc);
+            "/* BEGIN DATA.DF MANIFEST %s */\n"
+            "#define DF_%s_SIZE %uu\n#define DF_%s_COUNT %uu\n#define DF_%s_DIR_CRC 0x%08xu\n"
+            "static const IcoDfManifestEntry dfMembers%s[] = {\n",
+            slug, up, (unsigned)df.size, up, (unsigned)df.count, up, (unsigned)df.dir_crc, camel);
     for (i = 0; i < df.count; i++) {
         fprintf(out, "    {%uu, %uu, 0x%08xu},\n", (unsigned)df.m[i].offset, (unsigned)df.m[i].size,
                 (unsigned)df.m[i].crc);
     }
-    fprintf(out, "};\n/* END DATA.DF MANIFEST */\n");
+    fprintf(out, "};\n/* END DATA.DF MANIFEST %s */\n", slug);
     free(df.m);
     return 0;
 }
@@ -467,7 +350,9 @@ typedef struct Ex {
     IcoVfs *iso;
     Item *items;
     int n;
-    char boot[64]; /* BOOT2's file, normalized */
+    char boot[64];           /* BOOT2's file, normalized */
+    const IcoDiscInfo *disc; /* the row of that boot file, or NULL */
+    char elf_path[64];       /* the boot ELF hashed: the row's, else BOOT2's file */
 
     IcoExtractProgressFn progress;
     void *ctx;
@@ -517,8 +402,10 @@ static int root_file_wanted(const Ex *x, const char *comp)
 
     /* DUMMY.TXT is the file after DATA.DF on the PAL disc (LSN 443201, where
        DATA.DF's last sector ends): kept so a read that runs over DATA.DF's
-       end finds what the disc had there */
-    return strcmp(comp, CNF_PATH) == 0 || strcmp(comp, ELF_PATH) == 0 ||
+       end finds what the disc had there (the Japanese disc has none: its
+       DATA.DF is the last file) */
+    return strcmp(comp, CNF_PATH) == 0 ||
+           (x->elf_path[0] != '\0' && strcmp(comp, x->elf_path) == 0) ||
            strcmp(comp, "DUMMY.TXT") == 0 || (x->boot[0] != '\0' && strcmp(comp, x->boot) == 0) ||
            (n > 4 && strcmp(comp + n - 4, ".IRX") == 0);
 }
@@ -597,15 +484,15 @@ static int walk(Ex *x, const char *dir, const IcoVfsEntry *d, int store_all, int
 }
 
 /* SYSTEM.CNF's BOOT2 file, normalized ("SCES_507.60"); "" when absent. */
-static void read_boot_name(Ex *x)
+static void read_boot_name(IcoVfs *iso, char *boot, size_t size)
 {
     char cnf[1024];
     IcoVfsFile f;
     int64_t n;
     char *p;
 
-    x->boot[0] = '\0';
-    if (ico_vfs_open(x->iso, CNF_PATH, &f) != 0) {
+    boot[0] = '\0';
+    if (ico_vfs_open(iso, CNF_PATH, &f) != 0) {
         return;
     }
     n = ico_vfs_read(&f, 0, cnf, sizeof(cnf) - 1);
@@ -622,9 +509,28 @@ static void read_boot_name(Ex *x)
         p++;
     }
     p[strcspn(p, "\r\n")] = '\0';
-    if (ico_vfs_normalize(p, x->boot, sizeof(x->boot)) != 0) {
-        x->boot[0] = '\0';
+    if (ico_vfs_normalize(p, boot, size) != 0) {
+        boot[0] = '\0';
     }
+}
+
+const IcoDiscInfo *ico_extract_identify(const char *iso_path, char *boot, size_t size)
+{
+    IcoVfs *iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
+    char name[64];
+
+    if (boot != NULL && size > 0) {
+        boot[0] = '\0';
+    }
+    if (iso == NULL) {
+        return NULL;
+    }
+    read_boot_name(iso, name, sizeof(name));
+    ico_vfs_unmount(iso);
+    if (boot != NULL && size > 0) {
+        snprintf(boot, size, "%s", name);
+    }
+    return ico_disc_by_boot(name);
 }
 
 /* "SCES_507.60" -> "SCES-50760" */
@@ -731,7 +637,7 @@ static int store_item(Ex *x, mz_zip_archive *zip, const Item *it, int *tail_out,
     memset(&x->f, 0, sizeof(x->f));
     x->f.vfs = x->iso;
     x->f.entry = it->e;
-    x->is_elf = strcmp(it->path, ELF_PATH) == 0;
+    x->is_elf = x->elf_path[0] != '\0' && strcmp(it->path, x->elf_path) == 0;
     x->is_df = strcmp(it->path, DF_PATH) == 0;
     x->next = 0;
     x->read_err = 0;
@@ -936,10 +842,7 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
     x.iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
     if (x.iso == NULL) {
         res->unreadable = 1;
-        say(why, whysize,
-            "%s is not a disc image this program can read (an .iso, a .bin or .cue, or a .chd made "
-            "from one); the log says why",
-            iso_path);
+        say(why, whysize, ICO_UNREADABLE_DISC_TEXT, iso_path);
         return -1;
     }
     x.items = calloc(ITEMS_MAX, sizeof(*x.items));
@@ -948,8 +851,11 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
         say(why, whysize, "out of memory");
         goto done;
     }
-    read_boot_name(&x);
+    read_boot_name(x.iso, x.boot, sizeof(x.boot));
     disc_id_of(x.boot, res->disc_id, sizeof(res->disc_id));
+    /* the row by the boot file first; its rules below */
+    x.disc = ico_disc_by_boot(x.boot);
+    snprintf(x.elf_path, sizeof(x.elf_path), "%s", x.disc != NULL ? x.disc->boot_elf : x.boot);
     if (add_item(&x, "", 0, why, whysize) != 0) {
         goto done;
     }
@@ -988,7 +894,7 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
     }
     t1 = now_s();
     res->hash_seconds = t1 - t0;
-    iso_ok = strcmp(res->iso_sha1, ICO_DISC_ISO_SHA1) == 0;
+    iso_ok = x.disc != NULL && strcmp(res->iso_sha1, x.disc->iso_sha1) == 0;
 
     /* 2. the files */
     x.out = ico_archive_fopen(tmp, "wb");
@@ -1016,8 +922,8 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
     if (x.elf_seen && x.elf_in_order) {
         sha1_hex(&x.elf, res->elf_sha1);
     }
-    elf_ok = strcmp(res->elf_sha1, ICO_DISC_ELF_SHA1) == 0;
-    res->datadf_ok = df_matches(&x.df, dfwhy[0] ? NULL : dfwhy, sizeof(dfwhy));
+    elf_ok = x.disc != NULL && strcmp(res->elf_sha1, x.disc->elf_sha1) == 0;
+    res->datadf_ok = df_matches(&x.df, x.disc, dfwhy[0] ? NULL : dfwhy, sizeof(dfwhy));
     snprintf(res->datadf_why, sizeof(res->datadf_why), "%s", res->datadf_ok ? "" : dfwhy);
     if (iso_ok) {
         snprintf(res->rule, sizeof(res->rule), "%s", ICO_RULE_ISO_SHA1);
@@ -1027,13 +933,26 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
         snprintf(res->rule, sizeof(res->rule), "%s", ICO_RULE_UNVERIFIED);
     } else {
         res->wrong_disc = 1;
-        say(why, whysize,
-            "%s is not the ICO PAL disc (" ICO_DISC_ID ").\n"
-            "Image SHA-1 %s (expected " ICO_DISC_ISO_SHA1 ");\n"
-            "SCES_507.60 SHA-1 %s (expected " ICO_DISC_ELF_SHA1 ");\n"
-            "DATA.DF: %s.",
-            iso_path, res->iso_sha1, res->elf_sha1[0] ? res->elf_sha1 : "(absent)",
-            res->datadf_ok ? "matches" : res->datadf_why);
+        /* the box's text, then what the log needs to tell the cases apart */
+        if (x.disc == NULL) {
+            say(why, whysize,
+                ICO_WRONG_DISC_TEXT "\n"
+                                    "Its boot file is %s, which is neither disc's (%s, %s); "
+                                    "image SHA-1 %s.",
+                iso_path, x.boot[0] ? x.boot : "(absent)", ico_discs[ICO_REGION_PAL].boot_elf,
+                ico_discs[ICO_REGION_JPN].boot_elf, res->iso_sha1);
+        } else {
+            say(why, whysize,
+                ICO_WRONG_DISC_TEXT "\n"
+                                    "Its boot file %s is %s's, but the image is not an "
+                                    "unmodified copy of it.\n"
+                                    "Image SHA-1 %s (expected %s);\n"
+                                    "%s SHA-1 %s (expected %s);\n"
+                                    "DATA.DF: %s.",
+                iso_path, x.disc->boot_elf, x.disc->id, res->iso_sha1, x.disc->iso_sha1,
+                x.disc->boot_elf, res->elf_sha1[0] ? res->elf_sha1 : "(absent)", x.disc->elf_sha1,
+                res->datadf_ok ? "matches" : res->datadf_why);
+        }
         goto done;
     }
 

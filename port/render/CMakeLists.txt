@@ -157,6 +157,8 @@ target_include_directories(ico_render
     PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
 target_compile_options(ico_render PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_render PUBLIC ico_rhi_vk ico_shaders ico_vu1_ref ico_texpack_name)
+# texpack.c, modelpack.c: the selected disc's pack folder (port/core)
+target_link_libraries(ico_render PUBLIC ico_region)
 # texture packs: texpack_png.c inflates with miniz's tinfl
 target_link_libraries(ico_render PRIVATE ico_miniz)
 if(NOT WIN32)
@@ -671,7 +673,7 @@ add_executable(texpack_test test/texpack_test.c texpack.c)
 target_include_directories(texpack_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/rhi")
 target_compile_options(texpack_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-target_link_libraries(texpack_test PRIVATE ico_host_fs ico_texpack_name)
+target_link_libraries(texpack_test PRIVATE ico_host_fs ico_texpack_name ico_region)
 if(TARGET SDL3::SDL3-shared)
     target_link_libraries(texpack_test PRIVATE SDL3::SDL3-shared)
     target_compile_definitions(texpack_test PRIVATE ICO_TEXPACK_THREAD=1)

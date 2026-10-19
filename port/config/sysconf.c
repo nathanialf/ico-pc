@@ -10,6 +10,7 @@
 #include "sysconf.h"
 #include "clock.h"
 #include "config.h"
+#include "../core/region.h" /* the disc's region (fixed_60hz) */
 #include <ctype.h>
 #include <libscf.h>
 #include <stdio.h>
@@ -108,6 +109,31 @@ int ico_sysconf_host_language(void)
     }
 #endif
     return ico_scf_language_from_locale(env_locale());
+}
+
+int ico_sysconf_locale_is_japanese(const char *locale)
+{
+    return locale != NULL && (locale[0] == 'j' || locale[0] == 'J') &&
+           (locale[1] == 'a' || locale[1] == 'A') && !isalpha((unsigned char)locale[2]);
+}
+
+int ico_sysconf_host_japanese(void)
+{
+#ifdef ICO_CONFIG_SDL
+    int n = 0;
+    SDL_Locale **loc = SDL_GetPreferredLocales(&n);
+
+    if (loc != NULL) {
+        /* the first preferred locale: the system's own language */
+        const int ja = n > 0 && loc[0] != NULL && ico_sysconf_locale_is_japanese(loc[0]->language);
+
+        SDL_free(loc);
+        if (n > 0) {
+            return ja;
+        }
+    }
+#endif
+    return ico_sysconf_locale_is_japanese(env_locale());
 }
 
 static int cached = -1;
@@ -217,8 +243,20 @@ int ico_boot_language(void)
 
 int ico_boot_video_mode(void)
 {
-    int v = ico_sysconf_video_mode();
+    static int said;
+    int v;
 
+    if (ico_region_cur()->fixed_60hz) {
+        /* the disc has no 50 Hz mode (the Japanese one): 60 Hz whatever
+           the setting says */
+        if (!said && ico_sysconf_video_mode() == 1) {
+            said = 1;
+            fprintf(stderr, "scf: [video] video_mode = \"pal50\" is ignored on %s (%s): 60 Hz\n",
+                    ico_region_cur()->disc_id, ico_region_cur()->slug);
+        }
+        return 0;
+    }
+    v = ico_sysconf_video_mode();
     return v >= 0 ? v : 0;
 }
 

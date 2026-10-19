@@ -274,8 +274,11 @@ int ico_iso_import(const char *uri, char *out, size_t outSize, IcoExtractProgres
         fprintf(stderr, "ico_pc: cannot open %s: %s\n", uri, SDL_GetError());
         snprintf(why, n,
                  "The chosen file cannot be opened.\n"
-                 "Start the game again and choose your ICO disc image (a .iso, .chd or .bin "
-                 "file), or copy it as Ico_PAL.iso into %s with a USB cable or the Files app.",
+                 "Start the game again and choose a complete, unmodified image of the European "
+                 "disc (SCES-50760) or the Japanese disc (SCPS-11003), as a .iso, .chd or .bin "
+                 "file (with a .bin and a .cue, choose the .bin). Or copy it as Ico_PAL.iso "
+                 "(Ico_JPN.iso for the Japanese disc) into %s with a USB cable or the Files "
+                 "app.",
                  p->files);
         return ICO_ISO_IMPORT_FAILED;
     }
@@ -289,8 +292,11 @@ int ico_iso_import(const char *uri, char *out, size_t outSize, IcoExtractProgres
             fprintf(stderr, "ico_pc: cannot open %s again: %s\n", uri, SDL_GetError());
             snprintf(why, n,
                      "The chosen file cannot be read.\n"
-                     "Start the game again and choose your ICO disc image, or copy it as "
-                     "Ico_PAL.iso into %s with a USB cable or the Files app.",
+                     "Start the game again and choose a complete, unmodified image of the "
+                     "European disc (SCES-50760) or the Japanese disc (SCPS-11003), as a "
+                     ".iso, .chd or .bin file (with a .bin and a .cue, choose the .bin). Or "
+                     "copy it as Ico_PAL.iso (Ico_JPN.iso for the Japanese disc) into %s with "
+                     "a USB cable or the Files app.",
                      p->files);
             return ICO_ISO_IMPORT_FAILED;
         }
@@ -298,11 +304,14 @@ int ico_iso_import(const char *uri, char *out, size_t outSize, IcoExtractProgres
     if (ico_iso_is_cue(uri, head, headLen)) {
         SDL_CloseIO(io);
         snprintf(why, n,
-                 "Choose the .bin file, not the .cue (a .cue only lists the .bin).\n"
+                 "Choose the .bin file next to the .cue, not the .cue (a .cue only lists the "
+                 ".bin; the .bin alone is read the same).\n"
                  "Start the game again and choose your ICO disc image.");
         return ICO_ISO_IMPORT_FAILED;
     }
-    if (ico_android_image_path(p, ico_iso_ext_for(uri, head, headLen), out, outSize) != 0 ||
+    /* named as the European disc's until it is read: main_host.c renames
+       a copy of the Japanese disc (android_name_image) */
+    if (ico_android_image_path(p, NULL, ico_iso_ext_for(uri, head, headLen), out, outSize) != 0 ||
         snprintf(tmp, sizeof(tmp), "%s.tmp", out) >= (int)sizeof(tmp)) {
         SDL_CloseIO(io);
         snprintf(why, n, "The app's folder %s has too long a path for the disc image.", p->files);
@@ -317,7 +326,7 @@ int ico_iso_import(const char *uri, char *out, size_t outSize, IcoExtractProgres
         int i;
 
         for (i = 0; i < (int)(sizeof(exts) / sizeof(exts[0])); i++) {
-            if (ico_android_image_path(p, exts[i], other, sizeof(other)) == 0 &&
+            if (ico_android_image_path(p, NULL, exts[i], other, sizeof(other)) == 0 &&
                 snprintf(otherTmp, sizeof(otherTmp), "%s.tmp", other) < (int)sizeof(otherTmp)) {
                 remove(otherTmp);
             }

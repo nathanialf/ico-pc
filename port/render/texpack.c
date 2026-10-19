@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../core/region.h" /* the selected disc's pack folder */
 #include "host_fs.h"
 #include "rd_internal.h"
 #include "rd_tex.h"
@@ -672,7 +673,8 @@ int texpack_init(const TexpackConfig *cfg)
     if (!cfg) {
         return 0;
     }
-    snprintf(s_tp.serial, sizeof(s_tp.serial), "%s", cfg->serial ? cfg->serial : "SCES-50760");
+    snprintf(s_tp.serial, sizeof(s_tp.serial), "%s",
+             cfg->serial ? cfg->serial : ico_region_cur()->pack_serial);
     snprintf(s_tp.userDir, sizeof(s_tp.userDir), "%s", cfg->userDir ? cfg->userDir : "");
     s_tp.bc = cfg->bcSupported != 0;
     s_tp.developer = cfg->developer != 0;

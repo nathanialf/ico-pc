@@ -93,7 +93,7 @@ const IcoAndroidPaths *ico_android_paths(void)
         }
     }
     cache = SDL_GetAndroidCachePath();
-    if (files == NULL || cache == NULL || ico_android_layout(files, cache, &s_paths) != 0) {
+    if (files == NULL || cache == NULL || ico_android_layout(files, cache, NULL, &s_paths) != 0) {
         __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "no usable files folder (%s, %s): %s",
                             files ? files : "none", cache ? cache : "none", SDL_GetError());
         return NULL;
@@ -105,6 +105,21 @@ const IcoAndroidPaths *ico_android_paths(void)
     }
     s_paths_state = 1;
     return &s_paths;
+}
+
+int ico_android_select_serial(const char *serial)
+{
+    IcoAndroidPaths q;
+
+    if (ico_android_paths() == NULL ||
+        ico_android_layout(s_paths.files, s_paths.cache, serial, &q) != 0) {
+        return -1;
+    }
+    s_paths = q;
+    if (make_dirs(s_paths.textures) != 0) {
+        __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "cannot create %s", s_paths.textures);
+    }
+    return 0;
 }
 
 int ico_android_files_dir(char *out, size_t size)

@@ -25,6 +25,10 @@ int ico_host_main(int argc, char **argv);
    writable, else the internal one; the cache folder for the pipeline
    cache. NULL when neither folder is known or a path would not fit. */
 const IcoAndroidPaths *ico_android_paths(void);
+
+/* The disc is known (main_host.c): the layout's texture pack folder
+   becomes textures/<serial>/replacements, made if missing. 0, or -1. */
+int ico_android_select_serial(const char *serial);
 /* The files folder (where everything the port writes lives) and the cache
    folder; 0, or -1 with out emptied. */
 int ico_android_files_dir(char *out, size_t size);

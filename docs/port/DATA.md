@@ -14,8 +14,9 @@ disc's boot ELF, and the port's own reads of DATA.DF. The repository holds no di
 | --- | --- |
 | `port/data/vfs.h`, `vfs.c` | the VFS: the backend table, path spellings, byte reads over sector reads, the disc slot |
 | `port/data/iso9660.c` | the ISO9660 backend and `IcoDiscImage`, the logical bytes of an `.iso`, `.chd`, `.bin` or `.cue` |
-| `port/data/archive.h`, `archive.c` | `ico.o2r`: its layout, the disc's verification values, the archive backend |
-| `port/data/extract.h`, `extract.c` | the first-run extractor and the compiled DATA.DF manifest |
+| `port/data/archive.h`, `archive.c` | the archives (`ico.o2r`, `ico-jpn.o2r`): their layout, the disc table's type (`IcoDiscInfo`), the archive backend |
+| `port/data/discs.c` | the disc table `ico_discs` (one row per disc, in `config/regions.txt`'s order) and each disc's DATA.DF manifest |
+| `port/data/extract.h`, `extract.c` | the first-run extractor, the disc's identification by its boot file, the wrong-disc and unreadable texts |
 | `port/data/cdvd_host.h`, `cdvd_host.c` | the `sceCd*` functions the game calls, over the VFS disc |
 | `port/data/sif_host.h`, `sif_host.c` | `sceSif*` with no IOP: the IOP heap, SIF DMA, RPC to host servers |
 | `port/data/sifdev_host.c` | `sceOpen` and the other sifdev file calls, for the development kit's `host0:` device |
@@ -79,6 +80,31 @@ A backend (`IcoVfsBackend`) has `mount`, `unmount`, `lookup` (a normalized path)
 separators and the `;<version>` suffix, maps `\` to `/` and upper-cases (`port/data/vfs.h`
 (`IcoVfsBackend`, `ico_vfs_normalize`)).
 
+## The two discs
+
+The port plays two discs, one row each of `config/regions.txt` (the region module,
+[GAME_CODE.md](GAME_CODE.md#regions)); `ico_discs` (`port/data/discs.c`) holds what the disc
+layer needs of each, in the same order (the `region_select` test checks the slug, disc id, boot
+file and product name of every row against the table):
+
+| | European disc | Japanese disc |
+| --- | --- | --- |
+| slug, disc id, boot file | `pal`, `SCES-50760`, `SCES_507.60` | `jpn`, `SCPS-11003`, `SCPS_110.03` |
+| image SHA-1, size | `1017b53f6e80f41f823369b0be1d8c69f7e16dc6`, 907,706,368 bytes | `95ee72becbc7fba85e9c0f6aa6fc932c705b37b3`, 559,693,824 bytes |
+| boot ELF SHA-1 | `da3644c54c26fe760f3b6a591a5fc2eab396ed2b` | `580da1dcc4c239a1608a10300e7e220fe5d35525` |
+| DATA.DF | 867,184,640 bytes, 193 members, directory CRC-32 `0xfb82eea7` | 553,443,328 bytes, 183 members, directory CRC-32 `0xfc60bbaf` |
+| archive, image name | `ico.o2r`, `Ico_PAL.<ext>` | `ico-jpn.o2r`, `Ico_JPN.<ext>` |
+| media, `sceCdGetDiskType` | DVD, `0x14` (`SCECdPS2DVD`) | CD, `0x12` (`SCECdPS2CD`) |
+
+Which disc an image is comes from its `SYSTEM.CNF`: the `BOOT2` line's file, normalized
+(`SCPS_110.03`), is looked up by `ico_disc_by_boot`; `ico_extract_identify` (`extract.h`) does
+this reading only the directory, so the program knows the disc before it hashes anything. The
+row's values then verify the image. An image whose boot file is neither row's, or that is not an
+unmodified copy of its row's disc, gets one box text everywhere (`ICO_WRONG_DISC_TEXT`,
+`extract.h`: the extractor, `main_host.c`, the Android import); one that cannot be read gets
+`ICO_UNREADABLE_DISC_TEXT`. `LIBSD.IRX` and `SNDN2DRV.IRX` are byte-identical on both discs
+([AUDIO.md](AUDIO.md#values-read-from-the-disc)).
+
 ## Disc images
 
 `ico_vfs_iso9660` (`port/data/iso9660.c`) reads an image in place. It reads the primary volume
@@ -103,13 +129,15 @@ A CHD that needs a parent image is refused. libchdr is compiled from the source 
 needs no system zlib or zstd; `chdr_miniz_names.h`, forced into every libchdr file, gives its miniz
 copy a `chdr_` prefix beside the port's own `ico_miniz` (`port/data/CMakeLists.txt`).
 
-## The archive: ico.o2r
+## The archives: ico.o2r and ico-jpn.o2r
 
-`ico.o2r` (`port/data/archive.h`) is a ZIP whose entries are stored, not compressed:
+Each disc's data goes to its own archive (`IcoDiscInfo.archive_name`: `ico.o2r` for the European
+disc, `ico-jpn.o2r` for the Japanese one), so both can sit side by side in the user folder. An
+archive (`port/data/archive.h`) is a ZIP whose entries are stored, not compressed:
 
 | entry | holds |
 | --- | --- |
-| `disc/<PATH>` | the disc file `PATH` (`DFDATAS/DATA.DF`, `SCES_507.60`), byte for byte |
+| `disc/<PATH>` | the disc file `PATH` (`DFDATAS/DATA.DF`, `SCES_507.60`, `SCPS_110.03`), byte for byte |
 | `tail/<PATH>` | the bytes after the file's end up to its last sector's end, only when they are not all zero |
 | `meta.json` | the source image (SHA-1, size, the rule that accepted it), the extractor, the disc id, the volume's sector count, and for every disc file and directory the archive answers for: path, ISO name, first LSN, size and date |
 
@@ -123,15 +151,18 @@ and each entry's data offset is found from its local header; after that a sector
 `ico_archive_read_info` opens an archive and checks its structure (every entry `meta.json` names is
 stored, uncompressed, inside the file, at the size `meta.json` gives). `ico_archive_info_acceptable`
 accepts it only for format version `ICO_ARCHIVE_VERSION` (1), the extractor string
-`ICO_ARCHIVE_EXTRACTOR`, the disc id `SCES-50760`, the rule `iso-sha1` (with the image SHA-1
-`ICO_DISC_ISO_SHA1`) or `elf-sha1+datadf-crc`, and the boot ELF SHA-1 `ICO_DISC_ELF_SHA1`.
-`mount_archive` in `port/platform/main_host.c` then reads `SCES_507.60` back through the mounted
-archive and checks its SHA-1 again before making it the disc; the log line is `ico_pc: game data
-<path> (SCES-50760, N files, N bytes; from an image with SHA-1 ..., accepted by <rule>)`.
+`ICO_ARCHIVE_EXTRACTOR`, a disc id that is a row of `ico_discs`, the rule `iso-sha1` (with that
+row's image SHA-1) or `elf-sha1+datadf-crc`, and that row's boot ELF SHA-1. `mount_archive` in
+`port/platform/main_host.c` checks that the archive holds the disc it was opened for, reads the
+row's boot ELF back through the mounted archive and checks its SHA-1 again before making it the
+disc; the log line is `ico_pc: game data <path> (SCPS-11003, N files, N bytes; from an image with
+SHA-1 ..., accepted by <rule>)`.
 
 ## The first run
 
-`mount_game_data` (`port/platform/main_host.c`) looks for `ico.o2r` in the
+`mount_game_data` (`port/platform/main_host.c`) first decides the disc
+(`ico_host_choose_disc`, [PLATFORM.md](PLATFORM.md#the-disc-a-start-plays)), then looks for that
+disc's archive in the
 [user folder](ARCHITECTURE.md#terms) (`ico_host_pref_dir`: SDL's pref path in the
 [window build](ARCHITECTURE.md#terms), the executable's folder in the
 [headless build](ARCHITECTURE.md#terms), the portable folder in portable mode), then beside the
@@ -140,31 +171,35 @@ executable. The first usable one is mounted; an unusable one is logged
 extracts it into the user folder, and mounts the result.
 
 `find_iso` (`main_host.c`) looks for the image in this order: `--iso`; `Ico_PAL.iso`, `Ico_PAL.chd`,
-`Ico_PAL.bin`, `Ico_PAL.cue` beside the executable (`image_names`); `iso=` in `ico-pc.ini` (a
+`Ico_PAL.bin`, `Ico_PAL.cue`, `Ico_JPN.iso`, `Ico_JPN.chd`, `Ico_JPN.bin`, `Ico_JPN.cue` beside the
+executable (`image_names`, `find_beside`: the pinned disc's, else with both there the disc played
+last's, else the European one's); `iso=` in `ico-pc.ini` (a
 relative path is taken from the executable's folder); the
-`ICO_ISO` environment variable; the same four names under `baserom/` in the working folder; then a
+`ICO_ISO` environment variable; the same eight names under `baserom/` in the working folder; then a
 file-open dialog (native on Windows, SDL3's in the other window builds), whose answer is saved as
 `iso=` once it is verified. On iOS the executable's folder is the app's Documents folder
 (`port/platform/host_config.c` (`ico_host_exe_dir`)), and with no image there the run ends with a
 message box instead of a dialog. On Android the image comes from the system's file picker
 (`find_iso_android`, below).
 
-`ico_extract_archive` (`port/data/extract.h`) mounts the image with the ISO9660 backend and stores
-`SYSTEM.CNF`, the boot file its `BOOT2` line names, `SCES_507.60`, every `*.IRX` module in the root
+`ico_extract_archive` (`port/data/extract.h`) mounts the image with the ISO9660 backend, takes its
+row of `ico_discs` from the boot file, and stores `SYSTEM.CNF`, the boot file its `BOOT2` line
+names (the row's boot ELF), `DUMMY.TXT` when the disc has one, every `*.IRX` module in the root
 (the port reads `SNDN2DRV.IRX`'s pitch table and `LIBSD.IRX`'s reverb presets and idle voice
 block), and every file under `DFDATAS/`, DATA.DF whole. It hashes the whole image, streams each file
-into the ZIP with no compression (hashing `SCES_507.60` and taking the CRC-32 of DATA.DF's
+into the ZIP with no compression (hashing the boot ELF and taking the CRC-32 of DATA.DF's
 directory and members on the way), and writes `meta.json` last, once the image is accepted. The
 rules, in order:
 
 | rule | accepts when |
 | --- | --- |
-| `iso-sha1` | the image's logical SHA-1 is `ICO_DISC_ISO_SHA1` (for a `.chd` or `.bin`, the SHA-1 of the ISO it holds) |
-| `elf-sha1+datadf-crc` | `SCES_507.60` hashes to `ICO_DISC_ELF_SHA1`, and DATA.DF has the PAL disc's size, directory and members: the CRC-32 of its directory and of each of its 193 members match the manifest compiled into `extract.c` (a re-dump with other padding or volume size passes) |
+| `iso-sha1` | the image's logical SHA-1 is the row's `iso_sha1` (for a `.chd`, `.bin` or `.cue`, the SHA-1 of the ISO it holds) |
+| `elf-sha1+datadf-crc` | the row's boot ELF hashes to its `elf_sha1`, and DATA.DF has that disc's size, directory and members: the CRC-32 of its directory and of each of its members (193 on the European disc, 183 on the Japanese) match the row's manifest in `discs.c` (a re-dump with other padding or volume size passes) |
 
 Anything else is refused and nothing is left behind; `IcoExtractResult` says whether the file was
-`unreadable` (not an image this program reads) or the `wrong_disc` (another region, edition or a
-modified image), which `mount_game_data` turns into the message box the player sees.
+`unreadable` (not an image this program reads) or the `wrong_disc` (neither disc: another region
+or edition, or a modified image), which `mount_game_data` turns into the message box the player
+sees; the `why` text starts with that box's words and adds the boot file and hashes for the log.
 `ICO_EXTRACT_NO_VERIFY` (tests on a synthetic image) writes the rule `unverified`, which
 `ico_archive_info_acceptable` refuses. The archive is written to `<out>.tmp` and moved over `<out>`
 once it is complete and reads back (`MoveFileEx` on Windows); a failure or a cancel removes the
@@ -172,24 +207,30 @@ once it is complete and reads back (`MoveFileEx` on Windows); a failure or a can
 `finish`; the window build shows it in a small window and the log (`port/platform/main_host.c`
 (`mount_game_data`)).
 
-The DATA.DF manifest in `extract.c` (between the `BEGIN DATA.DF MANIFEST` and `END` lines) holds
-DATA.DF's size, the directory's member count and CRC-32, and each member's offset, size and CRC-32:
-no names and no bytes of the file. `archive_test manifest <iso>` prints it again
-(`ico_extract_print_datadf_manifest`).
+Each disc's DATA.DF manifest in `discs.c` (between its `BEGIN DATA.DF MANIFEST <slug>` and `END
+DATA.DF MANIFEST <slug>` lines) holds DATA.DF's size, the directory's member count and CRC-32, and
+each member's offset, size and CRC-32: no names and no bytes of the file. `archive_test manifest
+--region <slug> <iso>` prints a block again (`ico_extract_print_datadf_manifest`; `manifest <iso>`
+is the European one), and the `archive_manifest_jpn` test compares the Japanese block with the
+image.
 
 Android has no file beside the program: `find_iso_android` (`main_host.c`) asks the system's file
 picker, and `ico_iso_import` (`port/platform/android/iso_import.h`) copies the chosen `content://`
 stream into the app's files folder as `Ico_PAL.iso`, `.chd` or `.bin` (the kind from the header,
-`ico_iso_ext_for`; a `.cue` sheet is refused, `ico_iso_is_cue`), after checking that the image and
+`ico_iso_ext_for`; a `.cue` sheet is refused, `ico_iso_is_cue`, and the picker says to pick the
+`.bin` beside it: the raw reader takes the sync pattern and mode from the `.bin`'s first sector, so
+the `.bin` alone reads the same), after checking that the image and
 `ICO_ISO_IMPORT_SPARE_BYTES` (1.2 GB for the extracted data and a margin) are free. The extractor
-then reads the copy like any file, and `main_host.c` deletes it once the game data is mounted,
+then reads the copy like any file; once identified, a copy of the Japanese disc is renamed
+`Ico_JPN.<ext>` (`android_name_image`), and `main_host.c` deletes it once the game data is mounted,
 unless `keep_image=1` is in `ico-pc.ini`. A cancelled or refused copy is removed.
 
 `use_iso=1` in `ico-pc.ini` (or `[dev] use_iso`) skips the archive and mounts the image directly
 with `ico_cdvd_host_mount_iso`; it is the headless build's default, so
 [trace](ARCHITECTURE.md#terms) runs and tests read the image (`use_iso_mode`). In that mode the
-image's SHA-1 is checked unless `verify=0` or `--no-verify` (`verify_iso`); the extractor always
-verifies.
+image is identified by its boot file and its SHA-1 checked against that disc's unless `verify=0` or
+`--no-verify` (`verify_iso`); the extractor always verifies. Either way the disc is selected
+(`select_disc`) from the mounted image's boot file.
 
 ## libcdvd on the host
 
@@ -200,8 +241,9 @@ verifies.
 `sceCdReadClock` and the stream calls `sceCdSt*` and `sceCdStream`.
 
 - `sceCdSearchFile` fills libcdvd's 0x24-byte record (LSN, size, name, the date in libcdvd's
-  order). `sceCdGetDiskType` reports a PS2 DVD only when the disc holds the boot file `SYSTEM.CNF`
-  names (`ico_cdvd_host_boot_name`). The drive never reports a tray-open or not-ready state while a
+  order). `sceCdGetDiskType` reports a PS2 disc only when the disc holds the boot file `SYSTEM.CNF`
+  names (`ico_cdvd_host_boot_name`): its row's `cd_type`, a DVD (`0x14`) for the European disc and
+  a CD (`0x12`) for the Japanese one, which its `cdvd.c` waits for. The drive never reports a tray-open or not-ready state while a
   disc is mounted.
 - `sceCdRead` copies the sectors at once; `sceCdReadIOPm` copies them into `ico_iop_ram` at the IOP
   address it is given, and logs `cdvd: sceCdReadIOPm to 0x... (N sectors) is outside IOP RAM` for
@@ -290,8 +332,13 @@ the disc's count. An address the registry does not know fails the load with the 
 and both addresses (`tables: <member> <symbol>[i].<field>: no function is known at 0x...`); another
 disc's ELF fails on its first row's CRC, naming the disc the set reads (`... the ELF is not the boot
 file of the Japanese disc (SCPS_110.03, SCPS-11003)`). `main_host.c` logs it and ends the run with
-`Cannot read the game's data from <source>`. A good load logs `ico_pc: N data table rows (N
-records) loaded from SCES_507.60`. `ico_tables_count(ICO_TID_<symbol>)` gives the records a table
+`Cannot read the game's data from <source>`. `main_host.c` (`load_tables`) loads the set of the
+disc `select_disc` chose (`ico_table_sets[ico_region]`); a good load logs `ico_pc: N data table
+rows (N records) loaded from SCPS_110.03 (the Japanese disc)`. It then checks the counts the port
+names numbers by (`port/core/region.h`: `stage_count`, `layout_count`, `property_count`,
+`anim_none` + 1 for `stageTable`, `mv_orient_rows`, the five sound tables) against
+`ico_tables_count`, and ends the run with a box naming the disc when one differs (`ico_pc: the
+data tables: <table> has N records on <disc>, the port expects M`). `ico_tables_count(ICO_TID_<symbol>)` gives the records a table
 received (`texProperty` 436 on the European disc, 412 on the Japanese), `ico_tables_loaded_set()`
 the set. [GAME_CODE.md](GAME_CODE.md#data-tables) covers the generator and the maintainer's
 reference test.
@@ -397,8 +444,10 @@ mark, no comments, trailing commas, leading zeros, `NaN` or control characters, 
 
 | test | checks |
 | --- | --- |
-| `vfs_synthetic`, `vfs_disc` | the VFS and ISO9660 backend on an image the test builds, and on the player's disc (`ICO_DISC_IMAGE`; skipped, 77, without it) |
-| `archive_synthetic`, `archive_disc` | extraction into a temporary archive and its mount, compared with the ISO backend (`archive_disc` reads the player's disc and is skipped, 77, without it) |
+| `vfs_synthetic`, `vfs_disc`, `vfs_disc_jpn` | the VFS and ISO9660 backend on an image the test builds, and on each disc (`ICO_DISC_IMAGE`, `ICO_DISC_IMAGE_JPN`; skipped, 77, without it): the boot ELF's SHA-1, DATA.DF's directory, the disk type |
+| `vfs_disc_jpn_bin`, `vfs_disc_jpn_cue`, `vfs_disc_jpn_chd` | the Japanese `.iso` against a MODE2/2352 `.bin`, its `.cue` (both made from the `.iso` at test time by `port/data/test/make_raw_cd.py` into the build folder, zero EDC/ECC) and a `chdman createcd` `.chd` of the `.cue` (skipped without `chdman` on `PATH`): the same directory records, boot ELF and DATA.DF SHA-1s, and image SHA-1 (`vfs_test same`, run by `port/data/test/disc_raw_test.cmake`) |
+| `archive_synthetic`, `archive_disc`, `archive_disc_jpn` | extraction into a temporary archive and its mount, compared with the ISO backend; the disc tests identify the image by its boot file, check both rules hold and `meta.json`'s disc id (skipped, 77, without the image) |
+| `archive_manifest_jpn` | the Japanese DATA.DF manifest in `discs.c` against the image |
 | `iso_import` | the Android copy on Linux with SDL's memory streams: byte for byte, cancel, write failure, the space arithmetic (Linux window build) |
 | `json` | numbers, nesting and the depth limit, escapes, malformed input |
 | `data_desc_fresh` | `port/data/gen/` is what `tools/gen_data_desc.py` writes, every set at once, and the audit of MotionDef's bit reads |

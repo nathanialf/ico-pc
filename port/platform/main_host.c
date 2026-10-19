@@ -22,9 +22,14 @@
  *   logs/trace-<time>.txt    the trace (trace_host.h): by default in the
  *                            headless build only; ini trace=1 or PATH turns
  *                            it on in the window build, trace=0 off
- *   game data                the extracted archive ico.o2r (port/data/
- *                            archive.h) in the per-user folder, else beside
- *                            the executable. Without one (the first run) the
+ *   game data                the extracted archive (port/data/archive.h):
+ *                            ico.o2r for the European disc, ico-jpn.o2r
+ *                            for the Japanese one, in the per-user folder,
+ *                            else beside the executable. Which disc:
+ *                            config.toml [game] disc ("pal", "jpn"; "auto"
+ *                            by default: the image given, by its boot
+ *                            file, else the only archive, else [game]
+ *                            last_disc). Without one (the first run) the
  *                            disc image is found as below, verified and
  *                            extracted into the per-user folder once
  *                            (port/data/extract.h), with progress in the log
@@ -33,16 +38,18 @@
  *                            image directly instead: the default of the
  *                            headless build, so trace runs and tests read
  *                            the disc image itself
- *   disc image               Ico_PAL.iso, .chd, .bin or .cue beside the
- *                            executable, else ini iso=, else $ICO_ISO, else
- *                            baserom/Ico_PAL.iso (or .chd, .bin, .cue) under the working
+ *   disc image               Ico_PAL or Ico_JPN (.iso, .chd, .bin or .cue)
+ *                            beside the executable (both there: the disc
+ *                            played last, else Ico_PAL), else ini iso=,
+ *                            else $ICO_ISO, else baserom/Ico_PAL.iso (or
+ *                            .chd, .bin, .cue, then Ico_JPN's) under the working
  *                            folder, else a (Windows: native; Linux window build: SDL3)
  *                            file-open dialog whose answer is saved as iso=
  *                            in ico-pc.ini. A .chd or .bin (or the .cue
  *                            that names it) is read as the ISO it
  *                            holds (port/data/iso9660.c). With use_iso its
- *                            SHA-1 is checked against the SCES-50760
- *                            image's (ini
+ *                            SHA-1 is checked against both discs'
+ *                            images' (ini
  *                            verify=0 skips it); the extractor always
  *                            verifies
  *   pad script               ini pad_script= ([dev] pad_script); the
@@ -106,6 +113,7 @@
 #include "fpenv.h"
 #include "host_config.h"
 #include "host_fs.h"
+#include "../core/region.h" /* the disc's region (select_disc) */
 #include "startup_retry.h"
 #include "host_loop.h"
 #include "report.h"
@@ -118,7 +126,8 @@
 #include "options.h"       /* the recording's effective stick_fix */
 #include "video_options.h" /* the recording's frame: ico_video_frame */
 
-extern int ScreenHeight; /* ico2/seki/include/GsBase.h */
+extern int ScreenHeight;   /* ico2/seki/include/GsBase.h */
+extern int systemStatus[]; /* common/src/main.c: [0] the video mode word */
 #ifdef __ANDROID__
 #include "host_android.h" /* port/platform/android: the version line */
 #include "iso_import.h"   /* the first start's copy of the chosen image */
@@ -216,7 +225,7 @@ static void usage(FILE *out, const char *prog)
 {
     say(out,
         "usage: %s [options]   (none needed: see ico-pc.ini)\n"
-        "  --iso PATH         the SCES-50760 disc image\n"
+        "  --iso PATH         the disc image (European SCES-50760 or Japanese SCPS-11003)\n"
         "  --pad-script FILE  plug a scripted DualShock into controller port 1;\n"
         "                     lines: <tick> <buttons-hex> [lx ly rx ry]\n"
         "  --trace FILE|none  the per-Main-tick trace (logs/trace-<time>.txt by\n"
@@ -621,7 +630,11 @@ static int pick_iso_sdl(char *out, size_t size)
         /* the window keeps drawing behind the picker; Back while it shows
            (the picker did not come up) gives up */
         if (ico_window_progress("Setting up ICO (first start only)",
-                                "Choose your ICO disc image (.iso, .chd, .bin or .cue)", -1)) {
+                                "Choose your ICO disc image: the European disc "
+                                "(SCES-50760) or the Japanese disc (SCPS-11003), as a "
+                                ".iso, .chd or .bin file (with a .bin and a .cue, pick the "
+                                ".bin)",
+                                -1)) {
             pick_abandon();
             fprintf(stderr, "ico_pc: stopped while waiting for the file picker\n");
             return -1;
@@ -679,12 +692,70 @@ static int pick_iso_sdl(char *out, size_t size)
 static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, int *picked);
 #endif
 
-/* The disc image's names beside the program (Android: in the app's files
-   folder), the plain image first: of two copies, the one read without
-   decoding. */
+/* The disc images' names beside the program (Android: in the app's files
+   folder), each disc's plain image first: of two copies, the one read
+   without decoding. The first IMAGE_EXT_COUNT are the European disc's
+   (ico_discs[0].image_base), the next the Japanese disc's. */
 static const char *const image_names[] = {"Ico_PAL.iso", "Ico_PAL.chd", "Ico_PAL.bin",
-                                          "Ico_PAL.cue"};
+                                          "Ico_PAL.cue", "Ico_JPN.iso", "Ico_JPN.chd",
+                                          "Ico_JPN.bin", "Ico_JPN.cue"};
 #define IMAGE_NAME_COUNT ((int)(sizeof(image_names) / sizeof(image_names[0])))
+#define IMAGE_EXT_COUNT 4
+
+/* config.toml [game] disc: the disc it pins ("pal", "jpn"), or NULL for
+   "auto" (the default; an unknown value is logged as auto) */
+static const IcoDiscInfo *disc_setting(void)
+{
+    const int row = ico_config_disc_pin();
+
+    return row >= 0 ? &ico_discs[row] : NULL;
+}
+
+/* config.toml [game] last_disc: the disc a start last played, or NULL */
+static const IcoDiscInfo *last_disc(void)
+{
+    const int row = ico_config_last_disc();
+
+    return row >= 0 ? &ico_discs[row] : NULL;
+}
+
+/* The image beside the program (exe_dir) for `want` (NULL: either). With
+   both discs' images there and no wish, the one played last wins, else the
+   European one; the log says which. 0 with the path in iso, or -1. */
+static int find_beside(const char *exe_dir, const IcoDiscInfo *want, char *iso)
+{
+    int found[ICO_REGION_COUNT] = {-1, -1};
+    const IcoDiscInfo *last = last_disc();
+    int d, i, pick = -1;
+    char path[ICO_PATH_MAX];
+
+    for (d = 0; d < ICO_REGION_COUNT; d++) {
+        for (i = 0; i < IMAGE_EXT_COUNT && found[d] < 0; i++) {
+            const int k = d * IMAGE_EXT_COUNT + i;
+
+            if (ico_path_join(path, sizeof(path), exe_dir, image_names[k]) == 0 &&
+                ico_file_exists(path)) {
+                found[d] = k;
+            }
+        }
+    }
+    if (want != NULL) {
+        pick = found[want - ico_discs];
+    } else if (found[0] >= 0 && found[1] >= 0) {
+        pick = found[last != NULL ? last - ico_discs : 0];
+        fprintf(stderr,
+                "ico_pc: both discs' images are beside the program; %s is used (%s); "
+                "[game] disc in config.toml picks the other\n",
+                image_names[pick], last != NULL ? "the disc played last" : "the European disc");
+    } else {
+        pick = found[0] >= 0 ? found[0] : found[1];
+    }
+    if (pick < 0) {
+        return -1;
+    }
+    ico_path_join(iso, ICO_PATH_MAX, exe_dir, image_names[pick]);
+    return 0;
+}
 
 /* iso= into ico-pc.ini when the image was picked (the dialog, the Android
    picker), so the next start finds it */
@@ -716,12 +787,9 @@ static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char 
     (void)i;
     return find_iso_android(ini, exe_dir, iso, picked);
 #else
-    for (i = 0; i < IMAGE_NAME_COUNT; i++) {
-        ico_path_join(iso, ICO_PATH_MAX, exe_dir, image_names[i]);
-        if (ico_file_exists(iso)) {
-            fprintf(stderr, "ico_pc: disc image beside the executable: %s\n", iso);
-            return 0;
-        }
+    if (find_beside(exe_dir, disc_setting(), iso) == 0) {
+        fprintf(stderr, "ico_pc: disc image beside the executable: %s\n", iso);
+        return 0;
     }
     v = ico_ini_get(ini, "iso");
     if (v != NULL && v[0] != '\0') {
@@ -745,10 +813,10 @@ static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char 
         }
     }
 #ifdef ICO_IOS
-    ico_host_fatal(log_file(), "Game data is missing. Copy ico.o2r into ICO's Documents folder "
-                               "using LiveContainer's data-folder access, then reopen ICO. "
-                               "A PAL Ico_PAL.iso or Ico_PAL.chd (or .bin or .cue) can also "
-                               "be placed there.");
+    ico_host_fatal(log_file(), "Game data is missing. Copy ico.o2r (or ico-jpn.o2r) into ICO's "
+                               "Documents folder using LiveContainer's data-folder access, then "
+                               "reopen ICO. A disc image named Ico_PAL or Ico_JPN (.iso, .chd, "
+                               ".bin or .cue) can also be placed there.");
     return 1;
 #else
 #if !defined(ICO_HEADLESS) && !defined(_WIN32)
@@ -761,45 +829,64 @@ static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char 
         return 0;
     }
     ico_host_fatal(log_file(),
-                   "No ICO disc image was found or chosen. Put Ico_PAL.iso or "
-                   "Ico_PAL.chd (or .bin or .cue) next to the program, or set iso=<path> in "
-                   "ico-pc.ini.");
+                   "No ICO disc image was found or chosen. Put your disc image next to the "
+                   "program as Ico_PAL (the European disc, SCES-50760) or Ico_JPN (the "
+                   "Japanese disc, SCPS-11003), as a .iso, .chd, .bin or .cue file, or set "
+                   "iso=<path> in ico-pc.ini.");
 #endif
     return 0;
 #endif
 }
 
-static void verify_iso(const char *iso)
+/* Which disc the image is, by its boot file (SYSTEM.CNF's BOOT2), then
+   its SHA-1 against that disc's: the row, or a box (fatal) for an image
+   that is neither disc or not an unmodified copy of one. */
+static const IcoDiscInfo *verify_iso(const char *iso)
 {
+    const IcoDiscInfo *disc;
     char hex[41];
     char why[256];
+    char boot[64];
     uint64_t bytes = 0;
     clock_t start = clock();
     double secs;
 
+    disc = ico_extract_identify(iso, boot, sizeof(boot));
+    if (disc == NULL) {
+        fprintf(stderr, "ico_pc: the image's boot file is '%s', neither disc's (%s, %s)\n", boot,
+                ico_discs[ICO_REGION_PAL].boot_elf, ico_discs[ICO_REGION_JPN].boot_elf);
+        if (boot[0] == '\0') {
+            /* no boot file: not a disc image this program reads, or a
+               disc without SYSTEM.CNF */
+            IcoVfs *v = ico_vfs_mount(&ico_vfs_iso9660, iso);
+
+            if (v == NULL) {
+                ico_host_fatal(log_file(), ICO_UNREADABLE_DISC_TEXT, iso);
+            }
+            ico_vfs_unmount(v);
+        }
+        ico_host_fatal(log_file(), ICO_WRONG_DISC_TEXT, iso);
+        return NULL;
+    }
+    fprintf(stderr, "ico_pc: the image's boot file is %s: %s (%s)\n", boot, disc->id,
+            disc->product_name);
     /* the ISO's bytes, also for a .chd or .bin (extract.h) */
     fprintf(stderr, "ico_pc: checking the disc image's SHA-1...\n");
     if (ico_extract_image_sha1(iso, hex, &bytes, why, sizeof(why)) != 0) {
         fprintf(stderr, "ico_pc: %s\n", why);
-        ico_host_fatal(
-            log_file(),
-            "Cannot read the disc image %s.\n"
-            "Check that the file is complete and is a .iso, .chd, .bin or .cue copy of the PAL "
-            "disc. The log says why.",
-            iso);
+        ico_host_fatal(log_file(), ICO_UNREADABLE_DISC_TEXT, iso);
     }
     secs = (double)(clock() - start) / CLOCKS_PER_SEC;
     fprintf(stderr, "ico_pc: SHA-1 %s, %llu bytes, %.1f s\n", hex, (unsigned long long)bytes, secs);
-    if (strcmp(hex, ICO_DISC_ISO_SHA1) != 0) {
+    if (strcmp(hex, disc->iso_sha1) != 0) {
         /* the checksums are for the log; the box says what to use instead */
-        fprintf(stderr, "ico_pc: the image's SHA-1 is %s, expected %s\n", hex, ICO_DISC_ISO_SHA1);
-        ico_host_fatal(log_file(),
-                       "%s is not the disc image this port needs.\n"
-                       "Use a complete, unmodified image of the PAL release of ICO "
-                       "(SCES-50760). Other regions and editions do not work.",
-                       iso);
+        fprintf(stderr, "ico_pc: the image's SHA-1 is %s, %s's is %s\n", hex, disc->id,
+                disc->iso_sha1);
+        ico_host_fatal(log_file(), ICO_WRONG_DISC_TEXT, iso);
+        return NULL;
     }
-    fprintf(stderr, "ico_pc: disc image verified (SCES-50760)\n");
+    fprintf(stderr, "ico_pc: disc image verified (%s)\n", disc->id);
+    return disc;
 }
 
 /* --- the game data: the archive, or the image in dev mode ----------------- */
@@ -992,12 +1079,10 @@ static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, i
     Progress prog;
     int i, r;
 
-    for (i = 0; i < IMAGE_NAME_COUNT; i++) {
-        if (ico_path_join(iso, ICO_PATH_MAX, exe_dir, image_names[i]) == 0 &&
-            ico_file_exists(iso)) {
-            fprintf(stderr, "ico_pc: disc image in the app's folder: %s\n", iso);
-            return 0;
-        }
+    (void)i;
+    if (find_beside(exe_dir, disc_setting(), iso) == 0) {
+        fprintf(stderr, "ico_pc: disc image in the app's folder: %s\n", iso);
+        return 0;
     }
     v = ico_ini_get(ini, "iso");
     if (v != NULL && v[0] != '\0') {
@@ -1010,8 +1095,10 @@ static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, i
     if (pick_iso_sdl(uri, sizeof(uri)) != 0) {
         ico_host_fatal(log_file(),
                        "No disc image was chosen.\n"
-                       "Start the game again and choose your ICO disc image (a .iso, .chd or .bin "
-                       "copy of the PAL disc), or copy it as Ico_PAL.iso into %s with a USB "
+                       "Start the game again and choose your ICO disc image: the European "
+                       "disc (SCES-50760) or the Japanese disc (SCPS-11003), as a .iso, .chd "
+                       "or .bin file (with a .bin and a .cue, choose the .bin). Or copy it as "
+                       "Ico_PAL.iso (Ico_JPN.iso for the Japanese disc) into %s with a USB "
                        "cable or the Files app.",
                        exe_dir);
     }
@@ -1028,7 +1115,33 @@ static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, i
     return 0;
 }
 
-/* whether iso is one of the app's own Ico_PAL images in the files folder */
+/* The picker's copy is named Ico_PAL.<ext> before anything reads it: a
+   copy of the Japanese disc is renamed Ico_JPN.<ext>, so each disc's image
+   keeps its own name (iso is updated). */
+static void android_name_image(const char *exe_dir, char *iso, size_t size)
+{
+    const IcoDiscInfo *disc = ico_extract_identify(iso, NULL, 0);
+    const char *dot = strrchr(iso, '.');
+    char own[ICO_PATH_MAX];
+    char to[ICO_PATH_MAX];
+
+    if (disc == NULL || disc == &ico_discs[0] || dot == NULL ||
+        ico_path_join(own, sizeof(own), exe_dir, ico_discs[0].image_base) != 0 ||
+        strncmp(iso, own, strlen(own)) != 0 || strcmp(iso + strlen(own), dot) != 0 ||
+        ico_path_join(to, sizeof(to), exe_dir, disc->image_base) != 0 ||
+        strlen(to) + strlen(dot) >= sizeof(to)) {
+        return;
+    }
+    strcat(to, dot);
+    if (ico_rename_replace(iso, to) == 0) {
+        fprintf(stderr, "ico_pc: the copy is the %s disc: renamed to %s\n", disc->id, to);
+        snprintf(iso, size, "%s", to);
+    } else {
+        fprintf(stderr, "ico_pc: cannot rename %s to %s\n", iso, to);
+    }
+}
+
+/* whether iso is one of the app's own Ico_PAL or Ico_JPN images in the files folder */
 static int android_own_image(const char *exe_dir, const char *iso)
 {
     char own[ICO_PATH_MAX];
@@ -1113,11 +1226,52 @@ static void android_image_done(const IcoIni *ini, const char *ini_path, const ch
 
 #endif
 
-/* Checks an archive (meta.json, this disc, the boot ELF's hash read back
-   through it) and makes it the disc. 0, or -1 with the reason. */
-static int mount_archive(const char *path, char *why, size_t whysize)
+/* The disc this run plays, once its image or game data is identified and
+   before anything reads the game's data: the region is selected (port/core
+   region.h, which the game code, the tables, the packs, the options and
+   the menus read from here on), the video mode word set for a disc with no
+   50 Hz mode, the disc named in the log, the summary and the report file,
+   the Android texture pack folder made the disc's, and the disc remembered
+   as [game] last_disc when that changes what the choice falls back to (no
+   last_disc means the European disc, so a start of the European disc with
+   none leaves config.toml as it is). */
+static void select_disc(const IcoDiscInfo *disc)
+{
+    const IcoDiscInfo *last = last_disc();
+    char text[96];
+
+    if (ico_region_select(disc->slug) != 0) {
+        /* ico_discs and the region table have the same rows (region_select) */
+        fprintf(stderr, "ico_pc: no region '%s' for %s\n", disc->slug, disc->id);
+    }
+    /* the European disc keeps its own initial value (1, PAL) until main.c
+       sets the boot's mode (ico_boot_video_mode); the Japanese game's word
+       starts at 0 (60 Hz) and stays there */
+    if (ico_region_cur()->fixed_60hz) {
+        systemStatus[0] = 0;
+    }
+#ifdef __ANDROID__
+    (void)ico_android_select_serial(ico_region_cur()->pack_serial);
+#endif
+    fprintf(stderr, "ico_pc: playing %s (%s), boot file %s\n", disc->id, disc->product_name,
+            disc->boot_elf);
+    snprintf(text, sizeof(text), "%s (%s)", disc->id, disc->product_name);
+    ico_diag_set_disc(text);
+    if (last != disc && !(last == NULL && disc == &ico_discs[ICO_REGION_PAL])) {
+        if (ico_config_set_last_disc(disc->slug) != 0 || ico_config_save() != 0) {
+            fprintf(stderr, "ico_pc: cannot remember the disc in config.toml\n");
+        }
+    }
+}
+
+/* Checks an archive (meta.json, one of the discs, `want`'s when given, the
+   boot ELF's hash read back through it) and makes it the disc. 0 with its
+   row in *disc, or -1 with the reason. */
+static int mount_archive(const char *path, const IcoDiscInfo *want, const IcoDiscInfo **disc,
+                         char *why, size_t whysize)
 {
     static unsigned char chunk[1 << 16];
+    const IcoDiscInfo *row;
     IcoArchiveInfo info;
     IcoVfs *vfs;
     IcoVfsFile f;
@@ -1131,14 +1285,20 @@ static int mount_archive(const char *path, char *why, size_t whysize)
         !ico_archive_info_acceptable(&info, why, whysize)) {
         return -1;
     }
+    row = ico_disc_by_id(info.disc_id);
+    if (row == NULL || (want != NULL && row != want)) {
+        snprintf(why, whysize, "it holds the data of %s, not %s", info.disc_id,
+                 want != NULL ? want->id : "a disc this build plays");
+        return -1;
+    }
     vfs = ico_vfs_mount_archive(path);
     if (vfs == NULL) {
         snprintf(why, whysize, "it cannot be mounted");
         return -1;
     }
-    if (ico_vfs_open(vfs, ICO_TABLES_BOOT_ELF, &f) != 0) {
+    if (ico_vfs_open(vfs, row->boot_elf, &f) != 0) {
         ico_vfs_unmount(vfs);
-        snprintf(why, whysize, "it holds no %s", ICO_TABLES_BOOT_ELF);
+        snprintf(why, whysize, "it holds no %s", row->boot_elf);
         return -1;
     }
     ico_sha1_init(&s);
@@ -1155,9 +1315,9 @@ static int mount_archive(const char *path, char *why, size_t whysize)
     for (i = 0; i < 20; i++) {
         snprintf(hex + 2 * i, 3, "%02x", d[i]);
     }
-    if (off != f.entry.size || strcmp(hex, ICO_DISC_ELF_SHA1) != 0) {
+    if (off != f.entry.size || strcmp(hex, row->elf_sha1) != 0) {
         ico_vfs_unmount(vfs);
-        snprintf(why, whysize, "its %s reads back with SHA-1 %s", ICO_TABLES_BOOT_ELF, hex);
+        snprintf(why, whysize, "its %s reads back with SHA-1 %s", row->boot_elf, hex);
         return -1;
     }
     ico_vfs_set_disc(vfs);
@@ -1166,6 +1326,7 @@ static int mount_archive(const char *path, char *why, size_t whysize)
             "accepted by %s)\n",
             path, info.disc_id, (unsigned)info.stored, (unsigned long long)info.file_bytes,
             info.iso_sha1, info.accepted_by);
+    *disc = row;
     return 0;
 }
 
@@ -1180,8 +1341,46 @@ static void copy_path(char *out, size_t size, const char *s)
     out[n] = '\0';
 }
 
-/* The archive mode: mount ico.o2r, extracting it on the first run. 0, or 1
-   when the player stopped the Android first start (the run ends). */
+/* An image the player gave without being asked (--iso, beside the
+   program, ini iso= when that file is there, $ICO_ISO): 0 with its path, or
+   -1. The disc it is decides which archive is played. */
+static int given_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char *iso)
+{
+    const char *v;
+
+    if (a->iso != NULL) {
+        snprintf(iso, ICO_PATH_MAX, "%s", a->iso);
+        return 0;
+    }
+    if (find_beside(exe_dir, disc_setting(), iso) == 0) {
+        return 0;
+    }
+    v = ico_ini_get(ini, "iso");
+    if (v != NULL && v[0] != '\0' && ico_path_join(iso, ICO_PATH_MAX, exe_dir, v) == 0 &&
+        ico_file_exists(iso)) {
+        return 0;
+    }
+    v = getenv("ICO_ISO");
+    if (v != NULL && v[0] != '\0' && ico_file_exists(v)) {
+        snprintf(iso, ICO_PATH_MAX, "%s", v);
+        return 0;
+    }
+    return -1;
+}
+
+/* <dir>/<disc's archive> into out; -1 when it does not fit */
+static int archive_path(char *out, size_t size, const char *dir, const IcoDiscInfo *disc)
+{
+    return ico_path_join(out, size, dir, disc->archive_name);
+}
+
+/* The archive mode: mount the disc's archive (ico.o2r for the European
+   disc, ico-jpn.o2r for the Japanese one), extracting it on the first run;
+   both discs' archives can be there side by side. Which disc
+   (ico_host_choose_disc): [game] disc when it names one; else the image the
+   player gave, by its boot file; else the only archive there is; else the
+   disc played last; else the European one. 0, or 1 when the player stopped
+   the Android first start (the run ends). */
 static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir,
                            const char *ini_path, char *source, size_t source_size)
 {
@@ -1189,35 +1388,110 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
     char cand[2][ICO_PATH_MAX];
     char iso[ICO_PATH_MAX];
     char why[1024];
+    char boot[64];
     IcoExtractResult res;
     Progress prog;
-    int picked, i, r;
+    const IcoDiscInfo *setting = disc_setting();
+    const IcoDiscInfo *given = NULL;
+    const IcoDiscInfo *want;
+    const IcoDiscInfo *mounted = NULL;
+    const char *rule;
+    unsigned have = 0;
+    int picked, i, d, r;
 
     ico_host_pref_dir(pref, sizeof(pref));
-    /* cand[0] is also where the first run writes */
-    if (ico_path_join(cand[0], sizeof(cand[0]), pref, ICO_ARCHIVE_NAME) != 0) {
-        ico_host_fatal(log_file(), "The path of the folder %s is too long to hold the game's data.",
-                       pref);
-    }
-    if (ico_path_join(cand[1], sizeof(cand[1]), exe_dir, ICO_ARCHIVE_NAME) != 0) {
-        cand[1][0] = '\0'; /* read only: not a candidate */
-    }
-    for (i = 0; i < 2; i++) {
-        if ((i == 1 && strcmp(cand[0], cand[1]) == 0) || !ico_file_exists(cand[i])) {
-            continue;
+    /* the archives there are, per disc (the per-user folder, else beside
+       the program) */
+    for (d = 0; d < ICO_REGION_COUNT; d++) {
+        if ((archive_path(cand[0], sizeof(cand[0]), pref, &ico_discs[d]) == 0 &&
+             ico_file_exists(cand[0])) ||
+            (archive_path(cand[1], sizeof(cand[1]), exe_dir, &ico_discs[d]) == 0 &&
+             ico_file_exists(cand[1]))) {
+            have |= 1u << d;
         }
-        if (mount_archive(cand[i], why, sizeof(why)) == 0) {
-            copy_path(source, source_size, cand[i]);
-            return 0;
+    }
+    if (setting == NULL && given_iso(a, ini, exe_dir, iso) == 0) {
+        given = ico_extract_identify(iso, boot, sizeof(boot));
+        if (given != NULL) {
+            fprintf(stderr, "ico_pc: the disc image %s is %s (boot file %s)\n", iso, given->id,
+                    boot);
+        } else {
+            fprintf(stderr, "ico_pc: the disc image %s is neither disc (boot file '%s')\n", iso,
+                    boot);
         }
-        fprintf(stderr, "ico_pc: %s is not usable: %s\n", cand[i], why);
+    }
+    want = &ico_discs[ico_host_choose_disc(
+        setting != NULL ? (int)(setting - ico_discs) : -1,
+        given != NULL ? (int)(given - ico_discs) : -1, have,
+        last_disc() != NULL ? (int)(last_disc() - ico_discs) : -1, ICO_REGION_COUNT, &rule)];
+    {
+        char there[64] = "";
+
+        for (d = 0; d < ICO_REGION_COUNT; d++) {
+            if (have & (1u << d)) {
+                size_t n = strlen(there);
+
+                snprintf(there + n, sizeof(there) - n, "%s%s", n > 0 ? ", " : "", ico_discs[d].id);
+            }
+        }
+        fprintf(stderr, "ico_pc: disc %s (%s), by %s; game data there: %s\n", want->id,
+                want->product_name, rule, there[0] != '\0' ? there : "none");
     }
 
-    /* the first run: the image, verified and extracted once */
+    if (have & (1u << (want - ico_discs))) {
+        /* cand[0] is also where the first run writes */
+        if (archive_path(cand[0], sizeof(cand[0]), pref, want) != 0) {
+            ico_host_fatal(log_file(),
+                           "The path of the folder %s is too long to hold the game's data.", pref);
+        }
+        if (archive_path(cand[1], sizeof(cand[1]), exe_dir, want) != 0) {
+            cand[1][0] = '\0'; /* read only: not a candidate */
+        }
+        for (i = 0; i < 2; i++) {
+            if ((i == 1 && strcmp(cand[0], cand[1]) == 0) || !ico_file_exists(cand[i])) {
+                continue;
+            }
+            if (mount_archive(cand[i], want, &mounted, why, sizeof(why)) == 0) {
+                select_disc(mounted);
+                copy_path(source, source_size, cand[i]);
+                return 0;
+            }
+            fprintf(stderr, "ico_pc: %s is not usable: %s\n", cand[i], why);
+        }
+    }
     fprintf(stderr, "ico_pc: no usable %s in %s: the first run extracts it from the disc image\n",
-            ICO_ARCHIVE_NAME, pref);
+            want->archive_name, pref);
+
+    /* the first run: the image, verified and extracted once, into the
+       archive of the disc it is (beside the other disc's, if that is
+       there) */
     if (find_iso(a, ini, exe_dir, iso, &picked) != 0) {
         return 1;
+    }
+#ifdef ICO_ANDROID_UI
+    android_name_image(exe_dir, iso, sizeof(iso));
+#endif
+    {
+        const IcoDiscInfo *is = ico_extract_identify(iso, boot, sizeof(boot));
+
+        if (setting != NULL && is != NULL && is != setting) {
+            ico_host_fatal(log_file(),
+                           "%s is an image of %s (%s), but disc = \"%s\" in config.toml asks "
+                           "for %s (%s).\n"
+                           "Set disc = \"auto\" to play this disc, or give the image of the "
+                           "other one.",
+                           iso, is->product_name, is->id, setting->slug, setting->product_name,
+                           setting->id);
+        }
+        /* neither disc: the extractor refuses it with the reason */
+        want = is != NULL ? is : &ico_discs[ICO_REGION_PAL];
+        fprintf(stderr, "ico_pc: first run: the image is %s (boot file '%s'%s%s)\n",
+                is != NULL ? is->id : "neither disc", boot, is != NULL ? ", " : "",
+                is != NULL ? is->product_name : "");
+        if (archive_path(cand[0], sizeof(cand[0]), pref, want) != 0) {
+            ico_host_fatal(log_file(),
+                           "The path of the folder %s is too long to hold the game's data.", pref);
+        }
     }
     if (ico_make_dir(pref) != 0) {
         ico_host_fatal(log_file(),
@@ -1253,19 +1527,10 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
 #endif
         /* the box says what to do about it, in verify_iso's words */
         if (res.wrong_disc) {
-            ico_host_fatal(log_file(),
-                           "%s is not the disc image this port needs.\n"
-                           "Use a complete, unmodified image of the PAL release of ICO "
-                           "(SCES-50760). Other regions and editions do not work.",
-                           iso);
+            ico_host_fatal(log_file(), ICO_WRONG_DISC_TEXT, iso);
         }
         if (res.unreadable) {
-            ico_host_fatal(
-                log_file(),
-                "Cannot read the disc image %s.\n"
-                "Check that the file is complete and is a .iso, .chd, .bin or .cue copy of the PAL "
-                "disc. The log says why.",
-                iso);
+            ico_host_fatal(log_file(), ICO_UNREADABLE_DISC_TEXT, iso);
         }
         ico_host_fatal(log_file(),
                        "Could not extract the game's data from %s into %s.\n"
@@ -1274,13 +1539,16 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
                        iso, cand[0]);
     }
     fprintf(stderr,
-            "ico_pc: first run: disc image SHA-1 %s, %llu bytes; accepted by %s%s\n"
+            "ico_pc: first run: %s (%s, boot file %s): disc image SHA-1 %s, %llu bytes; "
+            "accepted by %s (%s%s)\n"
             "ico_pc: first run: %u files, %llu bytes, into %s (%llu bytes) in %.1f s "
             "(SHA-1 %.1f s, copy %.1f s)\n",
-            res.iso_sha1, (unsigned long long)res.iso_size, res.rule,
+            want->id, want->product_name, want->boot_elf, res.iso_sha1,
+            (unsigned long long)res.iso_size, res.rule,
+            strcmp(res.rule, ICO_RULE_ISO_SHA1) == 0 ? "the image's SHA-1" : want->boot_elf,
             strcmp(res.rule, ICO_RULE_ISO_SHA1) == 0
-                ? " (the image's SHA-1)"
-                : " (SCES_507.60's SHA-1 and DATA.DF's manifest: a re-dump of the PAL disc)",
+                ? ""
+                : "'s SHA-1 and DATA.DF's manifest: a re-dump of the disc",
             (unsigned)res.files, (unsigned long long)res.bytes, cand[0],
             (unsigned long long)res.archive_bytes, res.hash_seconds + res.extract_seconds,
             res.hash_seconds, res.extract_seconds);
@@ -1293,13 +1561,14 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
         save_picked_iso(ini_path, iso);
     }
 #endif
-    if (mount_archive(cand[0], why, sizeof(why)) != 0) {
+    if (mount_archive(cand[0], want, &mounted, why, sizeof(why)) != 0) {
         fprintf(stderr, "ico_pc: %s cannot be mounted: %s\n", cand[0], why);
         ico_host_fatal(log_file(),
                        "The game's data just written to %s cannot be read back.\n"
                        "Delete that file and start the game again to extract it once more.",
                        cand[0]);
     }
+    select_disc(mounted);
 #ifdef ICO_ANDROID_UI
     android_image_done(ini, ini_path, exe_dir, iso, picked);
 #endif
@@ -1371,21 +1640,55 @@ static int open_window(void)
 #endif
 
 /* the data tables, from the disc's boot ELF, before anything reads one
-   (port/data/tables.h) */
+   (port/data/tables.h): the set of the disc select_disc chose, and the
+   counts the port names numbers by (port/core region.h) checked against
+   what the load filled, so a table and the region data never disagree */
 static void load_tables(const char *source)
 {
-    /* P1: selected by the identified disc */
-    const IcoTableSet *set = ico_table_sets[0];
+    const IcoRegionInfo *reg = ico_region_cur();
+    const IcoTableSet *set = ico_table_sets[ico_region];
+
+    const struct {
+        IcoTableId id;
+        const char *name;
+        int want;
+    } counts[] = {
+        {ICO_TID_stageData, "stageData", reg->stage_count},
+        {ICO_TID_texLayout, "texLayout", reg->layout_count},
+        {ICO_TID_texProperty, "texProperty", reg->property_count},
+        {ICO_TID_stageTable, "stageTable", reg->anim_none + 1},
+        {ICO_TID_motionOrient, "motionOrient", reg->mv_orient_rows},
+        {ICO_TID_adpcmFile, "adpcmFile", reg->n_adpcm},
+        {ICO_TID_seFile, "seFile", reg->n_sefile},
+        {ICO_TID_seDef, "seDef", reg->n_sedef},
+        {ICO_TID_seList, "seList", reg->n_selist},
+        {ICO_TID_seEnv, "seEnv", reg->n_seenv},
+    };
+
     char why[512];
+    size_t i;
 
     if (ico_tables_load_vfs(ico_vfs_disc(), set, why, sizeof(why)) != 0) {
         fprintf(stderr, "ico_pc: the data tables: %s\n", why);
         ico_host_fatal(log_file(), "Cannot read the game's data from %s.\nThe log says why.",
                        source);
     }
-    fprintf(stderr, "ico_pc: %u data table rows (%u records) loaded from %s\n",
+    fprintf(stderr, "ico_pc: %u data table rows (%u records) loaded from %s (%s)\n",
             (unsigned)ico_tables_loaded_rows(), (unsigned)ico_tables_loaded_records(),
-            set->boot_elf);
+            set->boot_elf, set->product);
+    for (i = 0; i < sizeof(counts) / sizeof(counts[0]); i++) {
+        const uint32_t got = ico_tables_count(counts[i].id);
+
+        if (got != (uint32_t)counts[i].want) {
+            fprintf(stderr,
+                    "ico_pc: the data tables: %s has %u records on %s, the port expects %d\n",
+                    counts[i].name, (unsigned)got, set->disc_id, counts[i].want);
+            ico_host_fatal(log_file(),
+                           "The game's data read from %s does not match what this version of the "
+                           "port expects for %s (%s).\nThe log says why.",
+                           source, reg->disc_id, ico_discs[ico_region].product_name);
+        }
+    }
 }
 
 #ifndef ICO_HEADLESS
@@ -1520,7 +1823,7 @@ static void open_texture_pack(const char *exe_dir)
     memset(&tc, 0, sizeof(tc));
     tc.userDir = user;
     tc.programDir = exe_dir;
-    tc.serial = ICO_DISC_ID;
+    tc.serial = ico_region_cur()->pack_serial;
     tc.budgetMb = (uint32_t)vo.texturePackBudgetMb;
     tc.cacheMb = (uint32_t)vo.texturePackCacheMb;
     /* read ahead only while the pack is in use */
@@ -1545,7 +1848,7 @@ static void open_model_pack(const char *exe_dir)
     memset(&mc, 0, sizeof(mc));
     mc.userDir = user;
     mc.programDir = exe_dir;
-    mc.serial = ICO_DISC_ID;
+    mc.serial = ico_region_cur()->pack_serial;
     mc.developer = developer;
     mc.dumpEnabled = developer && ico_video_dump_models();
     modelpack_init(&mc);
@@ -1751,13 +2054,30 @@ static int host_main(int argc, char **argv)
         if (a.no_verify || (v != NULL && strcmp(v, "0") == 0)) {
             fprintf(stderr, "ico_pc: disc image SHA-1 check skipped\n");
         } else {
-            verify_iso(source);
+            (void)verify_iso(source);
         }
         if (picked) {
             save_picked_iso(ini_path, source);
         }
         if (ico_cdvd_host_mount_iso(source) != 0) {
             ico_host_fatal(log_file(), "Cannot open the disc image %s.", source);
+        }
+        /* the disc by its boot file, verified or not */
+        {
+            const IcoDiscInfo *disc = ico_disc_by_boot(ico_cdvd_host_boot_name());
+
+            if (disc == NULL) {
+                fprintf(stderr, "ico_pc: the image's boot file '%s' is neither disc's\n",
+                        ico_cdvd_host_boot_name() != NULL ? ico_cdvd_host_boot_name() : "");
+                ico_host_fatal(log_file(), ICO_WRONG_DISC_TEXT, source);
+            }
+            if (disc_setting() != NULL && disc_setting() != disc) {
+                fprintf(stderr,
+                        "ico_pc: use_iso: [game] disc = \"%s\" is ignored: the image "
+                        "is %s\n",
+                        disc_setting()->slug, disc->id);
+            }
+            select_disc(disc);
         }
     } else if (mount_game_data(&a, &ini, exe_dir, ini_path, source, sizeof(source)) != 0) {
         exit_reason = "the first start was stopped";

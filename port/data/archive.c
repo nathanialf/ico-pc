@@ -1,7 +1,7 @@
 /*
  * port/data/archive.c
  *
- * The VFS backend over `ico.o2r` (archive.h). At mount, miniz reads the
+ * The VFS backend over the extracted archive (archive.h). At mount, miniz reads the
  * ZIP's central directory over this file's own read callback, meta.json is parsed, and every stored entry's
  * data offset is found from its local header; from then on sector reads are
  * plain fseek/fread on the archive file.
@@ -368,6 +368,8 @@ int ico_archive_read_info(const char *path, IcoArchiveInfo *out, char *why, size
 
 int ico_archive_info_acceptable(const IcoArchiveInfo *info, char *why, size_t whysize)
 {
+    const IcoDiscInfo *disc;
+
     if (info->version != ICO_ARCHIVE_VERSION) {
         say(why, whysize, "format version %d, this build reads %d", info->version,
             ICO_ARCHIVE_VERSION);
@@ -378,8 +380,10 @@ int ico_archive_info_acceptable(const IcoArchiveInfo *info, char *why, size_t wh
             ICO_ARCHIVE_EXTRACTOR);
         return 0;
     }
-    if (strcmp(info->disc_id, ICO_DISC_ID) != 0) {
-        say(why, whysize, "disc id '%s', this build plays " ICO_DISC_ID, info->disc_id);
+    disc = ico_disc_by_id(info->disc_id);
+    if (disc == NULL) {
+        say(why, whysize, "disc id '%s', this build plays %s and %s", info->disc_id,
+            ico_discs[0].id, ico_discs[1].id);
         return 0;
     }
     if (strcmp(info->accepted_by, ICO_RULE_ISO_SHA1) != 0 &&
@@ -388,12 +392,12 @@ int ico_archive_info_acceptable(const IcoArchiveInfo *info, char *why, size_t wh
         return 0;
     }
     if (strcmp(info->accepted_by, ICO_RULE_ISO_SHA1) == 0 &&
-        (!is_hex40(info->iso_sha1) || strcmp(info->iso_sha1, ICO_DISC_ISO_SHA1) != 0)) {
-        say(why, whysize, "source image SHA-1 %s, expected " ICO_DISC_ISO_SHA1, info->iso_sha1);
+        (!is_hex40(info->iso_sha1) || strcmp(info->iso_sha1, disc->iso_sha1) != 0)) {
+        say(why, whysize, "source image SHA-1 %s, expected %s", info->iso_sha1, disc->iso_sha1);
         return 0;
     }
-    if (strcmp(info->elf_sha1, ICO_DISC_ELF_SHA1) != 0) {
-        say(why, whysize, "boot ELF SHA-1 %s, expected " ICO_DISC_ELF_SHA1, info->elf_sha1);
+    if (strcmp(info->elf_sha1, disc->elf_sha1) != 0) {
+        say(why, whysize, "boot ELF SHA-1 %s, expected %s", info->elf_sha1, disc->elf_sha1);
         return 0;
     }
     return 1;

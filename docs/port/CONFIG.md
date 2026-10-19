@@ -121,7 +121,7 @@ It is written at these moments only:
 
 | key | type | default | read by |
 | --- | --- | --- | --- |
-| `iso` | string | `""` | the disc image; empty asks on the first start (`port/platform/main_host.c` (`find_iso`)) |
+| `iso` | string | `""` | the disc image (the European or the Japanese disc); empty asks on the first start (`port/platform/main_host.c` (`find_iso`)) |
 | `saves` | string | `<user folder>/memcard` | the card in port 0 ([SAVES.md](SAVES.md); `host_config.c`, `ico_host_saves_dir`) |
 | `saves2` | string | absent: no card | the card in port 1 (`host_config.c` (`ico_host_saves2_dir`)) |
 | `keep_image` | bool | `false` | Android: keep the first start's copy of the disc image (`main_host.c` (`android_keep_image`)) |
@@ -150,7 +150,7 @@ display option, the [preset](ARCHITECTURE.md#terms) rule and the pacing belong t
 | `crt_mode` | string | `"consumer"` | `scanlines`, `consumer`, `trinitron`, `pvm`, `shadow` |
 | `crt_strength` | float | `1.0` | 0..1 |
 | `crt_scanlines`, `crt_mask`, `crt_halation`, `crt_bloom`, `crt_curvature` | float | `-1` | file only; below 0 is the mode's value |
-| `texture_pack` | bool | `true` | load an installed texture pack |
+| `texture_pack` | bool | `true` | load an installed texture pack (the disc's serial folder: SCES-50760 or SCPS-11003, [PACKS.md](PACKS.md)) |
 | `dump_textures` | bool | `false` | write each texture under its PCSX2 name |
 | `model_pack` | bool | `true` | load an installed model pack |
 | `dump_models` | bool | `false` | save each model part as glTF |
@@ -160,7 +160,7 @@ display option, the [preset](ARCHITECTURE.md#terms) rule and the pacing belong t
 | `effect_glow`, `effect_depth_of_field`, `effect_softening`, `effect_motion_blur`, `effect_fog`, `effect_cinematic_bars` | bool | `true` | the game's own picture effects |
 | `effect_water_sharp` | bool | `false` | Water reflections: `true` (Sharp) draws the reflections in water and the queen barrier's picture at the scene's scale, `false` (Original) at their GS size ([RENDER.md](RENDER.md#water-and-render-to-texture-blocks)) |
 | `effects_depth` | bool | `true` | file only; the scene's depth for an effects program such as ReShade |
-| `video_mode` | string | absent: 60 Hz | `pal50` or `60hz`, the boot screen's choice (`port/config/sysconf.c`) |
+| `video_mode` | string | absent: 60 Hz | `pal50` or `60hz`, the boot screen's choice (`port/config/sysconf.c`); ignored on the Japanese disc, which has no 50 Hz mode (`ico_boot_video_mode` returns 60 Hz and logs it once) |
 | `backend` | string | `"vulkan"` | `vulkan` or `d3d12`, the window build's renderer; when the key is empty, a run restarted after a graphics driver crash takes the backend its retry step names (`port/platform/window_host.c` (`ico_window_open`); `port/platform/startup_retry.h`) |
 | `gpu_driver` | string | `""` | Android: the folder of an added graphics driver, used from the next start |
 | `gpu_driver_failed` | string | `""` | Android: the driver that did not start last time, written by the game |
@@ -193,6 +193,8 @@ Settings menu changes the running values and the file (`port/platform/host_confi
 | `language` | string | `"auto"` | `en`, `fr`, `de`, `it`, `es`; `auto` follows the system ([System configuration](#system-configuration-libscf)) |
 | `circle_back` | bool | `true` | Circle backs out of the game's menus as Triangle does (`port/game/options.h` (`ico_opt_circle_back`)) |
 | `achievements` | bool | `true` | the achievement popups (`port/game/achievements.c` (`ico_ach_init`)) |
+| `disc` | string | `"auto"` | `pal` (the European disc, SCES-50760) or `jpn` (the Japanese disc, SCPS-11003) pins the disc a start plays when both are set up; `auto` lets the disc image given and the game data there decide; any other value is `auto`, logged once (`port/config/config.c` (`ico_config_disc_pin`); the rules: [PLATFORM.md](PLATFORM.md#the-disc-a-start-plays)) |
+| `last_disc` | string | absent | written by the program, not in the template: `pal` or `jpn`, the disc a start last played, the choice's fallback when both discs' data are there (`ico_config_last_disc`, `ico_config_set_last_disc`; `main_host.c` (`select_disc`)) |
 
 ### [ui]
 

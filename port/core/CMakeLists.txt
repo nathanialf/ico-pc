@@ -17,8 +17,11 @@ target_compile_options(ico_region PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WAR
 # region_select_test: both slugs select and ico_region follows, nothing else
 # selects; the disc ids; the per-disc config keys; the stage rows on each
 # disc; ico_region_info[] in config/regions.txt's order (read at test time);
-# every value of the Japanese row (CPU only). The argument: the table.
-add_executable(region_select_test test/region_select_test.c)
+# every value of the Japanese row (CPU only); the disc table ico_discs
+# (port/data/discs.c, plain data, compiled in) against the same rows. The
+# argument: the table.
+add_executable(region_select_test test/region_select_test.c "${CMAKE_SOURCE_DIR}/port/data/discs.c")
+target_include_directories(region_select_test PRIVATE "${CMAKE_SOURCE_DIR}/port/data")
 target_compile_options(region_select_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(region_select_test PRIVATE ico_region)
 if(ICO_RUN_TESTS)

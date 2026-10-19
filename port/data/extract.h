@@ -2,10 +2,14 @@
  * port/data/extract.h
  *
  * The first-run extractor:
- * reads the user's disc image once and writes `ico.o2r` (archive.h).
+ * reads the user's disc image once and writes its archive (archive.h:
+ * `ico.o2r` for the European disc, `ico-jpn.o2r` for the Japanese one).
+ * Which disc it is comes from SYSTEM.CNF's BOOT2 file, matched against
+ * ico_discs (archive.h) by name; that row's values verify it.
  *
- * What it stores: SYSTEM.CNF, the boot file its BOOT2 line names,
- * SCES_507.60, every *.IRX module in the root (the port reads SNDN2DRV.IRX's
+ * What it stores: SYSTEM.CNF, the boot file its BOOT2 line names (the
+ * row's boot ELF, SCES_507.60 or SCPS_110.03), DUMMY.TXT when the disc has
+ * one, every *.IRX module in the root (the port reads SNDN2DRV.IRX's
  * pitch table and LIBSD.IRX's reverb presets and idle voice block; the rest
  * are small and kept for later checks), and every file
  * under DFDATAS/ (DATA.DF whole). meta.json also lists the root and DFDATAS
@@ -13,14 +17,15 @@
  *
  * How it accepts the image, in order (the rule goes into meta.json and the
  * log):
- *   iso-sha1            the whole image's SHA-1 is ICO_DISC_ISO_SHA1 (for
+ *   iso-sha1            the whole image's SHA-1 is the row's iso_sha1 (for
  *                       a .chd or .bin, the SHA-1 of the ISO it holds)
- *   elf-sha1+datadf-crc SCES_507.60 hashes to ICO_DISC_ELF_SHA1 and DATA.DF
- *                       has the PAL disc's size, directory and members: the
- *                       CRC-32 of its directory and of each of its 193
- *                       members match the manifest compiled into extract.c
- *                       (a re-dump with different padding or a different
- *                       volume size still passes)
+ *   elf-sha1+datadf-crc the boot ELF hashes to the row's elf_sha1 and
+ *                       DATA.DF has that disc's size, directory and
+ *                       members: the CRC-32 of its directory and of each of
+ *                       its members (193 on the European disc, 183 on the
+ *                       Japanese) match the manifest compiled into
+ *                       discs.c (a re-dump with different padding or a
+ *                       different volume size still passes)
  * Anything else is refused and nothing is left behind, unless the caller
  * asks for ICO_EXTRACT_NO_VERIFY (tests on a synthetic image), which writes
  * the archive with the rule "unverified"; ico_archive_info_acceptable
@@ -35,9 +40,22 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include "archive.h"
 #include "vfs.h"
 
 #define ICO_EXTRACT_NO_VERIFY 1u
+
+/* The boxes a player sees for an image that is not one of the discs, and
+   for one that cannot be read (%s: the image's path). One text each, used
+   by the extractor's refusal, main_host.c and the Android import. */
+#define ICO_WRONG_DISC_TEXT                                                                        \
+    "%s is not a disc image this port plays.\n"                                                    \
+    "Use a complete, unmodified image of the European disc (SCES-50760) or the Japanese disc "     \
+    "(SCPS-11003), as a .iso, .chd, .bin or .cue file. Other editions do not work."
+#define ICO_UNREADABLE_DISC_TEXT                                                                   \
+    "Cannot read the disc image %s.\n"                                                             \
+    "Check that the file is complete and is a .iso, .chd, .bin or .cue copy of the European or "   \
+    "the Japanese disc. The log says why."
 
 /* Progress: phase "open" (reading the image's directory; done and total 0),
    "hash" (the image's SHA-1), "extract", then "finish" (writing the archive's
@@ -51,10 +69,10 @@ typedef struct IcoExtractResult {
     char rule[32]; /* ICO_RULE_* (archive.h), or "" when refused */
     char iso_sha1[41];
     uint64_t iso_size;
-    char elf_sha1[41];    /* SCES_507.60 as stored, "" if absent */
+    char elf_sha1[41];    /* the boot ELF as stored, "" if absent */
     int datadf_ok;        /* DATA.DF matched the manifest */
     char datadf_why[256]; /* why not */
-    char disc_id[16];     /* from SYSTEM.CNF's BOOT2 ("SCES-50760") */
+    char disc_id[16];     /* from SYSTEM.CNF's BOOT2 ("SCES-50760", "SCPS-11003") */
     uint32_t files;       /* files stored */
     uint64_t bytes;       /* their bytes */
     uint64_t archive_bytes;
@@ -64,8 +82,8 @@ typedef struct IcoExtractResult {
     /* why a refusal happened, for the message a player sees: unreadable,
        the file is not a disc image this program reads (not an .iso, a
        .bin or .cue, or a .chd made from one; a .chd that needs its parent,
-       a damaged file); wrong_disc, it reads but is not the PAL disc (another region
-       or edition, or a modified image).  Both 0 for the other failures
+       a damaged file); wrong_disc, it reads but is neither disc of
+       ico_discs (another region or edition, or a modified image).  Both 0 for the other failures
        (no space, a write error, a cancel). */
     int unreadable;
     int wrong_disc;
@@ -82,12 +100,16 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
 int ico_extract_image_sha1(const char *iso_path, char hex[41], uint64_t *bytes, char *why,
                            size_t whysize);
 
-/* Prints the DATA.DF manifest of the disc mounted as `iso` in the form
-   extract.c compiles (sizes, offsets and CRC-32s only; no names, no data).
-   0, or -1. Used by archive_test's `manifest` mode to regenerate it. */
-int ico_extract_print_datadf_manifest(IcoVfs *iso, FILE *out);
+/* Which disc the image is, by SYSTEM.CNF's BOOT2 file: its ico_discs row,
+   or NULL (not readable, or another disc). Copies the boot file's name
+   ("" when none) into boot when given. Reads the directory only. */
+const IcoDiscInfo *ico_extract_identify(const char *iso_path, char *boot, size_t size);
 
-/* The number of members the compiled manifest describes (0: none). */
-uint32_t ico_extract_datadf_manifest_count(void);
+/* Prints the DATA.DF manifest of the disc mounted as `iso` in the form
+   discs.c compiles for the region `slug` ("pal", "jpn": the block's
+   BEGIN/END lines and names; sizes, offsets and CRC-32s only, no names of
+   members, no data). 0, or -1. Used by archive_test's `manifest` mode to
+   regenerate it. */
+int ico_extract_print_datadf_manifest(IcoVfs *iso, const char *slug, FILE *out);
 
 #endif /* ICO_PORT_EXTRACT_H */

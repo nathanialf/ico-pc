@@ -28,6 +28,12 @@ int ico_scf_language_from_locale(const char *locale);
    build, else LC_ALL, LC_MESSAGES, LANG (not "C" or "POSIX"); English when
    nothing matches. */
 int ico_sysconf_host_language(void);
+/* Whether a locale name ("ja", "ja_JP.UTF-8", "ja-JP") is Japanese. */
+int ico_sysconf_locale_is_japanese(const char *locale);
+/* Whether the host's system is set to Japanese: its first preferred locale
+   (SDL_GetPreferredLocales in the window build, else LC_ALL, LC_MESSAGES,
+   LANG, not "C" or "POSIX"). For the Menu language's auto rule. */
+int ico_sysconf_host_japanese(void);
 /* Forget the answer sceScfGetLanguage cached (tests). */
 void ico_sysconf_reset(void);
 

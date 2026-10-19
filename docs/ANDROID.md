@@ -55,9 +55,9 @@ first ([where it is](#where-your-files-are)).
 2. The game asks you to choose your ICO disc image, the European release
    (SCES-50760) or the Japanese release (SCPS-11003), and opens your
    phone's file picker. Find your disc image and tap it. The picker shows
-   every file, so make sure you pick the `.iso`, `.chd`, `.bin` or `.cue`
-   of the disc. If you have a `.bin` and a `.cue` (the usual form of the
-   Japanese disc), pick the `.bin`.
+   every file, so make sure you pick the `.iso`, `.chd` or `.bin` of the
+   disc. If you have a `.bin` and a `.cue` (the usual form of the
+   Japanese disc), pick the `.bin`: a `.cue` on its own is not the disc.
 3. The game copies the image into its own folder, naming the copy
    `Ico_PAL` or `Ico_JPN` and the file's ending, after the disc it is. The screen says **Copying
    the disc image into the app**, with a bar. With a big image this can take

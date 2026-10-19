@@ -18,6 +18,7 @@
 #define ICO_CD_STAT_STOP 0x00    /* sceCdStatus: the spindle is stopped (no disc) */
 #define ICO_CD_STAT_PAUSE 0x0A   /* sceCdStatus: SCECdStatPause, the idle state */
 #define ICO_CD_TYPE_NODISC 0x00  /* sceCdGetDiskType: SCECdNODISC */
+#define ICO_CD_TYPE_PS2CD 0x12   /* sceCdGetDiskType: SCECdPS2CD (the Japanese cdvd.c's 18) */
 #define ICO_CD_TYPE_PS2DVD 0x14  /* sceCdGetDiskType: SCECdPS2DVD (cdvd.c's cdDiskType 20) */
 #define ICO_CD_ERR_NONE 0x00
 #define ICO_CD_ERR_ABORT 0x01   /* the command was broken off (sceCdBreak) */
@@ -42,7 +43,8 @@ const char *ico_cdvd_host_default_iso(void);
 
 /* The boot file SYSTEM.CNF's BOOT2 line names, without device and version
    ("SCES_507.60"), or NULL when the disc has none.  sceCdGetDiskType
-   reports a PS2 DVD only when this file exists on the disc. */
+   reports a PS2 disc only when this file exists on the disc: the type of
+   its ico_discs row (archive.h; a CD for SCPS_110.03), else a DVD. */
 const char *ico_cdvd_host_boot_name(void);
 
 /* Complete the non-blocking command in flight.  Registered as a simulated
