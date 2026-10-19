@@ -847,8 +847,8 @@ static void chain_set_charachara(GObj *gobj, float amp)
     cw->count = cw->count + 1;
 }
 
-/* The enemy parameter table, one 404-byte row (JPN 400) per motion id; ChainGeo
- * reads only the flag word at 0x18C (JPN 0x188).  Same record enemy_act.c reads
+/* The enemy parameter table, one 404-byte row (JPN and KOR 400) per motion id; ChainGeo
+ * reads only the flag word at 0x18C (JPN and KOR 0x188).  Same record enemy_act.c reads
  * as EnemyParaRow. */
 typedef struct { /* field names derived */
     char pad00[396];

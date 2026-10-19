@@ -3929,7 +3929,7 @@ static int menuArg = 0; /* derived name */
 static inline void debug_MenuBlink(void) /* derived name */
 {
     if (menuBlink >> 4) {
-        debug_PrintfDummy(220, 60, 0x80C0FF80u, "DISC VER.%s %s", PAL_JPNKOR("Jan 17 2002", "Nov  2 2001"), PAL_JPNKOR("15:37:26", "17:26:01"));
+        debug_PrintfDummy(220, 60, 0x80C0FF80u, "DISC VER.%s %s", PAL_JPN_KOR("Jan 17 2002", "Nov  2 2001", "Jan  9 2002"), PAL_JPN_KOR("15:37:26", "17:26:01", "19:03:40"));
     }
     menuBlink++;
     if (menuBlink >= 0x41) {

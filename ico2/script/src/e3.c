@@ -1209,7 +1209,7 @@ void actE3Warning(GObj *volatile self)
 
     scpBoyControlReadDisable = 1;
     InitStageLight(stage_no);
-    if (ICO_JPNKOR) {
+    if (ICO_JPN) {
         GlobalStageSetting.viewScale = 150;
     }
 

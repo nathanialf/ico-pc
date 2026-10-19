@@ -6,7 +6,8 @@
  * allocator and to the assert, so the name the file is included under
  * ("../ito/include/mv_defs.h") and those lines are part of the program's
  * data.  The original header had its two calls at lines 43 and 44 in the
- * PAL build and 42 and 43 in the Japanese one; LN gives each build its own.
+ * PAL build and 42 and 43 in the Japanese and Korean ones; LN gives each build
+ * its own.
  *
  * phys_addr strips the segment bits from an EE address, the form the DMA
  * controller and the IOP heap calls take; uncached_accel_addr puts the same

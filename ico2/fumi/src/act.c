@@ -234,7 +234,7 @@ typedef union { /* field names derived */
 } ActFWord; /* derived name */
 
 /* The extended work block hung off the work block at +0x688; the three
-   ten-entry histories at 0x900, 0x928 and 0x950 (JPN 0x8F0, 0x918 and 0x940) are read back in BeforeFunc. */
+   ten-entry histories at 0x900, 0x928 and 0x950 (JPN and KOR 0x8F0, 0x918 and 0x940) are read back in BeforeFunc. */
 typedef struct { /* field names derived */
     char pad0[2304];
     int a900[10];

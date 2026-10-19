@@ -129,7 +129,7 @@ typedef union { /* field names derived */
     } bits;
 } MotionFlags2; /* derived name */
 
-/* motion-def: one motion kind, 0x194 bytes (JPN 0x190), indexed by the motion id the
+/* motion-def: one motion kind, 0x194 bytes (JPN and KOR 0x190), indexed by the motion id the
    motion work carries (Sub15C+0x4A0): the effect, sound and vibration
    triggers frameDependSequence.c fires, the name, the switches
    SetMotionRequest copies into the motion work (MotCtrl), the root update

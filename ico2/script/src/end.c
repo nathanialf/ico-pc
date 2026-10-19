@@ -1204,9 +1204,9 @@ void actSt27aEndDemo(GObj *volatile self)
     }
 }
 
-/* The step between the logo and the save. The Japanese disc (the November build) names it
-   actEndLogoFade and has no per-language logo animation before the wait (the !ICO_JPN
-   block); the body is one for both discs under the European name. */
+/* The step between the logo and the save. The Japanese and Korean discs (the November
+   build) name it actEndLogoFade and have no per-language logo animation before the wait
+   (the !ICO_JPNKOR block); the body is one for every disc under the European name. */
 void actEndLogoChk(GObj *volatile self)
 {
     GObj *x = self;
@@ -1732,10 +1732,10 @@ void actEndDemo14Chk(GObj *volatile self)
     actCreateSubThread(actConte14_14, 21);
 }
 
-/* The ending's save step, one body for both discs under the European name. The
-   Japanese disc (the November build) still calls it actEndLogoChk, its name in the Aug-6
-   disc's TRFILE (the last function of end.c there too); January renamed it actEndingSave
-   and gave the name to the step before it. */
+/* The ending's save step, one body for every disc under the European name. The
+   Japanese and Korean discs (the November build) still call it actEndLogoChk, its name in
+   the Aug-6 disc's TRFILE (the last function of end.c there too); January renamed it
+   actEndingSave and gave the name to the step before it. */
 static void actEndingSave(GObj *volatile self)
 {
     /* PC port: the Extras credits never get here (they end

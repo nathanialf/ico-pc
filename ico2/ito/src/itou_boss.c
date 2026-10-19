@@ -13,8 +13,10 @@
 #include "quaternion.h"
 #include "generator.h"
 #include "sugiCommon.h"
+#include <stdio.h>
 #include <string.h>
 #include <libvu0.h>
+#include <eekernel.h> /* port: scePrintf, the Korean build's TTY lines */
 #include "main.h"
 #include "ios.h"
 #include "particleEffect.h"
@@ -533,7 +535,12 @@ inline void actBossCtrlStart(void *gobj)
         no++;
         o = isysGObjSearchFromObjKindID_next(o);
     }
-    debug_StdPrintfDummy("n generator %d\n", no);
+    if (ICO_KOR) {
+        /* the Korean build's printf to the TTY: the port's TTY, scePrintf */
+        scePrintf("n generator %d\n", no);
+    } else {
+        debug_StdPrintfDummy("n generator %d\n", no);
+    }
     for (i = 0; i < no; i++) {
         actCreateSubThread(gene_enemy, 21);
     }
@@ -553,7 +560,12 @@ inline ICO_WORD InitBossCtrlGeo(void *gobj)
     ret = (ICO_WORD)iosMallocDebug(ios_partition_sugipon, 0, __FILE__, 350);
     actInitialize(gobj);
     actInitialize_ext_charcter(gobj);
-    debug_StdPrintfDummy("N_CAPSULE %d\n", 53);
+    if (ICO_KOR) {
+        /* the Korean build's printf to the TTY: the port's TTY, scePrintf */
+        scePrintf("N_CAPSULE %d\n", 53);
+    } else {
+        debug_StdPrintfDummy("N_CAPSULE %d\n", 53);
+    }
 
     base = capsule;
     m = (char *)base->pos;

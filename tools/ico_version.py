@@ -6,6 +6,7 @@ The targets and where their files are:
     ------   ----   ---------------------------   -----------------------------
     main     pal    config/link_order.pal.txt     baserom/pal/baseelf.elf
     main     jpn    config/link_order.jpn.txt     baserom/jpn/baseelf.elf
+    main     kor    config/link_order.kor.txt     baserom/kor/baseelf.elf
     ntsc     us     (the ntsc branch's config)    baserom/baseelf.elf
     aug6     aug6   (the aug6 branch's config)    baserom/aug6/baseelf.elf
 
@@ -15,7 +16,7 @@ gitignored and can hold every target's files side by side.
 
 An explicit `VERSION` environment variable wins; otherwise the slug is the
 first one in VERSIONS order whose `config/link_order.<slug>.txt` exists
-(configured_versions()); this tree carries pal's and jpn's (upstream's
+(configured_versions()); this tree carries pal's, jpn's and kor's (upstream's
 records; tools/gen_sources.py reads pal's as the one source inventory), so it
 is pal.
 
@@ -31,7 +32,7 @@ import sys
 from pathlib import Path
 
 # Detection order.
-VERSIONS = ("pal", "jpn", "us", "aug6", "jun26")
+VERSIONS = ("pal", "jpn", "kor", "us", "aug6", "jun26")
 
 # Per-target disc image.
 #   region  : how messages describe the disc
@@ -62,6 +63,15 @@ DISCS = {
         "image": "Ico_JPN.bin",
         "cue": "Ico_JPN.cue",
         # The JPN disc ships no map or listing.
+        "extras": ("SYSTEM.CNF",),
+    },
+    "kor": {
+        "region": "Korean retail",
+        "product": "SCPS-56001",
+        "where": "Korea",
+        "image": "Ico_KOR.iso",
+        "cue": "",
+        # The Korean disc ships no map or listing either.
         "extras": ("SYSTEM.CNF",),
     },
     "us": {

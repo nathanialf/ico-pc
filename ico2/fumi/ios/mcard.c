@@ -41,7 +41,10 @@ char *iOSMcSaveSeg_pal[6] = {"BESCES-50760ico", "icon.sys",    "boy_blk.ico",
 char *iOSMcSaveSeg_jpn[6] = {"BISCPS-11003ico", "icon.sys",    "boy_blk.ico",
                              "boy_blk.ico",     "boy_blk.ico", "game."};
 
-#define iOSMcSaveSeg PAL_JPNKOR(iOSMcSaveSeg_pal, iOSMcSaveSeg_jpn)
+char *iOSMcSaveSeg_kor[6] = {"BISCPS-56001ico", "icon.sys",    "boy_blk.ico",
+                             "boy_blk.ico",     "boy_blk.ico", "game."};
+
+#define iOSMcSaveSeg PAL_JPN_KOR(iOSMcSaveSeg_pal, iOSMcSaveSeg_jpn, iOSMcSaveSeg_kor)
 
 static int mcLockCount = 0; /* derived name */
 
@@ -518,14 +521,16 @@ retry:
     }
 
     if (mp->flags.ll & 2) {
-        *(McName *)mp->path = *(McName *)PAL_JPNKOR("/BESCES-50760ico", "/BISCPS-11003ico");
+        *(McName *)mp->path =
+            *(McName *)PAL_JPN_KOR("/BESCES-50760ico", "/BISCPS-11003ico", "/BISCPS-56001ico");
         iosMcMgrMkdir(mp);
         if (mp->result != 0 && mp->result != -4) {
             return;
         }
     }
 
-    *(McName *)mp->dirName = *(McName *)PAL_JPNKOR("/BESCES-50760ico", "/BISCPS-11003ico");
+    *(McName *)mp->dirName =
+        *(McName *)PAL_JPN_KOR("/BESCES-50760ico", "/BISCPS-11003ico", "/BISCPS-56001ico");
     iosMcMgrChdir(mp);
 
     if (mp->result != 0) {

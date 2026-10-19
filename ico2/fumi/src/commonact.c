@@ -1989,7 +1989,7 @@ void actCommonBox(GObj *volatile self)
             if (ICO_JPNKOR) {
                 /* a local debug switch, off: mark the global hold point. The
                    ROM's stack slot order needs the block here, and the August
-                   TRFILE (3132-3136) and the January listing (3379-3383) have five
+                   TRFILE (3132-3136) and PAL's listing (3379-3383) have five
                    code-less lines in its place; the text is derived. */
                 if (dbg) {
                     debug_NMarker(pos, 255, 0, 0, 100.0f);

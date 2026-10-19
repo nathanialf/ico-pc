@@ -54,7 +54,7 @@ typedef struct { /* field names derived */
     long long w;
 } __attribute__((packed)) U64ag; /* derived name */
 
-/* The 0x194-byte-per-entry (JPN 0x190) motion record table, indexed by the object's
+/* The 0x194-byte-per-entry (JPN and KOR 0x190) motion record table, indexed by the object's
    current motion id (obj->0x15C->0x4A0); the fields this TU reads, named as
    motionOrientManager.h's MotionDef. */
 typedef struct { /* field names derived */

@@ -1429,23 +1429,23 @@ typedef struct GenGeo { /* field names derived */
 /* one stage-animation mode record: the base mode, the second animation and the held mode */
 typedef struct { /* field names derived */
     int baseMode; /* 0x00, the mode the record returns to, also its BG animation: the first stage-animation id */
-    int anim2; /* 0x04, the second stage-animation id, 972 (JPN 949, no animation) in most rows */
+    int anim2; /* 0x04, the second stage-animation id, 972 (JPN and KOR 949, no animation) in most rows */
     int word8; /* 0x08, no C reader */
-    int mode;  /* 0x0C, 972 (JPN 949) while held */
-    int flags; /* 0x10, bit 0 holds the mode at 972 (JPN 949) */
-} OaRecB;      /* derived name */
+    int mode;  /* 0x0C, 972 (JPN and KOR 949) while held */
+    int flags; /* 0x10, bit 0 holds the mode at 972 (JPN and KOR 949) */
+} OaRecB; /* derived name */
 
 typedef struct { /* field names derived */
     float m[16];
 } Mtx44 __attribute__((aligned(16)));
 
-/* RECONSTRUCTION, names ours: one memory card's product file, 0x1F0 bytes (JPN 0x1E8),
- * the record mcard.c's product_write and product_read move whole: the twenty
- * save files' previews, then the options and the last save's place. PAL's
- * record is 16-byte aligned, a SIF DMA buffer for the card code. JPN's, the
- * November 2001 record, is 8-byte aligned and ends before cameraMove and
- * palMode at 0x1E8; there product_write and product_read move 488 bytes and
- * index the two files 488 apart.
+/* RECONSTRUCTION, names ours: one memory card's product file, 0x1F0 bytes (JPN and KOR
+ * 0x1E8), the record mcard.c's product_write and product_read move whole: the
+ * twenty save files' previews, then the options and the last save's place.
+ * PAL's record is 16-byte aligned, a SIF DMA buffer for the card code. JPN's,
+ * the November 2001 record, and KOR's, the same one, are 8-byte aligned and
+ * end before cameraMove and palMode at 0x1E8; there product_write and
+ * product_read move 488 bytes and index the two files 488 apart.
  * Writers: ico2/fumi/ios/mcard.c; readers: common/src/layout_action.c,
  * common/src/kanbanBoot.c (PAL). */
 typedef struct {        /* field names derived */

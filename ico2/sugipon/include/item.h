@@ -11,7 +11,7 @@
 struct GObj;
 
 /* item-kind-def: one item kind's break animations, 0x20 bytes, seven kinds:
-   the stage BG animations (972 for none, JPN 949) and their modes the item plays
+   the stage BG animations (972 for none, JPN and KOR 949) and their modes the item plays
    while it stays, breaks, drops and is hit, and whether the break plays SE
    package 43. */
 typedef struct {        /* field names derived */

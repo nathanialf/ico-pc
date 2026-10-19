@@ -724,11 +724,12 @@ int la_vibe_select(void)
 {
     if (lt_fade_status() == 2 && (pad[0].flags & PAL_JPNKOR(0x840, 0x820))) {
         soundSeDefPlay(415, 0xFFFFFFFF, 0, 0);
-        switch (lt_current_property_item() + PAL_JPNKOR(0, 30)) { /* JPN property ids 30 lower */
-        case 0x2C:
+        switch (lt_current_property_item() +
+                PAL_JPN_KOR(0, 30, 36)) { /* JPN property ids 30 lower, KOR property ids 36 lower */
+        case 44:
             iosPadActRequestEnable = 1;
             break;
-        case 0x2D:
+        case 45:
             iosPadActRequestEnable = 0;
             break;
         }
@@ -828,12 +829,12 @@ int la_title_continue_or_new(int first)
     }
     if (continueDecided != 0) {
         lt_item_select_disable = 0;
-        lt_mask_property(PAL_JPNKOR(0x31, 0x14), 0);
-        lt_mask_property(PAL_JPNKOR(0x32, 0x15), 0);
+        lt_mask_property(PAL_JPN_KOR(49, 20, 14), 0);
+        lt_mask_property(PAL_JPN_KOR(50, 21, 15), 0);
     } else {
         lt_item_select_disable = 1;
-        lt_mask_property(PAL_JPNKOR(0x31, 0x14), 1);
-        lt_mask_property(PAL_JPNKOR(0x32, 0x15), 1);
+        lt_mask_property(PAL_JPN_KOR(49, 20, 14), 1);
+        lt_mask_property(PAL_JPN_KOR(50, 21, 15), 1);
     }
     ui_settings_title_mask(continueDecided == 0);
     /* PC port: not on the Settings row, whose Cross default_item_select
@@ -842,13 +843,14 @@ int la_title_continue_or_new(int first)
         lt_fade_status() == 2 LA_HOST_NOT_SETTINGS_ROW) {
         lt_continue_selected = 1;
         soundSeDefPlay(414, 0xFFFFFFFF, 0, 0);
-        switch (lt_current_property_item() + PAL_JPNKOR(0, 29)) { /* JPN property ids 29 lower */
-        case 0x31:
+        switch (lt_current_property_item() +
+                PAL_JPN_KOR(0, 29, 35)) { /* JPN property ids 29 lower, KOR property ids 35 lower */
+        case 49:
             opTitleLogoMode = 2;
             lt_set_item_select_func(0);
             actionStarted = 0;
             return PAL_JPNKOR(0x14, 0x11);
-        case 0x32:
+        case 50:
             opTitleLogoMode = 2;
             gFlagGameClear = 0;
             lt_set_item_select_func(0);
@@ -896,10 +898,10 @@ int la_title_new_game_only(int first)
     }
     if (newGameDecided != 0) {
         lt_item_select_disable = 0;
-        lt_mask_property(PAL_JPNKOR(51, 22), 0);
+        lt_mask_property(PAL_JPN_KOR(51, 22, 16), 0);
     } else {
         lt_item_select_disable = 1;
-        lt_mask_property(PAL_JPNKOR(51, 22), 1);
+        lt_mask_property(PAL_JPN_KOR(51, 22, 16), 1);
     }
     ui_settings_title_mask(newGameDecided == 0);
     /* PC port: not on the Settings row, whose Cross default_item_select
@@ -946,7 +948,7 @@ static int fileFirst = 1; /* derived name */
 
 static inline int la_mc_saved_file_select(int item)
 {
-    int i = item - PAL_JPNKOR(0x3E, 0x21);
+    int i = item - PAL_JPN_KOR(62, 33, 27);
     int old = i;
 
     lt_analog2Pad();
@@ -972,7 +974,7 @@ static inline int la_mc_saved_file_select(int item)
     if (old != i) {
         CUR_SE();
     }
-    return i + PAL_JPNKOR(0x3E, 0x21);
+    return i + PAL_JPN_KOR(62, 33, 27);
 }
 
 /* the selected port's current file number, 0 when the port has no card or
@@ -1002,7 +1004,7 @@ int la_mc_file_select(int first)
 {
     int i;
 
-    curFile = lt_current_property_item() - PAL_JPNKOR(62, 33);
+    curFile = lt_current_property_item() - PAL_JPN_KOR(62, 33, 27);
 
     if (first) {
         fileFirst = 1;
@@ -1021,17 +1023,17 @@ int la_mc_file_select(int first)
         } else {
             curFile = mcFileNoOfPort();
         }
-        texLayout[PAL_JPNKOR(14, 11)].curItem = curFile + PAL_JPNKOR(62, 33);
+        texLayout[PAL_JPNKOR(14, 11)].curItem = curFile + PAL_JPN_KOR(62, 33, 27);
         fileMoved = 1;
     }
 
     for (i = 0; i < 10; i++) {
         if (((fileMask >> i) & 1) && IosMcProductFile[filePort].file[i].stage != 0xFFFFFFFF) {
-            lt_mask_property(i + PAL_JPNKOR(62, 33), 0);
-            lt_mask_property(i + PAL_JPNKOR(52, 23), 1);
+            lt_mask_property(i + PAL_JPN_KOR(62, 33, 27), 0);
+            lt_mask_property(i + PAL_JPN_KOR(52, 23, 17), 1);
         } else {
-            lt_mask_property(i + PAL_JPNKOR(62, 33), 1);
-            lt_mask_property(i + PAL_JPNKOR(52, 23), 0);
+            lt_mask_property(i + PAL_JPN_KOR(62, 33, 27), 1);
+            lt_mask_property(i + PAL_JPN_KOR(52, 23, 17), 0);
         }
     }
 
@@ -1040,26 +1042,26 @@ int la_mc_file_select(int first)
     return (pad[0].flags & PAL_JPNKOR(0x40 | LA_BACK, 0x30)) ? curFile : -1;
 }
 
-/* the two discs' bodies differ only in the property ids, 29 lower on the
-   Japanese disc, as in _la_set_preview_info */
+/* the discs' bodies differ only in the property ids, 29 lower on the
+   Japanese disc and 35 lower on the Korean one, as in _la_set_preview_info */
 static void _la_mask_preview_info(void)
 {
     int i;
 
     for (i = 0; i < 10; i++) {
-        lt_mask_property(i + PAL_JPNKOR(76, 47), 1);
-        lt_mask_property(i + PAL_JPNKOR(86, 57), 1);
-        lt_mask_property(i + PAL_JPNKOR(96, 67), 1);
-        lt_mask_property(i + PAL_JPNKOR(106, 77), 1);
-        lt_mask_property(i + PAL_JPNKOR(116, 87), 1);
-        lt_mask_property(i + PAL_JPNKOR(126, 97), 1);
+        lt_mask_property(i + PAL_JPN_KOR(76, 47, 41), 1);
+        lt_mask_property(i + PAL_JPN_KOR(86, 57, 51), 1);
+        lt_mask_property(i + PAL_JPN_KOR(96, 67, 61), 1);
+        lt_mask_property(i + PAL_JPN_KOR(106, 77, 71), 1);
+        lt_mask_property(i + PAL_JPN_KOR(116, 87, 81), 1);
+        lt_mask_property(i + PAL_JPN_KOR(126, 97, 91), 1);
     }
-    lt_mask_property(PAL_JPNKOR(74, 45), 1);
-    lt_mask_property(PAL_JPNKOR(75, 46), 1);
+    lt_mask_property(PAL_JPN_KOR(74, 45, 39), 1);
+    lt_mask_property(PAL_JPN_KOR(75, 46, 40), 1);
     for (i = 0; i < 39; i++) {
-        lt_mask_property(i + PAL_JPNKOR(137, 108), 1);
+        lt_mask_property(i + PAL_JPN_KOR(137, 108, 102), 1);
     }
-    lt_mask_property(PAL_JPNKOR(136, 107), 1);
+    lt_mask_property(PAL_JPN_KOR(136, 107, 101), 1);
 }
 
 /* the play time of a save record split into hours, minutes and seconds and
@@ -1102,14 +1104,14 @@ static void _la_set_preview_info(void)
     min = ((min / 10 + 9) % 10) * 10 + (min % 10 + 9) % 10;
     sec = ((sec / 10 + 9) % 10) * 10 + (sec % 10 + 9) % 10;
 
-    lt_mask_property(PAL_JPNKOR(76, 47) + hour / 10, 0);
-    lt_mask_property(PAL_JPNKOR(86, 57) + hour % 10, 0);
-    lt_mask_property(PAL_JPNKOR(96, 67) + min / 10, 0);
-    lt_mask_property(PAL_JPNKOR(106, 77) + min % 10, 0);
-    lt_mask_property(PAL_JPNKOR(116, 87) + sec / 10, 0);
-    lt_mask_property(PAL_JPNKOR(126, 97) + sec % 10, 0);
-    lt_mask_property(PAL_JPNKOR(74, 45), 0);
-    lt_mask_property(PAL_JPNKOR(75, 46), 0);
+    lt_mask_property(PAL_JPN_KOR(76, 47, 41) + hour / 10, 0);
+    lt_mask_property(PAL_JPN_KOR(86, 57, 51) + hour % 10, 0);
+    lt_mask_property(PAL_JPN_KOR(96, 67, 61) + min / 10, 0);
+    lt_mask_property(PAL_JPN_KOR(106, 77, 71) + min % 10, 0);
+    lt_mask_property(PAL_JPN_KOR(116, 87, 81) + sec / 10, 0);
+    lt_mask_property(PAL_JPN_KOR(126, 97, 91) + sec % 10, 0);
+    lt_mask_property(PAL_JPN_KOR(74, 45, 39), 0);
+    lt_mask_property(PAL_JPN_KOR(75, 46, 40), 0);
 
     n = previewInfo.stage;
     if (n == PAL_JPNKOR(63, 61)) {
@@ -1124,9 +1126,9 @@ static void _la_set_preview_info(void)
             n = 40;
             break;
         }
-        lt_mask_property(n + PAL_JPNKOR(134, 105), 0);
+        lt_mask_property(n + PAL_JPN_KOR(134, 105, 99), 0);
         if (previewInfo.cleared != 0) {
-            lt_mask_property(PAL_JPNKOR(136, 107), 0);
+            lt_mask_property(PAL_JPN_KOR(136, 107, 101), 0);
         }
     }
 }
@@ -1144,8 +1146,8 @@ inline int la_mc_preview_info(void)
 
 inline int la_mc_current_slot(void)
 {
-    lt_mask_property(PAL_JPNKOR(0xB0, 0x93), curPort);
-    lt_mask_property(PAL_JPNKOR(0xB1, 0x94), curPort ^ 1);
+    lt_mask_property(PAL_JPN_KOR(176, 147, 141), curPort);
+    lt_mask_property(PAL_JPN_KOR(177, 148, 142), curPort ^ 1);
     return -1;
 }
 
@@ -1154,9 +1156,9 @@ inline int la_mc_current_slot(void)
 static inline void setLoadGameStartItem(void) /* derived name */
 {
     if (loadSerial == IosMcProductFile[0].serial || saveSerial != IosMcProductFile[1].serial) {
-        texLayout[PAL_JPNKOR(17, 14)].defaultItem = PAL_JPNKOR(186, 158);
+        texLayout[PAL_JPNKOR(17, 14)].defaultItem = PAL_JPN_KOR(186, 158, 152);
     } else {
-        texLayout[PAL_JPNKOR(17, 14)].defaultItem = PAL_JPNKOR(187, 159);
+        texLayout[PAL_JPNKOR(17, 14)].defaultItem = PAL_JPN_KOR(187, 159, 153);
     }
 }
 
@@ -1164,8 +1166,8 @@ int la_load_game_memory_card_check(int first)
 {
     _la_mask_preview_info();
     mcLoadMode = 1;
-    lt_mask_property(PAL_JPNKOR(0xB0, 0x93), 1);
-    lt_mask_property(PAL_JPNKOR(0xB1, 0x94), 1);
+    lt_mask_property(PAL_JPN_KOR(176, 147, 141), 1);
+    lt_mask_property(PAL_JPN_KOR(177, 148, 142), 1);
     switch (_la_set_current_port_2(&mc, first)) {
     case 0:
         if (mcLastResult == 0 || mcLastResult == -14) {
@@ -1206,7 +1208,7 @@ inline int la_mc_load_current_slot_select(void)
 {
     _la_mask_preview_info();
     if (pad[0].flags & PAL_JPNKOR(0x40, 0x20)) {
-        curPort = lt_current_property_item() - PAL_JPNKOR(0xBA, 0x9E);
+        curPort = lt_current_property_item() - PAL_JPN_KOR(186, 158, 152);
         lastPort = curPort;
         curPortInfo = &mcPortInfo[curPort];
         POSITIVE_SE();
@@ -1239,16 +1241,16 @@ int la_mc_load_file_select(int first, int item)
 
     if (fileMask != 0) {
         _la_set_preview_info();
-        lt_mask_property(PAL_JPNKOR(73, 44), 1);
-        lt_mask_property(PAL_JPNKOR(72, 43), 1);
-        lt_mask_property(PAL_JPNKOR(195, 167), 0);
-        lt_mask_property(PAL_JPNKOR(196, 168), 0);
+        lt_mask_property(PAL_JPN_KOR(73, 44, 38), 1);
+        lt_mask_property(PAL_JPN_KOR(72, 43, 37), 1);
+        lt_mask_property(PAL_JPN_KOR(195, 167, 161), 0);
+        lt_mask_property(PAL_JPN_KOR(196, 168, 162), 0);
     } else {
         _la_mask_preview_info();
-        lt_mask_property(PAL_JPNKOR(73, 44), 0);
-        lt_mask_property(PAL_JPNKOR(72, 43), 0);
-        lt_mask_property(PAL_JPNKOR(195, 167), 1);
-        lt_mask_property(PAL_JPNKOR(196, 168), 1);
+        lt_mask_property(PAL_JPN_KOR(73, 44, 38), 0);
+        lt_mask_property(PAL_JPN_KOR(72, 43, 37), 0);
+        lt_mask_property(PAL_JPN_KOR(195, 167, 161), 1);
+        lt_mask_property(PAL_JPN_KOR(196, 168, 162), 1);
     }
     lt_set_item_select_func((ICO_WORD_PTR(LtSelectFn))la_mc_saved_file_select);
 
@@ -1611,8 +1613,8 @@ int la_mc_confirm_save_file(int first, int item)
     int i;
 
     _la_mask_preview_info();
-    lt_mask_property(PAL_JPNKOR(0xB0, 0x93), 1);
-    lt_mask_property(PAL_JPNKOR(0xB1, 0x94), 1);
+    lt_mask_property(PAL_JPN_KOR(176, 147, 141), 1);
+    lt_mask_property(PAL_JPN_KOR(177, 148, 142), 1);
     if (first) {
         systemStatus[5] = 1;
         fightSoundProcessRequestPause();
@@ -1657,7 +1659,7 @@ int la_mc_confirm_save_file(int first, int item)
         }
         {
             if (lt_fade_status() == 2) {
-                switch (item + PAL_JPNKOR(0, 24)) { /* JPN ids 24 lower */
+                switch (item + PAL_JPN_KOR(0, 24, 30)) { /* JPN ids 24 lower, KOR ids 30 lower */
                 case 214:
                     POSITIVE_SE();
                     lt_set_item_select_func(0);
@@ -1694,9 +1696,9 @@ int la_mc_confirm_save_file(int first, int item)
 static inline void setSaveGameStartItem(void) /* derived name */
 {
     if (loadSerial == IosMcProductFile[0].serial || loadSerial != IosMcProductFile[1].serial) {
-        texLayout[PAL_JPNKOR(18, 15)].defaultItem = PAL_JPNKOR(186, 158);
+        texLayout[PAL_JPNKOR(18, 15)].defaultItem = PAL_JPN_KOR(186, 158, 152);
     } else {
-        texLayout[PAL_JPNKOR(18, 15)].defaultItem = PAL_JPNKOR(187, 159);
+        texLayout[PAL_JPNKOR(18, 15)].defaultItem = PAL_JPN_KOR(187, 159, 153);
     }
 }
 
@@ -1704,8 +1706,8 @@ int la_save_game_memory_card_check(int first)
 {
     _la_mask_preview_info();
     mcLoadMode = 0;
-    lt_mask_property(PAL_JPNKOR(0xB0, 0x93), 1);
-    lt_mask_property(PAL_JPNKOR(0xB1, 0x94), 1);
+    lt_mask_property(PAL_JPN_KOR(176, 147, 141), 1);
+    lt_mask_property(PAL_JPN_KOR(177, 148, 142), 1);
     debug_StdPrintfDummy("save game check port %d\n", curPort);
     switch (_la_set_current_port_new(&mc, first)) {
     case 0:
@@ -1753,7 +1755,7 @@ inline int la_mc_save_current_slot_select(void)
 {
     if (pad[0].flags & PAL_JPNKOR(0x40, 0x20)) {
         POSITIVE_SE();
-        curPort = lt_current_property_item() - PAL_JPNKOR(0xBA, 0x9E);
+        curPort = lt_current_property_item() - PAL_JPN_KOR(186, 158, 152);
         lastPort = curPort;
         curPortInfo = &mcPortInfo[curPort];
         lt_set_item_select_func(0);
@@ -1863,15 +1865,15 @@ int la_mc_save_file_select(int first, int item)
 
     if (actionStarted != 0) {
         _la_set_preview_info();
-        lt_mask_property(PAL_JPNKOR(73, 44), 1);
-        lt_mask_property(PAL_JPNKOR(72, 43), 1);
-        lt_mask_property(PAL_JPNKOR(239, 216), 0);
-        lt_mask_property(PAL_JPNKOR(240, 217), 0);
+        lt_mask_property(PAL_JPN_KOR(73, 44, 38), 1);
+        lt_mask_property(PAL_JPN_KOR(72, 43, 37), 1);
+        lt_mask_property(PAL_JPN_KOR(239, 216, 210), 0);
+        lt_mask_property(PAL_JPN_KOR(240, 217, 211), 0);
     } else {
-        lt_mask_property(PAL_JPNKOR(73, 44), 0);
-        lt_mask_property(PAL_JPNKOR(72, 43), 0);
-        lt_mask_property(PAL_JPNKOR(239, 216), 1);
-        lt_mask_property(PAL_JPNKOR(240, 217), 1);
+        lt_mask_property(PAL_JPN_KOR(73, 44, 38), 0);
+        lt_mask_property(PAL_JPN_KOR(72, 43, 37), 0);
+        lt_mask_property(PAL_JPN_KOR(239, 216, 210), 1);
+        lt_mask_property(PAL_JPN_KOR(240, 217, 211), 1);
     }
 
     if (actionStarted != 0) {
@@ -2063,7 +2065,7 @@ int la_save_confirm_overwrite(int first, int item)
         actionStarted = 0;
         return PAL_JPNKOR(0x21, 0x1E);
     }
-    switch (item + PAL_JPNKOR(0, 24)) { /* JPN ids 24 lower */
+    switch (item + PAL_JPN_KOR(0, 24, 30)) { /* JPN ids 24 lower, KOR ids 30 lower */
     case 214:
     case 218:
         POSITIVE_SE();
@@ -2118,7 +2120,7 @@ int la_format_confirm(int first, int item)
         actionStarted = 0;
         return PAL_JPNKOR(0x21, 0x1E);
     }
-    switch (item + PAL_JPNKOR(0, 24)) { /* JPN ids 24 lower */
+    switch (item + PAL_JPN_KOR(0, 24, 30)) { /* JPN ids 24 lower, KOR ids 30 lower */
     case 214:
     case 218:
         POSITIVE_SE();
@@ -2422,15 +2424,16 @@ inline int la_save_confirm_complete(int first, int item)
         debug_StdPrintfDummy("save complete %d %d\n", fileMask, curFile);
     }
     if (item != -1) {
-        debug_StdPrintfDummy("%d %d %d\n", PAL_JPNKOR(0x108, 0xF1), PAL_JPNKOR(0x109, 0xF2), item);
+        debug_StdPrintfDummy("%d %d %d\n", PAL_JPN_KOR(264, 241, 235), PAL_JPN_KOR(265, 242, 236),
+                             item);
     }
-    switch (item + PAL_JPNKOR(0, 23)) { /* JPN ids 23 lower */
-    case 0x108:
+    switch (item + PAL_JPN_KOR(0, 23, 29)) { /* JPN ids 23 lower, KOR ids 29 lower */
+    case 264:
         systemStatus[5] = 0;
         lt_set_item_select_func(0);
         actionStarted = 0;
         return PAL_JPNKOR(0x36, 0x33);
-    case 0x109:
+    case 265:
         nextStage = 1;
         lt_set_item_select_func(0);
         actionStarted = 0;
@@ -2446,14 +2449,14 @@ int la_end_confirm(void)
     if (lt_fade_status() == 2 && (pad[0].flags & PAL_JPNKOR(LA_BACK, 0x40))) {
         NEGATIVE_SE();
         item = lt_current_property_item();
-        if (item >= PAL_JPNKOR(270, 247)) {
-            if (item < PAL_JPNKOR(272, 249)) {
+        if (item >= PAL_JPN_KOR(270, 247, 241)) {
+            if (item < PAL_JPN_KOR(272, 249, 243)) {
                 lt_set_item_select_func(0);
                 actionStarted = 0;
                 return PAL_JPNKOR(0x29, 0x26);
             }
-            if (item < PAL_JPNKOR(426, 403)) {
-                if (item >= PAL_JPNKOR(424, 401)) {
+            if (item < PAL_JPN_KOR(426, 403, 397)) {
+                if (item >= PAL_JPN_KOR(424, 401, 395)) {
                     lt_set_item_select_func(0);
                     actionStarted = 0;
                     return PAL_JPNKOR(0x39, 0x36);
@@ -2463,7 +2466,8 @@ int la_end_confirm(void)
     }
     if (pad[0].flags & PAL_JPNKOR(0x40, 0x20)) {
         debug_StdPrintfDummy("%d\n", lt_current_property_item());
-        switch (lt_current_property_item() + PAL_JPNKOR(0, 23)) { /* JPN property ids 23 lower */
+        switch (lt_current_property_item() +
+                PAL_JPN_KOR(0, 23, 29)) { /* JPN property ids 23 lower, KOR property ids 29 lower */
         case 270:
         case 424:
             POSITIVE_SE();
@@ -2531,12 +2535,12 @@ inline int la_delete_start_check(int first)
 
 inline int la_delete_confirm(int first, int item)
 {
-    switch (item + PAL_JPNKOR(0, 24)) { /* JPN ids 24 lower */
-    case 0xD6:
+    switch (item + PAL_JPN_KOR(0, 24, 30)) { /* JPN ids 24 lower, KOR ids 30 lower */
+    case 214:
         lt_set_item_select_func(0);
         actionStarted = 0;
         return PAL_JPNKOR(0x32, 0x2F);
-    case 0xD7:
+    case 215:
         lt_set_item_select_func(0);
         actionStarted = 0;
         return PAL_JPNKOR(0x1E, 0x1B);
@@ -2703,13 +2707,13 @@ inline int la_game_pause(int first)
     if (first) {
         systemStatus[5] = 1;
         iosPadActStopAll();
-        texLayout[PAL_JPNKOR(58, 55)].defaultItem = PAL_JPNKOR(308, 285);
+        texLayout[PAL_JPNKOR(58, 55)].defaultItem = PAL_JPN_KOR(308, 285, 279);
     }
     if (lt_fade_status() != 2) {
         return -1;
     }
     if (((pad[0].flags & PAL_JPNKOR(0x40, 0x20)) &&
-         lt_current_property_item() == PAL_JPNKOR(0x127, 0x110)) ||
+         lt_current_property_item() == PAL_JPN_KOR(295, 272, 266)) ||
         (pad[0].flags & PAL_JPNKOR(0x800 | LA_BACK, 0x840))) {
         NEGATIVE_SE();
         adpcmPauseRequest(0);
@@ -2755,8 +2759,9 @@ int la_game_over_continue(int first)
             }
         }
     } else {
-        switch (lt_current_property_item() + PAL_JPNKOR(0, 23)) { /* JPN property ids 23 lower */
-        case 0x1AD:
+        switch (lt_current_property_item() +
+                PAL_JPN_KOR(0, 23, 29)) { /* JPN property ids 23 lower, KOR property ids 29 lower */
+        case 429:
             if ((pad[0].flags & PAL_JPNKOR(0x40, 0x20)) == 0 || lt_fade_status() != 2) {
                 return -1;
             }
@@ -2767,7 +2772,7 @@ int la_game_over_continue(int first)
             lt_set_item_select_func(0);
             actionStarted = 0;
             return PAL_JPNKOR(0x3F, 0x3C);
-        case 0x1AE:
+        case 430:
             if ((pad[0].flags & PAL_JPNKOR(0x40, 0x20)) == 0 || lt_fade_status() != 2) {
                 return -1;
             }
@@ -2798,8 +2803,8 @@ static inline void keyconfigMaskAll(void) /* derived name */
     int i;
 
     for (i = 0; i < 48; i++) {
-        lt_mask_property(i + PAL_JPNKOR(342, 319), 1);
-        lt_default_mask_property(i + PAL_JPNKOR(342, 319), 1);
+        lt_mask_property(i + PAL_JPN_KOR(342, 319, 313), 1);
+        lt_default_mask_property(i + PAL_JPN_KOR(342, 319, 313), 1);
     }
 }
 
@@ -2852,9 +2857,9 @@ int la_key_config(int first)
     int k;
     int n;
 
-    sel = lt_current_property_item() - PAL_JPNKOR(336, 313);
+    sel = lt_current_property_item() - PAL_JPN_KOR(336, 313, 307);
     if (first) {
-        texLayout[PAL_JPNKOR(58, 55)].defaultItem = PAL_JPNKOR(323, 300);
+        texLayout[PAL_JPNKOR(58, 55)].defaultItem = PAL_JPN_KOR(323, 300, 294);
         for (i = 0; i < 16; i++) {
             if ((keyConfigMask >> i) & 1) {
                 keyConfigSlot[keyCodeIndex(iosPadConfCustom.bit[i])] = keyCodeIndex(1 << i);
@@ -2877,17 +2882,17 @@ int la_key_config(int first)
     }
     keyconfigMaskAll();
     for (i = 0; i < 6; i++) {
-        lt_mask_property(i * 8 + PAL_JPNKOR(342, 319) + keyConfigSlot[i], 0);
-        lt_default_mask_property(i * 8 + PAL_JPNKOR(342, 319) + keyConfigSlot[i], 0);
+        lt_mask_property(i * 8 + PAL_JPN_KOR(342, 319, 313) + keyConfigSlot[i], 0);
+        lt_default_mask_property(i * 8 + PAL_JPN_KOR(342, 319, 313) + keyConfigSlot[i], 0);
     }
     if (pad[0].flags & PAL_JPNKOR(0x40, 0x20)) {
-        if (lt_current_property_item() == PAL_JPNKOR(391, 368)) {
+        if (lt_current_property_item() == PAL_JPN_KOR(391, 368, 362)) {
             for (i = 7; i >= 0; i--) {
                 keyConfigSlot[i] = i;
             }
             NEGATIVE_SE();
         }
-        if (lt_current_property_item() == PAL_JPNKOR(390, 367)) {
+        if (lt_current_property_item() == PAL_JPN_KOR(390, 367, 361)) {
             POSITIVE_SE();
             for (i = 0; i < 16; i++) {
                 if ((keyConfigMask >> i) & 1) {
@@ -2902,8 +2907,8 @@ int la_key_config(int first)
             }
             keyconfigMaskAll();
             for (i = 0; i < 6; i++) {
-                lt_default_mask_property(i * 8 + PAL_JPNKOR(342, 319) + keyConfigSlot[i], 0);
-                lt_mask_property(i * 8 + PAL_JPNKOR(342, 319) + keyConfigSlot[i], 0);
+                lt_default_mask_property(i * 8 + PAL_JPN_KOR(342, 319, 313) + keyConfigSlot[i], 0);
+                lt_mask_property(i * 8 + PAL_JPN_KOR(342, 319, 313) + keyConfigSlot[i], 0);
             }
             lt_set_item_select_func(0);
             actionStarted = 0;
@@ -2917,8 +2922,11 @@ int la_key_config(int first)
 
 /* the option screen's layout items: the five screen modes, the stage
    animation each mode plays (-1 for none), and the two choices of the control
-   type (item 318, JPN 295) followed by the two of the setting item 325 (JPN 302) toggles, in one
+   type (item 318, JPN 295, KOR 289) followed by the two of the setting item 325 (JPN 302, KOR
+   296) toggles, in one
    table; the code reaches the second pair through an offset pointer */
+
+static const int screenModeItem_kor[5] = {274, 275, 276, 277, 278}; /* derived name */
 
 static const int screenModeItem_jpn[5] = {280, 281, 282, 283, 284}; /* derived name */
 
@@ -2928,13 +2936,15 @@ static const int screenModeAnim_jpn[5] = {-1, 63, 64, 65, 66}; /* derived name *
 
 static const int screenModeAnim_pal[5] = {-1, 67, 68, 69, 70}; /* derived name */
 
+static const int choiceItem_kor[4] = {292, 293, 299, 300}; /* derived name */
+
 static const int choiceItem_jpn[4] = {298, 299, 305, 306}; /* derived name */
 
 static const int choiceItem_pal[4] = {321, 322, 328, 329}; /* derived name */
 
-#define screenModeItem PAL_JPNKOR(screenModeItem_pal, screenModeItem_jpn)
+#define screenModeItem PAL_JPN_KOR(screenModeItem_pal, screenModeItem_jpn, screenModeItem_kor)
 #define screenModeAnim PAL_JPNKOR(screenModeAnim_pal, screenModeAnim_jpn)
-#define choiceItem PAL_JPNKOR(choiceItem_pal, choiceItem_jpn)
+#define choiceItem PAL_JPN_KOR(choiceItem_pal, choiceItem_jpn, choiceItem_kor)
 
 int la_game_option(void)
 {
@@ -2948,7 +2958,8 @@ int la_game_option(void)
     if ((pad[0].now & 0xA000) != 0) {
         cur = optionControlType;
         sel = optionScreenMode;
-        switch (lt_current_property_item() + PAL_JPNKOR(0, 23)) { /* JPN property ids 23 lower */
+        switch (lt_current_property_item() +
+                PAL_JPN_KOR(0, 23, 29)) { /* JPN property ids 23 lower, KOR property ids 29 lower */
         case 300:
             if ((pad[0].flags & 0x8000) != 0) {
                 sel--;
@@ -3018,7 +3029,7 @@ int la_game_option(void)
     }
     lt_default_mask_property(choiceItem[optionControlType], 0);
     if ((pad[0].flags & PAL_JPNKOR(0x40, 0x20)) != 0) {
-        if (lt_current_property_item() == PAL_JPNKOR(330, 307)) {
+        if (lt_current_property_item() == PAL_JPN_KOR(330, 307, 301)) {
             NEGATIVE_SE();
             lt_set_item_select_func(0);
             actionStarted = 0;
@@ -3026,18 +3037,18 @@ int la_game_option(void)
         }
     }
     if (mode == 0) {
-        lt_default_mask_property(PAL_JPNKOR(311, 288), 0);
-        lt_default_mask_property(PAL_JPNKOR(312, 289), 1);
+        lt_default_mask_property(PAL_JPN_KOR(311, 288, 282), 0);
+        lt_default_mask_property(PAL_JPN_KOR(312, 289, 283), 1);
     } else {
-        lt_default_mask_property(PAL_JPNKOR(311, 288), 1);
-        lt_default_mask_property(PAL_JPNKOR(312, 289), 0);
+        lt_default_mask_property(PAL_JPN_KOR(311, 288, 282), 1);
+        lt_default_mask_property(PAL_JPN_KOR(312, 289, 283), 0);
     }
     if (iosPadActRequestEnable != 0) {
-        lt_default_mask_property(PAL_JPNKOR(316, 293), 0);
-        lt_default_mask_property(PAL_JPNKOR(317, 294), 1);
+        lt_default_mask_property(PAL_JPN_KOR(316, 293, 287), 0);
+        lt_default_mask_property(PAL_JPN_KOR(317, 294, 288), 1);
     } else {
-        lt_default_mask_property(PAL_JPNKOR(316, 293), 1);
-        lt_default_mask_property(PAL_JPNKOR(317, 294), 0);
+        lt_default_mask_property(PAL_JPN_KOR(316, 293, 287), 1);
+        lt_default_mask_property(PAL_JPN_KOR(317, 294, 288), 0);
     }
     for (sel = 0; sel < 2; sel++) {
         lt_default_mask_property((choiceItem + 2)[sel], 1);
@@ -3052,7 +3063,7 @@ static inline void clearAdjustScreenMarks(void) /* derived name */
     int i;
 
     for (i = 0; i < 15; i++) {
-        lt_default_mask_property(i + PAL_JPNKOR(395, 372), 1);
+        lt_default_mask_property(i + PAL_JPN_KOR(395, 372, 366), 1);
     }
 }
 
@@ -3060,7 +3071,7 @@ int la_adjust_screen(void)
 {
     int v;
 
-    texLayout[PAL_JPNKOR(58, 55)].defaultItem = PAL_JPNKOR(324, 301);
+    texLayout[PAL_JPNKOR(58, 55)].defaultItem = PAL_JPN_KOR(324, 301, 295);
     lt_analog2Pad();
     if (pad[0].flags & 0x8000) {
         v = systemStatus[11];
@@ -3080,7 +3091,7 @@ int la_adjust_screen(void)
         systemStatus[11] = 7;
     }
     clearAdjustScreenMarks();
-    lt_default_mask_property(systemStatus[11] + PAL_JPNKOR(395, 372), 0);
+    lt_default_mask_property(systemStatus[11] + PAL_JPN_KOR(395, 372, 366), 0);
     if (pad[0].flags & PAL_JPNKOR(0x40, 0x20)) {
         POSITIVE_SE();
         lt_set_item_select_func(0);

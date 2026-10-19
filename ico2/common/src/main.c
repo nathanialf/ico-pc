@@ -32,11 +32,12 @@
 #include "ico_gamestate.h" /* port: achievement signals */
 
 /* main.c's .data globals, each with an initialiser. systemStatus starts in PAL
-   mode (word 0) at a frame step of 2 (word 1); the Japanese ELF starts word 0
-   at 0 (NTSC). One initialiser serves both discs: the host sets word 0 per disc
-   before the first tick, 0 on a fixed 60 Hz disc in main_host.c's select_disc,
-   and Main writes ico_boot_video_mode() (port/config/sysconf.c, 0 on that disc)
-   over it. db is the GS double buffer (libgraph's
+   mode (word 0) at a frame step of 2 (word 1); the Japanese and Korean ELFs
+   start word 0 at 0 (NTSC). One initialiser serves every disc: the host sets
+   word 0 per disc before the first tick, 0 on a fixed 60 Hz disc in
+   main_host.c's select_disc, and Main writes ico_boot_video_mode()
+   (port/config/sysconf.c, 0 on that disc) over it. db is the GS double
+   buffer (libgraph's
    sceGsDBuff, 0x230 B), stageMgrMsg the stage manager's message (main.h's
    StgMgrMsg, 0x18 B) and SchedulerMsgQ the scheduler's queue (message.c's
    IosMsgQueue, 0x30 B). */
@@ -576,7 +577,7 @@ int main(void)
     return 0;
 }
 
-/* main.c's .sdata globals.  Both builds add six to the January map's (marked
+/* main.c's .sdata globals.  Every build adds six to PAL's map's (marked
    derived): one quadword after game_pause and the girl-control block before
    boyGObj.  Each is a 4-byte scalar; the ones marked QWORD open a 16-byte
    quadword of their own, the rest of which stays empty. */

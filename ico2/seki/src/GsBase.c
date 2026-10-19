@@ -178,7 +178,7 @@ void gsb_SetFrame(sceGsDBuff *db, int a1, int a2, int psm, short zbp)
     sceGsSetDefDispEnv(disp1, 0, w, h, 0, 0);
 }
 
-/* Bring the GS up and set the double buffer up (JPN: the other way round)
+/* Bring the GS up and set the double buffer up (JPN and KOR: the other way round)
  * for the frame size the stage record asks for: 512 by 448 interlaced,
  * 512 by 512 in the tall mode and 512 by 448 otherwise, then hand the first
  * frame over and put the view scale back to one. */
@@ -687,7 +687,7 @@ static float scissorStep = 0.0f; /* derived name */
 extern void gif_EndPacketPath1(void);
 
 /* The letterbox the demo scenes fade in: two black bars, top and bottom,
- * whose alpha eases to 128 while the scene is state 55 (JPN layout 52) and back to 0
+ * whose alpha eases to 128 while the scene is state 55 (JPN and KOR layout 52) and back to 0
  * otherwise.  While the bars are visible they are drawn and the motion blur
  * is left alone; once they are gone the stage record's blur setting is
  * restored.  Each bar is drawn by a macro inside the two-iteration loop,
@@ -1741,7 +1741,7 @@ void gsb_SetVSMatrix(int w, int h, float d)
     gsbHostCullMargin((float *)(matrixptr + 0x240));
     gsbHostCullMargin((float *)(matrixptr + 0x680));
     if (ICO_JPNKOR) {
-        /* The field of view print of the January debug listing (SRCFILE.TXT,
+        /* The field of view print of PAL's debug listing (SRCFILE.TXT,
          * GsBase.c 2305-2306); the release build keeps its two tests.  The
          * format text is derived: it is on no disc. */
         if (gsSystemReady != 0) {

@@ -42,7 +42,7 @@ static Kanban *bootKanban; /* derived name */ /* the sign the boot sequence is s
 static Kanban *bootKanbanSub; /* derived name */ /* the second sign shown beside it */
 
 /* the sign id the card check picked: PAL 3 none, 0 ok, 4 full, -1 clear;
-   JPN 1 no card, 2 full */
+   JPN and KOR 1 no card, 2 full */
 static int mcKanbanId; /* derived name */
 
 static int mcPort; /* derived name */ /* the card slot being checked, 0 then 1 */
@@ -153,7 +153,7 @@ static int kanbanBootMcCheck_jpn(void)
         if (bootKanban->key != 1) {
             break;
         }
-        if (bootKanban->layout->curItem == 11) {
+        if (bootKanban->layout->curItem == PAL_KOR(11, 5)) {
             mcCheckStep = -1;
             kanbanReqDelFade(bootKanbanSub);
             kanbanReqDelFade(bootKanban);

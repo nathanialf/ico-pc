@@ -66,7 +66,7 @@ static void *bga_objPtr(IcoEEWord w);
 #define BGA_OBJ(T, w) ((T)bga_objPtr(w))
 #define BGA_OBJW(p) bga_objWord(p)
 
-/* The words the file's functions share, four on JPN and six on PAL.  PAL's
+/* The words the file's functions share, four on JPN and KOR and six on PAL.  PAL's
    bgaStreamSync is read and cleared by streamMotionManager.c (_infoUpdate),
    so it is global. */
 int bgaStreamSync = 0; /* derived name */
@@ -2295,7 +2295,7 @@ static inline float bga_ntscFrame(float f) /* derived name */
 }
 
 /* The record is read through its fields.  Both frame-rate scales are the
- * display rate over 30 on JPN and `x * (PAL ? k : 1.0f)` on PAL, and each
+ * display rate over 30 on JPN and KOR and `x * (PAL ? k : 1.0f)` on PAL, and each
  * key's two values are read into locals of their own, fov first. */
 void bga_CalcSdfCamera(char *data, int loop)
 {

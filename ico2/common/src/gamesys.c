@@ -46,12 +46,14 @@ static void gamesysCharacterInfoSave(GamesysMemCursor *self);
    the zero pair; the per-stage exit times; the object-info records; the save
    image itself.  The buffers are zero-initialised, so they sit in .data. */
 
+char stamp_str_kor[] = "10/23/01 17:47:13";
+
 char stamp_str_jpn[] = "10/23/01 02:02:43";
 
 char stamp_str_pal[] = "12/12/01 17:53:37";
 
 /* each disc compares its own build stamp against the save area's */
-#define stamp_str PAL_JPNKOR(stamp_str_pal, stamp_str_jpn)
+#define stamp_str PAL_JPN_KOR(stamp_str_pal, stamp_str_jpn, stamp_str_kor)
 
 void *gameSysMemoryFuncList[] = {
     gamesysVersionLoad,

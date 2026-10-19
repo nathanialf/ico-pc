@@ -41,7 +41,7 @@ static IosSema jimakuShownSema; /* derived name */
 static IosSema jimakuFrameSema; /* derived name */
 
 #include "jimaku.h"
-#include "layout_texture.h" /* texProperty: jimaku's entries are 434 and 435 (JPN 410 and 411) */
+#include "layout_texture.h" /* jimaku's texProperty rows: 434, 435 (JPN 410, 411; KOR 404, 405) */
 #include "gflag.h"
 
 typedef struct JimCol { /* field names derived */
@@ -287,8 +287,8 @@ static void jimakuMgrNext(JimakuArg *p)
     g->node->stamp = lock_execIcoMisc;
     if (g->node->tex == -1) {
         debug_StdPrintfDummy("already exist\n");
-        debug_assert(__FILE__, LN(688, 655, 655));
-        __assert(__FILE__, LN(688, 655, 655), "0");
+        debug_assert(__FILE__, LN(688, 655, 658));
+        __assert(__FILE__, LN(688, 655, 658), "0");
     }
     sub->n = (sub->n + 1) % 4;
     if (iosSemaWait(&jimakuShownSema) < 0) {
@@ -434,16 +434,16 @@ void jimakuDisp(JimakuArg *msg)
     }
     if (jimakuDispOn != 0) {
         int v = g->tex;
-        texProperty[PAL_JPNKOR(435, 411)].texNo = v;
-        texProperty[PAL_JPNKOR(434, 410)].texNo = v;
+        texProperty[PAL_JPN_KOR(435, 411, 405)].texNo = v;
+        texProperty[PAL_JPN_KOR(434, 410, 404)].texNo = v;
         if (v < 0) {
             return;
         }
         if (jimakuOn != 0) {
             JIM_HOST_KEY(g, 0);
-            display_texture(&texProperty[PAL_JPNKOR(434, 410)]);
+            display_texture(&texProperty[PAL_JPN_KOR(434, 410, 404)]);
             JIM_HOST_KEY(g, 1);
-            display_texture(&texProperty[PAL_JPNKOR(435, 411)]);
+            display_texture(&texProperty[PAL_JPN_KOR(435, 411, 405)]);
             JIM_HOST_KEY(0, 0);
         }
     }

@@ -226,9 +226,9 @@ static inline int lt_property_visible(int no) /* derived name */
     int vis = 1;
 
     if (gFlagGameClear == 0 && current_layout_id == PAL_JPNKOR(58, 55) &&
-        no >= PAL_JPNKOR(300, 277) &&
-        (no < PAL_JPNKOR(308, 285) ||
-         (no < PAL_JPNKOR(330, 307) ? no >= PAL_JPNKOR(325, 302) : 0))) {
+        no >= PAL_JPN_KOR(300, 277, 271) &&
+        (no < PAL_JPN_KOR(308, 285, 279) ||
+         (no < PAL_JPN_KOR(330, 307, 301) ? no >= PAL_JPN_KOR(325, 302, 296) : 0))) {
         vis = 0;
     }
     return vis;
