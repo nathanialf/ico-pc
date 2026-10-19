@@ -4,7 +4,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thank you for reporting it. Please say which disc you play and attach the report file: the same problem can differ between the two discs.
+        Thank you for reporting it. Please say which disc you play and attach the report file: the same problem can differ between the three discs.
   - type: dropdown
     id: disc
     attributes:
@@ -13,6 +13,7 @@ body:
       options:
         - the European disc (SCES-50760)
         - the Japanese disc (SCPS-11003)
+        - the Korean disc (SCPS-56001)
     validations:
       required: true
   - type: input

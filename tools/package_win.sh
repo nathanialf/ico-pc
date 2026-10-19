@@ -72,7 +72,7 @@ cp "$b/SDL3.dll" "$d/SDL3.dll"
 rm -rf "$d/tools"; mkdir -p "$d/tools"
 cp "$b/port/save/mc_import.exe" "$b/SDL3.dll" "$d/tools/"
 cat > "$d/tools/README.txt" <<'TXT'
-mc_import.exe copies ICO's save (of the European or the Japanese disc) out
+mc_import.exe copies ICO's save (of any of the discs) out
 of a PS2 memory card file or save archive into the game's save folder.
 Playing the game does not need it.
 To run it, open a Command Prompt in this folder and give it the file.
@@ -105,7 +105,7 @@ printf 'ico-pc %s\r\nbuilt %s\r\ncommit %s\r\n' "$label" "$date_str" "$commit" >
 
 # zip, root dir ico-pc-<label>/. The files staged above and nothing else:
 # the stage folder is also where the build
-# is tried, so it can hold Ico_PAL.iso or Ico_JPN.iso (found beside the exe), dumps\
+# is tried, so it can hold Ico_PAL.iso, Ico_JPN.iso or Ico_KOR.iso (found beside the exe), dumps\
 # (frames from the disc) and logs\, none of which may be shipped.
 # Two archives from the one stage: the normal one (with make_portable.cmd)
 # and the portable one (ico-pc.ini with portable=1, a paragraph in the README,

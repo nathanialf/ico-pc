@@ -155,7 +155,7 @@ printf 'ico-pc %s\nbuilt %s\ncommit %s\n' "$label" "$date_str" "$commit" > "$sta
 
 # archive, root dir ico-pc-<label>/, files owned by root, names sorted.
 # The files staged above and nothing else: the stage folder is also where
-# the build is tried, so it can hold Ico_PAL.iso or Ico_JPN.iso (found beside ico_pc),
+# the build is tried, so it can hold Ico_PAL.iso, Ico_JPN.iso or Ico_KOR.iso (found beside ico_pc),
 # dumps/ (frames from the disc) and logs/, none of which may be shipped.
 # Two archives from the one stage: the normal one (with make_portable.sh)
 # and the portable one (ico-pc.ini with portable=1, a paragraph in the

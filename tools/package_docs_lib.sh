@@ -46,11 +46,12 @@ portable=1'
 # with # or ; are notes. Everything works without editing this file.
 #
 # iso: the full path of your disc image of ICO, the European disc
-# (SCES-50760) or the Japanese disc (SCPS-11003): a .iso, a .chd, or a
+# (SCES-50760), the Japanese disc (SCPS-11003) or the Korean disc
+# (SCPS-56001): a .iso, a .chd, or a
 # .bin with its .cue, for example iso=C:\\Games\\Ico_PAL.iso . A file named
 # Ico_PAL.iso, Ico_PAL.chd, Ico_PAL.bin or Ico_PAL.cue (European disc), or
-# the same with Ico_JPN (Japanese disc), next to the program is used before
-# this line. Leave it empty and the first start asks for the image, then
+# the same with Ico_JPN (Japanese disc) or Ico_KOR (Korean disc), next to
+# the program is used before this line. Leave it empty and the first start asks for the image, then
 # saves your choice here. The image is read once, to copy the game's data
 # into your user folder (%APPDATA%\\ico-pc\\ico-pc); later starts do not
 # need it.
@@ -65,13 +66,14 @@ watchdog=30
 $portable_block
 
 # texture packs: see textures\\SCES-50760\\replacements\\README.txt (European
-# disc) or textures\\SCPS-11003\\replacements\\README.txt (Japanese disc) next
-# to the program.
+# disc), textures\\SCPS-11003\\replacements\\README.txt (Japanese disc) or
+# textures\\SCPS-56001\\replacements\\README.txt (Korean disc) next to the
+# program.
 #
 # Everything else (display, sound, controls, gameplay, texture packs) is in
 # the in-game Options menu, which saves it to config.toml in your user
-# folder. With a problem report, say which disc you play (the European or
-# the Japanese) and send the newest logs\\report-<date>.zip from next to
+# folder. With a problem report, say which disc you play (the European, the
+# Japanese or the Korean) and send the newest logs\\report-<date>.zip from next to
 # the program (or logs\\ico-pc.log).
 INI
     else
@@ -80,11 +82,12 @@ INI
 # with # or ; are notes. Everything works without editing this file.
 #
 # iso: the full path of your disc image of ICO, the European disc
-# (SCES-50760) or the Japanese disc (SCPS-11003): a .iso, a .chd, or a
+# (SCES-50760), the Japanese disc (SCPS-11003) or the Korean disc
+# (SCPS-56001): a .iso, a .chd, or a
 # .bin with its .cue, for example iso=/home/deck/Games/Ico_PAL.iso . A file
 # named Ico_PAL.iso, Ico_PAL.chd, Ico_PAL.bin or Ico_PAL.cue (European
-# disc), or the same with Ico_JPN (Japanese disc), next to ico_pc is used
-# before this line.
+# disc), or the same with Ico_JPN (Japanese disc) or Ico_KOR (Korean disc),
+# next to ico_pc is used before this line.
 # Leave it empty and the first start asks for the image (the file window
 # comes from your desktop, or from the small program zenity), then saves
 # your choice here. The image is read once, to
@@ -101,13 +104,13 @@ watchdog=30
 $portable_block
 
 # texture packs: see textures/SCES-50760/replacements/README.txt (European
-# disc) or textures/SCPS-11003/replacements/README.txt (Japanese disc) next
-# to ico_pc.
+# disc), textures/SCPS-11003/replacements/README.txt (Japanese disc) or
+# textures/SCPS-56001/replacements/README.txt (Korean disc) next to ico_pc.
 #
 # Everything else (display, sound, controls, gameplay, texture packs) is in
 # the in-game Options menu, which saves it to config.toml in your user
-# folder. With a problem report, say which disc you play (the European or
-# the Japanese) and send the newest logs/report-<date>.zip from next to
+# folder. With a problem report, say which disc you play (the European, the
+# Japanese or the Korean) and send the newest logs/report-<date>.zip from next to
 # ico_pc (or logs/ico-pc.log).
 INI
     fi

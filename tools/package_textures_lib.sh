@@ -4,27 +4,54 @@
 # sourced by package_win.sh and package_linux.sh and by
 # tools/test/package_textures_test.sh. Functions only.
 
-# the serial folders: one per disc the game plays, the European (SCES-50760)
-# and the Japanese (SCPS-11003); the game reads the one of the disc it plays
-pkg_serials=(SCES-50760 SCPS-11003)
+# the serial folders: one per disc the game plays, the European (SCES-50760),
+# the Japanese (SCPS-11003) and the Korean (SCPS-56001); the game reads the
+# one of the disc it plays
+pkg_serials=(SCES-50760 SCPS-11003 SCPS-56001)
 
 # pkg_disc_name <serial>: the disc's name in the notes
 pkg_disc_name() {
     case "$1" in
         SCPS-11003) echo "the Japanese disc" ;;
+        SCPS-56001) echo "the Korean disc" ;;
         *) echo "the European disc" ;;
     esac
 }
 
-# pkg_other_serial <serial>: the other disc's serial
-pkg_other_serial() {
-    if [[ "$1" == SCPS-11003 ]]; then echo SCES-50760; else echo SCPS-11003; fi
+# pkg_other_discs <serial>: the other discs' names for the notes, "the
+# Japanese disc (SCPS-11003) or the Korean disc (SCPS-56001)"
+pkg_other_discs() {
+    local s out="" n=0 total=$(( ${#pkg_serials[@]} - 1 ))
+    for s in "${pkg_serials[@]}"; do
+        [[ "$s" == "$1" ]] && continue
+        n=$((n + 1))
+        if (( n > 1 )); then
+            if (( n == total )); then out+=" or "; else out+=", "; fi
+        fi
+        out+="$(pkg_disc_name "$s") ($s)"
+    done
+    echo "$out"
+}
+
+# pkg_other_dirs <kind> <serial>: "kind/S1/replacements/ or kind/S2/replacements/"
+pkg_other_dirs() {
+    local s out="" n=0 total=$(( ${#pkg_serials[@]} - 1 ))
+    for s in "${pkg_serials[@]}"; do
+        [[ "$s" == "$2" ]] && continue
+        n=$((n + 1))
+        if (( n > 1 )); then
+            if (( n == total )); then out+=" or "; else out+=", "; fi
+        fi
+        out+="$1/$s/replacements/"
+    done
+    echo "$out"
 }
 
 # the folder under the program folder the game looks in, and the note in it
-# (the European disc's; the Japanese disc's is the same with its serial)
+# (the European disc's; the other discs' are the same with their serials)
 pkg_textures_rel="textures/SCES-50760/replacements"
 pkg_textures_rel_jpn="textures/SCPS-11003/replacements"
+pkg_textures_rel_kor="textures/SCPS-56001/replacements"
 
 # pkg_note_eol <file> <crlf|lf>: the notes are written with the Linux
 # wording and forward slashes in their paths (no other slash appears in
@@ -41,15 +68,16 @@ pkg_note_eol() {
 # none is given)
 pkg_stage_textures_readme() {
     local serial="${3:-SCES-50760}"
-    local d="$1/textures/$serial/replacements" eol="$2" disc other
+    local d="$1/textures/$serial/replacements" eol="$2" disc others otherdirs
     disc="$(pkg_disc_name "$serial")"
-    other="$(pkg_other_serial "$serial")"
+    others="$(pkg_other_discs "$serial")"
+    otherdirs="$(pkg_other_dirs textures "$serial")"
     mkdir -p "$d"
     cat > "$d/README.txt" <<TXT
 This folder is for texture packs for $disc of ICO ($serial):
 pictures that replace the game's own textures. Playing the game needs
-nothing in it. A pack for $(pkg_disc_name "$other") ($other) goes in
-textures/$other/replacements/ instead; the game reads the folder of the
+nothing in it. A pack for $others goes in
+$otherdirs instead; the game reads the folder of the
 disc you play.
 Copy a pack here keeping the pack's own folders, so its files end up under
 textures/$serial/replacements/ next to the program. A pack whose
@@ -62,6 +90,7 @@ With portable mode (a userdata folder next to the program) the pack may
 also go in userdata/textures/$serial/replacements/.
 Packs made for PCSX2 work as they are.
 TXT
+    fold -s -w 78 "$d/README.txt" | sed "s/ *\$//" > "$d/README.tmp" && mv "$d/README.tmp" "$d/README.txt"
     pkg_note_eol "$d/README.txt" "$eol"
 }
 
@@ -69,24 +98,26 @@ TXT
 # their notes, beside the textures folders
 pkg_models_rel="models/SCES-50760/replacements"
 pkg_models_rel_jpn="models/SCPS-11003/replacements"
+pkg_models_rel_kor="models/SCPS-56001/replacements"
 pkg_reshade_rel="reshade"
-pkg_note_rels=("$pkg_textures_rel" "$pkg_textures_rel_jpn" "$pkg_models_rel" "$pkg_models_rel_jpn"
-    "$pkg_reshade_rel")
+pkg_note_rels=("$pkg_textures_rel" "$pkg_textures_rel_jpn" "$pkg_textures_rel_kor"
+    "$pkg_models_rel" "$pkg_models_rel_jpn" "$pkg_models_rel_kor" "$pkg_reshade_rel")
 
 # pkg_stage_models_readme <dir> <crlf|lf> [serial]: writes
 # <dir>/models/<serial>/replacements/README.txt (serial SCES-50760 when none
 # is given)
 pkg_stage_models_readme() {
     local serial="${3:-SCES-50760}"
-    local d="$1/models/$serial/replacements" eol="$2" disc other
+    local d="$1/models/$serial/replacements" eol="$2" disc others otherdirs
     disc="$(pkg_disc_name "$serial")"
-    other="$(pkg_other_serial "$serial")"
+    others="$(pkg_other_discs "$serial")"
+    otherdirs="$(pkg_other_dirs models "$serial")"
     mkdir -p "$d"
     cat > "$d/README.txt" <<TXT
 This folder is for model packs for $disc of ICO ($serial): 3D
 models that replace the game's own. Playing the game needs nothing in it.
-A pack for $(pkg_disc_name "$other") ($other) goes in
-models/$other/replacements/ instead; the game reads the folder of the disc
+A pack for $others goes in
+$otherdirs instead; the game reads the folder of the disc
 you play.
 Copy a pack here keeping the pack's own folders, so its files end up under
 models/$serial/replacements/ next to the program. A pack whose
@@ -98,6 +129,7 @@ With portable mode (a userdata folder next to the program) the pack may
 also go in userdata/models/$serial/replacements/.
 To make a pack, see docs/MODEL_PACKS.md in the download's docs folder.
 TXT
+    fold -s -w 78 "$d/README.txt" | sed "s/ *\$//" > "$d/README.tmp" && mv "$d/README.tmp" "$d/README.txt"
     pkg_note_eol "$d/README.txt" "$eol"
 }
 
