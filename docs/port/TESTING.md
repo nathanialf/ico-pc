@@ -206,7 +206,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `kanban_boot_test.c`: the boot's card check and signs (`kanbanBoot.c`) for a first and a later
   boot (`kanban_boot`); with `jpn` or `kor`, the Japanese program's check (`kanbanBootMcCheck_jpn`,
   which the Korean disc runs too): no language or video step, no read of the card's system file,
-  the language word 0 and 60 Hz throughout (`kanban_boot_jpn`, `kanban_boot_kor`).
+  the language word 0 and 60 Hz throughout (`kanban_boot_jpn`, `kanban_boot_kor`). Each run also
+  boots with no card and with a full one: the card warning's item that checks again brings it back,
+  the item that starts without a card (European 41, Japanese 11, Korean 5) lets the boot go on.
 - `model_viewer_cam_test.c`: the viewer's camera step without the game (`model_viewer_cam`).
 - `model_viewer_test.c`: the viewer's table against its motion-kind blocks and the game's table
   sizes, its names in five languages (`model_viewer`); its Japanese model column is checked by

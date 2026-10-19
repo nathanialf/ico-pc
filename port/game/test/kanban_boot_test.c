@@ -37,6 +37,15 @@
  * over the load the check asks for the presents sign within a few ticks,
  * before the load ends, and every frame from its step 2 to that tick is a
  * keep frame.
+ * With no card in either port, and with a full card in port 0 (no room for
+ * the save), every disc's check puts up its card warning (the European
+ * disc's sign 5 at step 301, the Japanese program's sign 3 at step 100); the
+ * first answer is the item that checks the card again (the warning comes
+ * back after one more check), the second the item that starts without a
+ * card, and the boot goes on to the presents sign and its end. That item is
+ * the European 41 (step 302), the Japanese 11 and the Korean 5 (step 101,
+ * PAL_KOR(11, 5); upstream kanbanBoot.c), and the other program's value is
+ * the one that checks again.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -81,10 +90,14 @@ McProductFile IosMcProductFile[2];
 static struct {
     int reloads, layoutSwitches, gsResets, chdirs, loads, adds[8], badStep, ticks;
     int savePresent;
+    int card;       /* port 0: CARD_ROOM, CARD_NONE (no card in either port), CARD_FULL */
+    int answers[2]; /* the item the card warning is answered with, first and later */
     /* the tick each step was first logged at (kanbanBootMain's entry), -1
        before: card steps 100, 101, 300 and -1, bootStep 3 */
     int at100, at101, at300, atEnd, atBoot3;
 } s;
+
+enum { CARD_ROOM, CARD_NONE, CARD_FULL };
 
 static Kanban s_signs[16];
 static int s_signCount;
@@ -99,6 +112,10 @@ Kanban *kanbanReqAdd(int no, int pri)
     memset(k, 0, sizeof(*k));
     k->layout = &texLayout[no + 1];
     k->key = 1; /* answered at once */
+    if (no == SIGN_WARNING && s.card != CARD_ROOM) {
+        /* the item the player picks on the card warning */
+        k->layout->curItem = s.answers[s.adds[no] > 1 ? 1 : 0];
+    }
     return k;
 }
 
@@ -119,14 +136,15 @@ void kanbanReqAllDelFade(void)
     }
 }
 
-/* a formatted card in port 0 with room; the game's directory there when
-   savePresent (sceMcChdir's result 0) */
+/* a formatted card in port 0 with room (CARD_ROOM; CARD_FULL: 100 free, less
+   than the save's 360), none in port 1; the game's directory there when
+   savePresent (sceMcChdir's result 0). CARD_NONE: no card in either port. */
 void iosMcChdirProduct(McMgr *mp)
 {
     s.chdirs++;
-    mp->type = mp->port == 0 ? 2 : 0;
+    mp->type = mp->port == 0 && s.card != CARD_NONE ? 2 : 0;
     mp->format = 1;
-    mp->free = 4000;
+    mp->free = s.card == CARD_FULL ? 100 : 4000;
     mp->result = mp->port == 0 && s.savePresent ? 0 : -4;
 }
 
@@ -252,6 +270,57 @@ static void boot(const char *what, int savePresent)
     CHECK(fbKeep == 0, "%s: the frame buffer released", what);
     printf("  %s: %d ticks, %d chdir, %d load, %d reloads, %d gsResetFunc\n", what, s.ticks,
            s.chdirs, s.loads, s.reloads, s.gsResets);
+}
+
+/* --- no card, or a full one: the card warning's two answers ------------- */
+
+/* The card warning answered first with retryItem (check the card again),
+   then with startItem (start without a card): the warning twice, with the
+   card checks between, then the presents sign and the end. The card checks:
+   with no card, the check retries ten times (mcRetryCount) over both ports
+   before the first warning and once more after the first answer (20 and 2
+   chdirs); with a full card it does not retry (2 and 2). */
+static void bootNoCard(const char *what, int card, int startItem, int retryItem)
+{
+    const int subSign = card == CARD_NONE ? (s_jpn ? 1 : 3) : (s_jpn ? 2 : 4);
+    const int wantChdirs = card == CARD_NONE ? 22 : 4;
+
+    memset(&s, 0, sizeof(s));
+    s.at100 = s.at101 = s.at300 = s.atEnd = s.atBoot3 = -1;
+    s.card = card;
+    s.answers[0] = retryItem;
+    s.answers[1] = startItem;
+    memset(IosMcProductFile, 0, sizeof(IosMcProductFile));
+    bootStep = mcCheckStep = bootStarted = bootKanbanDone = 0;
+    mcRetryCount = 10;
+    fbKeep = 0;
+    fadeStatus = 0;
+    systemStatus[6] = 0;
+    systemStatus[0] = ico_boot_video_mode();
+    NonLinearCameraMove = ico_boot_language();
+    kanbanBootInit();
+    kanbanBootStart();
+    while (!kanbanBootEnd && s.ticks < 1000) {
+        kanbanBootMain();
+        s.ticks++;
+    }
+    CHECK(kanbanBootEnd, "%s: the boot ends past the card warning (%d ticks)", what, s.ticks);
+    CHECK(s.adds[SIGN_WARNING] == 2,
+          "%s: the card warning twice: item %d checks the card again, item %d starts (%d)", what,
+          retryItem, startItem, s.adds[SIGN_WARNING]);
+    CHECK(s.adds[subSign] == 2, "%s: the card sign %d beside it twice (%d)", what, subSign,
+          s.adds[subSign]);
+    CHECK(s.chdirs == wantChdirs, "%s: %d card checks (want %d)", what, s.chdirs, wantChdirs);
+    CHECK(s.adds[SIGN_PRESENTS] == 1, "%s: the presents sign once (%d)", what,
+          s.adds[SIGN_PRESENTS]);
+    CHECK(s.loads == 0, "%s: no system file read (%d)", what, s.loads);
+    CHECK(s.reloads == 0 && s.layoutSwitches == 0 && s.gsResets == 0,
+          "%s: no reload, layout switch or gsResetFunc (%d, %d, %d)", what, s.reloads,
+          s.layoutSwitches, s.gsResets);
+    CHECK(s.badStep == 0, "%s: no tick in steps 102 or 190..202 (%d)", what, s.badStep);
+    CHECK(fbKeep == 0, "%s: the frame buffer released", what);
+    printf("  %s: %d ticks, %d chdirs, the card warning %d times (items %d then %d)\n", what,
+           s.ticks, s.chdirs, s.adds[SIGN_WARNING], retryItem, startItem);
 }
 
 /* --- the start-up's frames over stage 1's load ------------------------- */
@@ -383,6 +452,16 @@ int main(int argc, char **argv)
     boot("later boot (a save)", 1);
     bootOverLoad("over the load, the stage manager first", 0);
     bootOverLoad("over the load, the stage manager after the tick", 1);
+    {
+        /* the item that starts without a card, and one that checks again:
+           the European 41 (step 302; 40 stands for any other item), the
+           Japanese 11 and the Korean 5 (step 101's PAL_KOR(11, 5)), each
+           checked against the other disc's value */
+        const int startItem = !s_jpn ? 41 : ICO_KOR ? 5 : 11;
+        const int retryItem = !s_jpn ? 40 : ICO_KOR ? 11 : 5;
+        bootNoCard("no card", CARD_NONE, startItem, retryItem);
+        bootNoCard("a full card", CARD_FULL, startItem, retryItem);
+    }
     remove(p);
     if (failures) {
         printf("kanban_boot_test %s: %d failures\n", ico_region_cur()->slug, failures);

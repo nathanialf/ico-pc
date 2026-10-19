@@ -3,16 +3,18 @@
  *
  * What differs between the discs the port plays, as the port's own code
  * needs it: one IcoRegionInfo per row of config/regions.txt, region_pal.c
- * (the European release SCES-50760) and region_jpn.c (the Japanese release
- * SCPS-11003), collected in ico_region_info[] in the table's order. The
+ * (the European release SCES-50760), region_jpn.c (the Japanese release
+ * SCPS-11003) and region_kor.c (the Korean release SCPS-56001), collected
+ * in ico_region_info[] in the table's order. The
  * port names game data by number in many places (a layout, a menu row, a
  * stage, a story flag); each number here was resolved by name against that
  * disc's own sources and tables, never by a blanket shift: the two builds
  * differ in the middle of most tables.
  *
  * The selected region is the game's own index, ico_region (the game header
- * ico2/common/include/region.h, which the game code reads through ICO_JPN
- * and PAL_JPN); it is set once, by ico_region_select when the disc image is
+ * ico2/common/include/region.h, which the game code reads through the
+ * ICO_<SET> predicates and PAL_<SET> selectors, docs/port/CONVENTIONS.md);
+ * it is set once, by ico_region_select when the disc image is
  * identified, and is 0 (the European disc) until then, so code and tests
  * that never select one keep the European values.
  *
@@ -58,16 +60,16 @@ typedef struct IcoGlyphRow {
 
 typedef struct IcoRegionInfo {
     /* --- the disc ------------------------------------------------------ */
-    const char *slug;         /* "pal", "jpn": config/regions.txt's first column */
+    const char *slug;         /* "pal", "jpn", "kor": config/regions.txt's first column */
     const char *disc_id;      /* "SCES-50760": its third */
     const char *boot_elf;     /* "SCES_507.60": its fourth */
     const char *pack_serial;  /* texture and model pack folders (PCSX2's) */
-    const char *archive_name; /* "ico.o2r", "ico-jpn.o2r" */
-    const char *image_base;   /* "Ico_PAL", "Ico_JPN" */
+    const char *archive_name; /* "ico.o2r", "ico-jpn.o2r", "ico-kor.o2r" */
+    const char *image_base;   /* "Ico_PAL", "Ico_JPN", "Ico_KOR" */
     /* config.toml keys kept per disc (options.c, achievements.c): the
        European disc keeps the names it always had ("" prefix and suffix) */
-    const char *key_prefix; /* [mirror] <prefix>slot_N: "", "jpn_" */
-    const char *key_suffix; /* stats.stages<suffix>: "", "_jpn" */
+    const char *key_prefix; /* [mirror] <prefix>slot_N: "", "jpn_", "kor_" */
+    const char *key_suffix; /* stats.stages<suffix>: "", "_jpn", "_kor" */
 
     /* --- the memory card --------------------------------------------- */
     const char *mc_save_dir; /* fumi/ios/mcard.c's product directory */
@@ -188,7 +190,7 @@ extern const IcoRegionInfo *const ico_region_info[ICO_REGION_COUNT];
 /* The selected region's table: ico_region_info[ico_region]. */
 const IcoRegionInfo *ico_region_cur(void);
 
-/* Selects the region by its slug ("pal", "jpn"): 0, or -1 for a slug that
+/* Selects the region by its slug ("pal", "jpn", "kor"): 0, or -1 for a slug that
    is not a row (NULL too), which keeps the selection. The program calls it
    once, when the disc image is identified, before any game code runs. */
 int ico_region_select(const char *slug);
