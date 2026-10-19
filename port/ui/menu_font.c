@@ -118,6 +118,17 @@ static const UiSheetInk kSheetInk[UI_LANG_SHEET_COUNT] = {
        and scei sheets: fill 251.5 (the letters' palette white is fcfcfc,
        252), rim 34.3, one antialiasing step */
     {1, 34, 252, 1, 0},
+    /* the Korean disc's sheets (UI_SHEET_KO), measured off line on SCPS-56001's
+       Tex_menu01 title (새로 시작하기, 불러오기), mc04 (게임으로 돌아감, 게임을 종료함)
+       and option (옵션, 게임으로) words with menu_jpn_test.c's rule (inkAdd:
+       the fill texels grey >= 240 and alpha >= 0.9, the rim texels alpha
+       >= 0.5, grey <= 100, not next to a fill texel), the same rule giving
+       250.5 and 33.6 on the Japanese disc's same words where menu_look_jpn
+       measures 251.5 and 34.3: fill 249.7 + 1.0, rim 42.2 + 0.7 (each
+       sheet's own: title 254 / 45.6, mc04 245 / 40.2, option 252.7 / 41.1),
+       one antialiasing step (alpha 232 on the title, 252 on mc04) as the
+       Japanese sheets'.  A Korean twin of menu_look_jpn re-measures it. */
+    {1, 43, 251, 1, 0},
 };
 /* the dark, plain and grey inks and the light words without a halo: no
    rim, a white fill (the vertex colour makes them black, white or grey) */
@@ -266,7 +277,7 @@ void ui__menu_set_bold(float bx, float by)
 /* ------------------------------------------------------- the geometry */
 
 /* A port text's geometry per sheet: the em over the one asked for, the
-   width (wx, over UI_SHEET_WIDTH), the Japanese glyphs' gap (font.c
+   width (wx, over UI_SHEET_WIDTH), the Japanese and Korean glyphs' gap (font.c
    ui__sheet_set_kana_gap: below 0 their own advances) and the weight
    across and down.  The European sheets' is the font's as it is (em 1,
    width 1, the weight UI_MENU_BOLD_X / Y, which ctest menu_look fitted;
@@ -285,7 +296,26 @@ void ui__menu_set_bold(float bx, float by)
    texel, the width within 10 % on the title sheet and 17 % on the others,
    whose words are spaced unevenly (もどる and ズーム tighter than
    オプション): their geometry keeps the disc's letter widths and close
-   setting, and the tight words come out up to 15 % wide. */
+   setting, and the tight words come out up to 15 % wide.
+   The Korean disc's sheets (UI_SHEET_KO) letter Hangul thinner and
+   narrower than Noto Sans KR at the menus' em, set proportionally with a
+   wide gap, the title's words (title.tm2) as the other screens' (option.tm2,
+   mc04.tm2): one geometry, no title variant.  Measured off line on the
+   decoded sheets (the fill box of menu_jpn_test.c geoBoxOf, grey >= 200
+   and alpha >= 0.7) against an emulation of this rasteriser, embolden and
+   sheet_ref.c's 1x texel (which gives the Japanese geometry's words within
+   the gate as menu_look_jpn does: オプション -11 %, もどる +14 %, ズーム
+   +13 %, はじめから +3 %, つづきから -3 %), searched over em 1.04 .. 1.20,
+   wx 0.50 .. 0.70, gap 5 .. 10, weight 0 / 0.15 with the score of
+   testGeometry for the held words of both sheets together: em 1.12, wx
+   0.62, gap 7.5, no extra weight.  The disc's boxes and the port's
+   (width x height): 옵션 32 x 14 / 32 x 13, 게임으로 71 x 14 / 72 x 13,
+   조작 설정 81 x 13 / 78 x 13, 줌 12 x 13 / 12 x 13, 게임을 종료함 106 x 12
+   / 116 x 13 (+9.4 %, mc04's condensed lettering), 새로 시작하기 116 x 13 /
+   118 x 14, 불러오기 72 x 14 / 71 x 14: every height within a texel, every
+   width within 10 % (the title's gate on every sheet).  Syllable ink is
+   12 to 14 texels high (a final consonant reaching 14), 11 to 15 wide, 5
+   to 7 apart, a space 11 to 15. */
 #define JA_GEO_EM 0.98f
 #define JA_GEO_WX 0.86f
 #define JA_GEO_GAP 1.5f
@@ -294,15 +324,21 @@ void ui__menu_set_bold(float bx, float by)
 #define JA_TITLE_GEO_WX 0.70f
 #define JA_TITLE_GEO_GAP 6.0f
 #define JA_TITLE_GEO_BOLD 0.0f
-static MfGeo s_jaGeo[2] = {
+#define KO_GEO_EM 1.12f
+#define KO_GEO_WX 0.62f
+#define KO_GEO_GAP 7.5f
+#define KO_GEO_BOLD 0.0f
+static MfGeo s_cjkGeo[3] = {
     {JA_GEO_EM, JA_GEO_WX, JA_GEO_GAP, JA_GEO_BOLD, JA_GEO_BOLD},
     {JA_TITLE_GEO_EM, JA_TITLE_GEO_WX, JA_TITLE_GEO_GAP, JA_TITLE_GEO_BOLD, JA_TITLE_GEO_BOLD},
+    {KO_GEO_EM, KO_GEO_WX, KO_GEO_GAP, KO_GEO_BOLD, KO_GEO_BOLD},
 };
 static int s_titleSheet; /* ui_menu_text_set_title */
 
+/* UI_SHEET_JA_TITLE's, UI_SHEET_KO's, else UI_SHEET_JA's */
 static MfGeo *jaGeo(int sheet)
 {
-    return &s_jaGeo[sheet == UI_SHEET_JA_TITLE ? 1 : 0];
+    return &s_cjkGeo[sheet == UI_SHEET_JA_TITLE ? 1 : sheet == UI_SHEET_KO ? 2 : 0];
 }
 
 void ui__menu_set_ja_geometry(int sheet, float em, float wx, float gap, float bx, float by)
@@ -333,11 +369,14 @@ int ui_menu_text_set_title(int on)
 }
 
 /* the current sheet's (ui_sheet_language, and on the Japanese disc the
-   title's or the other screens') */
+   title's or the other screens'; the Korean disc's one) */
 static MfGeo sheetGeo(void)
 {
     if (ui_sheet_language() == UI_SHEET_JA) {
         return *jaGeo(s_titleSheet ? UI_SHEET_JA_TITLE : UI_SHEET_JA);
+    }
+    if (ui_sheet_language() == UI_SHEET_KO) {
+        return *jaGeo(UI_SHEET_KO);
     }
     return (MfGeo){1.0f, 1.0f, -1.0f, s_boldX, s_boldY};
 }

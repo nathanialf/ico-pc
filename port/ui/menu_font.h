@@ -75,7 +75,7 @@ typedef struct UiSheetInk {
 } UiSheetInk;
 
 /* The light ink's style for sheet language lang (strings.h: a European
-   language's UiLang, or UI_SHEET_JA; out of range: English): kSheetInk,
+   language's UiLang, UI_SHEET_JA or UI_SHEET_KO; out of range: English): kSheetInk,
    menu_font.c, the one place the levels live. */
 const UiSheetInk *ui_menu_sheet_ink(int lang);
 
@@ -112,7 +112,7 @@ void ui_draw_menu_text(float x, float y, float size, const uint8_t rgba[4], cons
    on != 0 measures and draws the text after it in the Japanese title
    sheet's geometry (UI_SHEET_JA_TITLE: the title's words are spaced apart
    more than the other sheets'), 0 in the other screens' (UI_SHEET_JA);
-   the European sheets have one.  Returns the previous setting. */
+   the European and Korean sheets have one.  Returns the previous setting. */
 int ui_menu_text_set_title(int on);
 
 /* A game row's words where its sprite would be: it the row's item, lang
