@@ -358,16 +358,9 @@ static void iosCdvdMgrSearchFile(IosCdvdHandle *self)
         if (sceCdSearchFile(&self->file, self->name) == 0) {
             self->result = 100;
         }
-        if (ICO_KOR) {
-            /* On the Korean disc the archive's header, which opens DATA.DF on
-             * the Japanese disc, lies 153600 sectors (300 MB) into the file.
-             * PAL's listing has seven code-less lines here (789-795), and every
-             * assert line of this build equals PAL's: the block is in PAL's
-             * source, compiled out. */
-            if (strcmp("\\DFDATAS\\DATA.DF;1", self->name) == 0) {
-                self->file.lsn += 153600;
-            }
-        }
+        /* upstream's Korean block (DATA.DF's lsn += 153600: the archive lies 153600
+           sectors into the file) is the disc layer's here: IcoDiscInfo.df_lsn_shift
+           (docs/port/DIVERGENCES.md) */
         if (srhBuffCnt < 200) {
             iosCdvdSrhBuff[srhBuffCnt].lsn = self->file.lsn;
             iosCdvdSrhBuff[srhBuffCnt].size = self->file.size;
@@ -839,7 +832,7 @@ void iosCdvdManager(void)
     IosCdvdHandle *msg;
     IosCdvdHandle *req;
 
-    cdDiskType = PAL_JPNKOR(20, 18); /* JPN: a PlayStation 2 CD */
+    cdDiskType = PAL_JPN(20, 18); /* JPN: a PlayStation 2 CD; KOR a DVD, as PAL */
     sceCdInit(0);
     sceCdMmode(iosCdvdMediaType);
     sceFsReset();

@@ -102,7 +102,7 @@ static void ios_init_plus(void)
 
 void iosInitialize(void)
 {
-    iosCdvdMediaType = PAL_JPNKOR(2, 1); /* cdvd.c: JPN 1, a CD */
+    iosCdvdMediaType = PAL_JPN(2, 1); /* cdvd.c: JPN 1, a CD; KOR 2, a DVD, as PAL */
     debug_StdPrintfDummy("iosInitialize()\n");
     iosThreadInit();
     /* the same range, inside the host's EE RAM arena, ending
