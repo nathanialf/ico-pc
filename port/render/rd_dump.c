@@ -16,6 +16,12 @@
  *            the width the cull and the draws used (the head's gsW; the
  *            frame's own gsW is the renderer context's).  A version 3 to
  *            9 dump has none and loads as aspect 4/3, wExact 512, cullW 512)
+ *   (version 12: char[8] region, the slug of the disc the frame was drawn
+ *            on, NUL-padded (ico_region_cur()->slug, config/regions.txt):
+ *            the reduction's crop and the border mask are the region's
+ *            (rd_post.c rd__reduction_crop), so rd_replay_tool selects it
+ *            before replaying.  A version 3 to 11 dump has none and is the
+ *            European disc's, "pal")
  *   u32      number, keep, hasCamera
  *   RdCamera camera (raw)
  *   RdStateBlock startState, endState (version 3: without the trailing aa1,
@@ -98,6 +104,7 @@
 #include <string.h>
 #include "host_fs.h"
 #include "rd_internal.h"
+#include "../core/region.h" /* the disc a dump was drawn on (version 12) */
 #include "rd_mesh.h"
 #include "rd_passring.h"
 #include "shader_consts.h"
@@ -247,6 +254,16 @@ static bool wf32(FILE *fp, float v)
     return w32(fp, u);
 }
 
+/* version 12: the disc's slug, NUL-padded to RD_DUMP_REGION_BYTES */
+static bool wRegion(FILE *fp)
+{
+    char slug[RD_DUMP_REGION_BYTES] = {0};
+    const char *s = ico_region_cur()->slug;
+
+    strncpy(slug, s != NULL ? s : "pal", sizeof(slug) - 1);
+    return wraw(fp, slug, sizeof(slug));
+}
+
 bool rd__dump_frame(const RdFrame *f, const char *path)
 {
     if (!f || !path) {
@@ -265,8 +282,9 @@ bool rd__dump_frame(const RdFrame *f, const char *path)
               w32(fp, (uint32_t)sizeof(RdScreenVtx)) && w32(fp, f->gsW) && w32(fp, f->gsH) &&
               wf32(fp, f->aspect > 0.0f ? f->aspect : 4.0f / 3.0f) &&
               wf32(fp, f->wExact > 0.0f ? f->wExact : (float)f->gsW) &&
-              w32(fp, f->cullW ? f->cullW : f->gsW) && w32(fp, f->number) && w32(fp, f->keep) &&
-              w32(fp, f->hasCamera) && wraw(fp, &f->camera, sizeof(f->camera)) &&
+              w32(fp, f->cullW ? f->cullW : f->gsW) && wRegion(fp) && w32(fp, f->number) &&
+              w32(fp, f->keep) && w32(fp, f->hasCamera) &&
+              wraw(fp, &f->camera, sizeof(f->camera)) &&
               wraw(fp, &f->startState, sizeof(RdStateBlock)) &&
               wraw(fp, &f->endState, sizeof(RdStateBlock));
     for (int l = 0; ok && l < RD_LIST_COUNT; l++) {
@@ -404,6 +422,22 @@ static bool frameFieldsOk(float aspect, float wExact, uint32_t cullW)
            cullW <= (uint32_t)ICO_FRAME_W_MAX && wExact <= (float)cullW + 1e-3f;
 }
 
+/* version 12's region slug into out (NUL-terminated, a row's slug); "pal"
+   for an older dump */
+static bool rRegion(FILE *fp, uint32_t ver, char out[RD_DUMP_REGION_BYTES])
+{
+    memset(out, 0, RD_DUMP_REGION_BYTES);
+    if (ver < 12u) {
+        memcpy(out, "pal", 3);
+        return true;
+    }
+    if (!rraw(fp, out, RD_DUMP_REGION_BYTES)) {
+        return false;
+    }
+    out[RD_DUMP_REGION_BYTES - 1] = '\0';
+    return ico_region_by_slug(out) != NULL;
+}
+
 bool rd__dump_peek(const char *path, RdDumpInfo *info)
 {
     FILE *fp = ico_fopen(path, "rb");
@@ -427,6 +461,7 @@ bool rd__dump_peek(const char *path, RdDumpInfo *info)
         ok = rf32(fp, &info->aspect) && rf32(fp, &info->wExact) && r32(fp, &info->cullW) &&
              frameFieldsOk(info->aspect, info->wExact, info->cullW);
     }
+    ok = ok && rRegion(fp, info->version, info->region);
     fclose(fp);
     return ok;
 }
@@ -601,6 +636,19 @@ bool rd__load_frame(const char *path, RdFrame *out)
     if (ok && ver >= 10u) {
         ok = rf32(fp, &out->aspect) && rf32(fp, &out->wExact) && r32(fp, &out->cullW) &&
              frameFieldsOk(out->aspect, out->wExact, out->cullW);
+    }
+    {
+        /* the region is the replay's to select (rd__dump_peek) */
+        char region[RD_DUMP_REGION_BYTES];
+        if (ok && !rRegion(fp, ver, region)) {
+            if (region[0] != '\0') {
+                rd__log("load: %s names the region '%s', no row of config/regions.txt", path,
+                        region);
+                fclose(fp);
+                return false;
+            }
+            ok = false; /* truncated: the message below */
+        }
     }
     ok = ok && r32(fp, &out->number) && r32(fp, &out->keep) && r32(fp, &out->hasCamera) &&
          rraw(fp, &out->camera, sizeof(out->camera)) && rraw(fp, &out->startState, szState) &&

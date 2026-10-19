@@ -7,6 +7,9 @@
  *
  * <dump> is an .rddump, or the .zip F12 writes: its first .rddump entry is
  * taken (extracted to a temporary file in the temp folder, deleted at exit).
+ * The replay runs as the disc the dump was drawn on (its region, dump
+ * version 12; the European disc for an older dump): the reduction's crop
+ * and the border mask are that disc's.
  *
  * NAME is a named target (SCENE, DISPLAY (default), SHADOW0..2, WORK0..3,
  * AA0, AA1, FEED128, AURA_WORK, AURA_TAP, WORK2_PAD, FEED_HELD,
@@ -194,6 +197,7 @@
 #include "dump_zip.h" /* port/platform: the F12 zip */
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "../core/region.h"              /* the dump's disc (version 12) */
 #include "../vu1_ref/vu1_ref.h"          /* --vu-ref: the CPU mirror of the VU programs */
 #include "../../shaders/shader_consts.h" /* ICO_VU_MARK_*: the marks --mesh shows */
 #include "font.h"                        /* port/ui: the overlay test's text */
@@ -1215,6 +1219,14 @@ int main(int argc, char **argv)
     }
     gw = info.gsW;
     gh = info.gsH;
+    /* the disc the frame was drawn on (dump version 12; "pal" before): the
+     * reduction's crop and the border mask are its (rd_post.c
+     * rd__reduction_crop), so the replay draws what the player saw */
+    if (ico_region_select(info.region) != 0) {
+        fprintf(stderr, "%s: the dump's region '%s' is not a row of config/regions.txt\n", dump,
+                info.region);
+        return 1;
+    }
     /* The aspect: a dump holds the picture as drawn at its own width (4:3
      * before version 10).  Replaying narrower crops it in the present;
      * wider has nothing to show.  The renderer is built at the dump's
@@ -1324,9 +1336,11 @@ int main(int argc, char **argv)
         RdStateBlock st = rf->startState;
         s_listed = 0;
         rd__walk(rf, (int)rf->keep, &st, listCmd, (void *)rf);
-        printf("dump: version %u, GS %ux%u, aspect %.4f (%s), visible width %g, cull width %u\n",
+        printf("dump: version %u, GS %ux%u, aspect %.4f (%s), visible width %g, cull width %u, "
+               "region %s\n",
                info.version, info.gsW, info.gsH, (double)info.aspect,
-               aspectName(info.aspect, (char[16]){0}), (double)info.wExact, info.cullW);
+               aspectName(info.aspect, (char[16]){0}), (double)info.wExact, info.cullW,
+               info.region);
         printf("listed %u commands of frame %u (%ux%u, fba/pabe/texa/date per action)\n", s_listed,
                rf->number, rf->gsW, rf->gsH);
         /* the game's F12 line about the water (rd_water.c rd__water_dump_line),

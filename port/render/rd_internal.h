@@ -2982,12 +2982,15 @@ bool rd__read_texture(RdTex t, void *dst, size_t dstSize, uint32_t *w, uint32_t 
  * 11 a sheet image's bakedTexa word with bits 16..23 clear, its image as in
  * 10 (those bits set: a sheet w x h at every scale with a halo made on the
  * CPU in its bottom half, which loads as the image made again from the
- * coverage of its top half, rd_dump.c sheetFromHalo).
+ * coverage of its top half, rd_dump.c sheetFromHalo); 12 the disc's region
+ * slug after cullW (char[RD_DUMP_REGION_BYTES], NUL-padded: "pal", "jpn";
+ * an older dump is "pal", RdDumpInfo.region).
  * rd__dump_frame writes this version; rd__load_frame reads 3 to it, and a
  * dump before 10 loads as the 4:3 frame (aspect 4/3, wExact 512, cullW 512).
  * A dump holds the picture as drawn at its width: a replay can crop it to a
  * narrower aspect, never widen it (rd_replay_tool). */
-#define RD_DUMP_VERSION 11u
+#define RD_DUMP_VERSION 12u
+#define RD_DUMP_REGION_BYTES 8
 bool rd__dump_frame(const RdFrame *f, const char *path);
 bool rd__load_frame(const char *path, RdFrame *out);
 
@@ -2999,6 +3002,11 @@ typedef struct RdDumpInfo {
     float aspect;   /* 4/3 before version 10 */
     float wExact;   /* 512 before version 10 */
     uint32_t cullW; /* 512 before version 10 */
+    /* the slug of the disc the frame was drawn on (a row of
+       config/regions.txt; "pal" before version 12): rd_replay_tool selects
+       it (ico_region_select) so the reduction's crop and border are that
+       disc's */
+    char region[RD_DUMP_REGION_BYTES];
 } RdDumpInfo;
 
 bool rd__dump_peek(const char *path, RdDumpInfo *info);

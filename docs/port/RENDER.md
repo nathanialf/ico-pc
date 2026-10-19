@@ -2493,12 +2493,15 @@ sum of the lists, not one list or effect.
 ## Dumps and the replay tool
 
 A [.rddump](ARCHITECTURE.md#terms) is the in-memory frame, little-endian, versioned by
-`RD_DUMP_VERSION` (10): the frame's native size and aspect, its camera, start and end states, the
+`RD_DUMP_VERSION` (12): the frame's native size and aspect, the disc it was drawn on (its region
+slug, version 12; an older dump is the European disc's), its camera, start and end states, the
 13 lists, the payload, the textures and temporary targets it references, and its VU meshes. Target
 contents are not written: a frame that reads a retained target replays from what the loading
 context holds. Loading creates the textures and targets anew and rewrites every id, and gives the VU
 draws recorded without card verdicts theirs ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)), so
-a dump replays alike at every setting. Dumps hold game assets and are never committed
+a dump replays alike at every setting. `rd_replay_tool` selects the dump's region
+(`ico_region_select`) before it replays, so the reduction's crop and the border mask
+(`rd__reduction_crop`) are that disc's. Dumps hold game assets and are never committed
 (`port/render/rd_dump.c`, header comment).
 
 Dumps are written by F12 and Shift+F12 ([PLATFORM.md](PLATFORM.md#hotkeys-and-dump-zips)) and by

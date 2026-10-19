@@ -31,7 +31,9 @@
  *              DISPLAY_HELD (appended after them) are recreated
  *   dump v10   the native frame (aspect, wExact, cullW) after gsH round-trips
  *              and peeks (rd__dump_peek); a version 9 dump loads as the 4:3
- *              frame; a header the renderer cannot size is refused
+ *              frame; a header the renderer cannot size is refused; the
+ *              version 12 region slug ("pal", "jpn", "pal" for version 11,
+ *              no row refused)
  *   dump sheet a version 11 dump's sheets round-trip (1x the coverage
  *              alone, 2x over rd_sheet_rim's rim); one with a halo made on
  *              the CPU (w x 2h at every scale, a gain in bakedTexa bits
@@ -72,6 +74,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../../core/region.h" /* the dump's region (version 12) */
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "shader_consts.h"
@@ -598,8 +601,10 @@ static void cutBytes(uint8_t *buf, long *size, size_t o, size_t n)
 }
 
 /* The version 10 frame fields' place: after the version word and the three
- * sizes (8 + 16 bytes) and gsW, gsH; aspect, wExact and cullW, 12 bytes. */
+ * sizes (8 + 16 bytes) and gsW, gsH; aspect, wExact and cullW, 12 bytes.
+ * Version 12's region slug follows them (RD_DUMP_REGION_BYTES). */
 #define V10_FIELDS_AT (8 + 4 * 4 + 2 * 4)
+#define V12_REGION_AT (V10_FIELDS_AT + 12)
 
 /* A dump of this version in buf rewritten in place as a version 8 one:
  * without the version 10 frame fields, the state blocks without tex1Lod and
@@ -607,7 +612,7 @@ static void cutBytes(uint8_t *buf, long *size, size_t o, size_t n)
  * left to the caller. */
 static void dumpTo8(uint8_t *buf, long *size)
 {
-    cutBytes(buf, size, V10_FIELDS_AT, 12);
+    cutBytes(buf, size, V10_FIELDS_AT, 12 + RD_DUMP_REGION_BYTES);
     const size_t st0 = 8 + 4 * 4 + 5 * 4 + sizeof(RdCamera);
     const size_t sb = sizeof(RdStateBlock), sb8 = RD_STATE_BLOCK_V8_SIZE;
     const uint32_t sz8 = RD_STATE_BLOCK_V8_SIZE;
@@ -955,7 +960,9 @@ static void testDumpBlock(const char *dir)
  * the 4:3 frame (aspect 4/3, wExact 512, cullW 512) and leaves its content
  * alone; a header the renderer cannot size (an aspect under 4:3, a visible
  * width past the native one, a cull width that is not the frame's) is
- * refused. */
+ * refused.  Version 12's region slug after them: "pal" in this run and in a
+ * version 11 dump, "jpn" for a frame dumped with the Japanese disc
+ * selected, a slug that is no row refused. */
 static void testDumpV10(const char *dir)
 {
     CHECK(RD_DUMP_VERSION >= 10u, "the dump version is 10 or later (%u)", RD_DUMP_VERSION);
@@ -1002,10 +1009,11 @@ static void testDumpV10(const char *dir)
         snprintf(path9, sizeof(path9), "%s/rd_state_test_v9.rddump", dir);
         uint8_t *b9 = malloc((size_t)size);
         memcpy(b9, buf, (size_t)size);
-        cutBytes(b9, &size, V10_FIELDS_AT, 12);
+        cutBytes(b9, &size, V10_FIELDS_AT, 12 + RD_DUMP_REGION_BYTES);
         const uint32_t v9 = 9;
         memcpy(b9 + 8, &v9, 4);
-        CHECK(size == size10 - 12 && spit(path9, b9, size), "v9 dump written");
+        CHECK(size == size10 - 12 - RD_DUMP_REGION_BYTES && spit(path9, b9, size),
+              "v9 dump written");
         CHECK(rd__dump_peek(path9, &info) && info.version == 9u && info.aspect == 4.0f / 3.0f &&
                   info.wExact == 512.0f && info.cullW == 512u,
               "v9 header peeked as the 4:3 frame");
@@ -1021,6 +1029,52 @@ static void testDumpV10(const char *dir)
         }
         remove(path9);
         free(b9);
+        /* version 12: the region after cullW; this run's is the European
+           disc's, a version 11 dump (the same less the slug) is "pal", a
+           frame drawn on the Japanese disc says so, and a slug that is no
+           row is refused */
+        CHECK(rd__dump_peek(path, &info) && strcmp(info.region, "pal") == 0 &&
+                  memcmp(buf + V12_REGION_AT, "pal\0\0\0\0\0", RD_DUMP_REGION_BYTES) == 0,
+              "v12 region peeked (%s)", info.region);
+        {
+            char path11[1100], pathJ[1100];
+            long size11 = size10;
+            uint8_t *b11 = malloc((size_t)size10);
+            memcpy(b11, buf, (size_t)size10);
+            cutBytes(b11, &size11, V12_REGION_AT, RD_DUMP_REGION_BYTES);
+            const uint32_t v11 = 11;
+            memcpy(b11 + 8, &v11, 4);
+            snprintf(path11, sizeof(path11), "%s/rd_state_test_v11.rddump", dir);
+            CHECK(spit(path11, b11, size11) && rd__dump_peek(path11, &info) &&
+                      info.version == 11u && strcmp(info.region, "pal") == 0 && info.cullW == 1376u,
+                  "v11 dump peeks as the European disc's (%s)", info.region);
+            if (rd__load_frame(path11, &g)) {
+                CHECK(g.cullW == 1376u && g.lists[7].count == f->lists[7].count, "v11 dump loads");
+                rd__frame_free(&g);
+            } else {
+                CHECK(0, "v11 dump loaded");
+            }
+            remove(path11);
+            free(b11);
+            CHECK(ico_region_select("jpn") == 0, "region jpn selected");
+            snprintf(pathJ, sizeof(pathJ), "%s/rd_state_test_jpn.rddump", dir);
+            CHECK(rd__dump_frame(f, pathJ) && rd__dump_peek(pathJ, &info) &&
+                      strcmp(info.region, "jpn") == 0,
+                  "a frame dumped on the Japanese disc peeks as jpn (%s)", info.region);
+            ico_region_select("pal");
+            long sizeJ = 0;
+            uint8_t *bj = slurp(pathJ, &sizeJ);
+            if (bj) {
+                memcpy(bj + V12_REGION_AT, "xx\0\0\0\0\0\0", RD_DUMP_REGION_BYTES);
+                CHECK(spit(pathJ, bj, sizeJ) && !rd__dump_peek(pathJ, &info) &&
+                          !rd__load_frame(pathJ, &g),
+                      "a region that is no row is refused");
+                free(bj);
+            } else {
+                CHECK(0, "jpn dump read back");
+            }
+            remove(pathJ);
+        }
         /* refused: an aspect under 4:3, a cull width other than gsW, a
            visible width past the native one */
         const float lowAspect = 1.0f, wide = 2000.0f;
@@ -1108,7 +1162,8 @@ static void testDumpSheetV11(const char *dir)
     }
     /* the texture records: after the header (with the version 10 frame
        fields), the two state blocks, the lists and the payload */
-    size_t o = V10_FIELDS_AT + 12 + 3 * 4 + sizeof(RdCamera) + 2 * sizeof(RdStateBlock);
+    size_t o =
+        V12_REGION_AT + RD_DUMP_REGION_BYTES + 3 * 4 + sizeof(RdCamera) + 2 * sizeof(RdStateBlock);
     for (int l = 0; l < RD_LIST_COUNT; l++) {
         o += 4 + (size_t)rd32(buf + o) * sizeof(RdCmd);
     }
