@@ -18,9 +18,7 @@
 
 #include "options.h"
 
-/* the disc's row of config/regions.txt (0 PAL, 1 JPN), set at disc mount
-   (ico2/common/include/region.h once it is on main) */
-extern int ico_region;
+#include "region.h" /* ico_region: the disc's row of config/regions.txt */
 
 #ifdef ICO_GS_LIVE
 #include "typedef.h"
@@ -66,7 +64,7 @@ void ico_gs_sample_live(IcoGsSnapshot *s)
     s->frame_count = frame_count;
     /* the game keeps the language here; the Japanese disc has no such word
        (its ELF defines none, and no JPN code reads one) */
-    s->language = ico_region == 0 ? NonLinearCameraMove : -1;
+    s->language = ico_region == ICO_REGION_PAL ? NonLinearCameraMove : -1;
     s->time_count = gamesysTimeCount;
     s->game_clear = gFlagGameClear;
     s->save_stage = gFlagSaveStage;
@@ -592,7 +590,7 @@ _Static_assert(sizeof(s_peek_jpn) / sizeof(s_peek_jpn[0]) <=
                "peek rows");
 
 /* config/regions.txt's order */
-static const PeekTable s_peek_tables[] = {
+static const PeekTable s_peek_tables[ICO_REGION_COUNT] = {
     {s_peek_pal, (int)(sizeof(s_peek_pal) / sizeof(s_peek_pal[0]))},
     {s_peek_jpn, (int)(sizeof(s_peek_jpn) / sizeof(s_peek_jpn[0]))},
 };

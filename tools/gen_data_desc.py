@@ -932,6 +932,11 @@ def generate():
         files[f"{st.slug}/tables.cmake"] = cm
     ts = [SHARED_NOTE,
           '#include "port/data/gen/table_desc.h"',
+          '#include "ico2/common/include/region.h"',
+          "",
+          "/* one set per region: the index is ico_region */",
+          "_Static_assert(ICO_TABLE_SET_COUNT == ICO_REGION_COUNT, "
+          "\"a descriptor set per row of config/regions.txt\");",
           "",
           "/* config/regions.txt's rows in order */",
           "const IcoTableSet *const ico_table_sets[ICO_TABLE_SET_COUNT] = {"]
