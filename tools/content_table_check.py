@@ -593,6 +593,22 @@ def region_row(slug):
     raise SystemExit("content_table_check: no row %s in %s" % (slug, REGIONS))
 
 
+DISCS_C = os.path.join(ROOT, "port", "data", "discs.c")
+
+
+def disc_df_shift(slug):
+    """IcoDiscInfo.df_lsn_shift of the row of port/data/discs.c whose slug this is: the
+    sectors DATA.DF's directory LSN is short of the archive (the Korean disc, 153600);
+    0 for a row without one. Read from the row's initializer, the field after the
+    directory CRC (archive.h)."""
+    src = open(DISCS_C, encoding="utf-8").read()
+    m = re.search(r'\[ICO_REGION_%s\]\s*=\s*\{(.*?)\},' % slug.upper(), src, re.S)
+    if not m:
+        raise SystemExit("content_table_check: no ico_discs row for %s in %s" % (slug, DISCS_C))
+    f = re.search(r"_DIR_CRC,\s*(\d+)u?\s*,", m.group(1))
+    return int(f.group(1)) if f else 0
+
+
 def region_groups(slug):
     """The chain groups port/core/region_SLUG.c gives, in the table's order."""
     path = os.path.join(ROOT, "port", "core", "region_%s.c" % slug)
@@ -634,14 +650,19 @@ def table_range(name, slug="pal"):
 class Disc:
     """A disc image (ISO 9660): its files, DATA.DF's packs, the boot ELF."""
 
-    def __init__(self, path, boot_elf="SCES_507.60"):
+    def __init__(self, path, boot_elf="SCES_507.60", df_shift=0):
         self.boot_elf = boot_elf
         self.f = open(path, "rb")
         pvd = self.sectors(16, 1)
         if pvd[1:6] != b"CD001":
             raise ValueError("%s: not an ISO 9660 image" % path)
         self.root = struct.unpack_from("<I", pvd, 158)[0], struct.unpack_from("<I", pvd, 166)[0]
-        self.df = self.find("DFDATAS/DATA.DF")
+        lsn, size = self.find("DFDATAS/DATA.DF")
+        # the Korean disc's archive lies df_shift sectors past the directory's LSN
+        # (IcoDiscInfo.df_lsn_shift, port/data/archive.h); the span shrinks by as much
+        if size <= df_shift * 2048:
+            raise ValueError("%s: DATA.DF (%d bytes) is not longer than its shift" % (path, size))
+        self.df = lsn + df_shift, size - df_shift * 2048
         n = struct.unpack("<I", self.read_df(0, 4))[0]
         raw = self.read_df(4, n * 40)
         self.entries = [(raw[i * 40:i * 40 + 32].split(b"\0")[0].decode("latin-1"),
@@ -785,7 +806,7 @@ def cmd_chains(args):
     if not path.lower().endswith(".iso") or not os.path.exists(path):
         say("SKIP chains: no disc image (.iso) at %s" % path)
         return EXIT_SKIP
-    disc = Disc(path, boot_elf)
+    disc = Disc(path, boot_elf, disc_df_shift(slug))
     read = elf_reader(disc.elf())
     base, count = table_range("stageTable", slug)
     rows = []
