@@ -94,6 +94,13 @@ void ui__sheet_raster_line(uint8_t *cov, int w, int h, int stride, float emRows,
 /* Tests: the lettering's width factor (UI_SHEET_WIDTH) set; returns the
    previous one */
 float ui__sheet_set_width(float k);
+/* The Japanese glyphs (Noto Sans JP's) set proportionally, as the Japanese
+   disc's lettering is: gap >= 0 advances each glyph with an outline by the
+   outline's width plus gap texels, its ink at the pen (a space keeps its
+   advance); below 0 (the default) every glyph keeps its advance.  Returns
+   the previous gap.  menu_font.c sets it around the Japanese sheet
+   language's text (its geometry's gap). */
+float ui__sheet_set_kana_gap(float gap);
 uint64_t ui__text_key(const char *utf8, unsigned flags, int page);
 /* Tests (menu_look): the coverage strip of a menu text item in language lang
    (UiLang), the one ui_menu_word_draw caches, into out (w x h bytes, the
@@ -120,6 +127,12 @@ void ui__menu_force_scale(int scale);
 #define UI_MENU_BOLD_Y 0.3f
 /* Tests: the letters' extra weight across and down (UI_MENU_BOLD_X / Y) set */
 void ui__menu_set_bold(float bx, float by);
+/* Tests (menu_look_jpn): a Japanese sheet's geometry (UI_SHEET_JA or
+   UI_SHEET_JA_TITLE) for the port's text (menu_font.c sheetGeo: the em over the one asked for, the
+   width over UI_SHEET_WIDTH, the Japanese glyphs' gap, the weight across
+   and down) set and read */
+void ui__menu_set_ja_geometry(int sheet, float em, float wx, float gap, float bx, float by);
+void ui__menu_ja_geometry(int sheet, float *em, float *wx, float *gap, float *bx, float *by);
 void ui__set_menu_font_hooks(void (*shutdown)(void), void (*forget)(void));
 
 #ifdef ICO_RD

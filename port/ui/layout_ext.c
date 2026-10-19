@@ -40,8 +40,9 @@ typedef struct ExtRow {
     int hasLiteral;
     int base[4]; /* the last plain box (the glow maps from it) */
     int hasBase;
-    int dim;  /* greyed (lt_ext_set_dim): the colour at half */
-    int role; /* LT_POINTER_* (lt_ext_set_pointer_role) */
+    int dim;        /* greyed (lt_ext_set_dim): the colour at half */
+    int role;       /* LT_POINTER_* (lt_ext_set_pointer_role) */
+    int titleSheet; /* on the title screen (lt_ext_set_title_sheet) */
 } ExtRow;
 
 static LtProp s_layouts[LT_EXT_MAX_LAYOUTS];
@@ -166,6 +167,16 @@ int lt_ext_row_dim(int index)
 {
     ExtRow *r = rowOf(index);
     return r ? r->dim : 0;
+}
+
+int lt_ext_set_title_sheet(int index, int on)
+{
+    ExtRow *r = rowOf(index);
+    if (!r) {
+        return -1;
+    }
+    r->titleSheet = on != 0;
+    return 0;
 }
 
 int lt_ext_set_pointer_role(int index, int role)
@@ -518,6 +529,9 @@ void lt_ext_draw_row(const LtProperty *e, const int box[4], const unsigned char 
         break;
     }
     float size = r->text.size > 0.0f ? r->text.size : UI_MENU_TEXT_SIZE;
+    /* the title screen's rows in the title sheet's geometry (the Japanese
+       disc's; menu_font.h ui_menu_text_set_title) */
+    const int wasTitle = ui_menu_text_set_title(r->titleSheet);
     /* a label wider than its box (a long option, another language) is set
        smaller to fit, down to 60 %; the widest line of a multi-line label
        counts */
@@ -535,6 +549,7 @@ void lt_ext_draw_row(const LtProperty *e, const int box[4], const unsigned char 
        (menu_font.h), into the scene list at 1x in every preset */
     if (!glow) {
         ui_draw_menu_text(x, y, size, rgba, text, flags, UI_INK_LIGHT, NULL);
+        ui_menu_text_set_title(wasTitle);
         ui_set_draw_key(owner);
         return;
     }
@@ -548,6 +563,7 @@ void lt_ext_draw_row(const LtProperty *e, const int box[4], const unsigned char 
     xf.offsetY = ((float)box[1] / 8.0f + UI_GRID_CY) - by;
     /* the glow sprite's blend (ALPHA 0x48), which the packet holds */
     ui_draw_menu_text(x, y, size, rgba, text, flags | UI_ADDITIVE, UI_INK_LIGHT, &xf);
+    ui_menu_text_set_title(wasTitle);
     ui_set_draw_key(owner);
 }
 

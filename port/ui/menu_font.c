@@ -134,12 +134,18 @@ typedef struct MfPage {
     uint32_t lastFrame; /* rd_frame_number at its last draw */
 } MfPage;
 
+/* a port text's geometry (sheetGeo, below) */
+typedef struct MfGeo {
+    float em, wx, gap, boldX, boldY;
+} MfGeo;
+
 typedef struct MfStrip {
     int used;
     uint64_t hash;
     char *text;          /* a port text's string; NULL for an item's */
     int item, lang;      /* an item's index and language; -1 for a port text */
     float em;            /* texel rows */
+    MfGeo geo;           /* a port text's geometry */
     unsigned layout;     /* a port text's alignment flags */
     int scale;           /* strip texels a sheet texel */
     int cls, page, x, y; /* the page's texels */
@@ -193,6 +199,8 @@ const UiSheetInk *ui_menu_item_ink(int ink, int rim, int lang)
 
 /* ------------------------------------------------------------- measuring */
 
+static MfGeo sheetGeo(void);
+
 /* the lines of utf8: starts and lengths; returns the count */
 static int splitLines(const char *utf8, const char **start, size_t *len)
 {
@@ -219,18 +227,21 @@ float ui_measure_menu_text(float size, const char *utf8)
     const char *start[MF_LINES];
     size_t len[MF_LINES];
     const int n = splitLines(utf8, start, len);
+    const MfGeo g = sheetGeo();
+    const float gap = ui__sheet_set_kana_gap(g.gap);
     float widest = 0.0f;
     for (int i = 0; i < n; i++) {
-        const float w = ui__sheet_line_width(size * 0.5f, 1.0f, 0.0f, start[i], len[i]);
+        const float w = ui__sheet_line_width(size * 0.5f * g.em, g.wx, 0.0f, start[i], len[i]);
         widest = w > widest ? w : widest;
     }
+    ui__sheet_set_kana_gap(gap);
     return widest;
 }
 
 void ui_menu_font_metrics(float size, float *ascent, float *descent, float *capHeight)
 {
     float a = 0.0f, d = 0.0f, c = 0.0f;
-    ui__sheet_v_metrics(size * 0.5f, &a, &d, NULL, &c);
+    ui__sheet_v_metrics(size * 0.5f * sheetGeo().em, &a, &d, NULL, &c);
     if (ascent) {
         *ascent = 2.0f * a;
     }
@@ -252,6 +263,82 @@ void ui__menu_set_bold(float bx, float by)
     s_boldY = by;
 }
 
+/* ------------------------------------------------------- the geometry */
+
+/* A port text's geometry per sheet: the em over the one asked for, the
+   width (wx, over UI_SHEET_WIDTH), the Japanese glyphs' gap (font.c
+   ui__sheet_set_kana_gap: below 0 their own advances) and the weight
+   across and down.  The European sheets' is the font's as it is (em 1,
+   width 1, the weight UI_MENU_BOLD_X / Y, which ctest menu_look fitted;
+   their words' own fit is per item, menu_text.c).  The Japanese disc's
+   lettering is thinner than Noto Sans JP at the menus' em and set
+   proportionally, and its sheets space their words apart: the title's
+   (title.tm2: つづきから, はじめから) loosely, the pause menu's and the
+   Options screens' (option.tm2, mc04.tm2: オプション, もどる, ゲーム終了,
+   ズーム, キーコンフィグ) tightly.  So the Japanese sheets have two
+   geometries: UI_SHEET_JA_TITLE for the port's rows on the title screen
+   (layout_ext.c, the rows settings.c marks, ui_menu_text_set_title), and
+   UI_SHEET_JA everywhere else (the pause menu, the Settings pages, the
+   popups).  Each is fitted to its sheet's words by ctest menu_look_jpn
+   (menu_jpn_test.c testGeometry, ICO_MENU_LOOK_JPN_FIT=1 for the search),
+   which holds every word's ink to the disc's row: the height within a
+   texel, the width within 10 %. */
+#define JA_GEO_EM 0.98f
+#define JA_GEO_WX 0.60f
+#define JA_GEO_GAP 7.5f
+#define JA_GEO_BOLD 0.15f
+#define JA_TITLE_GEO_EM 1.06f
+#define JA_TITLE_GEO_WX 0.70f
+#define JA_TITLE_GEO_GAP 6.0f
+#define JA_TITLE_GEO_BOLD 0.0f
+static MfGeo s_jaGeo[2] = {
+    {JA_GEO_EM, JA_GEO_WX, JA_GEO_GAP, JA_GEO_BOLD, JA_GEO_BOLD},
+    {JA_TITLE_GEO_EM, JA_TITLE_GEO_WX, JA_TITLE_GEO_GAP, JA_TITLE_GEO_BOLD, JA_TITLE_GEO_BOLD},
+};
+static int s_titleSheet; /* ui_menu_text_set_title */
+
+static MfGeo *jaGeo(int sheet)
+{
+    return &s_jaGeo[sheet == UI_SHEET_JA_TITLE ? 1 : 0];
+}
+
+void ui__menu_set_ja_geometry(int sheet, float em, float wx, float gap, float bx, float by)
+{
+    MfGeo *g = jaGeo(sheet);
+    g->em = em;
+    g->wx = wx;
+    g->gap = gap;
+    g->boldX = bx;
+    g->boldY = by;
+}
+
+void ui__menu_ja_geometry(int sheet, float *em, float *wx, float *gap, float *bx, float *by)
+{
+    const MfGeo *g = jaGeo(sheet);
+    *em = g->em;
+    *wx = g->wx;
+    *gap = g->gap;
+    *bx = g->boldX;
+    *by = g->boldY;
+}
+
+int ui_menu_text_set_title(int on)
+{
+    const int old = s_titleSheet;
+    s_titleSheet = on != 0;
+    return old;
+}
+
+/* the current sheet's (ui_sheet_language, and on the Japanese disc the
+   title's or the other screens') */
+static MfGeo sheetGeo(void)
+{
+    if (ui_sheet_language() == UI_SHEET_JA) {
+        return *jaGeo(s_titleSheet ? UI_SHEET_JA_TITLE : UI_SHEET_JA);
+    }
+    return (MfGeo){1.0f, 1.0f, -1.0f, s_boldX, s_boldY};
+}
+
 /* the strip's letters made heavier (ui_internal.h UI_MENU_BOLD_X / Y): each
    texel gains half the strength of its two neighbours' coverage across (bx)
    and down (by), clamped; a stem or a bar grows by about the strength in
@@ -261,9 +348,9 @@ void ui__menu_set_bold(float bx, float by)
    its fraction as at 1x from the neighbours n + 1 away, so the edge stays one
    strip texel wide (1x: n = 0, the sum above)
  */
-static void embolden(uint8_t *cov, int w, int h, int scale)
+static void embolden(uint8_t *cov, int w, int h, int scale, float bx, float by)
 {
-    const float k[2] = {s_boldX * 0.5f * (float)scale, s_boldY * 0.5f * (float)scale};
+    const float k[2] = {bx * 0.5f * (float)scale, by * 0.5f * (float)scale};
     const int n[2] = {w, h};
     uint8_t *t = malloc((size_t)(w > h ? w : h));
     if (!t) {
@@ -345,7 +432,7 @@ static void rasterItem(const UiMenuTextItem *it, int lang, uint8_t *cov, int sca
         const float base = it->y[lang] + (float)i * it->pitch + cap * 0.5f;
         ui__sheet_raster_line(cov, w, hgt, w, em, wx, track, pen, base, start[i], len[i], scale);
     }
-    embolden(cov, w, hgt, scale);
+    embolden(cov, w, hgt, scale, s_boldX, s_boldY);
 }
 
 int ui__menu_strip_raster(const UiMenuTextItem *it, int lang, uint8_t *out, int w, int h)
@@ -368,13 +455,15 @@ typedef struct MfText {
     const char *start[MF_LINES];
     size_t len[MF_LINES];
     int n;
-    float em, b0, step, pen[MF_LINES];
+    float em, wx, gap, boldX, boldY, b0, step, pen[MF_LINES];
     int ox, oy, w, h;
 } MfText;
 
-/* 0 when the strip has no size */
-static int textLayout(const char *utf8, float em, unsigned layout, MfText *t)
+/* 0 when the strip has no size; em is the one asked for, g the sheet
+   language's geometry */
+static int textLayout(const char *utf8, float em, MfGeo g, unsigned layout, MfText *t)
 {
+    em *= g.em;
     const char *start[MF_LINES];
     size_t len[MF_LINES];
     const int n = splitLines(utf8, start, len);
@@ -393,8 +482,9 @@ static int textLayout(const char *utf8, float em, unsigned layout, MfText *t)
         break;
     }
     float pen[MF_LINES], minX = 0.0f, maxX = 0.0f;
+    const float gap = ui__sheet_set_kana_gap(g.gap);
     for (int i = 0; i < n; i++) {
-        const float w = ui__sheet_line_width(em, 1.0f, 0.0f, start[i], len[i]);
+        const float w = ui__sheet_line_width(em, g.wx, 0.0f, start[i], len[i]);
         switch (layout & UI_ALIGN_MASK) {
         case UI_ALIGN_CENTER:
             pen[i] = -w * 0.5f;
@@ -413,6 +503,7 @@ static int textLayout(const char *utf8, float em, unsigned layout, MfText *t)
             maxX = pen[i] + w;
         }
     }
+    ui__sheet_set_kana_gap(gap);
     /* the glyphs' overhang past their advances (italic-free Arimo: a
        fraction of the em) and the rim */
     const float padX = ceilf(em * 2.0f * UI_X_PER_Y * 0.12f) + (float)MF_RIM_X;
@@ -429,6 +520,10 @@ static int textLayout(const char *utf8, float em, unsigned layout, MfText *t)
     }
     t->n = n;
     t->em = em;
+    t->wx = g.wx;
+    t->gap = g.gap;
+    t->boldX = g.boldX;
+    t->boldY = g.boldY;
     t->b0 = b0;
     t->step = step;
     t->ox = ox;
@@ -447,11 +542,13 @@ static void textRaster(const MfText *t, uint8_t *cov, int sc)
     const char *const *start = t->start;
     const size_t *len = t->len;
     const float *pen = t->pen;
+    const float gap = ui__sheet_set_kana_gap(t->gap);
     for (int i = 0; i < n; i++) {
-        ui__sheet_raster_line(cov, w * sc, hgt * sc, w * sc, em, 1.0f, 0.0f, pen[i] - (float)ox,
+        ui__sheet_raster_line(cov, w * sc, hgt * sc, w * sc, em, t->wx, 0.0f, pen[i] - (float)ox,
                               b0 + (float)i * step - (float)oy, start[i], len[i], sc);
     }
-    embolden(cov, w * sc, hgt * sc, sc);
+    ui__sheet_set_kana_gap(gap);
+    embolden(cov, w * sc, hgt * sc, sc, t->boldX, t->boldY);
 }
 
 int ui__menu_text_raster(const char *utf8, float size, unsigned layout, uint8_t **out, int *w,
@@ -459,7 +556,7 @@ int ui__menu_text_raster(const char *utf8, float size, unsigned layout, uint8_t 
 {
     MfText t;
     if (!out || !w || !h || !utf8 || !*utf8 || !(size > 0.0f) ||
-        !textLayout(utf8, size * 0.5f, layout & (UI_ALIGN_MASK | UI_VALIGN_MASK), &t)) {
+        !textLayout(utf8, size * 0.5f, sheetGeo(), layout & (UI_ALIGN_MASK | UI_VALIGN_MASK), &t)) {
         return -1;
     }
     uint8_t *cov = calloc((size_t)t.w * (size_t)t.h, 1);
@@ -963,9 +1060,13 @@ static MfStrip *itemStrip(const UiMenuTextItem *it, int item, int lang, int cls,
 
 static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls, int sc)
 {
+    /* the sheet language's geometry is part of the strip (a language
+       change draws its words anew) */
+    const MfGeo g = sheetGeo();
     uint64_t h = 0xCBF29CE484222325ull;
     h = hashBytes(h, utf8, strlen(utf8));
     h = hashBytes(h, &em, sizeof(em));
+    h = hashBytes(h, &g, sizeof(g));
     h = hashBytes(h, &layout, sizeof(layout));
     h = hashBytes(h, &cls, sizeof(cls));
     if (sc > 1) {
@@ -974,12 +1075,13 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls, 
     for (int i = 0; i < MF_STRIPS; i++) {
         MfStrip *s = &s_mf.strips[i];
         if (s->used && s->hash == h && s->text && s->cls == cls && s->scale == sc && s->em == em &&
-            s->layout == layout && strcmp(s->text, utf8) == 0) {
+            memcmp(&s->geo, &g, sizeof(g)) == 0 && s->layout == layout &&
+            strcmp(s->text, utf8) == 0) {
             return s;
         }
     }
     MfText t;
-    if (!textLayout(utf8, em, layout, &t)) {
+    if (!textLayout(utf8, em, g, layout, &t)) {
         return NULL;
     }
     const int w = t.w, hgt = t.h, ox = t.ox, oy = t.oy;
@@ -1004,6 +1106,7 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls, 
     s->item = -1;
     s->lang = -1;
     s->em = em;
+    s->geo = g;
     s->layout = layout;
     s->scale = sc;
     s->cls = cls;

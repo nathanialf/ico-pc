@@ -1215,6 +1215,35 @@ float ui__sheet_set_width(float k)
     return old;
 }
 
+/* The Japanese glyphs set proportionally (ui_internal.h
+   ui__sheet_set_kana_gap): below 0 off, else each Noto Sans JP glyph with
+   an outline advances by its outline's width plus this many texels, its
+   ink starting at the pen */
+static float s_kanaGap = -1.0f;
+
+float ui__sheet_set_kana_gap(float gap)
+{
+    const float old = s_kanaGap;
+    s_kanaGap = gap;
+    return old;
+}
+
+/* a glyph's advance in texels at the horizontal scale sx (scale strip
+   texels a sheet texel), and in *lead the texels its outline is moved left
+   by (the proportional Japanese glyphs: their left bearing) */
+static float sheetAdvance(FontGlyph f, float sx, int scale, float *lead)
+{
+    *lead = 0.0f;
+    if (s_kanaGap >= 0.0f && f.info == &s_font.ja) {
+        int x0, y0, x1, y1;
+        if (stbtt_GetGlyphBox(f.info, f.g, &x0, &y0, &x1, &y1) && x1 > x0) {
+            *lead = (float)x0 * f.k * sx;
+            return (float)(x1 - x0) * f.k * sx + s_kanaGap * (float)scale;
+        }
+    }
+    return advanceUnits(f) * sx;
+}
+
 static void sheetScales(float emRows, float wx, float *sx, float *sy)
 {
     const float y = stbtt_ScaleForMappingEmToPixels(&s_font.info, emRows > 0.01f ? emRows : 0.01f);
@@ -1258,7 +1287,8 @@ float ui__sheet_line_width(float emRows, float wx, float track, const char *utf8
         if (prev) {
             pen += kernUnits(prev, cp) * sx + track;
         }
-        pen += advanceUnits(f) * sx;
+        float lead;
+        pen += sheetAdvance(f, sx, 1, &lead);
         prev = cp;
     }
     return pen;
@@ -1294,9 +1324,12 @@ void ui__sheet_raster_line(uint8_t *cov, int w, int h, int stride, float emRows,
             penX += kernUnits(prev, cp) * sx + track;
         }
         prev = cp;
+        float lead;
+        const float adv = sheetAdvance(f, sx, scale, &lead);
         /* the glyph at its fractional pen: the whole part places the
            bitmap, the fraction shifts the outline inside it */
-        const float bx = floorf(penX), fx = penX - bx;
+        const float gx = penX - lead;
+        const float bx = floorf(gx), fx = gx - bx;
         int x0, y0, x1, y1;
         stbtt_GetGlyphBitmapBoxSubpixel(f.info, f.g, sx * f.k, sy * f.k, fx, fy, &x0, &y0, &x1,
                                         &y1);
@@ -1332,7 +1365,7 @@ void ui__sheet_raster_line(uint8_t *cov, int w, int h, int stride, float emRows,
                 }
             }
         }
-        penX += advanceUnits(f) * sx;
+        penX += adv;
     }
     free(tmp);
 }

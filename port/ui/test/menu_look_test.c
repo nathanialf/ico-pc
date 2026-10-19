@@ -190,6 +190,17 @@ static void collect(void)
             if (!s || it->u + it->w > s->w || it->v + it->h > s->h) {
                 continue;
             }
+            /* the same texels once (the player count's items are the film
+               effect's 1 and 2 tiles under their own words) */
+            int seen = 0;
+            for (int k = 0; k < s_nrect[lang] && !seen; k++) {
+                const UiMenuTextItem *o = &ui_menu_text_items[s_rect[lang][k].item];
+                seen = s_rect[lang][k].sheet == s->name && o->u == it->u && o->v == it->v &&
+                       o->w == it->w && o->h == it->h;
+            }
+            if (seen) {
+                continue;
+            }
             Rect *r = &s_rect[lang][s_nrect[lang]++];
             r->item = i;
             r->row = row;
@@ -1018,7 +1029,8 @@ static void testCompareItems(const char *outDir)
             langN++;
             const int multi = strchr(ui_str_in((UiLang)lang, (UiStrId)it->str), '\n') != NULL;
             /* the figure 1 (and 10): Arimo's 1 has a foot the sheets' has not */
-            const int one = it->str == UI_STR_MT_DIGIT_1 || it->str == UI_STR_MT_DIGIT_10;
+            const int one = it->str == UI_STR_MT_DIGIT_1 || it->str == UI_STR_MT_DIGIT_10 ||
+                            it->str == UI_STR_MT_PLAYERS_1;
             if (langN <= GEO_ITEMS) {
                 const float b[4] = {fabsf(mr.left - ms.left), fabsf(mr.right - ms.right),
                                     fabsf(mr.top - ms.top), fabsf(mr.bottom - ms.bottom)};

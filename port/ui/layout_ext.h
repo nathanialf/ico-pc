@@ -81,6 +81,12 @@ int lt_ext_set_size(int index, float size);
 int lt_ext_set_dim(int index, int dim);
 /* whether a port row is greyed (tests) */
 int lt_ext_row_dim(int index);
+/* Marks a port row as one of the title screen's (settings.c: Options and
+   Quit under the title's words): its label is measured and drawn in the
+   title sheet's geometry (menu_font.h ui_menu_text_set_title; the Japanese
+   disc's title sheet spaces its words apart more than the others).
+   Cleared by lt_ext_reset; -1 if index is not a port row. */
+int lt_ext_set_title_sheet(int index, int on);
 /* the label as it would be drawn now (tests) */
 const char *lt_ext_row_text(int index);
 /* the label's size before any shrink to fit (UI_MENU_TEXT_SIZE for 0), 0

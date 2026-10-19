@@ -19,7 +19,11 @@
  *         rim), and over them the Japanese sheets' ink, the port's own rows
  *         over these sheets are drawn with (menu_font.c
  *         kSheetInk[UI_SHEET_JA]), printed and held to that table within
- *         menu_look's tolerances.
+ *         menu_look's tolerances; and the port's geometry for the Japanese
+ *         sheet language (menu_font.c sheetGeo): the title's and pause
+ *         menu's words drawn by the port against the disc's rows of the
+ *         same words, the ink's height within a texel and its width within
+ *         10 % (ICO_MENU_LOOK_JPN_FIT=1 searches the numbers).
  *
  *   dump  with the disc image, pictures to compare the port's Japanese
  *         words with the disc's lettering (not a ctest; no checks):
@@ -699,6 +703,8 @@ static const PortStr kPortStr[] = {
     MT(COLON),
     MT(VAL_A),
     MT(VAL_B),
+    MT(PLAYERS_1),
+    MT(PLAYERS_2),
     /* the port's words on the title and the pause menu (settings.c
        buildEntries, the quit confirmation) and the Settings pages' titles
        (addHeader: HEADER_SIZE 30 in a 600 box) */
@@ -722,8 +728,8 @@ static const PortStr kPortStr[] = {
 };
 #undef MT
 #define PORT_STR_COUNT ((int)(sizeof(kPortStr) / sizeof(kPortStr[0])))
-#define MT_COUNT (UI_STR_MT_VAL_B - UI_STR_MT_LANG_ENGLISH + 1)
-_Static_assert(MT_COUNT == 93, "kPortStr starts with every UI_STR_MT_* id, in order");
+#define MT_COUNT (UI_STR_MT_PLAYERS_2 - UI_STR_MT_LANG_ENGLISH + 1)
+_Static_assert(MT_COUNT == 95, "kPortStr starts with every UI_STR_MT_* id, in order");
 
 /* a port string rendered as ui_draw_menu_text draws it in the Japanese
    sheets' light ink (kSheetInk[UI_SHEET_JA], the full rim), unlit sprite
@@ -776,6 +782,241 @@ static int renderPort(const PortStr *ps, Rendered *out)
     out->h = h;
     out->size = size;
     return 1;
+}
+
+/* ------------------------------------------------------------ geometry */
+
+/* The port's Japanese words against the disc's: the ink box of a word's
+   letters (the fill texels, grey >= 200 and alpha >= 0.7, as the survey
+   counts them; the rim and its halo are not the letters), and its columns
+   with ink (the letters' width without the gaps between them), on the
+   disc's row and on the port's strip of the same word (ui__menu_text_raster at
+   UI_MENU_TEXT_SIZE in kSheetInk[UI_SHEET_JA], renderPort), with the
+   fill's texel count, in the geometry of the word's sheet: the title's
+   (UI_SHEET_JA_TITLE: つづきから, はじめから) or the other screens'
+   (UI_SHEET_JA: the pause menu's オプション, もどる, ゲーム終了 and
+   Options' ズーム, キーコンフィグ).  Those are held to the disc: the
+   ink height within GEO_TOL_H texels, the width within GEO_TOL_W of the
+   disc's; more of Options' words are printed beside them. */
+typedef struct GeoWord {
+    int id;
+    const char *name;
+    int row;   /* the Japanese table's row */
+    int sheet; /* UI_SHEET_JA_TITLE or UI_SHEET_JA */
+    int held;
+} GeoWord;
+
+typedef struct GeoBox {
+    int w, h, fill;
+    int cols; /* the columns with a fill texel: the letters' own width, the gaps not */
+} GeoBox;
+
+#define GEO_TOL_H 1
+#define GEO_TOL_W 0.10
+
+static int geoFill(int grey, int alpha)
+{
+    return grey >= 200 && alpha * 10 >= 7 * 255;
+}
+
+static GeoBox geoBoxOf(const uint8_t *grey, const uint8_t *alpha, int w, int h, int stride)
+{
+    GeoBox b = {0, 0, 0, 0};
+    int x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            if (geoFill(grey[y * stride + x], alpha[y * stride + x])) {
+                b.fill++;
+                x0 = x < x0 ? x : x0;
+                y0 = y < y0 ? y : y0;
+                x1 = x > x1 ? x : x1;
+                y1 = y > y1 ? y : y1;
+            }
+        }
+    }
+    if (x1 >= 0) {
+        b.w = x1 - x0 + 1;
+        b.h = y1 - y0 + 1;
+    }
+    for (int x = 0; x < w; x++) {
+        for (int y = 0; y < h; y++) {
+            if (geoFill(grey[y * stride + x], alpha[y * stride + x])) {
+                b.cols++;
+                break;
+            }
+        }
+    }
+    return b;
+}
+
+static int geoRowBox(IcoVfs *vfs, int row, GeoBox *out)
+{
+    const LtProperty *e = &texProperty[row];
+    const MsSheet *s = sheetOfRow(vfs, row);
+    if (!s || e->texW < 8 || e->texH < 8) {
+        return 0;
+    }
+    const int w = e->texW, h = e->texH;
+    uint8_t *g = calloc((size_t)w * (size_t)h, 1), *a = calloc((size_t)w * (size_t)h, 1);
+    if (!g || !a) {
+        free(g);
+        free(a);
+        return 0;
+    }
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            const int u = e->texU + x, v = e->texV + y;
+            if (u >= s->w || v >= s->h) {
+                continue;
+            }
+            const uint8_t *p = &s->rgba[((size_t)v * (size_t)s->w + (size_t)u) * 4];
+            g[y * w + x] = (uint8_t)((p[0] + p[1] + p[2]) / 3);
+            a[y * w + x] = p[3];
+        }
+    }
+    *out = geoBoxOf(g, a, w, h, w);
+    free(g);
+    free(a);
+    return out->w > 0;
+}
+
+static int geoPortBox(int id, GeoBox *out)
+{
+    const PortStr ps = {id, "", 0.0f, 0};
+    Rendered r;
+    if (!renderPort(&ps, &r)) {
+        return 0;
+    }
+    *out = geoBoxOf(r.grey, r.alpha, r.w, r.h, r.w);
+    free(r.grey);
+    free(r.alpha);
+    return out->w > 0;
+}
+
+/* the words' boxes on the disc and drawn by the port, printed when verbose;
+   the sum of the squared misses (height in texels, width in tenths, the
+   fill's amount in halves) over the held words, and their failures */
+/* the words of one sheet (sheet; -1 every word): their boxes on the disc
+   and drawn by the port, printed when verbose; the sum of the squared
+   misses (height in texels, width in tenths, the fill's amount in halves)
+   over the held words, and their failures in *bad */
+static double geoScore(const GeoWord *wd, int n, const GeoBox *disc, int sheet, int verbose,
+                       int *bad)
+{
+    double score = 0.0;
+    *bad = 0;
+    for (int i = 0; i < n; i++) {
+        if (disc[i].w <= 0 || (sheet >= 0 && wd[i].sheet != sheet) || (!verbose && !wd[i].held)) {
+            continue;
+        }
+        const int was = ui_menu_text_set_title(wd[i].sheet == UI_SHEET_JA_TITLE);
+        GeoBox p;
+        const int ok0 = geoPortBox(wd[i].id, &p);
+        ui_menu_text_set_title(was);
+        if (!ok0) {
+            continue;
+        }
+        const double dh = (double)(p.h - disc[i].h);
+        const double dw = (double)(p.w - disc[i].w) / (double)disc[i].w;
+        const double da = disc[i].fill > 0 ? (double)p.fill / (double)disc[i].fill - 1.0 : 0.0;
+        const double dc = (double)(p.cols - disc[i].cols) / (double)disc[i].w;
+        const int ok = abs(p.h - disc[i].h) <= GEO_TOL_H && fabs(dw) <= GEO_TOL_W;
+        if (wd[i].held) {
+            score += dh * dh + 100.0 * dw * dw + 100.0 * dc * dc + 4.0 * da * da;
+            *bad += !ok;
+        }
+        if (verbose) {
+            printf(
+                "menu_look_jpn: geometry %-5s %-13s row %3d disc %3d x %2d (%3d inked) fill %3d, "
+                "port %3d x %2d (%3d inked) fill %3d: height %+d, width %+.1f %%, fill %+.0f "
+                "%%%s\n",
+                wd[i].sheet == UI_SHEET_JA_TITLE ? "title" : "other", wd[i].name, wd[i].row,
+                disc[i].w, disc[i].h, disc[i].cols, disc[i].fill, p.w, p.h, p.cols, p.fill,
+                p.h - disc[i].h, 100.0 * dw, 100.0 * da,
+                wd[i].held ? (ok ? "" : " (off)") : " (printed)");
+        }
+    }
+    return score;
+}
+
+static void testGeometry(IcoVfs *vfs)
+{
+    const IcoRegionInfo *r = ico_region_cur();
+    const int T = UI_SHEET_JA_TITLE, O = UI_SHEET_JA;
+    const GeoWord wd[] = {
+        {UI_STR_MT_CONTINUE, "CONTINUE", r->row_title_continue, T, 1},
+        {UI_STR_MT_NEW_GAME, "NEW_GAME", r->row_title_new, T, 1},
+        {UI_STR_MT_OPTIONS, "OPTIONS", r->row_pause_options, O, 1},
+        {UI_STR_MT_PAUSE_BACK, "PAUSE_BACK", r->row_pause_back, O, 1},
+        {UI_STR_MT_END_GAME, "END_GAME", r->row_pause_end, O, 1},
+        /* Options' words (the Japanese table's rows; their halo is the
+           Options page's dark glow) */
+        {UI_STR_MT_ZOOM, "ZOOM", 318, O, 1},
+        {UI_STR_MT_BUTTON_CONFIG, "BUTTON_CONFIG", 300, O, 1},
+        {UI_STR_MT_SOUND, "SOUND", 285, O, 0},
+        {UI_STR_MT_STEREO, "STEREO", 288, O, 0},
+        {UI_STR_MT_MONO, "MONO", 289, O, 0},
+        {UI_STR_MT_VIBRATION, "VIBRATION", 290, O, 0},
+        {UI_STR_MT_BRIGHTNESS, "BRIGHTNESS", 301, O, 0},
+        {UI_STR_MT_JUMP, "JUMP", 313, O, 0},
+        {UI_STR_MT_ACTION, "ACTION", 315, O, 0},
+    };
+    const int n = (int)(sizeof(wd) / sizeof(wd[0]));
+    GeoBox disc[sizeof(wd) / sizeof(wd[0])];
+    for (int i = 0; i < n; i++) {
+        memset(&disc[i], 0, sizeof(disc[i]));
+        const int ok =
+            wd[i].row >= 0 && wd[i].row < r->property_count && geoRowBox(vfs, wd[i].row, &disc[i]);
+        CHECK(ok || !wd[i].held, "geometry: no word on row %d (%s)", wd[i].row, wd[i].name);
+    }
+    ui_set_sheet_language(UI_SHEET_JA);
+    const int sheets[2] = {T, O};
+    const char *fit = getenv("ICO_MENU_LOOK_JPN_FIT");
+    for (int k = 0; k < 2; k++) {
+        const int sh = sheets[k];
+        const char *name = sh == T ? "title" : "other";
+        float em, wx, gap, bx, by;
+        ui__menu_ja_geometry(sh, &em, &wx, &gap, &bx, &by);
+        if (fit && *fit == '1') {
+            /* the search the table's numbers came from: within the gate
+               first, then the smallest misses */
+            double best = 1e30;
+            float be = em, bw = wx, bg = gap, bb = bx;
+            for (float e = 0.90f; e <= 1.0601f; e += 0.02f) {
+                for (float x = 0.50f; x <= 1.1001f; x += 0.02f) {
+                    for (float q = 0.0f; q <= 8.0001f; q += 0.5f) {
+                        for (float b = 0.0f; b <= 0.3001f; b += 0.15f) {
+                            ui__menu_set_ja_geometry(sh, e, x, q, b, b);
+                            int bad;
+                            const double sc = geoScore(wd, n, disc, sh, 0, &bad) + 1000.0 * bad;
+                            if (sc < best) {
+                                best = sc;
+                                be = e;
+                                bw = x;
+                                bg = q;
+                                bb = b;
+                            }
+                        }
+                    }
+                }
+            }
+            printf("menu_look_jpn: geometry fit %s em %.2f wx %.2f gap %.2f bold %.2f (score "
+                   "%.2f)\n",
+                   name, be, bw, bg, bb, best);
+            ui__menu_set_ja_geometry(sh, be, bw, bg, bb, bb);
+            int bad;
+            (void)geoScore(wd, n, disc, sh, 1, &bad);
+            ui__menu_set_ja_geometry(sh, em, wx, gap, bx, by);
+        }
+        printf("menu_look_jpn: geometry %s: em %.2f wx %.2f gap %.2f bold %.2f %.2f\n", name, em,
+               wx, gap, bx, by);
+        int bad;
+        (void)geoScore(wd, n, disc, sh, 1, &bad);
+        CHECK(bad == 0,
+              "geometry %s: %d words off the disc's (height within %d texel, width within %.0f %%)",
+              name, bad, GEO_TOL_H, 100.0 * GEO_TOL_W);
+    }
+    ms_sheets_free();
 }
 
 /* the sheets' file names: Tex_menu01/option.tm2 -> Tex_menu01_option */
@@ -947,6 +1188,8 @@ static void flow(const int *cw, const int *ch, int n, int maxW, int *xy, int *W,
 
 static int dump(IcoVfs *vfs, const char *outDir)
 {
+    /* the port's words as drawn over the Japanese sheets (menu_font.c sheetGeo) */
+    ui_set_sheet_language(UI_SHEET_JA);
     const IcoRegionInfo *r = ico_region_cur();
     const int nRows = r->property_count;
     char path[1200];
@@ -1094,7 +1337,14 @@ static int dump(IcoVfs *vfs, const char *outDir)
                 "em box text rows\n");
     for (int i = 0; rend && i < PORT_STR_COUNT; i++) {
         const PortStr *ps = &kPortStr[i];
-        if (!renderPort(ps, &rend[i])) {
+        /* the title screen's words in the title sheet's geometry (the
+           port's title rows are marked so: settings.c placeTitle) */
+        const int was =
+            ui_menu_text_set_title(ps->id == UI_STR_MT_CONTINUE || ps->id == UI_STR_MT_NEW_GAME ||
+                                   ps->id == UI_STR_QUIT_DESKTOP);
+        const int ok = renderPort(ps, &rend[i]);
+        ui_menu_text_set_title(was);
+        if (!ok) {
             fprintf(ix, "%s: not rendered\n", ps->name);
             continue;
         }
@@ -1296,6 +1546,7 @@ int main(int argc, char **argv)
             return 77;
         }
         testLook(vfs);
+        testGeometry(vfs);
         ico_vfs_unmount(vfs);
     }
     printf("menu_jpn: %d failures\n", failures);

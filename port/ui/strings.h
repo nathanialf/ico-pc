@@ -45,6 +45,11 @@ typedef enum UiLang {
    style (menu_font.c kSheetInk) is measured per sheet language. */
 #define UI_SHEET_JA 5
 #define UI_LANG_SHEET_COUNT 6
+/* The Japanese disc's title sheet: not a sheet language (ui_set_sheet_language
+   ignores it) but the geometry of the port's rows on the title screen, whose
+   words the title sheet spaces apart more than the other sheets
+   (menu_font.c sheetGeo, ui_menu_text_set_title) */
+#define UI_SHEET_JA_TITLE 6
 
 typedef enum UiStrId {
     UI_STR_NONE = 0, /* "" */
@@ -352,6 +357,10 @@ typedef enum UiStrId {
     UI_STR_MT_COLON,
     UI_STR_MT_VAL_A,
     UI_STR_MT_VAL_B,
+    /* the Options screen's player count tiles (the European sheets' 1 and
+       2, the Japanese disc's ひとり and ふたり) */
+    UI_STR_MT_PLAYERS_1,
+    UI_STR_MT_PLAYERS_2,
     UI_STR_EXTRAS,
     UI_STR_EXTRAS_MUSIC,
     UI_STR_EXTRAS_MODELS,
@@ -366,6 +375,7 @@ typedef enum UiStrId {
     UI_STR_VAL_MONO,
     UI_STR_OPT_DEVICE,
     UI_STR_VAL_DEFAULT_DEVICE,
+    UI_STR_VAL_DEFAULT, /* a value at its default (Settings > Brightness) */
     /* Settings > Extras > Music, the music gallery */
     UI_STR_GAL_SOUNDTRACK,
     UI_STR_GAL_SCENE,

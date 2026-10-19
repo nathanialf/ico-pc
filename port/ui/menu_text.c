@@ -41,7 +41,10 @@
  * without a rim; layout_action.c _la_set_preview_info picks a row per
  * figure), and the Options values (the film effect's 0..4, the hold type's
  * A / B, 1 / 2 players; light with the rim).  Their em, anchor and capital
- * middle were measured the same way, per ink (UiMenuTextInk).
+ * middle were measured the same way, per ink (UiMenuTextInk).  The player
+ * count's 1 and 2 are the film effect's tiles drawn as their own items (the
+ * last two, UI_STR_MT_PLAYERS_1 / 2), since their words are not figures in
+ * Japanese (ひとり, ふたり).
  *
  * Rows not in the table (they keep their texels: no lettering, or
  * lettering in another style), and why:
@@ -213,6 +216,10 @@ const UiMenuTextItem ui_menu_text_items[] = {
     {390, 130, 100, 20, UI_STR_MT_LIGHT, UI_ALIGN_CENTER, 0, {13.81f, 15.78f, 15.11f, 20.51f, 15.7f}, {48.88f, 50.25f, 50.01f, 50.13f, 50.63f}, 15.5f, {9.38f, 8.88f, 8.88f, 11.0f, 8.88f}, {1.063f, 0.918f, 0.964f, 1.121f, 0.923f}, {-0.23f, -0.06f, -0.18f, 0.0f, -0.14f}, {1, 2, 2, 2, 2}}, /* 415: Light */
     {0, 205, 256, 35, UI_STR_MT_GAME_WILL_END, UI_ALIGN_CENTER, 0, {13.5f, 13.77f, 14.32f, 14.04f, 13.9f}, {128.0f, 128.75f, 129.24f, 129.24f, 129.24f}, 15.0f, {9.62f, 9.62f, 9.12f, 9.25f, 9.25f}, {0.998f, 0.988f, 0.941f, 0.955f, 0.982f}, {-0.06f, -0.17f, -0.06f, 0.0f, -0.2f}, {1, 2, 2, 2, 2}}, /* 423: The game will end. / Is this okay? */
     {0, 180, 300, 25, UI_STR_MT_CONTINUE_Q, UI_ALIGN_CENTER, 0, {17.48f, 17.28f, 18.58f, 17.3f, 17.08f}, {149.14f, 156.62f, 149.5f, 150.0f, 149.88f}, 18.9f, {11.26f, 11.51f, 11.0f, 11.5f, 11.62f}, {0.984f, 0.989f, 0.937f, 0.964f, 0.978f}, {0.0f, 0.24f, -0.2f, 0.58f, 0.55f}, {2, 2, 2, 2, 2}}, /* 428: Continue ? */
+    /* the player count's tiles: the film effect's 1 and 2 (304, 305), with the
+       words of the player count (the Japanese disc's ひとり, ふたり) */
+    {430, 90, 40, 20, UI_STR_MT_PLAYERS_1, UI_ALIGN_CENTER, UI_INK_LIGHT, {18.35f, 18.44f, 18.16f, 18.16f, 18.34f}, {23.12f, 23.0f, 22.62f, 22.5f, 22.62f}, 15.5f, {10.0f, 10.12f, 10.12f, 10.25f, 10.12f}, {1.111f, 1.117f, 1.159f, 1.139f, 1.137f}, {0.22f, 0.68f, -0.41f, 0.84f, 0.21f}, {2, 2, 2, 2, 2}}, /* 328: 1 (players) */
+    {470, 90, 40, 20, UI_STR_MT_PLAYERS_2, UI_ALIGN_CENTER, UI_INK_LIGHT, {18.35f, 18.44f, 18.16f, 18.16f, 18.34f}, {20.38f, 20.25f, 20.38f, 20.14f, 20.38f}, 15.5f, {10.0f, 10.12f, 10.12f, 10.25f, 10.12f}, {1.111f, 1.117f, 1.159f, 1.139f, 1.137f}, {0.22f, 0.68f, -0.41f, 0.84f, 0.21f}, {2, 2, 2, 2, 2}}, /* 329: 2 (players) */
 };
 const int ui_menu_text_item_count = (int)(sizeof(ui_menu_text_items) / sizeof(ui_menu_text_items[0]));
 
@@ -409,8 +416,8 @@ const UiMenuTextRow ui_menu_text_rows[] = {
     {323, 108},
     {324, 109},
     {325, 110},
-    {328, 97},
-    {329, 98},
+    {328, 125},
+    {329, 126},
     {332, 68},
     {335, 111},
     {336, 112},

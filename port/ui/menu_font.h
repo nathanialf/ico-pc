@@ -108,6 +108,13 @@ void ui_menu_font_metrics(float size, float *ascent, float *descent, float *capH
 void ui_draw_menu_text(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
                        unsigned flags, int ink, const UiXform *xf);
 
+/* The port's rows on the title screen (layout_ext.c lt_ext_set_title_sheet):
+   on != 0 measures and draws the text after it in the Japanese title
+   sheet's geometry (UI_SHEET_JA_TITLE: the title's words are spaced apart
+   more than the other sheets'), 0 in the other screens' (UI_SHEET_JA);
+   the European sheets have one.  Returns the previous setting. */
+int ui_menu_text_set_title(int on);
+
 /* A game row's words where its sprite would be: it the row's item, lang
    its sheet language (ui_sheet_language: one of the European disc's
    UiLangs, the item table's columns; any other value draws English), box and uv the sprite's rectangle (x, y, w, h:

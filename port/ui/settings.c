@@ -1285,7 +1285,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return buf;
     case UI_OPT_BRIGHTNESS:
         if (brightness() == BRIGHTNESS_DEFAULT) {
-            snprintf(buf, size, "%d (%s)", brightness(), ui_str(UI_STR_MT_DEFAULT));
+            snprintf(buf, size, "%d (%s)", brightness(), ui_str(UI_STR_VAL_DEFAULT));
         } else {
             snprintf(buf, size, "%d", brightness());
         }
@@ -3419,6 +3419,8 @@ static void placeTitle(void)
             if (rows[i] >= 0) {
                 P(rows[i])->dispY = TITLE_Y(2 + i);
                 P(rows[i])->dispH = texProperty[ROW_TITLE_NEW].dispH;
+                /* lettered as the title's words are (the Japanese title sheet) */
+                lt_ext_set_title_sheet(rows[i], 1);
             }
         }
     }
