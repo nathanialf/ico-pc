@@ -182,6 +182,7 @@ typedef struct IcoRegionInfo {
    cannot copy another object. */
 extern const IcoRegionInfo ico_region_info_pal;
 extern const IcoRegionInfo ico_region_info_jpn;
+extern const IcoRegionInfo ico_region_info_kor;
 extern const IcoRegionInfo *const ico_region_info[ICO_REGION_COUNT];
 
 /* The selected region's table: ico_region_info[ico_region]. */

@@ -263,7 +263,7 @@ void actInitialize_only_charcter(char *self)
     for (i = 0; i < 10; i++) {
         q->modeHist[i] = 0;
         q->frameHist[i] = 0;
-        q->prevHist[i] = PAL_JPN(0x1A2, 418);
+        q->prevHist[i] = PAL_JPNKOR(0x1A2, 418);
     }
 }
 

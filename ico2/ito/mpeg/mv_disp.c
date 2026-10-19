@@ -101,7 +101,7 @@ void dispClear(MvDispEnv *self, unsigned int col)
     r.x = 0;
     r.y = 0;
     r.w = self->width << 4;
-    r.h = ((self->height + 31) / 32 * 64 + self->height * PAL_JPN(2, 3)) << 4;
+    r.h = ((self->height + 31) / 32 * 64 + self->height * PAL_JPNKOR(2, 3)) << 4;
 
     p = setGIFtag((int *)uncached_accel_addr((int)mvClearPacket), 14, 1, 0, 0, 0, 1, 4);
     setClearSprite(p, &r, col);
@@ -116,11 +116,11 @@ void dispClear(MvDispEnv *self, unsigned int col)
 void setDispEnv(MvDispEnv *self, int imageW, int imageH, int dbx, int dby)
 {
     int *p;
-    int w = PAL_JPN(720, imageW);
-    int h = PAL_JPN(288, imageH / 2);
+    int w = PAL_JPNKOR(720, imageW);
+    int h = PAL_JPNKOR(288, imageH / 2);
 
     self->fbp[0] = 0;
-    self->fbp[1] = PAL_JPN(108, (w + 63) / 64 * 64 * ((h + 31) / 32 * 32) >> 11);
+    self->fbp[1] = PAL_JPNKOR(108, (w + 63) / 64 * 64 * ((h + 31) / 32 * 32) >> 11);
     self->width = w;
     self->height = h;
     self->imageWidth = imageW;
@@ -128,22 +128,23 @@ void setDispEnv(MvDispEnv *self, int imageW, int imageH, int dbx, int dby)
 
     sceGsSetDefDispEnv(&self->env.gs, 0, imageW, imageH / 2, 0, 0);
 
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         p = (int *)uncached_accel_addr((int)mvDispPacket);
     }
     self->env.w.dispfbDB = (self->env.w.dispfbDB & ~0x7FF) | (dbx & 0x7FF);
     self->env.w.dispfbDB = (self->env.w.dispfbDB & 0xFFC007FF) | ((dby & 0x7FF) << 11);
-    if (!ICO_JPN) {
+    if (!ICO_JPNKOR) {
         self->env.w.dispfb = (self->env.w.dispfb & ~0x7E00) | 0x1800;
     }
 
-    p = setGIFtag(PAL_JPN((int *)uncached_accel_addr((int)mvDispPacket), p), 14, 1, 0, 0, 0, 1, 6);
+    p = setGIFtag(PAL_JPNKOR((int *)uncached_accel_addr((int)mvDispPacket), p), 14, 1, 0, 0, 0, 1,
+                  6);
     p = setPRMODECONT(p, 1);
     p = setFRAME_1(p, 0, (self->width + 63) / 64, 0, 0);
     p = setTEST_1(p, 0, 0, 0, 0, 0, 0, 0, 0);
     p = setSCISSOR_1(p, 0, self->width - 1, 0,
-                     PAL_JPN((self->height + 31) / 32 * 128 - 1,
-                             (self->height + 31) / 32 * 64 + self->height * 3));
+                     PAL_JPNKOR((self->height + 31) / 32 * 128 - 1,
+                                (self->height + 31) / 32 * 64 + self->height * 3));
     p = setXYOFFSET_1(p, 0, 0);
     setCLAMP_1(p, 1, 1, 0, 0, 0, 0);
 }
@@ -176,7 +177,7 @@ void dispCreate(MvDispEnv *self, int imageW, int imageH, int dbx, int dby)
     *(volatile int *)&dispField = 0;
     *(volatile int *)&dispSyncBusy = 0;
     sceGsSyncV(0);
-    sceGsResetGraph(0, 1, PAL_JPN(systemStatus[0] != 0 ? 3 : 2, 2), 1);
+    sceGsResetGraph(0, 1, PAL_JPNKOR(systemStatus[0] != 0 ? 3 : 2, 2), 1);
     sceGsResetPath();
     setDispEnv(self, imageW, imageH, dbx, dby);
     sendDispEnv(self);
@@ -203,7 +204,7 @@ void dispSetTags(MvDispEnv *self, int src, int image, int field, int x, int y, i
     nx = texW >> 4;
     ny = texH >> 4;
 
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         r.x = 0;
         r.y = ((self->height + 31) / 32 * 64 + self->height * 2) << 4;
         r.w = texW << 4;
@@ -220,7 +221,7 @@ void dispSetTags(MvDispEnv *self, int src, int image, int field, int x, int y, i
     }
 
     if (field == 0) {
-        if (ICO_JPN) {
+        if (ICO_JPNKOR) {
             uv.x = 8;
             uv.y = 8;
             uv.w = texW << 4;
@@ -256,11 +257,11 @@ void dispSetTags(MvDispEnv *self, int src, int image, int field, int x, int y, i
             }
         }
     } else {
-        if (ICO_JPN) {
+        if (ICO_JPNKOR) {
             uv.x = 8;
         }
         uv.y = 24;
-        if (ICO_JPN) {
+        if (ICO_JPNKOR) {
             uv.w = texW << 4;
             uv.h = texH << 4;
 
@@ -281,10 +282,10 @@ void dispSetTags(MvDispEnv *self, int src, int image, int field, int x, int y, i
     p = setDMAscTag(p, 0, 0, 0, 7, 0, 16);
     p = setGIFtag(p, 14, 1, 0, 0, 0, 1, 15);
     p = setTEXFLUSH(p);
-    p = setTEX1_1(p, 0, 0, PAL_JPN(1, 0), PAL_JPN(1, 0), 0, 0, 0);
+    p = setTEX1_1(p, 0, 0, PAL_JPNKOR(1, 0), PAL_JPNKOR(1, 0), 0, 0, 0);
     p = setTEX0_1(p, (self->height + 31) / 32 * ((self->width + 63) / 64 << 6),
                   (self->width + 63) / 64, 0, 10, 10, 0, 1, 0, 0, 0, 0, 0);
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         p = setTexSprite(p, &r, &uv);
         p = setTEXFLUSH(p);
         p = setTEX1_1(p, 0, 0, 1, 1, 0, 0, 0);

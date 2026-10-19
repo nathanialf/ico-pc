@@ -225,8 +225,10 @@ static inline int lt_property_visible(int no) /* derived name */
 {
     int vis = 1;
 
-    if (gFlagGameClear == 0 && current_layout_id == PAL_JPN(58, 55) && no >= PAL_JPN(300, 277) &&
-        (no < PAL_JPN(308, 285) || (no < PAL_JPN(330, 307) ? no >= PAL_JPN(325, 302) : 0))) {
+    if (gFlagGameClear == 0 && current_layout_id == PAL_JPNKOR(58, 55) &&
+        no >= PAL_JPNKOR(300, 277) &&
+        (no < PAL_JPNKOR(308, 285) ||
+         (no < PAL_JPNKOR(330, 307) ? no >= PAL_JPNKOR(325, 302) : 0))) {
         vis = 0;
     }
     return vis;
@@ -249,7 +251,7 @@ static inline void lt_draw_layout(int no) /* derived name */
    out-of-line function and the second site set 3. */
 static inline void lt_switch_layout_7(int no) /* derived name */
 {
-    if ((fadeState == 2 && no != current_layout_id) || no == PAL_JPN(62, 59)) {
+    if ((fadeState == 2 && no != current_layout_id) || no == PAL_JPNKOR(62, 59)) {
         nextLayout = no;
         display_texture_fade_cancel_chk(current_layout_id, no);
         if (fadeType == 1) {
@@ -263,7 +265,7 @@ static inline void lt_switch_layout_7(int no) /* derived name */
 
 static inline void lt_switch_layout_3(int no) /* derived name */
 {
-    if ((fadeState == 2 && no != current_layout_id) || no == PAL_JPN(62, 59)) {
+    if ((fadeState == 2 && no != current_layout_id) || no == PAL_JPNKOR(62, 59)) {
         nextLayout = no;
         display_texture_fade_cancel_chk(current_layout_id, no);
         if (fadeType == 1) {
@@ -293,7 +295,7 @@ static void default_item_select(int no)
     if (fadeCallback == 0) {
         lt_analog2Pad();
         prev = p->curItem;
-        if ((pad[0].flags & PAL_JPN(0x50, 0x60)) == 0) {
+        if ((pad[0].flags & PAL_JPNKOR(0x50, 0x60)) == 0) {
             if ((pad[0].flags & 0x1000) && e->upItem >= 0) {
                 p->curItem = e->upItem;
                 while (!lt_property_visible(p->curItem)) {
@@ -323,7 +325,7 @@ static void default_item_select(int no)
     }
 
     e = &LT_PROP(p->curItem);
-    if (pad[0].flags & PAL_JPN(0x40, 0x20)) {
+    if (pad[0].flags & PAL_JPNKOR(0x40, 0x20)) {
         if (e->right >= 0) {
             if (fadeState == 2) {
                 soundSeDefPlay(412, 0xFFFFFFFE, 0, 0);
@@ -332,7 +334,7 @@ static void default_item_select(int no)
             }
         }
     }
-    if (pad[0].flags & PAL_JPN(LT_BACK_BUTTONS, 0x40)) {
+    if (pad[0].flags & PAL_JPNKOR(LT_BACK_BUTTONS, 0x40)) {
         if (e->left >= 0) {
             if (fadeState == 2) {
                 soundSeDefPlay(413, 0xFFFFFFFE, 0, 0);
@@ -695,10 +697,10 @@ static void display_primary_texture_layout(int no, int sel)
         sel = p->proc(ltSelectFlag, sel);
         if (sel != -1) {
             flag = 0;
-            if ((pad[0].flags & PAL_JPN(0x40, 0x20)) != 0) {
+            if ((pad[0].flags & PAL_JPNKOR(0x40, 0x20)) != 0) {
                 flag = m == 1;
             }
-            if ((fadeState == 2 && sel != current_layout_id) || sel == PAL_JPN(62, 59)) {
+            if ((fadeState == 2 && sel != current_layout_id) || sel == PAL_JPNKOR(62, 59)) {
                 nextLayout = sel;
                 display_texture_fade_cancel_chk(current_layout_id, sel);
                 if (fadeType == 1) {
@@ -708,7 +710,7 @@ static void display_primary_texture_layout(int no, int sel)
                     fadeState = flag ? 7 : 3;
                 }
             }
-        } else if ((pad[0].flags & PAL_JPN(0x40, 0x20)) != 0) {
+        } else if ((pad[0].flags & PAL_JPNKOR(0x40, 0x20)) != 0) {
             if (m == 2) {
                 nextFadeState = m;
                 fadeState = 7;
@@ -896,23 +898,23 @@ void init_layout_texture(int stage)
     if (stage == 1) {
         gflagInit();
         if (layout_boot_flag == 0) {
-            current_layout_id = PAL_JPN(7, 4);
+            current_layout_id = PAL_JPNKOR(7, 4);
         } else if (mpegPlayReturnStage == stage) {
             mpegPlayReturnStage = 0;
             if (stage_after_skipping_demo == 0xFFFFFFFE) {
                 title_demo_mode = title_demo_mode ^ 1;
-                current_layout_id = PAL_JPN(13, 10);
+                current_layout_id = PAL_JPNKOR(13, 10);
             } else if (stage_after_skipping_demo == 0xFFFFFFFF) {
-                current_layout_id = PAL_JPN(10, 7);
+                current_layout_id = PAL_JPNKOR(10, 7);
                 title_demo_mode = title_demo_mode ^ 1;
             } else {
-                current_layout_id = PAL_JPN(13, 10);
+                current_layout_id = PAL_JPNKOR(13, 10);
             }
         } else {
-            current_layout_id = PAL_JPN(13, 10);
+            current_layout_id = PAL_JPNKOR(13, 10);
         }
     } else {
-        current_layout_id = PAL_JPN(54, 51);
+        current_layout_id = PAL_JPNKOR(54, 51);
     }
     lt_init_stage_textures(stage);
     LT_LAYOUT(current_layout_id).curItem = LT_LAYOUT(current_layout_id).defaultItem;
@@ -923,7 +925,7 @@ void init_layout_texture(int stage)
 
 inline void lt_switch_layout(int no)
 {
-    if ((fadeState == 2 && no != current_layout_id) || no == PAL_JPN(62, 59)) {
+    if ((fadeState == 2 && no != current_layout_id) || no == PAL_JPNKOR(62, 59)) {
         nextLayout = no;
         display_texture_fade_cancel_chk(current_layout_id, no);
         if (fadeType == 1) {

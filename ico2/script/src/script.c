@@ -173,7 +173,7 @@ static struct WoodBoxEnt woodBoxTbl_jpn[11] = {
     {3271, 9, {0}, {-100.0f, -200.0f, 0.0f, 0.0f}, 0.0f, 0.0f, 0.0f, 0.0f},
 }; /* derived name */
 
-#define woodBoxTbl PAL_JPN(woodBoxTbl_pal, woodBoxTbl_jpn)
+#define woodBoxTbl PAL_JPNKOR(woodBoxTbl_pal, woodBoxTbl_jpn)
 
 /* .sbss: a stage change has been requested and no further one is
    accepted. */
@@ -203,21 +203,21 @@ inline void actSubSekizoSe(GObj *volatile self)
     if (gflagChk(332) == 0) {
         ScpCallCameraSetTarget(3834.0f, -888.0f, 0.0f);
         scpSearchGobj(2149)->active = 0;
-        stage_SetLoopFlag(PAL_JPN(555, 551), 0);
+        stage_SetLoopFlag(PAL_JPNKOR(555, 551), 0);
         queen_appear_mes[0].func = actSt25aQueenAppearChk;
         act->mail = queen_appear_mes;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
         return;
     }
-    scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(47, 0, PAL_JPN(555, 551), 0);
+    scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(47, 0, PAL_JPNKOR(555, 551), 0);
     scpSearchGobj(2149)->active = 1;
     scpPlayMot(scpSearchGobj(2149), 1104);
     tex_SetUVScroll(faceShadowTex, 0.0f, 0.0f, 0.25f, 0.0625f, 0.8f, 0.8f, 1);
     tex_SetUVScroll(faceShadowTex00, 0.0f, 0.0f, 0.25f, 0.0625f, 0.45f, 0.45f, 1);
     ScpCallCameraSetTarget(3834.0f, -888.0f, 0.0f);
-    stage_SetAnimation(PAL_JPN(156, 152), 0, -1);
-    stage_SetAnimation(PAL_JPN(159, 155), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(156, 152), 0, -1);
+    stage_SetAnimation(PAL_JPNKOR(159, 155), 1, 0);
 }
 
 inline void scpDispOffAllWithKind(int kind)
@@ -454,7 +454,7 @@ void scpPlayMotDirSmz(GObj *self, float *dir)
     sceVu0Normalize(dir, dir);
     SetMotionDirectionSmooze(
         self, dir,
-        (float)((struct MotTblRec *)(GOBJ_SUB(self)->ctrl.motion * PAL_JPN(404, 400) +
+        (float)((struct MotTblRec *)(GOBJ_SUB(self)->ctrl.motion * PAL_JPNKOR(404, 400) +
                                      (char *)motionKind))
             ->smzAngle);
 }
@@ -1326,7 +1326,7 @@ void scpSekizou(GObj *self, int flag, int anim, int anim2, int kind, float bx, f
         scpFadeOut(255.0f, 0, 0, 0);
     }
     stgmgrNextStagePreLoadForceStageSet(0);
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
     scpBoyControlReadDisable = 1;
     scpAdpcmPlayRequestFunc(kind, &sekizo_common, 1, 1, 0);
     while (sekizo_common == 0) {
@@ -1385,7 +1385,7 @@ void scpSekizou(GObj *self, int flag, int anim, int anim2, int kind, float bx, f
     _ACTWait(1);
     scpPlayMot(girlGObj, 532);
     scpPlayEnd(girlGObj);
-    lt_switch_layout(PAL_JPN(54, 51));
+    lt_switch_layout(PAL_JPNKOR(54, 51));
     scpBoyControlReadDisable = 0;
 }
 

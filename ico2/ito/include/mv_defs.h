@@ -40,8 +40,8 @@ static __inline__ int uncached_accel_addr(int p) /* derived name */
 void *iosMallocAlignDebug(struct IosMemPart *part, int size, int align, const char *file, int line);
 void debug_assert(const char *file, int line);   /* assert reporter */
 static __inline__ int alloc_zeroed(int size, int align) /* derived name */
-{ int p = (int)iosMallocAlignDebug(ios_partition_mpeg, size, align, __FILE__, LN(43, 42));
-  if (p == 0) { debug_assert(__FILE__, LN(44, 43)); __assert(__FILE__, LN(44, 43), "p != NULL"); }
+{ int p = (int)iosMallocAlignDebug(ios_partition_mpeg, size, align, __FILE__, LN(43, 42, 42));
+  if (p == 0) { debug_assert(__FILE__, LN(44, 43, 43)); __assert(__FILE__, LN(44, 43, 43), "p != NULL"); }
   memset((void *)p, 0, size); return p; }
 
 #endif /* MV_DEFS_H */

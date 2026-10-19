@@ -58,8 +58,8 @@ void actSt17aDoor(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(32) == 0) {
-        stage_SetLoopFlag(PAL_JPN(131, 127), 1);
-        stage_SetAnimation(PAL_JPN(131, 127), 1, 0);
+        stage_SetLoopFlag(PAL_JPNKOR(131, 127), 1);
+        stage_SetAnimation(PAL_JPNKOR(131, 127), 1, 0);
 
         doorInit_mes[0].func = actSt17aDoorUpChk;
         act->mail = doorInit_mes;
@@ -67,8 +67,8 @@ void actSt17aDoor(GObj *volatile self)
         _ACTWait(0);
     } else if (scpTriggerBall(self, boyGObj, 200.0f) != 0 ||
                ((void *)girlGObj != 0 && scpTriggerBall(self, (void *)girlGObj, 400.0f) != 0)) {
-        stage_SetLoopFlag(PAL_JPN(131, 127), 1);
-        stage_SetAnimation(PAL_JPN(131, 127), 1, 0);
+        stage_SetLoopFlag(PAL_JPNKOR(131, 127), 1);
+        stage_SetAnimation(PAL_JPNKOR(131, 127), 1, 0);
 
         _ACTWait(60);
         doorDown_mes[0].func = actSt17aDoorDownChk;
@@ -76,7 +76,7 @@ void actSt17aDoor(GObj *volatile self)
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-        stage_SetAnimation(PAL_JPN(129, 125), 0, 0);
+        stage_SetAnimation(PAL_JPNKOR(129, 125), 0, 0);
         doorUp_mes[0].func = actSt17aDoorUpChk;
         act->mail = doorUp_mes;
         ACTSendMailCorrect(self, 430);
@@ -100,7 +100,7 @@ void actSt17aDoorUpChk(GObj *volatile self)
 
     scpWakeupItemWithBoundary(6573.0f, -2077.0f, 1089.0f, 100.0f);
 
-    stage_SetAnimation(PAL_JPN(129, 125), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(129, 125), 1, 0);
 
     buf[0] = doorChkSePos.d[0];
     buf[1] = doorChkSePos.d[1];
@@ -113,13 +113,13 @@ void actSt17aDoorUpChk(GObj *volatile self)
 
     soundSeDefPlay(1222, 0, (float *)buf, 1);
 
-    while (stage_CheckAnimationFinish(PAL_JPN(129, 125)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(129, 125)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
-    stage_SetLoopFlag(PAL_JPN(131, 127), 1);
-    stage_SetAnimation(PAL_JPN(131, 127), 1, 0);
+    stage_SetLoopFlag(PAL_JPNKOR(131, 127), 1);
+    stage_SetAnimation(PAL_JPNKOR(131, 127), 1, 0);
 
     doorUpChk_mes[0].func = actSt17aDoorDownChk;
     sub->mail = doorUpChk_mes;
@@ -143,9 +143,9 @@ void actSt17aDoorDownChk(GObj *volatile self)
 
     scpWakeupItemWithBoundary(6573.0f, -2077.0f, 1089.0f, 100.0f);
 
-    stage_SetLoopFlag(PAL_JPN(131, 127), 0);
+    stage_SetLoopFlag(PAL_JPNKOR(131, 127), 0);
 
-    stage_SetAnimation(PAL_JPN(130, 126), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(130, 126), 1, 0);
 
     buf[0] = doorChkSePos.d[0];
     buf[1] = doorChkSePos.d[1];
@@ -158,7 +158,7 @@ void actSt17aDoorDownChk(GObj *volatile self)
 
     soundSeDefPlay(1222, 0, (float *)buf, 1);
 
-    while (stage_CheckAnimationFinish(PAL_JPN(130, 126)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(130, 126)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -195,7 +195,7 @@ void actSt17aHasiChk(GObj *volatile self)
     scpSearchGobj(243)->active = 0;
     scpSearchGobj(244)->active = 1;
 
-    stage_SetAnimation(PAL_JPN(133, 129), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(133, 129), 1, 0);
     SetCameraFlag_LwsCutBack();
 
     actCreateSubThread(actSt17aHasiEffect, 21);
@@ -205,7 +205,7 @@ void actSt17aHasiChk(GObj *volatile self)
 
         scpPlayStart((void *)girlGObj);
 
-        stage_SetAnimation(PAL_JPN(132, 128), 1, 0);
+        stage_SetAnimation(PAL_JPNKOR(132, 128), 1, 0);
 
         buf[0] = hasiChkSePos.d[0];
         buf[1] = hasiChkSePos.d[1];
@@ -227,7 +227,7 @@ void actSt17aHasiChk(GObj *volatile self)
         scpPlayStart(boyGObj);
         scpPlayStart((void *)girlGObj);
 
-        stage_SetAnimation(PAL_JPN(132, 128), 1, 0);
+        stage_SetAnimation(PAL_JPNKOR(132, 128), 1, 0);
 
         buf2[0] = hasiChkSePos.d[0];
         buf2[1] = hasiChkSePos.d[1];
@@ -246,7 +246,7 @@ void actSt17aHasiChk(GObj *volatile self)
             (int)((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 60.0f * 0.0f);
     }
 
-    while (stage_CheckAnimationFinish(PAL_JPN(132, 128)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(132, 128)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -331,12 +331,12 @@ static void actSt17aIntroCancel(GObj *volatile self)
             _ACTWait(1);
         }
 
-        stage_SetAnimation(PAL_JPN(83, 79), 1, -1);
+        stage_SetAnimation(PAL_JPNKOR(83, 79), 1, -1);
         SetCameraFlag_LwsCutBack();
         scpFadeIn(3.0f);
     }
 
-    lt_switch_layout(PAL_JPN(54, 51));
+    lt_switch_layout(PAL_JPNKOR(54, 51));
     scpBoyControlReadDisable = 0;
 }
 
@@ -359,7 +359,7 @@ void actSt17aSekizo(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
-    scpSekizou(self, 32, PAL_JPN(82, 78), PAL_JPN(130, 126), 18, 6450.0f, -2100.0f, 1000.0f,
+    scpSekizou(self, 32, PAL_JPNKOR(82, 78), PAL_JPNKOR(130, 126), 18, 6450.0f, -2100.0f, 1000.0f,
                6450.0f, -2100.0f, 1100.0f);
 }
 
@@ -371,7 +371,7 @@ void actSt17aHasi(GObj *volatile self)
 
     if (gflagChk(33) == 0) {
         scpSearchGobj(244)->active = 0;
-        stage_SetAnimation(PAL_JPN(132, 128), 0, 0);
+        stage_SetAnimation(PAL_JPNKOR(132, 128), 0, 0);
         SetWayGroupActive(3, 1);
         hasi_mes[0].func = actSt17aHasiChk;
         act->mail = hasi_mes;
@@ -379,7 +379,7 @@ void actSt17aHasi(GObj *volatile self)
         _ACTWait(0);
     } else {
         scpSearchGobj(243)->active = 0;
-        stage_SetAnimation(PAL_JPN(132, 128), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(132, 128), 0, -1);
     }
 }
 
@@ -503,16 +503,16 @@ SqEntry *cam = 0;
 
 void actSt17aIntroChk(GObj *volatile self)
 {
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
     scpBoyControlReadDisable = 1;
     gflagOn(34);
     scpAdpcmPlayRequestFunc(53, &cam, 1, 1, 1);
     _ACTWait(1);
-    stage_SetAnimation(PAL_JPN(83, 79), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(83, 79), 1, 0);
     SetCameraFlag_LwsCutBack();
     actCreateSubThread(actSt17aIntroCancel, 21);
 
-    while (stage_CheckAnimationFinish(PAL_JPN(83, 79)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(83, 79)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);

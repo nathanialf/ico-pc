@@ -57,9 +57,9 @@ SqEntry *st09a_brg = 0;
 void actSt09aInit(void)
 {
     if (gflagChk(86) == 0) {
-        stage_SetAnimation(PAL_JPN(378, 374), 0, 0);
+        stage_SetAnimation(PAL_JPNKOR(378, 374), 0, 0);
     } else {
-        stage_SetAnimation(PAL_JPN(378, 374), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(378, 374), 0, -1);
     }
 }
 
@@ -70,16 +70,16 @@ void actSt09aElvDown(GObj *volatile self)
        the animation wait and read again for soundSeDefStop */
     volatile int se;
 
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
     LockForceGroundParent(boyGObj);
 
-    stage_SetAnimation(PAL_JPN(375, 371), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(375, 371), 1, 0);
 
     se = soundSeDefPlay(1217, 0, 0, 1);
 
     gflagOn(83);
 
-    while (stage_CheckAnimationFrame(PAL_JPN(375, 371), 210, 1) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(375, 371), 210, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -88,7 +88,7 @@ void actSt09aElvDown(GObj *volatile self)
 
     UnlockForceGroundParent(boyGObj);
 
-    lt_switch_layout(PAL_JPN(54, 51));
+    lt_switch_layout(PAL_JPNKOR(54, 51));
 
     elvDown_mes[0].func = actSt09aElvMain;
     act->mail = elvDown_mes;
@@ -100,7 +100,7 @@ void actSt09aBrgDown(GObj *volatile self)
 {
     GProc *th;
 
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
     gflagOn(86);
     scpAdpcmPlayRequestFunc(90, &st09a_brg, 1, 1, 1);
 
@@ -129,7 +129,7 @@ void actSt09aBrgDown(GObj *volatile self)
             _ACTWait(1);
         }
 
-        stage_SetAnimation(PAL_JPN(378, 374), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(378, 374), 0, -1);
         scpFadeIn(5.0f);
 
         while (scpFadeChk() != 0) {
@@ -137,7 +137,7 @@ void actSt09aBrgDown(GObj *volatile self)
         }
     }
     scpBoyControlReadDisable = 0;
-    lt_switch_layout(PAL_JPN(54, 51));
+    lt_switch_layout(PAL_JPNKOR(54, 51));
 }
 
 void actSt09aElv(GObj *volatile self)
@@ -148,9 +148,9 @@ void actSt09aElv(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(83) != 0) {
-        stage_SetAnimation(PAL_JPN(375, 371), 0, 210);
+        stage_SetAnimation(PAL_JPNKOR(375, 371), 0, 210);
     } else {
-        stage_SetAnimation(PAL_JPN(375, 371), 0, 0);
+        stage_SetAnimation(PAL_JPNKOR(375, 371), 0, 0);
     }
 
     elv_mes[0].func = actSt09aElvMain;
@@ -170,7 +170,7 @@ void actSt09aSekizo(GObj *volatile self)
     soundSeDefPlay(1347, 0, sekizoPos, 1);
     soundSeDefPlay(1348, 0, sekizoPos, 1);
 
-    scpSekizou(self, 84, PAL_JPN(376, 372), 0, 18, -1350.0f, -100.0f, 1515.0f, -1450.0f, -100.0f,
+    scpSekizou(self, 84, PAL_JPNKOR(376, 372), 0, 18, -1350.0f, -100.0f, 1515.0f, -1450.0f, -100.0f,
                1515.0f);
 }
 
@@ -279,22 +279,22 @@ void actSt09aElvUp(GObj *volatile self)
        the animation wait and read again for soundSeDefStop */
     volatile int se;
 
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
 
-    stage_SetAnimation(PAL_JPN(375, 371), 1, 211);
+    stage_SetAnimation(PAL_JPNKOR(375, 371), 1, 211);
 
     se = soundSeDefPlay(1217, 0, 0, 1);
 
     gflagOff(83);
 
-    while (stage_CheckAnimationFrame(PAL_JPN(375, 371), 420, 1) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(375, 371), 420, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     soundSeDefStop(se);
 
-    lt_switch_layout(PAL_JPN(54, 51));
+    lt_switch_layout(PAL_JPNKOR(54, 51));
 
     elvUp_mes[0].func = actSt09aElvMain;
     act->mail = elvUp_mes;
@@ -309,20 +309,20 @@ void actSt09aSekizoEvent(int x)
 
 void actSt09aIntroChk(GObj *volatile self)
 {
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
     gflagOn(85);
 
     scpBoyControlReadDisable = 1;
     _ACTWait(1);
 
-    stage_SetAnimation(PAL_JPN(377, 373), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(377, 373), 1, 0);
 
-    while (stage_CheckAnimationFinish(PAL_JPN(377, 373)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(377, 373)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
-    lt_switch_layout(PAL_JPN(54, 51));
+    lt_switch_layout(PAL_JPNKOR(54, 51));
 
     scpBoyControlReadDisable = 0;
 }
@@ -354,23 +354,23 @@ void actSt09aBrgSwitch(GObj *volatile self)
 
 static void actSt09aBrgDownSub(GObj *volatile self)
 {
-    stage_SetAnimation(PAL_JPN(378, 374), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(378, 374), 1, 0);
 
-    while (stage_CheckAnimationFrame(PAL_JPN(378, 374), 115, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(378, 374), 115, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     iosPadActRequest(boyPad, 17);
 
-    while (stage_CheckAnimationFrame(PAL_JPN(378, 374), 165, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(378, 374), 165, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     iosPadActRequest(boyPad, 16);
 
-    while (stage_CheckAnimationFinish(PAL_JPN(378, 374)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(378, 374)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);

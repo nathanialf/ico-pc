@@ -123,6 +123,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "Which disc to play when both are installed. Takes effect at the next start.",
     [UI_STR_DISC_PAL] = "Europe (SCES-50760)",
     [UI_STR_DISC_JPN] = "Japan (SCPS-11003)",
+    [UI_STR_DISC_KOR] = "Korea (SCPS-56001)",
     [UI_STR_REMAP_KEYBOARD] = "Keyboard",
     [UI_STR_REMAP_GAMEPAD] = "Gamepad",
     [UI_STR_REMAP_HINT] = "Cross: change    Square: clear    Triangle: back",

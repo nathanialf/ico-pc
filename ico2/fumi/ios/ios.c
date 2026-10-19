@@ -102,7 +102,7 @@ static void ios_init_plus(void)
 
 void iosInitialize(void)
 {
-    iosCdvdMediaType = PAL_JPN(2, 1); /* cdvd.c: JPN 1, a CD */
+    iosCdvdMediaType = PAL_JPNKOR(2, 1); /* cdvd.c: JPN 1, a CD */
     debug_StdPrintfDummy("iosInitialize()\n");
     iosThreadInit();
     /* the same range, inside the host's EE RAM arena, ending
@@ -111,7 +111,7 @@ void iosInitialize(void)
        the arena may sit anywhere on a 64-bit host. The partitions are carved
        from the root's end down, so the stage partition, the last, keeps the
        EE's start and the others move up. */
-    ios_partition_root = iosMallocInitPartition(ico_arena_ee_addr(PAL_JPN(0x760000, 0x780000)),
+    ios_partition_root = iosMallocInitPartition(ico_arena_ee_addr(PAL_JPNKOR(0x760000, 0x780000)),
                                                 ico_arena_ee_addr(0x1FEFFF0 + ICO_HOST_HEAP_EXTRA));
     ios_partition_common = iosMallocSetPartition(ios_partition_root,
                                                  ICO_PART_SIZE(4227072, ICO_HOST_COMMON_EXTRA), 16);
@@ -128,7 +128,8 @@ void iosInitialize(void)
     ios_partition_hara = iosMallocSetPartition(ios_partition_root, 1, 16);
     ios_partition_isys = ios_partition_seki = ios_partition_sugipon = ios_partition_dmotion =
         iosMallocSetPartition(ios_partition_root,
-                              ICO_PART_SIZE(PAL_JPN(15826944, 15695872), ICO_HOST_STAGE_EXTRA), 16);
+                              ICO_PART_SIZE(PAL_JPNKOR(15826944, 15695872), ICO_HOST_STAGE_EXTRA),
+                              16);
     iosMallocSetPartitionName(ios_partition_isys, "stage");
     iosMallocSetPartitionName(ios_partition_smotion, "stat mot");
     iosMallocSetPartitionName(ios_partition_s2motion, "demo mot");

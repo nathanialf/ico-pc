@@ -51,7 +51,7 @@ char stamp_str_jpn[] = "10/23/01 02:02:43";
 char stamp_str_pal[] = "12/12/01 17:53:37";
 
 /* each disc compares its own build stamp against the save area's */
-#define stamp_str PAL_JPN(stamp_str_pal, stamp_str_jpn)
+#define stamp_str PAL_JPNKOR(stamp_str_pal, stamp_str_jpn)
 
 void *gameSysMemoryFuncList[] = {
     gamesysVersionLoad,
@@ -111,7 +111,7 @@ void gamesysObjInfoInit(void)
         gameSysObjInfo[i].stage = 0xFFFF;
     }
 
-    memset((char *)gamesysStageExitTime, 0, PAL_JPN(0x1A8, 0x1A0));
+    memset((char *)gamesysStageExitTime, 0, PAL_JPNKOR(0x1A8, 0x1A0));
     backStageProcessInit();
 }
 
@@ -137,14 +137,14 @@ void gamesysObjInfoSave(GamesysMemCursor *h)
 
     *(long long *)(p + 0x40) = (*(long long *)(p + 0x40) & -3) | ((long long)save << 1);
 
-    gamesysMemoryHandlerWrite(h, gamesysStageExitTime, PAL_JPN(0x1A8, 0x1A0));
+    gamesysMemoryHandlerWrite(h, gamesysStageExitTime, PAL_JPNKOR(0x1A8, 0x1A0));
 }
 
 void gamesysObjInfoLoad(GamesysMemCursor *h)
 {
     gamesysMemoryHandlerRead(h, &gamesysTimeCount, 4);
     gamesysMemoryHandlerRead(h, gameSysObjInfo, 0x2D80);
-    gamesysMemoryHandlerRead(h, gamesysStageExitTime, PAL_JPN(0x1A8, 0x1A0));
+    gamesysMemoryHandlerRead(h, gamesysStageExitTime, PAL_JPNKOR(0x1A8, 0x1A0));
 }
 
 /* unsigned */

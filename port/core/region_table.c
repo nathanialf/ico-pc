@@ -9,8 +9,10 @@
 
 extern const IcoRegionInfo ico_region_info_pal;
 extern const IcoRegionInfo ico_region_info_jpn;
+extern const IcoRegionInfo ico_region_info_kor;
 
 const IcoRegionInfo *const ico_region_info[ICO_REGION_COUNT] = {
     &ico_region_info_pal,
     &ico_region_info_jpn,
+    &ico_region_info_kor,
 };

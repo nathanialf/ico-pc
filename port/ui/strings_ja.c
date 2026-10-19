@@ -124,6 +124,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
         "両方のディスクのデータがあるとき、どちらで遊ぶかを選びます。次回の起動から使われます。",
     [UI_STR_DISC_PAL] = "欧州版（SCES-50760）",
     [UI_STR_DISC_JPN] = "日本版（SCPS-11003）",
+    [UI_STR_DISC_KOR] = "韓国版（SCPS-56001）",
     [UI_STR_REMAP_KEYBOARD] = "キーボード",
     [UI_STR_REMAP_GAMEPAD] = "ゲームパッド",
     [UI_STR_REMAP_HINT] = "×：変更    □：消去    △：もどる",

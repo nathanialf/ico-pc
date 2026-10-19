@@ -171,7 +171,7 @@ static int checkFieldContact(GObj *self, float lim)
     int r;
 
     GetRootPosition(pos, self);
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         GetLowerPlaneCollision(&w, pos);
     } else {
         CopyVector(v, pos);
@@ -431,7 +431,7 @@ static void initWheels(GObj *self, SObjSimpleSetting *lay)
     int i;
 
     if (objLayout[self->labelId].accessary == 26 ||
-        accessary[GOBJ_SUB(self)->accessary].model == PAL_JPN(0x610, 1548)) {
+        accessary[GOBJ_SUB(self)->accessary].model == PAL_JPNKOR(0x610, 1548)) {
         w->wheelDObj = 0;
     } else {
         w->wheelDObj = CSVSYSTEM_InitDObj(accessary[GOBJ_SUB(self)->accessary].model, lay);
@@ -444,14 +444,14 @@ static void initWheels(GObj *self, SObjSimpleSetting *lay)
         w->wheelDObj->nodeMtx = 0;
         w->wheelDObj->nodeQuat = 0;
         w->wheelDObj->nodeMtx =
-            (ICO_WORD)iosMallocDebug(ios_partition_seki, 128, __FILE__, LN(560, 557));
+            (ICO_WORD)iosMallocDebug(ios_partition_seki, 128, __FILE__, LN(560, 557, 557));
         w->wheelDObj->nodeQuat =
-            (ICO_WORD)iosMallocDebug(ios_partition_seki, 32, __FILE__, LN(560, 557));
+            (ICO_WORD)iosMallocDebug(ios_partition_seki, 32, __FILE__, LN(560, 557, 557));
         w->wheelDObj->nodeNum = 2;
         if (w->wheelDObj->nodes != 0) {
             iosFree((void *)(ICO_PHYS(ICO_ADDR(w->wheelDObj->nodes))));
         }
-        w->wheelDObj->nodes = iosMallocDebug(ios_partition_seki, 160, __FILE__, LN(560, 557));
+        w->wheelDObj->nodes = iosMallocDebug(ios_partition_seki, 160, __FILE__, LN(560, 557, 557));
 
         for (i = 0; i < 2; i++) {
             {
@@ -1287,7 +1287,7 @@ static void execFloating(GObj *self)
     if (w->floatPhase == 0) {
         CopyVector(cw.pt[0], pos);
         cw.pt[0][1] = w->waterHeight[0];
-        EntryStageMultiBgaManager(PAL_JPN(491, 487), cw.pt[0], IdentityQuaternion);
+        EntryStageMultiBgaManager(PAL_JPNKOR(491, 487), cw.pt[0], IdentityQuaternion);
     }
 }
 
@@ -1475,14 +1475,14 @@ static void action(GObj *self)
             v.f[2] = 1.0f;
             _ApplyMatrix(GOBJ_SUB(self)->ctrl.dir, (void *)GOBJ_SUB(self)->nodeMtx, &v);
         }
-        if (!ICO_JPN) {
+        if (!ICO_JPNKOR) {
             CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
         }
         break;
     case 1:
     case 6:
         execAutoMove(self);
-        if (!ICO_JPN) {
+        if (!ICO_JPNKOR) {
             CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
         }
         break;
@@ -1492,7 +1492,7 @@ static void action(GObj *self)
         break;
     case 4:
         playBoxAnimation(self, v.f);
-        if (!ICO_JPN) {
+        if (!ICO_JPNKOR) {
             CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
         }
         break;
@@ -1502,7 +1502,7 @@ static void action(GObj *self)
     case -1:
     default:
         debug_StdPrintfDummy("box die!!!\n");
-        if (!ICO_JPN) {
+        if (!ICO_JPNKOR) {
             CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
         }
         break;
@@ -1853,13 +1853,13 @@ static int moveBoxAutoMatic(GObj *self, int dir)
         break;
     case 1:
         memset(v, 0, 16);
-        v[2] = PAL_JPN(w * 0.5f, 0.5f);
+        v[2] = PAL_JPNKOR(w * 0.5f, 0.5f);
         p->friction = 0.98f;
         AddVectorXYZ(p->vel, p->vel, v);
         break;
     case -1:
         memset(v2, 0, 16);
-        v2[2] = PAL_JPN(w * -0.5f, -0.5f);
+        v2[2] = PAL_JPNKOR(w * -0.5f, -0.5f);
         p->friction = 0.98f;
         AddVectorXYZ(p->vel, p->vel, v2);
         break;
@@ -2046,8 +2046,8 @@ static unsigned char boxSerial = 0; /* derived name */
    and the sub-box model in its high half */
 BoxWork *InitBoxGeo(GObj *self, SObjSimpleSetting *lay)
 {
-    BoxWork *w =
-        iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(BoxWork, 416), __FILE__, LN(2017, 2003));
+    BoxWork *w = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(BoxWork, 416), __FILE__,
+                                LN(2017, 2003, 2003));
     GObj *o;
     GObj *g;
     int sub;

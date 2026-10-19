@@ -596,6 +596,7 @@ _Static_assert(sizeof(s_peek_jpn) / sizeof(s_peek_jpn[0]) <=
 static const PeekTable s_peek_tables[ICO_REGION_COUNT] = {
     {s_peek_pal, (int)(sizeof(s_peek_pal) / sizeof(s_peek_pal[0]))},
     {s_peek_jpn, (int)(sizeof(s_peek_jpn) / sizeof(s_peek_jpn[0]))},
+    {s_peek_jpn, (int)(sizeof(s_peek_jpn) / sizeof(s_peek_jpn[0]))}, /* K1: s_peek_kor */
 };
 
 static const PeekTable *peek_table(void)

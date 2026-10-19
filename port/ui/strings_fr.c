@@ -125,6 +125,7 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
         "Le disque joué quand les deux sont installés. Appliqué au prochain démarrage.",
     [UI_STR_DISC_PAL] = "Europe (SCES-50760)",
     [UI_STR_DISC_JPN] = "Japon (SCPS-11003)",
+    [UI_STR_DISC_KOR] = "Corée (SCPS-56001)",
     [UI_STR_REMAP_KEYBOARD] = "Clavier",
     [UI_STR_REMAP_GAMEPAD] = "Manette",
     [UI_STR_REMAP_HINT] = "Croix : modifier    Carré : effacer    Triangle : retour",

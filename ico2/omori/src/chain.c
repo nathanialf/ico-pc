@@ -167,8 +167,8 @@ static void StartPendulum(GObj *gobj, GObj *owner, float *pos)
         }
     }
     if (nearestNode == -1) {
-        debug_assert(__FILE__, LN(563, 557));
-        __assert(__FILE__, LN(563, 557), "nearestNode!=-1");
+        debug_assert(__FILE__, LN(563, 557, 557));
+        __assert(__FILE__, LN(563, 557, 557), "nearestNode!=-1");
     }
     cw->holdNode = nearestNode;
     cw->holdNode =
@@ -293,14 +293,14 @@ static void chain_simulate_term_swingready(GObj *gobj)
         debug_Printf(10, chainDebugY, 0x0FFFFFFF, "chain_simulate_term_swingready\n");
     }
     if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(0.5)) < 0) {
-        cw->pdl.ampSpeed =
-            PAL_JPN(-0.29999998f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.01f);
+        cw->pdl.ampSpeed = PAL_JPNKOR(
+            -0.29999998f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.01f);
     } else if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(1.0)) < 0) {
         cw->pdl.ampSpeed =
-            PAL_JPN(-1.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.05f);
+            PAL_JPNKOR(-1.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.05f);
     } else {
         cw->pdl.ampSpeed =
-            PAL_JPN(-4.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.15f);
+            PAL_JPNKOR(-4.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.15f);
     }
     chain_simulate_term_simple(gobj);
 }
@@ -319,18 +319,19 @@ static void chain_simulate_term_swingstart(GObj *gobj)
 
     if (h < 20.0f) {
         if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(0.3)) < 0) {
-            cw->pdl.ampSpeed = PAL_JPN(
+            cw->pdl.ampSpeed = PAL_JPNKOR(
                 -0.29999998f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.01f);
         } else if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(1.0)) < 0) {
             cw->pdl.ampSpeed =
-                PAL_JPN(-6.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.2f);
+                PAL_JPNKOR(-6.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.2f);
         } else {
             cw->pdl.ampSpeed =
-                PAL_JPN(-9.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.3f);
+                PAL_JPNKOR(-9.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.3f);
         }
     } else {
-        if (PAL_JPN(ico_dcmp(ico_f2d(h), ICO_D(20.0)) >= 0 && ico_dcmp(ico_f2d(h), ICO_D(21.5)) < 0,
-                    h == 20.0f)) {
+        if (PAL_JPNKOR(ico_dcmp(ico_f2d(h), ICO_D(20.0)) >= 0 &&
+                           ico_dcmp(ico_f2d(h), ICO_D(21.5)) < 0,
+                       h == 20.0f)) {
             cw->pdl.phase = 0.0f;
             cw->pdl.ampLimit = 360.0f;
         }
@@ -338,9 +339,9 @@ static void chain_simulate_term_swingstart(GObj *gobj)
         cw->pdl.amp = 3.0f;
 
         cw->pdl.phase = cw->pdl.phase - 1.0f +
-                        PAL_JPN(cw->pdl.cycle * 0.5f / 41.0f * 30.0f /
-                                    (float)((60 - systemStatus[0] * 10) / systemStatus[1]),
-                                cw->pdl.cycle * 0.5f / 40.0f);
+                        PAL_JPNKOR(cw->pdl.cycle * 0.5f / 41.0f * 30.0f /
+                                       (float)((60 - systemStatus[0] * 10) / systemStatus[1]),
+                                   cw->pdl.cycle * 0.5f / 40.0f);
     }
     chain_simulate_term_simple(gobj);
 }
@@ -453,7 +454,7 @@ static void chain_simulate_hangstart(GObj *gobj)
         debug_Printf(10, chainDebugY, 0x0FFFFFFF, "chain_simulate_hangstart\n");
     }
     cw->pdl.ampSpeed =
-        PAL_JPN(-1.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.05f);
+        PAL_JPNKOR(-1.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.05f);
     chain_simulate_term_simple(gobj);
 }
 
@@ -702,12 +703,12 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
     if (n < 2) {
         /* "the chain is too short (set it with the Y-scale of the placement table)" */
         debug_StdPrintfDummy("鎖の長さが短かすぎます(配置表のY-scaleで指定します)");
-        debug_assert(__FILE__, LN(1178, 1172));
-        __assert(__FILE__, LN(1178, 1172), "0");
+        debug_assert(__FILE__, LN(1178, 1172, 1172));
+        __assert(__FILE__, LN(1178, 1172, 1172), "0");
     }
 
     cw = iosMallocDebug(ios_partition_sugipon, (n << 5) + sizeof(ChainRecord), __FILE__,
-                        LN(1181, 1175));
+                        LN(1181, 1175, 1175));
 
     /* the record is wider here (8-byte pointers): copy the typed template */
     *cw = chainRecordDefault;
@@ -779,16 +780,16 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
     *(char **)&((ChainExtPtr *)&gobj->dobj)->sub->nodeMtx = 0;
 
     *(char **)&((ChainExtPtr *)&gobj->dobj)->sub->nodeQuat = 0;
-    *(char **)&((ChainExtPtr *)&gobj->dobj)->sub->nodeMtx =
-        (char *)iosMallocDebug(ios_partition_seki, (cw->nodes - 1) << 6, __FILE__, LN(1245, 1239));
-    *(char **)&((ChainExtPtr *)&gobj->dobj)->sub->nodeQuat =
-        (char *)iosMallocDebug(ios_partition_seki, (cw->nodes - 1) << 4, __FILE__, LN(1245, 1239));
+    *(char **)&((ChainExtPtr *)&gobj->dobj)->sub->nodeMtx = (char *)iosMallocDebug(
+        ios_partition_seki, (cw->nodes - 1) << 6, __FILE__, LN(1245, 1239, 1239));
+    *(char **)&((ChainExtPtr *)&gobj->dobj)->sub->nodeQuat = (char *)iosMallocDebug(
+        ios_partition_seki, (cw->nodes - 1) << 4, __FILE__, LN(1245, 1239, 1239));
     ((ChainExtPtr *)&gobj->dobj)->sub->nodeNum = cw->nodes - 1;
     if (((ChainExtPtr *)&gobj->dobj)->sub->nodes != 0) {
         iosFree((void *)ICO_PHYS(ICO_ADDR(((ChainExtPtr *)&gobj->dobj)->sub->nodes)));
     }
     ((ChainExtPtr *)&gobj->dobj)->sub->nodes =
-        iosMallocDebug(ios_partition_seki, (cw->nodes - 1) * 80, __FILE__, LN(1245, 1239));
+        iosMallocDebug(ios_partition_seki, (cw->nodes - 1) * 80, __FILE__, LN(1245, 1239, 1239));
 
     for (i = 0; i < cw->nodes - 1; i++) {
         ((ChainExtPtr *)&gobj->dobj)->sub->nodes[i].flags.ll &= ~1;
@@ -1224,8 +1225,8 @@ static void PlumbPointUpdateChain(GObj *gobj, float *pos)
         }
     }
     if (nearestNode == -1) {
-        debug_assert(__FILE__, LN(1675, 1669));
-        __assert(__FILE__, LN(1675, 1669), "nearestNode!=-1");
+        debug_assert(__FILE__, LN(1675, 1669, 1669));
+        __assert(__FILE__, LN(1675, 1669, 1669), "nearestNode!=-1");
     }
     cw->holdNode = nearestNode;
     cw->holdNode =
@@ -1338,13 +1339,13 @@ static void TestChainUpDown(GObj *gobj, GObj *boy)
         org[0] = test_CURRENTROOT(boyGObj)[0]; org[1] = test_CURRENTROOT(boyGObj)[1]; org[2] = test_CURRENTROOT(boyGObj)[2];
 
         rec = (ChainClimbWork *)chainClimb; if (rec->prev != mode) {
-            rec->phase = PAL_JPN(0.0f, 0);
+            rec->phase = PAL_JPNKOR(0.0f, 0);
             rec->frames = (int)(float)*motionTable[((ChainExtPtr *)&boy->dobj)->sub->ctrl.motion];
             SetChainClimbNodePoint(boy, rec);
             rec->target[0] = rec->node[0]; rec->target[2] = rec->node[2];
             rec->target[1] = rec->node[1] - 100.0f;
         }
-        if (ICO_JPN) {
+        if (ICO_JPNKOR) {
             _InterGV(v, rec->node, rec->target, (float)rec->phase, (float)(rec->frames - rec->phase));
         } else {
             _InterGV(v, rec->node, rec->target, rec->phase, (float)rec->frames - rec->phase);
@@ -1354,7 +1355,7 @@ static void TestChainUpDown(GObj *gobj, GObj *boy)
 
         PushChainClimbRoot(boy, v, w, d, -10.0f, 3.0f);
 
-        ((ChainClimbWork *)chainClimb)->phase = ((ChainClimbWork *)chainClimb)->phase + PAL_JPN(1.0f, 1);
+        ((ChainClimbWork *)chainClimb)->phase = ((ChainClimbWork *)chainClimb)->phase + PAL_JPNKOR(1.0f, 1);
 
         w[0] = test_CURRENTROOT(boyGObj)[0]; w[1] = test_CURRENTROOT(boyGObj)[1]; w[2] = test_CURRENTROOT(boyGObj)[2];
         w[1] = org[1] + ((ChainExtPtr *)&boyGObj->dobj)->sub->root.step[1];
@@ -1369,13 +1370,13 @@ static void TestChainUpDown(GObj *gobj, GObj *boy)
         org[0] = test_CURRENTROOT(boyGObj)[0]; org[1] = test_CURRENTROOT(boyGObj)[1]; org[2] = test_CURRENTROOT(boyGObj)[2];
 
         rec = (ChainClimbWork *)chainClimb; if (rec->prev != mode) {
-            rec->phase = PAL_JPN(0.0f, 0);
+            rec->phase = PAL_JPNKOR(0.0f, 0);
             rec->frames = (int)(float)*motionTable[((ChainExtPtr *)&boy->dobj)->sub->ctrl.motion];
             SetChainClimbNodePoint(boy, rec);
             rec->target[0] = rec->node[0]; rec->target[2] = rec->node[2];
             rec->target[1] = rec->node[1] - 100.0f;
         }
-        if (ICO_JPN) {
+        if (ICO_JPNKOR) {
             _InterGV(v, rec->node, rec->target, (float)rec->phase, (float)(rec->frames - rec->phase));
         } else {
             _InterGV(v, rec->node, rec->target, rec->phase, (float)rec->frames - rec->phase);
@@ -1387,7 +1388,7 @@ static void TestChainUpDown(GObj *gobj, GObj *boy)
 
         PushChainClimbRoot(boy, v, w, d, mode == 0 ? -15.0f : -10.0f, mode == 0 ? -3.0f : -10.0f);
 
-        ((ChainClimbWork *)chainClimb)->phase = ((ChainClimbWork *)chainClimb)->phase + PAL_JPN(30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), 1);
+        ((ChainClimbWork *)chainClimb)->phase = ((ChainClimbWork *)chainClimb)->phase + PAL_JPNKOR(30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), 1);
 
         w[0] = test_CURRENTROOT(boyGObj)[0]; w[1] = test_CURRENTROOT(boyGObj)[1]; w[2] = test_CURRENTROOT(boyGObj)[2];
         w[1] = org[1] + ((ChainExtPtr *)&boyGObj->dobj)->sub->root.step[1];
@@ -1400,14 +1401,14 @@ static void TestChainUpDown(GObj *gobj, GObj *boy)
     case 2: case 3: {
         ChainClimbWork *rec;
         rec = (ChainClimbWork *)chainClimb; if (rec->prev != mode) {
-            rec->phase = PAL_JPN(0.0f, 0);
+            rec->phase = PAL_JPNKOR(0.0f, 0);
             rec->frames = (int)(float)*motionTable[((ChainExtPtr *)&boy->dobj)->sub->ctrl.motion];
             SetChainClimbNodePoint(boy, rec);
             rec->target[0] = rec->node[0]; rec->target[2] = rec->node[2];
             rec->target[1] = rec->node[1] + 200.0f;
         }
 
-        if (ICO_JPN) {
+        if (ICO_JPNKOR) {
             _InterGV(v, rec->node, rec->target, (float)rec->phase, (float)(rec->frames - rec->phase));
         } else {
             _InterGV(v, rec->node, rec->target, rec->phase, (float)rec->frames - rec->phase);
@@ -1418,7 +1419,7 @@ static void TestChainUpDown(GObj *gobj, GObj *boy)
         v[1] = v[1] < cw->node2Pos[1] ? cw->node2Pos[1] : (cw->endPos[1] < v[1] ? cw->endPos[1] : v[1]);
 
         PushChainClimbRoot(boy, v, hw, hd, -20.0f, -5.0f);
-        ((ChainClimbWork *)chainClimb)->phase = ((ChainClimbWork *)chainClimb)->phase + PAL_JPN(1.0f, 1);
+        ((ChainClimbWork *)chainClimb)->phase = ((ChainClimbWork *)chainClimb)->phase + PAL_JPNKOR(1.0f, 1);
         PlumbPointUpdateChain(gobj, v);
     } break;
     default: { ChainClimbWork *rec;

@@ -1029,7 +1029,7 @@ static const QueenGenTable genEnemyTable_pal[2] = {
     {6, genEnemyLayoutDefault},
 };
 
-#define genEnemyTable PAL_JPN(genEnemyTable_pal, genEnemyTable_jpn)
+#define genEnemyTable PAL_JPNKOR(genEnemyTable_pal, genEnemyTable_jpn)
 
 static const char genEnemyStatFmt[] = "n_enemy_max:%d n_enemy:%d counter:%d"; /* derived name */
 
@@ -1091,7 +1091,7 @@ void gene_enemy(volatile ICO_WORD g)
                             }
                             Generator_Call(obj);
                             _ACTWait(1);
-                            while (stage_CheckAnimationFinish(PAL_JPN(506, 502)) == 0) {
+                            while (stage_CheckAnimationFinish(PAL_JPNKOR(506, 502)) == 0) {
                                 _ACTWait(1);
                             }
                             for (k = 0; k <= wait; k++) {
@@ -1369,7 +1369,7 @@ static const int barrierLayoutDefault_jpn[] = {3504}; /* derived name */
 static const int barrierLayoutDefault_pal[] = {3527}; /* derived name */
 
 /* the Japanese disc's layout ids are 23 lower */
-#define barrierLayoutDefault PAL_JPN(barrierLayoutDefault_pal, barrierLayoutDefault_jpn)
+#define barrierLayoutDefault PAL_JPNKOR(barrierLayoutDefault_pal, barrierLayoutDefault_jpn)
 
 static const char damageFmt[] = "damage:%d"; /* derived name */
 
@@ -1429,7 +1429,7 @@ void QueenGeo(GObj *g)
         queenFrame++;
     }
     ExecMotionOrient(g);
-    SetActressLight(g, 35, 44, PAL_JPN(472, 468));
+    SetActressLight(g, 35, 44, PAL_JPNKOR(472, 468));
     w = GOBJ_SUB(g)->work;
     if (w->clothOn != 0) {
         GetCloth4D(w->cloth, 3.0f, 0.98f);
@@ -1681,7 +1681,7 @@ void QueenBallGeo(GObj *g)
             GetRootPosition(objPos.f, o);
             hit |= CheckQueenBallBox(&objPos, (QVec *)m[3], &queenPos, 130, 300.0f, -120, 600.0f);
             bga = &queenBga[i];
-            CheckQueenBallRing(bga, PAL_JPN(482, 478), (QVec *)m[3], &objPos, r);
+            CheckQueenBallRing(bga, PAL_JPNKOR(482, 478), (QVec *)m[3], &objPos, r);
             if (*bga != 0) {
                 SetQueenBallOrient(*bga, (QVec *)m[3], &objPos);
             }
@@ -1694,7 +1694,7 @@ void QueenBallGeo(GObj *g)
                 GetRootPosition(objPos.f, sword);
                 hit |=
                     CheckQueenBallBox(&objPos, (QVec *)m[3], &queenPos, 75, 300.0f, -150, 500.0f);
-                CheckQueenBallRing(&queenBga[2], PAL_JPN(484, 480), (QVec *)m[3], &objPos, r);
+                CheckQueenBallRing(&queenBga[2], PAL_JPNKOR(484, 480), (QVec *)m[3], &objPos, r);
             }
         }
     }
@@ -1706,7 +1706,7 @@ void QueenBallGeo(GObj *g)
     if (w->attacked != 0) {
         w->attacked = 0;
         w->live = 0;
-        pbga_start(&w->bga, PAL_JPN(479, 475));
+        pbga_start(&w->bga, PAL_JPNKOR(479, 475));
         _CopyVector(w->bga->pos, m[3]);
         CopyQuaternion(w->bga->rot, IdentityQuaternion);
         ExecuteSEPackage(g, 94);
@@ -1770,7 +1770,7 @@ void QueenBallDL(GObj *g)
         p2o_DispVU1Default(g);
     }
     if (w->bga != 0) {
-        stage_SetScale(PAL_JPN(479, 475), w->scale);
+        stage_SetScale(PAL_JPNKOR(479, 475), w->scale);
         if (stage_DispBgAnimation(&w->bga) != 0) {
             Act *act;
 
@@ -1788,7 +1788,7 @@ void QueenBallDL(GObj *g)
         if ((o = *q) != 0) {
             long long id = *(long long *)o & 0x3FFF;
 
-            if (id == PAL_JPN(483, 479) || id == PAL_JPN(485, 481)) {
+            if (id == PAL_JPNKOR(483, 479) || id == PAL_JPNKOR(485, 481)) {
                 SetQueenBallOrient(o, &selfPos, &queenPos);
             }
             if (stage_DispBgAnimation(q) != 0) {

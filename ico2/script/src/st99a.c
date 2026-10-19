@@ -76,8 +76,8 @@ void actSpider(GObj *volatile self)
     Act *act = actInitialize(self);
     _ACTWait(1);
 
-    stage_SetLoopFlag(PAL_JPN(160, 156), 1);
-    stage_SetAnimation(PAL_JPN(160, 156), 1, 0);
+    stage_SetLoopFlag(PAL_JPNKOR(160, 156), 1);
+    stage_SetAnimation(PAL_JPNKOR(160, 156), 1, 0);
 
     spider_mes[0].func = actSpiderChk;
     act->mail = spider_mes;
@@ -91,8 +91,8 @@ void actDevilLightning(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
-    scpLinkBGAtoLayoutedTargetSkeltonWithLocalRotationFlag(PAL_JPN(3513, 3490), 0,
-                                                           PAL_JPN(554, 550), 0);
+    scpLinkBGAtoLayoutedTargetSkeltonWithLocalRotationFlag(PAL_JPNKOR(3513, 3490), 0,
+                                                           PAL_JPNKOR(554, 550), 0);
 }
 
 void actQueenLightning(GObj *volatile self)
@@ -101,8 +101,8 @@ void actQueenLightning(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
-    scpLinkBGAtoLayoutedTargetSkeltonWithLocalRotationFlag(PAL_JPN(3512, 3489), 0,
-                                                           PAL_JPN(555, 551), 0);
+    scpLinkBGAtoLayoutedTargetSkeltonWithLocalRotationFlag(PAL_JPNKOR(3512, 3489), 0,
+                                                           PAL_JPNKOR(555, 551), 0);
 }
 
 void actSt17aTest(GObj *volatile self)
@@ -111,7 +111,7 @@ void actSt17aTest(GObj *volatile self)
     Act *act = actInitialize(self);
     _ACTWait(1);
 
-    stage_SetAnimation(PAL_JPN(132, 128), 0, 0);
+    stage_SetAnimation(PAL_JPNKOR(132, 128), 0, 0);
 
     st17aTest_mes[0].func = actSt17aTestChk;
     act->mail = st17aTest_mes;
@@ -133,13 +133,13 @@ void actSt27aWave(GObj *volatile self)
 
 void actExplodeChk(GObj *volatile self)
 {
-    GOBJ_SUB(scpSearchGobj(PAL_JPN(3014, 3010)))->ctrl.noStand = 1;
-    GOBJ_SUB(scpSearchGobj(PAL_JPN(3014, 3010)))->ctrl.noStand = 0;
+    GOBJ_SUB(scpSearchGobj(PAL_JPNKOR(3014, 3010)))->ctrl.noStand = 1;
+    GOBJ_SUB(scpSearchGobj(PAL_JPNKOR(3014, 3010)))->ctrl.noStand = 0;
     scpGetWallCollision(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 100.0f);
     _ACTWait(60);
-    stage_SetAnimation(PAL_JPN(511, 507), 1, 0);
-    scpLinkBGAtoLayoutedTarget(PAL_JPN(3014, 3010), PAL_JPN(511, 507));
-    while (stage_CheckAnimationFinish(PAL_JPN(511, 507)) == 0) {
+    stage_SetAnimation(PAL_JPNKOR(511, 507), 1, 0);
+    scpLinkBGAtoLayoutedTarget(PAL_JPNKOR(3014, 3010), PAL_JPNKOR(511, 507));
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(511, 507)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -147,13 +147,13 @@ void actExplodeChk(GObj *volatile self)
 
 void actSplash1Chk(GObj *volatile self)
 {
-    GOBJ_SUB(scpSearchGobj(PAL_JPN(3015, 3011)))->ctrl.noStand = 1;
-    GOBJ_SUB(scpSearchGobj(PAL_JPN(3015, 3011)))->ctrl.noStand = 0;
+    GOBJ_SUB(scpSearchGobj(PAL_JPNKOR(3015, 3011)))->ctrl.noStand = 1;
+    GOBJ_SUB(scpSearchGobj(PAL_JPNKOR(3015, 3011)))->ctrl.noStand = 0;
     scpGetWallCollision(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 100.0f);
     _ACTWait(60);
-    stage_SetAnimation(PAL_JPN(498, 494), 1, 0);
-    scpLinkBGAtoLayoutedTarget(PAL_JPN(3015, 3011), PAL_JPN(498, 494));
-    while (stage_CheckAnimationFinish(PAL_JPN(498, 494)) == 0) {
+    stage_SetAnimation(PAL_JPNKOR(498, 494), 1, 0);
+    scpLinkBGAtoLayoutedTarget(PAL_JPNKOR(3015, 3011), PAL_JPNKOR(498, 494));
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(498, 494)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -161,13 +161,13 @@ void actSplash1Chk(GObj *volatile self)
 
 void actSplash2Chk(GObj *volatile self)
 {
-    GOBJ_SUB(scpSearchGobj(PAL_JPN(3016, 3012)))->ctrl.noStand = 1;
-    GOBJ_SUB(scpSearchGobj(PAL_JPN(3016, 3012)))->ctrl.noStand = 0;
+    GOBJ_SUB(scpSearchGobj(PAL_JPNKOR(3016, 3012)))->ctrl.noStand = 1;
+    GOBJ_SUB(scpSearchGobj(PAL_JPNKOR(3016, 3012)))->ctrl.noStand = 0;
     scpGetWallCollision(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 100.0f);
     _ACTWait(60);
-    stage_SetAnimation(PAL_JPN(499, 495), 1, 0);
-    scpLinkBGAtoLayoutedTarget(PAL_JPN(3016, 3012), PAL_JPN(499, 495));
-    while (stage_CheckAnimationFinish(PAL_JPN(499, 495)) == 0) {
+    stage_SetAnimation(PAL_JPNKOR(499, 495), 1, 0);
+    scpLinkBGAtoLayoutedTarget(PAL_JPNKOR(3016, 3012), PAL_JPNKOR(499, 495));
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(499, 495)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -183,13 +183,13 @@ void actWave1(GObj *volatile self)
     GObj *x = self;
     actInitialize(self);
     while (1) {
-        stage_SetAnimation(PAL_JPN(519, 515), 1, 0);
+        stage_SetAnimation(PAL_JPNKOR(519, 515), 1, 0);
         _ACTWait(179);
-        stage_SetAnimation(PAL_JPN(520, 516), 1, 0);
+        stage_SetAnimation(PAL_JPNKOR(520, 516), 1, 0);
         _ACTWait(179);
-        stage_SetAnimation(PAL_JPN(521, 517), 1, 0);
+        stage_SetAnimation(PAL_JPNKOR(521, 517), 1, 0);
         _ACTWait(179);
-        stage_SetAnimation(PAL_JPN(522, 518), 1, 0);
+        stage_SetAnimation(PAL_JPNKOR(522, 518), 1, 0);
         _ACTWait(179);
     }
 }
@@ -204,13 +204,13 @@ void actSt27aWave1(GObj *volatile self)
     GObj *x = self;
     actInitialize(self);
     while (1) {
-        stage_SetAnimation(PAL_JPN(194, 190), 1, 0);
+        stage_SetAnimation(PAL_JPNKOR(194, 190), 1, 0);
         _ACTWait(200);
-        stage_SetAnimation(PAL_JPN(195, 191), 1, 0);
+        stage_SetAnimation(PAL_JPNKOR(195, 191), 1, 0);
         _ACTWait(200);
-        stage_SetAnimation(PAL_JPN(196, 192), 1, 0);
+        stage_SetAnimation(PAL_JPNKOR(196, 192), 1, 0);
         _ACTWait(200);
-        stage_SetAnimation(PAL_JPN(197, 193), 1, 0);
+        stage_SetAnimation(PAL_JPNKOR(197, 193), 1, 0);
         _ACTWait(200);
     }
 }
@@ -232,7 +232,7 @@ static void actSt17aTestChk(GObj *volatile self)
         while ((pad[1].flags & 0x20) == 0) {
             _ACTWait(1);
         }
-        stage_SetAnimation(PAL_JPN(84, 80), 1, 0);
+        stage_SetAnimation(PAL_JPNKOR(84, 80), 1, 0);
         _ACTWait(1);
     }
 }

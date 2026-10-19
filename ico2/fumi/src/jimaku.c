@@ -217,7 +217,7 @@ static void jimakuMgrBegin(JimakuArg *p)
     jimakuRing[0].state = 3;
     jimakuRing[0].tex = -1;
     sub->ringPos = 1;
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         st = gFlagGameClear != 0;
     } else {
         switch (NonLinearCameraMove) {
@@ -287,8 +287,8 @@ static void jimakuMgrNext(JimakuArg *p)
     g->node->stamp = lock_execIcoMisc;
     if (g->node->tex == -1) {
         debug_StdPrintfDummy("already exist\n");
-        debug_assert(__FILE__, LN(688, 655));
-        __assert(__FILE__, LN(688, 655), "0");
+        debug_assert(__FILE__, LN(688, 655, 655));
+        __assert(__FILE__, LN(688, 655, 655), "0");
     }
     sub->n = (sub->n + 1) % 4;
     if (iosSemaWait(&jimakuShownSema) < 0) {
@@ -434,16 +434,16 @@ void jimakuDisp(JimakuArg *msg)
     }
     if (jimakuDispOn != 0) {
         int v = g->tex;
-        texProperty[PAL_JPN(435, 411)].texNo = v;
-        texProperty[PAL_JPN(434, 410)].texNo = v;
+        texProperty[PAL_JPNKOR(435, 411)].texNo = v;
+        texProperty[PAL_JPNKOR(434, 410)].texNo = v;
         if (v < 0) {
             return;
         }
         if (jimakuOn != 0) {
             JIM_HOST_KEY(g, 0);
-            display_texture(&texProperty[PAL_JPN(434, 410)]);
+            display_texture(&texProperty[PAL_JPNKOR(434, 410)]);
             JIM_HOST_KEY(g, 1);
-            display_texture(&texProperty[PAL_JPN(435, 411)]);
+            display_texture(&texProperty[PAL_JPNKOR(435, 411)]);
             JIM_HOST_KEY(0, 0);
         }
     }

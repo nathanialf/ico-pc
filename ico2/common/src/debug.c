@@ -577,7 +577,7 @@ static const DbgOpt debugOption_pal[76] = {
 
 /* The two discs page through different SnapShot rows (the Japanese disc names
    seven sizes and counts snapshots up from 0); every other row is the same. */
-#define debugOption PAL_JPN(debugOption_pal, debugOption_jpn)
+#define debugOption PAL_JPNKOR(debugOption_pal, debugOption_jpn)
 
 /* the font window's line count */
 static int fontWindowLine = 0; /* derived name */
@@ -902,10 +902,10 @@ void debug_Assert(char *fmt, ...)
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-    debug_assertMessage("src/debug.c", LN(1392, 1389), buf);
-    __assert("src/debug.c", LN(1392, 1389), "e");
-    debug_assert("src/debug.c", LN(1393, 1390));
-    __assert("src/debug.c", LN(1393, 1390), "0");
+    debug_assertMessage("src/debug.c", LN(1392, 1389, 1389), buf);
+    __assert("src/debug.c", LN(1392, 1389, 1389), "e");
+    debug_assert("src/debug.c", LN(1393, 1390, 1390));
+    __assert("src/debug.c", LN(1393, 1390, 1390), "0");
 }
 
 /* the host log file (the DEBUG build opens it) */
@@ -1131,7 +1131,7 @@ void debug_VariableInit(void)
     debug_zoom_per = 100;
     debug_debug_bar_start_item = 0;
     debug_ripple_roughness = 25;
-    debug_snapshot_num = PAL_JPN(100, 1);
+    debug_snapshot_num = PAL_JPNKOR(100, 1);
     debug_snapshot_size = 0;
     debug_snapshot_format = 0;
     debug_ambient_volume = 0;
@@ -1248,61 +1248,62 @@ int debug_Load(char **dst, char *name, int kind)
         switch (kind) {
         case 0:
         default:
-            *dst = iosMallocDebug(ios_partition_seki, sz, "src/debug.c", LN(1958, 1955));
+            *dst = iosMallocDebug(ios_partition_seki, sz, "src/debug.c", LN(1958, 1955, 1955));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_seki->start) * 100.0f / 10059776.0f);
             break;
         case 1:
-            *dst = iosMallocDebug(ios_partition_sugipon, sz, "src/debug.c", LN(1965, 1962));
+            *dst = iosMallocDebug(ios_partition_sugipon, sz, "src/debug.c", LN(1965, 1962, 1962));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 524288.0f,
                                  (*dst + sz - ios_partition_sugipon->start) * 100.0f / 524288.0f);
             break;
         case 2:
-            *dst = iosMallocDebug(ios_partition_common, sz, "src/debug.c", LN(1973, 1970));
+            *dst = iosMallocDebug(ios_partition_common, sz, "src/debug.c", LN(1973, 1970, 1970));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to static object area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 2.0f,
                                  (*dst + sz - ios_partition_common->start) * 100.0f / 2.0f);
             break;
         case 3:
-            *dst = iosMallocDebug(ios_partition_smotion, sz, "src/debug.c", LN(1982, 1979));
+            *dst = iosMallocDebug(ios_partition_smotion, sz, "src/debug.c", LN(1982, 1979, 1979));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to static motion area.(%2.1f%%/%2.1f%%)\n",
                                  sz * 100.0f / 1179648.0f,
                                  (*dst + sz - ios_partition_smotion->start) * 100.0f / 1179648.0f);
             break;
         case 5:
-            *dst = iosMallocDebug(ios_partition_dmotion, sz, "src/debug.c", LN(1991, 1988));
+            *dst = iosMallocDebug(ios_partition_dmotion, sz, "src/debug.c", LN(1991, 1988, 1988));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to dynamic motion area.(%2.1f%%/%2.1f%%)\n",
                                  sz * 100.0f / 3670016.0f,
                                  (*dst + sz - ios_partition_dmotion->start) * 100.0f / 3670016.0f);
             break;
         case 6:
-            *dst = iosMallocDebug(ios_partition_hara, sz, "src/debug.c", LN(2000, 1997));
+            *dst = iosMallocDebug(ios_partition_hara, sz, "src/debug.c", LN(2000, 1997, 1997));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_hara->start) * 100.0f);
             break;
         case 7:
-            *dst = iosMallocDebug(ios_partition_oomori, sz, "src/debug.c", LN(2007, 2004));
+            *dst = iosMallocDebug(ios_partition_oomori, sz, "src/debug.c", LN(2007, 2004, 2004));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_oomori->start) * 100.0f / 327680.0f);
             break;
         case 8:
-            *dst = iosMallocDebug(ios_partition_horagai, sz, "src/debug.c", LN(2014, 2011));
+            *dst = iosMallocDebug(ios_partition_horagai, sz, "src/debug.c", LN(2014, 2011, 2011));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to horagai-area.\n");
             break;
         case 9:
-            *dst = iosMallocDebug(ios_partition_sound, sz, "src/debug.c", LN(2019, 2016));
+            *dst = iosMallocDebug(ios_partition_sound, sz, "src/debug.c", LN(2019, 2016, 2016));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to sound-area.\n");
             break;
         case 10:
-            *dst = iosMallocDebug(ios_partition_sound_semi, sz, "src/debug.c", LN(2024, 2021));
+            *dst =
+                iosMallocDebug(ios_partition_sound_semi, sz, "src/debug.c", LN(2024, 2021, 2021));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to sound_semi-area.\n");
             break;
@@ -1898,7 +1899,7 @@ static void debug_DrawBar(void)
     int len;
 
     flip = 0;
-    scale = 1.0f / (270000.0f / PAL_JPN((float)((60 - systemStatus[0] * 10) / systemStatus[1]), 30.0f));
+    scale = 1.0f / (270000.0f / PAL_JPNKOR((float)((60 - systemStatus[0] * 10) / systemStatus[1]), 30.0f));
 
 
 
@@ -2129,7 +2130,7 @@ void debug_DispBar(void)
     int va;
     int vb;
     int n;
-    inv = 1.0f / (270000.0f / PAL_JPN((float)((60 - systemStatus[0] * 10) / systemStatus[1]), 30.0f));
+    inv = 1.0f / (270000.0f / PAL_JPNKOR((float)((60 - systemStatus[0] * 10) / systemStatus[1]), 30.0f));
     vb = (float)(debugBars[debugBarCount - 1].count * 100) * inv;
     va = (float)(drawTimerCount * 100) * inv;
 
@@ -2259,7 +2260,7 @@ int debug_SnapShot(int idx)
     size = ScreenWidth * ScreenHeight * 4;
     /* the European disc's SnapSize 0 is None; the Japanese disc's is
        Normal (debugSnapSizeName_jpn), which takes one like every size */
-    if (!ICO_JPN && debug_snapshot_size == 0) {
+    if (!ICO_JPNKOR && debug_snapshot_size == 0) {
         return -1;
     }
     /* PC port: the PS2 stored the scene buffer
@@ -2857,7 +2858,7 @@ static int debug_SelectStageMain(int ret, int stage)
 int debug_SelectStage(void)
 {
     return debug_SelectStageMain(debug_SelectCsvWindowWithLine("stage select", 10, 80, 11, stageData,
-                                                               404, 0x20, 0, PAL_JPN(106, 104), &stageSelectNo),
+                                                               404, 0x20, 0, PAL_JPNKOR(106, 104), &stageSelectNo),
                                  stageSelectNo);
 }
 
@@ -3928,7 +3929,7 @@ static int menuArg = 0; /* derived name */
 static inline void debug_MenuBlink(void) /* derived name */
 {
     if (menuBlink >> 4) {
-        debug_PrintfDummy(220, 60, 0x80C0FF80u, "DISC VER.%s %s", PAL_JPN("Jan 17 2002", "Nov  2 2001"), PAL_JPN("15:37:26", "17:26:01"));
+        debug_PrintfDummy(220, 60, 0x80C0FF80u, "DISC VER.%s %s", PAL_JPNKOR("Jan 17 2002", "Nov  2 2001"), PAL_JPNKOR("15:37:26", "17:26:01"));
     }
     menuBlink++;
     if (menuBlink >= 0x41) {

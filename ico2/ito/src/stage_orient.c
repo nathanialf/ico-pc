@@ -68,7 +68,7 @@ inline void StageOrientInit(void)
     int i, j;
     char buf[64];
 
-    for (i = 0; i < PAL_JPN(106, 104); i++) {
+    for (i = 0; i < PAL_JPNKOR(106, 104); i++) {
         sscanf(stageData[i].name, "%s", buf);
         stageOrientIdx[i] = -1;
         for (j = 0; j < sizeof(stageOrientDefs) / sizeof(stageOrientDefs[0]); j++) {

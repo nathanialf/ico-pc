@@ -180,7 +180,7 @@ static int kanbanBootMcCheck(void)
     int lang;
     int ret = 0;
 
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         return kanbanBootMcCheck_jpn();
     }
 
@@ -452,7 +452,7 @@ void kanbanBootMain(void)
             return;
         }
         kanbanReqAllDelFade();
-        waitKanban = kanbanReqAdd(PAL_JPN(2, 0), 1);
+        waitKanban = kanbanReqAdd(PAL_JPNKOR(2, 0), 1);
         bootStep++;
         break;
     case 3:

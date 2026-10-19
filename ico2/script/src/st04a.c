@@ -102,10 +102,10 @@ void actSt04aGate(GObj *volatile self)
     if (gflagChk(137) == 0) {
         scpFadeOut(255.0f, 0, 0, 0);
 
-        stage_SetLoopFlag(PAL_JPN(555, 551), 0);
+        stage_SetLoopFlag(PAL_JPNKOR(555, 551), 0);
 
-        stage_SetAnimation(PAL_JPN(269, 265), 0, 0);
-        stage_SetAnimation(PAL_JPN(272, 268), 0, 0);
+        stage_SetAnimation(PAL_JPNKOR(269, 265), 0, 0);
+        stage_SetAnimation(PAL_JPNKOR(272, 268), 0, 0);
 
         gflagOff(390);
 
@@ -114,10 +114,10 @@ void actSt04aGate(GObj *volatile self)
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-        stage_SetLoopFlag(PAL_JPN(555, 551), 0);
+        stage_SetLoopFlag(PAL_JPNKOR(555, 551), 0);
 
-        stage_SetAnimation(PAL_JPN(269, 265), 0, -1);
-        stage_SetAnimation(PAL_JPN(272, 268), 0, 0);
+        stage_SetAnimation(PAL_JPNKOR(269, 265), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(272, 268), 0, 0);
     }
 }
 
@@ -162,7 +162,7 @@ void actSt04aGateChk(GObj *volatile self)
 
     th0 = actCreateSubThread(actSt04aEnvSe, 21);
 
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
 
     scpBoyControlReadDisable = 1;
 
@@ -200,7 +200,7 @@ void actSt04aGateChk(GObj *volatile self)
     th1 = actCreateSubThread(actSt04aConte06, 21);
     th2 = actCreateSubThread(actSt04aConte06Jimaku, 21);
 
-    stage_SetAnimation(PAL_JPN(269, 265), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(269, 265), 1, 0);
 
     scpSearchGobj(590)->active = 1;
 
@@ -253,7 +253,7 @@ void actSt04aGateChk(GObj *volatile self)
             AnimList28 anim;
             unsigned int j;
 
-            anim = PAL_JPN(gateOpenAnims_pal, gateOpenAnims_jpn);
+            anim = PAL_JPNKOR(gateOpenAnims_pal, gateOpenAnims_jpn);
             for (j = 0; j < 28; j++) {
                 stage_SetAnimation(anim.v[j], 1, -1);
                 _ACTWait(1);
@@ -262,15 +262,15 @@ void actSt04aGateChk(GObj *volatile self)
 
         jimakuUndisp(&jimaku_msg);
 
-        stage_SetAnimation(PAL_JPN(269, 265), 0, -1);
-        stage_SetAnimation(PAL_JPN(673, 669), 1, -1);
-        stage_SetAnimation(PAL_JPN(475, 471), -1, -2);
-        stage_SetAnimation(PAL_JPN(477, 473), -1, -2);
+        stage_SetAnimation(PAL_JPNKOR(269, 265), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(673, 669), 1, -1);
+        stage_SetAnimation(PAL_JPNKOR(475, 471), -1, -2);
+        stage_SetAnimation(PAL_JPNKOR(477, 473), -1, -2);
 
         scpSearchGobj(590)->active = 0;
 
-        stage_SetLoopFlag(PAL_JPN(555, 551), 0);
-        stage_SetAnimation(PAL_JPN(555, 551), -1, -2);
+        stage_SetLoopFlag(PAL_JPNKOR(555, 551), 0);
+        stage_SetAnimation(PAL_JPNKOR(555, 551), -1, -2);
 
         reg_SetScissorSw(0);
 
@@ -328,7 +328,7 @@ void actSt04aGateChk(GObj *volatile self)
 
     scpBoyControlReadDisable = 0;
 
-    lt_switch_layout(PAL_JPN(54, 51));
+    lt_switch_layout(PAL_JPNKOR(54, 51));
 
     SetStaticBlur(1);
 
@@ -339,17 +339,17 @@ void actSt04aGateChk(GObj *volatile self)
 
 void actSt04aConte06(GObj *volatile self)
 {
-    stage_SetAnimation(PAL_JPN(648, 644), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(648, 644), 1, 0);
 
     AdpcmPlay(gate1st->stream);
 
-    while (stage_ContinueAnimation(PAL_JPN(648, 644), PAL_JPN(649, 645)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(648, 644), PAL_JPNKOR(649, 645)) == 0) {
         _ACTWait(1);
     }
-    while (stage_ContinueAnimation(PAL_JPN(649, 645), PAL_JPN(650, 646)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(649, 645), PAL_JPNKOR(650, 646)) == 0) {
         _ACTWait(1);
     }
-    while (stage_ContinueAnimation(PAL_JPN(650, 646), PAL_JPN(651, 647)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(650, 646), PAL_JPNKOR(651, 647)) == 0) {
         _ACTWait(1);
     }
 
@@ -359,51 +359,51 @@ void actSt04aConte06(GObj *volatile self)
     gate_yure_low_vol = 64;
     iosPadActVolumeSet(gate_yure_low, 64);
 
-    while (stage_ContinueAnimation(PAL_JPN(651, 647), PAL_JPN(652, 648)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(651, 647), PAL_JPNKOR(652, 648)) == 0) {
         _ACTWait(1);
     }
-    while (stage_ContinueAnimation(PAL_JPN(652, 648), PAL_JPN(653, 649)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(652, 648), PAL_JPNKOR(653, 649)) == 0) {
         _ACTWait(1);
     }
 
     reg_SetScissorSw(0);
 
-    while (stage_ContinueAnimation(PAL_JPN(653, 649), PAL_JPN(654, 650)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(653, 649), PAL_JPNKOR(654, 650)) == 0) {
         _ACTWait(1);
     }
-    while (stage_ContinueAnimation(PAL_JPN(654, 650), PAL_JPN(655, 651)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(654, 650), PAL_JPNKOR(655, 651)) == 0) {
         _ACTWait(1);
     }
-    while (stage_ContinueAnimation(PAL_JPN(655, 651), PAL_JPN(656, 652)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(655, 651), PAL_JPNKOR(656, 652)) == 0) {
         _ACTWait(1);
     }
 
-    stage_SetAnimation(PAL_JPN(475, 471), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(475, 471), 1, 0);
 
     iosPadActRequest(boyPad, 15);
 
-    scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(48, 0, PAL_JPN(555, 551), 0);
+    scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(48, 0, PAL_JPNKOR(555, 551), 0);
 
-    stage_SetLoopFlag(PAL_JPN(555, 551), 1);
-    stage_SetAnimation(PAL_JPN(555, 551), 1, 0);
+    stage_SetLoopFlag(PAL_JPNKOR(555, 551), 1);
+    stage_SetAnimation(PAL_JPNKOR(555, 551), 1, 0);
 
     debug_StdPrintfDummy("!!\n");
 
-    stage_SetAnimation(PAL_JPN(489, 485), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(489, 485), 1, 0);
 
     tex_SetUVScroll("face_sadow_sd", 0.0f, 0.0f, 0.25f, 0.0625f, 0.99f, 0.99f, 1);
     tex_SetUVScroll("face_sadow_sd_00", 0.0f, 0.0f, 0.25f, 0.0625f, 0.1f, 0.1f, 1);
 
-    while (stage_ContinueAnimation(PAL_JPN(656, 652), PAL_JPN(657, 653)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(656, 652), PAL_JPNKOR(657, 653)) == 0) {
         _ACTWait(1);
     }
-    while (stage_ContinueAnimation(PAL_JPN(657, 653), PAL_JPN(658, 654)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(657, 653), PAL_JPNKOR(658, 654)) == 0) {
         _ACTWait(1);
     }
 
     iosPadActStop(gate_yure_low);
 
-    while (stage_CheckAnimationFrame(PAL_JPN(658, 654), 150, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(658, 654), 150, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -411,7 +411,7 @@ void actSt04aConte06(GObj *volatile self)
     tex_SetUVScroll("face_sadow_sd", 0.0f, 0.0f, 0.25f, 0.0625f, 0.8f, 0.8f, 1);
     tex_SetUVScroll("face_sadow_sd_00", 0.0f, 0.0f, 0.25f, 0.0625f, 0.45f, 0.45f, 1);
 
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         while (stage_ContinueAnimation(654, 655) == 0) {
             _ACTWait(1);
         }
@@ -444,7 +444,7 @@ void actSt04aConte06(GObj *volatile self)
         _ACTWait(1);
     }
 
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         _ACTWait(120);
 
         stage_SetAnimation(473, 1, 0);
@@ -456,7 +456,7 @@ void actSt04aConte06(GObj *volatile self)
         _ACTWait(1);
     }
 
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         scpSearchGobj(590)->active = 0;
 
         stage_SetLoopFlag(551, 0);
@@ -473,7 +473,7 @@ void actSt04aConte06(GObj *volatile self)
         _ACTWait(1);
     }
 
-    if (!ICO_JPN) {
+    if (!ICO_JPNKOR) {
         _ACTWait(120);
 
         stage_SetAnimation(477, 1, 0);
@@ -485,7 +485,7 @@ void actSt04aConte06(GObj *volatile self)
         _ACTWait(1);
     }
 
-    if (!ICO_JPN) {
+    if (!ICO_JPNKOR) {
         scpSearchGobj(590)->active = 0;
 
         stage_SetLoopFlag(555, 0);
@@ -507,7 +507,7 @@ void actSt04aConte06(GObj *volatile self)
 
     SetCameraFlag_LwsCutBack();
 
-    while (stage_CheckAnimationFinish(PAL_JPN(673, 669)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(673, 669)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -656,7 +656,7 @@ void actSt04aGateOpen(GObj *volatile self)
     MallocStreamMotionBuffer();
 
     if (gflagChk(140) == 0) {
-        stage_SetAnimation(PAL_JPN(270, 266), 0, 0);
+        stage_SetAnimation(PAL_JPNKOR(270, 266), 0, 0);
 
         scpSearchGobj(669)->active = 0;
 
@@ -667,9 +667,9 @@ void actSt04aGateOpen(GObj *volatile self)
     } else {
         SetWayGroupActive(2, 1);
 
-        stage_SetAnimation(PAL_JPN(270, 266), 0, -1);
-        stage_SetAnimation(PAL_JPN(272, 268), 0, -1);
-        stage_SetAnimation(PAL_JPN(275, 271), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(270, 266), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(272, 268), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(275, 271), 0, -1);
 
         scpSearchGobj(669)->active = 0;
 
@@ -708,7 +708,7 @@ void actSt04aGateOpenChk(GObj *volatile self)
         _ACTWait(1);
     }
 
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
 
     scpBoyControlReadDisable = 1;
 
@@ -780,7 +780,7 @@ void actSt04aGateOpenChk(GObj *volatile self)
             AnimList anim;
             unsigned int j;
 
-            anim = PAL_JPN(gateOpen2Anims_pal, gateOpen2Anims_jpn);
+            anim = PAL_JPNKOR(gateOpen2Anims_pal, gateOpen2Anims_jpn);
             for (j = 0; j < 13; j++) {
                 stage_SetAnimation(anim.v[j], 1, -1);
                 _ACTWait(1);
@@ -789,11 +789,11 @@ void actSt04aGateOpenChk(GObj *volatile self)
 
         jimakuUndisp(&jimaku_msg);
 
-        stage_SetAnimation(PAL_JPN(724, 720), 1, -1);
-        stage_SetAnimation(PAL_JPN(275, 271), 0, -1);
-        stage_SetAnimation(PAL_JPN(272, 268), 0, -1);
-        stage_SetAnimation(PAL_JPN(280, 276), 0, -1);
-        stage_SetAnimation(PAL_JPN(270, 266), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(724, 720), 1, -1);
+        stage_SetAnimation(PAL_JPNKOR(275, 271), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(272, 268), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(280, 276), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(270, 266), 0, -1);
 
         scpKillEnemyAll();
 
@@ -851,7 +851,7 @@ void actSt04aGateOpenChk(GObj *volatile self)
 
     scpBoyControlReadDisable = 0;
 
-    lt_switch_layout(PAL_JPN(54, 51));
+    lt_switch_layout(PAL_JPNKOR(54, 51));
 
     SetWayGroupActive(2, 1);
 
@@ -879,18 +879,18 @@ void actConte09(GObj *volatile self)
 
     scpSearchGobj(648)->active = 1;
 
-    stage_SetAnimation(PAL_JPN(712, 708), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(712, 708), 1, 0);
 
-    while (stage_ContinueAnimation(PAL_JPN(712, 708), PAL_JPN(713, 709)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(712, 708), PAL_JPNKOR(713, 709)) == 0) {
         _ACTWait(1);
     }
-    while (stage_ContinueAnimation(PAL_JPN(713, 709), PAL_JPN(714, 710)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(713, 709), PAL_JPNKOR(714, 710)) == 0) {
         _ACTWait(1);
     }
 
-    stage_SetAnimation(PAL_JPN(280, 276), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(280, 276), 1, 0);
 
-    while (stage_CheckAnimationFrame(PAL_JPN(714, 710), 125, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(714, 710), 125, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -899,42 +899,42 @@ void actConte09(GObj *volatile self)
 
     scpKillEnemyAll();
 
-    while (stage_ContinueAnimation(PAL_JPN(714, 710), PAL_JPN(715, 711)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(714, 710), PAL_JPNKOR(715, 711)) == 0) {
         _ACTWait(1);
     }
-    while (stage_CheckAnimationFrame(PAL_JPN(715, 711), 15, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(715, 711), 15, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     iosPadActRequest(boyPad, 16);
 
-    while (stage_ContinueAnimation(PAL_JPN(715, 711), PAL_JPN(716, 712)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(715, 711), PAL_JPNKOR(716, 712)) == 0) {
         _ACTWait(1);
     }
 
-    stage_SetAnimation(PAL_JPN(270, 266), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(270, 266), 1, 0);
 
-    while (stage_ContinueAnimation(PAL_JPN(716, 712), PAL_JPN(717, 713)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(716, 712), PAL_JPNKOR(717, 713)) == 0) {
         _ACTWait(1);
     }
-    while (stage_ContinueAnimation(PAL_JPN(717, 713), PAL_JPN(718, 714)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(717, 713), PAL_JPNKOR(718, 714)) == 0) {
         _ACTWait(1);
     }
-    while (stage_CheckAnimationFrame(PAL_JPN(718, 714), 70, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(718, 714), 70, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     SetGirlHairDispSwitch(girlGObj, 1);
 
-    while (stage_ContinueAnimation(PAL_JPN(718, 714), PAL_JPN(719, 715)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(718, 714), PAL_JPNKOR(719, 715)) == 0) {
         _ACTWait(1);
     }
 
     _ACTWait(300);
 
-    stage_SetAnimation(PAL_JPN(275, 271), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(275, 271), 1, 0);
 
     _ACTWait(120);
 
@@ -942,22 +942,22 @@ void actConte09(GObj *volatile self)
     vol1 = 128;
     iosPadActVolumeSet(yure1, 128);
 
-    while (stage_ContinueAnimation(PAL_JPN(719, 715), PAL_JPN(720, 716)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(719, 715), PAL_JPNKOR(720, 716)) == 0) {
         _ACTWait(1);
     }
 
-    stage_SetAnimation(PAL_JPN(272, 268), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(272, 268), 1, 0);
 
-    while (stage_ContinueAnimation(PAL_JPN(720, 716), PAL_JPN(721, 717)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(720, 716), PAL_JPNKOR(721, 717)) == 0) {
         _ACTWait(1);
     }
 
     iosPadActStop(yure1);
 
-    while (stage_ContinueAnimation(PAL_JPN(721, 717), PAL_JPN(722, 718)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(721, 717), PAL_JPNKOR(722, 718)) == 0) {
         _ACTWait(1);
     }
-    while (stage_ContinueAnimation(PAL_JPN(722, 718), PAL_JPN(723, 719)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(722, 718), PAL_JPNKOR(723, 719)) == 0) {
         _ACTWait(1);
     }
 
@@ -965,10 +965,10 @@ void actConte09(GObj *volatile self)
 
     gflagOn(140);
 
-    while (stage_ContinueAnimation(PAL_JPN(723, 719), PAL_JPN(724, 720)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(723, 719), PAL_JPNKOR(724, 720)) == 0) {
         _ACTWait(1);
     }
-    while (stage_CheckAnimationFinish(PAL_JPN(724, 720)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(724, 720)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -1044,7 +1044,7 @@ void actSt04aGateOpen2Chk(GObj *volatile self)
     sceVu0SubVector(dir, ofs, test_CURRENTROOT(boyGObj));
     scpPlayMotDir(boyGObj, dir);
 
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
 
     scpBoyControlReadDisable = 1;
     scpPlayStart(boyGObj);
@@ -1072,30 +1072,30 @@ void actConte09_2(GObj *volatile self)
 
     PlayStreamMotion();
 
-    stage_SetAnimation(PAL_JPN(728, 724), 1, 0);
-    stage_SetAnimation(PAL_JPN(281, 277), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(728, 724), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(281, 277), 1, 0);
 
-    while (stage_ContinueAnimation(PAL_JPN(728, 724), PAL_JPN(729, 725)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(728, 724), PAL_JPNKOR(729, 725)) == 0) {
         _ACTWait(1);
     }
-    while (stage_CheckAnimationFrame(PAL_JPN(729, 725), 30, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(729, 725), 30, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     iosPadActRequest(boyPad, 15);
 
-    while (stage_ContinueAnimation(PAL_JPN(729, 725), PAL_JPN(730, 726)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(729, 725), PAL_JPNKOR(730, 726)) == 0) {
         _ACTWait(1);
     }
-    while (stage_CheckAnimationFrame(PAL_JPN(730, 726), 15, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(730, 726), 15, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     iosPadActRequest(boyPad, 16);
 
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         while (stage_ContinueAnimation(726, 727) == 0) {
             _ACTWait(1);
         }
@@ -1116,7 +1116,7 @@ void actConte09_2(GObj *volatile self)
         _ACTWait(1);
     }
 
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         yure2 = iosPadActRequest(boyPad, 10);
         vol2 = 128;
         iosPadActVolumeSet(yure2, 128);
@@ -1137,7 +1137,7 @@ void actConte09_2(GObj *volatile self)
         _ACTWait(1);
     }
 
-    if (!ICO_JPN) {
+    if (!ICO_JPNKOR) {
         yure2 = iosPadActRequest(boyPad, 10);
         vol2 = 128;
         iosPadActVolumeSet(yure2, 128);
@@ -1149,7 +1149,7 @@ void actConte09_2(GObj *volatile self)
         _ACTWait(1);
     }
 
-    if (!ICO_JPN) {
+    if (!ICO_JPNKOR) {
         while (stage_ContinueAnimation(737, 738) == 0) {
             _ACTWait(1);
         }
@@ -1175,9 +1175,9 @@ void actConte09_2(GObj *volatile self)
     sceVu0SubVector(dir, ofs, test_CURRENTROOT(girlGObj));
     scpPlayMotDir(girlGObj, dir);
 
-    lt_switch_layout(PAL_JPN(54, 51));
+    lt_switch_layout(PAL_JPNKOR(54, 51));
 
-    while (stage_CheckAnimationFinish(PAL_JPN(741, 737)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(741, 737)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -1214,9 +1214,9 @@ void actSt04aGateOpen3(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(142) == 0) {
-        stage_SetLoopFlag(PAL_JPN(555, 551), 0);
+        stage_SetLoopFlag(PAL_JPNKOR(555, 551), 0);
 
-        while (stage_CheckAnimationFrame(PAL_JPN(555, 551), 1, 1) == 0) {
+        while (stage_CheckAnimationFrame(PAL_JPNKOR(555, 551), 1, 1) == 0) {
             _ACTWait(1);
         }
         _ACTWait(1);
@@ -1226,9 +1226,9 @@ void actSt04aGateOpen3(GObj *volatile self)
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-        stage_SetLoopFlag(PAL_JPN(555, 551), 0);
+        stage_SetLoopFlag(PAL_JPNKOR(555, 551), 0);
 
-        while (stage_CheckAnimationFrame(PAL_JPN(555, 551), 1, 1) == 0) {
+        while (stage_CheckAnimationFrame(PAL_JPNKOR(555, 551), 1, 1) == 0) {
             _ACTWait(1);
         }
         _ACTWait(1);
@@ -1247,7 +1247,7 @@ void actSt04aGateOpen3Chk(GObj *volatile self)
 
     gflagOn(142);
 
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
 
     scpBoyControlReadDisable = 1;
     scpPlayStart(boyGObj);
@@ -1296,7 +1296,7 @@ void actConte09_3(GObj *volatile self)
     scpTorchLightOff(579);
     scpTorchLightOff(580);
 
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         stage_SetAnimation(276, -1, -2);
         stage_SetAnimation(277, -1, -2);
         stage_SetAnimation(708, -1, -2);
@@ -1316,13 +1316,13 @@ void actConte09_3(GObj *volatile self)
     stage_SetAnimation(718, -1, -2);
     stage_SetAnimation(719, -1, -2);
     stage_SetAnimation(720, -1, -2);
-    if (!ICO_JPN) {
+    if (!ICO_JPNKOR) {
         stage_SetAnimation(721, -1, -2);
         stage_SetAnimation(722, -1, -2);
         stage_SetAnimation(723, -1, -2);
     }
     stage_SetAnimation(724, -1, -2);
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         stage_SetAnimation(725, -1, -2);
         stage_SetAnimation(726, -1, -2);
         stage_SetAnimation(727, -1, -2);
@@ -1337,46 +1337,46 @@ void actConte09_3(GObj *volatile self)
     stage_SetAnimation(735, -1, -2);
     stage_SetAnimation(736, -1, -2);
     stage_SetAnimation(737, -1, -2);
-    if (!ICO_JPN) {
+    if (!ICO_JPNKOR) {
         stage_SetAnimation(738, -1, -2);
         stage_SetAnimation(739, -1, -2);
         stage_SetAnimation(740, -1, -2);
         stage_SetAnimation(741, -1, -2);
     }
 
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         stage_SetAnimation(738, 1, 0);
         stage_SetAnimation(269, 1, 501);
     } else {
         stage_SetAnimation(742, 1, 0);
     }
 
-    if (!ICO_JPN) {
+    if (!ICO_JPNKOR) {
         _ACTWait(1);
 
         stage_SetAnimation(273, 1, 502);
     }
 
-    while (stage_ContinueAnimation(PAL_JPN(742, 738), PAL_JPN(743, 739)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(742, 738), PAL_JPNKOR(743, 739)) == 0) {
         _ACTWait(1);
     }
 
     if (scpGameStat_BoyWeaponkind() == 1) {
-        stage_SetAnimation(PAL_JPN(276, 272), 1, 0);
+        stage_SetAnimation(PAL_JPNKOR(276, 272), 1, 0);
     }
     if (scpGameStat_BoyWeaponkind() == 4 || scpGameStat_BoyWeaponkind() == 5) {
-        stage_SetAnimation(PAL_JPN(277, 273), 1, 0);
+        stage_SetAnimation(PAL_JPNKOR(277, 273), 1, 0);
     }
     if (scpGameStat_BoyWeaponkind() == 6) {
-        stage_SetAnimation(PAL_JPN(278, 274), 1, 0);
+        stage_SetAnimation(PAL_JPNKOR(278, 274), 1, 0);
     }
     if (scpGameStat_BoyWeaponkind() == 9) {
-        stage_SetAnimation(PAL_JPN(279, 275), 1, 0);
+        stage_SetAnimation(PAL_JPNKOR(279, 275), 1, 0);
     }
 
     DeleteBoyWeapon();
 
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         while (stage_ContinueAnimation(739, 740) == 0) {
             _ACTWait(1);
         }
@@ -1403,7 +1403,7 @@ void actConte09_3(GObj *volatile self)
         _ACTWait(1);
     }
 
-    if (!ICO_JPN) {
+    if (!ICO_JPNKOR) {
         stage_SetAnimation(276, -1, -2);
         stage_SetAnimation(277, -1, -2);
         stage_SetAnimation(278, -1, -2);
@@ -1414,7 +1414,7 @@ void actConte09_3(GObj *volatile self)
         _ACTWait(1);
     }
 
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         stage_SetAnimation(721, 1, 0);
     }
 
@@ -1422,7 +1422,7 @@ void actConte09_3(GObj *volatile self)
         _ACTWait(1);
     }
 
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         shadow_SetLength(GOBJ_SUB(girlGObj), 20.0f);
     }
 
@@ -1430,7 +1430,7 @@ void actConte09_3(GObj *volatile self)
         _ACTWait(1);
     }
 
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         stage_SetAnimation(269, 1, 2101);
         stage_SetAnimation(722, 1, 0);
     } else {
@@ -1440,7 +1440,7 @@ void actConte09_3(GObj *volatile self)
     while (stage_ContinueAnimation(748, 749) == 0) {
         _ACTWait(1);
     }
-    if (!ICO_JPN) {
+    if (!ICO_JPNKOR) {
         while (stage_ContinueAnimation(749, 750) == 0) {
             _ACTWait(1);
         }
@@ -1472,10 +1472,10 @@ void actConte09_3(GObj *volatile self)
 
     shadow_DispCancel(71, 1);
 
-    scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(48, 0, PAL_JPN(555, 551), 0);
+    scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(48, 0, PAL_JPNKOR(555, 551), 0);
 
-    stage_SetLoopFlag(PAL_JPN(555, 551), 1);
-    stage_SetAnimation(PAL_JPN(555, 551), 1, 0);
+    stage_SetLoopFlag(PAL_JPNKOR(555, 551), 1);
+    stage_SetAnimation(PAL_JPNKOR(555, 551), 1, 0);
 
     tex_SetUVScroll("face_sadow_sd", 0.0f, 0.0f, 0.25f, 0.0625f, 0.99f, 0.99f, 1);
     tex_SetUVScroll("face_sadow_sd_00", 0.0f, 0.0f, 0.25f, 0.0625f, 0.1f, 0.1f, 1);
@@ -1486,7 +1486,7 @@ void actConte09_3(GObj *volatile self)
 
     SetStaticBlur(0);
 
-    while (stage_CheckAnimationFrame(PAL_JPN(753, 749), 150, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(753, 749), 150, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -1494,7 +1494,7 @@ void actConte09_3(GObj *volatile self)
     tex_SetUVScroll("face_sadow_sd", 0.0f, 0.0f, 0.25f, 0.0625f, 0.8f, 0.8f, 1);
     tex_SetUVScroll("face_sadow_sd_00", 0.0f, 0.0f, 0.25f, 0.0625f, 0.45f, 0.45f, 1);
 
-    while (stage_ContinueAnimation(PAL_JPN(753, 749), PAL_JPN(754, 750)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(753, 749), PAL_JPNKOR(754, 750)) == 0) {
         _ACTWait(1);
     }
 
@@ -1502,22 +1502,22 @@ void actConte09_3(GObj *volatile self)
 
     scpSearchGobj(649)->active = 1;
 
-    while (stage_CheckAnimationFrame(PAL_JPN(754, 750), 50, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(754, 750), 50, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
-    while (stage_ContinueAnimation(PAL_JPN(754, 750), PAL_JPN(755, 751)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(754, 750), PAL_JPNKOR(755, 751)) == 0) {
         _ACTWait(1);
     }
 
     shadow_SetLength(GOBJ_SUB(girlGObj), 0.0f);
 
-    while (stage_ContinueAnimation(PAL_JPN(755, 751), PAL_JPN(756, 752)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(755, 751), PAL_JPNKOR(756, 752)) == 0) {
         _ACTWait(1);
     }
 
-    if (ICO_JPN) {
+    if (ICO_JPNKOR) {
         stage_SetAnimation(723, 1, 0);
     } else {
         stage_SetAnimation(726, -1, -2);
@@ -1536,11 +1536,11 @@ void actConte09_3(GObj *volatile self)
     shadow_DispCancel(0, 1);
     shadow_DispCancel(4, 1);
 
-    while (stage_ContinueAnimation(PAL_JPN(756, 752), PAL_JPN(757, 753)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKOR(756, 752), PAL_JPNKOR(757, 753)) == 0) {
         _ACTWait(1);
     }
 
-    if (!ICO_JPN) {
+    if (!ICO_JPNKOR) {
         stage_SetAnimation(727, -1, -2);
     }
 
@@ -1554,7 +1554,7 @@ void actConte09_3(GObj *volatile self)
     gflagOn(144);
     gflagOn(390);
 
-    stage_SetLoopFlag(PAL_JPN(555, 551), 0);
+    stage_SetLoopFlag(PAL_JPNKOR(555, 551), 0);
 
     shadow_DispCancel(71, 0);
     shadow_DispCancel(0, 0);
@@ -1562,7 +1562,7 @@ void actConte09_3(GObj *volatile self)
 
     SetStaticBlur(1);
 
-    while (stage_CheckAnimationFrame(PAL_JPN(757, 753), 90, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(757, 753), 90, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -1584,7 +1584,7 @@ void actSt04aGateLChk(GObj *volatile self)
         _ACTWait(1);
     }
 
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
 
     scpBoyControlReadDisable = 1;
     gflagOn(138);
@@ -1625,7 +1625,7 @@ void actSt04aGateLChk(GObj *volatile self)
             _ACTWait(1);
         }
 
-        stage_SetAnimation(PAL_JPN(293, 289), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(293, 289), 0, -1);
 
         scpFadeIn(3.0f);
     }
@@ -1642,7 +1642,7 @@ void actSt04aGateRChk(GObj *volatile self)
         _ACTWait(1);
     }
 
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
 
     scpBoyControlReadDisable = 1;
     gflagOn(139);
@@ -1702,7 +1702,7 @@ void actSt04aGateRChk(GObj *volatile self)
             _ACTWait(1);
         }
 
-        stage_SetAnimation(PAL_JPN(295, 291), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(295, 291), 0, -1);
 
         scpFadeIn(3.0f);
     }
@@ -1722,42 +1722,42 @@ void actSt04aTorch1(GObj *volatile self)
 
         if (gflagChk(145) != 0) {
             scpSearchGobj(563)->active = 0;
-            stage_SetAnimation(PAL_JPN(283, 279), 0, -1);
+            stage_SetAnimation(PAL_JPNKOR(283, 279), 0, -1);
         }
 
         if (gflagChk(146) != 0) {
             scpSearchGobj(564)->active = 0;
-            stage_SetAnimation(PAL_JPN(284, 280), 0, -1);
+            stage_SetAnimation(PAL_JPNKOR(284, 280), 0, -1);
         }
 
         if (gflagChk(147) != 0) {
             scpSearchGobj(565)->active = 0;
-            stage_SetAnimation(PAL_JPN(285, 281), 0, -1);
+            stage_SetAnimation(PAL_JPNKOR(285, 281), 0, -1);
         }
 
         if (gflagChk(148) != 0) {
             scpSearchGobj(566)->active = 0;
-            stage_SetAnimation(PAL_JPN(286, 282), 0, -1);
+            stage_SetAnimation(PAL_JPNKOR(286, 282), 0, -1);
         }
 
         if (gflagChk(149) != 0) {
             scpSearchGobj(567)->active = 0;
-            stage_SetAnimation(PAL_JPN(287, 283), 0, -1);
+            stage_SetAnimation(PAL_JPNKOR(287, 283), 0, -1);
         }
 
         if (gflagChk(150) != 0) {
             scpSearchGobj(568)->active = 0;
-            stage_SetAnimation(PAL_JPN(288, 284), 0, -1);
+            stage_SetAnimation(PAL_JPNKOR(288, 284), 0, -1);
         }
 
         if (gflagChk(151) != 0) {
             scpSearchGobj(569)->active = 0;
-            stage_SetAnimation(PAL_JPN(289, 285), 0, -1);
+            stage_SetAnimation(PAL_JPNKOR(289, 285), 0, -1);
         }
 
         if (gflagChk(152) != 0) {
             scpSearchGobj(570)->active = 0;
-            stage_SetAnimation(PAL_JPN(290, 286), 0, -1);
+            stage_SetAnimation(PAL_JPNKOR(290, 286), 0, -1);
         }
 
         torch1_mail[0].func = actSt04aTorch1Chk;
@@ -1774,7 +1774,7 @@ void actSt04aTorch1(GObj *volatile self)
         scpSearchGobj(569)->active = 0;
         scpSearchGobj(570)->active = 0;
 
-        if (ICO_JPN) {
+        if (ICO_JPNKOR) {
             stage_SetAnimation(279, 0, -1);
             stage_SetAnimation(280, 0, -1);
             stage_SetAnimation(281, 0, -1);
@@ -1784,7 +1784,7 @@ void actSt04aTorch1(GObj *volatile self)
         stage_SetAnimation(284, 0, -1);
         stage_SetAnimation(285, 0, -1);
         stage_SetAnimation(286, 0, -1);
-        if (!ICO_JPN) {
+        if (!ICO_JPNKOR) {
             stage_SetAnimation(287, 0, -1);
             stage_SetAnimation(288, 0, -1);
             stage_SetAnimation(289, 0, -1);
@@ -1814,43 +1814,43 @@ void actSt04aTorch1Chk(GObj *volatile self)
     case 555:
         TORCH_FLAG(act) = 145;
         TORCH_OBJ(act) = scpSearchGobj(563);
-        TORCH_ANIM(act) = PAL_JPN(283, 279);
+        TORCH_ANIM(act) = PAL_JPNKOR(283, 279);
         actCreateSubThread(actSt04aTorchAllFlagfChk, 21);
         break;
     case 556:
         TORCH_FLAG(act) = 146;
         TORCH_OBJ(act) = scpSearchGobj(564);
-        TORCH_ANIM(act) = PAL_JPN(284, 280);
+        TORCH_ANIM(act) = PAL_JPNKOR(284, 280);
         break;
     case 557:
         TORCH_FLAG(act) = 147;
         TORCH_OBJ(act) = scpSearchGobj(565);
-        TORCH_ANIM(act) = PAL_JPN(285, 281);
+        TORCH_ANIM(act) = PAL_JPNKOR(285, 281);
         break;
     case 558:
         TORCH_FLAG(act) = 148;
         TORCH_OBJ(act) = scpSearchGobj(566);
-        TORCH_ANIM(act) = PAL_JPN(286, 282);
+        TORCH_ANIM(act) = PAL_JPNKOR(286, 282);
         break;
     case 559:
         TORCH_FLAG(act) = 149;
         TORCH_OBJ(act) = scpSearchGobj(567);
-        TORCH_ANIM(act) = PAL_JPN(287, 283);
+        TORCH_ANIM(act) = PAL_JPNKOR(287, 283);
         break;
     case 560:
         TORCH_FLAG(act) = 150;
         TORCH_OBJ(act) = scpSearchGobj(568);
-        TORCH_ANIM(act) = PAL_JPN(288, 284);
+        TORCH_ANIM(act) = PAL_JPNKOR(288, 284);
         break;
     case 561:
         TORCH_FLAG(act) = 151;
         TORCH_OBJ(act) = scpSearchGobj(569);
-        TORCH_ANIM(act) = PAL_JPN(289, 285);
+        TORCH_ANIM(act) = PAL_JPNKOR(289, 285);
         break;
     case 562:
         TORCH_FLAG(act) = 152;
         TORCH_OBJ(act) = scpSearchGobj(570);
-        TORCH_ANIM(act) = PAL_JPN(290, 286);
+        TORCH_ANIM(act) = PAL_JPNKOR(290, 286);
         break;
     }
 
@@ -1893,7 +1893,7 @@ void actSt04aTorchAllFlagfChk(GObj *volatile self)
         _ACTWait(1);
     }
 
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
     scpBoyControlReadDisable = 1;
     scpSleepEnemyAll();
     gflagOn(153);
@@ -1904,8 +1904,8 @@ void actSt04aTorchAllFlagfChk(GObj *volatile self)
         _ACTWait(1);
     }
 
-    stage_SetAnimation(PAL_JPN(282, 278), 1, 0);
-    while (stage_CheckAnimationFrame(PAL_JPN(282, 278), 60, 0) == 0 && skip == 0) {
+    stage_SetAnimation(PAL_JPNKOR(282, 278), 1, 0);
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(282, 278), 60, 0) == 0 && skip == 0) {
         if ((pad[0].flags & 0x800) && scpAdpcmPlayRequestNum() == 0) {
             skip = 1;
         }
@@ -1923,7 +1923,7 @@ void actSt04aTorchAllFlagfChk(GObj *volatile self)
     scpTorchLightOn(579);
     scpTorchLightOn(580);
 
-    while (stage_CheckAnimationFinish(PAL_JPN(282, 278)) == 0 && skip == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(282, 278)) == 0 && skip == 0) {
         if ((pad[0].flags & 0x800) && scpAdpcmPlayRequestNum() == 0) {
             skip = 1;
         }
@@ -1943,12 +1943,12 @@ void actSt04aTorchAllFlagfChk(GObj *volatile self)
         while (scpFadeChk() != 0) {
             _ACTWait(1);
         }
-        stage_SetAnimation(PAL_JPN(282, 278), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(282, 278), 0, -1);
         SetCameraFlag_LwsCutBack();
         scpFadeIn(3.0f);
     }
     scpBoyControlReadDisable = 0;
-    lt_switch_layout(PAL_JPN(54, 51));
+    lt_switch_layout(PAL_JPNKOR(54, 51));
     scpWakeupEnemyAll();
 }
 
@@ -1996,7 +1996,7 @@ void actSt04aGateL(GObj *volatile self)
 
         scpFadeOut(255.0f, 0, 0, 0);
 
-        stage_SetAnimation(PAL_JPN(295, 291), 0, 0);
+        stage_SetAnimation(PAL_JPNKOR(295, 291), 0, 0);
 
         gate_l_mail[0].func = actSt04aGateLChk;
         act->mail = gate_l_mail;
@@ -2016,7 +2016,7 @@ void actSt04aGateR(GObj *volatile self)
 
         scpFadeOut(255.0f, 0, 0, 0);
 
-        stage_SetAnimation(PAL_JPN(293, 289), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(293, 289), 0, -1);
 
         gate_r_mail[0].func = actSt04aGateRChk;
         act->mail = gate_r_mail;
@@ -2032,7 +2032,7 @@ void actSt04aTorchXL(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
-    stage_SetAnimation(PAL_JPN(291, 287), 0, 0);
+    stage_SetAnimation(PAL_JPNKOR(291, 287), 0, 0);
 }
 
 void actSt04aDeadCam(GObj *volatile self)
@@ -2046,14 +2046,14 @@ void actSt04aDeadCam(GObj *volatile self)
         _ACTWait(1);
     }
 
-    while (stage_CheckAnimationFrame(PAL_JPN(273, 269), 1400, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(273, 269), 1400, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
-    stage_SetAnimation(PAL_JPN(274, 270), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(274, 270), 1, 0);
 
-    while (stage_CheckAnimationFinish(PAL_JPN(274, 270)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(274, 270)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -2285,8 +2285,8 @@ static void actConte09_3_demoCancel(GObj *volatile self)
 
 static void actSt04aGateLSub(GObj *volatile self)
 {
-    stage_SetAnimation(PAL_JPN(293, 289), 1, 0);
-    while (stage_CheckAnimationFinish(PAL_JPN(293, 289)) == 0) {
+    stage_SetAnimation(PAL_JPNKOR(293, 289), 1, 0);
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(293, 289)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -2296,8 +2296,8 @@ static void actSt04aGateLSub(GObj *volatile self)
 
 static void actSt04aGateRSub(GObj *volatile self)
 {
-    stage_SetAnimation(PAL_JPN(295, 291), 1, 0);
-    while (stage_CheckAnimationFinish(PAL_JPN(295, 291)) == 0) {
+    stage_SetAnimation(PAL_JPNKOR(295, 291), 1, 0);
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(295, 291)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);

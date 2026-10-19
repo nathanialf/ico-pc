@@ -56,7 +56,7 @@ void actSt04eWaterStop(GObj *volatile self)
 {
     GProc *th;
 
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
 
     demoEnd = 0;
     demoSkipped = 0;
@@ -84,8 +84,8 @@ void actSt04eWaterStop(GObj *volatile self)
             _ACTWait(1);
         }
 
-        stage_SetAnimation(PAL_JPN(262, 258), 0, -1);
-        stage_SetAnimation(PAL_JPN(261, 257), -1, -2);
+        stage_SetAnimation(PAL_JPNKOR(262, 258), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(261, 257), -1, -2);
         scpFadeIn(3.0f);
     }
 
@@ -93,7 +93,7 @@ void actSt04eWaterStop(GObj *volatile self)
     scpSearchGobj(1272)->active = 0;
 
     scpBoyControlReadDisable = 0;
-    lt_switch_layout(PAL_JPN(54, 51));
+    lt_switch_layout(PAL_JPNKOR(54, 51));
 
     scpWakeupEnemyAll();
 
@@ -138,13 +138,13 @@ static void actSt04eFuchi1(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(227) == 0) {
-        stage_SetAnimation(PAL_JPN(263, 259), 0, 0);
+        stage_SetAnimation(PAL_JPNKOR(263, 259), 0, 0);
         fuchi1_mes[0].func = actSt04eFuchi1Chk;
         act->mail = fuchi1_mes;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-        stage_SetAnimation(PAL_JPN(263, 259), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(263, 259), 0, -1);
     }
 }
 
@@ -155,13 +155,13 @@ static void actSt04eFuchi2(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(228) == 0) {
-        stage_SetAnimation(PAL_JPN(264, 260), 0, 0);
+        stage_SetAnimation(PAL_JPNKOR(264, 260), 0, 0);
         fuchi2_mes[0].func = actSt04eFuchi2Chk;
         act->mail = fuchi2_mes;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-        stage_SetAnimation(PAL_JPN(264, 260), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(264, 260), 0, -1);
     }
 }
 
@@ -172,13 +172,13 @@ static void actSt04eFuchi3(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(229) == 0) {
-        stage_SetAnimation(PAL_JPN(265, 261), 0, 0);
+        stage_SetAnimation(PAL_JPNKOR(265, 261), 0, 0);
         fuchi3_mes[0].func = actSt04eFuchi3Chk;
         act->mail = fuchi3_mes;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-        stage_SetAnimation(PAL_JPN(265, 261), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(265, 261), 0, -1);
     }
 }
 
@@ -210,7 +210,7 @@ void actSt04eWater(GObj *volatile self)
         _ACTWait(0);
     } else {
         scpSearchGobj(1272)->active = 0;
-        stage_SetAnimation(PAL_JPN(261, 257), -1, -2);
+        stage_SetAnimation(PAL_JPNKOR(261, 257), -1, -2);
     }
 }
 
@@ -259,10 +259,10 @@ static void actSt04eWaterStopSub(GObj *volatile self)
 {
     _ACTWait(60);
 
-    stage_SetAnimation(PAL_JPN(262, 258), 1, 0);
-    stage_SetAnimation(PAL_JPN(261, 257), -1, -2);
+    stage_SetAnimation(PAL_JPNKOR(262, 258), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(261, 257), -1, -2);
 
-    while (stage_CheckAnimationFinish(PAL_JPN(262, 258)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(262, 258)) == 0) {
         _ACTWait(1);
     }
 
@@ -291,10 +291,10 @@ static void actSt04eFuchi1Chk(GObj *volatile self)
 
     gflagOn(227);
     _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1]);
-    stage_SetAnimation(PAL_JPN(263, 259), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(263, 259), 1, 0);
     soundSeDefPlay(1342, 0, 0, 1);
 
-    while (stage_CheckAnimationFinish(PAL_JPN(263, 259)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(263, 259)) == 0) {
         _ACTWait(1);
     }
 
@@ -309,10 +309,10 @@ static void actSt04eFuchi2Chk(GObj *volatile self)
 
     gflagOn(228);
     _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1]);
-    stage_SetAnimation(PAL_JPN(264, 260), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(264, 260), 1, 0);
     soundSeDefPlay(1342, 0, 0, 1);
 
-    while (stage_CheckAnimationFinish(PAL_JPN(264, 260)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(264, 260)) == 0) {
         _ACTWait(1);
     }
 
@@ -327,10 +327,10 @@ static void actSt04eFuchi3Chk(GObj *volatile self)
 
     gflagOn(229);
     _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1]);
-    stage_SetAnimation(PAL_JPN(265, 261), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(265, 261), 1, 0);
     soundSeDefPlay(1342, 0, 0, 1);
 
-    while (stage_CheckAnimationFinish(PAL_JPN(265, 261)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(265, 261)) == 0) {
         _ACTWait(1);
     }
 

@@ -241,7 +241,7 @@ void Main(void)
     debug_StdPrintfDummy("SYSTEM_FRAMERATE: \x1b[33m%d\x1b[m\n",
                          (60 - systemStatus[0] * 10) / systemStatus[1]);
     *T0_COUNT = 0;
-    if (!ICO_JPN) {
+    if (!ICO_JPNKOR) {
         NonLinearCameraMove = 3;
     }
     stage_no = 0;
@@ -256,7 +256,7 @@ void Main(void)
        stages: 64 to 87, 89, 90, 92 to 102) loads nothing and dies building
        its objects. Refused as debug_SelectStageMain refuses the NOCD_ rows;
        the boot runs instead. */
-    if (n > 1 && n < PAL_JPN(106, 104) &&
+    if (n > 1 && n < PAL_JPNKOR(106, 104) &&
         (strstr(stageData[n].dataFile, "NOCD_") != 0 ||
          strstr(stageData[n].dataFile, "ONLYSAMPLE_") != 0)) {
         ico_diag_milestone("start_stage %d (%s) refused: its data file %s is not on the disc; "
@@ -264,7 +264,7 @@ void Main(void)
                            n, stageData[n].name, stageData[n].dataFile);
         n = -1;
     }
-    thisIsYourStartStage = n < PAL_JPN(106, 104) ? n : PAL_JPN(105, 103);
+    thisIsYourStartStage = n < PAL_JPNKOR(106, 104) ? n : PAL_JPNKOR(105, 103);
     if (thisIsYourStartStage <= 0) {
         thisIsYourStartStage = 1;
     }
@@ -298,7 +298,7 @@ void Main(void)
     while (1) {
         iosThreadCancelWakeup(0);
         iosThreadSleep();
-        if (!ICO_JPN) {
+        if (!ICO_JPNKOR) {
             gsb_ResetSnap();
         }
         if (mpegPlay != 0) {
@@ -311,8 +311,9 @@ void Main(void)
             ios_partition_mpeg = ios_partition_isys;
             AdpcmStreamFree();
             soundAllocIopFree();
-            movie_init(&movieFile[mpegPlay * 0x20], 720, PAL_JPN(systemStatus[0] ? 576 : 480, 480),
-                       36, 12, soundOutputModeGet() == 1, mpegPlayInitColor);
+            movie_init(&movieFile[mpegPlay * 0x20], 720,
+                       PAL_JPNKOR(systemStatus[0] ? 576 : 480, 480), 36, 12,
+                       soundOutputModeGet() == 1, mpegPlayInitColor);
             ret = movie_proc(movie_abort_check);
             ico_gs_signal(ICO_GS_EV_FMV_END, ret == 1);
             sceGsSyncV(0);
@@ -371,7 +372,7 @@ void Main(void)
         ico_photo_view_tick();
         iosOmCreateDL();
         ExecDelayFree();
-        if (!ICO_JPN) {
+        if (!ICO_JPNKOR) {
             gsb_TakeSnap();
         }
         frameReady = 1;

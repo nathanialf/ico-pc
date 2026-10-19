@@ -71,10 +71,10 @@ static ActMail hint1_mes[2] = {{430}, {429}}; /* derived name */
 void actSt20aInit(void)
 {
     if (gflagChk(315) == 0) {
-        stage_SetAnimation(PAL_JPN(148, 144), 0, 0);
+        stage_SetAnimation(PAL_JPNKOR(148, 144), 0, 0);
         SetWayGroupActive(4, 0);
     } else {
-        stage_SetAnimation(PAL_JPN(148, 144), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(148, 144), 0, -1);
         SetWayGroupActive(4, 1);
     }
 }
@@ -107,7 +107,7 @@ void actSt20aBridgeDown(GObj *volatile self)
 {
     GProc *th;
 
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
     scpSleepEnemyAll();
     gflagOn(315);
     gflagOff(391);
@@ -131,14 +131,14 @@ void actSt20aBridgeDown(GObj *volatile self)
         while (lt_fade_status() != 2) {
             _ACTWait(1);
         }
-        stage_SetAnimation(PAL_JPN(148, 144), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(148, 144), 0, -1);
         scpFadeIn(3.0f);
     }
     iosPadActStop(st20a_yure);
     SetWayGroupActive(4, 1);
     scpWakeupEnemyAll();
     scpBoyControlReadDisable = 0;
-    lt_switch_layout(PAL_JPN(54, 51));
+    lt_switch_layout(PAL_JPNKOR(54, 51));
 }
 
 void actSt20aGondolaDown(GObj *volatile self)
@@ -150,14 +150,14 @@ void actSt20aGondolaDown(GObj *volatile self)
     while (gondola_down == 0) {
         _ACTWait(1);
     }
-    stage_SetAnimation(PAL_JPN(147, 143), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(147, 143), 1, 0);
     gflagOn(316);
-    while (stage_CheckAnimationFrame(PAL_JPN(147, 143), 150, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(147, 143), 150, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
     iosPadActRequest(boyPad, 17);
-    while (stage_CheckAnimationFrame(PAL_JPN(147, 143), 500, 1) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(147, 143), 500, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -183,14 +183,14 @@ void actSt20aGondolaUp(GObj *volatile self)
     while (gondola_up == 0) {
         _ACTWait(1);
     }
-    stage_SetAnimation(PAL_JPN(147, 143), 1, 500);
+    stage_SetAnimation(PAL_JPNKOR(147, 143), 1, 500);
     gflagOff(316);
-    while (stage_CheckAnimationFrame(PAL_JPN(147, 143), 820, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(147, 143), 820, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
     iosPadActRequest(boyPad, 17);
-    while (stage_CheckAnimationFrame(PAL_JPN(147, 143), 1000, 1) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(147, 143), 1000, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -229,8 +229,8 @@ void actSt20aFence(GObj *volatile self)
         scpSearchGobj(2028)->active = 0;
         scpSearchGobj(2029)->active = 0;
 
-        scpLinkBGAtoLayoutedTarget(2022, PAL_JPN(149, 145));
-        stage_SetAnimation(PAL_JPN(149, 145), 0, 30);
+        scpLinkBGAtoLayoutedTarget(2022, PAL_JPNKOR(149, 145));
+        stage_SetAnimation(PAL_JPNKOR(149, 145), 0, 30);
 
         fence_mes[0].func = actSt20aFenceUpChk;
         sub->mail = fence_mes;
@@ -249,8 +249,8 @@ void actSt20aFence(GObj *volatile self)
 
         gflagOff(309);
 
-        scpLinkBGAtoLayoutedTarget(2024, PAL_JPN(149, 145));
-        stage_SetAnimation(PAL_JPN(149, 145), 0, 0);
+        scpLinkBGAtoLayoutedTarget(2024, PAL_JPNKOR(149, 145));
+        stage_SetAnimation(PAL_JPNKOR(149, 145), 0, 0);
 
         if (girlGObj != 0 && scpTriggerFloorAttr(girlGObj, 0x2000000) != 0) {
             scpPlayPosSet(girlGObj, 3973.0f, -1100.0f, -1169.0f);
@@ -270,13 +270,13 @@ void actSt20aFenceDownChk(GObj *volatile self)
     while (scpTriggerBall(self, scpSearchGobj(2022), 5.0f) == 0) {
         _ACTWait(1);
     }
-    stage_SetAnimation(PAL_JPN(149, 145), 1, 0);
-    while (stage_CheckAnimationFrame(PAL_JPN(149, 145), 10, 0) == 0) {
+    stage_SetAnimation(PAL_JPNKOR(149, 145), 1, 0);
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(149, 145), 10, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
     soundSeDefPlay(1339, 0, 0, 1);
-    while (stage_CheckAnimationFrame(PAL_JPN(149, 145), 30, 1) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(149, 145), 30, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -300,13 +300,13 @@ void actSt20aFenceUpChk(GObj *volatile self)
         _ACTWait(1);
     }
     SetWayGroupActive(19, 0);
-    stage_SetAnimation(PAL_JPN(149, 145), 1, 31);
-    while (stage_CheckAnimationFrame(PAL_JPN(149, 145), 40, 0) == 0) {
+    stage_SetAnimation(PAL_JPNKOR(149, 145), 1, 31);
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(149, 145), 40, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
     soundSeDefPlay(1339, 0, 0, 1);
-    while (stage_CheckAnimationFinish(PAL_JPN(149, 145)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(149, 145)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -328,13 +328,13 @@ void actSt20aFenceDownChk2(GObj *volatile self)
     while (scpTriggerBall(self, scpSearchGobj(2024), 5.0f) == 0) {
         _ACTWait(1);
     }
-    stage_SetAnimation(PAL_JPN(149, 145), 1, 0);
-    while (stage_CheckAnimationFrame(PAL_JPN(149, 145), 10, 0) == 0) {
+    stage_SetAnimation(PAL_JPNKOR(149, 145), 1, 0);
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(149, 145), 10, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
     soundSeDefPlay(1339, 0, 0, 1);
-    while (stage_CheckAnimationFrame(PAL_JPN(149, 145), 30, 1) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(149, 145), 30, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -358,13 +358,13 @@ void actSt20aFenceUpChk2(GObj *volatile self)
         _ACTWait(1);
     }
     SetWayGroupActive(19, 0);
-    stage_SetAnimation(PAL_JPN(149, 145), 1, 31);
-    while (stage_CheckAnimationFrame(PAL_JPN(149, 145), 40, 0) == 0) {
+    stage_SetAnimation(PAL_JPNKOR(149, 145), 1, 31);
+    while (stage_CheckAnimationFrame(PAL_JPNKOR(149, 145), 40, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
     soundSeDefPlay(1339, 0, 0, 1);
-    while (stage_CheckAnimationFinish(PAL_JPN(149, 145)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(149, 145)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -400,11 +400,11 @@ void actSt20aGondola(GObj *volatile self)
 
     _ACTWait(1);
     if (gflagChk(316) != 0) {
-        stage_SetAnimation(PAL_JPN(147, 143), 0, 0);
+        stage_SetAnimation(PAL_JPNKOR(147, 143), 0, 0);
         _ACTWait(10);
-        stage_SetAnimation(PAL_JPN(147, 143), 0, 500);
+        stage_SetAnimation(PAL_JPNKOR(147, 143), 0, 500);
     } else {
-        stage_SetAnimation(PAL_JPN(147, 143), 0, 0);
+        stage_SetAnimation(PAL_JPNKOR(147, 143), 0, 0);
     }
     gondola_mes[0].func = actSt20aGondolaMain;
     sub->mail = gondola_mes;
@@ -566,11 +566,11 @@ static void actSt20aBridgeDownSub(GObj *volatile self)
         _ACTWait(1);
     }
     AdpcmPlay(brg20a->stream);
-    stage_SetAnimation(PAL_JPN(148, 144), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(148, 144), 1, 0);
     st20a_yure = iosPadActRequest(boyPad, 9);
     st20a_yure_vol = 128;
     iosPadActVolumeSet(st20a_yure, 128);
-    while (stage_CheckAnimationFinish(PAL_JPN(148, 144)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(148, 144)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -582,7 +582,7 @@ void actSt20aGondolaMain(GObj *volatile self)
 {
     Act *p = GOBJ_ACT(self);
 
-    lt_switch_layout(PAL_JPN(54, 51));
+    lt_switch_layout(PAL_JPNKOR(54, 51));
     scpBoyControlReadDisable = 0;
     scpWakeupEnemyAll();
     p->mainMail = gondolaMain_mes;
@@ -596,7 +596,7 @@ void actSt20aGondolaSwitch(GObj *volatile self)
     Act *sub = GOBJ_ACT(self);
 
     sub->mainMail = 0;
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
     scpBoyControlReadDisable = 1;
     scpSleepEnemyAll();
     if (gflagChk(316) != 0) {

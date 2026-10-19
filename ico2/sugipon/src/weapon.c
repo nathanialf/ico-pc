@@ -876,19 +876,19 @@ void WeaponGeo(GObj *g)
         calcBlur(g, w->bladeLength);
         w->bladeOn = 1;
         t = w->bladeLength;
-        stage_SetLoopFlag(PAL_JPN(473, 469), 1);
+        stage_SetLoopFlag(PAL_JPNKOR(473, 469), 1);
         if (t > 1.0f) {
-            n = (int)stage_PlayBgAnimation(PAL_JPN(473, 469), (float)w->humAnim,
+            n = (int)stage_PlayBgAnimation(PAL_JPNKOR(473, 469), (float)w->humAnim,
                                            (char *)GOBJ_SUB(g)->nodeMtx + 0x30, IdentityQuaternion);
             if (systemStatus[5] == 0) {
                 w->humAnim = n;
             }
         } else {
-            stage_PlayBgAnimation(PAL_JPN(473, 469), 0.0f, (char *)GOBJ_SUB(g)->nodeMtx + 0x30,
+            stage_PlayBgAnimation(PAL_JPNKOR(473, 469), 0.0f, (char *)GOBJ_SUB(g)->nodeMtx + 0x30,
                                   IdentityQuaternion);
             w->humAnim = 0;
         }
-        stage_SetLoopFlag(PAL_JPN(473, 469), 0);
+        stage_SetLoopFlag(PAL_JPNKOR(473, 469), 0);
     }
 
     GetRootMatrix(MatrixDrive_GetMatrix(), g);

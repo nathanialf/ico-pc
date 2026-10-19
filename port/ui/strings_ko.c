@@ -128,6 +128,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
         "설치된 디스크 중 어느 것으로 플레이할지 선택합니다. 다음 실행부터 적용됩니다.",
     [UI_STR_DISC_PAL] = "유럽판 (SCES-50760)",
     [UI_STR_DISC_JPN] = "일본판 (SCPS-11003)",
+    [UI_STR_DISC_KOR] = "한국판 (SCPS-56001)",
     [UI_STR_REMAP_KEYBOARD] = "키보드",
     [UI_STR_REMAP_GAMEPAD] = "게임패드",
     [UI_STR_REMAP_HINT] = "×: 변경    □: 지우기    △: 돌아가기",

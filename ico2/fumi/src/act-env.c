@@ -152,12 +152,12 @@ static void getDitchDistTbl(float **tbl, float *range, int *sofa, float *pos, vo
             }
         } else {
             if (mode == 1) {
-                if (!ICO_JPN) {
+                if (!ICO_JPNKOR) {
                     v = ditchCarryPos;
                 }
 
                 *tbl = ditchDistTblCarry;
-                if (ICO_JPN) {
+                if (ICO_JPNKOR) {
                     pos[0] = ditchCarryPos_jpn[0];
                     pos[1] = ditchCarryPos_jpn[1];
                     pos[2] = ditchCarryPos_jpn[2];
@@ -825,7 +825,7 @@ void ACTGetEnvironment(void *self, void *dir, float *orient, EnvFlag *flags, Act
     if (dist < 200.0f) {
         int b = (dist < 40.0f) ? 1 : 0;
 
-        if (!((stage_no == PAL_JPN(86, 84) || stage_no == 3 || stage_no == 46) && ((struct GObj *)self)->kind == 4) &&
+        if (!((stage_no == PAL_JPNKOR(86, 84) || stage_no == 3 || stage_no == 46) && ((struct GObj *)self)->kind == 4) &&
             CheckPureWallAttribute(self, 0x400)) {
             flags[2].bit.b24 = b;
             flags[2].w |= 0x800000;
@@ -1094,7 +1094,7 @@ void ACTGetEnvironment(void *self, void *dir, float *orient, EnvFlag *flags, Act
             flags[0].w |= 0x8000000;
         }
         if (hh < 40.0f) {
-            if (!((stage_no == PAL_JPN(86, 84) || stage_no == 3 || stage_no == 46) && ((struct GObj *)self)->kind == 4) &&
+            if (!((stage_no == PAL_JPNKOR(86, 84) || stage_no == 3 || stage_no == 46) && ((struct GObj *)self)->kind == 4) &&
                 CheckPureCliffAttribute(self, 0x400) && 60.0f < f26) {
                 env->edgeOrient[0] = env->cliffOrient[0];
                 env->edgeOrient[1] = env->cliffOrient[1];
@@ -1242,8 +1242,8 @@ void ACTGetEnvironment(void *self, void *dir, float *orient, EnvFlag *flags, Act
                         sub->wish2.ll |= 0x200;
                         break;
                     default:
-                        debug_assert("src/act-env.c", LN(2633, 2623));
-                        __assert("src/act-env.c", LN(2633, 2623), "0");
+                        debug_assert("src/act-env.c", LN(2633, 2623, 2623));
+                        __assert("src/act-env.c", LN(2633, 2623, 2623), "0");
                         break;
                     }
                 }

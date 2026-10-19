@@ -48,7 +48,7 @@ void actSt04cDoorDownChk(GObj *volatile self)
 
     actCreateSubThread(actSt04cDoorDownEffect, 21);
 
-    stage_SetAnimation(PAL_JPN(253, 249), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(253, 249), 1, 0);
 
     pos = doorDownChkPos;
 
@@ -57,7 +57,7 @@ void actSt04cDoorDownChk(GObj *volatile self)
     _ACTWait(30);
     soundSeDefPlay(1222, 0, pos.f, 1);
 
-    while (stage_CheckAnimationFinish(PAL_JPN(253, 249)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(253, 249)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -76,14 +76,14 @@ void actSt04cIntroChk(GObj *volatile self)
         _ACTWait(1);
     }
 
-    lt_switch_layout(PAL_JPN(55, 52));
+    lt_switch_layout(PAL_JPNKOR(55, 52));
 
     gflagOff(390);
 
     gflagOn(161);
     scpBoyControlReadDisable = 1;
 
-    stage_SetAnimation(PAL_JPN(352, 348), 1, 0);
+    stage_SetAnimation(PAL_JPNKOR(352, 348), 1, 0);
 
     th = actCreateSubThread(actSt04cIntroChkSub, 21);
     demoEnd = 0;
@@ -102,11 +102,11 @@ void actSt04cIntroChk(GObj *volatile self)
         while (lt_fade_status() != 2) {
             _ACTWait(1);
         }
-        stage_SetAnimation(PAL_JPN(352, 348), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(352, 348), 0, -1);
         scpFadeIn(3.0f);
     }
 
-    lt_switch_layout(PAL_JPN(54, 51));
+    lt_switch_layout(PAL_JPNKOR(54, 51));
     scpBoyControlReadDisable = 0;
 }
 
@@ -126,8 +126,8 @@ void actSt04lDoorChk(GObj *volatile self)
             break;
 
         case 1:
-            stage_SetAnimation(PAL_JPN(232, 228), 1, 0);
-            while (stage_CheckAnimationFinish(PAL_JPN(232, 228)) == 0) {
+            stage_SetAnimation(PAL_JPNKOR(232, 228), 1, 0);
+            while (stage_CheckAnimationFinish(PAL_JPNKOR(232, 228)) == 0) {
                 _ACTWait(1);
             }
             _ACTWait(1);
@@ -137,14 +137,14 @@ void actSt04lDoorChk(GObj *volatile self)
             scpSearchGobj(1098)->active = 0;
             FinishHint(15);
 
-            lt_switch_layout(PAL_JPN(55, 52));
+            lt_switch_layout(PAL_JPNKOR(55, 52));
 
             scpBoyControlReadDisable = 1;
             scpSleepEnemyAll();
 
             gflagOn(199);
 
-            stage_SetAnimation(PAL_JPN(231, 227), 1, 0);
+            stage_SetAnimation(PAL_JPNKOR(231, 227), 1, 0);
 
             h = soundSeDefPlay(1330, 0, 0, 1);
 
@@ -157,7 +157,7 @@ void actSt04lDoorChk(GObj *volatile self)
                     while (lt_fade_status() != 2) {
                         _ACTWait(1);
                     }
-                    stage_SetAnimation(PAL_JPN(231, 227), 0, -1);
+                    stage_SetAnimation(PAL_JPNKOR(231, 227), 0, -1);
                     scpFadeIn(3.0f);
                     break;
                 }
@@ -171,7 +171,7 @@ void actSt04lDoorChk(GObj *volatile self)
             scpWakeupEnemyAll();
             scpBoyControlReadDisable = 0;
 
-            lt_switch_layout(PAL_JPN(54, 51));
+            lt_switch_layout(PAL_JPNKOR(54, 51));
             break;
         }
     }
@@ -185,7 +185,7 @@ void actSt04cSolarXL(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(138) == 0) {
-        stage_SetAnimation(PAL_JPN(302, 298), -1, -2);
+        stage_SetAnimation(PAL_JPNKOR(302, 298), -1, -2);
     }
 }
 
@@ -204,13 +204,13 @@ void actSt04lDoor(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(199) == 0) {
-        stage_SetAnimation(PAL_JPN(231, 227), 0, 0);
+        stage_SetAnimation(PAL_JPNKOR(231, 227), 0, 0);
         st04lDoor_mes[0].func = actSt04lDoorChk;
         act->mail = st04lDoor_mes;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-        stage_SetAnimation(PAL_JPN(231, 227), 0, -1);
+        stage_SetAnimation(PAL_JPNKOR(231, 227), 0, -1);
         scpSearchGobj(1098)->active = 0;
         FinishHint(15);
     }
@@ -357,7 +357,7 @@ void actSt04cEneChk(GObj *volatile self)
 
 static void actSt04cIntroChkSub(GObj *volatile self)
 {
-    while (stage_CheckAnimationFinish(PAL_JPN(352, 348)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKOR(352, 348)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);

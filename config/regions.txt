@@ -4,3 +4,4 @@
 # Adding a target: add a row, then follow docs/port/GAME_CODE.md "Adding a build target".
 pal  -            SCES-50760  SCES_507.60  the European disc
 jpn  VERSION_JPN  SCPS-11003  SCPS_110.03  the Japanese disc
+kor  VERSION_KOR  SCPS-56001  SCPS_560.01  the Korean disc
