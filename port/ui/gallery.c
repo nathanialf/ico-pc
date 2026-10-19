@@ -14,7 +14,7 @@
 #include "strings.h"
 #include "../core/region.h" /* ico_region_cur */
 
-/* the running disc's (port/core/region.h; the same on both discs): the
+/* the running disc's (port/core/region.h; the same on every disc): the
    streams 1..100 music and scenes, 101..104 Yorda's hint voices; the
    stageData rows of the game itself (1 logo, 2 title, 3..39 the stages);
    40..56 are the cutscene stages, which load the same banks */

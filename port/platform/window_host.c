@@ -2037,7 +2037,7 @@ open_window:
     /* Extras > Add to Steam (Windows and Linux; see steam_add_handler) */
     ui_settings_set_steam_handler(steam_add_handler);
 #endif
-    /* Main > Disc, shown with both discs' game data */
+    /* Main > Disc, shown with two or more discs' game data */
     ui_settings_set_disc_handler(ico_host_disc_archive_present);
 #ifdef __ANDROID__
     /* the Graphics driver page, and "Quit game" for the

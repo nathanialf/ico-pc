@@ -83,13 +83,13 @@ extern void la_host_film_effect(int mode);
 extern unsigned int ico_host_main_ticks(void);
 
 /* on the port's screens the face button that does not confirm goes back
-   as Triangle does (Circle on the European disc, Cross on the Japanese:
+   as Triangle does (Circle on the European disc, Cross on the Japanese and Korean ones:
    layout_ext.h lt_ext_port_back_buttons), whatever [game] circle_back says
    (that switch is for the game's own menus, lt_ext_back_buttons): no PS2
    behaviour to keep here, and the button has no other use on them (a
    remap capture takes it before this check); they confirm with the
    disc's confirm (lt_ext_confirm_button: Cross, Circle on the Japanese
-   disc) */
+   and Korean discs) */
 #define PAD_BACK (lt_ext_port_back_buttons())
 #define PAD_OK (lt_ext_confirm_button())
 
@@ -111,8 +111,8 @@ extern unsigned int ico_host_main_ticks(void);
 #define ROW_PAUSE_BACK (ico_region_cur()->row_pause_back)
 #define ROW_PAUSE_END (ico_region_cur()->row_pause_end)
 /* the title's rows: Continue (49), New Game (50; 51 on the New-Game-only
-   layout), the copyright line (48, and on the Japanese disc its second
-   half) */
+   layout), the copyright line (48, and on the Japanese and Korean discs its
+   second half) */
 #define ROW_TITLE_CONTINUE (ico_region_cur()->row_title_continue)
 #define ROW_TITLE_NEW (ico_region_cur()->row_title_new)
 #define ROW_TITLE_NEW_ONLY (ico_region_cur()->row_title_new_only)
@@ -759,7 +759,8 @@ static const char *onOff(int v)
 }
 
 /* The game's own language (NonLinearCameraMove, 2..6), -1 on a disc that
-   has none (port/core/region.h has_game_language: the Japanese one) */
+   has none (port/core/region.h has_game_language: the Japanese and
+   Korean ones) */
 static int gameLanguage(void)
 {
     if (ico_region_cur()->has_game_language) {
@@ -1418,7 +1419,7 @@ static int isGameOpt(int opt)
 static int optShown(int opt, int link)
 {
     if (opt == UI_OPT_CIRCLE_BACK) {
-        /* the European disc's: Circle confirms on the Japanese one */
+        /* the European disc's: Circle confirms on the Japanese and Korean ones */
         return lt_ext_has_circle_back();
     }
     if (opt == UI_OPT_LINK && link == UI_PAGE_GPU_DRIVER) {
@@ -1467,10 +1468,10 @@ static int optShown(int opt, int link)
         return !ico_video_android(); /* no mouse camera on a phone */
     }
     if (opt == UI_OPT_VIDEO_MODE && !ico_region_cur()->has_50hz_row) {
-        return 0; /* the Japanese disc is 60 Hz only */
+        return 0; /* the Japanese and Korean discs are 60 Hz only */
     }
     if (opt == UI_OPT_DISC) {
-        return discRowShown(); /* both discs' game data */
+        return discRowShown(); /* two or more discs' game data */
     }
     if (opt == UI_OPT_LANGUAGE) {
         /* the game's own language: the European disc's five */
@@ -2707,8 +2708,8 @@ static void playTimeText(unsigned int frames, char *buf, size_t size)
    developer labels, not for players) */
 static const char *areaName(int stage)
 {
-    /* the running disc's end stage (63, 61 on the Japanese disc) as the
-       save screen maps it; stages 3 .. 38 are the same rows on both discs,
+    /* the running disc's end stage (63, 61 on the Japanese and Korean discs) as the
+       save screen maps it; stages 3 .. 38 are the same rows on every disc,
        and the menu text table's rows (the European disc's, stage + 134)
        name them in the port's text, in the port's language (these lines
        are the port's, not a sheet's) */
@@ -3432,7 +3433,8 @@ static void placeTitle(void)
             if (rows[i] >= 0) {
                 P(rows[i])->dispY = TITLE_Y(2 + i);
                 P(rows[i])->dispH = texProperty[ROW_TITLE_NEW].dispH;
-                /* lettered as the title's words are (the Japanese title sheet) */
+                /* lettered as the title's words are (the Japanese title sheet; the Korean
+                   disc has no title variant: the same geometry) */
                 lt_ext_set_title_sheet(rows[i], 1);
             }
         }

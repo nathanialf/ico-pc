@@ -69,7 +69,7 @@ void ico_roll_started(int discLines)
 /* --- the playback -------------------------------------------------------- */
 
 /* the game's empty layout, the one the scripts switch to for a scene (55,
-   52 on the Japanese disc: port/core/region.h) */
+   52 on the Japanese and Korean discs: port/core/region.h) */
 #define LAYOUT_NONE (ico_region_cur()->layout_scene)
 
 int ico_credits_stage(void)

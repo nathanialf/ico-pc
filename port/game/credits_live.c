@@ -69,9 +69,10 @@ extern int RequestStageChangeSimple(int no, float speed, float wait, unsigned ch
    started the roll at Main tick 3899: 3777 ticks at PAL's 25 Hz, 151.1 s
    into the song, so 114.5 s of it are left when the roll starts and it
    ends 12 s into the third scene (STAFF3, whose own piece starts there).
-   The Japanese disc's ending runs at its fixed 30 Hz (region.h
-   credits_roll_ms, the value and how it was found).  Both from the running
-   disc's table (port/core/region.h). */
+   The Japanese and Korean discs' endings run at their fixed 30 Hz (the
+   Korean build is the Japanese program; region.h credits_roll_ms, the value
+   and how it was found).  Both from the running disc's table
+   (port/core/region.h). */
 #define SONG (ico_region_cur()->credits_song)
 #define SONG_AT_ROLL_MS (ico_region_cur()->credits_roll_ms)
 /* the playback requests it in actStaff1Chk, on the roll's tick, and the
@@ -81,13 +82,13 @@ extern int RequestStageChangeSimple(int no, float speed, float wait, unsigned ch
 /* the real ending's way into STAFF1: 26b4demo2's sixth exit (actConte14_13,
    RequestStageChange(6, ...)), and the boy's object record (label 54, kind
    1: ACTGame_SetActors_Debug's first row) */
-#define ENTRANCE_EXIT (ico_region_cur()->credits_entrance_exit) /* 216 on both discs */
-#define BOY_LABEL (ico_region_cur()->credits_boy_label)         /* 54 on both discs */
+#define ENTRANCE_EXIT (ico_region_cur()->credits_entrance_exit) /* 216 on every disc */
+#define BOY_LABEL (ico_region_cur()->credits_boy_label)         /* 54 on every disc */
 #define BOY_KIND 1
 
-/* the story flags: gflag.c's 50-byte bitmap (the same on both discs) */
+/* the story flags: gflag.c's 50-byte bitmap (the same on every disc) */
 #define GFLAG_COUNT 400
-_Static_assert(GFLAG_COUNT == 400, "region.h gflag_count: 400 on both discs");
+_Static_assert(GFLAG_COUNT == 400, "region.h gflag_count: 400 on every disc");
 /* Main ticks the stage change may take before it counts as failed (the
    load of STAFF1 takes a few hundred): REACH_TICKS with no stage change
    running, REACH_LIMIT whatever runs; then RETURN_TICKS for the title's
@@ -308,8 +309,10 @@ static void roll(void)
     } else if (s_seaOpen) {
         at = (int)((now - s_seaTick) * tickMs + 0.5);
     }
-    fprintf(stderr, "credits: roll start at Main tick %u, song at %d ms (table %d ms)\n", now, at,
-            SONG_AT_ROLL_MS);
+    /* the disc is named: a log of the real ending measures the value of
+       that disc's row, and the three discs' rows are three values */
+    fprintf(stderr, "credits: roll start at Main tick %u, song at %d ms (table %d ms, %s)\n", now,
+            at, SONG_AT_ROLL_MS, ico_region_cur()->disc_id);
 }
 
 static const IcoCreditsEngine kEngine = {begin, roll};

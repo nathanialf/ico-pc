@@ -104,7 +104,7 @@ extern void iosFree(void *p);
 #define N_SELIST (ico_region_cur()->n_selist)
 #define N_SEENV (ico_region_cur()->n_seenv)
 #define N_STAGE (ico_region_cur()->stage_count)
-/* the streams' audible flags: adpcmFile's rows (105 on both discs) */
+/* the streams' audible flags: adpcmFile's rows (105 on every disc) */
 #define N_ADPCM_MAX 128
 
 static const GalleryItem *s_cur;

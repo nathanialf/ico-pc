@@ -466,13 +466,16 @@ static void buildMap(void)
 
 int ui_menu_text_applies(void)
 {
+    /* the table is the European disc's sheets' words (rows and rectangles
+       of its Tex_menu01 sheets): ICO_PAL, not "not Japanese". The Japanese
+       and Korean discs lettered their own sheets and keep their texels. */
     return ICO_PAL;
 }
 
 const UiMenuTextItem *ui_menu_text_item_of(const LtProperty *e)
 {
     /* the rows and rectangles are the European disc's sheets; every other
-       disc's menu words keep their texels (the Japanese sheets) */
+       disc's menu words keep their texels (the Japanese and Korean sheets) */
     if (!ui_menu_text_applies() || !e || e < texProperty || e >= texProperty + MT_GAME_ROWS) {
         return NULL;
     }

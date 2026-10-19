@@ -194,8 +194,8 @@ void ui_mouse_tick(void)
 
     s_m.active = menuUp();
     ico_pointer_set_menu(s_m.active);
-    /* the Japanese disc: the mouse's Cross and Circle trade places in its
-       menus and photo mode, where Circle confirms (pointer.h) */
+    /* the Japanese and Korean discs: the mouse's Cross and Circle trade places in
+       their menus and photo mode, where Circle confirms (pointer.h) */
     ico_pointer_set_swap_face(lt_ext_confirm_button() == LT_PAD_CIRCLE &&
                               (s_m.active || ico_photo_active()));
     /* a key or a pad button (not one of the mouse's own, which arrive as

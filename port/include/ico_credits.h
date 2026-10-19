@@ -28,14 +28,14 @@ extern "C" {
 
 /* the stageData row the playback starts in: STAFF1 (st13b), where
    actStaff1 starts the roll (actStaff1Demo, staffRollStart): the running
-   disc's (port/core/region.h stage_credits: 60, 58 on the Japanese disc;
+   disc's (port/core/region.h stage_credits: 60, 58 on the Japanese and Korean discs;
    credits.c) */
 int ico_credits_stage(void);
 #define ICO_CREDITS_STAGE (ico_credits_stage())
 /* the stage the playback returns to: the boot logo and title (stage 1), as
    the End Game path and actEndingSave go */
 #define ICO_CREDITS_TITLE_STAGE (ico_credits_title_stage())
-int ico_credits_title_stage(void); /* region.h stage_title: 1 on both discs */
+int ico_credits_title_stage(void); /* region.h stage_title: 1 on every disc */
 
 /* nonzero from the Extras row's start until the title is up again */
 int ico_credits_active(void);

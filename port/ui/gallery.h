@@ -164,7 +164,7 @@ long gallery_stream_end_block(const uint8_t *buf, size_t n, int channels);
 #define GALLERY_SECTOR 0x800
 /* the title theme's stream (op.c actTitleShortCut's request, kind 56,
    titleAdpcm) */
-#define GALLERY_TITLE_THEME (ico_region_cur()->gallery_title_theme) /* 56 on both discs */
+#define GALLERY_TITLE_THEME (ico_region_cur()->gallery_title_theme) /* 56 on every disc */
 
 /* Where a stream's blank tail starts: the first of the sectors, up to the
    pass's end (`pass` bytes), that hold an end block (gallery_stream_end_block)

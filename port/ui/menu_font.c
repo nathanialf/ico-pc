@@ -114,20 +114,21 @@ static const UiSheetInk kSheetInk[UI_LANG_SHEET_COUNT] = {
     {1, 61, 255, 1, 0}, /* Italian */
     {1, 62, 255, 1, 0}, /* Spanish */
     /* the Japanese disc's sheets (UI_SHEET_JA), measured by ctest
-       menu_look_jpn (menu_jpn_test.c) on Tex_menu01's option, mc04, title
+       menu_look_jpn (menu_region_test.c) on Tex_menu01's option, mc04, title
        and scei sheets: fill 251.5 (the letters' palette white is fcfcfc,
        252), rim 34.3, one antialiasing step */
     {1, 34, 252, 1, 0},
     /* the Korean disc's sheets (UI_SHEET_KO), measured off line on SCPS-56001's
        Tex_menu01 title (새로 시작하기, 불러오기), mc04 (게임으로 돌아감, 게임을 종료함)
-       and option (옵션, 게임으로) words with menu_jpn_test.c's rule (inkAdd:
+       and option (옵션, 게임으로) words with menu_region_test.c's rule (inkAdd:
        the fill texels grey >= 240 and alpha >= 0.9, the rim texels alpha
        >= 0.5, grey <= 100, not next to a fill texel), the same rule giving
        250.5 and 33.6 on the Japanese disc's same words where menu_look_jpn
        measures 251.5 and 34.3: fill 249.7 + 1.0, rim 42.2 + 0.7 (each
        sheet's own: title 254 / 45.6, mc04 245 / 40.2, option 252.7 / 41.1),
        one antialiasing step (alpha 232 on the title, 252 on mc04) as the
-       Japanese sheets'.  A Korean twin of menu_look_jpn re-measures it. */
+       Japanese sheets'.  ctest menu_look_kor (menu_region_test.c) re-measures it
+       on the disc (kInkExpect there holds the same estimate). */
     {1, 43, 251, 1, 0},
 };
 /* the dark, plain and grey inks and the light words without a halo: no
@@ -291,7 +292,7 @@ void ui__menu_set_bold(float bx, float by)
    (layout_ext.c, the rows settings.c marks, ui_menu_text_set_title), and
    UI_SHEET_JA everywhere else (the pause menu, the Settings pages, the
    popups).  Each is fitted to its sheet's words by ctest menu_look_jpn
-   (menu_jpn_test.c testGeometry, ICO_MENU_LOOK_JPN_FIT=1 for the search),
+   (menu_region_test.c testGeometry, ICO_MENU_LOOK_JPN_FIT=1 for the search),
    which holds every word's ink to the disc's row: the height within a
    texel, the width within 10 % on the title sheet and 17 % on the others,
    whose words are spaced unevenly (もどる and ズーム tighter than
@@ -301,7 +302,7 @@ void ui__menu_set_bold(float bx, float by)
    narrower than Noto Sans KR at the menus' em, set proportionally with a
    wide gap, the title's words (title.tm2) as the other screens' (option.tm2,
    mc04.tm2): one geometry, no title variant.  Measured off line on the
-   decoded sheets (the fill box of menu_jpn_test.c geoBoxOf, grey >= 200
+   decoded sheets (the fill box of menu_region_test.c geoBoxOf, grey >= 200
    and alpha >= 0.7) against an emulation of this rasteriser, embolden and
    sheet_ref.c's 1x texel (which gives the Japanese geometry's words within
    the gate as menu_look_jpn does: オプション -11 %, もどる +14 %, ズーム
