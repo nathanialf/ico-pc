@@ -1,0 +1,2 @@
+# The self test's config/region_twins.txt: path<TAB>function<TAB>twin
+ico2/common/src/fixture.c	fx_twin	fx_twin_jpn

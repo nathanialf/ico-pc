@@ -1,0 +1,7 @@
+# The self test's table of regions: config/regions.txt's two rows and a third
+# target, so the converter's arity path (#elif arms, PAL_US, PAL_JPN_US) is
+# tested before a third target exists.
+# slug  upstream-macro  disc-id     boot-elf     product-name
+pal     -               SCES-50760  SCES_507.60  the European disc
+jpn     VERSION_JPN     SCPS-11003  SCPS_110.03  the Japanese disc
+us      VERSION_US      SLUS-20218  SLUS_202.18  the American disc

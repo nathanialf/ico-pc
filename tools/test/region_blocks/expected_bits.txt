@@ -1,0 +1,1 @@
+MotionModeBits jpn=16 pal=19 width=3 # fixture.c:133

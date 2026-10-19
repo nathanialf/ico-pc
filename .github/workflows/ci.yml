@@ -101,6 +101,11 @@ jobs:
       - name: No ICO_HOST conditional in the game sources
         run: python3 tools/strip_host_gates.py --check
 
+      - name: No compile-time region block in the game sources
+        run: |
+          python3 tools/region_blocks.py --selftest
+          python3 tools/region_blocks.py check
+
       - name: No stack-layout reliance in the game sources
         run: |
           python3 tools/stack_overread_audit.py --selftest

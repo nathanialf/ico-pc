@@ -36,8 +36,11 @@ that fails, in this order:
 5. `tools/stack_overread_audit.py`: no reliance on the PS2's stack layout in `ico2/`.
 6. `tools/check_call_types.py`: calls and declarations agree with the definitions.
 7. `tools/struct_cast_audit.py`: no buffer cast to a struct wider on the host.
+8. `tools/region_blocks.py --selftest`, then `tools/region_blocks.py check`: the converter still
+   converts its fixture, and no `VERSION_` block or region conditional is in `ico2/` or `sce/`
+   ([Region forms](#region-forms)).
 
-Steps 4 to 7 are described in [GAME_CODE.md](GAME_CODE.md#audits). CI runs the same checks
+Steps 4 to 8 are described in [GAME_CODE.md](GAME_CODE.md#audits). CI runs the same checks
 ([BUILDING.md](../BUILDING.md#continuous-integration)). Rerun `tools/install_hooks.sh` after its
 hook text changes.
 
@@ -102,6 +105,30 @@ the newlib constants under `port/math/newlib`. `tools/rename_port_symbols.py --c
 tools/rename_table.txt` lists any `prefix_CamelCase` name `port/` declares; `--table` and `--apply`
 build and apply a rename table (the tool's docstring gives the conversion rule and the collision
 checks). Run `tools/format.sh` after an apply, since longer names rewrap lines.
+
+## Region forms
+
+The game sources choose by the disc at run time, never at compile time: no `#if`, `#ifdef` or
+`#ifndef` on the region, its macros or `ico_region` (`tools/region_blocks.py check`;
+[GAME_CODE.md](GAME_CODE.md#regions)). The forms, from `ico2/common/include/region.h`:
+
+- A value: `PAL_JPN(pal, jpn)`, the European disc's value first, then one per named region in
+  `config/regions.txt` order (`PAL_JPN_US(pal, jpn, us)` with a third row); a region the selector
+  does not name takes the first. `framePlayed / PAL_JPN(2997.0f, 50.0f)`, `strcpy(file,
+  PAL_JPN("SCES_507.60", "SCPS_110.03"))`. Never in a constant context: not after `>>` or `<<`,
+  not in `sizeof`, an array dimension, a `case` label, a static initialiser or at file scope.
+- Statements for two arms: `if (ICO_JPN) { ... } else { ... }`, the other region first and the
+  European arm last; statements for the European disc only: `if (!ICO_JPN) { ... }` (`ICO_PAL`
+  is the same test while the table has two rows; `!ICO_JPN` stays right when a row joins, since
+  upstream's `#ifndef VERSION_JPN` arm is every other region's).
+- `case` labels that shift by one delta: the European labels, and the switch head once,
+  `switch (lt_current_property_item() + PAL_JPN(0, 30)) { /* JPN property ids 30 lower */`.
+- A twin: the European body keeps the name, the other region's body is `name_jpn`, data twins
+  are `name_pal`/`name_jpn` behind `#define name PAL_JPN(name_pal, name_jpn)`; `_pal` only under
+  such a name-overlaying macro. Each function twin is a row of `config/region_twins.txt`.
+- `LN(pal, jpn)`: upstream's per-disc `__LINE__` for the debug allocators and asserts.
+- A layout difference is no form at all: the in-memory layout is the European one on every disc,
+  so a struct, offset, bit position or member name takes the European arm.
 
 ## Log lines
 

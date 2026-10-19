@@ -38,6 +38,11 @@ cat > "$HOOK" <<'EOF'
 #                                          the definitions (as CI)
 #   7. tools/struct_cast_audit.py          no buffer cast to a struct wider on
 #                                          the host in ico2/
+#   8. tools/region_blocks.py --selftest, then tools/region_blocks.py check
+#                                          the converter matches its fixture;
+#                                          no VERSION_ block in ico2/ or sce/,
+#                                          the region forms are legal and
+#                                          region.h is fresh
 set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 
@@ -77,6 +82,17 @@ done
 "$PY" "$ROOT/tools/struct_cast_audit.py" >/dev/null || {
     "$PY" "$ROOT/tools/struct_cast_audit.py"
     echo "pre-commit: a buffer is cast to a struct wider on the host: see tools/struct_cast_audit.py" >&2
+    exit 1
+}
+
+"$PY" "$ROOT/tools/region_blocks.py" --selftest >/dev/null || {
+    "$PY" "$ROOT/tools/region_blocks.py" --selftest
+    echo "pre-commit: tools/region_blocks.py no longer converts its fixture (tools/test/region_blocks)" >&2
+    exit 1
+}
+"$PY" "$ROOT/tools/region_blocks.py" check >/dev/null || {
+    "$PY" "$ROOT/tools/region_blocks.py" check
+    echo "pre-commit: ico2/ breaks a region rule: write the run-time form (docs/port/GAME_CODE.md \"Regions\")" >&2
     exit 1
 }
 EOF

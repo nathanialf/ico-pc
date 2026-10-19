@@ -795,7 +795,14 @@ failing when they select no test, and prints a one-line summary (`tools/dev_buil
 The audits over the game sources are tools, some run as ctests on native builds (`offset_audit`,
 `template_audit`: `port/test/CMakeLists.txt`; `softdouble_gate`: `port/math/CMakeLists.txt`),
 `const_write_audit` on native clang builds only, and the rest in the pre-commit hook and CI; what
-each refuses is in [GAME_CODE.md](GAME_CODE.md#audits). Other tests check generated files and
+each refuses is in [GAME_CODE.md](GAME_CODE.md#audits). The region converter's two runs are of
+that kind (pre-commit step 8, CI's `No compile-time region block in the game sources`):
+`python3 -I tools/region_blocks.py --selftest` converts `tools/test/region_blocks/fixture.c` (one
+block per class, a three-target block, `LN`, the deny-listed forms, both kinds of switch, a twin)
+and compares it, the report and the bit rows with the files beside it, then compiles the result
+with `gcc -fsyntax-only`; `python3 -I tools/region_blocks.py check` holds `ico2/` and `sce/` to the
+region rules and exits 0, 2 (raw blocks remain, all hand items) or 1 (a rule broken)
+([GAME_CODE.md](GAME_CODE.md#regions)). Other tests check generated files and
 tables: `layout_asserts` (a program compiled from the generated asserts), `layout_asserts_fresh`,
 `font_audit` and `content_table_chains` (`port/test/CMakeLists.txt`), `data_desc_fresh` (with the
 audit of MotionDef's bit reads), `tables_manifest` and `tables_manifest_jpn`
@@ -853,13 +860,17 @@ hand.
   (`ico_ach_count() >= 20 && ico_ach_count() <= 30`) bounds the table, which holds 30
   (`port/game/test/achievements_test.c`; `port/game/achievements.c`, `s_defs`). `font_coverage`
   checks the new strings' glyphs.
+- A change to `tools/region_blocks.py`: `python3 -I tools/region_blocks.py --selftest`; a change
+  in what it emits updates `tools/test/region_blocks/expected.c`, `expected_report.tsv` or
+  `expected_bits.txt` after reading the difference, and a new class or pattern gets a block in
+  `fixture.c`.
 - A change to these documents: `docs_check`.
 
 ## CI
 
 | workflow | job | runner | what it runs |
 | --- | --- | --- | --- |
-| `ci.yml` | `linux` | `ubuntu-24.04` | the hygiene checks (no disc data, format, no `ICO_HOST` conditional, stack-layout, struct-cast and call-type audits, generated files fresh), then `linux-x64` headless and window builds with `ctest`, `linux-x64-clang` with `ctest`, and the `win-x64` cross build (tests built, not run) |
+| `ci.yml` | `linux` | `ubuntu-24.04` | the hygiene checks (no disc data, format, no `ICO_HOST` conditional, no region block, stack-layout, struct-cast and call-type audits, generated files fresh), then `linux-x64` headless and window builds with `ctest`, `linux-x64-clang` with `ctest`, and the `win-x64` cross build (tests built, not run) |
 | `ci.yml` | `extra` | `ubuntu-24.04` | a matrix of `asan` and `fptrap` (build `all tests`, `ctest`) and the `win-x64-clang` cross build |
 | `ci.yml` | `linux-arm64` | `ubuntu-24.04-arm` | the no-disc-data check, the `linux-arm64` preset with `ctest`, the filtered-pixel render tests in a step that does not gate, the arm64 package on release tags |
 | `ci.yml` | `android` | `ubuntu-24.04` | the debug APK (`assembleDebug`), `tools/check_android_flags.sh`, the APK structure checks |

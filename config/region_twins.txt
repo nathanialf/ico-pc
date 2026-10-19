@@ -1,0 +1,6 @@
+# The region twins made by hand: a function whose bodies differ per region,
+# kept as the PAL body under its own name and the other region's body as
+# name_<slug> (docs/port/GAME_CODE.md "Regions"). tools/region_blocks.py
+# report writes a `twin` line for a block upstream puts inside either body;
+# check fails on a row whose path or functions do not exist.
+# path<TAB>function<TAB>twin

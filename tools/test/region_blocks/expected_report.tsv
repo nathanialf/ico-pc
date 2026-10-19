@@ -1,0 +1,41 @@
+ico2/common/src/fixture.c:9	hand	layout-typedef	a type differs: TexRec
+ico2/common/src/fixture.c:35	hand	define	MAX_CHARS
+ico2/common/src/fixture.c:43	hand	data-twin	systemStatus: initialisers differ
+ico2/common/src/fixture.c:48	hand	extern-init	iosCdvdMediaType: initialisers differ
+ico2/common/src/fixture.c:53	hand	array-size	stageOrientIdx: take the larger
+ico2/common/src/fixture.c:60	auto	file-scope	pal only: NonLinearCameraMove, demoEnd
+ico2/common/src/fixture.c:64	auto	file-scope	jpn only: DummyIcoMisc
+ico2/common/src/fixture.c:69	hand	rename	jpn: actEndLogoFade vs pal: actEndLogoChk
+ico2/common/src/fixture.c:89	hand	function-twin	mcCheck
+ico2/common/src/fixture.c:106	auto	token	1 substituted, 0 kept as PAL
+ico2/common/src/fixture.c:111	auto	token	1 substituted, 0 kept as PAL
+ico2/common/src/fixture.c:117	auto	token	1 substituted, 0 kept as PAL
+ico2/common/src/fixture.c:120	review	delta	PAL_JPN(2997.0f, 50.0f) delta 2947
+ico2/common/src/fixture.c:130	auto	token	0 substituted, 1 kept as PAL
+ico2/common/src/fixture.c:133	layout	shift	PAL 19 kept (shift): PAL_JPN(19, 16)
+ico2/common/src/fixture.c:137	auto	token	0 substituted, 1 kept as PAL
+ico2/common/src/fixture.c:140	layout	cast-offset	PAL 0x840 kept (cast-offset): PAL_JPN(0x840, 0x830)
+ico2/common/src/fixture.c:142	auto	token	0 substituted, 1 kept as PAL
+ico2/common/src/fixture.c:145	layout	offset-16	PAL 0x980 kept (offset-16): PAL_JPN(0x980, 0x970)
+ico2/common/src/fixture.c:147	auto	token	0 substituted, 1 kept as PAL
+ico2/common/src/fixture.c:150	layout	member	PAL a900 kept (member): PAL_JPN(a900, modeHist)
+ico2/common/src/fixture.c:158	auto	initialised	the initialised arm (jpn)
+ico2/common/src/fixture.c:164	auto	token	2 substituted, 0 kept as PAL
+ico2/common/src/fixture.c:167	review	delta	PAL_JPN(11, 6) delta 5
+ico2/common/src/fixture.c:167	review	delta	PAL_JPN(5, 6) delta -1
+ico2/common/src/fixture.c:169	hand	data-twin	a static local's initialiser differs: anims
+ico2/common/src/fixture.c:182	auto	case-shift	0 substituted, 0 kept as PAL
+ico2/common/src/fixture.c:189	auto	case-shift	1 substituted, 0 kept as PAL
+ico2/common/src/fixture.c:201	hand	case-mixed	the switch's labels do not shift by one delta
+ico2/common/src/fixture.c:218	auto	span	one span
+ico2/common/src/fixture.c:225	auto	if-else	2 arms
+ico2/common/src/fixture.c:235	auto	one-region	!ICO_JPN
+ico2/common/src/fixture.c:238	auto	one-region	ICO_JPN
+ico2/common/src/fixture.c:244	hand	decl	arm jpn declares `extra` at its top level
+ico2/common/src/fixture.c:254	auto	token	4 substituted, 0 kept as PAL
+ico2/common/src/fixture.c:263	review	delta	PAL_JPN_US(29, 30, 31) delta -1
+ico2/common/src/fixture.c:267	auto	if-else	3 arms
+ico2/common/src/fixture.c:281	hand	unbalanced	arm jpn opens or closes a bracket it does not close or open
+ico2/common/src/fixture.c:304	auto	token	1 substituted, 0 kept as PAL
+ico2/common/src/fixture.c:304	twin	fx_twin	inside a region twin (fx_twin / fx_twin_jpn): mirror the change into the other body
+ico2/common/src/fixture.c:307	review	delta	PAL_JPN(7, 6) delta 1
