@@ -16,23 +16,16 @@
 #include "gamesys.h"
 #include "main.h"
 
-/* declared ahead with no size for actSt22aIntroChk; the sized definition
-   follows the stream handle in .sdata */
-static int lightningAnims[];
-
 /* .sdata: the lightning stream handle and the two animation numbers the
    lightning plays. */
 struct SqEntry *lightning = 0;
 
-#ifdef VERSION_JPN
+/* the European disc's numbers, then the Japanese disc's (4 lower) */
+static int lightningAnims_pal[2] = {758, 759}; /* derived name */
 
-static int lightningAnims[2] = {754, 755}; /* derived name */
+static int lightningAnims_jpn[2] = {754, 755}; /* derived name */
 
-#else
-
-static int lightningAnims[2] = {758, 759}; /* derived name */
-
-#endif
+#define lightningAnims PAL_JPN(lightningAnims_pal, lightningAnims_jpn)
 
 /* the lightning's volume for height y */
 static inline float getVolume(float y) /* derived name */
