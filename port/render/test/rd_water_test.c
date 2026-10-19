@@ -154,6 +154,7 @@ int buffer_ID;
 int debug_bounding_flag, debug_specular_flag, debug_shadow_flag, debug_window_flag;
 int debug_disp_mesh = 1, debug_disp_particle = 1;
 int debug_skel_flag, debug_cloth_info;
+int debug_snapshot_reserve; /* debug.c's; pool.c reads it on the Japanese disc */
 float inflateSec;
 int texturetranssize, GlobalTimer, currentScreenWidth;
 int stage_no = 3;
