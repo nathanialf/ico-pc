@@ -75,14 +75,16 @@ static const char streamWaitFmt[] =
     "Now waiting for standby stream motion system... %d\n"; /* derived name */
 
 /* The eighteen stage animations the cancelled ending restores. */
-static const AnimSet18 cancelAnimSet = {
-/* derived name */
-#ifdef VERSION_JPN
+static const AnimSet18 cancelAnimSet_pal = {
+    /* derived name */
+    {784, 785, 786, 787, 788, 789, 790, 791, 792, 793, 794, 795, 796, 797, 798, 799, 800, 801}};
+
+/* the Japanese disc's, 4 lower */
+static const AnimSet18 cancelAnimSet_jpn = {
+    /* derived name */
     {780, 781, 782, 783, 784, 785, 786, 787, 788, 789, 790, 791, 792, 793, 794, 795, 796, 797}};
 
-#else
-    {784, 785, 786, 787, 788, 789, 790, 791, 792, 793, 794, 795, 796, 797, 798, 799, 800, 801}};
-#endif
+#define cancelAnimSet PAL_JPN(cancelAnimSet_pal, cancelAnimSet_jpn)
 
 /* Where the boy is put back when the ending is cancelled. */
 static const Vec4St25A cancelBoyPos = {
@@ -504,35 +506,35 @@ void actConte12(GObj *volatile self)
     }
 
     while (stage_ContinueAnimation(796, 797) == 0) {
-#ifndef VERSION_JPN
         _ACTWait(1);
     }
 
-    stage_SetAnimation(560, 1, 0);
+    if (!ICO_JPN) {
+        stage_SetAnimation(560, 1, 0);
 
-    while (stage_ContinueAnimation(797, 798) == 0) {
+        while (stage_ContinueAnimation(797, 798) == 0) {
+            _ACTWait(1);
+        }
+
+        scpLinkBGAtoLayoutedTarget(2158, 487);
+
+        scpSearchGobj(2158)->active = 1;
+
         _ACTWait(1);
-    }
+        stage_SetAnimation(561, 1, 0);
 
-    scpLinkBGAtoLayoutedTarget(2158, 487);
+        stage_SetAnimation(157, -1, -2);
 
-    scpSearchGobj(2158)->active = 1;
+        while (stage_ContinueAnimation(798, 799) == 0) {
+            _ACTWait(1);
+        }
 
-    _ACTWait(1);
-    stage_SetAnimation(561, 1, 0);
-
-    stage_SetAnimation(157, -1, -2);
-
-    while (stage_ContinueAnimation(798, 799) == 0) {
-        _ACTWait(1);
-    }
-
-    while (stage_ContinueAnimation(799, 800) == 0) {
-        _ACTWait(1);
-    }
-    while (stage_ContinueAnimation(800, 801) == 0) {
-#endif
-        _ACTWait(1);
+        while (stage_ContinueAnimation(799, 800) == 0) {
+            _ACTWait(1);
+        }
+        while (stage_ContinueAnimation(800, 801) == 0) {
+            _ACTWait(1);
+        }
     }
 
     eventDone = 1;
@@ -729,27 +731,25 @@ void actSt25aQueenDeadChk(GObj *volatile self)
         }
     }
 
-#ifdef VERSION_JPN
-    while (stage_CheckAnimationFrame(806, 15, 0) == 0) {
-#else
-    stage_SetAnimation(478, 1, 0);
-    iosPadActRequest(boyPad, 15);
-    DeleteBoyWeapon();
-    stage_SetAnimation(487, -1, -2);
-    stage_SetAnimation(158, 1, 0);
+    if (!ICO_JPN) {
+        stage_SetAnimation(478, 1, 0);
+        iosPadActRequest(boyPad, 15);
+        DeleteBoyWeapon();
+        stage_SetAnimation(487, -1, -2);
+        stage_SetAnimation(158, 1, 0);
 
-    while (stage_ContinueAnimation(808, 809) == 0) {
-        _ACTWait(1);
+        while (stage_ContinueAnimation(808, 809) == 0) {
+            _ACTWait(1);
+        }
+        while (stage_ContinueAnimation(809, 810) == 0) {
+            _ACTWait(1);
+        }
+
+        SelectBoyCrown(boyGObj, 2);
+        stage_SetAnimation(557, 1, 0);
     }
-    while (stage_ContinueAnimation(809, 810) == 0) {
-        _ACTWait(1);
-    }
 
-    SelectBoyCrown(boyGObj, 2);
-    stage_SetAnimation(557, 1, 0);
-
-    while (stage_CheckAnimationFrame(810, 15, 0) == 0) {
-#endif
+    while (stage_CheckAnimationFrame(PAL_JPN(810, 806), 15, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
