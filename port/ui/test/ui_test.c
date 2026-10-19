@@ -626,12 +626,20 @@ static void testPopups(void)
 
     /* a Japanese body wider than the panel breaks between its characters
        (strings.h ui_break_before) and the panel takes the second line; a
-       Latin body keeps its one line */
+       Latin body keeps its one line; a Korean body breaks at a space
+       (its lines no wider than the panel), and a Korean word alone wider
+       than the panel between two of its syllables (ui_hangul_char) */
     {
-        float h[3], w[3];
-        const char *bodies[3] = {"B", ui_str_in(UI_LANG_EN, UI_STR_ACH_NO_CAPTURE_DESC),
-                                 ui_str_in(UI_LANG_JA, UI_STR_ACH_NO_CAPTURE_DESC)};
-        for (int k = 0; k < 3; k++) {
+        char longWord[40 * 3 + 1];
+        for (int i = 0; i < 40; i++) {
+            memcpy(longWord + 3 * i, "\xEA\xB0\x80", 3); /* U+AC00, 120 bytes of 128 */
+        }
+        longWord[40 * 3] = '\0';
+        float h[5], w[5];
+        const char *bodies[5] = {"B", ui_str_in(UI_LANG_EN, UI_STR_ACH_NO_CAPTURE_DESC),
+                                 ui_str_in(UI_LANG_JA, UI_STR_ACH_NO_CAPTURE_DESC),
+                                 ui_str_in(UI_LANG_KO, UI_STR_ACH_NO_CAPTURE_DESC), longWord};
+        for (int k = 0; k < 5; k++) {
             ui_popup_reset();
             ui_popup_push("A", bodies[k]);
             for (int i = 0; i < ui_popup_slide_vsyncs(); i++) {
@@ -644,6 +652,10 @@ static void testPopups(void)
         CHECK(h[1] == h[0] && h[2] > h[0] && w[2] <= UI_GRID_W - 36.0f + 0.01f,
               "the panels: one line %g, English %g, Japanese %g high and %g wide", (double)h[0],
               (double)h[1], (double)h[2], (double)w[2]);
+        CHECK(h[3] > h[0] && w[3] <= UI_GRID_W - 36.0f + 0.01f && h[4] > h[0] &&
+                  w[4] <= UI_GRID_W - 36.0f + 0.01f,
+              "the Korean panels: %g high and %g wide, the long word %g high and %g wide",
+              (double)h[3], (double)w[3], (double)h[4], (double)w[4]);
         ui_popup_reset();
     }
 }

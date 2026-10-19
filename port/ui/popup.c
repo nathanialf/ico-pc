@@ -59,15 +59,18 @@ static void copyText(char *dst, const char *src)
     dst[n] = '\0';
 }
 
-/* The Japanese text's line breaks in a body (UI_POPUP_TEXT bytes): a line
-   wider than the panel's widest body takes a line break at the last place
-   between two characters where one may go (strings.h ui_break_before),
-   while the text has room for it.  Latin text keeps its lines as written:
+/* The Japanese and Korean text's line breaks in a body (UI_POPUP_TEXT
+   bytes): a line wider than the panel's widest body takes a line break at
+   the last place between two characters where one may go (strings.h
+   ui_break_before), or, Korean, at the last space after a Hangul character
+   (the space becomes the break), or, a Korean word alone wider than the
+   panel, between two of its Hangul characters (ui_hangul_char), while the
+   text has room for it.  Latin text keeps its lines as written:
    ui_break_before gives no place between two Latin characters. */
 static void wrapWide(char *s)
 {
     const float width = MAX_W - 2.0f * PAD_X;
-    size_t n = strlen(s), lineStart = 0, lastBreak = 0;
+    size_t n = strlen(s), lineStart = 0, lastBreak = 0, lastSpace = 0, lastInWord = 0;
     uint32_t prev = 0;
     for (size_t i = 0; i < n;) {
         const char *q = s + i;
@@ -82,19 +85,30 @@ static void wrapWide(char *s)
         if (i > lineStart && ui_break_before(prev, cp)) {
             lastBreak = i;
         }
+        if (i > lineStart && cp == ' ' && ui_hangul_char(prev)) {
+            lastSpace = i;
+        }
+        if (i > lineStart && ui_hangul_char(prev) && ui_hangul_char(cp)) {
+            lastInWord = i;
+        }
         prev = cp;
         i += len;
-        if (lastBreak > lineStart && n + 1 < UI_POPUP_TEXT) {
+        if ((lastBreak > lineStart || lastSpace > lineStart || lastInWord > lineStart) &&
+            n + 1 < UI_POPUP_TEXT) {
             const char saved = s[i];
             s[i] = '\0';
             const float w = ui_measure_menu_text(BODY_SIZE, s + lineStart);
             s[i] = saved;
-            if (w > width) {
-                memmove(s + lastBreak + 1, s + lastBreak, n - lastBreak + 1);
-                s[lastBreak] = '\n';
+            if (w > width && lastSpace > lineStart && lastSpace >= lastBreak) {
+                s[lastSpace] = '\n';
+                lineStart = lastSpace + 1;
+            } else if (w > width) {
+                const size_t at = lastBreak > lineStart ? lastBreak : lastInWord;
+                memmove(s + at + 1, s + at, n - at + 1);
+                s[at] = '\n';
                 n++;
                 i++;
-                lineStart = lastBreak + 1;
+                lineStart = at + 1;
             }
         }
     }

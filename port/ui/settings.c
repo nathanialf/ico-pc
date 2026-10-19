@@ -2122,10 +2122,13 @@ static void sourcesText(const IcoBindings *b, int t, int gamepad, char *buf, siz
 
 /* Breaks text into lines of at most width x units at size (a note): at a
    space, or for the Japanese text between two characters where a line may
-   break (strings.h ui_break_before), a line break put in there. */
+   break (strings.h ui_break_before), a line break put in there; a Korean
+   word alone wider than the line between two of its Hangul characters
+   (strings.h ui_hangul_char), the Korean text breaking at its spaces
+   otherwise. */
 static void wrapText(const char *text, float size, float width, char *out, unsigned outSize)
 {
-    unsigned n = 0, lineStart = 0, lastSpace = 0, lastBreak = 0;
+    unsigned n = 0, lineStart = 0, lastSpace = 0, lastBreak = 0, lastInWord = 0;
     uint32_t prev = 0;
     for (const char *p = text; *p;) {
         /* a whole UTF-8 sequence at a time: the line is measured only on a
@@ -2139,6 +2142,9 @@ static void wrapText(const char *text, float size, float width, char *out, unsig
         if (n > lineStart && ui_break_before(prev, cp)) {
             lastBreak = n;
         }
+        if (n > lineStart && ui_hangul_char(prev) && ui_hangul_char(cp)) {
+            lastInWord = n;
+        }
         memcpy(out + n, p, len);
         out[n + len] = '\0';
         if (*p == ' ') {
@@ -2147,16 +2153,18 @@ static void wrapText(const char *text, float size, float width, char *out, unsig
         n += len;
         p = next;
         prev = cp;
-        if ((lastSpace > lineStart || lastBreak > lineStart) &&
+        if ((lastSpace > lineStart || lastBreak > lineStart || lastInWord > lineStart) &&
             ui_measure_menu_text(size, out + lineStart) > width) {
             if (lastSpace > lineStart && lastSpace >= lastBreak) {
                 out[lastSpace] = '\n';
                 lineStart = lastSpace + 1;
             } else if (n + 2 <= outSize) {
-                memmove(out + lastBreak + 1, out + lastBreak, n - lastBreak + 1);
-                out[lastBreak] = '\n';
+                /* the Japanese break, else inside the Korean word */
+                const unsigned at = lastBreak > lineStart ? lastBreak : lastInWord;
+                memmove(out + at + 1, out + at, n - at + 1);
+                out[at] = '\n';
                 n++;
-                lineStart = lastBreak + 1;
+                lineStart = at + 1;
             }
         }
     }

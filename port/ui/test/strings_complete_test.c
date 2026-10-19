@@ -8,8 +8,9 @@
  * English one's in the same order (the serial notes: exactly one %s); the
  * serial notes filled with each disc's serial (ui_str_serial); the sheet
  * language's default and setter; the port text's language from [ui]
- * language and the disc (ui_lang.c); the Japanese line-break rules
- * (ui_wide_char, ui_break_before). CPU only, no game data.
+ * language and the disc (ui_lang.c, the region rows' ui_lang_default and
+ * menu_sheet); the Japanese and Korean line-break rules (ui_wide_char,
+ * ui_break_before, ui_hangul_char). CPU only, no game data.
  */
 #include <stdio.h>
 #include <string.h>
@@ -230,6 +231,17 @@ static void testBreaks(void)
               !ui_break_before('(', 0x3042) && ui_break_before(')', 0x3042),
           "the ASCII brackets and punctuation keep the same rules");
     CHECK(!ui_break_before(0, 0x3042), "no break at the text's start");
+    /* Korean: Hangul is not wide (it breaks at its spaces), the compatibility
+       jamo inside the CJK block neither */
+    CHECK(ui_hangul_char(0xD55C) && ui_hangul_char(0xAC00) && ui_hangul_char(0xD7A3) &&
+              ui_hangul_char(0x3131) && ui_hangul_char(0x1100) && !ui_hangul_char(0x3042) &&
+              !ui_hangul_char('a') && !ui_hangul_char(0x4E2D),
+          "the syllables and jamo are Hangul, kana, kanji and Latin not");
+    CHECK(!ui_wide_char(0xD55C) && !ui_wide_char(0x3131) && ui_wide_char(0x3000),
+          "Hangul is not a wide character; the CJK space still is");
+    CHECK(!ui_break_before(0xD55C, 0xAD6D) && !ui_break_before(0xD55C, ' ') &&
+              !ui_break_before(' ', 0xD55C) && !ui_break_before(0xD55C, '.'),
+          "Korean breaks at its spaces only");
 }
 
 int main(void)

@@ -882,8 +882,9 @@ static void unlock(int i)
 }
 
 /* Breaks text into lines of at most POPUP_LINE columns at spaces, a wide
-   (CJK, fullwidth) character two columns (strings.h ui_wide_char), so a
-   Japanese line is half as many characters as a Latin one.  Text with no
+   (CJK, fullwidth) character or a Hangul one two columns (strings.h
+   ui_wide_char, ui_hangul_char), so a Japanese or Korean line is half as
+   many characters as a Latin one.  Text with no
    space to break at (Japanese) is left to the popup, which breaks a body
    wider than its panel by the Japanese line rules (popup.c). */
 #define POPUP_LINE 44
@@ -909,7 +910,9 @@ static uint32_t lead_cp(const unsigned char *s)
 
 static int columns(const unsigned char *s)
 {
-    return ui_wide_char(lead_cp(s)) ? 2 : 1;
+    const uint32_t cp = lead_cp(s);
+
+    return ui_wide_char(cp) || ui_hangul_char(cp) ? 2 : 1;
 }
 
 static void wrap(const char *in, char *out, size_t size)

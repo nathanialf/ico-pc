@@ -681,6 +681,15 @@ const char *ui_str_in(UiLang lang, UiStrId id);
    (popup.c) break with these. */
 int ui_wide_char(uint32_t cp);
 int ui_break_before(uint32_t prev, uint32_t cp);
+/* Korean text is written with spaces between its words and breaks at them,
+   as Latin text does: Hangul is not a wide character (ui_wide_char, so
+   ui_break_before gives no break between two Hangul characters), though
+   it is as wide as one on the screen.  ui_hangul_char says whether cp is Hangul (the jamo, the
+   compatibility and extended jamo, the syllables); the wrappers break
+   between two Hangul characters only when one word alone is wider than
+   the line (settings.c wrapText, popup.c wrapWide), and count a Hangul
+   character two columns as a wide one (achievements.c). */
+int ui_hangul_char(uint32_t cp);
 
 /* The strings that name the running disc's pack folder (its PCSX2 serial,
    port/core/region.h IcoRegionInfo.pack_serial: SCES-50760, SCPS-11003):

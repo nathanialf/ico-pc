@@ -135,12 +135,21 @@ const char *ui_str_serial(UiStrId id, char *buf, size_t n)
     return buf;
 }
 
+int ui_hangul_char(uint32_t cp)
+{
+    return (cp >= 0x1100 && cp <= 0x11FF) || (cp >= 0x3130 && cp <= 0x318F) ||
+           (cp >= 0xA960 && cp <= 0xA97F) || (cp >= 0xAC00 && cp <= 0xD7FF);
+}
+
 int ui_wide_char(uint32_t cp)
 {
     /* the CJK blocks (U+2E80 .. U+9FFF: radicals, punctuation, kana, the
-       ideographs), the compatibility ideographs and the fullwidth forms */
-    return (cp >= 0x2E80 && cp <= 0x9FFF) || (cp >= 0xF900 && cp <= 0xFAFF) ||
-           (cp >= 0xFF01 && cp <= 0xFF60) || (cp >= 0xFFE0 && cp <= 0xFFE6);
+       ideographs), the compatibility ideographs and the fullwidth forms;
+       not the Hangul compatibility jamo inside them (ui_hangul_char: Korean
+       breaks at its spaces) */
+    return ((cp >= 0x2E80 && cp <= 0x9FFF) || (cp >= 0xF900 && cp <= 0xFAFF) ||
+            (cp >= 0xFF01 && cp <= 0xFF60) || (cp >= 0xFFE0 && cp <= 0xFFE6)) &&
+           !ui_hangul_char(cp);
 }
 
 int ui_break_before(uint32_t prev, uint32_t cp)
