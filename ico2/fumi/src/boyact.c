@@ -156,10 +156,9 @@ static void findChainInJump(void *self)
 
     /* the European text serves both discs: the Japanese reads the same flags2 bit by name
        (chainIkRate, its bit 6, which config/motion_bits.jpn.txt maps to bit 5), the same
-       ikRate words at its own offsets, and sets 0.8, what systemStatus[0] == 0 (60 Hz, fixed
-       on the Japanese disc) gives */
+       ikRate words at its own offsets, and sets 0.8 with no 50 Hz step */
     if ((rside != 0 || lside != 0) && ((CHAINROW(self)->flags2.word >> 5) & 1) != 0) {
-        float sp = (systemStatus[0] == 1) ? 0.5f : 0.8f;
+        float sp = (!ICO_JPN && systemStatus[0] == 1) ? 0.5f : 0.8f;
 
         ((BoyVal *)&GOBJ_SUB(self)->root.ikRate0)->f = sp;
         ((BoyVal *)&GOBJ_SUB(self)->root.ikRate1)->f = sp;

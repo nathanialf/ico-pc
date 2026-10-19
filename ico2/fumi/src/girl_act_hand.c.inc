@@ -113,11 +113,9 @@ void HandMgr_Speed(GObj *self, float f)
         float r;
         if (GOBJ_ACT(boyGObj)->curItem != 0) {
             r = 2.0f;
-#ifndef VERSION_JPN
-        } else if (systemStatus[0] == 1) {
+        } else if (!ICO_JPN && systemStatus[0] == 1) { /* the 50 Hz step: PAL only */
             r = (handmgr.handDist - 90.0f) / 120.0f + 1.1f;
             r = r < 1.0f ? 1.0f : (ico_dcmp(ico_f2d(r), ICO_D(1.4)) > 0 ? 1.4f : r);
-#endif
         } else {
             r = 1.3f;
         }
