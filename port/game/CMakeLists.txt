@@ -142,6 +142,8 @@ if(ICO_RUN_TESTS)
     # video step, no card system file read, the language word 0 and 60 Hz
     # throughout
     add_test(NAME kanban_boot_jpn COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" jpn)
+    # and on the Korean disc, which runs the Japanese program's check
+    add_test(NAME kanban_boot_kor COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" kor)
 endif()
 
 # The hand records Ico and Yorda hold hands with
@@ -345,4 +347,6 @@ if(ICO_RUN_TESTS)
     add_test(NAME credits COMMAND credits_test "${CMAKE_CURRENT_BINARY_DIR}")
     # the same on the Japanese disc's region (STAFF1 58, the scene layout 52)
     add_test(NAME credits_jpn COMMAND credits_test "${CMAKE_CURRENT_BINARY_DIR}" jpn)
+    # and the Korean disc's (the Japanese values: STAFF1 58, the scene layout 52)
+    add_test(NAME credits_kor COMMAND credits_test "${CMAKE_CURRENT_BINARY_DIR}" kor)
 endif()
