@@ -37,7 +37,11 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 
 The game's menus are tables loaded at run time: `texLayout[80]` (a layout: its first and last
 property rows, its proc, fades, cursor and link) and `texProperty[436]` (a row: its texture
-rectangle, its box on screen, its item links). Every property row is used, and the empty layout
+rectangle, its box on screen, its item links); on the Japanese disc `texLayout[76]` and
+`texProperty[412]`, and the extension starts there (`LT_GAME_LAYOUT_COUNT` and
+`LT_GAME_PROPERTY_COUNT` are the running disc's, `lt_ext_game_layout_count` and
+`lt_ext_game_property_count`; arrays sized at build time take the larger, `_MAX` 80 and 436;
+[The two discs](#the-two-discs)). Every property row is used, and the empty layout
 rows 66..79 sit inside every stage's layout range, whose textures the game initialises at each
 stage load, so a port row there would be looked up as a texture file. The port therefore extends
 both tables past their ends: layouts `80 ..` and properties `436 ..`, up to
@@ -126,15 +130,18 @@ cursor (`ico2/common/src/layout_texture.c` (`display_texture`, `curNo`)).
 
 `lt_ext_back_buttons` is the pad bits that take the game menus' back action where the game checks
 Triangle: Triangle, plus Circle while `[game] circle_back` is on (the default); off, Triangle alone,
-the PS2's checks. `layout_texture.c`'s `default_item_select` uses it as `LT_BACK_BUTTONS` and the
+the PS2's checks. On the Japanese disc it is Cross alone, that disc's cancel, and `[game]
+circle_back` does not apply ([The two discs](#the-two-discs)). `layout_texture.c`'s `default_item_select` uses it as `LT_BACK_BUTTONS` and the
 procs of `layout_action.c` as `LA_BACK`, except where Triangle is not a cancel or Circle has a
 meaning of its own (`port/ui/layout_ext.h` (`lt_ext_back_buttons`);
 `ico2/common/src/layout_action.c` (`LA_BACK`)). The port's own screens take Circle as Triangle
-always (`port/ui/settings.c` (`PAD_BACK`)). The option itself is
+always and confirm with Cross; on the Japanese disc they take Cross as Triangle and confirm with
+Circle (`port/ui/layout_ext.h` (`lt_ext_port_back_buttons`, `lt_ext_confirm_button`);
+`port/ui/settings.c` (`PAD_BACK`, `PAD_OK`)). The option itself is
 [GAME_FEATURES.md](GAME_FEATURES.md#circle-back)'s.
 
 Each port row has a pointer role for the mouse: `LT_POINTER_AUTO` (an item is pointed at and a
-click is Cross on it), `NONE` (never hit: a list heading, an empty slot), `LEFT` and `RIGHT` (a
+click is the disc's confirm on it, Cross, or Circle on the Japanese disc), `NONE` (never hit: a list heading, an empty slot), `LEFT` and `RIGHT` (a
 value's arrows, padded), `STEP` (a stepped value: a click is Right) (`port/ui/layout_ext.h`
 (`lt_ext_set_pointer_role`)).
 
@@ -241,9 +248,9 @@ The `settings` test holds each page's rows as fixed lists (`port/ui/test/setting
 
 ### Back
 
-`settingsProc` runs a page each [Main tick](ARCHITECTURE.md#terms): it follows the game's language
-(`ui_set_language`), refreshes the values, waits for the fade, then handles the pad. `PAD_BACK`
-(Triangle or Circle) goes to the page's parent, or to the layout the menu was entered from, with
+`settingsProc` runs a page each [Main tick](ARCHITECTURE.md#terms): it sets the menu language
+(`ui_settings_apply_language`), refreshes the values, waits for the fade, then handles the pad.
+`PAD_BACK` (Triangle or Circle; Triangle or Cross on the Japanese disc) goes to the page's parent, or to the layout the menu was entered from, with
 the cursor on the row that led there, saving first (`port/ui/settings.c` (`PAD_BACK`,
 `settingsProc`, `leaveTo`); `ico2/common/src/layout_action.c` (`la_host_leave`)).
 
@@ -294,11 +301,18 @@ table names the languages in their own words (English, Français, Deutsch, Itali
 
 The first five languages, `UI_LANG_PAL_COUNT`, are the European disc's, in the order of the game's
 language numbers; Japanese (`UI_LANG_JA`) is the port's own text, the Japanese disc's words being
-its sheets. The current language follows the game's at the call sites: `NonLinearCameraMove` holds
-2..6 after the boot (English, French, German, Italian, Spanish), and `ui_lang_from_game` maps it to
-`UiLang`; `settingsProc` and `ui_host.c`'s sync set it every tick, so a change on the Language row
-shows at once (`port/ui/strings.c` (`ui_lang_from_game`); `port/ui/ui_host.c` (`sync`)). The row
-also writes `[game] language` (`port/config/sysconf.h` (`ico_sysconf_set_language`)).
+its sheets. The current language is set by `ui_settings_apply_language`, which every screen of the
+port calls before it draws its words (`settingsProc`, `ui_host.c`'s sync, photo mode, the model
+viewer, the New Game and Quit screens, the pause menu's lines; also `select_disc`, since on
+Android the UI is up before the disc is chosen): the language of the rule below
+(`ui_set_language`) and the sheet language (`ui_set_sheet_language`: `UI_SHEET_JA` on the
+Japanese disc, else the game's own language) (`port/ui/settings.h` (`ui_settings_apply_language`);
+`port/ui/ui_host.c` (`sync`); `port/platform/main_host.c` (`select_disc`)). The game's own
+language is `NonLinearCameraMove`, 2..6 after the boot on the European disc (English, French,
+German, Italian, Spanish), mapped by `ui_lang_from_game`; the Language row changes it, so the
+menus follow at once while the menu language is Auto, and writes `[game] language`
+(`port/config/sysconf.h` (`ico_sysconf_set_language`)). The Japanese disc has no game language:
+the row is not shown there and the port never writes the word (`gameLanguage` is -1).
 
 The menu language, `[ui] language` (`auto`, `en`, `fr`, `de`, `it`, `es` or `ja`;
 `port/game/options.h` (`ico_opt_ui_language`)), is resolved by `ui_settings_resolve_language`: a
@@ -319,7 +333,8 @@ Four strings name the running disc's pack folder, its PCSX2 serial (SCES-50760, 
 texture and model pack notes and the two dump notes. Their entries are printf formats with one
 `%s`; `ui_str_serial` writes one in the current language with the selected region's
 `pack_serial` (`port/core/region.h`), and `ui_str_takes_serial` names the four
-(`port/ui/strings.c`).
+(`port/ui/strings.c`); the Settings notes are written through it (`port/ui/settings.c`
+(`noteText`, `setNote`)).
 
 The Japanese text has no spaces to break at. The notes' wrap (`port/ui/settings.c` (`wrapText`))
 and a popup body wider than the panel (`port/ui/popup.c` (`wrapWide`)) also break between two
@@ -411,8 +426,12 @@ least recently once no recent frame can name it (`port/ui/menu_font.c` (`MF_PAGE
 The inks (`UiMenuTextInk`): light letters with the dark rim (the menu rows; the port's text always
 has the full rim), and dark, plain and grey letters without one (the white panel's prompts, the
 save screens' play time and slot numbers). The light ink's rim level and fill are per sheet
-language (`kSheetInk`, `ui_menu_sheet_ink`: the European disc's five measured on their sheets, a
-row for `UI_SHEET_JA` the Japanese sheets' measurement fills), and a change restyles the pages
+language (`kSheetInk`, `ui_menu_sheet_ink`: the European disc's five measured on their sheets by
+`menu_look`, and `UI_SHEET_JA`, the Japanese disc's, measured by `menu_look_jpn` on the pause and
+title words of `Tex_menu01`'s sheets: fill 251.5, so the level is 252, the letters' palette white
+being fcfcfc on these sheets where the European ones have ffffff; rim 34.3, a black-grey near the
+English sheets' 24; one antialiasing step where the European sheets have three, which the shared
+`ICO_SHEET_LEVELS` covers; `{1, 34, 252, 1, 0}`), and a change restyles the pages
 without rasterising again (`port/ui/menu_font.h` (`ui_menu_sheet_ink`, `ui_menu_item_ink`)).
 
 ### The game's own menu words
@@ -422,7 +441,10 @@ string and where the lettering sits, per language, as the five PAL sheets letter
 anchor, the first line's capital middle, the line pitch, the width against the menus'
 (`wx`), the extra letter spacing (`track`) and the rim, fitted item by item to each sheet
 (`port/ui/menu_text.h` (`UiMenuTextItem`); `port/ui/menu_text.c`, header comment). The rows list
-every `texProperty` row that draws each rectangle. A row whose texel rectangle differs from the
+every `texProperty` row that draws each rectangle. The table applies to the European disc only
+(`ui_menu_text_applies`): on the Japanese disc every menu word keeps its own texels, and only the
+port's own rows over those sheets are drawn in the sheet look, in `kSheetInk[UI_SHEET_JA]`
+(`menu_text_jpn` checks no Japanese row is drawn from the table). A row whose texel rectangle differs from the
 measured one (tables that are not the PAL ones) keeps its texture; artwork, logos, the copyright,
 button glyphs, arrows, the shoulder labels and the subtitles are not in the table and keep their
 texels (`ui_menu_text_item_of`). `ui_menu_word_draw` draws a row's words where its sprite would be,
@@ -489,7 +511,7 @@ filter (`port/ui/ui_host.c` (`hostOverlayTop`)). [INPUT.md](INPUT.md) has the to
 game's `Main` (`port/ui/ui_mouse.h`; `ico2/common/src/main.c` (`Main`)). Over any layout the game
 runs with a cursor (the port's pages and lists, the title's and pause menu's rows, the memory card
 and save screens): pointing at a row moves the cursor onto it as the pad does, with its sound; a
-click is Cross on a row, Left or Right on a value's arrows, Right on a stepped value; the wheel is
+click is the disc's confirm on a row (Cross, Circle on the Japanese disc), Left or Right on a value's arrows, Right on a stepped value; the wheel is
 Up or Down, up to three notches queued; a key or pad press hides the pointer until the mouse moves
 again. Nothing happens while a layout fades, while the procs have the item select off (the title's
 card check, a list's wrap) or while the remap screen waits for a press; Play (layout 54) and its
@@ -520,7 +542,8 @@ progress bar of rectangle rows, the times and the transport's prompt line (`port
 
 The pause menu's "Photo mode" row opens a port layout with one masked row, so the game draws
 nothing of it; its proc hands the pad to `port/game/photo_mode.h` each Main tick, and Triangle,
-Circle or Start go back to the pause menu (`port/ui/photo_ui.h`, header comment). The help panel
+Circle or Start go back to the pause menu (Cross for Circle on the Japanese disc, where Circle
+saves a picture: `ico_photo_save_button`, `ico_photo_back_button`) (`port/ui/photo_ui.h`, header comment). The help panel
 is drawn on the presentation overlay, never in the game's frame, so a capture never shows it.
 Beside each action it shows the game's button picture (the glyphs' textures) or, for a button with
 no picture, its name; once a key or the mouse was the last input, the bound keys' names in
@@ -541,6 +564,46 @@ Leaving Extras > Characters in the model viewer returns to the title, which runs
 card check has decided, then opens Settings on Extras: `ui_settings_title_return` arms it, masking
 the title's rows and hiding the logo meanwhile (`port/ui/settings.h` (`ui_settings_title_return`,
 `ui_settings_reopen_page`)).
+
+## The two discs
+
+The port's UI names the game's menus by number, and each number is the running disc's, read from
+the region table at run time (`port/core/region.h` (`IcoRegionInfo`, `ico_region_cur`);
+[GAME_CODE.md](GAME_CODE.md#regions)): the layouts the Settings menu enters from and returns to,
+the pause, title and memory card rows, the button glyphs, the stages, story flags and table sizes
+of the gallery, the achievements, the credits, photo mode and the model viewer, the chain groups
+the renderer lets down. The Japanese values, and what each was resolved against, are
+`port/core/region_jpn.c`'s. On the Japanese disc:
+
+- **Buttons.** Circle confirms and Cross goes back in the game's menus (`pad_confirm` 0x20,
+  `pad_back` 0x40). The port follows: `lt_ext_back_buttons` is Cross alone and `[game]
+  circle_back` does not apply; the port's pages confirm with Circle and go back with Cross or
+  Triangle (Triangle goes back on the port's pages on both discs); a mouse click on an item is
+  Circle; photo mode saves with Circle and leaves with Cross, Triangle or Start; Escape (and
+  Android's Back) presses Cross where it pressed Triangle (`port/ui/layout_ext.h`;
+  `port/game/photo_mode.h` (`ico_photo_save_button`); `port/input/mouse_look.h`
+  (`ico_escape_target`)). The prompt lines show Circle where they show Cross (`ui_hint_build`),
+  and the remap page's hint is `UI_STR_REMAP_HINT_CIRCLE`. In the menus and photo mode the
+  mouse's Cross and Circle buttons trade places, so the right button still goes back and photo
+  mode's left button still saves (`port/input/pointer.h` (`ico_pointer_set_swap_face`), set by
+  `port/ui/ui_mouse.c`; `port/input/input_sdl.c` (`swap_mouse_face`)). The keyboard and the
+  gamepad keep their bindings: they press the same PlayStation buttons on both discs, so the
+  gamepad's right face button (Circle) confirms and the bottom one (Cross) goes back, as on a
+  Japanese PS2. The recorded pad scripts hold buttons, not meanings (`port/input/pad_script.h`).
+  [DIVERGENCES.md](DIVERGENCES.md) GL-11 records the convention.
+- **Rows.** The Circle goes back row, the 50 Hz Video mode row and the game's Language row are not
+  shown (`lt_ext_has_circle_back`, `has_50hz_row`, `has_game_language`); the Menu language row is
+  shown on both discs (`port/ui/settings.c` (`optShown`, `ui_settings_opt_shown`)).
+- **Glyphs.** The button pictures are the Japanese sheet's (`Tex_menu01/option.tm2`): rows 155,
+  321, 320 and 319 (Cross, Circle, Square, Triangle, 32 x 15 texels shown 30 high), 326, 323, 325
+  and 324 (L1, R1, L2, R2, 64 x 20 shown 40 high) and the arrows 278 and 279 (20 x 20, 40 high),
+  each at its row's own `dispH` (`IcoGlyphRow.disp_h`; `port/ui/layout_ext.c` reads
+  `IcoRegionInfo.glyph`, whose order `_Static_assert` ties to `LtExtGlyph`). The touch overlay's
+  buttons keep their physical labels and draw these pictures through the same calls.
+- **Text.** The game's menu words keep their texels; the port's pages, notes, prompts and popups
+  are in the menu language (Japanese unless another is chosen) in the sheets' look with the
+  Japanese sheets' ink, `kSheetInk[UI_SHEET_JA]` ([The menus' look](#the-menus-look)). The title's
+  copyright line is two rows on this disc (18 and 19), placed together (`ROW_TITLE_COPYRIGHT2`).
 
 ## The game's layout hooks
 
@@ -581,6 +644,8 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
 
 - `ui` (`test/ui_test.c`): the embedded fonts, UTF-8 decoding, measuring, the string tables, the
   layout extension through the real `layout_texture.c`, a Japanese popup body's line break.
+  `ui_jpn` (`ui_test jpn`): the glyph rows and rectangles, the table sizes and the pad convention
+  on the Japanese disc.
 - `strings_complete` (`test/strings_complete_test.c`): every table defines every id with the
   English entry's conversions, the serial notes on both discs, the sheet language, the menu
   language's rule, the Japanese line-break rules.
@@ -595,10 +660,22 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
 - `settings_render` (`test/settings_photo_test.c` with `SETTINGS_RENDER`): every screen through rd
   on a Vulkan device, written as PNGs, the words as sheet strips in the scene list, photo mode's
   panel in every language.
+- `settings_jpn`, `settings_extras_jpn`, `settings_extra_jpn`, `settings_render_jpn` (each program
+  with `jpn`): the Japanese disc over the fixture's tables at its numbers (`fxLayout`, `fxRow`):
+  the rows it has not and the Menu language row, Circle confirming and Cross or Triangle going
+  back, the title's rows and the copyright's halves placed, the notes naming SCPS-11003, Extras,
+  the mouse (a click is Circle; the buttons traded in menus only), the prompts' Circle, the menu
+  language Japanese by default (`settings_title_jpn.png`, `settings_main_jpn.png`).
 - `menu_text` (`test/menu_text_test.c`): the menu text table against the boot ELF's rows, every
   string drawable, the hook through the real `layout_texture.c`.
 - `menu_look` (`test/menu_look_test.c`, `test/menu_sheets.c`): the menus' strips against the
   player's sheets through the sheet shader's CPU reference; pins the sheet constants.
+- `menu_text_jpn`, `menu_look_jpn` (`test/menu_jpn_test.c`, with `test/menu_sheets.c`): over the
+  Japanese boot ELF's tables (`ICO_BASE_ELF_JPN`), the region's layouts by their procedures, the
+  title, pause and memory card rows, the glyph rows' rectangles and heights, no row drawn from the
+  menu text table; with the Japanese image (`ICO_DISC_IMAGE_JPN`) each glyph rectangle's ink, the
+  pause and title words' fill and rim, and `kSheetInk[UI_SHEET_JA]` held to them. 77 without
+  them.
 - `font_coverage` (`test/font_coverage_test.c`, `test/font_corpus/`): every character the port
   draws, in the six languages, has a glyph in one of the two fonts; a Japanese character is Noto
   Sans JP's own glyph. `font_audit` and `font_subset_ja` (`port/test/CMakeLists.txt`) check the
@@ -606,6 +683,8 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
 - `font_edge` (`test/font_edge_test.c`): plain text on the output at Enhanced 1080p and 4K, and
   the overlay unmirrored.
 - `gallery` (`test/gallery_test.c`): the music gallery's list from the base ELF's tables.
+  `gallery_jpn` (`gallery_test --jpn`): both discs' 105 `adpcmFile` paths equal row for row (the
+  names are keyed by the row), then the list from the Japanese tables and image.
 - `gallery_sweep` (`test/gallery_sweep.py`), `credits_headless` (`test/credits_headless.py`, with
   `test/headless_common.py`): the headless game through Extras > Music and Extras > Credits.
 - `ui_mouse` (`test/ui_mouse_test.c`): the pointer's arithmetic and hit test.

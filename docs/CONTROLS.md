@@ -77,6 +77,15 @@ button confirms and the bottom face button goes back, and on the keyboard E
 confirms and Space goes back (unless you changed them under Remap
 controls). The mouse works the same with both discs: the left button
 chooses, the right button goes back.
+In the menus this port adds (Options, the title screen's extras, the
+model viewer, Character Customization), Triangle still goes back too; the
+game's own menus go back with Cross only, as on the Japanese PS2. Escape
+(and Back on Android) goes back as Cross does.
+
+In photo mode, Circle saves a picture, and Cross, Triangle or Start
+leaves. The mouse still saves with the left button and leaves with the
+right one.
+
 The **Circle goes back** row is not in Options with the Japanese disc,
 since Circle confirms there.
 

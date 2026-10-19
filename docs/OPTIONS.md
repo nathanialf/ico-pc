@@ -13,7 +13,7 @@ Up and Down move between rows. Left and Right change a value. Cross opens
 a page or confirms. Triangle goes back, and so does Circle (see **Circle
 goes back** under [Controls](#controls)). On the Japanese disc it is the
 other way round, as on the Japanese PS2 release: Circle opens a page or
-confirms, and Cross goes back
+confirms, and Cross goes back. Triangle still goes back in Options too
 ([more](CONTROLS.md#the-japanese-disc)).
 
 In a released download, the version of the game is shown in small grey

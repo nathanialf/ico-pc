@@ -186,7 +186,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `appearance_test.c`: the recolour on synthetic CLUTs: identity, coverage, swatches, randomize
   (`appearance`).
 - `credits_test.c`: `staffroll.c` over a short table with the port credit appended, and the
-  credits row's lock (`credits`).
+  credits row's lock (`credits`); with `jpn`, the same on the Japanese disc's region: STAFF1 58,
+  the song 47, the scene layout 52, the roll offset 151,050 ms, the roll start's log line
+  (`credits_jpn`).
 - `door_grace_test.c`: the doorway fix's arm and grace and a copy of the exit check's guard
   (`door_grace`).
 - `hand_ik_test.c`: the hand records as `ACTGame_ConnectHand` sets them through the real
@@ -198,7 +200,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   boot (`kanban_boot`).
 - `model_viewer_cam_test.c`: the viewer's camera step without the game (`model_viewer_cam`).
 - `model_viewer_test.c`: the viewer's table against its motion-kind blocks and the game's table
-  sizes, its names in five languages (`model_viewer`).
+  sizes, its names in five languages (`model_viewer`); its Japanese model column is checked by
+  `tools/gen_mv_jpn.py --check` against both ELFs' `modelData` (`model_viewer_jpn`).
 - `model_viewer_effects_test.c`: a motion's effects with no stage animation loaded
   (`frameDependSequence.c` and `stageMultiBgaManager.c` compiled in over stubs): the stage
   animation entries' guard (no write, the slot kept, its log line once), and every motion of every
@@ -610,7 +613,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `font_edge_test.c`: the port's plain text at the output's resolution on a device (`font_edge`).
 - `gallery_sweep.py`: every stream and a sample of every bank in one headless run
   (`gallery_sweep`).
-- `gallery_test.c`: the music gallery's list from the base ELF's tables (`gallery`).
+- `gallery_test.c`: the music gallery's list from the base ELF's tables (`gallery`); with
+  `--jpn`, both discs' 105 `adpcmFile` paths compared row for row, then the list from the
+  Japanese tables and image (`gallery_jpn`).
+- `menu_jpn_test.c`: the Japanese disc's menus: the region's layouts, rows and glyph rows against
+  the Japanese ELF's tables, no row from the menu text table (`menu_text_jpn`); with the Japanese
+  image, the glyph rectangles' ink and the Japanese sheets' light ink, held to
+  `kSheetInk[UI_SHEET_JA]` (`menu_look_jpn`).
 - `menu_look_test.c`: the menus' Arimo text against the game's menu sheets from the disc
   (`menu_look`); `menu_sheets.c`/`.h` decode the sheets.
 - `menu_text_test.c`: the game's menu words and the port's rows drawn in the sheets' look
@@ -619,9 +628,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   fake tables, CPU only (`settings`, `settings_extra`, `settings_extras`); `settings_test.c` also
   presses Right in photo mode through Deja vu and checks the popup's words (`ui__photo_film_word`);
   `settings_extra_test.c` steps Effects > Water reflections between Original and Sharp, checks its
-  note, its key and the page's fourteen rows (`testWaterReflections`).
+  note, its key and the page's fourteen rows (`testWaterReflections`). Each also runs with `jpn`
+  as the Japanese disc over the fixture's tables at that disc's numbers (`settings_jpn`,
+  `settings_extra_jpn`, `settings_extras_jpn`): the rows it has not, Menu language, Circle
+  confirming, Cross and Triangle going back, the title's rows, the notes' serial, the mouse and
+  the prompts.
 - `settings_photo_test.c`: the Settings screens through rd on a device, written as PNGs
-  (`settings_render`).
+  (`settings_render`); with `jpn`, the Japanese disc's title and main page (`settings_render_jpn`).
 - `strings_complete_test.c`: every language's table defines every `UiStrId`, none empty but
   `UI_STR_NONE`, each with the English entry's printf conversions; the four pack notes filled
   with each disc's serial (`ui_str_serial`); the sheet language's default and setter; the menu
@@ -630,7 +643,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `ui_mouse_test.c`: the pointer's arithmetic in the menus (`ui_mouse`).
 - `ui_test.c`: the embedded fonts, UTF-8, the runtime text; each language's own Deja vu string
   (`UI_STR_PHOTO_FILM_DEJA`); a Japanese popup body wider than the panel takes a second line, an
-  English one keeps its one (`ui`).
+  English one keeps its one (`ui`); with `jpn`, the glyph rows, the table sizes and the pad
+  convention on the Japanese disc (`ui_jpn`).
 - Helpers: `settings_fixture.c`/`.h`, `headless_common.py`.
 
 ## Render gates
@@ -690,13 +704,16 @@ has their defaults; the registrations are in `port/*/CMakeLists.txt`):
   `content_table_chains` and the headless game runs below skip; `sndn2`, `fmv`, `shadow_spawn` and
   `rd_mesh` run only their synthetic part, and `tables_loader` reads the base ELF instead.
 - `ICO_DISC_IMAGE_JPN`, the Japanese image (`baserom/Ico_JPN.iso`). Without it `vfs_disc_jpn`,
-  `vfs_disc_jpn_bin`, `vfs_disc_jpn_cue`, `vfs_disc_jpn_chd`, `archive_disc_jpn` and
-  `archive_manifest_jpn` skip.
+  `vfs_disc_jpn_bin`, `vfs_disc_jpn_cue`, `vfs_disc_jpn_chd`, `archive_disc_jpn`,
+  `archive_manifest_jpn` and `menu_look_jpn` skip, and `gallery_jpn` leaves out the disc checks.
 - `ICO_BASE_ELF`, the PAL base ELF: with pyelftools, `tables_loader` and `tables_manifest` are
   built from it (`port/data/CMakeLists.txt`); `gallery` reads its tables.
 - `ICO_BASE_ELF_JPN` and `ICO_DISC_IMAGE_JPN`, the Japanese base ELF and image (defaults
   `baserom/jpn/baseelf.elf`, `baserom/Ico_JPN.iso`): `tables_loader_jpn` (through the image when
-  present) and `tables_manifest_jpn`, both skipped without the ELF.
+  present) and `tables_manifest_jpn`, both skipped without the ELF; `menu_text_jpn`,
+  `menu_look_jpn` and `gallery_jpn` (with the PAL ELF too) skip without it, and
+  `model_viewer_jpn` (`tools/gen_mv_jpn.py --check`, both ELFs through `gen_data_c.py`, so
+  pyelftools) checks the model viewer's Japanese column.
 - `ICO_TEXPACK_DIR`, a PCSX2 pack's replacements folder: `texpack_disc`, `texpack_e2e`,
   `texpack_pack_files`.
 - `ICO_FOG_DUMP`, a player dump with the depth fog: `rd_fog_depth_copy_dump` and `_d24s8` (skipped
