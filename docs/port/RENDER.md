@@ -1017,10 +1017,12 @@ it was asked for and why, the first 8 and then every 100th with the count so far
 `in the start-up set` or `in a replay's gathered keys` in place of `on first use in list 0`; the
 reason is the RHI's, read from `RhiStats` around the creation (`pipelinePoolFull`,
 `pipelineFailures`, `pipelineLastError`): `the RHI's pipeline pool is full (<live> of <size>
-alive)`, `the driver's error <code>` (a `VkResult` or an `HRESULT`), `the RHI refused its
+alive)`, `the driver's error VkResult <n> (<name>)` (the signed value, named for the
+results a pipeline's creation can return, `rd_pipeline.c` (`vkResultName`)) or `the driver's error
+HRESULT 0x<8 hex digits>` (Direct3D 12), `the RHI refused its
 description (its line above)`, or, with no RHI call, `its description was not made (a shader
 module not loaded)`; a batch of the set shares one reason, and a batch that met both says `the
-batch met a full pipeline pool (<n> times) and the driver's error <code>`. A key that failed is
+batch met a full pipeline pool (<n> times) and the driver's error ...`. A key that failed is
 never created again in the run: it stays in the cache as an entry without a pipeline (`pipe.id`
 0, no slot of the RHI's pool), found by the same hash look-up as a made key, so its draws, the set
 and a replay's gathered keys find it in O(1) and skip it (`port/render/rd_pipeline.c`

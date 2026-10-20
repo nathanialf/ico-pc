@@ -1313,6 +1313,30 @@ static void rhiPipeCounts(RhiStats *st)
     }
 }
 
+/* the name of a VkResult a pipeline's creation can return, " (NAME)", or
+ * "" (the renderer has no Vulkan header: the values from vulkan_core.h) */
+static const char *vkResultName(int64_t r)
+{
+    switch (r) {
+    case -1:
+        return " (VK_ERROR_OUT_OF_HOST_MEMORY)";
+    case -2:
+        return " (VK_ERROR_OUT_OF_DEVICE_MEMORY)";
+    case -3:
+        return " (VK_ERROR_INITIALIZATION_FAILED)";
+    case -4:
+        return " (VK_ERROR_DEVICE_LOST)";
+    case -13:
+        return " (VK_ERROR_UNKNOWN)";
+    case -1000012000:
+        return " (VK_ERROR_INVALID_SHADER_NV)";
+    case 1000297000:
+        return " (VK_PIPELINE_COMPILE_REQUIRED)";
+    default:
+        return "";
+    }
+}
+
 /* why the creations between a and b failed: the pool full, the driver's
  * error, a description the RHI refused, or none of the RHI's (the
  * renderer's description was not made: a module not loaded) */
@@ -1320,9 +1344,13 @@ static void failReason(const RhiStats *a, const RhiStats *b, char *out, size_t s
 {
     const uint64_t full = b->pipelinePoolFull - a->pipelinePoolFull;
     const uint64_t other = b->pipelineFailures - a->pipelineFailures;
-    char drv[64];
-    if (b->pipelineLastError != 0) {
-        snprintf(drv, sizeof(drv), "the driver's error %lld", (long long)b->pipelineLastError);
+    char drv[96];
+    if (b->pipelineLastError != 0 && rhi_backend() == RHI_BACKEND_D3D12) {
+        snprintf(drv, sizeof(drv), "the driver's error HRESULT 0x%08X",
+                 (unsigned)(uint32_t)b->pipelineLastError);
+    } else if (b->pipelineLastError != 0) {
+        snprintf(drv, sizeof(drv), "the driver's error VkResult %lld%s",
+                 (long long)b->pipelineLastError, vkResultName(b->pipelineLastError));
     } else {
         snprintf(drv, sizeof(drv), "the RHI refused its description (its line above)");
     }
@@ -1575,7 +1603,7 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
         firstUseLine(k, ms);
     }
     activityDone();
-    char when[64] = "", why[160] = "";
+    char when[64] = "", why[224] = "";
     if (!p.id) {
         char where[40];
         useWhere(where, sizeof(where));
@@ -2035,7 +2063,7 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             rhiPipeCounts(&st1);
             /* the batch's failures share one reason (failReason says when
                the batch had two) */
-            char why[160];
+            char why[224];
             failReason(&st0, &st1, why, sizeof(why));
             batchTimes(bk, bms, nb, first + 1, i, m, batchMs, batch.threads);
             if (times != NULL && i < m &&
