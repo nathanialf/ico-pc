@@ -388,6 +388,10 @@ store (`backend`, `unlock_credits`):
 | `audio_sync` | `true`: the audio renders on the game's clock, once per vsync with the queue and cushion of the push, instead of on the audio device's (exported as `ICO_AUDIO_SYNC=1`; `false`, the default, exports `0`); for comparing the two when a report is about sound ([AUDIO.md](AUDIO.md#the-outputs-clock)) |
 | `unlock_credits` | as `[dev] unlock_credits` |
 
+At start `ico_ini_export` logs the `[dev]` keys of `config.toml` the game itself writes (`pipeline_set`,
+`vu_prepass`, `gpu_robust`) in one line, `config: [dev] keys kept from an earlier start: pipeline_set =
+lazy, ...`, so a log shows whether an old fallback is in force; no line when none is set.
+
 (`port/platform/host_config.c` (`ini_map`, `export_dump_keys`, `export_audio_keys`,
 `ico_ini_export`, `ico_host_fixed_clock`, `ico_dev_env_value`); `port/platform/main_host.c`, header comment,
 `record_open`, `use_iso_mode`, `android_keep_image`.) The program writes the ini only to store

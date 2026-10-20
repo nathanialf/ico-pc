@@ -407,8 +407,16 @@ again or destroyed the thread is held out of its waits for at most 100 ms (`vkr_
 still in a wait then stops the timing and the swapchain goes on; at shutdown a thread that does not
 end is left to end on its own (`port/rhi/vk/vk_swapchain.c`, the display's timing).
 
-**Pipeline cache.** The window sets `pipelines.vkcache` in the [user folder](ARCHITECTURE.md#terms)
-(Android: the app's cache folder). `rhi_init` loads it when the file is 32 bytes to 64 MB and its
+**Pipeline cache.** The window sets `pipelines-<build>.vkcache` in the [user folder](ARCHITECTURE.md#terms)
+(Android: the app's cache folder), where `<build>` is `ICO_BUILD_COMMIT` (`git describe`: tag, commits since, short
+hash, `-dirty`) with every character but letters, digits, `.` and `-` made `_`
+(`port/platform/window_host.c` (`ico_window_open`)); a build without git names it `unknown`. `rhi_init`
+first removes every other `pipelines*.vkcache` and `pipelines*.vkcache.tmp` in that folder (the current
+file and its `.tmp` stay, files of other names stay, a folder that cannot be listed logs
+`pipeline cache: could not list <dir>; no other cache dropped` and goes on, a missing one nothing), one
+line each: `pipeline cache: dropped <name> (another version of the game); this start prepares the graphics
+from nothing` (`port/rhi/vk/vk_pipeline.c` (`vkr_cache_drop_others`); not done for a path whose file name does
+not start `pipelines` and end `.vkcache`). It then loads the file when the file is 32 bytes to 64 MB and its
 header (`VkPipelineCacheHeaderVersionOne`: header size, version one, vendor id, device id,
 `pipelineCacheUUID`) names this device; anything else logs "is for another device or driver" and
 starts empty, as does data the driver refuses. Every pipeline is created through it, and
@@ -636,7 +644,7 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 | test | checks |
 | --- | --- |
 | `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames; seven of the cells' pipelines come from one `rhi_create_pipelines` call with an uncreatable description among them (only that one fails, the ids are distinct, the finished count never goes back); the dynamic state cell (`dynamicCell`: sixteen cells of the renderer's depth tests, Z writes, blends and masks drawn with every state static, from one `rhi_create_pipelines` batch with `maxThreads` 1 on one thread, then with the device's dynamic groups set after each bind: texel-equal, three commands a group after each static bind, none for a repeat; skipped but for the static pass without dynamic state) |
-| `rhi_vk_test.c` | the common cells on Vulkan, a hazard-tracking cell, the render-area check (a pass wider than its colour target, one taller than its depth: each clamped and counted, no validation error; a fitting pass untouched), and the pipeline cache file (written while up by `rhi_pipeline_cache_save` and at shutdown, read back, another device's or garbage ignored); ctest `rhi_vk`, and `rhi_vk_nodual`, `rhi_vk_d24s8`, `rhi_vk_mali` under the fake switches |
+| `rhi_vk_test.c` | the common cells on Vulkan, a hazard-tracking cell, the render-area check (a pass wider than its colour target, one taller than its depth: each clamped and counted, no validation error; a fitting pass untouched), and the pipeline cache file (written while up by `rhi_pipeline_cache_save` and at shutdown, read back, another device's or garbage ignored; the drop of other builds' cache files in a temporary folder: the current file, its `.tmp` and unrelated names stay); ctest `rhi_vk`, and `rhi_vk_nodual`, `rhi_vk_d24s8`, `rhi_vk_mali` under the fake switches |
 | `rhi_vk_swapchain_test.c` | the window path on SDL's offscreen driver: frames, readback order, surface release and recreation, suboptimal and lost presents, resizes, the surface poll, submits per frame, the present-wait stand-in and a hanging wait; ctest `rhi_vk_swapchain` |
 | `rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` over the mode sets drivers offer, and `vkr_present_wait_wanted`; ctest `rhi_vk_present_mode` |
 | `rhi_vk_enum_test.c` | every `rhi.h` enumeration has a Vulkan mapping; the layer classifiers and `rhi_layer_switched_on`; ctest `rhi_vk_enum` |

@@ -21,6 +21,7 @@
 #include "host_loop.h"
 #include "hotkeys.h"
 #include "ico_credits.h"
+#include "ico_build_commit.h" /* ICO_BUILD_COMMIT, generated (port/platform/CMakeLists.txt) */
 #include "ico_version.h" /* ICO_VERSION_LABEL, generated (CMakeLists.txt; "" in a development build) */
 #include "input.h"
 #include "input_record.h"
@@ -1616,12 +1617,13 @@ open_window:
     /* the replay, the present and the FMV picture run on the host stack in
        the host FP mode, not on the game's 256 KB fiber stacks */
     rd_set_host_call(ico_sched_call_on_host);
-    /* the Vulkan pipeline cache in the per-user folder: a later start
-       creates the renderer's pipelines from it (rhi_set_pipeline_cache_path;
+    /* the Vulkan pipeline cache in the per-user folder: a later start of
+       the same build creates the renderer's pipelines from it
+       (rhi_set_pipeline_cache_path;
        D3D12 ignores it). Android: the app's cache folder, which the system
        may empty when space runs low (android_paths.h) */
     {
-        char pref[ICO_PATH_MAX], cache[ICO_PATH_MAX + 32];
+        char pref[ICO_PATH_MAX], cache[ICO_PATH_MAX + 96];
 
 #ifdef __ANDROID__
         if (ico_android_cache_dir(pref, sizeof(pref)) != 0) {
@@ -1630,7 +1632,28 @@ open_window:
 #else
         ico_host_pref_dir(pref, sizeof(pref));
 #endif
-        snprintf(cache, sizeof(cache), "%s/pipelines.vkcache", pref);
+        /* the file is this build's: another build's shader set does not
+           match a cache the driver wrote for it, so the renderer drops the
+           other pipelines*.vkcache files of the folder (vk_pipeline.c
+           vkr_cache_drop_others). The build is the commit
+           (ICO_BUILD_COMMIT, "git describe": the tag, the commits since and
+           the short hash; "unknown" without git, where every such build
+           shares a file), with every character a file name does not take
+           made "_" */
+        {
+            char build[64];
+            size_t i;
+
+            snprintf(build, sizeof(build), "%s", ICO_BUILD_COMMIT);
+            for (i = 0; build[i] != '\0'; i++) {
+                const char c = build[i];
+                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                      c == '.' || c == '-')) {
+                    build[i] = '_';
+                }
+            }
+            snprintf(cache, sizeof(cache), "%s/pipelines-%s.vkcache", pref, build);
+        }
         rhi_set_pipeline_cache_path(cache);
         ico_diag_set_pipeline_cache(0, cache);
     }

@@ -515,8 +515,11 @@ process is started): the step and its value (`blend:vulkan`, then `backend:d3d12
 `atexit` steps before the relaunch, nothing at exit when no step is left, and the box when the
 relaunch fails (`port/platform/test/diag_test.c` (`loss_child`)).
 
-An end without a crash report (the system or the driver ends the process) is caught by the start-up
-activity file, `logs/startup-activity.txt`: the version's line, then the activity note. While the
+A start of another version than the activity file's (its version line) logs that the other version's
+pipeline cache file is dropped and the graphics prepared from nothing, with or without an ended run
+in the note (`port/platform/diag_host.c`; the drop itself is `vkr_cache_drop_others`,
+[RHI.md](RHI.md#vulkan)). An end without a crash report (the system or the driver ends the
+process) is caught by the start-up activity file, `logs/startup-activity.txt`: the version's line, then the activity note. While the
 start-up pipeline set is created (`ICO_DIAG_ACTIVITY_STARTUP`) each batch's note (its range of the
 set and its first and last key, [RENDER.md](RENDER.md#pipelines)) replaces the text (a careful
 set's file adds `set: careful` after it), and the file is deleted when the set is done; a lazy run (`ICO_DIAG_ACTIVITY_LAZY`) records

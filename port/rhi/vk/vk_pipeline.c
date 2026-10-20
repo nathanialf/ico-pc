@@ -1,6 +1,7 @@
 /* vk_pipeline.c: bind group layouts, transient bind groups and graphics
  * pipelines for the Vulkan backend. */
 #include "vk_internal.h"
+#include "rhi_vk.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +14,8 @@
 
 #else
 
+#include <dirent.h>
+#include <errno.h>
 #include <unistd.h>
 
 #endif
@@ -33,6 +36,117 @@ void rhi_set_pipeline_cache_path(const char *path)
     if (path && strlen(path) + 5 < sizeof(s_cachePath)) {
         strcpy(s_cachePath, path);
     }
+}
+
+/* ------------------------------------------------ the other builds' caches
+ * The window names the file pipelines-<build>.vkcache, so a cache written by
+ * another build (its shader set differs; the driver would be handed the stale
+ * blob and every new pipeline) is never read.  This removes them. */
+static const char *vkr_base_name(const char *path)
+{
+    const char *b = path;
+    for (const char *p = path; *p; p++) {
+        if (*p == '/' || *p == '\\') {
+            b = p + 1;
+        }
+    }
+    return b;
+}
+
+static bool vkr_ends_with(const char *s, const char *tail)
+{
+    const size_t n = strlen(s), t = strlen(tail);
+    return n >= t && strcmp(s + n - t, tail) == 0;
+}
+
+/* a cache file of some build: pipelines*.vkcache, or its .tmp */
+static bool vkr_is_cache_name(const char *name)
+{
+    return strncmp(name, "pipelines", 9) == 0 &&
+           (vkr_ends_with(name, ".vkcache") || vkr_ends_with(name, ".vkcache.tmp"));
+}
+
+uint32_t vkr_cache_drop_others(const char *path, char *log, size_t logCap)
+{
+    uint32_t dropped = 0;
+    char dir[1024];
+    const char *cur = path ? vkr_base_name(path) : "";
+    if (log && logCap) {
+        log[0] = '\0';
+    }
+    /* only the pipelines-<build>.vkcache the window names: any other file
+       name (a test's) is left alone along with its neighbours */
+    if (!path || strncmp(cur, "pipelines", 9) != 0 || !vkr_ends_with(cur, ".vkcache") ||
+        (size_t)(cur - path) >= sizeof(dir)) {
+        return 0;
+    }
+    memcpy(dir, path, (size_t)(cur - path));
+    dir[cur - path] = '\0';
+    if (dir[0] == '\0') {
+        strcpy(dir, ".");
+    }
+    char tmpName[sizeof(dir)];
+    snprintf(tmpName, sizeof(tmpName), "%s.tmp", cur);
+
+    /* names first, removals after: a removal while listing may skip entries */
+    enum { MAXN = 64 };
+
+    static char names[MAXN][256];
+    uint32_t n = 0;
+#ifdef _WIN32
+    char pat[sizeof(dir) + 16];
+    WIN32_FIND_DATAA fd;
+    snprintf(pat, sizeof(pat), "%.*spipelines*", (int)(cur - path), path);
+    HANDLE h = FindFirstFileA(pat, &fd);
+    if (h == INVALID_HANDLE_VALUE) {
+        if (GetLastError() != ERROR_FILE_NOT_FOUND && GetLastError() != ERROR_PATH_NOT_FOUND) {
+            VKR_LOG("pipeline cache: could not list %s; no other cache dropped", dir);
+        }
+        return 0;
+    }
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && vkr_is_cache_name(fd.cFileName) &&
+            strcmp(fd.cFileName, cur) != 0 && strcmp(fd.cFileName, tmpName) != 0 && n < MAXN &&
+            strlen(fd.cFileName) < sizeof(names[0])) {
+            strcpy(names[n++], fd.cFileName);
+        }
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+#else
+    DIR *d = opendir(dir);
+    if (!d) {
+        if (errno != ENOENT) {
+            VKR_LOG("pipeline cache: could not list %s; no other cache dropped", dir);
+        }
+        return 0;
+    }
+    for (struct dirent *e; (e = readdir(d)) != NULL;) {
+        if (vkr_is_cache_name(e->d_name) && strcmp(e->d_name, cur) != 0 &&
+            strcmp(e->d_name, tmpName) != 0 && n < MAXN && strlen(e->d_name) < sizeof(names[0])) {
+            strcpy(names[n++], e->d_name);
+        }
+    }
+    closedir(d);
+#endif
+    for (uint32_t i = 0; i < n; i++) {
+        char full[sizeof(dir) + sizeof(names[0])];
+        const size_t plen = (size_t)(cur - path);
+        memcpy(full, path, plen);
+        strcpy(full + plen, names[i]);
+        if (remove(full) == 0) {
+            VKR_LOG("pipeline cache: dropped %s (another version of the game); this start "
+                    "prepares the graphics from nothing",
+                    names[i]);
+            if (log && logCap > strlen(log) + strlen(names[i]) + 2) {
+                strcat(log, names[i]);
+                strcat(log, "\n");
+            }
+            dropped++;
+        } else {
+            VKR_LOG("pipeline cache: could not drop %s", names[i]);
+        }
+    }
+    return dropped;
 }
 
 /* the file's blob when its header (VkPipelineCacheHeaderVersionOne: header
@@ -90,6 +204,7 @@ void vkr_pipeline_cache_init(void)
     size_t size = 0;
     s_cacheLoaded = false;
     s_cacheFileSize = 0;
+    vkr_cache_drop_others(s_cachePath, NULL, 0);
     void *blob = vkr_cache_load(&size);
     VkPipelineCacheCreateInfo ci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,

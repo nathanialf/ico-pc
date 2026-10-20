@@ -3,6 +3,7 @@
 #ifndef PORT_RHI_VK_RHI_VK_H
 #define PORT_RHI_VK_RHI_VK_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -14,6 +15,14 @@ extern "C" {
 /* Number of validation-layer errors reported since rhi_init (still readable
  * after rhi_shutdown).  Always 0 when the layer is not installed. */
 uint32_t rhi_vk_validation_error_count(void);
+
+/* For rhi_vk_test's cache cell: the drop vkr_pipeline_cache_init makes.
+ * `path` is the cache file as rhi_set_pipeline_cache_path takes it; when its
+ * name is pipelines<...>.vkcache every other pipelines*.vkcache and
+ * pipelines*.vkcache.tmp in its folder is removed, with one log line each.
+ * Returns the number removed; the removed names, one per line, are copied to
+ * `log` (when not NULL; logCap bytes). */
+uint32_t vkr_cache_drop_others(const char *path, char *log, size_t logCap);
 
 /* For rhi_vk_swapchain_test: the next rhi_present reports
  * `result` (a VkResult value) instead of what the driver returned, once;

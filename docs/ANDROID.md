@@ -50,7 +50,9 @@ first ([where it is](#where-your-files-are)).
    minutes. After a few seconds the screen also says about how much time
    is left (a rough guess from how fast the count has gone so far) and
    that this happens once after an update. Leave the game open until the
-   count is done. Later starts skip it or show it only for a moment. If you
+   count is done. After an update the game starts this from nothing:
+   what was prepared before the update is thrown away. Later starts skip it or
+   show it only for a moment. If you
    close the game during it, the next start shows it again.
 2. The game asks you to choose your ICO disc image, the European release
    (SCES-50760), the Japanese release (SCPS-11003) or the Korean release

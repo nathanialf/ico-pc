@@ -46,8 +46,10 @@ take a few minutes. After a few seconds the screen also says about how
 much time is left, worked out from how fast the count has gone so far, so
 it is only a rough guess. The game keeps working meanwhile: leave it open
 until the count is done. On a phone the screen also says that this happens
-once after an update: the game keeps what was prepared, and later starts
-skip this screen or show it only for a moment. If you close the game while
+once after an update: the first start after an update prepares the
+graphics from nothing, because what was prepared before the update is
+thrown away. The game keeps what it prepares now, and later starts skip this
+screen or show it only for a moment. If you close the game while
 it says this, the next start shows it again. If the game closes by itself
 on this screen, see [The game closes by itself](#the-game-closes-by-itself).
 

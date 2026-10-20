@@ -186,7 +186,7 @@ Original, else 1/60 s; the rule is off under the CRT filter (`port/platform/wind
 240), resizable and high pixel density on the desktop and always fullscreen on mobile, where
 `window_mode` is ignored; a configured fullscreen mode is asked for at creation so the window
 manager sees it before mapping. It picks the backend from `[video] backend`, makes the device
-through `rd_init`, points the Vulkan pipeline cache at `pipelines.vkcache` in the [user
+through `rd_init`, points the Vulkan pipeline cache at `pipelines-<build>.vkcache` in the [user
 folder](ARCHITECTURE.md#terms) (the app's cache folder on Android), creates the whole reachable
 pipeline set before the first frame, runs the fog's self-test and logs one start-up line with the
 backend, adapter and options, then `window: present mode M` (`port/platform/window_host.c`

@@ -2101,6 +2101,14 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
         return 0;
     }
     if (prev[0] == '\0') {
+        if (ver[0] != '\0' && strcmp(ver, act_version) != 0) {
+            /* a clean end of another version: its graphics cache goes too
+               (vk_pipeline.c vkr_cache_drop_others) */
+            ico_diag_log("ico_pc: the previous start was version %s, this one is %s: the graphics "
+                         "cache of that version is dropped; this start prepares the graphics "
+                         "from nothing",
+                         ver, act_version);
+        }
         return 0;
     }
     if (strcmp(prev, act_lazy_exit_once) == 0) {
@@ -2129,19 +2137,25 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     if (strcmp(ver, act_version) != 0) {
         /* another version: its fixes may have removed the cause */
         if (strcmp(prev, act_lazy_exit) == 0) {
-            ico_diag_log("ico_pc: the previous run (version %s) created the pipelines as the "
-                         "frames needed them; trying the start-up set again on %s",
-                         ver[0] != '\0' ? ver : "unknown", act_version);
+            ico_diag_log(
+                "ico_pc: the previous run (version %s) created the pipelines as the "
+                "frames needed them; trying the start-up set again on %s (the graphics cache "
+                "of that version is dropped; this start prepares the graphics from "
+                "nothing)",
+                ver[0] != '\0' ? ver : "unknown", act_version);
         } else if (act_end_n[ICO_DIAG_END_PIPELINES] != 0) {
             /* an end while making the pipelines counts whatever the
                version (the setting outlives it): the policy's line says
                what this start does (ico_diag_startup_end_persist) */
-            ico_diag_log("ico_pc: the previous run ended while: %s (version %s)", prev,
-                         ver[0] != '\0' ? ver : "unknown");
+            ico_diag_log("ico_pc: the previous run ended while: %s (version %s); the graphics "
+                         "cache of that version is dropped",
+                         prev, ver[0] != '\0' ? ver : "unknown");
         } else {
-            ico_diag_log("ico_pc: the previous run ended while: %s (version %s); trying the "
-                         "start-up set again on %s",
-                         prev, ver[0] != '\0' ? ver : "unknown", act_version);
+            ico_diag_log(
+                "ico_pc: the previous run ended while: %s (version %s); trying the "
+                "start-up set again on %s (the graphics cache of that version is dropped; this "
+                "start prepares the graphics from nothing)",
+                prev, ver[0] != '\0' ? ver : "unknown", act_version);
         }
         return 0;
     }

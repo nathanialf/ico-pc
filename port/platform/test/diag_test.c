@@ -1795,8 +1795,9 @@ int main(int argc, char **argv)
         unsetenv("ICO_TEST_ACT_VERSION");
         s = read_file(log);
         CHECK(r == 0);
-        CHECK(strstr(s, "ico_pc: the previous run ended while: " BATCH_NOTE
-                        " (version test 1)\n") != NULL);
+        CHECK(strstr(s,
+                     "ico_pc: the previous run ended while: " BATCH_NOTE
+                     " (version test 1); the graphics cache of that version is dropped\n") != NULL);
         CHECK(strstr(s, "trying the start-up set again") == NULL);
         CHECK(strstr(s, "test: lazy 0") != NULL);
         run(argv[0], "actrecord", log);
@@ -1805,8 +1806,13 @@ int main(int argc, char **argv)
         r = run(argv[0], "actnext", log);
         unsetenv("ICO_TEST_ACT_VERSION");
         s = read_file(log);
-        CHECK(strstr(s, "ico_pc: the previous run (version test 1) created the pipelines as the "
-                        "frames needed them; trying the start-up set again on test 2\n") != NULL);
+        CHECK(
+            strstr(
+                s,
+                "ico_pc: the previous run (version test 1) created the pipelines as the "
+                "frames needed them; trying the start-up set again on test 2 (the graphics cache of "
+                "that version is dropped; this start prepares the graphics from "
+                "nothing)\n") != NULL);
         CHECK(strstr(s, "test: lazy 0") != NULL);
         {
             FILE *f = fopen(act, "rb");
@@ -1932,8 +1938,9 @@ int main(int argc, char **argv)
         r = run(argv[0], "actpipeset", log);
         s = read_file(log);
         CHECK(strstr(s, "test: lazy 0\n") != NULL);
-        CHECK(strstr(s, "ico_pc: the previous run ended while: " NOTE_2D " (version test 1)\n") !=
-              NULL);
+        CHECK(strstr(s,
+                     "ico_pc: the previous run ended while: " NOTE_2D
+                     " (version test 1); the graphics cache of that version is dropped\n") != NULL);
         CHECK(strstr(s, "trying the start-up set again") == NULL);
         CHECK(strstr(s, "this start only makes the pipelines as the game needs them") != NULL);
         CHECK(strstr(s, "test: config write") == NULL);

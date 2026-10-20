@@ -4,7 +4,8 @@
  * cache file (rhi_set_pipeline_cache_path: written by rhi_pipeline_cache_save
  * while the device is up and at shutdown, each with a version
  * one header, read back at the next init, a file of another device or of
- * garbage ignored and replaced).
+ * garbage ignored and replaced), and the drop of other builds' cache files
+ * (vkr_cache_drop_others).
  *
  * Exit 0 on success, 1 on a mismatch or a validation error, 77 (skipped)
  * when no Vulkan device can be created.  Set VK_ICD_FILENAMES to pick a
@@ -16,6 +17,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#ifdef _WIN32
+#include <direct.h>
+#define MKDIR(d) _mkdir(d)
+#else
+#define MKDIR(d) mkdir((d), 0755)
+#endif
 
 /* The barriers one render pass adds to a list, read from RhiStats. */
 static uint64_t passBarriers(RhiCommandList cl, RhiTexture target)
@@ -217,6 +225,105 @@ static int cacheCell(void)
     return failures + (int)rhi_vk_validation_error_count();
 }
 
+static void touchFile(const char *dir, const char *name)
+{
+    char p[256];
+    snprintf(p, sizeof(p), "%s/%s", dir, name);
+    FILE *fp = fopen(p, "wb");
+    if (fp) {
+        fputc(1, fp);
+        fclose(fp);
+    }
+}
+
+static int fileExists(const char *dir, const char *name)
+{
+    char p[256];
+    snprintf(p, sizeof(p), "%s/%s", dir, name);
+    FILE *fp = fopen(p, "rb");
+    if (fp) {
+        fclose(fp);
+    }
+    return fp != NULL;
+}
+
+/* The other builds' caches: with the file pipelines-<build>.vkcache, every
+ * other pipelines*.vkcache and pipelines*.vkcache.tmp in its folder goes
+ * (one log name each), the current file, its own .tmp and unrelated files
+ * stay; a missing folder and a file of another name drop nothing. */
+static int cacheDropCell(void)
+{
+    static const char *dir = "rhi_vk_test_cachedrop";
+    static const char *const old[] = {"pipelines-old.vkcache", "pipelines.vkcache",
+                                      "pipelines-old2.vkcache.tmp"};
+    static const char *const keep[] = {"pipelines-now.vkcache", "notes.txt", "other.vkcache"};
+    char path[256], logbuf[512];
+    int failures = 0;
+    MKDIR(dir);
+    for (size_t i = 0; i < sizeof(old) / sizeof(old[0]); i++) {
+        touchFile(dir, old[i]);
+    }
+    for (size_t i = 0; i < sizeof(keep) / sizeof(keep[0]); i++) {
+        touchFile(dir, keep[i]);
+    }
+    snprintf(path, sizeof(path), "%s/pipelines-now.vkcache", dir);
+    const uint32_t n = vkr_cache_drop_others(path, logbuf, sizeof(logbuf));
+    rhi_test_log("cache drop cell: dropped %u: %s\n", n, logbuf);
+    if (n != 3) {
+        rhi_test_log("FAIL cache drop cell: dropped %u files, expected 3\n", n);
+        failures++;
+    }
+    for (size_t i = 0; i < sizeof(old) / sizeof(old[0]); i++) {
+        if (fileExists(dir, old[i]) || strstr(logbuf, old[i]) == NULL) {
+            rhi_test_log("FAIL cache drop cell: %s is still there or was not logged\n", old[i]);
+            failures++;
+        }
+    }
+    for (size_t i = 0; i < sizeof(keep) / sizeof(keep[0]); i++) {
+        if (!fileExists(dir, keep[i])) {
+            rhi_test_log("FAIL cache drop cell: %s was removed\n", keep[i]);
+            failures++;
+        }
+    }
+    /* a file of another name (the cache cell's) leaves its neighbours */
+    snprintf(path, sizeof(path), "%s/custom.vkcache", dir);
+    touchFile(dir, "pipelines-old.vkcache");
+    if (vkr_cache_drop_others(path, NULL, 0) != 0 || !fileExists(dir, "pipelines-old.vkcache")) {
+        rhi_test_log("FAIL cache drop cell: a file not named pipelines*.vkcache dropped one\n");
+        failures++;
+    }
+    /* a folder that does not exist: nothing, no crash */
+    if (vkr_cache_drop_others("rhi_vk_test_nonexistent/pipelines-now.vkcache", NULL, 0) != 0) {
+        rhi_test_log("FAIL cache drop cell: a missing folder dropped something\n");
+        failures++;
+    }
+    /* rhi_init does it: the old file is gone after the init */
+    snprintf(path, sizeof(path), "%s/pipelines-now.vkcache", dir);
+    rhi_set_pipeline_cache_path(path);
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test cache drop"};
+    if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
+        rhi_test_log("FAIL cache drop cell: init\n");
+        failures++;
+    } else {
+        if (fileExists(dir, "pipelines-old.vkcache")) {
+            rhi_test_log("FAIL cache drop cell: rhi_init left the other build's cache\n");
+            failures++;
+        }
+        rhi_shutdown();
+    }
+    rhi_set_pipeline_cache_path(NULL);
+    for (size_t i = 0; i < sizeof(keep) / sizeof(keep[0]); i++) {
+        char p[256];
+        snprintf(p, sizeof(p), "%s/%s", dir, keep[i]);
+        remove(p);
+    }
+    snprintf(path, sizeof(path), "%s/pipelines-now.vkcache", dir);
+    remove(path);
+    snprintf(path, sizeof(path), "%s/pipelines-old.vkcache", dir);
+    remove(path);
+    return failures;
+}
+
 /* Android: under ICO_VK_FAKE_LIMITS=mali (ctest rhi_vk_mali) the
  * device has a Mali-G68's limits, the cells above still draw within them,
  * and what goes past them is refused by the limit's name: a pipeline with
@@ -330,5 +437,6 @@ int main(void)
     if (rc != 0) {
         return rc;
     }
-    return (hazardCell() || passAreaCell() || cacheCell() || limitsCell()) ? 1 : 0;
+    return (hazardCell() || passAreaCell() || cacheCell() || cacheDropCell() || limitsCell()) ? 1
+                                                                                              : 0;
 }

@@ -793,6 +793,29 @@ void ico_ini_export(const IcoIni *ini, const char *path, int r)
         if (t != NULL && ico_toml_get(t, "audio.device") != NULL) {
             put_env("ICO_AUDIO_DEVICE", ico_toml_get(t, "audio.device"));
         }
+        /* [dev] keys the game itself wrote after a start that ended while it
+           prepared the graphics (window_host.c): an old fallback still in
+           force shows in the log */
+        {
+            static const char *const kept[] = {"dev.pipeline_set", "dev.vu_prepass",
+                                               "dev.gpu_robust"};
+            char line[256] = "";
+            size_t i;
+
+            for (i = 0; t != NULL && i < sizeof(kept) / sizeof(kept[0]); i++) {
+                const char *v = ico_toml_get(t, kept[i]);
+
+                if (v != NULL && v[0] != '\0') {
+                    const size_t len = strlen(line);
+
+                    snprintf(line + len, sizeof(line) - len, "%s%s = %s", len ? ", " : "",
+                             kept[i] + 4, v);
+                }
+            }
+            if (line[0] != '\0') {
+                fprintf(stderr, "config: [dev] keys kept from an earlier start: %s\n", line);
+            }
+        }
         ico_toml_free(t);
         put_env("ICO_FIXED_CLOCK", ico_host_fixed_clock(ini) ? "1" : "0");
     }
