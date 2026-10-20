@@ -449,6 +449,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   one key and of two, at 185 degrees a tick with their places in the list changing every tick,
   both forward the long way; the ride of `box.c` (0.5 a tick of push, 0.98 friction, radius 10)
   up to 125 degrees a tick blended every pair, then a camera cut, and each pair after it forward.
+  The seams (`testStillSeams`, drawn through the game's screen and clip matrices): two still prelit
+  parts with different model to world matrices, the camera orbiting 28 degrees, are still draws at
+  alpha 0.5, each bit for bit the same part unmatched (the tick's block re-based, `camCurDraw`);
+  their shared vertex at a cell's middle lands in the expected cell through `vu1_ref` (placement);
+  two meshes of one model matrix with other centroids have bit-equal camera and model rows, and a
+  point a quarter of an ulp from a cell's edge lands in one cell in both (the mechanism).
 - `rd_layout_test.c`: the layout frame from the game's layout calls (`rd_layout`).
 - `rd_mesh_test.c`: the mesh path from `Packet.c` to the VU shaders (`rd_mesh`, sharded), each
   device case's frame replayed again with the VU vertex pre-pass switched, the picture byte for

@@ -229,7 +229,7 @@ While the camera turns or moves, thin white or light lines can flicker
 along the edges where two pieces of a wall or a floor meet. Each line is a
 gap a fraction of a pixel wide between the two pieces, and the light colour
 is the room's mist showing through it. The game draws the still parts of a
-room the same way in every picture between its own steps, so their edges
+room the same way in every picture between its own steps, so most edges
 stay closed. If you still see such lines:
 
 1. Set **Options > Display > Frame rate** to **Original** and turn the
@@ -238,9 +238,12 @@ stay closed. If you still see such lines:
    the game's own pictures too.
 2. Set **Frame rate** back, and while the lines show press **F12**
    ([Save a picture of a problem](#save-a-picture-of-a-problem)).
-3. Send a [problem report](#send-a-problem-report) with the `.zip` and the
-   newest `report-` file (or `ico-pc.log`), and say which Frame rate showed
-   the lines and where in the game you were.
+3. Send a [problem report](#send-a-problem-report) with the `.zip` F12
+   saved (it holds that moment and the moment before it, so the pictures in
+   between can be drawn again), the picture ending in `-present.png` (the
+   lines as your screen showed them) and the newest `report-` file (or
+   `ico-pc.log`), and say which Frame rate showed the lines and where in the
+   game you were.
 
 ## Send a problem report
 
@@ -281,13 +284,16 @@ game saves three files in a `dumps` folder in the folder with your saves
 ([where that is](PORTABLE_MODE.md#where-your-saves-are)), all named
 `frame-` and the date and time:
 
-- a `.zip` file with a file that lets the developers see exactly how that
-  moment was drawn, and a copy of the log (`ico-pc.log`);
+- a `.zip` file with files that let the developers see exactly how that
+  moment and the moment before it were drawn (and so the pictures the game
+  draws between them), and a copy of the log (`ico-pc.log`);
 - a `.png` picture of the whole frame the game drew at that moment;
 - a picture ending in `-present.png`: that moment as your window showed it.
 
 Attach the `.zip` to your report on the issues page. The pictures are
-optional, and can be very large when the Resolution is high.
+optional, and can be very large when the Resolution is high; for something
+that shows only while the picture moves (lines or flicker), attach the
+`-present.png` too.
 
 The files contain pictures from your disc, so use them only for a bug
 report, and do not share them anywhere else.
