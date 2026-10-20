@@ -8,12 +8,19 @@ Every time the game runs, it writes what it is doing into a text file
 named `ico-pc.log`, in a `logs` folder. Where that folder is:
 
 - Windows: beside the program, so the file is `x64\logs\ico-pc.log`.
-- Linux and Steam Deck: beside `ico_pc`.
+- Linux and Steam Deck: beside `ico_pc`, or for the AppImage, beside the
+  AppImage file.
 - Mac: in the game's folder, usually
   `~/Library/Application Support/ico-pc/ico-pc/logs`.
 - iPhone: in ICO's Documents folder.
 - Android: in the game's folder
   ([where that is](ANDROID.md#where-your-files-are)).
+
+If the game cannot make the `logs` folder there (for example, an AppImage
+kept in a folder you cannot write to), it uses the `logs` folder in your
+user folder instead
+([where that is](PORTABLE_MODE.md#where-your-saves-are)), and the log's
+first lines say so.
 
 Each run starts the file again and keeps the one from the run before as
 `ico-pc-previous.log` in the same folder, so the log of a run that went
@@ -479,9 +486,17 @@ were found and why a file was not used.
 The Linux version needs a fairly new system: Debian 13, Ubuntu 24.04 or
 newer. Keep `ico_pc` and `libSDL3.so.0` in the same folder.
 
+If the AppImage does nothing when you double-click it, first check that it
+may run as a program (right-click, **Properties**; see
+[Install](../README.md#linux-and-steam-deck)). If it still does not start,
+run it from a terminal with `--appimage-extract-and-run` after the file's
+name: some systems lack a part the AppImage normally uses, and this way
+works without it. Keep the AppImage in a folder you can write to, because
+`ico-pc.ini` and the `logs` folder go next to it.
+
 The window that asks for your disc image comes from your desktop's own
 file window, or from the small program `zenity`. If no window shows up,
-put the image beside `ico_pc` named `Ico_PAL.iso` (or `Ico_PAL.chd`,
+put the image beside `ico_pc` (or beside the AppImage) named `Ico_PAL.iso` (or `Ico_PAL.chd`,
 `Ico_PAL.bin` or `Ico_PAL.cue`) for the European disc, `Ico_JPN.iso`
 (or `Ico_JPN.chd`, `Ico_JPN.bin` or `Ico_JPN.cue`) for the Japanese disc, or
 `Ico_KOR.iso` (or `Ico_KOR.chd`, `Ico_KOR.bin` or `Ico_KOR.cue`) for the
@@ -494,18 +509,20 @@ game uses).
 
 ## Steam Deck
 
-1. In Desktop Mode, unpack the Linux download into a folder in your home
-   folder.
-2. Start `ico_pc` once in Desktop Mode, so it can ask for your disc image
-   and set itself up. Or put the image beside `ico_pc` named
+1. In Desktop Mode, put the AppImage in a folder of its own in your home
+   folder and let it run as a program
+   ([how](../README.md#linux-and-steam-deck)), or unpack the
+   `-linux.tar.gz` download into a folder there.
+2. Start it (the AppImage, or `ico_pc`) once in Desktop Mode, so it can ask
+   for your disc image and set itself up. Or put the image beside it named
    `Ico_PAL.iso` (European disc), `Ico_JPN.iso` (Japanese disc) or
    `Ico_KOR.iso` (Korean disc) and skip
    the question.
 3. Close Steam, start the game, and choose Options > Extras > Add to Steam on the
    title screen
    ([what it does](OPTIONS.md#extras)). Or add it by hand: in Steam, choose
-   **Add a Non-Steam Game**, browse to `ico_pc`, and add it. It needs no
-   launch options.
+   **Add a Non-Steam Game**, browse to the AppImage (or `ico_pc`), and add
+   it. It needs no launch options.
 4. Play it in Game Mode with the normal controller layout. The Deck's
    buttons work with no setup.
 

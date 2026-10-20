@@ -36,7 +36,8 @@ In the user folder:
 
 **Back up your saves** by copying the `memcard` folder somewhere safe.
 
-**To uninstall,** delete the program's folder and the user folder. On a
+**To uninstall,** delete the program's folder (or the AppImage file) and
+the user folder. On a
 Mac, also drag ICO from Applications to the Bin; on an iPhone, remove it
 in LiveContainer; on Android, uninstall the app
 ([copy your saves first](ANDROID.md#where-your-files-are)).
@@ -72,6 +73,14 @@ There are three ways to have it:
   beside the program. On Windows that is inside the `x64` folder. That is
   all.
 
+**With the AppImage** (Linux), the program is the AppImage file itself:
+make an empty folder named `userdata` next to the file, and the game keeps
+your saves, settings and its own files there. `ico-pc.ini` and the `logs`
+folder are next to the file as well. That is the only step: there is no
+portable AppImage download and no make-portable script for it. This suits
+an external drive or a USB stick, as long as you can write to it; to move
+saves you already have, see [below](#move-an-existing-game-into-portable-mode).
+
 You can also turn it on in `ico-pc.ini`, the file beside the program. Open
 it in a text editor and find this line:
 
@@ -104,7 +113,9 @@ The make-portable script above can move them for you. To do it by hand:
 
 The game comes with a small tool, `mc_import`, that copies ICO's save out
 of a PS2 memory card file. It is in the `tools` folder of the download:
-`x64\tools\mc_import.exe` on Windows, `tools/mc_import` on Linux.
+`x64\tools\mc_import.exe` on Windows, `tools/mc_import` on Linux. If you
+play the AppImage, take `tools/mc_import` from the `-linux.tar.gz` download
+of the same version.
 
 It reads memory card files from emulators and save tools: `.ps2` and `.bin`
 memory card files (not the disc image), and `.psu` files. It cannot read

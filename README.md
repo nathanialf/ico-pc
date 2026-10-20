@@ -47,9 +47,9 @@ the PS2's unless you choose Original. The mouse camera starts on.
 | Device | Download | Status |
 |---|---|---|
 | Windows 10 or 11, 64-bit, with a graphics card from NVIDIA, AMD or Intel | `-win.zip` (or `-win-portable.zip`) | The main test machine. Draws with Vulkan, or Direct3D 12 if you choose it ([how](docs/OPTIONS.md#choosing-the-renderer-on-windows)). |
-| Linux PC, 64-bit x86: Debian 13, Ubuntu 24.04 or newer | `-linux.tar.gz` (or `-linux-portable.tar.gz`) | Built and checked by the automatic tests for every release. |
-| Steam Deck | `-linux.tar.gz` | Supported; [Steam Deck tips](docs/TROUBLESHOOTING.md#steam-deck). |
-| Linux handheld or board, 64-bit ARM: Debian 13, Ubuntu 24.04 or newer | `-linux-arm64.tar.gz` (or `-linux-arm64-portable.tar.gz`) | Built for every release. |
+| Linux PC, 64-bit x86: Debian 13, Ubuntu 24.04 or newer | `-linux-x86_64.AppImage`, or `-linux.tar.gz` (or `-linux-portable.tar.gz`) | Built and checked by the automatic tests for every release. |
+| Steam Deck | `-linux-x86_64.AppImage` or `-linux.tar.gz` | Supported; [Steam Deck tips](docs/TROUBLESHOOTING.md#steam-deck). |
+| Linux handheld or board, 64-bit ARM: Debian 13, Ubuntu 24.04 or newer | `-linux-aarch64.AppImage`, or `-linux-arm64.tar.gz` (or `-linux-arm64-portable.tar.gz`) | Built for every release. |
 | Android phone or tablet, 64-bit, Android 10 or newer (usually 2022 or newer) | `-android.apk` | Supported. It can be slower than on a PC. [The Android guide](docs/ANDROID.md). |
 | iPhone, iOS 15 or newer, through [LiveContainer](https://github.com/LiveContainer/LiveContainer) | `-ios-unsigned.ipa` | The maintainer has no Apple device, so these builds are not tested here; problem reports are welcome. |
 | Apple-silicon Mac, macOS 12 or newer | `-macos-arm64.dmg` (or `-macos-arm64.zip`) | Not tested by the maintainer either. The first time, right-click **ICO** and choose **Open** ([how](#mac)). |
@@ -75,6 +75,29 @@ from the [releases page](https://github.com/nathanialf/ico-pc/releases).
 
 ### Linux and Steam Deck
 
+The simplest way is the AppImage, the game in a single file:
+
+1. Download the file whose name ends in `-linux-x86_64.AppImage`. Put it
+   in a folder of its own in your home folder, such as `Games/ICO`: the
+   game keeps its settings file `ico-pc.ini` and its `logs` folder next to
+   it.
+2. Let it run as a program: right-click the file, choose **Properties**,
+   and turn on the option that lets it run (called **Allow executing file
+   as program** or **Is executable**, depending on your desktop; it may be
+   on a **Permissions** tab). Or, in a terminal, run `chmod +x` followed by
+   the file's name.
+3. Double-click it.
+
+Your saves and settings go to your user folder
+(`~/.local/share/ico-pc/ico-pc/`), so a newer AppImage finds them. To keep
+everything next to the file instead, for example on an external drive,
+make an empty folder named `userdata` beside it
+([portable mode](docs/PORTABLE_MODE.md#keep-everything-in-one-folder)).
+Options > Extras > Add to Steam adds the AppImage to Steam. If it does not
+start, see [Linux](docs/TROUBLESHOOTING.md#linux).
+
+Or use the archive:
+
 1. Download the file whose name ends in `-linux.tar.gz`.
 2. Right-click the file and choose **Extract** (or **Extract Here**), into
    a folder in your home folder.
@@ -82,16 +105,17 @@ from the [releases page](https://github.com/nathanialf/ico-pc/releases).
    asks, choose **Run** or **Execute**.
 
 The Linux version needs a fairly new system: Debian 13, Ubuntu 24.04 or
-newer. On a Steam Deck, unpack it in Desktop Mode and start it once there so
-it can ask for the disc image, then close Steam (right-click its icon in the
-taskbar and choose **Exit Steam**) and choose Options > Extras > Add to
-Steam on the title screen (or add `ico_pc` by hand with Steam > Add a
-Non-Steam Game) and play in Game Mode. [Steam Deck
-tips](docs/TROUBLESHOOTING.md#steam-deck).
+newer. On a Steam Deck, put it in a folder in Desktop Mode and start it
+once there so it can ask for the disc image, then close Steam (right-click
+its icon in the taskbar and choose **Exit Steam**) and choose Options >
+Extras > Add to Steam on the title screen (or add the AppImage or `ico_pc`
+by hand with Steam > Add a Non-Steam Game) and play in Game Mode. [Steam
+Deck tips](docs/TROUBLESHOOTING.md#steam-deck).
 
 On a 64-bit ARM Linux handheld or board, download the file whose name ends
-in `-linux-arm64.tar.gz` instead and follow the same steps. It also needs
-a fairly new system: Debian 13, Ubuntu 24.04 or newer.
+in `-linux-aarch64.AppImage` (or `-linux-arm64.tar.gz`) instead and follow
+the same steps. It also needs a fairly new system: Debian 13, Ubuntu 24.04
+or newer.
 
 ### Android
 
@@ -232,7 +256,9 @@ When something goes wrong, the game writes what happened into a file named
 `ico-pc.log`, in a folder named `logs`. Where that folder is:
 
 - Windows and Linux: beside the program (on Windows, inside the `x64`
-  folder).
+  folder; for the AppImage, beside the AppImage file). If the game cannot
+  make the folder there, it uses the `logs` folder in your user folder
+  ([where that is](docs/PORTABLE_MODE.md#where-your-saves-are)).
 - Mac: in the game's folder, usually
   `~/Library/Application Support/ico-pc/ico-pc/logs`.
 - iPhone: in ICO's Documents folder.

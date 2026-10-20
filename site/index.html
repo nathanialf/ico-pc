@@ -173,11 +173,13 @@ footer p { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint)
   var README = REPO + "#";
 
   /* each device: the main file's name ending, the portable one's, where the
-     README explains the install, and a note shown under the button */
+     README explains the install, and a note shown under the button; alt is
+     a second file's name ending, offered under the button (altStep: the one
+     step it needs, else it is the same app as a .zip) */
   var PLATS = [
     { id: "win", label: "Windows", main: "-win.zip", portable: "-win-portable.zip", howto: "windows", steps: ["Download the file whose name ends in <code>-win.zip</code>.", "Right-click it and choose <strong>Extract All</strong>, into a folder you can write to, such as Documents or a Games folder. Keep all the files together.", "Open the <code>x64</code> folder and double-click <code>ico_pc_x64.exe</code>."], install: "" },
-    { id: "linux", label: "Linux and Steam Deck", main: "-linux.tar.gz", portable: "-linux-portable.tar.gz", howto: "linux-and-steam-deck", steps: ["Download the file whose name ends in <code>-linux.tar.gz</code>.", "Right-click it and choose <strong>Extract</strong> (or <strong>Extract Here</strong>), into a folder in your home folder.", "Double-click <code>ico_pc</code>, or run it from a terminal. If your file manager asks, choose <strong>Run</strong> or <strong>Execute</strong>."], install: "Needs a fairly new system: Debian 13, Ubuntu 24.04 or newer. On a Steam Deck, unpack and start it once in Desktop Mode, then close Steam and choose Options &gt; Extras &gt; Add to Steam on the title screen to play in Game Mode." },
-    { id: "linux-arm64", label: "Linux on ARM", main: "-linux-arm64.tar.gz", portable: "-linux-arm64-portable.tar.gz", howto: "linux-and-steam-deck",
+    { id: "linux", label: "Linux and Steam Deck", main: "-linux.tar.gz", portable: "-linux-portable.tar.gz", alt: "-linux-x86_64.AppImage", altStep: "let it run as a program (right-click it, <strong>Properties</strong>), then double-click it", howto: "linux-and-steam-deck", steps: ["Download the file whose name ends in <code>-linux.tar.gz</code>.", "Right-click it and choose <strong>Extract</strong> (or <strong>Extract Here</strong>), into a folder in your home folder.", "Double-click <code>ico_pc</code>, or run it from a terminal. If your file manager asks, choose <strong>Run</strong> or <strong>Execute</strong>."], install: "Needs a fairly new system: Debian 13, Ubuntu 24.04 or newer. On a Steam Deck, unpack and start it once in Desktop Mode, then close Steam and choose Options &gt; Extras &gt; Add to Steam on the title screen to play in Game Mode." },
+    { id: "linux-arm64", label: "Linux on ARM", main: "-linux-arm64.tar.gz", portable: "-linux-arm64-portable.tar.gz", alt: "-linux-aarch64.AppImage", altStep: "let it run as a program (right-click it, <strong>Properties</strong>), then double-click it", howto: "linux-and-steam-deck",
       note: "For 64-bit ARM Linux handhelds and boards.", steps: ["Download the file whose name ends in <code>-linux-arm64.tar.gz</code>.", "Right-click it and choose <strong>Extract</strong> (or <strong>Extract Here</strong>), into a folder in your home folder.", "Double-click <code>ico_pc</code>, or run it from a terminal. If your file manager asks, choose <strong>Run</strong> or <strong>Execute</strong>."], install: "Needs a fairly new system: Debian 13, Ubuntu 24.04 or newer." },
     { id: "macos", label: "Mac", main: "-macos-arm64.dmg", alt: "-macos-arm64.zip", howto: "mac",
       note: "For Macs with Apple silicon. The first time, right-click ICO and choose Open.", steps: ["Download the file whose name ends in <code>-macos-arm64.dmg</code> (the <code>.zip</code> holds the same app).", "Open it, open a second Finder window on Applications (<strong>Go &gt; Applications</strong>) and drag <strong>ICO</strong> into it.", "The first time, right-click <strong>ICO</strong> and choose <strong>Open</strong>, then <strong>Open</strong> again. If your Mac still will not open it, go to <strong>System Settings &gt; Privacy &amp; Security</strong>, scroll down and choose <strong>Open Anyway</strong> next to ICO."], install: "Your saves, settings and logs are in <code>~/Library/Application Support/ico-pc/ico-pc/</code> (Finder: Go &gt; Go to Folder)." },
@@ -414,7 +416,12 @@ footer p { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint)
       var html2 = buttonHtml("big", "Download for " + p.label, asset);
       if (p.note) html2 += '<p class="note">' + esc(p.note) + "</p>";
       var alt = findAsset(rel, p.alt);
-      if (alt) html2 += '<p class="note">Also as a <a href="' + esc(alt.url) + '">.zip</a> (' + esc(size(alt.size)) + "), the same app.</p>";
+      if (alt && p.altStep) {
+        html2 += '<p class="note">Or the <a href="' + esc(alt.url) + '">AppImage</a> (' + esc(size(alt.size)) +
+          "), the game in one file: " + p.altStep + ".</p>";
+      } else if (alt) {
+        html2 += '<p class="note">Also as a <a href="' + esc(alt.url) + '">.zip</a> (' + esc(size(alt.size)) + "), the same app.</p>";
+      }
       main.innerHTML = html2;
     }
     var pa = findAsset(rel, p.portable);
