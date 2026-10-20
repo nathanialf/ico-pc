@@ -306,9 +306,11 @@ _Static_assert(sizeof(RdPipelineKey) == 16, "RdPipelineKey: 16 bytes, msaa took 
  * dynamic state takes the Z test, Z write, blend and colour mask out of
  * the keys where the device has it (rd__key_dynamic_normalise).  446 keys
  * at Original 4:3 with the fixed-function blend and every state static;
- * the largest, a tile-based GPU's (the pre-pass off, every state static)
- * at a fractional Enhanced scale (every vu_ps key's vu_np_ps twin), 1153
- * (rd_state_test prints the counts).
+ * the largest, a tile-based GPU's (its profile with local read, the fx
+ * plan's 30 keys among them; the pre-pass off, every state static) at a
+ * fractional Enhanced scale (every vu_ps key's vu_np_ps twin), 1153
+ * (rd_state_test testTilerFracSet and rd_pixel_test testPipelines print
+ * it).
  *
  * The cache holds the RHI's pool less the pool's headroom for the
  * pipelines made outside the cache (port/rhi/rhi_pipeline_pool.h), so the

@@ -989,17 +989,21 @@ step (the `slow step` line's `texture decodes`) and the replay's texture and mes
 
 **The set against the pool.** The set's size depends on the device's profile and the scale: 446
 keys at Original 4:3 with the fixed-function blend and every state static (the pre-pass on); the
-tile-based profile ([The device profile](#the-device-profile)) adds the DATE, fog and fold keys and,
+tile-based profile ([The device profile](#the-device-profile)) adds the DATE, fog and fold keys, the
+fx plan's 30 (`rd_fx_plan.c` (`rd__fx_enumerate`): under six depth states the alpha-only key, three
+`fx_frame_ps` keys and, with local read, one `fx_local_ps` key) and,
 with the pre-pass off, the eleven program entries under every Z test, Z write and blend
 (`rd_mesh.c` (`enumerateVuDraws`)); without dynamic state those fields stay in every key; and at a
 fractional Enhanced scale every `vu_ps` key has its `vu_np_ps` twin (`rd_pixel_plan.c`
 (`rd__vu_pixel_fs_enum`)). All four together give the largest set a device meets, 1153 keys on an
 Adreno 710 at 2340x1080 (Custom, which maps to Enhanced: 2.8125 x 2.41071). Every set fits the
-cache and so the RHI's pool: `rd_state_test` `testTilerSet` and `testTilerFracSet` count the tile
-profile's sets (static, dynamic depth, dynamic depth and blend; the pre-pass off at 2x and at
-2.8125 x 2.41071) under `RD_PIPELINE_REACHABLE_MAX` and inside `RHI_PIPELINE_POOL_MAX` less
-`RHI_PIPELINE_POOL_HEADROOM`, and `rd_pixel_test` `testPipelines` counts the same configuration
-with both blends. The set's first line names it against the pool (`rd_precreate_pipelines`):
+cache and so the RHI's pool: `rd_state_test` `testTilerSet` counts the tile profile's sets
+(static, dynamic depth, dynamic depth and blend) and `testTilerFracSet` the tile class as
+`rd_profile.c` makes it with local read (the alpha plan, the fx plan and its local read on; module
+and layout stand-ins where the test has no device), the pre-pass off, at 2x (977 keys) and at
+2.8125 x 2.41071 (1153), each under `RD_PIPELINE_REACHABLE_MAX` and inside `RHI_PIPELINE_POOL_MAX`
+less `RHI_PIPELINE_POOL_HEADROOM`; `rd_pixel_test` `testPipelines` counts the same configuration on
+a device with both blends (1153, and 1260 with the two-pass fallback). The set's first line names it against the pool (`rd_precreate_pipelines`):
 
     rd: pipelines: the start-up set's 1153 keys (pool 4160: the cache's 4096 and 64 for the pipelines made outside it; 0 already made)
 

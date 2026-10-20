@@ -494,8 +494,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the
   dump the tool tests replay (`rd_pixel`). Its pipelines case holds the reachable set under
-  `RD_PIPELINE_REACHABLE_MAX` with both blends, the tile-based GPU's set too (the pre-pass off,
-  every state static, Enhanced at 2.8125 x 2.41071), that one also inside the RHI's pipeline pool
+  `RD_PIPELINE_REACHABLE_MAX` with both blends, the tile-based GPU's set too (its profile with
+  local read and the fx plan, the pre-pass off, every state static, Enhanced at 2.8125 x 2.41071:
+  1153 keys), that one also inside the RHI's pipeline pool
   less its headroom (`testPipelines`). Its DATE case replays one frame through the stencil bit
   and through the snapshot (where the device has local read): one DATE command of two overlapping
   sprites over cells of alpha 0x80 and 0, SCENE the same bytes both ways and the snapshot's
@@ -546,7 +547,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   blend, with and without local read (`testTilerSet`: the desktop keys and exactly DATE's, the fog's
   local key and the fold key, none twice; printed beside the careful-set target; each set under
   `RD_PIPELINE_REACHABLE_MAX` and inside the RHI's pipeline pool less its headroom), the tile
-  profile's largest set, the pre-pass off and every state static at 2.8125 x 2.41071: the 2x set
+  class's largest set (its profile with local read and the fx plan, stand-in modules), the
+  pre-pass off and every state static at 2.8125 x 2.41071, 1153 keys: the 2x set
   and the `vu_np_ps` keys (the DATE pass's twins of them too), each with its `vu_ps` key in the
   set, under the same two bounds (`testTilerFracSet`), and a dump's menu text sheets loading as the renderer makes them, a sheet with
 - `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, each in a child process; the symbolizer, the report file and `ico_log_limited` (above)

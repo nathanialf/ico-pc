@@ -3437,7 +3437,9 @@ static void testPipelines(void)
           "reachable pipelines with the two-pass fallback %u >= %d", nNd,
           RD_PIPELINE_REACHABLE_MAX);
     {
-        /* the tile-based GPU's configuration: its profile with local read,
+        /* the tile-based GPU's configuration (the Adreno 710's 1153 keys, 1260
+         * with the two-pass fallback): its profile with local read as
+         * rd_profile.c makes it,
          * the vertex pre-pass off, no dynamic state (every state in the
          * keys), Enhanced at the phone's fractional 2.8125 x 2.41071 (the
          * vu_np_ps twins), both blends: under the ceiling and inside the
@@ -3459,6 +3461,9 @@ static void testPipelines(void)
         g_rd.profile.localRead = true;
         g_rd.profile.dateStencil = true;
         g_rd.profile.fogLocal = true;
+        g_rd.profile.alphaPlan = true;
+        g_rd.profile.fxPlan = true;
+        g_rd.profile.fxDstLocal = true; /* the tile class with local read (rd_profile.c) */
         g_rd.profile.vuPlanesFrac = true;
         g_rd.settings.preset = RD_PRESET_ENHANCED;
         g_rd.dstMode = RD_BLEND_EXACT_OFF;

@@ -1693,8 +1693,10 @@ static bool isDateStencil(uint8_t m)
 }
 
 /* The largest set a device meets (an Adreno 710 phone at 2340x1080,
- * Custom = Enhanced: 1153 keys, more than 1024): the tile profile with
- * local read (as testTilerSet's),
+ * Custom = Enhanced: 1153 keys, more than 1024): the tile class with local
+ * read as rd_profile.c makes it (testTilerSet's flags and the alpha plan,
+ * the fx plan and its local read, whose 30 keys rd_fx_plan.c
+ * rd__fx_enumerate adds: 977 at 2x, 1153 at the fractional scale),
  * the vertex pre-pass off (the eleven program entries under every depth,
  * Z write and blend), every state static, at a fractional Enhanced scale
  * (2.8125 x 2.41071: rd_pixel_plan.c rd__vu_pixel_fs_enum gives every
@@ -1709,15 +1711,32 @@ static void testTilerFracSet(RdPipeKeyInt *keys)
     const RdPreset keepPreset = g_rd.settings.preset;
     const float keepSx = g_rd.sceneSx, keepSy = g_rd.sceneSy;
     const uint8_t keepDst = g_rd.dstMode;
+    /* the fx plan's modules and the local read's layout: stand-ins, as
+       testTilerSet's (never made) */
+    const RhiShader keepFrame = g_rd.fs[RD_FS_FX_FRAME], keepLocal = g_rd.fs[RD_FS_FX_LOCAL];
+    const RhiBindGroupLayout keepLayout = g_rd.layoutLocal;
+    if (g_rd.fs[RD_FS_FX_FRAME].id == 0) {
+        g_rd.fs[RD_FS_FX_FRAME].id = 0x7F000010u;
+    }
+    if (g_rd.fs[RD_FS_FX_LOCAL].id == 0) {
+        g_rd.fs[RD_FS_FX_LOCAL].id = 0x7F000011u;
+    }
+    if (g_rd.layoutLocal.id == 0) {
+        g_rd.layoutLocal.id = 0x7F000012u;
+    }
     g_rd.dynDepth = false;
     g_rd.dynBlend = false;
     rd__set_vu_prepass(false);
+    /* the tile class with local read as rd_profile.c makes it */
     memset(&g_rd.profile, 0, sizeof(g_rd.profile));
     g_rd.profile.tiler = true;
     g_rd.profile.blurFold = true;
     g_rd.profile.localRead = true;
     g_rd.profile.dateStencil = true;
     g_rd.profile.fogLocal = true;
+    g_rd.profile.alphaPlan = true;
+    g_rd.profile.fxPlan = true;
+    g_rd.profile.fxDstLocal = true;
     g_rd.profile.vuPlanesFrac = true;
     g_rd.settings.preset = RD_PRESET_ENHANCED;
     g_rd.dstMode = RD_BLEND_EXACT_OFF;
@@ -1764,6 +1783,9 @@ static void testTilerFracSet(RdPipeKeyInt *keys)
     g_rd.sceneSx = keepSx;
     g_rd.sceneSy = keepSy;
     g_rd.dstMode = keepDst;
+    g_rd.fs[RD_FS_FX_FRAME] = keepFrame;
+    g_rd.fs[RD_FS_FX_LOCAL] = keepLocal;
+    g_rd.layoutLocal = keepLayout;
 }
 
 static void testTilerSet(RdPipeKeyInt *keys)
