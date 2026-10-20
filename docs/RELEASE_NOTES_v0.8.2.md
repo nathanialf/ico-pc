@@ -7,6 +7,6 @@
 ## Fixed
 
 - Sound on Linux desktops that use PipeWire or PulseAudio. The game used to talk to the sound card directly and could play through the wrong output or none. It now plays through your desktop's sound system, and the list in Options > Audio shows your system's outputs.
-- Android: the first start after installing a new version now prepares its graphics from nothing, so nothing is kept from the previous version.
-- Android handhelds that run low on memory while the game prepares its graphics: the game now stops preparing at the system's first low-memory warning and goes on, and the next start does not prepare again.
-- When the graphics driver stops answering while the game is drawing, the game now says so and names the report file to attach, instead of looking like a frozen game.
+- Android: the first start after installing a new version now prepares its graphics from nothing. The graphics the previous version prepared are dropped; saves and settings stay.
+- Android handhelds that run low on memory while the game prepares its graphics: the game now stops preparing when the system warns that memory is critically low and goes on, and the next start does not prepare again.
+- When the graphics driver stops answering while the game is drawing, the game now says so and names the report file to attach, instead of looking like a frozen game. On Android the next start has the graphics driver check every read, as after any time the graphics stop.

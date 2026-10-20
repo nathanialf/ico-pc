@@ -115,7 +115,7 @@ The game comes with a small tool, `mc_import`, that copies ICO's save out
 of a PS2 memory card file. It is in the `tools` folder of the download:
 `x64\tools\mc_import.exe` on Windows, `tools/mc_import` on Linux. If you
 play the AppImage, take `tools/mc_import` from the `-linux.tar.gz` download
-of the same version.
+(`-linux-arm64.tar.gz` for the ARM AppImage) of the same version.
 
 It reads memory card files from emulators and save tools: `.ps2` and `.bin`
 memory card files (not the disc image), and `.psu` files. It cannot read
