@@ -643,9 +643,11 @@ static int open_stream(const char *name)
 
 /* The one line that says which audio drivers this SDL has and which it chose (a build without the
  * PipeWire and PulseAudio backends plays through ALSA's default device only, which on a desktop
- * without the ALSA plugins of its sound server is not the sink the player listens on). On Linux
- * the plain line follows when ALSA was chosen: neither sound server answered. Once a run: the
- * open runs once at the start (the Settings menu's reopen moves the stream, not the driver). */
+ * without the ALSA plugins of its sound server is not the sink the player listens on), right after
+ * the audio subsystem starts, so a device open that then fails still names the driver it tried.
+ * On Linux the plain line follows when ALSA was chosen: neither sound server answered, or the
+ * player's SDL_AUDIO_DRIVER named it. Once a run: the open runs once at the start (the Settings
+ * menu's reopen moves the stream, not the driver). */
 static void log_drivers(void)
 {
     char list[256];
@@ -668,9 +670,18 @@ static void log_drivers(void)
     fprintf(stderr, "audio: SDL audio drivers built in: %s; using %s\n",
             used != 0 ? list : "(none)", cur != NULL ? cur : "?");
 #if defined(__linux__) && !defined(__ANDROID__)
-    if (cur != NULL && strcmp(cur, "alsa") == 0)
-        fprintf(stderr, "audio: no sound server found (PipeWire or PulseAudio); playing through "
-                        "ALSA's default device\n");
+    if (cur != NULL && strcmp(cur, "alsa") == 0) {
+        const char *hint = SDL_GetHint(SDL_HINT_AUDIO_DRIVER);
+
+        if (hint != NULL && hint[0] != '\0')
+            fprintf(stderr,
+                    "audio: ALSA was chosen (SDL_AUDIO_DRIVER=%s); playing through ALSA's "
+                    "default device\n",
+                    hint);
+        else
+            fprintf(stderr, "audio: no sound server found (PipeWire or PulseAudio); playing "
+                            "through ALSA's default device\n");
+    }
 #endif
 }
 
@@ -681,6 +692,7 @@ int ico_audio_sdl_open(IcoAudioRender pull, const char *why)
         fprintf(stderr, "audio: SDL audio unavailable (%s); no sound\n", SDL_GetError());
         return -1;
     }
+    log_drivers();
     cushion_level = 0; /* before the open primes it */
     pull_render = pull;
     sync_why = why != NULL ? why : "";
@@ -701,7 +713,6 @@ int ico_audio_sdl_open(IcoAudioRender pull, const char *why)
     last_push_ns = 0;
     quiet_frames = 0;
     cushion_peak = cushion_frames();
-    log_drivers();
     if (pull_render != NULL) {
         fprintf(stderr,
                 "audio: SDL driver %s, 48 kHz stereo, played on the device's clock: %d frames a "

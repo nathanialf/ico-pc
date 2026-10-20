@@ -711,9 +711,12 @@ two ways, the pull path on the device's clock and the push on the game's
 - The Linux build of SDL3 carries the PipeWire, PulseAudio and ALSA backends, each loaded by soname
   at run time (`tools/fetch_deps.sh`, stamp `+audio3`; `tools/package_linux.sh` refuses a
   `libSDL3.so.0` without the three names); SDL prefers the sound server when its daemon runs.
-  `ico_audio_sdl_open` logs once a run `audio: SDL audio drivers built in: <names>; using <driver>`
-  (`port/audio/out_sdl.c` (`log_drivers`)) and, on Linux when the driver is `alsa`, `audio: no
-  sound server found (PipeWire or PulseAudio); playing through ALSA's default device`.
+  `ico_audio_sdl_open` logs once a run, as soon as the audio subsystem starts and before the device
+  is opened (so a failed open still names the driver), `audio: SDL audio drivers built in: <names>;
+  using <driver>` (`port/audio/out_sdl.c` (`log_drivers`)) and, on Linux when the driver is `alsa`,
+  `audio: no sound server found (PipeWire or PulseAudio); playing through ALSA's default device`,
+  or `audio: ALSA was chosen (SDL_AUDIO_DRIVER=<value>); playing through ALSA's default device`
+  when the `SDL_AUDIO_DRIVER` hint is set.
 - The device is the one `[audio] device` names, or SDL's default (which follows the system's)
   when the name is empty or no device has it (`audio: no output device called "..."; using the
   default`). A name cut to the Settings list's buffer matches a device whose name starts with it
