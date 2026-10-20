@@ -921,6 +921,15 @@ void rd_set_memory_fn(RdMemoryFn fn)
     s_memoryFn = fn;
 }
 
+/* rd_set_low_memory_fn: the system's low-memory signal stops the start-up
+ * set between two batches (issue 128) */
+static RdLowMemoryFn s_lowMemoryFn;
+
+void rd_set_low_memory_fn(RdLowMemoryFn fn)
+{
+    s_lowMemoryFn = fn;
+}
+
 /* How the start-up set is made (rd.h RdPipelineSetPolicy; createKeys):
  * zero fields are the defaults (RD_PIPE_BATCH keys a batch, the backend's
  * threads, no memory bound, the cache written as cacheKeptPerBatch says).
@@ -1924,7 +1933,19 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
                 (void)rhi_pipeline_cache_save();
                 s_setSavedMs = rd__now_ms();
             }
-            if (budgeted && i < m) {
+            char lowMem[48];
+            if (times != NULL && i < m && s_lowMemoryFn != NULL &&
+                s_lowMemoryFn(lowMem, sizeof(lowMem)) != 0) {
+                /* the system reported low memory (issue 128: the Adreno
+                 * 740 handheld's system took the process's pages back and
+                 * ended it while its set went on): the set stops here,
+                 * under any policy, before the budget's own rules (the
+                 * growth rule cannot fire while the pages are taken back) */
+                snprintf(c->budget, sizeof(c->budget),
+                         "(memory budget: the system reported low memory (%s) after %u of %u keys; "
+                         "the rest is made as the game needs it)",
+                         lowMem, i, m);
+            } else if (budgeted && i < m) {
                 /* the policy's bound: the process's growth since the set
                  * began (the memory read before and after the batch) or a
                  * batch past RD_SET_SLOW_BATCH_MS stops the set here */
@@ -2034,6 +2055,10 @@ uint32_t rd_precreate_pipelines(void)
         rd__log("pipelines: the start-up set's policy: %s; with a budget the set stops past it or "
                 "after a batch over %.0f s, the rest made on first use",
                 pol, RD_SET_SLOW_BATCH_MS / 1000.0);
+    }
+    if (s_lowMemoryFn != NULL) {
+        rd__log("pipelines: the start-up set stops at the system's low-memory signal (asked after "
+                "each batch), the rest made on first use");
     }
     createKeys(keys, m, false, &times, &c);
     if (c.stop) {

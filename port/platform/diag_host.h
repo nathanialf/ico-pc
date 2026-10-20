@@ -96,6 +96,16 @@ void ico_diag_set_fatal_ui(void (*box)(const char *text), void (*flush)(void));
 /* The process's resident memory and its peak in KB (/proc/self/status:
    Linux, Android); 0, or -1 where unknown. Async-signal-safe. */
 int ico_diag_process_memory(long *rss_kb, long *peak_kb);
+/* The device's available and total memory in KB (/proc/meminfo's
+   MemAvailable and MemTotal: Linux, Android); 0, or -1 (both -1) where
+   unknown. Open and read only, as ico_diag_process_memory. */
+int ico_diag_device_memory(long *avail_kb, long *total_kb);
+/* "memory 191 MB (most 197 MB); device 320 MB available of 7632 MB" (the
+   process's, then the device's; "...; device memory unknown" without
+   /proc/meminfo), "" where the process's is unknown (Windows, macOS): the
+   heartbeat's, the low-memory line's, the window's 10 s memory line's and
+   report.txt's. */
+void ico_diag_memory_text(char *out, size_t size);
 
 /* The window's rd_present is bracketed by these two. The time
    spent inside a present does not count towards either watchdog limit: a
@@ -329,14 +339,17 @@ int ico_diag_startup_end_count(int kind);
                                       pre-pass's, ico_diag_startup_vu_prepass),
                                       the first in a row
                                       (ico_diag_startup_end_count), and its
-                                      file has no "set: careful" line (it
-                                      made the full set, or none): this
+                                      file has no "set: careful" line and
+                                      no low-memory stop's (it made the
+                                      full set, or none): this
                                       start only makes the set under the
                                       careful policy, nothing written; its
                                       line comes after the device is made
                                       (ico_diag_startup_end_persist);
      ICO_DIAG_PIPESET_LAZY_ONCE       the same end, the first in a row, of a
-                                      start whose file says "set: careful":
+                                      start whose file says "set: careful"
+                                      or "set: stopped at the system's
+                                      low-memory signal":
                                       this start only makes no set, nothing
                                       written, and the lazy run's notes say
                                       so (the next start tries the set
@@ -349,6 +362,12 @@ int ico_diag_startup_end_count(int kind);
      ICO_DIAG_PIPESET_LAZY_FILE       file_lazy (the previous run of this
                                       version ended in a lazy run, or exited
                                       lazy, without a "this start only");
+     ICO_DIAG_PIPESET_LAZY_LOW_MEMORY the same, the previous run's file
+                                      saying its set stopped at the
+                                      system's low-memory signal (issue 128,
+                                      ico_diag_startup_activity_budget_stop;
+                                      not after a restart): no set, the
+                                      line kept in this start's file;
      ICO_DIAG_PIPESET_CAREFUL_SETTING setting is "careful" (and none of the
                                       above);
      ICO_DIAG_PIPESET_FULL            the start-up set.
@@ -363,6 +382,7 @@ int ico_diag_startup_end_count(int kind);
 #define ICO_DIAG_PIPESET_LAZY_ONCE 4
 #define ICO_DIAG_PIPESET_CAREFUL_ONCE 5
 #define ICO_DIAG_PIPESET_CAREFUL_SETTING 6
+#define ICO_DIAG_PIPESET_LAZY_LOW_MEMORY 7
 int ico_diag_startup_pipeline_set(int relaunched, int file_lazy, const char *setting,
                                   const char *config_name);
 /* The VU vertex pre-pass off after an end inside one of its batches or
@@ -454,7 +474,8 @@ void ico_diag_startup_activity_background(int background);
    logged at once from any thread ("ico_pc: the system asked the app to
    free memory: low memory (onTrimMemory level 15, running critical;
    signal 1 of this run) at pipelines 201 of 527 of the start-up set;
-   memory 102 MB (most 194 MB)", or "with N pipelines made" outside the
+   memory 102 MB (most 194 MB); device 320 MB available of 7632 MB"
+   (ico_diag_memory_text), or "with N pipelines made" outside the
    set, ico_diag_set_pipelines_made; "low memory" for levels 5, 10, 15
    and -1 only, "the app's screen was hidden" for 20, "the app is in the
    background" for 40, 60 and 80), and kept for the activity file as a
@@ -464,8 +485,18 @@ void ico_diag_startup_activity_background(int background);
    20 or more marks the background at once
    (ico_diag_startup_activity_background), and every line while marked
    also goes into the mark from this thread (the main thread may be held
-   there). */
+   there).
+   Issue 128: level 15 ("running critical"), and level 10 ("running low")
+   once the start-up set is past its first batch (ico_diag_set_pipelines'
+   count above 0), also ask the set to stop (ico_diag_low_memory_stop);
+   the flag is set before the line is logged, from any thread. */
 void ico_diag_note_low_memory(int level);
+/* The start-up set's loop (rd.h rd_set_low_memory_fn), between two
+   batches: 1 when a low-memory signal asked the set to stop
+   (ico_diag_note_low_memory), why holding the strongest level's name
+   ("running critical", "running low"), else 0. A 1 marks the stop for
+   ico_diag_startup_activity_budget_stop. Any thread. */
+int ico_diag_low_memory_stop(char *why, size_t size);
 /* On the main thread (the start-up screen's progress, the window's pump):
    a low-memory line waiting from ico_diag_note_low_memory goes into the
    activity file while it records. Cheap when none waits. */
@@ -490,7 +521,24 @@ void ico_diag_startup_activity_careful(int on);
    finish, and the rest of the run records as a lazy run for this start
    only (ICO_DIAG_ACTIVITY_LAZY, its notes and exit saying "for this start
    only", the "set: careful" line kept), so a freeze in a later creation is
-   named and counted while the next start tries the set again. */
+   named and counted while the next start tries the set again.
+   A set stopped at the system's low-memory signal (issue 128;
+   ico_diag_low_memory_stop answered 1) records the rest of the run as a
+   lazy run that is not for this start only, with the line "set: stopped
+   at the system's low-memory signal (running critical)" after the note
+   (and the careful line), and logs "ico_pc: the start-up set stopped at
+   the system's low-memory signal (running critical); the next start
+   makes the pipelines as the game needs them, with no start-up set". The
+   next start of the same version that finds the line beside the lazy
+   run's exit or its note between two creations logs "ico_pc: the previous
+   start stopped preparing the graphics when the system ran low on memory
+   (<note>); this start prepares them as the game needs them" and is lazy
+   (ICO_DIAG_PIPESET_LAZY_LOW_MEMORY), its own file keeping the line; one
+   ended inside a creation logs "ico_pc: the previous start had stopped
+   preparing the graphics when the system ran low on memory (<line>)" and
+   counts as an end while preparing the graphics, stepping from no set
+   (ICO_DIAG_PIPESET_LAZY_ONCE, then LAZY_NOW). Another version tries the
+   set again. */
 void ico_diag_startup_activity_budget_stop(void);
 /* The running version's text (the "ico_pc: version" log line's: "<label>
    (commit <c>)" or "development build (commit <c>)"); copied, at most 127

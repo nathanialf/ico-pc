@@ -9,7 +9,9 @@
  *   report.txt               what ended the run, the VERSION.txt lines,
  *                            the disc played (diag_host.h
  *                            ico_diag_set_disc), the summary line (diag_host.h
- *                            ico_diag_set_summary), achievements.toml's
+ *                            ico_diag_set_summary), the process's and the
+ *                            device's memory (ico_diag_memory_text),
+ *                            achievements.toml's
  *                            stages line (not the file), the latest
  *                            device, blend, index, fog and shader lines
  *                            of the log, the last 20 ico_pc:/window:/rd:
@@ -56,6 +58,10 @@ typedef struct IcoReportInputs {
     const char *log_path; /* the current log (NULL: none) */
     const char *summary;  /* the summary line's text ("" none) */
     const char *disc;     /* the disc played ("SCPS-11003 (the Japanese disc)"; "" none) */
+    /* the process's and the device's memory when the report is written
+       (diag_host.h ico_diag_memory_text: "memory 191 MB (most 197 MB);
+       device 320 MB available of 7632 MB"; NULL or "": unknown) */
+    const char *memory;
     const char *loss_zip; /* the newest loss dump's path (NULL: none) */
     double uptime_s;      /* seconds into the run */
     /* text of the host's own for report.txt's end (the window: SDL's log

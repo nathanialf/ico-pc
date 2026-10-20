@@ -97,6 +97,17 @@ If the game still stops, send the log of the start that stopped and the
 log of the start after it: they say what was being prepared and how much
 memory the game was using.
 
+On a phone or a handheld the system tells the game when the device itself
+runs low on memory. If it says so while the game prepares its graphics,
+the game stops preparing, goes on to the title and prepares the rest the
+first time the game needs it. The next start then skips **Preparing
+graphics** and goes straight to the title; the first minutes of play can
+pause for a moment here and there while graphics are prepared. Apps left
+open in the background hold memory too: close them before you start the
+game. A new version of the game tries preparing everything at the start
+again. The log says how much memory the device had left each time the
+system asked the game to free some.
+
 If the whole phone or handheld freezes on **Preparing graphics** and you
 have to restart it, restart the device and start the game again: the game
 sees where the last start stopped and, for that start, prepares the

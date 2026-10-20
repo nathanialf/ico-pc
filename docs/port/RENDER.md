@@ -920,7 +920,8 @@ them; for this start only)`). `[dev] pipeline_set = "full"` does not override th
 start-up activity file then says `set: careful`, so an end inside the careful set makes the next
 start lazy rather than careful again. When the budget stops the set (`rd_pipelines_lazy_on`), the
 rest of the run is recorded as a lazy run's for that start only
-(`ico_diag_startup_activity_budget_stop`).
+(`ico_diag_startup_activity_budget_stop`); when the system's low-memory signal stopped it, as a lazy
+run whose next start makes no set ([PLATFORM.md](PLATFORM.md#diagnostics)).
 
 With the set made, a pipeline a draw needs later is a key the set did not hold, made on the thread
 that draws while the replay waits; on a driver that takes seconds a pipeline (up to 3.4 s for a VU
@@ -968,11 +969,13 @@ step (the `slow step` line's `texture decodes`) and the replay's texture and mes
 
 | the set is skipped | `<why>` in the line |
 | --- | --- |
+| the system reported low memory during the set, under any policy (below): the rest of the set | `(memory budget: the system reported low memory (running critical) after <i> of <n> keys; the rest is made as the game needs it)` |
 | the set under a policy with a memory budget (below) grew the process past it, or a batch took over 10 s: the rest of the set | `(memory budget: the process grew <g> MB, from <a> to <b> MB, past the policy's <m> MB, after <i> of <n> keys)` or `(memory budget: a batch of <k> took <t> s, past 10 s; ...)` |
 | `[dev] pipeline_set = "lazy"` (`ICO_PIPELINE_SET=lazy`, [CONFIG.md](CONFIG.md#ico-pcini)) | `by the settings ([dev] pipeline_set = "lazy")` |
 | the previous start, of any version, ended without a word in the foreground while a pipeline of its careful set was being made (its activity file says `set: careful`), the first such end in a row: this start only, nothing written (after a full set's end the next start is careful instead, above; [PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them in the careful set; for this start only)` |
 | such an end, whatever the set, the second in a row: the setting is written once the device is made ([PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them; [dev] pipeline_set = "lazy" from now on)` |
 | the last run, of the same version, ran without the set and ended, or exited from it | `(the last run made them that way)` |
+| the same, its set having stopped at the system's low-memory signal (its activity file's `set: stopped at the system's low-memory signal`) | `(the previous start's set stopped when the system ran low on memory)` |
 | the crash order's `lazy` step | `(a restart after a graphics driver crash)` |
 
 **The policy.** `rd_set_pipeline_policy(&p)` before `rd_precreate_pipelines` sets how the set is
@@ -989,7 +992,13 @@ MB budget, the cache after each batch, the values for a device of `RhiLimits.car
 A policy other than the defaults is logged once before the set, `rd: pipelines: the start-up set's
 policy: batch 8, threads 1, budget 128 MB, cache each batch; with a budget the set stops past it or
 after a batch over 10 s, the rest made on first use`, and each batch's line ends with `; policy
-batch 8, threads 1, budget 128 MB, cache each batch`.
+batch 8, threads 1, budget 128 MB, cache each batch`. Under any policy, with a low-memory function
+set (`rd_set_low_memory_fn`: the window's `ico_diag_low_memory_stop`, on Android only), the set asks
+it after every batch but the last and stops there on a yes, before the budget's rules (the growth
+rule cannot fire while the system takes the process's pages back), logged once before the set as
+`rd: pipelines: the start-up set stops at the system's low-memory signal (asked after each batch),
+the rest made on first use`. A batch in flight is not cut short: the careful batches are 8
+pipelines on one thread.
 
 The table's row (`port/rhi/vk/vk_device.c` `kVuPlainOnly`; the fallback rule of the next section
 stays on the same device):

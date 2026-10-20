@@ -751,6 +751,10 @@ static void build_text(const IcoReportInputs *in)
     text_kv("summary: ", in->summary != NULL && in->summary[0] != '\0'
                              ? in->summary
                              : "(not reached: the run ended before the renderer started)");
+    /* issue 128: what the device had left when the run ended (a phone's
+       system ends the app on the device's memory, not the app's) */
+    text_kv("memory: ",
+            in->memory != NULL && in->memory[0] != '\0' ? in->memory : "(unknown on this system)");
 
     memset(s_key, 0, sizeof s_key);
     s_ring_n = s_ring_head = s_before_n = s_before_head = 0;

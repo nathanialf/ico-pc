@@ -283,7 +283,8 @@ uploads, `acquire` the backbuffer, `walk` recording the VU vertex pre-pass and t
 (`replayFrame`); `port/render/rd.h` (`RdPerfRecord`)). Further lines give the GPU time per list and
 per picture effect, the per-replay counts (draws, passes, binds, barriers, uploads) with the block's
 creations, the MSAA samples and resolves, and the graphics allocations against the device's limit
-with the process's memory (`perf_log`). Three lines come from the per-pass timing
+with the process's memory and the device's available and total memory (`perf_log`;
+`ico_diag_device_memory`, [PLATFORM.md](PLATFORM.md#diagnostics)). Three lines come from the per-pass timing
 ([RENDER.md](RENDER.md#the-per-pass-timing)): `window: GPU top passes: ...` (the most expensive
 passes of the block's timed replays, each timed between stamps outside the render passes, with
 the count of passes a replay and of those under 0.05 ms; only with GPU timestamps),

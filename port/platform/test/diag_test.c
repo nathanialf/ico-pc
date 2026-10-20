@@ -65,7 +65,11 @@
  *               set's first end makes the next start careful for that start
  *               (its file "set: careful"), a careful set's lazy, the second
  *               end in a row writes pipeline_set = "lazy", a set stopped at
- *               its budget records as a lazy run for that start only; the
+ *               its budget records as a lazy run for that start only, one
+ *               stopped at the system's low-memory signal (onTrimMemory
+ *               15, or 10 past the first batch) as a lazy run whose next
+ *               start of the version is lazy, its own end inside a
+ *               creation stepping from no set; the
  *               record path's vu_main_vs batch is the pre-pass's kind;
  *               Android's next start after a device loss: robust access for
  *               that start, the second loss in a row with it off (or in the
@@ -548,13 +552,19 @@ static int persist_pre_stub(void)
    run's exit, or the set finished), "cleanvupre" the set finished after a
    batch of the vertex pre-pass, "budget" the careful set stopped at its
    memory budget and the run then ended inside a first-use pipeline
-   ("budgetclean": exited cleanly); unset: no run (the file stays deleted).
+   ("budgetclean": exited cleanly), "lowmem" the set stopped at the
+   system's low-memory signal (issue 128: onTrimMemory 15 past the first
+   batch, the set's loop asking ico_diag_low_memory_stop as rd_pipeline.c
+   does) and the run then ended between two first-use pipelines
+   ("lowmemdie": inside one, "lowmemclean": exited cleanly); unset: no run
+   (the file stays deleted).
    The set is the careful one when the policy says so or the device table
    would (ICO_TEST_TABLE_CAREFUL), as window_host.c makes it */
 static void pipeset_then(int set)
 {
     const char *then = getenv("ICO_TEST_THEN");
-    const int lazy = set >= ICO_DIAG_PIPESET_LAZY_FILE && set <= ICO_DIAG_PIPESET_LAZY_ONCE;
+    const int lazy = (set >= ICO_DIAG_PIPESET_LAZY_FILE && set <= ICO_DIAG_PIPESET_LAZY_ONCE) ||
+                     set == ICO_DIAG_PIPESET_LAZY_LOW_MEMORY;
     const int careful =
         !lazy && (set == ICO_DIAG_PIPESET_CAREFUL_ONCE || set == ICO_DIAG_PIPESET_CAREFUL_SETTING ||
                   getenv("ICO_TEST_TABLE_CAREFUL") != NULL);
@@ -585,6 +595,28 @@ static void pipeset_then(int set)
             _exit(0);
         }
         ico_diag_clear_activity();
+        ico_diag_startup_activity_exit();
+        return;
+    } else if (strncmp(then, "lowmem", 6) == 0) {
+        char why[48] = "";
+        int stop;
+        ico_diag_set_pipelines(144, 568, 70);
+        ico_diag_set_activity(NOTE_2D);
+        ico_diag_note_low_memory(15);
+        ico_diag_startup_activity_poll();
+        /* the set's loop after the batch (rd_pipeline.c createKeys) */
+        stop = ico_diag_low_memory_stop(why, sizeof why);
+        ico_diag_log("test: low memory stop %d (%s)", stop, why);
+        ico_diag_set_pipelines(0, 0, 0);
+        ico_diag_startup_activity_budget_stop();
+        ico_diag_set_activity("creating pipeline fog test");
+        if (strcmp(then, "lowmemdie") == 0) {
+            _exit(0);
+        }
+        ico_diag_clear_activity();
+        if (strcmp(then, "lowmem") == 0) {
+            _exit(0);
+        }
         ico_diag_startup_activity_exit();
         return;
     } else if (strcmp(then, "cleanvupre") == 0) {
@@ -756,6 +788,31 @@ static void activity_child(const char *mode, const char *log)
             }
         }
         _exit(0);
+    } else if (strcmp(mode, "actlowstop") == 0) {
+        /* issue 128: which signals ask the start-up set to stop: not 5,
+           not 10 before the set's first batch (nor without a set), 10
+           past it, 15 over 10; the memory text with the device's */
+        char why[48] = "", mem[160];
+        int stop;
+        ico_diag_note_low_memory(5);
+        stop = ico_diag_low_memory_stop(why, sizeof why);
+        ico_diag_log("test: after 5: %d", stop);
+        ico_diag_note_low_memory(10);
+        ico_diag_set_pipelines(0, 568, 0);
+        ico_diag_note_low_memory(10);
+        stop = ico_diag_low_memory_stop(why, sizeof why);
+        ico_diag_log("test: after 10 before the first batch: %d", stop);
+        ico_diag_set_pipelines(8, 568, 70);
+        ico_diag_note_low_memory(10);
+        stop = ico_diag_low_memory_stop(why, sizeof why);
+        ico_diag_log("test: after 10 past the first batch: %d (%s)", stop, why);
+        ico_diag_note_low_memory(15);
+        ico_diag_note_low_memory(10);
+        stop = ico_diag_low_memory_stop(why, sizeof why);
+        ico_diag_log("test: after 15: %d (%s)", stop, why);
+        ico_diag_memory_text(mem, sizeof mem);
+        ico_diag_log("test: memory text: %s", mem);
+        child_quit(0);
     } else if (strcmp(mode, "actlowlazy") == 0) {
         /* a run without the set: a lazy batch closed, then the system's
            signal between two creations, then the end */
@@ -1451,6 +1508,8 @@ int main(int argc, char **argv)
 
             CHECK(strstr(txt, "what ended the run: SIGSEGV") != NULL);
             CHECK(strstr(txt, "summary: version test; platform the test; GPU none\n") != NULL);
+            /* issue 128: the process's and the device's memory */
+            CHECK(strstr(txt, "\nmemory: memory ") != NULL);
             CHECK(strstr(txt, "the last ico_pc:/window:/rd: lines before the report:\n") != NULL);
             CHECK(strstr(txt, "ico_pc: summary: version test") != NULL);
             CHECK(strstr(txt, "ico_pc: CRASH: SIGSEGV") != NULL);
@@ -2441,6 +2500,108 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "this one tries the start-up set again") != NULL);
         CHECK(strstr(s, "test: pipeline set 6\n") != NULL);
         remove(act);
+        /* issue 128: the signals that stop the set */
+        remove(ends);
+        r = run(argv[0], "actlowstop", log);
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "test: after 5: 0\n") != NULL);
+        CHECK(strstr(s, "test: after 10 before the first batch: 0\n") != NULL);
+        CHECK(strstr(s, "test: after 10 past the first batch: 1 (running low)\n") != NULL);
+        CHECK(strstr(s, "test: after 15: 1 (running critical)\n") != NULL);
+        CHECK(strstr(s, "(onTrimMemory level 15, running critical; signal 5 of this run) at "
+                        "pipelines 8 of 568 of the start-up set; memory ") != NULL);
+        CHECK(strstr(s, "test: memory text: memory ") != NULL);
+        CHECK(strstr(s, " MB); device ") != NULL);
+        CHECK(strstr(s, " MB available of ") != NULL || strstr(s, "device memory unknown") != NULL);
+        remove(act);
+        /* ... the set stopped at the signal: the file keeps the line after
+           the careful one through the lazy run's exit (not "for this start
+           only"), the row is cleared; the next start of the version is
+           lazy from it (pipeline set 7, nothing written), and its own file
+           keeps the line */
+        remove(ends);
+        setenv("ICO_TEST_PIPESET", "careful", 1);
+        setenv("ICO_TEST_THEN", "lowmemclean", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "test: low memory stop 1 (running critical)\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the start-up set stopped at the system's low-memory signal "
+                        "(running critical); the next start makes the pipelines as the game "
+                        "needs them, with no start-up set\n") != NULL);
+        s = read_file(act);
+        CHECK(strncmp(s,
+                      "test 1\nexited with the pipelines created as the frames needed them\nset: "
+                      "careful\nset: stopped at the system's low-memory signal (running "
+                      "critical)\nsystem: low memory (onTrimMemory level 15, running critical; "
+                      "signal 1 of this run) at pipelines 144 of 568 of the start-up set; memory ",
+                      strlen("test 1\nexited with the pipelines created as the frames needed "
+                             "them\nset: careful\nset: stopped at the system's low-memory signal "
+                             "(running critical)\nsystem: low memory (onTrimMemory level 15, "
+                             "running critical; signal 1 of this run) at pipelines 144 of 568 of "
+                             "the start-up set; memory ")) == 0);
+        CHECK(read_file(ends)[0] == '\0');
+        setenv("ICO_TEST_THEN", "clean", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous start stopped preparing the graphics when the system "
+                        "ran low on memory (exited with the pipelines created as the frames "
+                        "needed them); this start prepares them as the game needs them\n") != NULL);
+        CHECK(strstr(s, "test: lazy 1\n") != NULL);
+        CHECK(strstr(s, "test: pipeline set 7\n") != NULL);
+        CHECK(strstr(s, "test: config write") == NULL);
+        s = read_file(act);
+        CHECK(strcmp(s, "test 1\nexited with the pipelines created as the frames needed "
+                        "them\nset: stopped at the system's low-memory signal (running "
+                        "critical)") == 0);
+        /* ... that lazy start ended inside a first-use pipeline: the first
+           end in a row, stepping from no set (lazy for that start only),
+           not back to the careful set */
+        setenv("ICO_TEST_THEN", "die", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
+        s = read_file(log);
+        CHECK(strstr(s, "test: pipeline set 7\n") != NULL);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous start had stopped preparing the graphics when the "
+                        "system ran low on memory (set: stopped at the system's low-memory signal "
+                        "(running critical))\n") != NULL);
+        CHECK(strstr(s, "ico_pc: starts in a row that ended while preparing the graphics (the "
+                        "pipelines): 1\n") != NULL);
+        CHECK(strstr(s, "test: pipeline set 4\n") != NULL);
+        /* ... the stopped set's run ended between two first-use pipelines:
+           lazy from the file as well; inside one: the count steps */
+        remove(ends);
+        setenv("ICO_TEST_THEN", "lowmem", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: pipeline set 7\n") != NULL);
+        remove(ends);
+        setenv("ICO_TEST_THEN", "lowmemdie", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: pipeline set 4\n") != NULL);
+        /* ... another version tries the set again */
+        remove(ends);
+        setenv("ICO_TEST_THEN", "lowmemclean", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
+        setenv("ICO_TEST_ACT_VERSION", "test 2", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_ACT_VERSION");
+        unsetenv("ICO_TEST_PIPESET");
+        s = read_file(log);
+        CHECK(strstr(s, "test: pipeline set 6\n") != NULL);
+        remove(act);
+        remove(ends);
         /* the record path's drawing shaders (vu_main_vs): the pre-pass's
            kind (the retired extended VU kind folds into it) */
         remove(ends);

@@ -746,14 +746,67 @@ int ico_diag_process_memory(long *rss_kb, long *peak_kb)
 #endif
 }
 
-/* " | memory N MB (most M MB)", or "" where unknown */
+int ico_diag_device_memory(long *avail_kb, long *total_kb)
+{
+    *avail_kb = *total_kb = -1;
+#ifdef _WIN32
+    return -1;
+#else
+    /* open and read only, as ico_diag_process_memory: the two lines are
+       the file's first three */
+    char buf[4096];
+    ssize_t got = 0;
+    const int fd = open("/proc/meminfo", O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        return -1;
+    }
+    while (got < (ssize_t)sizeof buf - 1) {
+        const ssize_t r = read(fd, buf + got, sizeof buf - 1 - (size_t)got);
+        if (r <= 0) {
+            break;
+        }
+        got += r;
+    }
+    close(fd);
+    buf[got] = '\0';
+    *avail_kb = status_kb(buf, "MemAvailable:");
+    *total_kb = status_kb(buf, "MemTotal:");
+    if (*avail_kb < 0 || *total_kb < 0) {
+        *avail_kb = *total_kb = -1;
+        return -1;
+    }
+    return 0;
+#endif
+}
+
+void ico_diag_memory_text(char *out, size_t size)
+{
+    long rss, peak, avail, total;
+    if (size == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (ico_diag_process_memory(&rss, &peak) != 0) {
+        return;
+    }
+    if (ico_diag_device_memory(&avail, &total) == 0) {
+        snprintf(out, size, "memory %ld MB (most %ld MB); device %ld MB available of %ld MB",
+                 rss / 1024, (peak >= 0 ? peak : rss) / 1024, avail / 1024, total / 1024);
+    } else {
+        snprintf(out, size, "memory %ld MB (most %ld MB); device memory unknown", rss / 1024,
+                 (peak >= 0 ? peak : rss) / 1024);
+    }
+}
+
+/* " | memory N MB (most M MB); device A MB available of T MB", or "" where
+   unknown */
 static void memory_note(char *out, size_t size)
 {
-    long rss, peak;
+    char text[160];
     out[0] = '\0';
-    if (ico_diag_process_memory(&rss, &peak) == 0) {
-        snprintf(out, size, " | memory %ld MB (most %ld MB)", rss / 1024,
-                 (peak >= 0 ? peak : rss) / 1024);
+    ico_diag_memory_text(text, sizeof text);
+    if (text[0] != '\0') {
+        snprintf(out, size, " | %s", text);
     }
 }
 
@@ -1177,6 +1230,16 @@ static const char act_loss_prefix[] = "loss dump: ";
 static int act_careful;
 static const char act_set_careful[] = "set: careful";
 static int act_prev_careful;
+/* this start's set stopped at the system's low-memory signal
+   (ico_diag_startup_activity_budget_stop after ico_diag_low_memory_stop):
+   the file's line after the note for the rest of the run, with the level
+   ("set: stopped at the system's low-memory signal (running critical)");
+   the previous run's, read by begin, makes this start lazy
+   (ICO_DIAG_PIPESET_LAZY_LOW_MEMORY) */
+static char act_low_memory[112];
+static const char act_set_low_memory[] = "set: stopped at the system's low-memory signal";
+static int act_prev_low_memory;
+static char act_prev_low_memory_line[sizeof act_low_memory];
 static const char act_loss_none[] = "graphics device lost, no loss dump";
 /* the loss dump the previous run left for this one's bisect
    (ico_diag_startup_activity_begin), "" none */
@@ -1290,15 +1353,18 @@ static int act_unsynced;
 static void act_write_sync(const char *note, int sync)
 {
     /* the version's line, then the note, then the careful set's line
-       while it records, then this run's loss when there was one, then the
+       while it records, then the low-memory stop's line while it records,
+       then this run's loss when there was one, then the
        batches' lines; room for the NULs over a longer text before it (one
        past the longest text) */
     static char text[sizeof act_version + 1 + sizeof activity + 1 + sizeof act_set_careful + 1 +
-                     sizeof act_loss + 1 + ACT_BATCHES_TEXT + 1];
+                     sizeof act_low_memory + 1 + sizeof act_loss + 1 + ACT_BATCHES_TEXT + 1];
     const size_t cap = sizeof text - 1;
-    int len = snprintf(text, cap, "%s\n%s%s%s%s%s", act_version, note,
+    int len = snprintf(text, cap, "%s\n%s%s%s%s%s%s%s", act_version, note,
                        act_careful && act_mode != 0 ? "\n" : "",
                        act_careful && act_mode != 0 ? act_set_careful : "",
+                       act_low_memory[0] != '\0' && act_mode != 0 ? "\n" : "",
+                       act_low_memory[0] != '\0' && act_mode != 0 ? act_low_memory : "",
                        act_loss[0] != '\0' ? "\n" : "", act_loss);
     {
         const unsigned int nb = act_nbatches;
@@ -1865,16 +1931,54 @@ static const char *trim_kind(int level)
     return "a memory signal";
 }
 
+/* The start-up set stops at the system's low-memory signal (issue 128:
+   the Adreno 740 handheld's set went on through four of them, the system
+   took the process's pages back and then ended it): the level that asks
+   the set to stop, 0 none, set from the signal's thread (Android's Java
+   thread) and read by the set's loop between two batches
+   (ico_diag_low_memory_stop through rd_set_low_memory_fn). 15 ("running
+   critical") at once, whenever it comes before the set's end; 10
+   ("running low") once the set is past its first batch (pipes_done: a
+   "running low" while the app is opened can be the system making room
+   for it, one batch later the shortage is the device's while the set
+   runs); 5 ("running moderate") and a signal without a level never. */
+static volatile int low_memory_stop_level;
+/* the set stopped on it (ico_diag_low_memory_stop answered yes): the
+   window's ico_diag_startup_activity_budget_stop persists it */
+static volatile int low_memory_stopped;
+
+static void low_memory_stop_note(int level)
+{
+    if (level == 15 || (level == 10 && pipes_total > 0 && pipes_done > 0)) {
+        int cur = __atomic_load_n(&low_memory_stop_level, __ATOMIC_ACQUIRE);
+        /* the strongest level asked so far (15 over 10) */
+        while (level > cur && !__atomic_compare_exchange_n(&low_memory_stop_level, &cur, level, 0,
+                                                           __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {}
+    }
+}
+
+int ico_diag_low_memory_stop(char *why, size_t size)
+{
+    const int level = __atomic_load_n(&low_memory_stop_level, __ATOMIC_ACQUIRE);
+    if (level == 0) {
+        return 0;
+    }
+    low_memory_stopped = 1;
+    if (why != NULL && size > 0) {
+        snprintf(why, size, "%s", trim_name(level));
+    }
+    return 1;
+}
+
 void ico_diag_note_low_memory(int level)
 {
-    char line[ACT_BATCH_BYTES - sizeof act_system_prefix], pipes[96], mem[64], lv[128];
-    long rss = -1, peak = -1;
+    char line[ACT_BATCH_BYTES - sizeof act_system_prefix], pipes[96], mem[160], lv[128];
     const unsigned int nth = ++low_memory_count;
+    /* before the line: the set reads the flag between two batches */
+    low_memory_stop_note(level);
     act_where(pipes, sizeof pipes);
-    if (ico_diag_process_memory(&rss, &peak) == 0 && rss >= 0) {
-        snprintf(mem, sizeof mem, "memory %ld MB (most %ld MB)", rss / 1024,
-                 (peak >= 0 ? peak : rss) / 1024);
-    } else {
+    ico_diag_memory_text(mem, sizeof mem);
+    if (mem[0] == '\0') {
         snprintf(mem, sizeof mem, "memory unknown");
     }
     if (level >= 0) {
@@ -1957,8 +2061,8 @@ const char *ico_diag_startup_activity_prev(void)
 
 int ico_diag_startup_activity_begin(const char *path, int relaunched)
 {
-    static char
-        buf[sizeof act_version + 1 + sizeof activity + 1 + sizeof act_loss + 1 + ACT_BATCHES_TEXT];
+    static char buf[sizeof act_version + 1 + sizeof activity + 1 + sizeof act_set_careful + 1 +
+                    sizeof act_low_memory + 1 + sizeof act_loss + 1 + ACT_BATCHES_TEXT];
     const char *ver = "";
     char *prev = buf;
     char *loss = NULL;
@@ -1976,6 +2080,9 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     act_once = 0;
     act_careful = 0;
     act_prev_careful = 0;
+    act_low_memory[0] = '\0';
+    act_prev_low_memory = 0;
+    act_prev_low_memory_line[0] = '\0';
     act_saw_vu_pre = 0;
     act_unsynced = 0;
     act_end_n[0] = act_end_n[1] = act_end_n[2] = 0;
@@ -2069,6 +2176,11 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
         } else if (strcmp(line, act_set_careful) == 0) {
             /* the ended start's set was the careful one */
             act_prev_careful = 1;
+        } else if (strncmp(line, act_set_low_memory, sizeof act_set_low_memory - 1) == 0) {
+            /* issue 128: its set stopped at the system's low-memory
+               signal (ico_diag_startup_pipeline_set) */
+            act_prev_low_memory = 1;
+            snprintf(act_prev_low_memory_line, sizeof act_prev_low_memory_line, "%s", line);
         } else if (loss == NULL && line[0] != '\0') {
             loss = line;
         }
@@ -2196,6 +2308,25 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
         }
         return 0;
     }
+    if (act_prev_low_memory && !relaunched &&
+        (strcmp(prev, act_lazy_exit) == 0 || strcmp(prev, act_between) == 0)) {
+        /* issue 128: the set stopped at the system's low-memory signal and
+           the run went on lazily (exited, or was ended between two
+           creations): this start makes no set
+           (ICO_DIAG_PIPESET_LAZY_LOW_MEMORY) */
+        ico_diag_log("ico_pc: the previous start stopped preparing the graphics when the system "
+                     "ran low on memory (%s); this start prepares them as the game needs them",
+                     prev);
+        return 1;
+    }
+    if (act_prev_low_memory) {
+        /* ... and was then ended inside a creation: the count of ends
+           decides (ico_diag_startup_pipeline_set), the line says why its
+           set was short */
+        ico_diag_log("ico_pc: the previous start had stopped preparing the graphics when the "
+                     "system ran low on memory (%s)",
+                     act_prev_low_memory_line);
+    }
     if (strcmp(prev, act_lazy_exit) == 0) {
         /* a clean exit of a lazy run: no ended run to report */
         ico_diag_log("ico_pc: the previous run created the pipelines as the frames needed them; "
@@ -2234,6 +2365,14 @@ int ico_diag_startup_pipeline_set(int relaunched, int file_lazy, const char *set
     /* a restart after a crash report takes its own step (startup_retry.h);
        an end in the background is not counted (begin said so) */
     if (relaunched || act_end_n[ICO_DIAG_END_PIPELINES] == 0) {
+        if (file_lazy && act_prev_low_memory && !relaunched) {
+            /* issue 128: the previous start's set stopped at the system's
+               low-memory signal; this start's file keeps the line, so an
+               end inside its own creations steps from "no set" (LAZY_ONCE,
+               then the setting), not back to the careful set */
+            memcpy(act_low_memory, act_prev_low_memory_line, sizeof act_low_memory);
+            return ICO_DIAG_PIPESET_LAZY_LOW_MEMORY;
+        }
         return file_lazy ? ICO_DIAG_PIPESET_LAZY_FILE
                : careful ? ICO_DIAG_PIPESET_CAREFUL_SETTING
                          : ICO_DIAG_PIPESET_FULL;
@@ -2248,8 +2387,9 @@ int ico_diag_startup_pipeline_set(int relaunched, int file_lazy, const char *set
        comes after the device is made (ico_diag_startup_end_persist). The
        ended start's own set says how far this one steps back: from the
        full set (or none, a lazy run or an older version's file without
-       the line) to the careful set, from the careful set to none */
-    if (!act_prev_careful) {
+       the line) to the careful set, from the careful set, or a set that
+       stopped at the system's low-memory signal (issue 128), to none */
+    if (!act_prev_careful && !act_prev_low_memory) {
         act_careful_once = 1;
         return ICO_DIAG_PIPESET_CAREFUL_ONCE;
     }
@@ -2433,9 +2573,28 @@ void ico_diag_startup_activity_budget_stop(void)
     /* the set ended as it should (stopped by its policy): its row is
        broken as at its finish; the rest of the run is a lazy run's, for
        this start only (the careful line kept) */
-    act_nbatches = 0;
     ends_clean();
-    act_once = 1;
+    if (low_memory_stopped) {
+        /* issue 128: stopped at the system's low-memory signal
+           (ico_diag_low_memory_stop): the file's line says so for the rest
+           of the run, and the lazy run is not for this start only, so the
+           next start makes no set (ICO_DIAG_PIPESET_LAZY_LOW_MEMORY); the
+           set's batches and the system's lines stay in the file (what the
+           memory did up to the stop) */
+        char lv[48];
+        if (!ico_diag_low_memory_stop(lv, sizeof lv)) {
+            snprintf(lv, sizeof lv, "a level not named");
+        }
+        snprintf(act_low_memory, sizeof act_low_memory, "%s (%s)", act_set_low_memory, lv);
+        act_once = 0;
+        ico_diag_log("ico_pc: the start-up set stopped at the system's low-memory signal (%s); "
+                     "the next start makes the pipelines as the game needs them, with no "
+                     "start-up set",
+                     lv);
+    } else {
+        act_nbatches = 0;
+        act_once = 1;
+    }
     ico_diag_clear_activity();
     ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_LAZY);
 }
@@ -3667,6 +3826,12 @@ static void report_file(const char *what, int fatal)
     in.log_path = log_path_copy[0] != '\0' ? log_path_copy : NULL;
     in.summary = summary_text;
     in.disc = disc_text;
+    {
+        /* open and read only (ico_diag_memory_text): a crash handler's */
+        static char mem[160];
+        ico_diag_memory_text(mem, sizeof mem);
+        in.memory = mem;
+    }
     in.uptime_s = ico_diag_uptime();
     /* this run's loss dump, else the one the previous run left */
     if (strncmp(act_loss, act_loss_prefix, np) == 0) {

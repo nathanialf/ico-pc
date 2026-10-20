@@ -637,6 +637,34 @@ records the rest of the run as a lazy run for this start only (`ICO_DIAG_ACTIVIT
 `set: careful` line kept), so a freeze in a later first-use pipeline is named and counted (the
 next start lazy for that start) and a clean exit makes the next start try the set again.
 
+On Android the system's low-memory signal stops the start-up set too, under any policy
+(`port/platform/diag_host.c` (`low_memory_stop_note`, `ico_diag_low_memory_stop`)):
+`ico_diag_note_low_memory` sets an atomic level from the activity's thread before it logs its line,
+`onTrimMemory` 15 (`running critical`) at once and 10 (`running low`) only once the set is past its
+first batch (`ico_diag_set_pipelines`' count above 0: a `running low` while the app is opened can be
+the system making room for it); 5 and a signal without a level never stop it. The set's loop asks
+`ico_diag_low_memory_stop` through `rd_set_low_memory_fn` after each batch (the window registers it
+before `rd_init` on Android only; desktops never get the signal), so the batch in flight finishes
+(the careful policy's batches are 8 pipelines on one thread, so nothing cuts a batch short), the
+pipeline cache is written, and the rest of the set is made on first use
+([RENDER.md](RENDER.md#the-start-up-set)). The window's `ico_diag_startup_activity_budget_stop` then
+logs `ico_pc: the start-up set stopped at the system's low-memory signal (running critical); the
+next start makes the pipelines as the game needs them, with no start-up set` and records the rest of
+the run as a lazy run that is not for this start only, with the line `set: stopped at the system's
+low-memory signal (running critical)` after the note (and after `set: careful`), the set's
+`compiled: ` and `system: ` lines kept. The next start of the same version that finds the line
+beside the lazy run's clean exit or its note between two creations logs `ico_pc: the previous start
+stopped preparing the graphics when the system ran low on memory (<note>); this start prepares them
+as the game needs them` and makes no set (`ICO_DIAG_PIPESET_LAZY_LOW_MEMORY`; the renderer's `rd:
+pipelines: no start-up set (the previous start's set stopped when the system ran low on memory)`),
+so the "Preparing graphics" screen does not come; that start's own file keeps the line, so the
+decision lasts until the version changes. A start whose file has the line and that ended inside a
+first-use pipeline logs `ico_pc: the previous start had stopped preparing the graphics when the
+system ran low on memory (<line>)` and counts as an end while preparing the graphics: the line
+counts as `set: careful` does, so the first end in a row makes the next start lazy for that start
+(`ICO_DIAG_PIPESET_LAZY_ONCE`) and the second writes `[dev] pipeline_set = "lazy"`. A restart after a
+crash report and another version's file take their own steps above.
+
 Android cannot start the game again after a device loss, so the `robust` loss step's measure
 comes at the next start instead (`port/platform/window_host.c`, `#ifdef __ANDROID__`): the
 activity file's loss line (`loss dump: <zip>` or `graphics device lost, no loss dump`,
@@ -727,8 +755,13 @@ batch (issue 93); the log itself has the line as each batch completes, with ever
 (`onTrimMemory`, which `IcoActivity` hands to `nativeTrimMemory` with its level before SDL turns it
 into `SDL_EVENT_LOW_MEMORY`, which has none) is logged at once from the activity's thread: `ico_pc:
 the system asked the app to free memory: low memory (onTrimMemory level 15, running critical;
-signal 1 of this run) at pipelines 201 of 527 of the start-up set; memory 102 MB (most 194 MB)`
-(`with <n> pipelines made` outside the set). Only levels 5, 10 and 15 (`TRIM_MEMORY_RUNNING_*`:
+signal 1 of this run) at pipelines 201 of 527 of the start-up set; memory 102 MB (most 194 MB);
+device 320 MB available of 7632 MB` (`with <n> pipelines made` outside the set). The memory is
+`ico_diag_memory_text`: the process's resident size and peak (`/proc/self/status`), then the
+device's `MemAvailable` and `MemTotal` from `/proc/meminfo` (`ico_diag_device_memory`; `device
+memory unknown` when that file cannot be read), the same text the heartbeat ends with, the window's
+10 s line (`window: memory: ...; the process holds <n> MB (most <m> MB); device <a> MB available of
+<t> MB`) and report.txt's `memory: ` line carry. Only levels 5, 10 and 15 (`TRIM_MEMORY_RUNNING_*`:
 the device is low on memory while the app runs) are called low memory; level 20 is `the app's
 screen was hidden` (`TRIM_MEMORY_UI_HIDDEN`) and 40, 60 and 80 `the app is in the background`
 (its place in the system's list of cached processes; Android 14 and later send 20 and 40 only),
@@ -810,7 +843,9 @@ the 16-step and 6-start bounds, the time budget, and state files that do not par
 A heartbeat and a watchdog share one OS thread of their own, so a game thread that spins without a
 kernel call cannot stop them. Every 2 s the heartbeat logs one line of progress
 (`port/platform/trace_host.c` (`ico_host_status`: vsyncs, ticks, stage, the disc and
-[SIF](ARCHITECTURE.md#terms) counters)). The watchdog stops the run, with every thread dumped and
+[SIF](ARCHITECTURE.md#terms) counters)), ending with `| memory <n> MB (most <m> MB); device <a> MB
+available of <t> MB` where `/proc` exists (`ico_diag_memory_text`; `port/platform/diag_host.c`
+(`memory_note`)). The watchdog stops the run, with every thread dumped and
 exit code 4, when no Main tick comes `watchdog=` seconds after boot (default 30) or no new tick or
 other progress for twice that; a movie notes each picture as progress, time inside a present is
 excused for an effects program, and the first limit is doubled when one is loaded
@@ -1068,7 +1103,7 @@ the newest file in logs that starts with report-" and name it (`port/platform/di
 
 | entry | what |
 | --- | --- |
-| `report.txt` | what ended the run and when, the `VERSION.txt` lines (beside the program or one folder up; Android's from the app's assets), `achievements.toml`'s `stages` line (not the file), the disc played (`disc: SCPS-11003 (the Japanese disc)`, `ico_diag_set_disc`), the [summary line](#the-summary-line), the log's latest device, robust access, blend, VU index, fog, shader and window lines, the last 20 `ico_pc:`, `window:` and `rd:` lines before the report, the report block itself (the crash or watchdog report with its symbol lines), and the window's own part (`IcoReportInputs.extra`, `ico_diag_set_report_extra`: SDL's own log, the last 64 lines) |
+| `report.txt` | what ended the run and when, the `VERSION.txt` lines (beside the program or one folder up; Android's from the app's assets), `achievements.toml`'s `stages` line (not the file), the disc played (`disc: SCPS-11003 (the Japanese disc)`, `ico_diag_set_disc`), the [summary line](#the-summary-line), the process's and the device's memory when the report is written (`memory: memory 191 MB (most 197 MB); device 320 MB available of 7632 MB`, `IcoReportInputs.memory`, `ico_diag_memory_text`; `(unknown on this system)` without `/proc`), the log's latest device, robust access, blend, VU index, fog, shader and window lines, the last 20 `ico_pc:`, `window:` and `rd:` lines before the report, the report block itself (the crash or watchdog report with its symbol lines), and the window's own part (`IcoReportInputs.extra`, `ico_diag_set_report_extra`: SDL's own log, the last 64 lines) |
 | `ico-pc.log` | the log so far |
 | `ico-pc-previous.log` | the run before's |
 | `startup-activity.txt` | when there is one |

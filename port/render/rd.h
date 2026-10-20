@@ -607,6 +607,18 @@ void rd_set_batch_fn(RdActivityFn fn);
  * default): "memory unknown". */
 typedef int (*RdMemoryFn)(long *rssKb, long *peakKb);
 void rd_set_memory_fn(RdMemoryFn fn);
+/* Whether the system reported low memory (issue 128; diag_host.h
+ * ico_diag_low_memory_stop: Android's onTrimMemory "running critical"):
+ * fn(why, size) returns nonzero with the level's name in why.  The
+ * start-up set (rd_precreate_pipelines, under any policy) asks it after
+ * each batch and stops there on a yes, the pipeline cache written as after
+ * any batch and the rest made on first use (rd_pipelines_lazy: "no
+ * start-up set (memory budget: the system reported low memory (running
+ * critical) after 147 of 568 keys; the rest is made as the game needs
+ * it)"); a batch in flight is not cut (the careful policy's batches are 8
+ * pipelines on one thread).  NULL (the default): never asked. */
+typedef int (*RdLowMemoryFn)(char *why, size_t size);
+void rd_set_low_memory_fn(RdLowMemoryFn fn);
 /* No start-up set (issues 93 and 107; docs/port/RENDER.md, "The start-up
  * set"): the window calls it instead of rd_precreate_pipelines, why saying
  * why ("on this device (Adreno 740, issues 93 and 107)", "by the settings

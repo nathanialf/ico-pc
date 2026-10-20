@@ -1542,7 +1542,9 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
        ended start made the full set, lazy when it made the careful one
        (its activity file's "set: careful"), the second also every start
        after it lazy ([dev] pipeline_set = "lazy"; the lines and the
-       setting after rd_init). The device table's careful rule
+       setting after rd_init). A previous start of this version whose set
+       stopped at the system's low-memory signal (issue 128) makes this
+       start lazy (ICO_DIAG_PIPESET_LAZY_LOW_MEMORY). The device table's careful rule
        (RhiLimits.carefulPipelines) is read after rd_init. */
     const char *pipeSetting = getenv("ICO_PIPELINE_SET");
     const int pipePolicy =
@@ -1773,6 +1775,12 @@ open_window:
     /* before the set: the careful policy's budget reads the process's
        memory around each batch (rd_pipeline.c createKeys) */
     rd_set_memory_fn(ico_diag_process_memory);
+#ifdef __ANDROID__
+    /* issue 128: the system's low-memory signal (IcoActivity's
+       onTrimMemory, diag_host.c ico_diag_note_low_memory) stops the
+       start-up set between two batches; desktops never send it */
+    rd_set_low_memory_fn(ico_diag_low_memory_stop);
+#endif
     bool up = rd_init(gsW, gsH, &rs, s_window);
 #ifdef __ANDROID__
     /* not after a bisect that lost the device: the player's driver did not
@@ -1932,6 +1940,9 @@ open_window:
             snprintf(why, sizeof(why),
                      "(the previous start ended while preparing them; [dev] pipeline_set = "
                      "\"lazy\" could not be written, so for this start only)");
+        } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_LOW_MEMORY) {
+            snprintf(why, sizeof(why),
+                     "(the previous start's set stopped when the system ran low on memory)");
         } else {
             snprintf(why, sizeof(why), "(the last run made them that way)");
         }
@@ -2005,7 +2016,9 @@ open_window:
         ico_diag_set_pipelines(0, 0, 0);
         if (rd_pipelines_lazy_on()) {
             /* the careful policy's budget stopped the set: the rest of the
-               run is recorded as a lazy run's, for this start only */
+               run is recorded as a lazy run's, for this start only; or the
+               system's low-memory signal did (issue 128): then not for this
+               start only, and the next start makes no set */
             ico_diag_startup_activity_budget_stop();
         } else {
             ico_diag_startup_activity_record(0);
@@ -4102,12 +4115,19 @@ static void perf_log(void)
            phone GPU allows 4096) and the process's memory (a phone ends a
            process that holds too much without a word) */
         RhiStats st;
-        long rss = -1, peak = -1;
+        long rss = -1, peak = -1, avail = -1, total = -1;
 
         char gfx[160] = "graphics allocations not counted";
+        char dev[96] = "; device memory unknown";
 
         rhi_get_stats(&st);
         ico_diag_process_memory(&rss, &peak);
+        /* and the device's (issue 128: what the system has left decides
+           when it ends the app, not the app's own size) */
+        if (ico_diag_device_memory(&avail, &total) == 0) {
+            snprintf(dev, sizeof(dev), "; device %ld MB available of %ld MB", avail / 1024,
+                     total / 1024);
+        }
         if (st.memoryLimit != 0) { /* Vulkan counts them */
             snprintf(gfx, sizeof(gfx),
                      "%llu graphics allocations alive (most %llu; the device allows %llu), "
@@ -4117,8 +4137,8 @@ static void perf_log(void)
                      (double)st.memoryPeakBytes / 1048576.0);
         }
         if (rss >= 0) {
-            fprintf(stderr, "window: memory: %s; the process holds %ld MB (most %ld MB)\n", gfx,
-                    rss / 1024, (peak >= 0 ? peak : rss) / 1024);
+            fprintf(stderr, "window: memory: %s; the process holds %ld MB (most %ld MB)%s\n", gfx,
+                    rss / 1024, (peak >= 0 ? peak : rss) / 1024, dev);
         } else {
             fprintf(stderr, "window: memory: %s\n", gfx);
         }
