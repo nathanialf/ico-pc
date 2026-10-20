@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The AppImage's icon: the Android launcher's placeholder disc
+     (android/app/src/main/res/drawable/ic_launcher_foreground.xml), the same
+     viewport and path data, converted to SVG. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
+  <path fill="#E8DCC4" d="M54,30a24,24 0,1 1,0 48a24,24 0,1 1,0 -48z"/>
+</svg>

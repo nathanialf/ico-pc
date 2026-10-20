@@ -24,6 +24,11 @@
 # dist/stage/linux-arm64/, logged to build-host/pkg-linux-arm64-<label>.log.
 # The x86-64 names are as above; the portable archive is
 # dist/ico-pc-<label>-linux-arm64-portable.tar.gz there.
+#
+# Last, the AppImage from the same stage: dist/ico-pc-<label>-linux-x86_64.AppImage
+# (dist/ico-pc-<label>-linux-aarch64.AppImage on arm64) with its .sha256,
+# made with the AppImage tools tools/fetch_deps.sh unpacks
+# (tools/toolchain/deps/appimage/<arch>/) and checked by unpacking it again.
 set -euo pipefail
 
 pkg_name=package_linux
@@ -79,19 +84,24 @@ b="$wt/build-host/$preset"
 [[ -f "$b/port/save/mc_import" ]] || fail "$preset did not produce mc_import"
 cd "$root"
 
-# the binary must need only SDL3 and system libraries, and find SDL3 beside itself
-needed="$(readelf -d "$b/ico_pc" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' | tr '\n' ' ')"
-echo "package_linux: NEEDED: $needed" >>"$log"
-for n in $needed; do
-    case "$n" in
-        libSDL3.so.0|libc.so.6|libm.so.6|libdl.so.2|libpthread.so.0|librt.so.1|"$ldso") ;;
-        *) fail "unexpected shared library dependency $n" ;;
-    esac
-done
-readelf -d "$b/ico_pc" | grep -E 'RUNPATH|RPATH' | grep -q '\$ORIGIN' || fail "no \$ORIGIN run path"
-if readelf -d "$b/ico_pc" | grep -E 'RUNPATH|RPATH' | grep -q "$root"; then
-    fail "the run path names the build tree"
-fi
+# the binary must need only SDL3 and system libraries, and find SDL3 beside
+# itself (checked again on the program the AppImage holds)
+check_program_elf() {
+    local needed n
+    needed="$(readelf -d "$1" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' | tr '\n' ' ')"
+    echo "package_linux: NEEDED ($1): $needed" >>"$log"
+    for n in $needed; do
+        case "$n" in
+            libSDL3.so.0|libc.so.6|libm.so.6|libdl.so.2|libpthread.so.0|librt.so.1|"$ldso") ;;
+            *) fail "unexpected shared library dependency $n in $1" ;;
+        esac
+    done
+    readelf -d "$1" | grep -E 'RUNPATH|RPATH' | grep -q '\$ORIGIN' || fail "no \$ORIGIN run path in $1"
+    if readelf -d "$1" | grep -E 'RUNPATH|RPATH' | grep -q "$root"; then
+        fail "the run path of $1 names the build tree"
+    fi
+}
+check_program_elf "$b/ico_pc"
 
 # the oldest C library the package runs on: README.md says Ubuntu 24.04 or
 # newer (glibc 2.39), so no shipped binary may need a newer symbol version.
@@ -208,6 +218,82 @@ for variant in normal portable; do
     fi
 done
 
+# The AppImage, from the same stage: one file the player marks as a program
+# and double-clicks. The runtime (deps/appimage/<arch>/runtime) mounts the
+# read-only file system inside it and runs AppRun, a link to usr/bin/ico_pc,
+# which finds libSDL3.so.0 beside itself ($ORIGIN) and its link map
+# (/proc/self/exe). ico_pc takes the AppImage file's folder as its own
+# (host_fs.c ico_appimage_file, host_config.c ico_host_exe_dir), so
+# ico-pc.ini, logs/, userdata/, the disc image and the textures, models and
+# reshade folders all go beside the file: none of them is inside, nor
+# make_portable.sh. The guides, licences and VERSION.txt sit in
+# usr/share/doc/ico-pc/. appimagetool runs unpacked (no FUSE needed) with
+# its own mksquashfs and the pinned runtime, so nothing is downloaded;
+# SOURCE_DATE_EPOCH (the commit's time) stamps the file system. Then the
+# file is unpacked again with its own --appimage-extract (no FUSE either)
+# and its file list, links and program are checked; the .sha256 is written
+# beside it as CI writes the archives'.
+case "$arch" in
+    x64) appimage_arch=x86_64 ;;
+    arm64) appimage_arch=aarch64 ;;
+esac
+ait="$root/tools/toolchain/deps/appimage/$appimage_arch"
+appimage="$root/dist/ico-pc-$label-linux-$appimage_arch.AppImage"
+[[ -x "$ait/squashfs-root/AppRun" && -f "$ait/runtime" ]] ||
+    fail "no AppImage tools for $appimage_arch: run tools/fetch_deps.sh"
+appdir="$root/build-host/tmp/appdir-$label"
+doc="$appdir/usr/share/doc/ico-pc"
+rm -rf "$appdir"
+mkdir -p "$appdir/usr/bin" "$doc"
+for f in ico_pc ico_pc.map libSDL3.so.0; do
+    cp -a "$stage/$f" "$appdir/usr/bin/$f" || fail "stage: no $f"
+done
+cp -a "$stage/tools/mc_import" "$appdir/usr/bin/mc_import" || fail "stage: no tools/mc_import"
+for f in README.md LICENSE NOTICES.txt THIRD_PARTY.md VERSION.txt; do
+    cp -a "$stage/$f" "$doc/$f" || fail "stage: no $f"
+done
+cp -a "$stage/docs" "$doc/docs"
+cp "$wt/tools/appimage/ico-pc.desktop" "$appdir/ico-pc.desktop"
+cp "$wt/tools/appimage/ico-pc.svg" "$appdir/ico-pc.svg"
+ln -s ico-pc.svg "$appdir/.DirIcon"
+ln -s usr/bin/ico_pc "$appdir/AppRun"
+rm -f "$appimage" "$appimage.sha256"
+run env ARCH="$appimage_arch" SOURCE_DATE_EPOCH="$(git log -1 --format=%ct "$commit")" \
+    "$ait/squashfs-root/AppRun" --no-appstream --runtime-file "$ait/runtime" "$appdir" "$appimage"
+[[ -f "$appimage" ]] || fail "appimagetool did not write $appimage"
+chmod 755 "$appimage"
+rm -rf "$appdir"
+# an ELF (the runtime) with the AppImage type 2 mark at byte 8
+[[ "$(od -An -tx1 -N11 "$appimage" | tr -d ' \n')" == 7f454c46*414902 ]] ||
+    fail "$appimage does not start with the AppImage runtime"
+chk="$root/build-host/tmp/appimage-check-$label"
+rm -rf "$chk"
+mkdir -p "$chk"
+(cd "$chk" && "$appimage" --appimage-extract >/dev/null 2>>"$log") || fail "$appimage --appimage-extract"
+sq="$chk/squashfs-root"
+want_list="$chk/want.txt"
+{
+    printf '%s\n' .DirIcon AppRun ico-pc.desktop ico-pc.svg \
+        usr/bin/ico_pc usr/bin/ico_pc.map usr/bin/libSDL3.so.0 usr/bin/mc_import
+    for f in README.md LICENSE NOTICES.txt THIRD_PARTY.md VERSION.txt; do
+        echo "usr/share/doc/ico-pc/$f"
+    done
+    for n in "${pkg_player_docs[@]}"; do echo "usr/share/doc/ico-pc/docs/$n.md"; done
+} | LC_ALL=C sort > "$want_list"
+(cd "$sq" && find . -mindepth 1 \( -type f -o -type l \) -printf '%P\n' | LC_ALL=C sort) > "$chk/got.txt"
+if ! diff -u "$want_list" "$chk/got.txt" >>"$log" 2>&1; then
+    fail "the AppImage's files are not the expected list (the diff is in the log)"
+fi
+[[ "$(readlink "$sq/AppRun")" == usr/bin/ico_pc ]] || fail "the AppImage's AppRun is not a link to usr/bin/ico_pc"
+[[ "$(readlink "$sq/.DirIcon")" == ico-pc.svg ]] || fail "the AppImage's .DirIcon is not a link to ico-pc.svg"
+[[ -x "$sq/usr/bin/ico_pc" ]] || fail "the AppImage's ico_pc is not executable"
+cmp -s "$sq/usr/bin/ico_pc" "$stage/ico_pc" || fail "the AppImage's ico_pc differs from the stage's"
+check_program_elf "$sq/usr/bin/ico_pc"
+rm -rf "$chk"
+(cd "$root/dist" && sha256sum "${appimage##*/}" > "${appimage##*/}.sha256")
+echo "package_linux: AppImage $appimage ($(stat -c %s "$appimage") bytes)" >>"$log"
+
 echo "$tgz"
 echo "$tgzp"
+echo "$appimage"
 echo "built from $commit"

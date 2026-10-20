@@ -24,6 +24,9 @@
 #                          handhelds run a Wayland compositor or none)
 #   deps/sdl3/mingw/       SDL's own mingw development release: its
 #                          x86_64-w64-mingw32 prefix
+#   deps/appimage/<arch>/  appimagetool (MIT), unpacked, and the AppImage
+#                          runtime (MIT) for the host (x86_64 or aarch64):
+#                          tools/package_linux.sh's AppImage
 #   deps/vulkan-validation/ the Khronos validation layer (Apache-2.0) from
 #                          Debian 13, for the RHI tests only; never shipped
 #   deps/dxc/              DirectX Shader Compiler (NCSA; Linux x86-64 release,
@@ -52,7 +55,10 @@
 #   LIBMPEG2_TAG, LIBMPEG2_COMMIT, LIBMPEG2_TAR_SHA256
 #   LIBCHDR_TAG, LIBCHDR_COMMIT, LIBCHDR_TAR_SHA256, ZSTD_LICENSE_SHA256
 #   SKIP_SDL3_LINUX=1, SKIP_SDL3_MINGW=1, SKIP_VALIDATION_LAYER=1, SKIP_DXC=1,
-#   SKIP_LIBMPEG2=1, SKIP_LIBCHDR=1, SKIP_NOTO_JP=1, SKIP_NOTO_KR=1
+#   SKIP_LIBMPEG2=1, SKIP_LIBCHDR=1, SKIP_NOTO_JP=1, SKIP_NOTO_KR=1,
+#   SKIP_APPIMAGE=1
+#   APPIMAGETOOL_VERSION, APPIMAGETOOL_SHA256, APPIMAGE_RUNTIME_VERSION,
+#   APPIMAGE_RUNTIME_SHA256 (the host architecture's assets)
 #   NOTO_JP_COMMIT, NOTO_JP_SHA256, NOTO_JP_OFL_SHA256
 #   NOTO_KR_COMMIT, NOTO_KR_SHA256, NOTO_KR_OFL_SHA256
 #   DEB_SNAPSHOT     snapshot.debian.org fallback for the Debian packages
@@ -448,6 +454,71 @@ else
     done
     echo "$SDL3_MINGW_ID" > "$SDL3_MINGW/.ico-release"
     echo "==> SDL3 ${SDL3_VERSION} (mingw) at $SDL3_MINGW"
+fi
+
+# --- 2b. AppImage tools (the Linux AppImage) ---------------------------------
+#
+# tools/package_linux.sh makes the AppImage with appimagetool (MIT,
+# github.com/AppImage/appimagetool) and puts the AppImage runtime (MIT, with
+# statically linked musl, libfuse, squashfuse, zstd and zlib: its LICENSE,
+# kept as tools/appimage/runtime-LICENSE; github.com/AppImage/type2-runtime)
+# at the start of the file; both for the host's architecture. Both projects
+# also publish a moving "continuous" release; these are their newest tagged
+# releases instead, so the pin holds: appimagetool 1.9.1
+# (https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-<arch>.AppImage)
+# and type2-runtime 20251108 = commit dd6cebedcbddde9c82f89b011e8e1d40b6e43868
+# (https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-<arch>).
+# The SHA-256s are the digests GitHub lists for the assets, checked against
+# the downloads on 2026-10-20. appimagetool is itself an AppImage: it is
+# unpacked once with --appimage-extract (which needs no FUSE) into
+# deps/appimage/<arch>/squashfs-root, which carries its own mksquashfs; the
+# runtime is kept as deps/appimage/<arch>/runtime and handed to it with
+# --runtime-file, so packaging downloads nothing. Never linked; only the
+# runtime ships (inside the AppImage; tools/notices/manifest.json).
+APPIMAGETOOL_VERSION="${APPIMAGETOOL_VERSION:-1.9.1}"
+APPIMAGE_RUNTIME_VERSION="${APPIMAGE_RUNTIME_VERSION:-20251108}"
+APPIMAGE_ARCH="$(by_arch x86_64 aarch64)"
+APPIMAGETOOL_SHA256="${APPIMAGETOOL_SHA256:-$(by_arch \
+    ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0 \
+    f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158)}"
+APPIMAGE_RUNTIME_SHA256="${APPIMAGE_RUNTIME_SHA256:-$(by_arch \
+    2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d \
+    00cbdfcf917cc6c0ff6d3347d59e0ca1f7f45a6df1a428a0d6d8a78664d87444)}"
+APPIMAGE_DIR="$DEST/appimage/$APPIMAGE_ARCH"
+APPIMAGE_ID="appimagetool-${APPIMAGETOOL_VERSION}+runtime-${APPIMAGE_RUNTIME_VERSION}-${APPIMAGE_ARCH}"
+# fetch_pinned <url> <sha256> <file>: fetch, with the way out when an
+# upstream file changed under its pin
+fetch_pinned() {
+    if ! (fetch "$1" "$2" "$3"); then
+        echo "fetch_deps: $1 could not be fetched or does not match its pinned SHA-256 $2;" \
+            "if upstream replaced the file, refresh the pin (tools/fetch_deps.sh, section 2b," \
+            "and docs/THIRD_PARTY.md)" >&2
+        exit 1
+    fi
+}
+if [[ "${SKIP_APPIMAGE:-0}" == "1" ]]; then
+    echo "==> SKIP_APPIMAGE=1; not fetching the AppImage tools"
+elif stamped "$APPIMAGE_DIR" "$APPIMAGE_ID"; then
+    echo "==> AppImage tools already at $APPIMAGE_DIR"
+else
+    fetch_pinned "https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/appimagetool-${APPIMAGE_ARCH}.AppImage" \
+        "$APPIMAGETOOL_SHA256" "$TMP/appimagetool.AppImage"
+    fetch_pinned "https://github.com/AppImage/type2-runtime/releases/download/${APPIMAGE_RUNTIME_VERSION}/runtime-${APPIMAGE_ARCH}" \
+        "$APPIMAGE_RUNTIME_SHA256" "$TMP/appimage-runtime"
+    mkdir -p "$TMP/appimagetool"
+    chmod 755 "$TMP/appimagetool.AppImage"
+    (cd "$TMP/appimagetool" && "$TMP/appimagetool.AppImage" --appimage-extract >/dev/null)
+    [[ -x "$TMP/appimagetool/squashfs-root/AppRun" && -x "$TMP/appimagetool/squashfs-root/usr/bin/mksquashfs" ]] || {
+        echo "fetch_deps: appimagetool did not unpack to squashfs-root/AppRun with its mksquashfs" >&2
+        exit 1
+    }
+    rm -rf "$APPIMAGE_DIR"
+    mkdir -p "$APPIMAGE_DIR"
+    mv "$TMP/appimagetool/squashfs-root" "$APPIMAGE_DIR/squashfs-root"
+    mv "$TMP/appimage-runtime" "$APPIMAGE_DIR/runtime"
+    chmod 644 "$APPIMAGE_DIR/runtime"
+    echo "$APPIMAGE_ID" > "$APPIMAGE_DIR/.ico-release"
+    echo "==> AppImage tools at $APPIMAGE_DIR"
 fi
 
 # --- 3. Khronos validation layer (Linux host, tests only) ---------------------

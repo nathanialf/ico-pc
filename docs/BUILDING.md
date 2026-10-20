@@ -45,7 +45,7 @@ and fills `tools/toolchain/` (gitignored, about 1.6 GB):
 | `mingw-gcc/` | mingw-w64 gcc 14 and binutils for x86-64 Windows (x86-64 hosts only) | Debian 13 `gcc-mingw-w64-*-win32` 14.2.0-19+27+b1, `binutils-mingw-w64-*` 2.44-3+12+b1, `mingw-w64-*-dev` 12.0.0-5, SHA-256 pinned |
 | `cmake/` | CMake 4.4.4 (`cmake`, `ctest`) | [Kitware's release](https://github.com/Kitware/CMake/releases/tag/v4.4.4) `cmake-4.4.4-linux-x86_64.tar.gz` (`-linux-aarch64` on an arm64 host), SHA-256 pinned |
 | `ccache/` | ccache 4.11.3, the compiler launcher every preset names (`tools/toolchain/ccache/bin/ccache`) | [ccache's release](https://github.com/ccache/ccache/releases/tag/v4.11.3) `ccache-4.11.3-linux-x86_64.tar.xz`, SHA-256 pinned (no arm64 build exists: that host builds without it; `SKIP_CCACHE=1` skips it elsewhere) |
-| `deps/` | SDL3, volk, the Vulkan headers, the validation layer, DXC, libmpeg2 and libchdr | `tools/fetch_deps.sh`, which `fetch_toolchain.sh` runs last ([`THIRD_PARTY.md`](THIRD_PARTY.md)) |
+| `deps/` | SDL3, volk, the Vulkan headers, the validation layer, DXC, libmpeg2, libchdr and the AppImage tools (`deps/appimage/<x86_64\|aarch64>/`: appimagetool unpacked, and the AppImage runtime) | `tools/fetch_deps.sh`, which `fetch_toolchain.sh` runs last ([`THIRD_PARTY.md`](THIRD_PARTY.md)) |
 
 The pins the fetch scripts share (the SDL3 version and its SHA-256,
 `DEB_SNAPSHOT`, and the `fetch_deb` helper that downloads a Debian package
@@ -544,7 +544,8 @@ Build and deployment > Source: **GitHub Actions**), a one-time setting.
 ## Packages
 
 `tools/package_win.sh <label>` and `tools/package_linux.sh <label>` build the packages for HEAD in a
-clean worktree (`dist/ico-pc-<label>-win.zip`, `dist/ico-pc-<label>-linux.tar.gz`). Neither contains
+clean worktree (`dist/ico-pc-<label>-win.zip`, `dist/ico-pc-<label>-linux.tar.gz`, and the
+AppImage below). Neither contains
 game data; both carry the README, the player guides, the licence files and the save importer
 (`x64/tools/mc_import.exe` with its `SDL3.dll` and a short `README.txt`), and a make-portable script
 (`x64/make_portable.cmd` in the zip, `make_portable.sh` in the tar; the sources are
@@ -574,9 +575,29 @@ either architecture it fails when a shipped binary (`ico_pc`, `tools/mc_import`,
 needs a glibc symbol version newer than 2.39, Ubuntu 24.04's and the oldest system the README names;
 the log has each binary's newest.
 
+Last, from the same stage, `tools/package_linux.sh` writes the AppImage,
+`dist/ico-pc-<label>-linux-x86_64.AppImage` (`-linux-aarch64.AppImage` on arm64), with its
+`.sha256` beside it, written by the script on both architectures. The AppDir is `AppRun` (a link to
+`usr/bin/ico_pc`), `usr/bin/` with `ico_pc`, `ico_pc.map`, `libSDL3.so.0` and `mc_import`,
+`usr/share/doc/ico-pc/` with the README, the guides, `LICENSE`, `NOTICES.txt`, `THIRD_PARTY.md`
+and `VERSION.txt`, and `ico-pc.desktop`, `ico-pc.svg` and `.DirIcon` (a link to the icon) from
+`tools/appimage/`; no `ico-pc.ini`, folder notes or make-portable script, because the program
+keeps all of those beside the AppImage file ([PLATFORM.md](port/PLATFORM.md#folders-ico-pcini-and-the-user-folder)).
+appimagetool runs unpacked from `tools/toolchain/deps/appimage/<arch>/squashfs-root` with its own
+`mksquashfs` and `--runtime-file` pointing at the pinned runtime, so packaging needs no FUSE and
+downloads nothing; `SOURCE_DATE_EPOCH` is the commit's time, so the same commit and stage give the
+same file. The script then unpacks the result with its own `--appimage-extract` (no FUSE either)
+into `build-host/tmp/`, fails unless the file list is exactly the one above, the two links point
+where they should and `usr/bin/ico_pc` is the staged program, and runs the `readelf -d` checks on
+it as on the archive's. The icon is the Android launcher's placeholder disc
+(`android/app/src/main/res/drawable/ic_launcher_foreground.xml`), the same path data. Both tools
+are pinned in `tools/fetch_deps.sh` (section 2b; `SKIP_APPIMAGE=1` skips it), to tagged releases
+rather than the projects' moving `continuous` ones; when a download does not match its pin, the
+fetch fails with "refresh the pin".
+
 The release's arm64 archive is built by CI on GitHub's arm64 runner. Pushing a `v*` tag runs `ci.yml`, and its `linux-arm64` job,
 once its gating tests pass, runs `tools/package_linux.sh <tag>` and uploads
-both archives (normal and portable), their `.sha256` files and the packaging log as the artifact
+both archives (normal and portable), the aarch64 AppImage, their `.sha256` files and the packaging log as the artifact
 `ico-pc-<tag>-linux-arm64` (kept 30 days). Pull requests and pushes to main
 never package. To fetch it (the artifact keeps the `dist/` and
 `build-host/` folders):
@@ -584,8 +605,8 @@ never package. To fetch it (the artifact keeps the `dist/` and
 ```sh
 gh run list --workflow ci.yml --branch <tag> --limit 1     # the tag's run id
 gh run download <run-id> -n ico-pc-<tag>-linux-arm64 -D build-host/tmp/ci-arm64
-mv build-host/tmp/ci-arm64/dist/ico-pc-<tag>-linux-arm64*.tar.gz* dist/
-(cd dist && sha256sum -c ico-pc-<tag>-linux-arm64.tar.gz.sha256 ico-pc-<tag>-linux-arm64-portable.tar.gz.sha256)
+mv build-host/tmp/ci-arm64/dist/ico-pc-<tag>-linux-arm64*.tar.gz* build-host/tmp/ci-arm64/dist/ico-pc-<tag>-linux-aarch64.AppImage* dist/
+(cd dist && sha256sum -c ico-pc-<tag>-linux-arm64.tar.gz.sha256 ico-pc-<tag>-linux-arm64-portable.tar.gz.sha256 ico-pc-<tag>-linux-aarch64.AppImage.sha256)
 tar -xzOf dist/ico-pc-<tag>-linux-arm64.tar.gz ico-pc-<tag>/VERSION.txt  # the tag's commit
 ```
 
@@ -650,14 +671,15 @@ the file to the false-positive forms: Microsoft
 notes may link the VirusTotal results (the FAQ tells players they can check
 there).
 
-A release carries ten files. `gh release create` uploads seven: the Windows, Linux x86-64 and
-Linux arm64 archives, each with its portable twin (the arm64 pair comes from CI, above), and the
-APK. Publishing the release starts the Apple packages workflow, which attaches three more: the IPA
+A release carries twelve files. `gh release create` uploads nine: the Windows, Linux x86-64 and
+Linux arm64 archives, each with its portable twin, the x86-64 and aarch64 AppImages (the arm64 pair
+and the aarch64 AppImage come from CI, above), and the APK. The `.sha256` files are for checking
+the copies before the upload and are not attached. Publishing the release starts the Apple packages workflow, which attaches three more: the IPA
 and the macOS zip and dmg ([Continuous integration](#continuous-integration); run it by hand with
 `gh workflow run ios.yml -f tag=<tag>` when the release event does not start it):
 
 ```sh
-gh release create <tag> dist/ico-pc-<tag>-win.zip dist/ico-pc-<tag>-win-portable.zip dist/ico-pc-<tag>-linux.tar.gz dist/ico-pc-<tag>-linux-portable.tar.gz dist/ico-pc-<tag>-linux-arm64.tar.gz dist/ico-pc-<tag>-linux-arm64-portable.tar.gz dist/ico-pc-<tag>-android.apk
+gh release create <tag> dist/ico-pc-<tag>-win.zip dist/ico-pc-<tag>-win-portable.zip dist/ico-pc-<tag>-linux.tar.gz dist/ico-pc-<tag>-linux-portable.tar.gz dist/ico-pc-<tag>-linux-arm64.tar.gz dist/ico-pc-<tag>-linux-arm64-portable.tar.gz dist/ico-pc-<tag>-linux-x86_64.AppImage dist/ico-pc-<tag>-linux-aarch64.AppImage dist/ico-pc-<tag>-android.apk
 ```
 
 ## Appendix, maintainers: the base ELF

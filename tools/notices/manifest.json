@@ -21,6 +21,14 @@
       "texts": [{"file": "tools/toolchain/deps/sdl3/linux-arm64/wayland-protocols/NOTICES.txt"}]
     },
     {
+      "name": "AppImage runtime (type2-runtime), with the libraries linked into it: musl libc, libfuse, squashfuse, libzstd, zlib",
+      "version": "release 20251108 (commit dd6cebedcbddde9c82f89b011e8e1d40b6e43868), unmodified; source at https://github.com/AppImage/type2-runtime",
+      "licence": "MIT (the runtime); its own LICENSE names the statically linked libraries' terms: musl libc MIT, libfuse LGPL-2.1, squashfuse BSD-2-Clause, libzstd BSD-3-Clause, zlib zlib",
+      "used_for": "the AppImage download only: the small program at the start of the .AppImage file that mounts or unpacks the files inside it and starts the game; not part of the game program",
+      "platforms": ["linux"],
+      "texts": [{"file": "tools/appimage/runtime-LICENSE"}]
+    },
+    {
       "name": "SDL3 (with its Android Java code, org.libsdl.app)",
       "version": "3.4.18",
       "licence": "zlib",

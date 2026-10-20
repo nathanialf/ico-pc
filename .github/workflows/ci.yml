@@ -318,9 +318,12 @@ jobs:
             -R '^(rd_(pixel|gsbase|present|crt)(_[a-z0-9_]+)?|rd_replay_tool(_list)?)$'
 
       # A pushed release tag (never a pull request): the Linux arm64 package
-      # (normal and portable archives) of the tagged commit, which the maintainer's x86-64 machine cannot
-      # build, kept as an artifact named after the tag with its SHA-256 and
-      # the packaging log (docs/BUILDING.md, "Packages"). The preset names
+      # (normal and portable archives, and the aarch64 AppImage) of the tagged commit, which the maintainer's x86-64 machine cannot
+      # build, kept as an artifact named after the tag with their SHA-256s and
+      # the packaging log (docs/BUILDING.md, "Packages"). package_linux.sh
+      # writes the AppImage's .sha256 itself; the AppImage tools come with
+      # the toolchain fetch above (tools/fetch_deps.sh), so apt needs
+      # nothing more. The preset names
       # plain gcc; a gcc directory first on PATH makes that the gcc 14 the
       # tests above were built with.
       - name: Package linux-arm64 (release tags only)
@@ -345,6 +348,8 @@ jobs:
             dist/ico-pc-${{ github.ref_name }}-linux-arm64.tar.gz.sha256
             dist/ico-pc-${{ github.ref_name }}-linux-arm64-portable.tar.gz
             dist/ico-pc-${{ github.ref_name }}-linux-arm64-portable.tar.gz.sha256
+            dist/ico-pc-${{ github.ref_name }}-linux-aarch64.AppImage
+            dist/ico-pc-${{ github.ref_name }}-linux-aarch64.AppImage.sha256
             build-host/pkg-linux-arm64-${{ github.ref_name }}.log
           retention-days: 30
           if-no-files-found: error

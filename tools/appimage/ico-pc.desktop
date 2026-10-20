@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=ICO
+Exec=ico_pc
+Icon=ico-pc
+Categories=Game;
+Terminal=false
