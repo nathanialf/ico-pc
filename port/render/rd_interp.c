@@ -2740,11 +2740,24 @@ static uint32_t s_vuTicks;
  * object's 0.07 or more apart.  RD_INTERP_STILL_REL is that bound with a
  * margin of 64; on the GS grid it is a 64th of a pixel at the 2048 offset.
  *
- * A still draw is a part of the world whose re-based rows agree so;
- * stillDraw also gives cur's block through the blended camera as camCurDraw
- * makes it (Pt Pc^-1 under an easing zoom, as there), and blendVu counts
- * the still draws whose blend is not that block in bits
- * (RdInterpStats.stillReRounded). */
+ * A still draw is a part of the world whose re-based rows agree so.  Its
+ * camera and model rows (qw 4..27) are cur's block through the blended
+ * camera as camCurDraw makes it (stillDraw; Pt Pc^-1 under an easing zoom,
+ * as there), not the blend of the two ticks' and no rotateModel: every
+ * still draw, matched, unmatched, jumped or unkeyed, is placed by the same
+ * function of (cur's block, the blended camera), the same double
+ * arithmetic stored as float, so identical model rows at the tick give
+ * identical bits between ticks across neighbouring draws, and a shared
+ * vertex lands in the same cell in each, as at the tick.  The UV scroll
+ * (qw 2) and the lights (qw 28..35) keep their blend; moving objects keep
+ * the blend and the turn; t = 0 and t = 1 are untouched (no blended camera
+ * there).  What still differs is what differs at a tick: pieces with
+ * different model rows (other node matrices) carry the rounding of their
+ * own products, the PS2's per-packet rounding (docs/port/DIVERGENCES.md).
+ * An object moving less than the bound (a 64th of a pixel in the tick) is
+ * drawn at its tick's place, at most that far from its blend.  blendVu
+ * still counts a still draw whose rows are not that block in bits
+ * (RdInterpStats.stillReRounded: 0 by construction). */
 #define RD_INTERP_STILL_REL (1.0f / 131072.0f)
 
 static bool stillRows(const float (*p)[4], const float (*c)[4])
@@ -2908,7 +2921,12 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
     lerpVuBlock(vo, vp, (const float (*)[4])vc, t, hc.scroll);
     /* a turning object keeps its size half way */
     const bool rot = t > 0.0f && t < 1.0f && !rd__s2_legacy();
-    if (cc->type == RDC_MESH && isNormalProg(cc->b[0]) && rot) {
+    if (still) {
+        /* placed by cur's block through the blended camera, as the draws
+         * that are cur's (the UV scroll and the lights keep their blend) */
+        memcpy(vo[4], vcs[4], 24 * sizeof(vo[0]));
+        s_stillCur++;
+    } else if (cc->type == RDC_MESH && isNormalProg(cc->b[0]) && rot) {
         double centre[3];
         const bool hasCentre = meshCentroid(cc->u[0], centre);
         s_rotated |= rotateModel(vo, vp, (const float (*)[4])vc, t, hasCentre ? centre : NULL,
