@@ -159,13 +159,13 @@ SDL3_BASE="https://github.com/libsdl-org/SDL/releases/download/release-${SDL3_VE
 # and KMSDRM backends are required too: the build host needs their headers
 # and wayland-scanner (docs/BUILDING.md, "Linux arm64").
 SDL3_LINUX="$DEST/sdl3/linux-$ICO_HOST_ARCH"
-# "+audio": the build with the ALSA/PulseAudio headers; a tree
-# stamped by an older run of this script (X11 only, no audio backend) is
+# "+audio3": the build with the ALSA, PulseAudio and PipeWire backends; a
+# tree stamped by an older run of this script (X11 only, or ALSA alone) is
 # rebuilt. "+wayland+kmsdrm": the arm64 build's video backends;
 # "+wlnotices": the Wayland protocols' notices are copied beside it.
 # "+dbus+xss": D-Bus and the X11 screensaver extension, how SDL keeps the
 # desktop from locking or sleeping while the game runs (issue 86).
-SDL3_LINUX_ID="SDL3-${SDL3_VERSION}+audio$(by_arch "" "+wayland+kmsdrm+wlnotices")+dbus+xss"
+SDL3_LINUX_ID="SDL3-${SDL3_VERSION}+audio3$(by_arch "" "+wayland+kmsdrm+wlnotices")+dbus+xss"
 SDL3_LINUX_VIDEO=()
 if [[ "$ICO_HOST_ARCH" == "arm64" ]]; then
     SDL3_LINUX_VIDEO=(-DSDL_X11=ON -DSDL_WAYLAND=ON -DSDL_KMSDRM=ON)
@@ -215,25 +215,53 @@ else
         declare -n X11_DEBS="X11_DEBS_$DEB_ARCH"
         unpack_debs "$X11DEV" "${X11_DEBS[@]}"
     fi
-    # Audio backend headers: SDL
-    # builds a backend only when its headers are found and dlopens the
-    # library by soname at run time. ALSA is the one this port needs (it
-    # also reaches PulseAudio and PipeWire through their ALSA plugins);
-    # PulseAudio's headers come along and SDL enables that backend when the
-    # build host has libpulse.so.0. Pinned Debian 13 packages; the SHA-256s
-    # are the trixie main/binary-amd64 Packages index's (its InRelease
-    # signature checked with the Debian archive keyring, 2026-10-05).
+    # Audio backend headers: SDL builds a backend only when pkg-config finds
+    # its headers (ALSA: the header search; PulseAudio: libpulse.pc;
+    # PipeWire: libpipewire-0.3.pc, which requires libspa-0.2.pc) and dlopens
+    # the library by soname at run time. All three are built: ALSA alone
+    # reaches a PipeWire or PulseAudio desktop only through the ALSA
+    # plugins, which most distributions do not install by default, and then
+    # plays on the first sound card instead of the player's sink (issue 120).
+    # The runtime libraries (libpulse0, libpipewire-0.3-0t64) come along only
+    # so the linker's search finds the .so files and SDL records their
+    # sonames; nothing links against them and none is shipped. Pinned Debian
+    # 13 packages; the SHA-256s are the trixie main/binary-amd64 and
+    # main/binary-arm64 Packages indexes' (read 2026-10-20).
     if ! [[ -f /usr/include/alsa/asoundlib.h ]]; then
         AUDIO_DEBS_amd64=(
             "pool/main/a/alsa-lib/libasound2-dev_1.2.14-1+deb13u1_amd64.deb dfa8e8a133ef8704093d03464d86a3e86d26232baf1e3827aa030cb68c437e1c"
-            "pool/main/p/pulseaudio/libpulse-dev_17.0+dfsg1-2+b1_amd64.deb bcbd91aae55d1794f8fe8b1e766ec810173a6415b2165642bf756858e20ab7c4"
         )
         AUDIO_DEBS_arm64=(
             "pool/main/a/alsa-lib/libasound2-dev_1.2.14-1+deb13u1_arm64.deb fd28b8f24feac0a6f1d3e3181ea097741d3f291f95c193bffa179a28dca3b612"
-            "pool/main/p/pulseaudio/libpulse-dev_17.0+dfsg1-2+b1_arm64.deb 6c6f69b2e021e82fb51bf8000d1ac8799a2511e81f39a93d8f6b43fb90ec4d0f"
         )
         declare -n AUDIO_DEBS="AUDIO_DEBS_$DEB_ARCH"
         unpack_debs "$X11DEV" "${AUDIO_DEBS[@]}"
+    fi
+    if ! [[ -f /usr/include/pulse/pulseaudio.h ]]; then
+        PULSE_DEBS_amd64=(
+            "pool/main/p/pulseaudio/libpulse-dev_17.0+dfsg1-2+b1_amd64.deb bcbd91aae55d1794f8fe8b1e766ec810173a6415b2165642bf756858e20ab7c4"
+            "pool/main/p/pulseaudio/libpulse0_17.0+dfsg1-2+b1_amd64.deb 786aca79119cb249562708fd24dcdf817604cfe75bbfcb8cda3464042e17f40e"
+        )
+        PULSE_DEBS_arm64=(
+            "pool/main/p/pulseaudio/libpulse-dev_17.0+dfsg1-2+b1_arm64.deb 6c6f69b2e021e82fb51bf8000d1ac8799a2511e81f39a93d8f6b43fb90ec4d0f"
+            "pool/main/p/pulseaudio/libpulse0_17.0+dfsg1-2+b1_arm64.deb 2de5610e3affe69cfb11110f890375261b47c9e0fc1a81eef7ecc4d6d2dc9a6d"
+        )
+        declare -n PULSE_DEBS="PULSE_DEBS_$DEB_ARCH"
+        unpack_debs "$X11DEV" "${PULSE_DEBS[@]}"
+    fi
+    if ! [[ -f /usr/include/pipewire-0.3/pipewire/pipewire.h ]]; then
+        PIPEWIRE_DEBS_amd64=(
+            "pool/main/p/pipewire/libpipewire-0.3-dev_1.4.2-1_amd64.deb 6f7f4c555b6ce362ff556e7f063f92e878510564de434d56a0ded73788e83bd1"
+            "pool/main/p/pipewire/libspa-0.2-dev_1.4.2-1_amd64.deb 7d8d46d5a98a031373d01eb74c2a1e40152294bbcaf6fb9320f88648cfde44bd"
+            "pool/main/p/pipewire/libpipewire-0.3-0t64_1.4.2-1_amd64.deb 68522d7dff91b0f759fe58e685e19422bc2bb43dc8d6fd41f025954da09a3d0f"
+        )
+        PIPEWIRE_DEBS_arm64=(
+            "pool/main/p/pipewire/libpipewire-0.3-dev_1.4.2-1_arm64.deb 0cc2a8e1c2234bdd59581c842b405d1471178c59a1d3cf88b211713729ecd35f"
+            "pool/main/p/pipewire/libspa-0.2-dev_1.4.2-1_arm64.deb 0e6f052b893af6e8855b6f8024abd14a07b4d39a005ac1f9aa286d705cfbfa8d"
+            "pool/main/p/pipewire/libpipewire-0.3-0t64_1.4.2-1_arm64.deb f25ab475f09ab5ec952f13a2d6b7a870dd5eb8c7806664baf8be9bdee3ae995b"
+        )
+        declare -n PIPEWIRE_DEBS="PIPEWIRE_DEBS_$DEB_ARCH"
+        unpack_debs "$X11DEV" "${PIPEWIRE_DEBS[@]}"
     fi
     # The desktop's sleep inhibit: SDL stops the screensaver and idle sleep
     # while its window is open (SDL_DisableScreenSaver), on Linux through
@@ -295,10 +323,15 @@ PKGCONF
     # tree and libsystemd (Requires.private, never linked: SDL dlopens
     # libdbus) dropped
     mkdir -p "$X11DEV/pkgconfig"
-    if [[ -f "$X11DEV/usr/lib/$DEB_MULTIARCH/pkgconfig/dbus-1.pc" ]]; then
-        sed -e "s|^prefix=.*|prefix=$X11DEV/usr|" -e '/^Requires.private:/d' \
-            "$X11DEV/usr/lib/$DEB_MULTIARCH/pkgconfig/dbus-1.pc" >"$X11DEV/pkgconfig/dbus-1.pc"
-    fi
+    # The audio libraries' files get the same treatment (libpipewire-0.3.pc
+    # requires libspa-0.2.pc, so all three are needed): SDL's CheckPulseAudio
+    # and CheckPipewire ask pkg-config for libpulse and libpipewire-0.3.
+    for pc in dbus-1 libpulse libpipewire-0.3 libspa-0.2; do
+        if [[ -f "$X11DEV/usr/lib/$DEB_MULTIARCH/pkgconfig/$pc.pc" ]]; then
+            sed -e "s|^prefix=.*|prefix=$X11DEV/usr|" -e '/^Requires.private:/d' \
+                "$X11DEV/usr/lib/$DEB_MULTIARCH/pkgconfig/$pc.pc" >"$X11DEV/pkgconfig/$pc.pc"
+        fi
+    done
     mkdir -p "$X11DEV/usr/include" "$X11DEV/usr/lib/$DEB_MULTIARCH"
     gen=()
     if command -v ninja >/dev/null 2>&1 || [[ -x "$ROOT/.venv/bin/ninja" ]]; then
@@ -321,13 +354,21 @@ PKGCONF
         -DSDL_INSTALL_DOCS=OFF \
         -DSDL_X11_XSCRNSAVER=ON -DSDL_X11_XTEST=OFF \
         "${SDL3_LINUX_VIDEO[@]}" \
-        -DSDL_ALSA=ON -DSDL_ALSA_SHARED=ON -DSDL_DBUS=ON | tee "$TMP/sdl3-configure.log"
+        -DSDL_ALSA=ON -DSDL_ALSA_SHARED=ON \
+        -DSDL_PULSEAUDIO=ON -DSDL_PULSEAUDIO_SHARED=ON \
+        -DSDL_PIPEWIRE=ON -DSDL_PIPEWIRE_SHARED=ON -DSDL_DBUS=ON | tee "$TMP/sdl3-configure.log"
     # the audio backends this build has (the configure summary)
     grep -E "SDL_(ALSA|PULSEAUDIO|PIPEWIRE|JACK|SNDIO|OSS)\b.*: *(ON|OFF)" "$TMP/sdl3-configure.log" || true
-    if ! grep -qE "SDL_ALSA\b.*: *ON *$" "$TMP/sdl3-configure.log"; then
-        echo "fetch_deps: SDL3 configured without ALSA: no audio on Linux" >&2
-        exit 1
-    fi
+    # all three are required: the player's desktop runs PipeWire or
+    # PulseAudio, and ALSA is what is left without either (issue 120)
+    for b in ALSA:libasound2-dev PULSEAUDIO:libpulse-dev PIPEWIRE:"libpipewire-0.3-dev and libspa-0.2-dev"; do
+        if ! grep -qE "SDL_${b%%:*}\b.*: *ON *$" "$TMP/sdl3-configure.log"; then
+            echo "fetch_deps: SDL3 configured without ${b%%:*}: the headers (${b#*:}) and" \
+                "their pkg-config files were not found; a Linux build without all of" \
+                "ALSA, PulseAudio and PipeWire plays no sound on some desktops" >&2
+            exit 1
+        fi
+    done
     # the video backends this build has; arm64 needs Wayland and KMSDRM
     grep -E "SDL_(X11|WAYLAND|KMSDRM)\b.*: *(ON|OFF)" "$TMP/sdl3-configure.log" || true
     if [[ "$ICO_HOST_ARCH" == "arm64" ]]; then

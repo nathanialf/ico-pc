@@ -641,6 +641,39 @@ static int open_stream(const char *name)
     return 0;
 }
 
+/* The one line that says which audio drivers this SDL has and which it chose (a build without the
+ * PipeWire and PulseAudio backends plays through ALSA's default device only, which on a desktop
+ * without the ALSA plugins of its sound server is not the sink the player listens on). On Linux
+ * the plain line follows when ALSA was chosen: neither sound server answered. Once a run: the
+ * open runs once at the start (the Settings menu's reopen moves the stream, not the driver). */
+static void log_drivers(void)
+{
+    char list[256];
+    size_t used = 0;
+    int n = SDL_GetNumAudioDrivers();
+    const char *cur = SDL_GetCurrentAudioDriver();
+
+    list[0] = '\0';
+    for (int i = 0; i < n; i++) {
+        const char *name = SDL_GetAudioDriver(i);
+        int w;
+
+        if (name == NULL)
+            continue;
+        w = snprintf(list + used, sizeof list - used, "%s%s", used != 0 ? " " : "", name);
+        if (w < 0 || (size_t)w >= sizeof list - used)
+            break;
+        used += (size_t)w;
+    }
+    fprintf(stderr, "audio: SDL audio drivers built in: %s; using %s\n",
+            used != 0 ? list : "(none)", cur != NULL ? cur : "?");
+#if defined(__linux__) && !defined(__ANDROID__)
+    if (cur != NULL && strcmp(cur, "alsa") == 0)
+        fprintf(stderr, "audio: no sound server found (PipeWire or PulseAudio); playing through "
+                        "ALSA's default device\n");
+#endif
+}
+
 int ico_audio_sdl_open(IcoAudioRender pull, const char *why)
 {
     SDL_SetHint(SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES, "480");
@@ -668,6 +701,7 @@ int ico_audio_sdl_open(IcoAudioRender pull, const char *why)
     last_push_ns = 0;
     quiet_frames = 0;
     cushion_peak = cushion_frames();
+    log_drivers();
     if (pull_render != NULL) {
         fprintf(stderr,
                 "audio: SDL driver %s, 48 kHz stereo, played on the device's clock: %d frames a "

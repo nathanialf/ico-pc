@@ -136,6 +136,27 @@ the moments the sound could not keep up. A short click when you go from one
 area to the next is the game stopping its sounds all at once, as it does on
 the PlayStation 2; the log writes down how loud each one was.
 
+## No sound on Linux
+
+Open `ico-pc.log` (see [The log file](#the-log-file)) and look for the
+lines that start with `audio:`. The first says which sound systems this
+copy of the game can talk to and which one it picked, for example
+`audio: SDL audio drivers built in: pipewire pulseaudio alsa disk dummy;
+using pipewire`. If it says `using pipewire` or `using pulseaudio`, the game
+is playing through your desktop's sound system, and the speakers it uses are
+the ones your desktop has chosen. If the next line says `no sound server
+found`, the game did not find PipeWire or PulseAudio running and is using
+the sound card directly, which can be a different output than the one you
+listen on.
+
+Open **Options > Audio** and look at the **Output device** row: it lists
+the outputs the game can see. Pick the one you listen on. The game talks to
+PipeWire and PulseAudio directly. If the log has no line saying which sound
+systems the game can use, you have a copy of the game that talks to the sound
+card only, which gives silence on some desktops: download the newest version
+from the front page. If you have no sound with the newest version, send the
+`audio:` lines of `ico-pc.log` with a [problem report](#send-a-problem-report).
+
 ## The game is slow on an older graphics card
 
 When the graphics card cannot draw every picture in time, the game keeps

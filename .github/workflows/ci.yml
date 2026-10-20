@@ -51,6 +51,7 @@ jobs:
             build-essential gcc-14 curl xz-utils python3 python3-venv \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
             libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
+            libpipewire-0.3-dev libspa-0.2-dev \
             libdbus-1-dev libxss-dev \
             libvulkan1 mesa-vulkan-drivers
           # lavapipe (mesa-vulkan-drivers): the render tests run on the CPU
@@ -189,6 +190,7 @@ jobs:
             build-essential gcc-14 curl xz-utils python3 python3-venv \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
             libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
+            libpipewire-0.3-dev libspa-0.2-dev \
             libdbus-1-dev libxss-dev \
             libvulkan1 mesa-vulkan-drivers
 
@@ -264,6 +266,7 @@ jobs:
             build-essential gcc-14 g++ git curl xz-utils python3 python3-venv \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
             libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
+            libpipewire-0.3-dev libspa-0.2-dev \
             libdbus-1-dev libxss-dev \
             libwayland-dev wayland-protocols libxkbcommon-dev libdecor-0-dev \
             libdrm-dev libgbm-dev libegl-dev \

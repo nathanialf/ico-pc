@@ -133,6 +133,16 @@ cp "$b/ico_pc.map" "$stage/ico_pc.map"
 sdl="$root/tools/toolchain/deps/sdl3/linux-$arch/lib"
 cp -L "$sdl/libSDL3.so.0" "$stage/libSDL3.so.0"
 chmod 755 "$stage/libSDL3.so.0"
+
+# the audio backends: SDL3 loads PipeWire, PulseAudio and ALSA by soname at run time, so the names
+# sit in the library as strings and the package needs none of the three (NEEDED stays libc/libm).
+# A library built without a backend plays through ALSA's default device only, which on a PipeWire
+# desktop without the ALSA plugins is not the sink the player listens on (issue 120).
+for n in libpipewire-0.3.so.0 libpulse.so.0 libasound.so.2; do
+    grep -aqF "$n" "$stage/libSDL3.so.0" ||
+        fail "libSDL3.so.0 has no $n backend: run tools/fetch_deps.sh (rebuilds SDL3 with the audio backends)"
+done
+
 # licences: the program's (LICENSE, MIT) and every third-party component's
 # notice (NOTICES.txt, tools/gen_notices.py from tools/notices/manifest.json);
 # THIRD_PARTY.md says where each comes from

@@ -81,6 +81,7 @@ packages it needs the Wayland and KMSDRM headers and `wayland-scanner`:
 sudo apt-get install build-essential gcc-14 g++ git curl xz-utils python3 python3-venv \
     libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
     libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
+    libpipewire-0.3-dev libspa-0.2-dev \
     libdbus-1-dev libxss-dev \
     libwayland-dev wayland-protocols libxkbcommon-dev libdecor-0-dev \
     libdrm-dev libgbm-dev libegl-dev
@@ -472,7 +473,7 @@ more preset; `linux-arm64` and `android` are described after the table.
 
 | step | what |
 | --- | --- |
-| host packages, venv | gcc 14 (the runner's default gcc 13 also configures, since `cmake/IcoFlags.cmake` drops warning flags a compiler does not know), the X11, ALSA and PulseAudio headers SDL3 builds against, lavapipe (`mesa-vulkan-drivers`, `libvulkan1`) so the render tests run on a CPU Vulkan device, `tools/requirements.txt` |
+| host packages, venv | gcc 14 (the runner's default gcc 13 also configures, since `cmake/IcoFlags.cmake` drops warning flags a compiler does not know), the X11, ALSA, PulseAudio and PipeWire (`libpipewire-0.3-dev`, `libspa-0.2-dev`) headers SDL3 builds against, lavapipe (`mesa-vulkan-drivers`, `libvulkan1`) so the render tests run on a CPU Vulkan device, `tools/requirements.txt` |
 | cache and `tools/fetch_toolchain.sh` | `tools/toolchain/` is cached on the hash of `fetch_toolchain.sh`, `fetch_deps.sh`, `fetch_common.sh` and `fetch_android.sh`, restored and saved as separate steps so a cold fetch is saved even when a later step fails |
 | ccache | `~/.cache/ccache` is restored before the builds and saved after them (also when a build fails), keyed by the job or preset and the same four scripts' hash, with the commit as the last part so every run saves its entries, each capped at 5 GiB (`CCACHE_MAXSIZE` in the workflow's `env`; `tools/fetch_toolchain.sh` sets the same cap for a local ccache); the `linux-arm64` job has no ccache |
 | `tools/check_no_rom.sh` | the IP scan over every tracked file |
