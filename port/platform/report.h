@@ -44,7 +44,10 @@
 /* The files a report takes (each copied; NULL or "" leaves one out):
    logs_dir the logs folder (the zip's folder; ico-pc-previous.log and
    startup-activity.txt are read there), exe_dir the program's folder
-   (VERSION.txt is read there or in its parent), pref_dir the user folder
+   (VERSION.txt is read there or in its parent; on Linux then in
+   <the running program's folder>/../share/doc/ico-pc/, where the AppImage
+   keeps it inside its mount while exe_dir is the AppImage file's folder),
+   pref_dir the user folder
    (config.toml, achievements.toml), ini_path ico-pc.ini. Also notes the
    local time's offset from UTC, for the zip's name. */
 void ico_report_set_paths(const char *logs_dir, const char *exe_dir, const char *pref_dir,

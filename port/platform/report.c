@@ -35,6 +35,11 @@ static char s_exe[PATH_BYTES];
 static char s_pref[PATH_BYTES];
 static char s_ini[PATH_BYTES];
 static char s_version_text[256];
+/* Linux: VERSION.txt where the AppImage keeps it, beside the program in
+   the mount (<program's folder>/../share/doc/ico-pc/), "" none */
+static char s_version_pkg[PATH_BYTES + 32];
+
+static int join(char *out, size_t size, const char *dir, const char *name);
 #ifndef _WIN32
 static long s_utc_offset_s;
 #endif
@@ -46,6 +51,28 @@ void ico_report_set_paths(const char *logs_dir, const char *exe_dir, const char 
     snprintf(s_exe, sizeof s_exe, "%s", exe_dir != NULL ? exe_dir : "");
     snprintf(s_pref, sizeof s_pref, "%s", pref_dir != NULL ? pref_dir : "");
     snprintf(s_ini, sizeof s_ini, "%s", ini_path != NULL ? ini_path : "");
+    s_version_pkg[0] = '\0';
+#if defined(__linux__) && !defined(__ANDROID__)
+    {
+        /* an AppImage's program folder is the file's (host_fs.h
+           ico_appimage_file), while VERSION.txt stays in the mount */
+        char self[PATH_BYTES];
+        const ssize_t n = readlink("/proc/self/exe", self, sizeof self - 1);
+        char *slash;
+
+        if (n > 0 && (size_t)n < sizeof self - 1) {
+            self[n] = '\0';
+            slash = strrchr(self, '/');
+            if (slash != NULL && slash != self) {
+                *slash = '\0';
+                if (join(s_version_pkg, sizeof s_version_pkg, self,
+                         "../share/doc/ico-pc/VERSION.txt") != 0) {
+                    s_version_pkg[0] = '\0';
+                }
+            }
+        }
+    }
+#endif
 #ifndef _WIN32
     {
         /* the offset now, so the crash path needs no time zone lookup */
@@ -737,7 +764,8 @@ static void build_text(const IcoReportInputs *in)
     } else if (!(join(path, sizeof path, s_exe, "VERSION.txt") == 0 &&
                  each_line(path, version_line, NULL) == 0) &&
                !(join(path, sizeof path, s_exe, "../VERSION.txt") == 0 &&
-                 each_line(path, version_line, NULL) == 0)) {
+                 each_line(path, version_line, NULL) == 0) &&
+               !(s_version_pkg[0] != '\0' && each_line(s_version_pkg, version_line, NULL) == 0)) {
         text_line("  (none beside the program: a development build)");
     }
     s_stages[0] = '\0';
