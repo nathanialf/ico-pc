@@ -90,11 +90,19 @@ static RdPipeEntry s_cache[RD_PIPELINE_CACHE_MAX];
 static uint32_t s_count;
 
 /* Keys whose creation failed; looked up before a retry, so a
- * failed pipeline costs one creation attempt and one log line per session
- * (per cache clear), not two lines per draw. */
+ * failed pipeline costs one creation attempt per session (per cache
+ * clear), never one per draw.  As many as the cache holds (a linear
+ * look-up, made only on a draw whose key has no pipeline: a key that
+ * failed, or a new one); past that s_createStopped: no pipeline is made
+ * until the cache is cleared, so even then nothing is retried. */
 static RdPipeKeyInt s_failed[RD_PIPELINE_FAIL_MAX];
 
 static uint32_t s_failedCount;
+
+/* failed creations this session (per cache clear), the line's limiter */
+static uint32_t s_failLines;
+
+static bool s_createStopped;
 
 static bool s_fullLogged;
 
@@ -881,6 +889,7 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
 #define RD_PIPE_HASH (4 * RD_PIPELINE_CACHE_MAX)
 
 static uint16_t s_hash[RD_PIPE_HASH];
+_Static_assert(RD_PIPELINE_CACHE_MAX < 65535, "s_hash holds a cache slot + 1 in 16 bits");
 
 static uint32_t keyHash(const RdPipeKeyInt *k)
 {
@@ -1294,16 +1303,81 @@ static bool cacheFull(const RdPipeKeyInt *k)
     return true;
 }
 
+/* The RHI's pipeline counts around a creation (RhiStats
+ * pipelinePoolFull, pipelineFailures, pipelineLastError); zero without a
+ * device */
+static void rhiPipeCounts(RhiStats *st)
+{
+    memset(st, 0, sizeof(*st));
+    if (g_rd.hasDevice) {
+        rhi_get_stats(st);
+    }
+}
+
+/* why the creations between a and b failed: the pool full, the driver's
+ * error, a description the RHI refused, or none of the RHI's (the
+ * renderer's description was not made: a module not loaded) */
+static void failReason(const RhiStats *a, const RhiStats *b, char *out, size_t size)
+{
+    const uint64_t full = b->pipelinePoolFull - a->pipelinePoolFull;
+    const uint64_t other = b->pipelineFailures - a->pipelineFailures;
+    char drv[64];
+    if (b->pipelineLastError != 0) {
+        snprintf(drv, sizeof(drv), "the driver's error %lld", (long long)b->pipelineLastError);
+    } else {
+        snprintf(drv, sizeof(drv), "the RHI refused its description (its line above)");
+    }
+    if (full != 0 && other == 0) {
+        snprintf(out, size, "the RHI's pipeline pool is full (%llu of %llu alive)",
+                 (unsigned long long)b->pipelinesLive, (unsigned long long)b->pipelinePoolSize);
+    } else if (full == 0 && other != 0) {
+        snprintf(out, size, "%s", drv);
+    } else if (full != 0) {
+        snprintf(out, size, "the batch met a full pipeline pool (%llu times) and %s",
+                 (unsigned long long)full, drv);
+    } else {
+        snprintf(out, size, "its description was not made (a shader module not loaded)");
+    }
+}
+
+/* where a creation ran: the replay's list, the vertex pre-pass, the
+ * present or a check */
+static void useWhere(char *out, size_t size)
+{
+    const int list = rd__replay_list();
+    if (list >= 0) {
+        snprintf(out, size, "list %d", list);
+    } else if (rd__vu_prepass_running()) {
+        snprintf(out, size, "the vertex pre-pass (before list 0)");
+    } else {
+        snprintf(out, size, "no draw list (the present, a check)");
+    }
+}
+
 /* a creation's result into the cache (at: the empty slot probeKey gave),
- * or into the failed keys */
-static void keepPipeline(const RdPipeKeyInt *k, RhiPipeline p, uint32_t at)
+ * or into the failed keys: the line names the key, when it was asked for
+ * (when: "in the start-up set", "on first use in list 3") and why it
+ * failed (failReason), the first 8 then every 100th */
+static void keepPipeline(const RdPipeKeyInt *k, RhiPipeline p, uint32_t at, const char *when,
+                         const char *why)
 {
     if (!p.id) {
+        s_failLines++;
+        if (s_failLines <= 8u || s_failLines % 100u == 0u) {
+            rd__log("pipeline creation failed %s (program %u blend %u vs %u fs %u fmt %u/%u): %s; "
+                    "draws with this key are skipped (%u failed so far%s)",
+                    when, k->gs.program, k->gs.blend, k->vs, k->fs, k->colorFmt, k->depthFmt, why,
+                    s_failLines, s_failLines == 8u ? "; from here every 100th is written" : "");
+        }
         if (s_failedCount < RD_PIPELINE_FAIL_MAX) {
             s_failed[s_failedCount++] = *k;
-            rd__log("pipeline creation failed (program %u blend %u vs %u fs %u fmt %u/%u); "
-                    "draws with this key are skipped",
-                    k->gs.program, k->gs.blend, k->vs, k->fs, k->colorFmt, k->depthFmt);
+        } else if (!s_createStopped) {
+            /* no room to remember it: no creation at all from here, so
+               this key is not retried on its every draw either */
+            s_createStopped = true;
+            rd__log("pipelines: %u keys failed, more than the %d remembered: no pipeline is "
+                    "created until the cache is cleared (new keys are not drawn)",
+                    s_failLines, RD_PIPELINE_FAIL_MAX);
         }
         return;
     }
@@ -1324,7 +1398,7 @@ static uint32_t s_gatherN;
 /* in rd__get_pipeline while gathering: k (drawKey's) noted, no pipeline */
 static void gatherKey(const RdPipeKeyInt *k)
 {
-    if (keyFailed(k) || cacheFull(k)) {
+    if (s_createStopped || keyFailed(k) || cacheFull(k)) {
         return;
     }
     for (uint32_t i = 0; i < s_gatherN; i++) {
@@ -1413,7 +1487,6 @@ double rd__pipeline_create_ms(void)
 static void firstUseLine(const RdPipeKeyInt *k, float ms)
 {
     char key[256], vs[48], fs[48], where[40];
-    const int list = rd__replay_list();
 
     s_firstUse++;
     if (s_firstUse > 8u && s_firstUse % 100u != 0u) {
@@ -1429,13 +1502,7 @@ static void firstUseLine(const RdPipeKeyInt *k, float ms)
              k->gs.aa1, k->gs.nodual);
     keyVsName(k, vs, sizeof(vs));
     keyFsName(k, fs, sizeof(fs));
-    if (list >= 0) {
-        snprintf(where, sizeof(where), "list %d", list);
-    } else if (rd__vu_prepass_running()) {
-        snprintf(where, sizeof(where), "the vertex pre-pass (before list 0)");
-    } else {
-        snprintf(where, sizeof(where), "no draw list (the present, a check)");
-    }
+    useWhere(where, sizeof(where));
     rd__log("pipelines: made on first use in %s: %s (%s + %s) in %.1f ms (not in the start-up "
             "set; %u so far%s)",
             where, key, vs, fs, (double)ms, s_firstUse,
@@ -1480,21 +1547,31 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
         gatherKey(k); /* created afterwards in batches (rd__pipeline_gather) */
         return (RhiPipeline){0};
     }
-    if (!g_rd.hasDevice || keyFailed(k) || cacheFull(k)) {
+    if (!g_rd.hasDevice || s_createStopped || keyFailed(k) || cacheFull(k)) {
         return (RhiPipeline){0};
     }
     activityCreating(k);
+    RhiStats st0, st1;
+    rhiPipeCounts(&st0);
     const double t0 = rd__now_ms();
     RhiPipeline p = createPipeline(k);
     const float ms = (float)(rd__now_ms() - t0);
     s_createMs += ms;
-    if (s_lazy.on) {
+    if (p.id && s_lazy.on) {
         lazyCount(k, ms);
-    } else if (s_startupSet) {
+    } else if (p.id && s_startupSet) {
         firstUseLine(k, ms);
     }
     activityDone();
-    keepPipeline(k, p, at);
+    char when[64] = "", why[160] = "";
+    if (!p.id) {
+        char where[40];
+        useWhere(where, sizeof(where));
+        snprintf(when, sizeof(when), "on first use in %s", where);
+        rhiPipeCounts(&st1);
+        failReason(&st0, &st1, why, sizeof(why));
+    }
+    keepPipeline(k, p, at, when, why);
     return p;
 }
 
@@ -1507,6 +1584,8 @@ void rd__pipeline_cache_clear(void)
     }
     s_count = 0;
     s_failedCount = 0;
+    s_failLines = 0;
+    s_createStopped = false;
     s_fullLogged = false;
     memset(s_hash, 0, sizeof(s_hash));
 }
@@ -1535,6 +1614,15 @@ float rd_precreate_longest_ms(void)
  * never both, so the note's dst field is the whole batch's
  * (startup_retry.h startup_retry_note_has_dst: the fixed-blend step) */
 #define RD_PIPE_BATCH 32u
+
+/* The pool's headroom (rhi_pipeline_pool.h) holds what is alive outside
+ * the cache at once: one batch's descriptions (its ids held until it
+ * ends, its duplicates destroyed then), the COLCLAMP 0 pipelines and the
+ * movie's three (rd_video.c: two outputs, the field pipeline) */
+_Static_assert(RD_PIPE_BATCH + RD_WRAP_PIPES + 3u <= (unsigned)RHI_PIPELINE_POOL_HEADROOM,
+               "the RHI's pipeline pool headroom holds a batch, the wrap and the movie pipelines");
+_Static_assert(RD_PIPELINE_CACHE_MAX + RHI_PIPELINE_POOL_HEADROOM == RHI_PIPELINE_POOL_MAX,
+               "the RHI's pipeline pool holds the cache and the headroom");
 
 typedef struct PreBatch {
     uint32_t base;  /* the set's keys done before this batch */
@@ -1825,6 +1913,8 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
     static RhiBindGroupLayout bl[RD_PIPE_BATCH][4];
     static RhiPipeline bp[RD_PIPE_BATCH];
     static float bms[RD_PIPE_BATCH];
+    /* a failed key's line: when it was asked for */
+    const char *when = times != NULL ? "in the start-up set" : "in a replay's gathered keys";
     PreBatch pb = {0, m, 0, 0};
     memset(c, 0, sizeof(*c));
     c->threads = 1;
@@ -1854,7 +1944,7 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             if (found) {
                 continue;
             }
-            if (keyFailed(k)) {
+            if (s_createStopped || keyFailed(k)) {
                 c->failed++;
                 continue;
             }
@@ -1869,7 +1959,8 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
                 continue;
             }
             if (!pipelineDesc(k, &bd[nb], bl[nb])) {
-                keepPipeline(k, (RhiPipeline){0}, 0);
+                keepPipeline(k, (RhiPipeline){0}, 0, when,
+                             "its description was not made (a shader module not loaded)");
                 c->failed++;
                 continue;
             }
@@ -1919,9 +2010,16 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             RhiPipelineBatch batch = {preWait, &pb, bms, 1, s_setPolicy.maxThreads};
             pb.base = first;
             const long beforeKb = budgeted ? residentKb() : -1;
+            RhiStats st0, st1;
+            rhiPipeCounts(&st0);
             const double bt0 = rd__now_ms();
             rhi_create_pipelines(bd, nb, bp, &batch);
             const double batchMs = rd__now_ms() - bt0;
+            rhiPipeCounts(&st1);
+            /* the batch's failures share one reason (failReason says when
+               the batch had two) */
+            char why[160];
+            failReason(&st0, &st1, why, sizeof(why));
             batchTimes(bk, bms, nb, first + 1, i, m, batchMs, batch.threads);
             if (times != NULL && i < m &&
                 (s_setPolicy.cacheEachBatch || rd__now_ms() - s_setSavedMs >= RD_SET_SAVE_MS) &&
@@ -1980,7 +2078,7 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
                     preTime(times, &bk[j], bms[j]);
                 }
                 if (!bp[j].id) {
-                    keepPipeline(&bk[j], bp[j], at);
+                    keepPipeline(&bk[j], bp[j], at, when, why);
                     c->failed++;
                     continue;
                 }
@@ -1991,7 +2089,7 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
                     rhi_destroy_pipeline(bp[j]);
                     continue;
                 }
-                keepPipeline(&bk[j], bp[j], at);
+                keepPipeline(&bk[j], bp[j], at, when, "");
             }
         }
         if (c->budget[0]) {
@@ -2039,6 +2137,12 @@ uint32_t rd_precreate_pipelines(void)
     /* n counts the whole set, keys[] holds the first RD_PIPELINE_CACHE_MAX:
      * only those are created, and the progress counts to them */
     const uint32_t m = n < RD_PIPELINE_CACHE_MAX ? n : RD_PIPELINE_CACHE_MAX;
+    /* the set against the RHI's pool: the cache holds the pool less its
+       headroom (rhi_pipeline_pool.h), so a set inside the cache is inside
+       the pool */
+    rd__log("pipelines: the start-up set's %u keys (pool %d: the cache's %d and %d for the "
+            "pipelines made outside it; %u already made)",
+            n, RHI_PIPELINE_POOL_MAX, RD_PIPELINE_CACHE_MAX, RHI_PIPELINE_POOL_HEADROOM, s_count);
     if (n > m) {
         rd__log("pipelines: the reachable set has %u keys, more than the %u the cache holds: "
                 "the first %u are created",

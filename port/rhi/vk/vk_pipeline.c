@@ -938,26 +938,38 @@ static const VkDynamicState vkr_pipe_dynamic_blend[] = {VK_DYNAMIC_STATE_COLOR_B
                                                         VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT,
                                                         VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT};
 
+/* a creation that failed other than for a full pool (RhiStats
+ * pipelineFailures): code the driver's error, 0 for a description this
+ * backend refused (its line already written) */
+static void vkr_pipe_failed(VkResult code)
+{
+    g_vkr.stats.pipelineFailures++;
+    g_vkr.stats.pipelineLastError = (int64_t)code;
+}
+
 static bool vkr_pipe_prepare(const RhiPipelineDesc *d, VkrPipeJob *j)
 {
     memset(j, 0, sizeof(*j));
     if (!d || !vkr_valid_pipeline_desc(d)) {
         VKR_LOG("pipeline %s: invalid description", d && d->debugName ? d->debugName : "?");
+        vkr_pipe_failed(VK_SUCCESS);
         return false;
     }
     if (!vkr_pipeline_fits(d)) {
+        vkr_pipe_failed(VK_SUCCESS);
         return false;
     }
     VkrShader *vs = vkr_pool_get(&g_vkr.shaders, d->vertex.id);
     VkrShader *fs = vkr_pool_get(&g_vkr.shaders, d->fragment.id);
     if (!vs) {
         VKR_LOG("pipeline %s: no vertex shader", d->debugName ? d->debugName : "?");
+        vkr_pipe_failed(VK_SUCCESS);
         return false;
     }
     VkrPipeline *p = NULL;
     uint32_t id = vkr_pool_alloc(&g_vkr.pipelines, (void **)&p);
     if (!id) {
-        return false;
+        return false; /* counted by the pool (RhiStats pipelinePoolFull) */
     }
 
     /* pipeline layout: group i is descriptor set i */
@@ -968,6 +980,7 @@ static bool vkr_pipe_prepare(const RhiPipelineDesc *d, VkrPipeJob *j)
             VKR_LOG("pipeline %s: invalid bind group layout %u", d->debugName ? d->debugName : "?",
                     i);
             vkr_pool_release(&g_vkr.pipelines, id);
+            vkr_pipe_failed(VK_SUCCESS);
             return false;
         }
         sets[i] = l->layout;
@@ -977,8 +990,10 @@ static bool vkr_pipe_prepare(const RhiPipelineDesc *d, VkrPipeJob *j)
         .setLayoutCount = d->layoutCount,
         .pSetLayouts = sets,
     };
-    if (!VKR_CHECK(vkCreatePipelineLayout(g_vkr.device, &lci, NULL, &p->layout))) {
+    const VkResult lr = vkCreatePipelineLayout(g_vkr.device, &lci, NULL, &p->layout);
+    if (!vkr_check(lr, "vkCreatePipelineLayout", __FILE__, __LINE__)) {
         vkr_pool_release(&g_vkr.pipelines, id);
+        vkr_pipe_failed(lr);
         return false;
     }
     p->layoutCount = d->layoutCount;
@@ -1152,6 +1167,7 @@ static RhiPipeline vkr_pipe_finish(const RhiPipelineDesc *d, VkrPipeJob *j)
         }
         vkDestroyPipelineLayout(g_vkr.device, j->layout, NULL);
         vkr_pool_release(&g_vkr.pipelines, j->id);
+        vkr_pipe_failed(j->result);
         return out;
     }
     p->pipeline = j->pipeline;

@@ -226,7 +226,10 @@ typedef struct D3dpPool {
     uint8_t *live;
     uint32_t *freeList;
     uint32_t freeCount;
+    /* first never-used index: a freed slot is taken again before it moves,
+     * so it is also the most slots alive at once */
     uint32_t next;
+    uint64_t full; /* allocations refused because every slot was taken */
 } D3dpPool;
 
 bool d3dp_pool_init(D3dpPool *p, const char *name, uint32_t cap, uint32_t elemSize);

@@ -299,7 +299,14 @@ uint32_t vkr_pool_alloc(VkrPool *p, void **out)
     } else if (p->next < p->cap) {
         idx = p->next++;
     } else {
-        VKR_LOG("%s pool full (%u)", p->name, p->cap);
+        /* the first 8 then every 100th (a pool that stays full is asked on
+           every draw of a key it refused); the 10 s summary has the count */
+        p->full++;
+        if (p->full <= 8u || p->full % 100u == 0u) {
+            VKR_LOG("%s pool full (%u); %llu refused so far%s", p->name, p->cap,
+                    (unsigned long long)p->full,
+                    p->full == 8u ? "; from here every 100th is written" : "");
+        }
         return 0;
     }
     p->live[idx] = 1;
@@ -2040,7 +2047,7 @@ bool rhi_init(const RhiDeviceDesc *desc)
         !vkr_pool_init(&g_vkr.samplers, "sampler", 256, sizeof(VkSampler)) ||
         !vkr_pool_init(&g_vkr.shaders, "shader", 512, sizeof(VkrShader)) ||
         !vkr_pool_init(&g_vkr.layouts, "bind group layout", 64, sizeof(VkrLayout)) ||
-        !vkr_pool_init(&g_vkr.pipelines, "pipeline", 1024, sizeof(VkrPipeline))) {
+        !vkr_pool_init(&g_vkr.pipelines, "pipeline", RHI_PIPELINE_POOL_MAX, sizeof(VkrPipeline))) {
         rhi_shutdown();
         return false;
     }
@@ -2160,6 +2167,10 @@ void rhi_get_stats(RhiStats *out)
         out->memoryLiveBytes = g_vkr.memLiveBytes;
         out->memoryPeakBytes = g_vkr.memPeakBytes;
         out->memoryLimit = g_vkr.props.limits.maxMemoryAllocationCount;
+        out->pipelinePoolSize = g_vkr.pipelines.cap;
+        out->pipelinesLive = g_vkr.pipelines.next - g_vkr.pipelines.freeCount;
+        out->pipelinesPeak = g_vkr.pipelines.next;
+        out->pipelinePoolFull = g_vkr.pipelines.full;
     }
 }
 

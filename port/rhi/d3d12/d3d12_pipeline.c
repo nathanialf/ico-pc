@@ -546,6 +546,15 @@ typedef struct DxPipeJob {
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pd;
 } DxPipeJob;
 
+/* a creation that failed other than for a full pool (RhiStats
+ * pipelineFailures): hr the driver's error, S_OK for a description this
+ * backend refused (its line already written) */
+static void dx_pipe_failed(HRESULT hr)
+{
+    g_dx.counts.pipelineFailures++;
+    g_dx.counts.pipelineLastError = (int64_t)hr;
+}
+
 static bool dx_pipe_prepare(const RhiPipelineDesc *d, DxPipeJob *j)
 {
     memset(j, 0, sizeof(*j));
@@ -679,11 +688,20 @@ static RhiPipeline dx_pipe_finish(const RhiPipelineDesc *d, DxPipeJob *j)
     if (!dx_check(j->hr, "ID3D12Device_CreateGraphicsPipelineState", __FILE__, __LINE__)) {
         DX_LOG("pipeline %s not created", name);
         DX_RELEASE(j->pso);
+        dx_pipe_failed(j->hr);
         return out;
     }
     DxPipeline *p = NULL;
     uint32_t id = d3dp_pool_alloc(&g_dx.pipelines, (void **)&p);
     if (!id) {
+        /* the first 8 then every 100th, as the Vulkan pool's line
+           (vk_device.c vkr_pool_alloc); the 10 s summary has the count */
+        const uint64_t full = g_dx.pipelines.full;
+        if (full <= 8u || full % 100u == 0u) {
+            DX_LOG("pipeline pool full (%u); %llu refused so far%s", g_dx.pipelines.cap,
+                   (unsigned long long)full,
+                   full == 8u ? "; from here every 100th is written" : "");
+        }
         DX_RELEASE(j->pso);
         return out;
     }
@@ -704,6 +722,7 @@ RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
 {
     DxPipeJob j;
     if (!dx_pipe_prepare(d, &j)) {
+        dx_pipe_failed(S_OK);
         return (RhiPipeline){0};
     }
     dx_pipe_compile(&j);
@@ -766,7 +785,9 @@ uint32_t rhi_create_pipelines(const RhiPipelineDesc *descs, uint32_t n, RhiPipel
         return made;
     }
     for (uint32_t i = 0; i < n; i++) {
-        dx_pipe_prepare(&descs[i], &w.jobs[i]);
+        if (!dx_pipe_prepare(&descs[i], &w.jobs[i])) {
+            dx_pipe_failed(S_OK);
+        }
     }
     bool done = false;
     if (n > 1 || (batch && batch->wait)) {

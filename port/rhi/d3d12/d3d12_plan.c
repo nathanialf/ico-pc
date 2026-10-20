@@ -386,6 +386,7 @@ uint32_t d3dp_pool_alloc(D3dpPool *p, void **out)
     } else if (p->next < p->cap) {
         idx = p->next++;
     } else {
+        p->full++; /* the caller logs it (d3d12_pipeline.c dx_pipe_finish) */
         return 0;
     }
     p->live[idx] = 1;

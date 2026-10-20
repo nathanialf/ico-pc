@@ -734,7 +734,7 @@ bool rhi_init(const RhiDeviceDesc *desc)
         !d3dp_pool_init(&g_dx.samplers, "sampler", DX_SMP_PERSISTENT, sizeof(DxSampler)) ||
         !d3dp_pool_init(&g_dx.shaders, "shader", 512, sizeof(DxShader)) ||
         !d3dp_pool_init(&g_dx.layouts, "bind group layout", 64, sizeof(DxLayout)) ||
-        !d3dp_pool_init(&g_dx.pipelines, "pipeline", 1024, sizeof(DxPipeline))) {
+        !d3dp_pool_init(&g_dx.pipelines, "pipeline", RHI_PIPELINE_POOL_MAX, sizeof(DxPipeline))) {
         rhi_shutdown();
         return false;
     }
@@ -860,6 +860,10 @@ void rhi_get_stats(RhiStats *out)
         out->fenceWaits = g_dx.fenceWaits;
         out->fenceWaitNs = g_dx.fenceWaitNs;
         out->acquireNs = g_dx.acquireNs;
+        out->pipelinePoolSize = g_dx.pipelines.cap;
+        out->pipelinesLive = g_dx.pipelines.next - g_dx.pipelines.freeCount;
+        out->pipelinesPeak = g_dx.pipelines.next;
+        out->pipelinePoolFull = g_dx.pipelines.full;
     }
 }
 

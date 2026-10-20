@@ -13,6 +13,7 @@
 #define PORT_RENDER_RD_STATE_H
 
 #include <stdint.h>
+#include "../rhi/rhi_pipeline_pool.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -267,8 +268,8 @@ typedef struct RdDrawState {
  * RdDrawState that is not a pipeline-level property (aref, blendFix,
  * sampler settings) goes in a uniform or sampler object instead.  The tests hold the enumerated
  * reachable set under RD_PIPELINE_REACHABLE_MAX (rd__enumerate_reachable);
- * the runtime cache has four times that room, and a key past it (or one
- * whose creation failed) is logged once and drawn as nothing, never an
+ * the runtime cache has twice that room, and a key past it (or one
+ * whose creation failed) is logged and drawn as nothing, never an
  * abort (rd_pipeline.c, rd__get_pipeline). */
 typedef struct RdPipelineKey {
     uint8_t program; /* RdProg (rd.h) */
@@ -304,13 +305,23 @@ _Static_assert(sizeof(RdPipelineKey) == 16, "RdPipelineKey: 16 bytes, msaa took 
  * destination-read images of the blended keys (rd_dst_read.c); the
  * dynamic state takes the Z test, Z write, blend and colour mask out of
  * the keys where the device has it (rd__key_dynamic_normalise).  446 keys
- * at Original 4:3 with the fixed-function blend and every state static
- * (rd_state_test prints the counts); the tests keep it under this. */
-#define RD_PIPELINE_REACHABLE_MAX 1024
-#define RD_PIPELINE_CACHE_MAX (4 * RD_PIPELINE_REACHABLE_MAX)
-/* keys whose rhi_create_pipeline failed, remembered so they are not retried
- * (and logged) on every draw */
-#define RD_PIPELINE_FAIL_MAX 64
+ * at Original 4:3 with the fixed-function blend and every state static;
+ * the largest, a tile-based GPU's (the pre-pass off, every state static)
+ * at a fractional Enhanced scale (every vu_ps key's vu_np_ps twin), 1153
+ * (rd_state_test prints the counts).
+ *
+ * The cache holds the RHI's pool less the pool's headroom for the
+ * pipelines made outside the cache (port/rhi/rhi_pipeline_pool.h), so the
+ * pool never refuses a pipeline the cache keeps; the tests keep every
+ * start-up set under RD_PIPELINE_REACHABLE_MAX, half the cache, the other
+ * half left for the keys made on first use. */
+#define RD_PIPELINE_CACHE_MAX RHI_PIPELINE_POOL_CACHE
+#define RD_PIPELINE_REACHABLE_MAX (RD_PIPELINE_CACHE_MAX / 2)
+/* keys whose creation failed, remembered so they are not retried (and
+ * logged) on every draw: as many as the cache holds; past that no
+ * pipeline is created until the cache is cleared (rd_pipeline.c
+ * keepPipeline) */
+#define RD_PIPELINE_FAIL_MAX RD_PIPELINE_CACHE_MAX
 
 #ifdef __cplusplus
 }

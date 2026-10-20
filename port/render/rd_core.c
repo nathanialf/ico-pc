@@ -102,7 +102,7 @@ void rd_summary_text(char *out, size_t size)
     }
     snprintf(out, size,
              "blend %s; profile %s; index values dense (marks in the stream); fog %s; VU shaders "
-             "%s%s; VU pre-pass %s; pipelines %s",
+             "%s%s; VU pre-pass %s; pipelines %s (pool %d, cache %d)",
              g_rdSumBlend[0] ? g_rdSumBlend : "(self-test not reached)",
              rd__profile_text()[0] ? rd__profile_text() : "(not decided)",
              g_rdSumFog[0] ? g_rdSumFog : "(self-test not reached)",
@@ -112,7 +112,8 @@ void rd_summary_text(char *out, size_t size)
                  ? "the careful start-up set, stopped at its budget (the rest on first use)"
              : rd__pipelines_lazy_on() ? "on first use (no start-up set)"
              : careful                 ? "the careful start-up set"
-                                       : "the start-up set");
+                                       : "the start-up set",
+             RHI_PIPELINE_POOL_MAX, RD_PIPELINE_CACHE_MAX);
 }
 
 /* ------------------------------------------------ the VU index spans

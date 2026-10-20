@@ -4136,11 +4136,22 @@ static void perf_log(void)
                      (unsigned long long)st.memoryLimit, (double)st.memoryLiveBytes / 1048576.0,
                      (double)st.memoryPeakBytes / 1048576.0);
         }
+        /* the RHI's pipeline pool (both backends): the most alive at once
+           against its size, and the creations that failed (a full pool's
+           and the driver's), so a log shows a pool that ran out */
+        char pipes[160];
+        snprintf(pipes, sizeof(pipes),
+                 "; pipelines %llu alive (most %llu of the pool's %llu), %llu creations failed "
+                 "(%llu for a full pool)",
+                 (unsigned long long)st.pipelinesLive, (unsigned long long)st.pipelinesPeak,
+                 (unsigned long long)st.pipelinePoolSize,
+                 (unsigned long long)(st.pipelineFailures + st.pipelinePoolFull),
+                 (unsigned long long)st.pipelinePoolFull);
         if (rss >= 0) {
-            fprintf(stderr, "window: memory: %s; the process holds %ld MB (most %ld MB)%s\n", gfx,
-                    rss / 1024, (peak >= 0 ? peak : rss) / 1024, dev);
+            fprintf(stderr, "window: memory: %s; the process holds %ld MB (most %ld MB)%s%s\n", gfx,
+                    rss / 1024, (peak >= 0 ? peak : rss) / 1024, dev, pipes);
         } else {
-            fprintf(stderr, "window: memory: %s\n", gfx);
+            fprintf(stderr, "window: memory: %s%s\n", gfx, pipes);
         }
     }
     perf_reset();

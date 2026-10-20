@@ -33,12 +33,17 @@ typedef struct VkrPool {
     uint8_t *live;
     uint32_t *freeList;
     uint32_t freeCount;
-    uint32_t next; /* first never-used index */
+    /* first never-used index: a freed slot is taken again before it moves,
+     * so it is also the most slots alive at once */
+    uint32_t next;
+    uint64_t full; /* allocations refused because every slot was taken */
 } VkrPool;
 
 bool vkr_pool_init(VkrPool *p, const char *name, uint32_t cap, uint32_t elemSize);
 void vkr_pool_free(VkrPool *p);
-/* Allocates a zeroed element; returns its id (0 when full). */
+/* Allocates a zeroed element; returns its id (0 when full: the line
+ * "<name> pool full (cap); N refused so far" the first 8 times, then every
+ * 100th). */
 uint32_t vkr_pool_alloc(VkrPool *p, void **out);
 void *vkr_pool_get(const VkrPool *p, uint32_t id);
 void vkr_pool_release(VkrPool *p, uint32_t id);

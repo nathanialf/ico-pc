@@ -25,6 +25,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "rhi_pipeline_pool.h"
 
 #ifdef RHI_BACKEND_PREFIX
 
@@ -1044,6 +1045,18 @@ typedef struct RhiStats {
     /* allocations a memory type of their kind refused that another took
      * (Vulkan: a full PCIe BAR window, uploads then in system memory) */
     uint64_t memoryFallbacks;
+    /* The pipeline pool (both backends): its size (RHI_PIPELINE_POOL_MAX),
+     * the pipelines alive now and the most alive at once (gauges); the
+     * creations refused because the pool was full (pipelinePoolFull) and
+     * those that failed otherwise (pipelineFailures: the driver's error,
+     * or a description the backend refused, its line in the log), counts;
+     * pipelineLastError: the driver's error of the last failure that had
+     * one (a VkResult or an HRESULT), 0 when the last failure was the
+     * description's.  The renderer reads them around a creation to say
+     * why it failed (rd_pipeline.c failReason). */
+    uint64_t pipelinePoolSize, pipelinesLive, pipelinesPeak;
+    uint64_t pipelinePoolFull, pipelineFailures;
+    int64_t pipelineLastError;
 } RhiStats;
 
 void rhi_get_stats(RhiStats *out);
