@@ -1698,11 +1698,12 @@ static bool isDateStencil(uint8_t m)
  * the vertex pre-pass off (the eleven program entries under every depth,
  * Z write and blend), every state static, at a fractional Enhanced scale
  * (2.8125 x 2.41071: rd_pixel_plan.c rd__vu_pixel_fs_enum gives every
- * vu_ps key its vu_np_ps twin).  The set at 2x plus one twin per vu_ps
- * key, under RD_PIPELINE_REACHABLE_MAX and inside the pool less its
- * headroom (port/rhi/rhi_pipeline_pool.h).  Called by testTilerSet with
- * its stand-in modules; the caller restores the profile, the dynamic
- * state and the pre-pass. */
+ * vu_ps key its vu_np_ps twin, and the DATE pass then twins those under
+ * GEQUAL as it twins the vu_ps ones).  The set at 2x and the vu_np_ps keys,
+ * each with its vu_ps key in the set, under RD_PIPELINE_REACHABLE_MAX and
+ * inside the pool less its headroom (port/rhi/rhi_pipeline_pool.h).
+ * Called by testTilerSet with its stand-in modules; the caller restores
+ * the profile, the dynamic state and the pre-pass. */
 static void testTilerFracSet(RdPipeKeyInt *keys)
 {
     const RdPreset keepPreset = g_rd.settings.preset;
@@ -1721,26 +1722,39 @@ static void testTilerFracSet(RdPipeKeyInt *keys)
     g_rd.settings.preset = RD_PRESET_ENHANCED;
     g_rd.dstMode = RD_BLEND_EXACT_OFF;
     g_rd.sceneSx = g_rd.sceneSy = 2.0f;
-    const uint32_t nWhole = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
+    static RdPipeKeyInt whole[RD_PIPELINE_REACHABLE_MAX];
+    const uint32_t nWhole = rd__enumerate_reachable(whole, RD_PIPELINE_REACHABLE_MAX);
     uint32_t vuPs = 0, npWhole = 0;
     for (uint32_t i = 0; i < nWhole && i < RD_PIPELINE_REACHABLE_MAX; i++) {
-        vuPs += keys[i].fs == RD_FS_VU;
-        npWhole += keys[i].fs == RD_FS_VU_NP;
+        vuPs += whole[i].fs == RD_FS_VU;
+        npWhole += whole[i].fs == RD_FS_VU_NP;
     }
     g_rd.sceneSx = 2.8125f;
     g_rd.sceneSy = 2.41071f;
     const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
-    uint32_t np = 0;
+    /* every vu_np_ps key (the DATE pass's too) has its vu_ps key in the
+       set, every other key is the 2x set's, and the 2x set is all there */
+    uint32_t np = 0, noBase = 0, others = 0, missing = 0;
     for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
-        np += keys[i].fs == RD_FS_VU_NP;
+        if (keys[i].fs == RD_FS_VU_NP) {
+            RdPipeKeyInt b = keys[i];
+            b.fs = RD_FS_VU;
+            np++;
+            noBase += !keyIn(keys, n, &b);
+        } else {
+            others += !keyIn(whole, nWhole, &keys[i]);
+        }
+    }
+    for (uint32_t i = 0; i < nWhole && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+        missing += !keyIn(keys, n, &whole[i]);
     }
     printf("  tiler set, static, the pre-pass off: %u keys at 2x (%u vu_ps), %u at 2.8125x2.41071 "
            "(%u vu_np_ps); the pool %d less its headroom %d\n",
            nWhole, vuPs, n, np, RHI_PIPELINE_POOL_MAX, RHI_PIPELINE_POOL_HEADROOM);
-    CHECK(npWhole == 0 && np == vuPs && n == nWhole + vuPs,
-          "tiler, fractional scale: %u twins of %u vu_ps keys, %u keys against %u at 2x (%u twins "
-          "at 2x)",
-          np, vuPs, n, nWhole, npWhole);
+    CHECK(npWhole == 0 && np > 0 && noBase == 0 && others == 0 && missing == 0 && n == nWhole + np,
+          "tiler, fractional scale: %u keys against %u at 2x: %u vu_np_ps keys (%u at 2x, %u "
+          "without their vu_ps key), %u keys not in the 2x set, %u of the 2x set missing",
+          n, nWhole, np, npWhole, noBase, others, missing);
     CHECK(n < RD_PIPELINE_REACHABLE_MAX, "tiler, fractional scale: %u keys under %d", n,
           RD_PIPELINE_REACHABLE_MAX);
     CHECK(n <= RHI_PIPELINE_POOL_MAX - RHI_PIPELINE_POOL_HEADROOM,

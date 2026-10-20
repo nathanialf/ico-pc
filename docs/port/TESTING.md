@@ -546,8 +546,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   blend, with and without local read (`testTilerSet`: the desktop keys and exactly DATE's, the fog's
   local key and the fold key, none twice; printed beside the careful-set target; each set under
   `RD_PIPELINE_REACHABLE_MAX` and inside the RHI's pipeline pool less its headroom), the tile
-  profile's largest set, the pre-pass off and every state static at 2.8125 x 2.41071, the 2x set
-  and one `vu_np_ps` twin per `vu_ps` key, under the same two bounds (`testTilerFracSet`), and a dump's menu text sheets loading as the renderer makes them, a sheet with
+  profile's largest set, the pre-pass off and every state static at 2.8125 x 2.41071: the 2x set
+  and the `vu_np_ps` keys (the DATE pass's twins of them too), each with its `vu_ps` key in the
+  set, under the same two bounds (`testTilerFracSet`), and a dump's menu text sheets loading as the renderer makes them, a sheet with
 - `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, each in a child process; the symbolizer, the report file and `ico_log_limited` (above)
 - `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and a text texture
   that could not be uploaded named once in the log, the game's own textures never
