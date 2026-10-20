@@ -574,6 +574,16 @@ the loss with the zip's path (or that none was written) for the next start
 (`port/render/rd_dump.c` (`rd_dump_retained`); `port/platform/dump_zip.c` (`ico_loss_dump_zip`,
 `ico_loss_dump_prune`); `port/platform/window_host.c` (`loss_dump`, `device_lost_quit`)).
 
+A GPU hang writes the same zip: when the watchdog ends a run whose main thread waits for work the
+GPU never finishes ([PLATFORM.md](PLATFORM.md#diagnostics), "A GPU hang"), the window writes the pass
+ring and the loss dump from the watchdog thread. The main thread, the only one that writes the
+frame ring, the texture and mesh records and the pass ring, is blocked inside the driver, so they
+stand still while they are written; the texture pack's loader thread fills only its own queue, and
+the pipeline compiler threads run only inside a batch the main thread waits for. Nothing in the
+dump needs the device, so none of it calls the hung one. The lost frame is then the last closed
+frame, the one whose replay the wait belongs to or the one after it, and the next start bisects it
+as it would a loss's (`port/platform/window_host.c` (`window_gpu_hang`)).
+
 ### The loss bisect
 
 The start after a loss that left a loss dump (of the same version) finds the pass that loses the

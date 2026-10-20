@@ -112,6 +112,19 @@
  *               time budget; a state file that does not parse (garbage, a
  *               line too long, numbers out of range, a step out of order)
  *               or from another version is deleted;
+ *   - hang:     the watchdog's GPU hang (ico_diag_set_gpu_hang) with the
+ *               backend's progress faked as issue 123's run left it: the
+ *               main thread inside a present, waiting for submission 263,
+ *               the newest seen finished 262: the WATCHDOG block names the
+ *               driver ("did not finish the picture (the last submission
+ *               is still running after 60 s)") and the wait, the heartbeat
+ *               the wait, the dump stub runs before the report, the report
+ *               says "the graphics driver stopped responding", the box is
+ *               the device loss's (Linux), the activity file keeps the
+ *               loss dump and the next start counts the loss (ends file
+ *               "loss 1"); hangnodump: no dump, the loss noted without one;
+ *               hangnot: no wait in progress (the present call itself): a
+ *               freeze as before, with the GPU's line and no loss;
  *   - early:    the reporter started before the limits (Android's start):
  *               the first limit counts from ico_diag_start, not from the
  *               thread's start;
@@ -881,6 +894,50 @@ static void loss_child(const char *mode, const char *log)
     exit(0);
 }
 
+/* The watchdog's GPU hang, faked (ico_diag_set_gpu_hang): issue 123's
+   run, the main thread inside a present and waiting for submission 263
+   while the newest seen finished is 262, a minute after it was made;
+   "hangnot": no wait in progress (the driver's present call) */
+static int gpu_fake_waiting;
+
+static int gpu_fake(IcoDiagGpu *out)
+{
+    out->submitted = 263;
+    out->finished = 262;
+    out->waiting_for = gpu_fake_waiting ? 263 : 0;
+    out->waiting_s = gpu_fake_waiting ? 59.8 : 0.0;
+    out->submitted_ago_s = 60.4;
+    out->replay = 249;
+    out->frame = 127;
+    return 1;
+}
+
+/* the window's pass ring and loss dump (window_host.c window_gpu_hang) */
+static void gpu_dump_stub(void)
+{
+    ico_diag_log("test: hang dump");
+    ico_diag_note_device_loss("/logs/loss-hang.zip");
+}
+
+/* "hang": the dump noted; "hangnodump": no dump function; "hangnot": no
+   wait for the GPU in progress. The later limit (1 s) ends the run. */
+static void hang_child(const char *mode, const char *log)
+{
+    char path[300];
+    act_path(path, sizeof path, log);
+    ico_diag_set_version("test 1");
+    (void)ico_diag_startup_activity_begin(path, 0);
+    gpu_fake_waiting = strcmp(mode, "hangnot") != 0;
+    ico_diag_set_gpu_hang(gpu_fake, strcmp(mode, "hang") == 0 ? gpu_dump_stub : NULL);
+    ico_diag_set_fatal_ui(loss_box, NULL);
+    fake_ticks = 1;
+    ico_diag_start(0, 1);
+    ico_diag_present_enter();
+    pause_ms(5000);
+    ico_diag_log("test: the watchdog did not fire");
+    exit(0);
+}
+
 /* ico_diag_start_reporter first, the limits 1.5 s later: the first limit
    (1 s) has not fired 0.6 s after them, and fires after that */
 static void early_child(void)
@@ -927,6 +984,8 @@ static void run_child(const char *mode, const char *log)
         activity_child(mode, log);
     } else if (strncmp(mode, "loss", 4) == 0) {
         loss_child(mode, log);
+    } else if (strncmp(mode, "hang", 4) == 0) {
+        hang_child(mode, log);
     } else if (strcmp(mode, "early") == 0) {
         early_child();
     } else if (strncmp(mode, "pump", 4) == 0) {
@@ -1709,6 +1768,90 @@ int main(int argc, char **argv)
     CHECK(strstr(s, "WATCHDOG: no new Main tick for 1 s") != NULL);
     if (fails) {
         printf("--- presentplain log ---\n%s\n", s);
+    }
+    /* a GPU hang (issue 123): the main thread waits for work the GPU never
+       finishes; the end is a device loss's */
+    {
+        char act[300], ends[320];
+        act_path(act, sizeof act, log);
+        snprintf(ends, sizeof ends, "%s-ends.txt", act);
+        remove(act);
+        remove(ends);
+        clear_dir(rdir);
+        setenv("ICO_TEST_REPORT_DIR", rdir, 1);
+        r = run(argv[0], "hang", log);
+        unsetenv("ICO_TEST_REPORT_DIR");
+        s = read_file(log);
+        CHECK(r == 4);
+        CHECK(strstr(s, "ico_pc: WATCHDOG: no new Main tick for 1 s (the last was tick 1, "
+                        "progress 0)\nico_pc: the graphics driver did not finish the picture (the "
+                        "last submission is still running after 60 s)\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the GPU: the main thread has waited 60 s for submission 263; the "
+                        "newest is 263 (replay 249, frame 127), the newest seen finished 262; this "
+                        "end counts as a device loss (the loss dump, and the next start takes the "
+                        "loss steps)\n") != NULL);
+        CHECK(strstr(s, "for a picture to be shown") == NULL);
+        CHECK(strstr(s, " | waiting for the GPU 60 s (submission 263; the newest 263, the newest "
+                        "seen finished 262)") != NULL);
+        CHECK(strstr(s, "test: hang dump\n") != NULL);
+        CHECK(strstr(s, "ico_pc: report: report-") != NULL);
+        CHECK(strstr(s, "test: hang dump\n") < strstr(s, "ico_pc: report: report-"));
+        CHECK(strstr(s, "ico_pc: the run ended: the graphics driver stopped responding "
+                        "(watchdog)\n") != NULL);
+        CHECK(strstr(s, "test: the watchdog did not fire") == NULL);
+#if defined(__linux__)
+        CHECK(strstr(s, "test: box: The graphics card stopped responding while the game was "
+                        "drawing, so the game has to close.") != NULL);
+#endif
+        {
+            char zip[512];
+            char *txt = NULL;
+
+            if (newest_report(rdir, zip, sizeof zip)) {
+                txt = zip_entry(zip, "report.txt");
+            }
+            CHECK(txt != NULL &&
+                  strstr(txt, "what ended the run: the graphics driver stopped responding (the "
+                              "last submission is still running after 60 s)\n") != NULL);
+            free(txt);
+        }
+        CHECK(strcmp(read_file(act), "test 1\n\nloss dump: /logs/loss-hang.zip") == 0);
+        if (fails) {
+            printf("--- hang log ---\n%s\n", s);
+        }
+        /* the next start takes the loss path: the row of losses counts it */
+        r = run(argv[0], "actlossnext", log);
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "ico_pc: starts in a row that lost the graphics device: 1\n") != NULL);
+        CHECK(strstr(read_file(ends), "loss 1\n") != NULL);
+        remove(act);
+        remove(ends);
+        /* no dump function: the loss is noted without a dump */
+        r = run(argv[0], "hangnodump", log);
+        CHECK(r == 4);
+        CHECK(strstr(read_file(log), "the graphics driver did not finish the picture") != NULL);
+        CHECK(strcmp(read_file(act), "test 1\n\ngraphics device lost, no loss dump") == 0);
+        remove(act);
+        /* no wait for the GPU in progress: a freeze as before, the GPU's
+           state named, no loss */
+        r = run(argv[0], "hangnot", log);
+        s = read_file(log);
+        CHECK(r == 4);
+        CHECK(strstr(s, "the graphics driver did not finish the picture") == NULL);
+        CHECK(strstr(s, "ico_pc: the game has waited 1 s for a picture to be shown") != NULL);
+        CHECK(strstr(s, "ico_pc: the GPU: no wait for it in progress; the newest submission is "
+                        "263 (replay 249, frame 127, made 60 s ago), the newest seen finished "
+                        "262\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the run ended: watchdog\n") != NULL);
+#if defined(__linux__)
+        CHECK(strstr(s, "test: box: ICO PC stopped responding, so it was closed.") != NULL);
+#endif
+        CHECK(read_file(act)[0] == '\0');
+        if (fails) {
+            printf("--- hangnot log ---\n%s\n", s);
+        }
+        clear_dir(rdir);
     }
     /* the start-up activity file */
     {

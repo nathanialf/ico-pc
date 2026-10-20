@@ -109,6 +109,41 @@ void ico_diag_set_effects_program(int loaded);
 void ico_diag_present_enter(void);
 void ico_diag_present_leave(void);
 
+/* A GPU hang: the watchdog fires (either limit, not the event pump's
+   bound) while the main thread is blocked in a wait for the GPU and the
+   work it waits for has not finished (IcoDiagGpu.waiting_for above
+   .finished). The driver never returned and never reported a loss, so
+   the end is the device loss it would have been: the WATCHDOG block's
+   second line is "ico_pc: the graphics driver did not finish the picture
+   (the last submission is still running after N s)" (N: since the newest
+   submission), then "ico_pc: the GPU: the main thread has waited W s for
+   submission V; the newest is S (replay R, frame F), the newest seen
+   finished D; this end counts as a device loss (the loss dump, and the
+   next start takes the loss steps)"; after the threads and the symbols,
+   dump() runs on the watchdog thread (the window's pass ring and loss
+   dump, which notes the loss: ico_diag_note_device_loss), and when it
+   noted none the loss is noted without a dump, so the next start counts
+   it (ICO_DIAG_END_LOSS) and bisects the dump (ico_diag_loss_bisect). The
+   report file's "what ended the run" is "the graphics driver stopped
+   responding (the last submission is still running after N s)", the box
+   the device loss's words, the end "the run ended: the graphics driver
+   stopped responding (watchdog)" with the watchdog's exit code and no
+   relaunch. Any other watchdog end with the main thread inside a present
+   adds "ico_pc: the GPU: no wait for it in progress; the newest
+   submission is S (replay R, frame F, made N s ago), the newest seen
+   finished D" (its acquire or present call may be the one that has not
+   returned). progress fills *out from the graphics backend without a
+   call into the driver (port/rhi/rhi.h rhi_gpu_progress) and returns 1,
+   or 0 when the backend does not track it (then no end is a hang); any
+   thread. Either may be NULL. */
+typedef struct IcoDiagGpu {
+    unsigned long long submitted, finished, waiting_for;
+    double waiting_s, submitted_ago_s;
+    unsigned int replay, frame;
+} IcoDiagGpu;
+
+void ico_diag_set_gpu_hang(int (*progress)(IcoDiagGpu *out), void (*dump)(void));
+
 /* The main thread is inside a call that waits on the operating system and
    runs none of the game's code (the window's event pump, SDL_PollEvent):
    ico_diag_os_wait_enter before it, ico_diag_os_wait_leave after it, on the

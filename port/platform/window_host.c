@@ -1441,6 +1441,10 @@ static int vu_prepass_persist(void)
     return ico_config_set_bool("dev.vu_prepass", 0) == 0 && ico_config_save() == 0 ? 0 : -1;
 }
 
+/* the watchdog's GPU hang (below, beside device_lost_quit) */
+static int window_gpu_progress(IcoDiagGpu *out);
+static void window_gpu_hang(void);
+
 int ico_window_open(unsigned int gsW, unsigned int gsH)
 {
     RdSettings rs;
@@ -1846,6 +1850,25 @@ open_window:
        is off by the device's default, not by gpu_robust (startup_retry.h
        StartupRetryRun.robustOffDefault; Direct3D 12: NULL, its own rules) */
     ico_diag_set_robust_off_default(rhi_limits() != NULL && rhi_limits()->robustDefaultOff);
+    {
+        /* the watchdog's GPU hang counts as a device loss where the
+           backend tracks its submissions (rhi_gpu_progress), said once */
+        static int s_hangSaid;
+        RhiGpuProgress gp;
+        const int tracked = rhi_gpu_progress(&gp);
+
+        ico_diag_set_gpu_hang(window_gpu_progress, window_gpu_hang);
+        if (!s_hangSaid) {
+            s_hangSaid = 1;
+            fprintf(stderr, "%s",
+                    tracked ? "window: GPU hang: the watchdog's end while the game waits for the "
+                              "GPU and the work has not finished counts as a device loss (the "
+                              "loss dump, the next start's loss steps)\n"
+                            : "window: GPU hang: not told from a freeze on this graphics backend "
+                              "(it does not track its submissions); its driver reports a hung "
+                              "device as a loss\n");
+        }
+    }
 #ifdef ICO_IOS
     s_background = 0;
 #endif
@@ -2274,6 +2297,53 @@ static void loss_dump(char *name, size_t name_size)
     }
     snprintf(name, name_size, "loss-%s.zip", stamp);
     ico_diag_note_device_loss(zip);
+}
+
+/* The watchdog's GPU hang (diag_host.h ico_diag_set_gpu_hang): the
+   backend's submissions as the main thread last saw them (rhi.h
+   rhi_gpu_progress: no call into the driver), 0 when it does not track
+   them (Direct3D 12) */
+static int window_gpu_progress(IcoDiagGpu *out)
+{
+    RhiGpuProgress p;
+
+    if (!rhi_gpu_progress(&p)) {
+        return 0;
+    }
+    out->submitted = p.submitted;
+    out->finished = p.finished;
+    out->waiting_for = p.waitingFor;
+    out->waiting_s = (double)p.waitingNs / 1e9;
+    out->submitted_ago_s = (double)p.submittedAgoNs / 1e9;
+    out->replay = p.replay;
+    out->frame = p.frame;
+    return 1;
+}
+
+/* The GPU hang's part of device_lost_quit, on the watchdog thread while
+   the main thread is blocked in the driver waiting for the GPU: the index
+   span, the pass ring and the loss dump (loss_dump, which notes the loss
+   for the next start). CPU data only, no call into the device (it is
+   hung). Nothing else writes what these read: the renderer's frames, its
+   texture and mesh records and the pass ring are written by the main
+   thread only (the texture pack's loader thread fills its own queue under
+   its lock, texpack.c; the pipeline compiler threads run only inside a
+   batch the main thread waits for, rhi_create_pipelines; the audio thread
+   touches none of the renderer). The box and the report are the
+   watchdog's (diag_host.c watchdog_fire). */
+static void window_gpu_hang(void)
+{
+    char span[256];
+    char dumpName[64];
+
+    fprintf(stderr, "window: the graphics driver stopped responding (a GPU hang); what was being "
+                    "drawn follows, as for a device loss\n");
+    rd_index_span_text(span, sizeof(span));
+    fprintf(stderr, "window: at the hang: %s\n", span);
+    rd_passring_print(stderr, rd_perf_post_name);
+    ico_host_log_flush();
+    loss_dump(dumpName, sizeof(dumpName));
+    ico_host_log_flush();
 }
 
 /* The renderer's device was removed, reset or hung (the driver

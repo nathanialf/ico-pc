@@ -848,6 +848,51 @@ ticks and the current thread (`ico_diag_milestone`), and game threads are named 
 `iosThreadCreate` runs (`ico_host_thread_func`). `ico_diag_float_fault` logs a NaN that reaches game
 code the PS2 never fed one (`port/platform/diag_host.h` (`ico_diag_float_fault`)).
 
+**A GPU hang.** When the watchdog fires (either limit; not the pump's bound) while the main thread
+is blocked in a wait for the GPU and the work it waits for has not finished
+([RHI.md](RHI.md#device-loss), `rhi_gpu_progress`: the wait's value above the newest seen finished),
+the driver neither finished the picture nor reported the device lost, and the end is the device
+loss it would have been. The WATCHDOG block's next lines say so in place of the "waited for a
+picture" line:
+
+```
+ico_pc: WATCHDOG: no new Main tick for 60 s (the last was tick 127, progress 0)
+ico_pc: the graphics driver did not finish the picture (the last submission is still running after 60 s)
+ico_pc: the GPU: the main thread has waited 60 s for submission 262; the newest is 263 (replay 249, frame 127), the newest seen finished 261; this end counts as a device loss (the loss dump, and the next start takes the loss steps)
+```
+
+Then come the main thread's sample, the heartbeat (which carries `| waiting for the GPU N s
+(submission V; the newest S, the newest seen finished D)` whenever such a wait has lasted a second),
+the threads and the symbols as for any watchdog end. On the watchdog thread the window then writes
+what a device loss writes before its box: `window: the graphics driver stopped responding (a GPU
+hang); what was being drawn follows, as for a device loss`, the index span, the renderer's
+[pass ring](RENDER.md#the-pass-ring) and the [loss dump](RENDER.md#the-loss-dump), which notes the
+loss in the activity file (without a dump the loss is noted without one), so the next start counts
+it in the row of losses (on Android, robust access for that start) and runs the
+[loss bisect](RENDER.md#the-loss-bisect) on the dump. All of it is CPU data the main thread wrote and
+nothing else writes while it is blocked; no call goes to the hung device
+(`port/platform/window_host.c` (`window_gpu_hang`, `window_gpu_progress`)). The
+[report file](#the-report-file)'s `what ended the run:` is `the graphics driver stopped responding
+(the last submission is still running after N s)`, and the box is the device loss's: on a computer
+"The graphics card stopped responding while the game was drawing, so the game has to close. Your
+last save is kept; the log says why.", the overclock advice and the report file to attach; on a
+phone the same first sentence, "Start the game again." and the report file. The run ends
+`ico_pc: the run ended: the graphics driver stopped responding (watchdog)` with the watchdog's exit
+code 4 and no restart: the loss restart runs at exit after the normal quit path, which the blocked
+main thread never reaches, and a process holding a hung device should not start a second one
+before the driver lets go of it. A watchdog end with the main thread inside a present but in no
+wait for the GPU (the driver's acquire or present call has not returned) stays a freeze, with one
+more line naming the GPU's state: `ico_pc: the GPU: no wait for it in progress; the newest
+submission is S (replay R, frame F, made N s ago), the newest seen finished D`. One start line says
+whether the backend tells a hang apart: `window: GPU hang: the watchdog's end while the game waits
+for the GPU and the work has not finished counts as a device loss (the loss dump, the next start's
+loss steps)` on Vulkan, `window: GPU hang: not told from a freeze on this graphics backend ...` on
+Direct3D 12 (`port/platform/diag_host.h` (`ico_diag_set_gpu_hang`, `IcoDiagGpu`);
+`port/platform/diag_host.c` (`watchdog_fire`, `gpu_state`, `gpu_hung`)). ctest `diag` fakes the
+backend's progress (`hang`, `hangnodump`, `hangnot` in `port/platform/test/diag_test.c`): the
+lines, the dump before the report, the report's line, the box, the activity file's loss and the next
+start's count, the loss without a dump, and the freeze with no wait in progress.
+
 The window build logs a stats block every 10 s. A host step longer than `[dev] slow_step_ms`
 (default 8, 0 off) logs a slow-step line ([DISPLAY.md](DISPLAY.md#pacing);
 `port/platform/window_host.c` (`slow_step`); `port/platform/host_loop.h` (`IcoStepProfile`)).

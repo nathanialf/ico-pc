@@ -146,6 +146,10 @@ static double os_wait_seconds(double *current, unsigned long long *since_out);
 static const char *os_wait_name(void);
 /* ico_diag_set_effects_program: written by the host before the first present */
 static volatile int effects_program;
+/* ico_diag_set_gpu_hang: the graphics backend's progress and the window's
+   loss dump, set once before the game */
+static int (*volatile gpu_progress_fn)(IcoDiagGpu *out);
+static void (*volatile gpu_dump_fn)(void);
 static void (*exit_hook)(const char *reason);
 
 #ifndef _WIN32
@@ -855,6 +859,29 @@ static void fatal_text(char *out, size_t size, const char *what)
 
 #endif
 
+/* --- The GPU's progress (ico_diag_set_gpu_hang) ----------------------------------- */
+
+void ico_diag_set_gpu_hang(int (*progress)(IcoDiagGpu *out), void (*dump)(void))
+{
+    gpu_progress_fn = progress;
+    gpu_dump_fn = dump;
+}
+
+/* the backend's progress into *g: 1 when it tracks it (no call into the
+   driver: callable from the watchdog thread and the crash paths) */
+static int gpu_state(IcoDiagGpu *g)
+{
+    int (*fn)(IcoDiagGpu *) = gpu_progress_fn;
+    memset(g, 0, sizeof *g);
+    return fn != NULL && fn(g) != 0;
+}
+
+/* a GPU hang: a wait for the GPU in progress whose work has not finished */
+static int gpu_hung(const IcoDiagGpu *g)
+{
+    return g->waiting_for != 0 && g->waiting_for > g->finished;
+}
+
 /* --- Heartbeat ------------------------------------------------------------------ */
 
 /* The heartbeat's content without the time. */
@@ -930,7 +957,8 @@ static unsigned int same_beats;
 static void heartbeat(int fatal_path)
 {
     static char body[1024];
-    static char mem[160];
+    static char mem[288];
+    IcoDiagGpu gpu;
     heartbeat_body(body, sizeof body);
     if (strcmp(body, last_body) == 0) {
         same_beats++;
@@ -951,6 +979,15 @@ static void heartbeat(int fatal_path)
             const size_t n = strlen(mem);
             snprintf(mem + n, sizeof mem - n, " | in %s %.0f s", os_wait_name(), cur);
         }
+    }
+    if (gpu_state(&gpu) && gpu.waiting_for != 0 && gpu.waiting_s >= 1.0) {
+        /* a wait for the GPU (the watchdog's GPU hang), outside the
+           comparison too */
+        const size_t n = strlen(mem);
+        snprintf(mem + n, sizeof mem - n,
+                 " | waiting for the GPU %.0f s (submission %llu; the newest %llu, the newest "
+                 "seen finished %llu)",
+                 gpu.waiting_s, gpu.waiting_for, gpu.submitted, gpu.finished);
     }
     if (fatal_path) {
         flog("ico_pc: heartbeat %.1f s | %s%s", ico_diag_uptime(), body, mem);
@@ -4286,21 +4323,43 @@ static void watchdog_fire(const char *reason)
     char where[96];
     char tmp[80];
     char box[512];
+    IcoDiagGpu gpu;
+    int tracked, hang;
     if (fatal_once++) {
         return;
     }
     flush_stdio_bounded();
     sym_n = 0;
     sym_collect = 1;
+    /* a GPU hang (diag_host.h ico_diag_set_gpu_hang): the main thread waits
+       for work the GPU has not finished; the end is a device loss's */
+    tracked = gpu_state(&gpu);
+    hang = tracked && gpu_hung(&gpu);
     flog("ico_pc: ======================================================================");
     flog("ico_pc: WATCHDOG: %s", reason);
+    if (hang) {
+        flog("ico_pc: the graphics driver did not finish the picture (the last submission is "
+             "still running after %.0f s)",
+             gpu.submitted_ago_s);
+        flog("ico_pc: the GPU: the main thread has waited %.0f s for submission %llu; the newest "
+             "is %llu (replay %u, frame %u), the newest seen finished %llu; this end counts as a "
+             "device loss (the loss dump, and the next start takes the loss steps)",
+             gpu.waiting_s, gpu.waiting_for, gpu.submitted, gpu.replay, gpu.frame, gpu.finished);
+    }
     {
         double cur;
         (void)present_seconds(&cur);
-        if (cur > 0.0) {
+        if (cur > 0.0 && !hang) {
             flog("ico_pc: the game has waited %.0f s for a picture to be shown (an effects "
                  "program may be preparing its effects)",
                  cur);
+            if (tracked && gpu.submitted != 0 && gpu.waiting_for == 0) {
+                /* inside the present but not waiting for the GPU: the
+                   driver's acquire or present call has not returned */
+                flog("ico_pc: the GPU: no wait for it in progress; the newest submission is %llu "
+                     "(replay %u, frame %u, made %.0f s ago), the newest seen finished %llu",
+                     gpu.submitted, gpu.replay, gpu.frame, gpu.submitted_ago_s, gpu.finished);
+            }
         }
         (void)os_wait_seconds(&cur, NULL);
         if (cur > 0.0) {
@@ -4335,22 +4394,58 @@ static void watchdog_fire(const char *reason)
     heartbeat(1);
     dump_threads();
     report_symbols();
+    if (hang) {
+        /* what a device loss writes (window_host.c device_lost_quit): the
+           pass ring and the loss dump, from the frames the renderer holds
+           (CPU data: the main thread that writes them is blocked in the
+           driver), noted for the next start; a loss without a dump when
+           none was noted */
+        void (*dump)(void) = gpu_dump_fn;
+        if (dump != NULL) {
+            dump();
+        }
+#ifdef __ANDROID__
+        fatal_ui_flush();
+#else
+        flush_stdio_bounded();
+#endif
+        if (act_loss[0] == '\0') {
+            ico_diag_note_device_loss(NULL);
+        }
+    }
     {
         char what[LINE_MAX_BYTES - 64];
 
-        snprintf(what, sizeof what, "the watchdog: %s", reason);
+        if (hang) {
+            snprintf(what, sizeof what,
+                     "the graphics driver stopped responding (the last submission is still "
+                     "running after %.0f s)",
+                     gpu.submitted_ago_s);
+        } else {
+            snprintf(what, sizeof what, "the watchdog: %s", reason);
+        }
         report_file(what, 1);
     }
-    /* the reason is in the log; the box says what happened in plain words */
+    /* the reason is in the log; the box says what happened in plain words
+       (a GPU hang: a device loss's, window_host.c device_lost_quit) */
 #ifdef __ANDROID__
-    snprintf(box, sizeof box, "ICO stopped responding, so it has to close.");
+    snprintf(box, sizeof box, "%s",
+             hang ? "The graphics driver stopped responding while the game was drawing, so the "
+                    "game has to close.\n\nStart the game again. If this happens every time at "
+                    "the same place, please report it at github.com/nathanialf/ico-pc/issues."
+                  : "ICO stopped responding, so it has to close.");
 #else
-    snprintf(box, sizeof box, "ICO PC stopped responding, so it was closed.");
+    snprintf(box, sizeof box, "%s",
+             hang ? "The graphics card stopped responding while the game was drawing, so the "
+                    "game has to close. Your last save is kept; the log says why.\n\nIf the "
+                    "graphics card is overclocked, try its stock clocks first."
+                  : "ICO PC stopped responding, so it was closed.");
 #ifdef __linux__
     watchdog_ending = 1;
 #endif
 #endif
-    finish("watchdog", box, EXIT_WATCHDOG);
+    finish(hang ? "the graphics driver stopped responding (watchdog)" : "watchdog", box,
+           EXIT_WATCHDOG);
 }
 
 static unsigned int wd_first_s;

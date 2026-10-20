@@ -118,6 +118,20 @@ and only the picture is missing. See
 [The screen stays black but I hear the game](FAQ.md#the-screen-stays-black-but-i-hear-the-game):
 updating the graphics driver usually fixes it.
 
+**A black screen that never changes.** If the picture freezes or stays
+black and nothing changes, the graphics driver may have stopped
+responding without saying so. Wait: after about a minute the game closes
+by itself. Windows and Android show a message ("The graphics card stopped
+responding while the game was drawing", on a phone "The graphics driver
+stopped responding while the game was drawing"). Your last save is kept. Start the game
+again: the game treats this like any other time the graphics stop (see
+[The game closes by itself](#the-game-closes-by-itself) and the messages
+under [Error messages](#error-messages)), so the next start checks the
+picture it was drawing and, on a phone, has the graphics driver check
+every read for that start. If it happens again, report it and attach the
+newest file in `logs` that starts with `report-` (the message names it),
+and say which disc you play, the European, the Japanese or the Korean.
+
 ## The music stops
 
 If a piece of music goes quiet while the sounds around it still play, or
@@ -439,6 +453,11 @@ If the game stops responding, it closes itself after a while: 30 seconds
 while it is starting, 60 seconds once it is running. Windows and Android
 show a message that says so. The log then has a line of `=` signs, and the
 line after it has `WATCHDOG:` in it and says what the game was doing.
+When the game was waiting for the graphics card, the next line says `the
+graphics driver did not finish the picture`, and the message says the
+graphics card (or the graphics driver) stopped responding: the game then
+keeps a copy of the picture as it does whenever the graphics stop (see
+[Error messages](#error-messages)).
 Send the newest file in `logs` that starts with `report-`, and say which
 disc you play, the European, the Japanese or the Korean.
 With [ReShade](RESHADE.md) loaded, the game gives itself 60 seconds to
