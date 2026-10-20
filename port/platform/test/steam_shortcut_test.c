@@ -8,7 +8,8 @@
  * read for the most recent user; the whole job over a fake Steam folder,
  * including the refusal while Steam runs (a pid file, and stand-ins for the
  * registry's ActiveProcess pid and the steam.exe process check) and the
- * .bak copy.
+ * .bak copy; the program path the shortcut records, the AppImage file when
+ * run from one.
  *
  * argv[1]: a folder the test may write in (the build folder).
  */
@@ -649,6 +650,55 @@ static void test_running(void)
 #endif
 }
 
+/* The path the shortcut records: the program itself, or the AppImage file
+   it runs from when APPIMAGE names a file and the program lies under
+   APPDIR (host_fs.c ico_appimage_file); a stray APPIMAGE is not used */
+static void test_self_exe(void)
+{
+#if defined(__linux__)
+    char self[ICO_STEAM_PATH_MAX], got[ICO_STEAM_PATH_MAX], appdir[ICO_STEAM_PATH_MAX];
+    char base[4096], file[4200]; /* realpath writes up to PATH_MAX */
+    long n = (long)readlink("/proc/self/exe", self, sizeof(self) - 1);
+    const int based = realpath(s_base, base) != NULL;
+    FILE *f;
+
+    CHECK(n > 0 && based);
+    if (n <= 0 || !based) {
+        return;
+    }
+    self[n] = '\0';
+    unsetenv("APPIMAGE");
+    unsetenv("APPDIR");
+    CHECK(ico_steam_self_exe(got, sizeof(got)) == 0 && strcmp(got, self) == 0);
+
+    snprintf(file, sizeof(file), "%s/ICO-v0.0.0-linux-x86_64.AppImage", base);
+    if (strlen(file) >= sizeof(got)) {
+        fprintf(stderr, "steam_shortcut_test: %s is too long; the AppImage path not tested\n",
+                file);
+        return;
+    }
+    f = fopen(file, "wb");
+    CHECK(f != NULL);
+    if (f == NULL) {
+        return;
+    }
+    fputs("not an AppImage\n", f);
+    fclose(f);
+    snprintf(appdir, sizeof(appdir), "%s", self);
+    *strrchr(appdir, '/') = '\0'; /* the folder the program runs from, as the mount */
+    setenv("APPIMAGE", file, 1);
+    setenv("APPDIR", appdir, 1);
+    CHECK(ico_steam_self_exe(got, sizeof(got)) == 0 && strcmp(got, file) == 0);
+    /* the program outside APPDIR, or no APPDIR: the program itself */
+    setenv("APPDIR", base, 1);
+    CHECK(ico_steam_self_exe(got, sizeof(got)) == 0 && strcmp(got, self) == 0);
+    unsetenv("APPDIR");
+    CHECK(ico_steam_self_exe(got, sizeof(got)) == 0 && strcmp(got, self) == 0);
+    unsetenv("APPIMAGE");
+    ico_remove(file);
+#endif
+}
+
 int main(int argc, char **argv)
 {
     const char *base = argc > 1 ? argv[1] : ".";
@@ -663,6 +713,7 @@ int main(int argc, char **argv)
     test_login_users();
     test_job();
     test_running();
+    test_self_exe();
 
     fresh();
     ico_rmdir(s_base);

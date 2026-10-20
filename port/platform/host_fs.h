@@ -16,6 +16,7 @@
 #ifndef ICO_PLATFORM_HOST_FS_H
 #define ICO_PLATFORM_HOST_FS_H
 
+#include <stddef.h>
 #include <stdio.h>
 
 /* fopen */
@@ -54,6 +55,18 @@ int ico_path_kind(const char *path, unsigned long long *size, long long *mtime);
    up cannot repeat the walk. */
 typedef int (*IcoDirWalkFn)(const char *path, const char *name, void *user);
 int ico_dir_walk(const char *dir, int depth, IcoDirWalkFn fn, void *user);
+
+/* The AppImage this program runs from (Linux). The AppImage runtime mounts
+   the file's contents read-only at $APPDIR (or extracts them there, with
+   --appimage-extract-and-run) and starts the program inside with $APPIMAGE
+   the file's full path. $APPIMAGE is trusted only when $APPDIR is set and
+   the running program (/proc/self/exe) lies under it (APPDIR resolved with
+   realpath, and not the root folder), and $APPIMAGE is a full path to a
+   file: a stray APPIMAGE in the environment does not move the player's
+   folders. 1 with that path in out; else 0 and out "", with *why (when
+   not NULL) the reason when APPIMAGE is set but not trusted, NULL when it
+   is unset or empty. 0 on every other platform. */
+int ico_appimage_file(char *out, size_t size, const char **why);
 
 #ifdef _WIN32
 

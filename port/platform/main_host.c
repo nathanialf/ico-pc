@@ -15,7 +15,9 @@
  * Run with no arguments (a double-click), everything comes from the
  * executable's folder (host_config.h describes ico-pc.ini; a macOS app
  * bundle keeps ico-pc.ini and logs/ in its per-user folder instead,
- * ico_host_ini_path and ico_host_logs_dir):
+ * ico_host_ini_path and ico_host_logs_dir; an AppImage's folder is the one
+ * holding the AppImage file, ico_host_exe_dir; a logs/ that cannot be made
+ * there moves to the per-user folder, ico_host_set_logs_dir):
  *
  *   logs/ico-pc.log          stdout and stderr, rewritten each run (the
  *                            run before's kept as logs/ico-pc-previous.log)
@@ -1970,6 +1972,29 @@ static int host_main(int argc, char **argv)
     }
     /* Traces and pad recordings still use the logs folder with --console. */
     logs_ready = logs_dir[0] != '\0' && ico_make_dir(logs_dir) == 0;
+    /* a program folder the player cannot write to (an AppImage kept in a
+       read-only place, a system folder): the logs go to the per-user
+       folder rather than to the console only, and every later
+       ico_host_logs_dir names it; the log says so below */
+    char logs_moved[ICO_PATH_MAX]; /* the folder that could not be made, or "" */
+    int logs_moved_errno = 0;
+
+    logs_moved[0] = '\0';
+    if (!logs_ready && logs_dir[0] != '\0') {
+        char user[ICO_PATH_MAX], alt[ICO_PATH_MAX], alt_log[ICO_PATH_MAX];
+
+        logs_moved_errno = errno;
+        if (ico_host_pref_dir(user, sizeof(user)) == 0 &&
+            ico_path_join(alt, sizeof(alt), user, "logs") == 0 && strcmp(alt, logs_dir) != 0 &&
+            ico_path_join(alt_log, sizeof(alt_log), alt, "ico-pc.log") == 0 &&
+            ico_make_dir(alt) == 0) {
+            snprintf(logs_moved, sizeof(logs_moved), "%s", logs_dir);
+            snprintf(logs_dir, sizeof(logs_dir), "%s", alt);
+            snprintf(log_path, sizeof(log_path), "%s", alt_log);
+            ico_host_set_logs_dir(logs_dir);
+            logs_ready = 1;
+        }
+    }
     if (a.console && !have_console) {
         ico_host_message_box(
             "--console: there is no console to log to (start ico_pc from a "
@@ -2009,6 +2034,23 @@ static int host_main(int argc, char **argv)
 #endif
     timestamp(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S");
     fprintf(stderr, "ico_pc: started %s in %s\n", stamp, exe_dir);
+    {
+        /* the AppImage the program runs from (host_fs.h): its folder is the
+           program's folder; a set APPIMAGE that is not trusted says why */
+        char appimage[ICO_PATH_MAX];
+        const char *why = NULL;
+
+        if (ico_appimage_file(appimage, sizeof(appimage), &why)) {
+            fprintf(stderr, "ico_pc: AppImage %s; program folder %s\n", appimage, exe_dir);
+        } else if (why != NULL) {
+            fprintf(stderr, "ico_pc: APPIMAGE=%s is not used (%s); program folder %s\n",
+                    getenv("APPIMAGE"), why, exe_dir);
+        }
+    }
+    if (logs_moved[0] != '\0') {
+        fprintf(stderr, "ico_pc: the logs folder %s cannot be made (%s); the logs are in %s\n",
+                logs_moved, strerror(logs_moved_errno), logs_dir);
+    }
     {
         /* the start-up activity file records it (diag_host.h): a new
            version tries the start-up set again */

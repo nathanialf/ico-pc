@@ -278,7 +278,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   keys exported as environment switches (`ico_dev_env_value`, `test_dev_env`), a restart's
   `ICO_RD_BLEND` and `ICO_RD_VU_PREPASS` over the ini's (`test_retry_blend`,
   `test_retry_prepass`), the disc choice's rules in order (`ico_host_choose_disc`,
-  `test_choose_disc`); built again
+  `test_choose_disc`), the logs folder set by `ico_host_set_logs_dir` (`test_logs_override`), and
+  on Linux the AppImage's program folder: with `APPIMAGE` and `APPDIR` set in the process the
+  folder, `ico-pc.ini`, `logs/` and a `userdata/` portable folder are the AppImage file's, and
+  `APPDIR` not holding the program, missing, the root folder or a mere name prefix, or `APPIMAGE`
+  relative, a folder or empty, change nothing (`test_appimage`); built again
   as `host_config_portable_test` (`host_config`, `host_config_portable`).
 - `host_fs_test.c`: the file helpers on a UTF-8 path outside ASCII (`host_fs`).
 - `hotkeys_test.c`: F12, Shift+F12 and F11, repeats ignored, no other key taken (`hotkeys`).
@@ -319,7 +323,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   with the pre-pass (a crash in one of its pipelines: cache, noprepass, then the rest without it;
   a loss in a run drawing with it: lossnoprepass, blend, backend) (`startup_retry`).
 - `steam_shortcut_test.c`: Add to Steam's CRC and id, a sample `shortcuts.vdf` appended byte-true,
-  the duplicate check, `loginusers.vdf` (`steam_shortcut`).
+  the duplicate check, `loginusers.vdf`, and the recorded program path: the AppImage file when
+  `APPIMAGE` names one and the program lies under `APPDIR`, else the program itself
+  (`test_self_exe`) (`steam_shortcut`).
 - `window_video_test.c`: fullscreen and mode requests on SDL's offscreen driver (`window_video`).
 - `port/platform/fpenv_test.c`: the simulation's FP mode rounds toward zero and flushes denormals,
   the host mode is back to nearest; `trap` checks the fptrap build traps (`fpenv`, `fpenv_trap`).

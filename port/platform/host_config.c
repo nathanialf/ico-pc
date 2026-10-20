@@ -116,13 +116,20 @@ int ico_host_exe_dir(char *out, size_t size)
     }
     slash = strrchr(buf, '/');
 #else
-    long n = (long)readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    /* inside an AppImage the program runs from the file's read-only mount:
+       the program's folder is then the folder of the AppImage file itself
+       (host_fs.h ico_appimage_file), so ico-pc.ini, logs/, userdata/, the
+       disc image and the texture folders sit beside the file the player
+       sees. The link map is still read from the mount (diag_host.c). */
+    if (!ico_appimage_file(buf, sizeof(buf), NULL)) {
+        long n = (long)readlink("/proc/self/exe", buf, sizeof(buf) - 1);
 
-    if (n <= 0) {
-        copy(out, size, ".");
-        return -1;
+        if (n <= 0) {
+            copy(out, size, ".");
+            return -1;
+        }
+        buf[n] = '\0';
     }
-    buf[n] = '\0';
     slash = strrchr(buf, '/');
 #endif
     if (slash == NULL) {
@@ -2202,9 +2209,28 @@ int ico_host_ini_path(char *out, size_t size)
     return ico_path_join(out, size, dir, "ico-pc.ini") != 0 ? -1 : 0;
 }
 
+/* the logs folder main_host.c fell back to (ico_host_set_logs_dir), or "" */
+static char logs_override[ICO_PATH_MAX];
+
+void ico_host_set_logs_dir(const char *dir)
+{
+    copy(logs_override, sizeof(logs_override), dir != NULL ? dir : "");
+}
+
 int ico_host_logs_dir(char *out, size_t size)
 {
     char dir[ICO_PATH_MAX];
+
+    if (logs_override[0] != '\0') {
+        if (strlen(logs_override) >= size) {
+            if (size > 0) {
+                out[0] = '\0';
+            }
+            return -1;
+        }
+        copy(out, size, logs_override);
+        return 0;
+    }
 
 #if defined(__APPLE__) && !defined(ICO_IOS)
     if (ico_host_pref_dir(dir, sizeof(dir)) != 0) {

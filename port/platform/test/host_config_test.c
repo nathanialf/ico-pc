@@ -3,8 +3,9 @@
  *
  * ico-pc.ini parsing and rewriting, SHA-1 against FIPS 180 test vectors,
  * path joining, the [dev] keys exported as environment switches and the
- * fixed blend of a run started again after a device loss
- * (port/platform/host_config.c). Built a second time with
+ * fixed blend of a run started again after a device loss, the logs folder
+ * override and the program folder of an AppImage
+ * (port/platform/host_config.c, host_fs.c ico_appimage_file). Built a second time with
  * ICO_HOST_FORCE_PORTABLE (host_config_portable_test, as the Android build
  * compiles host_config.c), where the user folder is always the executable's
  * own folder.
@@ -14,6 +15,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(__linux__) && !defined(__ANDROID__)
+#include <unistd.h>
+#endif
 
 static int failures;
 
@@ -901,6 +905,137 @@ static void test_choose_disc(void)
     CHECK(ico_host_choose_image(7u, 1u, 2, 3, &why) == 2);
 }
 
+/* ico_host_set_logs_dir: every later ico_host_logs_dir names the folder
+   set, "" goes back to <exe dir>/logs */
+static void test_logs_override(void)
+{
+    char exe[ICO_PATH_MAX], want[ICO_PATH_MAX], logs[ICO_PATH_MAX];
+
+    ico_host_exe_dir(exe, sizeof(exe));
+    ico_path_join(want, sizeof(want), exe, "logs");
+    ico_host_set_logs_dir("/home/player/.local/share/ico-pc/ico-pc/logs");
+    CHECK(ico_host_logs_dir(logs, sizeof(logs)) == 0 &&
+          strcmp(logs, "/home/player/.local/share/ico-pc/ico-pc/logs") == 0);
+    CHECK(ico_host_logs_dir(logs, 8) == -1 && logs[0] == '\0');
+    ico_host_set_logs_dir("");
+    CHECK(ico_host_logs_dir(logs, sizeof(logs)) == 0 && strcmp(logs, want) == 0);
+    ico_host_set_logs_dir(NULL);
+    CHECK(ico_host_logs_dir(logs, sizeof(logs)) == 0 && strcmp(logs, want) == 0);
+}
+
+#if defined(__linux__) && !defined(__ANDROID__)
+/* An AppImage: with APPIMAGE the file's path and APPDIR a folder the
+   running program lies under (here the test's own folder stands in for
+   the mount), the program's folder is the AppImage file's folder, and
+   ico-pc.ini, logs/ and userdata/ follow it. APPDIR not holding the
+   program, missing, the root folder or a name that only starts the same
+   way, and APPIMAGE relative, a folder or empty: nothing moves. */
+static void test_appimage(void)
+{
+    char real[ICO_PATH_MAX], dir[ICO_PATH_MAX], file[ICO_PATH_MAX], got[ICO_PATH_MAX];
+    char want[ICO_PATH_MAX], tmp[ICO_PATH_MAX + 2], self[ICO_PATH_MAX], near[ICO_PATH_MAX];
+    const char *why = "unset";
+    FILE *f;
+    long n;
+
+    unsetenv("APPIMAGE");
+    unsetenv("APPDIR");
+    CHECK(ico_appimage_file(got, sizeof(got), &why) == 0 && got[0] == '\0' && why == NULL);
+    CHECK(ico_host_exe_dir(real, sizeof(real)) == 0);
+    ico_path_join(dir, sizeof(dir), real, "appimage_test_dir");
+    ico_path_join(file, sizeof(file), dir, "ICO-v0.0.0-linux-x86_64.AppImage");
+    CHECK(ico_make_dir(dir) == 0);
+    f = fopen(file, "wb");
+    CHECK(f != NULL);
+    if (f == NULL) {
+        return;
+    }
+    fputs("not an AppImage\n", f);
+    fclose(f);
+
+    /* the program runs from inside APPDIR: the file's folder */
+    setenv("APPIMAGE", file, 1);
+    setenv("APPDIR", real, 1);
+    why = "unset";
+    CHECK(ico_appimage_file(got, sizeof(got), &why) == 1 && strcmp(got, file) == 0 && why == NULL);
+    CHECK(ico_host_exe_dir(got, sizeof(got)) == 0 && strcmp(got, dir) == 0);
+    ico_path_join(want, sizeof(want), dir, "ico-pc.ini");
+    CHECK(ico_host_ini_path(got, sizeof(got)) == 0 && strcmp(got, want) == 0);
+    ico_path_join(want, sizeof(want), dir, "logs");
+    CHECK(ico_host_logs_dir(got, sizeof(got)) == 0 && strcmp(got, want) == 0);
+    /* a path that does not fit: 0 and "" */
+    CHECK(ico_appimage_file(got, 8, &why) == 0 && got[0] == '\0' && why != NULL);
+#ifndef ICO_HOST_FORCE_PORTABLE
+    /* a userdata folder beside the AppImage file turns portable mode on */
+    ico_path_join(want, sizeof(want), dir, "userdata");
+    CHECK(ico_make_dir(want) == 0);
+    ico_host_set_portable(-1);
+    CHECK(ico_host_pref_is_portable());
+    CHECK(ico_host_pref_dir(got, sizeof(got)) == 0 && strcmp(got, want) == 0);
+    remove(want);
+    ico_host_set_portable(-1);
+#endif
+    /* APPDIR with a trailing separator, and a folder above the program */
+    snprintf(tmp, sizeof(tmp), "%s/", real);
+    setenv("APPDIR", tmp, 1);
+    CHECK(ico_appimage_file(got, sizeof(got), NULL) == 1);
+    snprintf(tmp, sizeof(tmp), "%s", real);
+    if (strrchr(tmp, '/') != NULL && strrchr(tmp, '/') != tmp) {
+        *strrchr(tmp, '/') = '\0';
+        setenv("APPDIR", tmp, 1);
+        CHECK(ico_appimage_file(got, sizeof(got), NULL) == 1);
+    }
+
+    /* the program outside APPDIR: a stray APPIMAGE moves nothing */
+    setenv("APPDIR", dir, 1);
+    why = NULL;
+    CHECK(ico_appimage_file(got, sizeof(got), &why) == 0 && got[0] == '\0' && why != NULL);
+    CHECK(ico_host_exe_dir(got, sizeof(got)) == 0 && strcmp(got, real) == 0);
+    /* a folder whose name only starts the program's path */
+    n = (long)readlink("/proc/self/exe", self, sizeof(self) - 1);
+    CHECK(n > 1);
+    if (n > 1) {
+        self[n] = '\0';
+        snprintf(near, sizeof(near), "%.*s", (int)(n - 1), self);
+        if (ico_make_dir(near) == 0) {
+            setenv("APPDIR", near, 1);
+            why = NULL;
+            CHECK(ico_appimage_file(got, sizeof(got), &why) == 0 && why != NULL);
+            remove(near);
+        }
+    }
+    /* APPDIR the root folder, missing, unset */
+    setenv("APPDIR", "/", 1);
+    why = NULL;
+    CHECK(ico_appimage_file(got, sizeof(got), &why) == 0 && why != NULL);
+    ico_path_join(tmp, sizeof(tmp), real, "appimage_test_missing");
+    setenv("APPDIR", tmp, 1);
+    why = NULL;
+    CHECK(ico_appimage_file(got, sizeof(got), &why) == 0 && why != NULL);
+    unsetenv("APPDIR");
+    why = NULL;
+    CHECK(ico_appimage_file(got, sizeof(got), &why) == 0 && why != NULL);
+    CHECK(ico_host_exe_dir(got, sizeof(got)) == 0 && strcmp(got, real) == 0);
+    /* APPIMAGE relative, a folder, empty */
+    setenv("APPDIR", real, 1);
+    setenv("APPIMAGE", "ICO.AppImage", 1);
+    why = NULL;
+    CHECK(ico_appimage_file(got, sizeof(got), &why) == 0 && why != NULL);
+    setenv("APPIMAGE", dir, 1);
+    why = NULL;
+    CHECK(ico_appimage_file(got, sizeof(got), &why) == 0 && why != NULL);
+    setenv("APPIMAGE", "", 1);
+    why = "unset";
+    CHECK(ico_appimage_file(got, sizeof(got), &why) == 0 && why == NULL);
+    CHECK(ico_host_exe_dir(got, sizeof(got)) == 0 && strcmp(got, real) == 0);
+
+    unsetenv("APPIMAGE");
+    unsetenv("APPDIR");
+    remove(file);
+    remove(dir);
+}
+#endif
+
 int main(void)
 {
     test_choose_disc();
@@ -914,6 +1049,10 @@ int main(void)
     test_dev_env();
     test_retry_blend();
     test_retry_prepass();
+    test_logs_override();
+#if defined(__linux__) && !defined(__ANDROID__)
+    test_appimage();
+#endif
 #ifdef ICO_HOST_FORCE_PORTABLE
     test_forced_portable();
 #else

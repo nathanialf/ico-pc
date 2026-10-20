@@ -321,6 +321,7 @@ Per platform:
 | platform | ini and logs | user folder |
 | --- | --- | --- |
 | Windows, Linux (window build) | beside the executable | SDL's pref path, or `userdata/` in portable mode |
+| Linux AppImage | beside the AppImage file | SDL's pref path, or `userdata/` beside the AppImage file in portable mode |
 | macOS app | the user folder (`port/platform/host_config.h` (`ico_host_ini_path`, `ico_host_logs_dir`)) | SDL's pref path, or `userdata/` beside the executable inside the bundle in portable mode |
 | headless build | beside the executable | the executable's folder |
 | Android | the app's files folder | the same folder, always |
@@ -335,6 +336,29 @@ app's files folder on Android, Documents on iOS), and a `portable=` line is logg
 (`port/platform/host_config.c` (`ico_host_set_portable`); `CMakeLists.txt` (the Android and iOS
 targets)). The Android layout is listed in `port/platform/android/android_paths.h`: everything in
 the files folder (shared storage when writable), the Vulkan pipeline cache in the cache folder.
+
+An AppImage (the Linux package's single file, `tools/package_linux.sh`) runs the program from a
+read-only mount of the file (or a temporary copy with `--appimage-extract-and-run`): the runtime
+sets `APPIMAGE` to the file's full path and `APPDIR` to the mount. `ico_host_exe_dir` returns the
+folder of `APPIMAGE` instead of the mount's `usr/bin` when `APPIMAGE` is a full path to a file,
+`APPDIR` is set, not the root folder, and, resolved with `realpath`, a folder that
+`/proc/self/exe` lies under; anything else leaves `/proc/self/exe`'s folder, so a stray `APPIMAGE`
+in the environment moves nothing (`port/platform/host_fs.h` (`ico_appimage_file`);
+`port/platform/host_config.c` (`ico_host_exe_dir`)). Everything "beside the program" follows the
+file: `ico-pc.ini` (the first start's `iso=` is saved there), `logs/`, `userdata/` (portable mode,
+by the folder or by `portable=1`), the disc image found by name, relative `iso=` and card paths,
+and the texture, model and ReShade folders. The link map is read beside `/proc/self/exe`, inside
+the mount (`port/platform/diag_host.c` (`sym_open_default`)), and a restart after a driver crash
+re-executes the mounted program in the same process, which keeps the mount
+(`ico_diag_prepare_relaunch`). The start logs `ico_pc: AppImage <file>; program folder <dir>`,
+or, for an `APPIMAGE` that is not trusted, `ico_pc: APPIMAGE=<value> is not used (<reason>)`
+(`port/platform/main_host.c` (`main`)).
+
+When `logs/` beside the program cannot be made (an AppImage or a program folder the player cannot
+write to), the logs go to `<user folder>/logs` with the line `ico_pc: the logs folder <dir> cannot
+be made (<error>); the logs are in <dir>`, and every later `ico_host_logs_dir` names that folder
+(`port/platform/host_config.h` (`ico_host_set_logs_dir`); `port/platform/main_host.c` (`main`)).
+Only when that fails too does the log go to the console.
 
 ### The disc a start plays
 
@@ -1123,7 +1147,11 @@ Settings > Extras > Add to Steam writes a non-Steam shortcut for the program int
 Steam user's `userdata/<id>/config/shortcuts.vdf`, inserting one entry before the end of the
 `shortcuts` map so every existing entry keeps its bytes, after copying the file to
 `shortcuts.vdf.bak`. Nothing is written while Steam runs, because Steam rewrites the file when it
-exits (`port/platform/steam_shortcut.h`; `port/platform/steam_shortcut.c` (header comment)). It is
+exits (`port/platform/steam_shortcut.h`; `port/platform/steam_shortcut.c` (header comment)). The
+entry's Exe is the program's own path, or, run from an AppImage, the AppImage file (the mount is
+gone once the game ends), with its folder as the start folder (`port/platform/steam_shortcut.h`
+(`ico_steam_self_exe`)); each press logs `ico_pc: Add to Steam: <exe> (start folder <dir>):
+<answer>`. It is
 compiled into the Windows and Linux window builds only, not macOS, Android or iOS
 (`CMakeLists.txt` (the window build section)).
 

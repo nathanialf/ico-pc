@@ -255,6 +255,61 @@ int ico_path_kind(const char *path, unsigned long long *size, long long *mtime)
 
 #endif
 
+/* --- ico_appimage_file -------------------------------------------------- */
+
+int ico_appimage_file(char *out, size_t size, const char **why)
+{
+#if defined(__linux__) && !defined(__ANDROID__)
+    const char *file = getenv("APPIMAGE");
+    const char *appdir = getenv("APPDIR");
+    const char *no = NULL;
+    char exe[4096], dir[4096];
+    ssize_t len = 0;
+    size_t n = 0;
+
+    if (size > 0) {
+        out[0] = '\0';
+    }
+    if (why != NULL) {
+        *why = NULL;
+    }
+    if (file == NULL || file[0] == '\0') {
+        return 0;
+    }
+    if (file[0] != '/') {
+        no = "APPIMAGE is not a full path";
+    } else if (appdir == NULL || appdir[0] == '\0') {
+        no = "APPDIR is not set";
+    } else if ((len = readlink("/proc/self/exe", exe, sizeof(exe) - 1)) <= 0) {
+        no = "the program's own path cannot be read";
+    } else if (realpath(appdir, dir) == NULL) {
+        no = "APPDIR does not exist";
+    } else if ((n = strlen(dir)) <= 1) {
+        no = "APPDIR is the root folder";
+    } else if ((exe[len] = '\0', strncmp(exe, dir, n) != 0 || exe[n] != '/')) {
+        no = "the program does not run from inside APPDIR";
+    } else if (ico_path_kind(file, NULL, NULL) != 0) {
+        no = "APPIMAGE is not a file";
+    } else if (strlen(file) >= size) {
+        no = "APPIMAGE's path is too long";
+    }
+    if (no != NULL) {
+        if (why != NULL) {
+            *why = no;
+        }
+        return 0;
+    }
+    memcpy(out, file, strlen(file) + 1);
+    return 1;
+#else
+    (void)why;
+    if (size > 0) {
+        out[0] = '\0';
+    }
+    return 0;
+#endif
+}
+
 /* --- ico_dir_walk ------------------------------------------------------- */
 
 #include <dirent.h>

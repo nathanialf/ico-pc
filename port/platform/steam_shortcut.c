@@ -816,8 +816,7 @@ void ico_steam_env_default(IcoSteamEnv *env)
 #endif
 }
 
-/* this program's own path, UTF-8, with the platform's separators */
-static int self_exe(char *out, size_t size)
+int ico_steam_self_exe(char *out, size_t size)
 {
 #ifdef _WIN32
     wchar_t w[ICO_STEAM_PATH_MAX];
@@ -833,6 +832,11 @@ static int self_exe(char *out, size_t size)
     }
     return 0;
 #else
+    /* run from an AppImage: the AppImage file, which Steam can start again,
+       not the program inside its mount (gone once the game ends) */
+    if (ico_appimage_file(out, size, NULL)) {
+        return 0;
+    }
     const long n = (long)readlink("/proc/self/exe", out, size - 1);
 
     if (n <= 0) {
@@ -849,7 +853,7 @@ int ico_steam_add_this_game(void)
     IcoSteamEntry e;
     char exe[ICO_STEAM_PATH_MAX], dir[ICO_STEAM_PATH_MAX], *slash, *bs;
 
-    if (self_exe(exe, sizeof(exe)) != 0) {
+    if (ico_steam_self_exe(exe, sizeof(exe)) != 0) {
         return ICO_STEAM_FAILED;
     }
     snprintf(dir, sizeof(dir), "%s", exe);
@@ -870,5 +874,14 @@ int ico_steam_add_this_game(void)
     e.exe = exe;
     e.startDir = dir;
     e.icon = env.iconIsExe ? exe : "";
-    return ico_steam_add_shortcut(&env, &e);
+    const int r = ico_steam_add_shortcut(&env, &e);
+    /* one line per press: which program the entry starts, and the answer */
+    fprintf(stderr, "ico_pc: Add to Steam: %s (start folder %s): %s\n", exe, dir,
+            r == ICO_STEAM_ADDED       ? "added"
+            : r == ICO_STEAM_EXISTS    ? "already there"
+            : r == ICO_STEAM_RUNNING   ? "Steam is running, nothing written"
+            : r == ICO_STEAM_NOT_FOUND ? "no Steam folder"
+            : r == ICO_STEAM_NO_USER   ? "no Steam user"
+                                       : "failed");
+    return r;
 }

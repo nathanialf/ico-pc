@@ -84,5 +84,10 @@ int ico_steam_add_shortcut(const IcoSteamEnv *env, const IcoSteamEntry *e);
    Returns ICO_STEAM_*. */
 void ico_steam_env_default(IcoSteamEnv *env);
 int ico_steam_add_this_game(void);
+/* The path the shortcut starts, UTF-8 with the platform's separators: this
+   program's own (GetModuleFileNameW, /proc/self/exe), or on Linux the
+   AppImage file it runs from (ico_appimage_file, host_fs.h); the entry's
+   start folder is its folder. 0, or -1. */
+int ico_steam_self_exe(char *out, size_t size);
 
 #endif

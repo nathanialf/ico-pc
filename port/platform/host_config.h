@@ -57,7 +57,9 @@ typedef struct IcoIni {
 
 /* The executable's folder, without a trailing separator. 0, or -1 (then
    out is "."). Android: the app's files folder (port/platform/android/
-   android_paths.h), where everything the port writes lives. */
+   android_paths.h), where everything the port writes lives. Linux, run
+   from an AppImage: the folder holding the AppImage file
+   (ico_appimage_file, host_fs.h), not the read-only mount. */
 int ico_host_exe_dir(char *out, size_t size);
 /* dir + separator + name. A name that is already absolute is copied. 0, or
    -1 when the result does not fit in size: out is then "" (never a cut-off
@@ -115,8 +117,14 @@ int ico_host_ini_path(char *out, size_t size);
 /* The logs folder (ico-pc.log and the files written beside it): <per-user
    folder>/logs for a macOS app bundle, else <executable's folder>/logs (the
    Documents folder on iOS, the app's files folder on Android). Not created.
-   0, or -1 when no folder is known or the path does not fit (out ""). */
+   0, or -1 when no folder is known or the path does not fit (out "").
+   After ico_host_set_logs_dir with a folder: that folder. */
 int ico_host_logs_dir(char *out, size_t size);
+/* The logs folder from now on, for every later ico_host_logs_dir: main_host.c
+   sets <per-user folder>/logs when the one beside the program cannot be
+   made (an AppImage or a program folder in a place the player cannot
+   write to). NULL or "" goes back to the rule above. */
+void ico_host_set_logs_dir(const char *dir);
 /* ico_ini_load without the layering below: the file's own keys only. */
 int ico_ini_load_file(IcoIni *ini, const char *path);
 /* The ini key a config.toml path maps onto (the keys the ini has always had:
