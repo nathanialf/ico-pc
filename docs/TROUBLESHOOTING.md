@@ -132,14 +132,14 @@ updating the graphics driver usually fixes it.
 **A black screen that never changes.** If the picture freezes or stays
 black and nothing changes, the graphics driver may have stopped
 responding without saying so. Wait: after about a minute the game closes
-by itself. Windows and Android show a message ("The graphics card stopped
+by itself. Windows, Linux and Android show a message ("The graphics card stopped
 responding while the game was drawing", on a phone "The graphics driver
 stopped responding while the game was drawing"). Your last save is kept. Start the game
 again: the game treats this like any other time the graphics stop (see
 [The game closes by itself](#the-game-closes-by-itself) and the messages
-under [Error messages](#error-messages)), so the next start checks the
-picture it was drawing and, on a phone, has the graphics driver check
-every read for that start. If it happens again, report it and attach the
+under [Error messages](#error-messages)): it keeps a copy of the picture
+it was drawing for the report, and on a phone the next start has the
+graphics driver check every read for that start. If it happens again, report it and attach the
 newest file in `logs` that starts with `report-` (the message names it),
 and say which disc you play, the European, the Japanese or the Korean.
 
@@ -461,8 +461,8 @@ also open `ico-pc.ini` in the `x64` folder with Notepad and add the line
 attach the log: it shows every attempt.
 
 If the game stops responding, it closes itself after a while: 30 seconds
-while it is starting, 60 seconds once it is running. Windows and Android
-show a message that says so. The log then has a line of `=` signs, and the
+while it is starting, 60 seconds once it is running. Windows, Linux and
+Android show a message that says so. The log then has a line of `=` signs, and the
 line after it has `WATCHDOG:` in it and says what the game was doing.
 When the game was waiting for the graphics card, the next line says `the
 graphics driver did not finish the picture`, and the message says the

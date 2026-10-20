@@ -600,7 +600,11 @@ finished (a wait that returned, a counter read before one, `rhi_wait_idle`), and
 in progress blocks on with how long it has blocked. The submitting thread stores them with
 `__atomic` stores in `vkr_note_submit`, `vkr_wait_value` and `rhi_wait_idle`; a wait in progress
 for a value above the newest seen finished is work the GPU has not finished. The watchdog reads it
-to tell a GPU hang from a freeze ([PLATFORM.md](PLATFORM.md#diagnostics)). D3D12 does not track it
+to tell a GPU hang from a freeze ([PLATFORM.md](PLATFORM.md#diagnostics)). Three other
+`vkDeviceWaitIdle` calls are not marked as waits, so a hang inside one stays a freeze: the surface's
+release and the swapchain's resize (`port/rhi/vk/vk_swapchain.c` (`rhi_release_surface`,
+`rhi_resize_swapchain`)) and a full deferred-destroy list (`port/rhi/vk/vk_resource.c`
+(`vkr_defer_sized`)). D3D12 does not track it
 (`rhi_gpu_progress` returns false): its driver reports a hung device as `DXGI_ERROR_DEVICE_HUNG`, a
 loss (`port/rhi/rhi.h` (`RhiGpuProgress`); `port/rhi/vk/vk_cmd.c` (`vkr_progress_wait`,
 `vkr_progress_finished`); `port/rhi/vk/vk_device.c` (`rhi_gpu_progress`);

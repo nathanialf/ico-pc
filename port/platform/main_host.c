@@ -2041,7 +2041,12 @@ static int host_main(int argc, char **argv)
         const char *why = NULL;
 
         if (ico_appimage_file(appimage, sizeof(appimage), &why)) {
-            fprintf(stderr, "ico_pc: AppImage %s; program folder %s\n", appimage, exe_dir);
+            /* a restart starts the file again (diag_host.h
+               ico_diag_prepare_relaunch) */
+            fprintf(stderr,
+                    "ico_pc: AppImage %s; program folder %s; a restart starts the AppImage "
+                    "again\n",
+                    appimage, exe_dir);
         } else if (why != NULL) {
             fprintf(stderr, "ico_pc: APPIMAGE=%s is not used (%s); program folder %s\n",
                     getenv("APPIMAGE"), why, exe_dir);

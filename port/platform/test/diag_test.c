@@ -120,13 +120,16 @@
  *               backend's progress faked as issue 123's run left it: the
  *               main thread inside a present, waiting for submission 263,
  *               the newest seen finished 262: the WATCHDOG block names the
- *               driver ("did not finish the picture (the last submission
- *               is still running after 60 s)") and the wait, the heartbeat
- *               the wait, the dump stub runs before the report, the report
- *               says "the graphics driver stopped responding", the box is
- *               the device loss's (Linux), the activity file keeps the
- *               loss dump and the next start counts the loss (ends file
- *               "loss 1"); hangnodump: no dump, the loss noted without one;
+ *               driver ("did not finish the picture (submission 263 has
+ *               not finished after a 60 s wait)") and the wait, the
+ *               heartbeat the wait, the dump stub runs before the report,
+ *               the report says "the graphics driver stopped responding",
+ *               the box is the device loss's (Linux), the activity file
+ *               keeps the hang's own loss line ("loss dump (the driver
+ *               hung): <zip>") and the next start counts the loss (ends
+ *               file "loss 1"; Android's robust step) but does not bisect
+ *               the dump; hangnodump: no dump, the hang's loss noted
+ *               without one, still counted;
  *               hangnot: no wait in progress (the present call itself): a
  *               freeze as before, with the GPU's line and no loss;
  *   - early:    the reporter started before the limits (Android's start):
@@ -1045,6 +1048,19 @@ static void run_child(const char *mode, const char *log)
         hang_child(mode, log);
     } else if (strcmp(mode, "early") == 0) {
         early_child();
+    } else if (strcmp(mode, "relaunchexe") == 0) {
+        /* the program a restart starts (ico_diag_prepare_relaunch): the
+           AppImage file when APPIMAGE is trusted, else /proc/self/exe */
+        static char *rargv[4];
+        const char *prog;
+        rargv[0] = (char *)self_path;
+        rargv[1] = (char *)mode;
+        rargv[2] = (char *)log;
+        rargv[3] = NULL;
+        ico_diag_prepare_relaunch(3, rargv);
+        prog = ico_diag_relaunch_program();
+        ico_diag_log("test: relaunch program %s", prog != NULL ? prog : "(none)");
+        child_quit(0);
     } else if (strncmp(mode, "pump", 4) == 0) {
         pump_child(mode);
     } else if (strcmp(mode, "segv") == 0) {
@@ -1836,6 +1852,8 @@ int main(int argc, char **argv)
         snprintf(ends, sizeof ends, "%s-ends.txt", act);
         remove(act);
         remove(ends);
+        /* the reports' folder was removed after the report tests above */
+        mkdir(rdir, 0755);
         clear_dir(rdir);
         setenv("ICO_TEST_REPORT_DIR", rdir, 1);
         r = run(argv[0], "hang", log);
@@ -1843,12 +1861,12 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(r == 4);
         CHECK(strstr(s, "ico_pc: WATCHDOG: no new Main tick for 1 s (the last was tick 1, "
-                        "progress 0)\nico_pc: the graphics driver did not finish the picture (the "
-                        "last submission is still running after 60 s)\n") != NULL);
+                        "progress 0)\nico_pc: the graphics driver did not finish the picture "
+                        "(submission 263 has not finished after a 60 s wait)\n") != NULL);
         CHECK(strstr(s, "ico_pc: the GPU: the main thread has waited 60 s for submission 263; the "
                         "newest is 263 (replay 249, frame 127), the newest seen finished 262; this "
-                        "end counts as a device loss (the loss dump, and the next start takes the "
-                        "loss steps)\n") != NULL);
+                        "end counts as a device loss (the loss dump; the next start counts the "
+                        "loss and does not replay the frame)\n") != NULL);
         CHECK(strstr(s, "for a picture to be shown") == NULL);
         CHECK(strstr(s, " | waiting for the GPU 60 s (submission 263; the newest 263, the newest "
                         "seen finished 262)") != NULL);
@@ -1870,28 +1888,71 @@ int main(int argc, char **argv)
                 txt = zip_entry(zip, "report.txt");
             }
             CHECK(txt != NULL &&
-                  strstr(txt, "what ended the run: the graphics driver stopped responding (the "
-                              "last submission is still running after 60 s)\n") != NULL);
+                  strstr(txt, "what ended the run: the graphics driver stopped responding "
+                              "(submission 263 has not finished after a 60 s wait)\n") != NULL);
             free(txt);
         }
-        CHECK(strcmp(read_file(act), "test 1\n\nloss dump: /logs/loss-hang.zip") == 0);
+        /* the hang's own loss line (counted, never bisected) */
+        CHECK(strcmp(read_file(act),
+                     "test 1\n\nloss dump (the driver hung): /logs/loss-hang.zip") == 0);
         if (fails) {
-            printf("--- hang log ---\n%s\n", s);
+            /* read_file's one buffer held the activity file */
+            printf("--- hang log ---\n%s\n", read_file(log));
         }
-        /* the next start takes the loss path: the row of losses counts it */
+        /* the next start counts the loss and replays nothing: no loss dump
+           for the bisect, so no bisect before the game (a replay of the
+           frame the driver hung on could hang before the watchdog runs) */
+        setenv("ICO_TEST_BISECT", "lost", 1);
+        r = run(argv[0], "actbisect", log);
+        unsetenv("ICO_TEST_BISECT");
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "ico_pc: starts in a row that lost the graphics device: 1\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous run ended because the graphics driver stopped "
+                        "responding (a GPU hang, counted as a device loss); its loss dump "
+                        "/logs/loss-hang.zip is not replayed (the replay could hang the same "
+                        "way)\n") != NULL);
+        CHECK(strstr(s, "test: loss dump (none)\n") != NULL);
+        CHECK(strstr(s, "test: bisect -1\n") != NULL);
+        CHECK(strstr(s, "loss bisect:") == NULL);
+        CHECK(strstr(s, "test: bisect stub") == NULL);
+        CHECK(strstr(read_file(ends), "loss 1\n") != NULL);
+        if (fails) {
+            printf("--- after the hang log ---\n%s\n", read_file(log));
+        }
+        remove(act);
+        remove(ends);
+        /* Android's next start after the hang: the loss path (robust
+           access for this start) */
+        {
+            FILE *f = fopen(act, "wb");
+            if (f != NULL) {
+                fputs("test 1\n\nloss dump (the driver hung): /logs/loss-hang.zip", f);
+                fclose(f);
+            }
+        }
         r = run(argv[0], "actlossnext", log);
         s = read_file(log);
         CHECK(r == 0);
         CHECK(strstr(s, "ico_pc: starts in a row that lost the graphics device: 1\n") != NULL);
+        CHECK(strstr(s, "test: losses 1, robust this start\n") != NULL);
         CHECK(strstr(read_file(ends), "loss 1\n") != NULL);
         remove(act);
         remove(ends);
-        /* no dump function: the loss is noted without a dump */
+        /* no dump function: the hang's loss is noted without a dump, and
+           still counted */
         r = run(argv[0], "hangnodump", log);
         CHECK(r == 4);
         CHECK(strstr(read_file(log), "the graphics driver did not finish the picture") != NULL);
-        CHECK(strcmp(read_file(act), "test 1\n\ngraphics device lost, no loss dump") == 0);
+        CHECK(strcmp(read_file(act), "test 1\n\ngraphics driver hung, no loss dump") == 0);
+        r = run(argv[0], "actlossnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous run ended because the graphics driver stopped "
+                        "responding (a GPU hang, counted as a device loss; no loss dump was "
+                        "written)\n") != NULL);
+        CHECK(strstr(s, "test: losses 1, robust this start\n") != NULL);
         remove(act);
+        remove(ends);
         /* no wait for the GPU in progress: a freeze as before, the GPU's
            state named, no loss */
         r = run(argv[0], "hangnot", log);
@@ -1908,10 +1969,58 @@ int main(int argc, char **argv)
 #endif
         CHECK(read_file(act)[0] == '\0');
         if (fails) {
-            printf("--- hangnot log ---\n%s\n", s);
+            printf("--- hangnot log ---\n%s\n", read_file(log));
         }
         clear_dir(rdir);
+        rmdir(rdir);
     }
+#if defined(__linux__) && !defined(__ANDROID__)
+    /* a restart inside an AppImage starts the AppImage file (its mount
+       ends with the restart's execve), with APPIMAGE trusted as
+       host_fs.h ico_appimage_file trusts it: APPDIR a folder the program
+       lies under (here diag_test's own folder stands in for the mount);
+       otherwise the program itself */
+    {
+        char self[512], dir[512], cwd[400], file[480], want[560];
+        const ssize_t n = readlink("/proc/self/exe", self, sizeof self - 1);
+        FILE *f;
+
+        CHECK(n > 1 && getcwd(cwd, sizeof cwd) != NULL);
+        if (n > 1 && getcwd(cwd, sizeof cwd) != NULL) {
+            self[n] = '\0';
+            snprintf(dir, sizeof dir, "%s", self);
+            if (strrchr(dir, '/') != NULL) {
+                *strrchr(dir, '/') = '\0';
+            }
+            snprintf(file, sizeof file, "%s/diag_test_%d.AppImage", cwd, (int)getpid());
+            f = fopen(file, "wb");
+            CHECK(f != NULL);
+            if (f != NULL) {
+                fputs("not an AppImage\n", f);
+                fclose(f);
+            }
+            setenv("APPIMAGE", file, 1);
+            setenv("APPDIR", dir, 1);
+            r = run(argv[0], "relaunchexe", log);
+            snprintf(want, sizeof want, "test: relaunch program %s\n", file);
+            CHECK(r == 0 && strstr(read_file(log), want) != NULL);
+            /* APPIMAGE not trusted (APPDIR missing): the program itself */
+            setenv("APPDIR", "/diag_test_no_such_folder", 1);
+            r = run(argv[0], "relaunchexe", log);
+            snprintf(want, sizeof want, "test: relaunch program %s\n", self);
+            CHECK(r == 0 && strstr(read_file(log), want) != NULL);
+            /* no AppImage */
+            unsetenv("APPIMAGE");
+            unsetenv("APPDIR");
+            r = run(argv[0], "relaunchexe", log);
+            CHECK(r == 0 && strstr(read_file(log), want) != NULL);
+            if (fails) {
+                printf("--- relaunchexe log ---\n%s\n", read_file(log));
+            }
+            remove(file);
+        }
+    }
+#endif
     /* the start-up activity file */
     {
         char act[300], ends[320], bgmark[320];
@@ -1997,9 +2106,9 @@ int main(int argc, char **argv)
         unsetenv("ICO_TEST_ACT_VERSION");
         s = read_file(log);
         CHECK(r == 0);
-        CHECK(strstr(s,
-                     "ico_pc: the previous run ended while: " BATCH_NOTE
-                     " (version test 1); the graphics cache of that version is dropped\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: " BATCH_NOTE
+                        " (version test 1); a Vulkan renderer drops the graphics cache of that "
+                        "version\n") != NULL);
         CHECK(strstr(s, "trying the start-up set again") == NULL);
         CHECK(strstr(s, "test: lazy 0") != NULL);
         run(argv[0], "actrecord", log);
@@ -2009,12 +2118,11 @@ int main(int argc, char **argv)
         unsetenv("ICO_TEST_ACT_VERSION");
         s = read_file(log);
         CHECK(
-            strstr(
-                s,
-                "ico_pc: the previous run (version test 1) created the pipelines as the "
-                "frames needed them; trying the start-up set again on test 2 (the graphics cache of "
-                "that version is dropped; this start prepares the graphics from "
-                "nothing)\n") != NULL);
+            strstr(s,
+                   "ico_pc: the previous run (version test 1) created the pipelines as the "
+                   "frames needed them; trying the start-up set again on test 2 (a Vulkan renderer "
+                   "drops the graphics cache of that version; this start prepares the graphics "
+                   "from nothing)\n") != NULL);
         CHECK(strstr(s, "test: lazy 0") != NULL);
         {
             FILE *f = fopen(act, "rb");
@@ -2140,9 +2248,9 @@ int main(int argc, char **argv)
         r = run(argv[0], "actpipeset", log);
         s = read_file(log);
         CHECK(strstr(s, "test: lazy 0\n") != NULL);
-        CHECK(strstr(s,
-                     "ico_pc: the previous run ended while: " NOTE_2D
-                     " (version test 1); the graphics cache of that version is dropped\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: " NOTE_2D
+                        " (version test 1); a Vulkan renderer drops the graphics cache of that "
+                        "version\n") != NULL);
         CHECK(strstr(s, "trying the start-up set again") == NULL);
         CHECK(strstr(s, "this start only makes the pipelines as the game needs them") != NULL);
         CHECK(strstr(s, "test: config write") == NULL);

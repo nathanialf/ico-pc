@@ -581,13 +581,16 @@ frame ring, the texture and mesh records and the pass ring, is blocked inside th
 stand still while they are written; the texture pack's loader thread fills only its own queue, and
 the pipeline compiler threads run only inside a batch the main thread waits for. Nothing in the
 dump needs the device, so none of it calls the hung one. The lost frame is then the last closed
-frame, the one whose replay the wait belongs to or the one after it, and the next start bisects it
-as it would a loss's (`port/platform/window_host.c` (`window_gpu_hang`)).
+frame, the one whose replay the wait belongs to or the one after it. The activity file notes it with
+the hang's own line, which the next start counts as a loss but does not bisect: the bisect runs
+before the watchdog and waits for the GPU with no limit, and a driver that hangs at that frame would
+hang it too (`port/platform/window_host.c` (`window_gpu_hang`); `port/platform/diag_host.c`
+(`ico_diag_note_device_loss`)). The zip goes with the report for the developers' replay.
 
 ### The loss bisect
 
 The start after a loss that left a loss dump (of the same version) finds the pass that loses the
-device on that device, before the game. Only a start with the player's own blending and backend
+device on that device, before the game; a GPU hang's dump is not bisected (see the loss dump above). Only a start with the player's own blending and backend
 bisects: a run the loss restart started (its step's fixed-function blend or Direct3D 12) logs that
 the bisect was not run and leaves the zip in the logs folder
 ([PLATFORM.md](PLATFORM.md#diagnostics)). A renderer of its own, sized to the dump's frame, loads the

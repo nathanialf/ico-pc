@@ -125,17 +125,26 @@ void ico_diag_present_leave(void);
    .finished). The driver never returned and never reported a loss, so
    the end is the device loss it would have been: the WATCHDOG block's
    second line is "ico_pc: the graphics driver did not finish the picture
-   (the last submission is still running after N s)" (N: since the newest
-   submission), then "ico_pc: the GPU: the main thread has waited W s for
-   submission V; the newest is S (replay R, frame F), the newest seen
-   finished D; this end counts as a device loss (the loss dump, and the
-   next start takes the loss steps)"; after the threads and the symbols,
-   dump() runs on the watchdog thread (the window's pass ring and loss
-   dump, which notes the loss: ico_diag_note_device_loss), and when it
-   noted none the loss is noted without a dump, so the next start counts
-   it (ICO_DIAG_END_LOSS) and bisects the dump (ico_diag_loss_bisect). The
-   report file's "what ended the run" is "the graphics driver stopped
-   responding (the last submission is still running after N s)", the box
+   (submission V has not finished after a W s wait)" (V: the submission
+   the main thread waits for, W: how long it has waited), then "ico_pc:
+   the GPU: the main thread has waited W s for submission V; the newest is
+   S (replay R, frame F), the newest seen finished D; this end counts as a
+   device loss (the loss dump; the next start counts the loss and does not
+   replay the frame)"; after the threads and the symbols, dump() runs on
+   the watchdog thread (the window's pass ring and loss dump, which notes
+   the loss: ico_diag_note_device_loss), and when it noted none the loss
+   is noted without a dump. The hang's loss line is its own ("loss dump
+   (the driver hung): <zip>", or "graphics driver hung, no loss dump"):
+   the next start counts it as a loss (ICO_DIAG_END_LOSS, so Android's
+   robust step follows) and a report attaches its dump, but it is never
+   replayed by the loss bisect (ico_diag_loss_dump stays NULL: the replay
+   waits for the GPU with no limit, before the watchdog runs, and the
+   frame the driver hung on can hang it the same way); the next start logs
+   "ico_pc: the previous run ended because the graphics driver stopped
+   responding (a GPU hang, counted as a device loss); its loss dump <zip>
+   is not replayed (the replay could hang the same way)". The report
+   file's "what ended the run" is "the graphics driver stopped responding
+   (submission V has not finished after a W s wait)", the box
    the device loss's words, the end "the run ended: the graphics driver
    stopped responding (watchdog)" with the watchdog's exit code and no
    relaunch. Any other watchdog end with the main thread inside a present
@@ -572,7 +581,9 @@ void ico_diag_startup_activity_exit(void);
    was written), at once and kept through the run's end, whatever the
    file's note and mode; the next start's ico_diag_startup_activity_begin
    logs it and, when it names a dump and the version is the same, keeps
-   the path for the loss bisect (ico_diag_loss_dump). */
+   the path for the loss bisect (ico_diag_loss_dump). Called during a GPU
+   hang (ico_diag_set_gpu_hang) it writes the hang's own line instead,
+   which is counted but never bisected. */
 void ico_diag_note_device_loss(const char *dump_zip);
 /* The loss dump the previous run left for this one (NULL: none). */
 const char *ico_diag_loss_dump(void);
@@ -688,8 +699,15 @@ void ico_diag_set_pipeline_cache(int loaded, const char *path);
    path does not allocate. Call once after ico_diag_init with main's argc
    and argv (kept: they must live as long as the process); registers the
    relaunch after a device loss with atexit (ico_diag_device_lost_restart).
-   Android and iOS: nothing (no relaunch). */
+   Linux inside an AppImage (host_fs.h ico_appimage_file trusts APPIMAGE):
+   the program started again is the AppImage file, which mounts it anew
+   (the mount of this run ends with the execve that closes the runtime's
+   keep-alive pipe). Android and iOS: nothing (no relaunch). */
 void ico_diag_prepare_relaunch(int argc, char **argv);
+/* Tests: the program a relaunch starts (Linux and macOS, once prepared);
+   NULL before ico_diag_prepare_relaunch, on Windows (a wide path), Android
+   and iOS. */
+const char *ico_diag_relaunch_program(void);
 /* Tests: once the relaunch is prepared, fn(value) stands in for starting
    the program again (value: ICO_STARTUP_RETRY's), returning 0 as a started
    run would; NULL: the real relaunch. */

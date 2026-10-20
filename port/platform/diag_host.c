@@ -1241,6 +1241,16 @@ static const char act_set_low_memory[] = "set: stopped at the system's low-memor
 static int act_prev_low_memory;
 static char act_prev_low_memory_line[sizeof act_low_memory];
 static const char act_loss_none[] = "graphics device lost, no loss dump";
+/* a GPU hang's loss (watchdog_fire, loss_hang set): its own line, counted
+   as a loss (loss_count_prev) and its dump attached to a report, but never
+   replayed by the next start's bisect (a replay of the frame the driver
+   hung on can hang the same way, before the watchdog runs) */
+static const char act_loss_hang_prefix[] = "loss dump (the driver hung): ";
+static const char act_loss_hang_none[] = "graphics driver hung, no loss dump";
+static volatile int loss_hang;
+/* the previous run's GPU hang's dump, for this run's report only
+   (report_file), "" none */
+static char loss_prev_hang[1024];
 /* the loss dump the previous run left for this one's bisect
    (ico_diag_startup_activity_begin), "" none */
 static char loss_pending[1024];
@@ -2077,6 +2087,7 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     act_loss[0] = '\0';
     act_prev[0] = '\0';
     loss_pending[0] = '\0';
+    loss_prev_hang[0] = '\0';
     act_once = 0;
     act_careful = 0;
     act_prev_careful = 0;
@@ -2211,7 +2222,9 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     ends_count_prev(prev, relaunched);
     loss_count_prev(loss != NULL &&
                         (strcmp(loss, act_loss_none) == 0 ||
-                         strncmp(loss, act_loss_prefix, sizeof act_loss_prefix - 1) == 0),
+                         strncmp(loss, act_loss_prefix, sizeof act_loss_prefix - 1) == 0 ||
+                         strcmp(loss, act_loss_hang_none) == 0 ||
+                         strncmp(loss, act_loss_hang_prefix, sizeof act_loss_hang_prefix - 1) == 0),
                     relaunched);
     if (act_prev_background && (relaunched || !note_is_pipelines(prev))) {
         /* the mark of a run that ended in the background outside a
@@ -2223,6 +2236,19 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     if (loss != NULL && strcmp(loss, act_loss_none) == 0) {
         ico_diag_log("ico_pc: the previous run lost the graphics device (no loss dump was "
                      "written)");
+    } else if (loss != NULL && strcmp(loss, act_loss_hang_none) == 0) {
+        ico_diag_log("ico_pc: the previous run ended because the graphics driver stopped "
+                     "responding (a GPU hang, counted as a device loss; no loss dump was "
+                     "written)");
+    } else if (loss != NULL &&
+               strncmp(loss, act_loss_hang_prefix, sizeof act_loss_hang_prefix - 1) == 0) {
+        /* counted above; the dump goes with a report, never to the bisect */
+        const char *zip = loss + sizeof act_loss_hang_prefix - 1;
+        snprintf(loss_prev_hang, sizeof loss_prev_hang, "%s", zip);
+        ico_diag_log("ico_pc: the previous run ended because the graphics driver stopped "
+                     "responding (a GPU hang, counted as a device loss); its loss dump %s is not "
+                     "replayed (the replay could hang the same way)",
+                     zip);
     } else if (loss != NULL && strncmp(loss, act_loss_prefix, sizeof act_loss_prefix - 1) == 0 &&
                loss[sizeof act_loss_prefix - 1] != '\0') {
         const char *zip = loss + sizeof act_loss_prefix - 1;
@@ -2251,11 +2277,13 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     }
     if (prev[0] == '\0') {
         if (ver[0] != '\0' && strcmp(ver, act_version) != 0) {
-            /* a clean end of another version: its graphics cache goes too
-               (vk_pipeline.c vkr_cache_drop_others) */
-            ico_diag_log("ico_pc: the previous start was version %s, this one is %s: the graphics "
-                         "cache of that version is dropped; this start prepares the graphics "
-                         "from nothing",
+            /* another version's file with no note: only its loss line
+               kept it (a clean end deletes the file); a Vulkan renderer
+               drops that version's graphics cache (vk_pipeline.c
+               vkr_cache_drop_others), Direct3D 12 has none */
+            ico_diag_log("ico_pc: the previous start was version %s, this one is %s: a Vulkan "
+                         "renderer drops the graphics cache of that version; this start prepares "
+                         "the graphics from nothing",
                          ver, act_version);
         }
         return 0;
@@ -2288,22 +2316,22 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
         if (strcmp(prev, act_lazy_exit) == 0) {
             ico_diag_log(
                 "ico_pc: the previous run (version %s) created the pipelines as the "
-                "frames needed them; trying the start-up set again on %s (the graphics cache "
-                "of that version is dropped; this start prepares the graphics from "
-                "nothing)",
+                "frames needed them; trying the start-up set again on %s (a Vulkan renderer "
+                "drops the graphics cache of that version; this start prepares the graphics "
+                "from nothing)",
                 ver[0] != '\0' ? ver : "unknown", act_version);
         } else if (act_end_n[ICO_DIAG_END_PIPELINES] != 0) {
             /* an end while making the pipelines counts whatever the
                version (the setting outlives it): the policy's line says
                what this start does (ico_diag_startup_end_persist) */
-            ico_diag_log("ico_pc: the previous run ended while: %s (version %s); the graphics "
-                         "cache of that version is dropped",
+            ico_diag_log("ico_pc: the previous run ended while: %s (version %s); a Vulkan "
+                         "renderer drops the graphics cache of that version",
                          prev, ver[0] != '\0' ? ver : "unknown");
         } else {
             ico_diag_log(
                 "ico_pc: the previous run ended while: %s (version %s); trying the "
-                "start-up set again on %s (the graphics cache of that version is dropped; this "
-                "start prepares the graphics from nothing)",
+                "start-up set again on %s (a Vulkan renderer drops the graphics cache of that "
+                "version; this start prepares the graphics from nothing)",
                 prev, ver[0] != '\0' ? ver : "unknown", act_version);
         }
         return 0;
@@ -2601,10 +2629,12 @@ void ico_diag_startup_activity_budget_stop(void)
 
 void ico_diag_note_device_loss(const char *dump_zip)
 {
+    const int hang = loss_hang;
     if (dump_zip != NULL && dump_zip[0] != '\0') {
-        snprintf(act_loss, sizeof act_loss, "%s%s", act_loss_prefix, dump_zip);
+        snprintf(act_loss, sizeof act_loss, "%s%s", hang ? act_loss_hang_prefix : act_loss_prefix,
+                 dump_zip);
     } else {
-        snprintf(act_loss, sizeof act_loss, "%s", act_loss_none);
+        snprintf(act_loss, sizeof act_loss, "%s", hang ? act_loss_hang_none : act_loss_none);
     }
     /* written now, the run's note kept (the process may be ended before
        its exit) */
@@ -3290,6 +3320,19 @@ void ico_diag_prepare_relaunch(int argc, char **argv)
         }
         relaunch_exe[n] = '\0';
     }
+    {
+        /* inside an AppImage (host_fs.h ico_appimage_file) the program
+           lies in the runtime's mount, which ends once the runtime's
+           keep-alive pipe has no reader: execve closes it (relaunch_now
+           marks every descriptor close-on-exec), so the program in the
+           mount could not load its libraries. The restart starts the
+           AppImage file instead, which mounts it again; the link map stays
+           the mounted program's (/proc/self/exe) */
+        char app[sizeof relaunch_exe];
+        if (ico_appimage_file(app, sizeof app, NULL)) {
+            memcpy(relaunch_exe, app, strlen(app) + 1);
+        }
+    }
 #endif
     relaunch_argv = argv;
     relaunch_var[0] = '\0';
@@ -3357,6 +3400,14 @@ static int relaunch_now(const char *value)
 #endif
 
 #endif
+const char *ico_diag_relaunch_program(void)
+{
+#if !defined(_WIN32) && !defined(__ANDROID__) && !defined(ICO_IOS)
+    return relaunch_ready ? relaunch_exe : NULL;
+#else
+    return NULL;
+#endif
+}
 
 /* The crash box's words after a driver crash with nothing left to try */
 static const char driver_box_text[] =
@@ -3836,8 +3887,12 @@ static void report_file(const char *what, int fatal)
     /* this run's loss dump, else the one the previous run left */
     if (strncmp(act_loss, act_loss_prefix, np) == 0) {
         in.loss_zip = act_loss + np;
+    } else if (strncmp(act_loss, act_loss_hang_prefix, sizeof act_loss_hang_prefix - 1) == 0) {
+        in.loss_zip = act_loss + sizeof act_loss_hang_prefix - 1;
     } else if (loss_pending[0] != '\0') {
         in.loss_zip = loss_pending;
+    } else if (loss_prev_hang[0] != '\0') {
+        in.loss_zip = loss_prev_hang;
     }
 #ifdef _WIN32
     if (log_h != INVALID_HANDLE_VALUE) {
@@ -3969,13 +4024,12 @@ static void report_box(char *box, size_t size, const char *box_text)
     if (report_name[0] != '\0') {
         snprintf(box, size,
                  "%s\n\nPlease report it at github.com/nathanialf/ico-pc/issues and attach the "
-                 "newest file in logs that starts with report- (this time: %s). The logs folder "
-                 "is beside the program; the log is:\n%s",
+                 "newest file in logs that starts with report- (this time: %s). The log is:\n%s",
                  box_text, report_name, ico_diag_log_path());
     } else {
         snprintf(box, size,
                  "%s\n\nPlease report it at github.com/nathanialf/ico-pc/issues and attach "
-                 "the logs folder from beside the program. The log is:\n%s",
+                 "the logs folder, the one that holds the log. The log is:\n%s",
                  box_text, ico_diag_log_path());
     }
 }
@@ -4503,12 +4557,13 @@ static void watchdog_fire(const char *reason)
     flog("ico_pc: ======================================================================");
     flog("ico_pc: WATCHDOG: %s", reason);
     if (hang) {
-        flog("ico_pc: the graphics driver did not finish the picture (the last submission is "
-             "still running after %.0f s)",
-             gpu.submitted_ago_s);
+        flog("ico_pc: the graphics driver did not finish the picture (submission %llu has not "
+             "finished after a %.0f s wait)",
+             gpu.waiting_for, gpu.waiting_s);
         flog("ico_pc: the GPU: the main thread has waited %.0f s for submission %llu; the newest "
              "is %llu (replay %u, frame %u), the newest seen finished %llu; this end counts as a "
-             "device loss (the loss dump, and the next start takes the loss steps)",
+             "device loss (the loss dump; the next start counts the loss and does not replay the "
+             "frame)",
              gpu.waiting_s, gpu.waiting_for, gpu.submitted, gpu.replay, gpu.frame, gpu.finished);
     }
     {
@@ -4563,9 +4618,11 @@ static void watchdog_fire(const char *reason)
         /* what a device loss writes (window_host.c device_lost_quit): the
            pass ring and the loss dump, from the frames the renderer holds
            (CPU data: the main thread that writes them is blocked in the
-           driver), noted for the next start; a loss without a dump when
-           none was noted */
+           driver), noted for the next start with the hang's own line
+           (loss_hang: counted as a loss, never bisected); a loss without a
+           dump when none was noted */
         void (*dump)(void) = gpu_dump_fn;
+        loss_hang = 1;
         if (dump != NULL) {
             dump();
         }
@@ -4583,9 +4640,9 @@ static void watchdog_fire(const char *reason)
 
         if (hang) {
             snprintf(what, sizeof what,
-                     "the graphics driver stopped responding (the last submission is still "
-                     "running after %.0f s)",
-                     gpu.submitted_ago_s);
+                     "the graphics driver stopped responding (submission %llu has not finished "
+                     "after a %.0f s wait)",
+                     gpu.waiting_for, gpu.waiting_s);
         } else {
             snprintf(what, sizeof what, "the watchdog: %s", reason);
         }

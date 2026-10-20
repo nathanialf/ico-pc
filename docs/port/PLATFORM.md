@@ -348,16 +348,20 @@ in the environment moves nothing (`port/platform/host_fs.h` (`ico_appimage_file`
 file: `ico-pc.ini` (the first start's `iso=` is saved there), `logs/`, `userdata/` (portable mode,
 by the folder or by `portable=1`), the disc image found by name, relative `iso=` and card paths,
 and the texture, model and ReShade folders. The link map is read beside `/proc/self/exe`, inside
-the mount (`port/platform/diag_host.c` (`sym_open_default`)), and a restart after a driver crash
-re-executes the mounted program in the same process, which keeps the mount
-(`ico_diag_prepare_relaunch`). The start logs `ico_pc: AppImage <file>; program folder <dir>`,
-or, for an `APPIMAGE` that is not trusted, `ico_pc: APPIMAGE=<value> is not used (<reason>)`
-(`port/platform/main_host.c` (`main`)).
+the mount (`port/platform/diag_host.c` (`sym_open_default`)). A restart (after a driver crash, or
+the desktop's restart after a device loss) executes the AppImage file, not the mounted program: the
+runtime keeps the mount only while its keep-alive pipe has a reader, the restart's `execve` closes
+it (`relaunch_now` marks every descriptor close-on-exec), and the program in a mount that ended
+cannot load its libraries; the file mounts itself again and sets `APPIMAGE` and `APPDIR` anew,
+with the same arguments and process id (`port/platform/diag_host.c` (`ico_diag_prepare_relaunch`,
+`ico_diag_relaunch_program`)). The start logs `ico_pc: AppImage <file>; program folder <dir>; a
+restart starts the AppImage again`, or, for an `APPIMAGE` that is not trusted,
+`ico_pc: APPIMAGE=<value> is not used (<reason>)` (`port/platform/main_host.c` (`host_main`)).
 
 When `logs/` beside the program cannot be made (an AppImage or a program folder the player cannot
 write to), the logs go to `<user folder>/logs` with the line `ico_pc: the logs folder <dir> cannot
 be made (<error>); the logs are in <dir>`, and every later `ico_host_logs_dir` names that folder
-(`port/platform/host_config.h` (`ico_host_set_logs_dir`); `port/platform/main_host.c` (`main`)).
+(`port/platform/host_config.h` (`ico_host_set_logs_dir`); `port/platform/main_host.c` (`host_main`)).
 Only when that fails too does the log go to the console.
 
 ### The disc a start plays
@@ -539,9 +543,10 @@ process is started): the step and its value (`blend:vulkan`, then `backend:d3d12
 `atexit` steps before the relaunch, nothing at exit when no step is left, and the box when the
 relaunch fails (`port/platform/test/diag_test.c` (`loss_child`)).
 
-A start of another version than the activity file's (its version line) logs that the other version's
-pipeline cache file is dropped and the graphics prepared from nothing, with or without an ended run
-in the note (`port/platform/diag_host.c`; the drop itself is `vkr_cache_drop_others`,
+A start of another version than the activity file's (its version line) logs that a Vulkan renderer
+drops the other version's pipeline cache file (Direct3D 12 keeps none) and the graphics are prepared
+from nothing, with or without an ended run in the note; a file with no note is one only a loss line
+kept, as a clean end deletes it (`port/platform/diag_host.c` (`ico_diag_startup_activity_begin`); the drop itself is `vkr_cache_drop_others`,
 [RHI.md](RHI.md#vulkan)). An end without a crash report (the system or the driver ends the
 process) is caught by the start-up activity file, `logs/startup-activity.txt`: the version's line, then the activity note. While the
 start-up pipeline set is created (`ICO_DIAG_ACTIVITY_STARTUP`) each batch's note (its range of the
@@ -892,8 +897,8 @@ picture" line:
 
 ```
 ico_pc: WATCHDOG: no new Main tick for 60 s (the last was tick 127, progress 0)
-ico_pc: the graphics driver did not finish the picture (the last submission is still running after 60 s)
-ico_pc: the GPU: the main thread has waited 60 s for submission 262; the newest is 263 (replay 249, frame 127), the newest seen finished 261; this end counts as a device loss (the loss dump, and the next start takes the loss steps)
+ico_pc: the graphics driver did not finish the picture (submission 262 has not finished after a 60 s wait)
+ico_pc: the GPU: the main thread has waited 60 s for submission 262; the newest is 263 (replay 249, frame 127), the newest seen finished 261; this end counts as a device loss (the loss dump; the next start counts the loss and does not replay the frame)
 ```
 
 Then come the main thread's sample, the heartbeat (which carries `| waiting for the GPU N s
@@ -902,13 +907,20 @@ the threads and the symbols as for any watchdog end. On the watchdog thread the 
 what a device loss writes before its box: `window: the graphics driver stopped responding (a GPU
 hang); what was being drawn follows, as for a device loss`, the index span, the renderer's
 [pass ring](RENDER.md#the-pass-ring) and the [loss dump](RENDER.md#the-loss-dump), which notes the
-loss in the activity file (without a dump the loss is noted without one), so the next start counts
-it in the row of losses (on Android, robust access for that start) and runs the
-[loss bisect](RENDER.md#the-loss-bisect) on the dump. All of it is CPU data the main thread wrote and
+loss in the activity file with the hang's own line, `loss dump (the driver hung): <zip>` (without a
+dump, `graphics driver hung, no loss dump`). The next start counts it in the row of losses (on
+Android, robust access for that start), logs `ico_pc: the previous run ended because the graphics
+driver stopped responding (a GPU hang, counted as a device loss); its loss dump <zip> is not
+replayed (the replay could hang the same way)`, and a report it writes attaches the zip; it does not
+run the [loss bisect](RENDER.md#the-loss-bisect) on the dump: the bisect replays the frame before
+the watchdog starts and waits for the GPU with no limit, so on a driver that hangs at that frame the
+start would freeze for good (`port/platform/diag_host.c` (`ico_diag_note_device_loss`,
+`ico_diag_startup_activity_begin`, `loss_hang`)). All of it is CPU data the main thread wrote and
 nothing else writes while it is blocked; no call goes to the hung device
 (`port/platform/window_host.c` (`window_gpu_hang`, `window_gpu_progress`)). The
 [report file](#the-report-file)'s `what ended the run:` is `the graphics driver stopped responding
-(the last submission is still running after N s)`, and the box is the device loss's: on a computer
+(submission V has not finished after a W s wait)` (V the submission the main thread waits for, W how
+long it has waited), and the box is the device loss's: on a computer
 "The graphics card stopped responding while the game was drawing, so the game has to close. Your
 last save is kept; the log says why.", the overclock advice and the report file to attach; on a
 phone the same first sentence, "Start the game again." and the report file. The run ends
