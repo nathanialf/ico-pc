@@ -223,6 +223,25 @@ records each change you make to them. If it is slow only at one place or
 after one change, say where or which, and send one run that is slow and, if
 you can, one at Resolution 1x for comparison.
 
+## White lines along walls while the camera moves
+
+While the camera turns or moves, thin white or light lines can flicker
+along the edges where two pieces of a wall or a floor meet. Each line is a
+gap a fraction of a pixel wide between the two pieces, and the light colour
+is the room's mist showing through it. The game draws the still parts of a
+room the same way in every picture between its own steps, so their edges
+stay closed. If you still see such lines:
+
+1. Set **Options > Display > Frame rate** to **Original** and turn the
+   camera in the same place. If the lines are gone, they come from the
+   pictures the game draws between its own steps; if they stay, they are in
+   the game's own pictures too.
+2. Set **Frame rate** back, and while the lines show press **F12**
+   ([Save a picture of a problem](#save-a-picture-of-a-problem)).
+3. Send a [problem report](#send-a-problem-report) with the `.zip` and the
+   newest `report-` file (or `ico-pc.log`), and say which Frame rate showed
+   the lines and where in the game you were.
+
 ## Send a problem report
 
 1. Open a report on the

@@ -2098,7 +2098,10 @@ after `rd_precreate_pipelines` and again whenever SCENE is made at a new size. `
 or `ICO_RD_DEPTH_COPY` names a path to try first; `ICO_RD_FOG_PATH=test` tries every path
 (`port/render/rd_fog_path.c`; `port/render/rd.h` (`rd_fog_selftest`)). The probe logs five
 texels' Z, index and colour on the first fogged replay after start and after a new scene size
-(`fog: probe`) (`port/render/rd_fog_path.c`). Both draw the fog at the exact table entry of
+(`fog: probe`), then the table's entry 0, the colour the fog gives Z 0, which a pixel no draw
+covered keeps from the clear (`...; pixels nothing drew take the fog's colour at Z 0, table entry 0
+= RRGGBBAA`): a line of that colour in a report's picture is a gap in the geometry
+([Camera blending](#camera-blending)) (`port/render/rd_fog_path.c` (`rd__fog_probe_record`)). Both draw the fog at the exact table entry of
 each index, not read between entries above 1x, since what they measure is the depth read; the
 probe's frame is one game frame drawn that way (`port/render/rd_fog_path.c` (`rd__fog_exact`),
 `port/render/rd_replay.c` (`doFog`)).
@@ -2251,6 +2254,53 @@ one implementation, included by `rd_interp.c` and `GsBase.c` in every build
 step past `RD_INTERP_CAMERA_TURN` (30 degrees) or `RD_INTERP_CAMERA_MOVE` (300 units) a tick is a
 cut, and `RD_CULL_MARGIN` is the cull's frustum margin (`port/render/rd_camera_blend.h`).
 
+**What the fog paints in a gap.** A pixel no draw covers keeps the clear's Z of 0, and the fog
+sprite indexes its table by Z bits 16..23 (`port/shaders/fog_lut.hlsl`), so such a pixel takes
+entry 0, the stage's full fog colour: near white in the light rooms. Neighbouring parts of the world
+(a wall's or a floor's pieces, one draw per packet or texture) share their edge vertices, and the
+vertex shader truncates each to the GS's 1/16 pixel grid (`port/shaders/vu_common.hlsli`
+(`vu_ftoi4`)); two draws whose model to screen matrices differ in a bit can put a shared vertex in
+two cells and leave a sliver of 1/16 GS pixel between them, which the fog paints. At a tick the
+game's own matrices decide: most pieces of a stage carry the same model rows to the bit (one node
+matrix), so their edges close, and pieces with other node matrices carry the rounding of their own
+products, as on the PS2 ([DIVERGENCES.md](DIVERGENCES.md)). The fog probe line names entry 0
+([The fog path and its self-test](#the-fog-path-and-its-self-test)).
+
+**Still draws take the tick's block.** Between ticks a matched VU draw's block is both ticks'
+blocks re-based on the blended camera and blended, and a mesh's model matrices are then composed
+as a turn about its own centroid (`rotateModel`), while a draw that is the tick's alone (unmatched,
+jumped, unkeyed) is the tick's block re-based (`camCurDraw`). Done to the pieces of a wall, that
+made pieces with identical rows at the tick come out a few ulps apart (another pivot, or the other
+path), and the set of shared vertices that changed cells moved with the alpha at every present:
+white lines flickering along edges while the camera moves, never with it still (a still camera
+re-bases nothing). No row of a normal program's block is the object's alone (each model row is a
+camera part times the object's model to world matrix, qw 4..15 are the camera's), so the two
+ticks' rows of a wall never agree in bits under a moving camera; re-based on the blended camera
+they agree to the rounding of the products, within 1.2e-7 of each quadword's largest magnitude in
+the corpus' blended pairs against 0.07 or more for a moving object. A part of the world (a normal
+program placed through the view) whose re-based model rows (qw 16..27) agree within
+`RD_INTERP_STILL_REL` (2^-17 of each quadword's largest magnitude: a 64th of a pixel at the 2048
+offset) is a still draw, and its camera and model rows (qw 4..27) are the tick's block re-based
+exactly as `camCurDraw` re-bases one (the projection taken to the blended one under an easing
+zoom, as there), not the blend and no turn; its UV scroll and lights keep their blend. Every still
+draw, matched or not, is then the same function of the tick's block and the blended camera, so
+identical rows give identical bits across neighbouring draws. Moving objects keep the blend and
+the turn; alpha 0 and 1 have no blended camera and are the ticks' blocks byte for byte; an object
+moving less than the bound is drawn at its tick's place (`port/render/rd_interp.c` (`stillDraw`,
+`stillRows`, `blendVu`, `camCurDraw`)). The 10 s summary carries a line for them, and
+`rd_replay_tool --interp` prints the same counts as its third line:
+
+```
+interp: N still draws (parts of the world that did not move while the camera did): C drawn from the tick's block through the blended camera, R re-rounded by the blend (camera and model rows not the tick's through the blended camera, to the bit); W parts of the world drawn as the tick's beside blended ones; K VU draws with the ticks' cameras
+```
+
+R is 0 by construction (a still draw whose rows are not that block in bits); W counts the parts of
+the world `camCurDraw` re-based in a blended frame, K the draws marked `RD_VU_TICK_CAMERAS`
+(`RdInterpStats` `stillDraws`, `stillCur`, `stillReRounded`, `curWorld`, `tickCams`,
+`port/render/rd_internal.h`). The vertex shaders keep the order of their arithmetic: every VU vertex
+shader carries `NoContraction` (HLSL `precise`) and no module `FPFastMathMode`, so no driver fuses
+one draw's products and not another's (`tools/check_spirv.py`, the precise gate).
+
 ## Interpolation and presentation
 
 With `RdSettings.interpolate` on, `rd_end_frame` only closes the frame and the host calls
@@ -2347,8 +2397,10 @@ on. `--stats` prints the counts as a second line, `<dump>: stats: D destination-
 storage passes, P pass switches for the exact blend; glow N passes; snapshots C copied, W swapped;
 A draws resampled above 1x`, and the VU vertex and triangle pre-passes as a third, `<dump>: stats:
 VU pre-pass on: 2 passes, V vertices in D draws; F mesh and grid draws the old way; S sprites, T
-triangle slots` (`vuPrePasses`, `vuPreVertices`, `vuPreDraws`, `vuPreFallbacks`, `vuPreSprites`,
-`vuTriSlots`, [The vertex and triangle pre-passes](#the-vertex-and-triangle-pre-passes));
+triangle slots; K VU draws with the ticks' cameras` (`vuPrePasses`, `vuPreVertices`, `vuPreDraws`,
+`vuPreFallbacks`, `vuPreSprites`, `vuTriSlots`, `vuTickDraws`: the draws a frame blended between
+two ticks draws under the ticks' cameras, `port/render/rd_replay_vu.c` (`doVuDraw`);
+[The vertex and triangle pre-passes](#the-vertex-and-triangle-pre-passes));
 the GPU line (`window: GPU ms per replay: ...`) ends with `; VU pre-pass <ms>`, as `--stats`'s
 `gpu:` line does
 (`port/render/rd.h` (`RdPerfRecord`); `port/platform/window_host.c` (`perf_log`)).
