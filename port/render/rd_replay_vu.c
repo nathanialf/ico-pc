@@ -1383,6 +1383,8 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     if (!pre && !vuSource(f, c, &local)) {
         return;
     }
+    /* a draw under the ticks' cameras (vuSource), once a draw */
+    g_rdPerf.vuTickDraws += (src->vcb.draw[2] & ICO_VU_TICKS) != 0u;
     DrawSetup ds;
     if (!rd__replay_prepare_draw(r, &ds, NULL)) {
         return;

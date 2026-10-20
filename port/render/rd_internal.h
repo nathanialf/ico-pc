@@ -1905,6 +1905,20 @@ typedef struct RdInterpStats {
     /* draws projected on the CPU by their tick's camera (RD_SCREEN_FRAME_CAMERA,
      * RD_SHADOW_FRAME_CAMERA) taken through the world onto the blended camera */
     uint32_t reprojected;
+    /* The still draws (rd_interp.c stillDraw): blended parts of the world
+     * whose object did not move between the ticks while the camera did;
+     * stillCur, of them those drawn from the tick's block through the
+     * blended camera (camCurDraw's block); stillReRounded, those whose
+     * camera and model rows (qw 4..27) came out of the blend not equal in
+     * bits to that block.  curWorld: the parts of the world (normal
+     * programs, placed through the view) drawn as the tick's through the
+     * blended camera (unmatched, snapped or unkeyed) in a frame that
+     * blended others.  tickCams: the VU draws marked RD_VU_TICK_CAMERAS */
+    uint32_t stillDraws;
+    uint32_t stillCur;
+    uint32_t stillReRounded;
+    uint32_t curWorld;
+    uint32_t tickCams;
 } RdInterpStats;
 
 /* Rotation-aware blending of an affine 4 x 4 (column-major, w row 0 0 0
@@ -2731,10 +2745,12 @@ void rd__fog_buffer_free(void);
  * (centre, and the corners 8 pixels in) of the depth the fog read and of
  * the fogged colour target into small textures; rd__fog_probe_finish (the
  * next rd_begin_frame) reads them back and logs one line, "fog: probe".
- * zid: the depth's target id (its GS Z scale). */
+ * zid: the depth's target id (its GS Z scale); lut: the fog's table (256
+ * RGBA8 entries; NULL: none), whose entry 0 the line names as the colour of
+ * a pixel nothing drew. */
 bool rd__fog_probe_wanted(void);
 void rd__fog_probe_record(RhiCommandList cl, const RdTargetRec *tz, uint32_t zid,
-                          const RdFogSource *src, RdTargetRec *tc);
+                          const RdFogSource *src, RdTargetRec *tc, const uint8_t *lut);
 void rd__fog_probe_finish(void);
 /* The self-test's replays (rd_fog_selftest) and the probe's fogged replay:
  * doFog reads the table at the exact entry of the depth's index (Z >> 16),

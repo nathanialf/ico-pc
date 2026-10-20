@@ -1982,6 +1982,10 @@ typedef struct RdPerfRecord {
      * gpuUploadMs) */
     uint32_t vuPrePasses, vuPreVertices, vuPreDraws, vuPreFallbacks;
     uint32_t vuPreSprites, vuTriSlots;
+    /* the VU draws drawn under the ticks' cameras (rd_replay_vu.c doVuDraw:
+     * a frame blended between two ticks, a draw marked RD_VU_TICK_CAMERAS,
+     * vuSource), once a draw whether the pre-pass recorded it or not */
+    uint32_t vuTickDraws;
     double gpuPrepassMs;
     /* The per-pass timing (rd_perf_passes_of; docs/port/RENDER.md,
      * "Performance records").  passKinds: the pieces of GPU work begun, by

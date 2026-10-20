@@ -4989,7 +4989,8 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
      * itself is the frame's own) */
     if (rd__fog_probe_wanted()) {
         endPass(r);
-        rd__fog_probe_record(s_cl, tz, zid, &src, tc);
+        rd__fog_probe_record(s_cl, tz, zid, &src, tc,
+                             p.lutOffset != ~0u ? f->payload + p.lutOffset : NULL);
     }
     (void)topo;
 }

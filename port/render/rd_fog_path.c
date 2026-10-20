@@ -27,6 +27,11 @@
  * the fog read and of the colour it drew are copied out after the fog's
  * draw and logged at the next rd_begin_frame as GS Z, fog index and RGBA:
  *   fog: probe <path> z=<5 x GS Z> idx=<5 x index> out=<5 x RGBA>
+ * then the table's entry 0, the colour the fog gives Z 0, which a pixel no
+ * draw covered keeps from the clear (fog_lut.hlsl: the index is Z bits
+ * 16..23), so a line or speck of that colour in a report's picture is a
+ * gap in the geometry, not a texture:
+ *   ...; pixels nothing drew take the fog's colour at Z 0, table entry 0 = <RGBA>
  * so a report's log says what the device returned.
  *
  * The self-test (rd_fog_selftest): a frame built here, never recorded (no
@@ -97,6 +102,8 @@ static struct {
     bool armed;   /* the next fogged replay records */
     bool pending; /* recorded, read back at the next rd_begin_frame */
     bool haveZ;   /* the depth texels were copied (not on D3D12's depth) */
+    bool haveLut; /* lut0 holds the table's entry 0 */
+    uint8_t lut0[4];
     bool d24;
     uint8_t path;
     float zScale;
@@ -400,9 +407,13 @@ static uint32_t probeStride(void)
 }
 
 void rd__fog_probe_record(RhiCommandList cl, const RdTargetRec *tz, uint32_t zid,
-                          const RdFogSource *src, RdTargetRec *tc)
+                          const RdFogSource *src, RdTargetRec *tc, const uint8_t *lut)
 {
     s_probe.armed = false; /* one try for each arming */
+    s_probe.haveLut = lut != NULL;
+    if (lut) {
+        memcpy(s_probe.lut0, lut, sizeof(s_probe.lut0));
+    }
     if (s_probe.cTex.id && s_probe.cFmt != tc->format) {
         rhi_destroy_texture(s_probe.cTex);
         s_probe.cTex = (RhiTexture){0};
@@ -497,9 +508,17 @@ void rd__fog_probe_finish(void)
                                    p[1], p[2], p[3]);
         }
     }
-    rd__log("fog: probe %s z=%s idx=%s out=%s (centre, then the corners 8 pixels in; %s)",
+    char lut0[12];
+    if (s_probe.haveLut) {
+        snprintf(lut0, sizeof(lut0), "%02X%02X%02X%02X", s_probe.lut0[0], s_probe.lut0[1],
+                 s_probe.lut0[2], s_probe.lut0[3]);
+    } else {
+        snprintf(lut0, sizeof(lut0), "n/a");
+    }
+    rd__log("fog: probe %s z=%s idx=%s out=%s (centre, then the corners 8 pixels in; %s); pixels "
+            "nothing drew take the fog's colour at Z 0, table entry 0 = %s",
             rd__fog_path_name(s_probe.path), okZ ? z : "n/a", okZ ? idx : "n/a", okC ? out : "n/a",
-            s_probe.d24 ? "D24S8" : "D32S8");
+            s_probe.d24 ? "D24S8" : "D32S8", lut0);
 }
 
 /* ------------------------------------------------------------ self-test */

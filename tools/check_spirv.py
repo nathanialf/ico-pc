@@ -97,6 +97,18 @@ Gates:
              (a local array indexed at run time is memory the compiler lays
              out). Pixel shaders may (font_sheet_ps, yuv_ps: built fine on
              the same drivers).
+  precise    every VU vertex shader (vu_*_vs: the programs' entries, their
+             plain variants, the pre-passes' and the main shaders) carries
+             the NoContraction decoration (HLSL precise: no fused multiply-
+             add, no reassociation), and no module carries FPFastMathMode.
+             Neighbouring parts of the world share their edge vertices,
+             each part a draw: a shared vertex is the same GS cell in every
+             draw only when every draw computes it by the same operations in
+             the same order (vu_common.hlsli vu_ftoi4 truncates to the 1/16
+             pixel grid), and a contraction the driver may make in one
+             pipeline and not in another opens a crack of 1/16 GS pixel,
+             which the fog paints at full fog colour (docs/port/RENDER.md,
+             Camera blending).
 
 The modules are the build's port/shaders output (CMAKE_BINARY_DIR/shaders);
 the ctest spirv_check runs this over it. No SPIR-V tool is needed: the
@@ -108,6 +120,10 @@ import sys
 
 OP_UNDEF = 1
 OP_ENTRY_POINT = 15
+OP_DECORATE = 71
+OP_MEMBER_DECORATE = 72
+DECORATION_FP_FAST_MATH_MODE = 40
+DECORATION_NO_CONTRACTION = 42
 OP_TYPE_BOOL = 20
 OP_TYPE_VECTOR = 23
 OP_ANY = 154
@@ -231,6 +247,18 @@ def check(path, sizes=None):
     out = []
     counts = {}
     local = 0
+    # the decorations: OpDecorate target, decoration; OpMemberDecorate
+    # structure, member, decoration
+    deco = {}
+    for op, ops in insts:
+        k = ops[1] if op == OP_DECORATE else ops[2] if op == OP_MEMBER_DECORATE else None
+        if k is not None:
+            deco[k] = deco.get(k, 0) + 1
+    name = os.path.basename(path)
+    if vertex and name.startswith("vu_") and not deco.get(DECORATION_NO_CONTRACTION):
+        out.append("precise: a VU vertex shader without NoContraction (its precise lost)")
+    if deco.get(DECORATION_FP_FAST_MATH_MODE):
+        out.append("precise: %d FPFastMathMode decorations" % deco[DECORATION_FP_FAST_MATH_MODE])
     for op, ops in insts:
         if op in TYPED_VALUE_OPS and ops[0] in arrays:
             counts[op] = counts.get(op, 0) + 1

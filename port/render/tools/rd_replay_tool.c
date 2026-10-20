@@ -181,6 +181,11 @@
  *                         saved some ticks apart, as the F12 sets are): no
  *                         gap snap; the other snaps (a camera past the cut
  *                         thresholds) still apply
+ *                         The third interp line counts the still draws
+ *                         (rd_interp.c stillDraw), those drawn from the
+ *                         tick's block, those re-rounded by the blend, the
+ *                         parts of the world drawn as the tick's and the
+ *                         draws marked for the ticks' cameras
  *   --no-reproject        (with --interp) the draws the frame camera
  *                         projected on the CPU (lightning, lines, shadow
  *                         volumes) blend in screen space instead of being
@@ -868,6 +873,10 @@ static const RdFrame *prepareFrame(const char *dump, RdFrame *pf, RdFrame *f)
                ist.unmatchedWhy[RD_UNMATCHED_ABSENT], ist.unmatchedWhy[RD_UNMATCHED_FEWER],
                ist.unmatchedWhy[RD_UNMATCHED_UNPLACED], ist.unmatchedWhy[RD_UNMATCHED_PAYLOAD],
                ist.apart, ist.prevKept, ist.prevHeld, ist.reprojected, ist.longWay, ist.turnSnap);
+        printf("interp: %u still draws: %u drawn from the tick's block through the blended "
+               "camera, %u re-rounded by the blend; %u parts of the world drawn as the tick's "
+               "beside blended ones; %u VU draws with the ticks' cameras\n",
+               ist.stillDraws, ist.stillCur, ist.stillReRounded, ist.curWorld, ist.tickCams);
     }
     return rf;
 }
@@ -1453,9 +1462,11 @@ int main(int argc, char **argv)
          * each mesh and grid vertex and triangle and each sprite once, before
          * the lists */
         printf("%s: stats: VU pre-pass %s: %u passes, %u vertices in %u draws; %u mesh and grid "
-               "draws the old way; %u sprites, %u triangle slots\n",
+               "draws the old way; %u sprites, %u triangle slots; %u VU draws with the ticks' "
+               "cameras\n",
                dump, g_rd.vuPrepass ? "on" : "off", pr->vuPrePasses, pr->vuPreVertices,
-               pr->vuPreDraws, pr->vuPreFallbacks, pr->vuPreSprites, pr->vuTriSlots);
+               pr->vuPreDraws, pr->vuPreFallbacks, pr->vuPreSprites, pr->vuTriSlots,
+               pr->vuTickDraws);
     }
     if (replayed && passDir) {
         /* One frame, every target: the renderer keeps each target's contents

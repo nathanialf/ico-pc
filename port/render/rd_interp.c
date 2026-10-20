@@ -1855,6 +1855,12 @@ static int s_rebased; /* VU draws re-based on the blended camera, this frame */
 
 static int s_rebasedCur; /* of them, draws that are cur's */
 
+/* this frame: the still draws (stillDraw), those drawn from cur's block
+ * through the blended camera, those whose blend was not that block in
+ * bits; the parts of the world camCurDraw re-based; the VU draws marked
+ * RD_VU_TICK_CAMERAS (RdInterpStats) */
+static int s_still, s_stillCur, s_stillReRounded, s_curWorld, s_tickCams;
+
 /* ------------------------------------------- the pool's screen-space STs
  *
  * pool.c makes the STs of its grids, which sample the scene copied into a
@@ -2028,6 +2034,8 @@ static void camCurDraw(RdCmd *c)
         s_rebased++;
         s_rebasedCur++;
         c->u[3] = tickMark(how, vuView(c));
+        s_tickCams += c->u[3] != 0u;
+        s_curWorld += c->type == RDC_MESH && isNormalProg(c->b[0]) && vuView(c) == RD_VU_VIEW_WORLD;
         /* the pool's grids: their STs through the camera they are now drawn
          * with, as a matched one's */
         gridCameraSts(c, op);
@@ -2695,6 +2703,93 @@ static int s_gridSt; /* grids whose STs blended (s_gridScreenSt), this present *
 /* blendVu's RD_VU_TICK_CAMERAS for the draw it blended (tickMark) */
 static uint32_t s_vuTicks;
 
+/* ------------------------------------------------------------ still draws
+ *
+ * A pixel no draw covers keeps the clear's Z of 0, and the fog sprite reads
+ * its table at Z bits 16..23 (fog_lut.hlsl): entry 0, the stage's full fog
+ * colour, white in the light rooms.  Neighbouring parts of the world (a
+ * wall's pieces, a floor's, one draw per packet or texture) share their
+ * edge vertices, and the vertex shader truncates each to the GS's 1/16
+ * pixel grid (vu_common.hlsli vu_ftoi4): two draws whose model to screen
+ * matrices differ in a bit can put a shared vertex in two cells, a sliver
+ * of 1/16 GS pixel between them that the fog paints.  At a tick the game's
+ * own matrices decide, the PS2's per-packet rounding; most parts of a
+ * stage carry the same model rows to the bit (one node matrix), so their
+ * edges close.
+ *
+ * Between ticks a blended draw's block is a function of both ticks' blocks
+ * and of its mesh: the element-wise blend of the two re-based blocks, then
+ * rotateModel's composition C(t) W(t), whose turn of W is about the mesh's
+ * own centroid (meshCentroid), while a draw that is cur's (unmatched,
+ * jumped, unkeyed) takes cur's block through the blended camera
+ * (camCurDraw).  Two pieces with the same model rows at both ticks can come
+ * out with model rows that differ in their last bits (another pivot, or the
+ * other path), and the set of shared vertices that change cells moves with
+ * t at every present: lines flickering along the edges while the camera
+ * moves, never with it still (s_cam.still: nothing re-based).
+ *
+ * A normal program's model rows (qw 16..19 model to screen, 20..23 model to
+ * clip, 24..27 model to view) are each a camera part times the object's
+ * model to world W, and the common block (qw 4..15) is the camera's: no
+ * row is the object's alone, so under a moving camera the two ticks' rows
+ * differ in bits even for a wall.  Re-based on the blended camera (camRebase:
+ * S E W = P Vt W from either tick, with the projections taken to the blended
+ * one where they ease) a still object's rows agree to the rounding of the
+ * game's float products and of the re-base: within 1.2e-7 of each
+ * quadword's largest magnitude in the corpus' blended pairs, a moving
+ * object's 0.07 or more apart.  RD_INTERP_STILL_REL is that bound with a
+ * margin of 64; on the GS grid it is a 64th of a pixel at the 2048 offset.
+ *
+ * A still draw is a part of the world whose re-based rows agree so;
+ * stillDraw also gives cur's block through the blended camera as camCurDraw
+ * makes it (Pt Pc^-1 under an easing zoom, as there), and blendVu counts
+ * the still draws whose blend is not that block in bits
+ * (RdInterpStats.stillReRounded). */
+#define RD_INTERP_STILL_REL (1.0f / 131072.0f)
+
+static bool stillRows(const float (*p)[4], const float (*c)[4])
+{
+    for (int q = 16; q < 28; q++) {
+        float m = 0.0f;
+        for (int r = 0; r < 4; r++) {
+            m = fmaxf(m, fmaxf(fabsf(p[q][r]), fabsf(c[q][r])));
+        }
+        for (int r = 0; r < 4; r++) {
+            if (!(fabsf(p[q][r] - c[q][r]) <= m * RD_INTERP_STILL_REL)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/* Whether a matched part of the world is a still draw (above): pu and cu
+ * the two ticks' blocks as recorded, pr and cr the same re-based without a
+ * projection step (blendVu's), howCur camOf of cur's block.  True: out holds
+ * cur's block through the blended camera, as camCurDraw makes it. */
+static bool stillDraw(const float (*pu)[4], const float (*cu)[4], const float (*pr)[4],
+                      const float (*cr)[4], int howCur, float (*out)[4])
+{
+    if (!(howCur == CAM_FULL && s_cam.zoom)) {
+        /* no projection step: camCurDraw's block is blendVu's re-base */
+        if (!stillRows(pr, cr)) {
+            return false;
+        }
+        memcpy(out, cr, 36 * sizeof(out[0]));
+        return true;
+    }
+    /* the zoom eases: both ticks' projections taken to the blended one */
+    if (!s_cam.zoomPrev || camOfUncached(pu, s_cam.vp, s_cam.pp) != CAM_FULL) {
+        return false;
+    }
+    float pz[36][4];
+    memcpy(pz, pu, sizeof(pz));
+    memcpy(out, cu, sizeof(pz));
+    return camRebase(pz, s_cam.ep, 3, s_cam.lp, s_cam.vp, RD_VU_VIEW_WORLD) &&
+           camRebase(out, s_cam.ec, 3, s_cam.lc, s_cam.vc, RD_VU_VIEW_WORLD) &&
+           stillRows((const float (*)[4])pz, (const float (*)[4])out);
+}
+
 static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCmd *cc, float t)
 {
     s_vuTicks = 0;
@@ -2731,6 +2826,9 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
     float (*vo)[4] = (float (*)[4])(void *)(op + sizeof(RdVuPayload));
     float vc[36][4];
     memcpy(vc, vo, sizeof(vc));
+    const float (*const vpu)[4] = vp; /* the two ticks' blocks as recorded */
+    float vcu[36][4];
+    memcpy(vcu, vc, sizeof(vcu));
     const uint32_t after = (uint32_t)(sizeof(RdVuPayload) + sizeof(RdVuBlock));
     const float (*bp)[4] = (const float (*)[4])(const void *)(pp + after);
     float (*bo)[4] = (float (*)[4])(void *)(op + after);
@@ -2766,6 +2864,7 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
      * then agree; only the object's own motion is left to blend) */
     float vpr[36][4];
     int howCur = CAM_NONE;
+    bool rebased = false;
     if (s_cam.on && !s_cam.still && camOf(vp, s_cam.vp, NULL) != CAM_NONE &&
         (howCur = camOf((const float (*)[4])vc, s_cam.vc, s_cam.pc)) != CAM_NONE) {
         const int mats = camModelMats(cc->type, cc->b[0]);
@@ -2787,8 +2886,15 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
             vp = (const float (*)[4])vpr;
             s_rebased++;
             s_vuTicks = ticks;
+            rebased = true;
         }
     }
+    /* a part of the world that did not move while the camera did */
+    float vcs[36][4];
+    const bool still =
+        rebased && cc->type == RDC_MESH && isNormalProg(cc->b[0]) &&
+        vuView(cc) == RD_VU_VIEW_WORLD &&
+        stillDraw(vpu, (const float (*)[4])vcu, vp, (const float (*)[4])vc, howCur, vcs);
     /* prev's lights in the slots of the lights of cur they pair with, before
      * the blend and the light's turn (pairLights, rotateLight) */
     float vpl[36][4];
@@ -2808,6 +2914,11 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
         s_rotated |= rotateModel(vo, vp, (const float (*)[4])vc, t, hasCentre ? centre : NULL,
                                  cc->b[0] == RD_PROG_LIT || cc->b[0] == RD_PROG_LIT_SPEC);
         s_drawTurn = fmax(s_drawTurn, s_turnDeg);
+    }
+    if (still) {
+        s_still++;
+        /* the camera and model rows the draw is placed by */
+        s_stillReRounded += memcmp(vo[4], vcs[4], 24 * sizeof(vo[0])) != 0;
     }
     if (hc.boneQw) {
         float tmp[4], cb[4][4];
@@ -5254,6 +5365,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     s_cam.on = 0;
     s_rp.on = 0;
     s_rebased = s_rebasedCur = 0;
+    s_still = s_stillCur = s_stillReRounded = s_curWorld = s_tickCams = 0;
     s_reproj = 0;
     s_out.hasTickCams = 0;
     if (blend) {
@@ -5346,6 +5458,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                     s_gridScreenSt = false;
                     if (r == R_LERP) {
                         c->u[3] = s_vuTicks;
+                        s_tickCams += s_vuTicks != 0u;
                     }
                     break;
                 }
@@ -5419,6 +5532,11 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     st.gridSt = (uint32_t)s_gridSt;
     st.reprojected = s_reproj;
     st.gridStCamera = (uint32_t)s_gridStCam;
+    st.stillDraws = (uint32_t)s_still;
+    st.stillCur = (uint32_t)s_stillCur;
+    st.stillReRounded = (uint32_t)s_stillReRounded;
+    st.curWorld = (uint32_t)s_curWorld;
+    st.tickCams = (uint32_t)s_tickCams;
     feedback(firstOfTick);
     if (stats) {
         *stats = st;
@@ -5442,6 +5560,9 @@ static struct {
     float maxTurn;
     uint32_t snapFlips, lastSnap;
     uint64_t rebased, rebasedCur; /* VU draws re-based on the blended camera */
+    /* still draws, drawn from cur's block, re-rounded by the blend; parts of
+     * the world drawn as the tick's; draws with the ticks' cameras */
+    uint64_t still, stillCur, stillReRounded, curWorld, tickCams;
     /* unmatched screen prims and shadow volumes (faded in, faded out,
      * switched at half way, cur's and prev's; prev's not placed), lit draws
      * whose light matrix turned with the model */
@@ -5485,6 +5606,11 @@ static void presentLog(void)
     s_pres.shifted += st->shifted;
     s_pres.rebased += st->rebased;
     s_pres.rebasedCur += st->rebasedCur;
+    s_pres.still += st->stillDraws;
+    s_pres.stillCur += st->stillCur;
+    s_pres.stillReRounded += st->stillReRounded;
+    s_pres.curWorld += st->curWorld;
+    s_pres.tickCams += st->tickCams;
     s_pres.maxTurn = fmaxf(s_pres.maxTurn, st->maxTurn);
     s_pres.fadeIn += s_umFadeIn;
     s_pres.fadeOut += s_umFadeOut;
@@ -5567,6 +5693,16 @@ static void presentLog(void)
             (unsigned long long)u[RD_UNMATCHED_UNPLACED],
             (unsigned long long)u[RD_UNMATCHED_PAYLOAD], (unsigned long long)s_pres.apart,
             (unsigned long long)s_pres.prevKept, (unsigned long long)s_pres.prevHeld);
+    /* the still draws (stillDraw), whose rows decide the seams between the
+     * parts of the world while the camera moves, and the ticks' cameras */
+    rd__log("interp: %llu still draws (parts of the world that did not move while the camera "
+            "did): %llu drawn from the tick's block through the blended camera, %llu re-rounded "
+            "by the blend (camera and model rows not the tick's through the blended camera, to "
+            "the bit); %llu parts of the world drawn as the tick's beside blended ones; %llu VU "
+            "draws with the ticks' cameras",
+            (unsigned long long)s_pres.still, (unsigned long long)s_pres.stillCur,
+            (unsigned long long)s_pres.stillReRounded, (unsigned long long)s_pres.curWorld,
+            (unsigned long long)s_pres.tickCams);
     /* a sixth line, only when a turn kept the tick's pose: why, and the
      * draws that did it most */
     if (s_pres.turnSnap || s_pres.turnFull) {
