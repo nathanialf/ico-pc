@@ -389,7 +389,7 @@ store (`backend`, `unlock_credits`):
 | `unlock_credits` | as `[dev] unlock_credits` |
 
 At start `ico_ini_export` logs the `[dev]` keys of `config.toml` the game itself writes (`pipeline_set`,
-`vu_prepass`, `gpu_robust`) in one line, `config: [dev] keys kept from an earlier start: pipeline_set =
+`vu_prepass`, `gpu_robust`) in one line, `ico_pc: [dev] keys kept from an earlier start: pipeline_set =
 lazy, ...`, so a log shows whether an old fallback is in force; no line when none is set.
 
 (`port/platform/host_config.c` (`ini_map`, `export_dump_keys`, `export_audio_keys`,

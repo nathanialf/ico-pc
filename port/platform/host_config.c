@@ -820,7 +820,7 @@ void ico_ini_export(const IcoIni *ini, const char *path, int r)
                 }
             }
             if (line[0] != '\0') {
-                fprintf(stderr, "config: [dev] keys kept from an earlier start: %s\n", line);
+                fprintf(stderr, "ico_pc: [dev] keys kept from an earlier start: %s\n", line);
             }
         }
         ico_toml_free(t);
