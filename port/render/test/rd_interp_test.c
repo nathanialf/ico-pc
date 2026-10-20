@@ -1745,17 +1745,38 @@ static void s6OrbitEye(double deg, double eye[3])
 /* the focal length of the tick's projection (GsBase.c's zoom eases) */
 static double s6Focal = 500.0;
 
+/* s6Proj's Z row: 0, Z = z_v + 1; 1, the game's (GsBase.c
+ * gsb_SetVSMatrixSub: Z = zf + zn z_v, zf about 1.07e9, zn about -4095,
+ * the depths 2 .. 262144 onto 1 .. 536870880) */
+static int s6GsZ;
+
 /* a GS screen matrix: x = 2048 + f x_v / z_v, w = z_v (invertible) */
 static void s6Proj(double *p)
 {
+    const double v5 = 1.0, v6 = 536870880.0, v7 = 2.0, v8 = 262144.0;
     memset(p, 0, 16 * sizeof(double));
     p[0] = s6Focal;
     p[5] = s6Focal;
     p[8] = 2048.0;
     p[9] = 2048.0;
-    p[10] = 1.0;
+    p[10] = s6GsZ ? (-v6 * v7 + v5 * v8) / (-v7 + v8) : 1.0; /* zn */
     p[11] = 1.0;
-    p[14] = 1.0;
+    p[14] = s6GsZ ? v8 * v7 * (-v5 + v6) / (-v7 + v8) : 1.0; /* zf */
+}
+
+/* with s6GsZ, the model to clip matrix's camera part (GsBase.c +0x200:
+ * the projection on the 1500 unit screen times the view): x and y over the
+ * half picture at the focal length, z (F + N) / (F - N) z_v - 2 F N / (F -
+ * N), w = z_v */
+static void s6Clip(double *p)
+{
+    const double n = 2.0, f = 262144.0;
+    memset(p, 0, 16 * sizeof(double));
+    p[0] = s6Focal / 256.0;
+    p[5] = s6Focal / 224.0;
+    p[10] = (f + n) / (f - n);
+    p[11] = 1.0;
+    p[14] = -2.0 * f * n / (f - n);
 }
 
 static void s6Translate(double *w, double x, double y, double z)
@@ -1800,11 +1821,17 @@ static int s_s6List; /* the list s6Draw draws in (8 for a shine packet) */
 /* a prelit static mesh with model to world w through the camera v */
 static void s6Draw(RdMesh mesh, const double *v, const double *w, RdKey key)
 {
-    double p[16], s[16], m[16], vw[16];
+    double p[16], s[16], m[16], vw[16], cl[16], cw[16];
     s6Proj(p);
     mul4(p, v, s);
     mul4(s, w, m);
     mul4(v, w, vw);
+    if (s6GsZ) {
+        s6Clip(cl);
+        mul4(cl, vw, cw);
+    } else {
+        memcpy(cw, m, sizeof(cw));
+    }
     /* the inverse view: R^T and the eye */
     double iv[16];
     memset(iv, 0, sizeof(iv));
@@ -1826,7 +1853,7 @@ static void s6Draw(RdMesh mesh, const double *v, const double *w, RdKey key)
             d.vu.mem[4 + c][r] = (float)s[c * 4 + r];
             d.vu.mem[12 + c][r] = (float)iv[c * 4 + r];
             d.vu.mem[16 + c][r] = (float)m[c * 4 + r];
-            d.vu.mem[20 + c][r] = (float)m[c * 4 + r];
+            d.vu.mem[20 + c][r] = (float)cw[c * 4 + r];
             d.vu.mem[24 + c][r] = (float)vw[c * 4 + r];
         }
     }
@@ -5659,6 +5686,15 @@ static void testStillSeams(void)
     static float qa[10][4], qb[10][4];
     double x[3], wa[16], wb[16];
     int32_t want[2];
+    /* the game's Z row: with s6Proj's Z = z_v + 1 the re-base's recovered
+     * model to world (S^-1 times the stored S W) takes its homogeneous term
+     * from float(z_v + 1) - float(z_v), exact only while the two share a
+     * binade: at the 28 degree tick part A lies at z_v 511.35, so Z 512.35
+     * rounds at 6.1e-5 while z_v rounds at 3.05e-5, and A's re-based rows
+     * moved by 7.8e-6 of their magnitude, past the still bound.  Through the
+     * game's matrix Z is zf + zn z_v (zf 1.07e9): the recovered term is off
+     * by about ulp(Z) / zf, 3e-8, as in the dumps (1.2e-7 at most) */
+    s6GsZ = 1;
     seamPoint(x, want);
     seamWorld(0, wa);
     seamWorld(1, wb);
@@ -5735,6 +5771,7 @@ static void testStillSeams(void)
     }
     rd_destroy_vu_mesh(ma);
     rd_destroy_vu_mesh(mb);
+    s6GsZ = 0;
 }
 
 static void runCpu(void)
