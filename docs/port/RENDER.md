@@ -1021,11 +1021,14 @@ alive)`, `the driver's error <code>` (a `VkResult` or an `HRESULT`), `the RHI re
 description (its line above)`, or, with no RHI call, `its description was not made (a shader
 module not loaded)`; a batch of the set shares one reason, and a batch that met both says `the
 batch met a full pipeline pool (<n> times) and the driver's error <code>`. A key that failed is
-never created again in the run: the failed keys' table (`RD_PIPELINE_FAIL_MAX`) holds as many as
-the cache, looked up before every creation, at first use, in the set and in a replay's gathered
-keys; past that `rd: pipelines: <n> keys failed, more than the 4096 remembered: no pipeline is
-created until the cache is cleared (new keys are not drawn)` stops every creation until
-`rd__pipeline_cache_clear`, so no key is retried on its every draw. The RHI's own lines and the
+never created again in the run: it stays in the cache as an entry without a pipeline (`pipe.id`
+0, no slot of the RHI's pool), found by the same hash look-up as a made key, so its draws, the set
+and a replay's gathered keys find it in O(1) and skip it (`port/render/rd_pipeline.c`
+(`keepPipeline`, `keyFailed`)); failed entries take cache room, and `rd__pipeline_count` counts
+the made ones only. Past `RD_PIPELINE_FAIL_MAX` (1024, a quarter of the cache) failed entries,
+`rd: pipelines: <n> keys failed, more than the 1024 remembered: no pipeline is created until the
+cache is cleared (new keys are not drawn)` stops every creation until `rd__pipeline_cache_clear`,
+so no key is retried on its every draw. The RHI's own lines and the
 10 s numbers are in [RHI.md](RHI.md#the-pipeline-pool).
 
 **The policy.** `rd_set_pipeline_policy(&p)` before `rd_precreate_pipelines` sets how the set is

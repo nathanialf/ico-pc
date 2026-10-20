@@ -80,6 +80,11 @@
 #include "shader_consts.h"
 #include "shaders_gen.h"
 
+/* A cache entry: a key and its pipeline, or a key whose creation failed
+ * (pipe.id 0: it holds no slot of the RHI's pool).  A failed key is found
+ * by the same hash look-up as a made one, so it costs one creation attempt
+ * per session (per cache clear), never one per draw, and its draws find it
+ * in O(1). */
 typedef struct RdPipeEntry {
     RdPipeKeyInt key;
     RhiPipeline pipe;
@@ -87,16 +92,12 @@ typedef struct RdPipeEntry {
 
 static RdPipeEntry s_cache[RD_PIPELINE_CACHE_MAX];
 
-static uint32_t s_count;
+/* s_used: the entries, made and failed (s_cache[0 .. s_used)); s_count: the
+ * made ones (rd__pipeline_count, the lines' "created" counts) */
+static uint32_t s_used, s_count;
 
-/* Keys whose creation failed; looked up before a retry, so a
- * failed pipeline costs one creation attempt per session (per cache
- * clear), never one per draw.  As many as the cache holds (a linear
- * look-up, made only on a draw whose key has no pipeline: a key that
- * failed, or a new one); past that s_createStopped: no pipeline is made
- * until the cache is cleared, so even then nothing is retried. */
-static RdPipeKeyInt s_failed[RD_PIPELINE_FAIL_MAX];
-
+/* the failed entries; past RD_PIPELINE_FAIL_MAX of them s_createStopped:
+ * no pipeline is made until the cache is cleared */
 static uint32_t s_failedCount;
 
 /* failed creations this session (per cache clear), the line's limiter */
@@ -1276,14 +1277,12 @@ static uint32_t probeKey(const RdPipeKeyInt *k, bool *found)
     return at;
 }
 
+/* k is a failed entry (O(1): the hash look-up) */
 static bool keyFailed(const RdPipeKeyInt *k)
 {
-    for (uint32_t i = 0; i < s_failedCount; i++) {
-        if (keyEqual(&s_failed[i], k)) {
-            return true;
-        }
-    }
-    return false;
+    bool found;
+    const uint32_t at = probeKey(k, &found);
+    return found && s_cache[s_hash[at] - 1].pipe.id == 0;
 }
 
 /* no assert: NDEBUG is never defined (CMakeLists.txt), so an assert here
@@ -1291,7 +1290,7 @@ static bool keyFailed(const RdPipeKeyInt *k)
  * RD_PIPELINE_REACHABLE_MAX instead */
 static bool cacheFull(const RdPipeKeyInt *k)
 {
-    if (s_count < RD_PIPELINE_CACHE_MAX) {
+    if (s_used < RD_PIPELINE_CACHE_MAX) {
         return false;
     }
     if (!s_fullLogged) {
@@ -1369,9 +1368,17 @@ static void keepPipeline(const RdPipeKeyInt *k, RhiPipeline p, uint32_t at, cons
                     when, k->gs.program, k->gs.blend, k->vs, k->fs, k->colorFmt, k->depthFmt, why,
                     s_failLines, s_failLines == 8u ? "; from here every 100th is written" : "");
         }
-        if (s_failedCount < RD_PIPELINE_FAIL_MAX) {
-            s_failed[s_failedCount++] = *k;
-        } else if (!s_createStopped) {
+        /* a failed entry where there is room (its own probe: a caller's
+           slot may be stale, or the key made meanwhile) */
+        bool found;
+        const uint32_t fat = probeKey(k, &found);
+        if (s_failedCount < RD_PIPELINE_FAIL_MAX && s_used < RD_PIPELINE_CACHE_MAX && !found) {
+            s_cache[s_used].key = *k;
+            s_cache[s_used].pipe = (RhiPipeline){0};
+            s_used++;
+            s_hash[fat] = (uint16_t)s_used;
+            s_failedCount++;
+        } else if (!found && !s_createStopped) {
             /* no room to remember it: no creation at all from here, so
                this key is not retried on its every draw either */
             s_createStopped = true;
@@ -1381,10 +1388,11 @@ static void keepPipeline(const RdPipeKeyInt *k, RhiPipeline p, uint32_t at, cons
         }
         return;
     }
-    s_cache[s_count].key = *k;
-    s_cache[s_count].pipe = p;
+    s_cache[s_used].key = *k;
+    s_cache[s_used].pipe = p;
+    s_used++;
     s_count++;
-    s_hash[at] = (uint16_t)s_count;
+    s_hash[at] = (uint16_t)s_used;
     g_rd.stats.pipelineCreates++;
     rd__passring_pipeline(p.id, k->vs, k->fs, k->dst);
 }
@@ -1540,14 +1548,18 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
     k = drawKey(k, &tmp);
     const uint32_t at = probeKey(k, &found);
     if (found) {
-        rd__passring_pipeline(s_cache[s_hash[at] - 1].pipe.id, k->vs, k->fs, k->dst);
-        return s_cache[s_hash[at] - 1].pipe;
+        /* a failed entry: drawn as nothing, not created again */
+        const RhiPipeline p = s_cache[s_hash[at] - 1].pipe;
+        if (p.id) {
+            rd__passring_pipeline(p.id, k->vs, k->fs, k->dst);
+        }
+        return p;
     }
     if (s_gatherOn) {
         gatherKey(k); /* created afterwards in batches (rd__pipeline_gather) */
         return (RhiPipeline){0};
     }
-    if (!g_rd.hasDevice || s_createStopped || keyFailed(k) || cacheFull(k)) {
+    if (!g_rd.hasDevice || s_createStopped || cacheFull(k)) {
         return (RhiPipeline){0};
     }
     activityCreating(k);
@@ -1578,11 +1590,14 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
 void rd__pipeline_cache_clear(void)
 {
     if (g_rd.hasDevice) {
-        for (uint32_t i = 0; i < s_count; i++) {
-            rhi_destroy_pipeline(s_cache[i].pipe);
+        for (uint32_t i = 0; i < s_used; i++) {
+            if (s_cache[i].pipe.id) {
+                rhi_destroy_pipeline(s_cache[i].pipe);
+            }
         }
     }
     s_count = 0;
+    s_used = 0;
     s_failedCount = 0;
     s_failLines = 0;
     s_createStopped = false;
@@ -1940,11 +1955,13 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             if (dstKind >= 0 && kind != dstKind) {
                 break;
             }
-            probeKey(k, &found);
+            const uint32_t at = probeKey(k, &found);
             if (found) {
+                /* made, or a failed entry (not created again) */
+                c->failed += s_cache[s_hash[at] - 1].pipe.id == 0;
                 continue;
             }
-            if (s_createStopped || keyFailed(k)) {
+            if (s_createStopped) {
                 c->failed++;
                 continue;
             }
@@ -1954,7 +1971,7 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             if (dup) {
                 continue;
             }
-            if (cacheFull(k) || s_count + nb >= RD_PIPELINE_CACHE_MAX) {
+            if (cacheFull(k) || s_used + nb >= RD_PIPELINE_CACHE_MAX) {
                 c->failed++;
                 continue;
             }
@@ -2085,7 +2102,7 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
                 c->compiled++;
                 /* the progress screen's frame may have made the same key
                    meanwhile, or filled the cache */
-                if (found || s_count >= RD_PIPELINE_CACHE_MAX) {
+                if (found || s_used >= RD_PIPELINE_CACHE_MAX) {
                     rhi_destroy_pipeline(bp[j]);
                     continue;
                 }
@@ -2281,9 +2298,22 @@ void rd_pipelines_lazy_tick(void)
     lazyBatchEnd(now);
 }
 
+/* the i-th made pipeline's key (failed entries skipped: a walk only
+ * when there are any, which the tests that call this never have) */
 const RdPipeKeyInt *rd__pipeline_key_at(uint32_t i)
 {
-    return i < s_count ? &s_cache[i].key : NULL;
+    if (i >= s_count) {
+        return NULL;
+    }
+    if (s_failedCount == 0) {
+        return &s_cache[i].key;
+    }
+    for (uint32_t e = 0; e < s_used; e++) {
+        if (s_cache[e].pipe.id && i-- == 0) {
+            return &s_cache[e].key;
+        }
+    }
+    return NULL;
 }
 
 /* ------------------------------------------------ the VU modules

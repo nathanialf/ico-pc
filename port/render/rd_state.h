@@ -319,11 +319,11 @@ _Static_assert(sizeof(RdPipelineKey) == 16, "RdPipelineKey: 16 bytes, msaa took 
  * half left for the keys made on first use. */
 #define RD_PIPELINE_CACHE_MAX RHI_PIPELINE_POOL_CACHE
 #define RD_PIPELINE_REACHABLE_MAX (RD_PIPELINE_CACHE_MAX / 2)
-/* keys whose creation failed, remembered so they are not retried (and
- * logged) on every draw: as many as the cache holds; past that no
- * pipeline is created until the cache is cleared (rd_pipeline.c
- * keepPipeline) */
-#define RD_PIPELINE_FAIL_MAX RD_PIPELINE_CACHE_MAX
+/* keys whose creation failed, kept in the cache as entries without a
+ * pipeline (rd_pipeline.c keepPipeline: no slot of the RHI's pool, found by
+ * the cache's hash) so they are not retried (and logged) on every draw; past
+ * this many no pipeline is created until the cache is cleared */
+#define RD_PIPELINE_FAIL_MAX (RD_PIPELINE_CACHE_MAX / 4)
 
 #ifdef __cplusplus
 }
