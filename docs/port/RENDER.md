@@ -2290,27 +2290,35 @@ white lines flickering along edges while the camera moves, never with it still (
 re-bases nothing). No row of a normal program's block is the object's alone (each model row is a
 camera part times the object's model to world matrix, qw 4..15 are the camera's), so the two
 ticks' rows of a wall never agree in bits under a moving camera; re-based on the blended camera
-they agree to the rounding of the products, within 1.2e-7 of each quadword's largest magnitude in
-the corpus' blended pairs against 0.07 or more for a moving object. A part of the world (a normal
-program placed through the view) whose re-based model rows (qw 16..27) agree within
-`RD_INTERP_STILL_REL` (2^-17 of each quadword's largest magnitude: a 64th of a pixel at the 2048
-offset) is a still draw, and its camera and model rows (qw 4..27) are the tick's block re-based
-exactly as `camCurDraw` re-bases one (the projection taken to the blended one under an easing
-zoom, as there), not the blend and no turn; its UV scroll and lights keep their blend. Every still
+they agree to the rounding of the products. `stillRows` compares the model to screen rows (qw
+16..19) on X, Y and W only, each against the largest of those three in its quadword (the GS Z row
+carries zf, about 1.07e9, in the translation: `ico2/seki/src/GsBase.c` (`gsb_SetVSMatrixSub`)),
+and the model to clip rows (qw 20..23) whole; not the model to view rows (qw 24..27), which some
+list 5 draws carry from another object, while their clip rows are the frame's clip camera times
+the W of their own model to screen rows in every dump measured. So compared, a still object's
+re-based rows agree within 1.8e-7 of each quadword's largest magnitude in the corpus' blended
+pairs, a moving object's 5.8e-3 or more apart. A part of the world (a normal program placed
+through the view) whose rows agree within `RD_INTERP_STILL_REL` (2^-17) is a still draw. The clip
+rows' magnitudes are about the view distance, so the bound holds a still part to 2^-17 of its
+distance, about 0.004 GS pixels at the focal length of 500 (the model to screen rows alone would
+allow 2^-17 x 2048, 0.016 pixels). A still draw's camera and model rows (qw 4..27) are the tick's
+block re-based exactly as `camCurDraw` re-bases one (the projection taken to the blended one
+under an easing zoom, as there), not the blend and no turn; its UV scroll and lights keep their blend. Every still
 draw, matched or not, is then the same function of the tick's block and the blended camera, so
 identical rows give identical bits across neighbouring draws. Moving objects keep the blend and
 the turn; alpha 0 and 1 have no blended camera and are the ticks' blocks byte for byte; an object
-moving less than the bound is drawn at its tick's place (`port/render/rd_interp.c` (`stillDraw`,
-`stillRows`, `blendVu`, `camCurDraw`)). The 10 s summary carries a line for them, and
+moving less than the bound is drawn at its tick's place, at most about 0.004 pixels from its blend
+(`port/render/rd_interp.c` (`stillDraw`, `stillRows`, `blendVu`, `camCurDraw`)). The 10 s summary carries a line for them, and
 `rd_replay_tool --interp` prints the same counts as its third line:
 
 ```
-interp: N still draws (parts of the world that did not move while the camera did): C drawn from the tick's block through the blended camera, R re-rounded by the blend (camera and model rows not the tick's through the blended camera, to the bit); W parts of the world drawn as the tick's beside blended ones; K VU draws with the ticks' cameras
+interp: N still draws (parts of the world that did not move while the camera did), each drawn from the tick's block through the blended camera; R of them the blend of the two ticks would have re-rounded (camera and model rows not the tick's through the blended camera, to the bit); W parts of the world drawn as the tick's beside blended ones; K VU draws with the ticks' cameras
 ```
 
-R is 0 by construction (a still draw whose rows are not that block in bits); W counts the parts of
-the world `camCurDraw` re-based in a blended frame, K the draws marked `RD_VU_TICK_CAMERAS`
-(`RdInterpStats` `stillDraws`, `stillCur`, `stillReRounded`, `curWorld`, `tickCams`,
+R counts the still draws whose element-wise blend of qw 4..27, what they were drawn with before
+the still draws (less the turn), differs in bits from the block they take: the draws the fix
+changed. W counts the parts of the world `camCurDraw` re-based in a blended frame, K the draws
+marked `RD_VU_TICK_CAMERAS` (`RdInterpStats` `stillDraws`, `stillReRounded`, `curWorld`, `tickCams`,
 `port/render/rd_internal.h`). The vertex shaders keep the order of their arithmetic: every VU vertex
 shader carries `NoContraction` (HLSL `precise`) and no module `FPFastMathMode`, so no driver fuses
 one draw's products and not another's (`tools/check_spirv.py`, the precise gate).

@@ -5721,11 +5721,10 @@ static void testStillSeams(void)
     seamFrame(ma, mb, 0.0, 0);
     seamFrame(ma, mb, 28.0, 0);
     const RdInterpStats *st = build(0.5f, 1);
-    CHECK(st->snap == RD_SNAP_NONE && st->lerped == 2 && st->stillDraws == 2 && st->stillCur == 2 &&
-              st->stillReRounded == 0 && st->rotated == 0,
+    CHECK(st->snap == RD_SNAP_NONE && st->lerped == 2 && st->stillDraws == 2 && st->rotated == 0,
           "seams: two still draws drawn from the tick's block (snap %u, lerped %u, still %u, "
-          "from the tick's %u, re-rounded %u, rotated %u)",
-          st->snap, st->lerped, st->stillDraws, st->stillCur, st->stillReRounded, st->rotated);
+          "re-rounded by the blend %u, rotated %u)",
+          st->snap, st->lerped, st->stillDraws, st->stillReRounded, st->rotated);
     const RdFrame *f = built(0.5f);
     const RdFrame *pf = rd__prev_frame(), *cf = rd__last_frame();
     int have = 1;

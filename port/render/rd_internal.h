@@ -1906,16 +1906,16 @@ typedef struct RdInterpStats {
      * RD_SHADOW_FRAME_CAMERA) taken through the world onto the blended camera */
     uint32_t reprojected;
     /* The still draws (rd_interp.c stillDraw): blended parts of the world
-     * whose object did not move between the ticks while the camera did;
-     * stillCur, of them those drawn from the tick's block through the
-     * blended camera (camCurDraw's block); stillReRounded, those whose
-     * camera and model rows (qw 4..27) came out of the blend not equal in
-     * bits to that block.  curWorld: the parts of the world (normal
-     * programs, placed through the view) drawn as the tick's through the
-     * blended camera (unmatched, snapped or unkeyed) in a frame that
-     * blended others.  tickCams: the VU draws marked RD_VU_TICK_CAMERAS */
+     * whose object did not move between the ticks while the camera did,
+     * each drawn from the tick's block through the blended camera
+     * (camCurDraw's block); stillReRounded, of them those whose element-wise
+     * blend of camera and model rows (qw 4..27) was not that block in bits
+     * (what the blend would have drawn, before the turn).  curWorld: the
+     * parts of the world (normal programs, placed through the view) drawn as
+     * the tick's through the blended camera (unmatched, snapped or unkeyed)
+     * in a frame that blended others.  tickCams: the VU draws marked
+     * RD_VU_TICK_CAMERAS */
     uint32_t stillDraws;
-    uint32_t stillCur;
     uint32_t stillReRounded;
     uint32_t curWorld;
     uint32_t tickCams;

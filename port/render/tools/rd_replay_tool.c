@@ -182,8 +182,8 @@
  *                         gap snap; the other snaps (a camera past the cut
  *                         thresholds) still apply
  *                         The third interp line counts the still draws
- *                         (rd_interp.c stillDraw), those drawn from the
- *                         tick's block, those re-rounded by the blend, the
+ *                         (rd_interp.c stillDraw), those the blend would
+ *                         have re-rounded, the
  *                         parts of the world drawn as the tick's and the
  *                         draws marked for the ticks' cameras
  *   --no-reproject        (with --interp) the draws the frame camera
@@ -873,10 +873,10 @@ static const RdFrame *prepareFrame(const char *dump, RdFrame *pf, RdFrame *f)
                ist.unmatchedWhy[RD_UNMATCHED_ABSENT], ist.unmatchedWhy[RD_UNMATCHED_FEWER],
                ist.unmatchedWhy[RD_UNMATCHED_UNPLACED], ist.unmatchedWhy[RD_UNMATCHED_PAYLOAD],
                ist.apart, ist.prevKept, ist.prevHeld, ist.reprojected, ist.longWay, ist.turnSnap);
-        printf("interp: %u still draws: %u drawn from the tick's block through the blended "
-               "camera, %u re-rounded by the blend; %u parts of the world drawn as the tick's "
-               "beside blended ones; %u VU draws with the ticks' cameras\n",
-               ist.stillDraws, ist.stillCur, ist.stillReRounded, ist.curWorld, ist.tickCams);
+        printf("interp: %u still draws, each drawn from the tick's block through the blended "
+               "camera; %u of them the blend would have re-rounded; %u parts of the world drawn "
+               "as the tick's beside blended ones; %u VU draws with the ticks' cameras\n",
+               ist.stillDraws, ist.stillReRounded, ist.curWorld, ist.tickCams);
     }
     return rf;
 }

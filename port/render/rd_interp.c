@@ -1855,11 +1855,11 @@ static int s_rebased; /* VU draws re-based on the blended camera, this frame */
 
 static int s_rebasedCur; /* of them, draws that are cur's */
 
-/* this frame: the still draws (stillDraw), those drawn from cur's block
- * through the blended camera, those whose blend was not that block in
- * bits; the parts of the world camCurDraw re-based; the VU draws marked
- * RD_VU_TICK_CAMERAS (RdInterpStats) */
-static int s_still, s_stillCur, s_stillReRounded, s_curWorld, s_tickCams;
+/* this frame: the still draws (stillDraw, each drawn from cur's block
+ * through the blended camera), those whose element-wise blend was not that
+ * block in bits; the parts of the world camCurDraw re-based; the VU draws
+ * marked RD_VU_TICK_CAMERAS (RdInterpStats) */
+static int s_still, s_stillReRounded, s_curWorld, s_tickCams;
 
 /* ------------------------------------------- the pool's screen-space STs
  *
@@ -2735,10 +2735,21 @@ static uint32_t s_vuTicks;
  * differ in bits even for a wall.  Re-based on the blended camera (camRebase:
  * S E W = P Vt W from either tick, with the projections taken to the blended
  * one where they ease) a still object's rows agree to the rounding of the
- * game's float products and of the re-base: within 1.2e-7 of each
- * quadword's largest magnitude in the corpus' blended pairs, a moving
- * object's 0.07 or more apart.  RD_INTERP_STILL_REL is that bound with a
- * margin of 64; on the GS grid it is a 64th of a pixel at the 2048 offset.
+ * game's float products and of the re-base.  stillRows compares qw 16..19
+ * on X, Y and W, each against the largest of those three in its quadword
+ * (the GS Z row, zf + zn z_v with zf about 1.07e9 in the translation,
+ * GsBase.c gsb_SetVSMatrixSub, would make the bound there thousands of
+ * times wider), and qw 20..23 whole.  Not qw 24..27: some list 5 draws
+ * carry another object's there (vuWorldOrigin), while their qw 20..23 are
+ * the frame's clip camera times the W of their qw 16..19 in every dump
+ * measured (the corpus, the forest and the room dumps).  Measured that way
+ * a still object's rows agree within 1.8e-7 of each quadword's largest
+ * magnitude in the corpus' blended pairs, a moving object's 5.8e-3 or more
+ * apart; RD_INTERP_STILL_REL (2^-17) sits 40 times above the first.  The
+ * clip rows' magnitudes are about the view distance, so the bound holds a
+ * still part to 2^-17 of its distance, about 0.004 GS pixels at the
+ * game's focal length of 500 (the model to screen rows alone would allow
+ * 2^-17 x 2048, 0.016 pixels).
  *
  * A still draw is a part of the world whose re-based rows agree so.  Its
  * camera and model rows (qw 4..27) are cur's block through the blended
@@ -2754,21 +2765,26 @@ static uint32_t s_vuTicks;
  * there).  What still differs is what differs at a tick: pieces with
  * different model rows (other node matrices) carry the rounding of their
  * own products, the PS2's per-packet rounding (docs/port/DIVERGENCES.md).
- * An object moving less than the bound (a 64th of a pixel in the tick) is
- * drawn at its tick's place, at most that far from its blend.  blendVu
- * still counts a still draw whose rows are not that block in bits
- * (RdInterpStats.stillReRounded: 0 by construction). */
+ * An object moving less than the bound in a tick is drawn at its tick's
+ * place, at most about 0.004 pixels from its blend.  blendVu counts the
+ * still draws whose element-wise blend of qw 4..27 (what they were drawn
+ * with before, less the turn) is not that block in bits
+ * (RdInterpStats.stillReRounded). */
 #define RD_INTERP_STILL_REL (1.0f / 131072.0f)
 
 static bool stillRows(const float (*p)[4], const float (*c)[4])
 {
-    for (int q = 16; q < 28; q++) {
+    for (int q = 16; q < 24; q++) {
+        /* model to screen: X, Y and W (lane 2, the GS Z, left out) */
+        const unsigned lanes = q < 20 ? 0xBu : 0xFu;
         float m = 0.0f;
         for (int r = 0; r < 4; r++) {
-            m = fmaxf(m, fmaxf(fabsf(p[q][r]), fabsf(c[q][r])));
+            if (lanes & (1u << r)) {
+                m = fmaxf(m, fmaxf(fabsf(p[q][r]), fabsf(c[q][r])));
+            }
         }
         for (int r = 0; r < 4; r++) {
-            if (!(fabsf(p[q][r] - c[q][r]) <= m * RD_INTERP_STILL_REL)) {
+            if ((lanes & (1u << r)) && !(fabsf(p[q][r] - c[q][r]) <= m * RD_INTERP_STILL_REL)) {
                 return false;
             }
         }
@@ -2922,21 +2938,19 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
     /* a turning object keeps its size half way */
     const bool rot = t > 0.0f && t < 1.0f && !rd__s2_legacy();
     if (still) {
+        /* what the blend gave the rows the draw is placed by (before the
+         * turn), against the block it now takes */
+        s_still++;
+        s_stillReRounded += memcmp(vo[4], vcs[4], 24 * sizeof(vo[0])) != 0;
         /* placed by cur's block through the blended camera, as the draws
          * that are cur's (the UV scroll and the lights keep their blend) */
         memcpy(vo[4], vcs[4], 24 * sizeof(vo[0]));
-        s_stillCur++;
     } else if (cc->type == RDC_MESH && isNormalProg(cc->b[0]) && rot) {
         double centre[3];
         const bool hasCentre = meshCentroid(cc->u[0], centre);
         s_rotated |= rotateModel(vo, vp, (const float (*)[4])vc, t, hasCentre ? centre : NULL,
                                  cc->b[0] == RD_PROG_LIT || cc->b[0] == RD_PROG_LIT_SPEC);
         s_drawTurn = fmax(s_drawTurn, s_turnDeg);
-    }
-    if (still) {
-        s_still++;
-        /* the camera and model rows the draw is placed by */
-        s_stillReRounded += memcmp(vo[4], vcs[4], 24 * sizeof(vo[0])) != 0;
     }
     if (hc.boneQw) {
         float tmp[4], cb[4][4];
@@ -5383,7 +5397,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     s_cam.on = 0;
     s_rp.on = 0;
     s_rebased = s_rebasedCur = 0;
-    s_still = s_stillCur = s_stillReRounded = s_curWorld = s_tickCams = 0;
+    s_still = s_stillReRounded = s_curWorld = s_tickCams = 0;
     s_reproj = 0;
     s_out.hasTickCams = 0;
     if (blend) {
@@ -5551,7 +5565,6 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     st.reprojected = s_reproj;
     st.gridStCamera = (uint32_t)s_gridStCam;
     st.stillDraws = (uint32_t)s_still;
-    st.stillCur = (uint32_t)s_stillCur;
     st.stillReRounded = (uint32_t)s_stillReRounded;
     st.curWorld = (uint32_t)s_curWorld;
     st.tickCams = (uint32_t)s_tickCams;
@@ -5578,9 +5591,9 @@ static struct {
     float maxTurn;
     uint32_t snapFlips, lastSnap;
     uint64_t rebased, rebasedCur; /* VU draws re-based on the blended camera */
-    /* still draws, drawn from cur's block, re-rounded by the blend; parts of
+    /* still draws, those the blend would have re-rounded; parts of
      * the world drawn as the tick's; draws with the ticks' cameras */
-    uint64_t still, stillCur, stillReRounded, curWorld, tickCams;
+    uint64_t still, stillReRounded, curWorld, tickCams;
     /* unmatched screen prims and shadow volumes (faded in, faded out,
      * switched at half way, cur's and prev's; prev's not placed), lit draws
      * whose light matrix turned with the model */
@@ -5625,7 +5638,6 @@ static void presentLog(void)
     s_pres.rebased += st->rebased;
     s_pres.rebasedCur += st->rebasedCur;
     s_pres.still += st->stillDraws;
-    s_pres.stillCur += st->stillCur;
     s_pres.stillReRounded += st->stillReRounded;
     s_pres.curWorld += st->curWorld;
     s_pres.tickCams += st->tickCams;
@@ -5711,17 +5723,17 @@ static void presentLog(void)
             (unsigned long long)u[RD_UNMATCHED_UNPLACED],
             (unsigned long long)u[RD_UNMATCHED_PAYLOAD], (unsigned long long)s_pres.apart,
             (unsigned long long)s_pres.prevKept, (unsigned long long)s_pres.prevHeld);
-    /* the still draws (stillDraw), whose rows decide the seams between the
-     * parts of the world while the camera moves, and the ticks' cameras */
+    /* a sixth line: the still draws (stillDraw), whose rows decide the
+     * seams between the parts of the world while the camera moves, and the
+     * ticks' cameras */
     rd__log("interp: %llu still draws (parts of the world that did not move while the camera "
-            "did): %llu drawn from the tick's block through the blended camera, %llu re-rounded "
-            "by the blend (camera and model rows not the tick's through the blended camera, to "
-            "the bit); %llu parts of the world drawn as the tick's beside blended ones; %llu VU "
-            "draws with the ticks' cameras",
-            (unsigned long long)s_pres.still, (unsigned long long)s_pres.stillCur,
-            (unsigned long long)s_pres.stillReRounded, (unsigned long long)s_pres.curWorld,
-            (unsigned long long)s_pres.tickCams);
-    /* a sixth line, only when a turn kept the tick's pose: why, and the
+            "did), each drawn from the tick's block through the blended camera; %llu of them "
+            "the blend of the two ticks would have re-rounded (camera and model rows not the "
+            "tick's through the blended camera, to the bit); %llu parts of the world drawn as "
+            "the tick's beside blended ones; %llu VU draws with the ticks' cameras",
+            (unsigned long long)s_pres.still, (unsigned long long)s_pres.stillReRounded,
+            (unsigned long long)s_pres.curWorld, (unsigned long long)s_pres.tickCams);
+    /* a seventh line, only when a turn kept the tick's pose: why, and the
      * draws that did it most */
     if (s_pres.turnSnap || s_pres.turnFull) {
         char most[400];
