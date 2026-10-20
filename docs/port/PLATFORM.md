@@ -766,7 +766,7 @@ device 320 MB available of 7632 MB` (`with <n> pipelines made` outside the set).
 device's `MemAvailable` and `MemTotal` from `/proc/meminfo` (`ico_diag_device_memory`; `device
 memory unknown` when that file cannot be read), the same text the heartbeat ends with, the window's
 10 s line (`window: memory: ...; the process holds <n> MB (most <m> MB); device <a> MB available of
-<t> MB`) and report.txt's `memory: ` line carry. Only levels 5, 10 and 15 (`TRIM_MEMORY_RUNNING_*`:
+<t> MB; pipelines ...`) and report.txt's `memory: ` line carry. Only levels 5, 10 and 15 (`TRIM_MEMORY_RUNNING_*`:
 the device is low on memory while the app runs) are called low memory; level 20 is `the app's
 screen was hidden` (`TRIM_MEMORY_UI_HIDDEN`) and 40, 60 and 80 `the app is in the background`
 (its place in the system's list of cached processes; Android 14 and later send 20 and 40 only),
@@ -1163,7 +1163,11 @@ keeps.
 `ico_diag_set_summary` flushes the C library's held lines first, so on Windows the line follows the
 device and window lines in the file, and keeps the text for the report file. The 10 s block's
 `window: memory:` line has the graphics memory in use and its peak where the backend counts it
-(Vulkan), and the process's (`port/platform/window_host.c` (`perf_log`)).
+(Vulkan), the process's, and at its end the RHI's pipeline pool on both backends: `; pipelines
+<live> alive (most <peak> of the pool's <size>), <f> creations failed (<p> for a full pool)`
+(`RhiStats` `pipelinesLive`, `pipelinesPeak`, `pipelinePoolSize`, `pipelineFailures` and
+`pipelinePoolFull`; [RHI.md](RHI.md#the-pipeline-pool)), so a log shows a pool that ran out
+(`port/platform/window_host.c` (`perf_log`)).
 
 ### Rate-limited lines
 

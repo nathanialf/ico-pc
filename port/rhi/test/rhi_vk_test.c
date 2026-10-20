@@ -460,8 +460,8 @@ static bool envOn(const char *name)
  * pipelines alive at once (the renderer's cache and the headroom for the
  * pipelines made outside it), the first 1100 made one at a time and the
  * rest in batches of 32 (rhi_create_pipelines, as the start-up set), none
- * refused and every id distinct; the 1025th (past the 1024 the pool once
- * held) and the last drawn with, each into its half of a target, read
+ * refused and every id distinct; the 1025th (a slot past 1024) and the
+ * last drawn with, each into its half of a target, read
  * back in its colour (the ids resolve to their pipelines); one more past
  * the pool refused and counted (RhiStats pipelinePoolFull), the most alive
  * at once the pool's size, none alive after they are destroyed.  Run once,

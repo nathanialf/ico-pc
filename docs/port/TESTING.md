@@ -493,7 +493,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the top-passes text (with a cut to a short buffer) and the passes-by-kind text, to the byte
   (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the
-  dump the tool tests replay (`rd_pixel`). Its DATE case replays one frame through the stencil bit
+  dump the tool tests replay (`rd_pixel`). Its pipelines case holds the reachable set under
+  `RD_PIPELINE_REACHABLE_MAX` with both blends, the tile-based GPU's set too (the pre-pass off,
+  every state static, Enhanced at 2.8125 x 2.41071), that one also inside the RHI's pipeline pool
+  less its headroom (`testPipelines`). Its DATE case replays one frame through the stencil bit
   and through the snapshot (where the device has local read): one DATE command of two overlapping
   sprites over cells of alpha 0x80 and 0, SCENE the same bytes both ways and the snapshot's
   semantics within the draw (`testDateStencil`). Its alpha plan case replays one frame with the
@@ -541,7 +544,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   first use, blend 4 and 12 under Z ALWAYS (as `vu_main_vs` keys) and the UI sprite under Z GEQUAL, are in the set), the tile-based
   profile's set against the desktop one, static, with dynamic depth and with dynamic depth and
   blend, with and without local read (`testTilerSet`: the desktop keys and exactly DATE's, the fog's
-  local key and the fold key, none twice; printed beside the careful-set target), and a dump's menu text sheets loading as the renderer makes them, a sheet with
+  local key and the fold key, none twice; printed beside the careful-set target; each set under
+  `RD_PIPELINE_REACHABLE_MAX` and inside the RHI's pipeline pool less its headroom), the tile
+  profile's largest set, the pre-pass off and every state static at 2.8125 x 2.41071, the 2x set
+  and one `vu_np_ps` twin per `vu_ps` key, under the same two bounds (`testTilerFracSet`), and a dump's menu text sheets loading as the renderer makes them, a sheet with
 - `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, each in a child process; the symbolizer, the report file and `ico_log_limited` (above)
 - `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and a text texture
   that could not be uploaded named once in the log, the game's own textures never
@@ -571,7 +577,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 
 - `rhi_vk_test.c`: the exact-texel RHI checks on Vulkan, a hazard cell, the render-area check (a
   pass larger than its attachments clamped with no validation error, `passAreaCell`), the
-  pipeline cache file (`rhi_vk`, `rhi_vk_nodual`, `rhi_vk_d24s8`, `rhi_vk_mali`).
+  pipeline cache file, and the pipeline pool filled: `RHI_PIPELINE_POOL_MAX` pipelines alive at
+  once, none refused, the 1025th and the last drawn with, one more refused and counted
+  (`poolCell`, once, not under the fake switches) (`rhi_vk`, `rhi_vk_nodual`, `rhi_vk_d24s8`,
+  `rhi_vk_mali`).
 - `rhi_d3d12_test.c`: the same checks on D3D12, a Windows GUI program that writes a log and shows
   a message box (`rhi_d3d12`).
 - `rhi_d3d12_plan_test.c`: the D3D12 backend's state and barrier bookkeeping on the CPU

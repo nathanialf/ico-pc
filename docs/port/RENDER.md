@@ -845,10 +845,15 @@ Cs and Cd, a model of the fixed-function path over the blend modes, the ranges),
 `testAlphaPlan` (one frame replayed with the planner off and on, SCENE's colour and depth the same
 bytes) and `testRailing` (the lattice keeps its split).
 
-The cache holds `RD_PIPELINE_CACHE_MAX` keys, four times `RD_PIPELINE_REACHABLE_MAX` (1024, the
-ceiling the tests hold the reachable set under, `rd__enumerate_reachable`); a key past it or one
-whose creation failed is logged once and drawn as nothing, never an abort (`port/render/rd_state.h`;
-`port/render/rd_pipeline.c` (`rd__get_pipeline`)). `rd_precreate_pipelines` creates the whole
+The cache holds `RD_PIPELINE_CACHE_MAX` keys (4096), the RHI's pipeline pool less the pool's
+headroom for the pipelines made outside the cache (`port/rhi/rhi_pipeline_pool.h`
+(`RHI_PIPELINE_POOL_CACHE`); [RHI.md](RHI.md#the-pipeline-pool)), so the pool never refuses a
+pipeline the cache keeps. `RD_PIPELINE_REACHABLE_MAX`, half the cache (2048), is the ceiling the
+tests hold every reachable set under (`rd__enumerate_reachable`), the other half left for the keys
+made on first use. A key past the cache or one whose creation failed is logged and drawn as
+nothing, never an abort, and a key that failed is never created again in the run ("The set against the pool" in
+[The start-up set](#the-start-up-set); `port/render/rd_state.h`; `port/render/rd_pipeline.c`
+(`rd__get_pipeline`)). `rd_precreate_pipelines` creates the whole
 reachable set at start so the first frames do not stall on the driver. It hands the keys to
 `rhi_create_pipelines` up to 32 at a time, so the driver compiles each batch on worker threads
 ([RHI.md](RHI.md#the-interface)); a batch holds keys with a destination read or keys without, never
@@ -937,7 +942,8 @@ flag) and the time it took (`port/render/rd_pipeline.c` (`firstUseLine`)):
     rd: pipelines: made on first use in list 0: program 0 blend 4 vs 15 fs 5 fmt 1/8 msaa 0 dst 0 ext 1, ztst <z> zwrite <w> mask <m> target <t> prim <p> stencil <s> aa1 <a> nodual <n> (vu_tri_vs + vu_ps) in 769.8 ms (not in the start-up set; 2 so far)
 
 `no draw list (the present, a check)` stands for the list outside the replay's lists. The key is the
-one `rd__enumerate_reachable` would need to hold. On a PowerVR DXT-48-1536 a `vu_tri_vs`
+one `rd__enumerate_reachable` would need to hold. The line and its count are the pipelines made; a
+creation that fails has its own line ("The set against the pool" in [The start-up set](#the-start-up-set)). On a PowerVR DXT-48-1536 a `vu_tri_vs`
 pipeline made so takes about 750 ms (770 and 745 ms for the two keys of a room change in a phone's
 log that named only the fields before the comma) and a program entry's up to 3.4 s, a visible
 stall each; a 2D key the driver has cached, under 1 ms. That log's keys matched enumerated
@@ -980,6 +986,43 @@ step (the `slow step` line's `texture decodes`) and the replay's texture and mes
 | the last run, of the same version, ran without the set and ended, or exited from it | `(the last run made them that way)` |
 | the same, its set having stopped at the system's low-memory signal (its activity file's `set: stopped at the system's low-memory signal`) | `(the previous start's set stopped when the system ran low on memory)` |
 | the crash order's `lazy` step | `(a restart after a graphics driver crash)` |
+
+**The set against the pool.** The set's size depends on the device's profile and the scale: 446
+keys at Original 4:3 with the fixed-function blend and every state static (the pre-pass on); the
+tile-based profile ([The device profile](#the-device-profile)) adds the DATE, fog and fold keys and,
+with the pre-pass off, the eleven program entries under every Z test, Z write and blend
+(`rd_mesh.c` (`enumerateVuDraws`)); without dynamic state those fields stay in every key; and at a
+fractional Enhanced scale every `vu_ps` key has its `vu_np_ps` twin (`rd_pixel_plan.c`
+(`rd__vu_pixel_fs_enum`)). All four together give the largest set a device meets, 1153 keys on an
+Adreno 710 at 2340x1080 (Custom, which maps to Enhanced: 2.8125 x 2.41071). Every set fits the
+cache and so the RHI's pool: `rd_state_test` `testTilerSet` and `testTilerFracSet` count the tile
+profile's sets (static, dynamic depth, dynamic depth and blend; the pre-pass off at 2x and at
+2.8125 x 2.41071) under `RD_PIPELINE_REACHABLE_MAX` and inside `RHI_PIPELINE_POOL_MAX` less
+`RHI_PIPELINE_POOL_HEADROOM`, and `rd_pixel_test` `testPipelines` counts the same configuration
+with both blends. The set's first line names it against the pool (`rd_precreate_pipelines`):
+
+    rd: pipelines: the start-up set's 1153 keys (pool 4160: the cache's 4096 and 64 for the pipelines made outside it; 0 already made)
+
+and the summary line's renderer part ends with ` (pool 4160, cache 4096)` after the set's words
+(`rd_summary_text`). A creation that fails, in the set or at first use, is logged with the key, when
+it was asked for and why, the first 8 and then every 100th with the count so far
+(`port/render/rd_pipeline.c` (`keepPipeline`, `failReason`)):
+
+    rd: pipeline creation failed on first use in list 0 (program 0 blend 4 vs 4 fs 5 fmt 1/8): the RHI's pipeline pool is full (4160 of 4160 alive); draws with this key are skipped (1 failed so far)
+
+`in the start-up set` or `in a replay's gathered keys` in place of `on first use in list 0`; the
+reason is the RHI's, read from `RhiStats` around the creation (`pipelinePoolFull`,
+`pipelineFailures`, `pipelineLastError`): `the RHI's pipeline pool is full (<live> of <size>
+alive)`, `the driver's error <code>` (a `VkResult` or an `HRESULT`), `the RHI refused its
+description (its line above)`, or, with no RHI call, `its description was not made (a shader
+module not loaded)`; a batch of the set shares one reason, and a batch that met both says `the
+batch met a full pipeline pool (<n> times) and the driver's error <code>`. A key that failed is
+never created again in the run: the failed keys' table (`RD_PIPELINE_FAIL_MAX`) holds as many as
+the cache, looked up before every creation, at first use, in the set and in a replay's gathered
+keys; past that `rd: pipelines: <n> keys failed, more than the 4096 remembered: no pipeline is
+created until the cache is cleared (new keys are not drawn)` stops every creation until
+`rd__pipeline_cache_clear`, so no key is retried on its every draw. The RHI's own lines and the
+10 s numbers are in [RHI.md](RHI.md#the-pipeline-pool).
 
 **The policy.** `rd_set_pipeline_policy(&p)` before `rd_precreate_pipelines` sets how the set is
 made (`port/render/rd.h` (`RdPipelineSetPolicy`); `port/render/rd_pipeline.c` (`createKeys`)); zero

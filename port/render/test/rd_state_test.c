@@ -1692,9 +1692,9 @@ static bool isDateStencil(uint8_t m)
            m == RD_STENCIL_DATE_TEST1;
 }
 
-/* The largest set a device has met (an Adreno 710 phone at 2340x1080,
- * Custom = Enhanced: 1153 keys, past the 1024 pipelines the RHI's pool
- * then held): the tile profile with local read (as testTilerSet's),
+/* The largest set a device meets (an Adreno 710 phone at 2340x1080,
+ * Custom = Enhanced: 1153 keys, more than 1024): the tile profile with
+ * local read (as testTilerSet's),
  * the vertex pre-pass off (the eleven program entries under every depth,
  * Z write and blend), every state static, at a fractional Enhanced scale
  * (2.8125 x 2.41071: rd_pixel_plan.c rd__vu_pixel_fs_enum gives every

@@ -11,6 +11,7 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | path | what it holds |
 | --- | --- |
 | `port/rhi/rhi.h` | the interface: handles, formats, resources, bind groups, pipelines, passes, commands, stats, timing, backend selection |
+| `port/rhi/rhi_pipeline_pool.h` | the pipeline pool's size, which both backends and the renderer's cache read |
 | `port/rhi/rhi_backend.h` | the backend table (`RHI_BACKEND_FUNCS`, `RhiBackendTable`, `RHI_BACKEND_DEFINE`) |
 | `port/rhi/rhi_backend_names.h` | the renaming of every entry point to `rhi_<prefix>_*` inside a backend |
 | `port/rhi/rhi_backend.c` | the real `rhi_*` functions, forwarding to the selected table; the layer classifiers |
@@ -37,8 +38,8 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 
 ## The interface
 
-`rhi.h` keeps the surface small: fourteen shader files, a reachable set of a few hundred pipelines
-(held under `RD_PIPELINE_REACHABLE_MAX`, 1024, `port/render/rd_state.h`), about twenty render
+`rhi.h` keeps the surface small: fourteen shader files, a reachable set of a few hundred to about
+1150 pipelines (held under `RD_PIPELINE_REACHABLE_MAX`, 2048, `port/render/rd_state.h`), about twenty render
 targets, ring buffers for per-frame data and no compute. Its rules for additions: nothing
 Vulkan-only (no input attachments, no framebuffer feedback loops, no push descriptors; anything
 added must be expressible in D3D12 and Metal); explicit state transitions (`rhi_cmd_barrier`: the
@@ -184,6 +185,7 @@ root signature's slots after a root-signature change (D3D12 resets the root argu
 null groups included, where Vulkan counts only the slots it binds a caller's group to
 (`port/rhi/vk/vk_cmd.c` (`vkr_flush_bind_groups`)). So for the same draws D3D12's two bind group
 figures read higher than Vulkan's.
+Both backends fill the pipeline pool's fields ([The pipeline pool](#the-pipeline-pool)).
 The Vulkan-only fields read 0 on D3D12: the memory gauges (live and peak allocations, their bytes,
 the device's limit), `memoryAllocs`, `memoryFrees`, `memoryFallbacks`, `orderBarriers`
 (`port/rhi/rhi.h` (`RhiStats`); `port/rhi/vk/vk_swapchain.c` (`rhi_acquire_backbuffer`,
@@ -231,6 +233,49 @@ builds reject another loader), `rhi_injector_name` ("ReShade" or "vkBasalt") and
 ("Steam overlay" or "Mesa overlay"), with the pure classifiers `rhi_injector_from_layer_name`,
 `rhi_overlay_from_layer_name` and `rhi_layer_switched_on`, which reads a layer's enable and disable
 variables as the loader does (`port/rhi/rhi.h`; `port/rhi/rhi_backend.c`).
+
+### The pipeline pool
+
+Each backend keeps its pipelines in a handle pool of `RHI_PIPELINE_POOL_MAX` slots
+(`port/rhi/rhi_pipeline_pool.h`; `port/rhi/vk/vk_device.c` and `port/rhi/d3d12/d3d12_device.c`
+(`rhi_init`)), 4160: `RHI_PIPELINE_POOL_CACHE` (4096), the renderer's whole pipeline cache
+(`port/render/rd_state.h` (`RD_PIPELINE_CACHE_MAX`) is that number), and
+`RHI_PIPELINE_POOL_HEADROOM` (64) for what the renderer holds outside the cache at once: one batch
+of the start-up set's or a replay's gathered keys (`RD_PIPE_BATCH`, 32: their ids are held until
+the batch ends and its duplicates are destroyed), the COLCLAMP 0 pipelines (`RD_WRAP_PIPES`, 16)
+and the movie's three (`port/render/rd_video.c`: two outputs, the field pipeline), 51 in all; a
+static assert in `port/render/rd_pipeline.c` holds the sum under the headroom and the cache plus
+the headroom to the pool. So no pipeline the renderer's cache can keep is refused by the pool. A
+handle indexes `2^20 - 1` slots (`port/rhi/vk/vk_internal.h` (`VKR_INDEX_BITS`),
+`port/rhi/d3d12/d3d12_plan.h` (`D3DP_INDEX_BITS`), 20 bits each, the 12 above them the
+generation), far above the pool. A slot costs the pipeline's record and 7 bytes of bookkeeping (the
+generation, the live flag, the free list's entry): 79 bytes on 64-bit Vulkan (`VkrPipeline`, 72),
+95 on 64-bit D3D12 (`DxPipeline`, 88), so the pool is about 321 KB and 386 KB, allocated at
+`rhi_init`.
+
+A slot freed by `rhi_destroy_pipeline` is taken again before the pool's never-used part, so the
+pool's first never-used index (`VkrPool.next`, `D3dpPool.next`) is also the most pipelines alive at
+once. `RhiStats` reads the pool on both backends: `pipelinePoolSize`, `pipelinesLive` and
+`pipelinesPeak` (gauges), `pipelinePoolFull` (creations the full pool refused, the pool's own
+count), `pipelineFailures` (creations that failed otherwise: the driver's error, or a description
+the backend refused with its own line) and `pipelineLastError` (the driver's error of the last such
+failure that had one, a `VkResult` or an `HRESULT`; 0 when the last was the description's). The
+renderer reads them around a creation to name the failure's reason in its line
+([RENDER.md](RENDER.md#the-start-up-set), "The set against the pool"). A full pool's line is written the first 8 times
+and then every 100th, with the running count (Vulkan `vkr_pool_alloc`, any pool; D3D12 at the
+pipeline's allocation, `dx_pipe_finish`):
+
+    rhi_vk: pipeline pool full (4160); 9 refused so far
+    rhi_d3d12: pipeline pool full (4160); 100 refused so far
+
+the 8th ending `; from here every 100th is written`. The window's 10 s `memory:` line ends with the
+pool's numbers (`port/platform/window_host.c` (`perf_log`); [PLATFORM.md](PLATFORM.md#diagnostics)):
+`; pipelines <live> alive (most <peak> of the pool's <size>), <f> creations failed (<p> for a
+full pool)`, `<f>` counting both kinds. `rhi_vk_test`'s `poolCell` makes `RHI_PIPELINE_POOL_MAX`
+pipelines on one device (lavapipe in the container), the first 1100 one at a time and the rest in
+batches of 32, none refused, every id distinct, draws with the 1025th and the last and reads their
+colours back, has one more refused and counted in `pipelinePoolFull`, and finds none alive after
+they are destroyed ([Tests](#tests)).
 
 ### Dynamic state
 
@@ -662,7 +707,7 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 | test | checks |
 | --- | --- |
 | `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames; seven of the cells' pipelines come from one `rhi_create_pipelines` call with an uncreatable description among them (only that one fails, the ids are distinct, the finished count never goes back); the dynamic state cell (`dynamicCell`: sixteen cells of the renderer's depth tests, Z writes, blends and masks drawn with every state static, from one `rhi_create_pipelines` batch with `maxThreads` 1 on one thread, then with the device's dynamic groups set after each bind: texel-equal, three commands a group after each static bind, none for a repeat; skipped but for the static pass without dynamic state) |
-| `rhi_vk_test.c` | the common cells on Vulkan, a hazard-tracking cell, the render-area check (a pass wider than its colour target, one taller than its depth: each clamped and counted, no validation error; a fitting pass untouched), and the pipeline cache file (written while up by `rhi_pipeline_cache_save` and at shutdown, read back, another device's or garbage ignored; the drop of other builds' cache files in a temporary folder: the current file, its `.tmp` and unrelated names stay); ctest `rhi_vk`, and `rhi_vk_nodual`, `rhi_vk_d24s8`, `rhi_vk_mali` under the fake switches |
+| `rhi_vk_test.c` | the common cells on Vulkan, a hazard-tracking cell, the render-area check (a pass wider than its colour target, one taller than its depth: each clamped and counted, no validation error; a fitting pass untouched), and the pipeline cache file (written while up by `rhi_pipeline_cache_save` and at shutdown, read back, another device's or garbage ignored; the drop of other builds' cache files in a temporary folder: the current file, its `.tmp` and unrelated names stay), and the pipeline pool filled (`poolCell`, [The pipeline pool](#the-pipeline-pool); not under the fake switches); ctest `rhi_vk`, and `rhi_vk_nodual`, `rhi_vk_d24s8`, `rhi_vk_mali` under the fake switches |
 | `rhi_vk_swapchain_test.c` | the window path on SDL's offscreen driver: frames, readback order, surface release and recreation, suboptimal and lost presents, resizes, the surface poll, submits per frame, the present-wait stand-in and a hanging wait; ctest `rhi_vk_swapchain` |
 | `rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` over the mode sets drivers offer, and `vkr_present_wait_wanted`; ctest `rhi_vk_present_mode` |
 | `rhi_vk_enum_test.c` | every `rhi.h` enumeration has a Vulkan mapping; the layer classifiers and `rhi_layer_switched_on`; ctest `rhi_vk_enum` |
