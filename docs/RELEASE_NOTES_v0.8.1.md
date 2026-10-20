@@ -1,4 +1,4 @@
-**Please note:** this release adds the Korean disc, and the Korean disc has had only limited testing: one computer, one phone and automated checks. It may look or play wrong in places the other discs do not. If it does, keep the previous version and send the game's report file (the newest file in the `logs` folder that starts with `report-`, or `ico-pc.log`) with a short description of what you saw. Every report must say which disc it was made with, the European disc (SCES-50760), the Japanese disc (SCPS-11003) or the Korean disc (SCPS-56001).
+**Please note:** this release adds the Korean disc, and the Korean disc has had only limited testing: automated checks and one start to the title screen. Nobody has played it through yet. It may look or play wrong in places the other discs do not. If it does, keep the previous version and send the game's report file (the newest file in the `logs` folder that starts with `report-`, or `ico-pc.log`) with a short description of what you saw. Every report must say which disc it was made with, the European disc (SCES-50760), the Japanese disc (SCPS-11003) or the Korean disc (SCPS-56001).
 
 ## New
 
