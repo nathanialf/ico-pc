@@ -10,7 +10,9 @@
  * aspect missing a file is left out; none to zip writes nothing.  The
  * device-loss zip (ico_loss_dump_zip): the lost frame's dump first, the one
  * before it, the log, the loose dumps gone after; without the one before,
- * the lost one and the log; its path (ico_loss_dump_path); the pruning
+ * the lost one and the log; the second .rddump (ico_dump_zip_extract_nth),
+ * also of F12's pair (ico_frame_dump_zip with the tick before); its path
+ * (ico_loss_dump_path); the pruning
  * (ico_loss_dump_prune) keeps the newest loss zips by name and leaves
  * every other file alone.
  * argv[1]: a folder the test may write in (the build folder).
@@ -100,6 +102,20 @@ static void test_loss(const char *base)
     CHECK(got != NULL && size == sizeof(a) && memcmp(got, a, size) == 0);
     CHECK(strcmp(name, "frame-121-lost.rddump") == 0);
     free(got);
+    /* the tick before, the zip's second .rddump (rd_replay_tool --interp) */
+    got = ico_dump_zip_extract_nth(zip, 1, &size, name, sizeof(name));
+    CHECK(got != NULL && size == sizeof(b) && memcmp(got, b, size) == 0);
+    CHECK(strcmp(name, "frame-120-before.rddump") == 0);
+    free(got);
+    CHECK(ico_dump_zip_extract_nth(zip, 2, &size, NULL, 0) == NULL);
+    /* F12's pair: the frame, then the tick before, then the log */
+    CHECK(put(lost, a, sizeof(a)) == 0);
+    CHECK(put(before, b, sizeof(b)) == 0);
+    CHECK(ico_frame_dump_zip(zip, lost, before, log, why, sizeof(why)) == 0);
+    got = ico_dump_zip_extract_nth(zip, 1, &size, NULL, 0);
+    CHECK(got != NULL && size == sizeof(b) && memcmp(got, b, size) == 0);
+    free(got);
+    CHECK(ico_path_kind(before, NULL, NULL) == -1);
     /* no frame before it: the lost one and the log */
     CHECK(put(lost, a, sizeof(a)) == 0);
     CHECK(ico_loss_dump_zip(zip, lost, NULL, log, why, sizeof(why)) == 0);
@@ -160,7 +176,7 @@ int main(int argc, char **argv)
     /* both files, each under its own name, the dump's size and bytes kept;
        the loose dump is gone after a good zip */
     why[0] = '\0';
-    CHECK(ico_frame_dump_zip(zip, dump, log, why, sizeof(why)) == 0);
+    CHECK(ico_frame_dump_zip(zip, dump, NULL, log, why, sizeof(why)) == 0);
     CHECK(ico_path_kind(dump, NULL, NULL) == -1);
 
     /* ico_dump_zip_extract gives the dump back, with its name */
@@ -184,7 +200,7 @@ int main(int argc, char **argv)
     /* an unreadable log: the dump alone, still a zip */
     CHECK(put(dump, rd, sizeof(rd)) == 0);
     snprintf(log, sizeof(log), "%s/no-such.log", argv[1]);
-    CHECK(ico_frame_dump_zip(zip, dump, log, why, sizeof(why)) == 1);
+    CHECK(ico_frame_dump_zip(zip, dump, NULL, log, why, sizeof(why)) == 1);
     memset(&z, 0, sizeof(z));
     CHECK(mz_zip_reader_init_file(&z, zip, 0));
     CHECK(mz_zip_reader_get_num_files(&z) == 1);
@@ -195,7 +211,7 @@ int main(int argc, char **argv)
 
     /* no log named (--console): the same */
     CHECK(put(dump, rd, sizeof(rd)) == 0);
-    CHECK(ico_frame_dump_zip(zip, dump, NULL, why, sizeof(why)) == 1);
+    CHECK(ico_frame_dump_zip(zip, dump, NULL, NULL, why, sizeof(why)) == 1);
 
     /* a zip that cannot be written (its folder is missing): refused, the
        loose dump is kept */
@@ -205,7 +221,7 @@ int main(int argc, char **argv)
 
         snprintf(bad, sizeof(bad), "%s/no-such-folder/x.zip", argv[1]);
         why[0] = '\0';
-        CHECK(ico_frame_dump_zip(bad, dump, NULL, why, sizeof(why)) == -1);
+        CHECK(ico_frame_dump_zip(bad, dump, NULL, NULL, why, sizeof(why)) == -1);
         CHECK(why[0] != '\0');
         CHECK(ico_path_kind(dump, NULL, NULL) == 0);
     }
@@ -215,7 +231,7 @@ int main(int argc, char **argv)
     remove(zip);
     snprintf(dump, sizeof(dump), "%s/no-such.rddump", argv[1]);
     why[0] = '\0';
-    CHECK(ico_frame_dump_zip(zip, dump, NULL, why, sizeof(why)) == -1);
+    CHECK(ico_frame_dump_zip(zip, dump, NULL, NULL, why, sizeof(why)) == -1);
     CHECK(why[0] != '\0');
     CHECK(ico_path_kind(zip, NULL, NULL) == -1);
 

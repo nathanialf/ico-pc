@@ -4,7 +4,8 @@
  * The window build's diagnostic keys, kept free of SDL so a unit test checks them:
  *
  *   F12   the frame shown, for a bug report, in <pref>/dumps: an rd dump of
- *         the last closed frame zipped with a copy of the log,
+ *         the last closed frame and one of the tick before (when it is the
+ *         tick right before) zipped with a copy of the log,
  *         frame-<time>-v<vsync>.zip (dump_zip.h; the loose .rddump is kept
  *         only when the zip fails), the whole DISPLAY frame as
  *         frame-<time>-v<vsync>.png, and the picture as presented as
@@ -61,7 +62,7 @@ unsigned long long ico_stats_period_ns(unsigned long long now, unsigned long lon
 unsigned long long ico_stats_fast_toggle(unsigned long long now, unsigned long long fast_until);
 
 /* F12's three files in dir: frame-<stamp>-v<vsync>.rddump, .png and .zip
-   (the zip holds the rddump and the log, dump_zip.h). 0, or -1 when any
+   (the zip holds the rddump, the tick before's and the log, dump_zip.h). 0, or -1 when any
    path does not fit (all three then ""). */
 int ico_frame_dump_paths(const char *dir, const char *stamp, unsigned int vsync, char *dump,
                          size_t dump_size, char *png, size_t png_size, char *zip, size_t zip_size);

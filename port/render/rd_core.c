@@ -2654,6 +2654,12 @@ bool rd_dump_frame(const char *path)
     return f ? rd__dump_frame(f, path) : false;
 }
 
+bool rd_dump_prev_frame(const char *path)
+{
+    const RdFrame *f = rd__last_frame(), *p = rd__prev_frame();
+    return f && p && p->closed && p->number + 1 == f->number ? rd__dump_frame(p, path) : false;
+}
+
 bool rd_read_display(void *dst, uint32_t *w, uint32_t *h)
 {
     RdTargetRec *t = rd__target_rec(RD_TARGET_DISPLAY + 1);

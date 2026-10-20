@@ -152,12 +152,13 @@ static int files_zip(const char *zip_path, const char *const *paths, int n, cons
     return r;
 }
 
-int ico_frame_dump_zip(const char *zip_path, const char *dump_path, const char *log_path, char *why,
-                       size_t why_size)
+int ico_frame_dump_zip(const char *zip_path, const char *dump_path, const char *prev_path,
+                       const char *log_path, char *why, size_t why_size)
 {
-    const char *paths[1] = {dump_path};
+    const char *paths[ICO_LOSS_DUMP_FILES] = {dump_path, prev_path};
+    const int n = prev_path != NULL && prev_path[0] != '\0' ? 2 : 1;
 
-    return files_zip(zip_path, paths, 1, log_path, why, why_size);
+    return files_zip(zip_path, paths, n, log_path, why, why_size);
 }
 
 int ico_loss_dump_zip(const char *zip_path, const char *lost_path, const char *before_path,
@@ -230,7 +231,8 @@ int ico_loss_dump_prune(const char *dir, int keep)
     return removed;
 }
 
-void *ico_dump_zip_extract(const char *zip_path, size_t *size, char *name, size_t name_size)
+void *ico_dump_zip_extract_nth(const char *zip_path, int nth, size_t *size, char *name,
+                               size_t name_size)
 {
     mz_zip_archive z;
     void *data = NULL, *zip = NULL;
@@ -255,7 +257,7 @@ void *ico_dump_zip_extract(const char *zip_path, size_t *size, char *name, size_
         }
         const size_t len = strlen(st.m_filename);
 
-        if (len < 7 || strcmp(st.m_filename + len - 7, ".rddump") != 0) {
+        if (len < 7 || strcmp(st.m_filename + len - 7, ".rddump") != 0 || nth-- > 0) {
             continue;
         }
         data = mz_zip_reader_extract_to_heap(&z, i, size, 0);
@@ -266,6 +268,11 @@ void *ico_dump_zip_extract(const char *zip_path, size_t *size, char *name, size_
     mz_zip_reader_end(&z);
     free(zip);
     return data;
+}
+
+void *ico_dump_zip_extract(const char *zip_path, size_t *size, char *name, size_t name_size)
+{
+    return ico_dump_zip_extract_nth(zip_path, 0, size, name, name_size);
 }
 
 static const char *const kSweepName[ICO_SWEEP_COUNT] = {"4x3", "16x9", "32x9", "48x9", "60x9"};

@@ -1640,6 +1640,11 @@ const RdVuCommon *rd_get_vu_common(void);
  * can replay it headless on another backend.  Dumps contain game assets and
  * are never committed. */
 bool rd_dump_frame(const char *path);
+/* The tick before the last closed frame (the one the presenter blends
+ * from), when it is closed and the tick right before; false (nothing
+ * written) otherwise.  F12 zips it beside the frame, so `rd_replay_tool
+ * --interp T` rebuilds the pictures between the two. */
+bool rd_dump_prev_frame(const char *path);
 /* The device-loss dump (port/platform/window_host.c device_lost_quit;
  * docs/port/RENDER.md, "The loss dump"): the frames the renderer still holds
  * as two ordinary dumps, the last closed frame (the one the lost replay

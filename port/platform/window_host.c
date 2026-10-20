@@ -2482,7 +2482,9 @@ static int device_lost_quit(void)
 }
 
 /* F12, the frame on the screen for a bug report, in <pref>/dumps: a PNG
-   and a zip of the rd dump and a copy of the log (GitHub issues refuse
+   and a zip of the rd dump, the tick before's (rd_dump_prev_frame: with it
+   rd_replay_tool --interp rebuilds the pictures between the two, where the
+   presenter blends) and a copy of the log (GitHub issues refuse
    .rddump files but take a .zip; the PNG stays a loose file, it is too big
    for a zip at high scales). The dump is written first, zipped, and the
    loose .rddump deleted by ico_frame_dump_zip once the zip is written; when the zip fails the
@@ -2491,7 +2493,7 @@ static int device_lost_quit(void)
 static void frame_dump(void)
 {
     char pref[ICO_PATH_MAX], dir[ICO_PATH_MAX], dump[ICO_PATH_MAX], png[ICO_PATH_MAX],
-        zip[ICO_PATH_MAX], why[160];
+        zip[ICO_PATH_MAX], prev[ICO_PATH_MAX + 8], why[160];
     char stamp[32];
     const time_t now = time(NULL);
     const struct tm *tm = localtime(&now);
@@ -2510,6 +2512,11 @@ static void frame_dump(void)
         return;
     }
     const int ok = rd_dump_on_demand(dump, png);
+    /* the tick before, <name>-prev.rddump (none when it is not the tick
+       right before, or not closed) */
+    const size_t stem = strlen(dump) > 7 ? strlen(dump) - 7 : 0;
+    snprintf(prev, sizeof(prev), "%.*s-prev.rddump", (int)stem, dump);
+    const int havePrev = ok && rd_dump_prev_frame(prev);
     /* the picture as presented, frame-<stamp>-present.png, at the next
        present (the .png above is the whole DISPLAY frame, which at 16:9 is
        wider than the window's picture; tools/native_frame_check.py reads
@@ -2528,16 +2535,19 @@ static void frame_dump(void)
     snprintf(why, sizeof(why), "no dump");
     if (ok) {
         ico_host_log_flush();
-        zr = ico_frame_dump_zip(zip, dump, ico_diag_log_path(), why, sizeof(why));
+        zr = ico_frame_dump_zip(zip, dump, havePrev ? prev : NULL, ico_diag_log_path(), why,
+                                sizeof(why));
     }
     if (zr < 0) {
         fprintf(stderr, "window: dump: zip not written: %s%s\n", why,
                 ok ? "; the .rddump is kept" : "");
     }
-    fprintf(stderr, "window: F12 at vsync %u, Main tick %u, frame %u: %s %s%s%s\n",
+    fprintf(stderr, "window: F12 at vsync %u, Main tick %u, frame %u: %s %s%s%s (%s)\n",
             ico_host_vsync_count(), ico_host_main_ticks(), (unsigned)rd_frame_number(),
             ok ? "wrote" : "could not write all of", png, zr >= 0 ? " and " : "",
-            zr >= 0 ? zip : "");
+            zr >= 0 ? zip : "",
+            havePrev ? "with the tick before: rd_replay_tool --interp rebuilds the pictures between"
+                     : "without the tick before");
 }
 
 /* Shift+F12 in photo mode, the aspect sweep: the paused frame captured at

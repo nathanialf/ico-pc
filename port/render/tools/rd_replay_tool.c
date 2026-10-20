@@ -6,7 +6,9 @@
  *                  [--pass-dump DIR] [--backend vulkan|d3d12]
  *
  * <dump> is an .rddump, or the .zip F12 writes: its first .rddump entry is
- * taken (extracted to a temporary file in the temp folder, deleted at exit).
+ * taken (and for --interp's PREV given as a zip, its second, the tick
+ * before F12 and the loss dump zip beside the frame: `rd_replay_tool
+ * frame.zip out.png --interp 0.5 frame.zip`) (extracted to a temporary file in the temp folder, deleted at exit).
  * The replay runs as the disc the dump was drawn on (its region, dump
  * version 12; the European disc for an older dump): the reduction's crop
  * and the border mask are that disc's.
@@ -592,20 +594,25 @@ static void dumpTextures(const char *dir)
     }
 }
 
-static char s_zipTemp[1100];
+static char s_zipTemps[2][1100];
 
 static void removeZipTemp(void)
 {
-    if (s_zipTemp[0] != '\0') {
-        remove(s_zipTemp);
+    for (int k = 0; k < 2; k++) {
+        if (s_zipTemps[k][0] != '\0') {
+            remove(s_zipTemps[k]);
+        }
     }
 }
 
-/* a .zip given as the dump: its .rddump goes to a temporary file (the
-   loader takes a path) and *dump names that file; false with a message when
-   it cannot */
-static bool unzipDump(const char **dump)
+/* a .zip given as a dump: its .rddump goes to a temporary file (the loader
+   takes a path) and *dump names that file; false with a message when it
+   cannot.  nth 0: the zip's first .rddump (the frame); 1: --interp's PREV,
+   the zip's second (F12's and the loss dump's tick before), its first when
+   it holds one only */
+static bool unzipDump(const char **dump, int nth)
 {
+    char *tmp = s_zipTemps[nth];
     const char *path = *dump;
     const size_t n = strlen(path);
 
@@ -613,7 +620,10 @@ static bool unzipDump(const char **dump)
         return true;
     }
     size_t size = 0;
-    void *data = ico_dump_zip_extract(path, &size, NULL, 0);
+    void *data = nth ? ico_dump_zip_extract_nth(path, 1, &size, NULL, 0) : NULL;
+    if (data == NULL) {
+        data = ico_dump_zip_extract(path, &size, NULL, 0);
+    }
 
     if (data == NULL) {
         fprintf(stderr, "%s: no .rddump in this zip\n", path);
@@ -630,25 +640,29 @@ static bool unzipDump(const char **dump)
     if (dir == NULL) {
         dir = "/tmp";
     }
-    snprintf(s_zipTemp, sizeof(s_zipTemp), "%s/rd_replay_%u.rddump", dir,
-             (unsigned)(uintptr_t)data & 0xFFFFFFu);
-    FILE *fp = fopen(s_zipTemp, "wb");
+    snprintf(tmp, sizeof(s_zipTemps[0]), "%s/rd_replay_%u_%d.rddump", dir,
+             (unsigned)(uintptr_t)data & 0xFFFFFFu, nth);
+    FILE *fp = fopen(tmp, "wb");
     const bool ok = fp != NULL && fwrite(data, 1, size, fp) == size;
 
     if (fp != NULL && fclose(fp) != 0) {
-        s_zipTemp[0] = '\0';
+        tmp[0] = '\0';
         free(data);
         return false;
     }
     free(data);
     if (!ok) {
-        fprintf(stderr, "%s: cannot write the temporary dump\n", s_zipTemp);
+        fprintf(stderr, "%s: cannot write the temporary dump\n", tmp);
         removeZipTemp();
-        s_zipTemp[0] = '\0';
+        tmp[0] = '\0';
         return false;
     }
-    atexit(removeZipTemp);
-    *dump = s_zipTemp;
+    static bool registered;
+    if (!registered) {
+        registered = true;
+        atexit(removeZipTemp);
+    }
+    *dump = tmp;
     return true;
 }
 
@@ -1210,7 +1224,7 @@ int main(int argc, char **argv)
         }
     }
     uint32_t gw = 0, gh = 0;
-    if (!unzipDump(&dump)) {
+    if (!unzipDump(&dump, 0) || (interpPrev && !unzipDump(&interpPrev, 1))) {
         return 1;
     }
     FILE *probe = fopen(dump, "rb");

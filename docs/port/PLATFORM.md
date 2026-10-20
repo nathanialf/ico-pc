@@ -1188,9 +1188,15 @@ The window build's diagnostic keys are free of SDL so a unit test checks them
 - **F12**: an [.rddump](ARCHITECTURE.md#terms) of the last closed frame and a PNG of it
   (`frame-<time>-v<vsync>.rddump`, `.png`), and a PNG of the picture as presented
   (`frame-<time>-present.png`), in `<user folder>/dumps/`. The
-  dump and a copy of the log go into one zip, and the loose dump is deleted
-  (`port/platform/dump_zip.h` (`ico_frame_dump_zip`)). The
-  [replay tool](ARCHITECTURE.md#terms) takes the zip directly (`ico_dump_zip_extract`).
+  dump, a dump of the tick before (`-prev.rddump`, when it is closed and the tick right before:
+  `port/render/rd.h` (`rd_dump_prev_frame`)) and a copy of the log go into one zip, and the loose
+  dumps are deleted (`port/platform/dump_zip.h` (`ico_frame_dump_zip`)). The
+  [replay tool](ARCHITECTURE.md#terms) takes the zip directly (`ico_dump_zip_extract`), and as
+  `--interp`'s PREV it takes the zip's second `.rddump` (`ico_dump_zip_extract_nth`), so
+  `rd_replay_tool frame.zip out.png --interp 0.5 frame.zip` rebuilds a picture between the two
+  ticks, where the presenter blends. The presented PNG stays a loose file beside the zip; the log
+  line says whether the tick before is in (`window: F12 at vsync ...: wrote ... (with the tick
+  before: ...)`).
 - **Shift+F12** in photo mode: the aspect sweep, the paused frame rendered at 4:3, 16:9, 32:9,
   48:9 and 60:9 into `sweep-<time>.zip` (`ico_sweep_zip`).
 - **F11**: stats lines every second for 30 s instead of every 10 s; again turns it off

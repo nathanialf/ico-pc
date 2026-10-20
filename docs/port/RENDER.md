@@ -2654,7 +2654,8 @@ also writes the frame before (`-prev`) and the frame blended half way (`-i50`)
 the tool and the tests (`port/render/rd_png.c`).
 
 `rd_replay_tool <dump> <out.png>` loads a dump (or the first `.rddump` in an F12 zip) and renders
-it headless (`port/render/tools/rd_replay_tool.c`, usage comment):
+it headless; `--interp T PREV` with PREV an F12 or loss zip takes the zip's second `.rddump`, the
+tick before, so a report's zip rebuilds the pictures between its two ticks (`port/render/tools/rd_replay_tool.c`, usage comment):
 
 | option | does |
 | --- | --- |
@@ -2673,7 +2674,7 @@ it headless (`port/render/tools/rd_replay_tool.c`, usage comment):
 | `--pass-times` | with `--stats`, the warm replay timed pass by pass ([The per-pass timing](#the-per-pass-timing)) |
 | `--prev DUMP` | replays earlier dumps first so retained targets hold the run's pictures |
 | `--no-half`, `--no-aa1` | the frame without the field's half pixel or without PRIM.AA1 |
-| `--interp T PREV` | the frame the presenter builds between PREV and the dump at alpha T |
+| `--interp T PREV` | the frame the presenter builds between PREV and the dump at alpha T (PREV an F12 or loss zip: its second `.rddump`, the tick before) |
 | `--interp-any`, `--no-reproject` | with `--interp`: PREV taken as the tick before whatever its frame number; the CPU-projected draws blended in screen space |
 | `--aa MODE` | (with `--enhanced`) the anti-aliasing setting: off, ssaa2, ssaa4, msaa2, msaa4, msaa8 |
 | `--crt-strength K` | after `--crt`, the strength 0..1 |
