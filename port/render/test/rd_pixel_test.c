@@ -155,7 +155,10 @@
  *            with the VU programs, fewer than RD_PIPELINE_REACHABLE_MAX)
  *            (the set with the two-pass fallback too, also under
  *            RD_PIPELINE_REACHABLE_MAX; a created key is in the set of its
- *            mode); a triangle pass with the planes (rd__plane_pass)
+ *            mode; the tile-based GPU's set, the pre-pass off and every
+ *            state static at a fractional Enhanced scale, both blends,
+ *            under it and inside the RHI's pipeline pool less its
+ *            headroom); a triangle pass with the planes (rd__plane_pass)
  *            takes the planes build of both shaders (sprite_plane_*_vs
  *            with sprite_ps_planes, sprite_texa_ps_planes or
  *            sprite_stq_ps_planes), enumerated, with their twins listed
@@ -3433,6 +3436,60 @@ static void testPipelines(void)
     CHECK(nNd < RD_PIPELINE_REACHABLE_MAX,
           "reachable pipelines with the two-pass fallback %u >= %d", nNd,
           RD_PIPELINE_REACHABLE_MAX);
+    {
+        /* the tile-based GPU's configuration: its profile with local read,
+         * the vertex pre-pass off, no dynamic state (every state in the
+         * keys), Enhanced at the phone's fractional 2.8125 x 2.41071 (the
+         * vu_np_ps twins), both blends: under the ceiling and inside the
+         * RHI's pool less its headroom (rhi_pipeline_pool.h) */
+        static RdPipeKeyInt keysT[RD_PIPELINE_REACHABLE_MAX];
+        const RdProfile keepProfile = g_rd.profile;
+        const bool keepD = g_rd.dynDepth, keepB = g_rd.dynBlend, keepPrepass = g_rd.vuPrepass;
+        const RdPreset keepPreset = g_rd.settings.preset;
+        const float keepSx = g_rd.sceneSx, keepSy = g_rd.sceneSy;
+        const uint8_t keepDst = g_rd.dstMode;
+        char keepWhy[sizeof(g_rd.vuPrepassWhy)];
+        memcpy(keepWhy, g_rd.vuPrepassWhy, sizeof(keepWhy));
+        g_rd.dynDepth = false;
+        g_rd.dynBlend = false;
+        rd__set_vu_prepass(false);
+        memset(&g_rd.profile, 0, sizeof(g_rd.profile));
+        g_rd.profile.tiler = true;
+        g_rd.profile.blurFold = true;
+        g_rd.profile.localRead = true;
+        g_rd.profile.dateStencil = true;
+        g_rd.profile.fogLocal = true;
+        g_rd.profile.vuPlanesFrac = true;
+        g_rd.settings.preset = RD_PRESET_ENHANCED;
+        g_rd.dstMode = RD_BLEND_EXACT_OFF;
+        g_rd.sceneSx = 2.8125f;
+        g_rd.sceneSy = 2.41071f;
+        rd_set_no_dual(false);
+        const uint32_t nT = rd__enumerate_reachable(keysT, RD_PIPELINE_REACHABLE_MAX);
+        rd_set_no_dual(true);
+        const uint32_t nTNd = rd__enumerate_reachable(keysT, RD_PIPELINE_REACHABLE_MAX);
+        rd_set_no_dual(was);
+        g_rd.profile = keepProfile;
+        g_rd.dynDepth = keepD;
+        g_rd.dynBlend = keepB;
+        g_rd.vuPrepass = keepPrepass; /* as it was, its reason too */
+        memcpy(g_rd.vuPrepassWhy, keepWhy, sizeof(keepWhy));
+        g_rd.settings.preset = keepPreset;
+        g_rd.sceneSx = keepSx;
+        g_rd.sceneSy = keepSy;
+        g_rd.dstMode = keepDst;
+        printf("  pipelines: the tile-based GPU's set (the pre-pass off, every state static, "
+               "Enhanced at 2.8125x2.41071): %u, %u with the two-pass fallback (pool %d, "
+               "headroom %d)\n",
+               nT, nTNd, RHI_PIPELINE_POOL_MAX, RHI_PIPELINE_POOL_HEADROOM);
+        CHECK(nT < RD_PIPELINE_REACHABLE_MAX && nTNd < RD_PIPELINE_REACHABLE_MAX,
+              "the tile-based GPU's set %u (%u with the two-pass fallback) >= %d", nT, nTNd,
+              RD_PIPELINE_REACHABLE_MAX);
+        CHECK(nT <= RHI_PIPELINE_POOL_MAX - RHI_PIPELINE_POOL_HEADROOM &&
+                  nTNd <= RHI_PIPELINE_POOL_MAX - RHI_PIPELINE_POOL_HEADROOM,
+              "the tile-based GPU's set %u (%u) past the pool's %d less its headroom %d", nT, nTNd,
+              RHI_PIPELINE_POOL_MAX, RHI_PIPELINE_POOL_HEADROOM);
+    }
     /* 347 with the triangle commands' plane shaders (rd_screen_planes.c),
      * a second vertex shader for each triangle pass (250 without them) */
     CHECK(ns < 400, "reachable screen and post pipelines %u >= 400", ns);

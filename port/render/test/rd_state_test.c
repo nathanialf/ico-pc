@@ -69,6 +69,12 @@
  *              Z test (dynamic depth), blend or mask (dynamic blend) map to
  *              one; the collapsed sets' VU parts 8 + 8 + 10 + 5 and
  *              2 + 2 + 10 + 5, every static key's normalised form in them
+ *   tiler      the tile-based profile's sets (static, dynamic depth,
+ *              dynamic depth and blend; with and without local read), and
+ *              its largest: the pre-pass off, every state static, at a
+ *              fractional Enhanced scale (every vu_ps key's vu_np_ps twin),
+ *              each under RD_PIPELINE_REACHABLE_MAX and inside the RHI's
+ *              pipeline pool less its headroom (rhi_pipeline_pool.h)
  *
  * argv[1]: a writable directory for the dump.  Exit 0 or 1. */
 #include <stdio.h>
@@ -1686,6 +1692,66 @@ static bool isDateStencil(uint8_t m)
            m == RD_STENCIL_DATE_TEST1;
 }
 
+/* The largest set a device has met (an Adreno 710 phone at 2340x1080,
+ * Custom = Enhanced: 1153 keys, past the 1024 pipelines the RHI's pool
+ * then held): the tile profile with local read (as testTilerSet's),
+ * the vertex pre-pass off (the eleven program entries under every depth,
+ * Z write and blend), every state static, at a fractional Enhanced scale
+ * (2.8125 x 2.41071: rd_pixel_plan.c rd__vu_pixel_fs_enum gives every
+ * vu_ps key its vu_np_ps twin).  The set at 2x plus one twin per vu_ps
+ * key, under RD_PIPELINE_REACHABLE_MAX and inside the pool less its
+ * headroom (port/rhi/rhi_pipeline_pool.h).  Called by testTilerSet with
+ * its stand-in modules; the caller restores the profile, the dynamic
+ * state and the pre-pass. */
+static void testTilerFracSet(RdPipeKeyInt *keys)
+{
+    const RdPreset keepPreset = g_rd.settings.preset;
+    const float keepSx = g_rd.sceneSx, keepSy = g_rd.sceneSy;
+    const uint8_t keepDst = g_rd.dstMode;
+    g_rd.dynDepth = false;
+    g_rd.dynBlend = false;
+    rd__set_vu_prepass(false);
+    memset(&g_rd.profile, 0, sizeof(g_rd.profile));
+    g_rd.profile.tiler = true;
+    g_rd.profile.blurFold = true;
+    g_rd.profile.localRead = true;
+    g_rd.profile.dateStencil = true;
+    g_rd.profile.fogLocal = true;
+    g_rd.profile.vuPlanesFrac = true;
+    g_rd.settings.preset = RD_PRESET_ENHANCED;
+    g_rd.dstMode = RD_BLEND_EXACT_OFF;
+    g_rd.sceneSx = g_rd.sceneSy = 2.0f;
+    const uint32_t nWhole = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
+    uint32_t vuPs = 0, npWhole = 0;
+    for (uint32_t i = 0; i < nWhole && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+        vuPs += keys[i].fs == RD_FS_VU;
+        npWhole += keys[i].fs == RD_FS_VU_NP;
+    }
+    g_rd.sceneSx = 2.8125f;
+    g_rd.sceneSy = 2.41071f;
+    const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
+    uint32_t np = 0;
+    for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+        np += keys[i].fs == RD_FS_VU_NP;
+    }
+    printf("  tiler set, static, the pre-pass off: %u keys at 2x (%u vu_ps), %u at 2.8125x2.41071 "
+           "(%u vu_np_ps); the pool %d less its headroom %d\n",
+           nWhole, vuPs, n, np, RHI_PIPELINE_POOL_MAX, RHI_PIPELINE_POOL_HEADROOM);
+    CHECK(npWhole == 0 && np == vuPs && n == nWhole + vuPs,
+          "tiler, fractional scale: %u twins of %u vu_ps keys, %u keys against %u at 2x (%u twins "
+          "at 2x)",
+          np, vuPs, n, nWhole, npWhole);
+    CHECK(n < RD_PIPELINE_REACHABLE_MAX, "tiler, fractional scale: %u keys under %d", n,
+          RD_PIPELINE_REACHABLE_MAX);
+    CHECK(n <= RHI_PIPELINE_POOL_MAX - RHI_PIPELINE_POOL_HEADROOM,
+          "tiler, fractional scale: %u keys past the pool's %d less its headroom %d", n,
+          RHI_PIPELINE_POOL_MAX, RHI_PIPELINE_POOL_HEADROOM);
+    g_rd.settings.preset = keepPreset;
+    g_rd.sceneSx = keepSx;
+    g_rd.sceneSy = keepSy;
+    g_rd.dstMode = keepDst;
+}
+
 static void testTilerSet(RdPipeKeyInt *keys)
 {
     static RdPipeKeyInt desk[RD_PIPELINE_REACHABLE_MAX];
@@ -1770,6 +1836,10 @@ static void testTilerSet(RdPipeKeyInt *keys)
                kMode[mode], n, nd, date, dateScreen, dateVu, setup, fogLocal, fold, nb);
         CHECK(n < RD_PIPELINE_REACHABLE_MAX && nb < RD_PIPELINE_REACHABLE_MAX,
               "tiler %s: %u and %u keys under %d", kMode[mode], n, nb, RD_PIPELINE_REACHABLE_MAX);
+        CHECK(n <= RHI_PIPELINE_POOL_MAX - RHI_PIPELINE_POOL_HEADROOM &&
+                  nb <= RHI_PIPELINE_POOL_MAX - RHI_PIPELINE_POOL_HEADROOM,
+              "tiler %s: %u and %u keys past the pool's %d less its headroom %d", kMode[mode], n,
+              nb, RHI_PIPELINE_POOL_MAX, RHI_PIPELINE_POOL_HEADROOM);
         CHECK(dup == 0 && missing == 0 && other == 0 && otherBare == 0,
               "tiler %s: %u keys twice, %u desktop keys missing, %u (and %u) keys of no tiler "
               "family",
@@ -1789,6 +1859,7 @@ static void testTilerSet(RdPipeKeyInt *keys)
     printf("  the careful-set target (about 150-200 keys, dynamic depth without EDS3): %u "
            "without local read, %u with it (static %u / %u, dynamic depth and blend %u / %u)\n",
            without[1], withLocal[1], without[0], withLocal[0], without[2], withLocal[2]);
+    testTilerFracSet(keys);
     for (int i = 0; i < 4; i++) {
         g_rd.fs[kFs[i]] = keepFs[i];
     }

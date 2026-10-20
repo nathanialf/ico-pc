@@ -4,14 +4,16 @@
  * cache file (rhi_set_pipeline_cache_path: written by rhi_pipeline_cache_save
  * while the device is up and at shutdown, each with a version
  * one header, read back at the next init, a file of another device or of
- * garbage ignored and replaced), and the drop of other builds' cache files
- * (vkr_cache_drop_others).
+ * garbage ignored and replaced), the drop of other builds' cache files
+ * (vkr_cache_drop_others), and the pipeline pool (poolCell: every
+ * pipeline the pool holds, RHI_PIPELINE_POOL_MAX, made and alive at once).
  *
  * Exit 0 on success, 1 on a mismatch or a validation error, 77 (skipped)
  * when no Vulkan device can be created.  Set VK_ICD_FILENAMES to pick a
  * driver (lavapipe in the container). */
 #include "rhi.h"
 #include "rhi_test_common.h"
+#include "rhi_test_spv.h"
 #include "vk/rhi_vk.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -448,6 +450,195 @@ static int limitsCell(void)
     return failures + (int)rhi_vk_validation_error_count();
 }
 
+static bool envOn(const char *name)
+{
+    const char *v = getenv(name);
+    return v && v[0] && v[0] != '0';
+}
+
+/* The pipeline pool (port/rhi/rhi_pipeline_pool.h): RHI_PIPELINE_POOL_MAX
+ * pipelines alive at once (the renderer's cache and the headroom for the
+ * pipelines made outside it), the first 1100 made one at a time and the
+ * rest in batches of 32 (rhi_create_pipelines, as the start-up set), none
+ * refused and every id distinct; the 1025th (past the 1024 the pool once
+ * held) and the last drawn with, each into its half of a target, read
+ * back in its colour (the ids resolve to their pipelines); one more past
+ * the pool refused and counted (RhiStats pipelinePoolFull), the most alive
+ * at once the pool's size, none alive after they are destroyed.  Run once,
+ * not again under the fake devices (rhi_vk_nodual, _d24s8, _mali). */
+typedef struct PoolVtx {
+    float x, y, z;
+    uint8_t rgba[4];
+    float u, v;
+} PoolVtx;
+
+static int poolCell(void)
+{
+    if (envOn("ICO_VK_FAKE_NO_DUAL") || envOn("ICO_VK_FAKE_D24S8") || envOn("ICO_VK_FAKE_LIMITS")) {
+        return 0;
+    }
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test pool"};
+    if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
+        rhi_test_log("FAIL pool cell: init\n");
+        return 1;
+    }
+    int failures = 0;
+#define POOL_CHECK(cond, ...)                                                                      \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            rhi_test_log("FAIL pool cell: " __VA_ARGS__);                                          \
+            failures++;                                                                            \
+        }                                                                                          \
+    } while (0)
+    const RhiShader vs = rhi_create_shader(&(RhiShaderDesc){
+        RHI_STAGE_VERTEX, spv_vs_main, sizeof(spv_vs_main), "vs_main", "pool vs_main"});
+    const RhiShader ps = rhi_create_shader(&(RhiShaderDesc){
+        RHI_STAGE_FRAGMENT, spv_ps_color, sizeof(spv_ps_color), "ps_color", "pool ps_color"});
+    static const RhiVertexBinding vb = {0, sizeof(PoolVtx), false};
+    static const RhiVertexAttr va[3] = {
+        {0, 0, RHI_VTX_F32x3, offsetof(PoolVtx, x)},
+        {1, 0, RHI_VTX_U8x4_UNORM, offsetof(PoolVtx, rgba)},
+        {2, 0, RHI_VTX_F32x2, offsetof(PoolVtx, u)},
+    };
+    RhiPipelineDesc d;
+    memset(&d, 0, sizeof(d));
+    d.vertex = vs;
+    d.fragment = ps;
+    d.vertexBindings = &vb;
+    d.vertexBindingCount = 1;
+    d.vertexAttrs = va;
+    d.vertexAttrCount = 3;
+    d.topology = RHI_TOPO_TRIANGLE_LIST;
+    d.cullNone = true;
+    d.blend[0].writeMask = 0xF;
+    d.colorFormats[0] = RHI_FMT_RGBA8_UNORM;
+    d.colorCount = 1;
+    d.debugName = "pool";
+    RhiStats a, b;
+    rhi_get_stats(&a);
+    const uint32_t cap = (uint32_t)a.pipelinePoolSize, live0 = (uint32_t)a.pipelinesLive;
+    POOL_CHECK(vs.id && ps.id, "shaders\n");
+    POOL_CHECK(cap == RHI_PIPELINE_POOL_MAX && live0 == 0, "pool size %u (want %d), %u alive\n",
+               cap, RHI_PIPELINE_POOL_MAX, live0);
+    RhiPipeline *p = calloc(RHI_PIPELINE_POOL_MAX, sizeof(*p));
+    uint32_t made = 0, refused = 0;
+    if (p && vs.id && ps.id && cap == RHI_PIPELINE_POOL_MAX) {
+        for (; made < 1100u; made++) {
+            p[made] = rhi_create_pipeline(&d);
+            refused += p[made].id == 0;
+        }
+        RhiPipelineDesc descs[32];
+        for (uint32_t i = 0; i < 32u; i++) {
+            descs[i] = d;
+        }
+        while (made < cap) {
+            const uint32_t nb = cap - made < 32u ? cap - made : 32u;
+            rhi_create_pipelines(descs, nb, &p[made], NULL);
+            for (uint32_t i = 0; i < nb; i++) {
+                refused += p[made + i].id == 0;
+            }
+            made += nb;
+        }
+    }
+    uint32_t same = 0;
+    for (uint32_t i = 0; i < made; i++) {
+        for (uint32_t j = i + 1; j < made && p[i].id; j++) {
+            same += p[i].id == p[j].id;
+        }
+    }
+    rhi_get_stats(&b);
+    rhi_test_log("pool cell: %u pipelines made (%u refused, %u ids shared), %llu alive, most %llu "
+                 "of %llu\n",
+                 made, refused, same, (unsigned long long)b.pipelinesLive,
+                 (unsigned long long)b.pipelinesPeak, (unsigned long long)b.pipelinePoolSize);
+    POOL_CHECK(made == RHI_PIPELINE_POOL_MAX && refused == 0 && same == 0,
+               "%u made, %u refused, %u ids shared\n", made, refused, same);
+    POOL_CHECK(b.pipelinesLive == cap && b.pipelinesPeak == cap &&
+                   b.pipelinePoolFull == a.pipelinePoolFull &&
+                   b.pipelineFailures == a.pipelineFailures,
+               "%llu alive, most %llu, %llu refused for a full pool, %llu failed\n",
+               (unsigned long long)b.pipelinesLive, (unsigned long long)b.pipelinesPeak,
+               (unsigned long long)(b.pipelinePoolFull - a.pipelinePoolFull),
+               (unsigned long long)(b.pipelineFailures - a.pipelineFailures));
+    if (made == RHI_PIPELINE_POOL_MAX && refused == 0) {
+        /* one more: the pool refuses it and counts it */
+        const RhiPipeline over = rhi_create_pipeline(&d);
+        rhi_get_stats(&b);
+        POOL_CHECK(over.id == 0 && b.pipelinePoolFull == a.pipelinePoolFull + 1u,
+                   "one past the pool: id %u, %llu refused for a full pool\n", over.id,
+                   (unsigned long long)(b.pipelinePoolFull - a.pipelinePoolFull));
+        rhi_destroy_pipeline(over);
+        /* the 1025th and the last pipeline draw: red on the left half of a
+           4x2 target, green on the right */
+        RhiTexture tgt = rhi_create_texture(&(RhiTextureDesc){
+            4, 2, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC, "pool", 0});
+        RhiBuffer vbuf = rhi_create_buffer(
+            &(RhiBufferDesc){12 * sizeof(PoolVtx), RHI_BUF_VERTEX, RHI_MEM_UPLOAD, "pool verts"});
+        PoolVtx *v = vbuf.id ? rhi_map_buffer(vbuf) : NULL;
+        POOL_CHECK(tgt.id && v, "target or vertex buffer\n");
+        if (tgt.id && v) {
+            static const float qx[6] = {0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f};
+            static const float qy[6] = {1.0f, 1.0f, -1.0f, -1.0f, 1.0f, -1.0f};
+            for (int h = 0; h < 2; h++) {
+                for (int i = 0; i < 6; i++) {
+                    v[h * 6 + i] = (PoolVtx){qx[i] - 1.0f + (float)h,
+                                             qy[i],
+                                             0.0f,
+                                             {h ? 0 : 255, h ? 255 : 0, 0, 255},
+                                             0.0f,
+                                             0.0f};
+                }
+            }
+            rhi_wait_frame();
+            RhiCommandList cl = rhi_begin_commands();
+            RhiTextureBarrier pre = {tgt, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
+            rhi_cmd_barrier(cl, &pre, 1);
+            RhiRenderPassDesc rp = {0};
+            rp.color[0].texture = tgt;
+            rp.color[0].load = RHI_LOAD_CLEAR;
+            rp.colorCount = 1;
+            rp.width = 4;
+            rp.height = 2;
+            rhi_cmd_begin_render_pass(cl, &rp);
+            rhi_cmd_set_vertex_buffer(cl, 0, vbuf, 0);
+            rhi_cmd_set_pipeline(cl, p[1024]);
+            rhi_cmd_draw(cl, 6, 0, 1);
+            rhi_cmd_set_pipeline(cl, p[RHI_PIPELINE_POOL_MAX - 1]);
+            rhi_cmd_draw(cl, 6, 6, 1);
+            rhi_cmd_end_render_pass(cl);
+            RhiTextureBarrier post = {tgt, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
+            rhi_cmd_barrier(cl, &post, 1);
+            rhi_end_commands(cl);
+            rhi_submit(cl);
+            uint8_t img[4 * 2 * 4];
+            uint32_t pitch = 0;
+            const bool read = rhi_readback_texture(tgt, RHI_ASPECT_COLOR, img, sizeof(img), &pitch);
+            static const uint8_t red[4] = {255, 0, 0, 255}, green[4] = {0, 255, 0, 255};
+            POOL_CHECK(read && pitch == 16 && memcmp(&img[0], red, 4) == 0 &&
+                           memcmp(&img[1 * 16 + 3 * 4], green, 4) == 0,
+                       "the 1025th and the last pipeline's draws: read %d pitch %u, left %u %u %u "
+                       "%u, right %u %u %u %u\n",
+                       (int)read, pitch, img[0], img[1], img[2], img[3], img[28], img[29], img[30],
+                       img[31]);
+        }
+        rhi_destroy_buffer(vbuf);
+        rhi_destroy_texture(tgt);
+    }
+    for (uint32_t i = 0; i < made; i++) {
+        rhi_destroy_pipeline(p[i]);
+    }
+    free(p);
+    rhi_get_stats(&b);
+    POOL_CHECK(b.pipelinesLive == 0, "%llu pipelines alive after they were destroyed\n",
+               (unsigned long long)b.pipelinesLive);
+    rhi_destroy_shader(vs);
+    rhi_destroy_shader(ps);
+#undef POOL_CHECK
+    rhi_wait_idle();
+    rhi_shutdown();
+    return failures + (int)rhi_vk_validation_error_count();
+}
+
 int main(void)
 {
     const RhiTestConfig cfg = {"vulkan", "rhi_vk_test", true, NULL, rhi_vk_validation_error_count};
@@ -455,6 +646,8 @@ int main(void)
     if (rc != 0) {
         return rc;
     }
-    return (hazardCell() || passAreaCell() || cacheCell() || cacheDropCell() || limitsCell()) ? 1
-                                                                                              : 0;
+    return (hazardCell() || passAreaCell() || cacheCell() || cacheDropCell() || limitsCell() ||
+            poolCell())
+               ? 1
+               : 0;
 }
