@@ -1,0 +1,33 @@
+The AppImage runtime: where its source is
+
+The .AppImage files of ICO PC start with the AppImage runtime, a small
+separate program that mounts (or unpacks) the files inside the AppImage
+and starts the game. It is the prebuilt runtime of AppImage/type2-runtime
+release 20251108, used unmodified:
+
+  https://github.com/AppImage/type2-runtime/tree/dd6cebedcbddde9c82f89b011e8e1d40b6e43868
+  https://github.com/AppImage/type2-runtime/releases/tag/20251108
+
+That commit holds the runtime's own source (src/runtime/runtime.c, MIT)
+and the scripts that build it (scripts/), which name the exact sources of
+the libraries linked into it statically:
+
+  libfuse 3.15.0 (LGPL-2.1), with the type2-runtime's patch
+    patches/libfuse/mount.c.diff applied:
+    https://github.com/libfuse/libfuse/releases/download/fuse-3.15.0/fuse-3.15.0.tar.xz
+    (tag fuse-3.15.0, commit 6d08472ea47db895748d5ca7d3daf032c3fefcf8)
+  squashfuse 0.5.2 (BSD-2-Clause):
+    https://github.com/vasi/squashfuse/archive/0.5.2.tar.gz
+    (commit 775b4cc72ab47641637897f11ce0da15d5c1f115)
+  Alpine Linux 3.21's packages of musl libc 1.2.5 (MIT), Zstandard 1.5.6
+    (BSD-3-Clause), zlib 1.3.1 (zlib) and mimalloc 2.1.7 (MIT):
+    https://pkgs.alpinelinux.org/packages?branch=v3.21
+
+With these sources and the runtime's build scripts the runtime can be
+rebuilt, and relinked with a modified libfuse, as the GNU Lesser General
+Public License 2.1 (section 6) provides. The licence texts of the
+runtime and of each of these libraries follow this note.
+
+For three years from the release that carries it, a copy of these
+sources is available on request: open an issue at
+https://github.com/nathanialf/ico-pc/issues.

@@ -21,12 +21,22 @@
       "texts": [{"file": "tools/toolchain/deps/sdl3/linux-arm64/wayland-protocols/NOTICES.txt"}]
     },
     {
-      "name": "AppImage runtime (type2-runtime), with the libraries linked into it: musl libc, libfuse, squashfuse, libzstd, zlib",
-      "version": "release 20251108 (commit dd6cebedcbddde9c82f89b011e8e1d40b6e43868), unmodified; source at https://github.com/AppImage/type2-runtime",
-      "licence": "MIT (the runtime); its own LICENSE names the statically linked libraries' terms: musl libc MIT, libfuse LGPL-2.1, squashfuse BSD-2-Clause, libzstd BSD-3-Clause, zlib zlib",
+      "name": "AppImage runtime (type2-runtime), with the libraries linked into it: musl libc, libfuse, squashfuse, libzstd, zlib, mimalloc",
+      "version": "release 20251108 (commit dd6cebedcbddde9c82f89b011e8e1d40b6e43868), unmodified; source at https://github.com/AppImage/type2-runtime; linked: libfuse 3.15.0 (with the runtime's patches/libfuse/mount.c.diff), squashfuse 0.5.2, and Alpine 3.21's musl 1.2.5, Zstandard 1.5.6, zlib 1.3.1 and mimalloc 2.1.7",
+      "licence": "MIT (the runtime); the statically linked libraries: musl libc MIT, libfuse LGPL-2.1, squashfuse BSD-2-Clause, libzstd BSD-3-Clause, zlib zlib, mimalloc MIT",
       "used_for": "the AppImage download only: the small program at the start of the .AppImage file that mounts or unpacks the files inside it and starts the game; not part of the game program",
       "platforms": ["linux"],
-      "texts": [{"file": "tools/appimage/runtime-LICENSE"}]
+      "texts": [
+        {"file": "tools/appimage/runtime-LICENSE"},
+        {"file": "tools/appimage/runtime-SOURCE.txt"},
+        {"file": "tools/appimage/runtime-musl-COPYRIGHT"},
+        {"file": "tools/appimage/runtime-libfuse-LICENSE"},
+        {"file": "tools/appimage/runtime-libfuse-LGPL2.txt"},
+        {"file": "tools/appimage/runtime-squashfuse-LICENSE"},
+        {"file": "tools/appimage/runtime-zstd-LICENSE"},
+        {"file": "tools/appimage/runtime-zlib-LICENSE"},
+        {"file": "tools/appimage/runtime-mimalloc-LICENSE"}
+      ]
     },
     {
       "name": "SDL3 (with its Android Java code, org.libsdl.app)",
