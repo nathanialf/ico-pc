@@ -1030,7 +1030,12 @@ and a replay's gathered keys find it in O(1) and skip it (`port/render/rd_pipeli
 the made ones only. Past `RD_PIPELINE_FAIL_MAX` (1024, a quarter of the cache) failed entries,
 `rd: pipelines: <n> keys failed, more than the 1024 remembered: no pipeline is created until the
 cache is cleared (new keys are not drawn)` stops every creation until `rd__pipeline_cache_clear`,
-so no key is retried on its every draw. The RHI's own lines and the
+so no key is retried on its every draw. A key the driver refused (not the pool) is not retried
+after a scene change either, though a transient refusal (the driver out of memory while the
+system takes pages back) then loses that key's draws for the run: no scene change reaches
+`rd_pipeline.c` (the cut is the replayed frame's, `RdFrame.cut`, read by `rd_interp.c` and
+`rd_core.c`), so a retry needs a hook called from the replay (`rd_replay.c`) that turns the
+driver's failed entries back into misses once, which this file cannot add alone. The RHI's own lines and the
 10 s numbers are in [RHI.md](RHI.md#the-pipeline-pool).
 
 **The policy.** `rd_set_pipeline_policy(&p)` before `rd_precreate_pipelines` sets how the set is

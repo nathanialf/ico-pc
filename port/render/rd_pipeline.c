@@ -84,7 +84,10 @@
  * (pipe.id 0: it holds no slot of the RHI's pool).  A failed key is found
  * by the same hash look-up as a made one, so it costs one creation attempt
  * per session (per cache clear), never one per draw, and its draws find it
- * in O(1). */
+ * in O(1).  A driver's failure is not retried after a scene change either:
+ * no scene change reaches this file (the cut is the replayed frame's,
+ * RdFrame.cut), so a retry needs a hook from the replay (RENDER.md, "The
+ * set against the pool"). */
 typedef struct RdPipeEntry {
     RdPipeKeyInt key;
     RhiPipeline pipe;
