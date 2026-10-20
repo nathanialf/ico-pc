@@ -95,7 +95,8 @@ static int hazardCell(void)
  * follows: the area the driver sees fits); a pass that fits is untouched.
  * rhi_cmd_checkpoint and rhi_set_submit_tag are no-ops to the picture
  * (checkpoints off, or not offered: lavapipe has no
- * VK_NV_device_diagnostic_checkpoints). */
+ * VK_NV_device_diagnostic_checkpoints). After the wait, rhi_gpu_progress
+ * says the submission finished, no wait in progress, under tag 7/3. */
 static int passAreaCell(void)
 {
     if (!rhi_create_backend("vulkan")) {
@@ -153,6 +154,23 @@ static int passAreaCell(void)
         rhi_submit(cl);
     }
     rhi_wait_idle();
+    {
+        /* rhi_gpu_progress after the wait: the submission seen finished,
+         * no wait in progress, the tag it was made under */
+        RhiGpuProgress gp;
+        const bool tracked = rhi_gpu_progress(&gp);
+        rhi_test_log("gpu progress: tracked %d, submitted %llu, finished %llu, waiting for %llu, "
+                     "replay %u, frame %u\n",
+                     (int)tracked, (unsigned long long)gp.submitted,
+                     (unsigned long long)gp.finished, (unsigned long long)gp.waitingFor, gp.replay,
+                     gp.frame);
+        if (!tracked || gp.submitted == 0 || gp.finished != gp.submitted || gp.waitingFor != 0 ||
+            gp.replay != 7 || gp.frame != 3) {
+            rhi_test_log("FAIL gpu progress: want tracked, finished == submitted > 0, no wait, "
+                         "replay 7, frame 3\n");
+            failures++;
+        }
+    }
     vkr_test_pass_area_no_assert(false);
     rhi_destroy_texture(col);
     rhi_destroy_texture(dep);

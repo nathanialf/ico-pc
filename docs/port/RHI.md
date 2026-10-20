@@ -592,6 +592,20 @@ renderer's [pass ring](RENDER.md#the-pass-ring) after it, before the message box
   `port/rhi/vk/vk_device.c` (`vkr_report_checkpoints`); `port/rhi/d3d12/d3d12_device.c`
   (`dx_dred_enable`, `dx_report_breadcrumbs`); `port/rhi/d3d12/d3d12_cmd.c` (`rhi_cmd_checkpoint`)).
 
+**A device that hangs without a loss.** A driver may also never return from a wait and never
+report the device lost. `rhi_gpu_progress` gives another thread the GPU's progress as the
+submitting thread last saw it, without a call into the driver: the newest submission's timeline
+value, when it was made and its `rhi_set_submit_tag` replay and frame, the newest value seen
+finished (a wait that returned, a counter read before one, `rhi_wait_idle`), and the value a wait
+in progress blocks on with how long it has blocked. The submitting thread stores them with
+`__atomic` stores in `vkr_note_submit`, `vkr_wait_value` and `rhi_wait_idle`; a wait in progress
+for a value above the newest seen finished is work the GPU has not finished. The watchdog reads it
+to tell a GPU hang from a freeze ([PLATFORM.md](PLATFORM.md#diagnostics)). D3D12 does not track it
+(`rhi_gpu_progress` returns false): its driver reports a hung device as `DXGI_ERROR_DEVICE_HUNG`, a
+loss (`port/rhi/rhi.h` (`RhiGpuProgress`); `port/rhi/vk/vk_cmd.c` (`vkr_progress_wait`,
+`vkr_progress_finished`); `port/rhi/vk/vk_device.c` (`rhi_gpu_progress`);
+`port/rhi/d3d12/d3d12_cmd.c` (`rhi_gpu_progress`)).
+
 The checkpoints cost one GPU write per pass (about 430 a replay) and the binding report a callback
 per resource, so they stay off unless asked for; the fault report costs nothing until a loss.
 **Robust access** (`gpu_robust`, Vulkan): `robustBufferAccess`, plus `robustBufferAccess2` and

@@ -361,6 +361,13 @@ typedef struct VkrState {
     uint32_t tagReplay, tagFrame;
     /* the timeline value of the wait that failed, 0: none (vkr_wait_value) */
     uint64_t lostWaitValue;
+    /* rhi_gpu_progress (rhi.h; read from any thread): the newest
+     * submission's value, when it was made (vkr_now_ns) and its tag
+     * (vkr_note_submit), the newest value seen finished, and the value a
+     * wait in progress blocks on with its start (vkr_wait_value,
+     * rhi_wait_idle); stored with __atomic by the submitting thread */
+    uint64_t progSubmitted, progSubmitNs, progFinished, progWaitingFor, progWaitSinceNs;
+    uint32_t progReplay, progFrame;
     /* render passes whose area exceeded an attachment (vk_cmd.c
      * vkr_pass_area_fits: logged once, clamped; vkr_test_pass_area_count) */
     uint32_t passAreaBad;
@@ -496,6 +503,8 @@ static inline VkrFrame *vkr_cur_frame(void)
 void vkr_lost_report(void);
 /* vk_cmd.c: a submission into VkrState.submits */
 void vkr_note_submit(uint64_t value, uint32_t lists, bool present);
+/* vk_cmd.c: rhi_gpu_progress's values back to none (a new device) */
+void vkr_progress_reset(void);
 
 /* vk_resource.c: the allocation table, every VkDeviceMemory alive with the
  * object bound to it, its size and debug name, and (with the address

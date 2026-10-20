@@ -433,6 +433,17 @@ void rhi_set_submit_tag(uint32_t replay, uint32_t frame)
     }
 }
 
+/* any thread (rhi.h): s_up and s_sel are set by rhi_init on the main
+ * thread long before a watchdog asks */
+bool rhi_gpu_progress(RhiGpuProgress *out)
+{
+    if (!s_up || !s_sel) {
+        memset(out, 0, sizeof(*out));
+        return false;
+    }
+    return s_sel->gpu_progress(out);
+}
+
 bool rhi_readback_texture(RhiTexture t, RhiViewAspect aspect, void *dst, size_t dstSize,
                           uint32_t *outRowPitch)
 {

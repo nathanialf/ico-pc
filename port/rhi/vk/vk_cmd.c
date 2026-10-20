@@ -93,6 +93,33 @@ void vkr_frames_shutdown(void)
     }
 }
 
+/* rhi_gpu_progress (rhi.h): the values a watchdog reads from another
+ * thread while this one may be blocked in the driver; only the submitting
+ * thread stores them */
+void vkr_progress_reset(void)
+{
+    __atomic_store_n(&g_vkr.progWaitingFor, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_vkr.progFinished, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_vkr.progSubmitted, 0, __ATOMIC_RELEASE);
+}
+
+/* value seen finished (a wait that returned, a counter read) */
+static void vkr_progress_finished(uint64_t value)
+{
+    if (value > __atomic_load_n(&g_vkr.progFinished, __ATOMIC_RELAXED)) {
+        __atomic_store_n(&g_vkr.progFinished, value, __ATOMIC_RELEASE);
+    }
+}
+
+/* a wait for value starts (value != 0) or ends (0) */
+static void vkr_progress_wait(uint64_t value)
+{
+    if (value != 0) {
+        __atomic_store_n(&g_vkr.progWaitSinceNs, vkr_now_ns(), __ATOMIC_RELAXED);
+    }
+    __atomic_store_n(&g_vkr.progWaitingFor, value, __ATOMIC_RELEASE);
+}
+
 static void vkr_wait_value(uint64_t value)
 {
     /* a lost device finishes nothing more: no wait (the first failed one
@@ -100,11 +127,17 @@ static void vkr_wait_value(uint64_t value)
     if (value == 0 || g_vkr.deviceLost) {
         return;
     }
-    /* a wait that blocks is counted with its time */
+    /* a wait that blocks is counted with its time. The watchdog sees the
+     * wait from the counter read on (rhi_gpu_progress): a driver may block
+     * in either call while the GPU hangs */
     uint64_t done = 0;
-    if (vkGetSemaphoreCounterValue(g_vkr.device, g_vkr.timeline, &done) == VK_SUCCESS &&
-        done >= value) {
-        return;
+    vkr_progress_wait(value);
+    if (vkGetSemaphoreCounterValue(g_vkr.device, g_vkr.timeline, &done) == VK_SUCCESS) {
+        vkr_progress_finished(done);
+        if (done >= value) {
+            vkr_progress_wait(0);
+            return;
+        }
     }
     VkSemaphoreWaitInfo wi = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
@@ -114,7 +147,11 @@ static void vkr_wait_value(uint64_t value)
     };
     const uint64_t t0 = vkr_now_ns();
     const VkResult r = vkWaitSemaphores(g_vkr.device, &wi, UINT64_MAX);
+    vkr_progress_wait(0);
     const uint64_t waited = vkr_now_ns() - t0;
+    if (r == VK_SUCCESS) {
+        vkr_progress_finished(value);
+    }
     if (r != VK_SUCCESS) {
         /* the value waited for against the one the GPU reached: the
          * submissions between them never finished (the loss report names
@@ -138,6 +175,10 @@ static void vkr_wait_value(uint64_t value)
 void vkr_note_submit(uint64_t value, uint32_t lists, bool present)
 {
     const uint32_t i = g_vkr.submitCount++ % VKR_SUBMIT_HISTORY;
+    __atomic_store_n(&g_vkr.progReplay, g_vkr.tagReplay, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_vkr.progFrame, g_vkr.tagFrame, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_vkr.progSubmitNs, vkr_now_ns(), __ATOMIC_RELAXED);
+    __atomic_store_n(&g_vkr.progSubmitted, value, __ATOMIC_RELEASE);
     g_vkr.submits[i].value = value;
     g_vkr.submits[i].replay = g_vkr.tagReplay;
     g_vkr.submits[i].frame = g_vkr.tagFrame;
@@ -224,7 +265,14 @@ void rhi_wait_idle(void)
      * bisect waits here after each replay, rd_dump.c rd_loss_bisect); a
      * device already lost is not asked again */
     if (!g_vkr.deviceLost) {
-        VKR_CHECK(vkDeviceWaitIdle(g_vkr.device));
+        /* a watchdog sees the wait (rhi_gpu_progress): everything submitted */
+        const uint64_t all = g_vkr.timelineValue;
+        vkr_progress_wait(all);
+        const bool ok = VKR_CHECK(vkDeviceWaitIdle(g_vkr.device));
+        vkr_progress_wait(0);
+        if (ok) {
+            vkr_progress_finished(all);
+        }
     }
     g_vkr.stats.waitIdles++;
     g_vkr.stats.fenceWaitNs += vkr_now_ns() - t0;

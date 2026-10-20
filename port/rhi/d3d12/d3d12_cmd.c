@@ -447,6 +447,14 @@ void rhi_set_submit_tag(uint32_t replay, uint32_t frame)
     g_dx.tagFrame = frame;
 }
 
+/* not tracked on Direct3D 12 (rhi.h): a hung device there is found by the
+ * driver's own timeout (DXGI_ERROR_DEVICE_HUNG, a loss) */
+bool rhi_gpu_progress(RhiGpuProgress *out)
+{
+    memset(out, 0, sizeof(*out));
+    return false;
+}
+
 /* ---------------------------------------------------------------- barriers */
 void rhi_cmd_barrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32_t count)
 {

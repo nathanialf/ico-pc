@@ -1747,6 +1747,7 @@ static bool vkr_create_device(void)
         return false;
     }
     g_vkr.timelineValue = 0;
+    vkr_progress_reset();
 
     VkCommandPoolCreateInfo pci = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -2126,6 +2127,28 @@ const char *rhi_adapter_name(void)
 bool rhi_device_lost(void)
 {
     return g_vkr.deviceLost;
+}
+
+/* any thread (rhi.h): the values vk_cmd.c stores, no Vulkan call (the
+ * device may be hung under the thread that submitted) */
+bool rhi_gpu_progress(RhiGpuProgress *out)
+{
+    const uint64_t now = vkr_now_ns();
+    memset(out, 0, sizeof(*out));
+    out->submitted = __atomic_load_n(&g_vkr.progSubmitted, __ATOMIC_ACQUIRE);
+    out->finished = __atomic_load_n(&g_vkr.progFinished, __ATOMIC_ACQUIRE);
+    out->waitingFor = __atomic_load_n(&g_vkr.progWaitingFor, __ATOMIC_ACQUIRE);
+    out->replay = __atomic_load_n(&g_vkr.progReplay, __ATOMIC_RELAXED);
+    out->frame = __atomic_load_n(&g_vkr.progFrame, __ATOMIC_RELAXED);
+    if (out->waitingFor != 0) {
+        const uint64_t since = __atomic_load_n(&g_vkr.progWaitSinceNs, __ATOMIC_RELAXED);
+        out->waitingNs = now > since ? now - since : 0;
+    }
+    if (out->submitted != 0) {
+        const uint64_t at = __atomic_load_n(&g_vkr.progSubmitNs, __ATOMIC_RELAXED);
+        out->submittedAgoNs = now > at ? now - at : 0;
+    }
+    return true;
 }
 
 void rhi_get_stats(RhiStats *out)

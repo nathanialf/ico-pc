@@ -965,6 +965,31 @@ void rhi_cmd_end_label(RhiCommandList cl);
 void rhi_cmd_checkpoint(RhiCommandList cl, const void *marker);
 void rhi_set_submit_tag(uint32_t replay, uint32_t frame);
 
+/* The GPU's progress as the submitting thread last saw it, for a watchdog
+ * on another thread while that thread may be blocked inside the driver
+ * (port/platform/diag_host.h ico_diag_set_gpu_hang): no call into the
+ * driver, plain reads of values the submitting thread stores atomically.
+ *   submitted     the newest submission's number (Vulkan: the timeline
+ *                 value it signals), 0 before the first;
+ *   finished      the newest number the submitting thread saw finished
+ *                 (a wait that returned, a read of the counter before one);
+ *   waitingFor    the number a wait in progress blocks on (rhi_wait_frame,
+ *                 rhi_wait_idle, a readback), 0 when none is in progress;
+ *   waitingNs     how long that wait has blocked so far;
+ *   submittedAgoNs how long ago the newest submission was made;
+ *   replay, frame the newest submission's rhi_set_submit_tag.
+ * A wait in progress whose number is above finished is work the GPU has
+ * not finished: while the wait has not returned, it is still running.
+ * False (and *out zeroed) when the backend does not track it (Direct3D 12)
+ * or no device is up. */
+typedef struct RhiGpuProgress {
+    uint64_t submitted, finished, waitingFor;
+    uint64_t waitingNs, submittedAgoNs;
+    uint32_t replay, frame;
+} RhiGpuProgress;
+
+bool rhi_gpu_progress(RhiGpuProgress *out);
+
 /* -------------------------------------------------- verification helpers
  * Synchronous readback of a whole texture into caller memory as tightly
  * packed rows (RGBA8 or R32F for depth).  Slow; only used by the frame-dump
