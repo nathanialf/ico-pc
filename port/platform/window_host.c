@@ -247,10 +247,12 @@ static struct {
     char presentPng[ICO_PATH_MAX];
     /* the present that took it: the record of the first present_once after
        the capture was armed (presentInfoPending until then; presentInfoHave
-       once noted), and the frame the dump holds */
+       once noted), the frame the dump holds and whether the zip holds the
+       tick before (the -prev.rddump --interp rebuilds the present from) */
     int presentInfoPending, presentInfoHave;
     RdPresentInfo presentInfo;
     uint32_t presentDumpFrame;
+    int presentDumpPrev;
 } s_pres;
 
 /* resolution "auto" (video_options.h ICO_RES_AUTO): the
@@ -2570,6 +2572,7 @@ static void frame_dump(void)
     s_pres.presentInfoPending = s_pres.presentPng[0] != '\0';
     s_pres.presentInfoHave = 0;
     s_pres.presentDumpFrame = rd_frame_number();
+    s_pres.presentDumpPrev = 0;
     /* the recording up to this moment, for the same report */
     ico_input_record_flush();
     /* the zip is made after the dump is closed; with --console the log
@@ -2582,6 +2585,7 @@ static void frame_dump(void)
         zr = ico_frame_dump_zip(zip, dump, havePrev ? prev : NULL, ico_diag_log_path(), why,
                                 sizeof(why));
     }
+    s_pres.presentDumpPrev = havePrev && zr >= 0;
     if (zr < 0) {
         fprintf(stderr, "window: dump: zip not written: %s%s\n", why,
                 ok ? "; the .rddump is kept" : "");
@@ -2813,13 +2817,25 @@ static void photo_pump(void)
                 RdPresentInfo pi;
                 const int have = s_pres.presentInfoHave ? (pi = s_pres.presentInfo, 1)
                                                         : rd_last_present_info(&pi);
-                char what[160] = "";
+                char what[192] = "";
 
-                if (have && pi.frame == s_pres.presentDumpFrame) {
+                if (have && pi.frame == s_pres.presentDumpFrame && pi.keep) {
+                    /* a keep frame's present shows DISPLAY again: nothing
+                       interpolated to rebuild */
                     snprintf(what, sizeof(what),
-                             " (the present of frame %u at alpha %.9g: rd_replay_tool --interp "
-                             "%.9g rebuilds it from the zip)",
+                             " (the present of frame %u at alpha %.9g, keep 1: the picture shown "
+                             "again)",
+                             pi.frame, (double)pi.alpha);
+                } else if (have && pi.frame == s_pres.presentDumpFrame && s_pres.presentDumpPrev) {
+                    snprintf(what, sizeof(what),
+                             " (the present of frame %u at alpha %.9g, keep 0: rd_replay_tool "
+                             "--interp %.9g rebuilds it from the zip)",
                              pi.frame, (double)pi.alpha, (double)pi.alpha);
+                } else if (have && pi.frame == s_pres.presentDumpFrame) {
+                    snprintf(what, sizeof(what),
+                             " (the present of frame %u at alpha %.9g, keep 0; the zip has no "
+                             "tick before to rebuild it from)",
+                             pi.frame, (double)pi.alpha);
                 } else if (have) {
                     snprintf(what, sizeof(what),
                              " (the present of frame %u at alpha %.9g, a later frame than the "

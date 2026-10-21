@@ -728,12 +728,16 @@ notes `rd_last_present_info` of the first present that succeeds after the arming
 (`RdPresentInfo.alpha`, the alpha it was drawn at) and the line names that present:
 
 ```
-window: F12: wrote <dumps>/frame-<time>-present.png (the present of frame F at alpha A: rd_replay_tool --interp A rebuilds it from the zip)
+window: F12: wrote <dumps>/frame-<time>-present.png (the present of frame F at alpha A, keep 0: rd_replay_tool --interp A rebuilds it from the zip)
 ```
 
 `rd_replay_tool frame.zip out.png --interp A frame.zip` then draws the same picture from the zip's
 two ticks ([RENDER.md](RENDER.md#dumps-and-the-replay-tool)). When a tick closed between F12 and
-that present, the line says `a later frame than the zip's N` instead and the zip cannot rebuild it;
+that present, the line says `a later frame than the zip's N` instead and the zip cannot rebuild it.
+The rebuild is named only when the zip holds the tick before (its `-prev.rddump`): without it the
+line says `keep 0; the zip has no tick before to rebuild it from`. A keep frame's present
+(`RdPresentInfo.keep`) shows DISPLAY again, not an interpolated frame: `keep 1: the picture shown
+again`;
 with interpolation off the present is `rd_end_frame`'s, alpha 1 (`port/platform/window_host.c`
 (`frame_dump`, `present_once`, `photo_pump`); `port/render/rd_interp.c` (`rd_present`,
 `rd__note_frame_present`)).
