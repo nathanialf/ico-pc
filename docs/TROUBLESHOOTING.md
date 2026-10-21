@@ -225,25 +225,33 @@ you can, one at Resolution 1x for comparison.
 
 ## White lines along walls while the camera moves
 
-While the camera turns or moves, thin white or light lines can flicker
-along the edges where two pieces of a wall or a floor meet. Each line is a
-gap a fraction of a pixel wide between the two pieces, and the light colour
-is the room's mist showing through it. The game draws the still parts of a
-room the same way in every picture between its own steps, so most edges
-stay closed. If you still see such lines:
+While the camera turns or moves, white or light wedges and lines can show
+along the edges where two pieces of a wall or a floor meet. The light
+colour is the room's mist showing through a gap between the pieces. The
+game draws extra pictures between its own steps to look smooth, which only
+happens at a Frame rate of 60 or more. In some of those pictures, pieces
+that had just come into view or just crossed the edge of the screen were
+placed from a different moment than their neighbours, so a gap opened
+between them. The game now places every piece in such a picture from the
+same viewpoint. If you still see such lines:
 
 1. Set **Options > Display > Frame rate** to **Original** and turn the
    camera in the same place. If the lines are gone, they come from the
    pictures the game draws between its own steps; if they stay, they are in
    the game's own pictures too.
-2. Set **Frame rate** back, and while the lines show press **F12**
-   ([Save a picture of a problem](#save-a-picture-of-a-problem)).
-3. Send a [problem report](#send-a-problem-report) with the `.zip` F12
-   saved (it holds that moment and the moment before it, so the pictures in
-   between can be drawn again), the picture ending in `-present.png` (the
-   lines as your screen showed them) and the newest `report-` file (or
-   `ico-pc.log`), and say which Frame rate showed the lines and where in the
-   game you were.
+2. Set **Frame rate** back and play for a few minutes where the lines show.
+   The log (`ico-pc.log`) then holds lines that say how many pictures had
+   pieces placed from different moments.
+3. On Windows, while the lines show, press **F12**
+   ([Save a picture of a problem](#save-a-picture-of-a-problem)). The
+   message the game writes in the log for it says which moment between two
+   steps the picture shows, so the picture can be drawn again exactly.
+4. Send a [problem report](#send-a-problem-report) with the newest `report-`
+   file (or `ico-pc.log`), and on Windows the `.zip` F12 saved (it holds that
+   moment and the moment before it) and the picture ending in
+   `-present.png` (the lines as your screen showed them). Say which Frame
+   rate showed the lines and where in the game you were. On a phone, a short
+   screen recording of the lines helps.
 
 ## A program that adds frames or scales the game (Lossless Scaling) does not work
 
