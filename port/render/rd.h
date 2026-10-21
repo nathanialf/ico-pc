@@ -819,10 +819,14 @@ void rd_note_cull_drop(const char *model, int part, int rule, int views, int one
  * rd_end_frame's one present of the frame), for the window's start-up log: the
  * frame's number, its keep flag, the strongest fade it recorded (1 + the
  * fade's alpha, GS 0x80 = 1.0; 0 for none), the frame-level snap against
- * the frame before (rd_internal.h RD_SNAP_*: 0 blended) and whether it was
- * the tick's first present.  False before the first present. */
+ * the frame before (rd_internal.h RD_SNAP_*: 0 blended), whether it was
+ * the tick's first present, and the alpha it was drawn at (rd_present's,
+ * after its clamp to [0, 1]; 1 for rd_end_frame's present of the tick):
+ * the replay tool's --interp with that alpha rebuilds the same picture
+ * from the frame and the one before it.  False before the first present. */
 typedef struct RdPresentInfo {
     uint32_t frame, keep, fade, snap, firstOfTick;
+    float alpha;
 } RdPresentInfo;
 
 bool rd_last_present_info(RdPresentInfo *out);

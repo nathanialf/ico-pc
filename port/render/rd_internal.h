@@ -1837,6 +1837,18 @@ enum {
     RD_UNMATCHED_COUNT
 };
 
+/* Why a frame that blended (no snap, alpha below 1) had no blended camera
+ * (rd_interp.c camSetup; RdInterpStats.camOffWhy) */
+enum {
+    RD_CAM_OFF_NONE = 0,  /* the blended camera on, or the frame not blended (a snap) */
+    RD_CAM_OFF_ALPHA0,    /* alpha 0 */
+    RD_CAM_OFF_ALPHA1,    /* alpha 1: nothing blends, the tick's own picture */
+    RD_CAM_OFF_NO_CAMERA, /* a frame without a camera (RdFrame.hasCamera) */
+    RD_CAM_OFF_LEGACY,    /* ICO_RD_S2_LEGACY=1 (rd__s2_legacy) */
+    RD_CAM_OFF_FAILED,    /* a view not invertible, or the blend refused (not affine, a mirror) */
+    RD_CAM_OFF_COUNT
+};
+
 /* Why a turn over RD_INTERP_TURN_SNAP kept the tick's pose (rd_interp.c
  * rotation continuity; RdInterpStats.turnWhy, the 10 s summary) */
 enum {
@@ -1919,6 +1931,22 @@ typedef struct RdInterpStats {
     uint32_t stillReRounded;
     uint32_t curWorld;
     uint32_t tickCams;
+    /* The mixed picture: in a frame that blended without a blended camera
+     * (camOffWhy, RD_CAM_OFF_*), the parts of the world (normal programs'
+     * mesh draws placed through the view) that were matched and so drawn
+     * from both ticks' blocks blended element by element (at alpha 0 the
+     * tick before's block as recorded), worldPrevRaw, and those drawn as
+     * the tick's alone (unmatched, snapped or unkeyed: camCurDraw with no
+     * camera to re-base them on, the tick's block as recorded),
+     * worldCurRaw.  With both above 0 the two kinds stand a tick of camera
+     * motion apart in one picture; mixed is then the smaller of the two
+     * (the pieces in the minority), 0 otherwise.  Whether such pieces
+     * touch is not computed: mixed counts pieces that may open a wedge,
+     * not wedges. */
+    uint32_t worldPrevRaw;
+    uint32_t worldCurRaw;
+    uint32_t mixed;
+    uint32_t camOffWhy;
 } RdInterpStats;
 
 /* Rotation-aware blending of an affine 4 x 4 (column-major, w row 0 0 0
@@ -1945,6 +1973,30 @@ int rd__interp_snap(const RdFrame *prev, const RdFrame *cur);
  * default; rd_interp.c): off, they blend in screen space (the
  * tests' and the replay tool's before/after switch). */
 void rd__interp_set_reproject(bool on);
+/* The present clock's alpha before its clamp to [0, 0.999]
+ * (rd_present_clock_alpha's (clock - tickAtMs) / tickMs), as its last call
+ * computed it; NAN when that call returned before computing one or
+ * rd_present has taken it since (each rd_present takes the value the clock
+ * noted for it, so a present the clock did not time, the vsync lock's,
+ * finds none).  For the alpha histogram and the tests. */
+double rd__present_clock_raw(void);
+
+/* The bins of the alpha histogram (rd_interp.c, the 10 s summary): alpha 0
+ * split by the clock's raw value (below 0: clamped from below; anything
+ * else, none included: exactly 0), the tenths of 0 < alpha < 0.999, the
+ * clock's top 0.999 and 1 (the vsync lock's last slot).  rd__alpha_bin
+ * the bin of a present at alpha (already clamped to [0, 1]) whose clock
+ * value was raw (NAN: none) */
+enum {
+    RD_ALPHA_BIN_CLAMPED = 0,
+    RD_ALPHA_BIN_ZERO,
+    RD_ALPHA_BIN_TENTH0,
+    RD_ALPHA_BIN_TOP = RD_ALPHA_BIN_TENTH0 + 10,
+    RD_ALPHA_BIN_ONE,
+    RD_ALPHA_BIN_COUNT
+};
+
+int rd__alpha_bin(float alpha, double raw);
 /* One vertex's ST by the RdGridSt formula kind (rd.h; pool.c's statements in
  * double precision): m the grid's model to GS screen (VU qw 16..19), eye the
  * camera's eye in the world (REFLECT), sx and sy the command's f[0] and

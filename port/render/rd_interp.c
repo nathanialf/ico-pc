@@ -1225,6 +1225,13 @@ static CamBlend s_cam;
 
 static uint32_t s_camGen, s_camGenSeen[2]; /* camSetup calls: camOf's cache */
 
+/* why the frame has no blended camera (RD_CAM_OFF_*), and the parts of the
+ * world drawn from the ticks' blocks as recorded without one: matched
+ * (blended element by element) and the tick's alone (RdInterpStats
+ * worldPrevRaw, worldCurRaw: the mixed picture) */
+static uint32_t s_camOff;
+static uint32_t s_worldPrevRaw, s_worldCurRaw;
+
 static void loadF16(const float *f, double *o)
 {
     for (int i = 0; i < 16; i++) {
@@ -1239,6 +1246,10 @@ static void camSetup(const RdFrame *prev, const RdFrame *cur, float t)
     memset(&s_cam, 0, sizeof(s_cam));
     s_camGen++;
     if (rd__s2_legacy() || !prev->hasCamera || !cur->hasCamera || !(t > 0.0f) || !(t < 1.0f)) {
+        s_camOff = rd__s2_legacy()                       ? RD_CAM_OFF_LEGACY
+                   : !prev->hasCamera || !cur->hasCamera ? RD_CAM_OFF_NO_CAMERA
+                   : !(t > 0.0f)                         ? RD_CAM_OFF_ALPHA0
+                                                         : RD_CAM_OFF_ALPHA1;
         return;
     }
     double ip[16], ic[16];
@@ -1246,6 +1257,7 @@ static void camSetup(const RdFrame *prev, const RdFrame *cur, float t)
     loadF16(cur->camera.view, s_cam.vc);
     if (!invert4d(s_cam.vp, ip) || !invert4d(s_cam.vc, ic) ||
         !rd__blend_affine(ip, ic, t, NULL, s_cam.it) || !invert4d(s_cam.it, s_cam.vt)) {
+        s_camOff = RD_CAM_OFF_FAILED;
         return;
     }
     mul4d(ip, s_cam.vt, s_cam.ep);
@@ -1993,6 +2005,9 @@ static bool gridCameraSts(const RdCmd *c, uint8_t *op)
 static void camCurDraw(RdCmd *c)
 {
     if (!s_cam.on) {
+        /* a part of the world left at its tick's camera (the mixed picture) */
+        s_worldCurRaw +=
+            c->type == RDC_MESH && isNormalProg(c->b[0]) && vuView(c) == RD_VU_VIEW_WORLD;
         return;
     }
     if (s_cam.still) {
@@ -5395,6 +5410,8 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
         (void)indexCur(); /* false: the ordinal pairing for every key */
     }
     s_cam.on = 0;
+    s_camOff = t < 1.0f ? RD_CAM_OFF_NONE : RD_CAM_OFF_ALPHA1;
+    s_worldPrevRaw = s_worldCurRaw = 0;
     s_rp.on = 0;
     s_rebased = s_rebasedCur = 0;
     s_still = s_stillReRounded = s_curWorld = s_tickCams = 0;
@@ -5498,6 +5515,10 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                 if (r != R_LERP) {
                     camCurDraw(c); /* the tick's draw, through the blended camera */
                 }
+                /* a matched part of the world blended from the ticks' blocks
+                 * as recorded, with no blended camera (the mixed picture) */
+                s_worldPrevRaw += r == R_LERP && !s_cam.on && c->type == RDC_MESH &&
+                                  isNormalProg(c->b[0]) && vuView(c) == RD_VU_VIEW_WORLD;
                 st.lerped += r == R_LERP;
                 st.mismatch += r == R_MISMATCH;
                 st.jump += r == R_JUMP;
@@ -5568,6 +5589,12 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     st.stillReRounded = (uint32_t)s_stillReRounded;
     st.curWorld = (uint32_t)s_curWorld;
     st.tickCams = (uint32_t)s_tickCams;
+    st.worldPrevRaw = s_worldPrevRaw;
+    st.worldCurRaw = s_worldCurRaw;
+    st.mixed = s_worldPrevRaw && s_worldCurRaw
+                   ? (s_worldPrevRaw < s_worldCurRaw ? s_worldPrevRaw : s_worldCurRaw)
+                   : 0u;
+    st.camOffWhy = blend ? s_camOff : RD_CAM_OFF_NONE;
     feedback(firstOfTick);
     if (stats) {
         *stats = st;
@@ -5608,6 +5635,16 @@ static struct {
     uint64_t unmatchedWhy[RD_UNMATCHED_COUNT], apart, prevKept, prevHeld;
     uint32_t scratchMax;      /* the most scratch meshes a present used */
     uint64_t scratchBytesMax; /* and the most bytes they held */
+    /* per present (every present, not only a tick's first): the alpha
+     * histogram (RD_ALPHA_BIN_*) and the lowest clock value clamped to 0;
+     * the presents that drew a mixed picture (RdInterpStats.mixed above 0),
+     * their parts of the world from each tick and in the minority, why
+     * they had no blended camera (RD_CAM_OFF_*), and the event lines
+     * written for them in this block */
+    uint64_t alphaBins[RD_ALPHA_BIN_COUNT];
+    double lowestRaw;
+    uint64_t mixedPresents, mixedPrev, mixedCur, mixedMinority, mixedWhy[RD_CAM_OFF_COUNT];
+    uint32_t mixedLogged;
 } s_pres;
 
 #define RD_INTERP_LOG_FRAMES 250
@@ -5733,7 +5770,41 @@ static void presentLog(void)
             "the tick's beside blended ones; %llu VU draws with the ticks' cameras",
             (unsigned long long)s_pres.still, (unsigned long long)s_pres.stillReRounded,
             (unsigned long long)s_pres.curWorld, (unsigned long long)s_pres.tickCams);
-    /* a seventh line, only when a turn kept the tick's pose: why, and the
+    /* a seventh line: the presents' alphas (rd__alpha_bin) */
+    {
+        const uint64_t *b = s_pres.alphaBins;
+        rd__log("interp: alpha of the %u presents: %llu at 0 (%llu clamped from below, lowest "
+                "%.4f; %llu exactly 0), by tenths %llu %llu %llu %llu %llu %llu %llu %llu %llu "
+                "%llu, %llu at 0.999, %llu at 1",
+                s_pres.presents,
+                (unsigned long long)(b[RD_ALPHA_BIN_CLAMPED] + b[RD_ALPHA_BIN_ZERO]),
+                (unsigned long long)b[RD_ALPHA_BIN_CLAMPED],
+                b[RD_ALPHA_BIN_CLAMPED] ? s_pres.lowestRaw : 0.0,
+                (unsigned long long)b[RD_ALPHA_BIN_ZERO],
+                (unsigned long long)b[RD_ALPHA_BIN_TENTH0 + 0],
+                (unsigned long long)b[RD_ALPHA_BIN_TENTH0 + 1],
+                (unsigned long long)b[RD_ALPHA_BIN_TENTH0 + 2],
+                (unsigned long long)b[RD_ALPHA_BIN_TENTH0 + 3],
+                (unsigned long long)b[RD_ALPHA_BIN_TENTH0 + 4],
+                (unsigned long long)b[RD_ALPHA_BIN_TENTH0 + 5],
+                (unsigned long long)b[RD_ALPHA_BIN_TENTH0 + 6],
+                (unsigned long long)b[RD_ALPHA_BIN_TENTH0 + 7],
+                (unsigned long long)b[RD_ALPHA_BIN_TENTH0 + 8],
+                (unsigned long long)b[RD_ALPHA_BIN_TENTH0 + 9],
+                (unsigned long long)b[RD_ALPHA_BIN_TOP], (unsigned long long)b[RD_ALPHA_BIN_ONE]);
+    }
+    /* an eighth line: the presents that drew parts of the world from both
+     * ticks' cameras in one picture (RdInterpStats.mixed) */
+    rd__log("interp: %llu presents drew a mixed picture (parts of the world from both ticks' "
+            "cameras, no blended camera): %llu parts from the tick before, %llu from the tick, "
+            "%llu in the minority; why no blended camera: alpha 0 %llu, no camera %llu, blend "
+            "failed %llu",
+            (unsigned long long)s_pres.mixedPresents, (unsigned long long)s_pres.mixedPrev,
+            (unsigned long long)s_pres.mixedCur, (unsigned long long)s_pres.mixedMinority,
+            (unsigned long long)s_pres.mixedWhy[RD_CAM_OFF_ALPHA0],
+            (unsigned long long)s_pres.mixedWhy[RD_CAM_OFF_NO_CAMERA],
+            (unsigned long long)s_pres.mixedWhy[RD_CAM_OFF_FAILED]);
+    /* a ninth line, only when a turn kept the tick's pose: why, and the
      * draws that did it most */
     if (s_pres.turnSnap || s_pres.turnFull) {
         char most[400];
@@ -5784,6 +5855,10 @@ static void presentLog(void)
     s_pres.number = number;
 }
 
+/* rd__present_clock_raw: the last rd_present_clock_alpha's value before its
+ * clamp, NAN once rd_present has taken it */
+static double s_clockRaw = NAN;
+
 /* rd_last_present_info's record; valid once a present ran */
 static RdPresentInfo s_info;
 static bool s_infoValid;
@@ -5804,6 +5879,7 @@ void rd__note_frame_present(const RdFrame *f)
     s_info.fade = f->fade;
     s_info.snap = (uint32_t)rd__interp_snap(rd__prev_frame(), f);
     s_info.firstOfTick = 1;
+    s_info.alpha = 1.0f; /* the tick's own picture */
     s_infoValid = true;
 }
 
@@ -5823,6 +5899,31 @@ bool rd_interpolation_active(void)
     return g_rd.inited && g_rd.settings.interpolate != 0;
 }
 
+/* a present that drew a mixed picture (RdInterpStats.mixed): counted for
+ * the 10 s summary, and the first three of a block named in an event line */
+static void mixedNote(const RdInterpStats *st, uint32_t frame, float alpha, double raw)
+{
+    if (!st->mixed) {
+        return;
+    }
+    s_pres.mixedPresents++;
+    s_pres.mixedPrev += st->worldPrevRaw;
+    s_pres.mixedCur += st->worldCurRaw;
+    s_pres.mixedMinority += st->mixed;
+    s_pres.mixedWhy[st->camOffWhy < RD_CAM_OFF_COUNT ? st->camOffWhy : 0]++;
+    if (s_pres.mixedLogged >= 3) {
+        return;
+    }
+    s_pres.mixedLogged++;
+    char clamped[48] = "";
+    if (alpha == 0.0f && raw < 0.0) {
+        snprintf(clamped, sizeof(clamped), " (clamped from %.4f)", raw);
+    }
+    rd__log("interp: present of frame %u at alpha %.4f%s drew %u parts of the world from the "
+            "tick before and %u from the tick: a mixed picture",
+            frame, (double)alpha, clamped, st->worldPrevRaw, st->worldCurRaw);
+}
+
 bool rd_present(float alpha)
 {
     if (!rd_interpolation_active() || !g_rd.hasDevice || g_rd.videoShown) {
@@ -5838,17 +5939,32 @@ bool rd_present(float alpha)
     if (alpha > 1.0f) {
         alpha = 1.0f;
     }
+    /* the clock's value for this present (none under the vsync lock, whose
+     * alpha is k / (n perFrame), never 0: a 0 there counts as exact); with
+     * ICO_RD_S2_LEGACY=1 the window replaces the clock's alpha by the
+     * measured one after the clock ran, and the bin still follows the
+     * clock's value */
+    const double raw = s_clockRaw;
+    s_clockRaw = NAN;
     /* the tick's first present keeps the feedback passes' inputs (FEED128,
      * and DISPLAY for the motion blur), the later ones start from them
      * again (feedback) */
     const int first = cur->number != s_pres.number;
     s_pres.number = cur->number;
     s_pres.presents++;
+    {
+        const int bin = rd__alpha_bin(alpha, raw);
+        s_pres.alphaBins[bin]++;
+        if (bin == RD_ALPHA_BIN_CLAMPED && (s_pres.alphaBins[bin] == 1 || raw < s_pres.lowestRaw)) {
+            s_pres.lowestRaw = raw;
+        }
+    }
     s_info.frame = cur->number;
     s_info.keep = cur->keep;
     s_info.fade = cur->fade;
     s_info.snap = (uint32_t)rd__interp_snap(rd__prev_frame(), cur);
     s_info.firstOfTick = (uint32_t)first;
+    s_info.alpha = alpha;
     s_infoValid = true;
     if (cur->keep) {
         /* a keep frame draws lists 11..12 over DISPLAY: once; the other
@@ -5865,6 +5981,7 @@ bool rd_present(float alpha)
     s_track = 0;
     rd__perf_interp_ms(rd__now_ms() - t0); /* charged to the replay below */
     rd__perf_alpha(alpha, first);
+    mixedNote(&s_pres.stats, cur->number, alpha, raw);
     if (first) {
         presentLog();
     }
@@ -5873,9 +5990,30 @@ bool rd_present(float alpha)
 
 /* ---------------------------------------------------------- present clock */
 
+int rd__alpha_bin(float alpha, double raw)
+{
+    if (!(alpha > 0.0f)) {
+        return raw < 0.0 ? RD_ALPHA_BIN_CLAMPED : RD_ALPHA_BIN_ZERO;
+    }
+    if (alpha >= 1.0f) {
+        return RD_ALPHA_BIN_ONE;
+    }
+    if (alpha == 0.999f) {
+        return RD_ALPHA_BIN_TOP;
+    }
+    const int k = (int)(alpha * 10.0f);
+    return RD_ALPHA_BIN_TENTH0 + (k < 0 ? 0 : (k > 9 ? 9 : k));
+}
+
+double rd__present_clock_raw(void)
+{
+    return s_clockRaw;
+}
+
 float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, double tickMs,
                              double nominalMs)
 {
+    s_clockRaw = NAN;
     if (!(tickMs > 0.0)) {
         return 0.0f;
     }
@@ -5907,6 +6045,7 @@ float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, d
     c->presents++;
     c->lastMs = nowMs;
     double a = (c->clockMs - tickAtMs) / tickMs;
+    s_clockRaw = a; /* before the clamp: the alpha histogram's "clamped from below" */
     a = a < 0.0 ? 0.0 : (a > 0.999 ? 0.999 : a);
     return (float)a;
 }

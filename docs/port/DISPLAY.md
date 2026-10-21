@@ -618,6 +618,22 @@ the frame closed and `tick` the last two closes apart, held to one to four perio
 and turns off the finer blending (`port/render/rd_internal.h` (`rd__s2_legacy`)). Under the lock the
 alpha is the grid's exact `k / (n * perFrame)` (`pace_lock_alpha`).
 
+`tickAt` is the deadline the closing step was due, while the clock is a smoothed estimate, so a
+present right after a tick closes can find the clock below it: its value is negative and the alpha
+is clamped to exactly 0. The 10 s summary counts every present's alpha
+(`port/render/rd_interp.c` (`rd__alpha_bin`, `presentLog`)):
+
+```
+interp: alpha of the N presents: Z at 0 (C clamped from below, lowest -0.0123; E exactly 0), by tenths a b c d e f g h i j, T at 0.999, O at 1
+```
+
+C counts the presents whose clock value was below 0 (the lowest of them after it), E the other
+zeros: a clock value of exactly 0, and every 0 of a present the clock did not time (the vsync
+lock's alphas are never 0). The tenths count 0 < alpha < 0.999 by its first decimal, T the clock's
+top and O the lock's last slot; Z + the tenths + T + O = N, the presents of the block. With
+`ICO_RD_S2_LEGACY=1` the bin of a 0 follows the clock's value, not the measured time that replaced
+it (`rd__present_clock_raw`).
+
 ## The CRT filter
 
 `rd_crt.c` is a present-time pass in place of the line doubling and the box blit, and the last pass
@@ -651,6 +667,22 @@ F12 (the frame shown), Shift+F12 (the aspect sweep in photo mode, below) and F11
 every second for 30 s) are [PLATFORM.md](PLATFORM.md#hotkeys-and-dump-zips)'s; `hotkeys_test` checks
 them (`port/platform/hotkeys.h`, header comment; `port/platform/window_host.c` (`frame_dump`,
 `sweep_start`, `stats_fast_toggle`)).
+
+F12's `-present.png` is taken by the first present after F12 arms the capture, and the line saying
+it was written comes from a later pump, after which more presents may have run. So `present_once`
+notes `rd_last_present_info` of the first present that succeeds after the arming
+(`RdPresentInfo.alpha`, the alpha it was drawn at) and the line names that present:
+
+```
+window: F12: wrote <dumps>/frame-<time>-present.png (the present of frame F at alpha A: rd_replay_tool --interp A rebuilds it from the zip)
+```
+
+`rd_replay_tool frame.zip out.png --interp A frame.zip` then draws the same picture from the zip's
+two ticks ([RENDER.md](RENDER.md#dumps-and-the-replay-tool)). When a tick closed between F12 and
+that present, the line says `a later frame than the zip's N` instead and the zip cannot rebuild it;
+with interpolation off the present is `rd_end_frame`'s, alpha 1 (`port/platform/window_host.c`
+(`frame_dump`, `present_once`, `photo_pump`); `port/render/rd_interp.c` (`rd_present`,
+`rd__note_frame_present`)).
 
 The sweep forces the native frame's aspect (`ico_video_frame_force_aspect`); the next flip latches
 the new width and remakes the scene-sized targets, and the paused photo camera rebuilds the game's

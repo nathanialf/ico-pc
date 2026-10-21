@@ -2319,7 +2319,26 @@ R counts the still draws whose element-wise blend of qw 4..27, what they were dr
 the still draws (less the turn), differs in bits from the block they take: the draws the fix
 changed. W counts the parts of the world `camCurDraw` re-based in a blended frame, K the draws
 marked `RD_VU_TICK_CAMERAS` (`RdInterpStats` `stillDraws`, `stillReRounded`, `curWorld`, `tickCams`,
-`port/render/rd_internal.h`). The vertex shaders keep the order of their arithmetic: every VU vertex
+`port/render/rd_internal.h`).
+
+**The mixed picture.** A frame that blends without a blended camera (alpha 0, a frame without a
+camera, the blend refused, `ICO_RD_S2_LEGACY=1`: `RdInterpStats.camOffWhy`, `RD_CAM_OFF_*`) draws
+its matched parts of the world from the ticks' blocks as recorded, blended element by element (at
+alpha 0 the tick before's), and the parts that are the tick's alone (unmatched, snapped, unkeyed)
+from the tick's block, `camCurDraw` having no camera to re-base them on. Both kinds in one picture
+stand a tick of camera motion apart, and the fog paints the gaps between them. The counts are
+`worldPrevRaw` and `worldCurRaw`, and `mixed` the smaller of the two when both are above 0 (the
+pieces in the minority; whether they touch is not computed). The 10 s summary carries a line for
+the presents that drew one, after the alpha line ([DISPLAY.md](DISPLAY.md#interpolation-between-ticks)),
+and an event line for the first three of each block:
+
+```
+interp: M presents drew a mixed picture (parts of the world from both ticks' cameras, no blended camera): P parts from the tick before, Q from the tick, R in the minority; why no blended camera: alpha 0 a, no camera b, blend failed c
+interp: present of frame F at alpha 0.0000 (clamped from -0.0081) drew 212 parts of the world from the tick before and 4 from the tick: a mixed picture
+```
+
+`rd_replay_tool --interp` prints the same counts and why the frame had no blended camera at the end
+of its third line (`port/render/rd_interp.c` (`camSetup`, `camCurDraw`, `mixedNote`)). The vertex shaders keep the order of their arithmetic: every VU vertex
 shader carries `NoContraction` (HLSL `precise`) and no module `FPFastMathMode`, so no driver fuses
 one draw's products and not another's (`tools/check_spirv.py`, the precise gate).
 
@@ -2655,7 +2674,9 @@ the tool and the tests (`port/render/rd_png.c`).
 
 `rd_replay_tool <dump> <out.png>` loads a dump (or the first `.rddump` in an F12 zip) and renders
 it headless; `--interp T PREV` with PREV an F12 or loss zip takes the zip's second `.rddump`, the
-tick before, so a report's zip rebuilds the pictures between its two ticks (`port/render/tools/rd_replay_tool.c`, usage comment):
+tick before, so a report's zip rebuilds the pictures between its two ticks, and with T the alpha
+F12's line names for its `-present.png` ([DISPLAY.md](DISPLAY.md#hotkeys-for-pictures)) the picture
+that was presented (`port/render/tools/rd_replay_tool.c`, usage comment):
 
 | option | does |
 | --- | --- |

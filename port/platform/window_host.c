@@ -240,6 +240,12 @@ static struct {
     Uint64 fastUntil;
     /* F12's presented-picture PNG while its capture is pending ("": none) */
     char presentPng[ICO_PATH_MAX];
+    /* the present that took it: the record of the first present_once after
+       the capture was armed (presentInfoPending until then; presentInfoHave
+       once noted), and the frame the dump holds */
+    int presentInfoPending, presentInfoHave;
+    RdPresentInfo presentInfo;
+    uint32_t presentDumpFrame;
 } s_pres;
 
 /* resolution "auto" (video_options.h ICO_RES_AUTO): the
@@ -2526,6 +2532,9 @@ static void frame_dump(void)
         fprintf(stderr, "window: F12: the presented picture could not be armed\n");
         s_pres.presentPng[0] = '\0';
     }
+    s_pres.presentInfoPending = s_pres.presentPng[0] != '\0';
+    s_pres.presentInfoHave = 0;
+    s_pres.presentDumpFrame = rd_frame_number();
     /* the recording up to this moment, for the same report */
     ico_input_record_flush();
     /* the zip is made after the dump is closed; with --console the log
@@ -2760,9 +2769,32 @@ static void photo_pump(void)
             base = b2 != NULL && (base == NULL || b2 > base) ? b2 : base;
 #endif
             if (s_pres.presentPng[0] != '\0' && strcmp(path, s_pres.presentPng) == 0) {
-                /* F12's presented picture: no photo popup */
-                fprintf(stderr, "window: F12: %s %s\n", r > 0 ? "wrote" : "could not write", path);
+                /* F12's presented picture: no photo popup.  The capture is
+                   taken by the first present after F12 armed it, and this
+                   pump can follow several more presents, so the present it
+                   names is the one present_once noted then; without one
+                   (interpolation off: rd_end_frame's present in the step
+                   before this pump) the last present, which is it */
+                RdPresentInfo pi;
+                const int have = s_pres.presentInfoHave ? (pi = s_pres.presentInfo, 1)
+                                                        : rd_last_present_info(&pi);
+                char what[160] = "";
+
+                if (have && pi.frame == s_pres.presentDumpFrame) {
+                    snprintf(what, sizeof(what),
+                             " (the present of frame %u at alpha %.9g: rd_replay_tool --interp "
+                             "%.9g rebuilds it from the zip)",
+                             pi.frame, (double)pi.alpha, (double)pi.alpha);
+                } else if (have) {
+                    snprintf(what, sizeof(what),
+                             " (the present of frame %u at alpha %.9g, a later frame than the "
+                             "zip's %u)",
+                             pi.frame, (double)pi.alpha, s_pres.presentDumpFrame);
+                }
+                fprintf(stderr, "window: F12: %s %s%s\n", r > 0 ? "wrote" : "could not write", path,
+                        what);
                 s_pres.presentPng[0] = '\0';
+                s_pres.presentInfoPending = s_pres.presentInfoHave = 0;
             } else {
                 ui_photo_capture_done(r > 0, base != NULL ? base + 1 : path);
             }
@@ -4702,6 +4734,11 @@ static int present_once(float a, Uint64 refresh, Uint64 period)
     }
     if (!ok) {
         return 0;
+    }
+    if (s_pres.presentInfoPending) {
+        /* the present that took F12's armed capture (photo_pump names it) */
+        s_pres.presentInfoHave = rd_last_present_info(&s_pres.presentInfo);
+        s_pres.presentInfoPending = 0;
     }
     /* the cost smoothed over the last presents, with hysteresis;
        a present is slower with an effects program loaded */

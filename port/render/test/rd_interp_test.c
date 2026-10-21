@@ -2397,6 +2397,31 @@ static void testPresentClock(void)
                                            1000.0 + 2000 * gap + 490.0, tick, gap);
     CHECK(c.resets == 2 && fabsf(a - (float)(10.0 / tick)) < 1e-5f,
           "present clock: a 500 ms pause resets it (alpha %.4f)", a);
+    CHECK(fabs(rd__present_clock_raw() - 10.0 / tick) < 1e-9,
+          "present clock: the value before the clamp noted (%.6f)", rd__present_clock_raw());
+    /* a present timed before the closing step's deadline (the clock after
+     * a reset is the measured time): the alpha clamped to exactly 0, the
+     * value below 0 noted for the histogram's "clamped from below" */
+    RdPresentClock e;
+    memset(&e, 0, sizeof(e));
+    const float z = rd_present_clock_alpha(&e, 5000.0 - 0.27, 5000.0, tick, gap);
+    const double raw = rd__present_clock_raw();
+    CHECK(z == 0.0f && fabs(raw - (-0.27 / tick)) < 1e-9 &&
+              rd__alpha_bin(z, raw) == RD_ALPHA_BIN_CLAMPED,
+          "present clock: before the tick's time, alpha %.4f, noted %.6f (want %.6f), bin %d", z,
+          raw, -0.27 / tick, rd__alpha_bin(z, raw));
+    (void)rd_present_clock_alpha(&e, 5000.0, 5000.0, 0.0, gap);
+    CHECK(isnan(rd__present_clock_raw()), "present clock: no tick length, nothing noted");
+    /* the bins: 0 without a clock value (the vsync lock) or at it, the
+     * tenths, the clock's top and the lock's last slot */
+    CHECK(rd__alpha_bin(0.0f, NAN) == RD_ALPHA_BIN_ZERO &&
+              rd__alpha_bin(0.0f, 0.0) == RD_ALPHA_BIN_ZERO &&
+              rd__alpha_bin(0.05f, 0.05) == RD_ALPHA_BIN_TENTH0 &&
+              rd__alpha_bin(0.55f, 0.55) == RD_ALPHA_BIN_TENTH0 + 5 &&
+              rd__alpha_bin(0.9985f, NAN) == RD_ALPHA_BIN_TENTH0 + 9 &&
+              rd__alpha_bin((float)0.999, 0.999) == RD_ALPHA_BIN_TOP &&
+              rd__alpha_bin(1.0f, NAN) == RD_ALPHA_BIN_ONE,
+          "present clock: the alpha histogram's bins");
 }
 
 /* ----------------------------------- unmatched draws, particles, lights */
@@ -5653,8 +5678,8 @@ static RdMesh seamMesh(const double *w, const double x[3], float (*qw)[4])
 }
 
 /* a tick: the camera turned deg about the origin, A and B keyed by parts
- * part and part + 1 */
-static void seamFrame(RdMesh ma, RdMesh mb, double deg, int part)
+ * pa and pb */
+static void seamFrameKeys(RdMesh ma, RdMesh mb, double deg, int pa, int pb)
 {
     rd_begin_frame();
     frameHead();
@@ -5672,10 +5697,16 @@ static void seamFrame(RdMesh ma, RdMesh mb, double deg, int part)
     rd_set_camera(&cam);
     s_s6List = 0;
     seamWorld(0, w);
-    s6Draw(ma, v, w, RD_KEY(&kObjSeam, part, 32));
+    s6Draw(ma, v, w, RD_KEY(&kObjSeam, pa, 32));
     seamWorld(1, w);
-    s6Draw(mb, v, w, RD_KEY(&kObjSeam, part + 1, 32));
+    s6Draw(mb, v, w, RD_KEY(&kObjSeam, pb, 32));
     rd_end_frame(0);
+}
+
+/* A and B keyed by parts part and part + 1 */
+static void seamFrame(RdMesh ma, RdMesh mb, double deg, int part)
+{
+    seamFrameKeys(ma, mb, deg, part, part + 1);
 }
 
 /* the first vertex's GS X and Y (ftoi4) of the batch qw through the block m
@@ -5783,6 +5814,28 @@ static void testStillSeams(void)
               "B (%d, %d), through the blended camera (%d, %d)",
               cell[0][0], cell[0][1], cell[1][0], cell[1][1], want[0], want[1]);
     }
+    /* the mixed picture's counters: A matched, B the tick's alone (the tick
+     * before drew it under another key).  At alpha 0 no blended camera: A
+     * is the tick before's block, B the tick's, a tick of camera motion
+     * apart (one part in the minority); half way both are through the
+     * blended camera */
+    seamFrameKeys(ma, mb, 0.0, 0, 11);
+    seamFrameKeys(ma, mb, 28.0, 0, 1);
+    st = build(0.0f, 1);
+    CHECK(st->worldPrevRaw == 1 && st->worldCurRaw == 1 && st->mixed == 1 &&
+              st->camOffWhy == RD_CAM_OFF_ALPHA0,
+          "seams: alpha 0, A matched and B the tick's: a mixed picture (from the tick before %u, "
+          "from the tick %u, minority %u, no blended camera for %u)",
+          st->worldPrevRaw, st->worldCurRaw, st->mixed, st->camOffWhy);
+    st = build(0.5f, 1);
+    CHECK(st->mixed == 0 && st->worldPrevRaw == 0 && st->worldCurRaw == 0 &&
+              st->camOffWhy == RD_CAM_OFF_NONE && st->curWorld == 1 && st->stillDraws == 1,
+          "seams: half way, A matched and B the tick's: no mixed picture (minority %u, the "
+          "tick's through the blended camera %u, still %u)",
+          st->mixed, st->curWorld, st->stillDraws);
+    st = build(1.0f, 1);
+    CHECK(st->mixed == 0 && st->camOffWhy == RD_CAM_OFF_NONE,
+          "seams: alpha 1, nothing blends: no mixed picture (minority %u)", st->mixed);
     rd_destroy_vu_mesh(ma);
     rd_destroy_vu_mesh(mb);
 

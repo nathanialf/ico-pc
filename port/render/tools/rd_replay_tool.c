@@ -887,10 +887,20 @@ static const RdFrame *prepareFrame(const char *dump, RdFrame *pf, RdFrame *f)
                ist.unmatchedWhy[RD_UNMATCHED_ABSENT], ist.unmatchedWhy[RD_UNMATCHED_FEWER],
                ist.unmatchedWhy[RD_UNMATCHED_UNPLACED], ist.unmatchedWhy[RD_UNMATCHED_PAYLOAD],
                ist.apart, ist.prevKept, ist.prevHeld, ist.reprojected, ist.longWay, ist.turnSnap);
+        static const char *const kCamOff[RD_CAM_OFF_COUNT] = {"on (or the frame not blended)",
+                                                              "off at alpha 0",
+                                                              "off at alpha 1",
+                                                              "off: no camera",
+                                                              "off: legacy",
+                                                              "off: the blend failed"};
         printf("interp: %u still draws, each drawn from the tick's block through the blended "
                "camera; %u of them the blend would have re-rounded; %u parts of the world drawn "
-               "as the tick's beside blended ones; %u VU draws with the ticks' cameras\n",
-               ist.stillDraws, ist.stillReRounded, ist.curWorld, ist.tickCams);
+               "as the tick's beside blended ones; %u VU draws with the ticks' cameras; a mixed "
+               "picture (no blended camera): %u parts of the world from the tick before, %u from "
+               "the tick, %u in the minority; the blended camera: %s\n",
+               ist.stillDraws, ist.stillReRounded, ist.curWorld, ist.tickCams, ist.worldPrevRaw,
+               ist.worldCurRaw, ist.mixed,
+               kCamOff[ist.camOffWhy < RD_CAM_OFF_COUNT ? ist.camOffWhy : 0]);
     }
     return rf;
 }
