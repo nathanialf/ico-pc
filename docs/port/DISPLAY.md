@@ -683,8 +683,10 @@ interp: alpha of the N presents: Z at 0 (C clamped from below, lowest -0.0123; E
 
 C counts the presents whose clock value was below 0 (the lowest of them after it), E the other
 zeros: a clock value of exactly 0, and every 0 of a present the clock did not time (the vsync
-lock's alphas are never 0). The tenths count 0 < alpha < 0.999 by its first decimal, T the clock's
-top and O the lock's last slot; Z + the tenths + T + O = N, the presents of the block. With
+lock's alphas are never 0). The tenths count every 0 < alpha < 1 but exactly 0.999 by its first
+decimal (a lock alpha such as 0.9995 among them, in the last tenth), T an alpha of exactly 0.999, the
+clock's top, and O an alpha of 1, the lock's last slot (`port/render/rd_interp.c`
+(`rd__alpha_bin`)); Z + the tenths + T + O = N, the presents of the block. With
 `ICO_RD_S2_LEGACY=1` the bin of a 0 follows the clock's value, not the measured time that replaced
 it (`rd__present_clock_raw`).
 

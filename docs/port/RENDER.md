@@ -2780,6 +2780,7 @@ The options:
 | `--overlay-test` | (with `--present`) a test pattern and a popup drawn as a presentation overlay |
 | `--vu-ref L:I` | the CPU mirror's vertices of prelit draw I of list L |
 | `--loss-bisect` | the [loss bisect](#the-loss-bisect) on the dump: the frame one pass longer each time, waiting for the GPU after each |
+| `--keys` | the pipelines the replay asks for against the start-up set, one line a key (`in set` or `MISSING`), exit 1 on a miss ([The start-up set](#the-start-up-set)); needs a device, `<out.png>` unused (give `-`) |
 | `--passes A[-B]` | replays passes A..B only (the [pass window](#the-loss-bisect)); A alone is pass A alone |
 
 ## Shader families
