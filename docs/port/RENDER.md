@@ -1023,6 +1023,15 @@ count and to the count without local read, and prints them for each mode.
 (`rd__pipeline_gather`, rounds as the loss bisect's `bisectPipelines`), one line each with its
 family and `in set` or `MISSING`, and `exit 1` on a miss (ctest `rd_replay_tool_keys`, TESTING.md).
 A key the set lacks costs one first-use stall, logged by `firstUseLine`, never a wrong picture.
+
+The DATE twins of the VU keys stay for every VU entry. The TEST with the DATE bits that is a list's
+default is list 4's, `RD_TEST_DATE1_Z_GEQUAL` (0x5C000), which only
+`ico2/seki/src/GsBase.c` (`gsb_setSpecularReg`, called for list 4 in the list setup) writes; but
+list 4 hosts the specular and the reflection passes (the list table above) and the C source has no
+caller of `mc_SetMicroCode`, so the programs that draw there cannot be read from the game's code,
+and with the vertex pre-pass the drawing keys carry `vu_main_vs` and `RD_PROG_PRELIT` whatever the
+program (`port/render/rd_mesh.c` (`enumerateVuDraws`)), so a key cannot say "specular only". A
+fold to the specular entries could be made only with the pre-pass off. `rd_replay_tool --keys` lists the VU keys with a DATE state a dump asks for.
 The summary line's renderer part ends with ` (pool 4160, cache 4096)` after the set's words
 (`rd_summary_text`). A creation that fails, in the set or at first use, is logged with the key, when
 it was asked for and why, the first 8 and then every 100th with the count so far
