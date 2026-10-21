@@ -1914,6 +1914,7 @@ bool rd_update_vu_mesh(RdMesh mesh, const float (*qw)[4])
         return false; /* a replaced mesh: its stream is not the packet's layout */
     }
     keepVersion(m);
+    m->streamWrites++;
     for (uint32_t b = 0; b < m->batchCount; b++) {
         const RdVuBatchRec *br = &m->batches[b];
         /* a sheet's batch: the packet holds its own vertices, not the tiles */

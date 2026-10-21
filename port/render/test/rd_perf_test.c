@@ -49,6 +49,14 @@
  *             one has no pieces, and every replay still counts its pieces
  *             by kind.  Before any device: the CSV header and line and the
  *             window's two summary texts on fixed pieces, to the byte.
+ *   interp    with interpolation on, two frames whose VU draws stand 2 GS
+ *             pixels apart presented 200 times between them (rd_present,
+ *             the alpha sweeping 0..0.95): the tick's plan (rd_interp.c) is
+ *             built at the first present only (its record's interpPlanMs
+ *             above 0, every later one's 0) and nothing is built or
+ *             allocated for it after; from the third present on nothing is
+ *             created or destroyed; DISPLAY at the same alpha early and
+ *             late is the same, byte for byte.
  *
  * With a dump instead (a measurement tool):
  *   rd_perf_test --dump FILE [--enhanced] [--resolution N] [--full-height]
@@ -89,6 +97,9 @@ static RdMesh s_mesh[MESHES];
 static RdTex s_tex[4];
 
 static float s_morph[1 + MESH_VERTS * QPV][4];
+
+/* the interp phase's step: the VU draws' GS X moved by it */
+static float s_shift;
 
 /* ------------------------------------------------------------ the frame */
 
@@ -181,7 +192,7 @@ static void recordFrame(uint32_t n)
         d.vu.mem[4][0] = 1.0f;
         d.vu.mem[5][1] = 1.0f;
         d.vu.mem[6][2] = 1.0f;
-        d.vu.mem[7][0] = 2048.0f;
+        d.vu.mem[7][0] = 2048.0f + s_shift;
         d.vu.mem[7][1] = 2048.0f;
         d.vu.mem[7][3] = 1.0f;
         d.batchCount = 1;
@@ -923,6 +934,74 @@ static void checkPasses(const RdFrame *f, bool prepass)
     CHECK(bare > 0, "passes: no replay checked without list stamps");
 }
 
+/* interp (the header): 200 presents between two frames 2 pixels apart */
+static void checkInterp(const RdSettings *base)
+{
+    RdSettings is = *base;
+    is.interpolate = 1;
+    rd_set_settings(&is); /* applied at the next rd_begin_frame */
+    for (int k = 0; k < 3; k++) {
+        s_shift = k == 2 ? 2.0f : 0.0f;
+        recordFrame(0);
+        rd_end_frame(0); /* closed, not replayed: rd_present draws */
+    }
+    s_shift = 0.0f;
+    uint32_t builds0 = 0, allocs0 = 0, builds1 = 0, allocs1 = 0, created = 0, laterPlans = 0;
+    uint32_t presented = 0;
+    double firstPlan = -1.0;
+    uint8_t *early = NULL, *late = NULL;
+    for (int k = 0; k < 200; k++) {
+        const float alpha = (float)((k * 7) % 20) / 20.0f; /* 0, 0.35, 0.7, 0.05, ... */
+        if (k == 1) {
+            rd__interp_plan_counts(&builds0, &allocs0);
+        }
+        if (!rd_present(alpha)) {
+            continue;
+        }
+        presented++;
+        const RdPerfRecord r = g_rdPerf; /* the record the present's replay closed */
+        while (rd_perf_pop(NULL)) {}
+        if (k == 0) {
+            firstPlan = r.interpPlanMs;
+        } else {
+            laterPlans += r.interpPlanMs != 0.0;
+        }
+        /* a readback (k 3, 183) may make its buffer, counted by the next */
+        if (k >= 2 && k != 4 && k < 184) {
+            created += r.buffersCreated + r.texturesCreated + r.buffersDestroyed +
+                       r.texturesDestroyed + r.memoryAllocs;
+        }
+        if (k == 3) {
+            early = readDisplay(); /* alpha 0.05 */
+        } else if (k == 183) {
+            late = readDisplay(); /* (183 * 7) % 20 = 1: alpha 0.05 again */
+        }
+    }
+    rd__interp_plan_counts(&builds1, &allocs1);
+    RdPresentInfo info;
+    memset(&info, 0, sizeof(info));
+    (void)rd_last_present_info(&info);
+    printf("interp: %u presents (snap %u), the first's plan %.3f ms, %u later presents with a plan "
+           "time, plans built %u and allocations %u after the first present, %u created or "
+           "destroyed\n",
+           presented, info.snap, firstPlan, laterPlans, builds1 - builds0, allocs1 - allocs0,
+           created);
+    CHECK(presented == 200 && info.snap == 0, "interp: %u of 200 presents (snap %u)", presented,
+          info.snap);
+    CHECK(firstPlan > 0.0 && laterPlans == 0,
+          "interp: the plan's time in the first present only (%.3f ms; %u later)", firstPlan,
+          laterPlans);
+    CHECK(builds1 == builds0 && allocs1 == allocs0,
+          "interp: %u plans built and %u allocations after the first present", builds1 - builds0,
+          allocs1 - allocs0);
+    CHECK(created == 0, "interp: %u created, destroyed or allocated after the second present",
+          created);
+    samePixels("interp: alpha 0.05 at present 4 and at present 184", early, late);
+    free(early);
+    free(late);
+    rd_set_settings(base);
+}
+
 static int synthetic(void)
 {
     RdSettings st;
@@ -1115,6 +1194,7 @@ static int synthetic(void)
         printf("reachable set: %u keys, %u without a pipeline\n", n, missing);
         CHECK(n > 0 && missing == 0, "reachable set: %u of %u keys without a pipeline", missing, n);
     }
+    checkInterp(&st);
     rd_shutdown();
     return 0;
 }

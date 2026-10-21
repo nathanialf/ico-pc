@@ -320,8 +320,8 @@ and a step's mean of the region rule's card verdicts the CPU decided while the d
 `wait` the [frame slot](ARCHITECTURE.md#terms)'s fence (`rhi_wait_frame`), `upload` the ring and the
 uploads, `acquire` the backbuffer, `walk` recording the VU vertex pre-pass and the lists less `bind`,
 `submit`, `present`; `interp` the presenter's blend between the ticks, and `(plan Y)` of it the
-part spent building an interpolation plan for the pair of ticks
-([RENDER.md](RENDER.md#performance-records));
+part spent building the tick's plan, once for a pair of ticks
+([RENDER.md](RENDER.md#the-ticks-plan));
 `fence waits` is the backend's blocked time inside wait and readback (`port/render/rd_replay.c`
 (`replayFrame`); `port/render/rd.h` (`RdPerfRecord`)). Further lines give the GPU time per list and
 per picture effect, the per-replay counts (draws, passes, binds, barriers, uploads) with the block's

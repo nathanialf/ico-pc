@@ -5594,6 +5594,7 @@ static void testNativeWidths(void)
 }
 
 #include "rd_interp_seams_test.inc"
+#include "rd_interp_plan_test.inc"
 
 static void runCpu(void)
 {
@@ -5637,6 +5638,7 @@ static void runCpu(void)
     testStillSeams();
     testStillSeamsAlpha0();
     testSeamsSizeTail();
+    testPlanIdentity();
 }
 
 /* ------------------------------------------------------ the ticks' eyes

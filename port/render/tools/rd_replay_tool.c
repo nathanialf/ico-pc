@@ -141,8 +141,9 @@
  *   --time N              after the picture is written, the frame replayed
  *                         N more times (with --interp the presenter's frame
  *                         built again before each, rd__interp_frame: the
- *                         first as the tick's first present, the others as
- *                         its later presents) and one line of the N
+ *                         first as the tick's first present, building the
+ *                         pair's plan again, the others as its later
+ *                         presents) and one line of the N
  *                         replays' records (rd.h RdPerfRecord), each CPU
  *                         phase's mean and least: "<dump>: time: N
  *                         replays, CPU mean (min) ms: total, interp (plan
@@ -1171,10 +1172,13 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
     for (int k = 0; k < n && ok; k++) {
         if (interpPrev) {
             RdInterpStats ist;
+            if (k == 0) {
+                rd__interp_plan_reset(); /* the first replay builds the pair's plan */
+            }
             const double t0 = rd__now_ms();
             rf = rd__interp_frame(pf, f, interpT, k == 0, &ist);
-            const double ms = rd__now_ms() - t0;
-            rd__perf_interp_ms(0.0, ms); /* charged to the replay below, as rd_present does */
+            const double ms = rd__now_ms() - t0, plan = rd__interp_last_plan_ms();
+            rd__perf_interp_ms(plan, ms - plan); /* charged to the replay below, as rd_present */
             if (!rf) {
                 fprintf(stderr, "%s: time: rd__interp_frame failed\n", dump);
                 ok = false;

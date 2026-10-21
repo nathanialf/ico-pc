@@ -216,8 +216,11 @@ static void prismFree(void);
 static void umFree(void);
 static void turnFree(void);
 
+static void planFree(void);
+
 void rd__interp_shutdown(void)
 {
+    planFree();
     turnFree();
     umFree();
     prismFree();
@@ -840,6 +843,289 @@ static double s_pivot[RD_INTERP_BONES][4]; /* x, y, z, weight */
 
 static uint32_t s_pivotMesh;
 
+/* ------------------------------------------------------------ the plan
+ *
+ * A pair of ticks is presented several times (a 50 Hz tick at 144
+ * presents a second: about three), and part of rd__interp_frame's work
+ * depends on the pair alone.  The tick's plan keeps that part, computed by
+ * the pair's first present where it always was, and the pair's later
+ * presents take it instead of computing it again:
+ *
+ *   the matching (buildIndex, indexCur, matchOf with placeSlot): per keyed
+ *   draw of cur in the main loop's order, its match in prev, why it has
+ *   none, whether it is paired apart, its two ordinals; the keyed count and
+ *   the draws placed.  prev's index (s_slots, s_nodes and each node's match,
+ *   Node.out, which unmatchedPass reads) stays as that present left it;
+ *   per mesh (its id, verFrame, rewrites, stream and layout) a rigid mesh's
+ *   centroid (meshCentroid) and a skinned mesh's pivots (skinPivots);
+ *   per VU block, keyed by the bits they come from: camRebase's model to
+ *   world W and W^-1 (qw 4..7, 16..19) and vuWorldOrigin's origin (qw 4..7,
+ *   19).
+ *
+ * The rest runs per present as before (the copy of cur, the camera, the
+ * re-bases' products with the blended camera, the lerps, the still test,
+ * the turns and their memory, the morphs, unmatchedPass, feedback, the
+ * flap notes): a kept value is the same arithmetic on the same values, so
+ * every present's frame and stats are the bits a present without the plan
+ * makes, at every alpha and either firstOfTick.  The key: both frames'
+ * addresses, numbers, payloads (address and size) and list counts (a closed
+ * frame is never written: the ring records into another slot, rd_core.c;
+ * rd_shutdown drops the plan).  Its tables are allocated when it is built,
+ * at a pair's first present; a full table computes without keeping.
+ * ICO_RD_INTERP_PLAN=0 builds it at every present (the measure without
+ * it); rd__interp_plan_reset for a test that edits a frame in place. */
+enum { PLAN_NONE = 0, PLAN_BUILDING, PLAN_READY };
+
+typedef struct PlanMatch {
+    const RdCmd *pc;
+    uint32_t curOrd, ord;
+    uint8_t why, apart;
+} PlanMatch;
+
+/* values by the 32-bit words they are computed from (planGet) */
+typedef struct PlanEnt {
+    uint32_t used; /* PlanTab.gen when it holds a key */
+    uint32_t key[32];
+    uint8_t ok[2];
+    double v[32];
+} PlanEnt;
+
+typedef struct PlanTab {
+    PlanEnt *e;
+    uint32_t cap, size, count, gen;
+} PlanTab;
+
+/* a mesh's centroid (c) or pivots (piv), by its identity and version */
+typedef struct PlanMesh {
+    uint32_t used, id, verFrame, writes, vertexCount, qwPerVertex;
+    const void *stream;
+    uint8_t ok;
+    double c[3];
+} PlanMesh;
+
+typedef struct PlanMeshTab {
+    PlanMesh *e;
+    double (*piv)[RD_INTERP_BONES][4]; /* the pivots table's, entry by entry */
+    uint32_t cap, pivCap, size, count, gen;
+} PlanMeshTab;
+
+static struct {
+    const RdFrame *prev, *cur;
+    const uint8_t *pp, *cp;
+    uint32_t pn, cn, psz, csz, pl[RD_LIST_COUNT], cl[RD_LIST_COUNT];
+    int state;
+    uint32_t keyed, placed, at, cap;
+    PlanMatch *match;
+    PlanTab rebase, origin;
+    PlanMeshTab centroid, pivots;
+    uint32_t builds, allocs;
+    double ms; /* the last rd__interp_frame's building */
+} s_plan;
+
+static bool planOn(void)
+{
+    static int v = -1;
+    if (v < 0) {
+        const char *e = getenv("ICO_RD_INTERP_PLAN");
+        v = !(e != NULL && e[0] == '0');
+    }
+    return v != 0;
+}
+
+void rd__interp_plan_reset(void)
+{
+    s_plan.state = PLAN_NONE;
+}
+
+double rd__interp_last_plan_ms(void)
+{
+    return s_plan.ms;
+}
+
+void rd__interp_plan_counts(uint32_t *builds, uint32_t *allocs)
+{
+    *builds = s_plan.builds;
+    *allocs = s_plan.allocs;
+}
+
+static void planFree(void)
+{
+    free(s_plan.match);
+    free(s_plan.rebase.e);
+    free(s_plan.origin.e);
+    free(s_plan.centroid.e);
+    free(s_plan.pivots.e);
+    free(s_plan.pivots.piv);
+    const uint32_t builds = s_plan.builds, allocs = s_plan.allocs;
+    memset(&s_plan, 0, sizeof(s_plan));
+    s_plan.builds = builds;
+    s_plan.allocs = allocs;
+}
+
+/* *p grown to n elements of size bytes, zeroed when grown; false when it
+ * cannot be */
+static bool planGrow(void **p, uint32_t *cap, uint32_t n, size_t size)
+{
+    if (n <= *cap) {
+        return true;
+    }
+    void *q = realloc(*p, (size_t)n * size);
+    if (!q) {
+        return false;
+    }
+    memset(q, 0, (size_t)n * size);
+    s_plan.allocs++;
+    *p = q;
+    *cap = n;
+    return true;
+}
+
+/* a table's size for n keys (a quarter free), 0 when it cannot be had */
+static uint32_t planSize(void **p, uint32_t *cap, uint32_t n, size_t size)
+{
+    uint32_t want = 64;
+    while (want < n + n / 3u + 1u) {
+        want *= 2u;
+    }
+    return planGrow(p, cap, want, size) ? want : 0u;
+}
+
+static bool planKeyed(const RdFrame *prev, const RdFrame *cur)
+{
+    if (s_plan.prev != prev || s_plan.cur != cur || s_plan.pp != prev->payload ||
+        s_plan.cp != cur->payload || s_plan.pn != prev->number || s_plan.cn != cur->number ||
+        s_plan.psz != prev->payloadSize || s_plan.csz != cur->payloadSize) {
+        return false;
+    }
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        if (s_plan.pl[l] != prev->lists[l].count || s_plan.cl[l] != cur->lists[l].count) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* the plan for prev, cur begins (this present's matching is kept): the
+ * key and the tables; the match table off when it cannot be had */
+static void planStart(const RdFrame *prev, const RdFrame *cur, uint32_t keyed)
+{
+    static bool logged;
+    s_plan.prev = prev;
+    s_plan.cur = cur;
+    s_plan.pp = prev->payload;
+    s_plan.cp = cur->payload;
+    s_plan.pn = prev->number;
+    s_plan.cn = cur->number;
+    s_plan.psz = prev->payloadSize;
+    s_plan.csz = cur->payloadSize;
+    uint32_t vu = 0, meshes = 0, skinned = 0;
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        s_plan.pl[l] = prev->lists[l].count;
+        s_plan.cl[l] = cur->lists[l].count;
+        for (int k = 0; k < 2; k++) {
+            const RdCmdList *cl = k ? &cur->lists[l] : &prev->lists[l];
+            for (uint32_t i = 0; i < cl->count; i++) {
+                const uint8_t ty = cl->cmds[i].type;
+                vu += ty == RDC_MESH || ty == RDC_SKINNED || ty == RDC_GRID || ty == RDC_PARTICLES;
+                meshes += k && ty == RDC_MESH;
+                skinned += k && ty == RDC_SKINNED;
+            }
+        }
+    }
+    PlanTab *const tabs[2] = {&s_plan.rebase, &s_plan.origin};
+    for (int k = 0; k < 2; k++) {
+        tabs[k]->size = planSize((void **)&tabs[k]->e, &tabs[k]->cap, vu, sizeof(PlanEnt));
+        tabs[k]->count = 0;
+        tabs[k]->gen++;
+    }
+    PlanMeshTab *const mt[2] = {&s_plan.centroid, &s_plan.pivots};
+    for (int k = 0; k < 2; k++) {
+        mt[k]->size =
+            planSize((void **)&mt[k]->e, &mt[k]->cap, k ? skinned : meshes, sizeof(PlanMesh));
+        if (k && mt[k]->size &&
+            !planGrow((void **)&mt[k]->piv, &mt[k]->pivCap, mt[k]->size, sizeof(mt[k]->piv[0]))) {
+            mt[k]->size = 0;
+        }
+        mt[k]->count = 0;
+        mt[k]->gen++;
+    }
+    s_plan.at = 0;
+    s_plan.state =
+        planGrow((void **)&s_plan.match, &s_plan.cap, keyed ? keyed : 1u, sizeof(PlanMatch))
+            ? PLAN_BUILDING
+            : PLAN_NONE;
+    s_plan.builds++;
+    if (!logged) {
+        logged = true;
+        rd__log("interp: the tick's plan %s",
+                planOn() ? "on: a pair of ticks is matched at its first present, its later "
+                           "presents reuse the match (ICO_RD_INTERP_PLAN=0: at every present)"
+                         : "off (ICO_RD_INTERP_PLAN=0): every present matches the pair again");
+    }
+}
+
+/* the entry of t for the n words of key; *hit: it holds that key's values
+ * (else it is the key's, to fill); NULL when the table is off or full */
+static PlanEnt *planGet(PlanTab *t, const uint32_t *key, uint32_t n, bool *hit)
+{
+    *hit = false;
+    if (!t->size) {
+        return NULL;
+    }
+    uint32_t h = 2166136261u;
+    for (uint32_t k = 0; k < n; k++) {
+        h = (h ^ key[k]) * 16777619u;
+    }
+    for (uint32_t i = (h ^ h >> 15) & (t->size - 1u);; i = (i + 1u) & (t->size - 1u)) {
+        PlanEnt *e = &t->e[i];
+        if (e->used != t->gen) {
+            if (4u * (t->count + 1u) > 3u * t->size) {
+                return NULL;
+            }
+            t->count++;
+            e->used = t->gen;
+            memcpy(e->key, key, n * sizeof(key[0]));
+            return e;
+        }
+        if (memcmp(e->key, key, n * sizeof(key[0])) == 0) {
+            *hit = true;
+            return e;
+        }
+    }
+}
+
+/* the entry of t for mesh m (id); *hit as planGet; a version that differs
+ * takes the entry over */
+static PlanMesh *planMesh(PlanMeshTab *t, uint32_t id, const RdMeshRec *m, uint32_t *at, bool *hit)
+{
+    *hit = false;
+    if (!t->size) {
+        return NULL;
+    }
+    for (uint32_t i = (id * 0x9E3779B1u >> 7) & (t->size - 1u);; i = (i + 1u) & (t->size - 1u)) {
+        PlanMesh *e = &t->e[i];
+        const bool mine = e->used == t->gen && e->id == id;
+        if (e->used != t->gen && 4u * (t->count + 1u) > 3u * t->size) {
+            return NULL;
+        }
+        if (e->used != t->gen || mine) {
+            *hit = mine && e->verFrame == m->verFrame && e->writes == m->streamWrites &&
+                   e->stream == (const void *)m->stream && e->vertexCount == m->vertexCount &&
+                   e->qwPerVertex == m->qwPerVertex;
+            t->count += !mine;
+            e->used = t->gen;
+            e->id = id;
+            e->verFrame = m->verFrame;
+            e->writes = m->streamWrites;
+            e->stream = m->stream;
+            e->vertexCount = m->vertexCount;
+            e->qwPerVertex = m->qwPerVertex;
+            *at = i;
+            return e;
+        }
+    }
+}
+
 static void skinPivots(uint32_t meshId)
 {
     if (meshId == s_pivotMesh) {
@@ -849,6 +1135,13 @@ static void skinPivots(uint32_t meshId)
     s_pivotMesh = meshId;
     const RdMeshRec *m = rd__mesh_rec(meshId);
     if (!m || !m->vu || m->qwPerVertex != RD_VU_QW_SKIN || !m->stream) {
+        return;
+    }
+    uint32_t at = 0;
+    bool hit;
+    const PlanMesh *pm = planMesh(&s_plan.pivots, meshId, m, &at, &hit);
+    if (hit) {
+        memcpy(s_pivot, s_plan.pivots.piv[at], sizeof(s_pivot));
         return;
     }
     for (uint32_t v = 0; v < m->vertexCount; v++) {
@@ -876,6 +1169,9 @@ static void skinPivots(uint32_t meshId)
             }
         }
     }
+    if (pm) {
+        memcpy(s_plan.pivots.piv[at], s_pivot, sizeof(s_pivot));
+    }
 }
 
 /* a rigid mesh's vertex centroid; false without vertices */
@@ -884,6 +1180,15 @@ static bool meshCentroid(uint32_t meshId, double out[3])
     const RdMeshRec *m = rd__mesh_rec(meshId);
     if (!m || !m->vu || !m->stream || m->vertexCount == 0 || m->qwPerVertex == 0) {
         return false;
+    }
+    uint32_t at;
+    bool hit;
+    PlanMesh *pm = planMesh(&s_plan.centroid, meshId, m, &at, &hit);
+    if (hit) {
+        if (pm->ok) {
+            memcpy(out, pm->c, sizeof(pm->c));
+        }
+        return pm->ok != 0;
     }
     double s[3] = {0.0, 0.0, 0.0};
     uint32_t n = 0;
@@ -897,10 +1202,17 @@ static bool meshCentroid(uint32_t meshId, double out[3])
         }
     }
     if (n == 0) {
+        if (pm) {
+            pm->ok = 0;
+        }
         return false;
     }
     for (int k = 0; k < 3; k++) {
         out[k] = s[k] / n;
+    }
+    if (pm) {
+        pm->ok = 1;
+        memcpy(pm->c, out, sizeof(pm->c));
     }
     return true;
 }
@@ -1456,13 +1768,34 @@ static bool camRebase(float (*m)[4], const double *e, int mats, const double *l,
     storeQw4(out, 0, se);
     storeQw4(out, 4, s_cam.it);
     if (mats > 0) {
-        double m16[16];
-        loadQw4(m, 16, m16);
-        if (!invert4d(s, is)) {
-            return false;
+        /* W = S^-1 M and W^-1: the block's own (the plan keeps them) */
+        uint32_t key[32];
+        bool hit;
+        memcpy(key, m[4], 16 * sizeof(float));
+        memcpy(key + 16, m[16], 16 * sizeof(float));
+        PlanEnt *pe = planGet(&s_plan.rebase, key, 32, &hit);
+        bool ok;
+        if (hit) {
+            ok = pe->ok[0] != 0;
+            memcpy(w, pe->v, sizeof(w));
+            memcpy(iw, pe->v + 16, sizeof(iw));
+        } else {
+            double m16[16];
+            loadQw4(m, 16, m16);
+            ok = invert4d(s, is);
+            if (ok) {
+                mul4d(is, m16, w);
+                ok = invert4d(w, iw);
+            }
+            if (pe) {
+                pe->ok[0] = ok;
+                if (ok) {
+                    memcpy(pe->v, w, sizeof(w));
+                    memcpy(pe->v + 16, iw, sizeof(iw));
+                }
+            }
         }
-        mul4d(is, m16, w);
-        if (!invert4d(w, iw)) {
+        if (!ok) {
             return false;
         }
         double eb[16];
@@ -2091,7 +2424,32 @@ static void camCurDraw(RdCmd *c)
  * screen matrix).  qw 24..27 (model to view) would be simpler but is not
  * uploaded by every pass: list 5's dissolve draws carry another object's.
  * The camera's motion cancels, so this is the object's own move. */
+static bool worldOriginOf(const float (*m)[4], float out[3]);
+
 static bool vuWorldOrigin(const float (*m)[4], float out[3])
+{
+    uint32_t key[20];
+    bool hit;
+    memcpy(key, m[4], 16 * sizeof(float));
+    memcpy(key + 16, m[19], 4 * sizeof(float));
+    PlanEnt *pe = planGet(&s_plan.origin, key, 20, &hit);
+    if (!hit) {
+        const bool ok = worldOriginOf(m, out);
+        if (pe) {
+            pe->ok[0] = ok;
+            for (int j = 0; ok && j < 3; j++) {
+                pe->v[j] = out[j];
+            }
+        }
+        return ok;
+    }
+    for (int j = 0; pe->ok[0] && j < 3; j++) {
+        out[j] = (float)pe->v[j];
+    }
+    return pe->ok[0] != 0;
+}
+
+static bool worldOriginOf(const float (*m)[4], float out[3])
 {
     double inv[16], w[4] = {0.0, 0.0, 0.0, 0.0};
     if (!invert4(&m[4][0], inv)) {
@@ -2685,6 +3043,37 @@ static const RdCmd *matchOf(const RdFrame *prev, const RdCmd *c, int l, uint32_t
     nd->out = (int32_t)i;
     s_matchOrd = nd->ord;
     return &prev->lists[nd->list].cmds[nd->index];
+}
+
+/* matchOf for cur's draw c (index i of list l), kept in the plan as it is
+ * built, or the plan's answer (use) with matchOf's last-answer variables */
+static const RdCmd *planMatch(const RdFrame *prev, const RdCmd *c, int l, uint32_t i, bool use)
+{
+    if (use) {
+        if (s_plan.at >= s_plan.keyed) {
+            s_unWhy = RD_UNMATCHED_ABSENT; /* not reached: the plan has each keyed draw */
+            s_matchApart = false;
+            return NULL;
+        }
+        const PlanMatch *pm = &s_plan.match[s_plan.at++];
+        s_unWhy = pm->why;
+        s_matchApart = pm->apart != 0;
+        s_matchCurOrd = pm->curOrd;
+        s_matchOrd = pm->ord;
+        return pm->pc;
+    }
+    const double t0 = rd__now_ms();
+    const RdCmd *pc = matchOf(prev, c, l, i);
+    s_plan.ms += rd__now_ms() - t0;
+    if (s_plan.state == PLAN_BUILDING) {
+        if (s_plan.at < s_plan.cap) {
+            s_plan.match[s_plan.at++] =
+                (PlanMatch){pc, s_matchCurOrd, s_matchOrd, (uint8_t)s_unWhy, (uint8_t)s_matchApart};
+        } else {
+            s_plan.state = PLAN_NONE;
+        }
+    }
+    return pc;
 }
 
 /* ------------------------------------------------------------ per draw */
@@ -4104,6 +4493,7 @@ static RdMeshRec *scratchFor(const RdMeshRec *c, const float (*stream)[4])
             return NULL;
         }
     }
+    m->streamWrites++;            /* rewritten (the plan's mesh key) */
     rd__vu_mesh_copy_marks(m, c); /* the source's marks */
     /* a sheet's appended tiles (rd__vu_sheet_end draws them only outside
        the out-of-the-box state) */
@@ -5431,6 +5821,7 @@ static void feedback(int firstOfTick)
 const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float alpha,
                                 int firstOfTick, RdInterpStats *stats)
 {
+    s_plan.ms = 0.0;
     RdInterpStats st;
     memset(&st, 0, sizeof(st));
     if (!cur || !copyFrame(cur)) {
@@ -5441,7 +5832,12 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     }
     const float t = alpha < 0.0f ? 0.0f : (alpha > 1.0f ? 1.0f : alpha);
     st.snap = (uint32_t)rd__interp_snap(prev, cur);
-    for (int l = 0; l < RD_LIST_COUNT; l++) {
+    /* the pair's plan (above), when this pair built it */
+    const bool use = s_plan.state == PLAN_READY && prev && planKeyed(prev, cur);
+    if (use) {
+        st.keyed = s_plan.keyed;
+    }
+    for (int l = 0; !use && l < RD_LIST_COUNT; l++) {
         for (uint32_t i = 0; i < s_out.lists[l].count; i++) {
             st.keyed += isKeyedDraw(&s_out.lists[l].cmds[i]);
         }
@@ -5459,10 +5855,18 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     if (s_track) {
         memset(s_ord, 0, sizeof(s_ord));
     }
-    const bool blend = st.snap == RD_SNAP_NONE && t < 1.0f && buildIndex(prev);
-    if (blend) {
-        (void)indexCur(); /* false: the ordinal pairing for every key */
+    bool blend = st.snap == RD_SNAP_NONE && t < 1.0f;
+    if (blend && !use) {
+        const double t0 = rd__now_ms();
+        s_plan.state = PLAN_NONE; /* prev's index is rebuilt */
+        blend = buildIndex(prev);
+        if (blend) {
+            (void)indexCur(); /* false: the ordinal pairing for every key */
+            planStart(prev, cur, st.keyed);
+        }
+        s_plan.ms += rd__now_ms() - t0;
     }
+    s_plan.at = 0;
     s_cam.on = 0;
     s_camOff = t < 1.0f ? RD_CAM_OFF_NONE : RD_CAM_OFF_ALPHA1;
     s_worldPrevRaw = s_worldCurRaw = 0;
@@ -5516,7 +5920,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                     camCurDraw(c); /* unkeyed, cur's through the blended camera */
                     continue;
                 }
-                const RdCmd *pc = matchOf(prev, c, l, i);
+                const RdCmd *pc = planMatch(prev, c, l, i, use);
                 uint8_t *op = outPayload(c);
                 if (!pc || !op) {
                     const int why = pc ? RD_UNMATCHED_PAYLOAD : s_unWhy;
@@ -5609,6 +6013,13 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                     c->f[0] = pc->f[0] + (c->f[0] - pc->f[0]) * t;
                 }
             }
+        }
+        if (use) {
+            s_placed = (int)s_plan.placed; /* placeSlot's, when the plan was built */
+        } else if (s_plan.state == PLAN_BUILDING) {
+            s_plan.state = s_plan.at == st.keyed && planOn() ? PLAN_READY : PLAN_NONE;
+            s_plan.keyed = st.keyed;
+            s_plan.placed = (uint32_t)s_placed;
         }
     }
     /* the other mesh draws (unkeyed, unmatched, snapped) take cur's
@@ -6038,7 +6449,8 @@ bool rd_present(float alpha)
     s_track = first; /* the flap detector, once a frame */
     const RdFrame *f = rd__interp_frame(rd__prev_frame(), cur, alpha, first, &s_pres.stats);
     s_track = 0;
-    rd__perf_interp_ms(0.0, rd__now_ms() - t0); /* charged to the replay below */
+    const double ms = rd__now_ms() - t0, planMs = rd__interp_last_plan_ms();
+    rd__perf_interp_ms(planMs, ms - planMs); /* charged to the replay below */
     rd__perf_alpha(alpha, first);
     mixedNote(&s_pres.stats, cur->number, alpha, raw);
     if (first) {
