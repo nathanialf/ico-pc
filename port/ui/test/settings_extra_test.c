@@ -194,16 +194,16 @@ static void testWindowSize(void)
 
     /* a size from the file: shown as written, the next listed one each way */
     useConfig("version = 1\n[video]\nwindow_mode = \"borderless\"\nwindow_size = \"1700x950\"\n");
-    enterMain(1);
+    enterMainKeep(1); /* enterMain would rewrite the file */
     CHECK(strcmp(ui_settings_value_text(UI_OPT_WINDOW_SIZE), "1700x950") == 0,
           "the file's 1700x950 shown (%s)", ui_settings_value_text(UI_OPT_WINDOW_SIZE));
     CHECK(strcmp(wsStep(1), "1600x900") == 0, "from 1700x950, Right: 1600x900");
     useConfig("version = 1\n[video]\nwindow_size = \"1700x950\"\n");
-    enterMain(1);
+    enterMainKeep(1); /* enterMain would rewrite the file */
     CHECK(strcmp(wsStep(-1), "Display size") == 0,
           "from 1700x950 on a 1920x1080 display, Left: Display size (nothing larger offered)");
     useConfig("version = 1\n[video]\nwindow_size = \"2560x1440\"\n");
-    enterMain(1);
+    enterMainKeep(1); /* enterMain would rewrite the file */
     CHECK(strcmp(ui_settings_value_text(UI_OPT_WINDOW_SIZE), "2560x1440") == 0,
           "a size larger than the display is shown as written");
     CHECK(strcmp(wsStep(1), "1600x900") == 0, "from 2560x1440, Right: 1600x900");
