@@ -1870,6 +1870,34 @@ static void testTilerSet(RdPipeKeyInt *keys)
         printf("  tiler set, %s: %u keys with local read = desktop %u + DATE %u (screen %u, VU "
                "%u, setup %u) + fog local %u + fold %u; %u without local read (the fold alone)\n",
                kMode[mode], n, nd, date, dateScreen, dateVu, setup, fogLocal, fold, nb);
+        /* the families (rd__pipe_key_family, the start-up set's family line) sum to n and to nb */
+        uint32_t fam[RD_KF_COUNT], famBare[RD_KF_COUNT];
+        const uint32_t famSum = rd__pipe_family_counts(keys, n, RD_PIPELINE_REACHABLE_MAX, fam);
+        const uint32_t famBareSum =
+            rd__pipe_family_counts(bare, nb, RD_PIPELINE_REACHABLE_MAX, famBare);
+        printf("    families with local read:");
+        for (int f = 0; f < RD_KF_COUNT; f++) {
+            printf("%s %s %u", f ? "," : "", rd__pipe_family_name((RdKeyFamily)f), fam[f]);
+        }
+        printf("; without:");
+        for (int f = 0; f < RD_KF_COUNT; f++) {
+            printf("%s %s %u", f ? "," : "", rd__pipe_family_name((RdKeyFamily)f), famBare[f]);
+        }
+        printf("\n");
+        uint32_t famAdd = 0, famBareAdd = 0;
+        for (int f = 0; f < RD_KF_COUNT; f++) {
+            famAdd += fam[f];
+            famBareAdd += famBare[f];
+        }
+        CHECK(famSum == n && famAdd == n && famBareSum == nb && famBareAdd == nb,
+              "tiler %s: the families sum to %u (counted %u) of %u keys, and %u (%u) of %u without "
+              "local read",
+              kMode[mode], famAdd, famSum, n, famBareAdd, famBareSum, nb);
+        CHECK(fam[RD_KF_DATE] >= date && fam[RD_KF_VU] > 0 && fam[RD_KF_2D] > 0 &&
+                  fam[RD_KF_FOG] > 0 && fam[RD_KF_SHADOW] > 0 && fam[RD_KF_CRT] > 0 &&
+                  fam[RD_KF_FX] > 0,
+              "tiler %s: a family is empty or DATE's %u is under the twins %u", kMode[mode],
+              fam[RD_KF_DATE], date);
         CHECK(n < RD_PIPELINE_REACHABLE_MAX && nb < RD_PIPELINE_REACHABLE_MAX,
               "tiler %s: %u and %u keys under %d", kMode[mode], n, nb, RD_PIPELINE_REACHABLE_MAX);
         CHECK(n <= RHI_PIPELINE_POOL_MAX - RHI_PIPELINE_POOL_HEADROOM &&

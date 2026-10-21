@@ -2191,6 +2191,21 @@ uint32_t rd_precreate_pipelines(void)
     rd__log("pipelines: the start-up set's %u keys (pool %d: the cache's %d and %d for the "
             "pipelines made outside it; %u already made)",
             n, RHI_PIPELINE_POOL_MAX, RD_PIPELINE_CACHE_MAX, RHI_PIPELINE_POOL_HEADROOM, s_count);
+    {
+        /* the set's families (rd__pipe_key_family): which part of it grew or shrank is
+         * in a reporter's log */
+        uint32_t fam[RD_KF_COUNT];
+        (void)rd__pipe_family_counts(keys, n, m, fam);
+        char w[160];
+        size_t at = 0;
+        w[0] = '\0';
+        for (int f = 0; f < RD_KF_COUNT && at < sizeof(w); f++) {
+            const int put = snprintf(w + at, sizeof(w) - at, "%s%s %u", f ? ", " : "",
+                                     rd__pipe_family_name((RdKeyFamily)f), fam[f]);
+            at += put > 0 ? (size_t)put : 0;
+        }
+        rd__log("pipelines: the start-up set by family: %s", w);
+    }
     if (n > m) {
         rd__log("pipelines: the reachable set has %u keys, more than the %u the cache holds: "
                 "the first %u are created",
@@ -2568,6 +2583,76 @@ RdPipeKeyInt rd__vu_stage_key(uint8_t vs, uint8_t colorMask)
 static uint32_t keyClass(const RdPipeKeyInt *k)
 {
     return keyIsVu(k) ? 1u : 0u;
+}
+
+/* The families of the set (rd_internal.h RdKeyFamily), by what the key
+ * holds, not by the enumerator that listed it: the DATE twins of VU and
+ * screen keys count as DATE, the water's states as 2D.  The order class
+ * above stays the VU/other split, so a DATE twin of a VU key is still
+ * made with the VU batches. */
+RdKeyFamily rd__pipe_key_family(const RdPipeKeyInt *k)
+{
+    switch (k->gs.stencil) {
+    case RD_STENCIL_DATE_CLEAR:
+    case RD_STENCIL_DATE_SET:
+    case RD_STENCIL_DATE_TEST0:
+    case RD_STENCIL_DATE_TEST1:
+        return RD_KF_DATE;
+    default:
+        break;
+    }
+    if (rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs)) {
+        return RD_KF_VU_POINT;
+    }
+    if (keyIsVu(k)) {
+        return RD_KF_VU;
+    }
+    switch (k->fs) {
+    case RD_FS_BOX_REDUCE:
+        return RD_KF_SHADOW;
+    case RD_FS_FOG:
+    case RD_FS_FOG_BUFFER:
+    case RD_FS_FOG_MS:
+    case RD_FS_FOG_LOCAL:
+    case RD_FS_DEPTH_RESOLVE:
+    case RD_FS_DEPTH_UPSAMPLE:
+        return RD_KF_FOG;
+    case RD_FS_CRT_BLOOM:
+    case RD_FS_CRT_BLUR:
+    case RD_FS_CRT:
+        return RD_KF_CRT;
+    case RD_FS_FX_SPRITE:
+    case RD_FS_FX_SPRITE_UINT:
+    case RD_FS_FX_BLUR2:
+    case RD_FS_FX_FRAME:
+    case RD_FS_FX_LOCAL:
+        return RD_KF_FX;
+    default:
+        break;
+    }
+    if (k->gs.stencil == RD_STENCIL_INCR || k->gs.stencil == RD_STENCIL_DECR ||
+        k->gs.stencil == RD_STENCIL_TEST_NONZERO) {
+        return RD_KF_SHADOW;
+    }
+    return RD_KF_2D;
+}
+
+const char *rd__pipe_family_name(RdKeyFamily f)
+{
+    static const char *const kName[RD_KF_COUNT] = {"2D",  "VU",  "VU point", "shadow",
+                                                   "fog", "CRT", "fx",       "DATE"};
+    return (unsigned)f < RD_KF_COUNT ? kName[f] : "?";
+}
+
+uint32_t rd__pipe_family_counts(const RdPipeKeyInt *keys, uint32_t n, uint32_t max,
+                                uint32_t counts[RD_KF_COUNT])
+{
+    memset(counts, 0, sizeof(counts[0]) * RD_KF_COUNT);
+    const uint32_t m = n < max ? n : max;
+    for (uint32_t i = 0; i < m; i++) {
+        counts[rd__pipe_key_family(&keys[i])]++;
+    }
+    return m;
 }
 
 static void orderSet(RdPipeKeyInt *out, uint32_t n)

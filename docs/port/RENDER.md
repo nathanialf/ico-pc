@@ -1010,7 +1010,16 @@ a device with both blends (1153, and 1260 with the two-pass fallback). The set's
 
     rd: pipelines: the start-up set's 1153 keys (pool 4160: the cache's 4096 and 64 for the pipelines made outside it; 0 already made)
 
-and the summary line's renderer part ends with ` (pool 4160, cache 4096)` after the set's words
+and the next line splits the set by family (`port/render/rd_pipeline.c` (`rd__pipe_key_family`), by what
+a key holds, not by the enumerator that listed it: a DATE twin of a VU or screen key counts as DATE,
+the water's states as 2D):
+
+    rd: pipelines: the start-up set by family: 2D <n>, VU <n>, VU point <n>, shadow <n>, fog <n>, CRT <n>, fx <n>, DATE <n>
+
+(a key is in one family, the first that holds of DATE, VU point, VU,
+shadow, fog, CRT, fx, 2D). `rd_state_test` `testTilerSet` asserts the families sum to the set's
+count and to the count without local read, and prints them for each mode.
+The summary line's renderer part ends with ` (pool 4160, cache 4096)` after the set's words
 (`rd_summary_text`). A creation that fails, in the set or at first use, is logged with the key, when
 it was asked for and why, the first 8 and then every 100th with the count so far
 (`port/render/rd_pipeline.c` (`keepPipeline`, `failReason`)):

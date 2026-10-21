@@ -1458,6 +1458,31 @@ void rd__key_dynamic_normalise(RdPipeKeyInt *k);
 uint32_t rd__key_dynamic_bits(const RdPipeKeyInt *k);
 /* the key's words ("program 0 blend 4 vs 5 fs 5 fmt 1/8 msaa 0 dst 0") */
 void rd__pipe_key_text(const RdPipeKeyInt *k, char *out, size_t size);
+
+/* The family of a key, for the start-up set's count (rd_pipeline.c
+ * rd__pipe_key_family): the first that holds of DATE (a DATE stencil
+ * mode), a VU point entry (pre-pass, stage), a VU drawing entry, shadow
+ * (the volume's counting stencil or the box reduction), fog (the fog's
+ * fragment programs and the depth resolves), CRT, fx (staticBlur's and the
+ * post sprites' programs), else 2D (the screen prims, the blits and the
+ * water's states, which are screen prims). */
+typedef enum RdKeyFamily {
+    RD_KF_2D = 0,
+    RD_KF_VU,
+    RD_KF_VU_POINT,
+    RD_KF_SHADOW,
+    RD_KF_FOG,
+    RD_KF_CRT,
+    RD_KF_FX,
+    RD_KF_DATE,
+    RD_KF_COUNT
+} RdKeyFamily;
+
+RdKeyFamily rd__pipe_key_family(const RdPipeKeyInt *k);
+const char *rd__pipe_family_name(RdKeyFamily f);
+/* counts[family] over the first min(n, max) keys; returns their sum */
+uint32_t rd__pipe_family_counts(const RdPipeKeyInt *keys, uint32_t n, uint32_t max,
+                                uint32_t counts[RD_KF_COUNT]);
 /* The crash report's note (rd_set_activity_fn) around a pipeline made
  * outside rd__get_pipeline: begin sets "creating pipeline <what>" (a
  * graphics driver crash then counts as one while preparing the shaders,
