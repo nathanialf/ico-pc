@@ -2391,7 +2391,7 @@ and an event line for the first three of each block:
 
 ```
 interp: M presents drew a mixed picture (parts of the world from both ticks' cameras, no blended camera): P parts from the tick before, Q from the tick, R in the minority; why no blended camera: no camera a, blend failed b
-interp: present of frame F at alpha 0.0000 (clamped from -0.0081) drew 212 parts of the world from the tick before and 4 from the tick: a mixed picture
+interp: present of frame F at alpha 0.4000 drew 212 parts of the world from the tick before and 4 from the tick: a mixed picture
 ```
 
 `rd_replay_tool --interp` prints the same counts and why the frame had no blended camera at the end
