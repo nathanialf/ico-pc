@@ -4850,6 +4850,21 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     } else if (!rd__fog_source(s_cl, tz, &s_fogDepth, &src) || src.buffer != buffer) {
         return;
     }
+    if (fogEpoch) {
+        /* which depth the fog of an MSAA frame read, once a run each
+         * (DIVERGENCES.md VD-22): per sample, or the resolve's smallest
+         * sample, where a pixel with one sample the triangles left
+         * uncovered (the clear's Z 0) takes the fog table's entry 0 */
+        static bool loggedMs, loggedResolved; /* rd__log_once's flags are full */
+        bool *logged = fogMs ? &loggedMs : &loggedResolved;
+        if (!*logged) {
+            *logged = true;
+            rd__log("fog: in the MSAA epoch %s", fogMs ? "per sample (each sample's own depth)"
+                                                       : "on the resolved picture (the smallest "
+                                                         "sample's depth: a pixel with one "
+                                                         "uncovered sample takes full fog)");
+        }
+    }
 
     /* the pass on the colour target alone (on the local read the scene pass
      * with its depth, readable), FrameCB and the scissor */

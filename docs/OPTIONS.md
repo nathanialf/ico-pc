@@ -62,7 +62,10 @@ How the picture looks.
   glow and blur effects keep the PS2's size and are spread over the finer
   picture the way the console spreads them, and its shadow and fog effects
   are drawn to suit the finer picture, so none of them shows a grid; at 1x
-  they are the PS2's exactly.
+  they are the PS2's exactly. For the cleanest edges where pieces of the
+  world meet, pick a whole number (2x, 3x, 4x and so on): at the size of
+  your window, which is usually not a whole number, the edges are placed
+  a little less exactly.
 - **Aspect ratio** is the picture's shape: 4:3 (the PS2's), 16:10, 16:9,
   21:9, 32:9 or 48:9. **Auto** follows the shape of your window or screen,
   up to 60:9.
@@ -76,7 +79,9 @@ How the picture looks.
   do is skipped when you step through the row. Supersampling draws the
   picture at a larger size and shrinks it back, which smooths everything
   (including the insides of textures) but needs more from your graphics
-  card.
+  card. With MSAA, a gap thinner than a pixel between two pieces of the
+  world can show as a whole line of the room's mist; with supersampling
+  such a gap stays faint.
   While the Preset is **Original**, this row stays at **Off** and cannot be
   changed. Pick **Enhanced**, or change one of the Preset's rows, to use
   it. The row shows your saved choice. When the game is not using it,
