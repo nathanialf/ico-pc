@@ -2336,6 +2336,23 @@ recorded one), the CPU-projected draws are re-projected and the draws of the tic
 placed as at any other alpha, and the draws carry the ticks' cameras (`RD_VU_TICK_CAMERAS`). An
 object that did not move is drawn where it stood at the tick before, whichever kind of draw it is.
 
+**Payloads of two sizes.** A VU draw's payload carries its card section
+([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)) only under the region rule (`port/render/rd_mesh.c`
+(`cardKind`: clip mode REGION, in a state other than out of the box, `rd__vu_extended`)), and the
+game switches a packet from the region code (32) to the scissor code (36) when its box crosses the
+screen's edge (`ico2/seki/src/RegistPacket.c` (`reg_clipPacketBoundingBox`)), so a part of the
+world along the picture's edge gains or loses the section between ticks. `blendVu` reads both
+headers first and takes a draw as mismatched by size (`RD_MISMATCH_SIZE`) only when a payload is
+shorter than its header says (the header, the block, the bones, the stream and the materials:
+`vuFixedSize`); the header test then makes the two fixed parts equal, every offset after the block
+derives from the headers, and the card sections stay each payload's own (`rd__vu_cards_merge` takes
+each side's size, and leaves the tick's section as recorded when the tick before has none). Such a
+draw blends like any other, a still part of the world among them, instead of being drawn as the
+tick's alone beside its blended neighbours. The 10 s summary's second line counts them (`N VU draws
+blended across a change of payload size (a card section at one tick only)`,
+`RdInterpStats.sizeTailBlended`), and `rd_replay_tool --interp`'s second line with the draws still
+mismatched by size.
+
 **The mixed picture.** A frame that blends without a blended camera (a frame without a camera, the
 blend refused, `ICO_RD_S2_LEGACY=1`: `RdInterpStats.camOffWhy`, `RD_CAM_OFF_*`) draws its matched
 parts of the world from the ticks' blocks as recorded, blended element by element, and the parts

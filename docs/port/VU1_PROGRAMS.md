@@ -338,7 +338,9 @@ bits for each vertex of a card's strip, the verdict at the tick before and at th
 vertices a word. The draw records both as this tick's; when the interpolation blends the draw from
 the tick before's, it puts that tick's own verdicts in the first bits (`rd__vu_cards_merge`;
 `port/render/rd_interp.c` (`blendVu`)). The section's size depends only on the mesh and the batch
-range, so the two ticks' payloads of a draw keep one size and pair. The vertex stream is not
+range, but a draw records it only under the region rule, so a part the game switches to the scissor
+code at one tick has a section at the other alone; the interpolation pairs the two payloads by their
+headers and each one's own size ([RENDER.md](RENDER.md#camera-blending)). The vertex stream is not
 touched (the bits are numbered by the index list's vertices), so a dump keeps its format: a dump
 whose draws have no verdicts (one recorded out of the box or with the plain shaders only, or one
 written before them) gets them at

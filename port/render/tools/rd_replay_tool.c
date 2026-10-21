@@ -883,10 +883,12 @@ static const RdFrame *prepareFrame(const char *dump, RdFrame *pf, RdFrame *f)
         printf("interp: unmatched %u not drawn before, %u fewer before, %u left by the place "
                "pairing, %u payload; %u paired with another place; %u of the tick before kept, "
                "%u held; %u CPU-projected draws re-projected; %u draws turned the long way, "
-               "%u kept at the tick's pose for their turn\n",
+               "%u kept at the tick's pose for their turn; %u VU draws blended across a change "
+               "of payload size, %u mismatched by size\n",
                ist.unmatchedWhy[RD_UNMATCHED_ABSENT], ist.unmatchedWhy[RD_UNMATCHED_FEWER],
                ist.unmatchedWhy[RD_UNMATCHED_UNPLACED], ist.unmatchedWhy[RD_UNMATCHED_PAYLOAD],
-               ist.apart, ist.prevKept, ist.prevHeld, ist.reprojected, ist.longWay, ist.turnSnap);
+               ist.apart, ist.prevKept, ist.prevHeld, ist.reprojected, ist.longWay, ist.turnSnap,
+               ist.sizeTailBlended, ist.why[RD_MISMATCH_SIZE]);
         static const char *const kCamOff[RD_CAM_OFF_COUNT] = {"on (or the frame not blended)",
                                                               "off at alpha 0",
                                                               "off at alpha 1",

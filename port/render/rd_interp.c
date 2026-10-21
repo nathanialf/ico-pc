@@ -2746,6 +2746,10 @@ static int s_gridSt; /* grids whose STs blended (s_gridScreenSt), this present *
 /* blendVu's RD_VU_TICK_CAMERAS for the draw it blended (tickMark) */
 static uint32_t s_vuTicks;
 
+/* blendVu's draw: the two ticks' payloads differ in size (a card section
+ * at one tick only) */
+static int s_sizeTail;
+
 /* ------------------------------------------------------------ still draws
  *
  * A pixel no draw covers keeps the clear's Z of 0, and the fog sprite reads
@@ -2863,15 +2867,22 @@ static bool stillDraw(const float (*pu)[4], const float (*cu)[4], const float (*
            stillRows((const float (*)[4])pz, (const float (*)[4])out);
 }
 
+/* A VU payload's size without its card section (rd_mesh.h, the recorded
+ * payload): the header, the block, the bones, the stream, the materials */
+static uint64_t vuFixedSize(const RdVuPayload *h)
+{
+    return (uint64_t)sizeof(RdVuPayload) + sizeof(RdVuBlock) +
+           ((uint64_t)h->boneQw + h->streamQw) * 16u +
+           (uint64_t)h->materialCount * sizeof(RdMaterial);
+}
+
 static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCmd *cc, float t)
 {
     s_vuTicks = 0;
     s_rotated = 0;
     s_drawTurn = 0.0;
     s_drawLong = s_drawSnap = s_drawSnapWhy = 0;
-    if (pc->u[2] != cc->u[2]) {
-        return mismatch(RD_MISMATCH_SIZE);
-    }
+    s_sizeTail = 0;
     /* the program must match; the MSCAL code and clip mode (b[1], b[2])
      * change when a part crosses the edge of the screen (REGION against
      * SCISSOR, reg_clipPacketBoundingBox) and say nothing about the data */
@@ -2883,18 +2894,32 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
         return mismatch(RD_MISMATCH_MESH);
     }
     const uint8_t *pp = payloadAt(prev, pc->u[1], pc->u[2]);
-    if (!pp || cc->u[2] < sizeof(RdVuPayload) + sizeof(RdVuBlock)) {
+    if (!pp || pc->u[2] < sizeof(RdVuPayload) + sizeof(RdVuBlock) ||
+        cc->u[2] < sizeof(RdVuPayload) + sizeof(RdVuBlock)) {
         return mismatch(RD_MISMATCH_SIZE);
     }
     RdVuPayload hp, hc;
     memcpy(&hp, pp, sizeof(hp));
     memcpy(&hc, op, sizeof(hc));
+    /* The two payloads may differ in size by their card section alone: it
+     * is recorded only under the region rule (rd_mesh.c cardKind: clip
+     * REGION), and the clip mode changes with the code when the part's box
+     * crosses the screen's edge (above), so one tick can carry the section
+     * and the other not.  Each payload must hold its fixed part; the
+     * header test below then makes the two fixed parts equal, every offset
+     * after the block derives from the headers, and the card sections are
+     * each payload's own (rd__vu_cards_merge takes each side's size and
+     * leaves cur's section as recorded when prev has none) */
+    if (pc->u[2] < vuFixedSize(&hp) || cc->u[2] < vuFixedSize(&hc)) {
+        return mismatch(RD_MISMATCH_SIZE);
+    }
     if (hp.firstBatch != hc.firstBatch || hp.batchCount != hc.batchCount ||
         hp.boneQw != hc.boneQw || hp.streamQw != hc.streamQw ||
         hp.vertsPerBatch != hc.vertsPerBatch || hp.qwPerVertex != hc.qwPerVertex ||
         hp.materialCount != hc.materialCount) {
         return mismatch(RD_MISMATCH_HEADER);
     }
+    s_sizeTail = pc->u[2] != cc->u[2];
     const float (*vp)[4] = (const float (*)[4])(const void *)(pp + sizeof(RdVuPayload));
     float (*vo)[4] = (float (*)[4])(void *)(op + sizeof(RdVuPayload));
     float vc[36][4];
@@ -5537,6 +5562,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                     if (r == R_LERP) {
                         c->u[3] = s_vuTicks;
                         s_tickCams += s_vuTicks != 0u;
+                        st.sizeTailBlended += (uint32_t)s_sizeTail;
                     }
                     break;
                 }
@@ -5647,6 +5673,7 @@ static struct {
     float maxTurn;
     uint32_t snapFlips, lastSnap;
     uint64_t rebased, rebasedCur; /* VU draws re-based on the blended camera */
+    uint64_t sizeTailBlended;     /* VU draws blended across a card section of one tick */
     /* still draws, those the blend would have re-rounded; parts of
      * the world drawn as the tick's; draws with the ticks' cameras */
     uint64_t still, stillReRounded, curWorld, tickCams;
@@ -5703,6 +5730,7 @@ static void presentLog(void)
     s_pres.shifted += st->shifted;
     s_pres.rebased += st->rebased;
     s_pres.rebasedCur += st->rebasedCur;
+    s_pres.sizeTailBlended += st->sizeTailBlended;
     s_pres.still += st->stillDraws;
     s_pres.stillReRounded += st->stillReRounded;
     s_pres.curWorld += st->curWorld;
@@ -5751,15 +5779,17 @@ static void presentLog(void)
         "%.1f degrees; %llu continued the long way, %llu snapped over %.0f degrees); %llu shadow "
         "volumes moved across a topology change; %u draws flapping "
         "(%u or more outcome changes); %u frames changed between blended and snapped; %llu VU "
-        "draws through the blended camera (%llu of them the tick's: unmatched, snapped or unkeyed)",
+        "draws through the blended camera (%llu of them the tick's: unmatched, snapped or "
+        "unkeyed); %llu VU draws blended across a change of payload size (a card section at one "
+        "tick only)",
         (unsigned long long)s_pres.why[0], (unsigned long long)s_pres.why[1],
         (unsigned long long)s_pres.why[2], (unsigned long long)s_pres.why[3],
         (unsigned long long)s_pres.why[4], (unsigned long long)s_pres.rotated,
         (unsigned long long)s_pres.turned, (double)s_pres.maxTurn,
         (unsigned long long)s_pres.longWay, (unsigned long long)s_pres.turnSnap,
         RD_INTERP_TURN_SNAP, (unsigned long long)s_pres.shifted, flapping, RD_FLAP_MIN,
-        s_pres.snapFlips, (unsigned long long)s_pres.rebased,
-        (unsigned long long)s_pres.rebasedCur);
+        s_pres.snapFlips, (unsigned long long)s_pres.rebased, (unsigned long long)s_pres.rebasedCur,
+        (unsigned long long)s_pres.sizeTailBlended);
     /* a third line: the unmatched draws and the scratch meshes */
     rd__log("interp: unmatched screen prims and shadow volumes: %llu faded in, %llu faded out, "
             "%llu of the tick drawn from half way, %llu of the tick before drawn until half way, "

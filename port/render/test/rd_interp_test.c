@@ -184,6 +184,11 @@
  *             (3) drew with no blended camera at alpha 0) lands over 16
  *             pixels away; frames without a camera still count a mixed
  *             picture (mixed 1)
+ *   size tail Enhanced, B drawn with code 32 (region, a card section in
+ *             its payload) at one tick and 36 (scissor, none) at the other:
+ *             at alpha 0 and 0.5 B blends (not mismatched by size,
+ *             sizeTailBlended 1), A and B are still draws with the shared
+ *             vertex in one cell, B's card section is the tick's
  *   eye ticks (on a device) the camera orbits 28 degrees in the
  *             tick: a wall strip's triangle with a vertex in front of both
  *             ticks' eyes and behind the blended camera's is drawn half way
@@ -1835,6 +1840,10 @@ static const double kS6PointB[3] = {0.0, 0.0, 0.0}; /* B's origin: W = (-200, 0,
 
 static int s_s6List; /* the list s6Draw draws in (8 for a shine packet) */
 
+/* the MSCAL code and clip mode s6Draw draws with: normal_c's region rule by
+ * default, 36 and SCISSOR for a part across the screen's edge */
+static uint8_t s_s6Code = 32, s_s6Clip = RD_VU_CLIP_REGION;
+
 /* a prelit static mesh with model to world w through the camera v */
 static void s6Draw(RdMesh mesh, const double *v, const double *w, RdKey key)
 {
@@ -1864,7 +1873,8 @@ static void s6Draw(RdMesh mesh, const double *v, const double *w, RdKey key)
     RdVuDraw d;
     memset(&d, 0, sizeof(d));
     d.prog = RD_PROG_PRELIT;
-    d.code = 32;
+    d.code = s_s6Code;
+    d.clip = s_s6Clip;
     for (int c = 0; c < 4; c++) {
         for (int r = 0; r < 4; r++) {
             d.vu.mem[4 + c][r] = (float)s[c * 4 + r];
@@ -5626,6 +5636,7 @@ static void runCpu(void)
     testReprojectOneTick();
     testStillSeams();
     testStillSeamsAlpha0();
+    testSeamsSizeTail();
 }
 
 /* ------------------------------------------------------ the ticks' eyes

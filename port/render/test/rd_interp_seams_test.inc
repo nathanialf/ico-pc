@@ -476,3 +476,117 @@ static void testStillSeamsAlpha0(void)
     rd_destroy_vu_mesh(mb);
     s6GsZ = 0;
 }
+
+/* The size flap: the game switches a packet from normal_c's region code
+ * (32) to the scissor code (36) when its box crosses the screen's edge
+ * (reg_clipPacketBoundingBox), and a draw records its card section only
+ * under the region rule and outside the out of the box state (rd_mesh.c
+ * cardKind, rd__vu_extended), so the two ticks' payloads of one part
+ * differ by that section.  Under Enhanced, A drawn with code 32 at both
+ * ticks and B with 32 at the tick before and 36 at the tick (then the other
+ * way round), the camera orbiting 28 degrees, at alpha 0 and 0.5 (X at a
+ * cell's middle through each one's camera): B is blended, not mismatched
+ * by size, both parts are still draws with the shared vertex in one cell,
+ * and B's card section is the tick's (none when the tick drew it with 36;
+ * the tick's words as recorded when the tick drew it with 32 and the tick
+ * before, with 36, had none to give the first bits).  With blendVu's
+ * payload size test first, B was mismatched by size (RD_MISMATCH_SIZE)
+ * and drawn as the tick's alone. */
+static void testSeamsSizeTail(void)
+{
+    RdSettings keep = *rd_get_settings(), es = keep;
+    es.preset = RD_PRESET_ENHANCED;
+    es.sceneScale = 1.0f;
+    es.interpolate = 1;
+    rd_set_settings(&es);
+    CHECK(rd__vu_extended(), "size tail: Enhanced draws record card sections");
+    s6GsZ = 1;
+    const RdKey ka = RD_KEY(&kObjSeam, 0, 32), kb = RD_KEY(&kObjSeam, 1, 32);
+    static const float kT[2] = {0.0f, 0.5f};
+    static const char *const kDir[2] = {"32 then 36", "36 then 32"};
+    for (int w = 0; w < 2; w++) {
+        static float qa[10][4], qb[10][4];
+        double x[3], wa[16], wb[16];
+        int32_t want[2];
+        seamPointAtT(kT[w], 0.5, x, want);
+        seamWorld(0, wa);
+        seamWorld(1, wb);
+        RdMesh ma = seamMesh(wa, x, qa), mb = seamMesh(wb, x, qb);
+        const RdMeshRec *rb = rd__mesh_rec(mb.id);
+        CHECK(ma.id && mb.id && rb && rb->cardStripCount == 1,
+              "size tail: the meshes, B's triangle a free-standing strip (%u)",
+              rb ? rb->cardStripCount : 0u);
+        /* dir 0: B 32 then 36 (the tick before carries the section); 1: 36
+         * then 32 (the tick carries it) */
+        for (int dir = 0; dir < 2; dir++) {
+            for (int k = 0; k < 2; k++) {
+                rd_begin_frame();
+                frameHead();
+                double eye[3], v[16], p[16];
+                s6OrbitEye(k ? 28.0 : 0.0, eye);
+                s6View(k ? 28.0 : 0.0, eye, v);
+                s6Proj(p);
+                RdCamera cam;
+                memset(&cam, 0, sizeof(cam));
+                for (int i = 0; i < 16; i++) {
+                    cam.view[i] = (float)v[i];
+                    cam.proj[i] = (float)p[i];
+                }
+                cam.zoom = 500.0f;
+                rd_set_camera(&cam);
+                s_s6List = 0;
+                s6Draw(ma, v, wa, ka);
+                const int scissor = dir ? k == 0 : k == 1;
+                s_s6Code = scissor ? 36 : 32;
+                s_s6Clip = scissor ? RD_VU_CLIP_SCISSOR : RD_VU_CLIP_REGION;
+                s6Draw(mb, v, wb, kb);
+                s_s6Code = 32;
+                s_s6Clip = RD_VU_CLIP_REGION;
+                rd_end_frame(0);
+            }
+            const RdFrame *pf = rd__prev_frame(), *cf = rd__last_frame();
+            const RdCmd *pb = findKey(pf, 0, kb, 0), *cb = findKey(cf, 0, kb, 0);
+            RdVuCards pc, cc;
+            const uint32_t pAt = pb ? rd__vu_cards_at(pf->payload + pb->u[1], pb->u[2], &pc) : 0u;
+            const uint32_t cAt = cb ? rd__vu_cards_at(cf->payload + cb->u[1], cb->u[2], &cc) : 0u;
+            CHECK(pb && cb && pb->u[2] != cb->u[2] && (dir ? !pAt && cAt : pAt && !cAt),
+                  "size tail: alpha %.1f, B %s: the payloads differ by the card section (%u, %u "
+                  "bytes)",
+                  (double)kT[w], kDir[dir], pb ? pb->u[2] : 0u, cb ? cb->u[2] : 0u);
+            const RdInterpStats *st = build(kT[w], 1);
+            CHECK(st->snap == RD_SNAP_NONE && st->lerped == 2 && st->mismatch == 0 &&
+                      st->why[RD_MISMATCH_SIZE] == 0 && st->sizeTailBlended == 1 &&
+                      st->stillDraws == 2 && st->mixed == 0,
+                  "size tail: alpha %.1f, B %s: both blended (lerped %u, mismatched %u, by size "
+                  "%u), B across the size (%u), both still (%u)",
+                  (double)kT[w], kDir[dir], st->lerped, st->mismatch, st->why[RD_MISMATCH_SIZE],
+                  st->sizeTailBlended, st->stillDraws);
+            const RdFrame *f = built(kT[w]);
+            const RdCmd *oa = f ? findKey(f, 0, ka, 0) : NULL;
+            const RdCmd *ob = f ? findKey(f, 0, kb, 0) : NULL;
+            int32_t ca[2] = {0, 0}, cbx[2] = {0, 0};
+            const bool cells = oa && ob && seamCell(vuBlock(f, oa), (const float (*)[4])qa, ca) &&
+                               seamCell(vuBlock(f, ob), (const float (*)[4])qb, cbx);
+            CHECK(cells && ca[0] == want[0] && ca[1] == want[1] && cbx[0] == want[0] &&
+                      cbx[1] == want[1],
+                  "size tail: alpha %.1f, B %s: the shared vertex in one cell, A (%d, %d), B (%d, "
+                  "%d), want (%d, %d)",
+                  (double)kT[w], kDir[dir], ca[0], ca[1], cbx[0], cbx[1], want[0], want[1]);
+            /* B's card section: the tick's, its size and its words */
+            RdVuCards oc;
+            const uint32_t oAt = ob ? rd__vu_cards_at(f->payload + ob->u[1], ob->u[2], &oc) : 0u;
+            CHECK(ob && cb && ob->u[2] == cb->u[2] && oAt == cAt &&
+                      (!oAt || (memcmp(&oc, &cc, sizeof(oc)) == 0 &&
+                                memcmp(f->payload + ob->u[1] + oAt, cf->payload + cb->u[1] + cAt,
+                                       4u * cc.words) == 0)),
+                  "size tail: alpha %.1f, B %s: the card section is the tick's", (double)kT[w],
+                  kDir[dir]);
+        }
+        rd_destroy_vu_mesh(ma);
+        rd_destroy_vu_mesh(mb);
+    }
+    s6GsZ = 0;
+    rd_set_settings(&keep);
+    rd_begin_frame();
+    rd_end_frame(0);
+}

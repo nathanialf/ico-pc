@@ -1820,7 +1820,7 @@ enum {
 
 /* What made a matched keyed draw snap as mismatched */
 enum {
-    RD_MISMATCH_SIZE = 0, /* payload size, vertex or primitive count */
+    RD_MISMATCH_SIZE = 0, /* payload too short for its header, vertex or primitive count */
     RD_MISMATCH_MESH,     /* the mesh ids are of different layouts (sameMesh) */
     RD_MISMATCH_STATE,    /* program, code or clip mode (b[0..2]) */
     RD_MISMATCH_HEADER,   /* batch range, bones, stream, layout (RdVuPayload) */
@@ -1947,6 +1947,10 @@ typedef struct RdInterpStats {
     uint32_t worldCurRaw;
     uint32_t mixed;
     uint32_t camOffWhy;
+    /* VU draws blended whose two payloads differ in size: a card section
+     * (rd_mesh.h RdVuCards) at one tick only, the clip mode having changed
+     * between REGION and SCISSOR (rd_interp.c blendVu) */
+    uint32_t sizeTailBlended;
 } RdInterpStats;
 
 /* Rotation-aware blending of an affine 4 x 4 (column-major, w row 0 0 0

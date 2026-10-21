@@ -405,8 +405,13 @@ typedef struct RdVuPayload {
  * the tick before's, sets the first from that tick's (rd__vu_cards_merge).
  * any: bit 0 some vertex's first bit is set, bit 1 some second; words a
  * multiple of 4 (whole quadwords, as the replay hands them to VuBoneCB).
- * The size depends only on the mesh and the batch range, so the two ticks'
- * payloads of a draw keep one size (the interpolation pairs them).  A dump
+ * The section's size depends only on the mesh and the batch range, but it
+ * is recorded only under the region rule (rd_mesh.c cardKind: clip mode
+ * REGION), and the game switches a packet to the SCISSOR code when its box
+ * crosses the screen's edge (reg_clipPacketBoundingBox), so the two ticks'
+ * payloads of a draw can differ by the section: the interpolation pairs
+ * them by their headers and each side's own size (rd_interp.c blendVu,
+ * rd__vu_cards_merge).  A dump
  * whose draws have none (one from before them, or recorded out of the box)
  * gets them at load (rd__vu_cards_fill_frame), whatever its replay's
  * settings. */

@@ -464,7 +464,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   through the tick before's camera, `camCurDraw`), no picture is mixed, and the vertex lands in the
   same cell in both; B through the tick's own camera, what (3) drew while alpha 0 had no blended
   camera, lands over 16 pixels away, so (3) fails on a renderer without the alpha 0 camera; frames
-  without a camera count a mixed picture (`mixed` 1). The present clock (`testPresentClock`) notes
+  without a camera count a mixed picture (`mixed` 1). The size flap (`testSeamsSizeTail`, Enhanced):
+  B drawn with the region code at one tick and the scissor code at the other, so one payload
+  carries a card section and the other not, at alpha 0 and 0.5: both parts blend (none mismatched
+  by size, `sizeTailBlended` 1), both are still draws with the shared vertex in one cell, and B's
+  card section is the tick's. The present clock (`testPresentClock`) notes
   its value before the clamp (`rd__present_clock_raw`), below 0 for a present before the tick's
   time, and `rd__alpha_bin` sorts the alphas into the 10 s line's bins. The ticks' eyes
   (`testEyeTicks`, on a device): alpha 0 carries the ticks' cameras as every present between the
