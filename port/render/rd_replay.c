@@ -68,6 +68,7 @@
 #include "shader_consts.h"
 #include "shaders_gen.h"
 #include "texpack.h"
+#include "xxh3.h"
 
 /* the snapshots taken, copies and swaps alike (rd__blur_snapshot_count) */
 static uint64_t s_blurSnapCount;
@@ -618,14 +619,14 @@ void rd__wait_frame(void)
     s_bindEpoch++;
 }
 
-/* FNV-1a over a uniform block's bytes */
-static uint32_t hashBytes(const void *p, uint32_t n, uint32_t h)
+/* A uniform block's bytes and its layout, hashed: XXH3-64 over the bytes
+   (a few words at a time where FNV-1a took a byte a multiply), the layout
+   mixed in, folded to 32 bits.  Only picks the cache entry: a hit is the
+   bytes compared (uniformGroup) */
+static uint32_t hashBytes(const void *p, uint32_t n, uint32_t layout)
 {
-    const uint8_t *b = p;
-    for (uint32_t i = 0; i < n; i++) {
-        h = (h ^ b[i]) * 16777619u;
-    }
-    return h;
+    const uint64_t h = xxh3_64(p, n) ^ ((uint64_t)layout * 0x9E3779B97F4A7C15ull);
+    return (uint32_t)(h ^ (h >> 32));
 }
 
 /* The uniform layouts' groups.  FrameCB, DrawCB, VuCB and
@@ -705,7 +706,7 @@ static RdUniform uniformGroup(RhiBindGroupLayout layout, uint32_t slot, const vo
     UniformEntry *e = NULL;
     uint32_t h = 0;
     if (size <= RD_UNIFORM_CACHE_BYTES) {
-        h = hashBytes(data, size, 2166136261u ^ layout.id);
+        h = hashBytes(data, size, layout.id);
         e = &s_uniformCache[h % RD_UNIFORM_CACHE];
         if (e->epoch == s_bindEpoch && e->hash == h && e->layout == layout.id && e->size == size &&
             memcmp(e->data, data, size) == 0) {

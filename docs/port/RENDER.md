@@ -408,7 +408,8 @@ glyph page `rd_create_texture_r8` could not make logs the same words with `ui:`,
 **Bind groups.** Bind groups are valid only in the [frame slot](ARCHITECTURE.md#terms) they were
 made in, so their caches are tagged with an epoch every `rhi_wait_frame` of the renderer starts anew
 (`rd__wait_frame`). Uniform blocks are written once per replay per content: DrawCB, FrameCB and
-the other blocks of `uniformGroup` (FNV-1a, the bytes compared), and a VU draw's VuCB and VuBoneCB
+the other blocks of `uniformGroup` (512 entries chosen by XXH3-64 over the block and its
+layout, the bytes compared), and a VU draw's VuCB and VuBoneCB
 (`port/render/rd_replay_vu.c` (`cbShared`): 64 entries, four ways in each of 16 sets chosen by
 XXH3-64 over the block, the bytes compared against the entry's own copy since the mapped ring is
 never read back). The ring is reset only where a replay begins, after `rd__wait_frame`, so a block
