@@ -4367,7 +4367,7 @@ static int seamEnd(const double (*seg)[4], int nseg, double t0, double t1, int *
     return n;
 }
 
-/* S1-S4 in the bound renderer (mode: its name) */
+/* S1-S5 in the bound renderer (mode: its name) */
 static void testVuSeams(const char *mode)
 {
     /* a quad split along P1-P2 (its normal points to P3's side); off the
@@ -4498,6 +4498,55 @@ static void testVuSeams(const char *mode)
                "inner edges (Original 1x: %d)\n",
                mode, n, near, s_s4Ref);
         CHECK(near > 1000, "vu seams (%s): S4 saw %d pixels near the inner edges", mode, near);
+        /* 0 in every mode in the runs of 2026-10-12 (CI) and 2026-10-19
+         * (build-host/linux-x64-window's LastTest.log): the quads' shared
+         * corners differ by float noise that ftoi4's truncation absorbs */
+        CHECK(n == 0, "vu seams (%s): S4: %d cracks along the inner edges", mode, n);
+        rd_destroy_vu_mesh(m);
+    }
+
+    /* S5: a code-32 strip v0..v3 whose first triangle fails the region
+     * test (v0 at GS X 4102, past 4094) and whose second is all inside;
+     * v1, one end of the shared edge v1-v2, has a GS Z ftoi4 saturates
+     * (0x7FFFFFFF: the game's Z row within about 8 units of the eye), and X
+     * and Y on no 1/16 step (16 frac = 0.99: the unsnapped position 0.062
+     * GS pixel from the snapped one on each axis, across the edge toward
+     * the first triangle).  Out of the box (Original 1x) the PS2's rule
+     * drops the first triangle; in any other state it is drawn,
+     * GPU-clipped (the strip passes the card test), and v1 must sit at its
+     * GS position there as in the exact second triangle (vu_common.hlsli
+     * vu_corner_cut_position), where the homogeneous form put it at its
+     * unsnapped X and Y: a sliver of the clear along the edge (a model of
+     * the two rasterizations: 60 such pixels at 2.25x, 209 at 4x).  The
+     * probe: 8 GS pixels from the edge's middle into the first triangle */
+    {
+        const float strip[4][4] = {{2310.0f, 300.0f, 1000000.3f, 1.0f},
+                                   {120.937f, 300.937f, 200000000.0f, 1.0f},
+                                   {380.0f, 40.0f, 1010000.7f, 1.0f},
+                                   {60.0f, 50.0f, 990000.1f, 1.0f}};
+        const RdScreenVtx g1 = seamGsVtx(strip[1], 0.0, 0.0, kSeamRed);
+        CHECK(g1.z == 0x7FFFFFFFu, "vu seams: S5 v1's GS Z %08X is not saturated", (unsigned)g1.z);
+        CHECK((g1.x & 15) != 0 && (g1.y & 15) != 0, "vu seams: S5 v1 is on the 1/16 grid");
+        const double e5[1][4] = {{strip[1][0], strip[1][1], strip[2][0], strip[2][1]}};
+        const RdMesh m = seamMesh(strip, kStart4, 4, kSeamRed);
+        seamBegin();
+        seamVuDraw(m, 32, 1.0, 0.0, 0.0, 0.0, 4);
+        const double probe[2] = {(strip[1][0] + strip[2][0]) * 0.5 + 8.0 * 0.7071,
+                                 (strip[1][1] + strip[2][1]) * 0.5 + 8.0 * 0.7071};
+        int probeBg = 1;
+        n = seamEnd(e5, 1, 0.1, 0.9, &near, probe, &probeBg);
+        const bool ext = rd__vu_extended();
+        printf("  vu seams (%s): S5 code 32 clipped beside exact, v1's GS Z saturated: %d cracks "
+               "in %d pixels along the edge, the first triangle %s\n",
+               mode, n, near, probeBg ? "not drawn" : "drawn");
+        if (ext) {
+            CHECK(n == 0 && near > 100, "vu seams (%s): S5: %d cracks (%d pixels near)", mode, n,
+                  near);
+            CHECK(!probeBg, "vu seams (%s): S5: the clipped triangle is not drawn", mode);
+        } else {
+            /* out of the box: the PS2's rule, the first triangle dropped */
+            CHECK(probeBg, "vu seams (%s): S5: the first triangle is drawn out of the box", mode);
+        }
         rd_destroy_vu_mesh(m);
     }
 }

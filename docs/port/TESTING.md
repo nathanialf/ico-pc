@@ -530,6 +530,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   alpha/blend planner off and on: prelit quads of vertex alpha 0x80, 0x70 and 0x40 under the
   railing's state, a LERP FIX 0x80 sprite and a LERP sprite of As 0, SCENE's colour and depth the
   same bytes, three draws counted one-pass (`testAlphaPlan`); the railing keeps its split.
+  Its VU seams case (`testVuSeams`, at Original 1x and 4x and Enhanced 2.25x and 4x) counts the
+  clear's pixels along edges two draws share: S1 a code-32 triangle beside a GIF one, S2 two
+  meshes 0.01 GS pixel apart, S3 a code-36 cut triangle beside a kicked one, S4 8 x 8 quads under
+  a matrix each, none in any mode; S5 a code-32 triangle the region test drops, drawn clipped
+  beside an exact one, their shared vertex's GS Z saturated and its X and Y off the 1/16 grid:
+  none above Original 1x, where the clipped triangle is drawn, and at Original 1x not drawn
+  (`vu_corner_cut_position`).
 - `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`);
   the targets' scales include the work buffers and shadow levels at their GS sizes at every scale
   and Water reflections' block: its GS size under Original, the scene's scale under Sharp (4x at

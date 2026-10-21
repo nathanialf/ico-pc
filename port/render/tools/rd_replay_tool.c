@@ -120,7 +120,11 @@
  *                         through the above-1x kernels (rd.h
  *                         RdPerfRecord); a third: the VU vertex pre-pass,
  *                         on or off, its passes, vertices and draws and the
- *                         mesh and grid draws drawn the old way; on a device
+ *                         mesh and grid draws drawn the old way; the last:
+ *                         the region-mode mesh vertices in front of the eye
+ *                         whose GS Z saturates (on the CPU, vu1_ref), which a
+ *                         GPU-clipped triangle draws at their GS position in
+ *                         a state other than out of the box; on a device
  *                         with GPU timestamps, after the picture is written,
  *                         the frame is replayed RHI_FRAMES_IN_FLIGHT + 2
  *                         more times and the last replay's GPU times are
@@ -308,6 +312,82 @@ static void texSummary(uint32_t id)
     if (t->gsLevels > 1) {
         printf(" gs levels %u", t->gsLevels);
     }
+}
+
+/* --stats: the vertices of the frame's region-mode mesh draws (static and
+ * skinned; not the grids) in front of the eye whose ftoi4 Z saturates and X
+ * and Y do not (vu1_ref.h vu1ref_region_z_saturated, the shaders' own
+ * transform): the corners vu_common.hlsli vu_corner_cut_position keeps at
+ * their GS position when a GPU-clipped triangle has them, in a state other
+ * than out of the box.  *drawsOut: the draws with one or more */
+static uint64_t satZVertices(const RdFrame *f, uint32_t *drawsOut)
+{
+    static float bones[240][4];
+    uint64_t n = 0;
+    uint32_t draws = 0;
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < f->lists[l].count; i++) {
+            const RdCmd *c = &f->lists[l].cmds[i];
+            if (c->type != RDC_MESH && c->type != RDC_SKINNED) {
+                continue;
+            }
+            const RdMeshRec *m = rd__mesh_rec(c->u[0]);
+            RdVuPayload p;
+            if (!m || !m->stream ||
+                (uint64_t)c->u[1] + sizeof(p) + sizeof(RdVuBlock) > f->payloadSize) {
+                continue;
+            }
+            memcpy(&p, f->payload + c->u[1], sizeof(p));
+            int kind;
+            switch (p.prog) {
+            case RD_PROG_PRELIT:
+            case RD_PROG_LIT:
+            case RD_PROG_LIT_SPEC:
+            case RD_PROG_REFLECT:
+                kind = VU1REF_CARD_NORMAL;
+                break;
+            case RD_PROG_SKIN:
+            case RD_PROG_SKIN_SPEC:
+                kind = VU1REF_CARD_CLUSTER;
+                break;
+            default:
+                kind = -1;
+                break;
+            }
+            if (kind < 0 || p.clip != RD_VU_CLIP_REGION ||
+                (kind == VU1REF_CARD_CLUSTER) != (c->type == RDC_SKINNED)) {
+                continue;
+            }
+            const float (*mem)[4] =
+                (const float (*)[4])(const void *)(f->payload + c->u[1] + sizeof(p));
+            if (kind == VU1REF_CARD_CLUSTER) {
+                const uint32_t nb = p.boneQw < 240u ? p.boneQw : 240u;
+                if ((uint64_t)c->u[1] + sizeof(p) + sizeof(RdVuBlock) + (uint64_t)nb * 16 >
+                    f->payloadSize) {
+                    continue;
+                }
+                memset(bones, 0, sizeof(bones));
+                memcpy(bones, mem + 36, (size_t)nb * 16);
+            }
+            uint32_t last = p.firstBatch + p.batchCount;
+            if (last > m->batchCount || p.batchCount == 0) {
+                last = m->batchCount;
+            }
+            uint64_t k = 0;
+            for (uint32_t b = p.firstBatch; b < last; b++) {
+                const uint32_t v0 = m->batches[b].firstVertex;
+                for (uint32_t v = v0; v < v0 + m->batches[b].vertexCount; v++) {
+                    k += (uint64_t)vu1ref_region_z_saturated(
+                        kind, mem, (const float (*)[4])bones,
+                        (const float (*)[4])(m->stream + (size_t)v * m->qwPerVertex));
+                }
+            }
+            n += k;
+            draws += k != 0;
+        }
+    }
+    *drawsOut = draws;
+    return n;
 }
 
 /* --list, RDC_SKINNED: the drawn vertices' place as cluster.vsm computes it
@@ -1518,6 +1598,12 @@ int main(int argc, char **argv)
                dump, g_rd.vuPrepass ? "on" : "off", pr->vuPrePasses, pr->vuPreVertices,
                pr->vuPreDraws, pr->vuPreFallbacks, pr->vuPreSprites, pr->vuTriSlots,
                pr->vuTickDraws);
+        uint32_t satDraws = 0;
+        const uint64_t sat = satZVertices(rf, &satDraws);
+        printf("%s: stats: VU corners with a saturated GS Z: %llu vertices of region-mode meshes "
+               "in %u draws (in a GPU-clipped triangle at their GS position: %s)\n",
+               dump, (unsigned long long)sat, satDraws,
+               rd__vu_extended() ? "yes, not out of the box" : "no, out of the box");
     }
     if (replayed && passDir) {
         /* One frame, every target: the renderer keeps each target's contents

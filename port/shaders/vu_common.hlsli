@@ -530,6 +530,49 @@ float4 vu_cut_position(VuVtx v)
     return vu_cut_position_of(v, vu_vtx_position(v));
 }
 
+// The position a corner of a triangle the GPU clips is drawn at (code 2 of
+// vu_triangle_out_pos and vu_corner_position; the rules' z cut keeps
+// vu_cut_position): vu_cut_position_of, except that in a state other than
+// out of the box (VU_F_EXTENDED) a corner in front of the eye (w > 0)
+// whose ftoi4 X and Y are not saturated, whose ftoi4 Z saturated
+// (0x7FFFFFFF), and which has no z clip flag (clipf bits 4 and 5: a
+// scissor program's corner beyond its z planes, which the PS2's
+// SCISSOR_COMMON clips away; 0 in the other programs) takes its GS
+// position vtx: the 12.4 X and Y and gs_depth(0x7FFFFFFF), 2^31 * g_z.x
+// (0.5 on D24S8, 0.25 on a float depth buffer), what a triangle drawn
+// exactly gives the same vertex (the region test does not test Z, so a
+// neighbour with all three corners inside is code 1 there).  The game's Z
+// row (GsBase.c gsb_SetVSMatrixSub: GS Z the ftoi4 of zf / z + zn at view
+// depth z, zf about 1.07e9, zn about -4095) saturates within about 8 units
+// of the eye.  The homogeneous form put that corner at its unsnapped X
+// and Y, up to 1/16 GS pixel from the exact neighbour's (a crack along the
+// shared edge the PS2, which gives both triangles the one ftoi4 vertex,
+// does not have), at the linear depth of the unsaturated Z, and the GPU
+// clipped it where that passes 1 / g_z.x (2^32 on D24S8, 2^33 on a float
+// buffer: within 4 or 2 units of the eye), opening the edge further.  A corner whose GS Z fell below 0 keeps the
+// homogeneous form, cut at GS Z 0: there the game's Z row is past 262,000
+// units, where the gap and the surface both take the fog table's first
+// entry, and a matrix with its near plane at GS Z 0 (vu1_test's M) needs
+// the cut.  The Original preset at 4:3 and 1x (VU_F_EXTENDED clear) keeps
+// the homogeneous form for every corner: its picture is the PS2's byte for
+// byte.  A corner behind the eye or with X or Y saturated keeps it in
+// every state.
+float4 vu_corner_cut_position(VuVtx v, float4 vtx)
+{
+    uint xyOk = v.gx != 0x7FFFFFFF && v.gx != (int)0x80000000u && v.gy != 0x7FFFFFFF &&
+                        v.gy != (int)0x80000000u
+                    ? 1u
+                    : 0u;
+    uint snap = (vu_draw.z & VU_F_EXTENDED) != 0u && v.h.w > 0.0 && v.gz == 0x7FFFFFFF &&
+                        (v.clipf & 0x30u) == 0u
+                    ? xyOk
+                    : 0u;
+    if ((vu_has_gs_position(v) | snap) != 0u) {
+        return vtx;
+    }
+    return vu_homogeneous_position(v.h);
+}
+
 static const float4 VU_CULLED = float4(2.0, 2.0, 2.0, 1.0); // outside x <= w: clipped away
 
 // The camera's picture: the part of the drawing camera's view the PS2
@@ -1159,9 +1202,11 @@ VuVSOut vu_plane_out(VuVSOut o, VuPlaneTri t, uint kick, uint me)
 //   a game made for a wide picture would not draw geometry behind the eye
 //   either. None is cut at the picture's edge (the waterfall's mist).
 // A drawn triangle with a vertex outside takes code 36's corner rule
-// (vu_cut_position: the GS position where the vertex has one, the
-// homogeneous form of h where it is behind the eye, saturated or below GS
-// Z 0; every program computes h before the test). A HIDE triangle never
+// (vu_corner_cut_position: the GS position where the vertex has one, the
+// homogeneous form of h where it is behind the eye, its X or Y saturated
+// or its GS Z below 0; in a state other than out of the box a vertex
+// whose GS Z alone saturated keeps its GS position, as the exact neighbour
+// draws it; every program computes h before the test). A HIDE triangle never
 // reaches here (vu_content_hidden); the strip test counts every triangle
 // of the strip, marked or not. A grid (vu_grid.hlsl, Mesh3D) has a batch
 // a strip, each the rows i and i + 1 of one vertex grid
@@ -1339,7 +1384,7 @@ uint vu_rule_card(uint rule, uint marks, uint kick)
 // The triangle k-2, k-1, k: what the GS draws of it (vu_triangle_out),
 // without the planes; exact 1: every corner drawn at its GS position.
 // Each position the corner can take is computed once (pme its
-// vu_vtx_position, cme its vu_cut_position), the rules give a code (0
+// vu_vtx_position, cme its vu_corner_cut_position), the rules give a code (0
 // culled, 1 pme, 2 cme, 3 the wrapped GS position), and the position is
 // chosen value by value.
 VuVSOut vu_triangle_out_pos(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode, uint rule,
@@ -1352,7 +1397,7 @@ VuVSOut vu_triangle_out_pos(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode, uint
     // GPU clips have none
     uint gsPos = vu_has_gs_position(a) & vu_has_gs_position(b) & vu_has_gs_position(c);
     float4 pme = vu_vtx_position(me);
-    float4 cme = vu_cut_position_of(me, pme);
+    float4 cme = vu_corner_cut_position(me, pme);
     float4 wme = pme;
     if (mode == VU_CLIP_NONE) {
         wme = vu_gs_position(me.gx, me.gy, me.gz, true);
@@ -1703,7 +1748,7 @@ VuVSOut vu_rec_planes(VuVSOut o, uint4 a0, uint ta, uint tb)
 float4 vu_corner_position(VuVtx me, uint mode, uint at)
 {
     float4 pme = vu_vtx_position(me);
-    float4 cme = vu_cut_position_of(me, pme);
+    float4 cme = vu_corner_cut_position(me, pme);
     float4 wme = pme;
     if (mode == VU_CLIP_NONE) {
         wme = vu_gs_position(me.gx, me.gy, me.gz, true);

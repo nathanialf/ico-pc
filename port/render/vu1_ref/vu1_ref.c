@@ -266,12 +266,13 @@ static float cardRcp(float x)
     return 1.0f / x;
 }
 
-int vu1ref_region_inside(int kind, const float (*mem)[4], const float (*bones)[4],
-                         const float (*v)[4])
+/* vu1ref_region_inside's position h of the vertex v and the bounds of
+ * its kind's region test */
+static void regionVertex(int kind, const float (*mem)[4], const float (*bones)[4],
+                         const float (*v)[4], Vec4 h, const float **loOut, const float **hiOut)
 {
     static const float lo0[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     static const float hi4094[4] = {4094.0f, 4094.0f, 0.0f, 16777214.0f};
-    Vec4 h;
     const float *lo = lo0, *hi = hi4094;
     if (kind == VU1REF_CARD_CLUSTER) {
         /* vu_skin_vertex: P = B0 (pos, 1) w0 + B1 (pos, 1) w1, then mem[4..7] */
@@ -298,10 +299,50 @@ int vu1ref_region_inside(int kind, const float (*mem)[4], const float (*bones)[4
          * vu_grid_vertex */
         vu_mat(h, mem[16], mem[17], mem[18], mem[19], v[0], 1.0f);
     }
+    *loOut = lo;
+    *hiOut = hi;
+}
+
+int vu1ref_region_inside(int kind, const float (*mem)[4], const float (*bones)[4],
+                         const float (*v)[4])
+{
+    Vec4 h;
+    const float *lo, *hi;
+    regionVertex(kind, mem, bones, v, h, &lo, &hi);
     const float q = cardRcp(h[3]);
     const float px = h[0] * q, py = h[1] * q;
     /* vu_inside */
     return lo[0] < px && lo[1] < py && lo[3] < h[3] && px < hi[0] && py < hi[1] && h[3] < hi[3];
+}
+
+/* vu_common.hlsli vu_ftoi4: x * 16 truncated, saturated at the int32
+ * bounds (NaN: 0, never saturated) */
+static int32_t shaderFtoi4(float x)
+{
+    const float v = x * 16.0f;
+    if (v >= 2147483648.0f) {
+        return INT32_MAX;
+    }
+    if (v <= -2147483648.0f) {
+        return INT32_MIN;
+    }
+    return v == v ? (int32_t)v : 0;
+}
+
+int vu1ref_region_z_saturated(int kind, const float (*mem)[4], const float (*bones)[4],
+                              const float (*v)[4])
+{
+    Vec4 h;
+    const float *lo, *hi;
+    regionVertex(kind, mem, bones, v, h, &lo, &hi);
+    if (!(h[3] > 0.0f)) {
+        return 0;
+    }
+    const float q = cardRcp(h[3]);
+    const int32_t gx = shaderFtoi4(h[0] * q), gy = shaderFtoi4(h[1] * q);
+    const int32_t gz = shaderFtoi4(h[2] * q);
+    return gz == INT32_MAX && gx != INT32_MAX && gx != INT32_MIN && gy != INT32_MAX &&
+           gy != INT32_MIN;
 }
 
 int vu1ref_strip_card(int kind, const float (*mem)[4], const float (*bones)[4], const float (*v)[4],

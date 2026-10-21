@@ -1314,7 +1314,7 @@ where the blended verdict is `VU_RULE_DROP` under the tick cameras, slot C (one)
 sent it to the card test sends it there, the card test's verdict decides `VU_RULE_STRIP`), applies
 the scissor draw's `ICO_VU_CUT_ONLY` / `ICO_VU_KICK_ONLY` to the stored corner code, chooses the
 position value by value as `vu_triangle_out_pos` does (`vu_corner_position`: the GS position, the
-cut position, clip mode none's wrapped one), culls past the chain plane and takes its corner's
+cut position of `vu_corner_cut_position`, clip mode none's wrapped one), culls past the chain plane and takes its corner's
 distance (`vu_plane_distance`, one stream load), and adds the later bias from the three corners'
 records where the flag says (`vu_later_bias`). The program's choices come from VuCB as for the
 stages: `vu_rec.w` holds the clip mode the program uses (normal_c takes VuCB's, normal_l's code

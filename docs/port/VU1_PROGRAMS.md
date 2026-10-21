@@ -247,9 +247,11 @@ since the projection does not change with the width. What the port then draws of
 6. A vertex behind the eye and reaching into the picture: not drawn in any state.
 
 A `VU_MARK_HIDE` triangle never reaches the rule (`vu_content_hidden`). A drawn triangle with a
-vertex outside takes code 36's corner rule (`vu_cut_position`). A grid's strips share rows with
-their neighbours, so the replay marks every triangle of a grid of two strips or more joined, as the
-draw's own mark (`vu_mark.y`; `port/render/rd_replay_vu.c` (`doVuDraw`)).
+vertex outside takes code 36's corner rule (`vu_corner_cut_position`; in a state other than out of
+the box a corner whose GS Z alone saturated keeps its GS position, as the exact neighbour has it).
+A grid's strips share rows with their neighbours, so the replay marks every triangle of a grid of
+two strips or more joined, as the draw's own mark (`vu_mark.y`; `port/render/rd_replay_vu.c`
+(`doVuDraw`)).
 
 Under `VU_F_TICKS` (a picture between two ticks, through a blended camera) a triangle the rule
 drops at the blended camera is drawn, clipped, when either tick's camera showed it on the frame;

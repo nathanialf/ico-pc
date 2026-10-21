@@ -257,6 +257,14 @@ enum {
  * first; the cluster's weights in v[2], the bone addresses as raw ints). */
 int vu1ref_region_inside(int kind, const float (*mem)[4], const float (*bones)[4],
                          const float (*v)[4]);
+/* Whether the vertex, through the same transform, lies in front of the eye
+ * (w > 0) with its ftoi4 Z saturated (0x7FFFFFFF) and X and Y not
+ * (vu_ftoi4 of the divided position): a corner vu_common.hlsli
+ * vu_corner_cut_position puts at its GS position in a GPU-clipped triangle
+ * in a state other than out of the box (rd_replay_tool --stats counts
+ * them) */
+int vu1ref_region_z_saturated(int kind, const float (*mem)[4], const float (*bones)[4],
+                              const float (*v)[4]);
 /* Whether a strip of count vertices (qwords from v, qpv a vertex) is a
  * card: none of its triangles k-2, k-1, k (k = 2 .. count - 1) has all
  * three vertices inside (vu1ref_strip_passes's walk; the first passing

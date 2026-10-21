@@ -597,8 +597,17 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
     }
     if (rd__vu_extended()) {
         /* a triangle the region test drops is clipped unless it belongs
-         * to a card (vu_region_rule) */
+         * to a card (vu_region_rule); a clipped triangle's corner whose GS
+         * Z alone saturated keeps its GS position (vu_corner_cut_position) */
         vcb.draw[2] |= ICO_VU_EXTENDED;
+        static bool logged; /* once a run (rd__log_once's flags are full) */
+        if (!logged) {
+            logged = true;
+            rd__log("VU corners: not out of the box (Enhanced, wider than 4:3 or above 1x): a "
+                    "triangle the region test drops is drawn clipped unless it is a card, and a "
+                    "clipped triangle's corner whose GS Z saturated (within about 8 units of the "
+                    "eye) keeps its GS position, as the exact triangle beside it has it");
+        }
     }
     if (m && m->kickMark) {
         /* the triangles' marks, a byte a kick after the stream
