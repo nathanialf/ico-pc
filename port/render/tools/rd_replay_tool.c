@@ -194,6 +194,14 @@
  *                         seen through the blended camera
  *                         (rd__interp_set_reproject): the before of a
  *                         before/after pair from one build
+ *   --interp-nop-prev L:A[-B]
+ *                         (with --interp, repeatable) turns commands A..B
+ *                         of list L of PREV into NOPs before the blend, as
+ *                         --nop does to <dump>: their draws in <dump> find
+ *                         no match and are drawn as the tick's alone
+ *                         (unmatched), to make chosen parts of the world
+ *                         the tick's in a blended picture (the mixed
+ *                         picture of rd_interp.c, RdInterpStats.mixed)
  *
  * Exit: 0 written (or, with --no-device, listed), 1 error, 77 no device or no dump file. */
 #include <math.h>
@@ -778,6 +786,7 @@ static void overlayTest(const RdOverlayCtx *ctx, void *user)
 /* the replay's frame edits and the interpolation (prepareFrame) */
 static struct {
     unsigned l, a, b;
+    bool prev; /* --interp-nop-prev: applied to the --interp PREV */
 } nops[64];
 
 static int nopCount;
@@ -839,13 +848,20 @@ static const RdFrame *prepareFrame(const char *dump, RdFrame *pf, RdFrame *f)
         rd_shutdown();
         return NULL;
     }
+    uint32_t prevNops = 0;
     for (int k = 0; k < nopCount; k++) {
-        const RdCmdList *cl = &f->lists[nops[k].l];
+        RdFrame *nf = nops[k].prev ? pf : f; /* main: --interp-nop-prev needs --interp */
+        const RdCmdList *cl = &nf->lists[nops[k].l];
         for (uint32_t c = nops[k].a; c <= nops[k].b && c < cl->count; c++) {
             if (!rd__cmd_is_state(cl->cmds[c].type)) {
+                prevNops += nops[k].prev && cl->cmds[c].type != RDC_NOP;
                 cl->cmds[c].type = RDC_NOP;
             }
         }
+    }
+    if (prevNops) {
+        /* those draws' matches in <dump> are the tick's alone */
+        printf("interp-nop-prev: %u draws of PREV turned into NOPs\n", prevNops);
     }
     dropHalf(f);
     if (noAa1) {
@@ -1014,7 +1030,8 @@ int main(int argc, char **argv)
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
                 "[--pass-dump DIR] "
-                "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject]]\n"
+                "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject] "
+                "[--interp-nop-prev L:A[-B]]]\n"
                 "       [--loss-bisect] [--passes A[-B]] [--draws A[-B]] [--mask-marks]\n"
                 "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
                 "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n"
@@ -1209,15 +1226,17 @@ int main(int argc, char **argv)
             meshName = argv[++i];
         } else if (strcmp(argv[i], "--dump-textures") == 0 && i + 1 < argc) {
             texDir = argv[++i];
-        } else if (strcmp(argv[i], "--nop") == 0 && i + 1 < argc && nopCount < 64) {
+        } else if ((strcmp(argv[i], "--nop") == 0 || strcmp(argv[i], "--interp-nop-prev") == 0) &&
+                   i + 1 < argc && nopCount < 64) {
             unsigned l = 0, a = 0, b = 0;
             int n = sscanf(argv[++i], "%u:%u-%u", &l, &a, &b);
             if (n < 2 || l >= RD_LIST_COUNT) {
-                fprintf(stderr, "bad --nop\n");
+                fprintf(stderr, "bad %s\n", argv[i - 1]);
                 return 1;
             }
             nops[nopCount].l = l;
             nops[nopCount].a = a;
+            nops[nopCount].prev = strcmp(argv[i - 1], "--interp-nop-prev") == 0;
             nops[nopCount++].b = n == 3 ? b : a;
         } else if (strcmp(argv[i], "--present") == 0 && i + 1 < argc) {
             if (sscanf(argv[++i], "%ux%u", &pw, &ph) != 2 || !pw || !ph) {
@@ -1232,6 +1251,12 @@ int main(int argc, char **argv)
             vuRefCount++;
         } else {
             fprintf(stderr, "unknown argument %s\n", argv[i]);
+            return 1;
+        }
+    }
+    for (int k = 0; k < nopCount; k++) {
+        if (nops[k].prev && !interpPrev) {
+            fprintf(stderr, "--interp-nop-prev needs --interp\n");
             return 1;
         }
     }

@@ -2733,6 +2733,7 @@ that was presented (`port/render/tools/rd_replay_tool.c`, usage comment):
 | `--no-half`, `--no-aa1` | the frame without the field's half pixel or without PRIM.AA1 |
 | `--interp T PREV` | the frame the presenter builds between PREV and the dump at alpha T (PREV an F12 or loss zip: its second `.rddump`, the tick before) |
 | `--interp-any`, `--no-reproject` | with `--interp`: PREV taken as the tick before whatever its frame number; the CPU-projected draws blended in screen space |
+| `--interp-nop-prev L:A[-B]` | with `--interp`, repeatable: turns commands A..B of list L of PREV into NOPs before the blend, as `--nop` does to the dump, so their draws in the dump are the tick's alone (unmatched): chosen parts of the world made the tick's in a blended picture, the [mixed picture](#camera-blending)'s case |
 | `--aa MODE` | (with `--enhanced`) the anti-aliasing setting: off, ssaa2, ssaa4, msaa2, msaa4, msaa8 |
 | `--crt-strength K` | after `--crt`, the strength 0..1 |
 | `--overlay-test` | (with `--present`) a test pattern and a popup drawn as a presentation overlay |
