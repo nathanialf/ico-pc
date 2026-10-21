@@ -437,7 +437,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   stage 40 or with photo mode closed, the veil alone without the row (`checkDejaReel`; the
   evaluator there stands in for the game's).
 - `rd_interp_test.c`: presentation between [ticks](ARCHITECTURE.md#terms) on two synthetic frames
-  (`rd_interp`); its rotation cases live in `rd_interp_turn_test.inc`, included where they stood;
+  (`rd_interp`); its rotation cases live in `rd_interp_turn_test.inc` and its seams cases in
+  `rd_interp_seams_test.inc`, included where they stood;
   rotation continuity (`testRotationContinuity`): a rigid draw and a bone turning
   170 then 190 degrees a tick stand at 265 degrees half way (on forward the long way, not back to
   85), at 217.5 at alpha 0.25 and at the tick's pose at alpha 1; 190 degrees with no turn before
@@ -454,7 +455,20 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   alpha 0.5, each bit for bit the same part unmatched (the tick's block re-based, `camCurDraw`);
   their shared vertex at a cell's middle lands in the expected cell through `vu1_ref` (placement);
   two meshes of one model matrix with other centroids have bit-equal camera and model rows, and a
-  point a quarter of an ulp from a cell's edge lands in one cell in both (the mechanism).
+  point a quarter of an ulp from a cell's edge lands in one cell in both (the mechanism); at alpha 0
+  the frame's view is the tick before's bit for bit and each part's rows lie within the still bound
+  of the tick before's. The seams at alpha 0 (`testStillSeamsAlpha0`): the same two parts, their
+  shared vertex at a cell's middle through the tick before's camera, (1) both matched, (2) both
+  unmatched, (3) A matched and B unmatched (the wedge's case); in each the frame's view is the tick
+  before's, both parts' camera and model rows are those of (2) bit for bit (the tick's block
+  through the tick before's camera, `camCurDraw`), no picture is mixed, and the vertex lands in the
+  same cell in both; B through the tick's own camera, what (3) drew while alpha 0 had no blended
+  camera, lands over 16 pixels away, so (3) fails on a renderer without the alpha 0 camera; frames
+  without a camera count a mixed picture (`mixed` 1). The present clock (`testPresentClock`) notes
+  its value before the clamp (`rd__present_clock_raw`), below 0 for a present before the tick's
+  time, and `rd__alpha_bin` sorts the alphas into the 10 s line's bins. The ticks' eyes
+  (`testEyeTicks`, on a device): alpha 0 carries the ticks' cameras as every present between the
+  ticks, alpha 1 none.
 - `rd_layout_test.c`: the layout frame from the game's layout calls (`rd_layout`).
 - `rd_mesh_test.c`: the mesh path from `Packet.c` to the VU shaders (`rd_mesh`, sharded), each
   device case's frame replayed again with the VU vertex pre-pass switched, the picture byte for

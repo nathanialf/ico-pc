@@ -620,7 +620,9 @@ alpha is the grid's exact `k / (n * perFrame)` (`pace_lock_alpha`).
 
 `tickAt` is the deadline the closing step was due, while the clock is a smoothed estimate, so a
 present right after a tick closes can find the clock below it: its value is negative and the alpha
-is clamped to exactly 0. The 10 s summary counts every present's alpha
+is clamped to exactly 0. Such a present is one between the ticks like any other, drawn through the
+tick before's camera with every part of the world, matched or the tick's alone, placed by it
+([RENDER.md](RENDER.md#camera-blending)). The 10 s summary counts every present's alpha
 (`port/render/rd_interp.c` (`rd__alpha_bin`, `presentLog`)):
 
 ```

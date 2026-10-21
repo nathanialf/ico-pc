@@ -166,20 +166,33 @@
  *             (the tick's block re-based, camCurDraw), none re-rounded; the
  *             shared vertex lands in the middle of the same ftoi4 cell in
  *             both draws through vu1_ref (normal_c 32), the cell of the
- *             point through the blended camera (placement); alpha 0 and 1
- *             are the ticks' blocks byte for byte; two meshes of one model
+ *             point through the blended camera (placement); alpha 1 is
+ *             the tick's payload byte for byte, alpha 0 has the tick
+ *             before's view to the bit and rows within the still bound of
+ *             its blocks; two meshes of one model
  *             matrix (other centroids), both matched, have bit-equal camera
  *             and model rows, and a shared point a quarter of an ulp from a
  *             cell's edge lands in one cell in both (the game's Z row and
  *             clip rows, GsBase.c)
+ *   seams 0   alpha 0 (the timer path's clamped presents): the frame's
+ *             view is the tick before's bit for bit; A and B (1) both
+ *             matched, (2) both unmatched, (3) A matched and B unmatched
+ *             (the wedge's case) have the same camera and model rows, the
+ *             tick's block through the tick before's camera (camCurDraw's),
+ *             no mixed picture, and the shared vertex in the cell through
+ *             that camera in both; B through the tick's own camera (what
+ *             (3) drew with no blended camera at alpha 0) lands over 16
+ *             pixels away; frames without a camera still count a mixed
+ *             picture (mixed 1)
  *   eye ticks (on a device) the camera orbits 28 degrees in the
  *             tick: a wall strip's triangle with a vertex in front of both
  *             ticks' eyes and behind the blended camera's is drawn half way
  *             (Enhanced; the frame carries the ticks' cameras, the draw
  *             RD_VU_TICK_CAMERAS, and they take a point's position through
  *             the blended camera to each tick's); with the vertex behind
- *             every camera it stays dropped; the ticks' own pictures (alpha
- *             0 and 1) carry neither
+ *             every camera it stays dropped; the tick's own picture (alpha
+ *             1) carries neither, alpha 0 (the tick before's camera, a
+ *             present between the ticks) both
  */
 #include <math.h>
 #include <stdio.h>
@@ -5570,327 +5583,7 @@ static void testNativeWidths(void)
     }
 }
 
-/* ------------------------------------------- still parts of the world
- *
- * The seams between the parts of a wall while the camera moves (rd_interp.c,
- * still draws): A and B, two prelit parts whose model to world matrices
- * differ (A turned 30 degrees about y and moved one way, B turned -50 and
- * moved another), each a triangle whose first vertex is the world point X,
- * drawn at both ticks while the camera orbits 28 degrees (s6Frame's camera).
- * X is placed at the middle of a 1/16 pixel cell of the picture through the
- * blended camera at alpha 0.5, so the rounding of the two draws' own
- * products (a few ulps) cannot carry it across a cell's edge in one draw
- * and not in the other: a different cell there is a different placement,
- * not rounding. */
-static const char kObjSeam;
-
-static void seamWorld(int which, double *w)
-{
-    const double a = (which ? -50.0 : 30.0) * 3.14159265358979323846 / 180.0;
-    memset(w, 0, 16 * sizeof(double));
-    w[0] = cos(a);
-    w[2] = -sin(a);
-    w[5] = 1.0;
-    w[8] = sin(a);
-    w[10] = cos(a);
-    w[15] = 1.0;
-    w[12] = which ? 140.0 : -90.0;
-    w[13] = which ? -20.0 : 15.0;
-    w[14] = which ? 60.0 : -35.0;
-}
-
-/* X: (37, 21, 64) moved in x and y until the blended camera at alpha 0.5
- * (aloneExpected) puts it at frac of a 1/16 pixel cell (0.5: its middle);
- * cell its GS X and Y in 1/16 pixels */
-static void seamPointAt(double frac, double x[3], int32_t cell[2])
-{
-    x[0] = 37.0;
-    x[1] = 21.0;
-    x[2] = 64.0;
-    for (int it = 0; it < 4; it++) {
-        double g[2], gx[2], gy[2];
-        const double h = 0.01;
-        const double xd[3] = {x[0] + h, x[1], x[2]}, yd[3] = {x[0], x[1] + h, x[2]};
-        aloneExpected(0.5, x, g);
-        aloneExpected(0.5, xd, gx);
-        aloneExpected(0.5, yd, gy);
-        const double tx = (floor(g[0] * 16.0) + frac) / 16.0,
-                     ty = (floor(g[1] * 16.0) + frac) / 16.0;
-        const double a = (gx[0] - g[0]) / h, b = (gy[0] - g[0]) / h;
-        const double c = (gx[1] - g[1]) / h, d = (gy[1] - g[1]) / h;
-        const double det = a * d - b * c;
-        if (!(fabs(det) > 1e-12)) {
-            break;
-        }
-        x[0] += ((tx - g[0]) * d - b * (ty - g[1])) / det;
-        x[1] += (a * (ty - g[1]) - c * (tx - g[0])) / det;
-    }
-    double g[2];
-    aloneExpected(0.5, x, g);
-    cell[0] = (int32_t)floor(g[0] * 16.0);
-    cell[1] = (int32_t)floor(g[1] * 16.0);
-}
-
-static void seamPoint(double x[3], int32_t cell[2])
-{
-    seamPointAt(0.5, x, cell);
-}
-
-/* the part's triangle in its model space: X through W^-1 (a turn and a
- * move: R^T (X - t)), then spread units along the model's x and y; qw the
- * mesh's stream as rd_create_vu_mesh takes it (and normal_c's batch) */
-static RdMesh seamMeshSpread(const double *w, const double x[3], float (*qw)[4], double spread)
-{
-    double l[3];
-    for (int i = 0; i < 3; i++) {
-        l[i] = 0.0;
-        for (int j = 0; j < 3; j++) {
-            l[i] += w[i * 4 + j] * (x[j] - w[12 + j]);
-        }
-    }
-    memset(qw, 0, 10 * sizeof(qw[0]));
-    const uint32_t tag = 0x8003u;
-    memcpy(&qw[0][0], &tag, 4);
-    for (int k = 0; k < 3; k++) {
-        qw[1 + k * 3][0] = (float)(l[0] + (k == 1 ? spread : 0.0));
-        qw[1 + k * 3][1] = (float)(l[1] + (k == 2 ? spread : 0.0));
-        qw[1 + k * 3][2] = (float)l[2];
-        qw[1 + k * 3][3] = 1.0f;
-        qw[1 + k * 3 + 1][2] = 1.0f;
-        qw[1 + k * 3 + 1][3] = k == 0 ? 0.0f : 1.0f;
-        qw[1 + k * 3 + 2][0] = qw[1 + k * 3 + 2][1] = qw[1 + k * 3 + 2][2] = 128.0f;
-        qw[1 + k * 3 + 2][3] = 128.0f;
-    }
-    const RdVuBatchDesc bd = {0, 0, 0};
-    RdVuMeshDesc md;
-    memset(&md, 0, sizeof(md));
-    md.qw = (const float (*)[4])qw;
-    md.qwCount = 10;
-    md.qwPerVertex = RD_VU_QW_PRELIT;
-    md.batchCount = 1;
-    md.batches = &bd;
-    return rd_create_vu_mesh(&md);
-}
-
-static RdMesh seamMesh(const double *w, const double x[3], float (*qw)[4])
-{
-    return seamMeshSpread(w, x, qw, 40.0);
-}
-
-/* a tick: the camera turned deg about the origin, A and B keyed by parts
- * pa and pb */
-static void seamFrameKeys(RdMesh ma, RdMesh mb, double deg, int pa, int pb)
-{
-    rd_begin_frame();
-    frameHead();
-    double eye[3], v[16], p[16], w[16];
-    s6OrbitEye(deg, eye);
-    s6View(deg, eye, v);
-    s6Proj(p);
-    RdCamera cam;
-    memset(&cam, 0, sizeof(cam));
-    for (int k = 0; k < 16; k++) {
-        cam.view[k] = (float)v[k];
-        cam.proj[k] = (float)p[k];
-    }
-    cam.zoom = 500.0f;
-    rd_set_camera(&cam);
-    s_s6List = 0;
-    seamWorld(0, w);
-    s6Draw(ma, v, w, RD_KEY(&kObjSeam, pa, 32));
-    seamWorld(1, w);
-    s6Draw(mb, v, w, RD_KEY(&kObjSeam, pb, 32));
-    rd_end_frame(0);
-}
-
-/* A and B keyed by parts part and part + 1 */
-static void seamFrame(RdMesh ma, RdMesh mb, double deg, int part)
-{
-    seamFrameKeys(ma, mb, deg, part, part + 1);
-}
-
-/* the first vertex's GS X and Y (ftoi4) of the batch qw through the block m
- * (common block qw 0..15, model matrices qw 16..27): normal_c code 32 */
-static bool seamCell(const float (*m)[4], const float (*qw)[4], int32_t out[2])
-{
-    static Vu1Ref r;
-    static VuBatchOut o;
-    vu1ref_init(&r);
-    vu1ref_load_common(&r, m);
-    vu1ref_normal_set_matrix(&r, m + 16);
-    vu1ref_normal_c(&r, 32, qw, &o);
-    if (o.count != 3) {
-        return false;
-    }
-    out[0] = o.v[0].xyz[0];
-    out[1] = o.v[0].xyz[1];
-    return true;
-}
-
-static void testStillSeams(void)
-{
-    static float qa[10][4], qb[10][4];
-    double x[3], wa[16], wb[16];
-    int32_t want[2];
-    /* the game's Z row: with s6Proj's Z = z_v + 1 the re-base's recovered
-     * model to world (S^-1 times the stored S W) takes its homogeneous term
-     * from float(z_v + 1) - float(z_v), exact only while the two share a
-     * binade: at the 28 degree tick part A lies at z_v 511.35, so Z 512.35
-     * rounds at 6.1e-5 while z_v rounds at 3.05e-5, and A's re-based rows
-     * moved by 7.8e-6 of their magnitude, past the still bound.  Through the
-     * game's matrix Z is zf + zn z_v (zf 1.07e9): the recovered term is off
-     * by about ulp(Z) / zf, 3e-8, as in the dumps (1.2e-7 at most) */
-    s6GsZ = 1;
-    seamPoint(x, want);
-    seamWorld(0, wa);
-    seamWorld(1, wb);
-    RdMesh ma = seamMesh(wa, x, qa), mb = seamMesh(wb, x, qb);
-    CHECK(ma.id && mb.id, "seams: the meshes");
-    static float blk[2][36][4], cur[2][36][4], prv[2][36][4];
-    const RdKey ka = RD_KEY(&kObjSeam, 0, 32), kb = RD_KEY(&kObjSeam, 1, 32);
-    /* matched: both parts at both ticks */
-    seamFrame(ma, mb, 0.0, 0);
-    seamFrame(ma, mb, 28.0, 0);
-    const RdInterpStats *st = build(0.5f, 1);
-    CHECK(st->snap == RD_SNAP_NONE && st->lerped == 2 && st->stillDraws == 2 && st->rotated == 0,
-          "seams: two still draws drawn from the tick's block (snap %u, lerped %u, still %u, "
-          "re-rounded by the blend %u, rotated %u)",
-          st->snap, st->lerped, st->stillDraws, st->stillReRounded, st->rotated);
-    const RdFrame *f = built(0.5f);
-    const RdFrame *pf = rd__prev_frame(), *cf = rd__last_frame();
-    int have = 1;
-    for (int k = 0; k < 2; k++) {
-        const RdKey key = k ? kb : ka;
-        const float (*m)[4] = vuBlock(f, findKey(f, 0, key, 0));
-        const float (*mc)[4] = vuBlock(cf, findKey(cf, 0, key, 0));
-        const float (*mp)[4] = vuBlock(pf, findKey(pf, 0, key, 0));
-        if (!m || !mc || !mp) {
-            have = 0;
-            continue;
-        }
-        memcpy(blk[k], m, sizeof(blk[k]));
-        memcpy(cur[k], mc, sizeof(cur[k]));
-        memcpy(prv[k], mp, sizeof(prv[k]));
-    }
-    CHECK(have, "seams: the matched draws");
-    /* the ticks: alpha 1 the tick's payload byte for byte, alpha 0 the
-     * blocks of the tick before (qw 4..35) */
-    f = built(1.0f);
-    CHECK(f && f->payloadSize == cf->payloadSize &&
-              memcmp(f->payload, cf->payload, cf->payloadSize) == 0,
-          "seams: alpha 1 is the tick's payload byte for byte");
-    f = built(0.0f);
-    for (int k = 0; have && k < 2; k++) {
-        const float (*m)[4] = vuBlock(f, findKey(f, 0, k ? kb : ka, 0));
-        CHECK(m && memcmp(m[4], prv[k][4], 32 * sizeof(m[0])) == 0,
-              "seams: alpha 0, part %d is the tick before's block", k);
-    }
-    /* the same parts unmatched (the tick before drew them under other keys):
-     * the tick's block through the same blended camera (camCurDraw) */
-    seamFrame(ma, mb, 0.0, 10);
-    seamFrame(ma, mb, 28.0, 0);
-    st = build(0.5f, 1);
-    CHECK(st->missing == 2 && st->curWorld == 2 && st->stillDraws == 0,
-          "seams: unmatched, both the tick's through the blended camera (missing %u, parts of "
-          "the world %u, still %u)",
-          st->missing, st->curWorld, st->stillDraws);
-    f = built(0.5f);
-    int32_t cell[2][2];
-    for (int k = 0; have && k < 2; k++) {
-        const float (*u)[4] = vuBlock(f, findKey(f, 0, k ? kb : ka, 0));
-        CHECK(u && memcmp(u[4], blk[k][4], 24 * sizeof(u[0])) == 0,
-              "seams: part %d matched is bit for bit the tick's block through the blended "
-              "camera (qw 4..27)",
-              k);
-        CHECK(memcmp(blk[k][4], cur[k][4], 24 * sizeof(blk[k][0])) != 0,
-              "seams: part %d's rows are not the tick's own (the camera moved)", k);
-        CHECK(seamCell((const float (*)[4])blk[k], (const float (*)[4])(k ? qb : qa), cell[k]),
-              "seams: vu1_ref's batch of part %d", k);
-    }
-    if (have) {
-        CHECK(cell[0][0] == cell[1][0] && cell[0][1] == cell[1][1] && cell[0][0] == want[0] &&
-                  cell[0][1] == want[1],
-              "seams: placement: the shared vertex at the middle of one ftoi4 cell, A (%d, %d), "
-              "B (%d, %d), through the blended camera (%d, %d)",
-              cell[0][0], cell[0][1], cell[1][0], cell[1][1], want[0], want[1]);
-    }
-    /* the mixed picture's counters: A matched, B the tick's alone (the tick
-     * before drew it under another key).  At alpha 0 no blended camera: A
-     * is the tick before's block, B the tick's, a tick of camera motion
-     * apart (one part in the minority); half way both are through the
-     * blended camera */
-    seamFrameKeys(ma, mb, 0.0, 0, 11);
-    seamFrameKeys(ma, mb, 28.0, 0, 1);
-    st = build(0.0f, 1);
-    CHECK(st->worldPrevRaw == 1 && st->worldCurRaw == 1 && st->mixed == 1 &&
-              st->camOffWhy == RD_CAM_OFF_ALPHA0,
-          "seams: alpha 0, A matched and B the tick's: a mixed picture (from the tick before %u, "
-          "from the tick %u, minority %u, no blended camera for %u)",
-          st->worldPrevRaw, st->worldCurRaw, st->mixed, st->camOffWhy);
-    st = build(0.5f, 1);
-    CHECK(st->mixed == 0 && st->worldPrevRaw == 0 && st->worldCurRaw == 0 &&
-              st->camOffWhy == RD_CAM_OFF_NONE && st->curWorld == 1 && st->stillDraws == 1,
-          "seams: half way, A matched and B the tick's: no mixed picture (minority %u, the "
-          "tick's through the blended camera %u, still %u)",
-          st->mixed, st->curWorld, st->stillDraws);
-    st = build(1.0f, 1);
-    CHECK(st->mixed == 0 && st->camOffWhy == RD_CAM_OFF_NONE,
-          "seams: alpha 1, nothing blends: no mixed picture (minority %u)", st->mixed);
-    rd_destroy_vu_mesh(ma);
-    rd_destroy_vu_mesh(mb);
-
-    /* the mechanism: C and D, two meshes of one model matrix (A's) whose
-     * other corners lie 40 and 300 units out (other centroids, so other
-     * pivots for a turn), both matched, the shared point within a quarter
-     * of a float ulp of a cell's edge through the blended camera: any
-     * difference in the last bits of their rows (the blend and a turn
-     * about each mesh's centroid gave them) can put it in two cells.  Their
-     * camera and model rows are bit-equal and the point is in one cell */
-    static float qc[10][4], qd[10][4];
-    double y[3];
-    int32_t edge[2], cc[2] = {0, 0}, cd[2] = {0, 0};
-    seamPointAt(0.001, y, edge);
-    RdMesh mc = seamMeshSpread(wa, y, qc, 40.0), md = seamMeshSpread(wa, y, qd, 300.0);
-    for (int k = 0; k < 2; k++) {
-        rd_begin_frame();
-        frameHead();
-        double eye[3], v[16], p[16];
-        s6OrbitEye(k ? 28.0 : 0.0, eye);
-        s6View(k ? 28.0 : 0.0, eye, v);
-        s6Proj(p);
-        RdCamera cam;
-        memset(&cam, 0, sizeof(cam));
-        for (int i = 0; i < 16; i++) {
-            cam.view[i] = (float)v[i];
-            cam.proj[i] = (float)p[i];
-        }
-        cam.zoom = 500.0f;
-        rd_set_camera(&cam);
-        s_s6List = 0;
-        s6Draw(mc, v, wa, RD_KEY(&kObjSeam, 20, 32));
-        s6Draw(md, v, wa, RD_KEY(&kObjSeam, 21, 32));
-        rd_end_frame(0);
-    }
-    st = build(0.5f, 1);
-    CHECK(st->lerped == 2 && st->stillDraws == 2,
-          "seams: one model matrix, two meshes: both blended still draws (lerped %u, still %u)",
-          st->lerped, st->stillDraws);
-    f = built(0.5f);
-    const float (*bc)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjSeam, 20, 32), 0));
-    const float (*bd)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjSeam, 21, 32), 0));
-    CHECK(bc && bd && memcmp(bc[4], bd[4], 24 * sizeof(bc[0])) == 0,
-          "seams: one model matrix, two meshes: camera and model rows (qw 4..27) bit-equal");
-    if (bc && bd) {
-        CHECK(seamCell(bc, (const float (*)[4])qc, cc) &&
-                  seamCell(bd, (const float (*)[4])qd, cd) && cc[0] == cd[0] && cc[1] == cd[1],
-              "seams: one model matrix, two meshes: the shared point at a cell's edge in one cell, "
-              "C (%d, %d), D (%d, %d), the edge (%d, %d)",
-              cc[0], cc[1], cd[0], cd[1], edge[0], edge[1]);
-    }
-    rd_destroy_vu_mesh(mc);
-    rd_destroy_vu_mesh(md);
-    s6GsZ = 0;
-}
+#include "rd_interp_seams_test.inc"
 
 static void runCpu(void)
 {
@@ -5932,6 +5625,7 @@ static void runCpu(void)
     testReproject();
     testReprojectOneTick();
     testStillSeams();
+    testStillSeamsAlpha0();
 }
 
 /* ------------------------------------------------------ the ticks' eyes
@@ -6101,12 +5795,21 @@ static void testEyeTicks(void)
               "eye ticks: behind the eye at both ticks, not drawn (%d pixels)",
               eyeDiff(behind, abc));
     }
-    /* the ticks' own pictures: no ticks' cameras, no mark */
+    /* the tick's own picture (alpha 1): no ticks' cameras, no mark; alpha 0
+     * is a present between the ticks through the tick before's camera
+     * (camSetup), and carries them as every other does */
     for (int k = 0; k < 2; k++) {
         if (eyePresent(m4, k ? 1.0f : 0.0f, tick, &f)) {
             const RdCmd *c = findKey(f, 0, RD_KEY(&kObjEye, 0, 32), 0);
-            CHECK(!f->hasTickCams && c && c->u[3] == 0u,
-                  "eye ticks: the tick's picture (alpha %d) has no ticks' cameras", k);
+            if (k) {
+                CHECK(!f->hasTickCams && c && c->u[3] == 0u,
+                      "eye ticks: the tick's picture (alpha 1) has no ticks' cameras");
+            } else {
+                CHECK(f->hasTickCams && c && c->u[3] == RD_VU_TICK_CAMERAS,
+                      "eye ticks: alpha 0 has the ticks' cameras (%u) and the draw the mark "
+                      "(%u), as every present between the ticks",
+                      f->hasTickCams, c ? c->u[3] : 0u);
+            }
         }
     }
     rd_destroy_vu_mesh(m3);

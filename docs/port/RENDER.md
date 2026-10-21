@@ -2306,7 +2306,8 @@ block re-based exactly as `camCurDraw` re-bases one (the projection taken to the
 under an easing zoom, as there), not the blend and no turn; its UV scroll and lights keep their blend. Every still
 draw, matched or not, is then the same function of the tick's block and the blended camera, so
 identical rows give identical bits across neighbouring draws. Moving objects keep the blend and
-the turn; alpha 0 and 1 have no blended camera and are the ticks' blocks byte for byte; an object
+the turn (none at alpha 0); alpha 1 has no blended camera and is the tick's payload byte for byte,
+and at alpha 0 the blended camera is the tick before's to the bit (below); an object
 moving less than the bound is drawn at its tick's place, at most about 0.004 pixels from its blend
 (`port/render/rd_interp.c` (`stillDraw`, `stillRows`, `blendVu`, `camCurDraw`)). The 10 s summary carries a line for them, and
 `rd_replay_tool --interp` prints the same counts as its third line:
@@ -2321,12 +2322,28 @@ changed. W counts the parts of the world `camCurDraw` re-based in a blended fram
 marked `RD_VU_TICK_CAMERAS` (`RdInterpStats` `stillDraws`, `stillReRounded`, `curWorld`, `tickCams`,
 `port/render/rd_internal.h`).
 
-**The mixed picture.** A frame that blends without a blended camera (alpha 0, a frame without a
-camera, the blend refused, `ICO_RD_S2_LEGACY=1`: `RdInterpStats.camOffWhy`, `RD_CAM_OFF_*`) draws
-its matched parts of the world from the ticks' blocks as recorded, blended element by element (at
-alpha 0 the tick before's), and the parts that are the tick's alone (unmatched, snapped, unkeyed)
-from the tick's block, `camCurDraw` having no camera to re-base them on. Both kinds in one picture
-stand a tick of camera motion apart, and the fog paints the gaps between them. The counts are
+**Alpha 0 is a present between the ticks.** On the timer path the present clock clamps a value
+below 0 to exactly 0, which a present right after a tick closes often has
+([DISPLAY.md](DISPLAY.md#interpolation-between-ticks)). `camSetup` takes t = 0 like any other t
+below 1, with the tick before's camera exactly: the blended view is the tick before's view
+(`s_cam.vt = s_cam.vp`), its inverse the inverse of that, `E_p` the identity and `E_c = Vc^-1 Vp`,
+without `rd__blend_affine` (whose t = 0 is the tick before's view to about 1e-16, not its bits,
+`port/render/rd_camera_blend.h` (`rdcb_blend_affine`)); the projection's lerp is the tick before's
+there. So the frame's view is the tick before's bit for bit, every draw that is the tick's alone
+(unmatched, snapped, unkeyed) is re-based onto that camera by `camCurDraw`, a still draw takes the
+tick's block through it, a moving matched draw the tick before's block re-based (a few ulps from the
+recorded one), the CPU-projected draws are re-projected and the draws of the tick before alone are
+placed as at any other alpha, and the draws carry the ticks' cameras (`RD_VU_TICK_CAMERAS`). An
+object that did not move is drawn where it stood at the tick before, whichever kind of draw it is.
+
+**The mixed picture.** A frame that blends without a blended camera (a frame without a camera, the
+blend refused, `ICO_RD_S2_LEGACY=1`: `RdInterpStats.camOffWhy`, `RD_CAM_OFF_*`) draws its matched
+parts of the world from the ticks' blocks as recorded, blended element by element, and the parts
+that are the tick's alone from the tick's block, `camCurDraw` having no camera to re-base them on.
+Both kinds in one picture stand up to a tick of camera motion apart, and the fog paints the gaps
+between them: the white wedges between wall and floor pieces a present at alpha 0 drew while it had
+no blended camera, where pieces entering the view (the game's cull) or whose payload changed size
+were the tick's and their neighbours the tick before's. The counts are
 `worldPrevRaw` and `worldCurRaw`, and `mixed` the smaller of the two when both are above 0 (the
 pieces in the minority; whether they touch is not computed). The 10 s summary carries a line for
 the presents that drew one, after the alpha line ([DISPLAY.md](DISPLAY.md#interpolation-between-ticks)),
@@ -2338,7 +2355,9 @@ interp: present of frame F at alpha 0.0000 (clamped from -0.0081) drew 212 parts
 ```
 
 `rd_replay_tool --interp` prints the same counts and why the frame had no blended camera at the end
-of its third line (`port/render/rd_interp.c` (`camSetup`, `camCurDraw`, `mixedNote`)). The vertex shaders keep the order of their arithmetic: every VU vertex
+of its third line (`port/render/rd_interp.c` (`camSetup`, `camCurDraw`, `mixedNote`)). The reason
+`alpha 0` stays in the line for the form's sake; `camSetup` sets it only for an alpha below 0, which
+`rd__interp_frame` never passes it. The vertex shaders keep the order of their arithmetic: every VU vertex
 shader carries `NoContraction` (HLSL `precise`) and no module `FPFastMathMode`, so no driver fuses
 one draw's products and not another's (`tools/check_spirv.py`, the precise gate).
 

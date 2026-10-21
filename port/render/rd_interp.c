@@ -5,7 +5,9 @@
  * only closes the frame and the host calls rd_present(alpha) as often as
  * the display allows: the last closed frame (cur) is replayed with the data
  * of every keyed draw blended from its match in the frame before (prev),
- * weight alpha on cur.  At alpha 0 the picture is prev's, so presentation
+ * weight alpha on cur.  At alpha 0 the picture is prev's, seen through
+ * prev's camera (camSetup: the draws of cur alone re-based onto it, the
+ * still parts of the world cur's block through it), so presentation
  * runs one tick behind the simulation; it never feeds back into it (this
  * file only reads the retained frames, rd_core.c's RD_FRAME_RING).
  *
@@ -1239,28 +1241,54 @@ static void loadF16(const float *f, double *o)
     }
 }
 
-/* s_cam for prev, cur at t; off without both cameras, in the legacy mode,
- * or when the blend fails (not affine, a mirror) */
+/* s_cam for prev, cur at t in [0, 1); off without both cameras, in the
+ * legacy mode, or when the blend fails (not affine, a mirror).
+ *
+ * At t = 0 the blended camera is the tick before's exactly: Vt = Vp, its
+ * inverse Vp^-1, E_p the identity and E_c = Vc^-1 Vp, without
+ * rd__blend_affine (whose t = 0 is Vp to about 1e-16, not its bits), and
+ * the projection's lerp gives Pp there.  So alpha 0 is a present like any
+ * other between the ticks: the draws that are the tick's alone (unmatched,
+ * snapped, unkeyed) are re-based onto the tick before's camera by
+ * camCurDraw, the still draws take the tick's block through it, the
+ * moving matched ones the tick before's block re-based (a few ulps from
+ * the recorded one), and the frame's view (s_out.camera.view) is the tick
+ * before's bit for bit.  Without it a present at alpha 0 (the timer path's
+ * clock clamps a value below 0 to exactly 0, rd_present_clock_alpha) drew
+ * the matched parts of the world at the tick before's camera and those of
+ * the tick alone at the tick's, a tick of camera motion apart: wedges of
+ * fog between neighbouring pieces (the mixed picture, RdInterpStats
+ * mixed). */
 static void camSetup(const RdFrame *prev, const RdFrame *cur, float t)
 {
     memset(&s_cam, 0, sizeof(s_cam));
     s_camGen++;
-    if (rd__s2_legacy() || !prev->hasCamera || !cur->hasCamera || !(t > 0.0f) || !(t < 1.0f)) {
+    if (rd__s2_legacy() || !prev->hasCamera || !cur->hasCamera || !(t >= 0.0f) || !(t < 1.0f)) {
         s_camOff = rd__s2_legacy()                       ? RD_CAM_OFF_LEGACY
                    : !prev->hasCamera || !cur->hasCamera ? RD_CAM_OFF_NO_CAMERA
-                   : !(t > 0.0f)                         ? RD_CAM_OFF_ALPHA0
+                   : !(t >= 0.0f)                        ? RD_CAM_OFF_ALPHA0
                                                          : RD_CAM_OFF_ALPHA1;
         return;
     }
     double ip[16], ic[16];
     loadF16(prev->camera.view, s_cam.vp);
     loadF16(cur->camera.view, s_cam.vc);
-    if (!invert4d(s_cam.vp, ip) || !invert4d(s_cam.vc, ic) ||
-        !rd__blend_affine(ip, ic, t, NULL, s_cam.it) || !invert4d(s_cam.it, s_cam.vt)) {
+    if (!invert4d(s_cam.vp, ip) || !invert4d(s_cam.vc, ic)) {
         s_camOff = RD_CAM_OFF_FAILED;
         return;
     }
-    mul4d(ip, s_cam.vt, s_cam.ep);
+    if (t == 0.0f) {
+        /* the tick before's camera, to the bit */
+        memcpy(s_cam.it, ip, sizeof(ip));
+        memcpy(s_cam.vt, s_cam.vp, sizeof(s_cam.vt));
+        memset(s_cam.ep, 0, sizeof(s_cam.ep));
+        s_cam.ep[0] = s_cam.ep[5] = s_cam.ep[10] = s_cam.ep[15] = 1.0;
+    } else if (!rd__blend_affine(ip, ic, t, NULL, s_cam.it) || !invert4d(s_cam.it, s_cam.vt)) {
+        s_camOff = RD_CAM_OFF_FAILED;
+        return;
+    } else {
+        mul4d(ip, s_cam.vt, s_cam.ep);
+    }
     mul4d(ic, s_cam.vt, s_cam.ec);
     s_cam.still = memcmp(prev->camera.view, cur->camera.view, sizeof(prev->camera.view)) == 0;
     /* the projection: GsBase.c's zoom eases towards its target (zoomCurrent,
@@ -2776,8 +2804,9 @@ static uint32_t s_vuTicks;
  * identical bits between ticks across neighbouring draws, and a shared
  * vertex lands in the same cell in each, as at the tick.  The UV scroll
  * (qw 2) and the lights (qw 28..35) keep their blend; moving objects keep
- * the blend and the turn; t = 0 and t = 1 are untouched (no blended camera
- * there).  What still differs is what differs at a tick: pieces with
+ * the blend and the turn (no turn at t = 0, where the blended camera is
+ * the tick before's exactly, camSetup); t = 1 is untouched (no blended
+ * camera there).  What still differs is what differs at a tick: pieces with
  * different model rows (other node matrices) carry the rounding of their
  * own products, the PS2's per-packet rounding (docs/port/DIVERGENCES.md).
  * An object moving less than the bound in a tick is drawn at its tick's
