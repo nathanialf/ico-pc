@@ -672,7 +672,7 @@ static int render(void)
         int row; /* main page row */
         int downs;
         const char *name;
-    } pages[] = {{0, 0, "settings_display.png"},     {0, 8, "settings_display_videomode.png"},
+    } pages[] = {{0, 0, "settings_display.png"},     {0, 9, "settings_display_videomode.png"},
                  {1, 0, "settings_effects.png"},     {3, 0, "settings_audio.png"},
                  {4, 1, "settings_controls.png"},    {5, 0, "settings_gameplay.png"},
                  {8, 0, "settings_achievements.png"}};
