@@ -559,6 +559,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `rd_replay_tool_snap_swap.cmake`: that dump on each blend path the device has, at 1x and 2x:
   the staticBlur sprites' snapshot swap draws `ICO_RD_SNAP_SWAP=0`'s (the copy's) DISPLAY picture
   byte for byte, and its copies plus swaps are the copy's snapshots (`rd_replay_tool_snap_swap`).
+- `rd_replay_tool_keys.cmake`: every dump of `ICO_DUMPS` (a list or a folder; skips without it)
+  through `rd_replay_tool --keys` at 1x, `--enhanced --resolution 2x` and `--enhanced --resolution
+  2340x1080`, on the fake phone limits (`ICO_VK_FAKE_LIMITS=mali`) and again with the tile-based
+  GPU's paths forced (`ICO_RD_DATE_PATH=stencil`, `ICO_RD_FOG_PATH=local`, `ICO_RD_BLUR_FOLD=1`;
+  the fake limits drop the local read, so the two cannot be combined, and a device without local
+  read compares the desktop set again, which the test's output says). `--keys` walks the replay
+  with nothing drawn (`rd__pipeline_gather`), makes the keys it names and compares them with
+  `rd__enumerate_reachable`; the test fails on a key the set lacks, which on a device is one
+  first-use stall (`firstUseLine`), never a wrong picture. The union of the asked keys is left in
+  `rd_replay_tool_keys/keys-<config>-<size>.txt` (`rd_replay_tool_keys`).
 - `rd_bisect_plan_test.c`: the loss bisect's second-level planner against oracles: a draw that
   faults with every draw before it (1, 731 and 1,312 of 1,312) found within 12 steps, the masked
   step's verdict, a killed step counted as lost, a step without a verdict planned again,

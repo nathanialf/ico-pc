@@ -1505,6 +1505,11 @@ void rd__pipeline_gather(bool on);
  * vertex pre-pass's choices, which would otherwise fall back) */
 bool rd__pipeline_gathering(void);
 uint32_t rd__pipeline_create_gathered(bool *stopped);
+/* the keys the gathering replay has named so far, each once, as
+ * rd__get_pipeline made them (copied to out, at most max); returns how many
+ * (rd_replay_tool --keys reads them before rd__pipeline_create_gathered
+ * clears them) */
+uint32_t rd__pipeline_gathered(RdPipeKeyInt *out, uint32_t max);
 uint32_t rd__pipeline_count(void);
 /* The time the pipelines made at first use took, in all, ms
  * (rd__get_pipeline; the replay's walk breakdown). */

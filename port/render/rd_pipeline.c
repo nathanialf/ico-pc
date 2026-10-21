@@ -2262,6 +2262,13 @@ void rd__pipeline_gather(bool on)
     }
 }
 
+uint32_t rd__pipeline_gathered(RdPipeKeyInt *out, uint32_t max)
+{
+    const uint32_t m = s_gatherN < max ? s_gatherN : max;
+    memcpy(out, s_gather, (size_t)m * sizeof(out[0]));
+    return m;
+}
+
 uint32_t rd__pipeline_create_gathered(bool *stopped)
 {
     const double t0 = rd__now_ms();

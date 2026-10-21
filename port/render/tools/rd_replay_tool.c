@@ -131,6 +131,16 @@
  *                         printed: the uploads, each list, each picture
  *                         effect (rd.h RD_PERF_POST_*, inside the lists'
  *                         times), the present and the VU pre-pass
+ *   --keys                the pipelines the replay asks for against the start-up
+ *                         set (rd__enumerate_reachable): the replay is walked
+ *                         with nothing drawn (rd__pipeline_gather) and the keys
+ *                         it names are made, again while a replay names new
+ *                         ones (at most 6 rounds); then one line a key,
+ *                         "<dump>: key: <in set|MISSING> <family>: <words>",
+ *                         and "<dump>: keys: N asked, M in the set of K, X
+ *                         missing"; exit 1 on a miss.  <out.png> is unused
+ *                         (give -).  The profile the set was made for is
+ *                         printed first ("<dump>: keys: profile ...")
  *   --pass-times          (implies --stats) every replay timed pass by pass
  *                         ([dev] perf_passes, rd_perf.c): after the gpu line
  *                         the warm replay's passes, one line each ("pass N:
@@ -1247,6 +1257,65 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
     return ok;
 }
 
+/* --keys: the replay's pipelines against the start-up set.  The rounds are
+ * rd_dump.c bisectPipelines': a replay that only names the keys it finds no
+ * pipeline for, then those keys made (a key a draw asks for only once
+ * another exists, the fallback pair's second pass, shows in a later round).
+ * The set is enumerated after the rounds, from the same state the keys were
+ * asked in.  1 on a miss. */
+#define KEYS_ROUNDS 6
+
+static int checkKeys(const char *dump, const RdFrame *rf)
+{
+    static RdPipeKeyInt asked[RD_PIPELINE_CACHE_MAX];
+    static RdPipeKeyInt round[RD_PIPELINE_CACHE_MAX];
+    static RdPipeKeyInt set[RD_PIPELINE_REACHABLE_MAX];
+    uint32_t na = 0, rounds = 0;
+    for (int r = 0; r < KEYS_ROUNDS; r++) {
+        bool stopped = false;
+        rd__pipeline_gather(true);
+        (void)rd__replay_frame(rf, (int)rf->keep, false);
+        rd__pipeline_gather(false);
+        rhi_wait_idle();
+        const uint32_t got = rd__pipeline_gathered(round, RD_PIPELINE_CACHE_MAX);
+        for (uint32_t i = 0; i < got; i++) {
+            na = rd__add_pipe_key(asked, RD_PIPELINE_CACHE_MAX, na, &round[i]);
+        }
+        if (got == 0) {
+            break;
+        }
+        rounds++;
+        (void)rd__pipeline_create_gathered(&stopped);
+        if (stopped || rhi_device_lost()) {
+            fprintf(stderr, "%s: keys: stopped in round %d\n", dump, r + 1);
+            return 1;
+        }
+    }
+    const uint32_t ns = rd__enumerate_reachable(set, RD_PIPELINE_REACHABLE_MAX);
+    const uint32_t nsm = ns < RD_PIPELINE_REACHABLE_MAX ? ns : RD_PIPELINE_REACHABLE_MAX;
+    const uint32_t nam = na < RD_PIPELINE_CACHE_MAX ? na : RD_PIPELINE_CACHE_MAX;
+    const RdProfile *pr = &g_rd.profile;
+    printf("%s: keys: profile tiler %d, local read %d, fog local %d, DATE stencil %d, blur fold "
+           "%d, dynamic depth %d, dynamic blend %d, VU pre-pass %d\n",
+           dump, pr->tiler, pr->localRead, pr->fogLocal, pr->dateStencil, pr->blurFold,
+           g_rd.dynDepth, g_rd.dynBlend, g_rd.vuPrepass);
+    uint32_t miss = 0;
+    for (uint32_t i = 0; i < nam; i++) {
+        bool in = false;
+        for (uint32_t j = 0; j < nsm && !in; j++) {
+            in = rd__pipe_key_equal(&asked[i], &set[j]);
+        }
+        char w[200];
+        rd__pipe_key_text(&asked[i], w, sizeof(w));
+        printf("%s: key: %s %s: %s\n", dump, in ? "in set" : "MISSING",
+               rd__pipe_family_name(rd__pipe_key_family(&asked[i])), w);
+        miss += !in;
+    }
+    printf("%s: keys: %u asked in %u rounds, %u in the set of %u, %u missing\n", dump, nam, rounds,
+           nam - miss, ns, miss);
+    return miss ? 1 : 0;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 3) {
@@ -1256,7 +1325,7 @@ int main(int argc, char **argv)
                 "[--border-mask] [--water-sharp] [--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
-                "[--time N] "
+                "[--time N] [--keys] "
                 "[--pass-dump DIR] "
                 "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject] "
                 "[--interp-nop-prev L:A[-B]]]\n"
@@ -1275,6 +1344,7 @@ int main(int argc, char **argv)
     bool list = false, overlay = false, stats = false, passTimes = false;
     int timeN = 0; /* --time N */
     bool noDevice = false, aspectGiven = false;
+    bool keysCheck = false;
     int vuRefL[8], vuRefCount = 0;
     uint32_t vuRefI[8];
     const char *passDir = NULL;
@@ -1364,6 +1434,8 @@ int main(int argc, char **argv)
             overlay = true;
         } else if (strcmp(argv[i], "--stats") == 0) {
             stats = true;
+        } else if (strcmp(argv[i], "--keys") == 0) {
+            keysCheck = true;
         } else if (strcmp(argv[i], "--pass-times") == 0) {
             stats = passTimes = true;
         } else if (strcmp(argv[i], "--time") == 0 && i + 1 < argc) {
@@ -1566,6 +1638,10 @@ int main(int argc, char **argv)
     s.outputHeight = passDir ? 0 : oh;
     /* --no-device (or --list without a device) loads the dump into a
        record-only renderer, lists it and renders nothing */
+    if (keysCheck && noDevice) {
+        fprintf(stderr, "--keys needs a device\n");
+        return 77;
+    }
     if (noDevice && !list && !texDir && !meshName && !vuRefCount) {
         fprintf(stderr, "--no-device renders nothing: give --list, --mesh or --dump-textures\n");
         return 1;
@@ -1661,6 +1737,13 @@ int main(int argc, char **argv)
         rd__frame_free(&pf);
         rd_shutdown();
         return 0;
+    }
+    if (keysCheck) {
+        const int krc = checkKeys(dump, rf);
+        rd__frame_free(&f);
+        rd__frame_free(&pf);
+        rd_shutdown();
+        return krc;
     }
     if (passA) {
         rd__replay_set_window_draws(passA, passB, drawA, drawA ? drawB : 0u, maskMarks ? 1 : 0, 0);

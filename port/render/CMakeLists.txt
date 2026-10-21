@@ -824,6 +824,16 @@ if(ICO_RUN_TESTS)
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_snap_swap.cmake")
     set_tests_properties(rd_replay_tool_snap_swap PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                              FIXTURES_REQUIRED rd_dump TIMEOUT 600)
+    # every pipeline a replay asks for is in the start-up set (rd_replay_tool --keys): each
+    # dump of ICO_DUMPS at 1x, --enhanced 2x and --enhanced 2340x1080, on the fake phone
+    # limits and with the tile-based GPU's paths forced; skips without ICO_DUMPS or a device.
+    # The union of the asked keys is left in rd_replay_tool_keys/keys-<config>-<size>.txt
+    add_test(NAME rd_replay_tool_keys
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_keys"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_keys.cmake")
+    set_tests_properties(rd_replay_tool_keys PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                        TIMEOUT 3600)
     # the native frame gates (tools/native_frame_check.py, docs/port/TESTING.md): gate-a
     # re-renders the dump list ICO_DUMPS names and compares with
     # docs/native_frame_baseline.json; gate-b checks the aspect sweeps ICO_SWEEPS names.

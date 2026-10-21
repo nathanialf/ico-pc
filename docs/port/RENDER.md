@@ -1019,6 +1019,10 @@ the water's states as 2D):
 (a key is in one family, the first that holds of DATE, VU point, VU,
 shadow, fog, CRT, fx, 2D). `rd_state_test` `testTilerSet` asserts the families sum to the set's
 count and to the count without local read, and prints them for each mode.
+`rd_replay_tool --keys` compares the set with what a replay asks for: the keys the replay names
+(`rd__pipeline_gather`, rounds as the loss bisect's `bisectPipelines`), one line each with its
+family and `in set` or `MISSING`, and `exit 1` on a miss (ctest `rd_replay_tool_keys`, TESTING.md).
+A key the set lacks costs one first-use stall, logged by `firstUseLine`, never a wrong picture.
 The summary line's renderer part ends with ` (pool 4160, cache 4096)` after the set's words
 (`rd_summary_text`). A creation that fails, in the set or at first use, is logged with the key, when
 it was asked for and why, the first 8 and then every 100th with the count so far
