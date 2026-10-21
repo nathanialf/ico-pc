@@ -333,8 +333,10 @@ passes of the block's timed replays, each timed between stamps outside the rende
 the count of passes a replay and of those under 0.05 ms; only with GPU timestamps),
 `window: passes per replay N: render passes R (lists L, <effect> E, ...), <kind> K, ...` (what a
 replay begins, by kind, every replay) and `window: CPU walk ms per replay by list 0-12: ...;
-uploaded KB per replay: textures T, meshes M (interpolated I), uniform blocks U, VU streams S,
-other O` (`perf_log`, `perf_passes_add`).
+uploaded KB per replay: textures T, meshes M (interpolated I), uniform blocks U (R VU blocks
+reused), VU streams S, other O` (`perf_log`, `perf_passes_add`; R is the VuCB and VuBoneCB blocks a
+replay that took the ring offset of a block of the same bytes instead of a copy,
+`RdPerfRecord.uniformDedup`).
 
 **Reading the lines for a speed report.** Four lines carry the evidence, with the start's
 `ico_pc: summary:` and `rhi_vk:` device lines (`port/platform/window_host.c` (`perf_log`,

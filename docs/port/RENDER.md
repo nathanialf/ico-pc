@@ -407,8 +407,15 @@ glyph page `rd_create_texture_r8` could not make logs the same words with `ui:`,
 
 **Bind groups.** Bind groups are valid only in the [frame slot](ARCHITECTURE.md#terms) they were
 made in, so their caches are tagged with an epoch every `rhi_wait_frame` of the renderer starts anew
-(`rd__wait_frame`). Uniform blocks are written once per replay per content (FNV-1a), and texture
-groups are cached by (texture, sampler, DATE snapshot) (`port/render/rd_replay.c` (`s_bindEpoch`)).
+(`rd__wait_frame`). Uniform blocks are written once per replay per content: DrawCB, FrameCB and
+the other blocks of `uniformGroup` (FNV-1a, the bytes compared), and a VU draw's VuCB and VuBoneCB
+(`port/render/rd_replay_vu.c` (`cbShared`): 64 entries, four ways in each of 16 sets chosen by
+XXH3-64 over the block, the bytes compared against the entry's own copy since the mapped ring is
+never read back). The ring is reset only where a replay begins, after `rd__wait_frame`, so a block
+at a cached offset is never written again in its epoch and a draw that takes it binds the bytes a
+copy of its own would hold; `RdPerfRecord.uniformDedup` counts the VuCB and VuBoneCB blocks that
+took an earlier block's offset (the packets of one character share their bones). Texture groups
+are cached by (texture, sampler, DATE snapshot) (`port/render/rd_replay.c` (`s_bindEpoch`)).
 
 **DATE snapshots.** TEST.DATE tests the destination alpha's MSB. The replay copies the bound
 target's alpha MSB into the R8 `RD_TARGET_DATE_SNAPSHOT` over the area the draw can touch, and the
@@ -2589,7 +2596,7 @@ The window's 10 s block has three lines from it, after the `GPU ms per replay` l
 ```
 window: GPU top passes: list 0 SCENE 848x448 420 draws 4.12 ms, glow WORK1 256x128 10.0 passes 10 draws 1.21 ms, ... (5 of 47.0 passes a replay, 16 timed replays; passes under 0.05 ms: 31.0 a replay, 0.62 ms)
 window: passes per replay 47.0: render passes 32.0 (lists 9.0, reduction 1.0, fog 1.0, glow 17.0), uploads 1.0, VU pre-pass 1.0, copy 15.0, snapshot 0.5, DATE snapshot 1.5, fog depth read 1.0, present 1.0
-window: CPU walk ms per replay by list 0-12: 1.10 0.05 ... 0.20; uploaded KB per replay: textures 57, meshes 27 (interpolated 20), uniform blocks 820, VU streams 30, other 61
+window: CPU walk ms per replay by list 0-12: 1.10 0.05 ... 0.20; uploaded KB per replay: textures 57, meshes 27 (interpolated 20), uniform blocks 820 (310 VU blocks reused), VU streams 30, other 61
 ```
 
 (the numbers show the fields, not a measurement). The top passes are the timed replays' pieces
@@ -2603,8 +2610,9 @@ fixed part of a tiler's frame can be worked out. The third splits the walk's CPU
 `RdPerfRecord.walkListMs`) and the upload ring's bytes by what they carry (`uploadTextureBytes`,
 `meshUploadBytes` and of it `uploadInterpBytes`, the interpolation's scratch meshes,
 `uploadUniformBytes`: every DrawCB, VuCB, VuBoneCB and FrameCB written (`uniformGroup`,
-`rd_replay_vu.c` `cbCopy`), `uploadStreamBytes`: the VU streams without a mesh and the grids'
-index lists; other: the screen prims' vertices, the fog's table, alignment). With `[dev]
+`rd_replay_vu.c` `cbCopy`), with the count of VuCB and VuBoneCB blocks a replay that reused one
+written earlier instead (`uniformDedup`, `cbShared`; not in the bytes), `uploadStreamBytes`: the
+VU streams without a mesh and the grids' index lists; other: the screen prims' vertices, the fog's table, alignment). With `[dev]
 perf_passes` the window also writes every piece of every replay to `ico-pc-passes.csv`
 ([DISPLAY.md](DISPLAY.md#the-perf-csv)). The replay tool's `--pass-times` (with `--stats`) times
 the warm replay pass by pass and prints one line a piece, `<dump>: pass N: <label> <target> WxH,

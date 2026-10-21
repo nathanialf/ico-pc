@@ -2024,6 +2024,10 @@ typedef struct RdPerfRecord {
      * lists; the rest is the screen prims' vertices, the fog's table and the
      * alignment between them */
     uint64_t uploadTextureBytes, uploadUniformBytes, uploadInterpBytes, uploadStreamBytes;
+    /* The VuCB and VuBoneCB blocks that took the ring offset of a block of
+     * the same bytes written earlier in the replay instead of a copy of
+     * their own (rd_replay_vu.c cbShared; not in uploadUniformBytes) */
+    uint32_t uniformDedup;
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are
