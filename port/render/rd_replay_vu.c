@@ -13,7 +13,6 @@
 #include "rd_passring.h"
 #include "rd_replay.h"
 #include "shader_consts.h"
-#include "xxh3.h"
 
 /* -------------------------------------------------------------- VU draws
  * RDC_MESH / RDC_SKINNED (rd_draw_vu_mesh), RDC_GRID (rd_draw_vu_grid) and
@@ -48,118 +47,6 @@ static uint64_t cbCopy(const void *data, uint64_t size, uint64_t align)
         g_rdPerf.uploadUniformBytes += size;
     }
     return off;
-}
-
-/* VuCB and VuBoneCB by content (cbShared): a block whose bytes one written
- * earlier in this replay already holds takes that one's ring offset instead
- * of a copy of its own (RdPerfRecord.uniformDedup).  The ring is a bump
- * allocator reset only when a replay begins (rd_replay.c, after
- * rd__wait_frame starts a new epoch), so within one epoch the block at a
- * cached offset is never written again: the GPU reads, at the offset bound,
- * the bytes it would read from a copy of its own.  64 entries, four ways
- * in each of 16 sets chosen by XXH3-64 over the block (a draw's VuCB and
- * VuBoneCB in one set do not evict each other), the hit confirmed by the
- * bytes kept here (the mapped ring is uncached memory: never read back); a
- * miss takes a way of an older epoch, else the set's ways in turn.  The
- * skinned and carded draws' 3840-byte VuBoneCB and the 816-byte VuCB of
- * the packets of one character, or of one mesh drawn twice, repeat within
- * a replay. */
-#define RD_VU_CB_WAYS 4
-#define RD_VU_CB_SETS 16
-
-typedef struct VuCbEntry {
-    uint32_t epoch, size;
-    uint64_t hash, align, offset;
-    uint8_t data[sizeof(IcoVuBoneCB) > sizeof(IcoVuCB) ? sizeof(IcoVuBoneCB) : sizeof(IcoVuCB)];
-} VuCbEntry;
-
-static VuCbEntry s_vuCb[RD_VU_CB_SETS][RD_VU_CB_WAYS];
-
-static uint8_t s_vuCbNext[RD_VU_CB_SETS]; /* the way a set's next miss takes when all are live */
-
-static uint64_t cbShared(const void *data, uint64_t size, uint64_t align)
-{
-    if (size == 0 || size > sizeof(s_vuCb[0][0].data)) {
-        return cbCopy(data, size, align);
-    }
-    const uint32_t epoch = rd__replay_bind_epoch();
-    const uint64_t h = xxh3_64(data, (size_t)size);
-    const uint32_t set = (uint32_t)((h ^ (h >> 32)) % RD_VU_CB_SETS);
-    VuCbEntry *ways = s_vuCb[set], *e = NULL;
-    for (int i = 0; i < RD_VU_CB_WAYS; i++) {
-        VuCbEntry *w = &ways[i];
-        if (w->epoch == epoch && w->hash == h && w->size == size && w->align == align &&
-            memcmp(w->data, data, (size_t)size) == 0) {
-            g_rdPerf.uniformDedup++;
-            return w->offset;
-        }
-        if (!e && w->epoch != epoch) {
-            e = w;
-        }
-    }
-    const uint64_t off = cbCopy(data, size, align);
-    if (off != ~0ull) {
-        if (!e) {
-            e = &ways[s_vuCbNext[set]];
-            s_vuCbNext[set] = (uint8_t)((s_vuCbNext[set] + 1u) % RD_VU_CB_WAYS);
-        }
-        e->epoch = epoch;
-        e->size = (uint32_t)size;
-        e->hash = h;
-        e->align = align;
-        e->offset = off;
-        memcpy(e->data, data, (size_t)size);
-    }
-    return off;
-}
-
-/* A grid's index list (doVuDraw): indices k = 2 .. vpb-1 of every strip,
- * ICO_VU_INDEX(b * vpb + v, 0..2), ni of them; a function of the grid's
- * shape (batchCount, vpb) alone, so a grid of a shape one drawn earlier in
- * this replay had takes that list's ring offset (the ring is not written
- * again in the epoch: cbShared above) and the GPU reads the indices a list
- * of its own would hold.  Eight shapes a replay, the oldest replaced;
- * ~0ull when the ring is full. */
-#define RD_GRID_LISTS 8
-
-typedef struct GridList {
-    uint32_t epoch, batchCount, vpb;
-    uint64_t offset;
-} GridList;
-
-static GridList s_gridLists[RD_GRID_LISTS];
-
-static uint32_t s_gridListNext;
-
-static uint64_t gridIndexList(uint32_t batchCount, uint32_t vpb, uint32_t ni)
-{
-    const uint32_t epoch = rd__replay_bind_epoch();
-    for (int i = 0; i < RD_GRID_LISTS; i++) {
-        const GridList *e = &s_gridLists[i];
-        if (e->epoch == epoch && e->batchCount == batchCount && e->vpb == vpb) {
-            return e->offset;
-        }
-    }
-    const uint64_t iOff = rd__ring_alloc((uint64_t)ni * 4, 16);
-    if (iOff == ~0ull) {
-        return iOff;
-    }
-    g_rdPerf.uploadStreamBytes += (uint64_t)ni * 4;
-    uint32_t *idx = (uint32_t *)(g_rd.ringMap[rd__ring_slot()] + iOff);
-    for (uint32_t b = 0, k = 0; b < batchCount; b++) {
-        for (uint32_t v = 2; v < vpb; v++) {
-            for (uint32_t cc = 0; cc < 3; cc++) {
-                idx[k++] = ICO_VU_INDEX(b * vpb + v, cc);
-            }
-        }
-    }
-    GridList *e = &s_gridLists[s_gridListNext];
-    s_gridListNext = (s_gridListNext + 1u) % RD_GRID_LISTS;
-    e->epoch = epoch;
-    e->batchCount = batchCount;
-    e->vpb = vpb;
-    e->offset = iOff;
-    return iOff;
 }
 
 /* ------------------------------------------------ the record's buffers
@@ -486,9 +373,8 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     }
     /* the exact blend's passes, two passes without dual-source blend */
     const int np = rd__replay_expand_passes(r, pl, npl, dp);
-    /* VuCB once a draw (or a block of the same bytes written earlier in the
-       replay: cbShared): every pass of it reads the same block */
-    const uint64_t vOff = cbShared(vcb, sizeof(*vcb), ua);
+    /* VuCB once a draw: every pass of it reads the same block */
+    const uint64_t vOff = cbCopy(vcb, sizeof(*vcb), ua);
     if (vOff == ~0ull) {
         return;
     }
@@ -644,7 +530,7 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
             const uint32_t words = (cardKicks + 15u) / 16u;
             memcpy(bc.bone[cardQw], pay + cardWords, (size_t)words * 4u);
         }
-        bonesOff = cbShared(&bc, sizeof(bc), ua);
+        bonesOff = cbCopy(&bc, sizeof(bc), ua);
     } else {
         if (s_zeroBonesFor != g_rd.replayCounter) {
             static const IcoVuBoneCB zero;
@@ -1017,7 +903,7 @@ static bool vuStageDraw(const VuPre *e, IcoVuCB *vcb, uint64_t dOff, const RdPip
     }
     const RhiBindGroup g1 = vuGroup(e->src.streamBuf, e->src.streamBufSize, e->src.streamOff,
                                     e->src.streamSize, &vcb->draw[0]);
-    const uint64_t vOff = cbShared(vcb, sizeof(*vcb), rhi_limits()->uniformAlign);
+    const uint64_t vOff = cbCopy(vcb, sizeof(*vcb), rhi_limits()->uniformAlign);
     const RhiPipeline p = rd__get_pipeline(key);
     if (!g1.id || vOff == ~0ull || (!p.id && !rd__pipeline_gathering())) {
         return false;
@@ -1569,18 +1455,27 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
          * strip flag); the stream's layout and the draw's mark: vuSource */
         const uint32_t vpb = p.vertsPerBatch;
         const uint32_t ni = p.batchCount * (vpb - 2) * 3;
-        const uint64_t iOff = gridIndexList(p.batchCount, vpb, ni);
+        const uint64_t iOff = rd__ring_alloc((uint64_t)ni * 4, 16);
         if (iOff == ~0ull) {
             return;
         }
+        g_rdPerf.uploadStreamBytes += (uint64_t)ni * 4;
+        uint32_t *idx = (uint32_t *)(g_rd.ringMap[rd__ring_slot()] + iOff);
         if (g_rdWin.first && g_rdWin.drawLast) {
-            g_rdVuCur.index = (const uint32_t *)(g_rd.ringMap[rd__ring_slot()] + iOff);
+            g_rdVuCur.index = idx;
         }
-        /* the span from the grid's shape, not from the list (the mapped
-         * ring is uncached memory): ICO_VU_INDEX(2, 0) to ICO_VU_INDEX(the
-         * last batch's last vertex, 2) */
+        /* the span from the grid's shape, not from idx (the mapped ring is
+         * uncached memory): ICO_VU_INDEX(2, 0) to ICO_VU_INDEX(the last
+         * batch's last vertex, 2) */
         if (vpb >= 3u && p.batchCount > 0u) {
             rd__span_range(ICO_VU_INDEX(2u, 0u), ICO_VU_INDEX(p.batchCount * vpb - 1u, 2u));
+        }
+        for (uint32_t b = 0, k = 0; b < p.batchCount; b++) {
+            for (uint32_t v = 2; v < vpb; v++) {
+                for (uint32_t cc = 0; cc < 3; cc++) {
+                    idx[k++] = ICO_VU_INDEX(b * vpb + v, cc);
+                }
+            }
         }
         RhiBindGroup g2 = rd__replay_bind_draw_keep(r, &ds);
         if (!g2.id) {

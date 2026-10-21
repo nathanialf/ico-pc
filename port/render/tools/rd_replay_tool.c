@@ -111,10 +111,7 @@
  *   --stats               prints the replay's counts from its performance
  *                         record (rd.h RdPerfRecord): draws, passes, bind
  *                         groups created (rd's uniform and texture groups
- *                         apart), bind group and pipeline binds, ring bytes
- *                         (of them the uniform blocks', and the VuCB and
- *                         VuBoneCB blocks that reused the offset of a block
- *                         of the same bytes, rd_replay_vu.c cbShared),
+ *                         apart), bind group and pipeline binds, ring bytes,
  *                         pipeline barriers and copies, the screen-prim
  *                         draws one per command and merged; a second line:
  *                         the exact blend's destination-read draws, storage
@@ -1800,12 +1797,12 @@ int main(int argc, char **argv)
          * once its timestamps are in, RHI_FRAMES_IN_FLIGHT replays later) */
         const RdPerfRecord *pr = &g_rdPerf;
         printf("%s: stats: %u draws, %u passes, %u bind groups (%u uniform, %u texture), %u bind "
-               "group binds, %u pipeline binds, %llu ring bytes (%llu uniform, %u VU uniform "
-               "blocks reused), %u barriers, %u copies; screen prims %u draws merged into %u\n",
+               "group binds, %u pipeline binds, %llu ring bytes, %u barriers, %u copies; screen "
+               "prims %u draws merged into %u\n",
                dump, pr->draws, pr->renderPasses, pr->bindGroups, pr->uniformGroups,
                pr->textureGroups, pr->bindGroupBinds, pr->pipelineBinds,
-               (unsigned long long)pr->uploadBytes, (unsigned long long)pr->uploadUniformBytes,
-               pr->uniformDedup, pr->barriers, pr->copies, pr->screenCmds, pr->screenDraws);
+               (unsigned long long)pr->uploadBytes, pr->barriers, pr->copies, pr->screenCmds,
+               pr->screenDraws);
         printf("%s: stats: %u destination-read draws, %u storage passes, %u pass switches for the "
                "exact blend; glow %u passes; snapshots %u copied, %u swapped; %u draws resampled "
                "above 1x\n",
