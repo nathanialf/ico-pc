@@ -439,9 +439,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   stage 40 or with photo mode closed, the veil alone without the row (`checkDejaReel`; the
   evaluator there stands in for the game's).
 - `rd_interp_test.c`: presentation between [ticks](ARCHITECTURE.md#terms) on two synthetic frames
-  (`rd_interp`); its rotation cases live in `rd_interp_turn_test.inc`, its seams cases in
-  `rd_interp_seams_test.inc`, included where they stood, and the tick's plan's case in
-  `rd_interp_plan_test.inc`, after the seams;
+  (`rd_interp`); its rotation cases live in `rd_interp_turn_test.inc` and its seams cases in
+  `rd_interp_seams_test.inc`, included where they stood;
   rotation continuity (`testRotationContinuity`): a rigid draw and a bone turning
   170 then 190 degrees a tick stand at 265 degrees half way (on forward the long way, not back to
   85), at 217.5 at alpha 0.25 and at the tick's pose at alpha 1; 190 degrees with no turn before
@@ -473,15 +472,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   by size, `sizeTailBlended` 1), both are still draws with the shared vertex in one cell, and B's
   card section is the tick's. The present clock (`testPresentClock`) notes
   its value before the clamp (`rd__present_clock_raw`), below 0 for a present before the tick's
-  time, and `rd__alpha_bin` sorts the alphas into the 10 s line's bins. The tick's plan
-  (`testPlanIdentity`, [RENDER.md](RENDER.md#the-ticks-plan)): over the pair builders (sprites, VU
-  draws, turns with a skinned draw, the blended camera with a part matched and one the tick's, the
-  hall's lights, still and wading instances, a mesh of the tick before alone, the re-projected
-  strips, the pool's grids, the unmatched prims, the prisms, the wheels, the seams matched and with
-  a part the tick's, a lit turn) the presents at alpha 0.5 (the tick's first), 0.25, 0.75, 1 and 0
-  give the same lists, payload, camera, VU block, ticks' cameras, text items and stats with the
-  plan as with it built again before every present (`rd__interp_plan_reset`), the plan built once
-  and nothing allocated after its first present (`rd__interp_plan_counts`). The ticks' eyes
+  time, and `rd__alpha_bin` sorts the alphas into the 10 s line's bins. The ticks' eyes
   (`testEyeTicks`, on a device): alpha 0 carries the ticks' cameras as every present between the
   ticks, alpha 1 none.
 - `rd_layout_test.c`: the layout frame from the game's layout calls (`rd_layout`).
@@ -526,13 +517,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`rd__set_perf_list_stamps`) the lists' times are 0, the GPU total is there and the pieces add
   up to it; before any device, the CSV header and line,
   the top-passes text (with a cut to a short buffer) and the passes-by-kind text, to the byte
-  (`checkPassTexts`). The reachable set is made with the pre-pass. The interp phase
-  (`checkInterp`): with interpolation on, two frames whose VU draws stand 2 GS pixels apart
-  presented 200 times at an alpha sweeping 0 to 0.95 (`rd_present`): the tick's plan is built at the
-  first present only (its record's `interpPlanMs` above 0, the others' 0, no plan built or
-  allocation made after it), nothing is created or destroyed from the third present on, and DISPLAY
-  at alpha 0.05 at the 4th and the 184th present is the same byte for byte (`rd_perf`,
-  `rd_perf_mali`).
+  (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the
   dump the tool tests replay (`rd_pixel`). Its pipelines case holds the reachable set under
   `RD_PIPELINE_REACHABLE_MAX` with both blends, the tile-based GPU's set too (its profile with
@@ -858,7 +843,6 @@ switches the tests and their registrations use:
 | `ICO_RD_VU_PLAIN` | `rd_pipeline.c` | 1: every VU draw with the VU vertex shaders' plain variants, as on a device of the table (`kVuPlainOnly`); the replay tool's pictures at a wide aspect then show the plain-only picture ([RENDER.md](RENDER.md#the-fallback-entries)) |
 | `ICO_RD_VU_EXTENDED` | `rd_pipeline.c` | 1: the extended variants whatever the device table or `ICO_RD_VU_PLAIN` says |
 | `ICO_RD_VU_PREPASS` | `rd_replay_vu.c` | 0: no VU vertex pre-pass, every VU draw the old way (`[dev] vu_prepass = false`); the tests switch it with `rd__set_vu_prepass` ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)) |
-| `ICO_RD_INTERP_PLAN` | `rd_interp.c` | 0: the tick's plan built again at every present (the same frames, the cost without it); `rd_interp_test` does the same with `rd__interp_plan_reset` ([RENDER.md](RENDER.md#the-ticks-plan)) |
 | `ICO_RD_PERF_LIST_STAMPS` | `rd_perf.c` | 0: no list or effect timestamp (`[dev] perf_list_stamps = false`); `rd_perf_test` switches it with `rd__set_perf_list_stamps` ([RENDER.md](RENDER.md#the-per-pass-timing)) |
 | `ICO_RD_PERF_PASSES` | `rd_perf.c` | 1: every replay timed pass by pass (`[dev] perf_passes = true`; the window writes `ico-pc-passes.csv`); `rd_perf_test` and the replay tool's `--pass-times` switch it with `rd__set_perf_passes` ([RENDER.md](RENDER.md#the-per-pass-timing)) |
 | `ICO_RHI_BACKEND`, `ICO_VK_DEVICE`, `ICO_D3D12_ADAPTER` | `rhi_backend.c`, `vk_device.c`, `d3d12_device.c` | pick the backend, the Vulkan device, the D3D12 adapter (`warp`) |

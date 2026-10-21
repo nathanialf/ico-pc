@@ -771,10 +771,6 @@ typedef struct RdMeshRec {
      * keeps the old one in hist (the older entry replaced): what frames
      * from .. to - 1 drew. */
     uint32_t verFrame;
-    /* the stream's rewrites (rd_update_vu_mesh), counted: two in one
-     * recording frame keep one verFrame (rd_interp.c's tick's plan keys a
-     * mesh's centroid and pivots by both) */
-    uint32_t streamWrites;
 
     struct {
         float (*stream)[4];
@@ -2019,14 +2015,6 @@ void rd__note_frame_present(const RdFrame *f);
 const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float alpha,
                                 int firstOfTick, RdInterpStats *stats);
 void rd__interp_shutdown(void);
-/* The tick's plan (rd_interp.c, "the plan"): the next rd__interp_frame
- * builds it again (a test that edits a frame in place between two presents
- * of one pair; rd_replay_tool --time's first replay); the building's time
- * in the last rd__interp_frame, ms (0 when it used the plan it had); the
- * plans built and the allocations they made since the start */
-void rd__interp_plan_reset(void);
-double rd__interp_last_plan_ms(void);
-void rd__interp_plan_counts(uint32_t *builds, uint32_t *allocs);
 
 /* rd_present.c's capture (rd.h rd_capture_presented): whether one is armed;
  * captureRecord (rd_present.c) copies the output into the capture texture

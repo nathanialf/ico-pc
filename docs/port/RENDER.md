@@ -2433,45 +2433,6 @@ prints the pair's long ways and turns kept at the tick's pose (`port/render/rd_i
 continuity: `turnFind`, `turnRecall`, `turnRecallGap`, `turnKeep`, `blendTurn`, `turnSnaps`),
 `port/render/rd_camera_blend.h`, `port/render/rd_internal.h`).
 
-### The tick's plan
-
-A pair of ticks is presented several times (a 50 Hz tick at 144 presents a second is about three
-presents), and part of `rd__interp_frame`'s work depends on the pair alone. The pair's first
-present keeps that part in the tick's plan, computed where the code always computed it, and the
-pair's later presents take it from there (`port/render/rd_interp.c`, "the plan"):
-
-- the matching (`buildIndex`, `indexCur`, `matchOf` with `placeSlot` and `alignSlot`): per keyed
-  draw of the current tick, in the main loop's order, its match in the tick before, why it has
-  none, whether it is paired apart, its two ordinals; the keyed count and the draws placed. The
-  tick before's index stays as the first present left it, with each draw's match (`Node.out`),
-  which `unmatchedPass` reads (`planMatch`, `planStart`);
-- per mesh, by its id (with its generation), `verFrame`, rewrites, stream and layout: a rigid mesh's
-  centroid (`meshCentroid`) and a skinned mesh's pivots (`skinPivots`) (`planMesh`);
-- per VU block, by the bits they come from: `camRebase`'s model to world W and its inverse (from
-  qw 4..7 and 16..19) and `vuWorldOrigin`'s origin (qw 4..7 and 19) (`planGet`).
-
-Everything else runs at every present as before: the copy of the tick, the blended camera and the
-re-base's products with it, the lerps, the still test, the turns and their memory, the morphs,
-`unmatchedPass` (its verdict on a draw of the tick before alone reads the blended camera's near
-plane), `feedback` and the flap notes. A kept value is the same arithmetic on the same values, so
-each present's frame and stats are the bits a present without the plan makes, at every alpha and
-for either `firstOfTick` (`rd_interp_test`'s `testPlanIdentity`). The plan's key is both frames'
-addresses, numbers, payloads (address and size) and list counts: a closed frame is never written
-(the ring records into a third slot, `port/render/rd_core.c`), `rd_shutdown` drops the plan
-(`rd__interp_shutdown`), and a test that edits a frame in place between two presents of one pair
-calls `rd__interp_plan_reset`. The tables are sized and allocated when the plan is built, at the
-pair's first present, and a full table computes without keeping, so the later presents allocate
-nothing (`rd_perf_test`'s interp phase). `ICO_RD_INTERP_PLAN=0` builds the plan again at every
-present, the same frames at the cost without the plan. The log says once which it is: `interp:
-the tick's plan on: a pair of ticks is matched at its first present, its later presents reuse the
-match (ICO_RD_INTERP_PLAN=0: at every present)`, or `interp: the tick's plan off
-(ICO_RD_INTERP_PLAN=0): every present matches the pair again`. The plan's time is
-`RdPerfRecord.interpPlanMs` ([Performance records](#performance-records)); `rd_replay_tool --time`
-builds it again for its first replay. A mesh's key holds its rewrites (`RdMeshRec.streamWrites`,
-counted by `rd_update_vu_mesh`, `port/render/rd_mesh.c`) beside its `verFrame`: two rewrites
-while one frame records keep one `verFrame`, and a tick records over two of the host's steps (one
-vsync each, `port/platform/host_loop.c` (`ico_host_step`)), between which the window presents.
-
 ## Performance records
 
 A record (`RdPerfRecord`) is filled while a replay runs (its CPU phases and counts), closed with the
@@ -2498,10 +2459,9 @@ A present's interpolation time (`interpMs`, measured around `rd__interp_frame` b
 charged to the replay that follows) is split in two: `interpPlanMs`, the part spent building an
 interpolation plan for the pair of ticks, and `interpApplyMs`, the rest, the blend at the
 present's alpha; `interpMs` is their sum (`port/render/rd_perf.c` (`rd__perf_interp_ms`);
-`port/render/rd_interp.c` (`rd_present`, `rd__interp_last_plan_ms`)). A pair's first present
-builds the plan ([The tick's plan](#the-ticks-plan)) and its later presents have `interpPlanMs` 0.
-The window's replays line shows the plan's part as `interp X (plan Y)` and the perf CSV has both
-([DISPLAY.md](DISPLAY.md#the-stats-lines)).
+`port/render/rd_interp.c` (`rd_present`)). The presenter keeps no plan: every present does all of
+its work at its alpha and `interpPlanMs` is 0. The window's replays line shows the plan's part as
+`interp X (plan Y)` and the perf CSV has both ([DISPLAY.md](DISPLAY.md#the-stats-lines)).
 
 The record also counts the exact blend's cost and the glow's passes (issue 103): `dstDraws`, the
 draws recorded through a destination-read shader (`dstBind`); `storagePasses`, the passes begun
@@ -2775,9 +2735,8 @@ uniform KB, interp KB, draws, pipeline binds, bind group binds`, then `<dump>: t
 replay: interp X ms (plan P, apply A), total T`. With `--interp` it compares DISPLAY after the
 first and the last of the N replays byte for byte and prints `pictures identical`, or the bytes
 that differ and exits 1: a present later in a tick must draw the tick's first present's picture
-(`timeReplays`). The first of the N replays builds the pair's plan again
-([The tick's plan](#the-ticks-plan)), so its line carries the plan's time. The lavapipe numbers are
-for comparing two builds on one host, not a device's times.
+(`timeReplays`). The lavapipe numbers are for comparing two builds on one host, not a device's
+times.
 
 The options:
 
