@@ -103,10 +103,7 @@ How the picture looks.
   and Fullscreen do not use this row. On Linux with Wayland, your desktop
   decides where the window goes. This row is not on phones and tablets.
 - **Vertical sync** stops the picture from tearing. With it off, the
-  picture can tear if your screen allows it. On Windows, a window smaller
-  than the screen (Windowed, or Borderless at a smaller Window size) does
-  not tear either way, because Windows draws it together with the rest of
-  the desktop. With it on, **Video mode** at
+  picture can tear if your screen allows it. With it on, **Video mode** at
   60 Hz (the normal choice) and **Frame rate** at 60 on a 60 Hz screen or
   120 on a 120 Hz screen, the game takes its steps in time with the screen,
   so every picture is shown for the same length of time. With Video mode at

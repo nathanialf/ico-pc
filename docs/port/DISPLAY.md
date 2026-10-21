@@ -224,11 +224,13 @@ and becomes resizable again when it leaves that state (`set_sized_edges`). Every
 the window system and logs what the window became: `window: mode M (window WxH pixels)`, for
 Borderless `(window WxH pixels, the display's size)` or `(window WxH pixels; display WxH)`, with
 `; the window manager did not follow the request` when the mode read back differs. The point of a
-smaller window: SDL gives a Borderless window and a fullscreen one the same `WS_POPUP` style on
-Windows, and a frameless window whose client area equals its monitor is shown by the desktop
-compositor the way a fullscreen game is, which programs that hook the composed window (Lossless
-Scaling) cannot use; a window smaller than the display is always composed. That compositor rule is
-Microsoft's behaviour, not in any source here; a Windowed window shows the same.
+smaller window: on Windows a window whose client region covers the screen can be flipped to the
+screen without the desktop compositor, as a fullscreen game is (DirectFlip, "your window client
+region covers the screen", Microsoft's [For best performance, use DXGI flip
+model](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/for-best-performance--use-dxgi-flip-model)), which programs that hook the composed window (Lossless Scaling) cannot use. A window
+smaller than the display is usually composed; on hardware with multi-plane overlays Windows can
+flip it on its own plane (the same page, "DirectFlip with multi-plane overlay"). These rules are
+Microsoft's behaviour, not in any source here; a Windowed window follows the same rules.
 
 After a graphics driver crash while the pipelines are built, the crash handler starts the program
 again with `ICO_STARTUP_RETRY=<step>:<backend>`: `cache` deletes the loaded pipeline cache, `d3d12`
@@ -461,8 +463,8 @@ vblank past the deadline, a new frame at most once and never once the deadline h
 the lock and the present mode are decided from the display's refresh, not from how much of the
 display the window covers (`video_settings`), the presenter boxes the picture into any output size
 (`port/render/rd_present.c` (`rd__present_box`)), and the vblank clock is the output's
-(`port/platform/display_clock.h`). Under the desktop compositor a present is shown one composition
-later, about one refresh more latency than a window that fills the display; how well the lock
+(`port/platform/display_clock.h`). When the desktop compositor composes the window a present is
+shown one composition later, about one refresh more latency than a window flipped to the display; how well the lock
 holds its phase there has not been measured on hardware: the 10 s `lock held` line is the check.
 
 ### The vsync lock
