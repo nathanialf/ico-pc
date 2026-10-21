@@ -237,6 +237,9 @@ int ico_config_save(void)
     if (!ico_toml_has(toml, "video.fullscreen")) {
         r |= ico_toml_set_bool(toml, "video.fullscreen", 0);
     }
+    if (!ico_toml_has(toml, "video.window_size")) {
+        r |= ico_toml_set_string(toml, "video.window_size", "display");
+    }
     if (!ico_toml_has(toml, "audio.enabled")) {
         r |= ico_toml_set_bool(toml, "audio.enabled", 1);
     }
@@ -291,10 +294,13 @@ static const char first_run_text[] =
     "# aspect, texture_filter and full_height as written.\n"
     "preset = \"original\"\n"
     "vsync = true\n"
-    "# windowed, borderless (a frameless window that fills the screen) or\n"
-    "# fullscreen\n"
+    "# windowed, borderless (a window without a frame) or fullscreen\n"
     "window_mode = \"windowed\"\n"
     "fullscreen = false\n"
+    "# The size of a borderless window: \"display\" fills the screen, a size\n"
+    "# such as \"1920x1080\" leaves it in the middle of the screen, which\n"
+    "# programs that scale the game's window or add frames to it need.\n"
+    "window_size = \"display\"\n"
     "# A PCSX2 texture pack: copy its SCES-50760 folder (SCPS-11003 for the\n"
     "# Japanese disc) into a folder named\n"
     "# textures beside the program or in your user folder. false shows the\n"

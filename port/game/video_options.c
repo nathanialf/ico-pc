@@ -107,6 +107,11 @@ static int lower_eq(const char *a, const char *b)
     return *a == 0 && *b == 0;
 }
 
+/* The bounds of a "WxH": a resolution's and a window size's */
+#define WXH_MIN 64u
+#define WXH_MAX_W 7680u
+#define WXH_MAX_H 4320u
+
 int ico_video_parse_resolution(const char *s, IcoVideoOptions *o)
 {
     unsigned w = 0, h = 0, n = 0;
@@ -124,7 +129,8 @@ int ico_video_parse_resolution(const char *s, IcoVideoOptions *o)
         o->resScale = ICO_RES_AUTO;
         return 0;
     }
-    if (sscanf(s, "%ux%u%c", &w, &h, &tail) == 2 && w >= 64 && h >= 64 && w <= 7680 && h <= 4320) {
+    if (sscanf(s, "%ux%u%c", &w, &h, &tail) == 2 && w >= WXH_MIN && h >= WXH_MIN &&
+        w <= WXH_MAX_W && h <= WXH_MAX_H) {
         o->resW = (int)w;
         o->resH = (int)h;
         o->resScale = 0;
@@ -216,6 +222,37 @@ int ico_video_parse_window_mode(const char *s, int *mode)
 const char *ico_video_window_mode_name(int mode)
 {
     return mode >= 0 && mode < ICO_WINDOW_COUNT ? kWindowMode[mode] : kWindowMode[0];
+}
+
+int ico_video_parse_window_size(const char *s, int *w, int *h)
+{
+    unsigned x = 0, y = 0;
+    char tail = 0;
+
+    if (s == NULL) {
+        return -1;
+    }
+    if (lower_eq(s, "display")) {
+        *w = *h = 0;
+        return 0;
+    }
+    if (sscanf(s, "%ux%u%c", &x, &y, &tail) == 2 && x >= WXH_MIN && y >= WXH_MIN &&
+        x <= WXH_MAX_W && y <= WXH_MAX_H) {
+        *w = (int)x;
+        *h = (int)y;
+        return 0;
+    }
+    return -1;
+}
+
+const char *ico_video_window_size_name(int w, int h, char *buf, unsigned size)
+{
+    if (w > 0 && h > 0) {
+        snprintf(buf, size, "%dx%d", w, h);
+    } else {
+        snprintf(buf, size, "display");
+    }
+    return buf;
 }
 
 int ico_video_parse_filter(const char *s, int *filter)
@@ -367,6 +404,11 @@ static void sanitize(IcoVideoOptions *o)
     if (o->windowMode < 0 || o->windowMode >= ICO_WINDOW_COUNT) {
         o->windowMode = d.windowMode;
     }
+    /* a window size is both sides within the "WxH" bounds, or "display" */
+    if (o->winW < (int)WXH_MIN || o->winH < (int)WXH_MIN || o->winW > (int)WXH_MAX_W ||
+        o->winH > (int)WXH_MAX_H) {
+        o->winW = o->winH = 0;
+    }
     o->vsync = o->vsync != 0;
     o->fullHeight = o->fullHeight != 0;
     o->fullPixel = o->fullPixel != 0;
@@ -453,6 +495,11 @@ static void read_config(void)
             o.windowMode = ICO_WINDOW_WINDOWED;
             fprintf(stderr, "video: window_mode not understood; \"windowed\" used\n");
         }
+    }
+    if (ico_video_parse_window_size(ico_config_get_string("video.window_size", "display"), &o.winW,
+                                    &o.winH) != 0) {
+        o.winW = o.winH = 0;
+        fprintf(stderr, "video: window_size not understood; display used\n");
     }
     o.vsync = ico_config_get_bool("video.vsync", 1) != 0;
     o.fullHeight = ico_config_get_bool("video.full_height", 0) != 0;
@@ -582,7 +629,7 @@ unsigned ico_video_serial(void)
 int ico_video_save(void)
 {
     IcoVideoOptions o;
-    char res[32], fr[16];
+    char res[32], fr[16], ws[24];
     int r = 0;
 
     ico_video_get(&o);
@@ -594,6 +641,8 @@ int ico_video_save(void)
     r |= ico_config_set_string("video.aspect", ico_video_aspect_name(o.aspect));
     r |= ico_config_set_string("video.window_mode", ico_video_window_mode_name(o.windowMode));
     r |= ico_config_set_bool("video.fullscreen", o.windowMode == ICO_WINDOW_FULLSCREEN);
+    r |= ico_config_set_string("video.window_size",
+                               ico_video_window_size_name(o.winW, o.winH, ws, sizeof(ws)));
     r |= ico_config_set_bool("video.vsync", o.vsync);
     r |= ico_config_set_string("video.texture_filter", ico_video_filter_name(o.filter));
     r |= ico_config_set_bool("video.full_height", o.fullHeight);

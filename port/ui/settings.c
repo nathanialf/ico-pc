@@ -841,6 +841,28 @@ static int resolutionIndex(const IcoVideoOptions *o)
     return -1; /* a WxH or another N from the file */
 }
 
+/* The Window size row's sizes in pixels, after Display size, largest
+   first; a size from the file that is not in the list (or does not fit the
+   display) is shown as it is */
+static const int kWinSizes[][2] = {{3840, 2160}, {2560, 1440}, {1920, 1080},
+                                   {1600, 900},  {1280, 720},  {960, 720}};
+#define WIN_SIZES ((int)N_OF(kWinSizes))
+static int (*s_displaySizeQuery)(int *w, int *h); /* the display's pixels, when installed */
+
+/* the row offers kWinSizes[i]: it fits the display and is smaller than it
+   (a window of the display's size is Display size); every size without
+   the host's answer */
+static int winSizeOffered(int i)
+{
+    int dw = 0, dh = 0;
+
+    if (s_displaySizeQuery == NULL || !s_displaySizeQuery(&dw, &dh) || dw <= 0 || dh <= 0) {
+        return 1;
+    }
+    return kWinSizes[i][0] <= dw && kWinSizes[i][1] <= dh &&
+           (kWinSizes[i][0] < dw || kWinSizes[i][1] < dh);
+}
+
 /* ------------------------------------------------------------- Extras
  * Settings > Extras.  Music, Models and Credits leave the stage, so they
  * show from the title only (masked and skipped by the cursor from the
@@ -1241,6 +1263,12 @@ static const char *rawValue(int opt, char *buf, unsigned size)
                       : m == ICO_WINDOW_FULLSCREEN ? UI_STR_OPT_FULLSCREEN
                                                    : UI_STR_VAL_WINDOWED);
     }
+    case UI_OPT_WINDOW_SIZE:
+        /* Display size, or the WxH as the file has it */
+        if (o.winW <= 0 || o.winH <= 0) {
+            return ui_str(UI_STR_VAL_DISPLAY_SIZE);
+        }
+        return ico_video_window_size_name(o.winW, o.winH, buf, size);
     case UI_OPT_VSYNC:
         return onOff(o.vsync);
     case UI_OPT_FILTER:
@@ -1467,7 +1495,7 @@ static int optShown(int opt, int link)
     if (isTouchOpt(opt)) {
         return touchPresent(); /* a phone, a tablet, a touch screen */
     }
-    if (opt == UI_OPT_WINDOW_MODE) {
+    if (opt == UI_OPT_WINDOW_MODE || opt == UI_OPT_WINDOW_SIZE) {
         return !ico_video_android(); /* the phone's window is the screen */
     }
     if (opt == UI_OPT_MOUSE_CAMERA || opt == UI_OPT_MOUSE_SENS || opt == UI_OPT_MOUSE_INVERT ||
@@ -1655,6 +1683,49 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
                                  ICO_WINDOW_COUNT, dir);
         video = 1;
         break;
+    case UI_OPT_WINDOW_SIZE: {
+        /* Display size, then the sizes the display offers, around; from a
+           size not in that list, the next smaller one on Right (Display
+           size after the smallest) and the next larger on Left (Display
+           size above the largest), as Resolution steps from a scale of the
+           file's */
+        int list[1 + WIN_SIZES], n = 0, pos = -1, next = 0;
+
+        list[n++] = -1;
+        for (int i = 0; i < WIN_SIZES; i++) {
+            if (winSizeOffered(i)) {
+                list[n++] = i;
+            }
+        }
+        if (o.winW <= 0 || o.winH <= 0) {
+            pos = 0;
+        }
+        for (int k = 1; k < n && pos < 0; k++) {
+            if (kWinSizes[list[k]][0] == o.winW && kWinSizes[list[k]][1] == o.winH) {
+                pos = k;
+            }
+        }
+        if (pos >= 0) {
+            next = stepIndex(pos, n, dir);
+        } else {
+            const long area = (long)o.winW * o.winH;
+
+            for (int k = 1; k < n; k++) {
+                const long a = (long)kWinSizes[list[k]][0] * kWinSizes[list[k]][1];
+                if (dir > 0 && a < area) {
+                    next = k;
+                    break;
+                }
+                if (dir < 0 && a > area) {
+                    next = k;
+                }
+            }
+        }
+        o.winW = next == 0 ? 0 : kWinSizes[list[next]][0];
+        o.winH = next == 0 ? 0 : kWinSizes[list[next]][1];
+        video = 1;
+        break;
+    }
     case UI_OPT_FILTER:
         o.filter = stepIndex(o.filter, 3, dir);
         video = 1;
@@ -2271,8 +2342,9 @@ static void buildGalleryBar(void)
 
 /* A page's first row and pitch (field lines) for n rows shown.  Every page
    keeps Back's box inside the 226 lines and above the notes:
-     Display      from 36, 14 apart (at most eleven rows shown; Video mode
-                  and Model pack are the title's)
+     Display      from 36, 14 apart up to eleven rows; twelve (the title's
+                  with Video mode and Model pack) from 34, 13 apart (Back
+                  at 177)
      Characters   from 40, 13 apart (twelve rows: Back at 183, its box to
                   219); inside the model viewer CV_ROW_Y0 and CV_ROW_PITCH
      Main         from 40: up to 8 rows 19 apart, 9 rows 17, 10 rows 15,
@@ -2293,9 +2365,8 @@ static void buildGalleryBar(void)
 static int pagePitch(int page, int n, int *y0)
 {
     if (page == UI_PAGE_DISPLAY) {
-        (void)n;
-        *y0 = 36;
-        return 14;
+        *y0 = n > 11 ? 34 : 36;
+        return n > 11 ? 13 : 14;
     }
     *y0 = 40;
     if (page == UI_PAGE_EFFECTS && n > 13) {
@@ -2484,6 +2555,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     case UI_PAGE_DISPLAY:
         addNote(pg, UI_OPT_RESOLUTION, UI_STR_RESOLUTION_CRT_NOTE);
         addNote(pg, UI_OPT_ANTI_ALIAS, UI_STR_OPT_AA_NOTE);
+        addNote(pg, UI_OPT_WINDOW_SIZE, UI_STR_WINDOW_SIZE_NOTE);
         addNote(pg, UI_OPT_TEXTURE_PACK, UI_STR_TEXTURE_PACK_NOTE);
         addNote(pg, UI_OPT_MODEL_PACK, UI_STR_MODEL_PACK_NOTE);
         break;
@@ -2998,21 +3070,15 @@ static void build(void)
     /* every Display row always shown, Frame rate included; Full-height
        picture, Texture filtering and Brightness (the pause menu's) are the
        Effects page's, first there */
-    static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION,  UI_OPT_ASPECT,
-                                   UI_OPT_ANTI_ALIAS,   UI_OPT_WINDOW_MODE, UI_OPT_VSYNC,
-                                   UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,  UI_OPT_FRAMERATE,
-                                   UI_OPT_VIDEO_MODE,   UI_OPT_BACK};
-    static const int dispStrs[] = {UI_STR_OPT_PRESET,
-                                   UI_STR_OPT_RESOLUTION,
-                                   UI_STR_OPT_ASPECT,
-                                   UI_STR_OPT_AA,
-                                   UI_STR_OPT_WINDOW_MODE,
-                                   UI_STR_OPT_VSYNC,
-                                   UI_STR_OPT_TEXTURE_PACK,
-                                   UI_STR_OPT_MODEL_PACK,
-                                   UI_STR_OPT_FRAMERATE,
-                                   UI_STR_OPT_VIDEO_MODE,
-                                   UI_STR_BACK};
+    static const int dispOpts[] = {UI_OPT_PRESET,     UI_OPT_RESOLUTION,   UI_OPT_ASPECT,
+                                   UI_OPT_ANTI_ALIAS, UI_OPT_WINDOW_MODE,  UI_OPT_WINDOW_SIZE,
+                                   UI_OPT_VSYNC,      UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,
+                                   UI_OPT_FRAMERATE,  UI_OPT_VIDEO_MODE,   UI_OPT_BACK};
+    static const int dispStrs[] = {
+        UI_STR_OPT_PRESET,    UI_STR_OPT_RESOLUTION,   UI_STR_OPT_ASPECT,
+        UI_STR_OPT_AA,        UI_STR_OPT_WINDOW_MODE,  UI_STR_OPT_WINDOW_SIZE,
+        UI_STR_OPT_VSYNC,     UI_STR_OPT_TEXTURE_PACK, UI_STR_OPT_MODEL_PACK,
+        UI_STR_OPT_FRAMERATE, UI_STR_OPT_VIDEO_MODE,   UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
@@ -3309,6 +3375,11 @@ int ui_settings_capturing(void)
 void ui_settings_set_window_mode_query(int (*fn)(void))
 {
     s_windowModeQuery = fn;
+}
+
+void ui_settings_set_display_size_query(int (*fn)(int *w, int *h))
+{
+    s_displaySizeQuery = fn;
 }
 
 void ui_settings_set_aa_mask_query(unsigned (*fn)(void))

@@ -544,4 +544,9 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED_BODY] =
         "바로 가기 목록을 바꾸지 못했습니다.\n직접 추가하는 방법은 README에 있습니다.",
     [UI_STR_LANG_KO] = "한국어",
+    /* Display > Window size */
+    [UI_STR_OPT_WINDOW_SIZE] = "테두리 없는 창 크기",
+    [UI_STR_VAL_DISPLAY_SIZE] = "화면 크기",
+    [UI_STR_WINDOW_SIZE_NOTE] =
+        "테두리 없음 전용. 화면보다 작게 하면 창을 크게 하거나 프레임을 추가하는 도구를 사용할 수 있습니다.",
 };

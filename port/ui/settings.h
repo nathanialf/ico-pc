@@ -99,6 +99,11 @@ void ui_settings_set_quit_handler(void (*fn)(void));
    is installed; the window host installs it so the row follows Alt+Enter and
    the window manager.  NULL removes it (headless, tests). */
 void ui_settings_set_window_mode_query(int (*fn)(void));
+/* The Window size row offers the sizes that are smaller than fn's answer
+   (the window's display in pixels, into *w and *h; 1, or 0 when unknown)
+   besides Display size; without a query, or while it answers 0, every size
+   of the list.  The window host installs it.  NULL removes it. */
+void ui_settings_set_display_size_query(int (*fn)(int *w, int *h));
 /* The Anti-aliasing row's list: the RdAntiAlias values (a bit each, as
    rd_aa_supported_mask) the row steps through.  Without a query the
    renderer's own answer (a build without it: Off and the supersampling
@@ -265,6 +270,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_ASPECT,
     UI_OPT_ANTI_ALIAS, /* [video] anti_aliasing, stepped through rd_aa_supported_mask */
     UI_OPT_WINDOW_MODE,
+    UI_OPT_WINDOW_SIZE, /* [video] window_size: Display size or a WxH of a Borderless window */
     UI_OPT_VSYNC,
     UI_OPT_FILTER,
     UI_OPT_FULL_HEIGHT,

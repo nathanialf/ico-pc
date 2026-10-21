@@ -78,21 +78,15 @@ static void testBuild(void)
                                    UI_STR_OPT_DUMP_TEXTURES,
                                    UI_STR_OPT_DUMP_MODELS,
                                    UI_STR_BACK};
-    static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION,  UI_OPT_ASPECT,
-                                   UI_OPT_ANTI_ALIAS,   UI_OPT_WINDOW_MODE, UI_OPT_VSYNC,
-                                   UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,  UI_OPT_FRAMERATE,
-                                   UI_OPT_VIDEO_MODE,   UI_OPT_BACK};
-    static const int dispStrs[] = {UI_STR_OPT_PRESET,
-                                   UI_STR_OPT_RESOLUTION,
-                                   UI_STR_OPT_ASPECT,
-                                   UI_STR_OPT_AA,
-                                   UI_STR_OPT_WINDOW_MODE,
-                                   UI_STR_OPT_VSYNC,
-                                   UI_STR_OPT_TEXTURE_PACK,
-                                   UI_STR_OPT_MODEL_PACK,
-                                   UI_STR_OPT_FRAMERATE,
-                                   UI_STR_OPT_VIDEO_MODE,
-                                   UI_STR_BACK};
+    static const int dispOpts[] = {UI_OPT_PRESET,     UI_OPT_RESOLUTION,   UI_OPT_ASPECT,
+                                   UI_OPT_ANTI_ALIAS, UI_OPT_WINDOW_MODE,  UI_OPT_WINDOW_SIZE,
+                                   UI_OPT_VSYNC,      UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,
+                                   UI_OPT_FRAMERATE,  UI_OPT_VIDEO_MODE,   UI_OPT_BACK};
+    static const int dispStrs[] = {
+        UI_STR_OPT_PRESET,    UI_STR_OPT_RESOLUTION,   UI_STR_OPT_ASPECT,
+        UI_STR_OPT_AA,        UI_STR_OPT_WINDOW_MODE,  UI_STR_OPT_WINDOW_SIZE,
+        UI_STR_OPT_VSYNC,     UI_STR_OPT_TEXTURE_PACK, UI_STR_OPT_MODEL_PACK,
+        UI_STR_OPT_FRAMERATE, UI_STR_OPT_VIDEO_MODE,   UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
@@ -148,7 +142,7 @@ static void testBuild(void)
                                          UI_STR_BACK};
         CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 7), "Extras page rows");
     }
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 11),
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 12),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 6), "audio rows");
     CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 16), "controls rows");
@@ -226,7 +220,7 @@ static void testBuild(void)
     lt_ext_reset();
     ui_settings_reset();
     ui_settings_install();
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 11), "display rows (Enhanced)");
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 12), "display rows (Enhanced)");
     CHECK(strcmp(ui_settings_value_text(UI_OPT_FRAMERATE), "144 fps") == 0, "framerate 144 (%s)",
           ui_settings_value_text(UI_OPT_FRAMERATE));
 }

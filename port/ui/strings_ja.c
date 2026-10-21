@@ -545,4 +545,9 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED_BODY] =
         "ショートカット一覧を変更できませんでした。\n手動で追加する方法はREADMEにあります。",
     [UI_STR_LANG_KO] = "한국어",
+    /* Display > Window size */
+    [UI_STR_OPT_WINDOW_SIZE] = "ウィンドウサイズ",
+    [UI_STR_VAL_DISPLAY_SIZE] = "画面サイズ",
+    [UI_STR_WINDOW_SIZE_NOTE] =
+        "ボーダーレス用。画面より小さくすると、ウィンドウを大きくしたりフレームを追加するソフトが使えます。",
 };

@@ -546,4 +546,9 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED_BODY] =
         "No se pudo cambiar la lista de accesos directos.\nEl README explica cómo añadirlo a mano.",
     [UI_STR_LANG_KO] = "한국어",
+    /* Display > Window size */
+    [UI_STR_OPT_WINDOW_SIZE] = "Tamaño de ventana",
+    [UI_STR_VAL_DISPLAY_SIZE] = "Tamaño de pantalla",
+    [UI_STR_WINDOW_SIZE_NOTE] =
+        "Para Sin bordes. Más pequeño que la pantalla para programas que escalan la ventana o añaden fotogramas.",
 };

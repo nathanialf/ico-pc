@@ -106,7 +106,7 @@ int main(void)
         SDL_Rect b = {0, 0, 0, 0};
         SDL_GetDisplayBounds(SDL_GetDisplayForWindow(w), &b);
         pw = ph = -1;
-        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_BORDERLESS, &pw, &ph);
+        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_BORDERLESS, 0, 0, &pw, &ph);
         CHECK(r == ICO_WINDOWVIDEO_BORDERLESS, "borderless returned %d", r);
         if (strcmp(SDL_GetCurrentVideoDriver(), "offscreen") != 0) {
             CHECK((SDL_GetWindowFlags(w) & SDL_WINDOW_BORDERLESS) != 0, "borderless flag not set");
@@ -119,22 +119,62 @@ int main(void)
 
         /* windowed: framed, the rectangle from before */
         pw = ph = -1;
-        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_WINDOWED, &pw, &ph);
+        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_WINDOWED, 0, 0, &pw, &ph);
         CHECK(r == ICO_WINDOWVIDEO_WINDOWED, "windowed returned %d", r);
         CHECK((SDL_GetWindowFlags(w) & (SDL_WINDOW_BORDERLESS | SDL_WINDOW_FULLSCREEN)) == 0,
               "windowed still frameless or fullscreen");
         CHECK(pw == 960 && ph == 720, "windowed size %dx%d, want 960x720", pw, ph);
 
         /* fullscreen again, then fullscreen -> borderless leaves it */
-        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_FULLSCREEN, NULL, NULL);
+        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_FULLSCREEN, 0, 0, NULL, NULL);
         CHECK(r == ICO_WINDOWVIDEO_FULLSCREEN, "mode fullscreen returned %d", r);
         CHECK((SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) != 0, "mode fullscreen: no flag");
-        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_BORDERLESS, NULL, NULL);
+        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_BORDERLESS, 0, 0, NULL, NULL);
         CHECK(r == ICO_WINDOWVIDEO_BORDERLESS, "fullscreen -> borderless returned %d", r);
         CHECK((SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) == 0, "still fullscreen");
-        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_WINDOWED, &pw, &ph);
+        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_WINDOWED, 0, 0, &pw, &ph);
         CHECK(r == ICO_WINDOWVIDEO_WINDOWED && pw == 960 && ph == 720,
               "back to windowed: %d, %dx%d", r, pw, ph);
+    }
+
+    /* Borderless at a size: frameless, not fullscreen, that many pixels
+       (the offscreen driver's density is 1), and a refit on the same
+       display moves nothing; a size larger than the display is clamped to
+       it; Windowed comes back at its own rectangle, and so does a size
+       ignored by another mode */
+    {
+        SDL_Rect b = {0, 0, 0, 0};
+        int dw = 0, dh = 0;
+
+        SDL_GetDisplayBounds(SDL_GetDisplayForWindow(w), &b);
+        CHECK(ico_window_video_display_pixels(w, &dw, &dh) == 1 && dw == b.w && dh == b.h,
+              "display pixels %dx%d, bounds %dx%d", dw, dh, b.w, b.h);
+        pw = ph = -1;
+        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_BORDERLESS, 640, 480, &pw, &ph);
+        CHECK(r == ICO_WINDOWVIDEO_BORDERLESS, "borderless 640x480 returned %d", r);
+        CHECK((SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) == 0,
+              "borderless 640x480 is fullscreen");
+        CHECK(pw == 640 && ph == 480, "borderless 640x480: window %dx%d", pw, ph);
+        CHECK(ico_window_video_refit(w) == 0, "a sized window on its display: no refit");
+        {
+            int lw = 0, lh = 0;
+            SDL_GetWindowSize(w, &lw, &lh);
+            CHECK(lw == 640 && lh == 480, "after the refit: %dx%d", lw, lh);
+        }
+        if (b.w > 0 && b.h > 0) {
+            pw = ph = -1;
+            r = ico_window_video_mode(w, ICO_WINDOWVIDEO_BORDERLESS, b.w + 64, b.h + 64, &pw, &ph);
+            CHECK(r == ICO_WINDOWVIDEO_BORDERLESS && pw == b.w && ph == b.h,
+                  "borderless %dx%d on a %dx%d display: %d, %dx%d", b.w + 64, b.h + 64, b.w, b.h, r,
+                  pw, ph);
+        }
+        pw = ph = -1;
+        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_WINDOWED, 640, 480, &pw, &ph);
+        CHECK(r == ICO_WINDOWVIDEO_WINDOWED && pw == 960 && ph == 720,
+              "windowed after a sized borderless: %d, %dx%d", r, pw, ph);
+        CHECK((SDL_GetWindowFlags(w) & (SDL_WINDOW_BORDERLESS | SDL_WINDOW_FULLSCREEN)) == 0,
+              "windowed after a sized borderless: still frameless or fullscreen");
+        CHECK(ico_window_video_refit(w) == 0, "windowed: no refit");
     }
 
     SDL_DestroyWindow(w);

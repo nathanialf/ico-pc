@@ -650,6 +650,11 @@ typedef enum UiStrId {
     /* the Korean language's own name, the same in every table (the Menu
        language row, after UI_STR_LANG_JA) */
     UI_STR_LANG_KO,
+    /* Display > Window size ([video] window_size): the row, its first value
+       (the display's size; the others are "WxH") and its note */
+    UI_STR_OPT_WINDOW_SIZE,
+    UI_STR_VAL_DISPLAY_SIZE,
+    UI_STR_WINDOW_SIZE_NOTE,
     UI_STR_COUNT
 } UiStrId;
 

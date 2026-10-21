@@ -110,6 +110,131 @@ static void testWindowMode(void)
     CHECK(i17cDisplayHasWindowMode(), "the row shows again");
 }
 
+/* the Display > Window size row: after Window mode, Display size by
+   default, the list cut to the sizes smaller than the display the host
+   reports, a file's other size shown as it is and stepped from to the
+   next one, the key saved, the note, hidden on Android */
+static int s_wsDisplayW, s_wsDisplayH, s_wsKnown;
+
+static int fakeDisplaySize(int *w, int *h)
+{
+    *w = s_wsDisplayW;
+    *h = s_wsDisplayH;
+    return s_wsKnown;
+}
+
+/* the Window size row is shown (as i17cDisplayHasWindowMode) */
+static int wsRowShown(void)
+{
+    const int mainL = enterMain(0);
+
+    openPage(mainL, 0, UI_PAGE_DISPLAY);
+    const int row = ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_WINDOW_SIZE);
+    return row >= 0 && !lt_ext_prop(row)->defaultMask && !lt_ext_prop(row)->masked;
+}
+
+static const char *wsStep(int dir)
+{
+    ui_settings_step(UI_OPT_WINDOW_SIZE, dir);
+    return ui_settings_value_text(UI_OPT_WINDOW_SIZE);
+}
+
+static void testWindowSize(void)
+{
+    IcoVideoOptions o;
+    char p[1100];
+
+    useConfig("version = 1\n");
+    const int mainL = enterMain(1);
+    openPage(mainL, 0, UI_PAGE_DISPLAY);
+    {
+        int l[16], op[16];
+        const int n = ui_settings_page_rows(UI_PAGE_DISPLAY, l, op, NULL, 16);
+        CHECK(n > 5 && op[4] == UI_OPT_WINDOW_MODE && op[5] == UI_OPT_WINDOW_SIZE,
+              "Window size sits after Window mode");
+        const int row = ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_WINDOW_SIZE);
+        CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Window size") == 0, "its label \"%s\"",
+              row >= 0 ? lt_ext_row_text(row) : "");
+        checkPageFits(UI_PAGE_DISPLAY, "Display with Window size (title)");
+    }
+    {
+        const int note = noteStarting(UI_PAGE_DISPLAY, "For Borderless.");
+        CHECK(note >= 0, "the Window size note");
+        /* at most two lines, as the Anti-aliasing note above it */
+        const char *nl = note >= 0 ? strchr(lt_ext_row_text(note), '\n') : NULL;
+        CHECK(nl == NULL || strchr(nl + 1, '\n') == NULL,
+              "the Window size note: at most two lines");
+    }
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_WINDOW_SIZE), "Display size") == 0,
+          "default: Display size (%s)", ui_settings_value_text(UI_OPT_WINDOW_SIZE));
+
+    /* no host answer: every size, largest first, around */
+    ui_settings_set_display_size_query(NULL);
+    CHECK(strcmp(wsStep(1), "3840x2160") == 0, "no query: Right gives 3840x2160");
+    CHECK(strcmp(wsStep(-1), "Display size") == 0, "Left: Display size");
+    CHECK(strcmp(wsStep(-1), "960x720") == 0, "Left again wraps to 960x720");
+    ico_video_get(&o);
+    CHECK(o.winW == 960 && o.winH == 720, "the option is 960x720 (%dx%d)", o.winW, o.winH);
+    CHECK(strcmp(wsStep(1), "Display size") == 0, "Right wraps to Display size");
+
+    /* a 1920x1080 display: the sizes smaller than it */
+    s_wsDisplayW = 1920;
+    s_wsDisplayH = 1080;
+    s_wsKnown = 1;
+    ui_settings_set_display_size_query(fakeDisplaySize);
+    CHECK(strcmp(wsStep(1), "1600x900") == 0, "1920x1080 display: Right gives 1600x900");
+    CHECK(strcmp(wsStep(1), "1280x720") == 0, "then 1280x720");
+    CHECK(strcmp(wsStep(1), "960x720") == 0, "then 960x720");
+    CHECK(strcmp(wsStep(1), "Display size") == 0, "then Display size");
+    /* the host does not know: the whole list again */
+    s_wsKnown = 0;
+    CHECK(strcmp(wsStep(1), "3840x2160") == 0, "unknown display: 3840x2160 offered");
+    CHECK(strcmp(wsStep(-1), "Display size") == 0, "and back");
+    s_wsKnown = 1;
+
+    /* a size from the file: shown as written, the next listed one each way */
+    useConfig("version = 1\n[video]\nwindow_mode = \"borderless\"\nwindow_size = \"1700x950\"\n");
+    enterMain(1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_WINDOW_SIZE), "1700x950") == 0,
+          "the file's 1700x950 shown (%s)", ui_settings_value_text(UI_OPT_WINDOW_SIZE));
+    CHECK(strcmp(wsStep(1), "1600x900") == 0, "from 1700x950, Right: 1600x900");
+    useConfig("version = 1\n[video]\nwindow_size = \"1700x950\"\n");
+    enterMain(1);
+    CHECK(strcmp(wsStep(-1), "Display size") == 0,
+          "from 1700x950 on a 1920x1080 display, Left: Display size (nothing larger offered)");
+    useConfig("version = 1\n[video]\nwindow_size = \"2560x1440\"\n");
+    enterMain(1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_WINDOW_SIZE), "2560x1440") == 0,
+          "a size larger than the display is shown as written");
+    CHECK(strcmp(wsStep(1), "1600x900") == 0, "from 2560x1440, Right: 1600x900");
+
+    /* the save writes window_size; the window mode is untouched */
+    CHECK(ui_settings_save() == 0, "save");
+    path(p, sizeof(p), "settings_test.toml");
+    {
+        IcoToml *t = ico_toml_load(p);
+        CHECK(t != NULL, "the file");
+        if (t) {
+            const char *v = ico_toml_get(t, "video.window_size");
+            const char *m = ico_toml_get(t, "video.window_mode");
+            CHECK(v != NULL && strcmp(v, "1600x900") == 0, "[video] window_size (%s)",
+                  v ? v : "none");
+            CHECK(m != NULL && strcmp(m, "windowed") == 0, "[video] window_mode (%s)",
+                  m ? m : "none");
+            ico_toml_free(t);
+        }
+    }
+    ui_settings_set_display_size_query(NULL);
+
+    /* the phone's window is the screen: no row there */
+    useConfig("version = 1\n");
+    CHECK(wsRowShown(), "the row shows");
+    ico_video_set_android(1);
+    CHECK(!wsRowShown(), "Android: the row is hidden");
+    ico_video_set_android(0);
+    CHECK(wsRowShown(), "the row shows again");
+}
+
 /* Effects > Cinematic bars, the last switch before Back, On by
    default, a step flips it live and ui_settings_save writes the key; the other
    effects keep their value */
@@ -2516,6 +2641,8 @@ int main(int argc, char **argv)
     testFixture();
     /* Display > Window mode */
     testWindowMode();
+    /* Display > Window size */
+    testWindowSize();
     /* Effects > Cinematic bars */
     testCinematicBars();
     /* Effects > Water reflections */
