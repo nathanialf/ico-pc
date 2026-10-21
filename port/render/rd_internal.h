@@ -2547,8 +2547,9 @@ void rd__perf_post(RhiCommandList cl, int post);
 /* the effect an RDC_POST_STUB of kind RdPostKind belongs to (RD_PERF_POST_*),
    -1 for a kind that is none of them */
 int rd__perf_post_of_kind(uint32_t kind);
-/* rd_present's interpolation time, charged to the replay that follows */
-void rd__perf_interp_ms(double ms);
+/* rd_present's interpolation time, charged to the replay that follows: the
+ * plan's building and the rest (RdPerfRecord.interpPlanMs, interpApplyMs) */
+void rd__perf_interp_ms(double planMs, double applyMs);
 void rd__perf_alpha(float alpha, int firstOfTick); /* the next replay is a present at alpha */
 /* a synchronous readback's time (rd_replay.c readTexture), charged likewise */
 void rd__perf_readback_ms(double ms);

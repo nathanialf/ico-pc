@@ -288,6 +288,7 @@ static struct {
     double passKinds[RD_PERF_PASS_KIND_COUNT], passEffects[RD_PERF_POST_COUNT];
     double walkList[RD_LIST_COUNT];
     double texBytes, uniformBytes, interpBytes, streamBytes;
+    double interpPlan; /* of the interp phase, the plan's building (RdPerfRecord.interpPlanMs) */
     unsigned gpuN;
     PerfBlock ph;        /* the CPU phases (perf_block.h) */
     unsigned slowLogged; /* slow-replay lines logged in the block */
@@ -3740,7 +3741,8 @@ static void perf_csv_open(void)
         fprintf(s_perf.csv, ",walk_list%d_ms", l);
     }
     fprintf(s_perf.csv, ",upload_texture_bytes,upload_uniform_bytes,upload_interp_bytes,"
-                        "upload_stream_bytes,passes,pass_timed,pass_count\n");
+                        "upload_stream_bytes,passes,pass_timed,pass_count,interp_plan_ms,"
+                        "interp_apply_ms\n");
 }
 
 static void perf_csv_line(const RdPerfRecord *r)
@@ -3775,9 +3777,10 @@ static void perf_csv_line(const RdPerfRecord *r)
     for (int l = 0; l < RD_LIST_COUNT; l++) {
         fprintf(f, ",%.3f", r->walkListMs[l]);
     }
-    fprintf(f, ",%llu,%llu,%llu,%llu,%u,%u,%u\n", (unsigned long long)r->uploadTextureBytes,
-            (unsigned long long)r->uploadUniformBytes, (unsigned long long)r->uploadInterpBytes,
-            (unsigned long long)r->uploadStreamBytes, passes, r->passTimed, r->passCount);
+    fprintf(f, ",%llu,%llu,%llu,%llu,%u,%u,%u,%.3f,%.3f\n",
+            (unsigned long long)r->uploadTextureBytes, (unsigned long long)r->uploadUniformBytes,
+            (unsigned long long)r->uploadInterpBytes, (unsigned long long)r->uploadStreamBytes,
+            passes, r->passTimed, r->passCount, r->interpPlanMs, r->interpApplyMs);
 }
 
 /* ico-pc-passes.csv beside ico-pc-perf.csv, opened on the first timed
@@ -3946,6 +3949,7 @@ static void perf_drain(void)
         s_perf.uniformBytes += (double)r.uploadUniformBytes;
         s_perf.interpBytes += (double)r.uploadInterpBytes;
         s_perf.streamBytes += (double)r.uploadStreamBytes;
+        s_perf.interpPlan += r.interpPlanMs;
         {
             const double ph[PERF_PH_COUNT] = {
                 [PERF_PH_INTERP] = r.interpMs,     [PERF_PH_WAIT] = r.waitMs,
@@ -4077,16 +4081,16 @@ static void perf_log(void)
     rd_vu_card_counts(&cardStrips, &cardTris, &cardMs);
     const double steps = s_pres.stepCount ? (double)s_pres.stepCount : 1.0;
     fprintf(stderr,
-            "window: %u replays: CPU %.2f ms (max %.2f): interp %.2f, wait %.2f, acquire %.2f, "
-            "upload %.2f, walk %.2f, bind %.2f, submit %.2f, present %.2f, readback %.2f "
-            "(fence waits %.2f); longest: %s; %s; simulation step %.2f ms (max %.2f); strip "
+            "window: %u replays: CPU %.2f ms (max %.2f): interp %.2f (plan %.2f), wait %.2f, "
+            "acquire %.2f, upload %.2f, walk %.2f, bind %.2f, submit %.2f, present %.2f, readback "
+            "%.2f (fence waits %.2f); longest: %s; %s; simulation step %.2f ms (max %.2f); strip "
             "verdicts %.1f strips, %.1f triangles, %.3f ms a step\n",
-            b->n, b->total / n, b->totalMax, b->sum[PERF_PH_INTERP] / n, b->sum[PERF_PH_WAIT] / n,
-            b->sum[PERF_PH_ACQUIRE] / n, b->sum[PERF_PH_UPLOAD] / n, b->sum[PERF_PH_WALK] / n,
-            b->sum[PERF_PH_BIND] / n, b->sum[PERF_PH_SUBMIT] / n, b->sum[PERF_PH_PRESENT] / n,
-            b->sum[PERF_PH_READBACK] / n, b->sum[PERF_PH_FENCE] / n, longest, gpu,
-            s_pres.stepCount ? s_pres.stepSumMs / s_pres.stepCount : 0.0, s_pres.stepMaxMs,
-            (double)(cardStrips - s_pres.cardStrips) / steps,
+            b->n, b->total / n, b->totalMax, b->sum[PERF_PH_INTERP] / n, s_perf.interpPlan / n,
+            b->sum[PERF_PH_WAIT] / n, b->sum[PERF_PH_ACQUIRE] / n, b->sum[PERF_PH_UPLOAD] / n,
+            b->sum[PERF_PH_WALK] / n, b->sum[PERF_PH_BIND] / n, b->sum[PERF_PH_SUBMIT] / n,
+            b->sum[PERF_PH_PRESENT] / n, b->sum[PERF_PH_READBACK] / n, b->sum[PERF_PH_FENCE] / n,
+            longest, gpu, s_pres.stepCount ? s_pres.stepSumMs / s_pres.stepCount : 0.0,
+            s_pres.stepMaxMs, (double)(cardStrips - s_pres.cardStrips) / steps,
             (double)(cardTris - s_pres.cardTris) / steps, (cardMs - s_pres.cardMs) / steps);
     if (s_perf.gpuN) {
         /* the GPU time per replay by list and by picture effect (each

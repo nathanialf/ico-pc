@@ -138,6 +138,22 @@
  *                         pipeline binds, GPU <us> us, CPU <us> us"), then
  *                         the window's top-passes text over that replay and
  *                         its passes by kind
+ *   --time N              after the picture is written, the frame replayed
+ *                         N more times (with --interp the presenter's frame
+ *                         built again before each, rd__interp_frame: the
+ *                         first as the tick's first present, the others as
+ *                         its later presents) and one line of the N
+ *                         replays' records (rd.h RdPerfRecord), each CPU
+ *                         phase's mean and least: "<dump>: time: N
+ *                         replays, CPU mean (min) ms: total, interp (plan
+ *                         P, apply A), wait, acquire, upload, walk, bind,
+ *                         submit, present; per replay: ring, uniform and
+ *                         interp KB, draws, pipeline and bind group binds",
+ *                         then the first replay's interp alone; with
+ *                         --interp DISPLAY after the first and the last of
+ *                         them compared byte for byte ("pictures
+ *                         identical", else the bytes that differ and exit
+ *                         1)
  *   --prev DUMP           (repeatable, oldest first) replays DUMP in the same
  *                         context before <dump>, so the targets a frame
  *                         reads back from the frame before (the motion
@@ -1100,6 +1116,137 @@ static void vuRefDraw(const RdFrame *f, int l, uint32_t i)
     }
 }
 
+/* DISPLAY's texels into *px (grown to fit); false when it cannot be read */
+static bool readDisplay(uint8_t **px, size_t *cap, size_t *size)
+{
+    const RdTargetRec *tr = rd__target_rec(rd_target(RD_TARGET_DISPLAY).id);
+    const size_t want = tr ? (size_t)tr->tw * tr->th * 4 : 0;
+    uint32_t w = 0, h = 0;
+    if (!want) {
+        return false;
+    }
+    if (want > *cap) {
+        uint8_t *p = realloc(*px, want);
+        if (!p) {
+            return false;
+        }
+        *px = p;
+        *cap = want;
+    }
+    if (!rd__read_target(rd_target(RD_TARGET_DISPLAY), *px, *cap, &w, &h)) {
+        return false;
+    }
+    *size = (size_t)w * h * 4;
+    return true;
+}
+
+/* --time N (the usage comment): rf replayed n times, with --interp built
+ * again from pf and f before each; false on a failure or, with --interp,
+ * when DISPLAY after the first replay and after the last differ */
+static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, const RdFrame *rf,
+                        int n, bool present)
+{
+    enum {
+        P_TOTAL,
+        P_INTERP,
+        P_PLAN,
+        P_APPLY,
+        P_WAIT,
+        P_ACQUIRE,
+        P_UPLOAD,
+        P_WALK,
+        P_BIND,
+        P_SUBMIT,
+        P_PRESENT,
+        P_COUNT
+    };
+
+    double sum[P_COUNT] = {0}, low[P_COUNT] = {0};
+    double ring = 0.0, uniform = 0.0, interp = 0.0, draws = 0.0, pipes = 0.0, groups = 0.0;
+    RdPerfRecord first;
+    uint8_t *pic[2] = {NULL, NULL};
+    size_t cap[2] = {0, 0}, size[2] = {0, 0};
+    bool ok = true;
+    memset(&first, 0, sizeof(first));
+    for (int k = 0; k < n && ok; k++) {
+        if (interpPrev) {
+            RdInterpStats ist;
+            const double t0 = rd__now_ms();
+            rf = rd__interp_frame(pf, f, interpT, k == 0, &ist);
+            const double ms = rd__now_ms() - t0;
+            rd__perf_interp_ms(0.0, ms); /* charged to the replay below, as rd_present does */
+            if (!rf) {
+                fprintf(stderr, "%s: time: rd__interp_frame failed\n", dump);
+                ok = false;
+                break;
+            }
+        }
+        if (!rd__replay_frame(rf, (int)rf->keep, present)) {
+            fprintf(stderr, "%s: time: replay %d failed\n", dump, k + 1);
+            ok = false;
+            break;
+        }
+        const RdPerfRecord r = g_rdPerf; /* the record the replay just closed */
+        while (rd_perf_pop(NULL)) {}
+        const double v[P_COUNT] = {r.totalMs, r.interpMs,  r.interpPlanMs, r.interpApplyMs,
+                                   r.waitMs,  r.acquireMs, r.uploadMs,     r.walkMs,
+                                   r.bindMs,  r.submitMs,  r.presentMs};
+        for (int p = 0; p < P_COUNT; p++) {
+            sum[p] += v[p];
+            low[p] = k == 0 || v[p] < low[p] ? v[p] : low[p];
+        }
+        ring += (double)r.uploadBytes;
+        uniform += (double)r.uploadUniformBytes;
+        interp += (double)r.uploadInterpBytes;
+        draws += r.draws;
+        pipes += r.pipelineBinds;
+        groups += r.bindGroupBinds;
+        if (k == 0) {
+            first = r;
+        }
+        if (interpPrev && (k == 0 || k == n - 1)) {
+            const int at = k == 0 ? 0 : 1;
+            if (!readDisplay(&pic[at], &cap[at], &size[at])) {
+                fprintf(stderr, "%s: time: DISPLAY cannot be read after replay %d\n", dump, k + 1);
+                ok = false;
+            }
+        }
+    }
+    if (ok) {
+        const double m = (double)n;
+        printf("%s: time: %d replays, CPU mean (min) ms: total %.3f (%.3f), interp %.3f (%.3f) "
+               "(plan %.3f, apply %.3f), wait %.3f (%.3f), acquire %.3f (%.3f), upload %.3f "
+               "(%.3f), walk %.3f (%.3f), bind %.3f (%.3f), submit %.3f (%.3f), present %.3f "
+               "(%.3f); per replay: ring %.1f KB, uniform %.1f KB, interp %.1f KB, %.1f draws, "
+               "%.1f pipeline binds, %.1f bind group binds\n",
+               dump, n, sum[P_TOTAL] / m, low[P_TOTAL], sum[P_INTERP] / m, low[P_INTERP],
+               sum[P_PLAN] / m, sum[P_APPLY] / m, sum[P_WAIT] / m, low[P_WAIT], sum[P_ACQUIRE] / m,
+               low[P_ACQUIRE], sum[P_UPLOAD] / m, low[P_UPLOAD], sum[P_WALK] / m, low[P_WALK],
+               sum[P_BIND] / m, low[P_BIND], sum[P_SUBMIT] / m, low[P_SUBMIT], sum[P_PRESENT] / m,
+               low[P_PRESENT], ring / m / 1024.0, uniform / m / 1024.0, interp / m / 1024.0,
+               draws / m, pipes / m, groups / m);
+        printf("%s: time: the first replay: interp %.3f ms (plan %.3f, apply %.3f), total %.3f\n",
+               dump, first.interpMs, first.interpPlanMs, first.interpApplyMs, first.totalMs);
+    }
+    if (ok && interpPrev) {
+        /* two sizes: every byte of the larger counts */
+        size_t diff = size[0] != size[1] ? (size[0] > size[1] ? size[0] : size[1]) : 0;
+        for (size_t i = 0; size[0] == size[1] && i < size[0]; i++) {
+            diff += pic[0][i] != pic[1][i];
+        }
+        if (diff == 0) {
+            printf("%s: time: DISPLAY after replay 1 and replay %d: pictures identical\n", dump, n);
+        } else {
+            printf("%s: time: DISPLAY after replay 1 and replay %d: %zu bytes differ\n", dump, n,
+                   diff);
+            ok = false;
+        }
+    }
+    free(pic[0]);
+    free(pic[1]);
+    return ok;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 3) {
@@ -1109,6 +1256,7 @@ int main(int argc, char **argv)
                 "[--border-mask] [--water-sharp] [--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
+                "[--time N] "
                 "[--pass-dump DIR] "
                 "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject] "
                 "[--interp-nop-prev L:A[-B]]]\n"
@@ -1125,6 +1273,7 @@ int main(int argc, char **argv)
     /* the display options */
     RdSettings s;
     bool list = false, overlay = false, stats = false, passTimes = false;
+    int timeN = 0; /* --time N */
     bool noDevice = false, aspectGiven = false;
     int vuRefL[8], vuRefCount = 0;
     uint32_t vuRefI[8];
@@ -1217,6 +1366,14 @@ int main(int argc, char **argv)
             stats = true;
         } else if (strcmp(argv[i], "--pass-times") == 0) {
             stats = passTimes = true;
+        } else if (strcmp(argv[i], "--time") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            const long n = strtol(argv[++i], &end, 10);
+            if (!end || *end != '\0' || n < 1 || n > 100000) {
+                fprintf(stderr, "bad --time (a count of replays, 1..100000)\n");
+                return 1;
+            }
+            timeN = (int)n;
         } else if (strcmp(argv[i], "--no-aa1") == 0) {
             noAa1 = true;
         } else if (strcmp(argv[i], "--interp-any") == 0) {
@@ -1750,6 +1907,9 @@ int main(int argc, char **argv)
         } else {
             printf("%s: gpu: no timestamps came back\n", dump);
         }
+    }
+    if (rc == 0 && timeN > 0 && !timeReplays(dump, &pf, &f, rf, timeN, pw != 0)) {
+        rc = 1;
     }
     rd__frame_free(&f);
     rd__frame_free(&pf);

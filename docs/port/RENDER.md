@@ -2455,6 +2455,14 @@ into its 10 s statistics line, and `[dev] perf_log` writes one line per replay
 ([DISPLAY.md](DISPLAY.md#the-perf-csv)). The [replay tool](ARCHITECTURE.md#terms)'s `--stats` prints
 the same record.
 
+A present's interpolation time (`interpMs`, measured around `rd__interp_frame` by `rd_present` and
+charged to the replay that follows) is split in two: `interpPlanMs`, the part spent building an
+interpolation plan for the pair of ticks, and `interpApplyMs`, the rest, the blend at the
+present's alpha; `interpMs` is their sum (`port/render/rd_perf.c` (`rd__perf_interp_ms`);
+`port/render/rd_interp.c` (`rd_present`)). The presenter keeps no plan: every present does all of
+its work at its alpha and `interpPlanMs` is 0. The window's replays line shows the plan's part as
+`interp X (plan Y)` and the perf CSV has both ([DISPLAY.md](DISPLAY.md#the-stats-lines)).
+
 The record also counts the exact blend's cost and the glow's passes (issue 103): `dstDraws`, the
 draws recorded through a destination-read shader (`dstBind`); `storagePasses`, the passes begun
 without the colour attached; `dstSwitches`, the passes ended and begun again on the same targets
@@ -2715,7 +2723,22 @@ the tool and the tests (`port/render/rd_png.c`).
 it headless; `--interp T PREV` with PREV an F12 or loss zip takes the zip's second `.rddump`, the
 tick before, so a report's zip rebuilds the pictures between its two ticks, and with T the alpha
 F12's line names for its `-present.png` ([DISPLAY.md](DISPLAY.md#hotkeys-for-pictures)) the picture
-that was presented (`port/render/tools/rd_replay_tool.c`, usage comment):
+that was presented (`port/render/tools/rd_replay_tool.c`, usage comment).
+
+`--time N` measures the CPU side of a replay on a dump. After the picture is written the frame is
+replayed N more times; with `--interp` the presenter's frame is built again before each
+(`rd__interp_frame`: the first as a tick's first present, the others as its later presents, its
+time charged to the replay as `rd_present` charges it). The tool prints one line from the N
+records, each CPU phase's mean and least: `<dump>: time: N replays, CPU mean (min) ms: total,
+interp (plan P, apply A), wait, acquire, upload, walk, bind, submit, present; per replay: ring KB,
+uniform KB, interp KB, draws, pipeline binds, bind group binds`, then `<dump>: time: the first
+replay: interp X ms (plan P, apply A), total T`. With `--interp` it compares DISPLAY after the
+first and the last of the N replays byte for byte and prints `pictures identical`, or the bytes
+that differ and exits 1: a present later in a tick must draw the tick's first present's picture
+(`timeReplays`). The lavapipe numbers are for comparing two builds on one host, not a device's
+times.
+
+The options:
 
 | option | does |
 | --- | --- |
@@ -2732,6 +2755,7 @@ that was presented (`port/render/tools/rd_replay_tool.c`, usage comment):
 | `--dump-textures DIR` | every image texture as decoded |
 | `--stats` | the replay's performance record, with GPU times |
 | `--pass-times` | with `--stats`, the warm replay timed pass by pass ([The per-pass timing](#the-per-pass-timing)) |
+| `--time N` | after the picture, the frame replayed N more times and the mean and least of each CPU phase of their records printed (below) |
 | `--prev DUMP` | replays earlier dumps first so retained targets hold the run's pictures |
 | `--no-half`, `--no-aa1` | the frame without the field's half pixel or without PRIM.AA1 |
 | `--interp T PREV` | the frame the presenter builds between PREV and the dump at alpha T (PREV an F12 or loss zip: its second `.rddump`, the tick before) |

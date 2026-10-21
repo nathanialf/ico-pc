@@ -304,9 +304,9 @@ went back or a gap over `PACE_SHOWN_GAP` (240) refreshes (`port/platform/pace_po
 **The replays line**:
 
 ```
-window: N replays: CPU A ms (max M): interp, wait, acquire, upload, walk, bind, submit, present,
-        readback (fence waits); longest: ...; GPU ...; simulation step ...; strip verdicts S
-        strips, T triangles, C ms a step
+window: N replays: CPU A ms (max M): interp (plan), wait, acquire, upload, walk, bind, submit,
+        present, readback (fence waits); longest: ...; GPU ...; simulation step ...; strip
+        verdicts S strips, T triangles, C ms a step
 ```
 
 It gives the replays' mean CPU time by phase, then `longest:` with each phase's maximum in the block
@@ -319,7 +319,9 @@ and a step's mean of the region rule's card verdicts the CPU decided while the d
 (`perf_block_max_text`); `port/render/rd.h` (`rd_vu_card_counts`)). The phases are the replay's own:
 `wait` the [frame slot](ARCHITECTURE.md#terms)'s fence (`rhi_wait_frame`), `upload` the ring and the
 uploads, `acquire` the backbuffer, `walk` recording the VU vertex pre-pass and the lists less `bind`,
-`submit`, `present`;
+`submit`, `present`; `interp` the presenter's blend between the ticks, and `(plan Y)` of it the
+part spent building an interpolation plan for the pair of ticks
+([RENDER.md](RENDER.md#performance-records));
 `fence waits` is the backend's blocked time inside wait and readback (`port/render/rd_replay.c`
 (`replayFrame`); `port/render/rd.h` (`RdPerfRecord`)). Further lines give the GPU time per list and
 per picture effect, the per-replay counts (draws, passes, binds, barriers, uploads) with the block's
@@ -757,7 +759,8 @@ replay's start, alpha, `first_of_tick`, each picture effect `gpu_<effect>_ms`,
 CPU time by list `walk_list<N>_ms`, the upload bytes by what they carry `upload_texture_bytes`,
 `upload_uniform_bytes`, `upload_interp_bytes` (of the mesh bytes) and `upload_stream_bytes`, and
 the per-pass timing's `passes` (the pieces begun), `pass_timed` and `pass_count`
-([RENDER.md](RENDER.md#the-per-pass-timing))
+([RENDER.md](RENDER.md#the-per-pass-timing)), and `interp_plan_ms` and `interp_apply_ms`, the
+two parts of `interp_ms` ([RENDER.md](RENDER.md#performance-records))
 (`port/platform/window_host.c` (`perf_csv_open`, `perf_csv_line`)). The file
 is flushed after each drain, every vsync (`perf_drain`).
 
