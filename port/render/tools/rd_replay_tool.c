@@ -1266,7 +1266,7 @@ static int checkKeys(const char *dump, const RdFrame *rf)
 {
     static RdPipeKeyInt asked[RD_PIPELINE_CACHE_MAX];
     static RdPipeKeyInt round[RD_PIPELINE_CACHE_MAX];
-    static RdPipeKeyInt set[RD_PIPELINE_REACHABLE_MAX];
+    static RdPipeKeyInt set[RD_PIPELINE_CACHE_MAX]; /* as rd_precreate_pipelines enumerates */
     uint32_t na = 0, rounds = 0;
     for (int r = 0; r < KEYS_ROUNDS; r++) {
         bool stopped = false;
@@ -1288,8 +1288,8 @@ static int checkKeys(const char *dump, const RdFrame *rf)
             return 1;
         }
     }
-    const uint32_t ns = rd__enumerate_reachable(set, RD_PIPELINE_REACHABLE_MAX);
-    const uint32_t nsm = ns < RD_PIPELINE_REACHABLE_MAX ? ns : RD_PIPELINE_REACHABLE_MAX;
+    const uint32_t ns = rd__enumerate_reachable(set, RD_PIPELINE_CACHE_MAX);
+    const uint32_t nsm = ns < RD_PIPELINE_CACHE_MAX ? ns : RD_PIPELINE_CACHE_MAX;
     const uint32_t nam = na < RD_PIPELINE_CACHE_MAX ? na : RD_PIPELINE_CACHE_MAX;
     const RdProfile *pr = &g_rd.profile;
     printf("%s: keys: profile tiler %d, local read %d, fog local %d, DATE stencil %d, blur fold "
