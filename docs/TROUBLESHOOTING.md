@@ -245,6 +245,24 @@ stay closed. If you still see such lines:
    `ico-pc.log`), and say which Frame rate showed the lines and where in the
    game you were.
 
+## A program that adds frames or scales the game (Lossless Scaling) does not work
+
+Programs that scale the game's window or add frames to it, such as
+Lossless Scaling, need the game in a window that does not fill the whole
+screen:
+
+1. Set **Options > Display > Window mode** to **Borderless**.
+2. Set **Window size**, just below it, to a size smaller than your screen,
+   such as 1920x1080 on a 2560x1440 screen. The game sits in the middle of
+   the screen without a frame.
+3. Start the program and pick the game's window.
+
+**Windowed** works too. **Fullscreen**, and Borderless at **Display size**,
+do not: Windows shows a window that covers the whole screen the way it
+shows a fullscreen game, and those programs cannot work on that. If the
+program still does not work, send a [problem report](#send-a-problem-report)
+with `ico-pc.log` and say which program and which settings you use.
+
 ## Send a problem report
 
 1. Open a report on the

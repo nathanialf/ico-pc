@@ -84,12 +84,24 @@ How the picture looks.
   effect, it says **(off: not available)** after the name and the picture
   is drawn without it.
 - **Window mode** is **Windowed** (a normal window), **Borderless** (a
-  window without a frame that fills the whole screen, so switching to
-  another program is quick) or **Fullscreen**. In Game Mode, the Steam Deck
-  shows every game on the whole screen, whatever this row says. This row is
-  not on phones and tablets.
+  window without a frame, so switching to another program is quick) or
+  **Fullscreen**. With **Window size** at **Display size**, a Borderless
+  window fills the whole screen; a smaller size leaves it in the middle of
+  the screen. In Game Mode, the Steam Deck shows every game on the whole
+  screen, whatever this row says. This row is not on phones and tablets.
+- **Window size** is the size of a Borderless window: **Display size**
+  (the whole screen), 3840x2160, 2560x1440, 1920x1080, 1600x900, 1280x720
+  or 960x720. The row lists only the sizes smaller than your screen. Display
+  size fills the screen. Pick a smaller size if you use a program that
+  scales the game's window or adds frames to it, such as Lossless Scaling:
+  those programs cannot work on a window that fills the screen. Windowed
+  and Fullscreen do not use this row. On Linux with Wayland, your desktop
+  decides where the window goes. This row is not on phones and tablets.
 - **Vertical sync** stops the picture from tearing. With it off, the
-  picture can tear if your screen allows it. With it on, **Video mode** at
+  picture can tear if your screen allows it. On Windows, a window smaller
+  than the screen (Windowed, or Borderless at a smaller Window size) does
+  not tear either way, because Windows draws it together with the rest of
+  the desktop. With it on, **Video mode** at
   60 Hz (the normal choice) and **Frame rate** at 60 on a 60 Hz screen or
   120 on a 120 Hz screen, the game takes its steps in time with the screen,
   so every picture is shown for the same length of time. With Video mode at
@@ -481,6 +493,7 @@ Under `[video]`:
 | Line | What it does |
 | --- | --- |
 | `window_mode = "windowed"` | The Window mode row: `"windowed"`, `"borderless"` or `"fullscreen"`. If the file has no `window_mode` line, the game reads its `fullscreen =` line instead: `true` is Fullscreen, `false` is Windowed. |
+| `window_size = "display"` | The Window size row: `"display"` fills the screen, or a size in pixels such as `"1920x1080"` (from 64x64 to 7680x4320). A size the row does not list, such as `"1700x950"`, works too. A size larger than the screen is cut to the screen. |
 | `effect_glow = true` and the five other `effect_` lines | The six switches of the Effects page. |
 | `effect_water_sharp = false` | Water reflections on the Effects page: `false` is Original, `true` is Sharp. |
 | `crt = false`, `crt_mode = "consumer"`, `crt_strength = 1.0` | The CRT filter and CRT strength rows. `crt_mode` is `"scanlines"`, `"consumer"`, `"trinitron"`, `"pvm"` or `"shadow"`. `crt_strength` goes from `0.0` to `1.0`. |

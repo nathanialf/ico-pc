@@ -15,7 +15,7 @@ are [RHI.md](RHI.md).
 | `port/include/ico_frame.h` | the native frame: its width for an aspect, the exact width, the TEX0 helpers |
 | `port/game/video_options.h`, `video_options.c` | the `[video]` keys, the presets, Auto aspect, the frame for the options in force |
 | `port/platform/window_host.h`, `window_host.c` | the SDL window, the device on it, the pacing loop, the 10 s stats lines, F11 and F12 |
-| `port/platform/window_video.h`, `window_video.c` | window mode requests (windowed, borderless, fullscreen) and their readback |
+| `port/platform/window_video.h`, `window_video.c` | window mode requests (windowed, borderless at the display's size or at a window size, fullscreen) and their readback |
 | `port/platform/pace_policy.h`, `pace_policy.c` | the pacing decisions, free of SDL: slow presents, the gap, the vsync lock, the display's intervals, Auto resolution |
 | `port/platform/display_clock.h` | the vblank clock's interface |
 | `port/platform/display_clock_win.c` | the vblank clock on Windows: a thread on the window's DXGI output |
@@ -140,13 +140,25 @@ with the rows, which read back as Enhanced or Custom (`port/game/video_options.c
 [rd](ARCHITECTURE.md#terms) the same test as `RdSettings.preset` (`port/game/video_options.h`
 (`ico_video_original`); `port/platform/window_host.c` (`video_settings`)).
 
+**The window size.** `[video] window_size` is a Borderless window's size in pixels
+(`IcoVideoOptions.winW`, `winH`; `"display"`, 0 x 0, is the display's size), parsed by
+`ico_video_parse_window_size` within a `WxH` resolution's bounds and written by
+`ico_video_window_size_name`; it is outside the preset, and Windowed and Fullscreen ignore it
+(`port/game/video_options.h`, header comment; `port/game/video_options.c`). The Options > Display
+row Window size, after Window mode, steps Display size, 3840x2160, 2560x1440, 1920x1080, 1600x900,
+1280x720 and 960x720, keeping the sizes smaller than the display the host reports
+(`ui_settings_set_display_size_query`, `window_host.c` (`window_display_pixels`)); a size from the
+file that is not offered is shown as written and steps to the next offered size; the row is hidden
+on mobile like Window mode (`port/ui/settings.c` (`kWinSizes`, `winSizeOffered`,
+`ui_settings_step`, `optShown`)).
+
 **The AA lock.** `ico_video_anti_alias` returns off whenever the preset is Original, whatever the
 key says; the renderer draws an MSAA count the device lacks as off (`port/game/video_options.c`
 (`ico_video_anti_alias`); `port/platform/window_host.c` (`video_settings`)).
 
 **Fallbacks.** A key the parser does not understand logs one `video: ... not understood` line and
-takes the default (resolution, aspect, texture filter, window mode, anti-aliasing, frame rate, CRT
-mode); the texture pack sizes are clamped with a line; `window_mode` absent reads the `fullscreen`
+takes the default (resolution, aspect, texture filter, window mode, window size, anti-aliasing,
+frame rate, CRT mode); the texture pack sizes are clamped with a line; `window_mode` absent reads the `fullscreen`
 bool. Every run-time change goes through `sanitize`, which puts out-of-range values back to the
 defaults and clamps the CRT values (`port/game/video_options.c` (`read_config`, `sanitize`)). A
 backend that is not in the build falls back to Vulkan with a line (`port/platform/window_host.c`
@@ -163,7 +175,9 @@ that many times a second. It applies whatever the preset (`port/game/video_optio
 comment; `port/game/video_options.c` (`ico_video_interpolate`)).
 
 **Run-time changes.** `ico_video_set` bumps `ico_video_serial`; the window compares it at each pump
-and applies the change (`video_apply`): the window mode through SDL, the rest through
+and applies the change (`video_apply`): the window mode through SDL (asked again when the option
+differs from the window's state, or when Borderless and the window size changed; never on a resize's
+forced call, so a refused request is not made again at every size event), the rest through
 `rd_set_settings` at the next frame, which recreates targets and the swapchain as needed. A change
 also logs one `window: display changed:` line naming only the fields that differ
 (`port/platform/window_host.c` (`video_apply`, `video_log_changes`)).
@@ -189,8 +203,32 @@ manager sees it before mapping. It picks the backend from `[video] backend`, mak
 through `rd_init`, points the Vulkan pipeline cache at `pipelines-<build>.vkcache` in the [user
 folder](ARCHITECTURE.md#terms) (the app's cache folder on Android), creates the whole reachable
 pipeline set before the first frame, runs the fog's self-test and logs one start-up line with the
-backend, adapter and options, then `window: present mode M` (`port/platform/window_host.c`
-(`ico_window_open`, `window_flags`)).
+backend, adapter and options (`window mode M, window size S` among them, as in the summary line),
+then `window: present mode M` (`port/platform/window_host.c` (`ico_window_open`, `window_flags`,
+`log_summary`)).
+
+**The window modes** (`port/platform/window_video.c` (`ico_window_video_mode`)). Fullscreen is SDL's
+desktop fullscreen, never an exclusive mode. Windowed is the framed window at the rectangle it had
+when it last left the windowed state (`remember_rect`), else 960 x 720 centred. Borderless at
+Display size is a frameless window moved and sized to its display's bounds (on Wayland, which does
+not let a client place its window, a frameless maximised one). Borderless at a window size leaves
+fullscreen, takes the frame away, clamps the size to the display (`window: borderless WxH is larger
+than its display; WxH used`), converts pixels to SDL's logical units by the window's pixel density
+(`SDL_GetWindowPixelDensity`: pixel width over window width, 1.0 on Windows and X11, 2.0 on a
+Retina Mac, fractional on a scaled Wayland output), sets the size, then centres the window with
+`SDL_WINDOWPOS_CENTERED_DISPLAY` (SDL centres it in the display's usable bounds when it fits them,
+else in its bounds); on Wayland the compositor places it (`window: borderless WxH on Wayland: the
+compositor places the window`). While it is sized the window is not resizable (SDL's Windows
+backend gives a resizable frameless window `WS_THICKFRAME`, whose invisible edges could be dragged)
+and becomes resizable again when it leaves that state (`set_sized_edges`). Every request waits for
+the window system and logs what the window became: `window: mode M (window WxH pixels)`, for
+Borderless `(window WxH pixels, the display's size)` or `(window WxH pixels; display WxH)`, with
+`; the window manager did not follow the request` when the mode read back differs. The point of a
+smaller window: SDL gives a Borderless window and a fullscreen one the same `WS_POPUP` style on
+Windows, and a frameless window whose client area equals its monitor is shown by the desktop
+compositor the way a fullscreen game is, which programs that hook the composed window (Lossless
+Scaling) cannot use; a window smaller than the display is always composed. That compositor rule is
+Microsoft's behaviour, not in any source here; a Windowed window shows the same.
 
 After a graphics driver crash while the pipelines are built, the crash handler starts the program
 again with `ICO_STARTUP_RETRY=<step>:<backend>`: `cache` deletes the loaded pipeline cache, `d3d12`
@@ -202,7 +240,10 @@ player chose one, logs the step and skips the up-front pipeline set on `lazy`
 `ico_window_pump` drains SDL's events once per vsync: the close button quits; F11, F12 and Shift+F12
 are the diagnostic keys; Alt+Enter flips between Windowed and the last other mode (in memory, not
 saved); a pixel size change reaches `rd_resize_output` and Auto aspect; a display change refits a
-borderless window, decides the cap and present mode again and moves the vblank clock to the new
+borderless window (one at Display size to the new display's bounds, `window: borderless refitted to
+its display`; one at a window size, when its display or its clamped size changed, re-centred on that
+display, `window: borderless WxH centred on its display again`; `ico_window_video_refit`), decides
+the cap and present mode again and moves the vblank clock to the new
 output (`port/platform/window_host.c` (`ico_window_pump`, `toggle_fullscreen`)). The window's
 fullscreen state is read back from SDL, not the option, since the window manager can refuse a
 request (`port/platform/window_video.h`; `port/platform/window_host.c` (`window_fullscreen_event`)).
@@ -414,6 +455,14 @@ refresh is shorter than the period `pace_fifo_hold` holds back a present that wo
 vblank past the deadline, a new frame at most once and never once the deadline has passed
 (`port/platform/window_host.c` (`video_settings`, `pace`); `port/platform/pace_policy.c`
 (`pace_fifo_hold`)). Any other cap prefers mailbox (`rhi_prefer_mailbox`).
+
+**A window smaller than the display** (Windowed, or Borderless at a window size) paces the same:
+the lock and the present mode are decided from the display's refresh, not from how much of the
+display the window covers (`video_settings`), the presenter boxes the picture into any output size
+(`port/render/rd_present.c` (`rd__present_box`)), and the vblank clock is the output's
+(`port/platform/display_clock.h`). Under the desktop compositor a present is shown one composition
+later, about one refresh more latency than a window that fills the display; how well the lock
+holds its phase there has not been measured on hardware: the 10 s `lock held` line is the check.
 
 ### The vsync lock
 
@@ -732,9 +781,9 @@ one's pixels: for a measurement, not for play.
 | `port/platform/test/pace_loop_test.c` | the vsync lock's loop under a fake clock and swapchain (mailbox, FIFO, a FIFO queue, a vblank clock): grid, alphas, phase, drift (`testFifoDrift`), the ratchet (`testFifoRatchet`), D3D12's full queue (`testQueueBlocking`), the skip guard (`testSkipGuard`), the late-present skip under the lock (`testLateSkipLock`), clocks left, off the screen, long steps, pauses; FIFO latest ready (`testLatestReady`), the timer path's FIFO hold (`testFifoHold`), the audio's starting ratio (`testNominalRatio`), the log's trace (`testTrace`) |
 | `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the late-present skip and its loop under a fake clock |
 | `port/platform/test/perf_block_test.c` | a block's sums and maxima, the replays over the threshold, the longest-phase text, a reset |
-| `port/platform/test/window_video_test.c` | the window mode requests and their readback on SDL's offscreen driver (77 without one) |
+| `port/platform/test/window_video_test.c` | the window mode requests and their readback on SDL's offscreen driver (77 without one): fullscreen, Borderless at the display's size and at 640 x 480 (no refit on its own display), a size larger than the display clamped to it, Windowed back at 960 x 720 |
 | `port/platform/test/hotkeys_test.c` | F11, F12, the stats period, F12's file names |
-| `port/render/test/rd_present_test.c` | the display options from a config, the wide camera at 16:9, `rd__apply_display`'s scales, `rd__present_box`, and presented pictures on a Vulkan device |
+| `port/render/test/rd_present_test.c` | the display options from a config (`window_size` read, saved, refused out of range, outside the preset), the wide camera at 16:9, `rd__apply_display`'s scales, `rd__present_box`, and presented pictures on a Vulkan device |
 | `port/render/test/rd_interp_test.c` | blending two synthetic frames: the ends, half way, the snaps, ordinals, grids, meshes, particles, shadows, the present clock |
 | `port/render/test/rd_crt_test.c` | the CRT keys, the modes' table and overrides, and each mode's hash at two sizes on a Vulkan device |
 | `port/render/test/rd_boot_present_test.c` | a saved start-up through the presenter, present by present, with DISPLAY's probe points |

@@ -228,6 +228,9 @@ device: see [Can I play more than one disc?](docs/FAQ.md#can-i-play-more-than-on
   one). [Step by step](docs/TEXTURE_PACKS.md).
 - **Can I turn off the blur or the glow?** Yes, in **Options > Effects**.
   [What each one does](docs/OPTIONS.md#effects).
+- **Does Lossless Scaling work?** Yes, with **Options > Display > Window
+  mode** at **Borderless** and **Window size** smaller than your screen, or
+  in Windowed. [How to set it up](docs/TROUBLESHOOTING.md#a-program-that-adds-frames-or-scales-the-game-lossless-scaling-does-not-work).
 - **Where are my saves?** In a folder the game makes for you.
   [Where that is](docs/PORTABLE_MODE.md#where-your-saves-are).
 - **Do the Japanese and Korean discs work?** Yes, the European disc
