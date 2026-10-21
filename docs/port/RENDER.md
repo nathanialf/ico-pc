@@ -2390,14 +2390,12 @@ the presents that drew one, after the alpha line ([DISPLAY.md](DISPLAY.md#interp
 and an event line for the first three of each block:
 
 ```
-interp: M presents drew a mixed picture (parts of the world from both ticks' cameras, no blended camera): P parts from the tick before, Q from the tick, R in the minority; why no blended camera: alpha 0 a, no camera b, blend failed c
+interp: M presents drew a mixed picture (parts of the world from both ticks' cameras, no blended camera): P parts from the tick before, Q from the tick, R in the minority; why no blended camera: no camera a, blend failed b
 interp: present of frame F at alpha 0.0000 (clamped from -0.0081) drew 212 parts of the world from the tick before and 4 from the tick: a mixed picture
 ```
 
 `rd_replay_tool --interp` prints the same counts and why the frame had no blended camera at the end
-of its third line (`port/render/rd_interp.c` (`camSetup`, `camCurDraw`, `mixedNote`)). The reason
-`alpha 0` stays in the line for the form's sake; `camSetup` sets it only for an alpha below 0, which
-`rd__interp_frame` never passes it. The vertex shaders keep the order of their arithmetic: every VU vertex
+of its third line (`port/render/rd_interp.c` (`camSetup`, `camCurDraw`, `mixedNote`)). The vertex shaders keep the order of their arithmetic: every VU vertex
 shader carries `NoContraction` (HLSL `precise`) and no module `FPFastMathMode`, so no driver fuses
 one draw's products and not another's (`tools/check_spirv.py`, the precise gate).
 

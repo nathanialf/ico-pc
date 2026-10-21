@@ -1012,7 +1012,7 @@ static const RdFrame *prepareFrame(const char *dump, RdFrame *pf, RdFrame *f)
                ist.apart, ist.prevKept, ist.prevHeld, ist.reprojected, ist.longWay, ist.turnSnap,
                ist.sizeTailBlended, ist.why[RD_MISMATCH_SIZE]);
         static const char *const kCamOff[RD_CAM_OFF_COUNT] = {"on (or the frame not blended)",
-                                                              "off at alpha 0",
+                                                              "off: alpha out of range",
                                                               "off at alpha 1",
                                                               "off: no camera",
                                                               "off: legacy",

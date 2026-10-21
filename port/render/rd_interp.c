@@ -1266,7 +1266,7 @@ static void camSetup(const RdFrame *prev, const RdFrame *cur, float t)
     if (rd__s2_legacy() || !prev->hasCamera || !cur->hasCamera || !(t >= 0.0f) || !(t < 1.0f)) {
         s_camOff = rd__s2_legacy()                       ? RD_CAM_OFF_LEGACY
                    : !prev->hasCamera || !cur->hasCamera ? RD_CAM_OFF_NO_CAMERA
-                   : !(t >= 0.0f)                        ? RD_CAM_OFF_ALPHA0
+                   : !(t >= 0.0f)                        ? RD_CAM_OFF_ALPHA_RANGE
                                                          : RD_CAM_OFF_ALPHA1;
         return;
     }
@@ -5856,11 +5856,9 @@ static void presentLog(void)
      * ticks' cameras in one picture (RdInterpStats.mixed) */
     rd__log("interp: %llu presents drew a mixed picture (parts of the world from both ticks' "
             "cameras, no blended camera): %llu parts from the tick before, %llu from the tick, "
-            "%llu in the minority; why no blended camera: alpha 0 %llu, no camera %llu, blend "
-            "failed %llu",
+            "%llu in the minority; why no blended camera: no camera %llu, blend failed %llu",
             (unsigned long long)s_pres.mixedPresents, (unsigned long long)s_pres.mixedPrev,
             (unsigned long long)s_pres.mixedCur, (unsigned long long)s_pres.mixedMinority,
-            (unsigned long long)s_pres.mixedWhy[RD_CAM_OFF_ALPHA0],
             (unsigned long long)s_pres.mixedWhy[RD_CAM_OFF_NO_CAMERA],
             (unsigned long long)s_pres.mixedWhy[RD_CAM_OFF_FAILED]);
     /* a ninth line, only when a turn kept the tick's pose: why, and the

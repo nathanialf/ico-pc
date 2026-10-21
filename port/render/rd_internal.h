@@ -1870,12 +1870,12 @@ enum {
 /* Why a frame that blended (no snap, alpha below 1) had no blended camera
  * (rd_interp.c camSetup; RdInterpStats.camOffWhy) */
 enum {
-    RD_CAM_OFF_NONE = 0,  /* the blended camera on, or the frame not blended (a snap) */
-    RD_CAM_OFF_ALPHA0,    /* alpha 0 */
-    RD_CAM_OFF_ALPHA1,    /* alpha 1: nothing blends, the tick's own picture */
-    RD_CAM_OFF_NO_CAMERA, /* a frame without a camera (RdFrame.hasCamera) */
-    RD_CAM_OFF_LEGACY,    /* ICO_RD_S2_LEGACY=1 (rd__s2_legacy) */
-    RD_CAM_OFF_FAILED,    /* a view not invertible, or the blend refused (not affine, a mirror) */
+    RD_CAM_OFF_NONE = 0,    /* the blended camera on, or the frame not blended (a snap) */
+    RD_CAM_OFF_ALPHA_RANGE, /* alpha below 0 or NaN (rd__interp_frame passes neither) */
+    RD_CAM_OFF_ALPHA1,      /* alpha 1: nothing blends, the tick's own picture */
+    RD_CAM_OFF_NO_CAMERA,   /* a frame without a camera (RdFrame.hasCamera) */
+    RD_CAM_OFF_LEGACY,      /* ICO_RD_S2_LEGACY=1 (rd__s2_legacy) */
+    RD_CAM_OFF_FAILED,      /* a view not invertible, or the blend refused (not affine, a mirror) */
     RD_CAM_OFF_COUNT
 };
 
