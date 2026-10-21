@@ -519,7 +519,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   mesh, the same bones and VU block) without the pre-pass: `uniformDedup` 2 (the second packet's
   VuCB and VuBoneCB take the first's ring offsets, `rd_replay_vu.c` `cbShared`), with the second
   packet's bones changed 1 and one VuBoneCB more of uniform bytes, and SCENE the same replay after
-  replay; before any device, the CSV header and line,
+  replay; then a frame of three grids, two of one shape, uploads the three streams and two index
+  lists (`uploadStreamBytes`; `rd_replay_vu.c` `gridIndexList`, a list per shape a replay); before
+  any device, the CSV header and line,
   the top-passes text (with a cut to a short buffer) and the passes-by-kind text, to the byte
   (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the

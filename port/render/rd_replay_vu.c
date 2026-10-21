@@ -113,6 +113,55 @@ static uint64_t cbShared(const void *data, uint64_t size, uint64_t align)
     return off;
 }
 
+/* A grid's index list (doVuDraw): indices k = 2 .. vpb-1 of every strip,
+ * ICO_VU_INDEX(b * vpb + v, 0..2), ni of them; a function of the grid's
+ * shape (batchCount, vpb) alone, so a grid of a shape one drawn earlier in
+ * this replay had takes that list's ring offset (the ring is not written
+ * again in the epoch: cbShared above) and the GPU reads the indices a list
+ * of its own would hold.  Eight shapes a replay, the oldest replaced;
+ * ~0ull when the ring is full. */
+#define RD_GRID_LISTS 8
+
+typedef struct GridList {
+    uint32_t epoch, batchCount, vpb;
+    uint64_t offset;
+} GridList;
+
+static GridList s_gridLists[RD_GRID_LISTS];
+
+static uint32_t s_gridListNext;
+
+static uint64_t gridIndexList(uint32_t batchCount, uint32_t vpb, uint32_t ni)
+{
+    const uint32_t epoch = rd__replay_bind_epoch();
+    for (int i = 0; i < RD_GRID_LISTS; i++) {
+        const GridList *e = &s_gridLists[i];
+        if (e->epoch == epoch && e->batchCount == batchCount && e->vpb == vpb) {
+            return e->offset;
+        }
+    }
+    const uint64_t iOff = rd__ring_alloc((uint64_t)ni * 4, 16);
+    if (iOff == ~0ull) {
+        return iOff;
+    }
+    g_rdPerf.uploadStreamBytes += (uint64_t)ni * 4;
+    uint32_t *idx = (uint32_t *)(g_rd.ringMap[rd__ring_slot()] + iOff);
+    for (uint32_t b = 0, k = 0; b < batchCount; b++) {
+        for (uint32_t v = 2; v < vpb; v++) {
+            for (uint32_t cc = 0; cc < 3; cc++) {
+                idx[k++] = ICO_VU_INDEX(b * vpb + v, cc);
+            }
+        }
+    }
+    GridList *e = &s_gridLists[s_gridListNext];
+    s_gridListNext = (s_gridListNext + 1u) % RD_GRID_LISTS;
+    e->epoch = epoch;
+    e->batchCount = batchCount;
+    e->vpb = vpb;
+    e->offset = iOff;
+    return iOff;
+}
+
 /* ------------------------------------------------ the record's buffers
  * The vertex and triangle pre-passes (docs/port/RENDER.md, "The vertex and
  * triangle pre-passes"; rd__vu_prepass below) draw a record per vertex,
@@ -1520,27 +1569,18 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
          * strip flag); the stream's layout and the draw's mark: vuSource */
         const uint32_t vpb = p.vertsPerBatch;
         const uint32_t ni = p.batchCount * (vpb - 2) * 3;
-        const uint64_t iOff = rd__ring_alloc((uint64_t)ni * 4, 16);
+        const uint64_t iOff = gridIndexList(p.batchCount, vpb, ni);
         if (iOff == ~0ull) {
             return;
         }
-        g_rdPerf.uploadStreamBytes += (uint64_t)ni * 4;
-        uint32_t *idx = (uint32_t *)(g_rd.ringMap[rd__ring_slot()] + iOff);
         if (g_rdWin.first && g_rdWin.drawLast) {
-            g_rdVuCur.index = idx;
+            g_rdVuCur.index = (const uint32_t *)(g_rd.ringMap[rd__ring_slot()] + iOff);
         }
-        /* the span from the grid's shape, not from idx (the mapped ring is
-         * uncached memory): ICO_VU_INDEX(2, 0) to ICO_VU_INDEX(the last
-         * batch's last vertex, 2) */
+        /* the span from the grid's shape, not from the list (the mapped
+         * ring is uncached memory): ICO_VU_INDEX(2, 0) to ICO_VU_INDEX(the
+         * last batch's last vertex, 2) */
         if (vpb >= 3u && p.batchCount > 0u) {
             rd__span_range(ICO_VU_INDEX(2u, 0u), ICO_VU_INDEX(p.batchCount * vpb - 1u, 2u));
-        }
-        for (uint32_t b = 0, k = 0; b < p.batchCount; b++) {
-            for (uint32_t v = 2; v < vpb; v++) {
-                for (uint32_t cc = 0; cc < 3; cc++) {
-                    idx[k++] = ICO_VU_INDEX(b * vpb + v, cc);
-                }
-            }
         }
         RhiBindGroup g2 = rd__replay_bind_draw_keep(r, &ds);
         if (!g2.id) {

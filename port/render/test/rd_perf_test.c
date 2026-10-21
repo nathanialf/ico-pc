@@ -60,6 +60,9 @@
  *             layout, the exact barrier counts, no re-uploads, DISPLAY the
  *             same at a fresh frame's first replay and after) hold with the
  *             96 mesh draws' VuCB reused (draws of one mesh repeat theirs).
+ *             Then three grids, two of one shape: their VU stream bytes
+ *             are the three streams and two index lists (rd_replay_vu.c
+ *             gridIndexList: a list per shape a replay).
  *
  * With a dump instead (a measurement tool):
  *   rd_perf_test --dump FILE [--enhanced] [--resolution N] [--full-height]
@@ -657,6 +660,66 @@ static void checkUniformDedup(void)
     rd__set_vu_prepass(pre);
 }
 
+/* three grids, two of 4 strips of 6 vertices and one of 2: their index
+   lists are a function of the shape, so the replay writes two (rd_replay_vu.c
+   gridIndexList), and the VU stream bytes are the three streams and the two
+   lists */
+static void checkGridLists(void)
+{
+    static const uint8_t bg[4] = {16, 24, 32, 0x80};
+    static float qw[4 * (6 * RD_VU_QW_GRID_LIT + 4)][4];
+    const bool pre = g_rd.vuPrepass;
+    rd__set_vu_prepass(false);
+    RdTarget scene = rd_target(RD_TARGET_SCENE);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_set_target(scene, scene, W, H, RD_TARGET_OFFSET);
+    rd_clear_target(scene, bg, 1, 0);
+    rd_test_gs(0x50000);
+    rd_texture_off();
+    static const uint32_t strips[3] = {4, 2, 4};
+    for (int k = 0; k < 3; k++) {
+        RdVuGridDraw d;
+        memset(&d, 0, sizeof(d));
+        d.qw = (const float (*)[4])qw;
+        d.strips = strips[k];
+        d.stripLen = 6;
+        d.code = 20;
+        d.vu.mem[4][0] = d.vu.mem[5][1] = d.vu.mem[6][2] = d.vu.mem[7][3] = 1.0f;
+        d.vu.mem[7][0] = d.vu.mem[7][1] = 2048.0f;
+        rd_draw_vu_grid(&d, RD_KEY(7, (uint32_t)k, 0));
+    }
+    rd_end_frame(0);
+    const RdFrame *f = rd__last_frame();
+    uint64_t streams = 0, lists = 0, listsAll = 0;
+    uint32_t grids = 0;
+    for (int l = 0; f && l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < f->lists[l].count; i++) {
+            const RdCmd *c = &f->lists[l].cmds[i];
+            if (c->type != RDC_GRID) {
+                continue;
+            }
+            RdVuPayload p;
+            memcpy(&p, f->payload + c->u[1], sizeof(p));
+            const uint64_t list = (uint64_t)p.batchCount * (p.vertsPerBatch - 2u) * 3u * 4u;
+            streams += (uint64_t)p.streamQw * 16u;
+            listsAll += list;
+            lists += grids < 2 ? list : 0u; /* the third is the first's shape */
+            grids++;
+        }
+    }
+    const RdPerfRecord r = f ? replayOnce(f) : g_rdPerf;
+    printf("grids: %u grids, VU stream bytes %llu (streams %llu, index lists %llu; %llu with a "
+           "list a grid)\n",
+           grids, (unsigned long long)r.uploadStreamBytes, (unsigned long long)streams,
+           (unsigned long long)lists, (unsigned long long)listsAll);
+    CHECK(grids == 3, "grids: %u recorded, 3 drawn", grids);
+    CHECK(r.uploadStreamBytes == streams + lists,
+          "grids: %llu VU stream bytes, want %llu (three streams, two index lists)",
+          (unsigned long long)r.uploadStreamBytes, (unsigned long long)(streams + lists));
+    rd__set_vu_prepass(pre);
+}
+
 /* The uniform blocks take dynamic offsets, so every replay
  * creates one group per uniform layout it uses, whatever its draw count:
  * the frame (FrameCB), draw (DrawCB) and VU (DrawCB, VuCB, VuBoneCB over
@@ -1246,8 +1309,9 @@ static int synthetic(void)
         printf("passes: no GPU timestamps: skipped\n");
     }
 
-    /* dedup: two skinned packets of one character */
+    /* dedup: two skinned packets of one character; grids of one shape */
     checkUniformDedup();
+    checkGridLists();
 
     /* the reachable set, as the window creates it at
        start-up (rd_precreate_pipelines): every key makes a pipeline, the

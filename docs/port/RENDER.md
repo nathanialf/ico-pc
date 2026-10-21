@@ -513,8 +513,11 @@ bones for a skinned draw, and sets the draw's flags: a chain clip plane, the fre
 (`rd__vu_extended`), and `ICO_VU_TICKS` for a draw seen through a camera blended between two
 [ticks](ARCHITECTURE.md#terms). A mesh with marked triangles binds its mark bytes after its stream
 (`vu_mark`, [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-mesh-path)). A grid draw builds its index list
-here and marks every triangle of a grid of two strips or more joined, as the draw's own mark
-(`port/render/rd_replay_vu.c` (`rd__replay_vu`, `doVuDraw`); `port/render/rd_pipeline.c` (`rd__vu_extended`)). At start the renderer logs `rd: VU
+here, once a replay per shape (strips, vertices a strip: the list is a function of the two, so a
+grid of a shape drawn earlier in the replay binds that list's ring offset, `gridIndexList`, eight
+shapes a replay), and marks every triangle of a grid of two strips or more joined, as the draw's
+own mark (`port/render/rd_replay_vu.c` (`rd__replay_vu`, `doVuDraw`, `gridIndexList`);
+`port/render/rd_pipeline.c` (`rd__vu_extended`)). At start the renderer logs `rd: VU
 index values: dense (marks in the stream)`.
 A mesh, grid or particle command the pre-passes recorded draws through `vu_main_vs` (or
 `vu_particle_main_vs`) and `vu_ps` over that record ([The vertex and triangle
