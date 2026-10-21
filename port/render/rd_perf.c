@@ -44,7 +44,7 @@ static RhiStats s_last;
 
 static bool s_haveLast;
 
-static double s_interpPlanMs, s_interpApplyMs, s_readbackMs, s_t0;
+static double s_interpMs, s_readbackMs, s_t0;
 
 static uint32_t s_replay;
 
@@ -375,16 +375,15 @@ void rd__perf_reset(void)
     memset(s_pendingValid, 0, sizeof(s_pendingValid));
     memset(s_pendingStamps, 0, sizeof(s_pendingStamps));
     s_haveLast = false;
-    s_interpPlanMs = s_interpApplyMs = s_readbackMs = 0.0;
+    s_interpMs = s_readbackMs = 0.0;
     s_passHead = s_passCount = 0;
     s_passOn = false;
     s_passLastMs = -1.0e9;
 }
 
-void rd__perf_interp_ms(double planMs, double applyMs)
+void rd__perf_interp_ms(double ms)
 {
-    s_interpPlanMs += planMs;
-    s_interpApplyMs += applyMs;
+    s_interpMs += ms;
 }
 
 /* the alpha of the present about to replay (rd_present) */
@@ -410,16 +409,14 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
     g_rdPerf.frame = f ? f->number : 0;
     g_rdPerf.keep = (uint8_t)(keep != 0);
     g_rdPerf.presented = (uint8_t)present;
-    g_rdPerf.interpMs = s_interpPlanMs + s_interpApplyMs;
-    g_rdPerf.interpolated = (uint8_t)(g_rdPerf.interpMs > 0.0);
-    g_rdPerf.interpPlanMs = s_interpPlanMs;
-    g_rdPerf.interpApplyMs = s_interpApplyMs;
+    g_rdPerf.interpolated = (uint8_t)(s_interpMs > 0.0);
+    g_rdPerf.interpMs = s_interpMs;
     g_rdPerf.readbackMs = s_readbackMs; /* since the previous replay */
     g_rdPerf.alpha = s_alpha;
     g_rdPerf.firstOfTick = s_first;
     s_alpha = -1.0f;
     s_first = 0;
-    s_interpPlanMs = s_interpApplyMs = s_readbackMs = 0.0;
+    s_interpMs = s_readbackMs = 0.0;
     if (!s_haveLast && g_rd.hasDevice) {
         rhi_get_stats(&s_last);
         s_haveLast = true;

@@ -6038,7 +6038,7 @@ bool rd_present(float alpha)
     s_track = first; /* the flap detector, once a frame */
     const RdFrame *f = rd__interp_frame(rd__prev_frame(), cur, alpha, first, &s_pres.stats);
     s_track = 0;
-    rd__perf_interp_ms(0.0, rd__now_ms() - t0); /* charged to the replay below */
+    rd__perf_interp_ms(rd__now_ms() - t0); /* charged to the replay below */
     rd__perf_alpha(alpha, first);
     mixedNote(&s_pres.stats, cur->number, alpha, raw);
     if (first) {

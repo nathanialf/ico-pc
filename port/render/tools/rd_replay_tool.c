@@ -155,10 +155,10 @@
  *                         its later presents) and one line of the N
  *                         replays' records (rd.h RdPerfRecord), each CPU
  *                         phase's mean and least: "<dump>: time: N
- *                         replays, CPU mean (min) ms: total, interp (plan
- *                         P, apply A), wait, acquire, upload, walk, bind,
- *                         submit, present; per replay: ring, uniform and
- *                         interp KB, draws, pipeline and bind group binds",
+ *                         replays, CPU mean (min) ms: total, interp, wait,
+ *                         acquire, upload, walk, bind, submit, present;
+ *                         per replay: ring, uniform and interp KB, draws,
+ *                         pipeline and bind group binds",
  *                         then the first replay's interp alone; with
  *                         --interp DISPLAY after the first and the last of
  *                         them compared byte for byte ("pictures
@@ -1159,8 +1159,6 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
     enum {
         P_TOTAL,
         P_INTERP,
-        P_PLAN,
-        P_APPLY,
         P_WAIT,
         P_ACQUIRE,
         P_UPLOAD,
@@ -1184,7 +1182,7 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
             const double t0 = rd__now_ms();
             rf = rd__interp_frame(pf, f, interpT, k == 0, &ist);
             const double ms = rd__now_ms() - t0;
-            rd__perf_interp_ms(0.0, ms); /* charged to the replay below, as rd_present does */
+            rd__perf_interp_ms(ms); /* charged to the replay below, as rd_present does */
             if (!rf) {
                 fprintf(stderr, "%s: time: rd__interp_frame failed\n", dump);
                 ok = false;
@@ -1198,9 +1196,8 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
         }
         const RdPerfRecord r = g_rdPerf; /* the record the replay just closed */
         while (rd_perf_pop(NULL)) {}
-        const double v[P_COUNT] = {r.totalMs, r.interpMs,  r.interpPlanMs, r.interpApplyMs,
-                                   r.waitMs,  r.acquireMs, r.uploadMs,     r.walkMs,
-                                   r.bindMs,  r.submitMs,  r.presentMs};
+        const double v[P_COUNT] = {r.totalMs, r.interpMs, r.waitMs,   r.acquireMs, r.uploadMs,
+                                   r.walkMs,  r.bindMs,   r.submitMs, r.presentMs};
         for (int p = 0; p < P_COUNT; p++) {
             sum[p] += v[p];
             low[p] = k == 0 || v[p] < low[p] ? v[p] : low[p];
@@ -1224,19 +1221,19 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
     }
     if (ok) {
         const double m = (double)n;
-        printf("%s: time: %d replays, CPU mean (min) ms: total %.3f (%.3f), interp %.3f (%.3f) "
-               "(plan %.3f, apply %.3f), wait %.3f (%.3f), acquire %.3f (%.3f), upload %.3f "
+        printf("%s: time: %d replays, CPU mean (min) ms: total %.3f (%.3f), interp %.3f (%.3f), "
+               "wait %.3f (%.3f), acquire %.3f (%.3f), upload %.3f "
                "(%.3f), walk %.3f (%.3f), bind %.3f (%.3f), submit %.3f (%.3f), present %.3f "
                "(%.3f); per replay: ring %.1f KB, uniform %.1f KB, interp %.1f KB, %.1f draws, "
                "%.1f pipeline binds, %.1f bind group binds\n",
                dump, n, sum[P_TOTAL] / m, low[P_TOTAL], sum[P_INTERP] / m, low[P_INTERP],
-               sum[P_PLAN] / m, sum[P_APPLY] / m, sum[P_WAIT] / m, low[P_WAIT], sum[P_ACQUIRE] / m,
-               low[P_ACQUIRE], sum[P_UPLOAD] / m, low[P_UPLOAD], sum[P_WALK] / m, low[P_WALK],
-               sum[P_BIND] / m, low[P_BIND], sum[P_SUBMIT] / m, low[P_SUBMIT], sum[P_PRESENT] / m,
-               low[P_PRESENT], ring / m / 1024.0, uniform / m / 1024.0, interp / m / 1024.0,
-               draws / m, pipes / m, groups / m);
-        printf("%s: time: the first replay: interp %.3f ms (plan %.3f, apply %.3f), total %.3f\n",
-               dump, first.interpMs, first.interpPlanMs, first.interpApplyMs, first.totalMs);
+               sum[P_WAIT] / m, low[P_WAIT], sum[P_ACQUIRE] / m, low[P_ACQUIRE], sum[P_UPLOAD] / m,
+               low[P_UPLOAD], sum[P_WALK] / m, low[P_WALK], sum[P_BIND] / m, low[P_BIND],
+               sum[P_SUBMIT] / m, low[P_SUBMIT], sum[P_PRESENT] / m, low[P_PRESENT],
+               ring / m / 1024.0, uniform / m / 1024.0, interp / m / 1024.0, draws / m, pipes / m,
+               groups / m);
+        printf("%s: time: the first replay: interp %.3f ms, total %.3f\n", dump, first.interpMs,
+               first.totalMs);
     }
     if (ok && interpPrev) {
         /* two sizes: every byte of the larger counts */

@@ -2477,13 +2477,9 @@ into its 10 s statistics line, and `[dev] perf_log` writes one line per replay
 ([DISPLAY.md](DISPLAY.md#the-perf-csv)). The [replay tool](ARCHITECTURE.md#terms)'s `--stats` prints
 the same record.
 
-A present's interpolation time (`interpMs`, measured around `rd__interp_frame` by `rd_present` and
-charged to the replay that follows) is split in two: `interpPlanMs`, the part spent building an
-interpolation plan for the pair of ticks, and `interpApplyMs`, the rest, the blend at the
-present's alpha; `interpMs` is their sum (`port/render/rd_perf.c` (`rd__perf_interp_ms`);
-`port/render/rd_interp.c` (`rd_present`)). The presenter keeps no plan: every present does all of
-its work at its alpha and `interpPlanMs` is 0. The window's replays line shows the plan's part as
-`interp X (plan Y)` and the perf CSV has both ([DISPLAY.md](DISPLAY.md#the-stats-lines)).
+A present's interpolation time (`interpMs`) is measured around `rd__interp_frame` by `rd_present`
+and charged to the replay that follows (`port/render/rd_perf.c` (`rd__perf_interp_ms`);
+`port/render/rd_interp.c` (`rd_present`)); every present does all of its work at its alpha.
 
 The record also counts the exact blend's cost and the glow's passes (issue 103): `dstDraws`, the
 draws recorded through a destination-read shader (`dstBind`); `storagePasses`, the passes begun
@@ -2752,9 +2748,9 @@ replayed N more times; with `--interp` the presenter's frame is built again befo
 (`rd__interp_frame`: the first as a tick's first present, the others as its later presents, its
 time charged to the replay as `rd_present` charges it). The tool prints one line from the N
 records, each CPU phase's mean and least: `<dump>: time: N replays, CPU mean (min) ms: total,
-interp (plan P, apply A), wait, acquire, upload, walk, bind, submit, present; per replay: ring KB,
+interp, wait, acquire, upload, walk, bind, submit, present; per replay: ring KB,
 uniform KB, interp KB, draws, pipeline binds, bind group binds`, then `<dump>: time: the first
-replay: interp X ms (plan P, apply A), total T`. With `--interp` it compares DISPLAY after the
+replay: interp X ms, total T`. With `--interp` it compares DISPLAY after the
 first and the last of the N replays byte for byte and prints `pictures identical`, or the bytes
 that differ and exits 1: a present later in a tick must draw the tick's first present's picture
 (`timeReplays`). The lavapipe numbers are for comparing two builds on one host, not a device's

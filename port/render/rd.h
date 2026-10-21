@@ -1881,11 +1881,6 @@ typedef struct RdPerfRecord {
     uint8_t interpolated, keep, presented, gpuValid;
     double totalMs, interpMs, waitMs, acquireMs, uploadMs, walkMs, bindMs, submitMs, presentMs,
         readbackMs;
-    /* of interpMs: interpPlanMs the interpolation plan's building (rd_interp.c:
-     * the pair's matching, done once a pair of ticks; 0 in a present that used
-     * the plan it had), interpApplyMs the rest, the blend at the present's
-     * alpha */
-    double interpPlanMs, interpApplyMs;
     double fenceWaitMs; /* the backend's blocked time on GPU completion (inside wait, readback) */
     uint32_t buffersCreated, buffersDestroyed, texturesCreated, texturesDestroyed;
     uint32_t memoryAllocs, memoryFrees, bindGroups, pipelineBinds, bindGroupBinds;
