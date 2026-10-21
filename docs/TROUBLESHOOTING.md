@@ -229,11 +229,10 @@ While the camera turns or moves, white or light wedges and lines can show
 along the edges where two pieces of a wall or a floor meet. The light
 colour is the room's mist showing through a gap between the pieces. The
 game draws extra pictures between its own steps to look smooth, which only
-happens at a Frame rate of 60 or more. In some of those pictures, pieces
-that had just come into view or just crossed the edge of the screen were
-placed from a different moment than their neighbours, so a gap opened
-between them. The game now places every piece in such a picture from the
-same viewpoint. If you still see such lines:
+happens at a Frame rate of 60 or more. In those pictures every piece is
+placed from the same viewpoint, so pieces that have just come into view or
+crossed the edge of the screen line up with their neighbours. If you still
+see such lines:
 
 1. Set **Options > Display > Frame rate** to **Original** and turn the
    camera in the same place. If the lines are gone, they come from the

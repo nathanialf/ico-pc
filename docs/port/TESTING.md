@@ -464,8 +464,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   unmatched, (3) A matched and B unmatched (the wedge's case); in each the frame's view is the tick
   before's, both parts' camera and model rows are those of (2) bit for bit (the tick's block
   through the tick before's camera, `camCurDraw`), no picture is mixed, and the vertex lands in the
-  same cell in both; B through the tick's own camera, what (3) drew while alpha 0 had no blended
-  camera, lands over 16 pixels away, so (3) fails on a renderer without the alpha 0 camera; frames
+  same cell in both; B through the tick's own block and camera lands over 16 pixels away, so (3) fails on a renderer without the alpha 0 camera; frames
   without a camera count a mixed picture (`mixed` 1). The size flap (`testSeamsSizeTail`, Enhanced):
   B drawn with the region code at one tick and the scissor code at the other, so one payload
   carries a card section and the other not, at alpha 0 and 0.5: both parts blend (none mismatched

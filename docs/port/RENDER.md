@@ -2372,8 +2372,7 @@ shorter than its header says (the header, the block, the bones, the stream and t
 `vuFixedSize`); the header test then makes the two fixed parts equal, every offset after the block
 derives from the headers, and the card sections stay each payload's own (`rd__vu_cards_merge` takes
 each side's size, and leaves the tick's section as recorded when the tick before has none). Such a
-draw blends like any other, a still part of the world among them, instead of being drawn as the
-tick's alone beside its blended neighbours. The 10 s summary's second line counts them (`N VU draws
+draw blends like any other, a still part of the world among them. The 10 s summary's second line counts them (`N VU draws
 blended across a change of payload size (a card section at one tick only)`,
 `RdInterpStats.sizeTailBlended`), and `rd_replay_tool --interp`'s second line with the draws still
 mismatched by size.
@@ -2383,9 +2382,8 @@ blend refused, `ICO_RD_S2_LEGACY=1`: `RdInterpStats.camOffWhy`, `RD_CAM_OFF_*`) 
 parts of the world from the ticks' blocks as recorded, blended element by element, and the parts
 that are the tick's alone from the tick's block, `camCurDraw` having no camera to re-base them on.
 Both kinds in one picture stand up to a tick of camera motion apart, and the fog paints the gaps
-between them: the white wedges between wall and floor pieces a present at alpha 0 drew while it had
-no blended camera, where pieces entering the view (the game's cull) or whose payload changed size
-were the tick's and their neighbours the tick before's. The counts are
+between them, wedges where a piece entering the view (the game's cull) is the tick's and its
+neighbour the tick before's. The counts are
 `worldPrevRaw` and `worldCurRaw`, and `mixed` the smaller of the two when both are above 0 (the
 pieces in the minority; whether they touch is not computed). The 10 s summary carries a line for
 the presents that drew one, after the alpha line ([DISPLAY.md](DISPLAY.md#interpolation-between-ticks)),
