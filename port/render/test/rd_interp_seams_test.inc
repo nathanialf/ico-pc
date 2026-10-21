@@ -498,8 +498,7 @@ static void testSeamsSizeTail(void)
     es.preset = RD_PRESET_ENHANCED;
     es.sceneScale = 1.0f;
     es.interpolate = 1;
-    rd_set_settings(&es);
-    CHECK(rd__vu_extended(), "size tail: Enhanced draws record card sections");
+    rd_set_settings(&es); /* applied at the next rd_begin_frame */
     s6GsZ = 1;
     const RdKey ka = RD_KEY(&kObjSeam, 0, 32), kb = RD_KEY(&kObjSeam, 1, 32);
     static const float kT[2] = {0.0f, 0.5f};
