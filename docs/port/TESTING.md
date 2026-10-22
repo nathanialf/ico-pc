@@ -334,8 +334,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `APPIMAGE` names one and the program lies under `APPDIR`, else the program itself
   (`test_self_exe`) (`steam_shortcut`).
 - `window_video_test.c`: fullscreen and mode requests on SDL's offscreen driver (`window_video`),
-  Borderless at a window size among them (its pixel size, no refit on its own display, a size
-  larger than the display clamped to it).
+  Fullscreen holding the desktop's mode (its size and refresh rate) or no mode where the driver
+  takes none, as `ico_window_video_desktop_mode` returns. The swapchain's
+  `VK_EXT_full_screen_exclusive` request (Windows) has no test: lavapipe lacks the extension, and
+  whether a display goes exclusive is the driver's.
 - `port/platform/fpenv_test.c`: the simulation's FP mode rounds toward zero and flushes denormals,
   the host mode is back to nearest; `trap` checks the fptrap build traps (`fpenv`, `fpenv_trap`).
 
@@ -543,7 +545,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   beside an exact one, their shared vertex's GS Z saturated and its X and Y off the 1/16 grid:
   none above Original 1x, where the clipped triangle is drawn, and at Original 1x not drawn
   (`vu_corner_cut_position`).
-- `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`);
+- `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`),
+  an old file's `window_size` among them (ignored, kept as written);
   the targets' scales include the work buffers and shadow levels at their GS sizes at every scale
   and Water reflections' block: its GS size under Original, the scene's scale under Sharp (4x at
   4x), both the GS size at 1x (`checkScales`).
@@ -717,9 +720,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   steps Effects > Water reflections between Original and Sharp, checks its
   note, its key and the page's fourteen rows (`testWaterReflections`), and Main's Disc row
   (`testDiscRow`: shown with more than one disc's game data only, its values and `[game] disc`, the page
-  with all fifteen rows), and Display > Window size (`testWindowSize`: after Window mode, the sizes
-  smaller than the display the host reports, a file's other size shown and stepped from, its key,
-  its note, hidden on Android). Each also runs with `jpn`
+  with all fifteen rows). Each also runs with `jpn`
   as the Japanese or Korean disc over the fixture's tables at that disc's numbers (`settings_jpn`,
   `settings_extra_jpn`, `settings_extras_jpn`; `kor` the same, `settings_kor`, `settings_extra_kor`,
   `settings_extras_kor`, with the numbers from the Korean region row): the rows it has not, Menu language, Circle

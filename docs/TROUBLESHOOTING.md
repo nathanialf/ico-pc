@@ -254,21 +254,18 @@ see such lines:
 
 ## A program that adds frames or scales the game (Lossless Scaling) does not work
 
-Programs that scale the game's window or add frames to it, such as
-Lossless Scaling, need the game in a window that does not fill the whole
-screen:
+Programs that scale the game's window, add frames to it or draw over it,
+such as Lossless Scaling and overlays, need the game in a window that
+other programs can draw over:
 
-1. Set **Options > Display > Window mode** to **Borderless**.
-2. Set **Window size**, just below it, to a size smaller than your screen,
-   such as 1920x1080 on a 2560x1440 screen. The game sits in the middle of
-   the screen without a frame.
-3. Start the program and pick the game's window.
+1. Set **Options > Display > Window mode** to **Borderless**. The game
+   still fills the screen, without a frame.
+2. Start the program and pick the game's window.
 
-**Windowed** works too. **Fullscreen**, and Borderless at **Display size**,
-do not: Windows shows a window that covers the whole screen the way it
-shows a fullscreen game, and those programs cannot work on that. If the
-program still does not work, send a [problem report](#send-a-problem-report)
-with `ico-pc.log` and say which program and which settings you use.
+**Windowed** works too. **Fullscreen** does not: it takes the whole screen
+for the game, and those programs cannot work on that. If the program still
+does not work, send a [problem report](#send-a-problem-report) with
+`ico-pc.log` and say which program and which settings you use.
 
 ## Send a problem report
 

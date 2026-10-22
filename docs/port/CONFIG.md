@@ -138,9 +138,8 @@ display option, the [preset](ARCHITECTURE.md#terms) rule and the pacing belong t
 | `preset` | string | `"original"` | `original`, `enhanced`, `custom` |
 | `resolution` | string | `"window"` (`"auto"` on Android and iOS) | `window`, `WxH`, `Nx` (N 1..16), `auto` |
 | `aspect` | string | `"4:3"` | `4:3`, `16:10`, `16:9`, `21:9`, `32:9`, `48:9`, `auto` |
-| `window_mode` | string | `"windowed"` | `windowed`, `borderless`, `fullscreen` |
+| `window_mode` | string | `"windowed"` | `windowed`, `borderless`, `fullscreen` (exclusive at the desktop's mode; Windowed and Borderless are composed windows: [DISPLAY.md](DISPLAY.md), "The window modes") |
 | `fullscreen` | bool | `false` | read when `window_mode` is absent |
-| `window_size` | string | `"display"` | `display`, `WxH` (64..7680 by 64..4320): a Borderless window's size in pixels; a value out of range or not understood is `display` (`video_options.c` (`ico_video_parse_window_size`)); outside the preset |
 | `vsync` | bool | `true` | |
 | `texture_filter` | string | `"original"` | `original`, `trilinear`, `anisotropic` |
 | `full_height` | bool | `false` | |
