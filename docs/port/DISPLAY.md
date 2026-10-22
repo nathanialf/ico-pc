@@ -67,8 +67,13 @@ cropped; the reduction draws over its border (`port/render/rd_blur_border.c`
 W - 1, would be on the screen; the game does not always draw them (issue 129: a bright band at a
 phone's left edge, the fog's colour at depth 0 spread by the glow), so the reduction draws them
 again as columns 2 and W - 3, bit for bit in the GS model ([RENDER.md](RENDER.md#post-passes), the
-open border's outer columns). The rows the reduction's scissor kept black at the top and bottom
-show what SCENE holds.
+open border's outer columns). The glow reads SCENE before the reduction, so a fogged frame's SCENE
+has those columns repeated from columns 2 and W - 3 first, wherever the border is open or the
+frame cropped (issue 26: the same band at 16:9, where the present leaves the columns out but the
+glow had spread them about ten GS pixels in); with the border closed (Full pixel off at 4:3 and
+48:9) SCENE stays the game's, the PS2's picture ([RENDER.md](RENDER.md#post-passes), SCENE's outer
+columns). The rows the reduction's scissor kept black at the top and bottom show what SCENE
+holds.
 Without it the picture is the same: the same box, scale, crop and replay (the host sets
 `RdSettings.borderMask`, and the reduction draws over its border as with the option on,
 `port/render/rd_replay.c` (`borderOpen`)), and the presenter masks the game's border over its edge at
@@ -94,10 +99,11 @@ Original preset at 4:3 is the PS2's picture byte for byte (`port/render/rd_prese
 with the frame as the options give it, `frame W GS wide (exact E: cropped|exact width), border
 open (its outer two columns a side repeat their neighbours)|open (its columns left out at
 present)|closed`, and `rd_log_frame_state(when)` logs the same words with the output's size, the
-size asked for, the scene's scale, the aspect and how many times the outer columns were drawn as
-their neighbours: `rd: frame state (after resume): output 2340x1080 (asked 2340x1080), scene
+size asked for, the scene's scale, the aspect, how many times the outer columns were drawn as
+their neighbours and how many times SCENE's were repeated: `rd: frame state (after resume): output 2340x1080 (asked 2340x1080), scene
 2.8125x2.10938, aspect 2.167, frame 832 GS wide (exact 832.00: exact width), border open (...),
-the outer columns drawn as their neighbours N times`. The window host calls it when the app comes
+the outer columns drawn as their neighbours N times, repeated on SCENE after the fog M times`
+(M the frames whose SCENE had its outer columns repeated). The window host calls it when the app comes
 back to the foreground, after reading the window's size again (a size a few pixels off the
 frame's exact width crops the frame, which hides those columns), with the line `window: after the
 app came back: window WxH px, safe area x,y wxh` (`port/platform/window_host.c`

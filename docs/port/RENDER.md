@@ -24,7 +24,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_dst_read.c` | the exact GS blend read from the destination in the fragment shader |
 | `port/render/rd_post.c` | `rd_post`: each post kind as the GS writes and sprites GsBase.c issues |
 | `port/render/rd_blur.c` | staticBlur.c's sprites and the reduction's, for `rd__blur_post_sprite`; the open border's strips |
-| `port/render/rd_blur_border.c` | the post sprites' replay (`rd__blur_post_sprite`): the fold, the reduction's open border and its outer columns |
+| `port/render/rd_blur_border.c` | the post sprites' replay (`rd__blur_post_sprite`): the fold, the reduction's open border and its outer columns, SCENE's outer columns repeated after the fog |
 | `port/render/rd_blur_smooth.c` | Motion blur: Smooth: the motion blur's accumulator, its two passes and the sprite drawn over it (`rd__blur_smooth_sprite`) |
 | `port/render/rd_shadow.c` | the shadow count on the stencil |
 | `port/render/rd_water.c` | render-to-texture blocks, target aliases, camera scopes, pool STs |
@@ -1857,13 +1857,49 @@ of its four vertices' S constant, the S the pair has at that pixel's coordinate,
 CLAMP set, the sprite, the left strip, the right strip, the state put back
 (`port/render/rd_blur_border.c` (`rd__blur_post_sprite`, `drawStrips`), each strip through
 `rd__replay_blur_sprite_draw`, `doBlurSpriteDraw`'s export, in a payload of its own). A cropped
-frame (16:9) draws no strip, so its picture is byte for byte what it was; with Full pixel off the
-border stays closed. The top and bottom rows the reduction's scissor kept black are not repeated:
+frame (16:9) draws no strip; with Full pixel off the border stays closed. Measured on lavapipe
+(the 48:9 deja vu dump at 3840x720, 1.875 texels a GS pixel), the hardware strips cover DISPLAY
+texels 0 .. 3 and 3837 .. 3839 and are one value a row there; texel 3836 is the main sprite's. The top and bottom rows the reduction's scissor kept black are not repeated:
 they show what SCENE holds. One line the first time, `rd: display: the border is open
 at the frame's exact width (W GS pixels): its two outer columns a side repeat columns 2 and W-3
 (reported once)`. `rd__set_blur_border_repeat(false)` draws without them (tests: the present pins measured without
 the strips, `rd_present_test`'s open border cases); `rd__blur_border_strip_count` counts the
 strips drawn, which `rd_log_frame_state`'s line names.
+
+**SCENE's outer columns (issues 129 and 26).** The strips mend the reduction's own columns, but the
+glow reads SCENE before the reduction: list 7's flare and bloom reduce SCENE into the work
+buffers, so the fog-painted columns also spread about ten GS pixels into the picture, about twenty
+output pixels at 2x. That reaches the screen on a cropped frame too: issue 26's picture (4K,
+16:9, Full pixel off, the room with the hanging chain) shows the band at the left edge, rows 40 ..
+260 of 964, where the present already leaves the columns out. So the fog of a frame on SCENE arms
+a repeat (`rd__scene_border_arm`, the last line of `doFog`), done before the frame's first post
+sprite that samples SCENE (`sceneRepeatDue` in `rd__blur_post_sprite`: the glow's first
+reduction, the depth of field's, at the latest the reduction into DISPLAY), where SCENE's pass
+ends anyway, so the repeat adds no pass on a tiler's local fog read and an open MSAA epoch closes
+where it would have (`port/render/rd_blur_border.c` (`sceneRepeat`)). The repeat copies SCENE's
+texels of GS column 2 into those of columns 0 and 1, and of column W - 3 into W - 2 and W - 1,
+every row, the colour alone (the depth stays the game's, which the edge probe reads): the texels
+of GS column x start at `ceil(x sx - ox)` (texel t lies at GS `(t + ox) / sx`), the left fill is
+laid right to left from column 2 and the right fill left to right from W - 3, the outermost copy
+cut at the edge, so at a whole scale each column is column 2 (or W - 3) texel for texel. The RHI
+cannot copy a texture into itself, so the two source columns go through a small texture of their
+own first (`rd border columns`, the columns' widths by SCENE's height, freed with the scene's
+caches and at shutdown: `rd__scene_border_free`). It applies where the frame's outer columns are
+the port's own picture (`rd__scene_border_state`): the border open at the exact width
+(`RD_BORDER_OPEN`) and the frame cropped at present (`RD_BORDER_CROPPED`, Full pixel off at 16:9
+under the border mask, or any scale with SCENE holding the whole frame). With the border closed
+(`RD_BORDER_CLOSED`: Full pixel off at 4:3 and at an exact width such as 48:9, the GS's own DISPLAY
+with its border) SCENE stays as the game drew it, the PS2's picture, which the native-frame gate's
+Original and Enhanced 4:3 hashes hold. Full pixel's window (`RD_BORDER_WINDOW`, `ox > 0`) holds no
+texel of those columns at the usual crops, so nothing is copied there. The strips stay with it: the
+reduction's column 2 blends a quarter of column 3 (the PS2's +0.75), so DISPLAY's outer columns
+drawn from SCENE's repeat alone would be column 2 without that quarter, not DISPLAY's column 2.
+One line the first time, `rd: border: the frame's outer two columns a side repeat columns 2 and
+W-3 on SCENE after the fog (W GS pixels; the glow and the present read them)`, and on Full pixel's
+window `rd: border: the frame's outer two columns are not in SCENE (Full pixel's window holds the
+visible columns only): nothing to repeat (reported once)`; `rd__scene_border_repeat_count` counts
+the repeats (`rd_log_frame_state`'s line), `rd__set_scene_border_repeat(false)` leaves SCENE as
+drawn (tests).
 
 **The frame-size sprites' plan.** Before its snapshot, `doBlurSpriteDraw` hands the sprite to
 `rd__fx_plan_draw` (`RdProfile.fxPlan`, on in every class; `[dev] fx_plan`, `ICO_RD_FX_PLAN=1|0`),
@@ -2311,20 +2347,26 @@ texels' Z, index and colour on the first fogged replay after start and after a n
 covered keeps from the clear (`...; pixels nothing drew take the fog's colour at Z 0, table entry 0
 = RRGGBBAA`): a line of that colour in a report's picture is a gap in the geometry
 ([Camera blending](#camera-blending)) (`port/render/rd_fog_path.c` (`rd__fog_probe_record`)).
-While the reduction shows the frame's outer columns (the border open at the frame's exact width;
-[the open border's outer columns](#post-passes)), the edge probe copies the depth the
+At every aspect and with Full pixel either way, the edge probe copies the depth the
 fog read at texel columns 0, 1, tw - 2 and tw - 1, every row, on every 32nd fogged replay, into a
 readback buffer that a replay two frames on counts without a wait (`rd__fog_edge_due`,
-`rd__fog_edge_record`, called by `doFog` after its draw, the pass ended first); a probe that finds
-rows at GS Z 0 logs, the first three in each 10 s, `rd: fog: probe: outer columns: depth 0 at
-texel column 0 in N of M rows (rows a..b), column 1 in ..., column T-2 in ..., column T-1 in ...;
-the border is open at the frame's exact width (W GS pixels, its outer two columns a side drawn as
-columns 2 and W-3), table entry 0 = RRGGBB`, and the rest of those 10 s as one total at the next
-probe after them, `rd: fog: probe: outer columns: depth 0 there in N more probes in the last 10 s
-(T in all)`. Nothing is copied with the border closed or the frame cropped, in the self-test's
-replays, on the multisampled read, or on D3D12's depth (copied to a buffer only whole). Rows at Z
-0 there mean the game left those columns uncovered (now drawn as their neighbours); a band that
-survives with no such line is not the fog's (`port/render/rd_fog_path.c` (`rd__fog_edge_column`,
+`rd__fog_edge_record`, called by `doFog` after its draw, the pass ended first); the depth is the
+game's, as SCENE's repeat ([SCENE's outer columns](#post-passes)) copies the colour alone. A probe
+that finds rows at GS Z 0 logs, the first three in each 10 s, `rd: fog: probe: outer columns:
+depth 0 at texel column 0 in N of M rows (rows a..b), column 1 in ..., column T-2 in ..., column
+T-1 in ...; <where they go>, table entry 0 = RRGGBB`, where they go being, as
+`rd__scene_border_state` was at the copy, `the border is open at the frame's exact width (W GS
+pixels): they reach the screen, SCENE repeats columns 2 and W-3 over them before the glow`, `the
+frame is cropped (W GS pixels): the present leaves them out but the glow reads them, SCENE repeats
+columns 2 and W-3 over them before it`, `the border is closed (W GS pixels): the reduction shows
+black there but the glow reads them, SCENE keeps them (the PS2's picture)` or `the frame is
+cropped to Full pixel's window (W GS pixels): SCENE holds the visible columns only, these are the
+screen's edge`; so a 16:9 log carries the count too. The rest of those 10 s is one total at the
+next probe after them, `rd: fog: probe: outer columns: depth 0 there in N more probes in the last
+10 s (T in all)`. Nothing is copied in the self-test's replays, on the multisampled read, or on
+D3D12's depth (copied to a buffer only whole). Rows at Z 0 there mean the game left those columns
+uncovered (now repeated from their neighbours where the line says so); a band that survives with
+no such line is not the fog's (`port/render/rd_fog_path.c` (`rd__fog_edge_column`,
 `rd__fog_edge_line`); `rd_fog_test` (o)). Both draw the fog at the exact table entry of
 each index, not read between entries above 1x, since what they measure is the depth read; the
 probe's frame is one game frame drawn that way (`port/render/rd_fog_path.c` (`rd__fog_exact`),

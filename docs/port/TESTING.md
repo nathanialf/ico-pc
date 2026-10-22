@@ -450,9 +450,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the same bytes); at 2x a depth ramp's fog alpha equals the above-1x formula (the table
   interpolated, the ordered dither) texel for texel, and the 1x cases count no above-1x draw
   (`checkRamp`); the outer columns' probe: its count of GS Z 0 rows on D32F and D24 words and its
-  line on the CPU (`checkEdgeLine`), then with Full pixel on at 4:3 the cells' scene, two cells
-  left at Z 0 at the frame's edges, gives the line naming their rows, and with it off no line
-  (`checkEdgeProbe`).
+  line on the CPU with each of the four places those columns go (open, cropped, closed, Full
+  pixel's window: `checkEdgeLine`), then with Full pixel on at 4:3 the cells' scene, two cells
+  left at Z 0 at the frame's edges, gives the line naming their rows (`checkEdgeProbe`), and with
+  it off a line, if one was logged, says the border is closed.
 - `rd_gsbase_test.c`: `GsBase.c`'s host path driving a synthetic scene (`rd_gsbase`); photo mode's
   Deja vu draws the stage's sandstorm object once a frame with the vision's two nodes, gives back
   what it borrowed, adds no film grain, and draws nothing in stage 40, with the effect off or with
@@ -584,9 +585,17 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   SCENE red with green over GS columns 1 .. W - 2 presents green outer columns, byte for byte the
   present of SCENE green everywhere, and without the strips (`rd__set_blur_border_repeat`) only the
   outer columns differ; at 16:9 (cropped) and with Full pixel off the strips change no byte;
-  DISPLAY's strips are their neighbour columns' bytes at 1x and one value a row at 2x; the
-  present pins hold without the strips, and with them differ in the outer columns alone
-  (`checkFullPixelOnPin`),
+  DISPLAY's strips are their neighbour columns' bytes at 1x and one value a row at 2x; SCENE's
+  own outer columns (`checkSceneBorderRepeat`): a fogged frame whose SCENE leaves GS columns 0, 1,
+  W - 2, W - 1 at the clear (the fog paints them white) and a glow-like post sprite spreading SCENE
+  eight GS pixels in from each edge presents, at 16:9 Enhanced 2x with Full pixel off (the border
+  mask) and at 2340x1080 with it on, byte for byte the frame drawn over every column, with one
+  repeat a replay, and without the repeat (`rd__set_scene_border_repeat`) differs within 14 GS
+  pixels of the box's edges alone; at 16:9 with Full pixel on (its window) and at 4:3 with it off
+  (the border closed) SCENE is kept as drawn; the 48:9 strips (`checkExactEdges`) are checked one
+  value a row over the texels they cover by a whole texel (from 0 to below 2k - 0.75 and from
+  k (W - 2.25) + 1 on, k texels a GS pixel); the present pins hold without the strips, and with
+  them differ in the outer columns alone (`checkFullPixelOnPin`),
   an old file's `window_size` among them (ignored, kept as written);
   the targets' scales include the work buffers and shadow levels at their GS sizes at every scale
   and Water reflections' block: its GS size under Original, the scene's scale under Sharp (4x at

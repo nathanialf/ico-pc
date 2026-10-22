@@ -199,7 +199,9 @@ The last row is not one of the game's effects:
   hid under its thin black border is shown too. The two outermost columns
   of dots at each side, which the PS2 never showed and the game does not
   always draw, repeat the picture next to them instead, so no stray line
-  shows at the very edge. The picture is exactly as
+  shows at the very edge. With this row off on a wide screen those columns
+  are hidden, and they are repeated the same way, so they cannot light up
+  the edge of the picture either. The picture is exactly as
   wide as the window shows it, at every size and shape of window. It needs
   Resolution set to the size of your window (the Enhanced Preset picks it).
   With Original, a fixed Resolution (1x to 16x), the CRT filter or
