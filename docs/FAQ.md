@@ -113,8 +113,10 @@ rename or convert anything. [The full guide](TEXTURE_PACKS.md) has more.
 
 Yes. Open **Options > Effects**. There are six switches: Glow, Depth of
 field, Screen softening, Motion blur, Fog and Cinematic bars (the black
-bars of cutscenes). All of them On is the picture
-the PS2 gives. [What each one does](OPTIONS.md#effects).
+bars of cutscenes). All of them On (Motion blur at Original) is the picture
+the PS2 gives. Motion blur also has Smooth, which moves the trail on with
+every frame you see instead of once for each of the game's frames.
+[What each one does](OPTIONS.md#effects).
 
 ## Why is there a thin black border around the picture?
 

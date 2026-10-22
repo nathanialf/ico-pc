@@ -448,6 +448,9 @@ static void test_first_run(void)
     CHECK(ico_config_get_bool("video.effect_depth_of_field", 0) == 1);
     CHECK(ico_config_get_bool("video.effect_softening", 0) == 1);
     CHECK(ico_config_get_bool("video.effect_motion_blur", 0) == 1);
+    /* the motion blur's way: Original, written with the file */
+    CHECK_STR(ico_config_get_string("video.effect_motion_blur_mode", "?"), "original");
+    CHECK(text != NULL && strstr(text, "effect_motion_blur_mode = \"original\"") != NULL);
     CHECK(ico_config_get_bool("video.effect_fog", 0) == 1);
     CHECK(ico_config_get_bool("video.effect_cinematic_bars", 0) == 1);
     /* Water reflections: Original (the PS2's size) by default */

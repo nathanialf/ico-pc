@@ -3101,9 +3101,10 @@ static void testEffects(void)
     } kFx[] = {{UI_OPT_EFFECT_GLOW, "video.effect_glow"},
                {UI_OPT_EFFECT_DEPTH_OF_FIELD, "video.effect_depth_of_field"},
                {UI_OPT_EFFECT_SOFTENING, "video.effect_softening"},
-               {UI_OPT_EFFECT_MOTION_BLUR, "video.effect_motion_blur"},
                {UI_OPT_EFFECT_FOG, "video.effect_fog"},
                {UI_OPT_EFFECT_CINEMATIC_BARS, "video.effect_cinematic_bars"}};
+
+    const int nFx = (int)(sizeof(kFx) / sizeof(kFx[0]));
 
     useConfig("version = 1\n");
     int mainL = enterMain(1);
@@ -3115,7 +3116,7 @@ static void testEffects(void)
     press(0x10);
     CHECK(settle(mainL, 60), "Effects: back");
 
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < nFx; i++) {
         CHECK(strcmp(ui_settings_value_text(kFx[i].opt), "On") == 0, "effect %d: On by default", i);
         ui_settings_step(kFx[i].opt, 1);
         CHECK(strcmp(ui_settings_value_text(kFx[i].opt), "Off") == 0, "effect %d: Off", i);
@@ -3124,15 +3125,68 @@ static void testEffects(void)
         path(p, sizeof(p), "settings_test.toml");
         IcoToml *t = ico_toml_load(p);
         CHECK(t != NULL, "config %d", i);
-        for (int j = 0; t && j < 6; j++) {
+        for (int j = 0; t && j < nFx; j++) {
             CHECK(ico_toml_get_bool(t, kFx[j].key, 1) == (j > i), "%s after step %d", kFx[j].key,
                   i);
         }
         ico_toml_free(t);
     }
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < nFx; i++) {
         ui_settings_step(kFx[i].opt, -1);
         CHECK(strcmp(ui_settings_value_text(kFx[i].opt), "On") == 0, "effect %d: On again", i);
+    }
+
+    /* Motion blur: Off, Original (the default), Smooth, around; each step
+       written as the switch and the way ([video] effect_motion_blur,
+       effect_motion_blur_mode), the getter at once, the other effects
+       untouched */
+    static const struct {
+        int dir;
+        const char *text;
+        int on, smooth;
+    } kBlur[] = {{0, "Original", 1, 0}, {1, "Smooth", 1, 1}, {1, "Off", 0, 1},
+                 {1, "Original", 1, 0}, {-1, "Off", 0, 0},   {-1, "Smooth", 1, 1},
+                 {-1, "Original", 1, 0}};
+
+    for (size_t i = 0; i < sizeof(kBlur) / sizeof(kBlur[0]); i++) {
+        if (kBlur[i].dir) {
+            ui_settings_step(UI_OPT_EFFECT_MOTION_BLUR, kBlur[i].dir);
+        }
+        CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_MOTION_BLUR), kBlur[i].text) == 0,
+              "motion blur step %zu: %s (%s)", i, kBlur[i].text,
+              ui_settings_value_text(UI_OPT_EFFECT_MOTION_BLUR));
+        CHECK(ico_video_effect_motion_blur() == kBlur[i].on &&
+                  ico_video_effect_motion_blur_smooth() == (kBlur[i].on && kBlur[i].smooth),
+              "motion blur step %zu: the getters", i);
+        CHECK(ui_settings_save() == 0, "motion blur save %zu", i);
+        char p[1100];
+        path(p, sizeof(p), "settings_test.toml");
+        IcoToml *t = ico_toml_load(p);
+        /* Off keeps the way chosen last: Right from Smooth to Off writes
+           "smooth" still, so Left from there comes back to Smooth */
+        const char *got = ico_toml_get(t, "video.effect_motion_blur_mode");
+        const char *mode = got ? got : "?";
+        CHECK(t != NULL && ico_toml_get_bool(t, "video.effect_motion_blur", 2) == kBlur[i].on &&
+                  strcmp(mode, kBlur[i].smooth ? "smooth" : "original") == 0,
+              "motion blur step %zu: the file has %d and \"%s\"", i,
+              t ? ico_toml_get_bool(t, "video.effect_motion_blur", 2) : -1, mode);
+        for (int j = 0; t && j < nFx; j++) {
+            CHECK(ico_toml_get_bool(t, kFx[j].key, 0) == 1, "%s on beside the motion blur",
+                  kFx[j].key);
+        }
+        ico_toml_free(t);
+    }
+    /* the note under the row, and the page with it from both menus */
+    {
+        int fl = openPage(enterMain(1), 1, UI_PAGE_EFFECTS);
+        CHECK(fl == ui_settings_page_layout(UI_PAGE_EFFECTS), "Effects again (title)");
+        CHECK(noteStarting(UI_PAGE_EFFECTS, "Original moves the trail") >= 0,
+              "the Motion blur note");
+        checkPageFits(UI_PAGE_EFFECTS, "Effects with the Motion blur note (title)");
+        press(0x10);
+        fl = openPage(enterMain(0), 1, UI_PAGE_EFFECTS);
+        checkPageFits(UI_PAGE_EFFECTS, "Effects with the Motion blur note (pause)");
+        press(0x10);
     }
 
     for (int title = 1; title >= 0; title--) {

@@ -495,6 +495,9 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_VAL_SHARP] = "Nítido",
     [UI_STR_EFFECT_WATER_NOTE] =
         "Nítido dibuja los reflejos del agua a la resolución elegida; Original mantiene los reflejos más suaves de PS2.",
+    [UI_STR_VAL_SMOOTH] = "Fluido",
+    [UI_STR_EFFECT_MOTION_BLUR_NOTE] =
+        "Original hace avanzar la estela con los fotogramas del juego. Fluido la hace avanzar con cada fotograma mostrado, con la misma longitud de estela.",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Franjas de cine",
     [UI_STR_OPT_FULL_PIXEL] = "Píxeles exactos de pantalla",
     /* Settings > Graphics driver (Android), Quit game */

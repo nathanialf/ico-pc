@@ -654,6 +654,10 @@ typedef enum UiStrId {
     UI_STR_OPT_EFFECT_WATER,
     UI_STR_VAL_SHARP,
     UI_STR_EFFECT_WATER_NOTE,
+    /* Effects > Motion blur: Off (UI_STR_OFF), Original (UI_STR_VAL_ORIGINAL)
+       or Smooth, and the note under the row */
+    UI_STR_VAL_SMOOTH,
+    UI_STR_EFFECT_MOTION_BLUR_NOTE,
     /* the Korean language's own name, the same in every table (the Menu
        language row, after UI_STR_LANG_JA) */
     UI_STR_LANG_KO,

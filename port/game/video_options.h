@@ -58,6 +58,12 @@
  *                           true        the game's own picture effects: the
  *                                       light bloom and sun flare, the distance blur, the
  *                                       edge softening, the motion trail, the distance fog
+ *   [video] effect_motion_blur_mode
+ *                           "original"  "original" | "smooth": with effect_motion_blur on,
+ *                                       the trail moved on with the game's own frames
+ *                                       (Original) or with every frame shown, the same
+ *                                       length of trail (Smooth); anything else is
+ *                                       "original" (older builds ignore the key)
  *   [video] effect_water_sharp
  *                           false       the reflections in water (and the picture through
  *                                       the queen's barrier) at the scene's resolution;
@@ -170,10 +176,14 @@ typedef struct IcoVideoOptions {
     /* the game's own picture effects, 1 = on (the PS2 picture),
        applied whatever the preset; the game reads them through the
        ico_video_effect_* getters below */
-    int effectGlow;          /* the flare and bloom passes and the sun (staticBlur.c) */
-    int effectDepthOfField;  /* the depth-of-field pass (staticBlur.c depthField) */
-    int effectSoftening;     /* the edge softening (GsBase.c gsb_antiAlias) */
-    int effectMotionBlur;    /* the motion blur (staticBlur.c MotionBlur) */
+    int effectGlow;         /* the flare and bloom passes and the sun (staticBlur.c) */
+    int effectDepthOfField; /* the depth-of-field pass (staticBlur.c depthField) */
+    int effectSoftening;    /* the edge softening (GsBase.c gsb_antiAlias) */
+    int effectMotionBlur;   /* the motion blur (staticBlur.c MotionBlur) */
+    /* the motion blur's way while it is on: 0 Original (the game's, once a
+       tick), 1 Smooth (rd.h RdSettings.motionBlurSmooth: moved on at every
+       present); [video] effect_motion_blur_mode */
+    int effectMotionBlurSmooth;
     int effectFog;           /* the depth fog (ZFog.c fog_DrawFog) */
     int effectCinematicBars; /* the cutscene bars (GsBase.c); 1 = on */
     /* the water's reflections (puddle.c, pool.c) and the queen barrier's
@@ -283,6 +293,17 @@ int ico_video_effect_cinematic_bars(void);
 /* [video] effect_water_sharp, 1 (Sharp) or 0 (Original): the host hands it
    to the renderer (window_host.c video_settings, RdSettings.waterSharp) */
 int ico_video_effect_water_sharp(void);
+/* 1 when the motion blur is on and Smooth ([video] effect_motion_blur =
+   true, effect_motion_blur_mode = "smooth"): the host hands it to the
+   renderer (window_host.c video_settings, RdSettings.motionBlurSmooth);
+   0 for Off and Original */
+int ico_video_effect_motion_blur_smooth(void);
+/* The Motion blur row's value in the log's words: "off", "original" or
+   "smooth" */
+const char *ico_video_motion_blur_name(const IcoVideoOptions *o);
+/* "original" (0) or "smooth" (1), any case: 0 understood, -1 not (*smooth
+   untouched) */
+int ico_video_parse_motion_blur_mode(const char *s, int *smooth);
 /* [video] effects_depth, 1 or 0 */
 int ico_video_effects_depth(void);
 /* The anti-aliasing in force, ICO_AA_*: the anti_aliasing option, except

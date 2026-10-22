@@ -498,6 +498,9 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_VAL_SHARP] = "Scharf",
     [UI_STR_EFFECT_WATER_NOTE] =
         "Scharf zeichnet die Spiegelungen im Wasser in der gewählten Auflösung; Original behält die weicheren Spiegelungen der PS2.",
+    [UI_STR_VAL_SMOOTH] = "Flüssig",
+    [UI_STR_EFFECT_MOTION_BLUR_NOTE] =
+        "Original bewegt die Spur mit den Bildern des Spiels weiter. Flüssig bewegt sie mit jedem gezeigten Bild weiter, bei gleicher Länge der Spur.",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Kinobalken",
     [UI_STR_OPT_FULL_PIXEL] = "Exakte Bildschirmpixel",
     /* Settings > Graphics driver (Android), Quit game */
