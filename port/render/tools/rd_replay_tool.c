@@ -65,6 +65,11 @@
  *                         alone holds none (the trail starts with it); the
  *                         --prev dumps and --presents' PREV feed it, as
  *                         the presents of a run do
+ *   --no-crack-fill       the crack filler off (rd_crack_fill.c; [dev]
+ *                         crack_fill = false): above 1x under --enhanced the
+ *                         pixels no draw covered between drawn ones keep the
+ *                         clear and take the fog's colour, as before it (an
+ *                         A/B of the filler)
  *   --filter F            original, trilinear or anisotropic
  *   --mirror              the mirror mode: UI prims flipped at replay, the
  *                         present flipped (any preset)
@@ -128,6 +133,9 @@
  *                         RdPerfRecord); a third: the VU vertex pre-pass,
  *                         on or off, its passes, vertices and draws and the
  *                         mesh and grid draws drawn the old way; the last:
+ *                         the crack filler's line (its passes, the pixels
+ *                         it filled, every filled replay counted, the scale
+ *                         and the reach, or why it did not draw); then
  *                         the region-mode mesh vertices in front of the eye
  *                         whose GS Z saturates (on the CPU, vu1_ref), which a
  *                         GPU-clipped triangle draws at their GS position in
@@ -1401,7 +1409,8 @@ int main(int argc, char **argv)
         fprintf(stderr,
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
                 "[--aspect A] [--resolution WxH|Nx] [--full-height] [--full-pixel] "
-                "[--border-mask] [--water-sharp] [--motion-blur original|smooth] [--filter F] "
+                "[--border-mask] [--water-sharp] [--motion-blur original|smooth] [--no-crack-fill] "
+                "[--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
                 "[--time N] [--keys] "
@@ -1529,6 +1538,9 @@ int main(int argc, char **argv)
             overlay = true;
         } else if (strcmp(argv[i], "--stats") == 0) {
             stats = true;
+            rd__crack_fill_count_all(true); /* the replay's own count */
+        } else if (strcmp(argv[i], "--no-crack-fill") == 0) {
+            rd__crack_fill_set_enabled(false);
         } else if (strcmp(argv[i], "--keys") == 0) {
             keysCheck = true;
         } else if (strcmp(argv[i], "--pass-times") == 0) {
@@ -1953,6 +1965,15 @@ int main(int argc, char **argv)
                dump, g_rd.vuPrepass ? "on" : "off", pr->vuPrePasses, pr->vuPreVertices,
                pr->vuPreDraws, pr->vuPreFallbacks, pr->vuPreSprites, pr->vuTriSlots,
                pr->vuTickDraws);
+        /* the crack filler above 1x (rd_crack_fill.c): its count read back */
+        rd__crack_fill_wait();
+        RdCrackCounts cc;
+        rd__crack_fill_counts(&cc);
+        printf("%s: stats: crack fill %s: %u passes, %llu pixels filled (%llu replays counted; "
+               "scale %.4gx%.4g, reach %ux%u texels; %llu fogged replays above 1x not filled)\n",
+               dump, cc.enabled ? "on" : "off", pr->crackFillPasses, (unsigned long long)cc.pixels,
+               (unsigned long long)cc.counted, (double)cc.sx, (double)cc.sy, cc.rx, cc.ry,
+               (unsigned long long)cc.skipped);
         uint32_t satDraws = 0;
         const uint64_t sat = satZVertices(rf, &satDraws);
         printf("%s: stats: VU corners with a saturated GS Z: %llu vertices of region-mode meshes "

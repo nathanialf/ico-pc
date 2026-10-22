@@ -527,6 +527,9 @@ static const struct {
     /* false: the VU vertex pre-pass off, every VU draw the old way (an
        A/B; port/render/rd_replay_vu.c rd__vu_prepass_init) */
     {"dev.vu_prepass", "vu_prepass"},
+    /* false: the crack filler above 1x off (an A/B; port/render/rd_crack_fill.c
+       rd__crack_fill_init) */
+    {"dev.crack_fill", "crack_fill"},
     /* true: every replay timed pass by pass, logs/ico-pc-passes.csv
        (port/render/rd_perf.c rd__perf_passes_init, window_host.c) */
     {"dev.perf_passes", "perf_passes"},
@@ -573,6 +576,9 @@ static const struct {
     /* port/render/rd_replay_vu.c rd__vu_prepass_init: 0 draws without the
        vertex pre-pass */
     {"vu_prepass", "ICO_RD_VU_PREPASS"},
+    /* port/render/rd_crack_fill.c rd__crack_fill_init: 0 leaves the pixels
+       no draw covered above 1x to the fog */
+    {"crack_fill", "ICO_RD_CRACK_FILL"},
     /* port/render/rd_perf.c rd__perf_passes_init: 1 times every replay pass
        by pass (the window writes ico-pc-passes.csv) */
     {"perf_passes", "ICO_RD_PERF_PASSES"},
