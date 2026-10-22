@@ -8,11 +8,12 @@
  * and each editable control (ICO_TOUCH_CTL_*, touch.h: the D-pad is one
  * control, the four keys as one cross), where its centre is as an anchor
  * edge pair and an offset in q (layout millimetres: the unit the defaults
- * are stored in, touch.c), a size scale, an opacity multiplier, and for the
- * look pad its size in q. An unset control is at its default place. The
- * layout builder (ico_touch_layout_edits) applies them after place(): the
- * rects clamped inside the region and out of the hinge band, hidden
- * controls (alpha 0) skipped by the hit test.
+ * are stored in, touch.c; for the look pad, a rectangle, the offsets are
+ * those of its edges on the anchor sides), a size scale, an opacity
+ * multiplier, and for the look pad its size in q. An unset control is at
+ * its default place. The layout builder (ico_touch_layout_edits) applies
+ * them after place(): the rects clamped inside the region and out of the
+ * hinge band, hidden controls (alpha 0) skipped by the hit test.
  *
  * The rails: scale ICO_TOUCH_EDIT_SCALE_MIN..MAX; alpha at least
  * ICO_TOUCH_EDIT_ALPHA_MIN for every control that is not hideable
@@ -40,22 +41,36 @@ enum { ICO_TOUCH_ANCHOR_L = 0, ICO_TOUCH_ANCHOR_R = 1 };
 
 enum { ICO_TOUCH_ANCHOR_T = 0, ICO_TOUCH_ANCHOR_B = 1 };
 
+/* ax or ay of a control at its default place on that axis: the text
+   "hidden" parses to it (the text keeps no position) */
+enum { ICO_TOUCH_ANCHOR_DEFAULT = 2 };
+
 #define ICO_TOUCH_EDIT_SCALE_MIN 0.7f /* a face at 0.7 is 7.7 mm across: Android's 48 dp */
 #define ICO_TOUCH_EDIT_SCALE_MAX 1.6f
 #define ICO_TOUCH_EDIT_ALPHA_MIN 0.25f /* the floor of a control that cannot be hidden */
 #define ICO_TOUCH_EDIT_GRID_DEFAULT 4.0f
 #define ICO_TOUCH_EDIT_UNDO 8
+#define ICO_TOUCH_EDIT_LOOK_MIN 20.0f    /* the look pad's least width and height, q */
+#define ICO_TOUCH_EDIT_OFFSET_MAX 500.0f /* the largest offset or look pad side, q */
+#define ICO_TOUCH_EDIT_DRAG_MM 2.0f      /* a shorter move is a tap, q */
+#define ICO_TOUCH_EDIT_REFUSED 60        /* ticks the refused note shows */
+/* the gamepad's D-pad nudge repeats after this many ticks held, then every
+   ICO_TOUCH_EDIT_REPEAT ticks (8 a second at the 25 Hz Main tick) */
+#define ICO_TOUCH_EDIT_REPEAT_DELAY 8
+#define ICO_TOUCH_EDIT_REPEAT 3
 
 /* the grid sizes the Grid size row offers, in q */
 extern const float ico_touch_edit_grids[3];
 
 typedef struct IcoTouchCtlEdit {
     unsigned char set;    /* 0: the default place (nothing stored or written) */
-    unsigned char ax, ay; /* ICO_TOUCH_ANCHOR_* */
-    float dx, dy;         /* the control's centre from those edges, in q (>= 0) */
+    unsigned char ax, ay; /* ICO_TOUCH_ANCHOR_* (DEFAULT: the default place) */
+    float dx, dy;         /* the control's centre from those edges, in q (>= 0);
+                             the look pad's edges on those sides */
     float scale;          /* ICO_TOUCH_EDIT_SCALE_MIN..MAX, 1 = the default size */
     float alpha;          /* 0..1 times the Touch opacity setting; 0 = hidden */
-    float w, h;           /* ICO_TOUCH_CTL_LOOK only: the pad's size in q (its centre is dx, dy) */
+    float w, h;           /* ICO_TOUCH_CTL_LOOK only: the pad's size in q at scale 1;
+                             0 its default size */
 } IcoTouchCtlEdit;
 
 typedef struct IcoTouchEdits {
@@ -84,18 +99,29 @@ unsigned int ico_touch_ctl_zones(int ctl);
 /* One control's edit as config text and back. Text: whitespace-separated
    tokens "l<n>"|"r<n>" (the x anchor and offset), "t<n>"|"b<n>", "s<scale>"
    (optional, 1 when absent), "o<percent>" (optional, 100 when absent), and
-   for the look pad "w<n> h<n>"; "hidden" alone (a hideable control; the
-   text of alpha 0); "default" alone (unset). Examples "r20 b10.5 s1.00
+   for the look pad "w<n> h<n>" (optional, its default size when absent);
+   "hidden" alone (a hideable control at its default place; the text of
+   alpha 0); "default" alone (unset). Numbers are plain decimals (no sign,
+   no exponent, a point whatever the locale). Examples "r20 b10.5 s1.00
    o100", "l50 t0 w60 h30 o100". ico_touch_edit_text writes the same form
-   (numbers to two decimals, trailing zeros kept) into buf and returns it;
-   ico_touch_edit_parse fills *c for ctl and returns 0, or -1 for a token it
-   does not know, a value out of range, a missing anchor, or "hidden" on a
-   control that cannot be hidden: *c is then left unset. */
+   into buf and returns it: offsets and sizes to two decimals with trailing
+   zeros dropped, the scale to two decimals always (the look pad's only
+   when not 1 with a size), the opacity as a whole percent; "default" for
+   an unset edit or one at its default place. ico_touch_edit_parse fills
+   *c for ctl and returns 0, or -1 for a token it does not know (w/h on a
+   control that is not the look pad), a value out of range (offsets 0..
+   ICO_TOUCH_EDIT_OFFSET_MAX, s SCALE_MIN..MAX, o 0..100, w/h LOOK_MIN..
+   OFFSET_MAX), a token twice, a missing anchor, or "hidden" on a control
+   that cannot be hidden: *c is then left unset. A parsed edit is
+   sanitized (an o under the floor of a control that cannot be hidden
+   becomes the floor). */
 const char *ico_touch_edit_text(const IcoTouchCtlEdit *c, char *buf, unsigned size);
 int ico_touch_edit_parse(IcoTouchCtlEdit *c, int ctl, const char *text);
 /* The rails on one edit in place: scale clamped to the range, alpha to 0..1
-   and at least ICO_TOUCH_EDIT_ALPHA_MIN unless ctl is hideable, offsets at
-   least 0, the look pad's size at least its minimum. */
+   and at least ICO_TOUCH_EDIT_ALPHA_MIN unless ctl is hideable, offsets
+   0..ICO_TOUCH_EDIT_OFFSET_MAX, an unknown anchor DEFAULT, the look pad's
+   size 0 or ICO_TOUCH_EDIT_LOOK_MIN..OFFSET_MAX (w and h 0 on the others).
+   An unset edit is left alone. */
 void ico_touch_edit_sanitize(IcoTouchCtlEdit *c, int ctl);
 /* Clear every control of one posture (rule), or of all (rule < 0); snap
    and grid untouched; gen bumped. */
@@ -176,6 +202,14 @@ typedef struct IcoTouchEditor {
     IcoTouchRect tb[ICO_TOUCH_ED_TB_COUNT];
     IcoTouchRect confirm[ICO_TOUCH_ED_CF_COUNT];
     IcoTouchRect ctl[ICO_TOUCH_CTL_COUNT]; /* each control's bounding box */
+    /* the gesture (touch_edit.c) */
+    int grab;       /* the control the first finger went down on, -1 none */
+    int consumed;   /* the first finger is spent (the toolbar, the strip, a pinch's end) */
+    int pushed;     /* the gesture has pushed its undo entry */
+    float d0;       /* the fingers' distance at the pinch's start, pixels */
+    int confirmSel; /* the confirm strip's key the gamepad is on (ICO_TOUCH_ED_CF_*) */
+    int lastChange; /* the last tick changed the work: a posture flip right after
+                       (a control put on a flat crease) is undone and refused */
 } IcoTouchEditor;
 
 /* Start editing posture rule: work = *live, active = 1, nothing selected.
@@ -197,10 +231,26 @@ void ico_touch_edit_end(IcoTouchEditor *ed, int keep);
 /* What the drawing needs, from the last tick (touch.h IcoTouchEditView). */
 void ico_touch_edit_view(const IcoTouchEditor *ed, const IcoTouchLayout *l, IcoTouchEditView *out);
 
+/* The box (pixels, before the clamp) the edit c gives control ctl on l at
+   its scale: the D-pad's cross, a round button's square, the stick's 2 R
+   square, the look pad's rect (an unset c: scale 1, the look pad as l has
+   it). */
+void ico_touch_edit_box_size(const IcoTouchLayout *l, int ctl, const IcoTouchCtlEdit *c, float *w,
+                             float *h);
+/* Moves the centre (cx, cy) of a w x h box inside l's region and out of its
+   hinge band, to the nearer side of the band that holds it (touch.c, the
+   clamp the edits get). 1 when it is clear of the band and inside; 0 when
+   only inside (or centred on an axis the region is too small for). */
+int ico_touch_edit_clamp(const IcoTouchLayout *l, float *cx, float *cy, float w, float h);
+
 /* The toolbar's and confirm strip's hit boxes for a layout (the spot the
    plan proves clear of every default control: FULL and TABLETOP a 2 x 5
    block at x Rt-53..Rt-19, y T+13..T+28 in q; SPLIT 2 columns x 5 rows at
-   x L+43..L+55, y T+13..T+52). Tests read it too. */
+   x L+43..L+55, y T+13..T+52; the derivation is touch_edit.c's). The keys
+   in ICO_TOUCH_ED_TB_* order: FULL and TABLETOP row 0 Done..Grid, row 1
+   Size -..All; SPLIT column 0 Done..Grid, column 1 Size -..All. The
+   confirm strip: FULL and TABLETOP the first row as three keys, SPLIT the
+   first three rows each one key across both columns. Tests read it too. */
 void ico_touch_edit_toolbar(const IcoTouchLayout *l, IcoTouchRect tb[ICO_TOUCH_ED_TB_COUNT],
                             IcoTouchRect confirm[ICO_TOUCH_ED_CF_COUNT]);
 

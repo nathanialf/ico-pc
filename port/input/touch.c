@@ -10,6 +10,8 @@
 
 #include <string.h>
 
+#include "touch_edit.h"
+
 enum { ROLE_PENDING = 0, ROLE_BUTTON, ROLE_STICK, ROLE_LOOK, ROLE_IGNORED };
 
 /*
@@ -53,6 +55,27 @@ enum { ROLE_PENDING = 0, ROLE_BUTTON, ROLE_STICK, ROLE_LOOK, ROLE_IGNORED };
  *   - SPLIT, left of the band: 3 + 12 + 2 + 24 + 2 + 12 + 3 = 58 (L1, the
  *     D-pad, Select); right of it: Start and R2 need 3 + 12 + 2 + 12 + 3 =
  *     32, Square's left (Rt-35) 3 from the band needs 38 (40).
+ *
+ * The player's edits (touch_edit.h) apply after place(), for the layout's
+ * posture only (apply_edits): a set control's centre is dx q from its x
+ * anchor edge of R and dy q from its y anchor edge (the look pad: its
+ * anchor-side edges are, so "r0 t0" is the upper right corner), its size
+ * the default dimension (Q_DPAD_KEY, Q_RECT_W x Q_RECT_H, Q_FACE_R, Q_R1_R,
+ * ICO_TOUCH_STICK_MM; the look pad w x h q) times the scale. The box is
+ * then clamped inside R and pushed out of the hinge band to the nearer side
+ * that holds it (shrunk to ICO_TOUCH_EDIT_SCALE_MIN, the look pad to the
+ * side's width, when no side does; inside R regardless when even that
+ * fails: a control is never dropped), and its rects are written as place()
+ * writes them. The opacity goes into button[].alpha, stickAlpha and
+ * lookAlpha (0 hidden: hit() skips the button, the step the area). A moved
+ * stick's area is a 4.4 R square around its home, cut to R and to its side
+ * of the band (the buttons still win the hit test); the look pad's area is
+ * its own rect; lookR stays the default, so the look sensitivity does not
+ * follow the stick's size. faceX/faceY stay the defaults' (place() derives
+ * the areas from them); dpadX/dpadY follow an edited D-pad. With no edits,
+ * or none set, the layout is the default one byte for byte but editGen.
+ * The flat-crease check below sees the edited positions: place, apply, the
+ * check, and on a crease under a control TABLETOP's place and apply.
  */
 #define Q_MARGIN 3.0f
 #define Q_GAP 2.0f
@@ -102,6 +125,7 @@ static void button(IcoTouchLayout *l, int z, IcoTouchRect r, int round, unsigned
     l->button[z].rect = r;
     l->button[z].round = round;
     l->button[z].pad = pad;
+    l->button[z].alpha = 1.0f;
 }
 
 static void face(IcoTouchLayout *l, int z, float cx, float cy, float r, unsigned int pad)
@@ -189,6 +213,7 @@ static void place(IcoTouchLayout *l, float q)
     /* the look pad: the rest of the upper right */
     x0 = split ? l->band.x + l->band.w : l->stickArea.x + l->stickArea.w;
     l->lookArea = rect(x0, T, Rt - x0, (l->faceY - d - r - g) - T);
+    l->stickAlpha = l->lookAlpha = 1.0f;
 }
 
 /* the largest q (at most q0) that fits the region under the rule */
@@ -206,13 +231,14 @@ static float fit(const IcoTouchLayout *l, float q0)
     return q > 0.0f ? q : 0.0f;
 }
 
-/* any button, or the idle stick's square, shares a point with the rect */
+/* any button that is not hidden, or the idle stick's square, shares a
+   point with the rect */
 static int controls_touch(const IcoTouchLayout *l, IcoTouchRect band)
 {
     int z;
 
     for (z = 0; z < ICO_TOUCH_BUTTONS; z++) {
-        if (touches(l->button[z].rect, band)) {
+        if (l->button[z].alpha > 0.0f && touches(l->button[z].rect, band)) {
             return 1;
         }
     }
@@ -278,8 +304,311 @@ static void tabletop(IcoTouchLayout *l, IcoTouchRect band)
     l->region = rect(l->safeRect.x, y, l->safeRect.w, l->safeRect.y + l->safeRect.h - y);
 }
 
-IcoTouchLayout ico_touch_layout_env(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size,
-                                    const IcoTouchEnv *env)
+/* --- the edits (touch_edit.h) --------------------------------------------- */
+
+#define CLAMP_EPS 0.01f /* pixels: a box this far past an edge still fits */
+
+/* the rects share some area (touching is not overlapping) */
+static int overlaps(IcoTouchRect a, IcoTouchRect b)
+{
+    return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+static float clampf_(float v, float lo, float hi)
+{
+    if (!(v >= lo)) {
+        v = lo; /* also a NaN */
+    }
+    return v > hi ? hi : v;
+}
+
+static int box_inside(IcoTouchRect R, float cx, float cy, float w, float h)
+{
+    return cx - 0.5f * w >= R.x - CLAMP_EPS && cx + 0.5f * w <= R.x + R.w + CLAMP_EPS &&
+           cy - 0.5f * h >= R.y - CLAMP_EPS && cy + 0.5f * h <= R.y + R.h + CLAMP_EPS;
+}
+
+int ico_touch_edit_clamp(const IcoTouchLayout *l, float *cx, float *cy, float w, float h)
+{
+    const IcoTouchRect R = l->region, b = l->band;
+    float cand[4][2], best = 0.0f, bx = 0.0f, by = 0.0f;
+    int i, found = 0;
+
+    /* inside the region (centred on an axis it is too small for) */
+    *cx = w >= R.w ? R.x + 0.5f * R.w : clampf_(*cx, R.x + 0.5f * w, R.x + R.w - 0.5f * w);
+    *cy = h >= R.h ? R.y + 0.5f * R.h : clampf_(*cy, R.y + 0.5f * h, R.y + R.h - 0.5f * h);
+    if (!(b.w > 0.0f && b.h > 0.0f) || !overlaps(rect(*cx - 0.5f * w, *cy - 0.5f * h, w, h), b)) {
+        return box_inside(R, *cx, *cy, w, h);
+    }
+    /* out of the band: beside it on the nearer side that holds the box */
+    cand[0][0] = b.x - 0.5f * w;
+    cand[0][1] = *cy;
+    cand[1][0] = b.x + b.w + 0.5f * w;
+    cand[1][1] = *cy;
+    cand[2][0] = *cx;
+    cand[2][1] = b.y - 0.5f * h;
+    cand[3][0] = *cx;
+    cand[3][1] = b.y + b.h + 0.5f * h;
+    for (i = 0; i < 4; i++) {
+        float d = (cand[i][0] - *cx) * (cand[i][0] - *cx) + (cand[i][1] - *cy) * (cand[i][1] - *cy);
+
+        if (box_inside(R, cand[i][0], cand[i][1], w, h) && (!found || d < best)) {
+            found = 1;
+            best = d;
+            bx = cand[i][0];
+            by = cand[i][1];
+        }
+    }
+    if (!found) {
+        return 0; /* inside the region, on the band */
+    }
+    *cx = bx;
+    *cy = by;
+    return 1;
+}
+
+/* r cut to the region and, when the band crosses the region, to the side of
+   it that holds (px, py) */
+static IcoTouchRect cut_to_side(const IcoTouchLayout *l, IcoTouchRect r, float px, float py)
+{
+    const IcoTouchRect R = l->region, b = l->band;
+    float x0 = maxf_(r.x, R.x), y0 = maxf_(r.y, R.y);
+    float x1 = minf_(r.x + r.w, R.x + R.w), y1 = minf_(r.y + r.h, R.y + R.h);
+
+    if (b.w > 0.0f && b.h > 0.0f && overlaps(rect(x0, y0, x1 - x0, y1 - y0), b)) {
+        if (b.y <= R.y && b.y + b.h >= R.y + R.h) { /* a vertical band */
+            if (px < b.x + 0.5f * b.w) {
+                x1 = minf_(x1, b.x);
+            } else {
+                x0 = maxf_(x0, b.x + b.w);
+            }
+        } else if (py < b.y + 0.5f * b.h) {
+            y1 = minf_(y1, b.y);
+        } else {
+            y0 = maxf_(y0, b.y + b.h);
+        }
+    }
+    return rect(x0, y0, maxf_(x1 - x0, 0.0f), maxf_(y1 - y0, 0.0f));
+}
+
+/* the widest the look pad may be beside a band that crosses the region */
+static void look_shrink(const IcoTouchLayout *l, float *w, float *h)
+{
+    const IcoTouchRect R = l->region, b = l->band;
+
+    *w = minf_(*w, R.w);
+    *h = minf_(*h, R.h);
+    if (b.w > 0.0f && b.h > 0.0f) {
+        if (b.y <= R.y && b.y + b.h >= R.y + R.h) {
+            *w = minf_(*w, maxf_(b.x - R.x, R.x + R.w - (b.x + b.w)));
+        } else if (b.x <= R.x && b.x + b.w >= R.x + R.w) {
+            *h = minf_(*h, maxf_(b.y - R.y, R.y + R.h - (b.y + b.h)));
+        }
+    }
+}
+
+/* the button zone of a control that is one button; -1 for the D-pad, the
+   stick and the look pad */
+static int ctl_zone(int ctl)
+{
+    static const signed char zone[ICO_TOUCH_CTL_COUNT] = {-1,
+                                                          ICO_TOUCH_B_CROSS,
+                                                          ICO_TOUCH_B_CIRCLE,
+                                                          ICO_TOUCH_B_SQUARE,
+                                                          ICO_TOUCH_B_TRIANGLE,
+                                                          ICO_TOUCH_B_R1,
+                                                          ICO_TOUCH_B_L1,
+                                                          ICO_TOUCH_B_L2,
+                                                          ICO_TOUCH_B_R2,
+                                                          ICO_TOUCH_B_SELECT,
+                                                          ICO_TOUCH_B_START,
+                                                          -1,
+                                                          -1};
+
+    return ctl >= 0 && ctl < ICO_TOUCH_CTL_COUNT ? zone[ctl] : -1;
+}
+
+/* the D-pad's four keys around (cx, cy), key size k, as place() puts them */
+static void dpad_keys(IcoTouchLayout *l, float cx, float cy, float k)
+{
+    l->dpadX = cx;
+    l->dpadY = cy;
+    button(l, ICO_TOUCH_B_UP, rect(l->dpadX - 0.5f * k, l->dpadY - 1.5f * k, k, k), 0, ICO_PAD_UP);
+    button(l, ICO_TOUCH_B_DOWN, rect(l->dpadX - 0.5f * k, l->dpadY + 0.5f * k, k, k), 0,
+           ICO_PAD_DOWN);
+    button(l, ICO_TOUCH_B_LEFT, rect(l->dpadX - 1.5f * k, l->dpadY - 0.5f * k, k, k), 0,
+           ICO_PAD_LEFT);
+    button(l, ICO_TOUCH_B_RIGHT, rect(l->dpadX + 0.5f * k, l->dpadY - 0.5f * k, k, k), 0,
+           ICO_PAD_RIGHT);
+}
+
+/* A control's box at scale 1 (bw x bh, pixels) and its default box (the
+   placed layout's) in box0; 0 for no such control. The look pad's size is
+   the edit's when it has one. */
+static int base_size(const IcoTouchLayout *l, int ctl, const IcoTouchCtlEdit *c, float *bw,
+                     float *bh, IcoTouchRect *box0)
+{
+    const float q = l->unit;
+    const int z = ctl_zone(ctl);
+
+    if (ctl == ICO_TOUCH_CTL_DPAD) {
+        *bw = *bh = 3.0f * Q_DPAD_KEY * q;
+        *box0 = rect(l->dpadX - 0.5f * *bw, l->dpadY - 0.5f * *bh, *bw, *bh);
+    } else if (ctl == ICO_TOUCH_CTL_STICK) {
+        *bw = *bh = 2.0f * ICO_TOUCH_STICK_MM * q;
+        *box0 = rect(l->stickHomeX - l->stickR, l->stickHomeY - l->stickR, 2.0f * l->stickR,
+                     2.0f * l->stickR);
+    } else if (ctl == ICO_TOUCH_CTL_LOOK) {
+        *box0 = l->lookArea;
+        *bw = c != NULL && c->set && c->w > 0.0f ? c->w * q : box0->w;
+        *bh = c != NULL && c->set && c->h > 0.0f ? c->h * q : box0->h;
+    } else if (z >= 0) {
+        *box0 = l->button[z].rect;
+        if (l->button[z].round) {
+            *bw = *bh = 2.0f * (ctl == ICO_TOUCH_CTL_R1 ? Q_R1_R : Q_FACE_R) * q;
+        } else {
+            *bw = Q_RECT_W * q;
+            *bh = Q_RECT_H * q;
+        }
+    } else {
+        return 0;
+    }
+    return 1;
+}
+
+void ico_touch_edit_box_size(const IcoTouchLayout *l, int ctl, const IcoTouchCtlEdit *c, float *w,
+                             float *h)
+{
+    const float s = c != NULL && c->set ? c->scale : 1.0f;
+    IcoTouchRect box0;
+    float bw = 0.0f, bh = 0.0f;
+
+    if (!base_size(l, ctl, c, &bw, &bh, &box0)) {
+        bw = bh = 0.0f;
+    }
+    *w = bw * s;
+    *h = bh * s;
+}
+
+/* One set control's edit (sanitized) on the placed layout. */
+static void apply_one(IcoTouchLayout *l, int ctl, const IcoTouchCtlEdit *c)
+{
+    const IcoTouchRect R = l->region;
+    const float q = l->unit;
+    const int look = ctl == ICO_TOUCH_CTL_LOOK, z = ctl_zone(ctl);
+    IcoTouchRect box0;
+    float s = c->scale, bw, bh, w, h, cx = 0.0f, cy = 0.0f, cxA, cyA;
+    int i;
+
+    if (!base_size(l, ctl, c, &bw, &bh, &box0)) {
+        return;
+    }
+    w = bw * s;
+    h = bh * s;
+
+    /* the centre from the anchors (the look pad's anchor-side edges) */
+    for (i = 0; i < 2; i++) {
+        if (i == 1) {
+            /* no side of the band holds it: smaller, then inside the region
+               whatever happens (never dropped) */
+            if (look) {
+                look_shrink(l, &w, &h);
+            } else {
+                s = ICO_TOUCH_EDIT_SCALE_MIN;
+                w = bw * s;
+                h = bh * s;
+            }
+        }
+        if (c->ax == ICO_TOUCH_ANCHOR_L) {
+            cxA = R.x + c->dx * q + (look ? 0.5f * w : 0.0f);
+        } else if (c->ax == ICO_TOUCH_ANCHOR_R) {
+            cxA = R.x + R.w - c->dx * q - (look ? 0.5f * w : 0.0f);
+        } else {
+            cxA = box0.x + 0.5f * box0.w;
+        }
+        if (c->ay == ICO_TOUCH_ANCHOR_T) {
+            cyA = R.y + c->dy * q + (look ? 0.5f * h : 0.0f);
+        } else if (c->ay == ICO_TOUCH_ANCHOR_B) {
+            cyA = R.y + R.h - c->dy * q - (look ? 0.5f * h : 0.0f);
+        } else {
+            cyA = box0.y + 0.5f * box0.h;
+        }
+        cx = cxA;
+        cy = cyA;
+        if (ico_touch_edit_clamp(l, &cx, &cy, w, h)) {
+            break;
+        }
+    }
+
+    /* at its default place and size (a "hidden" line): the rects stay
+       place()'s to the bit, only the opacity changes */
+    if (c->ax == ICO_TOUCH_ANCHOR_DEFAULT && c->ay == ICO_TOUCH_ANCHOR_DEFAULT && s == 1.0f &&
+        cx == cxA && cy == cyA) {
+        if (ctl == ICO_TOUCH_CTL_DPAD) {
+            l->button[ICO_TOUCH_B_UP].alpha = l->button[ICO_TOUCH_B_DOWN].alpha = c->alpha;
+            l->button[ICO_TOUCH_B_LEFT].alpha = l->button[ICO_TOUCH_B_RIGHT].alpha = c->alpha;
+        } else if (ctl == ICO_TOUCH_CTL_STICK) {
+            l->stickAlpha = c->alpha;
+        } else if (look) {
+            l->lookAlpha = c->alpha;
+        } else {
+            l->button[z].alpha = c->alpha;
+        }
+        return;
+    }
+
+    /* the rects as place() writes them */
+    if (ctl == ICO_TOUCH_CTL_DPAD) {
+        dpad_keys(l, cx, cy, Q_DPAD_KEY * q * s);
+        l->button[ICO_TOUCH_B_UP].alpha = l->button[ICO_TOUCH_B_DOWN].alpha = c->alpha;
+        l->button[ICO_TOUCH_B_LEFT].alpha = l->button[ICO_TOUCH_B_RIGHT].alpha = c->alpha;
+    } else if (ctl == ICO_TOUCH_CTL_STICK) {
+        l->stickR = ICO_TOUCH_STICK_MM * q * s;
+        l->runR = ICO_TOUCH_RUN_RING * l->stickR;
+        l->stickHomeX = cx;
+        l->stickHomeY = cy;
+        l->stickAlpha = c->alpha;
+        if (c->ax <= ICO_TOUCH_ANCHOR_R || c->ay <= ICO_TOUCH_ANCHOR_B) {
+            const float a = 2.2f * l->stickR; /* half of the 4.4 R square */
+
+            l->stickArea = cut_to_side(l, rect(cx - a, cy - a, 2.0f * a, 2.0f * a), cx, cy);
+        }
+    } else if (look) {
+        l->lookArea = rect(cx - 0.5f * w, cy - 0.5f * h, w, h);
+        l->lookAlpha = c->alpha;
+    } else if (l->button[z].round) {
+        face(l, z, cx, cy, (ctl == ICO_TOUCH_CTL_R1 ? Q_R1_R : Q_FACE_R) * q * s, l->button[z].pad);
+        l->button[z].alpha = c->alpha;
+    } else {
+        button(l, z, rect(cx - 0.5f * w, cy - 0.5f * h, w, h), 0, l->button[z].pad);
+        l->button[z].alpha = c->alpha;
+    }
+}
+
+/* The posture's set controls over place()'s layout; editGen e->gen. */
+static void apply_edits(IcoTouchLayout *l, const IcoTouchEdits *e)
+{
+    int ctl;
+
+    if (e == NULL) {
+        return;
+    }
+    l->editGen = e->gen;
+    if (l->rule < 0 || l->rule >= ICO_TOUCH_POSTURES || !(l->unit > 0.0f)) {
+        return;
+    }
+    for (ctl = 0; ctl < ICO_TOUCH_CTL_COUNT; ctl++) {
+        IcoTouchCtlEdit c = e->ctl[l->rule][ctl];
+
+        if (c.set) {
+            ico_touch_edit_sanitize(&c, ctl);
+            apply_one(l, ctl, &c);
+        }
+    }
+}
+
+static IcoTouchLayout build(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size,
+                            const IcoTouchEnv *env, const IcoTouchEdits *edits)
 {
     IcoTouchLayout l;
     IcoTouchRect band = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -331,12 +660,21 @@ IcoTouchLayout ico_touch_layout_env(uint32_t outW, uint32_t outH, IcoTouchInsets
         tabletop(&l, band);
     }
     place(&l, fit(&l, q0));
+    apply_edits(&l, edits);
     if (fold == FOLD_FLAT && controls_touch(&l, band)) {
-        /* a flat crease under a button: below it instead */
+        /* a flat crease under a button (where the edits put it): below it
+           instead, with that posture's edits */
         tabletop(&l, band);
         place(&l, fit(&l, q0));
+        apply_edits(&l, edits);
     }
     return l;
+}
+
+IcoTouchLayout ico_touch_layout_env(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size,
+                                    const IcoTouchEnv *env)
+{
+    return build(outW, outH, safe, size, env, NULL);
 }
 
 IcoTouchLayout ico_touch_layout(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size)
@@ -347,16 +685,7 @@ IcoTouchLayout ico_touch_layout(uint32_t outW, uint32_t outH, IcoTouchInsets saf
 IcoTouchLayout ico_touch_layout_edits(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size,
                                       const IcoTouchEnv *env, const struct IcoTouchEdits *edits)
 {
-    IcoTouchLayout l = ico_touch_layout_env(outW, outH, safe, size, env);
-    int z;
-
-    /* the contract commit: the edits are applied by package TL-CORE */
-    (void)edits;
-    for (z = 0; z < ICO_TOUCH_BUTTONS; z++) {
-        l.button[z].alpha = 1.0f;
-    }
-    l.stickAlpha = l.lookAlpha = 1.0f;
-    return l;
+    return build(outW, outH, safe, size, env, edits);
 }
 
 float ico_touch_px_per_mm(float dpi)
@@ -369,7 +698,8 @@ static int in_rect(const IcoTouchRect *r, float x, float y)
     return x >= r->x && x < r->x + r->w && y >= r->y && y < r->y + r->h;
 }
 
-/* the button zone under (x, y) in pixels, or -1 */
+/* the button zone under (x, y) in pixels, or -1; a hidden button (alpha 0)
+   is never under anything */
 static int hit(const IcoTouchLayout *l, float x, float y)
 {
     int z;
@@ -377,6 +707,9 @@ static int hit(const IcoTouchLayout *l, float x, float y)
     for (z = 0; z < ICO_TOUCH_BUTTONS; z++) {
         const IcoTouchButton *b = &l->button[z];
 
+        if (!(b->alpha > 0.0f)) {
+            continue; /* hidden: no hit */
+        }
         if (b->round) {
             float r = 0.5f * b->rect.w;
             float dx = x - (b->rect.x + r), dy = y - (b->rect.y + r);
@@ -595,10 +928,10 @@ void ico_touch_step(IcoTouchState *t, const IcoTouchLayout *l, IcoVirtualPad *ou
         }
         if (hit(l, x0, y0) >= 0) {
             f->role = ROLE_BUTTON;
-        } else if (!f->up && stick < 0 && in_rect(&l->stickArea, x0, y0)) {
+        } else if (!f->up && stick < 0 && l->stickAlpha > 0.0f && in_rect(&l->stickArea, x0, y0)) {
             f->role = ROLE_STICK;
             stick = i;
-        } else if (!f->up && look < 0 && in_rect(&l->lookArea, x0, y0)) {
+        } else if (!f->up && look < 0 && l->lookAlpha > 0.0f && in_rect(&l->lookArea, x0, y0)) {
             f->role = ROLE_LOOK;
             look = i;
         } else {

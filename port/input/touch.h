@@ -279,6 +279,9 @@ typedef struct IcoTouchEditView {
     IcoTouchRect tb[10];     /* the toolbar's keys (ICO_TOUCH_ED_TB_*) */
     IcoTouchRect confirm[3]; /* the confirm strip (ICO_TOUCH_ED_CF_*), state CONFIRM_RESET */
     IcoTouchRect ctl[ICO_TOUCH_CTL_COUNT]; /* each control's bounding box (selection outline) */
+    int confirmSel;                        /* the confirm strip's key under the gamepad's cursor */
+    int undos;                             /* steps Undo can take (0: the key dims) */
+    int changed;                           /* the work differs from the saved edits */
 } IcoTouchEditView;
 
 /* What the overlay drawing reads, copied once per vsync by the device layer
