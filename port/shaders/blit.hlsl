@@ -6,6 +6,7 @@
 //   blit_depth_ps blit_ps plus SV_Depth from the scene's depth (the present's
 //                effects depth)
 //   aa_reduce_ps the supersampled DISPLAY box-averaged to the present box
+//   crack_fill_ps, crack_count_ps the crack filler above 1x (rd_crack_fill.c)
 // Texture function flags are DrawCB.g_mode.x: with DF_TEXTURED clear the
 // pass writes the tint colour alone (fade, letterbox).
 #include "common.hlsli"
@@ -179,6 +180,113 @@ Texture2D<float> g_ssDepth : register(t1, space2);
 float depth_upsample_ps(BlitVSOut i) : SV_Depth
 {
     return g_ssDepth.Load(int3(int2(i.pos.xy), 0));
+}
+
+// The crack filler above 1x (port/render/rd_crack_fill.c; docs/port/RENDER.md,
+// "Crack filling above 1x"), behind blit_vs over SCENE's texels, before the
+// fog. A texel no draw covered keeps the clear's depth 0, which the fog's
+// table takes as its entry 0 (fog_lut.hlsl): above 1x the 1/16 GS pixel
+// cracks between triangles truncated apart (DIVERGENCES.md VD-19, VD-20)
+// catch texel centres and show as dots of that colour. A texel of depth 0
+// is a crack when along its row or its column a run of at most the reach's
+// texels of depth 0 (it among them) has a written texel at each end; it
+// then takes the nearer end's colour and depth, exact copies (the shorter
+// run of the two axes, the row's on a tie; the end before it on a tie
+// within the run). Every other texel is discarded.
+//   t1  a copy of SCENE's colour (crack_fill_ps), read with Load
+//   t2  a copy of SCENE's depth, read with Load (crack_fill_ps)
+//   g_param.xy  the reach across columns and across rows, 0..3 texels
+//               (ceil(scale / 2) on an axis above 1x, else 0)
+// crack_count_ps: the same test over a 16 x 16 block of the depth copy (t1
+// there) per output texel, the count n of cracks written as (n & 255,
+// n >> 8) / 255 in R and G of an RGBA8 target (the filled pixels, read back
+// by rd_crack_fill.c for its counters).
+#define CRACK_REACH_MAX 3
+#define CRACK_BLOCK 16
+
+Texture2D<float> g_crackDepth : register(t1, space2);
+
+// texel q of the depth copy z, 0 (unwritten) outside it
+float crack_depth(Texture2D<float> z, int2 q, int2 size)
+{
+    int2 c = clamp(q, int2(0, 0), size - int2(1, 1));
+    float v = z.Load(int3(c, 0));
+    bool inside = q.x >= 0 && q.y >= 0 && q.x < size.x && q.y < size.y;
+    return inside ? v : 0.0;
+}
+
+// the distance (1..reach) to the first written texel from p by step, 0 none
+int crack_end(Texture2D<float> z, int2 p, int2 step, int reach, int2 size)
+{
+    int found = 0;
+    [unroll] for (int k = CRACK_REACH_MAX; k >= 1; k--) {
+        if (k <= reach && crack_depth(z, p + step * k, size) != 0.0) {
+            found = k;
+        }
+    }
+    return found;
+}
+
+// p a crack of the depth copy z: from the texel it takes
+bool crack_at(Texture2D<float> z, int2 p, int2 size, int2 reach, out int2 from)
+{
+    from = p;
+    if (crack_depth(z, p, size) != 0.0) {
+        return false;
+    }
+    int run = CRACK_REACH_MAX + 1;
+    int l = crack_end(z, p, int2(-1, 0), reach.x, size);
+    int r = crack_end(z, p, int2(1, 0), reach.x, size);
+    if (l > 0 && r > 0 && l + r - 1 <= reach.x) {
+        run = l + r - 1;
+        from = p + int2(l <= r ? -l : r, 0);
+    }
+    int u = crack_end(z, p, int2(0, -1), reach.y, size);
+    int d = crack_end(z, p, int2(0, 1), reach.y, size);
+    if (u > 0 && d > 0 && u + d - 1 <= reach.y && u + d - 1 < run) {
+        run = u + d - 1;
+        from = p + int2(0, u <= d ? -u : d);
+    }
+    return run <= CRACK_REACH_MAX;
+}
+
+struct CrackFillOut {
+    VK_LOC(0) float4 c : SV_Target0;
+    float d : SV_Depth;
+};
+
+CrackFillOut crack_fill_ps(BlitVSOut i)
+{
+    uint w, h;
+    g_sceneDepth.GetDimensions(w, h);
+    int2 p = int2(i.pos.xy);
+    int2 from;
+    if (!crack_at(g_sceneDepth, p, int2(int(w), int(h)), int2(g_param.xy), from)) {
+        discard;
+    }
+    CrackFillOut o;
+    o.c = g_texture.Load(int3(from, 0));
+    o.d = g_sceneDepth.Load(int3(from, 0));
+    return o;
+}
+
+float4 crack_count_ps(BlitVSOut i) : SV_Target0
+{
+    uint w, h;
+    g_crackDepth.GetDimensions(w, h);
+    int2 size = int2(int(w), int(h));
+    int2 base = int2(i.pos.xy) * CRACK_BLOCK;
+    uint n = 0u;
+    for (int y = 0; y < CRACK_BLOCK; y++) {
+        for (int x = 0; x < CRACK_BLOCK; x++) {
+            int2 p = base + int2(x, y);
+            int2 from;
+            if (p.x < size.x && p.y < size.y && crack_at(g_crackDepth, p, size, int2(g_param.xy), from)) {
+                n++;
+            }
+        }
+    }
+    return float4(float(n & 255u), float(n >> 8), 0.0, 255.0) * (1.0 / 255.0);
 }
 
 // camera_probe_ps (tests only, rd__camera_probe): FrameCB's

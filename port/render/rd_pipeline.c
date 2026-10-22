@@ -2630,6 +2630,8 @@ RdKeyFamily rd__pipe_key_family(const RdPipeKeyInt *k)
     case RD_FS_FOG_LOCAL:
     case RD_FS_DEPTH_RESOLVE:
     case RD_FS_DEPTH_UPSAMPLE:
+    case RD_FS_CRACK_FILL:
+    case RD_FS_CRACK_COUNT:
         return RD_KF_FOG;
     case RD_FS_CRT_BLOOM:
     case RD_FS_CRT_BLUR:
@@ -2855,7 +2857,26 @@ uint32_t rd__enumerate_reachable_fog(RdPipeKeyInt *out, uint32_t max, uint32_t n
             n = rd__add_pipe_key(out, max, n, &dp[i].key);
         }
     }
+    /* the crack filler before the fog above 1x (rd_crack_fill.c) */
+    if (g_rd.fs[RD_FS_CRACK_FILL].id && g_rd.fs[RD_FS_CRACK_COUNT].id) {
+        for (int c = 0; c < 2; c++) {
+            const RdPipeKeyInt k = rd__crack_fill_key(c);
+            n = rd__add_pipe_key(out, max, n, &k);
+        }
+    }
     return n;
+}
+
+RdPipeKeyInt rd__crack_fill_key(int count)
+{
+    RdPipeKeyInt k =
+        rd__post_key(RD_VS_BLIT, count ? RD_FS_CRACK_COUNT : RD_FS_CRACK_FILL, RHI_FMT_RGBA8_UNORM);
+    if (!count) {
+        k.depthFmt = RHI_FMT_D32F_S8;
+        k.gs.ztst = RD_ZTST_ALWAYS;
+        k.gs.zwrite = RD_ZWRITE_ON;
+    }
+    return k;
 }
 
 /* --------------------------------------------------------------- DATE */

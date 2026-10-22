@@ -100,7 +100,8 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     /* RD_FS_OPTIONAL_FIRST on */
     "sprite_ps_planes", "sprite_texa_ps_planes", "sprite_stq_ps_planes", "fog_lut_local_ps",
     "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps", "date_stencil_ps", "vu_np_ps",
-    "vu_texa_np_ps", "fx_frame_ps", "fx_local_ps", "fx_acc_ps", "fx_acc_resolve_ps"};
+    "vu_texa_np_ps", "fx_frame_ps", "fx_local_ps", "fx_acc_ps", "fx_acc_resolve_ps",
+    "crack_fill_ps", "crack_count_ps"};
 
 const char *rd__fs_name(uint8_t fs)
 {
@@ -4686,6 +4687,8 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
             return;
         }
     }
+    /* above 1x the pixels no draw covered between drawn ones (rd_crack_fill.c) */
+    rd__crack_fill(r, tc, tz, &s_fogDepth, s_ms.active || s_ms.want > 1u);
     /* the GS's BITBLT of the Z buffer to 0x2800: the depth in place, its
      * copy, its words or the pass's own depth attachment (g_rd.fogPath);
      * the pass below binds the colour target alone but on the local read,
