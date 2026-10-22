@@ -737,14 +737,18 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
         {2, 0, RHI_VTX_U8x4_UINT, offsetof(IcoSpriteVertex, rgba)},
         {3, 0, RHI_VTX_F32x2, offsetof(IcoSpriteVertex, u)},
     };
-    /* PRIM.AA1: the same and the coverage */
+    /* PRIM.AA1: the same, the coverage and the edge's clip (flat) */
     static const RhiVertexBinding vbAa1 = {0, sizeof(IcoSpriteAa1Vertex), false};
-    static const RhiVertexAttr vaAa1[5] = {
+    static const RhiVertexAttr vaAa1[9] = {
         {0, 0, RHI_VTX_U16x2_UINT, offsetof(IcoSpriteVertex, x)},
         {1, 0, RHI_VTX_U32x1, offsetof(IcoSpriteVertex, z)},
         {2, 0, RHI_VTX_U8x4_UINT, offsetof(IcoSpriteVertex, rgba)},
         {3, 0, RHI_VTX_F32x2, offsetof(IcoSpriteVertex, u)},
         {4, 0, RHI_VTX_F32x1, offsetof(IcoSpriteAa1Vertex, cov)},
+        {5, 0, RHI_VTX_U16x2_UINT, offsetof(IcoSpriteAa1Vertex, v0x)},
+        {6, 0, RHI_VTX_U32x1, offsetof(IcoSpriteAa1Vertex, d1)},
+        {7, 0, RHI_VTX_U32x1, offsetof(IcoSpriteAa1Vertex, d2)},
+        {8, 0, RHI_VTX_U32x1, offsetof(IcoSpriteAa1Vertex, flags)},
     };
     /* STQ: the same and Q */
     static const RhiVertexBinding vbStq = {0, sizeof(IcoSpriteStqVertex), false};
@@ -843,7 +847,7 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
         d->vertexBindings = &vbAa1;
         d->vertexBindingCount = 1;
         d->vertexAttrs = vaAa1;
-        d->vertexAttrCount = 5;
+        d->vertexAttrCount = 9;
     } else if (k->vs == RD_VS_SPRITE_STQ_UI || k->vs == RD_VS_SPRITE_STQ_WORLD) {
         d->vertexBindings = &vbStq;
         d->vertexBindingCount = 1;

@@ -549,6 +549,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   apart, so under a mode asked a third replay (the plan on, that mode) must stay within 3 per
   channel of the planned fixed-function one with the depth equal; a mismatch prints the first
   differing pixel and both values.
+  Its AA1 wedge case (`testAa1Wedge`, `rd_pixel_aa1_test.inc`) draws the drained room's ripple
+  state (PRIM.AA1, ABE, `Cs * FIX + Cd` with FIX 0x60, Z write, DATE DATM 1, a flat colour of 64,
+  so every fragment adds 48) over SCENE: a four-vertex strip with an acute corner and an
+  octagonal ring of eight quads, at alpha 0xFF and again at 0x80, and checks every pixel's red is
+  48 times the fragments a C model of PCSX2's `DrawTriangle` and `DrawEdgeTriangle` draws there
+  (the GS's fill for the interiors), the alpha 0xFF wherever one lands, and the As of the single
+  edge pixels at 0x80 within 1; it prints the pixels with 1, 2 and 3 or more fragments and how
+  many fragments the GS's own DATE would reject at 0x80 (DIVERGENCES.md VD-17).
   Its VU seams case (`testVuSeams`, at Original 1x and 4x and Enhanced 2.25x and 4x) counts the
   clear's pixels along edges two draws share: S1 a code-32 triangle beside a GIF one, S2 two
   meshes 0.01 GS pixel apart, S3 a code-36 cut triangle beside a kicked one, S4 8 x 8 quads under

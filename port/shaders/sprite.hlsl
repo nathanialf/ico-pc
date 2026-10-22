@@ -14,12 +14,18 @@
 //
 // sprite_aa1_ui_vs, sprite_aa1_world_vs and sprite_aa1_ps draw the lines
 // and triangles PRIM.AA1 antialiases. Their vertex (IcoSpriteAa1Vertex,
-// 24 bytes) adds
+// 40 bytes) adds
 //   loc 4  RHI_VTX_F32x1        the coverage: 0..1 on the geometry
-//                               rd_replay.c adds along an edge, interpolated
-//                               without perspective; ICO_AA1_INTERIOR (2.0)
-//                               on a triangle's own vertices
-// and sprite_aa1_ps takes the coverage as the fragment's alpha.
+//                               rd_replay_aa1.inc adds along an edge,
+//                               interpolated without perspective;
+//                               ICO_AA1_INTERIOR (2.0) on a triangle's own
+//                               vertices
+//   loc 5  RHI_VTX_U16x2_UINT   a triangle edge's clip, flat: the sorted
+//   loc 6  RHI_VTX_U32x1        triangle's first vertex (12.4), its other
+//   loc 7  RHI_VTX_U32x1        two less it (two int16 in each), and the
+//   loc 8  RHI_VTX_U32x1        flags (AA1_* below; 0 on lines and interiors)
+// and sprite_aa1_ps takes the coverage as the fragment's alpha and keeps an
+// edge pixel of a triangle only where the GS draws one (aa1_wedge_keep).
 //
 // The planes build (ICO_SPRITE_PLANES=1, port/shaders/CMakeLists.txt):
 // SpriteVSOut and SpriteStqVSOut carry the triangle's planes
@@ -381,6 +387,10 @@ struct SpriteAa1VSIn {
     VK_LOC(2) uint4 col : COLOR0;
     VK_LOC(3) float2 uv : TEXCOORD0;
     VK_LOC(4) float cov : TEXCOORD2;
+    VK_LOC(5) uint2 v0 : TEXCOORD3;
+    VK_LOC(6) uint d1 : TEXCOORD4;
+    VK_LOC(7) uint d2 : TEXCOORD5;
+    VK_LOC(8) uint flags : TEXCOORD6;
 };
 
 struct SpriteAa1VSOut {
@@ -388,6 +398,8 @@ struct SpriteAa1VSOut {
     VK_LOC(0) float4 col : COLOR0;
     VK_LOC(1) float2 uv : TEXCOORD0;
     VK_LOC(2) noperspective float cov : TEXCOORD1;
+    // the edge's clip: x v0 (X | Y << 16), y d1, z d2, w the flags
+    VK_LOC(3) nointerpolation uint4 wedge : TEXCOORD2;
 };
 
 SpriteAa1VSOut sprite_aa1_vertex(SpriteAa1VSIn i)
@@ -397,6 +409,7 @@ SpriteAa1VSOut sprite_aa1_vertex(SpriteAa1VSIn i)
     o.col = float4(i.col);
     o.uv = gs_uv_norm(i.uv);
     o.cov = i.cov;
+    o.wedge = uint4(i.v0.x | (i.v0.y << 16), i.d1, i.d2, i.flags);
     return o;
 }
 
@@ -410,17 +423,97 @@ SpriteAa1VSOut sprite_aa1_world_vs(SpriteAa1VSIn i)
     return sprite_aa1_vertex(i);
 }
 
+// IcoSpriteAa1Vertex.flags (shader_consts.h ICO_AA1_*, the same values)
+#define AA1_EDGE 3u   // the edge: 0 v0-v1, 1 v0-v2, 2 v1-v2 (the sorted vertices)
+#define AA1_CW 4u     // the sorted triangle is clockwise: the functions negated
+#define AA1_TL0 8u    // the top-left bias of edge v0-v1's function
+#define AA1_TL1 16u   // of edge v2-v0's
+#define AA1_TL2 32u   // of edge v1-v2's
+#define AA1_CLIP 128u // the clip is on
+
+// two int16 (x low, y high) of a d1 or d2
+int2 aa1_unpack(uint v)
+{
+    return int2(asint(v << 16) >> 16, asint(v) >> 16);
+}
+
+// The pixel's sample point as a GS window coordinate in 12.4: the GS
+// integer coordinate sits on the texel's centre (on a scaled target on its
+// block's first texel: rd_replay.c rd__frame_group_ex, g_origin.zw), so at
+// 1x it is XYOFFSET + 16 k exactly; above 1x the texel's own point, rounded
+// to the 1/16 grid.  A Full pixel target's left-out texels are added
+// (g_vpo.z, as fx_sprite_ps has them).
+int2 aa1_pixel_xy(float4 pos)
+{
+    const float2 ts = float2(g_z.y > 0.0 ? g_z.y : 1.0, g_z.z > 0.0 ? g_z.z : 1.0);
+    float2 fp = pos.xy + float2(g_vpo.z, 0.0);
+    [branch] if (ts.x != 1.0 || ts.y != 1.0) {
+        fp = fp / ts;
+    }
+    precise float2 gs = (g_origin.xy - g_origin.zw + fp) * 16.0;
+    return int2(round(gs));
+}
+
+// PCSX2's rule for a triangle's edge pixel (GSRasterizer.cpp DrawTriangle,
+// DrawEdgeTriangle): kept only where the triangle's other two edge
+// functions are above 0 (integer, 12.4, made positive inside, plus 1 on a
+// top-left edge) and inside the edge's box, x floor(min x) .. ceil(max x)
+// and y ceil(min y - 1) .. floor(max y + 1) in GS pixels, which on the
+// sample points' 1/16 grid are X > min - 16, X < max + 16, Y >= min - 16,
+// Y <= max + 16.  w: SpriteAa1VSOut.wedge.  The products stay in 32 bits
+// for a triangle within ICO_AA1_CLIP_EXTENT (rd_replay_aa1.inc) and a point
+// in the box; outside it they may wrap, and the box discards it anyway.
+bool aa1_wedge_keep(float4 pos, uint4 w)
+{
+    const int2 p = aa1_pixel_xy(pos) - int2(int(w.x & 0xFFFFu), int(w.x >> 16));
+    const int2 b = aa1_unpack(w.y);
+    const int2 c = aa1_unpack(w.z);
+    const uint f = w.w;
+    int e01 = b.y * p.x - b.x * p.y;
+    int e20 = c.x * (p.y - c.y) - c.y * (p.x - c.x);
+    int e12 = (c.y - b.y) * (p.x - b.x) - (c.x - b.x) * (p.y - b.y);
+    if ((f & AA1_CW) != 0u) {
+        e01 = -e01;
+        e20 = -e20;
+        e12 = -e12;
+    }
+    e01 += (f & AA1_TL0) != 0u ? 1 : 0;
+    e20 += (f & AA1_TL1) != 0u ? 1 : 0;
+    e12 += (f & AA1_TL2) != 0u ? 1 : 0;
+    const uint k = f & AA1_EDGE;
+    const int ea = k == 0u ? e20 : (k == 1u ? e12 : e01);
+    const int eb = k == 0u ? e12 : (k == 1u ? e01 : e20);
+    // the edge's ends, relative to v0: v0-v1, v0-v2, v1-v2
+    int2 a0 = int2(0, 0);
+    int2 a1 = c;
+    if (k == 2u) {
+        a0 = b;
+    }
+    if (k == 0u) {
+        a1 = b;
+    }
+    const int2 lo = min(a0, a1);
+    const int2 hi = max(a0, a1);
+    const bool box = p.x > lo.x - 16 && p.x < hi.x + 16 && p.y >= lo.y - 16 && p.y <= hi.y + 16;
+    return box && ea > 0 && eb > 0;
+}
+
 // The coverage alpha: a = the coverage on the
 // 0x80 scale for an edge pixel (16-bit coverage >> 9, so 0..0x7F), 0x80 for
 // an interior one. With PRIM.ABE 0 (DF_AA1_FULL) a replaces the fragment's
 // alpha; with ABE 1 it replaces it only where that alpha is exactly 0x80.
 // This happens before the alpha test, and the alpha that results is the
-// blend's As and the alpha written.
+// blend's As and the alpha written.  A triangle's edge pixel the GS does
+// not draw (aa1_wedge_keep) is discarded: the fringe is drawn longer than
+// its edge and cut here, exactly.
 GS_PS_ATTR GS_PS_OUT sprite_aa1_ps(SpriteAa1VSOut i)
 {
     uint4 col = sprite_colour(i.pos, i.col, i.uv, 1.0);
     uint a = 0x80u;
     if (i.cov < 1.5) {
+        if ((i.wedge.w & AA1_CLIP) != 0u && !aa1_wedge_keep(i.pos, i.wedge)) {
+            GS_DISCARD;
+        }
         a = uint(floor(saturate(i.cov) * 65535.0)) >> 9;
     }
     if ((g_mode.x & DF_AA1_FULL) != 0u || col.a == 0x80u) {

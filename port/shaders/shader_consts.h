@@ -223,16 +223,41 @@ typedef struct IcoSpriteVertex {
     float u, v;      /* texels of t1 */
 } IcoSpriteVertex;
 
-/* The vertex of sprite_aa1_*_vs, 24 bytes: IcoSpriteVertex and,
- * at loc 4 (RHI_VTX_F32x1), the coverage: 0..1 on the geometry rd_replay.c
- * adds along an antialiased edge (interpolated, it is the pixel's coverage),
- * ICO_AA1_INTERIOR on a triangle's own vertices. */
+/* The vertex of sprite_aa1_*_vs, 40 bytes: IcoSpriteVertex and
+ *   loc 4 RHI_VTX_F32x1      cov: 0..1 on the geometry rd_replay_aa1.inc
+ *                            adds along an antialiased edge (interpolated,
+ *                            it is the pixel's coverage), ICO_AA1_INTERIOR
+ *                            on a triangle's own vertices
+ * and, the same on all six vertices of a triangle's edge (flat), what
+ * sprite_aa1_ps clips the edge's pixels with (rd_replay_aa1.inc aa1Wedge):
+ *   loc 5 RHI_VTX_U16x2_UINT v0x, v0y: the triangle's first vertex in the
+ *                            GS's order by y (PCSX2's), 12.4
+ *   loc 6 RHI_VTX_U32x1      d1: its second vertex less the first, x in the
+ *                            low 16 bits and y in the high, two's complement
+ *   loc 7 RHI_VTX_U32x1      d2: its third less the first, the same way
+ *   loc 8 RHI_VTX_U32x1      flags: ICO_AA1_EDGE .. ICO_AA1_CLIP below
+ * A line's vertices and a triangle's own have flags 0 (no clip). */
 typedef struct IcoSpriteAa1Vertex {
     IcoSpriteVertex v;
     float cov;
+    uint16_t v0x, v0y;
+    uint32_t d1, d2;
+    uint32_t flags;
 } IcoSpriteAa1Vertex;
 
 #define ICO_AA1_INTERIOR 2.0f
+
+/* IcoSpriteAa1Vertex.flags (sprite.hlsl AA1_*, the same values) */
+#define ICO_AA1_EDGE 3u   /* the edge: 0 v0-v1, 1 v0-v2, 2 v1-v2 (the sorted vertices) */
+#define ICO_AA1_CW 4u     /* the sorted triangle is clockwise: the edge functions negated */
+#define ICO_AA1_TL0 8u    /* the top-left bias (1) of edge v0-v1's function */
+#define ICO_AA1_TL1 16u   /* of edge v2-v0's */
+#define ICO_AA1_TL2 32u   /* of edge v1-v2's */
+#define ICO_AA1_CLIP 128u /* the clip is on */
+/* the largest extent in x or y (12.4) of a triangle whose edges are
+ * clipped: sprite_aa1_ps's edge functions then stay inside 32 bits (two
+ * products of at most this by this + 16, plus the bias) */
+#define ICO_AA1_CLIP_EXTENT 0x7FEF
 
 /* Perspective-correct STQ: the vertex of sprite_stq_*_vs, 24 bytes: IcoSpriteVertex and, at loc 4
  * (RHI_VTX_F32x1), the GS Q.  u and v are S and T in texels of t1 (S times
@@ -313,7 +338,11 @@ _Static_assert(offsetof(IcoSpriteVertex, u) == 12, "vertex uv");
 
 _Static_assert(sizeof(IcoSpriteVertex) == 20, "vertex size");
 _Static_assert(offsetof(IcoSpriteAa1Vertex, cov) == 20, "AA1 vertex coverage");
-_Static_assert(sizeof(IcoSpriteAa1Vertex) == 24, "AA1 vertex size");
+_Static_assert(offsetof(IcoSpriteAa1Vertex, v0x) == 24, "AA1 vertex v0");
+_Static_assert(offsetof(IcoSpriteAa1Vertex, d1) == 28, "AA1 vertex d1");
+_Static_assert(offsetof(IcoSpriteAa1Vertex, d2) == 32, "AA1 vertex d2");
+_Static_assert(offsetof(IcoSpriteAa1Vertex, flags) == 36, "AA1 vertex flags");
+_Static_assert(sizeof(IcoSpriteAa1Vertex) == 40, "AA1 vertex size");
 _Static_assert(offsetof(IcoSpriteStqVertex, q) == 20, "STQ vertex q");
 _Static_assert(sizeof(IcoSpriteStqVertex) == 24, "STQ vertex size");
 

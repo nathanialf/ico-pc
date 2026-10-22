@@ -234,7 +234,8 @@ packing (each member a 16-byte register or a 64-byte matrix, so the packing is u
 | `IcoDrawCB` | b1 space1 | 112 | col, mode, blend, uvRect, tex, param, scale |
 | `IcoCrtCB` | b1 space1 | 112 | the CRT filter's block in DrawCB's place: src, box, beam, mask, glow, tone, pass |
 | `IcoSpriteVertex` | vertex | 20 | XY 12.4 (U16x2), Z (U32), RGBA (U8x4, 0x80 = 1.0), UV in texels (F32x2) |
-| `IcoSpriteAa1Vertex`, `IcoSpriteStqVertex` | vertex | 24 | plus the AA1 coverage, or Q |
+| `IcoSpriteAa1Vertex` | vertex | 40 | plus the AA1 coverage and a triangle edge's clip, flat: the sorted first vertex (U16x2), the other two less it (two int16 in a U32 each) and the flags (U32) |
+| `IcoSpriteStqVertex` | vertex | 24 | plus Q |
 | `IcoSpritePlaneVertex` | vertex | 120 | the STQ vertex plus the triangle's colour and STQ planes |
 | `IcoVuCB` | b2 space1 | 832 | VU1 data memory 0..35, draw, batch, the card test's bits' place, the two ticks' camera matrices, the marks' place (`vu_mark`), the vertex record's place and the program's triangle rule (`vu_rec`), its region bounds (`vu_lo`, `vu_hi`), the triangle record's slots and a stage draw's tick (`tri`) |
 | `IcoVuBoneCB` | b3 space1 | 3840 | VU memory 16..255, the cluster bones; the card bits after them |
