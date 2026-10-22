@@ -1020,6 +1020,18 @@ if(ICO_RUN_TESTS)
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> -DARGS=${_a}
                          "-DEXPECT=${_crk_on} ${_x} ${_crk_tail}" -P "${_crk}")
     endforeach()
+    # over a backdrop (a far plane writing Z first): the cracks hold its
+    # depth and colour and are filled by the discontinuity form
+    foreach(_c "2|2x2, reach 1x1|rd_crack_backdrop" "4|4x4, reach 2x2|rd_crack_backdrop_4x"
+               "frac|2.81[23]x2.411, reach 2x2|rd_crack_backdrop_frac")
+        string(REPLACE "|" ";" _cl "${_c}")
+        list(GET _cl 0 _a)
+        list(GET _cl 1 _x)
+        list(GET _cl 2 _n)
+        add_test(NAME ${_n}
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> "-DARGS=${_a}|backdrop"
+                         "-DEXPECT=${_crk_on} ${_x} ${_crk_tail}" -P "${_crk}")
+    endforeach()
     add_test(NAME rd_crack_1x
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> -DARGS=1
                      "-DEXPECT=rd: crack fill: on above 1x, not drawn at scale 1x1 \\(the GS's own grid\\)"
@@ -1041,8 +1053,8 @@ if(ICO_RUN_TESTS)
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> -DARGS=2
                          "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail}" -P "${_crk}")
     endforeach()
-    set_tests_properties(rd_crack rd_crack_4x rd_crack_frac rd_crack_1x rd_crack_original
-                         rd_crack_msaa PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+    set_tests_properties(rd_crack rd_crack_4x rd_crack_frac rd_crack_backdrop rd_crack_backdrop_4x
+                         rd_crack_backdrop_frac rd_crack_1x rd_crack_original rd_crack_msaa PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                   ENVIRONMENT "${_env}")
     set(_crk_env_off ${_env} "ICO_RD_CRACK_FILL=0")
     set(_crk_env_depth_copy ${_env} "ICO_RD_DEPTH_COPY=1")

@@ -1,6 +1,6 @@
 /* rd_crack_test.c: the crack filler above 1x (rd_crack_fill.c, issue 26).
  *
- *   rd_crack_test 2|4|1|frac|original [msaa]
+ *   rd_crack_test 2|4|1|frac|original [msaa|backdrop]
  *
  * On a Vulkan device (77 without one, or without MSAA4 when msaa is
  * given), a 640 x 448 frame under Enhanced at scale 2, 4 or 1, at the
@@ -20,6 +20,16 @@
  *   slit    two sprites 1.5 GS pixels apart (3 texels at 2x, 6 at 4x, 4 at
  *           2.8125: wider than the reach): the slit (its texels half a
  *           texel in from its sides) keeps the clear's fog, filler or not;
+ *   fold    below them a concave fold: two strips meeting in a vertical
+ *           line, each strip's depth falling steeply towards it (35 % of
+ *           the fold's depth a texel at 2x), so the texels along the fold
+ *           lie behind both neighbours, each on one of the two planes:
+ *           drawn, not a crack, never changed;
+ * with backdrop, a far plane covers the frame first (GS Z 0x200000, its
+ * own colour, Z written: a stage's backdrop) and the two triangles lie at
+ * GS Z 0xA00000 and 0xA40000 (two parts of one surface): the cracks hold
+ * the backdrop's depth and colour, not the clear's, and are filled the
+ * same (the discontinuity form), while the slit keeps the backdrop;
  *   rest    every texel the first replay drew is the same in both, colour
  *           and depth: the pictures differ only at the cracks;
  *   counts  the replay with the filler drew one fill pass and its count
@@ -64,6 +74,17 @@ static const uint8_t kClear[4] = {30, 60, 90, 0x80};
 static const uint8_t kTri1[4] = {200, 40, 40, 0x80};
 static const uint8_t kTri2[4] = {40, 200, 40, 0x80};
 static const uint8_t kRect[4] = {40, 40, 200, 0x80};
+static const uint8_t kBack[4] = {120, 90, 30, 0x80};
+
+/* the fold's band and its line (GS pixels), its depths */
+#define FOLD_TOP 404.0
+#define FOLD_BOTTOM 444.0
+#define FOLD_X 320.0
+#define FOLD_HALF 20.0
+#define FOLD_Z_OUT 0x00F00000u
+#define FOLD_Z_IN 0x00100000u
+
+static bool s_backdrop; /* the far plane first (argv[2] backdrop) */
 
 static RdScreenVtx vtx(double x, double y, uint32_t z, const uint8_t c[4])
 {
@@ -100,13 +121,31 @@ static void recordFrame(void)
     rd_z_write(1);
     rd_fba(0);
     rd_gouraud(0);
-    /* the crack: the second triangle's shared edge one 12.4 step right */
+    if (s_backdrop) {
+        /* a stage's far plane over the whole frame, Z written */
+        RdScreenVtx b[2] = {vtx(0.0, 0.0, 0x00200000u, kBack), vtx(GW, GH, 0x00200000u, kBack)};
+        rd_screen_prims(RD_PRIM_SPRITES, b, 2, RD_SPACE_WORLD, 1, 0);
+    }
+    /* the crack: the second triangle's shared edge one 12.4 step right;
+       over the backdrop the two parts of one surface lie near each other */
     const double d = 1.0 / 16.0;
-    RdScreenVtx t[6] = {
-        vtx(LEFT, TOP, 0x00600000u, kTri1),       vtx(EDGE_X0, TOP, 0x00600000u, kTri1),
-        vtx(LEFT, BOTTOM, 0x00600000u, kTri1),    vtx(EDGE_X0 + d, TOP, 0x00A00000u, kTri2),
-        vtx(EDGE_X0, BOTTOM, 0x00A00000u, kTri2), vtx(LEFT + d, BOTTOM, 0x00A00000u, kTri2)};
+    const uint32_t z1 = s_backdrop ? 0x00A00000u : 0x00600000u;
+    const uint32_t z2 = s_backdrop ? 0x00A40000u : 0x00A00000u;
+    RdScreenVtx t[6] = {vtx(LEFT, TOP, z1, kTri1),       vtx(EDGE_X0, TOP, z1, kTri1),
+                        vtx(LEFT, BOTTOM, z1, kTri1),    vtx(EDGE_X0 + d, TOP, z2, kTri2),
+                        vtx(EDGE_X0, BOTTOM, z2, kTri2), vtx(LEFT + d, BOTTOM, z2, kTri2)};
     rd_screen_prims(RD_PRIM_TRIANGLES, t, 6, RD_SPACE_WORLD, 1, 0);
+    /* the fold: two strips sharing the line FOLD_X (the same vertices),
+       each strip's depth falling linearly towards it */
+    const double fl = FOLD_X - FOLD_HALF, fr = FOLD_X + FOLD_HALF;
+    RdScreenVtx fo[12] = {
+        vtx(fl, FOLD_TOP, FOLD_Z_OUT, kTri1),       vtx(FOLD_X, FOLD_TOP, FOLD_Z_IN, kTri1),
+        vtx(fl, FOLD_BOTTOM, FOLD_Z_OUT, kTri1),    vtx(FOLD_X, FOLD_TOP, FOLD_Z_IN, kTri1),
+        vtx(FOLD_X, FOLD_BOTTOM, FOLD_Z_IN, kTri1), vtx(fl, FOLD_BOTTOM, FOLD_Z_OUT, kTri1),
+        vtx(FOLD_X, FOLD_TOP, FOLD_Z_IN, kTri2),    vtx(fr, FOLD_TOP, FOLD_Z_OUT, kTri2),
+        vtx(FOLD_X, FOLD_BOTTOM, FOLD_Z_IN, kTri2), vtx(fr, FOLD_TOP, FOLD_Z_OUT, kTri2),
+        vtx(fr, FOLD_BOTTOM, FOLD_Z_OUT, kTri2),    vtx(FOLD_X, FOLD_BOTTOM, FOLD_Z_IN, kTri2)};
+    rd_screen_prims(RD_PRIM_TRIANGLES, fo, 12, RD_SPACE_WORLD, 1, 0);
     /* the slit */
     RdScreenVtx s[4] = {vtx(400.0, TOP, 0x00800000u, kRect), vtx(SLIT0, BOTTOM, 0x00800000u, kRect),
                         vtx(SLIT1, TOP, 0x00800000u, kRect),
@@ -187,12 +226,13 @@ int main(int argc, char **argv)
 {
     printf("rd_crack_test\n");
     if (argc < 2) {
-        printf("usage: rd_crack_test 2|4|1|frac|original [msaa]\n");
+        printf("usage: rd_crack_test 2|4|1|frac|original [msaa|backdrop]\n");
         return 2;
     }
     const bool original = strcmp(argv[1], "original") == 0;
     const bool frac = strcmp(argv[1], "frac") == 0;
     const bool msaa = argc > 2 && strcmp(argv[2], "msaa") == 0;
+    s_backdrop = argc > 2 && strcmp(argv[2], "backdrop") == 0;
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = original ? RD_PRESET_ORIGINAL : RD_PRESET_ENHANCED;
@@ -233,9 +273,10 @@ int main(int argc, char **argv)
     const float sx = t->sx, sy = t->sy;
     const uint32_t rx = rd__crack_fill_reach(sx), ry = rd__crack_fill_reach(sy);
     const bool active = envOn && !original && !msaa && (sx > 1.0f || sy > 1.0f);
-    printf("  SCENE %ux%u texels, scale %gx%g, reach %ux%u; the filler %s\n", t->tw, t->th,
+    printf("  SCENE %ux%u texels, scale %gx%g, reach %ux%u; the filler %s%s\n", t->tw, t->th,
            (double)sx, (double)sy, rx, ry,
-           active ? "draws" : (envOn ? "on, not drawn here" : "off (ICO_RD_CRACK_FILL=0)"));
+           active ? "draws" : (envOn ? "on, not drawn here" : "off (ICO_RD_CRACK_FILL=0)"),
+           s_backdrop ? "; over a backdrop" : "");
 
     Picture off, on;
     memset(&off, 0, sizeof(off));
@@ -251,10 +292,12 @@ int main(int argc, char **argv)
         return 1;
     }
     const uint32_t w = off.w, h = off.h;
-    /* the clear's fog: every texel nothing drew (corner texel 1, 1) */
+    /* the clear's fog (with backdrop the backdrop's): every texel nothing
+       but the clear or the backdrop drew (corner texel 1, 1), its depth */
     const uint8_t *ref = &off.px[((size_t)1 * w + 1) * 4];
+    const float refZ = off.z ? off.z[(size_t)1 * w + 1] : 0.0f;
     int cracksOff = 0, cracksOn = 0, near = 0, slitOff = 0, slitOn = 0, slitAll = 0;
-    int changed = 0, changedDrawn = 0, badFrom = 0, badDepth = 0;
+    int changed = 0, changedDrawn = 0, badFrom = 0, badDepth = 0, fold = 0;
     for (uint32_t y = 0; y < h; y++) {
         const double gy = gsX(y, sy);
         const double ex = EDGE_X0 - (EDGE_X0 - LEFT) * (gy - TOP) / (BOTTOM - TOP);
@@ -264,6 +307,9 @@ int main(int argc, char **argv)
             const bool clearA = memcmp(a, ref, 4) == 0, clearB = memcmp(b, ref, 4) == 0;
             const double gx = gsX(x, sx);
             const bool band = gy >= BAND0 && gy <= BAND1;
+            /* the fold's texels within a texel of its line, away from its ends */
+            fold += gy > FOLD_TOP + 2.0 && gy < FOLD_BOTTOM - 2.0 && gx > FOLD_X - 1.0 / sx &&
+                    gx < FOLD_X + 1.0 / sx;
             if (band && gx > ex - 2.0 / sx && gx < ex + 2.0 / sx) {
                 near++;
                 cracksOff += clearA;
@@ -281,7 +327,7 @@ int main(int argc, char **argv)
                 continue;
             }
             changed++;
-            changedDrawn += !clearA || (off.z && off.z[i] != 0.0f);
+            changedDrawn += !clearA || (off.z && off.z[i] != refZ);
             /* a filled texel: a written texel within the reach on its row
                or its column has its colour (and its depth) */
             bool from = false, fromZ = false;
@@ -319,6 +365,10 @@ int main(int argc, char **argv)
            (unsigned long long)(c1.counted - c0.counted),
            (unsigned long long)(c1.filled - c0.filled));
     CHECK(near > 100, "the edge's band holds %d texels", near);
+    CHECK(fold > 20, "the fold's line holds %d texels", fold);
+    if (off.z) {
+        CHECK(s_backdrop ? refZ > 0.0f : refZ == 0.0f, "the corner's depth %g", (double)refZ);
+    }
     /* the slit is only measured where the filler draws (reach > 0): at 1x
        and under Original there is nothing to keep it from */
     CHECK(!active || (slitAll > 0 && slitOff == slitAll && slitOn == slitAll),
