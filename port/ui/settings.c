@@ -35,6 +35,8 @@
 #include "popup.h"
 #include "strings.h"
 #include "sysconf.h"
+#include "touch_edit.h"    /* the touch layout edits (port/input) */
+#include "touch_edit_ui.h" /* the Edit layout page */
 #include "ui_hint.h"
 #include "ui_list.h"
 #include "video_options.h"
@@ -291,6 +293,9 @@ static int isTitleLayout(int l)
 static int s_restoreTitle = -1; /* a game layout whose defaultItem to restore */
 static int s_restoreDefault;
 static int s_dirtyVideo, s_dirtyConfig, s_dirtyBindings;
+/* the touch layout edits changed (ico_input_live_touch_edits): the Snap to
+   grid and Grid size rows, the Resets, the Edit layout page's Done */
+static int s_dirtyTouch;
 static UiRemapCapture s_capture;
 static char s_text[256];
 
@@ -518,12 +523,44 @@ static void stepDevice(int dir)
 
 static int (*s_texturePackCount)(void); /* replacements installed, when known */
 static int (*s_touchQuery)(void);       /* a touch screen exists, when known */
-static UiTouchEditHost s_touchEditHost; /* the layout editor's hooks (TL-UI reads them) */
+static UiTouchEditHost s_touchEditHost; /* the layout editor's hooks (window_host.c) */
 static int s_touchEditHostSet;
 
 static int touchPresent(void)
 {
     return s_touchQuery != NULL && s_touchQuery() != 0;
+}
+
+/* the editor host is there: every hook, and an editor */
+static int touchEditHosted(void)
+{
+    const UiTouchEditHost *h = &s_touchEditHost;
+    return s_touchEditHostSet && h->editor != NULL && h->begin != NULL && h->end != NULL &&
+           h->rule != NULL && h->layout != NULL && h->editor() != NULL;
+}
+
+int ui_settings_touch_edit_host(UiTouchEditHost *out)
+{
+    if (!touchEditHosted()) {
+        return 0;
+    }
+    if (out != NULL) {
+        *out = s_touchEditHost;
+    }
+    return 1;
+}
+
+void ui_settings_touch_dirty(void)
+{
+    s_dirtyTouch = 1;
+}
+
+/* the posture the phone is in now (the host's live layout), FULL without
+   a host: the one Reset layout clears */
+static int touchRule(void)
+{
+    const int r = touchEditHosted() ? s_touchEditHost.rule() : ICO_TOUCH_RULE_FULL;
+    return r >= 0 && r < ICO_TOUCH_POSTURES ? r : ICO_TOUCH_RULE_FULL;
 }
 
 /* the host's graphics-driver hooks (settings.h) */
@@ -746,9 +783,47 @@ static void steamAdd(void)
                   kAnswers[r].body == UI_STR_COUNT ? "" : ui_str(kAnswers[r].body));
 }
 
+/* the Touch screen page's rows (and its link on Controls, optShown) */
 static int isTouchOpt(int opt)
 {
-    return opt == UI_OPT_TOUCH_MODE || opt == UI_OPT_TOUCH_SIZE || opt == UI_OPT_TOUCH_OPACITY;
+    return opt == UI_OPT_TOUCH_MODE || opt == UI_OPT_TOUCH_SIZE || opt == UI_OPT_TOUCH_OPACITY ||
+           opt == UI_OPT_TOUCH_EDIT || opt == UI_OPT_TOUCH_SNAP || opt == UI_OPT_TOUCH_GRID ||
+           opt == UI_OPT_TOUCH_RESET || opt == UI_OPT_TOUCH_RESET_ALL;
+}
+
+/* Edit layout opens the editor only while the overlay is on (Touch
+   controls not Off) and the device layer has an editor */
+static int touchEditLocked(void)
+{
+    return liveBindings()->touch_mode == ICO_TOUCH_MODE_OFF || !touchEditHosted();
+}
+
+/* the Grid size row's position in ico_touch_edit_grids: the nearest of
+   the three to the live value */
+static int touchGridIndex(const IcoTouchEdits *e)
+{
+    int best = 0;
+    for (int i = 1; i < N_OF(ico_touch_edit_grids); i++) {
+        const float d = ico_touch_edit_grids[i] - e->grid,
+                    db = ico_touch_edit_grids[best] - e->grid;
+        if ((d < 0.0f ? -d : d) < (db < 0.0f ? -db : db)) {
+            best = i;
+        }
+    }
+    return best;
+}
+
+/* a table string with one %d (UI_STR_VAL_MM) and its number */
+static const char *intText(UiStrId id, int v, char *buf, unsigned size)
+{
+    const char *t = ui_str(id);
+    const char *at = strstr(t, "%d");
+    if (at != NULL) {
+        snprintf(buf, size, "%.*s%d%s", (int)(at - t), t, v, at + 2);
+    } else {
+        snprintf(buf, size, "%d %s", v, t);
+    }
+    return buf;
 }
 
 /* the Touch opacity row's steps, percent */
@@ -1416,6 +1491,13 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_TOUCH_OPACITY:
         snprintf(buf, size, "%d %%", liveBindings()->touch_opacity);
         return buf;
+    case UI_OPT_TOUCH_SNAP:
+        return onOff(ico_input_live_touch_edits()->snap);
+    case UI_OPT_TOUCH_GRID: {
+        const IcoTouchEdits *e = ico_input_live_touch_edits();
+        return intText(UI_STR_VAL_MM, (int)(ico_touch_edit_grids[touchGridIndex(e)] + 0.5f), buf,
+                       size);
+    }
     case UI_OPT_FILM_EFFECT:
         if (optionScreenMode <= 0 || optionScreenMode >= FILM_EFFECTS) {
             return ui_str(UI_STR_OFF);
@@ -1475,6 +1557,9 @@ static int optShown(int opt, int link)
            chip, the one kind a driver package exists for (the page is
            hidden elsewhere) */
         return s_gpuHostSet && s_gpuHost.adreno() != 0;
+    }
+    if (opt == UI_OPT_LINK && link == UI_PAGE_TOUCH) {
+        return touchPresent(); /* Controls > Touch screen */
     }
     if (opt == UI_OPT_GPU_ADD) {
         return s_gpuHostSet && s_gpuHost.adreno() != 0;
@@ -1930,6 +2015,23 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         s_dirtyBindings = 1;
         break;
     }
+    case UI_OPT_TOUCH_SNAP: {
+        /* [touch] snap: the editor's drops round to the grid */
+        IcoTouchEdits *e = ico_input_live_touch_edits();
+        e->snap = !e->snap;
+        e->gen++;
+        s_dirtyTouch = 1;
+        break;
+    }
+    case UI_OPT_TOUCH_GRID: {
+        /* [touch] grid: 2, 4, 8 mm, around */
+        IcoTouchEdits *e = ico_input_live_touch_edits();
+        e->grid =
+            ico_touch_edit_grids[stepIndex(touchGridIndex(e), N_OF(ico_touch_edit_grids), dir)];
+        e->gen++;
+        s_dirtyTouch = 1;
+        break;
+    }
     case UI_OPT_CIRCLE_BACK:
         /* the game menus' alias, live from the next press */
         ico_opt_set_circle_back(!ico_opt_circle_back());
@@ -2055,6 +2157,13 @@ int ui_settings_save(void)
         }
         s_dirtyConfig = 1;
     }
+    if (s_dirtyTouch) {
+        /* [touch]: snap, grid and each edited control's line */
+        if (ico_input_write_touch_edits(ico_input_live_touch_edits()) < 0) {
+            r = -1;
+        }
+        s_dirtyConfig = 1;
+    }
     if (s_dirtyVideo) {
         /* writes [video] and saves the whole file */
         if (ico_video_save() != 0) {
@@ -2069,16 +2178,20 @@ int ui_settings_save(void)
         /* the table again from what was written: what the next run loads */
         ico_input_reload_bindings(ico_input_live_bindings());
     }
+    if (s_dirtyTouch) {
+        /* the edits again from what was written, as the bindings */
+        ico_input_reload_touch_edits(ico_input_live_touch_edits());
+    }
     if (r != 0) {
         fprintf(stderr, "settings: could not write %s\n", ico_config_toml_path());
     }
-    s_dirtyVideo = s_dirtyConfig = s_dirtyBindings = 0;
+    s_dirtyVideo = s_dirtyConfig = s_dirtyBindings = s_dirtyTouch = 0;
     return r;
 }
 
 int ui_settings_save_on_quit(void)
 {
-    if (!(s_dirtyVideo || s_dirtyConfig || s_dirtyBindings || ico_config_dirty())) {
+    if (!(s_dirtyVideo || s_dirtyConfig || s_dirtyBindings || s_dirtyTouch || ico_config_dirty())) {
         return 0;
     }
     fprintf(stderr, "settings: saving the changed settings on quit\n");
@@ -2370,8 +2483,11 @@ static void buildGalleryBar(void)
                   with Language, Graphics driver and the developer rows)
      Controls     from 40, up to 9 rows 18 apart, 10 or 11 rows 16, 12 rows
                   13 (Back at 183, its box to 219); 13 to 15 from
-                  30, 11 apart (Back at 184, its box to 220);
-                  16 rows 10 apart (Back at 180, its box to 216)
+                  30, 11 apart (Back at 184, its box to 220: fourteen,
+                  the pause menu's with the mouse rows and Touch screen,
+                  Back at 173); 16 rows 10 apart (Back at 180, its box to
+                  216; no entry shows as many now)
+     Touch screen from 40, 18 apart (nine rows: Back at 184, its box to 220)
      Effects      from 40, 18 apart, ten rows 16 (Back at 184, its box to 220);
                   eleven or twelve rows 13 (twelve: Back at 183); thirteen
                   (the title's) from 34, 13 apart (Back at 190, its box to
@@ -2596,7 +2712,11 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_HOLD_TYPE, UI_STR_HOLD_TYPE_NOTE);
         addNote(pg, UI_OPT_STICK_FIX, UI_STR_STICK_FIX_ALSO_NOTE);
         addNote(pg, UI_OPT_CIRCLE_BACK, UI_STR_CIRCLE_BACK_NOTE);
+        break;
+    case UI_PAGE_TOUCH:
         addNote(pg, UI_OPT_TOUCH_MODE, UI_STR_TOUCH_NOTE);
+        /* Edit layout's: what it does, or why it is locked (refreshPage) */
+        addNote(pg, UI_OPT_TOUCH_EDIT, UI_STR_TOUCH_EDIT_NOTE);
         break;
     case UI_PAGE_GAMEPLAY:
         addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);
@@ -2708,6 +2828,27 @@ static void buildListPage(int id, int header, const UiListDef *def, int parent)
     }
     int last = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT - 1;
     finishPage(pg, first, last);
+}
+
+/* Touch screen > Edit layout: photo mode's one masked row (photo_ui.c
+   ui_photo_build), nothing drawn and no cursor (curItem -1), over the
+   menus' shade; settingsProc hands the page to the touch layout editor
+   (touch_edit_ui.c) and the overlay draws it (touch_ui.c) */
+static void buildTouchEditorPage(void)
+{
+    Page *pg = &s_pages[UI_PAGE_TOUCH_LAYOUT];
+    memset(pg, 0, sizeof(*pg));
+    pg->parent = UI_PAGE_TOUCH;
+    pg->version = -1;
+    pg->layout = -1;
+    const int row = ui_settings_add_row(120, 200, 400, 40, 0, -1, UI_STR_OPT_TOUCH_EDIT, NULL, 0.0f,
+                                        UI_ALIGN_CENTER);
+    if (row < 0) {
+        return;
+    }
+    P(row)->defaultMask = 1;
+    pg->header = row;
+    pg->layout = addLayout(row, row + 1, 0.6f, settingsProc, -1);
 }
 
 static void addEntryLayout(int e, int first, int last)
@@ -3100,24 +3241,34 @@ static void build(void)
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
                                     UI_STR_OPT_OUTPUT, UI_STR_OPT_DEVICE,    UI_STR_BACK};
     /* the game's Button configuration, Vibration and Hold type after
-       Remap, from the pause menu; the touch overlay's three rows before
+       Remap, from the pause menu; the Touch screen page's link before
        Back, with a touch screen; the mouse camera's rows (not on
        Android) */
-    static const int ctlOpts[] = {
-        UI_OPT_LINK,        UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,     UI_OPT_HOLD_TYPE,
-        UI_OPT_STICK_FIX,   UI_OPT_MOUSE_CAMERA,  UI_OPT_MOUSE_SENS,    UI_OPT_MOUSE_INVERT,
-        UI_OPT_MOUSE_SPEED, UI_OPT_MOUSE_RANGE,   UI_OPT_MOUSE_RETURN,  UI_OPT_CIRCLE_BACK,
-        UI_OPT_TOUCH_MODE,  UI_OPT_TOUCH_SIZE,    UI_OPT_TOUCH_OPACITY, UI_OPT_BACK};
-    static const int ctlStrs[] = {UI_STR_OPT_REMAP,         UI_STR_OPT_BUTTON_CONFIG,
-                                  UI_STR_OPT_VIBRATION,     UI_STR_OPT_HOLD_TYPE,
-                                  UI_STR_OPT_STICK_FIX,     UI_STR_OPT_MOUSE_CAMERA,
-                                  UI_STR_OPT_MOUSE_SENS,    UI_STR_OPT_MOUSE_INVERT,
-                                  UI_STR_OPT_MOUSE_SPEED,   UI_STR_OPT_MOUSE_RANGE,
-                                  UI_STR_OPT_MOUSE_RETURN,  UI_STR_OPT_CIRCLE_BACK,
-                                  UI_STR_OPT_TOUCH_MODE,    UI_STR_OPT_TOUCH_SIZE,
-                                  UI_STR_OPT_TOUCH_OPACITY, UI_STR_BACK};
-    static const int ctlLinks[] = {
-        UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+    static const int ctlOpts[] = {UI_OPT_LINK,        UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,
+                                  UI_OPT_HOLD_TYPE,   UI_OPT_STICK_FIX,     UI_OPT_MOUSE_CAMERA,
+                                  UI_OPT_MOUSE_SENS,  UI_OPT_MOUSE_INVERT,  UI_OPT_MOUSE_SPEED,
+                                  UI_OPT_MOUSE_RANGE, UI_OPT_MOUSE_RETURN,  UI_OPT_CIRCLE_BACK,
+                                  UI_OPT_LINK,        UI_OPT_BACK};
+    static const int ctlStrs[] = {UI_STR_OPT_REMAP,        UI_STR_OPT_BUTTON_CONFIG,
+                                  UI_STR_OPT_VIBRATION,    UI_STR_OPT_HOLD_TYPE,
+                                  UI_STR_OPT_STICK_FIX,    UI_STR_OPT_MOUSE_CAMERA,
+                                  UI_STR_OPT_MOUSE_SENS,   UI_STR_OPT_MOUSE_INVERT,
+                                  UI_STR_OPT_MOUSE_SPEED,  UI_STR_OPT_MOUSE_RANGE,
+                                  UI_STR_OPT_MOUSE_RETURN, UI_STR_OPT_CIRCLE_BACK,
+                                  UI_STR_SECTION_TOUCH,    UI_STR_BACK};
+    static const int ctlLinks[] = {UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+                                   UI_PAGE_TOUCH, -1};
+    /* Controls > Touch screen: the overlay's three rows, then the layout
+       editor's (Edit layout opens UI_PAGE_TOUCH_LAYOUT) */
+    static const int touchOpts[] = {
+        UI_OPT_TOUCH_MODE,  UI_OPT_TOUCH_SIZE,      UI_OPT_TOUCH_OPACITY,
+        UI_OPT_TOUCH_EDIT,  UI_OPT_TOUCH_SNAP,      UI_OPT_TOUCH_GRID,
+        UI_OPT_TOUCH_RESET, UI_OPT_TOUCH_RESET_ALL, UI_OPT_BACK};
+    static const int touchStrs[] = {
+        UI_STR_OPT_TOUCH_MODE, UI_STR_OPT_TOUCH_SIZE,  UI_STR_OPT_TOUCH_OPACITY,
+        UI_STR_OPT_TOUCH_EDIT, UI_STR_OPT_TOUCH_SNAP,  UI_STR_OPT_TOUCH_GRID,
+        UI_STR_TOUCH_RESET,    UI_STR_TOUCH_RESET_ALL, UI_STR_BACK};
+    static const int touchLinks[] = {-1, -1, -1, UI_PAGE_TOUCH_LAYOUT, -1, -1, -1, -1, -1};
     /* the game's Film effect and Players, once the game is cleared */
     static const int gameOpts[] = {
         UI_OPT_YORDA,       UI_OPT_STICK_FIX, UI_OPT_DOOR_FIX, UI_OPT_NATURAL_CHAINS,
@@ -3132,6 +3283,10 @@ static void build(void)
     _Static_assert(sizeof(dispOpts) == sizeof(dispStrs), "a string for each Display row");
     _Static_assert(sizeof(ctlOpts) == sizeof(ctlStrs) && sizeof(ctlOpts) == sizeof(ctlLinks),
                    "a string and a link for each Controls row");
+    _Static_assert(sizeof(touchOpts) == sizeof(touchStrs) &&
+                       sizeof(touchOpts) == sizeof(touchLinks),
+                   "a string and a link for each Touch screen row");
+    _Static_assert(N_OF(touchOpts) <= MAX_ROWS, "the touchOpts rows fit the page's row budget");
     _Static_assert(sizeof(fxOpts) == sizeof(fxStrs), "a string for each Effects row");
     _Static_assert(sizeof(gpuOpts) == sizeof(gpuStrs), "a string for each Graphics driver row");
     _Static_assert(sizeof(gameOpts) == sizeof(gameStrs), "a string for each Gameplay row");
@@ -3163,6 +3318,9 @@ static void build(void)
                     N_OF(audioOpts), UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_CONTROLS, UI_STR_SECTION_CONTROLS, ctlOpts, ctlStrs, ctlLinks,
                     N_OF(ctlOpts), UI_PAGE_MAIN);
+    buildOptionPage(UI_PAGE_TOUCH, UI_STR_SECTION_TOUCH, touchOpts, touchStrs, touchLinks,
+                    N_OF(touchOpts), UI_PAGE_CONTROLS);
+    buildTouchEditorPage();
     buildOptionPage(UI_PAGE_GAMEPLAY, UI_STR_SECTION_GAMEPLAY, gameOpts, gameStrs, NULL,
                     N_OF(gameOpts), UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_EFFECTS, UI_STR_SECTION_EFFECTS, fxOpts, fxStrs, NULL, N_OF(fxOpts),
@@ -3183,11 +3341,12 @@ static void build(void)
     buildListPage(UI_PAGE_ACHIEVEMENTS, UI_STR_SECTION_ACHIEVEMENTS, &kAchDef, UI_PAGE_MAIN);
     buildListPage(UI_PAGE_REMAP, UI_STR_OPT_REMAP, &kRemapDef, UI_PAGE_CONTROLS);
     buildListPage(UI_PAGE_MUSIC, UI_STR_EXTRAS_MUSIC, &kGalDef, UI_PAGE_EXTRAS);
-    /* the section rows open their pages */
+    /* the section rows open their pages (and Edit layout its page: a row
+       of its own opt with a link, refreshPage locks it) */
     for (int p = 0; p < UI_PAGE_COUNT; p++) {
         for (int i = 0; i < s_pages[p].count; i++) {
             Row *r = &s_pages[p].rows[i];
-            if (r->opt == UI_OPT_LINK && r->link >= 0) {
+            if (r->link >= 0) {
                 P(r->label)->right = s_pages[r->link].layout;
             }
         }
@@ -3669,7 +3828,8 @@ void ui_settings_reset(void)
     s_restoreTitle = -1;
     s_titleReturn = -1;
     s_titleDecided = s_titleHandoff = 0;
-    s_dirtyVideo = s_dirtyConfig = s_dirtyBindings = 0;
+    s_dirtyVideo = s_dirtyConfig = s_dirtyBindings = s_dirtyTouch = 0;
+    ui_touch_edit_page_reset();
     memset(&s_capture, 0, sizeof(s_capture));
     for (int e = 0; e < ENTRY_COUNT; e++) {
         s_entryRow[e] = s_entryLayout[e] = s_quitRow[e] = -1;
@@ -4332,6 +4492,9 @@ static int rowLocked(const Row *r)
     if (r->opt == UI_OPT_MODEL_PACK) {
         return !modelPackInstalled();
     }
+    if (r->opt == UI_OPT_TOUCH_EDIT) {
+        return touchEditLocked(); /* Touch controls Off, or no editor */
+    }
     return r->opt == UI_OPT_EXTRAS_CREDITS && !creditsUnlocked();
 }
 
@@ -4533,8 +4696,14 @@ static void refreshPage(Page *pg, int id, int cur)
         if (r->value >= 0) {
             lt_ext_set_text(r->value, ui_settings_value_text((UiSettingsOpt)r->opt));
         }
+        if (r->opt == UI_OPT_TOUCH_EDIT) {
+            /* locked: Cross does nothing, the note says why */
+            P(r->label)->right = locked ? -1 : s_pages[UI_PAGE_TOUCH_LAYOUT].layout;
+            r->noteStr = locked ? UI_STR_TOUCH_EDIT_LOCKED : UI_STR_TOUCH_EDIT_NOTE;
+        }
         if (isExtrasOpt(r->opt) || r->opt == UI_OPT_RESOLUTION || r->opt == UI_OPT_ANTI_ALIAS ||
-            r->opt == UI_OPT_TEXTURE_PACK || r->opt == UI_OPT_MODEL_PACK) {
+            r->opt == UI_OPT_TEXTURE_PACK || r->opt == UI_OPT_MODEL_PACK ||
+            r->opt == UI_OPT_TOUCH_EDIT) {
             /* the locked style: the label and its value greyed */
             lt_ext_set_dim(r->label, locked);
             if (r->value >= 0) {
@@ -4562,6 +4731,22 @@ static int settingsProc(int first, int item)
     /* the port's strings follow the game's language (ui_host.c does too) */
     ui_settings_apply_language();
     gpuPoll(); /* an install the page started, on any page */
+    if (id == UI_PAGE_TOUCH_LAYOUT) {
+        /* the touch layout editor has the page: begun on the first call,
+           stepped every call (the pad word once the page has faded in), and
+           left with the cursor back on Edit layout, what changed saved */
+        const int ready = lt_fade_status() == 2;
+        unsigned int fl = 0, held = 0;
+        if (ready) {
+            lt_analog2Pad();
+            fl = (unsigned int)pad[0].flags;
+            held = (unsigned int)pad[0].now;
+        }
+        if (ui_touch_edit_proc(first, fl, held) && ready) {
+            return leaveTo(id, parentLayout(pg));
+        }
+        return -1;
+    }
     if (id == UI_PAGE_MUSIC) {
         gallery_tick(); /* the engine, once a Main tick while the page is up */
     }
@@ -4663,6 +4848,19 @@ static int settingsProc(int first, int item)
                 POSITIVE_SE();
                 return to;
             }
+        }
+        if ((flags & PAD_OK) &&
+            (r->opt == UI_OPT_TOUCH_RESET || r->opt == UI_OPT_TOUCH_RESET_ALL)) {
+            /* the posture the phone is in now, or every posture */
+            const int rule = r->opt == UI_OPT_TOUCH_RESET ? touchRule() : -1;
+            IcoTouchEdits *e = ico_input_live_touch_edits();
+            fprintf(stderr, "touch: reset layout (%s, %s)\n",
+                    rule < 0 ? "all postures" : ico_touch_posture_name(rule),
+                    ico_touch_edits_any(e, rule) ? "edited before" : "nothing edited");
+            ico_touch_edits_reset(e, rule);
+            s_dirtyTouch = 1;
+            POSITIVE_SE();
+            refreshPage(pg, id, lay->curItem);
         }
         if ((flags & PAD_OK) && r->opt == UI_OPT_EXTRAS_STEAM) {
             POSITIVE_SE();

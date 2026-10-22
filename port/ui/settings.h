@@ -132,9 +132,11 @@ void ui_settings_set_version(const char *label);
 /* the Main page's version row, -1 when none (tests) */
 int ui_settings_version_row(void);
 
-/* Settings > Controls shows the touch overlay's rows (Touch
-   controls, Touch size, Touch opacity) only while fn reports a touch screen
-   (input_sdl.h ico_input_sdl_touch_present); NULL, or 0, hides them. */
+/* Settings > Controls shows its Touch screen row (the link to the
+   UI_PAGE_TOUCH page: Touch controls, Touch size, Touch opacity, Edit
+   layout, Snap to grid, Grid size, Reset layout, Reset all layouts) only
+   while fn reports a touch screen (input_sdl.h ico_input_sdl_touch_present);
+   NULL, or 0, hides it. */
 void ui_settings_set_touch_query(int (*fn)(void));
 
 /* Settings > Controls > Touch screen > Edit layout (the touch layout
@@ -157,6 +159,13 @@ typedef struct UiTouchEditHost {
 } UiTouchEditHost;
 
 void ui_settings_set_touch_edit_host(const UiTouchEditHost *h);
+/* The host installed, every hook set and editor() not NULL: 1 and *out
+   filled, else 0 (touch_edit_ui.c, tests). */
+int ui_settings_touch_edit_host(UiTouchEditHost *out);
+/* The live edits changed outside the pages' steps (the Edit layout page's
+   Done): ui_settings_save writes them (ico_input_write_touch_edits) with
+   the rest. */
+void ui_settings_touch_dirty(void);
 
 /* The Android build's title Quit row and its confirmation
    read "Quit game" / "Quit the game?" while fn returns 1 (the phone's app is
@@ -279,6 +288,12 @@ typedef enum UiSettingsPage {
        appearance.h): nine stepped colour rows, Randomize, Reset, Back */
     UI_PAGE_CHARACTERS,
     UI_PAGE_GPU_DRIVER, /* Graphics driver (Android; main page link needs a host) */
+    /* Controls > Touch screen (shown with a touch screen): the overlay's
+       rows, Edit layout, Snap to grid, Grid size, the two Resets, Back */
+    UI_PAGE_TOUCH,
+    /* Touch screen > Edit layout: one masked row; the touch layout editor
+       (touch_edit_ui.c) takes the page's input and the overlay draws it */
+    UI_PAGE_TOUCH_LAYOUT,
     UI_PAGE_COUNT
 } UiSettingsPage;
 
@@ -329,10 +344,13 @@ typedef enum UiSettingsOpt {
     UI_OPT_CIRCLE_BACK,  /* [game] circle_back */
     UI_OPT_VIBRATION,    /* the game's iosPadActRequestEnable */
     UI_OPT_HOLD_TYPE,    /* [gameplay] hold_type: A (hold) or B (toggle) */
-    /* the touch overlay ([input] touch_*), shown with a touch screen */
+    /* Controls > Touch screen: the touch overlay ([input] touch_*) and
+       its layout edits ([touch]), shown with a touch screen */
     UI_OPT_TOUCH_MODE,    /* Off, Auto, Always */
     UI_OPT_TOUCH_SIZE,    /* Small, Medium, Large */
     UI_OPT_TOUCH_OPACITY, /* 25, 50, 75, 100 % */
+    UI_OPT_TOUCH_SNAP,    /* [touch] snap: On/Off */
+    UI_OPT_TOUCH_GRID,    /* [touch] grid: 2, 4 or 8 mm */
     /* Gameplay */
     UI_OPT_STICK_FIX,
     UI_OPT_YORDA,
@@ -388,7 +406,14 @@ typedef enum UiSettingsOpt {
     UI_OPT_GPU_REMOVE,
     /* Extras > Add to Steam (desktop; shown from the title while a host
        handler is set) */
-    UI_OPT_EXTRAS_STEAM
+    UI_OPT_EXTRAS_STEAM,
+    /* Controls > Touch screen's actions: Edit layout (opens
+       UI_PAGE_TOUCH_LAYOUT; locked while Touch controls is Off or without
+       an editor host), Reset layout (the posture the phone is in now) and
+       Reset all layouts (every posture) */
+    UI_OPT_TOUCH_EDIT,
+    UI_OPT_TOUCH_RESET,
+    UI_OPT_TOUCH_RESET_ALL
 } UiSettingsOpt;
 
 /* The entry rows and the menu's layouts (-1 before ui_settings_install):
@@ -434,7 +459,8 @@ const char *ui_settings_value_text(UiSettingsOpt opt);
    left/right press on its row does (tests). */
 void ui_settings_step(UiSettingsOpt opt, int dir);
 /* Writes what changed (ico_video_save, ico_input_write_bindings,
-   ico_config_save), as leaving a screen does.  0, or -1. */
+   ico_input_write_touch_edits, ico_config_save), as leaving a screen
+   does.  0, or -1. */
 int ui_settings_save(void);
 /* What is still unwritten when the game closes (the window's close
    button, the title's Quit to desktop): ui_settings_save's

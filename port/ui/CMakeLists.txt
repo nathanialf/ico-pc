@@ -6,7 +6,8 @@
 #                       ui_host.c and touch_ui.c), measure-only headless;
 #                       with the Settings menu's sources (ico_ui_settings:
 #                       settings.c, ui_list.c, ui_hint.c, gallery.c,
-#                       photo_ui.c, ui_mouse.c, ui_mouse_geom.c)
+#                       photo_ui.c, ui_mouse.c, ui_mouse_geom.c,
+#                       touch_edit_ui.c)
 #   ico_gallery_live    gallery_play.c, the music gallery's engine (the
 #                       game's sound calls), in ico_pc
 #   ico_ui_cpu          the CPU copy with the Settings sources, for the
@@ -77,7 +78,8 @@ set(_ui_sources
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
 set_source_files_properties(layout_ext.c menu_font.c menu_text.c popup.c settings.c ui_list.c
-                            ui_hint.c gallery.c photo_ui.c ui_mouse.c touch_ui.c PROPERTIES
+                            ui_hint.c gallery.c photo_ui.c ui_mouse.c touch_ui.c touch_edit_ui.c
+                            PROPERTIES
                             COMPILE_OPTIONS "-Wno-strict-prototypes")
 
 function(ico_ui_library name rd)
@@ -107,9 +109,10 @@ set(_ui_settings_deps ico_achievements ico_audio ico_input ico_options ico_confi
 function(ico_ui_settings name)
     # the mouse pointer in the menus (ui_mouse.c, its arithmetic
     # in ui_mouse_geom.c; the pointer's state is port/input's pointer.c);
-    # the port text's language from [ui] language and the disc (ui_lang.c)
+    # the port text's language from [ui] language and the disc (ui_lang.c);
+    # the Edit layout page's side of the touch layout editor (touch_edit_ui.c)
     target_sources(${name} PRIVATE settings.c ui_list.c ui_hint.c gallery.c photo_ui.c ui_mouse.c
-                                   ui_mouse_geom.c ui_lang.c)
+                                   ui_mouse_geom.c ui_lang.c touch_edit_ui.c)
     foreach(_lib ${_ui_settings_deps})
         target_include_directories(${name} PRIVATE
                                    $<TARGET_PROPERTY:${_lib},INTERFACE_INCLUDE_DIRECTORIES>)
