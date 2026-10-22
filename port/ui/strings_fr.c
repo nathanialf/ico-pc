@@ -497,6 +497,9 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_VAL_SHARP] = "Net",
     [UI_STR_EFFECT_WATER_NOTE] =
         "Net dessine les reflets dans l’eau à la résolution choisie ; Original garde les reflets plus doux de la PS2.",
+    [UI_STR_VAL_SMOOTH] = "Fluide",
+    [UI_STR_EFFECT_MOTION_BLUR_NOTE] =
+        "Original fait avancer la traînée avec les images du jeu. Fluide la fait avancer à chaque image affichée, pour la même longueur de traînée.",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Bandes cinéma",
     [UI_STR_OPT_FULL_PIXEL] = "Pixels exacts de l'écran",
     /* Settings > Graphics driver (Android), Quit game */

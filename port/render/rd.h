@@ -400,6 +400,15 @@ typedef struct RdSettings {
      * drawn at their own GS size, as on the PS2 (and as before this
      * option; the replay tool's --water-sharp sets it) */
     uint8_t waterSharp;
+    /* Motion blur: Smooth ([video] effect_motion_blur_mode = "smooth" with
+     * effect_motion_blur on).  The motion blur's sprite (staticBlur.c
+     * MotionBlur) reads an accumulator of the scenes of every present
+     * instead of the DISPLAY the tick started from, and its FIX is spread
+     * over the tick's presents (rd_blur_smooth.c): the same length of
+     * trail, moved on at every present.  0 in a zeroed RdSettings: the
+     * game's own (Original), as before this option; the replay tool's
+     * --motion-blur smooth sets it */
+    uint8_t motionBlurSmooth;
     /* The internal scene resolution, in texels: the scene's
      * texture is sceneWidth x sceneHeight (GS coordinates unchanged); 0 x 0
      * with sceneScale 0 = the presentation box in the window under the
@@ -1983,6 +1992,10 @@ typedef struct RdPerfRecord {
      * reading their destination by local read (rd_fx_plan.c); vuNoPlanes
      * the VU draw passes through vu_np_ps or vu_texa_np_ps (rd_pixel_plan.c) */
     uint32_t alphaOnePass, alphaOpaque, fxConstant, fxAdditive, fxLocal, vuNoPlanes;
+    /* Motion blur: Smooth (rd_blur_smooth.c): blurSmoothPasses the
+     * accumulator's passes this replay (the resolve and the accumulate, two
+     * a present; one on a restart) */
+    uint32_t blurSmoothPasses;
     /* The VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass;
      * docs/port/RENDER.md, "The vertex and triangle pre-passes"):
      * vuPrePasses their render passes (0, 1: the vertices and sprites, or 2:

@@ -158,6 +158,7 @@ display option, the [preset](ARCHITECTURE.md#terms) rule and the pacing belong t
 | `texture_pack_precache` | bool | `true` | file only; read the whole pack into memory at start |
 | `texture_pack_cache_mb` | int | `0` | file only; memory for that read, 0 (half the computer's) or 128..65536 |
 | `effect_glow`, `effect_depth_of_field`, `effect_softening`, `effect_motion_blur`, `effect_fog`, `effect_cinematic_bars` | bool | `true` | the game's own picture effects |
+| `effect_motion_blur_mode` | string | `"original"` | Motion blur's way while `effect_motion_blur` is on: `"original"` (the game's sprite reading the DISPLAY the tick started from) or `"smooth"` (`RdSettings.motionBlurSmooth`: an accumulator of every present's scene, [RENDER.md](RENDER.md#the-motion-blur-under-smooth)); anything else is `"original"` with a `video:` stderr line; written with every save, never by itself |
 | `effect_water_sharp` | bool | `false` | Water reflections: `true` (Sharp) draws the reflections in water and the queen barrier's picture at the scene's scale, `false` (Original) at their GS size ([RENDER.md](RENDER.md#water-and-render-to-texture-blocks)) |
 | `effects_depth` | bool | `true` | file only; the scene's depth for an effects program such as ReShade |
 | `video_mode` | string | absent: 60 Hz | `pal50` or `60hz`, the boot screen's choice (`port/config/sysconf.c`); ignored on the Japanese and Korean discs, which have no 50 Hz mode (`ico_boot_video_mode` returns 60 Hz and logs it once) |

@@ -25,6 +25,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_post.c` | `rd_post`: each post kind as the GS writes and sprites GsBase.c issues |
 | `port/render/rd_blur.c` | staticBlur.c's sprites and the reduction's, for `rd__blur_post_sprite`; the open border's strips |
 | `port/render/rd_blur_border.c` | the post sprites' replay (`rd__blur_post_sprite`): the fold, the reduction's open border and its outer columns |
+| `port/render/rd_blur_smooth.c` | Motion blur: Smooth: the motion blur's accumulator, its two passes and the sprite drawn over it (`rd__blur_smooth_sprite`) |
 | `port/render/rd_shadow.c` | the shadow count on the stencil |
 | `port/render/rd_water.c` | render-to-texture blocks, target aliases, camera scopes, pool STs |
 | `port/render/rd_fog_path.c` | how the fog reads the scene depth; the fog probe and self-test |
@@ -1901,6 +1902,86 @@ rd: fx plan: a staticBlur sprite drawn by the constant fold (a masked draw in th
 rd: fx plan: the reduction's black sprite on a scaled DISPLAY drawn as its clear (reported once)
 rd: fx local read: on (self-test: local ok 4, snapshot ok 4) on SCENE 512x512 at 1024x1024 texels
 ```
+
+### The motion blur under Smooth
+
+Options > Effects > Motion blur: Smooth (`[video] effect_motion_blur_mode = "smooth"` with
+`effect_motion_blur` on, `RdSettings.motionBlurSmooth`; issue 112). The game's motion blur
+(`ico2/sugipon/src/staticBlur.c` (`MotionBlur`)) is one sprite in list 7, the previous DISPLAY
+(TBP 0, RGB24, H/2 lines stretched over H) over SCENE with ALPHA mode 2, `(Cs - Cd) FIX / 128 +
+Cd`, FIX the stage's `motionBlur` (typically 32). Original keeps it once a tick: every present of
+a tick reads the DISPLAY the tick started from (`DISPLAY_HELD`, `rd_interp.c` (`feedback`)), so
+between ticks the trail stands still while the picture moves. Under Smooth `rd__blur_post_sprite`
+hands the sprite to `rd__blur_smooth_sprite` (`port/render/rd_blur_smooth.c`, file comment),
+which per present i keeps
+
+    A_i = S_i + a' (A_i-1 - S_i),   a' = FIX' / 128,   FIX' = clamp(round(128 (FIX / 128)^(1 / k)), FIX, 127)
+
+with S_i SCENE just before the sprite, A an RGBA16F ping-pong pair at SCENE's texture size (its
+scale, its Full pixel crop; an 8-bit running blend would stall up to 7 levels short at k = 10,
+its floor step `(A - S) FIX' >> 7` being 0 below `128 / (128 - FIX')`), and k the presents a
+tick. Each present: the sprite's pass ends; SCENE goes to a shader read (an open MSAA epoch
+resolves into it there); `fx_acc_resolve_ps` rounds A_i-1 into RES, an RGBA8 scene-class
+temporary target (`rd__temp_target_alloc(gsW, gsH, 0, 1)`); `fx_acc_ps` writes A_i into the
+pair's other texture from A_i-1 and SCENE (both `blit_vs`, one triangle, each texel by Load);
+then the game's sprite is drawn as recorded through `rd__replay_blur_sprite_draw`, in a payload of
+its own, with its texture RES's RGB24 view (`RD_VIEW_RGB24_TA0`, so the alpha it writes is TA0 as
+before), its V over all H lines (`uv[3] = uv[1] + 2 (uv[3] - uv[1])`: the recorded 4 .. 4100
+becomes 4 .. 8196, one texel a row as U has one a column) and FIX' for FIX; the state's
+texture and FIX are put back after it. The sprite's 8-bit result is A_i rounded; A keeps the
+fraction. The two pipelines are a private cache (`RD_BLUR_SMOOTH_PIPES`, as the COLCLAMP 0 wrap's
+`RD_WRAP_PIPES`; the pipeline pool's headroom assert counts them), so the `rd__get_pipeline` set
+and `RD_PIPELINE_REACHABLE_MAX` do not change; the sprite's own key is the recorded one (FIX and
+the texture are not in it).
+
+k comes from the presenters (`rd__blur_smooth_arm`, before each replay that presents): on the timer
+path `rd_present_clock_alpha`'s tick over its step (kept in `rd_interp.c` statics), under the vsync
+lock the presents the tick before counted (`rd_present`), 1 for the first tick and for the
+presenter without interpolation (`rd_core.c` (`replayOnHost`)); clamped to 1..64
+(`RD_BLUR_SMOOTH_K_MAX`); FIX' is taken at each sprite from the tick's k. A replay nobody armed
+(a self-test, a dump's, the replay tool's `--time`) draws the sprite as Original and leaves A
+alone. `feedback` makes no DISPLAY / DISPLAY_HELD head copy while `rd__blur_smooth_active` (the
+sprite does not read DISPLAY; FEED128's copies are unchanged).
+
+The trail ends where an armed replay that is not a keep frame's drew no motion blur sprite (the
+game's alpha 0, the switch off: `rd__blur_smooth_replay_end`, from `rd__replay_frame`): the next
+sprite starts it again, `A = S` and FIX' 0, which leaves SCENE's colour as it is (no stale
+ghost). The same restart follows a new scene size, the targets made again (`createNamedTargets`
+frees the pair and RES before the pool's clear), and a change of the setting (`rd_begin_frame`
+frees them on the host). `rd__blur_smooth_shutdown` (`rd__gpu_shutdown`) destroys the pair and the
+pipelines. A texture or pipeline the GPU refuses leaves the run on Original (logged). The tiler's
+fold cannot apply (the motion blur is no blur pair); the frame-size plan's local read
+(`rd_fx_plan.c`) draws the sprite as it would draw the recorded one.
+
+Against Original (DISPLAY.md): the light the passes after the sprite add (the aura, the
+brightness step, the reduction's tint, a fade) is not recycled through the trail, since A
+holds scenes, not DISPLAYs (spread over k presents that loop would settle at another brightness,
+`rd_interp.c`'s header), and the PS2's vertical halving of the old frame is gone. A still picture
+is the same within a level. At one present a tick (Frame rate Original) FIX' is FIX and the two
+differ only in what the trail holds. Cost: two passes of one triangle over SCENE's texture a
+present and 20 bytes a texel (50 MB at 2340x1080, 166 MB at 3840x2160), made only while Smooth
+draws.
+
+The log (`rd: ` lines):
+
+```
+motion blur: smooth (the trail moved on at every present from an accumulator of the scenes, the game's FIX spread over the presents of a tick)      (rd_init, or with ", from the next present" on a change)
+motion blur: original (the game's own: the trail moved on once a tick), from the next present
+motion blur: smooth: accumulator WxH (RGBA16F x2 + RGBA8, N.N MB)
+motion blur: smooth: no memory for the accumulator WxH (RGBA16F x2 + RGBA8, N.N MB): the motion blur is drawn as Original for this run
+motion blur: smooth: its pipelines could not be made (accumulate made|missing, resolve made|missing): the motion blur is drawn as Original for this run
+motion blur: smooth: the scene is WxH texels now (the accumulator WxH): made again
+motion blur: smooth: the accumulator WxH freed (why)
+motion blur: smooth: the trail starts again at frame N (why): this present's scene is its first picture, no old frame in it      (the first 3 a block)
+motion blur: smooth at one present a tick (FIX F as recorded): ...      (once)
+motion blur: smooth: the sprite of frame N is drawn as Original: why (reported once)
+motion blur: smooth: P presents, K1 to K2 presents a tick, FIX F drawn as F' (the last); D sprites through the accumulator, R restarts (M not named above), O drawn as Original (no accumulator)      (with the interp summary, when it drew)
+```
+
+`RdPerfRecord.blurSmoothPasses` counts the passes a replay. The replay tool's `--motion-blur
+smooth` sets it (its replays armed; the `--prev` dumps feed the trail) and `--presents N` (with
+`--interp T PREV`) replays PREV, then N presents at alpha `T (k + 1) / N` to `<out>-p<k>.png`
+(TESTING.md).
 
 ## Above 1x
 

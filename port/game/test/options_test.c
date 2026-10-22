@@ -606,6 +606,75 @@ static void test_video_effects(const char *dir)
     CHECK(o.effectWaterSharp == 1 && ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
     ico_video_set_preset(&o, ICO_VIDEO_ORIGINAL);
     CHECK(o.effectWaterSharp == 1);
+    /* Motion blur's way ([video] effect_motion_blur_mode): Original with no
+       key (a file from before it), "original" and "smooth" read in any
+       case, anything else Original (with a stderr line); Smooth only while
+       the switch is on for the getter and the log's name, the way kept
+       under Off; saved with every save, read back, outside the preset */
+    {
+        static const struct {
+            const char *text;
+            int smooth;
+        } kMode[] = {{NULL, 0}, {"original", 0}, {"Smooth", 1}, {"fast", 0}};
+
+        ico_video_defaults(&d);
+        CHECK(d.effectMotionBlurSmooth == 0 &&
+              strcmp(ico_video_motion_blur_name(&d), "original") == 0);
+        for (int i = 0; i < 4; i++) {
+            f = fopen(path, "wb");
+            if (f != NULL) {
+                fputs("[video]\n", f);
+                if (kMode[i].text != NULL) {
+                    fprintf(f, "effect_motion_blur_mode = \"%s\"\n", kMode[i].text);
+                }
+                fclose(f);
+            }
+            ico_config_reset(path, "/nonexistent/options_test.ini");
+            ico_video_reload();
+            ico_video_get(&o);
+            CHECK(o.effectMotionBlur == 1 && o.effectMotionBlurSmooth == kMode[i].smooth &&
+                  ico_video_effect_motion_blur_smooth() == kMode[i].smooth &&
+                  ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+        }
+        f = fopen(path, "wb");
+        if (f != NULL) {
+            fputs("[video]\neffect_motion_blur = false\neffect_motion_blur_mode = \"smooth\"\n", f);
+            fclose(f);
+        }
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_video_reload();
+        ico_video_get(&o);
+        CHECK(o.effectMotionBlur == 0 && o.effectMotionBlurSmooth == 1 &&
+              ico_video_effect_motion_blur_smooth() == 0 &&
+              strcmp(ico_video_motion_blur_name(&o), "off") == 0);
+        o.effectMotionBlur = 1;
+        o.effectMotionBlurSmooth = 4;
+        ico_video_set(&o);
+        ico_video_get(&o);
+        CHECK(o.effectMotionBlurSmooth == 1 && ico_video_effect_motion_blur_smooth() == 1 &&
+              strcmp(ico_video_motion_blur_name(&o), "smooth") == 0);
+        CHECK(ico_video_save() == 0);
+        text = read_text(path);
+        CHECK(text != NULL && strstr(text, "effect_motion_blur = true") != NULL &&
+              strstr(text, "effect_motion_blur_mode = \"smooth\"") != NULL);
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_video_reload();
+        ico_video_get(&o);
+        CHECK(o.effectMotionBlurSmooth == 1 && ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+        ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
+        CHECK(o.effectMotionBlurSmooth == 1 && ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
+        /* a file without the key saved by this build gains it as Original */
+        f = fopen(path, "wb");
+        if (f != NULL) {
+            fputs("[video]\neffect_fog = false\n", f);
+            fclose(f);
+        }
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_video_reload();
+        CHECK(ico_video_save() == 0);
+        text = read_text(path);
+        CHECK(text != NULL && strstr(text, "effect_motion_blur_mode = \"original\"") != NULL);
+    }
     /* the Glow size key an older version wrote (effect_glow_size) is read
        by nothing: a file holding it loads as one without it (every effect
        on, the preset Original), and a save of a file without it does not

@@ -375,6 +375,9 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->borderMask = (uint8_t)(o.fullPixel == 0);
     /* Water reflections: Sharp, in either preset (at 1x it changes nothing) */
     rs->waterSharp = (uint8_t)(o.effectWaterSharp != 0);
+    /* Motion blur: Smooth, in either preset; Off and Original are the
+       game's (staticBlur.c reads the switch) */
+    rs->motionBlurSmooth = (uint8_t)(o.effectMotionBlur != 0 && o.effectMotionBlurSmooth != 0);
     /* off under the Original preset (ico_video_anti_alias); the renderer
        draws an MSAA count the device lacks as off (rd_aa_supported_mask) */
     rs->antiAlias = (uint8_t)ico_video_anti_alias();
@@ -588,6 +591,8 @@ static void video_log_changes(const IcoVideoOptions *o)
                     o->modelPack ? "on" : "off");
     video_log_field(line, sizeof(line), "dump models", p->dumpModels ? "on" : "off",
                     o->dumpModels ? "on" : "off");
+    video_log_field(line, sizeof(line), "motion blur", ico_video_motion_blur_name(p),
+                    ico_video_motion_blur_name(o));
     if (line[0] != '\0') {
         fprintf(stderr, "window: display changed: %s\n", line);
     }
@@ -2179,7 +2184,7 @@ open_window:
                 "window: %dx%d pixels%s, %s on %s, %s preset (resolution %s, aspect %s, "
                 "texture filter %s, %s height, framerate %s), window mode %s, vsync %s, "
                 "texture pack %s, "
-                "dump textures %s, model pack %s, dump models %s, depth %s\n",
+                "dump textures %s, model pack %s, dump models %s, depth %s, motion blur %s\n",
                 w, h, s_fullscreen ? " fullscreen" : "",
                 rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", rhi_adapter_name(),
                 video_preset_label(&o), ico_video_resolution_name(&o, res, sizeof(res)),
@@ -2190,7 +2195,7 @@ open_window:
                 o.texturePack ? "on" : "off",
                 o.dumpTextures && ico_opt_developer_mode() ? "on" : "off",
                 o.modelPack ? "on" : "off", o.dumpModels && ico_opt_developer_mode() ? "on" : "off",
-                rhi_limits()->depthStencilFormatName);
+                rhi_limits()->depthStencilFormatName, ico_video_motion_blur_name(&o));
         fprintf(stderr, "window: present mode %s%s\n", rhi_present_mode_name(),
                 s_pres.gridLock         ? " (the cap equals the refresh: the vsync lock)"
                 : s_pres.fifoLock       ? " (the cap equals the refresh)"

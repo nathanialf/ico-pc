@@ -159,9 +159,10 @@ The picture's finish, the CRT filter and the game's own picture effects.
   still show through it. To adjust a style's details, see
   [the lines you can change in a file](#settings-you-can-only-change-in-a-file).
 
-The game's own effects are each On or Off (Water reflections is Original
-or Sharp). All On, with Water reflections at Original, is the picture the
-PS2 gives you, and that is how the game starts.
+The game's own effects are each On or Off (Motion blur is Off, Original
+or Smooth, and Water reflections is Original or Sharp). All On, with Motion
+blur and Water reflections at Original, is the picture the PS2 gives you,
+and that is how the game starts.
 
 - **Glow:** the soft glow around bright light, and the flare of the sun.
   It is drawn at the PlayStation 2's size at every Resolution and spread
@@ -170,7 +171,15 @@ PS2 gives you, and that is how the game starts.
 - **Depth of field:** the blur on things far away.
 - **Screen softening:** a slight blur over the whole picture that smooths
   jagged edges.
-- **Motion blur:** the trail that moving things leave behind.
+- **Motion blur:** the trail that moving things leave behind. Off, Original
+  or Smooth. Original is the PS2's trail: it moves on once for each of the
+  game's own frames, so when the game shows more frames than it makes (any
+  Frame rate above Original) the trail stands still for a moment while the
+  picture in front of it moves. Smooth moves the trail on with every frame
+  you see, so it follows the picture smoothly; the trail is as long as
+  Original's. Smooth costs a little more of the graphics card's time and
+  memory, which you may notice on a phone. At Frame rate Original the two
+  look nearly the same. Original is how the game starts.
 - **Fog:** the haze that hides the distance.
 - **Water reflections:** Original or Sharp. Original is the PS2's
   reflection in puddles, pools and the water at the mill, which looks soft
@@ -516,6 +525,7 @@ Under `[video]`:
 | --- | --- |
 | `window_mode = "windowed"` | The Window mode row: `"windowed"`, `"borderless"` or `"fullscreen"`. If the file has no `window_mode` line, the game reads its `fullscreen =` line instead: `true` is Fullscreen, `false` is Windowed. |
 | `effect_glow = true` and the five other `effect_` lines | The six switches of the Effects page. |
+| `effect_motion_blur_mode = "original"` | How Motion blur moves while it is on: `"original"` or `"smooth"`. `effect_motion_blur = false` is Off whatever this says. |
 | `effect_water_sharp = false` | Water reflections on the Effects page: `false` is Original, `true` is Sharp. |
 | `crt = false`, `crt_mode = "consumer"`, `crt_strength = 1.0` | The CRT filter and CRT strength rows. `crt_mode` is `"scanlines"`, `"consumer"`, `"trinitron"`, `"pvm"` or `"shadow"`. `crt_strength` goes from `0.0` to `1.0`. |
 | `crt_scanlines`, `crt_mask`, `crt_halation`, `crt_bloom` | Fine tuning of the CRT filter, each from `0.0` to `1.0`: how strong the dark lines are, how strong the fine pattern of dots or stripes is, how much glow surrounds bright spots and how much bright areas spread softly. A line that is missing, or a negative number, keeps the chosen style's own value. |

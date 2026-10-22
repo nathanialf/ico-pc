@@ -495,6 +495,9 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_VAL_SHARP] = "くっきり",
     [UI_STR_EFFECT_WATER_NOTE] =
         "「くっきり」は水面の映り込みを選んだ解像度で描きます。「オリジナル」はPS2のやわらかい映り込みのままです。",
+    [UI_STR_VAL_SMOOTH] = "なめらか",
+    [UI_STR_EFFECT_MOTION_BLUR_NOTE] =
+        "「オリジナル」はブラーをゲームのフレームごとに動かします。「なめらか」は表示するフレームごとに動かします。ブラーの長さは同じです。",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "上下の黒帯",
     [UI_STR_OPT_FULL_PIXEL] = "ドットバイドット",
     /* Settings > Graphics driver (Android), Quit game */

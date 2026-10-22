@@ -84,6 +84,7 @@ void ico_video_defaults_for(IcoVideoOptions *o, int android)
     o->effectDepthOfField = 1;
     o->effectSoftening = 1;
     o->effectMotionBlur = 1;
+    o->effectMotionBlurSmooth = 0;
     o->effectFog = 1;
     o->effectCinematicBars = 1;
     o->effectWaterSharp = 0;
@@ -412,6 +413,7 @@ static void sanitize(IcoVideoOptions *o)
     o->effectDepthOfField = !!o->effectDepthOfField;
     o->effectSoftening = !!o->effectSoftening;
     o->effectMotionBlur = !!o->effectMotionBlur;
+    o->effectMotionBlurSmooth = !!o->effectMotionBlurSmooth;
     o->effectFog = !!o->effectFog;
     o->effectCinematicBars = !!o->effectCinematicBars;
     o->effectWaterSharp = !!o->effectWaterSharp;
@@ -516,6 +518,13 @@ static void read_config(void)
     o.effectDepthOfField = ico_config_get_bool("video.effect_depth_of_field", 1);
     o.effectSoftening = ico_config_get_bool("video.effect_softening", 1);
     o.effectMotionBlur = ico_config_get_bool("video.effect_motion_blur", 1);
+    /* no key (a file from before the choice): Original, as before */
+    if (ico_video_parse_motion_blur_mode(
+            ico_config_get_string("video.effect_motion_blur_mode", "original"),
+            &o.effectMotionBlurSmooth) != 0) {
+        o.effectMotionBlurSmooth = 0;
+        fprintf(stderr, "video: effect_motion_blur_mode not understood; \"original\" used\n");
+    }
     o.effectFog = ico_config_get_bool("video.effect_fog", 1);
     o.effectCinematicBars = ico_config_get_bool("video.effect_cinematic_bars", 1);
     o.effectWaterSharp = ico_config_get_bool("video.effect_water_sharp", 0);
@@ -547,11 +556,16 @@ static void read_config(void)
 
         fprintf(stderr,
                 "video: %s preset: resolution %s, aspect %s, texture filter %s, %s "
-                "height, framerate %s\n",
+                "height, framerate %s, motion blur %s\n",
                 preset == ICO_VIDEO_ENHANCED ? "Enhanced" : "Custom",
                 ico_video_resolution_name(&o, res, sizeof(res)), ico_video_aspect_name(o.aspect),
                 ico_video_filter_name(o.filter), o.fullHeight ? "full" : "half",
-                ico_video_framerate_name(o.framerate, fr, sizeof(fr)));
+                ico_video_framerate_name(o.framerate, fr, sizeof(fr)),
+                ico_video_motion_blur_name(&o));
+    } else if (!o.effectMotionBlur || o.effectMotionBlurSmooth) {
+        /* the Original preset's line is the window's; a motion blur that
+           is not the game's own is named here too */
+        fprintf(stderr, "video: Original preset, motion blur %s\n", ico_video_motion_blur_name(&o));
     }
 }
 
@@ -639,6 +653,8 @@ int ico_video_save(void)
     r |= ico_config_set_bool("video.effect_depth_of_field", o.effectDepthOfField);
     r |= ico_config_set_bool("video.effect_softening", o.effectSoftening);
     r |= ico_config_set_bool("video.effect_motion_blur", o.effectMotionBlur);
+    r |= ico_config_set_string("video.effect_motion_blur_mode",
+                               o.effectMotionBlurSmooth ? "smooth" : "original");
     r |= ico_config_set_bool("video.effect_fog", o.effectFog);
     r |= ico_config_set_bool("video.effect_cinematic_bars", o.effectCinematicBars);
     r |= ico_config_set_bool("video.effect_water_sharp", o.effectWaterSharp);
@@ -737,6 +753,32 @@ int ico_video_effect_motion_blur(void)
         read_config();
     }
     return s_opt.effectMotionBlur;
+}
+
+int ico_video_effect_motion_blur_smooth(void)
+{
+    if (!s_read) {
+        read_config();
+    }
+    return s_opt.effectMotionBlur && s_opt.effectMotionBlurSmooth;
+}
+
+const char *ico_video_motion_blur_name(const IcoVideoOptions *o)
+{
+    return !o->effectMotionBlur ? "off" : o->effectMotionBlurSmooth ? "smooth" : "original";
+}
+
+int ico_video_parse_motion_blur_mode(const char *s, int *smooth)
+{
+    if (s != NULL && lower_eq(s, "original")) {
+        *smooth = 0;
+        return 0;
+    }
+    if (s != NULL && lower_eq(s, "smooth")) {
+        *smooth = 1;
+        return 0;
+    }
+    return -1;
 }
 
 int ico_video_effect_fog(void)

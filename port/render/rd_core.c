@@ -998,6 +998,9 @@ static void createNamedTargets(void)
         for (int i = 0; i < RD_TARGET_COUNT; i++) {
             rd__target_destroy_gpu(&g_rd.targets[i]);
         }
+        /* Motion blur: Smooth's accumulator and its target, at the old size
+         * (before the pool's clear, which destroys that target's textures) */
+        rd__blur_smooth_free("the targets were made again");
         rd__temp_target_pool_clear();
         rd__scene_caches_free();
         rd__effects_depth_free();
@@ -1623,6 +1626,17 @@ static void readDumpConfig(void)
     }
 }
 
+/* the line for the motion blur's way (rd_init, a change) */
+static void logMotionBlur(const char *when)
+{
+    rd__log("motion blur: %s (%s)%s", g_rd.settings.motionBlurSmooth ? "smooth" : "original",
+            g_rd.settings.motionBlurSmooth
+                ? "the trail moved on at every present from an accumulator of the scenes, the "
+                  "game's FIX spread over the presents of a tick"
+                : "the game's own: the trail moved on once a tick",
+            when);
+}
+
 bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, void *sdlWindow)
 {
     if (g_rd.inited) {
@@ -1682,6 +1696,9 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     rd__apply_display(); /* the scales the named targets take */
     if (g_rd.settings.waterSharp) {
         rd__log("water reflections: sharp (the scene's scale)");
+    }
+    if (g_rd.settings.motionBlurSmooth) {
+        logMotionBlur(""); /* made at its first sprite (rd_blur_smooth.c) */
     }
     createNamedTargets();
     readDumpConfig();
@@ -1967,6 +1984,15 @@ static void fogProbeFinish(void *arg)
     rd__fog_probe_finish();
 }
 
+/* Motion blur: Smooth turned off (or on again): its accumulator goes, the
+ * next Smooth sprite starts a trail of its own */
+static void blurSmoothChanged(void *arg)
+{
+    (void)arg;
+    rd__blur_smooth_free(g_rd.settings.motionBlurSmooth ? "Motion blur: Smooth chosen"
+                                                        : "Motion blur: Original chosen");
+}
+
 typedef struct ReplayCall {
     const RdFrame *f;
     int keep;
@@ -1976,6 +2002,7 @@ static void replayOnHost(void *arg)
 {
     const ReplayCall *c = (const ReplayCall *)arg;
     rd__note_frame_present(c->f); /* rd_last_present_info, as rd_present notes its own */
+    rd__blur_smooth_arm(1, 1);    /* Motion blur: Smooth at one present a tick */
     rd__replay_frame(c->f, c->keep, true);
 }
 
@@ -2001,6 +2028,8 @@ void rd_begin_frame(void)
         const bool modelsChanged = g_rd.settings.modelPack != g_rd.pendingSettings.modelPack;
         const bool dumpChanged = g_rd.settings.dumpModels != g_rd.pendingSettings.dumpModels;
         const bool waterChanged = g_rd.settings.waterSharp != g_rd.pendingSettings.waterSharp;
+        const bool blurChanged =
+            g_rd.settings.motionBlurSmooth != g_rd.pendingSettings.motionBlurSmooth;
         g_rd.settings = g_rd.pendingSettings;
         g_rd.settingsPending = false;
         if (packOff) {
@@ -2016,6 +2045,12 @@ void rd_begin_frame(void)
             /* the blocks made from this frame on (rd__target_scale_of) */
             rd__log("water reflections: %s", g_rd.settings.waterSharp ? "sharp (the scene's scale)"
                                                                       : "original (their GS size)");
+        }
+        if (blurChanged) {
+            logMotionBlur(", from the next present");
+            if (g_rd.hasDevice) {
+                rd__on_host(blurSmoothChanged, NULL);
+            }
         }
         /* the Settings menu applies here; a change of the
          * targets' scales recreates them (their content is lost: the next

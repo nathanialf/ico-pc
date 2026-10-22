@@ -118,7 +118,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 ### port/config/test, port/null/test, port/save/test
 
 - `config_test.c`: `config.toml`'s reader and writer, round trips, the ini over `config.toml` over
-  default precedence, the first-run template (Hold type `hold`), the language answer, `[game] disc` (`auto`, the slugs, an unknown value as
+  default precedence, the first-run template (Hold type `hold`, `effect_motion_blur_mode =
+  "original"`), the language answer, `[game] disc` (`auto`, the slugs, an unknown value as
   auto logged once a load) and `[game] last_disc` (read, written, not in the template), the wall
   clock and the [EE](ARCHITECTURE.md#terms) timers (`config`).
 - `null_devices_test.c`: the pad as an empty console answers it (`null_devices`).
@@ -227,7 +228,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the first model, an animation and back (`model_viewer_headless`).
 - `options_test.c`: the gameplay options' defaults and setters (Hold type: `hold` by default, `toggle`
   from the file, an unknown word as `hold`), the video effects' keys (Water
-  reflections' `effect_water_sharp` off by default, saved, outside the preset; a leftover
+  reflections' `effect_water_sharp` off by default, saved, outside the preset; Motion blur's
+  `effect_motion_blur_mode`: `"original"` with no key, `"original"` and `"smooth"` read in any
+  case, an unknown word as `"original"`, Smooth only with the switch on for the getter, kept
+  under Off, saved and read back, outside the preset; a leftover
   `effect_glow_size` read by nothing and not written), `[ui] language` (auto by default and for
   an unknown word, each name its language), `eBrainGetTarget` with Yorda safe off and on, and the
   `[mirror]` keys of the disc its second argument selects (`slot_N`, `jpn_slot_N`, `kor_slot_N`),
@@ -374,7 +378,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`rd_fx_plan.c`), every target against the CPU model exactly, the constant fold and the
   premultiplied paste counted, then with the scene passes readable and the destination by local
   read (`fx_local_ps`) where the device has local read, its self-test passing (`checkFxPlan`); the
-  `fix128_skip` shard holds the plan off (it counts the skip's snapshots).
+  `fix128_skip` shard holds the plan off (it counts the skip's snapshots); the
+  `motion_blur_smooth` shard (`rd_blur_smooth_test.inc`) runs Motion blur: Smooth against
+  Original: a still picture within 1 at 1, 4 and 10 presents a tick, a moving bar's four presents
+  a tick one DISPLAY under Original and four under Smooth with the ghost after the tick within 2,
+  and the restart after a tick without the motion blur holding no ghost
+  (`checkMotionBlurSmooth`); `motion_blur_smooth_scaled` the accumulator and its target at
+  SCENE's size at Enhanced 2x with the full-height scene, freed by `rd_shutdown`
+  (`checkMotionBlurSmoothScaled`).
 - `rd_fx_frame_test.c`: the frame-size sprites' plan on the CPU against `gs_math.hlsli`: the
   constant fold's channels over every blend mode, FIX, COLCLAMP, PABE and a set of RGBAQ against
   `gs_dst_channel` for every Cd and Ad, the premultiplied term through the fixed-function add and
@@ -453,7 +464,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   stage 40 or with photo mode closed, the veil alone without the row (`checkDejaReel`; the
   evaluator there stands in for the game's).
 - `rd_interp_test.c`: presentation between [ticks](ARCHITECTURE.md#terms) on two synthetic frames
-  (`rd_interp`); its rotation cases live in `rd_interp_turn_test.inc` and its seams cases in
+  (`rd_interp`); the feedback head copies (`testFeedback`: `DISPLAY_HELD` and `FEED_HELD` at a
+  tick's first present and the later ones, none for DISPLAY under Motion blur: Smooth, FEED128's
+  unchanged, the motion blur's record as recorded; FIX' of 32 at 1, 2, 4 and 10 presents and at
+  the ends); its rotation cases live in `rd_interp_turn_test.inc` and its seams cases in
   `rd_interp_seams_test.inc`, included where they stood;
   rotation continuity (`testRotationContinuity`): a rigid draw and a bone turning
   170 then 190 degrees a tick stand at 265 degrees half way (on forward the long way, not back to
@@ -740,7 +754,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `menu_text_test.c`: the game's menu words and the port's rows drawn in the sheets' look
   (`menu_text`).
 - `settings_test.c`, `settings_extra_test.c`, `settings_extras_test.c`: the Settings menu over
-  fake tables, CPU only (`settings`, `settings_extra`, `settings_extras`); `settings_test.c` also
+  fake tables, CPU only (`settings`, `settings_extra`, `settings_extras`); `settings_test.c`'s
+  `testEffects` steps Motion blur round Off, Original (the default) and Smooth, each step saved as
+  `effect_motion_blur` and `effect_motion_blur_mode` with the getters at once, the note under the
+  row and the page fitting from both menus; `settings_test.c` also
   presses Right in photo mode through Deja vu and checks the popup's words (`ui__photo_film_word`)
   and holds the fixed row lists of Controls (14 rows) and Touch screen (9 rows);
   `settings_extra_test.c` opens the Touch screen page (`testTouchPage`: the link only with a touch screen, the three overlay rows' values and save, both pages fitting from both entries) and the Edit layout page over a fake editor host and a real editor (`testTouchEditorPage`: open, Back to the Edit layout row with the edits kept, locked while Touch controls is Off or without a host, Snap to grid and Grid size saved as `touch.snap` and `touch.grid`, Reset layout and Reset all layouts), and steps Controls > Hold type from the title and the pause menu, checks the saved

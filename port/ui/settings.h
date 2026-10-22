@@ -324,6 +324,8 @@ typedef enum UiSettingsOpt {
     UI_OPT_EFFECT_GLOW,
     UI_OPT_EFFECT_DEPTH_OF_FIELD,
     UI_OPT_EFFECT_SOFTENING,
+    /* [video] effect_motion_blur and effect_motion_blur_mode: Off/Original/Smooth,
+       default Original */
     UI_OPT_EFFECT_MOTION_BLUR,
     UI_OPT_EFFECT_FOG,
     UI_OPT_EFFECT_WATER, /* [video] effect_water_sharp: Original/Sharp, default Original */

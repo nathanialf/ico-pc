@@ -5,7 +5,9 @@
  * rd__blur_post_sprite takes every staticBlur sprite and both of the
  * reduction's: a staticBlur pair the profile folds goes to
  * rd__replay_blur_fold (rd_replay_tiler.c), every other sprite to
- * rd__replay_blur_sprite_draw (rd_replay.c doBlurSpriteDraw).  The
+ * rd__replay_blur_sprite_draw (rd_replay.c doBlurSpriteDraw); the motion
+ * blur's under Motion blur: Smooth goes to rd__blur_smooth_sprite
+ * (rd_blur_smooth.c) first.  The
  * reduction's textured sprite with the border open (rd__replay_border_open:
  * Full pixel on, or the border mask on a cropped frame) is drawn with the
  * scissor the whole target and both axes on CLAMP, and where the frame is
@@ -112,6 +114,9 @@ static void drawStrips(Replay *r, const RdFrame *f, const RdCmd *c)
  * is not textured and covers everything already. */
 void rd__blur_post_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
 {
+    if (c->b[0] == RD_POST_MOTION_BLUR && rd__blur_smooth_sprite(r, f, c)) {
+        return; /* Motion blur: Smooth (rd_blur_smooth.c) */
+    }
     if (rd__replay_blur_fold(r, f, c)) {
         return; /* a pair folded into one pass (rd_replay_tiler.c) */
     }

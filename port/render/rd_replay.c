@@ -100,7 +100,7 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     /* RD_FS_OPTIONAL_FIRST on */
     "sprite_ps_planes", "sprite_texa_ps_planes", "sprite_stq_ps_planes", "fog_lut_local_ps",
     "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps", "date_stencil_ps", "vu_np_ps",
-    "vu_texa_np_ps", "fx_frame_ps", "fx_local_ps"};
+    "vu_texa_np_ps", "fx_frame_ps", "fx_local_ps", "fx_acc_ps", "fx_acc_resolve_ps"};
 
 const char *rd__fs_name(uint8_t fs)
 {
@@ -346,12 +346,13 @@ void rd__gpu_shutdown(void)
         }
     }
     rd__pipeline_cache_clear();
-    rd__mesh_gpu_shutdown();   /* the mesh arena */
-    rd__vu_prepass_shutdown(); /* the vertex pre-pass's record (rd_replay_vu.c) */
-    rd__fog_shutdown();        /* the fog LUT */
-    rd__shadow_shutdown();     /* the box-reduced shadow count */
-    rd__wrap_shutdown();       /* the COLCLAMP 0 wrap's pipelines and accumulator */
-    rd__msaa_free();           /* the MSAA scene pair */
+    rd__mesh_gpu_shutdown();    /* the mesh arena */
+    rd__vu_prepass_shutdown();  /* the vertex pre-pass's record (rd_replay_vu.c) */
+    rd__fog_shutdown();         /* the fog LUT */
+    rd__shadow_shutdown();      /* the box-reduced shadow count */
+    rd__wrap_shutdown();        /* the COLCLAMP 0 wrap's pipelines and accumulator */
+    rd__blur_smooth_shutdown(); /* Motion blur: Smooth's (rd_blur_smooth.c) */
+    rd__msaa_free();            /* the MSAA scene pair */
     if (g_rd.dummy.id) {
         rhi_destroy_texture(g_rd.dummy);
     }
@@ -5517,6 +5518,11 @@ bool rd__replay_border_open(void)
     return borderOpen();
 }
 
+void rd__replay_viewport(uint32_t w, uint32_t h)
+{
+    setViewport(w, h);
+}
+
 /* ----------------------------------------------------------------- frame */
 
 bool rd__begin_own_frame(uint64_t ringBytes)
@@ -5561,6 +5567,7 @@ bool rd__replay_frame(const RdFrame *f, int keep, bool present)
     const double t0 = rd__now_ms();
     rd__perf_begin(f, keep, present);
     const bool ok = replayFrame(f, keep, present);
+    rd__blur_smooth_replay_end(keep); /* the trail ends where no sprite drew */
     g_rdPerf.uploadBytes = s_ringOff;
     rd__perf_end();
     const double ms = rd__now_ms() - t0;

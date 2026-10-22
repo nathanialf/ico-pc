@@ -577,3 +577,33 @@ float4 fx_blur2_ps(float4 pos : SV_Position) : SV_Target0
     return float4(res) * (1.0 / 255.0);
 }
 #endif
+
+#if !defined(ICO_UINT_SRC) && !defined(ICO_FX_DST_LOCAL) && !defined(ICO_FX_FRAME)
+// fx_acc_ps, fx_acc_resolve_ps: Motion blur: Smooth (port/render/rd_blur_smooth.c),
+// drawn with blit_vs over a texture of SCENE's texture size, each texel read by Load
+// at its own position (no filter, no UV), the values 0..255:
+//   fx_acc_ps          the accumulator's step into the pair's other RGBA16F texture:
+//                      t1 (g_texture) the accumulator A, t2 (g_dest) SCENE just
+//                      before the motion blur's sprite; S + a' (A - S) with
+//                      a' = g_param.x (FIX' / 128), S alone at a' 0 (the trail
+//                      starting again: A is not read)
+//   fx_acc_resolve_ps  t1 the accumulator rounded into the RGBA8 target the sprite
+//                      reads, alpha 255 (the sprite reads TA0 through the RGB24 view)
+float4 fx_acc_ps(float4 pos : SV_Position) : SV_Target0
+{
+    const int3 p = int3(int2(pos.xy), 0);
+    const float4 s = floor(g_dest.Load(p) * 255.0 + 0.5);
+    const float a = g_param.x;
+    [branch] if (a <= 0.0) {
+        return s;
+    }
+    const float3 acc = g_texture.Load(p).rgb;
+    return float4(s.rgb + a * (acc - s.rgb), s.a);
+}
+
+float4 fx_acc_resolve_ps(float4 pos : SV_Position) : SV_Target0
+{
+    const float3 acc = g_texture.Load(int3(int2(pos.xy), 0)).rgb;
+    return float4(floor(clamp(acc, 0.0, 255.0) + 0.5) * (1.0 / 255.0), 1.0);
+}
+#endif

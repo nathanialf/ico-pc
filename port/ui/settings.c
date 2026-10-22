@@ -1378,7 +1378,10 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_EFFECT_SOFTENING:
         return onOff(o.effectSoftening);
     case UI_OPT_EFFECT_MOTION_BLUR:
-        return onOff(o.effectMotionBlur);
+        /* Off, Original (the game's own, the default) or Smooth */
+        return !o.effectMotionBlur        ? ui_str(UI_STR_OFF)
+               : o.effectMotionBlurSmooth ? ui_str(UI_STR_VAL_SMOOTH)
+                                          : ui_str(UI_STR_VAL_ORIGINAL);
     case UI_OPT_EFFECT_FOG:
         return onOff(o.effectFog);
     case UI_OPT_EFFECT_WATER:
@@ -1676,8 +1679,6 @@ static int *videoSwitch(IcoVideoOptions *o, UiSettingsOpt opt)
         return &o->effectDepthOfField;
     case UI_OPT_EFFECT_SOFTENING:
         return &o->effectSoftening;
-    case UI_OPT_EFFECT_MOTION_BLUR:
-        return &o->effectMotionBlur;
     case UI_OPT_EFFECT_FOG:
         return &o->effectFog;
     case UI_OPT_EFFECT_WATER:
@@ -1807,7 +1808,6 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
     case UI_OPT_EFFECT_GLOW:
     case UI_OPT_EFFECT_DEPTH_OF_FIELD:
     case UI_OPT_EFFECT_SOFTENING:
-    case UI_OPT_EFFECT_MOTION_BLUR:
     case UI_OPT_EFFECT_FOG:
     case UI_OPT_EFFECT_WATER:
     case UI_OPT_EFFECT_CINEMATIC_BARS:
@@ -1816,6 +1816,18 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
            and Sharp) */
         int *const on = videoSwitch(&o, opt);
         *on = !*on;
+        video = 1;
+        break;
+    }
+    case UI_OPT_EFFECT_MOTION_BLUR: {
+        /* Off, Original, Smooth, around (Right from Original is Smooth);
+           Off keeps the way chosen last in the file's mode key */
+        int i = !o.effectMotionBlur ? 0 : o.effectMotionBlurSmooth ? 2 : 1;
+        i = stepIndex(i, 3, dir);
+        o.effectMotionBlur = i != 0;
+        if (i) {
+            o.effectMotionBlurSmooth = i == 2;
+        }
         video = 1;
         break;
     }
@@ -2669,6 +2681,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         break;
     case UI_PAGE_EFFECTS:
         addNote(pg, UI_OPT_EFFECT_GLOW, UI_STR_EFFECTS_NOTE);
+        addNote(pg, UI_OPT_EFFECT_MOTION_BLUR, UI_STR_EFFECT_MOTION_BLUR_NOTE);
         addNote(pg, UI_OPT_EFFECT_WATER, UI_STR_EFFECT_WATER_NOTE);
         break;
     case UI_PAGE_GPU_DRIVER:

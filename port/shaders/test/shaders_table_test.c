@@ -59,6 +59,9 @@ static const char *const expectedDiet[] = {"vu_np_ps",      "vu_np_ps_nodual",
                                            "vu_texa_np_ps", "vu_texa_np_ps_nodual",
                                            "fx_frame_ps",   "fx_local_ps"};
 
+/* Motion blur: Smooth's accumulator (fx_sprite.hlsl; port/render/rd_blur_smooth.c) */
+static const char *const expectedSmooth[] = {"fx_acc_ps", "fx_acc_resolve_ps"};
+
 /* the mesh programs' entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli:
  * the fallback's on a device of the table) */
 static const char *const expectedPlain[] = {
@@ -236,6 +239,13 @@ int main(void)
     for (size_t i = 0; i < nDiet; i++) {
         if (!ico_find_shader(expectedDiet[i])) {
             printf("FAIL %s: not in the table\n", expectedDiet[i]);
+            failures++;
+        }
+    }
+    const size_t nSmooth = sizeof(expectedSmooth) / sizeof(expectedSmooth[0]);
+    for (size_t i = 0; i < nSmooth; i++) {
+        if (!ico_find_shader(expectedSmooth[i])) {
+            printf("FAIL %s: not in the table\n", expectedSmooth[i]);
             failures++;
         }
     }
