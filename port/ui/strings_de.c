@@ -553,4 +553,33 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_VAL_DISPLAY_SIZE] = "Bildschirmgröße",
     [UI_STR_WINDOW_SIZE_NOTE] =
         "Für Randlos. Kleiner als der Bildschirm für Programme, die das Fenster skalieren oder Bilder einfügen.",
+    /* Controls > Touch screen and the touch layout editor */
+    [UI_STR_SECTION_TOUCH] = "Touchscreen",
+    [UI_STR_OPT_TOUCH_EDIT] = "Layout bearbeiten",
+    [UI_STR_OPT_TOUCH_SNAP] = "Am Raster ausrichten",
+    [UI_STR_OPT_TOUCH_GRID] = "Rastergröße",
+    [UI_STR_VAL_MM] = "%d mm",
+    [UI_STR_TOUCH_RESET] = "Layout zurücksetzen",
+    [UI_STR_TOUCH_RESET_ALL] = "Alle Layouts zurücksetzen",
+    [UI_STR_TOUCH_EDIT_NOTE] =
+        "Tasten auf dem Bildschirm verschieben und in der Größe ändern. Fertig speichert.",
+    [UI_STR_TOUCH_EDIT_LOCKED] = "Zum Bearbeiten des Layouts die Touch-Steuerung einschalten.",
+    [UI_STR_TED_DONE] = "Fertig",
+    [UI_STR_TED_UNDO] = "Rückgängig",
+    [UI_STR_TED_RESET] = "Zurücksetzen",
+    [UI_STR_TED_SNAP] = "Einrasten",
+    [UI_STR_TED_GRID] = "Raster",
+    [UI_STR_TED_SIZE] = "Größe",
+    [UI_STR_TED_OPACITY] = "Deckkraft",
+    [UI_STR_TED_ALL] = "Alle",
+    [UI_STR_TED_THIS_SCREEN] = "Dieser Bildschirm",
+    [UI_STR_TED_ALL_SCREENS] = "Alle Bildschirme",
+    [UI_STR_TED_CANCEL] = "Abbrechen",
+    [UI_STR_TED_HIDDEN] = "Versteckt",
+    [UI_STR_TED_STICK] = "Stick",
+    [UI_STR_TED_LOOK] = "Kamerafeld",
+    [UI_STR_TED_HINT] =
+        "Eine Taste antippen, um sie auszuwählen. Ziehen verschiebt sie, zwei Finger ändern die Größe.",
+    [UI_STR_TED_OVERLAP] = "Überlappende Tasten: die zuerst gezeichnete gewinnt.",
+    [UI_STR_TED_COVERED] = "Eine Taste kann die Mitte einer anderen nicht verdecken.",
 };

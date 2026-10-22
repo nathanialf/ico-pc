@@ -655,6 +655,40 @@ typedef enum UiStrId {
     UI_STR_OPT_WINDOW_SIZE,
     UI_STR_VAL_DISPLAY_SIZE,
     UI_STR_WINDOW_SIZE_NOTE,
+    /* Controls > Touch screen: the link and its page's rows (Touch
+       controls, size and opacity are UI_STR_OPT_TOUCH_*), the Grid size
+       value ("%d mm", one %d), the Edit layout row's notes */
+    UI_STR_SECTION_TOUCH,
+    UI_STR_OPT_TOUCH_EDIT,
+    UI_STR_OPT_TOUCH_SNAP,
+    UI_STR_OPT_TOUCH_GRID,
+    UI_STR_VAL_MM,
+    UI_STR_TOUCH_RESET,
+    UI_STR_TOUCH_RESET_ALL,
+    UI_STR_TOUCH_EDIT_NOTE,
+    UI_STR_TOUCH_EDIT_LOCKED,
+    /* the touch layout editor's words (port/ui/touch_ui.c): the toolbar's
+       keys, the Reset key's confirm strip, the word on a hidden control,
+       the names of the controls that have no button word (the D-pad is
+       UI_STR_BTN_DPAD, the faces UI_STR_BTN_*), the hint line and the two
+       notes that replace it */
+    UI_STR_TED_DONE,
+    UI_STR_TED_UNDO,
+    UI_STR_TED_RESET,
+    UI_STR_TED_SNAP,
+    UI_STR_TED_GRID,
+    UI_STR_TED_SIZE,
+    UI_STR_TED_OPACITY,
+    UI_STR_TED_ALL,
+    UI_STR_TED_THIS_SCREEN,
+    UI_STR_TED_ALL_SCREENS,
+    UI_STR_TED_CANCEL,
+    UI_STR_TED_HIDDEN,
+    UI_STR_TED_STICK,
+    UI_STR_TED_LOOK,
+    UI_STR_TED_HINT,
+    UI_STR_TED_OVERLAP,
+    UI_STR_TED_COVERED,
     UI_STR_COUNT
 } UiStrId;
 

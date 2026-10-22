@@ -552,4 +552,33 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_VAL_DISPLAY_SIZE] = "Taille de l’écran",
     [UI_STR_WINDOW_SIZE_NOTE] =
         "Pour Sans bordure. Plus petite que l’écran pour les programmes qui agrandissent la fenêtre ou ajoutent des images.",
+    /* Controls > Touch screen and the touch layout editor */
+    [UI_STR_SECTION_TOUCH] = "Écran tactile",
+    [UI_STR_OPT_TOUCH_EDIT] = "Modifier la disposition",
+    [UI_STR_OPT_TOUCH_SNAP] = "Aligner sur la grille",
+    [UI_STR_OPT_TOUCH_GRID] = "Taille de la grille",
+    [UI_STR_VAL_MM] = "%d mm",
+    [UI_STR_TOUCH_RESET] = "Réinitialiser la disposition",
+    [UI_STR_TOUCH_RESET_ALL] = "Réinitialiser toutes les dispositions",
+    [UI_STR_TOUCH_EDIT_NOTE] =
+        "Déplacez et redimensionnez les boutons à l’écran. Terminé enregistre.",
+    [UI_STR_TOUCH_EDIT_LOCKED] = "Activez les commandes tactiles pour modifier la disposition.",
+    [UI_STR_TED_DONE] = "Terminé",
+    [UI_STR_TED_UNDO] = "Défaire",
+    [UI_STR_TED_RESET] = "Rétablir",
+    [UI_STR_TED_SNAP] = "Aligner",
+    [UI_STR_TED_GRID] = "Grille",
+    [UI_STR_TED_SIZE] = "Taille",
+    [UI_STR_TED_OPACITY] = "Opacité",
+    [UI_STR_TED_ALL] = "Tous",
+    [UI_STR_TED_THIS_SCREEN] = "Cet écran",
+    [UI_STR_TED_ALL_SCREENS] = "Tous les écrans",
+    [UI_STR_TED_CANCEL] = "Annuler",
+    [UI_STR_TED_HIDDEN] = "Masqué",
+    [UI_STR_TED_STICK] = "Stick",
+    [UI_STR_TED_LOOK] = "Zone caméra",
+    [UI_STR_TED_HINT] =
+        "Touchez un bouton pour le choisir. Faites-le glisser pour le déplacer. Pincez pour le redimensionner.",
+    [UI_STR_TED_OVERLAP] = "Boutons superposés : celui dessiné en premier l’emporte.",
+    [UI_STR_TED_COVERED] = "Un bouton ne peut pas couvrir le centre d’un autre.",
 };

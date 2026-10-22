@@ -549,4 +549,33 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_VAL_DISPLAY_SIZE] = "화면 크기",
     [UI_STR_WINDOW_SIZE_NOTE] =
         "테두리 없음 전용. 화면보다 작게 하면 창을 크게 하거나 프레임을 추가하는 도구를 사용할 수 있습니다.",
+    /* Controls > Touch screen and the touch layout editor */
+    [UI_STR_SECTION_TOUCH] = "터치 화면",
+    [UI_STR_OPT_TOUCH_EDIT] = "배치 변경",
+    [UI_STR_OPT_TOUCH_SNAP] = "격자에 맞추기",
+    [UI_STR_OPT_TOUCH_GRID] = "격자 크기",
+    [UI_STR_VAL_MM] = "%d mm",
+    [UI_STR_TOUCH_RESET] = "배치 초기화",
+    [UI_STR_TOUCH_RESET_ALL] = "배치 전부 초기화",
+    [UI_STR_TOUCH_EDIT_NOTE] =
+        "화면 위의 버튼 위치와 크기를 변경할 수 있습니다. ‘종료’로 저장합니다.",
+    [UI_STR_TOUCH_EDIT_LOCKED] = "배치를 변경하려면 ‘터치 조작’을 켜십시오.",
+    [UI_STR_TED_DONE] = "종료",
+    [UI_STR_TED_UNDO] = "되돌리기",
+    [UI_STR_TED_RESET] = "초기화",
+    [UI_STR_TED_SNAP] = "맞추기",
+    [UI_STR_TED_GRID] = "격자",
+    [UI_STR_TED_SIZE] = "크기",
+    [UI_STR_TED_OPACITY] = "불투명도",
+    [UI_STR_TED_ALL] = "전체",
+    [UI_STR_TED_THIS_SCREEN] = "이 화면",
+    [UI_STR_TED_ALL_SCREENS] = "화면 전부",
+    [UI_STR_TED_CANCEL] = "그만두기",
+    [UI_STR_TED_HIDDEN] = "숨겨짐",
+    [UI_STR_TED_STICK] = "스틱",
+    [UI_STR_TED_LOOK] = "시점 패드",
+    [UI_STR_TED_HINT] =
+        "버튼을 눌러 선택하고, 드래그로 이동하며, 두 번째 손끝으로 크기를 변경합니다.",
+    [UI_STR_TED_OVERLAP] = "버튼이 서로 덮여 있습니다. 먼저 그려진 버튼이 우선합니다.",
+    [UI_STR_TED_COVERED] = "다른 버튼의 가운데에는 놓을 수 없습니다.",
 };
