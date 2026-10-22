@@ -314,7 +314,9 @@ only shows up on a device with a touch screen. The page has these rows:
 
 - **Touch controls:** Auto is the normal choice and works as described
   above. Always keeps the buttons on the screen all the time, and they
-  keep working with a gamepad connected. Off turns them off.
+  keep working with a gamepad connected. Off turns them off, but a phone
+  does not offer Off: with no gamepad connected there would be no way to
+  turn the buttons back on, so on a phone Off counts as Auto.
 - **Touch size:** Small, Medium or Large. Medium is about the size of a
   gamepad's buttons; on small phones Large cannot grow much.
 - **Touch opacity:** how see-through they are, from 25 % (faint) to 100 %

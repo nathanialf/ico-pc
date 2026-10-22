@@ -776,8 +776,20 @@ static void note_pad_presses(void)
 static void touch_step(IcoVirtualPad *v)
 {
     const uint64_t now = SDL_GetTicksNS();
-    const int mode = s_bind.touch_mode;
+#if defined(__ANDROID__) || defined(ICO_IOS)
+    const int phone = 1;
+#else
+    const int phone = 0;
+#endif
+    const int mode = ico_touch_effective_mode(s_bind.touch_mode, s_raw.gamepads, phone);
+    static int s_offKept; /* the rail's line, once per run */
     int pct = s_bind.touch_opacity;
+
+    if (mode != s_bind.touch_mode && !s_offKept) {
+        s_offKept = 1;
+        fprintf(stderr, "touch: Touch controls is Off but no gamepad is connected: the "
+                        "on-screen buttons stay (Auto), nothing else could turn them on\n");
+    }
 
     const int editing = s_touchEdit.active;
 

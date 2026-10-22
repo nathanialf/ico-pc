@@ -284,7 +284,8 @@ The six mouse rows do not show on phones and tablets.
 - **Touch screen** opens a page for the on-screen buttons. It only shows
   up on a device with a touch screen.
   [About touch controls](CONTROLS.md#touch-controls-phones-and-tablets).
-  - **Touch controls:** Auto, Always or Off.
+  - **Touch controls:** Auto, Always or Off. A phone offers only Auto and
+    Always: with Off and no gamepad, nothing could turn the buttons back on.
   - **Touch size** and **Touch opacity** set how big and how see-through
     the buttons are. Their size is a real size, so they feel about the
     same on every screen (smaller only when the screen cannot hold them).

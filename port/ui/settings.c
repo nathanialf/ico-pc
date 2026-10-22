@@ -793,9 +793,17 @@ static int isTouchOpt(int opt)
 
 /* Edit layout opens the editor only while the overlay is on (Touch
    controls not Off) and the device layer has an editor */
+/* the Touch controls mode in force: a phone never keeps Off (touch.h
+   ico_touch_effective_mode; a gamepad may be connected, but the row's
+   choices are the ones a phone can always get back from) */
+static int touchModeInForce(void)
+{
+    return ico_touch_effective_mode(liveBindings()->touch_mode, 0, ico_video_android());
+}
+
 static int touchEditLocked(void)
 {
-    return liveBindings()->touch_mode == ICO_TOUCH_MODE_OFF || !touchEditHosted();
+    return touchModeInForce() == ICO_TOUCH_MODE_OFF || !touchEditHosted();
 }
 
 /* the Grid size row's position in ico_touch_edit_grids: the nearest of
@@ -1480,7 +1488,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
                                                              : UI_STR_VAL_HOLD_A);
     case UI_OPT_TOUCH_MODE: {
         static const int modeStr[3] = {UI_STR_OFF, UI_STR_VAL_AUTO, UI_STR_VAL_ALWAYS};
-        const int m = liveBindings()->touch_mode;
+        const int m = touchModeInForce();
         return ui_str(modeStr[m >= 0 && m < 3 ? m : 1]);
     }
     case UI_OPT_TOUCH_SIZE: {
@@ -1985,10 +1993,17 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         s_dirtyBindings = 1;
         break;
     case UI_OPT_TOUCH_MODE: {
-        /* live from the next vsync (input_sdl.c reads the table) */
+        /* live from the next vsync (input_sdl.c reads the table); a phone
+           steps between Auto and Always only: Off there would leave no
+           way to turn the buttons back on (ico_touch_effective_mode) */
         IcoBindings *b = liveBindings();
-        b->touch_mode =
-            stepIndex(b->touch_mode >= 0 && b->touch_mode < 3 ? b->touch_mode : 1, 3, dir);
+        const int m = touchModeInForce();
+
+        if (ico_video_android()) {
+            b->touch_mode = m == ICO_TOUCH_MODE_AUTO ? ICO_TOUCH_MODE_ALWAYS : ICO_TOUCH_MODE_AUTO;
+        } else {
+            b->touch_mode = stepIndex(m >= 0 && m < 3 ? m : 1, 3, dir);
+        }
         s_dirtyBindings = 1;
         break;
     }

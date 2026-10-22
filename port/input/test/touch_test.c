@@ -1235,6 +1235,13 @@ static void test_gamepad_drop(void)
     CHECK(ico_touch_accepts(ICO_TOUCH_MODE_ALWAYS, 0) &&
           ico_touch_accepts(ICO_TOUCH_MODE_ALWAYS, 2));
     CHECK(!ico_touch_accepts(ICO_TOUCH_MODE_OFF, 0) && !ico_touch_accepts(ICO_TOUCH_MODE_OFF, 1));
+    /* a phone never keeps Off without a gamepad: nothing else could turn
+       the buttons back on; a gamepad, or a computer, keeps the mode */
+    CHECK(ico_touch_effective_mode(ICO_TOUCH_MODE_OFF, 0, 1) == ICO_TOUCH_MODE_AUTO);
+    CHECK(ico_touch_effective_mode(ICO_TOUCH_MODE_OFF, 1, 1) == ICO_TOUCH_MODE_OFF);
+    CHECK(ico_touch_effective_mode(ICO_TOUCH_MODE_OFF, 0, 0) == ICO_TOUCH_MODE_OFF);
+    CHECK(ico_touch_effective_mode(ICO_TOUCH_MODE_AUTO, 0, 1) == ICO_TOUCH_MODE_AUTO);
+    CHECK(ico_touch_effective_mode(ICO_TOUCH_MODE_ALWAYS, 0, 1) == ICO_TOUCH_MODE_ALWAYS);
 
     /* Auto, one gamepad: Cross held and the stick pushed give nothing */
     ico_touch_set_gamepads(&t, 1, S);

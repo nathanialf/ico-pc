@@ -1054,6 +1054,14 @@ int ico_touch_accepts(int mode, int gamepads)
     return mode == ICO_TOUCH_MODE_ALWAYS || (mode == ICO_TOUCH_MODE_AUTO && gamepads <= 0);
 }
 
+int ico_touch_effective_mode(int mode, int gamepads, int phone)
+{
+    if (phone && mode == ICO_TOUCH_MODE_OFF && gamepads <= 0) {
+        return ICO_TOUCH_MODE_AUTO;
+    }
+    return mode;
+}
+
 int ico_touch_update(IcoTouchState *t, const IcoTouchLayout *l, int mode, int gamepads,
                      IcoVirtualPad *v, uint64_t nowNs)
 {

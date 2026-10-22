@@ -355,6 +355,11 @@ IcoTouchDrawInfo ico_touch_draw_info(const IcoTouchState *t, const IcoTouchLayou
    connected (the overlay is hidden then, so a touch would press unseen). */
 int ico_touch_accepts(int mode, int gamepads);
 
+/* The mode in force: on a phone (phone != 0) Off with no gamepad connected
+   acts as Auto, because nothing else could turn the buttons back on (the
+   row does not offer Off there either, settings.c); else the mode itself. */
+int ico_touch_effective_mode(int mode, int gamepads, int phone);
+
 /* The device layer's vsync: ico_touch_step every time (so a tap made while
    the touches are dropped is not replayed later), its pad merged into *v
    (ico_vpad_merge) only while ico_touch_accepts. Returns 1 when merged. */
