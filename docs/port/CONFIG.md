@@ -277,6 +277,56 @@ sources. A key or value that does not parse is logged and skipped (`ico_bindings
 puts back only what differs from the defaults or is already in the file
 (`port/input/input.h` (`ico_input_write_bindings`)). [INPUT.md](INPUT.md) has the bindings.
 
+### [touch]
+
+The touch overlay's layout edits, written only when the player edits (the Edit layout page,
+[UI.md](UI.md#the-touch-layout-editor)); a config nobody edited has no `[touch]` key, only a
+comment block in the first-run text (`port/config/config.c` (`first_run_text`)). Read at start by
+`port/input/input_config.c` (`ico_input_apply_touch_toml`) and written by `ico_input_write_touch_edits`;
+`ico-pc.ini` does not map these:
+
+| key | type | default | meaning |
+| --- | --- | --- | --- |
+| `snap` | bool | `true` | Snap to grid: a dropped control's offsets round to the grid |
+| `grid` | number | `4` | 2, 4 or 8, millimetres of the layout; any other value is logged and ignored |
+| `full.<control>`, `split.<control>`, `tabletop.<control>` | string | unset | one control's place, size and opacity in one posture ([INPUT.md](INPUT.md#layout-edits)) |
+
+The postures are `full`, `split` (a vertical fold) and `tabletop` (a horizontal fold, or the
+buttons moved below a flat crease), written as one table each (`[touch.full]`), appended when a
+key in it is first set. The controls are `dpad`, `cross`, `circle`, `square`, `triangle`, `r1`,
+`l1`, `l2`, `r2`, `select`, `start`, `stick` and `look`. A value is whitespace-separated tokens:
+
+| token | meaning |
+| --- | --- |
+| `l<n>` or `r<n>` | the control's centre (the look pad's edge) `n` millimetres from the left or right edge of the screen's safe area |
+| `t<n>` or `b<n>` | the same from the top or bottom edge |
+| `s<scale>` | size times `scale`, 0.7 to 1.6 (the default size when absent) |
+| `o<percent>` | opacity times the Touch opacity row's value, 0 to 100 (100 when absent); at least 25 on a control that cannot be hidden |
+| `w<n> h<n>` | the look pad only: its size in millimetres, 20 to 500 (its default size when absent) |
+| `hidden` | alone: a hideable control (`select`, `l1`, `l2`, `r2`, `look`) at its default place, not drawn and not touchable |
+| `default` | alone: the control is not edited (what a reset control that is in the file becomes) |
+
+Numbers are in layout millimetres, the unit the Touch size setting scales, so an arrangement keeps
+its real distance from the corners on another phone. The look pad's offsets are its edges on the
+anchor sides: `look = "r0 t0 w60 h30"` is the upper right corner. A hidden control that was moved
+is written with its position and `o0` (`l4 t6 s1.00 o0`) instead of `hidden`, so showing it again
+puts it back. Example:
+
+```toml
+[touch]
+snap = true
+grid = 4
+
+[touch.full]
+cross = "r20 b10.5 s1.00 o100"
+l2    = "hidden"
+look  = "l50 t0 w60 h30 o100"
+```
+
+A line that does not parse, is out of range or says `hidden` for a control that cannot be hidden is
+logged once as `touch: ignoring full.l2 = "..." (why)` and ignored: the control stays at its
+default place. Deleting the tables or any line gives the default back.
+
 ### [photo]
 
 | key | type | default | meaning |

@@ -28,6 +28,17 @@ has no such choice and always worked as B. The row shows from the title
 screen as well as the pause menu, and it is kept in your settings, so it
 stays as you set it for every save.
 
+## The on-screen buttons are in my way
+
+**Can I move them, make them smaller or hide some?**
+
+Yes. Open **Options > Controls > Touch screen > Edit layout**. Drag a button
+to move it, pinch it to resize it, and use the Opacity keys to make it more
+see-through. Select, L1, L2, R2 and the look pad can be hidden. The D-pad,
+the four face buttons, R1, Start and the stick cannot, and stay at least 25 %
+visible, so the menus and the game always stay reachable. Each way you hold
+or fold the phone has its own arrangement. [How it works](CONTROLS.md#arranging-the-buttons-yourself).
+
 ## Ico and Yorda come straight back out of a doorway
 
 **When I take Yorda's hand through the door at the top of the ladder in the

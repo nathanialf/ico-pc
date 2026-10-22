@@ -245,13 +245,18 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 
 - `input_record_test.c`: the pad recording's format, round trip through the script reader, the
   change-only rule and the sample point (`input_record`).
-- `input_test.c`: bindings from config text, dead zone, quantisation, the stick fix, merging, the
+- `input_test.c`: the `[touch]` tables onto the layout edits and back, bindings from config text, dead zone, quantisation, the stick fix, merging, the
   [libpad](ARCHITECTURE.md#terms) buffer, rumble, Escape (`input`).
 - `mouse_camera_test.c`: the mouse camera's speed and range for the hand camera (`mouse_camera`).
 - `pad_script_test.c`: the `--pad-script` reader and what the null pad then shows the game's pad
   code (`pad_script`).
-- `touch_test.c`: the touch overlay's layouts over a table of screens, the sticks and buttons
+- `touch_test.c`: the touch overlay's layouts over a table of screens (`test/touch_shapes.h`), the
+  sticks and buttons, every default layout's alpha 1 and `editGen` 0, a hidden L2 pressing nothing
   (`touch`).
+- `touch_edit_test.c`: the layout edits and the editor ([INPUT.md](INPUT.md#layout-edits)): an
+  unedited layout equal to the default to the byte, the anchor arithmetic, the clamp, hidden
+  controls and the rails, the config text round trip, the editor over synthetic fingers and
+  gamepad words, and the toolbar clear of every default control (`touch_edit`).
 
 ### port/math/test
 
@@ -705,8 +710,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`menu_text`).
 - `settings_test.c`, `settings_extra_test.c`, `settings_extras_test.c`: the Settings menu over
   fake tables, CPU only (`settings`, `settings_extra`, `settings_extras`); `settings_test.c` also
-  presses Right in photo mode through Deja vu and checks the popup's words (`ui__photo_film_word`);
-  `settings_extra_test.c` steps Controls > Hold type from the title and the pause menu, checks the saved
+  presses Right in photo mode through Deja vu and checks the popup's words (`ui__photo_film_word`)
+  and holds the fixed row lists of Controls (14 rows) and Touch screen (9 rows);
+  `settings_extra_test.c` opens the Touch screen page (`testTouchPage`: the link only with a touch screen, the three overlay rows' values and save, both pages fitting from both entries) and the Edit layout page over a fake editor host and a real editor (`testTouchEditorPage`: open, Back to the Edit layout row with the edits kept, locked while Touch controls is Off or without a host, Snap to grid and Grid size saved as `touch.snap` and `touch.grid`, Reset layout and Reset all layouts), and steps Controls > Hold type from the title and the pause menu, checks the saved
   `gameplay.hold_type` and that `ui_settings_install` sets `optionControlType` from it (`testHoldType`),
   steps Effects > Water reflections between Original and Sharp, checks its
   note, its key and the page's fourteen rows (`testWaterReflections`), and Main's Disc row
@@ -720,7 +726,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   confirming, Cross and Triangle going back, the title's rows, the notes' serial, the mouse and
   the prompts.
 - `settings_photo_test.c`: the Settings screens through rd on a device, written as PNGs
-  (`settings_render`); with `jpn` or `kor`, that disc's title and main page (`settings_render_jpn`,
+  (`settings_render`, which also draws the Touch screen page and the editor page); with `jpn` or `kor`, that disc's title and main page (`settings_render_jpn`,
   `settings_render_kor`).
 - `strings_complete_test.c`: every language's table defines every `UiStrId`, none empty but
   `UI_STR_NONE`, each with the English entry's printf conversions; the four pack notes filled

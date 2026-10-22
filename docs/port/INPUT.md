@@ -14,7 +14,7 @@ others.
 | `port/input/input.h` | the layers, the virtual pad, the binding tables and their API |
 | `port/input/input_sdl.h`, `input_sdl.c` | the SDL3 device layer: keyboard, mouse, gamepads, touch events, rumble out (window build) |
 | `port/input/bindings.c` | the default bindings and their config text, names, the per-vsync binding step, the mouse camera's stick |
-| `port/input/input_config.c` | `config.toml`'s `[input]` and `[gameplay]` onto the bindings, the live table, the remap screen's capture and writer |
+| `port/input/input_config.c` | `config.toml`'s `[input]` and `[gameplay]` onto the bindings, the live table, the remap screen's capture and writer; `[touch]` onto the live layout edits and back |
 | `port/input/keys.def` | the keyboard keys a binding can name, with their SDL scancodes |
 | `port/input/vpad.c` | the virtual pad's arithmetic: merge, dead zone, stick fix, mirror, quantisation |
 | `port/input/pad_host.c` | libpad: the DualShock 2 the game reads |
@@ -25,6 +25,7 @@ others.
 | `port/input/mouse_camera.h`, `mouse_camera.c` | the mouse camera's speed and range for the game's hand camera |
 | `port/input/pointer.h`, `pointer.c` | the mouse pointer in the menus |
 | `port/input/touch.h`, `touch.c` | the touch overlay's input mapper |
+| `port/input/touch_edit.h`, `touch_edit.c` | the layout edits (per posture and control), their config text and rails, and the layout editor's state machine |
 | `port/input/CMakeLists.txt` | `ico_input` and the input tests |
 | `port/input/test/` | the input unit tests |
 
@@ -343,18 +344,129 @@ copy for drawing taken at the step (`ico_input_sdl_touch_overlay`). The Settings
 appear once a touch screen is known (`ico_input_sdl_touch_present`; `input: touch screen (...)`).
 The overlay's drawing is `port/ui/touch_ui.c` ([UI.md](UI.md)).
 
+### Layout edits
+
+A player's arrangement is an `IcoTouchEdits` (`port/input/touch_edit.h`): per posture
+(`ICO_TOUCH_RULE_FULL`, `SPLIT`, `TABLETOP`, `ICO_TOUCH_POSTURES`) and per editable control
+(`ICO_TOUCH_CTL_*`: the D-pad as one control, the four faces, R1, L1, L2, R2, Select, Start, the
+stick and the look pad) an `IcoTouchCtlEdit`, plus `snap`, `grid` and a generation `gen` that
+every change bumps.
+
+- **Storage**: an anchor edge on each axis (`ax` left or right, `ay` top or bottom) and an offset
+  in q from it, the unit the defaults are written in (`port/input/touch.c`, layout comment), so a
+  control keeps its real distance from its corner on every screen, in either orientation, outside
+  the safe area, and it scales with the Touch size setting like the defaults. The offset is the
+  control's centre; for the look pad, a rectangle, it is the distance of its two edges on the
+  anchor sides, with its width and height `w` and `h` in q. `scale` multiplies the default size
+  (`ICO_TOUCH_EDIT_SCALE_MIN` 0.7 to `MAX` 1.6; a face at 0.7 is 7.7 mm, Android's 48 dp), `alpha`
+  multiplies the Touch opacity row's value, 0 is hidden. `set` 0 is the default place.
+- **Applied inside the layout builder**: `ico_touch_layout_edits` (`ico_touch_layout_env` is the
+  same with no edits) places the defaults, then `apply_edits` (`port/input/touch.c`) lays each
+  set control of the layout's posture over them: the centre from its anchors, the size from the
+  default dimension times `scale`, the box clamped inside the region and out of the hinge band
+  (`ico_touch_edit_clamp`: the nearer side of the band that holds it; shrunk toward the minimum
+  scale when neither does; never dropped), the rects written as `place()` writes them, `alpha`
+  into the button's `alpha`, `stickAlpha` and `lookAlpha`, and `editGen` from `gen`. A moved
+  stick's area is a square of 4.4 R around its home cut to its side of the band; a moved look
+  pad has its own rect; the look sensitivity radius stays the default. The flat-crease check that
+  sends a layout to `TABLETOP` sees the edited positions. The same runs on every rebuild (another
+  phone, a rotation, a fold, a safe-area change), so a stored edit can never leave the screen. An
+  unedited layout is the default to the byte (`touch_edit` `test_defaults`).
+- **Hidden**: the hit test skips a button at `alpha` 0, the step skips the stick's area at
+  `stickAlpha` 0 and the look pad at `lookAlpha` 0; a hidden button is also left out of the
+  flat-crease check (`ico_touch_step`, `hit`, `controls_touch`).
+- **The rails**: `ico_touch_ctl_hideable` is true for Select, L1, L2, R2 and the look pad only;
+  the D-pad, the faces, R1, Start and the stick (the menus and the game need them) keep
+  `alpha` at or above `ICO_TOUCH_EDIT_ALPHA_MIN` (0.25), and `scale` is always in range.
+  `ico_touch_edit_sanitize` enforces them on every editor change and on every parsed config line.
+- **Config text**: `ico_touch_edit_text` and `ico_touch_edit_parse`, one control as
+  whitespace-separated tokens `l<n>` or `r<n>`, `t<n>` or `b<n>`, optional `s<scale>` and
+  `o<percent>`, and for the look pad `w<n> h<n>`; numbers are plain decimals, locale-free, offsets
+  and sizes with two decimals and trailing zeros dropped, the scale always with two, the opacity a
+  whole percent (`r20 b10.5 s1.00 o100`, `l50 t0 w60 h30 o100`). `default` is an unset control.
+  `hidden` alone is a hideable control at its default place with `alpha` 0
+  (`ICO_TOUCH_ANCHOR_DEFAULT` anchors); a hidden control that was moved writes its position, `s1.00`
+  and `o0` instead, so it keeps its place when shown again. A line with a token it does not know,
+  a value out of range (offsets 0 to 500, `s` 0.7 to 1.6, `o` 0 to 100, `w` and `h` 20 to 500), a
+  token twice, a missing anchor, or `hidden` on a control that cannot be hidden is rejected and the
+  control stays at its default.
+- **Config**: `[touch]` holds `snap`, `grid` (2, 4 or 8) and one table per posture (`full`,
+  `split`, `tabletop`) of `<control> = "<text>"` ([CONFIG.md](CONFIG.md#touch)).
+  `ico_input_apply_touch_toml` reads it at start, `ico_input_write_touch_edits` writes the live
+  edits (a key only when it differs from the default or is already in the file; a reset control
+  whose key is in the file becomes `default`; an untouched config gains nothing),
+  `ico_input_reload_touch_edits` reads the saved file back, and `ico_input_live_touch_edits` is the
+  one live table, as `ico_input_live_bindings` is for the bindings (`port/input/input_config.c`).
+  A bad line is logged once (`touch: ignoring full.l2 = "..." (...)`) and ignored.
+
+### The layout editor
+
+`IcoTouchEditor` (`port/input/touch_edit.h`) is a state machine over a working copy of the live
+edits for the posture the phone is in (`ico_touch_edit_begin`). The finger events arrive through
+`ico_touch_edit_event` and are queued; `ico_touch_edit_tick` (once a Main tick, with the preview
+layout built from the working copy and the gamepad's `ICO_PAD_*` word) drains them and returns
+`ICO_TOUCH_ED_LEAVE` once Done was taken; `ico_touch_edit_end(ed, 1)` copies the work to the live
+edits (the generation moves past any preview built during the session); `ico_touch_edit_view`
+fills the `IcoTouchEditView` the drawing reads.
+
+- **Gestures**: a tap selects (on empty space, deselects); a move of more than
+  `ICO_TOUCH_EDIT_DRAG_MM` (2) drags; on release the anchors become the nearer edge on each axis
+  and, with `snap`, the offsets round to multiples of `grid`; a second finger pinches, scale times
+  the ratio of the fingers' distances, rounded to 0.05 on release. A cancel (focus loss) or a
+  posture change drops the gesture and puts the control back; earlier edits stay.
+- **Refusing**: a drop that covers another control's middle springs back and shows the refused
+  note for `ICO_TOUCH_EDIT_REFUSED` ticks; a change that would put a control on a flat crease and
+  fold the layout to `TABLETOP` is undone and refused. The overlap mask uses the controls' real
+  shapes (discs for the round buttons, the D-pad as two bars); the look pad is on neither side of
+  either rule because it lies under R1, R2 and Start by design.
+- **Toolbar**: ten keys (`ICO_TOUCH_ED_TB_*`: Done, Undo, Reset, Snap, Grid, Size -, Size +,
+  Opacity -, Opacity +, All) in a 2 x 5 block of 6 q x 7 q keys at the one spot the minimum
+  region leaves clear of every default control (FULL and TABLETOP at x Rt-53 to Rt-19, y T+13
+  to T+28; SPLIT as two columns by five rows on the left side); the derivation is the header
+  comment of `port/input/touch_edit.c`, and `ico_touch_edit_toolbar` returns the boxes. The
+  toolbar wins the hit test over a control dragged under it. Reset turns the first row, or in
+  SPLIT the first three rows, into the confirm strip (`ICO_TOUCH_ED_CF_*`: this screen, all
+  screens, cancel). Size and Opacity steps are 0.1 and 10 % on the selected control, or on every
+  control with All; Undo is `ICO_TOUCH_EDIT_UNDO` (8) deep.
+- **Gamepad**: L1 and R1 cycle the selection, the D-pad nudges one grid step (the first press at
+  once, then after `ICO_TOUCH_EDIT_REPEAT_DELAY` ticks held every `ICO_TOUCH_EDIT_REPEAT`
+  ticks), L2 and R2 change the size, Square and Cross the opacity (Cross with nothing selected
+  toggles All), Select undoes, Start opens the Reset strip (left and right move, Cross picks,
+  Circle, Triangle or Start cancels), Triangle and Circle are Done. A nudge obeys the same
+  refusals as a drop.
+
+The editor is driven by the Edit layout page (`port/ui/touch_edit_ui.c` (`ui_touch_edit_proc`),
+[UI.md](UI.md#the-touch-layout-editor)); `input_sdl.c` wires it:
+
+- `touch_rebuild` builds the layout with `ico_touch_layout_edits`, from the editor's working copy
+  while it is active and from `ico_input_live_touch_edits` otherwise; `ico_input_sdl_init` applies
+  the file's edits after the bindings so the first layout carries them.
+- `touch_finger` hands the finger events to `ico_touch_edit_event` while the editor is active and
+  to the mapper otherwise; `touch_cancel` also sends the editor a cancel.
+- `touch_step` rebuilds the layout when the size or `editGen` changed; while editing it steps the
+  mapper with the mode Off (so a drag never presses a button, and nothing merges), draws at opacity
+  1 whatever the Touch opacity row says, clears the debug info and fills the snapshot's `edit`
+  view. `touch_synth_mouse` is unchanged: the menus on a phone are the overlay's own D-pad and
+  faces, which is why the rails keep them.
+- The window host gives the page its hooks (`ico_input_sdl_touch_editor`,
+  `ico_input_sdl_touch_edit_begin`, `ico_input_sdl_touch_edit_end`, `ico_input_sdl_touch_rule`,
+  `ico_input_sdl_touch_layout`; `port/platform/window_host.c` (`ui_settings_set_touch_edit_host`));
+  begin cancels the mapper's fingers first. A fold, density or safe-area change rebuilds the layout
+  with the edits, and the editor follows a posture change.
+
 ## Tests
 
 | test | checks |
 | --- | --- |
-| `input` (`input_test.c`) | binding resolution from config text, the dead zone and quantisation, the stick fix, merging, the libpad buffer against a hand-written DualShock 2 frame, rumble, Escape's button |
+| `input` (`input_test.c`) | binding resolution from config text, the `[touch]` tables onto the layout edits and back (a config nobody edited gains nothing, a reset control is rewritten as `default`, a bad grid or line is rejected), the dead zone and quantisation, the stick fix, merging, the libpad buffer against a hand-written DualShock 2 frame, rumble, Escape's button |
 | `input_record` (`input_record_test.c`) | the recording's line format, the round trip through the script reader over a long session, the "only when it changes" rule, a second read in a tick, the poll's timing, a scripted session recorded through libpad and loaded back |
 | `touch` (`touch_test.c`) | the mapper's layouts over phones, a notch, foldables, a tablet and monitors at every size, the hinge rule, the floating stick, the d-pad and face buttons, sliding, cancel, the look pad's decay, hiding and fades, the merged pad with the stick fix off and on |
+| `touch_edit` (`touch_edit_test.c`) | an unedited layout equal to the default field by field and byte for byte over the screen table, the anchor arithmetic on four screens with and without insets, the clamp into the region and out of the band, hidden controls and the rails, the stick's and the look pad's areas, the flat crease seeing the edits, the config text round trip with bad and out-of-range lines, the editor fed synthetic fingers and gamepad words (tap, drag and snap, the refused drop, overlap, cancel, pinch, the steppers, All, the posture switch, Undo, Reset, Done), and the toolbar clear of every default control on the screen table and the smallest region of each posture |
 | `mouse_camera` (`mouse_camera_test.c`) | the camera step arithmetic, and the speed and range applied only while the mouse drives the camera |
 | `pad_script` (`pad_script_test.c`) | the script reader and what libpad then shows the game's pad state machine, replayed from `pad.c`'s libpad calls in their order |
 | `movie_pad` (`port/platform/test/movie_pad_test.c`) | the Start edge through the game's own pad code during a movie ([FMV.md](FMV.md)) |
 
-The first four are registered in `port/input/CMakeLists.txt`, `pad_script` in
+The first five are registered in `port/input/CMakeLists.txt`, `pad_script` in
 `port/null/CMakeLists.txt`, `movie_pad` in `port/platform/CMakeLists.txt`. Run them with
-`ctest --preset linux-x64 -R '^(input|input_record|touch|mouse_camera|pad_script|movie_pad)$'`
+`ctest --preset linux-x64 -R '^(input|input_record|touch|touch_edit|mouse_camera|pad_script|movie_pad)$'`
 ([TESTING.md](TESTING.md)).

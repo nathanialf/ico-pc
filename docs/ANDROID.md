@@ -172,8 +172,10 @@ you swipe to turn the camera) on the rest of the upper right. They are about
 the same real size on every phone and tablet (smaller when the screen is too
 short for the chosen Touch size) and never cover each other. They fade away
 when you stop touching the screen and come back when you touch it.
-**Options > Controls** has **Touch size** and **Touch opacity** to make
-them bigger or smaller and more or less see-through.
+**Options > Controls > Touch screen** has **Touch size** and **Touch
+opacity** to make them bigger or smaller and more or less see-through, and
+**Edit layout** to move, resize or hide them yourself, for each way you
+hold or fold the phone.
 [The full description](CONTROLS.md#touch-controls-phones-and-tablets).
 If Ico does not run in every direction you push the on-screen stick, turn
 on **Options > Gameplay > Analogue stick fix**.
@@ -195,7 +197,7 @@ pause menu's Options.
 
 **Gamepads.** A Bluetooth or USB gamepad works, with rumble if it has it.
 While one is connected, the touch buttons go away. Change that in
-**Options > Controls > Touch controls**.
+**Options > Controls > Touch screen > Touch controls**.
 
 **Keyboards.** A keyboard works too, with the same keys as on a PC
 ([the table](CONTROLS.md#play-with-a-gamepad-a-keyboard-or-a-mouse)).

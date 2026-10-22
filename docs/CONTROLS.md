@@ -309,8 +309,8 @@ The buttons fade away 5 seconds after you last touched the screen. Touch
 the screen and they come back. When you connect a gamepad, they go away
 and the screen stops acting as buttons, so a stray finger does nothing.
 
-Three rows in **Options > Controls** change them. These rows only show up
-on a device with a touch screen.
+**Options > Controls > Touch screen** holds everything for them. The link
+only shows up on a device with a touch screen. The page has these rows:
 
 - **Touch controls:** Auto is the normal choice and works as described
   above. Always keeps the buttons on the screen all the time, and they
@@ -319,6 +319,74 @@ on a device with a touch screen.
   gamepad's buttons; on small phones Large cannot grow much.
 - **Touch opacity:** how see-through they are, from 25 % (faint) to 100 %
   (solid).
+- **Edit layout:** opens the editor below. It is dimmed while Touch
+  controls is Off.
+- **Snap to grid** and **Grid size** (2, 4 or 8 mm): whether a button you
+  let go of snaps to the grid, and how wide the grid is.
+- **Reset layout:** puts the buttons of the way the phone is held or
+  folded right now back to where the game puts them.
+- **Reset all layouts:** does the same for every way the phone can be held
+  or folded.
+
+### Arranging the buttons yourself
+
+If the buttons are in your way, **Edit layout** lets you move them, make
+them bigger or smaller and more or less see-through. While the editor is
+open the buttons are drawn at full strength so you can see what you are
+doing. Buttons you hid show as dashed outlines with the word Hidden.
+
+- **Select:** tap a button. It gets a bright outline and its name. Tap an
+  empty spot to select nothing.
+- **Move:** drag it. A short touch counts as a tap, not a move. The button
+  cannot leave the screen, and it cannot sit on a fold. When you let go it
+  snaps to the grid, if Snap is on; the dots show the grid.
+- **Resize:** pinch it with two fingers, or use the **Size -** and
+  **Size +** keys. A button can be 70 % to 160 % of its normal size.
+- **See-through:** the **Opacity -** and **Opacity +** keys.
+- **All:** turns on the Size and Opacity keys for every button at once.
+- **Undo** takes back the last change, up to eight in a row. **Reset** asks
+  whether to put back this screen's buttons, every screen's, or nothing.
+- **Snap** and **Grid** are the same two settings as on the page.
+- **Done** keeps what you see. The Back gesture or button, and Triangle or
+  Circle on a gamepad, do the same. Done always keeps what you see; to go
+  back, use Undo or Reset first.
+
+What you cannot do, so that you never lock yourself out of the menus or the
+game:
+
+- The D-pad, Cross, Circle, Square, Triangle, R1, Start and the stick can
+  not be hidden, and never go below 25 % opacity. The menus and the game
+  need them.
+- Select, L1, L2, R2 and the look pad can be hidden: keep pressing
+  **Opacity -** until the button shows Hidden, and press **Opacity +** to
+  bring it back where you left it.
+- A button cannot be dropped onto the middle of another one; it jumps
+  back and a note says why. Buttons that overlap at the edges are drawn
+  in amber, and the one drawn first gets the touch.
+- Nothing you do can put a button off the screen, even on another phone or
+  after turning the phone: the buttons are always kept on the screen.
+
+A foldable (or a phone you turn) has a separate arrangement for each way
+it is held: opened flat, with the fold running top to bottom, and half
+folded like a laptop. The editor changes the one the phone is in now, and
+the others stay as the game puts them until you edit them as well. If you
+fold the phone while editing, the editor moves on to the new way of
+holding it and keeps what you did.
+
+Where you put a button is remembered as a real distance from the corners
+of the screen, so a layout feels the same on another phone, and the Touch
+size setting still makes all of it bigger or smaller.
+
+A gamepad works in the editor as well, with the touch screen or without
+it: L1 and R1 pick the next or the last button, the D-pad or the left
+stick moves it one grid step (hold it to repeat), L2 and R2 change the size,
+Square and Cross change the opacity (Cross with nothing selected turns All
+on and off), Select is Undo, Start asks about Reset (left and right, then
+Cross), and Triangle or Circle is Done.
+
+The arrangement is kept in the settings file, in the part called `[touch]`.
+If you ever want the game's own arrangement back, use the Reset rows, or
+delete the `[touch]` lines from the file with the game closed.
 
 On Android, the phone's **Back** button or gesture opens the pause menu,
 like Start. [More about Android](ANDROID.md#controls).

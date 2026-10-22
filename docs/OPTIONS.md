@@ -281,11 +281,21 @@ The six mouse rows do not show on phones and tablets.
   Triangle. It starts On. In the Options menu, Circle always goes back.
   This row is not there with the Japanese or Korean disc, where Circle
   confirms.
-- **Touch controls, Touch size and Touch opacity** set up the buttons on a
-  touch screen. They only show up on a device with one.
+- **Touch screen** opens a page for the on-screen buttons. It only shows
+  up on a device with a touch screen.
   [About touch controls](CONTROLS.md#touch-controls-phones-and-tablets).
-  Their size is a real size, so they feel about the same on every screen
-  (smaller only when the screen cannot hold them).
+  - **Touch controls:** Auto, Always or Off.
+  - **Touch size** and **Touch opacity** set how big and how see-through
+    the buttons are. Their size is a real size, so they feel about the
+    same on every screen (smaller only when the screen cannot hold them).
+  - **Edit layout** opens the editor, where you move, resize and hide
+    buttons. It is dimmed while Touch controls is Off.
+    [Arranging the buttons yourself](CONTROLS.md#arranging-the-buttons-yourself).
+  - **Snap to grid** and **Grid size** (2 mm, 4 mm or 8 mm) set where a
+    button you let go of lands in the editor.
+  - **Reset layout** puts the buttons of the way you hold or fold the
+    phone now back to the game's own places. **Reset all layouts** does
+    it for every way.
 
 ## Gameplay
 

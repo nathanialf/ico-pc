@@ -181,7 +181,9 @@ tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/setting
 | Effects | Full height, Filtering, Brightness, CRT filter, CRT strength, the six game effects with Water reflections (Original or Sharp, `UI_OPT_EFFECT_WATER`) after Fog, Full pixel, Back |
 | Graphics driver | Driver, Add a driver, Remove this driver, Back (Android) |
 | Audio | Volume, Music, Effects, Output, Device, Back |
-| Controls | Remap (a list), Button configuration, Vibration, Hold type, Stick fix, the mouse camera's six rows, Circle back, the touch overlay's three rows, Back |
+| Controls | Remap (a list), Button configuration, Vibration, Hold type, Stick fix, the mouse camera's six rows, Circle back, Touch screen (a link, with a touch screen only), Back |
+| Touch screen (`UI_PAGE_TOUCH`) | Touch controls, Touch size, Touch opacity, Edit layout (`UI_OPT_TOUCH_EDIT`), Snap to grid, Grid size, Reset layout, Reset all layouts, Back |
+| Edit layout (`UI_PAGE_TOUCH_LAYOUT`) | no shown rows: the editor's own screen ([The touch layout editor](#the-touch-layout-editor)) |
 | Gameplay | Yorda safe, Stick fix, Door fix, Natural chains, Film effect, Players, Back |
 | Achievements | a list, the popups switch |
 | Extras | Music, Models, Credits, Characters, Add to Steam, Achievement popups, Back |
@@ -201,7 +203,7 @@ Which rows show depends on where the menu was entered and what the machine has: 
 settings (Brightness, Vibration, Button configuration, Film effect, Players) only from
 the pause menu (Hold type shows from the title too: `[gameplay] hold_type`), Film effect and Players once the game is cleared; Video mode, Model pack and Extras'
 Music, Models and Credits only from the title (Add to Steam also only where the window host installs
-its handler); the dump rows only in developer mode; the touch rows only with a touch screen; the
+its handler); the dump rows only in developer mode; the Touch screen link only with a touch screen; the
 window and mouse camera rows not on Android; the Graphics driver link only with a driver host on an
 Adreno GPU (`port/ui/settings.c` (`optShown`, `isGameOpt`, `isExtrasOpt`)). `layoutPage` masks the
 hidden rows and spaces the shown ones by the page's pitch table, which keeps Back's box inside the
@@ -288,7 +290,7 @@ what is pending and calls the quit handler: the [window build](ARCHITECTURE.md#t
 
 The menu knows nothing of the platform; the window host installs what the pages ask: the window
 mode query, the anti-aliasing list and block, the texture and model pack counts, the touch query,
-the Quit word, the Graphics driver host (`UiGpuDriverHost`), the Steam handler, the models
+the touch editor's host (`UiTouchEditHost`), the Quit word, the Graphics driver host (`UiGpuDriverHost`), the Steam handler, the models
 handler, the Characters host (the model viewer's panel) (`port/ui/settings.h`
 (`ui_settings_set_*`)). A page whose host is missing hides its row.
 
@@ -587,6 +589,44 @@ loaded yet, the left stick's ring, run ring and knob, the look pad's ring and do
 brighter (`port/ui/touch_ui.h`, header comment). It draws only while the copy's opacity is above
 0. It is on the presenter's top layer (`rd_set_present_overlay_top`), never through the CRT
 filter (`port/ui/ui_host.c` (`hostOverlayTop`)). [INPUT.md](INPUT.md) has the touch input.
+
+## The touch layout editor
+
+Options > Controls > Touch screen is `UI_PAGE_TOUCH` (parent Controls), nine rows. Touch controls,
+Touch size and Touch opacity keep the values and steps they had on the Controls page. Snap to
+grid (On or Off) and Grid size (2, 4 or 8 mm, `UI_STR_VAL_MM`) step the live edits (`snap`,
+`grid`, `gen`) and set the page's dirty flag; Reset layout (`UI_OPT_TOUCH_RESET`) clears the
+posture the host reports (`ico_touch_edits_reset`), Reset all layouts the three; both play the
+confirm sound and log `touch: reset layout (...)`. Edit layout (`UI_OPT_TOUCH_EDIT`) is locked
+and dimmed with a note (`UI_STR_TOUCH_EDIT_LOCKED`) while Touch controls is Off or no editor host
+is set (`port/ui/settings.c` (`touchEditLocked`, `refreshPage`)). The Controls page has 14 rows
+with the link; `pagePitch` spaces 10 rows 16 apart, 11 or 12 rows 13 apart from line 40 and 13 or
+14 rows 11 apart from line 30.
+
+Edit layout opens `UI_PAGE_TOUCH_LAYOUT`, a page of one masked row with no cursor, built as photo
+mode's is (`buildTouchEditorPage`). `settingsProc` hands it to `ui_touch_edit_proc` each tick
+(`port/ui/touch_edit_ui.c`): on the first call the host's `begin`, then the editor's tick with the
+host's preview layout and the menus' pad word mapped to `ICO_PAD_*` (the left stick arrives as
+D-pad bits; a button held from the press that opened the page is ignored until let go). Done,
+or a back button other than Cross (Cross is the editor's Opacity +), calls `end(1)`, marks the
+page dirty and returns to Touch screen with the cursor on Edit layout. `ui_settings_save` then
+writes the edits and reads them back (`ico_input_write_touch_edits`,
+`ico_input_reload_touch_edits`); `ui_settings_save_on_quit` counts them. The page logs
+`touch: edit layout: begin (<posture>, N controls edited)` and `... done (...)`.
+
+The host (`UiTouchEditHost`: `editor`, `begin`, `end`, `rule`, `layout`; `port/ui/settings.h`) is
+installed by the window host; without it the row is locked.
+
+`touch_ui.c` draws every control at its layout alpha and skips a hidden one. While the snapshot's
+`edit` view is active it draws at opacity 1, floors every control at 0.35, draws hidden ones
+dashed with the word Hidden, outlines the look pad's area, hatches the hinge band, dots the grid
+from the anchor edges when snap is on (so the dots are where the drops land), outlines the
+selection with its name and the overlapping controls in amber (`kWarn`), and draws the toolbar
+keys with their values (Snap On or Off, Grid in mm, Size and Opacity in percent, dimmed with no
+selection and not All; Undo dimmed with nothing to undo), the hint line or the refused or overlap
+note under the key block, and the Reset confirm strip with the cursor key lit, all at the
+rectangles the view carries (`port/ui/touch_ui.c`; `port/input/touch.h` (`IcoTouchEditView`)).
+The words are the port's own (`UI_STR_TED_*`), in the seven languages.
 
 ## The mouse in menus
 
