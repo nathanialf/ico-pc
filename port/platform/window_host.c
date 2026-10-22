@@ -774,6 +774,8 @@ static void touch_layout_update(void)
     int pw = 0, ph = 0, ww = 0, wh = 0;
     SDL_Rect r;
     IcoTouchEnv env;
+    static int s_note[7]; /* the last window and safe area logged (pw, ph, x, y, w, h; 1 once) */
+    int note[7] = {0, 0, 0, 0, 0, 0, 1};
 
     if (s_window == NULL || !SDL_GetWindowSizeInPixels(s_window, &pw, &ph) || pw <= 0 || ph <= 0) {
         return;
@@ -784,10 +786,30 @@ static void touch_layout_update(void)
         SDL_GetWindowSafeArea(s_window, &r) && r.w > 0 && r.h > 0) {
         const double kx = (double)pw / ww, ky = (double)ph / wh;
 
-        ico_input_sdl_set_touch_layout(pw, ph, (int)(r.x * kx + 0.5), (int)(r.y * ky + 0.5),
-                                       (int)(r.w * kx + 0.5), (int)(r.h * ky + 0.5));
+        note[2] = (int)(r.x * kx + 0.5);
+        note[3] = (int)(r.y * ky + 0.5);
+        note[4] = (int)(r.w * kx + 0.5);
+        note[5] = (int)(r.h * ky + 0.5);
+        ico_input_sdl_set_touch_layout(pw, ph, note[2], note[3], note[4], note[5]);
     } else {
+        note[6] = 0;
         ico_input_sdl_set_touch_layout(pw, ph, 0, 0, 0, 0);
+    }
+    note[0] = pw;
+    note[1] = ph;
+    /* once per change (a rotation, a fold, the bars): what the OS gave, since
+       a camera hole's inset cannot be told from the bars' and the default
+       layout keeps clear of all of it while Edit layout reaches the edges */
+    if (memcmp(note, s_note, sizeof(note)) != 0) {
+        memcpy(s_note, note, sizeof(note));
+        if (note[6]) {
+            fprintf(stderr,
+                    "touch: window %dx%d px, safe area %d,%d %dx%d (insets l %d t %d r %d b %d)\n",
+                    pw, ph, note[2], note[3], note[4], note[5], note[2], note[3],
+                    pw - note[2] - note[4], ph - note[3] - note[5]);
+        } else {
+            fprintf(stderr, "touch: window %dx%d px, no safe area reported\n", pw, ph);
+        }
     }
 }
 

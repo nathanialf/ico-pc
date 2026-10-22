@@ -341,7 +341,11 @@ bindings' like any other source before the stick fix, the mirror and the quantis
 
 `input_sdl.c` wires it: the finger events, cancel on focus loss and backgrounding, the step once a
 vsync (`ico_touch_update`), the layout from the output's size, safe area, density and fold that
-the window hands over (`ico_input_sdl_set_touch_layout`, `ico_input_sdl_set_touch_env`), and a
+the window hands over (`ico_input_sdl_set_touch_layout`, `ico_input_sdl_set_touch_env`; `window_host.c` logs
+`touch: window WxH px, safe area x,y wxh (insets l t r b)` once per change, or `no safe area
+reported`: SDL gives one combined inset for the bars, the gestures and the camera hole, and
+Android reports the hole whether or not the OEM's display override is on, so the port cannot tell
+them apart), and a
 copy for drawing taken at the step (`ico_input_sdl_touch_overlay`). The Settings rows for touch
 appear once a touch screen is known (`ico_input_sdl_touch_present`; `input: touch screen (...)`).
 The overlay's drawing is `port/ui/touch_ui.c` ([UI.md](UI.md)).
@@ -357,7 +361,9 @@ every change bumps.
 - **Storage**: an anchor edge on each axis (`ax` left or right, `ay` top or bottom) and an offset
   in q from it, the unit the defaults are written in (`port/input/touch.c`, layout comment), so a
   control keeps its real distance from its corner on every screen, in either orientation, outside
-  the safe area, and it scales with the Touch size setting like the defaults. The offset is the
+  the safe area, and it scales with the Touch size setting like the defaults. An offset may be
+  negative (`l-3`, to `-ICO_TOUCH_EDIT_OFFSET_MAX`): the control then lies past the safe area, under
+  a camera hole or rounded corner (the default layout never does). The offset is the
   control's centre; for the look pad, a rectangle, it is the distance of its two edges on the
   anchor sides, with its width and height `w` and `h` in q. `scale` multiplies the default size
   (`ICO_TOUCH_EDIT_SCALE_MIN` 0.7 to `MAX` 1.6; a face at 0.7 is 7.7 mm, Android's 48 dp), `alpha`
@@ -365,8 +371,10 @@ every change bumps.
 - **Applied inside the layout builder**: `ico_touch_layout_edits` (`ico_touch_layout_env` is the
   same with no edits) places the defaults, then `apply_edits` (`port/input/touch.c`) lays each
   set control of the layout's posture over them: the centre from its anchors, the size from the
-  default dimension times `scale`, the box clamped inside the region and out of the hinge band
-  (`ico_touch_edit_clamp`: the nearer side of the band that holds it; shrunk toward the minimum
+  default dimension times `scale`, the box clamped inside `IcoTouchLayout.bounds` (the whole
+  window, or the part below a TABLETOP band; `region` stays the safe area that anchors, defaults,
+  `fit()` and the toolbar and hint use) and out of the hinge band carried along the hinge to the
+  bounds (`ico_touch_clamp_band`; `ico_touch_edit_clamp`: the nearer side of the band that holds it; shrunk toward the minimum
   scale when neither does; never dropped), the rects written as `place()` writes them, `alpha`
   into the button's `alpha`, `stickAlpha` and `lookAlpha`, and `editGen` from `gen`. A moved
   stick's area is a square of 4.4 R around its home cut to its side of the band (a stick still at
@@ -475,7 +483,7 @@ The editor is driven by the Edit layout page (`port/ui/touch_edit_ui.c` (`ui_tou
 | `input` (`input_test.c`) | binding resolution from config text, the `[touch]` tables onto the layout edits and back (a config nobody edited gains nothing, a reset control is rewritten as `default`, a bad grid or line is rejected), the dead zone and quantisation, the stick fix, merging, the libpad buffer against a hand-written DualShock 2 frame, rumble, Escape's button |
 | `input_record` (`input_record_test.c`) | the recording's line format, the round trip through the script reader over a long session, the "only when it changes" rule, a second read in a tick, the poll's timing, a scripted session recorded through libpad and loaded back |
 | `touch` (`touch_test.c`) | the mapper's layouts over phones, a notch, foldables, a tablet and monitors at every size, the hinge rule, the floating stick, the d-pad and face buttons, sliding, cancel, the look pad's decay, hiding and fades, the merged pad with the stick fix off and on |
-| `touch_edit` (`touch_edit_test.c`) | an unedited layout equal to the default field by field and byte for byte over the screen table, the anchor arithmetic on four screens with and without insets, the clamp into the region and out of the band, hidden controls and the rails, the stick's and the look pad's areas, the flat crease seeing the edits, the config text round trip with bad and out-of-range lines, the editor fed synthetic fingers and gamepad words (tap, drag and snap, the refused drop, overlap, cancel, pinch, a pinch from a fresh two-finger touch, the steppers, All, the posture switch, Undo, Reset, Done, a readout tap doing nothing), and the toolbar strip and the hint on the screen table and the smallest region of each posture (the strip inside the region, over the top row by 2.5 q at most with 5.5 q left, clear of every other control; SPLIT's second row on a hand-built narrow side) |
+| `touch_edit` (`touch_edit_test.c`) | an unedited layout equal to the default field by field and byte for byte over the screen table, the anchor arithmetic on four screens with and without insets, the clamp into the bounds and out of the band, a camera hole on the left and a rounded edge on the right (`test_cutout`: negative offsets kept, saved and parsed, clamped to the window, the band carried to the window's top, TABLETOP's bounds), hidden controls and the rails, the stick's and the look pad's areas, the flat crease seeing the edits, the config text round trip with bad and out-of-range lines, the editor fed synthetic fingers and gamepad words (tap, drag and snap, the refused drop, overlap, cancel, pinch, a pinch from a fresh two-finger touch, the steppers, All, the posture switch, Undo, Reset, Done, a readout tap doing nothing), and the toolbar strip and the hint on the screen table and the smallest region of each posture (the strip inside the region, over the top row by 2.5 q at most with 5.5 q left, clear of every other control; SPLIT's second row on a hand-built narrow side) |
 | `mouse_camera` (`mouse_camera_test.c`) | the camera step arithmetic, and the speed and range applied only while the mouse drives the camera |
 | `pad_script` (`pad_script_test.c`) | the script reader and what libpad then shows the game's pad state machine, replayed from `pad.c`'s libpad calls in their order |
 | `movie_pad` (`port/platform/test/movie_pad_test.c`) | the Start edge through the game's own pad code during a movie ([FMV.md](FMV.md)) |

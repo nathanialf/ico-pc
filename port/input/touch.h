@@ -197,6 +197,8 @@ typedef struct IcoTouchLayout {
     int rule;               /* ICO_TOUCH_RULE_* */
     IcoTouchRect safeRect;  /* the output less the insets */
     IcoTouchRect region;    /* where the controls are: safeRect, or below the band */
+    IcoTouchRect bounds;    /* where the editor may put a control: the whole output, or its
+                               part below a TABLETOP band (the default layout stays in region) */
     IcoTouchRect band;      /* the hinge band (SPLIT, TABLETOP); zero for FULL */
     IcoTouchRect stickArea; /* where a finger down starts the stick */
     float stickR;           /* R: full deflection */
@@ -321,6 +323,10 @@ struct IcoTouchEdits;
    editGen e->gen or 0). */
 IcoTouchLayout ico_touch_layout_edits(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size,
                                       const IcoTouchEnv *env, const struct IcoTouchEdits *edits);
+
+/* The hinge band carried along the hinge out to the layout's bounds (zero
+   for no band). The editor's clamp and grid keep clear of this. */
+IcoTouchRect ico_touch_clamp_band(const struct IcoTouchLayout *l);
 
 /* Clear every finger and output, look_decay to ICO_TOUCH_LOOK_DECAY (set
    the bindings' mouse_decay after), and show the overlay from nowNs with

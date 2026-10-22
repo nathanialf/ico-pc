@@ -65,8 +65,9 @@ extern const float ico_touch_edit_grids[3];
 typedef struct IcoTouchCtlEdit {
     unsigned char set;    /* 0: the default place (nothing stored or written) */
     unsigned char ax, ay; /* ICO_TOUCH_ANCHOR_* (DEFAULT: the default place) */
-    float dx, dy;         /* the control's centre from those edges, in q (>= 0);
-                             the look pad's edges on those sides */
+    float dx, dy;         /* the control's centre from those edges, in q (negative: past
+                             the safe area, under the camera hole); the
+                             look pad's edges on those sides */
     float scale;          /* ICO_TOUCH_EDIT_SCALE_MIN..MAX, 1 = the default size */
     float alpha;          /* 0..1 times the Touch opacity setting; 0 = hidden */
     float w, h;           /* ICO_TOUCH_CTL_LOOK only: the pad's size in q at scale 1;
@@ -99,19 +100,20 @@ unsigned int ico_touch_ctl_zones(int ctl);
 /* One control's edit as config text and back. Text: whitespace-separated
    tokens "l<n>"|"r<n>" (the x anchor and offset), "t<n>"|"b<n>", "s<scale>"
    (optional, 1 when absent), "o<percent>" (optional, 100 when absent), and
-   for the look pad "w<n> h<n>" (optional, its default size when absent);
+   for the look pad "w<n> h<n>" (optional, its default size when absent); an offset may be negative ("l-3":
+   past the safe area);
    "hidden" alone (a hideable control at its default place with alpha 0; a
    hidden control that was moved writes its position, "s1.00" and "o0" instead, so
-   it keeps its place when shown again); "default" alone (unset). Numbers are plain decimals (no sign,
-   no exponent, a point whatever the locale). Examples "r20 b10.5 s1.00
+   it keeps its place when shown again); "default" alone (unset). Numbers are plain decimals (a sign only on
+   an offset, no exponent, a point whatever the locale). Examples "r20 b10.5 s1.00
    o100", "l50 t0 w60 h30 o100". ico_touch_edit_text writes the same form
    into buf and returns it: offsets and sizes to two decimals with trailing
    zeros dropped, the scale to two decimals always (the look pad's only
    when not 1 with a size), the opacity as a whole percent; "default" for
    an unset edit or one at its default place. ico_touch_edit_parse fills
    *c for ctl and returns 0, or -1 for a token it does not know (w/h on a
-   control that is not the look pad), a value out of range (offsets 0..
-   ICO_TOUCH_EDIT_OFFSET_MAX, s SCALE_MIN..MAX, o 0..100, w/h LOOK_MIN..
+   control that is not the look pad), a value out of range (offsets
+   -ICO_TOUCH_EDIT_OFFSET_MAX..ICO_TOUCH_EDIT_OFFSET_MAX, s SCALE_MIN..MAX, o 0..100, w/h LOOK_MIN..
    OFFSET_MAX), a token twice, a missing anchor, or "hidden" on a control
    that cannot be hidden: *c is then left unset. A parsed edit is
    sanitized (an o under the floor of a control that cannot be hidden
@@ -120,7 +122,7 @@ const char *ico_touch_edit_text(const IcoTouchCtlEdit *c, char *buf, unsigned si
 int ico_touch_edit_parse(IcoTouchCtlEdit *c, int ctl, const char *text);
 /* The rails on one edit in place: scale clamped to the range, alpha to 0..1
    and at least ICO_TOUCH_EDIT_ALPHA_MIN unless ctl is hideable, offsets
-   0..ICO_TOUCH_EDIT_OFFSET_MAX, an unknown anchor DEFAULT, the look pad's
+   -ICO_TOUCH_EDIT_OFFSET_MAX..OFFSET_MAX (a NaN 0), an unknown anchor DEFAULT, the look pad's
    size 0 or ICO_TOUCH_EDIT_LOOK_MIN..OFFSET_MAX (w and h 0 on the others).
    An unset edit is left alone. */
 void ico_touch_edit_sanitize(IcoTouchCtlEdit *c, int ctl);
@@ -242,8 +244,9 @@ void ico_touch_edit_view(const IcoTouchEditor *ed, const IcoTouchLayout *l, IcoT
    it). */
 void ico_touch_edit_box_size(const IcoTouchLayout *l, int ctl, const IcoTouchCtlEdit *c, float *w,
                              float *h);
-/* Moves the centre (cx, cy) of a w x h box inside l's region and out of its
-   hinge band, to the nearer side of the band that holds it (touch.c, the
+/* Moves the centre (cx, cy) of a w x h box inside l's bounds (the window, or
+   below a TABLETOP band; wider than the region) and out of its hinge band
+   (carried along the hinge to the bounds), to the nearer side of the band that holds it (touch.c, the
    clamp the edits get). 1 when it is clear of the band and inside; 0 when
    only inside (or centred on an axis the region is too small for). */
 int ico_touch_edit_clamp(const IcoTouchLayout *l, float *cx, float *cy, float w, float h);

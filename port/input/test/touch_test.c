@@ -497,6 +497,8 @@ static void test_layouts(void)
     l = ico_touch_layout_env(2176, 1812, no_insets(), ICO_TOUCH_MEDIUM, &e);
     CHECK(l.rule == ICO_TOUCH_RULE_TABLETOP);
     CHECK(near_(l.region.y, 906.0f + 2.0f * k420, 0.01f));
+    CHECK(near_(l.bounds.x, 0.0f, 0.01f) && near_(l.bounds.w, 2176.0f, 0.01f) &&
+          near_(l.bounds.y, l.region.y, 0.01f) && near_(l.bounds.h, 1812.0f - l.region.y, 0.01f));
     CHECK(near_(l.unit, (1812.0f - 906.0f - 2.0f * k420) / 64.0f, 1e-3f)); /* 13.64 */
 
     /* 2400 x 1080 with a 100 px notch on the left: everything moves in */
@@ -505,6 +507,8 @@ static void test_layouts(void)
     l = ico_touch_layout(2400, 1080, in, ICO_TOUCH_MEDIUM);
     CHECK(near_(l.safeRect.x, 100.0f, 0.01f) && near_(l.safeRect.w, 2300.0f, 0.01f));
     CHECK(near_(l.region.x, 100.0f, 0.01f));
+    CHECK(near_(l.bounds.x, 0.0f, 0.01f) && near_(l.bounds.w, 2400.0f, 0.01f) &&
+          near_(l.bounds.y, 0.0f, 0.01f) && near_(l.bounds.h, 1080.0f, 0.01f));
     CHECK(near_(l.stickArea.x, 100.0f, 0.01f) && near_(l.stickArea.w, 920.0f, 0.01f));
     CHECK(near_(l.button[ICO_TOUCH_B_L1].rect.x, 100.0f + 3.0f * l.unit, 0.01f));
     CHECK(near_(l.button[ICO_TOUCH_B_L2].rect.x, 100.0f + 3.0f * l.unit, 0.01f));

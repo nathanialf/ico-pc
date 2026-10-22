@@ -166,7 +166,7 @@ static float clampf(float v, float lo, float hi)
     return v > hi ? hi : v;
 }
 
-/* v to the nearest multiple of g (g > 0; v >= 0) */
+/* v to the nearest multiple of g (g > 0) */
 static float snap_to(float v, float g)
 {
     return g > 0.0f ? (float)round_l(v / g) * g : v;
@@ -208,21 +208,31 @@ static void put_u(Out *o, unsigned long v)
     }
 }
 
-/* a token: its letter and v >= 0 to hundredths, the fraction always two
-   digits (fixed) or without its trailing zeros */
-static void put_num(Out *o, char key, float v, int fixed)
+/* a token: its letter and v to hundredths, the fraction always two digits
+   (fixed) or without its trailing zeros; a negative v writes a minus sign
+   when neg (an offset out past the safe area), else it is written as 0 */
+static void put_num(Out *o, char key, float v, int fixed, int neg)
 {
     long h = round_l(v * 100.0f);
     long f;
+    int minus = 0;
 
     if (h < 0) {
-        h = 0;
+        if (neg) {
+            h = -h;
+            minus = 1;
+        } else {
+            h = 0;
+        }
     }
     f = h % 100;
     if (o->n > 0) {
         put_c(o, ' ');
     }
     put_c(o, key);
+    if (minus) {
+        put_c(o, '-');
+    }
     put_u(o, (unsigned long)(h / 100));
     if (fixed || f != 0) {
         put_c(o, '.');
@@ -257,17 +267,17 @@ const char *ico_touch_edit_text(const IcoTouchCtlEdit *c, char *buf, unsigned si
     }
     /* a hidden control with a position keeps it ("l4 t6 o0"): shown again,
        it is where the player put it */
-    put_num(&o, c->ax == ICO_TOUCH_ANCHOR_L ? 'l' : 'r', c->dx, 0);
-    put_num(&o, c->ay == ICO_TOUCH_ANCHOR_T ? 't' : 'b', c->dy, 0);
+    put_num(&o, c->ax == ICO_TOUCH_ANCHOR_L ? 'l' : 'r', c->dx, 0, 1);
+    put_num(&o, c->ay == ICO_TOUCH_ANCHOR_T ? 't' : 'b', c->dy, 0, 1);
     sized = c->w > 0.0f || c->h > 0.0f;
     if (c->w > 0.0f) {
-        put_num(&o, 'w', c->w, 0);
+        put_num(&o, 'w', c->w, 0, 0);
     }
     if (c->h > 0.0f) {
-        put_num(&o, 'h', c->h, 0);
+        put_num(&o, 'h', c->h, 0, 0);
     }
     if (!sized || round_l(c->scale * 100.0f) != 100) {
-        put_num(&o, 's', c->scale, 1);
+        put_num(&o, 's', c->scale, 1, 0);
     }
     pct = round_l(c->alpha * 100.0f);
     if (pct > 100) {
@@ -337,6 +347,7 @@ int ico_touch_edit_parse(IcoTouchCtlEdit *c, int ctl, const char *text)
     for (;;) {
         unsigned n = 0;
         float v = 0.0f;
+        int neg;
 
         while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') {
             p++;
@@ -360,13 +371,18 @@ int ico_touch_edit_parse(IcoTouchCtlEdit *c, int ctl, const char *text)
             word = 2;
             continue;
         }
-        if (parse_num(tok + 1, &v) != 0) {
+        /* an offset may carry a minus sign (out past the safe area) */
+        neg = (tok[0] == 'l' || tok[0] == 'r' || tok[0] == 't' || tok[0] == 'b') && tok[1] == '-';
+        if (parse_num(tok + 1 + neg, &v) != 0) {
             return -1;
+        }
+        if (neg) {
+            v = -v;
         }
         switch (tok[0]) {
         case 'l':
         case 'r':
-            if (haveX++ || v > ICO_TOUCH_EDIT_OFFSET_MAX) {
+            if (haveX++ || v < -ICO_TOUCH_EDIT_OFFSET_MAX || v > ICO_TOUCH_EDIT_OFFSET_MAX) {
                 return -1;
             }
             e.ax = tok[0] == 'l' ? ICO_TOUCH_ANCHOR_L : ICO_TOUCH_ANCHOR_R;
@@ -374,7 +390,7 @@ int ico_touch_edit_parse(IcoTouchCtlEdit *c, int ctl, const char *text)
             break;
         case 't':
         case 'b':
-            if (haveY++ || v > ICO_TOUCH_EDIT_OFFSET_MAX) {
+            if (haveY++ || v < -ICO_TOUCH_EDIT_OFFSET_MAX || v > ICO_TOUCH_EDIT_OFFSET_MAX) {
                 return -1;
             }
             e.ay = tok[0] == 't' ? ICO_TOUCH_ANCHOR_T : ICO_TOUCH_ANCHOR_B;
@@ -448,8 +464,11 @@ void ico_touch_edit_sanitize(IcoTouchCtlEdit *c, int ctl)
     if (c->ay > ICO_TOUCH_ANCHOR_B) {
         c->ay = ICO_TOUCH_ANCHOR_DEFAULT;
     }
-    c->dx = clampf(c->dx, 0.0f, ICO_TOUCH_EDIT_OFFSET_MAX);
-    c->dy = clampf(c->dy, 0.0f, ICO_TOUCH_EDIT_OFFSET_MAX);
+    /* a negative offset lies past the safe area (the camera hole); a NaN is 0 */
+    c->dx = clampf(c->dx != c->dx ? 0.0f : c->dx, -ICO_TOUCH_EDIT_OFFSET_MAX,
+                   ICO_TOUCH_EDIT_OFFSET_MAX);
+    c->dy = clampf(c->dy != c->dy ? 0.0f : c->dy, -ICO_TOUCH_EDIT_OFFSET_MAX,
+                   ICO_TOUCH_EDIT_OFFSET_MAX);
     if (c->scale != c->scale) {
         c->scale = 1.0f; /* not a number */
     }
@@ -881,8 +900,8 @@ static void set_place(IcoTouchEdits *e, int rule, const IcoTouchLayout *l, int c
     c->ay = dt <= db ? ICO_TOUCH_ANCHOR_T : ICO_TOUCH_ANCHOR_B;
     c->dy = dt <= db ? dt : db;
     if (snap) {
-        c->dx = snap_to(c->dx < 0.0f ? 0.0f : c->dx, e->grid);
-        c->dy = snap_to(c->dy < 0.0f ? 0.0f : c->dy, e->grid);
+        c->dx = snap_to(c->dx, e->grid);
+        c->dy = snap_to(c->dy, e->grid);
     }
     ico_touch_edit_sanitize(c, ctl);
 }
@@ -1008,7 +1027,7 @@ static void nudge(IcoTouchEditor *ed, const IcoTouchLayout *l, int sx, int sy)
 {
     IcoTouchEdits next = ed->work;
     const int ctl = ed->selected;
-    const IcoTouchRect band = l->band;
+    const IcoTouchRect band = ico_touch_clamp_band(l);
     float cx, cy, w, h, nx, ny;
 
     if (ctl < 0 || ctl >= ICO_TOUCH_CTL_COUNT || !(l->unit > 0.0f)) {
@@ -1020,8 +1039,8 @@ static void nudge(IcoTouchEditor *ed, const IcoTouchLayout *l, int sx, int sy)
     ny = cy + (float)sy * next.grid * l->unit;
     set_place(&next, ed->rule, l, ctl, nx, ny, w, h, next.snap);
     edit_centre(l, ctl, &next.ctl[ed->rule][ctl], &nx, &ny, &w, &h);
-    if (sx != 0 && band.w > 0.0f && band.y <= l->region.y &&
-        band.y + band.h >= l->region.y + l->region.h && (sx > 0 ? nx <= cx : nx >= cx)) {
+    if (sx != 0 && band.w > 0.0f && band.y <= l->bounds.y &&
+        band.y + band.h >= l->bounds.y + l->bounds.h && (sx > 0 ? nx <= cx : nx >= cx)) {
         /* held at the hinge: to its far side */
         nx = sx > 0 ? band.x + band.w + 0.5f * w : band.x - 0.5f * w;
         if ((sx > 0) == (cx < band.x + 0.5f * band.w)) {
