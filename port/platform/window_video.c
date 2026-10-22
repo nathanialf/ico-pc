@@ -99,6 +99,13 @@ int ico_window_video_desktop_mode(SDL_Window *w)
     const SDL_DisplayID d = SDL_GetDisplayForWindow(w);
     const SDL_DisplayMode *m = d != 0 ? SDL_GetDesktopDisplayMode(d) : NULL;
 
+#ifdef __APPLE__
+    /* macOS: a set mode is a fullscreen without its own Space; the desktop
+       fullscreen (NULL) is what Mac games use */
+    (void)m;
+    SDL_SetWindowFullscreenMode(w, NULL);
+    return 0;
+#endif
     /* SDL_SetWindowFullscreenMode takes one of the display's modes
        (SDL_video.h); the desktop mode SDL reports is one.  Without it, or
        refused, NULL: SDL's borderless fullscreen at the desktop
