@@ -848,6 +848,19 @@ static void checkOptions(const char *dir)
     CHECK(strcmp(ico_config_get_string("video.window_mode", ""), "borderless") == 0 &&
               ico_config_get_bool("video.fullscreen", 1) == 0,
           "options: borderless saves fullscreen false");
+    /* a file from the version with a Window size row: its window_size is
+       an unknown key, ignored (Borderless fills the display) and kept as
+       written; the other keys read as before */
+    writeFile(toml, "version = 1\n[video]\nwindow_mode = \"borderless\"\n"
+                    "window_size = \"1280x720\"\nvsync = false\n");
+    ico_config_reset(toml, ini);
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.windowMode == ICO_WINDOW_BORDERLESS && o.vsync == 0,
+          "options: an old window_size beside window_mode and vsync changes nothing");
+    ico_video_save();
+    CHECK(strcmp(ico_config_get_string("video.window_size", ""), "1280x720") == 0,
+          "options: the old window_size is kept as written");
     /* back to the keys the rest of this check reads */
     writeFile(toml, "version = 1\n[video]\npreset = \"enhanced\"\nresolution = \"1920x1440\"\n"
                     "aspect = \"16:9\"\nfullscreen = true\nvsync = false\n"

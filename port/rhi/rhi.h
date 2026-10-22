@@ -1113,6 +1113,16 @@ uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max);
  * not offered (false). */
 void rhi_prefer_mailbox(bool on);
 bool rhi_present_mailbox(void);
+/* Whether the driver may take exclusive fullscreen presentation of the
+ * window (true, the default: the driver decides) or must keep it a
+ * composed window that other programs can draw over or capture (false:
+ * the Windowed and Borderless window modes).  A stored flag: the next
+ * swapchain creation reads it.  Vulkan on Windows: the swapchain's
+ * VkSurfaceFullScreenExclusiveInfoEXT (VK_EXT_full_screen_exclusive,
+ * DEFAULT or DISALLOWED) where the driver offers the extension; elsewhere
+ * nothing changes.  D3D12: ignored for now (a flip-model swapchain in a
+ * window; the window's own fullscreen is DXGI's to decide). */
+void rhi_set_exclusive_fullscreen(bool allowed);
 /* The current swapchain's present mode, for the logs: "fifo",
  * "mailbox", "immediate", "fifo_relaxed", or "none" without a swapchain.
  * Vulkan: the mode it was created with (vsync off prefers immediate, then

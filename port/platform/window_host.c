@@ -509,6 +509,26 @@ static int window_mode_now(void)
     return (f & SDL_WINDOW_BORDERLESS) ? ICO_WINDOW_BORDERLESS : ICO_WINDOW_WINDOWED;
 }
 
+/* The swapchain's full-screen-exclusive request follows the window mode
+   (rhi.h rhi_set_exclusive_fullscreen): Fullscreen lets the driver take
+   exclusive presentation, Windowed and Borderless keep a composed window
+   other programs can draw over or scale (Lossless Scaling, overlays).  Set
+   before each mode request and at creation; the swapchain made next reads
+   it.  1 when the flag changed. */
+static int s_exclusiveSet = -1; /* the flag last given; -1 before the first */
+
+static int exclusive_follow(int mode)
+{
+    const int allowed = mode == ICO_WINDOW_FULLSCREEN;
+
+    if (allowed == s_exclusiveSet) {
+        return 0;
+    }
+    s_exclusiveSet = allowed;
+    rhi_set_exclusive_fullscreen(allowed != 0);
+    return 1;
+}
+
 static const char *video_preset_label(const IcoVideoOptions *o)
 {
     const int p = ico_video_preset(o);
@@ -609,9 +629,14 @@ static void video_apply(int force)
        flag); the option follows the window (window_fullscreen_event) */
     request = 0;
 #endif
+    int exclusiveChanged = 0;
     if (request) {
-        /* fullscreen at the desktop resolution, a frameless window over the
-           display, or the framed window; the resize event follows */
+        /* the swapchain's exclusive request first: the resize event that
+           follows rebuilds it */
+        exclusiveChanged = exclusive_follow(o.windowMode);
+        /* exclusive fullscreen at the desktop's own mode, a frameless
+           window over the display, or the framed window; the resize event
+           follows */
         s_fullscreen =
             ico_window_video_mode(s_window, o.windowMode, NULL, NULL) == ICO_WINDOW_FULLSCREEN;
         /* refused, or not granted yet: the option stays what was asked (it
@@ -631,6 +656,23 @@ static void video_apply(int force)
         if (rhi_swapchain_size(&sw, &sh)) {
             w = (int)sw;
             h = (int)sh;
+        }
+    }
+    if (exclusiveChanged && w > 0 && h > 0) {
+        /* Borderless and Fullscreen at the same pixels: no size event
+           follows, so the swapchain is made again here for the new
+           exclusive request (a size event that does come makes it once
+           more, at its size) */
+        int pw = 0, ph = 0;
+
+        SDL_GetWindowSizeInPixels(s_window, &pw, &ph);
+        if (pw == w && ph == h) {
+            const Uint64 t0 = SDL_GetTicksNS();
+
+            fprintf(stderr, "window: the swapchain made again for the %s mode at %dx%d\n",
+                    ico_video_window_mode_name(o.windowMode), w, h);
+            rd_resize_output((uint32_t)w, (uint32_t)h);
+            s_pres.pausePendingNs += SDL_GetTicksNS() - t0;
         }
     }
     const int mailbox = s_pres.mailbox;
@@ -1609,6 +1651,17 @@ open_window:
         SDL_Quit();
         return -1;
     }
+#if !defined(__ANDROID__) && !defined(ICO_IOS)
+    /* the first swapchain's exclusive request (rd_init makes it), and
+       Fullscreen at the desktop's own mode: the flag at creation made SDL's
+       desktop fullscreen, the mode makes it exclusive (no change of
+       resolution or refresh rate) */
+    s_exclusiveSet = -1;
+    exclusive_follow(start.windowMode);
+    if (start.windowMode == ICO_WINDOW_FULLSCREEN) {
+        ico_window_video_desktop_mode(s_window);
+    }
+#endif
     /* No screensaver, screen lock or idle sleep while the game runs: a
        controller is not a desktop input device, so nothing else resets the
        desktop's idle timer (issue 86). SDL_Init already asked
@@ -2055,7 +2108,8 @@ open_window:
         ico_video_get(&o);
         fprintf(stderr,
                 "window: %dx%d pixels%s, %s on %s, %s preset (resolution %s, aspect %s, "
-                "texture filter %s, %s height, framerate %s), vsync %s, texture pack %s, "
+                "texture filter %s, %s height, framerate %s), window mode %s, vsync %s, "
+                "texture pack %s, "
                 "dump textures %s, model pack %s, dump models %s, depth %s\n",
                 w, h, s_fullscreen ? " fullscreen" : "",
                 rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", rhi_adapter_name(),
@@ -2063,7 +2117,8 @@ open_window:
                 ico_video_aspect_name(o.aspect), ico_video_filter_name(o.filter),
                 o.fullHeight ? "full" : "half",
                 ico_video_framerate_name(ico_video_framerate(), fr, sizeof(fr)),
-                o.vsync ? "on" : "off", o.texturePack ? "on" : "off",
+                ico_video_window_mode_name(o.windowMode), o.vsync ? "on" : "off",
+                o.texturePack ? "on" : "off",
                 o.dumpTextures && ico_opt_developer_mode() ? "on" : "off",
                 o.modelPack ? "on" : "off", o.dumpModels && ico_opt_developer_mode() ? "on" : "off",
                 rhi_limits()->depthStencilFormatName);
@@ -2868,6 +2923,11 @@ static void window_fullscreen_event(int entered)
         o.windowMode = ICO_WINDOW_WINDOWED;
         ico_video_set(&o);
     }
+#if !defined(__ANDROID__) && !defined(ICO_IOS)
+    /* the window manager's own change: the next swapchain (its size event)
+       asks for what the window now is */
+    exclusive_follow(o.windowMode);
+#endif
 }
 
 /* --- the event pump's long calls (issue 105) ------------------------------ */

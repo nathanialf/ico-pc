@@ -91,6 +91,7 @@
     X(read_timestamps)                                                                             \
     X(prefer_mailbox)                                                                              \
     X(present_mailbox)                                                                             \
+    X(set_exclusive_fullscreen)                                                                    \
     X(present_mode_name)                                                                           \
     X(present_timing)                                                                              \
     X(present_timing_use)                                                                          \

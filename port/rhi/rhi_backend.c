@@ -485,6 +485,11 @@ bool rhi_present_mailbox(void)
     return be()->present_mailbox();
 }
 
+void rhi_set_exclusive_fullscreen(bool allowed)
+{
+    be()->set_exclusive_fullscreen(allowed);
+}
+
 const char *rhi_present_mode_name(void)
 {
     return be()->present_mode_name();

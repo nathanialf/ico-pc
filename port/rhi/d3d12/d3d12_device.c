@@ -877,6 +877,13 @@ bool rhi_present_mailbox(void)
     return false;
 }
 
+/* rhi.h: ignored for now; the swapchain is DXGI's flip model in the
+   window, and the window's fullscreen is SDL's and DXGI's to decide */
+void rhi_set_exclusive_fullscreen(bool allowed)
+{
+    (void)allowed;
+}
+
 /* rhi.h: no display timing of presents (the vsync lock presents FIFO) */
 bool rhi_present_timing(void)
 {

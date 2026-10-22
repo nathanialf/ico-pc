@@ -441,6 +441,16 @@ typedef struct VkrState {
      * enabled on the device, asked for with ICO_VK_FIFO_LATEST_READY=1:
      * vkr_choose_present_mode takes it where FIFO would be taken */
     bool fifoLatestReady;
+    /* Windows: VK_KHR_get_surface_capabilities2 on the instance and
+     * VK_EXT_full_screen_exclusive on the device, both offered: the
+     * swapchain and its surface queries carry
+     * VkSurfaceFullScreenExclusiveInfoEXT (rhi_set_exclusive_fullscreen).
+     * presentModes2 is vkGetPhysicalDeviceSurfacePresentModes2EXT, loaded
+     * here (volk declares it only with VK_USE_PLATFORM_WIN32_KHR, which
+     * this build does not define); false and NULL elsewhere */
+    bool surfaceCaps2;
+    bool fullScreenExclusive;
+    PFN_vkVoidFunction presentModes2;
     uint64_t presentId;
     PFN_vkWaitForPresentKHR waitForPresent;
 

@@ -517,6 +517,24 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
 #endif
     }
     g_vkr.debugUtils = false;
+    g_vkr.surfaceCaps2 = false;
+#ifdef _WIN32
+    /* the swapchain says whether the driver may take exclusive fullscreen
+     * (VK_EXT_full_screen_exclusive, rhi_set_exclusive_fullscreen); its
+     * surface queries need VK_KHR_get_surface_capabilities2, which SDL may
+     * already list */
+    if (desc->sdlWindow && vkr_has_instance_ext(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME)) {
+        bool listed = false;
+        for (uint32_t i = 0; i < extCount; i++) {
+            listed =
+                listed || strcmp(exts[i], VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME) == 0;
+        }
+        if (!listed) {
+            exts[extCount++] = VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME;
+        }
+        g_vkr.surfaceCaps2 = true;
+    }
+#endif
 #ifdef ICO_RHI_MOLTENVK
     /* MoltenVK is a portability driver: listed only when asked for. The
      * other builds keep the loader's conformant devices. */
@@ -1045,6 +1063,23 @@ static bool vkr_create_device(void)
     if (g_vkr.surface) {
         exts[extCount++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
     }
+    g_vkr.fullScreenExclusive = false;
+    g_vkr.presentModes2 = NULL;
+#ifdef _WIN32
+    /* the swapchain's full-screen-exclusive request (vk_swapchain.c,
+     * rhi_set_exclusive_fullscreen): the device extension, its instance
+     * dependency and the present-mode query that takes the same chain */
+    if (g_vkr.surface && g_vkr.surfaceCaps2 &&
+        VKR_FUNCTION_AVAILABLE(vkGetPhysicalDeviceSurfaceCapabilities2KHR) &&
+        vkr_device_has_ext(g_vkr.phys, "VK_EXT_full_screen_exclusive")) {
+        g_vkr.presentModes2 =
+            vkGetInstanceProcAddr(g_vkr.instance, "vkGetPhysicalDeviceSurfacePresentModes2EXT");
+        if (g_vkr.presentModes2 != NULL) {
+            exts[extCount++] = "VK_EXT_full_screen_exclusive";
+            g_vkr.fullScreenExclusive = true;
+        }
+    }
+#endif
     if (!core13) {
         exts[extCount++] = VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME;
     }

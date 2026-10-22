@@ -11,6 +11,16 @@
 #include <SDL3/SDL_vulkan.h>
 
 #endif
+#ifdef _WIN32
+/* VK_EXT_full_screen_exclusive's structures (the build does not define
+ * VK_USE_PLATFORM_WIN32_KHR; VK_NO_PROTOTYPES keeps the header to types) */
+#define WIN32_LEAN_AND_MEAN
+
+#include <windows.h>
+
+#include <vulkan/vulkan_win32.h>
+
+#endif
 
 _Static_assert(RHI_VK_TEST_SUBOPTIMAL == VK_SUBOPTIMAL_KHR, "rhi_vk.h: VK_SUBOPTIMAL_KHR");
 _Static_assert(RHI_VK_TEST_SURFACE_LOST == VK_ERROR_SURFACE_LOST_KHR,
@@ -477,12 +487,118 @@ static bool s_preferMailbox;
 
 /* The surface's present modes (calloc'd, *n of them; NULL with *n 0 when
  * the query fails): every one, no cap */
-static VkPresentModeKHR *vkr_surface_present_modes(uint32_t *n)
+/* rhi_set_exclusive_fullscreen: the driver may take exclusive fullscreen
+ * (the default) or must keep the window composed; the next swapchain
+ * creation reads it */
+static bool s_exclusiveAllowed = true;
+
+void rhi_set_exclusive_fullscreen(bool allowed)
+{
+    s_exclusiveAllowed = allowed;
+}
+
+#ifdef _WIN32
+/* The full-screen-exclusive request chained into the swapchain and into
+ * its surface queries (the spec's rule for VK_EXT_full_screen_exclusive:
+ * the capabilities and present modes a swapchain is checked against are
+ * the ones queried with the same VkSurfaceFullScreenExclusiveInfoEXT).
+ * DEFAULT lets the driver decide (NVIDIA's takes exclusive-style
+ * presentation for a window covering its monitor); DISALLOWED keeps a
+ * composed window.  Kept static: the pointers outlive the call that
+ * builds them. */
+static VkSurfaceFullScreenExclusiveInfoEXT s_fseInfo;
+#endif
+
+/* The chain for this creation: NULL without VK_EXT_full_screen_exclusive
+ * (every build but Windows, and a Windows driver without it) */
+static const void *vkr_fse_chain(void)
+{
+#ifdef _WIN32
+    if (g_vkr.fullScreenExclusive) {
+        s_fseInfo = (VkSurfaceFullScreenExclusiveInfoEXT){
+            .sType = VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT,
+            .pNext = NULL,
+            .fullScreenExclusive = s_exclusiveAllowed ? VK_FULL_SCREEN_EXCLUSIVE_DEFAULT_EXT
+                                                      : VK_FULL_SCREEN_EXCLUSIVE_DISALLOWED_EXT,
+        };
+        return &s_fseInfo;
+    }
+#endif
+    return NULL;
+}
+
+/* The surface's capabilities, through vkGetPhysicalDeviceSurfaceCapabilities2KHR
+ * with the chain when there is one */
+static VkResult vkr_surface_caps(const void *chain, VkSurfaceCapabilitiesKHR *caps)
+{
+#ifdef _WIN32
+    if (chain != NULL) {
+        const VkPhysicalDeviceSurfaceInfo2KHR info = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR,
+            .pNext = chain,
+            .surface = g_vkr.surface,
+        };
+        VkSurfaceCapabilities2KHR c2 = {.sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR};
+        const VkResult r = vkGetPhysicalDeviceSurfaceCapabilities2KHR(g_vkr.phys, &info, &c2);
+        if (r == VK_SUCCESS) {
+            *caps = c2.surfaceCapabilities;
+        }
+        return r;
+    }
+#endif
+    (void)chain;
+    return vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_vkr.phys, g_vkr.surface, caps);
+}
+
+/* The surface's present modes, through
+ * vkGetPhysicalDeviceSurfacePresentModes2EXT with the chain when there is
+ * one */
+static VkResult vkr_present_modes_query(const void *chain, uint32_t *n, VkPresentModeKHR *modes)
+{
+#ifdef _WIN32
+    if (chain != NULL) {
+        const VkPhysicalDeviceSurfaceInfo2KHR info = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR,
+            .pNext = chain,
+            .surface = g_vkr.surface,
+        };
+        const PFN_vkGetPhysicalDeviceSurfacePresentModes2EXT fn =
+            (PFN_vkGetPhysicalDeviceSurfacePresentModes2EXT)g_vkr.presentModes2;
+        return fn(g_vkr.phys, &info, n, modes);
+    }
+#endif
+    (void)chain;
+    return vkGetPhysicalDeviceSurfacePresentModesKHR(g_vkr.phys, g_vkr.surface, n, modes);
+}
+
+/* One line per swapchain creation whose full-screen-exclusive state
+ * differs from the last one logged (Windows only: elsewhere there is
+ * nothing to say) */
+static void vkr_fse_log(const void *chain)
+{
+#ifdef _WIN32
+    static int s_logged = -1; /* 0 disallowed, 1 allowed, 2 not available */
+    const int now = chain == NULL ? 2 : (s_exclusiveAllowed ? 1 : 0);
+
+    if (now != s_logged) {
+        s_logged = now;
+        if (now == 2) {
+            fprintf(stderr, "rhi: swapchain exclusive fullscreen not available on this driver\n");
+        } else {
+            fprintf(stderr, "rhi: swapchain exclusive fullscreen %s\n",
+                    now == 0 ? "disallowed (VK_EXT_full_screen_exclusive)"
+                             : "allowed (the driver decides)");
+        }
+    }
+#else
+    (void)chain;
+#endif
+}
+
+static VkPresentModeKHR *vkr_surface_present_modes(const void *chain, uint32_t *n)
 {
     *n = 0;
-    if (vkGetPhysicalDeviceSurfacePresentModesKHR(g_vkr.phys, g_vkr.surface, n, NULL) !=
-            VK_SUCCESS ||
-        *n == 0) {
+    if (vkr_present_modes_query(chain, n, NULL) != VK_SUCCESS || *n == 0) {
         *n = 0;
         return NULL;
     }
@@ -491,7 +607,7 @@ static VkPresentModeKHR *vkr_surface_present_modes(uint32_t *n)
         *n = 0;
         return NULL;
     }
-    VkResult r = vkGetPhysicalDeviceSurfacePresentModesKHR(g_vkr.phys, g_vkr.surface, n, modes);
+    VkResult r = vkr_present_modes_query(chain, n, modes);
     if (r != VK_SUCCESS && r != VK_INCOMPLETE) {
         *n = 0;
     }
@@ -548,8 +664,11 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
     if (!g_vkr.surface) {
         return false;
     }
+    /* Windows: whether the driver may take exclusive fullscreen, chained
+     * into the queries below and the swapchain (rhi_set_exclusive_fullscreen) */
+    const void *fse = vkr_fse_chain();
     VkSurfaceCapabilitiesKHR caps;
-    if (!VKR_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_vkr.phys, g_vkr.surface, &caps))) {
+    if (!VKR_CHECK(vkr_surface_caps(fse, &caps))) {
         return false;
     }
     if (caps.currentExtent.width != UINT32_MAX) {
@@ -617,7 +736,7 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
     /* the present mode (vk_present_mode.c) from the modes the surface
      * offers, queried once per creation */
     uint32_t nModes = 0;
-    VkPresentModeKHR *modes = vkr_surface_present_modes(&nModes);
+    VkPresentModeKHR *modes = vkr_surface_present_modes(fse, &nModes);
     char offered[128];
     vkr_present_mode_list(offered, sizeof(offered), modes, nModes);
     /* the compositor turns the picture (an Android phone held sideways
@@ -645,6 +764,7 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
     vkr_pw_pause(); /* no wait on the old one while it is retired */
     VkSwapchainCreateInfoKHR ci = {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .pNext = fse,
         .surface = g_vkr.surface,
         .minImageCount = count,
         .imageFormat = pick.format,
@@ -684,6 +804,7 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
     }
     s_creations++;
     g_vkr.stats.swapchains++;
+    vkr_fse_log(fse);
     s_swapMadeNs = vkr_now_ns(); /* the poll runs at every present again */
     vkr_destroy_swap_resources();
     /* the old swapchain stays until the first present on the new one
