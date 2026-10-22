@@ -26,22 +26,14 @@ enum {
    request is logged with SDL's reason. */
 int ico_window_video_fullscreen(SDL_Window *w, int want, int *pxW, int *pxH);
 /* Puts the window in mode: FULLSCREEN is SDL's desktop fullscreen;
-   BORDERLESS a frameless window, over its display when sizeW x sizeH is
-   0 x 0 (on Wayland, which does not let a window place itself, a frameless
-   maximised one), else that many pixels in the middle of its display
-   (clamped to the display, converted to SDL's logical units by the
-   window's pixel density, its resizable edges off while it is so; Wayland's
-   compositor places it); WINDOWED the framed window at the rectangle it
-   had before it left the windowed state.  sizeW and sizeH are ignored but
-   for BORDERLESS.  Waits for the window system, logs, and returns the real
-   mode and the pixel size as ico_window_video_fullscreen does. */
-int ico_window_video_mode(SDL_Window *w, int mode, int sizeW, int sizeH, int *pxW, int *pxH);
+   BORDERLESS a frameless window over its display (on Wayland, which does
+   not let a window place itself, a frameless maximised one); WINDOWED the
+   framed window at the rectangle it had before it left the windowed state.
+   Waits for the window system, logs, and returns the real mode and the
+   pixel size as ico_window_video_fullscreen does. */
+int ico_window_video_mode(SDL_Window *w, int mode, int *pxW, int *pxH);
 /* A borderless window moved to another display (or whose display changed
-   size): one at the display's size is fitted to the display again, a sized
-   one centred on it again (its size clamped to it).  1 when it moved. */
+   size): fits it to the display again.  1 when it did. */
 int ico_window_video_refit(SDL_Window *w);
-/* The size in pixels of the window's display (its bounds times the window's
-   pixel density), for the Window size row: 1, or 0 when SDL does not know. */
-int ico_window_video_display_pixels(SDL_Window *w, int *pxW, int *pxH);
 
 #endif /* ICO_PLATFORM_WINDOW_VIDEO_H */

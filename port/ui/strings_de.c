@@ -548,11 +548,6 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED_BODY] =
         "Die Verknüpfungsliste ließ sich nicht ändern.\nDie README zeigt das Hinzufügen von Hand.",
     [UI_STR_LANG_KO] = "한국어",
-    /* Display > Window size */
-    [UI_STR_OPT_WINDOW_SIZE] = "Fenstergröße",
-    [UI_STR_VAL_DISPLAY_SIZE] = "Bildschirmgröße",
-    [UI_STR_WINDOW_SIZE_NOTE] =
-        "Für Randlos. Kleiner als der Bildschirm für Programme, die das Fenster skalieren oder Bilder einfügen.",
     /* Controls > Touch screen and the touch layout editor */
     [UI_STR_SECTION_TOUCH] = "Touchscreen",
     [UI_STR_OPT_TOUCH_EDIT] = "Layout bearbeiten",

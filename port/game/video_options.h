@@ -13,14 +13,8 @@
  *                                       while the presents take too long)
  *   [video] aspect          "4:3"       "4:3" | "16:10" | "16:9" | "21:9" | "32:9" | "48:9" | "auto"
  *   [video] window_mode     "windowed"  "windowed" | "borderless" | "fullscreen"
- *                                       (borderless: a frameless window, over the
- *                                       whole display or at window_size; ignored on
- *                                       Android)
- *   [video] window_size     "display"   "display" | "WxH" (64..7680 by 64..4320): the size
- *                                       in pixels of a Borderless window, centred on its
- *                                       display and clamped to it; "display" fills the
- *                                       display.  Windowed and Fullscreen ignore it;
- *                                       ignored on Android
+ *                                       (borderless: a frameless window over the
+ *                                       whole display; ignored on Android)
  *   [video] fullscreen      false       read when window_mode is absent (true is
  *                                       "fullscreen", false "windowed"), and written
  *                                       beside it (true only for "fullscreen")
@@ -83,8 +77,8 @@
  * they are window (on Android also resolution "auto"), aspect auto,
  * anisotropic and full, Custom otherwise; it is
  * saved back as "original" when Original, else "enhanced" with the rows.
- * window_mode, window_size, fullscreen, vsync, framerate, the CRT keys, the
- * texture pack keys and the effect keys are not part of it.
+ * fullscreen, vsync, framerate, the CRT keys, the texture pack keys and the
+ * effect keys are not part of it.
  * framerate: "original" presents once per
  * simulation tick (each picture held for the tick's refreshes, as the PS2);
  * "uncapped" presents as often as the display allows (vsync) and
@@ -124,8 +118,7 @@ enum {
 #define ICO_ASPECT_MAX ICO_FRAME_ASPECT_MAX
 
 /* The window's mode.  FULLSCREEN is SDL's desktop fullscreen;
-   BORDERLESS a frameless window over its display, or at the window size
-   (IcoVideoOptions.winW, winH) in its middle. */
+   BORDERLESS a frameless window over its display. */
 enum {
     ICO_WINDOW_WINDOWED = 0,
     ICO_WINDOW_BORDERLESS = 1,
@@ -152,8 +145,6 @@ typedef struct IcoVideoOptions {
     int resScale;   /* resolution "Nx": N (1..16); ICO_RES_AUTO: "auto"; 0 otherwise */
     int aspect;     /* ICO_ASPECT_* */
     int windowMode; /* ICO_WINDOW_* */
-    int winW, winH; /* window_size "WxH" in pixels: a Borderless window's size; 0 x 0:
-                       "display" (the display's size) */
     int vsync;      /* the swapchain waits for the vertical blank */
     int filter;     /* ICO_FILTER_* */
     int fullHeight; /* skip the reduction's vertical halving */
@@ -342,11 +333,6 @@ const char *ico_video_aspect_name(int aspect);
 /* "windowed", "borderless", "fullscreen" (any case) */
 int ico_video_parse_window_mode(const char *s, int *mode);
 const char *ico_video_window_mode_name(int mode);
-/* "display" (any case: 0 x 0) or "WxH" within 64..7680 by 64..4320, the
-   bounds of a resolution "WxH" */
-int ico_video_parse_window_size(const char *s, int *w, int *h);
-/* "display" or "WxH" into buf (at least 24 bytes) */
-const char *ico_video_window_size_name(int w, int h, char *buf, unsigned size);
 /* the CRT modes: "scanlines", "consumer", "trinitron", "pvm", "shadow" */
 int ico_video_parse_crt_mode(const char *s, int *mode);
 const char *ico_video_crt_mode_name(int mode);

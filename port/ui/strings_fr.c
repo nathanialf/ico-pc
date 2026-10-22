@@ -547,11 +547,6 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED_BODY] =
         "La liste des raccourcis n’a pas pu être modifiée.\nLe README explique l’ajout manuel.",
     [UI_STR_LANG_KO] = "한국어",
-    /* Display > Window size */
-    [UI_STR_OPT_WINDOW_SIZE] = "Taille de la fenêtre",
-    [UI_STR_VAL_DISPLAY_SIZE] = "Taille de l’écran",
-    [UI_STR_WINDOW_SIZE_NOTE] =
-        "Pour Sans bordure. Plus petite que l’écran pour les programmes qui agrandissent la fenêtre ou ajoutent des images.",
     /* Controls > Touch screen and the touch layout editor */
     [UI_STR_SECTION_TOUCH] = "Écran tactile",
     [UI_STR_OPT_TOUCH_EDIT] = "Modifier la disposition",

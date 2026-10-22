@@ -133,11 +133,6 @@ static int s_lastFullMode = ICO_WINDOW_FULLSCREEN;
    after the startup line) */
 static IcoVideoOptions s_videoLast;
 
-/* the Borderless window size last asked of the window (window_video.h
-   ico_window_video_mode; 0 x 0: the display's): a change of the option
-   while Borderless asks again, as a change of the mode does */
-static int s_winSizeW, s_winSizeH;
-
 /* the presentation loop (ico_window_pace) */
 static int s_pollRestarted; /* the poll's restart at the first game frame, once */
 
@@ -514,13 +509,6 @@ static int window_mode_now(void)
     return (f & SDL_WINDOW_BORDERLESS) ? ICO_WINDOW_BORDERLESS : ICO_WINDOW_WINDOWED;
 }
 
-/* The window's display in pixels, for the Window size row (1, or 0 before
-   the window or when SDL does not know) */
-static int window_display_pixels(int *w, int *h)
-{
-    return s_window != NULL && ico_window_video_display_pixels(s_window, w, h);
-}
-
 static const char *video_preset_label(const IcoVideoOptions *o)
 {
     const int p = ico_video_preset(o);
@@ -560,9 +548,6 @@ static void video_log_changes(const IcoVideoOptions *o)
                     ico_video_aspect_name(o->aspect));
     video_log_field(line, sizeof(line), "window mode", ico_video_window_mode_name(p->windowMode),
                     ico_video_window_mode_name(o->windowMode));
-    video_log_field(line, sizeof(line), "window size",
-                    ico_video_window_size_name(p->winW, p->winH, a, sizeof(a)),
-                    ico_video_window_size_name(o->winW, o->winH, b, sizeof(b)));
     video_log_field(line, sizeof(line), "vsync", p->vsync ? "on" : "off", o->vsync ? "on" : "off");
     video_log_field(line, sizeof(line), "texture filter", ico_video_filter_name(p->filter),
                     ico_video_filter_name(o->filter));
@@ -616,12 +601,6 @@ static void video_apply(int force)
        compared against the window, not the last request: an option that
        already matches what the window is asks for nothing */
     int request = !force && o.windowMode != window_mode_now();
-    /* Borderless at another size: asked again (the same rule: an option
-       change only, never a forced call) */
-    if (!force && o.windowMode == ICO_WINDOW_BORDERLESS &&
-        (o.winW != s_winSizeW || o.winH != s_winSizeH)) {
-        request = 1;
-    }
     if (o.windowMode != ICO_WINDOW_WINDOWED) {
         WINDOW_LAST_FULL(o.windowMode);
     }
@@ -633,10 +612,8 @@ static void video_apply(int force)
     if (request) {
         /* fullscreen at the desktop resolution, a frameless window over the
            display, or the framed window; the resize event follows */
-        s_fullscreen = ico_window_video_mode(s_window, o.windowMode, o.winW, o.winH, NULL, NULL) ==
-                       ICO_WINDOW_FULLSCREEN;
-        s_winSizeW = o.winW;
-        s_winSizeH = o.winH;
+        s_fullscreen =
+            ico_window_video_mode(s_window, o.windowMode, NULL, NULL) == ICO_WINDOW_FULLSCREEN;
         /* refused, or not granted yet: the option stays what was asked (it
            is what the file keeps); the ENTER/LEAVE events set it to what
            the window becomes (ico_window_pump), and the Window mode row
@@ -1323,7 +1300,6 @@ static const char *summary_joystick_scan(void)
 static void log_summary(const IcoVideoOptions *o, const char *res, const char *fr)
 {
     char rd[1024], pads[160]; /* rd: the blend, then the device profile's words, ... */
-    char ws[24];
     int n = 0;
     SDL_JoystickID *ids = SDL_GetGamepads(&n);
     const RhiLimits *l = rhi_limits();
@@ -1348,15 +1324,12 @@ static void log_summary(const IcoVideoOptions *o, const char *res, const char *f
     /* the audio's clock (audio_host.h ico_audio_mode_text): this runs
        before the audio starts, so the one the configuration asks for */
     ico_diag_set_summary(
-        "version %s; %s; GPU %s (%s); %s; %s preset, resolution %s, aspect %s, framerate %s; "
-        "window mode %s, window size %s; %s; "
+        "version %s; %s; GPU %s (%s); %s; %s preset, resolution %s, aspect %s, framerate %s; %s; "
         "index values up to %u; robust access %s; controller %s%s; disc %s; %s; %s",
         ico_diag_version(), summary_platform(), rhi_adapter_name(),
         l->driverText != NULL ? l->driverText : "driver unknown",
         rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", video_preset_label(o), res,
-        ico_video_aspect_name(o->aspect), fr, ico_video_window_mode_name(o->windowMode),
-        ico_video_window_size_name(o->winW, o->winH, ws, sizeof(ws)), rd,
-        (unsigned)l->maxDrawIndexedIndexValue,
+        ico_video_aspect_name(o->aspect), fr, rd, (unsigned)l->maxDrawIndexedIndexValue,
         l->robustText != NULL ? l->robustText
                               : (rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12's own" : "off"),
         pads[0] != '\0' ? pads : "none yet", summary_joystick_scan(),
@@ -1703,13 +1676,10 @@ open_window:
     s_fullscreen = window_fullscreen();
 #if !defined(__ANDROID__) && !defined(ICO_IOS)
     if (start.windowMode == ICO_WINDOW_BORDERLESS) {
-        /* the frameless window over its display (Wayland: maximised), or
-           at the window size in its middle */
-        ico_window_video_mode(s_window, ICO_WINDOW_BORDERLESS, start.winW, start.winH, NULL, NULL);
+        /* the frameless window over its display (Wayland: maximised) */
+        ico_window_video_mode(s_window, ICO_WINDOW_BORDERLESS, NULL, NULL);
     }
 #endif
-    s_winSizeW = start.winW;
-    s_winSizeH = start.winH;
     if (start.windowMode == ICO_WINDOW_FULLSCREEN && !s_fullscreen) {
         /* not granted (yet): the option is left as the file says, so a
            slow window manager never turns the setting off; an
@@ -2080,13 +2050,12 @@ open_window:
     rd_fog_selftest();
     {
         IcoVideoOptions o;
-        char res[32], fr[16], ws[24];
+        char res[32], fr[16];
 
         ico_video_get(&o);
         fprintf(stderr,
                 "window: %dx%d pixels%s, %s on %s, %s preset (resolution %s, aspect %s, "
-                "texture filter %s, %s height, framerate %s), window mode %s, window size %s, "
-                "vsync %s, texture pack %s, "
+                "texture filter %s, %s height, framerate %s), vsync %s, texture pack %s, "
                 "dump textures %s, model pack %s, dump models %s, depth %s\n",
                 w, h, s_fullscreen ? " fullscreen" : "",
                 rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", rhi_adapter_name(),
@@ -2094,9 +2063,7 @@ open_window:
                 ico_video_aspect_name(o.aspect), ico_video_filter_name(o.filter),
                 o.fullHeight ? "full" : "half",
                 ico_video_framerate_name(ico_video_framerate(), fr, sizeof(fr)),
-                ico_video_window_mode_name(o.windowMode),
-                ico_video_window_size_name(o.winW, o.winH, ws, sizeof(ws)), o.vsync ? "on" : "off",
-                o.texturePack ? "on" : "off",
+                o.vsync ? "on" : "off", o.texturePack ? "on" : "off",
                 o.dumpTextures && ico_opt_developer_mode() ? "on" : "off",
                 o.modelPack ? "on" : "off", o.dumpModels && ico_opt_developer_mode() ? "on" : "off",
                 rhi_limits()->depthStencilFormatName);
@@ -2131,8 +2098,6 @@ open_window:
     /* the Window mode row shows what the window is, not the
        option (the window manager can refuse or change it) */
     ui_settings_set_window_mode_query(window_mode_now);
-    /* the Window size row offers the sizes smaller than the display */
-    ui_settings_set_display_size_query(window_display_pixels);
     /* Display > Texture pack says "None installed" without one */
     ui_settings_set_texture_pack_count(texpack_count);
 #if !defined(__ANDROID__) && !defined(__APPLE__)
@@ -5363,7 +5328,6 @@ void ico_window_close(void)
     set_capture(ICO_CAPTURE_OFF);
     ico_input_sdl_shutdown();
     ui_settings_set_window_mode_query(NULL);
-    ui_settings_set_display_size_query(NULL);
     ui_settings_set_texture_pack_count(NULL);
     ui_settings_set_touch_query(NULL);
     ui_settings_set_touch_edit_host(NULL);

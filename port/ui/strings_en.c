@@ -542,11 +542,6 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED_BODY] =
         "The shortcut list could not be changed.\nThe README shows how to add it by hand.",
     [UI_STR_LANG_KO] = "한국어",
-    /* Display > Window size */
-    [UI_STR_OPT_WINDOW_SIZE] = "Window size",
-    [UI_STR_VAL_DISPLAY_SIZE] = "Display size",
-    [UI_STR_WINDOW_SIZE_NOTE] =
-        "For Borderless. Pick a size smaller than the screen for programs that scale the window or add frames.",
     /* Controls > Touch screen and the touch layout editor */
     [UI_STR_SECTION_TOUCH] = "Touch screen",
     [UI_STR_OPT_TOUCH_EDIT] = "Edit layout",

@@ -263,7 +263,7 @@ static void test_save(void)
         CHECK(strstr(text, "version = 1\n") != NULL);
         CHECK(strstr(text,
                      "[video]\npreset = \"original\"\nvsync = true\nwindow_mode = \"windowed\"\n"
-                     "fullscreen = false\nwindow_size = \"display\"\n") != NULL);
+                     "fullscreen = false\n") != NULL);
         CHECK(strstr(text, "[audio]\nenabled = true\nvolume = 1.0\nmusic = 1.0\neffects = 1.0\n"
                            "output = \"auto\"\ndevice = \"\"\n") != NULL);
         CHECK(strstr(text, "[game]\nlanguage = \"de\"\n") != NULL);
@@ -442,7 +442,6 @@ static void test_first_run(void)
     CHECK(ico_config_get_bool("video.vsync", 0) == 1);
     CHECK(ico_config_get_bool("video.fullscreen", 1) == 0);
     CHECK_STR(ico_config_get_string("video.window_mode", "?"), "windowed");
-    CHECK_STR(ico_config_get_string("video.window_size", "?"), "display");
     CHECK(ico_config_get_bool("video.texture_pack", 0) == 1);
     /* the five effect keys, each on */
     CHECK(ico_config_get_bool("video.effect_glow", 0) == 1);

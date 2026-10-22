@@ -545,11 +545,6 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED_BODY] =
         "L’elenco dei collegamenti non è stato modificato.\nIl README spiega come aggiungerlo a mano.",
     [UI_STR_LANG_KO] = "한국어",
-    /* Display > Window size */
-    [UI_STR_OPT_WINDOW_SIZE] = "Dimensione finestra",
-    [UI_STR_VAL_DISPLAY_SIZE] = "Dimensione schermo",
-    [UI_STR_WINDOW_SIZE_NOTE] =
-        "Per Senza bordi. Più piccola dello schermo per i programmi che ingrandiscono la finestra o aggiungono fotogrammi.",
     /* Controls > Touch screen and the touch layout editor */
     [UI_STR_SECTION_TOUCH] = "Schermo touch",
     [UI_STR_OPT_TOUCH_EDIT] = "Modifica disposizione",

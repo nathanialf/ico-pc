@@ -848,60 +848,6 @@ static void checkOptions(const char *dir)
     CHECK(strcmp(ico_config_get_string("video.window_mode", ""), "borderless") == 0 &&
               ico_config_get_bool("video.fullscreen", 1) == 0,
           "options: borderless saves fullscreen false");
-    /* window_size: "display" by default, a WxH read and saved, a bad value
-       is the display's; outside the preset */
-    CHECK(o.winW == 0 && o.winH == 0 &&
-              strcmp(ico_config_get_string("video.window_size", ""), "display") == 0,
-          "options: window_size display by default, and saved so (%dx%d)", o.winW, o.winH);
-    writeFile(toml, "version = 1\n[video]\nwindow_mode = \"borderless\"\n"
-                    "window_size = \"1920x1080\"\n");
-    ico_config_reset(toml, ini);
-    ico_video_reload();
-    ico_video_get(&o);
-    CHECK(o.windowMode == ICO_WINDOW_BORDERLESS && o.winW == 1920 && o.winH == 1080 &&
-              ico_video_preset(&o) == ICO_VIDEO_ORIGINAL,
-          "options: window_size 1920x1080 read, the preset still Original (%dx%d)", o.winW, o.winH);
-    {
-        IcoVideoOptions q = o;
-        ico_video_set_preset(&q, ICO_VIDEO_ENHANCED);
-        CHECK(q.winW == 1920 && q.winH == 1080, "options: the Enhanced shortcut keeps window_size");
-    }
-    o.winW = 1280;
-    o.winH = 720;
-    ico_video_set(&o);
-    ico_video_save();
-    CHECK(strcmp(ico_config_get_string("video.window_size", ""), "1280x720") == 0,
-          "options: save writes window_size");
-    o.winW = 50; /* below the bounds: the display's */
-    ico_video_set(&o);
-    ico_video_get(&o);
-    CHECK(o.winW == 0 && o.winH == 0, "options: an out-of-range window size is the display's");
-    {
-        static const char *const bad[] = {"\"huge\"", "\"1920x\"", "\"32x32\"", "\"8000x4000\"",
-                                          "\"1920x1080x2\""};
-        for (unsigned i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
-            char text[160];
-            snprintf(text, sizeof(text), "version = 1\n[video]\nwindow_size = %s\n", bad[i]);
-            writeFile(toml, text);
-            ico_config_reset(toml, ini);
-            ico_video_reload();
-            ico_video_get(&o);
-            CHECK(o.winW == 0 && o.winH == 0, "options: window_size %s is the display's", bad[i]);
-        }
-    }
-    {
-        int w = -1, h = -1;
-        char buf[24];
-        CHECK(ico_video_parse_window_size("DISPLAY", &w, &h) == 0 && w == 0 && h == 0,
-              "options: \"DISPLAY\" parses");
-        CHECK(ico_video_parse_window_size("7680x4320", &w, &h) == 0 && w == 7680 && h == 4320,
-              "options: the largest window size parses");
-        CHECK(ico_video_parse_window_size("7681x4320", &w, &h) != 0 && w == 7680,
-              "options: past the bounds is refused, the value unchanged");
-        CHECK(strcmp(ico_video_window_size_name(0, 0, buf, sizeof(buf)), "display") == 0 &&
-                  strcmp(ico_video_window_size_name(960, 720, buf, sizeof(buf)), "960x720") == 0,
-              "options: the window size names");
-    }
     /* back to the keys the rest of this check reads */
     writeFile(toml, "version = 1\n[video]\npreset = \"enhanced\"\nresolution = \"1920x1440\"\n"
                     "aspect = \"16:9\"\nfullscreen = true\nvsync = false\n"
