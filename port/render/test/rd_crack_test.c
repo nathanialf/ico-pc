@@ -319,7 +319,9 @@ int main(int argc, char **argv)
            (unsigned long long)(c1.counted - c0.counted),
            (unsigned long long)(c1.filled - c0.filled));
     CHECK(near > 100, "the edge's band holds %d texels", near);
-    CHECK(slitAll > 0 && slitOff == slitAll && slitOn == slitAll,
+    /* the slit is only measured where the filler draws (reach > 0): at 1x
+       and under Original there is nothing to keep it from */
+    CHECK(!active || (slitAll > 0 && slitOff == slitAll && slitOn == slitAll),
           "the slit: %d and %d of %d texels the clear's fog", slitOff, slitOn, slitAll);
     CHECK(changedDrawn == 0, "%d texels the first replay drew changed", changedDrawn);
     CHECK(off.fills == 0, "the replay with the filler off drew %u fill passes", off.fills);

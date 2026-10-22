@@ -1897,8 +1897,8 @@ reduction's column 2 blends a quarter of column 3 (the PS2's +0.75), so DISPLAY'
 drawn from SCENE's repeat alone would be column 2 without that quarter, not DISPLAY's column 2.
 One line the first time, `rd: border: the frame's outer two columns a side repeat columns 2 and
 W-3 on SCENE after the fog (W GS pixels; the glow and the present read them)`, and on Full pixel's
-window `rd: border: the frame's outer two columns are not in SCENE (Full pixel's window holds the
-visible columns only): nothing to repeat (reported once)`; `rd__scene_border_repeat_count` counts
+window `rd: border: Full pixel's window holds the visible columns only: SCENE is kept as drawn at
+its edges (reported once)` (no repeat there: whatever the window holds at its edge is the picture); `rd__scene_border_repeat_count` counts
 the repeats (`rd_log_frame_state`'s line), `rd__set_scene_border_repeat(false)` leaves SCENE as
 drawn (tests).
 

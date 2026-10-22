@@ -207,20 +207,22 @@ static void sceneRepeat(Replay *r)
     if (state == RD_BORDER_CLOSED) {
         return; /* the GS's own border: the PS2's picture */
     }
-    /* Full pixel's window (ox > 0) holds no texel of them at the usual
-       crops (texel 0 is GS ox / sx, past column 2); any it holds are
-       repeated as at ox 0 */
+    if (state == RD_BORDER_WINDOW) {
+        /* Full pixel's window (ox > 0) holds the visible columns only:
+           whatever it holds at its edge is the picture, kept as drawn */
+        static bool logged; /* once a run */
+        if (!logged) {
+            logged = true;
+            rd__log("border: Full pixel's window holds the visible columns only: SCENE is kept as "
+                    "drawn at its edges (reported once)");
+        }
+        return;
+    }
     const int32_t a2 = columnTexel(t, 2), a3 = columnTexel(t, 3);
     const int32_t bR = columnTexel(t, W - 3), aR = columnTexel(t, W - 2);
     const int32_t cwL = a3 - a2, cwR = aR - bR, tw = (int32_t)t->tw;
     const bool left = a2 > 0 && cwL > 0, right = aR < tw && cwR > 0;
     if (!left && !right) {
-        static bool logged; /* once a run */
-        if (!logged && state == RD_BORDER_WINDOW) {
-            logged = true;
-            rd__log("border: the frame's outer two columns are not in SCENE (Full pixel's window "
-                    "holds the visible columns only): nothing to repeat (reported once)");
-        }
         return;
     }
     if (rd__win_muted()) {
