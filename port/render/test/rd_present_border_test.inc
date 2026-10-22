@@ -455,8 +455,12 @@ static void checkOpenBorderEdges(void)
     /* issue 26: 16:9 Enhanced 2x, Full pixel off (the border mask) */
     checkSceneBorderRepeat("scene border 16:9 2x off", 16.0f / 9.0f, 1920, 1080, 2,
                            RD_BORDER_CROPPED);
+    /* Full pixel on at a whole scale: SCENE holds the whole frame (ox 0) and
+       the present crops it, so the columns are repeated as with it off; the
+       window state (ox > 0) needs a fractional scene scale, which this run
+       does not make */
     checkSceneBorderRepeat("scene border 16:9 2x on", 16.0f / 9.0f, 1920, 1080, 1,
-                           RD_BORDER_WINDOW);
+                           RD_BORDER_CROPPED);
     checkSceneBorderRepeat("scene border 2340x1080 2x on", 2340.0f / 1080.0f, 1664, 768, 1,
                            RD_BORDER_OPEN);
     checkSceneBorderRepeat("scene border 4:3 2x off", 4.0f / 3.0f, 1024, 768, 0, RD_BORDER_CLOSED);
