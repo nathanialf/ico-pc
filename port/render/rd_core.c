@@ -894,6 +894,16 @@ RhiTexture rd__sampled_depth(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *cop
         rd__transition(cl, t->depth, &t->depthState, RHI_STATE_DEPTH_READ);
         return t->depth;
     }
+    const RhiTexture z = rd__depth_copy_take(cl, t, copy, name);
+    if (!z.id) {
+        rd__note_scene_pressure(); /* the fog's read: the scale comes down */
+    }
+    return z;
+}
+
+RhiTexture rd__depth_copy_take(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *copy,
+                               const char *name)
+{
     /* the whole depth, both aspects, into a texture that is only ever
      * sampled: the read goes through a transfer, after the depth's last
      * pass has stored it, never through the attachment itself */
@@ -911,7 +921,6 @@ RhiTexture rd__sampled_depth(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *cop
         copy->h = t->th;
     }
     if (!copy->tex.id) {
-        rd__note_scene_pressure();
         return (RhiTexture){0};
     }
     rd__transition(cl, t->depth, &t->depthState, RHI_STATE_COPY_SRC);
@@ -1011,7 +1020,7 @@ static void createNamedTargets(void)
         const bool canLower = g_rd.hasDevice && (g_rd.sceneSx > 1.0f || g_rd.sceneSy > 1.0f);
 
         if (!createNamedPass(canLower)) {
-            return;
+            break;
         }
         /* give back what this pass made before asking for less */
         for (int i = 0; i < RD_TARGET_COUNT; i++) {
@@ -1027,6 +1036,7 @@ static void createNamedTargets(void)
         g_rd.sceneSy = ny;
         g_rd.sceneFellBack = true;
     }
+    rd__crack_fill_scene_made(); /* the crack filler's line at the scale made */
 }
 
 void rd__note_scene_pressure(void)
@@ -1701,6 +1711,7 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     if (g_rd.settings.motionBlurSmooth) {
         logMotionBlur(""); /* made at its first sprite (rd_blur_smooth.c) */
     }
+    rd__crack_fill_init(); /* its line once SCENE is made */
     createNamedTargets();
     readDumpConfig();
     return true;
@@ -1737,6 +1748,7 @@ void rd_shutdown(void)
     if (g_rd.hasDevice) {
         rd_video_shutdown(); /* the FMV path's objects (rd_video.c), before the device */
         rd__present_shutdown();
+        rd__crack_fill_shutdown(); /* the crack filler's count target and buffer */
         rd__gpu_shutdown();
     }
     rd__pipeline_cache_clear();

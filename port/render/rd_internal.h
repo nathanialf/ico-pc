@@ -1201,6 +1201,13 @@ typedef enum RdFsId {
      * pipelines a private cache of two (RD_BLUR_SMOOTH_PIPES) */
     RD_FS_FX_ACC,
     RD_FS_FX_ACC_RESOLVE,
+    /* the crack filler above 1x (rd_crack_fill.c), behind blit_vs, each
+     * texel by Load: crack_fill_ps the pixels no draw covered between two
+     * drawn ones in SCENE given the nearer one's colour and depth
+     * (SV_Depth), crack_count_ps the pixels it fills counted a 16 x 16
+     * block a texel; keys rd__crack_fill_key, in the fog's family */
+    RD_FS_CRACK_FILL,
+    RD_FS_CRACK_COUNT,
     RD_FS_COUNT
 } RdFsId;
 
@@ -1654,8 +1661,13 @@ uint32_t rd__enumerate_reachable_shadow(RdPipeKeyInt *out, uint32_t max, uint32_
  * ALWAYS, no write: the shader reads it as the input attachment). */
 int rd__fog_plan(const RdStateBlock *s, RhiFormat colorFmt, int path, RdDrawPass out[2]);
 /* The fog under ZFog.c's state (TEST 0x50000, ZMSK, ALPHA 0x44 with ABE),
- * with both fragment shaders; appends to out[0..n). */
+ * with both fragment shaders, and the crack filler's two keys where its
+ * shaders are made; appends to out[0..n). */
 uint32_t rd__enumerate_reachable_fog(RdPipeKeyInt *out, uint32_t max, uint32_t n);
+/* The crack filler's keys (rd_crack_fill.c), blit_vs into RGBA8: count 0
+ * crack_fill_ps with the scene depth (D32F_S8) attached, its test ALWAYS
+ * with writes (SV_Depth), no blend; count 1 crack_count_ps alone. */
+RdPipeKeyInt rd__crack_fill_key(int count);
 /* rd_replay.c: frees the fog's LUT texture (rd__gpu_shutdown); the fog samples
  * the depth target itself. */
 void rd__fog_shutdown(void);
@@ -2810,6 +2822,14 @@ typedef struct RdDepthCopy {
  * cannot be made. */
 RhiTexture rd__sampled_depth(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *copy,
                              const char *name);
+/* rd__sampled_depth's copy whatever g_rd.depthCopy says: t's whole depth
+ * (both aspects) copied into *copy (made or resized here), left in
+ * RHI_STATE_SHADER_READ outside any pass; id 0 when it cannot be made,
+ * with no word to the scale (rd__sampled_depth notes the scene's pressure
+ * then; the crack filler, rd_crack_fill.c, which writes t's depth while it
+ * reads the copy, does without). */
+RhiTexture rd__depth_copy_take(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *copy,
+                               const char *name);
 void rd__depth_copy_free(RdDepthCopy *copy);
 /* Turns g_rd.depthCopy on (the fog's path RD_FOG_COPY; tests: the copy
  * against the depth read in place, in one run). */
@@ -3290,6 +3310,52 @@ void rd__blur_smooth_sizes(uint32_t acc[2], uint32_t res[2]);
 void rd__blur_smooth_counts(uint64_t *drawn, uint64_t *restarts, uint64_t *original);
 #define RD_BLUR_SMOOTH_PIPES 2
 #define RD_BLUR_SMOOTH_K_MAX 64u
+
+/* rd_crack_fill.c: the crack filler above 1x (issue 26; docs/port/RENDER.md,
+ * "Crack filling above 1x").  Before the fog of SCENE (rd_replay.c doFog,
+ * rd_replay.h rd__crack_fill), under Enhanced with SCENE's scale above 1 on
+ * an axis, a texel no draw covered (depth 0, the fog's table entry 0)
+ * between written ones within the reach takes the nearer one's colour and
+ * depth.
+ * rd__crack_fill_init      rd_init: the switch (ICO_RD_CRACK_FILL=0, [dev]
+ *                          crack_fill = false: off; on by default) and the
+ *                          counters from zero
+ * rd__crack_fill_scene_made  rd_core.c after the named targets were made:
+ *                          the state line when it changed ("crack fill: on
+ *                          above 1x (scale ..., reach ...)", "off", "not
+ *                          drawn ..."), a count in flight dropped
+ * rd__crack_fill_set_enabled  the replay tool's --no-crack-fill, tests: the
+ *                          switch for the run, over the environment
+ * rd__crack_fill_count_all  every filled replay counted (tests, the tool's
+ *                          --stats), not one in RD_CRACK_COUNT_EVERY
+ * rd__crack_fill_wait      waits for the GPU and reads the count in flight
+ * rd__crack_fill_counts    since rd_init: replays filled, replays counted,
+ *                          the pixels those filled, the last and the
+ *                          largest count, the fogged replays above 1x not
+ *                          filled, the last fill's scale and reach
+ * rd__crack_fill_block     the 10 s summary's lines (rd_interp.c presentLog)
+ * rd__crack_fill_reach     the reach on an axis at scale s: ceil(s / 2)
+ *                          above 1, at most RD_CRACK_REACH_MAX, else 0
+ * rd__crack_fill_shutdown  rd_shutdown: the count's target and buffer */
+typedef struct RdCrackCounts {
+    uint64_t filled, counted, pixels, skipped;
+    uint32_t last, max;
+    float sx, sy;
+    uint32_t rx, ry;
+    bool enabled;
+} RdCrackCounts;
+
+void rd__crack_fill_init(void);
+void rd__crack_fill_scene_made(void);
+void rd__crack_fill_set_enabled(bool on);
+void rd__crack_fill_count_all(bool on);
+void rd__crack_fill_wait(void);
+void rd__crack_fill_counts(RdCrackCounts *out);
+void rd__crack_fill_block(void);
+uint32_t rd__crack_fill_reach(float scale);
+void rd__crack_fill_shutdown(void);
+#define RD_CRACK_REACH_MAX 3u
+#define RD_CRACK_COUNT_EVERY 16u
 
 /* rd_png.c: 8-bit RGBA (or RGB with withAlpha = 0), stored deflate.  The
  * source is RGBA8 either way, rows pitch (>= w * 4) bytes apart. */

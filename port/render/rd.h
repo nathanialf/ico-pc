@@ -1996,6 +1996,11 @@ typedef struct RdPerfRecord {
      * accumulator's passes this replay (the resolve and the accumulate, two
      * a present; one on a restart) */
     uint32_t blurSmoothPasses;
+    /* The crack filler above 1x (rd_crack_fill.c): crackFillPasses its
+     * passes this replay (0 or 1, before the fog), crackCountPasses the
+     * passes that counted what it filled (one in RD_CRACK_COUNT_EVERY
+     * filled replays; the count is read back later, rd__crack_fill_counts) */
+    uint32_t crackFillPasses, crackCountPasses;
     /* The VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass;
      * docs/port/RENDER.md, "The vertex and triangle pre-passes"):
      * vuPrePasses their render passes (0, 1: the vertices and sprites, or 2:

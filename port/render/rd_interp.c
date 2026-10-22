@@ -5940,6 +5940,7 @@ static void presentLog(void)
     }
     s_snapTopN = 0;
     rd__blur_smooth_block(); /* Motion blur: Smooth's line, when it drew */
+    rd__crack_fill_block();  /* the crack filler's, when it filled or was kept off */
     const uint32_t number = s_pres.number;
     const uint32_t tickPresents = s_pres.tickPresents, lastTickPresents = s_pres.lastTickPresents;
     memset(&s_pres, 0, sizeof(s_pres));

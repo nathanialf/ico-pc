@@ -188,6 +188,12 @@ ico_add_shader(fx_blur2_ps fx_sprite.hlsl fx_blur2_ps fragment)
 # blit_vs; used on both backends
 ico_add_shader(fx_acc_ps fx_sprite.hlsl fx_acc_ps fragment)
 ico_add_shader(fx_acc_resolve_ps fx_sprite.hlsl fx_acc_resolve_ps fragment)
+# The crack filler above 1x (port/render/rd_crack_fill.c): the pixels no
+# draw covered between two drawn ones take the nearer one's colour and depth
+# before the fog, and the filled pixels counted a 16 x 16 block a texel,
+# behind blit_vs; used on both backends
+ico_add_shader(crack_fill_ps blit.hlsl crack_fill_ps fragment)
+ico_add_shader(crack_count_ps blit.hlsl crack_count_ps fragment)
 # The blur sprite's UINT-view build (fx_sprite_u_ps)
 # fx_sprite_ps reading its textures through their RGBA8_UINT views
 # (RHI_TEX_UINT_VIEW; rd_replay.c doBlurSpriteDraw)

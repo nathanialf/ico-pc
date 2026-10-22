@@ -117,6 +117,7 @@ add_library(ico_render STATIC
     rd_blur_border.c # the post sprites' replay: the reduction's open border, its outer columns
     rd_blur_smooth.c # Motion blur: Smooth, the motion blur's accumulator
     rd_core.c
+    rd_crack_fill.c # above 1x: the pixels no draw covered between drawn ones, before the fog
     rd_crt.c # the CRT filter at present time
     rd_date_selftest.c # DATE through the stencil bit: the start-up check on the device
     rd_dst_read.c # the exact GS blend: the destination read
@@ -504,6 +505,16 @@ target_compile_options(rd_fog_selftest_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${IC
 target_include_directories(rd_fog_selftest_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_fog_selftest_test PRIVATE ico_render)
 
+# rd_crack_test: the crack filler above 1x (rd_crack_fill.c): a 1/16 GS
+# pixel crack between two triangles filled before the fog at 2x, 4x and a
+# fractional scale, a slit wider than the reach kept, nothing else changed,
+# nothing drawn at 1x, under Original, under MSAA or switched off (the log
+# lines are matched by test/rd_crack.cmake).
+add_executable(rd_crack_test test/rd_crack_test.c)
+target_compile_options(rd_crack_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_crack_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_crack_test PRIVATE ico_render)
+
 # rd_blend_selftest_test: the exact blend's self-test (rd_blend_selftest.c)
 # and the attachment read's Qualcomm rule (vk_device.c) on a wide, scaled
 # scene: the mode left in force, the forest's tint under it, the targets
@@ -710,7 +721,7 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test rd_replay_tool rd_state_test rd_
                   rd_present_test rd_filter_test rd_interp_test rd_mirror_test rd_msaa_test rd_mip_test
                   rd_perf_test rd_boot_present_test rd_crt_test texpack_load_test gsb_cull_test
                   rd_native_test rd_passring_test rd_stream_audit_test rd_alpha_plan_test
-                  rd_fx_frame_test rd_vu_frac_test)
+                  rd_fx_frame_test rd_vu_frac_test rd_crack_test)
 
 if(ICO_RUN_TESTS)
     add_test(NAME rd_state COMMAND rd_state_test "${CMAKE_CURRENT_BINARY_DIR}")
@@ -987,6 +998,69 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_fog_depth_copy rd_present_depth_copy
                          PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_dc}"
                                     ENVIRONMENT "${_env_dcopy}")
+    # the crack filler above 1x (rd_crack_fill.c): rd_crack_test at 2x, 4x,
+    # the window's 1800x1080 (2.8125 x 2.41), 1x, Original, MSAA4, switched
+    # off, on the depth copy, the buffer path, D24S8 and the two-pass
+    # blend; each run's state line (rd: crack fill: ...) matched; and the
+    # replay tool's --no-crack-fill and --stats line on rd_pixel's dump
+    set(_crk "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_crack.cmake")
+    set(_crk_on "rd: crack fill: on above 1x \\(scale")
+    set(_crk_tail "texels\\). \\[dev\\] crack_fill = false turns it off")
+    foreach(_c "2|2x2, reach 1x1" "4|4x4, reach 2x2" "frac|2.81[23]x2.411, reach 2x2")
+        string(REPLACE "|" ";" _cl "${_c}")
+        list(GET _cl 0 _a)
+        list(GET _cl 1 _x)
+        set(_n rd_crack_${_a})
+        if(_a STREQUAL "2")
+            set(_n rd_crack)
+        elseif(_a STREQUAL "4")
+            set(_n rd_crack_4x)
+        endif()
+        add_test(NAME ${_n}
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> -DARGS=${_a}
+                         "-DEXPECT=${_crk_on} ${_x} ${_crk_tail}" -P "${_crk}")
+    endforeach()
+    add_test(NAME rd_crack_1x
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> -DARGS=1
+                     "-DEXPECT=rd: crack fill: on above 1x, not drawn at scale 1x1 \\(the GS's own grid\\)"
+                     -P "${_crk}")
+    add_test(NAME rd_crack_original
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> -DARGS=original
+                     "-DEXPECT=rd: crack fill: on above 1x, not drawn under the Original preset"
+                     -P "${_crk}")
+    add_test(NAME rd_crack_msaa
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> "-DARGS=2|msaa"
+                     "-DEXPECT=rd: crack fill: not drawn on SCENE at scale 2x2: MSAA is asked for"
+                     -P "${_crk}")
+    add_test(NAME rd_crack_off
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> -DARGS=2
+                     "-DEXPECT=rd: crack fill: off \\(\\[dev\\] crack_fill = false, ICO_RD_CRACK_FILL=0\\)"
+                     "-DDENY=rd: crack fill: on above 1x \\(" -P "${_crk}")
+    foreach(_v depth_copy buffer d24s8 nodual)
+        add_test(NAME rd_crack_${_v}
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> -DARGS=2
+                         "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail}" -P "${_crk}")
+    endforeach()
+    set_tests_properties(rd_crack rd_crack_4x rd_crack_frac rd_crack_1x rd_crack_original
+                         rd_crack_msaa PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                  ENVIRONMENT "${_env}")
+    set(_crk_env_off ${_env} "ICO_RD_CRACK_FILL=0")
+    set(_crk_env_depth_copy ${_env} "ICO_RD_DEPTH_COPY=1")
+    set(_crk_env_buffer ${_env} "ICO_RD_FOG_PATH=buffer")
+    set(_crk_env_d24s8 ${_env} "ICO_VK_FAKE_D24S8=1")
+    set(_crk_env_nodual ${_env} "ICO_RD_NO_DUAL=1")
+    foreach(_v off depth_copy buffer d24s8 nodual)
+        set_tests_properties(rd_crack_${_v} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                       ENVIRONMENT "${_crk_env_${_v}}")
+    endforeach()
+    add_test(NAME rd_replay_tool_crack
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DARGS=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump|${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_crack.png|--enhanced|--resolution|2x|--stats|--no-crack-fill"
+                     "-DEXPECT=rd: crack fill: off \\(the replay tool's --no-crack-fill\\)"
+                     "-DEXPECT2=stats: crack fill off: 0 passes, 0 pixels filled"
+                     -P "${_crk}")
+    set_tests_properties(rd_replay_tool_crack PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                         FIXTURES_REQUIRED rd_dump)
     # the fog on the depth's words copied out through a buffer
     # (ICO_RD_FOG_PATH=buffer, rd_fog_path.c: the fallback of a device whose
     # depth reads fail), on D32S8 and on D24S8 (the top byte masked off):

@@ -62,6 +62,9 @@ static const char *const expectedDiet[] = {"vu_np_ps",      "vu_np_ps_nodual",
 /* Motion blur: Smooth's accumulator (fx_sprite.hlsl; port/render/rd_blur_smooth.c) */
 static const char *const expectedSmooth[] = {"fx_acc_ps", "fx_acc_resolve_ps"};
 
+/* the crack filler above 1x (blit.hlsl; port/render/rd_crack_fill.c) */
+static const char *const expectedCrack[] = {"crack_fill_ps", "crack_count_ps"};
+
 /* the mesh programs' entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli:
  * the fallback's on a device of the table) */
 static const char *const expectedPlain[] = {
@@ -249,6 +252,13 @@ int main(void)
             failures++;
         }
     }
+    const size_t nCrack = sizeof(expectedCrack) / sizeof(expectedCrack[0]);
+    for (size_t i = 0; i < nCrack; i++) {
+        if (!ico_find_shader(expectedCrack[i])) {
+            printf("FAIL %s: not in the table\n", expectedCrack[i]);
+            failures++;
+        }
+    }
     const size_t nPlain = sizeof(expectedPlain) / sizeof(expectedPlain[0]);
     for (size_t i = 0; i < nPlain; i++) {
         if (!ico_find_shader(expectedPlain[i])) {
@@ -277,7 +287,7 @@ int main(void)
         }
     }
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
-                        nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass + nSmooth;
+                        nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass + nSmooth + nCrack;
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;

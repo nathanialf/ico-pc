@@ -139,12 +139,12 @@ const char *ico_config_ini_key(const char *toml_path);
    blur_fold=, uint_view=, alpha_plan=, fx_plan=, fx_dst_local=,
    vu_planes=, dynamic_state=, gpu_checkpoints=,
    gpu_robust=, pass_split=, attachment_read=, storage_pass_merge=,
-   vu_prepass=, joystick_directinput=, pipeline_set=): ico_dev_env_name
+   vu_prepass=, crack_fill=, joystick_directinput=, pipeline_set=): ico_dev_env_name
    gives the environment variable a key is exported as (ICO_RD_BLEND,
    ICO_RD_FOG_PATH, ICO_RD_DATE_PATH, ICO_RD_STORE_PLAN, ICO_RD_BLUR_FOLD,
    ICO_RD_UINT_VIEW, ICO_RD_ALPHA_PLAN, ICO_RD_FX_PLAN, ICO_RD_FX_DST_LOCAL,
    ICO_RD_VU_PLANES, ICO_VK_FAKE_NO_DYNAMIC, ICO_GPU_CHECKPOINTS, ICO_GPU_ROBUST, ICO_RD_PASS_SPLIT,
-   ICO_VK_ATTACHMENT_READ, ICO_RD_PASS_MERGE, ICO_RD_VU_PREPASS,
+   ICO_VK_ATTACHMENT_READ, ICO_RD_PASS_MERGE, ICO_RD_VU_PREPASS, ICO_RD_CRACK_FILL,
    ICO_JOYSTICK_DIRECTINPUT, ICO_PIPELINE_SET), NULL for any other key (the
    retired vu_plain_only= and vu_extended= among them: read, logged by
    ico_ini_export as "ico_pc: [dev] <key> = <value> is not used (every
@@ -159,7 +159,7 @@ const char *ico_config_ini_key(const char *toml_path);
    (the variable names what is static); pipeline_set full, careful or lazy as they are; pass_split a
    count; gpu_*, attachment_read, storage_pass_merge, store_plan,
    blur_fold, uint_view, alpha_plan, fx_plan, fx_dst_local, vu_planes,
-   vu_prepass and joystick_directinput 1/true/on/yes ->
+   vu_prepass, crack_fill and joystick_directinput 1/true/on/yes ->
    "1", 0/false/off/no -> "0". ico_ini_export sets them. */
 const char *ico_dev_env_name(const char *key);
 const char *ico_dev_env_value(const char *key, const char *value);
