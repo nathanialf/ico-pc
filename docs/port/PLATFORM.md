@@ -1201,9 +1201,21 @@ The window build's diagnostic keys are free of SDL so a unit test checks them
   48:9 and 60:9 into `sweep-<time>.zip` (`ico_sweep_zip`).
 - **F11**: stats lines every second for 30 s instead of every 10 s; again turns it off
   (`ico_stats_fast_toggle`).
+- **Settings > Save a picture for a bug report** (Main, developer mode, under Dump models): F12's
+  dump 3 s after the press, time to leave the menu, for a phone or a handheld with no F12. The
+  settings handler (`ui_settings_set_frame_dump_handler`, installed on every platform with the
+  window) arms it, the pump runs `frame_dump` once the time has come, with the line `window: the
+  picture for a bug report (Settings, 3 s after the press):` before F12's own
+  (`port/platform/window_host.c` (`report_picture_arm`, `report_picture_pump`)).
 
 Neither key can be bound, and a held key's repeats do nothing. `dump_every=N` in `ico-pc.ini`
-writes every Nth frame as an `.rddump` (`port/platform/host_config.h`).
+writes every Nth frame as an `.rddump` (`port/platform/host_config.h`). It works on Android too:
+the ini there is the app's files folder's (`ico_host_ini_path` is the program's folder, which on
+Android is `ico_android_files_dir`), `export_dump_keys` makes `dumps` beside it and hands
+`ICO_RD_DUMP_EVERY` and `ICO_RD_DUMP_DIR` to `rd_init` in the environment, so the files land in
+`Android/data/com.defnf.icopc/files/dumps/rd-NNNNN.rddump`, loose (the issues page takes them
+zipped) (`port/platform/host_config.c` (`export_dump_keys`); `port/render/rd_core.c`
+(`readDumpConfig`): `rd: dumping every N frames from frame F into DIR`).
 
 A device loss writes its own zip with no key: `logs/loss-<date>-<time>.zip`, the lost frame's dump
 first, the frame before it, then the log, the newest three kept

@@ -404,6 +404,12 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_DUMP_MODELS] = "Modelle exportieren",
     [UI_STR_DUMP_MODELS_NOTE] =
         "Für Paketersteller: jedes Modellteil als glTF-Datei in models/%s/dumps im Benutzerordner.",
+    [UI_STR_OPT_REPORT_PICTURE] = "Bild für Fehlerbericht speichern",
+    [UI_STR_REPORT_PICTURE_NOTE] =
+        "Speichert 3 Sekunden später das Bild auf dem Bildschirm mit dem Protokoll als ZIP im Ordner dumps.",
+    [UI_STR_REPORT_PICTURE_ARMED] = "Bild in 3 Sekunden",
+    [UI_STR_REPORT_PICTURE_ARMED_BODY] =
+        "Jetzt das Menü verlassen.\nDie ZIP-Datei kommt in den Ordner dumps.",
     [UI_STR_SECTION_EFFECTS] = "Effekte",
     [UI_STR_OPT_EFFECT_GLOW] = "Leuchten",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Tiefenschärfe",

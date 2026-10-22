@@ -142,6 +142,8 @@ In that folder:
   `models/SCPS-56001/replacements` one for the Korean disc. Make these
   folders yourself.
 - `screenshots` holds the pictures you take in photo mode.
+- `dumps` holds the pictures saved for a bug report
+  ([how](#send-a-problem-report)).
 - `config.toml` holds your settings.
 - A big file of about 1 GB is the game's data, copied out of your disc
   image (one for each disc you set up). Do not delete it, or the next
@@ -269,6 +271,35 @@ the screen said "Preparing graphics", also say which numbers the screen
 showed last. Also tell us what you pressed just before, and whether your
 saves in `memcard` came from this phone or were copied from somewhere
 else.
+
+**Something looks wrong in the picture** (a line, a bright band or a mark
+that stays on the screen). Save a picture of it for the report:
+
+1. In **Options**, turn on **Developer mode** and choose **Save a picture
+   for a bug report** (the row under it).
+2. Leave the menu right away. 3 seconds after you chose the row, the game
+   saves what is on the screen in the `dumps` folder of the game's folder:
+   a `.zip` file whose name starts with `frame-` and the date and time, and
+   pictures with the same name. Send the `.zip` (it holds the log too) and
+   the picture ending in `-present.png`.
+3. Turn Developer mode off again: while it is on you cannot earn
+   achievements.
+
+If you cannot get to the menu while it shows, the game can save its
+pictures by itself instead. Add this line to the text file `ico-pc.ini` in
+the game's folder (see
+[Keeping the copy](#the-first-start) for how to make that file and copy it
+to the phone):
+
+```
+dump_every=300
+```
+
+The game then saves one of its pictures every few seconds into `dumps`.
+Play to the place, wait a little, close the game, put the newest file from
+`dumps` in a `.zip` file (the issues page takes `.zip` files) and send it.
+Each file is a few megabytes, so delete the line (and the files) when you
+are done.
 
 **The buttons you pressed.** Each start also writes a file in `logs`
 whose name starts with `input-` and goes on with the date and time of

@@ -399,6 +399,11 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_DUMP_MODELS] = "Dump models",
     [UI_STR_DUMP_MODELS_NOTE] =
         "For pack makers: saves each model part as a glTF file in models/%s/dumps in the user folder.",
+    [UI_STR_OPT_REPORT_PICTURE] = "Save a picture for a bug report",
+    [UI_STR_REPORT_PICTURE_NOTE] =
+        "Saves the picture on the screen 3 seconds later, with the log, as a zip in the dumps folder.",
+    [UI_STR_REPORT_PICTURE_ARMED] = "Picture in 3 seconds",
+    [UI_STR_REPORT_PICTURE_ARMED_BODY] = "Leave the menu now.\nThe zip goes to the dumps folder.",
     [UI_STR_SECTION_EFFECTS] = "Effects",
     [UI_STR_OPT_EFFECT_GLOW] = "Glow",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Depth of field",

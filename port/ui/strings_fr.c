@@ -403,6 +403,12 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_OPT_DUMP_MODELS] = "Extraire les modèles",
     [UI_STR_DUMP_MODELS_NOTE] =
         "Pour les créateurs de packs : chaque partie de modèle en fichier glTF, dans models/%s/dumps du dossier utilisateur.",
+    [UI_STR_OPT_REPORT_PICTURE] = "Capture pour un rapport de bug",
+    [UI_STR_REPORT_PICTURE_NOTE] =
+        "Enregistre l’image à l’écran 3 secondes plus tard, avec le journal, en zip dans le dossier dumps.",
+    [UI_STR_REPORT_PICTURE_ARMED] = "Capture dans 3 secondes",
+    [UI_STR_REPORT_PICTURE_ARMED_BODY] =
+        "Quittez le menu maintenant.\nLe zip va dans le dossier dumps.",
     [UI_STR_SECTION_EFFECTS] = "Effets",
     [UI_STR_OPT_EFFECT_GLOW] = "Lueur",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Profondeur de champ",

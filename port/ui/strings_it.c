@@ -402,6 +402,11 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_OPT_DUMP_MODELS] = "Esporta modelli",
     [UI_STR_DUMP_MODELS_NOTE] =
         "Per chi crea pacchetti: ogni parte di modello come file glTF in models/%s/dumps nella cartella utente.",
+    [UI_STR_OPT_REPORT_PICTURE] = "Immagine per una segnalazione",
+    [UI_STR_REPORT_PICTURE_NOTE] =
+        "Salva l’immagine sullo schermo 3 secondi dopo, con il registro, come zip nella cartella dumps.",
+    [UI_STR_REPORT_PICTURE_ARMED] = "Immagine tra 3 secondi",
+    [UI_STR_REPORT_PICTURE_ARMED_BODY] = "Esci ora dal menu.\nLo zip va nella cartella dumps.",
     [UI_STR_SECTION_EFFECTS] = "Effetti",
     [UI_STR_OPT_EFFECT_GLOW] = "Bagliore",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Profondità di campo",

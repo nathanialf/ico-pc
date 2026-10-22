@@ -740,7 +740,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   steps Effects > Water reflections between Original and Sharp, checks its
   note, its key and the page's fourteen rows (`testWaterReflections`), and Main's Disc row
   (`testDiscRow`: shown with more than one disc's game data only, its values and `[game] disc`, the page
-  with all fifteen rows). Each also runs with `jpn`
+  with all fifteen rows), and Main's Save a picture for a bug report (`testReportPicture`: shown in
+  developer mode with a host handler only, after Dump models, Cross calls the handler once and
+  shows its popup, the page with all sixteen rows, the label fitting and translated in every
+  language). Each also runs with `jpn`
   as the Japanese or Korean disc over the fixture's tables at that disc's numbers (`settings_jpn`,
   `settings_extra_jpn`, `settings_extras_jpn`; `kor` the same, `settings_kor`, `settings_extra_kor`,
   `settings_extras_kor`, with the numbers from the Korean region row): the rows it has not, Menu language, Circle

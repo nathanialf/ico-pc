@@ -800,6 +800,122 @@ static void testAddToSteam(void)
     }
 }
 
+/* Main > Save a picture for a bug report (issue 129): hidden without a
+   handler (the headless build) and outside developer mode; with both, after
+   Dump models, with its note; Cross calls the handler once (the host arms
+   its frame dump) and shows the popup, the cursor staying on the page.
+   With every Main row shown (the Graphics driver link, Disc and the three
+   developer rows: sixteen) the rows are 10 apart from 30 and the page
+   fits.  The label fits its box in every language and every string is
+   translated. */
+static int s_reportCalls;
+
+static void fakeReportPicture(void)
+{
+    s_reportCalls++;
+}
+
+static void testReportPicture(void)
+{
+    useConfig("version = 1\n");
+    ui_popup_reset();
+    ui_settings_set_frame_dump_handler(NULL);
+    int mainL = enterMain(1);
+    ico_opt_set_developer_mode(1);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    CHECK(ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE) >= 0 &&
+              !an22bShown(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE),
+          "report picture: no handler, the row is hidden");
+    ico_opt_set_developer_mode(0);
+    ui_settings_set_frame_dump_handler(fakeReportPicture);
+    mainL = enterMain(1);
+    frame(0);
+    CHECK(!an22bShown(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE),
+          "report picture: developer mode off, the row is hidden");
+    ico_opt_set_developer_mode(1); /* after enterMain, which reloads the options */
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    const int row = ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE);
+    CHECK(an22bShown(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE), "report picture: shown");
+    CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Save a picture for a bug report") == 0,
+          "report picture: the label \"%s\"", row >= 0 ? lt_ext_row_text(row) : "");
+    CHECK(ui_settings_note_row_of(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE) >= 0,
+          "report picture: the row has its note");
+    {
+        int labels[16];
+        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        int at = -1, models = -1;
+        for (int i = 0; i < n; i++) {
+            at = labels[i] == row ? i : at;
+            models = labels[i] == ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_DUMP_MODELS) ? i : models;
+        }
+        CHECK(at >= 0 && at == models + 1, "report picture: after Dump models (%d, %d)", at,
+              models);
+    }
+    s_reportCalls = 0;
+    ui_popup_reset();
+    lt_ext_layout(mainL)->curItem = row;
+    frame(0);
+    press(0x40);
+    CHECK(s_reportCalls == 1, "report picture: Cross calls the handler once (%d)", s_reportCalls);
+    CHECK(ui_popup_active() && strcmp(ui_popup_title(), "Picture in 3 seconds") == 0,
+          "report picture: popup \"%s\"", ui_popup_title());
+    CHECK(current_layout_id == mainL, "report picture: stays on the page");
+    ui_popup_reset();
+
+    /* every Main row: sixteen, from 30, 10 apart, Back's box inside */
+    s_gpuN = 0;
+    s_gpuSel = -1;
+    s_gpuFailed = -1;
+    s_gpuAdreno = 1;
+    ui_settings_set_gpu_driver_host(&kGpuHost);
+    s_discHave = 3u;
+    ui_settings_set_disc_handler(fakeDiscPresent);
+    enterMain(1);
+    ico_opt_set_developer_mode(1);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    {
+        int labels[16], shown = 0;
+        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        for (int i = 0; i < n; i++) {
+            shown += !lt_ext_prop(labels[i])->defaultMask && !lt_ext_prop(labels[i])->masked;
+        }
+        const LtProperty *back = lt_ext_prop(labels[n - 1]);
+        CHECK(shown == 16, "report picture: every Main row shown (%d of %d)", shown, n);
+        CHECK(back->dispY == 30 + 15 * 10, "report picture: sixteen rows 10 apart, Back at %d",
+              back->dispY);
+        CHECK(back->dispY + back->dispH <= 226, "report picture: Back's box ends at %d",
+              back->dispY + back->dispH);
+        checkPageFits(UI_PAGE_MAIN, "Main (every row, Save a picture)");
+    }
+    ico_opt_set_developer_mode(0);
+    ui_settings_set_gpu_driver_host(NULL);
+    ui_settings_set_disc_handler(NULL);
+    ui_settings_set_frame_dump_handler(NULL);
+    useConfig("version = 1\n");
+
+    for (int g = 0; g < UI_LANG_COUNT; g++) {
+        const float lw = ui_measure_menu_text(UI_MENU_TEXT_SIZE,
+                                              ui_str_in((UiLang)g, UI_STR_OPT_REPORT_PICTURE));
+        CHECK(lw * 0.6f <= 300.0f, "report picture: language %d: the label fits (%.1f)", g,
+              (double)lw);
+    }
+    static const UiStrId kIds[] = {UI_STR_OPT_REPORT_PICTURE, UI_STR_REPORT_PICTURE_NOTE,
+                                   UI_STR_REPORT_PICTURE_ARMED, UI_STR_REPORT_PICTURE_ARMED_BODY};
+    for (int l = 1; l < UI_LANG_COUNT; l++) {
+        for (unsigned i = 0; i < sizeof(kIds) / sizeof(kIds[0]); i++) {
+            const char *t = ui_str_in((UiLang)l, kIds[i]);
+            CHECK(t[0] != '\0' && strcmp(t, ui_str_in(UI_LANG_EN, kIds[i])) != 0,
+                  "report picture: language %d, string %d translated", l, kIds[i]);
+        }
+    }
+}
+
 static void testQuitGame(void)
 {
     static const char *const kAsk[2] = {"Quit to desktop?", "Quit the game?"};
@@ -2988,6 +3104,7 @@ int main(int argc, char **argv)
     testAddToSteam();
     /* Main > Disc */
     testDiscRow();
+    testReportPicture();
     testQuitGame();
     /* Controls > the mouse camera rows */
     testMouseCamera();

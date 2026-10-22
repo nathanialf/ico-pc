@@ -438,13 +438,18 @@ it: while it is on, Select opens it. Leave it off for normal play. While it
 is on, you cannot earn achievements, and they stay off for the rest of that
 game even after you turn it off, until you go back to the title screen.
 
-With Developer mode on, two more rows show up under it. They are for
-people who make packs:
+With Developer mode on, three more rows show up under it. The first two
+are for people who make packs, the third for problem reports:
 
 - **Dump textures** saves every texture as a picture file when the game
   loads it. [More](TEXTURE_PACKS.md#make-a-texture-pack).
 - **Dump models** saves every model piece as a 3D model file when the game
   draws it. [More](MODEL_PACKS.md#make-a-model-pack).
+- **Save a picture for a bug report** saves what is on the screen 3 seconds
+  after you press it, so leave the menu right away. It goes into the
+  `dumps` folder as a `.png` picture and a `.zip` file that also holds the
+  log; attach the `.zip` to your report. It is the same as F12 on a
+  computer, and it is how a phone or a handheld makes one.
 
 ## The pause menu's journey panel
 

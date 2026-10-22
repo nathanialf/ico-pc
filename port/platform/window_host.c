@@ -882,6 +882,10 @@ static void first_pump_recheck(void)
    safe area as they are now, and the renderer's frame state */
 static SDL_AtomicInt s_resumed;
 
+/* Settings > Save a picture for a bug report's handler (below, with F12's
+   frame_dump) */
+static void report_picture_arm(void);
+
 static void resume_recheck(void)
 {
     int pw = 0, ph = 0, ww = 0, wh = 0;
@@ -2226,6 +2230,8 @@ open_window:
 #endif
     /* Main > Disc, shown with two or more discs' game data */
     ui_settings_set_disc_handler(ico_host_disc_archive_present);
+    /* Main > Save a picture for a bug report (developer mode) */
+    ui_settings_set_frame_dump_handler(report_picture_arm);
 #ifdef __ANDROID__
     /* the Graphics driver page, and "Quit game" for the
        title's Quit row (a phone has no desktop to quit to); both before the
@@ -2691,6 +2697,27 @@ static void frame_dump(void)
             zr >= 0 ? zip : "",
             havePrev ? "with the tick before: rd_replay_tool --interp rebuilds the pictures between"
                      : "without the tick before");
+}
+
+/* Settings > Save a picture for a bug report (developer mode; settings.h
+   ui_settings_set_frame_dump_handler): F12's dump 3 s after the press,
+   time to leave the menu, from the pump (report_picture_pump). A phone has
+   no F12; the zip lands in the same dumps folder. */
+static Uint64 s_reportDumpAt;
+
+static void report_picture_arm(void)
+{
+    s_reportDumpAt = SDL_GetTicksNS() + 3000000000ull;
+}
+
+static void report_picture_pump(void)
+{
+    if (s_reportDumpAt == 0 || SDL_GetTicksNS() < s_reportDumpAt) {
+        return;
+    }
+    s_reportDumpAt = 0;
+    fprintf(stderr, "window: the picture for a bug report (Settings, 3 s after the press):\n");
+    frame_dump();
 }
 
 /* Shift+F12 in photo mode, the aspect sweep: the paused frame captured at
@@ -3467,6 +3494,7 @@ int ico_window_pump(void)
 #endif
     first_pump_recheck();
     resume_recheck();
+    report_picture_pump();
     /* the Settings menu's changes; forced when the
        renderer's output followed a swapchain rebuilt at another size, so
        aspect "auto" and resolution "window" follow it as on a resize */
@@ -5462,6 +5490,7 @@ void ico_window_close(void)
     ui_settings_set_steam_handler(NULL);
 #endif
     ui_settings_set_disc_handler(NULL);
+    ui_settings_set_frame_dump_handler(NULL);
 #ifdef __ANDROID__
     ui_settings_set_gpu_driver_host(NULL);
 #endif
