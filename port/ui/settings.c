@@ -715,6 +715,24 @@ void ui_settings_set_steam_handler(int (*fn)(void))
     s_steamFn = fn;
 }
 
+/* Main > Save a picture for a bug report: the host's frame dump, armed */
+static void (*s_frameDumpFn)(void);
+
+void ui_settings_set_frame_dump_handler(void (*fn)(void))
+{
+    s_frameDumpFn = fn;
+}
+
+static void reportPicture(void)
+{
+    if (s_frameDumpFn == NULL) {
+        return;
+    }
+    s_frameDumpFn();
+    fprintf(stderr, "settings: a picture for a bug report in 3 s\n");
+    ui_popup_push(ui_str(UI_STR_REPORT_PICTURE_ARMED), ui_str(UI_STR_REPORT_PICTURE_ARMED_BODY));
+}
+
 /* Main > Disc: the host's answer for each disc's game data, asked once */
 static int (*s_discFn)(const char *archiveName);
 static int s_discShown = -1;
@@ -1569,6 +1587,9 @@ static int optShown(int opt, int link)
     }
     if (opt == UI_OPT_DUMP_TEXTURES || opt == UI_OPT_DUMP_MODELS) {
         return ico_opt_developer_mode(); /* for pack authors */
+    }
+    if (opt == UI_OPT_REPORT_PICTURE) {
+        return ico_opt_developer_mode() && s_frameDumpFn != NULL; /* the window build */
     }
     if (isTouchOpt(opt)) {
         return touchPresent(); /* a phone, a tablet, a touch screen */
@@ -2471,6 +2492,12 @@ static int pagePitch(int page, int n, int *y0)
         }
         return 13;
     }
+    if (page == UI_PAGE_MAIN && n > 15) {
+        /* sixteen (every row, Save a picture for a bug report too): from
+           30, Back at 180, its box to 220 */
+        *y0 = 30;
+        return 10;
+    }
     if (page == UI_PAGE_MAIN) {
         return n > 14   ? 10
                : n > 13 ? 11
@@ -2630,6 +2657,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_DEVELOPER, UI_STR_DEVELOPER_NOTE);
         addNote(pg, UI_OPT_DUMP_TEXTURES, UI_STR_DUMP_TEXTURES_NOTE);
         addNote(pg, UI_OPT_DUMP_MODELS, UI_STR_DUMP_MODELS_NOTE);
+        addNote(pg, UI_OPT_REPORT_PICTURE, UI_STR_REPORT_PICTURE_NOTE);
         break;
     case UI_PAGE_DISPLAY:
         addNote(pg, UI_OPT_RESOLUTION, UI_STR_RESOLUTION_CRT_NOTE);
@@ -3060,11 +3088,13 @@ static void build(void)
 {
     /* Extras (after Achievements), from both entries (its Music,
        Models and Credits only from the title, layoutPage) */
-    /* Dump textures under Developer mode, shown while it is on */
+    /* Dump textures, Dump models and Save a picture for a bug report under
+       Developer mode, shown while it is on */
     static const int mainOpts[] = {
-        UI_OPT_LINK, UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,
-        UI_OPT_LINK, UI_OPT_LANGUAGE,  UI_OPT_MENU_LANGUAGE, UI_OPT_DISC,        UI_OPT_LINK,
-        UI_OPT_LINK, UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
+        UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,           UI_OPT_LINK,
+        UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LANGUAGE,       UI_OPT_MENU_LANGUAGE,
+        UI_OPT_DISC,          UI_OPT_LINK,        UI_OPT_LINK,           UI_OPT_DEVELOPER,
+        UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_REPORT_PICTURE, UI_OPT_BACK};
     static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
                                    UI_STR_SECTION_EFFECTS,
                                    UI_STR_SECTION_GPU_DRIVER,
@@ -3079,6 +3109,7 @@ static void build(void)
                                    UI_STR_OPT_DEVELOPER_MODE,
                                    UI_STR_OPT_DUMP_TEXTURES,
                                    UI_STR_OPT_DUMP_MODELS,
+                                   UI_STR_OPT_REPORT_PICTURE,
                                    UI_STR_BACK};
     static const int mainLinks[] = {UI_PAGE_DISPLAY,
                                     UI_PAGE_EFFECTS,
@@ -3091,6 +3122,7 @@ static void build(void)
                                     -1,
                                     UI_PAGE_ACHIEVEMENTS,
                                     UI_PAGE_EXTRAS,
+                                    -1,
                                     -1,
                                     -1,
                                     -1,
@@ -4812,6 +4844,10 @@ static int settingsProc(int first, int item)
         if ((flags & PAD_OK) && r->opt == UI_OPT_EXTRAS_STEAM) {
             POSITIVE_SE();
             steamAdd();
+        }
+        if ((flags & PAD_OK) && r->opt == UI_OPT_REPORT_PICTURE) {
+            POSITIVE_SE();
+            reportPicture();
         }
         if ((flags & PAD_OK) && r->opt == UI_OPT_GPU_ADD) {
             POSITIVE_SE();

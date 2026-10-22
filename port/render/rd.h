@@ -342,7 +342,7 @@ typedef struct RdSettings {
     uint8_t filterUpgrade;   /* RdFilterUpgrade: trilinear/anisotropic with generated mips */
     uint8_t fullHeightScene; /* skip the vertical halving of the reduction pass */
     /* the reduction pass draws the whole frame, with no black border and no
-     * wrap at the edge (rd_replay.c doBlurSprite); the picture's box, scale
+     * wrap at the edge (rd_blur_border.c rd__blur_post_sprite); the picture's box, scale
      * and crop are the same with it off (rd_present.c outputBox,
      * rd__apply_display), which borderMask below masks */
     uint8_t fullPixel;
@@ -751,6 +751,13 @@ void rd_resize_output(uint32_t width, uint32_t height);
  * may be NULL): the host loop then gives the size to the options that
  * follow the window (aspect auto, resolution window). */
 bool rd_output_followed(uint32_t *w, uint32_t *h);
+/* One log line now, "rd: frame state (<when>): ..." (the window after the
+ * app came back, issue 129): the output's size and the one asked for, the
+ * scene's scale, the aspect, the frame's width and exact width, cropped or
+ * at its exact width, the reduction's border open or closed and the times
+ * its outer columns were drawn as their neighbours.  Host loop; no-op
+ * before rd_init. */
+void rd_log_frame_state(const char *when);
 /* gsb_SetVSMatrix: the camera for this frame (used by Enhanced projection,
  * interpolation and the WORLD-space 2D conversion).
  * Called from gsb_MakeCommonMatrix, the point where the view

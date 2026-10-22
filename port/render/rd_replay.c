@@ -20,8 +20,9 @@
  *                    rd_shadow.c; doShadow* below)
  *   RDC_POST_STUB    of kind RD_POST_FOG: doFog; of kinds RD_POST_REDUCTION
  *                    and RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR:
- *                    doBlurSprite, the reduction's and staticBlur.c's
- *                    sprites (recorded by rd_blur.c) through fx_sprite_ps
+ *                    rd_blur_border.c rd__blur_post_sprite, the
+ *                    reduction's and staticBlur.c's sprites (recorded by
+ *                    rd_blur.c) through fx_sprite_ps (doBlurSpriteDraw)
  *   RDC_OVERLAY_TEXT nothing here: the present collects it (rd_present.c
  *                    rd__overlay_collect)
  *   RDC_WORLD_PRIMS and an RDC_POST_STUB of any other kind
@@ -5007,6 +5008,13 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         rd__fog_probe_record(s_cl, tz, zid, &src, tc,
                              p.lutOffset != ~0u ? f->payload + p.lutOffset : NULL);
     }
+    /* the outer columns' depth while the reduction shows them (rd_fog_path.c
+     * rd__fog_edge_due: every 32nd fogged replay, read back without a wait) */
+    if (rd__fog_edge_due(borderOpen() && !rd__frame_cropped() && !fogMs, &src, tz)) {
+        endPass(r);
+        rd__fog_edge_record(s_cl, tz, zid, &src,
+                            p.lutOffset != ~0u ? f->payload + p.lutOffset : NULL);
+    }
     (void)topo;
 }
 
@@ -5624,42 +5632,16 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     }
 }
 
-/* The reduction's textured sprite with Full pixel on (or the border mask:
- * borderOpen).  The game draws it
- * inside a scissor two columns and a few rows in from the frame's edge (the
- * black border), and with the wrap it never sets to CLAMP, so the last
- * column also blends in a quarter of the first.  Here the scissor is the
- * whole target and both axes clamp, so the border shows the picture SCENE
- * holds under it and the edges read their own texels.  The recorded scissor
- * and wrap stay in the frame (and in the dumps); this replaces them for this
- * one draw and puts them back after it, whichever way it returns.  The black
- * clear sprite before it is not textured and covers everything already. */
-static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
+/* rd_replay.h, for rd_blur_border.c (rd__blur_post_sprite, which the list
+ * loop calls for every post sprite): doBlurSpriteDraw and borderOpen */
+void rd__replay_blur_sprite_draw(Replay *r, const RdFrame *f, const RdCmd *c)
 {
-    if (rd__replay_blur_fold(r, f, c)) {
-        return; /* a pair folded into one pass (rd_replay_tiler.c) */
-    }
-    if (!borderOpen() || c->b[0] != RD_POST_REDUCTION || !r->st.ds.texEnabled) {
-        doBlurSpriteDraw(r, f, c);
-        return;
-    }
-    const RdTargetRec *tc = rd__target_rec(r->st.color);
-    if (!tc) {
-        doBlurSpriteDraw(r, f, c);
-        return;
-    }
-    int32_t scissor[4];
-    memcpy(scissor, r->st.scissor, sizeof(scissor));
-    const RdSamplerWrap wrap = r->st.ds.wrap;
-    r->st.scissor[0] = 0;
-    r->st.scissor[1] = 0;
-    r->st.scissor[2] = (int32_t)tc->w - 1;
-    r->st.scissor[3] = (int32_t)tc->h - 1;
-    r->st.ds.wrap.s = RD_WRAP_CLAMP;
-    r->st.ds.wrap.t = RD_WRAP_CLAMP;
     doBlurSpriteDraw(r, f, c);
-    memcpy(r->st.scissor, scissor, sizeof(scissor));
-    r->st.ds.wrap = wrap;
+}
+
+bool rd__replay_border_open(void)
+{
+    return borderOpen();
 }
 
 /* ----------------------------------------------------------------- frame */
@@ -5877,7 +5859,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
                     break;
                 }
                 if (rd__is_blur_kind(c->b[0])) {
-                    doBlurSprite(&r, f, c);
+                    rd__blur_post_sprite(&r, f, c); /* rd_blur_border.c */
                     break;
                 }
                 endPass(&r);

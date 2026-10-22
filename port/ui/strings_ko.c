@@ -404,6 +404,12 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_DUMP_MODELS] = "모델 추출",
     [UI_STR_DUMP_MODELS_NOTE] =
         "팩 제작자용: 모델의 각 부분을 glTF 파일로 사용자 폴더의 models/%s/dumps에 저장합니다.",
+    [UI_STR_OPT_REPORT_PICTURE] = "버그 신고용 사진 저장",
+    [UI_STR_REPORT_PICTURE_NOTE] =
+        "3초 뒤 화면 사진을 로그와 함께 zip 파일로 dumps 폴더에 저장합니다.",
+    [UI_STR_REPORT_PICTURE_ARMED] = "3초 뒤 사진 저장",
+    [UI_STR_REPORT_PICTURE_ARMED_BODY] =
+        "지금 메뉴에서 나가십시오.\nzip 파일은 dumps 폴더에 저장됩니다.",
     [UI_STR_SECTION_EFFECTS] = "효과",
     [UI_STR_OPT_EFFECT_GLOW] = "빛 번짐",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "피사계 심도",

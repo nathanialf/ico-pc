@@ -743,7 +743,8 @@ void checkPageFits(UiSettingsPage page, const char *what)
     const int tall = page == UI_PAGE_CONTROLS ? 12 : 13;
     /* the Main page's thirteen rows (Menu language, developer mode and
        both dumps) 12 apart, fifteen (the Graphics driver link and Disc
-       too) 10 apart (pagePitch) */
+       too) 10 apart, sixteen (Save a picture for a bug report too) 10
+       apart from 30 (pagePitch) */
     const int gap = shown > 15 && page == UI_PAGE_CONTROLS ? 10
                     : shown > 14 && page == UI_PAGE_MAIN   ? 10
                     : shown > tall                         ? 11

@@ -952,6 +952,116 @@ static void checkAaRecordAt(int fw)
     CHECK(!bad, "(w) W %d: the softening's sprites span their targets and sources", fw);
 }
 
+/* (b) the reduction's open border (rd_blur.c rd__blur_border_strips, CPU):
+ * the reduction's textured sprite as rd_post.c records it on a frame W
+ * wide (corners a quarter pixel before pixels 0 and W, U 8 .. 16 W + 8),
+ * the two strips: the left one covers pixels 0 and 1 alone, the right one
+ * W - 2 and W - 1, each pixel of a strip gets the U the sprite gives pixel
+ * 2 (or W - 3) by fx_sprite_ps's formula, with the mirror's half texel too
+ * (rd__blur_uv_rect moves both ends of a strip as it moves the sprite's);
+ * the hardware sprite's pairs (rd__blur_border_verts) the same S at those
+ * pixels' coordinates, plain and mirrored; a sprite short of the frame's
+ * width, corners off the 12.4 grid or a frame under 6 wide get none */
+static int32_t borderModelU(int32_t X, int32_t x0, int32_t x1, int32_t u0, int32_t u1)
+{
+    return u0 + (int32_t)(((int64_t)X - x0) * ((int64_t)u1 - u0) / ((int64_t)x1 - x0));
+}
+
+static void checkBorderStrips(void)
+{
+    static const int32_t widths[] = {512, 688, 832, 2048, 2560};
+    int bad = 0;
+    for (size_t i = 0; i < sizeof(widths) / sizeof(widths[0]); i++) {
+        const int32_t Wf = widths[i], o = 16 * (2048 - Wf / 2);
+        RdPostRec p;
+        memset(&p, 0, sizeof(p));
+        p.rect[0] = (float)(o - 4);
+        p.rect[1] = (float)(16 * (2048 - 128) - 4);
+        p.rect[2] = (float)(o - 4 + 16 * Wf);
+        p.rect[3] = p.rect[1] + 16.0f * 256.0f;
+        p.uv[0] = 8.0f;
+        p.uv[1] = 8.0f;
+        p.uv[2] = (float)(16 * Wf + 8);
+        p.uv[3] = (float)(16 * 512 + 8);
+        p.lutOffset = ~0u;
+        for (int mirror = 0; mirror < 2; mirror++) {
+            float uv[4];
+            memcpy(uv, p.uv, sizeof(uv));
+            if (mirror) {
+                uv[0] -= 8.0f; /* rd__blur_uv_rect with the mirror on */
+                uv[2] -= 8.0f;
+            }
+            RdPostRec out[2];
+            if (!rd__blur_border_strips(&p, p.uv, Wf, out)) {
+                bad++;
+                printf("  (b) W %d: no strips\n", Wf);
+                continue;
+            }
+            const int32_t want[2] = {borderModelU(o + 32, (int32_t)p.rect[0], (int32_t)p.rect[2],
+                                                  (int32_t)uv[0], (int32_t)uv[2]),
+                                     borderModelU(o + 16 * (Wf - 3), (int32_t)p.rect[0],
+                                                  (int32_t)p.rect[2], (int32_t)uv[0],
+                                                  (int32_t)uv[2])};
+            for (int k = 0; k < 2; k++) {
+                const RdPostRec *q = &out[k];
+                /* the strip's UVs as the replay draws them (the mirror's
+                   shift on both ends) */
+                const int32_t su0 = (int32_t)q->uv[0] - (mirror ? 8 : 0);
+                const int32_t su1 = (int32_t)q->uv[2] - (mirror ? 8 : 0);
+                for (int32_t x = 0; x < Wf; x++) {
+                    const int32_t X = o + 16 * x;
+                    const int cov = X >= (int32_t)q->rect[0] && X < (int32_t)q->rect[2];
+                    const int wantCov = k == 0 ? x < 2 : x >= Wf - 2;
+                    bad += cov != wantCov;
+                    if (cov) {
+                        bad += borderModelU(X, (int32_t)q->rect[0], (int32_t)q->rect[2], su0,
+                                            su1) != want[k];
+                    }
+                }
+                bad += q->rect[1] != p.rect[1] || q->rect[3] != p.rect[3] || q->uv[1] != p.uv[1] ||
+                       q->uv[3] != p.uv[3];
+            }
+            /* the PS2's U at pixel 2: 16 * 2 + 12 (texels 2 and 3 at 12 / 16
+               and 4 / 16), mirrored 16 * 2 + 4 */
+            bad += want[0] != (mirror ? 36 : 44) || want[1] != 16 * (Wf - 3) + (mirror ? 4 : 12);
+        }
+        /* the hardware sprite's pairs: plain, then mirrored (rd_post.c) */
+        RdScreenVtx v[4], hv[8];
+        memset(v, 0, sizeof(v));
+        for (int m = 0; m < 2; m++) {
+            v[2 * m].x = o - 4;
+            v[2 * m + 1].x = o - 4 + 16 * Wf;
+            v[2 * m].s = (float)(8 - 8 * m);
+            v[2 * m + 1].s = (float)(16 * Wf + 8 - 8 * m);
+        }
+        rd__blur_border_verts(v, Wf, hv);
+        const float ws[4] = {44.0f, 36.0f, (float)(16 * (Wf - 3) + 12), (float)(16 * (Wf - 3) + 4)};
+        for (int k = 0; k < 2; k++) {
+            for (int m = 0; m < 2; m++) {
+                const RdScreenVtx *w = &hv[4 * k + 2 * m];
+                bad += w[0].s != ws[2 * k + m] || w[1].s != ws[2 * k + m];
+                bad += k == 0 ? (w[0].x != o - 4 || w[1].x != o + 32)
+                              : (w[0].x != o + 16 * (Wf - 2) - 4 || w[1].x != o - 4 + 16 * Wf);
+            }
+        }
+    }
+    CHECK(bad == 0, "(b) the border's strips repeat columns 2 and W - 3 (%d differ)", bad);
+    /* none: a sprite one pixel short of the width, a corner off the grid, a
+       frame under 6 wide */
+    RdPostRec p, out[2];
+    memset(&p, 0, sizeof(p));
+    const int32_t o = 16 * (2048 - 256);
+    p.rect[0] = (float)(o - 4);
+    p.rect[2] = (float)(o - 4 + 16 * 511);
+    p.uv[2] = 16.0f * 512.0f;
+    CHECK(!rd__blur_border_strips(&p, p.uv, 512, out), "(b) a sprite short of the width: none");
+    p.rect[2] = (float)(o - 4 + 16 * 512) + 0.5f;
+    CHECK(!rd__blur_border_strips(&p, p.uv, 512, out), "(b) a corner off the 12.4 grid: none");
+    p.rect[0] = (float)(16 * (2048 - 2) - 4);
+    p.rect[2] = p.rect[0] + 16.0f * 4.0f;
+    CHECK(!rd__blur_border_strips(&p, p.uv, 4, out), "(b) a frame 4 wide: none");
+}
+
 /* (w) recording: the effects at 4:3 and on a 2048-wide frame (48:9, the
  * work buffers four times as wide), the sun on (the eye blur's ghosts) */
 static void checkRecordingWide(void)
@@ -3681,6 +3791,7 @@ int main(int argc, char **argv)
     checkRecordingMotionBlur(512);
     checkRecordingMotionBlurOff();
     checkRecordingWide();
+    checkBorderStrips();
     rd_shutdown();
     printf("  (r) recording checks: %s\n", failures ? "FAILED" : "ok");
     if (failures) {

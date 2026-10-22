@@ -208,6 +208,13 @@ void ui_settings_set_gpu_driver_host(const UiGpuDriverHost *host);
 #define UI_STEAM_NO_USER 4   /* no Steam account to add it to */
 #define UI_STEAM_FAILED 5    /* the shortcut list could not be changed */
 void ui_settings_set_steam_handler(int (*fn)(void));
+/* Main > Save a picture for a bug report (developer mode, below Dump
+   models): fn arms the host's frame dump (window_host.c frame_dump: the
+   picture, the frame's rd dump and the log in a zip in the dumps folder,
+   as F12 makes) to run 3 seconds later, time to leave the menu; the menu
+   answers with a popup that says so.  NULL (or never called) hides the
+   row (the headless build, tests). */
+void ui_settings_set_frame_dump_handler(void (*fn)(void));
 /* Main > Disc: fn answers whether a disc's game data (its archive_name,
    port/core/region.h) is there (port/platform/host_config.c
    ico_host_disc_archive_present); the row shows when every disc's is, and is
@@ -407,7 +414,10 @@ typedef enum UiSettingsOpt {
        Reset all layouts (every posture) */
     UI_OPT_TOUCH_EDIT,
     UI_OPT_TOUCH_RESET,
-    UI_OPT_TOUCH_RESET_ALL
+    UI_OPT_TOUCH_RESET_ALL,
+    /* Main's developer row "Save a picture for a bug report": the host's
+       frame dump, 3 s later (ui_settings_set_frame_dump_handler) */
+    UI_OPT_REPORT_PICTURE
 } UiSettingsOpt;
 
 /* The entry rows and the menu's layouts (-1 before ui_settings_install):

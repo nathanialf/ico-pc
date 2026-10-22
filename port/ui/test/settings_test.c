@@ -32,9 +32,10 @@
 static void testBuild(void)
 {
     static const int mainOpts[] = {
-        UI_OPT_LINK, UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,
-        UI_OPT_LINK, UI_OPT_LANGUAGE,  UI_OPT_MENU_LANGUAGE, UI_OPT_DISC,        UI_OPT_LINK,
-        UI_OPT_LINK, UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
+        UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,           UI_OPT_LINK,
+        UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LANGUAGE,       UI_OPT_MENU_LANGUAGE,
+        UI_OPT_DISC,          UI_OPT_LINK,        UI_OPT_LINK,           UI_OPT_DEVELOPER,
+        UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_REPORT_PICTURE, UI_OPT_BACK};
     static const int fxOpts[] = {UI_OPT_FULL_HEIGHT,
                                  UI_OPT_FILTER,
                                  UI_OPT_BRIGHTNESS,
@@ -77,6 +78,7 @@ static void testBuild(void)
                                    UI_STR_OPT_DEVELOPER_MODE,
                                    UI_STR_OPT_DUMP_TEXTURES,
                                    UI_STR_OPT_DUMP_MODELS,
+                                   UI_STR_OPT_REPORT_PICTURE,
                                    UI_STR_BACK};
     static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION,  UI_OPT_ASPECT,
                                    UI_OPT_ANTI_ALIAS,   UI_OPT_WINDOW_MODE, UI_OPT_VSYNC,
@@ -137,7 +139,7 @@ static void testBuild(void)
     ui_settings_reset();
     ui_set_language(UI_LANG_EN);
     ui_settings_install();
-    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 15), "main page rows");
+    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 16), "main page rows");
     CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 14), "effects rows");
     {
         /* Characters (a link), then Add to Steam (hidden without a host

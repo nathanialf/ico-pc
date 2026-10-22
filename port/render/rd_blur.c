@@ -8,7 +8,7 @@
  * loop through DISPLAY is in this model end to end.  This file records
  * that sprite: an RdPostRec in an RDC_POST_STUB, with the corners, UVs,
  * RGBAQ and Z as the GS gets them, the TEX0 size and TFX.  rd_replay.c
- * (doBlurSprite) draws it through fx_rect_vs / fx_sprite_ps with the state
+ * (rd_blur_border.c rd__blur_post_sprite) draws it through fx_rect_vs / fx_sprite_ps with the state
  * block in force:
  *
  *   coverage  the pixels whose window coordinate X (12.4) has x0 <= X < x1
@@ -173,4 +173,73 @@ void rd__blur_snap_verts(const RdStateBlock *st, RdScreenVtx v[2])
     }
     v[0].s += d;
     v[1].s += d;
+}
+
+/* fx_sprite_ps's U at the pixel of 12.4 coordinate X: u0 + (X - x0)
+ * (u1 - u0) / (x1 - x0), the quotient truncated toward zero (the shader's
+ * gs_div_trunc_rcp; rd_replay_tiler.c blurFoldU) */
+static int32_t borderU(int32_t X, int32_t x0, int32_t x1, int32_t u0, int32_t u1)
+{
+    return u0 + (int32_t)(((int64_t)X - x0) * ((int64_t)u1 - u0) / ((int64_t)x1 - x0));
+}
+
+/* the 12.4 coordinate of GS pixel 0 of a target gsW wide, XYOFFSET centred
+ * on it (rd_post.c postReduction): pixel x is at origin + 16 x */
+static int32_t borderOrigin(int32_t gsW)
+{
+    return 16 * (2048 - (gsW >> 1));
+}
+
+/* The border's strips (rd_internal.h).  The left one covers X from the
+ * sprite's x0 (a quarter pixel before pixel 0) to pixel 2's coordinate, so
+ * pixels 0 and 1; the right one from a quarter pixel before pixel gsW - 2
+ * to the sprite's x1.  With u0 = u1 every pixel of a strip gets U(pixel 2)
+ * (or U(pixel gsW - 3)): the same two texels at the same 4-bit weights
+ * that column was drawn with, so the same bytes.  V is the sprite's, its
+ * rows untouched. */
+bool rd__blur_border_strips(const RdPostRec *p, const float uv[4], int32_t gsW, RdPostRec out[2])
+{
+    if (gsW < 6) {
+        return false;
+    }
+    const int32_t o = borderOrigin(gsW);
+    const int32_t x0 = (int32_t)p->rect[0], x1 = (int32_t)p->rect[2];
+    const int32_t u0 = (int32_t)uv[0], u1 = (int32_t)uv[2];
+    if ((float)x0 != p->rect[0] || (float)x1 != p->rect[2] || (float)u0 != uv[0] ||
+        (float)u1 != uv[2] || x0 > o || x1 <= o + 16 * (gsW - 1)) {
+        return false; /* not the reduction's sprite over the whole width */
+    }
+    const int32_t xl = o + 32, xr = o + 16 * (gsW - 3);
+    const int32_t ul = borderU(xl, x0, x1, u0, u1), ur = borderU(xr, x0, x1, u0, u1);
+    out[0] = *p;
+    out[1] = *p;
+    out[0].rect[2] = (float)xl; /* pixels 0 and 1: X < pixel 2's */
+    out[1].rect[0] = (float)(o + 16 * (gsW - 2) - 4);
+    out[0].uv[0] = out[0].uv[2] = (float)ul;
+    out[1].uv[0] = out[1].uv[2] = (float)ur;
+    return true;
+}
+
+void rd__blur_border_verts(const RdScreenVtx v[4], int32_t gsW, RdScreenVtx out[8])
+{
+    const int32_t o = borderOrigin(gsW);
+    const int32_t at[2] = {o + 32, o + 16 * (gsW - 3)};
+    for (int k = 0; k < 2; k++) {
+        for (int m = 0; m < 2; m++) {
+            const RdScreenVtx *a = &v[2 * m], *b = &v[2 * m + 1];
+            RdScreenVtx *w = &out[4 * k + 2 * m];
+            w[0] = *a;
+            w[1] = *b;
+            const double dx = (double)b->x - (double)a->x;
+            const double s = dx != 0.0 ? (double)a->s + ((double)at[k] - (double)a->x) *
+                                                            ((double)b->s - (double)a->s) / dx
+                                       : (double)a->s;
+            w[0].s = w[1].s = (float)s;
+            if (k == 0) {
+                w[1].x = o + 32;
+            } else {
+                w[0].x = o + 16 * (gsW - 2) - 4;
+            }
+        }
+    }
 }

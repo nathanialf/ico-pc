@@ -874,6 +874,45 @@ static void first_pump_recheck(void)
     }
 }
 
+/* The app came back to the foreground (lifecycle_watch sets it, on
+   whichever thread SDL calls the watch from); the next pump of either kind
+   reads the window's size again (Android: a size event can be missed while
+   the app is away, and a size a few pixels off the frame's exact width
+   crops the frame's border columns, issue 129), logs the window and its
+   safe area as they are now, and the renderer's frame state */
+static SDL_AtomicInt s_resumed;
+
+/* Settings > Save a picture for a bug report's handler (below, with F12's
+   frame_dump) */
+static void report_picture_arm(void);
+
+static void resume_recheck(void)
+{
+    int pw = 0, ph = 0, ww = 0, wh = 0;
+    SDL_Rect r;
+
+    if (SDL_GetAtomicInt(&s_resumed) == 0 || s_window == NULL) {
+        return;
+    }
+    SDL_SetAtomicInt(&s_resumed, 0);
+    window_size_recheck("after the app came back");
+    if (!SDL_GetWindowSizeInPixels(s_window, &pw, &ph)) {
+        pw = ph = 0;
+    }
+    if (pw > 0 && ph > 0 && SDL_GetWindowSize(s_window, &ww, &wh) && ww > 0 && wh > 0 &&
+        SDL_GetWindowSafeArea(s_window, &r) && r.w > 0 && r.h > 0) {
+        const double kx = (double)pw / ww, ky = (double)ph / wh;
+
+        fprintf(stderr, "window: after the app came back: window %dx%d px, safe area %d,%d %dx%d\n",
+                pw, ph, (int)(r.x * kx + 0.5), (int)(r.y * ky + 0.5), (int)(r.w * kx + 0.5),
+                (int)(r.h * ky + 0.5));
+    } else {
+        fprintf(stderr, "window: after the app came back: window %dx%d px, no safe area reported\n",
+                pw, ph);
+    }
+    rd_log_frame_state("after resume");
+}
+
 #if defined(__ANDROID__) || defined(ICO_IOS)
 /* settings.h ui_settings_set_quit_is_game: Android's Quit ends the game */
 static int quit_is_game(void)
@@ -1036,6 +1075,7 @@ static bool SDLCALL lifecycle_watch(void *userdata, SDL_Event *event)
         ico_diag_startup_activity_background(1);
     } else if (e == ICO_LIFECYCLE_DID_ENTER_FOREGROUND) {
         ico_diag_startup_activity_background(0);
+        SDL_SetAtomicInt(&s_resumed, 1); /* the pump's resume_recheck */
     }
     if (e != ICO_LIFECYCLE_NONE && ready) {
 #ifdef ICO_IOS
@@ -2190,6 +2230,8 @@ open_window:
 #endif
     /* Main > Disc, shown with two or more discs' game data */
     ui_settings_set_disc_handler(ico_host_disc_archive_present);
+    /* Main > Save a picture for a bug report (developer mode) */
+    ui_settings_set_frame_dump_handler(report_picture_arm);
 #ifdef __ANDROID__
     /* the Graphics driver page, and "Quit game" for the
        title's Quit row (a phone has no desktop to quit to); both before the
@@ -2655,6 +2697,27 @@ static void frame_dump(void)
             zr >= 0 ? zip : "",
             havePrev ? "with the tick before: rd_replay_tool --interp rebuilds the pictures between"
                      : "without the tick before");
+}
+
+/* Settings > Save a picture for a bug report (developer mode; settings.h
+   ui_settings_set_frame_dump_handler): F12's dump 3 s after the press,
+   time to leave the menu, from the pump (report_picture_pump). A phone has
+   no F12; the zip lands in the same dumps folder. */
+static Uint64 s_reportDumpAt;
+
+static void report_picture_arm(void)
+{
+    s_reportDumpAt = SDL_GetTicksNS() + 3000000000ull;
+}
+
+static void report_picture_pump(void)
+{
+    if (s_reportDumpAt == 0 || SDL_GetTicksNS() < s_reportDumpAt) {
+        return;
+    }
+    s_reportDumpAt = 0;
+    fprintf(stderr, "window: the picture for a bug report (Settings, 3 s after the press):\n");
+    frame_dump();
 }
 
 /* Shift+F12 in photo mode, the aspect sweep: the paused frame captured at
@@ -3430,6 +3493,8 @@ int ico_window_pump(void)
     }
 #endif
     first_pump_recheck();
+    resume_recheck();
+    report_picture_pump();
     /* the Settings menu's changes; forced when the
        renderer's output followed a swapchain rebuilt at another size, so
        aspect "auto" and resolution "window" follow it as on a resize */
@@ -3636,6 +3701,7 @@ static int progress_present_notes(const char *title, const char *phase, int pct,
 #endif
     if (s_open) {
         first_pump_recheck();
+        resume_recheck();
     }
     if (device_lost_quit()) {
         return 1;
@@ -5424,6 +5490,7 @@ void ico_window_close(void)
     ui_settings_set_steam_handler(NULL);
 #endif
     ui_settings_set_disc_handler(NULL);
+    ui_settings_set_frame_dump_handler(NULL);
 #ifdef __ANDROID__
     ui_settings_set_gpu_driver_host(NULL);
 #endif

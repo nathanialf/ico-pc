@@ -401,6 +401,12 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_DUMP_MODELS] = "モデルを書き出す",
     [UI_STR_DUMP_MODELS_NOTE] =
         "パック制作者向け：モデルの各パーツをglTFファイルとして、ユーザーフォルダーのmodels/%s/dumpsに保存します。",
+    [UI_STR_OPT_REPORT_PICTURE] = "バグレポート用の写真を保存",
+    [UI_STR_REPORT_PICTURE_NOTE] =
+        "押すとすぐ後に画面の写真とログをzipでdumpsフォルダーに保存します。先にメニューを出てください。",
+    [UI_STR_REPORT_PICTURE_ARMED] = "まもなく写真を保存します",
+    [UI_STR_REPORT_PICTURE_ARMED_BODY] =
+        "メニューを出てください。\nzipファイルはdumpsフォルダーに保存されます。",
     [UI_STR_SECTION_EFFECTS] = "エフェクト",
     [UI_STR_OPT_EFFECT_GLOW] = "光のにじみ",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "被写界深度",

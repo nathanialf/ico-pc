@@ -172,7 +172,7 @@ static void textOp(RdPostKind kind, const uint8_t rgba[4], uint8_t fix, uint32_t
 }
 
 /* One reduction sprite: an RdPostRec of kind RD_POST_REDUCTION,
- * drawn by rd_replay.c's doBlurSprite through fx_sprite_ps in the GS
+ * drawn by rd_blur_border.c's rd__blur_post_sprite through fx_sprite_ps in the GS
  * integer arithmetic (rd_blur.c), with the state block in force: corners
  * and UV as the GS receives them (12.4), the TEX0 size 2^TW x 2^TH of
  * gsb_Reduction's TEX0 (TW = TH = 9 at 4:3; TW ceil(log2 W) on a wider
@@ -667,7 +667,7 @@ void rd_post(RdPostKind kind, const RdPostParams *params)
         postFog(params);
         break;
     /* staticBlur.c's sprites, recorded by rd_blur.c and
-     * replayed by rd_replay.c's doBlurSprite */
+     * replayed by rd_blur_border.c's rd__blur_post_sprite */
     case RD_POST_MOTION_BLUR:
     case RD_POST_DOF:
     case RD_POST_FLARE:

@@ -187,7 +187,10 @@ The last row is not one of the game's effects:
 - **Full pixel (exact screen pixels)** makes the picture out of your
   screen's own pixels: each pixel of the game's picture is one pixel on your
   screen, so nothing is rounded, cropped or stretched, and the strip the PS2
-  hid under its thin black border is shown too. The picture is exactly as
+  hid under its thin black border is shown too. The two outermost columns
+  of dots at each side, which the PS2 never showed and the game does not
+  always draw, repeat the picture next to them instead, so no stray line
+  shows at the very edge. The picture is exactly as
   wide as the window shows it, at every size and shape of window. It needs
   Resolution set to the size of your window (the Enhanced Preset picks it).
   With Original, a fixed Resolution (1x to 16x), the CRT filter or
@@ -435,13 +438,18 @@ it: while it is on, Select opens it. Leave it off for normal play. While it
 is on, you cannot earn achievements, and they stay off for the rest of that
 game even after you turn it off, until you go back to the title screen.
 
-With Developer mode on, two more rows show up under it. They are for
-people who make packs:
+With Developer mode on, three more rows show up under it. The first two
+are for people who make packs, the third for problem reports:
 
 - **Dump textures** saves every texture as a picture file when the game
   loads it. [More](TEXTURE_PACKS.md#make-a-texture-pack).
 - **Dump models** saves every model piece as a 3D model file when the game
   draws it. [More](MODEL_PACKS.md#make-a-model-pack).
+- **Save a picture for a bug report** saves what is on the screen 3 seconds
+  after you press it, so leave the menu right away. It goes into the
+  `dumps` folder as a `.png` picture and a `.zip` file that also holds the
+  log; attach the `.zip` to your report. It is the same as F12 on a
+  computer, and it is how a phone or a handheld makes one.
 
 ## The pause menu's journey panel
 

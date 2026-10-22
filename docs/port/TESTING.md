@@ -359,7 +359,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   passes store the pixel the plan before stores), the ranges of screen prims, meshes, grids and
   particles, and `rdtex_alpha_range` against every texel and two- and three-texel blends
   (`rd_alpha_plan`).
-- `rd_blur_test.c`: `staticBlur.c`'s full-screen effects on rd (`rd_blur`, sharded); the
+- `rd_blur_test.c`: `staticBlur.c`'s full-screen effects on rd (`rd_blur`, sharded); its CPU
+  part checks the open border's strips (`checkBorderStrips`: pixels 0, 1 and W - 2, W - 1 alone,
+  each with column 2's or W - 3's U, plain and mirrored, the hardware sprite's S the same); the
   `above1x` shard runs the aura's chain at Enhanced 4x against the CPU model with the above-1x
   box (`above1x_ref.c`) for the decimations and the GS's bilinear at the finer grid for the work
   buffers drawn back over the frame, the `effects_scaled` shard the seven post modes (the glow's
@@ -436,7 +438,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`rd_fog`, `rd_fog_*`; the local read from the start in `rd_fog_local`, the other paths' replays
   the same bytes); at 2x a depth ramp's fog alpha equals the above-1x formula (the table
   interpolated, the ordered dither) texel for texel, and the 1x cases count no above-1x draw
-  (`checkRamp`).
+  (`checkRamp`); the outer columns' probe: its count of GS Z 0 rows on D32F and D24 words and its
+  line on the CPU (`checkEdgeLine`), then with Full pixel on at 4:3 the cells' scene, two cells
+  left at Z 0 at the frame's edges, gives the line naming their rows, and with it off no line
+  (`checkEdgeProbe`).
 - `rd_gsbase_test.c`: `GsBase.c`'s host path driving a synthetic scene (`rd_gsbase`); photo mode's
   Deja vu draws the stage's sandstorm object once a frame with the vision's two nodes, gives back
   what it borrowed, adds no film grain, and draws nothing in stage 40, with the effect off or with
@@ -551,7 +556,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   beside an exact one, their shared vertex's GS Z saturated and its X and Y off the 1/16 grid:
   none above Original 1x, where the clipped triangle is drawn, and at Original 1x not drawn
   (`vu_corner_cut_position`).
-- `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`),
+- `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`);
+  the open border's outer columns (`rd_present_border_test.inc`, `checkOpenBorderEdges`): at
+  2340x1080 (832 columns, the frame its exact width) and 4:3, 1x and 2x, the mirror on and off,
+  SCENE red with green over GS columns 1 .. W - 2 presents green outer columns, byte for byte the
+  present of SCENE green everywhere, and without the strips (`rd__set_blur_border_repeat`) only the
+  outer columns differ; at 16:9 (cropped) and with Full pixel off the strips change no byte;
+  DISPLAY's strips are their neighbour columns' bytes at 1x and one value a row at 2x; the
+  present pins hold without the strips, and with them differ in the outer columns alone
+  (`checkFullPixelOnPin`),
   an old file's `window_size` among them (ignored, kept as written);
   the targets' scales include the work buffers and shadow levels at their GS sizes at every scale
   and Water reflections' block: its GS size under Original, the scene's scale under Sharp (4x at
@@ -727,7 +740,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   steps Effects > Water reflections between Original and Sharp, checks its
   note, its key and the page's fourteen rows (`testWaterReflections`), and Main's Disc row
   (`testDiscRow`: shown with more than one disc's game data only, its values and `[game] disc`, the page
-  with all fifteen rows). Each also runs with `jpn`
+  with all fifteen rows), and Main's Save a picture for a bug report (`testReportPicture`: shown in
+  developer mode with a host handler only, after Dump models, Cross calls the handler once and
+  shows its popup, the page with all sixteen rows, the label fitting and translated in every
+  language). Each also runs with `jpn`
   as the Japanese or Korean disc over the fixture's tables at that disc's numbers (`settings_jpn`,
   `settings_extra_jpn`, `settings_extras_jpn`; `kor` the same, `settings_kor`, `settings_extra_kor`,
   `settings_extras_kor`, with the numbers from the Korean region row): the rows it has not, Menu language, Circle

@@ -1,10 +1,10 @@
 /* rd_replay_tiler.c: the replay's tiler passes (docs/port/RENDER.md, "The
  * replay"): DATE through the stencil bit's setup (rd__replay_date_take,
  * from rd_replay.c bindDrawEx) and the staticBlur pair fold
- * (rd__replay_blur_fold, from doBlurSprite; the list loop's look-ahead
- * state, rd__replay_fold_list / _at / _skip).  Both are gated on the device
- * profile (RdProfile.dateStencil, blurFold) and draw the bytes the passes
- * they replace draw.  The replay's own helpers come through rd_replay.h
+ * (rd__replay_blur_fold, from rd_blur_border.c rd__blur_post_sprite; the
+ * list loop's look-ahead state, rd__replay_fold_list / _at / _skip).  Both
+ * are gated on the device profile (RdProfile.dateStencil, blurFold) and
+ * draw the bytes the passes they replace draw.  The replay's own helpers come through rd_replay.h
  * (rd__replay_*, each rd_replay.c's function named beside it). */
 #include <math.h>
 #include <stdlib.h>

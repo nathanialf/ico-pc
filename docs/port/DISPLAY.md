@@ -61,7 +61,14 @@ pixels: the present box has the frame's exact width (`wExact / 384`), and with t
 resolution and a frame wider than its exact width the scene's scale is the box's width over the
 exact width (2.8125 at 1080p 16:9), held to a 1/4096 step when that keeps the box's width, and the
 scene-class targets hold the exact width alone, so one texel is one output pixel and nothing is
-cropped; the reduction draws over its border (`port/render/rd_replay.c` (`doBlurSprite`)).
+cropped; the reduction draws over its border (`port/render/rd_blur_border.c`
+(`rd__blur_post_sprite`)). Where the frame is its exact width (4:3, 48:9, 2340x1080's 832 columns:
+`rd__frame_cropped` false) nothing of it is cropped, so the PS2's hidden columns, GS 0, 1, W - 2 and
+W - 1, would be on the screen; the game does not always draw them (issue 129: a bright band at a
+phone's left edge, the fog's colour at depth 0 spread by the glow), so the reduction draws them
+again as columns 2 and W - 3, bit for bit in the GS model ([RENDER.md](RENDER.md#post-passes), the
+open border's outer columns). The rows the reduction's scissor kept black at the top and bottom
+show what SCENE holds.
 Without it the picture is the same: the same box, scale, crop and replay (the host sets
 `RdSettings.borderMask`, and the reduction draws over its border as with the option on,
 `port/render/rd_replay.c` (`borderOpen`)), and the presenter masks the game's border over its edge at
@@ -83,7 +90,19 @@ box. The mask and the open border apply only on a cropped frame (`rd__frame_crop
 away); at 4:3 and at aspects where the frame is exactly the picture's width (48:9 at 2048), Full
 pixel off is the game's own border as before, the reduction's recorded scissor and no mask, so the
 Original preset at 4:3 is the PS2's picture byte for byte (`port/render/rd_present.c`
-(`rd__frame_cropped`), `port/render/rd_replay.c` (`borderOpen`)). The box (`wExact / 384`), the UI box, the pointer, the movie's box and the CRT filter's grid are
+(`rd__frame_cropped`), `port/render/rd_replay.c` (`borderOpen`)). The `rd: display:` line ends
+with the frame as the options give it, `frame W GS wide (exact E: cropped|exact width), border
+open (its outer two columns a side repeat their neighbours)|open (its columns left out at
+present)|closed`, and `rd_log_frame_state(when)` logs the same words with the output's size, the
+size asked for, the scene's scale, the aspect and how many times the outer columns were drawn as
+their neighbours: `rd: frame state (after resume): output 2340x1080 (asked 2340x1080), scene
+2.8125x2.10938, aspect 2.167, frame 832 GS wide (exact 832.00: exact width), border open (...),
+the outer columns drawn as their neighbours N times`. The window host calls it when the app comes
+back to the foreground, after reading the window's size again (a size a few pixels off the
+frame's exact width crops the frame, which hides those columns), with the line `window: after the
+app came back: window WxH px, safe area x,y wxh` (`port/platform/window_host.c`
+(`resume_recheck`, `window_size_recheck`); `port/render/rd_present.c` (`frameWords`,
+`rd_log_frame_state`)). The box (`wExact / 384`), the UI box, the pointer, the movie's box and the CRT filter's grid are
 the same with the option on and off (`port/render/rd_present.c` (`outputBox`, `rd_ui_box`,
 `rd__ui_box`, `rd__apply_display`, `sourceCrop`), `port/render/rd_crt.c` (`rd__crt_crop`); the
 targets: [RENDER.md](RENDER.md#frames-and-targets)).

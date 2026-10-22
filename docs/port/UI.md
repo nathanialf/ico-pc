@@ -176,7 +176,7 @@ tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/setting
 
 | page | rows |
 | --- | --- |
-| Main (`UI_PAGE_MAIN`) | Display, Effects, Graphics driver, Audio, Controls, Gameplay, Language, Achievements, Extras, Developer mode, Dump textures, Dump models, Back |
+| Main (`UI_PAGE_MAIN`) | Display, Effects, Graphics driver, Audio, Controls, Gameplay, Language, Achievements, Extras, Developer mode, Dump textures, Dump models, Save a picture for a bug report, Back |
 | Display | Preset, Resolution, Aspect, Anti-aliasing, Window mode, Vsync, Texture pack, Model pack, Frame rate, Video mode, Back |
 | Effects | Full height, Filtering, Brightness, CRT filter, CRT strength, the six game effects with Water reflections (Original or Sharp, `UI_OPT_EFFECT_WATER`) after Fog, Full pixel, Back |
 | Graphics driver | Driver, Add a driver, Remove this driver, Back (Android) |
@@ -189,6 +189,14 @@ tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/setting
 | Extras | Music, Models, Credits, Characters, Add to Steam, Achievement popups, Back |
 | Music | the music gallery, a list |
 | Characters | nine colour rows, Switch, Randomize, Reset, Back |
+
+**Save a picture for a bug report** is an action row on Main under Dump models
+(`UI_OPT_REPORT_PICTURE`), shown in developer mode while a host handler is set
+(`ui_settings_set_frame_dump_handler`: the window host's `report_picture_arm`, which runs F12's
+`frame_dump` 3 s later; none headless). Cross calls the handler once, logs `settings: a picture
+for a bug report in 3 s` and shows the popup `UI_STR_REPORT_PICTURE_ARMED` ("Picture in 3
+seconds") with `UI_STR_REPORT_PICTURE_ARMED_BODY`; its note is `UI_STR_REPORT_PICTURE_NOTE`
+(`port/ui/settings.c` (`reportPicture`, `optShown`)).
 
 `buildOptionPage` makes a page: a centred header, then per option a right-aligned label and, for
 a stepped option, a centred value row and the two arrow rows owned by the label, with their pointer
@@ -740,8 +748,9 @@ Japanese disc:
   start; with no pin the row shows the disc playing, which with several discs' data and no pin is the
   one the next start picks (the disc played last). Its note is `UI_STR_DISC_NOTE` ("Takes effect at
   the next start"). With every Main row shown (the Graphics driver link, Language, Disc and the
-  two developer rows) the page has fifteen rows, 10 lines apart (`pagePitch`). ctest
-  `settings_extra` (`testDiscRow`).
+  two dump rows) the page has fifteen rows, 10 lines apart (`pagePitch`); with Save a picture for a
+  bug report too, sixteen, 10 apart from line 30. ctest `settings_extra` (`testDiscRow`,
+  `testReportPicture`).
 - **Glyphs.** The button pictures are the Japanese sheet's (`Tex_menu01/option.tm2`): rows 155,
   321, 320 and 319 (Cross, Circle, Square, Triangle, 32 x 15 texels shown 30 high), 326, 323, 325
   and 324 (L1, R1, L2, R2, 64 x 20 shown 40 high) and the arrows 278 and 279 (20 x 20, 40 high),

@@ -294,6 +294,40 @@ static float sourceCrop(const RdTargetRec *disp, uint32_t sw)
     return (held - we) * 0.5f * (float)sw / held;
 }
 
+/* The frame's words for the display line and rd_log_frame_state: its
+ * width gw, its exact width we (cropped below gw, the columns past it left
+ * out at present: rd__frame_cropped), and the reduction's border as the
+ * replay draws it (rd_replay.c borderOpen; at the exact width its outer two
+ * columns a side repeat their neighbours, rd_blur_border.c) */
+static void frameWords(char *out, size_t size, uint32_t gw, float we)
+{
+    const bool cropped = gw != ICO_FRAME_BASE_W && we < (float)gw;
+    const RdSettings *st = &g_rd.settings;
+    const bool open = st->fullPixel || (st->borderMask && cropped);
+    snprintf(out, size, "frame %u GS wide (exact %.2f: %s), border %s", (unsigned)gw, (double)we,
+             cropped ? "cropped" : "exact width",
+             !open     ? "closed"
+             : cropped ? "open (its columns left out at present)"
+                       : "open (its outer two columns a side repeat their neighbours)");
+}
+
+void rd_log_frame_state(const char *when)
+{
+    if (!g_rd.inited) {
+        return;
+    }
+    const uint32_t gw = g_rd.gsW ? g_rd.gsW : ICO_FRAME_BASE_W;
+    char words[160];
+    frameWords(words, sizeof(words), gw, rd__frame_wexact());
+    const RdSettings *st = &g_rd.settings;
+    rd__log("frame state (%s): output %ux%u (asked %ux%u), scene %gx%g, aspect %.3f, %s, the "
+            "outer columns drawn as their neighbours %llu times",
+            when ? when : "now", (unsigned)st->outputWidth, (unsigned)st->outputHeight,
+            (unsigned)g_rd.pendingSettings.outputWidth, (unsigned)g_rd.pendingSettings.outputHeight,
+            (double)g_rd.sceneSx, (double)g_rd.sceneSy, (double)g_rd.outAspect, words,
+            (unsigned long long)rd__blur_border_strip_count());
+}
+
 bool rd__apply_display(void)
 {
     const RdSettings *st = &g_rd.settings;
@@ -442,13 +476,17 @@ bool rd__apply_display(void)
         const float sceneW = (cropWe > 0.0f ? cropWe : gw) * sx;
         /* MSAA is asked for here; the fog's self-test settles it later
          * (rd__fog_aa_reconcile) and logs "msaa: off" when the device cannot */
+        /* the frame as the options give it (issue 129: a phone whose width
+         * is a whole number of GS pixels shows the border's columns) */
+        char frameNote[160];
+        frameWords(frameNote, sizeof(frameNote), (uint32_t)gw, wexactFor(aspect));
         rd__log("display: scene %gx%g (%.0fx%.0f)%s, aspect %.3f, filter %u, %s height, "
-                "full pixel %s, vsync %s%s%s%s",
+                "full pixel %s, vsync %s%s%s%s, %s",
                 (double)sx, (double)sy, floor((double)sceneW + 0.5), floor((double)(gh * sy) + 0.5),
                 crtLock ? " (CRT: 1x)" : "", (double)aspect, (unsigned)filter,
                 full ? "full" : "half", st->fullPixel ? "on" : "off", st->vsync ? "on" : "off",
                 aaMode == RD_AA_OFF ? "" : rd__aa_label(aaMode),
-                rd_aa_samples(aaMode) > 1u ? " (asked)" : "", ssaaNote);
+                rd_aa_samples(aaMode) > 1u ? " (asked)" : "", ssaaNote, frameNote);
     }
     if (changed) {
         g_rd.frameCropWe = cropWe;

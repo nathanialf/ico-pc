@@ -486,6 +486,13 @@ typedef enum UiStrId {
     UI_STR_MODEL_PACK_NOTE,
     UI_STR_OPT_DUMP_MODELS,
     UI_STR_DUMP_MODELS_NOTE,
+    /* the developer row "Save a picture for a bug report" (settings.h
+       ui_settings_set_frame_dump_handler), its note, and the popup its
+       press shows */
+    UI_STR_OPT_REPORT_PICTURE,
+    UI_STR_REPORT_PICTURE_NOTE,
+    UI_STR_REPORT_PICTURE_ARMED,
+    UI_STR_REPORT_PICTURE_ARMED_BODY,
     /* Options > Effects: the page, its five switches, its note */
     UI_STR_SECTION_EFFECTS,
     UI_STR_OPT_EFFECT_GLOW,
