@@ -441,6 +441,20 @@ self-test](#the-fog-path-and-its-self-test)) (`port/render/rd_replay.c` (`dateSt
 (`date_clear_ps`, `date_stencil_ps`)). `--stats`: `DATE snapshots N, DATE stencil draws M (K
 setups)`.
 
+**DATE and AA1.** The snapshot's semantics differ from the GS's where a draw's primitives overlap,
+and an AA1 triangle strip is such a draw: on the GS the fringe a triangle draws along an edge it
+shares with the next leaves alpha below 0x80 (its coverage), so under DATM 1 the next triangle's own
+pixels on that row fail DATE and the row keeps the fringe alone; the port tests every primitive
+against the alpha before the draw and draws both (the drained room's ripples, `puddle.c`: ALPHA
+`Cs * FIX + Cd`, FIX 0x60, DATE DATM 1, Z write, so the zwrite split draws the interiors and then
+the fringes with no retake between). ctest `rd_pixel` (aa1 wedge) prints how many fragments the GS's
+own DATE would reject in its strip at alpha 0x80. Three exact forms exist and none is taken
+(DIVERGENCES.md VD-17): a snapshot per triangle (a pass break and a copy per triangle, hundreds per
+ripple); on the stencil path a two-draw variant whose fringe draw writes the DATE bit as it goes (a
+stencil write per fringe fragment and keys of their own); under the exact blend's storage read a
+test of the live `Cd.a` in the shader (that mode only, every DATE key). A retake between the
+interiors and the fringes alone is no closer: it fixes neither shared edge's order.
+
 **The fog's table.** The replay's upload phase copies the first `RD_POST_FOG` record's 256-entry
 table of the lists it draws into the LUT texture, outside any pass; `doFog` copies a table only
 when its fog's is another (`port/render/rd_replay.c` (`rd__fog_lut_upload`, `fogLutCopy`)).
@@ -490,10 +504,37 @@ destination must be the same size (`port/render/rd_post.c`; `port/render/rd_repl
 (`doExact`)).
 
 **AA1.** PRIM.AA1 on lines and triangles: `aa1Expand` adds a one-GS-pixel fringe along each edge
-(outside it, along its minor axis) whose coverage runs from 1 on the edge to 0 and is the
-fragment's alpha in `sprite_aa1_ps`; a triangle's own vertices carry `ICO_AA1_INTERIOR`. A draw
-whose fringes need Z write off is split in two (`port/render/rd_replay.c` (`aa1Band`,
-`aa1Fringe`, `aa1Expand`)).
+(outside it, along its minor axis) whose coverage runs from 1 on the edge to 0 and is the fragment's
+alpha in `sprite_aa1_ps`; a triangle's own vertices carry `ICO_AA1_INTERIOR`. A draw whose fringes
+need Z write off is split in two: every interior with the draw's Z write, then every fringe without
+(`port/render/rd_replay_aa1.inc` (`aa1Band`, `aa1Fringe`, `aa1Expand`), included by
+`port/render/rd_replay.c`). A triangle's fringe ends where PCSX2's software renderer ends it
+(`GSRasterizer.cpp` `DrawTriangle`, `DrawEdgeTriangle`): an edge pixel is kept only where the
+triangle's other two edge functions are above 0 (integer, 12.4, with the vertices sorted by y the
+GS's way, `s_ysort`; negated for a clockwise triangle; plus 1 on a top-left edge:
+`tl0 = y0 == y1 || !cw`, `tl1 = cw`, `tl2 = y1 != y2 && !cw`) and inside the edge's box, x from
+floor(min x) to ceil(max x) and y from ceil(min y - 1) to floor(max y + 1) in GS pixels. The band is
+drawn past both ends of its edge by a whole number of edge lengths, at least two GS pixels
+(`aa1Reach`: the ends stay exactly on the edge's line, the attributes carried along it and clamped),
+and `sprite_aa1_ps` (`aa1_wedge_keep`) keeps or discards each fragment with those tests on the
+triangle's flat fields (`IcoSpriteAa1Vertex` `v0x`, `v0y`, `d1`, `d2`, `flags`: the sorted first
+vertex, the other two less it as int16 pairs, the edge, clockwise and the three biases). On the
+sample points' 1/16 grid the box is `X > min x - 16`, `X < max x + 16`, `Y >= min y - 16`,
+`Y <= max y + 16` (12.4), which needs no XYOFFSET; the sample point is the GS integer coordinate on
+the texel's centre (`aa1_pixel_xy`: XYOFFSET + 16 k at 1x exactly, the texel's own point rounded to
+1/16 above 1x). Clipping the geometry instead would round the cuts to the 1/16 grid and flip pixel
+centres. A triangle wider or taller than `ICO_AA1_CLIP_EXTENT` (32751 in 12.4) keeps its fringes
+whole and unclipped (`flags` 0, as lines and interiors), so the integer tests stay inside 32 bits.
+At 1x the pixels drawn are PCSX2's exactly (ctest `rd_pixel`, aa1 wedge: every pixel's fragment
+count against a C model of `DrawTriangle` and `DrawEdgeTriangle`). A band ending in an axis-aligned
+cap at each vertex, unclipped, draws pixels past the corner outside the wedge (the spurs at the
+corners of the drained room's ripples, issue 106) and misses some inside it. The fringes of an edge
+two triangles share are both drawn, as on the GS. DATE inside one AA1 draw is the snapshot's (**DATE
+and AA1** above). The log says
+`rd: aa1: triangle edges clipped to the GS's wedge and box (the first command: N triangles, N clipped, N vertices)`
+once, and
+`rd: aa1: a triangle W x H GS pixels is past the edge clip's reach (2046): its edges drawn unclipped (N so far)`
+for the first three such triangles and then at each power of two.
 
 **COLCLAMP 0.** Additive and subtractive screen prims under COLCLAMP 0 keep the low 8 bits of
 every result (darkVolume.c's count). `doScreenWrap` draws them into an RGBA16F accumulator and then
@@ -2101,6 +2142,23 @@ smooth 1024 x 1024 BC7 replacement of this very mask
 `texpack_disc_test` names puddle.tm2 exactly so, so with the pack installed and the option on the
 port's puddle outlines follow the replacement (the pack does not touch the ring). No run with the
 pack on has been dumped; the reporting run's log said `textures: no texture pack`.
+
+**The ring's edges (issue 106, the corners and the strength).** The ring is drawn with PRIM.AA1:
+in `frame-20261015-223424-v2585.rddump` it is list 4 command 147, `SCREEN tris n 240 aa1`, 80
+triangles (five ripples), ALPHA `Cs * FIX + Cd` with FIX 0x60, ATE 0, DATE DATM 1, Z write, the
+reflection block as its texture (TCC 1, modulate, bilinear) and vertex alpha 0x80. ALPHA mode 0
+ignores As, so each of its edge pixels adds the full `Cs * 0.75`, as an interior pixel does, and
+an edge two quads share gets both fringes: the ring's rim is as strong as its body, on the GS and
+in PCSX2's software renderer alike (`IsCoverageAlpha`: AA1 on a line or triangle, ABE aside). The
+spurs at the octagon's corners in the issue's port picture came from fringes run past their
+vertices; a fringe ends at the GS's wedge and box (the **AA1** paragraph of
+[The replay](#the-replay)).
+PCSX2's hardware renderer draws the edge pixels only on a device whose features have `aa1`
+(`GSRendererHW.cpp`: `draw_aa1 = !no_rt && PRIM->AA1 && features.aa1`, and `aa1` needs feedback
+loops); the devices' code is not in the tree, and the investigation of the issue found it off on
+Vulkan and Direct3D, where a ring looks thinner and fainter than the GS's. The renderer of the
+reporter's PCSX2 picture is not known. The order of DATE inside the strip is a second, smaller
+difference (**DATE and AA1**, DIVERGENCES.md VD-17).
 
 ## The fog path and its self-test
 
