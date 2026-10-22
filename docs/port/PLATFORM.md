@@ -1229,6 +1229,15 @@ SDL3 delivers these only to an event watch, which `window_host.c` installs on An
 after the renderer starts, before the start-up set (`port/platform/window_host.c`
 (`lifecycle_watch`)). Before the window loop is open (Android's start-up set) the table does not
 run: the watch only pauses the watchdog in the background and runs it again in the foreground.
+Coming to the foreground also sets a flag (an `SDL_AtomicInt`: the watch may run on another
+thread) that the next pump of either kind takes: it reads the window's pixel size again
+(`window_size_recheck("after the app came back")`, which on Android and iOS sends a changed size
+through the size event's path with `window: WxH pixels after the app came back (the renderer had
+...)`), logs `window: after the app came back: window WxH px, safe area x,y wxh`, and
+`rd_log_frame_state("after resume")` (the frame's width, cropped or exact, the border open or
+closed: [DISPLAY.md](DISPLAY.md#the-native-frame)) (`port/platform/window_host.c`
+(`resume_recheck`)). A picture that changes after leaving the app and coming back (issue 129) then
+shows in the log as a size that changed with it.
 
 ## Android graphics driver packages
 

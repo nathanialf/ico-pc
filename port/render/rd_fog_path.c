@@ -521,6 +521,204 @@ void rd__fog_probe_finish(void)
             s_probe.d24 ? "D24S8" : "D32S8", lut0);
 }
 
+/* ------------------------------------------------------- the edge probe
+ * While the reduction shows the frame's outer columns (Full pixel on at the
+ * frame's exact width: rd_replay.c doFog asks), every RD_FOG_EDGE_EVERY-th
+ * fogged replay copies the depth the fog read at texel columns 0, 1,
+ * tw - 2 and tw - 1, every row, into a readback buffer; a later replay,
+ * once the GPU is past the one that copied (RHI_FRAMES_IN_FLIGHT replays
+ * on: no wait), counts the rows at GS Z 0 in each, which no draw covered
+ * and the fog paints with its table's entry 0 (issue 129: a bright band at
+ * a phone's left edge in one room).  A probe that finds none logs nothing;
+ * one that finds some logs, the first RD_FOG_EDGE_LINES in each 10 s,
+ *   fog: probe: outer columns: depth 0 at texel column 0 in N of M rows
+ *        (rows a..b), column 1 in ..., column tw-2 in ..., column tw-1 in
+ *        ...; the border is open at the frame's exact width (W GS pixels,
+ *        its outer two columns a side drawn as columns 2 and W - 3),
+ *        table entry 0 = RRGGBB
+ * and the rest of those 10 s as one total at the next probe after them
+ *   fog: probe: outer columns: depth 0 there in N more probes in the
+ *        last 10 s (T in all)
+ * Nothing is copied or counted while the border is closed or the frame
+ * cropped (16:9), in the self-test's replays, on the multisampled read,
+ * or on D3D12's depth (copied to a buffer only whole). */
+#define RD_FOG_EDGE_EVERY 32u
+#define RD_FOG_EDGE_LINES 3u
+
+static struct {
+    RhiBuffer buf;
+    uint64_t size;
+    bool pending;    /* copies recorded, not counted yet */
+    uint64_t replay; /* g_rd.replayCounter when they were */
+    uint32_t tw, th, pitch, half, gsW;
+    bool d24, haveLut;
+    float zScale;
+    uint8_t lut0[4];
+    uint32_t fogged; /* fogged replays with the border open */
+    double windowMs; /* the 10 s window's start */
+    uint32_t lines, more, total;
+    char last[512]; /* the last line logged (tests) */
+} s_edge;
+
+void rd__fog_edge_column(const uint8_t *data, uint32_t pitch, uint32_t rows, uint32_t index,
+                         bool d24, float zScale, uint32_t column, RdFogEdgeColumn *out)
+{
+    memset(out, 0, sizeof(*out));
+    out->column = column;
+    out->rows = rows;
+    for (uint32_t y = 0; y < rows; y++) {
+        uint32_t w;
+        memcpy(&w, data + (size_t)y * pitch + (size_t)index * 4u, sizeof(w));
+        if (gsZOf(w, d24, zScale) != 0) {
+            continue;
+        }
+        if (out->zero == 0) {
+            out->first = y;
+        }
+        out->last = y;
+        out->zero++;
+    }
+}
+
+size_t rd__fog_edge_line(char *out, size_t size, const RdFogEdgeColumn c[4], uint32_t gsW,
+                         const uint8_t *lut0)
+{
+    size_t n = (size_t)snprintf(out, size, "fog: probe: outer columns: depth 0 at texel");
+    for (int k = 0; k < 4 && n < size; k++) {
+        n += (size_t)snprintf(out + n, size - n, "%s column %u in %u of %u rows", k ? "," : "",
+                              c[k].column, c[k].zero, c[k].rows);
+        if (c[k].zero && n < size) {
+            n += (size_t)snprintf(out + n, size - n, " (rows %u..%u)", c[k].first, c[k].last);
+        }
+    }
+    if (n < size) {
+        n += (size_t)snprintf(out + n, size - n,
+                              "; the border is open at the frame's exact width (%u GS pixels, "
+                              "its outer two columns a side drawn as columns 2 and %u), table "
+                              "entry 0 = ",
+                              gsW, gsW >= 3u ? gsW - 3u : 0u);
+    }
+    if (n < size) {
+        n += lut0 ? (size_t)snprintf(out + n, size - n, "%02X%02X%02X", lut0[0], lut0[1], lut0[2])
+                  : (size_t)snprintf(out + n, size - n, "n/a");
+    }
+    return n < size ? n : (size ? size - 1 : 0);
+}
+
+const char *rd__fog_edge_last(void)
+{
+    return s_edge.last;
+}
+
+/* the 10 s window's total, once it is over */
+static void edgeWindow(double now)
+{
+    if (now - s_edge.windowMs < 10000.0) {
+        return;
+    }
+    if (s_edge.more) {
+        rd__log("fog: probe: outer columns: depth 0 there in %u more probes in the last 10 s (%u "
+                "in all)",
+                s_edge.more, s_edge.total);
+    }
+    s_edge.windowMs = now;
+    s_edge.lines = 0;
+    s_edge.more = 0;
+}
+
+/* the copies of a replay the GPU is past, counted and logged */
+static void edgeHarvest(void)
+{
+    if (!s_edge.pending || g_rd.replayCounter < s_edge.replay + RHI_FRAMES_IN_FLIGHT) {
+        return;
+    }
+    s_edge.pending = false;
+    const uint8_t *m = (const uint8_t *)rhi_map_buffer(s_edge.buf);
+    if (!m) {
+        return;
+    }
+    RdFogEdgeColumn c[4];
+    const uint32_t cols[4] = {0, 1, s_edge.tw - 2u, s_edge.tw - 1u};
+    for (int k = 0; k < 4; k++) {
+        rd__fog_edge_column(m + (k < 2 ? 0u : s_edge.half), s_edge.pitch, s_edge.th,
+                            (uint32_t)k & 1u, s_edge.d24, s_edge.zScale, cols[k], &c[k]);
+    }
+    rhi_unmap_buffer(s_edge.buf);
+    const double now = rd__now_ms();
+    edgeWindow(now);
+    if (!(c[0].zero | c[1].zero | c[2].zero | c[3].zero)) {
+        return;
+    }
+    s_edge.total++;
+    if (s_edge.lines >= RD_FOG_EDGE_LINES) {
+        s_edge.more++;
+        return;
+    }
+    s_edge.lines++;
+    rd__fog_edge_line(s_edge.last, sizeof(s_edge.last), c, s_edge.gsW,
+                      s_edge.haveLut ? s_edge.lut0 : NULL);
+    rd__log("%s", s_edge.last);
+}
+
+bool rd__fog_edge_due(bool open, const RdFogSource *src, const RdTargetRec *tz)
+{
+    edgeHarvest();
+    if (!open || !g_rd.hasDevice || s_st.running || s_edge.pending || !tz || tz->tw < 4 ||
+        tz->th == 0 || !(rhi_backend() == RHI_BACKEND_VULKAN || src->aspect == RHI_ASPECT_COLOR)) {
+        return false;
+    }
+    return s_edge.fogged++ % RD_FOG_EDGE_EVERY == 0;
+}
+
+void rd__fog_edge_record(RhiCommandList cl, const RdTargetRec *tz, uint32_t zid,
+                         const RdFogSource *src, const uint8_t *lut)
+{
+    const uint32_t pitch = wordPitch(2), a = probeStride();
+    const uint64_t half = ((uint64_t)pitch * tz->th + a - 1u) / a * a;
+    if (!s_edge.buf.id || s_edge.size < 2u * half) {
+        if (s_edge.buf.id) {
+            rhi_destroy_buffer(s_edge.buf);
+        }
+        s_edge.size = 2u * half;
+        s_edge.buf =
+            rhi_create_buffer(&(RhiBufferDesc){s_edge.size, RHI_BUF_COPY_DST | RHI_BUF_READBACK,
+                                               RHI_MEM_READBACK, "rd fog edge probe"});
+        if (!s_edge.buf.id) {
+            s_edge.size = 0;
+            rd__log("fog: probe: outer columns: no readback buffer (%llu bytes)",
+                    (unsigned long long)(2u * half));
+            return;
+        }
+    }
+    rd__transition(cl, src->tex, src->state, RHI_STATE_COPY_SRC);
+    rhi_cmd_copy_texture_to_buffer(cl, src->tex, src->aspect, (RhiRect){0, 0, 2, tz->th},
+                                   s_edge.buf, 0, pitch);
+    rhi_cmd_copy_texture_to_buffer(cl, src->tex, src->aspect,
+                                   (RhiRect){(int32_t)tz->tw - 2, 0, 2, tz->th}, s_edge.buf, half,
+                                   pitch);
+    s_edge.pending = true;
+    s_edge.replay = g_rd.replayCounter;
+    s_edge.tw = tz->tw;
+    s_edge.th = tz->th;
+    s_edge.pitch = pitch;
+    s_edge.half = (uint32_t)half;
+    s_edge.gsW = g_rd.gsW;
+    s_edge.d24 = rd__depth_unorm_steps() > 0.0f;
+    s_edge.zScale = rd__target_z_scale(zid);
+    s_edge.haveLut = lut != NULL;
+    if (lut) {
+        memcpy(s_edge.lut0, lut, sizeof(s_edge.lut0));
+    }
+}
+
+static void edgeFree(void)
+{
+    if (s_edge.buf.id) {
+        rhi_destroy_buffer(s_edge.buf);
+    }
+    memset(&s_edge, 0, sizeof(s_edge));
+}
+
 /* ------------------------------------------------------------ self-test */
 
 #define ST_CELLS 16
@@ -1096,6 +1294,7 @@ void rd__fog_path_shutdown(void)
     rd__blend_selftest_shutdown();
     rd__fog_buffer_free();
     probeFree();
+    edgeFree();
     if (s_stRead.tex.id) {
         rhi_destroy_texture(s_stRead.tex);
     }

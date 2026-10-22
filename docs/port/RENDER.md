@@ -2171,7 +2171,22 @@ texels' Z, index and colour on the first fogged replay after start and after a n
 (`fog: probe`), then the table's entry 0, the colour the fog gives Z 0, which a pixel no draw
 covered keeps from the clear (`...; pixels nothing drew take the fog's colour at Z 0, table entry 0
 = RRGGBBAA`): a line of that colour in a report's picture is a gap in the geometry
-([Camera blending](#camera-blending)) (`port/render/rd_fog_path.c` (`rd__fog_probe_record`)). Both draw the fog at the exact table entry of
+([Camera blending](#camera-blending)) (`port/render/rd_fog_path.c` (`rd__fog_probe_record`)).
+While the reduction shows the frame's outer columns (the border open at the frame's exact width;
+[the open border's outer columns](#post-passes)), the edge probe copies the depth the
+fog read at texel columns 0, 1, tw - 2 and tw - 1, every row, on every 32nd fogged replay, into a
+readback buffer that a replay two frames on counts without a wait (`rd__fog_edge_due`,
+`rd__fog_edge_record`, called by `doFog` after its draw, the pass ended first); a probe that finds
+rows at GS Z 0 logs, the first three in each 10 s, `rd: fog: probe: outer columns: depth 0 at
+texel column 0 in N of M rows (rows a..b), column 1 in ..., column T-2 in ..., column T-1 in ...;
+the border is open at the frame's exact width (W GS pixels, its outer two columns a side drawn as
+columns 2 and W-3), table entry 0 = RRGGBB`, and the rest of those 10 s as one total at the next
+probe after them, `rd: fog: probe: outer columns: depth 0 there in N more probes in the last 10 s
+(T in all)`. Nothing is copied with the border closed or the frame cropped, in the self-test's
+replays, on the multisampled read, or on D3D12's depth (copied to a buffer only whole). Rows at Z
+0 there mean the game left those columns uncovered (now drawn as their neighbours); a band that
+survives with no such line is not the fog's (`port/render/rd_fog_path.c` (`rd__fog_edge_column`,
+`rd__fog_edge_line`); `rd_fog_test` (o)). Both draw the fog at the exact table entry of
 each index, not read between entries above 1x, since what they measure is the depth read; the
 probe's frame is one game frame drawn that way (`port/render/rd_fog_path.c` (`rd__fog_exact`),
 `port/render/rd_replay.c` (`doFog`)).

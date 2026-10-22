@@ -438,7 +438,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`rd_fog`, `rd_fog_*`; the local read from the start in `rd_fog_local`, the other paths' replays
   the same bytes); at 2x a depth ramp's fog alpha equals the above-1x formula (the table
   interpolated, the ordered dither) texel for texel, and the 1x cases count no above-1x draw
-  (`checkRamp`).
+  (`checkRamp`); the outer columns' probe: its count of GS Z 0 rows on D32F and D24 words and its
+  line on the CPU (`checkEdgeLine`), then with Full pixel on at 4:3 the cells' scene, two cells
+  left at Z 0 at the frame's edges, gives the line naming their rows, and with it off no line
+  (`checkEdgeProbe`).
 - `rd_gsbase_test.c`: `GsBase.c`'s host path driving a synthetic scene (`rd_gsbase`); photo mode's
   Deja vu draws the stage's sandstorm object once a frame with the vision's two nodes, gives back
   what it borrowed, adds no film grain, and draws nothing in stage 40, with the effect off or with

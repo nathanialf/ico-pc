@@ -90,7 +90,19 @@ box. The mask and the open border apply only on a cropped frame (`rd__frame_crop
 away); at 4:3 and at aspects where the frame is exactly the picture's width (48:9 at 2048), Full
 pixel off is the game's own border as before, the reduction's recorded scissor and no mask, so the
 Original preset at 4:3 is the PS2's picture byte for byte (`port/render/rd_present.c`
-(`rd__frame_cropped`), `port/render/rd_replay.c` (`borderOpen`)). The box (`wExact / 384`), the UI box, the pointer, the movie's box and the CRT filter's grid are
+(`rd__frame_cropped`), `port/render/rd_replay.c` (`borderOpen`)). The `rd: display:` line ends
+with the frame as the options give it, `frame W GS wide (exact E: cropped|exact width), border
+open (its outer two columns a side repeat their neighbours)|open (its columns left out at
+present)|closed`, and `rd_log_frame_state(when)` logs the same words with the output's size, the
+size asked for, the scene's scale, the aspect and how many times the outer columns were drawn as
+their neighbours: `rd: frame state (after resume): output 2340x1080 (asked 2340x1080), scene
+2.8125x2.10938, aspect 2.167, frame 832 GS wide (exact 832.00: exact width), border open (...),
+the outer columns drawn as their neighbours N times`. The window host calls it when the app comes
+back to the foreground, after reading the window's size again (a size a few pixels off the
+frame's exact width crops the frame, which hides those columns), with the line `window: after the
+app came back: window WxH px, safe area x,y wxh` (`port/platform/window_host.c`
+(`resume_recheck`, `window_size_recheck`); `port/render/rd_present.c` (`frameWords`,
+`rd_log_frame_state`)). The box (`wExact / 384`), the UI box, the pointer, the movie's box and the CRT filter's grid are
 the same with the option on and off (`port/render/rd_present.c` (`outputBox`, `rd_ui_box`,
 `rd__ui_box`, `rd__apply_display`, `sourceCrop`), `port/render/rd_crt.c` (`rd__crt_crop`); the
 targets: [RENDER.md](RENDER.md#frames-and-targets)).

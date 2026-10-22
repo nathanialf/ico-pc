@@ -1073,11 +1073,84 @@ static void checkPipelines(void)
           "%d fog pipeline(s) on the buffer path, %d expected", fogWords, wantFog);
 }
 
+/* ============================================ (o) the outer columns' probe
+ * rd_fog_path.c's edge probe (issue 129).  On the CPU: the rows at GS Z 0
+ * of a pair of depth words a row (D32F bits and D24 steps) and the line
+ * they make.  On a device, Full pixel on at 4:3 (the frame its exact
+ * width, the reduction's border open): the cells' scene with its few cells
+ * left at the clear's Z 0, two of them at the frame's edges (cell 96 at
+ * column 0, rows 192..223; cell 127 at the right edge, rows 224..255),
+ * fogged a few frames: the probe's line names those rows; with Full pixel
+ * off (the run before) nothing is copied and no line is logged. */
+static void checkEdgeLine(void)
+{
+    /* 10 rows of a pair of words, 16 bytes a row (a padded pitch) */
+    uint8_t buf[10 * 16];
+    memset(buf, 0xEE, sizeof(buf));
+    const float half = 0.5f, zero = 0.0f;
+    for (uint32_t y = 0; y < 10; y++) {
+        memcpy(&buf[y * 16], y >= 3 && y <= 5 ? &zero : &half, 4);
+        memcpy(&buf[y * 16 + 4], &half, 4);
+    }
+    RdFogEdgeColumn c[4];
+    rd__fog_edge_column(buf, 16, 10, 0, false, 1.0f / 8589934592.0f, 0, &c[0]);
+    rd__fog_edge_column(buf, 16, 10, 1, false, 1.0f / 8589934592.0f, 1, &c[1]);
+    CHECK(c[0].zero == 3 && c[0].first == 3 && c[0].last == 5 && c[0].rows == 10 && c[1].zero == 0,
+          "(o) D32F: column 0 at Z 0 in rows 3..5 (%u, %u..%u), column 1 none (%u)", c[0].zero,
+          c[0].first, c[0].last, c[1].zero);
+    /* D24: the low 24 bits, the top byte undefined */
+    uint8_t b24[4 * 8];
+    for (uint32_t y = 0; y < 4; y++) {
+        const uint32_t w0 = y == 0 || y == 3 ? 0xAB000000u : 0x00000100u, w1 = 0x01000001u;
+        memcpy(&b24[y * 8], &w0, 4);
+        memcpy(&b24[y * 8 + 4], &w1, 4);
+    }
+    rd__fog_edge_column(b24, 8, 4, 0, true, 1.0f / 16777216.0f, 1662, &c[2]);
+    rd__fog_edge_column(b24, 8, 4, 1, true, 1.0f / 16777216.0f, 1663, &c[3]);
+    CHECK(c[2].zero == 2 && c[2].first == 0 && c[2].last == 3 && c[3].zero == 0,
+          "(o) D24: column 1662 at Z 0 in rows 0 and 3 (%u, %u..%u), 1663 none (%u)", c[2].zero,
+          c[2].first, c[2].last, c[3].zero);
+    char line[512];
+    static const uint8_t lut0[4] = {0xF0, 0xE8, 0xD0, 0x80};
+    rd__fog_edge_line(line, sizeof(line), c, 832, lut0);
+    static const char *want =
+        "fog: probe: outer columns: depth 0 at texel column 0 in 3 of 10 rows (rows 3..5), "
+        "column 1 in 0 of 10 rows, column 1662 in 2 of 4 rows (rows 0..3), column 1663 in 0 of "
+        "4 rows; the border is open at the frame's exact width (832 GS pixels, its outer two "
+        "columns a side drawn as columns 2 and 829), table entry 0 = F0E8D0";
+    CHECK(strcmp(line, want) == 0, "(o) the line:\n  %s\n  wanted\n  %s", line, want);
+    char shortLine[40];
+    const size_t n = rd__fog_edge_line(shortLine, sizeof(shortLine), c, 832, NULL);
+    CHECK(n == sizeof(shortLine) - 1 && strlen(shortLine) == n,
+          "(o) a short buffer holds the line's start (%zu)", n);
+}
+
+static void checkEdgeProbe(void)
+{
+    if (rhi_backend() != RHI_BACKEND_VULKAN && g_rd.fogPath != RD_FOG_BUFFER) {
+        printf("  (o) skipped: this backend copies a depth to a buffer only whole\n");
+        return;
+    }
+    for (int i = 0; i < 2 + RHI_FRAMES_IN_FLIGHT; i++) {
+        recordScene(0);
+    }
+    static const char *want =
+        "fog: probe: outer columns: depth 0 at texel column 0 in 32 of 512 rows (rows 192..223), "
+        "column 1 in 32 of 512 rows (rows 192..223), column 510 in 32 of 512 rows (rows "
+        "224..255), column 511 in 32 of 512 rows (rows 224..255); the border is open at the "
+        "frame's exact width (512 GS pixels, its outer two columns a side drawn as columns 2 "
+        "and 509), table entry 0 = C89664";
+    const char *got = rd__fog_edge_last();
+    printf("  (o) %s\n", got[0] ? got : "(no line)");
+    CHECK(strcmp(got, want) == 0, "(o) the probe's line:\n  %s\n  wanted\n  %s", got, want);
+}
+
 int main(void)
 {
     rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     printf("rd_fog_test\n");
     checkSwizzle();
+    checkEdgeLine();
 
     /* (c), (r) recording */
     if (!rd__init_record_only(W, H)) {
@@ -1157,11 +1230,29 @@ int main(void)
     }
 
     checkPipelines();
+    CHECK(rd__fog_edge_last()[0] == '\0', "(o) Full pixel off: no outer columns' line (%s)",
+          rd__fog_edge_last());
     CHECK(g_rd.above1xDraws == 0, "1x: %u draws above 1x", g_rd.above1xDraws);
     CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
           rhi_vk_validation_error_count());
     CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
     rd_shutdown();
+
+    /* (o) the outer columns' probe: Full pixel on at 4:3 */
+    memset(&st, 0, sizeof(st));
+    st.preset = RD_PRESET_ORIGINAL;
+    st.fullPixel = 1;
+    if (rd_init(W, H, &st, NULL)) {
+        gif_HostForgetTextures();
+        gif_HostFrameReset();
+        dl_Clear();
+        checkEdgeProbe();
+        CHECK(rhi_vk_validation_error_count() == 0, "(o) %u validation errors",
+              rhi_vk_validation_error_count());
+        rd_shutdown();
+    } else {
+        CHECK(0, "rd_init with Full pixel on");
+    }
 
     /* (e) the edge at 2x, in Enhanced */
     memset(&st, 0, sizeof(st));

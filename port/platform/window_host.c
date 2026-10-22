@@ -874,6 +874,41 @@ static void first_pump_recheck(void)
     }
 }
 
+/* The app came back to the foreground (lifecycle_watch sets it, on
+   whichever thread SDL calls the watch from); the next pump of either kind
+   reads the window's size again (Android: a size event can be missed while
+   the app is away, and a size a few pixels off the frame's exact width
+   crops the frame's border columns, issue 129), logs the window and its
+   safe area as they are now, and the renderer's frame state */
+static SDL_AtomicInt s_resumed;
+
+static void resume_recheck(void)
+{
+    int pw = 0, ph = 0, ww = 0, wh = 0;
+    SDL_Rect r;
+
+    if (SDL_GetAtomicInt(&s_resumed) == 0 || s_window == NULL) {
+        return;
+    }
+    SDL_SetAtomicInt(&s_resumed, 0);
+    window_size_recheck("after the app came back");
+    if (!SDL_GetWindowSizeInPixels(s_window, &pw, &ph)) {
+        pw = ph = 0;
+    }
+    if (pw > 0 && ph > 0 && SDL_GetWindowSize(s_window, &ww, &wh) && ww > 0 && wh > 0 &&
+        SDL_GetWindowSafeArea(s_window, &r) && r.w > 0 && r.h > 0) {
+        const double kx = (double)pw / ww, ky = (double)ph / wh;
+
+        fprintf(stderr, "window: after the app came back: window %dx%d px, safe area %d,%d %dx%d\n",
+                pw, ph, (int)(r.x * kx + 0.5), (int)(r.y * ky + 0.5), (int)(r.w * kx + 0.5),
+                (int)(r.h * ky + 0.5));
+    } else {
+        fprintf(stderr, "window: after the app came back: window %dx%d px, no safe area reported\n",
+                pw, ph);
+    }
+    rd_log_frame_state("after resume");
+}
+
 #if defined(__ANDROID__) || defined(ICO_IOS)
 /* settings.h ui_settings_set_quit_is_game: Android's Quit ends the game */
 static int quit_is_game(void)
@@ -1036,6 +1071,7 @@ static bool SDLCALL lifecycle_watch(void *userdata, SDL_Event *event)
         ico_diag_startup_activity_background(1);
     } else if (e == ICO_LIFECYCLE_DID_ENTER_FOREGROUND) {
         ico_diag_startup_activity_background(0);
+        SDL_SetAtomicInt(&s_resumed, 1); /* the pump's resume_recheck */
     }
     if (e != ICO_LIFECYCLE_NONE && ready) {
 #ifdef ICO_IOS
@@ -3430,6 +3466,7 @@ int ico_window_pump(void)
     }
 #endif
     first_pump_recheck();
+    resume_recheck();
     /* the Settings menu's changes; forced when the
        renderer's output followed a swapchain rebuilt at another size, so
        aspect "auto" and resolution "window" follow it as on a resize */
@@ -3636,6 +3673,7 @@ static int progress_present_notes(const char *title, const char *phase, int pct,
 #endif
     if (s_open) {
         first_pump_recheck();
+        resume_recheck();
     }
     if (device_lost_quit()) {
         return 1;

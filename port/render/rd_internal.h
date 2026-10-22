@@ -2876,6 +2876,33 @@ bool rd__st_target(RdFrame *f, int list, uint32_t scene, uint32_t w, uint32_t h)
 /* Copies recorded and not read back yet (rd_begin_frame then calls
  * rd__fog_probe_finish on the host). */
 bool rd__fog_probe_pending(void);
+
+/* The edge probe (rd_fog_path.c, issue 129): while the reduction shows the
+ * frame's outer columns, doFog asks rd__fog_edge_due (open: the border open
+ * at the frame's exact width and the fog not the multisampled read; it also
+ * counts the copies of a replay the GPU is past and logs them) and, when it
+ * says so, ends its pass and calls rd__fog_edge_record, which copies the
+ * fog's depth (src, tz's size) at texel columns 0, 1, tw - 2 and tw - 1
+ * into a readback buffer; lut: the fog's table (its entry 0 named), NULL.
+ * rd__fog_edge_column counts the rows of column index (0 or 1) of a pair
+ * of words per row, pitch bytes apart, at GS Z 0; rd__fog_edge_line writes
+ * the "fog: probe: outer columns:" line for four of them; rd__fog_edge_last
+ * is the last such line logged ("" before one, tests). */
+typedef struct RdFogEdgeColumn {
+    uint32_t column;      /* the texel column */
+    uint32_t rows;        /* the rows looked at */
+    uint32_t zero;        /* of them at GS Z 0 */
+    uint32_t first, last; /* the first and last of those (zero 0: none) */
+} RdFogEdgeColumn;
+
+bool rd__fog_edge_due(bool open, const RdFogSource *src, const RdTargetRec *tz);
+void rd__fog_edge_record(RhiCommandList cl, const RdTargetRec *tz, uint32_t zid,
+                         const RdFogSource *src, const uint8_t *lut);
+void rd__fog_edge_column(const uint8_t *data, uint32_t pitch, uint32_t rows, uint32_t index,
+                         bool d24, float zScale, uint32_t column, RdFogEdgeColumn *out);
+size_t rd__fog_edge_line(char *out, size_t size, const RdFogEdgeColumn c[4], uint32_t gsW,
+                         const uint8_t *lut0);
+const char *rd__fog_edge_last(void);
 /* rd_core.c, after the named targets were made again: a new SCENE size arms
  * the probe and, once rd_fog_selftest has run, runs the self-test again. */
 void rd__fog_scene_remade(void);

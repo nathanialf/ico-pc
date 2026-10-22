@@ -5008,6 +5008,13 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         rd__fog_probe_record(s_cl, tz, zid, &src, tc,
                              p.lutOffset != ~0u ? f->payload + p.lutOffset : NULL);
     }
+    /* the outer columns' depth while the reduction shows them (rd_fog_path.c
+     * rd__fog_edge_due: every 32nd fogged replay, read back without a wait) */
+    if (rd__fog_edge_due(borderOpen() && !rd__frame_cropped() && !fogMs, &src, tz)) {
+        endPass(r);
+        rd__fog_edge_record(s_cl, tz, zid, &src,
+                            p.lutOffset != ~0u ? f->payload + p.lutOffset : NULL);
+    }
     (void)topo;
 }
 
