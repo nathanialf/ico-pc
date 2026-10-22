@@ -135,18 +135,22 @@ int ico_touch_edits_any(const IcoTouchEdits *e, int rule);
 /* IcoTouchEditor.state */
 enum { ICO_TOUCH_ED_IDLE = 0, ICO_TOUCH_ED_DRAG, ICO_TOUCH_ED_PINCH, ICO_TOUCH_ED_CONFIRM_RESET };
 
-/* the toolbar's keys, in drawing order; IcoTouchEditView.tb[] */
+/* the toolbar strip's cells, left to right (IcoTouchEditView.tb[]): eight
+   keys and two display-only readouts, SIZE_VAL (the selected control's
+   size: a pinch on the control or the gamepad's L2/R2 change it) and
+   OP_VAL (its opacity, between Opacity - and +). A finger on a readout is
+   the toolbar's (nothing under it is picked) and does nothing. */
 enum {
     ICO_TOUCH_ED_TB_DONE = 0,
     ICO_TOUCH_ED_TB_UNDO,
     ICO_TOUCH_ED_TB_RESET,
     ICO_TOUCH_ED_TB_SNAP,
     ICO_TOUCH_ED_TB_GRID,
-    ICO_TOUCH_ED_TB_SIZE_DN,
-    ICO_TOUCH_ED_TB_SIZE_UP,
-    ICO_TOUCH_ED_TB_OP_DN,
-    ICO_TOUCH_ED_TB_OP_UP,
     ICO_TOUCH_ED_TB_ALL,
+    ICO_TOUCH_ED_TB_SIZE_VAL, /* display only: "Size 120 %" */
+    ICO_TOUCH_ED_TB_OP_DN,
+    ICO_TOUCH_ED_TB_OP_VAL, /* display only: "75 %" */
+    ICO_TOUCH_ED_TB_OP_UP,
     ICO_TOUCH_ED_TB_COUNT
 };
 
@@ -244,14 +248,23 @@ void ico_touch_edit_box_size(const IcoTouchLayout *l, int ctl, const IcoTouchCtl
    only inside (or centred on an axis the region is too small for). */
 int ico_touch_edit_clamp(const IcoTouchLayout *l, float *cx, float *cy, float w, float h);
 
-/* The toolbar's and confirm strip's hit boxes for a layout (the spot the
-   plan proves clear of every default control: FULL and TABLETOP a 2 x 5
-   block at x Rt-53..Rt-19, y T+13..T+28 in q; SPLIT 2 columns x 5 rows at
-   x L+43..L+55, y T+13..T+52; the derivation is touch_edit.c's). The keys
-   in ICO_TOUCH_ED_TB_* order: FULL and TABLETOP row 0 Done..Grid, row 1
-   Size -..All; SPLIT column 0 Done..Grid, column 1 Size -..All. The
-   confirm strip: FULL and TABLETOP the first row as three keys, SPLIT the
-   first three rows each one key across both columns. Tests read it too. */
+/* The toolbar's and confirm strip's hit boxes for a layout
+   (ico_touch_edit_toolbar), and the hint line's box (ico_touch_edit_hint_
+   rect); the derivation is touch_edit.c's (q the layout's unit, L, T, Rt,
+   B the region's edges). The toolbar is one strip of ICO_TOUCH_ED_TB_COUNT
+   cells of equal width along the region's top, y T+0.5..T+5.5, x L+3..
+   Rt-3, in ICO_TOUCH_ED_TB_* order. SPLIT cuts it at the hinge band (3 q
+   clear of it each side): Done .. All on the left side (as many of them as
+   are at least ICO_TOUCH_ED_CELL_MIN q wide there, at most six), the rest
+   on the right side in one row, or in two (y T+0.5..T+5.5 and T+6..T+11,
+   the first row the larger half) when one row's cells would be narrower
+   than ICO_TOUCH_ED_CELL_MIN (fit()'s smallest sides never need it). The
+   confirm strip: three cells of equal width across Done .. All (SPLIT:
+   across the left side's cells). The hint: y B-4..B-1, FULL and TABLETOP
+   x L+35..Rt-35 (between the stick's ring and Square); SPLIT the wider
+   side of the band, 3 q in from its edges. Tests read both. */
+#define ICO_TOUCH_ED_CELL_MIN 8.0f /* q: the narrowest strip cell before SPLIT's second row */
+void ico_touch_edit_hint_rect(const IcoTouchLayout *l, IcoTouchRect *hint);
 void ico_touch_edit_toolbar(const IcoTouchLayout *l, IcoTouchRect tb[ICO_TOUCH_ED_TB_COUNT],
                             IcoTouchRect confirm[ICO_TOUCH_ED_CF_COUNT]);
 

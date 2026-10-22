@@ -276,12 +276,15 @@ typedef struct IcoTouchEditView {
     int refused;          /* > 0: the "cannot cover another's middle" note shows */
     float selScale;       /* the selected control's scale and alpha, for the keys' values */
     float selAlpha;
-    IcoTouchRect tb[10];     /* the toolbar's keys (ICO_TOUCH_ED_TB_*) */
+    IcoTouchRect tb[10];     /* the toolbar strip's cells (ICO_TOUCH_ED_TB_*: eight keys and
+                                the two readouts, display only) */
     IcoTouchRect confirm[3]; /* the confirm strip (ICO_TOUCH_ED_CF_*), state CONFIRM_RESET */
     IcoTouchRect ctl[ICO_TOUCH_CTL_COUNT]; /* each control's bounding box (selection outline) */
     int confirmSel;                        /* the confirm strip's key under the gamepad's cursor */
     int undos;                             /* steps Undo can take (0: the key dims) */
     int changed;                           /* the work differs from the saved edits */
+    IcoTouchRect hint; /* the hint line's box (and the refused and overlap notes'), along
+                          the region's bottom edge */
 } IcoTouchEditView;
 
 /* What the overlay drawing reads, copied once per vsync by the device layer

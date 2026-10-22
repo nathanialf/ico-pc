@@ -622,10 +622,14 @@ installed by the window host; without it the row is locked.
 dashed with the word Hidden, outlines the look pad's area, hatches the hinge band, dots the grid
 from the anchor edges when snap is on (so the dots are where the drops land), outlines the
 selection with its name and the overlapping controls in amber (`kWarn`), and draws the toolbar
-keys with their values (Snap On or Off, Grid in mm, Size and Opacity in percent, dimmed with no
-selection and not All; Undo dimmed with nothing to undo), the hint line or the refused or overlap
-note under the key block, and the Reset confirm strip with the cursor key lit, all at the
-rectangles the view carries (`port/ui/touch_ui.c`; `port/input/touch.h` (`IcoTouchEditView`)).
+strip along the top: each cell one line of words shrunk to fit ("Snap: On", "Grid: 4 mm",
+"Opacity -"), the keys framed, the two readouts on a fainter backing without a frame ("Size 120
+%" and "75 %" for the selected control, Hidden at 0, "All" with All lit, "-" with nothing
+selected); the opacity keys and the readouts dim with no selection and not All, Undo with
+nothing to undo. While Reset asks, its three choices lie over Done to All with the cursor key lit
+and the rest of the strip dims. The hint line or the refused or overlap note is drawn in the
+view's `hint` box at the bottom, shrunk to its width, and the selection's name goes under the
+control when the strip leaves no room over it; all at the rectangles the view carries (`port/ui/touch_ui.c`; `port/input/touch.h` (`IcoTouchEditView`)).
 The words are the port's own (`UI_STR_TED_*`), in the seven languages.
 
 ## The mouse in menus

@@ -652,11 +652,18 @@ static void drawGrid(const IcoTouchOverlay *o, float th)
     }
 }
 
-/* whether a toolbar key acts now: Size and Opacity need a control
-   selected, or All on; Undo a step to take back */
+/* the strip's two readouts: display only, no frame */
+static int readout(int k)
+{
+    return k == ICO_TOUCH_ED_TB_SIZE_VAL || k == ICO_TOUCH_ED_TB_OP_VAL;
+}
+
+/* whether a toolbar cell acts (or, a readout, reads) now: the opacity keys
+   and both readouts need a control selected, or All on; Undo a step to
+   take back */
 static int keyLive(const IcoTouchEditView *v, int k)
 {
-    if (k >= ICO_TOUCH_ED_TB_SIZE_DN && k <= ICO_TOUCH_ED_TB_OP_UP) {
+    if (k >= ICO_TOUCH_ED_TB_SIZE_VAL && k <= ICO_TOUCH_ED_TB_OP_UP) {
         return v->selected >= 0 || v->all;
     }
     if (k == ICO_TOUCH_ED_TB_UNDO) {
@@ -676,7 +683,8 @@ static int confirmLit(const IcoTouchEditView *v, int k)
     return v->confirmSel == k;
 }
 
-/* the keys drawn now: the confirm strip while Reset asks, else the toolbar */
+/* Reset asks: its three choices lie over Done .. All, the rest of the
+   strip shows dimmed */
 static int confirming(const IcoTouchEditView *v)
 {
     return v->state == ICO_TOUCH_ED_CONFIRM_RESET;
@@ -687,52 +695,26 @@ static int rectShown(const IcoTouchRect *r)
     return r->w > 0.0f && r->h > 0.0f;
 }
 
-/* the block the keys drawn now make (the hint sits under it); 0 for none */
-static int keyBlock(const IcoTouchEditView *v, IcoTouchRect *out)
+/* the toolbar strip's cells' height: the unit the editor's words are sized
+   by; and the strip's lowest edge (the selection's name keeps below it) */
+static float keyHeight(const IcoTouchEditView *v, float *bottom)
 {
-    const IcoTouchRect *k = confirming(v) ? v->confirm : v->tb;
-    const int n = confirming(v) ? ICO_TOUCH_ED_CF_COUNT : ICO_TOUCH_ED_TB_COUNT;
-    float x0 = 0.0f, y0 = 0.0f, x1 = 0.0f, y1 = 0.0f;
-    int any = 0;
+    float h = 0.0f;
 
-    for (int i = 0; i < n; i++) {
-        if (!rectShown(&k[i])) {
-            continue;
-        }
-        if (!any || k[i].x < x0) {
-            x0 = k[i].x;
-        }
-        if (!any || k[i].y < y0) {
-            y0 = k[i].y;
-        }
-        if (!any || k[i].x + k[i].w > x1) {
-            x1 = k[i].x + k[i].w;
-        }
-        if (!any || k[i].y + k[i].h > y1) {
-            y1 = k[i].y + k[i].h;
-        }
-        any = 1;
-    }
-    out->x = x0;
-    out->y = y0;
-    out->w = x1 - x0;
-    out->h = y1 - y0;
-    return any;
-}
-
-/* the toolbar keys' height: the unit the editor's words are sized by */
-static float keyHeight(const IcoTouchEditView *v)
-{
+    *bottom = 0.0f;
     for (int i = 0; i < ICO_TOUCH_ED_TB_COUNT; i++) {
         if (rectShown(&v->tb[i])) {
-            return v->tb[i].h;
+            h = v->tb[i].h;
+            if (v->tb[i].y + v->tb[i].h > *bottom) {
+                *bottom = v->tb[i].y + v->tb[i].h;
+            }
         }
     }
-    return 0.0f;
+    return h;
 }
 
-/* the line over the keys: the refused or overlap note while it applies,
-   else the hint (none over the confirm strip) */
+/* the line at the bottom (IcoTouchEditView.hint): the refused or overlap
+   note while it applies, else the hint (none while Reset asks) */
 static const char *hintText(const IcoTouchEditView *v)
 {
     if (v->refused > 0) {
@@ -806,45 +788,57 @@ static const char *intText(UiStrId id, int v, char *buf, size_t size)
     return buf;
 }
 
-/* a toolbar key's words: its name, and under it the value where it has one
-   (Snap On, Grid 4 mm, the selected control's size and opacity) */
-static void keyWords(const IcoTouchEditView *v, int k, char *top, char *bot, size_t n)
+/* a strip cell's words, one line: its name, with its value where it has
+   one ("Snap: On", "Grid: 4 mm"); the readouts the selected control's
+   size and opacity ("Size 120 %", "75 %", Hidden at 0), "All" with All
+   lit, "-" with nothing selected */
+static void keyWords(const IcoTouchEditView *v, int k, char *out, size_t n)
 {
     static const UiStrId kName[ICO_TOUCH_ED_TB_COUNT] = {
-        UI_STR_TED_DONE, UI_STR_TED_UNDO, UI_STR_TED_RESET,   UI_STR_TED_SNAP,    UI_STR_TED_GRID,
-        UI_STR_TED_SIZE, UI_STR_TED_SIZE, UI_STR_TED_OPACITY, UI_STR_TED_OPACITY, UI_STR_TED_ALL};
+        UI_STR_TED_DONE,    UI_STR_TED_UNDO,   UI_STR_TED_RESET, UI_STR_TED_SNAP,
+        UI_STR_TED_GRID,    UI_STR_TED_ALL,    UI_STR_TED_SIZE,  UI_STR_TED_OPACITY,
+        UI_STR_TED_OPACITY, UI_STR_TED_OPACITY};
     const int sel = v->selected >= 0;
+    char val[48];
 
-    top[0] = bot[0] = '\0';
+    out[0] = '\0';
     switch (k) {
     case ICO_TOUCH_ED_TB_SNAP:
-        snprintf(top, n, "%s", ui_str(UI_STR_TED_SNAP));
-        snprintf(bot, n, "%s", ui_str(v->snap ? UI_STR_ON : UI_STR_OFF));
+        snprintf(out, n, "%s: %s", ui_str(UI_STR_TED_SNAP),
+                 ui_str(v->snap ? UI_STR_ON : UI_STR_OFF));
         return;
     case ICO_TOUCH_ED_TB_GRID:
-        snprintf(top, n, "%s", ui_str(UI_STR_TED_GRID));
-        intText(UI_STR_VAL_MM, (int)(v->grid + 0.5f), bot, n);
+        snprintf(out, n, "%s: %s", ui_str(UI_STR_TED_GRID),
+                 intText(UI_STR_VAL_MM, (int)(v->grid + 0.5f), val, sizeof(val)));
         return;
-    case ICO_TOUCH_ED_TB_SIZE_DN:
-    case ICO_TOUCH_ED_TB_SIZE_UP:
-        snprintf(top, n, "%s %s", ui_str(UI_STR_TED_SIZE),
-                 k == ICO_TOUCH_ED_TB_SIZE_DN ? "-" : "+");
-        if (sel) {
-            snprintf(bot, n, "%d %%", (int)(v->selScale * 100.0f + 0.5f));
+    case ICO_TOUCH_ED_TB_SIZE_VAL:
+        if (v->all) {
+            snprintf(val, sizeof(val), "%s", ui_str(UI_STR_TED_ALL));
+        } else if (sel) {
+            snprintf(val, sizeof(val), "%d %%", (int)(v->selScale * 100.0f + 0.5f));
+        } else {
+            snprintf(val, sizeof(val), "-");
+        }
+        snprintf(out, n, "%s %s", ui_str(UI_STR_TED_SIZE), val);
+        return;
+    case ICO_TOUCH_ED_TB_OP_VAL:
+        if (v->all) {
+            snprintf(out, n, "%s", ui_str(UI_STR_TED_ALL));
+        } else if (sel && !(v->selAlpha > 0.0f)) {
+            snprintf(out, n, "%s", ui_str(UI_STR_TED_HIDDEN));
+        } else if (sel) {
+            snprintf(out, n, "%d %%", (int)(v->selAlpha * 100.0f + 0.5f));
+        } else {
+            snprintf(out, n, "-");
         }
         return;
     case ICO_TOUCH_ED_TB_OP_DN:
     case ICO_TOUCH_ED_TB_OP_UP:
-        snprintf(top, n, "%s %s", ui_str(UI_STR_TED_OPACITY),
+        snprintf(out, n, "%s %s", ui_str(UI_STR_TED_OPACITY),
                  k == ICO_TOUCH_ED_TB_OP_DN ? "-" : "+");
-        if (sel && !(v->selAlpha > 0.0f)) {
-            snprintf(bot, n, "%s", ui_str(UI_STR_TED_HIDDEN));
-        } else if (sel) {
-            snprintf(bot, n, "%d %%", (int)(v->selAlpha * 100.0f + 0.5f));
-        }
         return;
     default:
-        snprintf(top, n, "%s", k >= 0 && k < ICO_TOUCH_ED_TB_COUNT ? ui_str(kName[k]) : "");
+        snprintf(out, n, "%s", k >= 0 && k < ICO_TOUCH_ED_TB_COUNT ? ui_str(kName[k]) : "");
         return;
     }
 }
@@ -866,27 +860,29 @@ static const char *ctlName(int ctl)
 }
 
 /* The marks over the controls: the overlapping controls' outlines in
-   amber, the selection's in white, the keys (the toolbar, or the confirm
-   strip while Reset asks, its cursor key lit; Size and Opacity dim with
-   nothing to act on, Undo with nothing to undo) and
-   the hint's backing as shapes, then their words, the selection's name and
-   the look pad's. */
+   amber, the selection's in white, the toolbar strip along the top (its
+   keys framed; the two readouts unframed on a fainter backing; Undo dims
+   with nothing to undo, the opacity keys and the readouts with nothing to
+   act on; while Reset asks its three choices over Done .. All, the cursor
+   key lit, and the rest of the strip dimmed) and the hint's backing at the
+   bottom as shapes, then their words, the selection's name and the look
+   pad's. */
 static void drawEditor(const RdOverlayCtx *ctx, const IcoTouchOverlay *o, float th)
 {
+    static const UiStrId kConfirm[ICO_TOUCH_ED_CF_COUNT] = {
+        UI_STR_TED_THIS_SCREEN, UI_STR_TED_ALL_SCREENS, UI_STR_TED_CANCEL};
     const IcoTouchEditView *v = &o->edit;
     const int conf = confirming(v);
-    const IcoTouchRect *keys = conf ? v->confirm : v->tb;
-    const int nKeys = conf ? ICO_TOUCH_ED_CF_COUNT : ICO_TOUCH_ED_TB_COUNT;
-    const float kh = keyHeight(v);
-    const float lineH = kh > 0.0f ? kh * 0.26f : o->layout.unit * 2.0f;
+    float stripBottom;
+    const float kh = keyHeight(v, &stripBottom);
+    const float lineH = kh > 0.0f ? kh * 0.36f : o->layout.unit * 2.0f;
     const int fontOk = ctx->box.w != 0 && ctx->box.h != 0 && ui_font_init();
     const TextGrid g = textGrid(ctx);
     const int sel =
         v->selected >= 0 && v->selected < ICO_TOUCH_CTL_COUNT && rectShown(&v->ctl[v->selected]);
-    IcoTouchRect block;
-    const int haveBlock = keyBlock(v, &block);
     const char *hint = hintText(v);
-    float hintW = 0.0f, hintX = 0.0f, hintY = 0.0f;
+    const IcoTouchRect *hr = &v->hint;
+    float hintW = 0.0f, hintSize = 0.0f;
 
     s_d.alpha = 1.0f;
     for (int c = 0; c < ICO_TOUCH_CTL_COUNT; c++) {
@@ -900,72 +896,82 @@ static void drawEditor(const RdOverlayCtx *ctx, const IcoTouchOverlay *o, float 
         frame(b->x - 2.0f * th, b->y - 2.0f * th, b->x + b->w + 2.0f * th, b->y + b->h + 2.0f * th,
               th, kEdgeHeld);
     }
-    for (int k = 0; k < nKeys; k++) {
-        const IcoTouchRect *r = &keys[k];
-        if (!rectShown(r)) {
+    /* the strip: cells side by side, each drawn a frame's width in */
+    for (int k = 0; k < ICO_TOUCH_ED_TB_COUNT; k++) {
+        const IcoTouchRect *r = &v->tb[k];
+        if (!rectShown(r) || (conf && k <= ICO_TOUCH_ED_TB_ALL)) {
             continue;
         }
-        const int lit = conf ? confirmLit(v, k) : keyLit(v, k);
-        s_d.alpha = conf || keyLive(v, k) ? 1.0f : KEY_DIM;
-        rect(r->x, r->y, r->x + r->w, r->y + r->h, lit ? kKeyLit : kKey);
-        frame(r->x, r->y, r->x + r->w, r->y + r->h, th * 0.6f, conf && lit ? kEdgeHeld : kEdge);
+        const float in = th * 0.5f;
+        s_d.alpha = !conf && keyLive(v, k) ? 1.0f : KEY_DIM;
+        if (readout(k)) {
+            s_d.alpha *= 0.6f;
+            rect(r->x + in, r->y + in, r->x + r->w - in, r->y + r->h - in, kKey);
+            continue;
+        }
+        rect(r->x + in, r->y + in, r->x + r->w - in, r->y + r->h - in,
+             !conf && keyLit(v, k) ? kKeyLit : kKey);
+        frame(r->x + in, r->y + in, r->x + r->w - in, r->y + r->h - in, th * 0.6f, kEdge);
+    }
+    if (conf) {
+        s_d.alpha = 1.0f;
+        for (int k = 0; k < ICO_TOUCH_ED_CF_COUNT; k++) {
+            const IcoTouchRect *r = &v->confirm[k];
+            const float in = th * 0.5f;
+            if (!rectShown(r)) {
+                continue;
+            }
+            const int lit = confirmLit(v, k);
+            rect(r->x + in, r->y + in, r->x + r->w - in, r->y + r->h - in, lit ? kKeyLit : kKey);
+            frame(r->x + in, r->y + in, r->x + r->w - in, r->y + r->h - in, th * 0.6f,
+                  lit ? kEdgeHeld : kEdge);
+        }
     }
     s_d.alpha = 1.0f;
-    if (fontOk && haveBlock && hint != NULL && s_d.kx > 0.0f) {
-        /* the hint's line just under the block (over it the Select and
-           Start row leaves no room), centred on it, kept on the output, on
-           a backing as wide as its words */
-        const float outW = (float)o->layout.outW;
-        const float sz = fitSize(&g, lineH * s_d.ky, outW * 0.96f * s_d.kx, hint);
-        hintW = ui_measure_text(sz, hint) * g.W / 640.0f / s_d.kx;
-        hintX = block.x + block.w * 0.5f;
-        if (hintX - hintW * 0.5f < 0.0f) {
-            hintX = hintW * 0.5f;
+    if (fontOk && hint != NULL && rectShown(hr) && s_d.kx > 0.0f) {
+        /* the hint in its box at the bottom, shrunk to its width, on a
+           backing as wide as its words */
+        hintSize = fitSize(&g, hr->h * 0.6f * s_d.ky, hr->w * s_d.kx, hint);
+        hintW = ui_measure_text(hintSize, hint) * g.W / 640.0f / s_d.kx;
+        if (hintW > hr->w) {
+            hintW = hr->w;
         }
-        if (hintX + hintW * 0.5f > outW) {
-            hintX = outW - hintW * 0.5f;
-        }
-        hintY = block.y + block.h + lineH * 1.2f;
-        rect(hintX - hintW * 0.5f - th, hintY - lineH * 0.8f, hintX + hintW * 0.5f + th,
-             hintY + lineH * 0.8f, kKey);
+        const float cx = hr->x + hr->w * 0.5f;
+        rect(cx - hintW * 0.5f - th, hr->y, cx + hintW * 0.5f + th, hr->y + hr->h, kKey);
     }
     flush();
     if (!fontOk) {
         return;
     }
     ui_begin_overlay(ctx);
-    for (int k = 0; k < nKeys; k++) {
-        static const UiStrId kConfirm[ICO_TOUCH_ED_CF_COUNT] = {
-            UI_STR_TED_THIS_SCREEN, UI_STR_TED_ALL_SCREENS, UI_STR_TED_CANCEL};
-        const IcoTouchRect *r = &keys[k];
-        char top[64], bot[64];
+    for (int k = 0; k < ICO_TOUCH_ED_TB_COUNT; k++) {
+        const IcoTouchRect *r = &v->tb[k];
+        char words[96];
 
-        if (!rectShown(r)) {
+        if (!rectShown(r) || (conf && k <= ICO_TOUCH_ED_TB_ALL)) {
             continue;
         }
-        if (conf) {
-            snprintf(top, sizeof(top), "%s", ui_str(kConfirm[k]));
-            bot[0] = '\0';
-        } else {
-            keyWords(v, k, top, bot, sizeof(top));
-        }
-        const float a = conf || keyLive(v, k) ? 1.0f : KEY_DIM;
-        const float cx = r->x + r->w * 0.5f, cy = r->y + r->h * 0.5f;
-        if (bot[0] != '\0') {
-            textAt(&g, cx, cy - r->h * 0.2f, r->h * 0.24f, r->w * 0.9f, a, top);
-            textAt(&g, cx, cy + r->h * 0.22f, r->h * 0.22f, r->w * 0.9f, a, bot);
-        } else {
-            textAt(&g, cx, cy, r->h * 0.26f, r->w * 0.9f, a, top);
+        keyWords(v, k, words, sizeof(words));
+        textAt(&g, r->x + r->w * 0.5f, r->y + r->h * 0.5f, r->h * 0.4f, r->w * 0.88f,
+               !conf && keyLive(v, k) ? 1.0f : KEY_DIM, words);
+    }
+    for (int k = 0; conf && k < ICO_TOUCH_ED_CF_COUNT; k++) {
+        const IcoTouchRect *r = &v->confirm[k];
+        if (rectShown(r)) {
+            textAt(&g, r->x + r->w * 0.5f, r->y + r->h * 0.5f, r->h * 0.4f, r->w * 0.88f, 1.0f,
+                   ui_str(kConfirm[k]));
         }
     }
     if (hintW > 0.0f) {
-        textAt(&g, hintX, hintY, lineH, hintW + 2.0f, 1.0f, hint);
+        textAt(&g, hr->x + hr->w * 0.5f, hr->y + hr->h * 0.5f, hr->h * 0.6f, hr->w, 1.0f, hint);
     }
     if (sel) {
-        /* the selection's name over it, or under it at the region's top */
+        /* the selection's name over it, or under it when the strip (or the
+           region's top) leaves no room over it */
         const IcoTouchRect *b = &v->ctl[v->selected];
+        const float top = stripBottom > o->layout.region.y ? stripBottom : o->layout.region.y;
         float y = b->y - 2.0f * th - lineH;
-        if (y - lineH * 0.6f < o->layout.region.y) {
+        if (y - lineH * 0.6f < top) {
             y = b->y + b->h + 2.0f * th + lineH;
         }
         textAt(&g, b->x + b->w * 0.5f, y, lineH, (float)o->layout.outW, 1.0f, ctlName(v->selected));

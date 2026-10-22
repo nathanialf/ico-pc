@@ -7,38 +7,38 @@
  * once a Main tick, then the gamepad word). Plain C: no SDL, no libm, no
  * locale (the numbers are read and written by hand), nothing printed.
  *
- * The toolbar's spot. Ten keys, the only place clear of every default
- * control on the smallest region fit() allows (touch.c: W >= 114 and
- * H >= 64 in q; SPLIT >= 58 left of the band and >= 40 right of it), the
- * offsets from place()'s table (L, T, Rt, B the region's edges, c its
- * centre x, all in q; the bounding boxes, touching counts as a clash):
+ * The toolbar's spot: a strip along the region's top edge, over the
+ * scene's sky rather than its middle. The offsets are place()'s table
+ * (touch.c; L, T, Rt, B the region's edges, c its centre x, all in q),
+ * checked on the smallest region fit() allows (W >= 114 and H >= 64;
+ * SPLIT >= 58 left of the band and >= 40 right of it):
  *
- *   FULL and TABLETOP: a 2 x 5 block of 6 x 7 keys, gap 1 (34 x 15), at
- *   x Rt-53..Rt-19, y T+13..T+28 (TABLETOP's T is the band's bottom):
- *     - Start c+1..c+13 and Select c-13..c-1 end at y T+11: 2 above;
- *     - R2 Rt-15..Rt-3 (y T+3..T+11): 4 right and 2 above;
- *     - R1 (Rt-10.5, B-43.5) radius 6.5, its square x Rt-17..Rt-4: 2
- *       right at any height (at H = 64 its y T+14..T+27 is beside the
- *       block);
- *     - Triangle (Rt-20, B-29.5) radius 5.5, its square from y B-35 =
- *       T+29 at H = 64: 1 below (more when H > 64); Circle, Cross and
- *       Square are lower still;
- *     - the D-pad's cross x L+17..L+41: Rt-53 = L+W-53 >= L+61, 20 right
- *       (it needs W > 94); L1/L2 end at L+15;
- *     - the stick's square at home (L+24, B-21), R 11: x L+13..L+35;
- *     - the look pad lies under the block by design (an area, not a
- *       control: the toolbar wins the hit test, as a button would).
- *   SPLIT: 2 columns x 5 rows of 5.5 x 7 keys, gap 1 (12 x 39), at
- *   x L+43..L+55, y T+13..T+52, left of the band:
- *     - the D-pad's cross ends at x L+41: 2 left;
- *     - L1/L2 end at x L+15; the stick's square at x L+35;
- *     - Select band.x-15..band.x-3 >= L+43 but at y T+3..T+11: 2 above;
- *       the block's right L+55 <= band.x-3 (the left side is >= 58);
- *     - its bottom T+52 <= B (H >= 64); nothing else is left of the band
- *       (Start, R2, R1, the faces and the look pad are right of it).
- *   The confirm strip of Reset takes the block's first row (FULL,
- *   TABLETOP: three keys of 32/3 x 7 with gaps of 1) or its first three
- *   rows (SPLIT: one 12 x 7 key each), so it is as clear.
+ *   FULL and TABLETOP (TABLETOP's T is the band's bottom): ten cells of
+ *   equal width, x L+3..Rt-3, y T+0.5..T+5.5: 10.8 q wide at W = 114,
+ *   13.5 on a 141 q phone.
+ *     - the top row of controls, L2 (L+3..L+15), the D-pad's Up key
+ *       (L+25..L+33), Select (c-13..c-1), Start (c+1..c+13) and R2
+ *       (Rt-15..Rt-3), all at y T+3..T+11: the strip covers 2.5 q of
+ *       each and leaves 5.5 q below it to grab (the toolbar wins the hit
+ *       test where they meet);
+ *     - everything else starts at y T+11 or lower: L1 at T+13, the D-pad's
+ *       Left and Right keys at T+11, R1's disc at B-50 >= T+14, the
+ *       stick's ring at B-32; the look pad lies under the strip by design
+ *       (an area, not a control).
+ *   SPLIT: cut at the band, 3 q clear of it each side. The left side's
+ *   span is >= 58 - 6 = 52 q, so it holds the six first cells (Done ..
+ *   All) at >= 8.67 q each over L2, Up and Select. The right side's span
+ *   is >= 40 - 6 = 34 q, so its four cells (the size readout .. Opacity
+ *   +) are >= 8.5 q each in one row over Start and R2, the same 2.5 q
+ *   deep. The second row (T+6..T+11, for a right side under 4 x 8 + 6 =
+ *   38 q) is never needed on a region fit() allows; it would cover Start
+ *   and R2 to their bottoms.
+ *   The confirm strip of Reset takes Done .. All's span (SPLIT: the left
+ *   side's cells) as three equal cells, so it is as clear.
+ *   The hint line sits at the bottom, y B-4..B-1, below every control
+ *   (Cross ends at B-4.5, the stick's ring at B-10): FULL and TABLETOP
+ *   x L+35..Rt-35 (44 q at the minimum) between the stick's ring and
+ *   Square; SPLIT on the wider side of the band, 3 q in from its edges.
  * test_toolbar_clear (test/touch_edit_test.c) asserts all of it over the
  * shape table and the smallest regions.
  *
@@ -48,12 +48,15 @@
  * control (clamped live as the layout clamps it), released it drops: the
  * anchors become the nearer edge on each axis, snapped to the grid's
  * multiples when Snap is on, and a drop whose shape covers another shown
- * control's centre springs back (refused). A second finger while the first
- * holds a control pinches: scale x (distance now / distance at the second
- * finger's down), clamped, snapped to 0.05 on the release. Size steps are
- * 0.1, opacity steps 10 %, on the selected control or with All on every
- * one. Every change pushes the work before it on the undo stack (8 deep,
- * the oldest dropped); Undo pops. The look pad is outside the overlap and
+ * control's centre springs back (refused). A second finger, anywhere,
+ * while the first is down on a control pinches that control (selected
+ * already by the first finger's down, no tap needed): scale x (distance
+ * now / distance at the second finger's down), clamped, snapped to 0.05
+ * on the release. The strip has no size keys (its size cell is a
+ * readout); the gamepad's L2/R2 step the size by 0.1. Opacity steps are
+ * 10 %. Size and opacity steps act on the selected control, or with All
+ * on every one. Every change pushes the work before it on the undo stack
+ * (8 deep, the oldest dropped); Undo pops. The look pad is outside the overlap and
  * refuse rules (it lies under buttons by design). A cancel (focus lost)
  * or a posture change drops a drag or pinch (the control back where the
  * gesture found it) and keeps every other edit.
@@ -506,35 +509,82 @@ static IcoTouchRect mkrect(float x, float y, float w, float h)
     return r;
 }
 
+_Static_assert(sizeof(((IcoTouchEditView *)0)->tb) == ICO_TOUCH_ED_TB_COUNT * sizeof(IcoTouchRect),
+               "IcoTouchEditView.tb holds every toolbar cell");
+
+#define TB_TOP 0.5f    /* the strip's top below the region's, q */
+#define TB_H 5.0f      /* a cell's height, q */
+#define TB_ROW2 6.0f   /* SPLIT's second row's top below the region's, q */
+#define TB_MARGIN 3.0f /* from the region's sides and the band, q */
+#define TB_CONFIRM 6   /* the toolbar cells the confirm strip lies over */
+
+/* n strip cells from cell `from`, of equal width across x0..x1 at y */
+static void strip_row(IcoTouchRect tb[ICO_TOUCH_ED_TB_COUNT], int from, int n, float x0, float x1,
+                      float y, float h)
+{
+    const float w = n > 0 ? (x1 - x0) / (float)n : 0.0f;
+    int i;
+
+    for (i = 0; i < n; i++) {
+        tb[from + i] = mkrect(x0 + (float)i * w, y, w, h);
+    }
+}
+
 void ico_touch_edit_toolbar(const IcoTouchLayout *l, IcoTouchRect tb[ICO_TOUCH_ED_TB_COUNT],
                             IcoTouchRect confirm[ICO_TOUCH_ED_CF_COUNT])
 {
     const IcoTouchRect R = l->region;
-    const float q = l->unit;
-    int i;
+    const float q = l->unit, y0 = R.y + TB_TOP * q, h = TB_H * q, m = TB_MARGIN * q;
+    float x0, x1, cw;
+    int i, first = TB_CONFIRM;
 
     if (l->rule == ICO_TOUCH_RULE_SPLIT) {
-        const float x0 = R.x + 43.0f * q, y0 = R.y + 13.0f * q;
+        const float lx0 = R.x + m, lx1 = l->band.x - m;
+        const float rx0 = l->band.x + l->band.w + m, rx1 = R.x + R.w - m;
+        const float minW = ICO_TOUCH_ED_CELL_MIN * q;
+        int nl = minW > 0.0f ? (int)((lx1 - lx0) / minW) : TB_CONFIRM, nr;
 
-        /* column 0 the actions, column 1 the steppers and All */
-        for (i = 0; i < ICO_TOUCH_ED_TB_COUNT; i++) {
-            tb[i] = mkrect(x0 + (float)(i / 5) * 6.5f * q, y0 + (float)(i % 5) * 8.0f * q, 5.5f * q,
-                           7.0f * q);
+        /* the actions and All on the left side, size and opacity on the right */
+        nl = nl > TB_CONFIRM ? TB_CONFIRM : nl < 1 ? 1 : nl;
+        nr = ICO_TOUCH_ED_TB_COUNT - nl;
+        strip_row(tb, 0, nl, lx0, lx1, y0, h);
+        if (rx1 - rx0 >= (float)nr * minW) {
+            strip_row(tb, nl, nr, rx0, rx1, y0, h);
+        } else {
+            const int n0 = (nr + 1) / 2;
+
+            strip_row(tb, nl, n0, rx0, rx1, y0, h);
+            strip_row(tb, nl + n0, nr - n0, rx0, rx1, R.y + TB_ROW2 * q, h);
         }
-        for (i = 0; i < ICO_TOUCH_ED_CF_COUNT; i++) {
-            confirm[i] = mkrect(x0, y0 + (float)i * 8.0f * q, 12.0f * q, 7.0f * q);
+        first = nl;
+    } else {
+        strip_row(tb, 0, ICO_TOUCH_ED_TB_COUNT, R.x + m, R.x + R.w - m, y0, h);
+    }
+    /* Reset's three choices across the first cells */
+    x0 = tb[0].x;
+    x1 = tb[first - 1].x + tb[first - 1].w;
+    cw = (x1 - x0) / (float)ICO_TOUCH_ED_CF_COUNT;
+    for (i = 0; i < ICO_TOUCH_ED_CF_COUNT; i++) {
+        confirm[i] = mkrect(x0 + (float)i * cw, y0, cw, h);
+    }
+}
+
+void ico_touch_edit_hint_rect(const IcoTouchLayout *l, IcoTouchRect *hint)
+{
+    const IcoTouchRect R = l->region;
+    const float q = l->unit, y = R.y + R.h - 4.0f * q, h = 3.0f * q;
+
+    if (l->rule == ICO_TOUCH_RULE_SPLIT) {
+        const float left = l->band.x - R.x, right = R.x + R.w - (l->band.x + l->band.w);
+
+        if (left >= right) {
+            *hint = mkrect(R.x + TB_MARGIN * q, y, left - 2.0f * TB_MARGIN * q, h);
+        } else {
+            *hint =
+                mkrect(l->band.x + l->band.w + TB_MARGIN * q, y, right - 2.0f * TB_MARGIN * q, h);
         }
     } else {
-        const float x0 = R.x + R.w - 53.0f * q, y0 = R.y + 13.0f * q, kw = 32.0f / 3.0f * q;
-
-        /* row 0 the actions, row 1 the steppers and All */
-        for (i = 0; i < ICO_TOUCH_ED_TB_COUNT; i++) {
-            tb[i] = mkrect(x0 + (float)(i % 5) * 7.0f * q, y0 + (float)(i / 5) * 8.0f * q, 6.0f * q,
-                           7.0f * q);
-        }
-        for (i = 0; i < ICO_TOUCH_ED_CF_COUNT; i++) {
-            confirm[i] = mkrect(x0 + (float)i * (kw + q), y0, kw, 7.0f * q);
-        }
+        *hint = mkrect(R.x + 35.0f * q, y, R.w - 70.0f * q, h);
     }
 }
 
@@ -1145,10 +1195,6 @@ static int key_act(IcoTouchEditor *ed, const IcoTouchLayout *l, int k)
         next.grid = ico_touch_edit_grids[i < 3 ? (i + 1) % 3 : 1];
         commit(ed, &next);
         break;
-    case ICO_TOUCH_ED_TB_SIZE_DN:
-    case ICO_TOUCH_ED_TB_SIZE_UP:
-        step_size(ed, l, k == ICO_TOUCH_ED_TB_SIZE_UP ? 1 : -1);
-        break;
     case ICO_TOUCH_ED_TB_OP_DN:
     case ICO_TOUCH_ED_TB_OP_UP:
         step_alpha(ed, l, k == ICO_TOUCH_ED_TB_OP_UP ? 1 : -1);
@@ -1219,12 +1265,15 @@ static int handle_event(IcoTouchEditor *ed, const IcoTouchLayout *l, const IcoTo
                 ed->consumed = 1;
                 return confirm_act(ed, k >= 0 ? k : ICO_TOUCH_ED_CF_CANCEL);
             }
-            if (in_box(span(ed->tb[0], ed->tb[ICO_TOUCH_ED_TB_COUNT - 1]), x, y)) {
-                /* the toolbar wins over any control under it */
+            {
+                /* the toolbar wins over any control under it (a value cell
+                   too: it does nothing) */
                 const int k = key_at(ed->tb, ICO_TOUCH_ED_TB_COUNT, x, y);
 
-                ed->consumed = 1;
-                return k >= 0 ? key_act(ed, l, k) : ICO_TOUCH_ED_NONE;
+                if (k >= 0) {
+                    ed->consumed = 1;
+                    return key_act(ed, l, k);
+                }
             }
             ed->selected = ed->grab = pick(ed, x, y);
             if (ed->grab >= 0) {
@@ -1505,6 +1554,7 @@ void ico_touch_edit_view(const IcoTouchEditor *ed, const IcoTouchLayout *l, IcoT
         }
     }
     ico_touch_edit_toolbar(l, out->tb, out->confirm);
+    ico_touch_edit_hint_rect(l, &out->hint);
     out->confirmSel = ed->confirmSel;
     out->undos = ed->undos;
     out->changed = (int)ed->changed;

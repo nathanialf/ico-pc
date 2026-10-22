@@ -409,25 +409,36 @@ layout built from the working copy and the gamepad's `ICO_PAD_*` word) drains th
 edits (the generation moves past any preview built during the session); `ico_touch_edit_view`
 fills the `IcoTouchEditView` the drawing reads.
 
-- **Gestures**: a tap selects (on empty space, deselects); a move of more than
-  `ICO_TOUCH_EDIT_DRAG_MM` (2) drags; on release the anchors become the nearer edge on each axis
-  and, with `snap`, the offsets round to multiples of `grid`; a second finger pinches, scale times
-  the ratio of the fingers' distances, rounded to 0.05 on release. A cancel (focus loss) or a
-  posture change drops the gesture and puts the control back; earlier edits stay.
+- **Gestures**: a finger down on a control selects it at once (on empty space, deselects); a
+  move of more than `ICO_TOUCH_EDIT_DRAG_MM` (2) drags; on release the anchors become the nearer
+  edge on each axis and, with `snap`, the offsets round to multiples of `grid`; a second finger
+  down anywhere while the first is still on the control pinches it (no tap needed first), scale
+  times the ratio of the fingers' distances, rounded to 0.05 on release. A cancel (focus loss) or
+  a posture change drops the gesture and puts the control back; earlier edits stay.
 - **Refusing**: a drop that covers another control's middle springs back and shows the refused
   note for `ICO_TOUCH_EDIT_REFUSED` ticks; a change that would put a control on a flat crease and
   fold the layout to `TABLETOP` is undone and refused. The overlap mask uses the controls' real
   shapes (discs for the round buttons, the D-pad as two bars); the look pad is on neither side of
   either rule because it lies under R1, R2 and Start by design.
-- **Toolbar**: ten keys (`ICO_TOUCH_ED_TB_*`: Done, Undo, Reset, Snap, Grid, Size -, Size +,
-  Opacity -, Opacity +, All) in a 2 x 5 block of 6 q x 7 q keys at the one spot the minimum
-  region leaves clear of every default control (FULL and TABLETOP at x Rt-53 to Rt-19, y T+13
-  to T+28; SPLIT as two columns by five rows on the left side); the derivation is the header
-  comment of `port/input/touch_edit.c`, and `ico_touch_edit_toolbar` returns the boxes. The
-  toolbar wins the hit test over a control dragged under it. Reset turns the first row, or in
-  SPLIT the first three rows, into the confirm strip (`ICO_TOUCH_ED_CF_*`: this screen, all
-  screens, cancel). Size and Opacity steps are 0.1 and 10 % on the selected control, or on every
-  control with All; Undo is `ICO_TOUCH_EDIT_UNDO` (8) deep.
+- **Toolbar**: one strip of ten cells of equal width along the region's top edge, y T+0.5 to
+  T+5.5 and x L+3 to Rt-3 in q (`ICO_TOUCH_ED_TB_*`, left to right: Done, Undo, Reset, Snap,
+  Grid, All, the size readout, Opacity -, the opacity readout, Opacity +; the two readouts,
+  `ICO_TOUCH_ED_TB_SIZE_VAL` and `_OP_VAL`, are display only). It covers the default top row (L2,
+  the D-pad's Up key, Select, Start, R2, all at y T+3 to T+11) by 2.5 q and leaves each 5.5 q to
+  grab below it; nothing else of the default layout is above T+11. SPLIT cuts the strip at the
+  band, 3 q clear of it: Done to All on the left side, the other four on the right side, in two
+  rows (T+0.5 to T+5.5 and T+6 to T+11) only when one row's cells would be under
+  `ICO_TOUCH_ED_CELL_MIN` (8 q), which the smallest SPLIT region (58 q left, 40 q right: cells of
+  8.67 q and 8.5 q) never needs. The derivation is the header comment of
+  `port/input/touch_edit.c`, and `ico_touch_edit_toolbar` returns the boxes. The toolbar, a
+  readout included, wins the hit test over any control under it. Reset turns Done to All into the
+  confirm strip (`ICO_TOUCH_ED_CF_*`: this screen, all screens, cancel; three equal cells). The
+  hint line and the refused and overlap notes sit at the bottom, y B-4 to B-1 (below every
+  control): x L+35 to Rt-35 in FULL and TABLETOP, between the stick's ring and Square, at least
+  44 q; in SPLIT on the wider side of the band (`ico_touch_edit_hint_rect`,
+  `IcoTouchEditView.hint`). Opacity steps are 10 % and the gamepad's size steps 0.1, on the
+  selected control or on every control with All; the strip has no size keys (a pinch resizes).
+  Undo is `ICO_TOUCH_EDIT_UNDO` (8) deep.
 - **Gamepad**: L1 and R1 cycle the selection, the D-pad nudges one grid step (the first press at
   once, then after `ICO_TOUCH_EDIT_REPEAT_DELAY` ticks held every `ICO_TOUCH_EDIT_REPEAT`
   ticks), L2 and R2 change the size, Square and Cross the opacity (Cross with nothing selected
@@ -461,7 +472,7 @@ The editor is driven by the Edit layout page (`port/ui/touch_edit_ui.c` (`ui_tou
 | `input` (`input_test.c`) | binding resolution from config text, the `[touch]` tables onto the layout edits and back (a config nobody edited gains nothing, a reset control is rewritten as `default`, a bad grid or line is rejected), the dead zone and quantisation, the stick fix, merging, the libpad buffer against a hand-written DualShock 2 frame, rumble, Escape's button |
 | `input_record` (`input_record_test.c`) | the recording's line format, the round trip through the script reader over a long session, the "only when it changes" rule, a second read in a tick, the poll's timing, a scripted session recorded through libpad and loaded back |
 | `touch` (`touch_test.c`) | the mapper's layouts over phones, a notch, foldables, a tablet and monitors at every size, the hinge rule, the floating stick, the d-pad and face buttons, sliding, cancel, the look pad's decay, hiding and fades, the merged pad with the stick fix off and on |
-| `touch_edit` (`touch_edit_test.c`) | an unedited layout equal to the default field by field and byte for byte over the screen table, the anchor arithmetic on four screens with and without insets, the clamp into the region and out of the band, hidden controls and the rails, the stick's and the look pad's areas, the flat crease seeing the edits, the config text round trip with bad and out-of-range lines, the editor fed synthetic fingers and gamepad words (tap, drag and snap, the refused drop, overlap, cancel, pinch, the steppers, All, the posture switch, Undo, Reset, Done), and the toolbar clear of every default control on the screen table and the smallest region of each posture |
+| `touch_edit` (`touch_edit_test.c`) | an unedited layout equal to the default field by field and byte for byte over the screen table, the anchor arithmetic on four screens with and without insets, the clamp into the region and out of the band, hidden controls and the rails, the stick's and the look pad's areas, the flat crease seeing the edits, the config text round trip with bad and out-of-range lines, the editor fed synthetic fingers and gamepad words (tap, drag and snap, the refused drop, overlap, cancel, pinch, a pinch from a fresh two-finger touch, the steppers, All, the posture switch, Undo, Reset, Done, a readout tap doing nothing), and the toolbar strip and the hint on the screen table and the smallest region of each posture (the strip inside the region, over the top row by 2.5 q at most with 5.5 q left, clear of every other control; SPLIT's second row on a hand-built narrow side) |
 | `mouse_camera` (`mouse_camera_test.c`) | the camera step arithmetic, and the speed and range applied only while the mouse drives the camera |
 | `pad_script` (`pad_script_test.c`) | the script reader and what libpad then shows the game's pad state machine, replayed from `pad.c`'s libpad calls in their order |
 | `movie_pad` (`port/platform/test/movie_pad_test.c`) | the Start edge through the game's own pad code during a movie ([FMV.md](FMV.md)) |

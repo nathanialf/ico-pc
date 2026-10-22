@@ -337,15 +337,24 @@ them bigger or smaller and more or less see-through. While the editor is
 open the buttons are drawn at full strength so you can see what you are
 doing. Buttons you hid show as dashed outlines with the word Hidden.
 
-- **Select:** tap a button. It gets a bright outline and its name. Tap an
+The editor's keys are a thin strip along the top of the screen, and its
+tips sit in a line at the bottom, so most of the picture stays clear while
+you arrange the buttons.
+
+- **Select:** touch a button. It gets a bright outline and its name. Tap an
   empty spot to select nothing.
 - **Move:** drag it. A short touch counts as a tap, not a move. The button
   cannot leave the screen, and it cannot sit on a fold. When you let go it
   snaps to the grid, if Snap is on; the dots show the grid.
-- **Resize:** pinch it with two fingers, or use the **Size -** and
-  **Size +** keys. A button can be 70 % to 160 % of its normal size.
-- **See-through:** the **Opacity -** and **Opacity +** keys.
-- **All:** turns on the Size and Opacity keys for every button at once.
+- **Resize:** put two fingers on a button and pinch to resize it (the
+  second finger can land anywhere once the first is on the button). The
+  strip shows its size, such as **Size 120 %**. A button can be 70 % to
+  160 % of its normal size. With a gamepad, L2 and R2 make it smaller and
+  bigger.
+- **See-through:** the **Opacity -** and **Opacity +** keys; the number
+  between them is the button's opacity.
+- **All:** makes the Opacity keys (and a gamepad's L2 and R2) change every
+  button at once.
 - **Undo** takes back the last change, up to eight in a row. **Reset** asks
   whether to put back this screen's buttons, every screen's, or nothing.
 - **Snap** and **Grid** are the same two settings as on the page.

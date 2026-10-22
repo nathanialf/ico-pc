@@ -9,7 +9,8 @@
  * editor's state machine fed synthetic fingers and gamepad words (tap,
  * drag and snap, the refused drop, the overlap mask, pinch, the steppers,
  * All, the posture switch, the gamepad table, Undo, Done) and the
- * toolbar's spot clear of every default control.
+ * toolbar strip's spot (over the top row of controls by 2.5 q at most,
+ * clear of every other) and the hint's.
  */
 #include <stdio.h>
 #include <string.h>
@@ -818,6 +819,14 @@ static void tap_key(IcoTouchEditor *ed, int key)
     etick(ed, 0);
 }
 
+/* one size step the gamepad's way (R2 up, L2 down: the strip has no size
+   keys), pressed and released */
+static void size_step(IcoTouchEditor *ed, int dir)
+{
+    etick(ed, dir > 0 ? ICO_PAD_R2 : ICO_PAD_L2);
+    etick(ed, 0);
+}
+
 static void reset_screen(uint32_t w, uint32_t h, const IcoTouchEnv *env)
 {
     g_w = w;
@@ -962,7 +971,7 @@ static void test_pinch_and_steppers(void)
     IcoTouchEditor ed;
     IcoTouchEditView v;
     IcoTouchRect tb[ICO_TOUCH_ED_TB_COUNT], cf[ICO_TOUCH_ED_CF_COUNT];
-    IcoTouchCtlEdit *cross;
+    IcoTouchCtlEdit *cross, *tri;
     float q, x, y;
     int i;
 
@@ -1010,15 +1019,15 @@ static void test_pinch_and_steppers(void)
     etick(&ed, 0);
     CHECK(near_(cross->scale, 1.45f, 1e-5f) && ed.undos == 3);
 
-    /* the size keys: 0.1 steps within 0.7..1.6, a step that changes nothing
-       pushes no undo */
-    tap_key(&ed, ICO_TOUCH_ED_TB_SIZE_UP);
+    /* the size steps (the gamepad's R2/L2): 0.1 within 0.7..1.6, a step
+       that changes nothing pushes no undo */
+    size_step(&ed, 1);
     CHECK(near_(cross->scale, 1.55f, 1e-5f) && ed.undos == 4);
-    tap_key(&ed, ICO_TOUCH_ED_TB_SIZE_UP);
+    size_step(&ed, 1);
     CHECK(near_(cross->scale, 1.6f, 1e-5f) && ed.undos == 5);
-    tap_key(&ed, ICO_TOUCH_ED_TB_SIZE_UP);
+    size_step(&ed, 1);
     CHECK(near_(cross->scale, 1.6f, 1e-5f) && ed.undos == 5);
-    tap_key(&ed, ICO_TOUCH_ED_TB_SIZE_DN);
+    size_step(&ed, -1);
     CHECK(near_(cross->scale, 1.5f, 1e-5f) && ed.selected == ICO_TOUCH_CTL_CROSS);
 
     /* opacity: 10 % steps, Cross stops at 25 % */
@@ -1034,7 +1043,9 @@ static void test_pinch_and_steppers(void)
     CHECK(near_(v.selScale, 1.5f, 1e-5f) && near_(v.selAlpha, 0.35f, 1e-5f));
     CHECK(v.snap == 1 && v.grid == 4.0f && v.hidden == 0 && v.undos == ed.undos && v.changed);
     ico_touch_edit_toolbar(&g_l, tb, cf);
-    CHECK(same_rect(v.tb[0], tb[0]) && same_rect(v.tb[9], tb[9]) && same_rect(v.confirm[2], cf[2]));
+    CHECK(same_rect(v.tb[0], tb[0]) &&
+          same_rect(v.tb[ICO_TOUCH_ED_TB_COUNT - 1], tb[ICO_TOUCH_ED_TB_COUNT - 1]) &&
+          same_rect(v.confirm[2], cf[2]));
     CHECK(same_rect(v.ctl[ICO_TOUCH_CTL_LOOK], g_l.lookArea));
     CHECK(same_rect(v.ctl[ICO_TOUCH_CTL_SELECT], g_l.button[ICO_TOUCH_B_SELECT].rect));
     CHECK(near_(v.ctl[ICO_TOUCH_CTL_DPAD].w, 24.0f * q, 0.01f));
@@ -1059,7 +1070,7 @@ static void test_pinch_and_steppers(void)
     /* All: the size and opacity keys act on every control */
     tap_key(&ed, ICO_TOUCH_ED_TB_ALL);
     CHECK(ed.all == 1);
-    tap_key(&ed, ICO_TOUCH_ED_TB_SIZE_DN);
+    size_step(&ed, -1);
     CHECK(near_(cross->scale, 1.4f, 1e-5f));
     CHECK(ed.work.ctl[0][ICO_TOUCH_CTL_L1].set &&
           near_(ed.work.ctl[0][ICO_TOUCH_CTL_L1].scale, 0.9f, 1e-5f));
@@ -1078,6 +1089,32 @@ static void test_pinch_and_steppers(void)
     }
     tap_key(&ed, ICO_TOUCH_ED_TB_ALL);
     CHECK(ed.all == 0);
+    ico_touch_edit_end(&ed, 0);
+
+    /* a pinch from a fresh two-finger touch: the first finger's down on an
+       unselected control selects it at once (no tap first), a second
+       finger anywhere scales it (100 px apart, then 120: 1.2) */
+    ico_touch_edits_defaults(&live);
+    ico_touch_edit_begin(&ed, &live, ICO_TOUCH_RULE_FULL);
+    etick(&ed, 0);
+    CHECK(ed.selected == -1);
+    tri = &ed.work.ctl[0][ICO_TOUCH_CTL_TRIANGLE];
+    x = cx_of(&g_l, ICO_TOUCH_B_TRIANGLE);
+    y = cy_of(&g_l, ICO_TOUCH_B_TRIANGLE);
+    fe(&ed, 8, x, y, ICO_TOUCH_DOWN);
+    etick(&ed, 0);
+    CHECK(ed.selected == ICO_TOUCH_CTL_TRIANGLE && ed.state == ICO_TOUCH_ED_IDLE && !tri->set);
+    fe(&ed, 9, x - 100.0f, y, ICO_TOUCH_DOWN);
+    etick(&ed, 0);
+    CHECK(ed.state == ICO_TOUCH_ED_PINCH && ed.selected == ICO_TOUCH_CTL_TRIANGLE);
+    fe(&ed, 9, x - 120.0f, y, ICO_TOUCH_MOVE);
+    fe(&ed, 9, x - 120.0f, y, ICO_TOUCH_UP);
+    fe(&ed, 8, x, y, ICO_TOUCH_UP);
+    etick(&ed, 0);
+    CHECK(ed.state == ICO_TOUCH_ED_IDLE && ed.selected == ICO_TOUCH_CTL_TRIANGLE);
+    CHECK(tri->set && near_(tri->scale, 1.2f, 1e-5f));
+    CHECK(near_(g_l.button[ICO_TOUCH_B_TRIANGLE].rect.w, 2.0f * 5.5f * 1.2f * q, 0.01f) &&
+          ed.undos == 1);
     ico_touch_edit_end(&ed, 0);
 }
 
@@ -1099,7 +1136,7 @@ static void test_posture_switch(void)
     /* a finished edit in FULL, then a drag under way */
     tap(&ed, cx_of(&g_l, ICO_TOUCH_B_L1), cy_of(&g_l, ICO_TOUCH_B_L1));
     etick(&ed, 0);
-    tap_key(&ed, ICO_TOUCH_ED_TB_SIZE_UP);
+    size_step(&ed, 1);
     CHECK(near_(ed.work.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_L1].scale, 1.1f, 1e-5f));
     x = cx_of(&g_l, ICO_TOUCH_B_CROSS);
     y = cy_of(&g_l, ICO_TOUCH_B_CROSS);
@@ -1122,7 +1159,7 @@ static void test_posture_switch(void)
     tap(&ed, cx_of(&g_l, ICO_TOUCH_B_CROSS), cy_of(&g_l, ICO_TOUCH_B_CROSS));
     etick(&ed, 0);
     CHECK(ed.selected == ICO_TOUCH_CTL_CROSS);
-    tap_key(&ed, ICO_TOUCH_ED_TB_SIZE_UP);
+    size_step(&ed, 1);
     CHECK(near_(ed.work.ctl[ICO_TOUCH_RULE_SPLIT][ICO_TOUCH_CTL_CROSS].scale, 1.1f, 1e-5f));
     CHECK(!ed.work.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_CROSS].set);
     /* folded back: FULL again, both kept */
@@ -1287,10 +1324,10 @@ static void test_undo(void)
     etick(&ed, 0);
     /* nine changes: 1.1 .. 1.6, then 1.5, 1.4, 1.3; the stack keeps eight */
     for (i = 0; i < 6; i++) {
-        tap_key(&ed, ICO_TOUCH_ED_TB_SIZE_UP);
+        size_step(&ed, 1);
     }
     for (i = 0; i < 3; i++) {
-        tap_key(&ed, ICO_TOUCH_ED_TB_SIZE_DN);
+        size_step(&ed, -1);
     }
     CHECK(near_(cross->scale, 1.3f, 1e-5f) && ed.undos == ICO_TOUCH_EDIT_UNDO);
     tap_key(&ed, ICO_TOUCH_ED_TB_UNDO);
@@ -1382,7 +1419,7 @@ static void test_done(void)
     etick(&ed, 0);
     tap(&ed, cx_of(&g_l, ICO_TOUCH_B_CROSS), cy_of(&g_l, ICO_TOUCH_B_CROSS));
     etick(&ed, 0);
-    tap_key(&ed, ICO_TOUCH_ED_TB_SIZE_UP);
+    size_step(&ed, 1);
     CHECK(ed.changed && !live.ctl[0][ICO_TOUCH_CTL_CROSS].set);
     /* end(1): work -> live, a generation newer than both */
     g = ed.work.gen > live.gen ? ed.work.gen : live.gen;
@@ -1398,31 +1435,41 @@ static void test_done(void)
     etick(&ed, 0);
     tap(&ed, cx_of(&g_l, ICO_TOUCH_B_CROSS), cy_of(&g_l, ICO_TOUCH_B_CROSS));
     etick(&ed, 0);
-    tap_key(&ed, ICO_TOUCH_ED_TB_SIZE_UP);
+    size_step(&ed, 1);
     CHECK(near_(ed.work.ctl[0][ICO_TOUCH_CTL_CROSS].scale, 1.2f, 1e-5f));
     ico_touch_edit_end(&ed, 0);
     CHECK(!ed.active && edits_equal(&live, &copy));
 
-    /* the Done key leaves; the toolbar wins over a control dragged under
-       it (R2 put under Done), the part of R2 outside the toolbar selects it */
+    /* the toolbar wins over a control put under it (R2 at l40 t7, its top
+       under Snap and Grid), the part of R2 below the strip selects it, the
+       Done key leaves (over L2: the toolbar wins there too) */
     q = ico_touch_layout(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM).unit;
     ico_touch_edits_defaults(&live);
-    set_edit(&live, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_R2, "r50 t16.5");
+    set_edit(&live, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_R2, "l40 t7");
     ico_touch_edit_begin(&ed, &live, ICO_TOUCH_RULE_FULL);
     etick(&ed, 0);
     ico_touch_edit_toolbar(&g_l, tb, cf);
-    CHECK(near_(cx_of(&g_l, ICO_TOUCH_B_R2), tb[ICO_TOUCH_ED_TB_DONE].x + 3.0f * q, 0.02f));
-    tap(&ed, 1920.0f - 55.0f * q, 16.5f * q);
+    CHECK(near_(cx_of(&g_l, ICO_TOUCH_B_R2), 40.0f * q, 0.02f));
+    CHECK(g_l.button[ICO_TOUCH_B_R2].rect.y < bottom_of(&tb[ICO_TOUCH_ED_TB_SNAP]));
+    CHECK(tb[ICO_TOUCH_ED_TB_SNAP].x < 40.0f * q &&
+          right_of(&tb[ICO_TOUCH_ED_TB_SNAP]) > 40.0f * q);
+    tap(&ed, 40.0f * q, 3.0f * q);
+    CHECK(etick(&ed, 0) == ICO_TOUCH_ED_NONE && ed.selected == -1 && ed.work.snap == 0);
+    tap(&ed, 40.0f * q, 9.0f * q);
     CHECK(etick(&ed, 0) == ICO_TOUCH_ED_NONE && ed.selected == ICO_TOUCH_CTL_R2);
     tap(&ed, 1000.0f, 900.0f);
     etick(&ed, 0);
     CHECK(ed.selected == -1);
+    /* a value cell is the toolbar's and does nothing */
+    tap_key(&ed, ICO_TOUCH_ED_TB_SIZE_VAL);
+    CHECK(ed.selected == -1 && ed.undos == 1 && ed.state == ICO_TOUCH_ED_IDLE);
+    CHECK(touches(&tb[ICO_TOUCH_ED_TB_DONE], &g_l.button[ICO_TOUCH_B_L2].rect));
     tap(&ed, tb[ICO_TOUCH_ED_TB_DONE].x + 0.5f * tb[ICO_TOUCH_ED_TB_DONE].w,
         tb[ICO_TOUCH_ED_TB_DONE].y + 0.5f * tb[ICO_TOUCH_ED_TB_DONE].h);
     CHECK(etick(&ed, 0) == ICO_TOUCH_ED_LEAVE && ed.selected == -1);
     ico_touch_edit_end(&ed, 1);
     CHECK(live.ctl[0][ICO_TOUCH_CTL_R2].set &&
-          near_(live.ctl[0][ICO_TOUCH_CTL_R2].dx, 50.0f, 1e-4f));
+          near_(live.ctl[0][ICO_TOUCH_CTL_R2].dx, 40.0f, 1e-4f));
 }
 
 /* each default control's bounding box (the look pad left out: the toolbar
@@ -1440,47 +1487,130 @@ static int control_boxes(const IcoTouchLayout *l, IcoTouchRect out[ICO_TOUCH_BUT
     return n + 1;
 }
 
-static void check_toolbar_clear(const IcoTouchLayout *l, const char *what)
+/* the rects share some area (touching is not overlapping), beyond eps */
+static int overlaps_by(const IcoTouchRect *a, const IcoTouchRect *b, float eps)
+{
+    return a->x < b->x + b->w - eps && b->x < a->x + a->w - eps && a->y < b->y + b->h - eps &&
+           b->y < a->y + a->h - eps;
+}
+
+/* the controls of the default top row (y T+3..T+11) the strip may cover */
+static int top_row(int z)
+{
+    return z == ICO_TOUCH_B_L2 || z == ICO_TOUCH_B_UP || z == ICO_TOUCH_B_SELECT ||
+           z == ICO_TOUCH_B_START || z == ICO_TOUCH_B_R2;
+}
+
+/* The strip's rules on a default layout: every cell inside the region,
+   3 q in from its sides (SPLIT: 3 q clear of the band, wholly on one side),
+   at least ICO_TOUCH_ED_CELL_MIN q wide, the cells side by side without
+   overlapping; the confirm strip over the first cells; the top row's
+   controls covered 2.5 q at most with 5.5 q below the strip to grab, no
+   other control touched (SPLIT's second row: Start and R2 only); the hint
+   inside the region along its bottom, touching no control and no cell.
+   Returns 1 when the strip has a second row. */
+static int check_toolbar_clear(const IcoTouchLayout *l, const char *what)
 {
     IcoTouchRect tb[ICO_TOUCH_ED_TB_COUNT], cf[ICO_TOUCH_ED_CF_COUNT], boxes[ICO_TOUCH_BUTTONS + 1];
-    IcoTouchRect keys[ICO_TOUCH_ED_TB_COUNT + ICO_TOUCH_ED_CF_COUNT];
-    int n = control_boxes(l, boxes), i, j, fails = failures;
+    IcoTouchRect hint;
+    const IcoTouchRect *R = &l->region, *b = &l->band;
+    const float q = l->unit, eps = 0.02f;
+    const float row1 = R->y + 5.5f * q;
+    const int split = l->rule == ICO_TOUCH_RULE_SPLIT;
+    int n = control_boxes(l, boxes), i, j, fails = failures, twoRows = 0;
 
     ico_touch_edit_toolbar(l, tb, cf);
+    ico_touch_edit_hint_rect(l, &hint);
     for (i = 0; i < ICO_TOUCH_ED_TB_COUNT; i++) {
-        keys[i] = tb[i];
-    }
-    for (i = 0; i < ICO_TOUCH_ED_CF_COUNT; i++) {
-        keys[ICO_TOUCH_ED_TB_COUNT + i] = cf[i];
-    }
-    for (i = 0; i < ICO_TOUCH_ED_TB_COUNT + ICO_TOUCH_ED_CF_COUNT; i++) {
-        CHECK(keys[i].w > 0.0f && keys[i].h > 0.0f);
-        CHECK(rect_inside(&keys[i], &l->region));
-        if (l->rule == ICO_TOUCH_RULE_SPLIT) {
-            CHECK(right_of(&keys[i]) <= l->band.x);
+        const int second = tb[i].y > row1 - eps;
+
+        twoRows |= second;
+        CHECK(tb[i].w >= ICO_TOUCH_ED_CELL_MIN * q - eps && near_(tb[i].h, 5.0f * q, eps));
+        CHECK(rect_inside(&tb[i], R));
+        CHECK(tb[i].x >= R->x + 3.0f * q - eps && right_of(&tb[i]) <= R->x + R->w - 3.0f * q + eps);
+        CHECK(near_(tb[i].y, R->y + (second ? 6.0f : 0.5f) * q, eps));
+        CHECK(!second || split);
+        if (split) {
+            CHECK(right_of(&tb[i]) <= b->x - 3.0f * q + eps ||
+                  tb[i].x >= b->x + b->w + 3.0f * q - eps);
+        }
+        for (j = i + 1; j < ICO_TOUCH_ED_TB_COUNT; j++) {
+            CHECK(!overlaps_by(&tb[i], &tb[j], eps));
         }
         for (j = 0; j < n; j++) {
-            if (touches(&keys[i], &boxes[j])) {
-                fprintf(stderr, "  %s: key %d touches control box %d\n", what, i, j);
+            const int z = j < ICO_TOUCH_BUTTONS ? j : -1;
+
+            if (second) {
+                /* SPLIT's second row lies over Start and R2 (the right
+                   side's top row) and nothing else */
+                if (z != ICO_TOUCH_B_START && z != ICO_TOUCH_B_R2 && touches(&tb[i], &boxes[j])) {
+                    fprintf(stderr, "  %s: second-row cell %d touches control box %d\n", what, i,
+                            j);
+                    CHECK(0);
+                }
+            } else if (z >= 0 && top_row(z)) {
+                if (overlaps_by(&tb[i], &boxes[j], eps)) {
+                    /* 2.5 q covered at most, 5.5 q left below */
+                    CHECK(bottom_of(&tb[i]) - boxes[j].y <= 2.5f * q + eps);
+                    CHECK(bottom_of(&boxes[j]) - bottom_of(&tb[i]) >= 5.5f * q - eps);
+                }
+            } else if (touches(&tb[i], &boxes[j])) {
+                fprintf(stderr, "  %s: cell %d touches control box %d\n", what, i, j);
                 CHECK(0);
             }
         }
-        /* no two keys touch */
-        for (j = i + 1; j < ICO_TOUCH_ED_TB_COUNT && i < ICO_TOUCH_ED_TB_COUNT; j++) {
-            CHECK(!touches(&keys[i], &keys[j]));
+        CHECK(!touches(&tb[i], &hint));
+    }
+    if (twoRows) {
+        /* only where the right side cannot hold its cells in one row */
+        CHECK(split && b->x + b->w + 3.0f * q < R->x + R->w - 3.0f * q);
+        CHECK((R->x + R->w - 3.0f * q) - (b->x + b->w + 3.0f * q) <
+              (float)(ICO_TOUCH_ED_TB_COUNT - 6) * ICO_TOUCH_ED_CELL_MIN * q + eps);
+    } else {
+        /* one row: every top-row control keeps its 5.5 q */
+        for (j = 0; j < ICO_TOUCH_BUTTONS; j++) {
+            if (top_row(j)) {
+                CHECK(bottom_of(&boxes[j]) - row1 >= 5.5f * q - eps);
+            }
+        }
+    }
+    for (i = 0; i < ICO_TOUCH_ED_CF_COUNT; i++) {
+        CHECK(near_(cf[i].y, tb[ICO_TOUCH_ED_TB_DONE].y, eps) && near_(cf[i].h, 5.0f * q, eps));
+        CHECK(cf[i].x >= tb[ICO_TOUCH_ED_TB_DONE].x - eps &&
+              right_of(&cf[i]) <= right_of(&tb[ICO_TOUCH_ED_TB_ALL]) + eps);
+        CHECK(i == 0 || near_(cf[i].x, right_of(&cf[i - 1]), eps));
+    }
+    /* the hint: the bottom, clear of every control */
+    CHECK(rect_inside(&hint, R) && near_(hint.y, R->y + R->h - 4.0f * q, eps) &&
+          near_(hint.h, 3.0f * q, eps));
+    CHECK(hint.w >= 44.0f * q - eps);
+    if (split) {
+        CHECK(right_of(&hint) <= b->x - 3.0f * q + eps || hint.x >= b->x + b->w + 3.0f * q - eps);
+    } else {
+        CHECK(near_(hint.x, R->x + 35.0f * q, eps) &&
+              near_(right_of(&hint), R->x + R->w - 35.0f * q, eps));
+    }
+    for (j = 0; j < n; j++) {
+        if (touches(&hint, &boxes[j])) {
+            fprintf(stderr, "  %s: the hint touches control box %d\n", what, j);
+            CHECK(0);
         }
     }
     if (failures != fails) {
         fprintf(stderr, "  in %s: %ux%u size %d rule %d q %.3f\n", what, l->outW, l->outH, l->size,
                 l->rule, (double)l->unit);
     }
+    return twoRows;
 }
 
 static void test_toolbar_clear(void)
 {
     IcoTouchEnv env;
     IcoTouchLayout l;
-    IcoTouchRect tb[ICO_TOUCH_ED_TB_COUNT], cf[ICO_TOUCH_ED_CF_COUNT];
+    IcoTouchRect tb[ICO_TOUCH_ED_TB_COUNT], cf[ICO_TOUCH_ED_CF_COUNT], hint;
+    IcoTouchEditor ed;
+    IcoTouchEditView v;
+    IcoTouchEdits live;
     int r, sz, seen = 0;
 
     for (r = 0; r < SHAPE_COUNT; r++) {
@@ -1496,29 +1626,104 @@ static void test_toolbar_clear(void)
     env = env_of(10.0f, ICO_TOUCH_FOLD_NONE, 0, 0, 0, 0, 0, 0);
     l = ico_touch_layout_env(1140, 640, no_insets(), ICO_TOUCH_MEDIUM, &env);
     CHECK(l.rule == ICO_TOUCH_RULE_FULL && l.unit == 10.0f);
-    check_toolbar_clear(&l, "FULL 114 x 64");
+    CHECK(check_toolbar_clear(&l, "FULL 114 x 64") == 0);
     ico_touch_edit_toolbar(&l, tb, cf);
-    CHECK(near_(tb[0].x, 1140.0f - 530.0f, 0.01f) && near_(tb[0].y, 130.0f, 0.01f));
-    CHECK(near_(right_of(&tb[4]), 1140.0f - 190.0f, 0.01f));
-    CHECK(near_(bottom_of(&tb[9]), 280.0f, 0.01f) && near_(tb[9].w, 60.0f, 0.01f));
-    CHECK(near_(cf[0].x, tb[0].x, 0.01f) && near_(right_of(&cf[2]), right_of(&tb[4]), 0.01f));
-    CHECK(near_(cf[1].y, tb[0].y, 0.01f) && near_(cf[1].h, 70.0f, 0.01f));
+    /* ten cells of 10.8 q from L+3 to Rt-3 */
+    CHECK(near_(tb[ICO_TOUCH_ED_TB_DONE].x, 30.0f, 0.01f) &&
+          near_(tb[ICO_TOUCH_ED_TB_DONE].y, 5.0f, 0.01f));
+    CHECK(near_(tb[ICO_TOUCH_ED_TB_DONE].w, 108.0f, 0.01f) &&
+          near_(tb[ICO_TOUCH_ED_TB_DONE].h, 50.0f, 0.01f));
+    CHECK(near_(tb[ICO_TOUCH_ED_TB_ALL].x, 30.0f + 5.0f * 108.0f, 0.01f));
+    CHECK(near_(tb[ICO_TOUCH_ED_TB_SIZE_VAL].x, 30.0f + 6.0f * 108.0f, 0.01f));
+    CHECK(near_(tb[ICO_TOUCH_ED_TB_OP_VAL].x, 30.0f + 8.0f * 108.0f, 0.01f));
+    CHECK(near_(right_of(&tb[ICO_TOUCH_ED_TB_OP_UP]), 1110.0f, 0.01f));
+    /* the confirm strip: three 21.6 q cells over Done .. All */
+    CHECK(near_(cf[0].x, 30.0f, 0.01f) && near_(cf[1].w, 216.0f, 0.01f));
+    CHECK(near_(right_of(&cf[2]), right_of(&tb[ICO_TOUCH_ED_TB_ALL]), 0.01f));
+    ico_touch_edit_hint_rect(&l, &hint);
+    CHECK(near_(hint.x, 350.0f, 0.01f) && near_(hint.w, 440.0f, 0.01f));
+    CHECK(near_(hint.y, 600.0f, 0.01f) && near_(hint.h, 30.0f, 0.01f));
 
     env = env_of(10.0f, ICO_TOUCH_FOLD_HORIZONTAL, 1, 0, 0.0f, 700.0f, 1140.0f, 0.0f);
     l = ico_touch_layout_env(1140, 1360, no_insets(), ICO_TOUCH_MEDIUM, &env);
     CHECK(l.rule == ICO_TOUCH_RULE_TABLETOP && l.unit == 10.0f && near_(l.region.h, 640.0f, 0.01f));
-    check_toolbar_clear(&l, "TABLETOP 114 x 64");
+    CHECK(check_toolbar_clear(&l, "TABLETOP 114 x 64") == 0);
     ico_touch_edit_toolbar(&l, tb, cf);
-    CHECK(near_(tb[0].y, 720.0f + 130.0f, 0.01f));
+    CHECK(near_(tb[ICO_TOUCH_ED_TB_DONE].y, 720.0f + 5.0f, 0.01f));
+    ico_touch_edit_hint_rect(&l, &hint);
+    CHECK(near_(hint.y, 1320.0f, 0.01f));
 
+    /* SPLIT at its minimum, 58 | 40: six cells of 52/6 q on the left, the
+       right side's 34 q in one row of four (8.5 q) over Start and R2 */
     env = env_of(10.0f, ICO_TOUCH_FOLD_VERTICAL, 0, 0, 600.0f, 0.0f, 0.0f, 640.0f);
     l = ico_touch_layout_env(1020, 640, no_insets(), ICO_TOUCH_MEDIUM, &env);
     CHECK(l.rule == ICO_TOUCH_RULE_SPLIT && l.unit == 10.0f && near_(l.band.x, 580.0f, 0.01f));
-    check_toolbar_clear(&l, "SPLIT 58 | 40 x 64");
+    CHECK(near_(l.band.x + l.band.w, 620.0f, 0.01f));
+    CHECK(check_toolbar_clear(&l, "SPLIT 58 | 40 x 64") == 0);
     ico_touch_edit_toolbar(&l, tb, cf);
-    CHECK(near_(tb[0].x, 430.0f, 0.01f) && near_(right_of(&tb[9]), 550.0f, 0.01f));
-    CHECK(near_(bottom_of(&tb[4]), 520.0f, 0.01f) && near_(tb[5].w, 55.0f, 0.01f));
-    CHECK(near_(cf[2].y, 130.0f + 160.0f, 0.01f) && near_(cf[2].w, 120.0f, 0.01f));
+    CHECK(near_(tb[ICO_TOUCH_ED_TB_DONE].x, 30.0f, 0.01f) &&
+          near_(tb[ICO_TOUCH_ED_TB_DONE].w, 520.0f / 6.0f, 0.01f));
+    CHECK(near_(right_of(&tb[ICO_TOUCH_ED_TB_ALL]), 550.0f, 0.01f));
+    CHECK(near_(tb[ICO_TOUCH_ED_TB_SIZE_VAL].x, 650.0f, 0.01f) &&
+          near_(tb[ICO_TOUCH_ED_TB_SIZE_VAL].y, 5.0f, 0.01f) &&
+          near_(tb[ICO_TOUCH_ED_TB_SIZE_VAL].w, 85.0f, 0.01f));
+    CHECK(near_(right_of(&tb[ICO_TOUCH_ED_TB_OP_UP]), 990.0f, 0.01f) &&
+          near_(tb[ICO_TOUCH_ED_TB_OP_UP].y, 5.0f, 0.01f));
+    CHECK(touches(&tb[ICO_TOUCH_ED_TB_SIZE_VAL], &l.button[ICO_TOUCH_B_START].rect) &&
+          touches(&tb[ICO_TOUCH_ED_TB_OP_UP], &l.button[ICO_TOUCH_B_R2].rect));
+    CHECK(near_(cf[0].x, 30.0f, 0.01f) && near_(right_of(&cf[2]), 550.0f, 0.01f) &&
+          near_(cf[2].y, 5.0f, 0.01f));
+    ico_touch_edit_hint_rect(&l, &hint);
+    CHECK(near_(hint.x, 30.0f, 0.01f) && near_(hint.w, 520.0f, 0.01f) &&
+          near_(hint.y, 600.0f, 0.01f));
+
+    /* SPLIT 58 | 58: the right side's cells 13 q wide */
+    env = env_of(10.0f, ICO_TOUCH_FOLD_VERTICAL, 0, 0, 600.0f, 0.0f, 0.0f, 640.0f);
+    l = ico_touch_layout_env(1200, 640, no_insets(), ICO_TOUCH_MEDIUM, &env);
+    CHECK(l.rule == ICO_TOUCH_RULE_SPLIT && l.unit == 10.0f);
+    CHECK(check_toolbar_clear(&l, "SPLIT 58 | 58 x 64") == 0);
+    ico_touch_edit_toolbar(&l, tb, cf);
+    CHECK(near_(tb[ICO_TOUCH_ED_TB_OP_UP].y, 5.0f, 0.01f) &&
+          near_(tb[ICO_TOUCH_ED_TB_SIZE_VAL].w, 130.0f, 0.01f));
+
+    /* the second row, on a right side narrower than fit() allows (28 q,
+       a layout built by hand: only the strip's geometry is read): its 22 q
+       span takes two rows of two 11 q cells */
+    memset(&l, 0, sizeof(l));
+    l.rule = ICO_TOUCH_RULE_SPLIT;
+    l.unit = 10.0f;
+    l.region.w = 900.0f;
+    l.region.h = 640.0f;
+    l.band.x = 580.0f;
+    l.band.w = 40.0f;
+    l.band.h = 640.0f;
+    ico_touch_edit_toolbar(&l, tb, cf);
+    CHECK(near_(right_of(&tb[ICO_TOUCH_ED_TB_ALL]), 550.0f, 0.01f));
+    CHECK(near_(tb[ICO_TOUCH_ED_TB_SIZE_VAL].x, 650.0f, 0.01f) &&
+          near_(tb[ICO_TOUCH_ED_TB_SIZE_VAL].y, 5.0f, 0.01f) &&
+          near_(tb[ICO_TOUCH_ED_TB_SIZE_VAL].w, 110.0f, 0.01f));
+    CHECK(near_(right_of(&tb[ICO_TOUCH_ED_TB_OP_DN]), 870.0f, 0.01f) &&
+          near_(tb[ICO_TOUCH_ED_TB_OP_DN].y, 5.0f, 0.01f));
+    CHECK(near_(tb[ICO_TOUCH_ED_TB_OP_VAL].x, 650.0f, 0.01f) &&
+          near_(tb[ICO_TOUCH_ED_TB_OP_VAL].y, 60.0f, 0.01f) &&
+          near_(bottom_of(&tb[ICO_TOUCH_ED_TB_OP_UP]), 110.0f, 0.01f) &&
+          near_(right_of(&tb[ICO_TOUCH_ED_TB_OP_UP]), 870.0f, 0.01f));
+
+    /* the view carries the cells and the hint */
+    g_w = 1140;
+    g_h = 640;
+    g_env = NULL;
+    ico_touch_edits_defaults(&live);
+    ico_touch_edit_begin(&ed, &live, ICO_TOUCH_RULE_FULL);
+    etick(&ed, 0);
+    ico_touch_edit_view(&ed, &g_l, &v);
+    ico_touch_edit_toolbar(&g_l, tb, cf);
+    ico_touch_edit_hint_rect(&g_l, &hint);
+    for (r = 0; r < ICO_TOUCH_ED_TB_COUNT; r++) {
+        CHECK(same_rect(v.tb[r], tb[r]));
+    }
+    CHECK(same_rect(v.hint, hint) && hint.w > 0.0f);
+    ico_touch_edit_end(&ed, 0);
 }
 
 int main(void)
