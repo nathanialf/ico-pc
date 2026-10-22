@@ -2161,6 +2161,16 @@ open_window:
        touch screen) and the copy its drawing reads (port/ui/touch_ui.h) */
     touch_layout_update();
     ui_settings_set_touch_query(ico_input_sdl_touch_present);
+    {
+        UiTouchEditHost host;
+
+        host.editor = ico_input_sdl_touch_editor;
+        host.begin = ico_input_sdl_touch_edit_begin;
+        host.end = ico_input_sdl_touch_edit_end;
+        host.rule = ico_input_sdl_touch_rule;
+        host.layout = ico_input_sdl_touch_layout;
+        ui_settings_set_touch_edit_host(&host);
+    }
     ui_touch_set_source(ico_input_sdl_touch_overlay);
     return 0;
 }
@@ -5356,6 +5366,7 @@ void ico_window_close(void)
     ui_settings_set_display_size_query(NULL);
     ui_settings_set_texture_pack_count(NULL);
     ui_settings_set_touch_query(NULL);
+    ui_settings_set_touch_edit_host(NULL);
 #if !defined(__ANDROID__) && !defined(ICO_IOS)
     ui_settings_set_steam_handler(NULL);
 #endif

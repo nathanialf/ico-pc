@@ -57,6 +57,7 @@
 #include <SDL3/SDL.h>
 #include "mouse_look.h"
 #include "touch.h"
+#include "touch_edit.h"
 
 void ico_input_sdl_init(const char *config_path);
 void ico_input_sdl_event(const SDL_Event *e);
@@ -68,5 +69,16 @@ void ico_input_sdl_set_touch_layout(int w, int h, int sx, int sy, int sw, int sh
 void ico_input_sdl_set_touch_env(const IcoTouchEnv *env);
 int ico_input_sdl_touch_present(void);
 int ico_input_sdl_touch_overlay(IcoTouchOverlay *out);
+/* The layout editor behind the Edit layout page (settings.h UiTouchEditHost,
+   touch_edit.h): its state, begin on the live layout's posture (the mapper's
+   fingers cancelled, the layout rebuilt from the working copy), end (keep: the
+   work becomes the live edits; the layout rebuilt), the posture the phone is
+   in, and the layout the editor ticks against (the preview, rebuilt on every
+   change). */
+IcoTouchEditor *ico_input_sdl_touch_editor(void);
+void ico_input_sdl_touch_edit_begin(void);
+void ico_input_sdl_touch_edit_end(int keep);
+int ico_input_sdl_touch_rule(void);
+const IcoTouchLayout *ico_input_sdl_touch_layout(void);
 
 #endif /* ICO_PORT_INPUT_INPUT_SDL_H */

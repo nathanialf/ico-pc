@@ -23,6 +23,7 @@
 #include "mouse_look.h"
 #include "pointer.h"
 #include "touch.h"
+#include "touch_edit.h"
 #ifdef __ANDROID__
 #include "android/host_android.h" /* port/platform/android: the phone vibrator */
 #else
@@ -103,6 +104,12 @@ static int s_touchW, s_touchH;
 static int s_safeX, s_safeY, s_safeW, s_safeH; /* s_safeW 0: the whole output */
 static IcoTouchEnv s_touchEnv;                 /* zero: unknown density, no fold */
 static IcoTouchOverlay s_touchSnap;
+/* the layout editor (touch_edit.h) while the Edit layout page is open: the
+   fingers go to it, not to s_touch.  Everything here runs on the window
+   thread: the events (ico_window_pump -> ico_input_sdl_event), the vsync
+   step (ico_input_sdl_update, the same pump) and the page's tick (the
+   game's Main step, between pumps), so the editor's queue needs no lock */
+static IcoTouchEditor s_touchEdit;
 
 static void pad_identity_read(PadIdentity *identity, SDL_JoystickID id, SDL_Gamepad *pad)
 {
@@ -247,8 +254,42 @@ static void touch_rebuild(void)
         in.right = in.right > 0.0f ? in.right : 0.0f;
         in.bottom = in.bottom > 0.0f ? in.bottom : 0.0f;
     }
-    s_touchLayout = ico_touch_layout_env((uint32_t)s_touchW, (uint32_t)s_touchH, in,
-                                         s_bind.touch_size, &s_touchEnv);
+    s_touchLayout = ico_touch_layout_edits(
+        (uint32_t)s_touchW, (uint32_t)s_touchH, in, s_bind.touch_size, &s_touchEnv,
+        s_touchEdit.active ? &s_touchEdit.work : ico_input_live_touch_edits());
+}
+
+/* the edits the layout should carry now: the editor's working copy while
+   it is open, else the live ones */
+static const IcoTouchEdits *touch_edits_now(void)
+{
+    return s_touchEdit.active ? &s_touchEdit.work : ico_input_live_touch_edits();
+}
+
+/* start-up: one line when the file had edits (none for an untouched config) */
+static void touch_edits_log(void)
+{
+    const IcoTouchEdits *e = ico_input_live_touch_edits();
+    char list[64] = "";
+    int total = 0, r, c;
+
+    for (r = 0; r < ICO_TOUCH_POSTURES; r++) {
+        int n = 0;
+
+        for (c = 0; c < ICO_TOUCH_CTL_COUNT; c++) {
+            n += e->ctl[r][c].set != 0;
+        }
+        if (n > 0) {
+            const size_t used = strlen(list);
+
+            snprintf(list + used, sizeof(list) - used, "%s%s", used > 0 ? ", " : "",
+                     ico_touch_posture_name(r));
+            total += n;
+        }
+    }
+    if (total > 0) {
+        fprintf(stderr, "touch: layout edits: %d controls in %s\n", total, list);
+    }
 }
 
 /* a direct touch screen is there: the overlay shows for 5 s from now */
@@ -301,6 +342,10 @@ void ico_input_sdl_init(const char *config_path)
             if (ico_input_apply_toml(&s_bind, t) != 0) {
                 fprintf(stderr, "input: %s: some settings were ignored\n", config_path);
             }
+            /* the layout edits ([touch]); before touch_rebuild below, so the
+               first layout carries them */
+            ico_input_apply_touch_toml(ico_input_live_touch_edits(), t);
+            touch_edits_log();
             ico_toml_free(t);
         } else {
             fprintf(stderr, "input: no %s, default bindings\n", config_path);
@@ -374,12 +419,21 @@ static void touch_finger(const SDL_Event *e, int kind)
         return; /* a trackpad's fingers (macOS) are not the overlay's */
     }
     touch_found("first touch");
+    if (s_touchEdit.active) {
+        ico_touch_edit_event(&s_touchEdit, (uint64_t)e->tfinger.fingerID, e->tfinger.x,
+                             e->tfinger.y, kind, e->tfinger.timestamp);
+        return;
+    }
     ico_touch_event(&s_touch, (uint64_t)e->tfinger.fingerID, e->tfinger.x, e->tfinger.y, kind,
                     e->tfinger.timestamp);
 }
 
 static void touch_cancel(void)
 {
+    if (s_touchEdit.active) {
+        /* focus lost: the editor drops a drag and keeps its edits */
+        ico_touch_edit_event(&s_touchEdit, 0, 0.0f, 0.0f, ICO_TOUCH_CANCEL, SDL_GetTicksNS());
+    }
     if (s_touchDevice) {
         ico_touch_event(&s_touch, 0, 0.0f, 0.0f, ICO_TOUCH_CANCEL, SDL_GetTicksNS());
     }
@@ -725,16 +779,62 @@ static void touch_step(IcoVirtualPad *v)
     const int mode = s_bind.touch_mode;
     int pct = s_bind.touch_opacity;
 
-    if (s_touchLayout.size != s_bind.touch_size) {
+    const int editing = s_touchEdit.active;
+
+    if (s_touchLayout.size != s_bind.touch_size ||
+        s_touchLayout.editGen != touch_edits_now()->gen) {
         touch_rebuild();
     }
     s_touch.look_decay = s_bind.mouse_decay;
-    ico_touch_update(&s_touch, &s_touchLayout, mode, s_raw.gamepads, v, now);
+    /* editing: the mapper steps (a tap made earlier is not replayed) but
+       merges nothing, so a drag never presses a button */
+    ico_touch_update(&s_touch, &s_touchLayout, editing ? ICO_TOUCH_MODE_OFF : mode, s_raw.gamepads,
+                     v, now);
     pct = pct < 0 ? 0 : pct > 100 ? 100 : pct;
     s_touchSnap.layout = s_touchLayout;
+    if (editing) {
+        /* every control at full strength, nothing pressed or lit */
+        memset(&s_touchSnap.info, 0, sizeof(s_touchSnap.info));
+        s_touchSnap.opacity = 1.0f;
+        ico_touch_edit_view(&s_touchEdit, &s_touchLayout, &s_touchSnap.edit);
+        return;
+    }
+    memset(&s_touchSnap.edit, 0, sizeof(s_touchSnap.edit));
     s_touchSnap.info = ico_touch_draw_info(&s_touch, &s_touchLayout);
     s_touchSnap.opacity =
         ico_touch_mode_opacity(&s_touch, mode, s_raw.gamepads, now) * (float)pct / 100.0f;
+}
+
+IcoTouchEditor *ico_input_sdl_touch_editor(void)
+{
+    return &s_touchEdit;
+}
+
+void ico_input_sdl_touch_edit_begin(void)
+{
+    /* the mapper lets go of every finger first: none stays pressed under
+       the editor */
+    ico_touch_event(&s_touch, 0, 0.0f, 0.0f, ICO_TOUCH_CANCEL, SDL_GetTicksNS());
+    ico_touch_edit_begin(&s_touchEdit, ico_input_live_touch_edits(), s_touchLayout.rule);
+    touch_rebuild();
+}
+
+void ico_input_sdl_touch_edit_end(int keep)
+{
+    ico_touch_edit_end(&s_touchEdit, keep);
+    /* a finger still down (the one that tapped Done) is not the mapper's */
+    ico_touch_event(&s_touch, 0, 0.0f, 0.0f, ICO_TOUCH_CANCEL, SDL_GetTicksNS());
+    touch_rebuild();
+}
+
+int ico_input_sdl_touch_rule(void)
+{
+    return s_touchLayout.rule;
+}
+
+const IcoTouchLayout *ico_input_sdl_touch_layout(void)
+{
+    return &s_touchLayout;
 }
 
 void ico_input_escape(int down, const IcoCaptureState *s)
@@ -840,6 +940,7 @@ void ico_input_sdl_shutdown(void)
         }
     }
     phone_vibrate_stop();
+    s_touchEdit.active = 0;
     s_touchSnap.opacity = 0.0f;
     s_touchDevice = 0;
     s_ready = 0;
