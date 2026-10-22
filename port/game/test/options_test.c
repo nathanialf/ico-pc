@@ -123,6 +123,16 @@ static void test_defaults(void)
     CHECK(ico_opt_natural_chains() == 1);
     ico_opt_reload();
     CHECK(ico_opt_natural_chains() == 0);
+    /* Hold type: hold (0) by default, the setter keeps 0 or 1, a reload
+       goes back to the config's (absent: hold) */
+    CHECK(ico_opt_hold_type() == ICO_HOLD_HOLD);
+    ico_opt_set_hold_type(5);
+    CHECK(ico_opt_hold_type() == ICO_HOLD_TOGGLE);
+    ico_opt_set_hold_type(0);
+    CHECK(ico_opt_hold_type() == ICO_HOLD_HOLD);
+    ico_opt_set_hold_type(1);
+    ico_opt_reload();
+    CHECK(ico_opt_hold_type() == ICO_HOLD_HOLD);
     ico_opt_set_developer_mode(3);
     CHECK(ico_opt_developer_mode() == 1);
     ico_opt_set_yorda_safe(5);
@@ -163,6 +173,11 @@ static void test_config(const char *dir)
     /* developer mode and the debug option file switch */
     CHECK(ico_opt_developer_mode() == 1);
     CHECK(ico_opt_debug_option() == 1);
+    /* hold_type: absent in this file reads hold; "toggle" reads 1; an
+       unknown word reads hold; the names round trip */
+    CHECK(ico_opt_hold_type() == ICO_HOLD_HOLD);
+    CHECK(strcmp(ico_opt_hold_type_name(0), "hold") == 0);
+    CHECK(strcmp(ico_opt_hold_type_name(1), "toggle") == 0);
     ico_opt_set_yorda_safe(0); /* the run-time value wins until a reload */
     CHECK(ico_opt_yorda_safe() == 0);
     remove(path);
@@ -184,6 +199,25 @@ static void test_config(const char *dir)
         ico_config_reset(path, "/nonexistent/options_test.ini");
         ico_opt_reload();
         CHECK(ico_opt_debug_option() == 0);
+        remove(path);
+    }
+    f = fopen(path, "wb");
+    if (f != NULL) {
+        fputs("[gameplay]\nhold_type = \"toggle\"\n", f);
+        fclose(f);
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_opt_reload();
+        CHECK(ico_opt_hold_type() == ICO_HOLD_TOGGLE);
+        CHECK(strcmp(ico_opt_hold_type_name(ico_opt_hold_type()), "toggle") == 0);
+        remove(path);
+    }
+    f = fopen(path, "wb");
+    if (f != NULL) {
+        fputs("[gameplay]\nhold_type = \"sideways\"\n", f);
+        fclose(f);
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_opt_reload();
+        CHECK(ico_opt_hold_type() == ICO_HOLD_HOLD);
         remove(path);
     }
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");

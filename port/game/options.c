@@ -311,12 +311,49 @@ void ico_opt_output_toggled(int mode)
     }
 }
 
+/* [gameplay] hold_type (options.h): -1 not read yet, else ICO_HOLD_* */
+static int s_hold_type = -1;
+
+int ico_opt_hold_type(void)
+{
+    if (s_hold_type < 0) {
+        const char *v = ico_config_get_string("gameplay.hold_type", "hold");
+
+        s_hold_type = v != NULL && strcmp(v, "toggle") == 0 ? ICO_HOLD_TOGGLE : ICO_HOLD_HOLD;
+        if (v != NULL && strcmp(v, "toggle") != 0 && strcmp(v, "hold") != 0) {
+            fprintf(stderr, "options: [gameplay] hold_type = \"%s\" is not one of hold, toggle\n",
+                    v);
+        }
+    }
+    return s_hold_type;
+}
+
+void ico_opt_set_hold_type(int type)
+{
+    s_hold_type = type != 0 ? ICO_HOLD_TOGGLE : ICO_HOLD_HOLD;
+}
+
+const char *ico_opt_hold_type_name(int type)
+{
+    return type != 0 ? "toggle" : "hold";
+}
+
+void ico_opt_hold_type_toggled(int type)
+{
+    ico_opt_set_hold_type(type);
+    if (ico_config_set_string("gameplay.hold_type", ico_opt_hold_type_name(s_hold_type)) != 0 ||
+        ico_config_save() != 0) {
+        fprintf(stderr, "options: cannot write [gameplay] hold_type\n");
+    }
+}
+
 void ico_opt_reload(void)
 {
     s_stick_fix = s_yorda_safe = s_door_fix = s_mirror = s_developer_mode = s_circle_back = -1;
     s_natural_chains = -1;
     s_output = -2;
     s_ui_language = -2;
+    s_hold_type = -1;
     /* the characters' colours ([characters], appearance.h) */
     ico_appearance_reload();
 }

@@ -387,7 +387,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_VAL_HOLD_A] = "A (누르고 있기)",
     [UI_STR_VAL_HOLD_B] = "B (전환)",
     [UI_STR_HOLD_TYPE_NOTE] =
-        "A: R1을 누르고 있는 동안 요르다의 손을 잡습니다. B: R1을 누르면 손을 놓습니다.",
+        "A: R1을 누르고 있는 동안 요르다의 손을 잡습니다. B: R1을 한 번 누르면 손을 잡고, 다시 누르면 놓습니다.",
     [UI_STR_STICK_FIX_ALSO_NOTE] = "‘게임플레이’에도 있습니다.",
     [UI_STR_ACH_POPUPS_ALSO_NOTE] = "‘업적’에도 있습니다.",
     [UI_STR_PLAYERS_NOTE] = "2: 두 번째 컨트롤러로 요르다를 조작합니다.",

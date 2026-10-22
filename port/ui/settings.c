@@ -70,7 +70,8 @@ extern void la_host_new_game_go(void);
    fumi/ios/pad.c): its film effect 0..4 (only once the game is cleared),
    hold type A 0 or B 1, players 1 (0) or 2 (1), and the vibration switch;
    the brightness step is systemStatus[11].  The game's saves write them
-   (fumi/ios/mcard.c product_write, gameblock_write). */
+   (fumi/ios/mcard.c product_write, gameblock_write); the hold type is read
+   back from [gameplay] hold_type, not from the card (applyHoldType). */
 extern int optionScreenMode;
 extern int optionControlType;
 extern int girlControlMode;
@@ -448,6 +449,14 @@ static void applyOutputMode(int restore)
     if (m != cur && (restore || ico_opt_output_mode() != ICO_OUTPUT_AUTO)) {
         soundOutputModeSet(m);
     }
+}
+
+/* [gameplay] hold_type (port/game/options.h) is the game's hold type: the
+   card's value is not read back (fumi/ios/mcard.c), so install and the row
+   set the variable.  Idempotent. */
+static void applyHoldType(void)
+{
+    optionControlType = ico_opt_hold_type();
 }
 
 /* the value box's text for [audio] device: Default, or the name, cut with
@@ -1392,7 +1401,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_VIBRATION:
         return onOff(iosPadActRequestEnable);
     case UI_OPT_HOLD_TYPE:
-        return ui_str(optionControlType == 1 ? UI_STR_VAL_HOLD_B : UI_STR_VAL_HOLD_A);
+        return ui_str(ico_opt_hold_type() == ICO_HOLD_TOGGLE ? UI_STR_VAL_HOLD_B
+                                                             : UI_STR_VAL_HOLD_A);
     case UI_OPT_TOUCH_MODE: {
         static const int modeStr[3] = {UI_STR_OFF, UI_STR_VAL_AUTO, UI_STR_VAL_ALWAYS};
         const int m = liveBindings()->touch_mode;
@@ -1446,11 +1456,12 @@ static const char *rawValue(int opt, char *buf, unsigned size)
 /* the game's settings, shown from the pause menu only (as its Options
    screen was: a load sets them from the save, so a change on the title
    would not last); the film effect and players once the game is cleared
-   (layout_texture.c lt_property_visible) */
+   (layout_texture.c lt_property_visible).  Hold type is not one: it is
+   kept in [gameplay] hold_type, so it shows on the title too. */
 static int isGameOpt(int opt)
 {
-    return opt == UI_OPT_BRIGHTNESS || opt == UI_OPT_VIBRATION || opt == UI_OPT_HOLD_TYPE ||
-           opt == UI_OPT_BUTTON_CONFIG || opt == UI_OPT_FILM_EFFECT || opt == UI_OPT_PLAYERS;
+    return opt == UI_OPT_BRIGHTNESS || opt == UI_OPT_VIBRATION || opt == UI_OPT_BUTTON_CONFIG ||
+           opt == UI_OPT_FILM_EFFECT || opt == UI_OPT_PLAYERS;
 }
 
 static int optShown(int opt, int link)
@@ -1991,8 +2002,11 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         iosPadActRequestEnable = iosPadActRequestEnable == 0;
         break;
     case UI_OPT_HOLD_TYPE:
-        /* row 318 */
-        optionControlType = optionControlType == 0;
+        /* row 318, kept in [gameplay] hold_type */
+        ico_opt_set_hold_type(!ico_opt_hold_type());
+        ico_config_set_string("gameplay.hold_type", ico_opt_hold_type_name(ico_opt_hold_type()));
+        applyHoldType();
+        s_dirtyConfig = 1;
         break;
     case UI_OPT_FILM_EFFECT: {
         /* row 300: 0..4 around, the stage animations with it */
@@ -3635,6 +3649,8 @@ void ui_settings_install(void)
     /* [audio] output: an explicit stereo or mono is the game's from the
        start (the card's system file is read later: fumi/ios/mcard.c's hook) */
     applyOutputMode(0);
+    /* [gameplay] hold_type, before any pad word is read */
+    applyHoldType();
     if (!s_built) {
         build();
         s_built = 1;

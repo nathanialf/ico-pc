@@ -70,6 +70,8 @@
 /* the region table (port/core/region.h, by its path: the game's include
    directories hold the game's own region.h) */
 #include "../../core/region.h"
+#include "../../config/config.h"
+#include "../../game/options.h"
 #include "mcard.h"
 #include "mcdata.h"
 #include "memory.h"
@@ -913,8 +915,30 @@ static void driver(void *arg)
     CHECK(req.result == 0);
     CHECK(memcmp(back, buf, sizeof(buf)) == 0);
     CHECK(systemStatus[11] == 2 && soundOutputMode == 1 && iosPadActRequestEnable == 1);
-    CHECK(optionControlType == 3 && optionScreenMode == 0x01020304);
+    /* the card's controlType (3 here) is written but not read back: the
+       variable is [gameplay] hold_type's (no config: hold, 0) */
+    CHECK(optionControlType == 0 && optionScreenMode == 0x01020304);
     CHECK(girlControlMode == 0x0A0B0C0D && iosPadConfCustom.bit[15] == 0x10F);
+    /* with hold_type = "toggle" in the config, a load makes it 1 */
+    {
+        FILE *cf = fopen("save_test_hold.toml", "wb");
+
+        CHECK(cf != NULL);
+        if (cf != NULL) {
+            fputs("[gameplay]\nhold_type = \"toggle\"\n", cf);
+            fclose(cf);
+        }
+        ico_config_reset("save_test_hold.toml", "/nonexistent/save_test.ini");
+        ico_opt_reload();
+        optionControlType = 0;
+        req.fileNo = 1;
+        iosMcLoadGameBlock(&req, back);
+        wait_request();
+        CHECK(req.result == 0 && optionControlType == 1);
+        remove("save_test_hold.toml");
+        ico_config_reset("/nonexistent/save_test.toml", "/nonexistent/save_test.ini");
+        ico_opt_reload();
+    }
 
     /* re-save the loaded state: the same files, byte for byte */
     do_save(1, back);

@@ -21,6 +21,9 @@
  *                                 links' size and shows more of itself as it
  *                                 comes down (port/render/rd_chain.h); draw
  *                                 only, so no pad-recording key
+ *   [gameplay] hold_type   "hold" Yorda's hand: "hold" keeps R1 held (the
+ *                                 game's Hold type A); "toggle" takes it with
+ *                                 one press and lets go with another (B)
  *   [gameplay] developer_mode
  *                          false  the development build's debug menu and
  *                                 debug options
@@ -166,6 +169,24 @@ void ico_opt_output_toggled(int mode);
    or the save: Settings > Audio > Output's Stereo and Mono, which set the
    key themselves and save it on leaving the page with the rest. */
 void ico_opt_output_record(int mode);
+/* [gameplay] hold_type: the game's Hold type (optionControlType), kept in
+   config.toml instead of the memory card: ICO_HOLD_HOLD (0, "hold", A: keep
+   R1 held to hold Yorda's hand, the default) or ICO_HOLD_TOGGLE (1,
+   "toggle", B: press R1 once to take her hand, again to let go).  Another
+   word reads as "hold", logged once.  The memory card hook (fumi/ios/mcard.c
+   gameblock_read) and Settings (ui_settings_install, the Hold type row)
+   copy it into optionControlType; options.c itself touches no game
+   variable. */
+#define ICO_HOLD_HOLD 0
+#define ICO_HOLD_TOGGLE 1
+int ico_opt_hold_type(void);
+void ico_opt_set_hold_type(int type);
+/* "hold" or "toggle": the key's text */
+const char *ico_opt_hold_type_name(int type);
+/* The Options screen hook (common/src/layout_action.c, the Hold type row
+   318, reached only on a disc whose layout tables are not recognised): sets
+   the type, writes the key and saves config.toml at once. */
+void ico_opt_hold_type_toggled(int type);
 /* Forget the run-time values: each option is read from the config again on
    its next use (and the characters' colours, appearance.h). */
 void ico_opt_reload(void);

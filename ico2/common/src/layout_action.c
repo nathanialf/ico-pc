@@ -292,6 +292,8 @@ int ico_ach_slot_loaded(int slot, unsigned int sum);
 void ico_opt_mirror_reset(void);
 /* port/game/options.h: the Stereo/Mono row's choice, for [audio] output */
 void ico_opt_output_toggled(int mode);
+/* PC port: the Hold type row's choice, for [gameplay] hold_type (port/game/options.h) */
+void ico_opt_hold_type_toggled(int type);
 void la_host_new_game_go(void);
 int la_host_mc_slot_pickable(int slot);
 
@@ -2978,6 +2980,7 @@ int la_game_option(void)
         case 318:
             if ((pad[0].flags & 0xA000) != 0) {
                 cur = cur == 0;
+                ico_opt_hold_type_toggled(cur); /* PC port: the type is kept in config.toml */
                 CUR_SE();
             }
             break;

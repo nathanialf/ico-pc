@@ -2484,13 +2484,14 @@ static void testGameOptions(void)
         const int ctlL = openPage(mainL, 4, UI_PAGE_CONTROLS);
         CHECK(rowShown(UI_PAGE_CONTROLS, UI_OPT_BUTTON_CONFIG) == !title &&
                   rowShown(UI_PAGE_CONTROLS, UI_OPT_VIBRATION) == !title &&
-                  rowShown(UI_PAGE_CONTROLS, UI_OPT_HOLD_TYPE) == !title,
-              "title %d: the game's controls %s", title, title ? "hidden" : "shown");
+                  rowShown(UI_PAGE_CONTROLS, UI_OPT_HOLD_TYPE),
+              "title %d: the game's controls %s; Hold type always shown", title,
+              title ? "hidden" : "shown");
         checkPageFits(UI_PAGE_CONTROLS, title ? "Controls (title)" : "Controls (pause)");
         press(0x4000);
         CHECK(lt_ext_layout(ctlL)->curItem ==
                   ui_settings_row_of(UI_PAGE_CONTROLS,
-                                     title ? UI_OPT_STICK_FIX : UI_OPT_BUTTON_CONFIG),
+                                     title ? UI_OPT_HOLD_TYPE : UI_OPT_BUTTON_CONFIG),
               "title %d: down from Remap", title);
         press(0x10);
         CHECK(settle(mainL, 60), "Controls: back");
@@ -2565,17 +2566,21 @@ static void testGameOptions(void)
     press(0x8000);
     CHECK(iosPadActRequestEnable == 1, "Left: on again");
     press(0x4000);
+    ico_opt_set_hold_type(0);
     optionControlType = 0;
     CHECK(strcmp(ui_settings_value_text(UI_OPT_HOLD_TYPE), "A (hold)") == 0, "hold type A (%s)",
           ui_settings_value_text(UI_OPT_HOLD_TYPE));
     press(0x2000);
-    CHECK(optionControlType == 1 &&
-              strcmp(ui_settings_value_text(UI_OPT_HOLD_TYPE), "B (toggle)") == 0,
-          "Right: hold type B (%d)", optionControlType);
-    const int hnote = noteStarting(UI_PAGE_CONTROLS, "A: Yorda");
+    CHECK(ico_opt_hold_type() == 1 && optionControlType == 1 &&
+              strcmp(ui_settings_value_text(UI_OPT_HOLD_TYPE), "B (toggle)") == 0 &&
+              strcmp(ico_config_get_string("gameplay.hold_type", ""), "toggle") == 0,
+          "Right: hold type B, kept as [gameplay] hold_type (%d)", optionControlType);
+    const int hnote = noteStarting(UI_PAGE_CONTROLS, "A: keep R1");
     CHECK(hnote >= 0 && !lt_ext_prop(hnote)->masked, "the Hold type note on the cursor");
     press(0x2000);
-    CHECK(optionControlType == 0, "Right again: A");
+    CHECK(ico_opt_hold_type() == 0 && optionControlType == 0 &&
+              strcmp(ico_config_get_string("gameplay.hold_type", ""), "hold") == 0,
+          "Right again: A");
     press(0x1000);
     press(0x1000);
     CHECK(lt_ext_layout(ctlL)->curItem == bc, "up twice: Button configuration");

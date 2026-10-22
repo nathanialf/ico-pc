@@ -382,7 +382,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_VAL_HOLD_A] = "A (hold)",
     [UI_STR_VAL_HOLD_B] = "B (toggle)",
     [UI_STR_HOLD_TYPE_NOTE] =
-        "A: Yorda’s hand stays held while R1 is held down. B: press R1 to let go of her hand.",
+        "A: keep R1 held to hold Yorda’s hand. B: press R1 once to take her hand, press again to let go.",
     [UI_STR_STICK_FIX_ALSO_NOTE] = "Also under Gameplay.",
     [UI_STR_ACH_POPUPS_ALSO_NOTE] = "Also under Achievements.",
     [UI_STR_PLAYERS_NOTE] = "2: a second controller controls Yorda.",

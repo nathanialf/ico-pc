@@ -33,6 +33,8 @@
  * variables, written by the game's saves as the Options screen left them
  * (fumi/ios/mcard.c), never into the port config; they show only from the
  * pause menu, as the Options screen did (a load sets them from the save).
+ * Hold type is the exception: [gameplay] hold_type keeps it, it shows on
+ * the title too, and a load does not change it.
  */
 #ifndef PORT_UI_SETTINGS_H
 #define PORT_UI_SETTINGS_H
@@ -326,7 +328,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_MOUSE_RETURN, /* [input] mouse_return, On/Off; not on Android */
     UI_OPT_CIRCLE_BACK,  /* [game] circle_back */
     UI_OPT_VIBRATION,    /* the game's iosPadActRequestEnable */
-    UI_OPT_HOLD_TYPE,    /* the game's optionControlType, A 0 or B 1 */
+    UI_OPT_HOLD_TYPE,    /* [gameplay] hold_type: A (hold) or B (toggle) */
     /* the touch overlay ([input] touch_*), shown with a touch screen */
     UI_OPT_TOUCH_MODE,    /* Off, Auto, Always */
     UI_OPT_TOUCH_SIZE,    /* Small, Medium, Large */

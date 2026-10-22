@@ -15,6 +15,8 @@
 
 /* port/game/options.h: [audio] output wins over the card's mode */
 extern int ico_opt_output_card(int card_mode);
+/* PC port: [gameplay] hold_type wins over the card's controlType (port/game/options.h) */
+extern int ico_opt_hold_type(void);
 
 /* the semaphore descriptor the card lock is created from, then the manager
    queue's 16-slot message ring */
@@ -213,7 +215,7 @@ static inline int gameblock_read(McMgr *self, void *buf)
     soundOutputModeSet((IosMcProductFile + self->port)->outputMode);
     soundOutputModeSet(ico_opt_output_card(soundOutputModeGet()));
     iosPadActRequestEnable = (IosMcProductFile + self->port)->vibration;
-    optionControlType = (IosMcProductFile + self->port)->controlType;
+    optionControlType = ico_opt_hold_type(); /* PC port: the card's controlType is not read back */
     *(McBlk *)iosPadConfCustom.bit = *(McBlk *)(IosMcProductFile + self->port)->padConf;
     iosMcHandlerRead(self, (unsigned char *)&optionScreenMode, 4);
     iosMcHandlerRead(self, (unsigned char *)&girlControlMode, 4);

@@ -1105,19 +1105,19 @@ static void testMouseCamera(void)
             }
             const int remap = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_LINK);
             const int below = lt_ext_prop(remap)->downItem;
-            const UiSettingsOpt want = android ? (title ? UI_OPT_STICK_FIX : UI_OPT_BUTTON_CONFIG)
-                                               : (title ? UI_OPT_STICK_FIX : UI_OPT_BUTTON_CONFIG);
+            /* Hold type shows on the title too ([gameplay] hold_type) */
+            const UiSettingsOpt want = title ? UI_OPT_HOLD_TYPE : UI_OPT_BUTTON_CONFIG;
             CHECK(below == ui_settings_row_of(UI_PAGE_CONTROLS, want),
                   "android %d, title %d: down from Remap (%d)", android, title, below);
-            if (!title && !android) {
+            if (!android) {
                 const int hold = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_HOLD_TYPE);
                 CHECK(lt_ext_prop(hold)->downItem ==
                           ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX),
-                      "pause: Stick fix after Hold type");
+                      "title %d: Stick fix after Hold type", title);
                 CHECK(
                     lt_ext_prop(ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX))->downItem ==
                         ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_MOUSE_CAMERA),
-                    "pause: Mouse camera after Stick fix");
+                    "title %d: Mouse camera after Stick fix", title);
             }
             if (!android) {
                 /* Invert, then Speed, Range, Swings back, then Circle back */
@@ -1751,7 +1751,7 @@ static void testDuplicatedRows(void)
         ico_ach_set_popups(1);
         const int mainL = enterMain(title);
 
-        /* Controls: after Hold type (hidden on the title: after Remap) */
+        /* Controls: after Hold type (shown on the title too) */
         const int ctlL = openPage(mainL, 4, UI_PAGE_CONTROLS);
         const int sf = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX);
         CHECK(sf >= 0 && an22bShown(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX),
@@ -2336,6 +2336,60 @@ static void testDoorFix(void)
     gFlagGameClear = 0;
 }
 
+/* Controls > Hold type ([gameplay] hold_type): the row shows from the title
+   and the pause menu; a step sets the key and leaving Controls writes it to
+   config.toml; ui_settings_install (run from init_layout_texture at boot)
+   sets the game's optionControlType from the key, whatever the card held */
+static void testHoldType(void)
+{
+    char p[1100];
+
+    gFlagGameClear = 0;
+    for (int title = 1; title >= 0; title--) {
+        stage_no = title ? 1 : 11;
+        const int mainL = enterMain(title);
+        const int ctlL = openPage(mainL, 4, UI_PAGE_CONTROLS);
+        const int row = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_HOLD_TYPE);
+        CHECK(row >= 0 && !lt_ext_prop(row)->defaultMask && !lt_ext_prop(row)->masked,
+              "title %d: the Hold type row is shown", title);
+        CHECK(ico_opt_hold_type() == 0 && optionControlType == 0 &&
+                  strcmp(ui_settings_value_text(UI_OPT_HOLD_TYPE), "A (hold)") == 0,
+              "title %d: A by default", title);
+        lt_ext_layout(ctlL)->curItem = row;
+        press(LT_PAD_RIGHT);
+        CHECK(ico_opt_hold_type() == 1 && optionControlType == 1 &&
+                  strcmp(ico_config_get_string("gameplay.hold_type", ""), "toggle") == 0,
+              "title %d: Right: B, the key set, the game's variable follows", title);
+        press(LT_PAD_TRIANGLE);
+        CHECK(settle(mainL, 60), "title %d: Controls: back", title);
+        path(p, sizeof(p), "settings_test.toml");
+        IcoToml *t = ico_toml_load(p);
+        const char *saved = t != NULL ? ico_toml_get(t, "gameplay.hold_type") : NULL;
+        CHECK(saved != NULL && strcmp(saved, "toggle") == 0,
+              "title %d: leaving Controls saved gameplay.hold_type = \"toggle\"", title);
+        if (t != NULL) {
+            ico_toml_free(t);
+        }
+        optionControlType = 0;
+        ico_opt_set_hold_type(0);
+    }
+
+    /* at boot: the key wins over what the game's variable held */
+    useConfig("version = 1\n[gameplay]\nhold_type = \"toggle\"\n");
+    optionControlType = 0;
+    enterMainKeep(1);
+    CHECK(optionControlType == 1, "install: hold_type = toggle sets optionControlType (%d)",
+          optionControlType);
+    optionControlType = 0;
+    ui_settings_install();
+    CHECK(optionControlType == 1, "install again: the same");
+    useConfig("version = 1\n");
+    optionControlType = 1;
+    ui_settings_install();
+    CHECK(optionControlType == 0, "install: no key is hold (%d)", optionControlType);
+    optionControlType = 0;
+}
+
 /* Gameplay > Natural chains ([gameplay] natural_chains): a row from the title
    and the pause menu after the East Reflector door fix, Off by default; a
    step turns it on and sets the key, the saved file has it, its note shows
@@ -2676,6 +2730,8 @@ int main(int argc, char **argv)
     testAntiAlias();
     /* Gameplay > East Reflector door fix */
     testDoorFix();
+    /* Controls > Hold type */
+    testHoldType();
     testNaturalChains();
     /* the version in the Options menu */
     testVersion();
