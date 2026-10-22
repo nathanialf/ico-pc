@@ -3,15 +3,19 @@
  *
  * The touch overlay's drawing (touch_ui.h): shapes as untextured triangles
  * in output pixels, the game's button pictures as sprites in output pixels,
- * the words through the font's overlay mode.
+ * the words through the font's overlay mode; each control at its layout
+ * edits' opacity (IcoTouchButton.alpha, stickAlpha, lookAlpha), and the
+ * touch layout editor's marks while its page is open (IcoTouchEditView).
  */
 #include "touch_ui.h"
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "touch.h"
+#include "touch_edit.h" /* the editor's keys (ICO_TOUCH_ED_*) */
 
 #ifdef ICO_RD
 #include <math.h>
@@ -46,6 +50,7 @@ static struct {
     float kx, ky;     /* layout pixels to output pixels */
     float maxX, maxY; /* the output, 12.4 */
     float opacity;
+    float alpha; /* the control being drawn: its edits' opacity (1 for the editor's marks) */
     float cosT[SEGMENTS + 1], sinT[SEGMENTS + 1];
     int tables;
 } s_d;
@@ -71,7 +76,7 @@ static int32_t fix16(float p, float max16)
 static void vtx(float x, float y, const uint8_t rgba[4])
 {
     RdScreenVtx *v = &s_d.v[s_d.n++];
-    float a = (float)rgba[3] * s_d.opacity;
+    float a = (float)rgba[3] * s_d.opacity * s_d.alpha;
 
     v->x = fix16(x * s_d.kx, s_d.maxX);
     v->y = fix16(y * s_d.ky, s_d.maxY);
@@ -207,6 +212,61 @@ static const uint8_t kFill[4] = {0x60, 0x60, 0x64, 0x28}, kFillHeld[4] = {0x80, 
                      kEdge[4] = {0x80, 0x80, 0x80, 0x60}, kEdgeHeld[4] = {0x80, 0x80, 0x80, 0x80},
                      kRun[4] = {0x80, 0x80, 0x80, 0x38}, kRunLit[4] = {0x80, 0x78, 0x50, 0x70},
                      kKnob[4] = {0x80, 0x80, 0x80, 0x50};
+/* the editor's: the grid's dots, the hinge band, a key of the toolbar (lit:
+   All or Snap on), the backing of its words, and the amber of an overlap */
+static const uint8_t kDot[4] = {0x80, 0x80, 0x80, 0x30}, kBand[4] = {0x40, 0x40, 0x44, 0x30},
+                     kKey[4] = {0x14, 0x14, 0x18, 0x60}, kKeyLit[4] = {0x50, 0x50, 0x58, 0x70},
+                     kWarn[4] = {0x80, 0x60, 0x10, 0x80};
+
+/* the faintest a shown control is drawn while the editor is open, so every
+   one can be seen and picked however faint it is in play */
+#define EDIT_ALPHA_FLOOR 0.35f
+/* a key that does nothing now (Size and Opacity with nothing selected) */
+#define KEY_DIM 0.4f
+
+/* The opacity a control is drawn at: its edits' alpha, at most 1, at least
+   EDIT_ALPHA_FLOOR while editing; -1 for a hidden one (alpha 0: nothing in
+   play, a dashed outline and the word Hidden while editing). */
+static float shownAlpha(const IcoTouchOverlay *o, float a)
+{
+    if (!(a > 0.0f)) {
+        return -1.0f;
+    }
+    a = a > 1.0f ? 1.0f : a;
+    return o->edit.active && a < EDIT_ALPHA_FLOOR ? EDIT_ALPHA_FLOOR : a;
+}
+
+/* a rect's border, th thick, in dashes three th long */
+static void dashedFrame(float x0, float y0, float x1, float y1, float th, const uint8_t c[4])
+{
+    const float dash = 3.0f * th;
+
+    if (!(dash > 0.0f) || !(x1 - x0 > 2.0f * th) || !(y1 - y0 > 2.0f * th)) {
+        return;
+    }
+    for (float x = x0; x < x1; x += 2.0f * dash) {
+        const float xe = x + dash < x1 ? x + dash : x1;
+        rect(x, y0, xe, y0 + th, c);
+        rect(x, y1 - th, xe, y1, c);
+    }
+    for (float y = y0 + th + dash; y < y1 - th; y += 2.0f * dash) {
+        const float ye = y + dash < y1 - th ? y + dash : y1 - th;
+        rect(x0, y, x0 + th, ye, c);
+        rect(x1 - th, y, x1, ye, c);
+    }
+}
+
+/* a ring in dashes: every other of its segments */
+static void dashedRing(float cx, float cy, float r, float th, const uint8_t c[4])
+{
+    const float r0 = r - th * 0.5f > 0.0f ? r - th * 0.5f : 0.0f, r1 = r + th * 0.5f;
+
+    for (int i = 0; i < SEGMENTS; i += 2) {
+        quad(cx + r0 * s_d.cosT[i], cy + r0 * s_d.sinT[i], cx + r1 * s_d.cosT[i],
+             cy + r1 * s_d.sinT[i], cx + r1 * s_d.cosT[i + 1], cy + r1 * s_d.sinT[i + 1],
+             cx + r0 * s_d.cosT[i + 1], cy + r0 * s_d.sinT[i + 1], c);
+    }
+}
 
 /* The D-pad as one plus-shaped cross: the four keys' rectangles joined
    through the square between them, filled and outlined in the other
@@ -228,10 +288,13 @@ static void drawDpad(const IcoTouchOverlay *o, float th)
     const uint8_t *eu = hu ? kEdgeHeld : kEdge, *ed = hd ? kEdgeHeld : kEdge,
                   *el = hl ? kEdgeHeld : kEdge, *er = hr ? kEdgeHeld : kEdge;
 
+    const float a = shownAlpha(o, u->alpha); /* the D-pad is one control, never hidden */
+
     if (!(x1 < x2) || !(x0 < x1) || !(x2 < x3) || !(y0 < y1) || !(y1 < y2) || !(y2 < y3) ||
-        2.0f * th >= x2 - x1 || 2.0f * th >= y2 - y1) {
+        2.0f * th >= x2 - x1 || 2.0f * th >= y2 - y1 || a < 0.0f) {
         return;
     }
+    s_d.alpha = a;
     rect(x1, y0, x2, y1, hu ? kFillHeld : kFill);
     rect(x1, y2, x2, y3, hd ? kFillHeld : kFill);
     rect(x0, y1, x1, y2, hl ? kFillHeld : kFill);
@@ -258,6 +321,7 @@ static void drawDpad(const IcoTouchOverlay *o, float th)
     rect(x2 - th, y1, x2, y1 + th, hu || hr ? kEdgeHeld : kEdge);
     rect(x1, y2 - th, x1 + th, y2, hd || hl ? kEdgeHeld : kEdge);
     rect(x2 - th, y2 - th, x2, y2, hd || hr ? kEdgeHeld : kEdge);
+    s_d.alpha = 1.0f;
 }
 
 static void drawButtons(const IcoTouchOverlay *o, float th)
@@ -270,9 +334,23 @@ static void drawButtons(const IcoTouchOverlay *o, float th)
         const float x0 = b->rect.x, y0 = b->rect.y, x1 = x0 + b->rect.w, y1 = y0 + b->rect.h;
         const float cx = x0 + b->rect.w * 0.5f, cy = y0 + b->rect.h * 0.5f;
 
+        const float a = shownAlpha(o, b->alpha);
+
         if (b->rect.w <= 0.0f || b->rect.h <= 0.0f || z <= ICO_TOUCH_B_RIGHT) {
             continue;
         }
+        if (a < 0.0f) {
+            /* hidden: only the editor shows where it is */
+            if (o->edit.active) {
+                if (b->round) {
+                    dashedRing(cx, cy, b->rect.w * 0.5f - th * 0.5f, th, kEdge);
+                } else {
+                    dashedFrame(x0, y0, x1, y1, th, kEdge);
+                }
+            }
+            continue;
+        }
+        s_d.alpha = a;
         if (b->round) {
             const float r = b->rect.w * 0.5f;
             disc(cx, cy, r, held ? kFillHeld : kFill);
@@ -281,26 +359,57 @@ static void drawButtons(const IcoTouchOverlay *o, float th)
             rect(x0, y0, x1, y1, held ? kFillHeld : kFill);
             frame(x0, y0, x1, y1, th, held ? kEdgeHeld : kEdge);
         }
+        s_d.alpha = 1.0f;
     }
 }
 
 static void drawSticks(const IcoTouchOverlay *o, float th)
 {
     const IcoTouchDrawInfo *d = &o->info;
+    const IcoTouchLayout *l = &o->layout;
+    const float sa = shownAlpha(o, l->stickAlpha), la = shownAlpha(o, l->lookAlpha);
+
+    if (o->edit.active) {
+        /* the editor: the stick where it rests (the step's state is not
+           kept while editing), the look pad's area outlined (it draws
+           nothing else until a finger is on it) */
+        const IcoTouchRect *a = &l->lookArea;
+        if (l->stickR > 0.0f && sa >= 0.0f) {
+            s_d.alpha = sa;
+            disc(l->stickHomeX, l->stickHomeY, l->stickR, kFill);
+            ring(l->stickHomeX, l->stickHomeY, l->stickR - th * 0.5f, th, kEdge);
+            ring(l->stickHomeX, l->stickHomeY, l->runR, th * 0.6f, kRun);
+            disc(l->stickHomeX, l->stickHomeY, l->stickR * 0.38f, kKnob);
+        }
+        if (a->w > 2.0f * th && a->h > 2.0f * th) {
+            s_d.alpha = la >= 0.0f ? la : 1.0f;
+            if (la >= 0.0f) {
+                frame(a->x, a->y, a->x + a->w, a->y + a->h, th * 0.6f, kRun);
+            } else {
+                dashedFrame(a->x, a->y, a->x + a->w, a->y + a->h, th, kEdge);
+            }
+        }
+        s_d.alpha = 1.0f;
+        return;
+    }
+
     const float R = d->stickR;
     const int running = d->stickActive && R > 0.0f && d->stickMag * R >= d->runR - 0.5f;
 
-    if (R > 0.0f) {
+    if (R > 0.0f && sa >= 0.0f) {
+        s_d.alpha = sa;
         disc(d->stickCX, d->stickCY, R, d->stickActive ? kFillHeld : kFill);
         ring(d->stickCX, d->stickCY, R - th * 0.5f, th, d->stickActive ? kEdgeHeld : kEdge);
         ring(d->stickCX, d->stickCY, d->runR, th * 0.6f, running ? kRunLit : kRun);
         disc(d->knobX, d->knobY, R * 0.38f, d->stickActive ? kEdgeHeld : kKnob);
     }
-    if (d->lookActive) {
-        const float r = o->layout.lookR > 0.0f ? o->layout.lookR * 0.35f : R * 0.35f;
+    if (d->lookActive && la >= 0.0f) {
+        const float r = l->lookR > 0.0f ? l->lookR * 0.35f : R * 0.35f;
+        s_d.alpha = la;
         ring(d->lookCX, d->lookCY, r, th, kEdge);
         disc(d->lookFX, d->lookFY, r * 0.5f, kKnob);
     }
+    s_d.alpha = 1.0f;
 }
 
 /* Whether table slot no holds the sheet the glyph is cut from.  A glyph
@@ -361,10 +470,15 @@ static uint32_t drawGlyphs(const IcoTouchOverlay *o)
             const int held = (o->info.pressed >> z) & 1u;
             int uvwh[4], gw = 0, gh = 0;
 
+            const float ca = shownAlpha(o, b->alpha);
+
             if (tex[z] != tex[first] || b->rect.w <= 0.0f || b->rect.h <= 0.0f) {
                 continue;
             }
             done |= 1u << z;
+            if (ca < 0.0f) {
+                continue; /* hidden: no picture (the editor writes Hidden) */
+            }
             if (lt_ext_glyph_source(glyphOf(z), uvwh) < 0) {
                 continue;
             }
@@ -388,7 +502,7 @@ static uint32_t drawGlyphs(const IcoTouchOverlay *o)
             const float w = bw < bh * a ? bw : bh * a, h = w / a;
             const float cx = (b->rect.x + b->rect.w * 0.5f) * s_d.kx;
             const float cy = (b->rect.y + b->rect.h * 0.5f) * s_d.ky;
-            float al = (float)(held ? 0x80 : 0x70) * s_d.opacity;
+            float al = (float)(held ? 0x80 : 0x70) * s_d.opacity * ca;
             RdScreenVtx *p = &v[n++], *q = &v[n++];
 
             al = al > 128.0f ? 128.0f : al;
@@ -439,9 +553,14 @@ static void drawLabels(const RdOverlayCtx *ctx, const IcoTouchOverlay *o, uint32
     ui_begin_overlay(ctx);
     for (int z = 0; z < ICO_TOUCH_BUTTONS; z++) {
         const IcoTouchButton *b = &o->layout.button[z];
-        const char *name = ((withGlyph >> z) & 1u) ? NULL : labelOf(z);
+        const float ca = shownAlpha(o, b->alpha);
+        /* a hidden one's word is Hidden while editing (none in play) */
+        const char *name =
+            ca < 0.0f ? (o->edit.active && z > ICO_TOUCH_B_RIGHT ? ui_str(UI_STR_TED_HIDDEN) : NULL)
+            : ((withGlyph >> z) & 1u) ? NULL
+                                      : labelOf(z);
         const int held = (o->info.pressed >> z) & 1u;
-        float a = (held ? 128.0f : 104.0f) * o->opacity;
+        float a = (held ? 128.0f : 104.0f) * s_d.opacity * (ca < 0.0f ? 1.0f : ca);
         uint8_t c[4] = {0x80, 0x80, 0x80, 0};
 
         if (name == NULL || b->rect.w <= 0.0f || b->rect.h <= 0.0f) {
@@ -463,17 +582,412 @@ static void drawLabels(const RdOverlayCtx *ctx, const IcoTouchOverlay *o, uint32
     ui_end_overlay();
 }
 
+/* --- the touch layout editor's marks (the Edit layout page) ---------------
+ * Drawn only while o->edit.active, every place from the snapshot: the
+ * layout's region, band and rects, the view's toolbar, confirm strip and
+ * control boxes (port/input/touch_edit.c computes them; nothing here
+ * places a key). */
+
+/* the hinge band hatched: its area faint, stripes across it at 45 degrees */
+static void drawBand(const IcoTouchLayout *l, float th)
+{
+    const IcoTouchRect *b = &l->band;
+    const float x0 = b->x, y0 = b->y, x1 = b->x + b->w, y1 = b->y + b->h;
+
+    if (!(b->w > 0.0f) || !(b->h > 0.0f)) {
+        return;
+    }
+    rect(x0, y0, x1, y1, kBand);
+    if (b->h >= b->w) {
+        /* a vertical band: each stripe falls b->w from left to right */
+        for (float y = y0 + b->w; y + th <= y1; y += 4.0f * th) {
+            quad(x0, y, x1, y - b->w, x1, y - b->w + th, x0, y + th, kRun);
+        }
+    } else {
+        for (float x = x0; x + b->h + th <= x1; x += 4.0f * th) {
+            quad(x, y1, x + b->h, y0, x + b->h + th, y0, x + th, y1, kRun);
+        }
+    }
+}
+
+/* Snap on: a faint dot where a control's centre can land, every grid step
+   counted from the edge it is anchored to (the nearer edge of the region on
+   each axis, as the editor anchors a drop), so what is seen is what
+   snaps; none in the hinge band */
+#define GRID_DOTS 256
+
+static int gridLine(float lo, float len, float step, float *out)
+{
+    const float mid = lo + len * 0.5f;
+    int n = 0;
+
+    for (int i = 0; n < GRID_DOTS / 2 && lo + (float)i * step <= mid; i++) {
+        out[n++] = lo + (float)i * step;
+    }
+    for (int i = 0; n < GRID_DOTS && lo + len - (float)i * step > mid; i++) {
+        out[n++] = lo + len - (float)i * step;
+    }
+    return n;
+}
+
+static void drawGrid(const IcoTouchOverlay *o, float th)
+{
+    const IcoTouchLayout *l = &o->layout;
+    const IcoTouchRect *r = &l->region, *b = &l->band;
+    const float step = o->edit.grid * l->unit, d = th * 0.5f;
+    float xs[GRID_DOTS], ys[GRID_DOTS];
+
+    if (!o->edit.snap || !(step >= 2.0f * th) || !(r->w > 0.0f) || !(r->h > 0.0f)) {
+        return;
+    }
+    const int nx = gridLine(r->x, r->w, step, xs), ny = gridLine(r->y, r->h, step, ys);
+    for (int i = 0; i < nx; i++) {
+        for (int j = 0; j < ny; j++) {
+            if (b->w > 0.0f && b->h > 0.0f && xs[i] >= b->x && xs[i] <= b->x + b->w &&
+                ys[j] >= b->y && ys[j] <= b->y + b->h) {
+                continue;
+            }
+            rect(xs[i] - d, ys[j] - d, xs[i] + d, ys[j] + d, kDot);
+        }
+    }
+}
+
+/* whether a toolbar key acts now: Size and Opacity need a control
+   selected, or All on */
+static int keyLive(const IcoTouchEditView *v, int k)
+{
+    if (k >= ICO_TOUCH_ED_TB_SIZE_DN && k <= ICO_TOUCH_ED_TB_OP_UP) {
+        return v->selected >= 0 || v->all;
+    }
+    return 1;
+}
+
+static int keyLit(const IcoTouchEditView *v, int k)
+{
+    return (k == ICO_TOUCH_ED_TB_ALL && v->all) || (k == ICO_TOUCH_ED_TB_SNAP && v->snap);
+}
+
+/* the keys drawn now: the confirm strip while Reset asks, else the toolbar */
+static int confirming(const IcoTouchEditView *v)
+{
+    return v->state == ICO_TOUCH_ED_CONFIRM_RESET;
+}
+
+static int rectShown(const IcoTouchRect *r)
+{
+    return r->w > 0.0f && r->h > 0.0f;
+}
+
+/* the block the keys drawn now make (the hint sits above it); 0 for none */
+static int keyBlock(const IcoTouchEditView *v, IcoTouchRect *out)
+{
+    const IcoTouchRect *k = confirming(v) ? v->confirm : v->tb;
+    const int n = confirming(v) ? ICO_TOUCH_ED_CF_COUNT : ICO_TOUCH_ED_TB_COUNT;
+    float x0 = 0.0f, y0 = 0.0f, x1 = 0.0f, y1 = 0.0f;
+    int any = 0;
+
+    for (int i = 0; i < n; i++) {
+        if (!rectShown(&k[i])) {
+            continue;
+        }
+        if (!any || k[i].x < x0) {
+            x0 = k[i].x;
+        }
+        if (!any || k[i].y < y0) {
+            y0 = k[i].y;
+        }
+        if (!any || k[i].x + k[i].w > x1) {
+            x1 = k[i].x + k[i].w;
+        }
+        if (!any || k[i].y + k[i].h > y1) {
+            y1 = k[i].y + k[i].h;
+        }
+        any = 1;
+    }
+    out->x = x0;
+    out->y = y0;
+    out->w = x1 - x0;
+    out->h = y1 - y0;
+    return any;
+}
+
+/* the toolbar keys' height: the unit the editor's words are sized by */
+static float keyHeight(const IcoTouchEditView *v)
+{
+    for (int i = 0; i < ICO_TOUCH_ED_TB_COUNT; i++) {
+        if (rectShown(&v->tb[i])) {
+            return v->tb[i].h;
+        }
+    }
+    return 0.0f;
+}
+
+/* the line over the keys: the refused or overlap note while it applies,
+   else the hint (none over the confirm strip) */
+static const char *hintText(const IcoTouchEditView *v)
+{
+    if (v->refused > 0) {
+        return ui_str(UI_STR_TED_COVERED);
+    }
+    if (v->overlap != 0) {
+        return ui_str(UI_STR_TED_OVERLAP);
+    }
+    return confirming(v) ? NULL : ui_str(UI_STR_TED_HINT);
+}
+
+/* the font's overlay grid of the output's box (font.h: 640 units across
+   the 4:3 width, 448 down), as drawLabels measures */
+typedef struct TextGrid {
+    const RdOverlayCtx *ctx;
+    float W, bh;
+} TextGrid;
+
+static TextGrid textGrid(const RdOverlayCtx *ctx)
+{
+    TextGrid g;
+    const float bw = (float)ctx->box.w;
+
+    g.ctx = ctx;
+    g.bh = (float)ctx->box.h;
+    g.W = bw < g.bh * (4.0f / 3.0f) ? bw : g.bh * (4.0f / 3.0f);
+    return g;
+}
+
+/* a line's size (grid y units) for capitals hOut output pixels tall,
+   shrunk to fit wOut output pixels */
+static float fitSize(const TextGrid *g, float hOut, float wOut, const char *t)
+{
+    float size = hOut * 448.0f / g->bh;
+
+    for (int i = 0; i < 24 && size > 4.0f && ui_measure_text(size, t) * g->W / 640.0f > wOut; i++) {
+        size *= 0.92f;
+    }
+    return size;
+}
+
+/* one line centred on layout pixel (px, py), hPx tall at most and wPx wide,
+   at alpha a (0..1) */
+static void textAt(const TextGrid *g, float px, float py, float hPx, float wPx, float a,
+                   const char *t)
+{
+    uint8_t c[4] = {0x80, 0x80, 0x80, 0};
+    const float al = 128.0f * a;
+    float gx, gy;
+
+    if (t == NULL || t[0] == '\0') {
+        return;
+    }
+    c[3] = (uint8_t)(al > 128.0f ? 128.0f : al < 0.0f ? 0.0f : al + 0.5f);
+    pxToGrid(g->ctx, px * s_d.kx, py * s_d.ky, &gx, &gy);
+    ui_draw_text(gx, gy, fitSize(g, hPx * s_d.ky, wPx * s_d.kx, t), c, t,
+                 UI_ALIGN_CENTER | UI_VALIGN_MIDDLE);
+}
+
+/* a table string with one %d (UI_STR_VAL_MM) and its number */
+static const char *intText(UiStrId id, int v, char *buf, size_t size)
+{
+    const char *t = ui_str(id);
+    const char *at = strstr(t, "%d");
+
+    if (at != NULL) {
+        snprintf(buf, size, "%.*s%d%s", (int)(at - t), t, v, at + 2);
+    } else {
+        snprintf(buf, size, "%d %s", v, t);
+    }
+    return buf;
+}
+
+/* a toolbar key's words: its name, and under it the value where it has one
+   (Snap On, Grid 4 mm, the selected control's size and opacity) */
+static void keyWords(const IcoTouchEditView *v, int k, char *top, char *bot, size_t n)
+{
+    static const UiStrId kName[ICO_TOUCH_ED_TB_COUNT] = {
+        UI_STR_TED_DONE, UI_STR_TED_UNDO, UI_STR_TED_RESET,   UI_STR_TED_SNAP,    UI_STR_TED_GRID,
+        UI_STR_TED_SIZE, UI_STR_TED_SIZE, UI_STR_TED_OPACITY, UI_STR_TED_OPACITY, UI_STR_TED_ALL};
+    const int sel = v->selected >= 0;
+
+    top[0] = bot[0] = '\0';
+    switch (k) {
+    case ICO_TOUCH_ED_TB_SNAP:
+        snprintf(top, n, "%s", ui_str(UI_STR_TED_SNAP));
+        snprintf(bot, n, "%s", ui_str(v->snap ? UI_STR_ON : UI_STR_OFF));
+        return;
+    case ICO_TOUCH_ED_TB_GRID:
+        snprintf(top, n, "%s", ui_str(UI_STR_TED_GRID));
+        intText(UI_STR_VAL_MM, (int)(v->grid + 0.5f), bot, n);
+        return;
+    case ICO_TOUCH_ED_TB_SIZE_DN:
+    case ICO_TOUCH_ED_TB_SIZE_UP:
+        snprintf(top, n, "%s %s", ui_str(UI_STR_TED_SIZE),
+                 k == ICO_TOUCH_ED_TB_SIZE_DN ? "-" : "+");
+        if (sel) {
+            snprintf(bot, n, "%d %%", (int)(v->selScale * 100.0f + 0.5f));
+        }
+        return;
+    case ICO_TOUCH_ED_TB_OP_DN:
+    case ICO_TOUCH_ED_TB_OP_UP:
+        snprintf(top, n, "%s %s", ui_str(UI_STR_TED_OPACITY),
+                 k == ICO_TOUCH_ED_TB_OP_DN ? "-" : "+");
+        if (sel && !(v->selAlpha > 0.0f)) {
+            snprintf(bot, n, "%s", ui_str(UI_STR_TED_HIDDEN));
+        } else if (sel) {
+            snprintf(bot, n, "%d %%", (int)(v->selAlpha * 100.0f + 0.5f));
+        }
+        return;
+    default:
+        snprintf(top, n, "%s", k >= 0 && k < ICO_TOUCH_ED_TB_COUNT ? ui_str(kName[k]) : "");
+        return;
+    }
+}
+
+/* a control's name: the selection's caption, the look pad's word */
+static const char *ctlName(int ctl)
+{
+    static const UiStrId kStr[ICO_TOUCH_CTL_COUNT] = {
+        UI_STR_BTN_DPAD,     UI_STR_BTN_CROSS,  UI_STR_BTN_CIRCLE, UI_STR_BTN_SQUARE,
+        UI_STR_BTN_TRIANGLE, UI_STR_NONE,       UI_STR_NONE,       UI_STR_NONE,
+        UI_STR_NONE,         UI_STR_BTN_SELECT, UI_STR_BTN_START,  UI_STR_TED_STICK,
+        UI_STR_TED_LOOK};
+    static const char *const kShoulder[4] = {"R1", "L1", "L2", "R2"};
+
+    if (ctl >= ICO_TOUCH_CTL_R1 && ctl <= ICO_TOUCH_CTL_R2) {
+        return kShoulder[ctl - ICO_TOUCH_CTL_R1];
+    }
+    return ctl >= 0 && ctl < ICO_TOUCH_CTL_COUNT ? ui_str(kStr[ctl]) : "";
+}
+
+/* The marks over the controls: the overlapping controls' outlines in
+   amber, the selection's in white, the keys (the toolbar, or the confirm
+   strip while Reset asks; Size and Opacity dim with nothing to act on) and
+   the hint's backing as shapes, then their words, the selection's name and
+   the look pad's. */
+static void drawEditor(const RdOverlayCtx *ctx, const IcoTouchOverlay *o, float th)
+{
+    const IcoTouchEditView *v = &o->edit;
+    const int conf = confirming(v);
+    const IcoTouchRect *keys = conf ? v->confirm : v->tb;
+    const int nKeys = conf ? ICO_TOUCH_ED_CF_COUNT : ICO_TOUCH_ED_TB_COUNT;
+    const float kh = keyHeight(v);
+    const float lineH = kh > 0.0f ? kh * 0.26f : o->layout.unit * 2.0f;
+    const int fontOk = ctx->box.w != 0 && ctx->box.h != 0 && ui_font_init();
+    const TextGrid g = textGrid(ctx);
+    const int sel =
+        v->selected >= 0 && v->selected < ICO_TOUCH_CTL_COUNT && rectShown(&v->ctl[v->selected]);
+    IcoTouchRect block;
+    const int haveBlock = keyBlock(v, &block);
+    const char *hint = hintText(v);
+    float hintW = 0.0f, hintX = 0.0f, hintY = 0.0f;
+
+    s_d.alpha = 1.0f;
+    for (int c = 0; c < ICO_TOUCH_CTL_COUNT; c++) {
+        const IcoTouchRect *b = &v->ctl[c];
+        if (((v->overlap >> c) & 1u) && rectShown(b)) {
+            frame(b->x - th, b->y - th, b->x + b->w + th, b->y + b->h + th, th, kWarn);
+        }
+    }
+    if (sel) {
+        const IcoTouchRect *b = &v->ctl[v->selected];
+        frame(b->x - 2.0f * th, b->y - 2.0f * th, b->x + b->w + 2.0f * th, b->y + b->h + 2.0f * th,
+              th, kEdgeHeld);
+    }
+    for (int k = 0; k < nKeys; k++) {
+        const IcoTouchRect *r = &keys[k];
+        if (!rectShown(r)) {
+            continue;
+        }
+        s_d.alpha = conf || keyLive(v, k) ? 1.0f : KEY_DIM;
+        rect(r->x, r->y, r->x + r->w, r->y + r->h, !conf && keyLit(v, k) ? kKeyLit : kKey);
+        frame(r->x, r->y, r->x + r->w, r->y + r->h, th * 0.6f, kEdge);
+    }
+    s_d.alpha = 1.0f;
+    if (fontOk && haveBlock && hint != NULL && s_d.kx > 0.0f) {
+        /* the hint's line over the block, centred on it, kept on the
+           output, on a backing as wide as its words */
+        const float outW = (float)o->layout.outW;
+        const float sz = fitSize(&g, lineH * s_d.ky, outW * 0.96f * s_d.kx, hint);
+        hintW = ui_measure_text(sz, hint) * g.W / 640.0f / s_d.kx;
+        hintX = block.x + block.w * 0.5f;
+        if (hintX - hintW * 0.5f < 0.0f) {
+            hintX = hintW * 0.5f;
+        }
+        if (hintX + hintW * 0.5f > outW) {
+            hintX = outW - hintW * 0.5f;
+        }
+        hintY = block.y - lineH * 1.6f;
+        rect(hintX - hintW * 0.5f - th, hintY - lineH * 0.8f, hintX + hintW * 0.5f + th,
+             hintY + lineH * 0.8f, kKey);
+    }
+    flush();
+    if (!fontOk) {
+        return;
+    }
+    ui_begin_overlay(ctx);
+    for (int k = 0; k < nKeys; k++) {
+        static const UiStrId kConfirm[ICO_TOUCH_ED_CF_COUNT] = {
+            UI_STR_TED_THIS_SCREEN, UI_STR_TED_ALL_SCREENS, UI_STR_TED_CANCEL};
+        const IcoTouchRect *r = &keys[k];
+        char top[64], bot[64];
+
+        if (!rectShown(r)) {
+            continue;
+        }
+        if (conf) {
+            snprintf(top, sizeof(top), "%s", ui_str(kConfirm[k]));
+            bot[0] = '\0';
+        } else {
+            keyWords(v, k, top, bot, sizeof(top));
+        }
+        const float a = conf || keyLive(v, k) ? 1.0f : KEY_DIM;
+        const float cx = r->x + r->w * 0.5f, cy = r->y + r->h * 0.5f;
+        if (bot[0] != '\0') {
+            textAt(&g, cx, cy - r->h * 0.2f, r->h * 0.24f, r->w * 0.9f, a, top);
+            textAt(&g, cx, cy + r->h * 0.22f, r->h * 0.22f, r->w * 0.9f, a, bot);
+        } else {
+            textAt(&g, cx, cy, r->h * 0.26f, r->w * 0.9f, a, top);
+        }
+    }
+    if (hintW > 0.0f) {
+        textAt(&g, hintX, hintY, lineH, hintW + 2.0f, 1.0f, hint);
+    }
+    if (sel) {
+        /* the selection's name over it, or under it at the region's top */
+        const IcoTouchRect *b = &v->ctl[v->selected];
+        float y = b->y - 2.0f * th - lineH;
+        if (y - lineH * 0.6f < o->layout.region.y) {
+            y = b->y + b->h + 2.0f * th + lineH;
+        }
+        textAt(&g, b->x + b->w * 0.5f, y, lineH, (float)o->layout.outW, 1.0f, ctlName(v->selected));
+    }
+    {
+        /* the look pad's word, or Hidden, in its area: nothing else shows it */
+        const IcoTouchRect *a = &o->layout.lookArea;
+        if (rectShown(a)) {
+            const float la = shownAlpha(o, o->layout.lookAlpha);
+            textAt(&g, a->x + a->w * 0.5f, a->y + a->h * 0.5f, lineH, a->w * 0.9f,
+                   la < 0.0f ? 1.0f : la,
+                   la < 0.0f ? ui_str(UI_STR_TED_HIDDEN) : ctlName(ICO_TOUCH_CTL_LOOK));
+        }
+    }
+    ui_end_overlay();
+}
+
 void ui_touch_draw_overlay(const struct RdOverlayCtx *ctx)
 {
     IcoTouchOverlay o;
 
-    if (!ctx || !s_source || !s_source(&o) || !(o.opacity > 0.0f) || o.layout.outW == 0 ||
-        o.layout.outH == 0 || ctx->outW == 0 || ctx->outH == 0) {
+    if (!ctx || !s_source || !s_source(&o) || !(o.opacity > 0.0f || o.edit.active) ||
+        o.layout.outW == 0 || o.layout.outH == 0 || ctx->outW == 0 || ctx->outH == 0) {
         return;
     }
     tables();
     s_d.n = 0;
     s_d.opacity = o.opacity > 1.0f ? 1.0f : o.opacity;
+    s_d.alpha = 1.0f;
+    if (o.edit.active) {
+        /* the editor shows every control at full strength (the device
+           layer's snapshot says 1 then: a gamepad in Auto would fade it) */
+        s_d.opacity = 1.0f;
+    }
     /* the zones were built for the window's pixels; the output is the
        same size but for a swapchain still catching up with a resize */
     s_d.kx = (float)ctx->outW / (float)o.layout.outW;
@@ -482,12 +996,19 @@ void ui_touch_draw_overlay(const struct RdOverlayCtx *ctx)
     s_d.maxY = (float)(ctx->outH < 4095u ? ctx->outH : 4095u) * 16.0f;
     float th = o.layout.unit * 0.4f;
     th = th < 2.0f ? 2.0f : th;
+    if (o.edit.active) {
+        drawBand(&o.layout, th);
+        drawGrid(&o, th);
+    }
     drawSticks(&o, th);
     drawButtons(&o, th);
     drawDpad(&o, th);
     flush();
     const uint32_t withGlyph = drawGlyphs(&o);
     drawLabels(ctx, &o, withGlyph);
+    if (o.edit.active) {
+        drawEditor(ctx, &o, th);
+    }
 }
 
 #else
