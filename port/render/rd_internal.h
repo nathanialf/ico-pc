@@ -1194,6 +1194,13 @@ typedef enum RdFsId {
      * rd__fs_local_read) */
     RD_FS_FX_FRAME,
     RD_FS_FX_LOCAL,
+    /* Motion blur: Smooth (rd_blur_smooth.c), behind blit_vs, each texel
+     * by Load: fx_acc_ps the accumulator's step A = S + a' (A - S) into
+     * the other RGBA16F texture of the pair, fx_acc_resolve_ps the
+     * accumulator rounded into an RGBA8 target the sprite reads; their
+     * pipelines a private cache of two (RD_BLUR_SMOOTH_PIPES) */
+    RD_FS_FX_ACC,
+    RD_FS_FX_ACC_RESOLVE,
     RD_FS_COUNT
 } RdFsId;
 
@@ -3215,6 +3222,56 @@ bool rd__wrap_applies(const RdStateBlock *s);
 void rd__wrap_shutdown(void);
 uint32_t rd__wrap_pipeline_count(void);
 #define RD_WRAP_PIPES 16
+
+/* rd_blur_smooth.c: Options > Effects > Motion blur: Smooth
+ * (RdSettings.motionBlurSmooth; docs/port/RENDER.md, "The motion blur
+ * under Smooth").  The motion blur's sprite reads, instead of the DISPLAY
+ * the tick started from, an RGBA16F accumulator of the scenes of every
+ * present, A = S + a' (A - S), resolved into an RGBA8 scene-class temporary
+ * target, with the sprite's FIX spread over the tick's presents:
+ * FIX' = clamp(round(128 (FIX / 128)^(1 / k)), FIX, 127).
+ * rd__blur_smooth_arm      the presenters, before a replay that presents
+ *                          (rd_interp.c rd_present, rd_core.c replayOnHost;
+ *                          the replay tool before its own): a tick's first
+ *                          present, and k the presents a tick (1..64); a
+ *                          replay not armed (a self-test, a dump's, --time)
+ *                          draws the sprite as Original and leaves the
+ *                          accumulator alone
+ * rd__blur_smooth_replay_end  rd__replay_frame after every replay: an armed
+ *                          replay that is not a keep frame's and drew no
+ *                          motion blur sprite (the game's alpha 0, the
+ *                          option off) ends the trail: the next sprite
+ *                          starts it again from its own scene (FIX' 0)
+ * rd__blur_smooth_active   Smooth is in force (the setting, and the
+ *                          accumulator not refused this run):
+ *                          rd_interp.c feedback leaves DISPLAY_HELD alone
+ * rd__blur_smooth_free     the accumulator, its target and the restart
+ *                          (rd_core.c: the targets recreated, Smooth to
+ *                          Original); why is logged when it held one
+ * rd__blur_smooth_shutdown the above and the two pipelines (rd__gpu_shutdown)
+ * rd__blur_smooth_fix      FIX' of FIX over k presents (pure)
+ * rd__blur_smooth_block    the 10 s summary's line (rd_interp.c presentLog),
+ *                          logged when the block drew a Smooth sprite or
+ *                          restarted, then the block's counts start again
+ * rd__blur_smooth_sizes    the pair's and the target's texture sizes (0 when
+ *                          none: tests)
+ * rd__blur_smooth_counts   since start: the sprites drawn under Smooth, the
+ *                          restarts, the sprites drawn as Original while
+ *                          Smooth was set (tests)
+ * k (rd_interp.c rd_present): the present clock's tick over its step
+ * (rd_present_clock_alpha) on the timer path, the presents the tick before
+ * counted under the vsync lock, 1 for the first tick */
+void rd__blur_smooth_arm(int firstOfTick, uint32_t presentsPerTick);
+void rd__blur_smooth_replay_end(int keep);
+bool rd__blur_smooth_active(void);
+void rd__blur_smooth_free(const char *why);
+void rd__blur_smooth_shutdown(void);
+uint8_t rd__blur_smooth_fix(uint32_t fix, uint32_t presentsPerTick);
+void rd__blur_smooth_block(void);
+void rd__blur_smooth_sizes(uint32_t acc[2], uint32_t res[2]);
+void rd__blur_smooth_counts(uint64_t *drawn, uint64_t *restarts, uint64_t *original);
+#define RD_BLUR_SMOOTH_PIPES 2
+#define RD_BLUR_SMOOTH_K_MAX 64u
 
 /* rd_png.c: 8-bit RGBA (or RGB with withAlpha = 0), stored deflate.  The
  * source is RGBA8 either way, rows pitch (>= w * 4) bytes apart. */

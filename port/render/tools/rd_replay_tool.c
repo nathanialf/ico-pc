@@ -58,6 +58,13 @@
  *                         (rd_core.c rd__target_scale_of); without it they are
  *                         drawn at their GS size, the PS2's.  A dump from before
  *                         the option marks no block and replays as without it
+ *   --motion-blur M       original (the default) or smooth: Options > Effects
+ *                         > Motion blur's way (RdSettings.motionBlurSmooth,
+ *                         rd_blur_smooth.c).  Smooth's trail is an
+ *                         accumulator of the replays before: one replay
+ *                         alone holds none (the trail starts with it); the
+ *                         --prev dumps and --presents' PREV feed it, as
+ *                         the presents of a run do
  *   --filter F            original, trilinear or anisotropic
  *   --mirror              the mirror mode: UI prims flipped at replay, the
  *                         present flipped (any preset)
@@ -208,6 +215,16 @@
  *                         tick's first present; the two must be
  *                         consecutive frames.  The meshes' kept versions are
  *                         not in a dump: each frame's own mesh is its stream
+ *   --presents N          (with --interp T PREV) PREV replayed once (the tick
+ *                         before: the motion blur's old frame), then N
+ *                         presents of <dump> at alpha T (k + 1) / N, k = 0
+ *                         .. N - 1, as the presenter draws a tick of N
+ *                         presents (the first the tick's first present),
+ *                         each written to <out>-p<k>.png (<out> without its
+ *                         .png); the motion blur takes k = N presents a
+ *                         tick.  Under --motion-blur original the N
+ *                         pictures' motion blur is one (DISPLAY_HELD), under
+ *                         smooth its trail moves on at each
  *   --interp-any          (with --interp) PREV is taken for the tick right
  *                         before <dump> whatever their frame numbers (dumps
  *                         saved some ticks apart, as the F12 sets are): no
@@ -905,6 +922,10 @@ static float interpT = 1.0f;
 static const char *prevDumps[16];
 static int prevCount;
 static bool noHalf;
+/* --motion-blur smooth (every replay armed as a present, rd__blur_smooth_arm)
+ * and --presents N */
+static bool motionSmooth;
+static int presentsN;
 
 /* --no-half: every TARGET command without the field's half pixel
    (RD_TARGET_HALF_Y), as a flip in the other field sends the frame */
@@ -930,6 +951,9 @@ static bool replayPrev(void)
             return false;
         }
         dropHalf(&q);
+        if (motionSmooth) {
+            rd__blur_smooth_arm(1, 1); /* Smooth's trail fed by the frames before */
+        }
         const bool ok = rd__replay_frame(&q, (int)q.keep, false);
         rhi_wait_frame();
         printf("prev %s: frame %u replayed%s\n", prevDumps[k], q.number, ok ? "" : " (failed)");
@@ -1313,19 +1337,77 @@ static int checkKeys(const char *dump, const RdFrame *rf)
     return miss ? 1 : 0;
 }
 
+/* --presents N: PREV replayed once, then N presents of the tick at alpha
+ * T (k + 1) / N, each picture to <png>-p<k>.png (a target's readback, or
+ * the presented picture with --present); 0 written, 1 a failure */
+static int presentsRun(const char *dump, const char *png, RdFrame *pf, RdFrame *f, int target,
+                       uint32_t ow, uint32_t oh, RhiRect want, uint32_t pw, uint32_t ph)
+{
+    char stem[1024];
+    snprintf(stem, sizeof(stem), "%s", png);
+    const size_t n = strlen(stem);
+    if (n > 4 && strcmp(stem + n - 4, ".png") == 0) {
+        stem[n - 4] = '\0';
+    }
+    rd__blur_smooth_arm(1, (uint32_t)presentsN);
+    if (!rd__replay_frame(pf, (int)pf->keep, false)) {
+        fprintf(stderr, "%s: --presents: PREV's replay failed\n", dump);
+        return 1;
+    }
+    rhi_wait_frame();
+    printf("%s: presents: PREV (frame %u) replayed as the tick before\n", dump, pf->number);
+    const size_t cap = (size_t)4096 * 4096 * 4;
+    uint8_t *px = pw ? NULL : malloc(cap);
+    int rc = 0;
+    for (int k = 0; k < presentsN && rc == 0; k++) {
+        const float a = interpT * (float)(k + 1) / (float)presentsN;
+        RdInterpStats ist;
+        const RdFrame *rf = rd__interp_frame(pf, f, a, k == 0, &ist);
+        if (!rf) {
+            fprintf(stderr, "%s: --presents: rd__interp_frame failed at present %d\n", dump, k);
+            rc = 1;
+            break;
+        }
+        rd__blur_smooth_arm(k == 0, (uint32_t)presentsN);
+        char name[1100];
+        snprintf(name, sizeof(name), "%s-p%d.png", stem, k);
+        uint32_t w = 0, h = 0;
+        bool ok = rd__replay_frame(rf, (int)rf->keep, pw != 0);
+        if (ok && pw) {
+            ok = writePresent(name, ow, oh, want, pw, ph);
+            w = pw;
+            h = ph;
+        } else if (ok) {
+            ok = px && rd__read_target(rd_target((RdTargetId)target), px, cap, &w, &h) &&
+                 rd_write_png(name, px, w, h, w * 4, 1);
+        }
+        rhi_wait_frame();
+        uint64_t drawn = 0, restarts = 0;
+        rd__blur_smooth_counts(&drawn, &restarts, NULL);
+        printf("%s: present %d of %d at alpha %.4f (snap %u): %ux%u -> %s; motion blur %s (%llu "
+               "drawn through the accumulator, %llu restarts)\n",
+               dump, k, presentsN, (double)a, ist.snap, w, h, ok ? name : "(failed)",
+               motionSmooth ? "smooth" : "original", (unsigned long long)drawn,
+               (unsigned long long)restarts);
+        rc = ok ? 0 : 1;
+    }
+    free(px);
+    return rc;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 3) {
         fprintf(stderr,
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
                 "[--aspect A] [--resolution WxH|Nx] [--full-height] [--full-pixel] "
-                "[--border-mask] [--water-sharp] [--filter F] "
+                "[--border-mask] [--water-sharp] [--motion-blur original|smooth] [--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
                 "[--time N] [--keys] "
                 "[--pass-dump DIR] "
                 "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject] "
-                "[--interp-nop-prev L:A[-B]]]\n"
+                "[--interp-nop-prev L:A[-B]] [--presents N]]\n"
                 "       [--loss-bisect] [--passes A[-B]] [--draws A[-B]] [--mask-marks]\n"
                 "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
                 "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n"
@@ -1388,6 +1470,22 @@ int main(int argc, char **argv)
             s.fullPixel = 1;
         } else if (strcmp(argv[i], "--border-mask") == 0) {
             s.borderMask = 1;
+        } else if (strcmp(argv[i], "--motion-blur") == 0 && i + 1 < argc) {
+            const char *m = argv[++i];
+            if (strcmp(m, "smooth") != 0 && strcmp(m, "original") != 0) {
+                fprintf(stderr, "bad --motion-blur (original or smooth)\n");
+                return 1;
+            }
+            motionSmooth = strcmp(m, "smooth") == 0;
+            s.motionBlurSmooth = motionSmooth ? 1 : 0;
+        } else if (strcmp(argv[i], "--presents") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            const long n = strtol(argv[++i], &end, 10);
+            if (!end || *end != '\0' || n < 1 || n > (long)RD_BLUR_SMOOTH_K_MAX) {
+                fprintf(stderr, "bad --presents (1..%u)\n", RD_BLUR_SMOOTH_K_MAX);
+                return 1;
+            }
+            presentsN = (int)n;
         } else if (strcmp(argv[i], "--water-sharp") == 0) {
             s.waterSharp = 1;
         } else if (strcmp(argv[i], "--mirror") == 0) {
@@ -1565,6 +1663,10 @@ int main(int argc, char **argv)
             fprintf(stderr, "--interp-nop-prev needs --interp\n");
             return 1;
         }
+    }
+    if (presentsN && (!interpPrev || passDir || timeN)) {
+        fprintf(stderr, "--presents needs --interp T PREV (and not --pass-dump or --time)\n");
+        return 1;
     }
     uint32_t gw = 0, gh = 0;
     if (!unzipDump(&dump, 0) || (interpPrev && !unzipDump(&interpPrev, 1))) {
@@ -1746,6 +1848,22 @@ int main(int argc, char **argv)
         rd__replay_set_window_draws(passA, passB, drawA, drawA ? drawB : 0u, maskMarks ? 1 : 0, 0);
     } else if (maskMarks) {
         rd__replay_set_window_draws(1, UINT32_MAX, 0, 0, 1, 0);
+    }
+    if (presentsN && !list) {
+        rc = presentsRun(dump, png, &pf, &f, target, ow, oh, want, pw, ph);
+        rd__frame_free(&f);
+        rd__frame_free(&pf);
+        rd_shutdown();
+        return rc;
+    }
+    if (motionSmooth) {
+        /* a replay of its own is a tick's first present; its trail is the
+           --prev frames' (none without them: the trail starts here) */
+        rd__blur_smooth_arm(1, 1);
+        if (!prevCount) {
+            printf("note: --motion-blur smooth on one replay holds no trail (give --prev DUMP or "
+                   "--interp T PREV --presents N)\n");
+        }
     }
     const bool replayed = rd__replay_frame(rf, (int)rf->keep, pw != 0 && !passDir);
     if (replayed && tempsDir) {

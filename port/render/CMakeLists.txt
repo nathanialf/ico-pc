@@ -115,6 +115,7 @@ add_library(ico_render STATIC
     rd_blend_selftest.c # the exact blend's start-up check on the device (issue 89)
     rd_blur.c # staticBlur.c's sprites
     rd_blur_border.c # the post sprites' replay: the reduction's open border, its outer columns
+    rd_blur_smooth.c # Motion blur: Smooth, the motion blur's accumulator
     rd_core.c
     rd_crt.c # the CRT filter at present time
     rd_date_selftest.c # DATE through the stencil bit: the start-up check on the device

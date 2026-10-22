@@ -118,7 +118,13 @@
  *      model's, rd__fx_local_selftest passing, every pipeline created
  *      enumerated.  f holds the plan off: it counts the FIX 128 skip's
  *      snapshots alone.
- * Tolerance 0 everywhere (but q's scaled runs).  Every pipeline created is enumerated; no
+ *   s  Motion blur: Smooth (rd_blur_smooth.c; rd_blur_smooth_test.inc says
+ *      what): a still picture within 1 of Original's at 1, 4 and 10
+ *      presents a tick, a moving bar's trail moved on at each present and
+ *      its ghost after a tick within 2 of Original's, the restart after a
+ *      tick without the motion blur holding no ghost; then (s2) at Enhanced
+ *      2x with the full-height scene the accumulator at SCENE's size.
+ * Tolerance 0 everywhere (but q's scaled runs and s).  Every pipeline created is enumerated; no
  * validation errors; no stubbed command replayed. */
 #include <math.h>
 #include <stdarg.h>
@@ -3198,6 +3204,8 @@ static void checkMotionBlurPresentsScaled(void)
     rd_shutdown();
 }
 
+#include "rd_blur_smooth_test.inc"
+
 /* ================== (w) the aura's feedback chain on a wide frame
  *
  * The Queen's mirage (feedback mode 2: AURA_WORK's alpha reduced into
@@ -3718,6 +3726,7 @@ static const IcoShardCase k_cases[] = {
     {"cut_presents", 1},
     {"motion_blur_presents", 40},
     {"fix128_skip", 1},
+    {"motion_blur_smooth", 6},
     {"uint_view", 2},
     {"blur_fold", 2},
     {"fx_plan", 8},
@@ -3729,6 +3738,7 @@ static const IcoShardCase k_cases[] = {
     {"motion_blur_wide", 4},
     {"above1x", 38},
     {"effects_scaled", 4},
+    {"motion_blur_smooth_scaled", 2},
 };
 
 int main(int argc, char **argv)
@@ -3839,6 +3849,9 @@ int main(int argc, char **argv)
     if (ico_shard_take("fix128_skip")) {
         checkFix128Skip();
     }
+    if (ico_shard_take("motion_blur_smooth")) {
+        checkMotionBlurSmooth(); /* Motion blur: Smooth (rd_blur_smooth_test.inc) */
+    }
 
     /* the pipelines the cases above created (this shard's) are all in the
        reachable set; every shard runs these two */
@@ -3878,6 +3891,9 @@ int main(int argc, char **argv)
     }
     if (ico_shard_take("effects_scaled")) {
         checkEffectsScaled(); /* re-initialises rd (PAL, Enhanced 2x) */
+    }
+    if (ico_shard_take("motion_blur_smooth_scaled")) {
+        checkMotionBlurSmoothScaled(); /* re-initialises rd (Enhanced 2x, full height) */
     }
     if (ico_shard_finish() != 0) {
         return 1;

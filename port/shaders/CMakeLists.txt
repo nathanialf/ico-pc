@@ -183,6 +183,11 @@ ico_add_shader(fog_lut_local_ps fog_lut.hlsl fog_lut_ps fragment
 ico_add_shader(date_clear_ps sprite.hlsl date_clear_ps fragment)
 ico_add_shader(date_stencil_ps sprite.hlsl date_stencil_ps fragment DEFINES ICO_DATE_STENCIL=1)
 ico_add_shader(fx_blur2_ps fx_sprite.hlsl fx_blur2_ps fragment)
+# Motion blur: Smooth's accumulator (port/render/rd_blur_smooth.c): its step
+# and its resolve into the RGBA8 target the motion blur's sprite reads, behind
+# blit_vs; used on both backends
+ico_add_shader(fx_acc_ps fx_sprite.hlsl fx_acc_ps fragment)
+ico_add_shader(fx_acc_resolve_ps fx_sprite.hlsl fx_acc_resolve_ps fragment)
 # The blur sprite's UINT-view build (fx_sprite_u_ps)
 # fx_sprite_ps reading its textures through their RGBA8_UINT views
 # (RHI_TEX_UINT_VIEW; rd_replay.c doBlurSpriteDraw)

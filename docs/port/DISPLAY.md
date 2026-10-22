@@ -694,7 +694,17 @@ changed or when it jumped; the whole frame snaps on a camera cut, a fade edge, a
 camera turn or move, and after the targets were recreated. CLUT animation, the rand-driven draws,
 the dissolve and film noise are held at the tick, and the feedback passes read the tick's first
 present's copies (`FEED_HELD`, `DISPLAY_HELD`), so the motion blur runs once a tick at any present
-rate (`port/render/rd_interp.c`, header comment).
+rate (`port/render/rd_interp.c`, header comment). Under Motion blur: Smooth
+(`[video] effect_motion_blur_mode = "smooth"`, `RdSettings.motionBlurSmooth`) the motion blur's
+sprite instead reads an RGBA16F accumulator of the scenes of every present, `A = S + a' (A - S)`,
+with `a' = FIX' / 128` and `FIX' = clamp(round(128 (FIX / 128)^(1 / k)), FIX, 127)` for k presents
+a tick, so the trail moves on at every present and keeps the PS2's share over a tick; no
+`DISPLAY_HELD` copy is made then. What it gives up against Original: the light the passes after
+the sprite add (the aura, the brightness step, the reduction's tint, a fade) is not fed
+back into the trail, and the old frame's vertical halving (DISPLAY's H / 2 lines) is gone; a
+still picture is the same within a level. k is the present clock's tick over its step on the
+timer path, the presents the tick before counted under the vsync lock, 1 for the first tick; at
+one present a tick FIX' is FIX ([RENDER.md](RENDER.md#the-motion-blur-under-smooth)).
 
 **The alpha.** On the timer path the window takes alpha from a present clock: it advances by the
 running mean of the intervals between presents and moves towards the measured time by an eighth of

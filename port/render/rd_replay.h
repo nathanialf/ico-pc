@@ -172,14 +172,23 @@ bool rd__replay_take_snap(Replay *r, RdTargetRec *tc, RhiRect area);
 int rd__replay_perf_target_post(const Replay *r, const RdCmd *c);
 void rd__replay_perf_post(Replay *r, int post);
 bool rd__replay_blur_fix128_skip(void);
-/* rd_replay.c for rd_blur_border.c: doBlurSpriteDraw (one post sprite, the
- * state block's scissor and wrap in force) and borderOpen (Full pixel on,
- * or the border mask on a cropped frame) */
+/* rd_replay.c for rd_blur_border.c and rd_blur_smooth.c: doBlurSpriteDraw
+ * (one post sprite, the state block's scissor, wrap, texture and FIX in
+ * force), borderOpen (Full pixel on, or the border mask on a cropped
+ * frame) and setViewport (a pass's viewport for a texture w x h: the exact
+ * one while the lists record) */
 void rd__replay_blur_sprite_draw(Replay *r, const RdFrame *f, const RdCmd *c);
 bool rd__replay_border_open(void);
+void rd__replay_viewport(uint32_t w, uint32_t h);
 /* rd_blur_border.c: an RDC_POST_STUB of an rd__is_blur_kind kind, the list
- * loop's (the fold, the reduction's open border and its outer columns) */
+ * loop's (the fold, the reduction's open border and its outer columns, the
+ * motion blur under Smooth) */
 void rd__blur_post_sprite(Replay *r, const RdFrame *f, const RdCmd *c);
+/* rd_blur_smooth.c: the motion blur's sprite c under Smooth
+ * (rd_internal.h rd__blur_smooth_arm): the accumulator's passes, then the
+ * recorded sprite reading the accumulator with FIX'; false when Smooth is
+ * not in force for this replay (the sprite is then drawn as recorded) */
+bool rd__blur_smooth_sprite(Replay *r, const RdFrame *f, const RdCmd *c);
 /* the target's passes readable for the exact blend's attachment read (exactReadable) */
 bool rd__replay_exact_readable(uint32_t target);
 

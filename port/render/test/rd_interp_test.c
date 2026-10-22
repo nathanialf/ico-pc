@@ -1016,13 +1016,24 @@ static void testFeedback(void)
      * frame) copies all of DISPLAY into DISPLAY_HELD at the head of a
      * tick's first present and back at the later ones', one that writes
      * FEED128 the same with FEED_HELD; the motion blur sprite is the
-     * recorded one in every present (the tick's FIX, no time factor) */
+     * recorded one in every present (the tick's FIX, no time factor).
+     * Under Motion blur: Smooth (RdSettings.motionBlurSmooth) the sprite
+     * reads its accumulator (rd_blur_smooth.c), so no DISPLAY copy is made
+     * either way, FEED128's as ever, and the frame's sprite record is still
+     * the recorded one (FIX' and the texture are the replay's) */
     static const struct {
-        int display, feed;
-    } kCases[] = {{1, 1}, {1, 0}, {0, 1}, {0, 0}};
+        int display, feed, smooth;
+    } kCases[] = {{1, 1, 0}, {1, 0, 0}, {0, 1, 0}, {0, 0, 0},
+                  {1, 1, 1}, {1, 0, 1}, {0, 1, 1}, {0, 0, 1}};
+
+    const uint8_t keepSmooth = g_rd.settings.motionBlurSmooth;
 
     for (size_t k = 0; k < sizeof(kCases) / sizeof(kCases[0]); k++) {
         const int display = kCases[k].display, feed = kCases[k].feed;
+        const int smooth = kCases[k].smooth;
+        g_rd.settings.motionBlurSmooth = (uint8_t)smooth;
+        CHECK(rd__blur_smooth_active() == (smooth != 0), "case %zu: Smooth %s", k,
+              smooth ? "in force" : "off");
         recordFeedback(display, feed);
         recordFeedback(display, feed);
         const RdFrame *cur = rd__last_frame();
@@ -1054,14 +1065,30 @@ static void testFeedback(void)
                   first ? "a tick's first" : "a later", aura);
             int d = 0, fd = 0;
             const int copies = headCopies(f, first, &d, &fd);
-            CHECK(d == display && fd == feed && copies == display + feed,
-                  "case %zu (DISPLAY read %d, FEED128 written %d), %s present: the head copies %s "
-                  "%d, %s %d (%d copies)",
-                  k, display, feed, first ? "a tick's first" : "a later",
+            const int wantD = smooth ? 0 : display;
+            CHECK(d == wantD && fd == feed && copies == wantD + feed,
+                  "case %zu (DISPLAY read %d, FEED128 written %d, Smooth %d), %s present: the head "
+                  "copies %s %d, %s %d (%d copies)",
+                  k, display, feed, smooth, first ? "a tick's first" : "a later",
                   first ? "DISPLAY into DISPLAY_HELD" : "DISPLAY_HELD back into DISPLAY", d,
                   first ? "FEED128 into FEED_HELD" : "FEED_HELD back into FEED128", fd, copies);
         }
     }
+    g_rd.settings.motionBlurSmooth = keepSmooth;
+    /* FIX' (rd__blur_smooth_fix): the tick's FIX at one present, the share
+     * a tick keeps spread over k presents, never under FIX nor 128 */
+    CHECK(rd__blur_smooth_fix(32, 1) == 32 && rd__blur_smooth_fix(32, 0) == 32,
+          "FIX' 32 at one present: %u", rd__blur_smooth_fix(32, 1));
+    CHECK(rd__blur_smooth_fix(32, 2) == 64 && rd__blur_smooth_fix(32, 4) == 91 &&
+              rd__blur_smooth_fix(32, 10) == 111,
+          "FIX' of 32 at 2, 4, 10 presents: %u %u %u", rd__blur_smooth_fix(32, 2),
+          rd__blur_smooth_fix(32, 4), rd__blur_smooth_fix(32, 10));
+    CHECK(rd__blur_smooth_fix(0, 10) == 0 && rd__blur_smooth_fix(128, 10) == 128 &&
+              rd__blur_smooth_fix(127, 64) == 127 && rd__blur_smooth_fix(1, 64) >= 1 &&
+              rd__blur_smooth_fix(120, 64) == 127,
+          "FIX' at the ends: %u %u %u %u %u", rd__blur_smooth_fix(0, 10),
+          rd__blur_smooth_fix(128, 10), rd__blur_smooth_fix(127, 64), rd__blur_smooth_fix(1, 64),
+          rd__blur_smooth_fix(120, 64));
 }
 
 /* ---------------------------------------------------------- on a device */

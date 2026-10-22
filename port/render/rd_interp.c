@@ -136,6 +136,15 @@
  * over the DISPLAY the tick started from (DISPLAY_HELD, feedback), so the
  * loop runs once a tick at any present rate and the tick's picture is the
  * PS2's; between ticks the old frame stays the last tick's, as on the PS2.
+ * Options > Effects > Motion blur: Smooth (RdSettings.motionBlurSmooth,
+ * rd_blur_smooth.c) spreads the retention over the k presents of a tick
+ * after all, but feeds the trail back from an accumulator of the scenes
+ * before the sprite, A = S + a' (A - S), never through P: no light is
+ * recycled and nothing runs to white or dark at any k.  feedback then makes
+ * no DISPLAY head copy (the sprite does not read DISPLAY), and rd_present
+ * hands rd_blur_smooth.c each present (rd__blur_smooth_arm) with k: the
+ * present clock's tick over its step on the timer path, the presents the
+ * tick before counted under the vsync lock.
  */
 #include <math.h>
 #include <stddef.h>
@@ -5399,7 +5408,9 @@ static void headCopy(int l, uint32_t from, uint32_t to, uint32_t sizeOf)
  * frame.)  For the motion blur, the same for DISPLAY when the frame reads it (the
  * motion blur's old frame, the file header): DISPLAY into DISPLAY_HELD at the
  * first present's head, back at the later ones', so every present draws the
- * tick's FIX over the previous tick's picture. */
+ * tick's FIX over the previous tick's picture.  Under Motion blur: Smooth
+ * (rd__blur_smooth_active) the sprite reads its accumulator instead and
+ * DISPLAY is left alone (FEED128's copies as ever). */
 static void feedback(int firstOfTick)
 {
     const uint32_t feed = rd_target(RD_TARGET_FEED128).id;
@@ -5423,7 +5434,7 @@ static void feedback(int firstOfTick)
     if (fed && held) {
         headCopy(head, firstOfTick ? feed : held, firstOfTick ? held : feed, feed);
     }
-    if (read && dispHeld) {
+    if (read && dispHeld && !rd__blur_smooth_active()) {
         headCopy(head, firstOfTick ? disp : dispHeld, firstOfTick ? dispHeld : disp, disp);
     }
 }
@@ -5701,7 +5712,28 @@ static struct {
     double lowestRaw;
     uint64_t mixedPresents, mixedPrev, mixedCur, mixedMinority, mixedWhy[RD_CAM_OFF_COUNT];
     uint32_t mixedLogged;
+    /* the presents of the tick being presented and of the tick before
+     * (Motion blur: Smooth's k under the vsync lock, rd_present) */
+    uint32_t tickPresents, lastTickPresents;
 } s_pres;
+
+/* the present clock's last tick and step (rd_present_clock_alpha): Motion
+ * blur: Smooth's k on the timer path */
+static double s_clockTickMs, s_clockStepMs;
+
+/* the presents a tick for Motion blur: Smooth (rd_blur_smooth.c), at a
+ * tick's first present: the clock's tick over its step when the clock ran
+ * for this present (raw a number), else the presents the tick before
+ * counted (the vsync lock); 0 before either is known (the first tick) */
+static uint32_t presentsPerTick(double raw)
+{
+    if (!isnan(raw) && s_clockTickMs > 0.0 && s_clockStepMs > 0.0) {
+        const double k = floor(s_clockTickMs / s_clockStepMs + 0.5);
+        return k < 1.0 ? 1u
+                       : (k > (double)RD_BLUR_SMOOTH_K_MAX ? RD_BLUR_SMOOTH_K_MAX : (uint32_t)k);
+    }
+    return s_pres.lastTickPresents;
+}
 
 #define RD_INTERP_LOG_FRAMES 250
 
@@ -5907,9 +5939,13 @@ static void presentLog(void)
             most[0] ? most : "none");
     }
     s_snapTopN = 0;
+    rd__blur_smooth_block(); /* Motion blur: Smooth's line, when it drew */
     const uint32_t number = s_pres.number;
+    const uint32_t tickPresents = s_pres.tickPresents, lastTickPresents = s_pres.lastTickPresents;
     memset(&s_pres, 0, sizeof(s_pres));
     s_pres.number = number;
+    s_pres.tickPresents = tickPresents;
+    s_pres.lastTickPresents = lastTickPresents;
 }
 
 /* rd__present_clock_raw: the last rd_present_clock_alpha's value before its
@@ -6009,6 +6045,12 @@ bool rd_present(float alpha)
     const int first = cur->number != s_pres.number;
     s_pres.number = cur->number;
     s_pres.presents++;
+    if (first) {
+        s_pres.lastTickPresents = s_pres.tickPresents;
+        s_pres.tickPresents = 0;
+    }
+    s_pres.tickPresents++;
+    const uint32_t k = first ? presentsPerTick(raw) : 0u;
     {
         const int bin = rd__alpha_bin(alpha, raw);
         s_pres.alphaBins[bin]++;
@@ -6026,6 +6068,7 @@ bool rd_present(float alpha)
     if (cur->keep) {
         /* a keep frame draws lists 11..12 over DISPLAY: once; the other
          * presents show DISPLAY again (an empty keep frame) */
+        rd__blur_smooth_arm(first, k); /* a keep frame draws no motion blur */
         if (first) {
             return rd__replay_frame(cur, 1, true);
         }
@@ -6042,7 +6085,11 @@ bool rd_present(float alpha)
     if (first) {
         presentLog();
     }
-    return f != NULL && rd__replay_frame(f, 0, true);
+    if (f == NULL) {
+        return false;
+    }
+    rd__blur_smooth_arm(first, k); /* Motion blur: Smooth's present */
+    return rd__replay_frame(f, 0, true);
 }
 
 /* ---------------------------------------------------------- present clock */
@@ -6101,6 +6148,8 @@ float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, d
     }
     c->presents++;
     c->lastMs = nowMs;
+    s_clockTickMs = tickMs; /* Motion blur: Smooth's presents a tick */
+    s_clockStepMs = c->stepMs;
     double a = (c->clockMs - tickAtMs) / tickMs;
     s_clockRaw = a; /* before the clamp: the alpha histogram's "clamped from below" */
     a = a < 0.0 ? 0.0 : (a > 0.999 ? 0.999 : a);
