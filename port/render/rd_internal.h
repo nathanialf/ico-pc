@@ -6,7 +6,8 @@
  *   rd_core.c      recording: the 13 lists, payload arena, state deltas, targets, the state walk
  *   rd_frame.c     the flip's frame head, per-target Z scale, the VU block, the camera in FrameCB
  *   rd_post.c      rd_post: each post kind as the GS register writes and sprites GsBase.c issues
- *   rd_blur.c      staticBlur.c's sprites and the reduction's, for doBlurSprite; work-buffer scale
+ *   rd_blur.c      staticBlur.c's sprites and the reduction's; the open border's strips; work scale
+ *   rd_blur_border.c  the post sprites' replay; the reduction's border open, its outer columns
  *   rd_shadow.c    the shadow count's recording (rd_replay.c's doShadow* replay it)
  *   rd_water.c     render-to-texture surfaces: target aliases, VRAM block targets, camera scopes
  *   rd_mesh.c      the VU mesh registry, the per-list VU images, the meshes' device arena
@@ -109,7 +110,7 @@ typedef enum RdCmdType {
                        * u[1] payload offset of RdScreenVtx[u[0] + u[3]], the triangles that
                        * increment (u[0] vertices) then those that decrement (u[3]) */
     RDC_POST_STUB,    /* b[0] RdPostKind, u[1] payload offset of RdPostRec.  RD_POST_FOG
-                       * (doFog) and the rd__is_blur_kind kinds (doBlurSprite) replay; any
+                       * (doFog) and the rd__is_blur_kind kinds (rd__blur_post_sprite) replay; any
                        * other kind is a stub (skipped, logged once) */
     /* rd_shadow.c: on the state block's colour and depth targets */
     RDC_SHADOW_RESET,   /* the depth target's stencil to 0 */
@@ -1814,8 +1815,29 @@ void rd__blur_snap_verts(const RdStateBlock *st, RdScreenVtx v[2]);
  * recorded one, except the reduction's with the mirror on, which samples
  * the mirror image of the unmirrored sample points. */
 void rd__blur_uv_rect(uint32_t kind, const RdPostRec *p, float uv[4]);
+/* rd_blur.c: the reduction's textured sprite p drawn again over its two
+ * outer GS columns a side (rd_blur_border.c, with the border open at the
+ * frame's exact width): out[0] covers GS pixels 0 and 1 and out[1] pixels
+ * gsW - 2 and gsW - 1 with p's rows, each with the one U fx_sprite_ps
+ * computes at pixel 2 (out[0]) or gsW - 3 (out[1]) from uv (p->uv as
+ * recorded: rd__blur_uv_rect's mirror moves both ends of a strip's U as it
+ * moves the sprite's), so each strip is that column again, bit for bit, in
+ * the GS model.  False (out untouched) for a sprite that is not one over
+ * the whole frame width with whole 12.4 corners and UVs, or gsW under 6. */
+bool rd__blur_border_strips(const RdPostRec *p, const float uv[4], int32_t gsW, RdPostRec out[2]);
+/* The same for the hardware sprite a scaled target draws instead
+ * (rd__blur_screen_fallback's four vertices v: the plain pair, then the
+ * mirrored one): out[0..3] the left strip's pairs, out[4..7] the right
+ * one's, each pair's S constant, the S the pair has at the 12.4 coordinate
+ * of pixel 2 or gsW - 3 (rd__blur_snap_verts then moves it as it moves the
+ * sprite's) */
+void rd__blur_border_verts(const RdScreenVtx v[4], int32_t gsW, RdScreenVtx out[8]);
+/* rd_blur_border.c: off (tests) draws the open border without the strips,
+ * the picture before v0.8.5; on by default.  The count of strips drawn. */
+void rd__set_blur_border_repeat(bool on);
+uint64_t rd__blur_border_strip_count(void);
 
-/* True for the kinds drawn by the GS sprite model (doBlurSprite): the
+/* True for the kinds drawn by the GS sprite model (rd__blur_post_sprite): the
  * staticBlur.c kinds (RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR) and the
  * reduction. */
 static inline bool rd__is_blur_kind(uint32_t kind)

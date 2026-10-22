@@ -359,7 +359,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   passes store the pixel the plan before stores), the ranges of screen prims, meshes, grids and
   particles, and `rdtex_alpha_range` against every texel and two- and three-texel blends
   (`rd_alpha_plan`).
-- `rd_blur_test.c`: `staticBlur.c`'s full-screen effects on rd (`rd_blur`, sharded); the
+- `rd_blur_test.c`: `staticBlur.c`'s full-screen effects on rd (`rd_blur`, sharded); its CPU
+  part checks the open border's strips (`checkBorderStrips`: pixels 0, 1 and W - 2, W - 1 alone,
+  each with column 2's or W - 3's U, plain and mirrored, the hardware sprite's S the same); the
   `above1x` shard runs the aura's chain at Enhanced 4x against the CPU model with the above-1x
   box (`above1x_ref.c`) for the decimations and the GS's bilinear at the finer grid for the work
   buffers drawn back over the frame, the `effects_scaled` shard the seven post modes (the glow's
@@ -551,7 +553,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   beside an exact one, their shared vertex's GS Z saturated and its X and Y off the 1/16 grid:
   none above Original 1x, where the clipped triangle is drawn, and at Original 1x not drawn
   (`vu_corner_cut_position`).
-- `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`),
+- `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`);
+  the open border's outer columns (`rd_present_border_test.inc`, `checkOpenBorderEdges`): at
+  2340x1080 (832 columns, the frame its exact width) and 4:3, 1x and 2x, the mirror on and off,
+  SCENE red with green over GS columns 1 .. W - 2 presents green outer columns, byte for byte the
+  present of SCENE green everywhere, and without the strips (`rd__set_blur_border_repeat`) only the
+  outer columns differ; at 16:9 (cropped) and with Full pixel off the strips change no byte;
+  DISPLAY's strips are their neighbour columns' bytes at 1x and one value a row at 2x; the
+  present pins hold without the strips, and with them differ in the outer columns alone
+  (`checkFullPixelOnPin`),
   an old file's `window_size` among them (ignored, kept as written);
   the targets' scales include the work buffers and shadow levels at their GS sizes at every scale
   and Water reflections' block: its GS size under Original, the scene's scale under Sharp (4x at

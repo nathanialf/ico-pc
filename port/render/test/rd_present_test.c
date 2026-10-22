@@ -2591,8 +2591,12 @@ static uint32_t colsDiffer(const uint8_t *a, uint32_t aw, uint32_t x0, const uin
  * of the band's middle row, the edge ones too, must be SCENE's column
  * x + G + d (G the guard texels the present leaves out).  Without the
  * guard the last column's sample lay past SCENE and clamped: it repeated
- * its neighbour's texel. */
-static void checkExactEdges(const char *name, const ExactRun *a, uint32_t outW, uint32_t G)
+ * its neighbour's texel.  Where the frame is its exact width (G 0: 48:9)
+ * the reduction draws its two outer GS columns a side again as their
+ * neighbours (rd_blur_border.c): those texels are each one value, and the
+ * columns within a texel of them are left out of the SCENE match. */
+static void checkExactEdges(const char *name, const ExactRun *a, float aspect, uint32_t outW,
+                            uint32_t G)
 {
     const uint32_t W = a->box.w;
     const uint32_t y = 168u * a->sh / 512u; /* the band's middle row (GS 96 .. 240) */
@@ -2613,8 +2617,25 @@ static void checkExactEdges(const char *name, const ExactRun *a, uint32_t outW, 
     if (d == -99) {
         return;
     }
-    uint32_t past = 0, bad = 0, first = ~0u;
+    uint32_t past = 0, bad = 0, first = ~0u, strip = 0;
+    /* the outer columns drawn as their neighbours at the exact width: the
+       texels whose centres lie inside GS pixels 0, 1 and W - 2, W - 1 */
+    const uint32_t fw = (uint32_t)ico_frame_width_for(aspect);
+    const double k = (double)W / (double)fw; /* texels a GS pixel (G 0: the box is the frame) */
+    const uint32_t reach = G ? 0u : (uint32_t)ceil(2.0 * k) + 1u;
+    const uint32_t nl = G ? 0u : (uint32_t)ceil(2.0 * k - 0.75);
+    const uint32_t r0 = G ? W : (uint32_t)ceil(k * (double)(fw - 2u) - 0.25);
+    for (uint32_t x = 1; x < nl && x < W; x++) {
+        strip += memcmp(&orow[x * 4], &orow[0], 4) != 0;
+    }
+    for (uint32_t x = r0 + 1; x < W; x++) {
+        strip += memcmp(&orow[x * 4], &orow[r0 * 4], 4) != 0;
+    }
+    CHECK(strip == 0, "%s: the outer columns are each one value (%u texels differ)", name, strip);
     for (uint32_t x = 0; x < W; x++) {
+        if (x < reach || x + reach >= W) {
+            continue; /* the outer columns (G 0) */
+        }
         const int64_t sx = (int64_t)x + G + d;
         if (sx < 0 || sx >= (int64_t)a->sw) {
             past++;
@@ -2679,7 +2700,7 @@ static void checkExactWindow(const char *name, float aspect, uint32_t outW, uint
               bad);
     }
     if (a.sh == a.box.h && a.sw >= a.box.w) {
-        checkExactEdges(name, &a, outW, G);
+        checkExactEdges(name, &a, aspect, outW, G);
     }
     /* the 4:3 picture as high as the box */
     const uint32_t w43 = (uint32_t)(((uint64_t)a.box.h * 4u + 1u) / 3u);
@@ -2706,7 +2727,10 @@ static void checkExactWindow(const char *name, float aspect, uint32_t outW, uint
               "%s: SCENE's 4:3 columns (%u..%u) are the 4:3 picture's %s (%u differ, the first %u, "
               "at most %u levels)",
               name, off, off + b.sw - 1, how, bad, first, maxd);
-        const uint32_t edge = 8;
+        /* the reduction's few columns at the 4:3 picture's own edges, and
+           the 4:3 run's two outer GS columns a side, which it draws again as
+           their neighbours (its frame is its exact width: rd_blur_border.c) */
+        const uint32_t edge = 8u + (2u * b.dw + 511u) / 512u;
         bad = colsDiffer(a.disp, a.dw, off + edge, b.disp, b.dw, edge, b.dw - 2 * edge, b.dh,
                          &first, &maxd);
         CHECK(
@@ -2790,9 +2814,16 @@ static bool fullPixelRun(float aspect, uint32_t w, uint32_t h, int full, int ful
 static void checkFullPixelOnPin(const char *name, float aspect, uint32_t outW, uint32_t outH,
                                 int full, uint64_t want)
 {
-    ExactRun a;
+    ExactRun a, b;
     s_exactNoTri = 1;
+    /* the pins are of the picture before the outer columns were drawn as
+       their neighbours (v0.8.5, rd_blur_border.c): measured without them,
+       and with them the present differs in those columns alone (the
+       strips' own checks: rd_present_border_test.inc) */
+    rd__set_blur_border_repeat(false);
     const bool ok = exactRun(aspect, outW, outH, full, &a);
+    rd__set_blur_border_repeat(true);
+    const bool okB = ok && exactRun(aspect, outW, outH, full, &b);
     s_exactNoTri = 0;
     if (!ok) {
         CHECK(0, "%s: readback", name);
@@ -2802,6 +2833,33 @@ static void checkFullPixelOnPin(const char *name, float aspect, uint32_t outW, u
     printf("%s: present %016llx\n", name, (unsigned long long)got);
     CHECK(!want || got == want, "%s: the present is pinned (%016llx, %016llx wanted)", name,
           (unsigned long long)got, (unsigned long long)want);
+    if (okB) {
+        IcoFrame fr;
+        ico_frame_make(&fr, aspect, 448);
+        const double k = (double)a.box.w / (double)fr.wExact;
+        const int32_t reach = (int32_t)ceil(2.0 * k) + 1;
+        const int32_t x0 = a.box.x, x1 = a.box.x + (int32_t)a.box.w;
+        uint32_t inside = 0, outside = 0;
+        for (uint32_t y = 0; y < outH; y++) {
+            for (uint32_t x = 0; x < outW; x++) {
+                const size_t o = ((size_t)y * outW + x) * 4;
+                if (memcmp(&a.out[o], &b.out[o], 4) != 0) {
+                    const int edge = ((int32_t)x >= x0 && (int32_t)x < x0 + reach) ||
+                                     ((int32_t)x < x1 && (int32_t)x >= x1 - reach);
+                    *(edge ? &inside : &outside) += 1;
+                }
+            }
+        }
+        const int cropped = fr.wExact < (float)fr.w - 0.01f;
+        CHECK(outside == 0 && (full != 1 || cropped || inside > 0) &&
+                  ((full == 1 && !cropped) || inside == 0),
+              "%s: the outer columns drawn as their neighbours change %u pixels there, %u "
+              "elsewhere",
+              name, inside, outside);
+        exactFree(&b);
+    } else if (ok) {
+        CHECK(0, "%s: readback with the outer columns", name);
+    }
     exactFree(&a);
 }
 
@@ -2810,6 +2868,8 @@ static void checkFullPixelOnPinFixed(const char *name, float aspect, float scale
 {
     static uint8_t out[960 * 540 * 4];
     uint32_t ow = 0, oh = 0;
+    /* a red frame: the outer columns drawn as their neighbours are red as
+       they were, so the pins hold with them */
     if (!fullPixelRun(aspect, 960, 540, full, 0, scale, out, &ow, &oh)) {
         CHECK(0, "%s: readback", name);
         return;
@@ -3037,6 +3097,8 @@ static void checkFullPixelCase(const char *name, float aspect, uint32_t w, uint3
 #undef RED
 #undef BLACK
 }
+
+#include "rd_present_border_test.inc"
 
 /* a white square (GS 192..320 both ways) on black through the reduction at
  * 512 lines (50 Hz), presented at 960 x 720 with full pixel off or on; its
@@ -3391,6 +3453,12 @@ static bool sameAs(const uint8_t *p, uint32_t w, uint32_t h, const uint8_t *ref,
 
 static void checkFullPixelClamp(void)
 {
+    /* the clamp is the reduction's own draw's: the outer columns drawn
+       again as their neighbours (rd_blur_border.c) would cover the columns
+       it reads into, so this runs without them (their checks:
+       rd_present_border_test.inc) */
+    rd__set_blur_border_repeat(false);
+
     static const struct {
         float scale;
         int fullHeight, mirror;
@@ -3468,6 +3536,7 @@ static void checkFullPixelClamp(void)
         }
         free(ref);
     }
+    rd__set_blur_border_repeat(true);
 }
 
 /* the layout's full-width bands (the pause and End Game bars, GS pixels 1
@@ -3535,7 +3604,12 @@ static void checkFullPixelBands(void)
         free(ref);
     }
     uint32_t w = 0, h = 0;
+    /* the band's own extension, without the outer columns drawn again as
+       their neighbours (rd_blur_border.c), which would carry the band to
+       the edge whatever its tag */
+    rd__set_blur_border_repeat(false);
     uint8_t *p = clampRun(1, 1.0f, 0, 0, 2, &w, &h);
+    rd__set_blur_border_repeat(true);
     if (!p) {
         CHECK(0, "full pixel bands UI-tagged: DISPLAY readback (%ux%u)", w, h);
         return;
@@ -5081,6 +5155,7 @@ int main(int argc, char **argv)
     checkFullPixelTargetWrap();
     checkReductionSnap();
     checkFullPixelBands();
+    checkOpenBorderEdges();
     checkFullPixelCrtOverlay();
     checkMips();
     checkLatticeMips(0);

@@ -61,7 +61,14 @@ pixels: the present box has the frame's exact width (`wExact / 384`), and with t
 resolution and a frame wider than its exact width the scene's scale is the box's width over the
 exact width (2.8125 at 1080p 16:9), held to a 1/4096 step when that keeps the box's width, and the
 scene-class targets hold the exact width alone, so one texel is one output pixel and nothing is
-cropped; the reduction draws over its border (`port/render/rd_replay.c` (`doBlurSprite`)).
+cropped; the reduction draws over its border (`port/render/rd_blur_border.c`
+(`rd__blur_post_sprite`)). Where the frame is its exact width (4:3, 48:9, 2340x1080's 832 columns:
+`rd__frame_cropped` false) nothing of it is cropped, so the PS2's hidden columns, GS 0, 1, W - 2 and
+W - 1, would be on the screen; the game does not always draw them (issue 129: a bright band at a
+phone's left edge, the fog's colour at depth 0 spread by the glow), so the reduction draws them
+again as columns 2 and W - 3, bit for bit in the GS model ([RENDER.md](RENDER.md#post-passes), the
+open border's outer columns). The rows the reduction's scissor kept black at the top and bottom
+show what SCENE holds.
 Without it the picture is the same: the same box, scale, crop and replay (the host sets
 `RdSettings.borderMask`, and the reduction draws over its border as with the option on,
 `port/render/rd_replay.c` (`borderOpen`)), and the presenter masks the game's border over its edge at

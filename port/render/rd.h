@@ -342,7 +342,7 @@ typedef struct RdSettings {
     uint8_t filterUpgrade;   /* RdFilterUpgrade: trilinear/anisotropic with generated mips */
     uint8_t fullHeightScene; /* skip the vertical halving of the reduction pass */
     /* the reduction pass draws the whole frame, with no black border and no
-     * wrap at the edge (rd_replay.c doBlurSprite); the picture's box, scale
+     * wrap at the edge (rd_blur_border.c rd__blur_post_sprite); the picture's box, scale
      * and crop are the same with it off (rd_present.c outputBox,
      * rd__apply_display), which borderMask below masks */
     uint8_t fullPixel;

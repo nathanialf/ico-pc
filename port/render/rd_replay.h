@@ -172,6 +172,14 @@ bool rd__replay_take_snap(Replay *r, RdTargetRec *tc, RhiRect area);
 int rd__replay_perf_target_post(const Replay *r, const RdCmd *c);
 void rd__replay_perf_post(Replay *r, int post);
 bool rd__replay_blur_fix128_skip(void);
+/* rd_replay.c for rd_blur_border.c: doBlurSpriteDraw (one post sprite, the
+ * state block's scissor and wrap in force) and borderOpen (Full pixel on,
+ * or the border mask on a cropped frame) */
+void rd__replay_blur_sprite_draw(Replay *r, const RdFrame *f, const RdCmd *c);
+bool rd__replay_border_open(void);
+/* rd_blur_border.c: an RDC_POST_STUB of an rd__is_blur_kind kind, the list
+ * loop's (the fold, the reduction's open border and its outer columns) */
+void rd__blur_post_sprite(Replay *r, const RdFrame *f, const RdCmd *c);
 /* the target's passes readable for the exact blend's attachment read (exactReadable) */
 bool rd__replay_exact_readable(uint32_t target);
 
@@ -224,7 +232,7 @@ void rd__fill_draw_cb_extra(const Replay *r, const RdDrawPass *dp, const DrawSet
  *                       (bindDrawEx, a draw with DrawSetup.dateStencil);
  *                       false: the draw is skipped
  * rd__replay_blur_fold  a staticBlur pair at its pass 1 c drawn as one pass
- *                       (doBlurSprite); true: drawn, and the loop skips
+ *                       (rd__blur_post_sprite); true: drawn, and the loop skips
  *                       rd__replay_fold_skip() commands with their state
  *                       applied
  * rd__replay_fold_list  the list the loop walks (NULL at its end), the
