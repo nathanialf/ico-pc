@@ -1,4 +1,4 @@
-**Please note:** this release has had only automated checks. Nobody has played it through, and the white-line fix below could not be tried, because the lines never appeared on the test machine. If lines still show, or something else looks or sounds wrong, keep the previous version and send the game's report file (the newest file in the `logs` folder that starts with `report-`, or `ico-pc.log`) with a short description of what you saw. A few minutes of play at your usual Frame rate is enough for the log to say whether the fix worked.
+**Please note:** this release has had only limited testing: one computer and automated checks. It may look or play wrong in places the previous version did not. If it does, keep the previous version and send the game's report file (the newest file in the `logs` folder that starts with `report-`, or `ico-pc.log`) with a short description of what you saw.
 
 ## New
 
