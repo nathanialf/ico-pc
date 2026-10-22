@@ -6,7 +6,8 @@
  * given), a 640 x 448 frame under Enhanced at scale 2, 4 or 1, at the
  * window's own 1800 x 1080 texels (frac: 2.8125 x 2.41) or under the
  * Original preset, recorded through the renderer's calls and replayed
- * twice, the filler off and then as the environment has it
+ * twice (after a first replay that the fog's probe takes), the filler off
+ * and then as the environment has it
  * (ICO_RD_CRACK_FILL), SCENE read back after the fog:
  *   cracks  two flat triangles that share a long diagonal edge, the second
  *           one's edge 1/16 GS pixel to the right of the first's (the
@@ -17,8 +18,8 @@
  *           (and, where the depth reads back, the depth) of a written
  *           texel at most the reach away on its row or its column;
  *   slit    two sprites 1.5 GS pixels apart (3 texels at 2x, 6 at 4x, 4 at
- *           2.8125: wider than the reach): the slit keeps every texel of
- *           the clear's fog, filler or not;
+ *           2.8125: wider than the reach): the slit (its texels half a
+ *           texel in from its sides) keeps the clear's fog, filler or not;
  *   rest    every texel the first replay drew is the same in both, colour
  *           and depth: the pictures differ only at the cracks;
  *   counts  the replay with the filler drew one fill pass and its count
@@ -215,6 +216,14 @@ int main(int argc, char **argv)
     RdCrackCounts c0;
     rd__crack_fill_counts(&c0);
     const bool envOn = c0.enabled; /* ICO_RD_CRACK_FILL */
+    /* the first fogged replay is the fog probe's (its own read, the exact
+     * table entry; under MSAA the resolved depth): one before the two
+     * compared, which then draw the fog alike */
+    rd__crack_fill_set_enabled(false);
+    recordFrame();
+    rd_begin_frame(); /* logs the probe */
+    rd_end_frame(0);
+    rd__crack_fill_counts(&c0);
     const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     CHECK(t != NULL, "no SCENE");
     if (!t) {
@@ -260,7 +269,9 @@ int main(int argc, char **argv)
                 cracksOff += clearA;
                 cracksOn += clearB;
             }
-            if (band && gx >= SLIT0 - 0.01 && gx < SLIT1 - 0.01) {
+            /* half a texel in from the slit's sides: unwritten whichever
+               side of a texel its centre is taken at */
+            if (band && gx > SLIT0 + 0.5 / sx && gx < SLIT1 - 0.5 / sx) {
                 slitAll++;
                 slitOff += clearA;
                 slitOn += clearB;
