@@ -13,6 +13,8 @@
 #include <string.h>
 #include "input.h"
 #include "touch.h"
+#include "touch_edit.h"
+#include "touch_shapes.h"
 
 static int failures;
 
@@ -361,55 +363,6 @@ static void check_layout_common(const IcoTouchLayout *l)
     }
 }
 
-/* a test screen: its pixels, insets, density and fold, and the rule it
-   should give at Small, Medium and Large */
-typedef struct Shape {
-    uint32_t w, h;
-    IcoTouchInsets insets;
-    float dpi; /* 0 unknown */
-    IcoTouchFold fold;
-    int rule[3];
-} Shape;
-
-#define NOFOLD {ICO_TOUCH_FOLD_NONE, 0, 0, {0.0f, 0.0f, 0.0f, 0.0f}}
-#define FULL3 {ICO_TOUCH_RULE_FULL, ICO_TOUCH_RULE_FULL, ICO_TOUCH_RULE_FULL}
-
-static const Shape s_shapes[] = {
-    {1920, 1080, {0, 0, 0, 0}, 0.0f, NOFOLD, FULL3},     /* desktop, density unknown */
-    {2340, 1080, {0, 0, 0, 0}, 420.0f, NOFOLD, FULL3},   /* a 19.5:9 phone */
-    {2400, 1080, {100, 0, 0, 0}, 450.0f, NOFOLD, FULL3}, /* a notch on the left */
-    {2176, 1812, {0, 0, 0, 0}, 420.0f, NOFOLD, FULL3},   /* a foldable open */
-    {1812, 2176, {0, 0, 0, 0}, 420.0f, NOFOLD, FULL3},   /* the same, portrait */
-    {2560, 1600, {0, 0, 0, 0}, 320.0f, NOFOLD, FULL3},   /* a 16:10 tablet */
-    {960, 540, {0, 0, 0, 0}, 0.0f, NOFOLD, FULL3},       /* a small window */
-    {3840, 2160, {0, 0, 0, 0}, 96.0f, NOFOLD, FULL3},    /* a 4K monitor */
-    {2208,
-     1840,
-     {0, 0, 0, 0},
-     420.0f,
-     {ICO_TOUCH_FOLD_VERTICAL, 0, 0, {1104.0f, 0.0f, 0.0f, 1840.0f}},
-     {ICO_TOUCH_RULE_SPLIT, ICO_TOUCH_RULE_SPLIT, ICO_TOUCH_RULE_SPLIT}}, /* flat, zero wide */
-    {2176,
-     1812,
-     {0, 0, 0, 0},
-     420.0f,
-     {ICO_TOUCH_FOLD_HORIZONTAL, 1, 1, {0.0f, 906.0f, 2176.0f, 0.0f}},
-     {ICO_TOUCH_RULE_TABLETOP, ICO_TOUCH_RULE_TABLETOP, ICO_TOUCH_RULE_TABLETOP}}, /* bent */
-    {2176,
-     1812,
-     {0, 0, 0, 0},
-     420.0f,
-     {ICO_TOUCH_FOLD_HORIZONTAL, 0, 0, {0.0f, 906.0f, 2176.0f, 0.0f}},
-     /* flat: the crease misses every button until Large puts R1 on it */
-     {ICO_TOUCH_RULE_FULL, ICO_TOUCH_RULE_FULL, ICO_TOUCH_RULE_TABLETOP}},
-    {2784,
-     1800,
-     {0, 0, 0, 0},
-     401.0f,
-     {ICO_TOUCH_FOLD_VERTICAL, 0, 1, {1350.0f, 0.0f, 84.0f, 1800.0f}},
-     {ICO_TOUCH_RULE_SPLIT, ICO_TOUCH_RULE_SPLIT, ICO_TOUCH_RULE_SPLIT}}, /* two screens */
-};
-
 static IcoTouchLayout shape_layout(const Shape *s, int size)
 {
     IcoTouchEnv env;
@@ -443,7 +396,7 @@ static void test_layouts(void)
     IcoTouchEnv e;
     int r, sz;
 
-    for (r = 0; r < (int)(sizeof(s_shapes) / sizeof(s_shapes[0])); r++) {
+    for (r = 0; r < SHAPE_COUNT; r++) {
         for (sz = 0; sz < 3; sz++) {
             l = shape_layout(&s_shapes[r], sz);
             if (l.rule != s_shapes[r].rule[sz]) {
@@ -452,6 +405,15 @@ static void test_layouts(void)
                 CHECK(0);
             }
             check_layout_common(&l);
+            /* the defaults: full strength everywhere, no edits */
+            {
+                int z;
+
+                for (z = 0; z < ICO_TOUCH_BUTTONS; z++) {
+                    CHECK(l.button[z].alpha == 1.0f);
+                }
+                CHECK(l.stickAlpha == 1.0f && l.lookAlpha == 1.0f && l.editGen == 0);
+            }
         }
     }
 
@@ -875,6 +837,35 @@ static void test_buttons(void)
     ico_touch_event(&t, 0, 0.0f, 0.0f, ICO_TOUCH_CANCEL, 1 * S);
     ev(&t, 200, x, y, ICO_TOUCH_DOWN, 1 * S);
     CHECK(step(&t, 1 * S).buttons == ICO_PAD_START);
+    ico_touch_event(&t, 0, 0.0f, 0.0f, ICO_TOUCH_CANCEL, 1 * S);
+
+    /* a hidden button (the edits' alpha 0) is under no finger: L2 hidden,
+       a finger on its spot presses nothing (no area is there either) */
+    {
+        IcoTouchEdits e;
+        IcoTouchLayout h;
+
+        ico_touch_edits_defaults(&e);
+        CHECK(ico_touch_edit_parse(&e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_L2], ICO_TOUCH_CTL_L2,
+                                   "hidden") == 0);
+        h = ico_touch_layout_edits(1920, 1080, no_insets(), ICO_TOUCH_LARGE, NULL, &e);
+        CHECK(h.button[ICO_TOUCH_B_L2].alpha == 0.0f && h.button[ICO_TOUCH_B_L1].alpha == 1.0f);
+        CHECK(memcmp(&h.button[ICO_TOUCH_B_L2].rect, &l.button[ICO_TOUCH_B_L2].rect,
+                     sizeof(IcoTouchRect)) == 0);
+        g_l = &h;
+        centre_of(&h, ICO_TOUCH_B_L2, &x, &y);
+        ev(&t, 300, x, y, ICO_TOUCH_DOWN, 1 * S);
+        v = step(&t, 1 * S);
+        CHECK(v.buttons == 0 && v.lx == 0.0f && v.rx == 0.0f);
+        ev(&t, 300, x, y, ICO_TOUCH_UP, 1 * S);
+        step(&t, 1 * S);
+        /* L1 below it still presses */
+        centre_of(&h, ICO_TOUCH_B_L1, &x, &y);
+        ev(&t, 301, x, y, ICO_TOUCH_DOWN, 1 * S);
+        CHECK(step(&t, 1 * S).buttons == ICO_PAD_L1);
+        ev(&t, 301, x, y, ICO_TOUCH_UP, 1 * S);
+        step(&t, 1 * S);
+    }
 }
 
 static void test_look(void)

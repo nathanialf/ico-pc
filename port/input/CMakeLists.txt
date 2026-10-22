@@ -63,6 +63,17 @@ if(ICO_RUN_TESTS)
     add_test(NAME touch COMMAND touch_test)
 endif()
 
+# the touch layout edits and the layout editor (touch.c's apply_edits,
+# touch_edit.c): an unedited layout is the default to the byte, the anchors,
+# the clamp, hidden controls, the config text, the editor's state machine
+# and the toolbar's spot
+add_executable(touch_edit_test test/touch_edit_test.c)
+target_compile_options(touch_edit_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(touch_edit_test PRIVATE ico_input)
+if(ICO_RUN_TESTS)
+    add_test(NAME touch_edit COMMAND touch_edit_test)
+endif()
+
 # the mouse camera's speed and range for the hand camera: the step arithmetic
 # and the gating on the mouse's stick driving the camera
 add_executable(mouse_camera_test test/mouse_camera_test.c ../platform/host_config.c)
