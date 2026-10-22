@@ -994,6 +994,9 @@ static void testAa1(void)
           edge);
 }
 
+/* testAa1Wedge: a triangle's edge pixels end where the GS's do */
+#include "rd_pixel_aa1_test.inc"
+
 /* ----------------------------------------------------------------- sprite */
 
 typedef struct SpriteCase {
@@ -5065,6 +5068,7 @@ int main(int argc, char **argv)
     testGsLod();
     testGsGrid();
     testAa1();
+    testAa1Wedge();
     testReduction(dir);
     testReductionUint(dir);
     testPresent();
