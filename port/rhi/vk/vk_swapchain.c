@@ -591,7 +591,9 @@ static void vkr_fse_log(const void *chain)
         }
     }
 #else
+    /* without the extension the flag is only stored (clang: set but not used) */
     (void)chain;
+    (void)s_exclusiveAllowed;
 #endif
 }
 

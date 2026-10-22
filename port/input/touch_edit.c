@@ -450,12 +450,12 @@ void ico_touch_edit_sanitize(IcoTouchCtlEdit *c, int ctl)
     }
     c->dx = clampf(c->dx, 0.0f, ICO_TOUCH_EDIT_OFFSET_MAX);
     c->dy = clampf(c->dy, 0.0f, ICO_TOUCH_EDIT_OFFSET_MAX);
-    if (!(c->scale >= 0.0f || c->scale < 0.0f)) {
+    if (c->scale != c->scale) {
         c->scale = 1.0f; /* not a number */
     }
     c->scale = clampf(c->scale, ICO_TOUCH_EDIT_SCALE_MIN, ICO_TOUCH_EDIT_SCALE_MAX);
-    if (!(c->alpha >= 0.0f || c->alpha < 0.0f)) {
-        c->alpha = 1.0f;
+    if (c->alpha != c->alpha) {
+        c->alpha = 1.0f; /* not a number */
     }
     c->alpha =
         clampf(c->alpha, ico_touch_ctl_hideable(ctl) ? 0.0f : ICO_TOUCH_EDIT_ALPHA_MIN, 1.0f);
