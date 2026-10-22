@@ -13,6 +13,7 @@
 #include "ui_lang.h"
 #include "../../core/region.h"
 #include "photo_mode.h"
+#include "touch_edit.h"
 
 /* the fixture builds a layout and the menu opens */
 static void testFixture(void)
@@ -981,8 +982,8 @@ static void testQuitGame(void)
    Mouse camera speed, Mouse camera range and Camera swings back follow
    Invert (mouse_camera_speed, mouse_full_range, mouse_return, written only
    when changed); the six mouse rows come after Hold type, hidden on
-   Android; fifteen rows (the pause menu with a touch screen) fit 11 lines
-   apart */
+   Android; fourteen rows (the pause menu with a touch screen: its Touch
+   screen row) fit 11 lines apart */
 static int s_i17aTouch;
 
 static int i17aTouch(void)
@@ -1137,7 +1138,7 @@ static void testMouseCamera(void)
     }
     ico_video_set_android(0);
 
-    /* sixteen rows with a touch screen from the pause menu: 10 lines apart
+    /* fourteen rows with a touch screen from the pause menu: 11 lines apart
        from 30, the last box inside the 226 lines */
     s_i17aTouch = 1;
     ui_settings_set_touch_query(i17aTouch);
@@ -1153,15 +1154,15 @@ static void testMouseCamera(void)
         if (r->defaultMask) {
             continue;
         }
-        CHECK(prev < 0 ? r->dispY >= 28 : r->dispY >= prev + 10,
-              "sixteen rows: row %d at y %d (the one above at %d)", i, r->dispY, prev);
+        CHECK(prev < 0 ? r->dispY >= 28 : r->dispY >= prev + 11,
+              "fourteen rows: row %d at y %d (the one above at %d)", i, r->dispY, prev);
         prev = r->dispY;
         last = labels[i];
         n++;
     }
-    CHECK(n == 16, "sixteen rows shown (%d)", n);
+    CHECK(n == 14, "fourteen rows shown (%d)", n);
     CHECK(last >= 0 && lt_ext_prop(last)->dispY + lt_ext_prop(last)->dispH <= 226,
-          "sixteen rows: the last box ends at %d",
+          "fourteen rows: the last box ends at %d",
           last >= 0 ? lt_ext_prop(last)->dispY + lt_ext_prop(last)->dispH : -1);
     press(0x10);
     CHECK(settle(mainL, 60), "Controls: back");
@@ -1713,7 +1714,7 @@ static void testAchievementPopups(void)
     ico_ach_set_popups(1);
 }
 
-/* a touch screen for the 16-row Controls page */
+/* a touch screen for the fullest (14-row) Controls page */
 static int rowsFakeTouch(void)
 {
     return 1;
@@ -1844,7 +1845,7 @@ static void testDuplicatedRows(void)
               "row_of returns the first of several rows of one option");
     }
 
-    /* the fullest Controls page (pause menu, mouse and touch): sixteen rows
+    /* the fullest Controls page (pause menu, mouse and touch): fourteen rows
        fit in every language */
     useConfig("version = 1\n");
     ico_video_set_android(0);
@@ -1862,11 +1863,11 @@ static void testDuplicatedRows(void)
         for (int j = 0; j < n; j++) {
             shown += !lt_ext_prop(labels[j])->defaultMask;
         }
-        CHECK(shown == 16, "language %d: Controls shows sixteen rows (%d)", i, shown);
+        CHECK(shown == 14, "language %d: Controls shows fourteen rows (%d)", i, shown);
         CHECK(strcmp(lt_ext_row_text(ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX)),
                      ui_str(UI_STR_OPT_STICK_FIX)) == 0,
               "language %d: the stick fix label", i);
-        checkPageFits(UI_PAGE_CONTROLS, "Controls, sixteen rows");
+        checkPageFits(UI_PAGE_CONTROLS, "Controls, fourteen rows");
         press(0x10);
         CHECK(settle(mainL, 60), "language %d: Controls: back", i);
     }
@@ -2678,6 +2679,412 @@ static void testOtherDiscPointer(const char *slug)
     CHECK(ico_pointer_swap_face() == 0, "the European disc never trades them");
 }
 
+/* Controls > Touch screen (UI_PAGE_TOUCH): the link only with a touch
+   screen; Controls' fourteen rows and the page's nine fit from both
+   entries; the overlay's three rows moved there (their values, steps, save
+   and read back as [input] touch_mode, touch_size, touch_opacity); the
+   overlay's note on Touch controls; Back to Controls on its Touch screen
+   row */
+static int s_tpTouch;
+
+static int tpTouch(void)
+{
+    return s_tpTouch;
+}
+
+/* Controls' Touch screen row, -1 */
+static int tpLink(void)
+{
+    int labels[16];
+    const int n = ui_settings_page_rows(UI_PAGE_CONTROLS, labels, NULL, NULL, 16);
+    for (int i = 0; i < n; i++) {
+        if (lt_ext_prop(labels[i])->right == ui_settings_page_layout(UI_PAGE_TOUCH)) {
+            return labels[i];
+        }
+    }
+    return -1;
+}
+
+/* the main page to Controls, then Cross on Touch screen: the page's layout */
+static int tpOpen(int mainL)
+{
+    const int ctlL = openPage(mainL, 4, UI_PAGE_CONTROLS);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    lt_ext_layout(ctlL)->curItem = tpLink();
+    press(lt_ext_confirm_button());
+    const int l = ui_settings_page_layout(UI_PAGE_TOUCH);
+    CHECK(settle(l, 60), "Touch screen opens (%d)", current_layout_id);
+    return l;
+}
+
+static void testTouchPage(void)
+{
+    static const UiSettingsOpt kRows[3] = {UI_OPT_TOUCH_MODE, UI_OPT_TOUCH_SIZE,
+                                           UI_OPT_TOUCH_OPACITY};
+    IcoBindings *b = ico_input_live_bindings();
+    char p[1100];
+
+    for (int title = 1; title >= 0; title--) {
+        s_tpTouch = 1;
+        ui_settings_set_touch_query(tpTouch);
+        const int mainL = enterMain(title);
+        const int ctlL = openPage(mainL, 4, UI_PAGE_CONTROLS);
+        for (int k = 0; k < 4; k++) {
+            frame(0);
+        }
+        CHECK(tpLink() >= 0 && !lt_ext_prop(tpLink())->defaultMask,
+              "title %d: the Touch screen row shown", title);
+        for (int i = 0; i < 3; i++) {
+            CHECK(ui_settings_row_of(UI_PAGE_CONTROLS, kRows[i]) < 0,
+                  "title %d: touch row %d is not on Controls", title, i);
+        }
+        checkPageFits(UI_PAGE_CONTROLS,
+                      title ? "Controls, touch (title)" : "Controls, touch (pause)");
+        press(LT_PAD_TRIANGLE);
+        CHECK(settle(mainL, 60), "title %d: Controls: back", title);
+        const int touchL = tpOpen(mainL);
+        for (int k = 0; k < 4; k++) {
+            frame(0);
+        }
+        int labels[16], shown = 0;
+        const int n = ui_settings_page_rows(UI_PAGE_TOUCH, labels, NULL, NULL, 16);
+        for (int i = 0; i < n; i++) {
+            shown += !lt_ext_prop(labels[i])->defaultMask;
+        }
+        CHECK(n == 9 && shown == 9, "title %d: Touch screen shows nine rows (%d of %d)", title,
+              shown, n);
+        CHECK(lt_ext_layout(touchL)->curItem ==
+                  ui_settings_row_of(UI_PAGE_TOUCH, UI_OPT_TOUCH_MODE),
+              "title %d: the page opens on Touch controls", title);
+        checkPageFits(UI_PAGE_TOUCH, title ? "Touch screen (title)" : "Touch screen (pause)");
+        CHECK(noteStarting(UI_PAGE_TOUCH, "On-screen buttons.") >= 0,
+              "title %d: the overlay's note", title);
+        press(LT_PAD_TRIANGLE);
+        CHECK(settle(ctlL, 60), "title %d: Touch screen: back to Controls", title);
+        CHECK(lt_ext_layout(ctlL)->curItem == tpLink(), "title %d: back on Touch screen", title);
+        /* no touch screen: the row hides again */
+        s_tpTouch = 0;
+        for (int k = 0; k < 4; k++) {
+            frame(0);
+        }
+        CHECK(lt_ext_prop(tpLink())->defaultMask, "title %d: no touch screen, no row", title);
+        press(LT_PAD_TRIANGLE);
+        CHECK(settle(mainL, 60), "title %d: Controls: back again", title);
+    }
+
+    /* the defaults, and a step of each row */
+    useConfig("version = 1\n");
+    ico_input_reload_bindings(b);
+    CHECK(b->touch_mode == 1 && b->touch_size == 1 && b->touch_opacity == 75,
+          "defaults: auto, medium, 75 (%d, %d, %d)", b->touch_mode, b->touch_size,
+          b->touch_opacity);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_MODE), "Auto") == 0, "mode: Auto (%s)",
+          ui_settings_value_text(UI_OPT_TOUCH_MODE));
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_SIZE), "Medium") == 0, "size: Medium");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_OPACITY), "75 %") == 0, "opacity: 75 %%");
+    ui_settings_step(UI_OPT_TOUCH_MODE, 1);
+    ui_settings_step(UI_OPT_TOUCH_SIZE, 1);
+    ui_settings_step(UI_OPT_TOUCH_OPACITY, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_MODE), "Always") == 0, "Right: Always");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_SIZE), "Large") == 0, "Right: Large");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_OPACITY), "100 %") == 0, "Right: 100 %%");
+    CHECK(b->touch_mode == 2 && b->touch_size == 2 && b->touch_opacity == 100,
+          "the live table: always, large, 100");
+    CHECK(ui_settings_save() == 0, "save the touch rows");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t &&
+              strcmp(ico_toml_get(t, "input.touch_mode") ? ico_toml_get(t, "input.touch_mode") : "",
+                     "always") == 0,
+          "saved: touch_mode = always (%s)", t ? ico_toml_get(t, "input.touch_mode") : "");
+    CHECK(t && ico_toml_get(t, "input.touch_size") &&
+              strcmp(ico_toml_get(t, "input.touch_size"), "large") == 0,
+          "saved: touch_size = large");
+    CHECK(t && ico_toml_get_int(t, "input.touch_opacity", 0) == 100, "saved: touch_opacity = 100");
+    CHECK(t && ico_toml_get(t, "touch.snap") == NULL && ico_toml_get(t, "touch.grid") == NULL,
+          "no [touch] keys: nothing of the layout changed");
+    ico_toml_free(t);
+    CHECK(b->touch_mode == 2 && b->touch_size == 2 && b->touch_opacity == 100,
+          "reloaded after the save: always, large, 100");
+    /* around: Right from Always is Off, from Large Small, from 100 % 25 % */
+    ui_settings_step(UI_OPT_TOUCH_MODE, 1);
+    ui_settings_step(UI_OPT_TOUCH_SIZE, 1);
+    ui_settings_step(UI_OPT_TOUCH_OPACITY, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_MODE), "Off") == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_TOUCH_SIZE), "Small") == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_TOUCH_OPACITY), "25 %") == 0,
+          "around: Off, Small, 25 %%");
+    CHECK(ui_settings_save() == 0, "save again");
+
+    /* read back from a file: a value between the steps steps from the
+       nearest one */
+    useConfig("version = 1\n[input]\ntouch_mode = \"off\"\ntouch_size = \"small\"\n"
+              "touch_opacity = 60\n");
+    ico_input_reload_bindings(b);
+    CHECK(b->touch_mode == 0 && b->touch_size == 0 && b->touch_opacity == 60,
+          "read back: off, small, 60 (%d, %d, %d)", b->touch_mode, b->touch_size, b->touch_opacity);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_MODE), "Off") == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_TOUCH_OPACITY), "60 %") == 0,
+          "the rows: Off, 60 %%");
+    ui_settings_step(UI_OPT_TOUCH_OPACITY, 1);
+    CHECK(b->touch_opacity == 75, "60 %% Right: 75 %% (%d)", b->touch_opacity);
+    ui_settings_step(UI_OPT_TOUCH_MODE, -1);
+    CHECK(b->touch_mode == 2, "Off Left: Always");
+    /* a bad value keeps the default */
+    useConfig("version = 1\n[input]\ntouch_mode = \"sometimes\"\ntouch_opacity = 5\n");
+    ico_input_reload_bindings(b);
+    CHECK(b->touch_mode == 1 && b->touch_opacity == 75, "bad values: the defaults (%d, %d)",
+          b->touch_mode, b->touch_opacity);
+    /* the defaults are not written when unchanged */
+    useConfig("version = 1\n");
+    ico_input_reload_bindings(b);
+    CHECK(ico_input_write_bindings(b) == 0 &&
+              ico_config_get_string("input.touch_mode", NULL) == NULL,
+          "defaults: no touch keys written");
+
+    ui_settings_set_touch_query(NULL);
+    s_tpTouch = 0;
+    useConfig("version = 1\n");
+    ico_input_reload_bindings(b);
+}
+
+/* Touch screen > Edit layout and the layout editor's rows.  A fake
+   UiTouchEditHost over a real IcoTouchEditor (touch_edit.h) and a layout
+   from ico_touch_layout_edits: Cross on Edit layout opens the page (one
+   masked row, no cursor) and begins the editor; Triangle comes back with
+   the cursor on Edit layout, the editor ended keeping its work; the row is
+   dimmed and inert with its note while Touch controls is Off or there is
+   no host; Snap to grid and Grid size step the live edits and are saved
+   as touch.snap and touch.grid; Reset layout clears the posture the host
+   says, Reset all layouts every posture.  The editor's own Done (a tap on
+   its toolbar key) and its gamepad selection run once the editor is the
+   real one (the contract's placeholders give no toolbar: a NOTE line says
+   they were skipped). */
+static IcoTouchEditor s_ted;
+static IcoTouchLayout s_tedLayout;
+static int s_tedRule, s_tedBegins, s_tedEnds, s_tedKeep = -1;
+
+static IcoTouchEditor *tedEditor(void)
+{
+    return &s_ted;
+}
+
+static void tedBegin(void)
+{
+    ico_touch_edit_begin(&s_ted, ico_input_live_touch_edits(), s_tedRule);
+    s_tedBegins++;
+}
+
+static void tedEnd(int keep)
+{
+    ico_touch_edit_end(&s_ted, keep);
+    s_tedEnds++;
+    s_tedKeep = keep;
+}
+
+static int tedRule(void)
+{
+    return s_tedRule;
+}
+
+#define TED_W 2340
+#define TED_H 1080
+
+static const IcoTouchLayout *tedLayout(void)
+{
+    const IcoTouchInsets none = {0.0f, 0.0f, 0.0f, 0.0f};
+    s_tedLayout = ico_touch_layout_edits(TED_W, TED_H, none, ICO_TOUCH_MEDIUM, NULL,
+                                         s_ted.active ? &s_ted.work : ico_input_live_touch_edits());
+    return &s_tedLayout;
+}
+
+static const UiTouchEditHost kTedHost = {tedEditor, tedBegin, tedEnd, tedRule, tedLayout};
+
+/* Cross on Edit layout from the Touch screen page: whether the editor page
+   came up */
+static int tedOpen(int touchL)
+{
+    lt_ext_layout(touchL)->curItem = ui_settings_row_of(UI_PAGE_TOUCH, UI_OPT_TOUCH_EDIT);
+    frame(0);
+    press(lt_ext_confirm_button());
+    return settle(ui_settings_page_layout(UI_PAGE_TOUCH_LAYOUT), 60);
+}
+
+static void testTouchEditorPage(void)
+{
+    IcoBindings *b = ico_input_live_bindings();
+    IcoTouchEdits *e = ico_input_live_touch_edits();
+    char p[1100];
+
+    for (int title = 1; title >= 0; title--) {
+        memset(&s_ted, 0, sizeof(s_ted));
+        s_tedRule = ICO_TOUCH_RULE_FULL;
+        s_tedBegins = s_tedEnds = 0;
+        s_tedKeep = -1;
+        s_tpTouch = 1;
+        ui_settings_set_touch_query(tpTouch);
+        ui_settings_set_touch_edit_host(&kTedHost);
+        const int mainL = enterMain(title);
+        ico_input_reload_bindings(b);
+        ico_touch_edits_defaults(e);
+        CHECK(ui_settings_touch_edit_host(NULL) == 1, "the host is installed");
+        const int touchL = tpOpen(mainL);
+        const int edit = ui_settings_row_of(UI_PAGE_TOUCH, UI_OPT_TOUCH_EDIT);
+        const int edL = ui_settings_page_layout(UI_PAGE_TOUCH_LAYOUT);
+        frame(0);
+        CHECK(edit >= 0 && lt_ext_prop(edit)->right == edL && lt_ext_row_dim(edit) == 0,
+              "title %d: Edit layout opens the editor's page", title);
+
+        /* open, then Triangle */
+        CHECK(tedOpen(touchL), "title %d: the editor's page opens (%d)", title, current_layout_id);
+        CHECK(s_tedBegins == 1 && s_ted.active, "title %d: the editor begun (%d)", title,
+              s_tedBegins);
+        {
+            const LtProp *lp = lt_ext_layout(edL);
+            IcoTouchEditView v;
+            CHECK(lp->curItem == -1 && lp->last == lp->first + 1 && lt_ext_prop(lp->first)->masked,
+                  "title %d: one masked row, no cursor", title);
+            ico_touch_edit_view(&s_ted, tedLayout(), &v);
+            CHECK(v.active == 1 && v.rule == ICO_TOUCH_RULE_FULL && v.selected == -1,
+                  "title %d: the view: active, full, nothing selected (%d %d %d)", title, v.active,
+                  v.rule, v.selected);
+            CHECK(ui_settings_covers_title() == title, "title %d: the page covers the title's logo",
+                  title);
+        }
+        for (int k = 0; k < 8; k++) {
+            frame(0); /* the page stays while nothing is pressed */
+        }
+        CHECK(current_layout_id == edL && s_tedEnds == 0, "title %d: the editor's page stays",
+              title);
+        press(LT_PAD_TRIANGLE);
+        CHECK(settle(touchL, 60), "title %d: Triangle: back to Touch screen (%d)", title,
+              current_layout_id);
+        CHECK(lt_ext_layout(touchL)->curItem == edit, "title %d: back on Edit layout", title);
+        CHECK(s_tedEnds == 1 && s_tedKeep == 1 && !s_ted.active,
+              "title %d: the editor ended, its work kept (%d, %d)", title, s_tedEnds, s_tedKeep);
+
+        /* the editor's Done and its gamepad (the real editor only) */
+        {
+            IcoTouchRect tb[ICO_TOUCH_ED_TB_COUNT], cf[ICO_TOUCH_ED_CF_COUNT];
+            ico_touch_edit_toolbar(tedLayout(), tb, cf);
+            if (tb[ICO_TOUCH_ED_TB_DONE].w > 0.0f) {
+                CHECK(tedOpen(touchL), "title %d: the page again", title);
+                press(LT_PAD_R1);
+                IcoTouchEditView v;
+                ico_touch_edit_view(&s_ted, tedLayout(), &v);
+                CHECK(v.selected >= 0, "title %d: R1 selects a control (%d)", title, v.selected);
+                const float nx = (tb[ICO_TOUCH_ED_TB_DONE].x + tb[ICO_TOUCH_ED_TB_DONE].w * 0.5f) /
+                                 (float)TED_W,
+                            ny = (tb[ICO_TOUCH_ED_TB_DONE].y + tb[ICO_TOUCH_ED_TB_DONE].h * 0.5f) /
+                                 (float)TED_H;
+                ico_touch_edit_event(&s_ted, 7, nx, ny, ICO_TOUCH_DOWN, 1000000ull);
+                ico_touch_edit_event(&s_ted, 7, nx, ny, ICO_TOUCH_UP, 2000000ull);
+                frame(0);
+                CHECK(settle(touchL, 60), "title %d: Done: back to Touch screen", title);
+                CHECK(s_tedEnds == 2 && s_tedKeep == 1 && lt_ext_layout(touchL)->curItem == edit,
+                      "title %d: Done ended the editor, on Edit layout", title);
+            } else {
+                printf("NOTE: %s: the editor's toolbar is empty (the contract's placeholders): "
+                       "the Done tap and the gamepad selection were skipped\n",
+                       __func__);
+            }
+        }
+
+        /* locked while Touch controls is Off: dimmed, its note, Cross inert */
+        b->touch_mode = ICO_TOUCH_MODE_OFF;
+        for (int k = 0; k < 4; k++) {
+            frame(0);
+        }
+        CHECK(lt_ext_row_dim(edit) == 1 && lt_ext_prop(edit)->right == -1,
+              "title %d: Off: Edit layout dimmed and locked", title);
+        CHECK(noteStarting(UI_PAGE_TOUCH, "Turn Touch controls on") >= 0,
+              "title %d: Off: the note says why", title);
+        const int begins = s_tedBegins;
+        lt_ext_layout(touchL)->curItem = edit;
+        press(lt_ext_confirm_button());
+        for (int k = 0; k < 20; k++) {
+            frame(0);
+        }
+        CHECK(current_layout_id == touchL && s_tedBegins == begins,
+              "title %d: Off: Cross does not open the editor", title);
+        b->touch_mode = ICO_TOUCH_MODE_AUTO;
+        /* and without a host */
+        ui_settings_set_touch_edit_host(NULL);
+        for (int k = 0; k < 4; k++) {
+            frame(0);
+        }
+        CHECK(lt_ext_row_dim(edit) == 1 && lt_ext_prop(edit)->right == -1,
+              "title %d: no host: Edit layout locked", title);
+        ui_settings_set_touch_edit_host(&kTedHost);
+        for (int k = 0; k < 4; k++) {
+            frame(0);
+        }
+        CHECK(lt_ext_row_dim(edit) == 0 && lt_ext_prop(edit)->right == edL,
+              "title %d: Auto with a host: open again", title);
+
+        /* Snap to grid and Grid size: the live edits, saved on leaving */
+        CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_SNAP), "On") == 0 &&
+                  strcmp(ui_settings_value_text(UI_OPT_TOUCH_GRID), "4 mm") == 0,
+              "title %d: defaults: snap On, grid 4 mm (%s, %s)", title,
+              ui_settings_value_text(UI_OPT_TOUCH_SNAP), ui_settings_value_text(UI_OPT_TOUCH_GRID));
+        const unsigned gen0 = e->gen;
+        lt_ext_layout(touchL)->curItem = ui_settings_row_of(UI_PAGE_TOUCH, UI_OPT_TOUCH_SNAP);
+        press(LT_PAD_RIGHT);
+        CHECK(e->snap == 0 && strcmp(ui_settings_value_text(UI_OPT_TOUCH_SNAP), "Off") == 0 &&
+                  e->gen != gen0,
+              "title %d: Right: snap Off", title);
+        lt_ext_layout(touchL)->curItem = ui_settings_row_of(UI_PAGE_TOUCH, UI_OPT_TOUCH_GRID);
+        press(LT_PAD_RIGHT);
+        CHECK(e->grid == 8.0f && strcmp(ui_settings_value_text(UI_OPT_TOUCH_GRID), "8 mm") == 0,
+              "title %d: Right: grid 8 mm", title);
+        press(LT_PAD_RIGHT);
+        CHECK(e->grid == 2.0f, "title %d: Right again: around to 2 mm", title);
+        press(LT_PAD_LEFT);
+        CHECK(e->grid == 8.0f, "title %d: Left: back to 8 mm", title);
+
+        /* Reset layout: the host's posture; Reset all layouts: every one */
+        e->ctl[ICO_TOUCH_RULE_SPLIT][ICO_TOUCH_CTL_CROSS].set = 1;
+        e->ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_CROSS].set = 1;
+        s_tedRule = ICO_TOUCH_RULE_SPLIT;
+        lt_ext_layout(touchL)->curItem = ui_settings_row_of(UI_PAGE_TOUCH, UI_OPT_TOUCH_RESET);
+        press(lt_ext_confirm_button());
+        CHECK(!ico_touch_edits_any(e, ICO_TOUCH_RULE_SPLIT) &&
+                  ico_touch_edits_any(e, ICO_TOUCH_RULE_FULL),
+              "title %d: Reset layout cleared the split posture only", title);
+        CHECK(current_layout_id == touchL, "title %d: Reset stays on the page", title);
+        lt_ext_layout(touchL)->curItem = ui_settings_row_of(UI_PAGE_TOUCH, UI_OPT_TOUCH_RESET_ALL);
+        press(lt_ext_confirm_button());
+        CHECK(!ico_touch_edits_any(e, -1), "title %d: Reset all layouts cleared every posture",
+              title);
+        s_tedRule = ICO_TOUCH_RULE_FULL;
+
+        /* leaving the page writes [touch] */
+        const int ctlL = ui_settings_page_layout(UI_PAGE_CONTROLS);
+        press(LT_PAD_TRIANGLE);
+        CHECK(settle(ctlL, 60), "title %d: Touch screen: back", title);
+        path(p, sizeof(p), "settings_test.toml");
+        IcoToml *t = ico_toml_load(p);
+        CHECK(t && ico_toml_has(t, "touch.snap") && ico_toml_get_bool(t, "touch.snap", 1) == 0 &&
+                  ico_toml_get_int(t, "touch.grid", 0) == 8,
+              "title %d: saved: touch.snap = false, touch.grid = 8", title);
+        if (t) {
+            ico_toml_free(t);
+        }
+        CHECK(e->snap == 0 && e->grid == 8.0f, "title %d: the edits read back", title);
+        press(LT_PAD_TRIANGLE);
+        CHECK(settle(mainL, 60), "title %d: Controls: back", title);
+    }
+    ui_settings_set_touch_edit_host(NULL);
+    ui_settings_set_touch_query(NULL);
+    s_tpTouch = 0;
+    useConfig("version = 1\n");
+    ico_input_reload_bindings(b);
+    ico_input_reload_touch_edits(e);
+    memset(&s_ted, 0, sizeof(s_ted));
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -2732,6 +3139,9 @@ int main(int argc, char **argv)
     testDoorFix();
     /* Controls > Hold type */
     testHoldType();
+    /* Controls > Touch screen, Edit layout */
+    testTouchPage();
+    testTouchEditorPage();
     testNaturalChains();
     /* the version in the Options menu */
     testVersion();

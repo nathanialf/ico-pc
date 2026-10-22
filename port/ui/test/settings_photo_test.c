@@ -30,6 +30,12 @@ static void renderCharsSwitch(int character)
 static void renderCharsLeave(void) {}
 
 /* SCENE (512 x 512 for the 640 x 448 grid) to a PNG at 4:3, 683 x 512 */
+/* a touch screen, for Controls' Touch screen row and its page */
+static int renderTouch(void)
+{
+    return 1;
+}
+
 static void snap(const char *name)
 {
     char p[1100];
@@ -714,6 +720,38 @@ static int render(void)
     ico_config_set_string("audio.device", "");
     ico_config_set_string("audio.output", "auto");
     ico_opt_reload();
+    /* Controls -> Touch screen (a touch screen there), the cursor on Edit
+       layout (its note: no editor here, so the locked one) */
+    {
+        ui_settings_set_touch_query(renderTouch);
+        lt_ext_layout(mainL)->curItem = labels[4];
+        press(0x40);
+        const int ctlL = ui_settings_page_layout(UI_PAGE_CONTROLS);
+        CHECK(settle(ctlL, 60), "Controls (touch)");
+        int cl[16];
+        const int cn = ui_settings_page_rows(UI_PAGE_CONTROLS, cl, NULL, NULL, 16);
+        for (int i = 0; i < cn; i++) {
+            if (lt_ext_prop(cl[i])->right == ui_settings_page_layout(UI_PAGE_TOUCH)) {
+                lt_ext_layout(ctlL)->curItem = cl[i];
+            }
+        }
+        frame(0);
+        snap("settings_controls_touch.png");
+        press(0x40);
+        CHECK(settle(ui_settings_page_layout(UI_PAGE_TOUCH), 60), "Touch screen");
+        frame(0);
+        snap("settings_touch.png");
+        for (int k = 0; k < 3; k++) {
+            press(0x4000); /* to Edit layout */
+        }
+        frame(0);
+        snap("settings_touch_edit.png");
+        press(0x10);
+        CHECK(settle(ctlL, 60), "back to Controls from Touch screen");
+        press(0x10);
+        CHECK(settle(mainL, 60), "back to the menu from Controls (touch)");
+        ui_settings_set_touch_query(NULL);
+    }
     /* Controls -> Remap, then a capture in progress */
     lt_ext_layout(mainL)->curItem = labels[4];
     press(0x40);

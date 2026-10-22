@@ -91,19 +91,26 @@ static void testBuild(void)
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
                                     UI_STR_OPT_OUTPUT, UI_STR_OPT_DEVICE,    UI_STR_BACK};
-    static const int ctlOpts[] = {
-        UI_OPT_LINK,        UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,     UI_OPT_HOLD_TYPE,
-        UI_OPT_STICK_FIX,   UI_OPT_MOUSE_CAMERA,  UI_OPT_MOUSE_SENS,    UI_OPT_MOUSE_INVERT,
-        UI_OPT_MOUSE_SPEED, UI_OPT_MOUSE_RANGE,   UI_OPT_MOUSE_RETURN,  UI_OPT_CIRCLE_BACK,
-        UI_OPT_TOUCH_MODE,  UI_OPT_TOUCH_SIZE,    UI_OPT_TOUCH_OPACITY, UI_OPT_BACK};
-    static const int ctlStrs[] = {UI_STR_OPT_REMAP,         UI_STR_OPT_BUTTON_CONFIG,
-                                  UI_STR_OPT_VIBRATION,     UI_STR_OPT_HOLD_TYPE,
-                                  UI_STR_OPT_STICK_FIX,     UI_STR_OPT_MOUSE_CAMERA,
-                                  UI_STR_OPT_MOUSE_SENS,    UI_STR_OPT_MOUSE_INVERT,
-                                  UI_STR_OPT_MOUSE_SPEED,   UI_STR_OPT_MOUSE_RANGE,
-                                  UI_STR_OPT_MOUSE_RETURN,  UI_STR_OPT_CIRCLE_BACK,
-                                  UI_STR_OPT_TOUCH_MODE,    UI_STR_OPT_TOUCH_SIZE,
-                                  UI_STR_OPT_TOUCH_OPACITY, UI_STR_BACK};
+    static const int ctlOpts[] = {UI_OPT_LINK,        UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,
+                                  UI_OPT_HOLD_TYPE,   UI_OPT_STICK_FIX,     UI_OPT_MOUSE_CAMERA,
+                                  UI_OPT_MOUSE_SENS,  UI_OPT_MOUSE_INVERT,  UI_OPT_MOUSE_SPEED,
+                                  UI_OPT_MOUSE_RANGE, UI_OPT_MOUSE_RETURN,  UI_OPT_CIRCLE_BACK,
+                                  UI_OPT_LINK,        UI_OPT_BACK};
+    static const int ctlStrs[] = {UI_STR_OPT_REMAP,        UI_STR_OPT_BUTTON_CONFIG,
+                                  UI_STR_OPT_VIBRATION,    UI_STR_OPT_HOLD_TYPE,
+                                  UI_STR_OPT_STICK_FIX,    UI_STR_OPT_MOUSE_CAMERA,
+                                  UI_STR_OPT_MOUSE_SENS,   UI_STR_OPT_MOUSE_INVERT,
+                                  UI_STR_OPT_MOUSE_SPEED,  UI_STR_OPT_MOUSE_RANGE,
+                                  UI_STR_OPT_MOUSE_RETURN, UI_STR_OPT_CIRCLE_BACK,
+                                  UI_STR_SECTION_TOUCH,    UI_STR_BACK};
+    static const int touchOpts[] = {
+        UI_OPT_TOUCH_MODE,  UI_OPT_TOUCH_SIZE,      UI_OPT_TOUCH_OPACITY,
+        UI_OPT_TOUCH_EDIT,  UI_OPT_TOUCH_SNAP,      UI_OPT_TOUCH_GRID,
+        UI_OPT_TOUCH_RESET, UI_OPT_TOUCH_RESET_ALL, UI_OPT_BACK};
+    static const int touchStrs[] = {
+        UI_STR_OPT_TOUCH_MODE, UI_STR_OPT_TOUCH_SIZE,  UI_STR_OPT_TOUCH_OPACITY,
+        UI_STR_OPT_TOUCH_EDIT, UI_STR_OPT_TOUCH_SNAP,  UI_STR_OPT_TOUCH_GRID,
+        UI_STR_TOUCH_RESET,    UI_STR_TOUCH_RESET_ALL, UI_STR_BACK};
     static const int gameOpts[] = {
         UI_OPT_YORDA,       UI_OPT_STICK_FIX, UI_OPT_DOOR_FIX, UI_OPT_NATURAL_CHAINS,
         UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,   UI_OPT_BACK};
@@ -145,7 +152,18 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 12),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 6), "audio rows");
-    CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 16), "controls rows");
+    CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 14), "controls rows");
+    CHECK(labelsAre(UI_PAGE_TOUCH, touchOpts, touchStrs, 9), "touch screen rows");
+    CHECK(ui_settings_page_rows(UI_PAGE_TOUCH_LAYOUT, NULL, NULL, NULL, 16) == 0,
+          "the Edit layout page has no rows");
+    {
+        /* Touch screen opens its page, Edit layout the editor's */
+        int cl[16], co[16];
+        const int cn = ui_settings_page_rows(UI_PAGE_CONTROLS, cl, co, NULL, 16);
+        CHECK(cn == 14 && co[12] == UI_OPT_LINK &&
+                  lt_ext_prop(cl[12])->right == ui_settings_page_layout(UI_PAGE_TOUCH),
+              "Touch screen opens its page");
+    }
     CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 7), "gameplay rows");
     /* the pop-ups switch is an item of the list (first, before the achievements), not a row of its own */
     CHECK(labelsAre(UI_PAGE_ACHIEVEMENTS, listOpts, listStrs, 8), "achievement slots");
@@ -3124,11 +3142,10 @@ static void testEffects(void)
     useConfig("version = 1\n");
 }
 
-/* Settings > Controls, the touch overlay's rows.  Hidden
-   without a touch screen (no query, or one that says none), shown with
-   one on both entries, the page still fitting; Auto, Medium and 75 % by
-   default; a step changes the live table and ui_settings_save writes
-   [input] touch_mode, touch_size and touch_opacity, which read back. */
+/* Settings > Controls' Touch screen row (the link to the touch overlay's
+   page).  Hidden without a touch screen (no query, or one that says none),
+   shown with one on both entries, the page still fitting; the page's rows
+   and their save are settings_extra_test.c's (testTouchPage). */
 static int s_touchAnswer;
 
 static int fakeTouch(void)
@@ -3136,115 +3153,52 @@ static int fakeTouch(void)
     return s_touchAnswer;
 }
 
+/* Controls' row that opens the Touch screen page, -1 */
+static int touchLink(void)
+{
+    int labels[16];
+    const int n = ui_settings_page_rows(UI_PAGE_CONTROLS, labels, NULL, NULL, 16);
+    for (int i = 0; i < n; i++) {
+        if (lt_ext_prop(labels[i])->right == ui_settings_page_layout(UI_PAGE_TOUCH)) {
+            return labels[i];
+        }
+    }
+    return -1;
+}
+
 static void testTouch(void)
 {
-    static const UiSettingsOpt kRows[3] = {UI_OPT_TOUCH_MODE, UI_OPT_TOUCH_SIZE,
-                                           UI_OPT_TOUCH_OPACITY};
-    IcoBindings *b = ico_input_live_bindings();
-    char p[1100];
-
     for (int title = 1; title >= 0; title--) {
         ui_settings_set_touch_query(NULL);
         int mainL = enterMain(title);
         openPage(mainL, 4, UI_PAGE_CONTROLS);
-        for (int i = 0; i < 3; i++) {
-            CHECK(!rowShown(UI_PAGE_CONTROLS, kRows[i]), "title %d: touch row %d hidden (no query)",
-                  title, i);
-        }
+        const int link = touchLink();
+        CHECK(link >= 0 && lt_ext_prop(link)->defaultMask,
+              "title %d: Touch screen hidden (no query)", title);
         s_touchAnswer = 0;
         ui_settings_set_touch_query(fakeTouch);
         for (int k = 0; k < 4; k++) {
             frame(0); /* the page refreshes */
         }
-        for (int i = 0; i < 3; i++) {
-            CHECK(!rowShown(UI_PAGE_CONTROLS, kRows[i]),
-                  "title %d: touch row %d hidden (no touch screen)", title, i);
-        }
+        CHECK(link >= 0 && lt_ext_prop(link)->defaultMask,
+              "title %d: Touch screen hidden (no touch screen)", title);
         s_touchAnswer = 1;
         for (int k = 0; k < 4; k++) {
             frame(0);
         }
-        for (int i = 0; i < 3; i++) {
-            CHECK(rowShown(UI_PAGE_CONTROLS, kRows[i]),
-                  "title %d: touch row %d shown with a touch screen", title, i);
-        }
+        CHECK(link >= 0 && !lt_ext_prop(link)->defaultMask &&
+                  strcmp(lt_ext_row_text(link), "Touch screen") == 0,
+              "title %d: Touch screen shown with a touch screen", title);
+        CHECK(lt_ext_prop(link)->downItem == ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_BACK),
+              "title %d: Back after Touch screen", title);
         checkPageFits(UI_PAGE_CONTROLS,
                       title ? "Controls with touch (title)" : "Controls with touch (pause)");
-        CHECK(rowWithPrefix(UI_PAGE_CONTROLS, "On-screen buttons.") >= 0, "the touch note");
+        CHECK(rowWithPrefix(UI_PAGE_CONTROLS, "On-screen buttons.") < 0,
+              "the touch note is the Touch screen page's");
     }
-
-    /* the defaults, and a step of each row */
-    useConfig("version = 1\n");
-    ico_input_reload_bindings(b);
-    CHECK(b->touch_mode == 1 && b->touch_size == 1 && b->touch_opacity == 75,
-          "defaults: auto, medium, 75 (%d, %d, %d)", b->touch_mode, b->touch_size,
-          b->touch_opacity);
-    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_MODE), "Auto") == 0, "mode: Auto (%s)",
-          ui_settings_value_text(UI_OPT_TOUCH_MODE));
-    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_SIZE), "Medium") == 0, "size: Medium");
-    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_OPACITY), "75 %") == 0, "opacity: 75 %%");
-    ui_settings_step(UI_OPT_TOUCH_MODE, 1);
-    ui_settings_step(UI_OPT_TOUCH_SIZE, 1);
-    ui_settings_step(UI_OPT_TOUCH_OPACITY, 1);
-    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_MODE), "Always") == 0, "Right: Always");
-    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_SIZE), "Large") == 0, "Right: Large");
-    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_OPACITY), "100 %") == 0, "Right: 100 %%");
-    CHECK(b->touch_mode == 2 && b->touch_size == 2 && b->touch_opacity == 100,
-          "the live table: always, large, 100");
-    CHECK(ui_settings_save() == 0, "save the touch rows");
-    path(p, sizeof(p), "settings_test.toml");
-    IcoToml *t = ico_toml_load(p);
-    CHECK(t &&
-              strcmp(ico_toml_get(t, "input.touch_mode") ? ico_toml_get(t, "input.touch_mode") : "",
-                     "always") == 0,
-          "saved: touch_mode = always (%s)", t ? ico_toml_get(t, "input.touch_mode") : "");
-    CHECK(t && ico_toml_get(t, "input.touch_size") &&
-              strcmp(ico_toml_get(t, "input.touch_size"), "large") == 0,
-          "saved: touch_size = large");
-    CHECK(t && ico_toml_get_int(t, "input.touch_opacity", 0) == 100, "saved: touch_opacity = 100");
-    ico_toml_free(t);
-    CHECK(b->touch_mode == 2 && b->touch_size == 2 && b->touch_opacity == 100,
-          "reloaded after the save: always, large, 100");
-    /* around: Right from Always is Off, from Large Small, from 100 % 25 % */
-    ui_settings_step(UI_OPT_TOUCH_MODE, 1);
-    ui_settings_step(UI_OPT_TOUCH_SIZE, 1);
-    ui_settings_step(UI_OPT_TOUCH_OPACITY, 1);
-    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_MODE), "Off") == 0 &&
-              strcmp(ui_settings_value_text(UI_OPT_TOUCH_SIZE), "Small") == 0 &&
-              strcmp(ui_settings_value_text(UI_OPT_TOUCH_OPACITY), "25 %") == 0,
-          "around: Off, Small, 25 %%");
-    CHECK(ui_settings_save() == 0, "save again");
-
-    /* read back from a file: a value between the steps steps from the
-       nearest one */
-    useConfig("version = 1\n[input]\ntouch_mode = \"off\"\ntouch_size = \"small\"\n"
-              "touch_opacity = 60\n");
-    ico_input_reload_bindings(b);
-    CHECK(b->touch_mode == 0 && b->touch_size == 0 && b->touch_opacity == 60,
-          "read back: off, small, 60 (%d, %d, %d)", b->touch_mode, b->touch_size, b->touch_opacity);
-    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_MODE), "Off") == 0 &&
-              strcmp(ui_settings_value_text(UI_OPT_TOUCH_OPACITY), "60 %") == 0,
-          "the rows: Off, 60 %%");
-    ui_settings_step(UI_OPT_TOUCH_OPACITY, 1);
-    CHECK(b->touch_opacity == 75, "60 %% Right: 75 %% (%d)", b->touch_opacity);
-    ui_settings_step(UI_OPT_TOUCH_MODE, -1);
-    CHECK(b->touch_mode == 2, "Off Left: Always");
-    /* a bad value keeps the default */
-    useConfig("version = 1\n[input]\ntouch_mode = \"sometimes\"\ntouch_opacity = 5\n");
-    ico_input_reload_bindings(b);
-    CHECK(b->touch_mode == 1 && b->touch_opacity == 75, "bad values: the defaults (%d, %d)",
-          b->touch_mode, b->touch_opacity);
-    /* the defaults are not written when unchanged */
-    useConfig("version = 1\n");
-    ico_input_reload_bindings(b);
-    CHECK(ico_input_write_bindings(b) == 0 &&
-              ico_config_get_string("input.touch_mode", NULL) == NULL,
-          "defaults: no touch keys written");
-
     ui_settings_set_touch_query(NULL);
     s_touchAnswer = 0;
     useConfig("version = 1\n");
-    ico_input_reload_bindings(b);
 }
 
 /* whether opt has a row on page that the frame shows (its label row not
