@@ -534,10 +534,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   less its headroom (`testPipelines`). Its DATE case replays one frame through the stencil bit
   and through the snapshot (where the device has local read): one DATE command of two overlapping
   sprites over cells of alpha 0x80 and 0, SCENE the same bytes both ways and the snapshot's
-  semantics within the draw (`testDateStencil`). Its alpha plan case replays one frame with the
+  semantics within the draw (`testDateStencil`; it skips under `ICO_RD_BLEND=storage` and prints
+  why: the storage read has no colour attachment to read, so DATE takes the snapshot there). Its alpha plan case replays one frame with the
   alpha/blend planner off and on: prelit quads of vertex alpha 0x80, 0x70 and 0x40 under the
   railing's state, a LERP FIX 0x80 sprite and a LERP sprite of As 0, SCENE's colour and depth the
-  same bytes, three draws counted one-pass (`testAlphaPlan`); the railing keeps its split.
+  same bytes, three draws counted one-pass (`testAlphaPlan`); the railing keeps its split. Both
+  replays run with the fixed-function blend (the mode forced off for them): under the storage read
+  the unplanned quads stay on that blend while the planned ones take the exact read, a rounding
+  apart, so under a mode asked a third replay (the plan on, that mode) must stay within 3 per
+  channel of the planned fixed-function one with the depth equal; a mismatch prints the first
+  differing pixel and both values.
   Its VU seams case (`testVuSeams`, at Original 1x and 4x and Enhanced 2.25x and 4x) counts the
   clear's pixels along edges two draws share: S1 a code-32 triangle beside a GIF one, S2 two
   meshes 0.01 GS pixel apart, S3 a code-36 cut triangle beside a kicked one, S4 8 x 8 quads under
@@ -563,8 +569,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   DISPLAY picture byte for byte (`rd_replay_tool_pass_split`).
 - `rd_replay_tool_pass_merge.cmake`: that dump under `ICO_RD_BLEND=storage` with the storage pass
   merge draws `ICO_RD_PASS_MERGE=0`'s DISPLAY picture byte for byte at 1x and 2x, with no more
-  passes or pass switches; skips without the storage read, as on lavapipe, which has no
-  interlock (`rd_replay_tool_pass_merge`).
+  passes or pass switches; skips without the storage read, as on a lavapipe before Mesa 25.2,
+  which has no interlock; from 25.2 lavapipe has it and the test runs
+  (`rd_replay_tool_pass_merge`).
 - `rd_replay_tool_snap_swap.cmake`: that dump on each blend path the device has, at 1x and 2x:
   the staticBlur sprites' snapshot swap draws `ICO_RD_SNAP_SWAP=0`'s (the copy's) DISPLAY picture
   byte for byte, and its copies plus swaps are the copy's snapshots (`rd_replay_tool_snap_swap`).
@@ -876,6 +883,8 @@ switches the tests and their registrations use:
 | `ICO_VU_REF_AT` | `rd_replay_tool.c` | the kicked triangles containing a GS point |
 | `ICO_BOOT_DUMPS`, `ICO_BOOT_OLD` | `rd_boot_present_test.c` | the start-up dumps (the folder when no argument is given), and `ICO_BOOT_OLD=1` for dumps whose frames 118 to 120 draw stage 1 |
 | `ICO_DUMPS`, `ICO_SWEEPS`, `ICO_COVERAGE_DIR`, `ICO_REPLAY_LOCK` | the gate tools | the dump list, the aspect sweeps, the coverage state, the lock |
+
+**Running the storage tests on a lavapipe with the interlock (no root).** The CI runners' Mesa 25.2 lavapipe has the fragment shader interlock, so `rd_pixel_storage`, `rd_fog_storage`, `rd_present_storage`, `rd_replay_tool_pass_merge` and `rd_blend_selftest_moltenvk_storage` run the exact storage path there (banner `blend exact (interlock)`); a lavapipe before 25.2 keeps the fixed-function blend and passes without exercising it. To reproduce on a machine with an older Mesa: download from snapshot.debian.org the trixie-backports `mesa-vulkan-drivers` and `mesa-libgallium` 25.2.6-1~bpo13+1 `.deb`s (into `build-host/tmp/lvp-interlock/deb/`; sid's 26.x needs a newer glibc), `dpkg-deb -x` both into `build-host/tmp/lvp-interlock/root`, copy `root/usr/share/vulkan/icd.d/lvp_icd*.json` and rewrite its `library_path` to the extracted `root/usr/lib/x86_64-linux-gnu/libvulkan_lvp.so`, then run the test from its build directory with `ICO_RD_BLEND=storage VK_ICD_FILENAMES=<that json> LD_LIBRARY_PATH=<root>/usr/lib/x86_64-linux-gnu` (the log's `blend:` line names the mode in force).
 
 `grep -rn 'getenv("' port/` and `grep -a -rn 'getenv("' ico2/` list the rest (the game sources
 read `ICO_START_STAGE`, `ICO_SWITCH_TO`, `ICO_SWITCH_AT` and `ICO_HEAP_ASAN_FREE`).

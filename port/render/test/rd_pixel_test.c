@@ -105,8 +105,17 @@
  *            and the blending, one pass blended, the failing pixels' pass
  *            alone), a LERP FIX 0x80 sprite and a LERP sprite of As 0:
  *            SCENE's colour and depth the same bytes, three draws counted
- *            one-pass and the opaque ones (none under the exact blend);
+ *            one-pass and the opaque ones; both replays run with the
+ *            fixed-function blend (the mode forced off for them): under
+ *            the storage read the unplanned quads keep that blend while
+ *            the planned ones take the exact read, VD-7's rounding apart;
+ *            under a mode asked, a third replay (the plan on, that mode)
+ *            is within 3 per channel of the planned fixed-function one,
+ *            the depth equal; the first differing pixel is printed;
  *            the railing's lattice keeps its split (counted neither)
+ *   DATE stencil one DATE command through the stencil bit and through the
+ *            snapshot, SCENE the same bytes (skipped, with the reason
+ *            printed, under the storage read: dateStencilFor is false there)
  *   alpha order an alpha-tested draw with Z write off whose failing
  *            pixels write what its passing ones write (FB_ONLY; RGB_ONLY
  *            with the alpha channel masked): two overlapping sprites in one
@@ -698,6 +707,13 @@ static void testDateStencil(void)
     if (!rhi_limits()->localRead || !g_rd.fs[RD_FS_DATE_STENCIL].id ||
         !g_rd.fs[RD_FS_DATE_CLEAR].id || !g_rd.layoutLocal.id) {
         printf("  DATE stencil: skipped (no local read or no DATE stencil shaders)\n");
+        return;
+    }
+    if (g_rd.dstMode == RD_BLEND_EXACT_STORAGE) {
+        /* dateStencilFor (rd_replay.c) is false under the storage read, by
+         * design: that mode has no colour attachment to read, so DATE takes
+         * the snapshot whatever the profile says */
+        printf("  DATE stencil: skipped (the storage read takes the snapshot: dateStencilFor)\n");
         return;
     }
     static const uint8_t a0[4] = {10, 10, 10, 0}, a1[4] = {20, 20, 20, 0x80};
@@ -4879,40 +4895,68 @@ static void testAlphaPlan(void)
     }
     rd_end_frame(0);
     const RdFrame *f = rd__last_frame();
-    static uint8_t img[2][512 * 512 * 4];
-    static float depth[2][512 * 512];
-    uint32_t one[2] = {0, 0}, opq[2] = {0, 0};
-    bool ok[2] = {false, false};
+    /* Replays 0 and 1 (the plan off, on) run with the fixed-function blend
+     * whatever the mode asked: under the storage read the unplanned passes
+     * with an alpha test and a depth write stay on the fixed-function blend
+     * (rd__expand_dst, RD_ONCE_DST_ZWRITE) while the planned ones, the
+     * discard dropped, take the exact read, and the two blends differ by
+     * VD-7's rounding, so byte identity holds only inside one blend.
+     * Replay 2 (the plan on, the mode asked) is checked against replay 1
+     * within that rounding. */
+    static uint8_t img[3][512 * 512 * 4];
+    static float depth[3][512 * 512];
+    uint32_t one[3] = {0, 0, 0}, opq[3] = {0, 0, 0};
+    bool ok[3] = {false, false, false};
     const bool was = g_rd.profile.alphaPlan;
-    for (int k = 0; k < 2 && f; k++) {
-        g_rd.profile.alphaPlan = k == 1;
+    const RdBlendExact asked = rd_blend_exact();
+    const int replays = asked == RD_BLEND_EXACT_OFF ? 2 : 3;
+    if (asked != RD_BLEND_EXACT_OFF) {
+        printf("  alpha plan: byte comparison with the fixed-function blend (mode %s asked); "
+               "the planned exact read is checked within 3 of it\n",
+               rd__blend_exact_name((uint8_t)asked));
+    }
+    for (int k = 0; k < replays && f; k++) {
+        g_rd.profile.alphaPlan = k >= 1;
+        const bool setOk = rd_set_blend_exact(k == 2 ? asked : RD_BLEND_EXACT_OFF);
         rd__replay_frame(f, 0, false);
         one[k] = g_rdPerf.alphaOnePass;
         opq[k] = g_rdPerf.alphaOpaque;
         uint32_t w = 0, h = 0, dw = 0, dh = 0;
-        ok[k] = rd__read_target(rd_target(RD_TARGET_SCENE), img[k], sizeof(img[k]), &w, &h) &&
+        ok[k] = setOk &&
+                rd__read_target(rd_target(RD_TARGET_SCENE), img[k], sizeof(img[k]), &w, &h) &&
                 rd__read_target_depth(rd_target(RD_TARGET_SCENE), depth[k], sizeof(depth[k]), &dw,
                                       &dh) &&
                 w == 512 && h == 512 && dw == w && dh == h;
     }
     g_rd.profile.alphaPlan = was;
-    CHECK(f && ok[0] && ok[1], "alpha plan: replay and readback");
+    rd_set_blend_exact(asked);
+    CHECK(f && ok[0] && ok[1] && (replays == 2 || ok[2]), "alpha plan: replay and readback");
     if (f && ok[0] && ok[1]) {
-        int colour = 0, z = 0, drawn = 0;
+        int colour = 0, z = 0, drawn = 0, first = -1;
         for (size_t i = 0; i < (size_t)512 * 512; i++) {
-            colour += memcmp(&img[0][i * 4], &img[1][i * 4], 4) != 0;
+            const bool d = memcmp(&img[0][i * 4], &img[1][i * 4], 4) != 0;
+            if (d && first < 0) {
+                first = (int)i;
+            }
+            colour += d;
             z += memcmp(&depth[0][i], &depth[1][i], sizeof(float)) != 0;
             drawn += memcmp(&img[0][i * 4], clr, 4) != 0;
         }
         /* opaque where the blend is not the exact blend's (rd_alpha_plan.c
          * blendRule): the 0x80 quad and the FIX sprite, and the As 0 sprite
-         * with the blend as dynamic state */
-        const uint32_t wantOpaque =
-            g_rd.dstMode == RD_BLEND_EXACT_OFF ? 2u + (g_rd.dynBlend ? 1u : 0u) : 0u;
+         * with the blend as dynamic state; replays 0 and 1 run with the
+         * fixed-function blend (RD_BLEND_EXACT_OFF) */
+        const uint32_t wantOpaque = 2u + (g_rd.dynBlend ? 1u : 0u);
         printf("  alpha plan: %d pixels drawn; with the plan %d differ in colour, %d in depth; "
                "%u one-pass and %u opaque draws (without it %u, %u)\n",
                drawn, colour, z, one[1], opq[1], one[0], opq[0]);
         CHECK(drawn > 20000, "alpha plan: only %d pixels drawn", drawn);
+        if (colour != 0) {
+            const uint8_t *u = &img[0][(size_t)first * 4], *v = &img[1][(size_t)first * 4];
+            printf("  alpha plan: first differing pixel (%d,%d): %u,%u,%u,%u without the plan, "
+                   "%u,%u,%u,%u with it\n",
+                   first % 512, first / 512, u[0], u[1], u[2], u[3], v[0], v[1], v[2], v[3]);
+        }
         CHECK(colour == 0 && z == 0, "alpha plan: %d pixels differ in colour, %d in depth", colour,
               z);
         CHECK(one[0] == 0 && opq[0] == 0, "alpha plan off: counted %u one-pass, %u opaque", one[0],
@@ -4920,6 +4964,39 @@ static void testAlphaPlan(void)
         CHECK(one[1] == 3 && opq[1] == wantOpaque,
               "alpha plan: %u one-pass draws (want 3), %u opaque (want %u)", one[1], opq[1],
               wantOpaque);
+        if (replays == 3 && ok[2]) {
+            int over = 0, zd = 0, worst = 0, at = -1;
+            for (size_t i = 0; i < (size_t)512 * 512; i++) {
+                for (int c = 0; c < 4; c++) {
+                    const int dl = abs((int)img[2][i * 4 + c] - (int)img[1][i * 4 + c]);
+                    if (dl > worst) {
+                        worst = dl;
+                    }
+                    if (dl > 3) {
+                        over++;
+                        if (at < 0) {
+                            at = (int)i;
+                        }
+                    }
+                }
+                zd += memcmp(&depth[2][i], &depth[1][i], sizeof(float)) != 0;
+            }
+            printf("  alpha plan: the planned %s read against the fixed-function blend: worst "
+                   "channel delta %d, %d channels over 3, %d depths differ; %u one-pass, %u opaque "
+                   "draws\n",
+                   rd__blend_exact_name((uint8_t)asked), worst, over, zd, one[2], opq[2]);
+            if (at >= 0) {
+                printf("  alpha plan: first pixel over 3 (%d,%d): %u,%u,%u,%u fixed-function, "
+                       "%u,%u,%u,%u exact\n",
+                       at % 512, at / 512, img[1][at * 4], img[1][at * 4 + 1], img[1][at * 4 + 2],
+                       img[1][at * 4 + 3], img[2][at * 4], img[2][at * 4 + 1], img[2][at * 4 + 2],
+                       img[2][at * 4 + 3]);
+            }
+            CHECK(over == 0 && zd == 0,
+                  "alpha plan: the planned exact read is off the fixed-function blend by more "
+                  "than 3 in %d channels, %d depths",
+                  over, zd);
+        }
     }
     for (int i = 0; i < 3; i++) {
         rd_destroy_vu_mesh(q[i]);
