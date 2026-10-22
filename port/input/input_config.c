@@ -357,7 +357,8 @@ void ico_input_reload_bindings(IcoBindings *b)
     apply_keys(b, config_get, NULL);
 }
 
-/* --- the touch layout edits (the contract commit's placeholders; TL-CFG) --- */
+/* --- the touch layout edits ([touch] tables, touch_edit.h) ---------------- */
+#include <stdlib.h>
 #include "touch_edit.h"
 
 static IcoTouchEdits s_touchEdits;
@@ -372,20 +373,172 @@ IcoTouchEdits *ico_input_live_touch_edits(void)
     return &s_touchEdits;
 }
 
+/* A bad line is logged once per key and run, until it reads well again (the
+   settings file is read again after every save). */
+static unsigned char s_touchLogged[ICO_TOUCH_POSTURES][ICO_TOUCH_CTL_COUNT];
+static unsigned char s_touchLoggedSnap, s_touchLoggedGrid;
+
+static const char *touch_why(int ctl, const char *text)
+{
+    if (strcmp(text, "hidden") == 0 && !ico_touch_ctl_hideable(ctl)) {
+        return "this button cannot be hidden";
+    }
+    return "not a valid layout";
+}
+
+/* The [touch] keys through get(src, path) onto *e: what the source names is
+   applied (a control's "default" or absence leaves it unset), what it does
+   not name is left as it is. Returns the keys applied. */
+static int apply_touch(IcoTouchEdits *e, const char *(*get)(const void *, const char *),
+                       const void *src)
+{
+    char path[64];
+    const char *v;
+    int r, c, n = 0;
+
+    v = get(src, "touch.snap");
+    if (v != NULL && (strcmp(v, "true") == 0 || strcmp(v, "1") == 0)) {
+        e->snap = 1;
+        n++;
+        s_touchLoggedSnap = 0;
+    } else if (v != NULL && (strcmp(v, "false") == 0 || strcmp(v, "0") == 0)) {
+        e->snap = 0;
+        n++;
+        s_touchLoggedSnap = 0;
+    } else if (v != NULL) {
+        if (!s_touchLoggedSnap) {
+            fprintf(stderr, "touch: ignoring snap = \"%s\" (use true or false)\n", v);
+            s_touchLoggedSnap = 1;
+        }
+    } else {
+        s_touchLoggedSnap = 0;
+    }
+
+    v = get(src, "touch.grid");
+    if (v != NULL) {
+        char *end = NULL;
+        double g = strtod(v, &end);
+        int i, ok = 0;
+
+        for (i = 0; end != v && *end == '\0' && i < 3; i++) {
+            if (g == (double)ico_touch_edit_grids[i]) {
+                e->grid = ico_touch_edit_grids[i];
+                n++;
+                ok = 1;
+            }
+        }
+        if (ok) {
+            s_touchLoggedGrid = 0;
+        } else if (!s_touchLoggedGrid) {
+            fprintf(stderr, "touch: ignoring grid = \"%s\" (use 2, 4 or 8)\n", v);
+            s_touchLoggedGrid = 1;
+        }
+    } else {
+        s_touchLoggedGrid = 0;
+    }
+
+    for (r = 0; r < ICO_TOUCH_POSTURES; r++) {
+        for (c = 0; c < ICO_TOUCH_CTL_COUNT; c++) {
+            IcoTouchCtlEdit *ed = &e->ctl[r][c];
+
+            snprintf(path, sizeof(path), "touch.%s.%s", ico_touch_posture_name(r),
+                     ico_touch_ctl_name(c));
+            v = get(src, path);
+            memset(ed, 0, sizeof(*ed));
+            if (v == NULL || strcmp(v, "default") == 0) {
+                s_touchLogged[r][c] = 0;
+                continue;
+            }
+            if (ico_touch_edit_parse(ed, c, v) != 0) {
+                memset(ed, 0, sizeof(*ed));
+                if (!s_touchLogged[r][c]) {
+                    fprintf(stderr, "touch: ignoring %s.%s = \"%s\" (%s)\n",
+                            ico_touch_posture_name(r), ico_touch_ctl_name(c), v, touch_why(c, v));
+                    s_touchLogged[r][c] = 1;
+                }
+                continue;
+            }
+            ed->set = 1;
+            ico_touch_edit_sanitize(ed, c);
+            s_touchLogged[r][c] = 0;
+            n++;
+        }
+    }
+    return n;
+}
+
 int ico_input_apply_touch_toml(IcoTouchEdits *e, const IcoToml *t)
 {
-    (void)e;
-    (void)t;
-    return 0;
+    int n;
+
+    if (e == NULL || t == NULL) {
+        return 0;
+    }
+    n = apply_touch(e, toml_get, t);
+    if (n > 0) {
+        e->gen++;
+    }
+    return n;
 }
 
 void ico_input_reload_touch_edits(IcoTouchEdits *e)
 {
-    (void)e;
+    IcoTouchEdits was;
+
+    if (e == NULL) {
+        return;
+    }
+    was = *e;
+    ico_touch_edits_defaults(e);
+    apply_touch(e, config_get, NULL);
+    /* the layout is rebuilt only when the file says something else than what
+       was live (a save writes what is live) */
+    e->gen = was.gen;
+    if (memcmp(e->ctl, was.ctl, sizeof(e->ctl)) != 0 || e->snap != was.snap ||
+        e->grid != was.grid) {
+        e->gen++;
+    }
 }
 
 int ico_input_write_touch_edits(const IcoTouchEdits *e)
 {
-    (void)e;
-    return 0;
+    IcoTouchEdits def;
+    char path[64], text[96];
+    const char *old;
+    int r, c, n = 0;
+
+    ico_touch_edits_defaults(&def);
+    if (e->snap != def.snap || ico_config_get_string("touch.snap", NULL) != NULL) {
+        if (ico_config_set_bool("touch.snap", e->snap != 0) != 0) {
+            return -1;
+        }
+        n++;
+    }
+    if (e->grid != def.grid || ico_config_get_string("touch.grid", NULL) != NULL) {
+        if (ico_config_set_int("touch.grid", (long long)(e->grid + 0.5f)) != 0) {
+            return -1;
+        }
+        n++;
+    }
+    for (r = 0; r < ICO_TOUCH_POSTURES; r++) {
+        for (c = 0; c < ICO_TOUCH_CTL_COUNT; c++) {
+            const IcoTouchCtlEdit *ed = &e->ctl[r][c];
+
+            snprintf(path, sizeof(path), "touch.%s.%s", ico_touch_posture_name(r),
+                     ico_touch_ctl_name(c));
+            old = ico_config_get_string(path, NULL);
+            if (ed->set) {
+                ico_touch_edit_text(ed, text, sizeof(text));
+            } else if (old != NULL && strcmp(old, "default") != 0) {
+                snprintf(text, sizeof(text), "default"); /* reset: the line stays, as default */
+            } else {
+                continue; /* unset, and the file has nothing (or default) there */
+            }
+            if (ico_config_set_string(path, text) != 0) {
+                return -1;
+            }
+            n++;
+        }
+    }
+    return n;
 }

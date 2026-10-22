@@ -473,6 +473,27 @@ static void test_first_run(void)
     CHECK(ico_config_get_bool("photo.hide_ui", 1) == 0);
     CHECK(ico_config_get_int("photo.film_effect", 7) == 0);
     CHECK_STR(ico_config_get_string("photo.png_dir", "?"), "screenshots");
+    /* the [touch] block is comments only: no key, no table header */
+    CHECK(text != NULL && strstr(text, "Edit layout") != NULL && strstr(text, "\n[touch") == NULL);
+    CHECK(ico_config_get_string("touch.snap", NULL) == NULL);
+    CHECK(ico_config_get_string("touch.full.cross", NULL) == NULL);
+    /* a two-dot path is a nested table: touch.full.cross lands in [touch.full],
+       after the first-run comments */
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_set_string("touch.full.cross", "r20 b10.5 s1.00 o100") == 0);
+    CHECK(ico_config_save() == 0);
+    {
+        char *saved = read_file(toml);
+        CHECK(saved != NULL &&
+              strstr(saved, "[touch.full]\ncross = \"r20 b10.5 s1.00 o100\"") != NULL);
+        free(saved);
+    }
+    ico_config_reset(toml, "no-such.ini");
+    CHECK_STR(ico_config_get_string("touch.full.cross", "?"), "r20 b10.5 s1.00 o100");
+    remove(toml);
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_write_first_run() == 0);
+    ico_config_reset(toml, "no-such.ini");
     /* a second run does nothing, and a player's edited file is kept */
     write_file(toml, "# mine\n[video]\npreset = \"enhanced\"\n");
     ico_config_reset(toml, "no-such.ini");

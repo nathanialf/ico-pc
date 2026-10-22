@@ -9,10 +9,13 @@
 #include <libpad.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include "config.h"
 #include "host_config.h"
 #include "input.h"
 #include "mouse_look.h"
 #include "pointer.h"
+#include "touch_edit.h"
 
 static int failures;
 
@@ -1271,6 +1274,224 @@ static void test_libpad(void)
     CHECK(scePadSetActDirect(0, 0, act) == 0);
 }
 
+/* --- the [touch] tables (input_config.c; the text grammar is touch_edit.h's) --- */
+
+static const char kTouchFile[] = "input_touch_test.toml";
+
+static void touch_file_write(const char *text)
+{
+    FILE *f = fopen(kTouchFile, "wb");
+
+    if (f == NULL) {
+        fprintf(stderr, "cannot write %s\n", kTouchFile);
+        failures++;
+        return;
+    }
+    fputs(text, f);
+    fclose(f);
+}
+
+/* the file's text, malloc'd ("" when unreadable) */
+static char *touch_file_read(void)
+{
+    FILE *f = fopen(kTouchFile, "rb");
+    char *text;
+    long n;
+
+    if (f == NULL) {
+        return calloc(1, 1);
+    }
+    fseek(f, 0, SEEK_END);
+    n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    text = malloc((size_t)n + 1);
+    n = (long)fread(text, 1, (size_t)n, f);
+    text[n] = '\0';
+    fclose(f);
+    return text;
+}
+
+static void touch_use(const char *text)
+{
+    touch_file_write(text);
+    ico_config_reset(kTouchFile, "");
+}
+
+static int touch_equal(const IcoTouchEdits *a, const IcoTouchEdits *b)
+{
+    return memcmp(a->ctl, b->ctl, sizeof(a->ctl)) == 0 && a->snap == b->snap && a->grid == b->grid;
+}
+
+static void test_touch_config(void)
+{
+    IcoTouchEdits e, f, def;
+    IcoToml *t;
+    const IcoTouchCtlEdit *c;
+    char *text;
+    int n;
+
+    ico_touch_edits_defaults(&def);
+    CHECK(ico_input_live_touch_edits() == ico_input_live_touch_edits());
+    CHECK(touch_equal(ico_input_live_touch_edits(), &def));
+
+    /* [touch] and [touch.split] lines onto the struct; a bad line is ignored,
+       the rest applied */
+    t = ico_toml_parse("[touch]\n"
+                       "snap = false\n"
+                       "grid = 8\n"
+                       "[touch.full]\n"
+                       "cross = \"r20 b10.5 s1.30 o80\"\n"
+                       "l2 = \"hidden\"\n"
+                       "dpad = \"hidden\"\n"
+                       "circle = \"nonsense\"\n"
+                       "[touch.split]\n"
+                       "look = \"l50 t0 w60 h30 o100\"\n"
+                       "select = \"default\"\n"
+                       "stick = \"l12 b30\"\n");
+    ico_touch_edits_defaults(&e);
+    n = ico_input_apply_touch_toml(&e, t);
+    ico_toml_free(t);
+    CHECK(n == 6); /* snap, grid, cross, l2, look, stick */
+    CHECK(e.snap == 0 && e.grid == 8.0f && e.gen == 1);
+    c = &e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_CROSS];
+    CHECK(c->set && c->ax == ICO_TOUCH_ANCHOR_R && c->ay == ICO_TOUCH_ANCHOR_B);
+    CHECK(near_(c->dx, 20.0f, 1e-4f) && near_(c->dy, 10.5f, 1e-4f));
+    CHECK(near_(c->scale, 1.3f, 1e-4f) && near_(c->alpha, 0.8f, 1e-4f));
+    c = &e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_L2];
+    CHECK(c->set && c->alpha == 0.0f);                            /* hidden */
+    CHECK(!e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_DPAD].set);   /* cannot be hidden */
+    CHECK(!e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_CIRCLE].set); /* not a layout */
+    c = &e.ctl[ICO_TOUCH_RULE_SPLIT][ICO_TOUCH_CTL_LOOK];
+    CHECK(c->set && c->ax == ICO_TOUCH_ANCHOR_L && c->ay == ICO_TOUCH_ANCHOR_T);
+    CHECK(near_(c->dx, 50.0f, 1e-4f) && near_(c->dy, 0.0f, 1e-4f));
+    CHECK(near_(c->w, 60.0f, 1e-4f) && near_(c->h, 30.0f, 1e-4f));
+    CHECK(!e.ctl[ICO_TOUCH_RULE_SPLIT][ICO_TOUCH_CTL_SELECT].set);
+    c = &e.ctl[ICO_TOUCH_RULE_SPLIT][ICO_TOUCH_CTL_STICK];
+    CHECK(c->set && near_(c->scale, 1.0f, 1e-4f) && near_(c->alpha, 1.0f, 1e-4f)); /* optional */
+    CHECK(!ico_touch_edits_any(&e, ICO_TOUCH_RULE_TABLETOP));
+
+    /* a grid that is not one of the three keeps the default; snap and grid
+       are applied on their own; no [touch] at all applies nothing */
+    t = ico_toml_parse("[touch]\ngrid = 5\n");
+    ico_touch_edits_defaults(&e);
+    CHECK(ico_input_apply_touch_toml(&e, t) == 0 && e.grid == 4.0f && e.gen == 0);
+    ico_toml_free(t);
+    t = ico_toml_parse("[touch]\ngrid = 2\nsnap = true\n");
+    CHECK(ico_input_apply_touch_toml(&e, t) == 2 && e.grid == 2.0f && e.snap == 1);
+    ico_toml_free(t);
+    t = ico_toml_parse("[input]\ndeadzone = 0.2\n");
+    ico_touch_edits_defaults(&e);
+    CHECK(ico_input_apply_touch_toml(&e, t) == 0 && touch_equal(&e, &def) && e.gen == 0);
+    ico_toml_free(t);
+    CHECK(ico_input_apply_touch_toml(&e, NULL) == 0);
+
+    /* a config without [touch]: writing the defaults adds nothing */
+    touch_use("# mine\nversion = 1\n[video]\npreset = \"enhanced\"\n");
+    ico_touch_edits_defaults(&e);
+    CHECK(ico_input_write_touch_edits(&e) == 0);
+    CHECK(ico_config_save() == 0);
+    text = touch_file_read();
+    CHECK(strstr(text, "touch") == NULL && strstr(text, "# mine\n") != NULL);
+    free(text);
+
+    /* write over a file with comments and unknown keys: read back equal, the
+       comments and the unknown keys kept */
+    touch_use("# my settings\nversion = 1\n[touch]\n# the grid\nsnap = true # mine\nunknown = 7\n"
+              "[audio]\nvolume = 0.5\n");
+    ico_touch_edits_defaults(&e);
+    e.snap = 0;
+    e.grid = 8.0f;
+    {
+        IcoTouchCtlEdit *k = &e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_CROSS];
+        k->set = 1;
+        k->ax = ICO_TOUCH_ANCHOR_R;
+        k->ay = ICO_TOUCH_ANCHOR_B;
+        k->dx = 20.0f;
+        k->dy = 10.5f;
+        k->scale = 1.25f;
+        k->alpha = 0.5f;
+        k = &e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_L2];
+        k->set = 1;
+        k->ax = ICO_TOUCH_ANCHOR_L;
+        k->ay = ICO_TOUCH_ANCHOR_T;
+        k->dx = 4.0f;
+        k->dy = 6.0f;
+        k->scale = 1.0f;
+        k->alpha = 0.0f;
+        k = &e.ctl[ICO_TOUCH_RULE_TABLETOP][ICO_TOUCH_CTL_LOOK];
+        k->set = 1;
+        k->ax = ICO_TOUCH_ANCHOR_L;
+        k->ay = ICO_TOUCH_ANCHOR_T;
+        k->dx = 50.0f;
+        k->dy = 0.0f;
+        k->scale = 1.0f;
+        k->alpha = 1.0f;
+        k->w = 60.0f;
+        k->h = 30.0f;
+    }
+    n = ico_input_write_touch_edits(&e);
+    CHECK(n == 5); /* snap, grid, three controls */
+    CHECK(ico_config_save() == 0);
+    text = touch_file_read();
+    CHECK(strstr(text, "# my settings\n") != NULL && strstr(text, "# the grid\n") != NULL);
+    CHECK(strstr(text, "unknown = 7\n") != NULL && strstr(text, "volume = 0.5\n") != NULL);
+    CHECK(strstr(text, "snap = false") != NULL && strstr(text, "grid = 8") != NULL);
+    CHECK(strstr(text, "[touch.full]\n") != NULL && strstr(text, "[touch.tabletop]\n") != NULL);
+    CHECK(strstr(text, "[touch.split]") == NULL); /* a table only when a key is first set */
+    free(text);
+    ico_config_reset(kTouchFile, "");
+    ico_touch_edits_defaults(&f);
+    ico_input_reload_touch_edits(&f);
+    CHECK(touch_equal(&f, &e));
+    CHECK(f.gen == 1); /* differed from the defaults: the layout is rebuilt */
+    ico_input_reload_touch_edits(&f);
+    CHECK(touch_equal(&f, &e) && f.gen == 1); /* the same again: not rebuilt */
+
+    /* an edited-then-reset control is rewritten as "default", the line stays */
+    memset(&e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_CROSS], 0, sizeof(IcoTouchCtlEdit));
+    CHECK(ico_input_write_touch_edits(&e) == 5); /* snap, grid, cross default, l2, look */
+    CHECK(ico_config_save() == 0);
+    text = touch_file_read();
+    CHECK(strstr(text, "cross = \"default\"") != NULL);
+    CHECK(strstr(text, "l2 = \"hidden\"") != NULL);
+    free(text);
+    ico_config_reset(kTouchFile, "");
+    ico_touch_edits_defaults(&f);
+    ico_input_reload_touch_edits(&f);
+    CHECK(touch_equal(&f, &e) && !f.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_CROSS].set);
+    /* a second write of the same state changes nothing in the file */
+    {
+        char *again;
+        text = touch_file_read();
+        CHECK(ico_input_write_touch_edits(&e) == 4); /* cross already says default */
+        CHECK(ico_config_save() == 0);
+        again = touch_file_read();
+        CHECK(strcmp(text, again) == 0);
+        free(text);
+        free(again);
+    }
+
+    /* snap and grid round trip, including back to the defaults (the keys are
+       in the file now, so they are written) */
+    ico_touch_edits_defaults(&e);
+    CHECK(ico_input_write_touch_edits(&e) == 4); /* snap, grid (in the file), l2 and look reset */
+    CHECK(ico_config_save() == 0);
+    ico_config_reset(kTouchFile, "");
+    ico_touch_edits_defaults(&f);
+    f.snap = 0;
+    f.grid = 8.0f;
+    ico_input_reload_touch_edits(&f);
+    CHECK(f.snap == 1 && f.grid == 4.0f && !ico_touch_edits_any(&f, -1));
+
+    /* a bad grid or snap in the file is read as the default */
+    touch_use("version = 1\n[touch]\ngrid = 5\nsnap = maybe\n");
+    ico_touch_edits_defaults(&f);
+    ico_input_reload_touch_edits(&f);
+    CHECK(f.grid == 4.0f && f.snap == 1);
+    remove(kTouchFile);
+    ico_config_reset(NULL, NULL);
+}
+
 int main(void)
 {
     test_toml();
@@ -1288,6 +1509,7 @@ int main(void)
     test_separate_gamepad_bindings();
     test_frame();
     test_libpad();
+    test_touch_config();
     if (failures != 0) {
         fprintf(stderr, "input_test: %d failure(s)\n", failures);
         return 1;

@@ -350,15 +350,26 @@ int ico_input_write_bindings(const IcoBindings *b);
 void ico_input_reload_bindings(IcoBindings *b);
 
 /* The touch overlay's layout edits (touch_edit.h IcoTouchEdits) in
-   config.toml's [touch] tables: the live edits (one static, as the live
-   bindings), the reader at start-up (touch.snap, touch.grid and the
-   touch.<posture>.<control> strings), the reload after a save (through
-   ico_config_get_string), and the writer (each edited control's text,
-   "default" for a reset control whose key is already in the file, snap and
-   grid when they differ from the default or are in the file; returns the
-   keys set, or -1). A line that does not parse is logged
-   ("touch: ignoring full.l2 = ...") and leaves the control at its default.
-   Package TL-CFG fills these in (input_config.c). */
+   config.toml's [touch] tables (input_config.c).
+   ico_input_live_touch_edits: the live edits, one static defaulted on first
+   use (as the live bindings).
+   ico_input_apply_touch_toml: the reader at start-up: touch.snap (true or
+   false), touch.grid (2, 4 or 8, else logged and the current grid kept) and
+   the string touch.<posture>.<control> ("full", "split", "tabletop"; the
+   names of ico_touch_ctl_name): "default" or absent leaves the control
+   unset, else the text (touch_edit.h grammar) is parsed and sanitized. A
+   line that does not parse is logged once per key and run
+   ("touch: ignoring full.l2 = "..." (why)") and leaves the control at its
+   default. gen is bumped when anything was applied. Returns the number of
+   keys applied (t may be NULL: 0).
+   ico_input_reload_touch_edits: *e rebuilt from the defaults and the
+   config's keys as port/config reads them (after a save); gen is bumped
+   only when the result differs from what was live.
+   ico_input_write_touch_edits: the writer, through ico_config_set_*: snap
+   and grid when they differ from the default or are in the file, each set
+   control as its text, and each unset control whose key is in the file as
+   "default" (lines are never deleted). A config nothing was edited in gains
+   no key. Returns the number of keys set, or -1. The caller saves. */
 struct IcoTouchEdits;
 struct IcoToml;
 struct IcoTouchEdits *ico_input_live_touch_edits(void);

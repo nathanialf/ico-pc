@@ -396,7 +396,19 @@ static const char first_run_text[] =
     "# four, 5 is Deja vu (the d-pad Right button changes it in photo mode).\n"
     "film_effect = 0\n"
     "# The folder for saved pictures, inside your user folder.\n"
-    "png_dir = \"screenshots\"\n";
+    "png_dir = \"screenshots\"\n"
+    "\n"
+    "# The touch screen buttons you arranged yourself (Options > Controls > Touch\n"
+    "# screen > Edit layout writes these lines; nothing is here until you do).\n"
+    "# snap = true or false and grid = 2, 4 or 8 (millimetres) go under [touch].\n"
+    "# Each posture of the phone (full, split, tabletop) has its own table, for\n"
+    "# example [touch.full], with a line per button: dpad, cross, circle, square,\n"
+    "# triangle, r1, l1, l2, r2, select, start, stick or look. A line reads\n"
+    "# cross = \"r20 b10.5 s1.00 o100\": the distance in millimetres from the left\n"
+    "# (l) or right (r) edge and from the top (t) or bottom (b) edge, the size\n"
+    "# (s, 0.7 to 1.6) and the opacity (o, percent). The look area also has its\n"
+    "# size, w and h. \"hidden\" hides select, l1, l2, r2 or look; \"default\" or\n"
+    "# no line puts a button back. Deleting these lines resets the layout.\n";
 
 int ico_config_write_first_run(void)
 {
