@@ -135,6 +135,27 @@ int ui_settings_version_row(void);
    (input_sdl.h ico_input_sdl_touch_present); NULL, or 0, hides them. */
 void ui_settings_set_touch_query(int (*fn)(void));
 
+/* Settings > Controls > Touch screen > Edit layout (the touch layout
+   editor, port/input/touch_edit.h): the device layer's editor and its
+   hooks. editor() the one IcoTouchEditor (NULL before init); begin()
+   cancels the mapper's fingers and starts editing the posture the phone is
+   in; end(keep) stops, keep copying the work into the live edits; rule()
+   the live layout's ICO_TOUCH_RULE_*; layout() the layout the overlay is
+   drawn from now (the preview while editing). NULL, or no host, locks the
+   Edit layout row. */
+struct IcoTouchEditor;
+struct IcoTouchLayout;
+
+typedef struct UiTouchEditHost {
+    struct IcoTouchEditor *(*editor)(void);
+    void (*begin)(void);
+    void (*end)(int keep);
+    int (*rule)(void);
+    const struct IcoTouchLayout *(*layout)(void);
+} UiTouchEditHost;
+
+void ui_settings_set_touch_edit_host(const UiTouchEditHost *h);
+
 /* The Android build's title Quit row and its confirmation
    read "Quit game" / "Quit the game?" while fn returns 1 (the phone's app is
    not a desktop program); no hook, or 0, keeps "Quit to desktop".  Asked

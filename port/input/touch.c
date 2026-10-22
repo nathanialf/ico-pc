@@ -344,6 +344,21 @@ IcoTouchLayout ico_touch_layout(uint32_t outW, uint32_t outH, IcoTouchInsets saf
     return ico_touch_layout_env(outW, outH, safe, size, NULL);
 }
 
+IcoTouchLayout ico_touch_layout_edits(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size,
+                                      const IcoTouchEnv *env, const struct IcoTouchEdits *edits)
+{
+    IcoTouchLayout l = ico_touch_layout_env(outW, outH, safe, size, env);
+    int z;
+
+    /* the contract commit: the edits are applied by package TL-CORE */
+    (void)edits;
+    for (z = 0; z < ICO_TOUCH_BUTTONS; z++) {
+        l.button[z].alpha = 1.0f;
+    }
+    l.stickAlpha = l.lookAlpha = 1.0f;
+    return l;
+}
+
 float ico_touch_px_per_mm(float dpi)
 {
     return dpi > 0.0f ? dpi / 25.4f : 0.0f;

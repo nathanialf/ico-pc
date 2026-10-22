@@ -349,6 +349,23 @@ int ico_input_write_bindings(const IcoBindings *b);
    (ico_input_apply_toml applies it). */
 void ico_input_reload_bindings(IcoBindings *b);
 
+/* The touch overlay's layout edits (touch_edit.h IcoTouchEdits) in
+   config.toml's [touch] tables: the live edits (one static, as the live
+   bindings), the reader at start-up (touch.snap, touch.grid and the
+   touch.<posture>.<control> strings), the reload after a save (through
+   ico_config_get_string), and the writer (each edited control's text,
+   "default" for a reset control whose key is already in the file, snap and
+   grid when they differ from the default or are in the file; returns the
+   keys set, or -1). A line that does not parse is logged
+   ("touch: ignoring full.l2 = ...") and leaves the control at its default.
+   Package TL-CFG fills these in (input_config.c). */
+struct IcoTouchEdits;
+struct IcoToml;
+struct IcoTouchEdits *ico_input_live_touch_edits(void);
+int ico_input_apply_touch_toml(struct IcoTouchEdits *e, const struct IcoToml *t);
+void ico_input_reload_touch_edits(struct IcoTouchEdits *e);
+int ico_input_write_touch_edits(const struct IcoTouchEdits *e);
+
 /* v clamped to 0..1, NaN to 0: a pointer or a finger's place on the
    screen (pointer.c, touch.c) */
 static inline float ico_clamp01f(float v)

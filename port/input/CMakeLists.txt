@@ -17,6 +17,7 @@ add_library(ico_input STATIC
     pad_script.c
     pointer.c
     touch.c
+    touch_edit.c
     vpad.c)
 target_include_directories(ico_input
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"

@@ -509,6 +509,8 @@ static void stepDevice(int dir)
 
 static int (*s_texturePackCount)(void); /* replacements installed, when known */
 static int (*s_touchQuery)(void);       /* a touch screen exists, when known */
+static UiTouchEditHost s_touchEditHost; /* the layout editor's hooks (TL-UI reads them) */
+static int s_touchEditHostSet;
 
 static int touchPresent(void)
 {
@@ -3415,6 +3417,16 @@ void ui_settings_set_texture_pack_count(int (*fn)(void))
 void ui_settings_set_touch_query(int (*fn)(void))
 {
     s_touchQuery = fn;
+}
+
+void ui_settings_set_touch_edit_host(const UiTouchEditHost *h)
+{
+    s_touchEditHostSet = h != NULL;
+    if (h != NULL) {
+        s_touchEditHost = *h;
+    } else {
+        memset(&s_touchEditHost, 0, sizeof(s_touchEditHost));
+    }
 }
 
 void ui_settings_set_quit_is_game(int (*fn)(void))

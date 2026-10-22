@@ -165,7 +165,28 @@ typedef struct IcoTouchButton {
     IcoTouchRect rect; /* the hit box; a round button's bounding square */
     int round;         /* 1: a disc of radius rect.w / 2 (the faces, R1) */
     unsigned int pad;  /* its ICO_PAD_* bit */
+    float alpha;       /* the edits' opacity multiplier, 1 at the default;
+                          0 hidden: drawn nowhere, skipped by the hit test */
 } IcoTouchButton;
+
+/* The editable controls (touch_edit.h): the four D-pad keys are one
+   control, the stick and the look pad are controls too. */
+enum {
+    ICO_TOUCH_CTL_DPAD = 0,
+    ICO_TOUCH_CTL_CROSS,
+    ICO_TOUCH_CTL_CIRCLE,
+    ICO_TOUCH_CTL_SQUARE,
+    ICO_TOUCH_CTL_TRIANGLE,
+    ICO_TOUCH_CTL_R1,
+    ICO_TOUCH_CTL_L1,
+    ICO_TOUCH_CTL_L2,
+    ICO_TOUCH_CTL_R2,
+    ICO_TOUCH_CTL_SELECT,
+    ICO_TOUCH_CTL_START,
+    ICO_TOUCH_CTL_STICK,
+    ICO_TOUCH_CTL_LOOK,
+    ICO_TOUCH_CTL_COUNT
+};
 
 typedef struct IcoTouchLayout {
     uint32_t outW, outH;
@@ -187,6 +208,9 @@ typedef struct IcoTouchLayout {
     float faceX, faceY;    /* the face-button diamond's centre */
     float dpadX, dpadY;    /* the D-pad cluster's centre */
     IcoTouchButton button[ICO_TOUCH_BUTTONS];
+    float stickAlpha, lookAlpha; /* the edits' opacity multipliers (1 default; 0 hidden:
+                                    the area starts nothing) */
+    unsigned int editGen;        /* IcoTouchEdits.gen the layout was built with (0 none) */
 } IcoTouchLayout;
 
 /* one finger slot (internal; the drawing reads IcoTouchDrawInfo) */
@@ -237,13 +261,34 @@ typedef struct IcoTouchDrawInfo {
     float rx, ry;         /* the right stick (decaying after release) */
 } IcoTouchDrawInfo;
 
+/* What the drawing needs of the layout editor (touch_edit.h) while the
+   Edit layout page is open; active 0 otherwise and the rest unread. */
+typedef struct IcoTouchEditView {
+    int active;
+    int rule;             /* the posture edited, ICO_TOUCH_RULE_* */
+    int state;            /* ICO_TOUCH_ED_* */
+    int selected;         /* ICO_TOUCH_CTL_*, -1 none */
+    int all;              /* the All key lit */
+    int snap;             /* the grid drawn */
+    float grid;           /* its pitch, q */
+    unsigned int overlap; /* 1 << ctl: drawn amber */
+    unsigned int hidden;  /* 1 << ctl: drawn dashed with the word Hidden */
+    int refused;          /* > 0: the "cannot cover another's middle" note shows */
+    float selScale;       /* the selected control's scale and alpha, for the keys' values */
+    float selAlpha;
+    IcoTouchRect tb[10];     /* the toolbar's keys (ICO_TOUCH_ED_TB_*) */
+    IcoTouchRect confirm[3]; /* the confirm strip (ICO_TOUCH_ED_CF_*), state CONFIRM_RESET */
+    IcoTouchRect ctl[ICO_TOUCH_CTL_COUNT]; /* each control's bounding box (selection outline) */
+} IcoTouchEditView;
+
 /* What the overlay drawing reads, copied once per vsync by the device layer
    (input_sdl.c) after its step: the zones, the step's state, and the
    opacity to draw at (the fades and the mode times the opacity setting). */
 typedef struct IcoTouchOverlay {
     IcoTouchLayout layout;
     IcoTouchDrawInfo info;
-    float opacity; /* 0..1; nothing is drawn at 0 */
+    float opacity;         /* 0..1; nothing is drawn at 0 */
+    IcoTouchEditView edit; /* the editor while its page is open (active) */
 } IcoTouchOverlay;
 
 /* Output pixels per millimetre for a screen's dots per inch: dpi / 25.4;
@@ -260,6 +305,16 @@ IcoTouchLayout ico_touch_layout_env(uint32_t outW, uint32_t outH, IcoTouchInsets
 
 /* ico_touch_layout_env(outW, outH, safe, size, NULL) */
 IcoTouchLayout ico_touch_layout(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size);
+
+struct IcoTouchEdits;
+/* The zones with the player's edits (touch_edit.h) applied after the
+   default placement: for each set control of the layout's posture, its
+   centre from its anchor edges, its size scaled, clamped inside the region
+   and out of the hinge band; hidden controls get alpha 0. NULL edits, or
+   none set, give ico_touch_layout_env's layout exactly (alpha 1 everywhere,
+   editGen e->gen or 0). */
+IcoTouchLayout ico_touch_layout_edits(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size,
+                                      const IcoTouchEnv *env, const struct IcoTouchEdits *edits);
 
 /* Clear every finger and output, look_decay to ICO_TOUCH_LOOK_DECAY (set
    the bindings' mouse_decay after), and show the overlay from nowNs with

@@ -356,3 +356,36 @@ void ico_input_reload_bindings(IcoBindings *b)
     ico_bindings_defaults(b);
     apply_keys(b, config_get, NULL);
 }
+
+/* --- the touch layout edits (the contract commit's placeholders; TL-CFG) --- */
+#include "touch_edit.h"
+
+static IcoTouchEdits s_touchEdits;
+static int s_touchEditsInit;
+
+IcoTouchEdits *ico_input_live_touch_edits(void)
+{
+    if (!s_touchEditsInit) {
+        ico_touch_edits_defaults(&s_touchEdits);
+        s_touchEditsInit = 1;
+    }
+    return &s_touchEdits;
+}
+
+int ico_input_apply_touch_toml(IcoTouchEdits *e, const IcoToml *t)
+{
+    (void)e;
+    (void)t;
+    return 0;
+}
+
+void ico_input_reload_touch_edits(IcoTouchEdits *e)
+{
+    (void)e;
+}
+
+int ico_input_write_touch_edits(const IcoTouchEdits *e)
+{
+    (void)e;
+    return 0;
+}
