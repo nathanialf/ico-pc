@@ -2481,8 +2481,9 @@ static void buildGalleryBar(void)
                   box to 224), 14 rows 11 (Back at 183, its box to 223),
                   15 rows 10 (Back at 180, its box to 220: the Disc row
                   with Language, Graphics driver and the developer rows)
-     Controls     from 40, up to 9 rows 18 apart, 10 or 11 rows 16, 12 rows
-                  13 (Back at 183, its box to 219); 13 to 15 from
+     Controls     from 40, up to 9 rows 18 apart, 10 rows 16 (Back at 184, its
+                  box to 220), 11 or 12 rows 13 (Back at 170 or 183, its
+                  box to 206 or 219); 13 to 15 from
                   30, 11 apart (Back at 184, its box to 220: fourteen,
                   the pause menu's with the mouse rows and Touch screen,
                   Back at 173); 16 rows 10 apart (Back at 180, its box to
@@ -2548,7 +2549,9 @@ static int pagePitch(int page, int n, int *y0)
             *y0 = 30;
             return 11;
         }
-        return n > 11 ? 13 : 16;
+        /* eleven (the title's with the mouse rows, no touch screen) or
+           twelve 13 apart: Back at 170 or 183 */
+        return n > 10 ? 13 : 16;
     }
     return 18;
 }

@@ -38,7 +38,7 @@
  *     each grid step from the edges the editor anchors to; over them the
  *     overlapping controls outlined in amber, the selection in white with
  *     its name, the toolbar's keys with their values (the confirm strip
- *     while Reset asks), and the hint line over the keys (the overlap or
+ *     while Reset asks), and the hint line under the keys (the overlap or
  *     refused note while one applies).  Every place is the snapshot's
  *     (port/input/touch_edit.h computes the keys and boxes).
  */

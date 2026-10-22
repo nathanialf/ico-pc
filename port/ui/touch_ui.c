@@ -653,11 +653,14 @@ static void drawGrid(const IcoTouchOverlay *o, float th)
 }
 
 /* whether a toolbar key acts now: Size and Opacity need a control
-   selected, or All on */
+   selected, or All on; Undo a step to take back */
 static int keyLive(const IcoTouchEditView *v, int k)
 {
     if (k >= ICO_TOUCH_ED_TB_SIZE_DN && k <= ICO_TOUCH_ED_TB_OP_UP) {
         return v->selected >= 0 || v->all;
+    }
+    if (k == ICO_TOUCH_ED_TB_UNDO) {
+        return v->undos > 0;
     }
     return 1;
 }
@@ -665,6 +668,12 @@ static int keyLive(const IcoTouchEditView *v, int k)
 static int keyLit(const IcoTouchEditView *v, int k)
 {
     return (k == ICO_TOUCH_ED_TB_ALL && v->all) || (k == ICO_TOUCH_ED_TB_SNAP && v->snap);
+}
+
+/* the confirm strip's key under the gamepad's cursor, lit */
+static int confirmLit(const IcoTouchEditView *v, int k)
+{
+    return v->confirmSel == k;
 }
 
 /* the keys drawn now: the confirm strip while Reset asks, else the toolbar */
@@ -678,7 +687,7 @@ static int rectShown(const IcoTouchRect *r)
     return r->w > 0.0f && r->h > 0.0f;
 }
 
-/* the block the keys drawn now make (the hint sits above it); 0 for none */
+/* the block the keys drawn now make (the hint sits under it); 0 for none */
 static int keyBlock(const IcoTouchEditView *v, IcoTouchRect *out)
 {
     const IcoTouchRect *k = confirming(v) ? v->confirm : v->tb;
@@ -858,7 +867,8 @@ static const char *ctlName(int ctl)
 
 /* The marks over the controls: the overlapping controls' outlines in
    amber, the selection's in white, the keys (the toolbar, or the confirm
-   strip while Reset asks; Size and Opacity dim with nothing to act on) and
+   strip while Reset asks, its cursor key lit; Size and Opacity dim with
+   nothing to act on, Undo with nothing to undo) and
    the hint's backing as shapes, then their words, the selection's name and
    the look pad's. */
 static void drawEditor(const RdOverlayCtx *ctx, const IcoTouchOverlay *o, float th)
@@ -895,14 +905,16 @@ static void drawEditor(const RdOverlayCtx *ctx, const IcoTouchOverlay *o, float 
         if (!rectShown(r)) {
             continue;
         }
+        const int lit = conf ? confirmLit(v, k) : keyLit(v, k);
         s_d.alpha = conf || keyLive(v, k) ? 1.0f : KEY_DIM;
-        rect(r->x, r->y, r->x + r->w, r->y + r->h, !conf && keyLit(v, k) ? kKeyLit : kKey);
-        frame(r->x, r->y, r->x + r->w, r->y + r->h, th * 0.6f, kEdge);
+        rect(r->x, r->y, r->x + r->w, r->y + r->h, lit ? kKeyLit : kKey);
+        frame(r->x, r->y, r->x + r->w, r->y + r->h, th * 0.6f, conf && lit ? kEdgeHeld : kEdge);
     }
     s_d.alpha = 1.0f;
     if (fontOk && haveBlock && hint != NULL && s_d.kx > 0.0f) {
-        /* the hint's line over the block, centred on it, kept on the
-           output, on a backing as wide as its words */
+        /* the hint's line just under the block (over it the Select and
+           Start row leaves no room), centred on it, kept on the output, on
+           a backing as wide as its words */
         const float outW = (float)o->layout.outW;
         const float sz = fitSize(&g, lineH * s_d.ky, outW * 0.96f * s_d.kx, hint);
         hintW = ui_measure_text(sz, hint) * g.W / 640.0f / s_d.kx;
@@ -913,7 +925,7 @@ static void drawEditor(const RdOverlayCtx *ctx, const IcoTouchOverlay *o, float 
         if (hintX + hintW * 0.5f > outW) {
             hintX = outW - hintW * 0.5f;
         }
-        hintY = block.y - lineH * 1.6f;
+        hintY = block.y + block.h + lineH * 1.2f;
         rect(hintX - hintW * 0.5f - th, hintY - lineH * 0.8f, hintX + hintW * 0.5f + th,
              hintY + lineH * 0.8f, kKey);
     }

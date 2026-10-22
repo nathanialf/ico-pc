@@ -2644,7 +2644,7 @@ static void testGameOptions(void)
     CHECK(lt_ext_layout(ctlL)->curItem == remap && lt_ext_layout(ctlL)->defaultItem == remap,
           "title: off the hidden row (%d)", lt_ext_layout(ctlL)->curItem);
     CHECK(lt_ext_prop(bc)->upItem == remap &&
-              lt_ext_prop(bc)->downItem == ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX),
+              lt_ext_prop(bc)->downItem == ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_HOLD_TYPE),
           "title: the hidden row's links lead to shown rows (%d, %d)", lt_ext_prop(bc)->upItem,
           lt_ext_prop(bc)->downItem);
     for (int i = 0; i < 12; i++) {
