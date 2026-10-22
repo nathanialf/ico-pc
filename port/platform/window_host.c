@@ -1366,12 +1366,13 @@ static void log_summary(const IcoVideoOptions *o, const char *res, const char *f
     /* the audio's clock (audio_host.h ico_audio_mode_text): this runs
        before the audio starts, so the one the configuration asks for */
     ico_diag_set_summary(
-        "version %s; %s; GPU %s (%s); %s; %s preset, resolution %s, aspect %s, framerate %s; %s; "
-        "index values up to %u; robust access %s; controller %s%s; disc %s; %s; %s",
+        "version %s; %s; GPU %s (%s); %s; %s preset, resolution %s, aspect %s, framerate %s; "
+        "window mode %s; %s; index values up to %u; robust access %s; controller %s%s; disc %s; %s; %s",
         ico_diag_version(), summary_platform(), rhi_adapter_name(),
         l->driverText != NULL ? l->driverText : "driver unknown",
         rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", video_preset_label(o), res,
-        ico_video_aspect_name(o->aspect), fr, rd, (unsigned)l->maxDrawIndexedIndexValue,
+        ico_video_aspect_name(o->aspect), fr, ico_video_window_mode_name(o->windowMode), rd,
+        (unsigned)l->maxDrawIndexedIndexValue,
         l->robustText != NULL ? l->robustText
                               : (rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12's own" : "off"),
         pads[0] != '\0' ? pads : "none yet", summary_joystick_scan(),

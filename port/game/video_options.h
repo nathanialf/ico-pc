@@ -117,7 +117,7 @@ enum {
    20:3); 48:9 is 4 times. */
 #define ICO_ASPECT_MAX ICO_FRAME_ASPECT_MAX
 
-/* The window's mode.  FULLSCREEN is SDL's desktop fullscreen;
+/* The window's mode.  FULLSCREEN is an exclusive fullscreen at the desktop's mode;
    BORDERLESS a frameless window over its display. */
 enum {
     ICO_WINDOW_WINDOWED = 0,
