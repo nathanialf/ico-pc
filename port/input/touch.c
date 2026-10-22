@@ -332,9 +332,9 @@ static int box_inside(IcoTouchRect R, float cx, float cy, float w, float h)
 /* the hinge band carried along the hinge out to the bounds (the editor lets a
    control reach the window's edges, so the band must reach them too); zero
    stays zero */
-IcoTouchRect ico_touch_clamp_band(const IcoTouchLayout *l)
+static IcoTouchRect extend_band(const IcoTouchLayout *l, IcoTouchRect b)
 {
-    const IcoTouchRect b = l->band, B = l->bounds;
+    const IcoTouchRect B = l->bounds;
 
     if (!(b.w > 0.0f && b.h > 0.0f)) {
         return b;
@@ -343,6 +343,11 @@ IcoTouchRect ico_touch_clamp_band(const IcoTouchLayout *l)
         return rect(b.x, B.y, b.w, B.h);
     }
     return rect(B.x, b.y, B.w, b.h);
+}
+
+IcoTouchRect ico_touch_clamp_band(const IcoTouchLayout *l)
+{
+    return extend_band(l, l->band);
 }
 
 int ico_touch_edit_clamp(const IcoTouchLayout *l, float *cx, float *cy, float w, float h)
@@ -686,7 +691,9 @@ static IcoTouchLayout build(uint32_t outW, uint32_t outH, IcoTouchInsets safe, i
     }
     place(&l, fit(&l, q0));
     apply_edits(&l, edits);
-    if (fold == FOLD_FLAT && controls_touch(&l, ico_touch_clamp_band(&l))) {
+    /* the flat crease is not the layout's band yet (l.band is zero under
+       FULL), so extend the local one */
+    if (fold == FOLD_FLAT && controls_touch(&l, extend_band(&l, band))) {
         /* a flat crease under a button (where the edits put it): below it
            instead, with that posture's edits */
         tabletop(&l, band);
