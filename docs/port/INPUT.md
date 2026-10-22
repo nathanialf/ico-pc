@@ -300,7 +300,9 @@ and the touch look pad (`ico_bindings_mouse_merged`). Only then do `mouse_camera
 
 Escape and Android's Back never reach the bindings. They press Start in play (the pause menu),
 nothing on the game's Button configuration screen (where any button is assigned to the highlighted
-action), and Triangle everywhere else; never a quit (`port/input/mouse_look.h`
+action), and Triangle everywhere else (Cross on the Japanese and Korean discs, whose menus cancel
+with Cross, except in the touch layout editor, where Cross is Opacity + and Back presses Triangle:
+`ico_input_escape`); never a quit (`port/input/mouse_look.h`
 (`ico_escape_target`); `port/platform/window_host.c` (`escape_event`)). The button is chosen at the
 press and held until the release, and a press lasts at least two steps
 (`ICO_ESCAPE_TAP_STEPS`), since the game reads the pad every second vsync (`ico_escape_latch`,
@@ -367,7 +369,8 @@ every change bumps.
   (`ico_touch_edit_clamp`: the nearer side of the band that holds it; shrunk toward the minimum
   scale when neither does; never dropped), the rects written as `place()` writes them, `alpha`
   into the button's `alpha`, `stickAlpha` and `lookAlpha`, and `editGen` from `gen`. A moved
-  stick's area is a square of 4.4 R around its home cut to its side of the band; a moved look
+  stick's area is a square of 4.4 R around its home cut to its side of the band (a stick still at
+  `place()`'s home, with only another size or opacity, keeps `place()`'s wide area); a moved look
   pad has its own rect; the look sensitivity radius stays the default. The flat-crease check that
   sends a layout to `TABLETOP` sees the edited positions. The same runs on every rebuild (another
   phone, a rotation, a fold, a safe-area change), so a stored edit can never leave the screen. An

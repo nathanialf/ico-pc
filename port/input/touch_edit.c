@@ -887,10 +887,15 @@ static void set_place(IcoTouchEdits *e, int rule, const IcoTouchLayout *l, int c
     ico_touch_edit_sanitize(c, ctl);
 }
 
-/* an unset control of e set where l shows it (no snap) */
+/* an unset control of e, or one set without a place (the file's "hidden"),
+   set where l shows it (no snap): a change made to it then has a position
+   to keep (a "hidden" control brought back would otherwise write "default"
+   and come back at 100 %) */
 static void ensure_set(IcoTouchEdits *e, int rule, const IcoTouchLayout *l, int ctl)
 {
-    if (!e->ctl[rule][ctl].set) {
+    const IcoTouchCtlEdit *c = &e->ctl[rule][ctl];
+
+    if (!c->set || c->ax > ICO_TOUCH_ANCHOR_R || c->ay > ICO_TOUCH_ANCHOR_B) {
         const IcoTouchRect b = ctl_box(l, ctl);
 
         set_place(e, rule, l, ctl, b.x + 0.5f * b.w, b.y + 0.5f * b.h, b.w, b.h, 0);

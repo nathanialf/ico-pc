@@ -297,7 +297,7 @@ key in it is first set. The controls are `dpad`, `cross`, `circle`, `square`, `t
 
 | token | meaning |
 | --- | --- |
-| `l<n>` or `r<n>` | the control's centre (the look pad's edge) `n` millimetres from the left or right edge of the screen's safe area |
+| `l<n>` or `r<n>` | the control's centre (the look pad's edge) `n` millimetres from the left or right edge of the screen's safe area (`tabletop`: of the part below the fold) |
 | `t<n>` or `b<n>` | the same from the top or bottom edge |
 | `s<scale>` | size times `scale`, 0.7 to 1.6 (the default size when absent) |
 | `o<percent>` | opacity times the Touch opacity row's value, 0 to 100 (100 when absent); at least 25 on a control that cannot be hidden |

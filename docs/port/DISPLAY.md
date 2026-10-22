@@ -203,7 +203,10 @@ then `window: present mode M` (`port/platform/window_host.c` (`ico_window_open`,
   of resolution or refresh rate) before `SDL_SetWindowFullscreen`. When the desktop mode is unknown or
   SDL refuses it, the mode is NULL, SDL's borderless desktop fullscreen. The request logs `window:
   fullscreen asks the desktop's mode WxH at R Hz (exclusive)` or `window: fullscreen without a mode
-  (the desktop's mode is unknown|was refused: <SDL's error>); SDL's desktop fullscreen`. Wayland,
+  (the desktop's mode is unknown|was refused: <SDL's error>); SDL's desktop fullscreen`. The window
+  is not minimised when it loses focus (`SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS` "0" before
+  `SDL_CreateWindow`; SDL's "auto" minimises an exclusive mode to restore the desktop's mode, which
+  here is the mode in use). Wayland,
   gamescope (the Deck's Game Mode) and macOS handle a mode as they can; the mode line below says
   what the window holds. A configured Fullscreen is asked for at creation through the window's
   flag, and the desktop mode is set right after (`port/platform/window_host.c` (`ico_window_open`)).

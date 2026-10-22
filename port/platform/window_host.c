@@ -1638,6 +1638,12 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
 
     ico_video_get(&start);
     s_videoSerial = ico_video_serial();
+    /* Fullscreen is an exclusive mode at the desktop's own mode
+       (window_video.c ico_window_video_desktop_mode), so there is no video
+       mode to restore when the window loses focus: it stays up behind the
+       program that took the focus, as a borderless window does, instead of
+       SDL's "auto" minimizing it (Windows, X11) */
+    SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
 open_window:
     /* fullscreen from the config is asked for at creation, not
        after: SDL's X11 backend then writes _NET_WM_STATE before the window

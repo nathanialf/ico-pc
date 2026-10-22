@@ -855,6 +855,12 @@ void ico_input_escape(int down, const IcoCaptureState *s)
         return;
     }
     ico_escape_latch(&s_escape, down, s);
+    /* the layout editor: the Japanese and Korean discs' back is Cross, the
+       editor's Opacity + (touch_edit.c handle_pad); Back leaves it as Done
+       does, so it presses Triangle there (touch_edit_ui.c) */
+    if (down && s_touchEdit.active && s_escape.target == ICO_T_CROSS) {
+        s_escape.target = ICO_T_TRIANGLE;
+    }
 }
 
 void ico_input_sdl_update(void)

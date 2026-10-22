@@ -563,12 +563,19 @@ static void apply_one(IcoTouchLayout *l, int ctl, const IcoTouchCtlEdit *c)
         l->button[ICO_TOUCH_B_UP].alpha = l->button[ICO_TOUCH_B_DOWN].alpha = c->alpha;
         l->button[ICO_TOUCH_B_LEFT].alpha = l->button[ICO_TOUCH_B_RIGHT].alpha = c->alpha;
     } else if (ctl == ICO_TOUCH_CTL_STICK) {
+        /* a stick still at place()'s home (an opacity or size change only,
+           or the editor's anchors for the default spot) keeps place()'s
+           wide catch area; a moved one gets a 4.4 R square around its home
+           (the default area could be nowhere near it) */
+        const float mx = cx - l->stickHomeX, my = cy - l->stickHomeY;
+        const int moved = mx > 0.25f * q || mx < -0.25f * q || my > 0.25f * q || my < -0.25f * q;
+
         l->stickR = ICO_TOUCH_STICK_MM * q * s;
         l->runR = ICO_TOUCH_RUN_RING * l->stickR;
         l->stickHomeX = cx;
         l->stickHomeY = cy;
         l->stickAlpha = c->alpha;
-        if (c->ax <= ICO_TOUCH_ANCHOR_R || c->ay <= ICO_TOUCH_ANCHOR_B) {
+        if (moved && (c->ax <= ICO_TOUCH_ANCHOR_R || c->ay <= ICO_TOUCH_ANCHOR_B)) {
             const float a = 2.2f * l->stickR; /* half of the 4.4 R square */
 
             l->stickArea = cut_to_side(l, rect(cx - a, cy - a, 2.0f * a, 2.0f * a), cx, cy);

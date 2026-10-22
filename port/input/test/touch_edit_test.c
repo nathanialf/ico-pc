@@ -553,6 +553,16 @@ static void test_stick_look_areas(void)
     CHECK(near_(v.lx, 0.5f, 0.002f) && v.buttons == 0);
     /* the look pad untouched by the stick's edit */
     CHECK(same_rect(l.lookArea, base.lookArea));
+    /* a stick still at its default home (a size or opacity change only, the
+       editor's anchors for that spot): place()'s wide catch area stays */
+    ico_touch_edits_defaults(&e);
+    set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_STICK, "l24 b21 s1.50 o60");
+    l = ico_touch_layout_edits(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM, NULL, &e);
+    CHECK(near_(l.stickR, 16.5f * q, 0.01f) && l.stickAlpha == 0.6f);
+    CHECK(same_rect(l.stickArea, base.stickArea));
+    v = finger_at(&l, base.stickArea.x + 2.0f * q, base.stickArea.y + 2.0f * q, 0.5f * l.stickR,
+                  0.0f);
+    CHECK(near_(v.lx, 0.5f, 0.002f));
 
     /* a look pad of its own: (65q, 40q) is in no area by default, the look
        pad's once it is moved there */
@@ -1089,6 +1099,35 @@ static void test_pinch_and_steppers(void)
     }
     tap_key(&ed, ICO_TOUCH_ED_TB_ALL);
     CHECK(ed.all == 0);
+    ico_touch_edit_end(&ed, 0);
+
+    /* a control the file hid ("hidden": no place of its own) brought back
+       with Opacity +: it gains its default place and writes it with the
+       new opacity, not "default" (which would reload at 100 %) */
+    ico_touch_edits_defaults(&live);
+    CHECK(ico_touch_edit_parse(&live.ctl[0][ICO_TOUCH_CTL_SELECT], ICO_TOUCH_CTL_SELECT,
+                               "hidden") == 0);
+    ico_touch_edit_begin(&ed, &live, ICO_TOUCH_RULE_FULL);
+    etick(&ed, 0);
+    tap(&ed, cx_of(&g_l, ICO_TOUCH_B_SELECT), cy_of(&g_l, ICO_TOUCH_B_SELECT));
+    etick(&ed, 0);
+    CHECK(ed.selected == ICO_TOUCH_CTL_SELECT);
+    tap_key(&ed, ICO_TOUCH_ED_TB_OP_UP);
+    {
+        const IcoTouchCtlEdit *sel = &ed.work.ctl[0][ICO_TOUCH_CTL_SELECT];
+        char buf[64];
+
+        CHECK(sel->set && sel->ax <= ICO_TOUCH_ANCHOR_R && sel->ay <= ICO_TOUCH_ANCHOR_B);
+        CHECK(near_(sel->alpha, 0.1f, 1e-5f));
+        ico_touch_edit_text(sel, buf, sizeof(buf));
+        CHECK(strcmp(buf, "default") != 0 && strstr(buf, " o10") != NULL);
+        CHECK(near_(g_l.button[ICO_TOUCH_B_SELECT].alpha, 0.1f, 1e-5f));
+        {
+            const IcoTouchLayout d = ico_touch_layout(g_w, g_h, no_insets(), ICO_TOUCH_MEDIUM);
+
+            CHECK(near_(cx_of(&g_l, ICO_TOUCH_B_SELECT), cx_of(&d, ICO_TOUCH_B_SELECT), 0.6f));
+        }
+    }
     ico_touch_edit_end(&ed, 0);
 
     /* a pinch from a fresh two-finger touch: the first finger's down on an

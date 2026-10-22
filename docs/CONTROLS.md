@@ -377,8 +377,7 @@ game:
 - Nothing you do can put a button off the screen, even on another phone or
   after turning the phone: the buttons are always kept on the screen.
 
-A foldable (or a phone you turn) has a separate arrangement for each way
-it is held: opened flat, with the fold running top to bottom, and half
+A foldable has a separate arrangement for each way it is folded: opened flat, with the fold running top to bottom, and half
 folded like a laptop. The editor changes the one the phone is in now, and
 the others stay as the game puts them until you edit them as well. If you
 fold the phone while editing, the editor moves on to the new way of
