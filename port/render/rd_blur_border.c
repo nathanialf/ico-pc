@@ -29,7 +29,25 @@
  * columns out already, so nothing is drawn again there and the picture is
  * byte for byte what it was.  The top and bottom rows the reduction's
  * scissor held black stay what SCENE holds (docs/port/RENDER.md).
+ *
+ * The glow reads SCENE before the reduction (list 7's flare and bloom
+ * reduce SCENE into the work buffers), so the fog-painted columns also
+ * spread about ten GS pixels into the picture, on a cropped frame (16:9)
+ * as at the exact width (issue 26's latest picture: 4K, 16:9).  So a
+ * fogged frame's SCENE has its two outer GS columns a side made copies of
+ * columns 2 and W - 3 (rd__scene_border_arm from doFog, done by
+ * sceneRepeat before the frame's first post sprite that reads SCENE):
+ * texel copies through a small texture of their own, every row, the
+ * colour alone, wherever the border is open or the frame cropped
+ * (rd__scene_border_state).  With the border closed (Full pixel off at 4:3
+ * and at an exact width such as 48:9: the GS's own DISPLAY with its
+ * border, the PS2's picture, what the gate's Original 4:3 hashes hold)
+ * SCENE is left as the game drew it.  The strips above stay: the
+ * reduction's column 2 blends a quarter of column 3, so its outer columns
+ * drawn from SCENE's repeat alone would read column 2 without that
+ * quarter.
  */
+#include <math.h>
 #include <stddef.h>
 #include <string.h>
 
@@ -49,6 +67,216 @@ static uint64_t s_stripDraws;
 uint64_t rd__blur_border_strip_count(void)
 {
     return s_stripDraws;
+}
+
+/* ------------------------------------------------- SCENE's outer columns */
+
+/* rd__set_scene_border_repeat (rd_internal.h, tests): the repeat done */
+static bool s_sceneRepeat = true;
+
+void rd__set_scene_border_repeat(bool on)
+{
+    s_sceneRepeat = on;
+}
+
+/* the repeats done since start (rd_log_frame_state's line) */
+static uint64_t s_sceneRepeats;
+
+uint64_t rd__scene_border_repeat_count(void)
+{
+    return s_sceneRepeats;
+}
+
+int rd__scene_border_state(const RdTargetRec *scene)
+{
+    if (scene && scene->ox > 0.0f) {
+        return RD_BORDER_WINDOW;
+    }
+    if (rd__frame_cropped()) {
+        return RD_BORDER_CROPPED;
+    }
+    return rd__replay_border_open() ? RD_BORDER_OPEN : RD_BORDER_CLOSED;
+}
+
+/* the replay (g_rd.replayCounter) whose fog asked for the repeat; 0 none */
+static uint64_t s_armed;
+
+void rd__scene_border_arm(const Replay *r)
+{
+    if (r->st.color == RD_TARGET_SCENE + 1u) {
+        s_armed = g_rd.replayCounter;
+    }
+}
+
+/* the copies' own texture: the two source columns' texels side by side,
+ * SCENE's rows (an RHI copy cannot read and write one texture) */
+static struct {
+    RhiTexture tex;
+    RhiState state;
+    uint32_t w, h;
+    RhiFormat format;
+} s_cols;
+
+void rd__scene_border_free(void)
+{
+    if (s_cols.tex.id) {
+        rhi_destroy_texture(s_cols.tex);
+    }
+    memset(&s_cols, 0, sizeof(s_cols));
+}
+
+static bool colsEnsure(uint32_t w, uint32_t h, RhiFormat format)
+{
+    if (s_cols.tex.id && s_cols.w >= w && s_cols.h == h && s_cols.format == format) {
+        return true;
+    }
+    rd__scene_border_free();
+    s_cols.tex = rhi_create_texture(
+        &(RhiTextureDesc){w, h, 1, format, RHI_TEX_SAMPLED | RHI_TEX_COPY_SRC | RHI_TEX_COPY_DST,
+                          "rd border columns", 0});
+    if (!s_cols.tex.id) {
+        return false;
+    }
+    s_cols.state = RHI_STATE_UNDEFINED;
+    s_cols.w = w;
+    s_cols.h = h;
+    s_cols.format = format;
+    return true;
+}
+
+/* The first texel of GS column x on t: the first whose point (texel t is
+ * GS t / sx from the frame's left, less the Full pixel crop:
+ * rd__gs_texel_x) lies at or right of x, clamped to the texture */
+static int32_t columnTexel(const RdTargetRec *t, int32_t x)
+{
+    const double v = ceil((double)x * (double)t->sx - (double)t->ox - 1e-4);
+    return v < 0.0 ? 0 : (v > (double)t->tw ? (int32_t)t->tw : (int32_t)v);
+}
+
+/* tmp's block [m, m + cw) (column 2's or W - 3's texels) copied to dst at
+ * x, cut to dst's texels [d0, d1) */
+static void copyBlock(RhiCommandList cl, RhiTexture dst, int32_t x, int32_t d0, int32_t d1,
+                      int32_t m, int32_t cw, uint32_t th)
+{
+    int32_t sx = m, w = cw;
+    if (x < d0) {
+        sx += d0 - x;
+        w -= d0 - x;
+        x = d0;
+    }
+    if (x + w > d1) {
+        w = d1 - x;
+    }
+    if (w > 0) {
+        rhi_cmd_copy_texture(cl, s_cols.tex, (RhiRect){sx, 0, w, th}, dst, x, 0);
+    }
+}
+
+/* dst's texels [d0, d1) filled with copies of tmp's block [m, m + cw), laid
+ * from the neighbour column outwards: right to left from d1 on the left
+ * (the block's last texel next to column 2), left to right from d0 on the
+ * right, the outermost copy cut at the edge.  At a whole scale that is the
+ * column twice, texel for texel */
+static void fillFrom(RhiCommandList cl, RhiTexture dst, int32_t d0, int32_t d1, int32_t m,
+                     int32_t cw, uint32_t th, int right)
+{
+    if (right) {
+        for (int32_t x = d0; x < d1; x += cw) {
+            copyBlock(cl, dst, x, d0, d1, m, cw, th);
+        }
+    } else {
+        for (int32_t x = d1 - cw; x + cw > d0; x -= cw) {
+            copyBlock(cl, dst, x, d0, d1, m, cw, th);
+        }
+    }
+}
+
+/* SCENE's GS columns 0, 1 and W - 2, W - 1 made copies of columns 2 and
+ * W - 3, texel for texel, every row (the file's header).  Outside any
+ * pass; SCENE's colour is left in COPY_DST (a later read moves it, which
+ * also closes an open MSAA epoch first: the copies read the resolved
+ * picture). */
+static void sceneRepeat(Replay *r)
+{
+    RdTargetRec *t = rd__target_rec(RD_TARGET_SCENE + 1u);
+    const int32_t W = (int32_t)r->st.gsW;
+    if (!t || !t->color.id || W < 6 || t->w != (uint32_t)W || t->th == 0) {
+        return;
+    }
+    const int state = rd__scene_border_state(t);
+    if (state == RD_BORDER_CLOSED) {
+        return; /* the GS's own border: the PS2's picture */
+    }
+    /* Full pixel's window (ox > 0) holds no texel of them at the usual
+       crops (texel 0 is GS ox / sx, past column 2); any it holds are
+       repeated as at ox 0 */
+    const int32_t a2 = columnTexel(t, 2), a3 = columnTexel(t, 3);
+    const int32_t bR = columnTexel(t, W - 3), aR = columnTexel(t, W - 2);
+    const int32_t cwL = a3 - a2, cwR = aR - bR, tw = (int32_t)t->tw;
+    const bool left = a2 > 0 && cwL > 0, right = aR < tw && cwR > 0;
+    if (!left && !right) {
+        static bool logged; /* once a run */
+        if (!logged && state == RD_BORDER_WINDOW) {
+            logged = true;
+            rd__log("border: the frame's outer two columns are not in SCENE (Full pixel's window "
+                    "holds the visible columns only): nothing to repeat (reported once)");
+        }
+        return;
+    }
+    if (rd__win_muted()) {
+        return;
+    }
+    const uint32_t th = t->th;
+    if (!colsEnsure((uint32_t)(cwL + cwR), th, t->format)) {
+        return;
+    }
+    rd__replay_end_pass(r);
+    const RhiCommandList cl = rd__replay_cl();
+    rd__transition(cl, t->color, &t->colorState, RHI_STATE_COPY_SRC);
+    rd__transition(cl, s_cols.tex, &s_cols.state, RHI_STATE_COPY_DST);
+    if (left) {
+        rhi_cmd_copy_texture(cl, t->color, (RhiRect){a2, 0, cwL, th}, s_cols.tex, 0, 0);
+    }
+    if (right) {
+        rhi_cmd_copy_texture(cl, t->color, (RhiRect){bR, 0, cwR, th}, s_cols.tex, cwL, 0);
+    }
+    rd__transition(cl, s_cols.tex, &s_cols.state, RHI_STATE_COPY_SRC);
+    rd__transition(cl, t->color, &t->colorState, RHI_STATE_COPY_DST);
+    if (left) {
+        fillFrom(cl, t->color, 0, a2, 0, cwL, th, 0);
+    }
+    if (right) {
+        fillFrom(cl, t->color, aR, tw, cwL, cwR, th, 1);
+    }
+    s_sceneRepeats++;
+    static bool logged; /* once a run */
+    if (!logged) {
+        logged = true;
+        rd__log("border: the frame's outer two columns a side repeat columns 2 and %d on SCENE "
+                "after the fog (%d GS pixels; the glow and the present read them)",
+                (int)(W - 3), (int)W);
+    }
+}
+
+/* the repeat a fog of this replay asked for, before the post sprite about
+ * to be drawn when it reads SCENE (the glow's first reduction, the depth
+ * of field's, at the latest the reduction into DISPLAY): there SCENE's
+ * pass ends anyway, so the repeat costs no pass of its own on a tiler's
+ * local fog read, and an open MSAA epoch is closed where it would be */
+static void sceneRepeatDue(Replay *r)
+{
+    if (!s_armed || s_armed != g_rd.replayCounter || !r->st.ds.texEnabled) {
+        return;
+    }
+    const RdTexRec *tx = rd__tex_rec(r->st.tex);
+    if (!tx || tx->kind != RD_TEXKIND_TARGET ||
+        rd__target_rec(tx->target) != rd__target_rec(RD_TARGET_SCENE + 1u)) {
+        return;
+    }
+    s_armed = 0;
+    if (s_sceneRepeat) {
+        sceneRepeat(r);
+    }
 }
 
 /* The two strips of the reduction's textured sprite c (its record p, the
@@ -114,6 +342,7 @@ static void drawStrips(Replay *r, const RdFrame *f, const RdCmd *c)
  * is not textured and covers everything already. */
 void rd__blur_post_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
 {
+    sceneRepeatDue(r); /* SCENE's outer columns before the first read of it */
     if (c->b[0] == RD_POST_MOTION_BLUR && rd__blur_smooth_sprite(r, f, c)) {
         return; /* Motion blur: Smooth (rd_blur_smooth.c) */
     }

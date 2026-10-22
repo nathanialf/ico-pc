@@ -1001,6 +1001,7 @@ static void createNamedTargets(void)
         /* Motion blur: Smooth's accumulator and its target, at the old size
          * (before the pool's clear, which destroys that target's textures) */
         rd__blur_smooth_free("the targets were made again");
+        rd__scene_border_free(); /* SCENE's outer columns' copies, at the old height */
         rd__temp_target_pool_clear();
         rd__scene_caches_free();
         rd__effects_depth_free();

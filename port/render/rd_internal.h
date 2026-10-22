@@ -1844,6 +1844,25 @@ void rd__blur_border_verts(const RdScreenVtx v[4], int32_t gsW, RdScreenVtx out[
 void rd__set_blur_border_repeat(bool on);
 uint64_t rd__blur_border_strip_count(void);
 
+/* rd_blur_border.c, SCENE's outer columns (issue 129, issue 26 at 16:9):
+ * where the frame's two outer GS columns a side go (scene: SCENE's record,
+ * NULL as no crop): RD_BORDER_CLOSED the GS's own border (Full pixel off at
+ * 4:3 or an exact width: the reduction shows black there, the PS2's
+ * picture), RD_BORDER_OPEN the border open at the frame's exact width (the
+ * screen shows them), RD_BORDER_CROPPED the frame cropped at present
+ * (16:9: left out, the glow still reads them), RD_BORDER_WINDOW Full
+ * pixel's window (SCENE holds the visible columns only: they are not in
+ * it).  A fogged frame's SCENE repeats columns 2 and W - 3 over them where
+ * OPEN or CROPPED; rd__set_scene_border_repeat(false) (tests) leaves them
+ * as drawn; the count of repeats; rd__scene_border_free the copies' texture
+ * (the targets made again, shutdown). */
+enum { RD_BORDER_CLOSED = 0, RD_BORDER_OPEN, RD_BORDER_CROPPED, RD_BORDER_WINDOW };
+
+int rd__scene_border_state(const RdTargetRec *scene);
+void rd__set_scene_border_repeat(bool on);
+uint64_t rd__scene_border_repeat_count(void);
+void rd__scene_border_free(void);
+
 /* True for the kinds drawn by the GS sprite model (rd__blur_post_sprite): the
  * staticBlur.c kinds (RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR) and the
  * reduction. */

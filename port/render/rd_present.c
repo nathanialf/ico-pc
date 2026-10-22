@@ -321,11 +321,13 @@ void rd_log_frame_state(const char *when)
     frameWords(words, sizeof(words), gw, rd__frame_wexact());
     const RdSettings *st = &g_rd.settings;
     rd__log("frame state (%s): output %ux%u (asked %ux%u), scene %gx%g, aspect %.3f, %s, the "
-            "outer columns drawn as their neighbours %llu times",
+            "outer columns drawn as their neighbours %llu times, repeated on SCENE after the fog "
+            "%llu times",
             when ? when : "now", (unsigned)st->outputWidth, (unsigned)st->outputHeight,
             (unsigned)g_rd.pendingSettings.outputWidth, (unsigned)g_rd.pendingSettings.outputHeight,
             (double)g_rd.sceneSx, (double)g_rd.sceneSy, (double)g_rd.outAspect, words,
-            (unsigned long long)rd__blur_border_strip_count());
+            (unsigned long long)rd__blur_border_strip_count(),
+            (unsigned long long)rd__scene_border_repeat_count());
 }
 
 bool rd__apply_display(void)

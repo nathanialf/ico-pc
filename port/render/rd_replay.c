@@ -352,6 +352,7 @@ void rd__gpu_shutdown(void)
     rd__shadow_shutdown();      /* the box-reduced shadow count */
     rd__wrap_shutdown();        /* the COLCLAMP 0 wrap's pipelines and accumulator */
     rd__blur_smooth_shutdown(); /* Motion blur: Smooth's (rd_blur_smooth.c) */
+    rd__scene_border_free();    /* SCENE's outer columns' copies (rd_blur_border.c) */
     rd__msaa_free();            /* the MSAA scene pair */
     if (g_rd.dummy.id) {
         rhi_destroy_texture(g_rd.dummy);
@@ -4889,6 +4890,7 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         rd__fog_edge_record(s_cl, tz, zid, &src,
                             p.lutOffset != ~0u ? f->payload + p.lutOffset : NULL);
     }
+    rd__scene_border_arm(r); /* SCENE's outer columns repeated (rd_blur_border.c) */
     (void)topo;
 }
 

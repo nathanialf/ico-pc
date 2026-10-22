@@ -184,6 +184,10 @@ void rd__replay_viewport(uint32_t w, uint32_t h);
  * loop's (the fold, the reduction's open border and its outer columns, the
  * motion blur under Smooth) */
 void rd__blur_post_sprite(Replay *r, const RdFrame *f, const RdCmd *c);
+/* rd_blur_border.c: doFog's fog drew on SCENE (r's colour target): the
+ * repeat of SCENE's outer columns (rd_internal.h rd__scene_border_state) is
+ * done before this replay's first post sprite that reads SCENE */
+void rd__scene_border_arm(const Replay *r);
 /* rd_blur_smooth.c: the motion blur's sprite c under Smooth
  * (rd_internal.h rd__blur_smooth_arm): the accumulator's passes, then the
  * recorded sprite reading the accumulator with FIX'; false when Smooth is

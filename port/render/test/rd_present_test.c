@@ -2593,8 +2593,16 @@ static uint32_t colsDiffer(const uint8_t *a, uint32_t aw, uint32_t x0, const uin
  * guard the last column's sample lay past SCENE and clamped: it repeated
  * its neighbour's texel.  Where the frame is its exact width (G 0: 48:9)
  * the reduction draws its two outer GS columns a side again as their
- * neighbours (rd_blur_border.c): those texels are each one value, and the
- * columns within a texel of them are left out of the SCENE match. */
+ * neighbours (rd_blur_border.c): each strip is one value a row over the
+ * texels it covers, and the columns within a texel of them are left out of
+ * the SCENE match.  On a scaled DISPLAY a strip is the hardware sprite with
+ * its S one value at its four vertices, so every texel it covers samples the
+ * same point; which texels it covers is the rasteriser's: at 1.875 texels a
+ * GS pixel (3840 x 720) the left strip covers texels 0 .. 3 and the right
+ * one 3837 .. 3839 (3836 is the main sprite's; measured on lavapipe, the
+ * 48:9 deja vu dump through rd_replay_tool), so the check takes the texels
+ * a whole texel inside each: from 0 to below 2k - 0.75 and from
+ * k (W - 2.25) + 1 on. */
 static void checkExactEdges(const char *name, const ExactRun *a, float aspect, uint32_t outW,
                             uint32_t G)
 {
@@ -2619,12 +2627,12 @@ static void checkExactEdges(const char *name, const ExactRun *a, float aspect, u
     }
     uint32_t past = 0, bad = 0, first = ~0u, strip = 0;
     /* the outer columns drawn as their neighbours at the exact width: the
-       texels whose centres lie inside GS pixels 0, 1 and W - 2, W - 1 */
+       texels a strip covers by a whole texel or more */
     const uint32_t fw = (uint32_t)ico_frame_width_for(aspect);
     const double k = (double)W / (double)fw; /* texels a GS pixel (G 0: the box is the frame) */
     const uint32_t reach = G ? 0u : (uint32_t)ceil(2.0 * k) + 1u;
     const uint32_t nl = G ? 0u : (uint32_t)ceil(2.0 * k - 0.75);
-    const uint32_t r0 = G ? W : (uint32_t)ceil(k * (double)(fw - 2u) - 0.25);
+    const uint32_t r0 = G ? W : (uint32_t)ceil(k * ((double)fw - 2.25) + 1.0);
     for (uint32_t x = 1; x < nl && x < W; x++) {
         strip += memcmp(&orow[x * 4], &orow[0], 4) != 0;
     }
