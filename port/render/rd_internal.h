@@ -3314,9 +3314,10 @@ void rd__blur_smooth_counts(uint64_t *drawn, uint64_t *restarts, uint64_t *origi
 /* rd_crack_fill.c: the crack filler above 1x (issue 26; docs/port/RENDER.md,
  * "Crack filling above 1x").  Before the fog of SCENE (rd_replay.c doFog,
  * rd_replay.h rd__crack_fill), under Enhanced with SCENE's scale above 1 on
- * an axis, a texel no draw covered (depth 0, the fog's table entry 0)
- * between written ones within the reach takes the nearer one's colour and
- * depth.
+ * an axis, a texel no draw covered (depth 0, the fog's table entry 0), or
+ * a drawn one behind both by a step in depth (a farther surface seen
+ * through the crack), between texels in front of it within the reach takes
+ * the nearer one's colour and depth.
  * rd__crack_fill_init      rd_init: the switch (ICO_RD_CRACK_FILL=0, [dev]
  *                          crack_fill = false: off; on by default) and the
  *                          counters from zero
@@ -3355,6 +3356,9 @@ void rd__crack_fill_block(void);
 uint32_t rd__crack_fill_reach(float scale);
 void rd__crack_fill_shutdown(void);
 #define RD_CRACK_REACH_MAX 3u
+/* a texel is in front of a crack's texel when nearer by more than
+ * 1 / RD_CRACK_BEHIND of its own depth (blit.hlsl crack_front) */
+#define RD_CRACK_BEHIND 64u
 #define RD_CRACK_COUNT_EVERY 16u
 
 /* rd_png.c: 8-bit RGBA (or RGB with withAlpha = 0), stored deflate.  The

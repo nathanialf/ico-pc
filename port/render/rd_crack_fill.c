@@ -5,9 +5,10 @@
  * the world through its own node matrix, so two triangles that meet on the
  * PS2 can leave a crack of 1/16 GS pixel between them (DIVERGENCES.md
  * VD-20; at a scale that is not a whole number the GPU's second snap moves
- * it, VD-19).  A pixel whose centre falls into it keeps the clear's depth,
- * GS Z 0, which the fog's table takes as its entry 0 (fog_lut.hlsl): a dot
- * of the full fog colour.  At 1x that is the PS2's own picture.  Above 1x a
+ * it, VD-19).  A pixel whose centre falls into it keeps what lies behind:
+ * the clear's depth, GS Z 0, which the fog's table takes as its entry 0
+ * (fog_lut.hlsl), a dot of the full fog colour, or a farther surface, a dot
+ * of it at its own, deeper fog.  At 1x that is the PS2's own picture.  Above 1x a
  * crack catches texel centres along its whole length, and the dots run
  * along the seams of walls and floors (Goblan's 4K screenshots of v0.8.4).
  *
@@ -17,16 +18,31 @@
  * depth attached: crack_fill_ps (blit.hlsl) reads a copy of SCENE's colour
  * (its snapshot texture, rd__replay_take_snap) and of its depth (the fog's
  * depth copy object, rd__depth_copy_take: the copy path's own, made here on
- * the other paths) and gives a texel of depth 0 the nearer written texel's
- * colour and depth (SV_Depth, test ALWAYS) where a run of at most R texels
- * of depth 0 along its row or its column (it among them) is bounded by
- * written texels at both ends; every other texel is discarded.  R on an
- * axis is ceil(scale / 2) above 1x, at most 3, else 0: the 1/16 pixel
- * crack is under one texel wide up to 16x, and a slit of a GS pixel or
- * more (2 texels at 2x) is the game's and stays.  The depth goes with the
- * colour so the fog paints the neighbour's fog level, and the draws after
- * the fog (the lists' Z tests) see a surface there.  Exact copies: no
- * filtering, no colour of its own.
+ * the other paths).  A texel in a run of at most R texels along its row or
+ * its column that has at each end a texel in front of it (written, and
+ * nearer by more than 1 / RD_CRACK_BEHIND of its own depth) is a crack when
+ * no draw covered it (depth 0), or when it is drawn behind both ends by a
+ * step in depth: the ends within half the drop of each other (two parts of
+ * one surface) and the texel behind each end's surface carried on to it by
+ * more than the share (a concave fold between two faces stays).  The crack
+ * takes the nearer end's colour and depth (SV_Depth, test ALWAYS); every
+ * other texel is discarded.  R on an axis is ceil(scale / 2) above 1x, at
+ * most 3, else 0: the 1/16 pixel crack is under one texel wide up to 16x,
+ * and a slit of a GS pixel or more (2 texels at 2x) is the game's and
+ * stays.  The depth goes with the colour so the fog paints the neighbour's
+ * fog level, and the draws after the fog (the lists' Z tests) see a surface
+ * there.  Exact copies: no filtering, no colour of its own.
+ *
+ * What the cracks hold: the clear's depth where nothing lies behind the
+ * seam (the sky of the castle's courtyard at 4K: 727 texels of the fog's
+ * entry 0 in each issue-91 dump), a farther surface where something does
+ * (a wall behind a pillar's seam: tens of texels a frame in the corpus
+ * rooms at 2x, measured with a fog table that writes each texel's depth
+ * index).  The corpus rooms at a tick and a whole scale have no texel of
+ * depth 0 at all after the world's draws (the clear's colour patched to
+ * magenta shows on none before the fog, and the table's entry 0 patched to
+ * magenta on none after it): their dark texels of the clear's RGB 1,1,1
+ * are the walls' mortar, not cracks.
  *
  * Not drawn: at scale 1 on both axes, under the Original preset, on any
  * replay with MSAA asked for (the fog then reads the multisampled scene or
@@ -43,8 +59,10 @@
  * copied into a readback buffer and summed once the GPU is past that
  * replay (RHI_FRAMES_IN_FLIGHT replays later, as the fog's edge probe).
  * The lines:
- *   rd: crack fill: on above 1x (scale 2x2, reach 1x1 texels); [dev]
- *       crack_fill = false turns it off          (start, a new scale)
+ *   rd: crack fill: on above 1x (scale 2x2, reach 1x1 texels: a run of
+ *       texels no draw covered, or drawn over 1/64 of the depth behind both
+ *       its ends, with a texel in front at each end takes the nearer end);
+ *       [dev] crack_fill = false turns it off      (start, a new scale)
  *   rd: crack fill: N pixels filled over M replays counted of T filled
  *       (max K a replay; scale SXxSY; reach RXxRY texels)   (10 s summary)
  *   rd: crack fill: N fogged replays above 1x not filled (...)   (the same)
@@ -89,7 +107,7 @@ static struct {
     uint64_t bFilled, bCounted, bPixels, bSkip[SKIP_COUNT];
     uint32_t bMax;
     bool skipSaid[SKIP_COUNT];
-    char noted[192]; /* the last state line */
+    char noted[320]; /* the last state line */
 } s_cf;
 
 /* the replay tool's --no-crack-fill and the tests: -1 none, else the switch */
@@ -133,9 +151,12 @@ static void note(void)
                  (double)sx, (double)sy);
     } else {
         snprintf(line, sizeof(line),
-                 "crack fill: on above 1x (scale %.4gx%.4g, reach %ux%u texels); [dev] "
-                 "crack_fill = false turns it off",
-                 (double)sx, (double)sy, rd__crack_fill_reach(sx), rd__crack_fill_reach(sy));
+                 "crack fill: on above 1x (scale %.4gx%.4g, reach %ux%u texels: a run of texels "
+                 "no draw covered, or drawn over 1/%u of the depth behind both its ends, with a "
+                 "texel in front at each end takes the nearer end); [dev] crack_fill = false "
+                 "turns it off",
+                 (double)sx, (double)sy, rd__crack_fill_reach(sx), rd__crack_fill_reach(sy),
+                 RD_CRACK_BEHIND);
     }
     if (strcmp(line, s_cf.noted) != 0) {
         snprintf(s_cf.noted, sizeof(s_cf.noted), "%s", line);
@@ -319,6 +340,7 @@ static void fullscreen(RhiCommandList cl, const RdPipeKeyInt *k, RhiPipeline pip
     memset(&cb, 0, sizeof(cb));
     cb.param[0] = (float)s_cf.rx;
     cb.param[1] = (float)s_cf.ry;
+    cb.param[2] = 1.0f / (float)RD_CRACK_BEHIND;
     RhiBinding b[3];
     memset(b, 0, sizeof(b));
     b[0].slot = 1;

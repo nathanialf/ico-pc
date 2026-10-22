@@ -184,19 +184,33 @@ float depth_upsample_ps(BlitVSOut i) : SV_Depth
 
 // The crack filler above 1x (port/render/rd_crack_fill.c; docs/port/RENDER.md,
 // "Crack filling above 1x"), behind blit_vs over SCENE's texels, before the
-// fog. A texel no draw covered keeps the clear's depth 0, which the fog's
-// table takes as its entry 0 (fog_lut.hlsl): above 1x the 1/16 GS pixel
-// cracks between triangles truncated apart (DIVERGENCES.md VD-19, VD-20)
-// catch texel centres and show as dots of that colour. A texel of depth 0
-// is a crack when along its row or its column a run of at most the reach's
-// texels of depth 0 (it among them) has a written texel at each end; it
-// then takes the nearer end's colour and depth, exact copies (the shorter
-// run of the two axes, the row's on a tie; the end before it on a tie
-// within the run). Every other texel is discarded.
+// fog. The VU truncates each part's vertices to the GS's 1/16 pixel grid
+// apart (DIVERGENCES.md VD-19, VD-20): above 1x the crack between two parts
+// catches texel centres, which keep what lies behind the parts: the clear's
+// depth 0, which the fog's table takes as its entry 0 (fog_lut.hlsl), or a
+// farther surface, which the fog paints at its own level. Either shows as
+// dots along the seam. A texel is a crack when along its row or its column a
+// run of at most the reach's texels (it among them) has at each end a texel
+// in front of it (crack_front: written, and nearer by more than the share of
+// its own depth), and the texel is
+//   at depth 0 (no draw covered it): nothing more;
+//   drawn (crack_behind): behind both ends by a step in depth, not on a
+//     surface: the two ends within half the drop of each other (two parts
+//     of one surface), and the texel behind each end's surface carried on
+//     to it (from the end and the texel beyond it) by more than the share,
+//     so the texels of a concave fold between two faces, each on one of the
+//     two planes, stay.
+// It then takes the nearer end's colour and depth, exact copies (the shorter
+// run of the two axes, the row's on a tie; the end before it on a tie within
+// the run). Every other texel is discarded. Depths grow with GS Z and are
+// linear in it on every format (gs_z_to_depth; the float form's top band,
+// the UI's, only ever reads as nearer), so a share of a depth is that share
+// of GS Z.
 //   t1  a copy of SCENE's colour (crack_fill_ps), read with Load
 //   t2  a copy of SCENE's depth, read with Load (crack_fill_ps)
 //   g_param.xy  the reach across columns and across rows, 0..3 texels
 //               (ceil(scale / 2) on an axis above 1x, else 0)
+//   g_param.z   the share (1 / RD_CRACK_BEHIND)
 // crack_count_ps: the same test over a 16 x 16 block of the depth copy (t1
 // there) per output texel, the count n of cracks written as (n & 255,
 // n >> 8) / 255 in R and G of an RGBA8 target (the filled pixels, read back
@@ -215,35 +229,64 @@ float crack_depth(Texture2D<float> z, int2 q, int2 size)
     return inside ? v : 0.0;
 }
 
-// the distance (1..reach) to the first written texel from p by step, 0 none
-int crack_end(Texture2D<float> z, int2 p, int2 step, int reach, int2 size)
+// depth dq in front of depth dp: written, and nearer by more than the share
+// of dq (any written texel in front of depth 0)
+bool crack_front(float dq, float dp, float share)
+{
+    return dq > 0.0 && dq - dp > dq * share;
+}
+
+// the distance (1..reach) to the first texel from p by step in front of
+// depth dp, 0 none; d its depth
+int crack_end(Texture2D<float> z, int2 p, int2 step, int reach, int2 size, float dp, float share,
+              out float d)
 {
     int found = 0;
+    d = 0.0;
     [unroll] for (int k = CRACK_REACH_MAX; k >= 1; k--) {
-        if (k <= reach && crack_depth(z, p + step * k, size) != 0.0) {
+        float dk = crack_depth(z, p + step * k, size);
+        if (k <= reach && crack_front(dk, dp, share)) {
             found = k;
+            d = dk;
         }
     }
     return found;
 }
 
-// p a crack of the depth copy z: from the texel it takes
-bool crack_at(Texture2D<float> z, int2 p, int2 size, int2 reach, out int2 from)
+// a drawn texel of depth dp, the ends a texels before it (depth da) and b
+// after it (db) along step: behind both by a step in depth, not on a surface
+bool crack_behind(Texture2D<float> z, int2 p, int2 step, int a, int b, float da, float db,
+                  float dp, int2 size, float share)
 {
-    from = p;
-    if (crack_depth(z, p, size) != 0.0) {
+    float drop = min(da, db) - dp;
+    if (abs(da - db) > 0.5 * drop) {
         return false;
     }
+    // each end's surface carried on to the texel: the end and the texel beyond it
+    float ea = da + (da - crack_depth(z, p - step * (a + 1), size)) * float(a);
+    float eb = db + (db - crack_depth(z, p + step * (b + 1), size)) * float(b);
+    float e = min(ea, eb);
+    return e - dp > e * share;
+}
+
+// p a crack of the depth copy z: from the texel it takes
+bool crack_at(Texture2D<float> z, int2 p, int2 size, int2 reach, float share, out int2 from)
+{
+    from = p;
+    float dp = crack_depth(z, p, size);
     int run = CRACK_REACH_MAX + 1;
-    int l = crack_end(z, p, int2(-1, 0), reach.x, size);
-    int r = crack_end(z, p, int2(1, 0), reach.x, size);
-    if (l > 0 && r > 0 && l + r - 1 <= reach.x) {
+    float da, db;
+    int l = crack_end(z, p, int2(-1, 0), reach.x, size, dp, share, da);
+    int r = crack_end(z, p, int2(1, 0), reach.x, size, dp, share, db);
+    if (l > 0 && r > 0 && l + r - 1 <= reach.x &&
+        (dp == 0.0 || crack_behind(z, p, int2(1, 0), l, r, da, db, dp, size, share))) {
         run = l + r - 1;
         from = p + int2(l <= r ? -l : r, 0);
     }
-    int u = crack_end(z, p, int2(0, -1), reach.y, size);
-    int d = crack_end(z, p, int2(0, 1), reach.y, size);
-    if (u > 0 && d > 0 && u + d - 1 <= reach.y && u + d - 1 < run) {
+    int u = crack_end(z, p, int2(0, -1), reach.y, size, dp, share, da);
+    int d = crack_end(z, p, int2(0, 1), reach.y, size, dp, share, db);
+    if (u > 0 && d > 0 && u + d - 1 <= reach.y && u + d - 1 < run &&
+        (dp == 0.0 || crack_behind(z, p, int2(0, 1), u, d, da, db, dp, size, share))) {
         run = u + d - 1;
         from = p + int2(0, u <= d ? -u : d);
     }
@@ -261,7 +304,7 @@ CrackFillOut crack_fill_ps(BlitVSOut i)
     g_sceneDepth.GetDimensions(w, h);
     int2 p = int2(i.pos.xy);
     int2 from;
-    if (!crack_at(g_sceneDepth, p, int2(int(w), int(h)), int2(g_param.xy), from)) {
+    if (!crack_at(g_sceneDepth, p, int2(int(w), int(h)), int2(g_param.xy), g_param.z, from)) {
         discard;
     }
     CrackFillOut o;
@@ -281,7 +324,8 @@ float4 crack_count_ps(BlitVSOut i) : SV_Target0
         for (int x = 0; x < CRACK_BLOCK; x++) {
             int2 p = base + int2(x, y);
             int2 from;
-            if (p.x < size.x && p.y < size.y && crack_at(g_crackDepth, p, size, int2(g_param.xy), from)) {
+            if (p.x < size.x && p.y < size.y &&
+                crack_at(g_crackDepth, p, size, int2(g_param.xy), g_param.z, from)) {
                 n++;
             }
         }

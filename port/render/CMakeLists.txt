@@ -1005,7 +1005,7 @@ if(ICO_RUN_TESTS)
     # replay tool's --no-crack-fill and --stats line on rd_pixel's dump
     set(_crk "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_crack.cmake")
     set(_crk_on "rd: crack fill: on above 1x \\(scale")
-    set(_crk_tail "texels\\). \\[dev\\] crack_fill = false turns it off")
+    set(_crk_tail "texels: a run of texels no draw covered, or drawn over 1/64 of the depth behind both its ends, with a texel in front at each end takes the nearer end\\). \\[dev\\] crack_fill = false turns it off")
     foreach(_c "2|2x2, reach 1x1" "4|4x4, reach 2x2" "frac|2.81[23]x2.411, reach 2x2")
         string(REPLACE "|" ";" _cl "${_c}")
         list(GET _cl 0 _a)
