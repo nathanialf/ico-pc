@@ -3456,7 +3456,10 @@ static void progress_overlay(const RdOverlayCtx *ctx, void *user)
         ui_draw_rect(x0 + 2.0f, y0 + 2.0f, x1 - 2.0f, y1 - 2.0f, track);
         ui_draw_rect(x0 + 2.0f, y0 + 2.0f, x0 + 2.0f + (x1 - x0 - 4.0f) * (float)pct / 100.0f,
                      y1 - 2.0f, fill);
-        float y = 300.0f;
+    }
+    {
+        /* the lines under the bar (or under the phase line without one) */
+        float y = v->pct >= 0 ? 300.0f : 272.0f;
         int i;
 
 #ifdef __ANDROID__
@@ -3605,19 +3608,20 @@ static int progress_present_notes(const char *title, const char *phase, int pct,
     return cancel;
 }
 
-static int progress_present(const char *title, const char *phase, int pct, int allowCancel)
+int ico_window_progress(const char *title, const char *phase, int pct)
 {
-    return progress_present_notes(title, phase, pct, allowCancel, NULL, NULL);
+    return ico_window_progress_notes(title, phase, pct, NULL, NULL);
 }
 
-int ico_window_progress(const char *title, const char *phase, int pct)
+int ico_window_progress_notes(const char *title, const char *phase, int pct, const char *note0,
+                              const char *note1)
 {
     int stop;
 
     if (!s_open) {
         return 0;
     }
-    stop = progress_present(title, phase, pct, 1);
+    stop = progress_present_notes(title, phase, pct, 1, note0, note1);
     /* a quit or close from an earlier screen that could not stop (the
        start-up graphics screen) stops this one too */
     return stop || s_quitLatched;

@@ -625,17 +625,17 @@ static void pick_abandon(void)
 
 #ifdef __ANDROID__
 
-/* the picker window's line: the discs from the regions table */
-static const char *pick_prompt(void)
+/* the picker screen's lines: the discs from the regions table, then the
+   file kinds, each its own line under the phase line */
+static const char *pick_prompt_discs(void)
 {
-    static char text[640];
+    static char text[600];
 
-    snprintf(text, sizeof(text),
-             "Choose your ICO disc image: %s, as a .iso, .chd or .bin file (with a .bin and a "
-             ".cue, pick the .bin)",
-             ico_disc_list_text());
+    snprintf(text, sizeof(text), "%s", ico_disc_list_text());
     return text;
 }
+
+#define PICK_PROMPT_FILES "A .iso, .chd or .bin file (with a .bin and a .cue, pick the .bin)"
 
 /* no filters: Android's picker matches MIME types, and a disc image has
    none it knows (the extractor checks the file) */
@@ -645,7 +645,9 @@ static int pick_iso_sdl(char *out, size_t size)
     while (SDL_GetAtomicInt(&s_pick.done) == 0) {
         /* the window keeps drawing behind the picker; Back while it shows
            (the picker did not come up) gives up */
-        if (ico_window_progress("Setting up ICO (first start only)", pick_prompt(), -1)) {
+        if (ico_window_progress_notes("Setting up ICO (first start only)",
+                                      "Choose your ICO disc image in the picker", -1,
+                                      pick_prompt_discs(), PICK_PROMPT_FILES)) {
             pick_abandon();
             fprintf(stderr, "ico_pc: stopped while waiting for the file picker\n");
             return -1;
@@ -869,9 +871,11 @@ static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char 
         return 0;
     }
     ico_host_fatal(log_file(),
-                   "No ICO disc image was found or chosen. Put your disc image next to the "
-                   "program as %s (for %s), as a .iso, .chd, .bin or .cue file, or set "
-                   "iso=<path> in ico-pc.ini.",
+                   "No ICO disc image was found or chosen.\n"
+                   "\n"
+                   "Put your disc image next to the program, named %s\n"
+                   "(for %s),\n"
+                   "as a .iso, .chd, .bin or .cue file, or set iso=<path> in ico-pc.ini.",
                    ico_disc_image_names_text(""), ico_disc_list_text());
 #endif
     return 0;
@@ -1147,9 +1151,13 @@ static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, i
     if (pick_iso_sdl(uri, sizeof(uri)) != 0) {
         ico_host_fatal(log_file(),
                        "No disc image was chosen.\n"
-                       "Start the game again and choose your ICO disc image: %s, as a .iso, "
-                       ".chd or .bin file (with a .bin and a .cue, choose the .bin). Or copy "
-                       "it into %s with a USB cable or the Files app, named %s for its disc.",
+                       "\n"
+                       "Start the game again and choose your ICO disc image in the picker:\n"
+                       "%s,\n"
+                       "as a .iso, .chd or .bin file (with a .bin and a .cue, choose the .bin).\n"
+                       "\n"
+                       "Or copy it into %s with a USB cable or the Files app,\n"
+                       "named %s for its disc.",
                        ico_disc_list_text(), exe_dir, ico_disc_image_names_text(".iso"));
     }
     fprintf(stderr, "ico_pc: disc image chosen in the file picker: %s\n", uri);

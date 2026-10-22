@@ -51,12 +51,16 @@
    used by the extractor's refusal, main_host.c and the Android import. */
 #define ICO_WRONG_DISC_TEXT                                                                        \
     "%s is not a disc image this port plays.\n"                                                    \
-    "Use a complete, unmodified image of %s, as a .iso, .chd, .bin or .cue file. Other editions "  \
-    "do not work."
+    "\n"                                                                                           \
+    "Use a complete, unmodified image of\n"                                                        \
+    "%s,\n"                                                                                        \
+    "as a .iso, .chd, .bin or .cue file. Other editions do not work."
 #define ICO_UNREADABLE_DISC_TEXT                                                                   \
     "Cannot read the disc image %s.\n"                                                             \
-    "Check that the file is complete and is a .iso, .chd, .bin or .cue copy of %s. The log says "  \
-    "why."
+    "\n"                                                                                           \
+    "Check that the file is complete and is a .iso, .chd, .bin or .cue copy of\n"                  \
+    "%s.\n"                                                                                        \
+    "The log says why."
 
 /* Progress: phase "open" (reading the image's directory; done and total 0),
    "hash" (the image's SHA-1), "extract", then "finish" (writing the archive's

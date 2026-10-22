@@ -58,5 +58,9 @@ int ico_window_pump(void);
 void ico_window_pace(int hz);
 void ico_window_close(void);
 int ico_window_progress(const char *title, const char *phase, int pct);
+/* the same with up to two smaller lines under the phase line (the picker's
+   disc names and file kinds) */
+int ico_window_progress_notes(const char *title, const char *phase, int pct, const char *note0,
+                              const char *note1);
 
 #endif /* ICO_PLATFORM_WINDOW_HOST_H */
