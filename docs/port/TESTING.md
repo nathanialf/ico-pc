@@ -118,7 +118,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 ### port/config/test, port/null/test, port/save/test
 
 - `config_test.c`: `config.toml`'s reader and writer, round trips, the ini over `config.toml` over
-  default precedence, the language answer, `[game] disc` (`auto`, the slugs, an unknown value as
+  default precedence, the first-run template (Hold type `hold`), the language answer, `[game] disc` (`auto`, the slugs, an unknown value as
   auto logged once a load) and `[game] last_disc` (read, written, not in the template), the wall
   clock and the [EE](ARCHITECTURE.md#terms) timers (`config`).
 - `null_devices_test.c`: the pad as an empty console answers it (`null_devices`).
@@ -129,6 +129,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   bytes up to 0x1E8 (`save_jpn`), the Korean disc's `BISCPS-56001ico` with the same 0x1E8 record
   (`save_kor`); each imports a card holding its directory and one other disc's side by side and
   the other disc's `.psu` beside their own ([SAVES.md](SAVES.md#tests)).
+  A load reads `optionControlType` from `[gameplay] hold_type`, not from the card's `controlType`.
 
 ### port/core/test
 
@@ -224,7 +225,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`model_viewer_effects_elf`, 77 without the ELF).
 - `model_viewer_headless.cmake` with `model_viewer_pad.txt`: the headless game driven from boot to
   the first model, an animation and back (`model_viewer_headless`).
-- `options_test.c`: the gameplay options' defaults and setters, the video effects' keys (Water
+- `options_test.c`: the gameplay options' defaults and setters (Hold type: `hold` by default, `toggle`
+  from the file, an unknown word as `hold`), the video effects' keys (Water
   reflections' `effect_water_sharp` off by default, saved, outside the preset; a leftover
   `effect_glow_size` read by nothing and not written), `[ui] language` (auto by default and for
   an unknown word, each name its language), `eBrainGetTarget` with Yorda safe off and on, and the
@@ -704,7 +706,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `settings_test.c`, `settings_extra_test.c`, `settings_extras_test.c`: the Settings menu over
   fake tables, CPU only (`settings`, `settings_extra`, `settings_extras`); `settings_test.c` also
   presses Right in photo mode through Deja vu and checks the popup's words (`ui__photo_film_word`);
-  `settings_extra_test.c` steps Effects > Water reflections between Original and Sharp, checks its
+  `settings_extra_test.c` steps Controls > Hold type from the title and the pause menu, checks the saved
+  `gameplay.hold_type` and that `ui_settings_install` sets `optionControlType` from it (`testHoldType`),
+  steps Effects > Water reflections between Original and Sharp, checks its
   note, its key and the page's fourteen rows (`testWaterReflections`), and Main's Disc row
   (`testDiscRow`: shown with more than one disc's game data only, its values and `[game] disc`, the page
   with all fifteen rows), and Display > Window size (`testWindowSize`: after Window mode, the sizes
@@ -910,8 +914,8 @@ A pad recording ([INPUT.md](INPUT.md#recordings)) is a pad script of what the ga
 headless build replays a player's session with `pad_script=<the file>`; it is on by default in the
 window build, in `logs/input-<time>.txt`, and off headless (`input_record=`). Its header records
 the values of `video.video_mode`, `game.language`, `gameplay.mirror`, `gameplay.stick_fix`,
-`gameplay.yorda_safe`, `gameplay.developer_mode`, `dev.start_stage`, `gameplay.door_fix` and
-`video.anti_aliasing`, and the native frame's width and aspect (`port/platform/main_host.c`,
+`gameplay.yorda_safe`, `gameplay.developer_mode`, `dev.start_stage`, `gameplay.door_fix`,
+`video.anti_aliasing` and `gameplay.hold_type`, and the native frame's width and aspect (`port/platform/main_host.c`,
 `record_keys`, `record_header`; `ico_input_record_frame_lines`).
 
 The trace (`trace=` or `--trace FILE`) writes a header naming its columns and then one line per Main

@@ -29,9 +29,13 @@ had. They only show up when you open Options from the pause menu, and they
 are kept in your save, as on the PS2:
 
 - Brightness (on the Effects page; Square puts back the normal value, 7)
-- Button configuration, Vibration and Hold type (on the Controls page)
+- Button configuration and Vibration (on the Controls page)
 - Film effect and Players (on the Gameplay page, once you have finished
   the game)
+
+Hold type, on the Controls page, is the one PS2 setting that shows from the
+title screen as well. It is kept in the settings file, not in your save, so
+it stays as you set it whatever save you load.
 
 ## Display
 
@@ -248,8 +252,11 @@ A change takes effect the next time you start the game.
   button does what. It applies on top of Remap controls. Pause menu only.
 - **Vibration** is On or Off, as the game's own setting. Pause menu only.
 - **Hold type** is **A (hold)**, where Yorda's hand stays held while you
-  keep R1 down, or **B (toggle)**, where you press R1 once to let go of her
-  hand. Pause menu only.
+  keep R1 down, or **B (toggle)**, where you press R1 once to take her hand
+  and again to let go. A is how the European, Japanese and Korean discs
+  start; the North American disc always worked as B. It shows from the
+  title screen and the pause menu, and is kept in the settings file for
+  every save.
 - **Analogue stick fix** is the same switch as the one on the Gameplay
   page, shown here too so you find it with the other controls. Turn it on
   in either place and it is on in both.

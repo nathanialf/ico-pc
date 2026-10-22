@@ -14,6 +14,20 @@ anywhere in between and Ico never reaches running speed.
 The game keeps that behaviour unless you change it. To run in any
 direction, open **Options > Gameplay** and turn on **Analogue stick fix**.
 
+## Do I have to hold R1 the whole time?
+
+**Yorda's hand only stays held while I keep R1 down. Can I just press it
+once?**
+
+Yes. Open **Options > Controls > Hold type** and choose **B (toggle)**.
+Then one press of R1 takes her hand and another press lets go. **A (hold)**
+is the other choice, where her hand stays held only while R1 is down.
+
+The European, Japanese and Korean discs start on A. The North American disc
+has no such choice and always worked as B. The row shows from the title
+screen as well as the pause menu, and it is kept in your settings, so it
+stays as you set it for every save.
+
 ## Ico and Yorda come straight back out of a doorway
 
 **When I take Yorda's hand through the door at the top of the ladder in the

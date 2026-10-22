@@ -48,6 +48,7 @@ defaults are [CONFIG.md](CONFIG.md#gameplay)'s; the differences from the PS2 are
 | `[gameplay] yorda_safe` | `ebrain.c`, `enemy_act.c`, `backStage.c` |
 | `[gameplay] door_fix` | `door_grace.c`, from `boyact.c` |
 | `[gameplay] natural_chains` | `BgAnimation.c` (window build) |
+| `[gameplay] hold_type` | `mcard.c`, `layout_action.c`, `settings.c` |
 | `[gameplay] mirror` | `pad_host.c`, `audio_host.c`, rd, `photo_ui.c` |
 | `[gameplay] developer_mode` | `main.c`, `debug.c`, the port |
 | `[game] circle_back` | `layout_action.c`, `layout_texture.c` |
@@ -128,7 +129,7 @@ rd_chain_find(p->group)` and `bgaHostNatural = bgaHostChain != 0 && ico_opt_natu
 `bga_CalcObject` reads them at the Null and at its children. The plane travels from
 `RegistPacket.c`'s `regHostMesh` to `rd_draw_vu_mesh`. Being a draw-only change, the key is not
 among the keys a pad recording's header records (`port/platform/main_host.c` (`record_keys`);
-`port/game/options.h`, header comment).
+`port/game/options.h`, header comment). `hold_type` is recorded, as R1's meaning changes the simulation.
 
 ### Mirror
 
@@ -185,6 +186,20 @@ hook records the card's mode and returns the mode in force (`ico2/fumi/ios/mcard
 (`gameblock_read`, `ico_opt_output_card`)); the game's own Stereo/Mono row records the new mode and,
 with an explicit key, saves the key at once so the file and the card never disagree
 (`ico2/common/src/layout_action.c` (`la_game_option`, `ico_opt_output_toggled`)).
+
+### Hold type
+
+`[gameplay] hold_type` is `"hold"` (the game's `optionControlType` 0, A: keep R1 held to hold Yorda's
+hand) or `"toggle"` (1, B: a press of R1 takes her hand, another lets go; `ico2/fumi/src/act-wish.c`,
+`ico2/fumi/src/commonact.c` (`handoff_heroin`), `ico2/fumi/src/boyact.c`). The key wins over the
+card: `gameblock_read` sets `optionControlType` from `ico_opt_hold_type`, not from the product
+file's `controlType`, which `product_write` still writes from the variable
+(`ico2/fumi/ios/mcard.c`); `ui_settings_install` sets it at boot (`applyHoldType`), and the Hold
+type row sets the key and the variable (`port/ui/settings.c` (`ui_settings_step`)). The game's own
+Options screen row, reached only on a disc whose layout tables are not recognised, calls
+`ico_opt_hold_type_toggled`, which writes the key and saves at once
+(`ico2/common/src/layout_action.c` (`la_game_option`, case 318); `port/game/options.c`). The
+North American disc has no option and is always the toggle.
 
 ## Achievements and the game-state view
 

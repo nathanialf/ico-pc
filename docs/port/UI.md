@@ -198,8 +198,8 @@ value for Credits; Characters a colour swatch per row and the viewer's prompt li
 `buildListPage` makes the three list pages over `ui_list` ([Lists](#lists)).
 
 Which rows show depends on where the menu was entered and what the machine has: the game's own
-settings (Brightness, Vibration, Hold type, Button configuration, Film effect, Players) only from
-the pause menu, Film effect and Players once the game is cleared; Video mode, Model pack and Extras'
+settings (Brightness, Vibration, Button configuration, Film effect, Players) only from
+the pause menu (Hold type shows from the title too: `[gameplay] hold_type`), Film effect and Players once the game is cleared; Video mode, Model pack and Extras'
 Music, Models and Credits only from the title (Add to Steam also only where the window host installs
 its handler); the dump rows only in developer mode; the touch rows only with a touch screen; the
 window and mouse camera rows not on Android; the Graphics driver link only with a driver host on an
@@ -212,10 +212,12 @@ rows from the pause menu (Brightness shown) are 12 apart from line 30, Back's bo
 
 A left or right press on a value calls its setter at once: `ico_video_set`, the `ico_opt_set_*`
 options, the live binding table, the game's own variables (`NonLinearCameraMove` for the language,
-`systemStatus[0]` and `gsResetFunc` for the video mode, `optionScreenMode`, `optionControlType`,
+`systemStatus[0]` and `gsResetFunc` for the video mode, `optionScreenMode`, `optionControlType`
+(from `[gameplay] hold_type`: `applyHoldType`, also at `ui_settings_install`),
 `girlControlMode`, `iosPadActRequestEnable`, the brightness step `systemStatus[11]`)
 (`port/ui/settings.h`, header comment; `port/ui/settings.c` (`ui_settings_step`)). The game's own
-settings are written by the game's saves, never into `config.toml`. A row that cannot step now
+settings are written by the game's saves, never into `config.toml`, except Hold type, which
+`config.toml` keeps (the card's value is written but not read back). A row that cannot step now
 (the video mode from the pause menu, the resolution under the CRT filter, a pack row with no pack
 installed) shows its value and ignores the press (`canStep`).
 

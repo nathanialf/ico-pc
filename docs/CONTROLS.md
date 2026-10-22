@@ -28,13 +28,18 @@ usual job, and the original button for its own.
 | Circle (in menus, goes back like Triangle) | right face button | E | right button |
 | Square | left face button | Q | |
 | Triangle (back) | top face button | R | |
-| L1 / R1 | shoulder buttons | Tab or the ` key (left of 1) / F | middle button (R1) |
+| L1 / R1 (R1 holds Yorda's hand) | shoulder buttons | Tab or the ` key (left of 1) / F | middle button (R1) |
 | L2 / R2 | triggers | Z / X | |
 | L3 / R3 (press a stick in) | press a stick in | V / B | |
 | Start / Select | start / back (or view) | Enter / Backspace | |
 | D-pad (menus) | d-pad | arrow keys | |
 | Left stick (move) | left stick | W A S D (hold Left Shift to walk) | |
 | Right stick (look) | right stick | I J K L | move the mouse |
+
+By default you keep R1 held to hold Yorda's hand. If you would rather press
+it once to take her hand and again to let go, choose **B (toggle)** under
+**Options > Controls > Hold type**, from the title screen or the pause
+menu. It works the same with every way of playing.
 
 A few more keys on a computer:
 
@@ -278,7 +283,9 @@ pictures:
 - **The D-pad** is above the stick, beside the L1 and L2 buttons in the
   top left corner, with L2 at the top. It moves around the menus.
 - **Cross, Circle, Square and Triangle** are in the lower right corner.
-- **R1** is the big button just above them. It holds Yorda's hand.
+- **R1** is the big button just above them. It holds Yorda's hand: keep a
+  finger on it, or, with **Hold type** on **B (toggle)**, tap it once to
+  take her hand and tap it again to let go.
 - **R2** is in the top right corner.
 - **Start and Select** are at the top in the middle.
 - **The look pad** is the rest of the upper right part of the screen.
