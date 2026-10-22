@@ -2805,9 +2805,10 @@ RhiTexture rd__sampled_depth(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *cop
                              const char *name);
 /* rd__sampled_depth's copy whatever g_rd.depthCopy says: t's whole depth
  * (both aspects) copied into *copy (made or resized here), left in
- * RHI_STATE_SHADER_READ outside any pass; id 0 when it cannot be made
- * (the crack filler, rd_crack_fill.c, which writes t's depth while it
- * reads the copy). */
+ * RHI_STATE_SHADER_READ outside any pass; id 0 when it cannot be made,
+ * with no word to the scale (rd__sampled_depth notes the scene's pressure
+ * then; the crack filler, rd_crack_fill.c, which writes t's depth while it
+ * reads the copy, does without). */
 RhiTexture rd__depth_copy_take(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *copy,
                                const char *name);
 void rd__depth_copy_free(RdDepthCopy *copy);

@@ -894,7 +894,11 @@ RhiTexture rd__sampled_depth(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *cop
         rd__transition(cl, t->depth, &t->depthState, RHI_STATE_DEPTH_READ);
         return t->depth;
     }
-    return rd__depth_copy_take(cl, t, copy, name);
+    const RhiTexture z = rd__depth_copy_take(cl, t, copy, name);
+    if (!z.id) {
+        rd__note_scene_pressure(); /* the fog's read: the scale comes down */
+    }
+    return z;
 }
 
 RhiTexture rd__depth_copy_take(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *copy,
@@ -917,7 +921,6 @@ RhiTexture rd__depth_copy_take(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *c
         copy->h = t->th;
     }
     if (!copy->tex.id) {
-        rd__note_scene_pressure();
         return (RhiTexture){0};
     }
     rd__transition(cl, t->depth, &t->depthState, RHI_STATE_COPY_SRC);
