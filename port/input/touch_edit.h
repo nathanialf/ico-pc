@@ -42,7 +42,7 @@ enum { ICO_TOUCH_ANCHOR_L = 0, ICO_TOUCH_ANCHOR_R = 1 };
 enum { ICO_TOUCH_ANCHOR_T = 0, ICO_TOUCH_ANCHOR_B = 1 };
 
 /* ax or ay of a control at its default place on that axis: the text
-   "hidden" parses to it (the text keeps no position) */
+   "hidden" parses to it (a hidden control with no position) */
 enum { ICO_TOUCH_ANCHOR_DEFAULT = 2 };
 
 #define ICO_TOUCH_EDIT_SCALE_MIN 0.7f /* a face at 0.7 is 7.7 mm across: Android's 48 dp */
@@ -100,8 +100,9 @@ unsigned int ico_touch_ctl_zones(int ctl);
    tokens "l<n>"|"r<n>" (the x anchor and offset), "t<n>"|"b<n>", "s<scale>"
    (optional, 1 when absent), "o<percent>" (optional, 100 when absent), and
    for the look pad "w<n> h<n>" (optional, its default size when absent);
-   "hidden" alone (a hideable control at its default place; the text of
-   alpha 0); "default" alone (unset). Numbers are plain decimals (no sign,
+   "hidden" alone (a hideable control at its default place with alpha 0; a
+   hidden control that was moved writes its position, "s1.00" and "o0" instead, so
+   it keeps its place when shown again); "default" alone (unset). Numbers are plain decimals (no sign,
    no exponent, a point whatever the locale). Examples "r20 b10.5 s1.00
    o100", "l50 t0 w60 h30 o100". ico_touch_edit_text writes the same form
    into buf and returns it: offsets and sizes to two decimals with trailing

@@ -717,6 +717,9 @@ static void test_text_round_trip(void)
     CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_SELECT, "r20 b10 o10") == 0 &&
           near_(c.alpha, 0.1f, 1e-6f));
     CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_SELECT, "r20 b10 o0") == 0 && c.alpha == 0.0f);
+    CHECK(strcmp(ico_touch_edit_text(&c, buf, sizeof(buf)), "r20 b10 s1.00 o0") ==
+          0); /* place kept */
+    CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_SELECT, "hidden") == 0 && c.alpha == 0.0f);
     CHECK(strcmp(ico_touch_edit_text(&c, buf, sizeof(buf)), "hidden") == 0);
 
     /* bad tokens, out of range, twice, missing anchors */

@@ -247,14 +247,13 @@ const char *ico_touch_edit_text(const IcoTouchCtlEdit *c, char *buf, unsigned si
         put_s(&o, "default");
         return buf;
     }
-    if (!(c->alpha > 0.0f)) {
-        put_s(&o, "hidden");
-        return buf;
-    }
     if (c->ax > ICO_TOUCH_ANCHOR_R || c->ay > ICO_TOUCH_ANCHOR_B) {
-        put_s(&o, "default"); /* no position to write */
+        /* no position to write: hidden at the default place, else nothing */
+        put_s(&o, !(c->alpha > 0.0f) ? "hidden" : "default");
         return buf;
     }
+    /* a hidden control with a position keeps it ("l4 t6 o0"): shown again,
+       it is where the player put it */
     put_num(&o, c->ax == ICO_TOUCH_ANCHOR_L ? 'l' : 'r', c->dx, 0);
     put_num(&o, c->ay == ICO_TOUCH_ANCHOR_T ? 't' : 'b', c->dy, 0);
     sized = c->w > 0.0f || c->h > 0.0f;

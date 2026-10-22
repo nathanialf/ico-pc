@@ -1453,7 +1453,7 @@ static void test_touch_config(void)
     CHECK(ico_config_save() == 0);
     text = touch_file_read();
     CHECK(strstr(text, "cross = \"default\"") != NULL);
-    CHECK(strstr(text, "l2 = \"hidden\"") != NULL);
+    CHECK(strstr(text, "l2 = \"l4 t6 s1.00 o0\"") != NULL); /* hidden where it was put */
     free(text);
     ico_config_reset(kTouchFile, "");
     ico_touch_edits_defaults(&f);
