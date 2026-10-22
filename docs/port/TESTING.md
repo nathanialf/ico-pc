@@ -433,12 +433,17 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `rd_crack_test.c` with `rd_crack.cmake`: the crack filler above 1x
   ([RENDER.md](RENDER.md#crack-filling-above-1x)). A 640 x 448 frame under Enhanced, two flat
   triangles sharing a long diagonal edge, the second one's edge one 12.4 step (1/16 GS pixel) to
-  the right, two sprites 1.5 GS pixels apart and the fog, replayed with the filler off and then
+  the right, two sprites 1.5 GS pixels apart, below them a concave fold (two strips whose depth
+  falls steeply towards their shared line) and the fog, replayed with the filler off and then
   as the environment has it, SCENE read back: at 2x, 4x and 1800 x 1080 texels (2.8125 x 2.41;
   `rd_crack`, `rd_crack_4x`, `rd_crack_frac`) the edge shows texels of the clear's fog without
   the filler and none with it, each filled texel the colour and the depth of a drawn texel
   within the reach on its row or column, the slit keeps every texel of the clear's fog, nothing
-  the first replay drew changes, one fill pass is drawn and its count equals the texels changed;
+  the first replay drew changes (the fold among it), one fill pass is drawn and its count equals
+  the texels changed; with `backdrop` (`rd_crack_backdrop`, `rd_crack_backdrop_4x`,
+  `rd_crack_backdrop_frac`) a far plane writes Z over the frame first and the two triangles lie
+  near each other in depth, so the cracks hold the plane's depth and colour and are filled the
+  same (the discontinuity form) while the slit keeps the plane;
   at 1x, under Original, under MSAA4 and with `ICO_RD_CRACK_FILL=0` (`rd_crack_1x`,
   `rd_crack_original`, `rd_crack_msaa`, `rd_crack_off`) no fill pass and the same bytes; the same
   2x run on the depth copy, the buffer path, D24S8 (no depth readback: colours only) and the

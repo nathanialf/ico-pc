@@ -26,7 +26,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_blur.c` | staticBlur.c's sprites and the reduction's, for `rd__blur_post_sprite`; the open border's strips |
 | `port/render/rd_blur_border.c` | the post sprites' replay (`rd__blur_post_sprite`): the fold, the reduction's open border and its outer columns, SCENE's outer columns repeated after the fog |
 | `port/render/rd_blur_smooth.c` | Motion blur: Smooth: the motion blur's accumulator, its two passes and the sprite drawn over it (`rd__blur_smooth_sprite`) |
-| `port/render/rd_crack_fill.c` | the crack filler above 1x: the pixels no draw covered between drawn ones filled before the fog, and their count ([Crack filling above 1x](#crack-filling-above-1x)) |
+| `port/render/rd_crack_fill.c` | the crack filler above 1x: the pixels no draw covered (or a farther surface seen through a seam) between drawn ones filled before the fog, and their count ([Crack filling above 1x](#crack-filling-above-1x)) |
 | `port/render/rd_shadow.c` | the shadow count on the stencil |
 | `port/render/rd_water.c` | render-to-texture blocks, target aliases, camera scopes, pool STs |
 | `port/render/rd_fog_path.c` | how the fog reads the scene depth; the fog probe and self-test |
@@ -2396,10 +2396,11 @@ path (self-test: stencil fail 2 at sample 1: 28C85000 for FAFA0A40, snapshot ok 
 The VU truncates every vertex to the GS's 1/16 pixel grid, each part of the world through its own
 node matrix, so two triangles that meet in the model can leave a crack of 1/16 GS pixel between
 them ([DIVERGENCES.md](DIVERGENCES.md#video) VD-20; at a scale that is not a whole number the GPU
-snaps the scaled position a second time, VD-19). A pixel whose centre falls into it keeps the
-clear's GS Z 0, which the fog's table takes as its entry 0: a dot of the full fog colour (the
-probe's `table entry 0`, [the fog path](#the-fog-path-and-its-self-test)). At 1x those dots are
-the PS2's own. Above 1x a crack catches texel centres all along its length, and the dots run along
+snaps the scaled position a second time, VD-19). A pixel whose centre falls into it keeps what
+lies behind the two parts: the clear's GS Z 0 where nothing does, which the fog's table takes as
+its entry 0, a dot of the full fog colour (the probe's `table entry 0`,
+[the fog path](#the-fog-path-and-its-self-test)), or a farther surface, a dot of that surface
+painted at its own, deeper fog level. At 1x those dots are the PS2's own. Above 1x a crack catches texel centres all along its length, and the dots run along
 the seams of walls and floors (issue 26: rows of them on a doorway's edge and a platform's top at
 4K).
 
@@ -2411,16 +2412,41 @@ too; the fog then begins it again, readable) and before the fog reads the depth
 (`rd__depth_copy_take`, the copy path's own texture, made on the other paths), and draws one
 triangle over SCENE with its depth attached: `crack_fill_ps` (`port/shaders/blit.hlsl`, behind
 `blit_vs`, key `rd__crack_fill_key(0)`: test ALWAYS with writes, no blend, the stencil loaded and
-stored untouched) gives a texel of depth 0 the colour and the depth (SV_Depth) of the nearer
-written texel where a run of at most R texels of depth 0 along its row or its column, the texel
-among them, has a written texel at each end; the shorter run of the two axes wins, the row on a
-tie, and within a run the end before it on a tie. Every other texel is discarded. R on an axis is
+stored untouched) gives a crack the colour and the depth (SV_Depth) of the nearer end of its run.
+A texel is a crack when a run of at most R texels along its row or its column, the texel among
+them, has at each end a texel in front of it (written, and nearer by more than 1/64 of its own
+depth, `RD_CRACK_BEHIND`, `crack_front`), and the texel is either at depth 0 (no draw covered it)
+or drawn behind both ends by a step in depth (`crack_behind`): the two ends within half the drop
+of each other (two parts of one surface, not a near and a far object), and the texel behind each
+end's surface carried on to it (the end and the texel beyond it, a straight line in depth: GS Z
+is linear across a triangle on the screen) by more than 1/64 of that depth, so the texels of a
+concave fold between two faces, each on one of the two planes, stay. Depths grow with GS Z and
+are linear in it on every format (`gs_z_to_depth`; the float form's top band, the UI's, only
+ever reads as nearer), so 1/64 of a depth is 1/64 of GS Z: in the rooms of the corpus the drawn
+cracks lie 4 to over 50 steps of the fog's index (Z bits 16..23) behind their ends, from about
+1.3 % of the ends' Z, while the texels of one surface differ by 0 to 2 steps from texel to texel. The
+shorter run of the two axes wins, the row on a tie, and within a run the end before it on a tie.
+Every other texel is discarded. R on an axis is
 ceil(scale / 2), at most 3, and 0 at a scale of 1 or less (`rd__crack_fill_reach`): 1 at 2x and
 1.154, 2 at 2.8125 and 4x, 3 from 6x. The crack is under a texel wide at every scale up to 16x,
 while a slit of a GS pixel or more (2 texels at 2x, 4 at 4x) is the game's and stays. The values
 are exact copies, nothing filtered; the depth goes with the colour, so the fog paints the
 neighbour's fog level there and the draws after the fog see a surface. The texels the first pass
 drew are not touched, so the picture differs from the one without the filler only at the cracks.
+
+What the cracks hold, measured on lavapipe with the replay tool and copies of the dumps (the
+clear's colour or the fog table's entries patched, every command after the fog NOPed): in the
+issue-91 4K dumps (scale 5.581 x 4.821) the sky is the clear, and 727 texels of the fog's entry
+0 against it are filled, most along the lattice tower at the top left (the runs of 1, 2 and 3
+such texels across a row fall from 97, 90 and 60 to 9, 7 and 7). The rooms of the corpus
+(lightning rd-00200 and rd-00300, queen rd-00200 and rd-00300, at 2x and 4x) have no texel of
+depth 0 after the world's draws: lightning's clear patched to magenta shows on no texel before
+the fog, and the table's entry 0 patched to magenta on none after it in any of them, so their
+texels of the clear's RGB 1,1,1 are the walls' dark mortar, not cracks. With a table that writes
+each texel's index (and the fog sprite's Z raised so it reaches every texel), 22 to 105 texels a
+frame at 2x (lightning rd-00200 22, rd-00300 105, queen rd-00200 49, at the index's precision) lie
+in one-texel runs behind both neighbours, a farther surface seen through a seam: the
+discontinuity form's share.
 
 Not drawn at scale 1 on both axes, under the Original preset, on any replay with MSAA asked for
 (the fog then reads the multisampled scene or the resolve's smallest sample, VD-22; the filler
@@ -2429,8 +2455,8 @@ for a fog of any target but SCENE, without a sampleable depth (`RhiLimits.depthS
 `[dev] crack_fill = false` (`ICO_RD_CRACK_FILL=0`; the replay tool's `--no-crack-fill`). Its two
 keys join the fog's family in the start-up set (`rd__enumerate_reachable_fog`). Cost above 1x: a
 copy of SCENE's colour and of its depth (12 bytes a texel copied, 99 MB at 3840 x 2160) and one
-pass reading about one depth texel per drawn texel and up to thirteen per unwritten one; the depth
-copy texture (8 bytes a texel) is the copy path's own and is made on the other paths.
+pass reading thirteen depth texels per texel (the runs' ends, both axes) and four more where a
+drawn texel lies behind both ends of a run (the texels beyond them); the depth copy texture (8 bytes a texel) is the copy path's own and is made on the other paths.
 
 The count: one filled replay in `RD_CRACK_COUNT_EVERY` (16), and every one under
 `rd__crack_fill_count_all` (the tests, the replay tool's `--stats`), `crack_count_ps` runs the
@@ -2439,8 +2465,9 @@ in G), which is copied into a readback buffer and summed once the GPU is past th
 (RHI_FRAMES_IN_FLIGHT replays later, as the fog's edge probe; `rd__crack_fill_wait` waits for it).
 `RdPerfRecord.crackFillPasses` and `crackCountPasses` count the passes of a replay. The lines:
 
-- `rd: crack fill: on above 1x (scale 2x2, reach 1x1 texels); [dev] crack_fill = false turns it
-  off`, or `... on above 1x, not drawn at scale 1x1 (the GS's own grid); ...`, `... on above 1x,
+- `rd: crack fill: on above 1x (scale 2x2, reach 1x1 texels: a run of texels no draw covered, or
+  drawn over 1/64 of the depth behind both its ends, with a texel in front at each end takes the
+  nearer end); [dev] crack_fill = false turns it off`, or `... on above 1x, not drawn at scale 1x1 (the GS's own grid); ...`, `... on above 1x,
   not drawn under the Original preset; ...`, `rd: crack fill: off ([dev] crack_fill = false,
   ICO_RD_CRACK_FILL=0)`: at the start and whenever SCENE is made again or the state changes (one
   line for each change);
@@ -2453,7 +2480,8 @@ in G), which is copied into a readback buffer and summed once the GPU is past th
 - `--stats`: `<dump>: stats: crack fill on|off: P passes, N pixels filled (M replays counted;
   scale SXxSY, reach RXxRY texels; S fogged replays above 1x not filled)`.
 
-`rd_crack_test` (`rd_crack`, `rd_crack_4x`, `rd_crack_frac`, `rd_crack_1x`, `rd_crack_original`,
+`rd_crack_test` (`rd_crack`, `rd_crack_4x`, `rd_crack_frac`, `rd_crack_backdrop`,
+`rd_crack_backdrop_4x`, `rd_crack_backdrop_frac`, `rd_crack_1x`, `rd_crack_original`,
 `rd_crack_msaa`, `rd_crack_off`, `rd_crack_depth_copy`, `rd_crack_buffer`, `rd_crack_d24s8`,
 `rd_crack_nodual`) and `rd_replay_tool_crack` check it ([TESTING.md](TESTING.md)).
 
