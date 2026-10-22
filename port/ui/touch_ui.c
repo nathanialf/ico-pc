@@ -613,19 +613,28 @@ static void drawBand(const IcoTouchLayout *l, float th)
 /* Snap on: a faint dot where a control's centre can land, every grid step
    counted from the edge it is anchored to (the nearer edge of the region on
    each axis, as the editor anchors a drop), so what is seen is what
-   snaps; none in the hinge band */
+   snaps; carried on outward to the bounds' edges (under the camera hole);
+   none in the hinge band (carried along the hinge to the bounds) */
 #define GRID_DOTS 256
 
-static int gridLine(float lo, float len, float step, float *out)
+/* the dots of one axis: the region's [lo, lo + len] with the bounds'
+   [blo, blo + blen] around it */
+static int gridLine(float lo, float len, float blo, float blen, float step, float *out)
 {
     const float mid = lo + len * 0.5f;
     int n = 0;
 
-    for (int i = 0; n < GRID_DOTS / 2 && lo + (float)i * step <= mid; i++) {
-        out[n++] = lo + (float)i * step;
+    for (int i = (int)ceilf((blo - lo) / step - 0.001f);
+         n < GRID_DOTS / 2 && lo + (float)i * step <= mid; i++) {
+        if (lo + (float)i * step >= blo - 0.001f) {
+            out[n++] = lo + (float)i * step;
+        }
     }
-    for (int i = 0; n < GRID_DOTS && lo + len - (float)i * step > mid; i++) {
-        out[n++] = lo + len - (float)i * step;
+    for (int i = (int)ceilf((lo + len - (blo + blen)) / step - 0.001f);
+         n < GRID_DOTS && lo + len - (float)i * step > mid; i++) {
+        if (lo + len - (float)i * step <= blo + blen + 0.001f) {
+            out[n++] = lo + len - (float)i * step;
+        }
     }
     return n;
 }
@@ -633,14 +642,17 @@ static int gridLine(float lo, float len, float step, float *out)
 static void drawGrid(const IcoTouchOverlay *o, float th)
 {
     const IcoTouchLayout *l = &o->layout;
-    const IcoTouchRect *r = &l->region, *b = &l->band;
+    const IcoTouchRect *r = &l->region, *B = &l->bounds;
+    const IcoTouchRect bandRect = ico_touch_clamp_band(l);
+    const IcoTouchRect *b = &bandRect;
     const float step = o->edit.grid * l->unit, d = th * 0.5f;
     float xs[GRID_DOTS], ys[GRID_DOTS];
 
     if (!o->edit.snap || !(step >= 2.0f * th) || !(r->w > 0.0f) || !(r->h > 0.0f)) {
         return;
     }
-    const int nx = gridLine(r->x, r->w, step, xs), ny = gridLine(r->y, r->h, step, ys);
+    const int nx = gridLine(r->x, r->w, B->x, B->w, step, xs),
+              ny = gridLine(r->y, r->h, B->y, B->h, step, ys);
     for (int i = 0; i < nx; i++) {
         for (int j = 0; j < ny; j++) {
             if (b->w > 0.0f && b->h > 0.0f && xs[i] >= b->x && xs[i] <= b->x + b->w &&

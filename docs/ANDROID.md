@@ -285,7 +285,8 @@ whether it happens there too.
 
 ## Screens of every shape
 
-The picture reaches into the notch or camera hole, and it fills a folding
+The picture reaches into the notch or camera hole (the game's buttons keep
+clear of it, and Edit layout can put one there; see CONTROLS.md), and it fills a folding
 phone's screen when you open it. The game keeps running as you fold and
 unfold.
 

@@ -294,7 +294,7 @@ static int fold_apply(const IcoTouchEnv *env, IcoTouchRect S, float kPhys, IcoTo
     return FOLD_IGNORE;
 }
 
-/* the region below a horizontal band */
+/* the region below a horizontal band (and the bounds with it) */
 static void tabletop(IcoTouchLayout *l, IcoTouchRect band)
 {
     const float y = band.y + band.h;
@@ -302,6 +302,7 @@ static void tabletop(IcoTouchLayout *l, IcoTouchRect band)
     l->rule = ICO_TOUCH_RULE_TABLETOP;
     l->band = band;
     l->region = rect(l->safeRect.x, y, l->safeRect.w, l->safeRect.y + l->safeRect.h - y);
+    l->bounds = rect(0.0f, y, (float)l->outW, (float)l->outH - y);
 }
 
 /* --- the edits (touch_edit.h) --------------------------------------------- */
@@ -328,9 +329,25 @@ static int box_inside(IcoTouchRect R, float cx, float cy, float w, float h)
            cy - 0.5f * h >= R.y - CLAMP_EPS && cy + 0.5f * h <= R.y + R.h + CLAMP_EPS;
 }
 
+/* the hinge band carried along the hinge out to the bounds (the editor lets a
+   control reach the window's edges, so the band must reach them too); zero
+   stays zero */
+IcoTouchRect ico_touch_clamp_band(const IcoTouchLayout *l)
+{
+    const IcoTouchRect b = l->band, B = l->bounds;
+
+    if (!(b.w > 0.0f && b.h > 0.0f)) {
+        return b;
+    }
+    if (b.y <= l->region.y && b.y + b.h >= l->region.y + l->region.h) { /* vertical */
+        return rect(b.x, B.y, b.w, B.h);
+    }
+    return rect(B.x, b.y, B.w, b.h);
+}
+
 int ico_touch_edit_clamp(const IcoTouchLayout *l, float *cx, float *cy, float w, float h)
 {
-    const IcoTouchRect R = l->region, b = l->band;
+    const IcoTouchRect R = l->bounds, b = ico_touch_clamp_band(l);
     float cand[4][2], best = 0.0f, bx = 0.0f, by = 0.0f;
     int i, found = 0;
 
@@ -371,7 +388,7 @@ int ico_touch_edit_clamp(const IcoTouchLayout *l, float *cx, float *cy, float w,
    it that holds (px, py) */
 static IcoTouchRect cut_to_side(const IcoTouchLayout *l, IcoTouchRect r, float px, float py)
 {
-    const IcoTouchRect R = l->region, b = l->band;
+    const IcoTouchRect R = l->bounds, b = ico_touch_clamp_band(l);
     float x0 = maxf_(r.x, R.x), y0 = maxf_(r.y, R.y);
     float x1 = minf_(r.x + r.w, R.x + R.w), y1 = minf_(r.y + r.h, R.y + R.h);
 
@@ -394,7 +411,7 @@ static IcoTouchRect cut_to_side(const IcoTouchLayout *l, IcoTouchRect r, float p
 /* the widest the look pad may be beside a band that crosses the region */
 static void look_shrink(const IcoTouchLayout *l, float *w, float *h)
 {
-    const IcoTouchRect R = l->region, b = l->band;
+    const IcoTouchRect R = l->bounds, b = ico_touch_clamp_band(l);
 
     *w = minf_(*w, R.w);
     *h = minf_(*h, R.h);
@@ -659,6 +676,7 @@ static IcoTouchLayout build(uint32_t outW, uint32_t outH, IcoTouchInsets safe, i
 
     l.rule = ICO_TOUCH_RULE_FULL;
     l.region = l.safeRect;
+    l.bounds = rect(0.0f, 0.0f, W, H);
     fold = fold_apply(env, l.safeRect, qPhys, &band);
     if (fold == FOLD_SPLIT) {
         l.rule = ICO_TOUCH_RULE_SPLIT;
@@ -668,7 +686,7 @@ static IcoTouchLayout build(uint32_t outW, uint32_t outH, IcoTouchInsets safe, i
     }
     place(&l, fit(&l, q0));
     apply_edits(&l, edits);
-    if (fold == FOLD_FLAT && controls_touch(&l, band)) {
+    if (fold == FOLD_FLAT && controls_touch(&l, ico_touch_clamp_band(&l))) {
         /* a flat crease under a button (where the edits put it): below it
            instead, with that posture's edits */
         tabletop(&l, band);

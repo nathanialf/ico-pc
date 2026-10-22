@@ -620,7 +620,9 @@ installed by the window host; without it the row is locked.
 `touch_ui.c` draws every control at its layout alpha and skips a hidden one. While the snapshot's
 `edit` view is active it draws at opacity 1, floors every control at 0.35, draws hidden ones
 dashed with the word Hidden, outlines the look pad's area, hatches the hinge band, dots the grid
-from the anchor edges when snap is on (so the dots are where the drops land), outlines the
+from the anchor edges when snap is on, carried out to the bounds' edges (the window's, so the
+dots reach under a camera hole) and skipping the band carried to them (so the dots are where the
+drops land), outlines the
 selection with its name and the overlapping controls in amber (`kWarn`), and draws the toolbar
 strip along the top: each cell one line of words shrunk to fit ("Snap: On", "Grid: 4 mm",
 "Opacity -"), the keys framed, the two readouts on a fainter backing without a frame ("Size 120
