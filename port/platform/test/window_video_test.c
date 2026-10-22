@@ -3,7 +3,11 @@
  *
  * This exercises their readback and logging: what they return is the
  * window's state after the request, and the size they report is the
- * window's pixel size then.  It does not exercise X11, KWin or gamescope (the
+ * window's pixel size then.  Fullscreen asks the desktop's own mode
+ * (ico_window_video_desktop_mode): checked as the mode SDL then holds for
+ * the window, or its absence where the driver takes none; whether the
+ * display goes exclusive is the window system's and the driver's, which
+ * no driver here shows.  It does not exercise X11, KWin or gamescope (the
  * offscreen driver has no window manager to refuse anything); the Deck is
  * where that is checked, through the log lines these calls write.
  *
@@ -125,10 +129,34 @@ int main(void)
               "windowed still frameless or fullscreen");
         CHECK(pw == 960 && ph == 720, "windowed size %dx%d, want 960x720", pw, ph);
 
-        /* fullscreen again, then fullscreen -> borderless leaves it */
-        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_FULLSCREEN, NULL, NULL);
+        /* fullscreen again, at the desktop's own mode (an exclusive
+           fullscreen without a change of resolution or refresh rate), or
+           without a mode where SDL refuses it; then fullscreen ->
+           borderless leaves it */
+        pw = ph = -1;
+        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_FULLSCREEN, &pw, &ph);
         CHECK(r == ICO_WINDOWVIDEO_FULLSCREEN, "mode fullscreen returned %d", r);
         CHECK((SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) != 0, "mode fullscreen: no flag");
+        CHECK(pw == desk->w && ph == desk->h, "mode fullscreen: %dx%d, desktop %dx%d", pw, ph,
+              desk->w, desk->h);
+        {
+            const SDL_DisplayMode *fm = SDL_GetWindowFullscreenMode(w);
+            const int asked = ico_window_video_desktop_mode(w);
+
+            CHECK(asked == (SDL_GetWindowFullscreenMode(w) != NULL),
+                  "desktop mode: returned %d, the window's mode %s", asked,
+                  SDL_GetWindowFullscreenMode(w) != NULL ? "set" : "none");
+            if (fm != NULL) {
+                CHECK(
+                    fm->w == desk->w && fm->h == desk->h && fm->refresh_rate == desk->refresh_rate,
+                    "mode fullscreen asked %dx%d at %.2f Hz, desktop %dx%d at %.2f Hz", fm->w,
+                    fm->h, (double)fm->refresh_rate, desk->w, desk->h, (double)desk->refresh_rate);
+            } else {
+                printf("mode fullscreen: SDL took no mode on the %s driver (desktop "
+                       "fullscreen)\n",
+                       SDL_GetCurrentVideoDriver());
+            }
+        }
         r = ico_window_video_mode(w, ICO_WINDOWVIDEO_BORDERLESS, NULL, NULL);
         CHECK(r == ICO_WINDOWVIDEO_BORDERLESS, "fullscreen -> borderless returned %d", r);
         CHECK((SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) == 0, "still fullscreen");

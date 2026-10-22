@@ -25,7 +25,16 @@ enum {
    pxW and pxH (may be NULL) receive the pixel size read back. A refused
    request is logged with SDL's reason. */
 int ico_window_video_fullscreen(SDL_Window *w, int want, int *pxW, int *pxH);
-/* Puts the window in mode: FULLSCREEN is SDL's desktop fullscreen;
+/* Sets the fullscreen mode the window takes when it goes fullscreen: its
+   display's desktop mode (SDL_GetDesktopDisplayMode: the resolution and
+   refresh rate the desktop already has), which makes SDL's fullscreen an
+   exclusive one (SDL_SetWindowFullscreenMode) without a mode change.  When
+   the desktop mode is unknown or SDL refuses it, NULL (SDL's borderless
+   desktop fullscreen).  Logs which; returns 1 for the desktop mode, 0 for
+   NULL.  Applies at once to a window already fullscreen. */
+int ico_window_video_desktop_mode(SDL_Window *w);
+/* Puts the window in mode: FULLSCREEN is an exclusive fullscreen at the
+   desktop's own mode (ico_window_video_desktop_mode);
    BORDERLESS a frameless window over its display (on Wayland, which does
    not let a window place itself, a frameless maximised one); WINDOWED the
    framed window at the rectangle it had before it left the windowed state.

@@ -94,6 +94,28 @@ static int on_wayland(void)
     return d != NULL && strcmp(d, "wayland") == 0;
 }
 
+int ico_window_video_desktop_mode(SDL_Window *w)
+{
+    const SDL_DisplayID d = SDL_GetDisplayForWindow(w);
+    const SDL_DisplayMode *m = d != 0 ? SDL_GetDesktopDisplayMode(d) : NULL;
+
+    /* SDL_SetWindowFullscreenMode takes one of the display's modes
+       (SDL_video.h); the desktop mode SDL reports is one.  Without it, or
+       refused, NULL: SDL's borderless fullscreen at the desktop
+       resolution, the request of a driver that has no modes */
+    if (m != NULL && SDL_SetWindowFullscreenMode(w, m)) {
+        fprintf(stderr, "window: fullscreen asks the desktop's mode %dx%d at %.2f Hz (exclusive)\n",
+                m->w, m->h, (double)m->refresh_rate);
+        return 1;
+    }
+    fprintf(stderr,
+            "window: fullscreen without a mode (the desktop's mode %s: %s); SDL's desktop "
+            "fullscreen\n",
+            m == NULL ? "is unknown" : "was refused", SDL_GetError());
+    SDL_SetWindowFullscreenMode(w, NULL);
+    return 0;
+}
+
 int ico_window_video_mode(SDL_Window *w, int mode, int *pxW, int *pxH)
 {
     int pw = 0, ph = 0;
@@ -109,8 +131,9 @@ int ico_window_video_mode(SDL_Window *w, int mode, int *pxW, int *pxH)
             s_maximizedByUs = 0;
         }
         SDL_SetWindowBordered(w, true);
-        /* no mode set: SDL's borderless fullscreen at the desktop resolution
-           (never an exclusive mode) */
+        /* the desktop's own mode: an exclusive fullscreen without a change
+           of resolution or refresh rate */
+        ico_window_video_desktop_mode(w);
         if (!SDL_SetWindowFullscreen(w, true)) {
             fprintf(stderr, "window: fullscreen refused: %s\n", SDL_GetError());
         }
@@ -157,11 +180,18 @@ int ico_window_video_mode(SDL_Window *w, int mode, int *pxW, int *pxH)
     SDL_SyncWindow(w);
     const int real = real_mode(w);
     SDL_GetWindowSizeInPixels(w, &pw, &ph);
-    fprintf(stderr, "window: mode %s (window %dx%d pixels)%s\n",
+    /* fullscreen: exclusive at a mode, or SDL's desktop fullscreen (what
+       the window system made of the request: Wayland, gamescope and macOS
+       handle a mode as they can) */
+    const char *how = real != ICO_WINDOWVIDEO_FULLSCREEN ? ""
+                      : SDL_GetWindowFullscreenMode(w) != NULL
+                          ? ", the desktop's mode asked (exclusive)"
+                          : ", desktop fullscreen";
+    fprintf(stderr, "window: mode %s (window %dx%d pixels%s)%s\n",
             real == ICO_WINDOWVIDEO_FULLSCREEN   ? "fullscreen"
             : real == ICO_WINDOWVIDEO_BORDERLESS ? "borderless"
                                                  : "windowed",
-            pw, ph, real != mode ? "; the window manager did not follow the request" : "");
+            pw, ph, how, real != mode ? "; the window manager did not follow the request" : "");
     if (pxW != NULL) {
         *pxW = pw;
     }
