@@ -1074,14 +1074,17 @@ static void checkPipelines(void)
 }
 
 /* ============================================ (o) the outer columns' probe
- * rd_fog_path.c's edge probe (issue 129).  On the CPU: the rows at GS Z 0
- * of a pair of depth words a row (D32F bits and D24 steps) and the line
- * they make.  On a device, Full pixel on at 4:3 (the frame its exact
- * width, the reduction's border open): the cells' scene with its few cells
- * left at the clear's Z 0, two of them at the frame's edges (cell 96 at
- * column 0, rows 192..223; cell 127 at the right edge, rows 224..255),
- * fogged a few frames: the probe's line names those rows; with Full pixel
- * off (the run before) nothing is copied and no line is logged. */
+ * rd_fog_path.c's edge probe (issues 129 and 26).  On the CPU: the rows at
+ * GS Z 0 of a pair of depth words a row (D32F bits and D24 steps) and the
+ * line they make, with each of the four places those columns go
+ * (rd__scene_border_state: open, cropped, closed, Full pixel's window).  On
+ * a device, Full pixel on at 4:3 (the frame its exact width, the
+ * reduction's border open): the cells' scene with its few cells left at
+ * the clear's Z 0, two of them at the frame's edges (cell 96 at column 0,
+ * rows 192..223; cell 127 at the right edge, rows 224..255), fogged a few
+ * frames: the probe's line names those rows; with Full pixel off (the run
+ * before) the probe runs too, and a line it logged says the border is
+ * closed. */
 static void checkEdgeLine(void)
 {
     /* 10 rows of a pair of words, 16 bytes a row (a padded pitch) */
@@ -1112,15 +1115,43 @@ static void checkEdgeLine(void)
           c[2].first, c[2].last, c[3].zero);
     char line[512];
     static const uint8_t lut0[4] = {0xF0, 0xE8, 0xD0, 0x80};
-    rd__fog_edge_line(line, sizeof(line), c, 832, lut0);
+    rd__fog_edge_line(line, sizeof(line), c, 832, RD_BORDER_OPEN, lut0);
     static const char *want =
         "fog: probe: outer columns: depth 0 at texel column 0 in 3 of 10 rows (rows 3..5), "
         "column 1 in 0 of 10 rows, column 1662 in 2 of 4 rows (rows 0..3), column 1663 in 0 of "
-        "4 rows; the border is open at the frame's exact width (832 GS pixels, its outer two "
-        "columns a side drawn as columns 2 and 829), table entry 0 = F0E8D0";
+        "4 rows; the border is open at the frame's exact width (832 GS pixels): they reach the "
+        "screen, SCENE repeats columns 2 and 829 over them before the glow, table entry 0 = "
+        "F0E8D0";
     CHECK(strcmp(line, want) == 0, "(o) the line:\n  %s\n  wanted\n  %s", line, want);
+
+    /* the other three places those columns go: the line names each, so a
+       16:9 log carries the count too (issue 26) */
+    static const struct {
+        int state;
+        uint32_t gsW;
+        const char *tail;
+    } kTails[3] = {
+        {RD_BORDER_CROPPED, 688,
+         "; the frame is cropped (688 GS pixels): the present leaves them out but the glow reads "
+         "them, SCENE repeats columns 2 and 685 over them before it, table entry 0 = n/a"},
+        {RD_BORDER_CLOSED, 512,
+         "; the border is closed (512 GS pixels): the reduction shows black there but the glow "
+         "reads them, SCENE keeps them (the PS2's picture), table entry 0 = n/a"},
+        {RD_BORDER_WINDOW, 688,
+         "; the frame is cropped to Full pixel's window (688 GS pixels): SCENE holds the visible "
+         "columns only, these are the screen's edge, table entry 0 = n/a"},
+    };
+
+    for (int i = 0; i < 3; i++) {
+        rd__fog_edge_line(line, sizeof(line), c, kTails[i].gsW, kTails[i].state, NULL);
+        const char *tail = strchr(line, ';');
+        CHECK(tail && strcmp(tail, kTails[i].tail) == 0,
+              "(o) the line (state %d):\n  %s\n  wanted "
+              "the tail\n  %s",
+              kTails[i].state, line, kTails[i].tail);
+    }
     char shortLine[40];
-    const size_t n = rd__fog_edge_line(shortLine, sizeof(shortLine), c, 832, NULL);
+    const size_t n = rd__fog_edge_line(shortLine, sizeof(shortLine), c, 832, RD_BORDER_OPEN, NULL);
     CHECK(n == sizeof(shortLine) - 1 && strlen(shortLine) == n,
           "(o) a short buffer holds the line's start (%zu)", n);
 }
@@ -1138,8 +1169,8 @@ static void checkEdgeProbe(void)
         "fog: probe: outer columns: depth 0 at texel column 0 in 32 of 512 rows (rows 192..223), "
         "column 1 in 32 of 512 rows (rows 192..223), column 510 in 32 of 512 rows (rows "
         "224..255), column 511 in 32 of 512 rows (rows 224..255); the border is open at the "
-        "frame's exact width (512 GS pixels, its outer two columns a side drawn as columns 2 "
-        "and 509), table entry 0 = C89664";
+        "frame's exact width (512 GS pixels): they reach the screen, SCENE repeats columns 2 "
+        "and 509 over them before the glow, table entry 0 = C89664";
     const char *got = rd__fog_edge_last();
     printf("  (o) %s\n", got[0] ? got : "(no line)");
     CHECK(strcmp(got, want) == 0, "(o) the probe's line:\n  %s\n  wanted\n  %s", got, want);
@@ -1230,7 +1261,11 @@ int main(void)
     }
 
     checkPipelines();
-    CHECK(rd__fog_edge_last()[0] == '\0', "(o) Full pixel off: no outer columns' line (%s)",
+    /* the probe runs with the border closed too (issue 26): any line it
+       logged here names it */
+    CHECK(rd__fog_edge_last()[0] == '\0' ||
+              strstr(rd__fog_edge_last(), "; the border is closed (512 GS pixels): ") != NULL,
+          "(o) Full pixel off: the outer columns' line says the border is closed (%s)",
           rd__fog_edge_last());
     CHECK(g_rd.above1xDraws == 0, "1x: %u draws above 1x", g_rd.above1xDraws);
     CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
