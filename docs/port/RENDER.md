@@ -2351,21 +2351,27 @@ covered keeps from the clear (`...; pixels nothing drew take the fog's colour at
 = RRGGBBAA`): a line of that colour in a report's picture is a gap in the geometry
 ([Camera blending](#camera-blending)) (`port/render/rd_fog_path.c` (`rd__fog_probe_record`)).
 At every aspect and with Full pixel either way, the edge probe copies the depth the
-fog read at texel columns 0, 1, tw - 2 and tw - 1, every row, on every 32nd fogged replay, into a
-readback buffer that a replay two frames on counts without a wait (`rd__fog_edge_due`,
-`rd__fog_edge_record`, called by `doFog` after its draw, the pass ended first); the depth is the
-game's, as SCENE's repeat ([SCENE's outer columns](#post-passes)) copies the colour alone. A probe
-that finds rows at GS Z 0 logs, the first three in each 10 s, `rd: fog: probe: outer columns:
-depth 0 at texel column 0 in N of M rows (rows a..b), column 1 in ..., column T-2 in ..., column
-T-1 in ...; <where they go>, table entry 0 = RRGGBB`, where they go being, as
-`rd__scene_border_state` was at the copy, `the border is open at the frame's exact width (W GS
-pixels): they reach the screen, SCENE repeats columns 2 and W-3 over them before the glow`, `the
-frame is cropped (W GS pixels): the present leaves them out but the glow reads them, SCENE repeats
-columns 2 and W-3 over them before it`, `the border is closed (W GS pixels): the reduction shows
-black there but the glow reads them, SCENE keeps them (the PS2's picture)` (512), `the border is
-closed (W GS pixels, wider than the PS2's): ..., SCENE repeats columns 2 and W-3 over them before
-it` or `the frame is cropped to Full pixel's window (W GS pixels): SCENE repeats columns 2 and W-3
-over the texels of them it holds before the glow`; so a 16:9 log carries the count too. The rest of those 10 s is one total at the
+fog read for the frame's first 8 and last 8 GS columns (`RD_FOG_EDGE_COLS`), every row, on every
+32nd fogged replay, into a readback buffer that a replay two frames on counts without a wait
+(`rd__fog_edge_due`, `rd__fog_edge_record`, called by `doFog` after its draw, the pass ended
+first). Each GS column is read at its first texel, `ceil(x * sx - ox)` clamped to 0 and kept only
+while it is under the next column's (`rd__fog_edge_texel`), so a depth target holding only Full
+pixel's window reports the columns it holds and `-` for the ones left out; the copies are two
+blocks, texels 0 up to the left's last read texel and the right's first read texel up to tw. The
+depth is the game's, as SCENE's repeat ([SCENE's outer columns](#post-passes)) copies the colour
+alone. A probe that finds rows at GS Z 0 logs, the first three in each 10 s, `rd: fog: probe: outer
+columns: depth 0 per column [n0 n1 ... n7] of M rows (rows a..b) | [n(W-8) ... n(W-1)]; frame W GS
+wide, crop C columns a side, border <where they go>, table entry 0 = RRGGBB`: each n is the rows
+of that GS column at Z 0, M the rows looked at, the run (left out when it has none) that of the
+first held column on the left, C the GS columns the present leaves out at each side, `(W - the
+exact width) / 2`, and where they go being, as `rd__scene_border_state` was at the copy, `open at
+the frame's exact width: they reach the screen, SCENE repeats columns 2 and W-3 over them before
+the glow`, `cropped by the present: the glow reads them, SCENE repeats columns 2 and W-3 over them
+before it`, `closed: the reduction shows black there but the glow reads them, SCENE keeps them (the
+PS2's picture)` (512), `closed (wider than the PS2's): ..., SCENE repeats columns 2 and W-3 over
+them before it` or `in Full pixel's window: SCENE repeats columns 2 and W-3 over the texels of them
+it holds before the glow`; so a 16:9 log carries the count too, and the eight counts a side say how
+wide an uncovered band is, not only that column 0 has one. The rest of those 10 s is one total at the
 next probe after them, `rd: fog: probe: outer columns: depth 0 there in N more probes in the last
 10 s (T in all)`. Nothing is copied in the self-test's replays, on the multisampled read, or on
 D3D12's depth (copied to a buffer only whole). Rows at Z 0 there mean the game left those columns

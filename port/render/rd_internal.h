@@ -2932,15 +2932,22 @@ bool rd__fog_probe_pending(void);
  * doFog asks rd__fog_edge_due (want: the fog not the multisampled read; it
  * also counts the copies of a replay the GPU is past and logs them) and, when it
  * says so, ends its pass and calls rd__fog_edge_record, which copies the
- * fog's depth (src, tz's size) at texel columns 0, 1, tw - 2 and tw - 1
- * into a readback buffer; lut: the fog's table (its entry 0 named), NULL.
- * rd__fog_edge_column counts the rows of column index (0 or 1) of a pair
- * of words per row, pitch bytes apart, at GS Z 0; rd__fog_edge_line writes
- * the "fog: probe: outer columns:" line for four of them; rd__fog_edge_last
- * is the last such line logged ("" before one, tests). */
+ * fog's depth (src, tz's size) of the frame's first and last
+ * RD_FOG_EDGE_COLS GS columns into a readback buffer; lut: the fog's table
+ * (its entry 0 named), NULL.  rd__fog_edge_texel is the texel GS column x
+ * is read at on a target of tw texels at sx texels a GS pixel less Full
+ * pixel's crop ox (the column's first, at or right of its left edge), -1
+ * when the target holds none of it; rd__fog_edge_column counts the rows of
+ * word index of each row, pitch bytes apart, at GS Z 0; rd__fog_edge_line
+ * writes the "fog: probe: outer columns:" line for the 2 * RD_FOG_EDGE_COLS
+ * columns (left then right; rows 0: not held, printed "-"), crop the GS
+ * columns the present leaves out a side; rd__fog_edge_last is the last such
+ * line logged ("" before one, tests). */
+#define RD_FOG_EDGE_COLS 8
+
 typedef struct RdFogEdgeColumn {
-    uint32_t column;      /* the texel column */
-    uint32_t rows;        /* the rows looked at */
+    uint32_t column;      /* the GS column */
+    uint32_t rows;        /* the rows looked at (0: the column is not held) */
     uint32_t zero;        /* of them at GS Z 0 */
     uint32_t first, last; /* the first and last of those (zero 0: none) */
 } RdFogEdgeColumn;
@@ -2948,10 +2955,11 @@ typedef struct RdFogEdgeColumn {
 bool rd__fog_edge_due(bool want, const RdFogSource *src, const RdTargetRec *tz);
 void rd__fog_edge_record(RhiCommandList cl, const RdTargetRec *tz, uint32_t zid,
                          const RdFogSource *src, const uint8_t *lut);
+int32_t rd__fog_edge_texel(float sx, float ox, uint32_t tw, int32_t x);
 void rd__fog_edge_column(const uint8_t *data, uint32_t pitch, uint32_t rows, uint32_t index,
                          bool d24, float zScale, uint32_t column, RdFogEdgeColumn *out);
-size_t rd__fog_edge_line(char *out, size_t size, const RdFogEdgeColumn c[4], uint32_t gsW,
-                         int state, const uint8_t *lut0);
+size_t rd__fog_edge_line(char *out, size_t size, const RdFogEdgeColumn c[2 * RD_FOG_EDGE_COLS],
+                         uint32_t gsW, float crop, int state, const uint8_t *lut0);
 const char *rd__fog_edge_last(void);
 /* rd_core.c, after the named targets were made again: a new SCENE size arms
  * the probe and, once rd_fog_selftest has run, runs the self-test again. */

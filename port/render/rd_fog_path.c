@@ -523,34 +523,39 @@ void rd__fog_probe_finish(void)
 
 /* ------------------------------------------------------- the edge probe
  * Every RD_FOG_EDGE_EVERY-th fogged replay (rd_replay.c doFog asks, at
- * every aspect and Full pixel either way) copies the depth the fog read at
- * texel columns 0, 1, tw - 2 and tw - 1, every row, into a readback
- * buffer; a later replay, once the GPU is past the one that copied
- * (RHI_FRAMES_IN_FLIGHT replays on: no wait), counts the rows at GS Z 0 in
- * each, which no draw covered and the fog paints with its table's entry 0
- * (issue 129: a bright band at a phone's left edge in one room; issue 26:
- * the same band at 16:9, spread in by the glow).  The depth is the game's:
- * SCENE's repeat of its outer columns (rd_blur_border.c) copies the colour
- * alone, later.  A probe that finds none logs nothing; one that finds some
- * logs, the first RD_FOG_EDGE_LINES in each 10 s,
- *   fog: probe: outer columns: depth 0 at texel column 0 in N of M rows
- *        (rows a..b), column 1 in ..., column tw-2 in ..., column tw-1 in
- *        ...; <where those columns go>, table entry 0 = RRGGBB
- * where those columns go being one of (rd__scene_border_state, at the copy)
- *   the border is open at the frame's exact width (W GS pixels): they
- *        reach the screen, SCENE repeats columns 2 and W-3 over them before
- *        the glow
- *   the frame is cropped (W GS pixels): the present leaves them out but
- *        the glow reads them, SCENE repeats columns 2 and W-3 over them
- *        before it
- *   the border is closed (512 GS pixels): the reduction shows black there
- *        but the glow reads them, SCENE keeps them (the PS2's picture)
- *   the border is closed (W GS pixels, wider than the PS2's): the
- *        reduction shows black there but the glow reads them, SCENE
- *        repeats columns 2 and W-3 over them before it
- *   the frame is cropped to Full pixel's window (W GS pixels): SCENE
- *        repeats columns 2 and W-3 over the texels of them it holds before
- *        the glow
+ * every aspect and Full pixel either way) copies the depth the fog read
+ * for the frame's first RD_FOG_EDGE_COLS and last RD_FOG_EDGE_COLS GS
+ * columns, every row, into a readback buffer; a later replay, once the GPU
+ * is past the one that copied (RHI_FRAMES_IN_FLIGHT replays on: no wait),
+ * counts the rows at GS Z 0 in each column, which no draw covered and the
+ * fog paints with its table's entry 0 (issue 129: a bright band at a
+ * phone's left edge in one room; issue 26: the same band at 16:9, spread in
+ * by the glow).  A GS column is read at its first texel
+ * (rd__fog_edge_texel: the first at or right of the column's left edge,
+ * through the depth target's scale and Full pixel's crop ox), so a frame
+ * whose target holds only Full pixel's window reports the columns it holds
+ * and "-" for the ones left out.  The depth is the game's: SCENE's repeat
+ * of its outer columns (rd_blur_border.c) copies the colour alone, later.
+ * A probe that finds none logs nothing; one that finds some logs, the
+ * first RD_FOG_EDGE_LINES in each 10 s,
+ *   fog: probe: outer columns: depth 0 per column [n0 n1 ... n7] of M rows
+ *        (rows a..b) | [n(W-8) ... n(W-1)]; frame W GS wide, crop C columns
+ *        a side, border <where those columns go>, table entry 0 = RRGGBB
+ * (the rows: the first held column's run on the left, left out when it has
+ * none; C: the GS columns the present leaves out at each side, (W - the
+ * exact width) / 2) where those columns go being one of
+ * (rd__scene_border_state, at the copy)
+ *   open at the frame's exact width: they reach the screen, SCENE repeats
+ *        columns 2 and W-3 over them before the glow
+ *   cropped by the present: the glow reads them, SCENE repeats columns 2
+ *        and W-3 over them before it
+ *   closed: the reduction shows black there but the glow reads them, SCENE
+ *        keeps them (the PS2's picture)                     (W = 512)
+ *   closed (wider than the PS2's): the reduction shows black there but the
+ *        glow reads them, SCENE repeats columns 2 and W-3 over them before
+ *        it
+ *   in Full pixel's window: SCENE repeats columns 2 and W-3 over the texels
+ *        of them it holds before the glow
  * and the rest of those 10 s as one total at the next probe after them
  *   fog: probe: outer columns: depth 0 there in N more probes in the
  *        last 10 s (T in all)
@@ -564,8 +569,12 @@ static struct {
     uint64_t size;
     bool pending;    /* copies recorded, not counted yet */
     uint64_t replay; /* g_rd.replayCounter when they were */
-    uint32_t tw, th, pitch, half, gsW;
-    int state; /* rd__scene_border_state at the copy */
+    uint32_t th, pitch, half, gsW;
+    /* each GS column's word in its block (left block from texel 0, right
+     * from texel right0); -1: the column is not in the target */
+    int32_t word[2 * RD_FOG_EDGE_COLS];
+    float crop; /* the GS columns the present leaves out a side */
+    int state;  /* rd__scene_border_state at the copy */
     bool d24, haveLut;
     float zScale;
     uint8_t lut0[4];
@@ -575,6 +584,16 @@ static struct {
     uint32_t noBuf; /* the readback buffer could not be made, times */
     char last[512]; /* the last line logged (tests) */
 } s_edge;
+
+int32_t rd__fog_edge_texel(float sx, float ox, uint32_t tw, int32_t x)
+{
+    /* texel t lies at GS (t + ox) / sx (rd__gs_texel_x); the column's
+     * texels are those from ceil(x sx - ox) up to ceil((x + 1) sx - ox) */
+    const double t0 = ceil((double)x * (double)sx - (double)ox - 1e-4);
+    const double t1 = ceil((double)(x + 1) * (double)sx - (double)ox - 1e-4);
+    const double t = t0 < 0.0 ? 0.0 : t0;
+    return t < t1 && t < (double)tw ? (int32_t)t : -1;
+}
 
 void rd__fog_edge_column(const uint8_t *data, uint32_t pitch, uint32_t rows, uint32_t index,
                          bool d24, float zScale, uint32_t column, RdFogEdgeColumn *out)
@@ -596,48 +615,76 @@ void rd__fog_edge_column(const uint8_t *data, uint32_t pitch, uint32_t rows, uin
     }
 }
 
-size_t rd__fog_edge_line(char *out, size_t size, const RdFogEdgeColumn c[4], uint32_t gsW,
-                         int state, const uint8_t *lut0)
+/* "[n0 n1 ...]" for RD_FOG_EDGE_COLS columns, "-" for one not held */
+static size_t edgeCounts(char *out, size_t size, const RdFogEdgeColumn *c)
 {
-    size_t n = (size_t)snprintf(out, size, "fog: probe: outer columns: depth 0 at texel");
-    for (int k = 0; k < 4 && n < size; k++) {
-        n += (size_t)snprintf(out + n, size - n, "%s column %u in %u of %u rows", k ? "," : "",
-                              c[k].column, c[k].zero, c[k].rows);
-        if (c[k].zero && n < size) {
-            n += (size_t)snprintf(out + n, size - n, " (rows %u..%u)", c[k].first, c[k].last);
-        }
+    size_t n = 0;
+    for (int k = 0; k < RD_FOG_EDGE_COLS && n < size; k++) {
+        const char *sep = k ? " " : "[";
+        n += c[k].rows ? (size_t)snprintf(out + n, size - n, "%s%u", sep, c[k].zero)
+                       : (size_t)snprintf(out + n, size - n, "%s-", sep);
+    }
+    if (n < size) {
+        n += (size_t)snprintf(out + n, size - n, "]");
+    }
+    return n;
+}
+
+size_t rd__fog_edge_line(char *out, size_t size, const RdFogEdgeColumn c[2 * RD_FOG_EDGE_COLS],
+                         uint32_t gsW, float crop, int state, const uint8_t *lut0)
+{
+    size_t n = (size_t)snprintf(out, size, "fog: probe: outer columns: depth 0 per column ");
+    if (n < size) {
+        n += edgeCounts(out + n, size - n, c);
+    }
+    /* M rows and the run: the first held column on the left (else the
+     * first on the right) */
+    const RdFogEdgeColumn *first = NULL;
+    for (int k = 0; k < 2 * RD_FOG_EDGE_COLS && !first; k++) {
+        first = c[k].rows ? &c[k] : NULL;
+    }
+    if (n < size) {
+        n += (size_t)snprintf(out + n, size - n, " of %u rows", first ? first->rows : 0u);
+    }
+    if (n < size && first && first->zero && first < c + RD_FOG_EDGE_COLS) {
+        n += (size_t)snprintf(out + n, size - n, " (rows %u..%u)", first->first, first->last);
+    }
+    if (n < size) {
+        n += (size_t)snprintf(out + n, size - n, " | ");
+    }
+    if (n < size) {
+        n += edgeCounts(out + n, size - n, c + RD_FOG_EDGE_COLS);
+    }
+    if (n < size) {
+        n += (size_t)snprintf(out + n, size - n, "; frame %u GS wide, crop %.2f columns a side, ",
+                              gsW, (double)crop);
     }
     const unsigned w3 = gsW >= 3u ? gsW - 3u : 0u;
     if (n < size && state == RD_BORDER_OPEN) {
         n += (size_t)snprintf(out + n, size - n,
-                              "; the border is open at the frame's exact width (%u GS pixels): "
-                              "they reach the screen, SCENE repeats columns 2 and %u over them "
-                              "before the glow",
-                              gsW, w3);
+                              "border open at the frame's exact width: they reach the screen, "
+                              "SCENE repeats columns 2 and %u over them before the glow",
+                              w3);
     } else if (n < size && state == RD_BORDER_CROPPED) {
         n += (size_t)snprintf(out + n, size - n,
-                              "; the frame is cropped (%u GS pixels): the present leaves them out "
-                              "but the glow reads them, SCENE repeats columns 2 and %u over them "
-                              "before it",
-                              gsW, w3);
+                              "border cropped by the present: the glow reads them, SCENE repeats "
+                              "columns 2 and %u over them before it",
+                              w3);
     } else if (n < size && state == RD_BORDER_WINDOW) {
         n += (size_t)snprintf(out + n, size - n,
-                              "; the frame is cropped to Full pixel's window (%u GS pixels): SCENE "
-                              "repeats columns 2 and %u over the texels of them it holds before "
-                              "the glow",
-                              gsW, w3);
+                              "border in Full pixel's window: SCENE repeats columns 2 and %u over "
+                              "the texels of them it holds before the glow",
+                              w3);
     } else if (n < size && gsW != ICO_FRAME_BASE_W) {
         n += (size_t)snprintf(out + n, size - n,
-                              "; the border is closed (%u GS pixels, wider than the PS2's): the "
-                              "reduction shows black there but the glow reads them, SCENE repeats "
-                              "columns 2 and %u over them before it",
-                              gsW, w3);
+                              "border closed (wider than the PS2's): the reduction shows black "
+                              "there but the glow reads them, SCENE repeats columns 2 and %u over "
+                              "them before it",
+                              w3);
     } else if (n < size) {
         n += (size_t)snprintf(out + n, size - n,
-                              "; the border is closed (%u GS pixels): the reduction shows black "
-                              "there but the glow reads them, SCENE keeps them (the PS2's "
-                              "picture)",
-                              gsW);
+                              "border closed: the reduction shows black there but the glow reads "
+                              "them, SCENE keeps them (the PS2's picture)");
     }
     if (n < size) {
         n += (size_t)snprintf(out + n, size - n, ", table entry 0 = ");
@@ -681,16 +728,24 @@ static void edgeHarvest(void)
     if (!m) {
         return;
     }
-    RdFogEdgeColumn c[4];
-    const uint32_t cols[4] = {0, 1, s_edge.tw - 2u, s_edge.tw - 1u};
-    for (int k = 0; k < 4; k++) {
-        rd__fog_edge_column(m + (k < 2 ? 0u : s_edge.half), s_edge.pitch, s_edge.th,
-                            (uint32_t)k & 1u, s_edge.d24, s_edge.zScale, cols[k], &c[k]);
+    RdFogEdgeColumn c[2 * RD_FOG_EDGE_COLS];
+    uint32_t any = 0;
+    for (int k = 0; k < 2 * RD_FOG_EDGE_COLS; k++) {
+        const uint32_t x =
+            k < RD_FOG_EDGE_COLS ? (uint32_t)k : s_edge.gsW - (uint32_t)(2 * RD_FOG_EDGE_COLS - k);
+        if (s_edge.word[k] < 0) {
+            memset(&c[k], 0, sizeof(c[k]));
+            c[k].column = x;
+            continue;
+        }
+        rd__fog_edge_column(m + (k < RD_FOG_EDGE_COLS ? 0u : s_edge.half), s_edge.pitch, s_edge.th,
+                            (uint32_t)s_edge.word[k], s_edge.d24, s_edge.zScale, x, &c[k]);
+        any |= c[k].zero;
     }
     rhi_unmap_buffer(s_edge.buf);
     const double now = rd__now_ms();
     edgeWindow(now);
-    if (!(c[0].zero | c[1].zero | c[2].zero | c[3].zero)) {
+    if (!any) {
         return;
     }
     s_edge.total++;
@@ -699,7 +754,7 @@ static void edgeHarvest(void)
         return;
     }
     s_edge.lines++;
-    rd__fog_edge_line(s_edge.last, sizeof(s_edge.last), c, s_edge.gsW, s_edge.state,
+    rd__fog_edge_line(s_edge.last, sizeof(s_edge.last), c, s_edge.gsW, s_edge.crop, s_edge.state,
                       s_edge.haveLut ? s_edge.lut0 : NULL);
     rd__log("%s", s_edge.last);
 }
@@ -708,7 +763,8 @@ bool rd__fog_edge_due(bool want, const RdFogSource *src, const RdTargetRec *tz)
 {
     edgeHarvest();
     if (!want || !g_rd.hasDevice || s_st.running || s_edge.pending || !tz || tz->tw < 4 ||
-        tz->th == 0 || !(rhi_backend() == RHI_BACKEND_VULKAN || src->aspect == RHI_ASPECT_COLOR)) {
+        tz->th == 0 || g_rd.gsW < 2u * RD_FOG_EDGE_COLS ||
+        !(rhi_backend() == RHI_BACKEND_VULKAN || src->aspect == RHI_ASPECT_COLOR)) {
         return false;
     }
     return s_edge.fogged++ % RD_FOG_EDGE_EVERY == 0;
@@ -717,7 +773,26 @@ bool rd__fog_edge_due(bool want, const RdFogSource *src, const RdTargetRec *tz)
 void rd__fog_edge_record(RhiCommandList cl, const RdTargetRec *tz, uint32_t zid,
                          const RdFogSource *src, const uint8_t *lut)
 {
-    const uint32_t pitch = wordPitch(2), a = probeStride();
+    /* each GS column's first texel, and the two blocks that hold them:
+     * texels [0, left) and [right0, tw) */
+    const uint32_t gsW = g_rd.gsW;
+    int32_t tex[2 * RD_FOG_EDGE_COLS];
+    int32_t left = 0, right0 = (int32_t)tz->tw;
+    for (int k = 0; k < 2 * RD_FOG_EDGE_COLS; k++) {
+        const int32_t x = k < RD_FOG_EDGE_COLS ? k : (int32_t)gsW - (2 * RD_FOG_EDGE_COLS - k);
+        tex[k] = rd__fog_edge_texel(tz->sx, tz->ox, tz->tw, x);
+        if (tex[k] >= 0 && k < RD_FOG_EDGE_COLS && tex[k] + 1 > left) {
+            left = tex[k] + 1;
+        }
+        if (tex[k] >= 0 && k >= RD_FOG_EDGE_COLS && tex[k] < right0) {
+            right0 = tex[k];
+        }
+    }
+    const uint32_t wl = (uint32_t)left, wr = tz->tw - (uint32_t)right0;
+    if (wl == 0 && wr == 0) {
+        return; /* no column held (a window cropping more than 8 a side) */
+    }
+    const uint32_t pitch = wordPitch(wl > wr ? wl : wr), a = probeStride();
     const uint64_t half = ((uint64_t)pitch * tz->th + a - 1u) / a * a;
     if (!s_edge.buf.id || s_edge.size < 2u * half) {
         if (s_edge.buf.id) {
@@ -739,18 +814,25 @@ void rd__fog_edge_record(RhiCommandList cl, const RdTargetRec *tz, uint32_t zid,
         }
     }
     rd__transition(cl, src->tex, src->state, RHI_STATE_COPY_SRC);
-    rhi_cmd_copy_texture_to_buffer(cl, src->tex, src->aspect, (RhiRect){0, 0, 2, tz->th},
-                                   s_edge.buf, 0, pitch);
-    rhi_cmd_copy_texture_to_buffer(cl, src->tex, src->aspect,
-                                   (RhiRect){(int32_t)tz->tw - 2, 0, 2, tz->th}, s_edge.buf, half,
-                                   pitch);
+    if (wl) {
+        rhi_cmd_copy_texture_to_buffer(cl, src->tex, src->aspect, (RhiRect){0, 0, wl, tz->th},
+                                       s_edge.buf, 0, pitch);
+    }
+    if (wr) {
+        rhi_cmd_copy_texture_to_buffer(cl, src->tex, src->aspect, (RhiRect){right0, 0, wr, tz->th},
+                                       s_edge.buf, half, pitch);
+    }
+    for (int k = 0; k < 2 * RD_FOG_EDGE_COLS; k++) {
+        s_edge.word[k] = tex[k] < 0 ? -1 : k < RD_FOG_EDGE_COLS ? tex[k] : tex[k] - right0;
+    }
     s_edge.pending = true;
     s_edge.replay = g_rd.replayCounter;
-    s_edge.tw = tz->tw;
     s_edge.th = tz->th;
     s_edge.pitch = pitch;
     s_edge.half = (uint32_t)half;
-    s_edge.gsW = g_rd.gsW;
+    s_edge.gsW = gsW;
+    const float wexact = rd__frame_wexact();
+    s_edge.crop = (float)gsW > wexact ? ((float)gsW - wexact) * 0.5f : 0.0f;
     s_edge.state = rd__scene_border_state(rd__target_rec(RD_TARGET_SCENE + 1u));
     s_edge.d24 = rd__depth_unorm_steps() > 0.0f;
     s_edge.zScale = rd__target_z_scale(zid);
