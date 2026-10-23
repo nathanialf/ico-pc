@@ -2974,6 +2974,9 @@ static void testDump(const char *dir)
 
 /* ---------------------------------------------------------------- present */
 
+/* The presenter's output of the last frame against DISPLAY as that frame
+ * left it (testReduction's), so it runs before anything makes the targets
+ * again */
 static void testPresent(void)
 {
     static uint8_t out[640 * 480 * 4];
@@ -5070,8 +5073,11 @@ int main(int argc, char **argv)
     testAa1();
     testAa1Wedge();
     testReduction(dir);
-    testReductionUint(dir);
+    /* the present before testReductionUint: its rd_reset_scene makes
+       DISPLAY again, whose texels are then whatever the driver's memory
+       held until the next replay clears them (rd_core.c createNamedPass) */
     testPresent();
+    testReductionUint(dir);
     testKeep();
     testExact();
     testDump(dir);

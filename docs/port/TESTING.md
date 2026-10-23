@@ -655,6 +655,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   beside an exact one, their shared vertex's GS Z saturated and its X and Y off the 1/16 grid:
   none above Original 1x, where the clipped triangle is drawn, and at Original 1x not drawn
   (`vu_corner_cut_position`).
+  Its present case (`testPresent`: the presenter's output pixel at the centre between its two
+  DISPLAY neighbours) runs right after the reduction, before `testReductionUint` makes the
+  targets again: a target made again holds whatever the driver's memory held until the next
+  replay clears it (lavapipe hands the freed DISPLAY's memory back, llvmpipe's OpenGL gives
+  zeros), so DISPLAY read after that is no longer the frame the presenter showed.
 - `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`;
   the scene limit's fallback checks drive the Vulkan backend's `vkr_test_fail_texels_above` and
   are skipped on Direct3D 12, OpenGL and Direct3D 11, which have no such hook);
