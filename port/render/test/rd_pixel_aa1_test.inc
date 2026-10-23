@@ -231,8 +231,8 @@ static int s_awFeed;
 static void awStrip(const int32_t (*s)[2], int n, int32_t dx, const uint8_t col[4])
 {
     const int32_t ox = (2048 - 256) * 16, oy = (2048 - 256) * 16;
-    RdScreenVtx v[18];
-    int32_t p[18][2];
+    RdScreenVtx v[18] = {{0}}; /* n <= 18 fills what is drawn; gcc 14 at -O1 cannot see it */
+    int32_t p[18][2] = {{0}};
     for (int i = 0; i < n && i < 18; i++) {
         p[i][0] = s[i][0] + dx;
         p[i][1] = s[i][1];
