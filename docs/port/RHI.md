@@ -1,7 +1,8 @@
 # The render hardware interface
 
 The [RHI](ARCHITECTURE.md#terms) is the thin interface under [rd](ARCHITECTURE.md#terms) that the
-Vulkan and Direct3D 12 backends implement; macOS and iOS run the Vulkan backend over MoltenVK. This
+Vulkan, Direct3D 12 and OpenGL backends implement; macOS and iOS run the Vulkan backend over
+MoltenVK. This
 document covers the interface, how several backends share one build, each backend's device,
 swapchain and diagnostics switches, and the tests. The shaders are [SHADERS.md](SHADERS.md); how the
 window paces and presents is [DISPLAY.md](DISPLAY.md).
@@ -32,6 +33,13 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | `port/rhi/d3d12/d3d12_swapchain.c` | the DXGI flip-model swapchain, the waitable object, frame statistics |
 | `port/rhi/d3d12/d3d12_cmd.c`, `d3d12_pipeline.c`, `d3d12_resource.c` | commands and fences; root signatures and pipeline states; committed resources |
 | `port/rhi/d3d12/d3d12_enums.h`, `d3d12_internal.h` | the enum tables; the backend's shared state |
+| `port/rhi/gl/rhi_gl.h` | OpenGL extras for tests only |
+| `port/rhi/gl/gl_internal.h` | the OpenGL backend's shared state, its records and which file defines which entry point |
+| `port/rhi/gl/gl_loader.h`, `gl_loader.c` | the OpenGL entry points, fetched through `SDL_GL_GetProcAddress` |
+| `port/rhi/gl/gl_device.c` | the context, the version and extension checks, the debug output, limits, frames, timestamps, the stats entry points |
+| `port/rhi/gl/gl_resource.c` | buffers, textures, samplers, separable programs, bind group layouts and bind groups, deferred deletes, readback |
+| `port/rhi/gl/gl_swapchain.c` | the backbuffer texture, its blit to the window and the swap |
+| `port/rhi/gl/gl_glsl.h`, `gl_glsl.c` | the shader table's deflated GLSL inflated ([SHADERS.md](SHADERS.md)) |
 | `port/rhi/d3d11/d3d11_shader.h`, `d3d11_shader.c` | the Direct3D 11 backend's run-time HLSL compile through `d3dcompiler_47.dll` and its DXBC cache file ([SHADERS.md](SHADERS.md#direct3d-11-run-time-compile)) |
 | `port/rhi/d3d11/d3d11_internal.h`, `rhi_d3d11.h` | the Direct3D 11 backend's shared state and the contract between its files; its test extras |
 | `port/rhi/d3d11/d3d11_device.c` | runtime loading, adapter pick, device, debug layer, limits, frame slots, submission, timestamps, the DXBC cache folder |
@@ -348,17 +356,19 @@ fog's depth and DATE's alpha this way ([RENDER.md](RENDER.md#the-replay)).
 
 ## Backends in one build
 
-Each backend library is compiled with `RHI_BACKEND_PREFIX` set to its short name (`vk`, `d3d12`).
+Each backend library is compiled with `RHI_BACKEND_PREFIX` set to its short name (`vk`, `d3d12`,
+`gl`).
 `rhi.h` then includes `rhi_backend_names.h`, whose macros rename every entry point the backend
 defines to `rhi_<prefix>_*`, so the backend's sources keep the plain names. The backend registers
 its functions once with `RHI_BACKEND_DEFINE` (`rhi_backend_vk` at the end of `vk_device.c`,
-`rhi_backend_d3d12` at the end of `d3d12_device.c`); `RHI_BACKEND_FUNCS` lists every entry point in
+`rhi_backend_d3d12` at the end of `d3d12_device.c`, `rhi_backend_gl` at the end of `gl_device.c`); `RHI_BACKEND_FUNCS` lists every entry point in
 table order and types each field from `rhi.h`'s declaration (`port/rhi/rhi_backend.h`, header
 comment; `port/rhi/rhi_backend_names.h`). Callers never include `rhi_backend.h`.
 
 `rhi_backend.c` defines the real `rhi_*` functions as forwarders to the selected table. The linked
-backends are listed by `ICO_RHI_HAVE_VK` and `ICO_RHI_HAVE_D3D12`, Vulkan first.
-`rhi_create_backend(name)` takes "vulkan" (or "vk") or "d3d12", case-insensitive; NULL or "" takes
+backends are listed by `ICO_RHI_HAVE_VK`, `ICO_RHI_HAVE_D3D12` and `ICO_RHI_HAVE_GL`, Vulkan
+first. `rhi_create_backend(name)` takes "vulkan" (or "vk"), "d3d12" or "opengl" (or "gl"),
+case-insensitive; NULL or "" takes
 `ICO_RHI_BACKEND` when it names a linked backend, else the first linked one. It refuses a backend
 not in the build and any change while a device is up; `rhi_backend_name(i)` lists the linked ones
 (`port/rhi/rhi_backend.c` (`find`, `defaultBackend`, `rhi_create_backend`)). The window passes
@@ -370,7 +380,10 @@ step may name "d3d12" instead when the player chose none (`STARTUP_RETRY_ENV`,
 (`ico_window_open`); [DISPLAY.md](DISPLAY.md#the-window-host)).
 
 `port/rhi/CMakeLists.txt` builds `ico_rhi_vulkan` (option `ICO_RHI_VULKAN`, on), `ico_rhi_d3d12`
-(`ICO_RHI_D3D12`, on for 64-bit Windows) and `ico_rhi` (the forwarders, linking the backends);
+(`ICO_RHI_D3D12`, on for 64-bit Windows), `ico_rhi_opengl` (`ICO_RHI_OPENGL`, on except for
+Android and Apple targets, built where SDL3 is found; it compiles `d3d12/d3d12_plan.c` for the
+handle pools and the layout rules and links `ico_miniz` for the GLSL) and `ico_rhi` (the
+forwarders, linking the backends);
 `ico_rhi_vk` is what `port/render` and the shader tests link. `ICO_RHI_MOLTENVK` (on for Apple
 targets) links the Vulkan backend to MoltenVK instead of compiling volk (`cmake/IcoMoltenVK.cmake`).
 Vulkan-Headers and volk come from `tools/fetch_deps.sh` (the backend loads the Vulkan library at run
@@ -711,6 +724,124 @@ resize, the first `rhi_init` on a real card and on WARP.
 
 **Test extras** (`port/rhi/d3d11/rhi_d3d11.h`): the debug layer's error count, whether it is active,
 whether the device runs on WARP, and the feature level.
+
+## OpenGL
+
+OpenGL 4.3 core with `ARB_clip_control` and `ARB_buffer_storage` (both core in 4.5), on Windows and
+Linux. The backend links no GL library: SDL3 makes the context and `SDL_GL_GetProcAddress` gives
+every entry point (`port/rhi/gl/gl_loader.h` `GL_FUNCS`: 135, the 4.3 core ones required, clip
+control, buffer storage and texture barrier optional), called as `glf.Name` (not `gl`, the
+backend's `RHI_BACKEND_PREFIX`).
+
+**Context** (`port/rhi/gl/gl_device.c` (`gl_create_context`)). With a window, the window must have
+been made with `SDL_WINDOW_OPENGL`, else `rhi_init` fails with
+`rhi_gl: the window was made without SDL_WINDOW_OPENGL; no OpenGL context on it`. Headless
+(`sdlWindow` NULL), the backend starts SDL's video when nothing has (the `offscreen` driver as a
+hint, so `SDL_VIDEO_DRIVER` still picks another; it makes its contexts through EGL without a
+display) and makes a hidden 1x1 `SDL_WINDOW_OPENGL` window of its own: double-buffered, no depth or
+stencil, no sRGB. Either way the context asks for 4.3 core (a driver gives its newest compatible
+version) with the debug flag under `debugLayers`. A failure logs `rhi_gl: no OpenGL 4.3 core
+context (<SDL's error>)`. The checks then refuse a driver below 4.3, or without clip control or
+buffer storage, with `rhi_gl: OpenGL 4.3 with ARB_clip_control is needed; this driver offers
+<GL_VERSION> (<GL_RENDERER>)` (or `... with ARB_buffer_storage ...`), and an entry point missing
+from a 4.3 driver with `rhi_gl: the driver has no glName (OpenGL 4.3 core)`. The device line is
+`rhi_gl: <renderer> (OpenGL M.m core|compatibility, <GL_VERSION>; GLSL <version>)[, headless];
+index values up to N`, followed by `rhi_gl: limits: uniform align N, dual-source yes|no, MSAA
+1|2|4|8, interlock yes|no (image units N), texture barrier yes|no, BC yes|no, anisotropy N, max
+texture N, entry points 135 (N optional missing), debug output on|off`.
+
+**Clip space** (`gl_defaults`). `glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE)` gives OpenGL the
+renderer's D3D-style conventions: depth 0 to 1 (reversed-Z GEQUAL as on the other backends), row 0
+of every target and texture at the top, `gl_FragCoord` from the top left, viewports and scissors in
+the same coordinates. The shaders, viewports, scissors, uploads and readbacks pass through
+unflipped. Only the window's framebuffer 0 has its row 0 at the bottom, so the swapchain is a
+texture blitted upside down at present (below). The other fixed state: no dithering, no
+`GL_FRAMEBUFFER_SRGB`, the vertex shader's point size, no culling, no depth clamp, no primitive
+restart, the first vertex's flat attributes (`glProvokingVertex(GL_FIRST_VERTEX_CONVENTION)`, the
+D3D and Vulkan rule), the scissor test on, pixel rows packed at 1 byte.
+
+**Bindings** (`gl_internal.h` `gl_bind_point`; the GLSL's side in [SHADERS.md](SHADERS.md)): uniform
+block `b` at binding `b`; storage buffer `t` at `16 + t`; sampled texture `t` at texture unit
+`16 + t`; storage image `u` at image unit `48 + u`. GLSL has combined samplers only, so a bind
+group's sampler goes to the unit of each texture it samples: the group's sampler slot with the
+texture's number, else its lowest one. Integer textures, the RGBA8_UINT view and multisampled
+textures get no sampler object (OpenGL filters none of them; an integer texture under a filtering
+sampler is incomplete and reads zeros): every texture carries point sampling, clamping and its
+level range as its own state. A bind group is a run of entries in its frame slot's arena, each ready
+for one bind (`GlBindEntry`); a uniform or storage slot without a usable binding gets a 64 KiB zeroed
+buffer, as D3D12 binds a null view, after one line a binding type:
+`rhi_gl: bind group: slot N (type T): <why> (reported once a type)` (`gl_resource.c`
+(`gl_make_entry`)). Dynamic uniforms are `glBindBufferRange` at the base plus the bind-time offset;
+`uniformAlign` is `GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT`, at least 16.
+
+**Resources** (`port/rhi/gl/gl_resource.c`). Buffers are immutable storage: UPLOAD mapped for
+writing and READBACK for reading, both persistent and coherent, once at creation (the stable
+pointer of `rhi_map_buffer`); DEVICE buffers are written only by copies. Textures are immutable
+storage in every RHI format (`gl_format`): D32F_S8 is `GL_DEPTH32F_STENCIL8` ("D32S8"), BC1, BC2 and
+BC3 the S3TC formats and BC7 `GL_COMPRESSED_RGBA_BPTC_UNORM`, BGRA8 stored as RGBA8 and moved as
+`GL_BGRA`; an `RHI_TEX_UINT_VIEW` texture gets its `GL_RGBA8UI` view (`glTextureView`) at creation.
+A shader is a separable program of its stage (`glCreateShaderProgramv`), so a pipeline pairs two
+programs in a program pipeline object without a link of its own; the GLSL is the table's deflated
+text inflated (`rhi_gl_inflate_glsl`), or plain text starting `#version` with `textSize` 0 (the RHI
+tests). A vertex program without its own `gl_PerVertex` block gets one (`gl_Position`,
+`gl_PointSize`), which strict drivers want for separable programs. A failed compile logs
+`rhi_gl: shader <name>: <the compiler's log>` (the first 8, then every 100th) and returns a null
+handle. Destroys are deferred to the frame slot's recycle: OpenGL keeps an object alive for the
+commands queued with it but may hand its name out again at once, and a bind group made earlier in
+the frame holds names. `rhi_readback_texture` waits with `glFinish` and reads level 0 through a
+scratch framebuffer with `glReadPixels` (depth as 32-bit floats), the rows from the top.
+
+**Frames** (`gl_device.c`). Command lists execute while they are recorded; `rhi_submit` places the
+slot's fence (`gl_frame_fence`: `glFenceSync`, then `glFlush`). `rhi_wait_frame` moves to the next
+slot, waits for its fence (`glClientWaitSync`, counted into `fenceWaits` and `fenceWaitNs` when it
+blocks; after 2 s it logs `rhi_gl: a frame's fence has not signalled after 2 s; still waiting`),
+then runs the slot's deletes, resets its bind group arena and reads its timestamps. GPU timestamps
+are `glQueryCounter(GL_TIMESTAMP)` on a query object per index and slot, made at its first use,
+read once the fence has passed (`rhi_gl: GPU timestamps: on (glQueryCounter, 256 per frame
+slot)`). `rhi_wait_idle` is `glFinish`.
+
+**Swapchain** (`port/rhi/gl/gl_swapchain.c`). The backbuffer is an RGBA8 texture at the window's
+pixel size (so `rhi_swapchain_format` is `RHI_FMT_RGBA8_UNORM`); `rhi_present` blits it upside down
+into framebuffer 0 (stretched with linear filtering if the window's size has changed since), then
+`SDL_GL_SwapWindow`, timed into `presentNs`, and follows the window's size afterwards as the other
+backends do. The swap interval is the vsync (1, or 0): `rhi_present_mode_name` says `fifo` or
+`immediate`. `rhi_present_shown` is false for a minimised or hidden window. `rhi_release_surface`
+drops the backbuffer and keeps the context; `rhi_recreate_surface` makes the same context current on
+the window again, so nothing made on it is lost. Creation logs
+`rhi_gl: swapchain WxH: an RGBA8 texture blitted to the window, swap interval N`.
+
+**Limits**: dual-source blending where `GL_MAX_DUAL_SOURCE_DRAW_BUFFERS` is at least 1;
+`msaaCounts` the counts `glGetInternalformativ` gives for RGBA8, RGBA8UI and `GL_DEPTH32F_STENCIL8`
+together, within `GL_MAX_SAMPLES`, `GL_MAX_INTEGER_SAMPLES` and the texture sample limits;
+`fragmentInterlock` with `ARB_fragment_shader_interlock` and more than 48 image units (the
+translated shaders' unit; absent on llvmpipe); `bcTextures` with S3TC and BPTC; `uintView`,
+`dynamicDepth` and `dynamicBlend` true (plain OpenGL state); `maxDynamicUniforms` 4; texture-to-buffer
+copies at a row pitch of 16 and an offset of 4, so the VU vertex pre-pass stays on
+(`colorBytesPerPixel` 0); `vendorId` from the vendor and renderer text; `driverText` the renderer
+and the version; `robustText` "off (OpenGL)".
+
+| variable | effect |
+| --- | --- |
+| `ICO_GL_DEBUG` | 1 the debug output (a debug context, `KHR_debug`) whatever `debugLayers` says; 0 off |
+| `ICO_GL_FAKE_NO_DUAL` | 1 reports no dual-source blending (also `rhi_gl_fake_no_dual`) |
+| `ICO_GL_FAKE_NO_DST` | 1 reports no fragment interlock |
+| `ICO_GL_FAKE_NO_MSAA` | 1 reports single sampling only |
+| `ICO_GL_FAKE_NO_TIMESTAMPS` | 1 turns GPU timestamps off |
+
+The debug output counts the driver's errors and undefined-behaviour messages
+(`rhi_gl_debug_error_count`) and prints `rhi_gl: debug: <type> #N (id 0x...): <message>` for the
+first 8 and every 100th; the other messages of low severity or above likewise, without the count;
+notifications are off; `rhi_shutdown` logs `rhi_gl: debug output: N errors, M other messages`.
+Labels are debug groups, only with the debug output.
+
+**Not implemented on OpenGL**: mailbox presents, exclusive fullscreen control, the display's timing
+of presents and frame statistics (OpenGL has none of them); the pipeline cache file (program
+binaries are for a later version; the driver's own shader cache applies); device loss (no robust
+context is asked for, so `rhi_device_lost` stays false); the memory gauges; the input-attachment
+shaders (GLSL cannot express them: `localRead` and `rasterOrderAttachment` are false).
+
+**Test extras** (`port/rhi/gl/rhi_gl.h`): `rhi_gl_fake_no_dual`, the debug output's error count and
+whether it was on.
 
 ## Device loss
 

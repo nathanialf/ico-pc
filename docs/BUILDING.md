@@ -56,6 +56,13 @@ Debian packages come from `deb.debian.org`, falling back to
 lists its other overrides. The toolchain files take `ICO_LLVM_MINGW` and
 `ICO_MINGW_GCC` from the environment to use copies elsewhere.
 
+The Linux SDL3 (`deps/sdl3/linux-<arch>/`) is built with OpenGL, GLX and EGL for the OpenGL
+renderer: `tools/fetch_deps.sh` unpacks the headers of Debian 13's `libgl-dev`, `libglx-dev` and
+`libegl-dev` (SHA-256 pinned) when the host has none, configures SDL with `SDL_OPENGL` and
+`SDL_OPENGLES`, and stops when GLX or EGL did not come out. SDL loads `libGL`, `libEGL` and the
+driver at run time, so the program links no GL library. Its stamp (`.ico-release`) ends in `+gl`; a
+tree whose stamp lacks it is built again by the next run.
+
 The Linux presets use the host's `gcc` and glibc (`CMAKE_C_COMPILER` `gcc`, `CMakePresets.json`):
 gcc 14 on Debian 13. On Ubuntu 24.04, whose `gcc` is 13, add `-DCMAKE_C_COMPILER=gcc-14` (package
 `gcc-14`) as CI does (`.github/workflows/ci.yml`, `ICO_CC`); gcc 13 also builds, since
@@ -109,8 +116,8 @@ What differs from an x86-64 host:
   Wayland and KMSDRM video backends as well as X11 (it stops when SDL's
   configure leaves either out), writes the Wayland protocol files' notices
   beside it for the package's `NOTICES.txt`, and takes the arm64 builds of
-  the pinned Debian packages (the X11, audio and D-Bus headers when the host has
-  none, the validation layer). SDL picks the backend at run time.
+  the pinned Debian packages (the X11, audio, D-Bus and GL headers when the
+  host has none, the validation layer). SDL picks the backend at run time.
 - Microsoft publishes no aarch64 Linux DXC, so `tools/fetch_deps.sh` builds
   the pinned release's tag from source (the commit id and the SHA-256 of its
   `git archive` checked, as libmpeg2's and libchdr's, and the same two checks
@@ -313,6 +320,7 @@ and macOS).
 | `ICO_RHI_VULKAN` | `ON` | builds the Vulkan renderer backend |
 | `ICO_RHI_D3D12` | `ON` for 64-bit Windows | builds the Direct3D 12 renderer backend next to the Vulkan one |
 | `ICO_RHI_D3D11` | `ON` for 64-bit Windows | builds the Direct3D 11 renderer backend next to the others (it compiles; it has not run on any Windows machine). It needs the toolchain's `d3d11.h`, `d3d11_1.h`, `dxgi1_6.h` and `d3dcompiler.h`, and turns `ICO_SHADERS_HLSL_SOURCE` on, which embeds the HLSL sources the backend compiles at run time |
+| `ICO_RHI_OPENGL` | `ON` except on Android and Apple targets (their presets set it `OFF`) | builds the OpenGL 4.3 renderer backend (`ico_rhi_opengl`, [port/RHI.md](port/RHI.md#opengl)) where SDL3 is found; its context and entry points come through SDL3, so nothing links a GL library. It also turns `ICO_SHADERS_GLSL` on |
 | `ICO_RHI_MOLTENVK` | `ON` on Apple | links the Vulkan backend to MoltenVK |
 | `ICO_SHADERS_DXIL` | `ON` | also compiles the shaders to DXIL for the Direct3D 12 backend; the arm64 and Apple presets turn it off |
 | `ICO_SHADERS_GLSL` | `ON` with `ICO_RHI_OPENGL` when `tools/fetch_deps.sh` fetched SPIRV-Cross, else `OFF` | also translates the shaders to GLSL 4.30 with SPIRV-Cross for the OpenGL backend (`ICO_SPIRV_CROSS` names another executable; `SKIP_SPIRV_CROSS=1` skips the fetch) |
@@ -476,7 +484,7 @@ more preset; `linux-arm64` and `android` are described after the table.
 
 | step | what |
 | --- | --- |
-| host packages, venv | gcc 14 (the runner's default gcc 13 also configures, since `cmake/IcoFlags.cmake` drops warning flags a compiler does not know), the X11, ALSA, PulseAudio and PipeWire (`libpipewire-0.3-dev`, `libspa-0.2-dev`) headers SDL3 builds against, lavapipe (`mesa-vulkan-drivers`, `libvulkan1`) so the render tests run on a CPU Vulkan device, `tools/requirements.txt` |
+| host packages, venv | gcc 14 (the runner's default gcc 13 also configures, since `cmake/IcoFlags.cmake` drops warning flags a compiler does not know), the X11, ALSA, PulseAudio and PipeWire (`libpipewire-0.3-dev`, `libspa-0.2-dev`) headers SDL3 builds against, lavapipe (`mesa-vulkan-drivers`, `libvulkan1`) so the render tests run on a CPU Vulkan device, the GL headers (`libgl-dev`, `libglx-dev`, `libegl-dev`) and llvmpipe (`libgl1-mesa-dri`, `libgl1`, `libegl1`) so the OpenGL tests run on a CPU OpenGL device, `tools/requirements.txt` |
 | cache and `tools/fetch_toolchain.sh` | `tools/toolchain/` is cached on the hash of `fetch_toolchain.sh`, `fetch_deps.sh`, `fetch_common.sh` and `fetch_android.sh`, restored and saved as separate steps so a cold fetch is saved even when a later step fails |
 | ccache | `~/.cache/ccache` is restored before the builds and saved after them (also when a build fails), keyed by the job or preset and the same four scripts' hash, with the commit as the last part so every run saves its entries, each capped at 5 GiB (`CCACHE_MAXSIZE` in the workflow's `env`; `tools/fetch_toolchain.sh` sets the same cap for a local ccache); the `linux-arm64` job has no ccache |
 | `tools/check_no_rom.sh` | the IP scan over every tracked file |
