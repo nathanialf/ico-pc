@@ -684,10 +684,8 @@ static void testGraphicsApi(void)
     const int pageL = openPage(mainL, 2, UI_PAGE_GRAPHICS);
     const int row = ui_settings_row_of(UI_PAGE_GRAPHICS, UI_OPT_GRAPHICS_API);
     CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Graphics API") == 0, "the Graphics API row");
-    CHECK(noteStarting(UI_PAGE_GRAPHICS,
-                       "Apply switches now; without Apply the choice is used from the next "
-                       "start.") >= 0,
-          "the note");
+    CHECK(noteStarting(UI_PAGE_GRAPHICS, "Apply switches now; without Apply") >= 0,
+          "the note (two lines: its start)");
     CHECK(strcmp(ui_settings_value_text(UI_OPT_GRAPHICS_API), "Automatic") == 0,
           "no key: Automatic");
 
