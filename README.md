@@ -46,8 +46,8 @@ the PS2's unless you choose Original. The mouse camera starts on.
 
 | Device | Download | Status |
 |---|---|---|
-| Windows 10 or 11, 64-bit, with a graphics card from NVIDIA, AMD or Intel | `-win.zip` (or `-win-portable.zip`) | The main test machine. Draws with Vulkan, or Direct3D 12 if you choose it ([how](docs/OPTIONS.md#choosing-the-renderer-on-windows)). |
-| Linux PC, 64-bit x86: Debian 13, Ubuntu 24.04 or newer | `-linux-x86_64.AppImage`, or `-linux.tar.gz` (or `-linux-portable.tar.gz`) | Built and checked by the automatic tests for every release. |
+| Windows 10 or 11, 64-bit, with a graphics card from NVIDIA, AMD or Intel | `-win.zip` (or `-win-portable.zip`) | The main test machine. Draws with Vulkan, or Direct3D 12 or OpenGL if you choose it in Options > Graphics ([how](docs/OPTIONS.md#choosing-the-renderer)). A Direct3D 11 choice is there too but has not been tried on any computer. |
+| Linux PC, 64-bit x86: Debian 13, Ubuntu 24.04 or newer | `-linux-x86_64.AppImage`, or `-linux.tar.gz` (or `-linux-portable.tar.gz`) | Built and checked by the automatic tests for every release. Draws with Vulkan, or OpenGL if your graphics driver has no Vulkan ([how](docs/OPTIONS.md#choosing-the-renderer)); OpenGL has only been checked on a software renderer. |
 | Steam Deck | `-linux-x86_64.AppImage` or `-linux.tar.gz` | Supported; [Steam Deck tips](docs/TROUBLESHOOTING.md#steam-deck). |
 | Linux handheld or board, 64-bit ARM: Debian 13, Ubuntu 24.04 or newer | `-linux-aarch64.AppImage`, or `-linux-arm64.tar.gz` (or `-linux-arm64-portable.tar.gz`) | Built for every release. |
 | Android phone or tablet, 64-bit, Android 10 or newer (usually 2022 or newer) | `-android.apk` | Supported. It can be slower than on a PC. [The Android guide](docs/ANDROID.md). |

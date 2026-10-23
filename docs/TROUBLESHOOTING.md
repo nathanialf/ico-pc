@@ -384,6 +384,22 @@ system update. The lines in the log that mention Vulkan say what is
 missing. If you added `backend=d3d12` to `ico-pc.ini` on Windows, delete
 that line and try again.
 
+**The game does not start: no Vulkan.** On a computer whose graphics card or driver has no
+Vulkan, Automatic goes on with Direct3D 12 (Windows) and then OpenGL by itself. If it still
+does not start, choose OpenGL yourself: on Windows add the line `backend=opengl` to `ico-pc.ini`
+in the `x64` folder, beside the program's `.exe`; on any computer, if the game opens, set
+Options > Graphics > Graphics API to OpenGL and start it again, or write `backend = "opengl"`
+under `[video]` in `config.toml` ([more](OPTIONS.md#choosing-the-renderer)). OpenGL has only been checked on a software
+renderer, so if it fails or looks wrong, send `logs/ico-pc.log` (the lines starting `window:`
+and `rhi_gl:`) with your graphics card and driver.
+
+**I chose Direct3D 11 and the game does not start.** Direct3D 11 has not been tried on any
+Windows computer, so this can happen. Open `ico-pc.ini` in the `x64` folder with Notepad and
+delete the line `backend=d3d11` (or change it to `backend=` with nothing after it, which is
+Automatic), then start the game. If you can still reach Options > Graphics, pick Automatic
+there. Please send `logs/ico-pc.log` (the lines starting `window:` and `rhi_d3d11:`) so we can
+see what stopped it.
+
 **"ICO could not start the game's graphics with this phone's driver."**
 (on a phone) The phone's own graphics driver cannot run the game. The box
 offers **Choose a driver file**: on a phone with an Adreno (Qualcomm
@@ -526,7 +542,7 @@ again. To make the game try that again sooner, delete the file
 `startup-activity.txt` in the `logs` folder. Updating the graphics driver usually fixes this. On Windows you can
 also open `ico-pc.ini` in the `x64` folder with Notepad and add the line
 `backend=d3d12` at the end to always use Direct3D 12
-([how](OPTIONS.md#choosing-the-renderer-on-windows)). If you report it,
+([how](OPTIONS.md#choosing-the-renderer)). If you report it,
 attach the log: it shows every attempt.
 
 If the game stops responding, it closes itself after a while: 30 seconds

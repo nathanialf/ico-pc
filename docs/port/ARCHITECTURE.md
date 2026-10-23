@@ -16,7 +16,7 @@ the other documents in `docs/port/` go deeper into each part. The glossary is th
 | `port/data/` | the disc: libcdvd, the VFS, the ISO/CHD/BIN reader, `ico.o2r`, the extractor, the data tables, the SIF and IOP RAM |
 | `port/math/` | VU0 maths in C, the PS2 float models, the EE's soft `double`, host copies of the EE's libm |
 | `port/render/` | rd: the GS and VU1 replacement the game's render layer draws through, and the presenter |
-| `port/rhi/` | the RHI and its backends: `vk/` (Vulkan, MoltenVK on Apple) and `d3d12/` |
+| `port/rhi/` | the RHI and its backends: `vk/` (Vulkan, MoltenVK on Apple), `d3d12/`, `d3d11/` and `gl/` (OpenGL) |
 | `port/shaders/` | the HLSL shaders, among them one per VU1 microprogram family |
 | `port/null/` | the graphics floor under the game's render layer in both builds (libgraph, libdma) |
 | `port/audio/` | the software SPU2, the SNDN2DRV.IRX sound driver as a host RPC server, the output |
@@ -228,7 +228,7 @@ the null floor: a DMA kick is a no-op and the GS is always idle (`port/null/gfx_
 it onto the [RHI](#terms) (`port/render/rd_replay.c`). Coordinates stay in GS units (12.4 fixed
 point about the 2048,2048 window centre) until the replay converts them under the GS sampling
 rules and the resolution scale in force (`port/render/rd.h` (Coordinates)). The RHI is a small
-interface the backends implement: Vulkan (`port/rhi/vk`), D3D12 (`port/rhi/d3d12`), and on macOS
+interface the backends implement: Vulkan (`port/rhi/vk`), D3D12 (`port/rhi/d3d12`), D3D11 (`port/rhi/d3d11`), OpenGL (`port/rhi/gl`), and on macOS
 and iOS Vulkan over MoltenVK, linked statically (`port/rhi/rhi.h`; `cmake/IcoMoltenVK.cmake`).
 One build may link several backends; `rhi_create_backend` picks one (`port/rhi/rhi.h`
 (`rhi_create_backend`); `port/rhi/rhi_backend.h` (header comment)).
@@ -420,7 +420,7 @@ The one glossary of `docs/port/`. Other documents link here and do not redefine 
 
 - **rd**: the port's renderer API the game's render layer draws through
   (`port/render/rd.h`).
-- **RHI**: the render hardware interface under rd that the Vulkan and D3D12 backends implement
+- **RHI**: the render hardware interface under rd that the Vulkan, D3D12, D3D11 and OpenGL backends implement
   (`port/rhi/rhi.h`).
 - **frame slot**: one of the RHI's `RHI_FRAMES_IN_FLIGHT` (2) sets of per-frame resources;
   `rhi_wait_frame` waits for the frame last submitted in a slot before the slot is reused

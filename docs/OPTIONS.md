@@ -114,7 +114,7 @@ How the picture looks.
   50 Hz, none of the Frame rate row's limits do this. On Windows the game
   measures how fast the screen really refreshes and follows that, rather
   than the number Windows reports. With
-  Direct3D 12 (see [Choosing the renderer on Windows](#choosing-the-renderer-on-windows))
+  Direct3D 12 (see [Choosing the renderer](#choosing-the-renderer))
   and Vertical sync on, the game waits until the screen is ready for a new
   picture before it draws one, so the picture you see is as fresh as it
   can be.
@@ -137,8 +137,7 @@ How the picture looks.
   starts at 60. If motion ever looks uneven, check that this limit matches
   your screen's refresh rate (see your system's display settings). If a
   faint trailing image stays while you move, try another limit, or on
-  Windows the Direct3D 12 renderer ([Choosing the renderer on
-  Windows](#choosing-the-renderer-on-windows)).
+  Windows the Direct3D 12 renderer ([Choosing the renderer](#choosing-the-renderer)).
 - **Video mode** is PAL 50 Hz or 60 Hz. The normal choice is 60 Hz. This
   row is only on the title screen's Options, and only with the European
   disc: the Japanese and Korean discs always run at 60 Hz, as they did on the
@@ -234,14 +233,9 @@ draw in more than one way; if yours can only draw one way, there is nothing to p
 is not shown. It has one row.
 
 - **Graphics API** picks what the game draws with, from the next start (the row says so under
-  it). **Automatic** is the normal choice: the game uses Vulkan; when Vulkan will not start at
-  all it goes on with Direct3D 12 on Windows, else with OpenGL, whichever your download has.
-  On Windows, after a crash of the graphics driver, the game may start itself again with
-  Direct3D 12. The other choices are listed after it, the ones your
-  download has: **Vulkan**, **OpenGL** (for a graphics card or driver that has no Vulkan),
-  **Direct3D 12** and **Direct3D 11** (Windows only; Direct3D 11 has not been tried on a real
-  computer yet, so tell us how it goes). If the choice does not start, pick Automatic again, or
-  delete the `backend` line in `config.toml` ([more](#choosing-the-renderer-on-windows)).
+  it): Automatic, Vulkan, OpenGL, Direct3D 12 or Direct3D 11, the ones your download has. What
+  each one is, what Automatic does and how to undo a choice that does not start:
+  [Choosing the renderer](#choosing-the-renderer).
 
 ## Graphics driver
 
@@ -571,7 +565,7 @@ Under `[video]`:
 | `crt = false`, `crt_mode = "consumer"`, `crt_strength = 1.0` | The CRT filter and CRT strength rows. `crt_mode` is `"scanlines"`, `"consumer"`, `"trinitron"`, `"pvm"` or `"shadow"`. `crt_strength` goes from `0.0` to `1.0`. |
 | `crt_scanlines`, `crt_mask`, `crt_halation`, `crt_bloom` | Fine tuning of the CRT filter, each from `0.0` to `1.0`: how strong the dark lines are, how strong the fine pattern of dots or stripes is, how much glow surrounds bright spots and how much bright areas spread softly. A line that is missing, or a negative number, keeps the chosen style's own value. |
 | `crt_curvature` | How much the screen bulges, from `0.0` to `0.25`. Missing keeps the style's own value. |
-| `backend = ""` | The Graphics API row of the Graphics page: empty is Automatic, or `"vulkan"`, `"opengl"`, `"d3d12"` or `"d3d11"` where your download has it. Used from the next start. [Choosing the renderer](#choosing-the-renderer-on-windows). |
+| `backend = ""` | The Graphics API row of the Graphics page: empty is Automatic, or `"vulkan"`, `"opengl"`, `"d3d12"` or `"d3d11"` where your download has it. Used from the next start. [Choosing the renderer](#choosing-the-renderer). |
 | `gpu_driver = ""` | Android only. The Driver row of the Graphics driver page: empty is the phone's own driver. The game also writes a `gpu_driver_failed` line when a driver did not start. [About Android](ANDROID.md#using-a-different-graphics-driver). |
 | `model_pack = true` | The Model pack row. `false` shows the game's own models. |
 | `dump_models = false` | The Dump models row. Only works with Developer mode on. |
@@ -612,23 +606,28 @@ On Android, under `[paths]`:
 | --- | --- |
 | `keep_image = false` | `true` keeps the copy of your disc image that the first start makes. On Android, a line `keep_image=1` in `ico-pc.ini` works as well. [About Android](ANDROID.md#the-first-start). |
 
-## Choosing the renderer on Windows
+## Choosing the renderer
 
-The game draws with Vulkan unless you tell it otherwise. If Vulkan does not start at all (no
-Vulkan driver, or a graphics card the game cannot use with it), it uses OpenGL instead, where
-your download has it. The easy way to choose is the **Graphics API** row on the
-[Graphics page](#graphics) of the Options menu (Options > Graphics, under Effects). The file
-does the same. The names are:
+The game draws with Vulkan unless you tell it otherwise. The easy way to choose is the
+**Graphics API** row on the [Graphics page](#graphics) of the Options menu (Options > Graphics,
+under Effects); the page only shows when your download can draw in more than one way. The
+settings file does the same. The names are:
 
 | Name | What it is | Downloads that have it |
 | --- | --- | --- |
 | `vulkan` | Vulkan, the normal choice | All |
-| `opengl` | OpenGL 4.3 or later, for a graphics card or driver with no Vulkan | Windows and Linux |
+| `opengl` | OpenGL 4.3 or later, for a graphics card or driver with no Vulkan. Only checked on a software renderer so far: please tell us how it goes. | Windows and Linux |
 | `d3d12` | Direct3D 12 | Windows |
-| `d3d11` | Direct3D 11. Not tried on a real computer yet: it may not start, or may draw wrongly. Please tell us how it goes. | Windows |
+| `d3d11` | Direct3D 11. Not tried on any computer yet: it may not start, or may draw wrongly. Please tell us how it goes. | Windows |
 
-On Windows, open `ico-pc.ini` in the `x64` folder, beside `ico_pc_x64.exe`, with Notepad and
-add a line with the name you want, for example:
+**Automatic** (the empty choice) starts with Vulkan. If Vulkan does not start at all (no Vulkan
+driver, or a graphics card the game cannot use with it), it goes on with Direct3D 12 on Windows,
+then with OpenGL, whichever your download has. It never picks Direct3D 11. On Windows, after a
+crash of the graphics driver, the game may also start itself again with Direct3D 12.
+
+To choose in the file, open `ico-pc.ini` in the `x64` folder, beside `ico_pc_x64.exe`, with
+Notepad and add a line with the name you want,
+for example:
 
 ```
 backend=opengl
@@ -639,6 +638,6 @@ On any computer, the same works as `backend = "opengl"` under `[video]` in `conf
 
 Start the game; a line near the top of `logs/ico-pc.log` that starts with `window:` then names
 it (`OpenGL`, `D3D12` or `D3D11` instead of `Vulkan`), and a line `window: Graphics API ...`
-says whether you chose it or the game did. Delete the line, or pick Automatic, to go back to
-Vulkan. If the name you wrote is not in your download, the game says so in the same file and
-uses Vulkan.
+says whether you chose it or the game did. If a choice does not start, pick Automatic in the
+row, or delete the `backend` line, to go back to Vulkan. If the name you wrote is not in your
+download, the game says so in the same file and uses Vulkan.

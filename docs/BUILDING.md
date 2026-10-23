@@ -125,8 +125,8 @@ What differs from an x86-64 host:
   host's g++: a few minutes on 8 cores. It builds the `dxc` program and
   `libdxcompiler.so` only; there is no `libdxil.so`, and the arm64 preset
   compiles no DXIL (`ICO_SHADERS_DXIL=OFF`).
-- The preset is the [window build](port/ARCHITECTURE.md#terms) with the program linked, Vulkan only
-  (`ICO_RHI_D3D12=OFF`), as `android-arm64`. The movie decoder uses
+- The preset is the [window build](port/ARCHITECTURE.md#terms) with the program linked, Vulkan and OpenGL
+  (`ICO_RHI_D3D12=OFF`, `ICO_RHI_D3D11=OFF`), where `android-arm64` is Vulkan only (`ICO_RHI_OPENGL=OFF` too). The movie decoder uses
   libmpeg2's NEON routines, as on Android.
 
 ## Android: `tools/fetch_android.sh`
@@ -298,8 +298,8 @@ how several configurations of one preset live side by side under
 | `asan` | Linux x86-64, `-fsanitize=address,undefined`, `-O1` | host `gcc` |
 | `fptrap` | `linux-x64` with float divide-by-zero and invalid unmasked in the simulation | host `gcc` |
 | `linux-x64-clang`, `win-x64-clang` | the same two targets, headless | llvm-mingw clang 23 (the host glibc for Linux) |
-| `linux-arm64` | Linux arm64 (aarch64), built on an arm64 host ([below](#linux-arm64)); window build, `ICO_LINK_EXE=ON`, no Direct3D 12 and no DXIL shaders | host `gcc` |
-| `android-arm64` | Android arm64-v8a, `libmain.so` alone: a compile check without Gradle (`tools/fetch_android.sh` first); window build, `ICO_LINK_EXE=ON`, no Direct3D 12 and no DXIL shaders | NDK clang |
+| `linux-arm64` | Linux arm64 (aarch64), built on an arm64 host ([below](#linux-arm64)); window build, `ICO_LINK_EXE=ON`, no Direct3D 12, no Direct3D 11 and no DXIL shaders | host `gcc` |
+| `android-arm64` | Android arm64-v8a, `libmain.so` alone: a compile check without Gradle (`tools/fetch_android.sh` first); window build, `ICO_LINK_EXE=ON`, Vulkan only (no Direct3D 12, Direct3D 11 or OpenGL) and no DXIL shaders | NDK clang |
 | `ios-moltenvk`, `macos-moltenvk` | iOS 15 and macOS 12 arm64, the renderer libraries over MoltenVK, built on a Mac ([above](#apple-vulkan-renderer-moltenvk)) | Xcode clang |
 | `ios-app`, `macos-app` | the iOS app (unsigned) and the macOS app bundle, `ICO_LINK_EXE=ON` | Xcode clang |
 
