@@ -315,6 +315,7 @@ and macOS).
 | `ICO_RHI_MOLTENVK` | `ON` on Apple | links the Vulkan backend to MoltenVK |
 | `ICO_SHADERS_DXIL` | `ON` | also compiles the shaders to DXIL for the Direct3D 12 backend; the arm64 and Apple presets turn it off |
 | `ICO_VERSION_LABEL` | empty | with `ICO_LINK_EXE`: the package label (`vX.Y.Z` or `vX.Y.Z-rcN`). Its numbers go into the Windows version information and the Apple bundles' Info.plist; the label itself, written to `generated/ico_version.h`, is shown in the log header and on the Settings menu's Main page, and is empty (nothing shown) when it does not parse as a version (`CMakeLists.txt`, `ICO_VERSION_LABEL_C`). The package scripts and `android/app/build.gradle` pass it; a build without it has an all-zero version |
+| `ICO_RC_TOOLS` | `OFF` | the release candidates' own tooling, for rc packages alone ([Release candidate tools](#release-candidate-tools)); `ON` defines `ICO_RC_TOOLS=1` for every source, and a non-empty `ICO_VERSION_LABEL` that does not end in `-rcN` is refused |
 | `ICO_BASE_ELF` | `baserom/pal/baseelf.elf` | the base ELF the data loader's reference tests read; without it they are not built |
 | `ICO_BASE_ELF_JPN` | `baserom/jpn/baseelf.elf` | the Japanese disc's base ELF (SCPS-11003), for the same tests on that disc |
 | `ICO_BASE_ELF_KOR` | `baserom/kor/baseelf.elf` | the Korean disc's base ELF (SCPS-56001), for the same tests on that disc |
@@ -681,6 +682,40 @@ and the macOS zip and dmg ([Continuous integration](#continuous-integration); ru
 ```sh
 gh release create <tag> dist/ico-pc-<tag>-win.zip dist/ico-pc-<tag>-win-portable.zip dist/ico-pc-<tag>-linux.tar.gz dist/ico-pc-<tag>-linux-portable.tar.gz dist/ico-pc-<tag>-linux-arm64.tar.gz dist/ico-pc-<tag>-linux-arm64-portable.tar.gz dist/ico-pc-<tag>-linux-x86_64.AppImage dist/ico-pc-<tag>-linux-aarch64.AppImage dist/ico-pc-<tag>-android.apk
 ```
+
+## Release candidate tools
+
+A release candidate (a label ending in `-rcN`) carries tooling a release never does. Today that is
+one row: on Android, Settings > Main > **Share a bug report**, directly below Save a picture for a
+bug report, which opens the system's share menu with `logs/ico-pc.log`, `logs/ico-pc-previous.log`,
+the newest `dumps/*.zip` and `dumps/*-present.png` and the newest `logs/report-*.zip`, each when it
+is there (`port/platform/share_report.c`; a phone's files folder cannot be reached without a
+computer). The gate is mechanical at every step:
+
+- The switch is CMake's `ICO_RC_TOOLS` (default `OFF`) and Gradle's `icoRcTools` (default `false`;
+  it passes `-DICO_RC_TOOLS` to the native build, sets `BuildConfig.RC_TOOLS` and enables the
+  report `FileProvider` in `AndroidManifest.xml` through the `icoRcTools` manifest placeholder; the
+  provider entry is always in the manifest but disabled, so the system never starts it).
+- Every package script takes it from `tools/check_rc_text.py --cmake-flag <label>` (or
+  `--gradle-flag`), which gives `ON` for a label matching `-rc[0-9]+$` and `OFF` for every other
+  label, and passes it explicitly every time, so a reused build folder keeps no `ON`.
+  `tools/package_android.sh` refuses an `ICO_GRADLE_ARGS` that names `icoRcTools`. CMake (with
+  `ICO_LINK_EXE`) and Gradle refuse the switch with a non-empty label that is not an rc's.
+- After the build, each script runs `tools/check_rc_text.py --label <label>` on what it built (the
+  Linux and Windows program, the unsigned APK with every entry inflated, the macOS and iOS
+  executables): for a release label the row's English text, "Share a bug report", must be absent
+  (UTF-8 and UTF-16), for an rc label present; the script fails otherwise. CI's debug APK is
+  checked the same way with the label `ci`.
+- In the sources, the row, its strings in all seven tables, the host's handler and the JNI call are
+  inside `#if ICO_RC_TOOLS` (`port/ui/settings.h` and `strings.h` default it to 0);
+  `ui_settings_set_share_report_handler` exists in every build and keeps nothing at 0.
+- ctests: `rc_tools_gate` (the checker's own cases, and the scripts, `CMakeLists.txt`,
+  `build.gradle` and the manifest using it), `rc_tools_binary` (this build's `ico_pc` holds the text
+  exactly when `ICO_RC_TOOLS` is on), `settings_extra` (`testShareReport`: at 0 the Main page has
+  its sixteen rows and no string is the row's text) and `share_report` (the files picked).
+
+The other settings tests pin the Main page's sixteen rows of the default build; ctest is run on a
+build with `ICO_RC_TOOLS` off.
 
 ## Appendix, maintainers: the base ELF
 

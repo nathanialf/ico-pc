@@ -227,7 +227,8 @@ on Android.
 ## Send a problem report
 
 1. Copy `logs/ico-pc.log` from the game's folder (see above) to a
-   computer.
+   computer. On a test build you can send it from the phone instead (see
+   "Sending the files from the phone" below).
 2. Open a report on the
    [issues page](https://github.com/nathanialf/ico-pc/issues), say which
    phone or tablet you have, and attach the file.
@@ -300,6 +301,17 @@ game can draw again for us, not a picture) about every ten seconds into
 game, put the newest file from `dumps` and `logs/ico-pc.log` in a `.zip`
 file (the issues page takes `.zip` files) and send it. Each file is a few
 megabytes, so delete the line (and the files) when you are done.
+
+**Sending the files from the phone (test builds only).** The test builds
+we post while we look into a problem (their names end in `-rc` and a
+number) have one more row on the first page of **Options**: **Share a bug
+report**, just below Save a picture for a bug report. The normal releases
+do not have it. Choose it after the picture is saved. The phone's share
+menu opens with the log, the log of the start before, the newest `.zip`
+and the newest picture ending in `-present.png` from `dumps`, and the
+newest `report-` file from `logs` if there is one. Pick an email or chat
+app, or save them to the phone's files, and attach them to your report.
+No computer is needed.
 
 **The buttons you pressed.** Each start also writes a file in `logs`
 whose name starts with `input-` and goes on with the date and time of

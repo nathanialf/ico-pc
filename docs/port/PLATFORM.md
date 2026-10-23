@@ -1207,6 +1207,23 @@ The window build's diagnostic keys are free of SDL so a unit test checks them
   window) arms it, the pump runs `frame_dump` once the time has come, with the line `window: the
   picture for a bug report (Settings, 3 s after the press):` before F12's own
   (`port/platform/window_host.c` (`report_picture_arm`, `report_picture_pump`)).
+- **Settings > Share a bug report** (Main, below it; an rc build on Android alone,
+  `ICO_RC_TOOLS`, [BUILDING.md](../BUILDING.md#release-candidate-tools)): `share_report_arm` sets
+  a flag and the pump's `share_report_pump`, on SDL's main thread, collects the files
+  (`port/platform/share_report.c` `ico_share_report_collect`: `logs/ico-pc.log`,
+  `logs/ico-pc-previous.log`, the newest `dumps/*.zip` and `dumps/*-present.png` by modification
+  time then name, the newest `logs/report-*.zip`, each skipped when missing), logs `window: share:
+  N files offered (name, name, ...)`, flushes the log and calls `ico_android_share_files`
+  (`host_android.c`), which calls the static `IcoActivity.shareReport(String title, String[]
+  paths)`: content URIs of the app's `FileProvider` (authority `<package>.reports`,
+  `res/xml/report_paths.xml`: the external and internal files folders; enabled in the manifest by
+  Gradle's `icoRcTools` placeholder alone) in an `ACTION_SEND_MULTIPLE` intent, MIME
+  `application/octet-stream`, the URIs also as its clip data with `FLAG_GRANT_READ_URI_PERMISSION`,
+  through `Intent.createChooser` titled with the row's label. A failure logs `window: share: the
+  share menu did not open: <reason>` (the Java exception's text, or the missing method); no file
+  logs `window: share: nothing to share (no log, dump or report in <logs>, <dumps>)`. F12's zip
+  is closed before the presented picture is written (one present later), so the picture goes as
+  its own file.
 
 Neither key can be bound, and a held key's repeats do nothing. `dump_every=N` in `ico-pc.ini`
 writes every Nth frame as an `.rddump` (`port/platform/host_config.h`). It works on Android too:

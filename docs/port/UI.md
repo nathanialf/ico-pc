@@ -176,7 +176,7 @@ tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/setting
 
 | page | rows |
 | --- | --- |
-| Main (`UI_PAGE_MAIN`) | Display, Effects, Graphics driver, Audio, Controls, Gameplay, Language, Achievements, Extras, Save a picture for a bug report, Developer mode, Dump textures, Dump models, Back |
+| Main (`UI_PAGE_MAIN`) | Display, Effects, Graphics driver, Audio, Controls, Gameplay, Language, Achievements, Extras, Save a picture for a bug report, (an rc build on Android: Share a bug report,) Developer mode, Dump textures, Dump models, Back |
 | Display | Preset, Resolution, Aspect, Anti-aliasing, Window mode, Vsync, Texture pack, Model pack, Frame rate, Video mode, Back |
 | Effects | Full height, Filtering, Brightness, CRT filter, CRT strength, the six game effects (Motion blur Off, Original or Smooth, `UI_OPT_EFFECT_MOTION_BLUR`, stepped round with `stepIndex` and its note `UI_STR_EFFECT_MOTION_BLUR_NOTE`) with Water reflections (Original or Sharp, `UI_OPT_EFFECT_WATER`) after Fog, Full pixel, Back |
 | Graphics driver | Driver, Add a driver, Remove this driver, Back (Android) |
@@ -197,6 +197,17 @@ tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/setting
 for a bug report in 3 s` and shows the popup `UI_STR_REPORT_PICTURE_ARMED` ("Picture in 3
 seconds") with `UI_STR_REPORT_PICTURE_ARMED_BODY`; its note is `UI_STR_REPORT_PICTURE_NOTE`
 (`port/ui/settings.c` (`reportPicture`, `optShown`)).
+
+**Share a bug report** (`UI_OPT_SHARE_REPORT`) exists in an rc build alone: the option, its two
+strings (`UI_STR_OPT_SHARE_REPORT`, `UI_STR_SHARE_REPORT_NOTE`, all seven tables), the table
+entries, its note and its Cross case are inside `#if ICO_RC_TOOLS` (`settings.h` and `strings.h`
+default it to 0; [BUILDING.md](../BUILDING.md#release-candidate-tools)), and `MAX_ROWS` is
+`16 + ICO_RC_TOOLS`. It sits directly below Save a picture for a bug report and shows on Android
+(`ico_video_android`) while a handler is set (`ui_settings_set_share_report_handler`: the window
+host's `share_report_arm`; at `ICO_RC_TOOLS` 0 the setter keeps nothing). Cross logs `settings:
+share a bug report (an rc build's row)` and calls the handler once, with no popup (the system's
+share menu opens over the game). With all seventeen rows shown the page starts at line 26, 10
+apart (Back at 186, its box to 226; `pagePitch`).
 
 `buildOptionPage` makes a page: a centred header, then per option a right-aligned label and, for
 a stepped option, a centred value row and the two arrow rows owned by the label, with their pointer
