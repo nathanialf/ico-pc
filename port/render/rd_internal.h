@@ -2252,6 +2252,12 @@ typedef struct RdContext {
      * the fog passes above 1x (doFog): 0 while every target is at scale 1 */
     uint32_t above1xDraws;
     uint32_t onceFlags;
+    /* rd_fog_selftest ran the DATE and local read self-tests on this
+     * renderer (once per rd_init: a renderer switched in the process tests
+     * its own device) */
+    bool dateRan;
+    /* the open frame is closed without a picture (rd_resume_frame) */
+    bool discardOpen;
 
     /* GPU objects (rd_replay.c / rd_pipeline.c) */
     RhiBindGroupLayout layoutFrame, layoutDraw, layoutTex, layoutInt;

@@ -501,6 +501,14 @@ void rd_shutdown(void);
  * their next draw. */
 void rd_suspend(void);
 bool rd_resume(const RdSettings *settings, void *sdlWindow);
+/* After rd_resume and what the caller runs on the new renderer before the
+ * game goes on (the self-tests, the pipeline set): a frame the game had
+ * open at rd_suspend is open again, so the rest of the game's tick records
+ * into it (its temporary targets freed with it) instead of being dropped
+ * outside a frame; its start went with the renderer before, so it is closed
+ * without a picture (its rd_end_frame discards it).  Nothing when no frame
+ * was open. */
+void rd_resume_frame(void);
 /* gsb_Init on a 50/60 Hz switch (kanbanBoot's gsResetFunc) recreates the
  * scene-sized targets. */
 void rd_reset_scene(uint32_t gsWidth, uint32_t gsHeight);

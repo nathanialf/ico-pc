@@ -1380,9 +1380,10 @@ bool rd_fog_selftest(void)
     if (!g_rd.inited || !g_rd.hasDevice) {
         return false;
     }
-    static bool dateRan; /* DATE's self-test once a run, before the fog's first */
-    if (!dateRan) {
-        dateRan = true;
+    /* DATE's self-test once a renderer (rd_init clears it), before the
+       fog's first */
+    if (!g_rd.dateRan) {
+        g_rd.dateRan = true;
         (void)rd_date_selftest();
         (void)rd__fx_local_selftest(); /* it reads the readable passes DATE's path keeps */
     }

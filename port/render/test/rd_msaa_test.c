@@ -34,7 +34,9 @@
  *            triangle covers its interior (the depth resolve takes the
  *            smallest sample; the largest failed the re-draw on a slope);
  *   original the Original preset with MSAA4 asked for: the frame without
- *            anti-aliasing, byte for byte. */
+ *            anti-aliasing, byte for byte.
+ * Before them, on any device, the renderer suspended and resumed (testSuspend:
+ * what is carried, what is forgotten, the frame opened again). */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -495,6 +497,53 @@ static void testOriginal(void)
           "original: MSAA4 asked for under the Original preset changed SCENE");
 }
 
+/* the renderer switched in the process (rd_suspend, rd_resume,
+   rd_resume_frame; Options > Graphics > Apply): suspended with a frame
+   open, a texture, the mirror mode and a GS state; resumed, the scene size,
+   the frame counter, the mirror mode and the state carried, the texture's
+   id names nothing, the DATE self-test's flag cleared (it runs again on
+   the new renderer), no frame open until rd_resume_frame opens one, whose
+   temporary target is freed when the game closes it, without a picture */
+static void testSuspend(const RdSettings *s)
+{
+    const RdTex t = rd_create_texture(16, 16, s_texel, RD_TEXA_80_80, "suspend test");
+    CHECK(t.id != 0 && rd__tex_rec(t.id) != NULL, "suspend: the texture");
+    rd_set_mirror(1);
+    g_rd.dateRan = true; /* as after the start's rd_fog_selftest */
+    rd_begin_frame();
+    g_rd.persistent.scissor[2] = 123;
+    g_rd.persistent.gouraud = 1;
+    g_rd.persistent.tex = t.id;
+    RdStateBlock want = g_rd.persistent;
+    want.tex = 0;
+    const uint32_t frames = g_rd.frameCounter;
+    const int lastIndex = g_rd.lastIndex;
+    rd_suspend();
+    CHECK(!g_rd.inited, "suspend: the renderer is down");
+    CHECK(rd_resume(s, NULL), "resume: the renderer is up again");
+    CHECK(g_rd.gsW == GW && g_rd.gsH == GH, "resume: the scene size %ux%u", g_rd.gsW, g_rd.gsH);
+    CHECK(g_rd.frameCounter == frames, "resume: the frame counter %u (%u)", g_rd.frameCounter,
+          frames);
+    CHECK(g_rd.mirrorRun == 1, "resume: the mirror mode carried");
+    CHECK(memcmp(&g_rd.persistent, &want, sizeof(want)) == 0,
+          "resume: the GS state carried, its texture forgotten");
+    CHECK(rd__tex_rec(t.id) == NULL, "resume: the kept texture id names nothing");
+    CHECK(!g_rd.dateRan, "resume: the DATE self-test runs again on the new renderer");
+    CHECK(!rd_frame_open(), "resume: no frame open before rd_resume_frame");
+    rd_resume_frame();
+    CHECK(rd_frame_open() && g_rd.frameCounter == frames + 1,
+          "rd_resume_frame: the game's frame open again (%u)", g_rd.frameCounter);
+    const RdTarget tt = rd_temp_target(64, 64, 0, 0);
+    CHECK(tt.id != 0 && rd__target_rec(tt.id) != NULL, "the tick's temporary target");
+    rd_end_frame(0);
+    CHECK(!rd_frame_open() && g_rd.lastIndex == -1 && rd__target_rec(tt.id) == NULL,
+          "the frame closed without a picture, its temporary target freed (last %d, was %d)",
+          g_rd.lastIndex, lastIndex);
+    rd_resume_frame();
+    CHECK(!rd_frame_open(), "rd_resume_frame once only");
+    rd_set_mirror(0);
+}
+
 int main(void)
 {
     printf("rd_msaa_test\n");
@@ -544,6 +593,7 @@ int main(void)
               "without depth_resolve_ps: off and the supersampling values (0x%x)", without);
         CHECK(rd_aa_supported_mask() == mask, "the module back: the mask as before");
     }
+    testSuspend(&s);
     if (!(mask & (1u << RD_AA_MSAA4))) {
         rd_shutdown();
         printf("rd_msaa_test: SKIP: no 4-sample MSAA on this device\n");

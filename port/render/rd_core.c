@@ -1785,6 +1785,9 @@ static struct {
     void *vu;
 } s_carry;
 
+/* a frame was open at rd_suspend (rd_resume_frame) */
+static bool s_resumeOpen;
+
 void rd_suspend(void)
 {
     if (!g_rd.inited) {
@@ -1797,6 +1800,7 @@ void rd_suspend(void)
     s_carry.persistent = g_rd.persistent;
     s_carry.mirror = g_rd.mirrorRun;
     s_carry.vu = rd__vu_take();
+    s_resumeOpen = rd_frame_open();
     rd_shutdown(); /* the open frame, if any, is dropped with the rest */
     rdtex_reset(); /* the entries name textures rd_shutdown destroyed */
 }
@@ -1824,6 +1828,16 @@ bool rd_resume(const RdSettings *settings, void *sdlWindow)
         memset(&s_carry, 0, sizeof(s_carry));
     }
     return true;
+}
+
+void rd_resume_frame(void)
+{
+    if (!s_resumeOpen || !g_rd.inited || rd_frame_open()) {
+        return;
+    }
+    s_resumeOpen = false;
+    rd_begin_frame();
+    g_rd.discardOpen = true;
 }
 
 static void fogSceneRemade(void *arg)
@@ -2099,6 +2113,7 @@ void rd_begin_frame(void)
     if (g_rd.recIndex >= 0) {
         rd__log("rd_begin_frame without rd_end_frame: the open frame is discarded");
     }
+    g_rd.discardOpen = false;
     /* the fog probe a replay recorded since the last frame: read back and
      * logged (once per start and new scene size) */
     if (rd__fog_probe_pending()) {
@@ -2204,6 +2219,10 @@ void rd_end_frame(int keep)
     if (!f) {
         return;
     }
+    if (g_rd.discardOpen) {
+        rd_discard_frame(); /* rd_resume_frame's: no picture */
+        return;
+    }
     f->keep = keep ? 1 : 0;
     if (f->cut) {
         f->camera.cut = 1;
@@ -2264,6 +2283,7 @@ void rd_discard_frame(void)
      * of them reached the GS */
     rd__frame_reset(f);
     g_rd.recIndex = -1;
+    g_rd.discardOpen = false;
 }
 
 bool rd_frame_open(void)
