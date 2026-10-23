@@ -259,9 +259,11 @@ typedef struct D11Pipeline {
  * D3D12 backend's. */
 #define D11_MAX_CMD_LISTS 8
 
-/* the bytes [lo, hi) of upload buffer `buffer` a list reads */
+/* the bytes [lo, hi) of one part (D11_PART_*) of upload buffer `buffer` a
+ * list reads */
 typedef struct D11Touch {
     uint32_t buffer;
+    uint32_t part;
     uint64_t lo, hi;
 } D11Touch;
 
@@ -442,12 +444,14 @@ void d11_drain_messages(void);
 bool d11_wait_query(ID3D11Query *q);
 /* The current frame slot's list for a handle, NULL for a stale one. */
 D11CommandList *d11_get_cmd(RhiCommandList cl);
-/* Notes that list c reads [lo, hi) of buffer id `buffer` (a no-op unless it
- * is an UPLOAD buffer): rhi_submit writes that range from the shadow into
- * the buffer's parts before the list executes.  The command path calls it
- * for every bind group range, vertex/index binding with its draw extent and
- * copy source it records on an upload buffer. */
-void d11_cmd_touch(D11CommandList *c, uint32_t buffer, uint64_t lo, uint64_t hi);
+/* Notes that list c reads [lo, hi) of part `part` (D11_PART_*) of buffer
+ * id `buffer` (a no-op unless it is an UPLOAD buffer): rhi_submit writes
+ * that range from the shadow into the part before the list executes
+ * (ranges of one buffer and part merge into their union).  The command
+ * path calls it for every bind group range (uniforms: D11_PART_CB, storage:
+ * D11_PART_SRV), vertex/index binding with its draw extent (D11_PART_VI)
+ * and copy source it records from an upload buffer's part. */
+void d11_cmd_touch(D11CommandList *c, uint32_t buffer, uint32_t part, uint64_t lo, uint64_t hi);
 
 static inline uint64_t d11_qpc_ns(uint64_t ticks)
 {
@@ -486,10 +490,11 @@ D11Layout *d11_get_layout(uint32_t id);
  * source). */
 ID3D11Buffer *d11_buffer_part(const D11Buffer *b, uint32_t part);
 ID3D11Buffer *d11_buffer_any_part(const D11Buffer *b);
-/* UPLOAD: writes [lo, hi) of the shadow into every part through ctx's
- * UpdateSubresource1 (16-byte aligned; a constant buffer whole when the
- * device has no partial updates). */
-void d11_buffer_flush(D11Buffer *b, ID3D11DeviceContext1 *ctx, uint64_t lo, uint64_t hi);
+/* UPLOAD: writes [lo, hi) of the shadow into part `part` (D11_PART_COUNT:
+ * every part) through ctx's UpdateSubresource1 (16-byte aligned; a
+ * constant buffer whole when the device has no partial updates). */
+void d11_buffer_flush(D11Buffer *b, ID3D11DeviceContext1 *ctx, uint32_t part, uint64_t lo,
+                      uint64_t hi);
 /* A structured SRV (16-byte elements) over [offset, offset + size) of the
  * buffer's SRV part, from its cache; NULL when the range is invalid. */
 ID3D11ShaderResourceView *d11_buffer_srv(D11Buffer *b, uint64_t offset, uint64_t size);
