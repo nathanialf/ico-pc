@@ -391,6 +391,7 @@ RhiSampler rhi_create_sampler(const RhiSamplerDesc *desc)
         return out;
     }
     memset(s, 0, sizeof(*s));
+    gl_check("before rhi_create_sampler"); /* an earlier error is not the sampler's */
     glf.GenSamplers(1, &s->name);
     const bool minLinear = desc->min == RHI_FILTER_LINEAR;
     const bool mipLinear = desc->mip == RHI_FILTER_LINEAR;

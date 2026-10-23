@@ -413,11 +413,14 @@ void gl_frame_fence(void)
             GL_LOG("glFenceSync failed (%u so far): the frame slot waits with glFinish", s_failed);
         }
     }
-    /* a later fence of the same frame covers the earlier one */
+    /* a later fence of the same frame covers the earlier one; a failed one
+       leaves the slot to glFinish at its recycle, until a later submit's
+       fence covers it */
     if (f->fence) {
         glf.DeleteSync(f->fence);
     }
     f->fence = s;
+    f->needFinish = !s;
     glf.Flush(); /* the fence reaches the GPU without a wait's flush */
 }
 
@@ -487,6 +490,10 @@ static void gl_collect_timestamps(GlFrame *f)
 
 static void gl_recycle_frame(GlFrame *f)
 {
+    if (f->needFinish) {
+        gl_wait_sync(NULL); /* a submit without a fence: glFinish */
+        f->needFinish = false;
+    }
     if (f->fence) {
         gl_wait_sync(f->fence);
         glf.DeleteSync(f->fence);

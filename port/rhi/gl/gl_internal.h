@@ -276,7 +276,8 @@ typedef struct GlGarbage {
 
 /* --------------------------------------------------------- frame slot */
 typedef struct GlFrame {
-    GLsync fence; /* placed by the slot's last submit (gl_frame_fence) */
+    GLsync fence;    /* placed by the slot's last submit (gl_frame_fence) */
+    bool needFinish; /* a submit's glFenceSync failed: the recycle waits with glFinish */
     GlCmdList lists[GL_MAX_CMD_LISTS];
     uint32_t listCount;
     /* the transient bind groups and their entries */

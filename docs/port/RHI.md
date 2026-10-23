@@ -883,7 +883,10 @@ scratch framebuffer with `glReadPixels` (depth as 32-bit floats), the rows from 
 slot's fence (`gl_frame_fence`: `glFenceSync`, then `glFlush`). `rhi_wait_frame` moves to the next
 slot, waits for its fence (`glClientWaitSync`, counted into `fenceWaits` and `fenceWaitNs` when it
 blocks; after 2 s it logs `rhi_gl: a frame's fence has not signalled after 2 s; still waiting`),
-then runs the slot's deletes, resets its bind group arena and reads its timestamps. GPU timestamps
+then runs the slot's deletes, resets its bind group arena and reads its timestamps. A
+`glFenceSync` that fails (`rhi_gl: glFenceSync failed (N so far): the frame slot waits with
+glFinish`) leaves the slot without a fence; unless a later submit of the slot places one, its
+recycle waits with `glFinish` (`GlFrame.needFinish`). GPU timestamps
 are `glQueryCounter(GL_TIMESTAMP)` on a query object per index and slot, made at its first use,
 read once the fence has passed (`rhi_gl: GPU timestamps: on (glQueryCounter, 256 per frame
 slot)`). `rhi_wait_idle` is `glFinish`.
@@ -954,8 +957,9 @@ again, so the blits between passes (a resolve, the present) never meet a closed 
 
 **Barriers and copies.** OpenGL orders rendering, clears, copies and texture fetches within its
 context itself, so `rhi_cmd_barrier` has no layouts to change; a texture leaving or entering
-`RHI_STATE_STORAGE` (image loads and stores) takes one `glMemoryBarrier` (image access, texture
-fetch, framebuffer and texture update bits) per call, counted in `barriers`. No
+`RHI_STATE_STORAGE` (image loads and stores) takes one `glMemoryBarrier(GL_ALL_BARRIER_BITS)` per
+call (the narrower bits do not name `glCopyImageSubData`, which `rhi_cmd_copy_texture` uses), counted
+in `barriers`. No
 `glTextureBarrier`: the RHI never samples a texture its pass draws into. `rhi_cmd_local_read_barrier`
 does nothing (`localRead` is false). Copies run outside passes on the scratch binding points:
 `rhi_cmd_copy_buffer` is `glCopyBufferSubData` (an upload buffer as the destination is refused);

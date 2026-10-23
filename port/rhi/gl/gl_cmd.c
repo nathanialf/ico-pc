@@ -558,8 +558,11 @@ void rhi_cmd_barrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint3
             continue;
         }
         if (b->before == RHI_STATE_STORAGE || b->after == RHI_STATE_STORAGE) {
-            bits |= GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT |
-                    GL_FRAMEBUFFER_BARRIER_BIT | GL_TEXTURE_UPDATE_BARRIER_BIT;
+            /* every bit: the named ones do not list glCopyImageSubData
+               (rhi_cmd_copy_texture) among the reads and writes they order,
+               and a storage transition is rare (an interlock driver's
+               destination read only) */
+            bits |= GL_ALL_BARRIER_BITS;
         }
     }
     if (bits) {

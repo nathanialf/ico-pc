@@ -629,7 +629,8 @@ extensions below).
 **The gates** (`tools/spirv_to_glsl.py`): the text starts with `#version 430` (`#version 450` for a module that queries a multisampled texture's sample count, `textureSamples()`: the MSAA depth resolve, `depth_resolve_ps`; a driver below OpenGL 4.5 refuses it and the renderer treats it as missing); every NoContraction
 decoration of the SPIR-V surfaces as `precise` in the GLSL (a module with the decoration and no
 `precise` fails the build; the counts differ by a few where SPIRV-Cross folds a decoration into one
-declaration); `embed_shaders.py` checks a non-empty file starts with `#version`;
+declaration); an image uniform still at a binding of 48 or more after the u-register remap (a
+declaration form the remap does not match) fails the build; `embed_shaders.py` checks a non-empty file starts with `#version`;
 `shaders_table` requires that with GLSL on exactly the entries of `expectedNoGlsl` have none.
 `spirv_to_glsl.py --spirv-cross <exe> --list --in <spv>...` prints name, bytes, extensions and the
 two counts per module. `port/rhi/test/shaders/gen_shaders.sh` writes the RHI test shaders' GLSL

@@ -94,6 +94,10 @@ IMAGE_BASE = 48  # the -fvk-u-shift of cmake/IcoShaders.cmake
 IMAGE_DECL = re.compile(r"^layout\(binding = (\d+)(, [^)]*)?\) uniform ((?:coherent |volatile |restrict |readonly |writeonly )*u?image2D\b.*)$",
                         re.M)
 
+# any image uniform with a binding, whatever its qualifiers and layout order
+IMAGE_ANY = re.compile(r"^.*\blayout\s*\([^)]*\bbinding\s*=\s*(\d+)[^)]*\).*\buniform\b[^;]*\bu?image\w*\b.*$",
+                       re.M)
+
 
 def remap_images(text):
     """A storage image's binding becomes its u register (48 + u -> u): OpenGL
@@ -105,7 +109,14 @@ def remap_images(text):
         if b < IMAGE_BASE:
             sys.exit(f"spirv_to_glsl: a storage image at binding {b}, below the u shift {IMAGE_BASE}")
         return f"layout(binding = {b - IMAGE_BASE}{m.group(2) or ''}) uniform {m.group(3)}"
-    return IMAGE_DECL.sub(sub, text)
+    text = IMAGE_DECL.sub(sub, text)
+    # a declaration form IMAGE_DECL does not match would keep its 48 + u
+    # binding and bind on no driver: refuse the module rather than ship it
+    for m in IMAGE_ANY.finditer(text):
+        if int(m.group(1)) >= IMAGE_BASE:
+            sys.exit(f"spirv_to_glsl: a storage image still at binding {m.group(1)} after the "
+                     f"remap (a declaration form IMAGE_DECL does not match): {m.group(0).strip()}")
+    return text
 
 
 def translate(exe, src, out):
