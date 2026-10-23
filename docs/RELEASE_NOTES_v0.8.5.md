@@ -4,7 +4,7 @@
 
 - **Options > Effects > Motion blur** has a third choice, **Smooth**. Off and Original are as before, and Original is still what the game starts with. Original moves the trail on once for each of the game's own frames, so above the Original frame rate it stands still for a moment between them while the picture in front keeps moving. Smooth moves the same trail on with every frame you see. It is as long as Original's, and it uses a little more of the graphics card, which matters most on a phone.
 - **Edit layout** on a phone with a camera hole or rounded corners now lets you drag a button under the hole or into the corner beside it. The game's own arrangement still keeps clear of them, so a button you have not moved stays where it was.
-- **Options > Developer mode > Save a picture for a bug report**, for phones and handhelds that have no F12 key. Choose it and leave the menu: 3 seconds later the game saves what is on the screen, with the log, in the `dumps` folder. If the menu is not reachable while the problem shows, putting `dump_every=300` in the settings file makes the game save a picture every few seconds instead; the Android page says how.
+- **Options > Developer mode > Save a picture for a bug report**, for phones and handhelds that have no F12 key. Choose it and leave the menu: 3 seconds later the game saves what is on the screen, with the log, in the `dumps` folder. If the menu is not reachable while the problem shows, putting the line `dump_every=300` in the text file `ico-pc.ini` in the game's folder makes the game save a recording of the frame about every ten seconds instead, to send with the log; the Android page says how.
 
 ## Fixed
 

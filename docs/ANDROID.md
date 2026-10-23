@@ -285,21 +285,22 @@ that stays on the screen). Save a picture of it for the report:
 3. Turn Developer mode off again: while it is on you cannot earn
    achievements.
 
-If you cannot get to the menu while it shows, the game can save its
-pictures by itself instead. Add this line to the text file `ico-pc.ini` in
-the game's folder (see
-[Keeping the copy](#the-first-start) for how to make that file and copy it
-to the phone):
+If you cannot get to the menu while it shows, the game can save
+recordings of its frames by itself instead. Add this line to the text file
+`ico-pc.ini` in the game's folder ([where it is](#where-your-files-are);
+see [Keeping the copy](#the-first-start) for how to make that file and copy
+it to the phone):
 
 ```
 dump_every=300
 ```
 
-The game then saves one of its pictures every few seconds into `dumps`.
-Play to the place, wait a little, close the game, put the newest file from
-`dumps` in a `.zip` file (the issues page takes `.zip` files) and send it.
-Each file is a few megabytes, so delete the line (and the files) when you
-are done.
+The game then saves a recording of the frame on the screen (a file the
+game can draw again for us, not a picture) about every ten seconds into
+`dumps`. Play to the place, wait there at least 15 seconds, close the
+game, put the newest file from `dumps` and `logs/ico-pc.log` in a `.zip`
+file (the issues page takes `.zip` files) and send it. Each file is a few
+megabytes, so delete the line (and the files) when you are done.
 
 **The buttons you pressed.** Each start also writes a file in `logs`
 whose name starts with `input-` and goes on with the date and time of
