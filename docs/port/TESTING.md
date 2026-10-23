@@ -345,9 +345,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   behind, and a 60 frames a second game on 20 ms presents through the late arm alone; the present
   allowance's rule (`testBudgetRule`: the drop to one below a late step's presents, the hold, the
   climb and its GPU gate, the display's wait excused, a late step of new frames only changing
-  nothing, never above the ceiling) and the timer path with a GPU queue (`testBudgetTimerLoop`:
-  nothing binds at 4 or 12 ms of GPU a picture, the in-betweens held at 20 ms so no step ends half
-  a period late, FIFO's return past the deadline excused); the clamp of a cap above the refresh in
+  nothing, never above the ceiling), the timer path's unbound start (`testBudgetUnbound`: 15
+  presents a step on time never refused, a drop held to the ceiling of 8, one climb past it
+  unbound again, the lock's allowance never unbound) and the timer path with a GPU queue
+  (`testBudgetTimerLoop`: nothing binds at 4 or 12 ms of GPU a picture nor on back-to-back 1 ms
+  presents, the in-betweens held at 20 ms so no step ends half a period late, FIFO's return past
+  the deadline excused); the clamp of a cap above the refresh in
   mailbox mode (`testPresentGap`, `testCapEqualsRefresh`) (`pace_policy`).
 - `perf_block_test.c`: a block of replays by phase: sums, maxes, the replays over a threshold, the
   longest phase (`perf_block`).
