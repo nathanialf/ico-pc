@@ -510,6 +510,34 @@ static char *gl_redeclare_per_vertex(char *text)
     return out;
 }
 
+/* The vertex program's main wrapped so that gl_Position.y is negated after
+ * it (every return included): the device draws with GL_LOWER_LEFT clip
+ * control (gl_device.c gl_defaults), whose window y runs the same way as
+ * the renderer's D3D-style clip y only with that negation.  The text's own
+ * main is renamed by a #define after the #version line. */
+static char *gl_flip_vertex_y(char *text)
+{
+    static const char rename[] = "#define main ico_gl_vertex_main\n";
+    static const char tail[] = "\n#undef main\nvoid main()\n{\n    ico_gl_vertex_main();\n"
+                               "    gl_Position.y = -gl_Position.y;\n}\n";
+    const char *nl = strchr(text, '\n');
+    if (!nl) {
+        return text;
+    }
+    const size_t at = (size_t)(nl + 1 - text), len = strlen(text);
+    const size_t addR = sizeof(rename) - 1u, addT = sizeof(tail) - 1u;
+    char *out = malloc(len + addR + addT + 1u);
+    if (!out) {
+        return text;
+    }
+    memcpy(out, text, at);
+    memcpy(out + at, rename, addR);
+    memcpy(out + at + addR, text + at, len - at);
+    memcpy(out + len + addR, tail, addT + 1u);
+    free(text);
+    return out;
+}
+
 RhiShader rhi_create_shader(const RhiShaderDesc *desc)
 {
     RhiShader out = {0};
@@ -533,7 +561,7 @@ RhiShader rhi_create_shader(const RhiShaderDesc *desc)
         return out;
     }
     if (desc->stage == RHI_STAGE_VERTEX) {
-        text = gl_redeclare_per_vertex(text);
+        text = gl_flip_vertex_y(gl_redeclare_per_vertex(text));
     }
     const GLenum type = desc->stage == RHI_STAGE_VERTEX ? GL_VERTEX_SHADER : GL_FRAGMENT_SHADER;
     const GLchar *src = text;

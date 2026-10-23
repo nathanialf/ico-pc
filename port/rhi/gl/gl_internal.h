@@ -5,10 +5,13 @@
  * owns when headless); every entry point through gl_loader.h (glf.Name).
  * docs/port/RHI.md, "OpenGL backend", describes the conventions:
  *
- *  - Clip space: glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE) at init, so
- *    the renderer's D3D-style clip space (depth 0..1, row 0 at the top,
- *    FragCoord from the top left) and its viewports and scissors pass
- *    through unflipped.  Texture row 0 is memory row 0 everywhere; only the
+ *  - Clip space: glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE) at init and
+ *    every vertex program's gl_Position.y negated after its main
+ *    (gl_resource.c gl_flip_vertex_y), so the renderer's D3D-style clip
+ *    space (depth 0..1, row 0 at the top, FragCoord from the top left) and
+ *    its viewports and scissors pass through unflipped, with D3D's top-left
+ *    fill rule on Mesa (GL_UPPER_LEFT flips Mesa's rule: gl_device.c
+ *    gl_defaults).  Texture row 0 is memory row 0 everywhere; only the
  *    default framebuffer is upside down, so the swapchain's image is an
  *    RGBA8 texture blitted y-flipped to framebuffer 0 at present
  *    (gl_swapchain.c).

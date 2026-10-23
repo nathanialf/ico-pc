@@ -810,7 +810,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `rhi_vk_swapchain_test.c`: the window path without a display, on SDL's offscreen driver
   (`rhi_vk_swapchain`).
 - Helpers: `rhi_test_common.c`/`.h` (the shared cells, seven of whose pipelines come from one
-  `rhi_create_pipelines` call with a failing description among them), `shaders/`
+  `rhi_create_pipelines` call with a failing description among them, and the fill-rule cell:
+  edges through pixel centres under the top-left rule on every backend), `shaders/`
   (`rhi_test.hlsl`, its compiled headers and `gen_shaders.sh`), and `compare_backends.cmd` with
   `compare_png.ps1`, which render every dump on Vulkan and D3D12 on Windows and compare the PNGs
   within 1 LSB.

@@ -839,14 +839,26 @@ from a 4.3 driver with `rhi_gl: the driver has no glName (OpenGL 4.3 core)`. The
 `rhi_gl: <renderer> (OpenGL M.m core|compatibility, <GL_VERSION>; GLSL <version>)[, headless];
 index values up to N`, followed by `rhi_gl: limits: uniform align N, dual-source yes|no, MSAA
 1|2|4|8, interlock yes|no (image units N), texture barrier yes|no, BC yes|no, anisotropy N, max
-texture N, entry points 139 (N optional missing), debug output on|off`.
+texture N, entry points 139 (N optional missing), debug output on|off, clip origin lower left (vertex
+y negated)`.
 
-**Clip space** (`gl_defaults`). `glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE)` gives OpenGL the
-renderer's D3D-style conventions: depth 0 to 1 (reversed-Z GEQUAL as on the other backends), row 0
-of every target and texture at the top, `gl_FragCoord` from the top left, viewports and scissors in
-the same coordinates. The shaders, viewports, scissors, uploads and readbacks pass through
-unflipped. Only the window's framebuffer 0 has its row 0 at the bottom, so the swapchain is a
-texture blitted upside down at present (below). The other fixed state: no dithering, no
+**Clip space** (`gl_defaults`). `glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE)` with every vertex
+program's `gl_Position.y` negated after its `main` (`gl_resource.c` `gl_flip_vertex_y`: a
+`#define main ico_gl_vertex_main` after the `#version` line and a `main` of the backend's own at the
+end, so every return is covered) gives OpenGL the renderer's D3D-style conventions: depth 0 to 1
+(reversed-Z GEQUAL as on the other backends), row 0 of every target and texture at the top,
+`gl_FragCoord` from the top left, viewports and scissors in the same coordinates. The viewports,
+scissors, uploads and readbacks pass through unflipped. `GL_UPPER_LEFT` would give the same rows
+without the negation, but not the same fill rule: an edge through pixel centres is a tie (every GS
+sprite and screen edge is one, the GS sampling rules in [RENDER.md](RENDER.md)), and Mesa's
+drivers (llvmpipe, radeonsi, iris) flip their rule under `GL_UPPER_LEFT`, so a framebuffer object
+takes the bottom edge's row and leaves the top edge's: every sprite one row low, its first row left
+at what was there (`rd_tex_gl` "PSMT8 sprite: 16 pixels differ"). At `GL_LOWER_LEFT` a framebuffer
+object keeps Direct3D's and Vulkan's top-left rule in memory rows, which the common cells'
+fill-rule cell checks on every backend. OpenGL leaves the rule to the driver, so another vendor's
+driver may still differ; the limits line ends `clip origin lower left (vertex y negated)`. Only the
+window's framebuffer 0 has its row 0 at the bottom, so the swapchain is a texture blitted upside
+down at present (below). The other fixed state: no dithering, no
 `GL_FRAMEBUFFER_SRGB`, the vertex shader's point size, no culling, no depth clamp, no primitive
 restart, the first vertex's flat attributes (`glProvokingVertex(GL_FIRST_VERTEX_CONVENTION)`, the
 D3D and Vulkan rule), the scissor test on, pixel rows packed at 1 byte.
@@ -1139,7 +1151,7 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 
 | test | checks |
 | --- | --- |
-| `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames; seven of the cells' pipelines come from one `rhi_create_pipelines` call with an uncreatable description among them (only that one fails, the ids are distinct, the finished count never goes back); the dynamic state cell (`dynamicCell`: sixteen cells of the renderer's depth tests, Z writes, blends and masks drawn with every state static, from one `rhi_create_pipelines` batch with `maxThreads` 1 on one thread, then with the device's dynamic groups set after each bind: texel-equal, three commands a group after each static bind, none for a repeat; skipped but for the static pass without dynamic state) |
+| `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), the fill rule (`fillRuleCell`: two quads with every edge through pixel centres, the top and left edges' pixels taken and the bottom and right ones left, the shared edge's row once), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames; seven of the cells' pipelines come from one `rhi_create_pipelines` call with an uncreatable description among them (only that one fails, the ids are distinct, the finished count never goes back); the dynamic state cell (`dynamicCell`: sixteen cells of the renderer's depth tests, Z writes, blends and masks drawn with every state static, from one `rhi_create_pipelines` batch with `maxThreads` 1 on one thread, then with the device's dynamic groups set after each bind: texel-equal, three commands a group after each static bind, none for a repeat; skipped but for the static pass without dynamic state) |
 | `rhi_vk_test.c` | the common cells on Vulkan, a hazard-tracking cell, the render-area check (a pass wider than its colour target, one taller than its depth: each clamped and counted, no validation error; a fitting pass untouched), and the pipeline cache file (written while up by `rhi_pipeline_cache_save` and at shutdown, read back, another device's or garbage ignored; the drop of other builds' cache files in a temporary folder: the current file, its `.tmp` and unrelated names stay), and the pipeline pool filled (`poolCell`, [The pipeline pool](#the-pipeline-pool); not under the fake switches); ctest `rhi_vk`, and `rhi_vk_nodual`, `rhi_vk_d24s8`, `rhi_vk_mali` under the fake switches |
 | `rhi_vk_swapchain_test.c` | the window path on SDL's offscreen driver: frames, readback order, surface release and recreation, suboptimal and lost presents, resizes, the surface poll, submits per frame, the present-wait stand-in and a hanging wait; ctest `rhi_vk_swapchain` |
 | `rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` over the mode sets drivers offer, and `vkr_present_wait_wanted`; ctest `rhi_vk_present_mode` |

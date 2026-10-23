@@ -689,14 +689,26 @@ static bool gl_check_version(void)
     return true;
 }
 
-/* The device's fixed state: the D3D-style clip space, no dithering or sRGB
- * conversion, the vertex shader's point size, no culling or depth clamp,
- * the scissor test always on (the passes set the scissor), the first
- * vertex's flat attributes (D3D's and Vulkan's provoking vertex), tightly
- * packed pixel rows. */
+/* The device's fixed state: depth 0..1 at the lower-left clip origin (the
+ * vertex programs negate gl_Position.y, gl_resource.c gl_flip_vertex_y, so
+ * the renderer's D3D-style clip y lands on the same rows as on the other
+ * backends), no dithering or sRGB conversion, the vertex shader's point
+ * size, no culling or depth clamp, the scissor test always on (the passes
+ * set the scissor), the first vertex's flat attributes (D3D's and Vulkan's
+ * provoking vertex), tightly packed pixel rows.
+ *
+ * Why not GL_UPPER_LEFT, which needs no negation: the fill rule.  An edge
+ * through pixel centres (every GS sprite and screen edge, rd_replay.c's half
+ * pixel) is a tie, and Mesa (llvmpipe, radeonsi, iris: the state tracker's
+ * bottom_edge_rule) flips its rule under GL_UPPER_LEFT, so a framebuffer
+ * object then takes the bottom edge's row and leaves the top edge's: every
+ * sprite one row low.  At GL_LOWER_LEFT a framebuffer object keeps D3D's and
+ * Vulkan's top-left rule in memory rows (rhi_test_common.c fillRuleCell).
+ * Window coordinates, gl_FragCoord and the viewport arithmetic are the same
+ * either way; only the clip-to-window step's sign moves into the shader. */
 static void gl_defaults(void)
 {
-    glf.ClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE);
+    glf.ClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
     glf.Disable(GL_DITHER);
     glf.Disable(GL_FRAMEBUFFER_SRGB);
     glf.Enable(GL_PROGRAM_POINT_SIZE);
@@ -787,7 +799,7 @@ bool rhi_init(const RhiDeviceDesc *desc)
            l->maxDrawIndexedIndexValue);
     GL_LOG("limits: uniform align %u, dual-source %s, MSAA %s, interlock %s (image units %d), "
            "texture barrier %s, BC %s, anisotropy %.0f, max texture %u, entry points %u (%u "
-           "optional missing), debug output %s",
+           "optional missing), debug output %s, clip origin lower left (vertex y negated)",
            l->uniformAlign, l->dualSourceBlend ? "yes" : (s_fakeNoDual ? "no (faked)" : "no"), msaa,
            l->fragmentInterlock ? "yes" : "no", g_gl.maxImageUnits,
            g_gl.hasTextureBarrier ? "yes" : "no", l->bcTextures ? "yes" : "no",

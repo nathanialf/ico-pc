@@ -16,6 +16,9 @@
  *   6  texture uploaded by copy, sampled nearest, drawn indexed
  *   7  untouched (clear colour)
  *
+ * Then cells of their own targets: BC textures, the fill rule (edges through
+ * pixel centres), multisampling, the destination read, dynamic state.
+ *
  * Plus an RGBA8_UINT target (integer clear and integer output), R8 texture
  * copies (a whole copy, then a second copy over part of it: same-state copy
  * ordering), a device-local vertex buffer filled by rhi_cmd_copy_buffer, depth
@@ -384,6 +387,93 @@ static void bcCell(const Ctx *c)
     if (!failures) {
         rhi_test_log("%s: BC cell passed (BC1 8x8 with 4 levels, BC3 4x4)\n", s_label);
     }
+}
+
+/* The fill rule (the renderer's GS emulation puts GS integer coordinates on
+ * pixel centres, rd_replay.c, so its sprite and screen edges are ties): on a
+ * 16 x 16 RGBA8 target cleared to 0, a red quad over (2.5, 2.5)-(6.5, 6.5)
+ * and a green one under it over (2.5, 6.5)-(6.5, 10.5), every edge through
+ * pixel centres.  Direct3D's and Vulkan's top-left rule takes the top and
+ * left edges' pixels and leaves the bottom and right ones: red rows 2..5,
+ * green rows 6..9 (the shared edge's row once, green's), columns 2..5,
+ * everything else the clear.  On OpenGL the rule is the driver's (the
+ * backend picks the clip origin that gives this one on Mesa,
+ * docs/port/RHI.md "OpenGL"). */
+static void fillRuleCell(const Ctx *c)
+{
+    enum { FS = 16 };
+
+    const RhiFormat CF = RHI_FMT_RGBA8_UNORM;
+    RhiTexture tgt = rhi_create_texture(&(RhiTextureDesc){
+        FS, FS, 1, CF, RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC, "fill rule target", 0});
+    RhiBuffer ring = rhi_create_buffer(
+        &(RhiBufferDesc){4096, RHI_BUF_VERTEX, RHI_MEM_UPLOAD, "fill rule verts"});
+    uint8_t *map = ring.id ? rhi_map_buffer(ring) : NULL;
+    RhiBlendState opaque = {.writeMask = 0xF};
+    RhiPipeline pipe = makePipeline(c, c->psColor, CF, RHI_FMT_UNKNOWN, &opaque, NULL, "fill rule");
+    if (!tgt.id || !map || !pipe.id) {
+        rhi_test_log("FAIL %s: fill rule resources\n", s_label);
+        failures++;
+        return;
+    }
+    Vtx v[12];
+    quad(&v[0], 2.5f, 2.5f, 6.5f, 6.5f, FS, FS, 0.0f, 255, 0, 0, 255);
+    quad(&v[6], 2.5f, 6.5f, 6.5f, 10.5f, FS, FS, 0.0f, 0, 255, 0, 255);
+    memcpy(map, v, sizeof(v));
+    RhiCommandList cl = rhi_begin_commands();
+    RhiTextureBarrier pre = {tgt, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
+    rhi_cmd_barrier(cl, &pre, 1);
+    RhiRenderPassDesc rp;
+    memset(&rp, 0, sizeof(rp));
+    rp.color[0].texture = tgt;
+    rp.color[0].load = RHI_LOAD_CLEAR;
+    rp.colorCount = 1;
+    rp.width = FS;
+    rp.height = FS;
+    rhi_cmd_begin_render_pass(cl, &rp);
+    rhi_cmd_set_pipeline(cl, pipe);
+    rhi_cmd_set_vertex_buffer(cl, 0, ring, 0);
+    rhi_cmd_draw(cl, 12, 0, 1);
+    rhi_cmd_end_render_pass(cl);
+    RhiTextureBarrier post = {tgt, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
+    rhi_cmd_barrier(cl, &post, 1);
+    rhi_end_commands(cl);
+    rhi_submit(cl);
+
+    static uint8_t img[FS * FS * 4];
+    uint32_t pitch = 0;
+    if (!rhi_readback_texture(tgt, RHI_ASPECT_COLOR, img, sizeof(img), &pitch)) {
+        rhi_test_log("FAIL %s: fill rule readback\n", s_label);
+        failures++;
+    } else {
+        const int before = failures;
+        for (int y = 0; y < FS; y++) {
+            for (int x = 0; x < FS; x++) {
+                const int in = x >= 2 && x <= 5;
+                const uint8_t r = in && y >= 2 && y <= 5 ? 255 : 0;
+                const uint8_t g = in && y >= 6 && y <= 9 ? 255 : 0;
+                expectRGBA(img, pitch, x, y, r, g, 0, (r | g) != 0 ? 255 : 0, 200);
+                if (failures - before >= 4) {
+                    break;
+                }
+            }
+            if (failures - before >= 4) {
+                break;
+            }
+        }
+        if (failures != before) {
+            rhi_test_log("FAIL %s: the fill rule: edges through pixel centres are not the "
+                         "top-left rule's\n",
+                         s_label);
+        } else {
+            rhi_test_log("%s: fill rule cell passed (top and left edges in, bottom and right "
+                         "out)\n",
+                         s_label);
+        }
+    }
+    rhi_destroy_pipeline(pipe);
+    rhi_destroy_texture(tgt);
+    rhi_destroy_buffer(ring);
 }
 
 /* Multisampling, for each of 2, 4 and 8 samples the device takes
@@ -1578,6 +1668,9 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
     if (!failures) {
         rhi_wait_frame();
         bcCell(&c);
+    }
+    if (!failures) {
+        fillRuleCell(&c);
     }
     if (!failures) {
         msaaCell(&c);
