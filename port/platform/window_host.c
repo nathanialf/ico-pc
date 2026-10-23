@@ -252,6 +252,14 @@ static struct {
     RdPresentInfo presentInfo;
     uint32_t presentDumpFrame;
     int presentDumpPrev;
+    /* the present allowance on the timer path (pace_policy.h PaceBudget;
+       under the lock lock.budget): the GPU time a presented replay (the
+       median of the last 8, perf_drain; 0: no timestamps yet), the last
+       present's waits for the display (the acquire and the present) and for
+       the GPU (the fence waits), the simulation step's time (ico_window_pace) */
+    PaceBudget budget;
+    PaceHist gpuHist;
+    Uint64 gpuNs, displayWaitNs, fenceWaitNs, stepNs;
 } s_pres;
 
 /* resolution "auto" (video_options.h ICO_RES_AUTO): the
@@ -428,7 +436,8 @@ static void video_settings(RdSettings *rs, int w, int h)
         s_pres.legacyAlpha = e != NULL && e[0] != '\0' && e[0] != '0';
     }
     if (s_pres.framerate != ico_video_framerate()) {
-        s_pres.nextPresent = 0; /* a new limit starts a new grid */
+        s_pres.nextPresent = 0;                            /* a new limit starts a new grid */
+        pace_budget_reset(&s_pres.budget, PACE_ALLOW_MAX); /* and a new allowance */
     }
     s_pres.framerate = ico_video_framerate();
     rs->interpolate = (uint8_t)(s_pres.framerate != ICO_FRAMERATE_ORIGINAL);
@@ -1023,6 +1032,7 @@ static void lc_pace_reset(void *u)
     s_pres.cost = 0;
     s_pres.lockN = 0; /* the lock starts again from now */
     s_pres.lastReturn = 0;
+    pace_budget_reset(&s_pres.budget, PACE_ALLOW_MAX);
 }
 
 static int lc_config_dirty(void *u)
@@ -4164,6 +4174,11 @@ static void perf_drain(void)
 
     while (rd_perf_pop(&r)) {
         auto_res_sample(&r);
+        if (r.presented && r.gpuValid) {
+            /* the present allowance's GPU gate: a presented replay's GPU
+               time (two replays late), the median of the last 8 */
+            s_pres.gpuNs = pace_hist_add(&s_pres.gpuHist, (Uint64)(r.gpuMs * 1e6));
+        }
 #ifdef ICO_IOS
         continue; /* Keep automatic resolution's samples without benchmark output. */
 #endif
@@ -4904,6 +4919,7 @@ void ico_window_pace(int hz)
     if (s_pres.paceEnd != 0 && now > s_pres.paceEnd) {
         const double ms = (double)(now - s_pres.paceEnd) / 1e6;
 
+        s_pres.stepNs = now - s_pres.paceEnd; /* the present allowance's GPU gate */
         s_pres.stepSumMs += ms;
         s_pres.stepMaxMs = ms > s_pres.stepMaxMs ? ms : s_pres.stepMaxMs;
         s_pres.stepCount++;
@@ -4974,9 +4990,14 @@ static int frame_seen(Uint64 closeAt)
 }
 
 /* One rd_present at alpha a, timed (s_pres.cost) and counted; false when
-   nothing was presented */
+   nothing was presented.  Its waits from the backend's counts: the
+   display's (s_pres.displayWaitNs), the GPU's (fenceWaitNs) and both for
+   the lock (lockWaitNs) */
 static int present_once(float a, Uint64 refresh, Uint64 period)
 {
+    RhiStats before, st;
+
+    rhi_get_stats(&before);
     Uint64 t0 = SDL_GetTicksNS();
     ico_diag_present_enter();
     const int ok = rd_present(a);
@@ -4995,8 +5016,6 @@ static int present_once(float a, Uint64 refresh, Uint64 period)
            the timer path now, before the deadline is judged (applied after
            the pace, the lag would be judged first and dropped: a resync, a
            black screen, at most frame rate changes) */
-        RhiStats st;
-
         rhi_get_stats(&st);
         const Uint64 pause =
             pace_first_present_pause(st.swapchains, &s_pres.swapchains, s_pres.cost, refresh);
@@ -5012,6 +5031,26 @@ static int present_once(float a, Uint64 refresh, Uint64 period)
     }
     if (!ok) {
         return 0;
+    }
+    /* how long it waited: the backend's own blocked time in it (Vulkan:
+       the acquire, the present and the fence waits; D3D12: the frame
+       latency wait, Present and the fence waits), which leaves out the
+       replay's own CPU time; the whole present where the backend times
+       nothing (then all of it the display's).  Never more than the present
+       (a rebuild's first present is paused out above).  The acquire and the
+       present are the display's (FIFO's full queue), the fence waits the
+       GPU's: the present allowance excuses the first only */
+    if (st.presents != before.presents && st.acquireNs + st.presentNs + st.fenceWaitNs != 0) {
+        const Uint64 disp = (st.acquireNs - before.acquireNs) + (st.presentNs - before.presentNs);
+        const Uint64 fence = st.fenceWaitNs - before.fenceWaitNs;
+
+        s_pres.lockWaitNs = disp + fence < s_pres.cost ? disp + fence : s_pres.cost;
+        s_pres.displayWaitNs = disp < s_pres.cost ? disp : s_pres.cost;
+        s_pres.fenceWaitNs = fence < s_pres.cost ? fence : s_pres.cost;
+    } else {
+        s_pres.lockWaitNs = s_pres.cost;
+        s_pres.displayWaitNs = s_pres.cost;
+        s_pres.fenceWaitNs = 0;
     }
     if (s_pres.presentInfoPending) {
         /* the present that took F12's armed capture (photo_pump names it) */
@@ -5048,31 +5087,14 @@ static uint64_t lock_io_now(void *u)
 static bool lock_io_present(void *u, float a)
 {
     const LockIoCtx *c = u;
-    RhiStats before, after;
 
-    rhi_get_stats(&before);
+    /* its waits: present_once (lockWaitNs, displayWaitNs) */
     if (!present_once(a, c->refresh, c->period)) {
         return false;
     }
     /* the timer path's late skip closes with any present (pace_late_skip):
        back on it after the lock, its next frame may be skipped again */
     s_pres.skipOpen = false;
-    rhi_get_stats(&after);
-    /* how long it waited: the backend's own blocked time in it (Vulkan:
-       the acquire, the present and the fence waits; D3D12: the frame
-       latency wait, Present and the fence waits), which leaves out the replay's own CPU time; the
-       whole present where the backend times nothing.  Never more than the
-       present (a rebuild's first present is paused out: present_once) */
-    if (after.presents != before.presents &&
-        after.acquireNs + after.presentNs + after.fenceWaitNs != 0) {
-        const Uint64 w = (after.acquireNs - before.acquireNs) +
-                         (after.presentNs - before.presentNs) +
-                         (after.fenceWaitNs - before.fenceWaitNs);
-
-        s_pres.lockWaitNs = w < s_pres.cost ? w : s_pres.cost;
-    } else {
-        s_pres.lockWaitNs = s_pres.cost;
-    }
     disp_present(c->refresh); /* the display line's counts */
     return true;
 }
@@ -5084,6 +5106,32 @@ static uint64_t lock_io_waited(void *u, uint64_t costNs)
     (void)u;
     (void)costNs;
     return s_pres.lockWaitNs;
+}
+
+/* the present allowance's excuse: the last present's wait for the display
+   alone (present_once) */
+static uint64_t lock_io_display_waited(void *u, uint64_t costNs)
+{
+    (void)u;
+    (void)costNs;
+    return s_pres.displayWaitNs;
+}
+
+/* A drop of the present allowance (pace_budget_step returned a change and
+   counted a drop): the event line, the first 8 then every 100th */
+static void budget_drop_line(const PaceBudget *b)
+{
+    const unsigned back = b->allow < b->max ? b->allow + 1 : b->max;
+
+    ico_log_limited("window: presents held",
+                    "window: presents held to %u a step: the step ended %.1f ms late after %u "
+                    "presents (the last present %.1f ms, waited %.1f ms for the GPU and %.1f ms "
+                    "for the display; GPU %.1f ms a replay); back to %u after %u steps on time if "
+                    "the GPU allows",
+                    b->allow, (double)b->dropLateNs / 1e6, b->dropPresents,
+                    (double)s_pres.cost / 1e6, (double)s_pres.fenceWaitNs / 1e6,
+                    (double)s_pres.displayWaitNs / 1e6, (double)s_pres.gpuNs / 1e6, back,
+                    PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB);
 }
 
 /* the window on the screen: off it, nothing is presented */
@@ -5191,7 +5239,7 @@ static void pace_locked(unsigned n, Uint64 period)
                            clock ? lock_io_shown : NULL,
                            lock_io_vblank,
                            lock_io_waited,
-                           NULL};
+                           lock_io_display_waited};
     char words[256];
 
     ctx.refresh = display_refresh_ns(period);
@@ -5262,7 +5310,15 @@ static void pace_locked(unsigned n, Uint64 period)
     const int newFrame = frame_seen(s_deadline);
 
     disp_vsync(ctx.refresh); /* the display clock's vblanks since the last vsync */
+    /* the present allowance's GPU gate (pace_policy.h PaceBudget) */
+    s_pres.lock.gpuNs = s_pres.gpuNs;
+    s_pres.lock.stepNs = s_pres.stepNs;
+    const unsigned drops = s_pres.lock.budget.drops;
+
     s_deadline = pace_lock_vsync(&s_pres.lock, &io, newFrame != 0);
+    if (s_pres.lock.budget.drops != drops) {
+        budget_drop_line(&s_pres.lock.budget);
+    }
     /* the lag the lock dropped, as the resync lines count it */
     s_pres.statResyncs += s_pres.lock.resyncs - s_pres.lockResyncs;
     s_pres.statDropped += s_pres.lock.droppedNs - s_pres.lockDroppedNs;
@@ -5370,10 +5426,17 @@ static void pace(int hz)
             pace_locked(n, period);
             return;
         }
+        if (s_pres.lockN != 0 || s_pres.budget.max == 0) {
+            /* off the lock (or the first pace): the timer path's allowance
+               starts again */
+            pace_budget_reset(&s_pres.budget, PACE_ALLOW_MAX);
+        }
         s_pres.lockN = 0;
         timing_use(0); /* the presents below as without the timing */
         disp_clock_stop();
     }
+    s_pres.budget.presents = 0; /* the step's presents (pace_budget_step) */
+    s_pres.budget.optional = 0;
     s_deadline += period;
     s_pres.statVsyncs++;
     const int newFrame = frame_seen(s_deadline - period);
@@ -5500,13 +5563,22 @@ static void pace(int hz)
            end past the deadline (its cost the last present's): the next
            simulation step is never late for one */
         /* off the screen: no present again */
-        if (s_pres.presentedFrame == s_pres.frame &&
-            (now >= s_deadline || s_pres.paceSlow || s_pres.offScreen ||
-             (!s_pres.fifoLock && now + s_pres.cost > s_deadline))) {
-            if (now < s_deadline) {
-                SDL_DelayPrecise(s_deadline - now);
+        /* nor one past the present allowance (pace_policy.h PaceBudget):
+           after a step that ended half a period late, the in-betweens a
+           step are held below what that step made */
+        if (s_pres.presentedFrame == s_pres.frame) {
+            const int guard = now >= s_deadline || s_pres.paceSlow || s_pres.offScreen ||
+                              (!s_pres.fifoLock && now + s_pres.cost > s_deadline);
+
+            if (guard || !pace_budget_allows(&s_pres.budget, false)) {
+                if (!guard) {
+                    s_pres.budget.refused++;
+                }
+                if (now < s_deadline) {
+                    SDL_DelayPrecise(s_deadline - now);
+                }
+                break;
             }
-            break;
         }
         if (gap && s_pres.nextPresent && now < s_pres.nextPresent) {
             const Uint64 wake = s_pres.nextPresent;
@@ -5534,10 +5606,12 @@ static void pace(int hz)
                 now > s_pres.tickAt ? (double)(now - s_pres.tickAt) / (double)tick : 0.0;
             a = (float)(r > 0.999 ? 0.999 : r);
         }
+        const bool fresh = s_pres.presentedFrame != s_pres.frame;
         const int ok = present_once(a, refresh, period);
         now = SDL_GetTicksNS();
         if (ok) {
             s_pres.skipOpen = false;
+            pace_budget_present(&s_pres.budget, fresh);
         }
         if (!ok) {
             /* a movie on the output, or nothing closed yet */
@@ -5550,6 +5624,16 @@ static void pace(int hz)
             gap ? pace_next_present(s_pres.nextPresent, s_pres.lastPresent, gap) : 0;
     }
     now = SDL_GetTicksNS();
+    {
+        /* the present allowance: the step ends now (a resync keeps it) */
+        const unsigned drops = s_pres.budget.drops;
+
+        if (pace_budget_step(&s_pres.budget, now > s_deadline ? now - s_deadline : 0, period,
+                             refresh, s_pres.displayWaitNs, s_pres.gpuNs, s_pres.stepNs) &&
+            s_pres.budget.drops != drops) {
+            budget_drop_line(&s_pres.budget);
+        }
+    }
     pace_log(now);
     if (now > s_deadline && now - s_deadline > RESYNC_NS) {
         resync(now);
