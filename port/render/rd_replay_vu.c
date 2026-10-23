@@ -1323,6 +1323,13 @@ void rd__vu_prepass_init(const RhiLimits *lim)
         snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
                  "on a tile-based GPU (the pictures between two ticks shook through it on a "
                  "PowerVR phone; [dev] vu_prepass = true turns it on)");
+    } else if (bytes != 0u && bytes < ICO_VU_REC_BYTES && rhi_backend() == RHI_BACKEND_D3D11) {
+        /* d3d11_device.c reports 32 bytes: the record's read-back copies
+         * are not in that backend (a texture only into a readback buffer) */
+        snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
+                 "on Direct3D 11 (the backend holds the colour targets to %u bytes a pixel, the "
+                 "record %u: its copies are not in that backend)",
+                 bytes, ICO_VU_REC_BYTES);
     } else if (bytes != 0u && bytes < ICO_VU_REC_BYTES) {
         snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
                  "on this device (its colour targets hold %u bytes a pixel together, the record "

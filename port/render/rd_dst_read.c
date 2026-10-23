@@ -77,7 +77,12 @@ const char *rd__blend_exact_name(int mode)
 {
     switch (mode) {
     case RD_BLEND_EXACT_STORAGE:
-        return rhi_backend() == RHI_BACKEND_D3D12 ? "exact (rov)" : "exact (interlock)";
+        /* rasterizer-ordered views on Direct3D (D3D11 reports rov false in
+         * v0.8.6, so the mode is not offered there yet); fragment shader
+         * interlock on Vulkan and OpenGL */
+        return rhi_backend() == RHI_BACKEND_D3D12 || rhi_backend() == RHI_BACKEND_D3D11
+                   ? "exact (rov)"
+                   : "exact (interlock)";
     case RD_BLEND_EXACT_ATTACHMENT:
         return "exact (attachment read)";
     default:

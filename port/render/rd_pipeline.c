@@ -1361,8 +1361,13 @@ static void failReason(const RhiStats *a, const RhiStats *b, char *out, size_t s
     const uint64_t full = b->pipelinePoolFull - a->pipelinePoolFull;
     const uint64_t other = b->pipelineFailures - a->pipelineFailures;
     char drv[96];
-    if (b->pipelineLastError != 0 && rhi_backend() == RHI_BACKEND_D3D12) {
+    const RhiBackendKind kind = rhi_backend();
+    if (b->pipelineLastError != 0 && (kind == RHI_BACKEND_D3D12 || kind == RHI_BACKEND_D3D11)) {
         snprintf(drv, sizeof(drv), "the driver's error HRESULT 0x%08X",
+                 (unsigned)(uint32_t)b->pipelineLastError);
+    } else if (b->pipelineLastError != 0 && kind == RHI_BACKEND_OPENGL) {
+        /* gl_pipeline.c: the glGetError after the program pipeline and VAO */
+        snprintf(drv, sizeof(drv), "the driver's error GL error 0x%04X",
                  (unsigned)(uint32_t)b->pipelineLastError);
     } else if (b->pipelineLastError != 0) {
         snprintf(drv, sizeof(drv), "the driver's error VkResult %lld%s",
