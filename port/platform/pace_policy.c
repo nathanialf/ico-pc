@@ -18,9 +18,17 @@ uint64_t pace_slow_threshold(uint64_t refreshNs, uint64_t periodNs, bool injecto
     return (refreshNs > periodNs ? refreshNs : periodNs) + periodNs / 2;
 }
 
+bool pace_cap_above_refresh(int cap, bool mailbox, uint64_t refreshNs)
+{
+    return cap > 0 && mailbox && refreshNs > 0 && 1000000000ull / (uint64_t)cap < refreshNs &&
+           !pace_cap_equals_refresh(cap, refreshNs);
+}
+
 uint64_t pace_present_gap(int cap, bool uncappedVsync, bool mailbox, uint64_t refreshNs)
 {
-    if (uncappedVsync) {
+    /* a cap above the refresh in mailbox mode: as "uncapped", one present
+       a refresh (the display shows no more) */
+    if (uncappedVsync || pace_cap_above_refresh(cap, mailbox, refreshNs)) {
         /* one present a refresh, but never fewer than sixty a second: a
            display can report a refresh it is not running at (a 4K screen
            running at 60 Hz can report 30.0 Hz, and one present per

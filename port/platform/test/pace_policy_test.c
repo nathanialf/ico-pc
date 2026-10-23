@@ -153,7 +153,10 @@ static void testAutoResolution(void)
 /* pace_present_gap: "uncapped" with vsync presents a sixteenth of a refresh
    early, in mailbox mode as under FIFO, on every platform, and never fewer
    than sixty a second whatever refresh the display reports; a limit is its
-   own period; "uncapped" without vsync has no gap */
+   own period, except one above the refresh in mailbox mode, which presents
+   as "uncapped" does (the clamp: 120 on 60 Hz); a limit equal to the
+   refresh or below it, and any limit under FIFO, keep their own;
+   "uncapped" without vsync has no gap */
 static void testPresentGap(void)
 {
     static const struct {
@@ -174,6 +177,15 @@ static void testPresentGap(void)
         {0, false, false, 16666667ull, 0},
         {120, false, false, 11111111ull, 8333333ull},
         {60, false, false, 6944444ull, 16666666ull},
+        /* the clamp: 120 on 60 Hz in mailbox mode, once a refresh; on a
+           screen reported at 30 Hz sixty a second; under FIFO 120's own */
+        {120, false, true, 16666667ull, 16666667ull - 16666667ull / 16},
+        {120, false, true, 33333333ull, 16666667ull - 16666667ull / 16},
+        {120, false, false, 16666667ull, 8333333ull},
+        /* equal (60 on 60.00, 144 on 144) or below the refresh: its own */
+        {60, false, true, 16666667ull, 16666666ull},
+        {144, false, true, 6944444ull, 6944444ull},
+        {60, false, true, 8333333ull, 16666666ull},
     };
 
     for (unsigned i = 0; i < sizeof(t) / sizeof(t[0]); i++) {
@@ -199,8 +211,9 @@ static void testPresentGap(void)
 }
 
 /* The mode a numeric cap takes with vsync on: a cap equal to the
-   refresh within 0.5 Hz takes FIFO with no timer gap; above or below it,
-   mailbox (above) with the cap's own gap */
+   refresh within 0.5 Hz takes FIFO with no timer gap; below it, mailbox
+   with the cap's own gap; above it, mailbox and one present a refresh (the
+   clamp; under FIFO its own gap) */
 static void testCapEqualsRefresh(void)
 {
     const uint64_t r6000 = 16666667ull, r5994 = 16683350ull, r120 = 8333333ull, r11988 = 8341675ull,
@@ -214,12 +227,20 @@ static void testCapEqualsRefresh(void)
     CHECK(pace_cap_equals_refresh(144, r144));
     /* the window's rule: equal -> gap 0 (FIFO); otherwise the cap's gap */
     CHECK(pace_present_gap(-1, true, true, r6000) != 0); /* uncapped: unchanged */
-    /* above the refresh: not equal, the cap's own gap (mailbox) */
+    /* above the refresh: not equal; in mailbox mode one present a refresh
+       (the clamp), under FIFO the cap's own gap */
     CHECK(!pace_cap_equals_refresh(144, r6000));
     CHECK(!pace_cap_equals_refresh(144, r120));
     CHECK(!pace_cap_equals_refresh(240, r144));
-    CHECK(pace_present_gap(144, false, true, r6000) == 1000000000ull / 144);
-    CHECK(pace_present_gap(240, false, true, r144) == 1000000000ull / 240);
+    CHECK(pace_cap_above_refresh(144, true, r6000) && !pace_cap_above_refresh(144, false, r6000));
+    CHECK(pace_present_gap(144, false, true, r6000) == r6000 - r6000 / 16);
+    CHECK(pace_present_gap(240, false, true, r144) == r144 - r144 / 16);
+    CHECK(pace_present_gap(144, false, false, r6000) == 1000000000ull / 144);
+    /* equal (60 on 59.94 and 60.00, 144 on a reported 143) or below: no clamp */
+    CHECK(!pace_cap_above_refresh(60, true, r6000) && !pace_cap_above_refresh(60, true, r5994));
+    CHECK(!pace_cap_above_refresh(144, true, (uint64_t)(1e9 / 143.0)));
+    CHECK(!pace_cap_above_refresh(60, true, r120) && !pace_cap_above_refresh(0, true, r6000));
+    CHECK(!pace_cap_above_refresh(-1, true, r6000) && !pace_cap_above_refresh(120, true, 0));
     /* below the refresh: 60 on 120, 59 on 60, 30 on 60 */
     CHECK(!pace_cap_equals_refresh(60, r120));
     CHECK(!pace_cap_equals_refresh(59, r6000));

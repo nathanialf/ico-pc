@@ -260,6 +260,11 @@ static struct {
     PaceBudget budget;
     PaceHist gpuHist;
     Uint64 gpuNs, displayWaitNs, fenceWaitNs, stepNs;
+    /* a numeric cap above the refresh in mailbox mode held to one present
+       a refresh (pace_cap_above_refresh): the refresh at this pace (0: not
+       held), and its line written since the last settings change */
+    Uint64 capAboveNs;
+    int capAboveLogged;
 } s_pres;
 
 /* resolution "auto" (video_options.h ICO_RES_AUTO): the
@@ -435,9 +440,11 @@ static void video_settings(RdSettings *rs, int w, int h)
 
         s_pres.legacyAlpha = e != NULL && e[0] != '\0' && e[0] != '0';
     }
+    s_pres.capAboveLogged = 0; /* the clamp's line again after a settings change */
     if (s_pres.framerate != ico_video_framerate()) {
-        s_pres.nextPresent = 0;                            /* a new limit starts a new grid */
-        pace_budget_reset(&s_pres.budget, PACE_ALLOW_MAX); /* and a new allowance */
+        /* a new limit starts a new grid and a new present allowance */
+        s_pres.nextPresent = 0;
+        pace_budget_reset(&s_pres.budget, PACE_ALLOW_MAX);
     }
     s_pres.framerate = ico_video_framerate();
     rs->interpolate = (uint8_t)(s_pres.framerate != ICO_FRAMERATE_ORIGINAL);
@@ -4675,6 +4682,7 @@ static void pace_log(Uint64 now)
        swapchain's present mode, the display's refresh and the window as it
        is (the only record of them a player's log has) */
     char fr[16];
+    char held[48] = ""; /* the clamp, while it holds */
     const SDL_DisplayMode *dm = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(s_window));
     int pw = 0, ph = 0;
 
@@ -4682,6 +4690,10 @@ static void pace_log(Uint64 now)
     if (movieFail != s_pres.statMovieFail) {
         snprintf(movieFailed, sizeof(movieFailed), " (%u failed)",
                  movieFail - s_pres.statMovieFail);
+    }
+    if (s_pres.capAboveNs != 0) {
+        snprintf(held, sizeof(held), " (held to the display's %.2f Hz)",
+                 1e9 / (double)s_pres.capAboveNs);
     }
     /* the vsync lock's state, and the audio's rate: under the lock the
        simulation runs at the display's rate over n (0.1 % fast on a 60.00
@@ -4765,7 +4777,7 @@ static void pace_log(Uint64 now)
         "presented fps, %.1f game fps; %u vsyncs (%.1f Hz simulated), %u resyncs dropping "
         "%.0f ms; skipped %u presents (late %u, slow %u); longest replay %.1f ms of %u, %u "
         "over a refresh; %u steps over %.0f ms; "
-        "framerate %s, present "
+        "framerate %s%s, present "
         "%s, display %.2f Hz (%.3f presents a refresh), window %dx%d%s; step late max %.1f "
         "ms; pump max %.1f ms; %s\n",
         s_pres.statPresents, movie - s_pres.statMovie, movieFailed, s_pres.statFrames,
@@ -4773,7 +4785,7 @@ static void pace_log(Uint64 now)
         s_pres.statVsyncs, s_pres.statVsyncs / sec, s_pres.statResyncs,
         (double)s_pres.statDropped / 1e6, s_pres.statSkipLate + s_pres.statSkipSlow,
         s_pres.statSkipLate, s_pres.statSkipSlow, maxMs, replays, s_perf.ph.over, s_pres.slowSteps,
-        s_pres.slowMs, ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)),
+        s_pres.slowMs, ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)), held,
         rhi_present_mode_name(), dm != NULL ? (double)dm->refresh_rate : 0.0,
         dm != NULL && dm->refresh_rate > 1.0f ? s_pres.statPresents / sec / dm->refresh_rate : 0.0,
         pw, ph, window_fullscreen() ? " fullscreen" : "", (double)s_pres.lateMaxNs / 1e6,
@@ -5389,6 +5401,7 @@ static void pace(int hz)
     const Uint64 period = hz == 50 ? 20000000ull : 16683333ull;
     Uint64 now;
 
+    s_pres.capAboveNs = 0; /* the timer path below sets it while the clamp holds */
     /* off the screen: the lock does not judge the presents (they return at
        once); back on it, the lock starts again from an empty queue */
     {
@@ -5501,6 +5514,23 @@ static void pace(int hz)
                                      rhi_present_mailbox(), refresh);
         if (!gap) {
             s_pres.nextPresent = 0;
+        }
+        /* a cap above the refresh in mailbox mode presents once a refresh
+           as "uncapped" does (pace_policy.h pace_cap_above_refresh): the
+           display shows no more, and the rest took the shown ones' GPU time */
+        if (!s_pres.fifoLock &&
+            pace_cap_above_refresh(s_pres.framerate, rhi_present_mailbox(), refresh)) {
+            static unsigned s_lines;
+
+            s_pres.capAboveNs = refresh;
+            if (!s_pres.capAboveLogged && s_lines < 16) {
+                s_lines++;
+                fprintf(stderr,
+                        "window: frame rate %d is above the display's %.2f Hz: presenting once a "
+                        "refresh (mailbox)\n",
+                        s_pres.framerate, 1e9 / (double)refresh);
+            }
+            s_pres.capAboveLogged = 1;
         }
     }
     Uint64 tick = s_pres.tickPrev ? s_pres.tickAt - s_pres.tickPrev : 2 * period;

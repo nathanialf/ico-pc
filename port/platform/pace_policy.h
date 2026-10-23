@@ -119,8 +119,20 @@ void pace_budget_block(PaceBudget *b);
  * little more than a refresh, and the display showed some pictures twice).
  * In mailbox mode never fewer than sixty a second whatever refresh the
  * display reports (a 4K screen reported 30 Hz while running at 60).
+ * A numeric cap above the display's refresh in mailbox mode
+ * (pace_cap_above_refresh: 120 on a 60 Hz screen) takes the same gap, one
+ * present a refresh: the display shows one picture a refresh, and the
+ * presents past it were drawn for nothing while they took the GPU time the
+ * shown ones need.
  * 0 (no gap: back to back) otherwise, i.e. "uncapped" without vsync. */
 uint64_t pace_present_gap(int cap, bool uncappedVsync, bool mailbox, uint64_t refreshNs);
+
+/* True when a numeric cap (cap > 0) asks for more presents than the
+ * display's refresh in mailbox mode: 1e9 / cap below refreshNs and the cap
+ * not equal to the refresh (pace_cap_equals_refresh: 60 on 59.94 or 60.00
+ * is equal, not above).  Under FIFO (mailbox false) a present past the
+ * refresh waits for the display, and the cap keeps its own gap. */
+bool pace_cap_above_refresh(int cap, bool mailbox, uint64_t refreshNs);
 
 /* True when a numeric frame rate limit (cap > 0) equals the display's rate:
  * within 0.5 Hz (60 on a 59.94 or 60.00 Hz screen, 120 on 119.88 or 120.00),
