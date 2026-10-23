@@ -17,8 +17,11 @@
  *            by fog_lut_buffer_ps (a float's bits on D32S8; on D24S8 the
  *            24-bit step in the low bits, the top byte undefined and masked
  *            off).  Two whole-picture transfers a fogged frame: a fallback
- *            only.  Vulkan only (D3D12 copies a depth only as a whole
- *            subresource into a placed footprint; not done there).
+ *            only.  Vulkan and OpenGL (glReadPixels of the depth into a
+ *            pixel-pack buffer, gl_cmd.c) only: D3D12 copies a depth only
+ *            as a whole subresource into a placed footprint (not done
+ *            there); D3D11 copies a texture only into a readback buffer and
+ *            into a texture only from an upload buffer (d3d11_cmd.c).
  * Every target depth is made with every use the device allows (sampled
  * and copy source), so the path can change between two replays.
  *
@@ -101,7 +104,7 @@ static struct {
 static struct {
     bool armed;   /* the next fogged replay records */
     bool pending; /* recorded, read back at the next rd_begin_frame */
-    bool haveZ;   /* the depth texels were copied (not on D3D12's depth) */
+    bool haveZ;   /* the depth texels were copied (not on D3D12's or D3D11's depth) */
     bool haveLut; /* lut0 holds the table's entry 0 */
     uint8_t lut0[4];
     bool d24;
@@ -123,6 +126,15 @@ static struct {
 
 /* ------------------------------------------------------------ the paths */
 
+/* the backend copies a region of a depth aspect into a device buffer
+ * (rhi_cmd_copy_texture_to_buffer) and the buffer on into a texture: the
+ * buffer path, and the probes' depth texels */
+static bool depthRegionCopies(void)
+{
+    const RhiBackendKind k = rhi_backend();
+    return k == RHI_BACKEND_VULKAN || k == RHI_BACKEND_OPENGL;
+}
+
 const char *rd__fog_path_name(int path)
 {
     return path >= 0 && path < RD_FOG_PATH_COUNT ? s_pathNames[path] : "?";
@@ -138,7 +150,7 @@ bool rd__fog_path_supported(int path)
     case RD_FOG_COPY: /* the copy is the same format, sampled */
         return rhi_limits()->depthSampled;
     case RD_FOG_BUFFER:
-        return rhi_backend() == RHI_BACKEND_VULKAN;
+        return depthRegionCopies();
     case RD_FOG_LOCAL:
         return rd__fog_local_offered();
     default:
@@ -442,9 +454,10 @@ void rd__fog_probe_record(RhiCommandList cl, const RdTargetRec *tz, uint32_t zid
         return;
     }
     uint32_t xs[PROBE_POINTS], ys[PROBE_POINTS];
-    /* the depth: D3D12 copies a depth texture to a buffer only whole (the
-     * buffer path's words are a colour texture: any backend) */
-    s_probe.haveZ = rhi_backend() == RHI_BACKEND_VULKAN || src->aspect == RHI_ASPECT_COLOR;
+    /* the depth: D3D12 copies a depth texture to a buffer only whole, D3D11
+     * only into a readback buffer (the buffer path's words are a colour
+     * texture: any backend that has the path) */
+    s_probe.haveZ = depthRegionCopies() || src->aspect == RHI_ASPECT_COLOR;
     if (s_probe.haveZ) {
         probePoints(tz->tw, tz->th, xs, ys);
         rd__transition(cl, src->tex, src->state, RHI_STATE_COPY_SRC);
@@ -764,7 +777,7 @@ bool rd__fog_edge_due(bool want, const RdFogSource *src, const RdTargetRec *tz)
     edgeHarvest();
     if (!want || !g_rd.hasDevice || s_st.running || s_edge.pending || !tz || tz->tw < 4 ||
         tz->th == 0 || g_rd.gsW < 2u * RD_FOG_EDGE_COLS ||
-        !(rhi_backend() == RHI_BACKEND_VULKAN || src->aspect == RHI_ASPECT_COLOR)) {
+        !(depthRegionCopies() || src->aspect == RHI_ASPECT_COLOR)) {
         return false;
     }
     return s_edge.fogged++ % RD_FOG_EDGE_EVERY == 0;

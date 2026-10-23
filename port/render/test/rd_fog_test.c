@@ -1222,8 +1222,12 @@ static void checkEdgeLine(void)
 
 static void checkEdgeProbe(void)
 {
-    if (rhi_backend() != RHI_BACKEND_VULKAN && g_rd.fogPath != RD_FOG_BUFFER) {
-        printf("  (o) skipped: this backend copies a depth to a buffer only whole\n");
+    /* Vulkan and OpenGL copy a region of a depth into a buffer
+     * (rd_fog_path.c depthRegionCopies); D3D12 a depth only whole, D3D11
+     * only into a readback buffer */
+    if (rhi_backend() != RHI_BACKEND_VULKAN && rhi_backend() != RHI_BACKEND_OPENGL &&
+        g_rd.fogPath != RD_FOG_BUFFER) {
+        printf("  (o) skipped: this backend copies no region of a depth to a buffer\n");
         return;
     }
     for (int i = 0; i < 2 + RHI_FRAMES_IN_FLIGHT; i++) {
