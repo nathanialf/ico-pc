@@ -1709,6 +1709,113 @@ static int vu_prepass_persist(void)
 static int window_gpu_progress(IcoDiagGpu *out);
 static void window_gpu_hang(void);
 
+/* The window with the backend's flags in mode at w x h (OpenGL: its pixel
+   format first), at the start and when the renderer is switched
+   (ico_window_reopen); NULL with SDL's error */
+static SDL_Window *window_create(int mode, int w, int h)
+{
+    if (rhi_backend() == RHI_BACKEND_OPENGL) {
+        window_gl_attributes();
+    }
+    return SDL_CreateWindow("ICO", w, h, window_flags(mode));
+}
+
+/* What hangs on a new window in mode, at the start and when the renderer
+   is switched: the exclusive request, the screensaver, the message hook,
+   the host call, the pipeline cache's file (the backend's own), the mode */
+static void window_attach(int mode)
+{
+#if !defined(__ANDROID__) && !defined(ICO_IOS)
+    /* the first swapchain's exclusive request (rd_init makes it), and
+       Fullscreen at the desktop's own mode: the flag at creation made SDL's
+       desktop fullscreen, the mode makes it exclusive (no change of
+       resolution or refresh rate) */
+    s_exclusiveSet = -1;
+    exclusive_follow(mode);
+    if (mode == ICO_WINDOW_FULLSCREEN) {
+        ico_window_video_desktop_mode(s_window);
+    }
+#endif
+    /* No screensaver, screen lock or idle sleep while the game runs: a
+       controller is not a desktop input device, so nothing else resets the
+       desktop's idle timer (issue 86). SDL_Init already asked
+       (SDL_HINT_VIDEO_ALLOW_SCREENSAVER is unset); asking again is
+       harmless. On Linux SDL asks through D-Bus (org.freedesktop.ScreenSaver
+       or the portal), the Wayland idle-inhibit protocol or the X11
+       screensaver extension. SDL_ScreenSaverEnabled reports SDL's own state,
+       not whether the desktop accepted the request: the video driver in the
+       line tells which way was taken. */
+    SDL_DisableScreenSaver();
+    /* Windows: the window's messages for the slow-pump lines, and the
+       watchdog's description of a pump the system holds (issue 105) */
+    ico_pump_win_install(SDL_GetPointerProperty(SDL_GetWindowProperties(s_window),
+                                                SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL));
+    ico_diag_set_os_wait_describe(pump_describe);
+    ico_diag_set_report_extra(sdl_log_report);
+    fprintf(stderr, "window: video driver %s; screensaver and idle sleep %s\n",
+            SDL_GetCurrentVideoDriver() != NULL ? SDL_GetCurrentVideoDriver() : "(none)",
+            SDL_ScreenSaverEnabled() ? "allowed (not inhibited)" : "inhibited");
+    /* the replay, the present and the FMV picture run on the host stack in
+       the host FP mode, not on the game's 256 KB fiber stacks */
+    rd_set_host_call(ico_sched_call_on_host);
+    /* the Vulkan pipeline cache in the per-user folder: a later start of
+       the same build creates the renderer's pipelines from it
+       (rhi_set_pipeline_cache_path;
+       D3D12 ignores it). Android: the app's cache folder, which the system
+       may empty when space runs low (android_paths.h) */
+    {
+        char pref[ICO_PATH_MAX], cache[ICO_PATH_MAX + 96];
+
+#ifdef __ANDROID__
+        if (ico_android_cache_dir(pref, sizeof(pref)) != 0) {
+            ico_host_pref_dir(pref, sizeof(pref));
+        }
+#else
+        ico_host_pref_dir(pref, sizeof(pref));
+#endif
+        /* the file is this build's: another build's shader set does not
+           match a cache the driver wrote for it, so the renderer drops the
+           other pipelines*.vkcache files of the folder (vk_pipeline.c
+           vkr_cache_drop_others). The build is the commit
+           (ICO_BUILD_COMMIT, "git describe": the tag, the commits since and
+           the short hash; "unknown" without git, where every such build
+           shares a file), with every character a file name does not take
+           made "_" */
+        {
+            char build[64];
+            size_t i;
+
+            snprintf(build, sizeof(build), "%s", ICO_BUILD_COMMIT);
+            for (i = 0; build[i] != '\0'; i++) {
+                const char c = build[i];
+                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                      c == '.' || c == '-')) {
+                    build[i] = '_';
+                }
+            }
+            snprintf(cache, sizeof(cache), "%s/pipelines-%s.vkcache", pref, build);
+        }
+        rhi_set_pipeline_cache_path(cache);
+        ico_diag_set_pipeline_cache(0, cache);
+    }
+    /* the window system's answer before the size is read */
+    SDL_SyncWindow(s_window);
+    s_fullscreen = window_fullscreen();
+#if !defined(__ANDROID__) && !defined(ICO_IOS)
+    if (mode == ICO_WINDOW_BORDERLESS) {
+        /* the frameless window over its display (Wayland: maximised) */
+        ico_window_video_mode(s_window, ICO_WINDOW_BORDERLESS, NULL, NULL);
+    }
+#endif
+    if (mode == ICO_WINDOW_FULLSCREEN && !s_fullscreen) {
+        /* not granted (yet): the option is left as the file says, so a
+           slow window manager never turns the setting off; an
+           ENTER_FULLSCREEN event later sets the window's state
+           (ico_window_pump) */
+        fprintf(stderr, "window: fullscreen was asked for at creation; the window is windowed\n");
+    }
+}
+
 int ico_window_open(unsigned int gsW, unsigned int gsH)
 {
     RdSettings rs;
@@ -1868,10 +1975,7 @@ open_window:
        after: SDL's X11 backend then writes _NET_WM_STATE before the window
        is mapped, which KWin and gamescope honour (borderless at the desktop
        resolution; no exclusive mode) */
-    if (rhi_backend() == RHI_BACKEND_OPENGL) {
-        window_gl_attributes();
-    }
-    s_window = SDL_CreateWindow("ICO", WINDOW_W, WINDOW_H, window_flags(start.windowMode));
+    s_window = window_create(start.windowMode, WINDOW_W, WINDOW_H);
     if (start.windowMode != ICO_WINDOW_WINDOWED) {
         WINDOW_LAST_FULL(start.windowMode);
     }
@@ -1884,95 +1988,7 @@ open_window:
         SDL_Quit();
         return -1;
     }
-#if !defined(__ANDROID__) && !defined(ICO_IOS)
-    /* the first swapchain's exclusive request (rd_init makes it), and
-       Fullscreen at the desktop's own mode: the flag at creation made SDL's
-       desktop fullscreen, the mode makes it exclusive (no change of
-       resolution or refresh rate) */
-    s_exclusiveSet = -1;
-    exclusive_follow(start.windowMode);
-    if (start.windowMode == ICO_WINDOW_FULLSCREEN) {
-        ico_window_video_desktop_mode(s_window);
-    }
-#endif
-    /* No screensaver, screen lock or idle sleep while the game runs: a
-       controller is not a desktop input device, so nothing else resets the
-       desktop's idle timer (issue 86). SDL_Init already asked
-       (SDL_HINT_VIDEO_ALLOW_SCREENSAVER is unset); asking again is
-       harmless. On Linux SDL asks through D-Bus (org.freedesktop.ScreenSaver
-       or the portal), the Wayland idle-inhibit protocol or the X11
-       screensaver extension. SDL_ScreenSaverEnabled reports SDL's own state,
-       not whether the desktop accepted the request: the video driver in the
-       line tells which way was taken. */
-    SDL_DisableScreenSaver();
-    /* Windows: the window's messages for the slow-pump lines, and the
-       watchdog's description of a pump the system holds (issue 105) */
-    ico_pump_win_install(SDL_GetPointerProperty(SDL_GetWindowProperties(s_window),
-                                                SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL));
-    ico_diag_set_os_wait_describe(pump_describe);
-    ico_diag_set_report_extra(sdl_log_report);
-    fprintf(stderr, "window: video driver %s; screensaver and idle sleep %s\n",
-            SDL_GetCurrentVideoDriver() != NULL ? SDL_GetCurrentVideoDriver() : "(none)",
-            SDL_ScreenSaverEnabled() ? "allowed (not inhibited)" : "inhibited");
-    /* the replay, the present and the FMV picture run on the host stack in
-       the host FP mode, not on the game's 256 KB fiber stacks */
-    rd_set_host_call(ico_sched_call_on_host);
-    /* the Vulkan pipeline cache in the per-user folder: a later start of
-       the same build creates the renderer's pipelines from it
-       (rhi_set_pipeline_cache_path;
-       D3D12 ignores it). Android: the app's cache folder, which the system
-       may empty when space runs low (android_paths.h) */
-    {
-        char pref[ICO_PATH_MAX], cache[ICO_PATH_MAX + 96];
-
-#ifdef __ANDROID__
-        if (ico_android_cache_dir(pref, sizeof(pref)) != 0) {
-            ico_host_pref_dir(pref, sizeof(pref));
-        }
-#else
-        ico_host_pref_dir(pref, sizeof(pref));
-#endif
-        /* the file is this build's: another build's shader set does not
-           match a cache the driver wrote for it, so the renderer drops the
-           other pipelines*.vkcache files of the folder (vk_pipeline.c
-           vkr_cache_drop_others). The build is the commit
-           (ICO_BUILD_COMMIT, "git describe": the tag, the commits since and
-           the short hash; "unknown" without git, where every such build
-           shares a file), with every character a file name does not take
-           made "_" */
-        {
-            char build[64];
-            size_t i;
-
-            snprintf(build, sizeof(build), "%s", ICO_BUILD_COMMIT);
-            for (i = 0; build[i] != '\0'; i++) {
-                const char c = build[i];
-                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                      c == '.' || c == '-')) {
-                    build[i] = '_';
-                }
-            }
-            snprintf(cache, sizeof(cache), "%s/pipelines-%s.vkcache", pref, build);
-        }
-        rhi_set_pipeline_cache_path(cache);
-        ico_diag_set_pipeline_cache(0, cache);
-    }
-    /* the window system's answer before the size is read */
-    SDL_SyncWindow(s_window);
-    s_fullscreen = window_fullscreen();
-#if !defined(__ANDROID__) && !defined(ICO_IOS)
-    if (start.windowMode == ICO_WINDOW_BORDERLESS) {
-        /* the frameless window over its display (Wayland: maximised) */
-        ico_window_video_mode(s_window, ICO_WINDOW_BORDERLESS, NULL, NULL);
-    }
-#endif
-    if (start.windowMode == ICO_WINDOW_FULLSCREEN && !s_fullscreen) {
-        /* not granted (yet): the option is left as the file says, so a
-           slow window manager never turns the setting off; an
-           ENTER_FULLSCREEN event later sets the window's state
-           (ico_window_pump) */
-        fprintf(stderr, "window: fullscreen was asked for at creation; the window is windowed\n");
-    }
+    window_attach(start.windowMode);
     SDL_GetWindowSizeInPixels(s_window, &w, &h);
     WINDOW_PIX_NOTE(w, h); /* window_size_recheck compares against it */
     video_settings(&rs, w, h);
