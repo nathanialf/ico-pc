@@ -736,6 +736,10 @@ void rhi_cmd_end_render_pass(RhiCommandList cl)
         c->inPass = false;
         c->passBad = false;
         c->readOnlyDepth = false;
+        /* every colour channel writable between passes, so no blit (a
+         * resolve, the present's) depends on whether a driver applies the
+         * last draw's colour mask to it; nothing is called when they are */
+        gl_open_masks((1u << RHI_MAX_COLOR_TARGETS) - 1u, false, false);
     }
 }
 
