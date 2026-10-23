@@ -520,9 +520,14 @@ RhiShader rhi_create_shader(const RhiShaderDesc *desc)
     char *text = gl_shader_text(desc);
     if (!text) {
         if (gl_log_rate(&s_failures)) {
-            GL_LOG("shader %s: no GLSL (%zu bytes%s did not inflate to %zu)", name,
-                   desc->bytecodeSize, desc->textSize ? "" : " of plain text starting #version",
-                   desc->textSize);
+            if (desc->textSize) {
+                GL_LOG("shader %s: the GLSL (%zu bytes) does not inflate to %zu bytes", name,
+                       desc->bytecodeSize, desc->textSize);
+            } else {
+                GL_LOG("shader %s: no GLSL (%zu bytes, neither deflated with its length nor text "
+                       "starting #version)",
+                       name, desc->bytecodeSize);
+            }
         }
         return out;
     }
