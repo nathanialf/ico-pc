@@ -666,9 +666,11 @@ and D32S8, logged as `rhi_d3d11: multisampling: sample counts 0x..`.
 on first use and kept. `rhi_begin_commands` hands out the next one; `rhi_end_commands` calls
 `FinishCommandList` (the deferred context's state is cleared); `rhi_submit` first writes the upload
 ranges the list read (below), then `ExecuteCommandList` on the immediate context in submit order,
-then ends the slot's `D3D11_QUERY_EVENT`. `rhi_wait_frame` moves to the next slot and polls its event
+releases the executed `ID3D11CommandList` at once (a list kept alive still references the swapchain
+buffer it drew into, and `ResizeBuffers` returns `DXGI_ERROR_INVALID_CALL` while one is; the
+deferred context is kept), then ends the slot's `D3D11_QUERY_EVENT`. `rhi_wait_frame` moves to the next slot and polls its event
 (`GetData`, which also flushes; `Sleep(0)`, then `SwitchToThread`, between polls), then releases the
-slot's command lists, garbage and bind groups (`d11_recycle_frame`). `rhi_wait_idle` ends an event
+slot's unsubmitted command lists, garbage and bind groups (`d11_recycle_frame`). `rhi_wait_idle` ends an event
 of its own and waits for it. A wait past 5 s logs
 `rhi_d3d11: a wait for the GPU has taken over 5 s; still waiting (once)`.
 

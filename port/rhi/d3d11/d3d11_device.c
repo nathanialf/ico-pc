@@ -1083,6 +1083,7 @@ void rhi_submit(RhiCommandList cl)
         if (c->finishFailed && !g_d11.deviceLost) {
             D11_LOG("rhi_submit: the list did not finish; its commands are dropped");
         }
+        D11_RELEASE(c->list);
         return;
     }
     /* what the list reads from upload buffers, from their shadows */
@@ -1098,6 +1099,12 @@ void rhi_submit(RhiCommandList cl)
         f->tsDisjointBegun = true;
     }
     ID3D11DeviceContext_ExecuteCommandList(g_d11.ctx, c->list, FALSE);
+    /* released at once: the runtime keeps what the executed commands need,
+     * and a list held until the slot recycles still references the
+     * swapchain buffer it drew into, so ResizeBuffers would fail with
+     * DXGI_ERROR_INVALID_CALL while one is alive. The deferred context
+     * (c->ctx) stays for the slot's next recording. */
+    D11_RELEASE(c->list);
     g_d11.counts.submits++;
     for (uint32_t w = 0; w < RHI_TIMESTAMP_WORDS; w++) {
         f->tsWritten[w] |= c->tsMask[w];
