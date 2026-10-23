@@ -67,6 +67,11 @@ function(add_test)
     if(ARGC LESS 2 OR NOT _t_COMMAND)
         return()
     endif()
+    # the command and working directory kept for a test registered again
+    # elsewhere (port/render/CMakeLists.txt ico_rd_gl_twin): ctest has no
+    # COMMAND test property to read them back from
+    set_property(GLOBAL PROPERTY "ICO_TEST_COMMAND_${ARGV1}" "${_t_COMMAND}")
+    set_property(GLOBAL PROPERTY "ICO_TEST_WORKING_DIRECTORY_${ARGV1}" "${_t_WORKING_DIRECTORY}")
     set(_progs "")
     list(GET _t_COMMAND 0 _first)
     if(TARGET "${_first}")

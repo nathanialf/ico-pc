@@ -1569,8 +1569,10 @@ endif()
 set(ICO_RD_GL_TOLERANCE)
 
 function(ico_rd_gl_twin name)
-    get_test_property(${name} COMMAND _cmd)
-    if(NOT _cmd OR _cmd STREQUAL "NOTFOUND")
+    # the command as add_test was given it (cmake/IcoTests.cmake keeps it: ctest
+    # has no COMMAND property to read back)
+    get_property(_cmd GLOBAL PROPERTY "ICO_TEST_COMMAND_${name}")
+    if(NOT _cmd)
         message(WARNING "ico: ${name} is not a test, no OpenGL twin")
         return()
     endif()
@@ -1596,8 +1598,8 @@ function(ico_rd_gl_twin name)
     # the folder the test writes in: the build folder's gl/ (or the test's own
     # folder under it), for the working directory and for any argument that is one
     set(_bin "${CMAKE_CURRENT_BINARY_DIR}")
-    get_test_property(${name} WORKING_DIRECTORY _wd)
-    if(NOT _wd OR _wd STREQUAL "NOTFOUND")
+    get_property(_wd GLOBAL PROPERTY "ICO_TEST_WORKING_DIRECTORY_${name}")
+    if(NOT _wd)
         set(_wd "${_bin}")
     endif()
     string(REPLACE "${_bin}" "${_bin}/gl" _wd "${_wd}")
