@@ -3,7 +3,9 @@
 // libmain.so (the CMake target ico_pc), whose SDL_main SDL calls.
 package com.defnf.icopc;
 
+import android.content.ActivityNotFoundException;
 import android.content.ClipData;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
@@ -248,6 +250,126 @@ public class IcoActivity extends SDLActivity {
             return null;
         } catch (RuntimeException e) {
             return e.toString();
+        }
+    }
+
+    // The file picker (host_android.c ico_android_pick_file, issue 135): the
+    // app's own, not SDL's, whose single pending-dialog slot the app cannot
+    // clear. pickFile runs on the game's thread (as SDL's showFileDialog
+    // does) and starts the system's document picker, ACTION_OPEN_DOCUMENT,
+    // or when no app takes that, ACTION_GET_CONTENT; the answer comes to
+    // onActivityResult on the activity's thread and goes to nativePickDone
+    // with gen, the native side's number for this pick, which drops an
+    // answer for a pick it gave up on. Nothing is persisted: the native side
+    // copies the file while the grant lasts.
+    private static final int PICK_REQUEST = 0x1C0D;
+    private static volatile int sPickGen;
+
+    // answer: uri the chosen file's content URI, or null; why null, or the
+    // reason the picker gave no usable answer (a null uri with a null why is
+    // the picker closed without a file)
+    private static native void nativePickDone(int gen, String uri, String why);
+
+    // one line for the log ("ico_pc: file picker: <line>")
+    private static native void nativePickNote(String line);
+
+    private static void pickNote(String line) {
+        try {
+            nativePickNote(line);
+        } catch (UnsatisfiedLinkError e) {
+            // libmain.so without the method: no line
+        }
+    }
+
+    private static Intent pickIntent(String action) {
+        Intent intent = new Intent(action);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        // no type filter: the native side checks what the file is
+        intent.setType("*/*");
+        return intent;
+    }
+
+    // null when a picker was started, else the reason: one starting "no app"
+    // when no installed app takes either intent (the native side's NO PICKER
+    // APP), any other text when the start failed some other way (NO PICKER)
+    public static String pickFile(int gen) {
+        IcoActivity a = sInstance;
+        if (a == null) {
+            return "no activity";
+        }
+        pickNote("pick " + gen + ": the activity is "
+                + (SDLActivity.mIsResumedCalled ? "resumed" : "not resumed")
+                + (SDLActivity.mHasFocus ? ", focused" : ", not focused")
+                + ", native state " + SDLActivity.mCurrentNativeState);
+        String openWhy;
+        try {
+            Intent open = pickIntent(Intent.ACTION_OPEN_DOCUMENT);
+            pickNote("pick " + gen + ": OPEN_DOCUMENT goes to " + resolved(a, open));
+            a.startActivityForResult(open, PICK_REQUEST);
+            sPickGen = gen;
+            return null;
+        } catch (ActivityNotFoundException e) {
+            openWhy = e.toString();
+        } catch (RuntimeException e) {
+            return e.toString();
+        }
+        pickNote("pick " + gen + ": no app for OPEN_DOCUMENT (" + openWhy
+                + "); trying GET_CONTENT");
+        try {
+            Intent get = pickIntent(Intent.ACTION_GET_CONTENT);
+            pickNote("pick " + gen + ": GET_CONTENT goes to " + resolved(a, get));
+            a.startActivityForResult(get, PICK_REQUEST);
+            sPickGen = gen;
+            return null;
+        } catch (ActivityNotFoundException e) {
+            return "no app for OPEN_DOCUMENT (" + openWhy + ") nor GET_CONTENT ("
+                    + e.toString() + ")";
+        } catch (RuntimeException e) {
+            return e.toString();
+        }
+    }
+
+    // the app an intent would start, for the log (the manifest's <queries>
+    // makes it visible on Android 11 and later)
+    private static String resolved(IcoActivity a, Intent intent) {
+        try {
+            ComponentName c = intent.resolveActivity(a.getPackageManager());
+            return c != null ? c.flattenToShortString() : "no app";
+        } catch (RuntimeException e) {
+            return "unknown (" + e.toString() + ")";
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode != PICK_REQUEST) {
+            super.onActivityResult(requestCode, resultCode, data);
+            return;
+        }
+        String uri = null;
+        String why = null;
+        if (resultCode == RESULT_OK && data != null) {
+            Uri u = data.getData();
+            if (u == null) {
+                // some pickers answer with the clip data alone
+                ClipData clip = data.getClipData();
+                if (clip != null && clip.getItemCount() > 0) {
+                    u = clip.getItemAt(0).getUri();
+                }
+            }
+            if (u != null) {
+                uri = u.toString();
+            } else {
+                why = "the picker answered without a file";
+            }
+        }
+        if (SDLActivity.mBrokenLibraries) {
+            return;
+        }
+        try {
+            nativePickDone(sPickGen, uri, why);
+        } catch (UnsatisfiedLinkError e) {
+            // libmain.so without the method: nobody is waiting
         }
     }
 }
