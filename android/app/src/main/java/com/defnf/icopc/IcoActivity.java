@@ -305,8 +305,10 @@ public class IcoActivity extends SDLActivity {
         try {
             Intent open = pickIntent(Intent.ACTION_OPEN_DOCUMENT);
             pickNote("pick " + gen + ": OPEN_DOCUMENT goes to " + resolved(a, open));
-            a.startActivityForResult(open, PICK_REQUEST);
+            // the gen before the start: a picker that answers at once
+            // must answer with this pick's gen, not the previous one's
             sPickGen = gen;
+            a.startActivityForResult(open, PICK_REQUEST);
             return null;
         } catch (ActivityNotFoundException e) {
             openWhy = e.toString();
@@ -318,8 +320,10 @@ public class IcoActivity extends SDLActivity {
         try {
             Intent get = pickIntent(Intent.ACTION_GET_CONTENT);
             pickNote("pick " + gen + ": GET_CONTENT goes to " + resolved(a, get));
-            a.startActivityForResult(get, PICK_REQUEST);
+            // the gen before the start: a picker that answers at once
+            // must answer with this pick's gen, not the previous one's
             sPickGen = gen;
+            a.startActivityForResult(get, PICK_REQUEST);
             return null;
         } catch (ActivityNotFoundException e) {
             return "no app for OPEN_DOCUMENT (" + openWhy + ") nor GET_CONTENT ("
