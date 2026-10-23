@@ -16,12 +16,18 @@ if [[ $# -gt 0 && "$1" != -* ]]; then
     label="$1"
     shift
 fi
-cmake --preset macos-app "-DICO_VERSION_LABEL=$label" "$@"
+# ICO_RC_TOOLS: the rc-only tooling, on for a label ending in -rc<N> alone and
+# given every time, so a build folder an rc configured keeps no ON
+# (tools/check_rc_text.py; docs/BUILDING.md, "Release candidate tools")
+rc_flag="$(python3 -I tools/check_rc_text.py --cmake-flag "$label")"
+cmake --preset macos-app "-DICO_VERSION_LABEL=$label" "$rc_flag" "$@"
 cmake --build --preset macos-app --parallel "${ICO_BUILD_JOBS:-6}"
 
 app="$root/build-host/macos-app/ICO.app"
 exe="$app/Contents/MacOS/ICO"
 [[ -x "$exe" ]] || { echo "Missing macOS executable: $exe" >&2; exit 1; }
+# a release's program holds no rc row, an rc's does
+python3 -I tools/check_rc_text.py --label "$label" "$exe"
 plutil -lint "$app/Contents/Info.plist"
 
 mkdir -p "$root/dist"

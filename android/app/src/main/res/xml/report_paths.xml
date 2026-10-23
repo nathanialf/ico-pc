@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The folders an rc build's Share a bug report may offer to another app
+     (IcoActivity.shareReport, the FileProvider in AndroidManifest.xml, which
+     is enabled in an rc build alone): the app's files folder, on the shared
+     storage (Android/data/<package>/files) or the internal one, where
+     logs/ and dumps/ are (port/platform/android/android_paths.h). -->
+<paths>
+    <external-files-path name="files" path="." />
+    <files-path name="internal" path="." />
+</paths>

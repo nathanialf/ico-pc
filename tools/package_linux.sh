@@ -76,11 +76,18 @@ cd "$wt"
 # $ORIGIN run path: libSDL3.so.0 is found beside the program. The build-tree
 # run path (the toolchain's absolute lib dir) is left out of the binary.
 # ICO_VERSION_LABEL: the version the log and the Options menu show.
+# ICO_RC_TOOLS: the rc-only tooling, on for a label ending in -rc<N> alone
+# (tools/check_rc_text.py; docs/BUILDING.md, "Release candidate tools")
+rc_flag="$(python3 -I "$wt/tools/check_rc_text.py" --cmake-flag "$label")" ||
+    fail "tools/check_rc_text.py --cmake-flag"
+echo "package_linux: $rc_flag" >>"$log"
 run "$cmake" --preset "$preset" -DICO_HEADLESS=OFF -DICO_LINK_EXE=ON "-DICO_VERSION_LABEL=$label" \
-    -DCMAKE_SKIP_BUILD_RPATH=ON "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-rpath,'\$ORIGIN'"
+    "$rc_flag" -DCMAKE_SKIP_BUILD_RPATH=ON "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-rpath,'\$ORIGIN'"
 run "$cmake" --build "build-host/$preset" --target ico_pc mc_import
 b="$wt/build-host/$preset"
 [[ -f "$b/ico_pc" ]] || fail "$preset did not produce ico_pc"
+# a release's program holds no rc row, an rc's does (the AppImage holds this one)
+run python3 -I "$wt/tools/check_rc_text.py" --label "$label" "$b/ico_pc"
 [[ -f "$b/port/save/mc_import" ]] || fail "$preset did not produce mc_import"
 cd "$root"
 

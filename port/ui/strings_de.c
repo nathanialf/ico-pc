@@ -410,6 +410,11 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_REPORT_PICTURE_ARMED] = "Bild in 3 Sekunden",
     [UI_STR_REPORT_PICTURE_ARMED_BODY] =
         "Jetzt das Menü verlassen.\nDie ZIP-Datei kommt in den Ordner dumps.",
+#if ICO_RC_TOOLS
+    [UI_STR_OPT_SHARE_REPORT] = "Fehlerbericht teilen",
+    [UI_STR_SHARE_REPORT_NOTE] =
+        "Öffnet das Teilen-Menü mit dem Protokoll und der neuesten Bild-ZIP, zum Senden per E-Mail oder Chat.",
+#endif
     [UI_STR_SECTION_EFFECTS] = "Effekte",
     [UI_STR_OPT_EFFECT_GLOW] = "Leuchten",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Tiefenschärfe",

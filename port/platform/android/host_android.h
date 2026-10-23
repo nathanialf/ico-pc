@@ -97,4 +97,20 @@ void ico_android_log_version(void);
    lines (diag_host.h ico_diag_set_symbols_fd); not read until a report. */
 void ico_android_open_symbols(void);
 
+/* ICO_RC_TOOLS: the release candidates' tooling (port/ui/settings.h); 0 in
+   every other build, which has none of what follows */
+#ifndef ICO_RC_TOOLS
+#define ICO_RC_TOOLS 0
+#endif
+#if ICO_RC_TOOLS
+/* An rc build's Share a bug report (window_host.c share_report_pump): the
+   n files at paths (UTF-8, under the app's files folder) to the system's
+   share menu, titled title, through IcoActivity.shareReport (an
+   ACTION_SEND_MULTIPLE chooser of FileProvider content URIs, the provider
+   enabled in an rc build's manifest alone).  On SDL's main thread.  0 when
+   the menu was asked for, else -1 with the reason in why. */
+int ico_android_share_files(const char *title, const char *const *paths, int n, char *why,
+                            size_t why_size);
+#endif
+
 #endif

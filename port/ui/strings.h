@@ -14,6 +14,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* ICO_RC_TOOLS: the release candidates' own tooling (CMake -DICO_RC_TOOLS=ON,
+   which tools/package_*.sh pass for a label ending in -rc<N> alone; Gradle
+   -PicoRcTools=true; docs/BUILDING.md "Release candidate tools").  0 in
+   every other build, which then has none of it: today the Main row "Share
+   a bug report" (settings.h ui_settings_set_share_report_handler). */
+#ifndef ICO_RC_TOOLS
+#define ICO_RC_TOOLS 0
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -493,6 +502,12 @@ typedef enum UiStrId {
     UI_STR_REPORT_PICTURE_NOTE,
     UI_STR_REPORT_PICTURE_ARMED,
     UI_STR_REPORT_PICTURE_ARMED_BODY,
+#if ICO_RC_TOOLS
+    /* the rc builds' Main row "Share a bug report" (settings.h
+       ui_settings_set_share_report_handler) and its note; not in a release */
+    UI_STR_OPT_SHARE_REPORT,
+    UI_STR_SHARE_REPORT_NOTE,
+#endif
     /* Options > Effects: the page, its five switches, its note */
     UI_STR_SECTION_EFFECTS,
     UI_STR_OPT_EFFECT_GLOW,

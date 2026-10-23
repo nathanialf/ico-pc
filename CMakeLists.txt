@@ -33,6 +33,17 @@ option(ICO_HEADLESS "Build the headless ico_pc (no window, no renderer)" OFF)
 option(ICO_FPTRAP "Unmask float divide-by-zero and invalid in simulation mode" OFF)
 option(ICO_BUILD_BLOCKED "Also compile the sources cmake/IcoExclusions.cmake blocks" OFF)
 option(ICO_LINK_EXE "Link the ico_pc executable (fails while symbols are unresolved)" OFF)
+# ICO_RC_TOOLS: a release candidate's own tooling, compiled in an rc build
+# alone (docs/BUILDING.md, "Release candidate tools"): today the Android Main
+# row "Share a bug report" (port/ui/settings.h). tools/package_*.sh turn it on
+# for a label ending in -rc<N> and nothing else, and check every package's
+# program for the row's text (tools/check_rc_text.py); a release label with
+# it on is refused below. OFF: ICO_RC_TOOLS is 0 in every source (the
+# headers' default), and none of it is compiled.
+option(ICO_RC_TOOLS "Compile the release candidates' tooling (rc packages only)" OFF)
+if(ICO_RC_TOOLS)
+    add_compile_definitions(ICO_RC_TOOLS=1)
+endif()
 
 # The retail game ran with its asserts live (the reconstruction calls
 # __assert where the macro expanded), so no configuration defines NDEBUG:
@@ -205,6 +216,12 @@ if(ICO_LINK_EXE)
     # for the final; 0.0.0.0 for a development build (cmake/IcoVersion.cmake)
     include(cmake/IcoVersion.cmake)
     ico_version_from_label("${ICO_VERSION_LABEL}" ICO_VER_NUMERIC ICO_VER_TEXT)
+    # the rc tooling never goes into a package with a release's label
+    if(ICO_RC_TOOLS AND NOT ICO_VERSION_LABEL STREQUAL "" AND
+       NOT ICO_VERSION_LABEL MATCHES "-rc[0-9]+$")
+        message(FATAL_ERROR "ICO_RC_TOOLS=ON with ICO_VERSION_LABEL=${ICO_VERSION_LABEL}: "
+                            "the rc tooling is for a label ending in -rc<N> alone")
+    endif()
     if(ICO_VER_TEXT MATCHES "^([0-9]+\\.[0-9]+\\.[0-9]+)\\.")
         set(ICO_VER_XYZ "${CMAKE_MATCH_1}")
     else()
@@ -345,6 +362,28 @@ if(Python3_FOUND)
     add_test(NAME docs_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_docs.py")
 endif()
 
+# the rc-only tooling's gate (ICO_RC_TOOLS above): the checker's own cases
+# and the package scripts' use of it (rc_tools_gate), and this build's
+# program holding the rc row's text exactly when ICO_RC_TOOLS is on
+# (rc_tools_binary; absent in the default build)
+if(Python3_FOUND)
+    add_test(NAME rc_tools_gate
+             COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_rc_text.py" --selftest)
+    # (the row's text is in the menus' tables, which the window build links;
+    # a headless rc build is not checked for it)
+    if(TARGET ico_pc AND NOT ANDROID AND NOT CMAKE_CROSSCOMPILING AND
+       (NOT ICO_RC_TOOLS OR NOT ICO_HEADLESS))
+        if(ICO_RC_TOOLS)
+            set(_ico_rc_expect present)
+        else()
+            set(_ico_rc_expect absent)
+        endif()
+        add_test(NAME rc_tools_binary
+                 COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_rc_text.py"
+                         --expect ${_ico_rc_expect} "$<TARGET_FILE:ico_pc>")
+    endif()
+endif()
+
 # On arm64 Android (and arm64 Linux) the movie decoder
 # (port/fmv, Ittiam libmpeg2) uses the library's own NEON routines, which are
 # assembly: the language is enabled here, in the top directory, as CMake
@@ -419,6 +458,10 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
     endif()
     target_sources(ico_pc PRIVATE port/platform/window_host.c port/platform/window_video.c
                                   port/platform/dump_zip.c)
+    if(ICO_RC_TOOLS AND ANDROID)
+        # an rc build's Share a bug report: the files it offers (share_report.h)
+        target_sources(ico_pc PRIVATE port/platform/share_report.c)
+    endif()
     # The display's vblanks for the vsync lock's log (display_clock.h): a
     # DXGI output's on Windows, none elsewhere
     if(WIN32)

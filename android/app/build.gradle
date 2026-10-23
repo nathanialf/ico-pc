@@ -3,13 +3,18 @@
 // variables); libSDL3.so and SDL's Java glue are tools/fetch_android.sh's
 // build of the pinned SDL release (tools/toolchain/deps/sdl3/android-arm64).
 //
-//   ./gradlew --no-daemon assembleDebug [-PicoLabel=<label>]
+//   ./gradlew --no-daemon assembleDebug [-PicoLabel=<label>] [-PicoRcTools=true]
 //
 // versionName: -PicoLabel, else `git describe --always --dirty --abbrev=10`;
 // versionCode: `git rev-list --count HEAD`. assets/VERSION.txt (the three
 // lines of tools/package_linux.sh's) and assets/NOTICES.txt
 // (tools/gen_notices.py --platform android) are generated at build time.
 // The release build is unsigned (tools signs it).
+// -PicoRcTools=true: a release candidate's tooling (docs/BUILDING.md,
+// "Release candidate tools"): the native -DICO_RC_TOOLS=ON,
+// BuildConfig.RC_TOOLS and the report FileProvider enabled. Off by default;
+// tools/package_android.sh passes it for a label ending in -rc<N> alone, and
+// this file refuses it with any other -PicoLabel.
 import org.gradle.process.ExecOperations
 
 import javax.inject.Inject
@@ -55,6 +60,12 @@ def icoNativeLabel = (project.findProperty('icoLabel') ?: '').toString()
 def icoCommit = gitOut(['rev-parse', 'HEAD']) ?: 'unknown'
 def icoVersionCode = (gitOut(['rev-list', '--count', 'HEAD']) ?: '1') as Integer
 def nativeJobs = (project.findProperty('icoNativeJobs') ?: '2').toString()
+// the rc-only tooling: never with a release label (CMakeLists.txt refuses it
+// too; the package scripts check the built program for the row's text)
+def icoRcTools = (project.findProperty('icoRcTools') ?: 'false').toString() == 'true'
+if (icoRcTools && icoNativeLabel && !(icoNativeLabel ==~ /.*-rc[0-9]+/)) {
+    throw new GradleException("android: -PicoRcTools=true with the label ${icoNativeLabel}, which is not a release candidate's (-rc<N>)")
+}
 
 // assets/VERSION.txt and assets/NOTICES.txt
 abstract class IcoAssetsTask extends DefaultTask {
@@ -99,6 +110,9 @@ android {
         targetSdk = 35
         versionCode = icoVersionCode
         versionName = icoLabel
+        // the rc-only tooling (IcoActivity.shareReport, AndroidManifest.xml's provider)
+        buildConfigField 'boolean', 'RC_TOOLS', icoRcTools ? 'true' : 'false'
+        manifestPlaceholders = [icoRcTools: icoRcTools ? 'true' : 'false']
         ndk {
             abiFilters 'arm64-v8a'
         }
@@ -112,6 +126,7 @@ android {
                         '-DICO_HEADLESS=OFF',
                         '-DICO_LINK_EXE=ON',
                         "-DICO_VERSION_LABEL=${icoNativeLabel}",
+                        "-DICO_RC_TOOLS=${icoRcTools ? 'ON' : 'OFF'}",
                         '-DICO_RHI_D3D12=OFF',
                         '-DICO_SHADERS_DXIL=OFF',
                         "-DCMAKE_JOB_POOLS=compile=${nativeJobs};link=1",
@@ -145,6 +160,10 @@ android {
             minifyEnabled = false
             signingConfig = null
         }
+    }
+
+    buildFeatures {
+        buildConfig = true // BuildConfig.RC_TOOLS
     }
 
     compileOptions {

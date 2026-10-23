@@ -933,6 +933,134 @@ static void testReportPicture(void)
     }
 }
 
+/* Main > Share a bug report, an rc build's row alone (ICO_RC_TOOLS, the
+   release candidates' tooling; docs/BUILDING.md).  rc_tools_off: in the
+   default build, on a phone with every other Main row shown and a share
+   handler set, the page has its sixteen rows, none of them the share row,
+   and no string of the English table is its text (a release has no such
+   row, CMakeLists.txt's rc_tools_binary checks the program too).  With
+   ICO_RC_TOOLS: the row shows on a phone with a handler, directly below
+   Save a picture for a bug report, with its note; not on a desktop, not
+   without a handler; Cross calls the handler once and stays on the page;
+   the seventeen rows are 10 apart from 26 and the page fits; the label
+   fits and both strings are translated. */
+static int s_shareCalls;
+
+static void fakeShareReport(void)
+{
+    s_shareCalls++;
+}
+
+static int mainRowsShown(int *labels, int max, int *n)
+{
+    int shown = 0;
+    *n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, max);
+    for (int i = 0; i < *n; i++) {
+        shown += !lt_ext_prop(labels[i])->defaultMask && !lt_ext_prop(labels[i])->masked;
+    }
+    return shown;
+}
+
+static void testShareReport(void)
+{
+    static const char kText[] = "Share a bug report";
+
+    useConfig("version = 1\n");
+    ui_popup_reset();
+    ico_video_set_android(1);
+    s_gpuN = 0;
+    s_gpuSel = -1;
+    s_gpuFailed = -1;
+    s_gpuAdreno = 1;
+    ui_settings_set_gpu_driver_host(&kGpuHost);
+    s_discHave = 3u;
+    ui_settings_set_disc_handler(fakeDiscPresent);
+    ui_settings_set_frame_dump_handler(fakeReportPicture);
+    ui_settings_set_share_report_handler(fakeShareReport);
+    int mainL = enterMain(1);
+    ico_opt_set_developer_mode(1);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    int labels[24], n = 0, textRow = -1;
+    const int shown = mainRowsShown(labels, 24, &n);
+    for (int i = 0; i < n; i++) {
+        textRow = strcmp(lt_ext_row_text(labels[i]), kText) == 0 ? i : textRow;
+    }
+#if !ICO_RC_TOOLS
+    CHECK(n == 16 && shown == 16,
+          "rc_tools_off: Main has its sixteen rows on a phone with a share handler (%d, %d shown)",
+          n, shown);
+    CHECK(textRow < 0, "rc_tools_off: no Main row is \"%s\" (row %d)", kText, textRow);
+    for (int id = 0; id < UI_STR_COUNT; id++) {
+        CHECK(strcmp(ui_str_in(UI_LANG_EN, (UiStrId)id), kText) != 0,
+              "rc_tools_off: string %d of the English table is \"%s\"", id, kText);
+    }
+    (void)mainL;
+#else
+    const int row = ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_SHARE_REPORT);
+    const int pic = ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE);
+    int at = -1, picAt = -1;
+    for (int i = 0; i < n; i++) {
+        at = labels[i] == row ? i : at;
+        picAt = labels[i] == pic ? i : picAt;
+    }
+    CHECK(n == 17 && shown == 17, "rc tools: seventeen Main rows shown on a phone (%d, %d)", n,
+          shown);
+    CHECK(row >= 0 && an22bShown(UI_PAGE_MAIN, UI_OPT_SHARE_REPORT) && at == textRow,
+          "rc tools: the row shows as \"%s\" (%d, %d)", kText, at, textRow);
+    CHECK(picAt >= 0 && at == picAt + 1, "rc tools: directly below Save a picture (%d, %d)", picAt,
+          at);
+    CHECK(ui_settings_note_row_of(UI_PAGE_MAIN, UI_OPT_SHARE_REPORT) >= 0,
+          "rc tools: the row has its note");
+    {
+        const LtProperty *back = lt_ext_prop(labels[n - 1]);
+        CHECK(back->dispY == 26 + 16 * 10, "rc tools: seventeen rows 10 apart, Back at %d",
+              back->dispY);
+        CHECK(back->dispY + back->dispH <= 226, "rc tools: Back's box ends at %d",
+              back->dispY + back->dispH);
+        checkPageFits(UI_PAGE_MAIN, "Main (every row, Share a bug report)");
+    }
+    s_shareCalls = 0;
+    lt_ext_layout(mainL)->curItem = row;
+    frame(0);
+    press(0x40);
+    CHECK(s_shareCalls == 1, "rc tools: Cross calls the handler once (%d)", s_shareCalls);
+    CHECK(current_layout_id == mainL, "rc tools: stays on the page");
+    ui_popup_reset();
+    /* a desktop, and a phone without a handler: no row */
+    ico_video_set_android(0);
+    enterMain(1);
+    frame(0);
+    CHECK(!an22bShown(UI_PAGE_MAIN, UI_OPT_SHARE_REPORT), "rc tools: hidden on a desktop");
+    ico_video_set_android(1);
+    ui_settings_set_share_report_handler(NULL);
+    enterMain(1);
+    frame(0);
+    CHECK(!an22bShown(UI_PAGE_MAIN, UI_OPT_SHARE_REPORT), "rc tools: hidden without a handler");
+    for (int g = 0; g < UI_LANG_COUNT; g++) {
+        const float lw =
+            ui_measure_menu_text(UI_MENU_TEXT_SIZE, ui_str_in((UiLang)g, UI_STR_OPT_SHARE_REPORT));
+        CHECK(lw * 0.6f <= 300.0f, "rc tools: language %d: the label fits (%.1f)", g, (double)lw);
+    }
+    static const UiStrId kIds[] = {UI_STR_OPT_SHARE_REPORT, UI_STR_SHARE_REPORT_NOTE};
+    for (int l = 1; l < UI_LANG_COUNT; l++) {
+        for (unsigned i = 0; i < sizeof(kIds) / sizeof(kIds[0]); i++) {
+            const char *t = ui_str_in((UiLang)l, kIds[i]);
+            CHECK(t[0] != '\0' && strcmp(t, ui_str_in(UI_LANG_EN, kIds[i])) != 0,
+                  "rc tools: language %d, string %d translated", l, kIds[i]);
+        }
+    }
+#endif
+    ico_opt_set_developer_mode(0);
+    ico_video_set_android(0);
+    ui_settings_set_gpu_driver_host(NULL);
+    ui_settings_set_disc_handler(NULL);
+    ui_settings_set_frame_dump_handler(NULL);
+    ui_settings_set_share_report_handler(NULL);
+    useConfig("version = 1\n");
+}
+
 static void testQuitGame(void)
 {
     static const char *const kAsk[2] = {"Quit to desktop?", "Quit the game?"};
@@ -3122,6 +3250,7 @@ int main(int argc, char **argv)
     /* Main > Disc */
     testDiscRow();
     testReportPicture();
+    testShareReport();
     testQuitGame();
     /* Controls > the mouse camera rows */
     testMouseCamera();

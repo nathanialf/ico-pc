@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The app: one activity, SDL's (IcoActivity), landscape, one permission
-     (VIBRATE). The package name is app/build.gradle's namespace
-     (com.defnf.icopc). -->
+     (VIBRATE), and a file provider that only an rc build enables. The
+     package name is app/build.gradle's namespace (com.defnf.icopc). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     android:installLocation="auto">
 
@@ -52,6 +52,24 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- An rc build's Settings > Share a bug report (IcoActivity.shareReport):
+             the log and the dumps as content URIs another app may read once
+             the player picks it. android:enabled is app/build.gradle's
+             icoRcTools placeholder, "true" in an rc build alone
+             (tools/package_android.sh, a label ending in -rc<N>); in every
+             other build the system never starts it and no URI can be made.
+             Never exported: access is granted per file, per share. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.reports"
+            android:enabled="${icoRcTools}"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/report_paths" />
+        </provider>
     </application>
 
 </manifest>

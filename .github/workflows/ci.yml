@@ -495,6 +495,10 @@ jobs:
           "$llvm/llvm-nm" -D "$so" > nm.txt
           grep -q ' T SDL_main' nm.txt
 
+          # CI's APK is no release candidate's: no rc row (ICO_RC_TOOLS,
+          # docs/BUILDING.md "Release candidate tools") in any entry
+          python3 -I tools/check_rc_text.py --label ci "$apk"
+
           # no compiled shaders from the DXC step in the program
           n=$(strings "$so" | grep -c DXBC || true)
           [ "$n" -eq 0 ] || { echo "DXBC found in libmain.so ($n lines)"; exit 1; }

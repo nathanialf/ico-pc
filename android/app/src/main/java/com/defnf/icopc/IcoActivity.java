@@ -3,15 +3,19 @@
 // libmain.so (the CMake target ico_pc), whose SDL_main SDL calls.
 package com.defnf.icopc;
 
+import android.content.ClipData;
 import android.content.Context;
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Rect;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.view.WindowManager;
 
+import androidx.core.content.FileProvider;
 import androidx.core.util.Consumer;
 import androidx.window.java.layout.WindowInfoTrackerCallbackAdapter;
 import androidx.window.layout.DisplayFeature;
@@ -21,6 +25,9 @@ import androidx.window.layout.WindowLayoutInfo;
 import androidx.window.layout.WindowMetricsCalculator;
 
 import org.libsdl.app.SDLActivity;
+
+import java.io.File;
+import java.util.ArrayList;
 
 public class IcoActivity extends SDLActivity {
     private static IcoActivity sInstance;
@@ -191,6 +198,56 @@ public class IcoActivity extends SDLActivity {
             sVibrator.vibrate(VibrationEffect.createOneShot(ms, Math.min(amplitude, 255)));
         } catch (RuntimeException e) {
             // no vibration is better than a crash
+        }
+    }
+
+    // An rc build's Settings > Share a bug report (host_android.c
+    // ico_android_share_files, on SDL's main thread): the files at paths,
+    // all under the app's files folder, offered to the system's share menu
+    // as content URIs of the app's FileProvider (AndroidManifest.xml, its
+    // authority <package>.reports, res/xml/report_paths.xml), read access
+    // granted to the app the player picks. null when the menu was started,
+    // else the reason, which the native side logs. BuildConfig.RC_TOOLS is
+    // app/build.gradle's icoRcTools (tools/package_android.sh sets it for a
+    // label ending in -rc<N> alone); without it the provider is disabled in
+    // the manifest and this does nothing.
+    public static String shareReport(String title, String[] paths) {
+        if (!BuildConfig.RC_TOOLS) {
+            return "not a release candidate build";
+        }
+        IcoActivity a = sInstance;
+        if (a == null) {
+            return "no activity";
+        }
+        try {
+            String authority = a.getPackageName() + ".reports";
+            ArrayList<Uri> uris = new ArrayList<>();
+            ClipData clip = null;
+            for (String p : paths) {
+                Uri u = FileProvider.getUriForFile(a, authority, new File(p));
+                uris.add(u);
+                if (clip == null) {
+                    clip = ClipData.newRawUri(new File(p).getName(), u);
+                } else {
+                    clip.addItem(new ClipData.Item(u));
+                }
+            }
+            if (uris.isEmpty()) {
+                return "no files";
+            }
+            Intent send = new Intent(Intent.ACTION_SEND_MULTIPLE);
+            send.setType("application/octet-stream");
+            send.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
+            // the chosen app's read access: the grant flag with the URIs as
+            // the intent's clip data too, which the chooser passes on
+            send.setClipData(clip);
+            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            Intent chooser = Intent.createChooser(send, title);
+            chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            a.startActivity(chooser);
+            return null;
+        } catch (RuntimeException e) {
+            return e.toString();
         }
     }
 }

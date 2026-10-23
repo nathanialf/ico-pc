@@ -129,6 +129,16 @@ if(ICO_RUN_TESTS)
     add_test(NAME dump_zip COMMAND dump_zip_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
+# An rc build's Share a bug report's files (share_report.c, compiled into
+# the program only with ICO_RC_TOOLS on Android), over a fake logs and dumps
+# folder under the build folder; tested in every build
+add_executable(share_report_test test/share_report_test.c share_report.c)
+target_compile_options(share_report_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(share_report_test PRIVATE ico_host_fs)
+if(ICO_RUN_TESTS)
+    add_test(NAME share_report COMMAND share_report_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
 # host_fs.h on a non-ASCII (UTF-8) path in the build tree
 add_executable(host_fs_test test/host_fs_test.c)
 target_compile_options(host_fs_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

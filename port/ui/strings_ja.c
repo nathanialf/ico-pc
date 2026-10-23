@@ -407,6 +407,10 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_REPORT_PICTURE_ARMED] = "まもなく写真を保存します",
     [UI_STR_REPORT_PICTURE_ARMED_BODY] =
         "メニューを出てください。\nzipファイルはdumpsフォルダーに保存されます。",
+#if ICO_RC_TOOLS
+    [UI_STR_OPT_SHARE_REPORT] = "バグレポートをシェア",
+    [UI_STR_SHARE_REPORT_NOTE] = "ログと写真のzipを、メールなどのアプリでシェアします。",
+#endif
     [UI_STR_SECTION_EFFECTS] = "エフェクト",
     [UI_STR_OPT_EFFECT_GLOW] = "光のにじみ",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "被写界深度",

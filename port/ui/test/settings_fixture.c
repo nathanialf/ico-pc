@@ -733,8 +733,8 @@ int rowWithText(UiSettingsPage page, const char *str)
    inside the 226 lines */
 void checkPageFits(UiSettingsPage page, const char *what)
 {
-    int labels[16];
-    const int n = ui_settings_page_rows(page, labels, NULL, NULL, 16);
+    int labels[24];
+    const int n = ui_settings_page_rows(page, labels, NULL, NULL, 24);
     int prev = -1, last = -1, shown = 0;
     for (int i = 0; i < n; i++) {
         shown += !lt_ext_prop(labels[i])->defaultMask;
@@ -750,7 +750,9 @@ void checkPageFits(UiSettingsPage page, const char *what)
                     : shown > tall                         ? 11
                     : shown == 13 && page == UI_PAGE_MAIN  ? 12
                                                            : 13;
-    const int top = shown > tall ? 30 : 34;
+    /* an rc build's seventeen Main rows (Share a bug report, ICO_RC_TOOLS)
+       from 26 */
+    const int top = shown > 16 && page == UI_PAGE_MAIN ? 26 : shown > tall ? 30 : 34;
     for (int i = 0; i < n; i++) {
         const LtProperty *r = lt_ext_prop(labels[i]);
         if (r->defaultMask) {

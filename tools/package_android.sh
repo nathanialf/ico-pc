@@ -89,11 +89,22 @@ done
 
 # ICO_GRADLE_ARGS: extra Gradle properties (e.g. a diagnostic switch) for a
 # diagnostic package that still carries the release signature (an unsigned
-# debug build cannot be installed over the release without losing the saves)
+# debug build cannot be installed over the release without losing the saves).
+# The rc-only tooling (icoRcTools) is the label's alone: on for a label ending
+# in -rc<N> (tools/check_rc_text.py; docs/BUILDING.md, "Release candidate
+# tools"), never from ICO_GRADLE_ARGS.
+[[ "${ICO_GRADLE_ARGS:-}" != *icoRcTools* ]] ||
+    fail "ICO_GRADLE_ARGS names icoRcTools: the rc tooling follows the label alone"
+rc_flag="$(python3 -I "$wt/tools/check_rc_text.py" --gradle-flag "$label")" ||
+    fail "tools/check_rc_text.py --gradle-flag"
+echo "package_android: $rc_flag" >>"$log"
 # shellcheck disable=SC2086
-(cd android && run ./gradlew --no-daemon assembleRelease "-PicoLabel=$label" ${ICO_GRADLE_ARGS:-})
+(cd android && run ./gradlew --no-daemon assembleRelease "-PicoLabel=$label" "$rc_flag" ${ICO_GRADLE_ARGS:-})
 unsigned="$wt/android/app/build/outputs/apk/release/app-release-unsigned.apk"
 [[ -f "$unsigned" ]] || fail "Gradle did not produce app-release-unsigned.apk"
+# a release's APK holds no rc row (libmain.so, classes.dex and the resources,
+# each entry inflated), an rc's does
+run python3 -I "$wt/tools/check_rc_text.py" --label "$label" "$unsigned"
 so="$(ls "$wt"/android/app/build/intermediates/cxx/*/*/obj/arm64-v8a/libmain.so 2>/dev/null | head -n 1 || true)"
 map="$(ls "$wt"/android/app/build/intermediates/cxx/*/*/obj/arm64-v8a/ico_pc.map "$wt"/android/app/.cxx/*/*/arm64-v8a/ico_pc.map 2>/dev/null | head -n 1 || true)"
 [[ -n "$so" && -f "$so" ]] || fail "no unstripped libmain.so under android/app/build/intermediates/cxx"

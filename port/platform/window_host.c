@@ -60,6 +60,10 @@
 #elif !defined(ICO_IOS)
 #include "steam_shortcut.h"
 #endif
+#if ICO_RC_TOOLS && defined(__ANDROID__)
+#include "share_report.h" /* an rc build's Share a bug report (settings.h) */
+#include "strings.h"
+#endif
 
 /* The window's first client size: 4:3, three times 320 x 240. */
 #define WINDOW_W 960
@@ -910,6 +914,11 @@ static SDL_AtomicInt s_resumed;
 /* Settings > Save a picture for a bug report's handler (below, with F12's
    frame_dump) */
 static void report_picture_arm(void);
+#if ICO_RC_TOOLS && defined(__ANDROID__)
+/* Settings > Share a bug report's handler, an rc build's alone (below) */
+static void share_report_arm(void);
+static void share_report_pump(void);
+#endif
 
 static void resume_recheck(void)
 {
@@ -2257,6 +2266,10 @@ open_window:
     ui_settings_set_disc_handler(ico_host_disc_archive_present);
     /* Main > Save a picture for a bug report (above Developer mode, always shown) */
     ui_settings_set_frame_dump_handler(report_picture_arm);
+#if ICO_RC_TOOLS && defined(__ANDROID__)
+    /* Main > Share a bug report, below it: an rc build on a phone alone */
+    ui_settings_set_share_report_handler(share_report_arm);
+#endif
 #ifdef __ANDROID__
     /* the Graphics driver page, and "Quit game" for the
        title's Quit row (a phone has no desktop to quit to); both before the
@@ -2744,6 +2757,59 @@ static void report_picture_pump(void)
     fprintf(stderr, "window: the picture for a bug report (Settings, 3 s after the press):\n");
     frame_dump();
 }
+
+#if ICO_RC_TOOLS && defined(__ANDROID__)
+/* Settings > Share a bug report (the Main page, an rc build's row alone:
+   ICO_RC_TOOLS; settings.h ui_settings_set_share_report_handler): the
+   report's files (share_report.h: the log, the run before's, the newest
+   dump zip and presented picture, the newest report zip) to the system's
+   share menu (host_android.c ico_android_share_files), from the pump on
+   SDL's main thread, whose JNI environment the call takes.  The files
+   folder is out of reach on a phone without a computer.  The line naming
+   the files is logged and the log flushed first, so the log shared holds
+   it. */
+static int s_shareArmed;
+
+static void share_report_arm(void)
+{
+    s_shareArmed = 1;
+}
+
+static void share_report_pump(void)
+{
+    static IcoShareReport s_files;
+    char logs[ICO_PATH_MAX], pref[ICO_PATH_MAX], dumps[ICO_PATH_MAX], names[768], why[256];
+    const char *paths[ICO_SHARE_REPORT_MAX];
+
+    if (!s_shareArmed) {
+        return;
+    }
+    s_shareArmed = 0;
+    if (ico_host_logs_dir(logs, sizeof(logs)) != 0) {
+        logs[0] = '\0';
+    }
+    ico_host_pref_dir(pref, sizeof(pref));
+    if (ico_path_join(dumps, sizeof(dumps), pref, "dumps") != 0) {
+        dumps[0] = '\0';
+    }
+    ico_share_report_collect(logs, dumps, &s_files);
+    ico_share_report_names(&s_files, names, sizeof(names));
+    fprintf(stderr, "window: share: %d files offered (%s)\n", s_files.count, names);
+    if (s_files.count == 0) {
+        fprintf(stderr, "window: share: nothing to share (no log, dump or report in %s, %s)\n",
+                logs[0] ? logs : "no logs folder", dumps[0] ? dumps : "no dumps folder");
+        return;
+    }
+    ico_host_log_flush();
+    for (int i = 0; i < s_files.count; i++) {
+        paths[i] = s_files.path[i];
+    }
+    if (ico_android_share_files(ui_str(UI_STR_OPT_SHARE_REPORT), paths, s_files.count, why,
+                                sizeof(why)) != 0) {
+        fprintf(stderr, "window: share: the share menu did not open: %s\n", why);
+    }
+}
+#endif
 
 /* Shift+F12 in photo mode, the aspect sweep: the paused frame captured at
    4:3, 16:9, 32:9, 48:9 and 60:9 into <pref>/dumps/sweep-<time>.zip, each
@@ -3520,6 +3586,9 @@ int ico_window_pump(void)
     first_pump_recheck();
     resume_recheck();
     report_picture_pump();
+#if ICO_RC_TOOLS && defined(__ANDROID__)
+    share_report_pump();
+#endif
     /* the Settings menu's changes; forced when the
        renderer's output followed a swapchain rebuilt at another size, so
        aspect "auto" and resolution "window" follow it as on a resize */
@@ -5516,6 +5585,7 @@ void ico_window_close(void)
 #endif
     ui_settings_set_disc_handler(NULL);
     ui_settings_set_frame_dump_handler(NULL);
+    ui_settings_set_share_report_handler(NULL);
 #ifdef __ANDROID__
     ui_settings_set_gpu_driver_host(NULL);
 #endif

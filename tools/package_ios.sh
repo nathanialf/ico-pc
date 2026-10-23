@@ -17,11 +17,17 @@ if [[ $# -gt 0 && "$1" != -* ]]; then
     label="$1"
     shift
 fi
-cmake --preset ios-app "-DICO_VERSION_LABEL=$label" "$@"
+# ICO_RC_TOOLS: the rc-only tooling, on for a label ending in -rc<N> alone and
+# given every time, so a build folder an rc configured keeps no ON
+# (tools/check_rc_text.py; docs/BUILDING.md, "Release candidate tools")
+rc_flag="$(python3 -I tools/check_rc_text.py --cmake-flag "$label")"
+cmake --preset ios-app "-DICO_VERSION_LABEL=$label" "$rc_flag" "$@"
 cmake --build --preset ios-app --parallel "${ICO_BUILD_JOBS:-6}"
 
 app="$root/build-host/ios-app/ICO.app"
 [[ -x "$app/ICO" ]] || { echo "Missing iOS executable: $app/ICO" >&2; exit 1; }
+# a release's program holds no rc row, an rc's does
+python3 -I tools/check_rc_text.py --label "$label" "$app/ICO"
 plutil -lint "$app/Info.plist"
 mkdir -p "$root/dist"
 stage="$(mktemp -d "$root/build-host/ios-package.XXXXXX")"

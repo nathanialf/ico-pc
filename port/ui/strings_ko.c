@@ -410,6 +410,10 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_REPORT_PICTURE_ARMED] = "3초 뒤 사진 저장",
     [UI_STR_REPORT_PICTURE_ARMED_BODY] =
         "지금 메뉴에서 나가십시오.\nzip 파일은 dumps 폴더에 저장됩니다.",
+#if ICO_RC_TOOLS
+    [UI_STR_OPT_SHARE_REPORT] = "버그 신고 공유",
+    [UI_STR_SHARE_REPORT_NOTE] = "로그와 사진 파일을 메일이나 메신저로 공유합니다.",
+#endif
     [UI_STR_SECTION_EFFECTS] = "효과",
     [UI_STR_OPT_EFFECT_GLOW] = "빛 번짐",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "피사계 심도",

@@ -512,6 +512,96 @@ void ico_host_vibrate(int amplitude, int ms)
     (*env)->DeleteLocalRef(env, act);
 }
 
+#if ICO_RC_TOOLS
+/* --- an rc build's share menu --------------------------------------------- */
+
+/* Calls the static Java method IcoActivity.shareReport(String title,
+   String[] paths), which answers null when the chooser was started, else
+   the reason.  The JNI environment is the calling thread's (SDL's main
+   thread, the pump's); every local reference is deleted and a Java
+   exception is cleared and named. */
+int ico_android_share_files(const char *title, const char *const *paths, int n, char *why,
+                            size_t why_size)
+{
+    JNIEnv *env = (JNIEnv *)SDL_GetAndroidJNIEnv();
+    jobject act = env != NULL ? (jobject)SDL_GetAndroidActivity() : NULL;
+    jclass cls = NULL, str = NULL;
+    jobjectArray arr = NULL;
+    jstring jtitle = NULL, answer = NULL;
+    int rc = -1;
+
+    snprintf(why, why_size, "no JNI environment or activity");
+    if (env == NULL || act == NULL) {
+        if (act != NULL) {
+            (*env)->DeleteLocalRef(env, act);
+        }
+        return -1;
+    }
+    cls = (*env)->GetObjectClass(env, act);
+    str = (*env)->FindClass(env, "java/lang/String");
+    jmethodID mid =
+        cls != NULL
+            ? (*env)->GetStaticMethodID(env, cls, "shareReport",
+                                        "(Ljava/lang/String;[Ljava/lang/String;)Ljava/lang/String;")
+            : NULL;
+    if (mid == NULL || str == NULL) {
+        snprintf(why, why_size, "no IcoActivity.shareReport(String, String[])");
+        goto out;
+    }
+    arr = (*env)->NewObjectArray(env, (jsize)n, str, NULL);
+    jtitle = (*env)->NewStringUTF(env, title != NULL ? title : "");
+    if (arr == NULL || jtitle == NULL) {
+        snprintf(why, why_size, "out of Java memory");
+        goto out;
+    }
+    for (int i = 0; i < n; i++) {
+        jstring p = (*env)->NewStringUTF(env, paths[i]);
+        if (p == NULL) {
+            snprintf(why, why_size, "out of Java memory");
+            goto out;
+        }
+        (*env)->SetObjectArrayElement(env, arr, (jsize)i, p);
+        (*env)->DeleteLocalRef(env, p);
+    }
+    answer = (jstring)(*env)->CallStaticObjectMethod(env, cls, mid, jtitle, arr);
+    if ((*env)->ExceptionCheck(env)) {
+        snprintf(why, why_size, "a Java exception in shareReport");
+        goto out;
+    }
+    if (answer != NULL) {
+        const char *s = (*env)->GetStringUTFChars(env, answer, NULL);
+        snprintf(why, why_size, "%s", s != NULL ? s : "shareReport failed");
+        if (s != NULL) {
+            (*env)->ReleaseStringUTFChars(env, answer, s);
+        }
+        goto out;
+    }
+    why[0] = '\0';
+    rc = 0;
+out:
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+    }
+    if (answer != NULL) {
+        (*env)->DeleteLocalRef(env, answer);
+    }
+    if (jtitle != NULL) {
+        (*env)->DeleteLocalRef(env, jtitle);
+    }
+    if (arr != NULL) {
+        (*env)->DeleteLocalRef(env, arr);
+    }
+    if (str != NULL) {
+        (*env)->DeleteLocalRef(env, str);
+    }
+    if (cls != NULL) {
+        (*env)->DeleteLocalRef(env, cls);
+    }
+    (*env)->DeleteLocalRef(env, act);
+    return rc;
+}
+#endif
+
 /* --- the screen's density and fold ---------------------------------------- */
 
 /* Written by the activity's thread (the Java UI thread), read by SDL's main

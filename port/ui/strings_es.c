@@ -407,6 +407,11 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
         "Guarda la imagen de la pantalla 3 segundos después, con el registro, como zip en la carpeta dumps.",
     [UI_STR_REPORT_PICTURE_ARMED] = "Imagen en 3 segundos",
     [UI_STR_REPORT_PICTURE_ARMED_BODY] = "Sal del menú ahora.\nEl zip va a la carpeta dumps.",
+#if ICO_RC_TOOLS
+    [UI_STR_OPT_SHARE_REPORT] = "Compartir un informe de error",
+    [UI_STR_SHARE_REPORT_NOTE] =
+        "Abre el menú de compartir con el registro y el último zip de imagen, para enviarlos por correo o chat.",
+#endif
     [UI_STR_SECTION_EFFECTS] = "Efectos",
     [UI_STR_OPT_EFFECT_GLOW] = "Resplandor",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Profundidad de campo",

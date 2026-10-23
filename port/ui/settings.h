@@ -39,6 +39,15 @@
 #ifndef PORT_UI_SETTINGS_H
 #define PORT_UI_SETTINGS_H
 
+/* ICO_RC_TOOLS: the release candidates' own tooling (CMake -DICO_RC_TOOLS=ON,
+   which tools/package_*.sh pass for a label ending in -rc<N> alone; Gradle
+   -PicoRcTools=true; docs/BUILDING.md "Release candidate tools").  0 in
+   every other build, which then has none of it: today the Main row "Share
+   a bug report" (settings.h ui_settings_set_share_report_handler). */
+#ifndef ICO_RC_TOOLS
+#define ICO_RC_TOOLS 0
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -215,6 +224,15 @@ void ui_settings_set_steam_handler(int (*fn)(void));
    answers with a popup that says so.  NULL (or never called) hides the
    row (the headless build, tests). */
 void ui_settings_set_frame_dump_handler(void (*fn)(void));
+/* Main > Share a bug report, in an rc build alone (ICO_RC_TOOLS above; a
+   release has no such row, string or host code), on Android alone, directly
+   below Save a picture for a bug report: fn hands the newest report files
+   (the log, the run before's, the newest dump zip and presented picture,
+   the newest report zip: share_report.h) to the system's share menu
+   (window_host.c share_report_arm, host_android.c ico_android_share_files).
+   NULL (or never called) hides the row.  With ICO_RC_TOOLS 0 the call keeps
+   nothing (the rc_tools_off check in settings_extra_test). */
+void ui_settings_set_share_report_handler(void (*fn)(void));
 /* Main > Disc: fn answers whether a disc's game data (its archive_name,
    port/core/region.h) is there (port/platform/host_config.c
    ico_host_disc_archive_present); the row shows when every disc's is, and is
@@ -419,7 +437,12 @@ typedef enum UiSettingsOpt {
     UI_OPT_TOUCH_RESET_ALL,
     /* Main's row "Save a picture for a bug report", above Developer mode:
        the host's frame dump, 3 s later (ui_settings_set_frame_dump_handler) */
-    UI_OPT_REPORT_PICTURE
+    UI_OPT_REPORT_PICTURE,
+#if ICO_RC_TOOLS
+    /* Main's row "Share a bug report" below it, rc builds on Android alone
+       (ui_settings_set_share_report_handler) */
+    UI_OPT_SHARE_REPORT,
+#endif
 } UiSettingsOpt;
 
 /* The entry rows and the menu's layouts (-1 before ui_settings_install):

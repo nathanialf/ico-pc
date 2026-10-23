@@ -404,6 +404,11 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "Saves the picture on the screen 3 seconds later, with the log, as a zip in the dumps folder.",
     [UI_STR_REPORT_PICTURE_ARMED] = "Picture in 3 seconds",
     [UI_STR_REPORT_PICTURE_ARMED_BODY] = "Leave the menu now.\nThe zip goes to the dumps folder.",
+#if ICO_RC_TOOLS
+    [UI_STR_OPT_SHARE_REPORT] = "Share a bug report",
+    [UI_STR_SHARE_REPORT_NOTE] =
+        "Opens the share menu with the log and the newest picture zip, to send by email or a chat app.",
+#endif
     [UI_STR_SECTION_EFFECTS] = "Effects",
     [UI_STR_OPT_EFFECT_GLOW] = "Glow",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Depth of field",

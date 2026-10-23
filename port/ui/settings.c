@@ -189,7 +189,8 @@ static int entryGame(int e)
 #define PAL_NEW_GAME_Y 165
 #define PAL_COPYRIGHT_Y 195
 
-#define MAX_ROWS 16
+/* Main's sixteen, and the rc builds' Share a bug report (ICO_RC_TOOLS) */
+#define MAX_ROWS (16 + ICO_RC_TOOLS)
 
 typedef struct Row {
     int opt;   /* UiSettingsOpt */
@@ -732,6 +733,31 @@ static void reportPicture(void)
     fprintf(stderr, "settings: a picture for a bug report in 3 s\n");
     ui_popup_push(ui_str(UI_STR_REPORT_PICTURE_ARMED), ui_str(UI_STR_REPORT_PICTURE_ARMED_BODY));
 }
+
+/* Main > Share a bug report (rc builds alone: ICO_RC_TOOLS; Android): the
+   host's share menu of the report files.  A release keeps nothing here */
+#if ICO_RC_TOOLS
+static void (*s_shareReportFn)(void);
+
+void ui_settings_set_share_report_handler(void (*fn)(void))
+{
+    s_shareReportFn = fn;
+}
+
+static void shareReport(void)
+{
+    if (s_shareReportFn == NULL) {
+        return;
+    }
+    fprintf(stderr, "settings: share a bug report (an rc build's row)\n");
+    s_shareReportFn();
+}
+#else
+void ui_settings_set_share_report_handler(void (*fn)(void))
+{
+    (void)fn; /* no such row outside an rc build */
+}
+#endif
 
 /* Main > Disc: the host's answer for each disc's game data, asked once */
 static int (*s_discFn)(const char *archiveName);
@@ -1595,6 +1621,12 @@ static int optShown(int opt, int link)
         /* the window build, developer mode or not: a player's report row */
         return s_frameDumpFn != NULL;
     }
+#if ICO_RC_TOOLS
+    if (opt == UI_OPT_SHARE_REPORT) {
+        /* an rc build on a phone: the files folder is out of reach there */
+        return ico_video_android() && s_shareReportFn != NULL;
+    }
+#endif
     if (isTouchOpt(opt)) {
         return touchPresent(); /* a phone, a tablet, a touch screen */
     }
@@ -2505,6 +2537,12 @@ static int pagePitch(int page, int n, int *y0)
         }
         return 13;
     }
+    if (page == UI_PAGE_MAIN && n > 16) {
+        /* seventeen, an rc build's alone (Share a bug report too,
+           ICO_RC_TOOLS): from 26, Back at 186, its box to 226 */
+        *y0 = 26;
+        return 10;
+    }
     if (page == UI_PAGE_MAIN && n > 15) {
         /* sixteen (every row: the Graphics driver link, Disc, Save a
            picture for a bug report and both dumps): from 30, Back at 180,
@@ -2672,6 +2710,9 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_DUMP_TEXTURES, UI_STR_DUMP_TEXTURES_NOTE);
         addNote(pg, UI_OPT_DUMP_MODELS, UI_STR_DUMP_MODELS_NOTE);
         addNote(pg, UI_OPT_REPORT_PICTURE, UI_STR_REPORT_PICTURE_NOTE);
+#if ICO_RC_TOOLS
+        addNote(pg, UI_OPT_SHARE_REPORT, UI_STR_SHARE_REPORT_NOTE);
+#endif
         break;
     case UI_PAGE_DISPLAY:
         addNote(pg, UI_OPT_RESOLUTION, UI_STR_RESOLUTION_CRT_NOTE);
@@ -3104,13 +3145,17 @@ static void build(void)
     /* Extras (after Achievements), from both entries (its Music,
        Models and Credits only from the title, layoutPage) */
     /* Save a picture for a bug report above Developer mode, always shown
-       (with a host handler); Dump textures and Dump models under Developer
-       mode, shown while it is on */
+       (with a host handler), and in an rc build Share a bug report below it
+       (ICO_RC_TOOLS, on a phone); Dump textures and Dump models under
+       Developer mode, shown while it is on */
     static const int mainOpts[] = {
-        UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,
-        UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LANGUAGE,    UI_OPT_MENU_LANGUAGE,
-        UI_OPT_DISC,      UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_REPORT_PICTURE,
-        UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
+        UI_OPT_LINK,         UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,
+        UI_OPT_LINK,         UI_OPT_LINK,          UI_OPT_LANGUAGE,    UI_OPT_MENU_LANGUAGE,
+        UI_OPT_DISC,         UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_REPORT_PICTURE,
+#if ICO_RC_TOOLS
+        UI_OPT_SHARE_REPORT,
+#endif
+        UI_OPT_DEVELOPER,    UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
     static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
                                    UI_STR_SECTION_EFFECTS,
                                    UI_STR_SECTION_GPU_DRIVER,
@@ -3123,6 +3168,9 @@ static void build(void)
                                    UI_STR_SECTION_ACHIEVEMENTS,
                                    UI_STR_EXTRAS,
                                    UI_STR_OPT_REPORT_PICTURE,
+#if ICO_RC_TOOLS
+                                   UI_STR_OPT_SHARE_REPORT,
+#endif
                                    UI_STR_OPT_DEVELOPER_MODE,
                                    UI_STR_OPT_DUMP_TEXTURES,
                                    UI_STR_OPT_DUMP_MODELS,
@@ -3139,6 +3187,9 @@ static void build(void)
                                     UI_PAGE_ACHIEVEMENTS,
                                     UI_PAGE_EXTRAS,
                                     -1,
+#if ICO_RC_TOOLS
+                                    -1,
+#endif
                                     -1,
                                     -1,
                                     -1,
@@ -4865,6 +4916,12 @@ static int settingsProc(int first, int item)
             POSITIVE_SE();
             reportPicture();
         }
+#if ICO_RC_TOOLS
+        if ((flags & PAD_OK) && r->opt == UI_OPT_SHARE_REPORT) {
+            POSITIVE_SE();
+            shareReport();
+        }
+#endif
         if ((flags & PAD_OK) && r->opt == UI_OPT_GPU_ADD) {
             POSITIVE_SE();
             gpuAdd();

@@ -44,11 +44,18 @@ fi
 export PATH="$wt/.venv/bin:$PATH"
 cd "$wt"
 # ICO_VERSION_LABEL: the program's version information (Details tab)
-run cmake --preset "$p" -DICO_LINK_EXE=ON "-DICO_VERSION_LABEL=$label"
+# ICO_RC_TOOLS: the rc-only tooling, on for a label ending in -rc<N> alone
+# (tools/check_rc_text.py; docs/BUILDING.md, "Release candidate tools")
+rc_flag="$(python3 -I "$wt/tools/check_rc_text.py" --cmake-flag "$label")" ||
+    fail "tools/check_rc_text.py --cmake-flag"
+echo "package_win: $rc_flag" >>"$log"
+run cmake --preset "$p" -DICO_LINK_EXE=ON "-DICO_VERSION_LABEL=$label" "$rc_flag"
 run cmake --build "build-host/$p" --target ico_pc mc_import
 for f in ico_pc.exe ico_pc.map SDL3.dll port/save/mc_import.exe; do
     [[ -f "build-host/$p/$f" ]] || fail "$p did not produce $f"
 done
+# a release's program holds no rc row, an rc's does
+run python3 -I "$wt/tools/check_rc_text.py" --label "$label" "build-host/$p/ico_pc.exe"
 [[ -f tools/portable/make_portable.cmd ]] || fail "tools/portable/make_portable.cmd is missing from HEAD"
 cd "$root"
 

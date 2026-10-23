@@ -409,6 +409,11 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_REPORT_PICTURE_ARMED] = "Capture dans 3 secondes",
     [UI_STR_REPORT_PICTURE_ARMED_BODY] =
         "Quittez le menu maintenant.\nLe zip va dans le dossier dumps.",
+#if ICO_RC_TOOLS
+    [UI_STR_OPT_SHARE_REPORT] = "Partager un rapport de bug",
+    [UI_STR_SHARE_REPORT_NOTE] =
+        "Ouvre le menu de partage avec le journal et le dernier zip d’image, à envoyer par e-mail ou messagerie.",
+#endif
     [UI_STR_SECTION_EFFECTS] = "Effets",
     [UI_STR_OPT_EFFECT_GLOW] = "Lueur",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Profondeur de champ",
