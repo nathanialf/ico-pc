@@ -271,7 +271,9 @@ typedef struct RhiShaderDesc {
     RhiShaderStage stage;
     const void *bytecode; /* SPIR-V (Vulkan), DXIL (D3D12), or deflated GLSL (OpenGL) */
     size_t bytecodeSize;
-    size_t textSize;        /* OpenGL: the GLSL's inflated length (zlib deflate, no header) */
+    /* OpenGL: the GLSL's inflated length (the table's zlib stream); 0 with
+     * plain GLSL text in bytecode, starting "#version" (the RHI tests) */
+    size_t textSize;
     const char *entryPoint; /* the entry's name (IcoShaderBlob.entry); Vulkan and D3D11 */
     const char *debugName;
     /* Direct3D 11 only: the HLSL file the entry is in, the -D macros of its
