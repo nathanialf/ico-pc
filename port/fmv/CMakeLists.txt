@@ -190,6 +190,19 @@ if(TARGET ico_render)
             if(_env)
                 set_tests_properties(rd_video_window PROPERTIES ENVIRONMENT "${_env}")
             endif()
+            # the same on an OpenGL window (ICO_RHI_BACKEND=opengl: the
+            # window made with SDL_WINDOW_OPENGL; Mesa's llvmpipe through
+            # SDL's offscreen EGL in the container); 77 without a context
+            if(TARGET ico_rhi_opengl)
+                set(_env_gl "ICO_RHI_BACKEND=opengl" "LIBGL_ALWAYS_SOFTWARE=1"
+                            "SDL_VIDEO_DRIVER=offscreen")
+                if(ICO_SANITIZE MATCHES "address")
+                    list(APPEND _env_gl "ASAN_OPTIONS=detect_leaks=0")
+                endif()
+                add_test(NAME rd_video_window_gl COMMAND rd_video_window_test)
+                set_tests_properties(rd_video_window_gl PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                                     "${_env_gl}")
+            endif()
         endif()
     endif()
 endif()

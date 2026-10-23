@@ -18,7 +18,15 @@
  * swapchain at the new size, and the next frame's output and box are the
  * new size's (rd__present_box).
  *
- * Exit 77 without SDL's offscreen Vulkan window or a Vulkan device.
+ * On OpenGL (ICO_RHI_BACKEND=opengl: the window made with SDL_WINDOW_OPENGL,
+ * llvmpipe through SDL's offscreen EGL in the container) the same sizes and
+ * checks: GL has no out-of-date result, its present follows the window's
+ * size (gl_swapchain.c rhi_present), so the forced result and the
+ * swapchain-creation counts (the Vulkan backend's hooks) are left out and
+ * the output must follow all the same.
+ *
+ * Exit 77 without SDL's offscreen window for the backend or its device, or
+ * on another backend.
  */
 #include <SDL3/SDL.h>
 #include <stdio.h>
@@ -69,6 +77,7 @@ static int movieFrame(void)
 
 static void run(SDL_Window *win)
 {
+    const bool vk = rhi_backend() == RHI_BACKEND_VULKAN; /* the backend's test hooks */
     memset(s_y, 120, sizeof(s_y));
     memset(s_u, 100, sizeof(s_u));
     memset(s_v, 160, sizeof(s_v));
@@ -88,11 +97,13 @@ static void run(SDL_Window *win)
        and the backend rebuilds the swapchain at the window's size */
     SDL_SetWindowSize(win, BW, BH);
     SDL_SyncWindow(win);
-    vkr_test_force_present_result(RHI_VK_TEST_OUT_OF_DATE);
+    if (vk) {
+        vkr_test_force_present_result(RHI_VK_TEST_OUT_OF_DATE);
+    }
     const uint32_t n0 = vkr_test_swapchain_creations();
     CHECK(movieFrame() == 0, "the frame presented out of date");
-    CHECK(vkr_test_swapchain_creations() == n0 + 1, "%u swapchains made on out of date, want 1",
-          vkr_test_swapchain_creations() - n0);
+    CHECK(!vk || vkr_test_swapchain_creations() == n0 + 1,
+          "%u swapchains made on out of date, want 1", vkr_test_swapchain_creations() - n0);
     sw = sh = 0;
     CHECK(rhi_swapchain_size(&sw, &sh) && sw == BW && sh == BH,
           "swapchain %ux%u after the rebuild, want %ux%u", sw, sh, BW, BH);
@@ -123,7 +134,7 @@ static void run(SDL_Window *win)
     SDL_SyncWindow(win);
     const uint32_t n1 = vkr_test_swapchain_creations();
     CHECK(movieFrame() == 0, "the frame presented after the resize to %ux%u", CW, CH);
-    CHECK(vkr_test_swapchain_creations() == n1 + 1, "%u swapchains made by the poll, want 1",
+    CHECK(!vk || vkr_test_swapchain_creations() == n1 + 1, "%u swapchains made by the poll, want 1",
           vkr_test_swapchain_creations() - n1);
     sw = sh = 0;
     CHECK(rhi_swapchain_size(&sw, &sh) && sw == CW && sh == CH,
@@ -154,9 +165,20 @@ int main(void)
         printf("SKIP rd_video_window_test: SDL_Init: %s\n", SDL_GetError());
         return 77;
     }
-    SDL_Window *win = SDL_CreateWindow("rd_video_window_test", AW, AH, SDL_WINDOW_VULKAN);
+    /* the backend ICO_RHI_BACKEND names (rhi_create_backend's default) */
+    const bool gl = rhi_backend() == RHI_BACKEND_OPENGL;
+    if (gl) {
+        /* window_host.c window_gl_attributes' pixel format */
+        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
+        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 0);
+        SDL_GL_SetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 0);
+    }
+    SDL_Window *win = SDL_CreateWindow("rd_video_window_test", AW, AH,
+                                       gl ? SDL_WINDOW_OPENGL : SDL_WINDOW_VULKAN);
     if (!win) {
-        printf("SKIP rd_video_window_test: no Vulkan window: %s\n", SDL_GetError());
+        printf("SKIP rd_video_window_test: no %s window: %s\n", gl ? "OpenGL" : "Vulkan",
+               SDL_GetError());
         SDL_Quit();
         return 77;
     }
@@ -168,13 +190,17 @@ int main(void)
     s.aspect = 4.0f / 3.0f;
     s.vsync = 1;
     if (!rd_init(512, 512, &s, win)) {
-        printf("SKIP rd_video_window_test: no Vulkan device presents to the window\n");
+        printf("SKIP rd_video_window_test: no %s device presents to the window\n",
+               rhi_backend_kind_name(rhi_backend()));
         SDL_DestroyWindow(win);
         SDL_Quit();
         return 77;
     }
-    if (rhi_backend() != RHI_BACKEND_VULKAN || rhi_swapchain_format() == RHI_FMT_UNKNOWN) {
-        printf("SKIP rd_video_window_test: not a Vulkan window device\n");
+    /* Vulkan and OpenGL; Direct3D runs only on Windows, where this test is
+       built but not run (ICO_RUN_TESTS) */
+    if ((rhi_backend() != RHI_BACKEND_VULKAN && rhi_backend() != RHI_BACKEND_OPENGL) ||
+        rhi_swapchain_format() == RHI_FMT_UNKNOWN) {
+        printf("SKIP rd_video_window_test: not a Vulkan or OpenGL window device\n");
         rd_shutdown();
         SDL_DestroyWindow(win);
         SDL_Quit();
