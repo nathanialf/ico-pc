@@ -182,7 +182,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `rd_video_test.c`: `rd_video.c` on [rd](ARCHITECTURE.md#terms)'s headless device, pictures in and
   the present target read back (`rd_video`, `rd_video_mali`).
 - `rd_video_window_test.c`: the renderer's output following the swapchain on SDL's offscreen
-  driver when the window is resized (`rd_video_window`).
+  driver when the window is resized (`rd_video_window`); the same on an OpenGL window
+  (`rd_video_window_gl`: `ICO_RHI_BACKEND=opengl`, the window made with `SDL_WINDOW_OPENGL`,
+  llvmpipe; the Vulkan backend's forced out-of-date result and swapchain counts left out, since
+  OpenGL's present follows the window's size). Another backend exits 77.
 
 ### port/game/test
 
@@ -444,7 +447,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   SCENE left to its clear; its log line matched (`rd_vuprepass_selftest`,
   `rd_vuprepass_selftest_plain`, `rd_vuprepass_selftest_sabotage`,
   `rd_vuprepass_selftest_sabotage_tri`, `rd_vuprepass_selftest_ticks`,
-  `rd_vuprepass_selftest_off`).
+  `rd_vuprepass_selftest_off`); the device profile's class ends with the backend's name (`Vulkan):`,
+  `OpenGL):`) and is the desktop column on OpenGL and Direct3D 11.
 - `rd_vustage_ab.cmake`: every dump of `tools/vustage_dumps.txt` (the dump corpus, machine-local
   paths, `*` globs, a missing dump named and skipped, none at all `SKIP`) replayed by
   `rd_replay_tool --pass-dump --stats` under `ICO_RD_BLEND=fixed` the
@@ -508,7 +512,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the line of the first 8 and last 8 GS columns on the CPU with each of the places those columns
   go (open, cropped, closed at 512 and at a wide 832, Full pixel's window with its `-` columns:
   `checkEdgeLine`), then with Full pixel on at 4:3 the cells' scene, two cells left at Z 0 at the
-  frame's edges, gives 32 rows in each of the 16 columns and the left's run (`checkEdgeProbe`), and
+  frame's edges, gives 32 rows in each of the 16 columns and the left's run (`checkEdgeProbe`; on
+  Vulkan and OpenGL, which copy a region of a depth to a buffer, else only on the buffer path), and
   with it off a line, if one was logged, says the border is closed.
 - `rd_gsbase_test.c`: `GsBase.c`'s host path driving a synthetic scene (`rd_gsbase`); photo mode's
   Deja vu draws the stage's sandstorm object once a frame with the vision's two nodes, gives back
@@ -575,7 +580,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   replays printed (the last three, whole at 430 passes a replay), the line format (the VU
   vertex pre-pass's entry among them, `testVuPre`) and the loss bisect's line; pure
   (`rd_passring`).
-- `rd_msaa_test.c`: the anti-aliasing's MSAA against the frame without it (`rd_msaa`).
+- `rd_msaa_test.c`: the anti-aliasing's MSAA against the frame without it (`rd_msaa`); with
+  `depth_resolve_ps` cleared for one call (an OpenGL driver below 4.5 refuses it) the supported
+  mask holds the supersampling values only.
 - `rd_native_test.c`: the native frame's centre rule on a synthetic frame at five widths
   (`rd_native`).
 - `rd_perf_test.c`: the renderer's CPU cost per replay and its steady state, and the start-up set
@@ -645,7 +652,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   beside an exact one, their shared vertex's GS Z saturated and its X and Y off the 1/16 grid:
   none above Original 1x, where the clipped triangle is drawn, and at Original 1x not drawn
   (`vu_corner_cut_position`).
-- `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`);
+- `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`;
+  the scene limit's fallback checks drive the Vulkan backend's `vkr_test_fail_texels_above` and
+  are skipped on Direct3D 12, OpenGL and Direct3D 11, which have no such hook);
   the open border's outer columns (`rd_present_border_test.inc`, `checkOpenBorderEdges`): at
   2340x1080 (832 columns, the frame its exact width) and 4:3, 1x and 2x, the mirror on and off,
   SCENE red with green over GS columns 1 .. W - 2 presents green outer columns, byte for byte the

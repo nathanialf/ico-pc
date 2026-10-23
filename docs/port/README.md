@@ -23,6 +23,7 @@ In reading order.
 | [WORK_BUFFERS.md](WORK_BUFFERS.md) | The post effects' work buffers: sizes per frame width, the glow chain's rects, its left edge on a wide frame, what stays across frames and the work clear. |
 | [DISPLAY.md](DISPLAY.md) | The native frame, the video options and presets, pacing and the vsync lock, presentation, interpolation and the CRT filter. |
 | [RHI.md](RHI.md) | The render hardware interface and its Vulkan, Direct3D 12 and MoltenVK backends. |
+| [BACKENDS.md](BACKENDS.md) | The four backends as the renderer sees them: its branches, limits and policies, the OpenGL and Direct3D 11 profile rows, the window and the fallback order. |
 | [SHADERS.md](SHADERS.md) | The HLSL sources, how they are compiled and embedded, the binding scheme and the shared constants. |
 | [AUDIO.md](AUDIO.md) | The software SPU2, libsd, the sound driver as a host server, streams, mixing and the output. |
 | [FMV.md](FMV.md) | The movie player: the PSS demuxer, the MPEG-2 decoder, pacing and the picture on screen. |

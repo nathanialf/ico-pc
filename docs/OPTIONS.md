@@ -234,8 +234,9 @@ draw in more than one way; if yours can only draw one way, there is nothing to p
 is not shown. It has one row.
 
 - **Graphics API** picks what the game draws with, from the next start (the row says so under
-  it). **Automatic** is the normal choice: the game uses Vulkan and, on Windows, switches to
-  Direct3D 12 when Vulkan will not start. The other choices are listed after it, the ones your
+  it). **Automatic** is the normal choice: the game uses Vulkan, and OpenGL when Vulkan will not
+  start at all (where your download has OpenGL). On Windows, after a crash of the graphics
+  driver, the game may start itself again with Direct3D 12. The other choices are listed after it, the ones your
   download has: **Vulkan**, **OpenGL** (for a graphics card or driver that has no Vulkan),
   **Direct3D 12** and **Direct3D 11** (Windows only; Direct3D 11 has not been tried on a real
   computer yet, so tell us how it goes). If the choice does not start, pick Automatic again, or
@@ -612,15 +613,31 @@ On Android, under `[paths]`:
 
 ## Choosing the renderer on Windows
 
-The game draws with Vulkan unless you tell it otherwise. The easy way is the **Graphics API**
-row on the [Graphics page](#graphics) of the Options menu. The file does the same: on Windows, to
-try Direct3D 12 instead, open
-`ico-pc.ini` in the `x64` folder, beside `ico_pc_x64.exe`, with Notepad and add this line
-(or `backend = "d3d12"` under `[video]` in `config.toml`):
+The game draws with Vulkan unless you tell it otherwise. If Vulkan does not start at all (no
+Vulkan driver, or a graphics card the game cannot use with it), it uses OpenGL instead, where
+your download has it. The easy way to choose is the **Graphics API** row on the
+[Graphics page](#graphics) of the Options menu (Options > Graphics, under Effects). The file
+does the same. The names are:
+
+| Name | What it is | Downloads that have it |
+| --- | --- | --- |
+| `vulkan` | Vulkan, the normal choice | All |
+| `opengl` | OpenGL 4.3 or later, for a graphics card or driver with no Vulkan | Windows and Linux |
+| `d3d12` | Direct3D 12 | Windows |
+| `d3d11` | Direct3D 11. Not tried on a real computer yet: it may not start, or may draw wrongly. Please tell us how it goes. | Windows |
+
+On Windows, open `ico-pc.ini` in the `x64` folder, beside `ico_pc_x64.exe`, with Notepad and
+add a line with the name you want, for example:
 
 ```
-backend=d3d12
+backend=opengl
 ```
 
-Start the game; a line near the top of `logs/ico-pc.log` that starts with `window:` then says
-`D3D12` instead of `Vulkan`. Delete the line to go back to Vulkan.
+On any computer, the same works as `backend = "opengl"` under `[video]` in `config.toml`
+([where that file is](#settings-you-can-only-change-in-a-file)).
+
+Start the game; a line near the top of `logs/ico-pc.log` that starts with `window:` then names
+it (`OpenGL`, `D3D12` or `D3D11` instead of `Vulkan`), and a line `window: Graphics API ...`
+says whether you chose it or the game did. Delete the line, or pick Automatic, to go back to
+Vulkan. If the name you wrote is not in your download, the game says so in the same file and
+uses Vulkan.

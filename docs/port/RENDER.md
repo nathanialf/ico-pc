@@ -1696,7 +1696,8 @@ branches on a vendor (`port/render/rd_profile.c`). The classes: D3D12 (the backe
 MoltenVK (`RhiLimits.moltenvk`), Adreno on Qualcomm's driver and Adreno on Turnip (vendor 0x5143;
 Turnip names itself in the driver text), Mali (0x13B5), PowerVR (0x1010), any other tile-based GPU
 (`RhiLimits.tiler`: Samsung, Broadcom, every Android GPU) on the PowerVR row, and the desktop
-immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan.
+immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3D 11:
+[BACKENDS.md](BACKENDS.md#the-device-profile-on-opengl-and-direct3d-11).
 
 | flag | desktop Vulkan | D3D12 | Adreno (Qualcomm's driver) | Adreno (Turnip) | Mali | PowerVR, other tile-based | Apple / MoltenVK |
 | --- | --- | --- | --- | --- | --- | --- | --- |

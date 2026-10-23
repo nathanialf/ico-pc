@@ -532,7 +532,17 @@ appends to the log, logs
 (the step is never taken against a player's blending other than `fixed`)
 (`port/platform/host_config.c` (`ico_ini_export`, `ico_dev_env_export_value`)). When the
 `backend` step's Direct3D 12 cannot start, that run goes on with Vulkan itself
-(`port/platform/window_host.c` (`ico_window_open`)). The step only grows (the loss steps come after
+(`port/platform/window_host.c` (`ico_window_open`)). Apart from the steps, a start whose backend
+the player did not name (`[video] backend` empty: Automatic) and whose Vulkan `rd_init` fails (no
+loader, no device, a device the renderer cannot use) goes on once with OpenGL where the build links
+it (`rhi_backend_name` lists `opengl`): `ico_pc: no Vulkan device; using OpenGL`, the window
+destroyed and made again with `SDL_WINDOW_OPENGL` (`window_flags`, after `window_gl_attributes`:
+double buffer, no depth, stencil or sRGB, 4.3 core), `ico_diag_set_startup_retry` told the new
+backend, then `window: Graphics API opengl (automatic, after Vulkan)`; an OpenGL that does not start
+either ends the start as before. A crash or loss on it takes the orders above with `opengl` as the
+backend (the `d3d12` and `backend` steps go to Direct3D 12 where the build has it; the steps
+themselves are unchanged: there is no OpenGL or Direct3D 11 step). See
+[BACKENDS.md](BACKENDS.md). The step only grows (the loss steps come after
 `lazy`), so a crash in a loss step's run ends with the crash box and every chain ends. Nothing is
 written to the user folder. ctest `startup_retry` checks both orders over every input
 and the loss values in the relaunch's environment, and the chains with the pre-pass
