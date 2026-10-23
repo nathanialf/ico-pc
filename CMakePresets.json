@@ -94,7 +94,9 @@
                 "ICO_LINK_EXE": "ON",
                 "ICO_RHI_D3D12": "OFF",
                 "ICO_RHI_D3D11": "OFF",
-                "ICO_SHADERS_DXIL": "OFF"
+                "ICO_SHADERS_DXIL": "OFF",
+                "ICO_RHI_OPENGL": "OFF",
+                "ICO_SHADERS_GLSL": "OFF"
             }
         },
         {
@@ -113,7 +115,9 @@
                 "ICO_RHI_MOLTENVK": "ON",
                 "ICO_RHI_D3D12": "OFF",
                 "ICO_RHI_D3D11": "OFF",
-                "ICO_SHADERS_DXIL": "OFF"
+                "ICO_SHADERS_DXIL": "OFF",
+                "ICO_RHI_OPENGL": "OFF",
+                "ICO_SHADERS_GLSL": "OFF"
             }
         },
         {
@@ -132,7 +136,9 @@
                 "ICO_RHI_MOLTENVK": "ON",
                 "ICO_RHI_D3D12": "OFF",
                 "ICO_RHI_D3D11": "OFF",
-                "ICO_SHADERS_DXIL": "OFF"
+                "ICO_SHADERS_DXIL": "OFF",
+                "ICO_RHI_OPENGL": "OFF",
+                "ICO_SHADERS_GLSL": "OFF"
             }
         },
         {

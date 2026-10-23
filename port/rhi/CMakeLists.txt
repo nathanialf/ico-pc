@@ -8,6 +8,10 @@
 #   ico_rhi_d3d11   the Direct3D 11 backend (option ICO_RHI_D3D11, default ON
 #                   for 64-bit Windows; compile-only in v0.8.6: it has not
 #                   run on any Windows machine)
+#   ico_rhi_opengl  the OpenGL backend (option ICO_RHI_OPENGL, default ON on
+#                   the desktop targets other than Apple's; built where SDL3
+#                   is found: its context and every entry point come
+#                   through SDL, no GL library is linked)
 #   ico_rhi         rhi_backend.c, the rhi.h entry points forwarded to the
 #                   backend rhi_create_backend selects; links the backends
 #   ico_rhi_vk      what port/render and the shader tests link (the name
@@ -38,18 +42,22 @@ if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
 endif()
 option(ICO_RHI_D3D12 "Build the D3D12 backend of port/rhi (ico_rhi_d3d12; Windows only)"
        ${_ico_d3d12_default})
-# The OpenGL backend (port/rhi/gl, ico_rhi_opengl, prefix gl): its sources
-# arrive with their own package, which turns the default on where it applies
-# (every desktop target with SDL3). Until then the option exists so the
-# shader table's GLSL column (cmake/IcoShaders.cmake ICO_SHADERS_GLSL) can be
-# asked for.
-option(ICO_RHI_OPENGL "Build the OpenGL backend of port/rhi (ico_rhi_opengl)" OFF)
 # The Direct3D 11 backend (port/rhi/d3d11, ico_rhi_d3d11, prefix d3d11): on
 # by default where D3D12 is (64-bit Windows). It compiles the embedded HLSL
 # at run time (d3d11/d3d11_shader.c), so the shader table carries the
 # sources with it (cmake/IcoShaders.cmake ICO_SHADERS_HLSL_SOURCE).
 option(ICO_RHI_D3D11 "Build the Direct3D 11 backend of port/rhi (ico_rhi_d3d11; Windows only)"
        ${_ico_d3d12_default})
+# The OpenGL backend (port/rhi/gl, ico_rhi_opengl, prefix gl): OpenGL 4.3 core
+# through SDL3 on Windows and Linux (docs/port/RHI.md, "OpenGL backend"); not
+# on Android or Apple targets (their presets also set it OFF), and left out
+# where SDL3 is not found.  It also turns the shader table's GLSL column on
+# (cmake/IcoShaders.cmake ICO_SHADERS_GLSL).
+set(_ico_gl_default ON)
+if(ANDROID OR APPLE)
+    set(_ico_gl_default OFF)
+endif()
+option(ICO_RHI_OPENGL "Build the OpenGL backend of port/rhi (ico_rhi_opengl)" ${_ico_gl_default})
 set(_ico_have_gl OFF)
 set(_ico_have_d3d11 OFF)
 
@@ -230,7 +238,17 @@ if(ICO_RHI_D3D11)
     endif()
 endif()
 
-if(NOT _ico_have_vk AND NOT _ico_have_d3d12 AND NOT _ico_have_d3d11)
+# --- OpenGL: SDL3 makes the context and gives the entry points ---------------
+if(ICO_RHI_OPENGL)
+    if(SDL3_FOUND AND NOT ICO_RHI_MOLTENVK)
+        set(_ico_have_gl ON)
+    else()
+        message(STATUS "ico: OpenGL RHI not built: it needs SDL3 for this target (run "
+                       "tools/fetch_deps.sh)")
+    endif()
+endif()
+
+if(NOT _ico_have_vk AND NOT _ico_have_d3d12 AND NOT _ico_have_gl AND NOT _ico_have_d3d11)
     return()
 endif()
 
@@ -325,6 +343,27 @@ if(_ico_have_d3d11)
         target_link_libraries(ico_rhi_d3d11 PUBLIC SDL3::SDL3)
     endif()
     message(STATUS "ico: D3D11 RHI built (ico_rhi_d3d11)")
+# --- ico_rhi_opengl -------------------------------------------------------------
+# gl/gl_glsl.c inflates the shader table's GLSL with miniz (ico_miniz,
+# port/data); d3d12/d3d12_plan.c gives the handle pools and the layout rules.
+# The pipelines and the command code (gl/gl_pipeline.c, gl/gl_cmd.c) join the
+# list with their own package: until then the library leaves those entry
+# points undefined.
+if(_ico_have_gl)
+    set(_ico_gl_sources
+        gl/gl_device.c
+        gl/gl_glsl.c
+        gl/gl_loader.c
+        gl/gl_resource.c
+        gl/gl_swapchain.c
+        d3d12/d3d12_plan.c)
+    add_library(ico_rhi_opengl STATIC ${_ico_gl_sources})
+    target_include_directories(ico_rhi_opengl PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_definitions(ico_rhi_opengl PRIVATE RHI_BACKEND_PREFIX=gl ICO_RHI_HAVE_SDL=1
+                               ${_ico_rhi_debug_default})
+    target_compile_options(ico_rhi_opengl PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_link_libraries(ico_rhi_opengl PUBLIC SDL3::SDL3 PRIVATE ico_miniz)
+    message(STATUS "ico: OpenGL RHI built (ico_rhi_opengl)")
 endif()
 
 # --- ico_rhi: the dispatcher ----------------------------------------------------
