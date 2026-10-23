@@ -1,29 +1,47 @@
 // rhi_test.hlsl: the shaders of port/rhi/test/rhi_vk_test.c, compiled by
 // gen_shaders.sh with DXC to SPIR-V (rhi_test_spv.h). Register spaces are
 // RHI bind groups; gen_shaders.sh gives the DXC flags that map
-// registers to Vulkan bindings.
+// registers to Vulkan bindings. The Direct3D 11 backend's tests compile the
+// same text at run time with FXC (shader model 5.0: rhi_test_hlsl.h, the file
+// as a C string), which has no register spaces and no [[vk::...]]
+// attributes: under ICO_D3D11 REG(r, s) drops the space (as
+// port/shaders/reg.hlsli does for the game's shaders), and the Vulkan
+// attributes are spelled only when DXC builds SPIR-V.
+#ifdef ICO_D3D11
+#define REG(r, s) register(r)
+#else
+#define REG_SPACE(s) space##s
+#define REG(r, s) register(r, REG_SPACE(s))
+#endif
+#ifdef __spirv__
+#define VK_LOC(n) [[vk::location(n)]]
+#define VK_DUAL(n, i) [[vk::location(n), vk::index(i)]]
+#else
+#define VK_LOC(n)
+#define VK_DUAL(n, i)
+#endif
 
 struct VSIn {
-    [[vk::location(0)]] float3 pos : POSITION;
-    [[vk::location(1)]] float4 col : COLOR0;
-    [[vk::location(2)]] float2 uv : TEXCOORD0;
+    VK_LOC(0) float3 pos : POSITION;
+    VK_LOC(1) float4 col : COLOR0;
+    VK_LOC(2) float2 uv : TEXCOORD0;
 };
 
 struct VSOut {
     float4 pos : SV_Position;
-    [[vk::location(0)]] float4 col : COLOR0;
-    [[vk::location(1)]] float2 uv : TEXCOORD0;
+    VK_LOC(0) float4 col : COLOR0;
+    VK_LOC(1) float2 uv : TEXCOORD0;
 };
 
 // group 0: the test's uniform block (the game's per-frame b0)
-cbuffer TestCB : register(b0, space0) {
+cbuffer TestCB : REG(b0, 0) {
     float4 g_src1; // dual-source output 1
     uint4 g_uint;  // value written to the RGBA8_UINT target
 };
 
 // group 2: textures t1.. and samplers s1..
-Texture2D<float4> g_tex : register(t1, space2);
-SamplerState g_smp : register(s1, space2);
+Texture2D<float4> g_tex : REG(t1, 2);
+SamplerState g_smp : REG(s1, 2);
 
 VSOut vs_main(VSIn i) {
     VSOut o;
@@ -34,8 +52,8 @@ VSOut vs_main(VSIn i) {
 }
 
 struct DualOut {
-    [[vk::location(0), vk::index(0)]] float4 c0 : SV_Target0;
-    [[vk::location(0), vk::index(1)]] float4 c1 : SV_Target1;
+    VK_DUAL(0, 0) float4 c0 : SV_Target0;
+    VK_DUAL(0, 1) float4 c1 : SV_Target1;
 };
 
 DualOut ps_dual(VSOut i) {
@@ -61,7 +79,7 @@ uint4 ps_uint(VSOut i) : SV_Target0 {
 // Load at each sample) resolved to the largest sample's (the renderer's
 // GEQUAL depth: the nearest), written as SV_Depth into a single-sampled
 // depth target over the whole viewport (the vertices of a full quad)
-Texture2DMS<float> g_msDepth : register(t1, space2);
+Texture2DMS<float> g_msDepth : REG(t1, 2);
 
 float ps_depth_resolve(VSOut i) : SV_Depth {
     uint w, h, n;
@@ -90,7 +108,7 @@ uint4 dst_lerp(uint4 s, uint4 d)
 #ifdef __spirv__
 [[vk::image_format("rgba8")]]
 #endif
-globallycoherent RasterizerOrderedTexture2D<unorm float4> g_rov : register(u0, space3);
+globallycoherent RasterizerOrderedTexture2D<unorm float4> g_rov : REG(u0, 3);
 
 [earlydepthstencil] void ps_rov(VSOut i)
 {
