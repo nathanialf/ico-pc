@@ -731,6 +731,24 @@ static void testGraphicsApi(void)
     ui_settings_step(UI_OPT_GRAPHICS_API, 1);
     CHECK(strcmp(ui_settings_value_text(UI_OPT_GRAPHICS_API), "Vulkan") == 0,
           "an unlinked value steps from Automatic");
+
+    /* the aliases rhi_create_backend takes ("gl", "vk", any case) show by
+       their names and step from their place */
+    useConfig("version = 1\n[video]\nbackend = \"gl\"\n");
+    ui_settings_set_backend_names(kNames, 4);
+    enterMain(1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_GRAPHICS_API), "OpenGL") == 0,
+          "gl shows as OpenGL (%s)", ui_settings_value_text(UI_OPT_GRAPHICS_API));
+    ui_settings_step(UI_OPT_GRAPHICS_API, 1);
+    CHECK(strcmp(ico_config_get_string("video.backend", "?"), "d3d12") == 0,
+          "Right from gl writes d3d12");
+    useConfig("version = 1\n[video]\nbackend = \"VK\"\n");
+    enterMain(1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_GRAPHICS_API), "Vulkan") == 0,
+          "VK shows as Vulkan (%s)", ui_settings_value_text(UI_OPT_GRAPHICS_API));
+    ui_settings_step(UI_OPT_GRAPHICS_API, 1);
+    CHECK(strcmp(ico_config_get_string("video.backend", "?"), "opengl") == 0,
+          "Right from VK writes opengl");
     ui_settings_set_backend_names(NULL, 0);
 }
 

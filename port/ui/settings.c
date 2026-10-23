@@ -587,14 +587,34 @@ void ui_settings_set_backend_names(const char *const *names, int count)
     }
 }
 
+/* the config's value as rhi_create_backend reads it: any case, "vk" for
+   "vulkan" and "gl" for "opengl" (port/rhi/rhi_backend.c), into buf */
+static const char *backendCanon(const char *v, char *buf, unsigned size)
+{
+    unsigned n = 0;
+    for (; v != NULL && v[n] != '\0' && n + 1 < size; n++) {
+        const char ch = v[n];
+        buf[n] = ch >= 'A' && ch <= 'Z' ? (char)(ch - 'A' + 'a') : ch;
+    }
+    buf[n] = '\0';
+    if (strcmp(buf, "vk") == 0) {
+        return "vulkan";
+    }
+    if (strcmp(buf, "gl") == 0) {
+        return "opengl";
+    }
+    return buf;
+}
+
 /* the Graphics API row: Automatic is index 0, then each name; the config's
    value decides (a value the build does not link reads as Automatic when
    stepped and shows as written) */
 static int backendCurrent(void)
 {
-    const char *v = ico_config_get_string("video.backend", "");
+    char buf[32];
+    const char *v = backendCanon(ico_config_get_string("video.backend", ""), buf, sizeof(buf));
     for (int i = 0; i < s_backendCount; i++) {
-        if (v != NULL && strcmp(v, s_backendNames[i]) == 0) {
+        if (strcmp(v, s_backendNames[i]) == 0) {
             return i + 1;
         }
     }
@@ -604,6 +624,9 @@ static int backendCurrent(void)
 /* a renderer's name as the player knows it (proper names, not translated) */
 static const char *backendLabel(const char *name)
 {
+    char buf[32];
+    const char *raw = name;
+    name = backendCanon(name, buf, sizeof(buf));
     if (strcmp(name, "vulkan") == 0) {
         return "Vulkan";
     }
@@ -616,7 +639,7 @@ static const char *backendLabel(const char *name)
     if (strcmp(name, "d3d11") == 0) {
         return "Direct3D 11";
     }
-    return name;
+    return raw;
 }
 
 static const char *backendText(char *buf, unsigned size)
