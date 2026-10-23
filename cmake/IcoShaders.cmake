@@ -68,6 +68,14 @@ if(ICO_SHADERS_GLSL AND NOT EXISTS "${ICO_SPIRV_CROSS_EXE}")
     message(FATAL_ERROR "ICO_SHADERS_GLSL is ON but there is no SPIRV-Cross at ${ICO_SPIRV_CROSS_EXE} "
                         "(run tools/fetch_deps.sh, or set ICO_SPIRV_CROSS)")
 endif()
+if(ICO_RHI_OPENGL AND NOT ICO_SHADERS_GLSL)
+    # the OpenGL backend links, but every shader it would load is missing:
+    # the Graphics API row and Automatic's fallback still offer it
+    message(WARNING "ICO_RHI_OPENGL is ON without GLSL shaders (no SPIRV-Cross at "
+                    "${ICO_SPIRV_CROSS_EXE}, or ICO_SHADERS_GLSL OFF): the OpenGL backend is "
+                    "built but cannot draw. Run tools/fetch_deps.sh, set ICO_SPIRV_CROSS, or set "
+                    "ICO_RHI_OPENGL=OFF")
+endif()
 option(ICO_SHADERS_HLSL_SOURCE "Embed the HLSL sources for the Direct3D 11 backend's run-time compile"
        ${ICO_RHI_D3D11})
 option(ICO_SHADERS_D3D11_CHECK "Add the shaders_d3d11_check target (DXC with ICO_D3D11=1)" ON)
