@@ -275,15 +275,14 @@ else.
 **Something looks wrong in the picture** (a line, a bright band or a mark
 that stays on the screen). Save a picture of it for the report:
 
-1. In **Options**, turn on **Developer mode** and choose **Save a picture
-   for a bug report** (the row under it).
+1. In **Options**, choose **Save a picture for a bug report**, the row just
+   above Developer mode on the first page (you do not need Developer mode
+   for it).
 2. Leave the menu right away. 3 seconds after you chose the row, the game
    saves what is on the screen in the `dumps` folder of the game's folder:
    a `.zip` file whose name starts with `frame-` and the date and time, and
    pictures with the same name. Send the `.zip` (it holds the log too) and
    the picture ending in `-present.png`.
-3. Turn Developer mode off again: while it is on you cannot earn
-   achievements.
 
 If you cannot get to the menu while it shows, the game can save
 recordings of its frames by itself instead. Add this line to the text file

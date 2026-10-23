@@ -1592,7 +1592,8 @@ static int optShown(int opt, int link)
         return ico_opt_developer_mode(); /* for pack authors */
     }
     if (opt == UI_OPT_REPORT_PICTURE) {
-        return ico_opt_developer_mode() && s_frameDumpFn != NULL; /* the window build */
+        /* the window build, developer mode or not: a player's report row */
+        return s_frameDumpFn != NULL;
     }
     if (isTouchOpt(opt)) {
         return touchPresent(); /* a phone, a tablet, a touch screen */
@@ -2505,8 +2506,9 @@ static int pagePitch(int page, int n, int *y0)
         return 13;
     }
     if (page == UI_PAGE_MAIN && n > 15) {
-        /* sixteen (every row, Save a picture for a bug report too): from
-           30, Back at 180, its box to 220 */
+        /* sixteen (every row: the Graphics driver link, Disc, Save a
+           picture for a bug report and both dumps): from 30, Back at 180,
+           its box to 220 */
         *y0 = 30;
         return 10;
     }
@@ -3101,13 +3103,14 @@ static void build(void)
 {
     /* Extras (after Achievements), from both entries (its Music,
        Models and Credits only from the title, layoutPage) */
-    /* Dump textures, Dump models and Save a picture for a bug report under
-       Developer mode, shown while it is on */
+    /* Save a picture for a bug report above Developer mode, always shown
+       (with a host handler); Dump textures and Dump models under Developer
+       mode, shown while it is on */
     static const int mainOpts[] = {
-        UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,           UI_OPT_LINK,
-        UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LANGUAGE,       UI_OPT_MENU_LANGUAGE,
-        UI_OPT_DISC,          UI_OPT_LINK,        UI_OPT_LINK,           UI_OPT_DEVELOPER,
-        UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_REPORT_PICTURE, UI_OPT_BACK};
+        UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,
+        UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LANGUAGE,    UI_OPT_MENU_LANGUAGE,
+        UI_OPT_DISC,      UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_REPORT_PICTURE,
+        UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
     static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
                                    UI_STR_SECTION_EFFECTS,
                                    UI_STR_SECTION_GPU_DRIVER,
@@ -3119,10 +3122,10 @@ static void build(void)
                                    UI_STR_OPT_DISC,
                                    UI_STR_SECTION_ACHIEVEMENTS,
                                    UI_STR_EXTRAS,
+                                   UI_STR_OPT_REPORT_PICTURE,
                                    UI_STR_OPT_DEVELOPER_MODE,
                                    UI_STR_OPT_DUMP_TEXTURES,
                                    UI_STR_OPT_DUMP_MODELS,
-                                   UI_STR_OPT_REPORT_PICTURE,
                                    UI_STR_BACK};
     static const int mainLinks[] = {UI_PAGE_DISPLAY,
                                     UI_PAGE_EFFECTS,

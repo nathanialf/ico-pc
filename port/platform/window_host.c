@@ -2235,7 +2235,7 @@ open_window:
 #endif
     /* Main > Disc, shown with two or more discs' game data */
     ui_settings_set_disc_handler(ico_host_disc_archive_present);
-    /* Main > Save a picture for a bug report (developer mode) */
+    /* Main > Save a picture for a bug report (above Developer mode, always shown) */
     ui_settings_set_frame_dump_handler(report_picture_arm);
 #ifdef __ANDROID__
     /* the Graphics driver page, and "Quit game" for the
@@ -2704,7 +2704,7 @@ static void frame_dump(void)
                      : "without the tick before");
 }
 
-/* Settings > Save a picture for a bug report (developer mode; settings.h
+/* Settings > Save a picture for a bug report (the Main page; settings.h
    ui_settings_set_frame_dump_handler): F12's dump 3 s after the press,
    time to leave the menu, from the pump (report_picture_pump). A phone has
    no F12; the zip lands in the same dumps folder. */

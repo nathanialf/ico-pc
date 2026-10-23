@@ -801,9 +801,11 @@ static void testAddToSteam(void)
 }
 
 /* Main > Save a picture for a bug report (issue 129): hidden without a
-   handler (the headless build) and outside developer mode; with both, after
-   Dump models, with its note; Cross calls the handler once (the host arms
-   its frame dump) and shows the popup, the cursor staying on the page.
+   handler (the headless build); with one shown with developer mode off and
+   on, directly above Developer mode, with its note, and turning developer
+   mode on or off does not hide it; Cross calls the handler once (the host
+   arms its frame dump) and shows the popup, the cursor staying on the
+   page.
    With every Main row shown (the Graphics driver link, Disc and the three
    developer rows: sixteen) the rows are 10 apart from 30 and the page
    fits.  The label fits its box in every language and every string is
@@ -832,14 +834,29 @@ static void testReportPicture(void)
     ui_settings_set_frame_dump_handler(fakeReportPicture);
     mainL = enterMain(1);
     frame(0);
-    CHECK(!an22bShown(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE),
-          "report picture: developer mode off, the row is hidden");
+    CHECK(an22bShown(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE) && !ico_opt_developer_mode(),
+          "report picture: developer mode off, the row is shown");
+    {
+        int labels[16];
+        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        const int rp = ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE);
+        const int dev = ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_DEVELOPER);
+        int at = -1, devAt = -1;
+        for (int i = 0; i < n; i++) {
+            at = labels[i] == rp ? i : at;
+            devAt = labels[i] == dev ? i : devAt;
+        }
+        CHECK(at >= 0 && at + 1 == devAt, "report picture: directly above Developer mode (%d, %d)",
+              at, devAt);
+        checkPageFits(UI_PAGE_MAIN, "Main (Save a picture, developer mode off)");
+    }
     ico_opt_set_developer_mode(1); /* after enterMain, which reloads the options */
     for (int k = 0; k < 4; k++) {
         frame(0);
     }
     const int row = ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE);
-    CHECK(an22bShown(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE), "report picture: shown");
+    CHECK(an22bShown(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE),
+          "report picture: shown with developer mode on");
     CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Save a picture for a bug report") == 0,
           "report picture: the label \"%s\"", row >= 0 ? lt_ext_row_text(row) : "");
     CHECK(ui_settings_note_row_of(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE) >= 0,
@@ -847,13 +864,13 @@ static void testReportPicture(void)
     {
         int labels[16];
         const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
-        int at = -1, models = -1;
+        int at = -1, dev = -1;
         for (int i = 0; i < n; i++) {
             at = labels[i] == row ? i : at;
-            models = labels[i] == ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_DUMP_MODELS) ? i : models;
+            dev = labels[i] == ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_DEVELOPER) ? i : dev;
         }
-        CHECK(at >= 0 && at == models + 1, "report picture: after Dump models (%d, %d)", at,
-              models);
+        CHECK(at >= 0 && at + 1 == dev, "report picture: directly above Developer mode (%d, %d)",
+              at, dev);
     }
     s_reportCalls = 0;
     ui_popup_reset();

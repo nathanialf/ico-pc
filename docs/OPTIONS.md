@@ -450,25 +450,33 @@ while you move a camera around and save pictures, and the picture is
 drawn from the camera with every effect the game has.
 [The photo mode controls](CONTROLS.md#take-a-photo).
 
+## Save a picture for a bug report
+
+**Save a picture for a bug report** is the row just above Developer mode
+on the Options menu's first page. It is always there, and you do not need
+Developer mode for it. It saves what is on the screen 3 seconds after you
+press it, so leave the menu right away. It goes into the `dumps` folder as
+two `.png` pictures (the frame the game drew, and one ending in
+`-present.png` as your screen showed it) and a `.zip` file that also holds
+the log; attach the `.zip` to your report. It is the same as F12 on a
+computer, and it is how a phone or a handheld makes one.
+
 ## Developer mode
 
 Developer mode brings back the menu the game's makers used while they built
 it: while it is on, Select opens it. Leave it off for normal play. While it
 is on, you cannot earn achievements, and they stay off for the rest of that
-game even after you turn it off, until you go back to the title screen.
+game even after you turn it off, until you go back to the title screen. A
+game you save in that time keeps them off when you load it again, until
+you start a New Game.
 
-With Developer mode on, three more rows show up under it. The first two
-are for people who make packs, the third for problem reports:
+With Developer mode on, two more rows show up under it, for people who
+make packs:
 
 - **Dump textures** saves every texture as a picture file when the game
   loads it. [More](TEXTURE_PACKS.md#make-a-texture-pack).
 - **Dump models** saves every model piece as a 3D model file when the game
   draws it. [More](MODEL_PACKS.md#make-a-model-pack).
-- **Save a picture for a bug report** saves what is on the screen 3 seconds
-  after you press it, so leave the menu right away. It goes into the
-  `dumps` folder as a `.png` picture and a `.zip` file that also holds the
-  log; attach the `.zip` to your report. It is the same as F12 on a
-  computer, and it is how a phone or a handheld makes one.
 
 ## The pause menu's journey panel
 
