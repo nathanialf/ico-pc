@@ -350,11 +350,14 @@ endif()
 # sounds and vibration the game's). model_viewer_effects runs on synthetic
 # motion tables; model_viewer_effects_elf on the PAL base ELF's (the table
 # loader, port/data/tables.c), where BOY SWIM must reach the guard, and exits
-# 77 without the ELF. CPU only.
+# 77 without the ELF. CPU only. Issue 136: model_viewer_motion.c too, the
+# viewer's list rule (a node-blend motion needs its partners loaded), checked
+# in the ELF run.
 set(_mve_data "${CMAKE_SOURCE_DIR}/port/data")
 add_executable(model_viewer_effects_test
     "${CMAKE_SOURCE_DIR}/port/game/test/model_viewer_effects_test.c"
     "${CMAKE_SOURCE_DIR}/port/game/model_viewer_table.c"
+    "${CMAKE_SOURCE_DIR}/port/game/model_viewer_motion.c"
     "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/frameDependSequence.c"
     "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/stageMultiBgaManager.c"
     "${_mve_data}/tables.c" ${ICO_TABLE_SOURCES})

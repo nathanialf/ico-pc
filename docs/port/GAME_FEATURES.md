@@ -19,6 +19,7 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | `port/game/photo_view.h`, `photo_view.c` | photo mode's camera put into the game's own matrices |
 | `port/game/model_viewer.h`, `model_viewer.c` | Extras > Models and the game side of Extras > Characters |
 | `port/game/model_viewer_table.c` | the viewer's models and the motion-kind blocks |
+| `port/game/model_viewer_motion.c` | which motions of a block the loaded stage can play (`ico_mv_motion_playable`) |
 | `port/game/model_viewer_cam.h`, `model_viewer_cam.c` | the viewer's camera step, a pure function |
 | `port/game/appearance.h`, `appearance.c` | the characters' colours: the parts, the palette, the recolour of the CLUTs |
 | `port/ui/gallery.h`, `gallery.c`, `gallery_play.c` | the music gallery's list and its engine |
@@ -412,6 +413,16 @@ layout row; its animations are a block of motion-kind ids played with the motion
 that block, as the development build's Motion Viewer plays them (`ico2/sugipon/src/motionViewer.c`
 (`objMenu`)) (`port/game/model_viewer_table.c` (`mv_models`, `mv_blocks`)). Only numbers are in the
 table; the names are the port's strings.
+
+The list holds the motions of the block the stage can play (`ico_mv_motion_playable`,
+`port/game/model_viewer_motion.c`): a plain motion (`blendKind` 320) needs its data loaded or to be
+the stage's own (`area` 0); a node-blend motion needs every partner of its `blendMotionKind` list
+(from `blendKind` to the 1147 end marker, inside the loaded table) to be a plain motion that passes
+the same test, because `getNodeBlendedFloatingMotion` reads each partner's data and the game only
+requests these motions where it loaded them (issue 136: motion 674 on Yorda's stage, partner 669
+not loaded). `play()` refuses an id that fails it and logs once per id; the `stage ... loaded`
+line carries the count left out. The development build's own filter
+(`ico2/sugipon/src/motionViewer.c`) tests only the plain case.
 
 Picking a model loads its host stage with `ico_mv_active` set: the stage's scripts do not start
 (`ico2/common/src/sceneManager.c` (`initSceneGObj`)) and achievements are suspended. Once the object

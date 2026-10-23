@@ -272,7 +272,7 @@ endif()
 if(TARGET ico_pc)
     # title_logo.c: the title's logo hidden under Settings and
     # Extras, asked by seki/src/RegistPacket.c
-    add_library(ico_model_viewer_live OBJECT model_viewer.c model_viewer_cam.c model_viewer_table.c title_logo.c)
+    add_library(ico_model_viewer_live OBJECT model_viewer.c model_viewer_cam.c model_viewer_motion.c model_viewer_table.c title_logo.c)
     ico_include_dirs(sugipon _ico_mv_game_incs)
     target_include_directories(ico_model_viewer_live PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                                ${_ico_mv_game_incs})

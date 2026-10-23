@@ -217,9 +217,10 @@ static int s_saveWait; /* Select armed the one-shot dump, its outcome not yet kn
 #endif
 static unsigned int s_logTick;
 static int s_logFrame;
-static MvCam s_cam;       /* the orbit: yaw, pitch, distance and its limits, the vertical move */
-static float s_centre[3]; /* the model's box centre, model space */
-static int s_rooted;      /* the target follows the root (a skeleton) */
+static int s_animsLeftOut; /* the block's motions the stage cannot play, out of the list */
+static MvCam s_cam;        /* the orbit: yaw, pitch, distance and its limits, the vertical move */
+static float s_centre[3];  /* the model's box centre, model space */
+static int s_rooted;       /* the target follows the root (a skeleton) */
 static char s_ovName[96], s_ovAnim[128], s_ovFrame[64];
 
 /* --- the table rows the stage can show ------------------------------------- */
@@ -228,15 +229,6 @@ static char s_ovName[96], s_ovAnim[128], s_ovFrame[64];
 static const char *motionName(int id)
 {
     return id >= 0 && id < MV_MOTION_KINDS ? motionKind[id].name : "";
-}
-
-/* motionViewer.c's test: a dynamic or swap motion that is not loaded */
-static int motionHeld(int id)
-{
-    if (id < 0 || id >= MV_MOTION_KINDS) {
-        return 0;
-    }
-    return !(motionKind[id].area != 0 && motionKind[id].blendKind == 320 && motionTable[id] == 0);
 }
 
 static const char *modelName(int row)
@@ -844,7 +836,7 @@ static void drawBackdrop(void)
 static int currentFrame(int *total)
 {
     int mot = ForMotionViewer_GetCurrentMotion(s_obj);
-    int n = motionHeld(mot) ? GetNbMotionFrames(mot) - 1 : 0;
+    int n = ico_mv_motion_playable(mot, NULL) ? GetNbMotionFrames(mot) - 1 : 0;
     float f = ForMotionViewer_GetCurrentAnimationFrame(s_obj);
     *total = n > 0 ? n : 0;
     return f > 0.0f ? (int)f : 0;
@@ -857,6 +849,17 @@ static void play(void)
         return;
     }
     int id = s_anims[s_sel];
+    int missing = -1;
+    if (!ico_mv_motion_playable(id, &missing)) {
+        /* the list leaves these out; a motion the stage cannot hold is not started */
+        static unsigned char logged[1150];
+        if (id >= 0 && id < (int)sizeof logged && !logged[id]) {
+            logged[id] = 1;
+            fprintf(stderr, "model_viewer: motion \"%s\" is not loaded here (partner \"%s\")\n",
+                    motionName(id), motionName(missing));
+        }
+        return;
+    }
     DisableChangeRootUpdateMode(s_obj);
     DisableMotionOrientUpdate(s_obj);
     InitMotionOrient(s_obj, m->oriFrom, m->oriTo, -1, -1, id);
@@ -941,14 +944,17 @@ static void setup(void)
     s_anims =
         malloc(sizeof(int) * (size_t)(m->motLast > m->motFirst ? m->motLast - m->motFirst : 1));
     s_animCount = 0;
+    s_animsLeftOut = 0;
     if (s_anims == NULL) {
         mvFailed("out of memory");
         return;
     }
     if (g->dobj->skelNodeNum > 0) {
         for (int id = m->motFirst; id < m->motLast; id++) {
-            if (motionHeld(id)) {
+            if (ico_mv_motion_playable(id, NULL)) {
                 s_anims[s_animCount++] = id;
+            } else {
+                s_animsLeftOut++;
             }
         }
     }
@@ -985,9 +991,10 @@ static void setup(void)
     setState(MV_VIEW);
     ui_list_reset(&s_animList);
     fprintf(stderr,
-            "model_viewer: stage %d loaded id %d \"%s\" (%d animations); the stage's picture "
+            "model_viewer: stage %d loaded id %d \"%s\" (%d animations, %d left out: their motion "
+            "data is not loaded on this stage); the stage's picture "
             "effects: post %d, feedback %d colour %d %d %d %d\n",
-            stage_no, mv_model_id(m), modelNameEn(s_model), s_animCount,
+            stage_no, mv_model_id(m), modelNameEn(s_model), s_animCount, s_animsLeftOut,
             (int)GlobalStageSetting.postEffect, (int)GlobalStageSetting.feedbackEffect,
             (int)GlobalStageSetting.feedbackCol[0], (int)GlobalStageSetting.feedbackCol[1],
             (int)GlobalStageSetting.feedbackCol[2], (int)GlobalStageSetting.feedbackCol[3]);

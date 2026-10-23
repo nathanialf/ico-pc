@@ -33,6 +33,15 @@
  * every branch (the plain, random and conditional effect ids, stage
  * animations with and without the water height, particles).
  *
+ * playable (the ELF run only) issue 136: the viewer's list rule
+ *         (model_viewer_motion.c).  With nothing loaded but the stage's own
+ *         motions (area 0), GIRL YORO_F (664-668 plain, area 0) are playable
+ *         and 674 "GIRL YORO_F(HETARI)", a node-blend motion whose second
+ *         partner (669, area 4) is not loaded, is not, and names that
+ *         partner; with 669 loaded 674 is; and for every motion of every
+ *         viewer model "playable" means every partner of its blend list is in
+ *         range, a plain motion and loaded.
+ *
  * Usage: model_viewer_effects_test <outdir> [<base ELF>]; exit 0, 1 on a
  * failure, 77 when the base ELF argument is empty or names no file.
  */
@@ -64,6 +73,7 @@
 #include "frameDependSequence.h"
 #include "geometryManager.h"
 #include "matrixDrive.h"
+#include "motionFileManager.h"
 #include "motionManager2.h"
 #include "motionOrientManager.h"
 #include "multiBgaManager.h"
@@ -92,6 +102,9 @@ extern int randomEffKind[];
 extern SERandEntry randomSEKind[];
 
 static int failures;
+
+/* motionFileManager.c's table of the loaded motions' data (not compiled in) */
+int *motionTable[1150];
 
 #define CHECK(c, ...)                                                                              \
     do {                                                                                           \
@@ -557,6 +570,76 @@ static void testSweep(int real)
     s_sub = NULL;
 }
 
+/* the rule's own reading of a partner list, apart from model_viewer_motion.c */
+static int partnersLoaded(int id)
+{
+    int rows = (int)ico_tables_count(ICO_TID_blendMotionKind);
+    int n = 0;
+    for (int j = motionKind[id].blendKind; j >= 0 && j < rows; j++) {
+        int m = blendMotionKind[j].motion;
+        if (m == 1147) {
+            return n > 0;
+        }
+        n++;
+        if (m < 0 || m >= MV_MOTION_KINDS || motionKind[m].blendKind != 320 ||
+            (motionKind[m].area != 0 && motionTable[m] == NULL)) {
+            return 0;
+        }
+    }
+    return 0;
+}
+
+static void testPlayable(void)
+{
+    static int dummy;
+    int missing = -2;
+
+    CHECK(ico_tables_count(ICO_TID_blendMotionKind) > 0, "playable: the blend table is empty");
+    for (int i = 0; i < MV_MOTION_KINDS; i++) {
+        motionTable[i] = motionKind[i].area == 0 ? &dummy : NULL;
+    }
+    for (int id = 664; id <= 668; id++) {
+        CHECK(ico_mv_motion_playable(id, NULL), "playable: motion %d \"%s\" is not", id,
+              motionKind[id].name);
+    }
+    CHECK(strcmp(motionKind[674].name, "GIRL YORO_F(HETARI)") == 0, "motion 674 is \"%s\"",
+          motionKind[674].name);
+    CHECK(motionKind[674].blendKind != 320, "motion 674 is not a node-blend motion");
+    CHECK(!ico_mv_motion_playable(674, &missing), "playable: 674 with 669 not loaded is");
+    CHECK(missing == 669, "playable: 674 names partner %d, not 669", missing);
+    CHECK(missing >= 0 && strcmp(motionKind[missing].name, "GIRL STAND(HETARI)") == 0,
+          "playable: the partner is \"%s\"", missing >= 0 ? motionKind[missing].name : "");
+    motionTable[669] = &dummy;
+    CHECK(ico_mv_motion_playable(674, &missing), "playable: 674 with 669 loaded is not");
+    CHECK(missing == -1, "playable: a playable motion names partner %d", missing);
+    motionTable[669] = NULL;
+
+    int offered = 0, left = 0, blended = 0;
+    for (int k = 0; k < mv_modelCount; k++) {
+        for (int id = mv_models[k].motFirst; id < mv_models[k].motLast; id++) {
+            int ok = ico_mv_motion_playable(id, NULL);
+            if (motionKind[id].blendKind != 320) {
+                blended++;
+                CHECK(!ok || partnersLoaded(id),
+                      "playable: %d \"%s\" offered, a partner is not "
+                      "loaded",
+                      id, motionKind[id].name);
+            } else {
+                CHECK(ok == (motionKind[id].area == 0 || motionTable[id] != NULL),
+                      "playable: plain %d disagrees with the loaded rule", id);
+            }
+            ok ? offered++ : left++;
+        }
+    }
+    printf("playable: %d offered, %d left out (%d node-blend) with only the area 0 motions "
+           "loaded\n",
+           offered, left, blended);
+    CHECK(left > 0 && blended > 0, "playable: nothing was left out");
+    for (int i = 0; i < MV_MOTION_KINDS; i++) {
+        motionTable[i] = NULL;
+    }
+}
+
 static int loadElf(const char *path)
 {
     FILE *f = fopen(path, "rb");
@@ -615,6 +698,9 @@ int main(int argc, char **argv)
 
     testGuard();
     testSweep(elf != NULL);
+    if (elf != NULL) {
+        testPlayable();
+    }
 
     if (failures != 0) {
         printf("model_viewer_effects_test: %d failure(s)\n", failures);

@@ -77,6 +77,12 @@ extern const int mv_blockCount;
 #define MV_MOTION_KINDS (ico_region_cur()->mv_motion_kinds)
 #define MV_ORIENT_ROWS (ico_region_cur()->mv_orient_rows)
 
+/* model_viewer_motion.c: whether the viewer can play motion `id` on the stage
+   it loaded: a plain motion needs its own data loaded (or to be the stage's),
+   a node-blend motion needs every partner of its blendMotionKind list loaded.
+   *missing (may be NULL) gets the first partner that is not, or -1. */
+int ico_mv_motion_playable(int id, int *missing);
+
 /* --- the game side (model_viewer.c, ico_pc only) --------------------------- */
 
 /* common/src/main.c, each Main tick after the pad is read */
