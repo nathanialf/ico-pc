@@ -176,7 +176,7 @@ tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/setting
 
 | page | rows |
 | --- | --- |
-| Main (`UI_PAGE_MAIN`) | Display, Effects, Graphics driver, Audio, Controls, Gameplay, Language, Achievements, Extras, Developer mode, Dump textures, Dump models, Save a picture for a bug report, Back |
+| Main (`UI_PAGE_MAIN`) | Display, Effects, Graphics driver, Audio, Controls, Gameplay, Language, Achievements, Extras, Save a picture for a bug report, Developer mode, Dump textures, Dump models, Back |
 | Display | Preset, Resolution, Aspect, Anti-aliasing, Window mode, Vsync, Texture pack, Model pack, Frame rate, Video mode, Back |
 | Effects | Full height, Filtering, Brightness, CRT filter, CRT strength, the six game effects (Motion blur Off, Original or Smooth, `UI_OPT_EFFECT_MOTION_BLUR`, stepped round with `stepIndex` and its note `UI_STR_EFFECT_MOTION_BLUR_NOTE`) with Water reflections (Original or Sharp, `UI_OPT_EFFECT_WATER`) after Fog, Full pixel, Back |
 | Graphics driver | Driver, Add a driver, Remove this driver, Back (Android) |
@@ -190,8 +190,8 @@ tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/setting
 | Music | the music gallery, a list |
 | Characters | nine colour rows, Switch, Randomize, Reset, Back |
 
-**Save a picture for a bug report** is an action row on Main under Dump models
-(`UI_OPT_REPORT_PICTURE`), shown in developer mode while a host handler is set
+**Save a picture for a bug report** is an action row on Main directly above Developer mode
+(`UI_OPT_REPORT_PICTURE`), a player's row shown with developer mode on or off while a host handler is set
 (`ui_settings_set_frame_dump_handler`: the window host's `report_picture_arm`, which runs F12's
 `frame_dump` 3 s later; none headless). Cross calls the handler once, logs `settings: a picture
 for a bug report in 3 s` and shows the popup `UI_STR_REPORT_PICTURE_ARMED` ("Picture in 3

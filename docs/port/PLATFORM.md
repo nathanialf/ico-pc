@@ -1201,7 +1201,7 @@ The window build's diagnostic keys are free of SDL so a unit test checks them
   48:9 and 60:9 into `sweep-<time>.zip` (`ico_sweep_zip`).
 - **F11**: stats lines every second for 30 s instead of every 10 s; again turns it off
   (`ico_stats_fast_toggle`).
-- **Settings > Save a picture for a bug report** (Main, developer mode, under Dump models): F12's
+- **Settings > Save a picture for a bug report** (Main, directly above Developer mode, always shown): F12's
   dump 3 s after the press, time to leave the menu, for a phone or a handheld with no F12. The
   settings handler (`ui_settings_set_frame_dump_handler`, installed on every platform with the
   window) arms it, the pump runs `frame_dump` once the time has come, with the line `window: the

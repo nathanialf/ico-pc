@@ -258,7 +258,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   sticks and buttons, every default layout's alpha 1 and `editGen` 0, a hidden L2 pressing nothing
   (`touch`).
 - `touch_edit_test.c`: the layout edits and the editor ([INPUT.md](INPUT.md#layout-edits)): an
-  unedited layout equal to the default to the byte, the anchor arithmetic, the clamp, hidden
+  unedited layout equal to the default to the byte, the anchor arithmetic, the clamp (a camera
+  hole's negative offsets in `test_cutout`; the region's clamp for offsets at or inside the safe
+  area on four inset screens in `test_v084_forms`), hidden
   controls and the rails, the config text round trip, the editor over synthetic fingers and
   gamepad words, and the toolbar clear of every default control (`touch_edit`).
 
@@ -801,8 +803,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   steps Effects > Water reflections between Original and Sharp, checks its
   note, its key and the page's fourteen rows (`testWaterReflections`), and Main's Disc row
   (`testDiscRow`: shown with more than one disc's game data only, its values and `[game] disc`, the page
-  with all fifteen rows), and Main's Save a picture for a bug report (`testReportPicture`: shown in
-  developer mode with a host handler only, after Dump models, Cross calls the handler once and
+  with all fifteen rows), and Main's Save a picture for a bug report (`testReportPicture`: shown with
+  a host handler only, with developer mode off and on, directly above Developer mode, Cross calls the handler once and
   shows its popup, the page with all sixteen rows, the label fitting and translated in every
   language). Each also runs with `jpn`
   as the Japanese or Korean disc over the fixture's tables at that disc's numbers (`settings_jpn`,
