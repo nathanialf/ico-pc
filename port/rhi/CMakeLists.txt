@@ -318,8 +318,8 @@ if(_ico_have_d3d12)
 endif()
 
 # --- ico_rhi_d3d11 --------------------------------------------------------------
-# d3d11_cmd.c and d3d11_pipeline.c (the command path and the pipelines) come
-# with the backend's second package; d3d12_plan.c brings the handle pools,
+# The device, the resources, the swapchain, the pipelines (d3d11_pipeline.c)
+# and the command path (d3d11_cmd.c); d3d12_plan.c brings the handle pools,
 # the bind group layouts and the DXBC input signature reader.
 if(_ico_have_d3d11)
     add_library(ico_rhi_d3d11 STATIC
@@ -535,5 +535,29 @@ if(_ico_have_d3d12)
     if(ICO_RUN_TESTS)
         add_test(NAME rhi_d3d12 COMMAND rhi_d3d12_test --console)
         set_tests_properties(rhi_d3d12 PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
+endif()
+
+# rhi_d3d11_test.exe: the same cells on Direct3D 11 (shaders compiled at run
+# time from test/shaders/rhi_test.hlsl), first on WARP, then on the hardware
+# adapter, then the swapchain on a hidden window, then Vulkan for comparison.
+# Double-clicked it needs no console and no flags: it writes
+# rhi_d3d11_test.log beside itself and shows the verdict in a message box.
+# The cross builds build it and do not run it; ctest runs it only on a
+# native Windows build (ICO_RUN_TESTS).
+if(_ico_have_d3d11)
+    add_executable(rhi_d3d11_test test/rhi_d3d11_test.c ${_ico_rhi_test_common})
+    target_include_directories(rhi_d3d11_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/test/shaders")
+    target_compile_options(rhi_d3d11_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_link_libraries(rhi_d3d11_test PRIVATE ico_rhi user32)
+    target_link_options(rhi_d3d11_test PRIVATE -mwindows -static)
+    if(SDL3_FOUND)
+        target_compile_definitions(rhi_d3d11_test PRIVATE ICO_RHI_HAVE_SDL=1)
+        target_link_libraries(rhi_d3d11_test PRIVATE SDL3::SDL3)
+        ico_copy_sdl3_dll(rhi_d3d11_test)
+    endif()
+    if(ICO_RUN_TESTS)
+        add_test(NAME rhi_d3d11 COMMAND rhi_d3d11_test --console)
+        set_tests_properties(rhi_d3d11 PROPERTIES SKIP_RETURN_CODE 77)
     endif()
 endif()

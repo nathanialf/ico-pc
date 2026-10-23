@@ -1,7 +1,8 @@
 /* rhi_test_common.h: the exact-texel RHI checks, run against any backend
  * (port/rhi/test/rhi_test_common.c).  rhi_vk_test.c runs them on Vulkan,
- * rhi_d3d12_test.c on D3D12; the expected values are the same, so the two
- * backends agree bit for bit on the integer paths. */
+ * rhi_d3d12_test.c on D3D12 and rhi_d3d11_test.c on Direct3D 11; the
+ * expected values are the same, so the backends agree bit for bit on the
+ * integer paths. */
 #ifndef PORT_RHI_TEST_RHI_TEST_COMMON_H
 #define PORT_RHI_TEST_RHI_TEST_COMMON_H
 
@@ -10,7 +11,7 @@
 #include <stdio.h>
 
 typedef struct RhiTestConfig {
-    const char *backend; /* rhi_create_backend name: "vulkan", "d3d12" */
+    const char *backend; /* rhi_create_backend name: "vulkan", "d3d12", "d3d11" */
     const char *label;   /* for messages: "rhi_vk_test", "rhi_d3d12_test (WARP)" */
     bool debugLayers;    /* RhiDeviceDesc.debugLayers */
     /* Called after rhi_init; false skips the run (exit code 77).  NULL:

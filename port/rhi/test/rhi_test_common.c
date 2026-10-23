@@ -25,6 +25,7 @@
 #include "rhi_test_common.h"
 #include "rhi.h"
 #include "rhi_test_dxil.h"
+#include "rhi_test_hlsl.h"
 #include "rhi_test_spv.h"
 #include <stdarg.h>
 #include <stdlib.h>
@@ -160,6 +161,11 @@ static RhiPipeline makePipeline(const Ctx *c, RhiShader ps, RhiFormat color, Rhi
     return makePipelineN(c, ps, color, depth, blend, ds, name, 0u);
 }
 
+/* Direct3D 11 compiles the HLSL itself at run time (FXC): the test's one
+ * source file as the table its includes resolve against (there are none) */
+static const RhiShaderSource s_hlslSources[1] = {
+    {"rhi_test.hlsl", rhi_test_hlsl, sizeof(rhi_test_hlsl) - 1u}};
+
 static RhiShader makeShader(RhiShaderStage stage, const void *code, size_t size, const char *entry)
 {
     RhiShaderDesc d = {0};
@@ -168,6 +174,14 @@ static RhiShader makeShader(RhiShaderStage stage, const void *code, size_t size,
     d.bytecodeSize = size;
     d.entryPoint = entry;
     d.debugName = entry;
+    if (rhi_backend() == RHI_BACKEND_D3D11) {
+        d.bytecode = NULL;
+        d.bytecodeSize = 0;
+        d.hlslFile = "rhi_test.hlsl";
+        d.defines = "";
+        d.sources = s_hlslSources;
+        d.sourceCount = 1;
+    }
     RhiShader s = rhi_create_shader(&d);
     if (!s.id) {
         rhi_test_log("FAIL shader %s not created\n", entry);
@@ -1070,7 +1084,8 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
     c.layouts[0] = c.l0;
     c.layouts[1] = c.l1;
     c.layouts[2] = c.l2;
-    /* the blob the backend understands: DXIL for D3D12, SPIR-V otherwise */
+    /* the blob the backend understands: DXIL for D3D12, SPIR-V otherwise
+     * (Direct3D 11 takes the HLSL instead: makeShader) */
     const bool dxil = rhi_backend() == RHI_BACKEND_D3D12;
 #define BLOB(n)                                                                                    \
     (dxil ? (const void *)dxil_##n : (const void *)spv_##n),                                       \
