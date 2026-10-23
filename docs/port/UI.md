@@ -179,7 +179,7 @@ tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/setting
 | Main (`UI_PAGE_MAIN`) | Display, Effects, Graphics (`UI_PAGE_GRAPHICS`), Graphics driver, Audio, Controls, Gameplay, Language, Achievements, Extras, Save a picture for a bug report, (an rc build on Android: Share a bug report,) Developer mode, Dump textures, Dump models, Back |
 | Display | Preset, Resolution, Aspect, Anti-aliasing, Window mode, Vsync, Texture pack, Model pack, Frame rate, Video mode, Back |
 | Effects | Full height, Filtering, Brightness, CRT filter, CRT strength, the six game effects (Motion blur Off, Original or Smooth, `UI_OPT_EFFECT_MOTION_BLUR`, stepped round with `stepIndex` and its note `UI_STR_EFFECT_MOTION_BLUR_NOTE`) with Water reflections (Original or Sharp, `UI_OPT_EFFECT_WATER`) after Fog, Full pixel, Back |
-| Graphics | Graphics API (`UI_OPT_GRAPHICS_API`: Automatic, then each name `ui_settings_set_backend_names` was given as Vulkan, OpenGL, Direct3D 12 or Direct3D 11; the shown value and the step base are the config's `video.backend`, an unlinked value shows as written and steps from Automatic; a step writes `video.backend` ("" for Automatic) and sets `s_dirtyConfig`, so the file is written on leaving; the note `UI_STR_GRAPHICS_API_NOTE` says it is used from the next start), Back (the link and the page only with two or more names) |
+| Graphics | Graphics API (`UI_OPT_GRAPHICS_API`: Automatic, then each name `ui_settings_set_backend_names` was given as Vulkan, OpenGL, Direct3D 12 or Direct3D 11; the shown value and the step base are the config's `video.backend`, an unlinked value shows as written and steps from Automatic; a step writes `video.backend` ("" for Automatic) and sets `s_dirtyConfig`, so the file is written on leaving; the note `UI_STR_GRAPHICS_API_NOTE` says Apply switches now and the choice is otherwise used from the next start), Apply (`UI_OPT_GRAPHICS_APPLY`, shown while a `UiGraphicsHost` is set, two or more names, no switch under way and the row's value, Automatic counting as `vulkan`, a linked name that is not the host's `running()`; note `UI_STR_GRAPHICS_APPLY_NOTE`), Keep and Revert (`UI_OPT_GRAPHICS_KEEP`, `UI_OPT_GRAPHICS_REVERT`, shown only in the countdown, which hides Graphics API and Back), Back (the link and the page only with two or more names) |
 | Graphics driver | Driver, Add a driver, Add from the drivers folder (`UI_OPT_GPU_ADD_FILE`, stepped over `fileName(i)`, shown while `fileCount()` is above 0, Cross calls `installFileBegin`), Remove this driver, Back (Android) |
 | Audio | Volume, Music, Effects, Output, Device, Back |
 | Controls | Remap (a list), Button configuration, Vibration, Hold type, Stick fix, the mouse camera's six rows, Circle back, Touch screen (a link, with a touch screen only), Back |
@@ -310,9 +310,36 @@ what is pending and calls the quit handler: the [window build](ARCHITECTURE.md#t
 
 The menu knows nothing of the platform; the window host installs what the pages ask: the window
 mode query, the anti-aliasing list and block, the texture and model pack counts, the touch query,
-the touch editor's host (`UiTouchEditHost`), the Quit word, the Graphics driver host (`UiGpuDriverHost`), the renderer names (`ui_settings_set_backend_names`, filled from `rhi_backend_name` in `ico_window_open`, so port/ui never links the RHI), the Steam handler, the models
+the touch editor's host (`UiTouchEditHost`), the Quit word, the Graphics driver host (`UiGpuDriverHost`), the renderer names (`ui_settings_set_backend_names`, filled from `rhi_backend_name` in `ico_window_open`, so port/ui never links the RHI), the Graphics page's Apply host (`UiGraphicsHost`, below), the Steam handler, the models
 handler, the Characters host (the model viewer's panel) (`port/ui/settings.h`
 (`ui_settings_set_*`)). A page whose host is missing hides its row.
+
+### Graphics > Apply
+
+`UiGraphicsHost` (`port/ui/settings.h`) is set by `port/platform/window_switch.c`
+(`ico_window_switch_install`): `running()` names the backend running as the config names it,
+`switchBegin(name, why)` asks for a switch (`UI_GFX_WHY_APPLY`, `_REVERT`, `_TIMEOUT`) and answers
+`UI_GFX_SWITCH_PENDING` (then `switchPoll()` is asked every frame and every vsync until it is not),
+`_DONE`, `_FAILED` (the name did not start, the backend that ran is back) or `_REFUSED`; `kept()` is
+Keep, which the window logs. The page's state is `s_gfx` (`port/ui/settings.c`): idle, applying,
+countdown, reverting.
+
+- Cross on Apply records the backend running and asks for the row's (`gfxApply`); while a switch is
+  under way the page takes no input (`gfxProc`).
+- Done: the countdown, `UI_GFX_KEEP_SECONDS` (10) times the popups' vsync rate
+  (`ui_popup_vsync_hz`), counted by `ui_settings_vsync` (`ui_host_vsync` calls it after
+  `ui_popup_vsync`); the cursor goes to Revert (`gfxRefresh`), so a second Cross meant for Apply
+  goes back. Keep and Revert share one note, `UI_STR_GRAPHICS_KEEP_ASK` with one `%d`, the
+  seconds left rounded up, written each refresh (`gfxNote`, outside `setNote`'s cache).
+- Keep: `s_dirtyConfig` (the row's value is in `video.backend` already, written on leaving), the
+  host's `kept()`.
+- Revert, Circle (`PAD_BACK`) or 0: `video.backend` back to the value the page found (`gfxEntry`:
+  taken at the first step or Apply after the page is entered), `switchBegin` with the backend that
+  ran.
+- Failed: a popup, `UI_STR_GRAPHICS_FAILED` with two `%s` (the backend that did not start, the
+  one kept, by their proper names); the row keeps the player's value. Refused: nothing.
+
+ctest `settings_extra` (`testGraphicsApply`).
 
 ## Strings and languages
 

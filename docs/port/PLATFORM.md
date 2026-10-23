@@ -29,6 +29,7 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/assert_host.c` | newlib's `__assert` as the game calls it |
 | `port/platform/window_host.c`, `window_host.h` | the SDL3 window, the renderer device, the real-time pacing, the stats lines (window build) |
 | `port/platform/window_video.c`, `window_video.h` | window mode requests and their readback |
+| `port/platform/window_switch.c`, `window_switch.h` | Options > Graphics > Apply: the renderer switched to another backend in the process, the Graphics page's host |
 | `port/platform/window_lifecycle.c`, `window_lifecycle.h` | the steps run when a mobile system moves the app |
 | `port/platform/pump_watch.c`, `pump_watch.h` | the event pump's recent window messages and SDL events, the controllers that came and went (name, GUID, SDL driver), SDL's own log ring, and the names of the messages (pure C, tested everywhere) |
 | `port/platform/window_pump_win.c`, `window_pump_win.h` | Windows: the window's messages recorded for the slow-pump lines, the display and the computer kept awake |
@@ -1280,6 +1281,64 @@ through the size event's path with `window: WxH pixels after the app came back (
 closed: [DISPLAY.md](DISPLAY.md#the-native-frame)) (`port/platform/window_host.c`
 (`resume_recheck`)). A picture that changes after leaving the app and coming back (issue 129) then
 shows in the log as a size that changed with it.
+
+## The renderer switched from the menu
+
+Options > Graphics > Apply switches the backend without ending the run ([UI.md](UI.md) has the
+page; the player's side is [OPTIONS.md](../OPTIONS.md#graphics)). The page asks through
+`UiGraphicsHost` (`port/platform/window_switch.c` (`hostBegin`)), which queues the name; the
+event pump runs it after `video_apply`, between two steps of the game and never inside a present,
+waiting up to 30 pumps for the game's frame to close (`rd_frame_open`; a frame still open is
+dropped with the renderer) (`ico_window_switch_pump`). The switch
+(`ico_window_switch_backend`):
+
+1. Refused, `-2`, nothing touched: a build with one renderer, a name it does not link, a movie
+   playing (`mpegPlay`), photo mode, the model viewer, the touch layout editor.
+2. The texture ids kept outside the renderer forgotten: the font pages (re-uploaded from their CPU
+   atlases, `ui_font_forget_textures`) and the GS shim's placeholders (`gif_HostForgetTextures`).
+3. `ico_window_reopen` (window_host.c): the window's mode, size and place noted (Windowed: its
+   size and position; otherwise the start's 960 x 720), `rd_suspend` (the renderer shut down keeping
+   the scene size, the GS state between frames, the frame numbers, the mirror mode and the VU
+   lists with their resident programs; the texture cache's entries forgotten; a texture or mesh
+   slot first used after `rd_init` takes a generation above every one given out before,
+   `port/render/rd_core.c` (`texAlloc`) and `rd_mesh.c` (`meshAlloc`), so an id kept from the
+   renderer before names nothing and is made again on its next draw),
+   the display clock stopped, the window destroyed, `rhi_create_backend`, a new window through
+   `window_create` and `window_attach` (the start's own: the backend's flags and OpenGL's pixel
+   format, the exclusive request, the message hook, the backend's pipeline cache file),
+   `rd_resume` with `video_settings`, then what the start does after `rd_init`: the crash
+   handler's cache, robust and retry state (`ico_diag_set_startup_retry` with the new backend as
+   chosen), `rd_blend_selftest`, `rd_vuprepass_selftest`, the pipeline set behind the progress
+   screen titled "Changing the graphics" unless the run makes pipelines as frames need them
+   (`rd_pipelines_lazy_on`), the cache saved, `rd_fog_selftest`; then the pointer's relative
+   mode, the touch zones, the display clock started again, `video_apply(1)` and
+   `window_size_recheck`. The time goes into `pausePendingNs`, a pause of the host as a
+   swapchain rebuild's is.
+4. The new backend did not start (no window, or `rd_resume` failed): `ico_window_reopen` on the
+   backend that ran, `-1`. That failing too ends the run, `-3` (the pump returns 0).
+
+The audio is not touched. The game's state is the CPU's: its textures are decoded again from its
+memory on the next cache miss, its meshes built again from the packets, and the glow and the
+motion blur trail start again as after a resume. Nothing is written by the window: the page
+writes `[video] backend` on Keep.
+
+Log lines (stderr, one per event):
+
+- `window: Graphics API <new> applied from the menu (was <old>), <s> s`
+- `window: Graphics API <new> did not start (the lines above say why); back on <old>`
+- `window: Graphics API <old> restored (reverted|not kept in 10 s), <s> s`
+- `window: Graphics API <name> kept`
+- `window: Graphics API <name> not switched to: <reason>`
+- `window: Graphics API <old> did not start again either; the game ends`
+- after each window: `window: video driver ...` (`window_attach`) and
+  `window: <w>x<h> pixels, <backend> on <adapter>, present mode <mode>`
+- the page's own: `settings: Graphics API back to <value|automatic> (reverted|not kept in 10 s)`
+
+Not verified: no switch has run anywhere (the game is not run in the container); the swap was
+syntax-checked only. Open points for the first runs: the window's place on a desktop that
+places new windows itself (Wayland ignores `SDL_SetWindowPosition`), the exclusive fullscreen
+mode on a new window, and a frame the game keeps across ticks (`fbKeep` screens) that has no
+picture until the game draws a new one.
 
 ## Android graphics driver packages
 

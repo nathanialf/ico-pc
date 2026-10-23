@@ -230,12 +230,28 @@ Changes you make here show in photo mode at once.
 
 This page is in the Options menu, under Effects. It only shows when your copy of the game can
 draw in more than one way; if yours can only draw one way, there is nothing to pick and the page
-is not shown. It has one row.
+is not shown.
 
-- **Graphics API** picks what the game draws with, from the next start (the row says so under
-  it): Automatic, Vulkan, OpenGL, Direct3D 12 or Direct3D 11, the ones your download has. What
-  each one is, what Automatic does and how to undo a choice that does not start:
+- **Graphics API** picks what the game draws with: Automatic, Vulkan, OpenGL, Direct3D 12 or
+  Direct3D 11, the ones your download has. Without Apply the choice is used from the next
+  start. What each one is, what Automatic does and how to undo a choice that does not start:
   [Choosing the renderer](#choosing-the-renderer).
+- **Apply** shows under it when the choice is not what the game draws with now (Automatic
+  counts as Vulkan). It switches at once, without leaving the game or losing your place. The
+  picture stops for a moment, and longer the first time a choice is used while the graphics are
+  prepared. The glow and the motion blur trail start again, as after the game comes back from
+  the background.
+- After Apply the page asks **Keep these settings? Reverting in 10 s**, counting down, with
+  **Keep** and **Revert**. Keep saves the choice. Revert, the Back button, or waiting until the
+  count reaches 0 switch back to what the game drew with before and put the row back as it was;
+  nothing is saved. If you cannot see the picture after Apply, wait 10 seconds.
+- If the choice does not start, the game goes back at once to what it drew with and a message
+  says so. The row keeps your choice, so you can try another one.
+
+Apply is not offered while a movie plays, in photo mode, in the model viewer or while you
+change the touch controls' layout. Direct3D 11 has not been tried on any computer yet (see
+[Choosing the renderer](#choosing-the-renderer)); trying it with Apply is the safe way, since the
+game comes back by itself if it does not work.
 
 ## Graphics driver
 
@@ -638,6 +654,8 @@ On any computer, the same works as `backend = "opengl"` under `[video]` in `conf
 
 Start the game; a line near the top of `logs/ico-pc.log` that starts with `window:` then names
 it (`OpenGL`, `D3D12` or `D3D11` instead of `Vulkan`), and a line `window: Graphics API ...`
-says whether you chose it or the game did. If a choice does not start, pick Automatic in the
-row, or delete the `backend` line, to go back to Vulkan. If the name you wrote is not in your
+says whether you chose it or the game did. A switch with Apply adds a line
+`window: Graphics API ... applied from the menu`, and one that says whether you kept it. If a
+choice does not start, pick Automatic in the row, or delete the `backend` line, to go back to
+Vulkan. If the name you wrote is not in your
 download, the game says so in the same file and uses Vulkan.

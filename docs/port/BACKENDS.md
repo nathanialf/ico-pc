@@ -128,6 +128,12 @@ The OpenGL window gets a double-buffered pixel format without depth, stencil or 
 pick the pixel format with the window; `gl_device.c` sets the context attributes again (with its
 debug flag) and refuses a window made without `SDL_WINDOW_OPENGL`. Android and iOS link Vulkan only.
 
+4. During the run, Options > Graphics > Apply switches to the row's backend in the process: the
+   renderer is suspended, the window made again with the new backend's flags (`window_create`,
+   `window_attach`, the start's own) and the renderer resumed; a backend that does not start
+   brings back the one that ran. A switch is not a fallback: nothing else is tried. The steps,
+   refusals and log lines are in [PLATFORM.md](PLATFORM.md#the-renderer-switched-from-the-menu).
+
 ## Tests
 
 | test | Vulkan | OpenGL | Direct3D |
@@ -150,6 +156,7 @@ The OpenGL runs of the renderer's suite are the `_gl` tests ([TESTING.md](TESTIN
   drivers the top-left rule the renderer's sprites need ([RHI.md](RHI.md#opengl), "Clip space"),
   and the common RHI cells' fill-rule cell is the check to run on another driver.
 - The OpenGL fallback in the window: not started in the container (the game is not run there).
+- The switch from the menu (Apply): no switch between any two backends has run.
 - An OpenGL driver below 4.5 (no MSAA values) has not been met.
 - Direct3D 11: nothing has run on Windows; the profile text, the pre-pass line and the robust
   words are from the limits `d3d11_device.c` reports.
