@@ -45,7 +45,7 @@ and fills `tools/toolchain/` (gitignored, about 1.6 GB):
 | `mingw-gcc/` | mingw-w64 gcc 14 and binutils for x86-64 Windows (x86-64 hosts only) | Debian 13 `gcc-mingw-w64-*-win32` 14.2.0-19+27+b1, `binutils-mingw-w64-*` 2.44-3+12+b1, `mingw-w64-*-dev` 12.0.0-5, SHA-256 pinned |
 | `cmake/` | CMake 4.4.4 (`cmake`, `ctest`) | [Kitware's release](https://github.com/Kitware/CMake/releases/tag/v4.4.4) `cmake-4.4.4-linux-x86_64.tar.gz` (`-linux-aarch64` on an arm64 host), SHA-256 pinned |
 | `ccache/` | ccache 4.11.3, the compiler launcher every preset names (`tools/toolchain/ccache/bin/ccache`) | [ccache's release](https://github.com/ccache/ccache/releases/tag/v4.11.3) `ccache-4.11.3-linux-x86_64.tar.xz`, SHA-256 pinned (no arm64 build exists: that host builds without it; `SKIP_CCACHE=1` skips it elsewhere) |
-| `deps/` | SDL3, volk, the Vulkan headers, the validation layer, DXC, libmpeg2, libchdr and the AppImage tools (`deps/appimage/<x86_64\|aarch64>/`: appimagetool unpacked, and the AppImage runtime) | `tools/fetch_deps.sh`, which `fetch_toolchain.sh` runs last ([`THIRD_PARTY.md`](THIRD_PARTY.md)) |
+| `deps/` | SDL3, volk, the Vulkan headers, the validation layer, DXC, SPIRV-Cross, libmpeg2, libchdr and the AppImage tools (`deps/appimage/<x86_64\|aarch64>/`: appimagetool unpacked, and the AppImage runtime) | `tools/fetch_deps.sh`, which `fetch_toolchain.sh` runs last ([`THIRD_PARTY.md`](THIRD_PARTY.md)) |
 
 The pins the fetch scripts share (the SDL3 version and its SHA-256,
 `DEB_SNAPSHOT`, and the `fetch_deb` helper that downloads a Debian package
@@ -314,6 +314,7 @@ and macOS).
 | `ICO_RHI_D3D12` | `ON` for 64-bit Windows | builds the Direct3D 12 renderer backend next to the Vulkan one |
 | `ICO_RHI_MOLTENVK` | `ON` on Apple | links the Vulkan backend to MoltenVK |
 | `ICO_SHADERS_DXIL` | `ON` | also compiles the shaders to DXIL for the Direct3D 12 backend; the arm64 and Apple presets turn it off |
+| `ICO_SHADERS_GLSL` | `ON` with `ICO_RHI_OPENGL` when `tools/fetch_deps.sh` fetched SPIRV-Cross, else `OFF` | also translates the shaders to GLSL 4.30 with SPIRV-Cross for the OpenGL backend (`ICO_SPIRV_CROSS` names another executable; `SKIP_SPIRV_CROSS=1` skips the fetch) |
 | `ICO_VERSION_LABEL` | empty | with `ICO_LINK_EXE`: the package label (`vX.Y.Z` or `vX.Y.Z-rcN`). Its numbers go into the Windows version information and the Apple bundles' Info.plist; the label itself, written to `generated/ico_version.h`, is shown in the log header and on the Settings menu's Main page, and is empty (nothing shown) when it does not parse as a version (`CMakeLists.txt`, `ICO_VERSION_LABEL_C`). The package scripts and `android/app/build.gradle` pass it; a build without it has an all-zero version |
 | `ICO_RC_TOOLS` | `OFF` | the release candidates' own tooling, for rc packages alone ([Release candidate tools](#release-candidate-tools)); `ON` defines `ICO_RC_TOOLS=1` for every source, and a non-empty `ICO_VERSION_LABEL` that does not end in `-rcN` is refused |
 | `ICO_BASE_ELF` | `baserom/pal/baseelf.elf` | the base ELF the data loader's reference tests read; without it they are not built |

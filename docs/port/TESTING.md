@@ -762,6 +762,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the counters (`rhi_d3d11_shader_plan`). The compile itself runs only on Windows; the
   `shaders_d3d11_check` build target is the build hosts' check of the D3D11 preprocessing
   ([SHADERS.md](SHADERS.md#direct3d-11-run-time-compile)).
+- `rhi_gl_glsl_test.c`: the OpenGL backend's GLSL inflate on the CPU (`port/rhi/gl/gl_glsl.c`, miniz):
+  a deflated text round-trips NUL-terminated; a wrong text length, a corrupt or truncated stream and
+  no stream give none (`rhi_gl_glsl`).
 - `rhi_driver_version_test.c`: the driver version text of the adapter line
   (`port/rhi/rhi_driver_version.c`) for each vendor's packing, the Qualcomm and MoltenVK rules and
   the colour bytes a pixel of each Apple GPU family (`rhi_metal_color_bytes`)

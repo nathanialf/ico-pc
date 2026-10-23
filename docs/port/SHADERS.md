@@ -583,15 +583,68 @@ D3D11 preprocessing compiles on the build hosts. Only Windows runs FXC itself, s
 error (shader model 5.0 limits, FXC's own warnings) shows first in a Windows player's log
 (`cmake/IcoShaders.cmake`).
 
+## GLSL for the OpenGL backend
+
+The OpenGL backend takes GLSL 4.30 text, translated from the SPIR-V the build already has, not
+written by hand: the HLSL stays the only source. `ico_add_shader` adds one more custom command per
+entry under `ICO_SHADERS_GLSL` (on by default when `ICO_RHI_OPENGL` is on and
+`tools/toolchain/deps/spirv-cross/bin/spirv-cross` exists; `ICO_SPIRV_CROSS` names another
+executable): `tools/spirv_to_glsl.py` runs
+`spirv-cross --version 430 --no-es --combined-samplers-inherit-bindings <name>.spv` and writes
+`<name>.glsl`. SPIRV-Cross is a build tool like DXC (`tools/fetch_deps.sh` section 9,
+`SKIP_SPIRV_CROSS=1`; [THIRD_PARTY.md](../THIRD_PARTY.md)); nothing of it is linked or shipped.
+`embed_shaders.py` deflates each file (zlib) into the table's `glsl` column, with the text length in
+`glsl_text_len`; the backend inflates it with `rhi_gl_inflate_glsl` (`port/rhi/gl/gl_glsl.c`, miniz)
+when it creates the shader. The deflated GLSL of the 127 translatable modules is about 1.2 MB.
+
+**The binding map** (observed on the compiled modules; the SPIR-V numbers carry over unchanged):
+
+| HLSL | GLSL |
+| --- | --- |
+| `b#` constant buffer | `layout(binding = #, std140) uniform`, uniform buffer binding # |
+| `t#` structured buffer | `layout(binding = 16 + #, std430) readonly buffer`, shader storage binding 16 + # |
+| `t#` texture with `s#` sampler | `layout(binding = 16 + #) uniform sampler2D`: SPIRV-Cross's combined sampler inherits the texture's binding, so the texture unit is 16 + # whatever the sampler (the `s#` slot has no GLSL object) |
+| `t#` texture read only with `Load` | the same combined sampler, built with a dummy sampler, at unit 16 + # |
+| `u#` storage image | `layout(binding = 48 + #, rgba8) uniform image2D`, image unit 48 + # |
+| dual-source output | `layout(location = 0, index = 0)` and `layout(location = 0, index = 1)` |
+
+Two combined samplers of one texture (one with the dummy sampler, one with `g_sampler`) get the
+same binding: one unit, bound once. The vertex inputs keep their SPIR-V `location`s.
+
+**What GLSL cannot express.** An input attachment (SPIR-V `OpTypeImage` with Dim SubpassData) has
+no GLSL, so the script writes an empty file for such a module and `embed_shaders.py` reads an empty
+file as none (glsl NULL, glsl_len 0). That is 17 entries: the `_dstatt` builds of the sprite, texa,
+aa1, stq, font, font_sheet, fog_lut, fog_lut_buffer, vu and vu_texa pixel shaders (and the planes
+variants), `fog_lut_local_ps`, `fog_lut_local_ps_nodual`, `date_stencil_ps` and `fx_local_ps`. The
+`_dstrov` builds (a storage image under fragment-shader interlock) translate.
+A backend without fragment-shader interlock has no blend path from these modules (see the
+extensions below).
+
+**The extensions** the GLSL asks for (`#extension` lines): `GL_EXT_control_flow_attributes` behind an
+`#if defined` guard (optional) in 38 modules; in the 13 `_dstrov` modules
+`GL_ARB_fragment_shader_interlock` or `GL_INTEL_fragment_shader_ordering` behind a guard that ends in
+`#error` (one of the two is required: Mesa's llvmpipe has neither); `GL_ARB_texture_query_samples`
+(required) in `depth_resolve_ps`. No module needs `GL_ARB_enhanced_layouts` (no `layout(offset`).
+
+**The gates** (`tools/spirv_to_glsl.py`): the text starts with `#version 430`; every NoContraction
+decoration of the SPIR-V surfaces as `precise` in the GLSL (a module with the decoration and no
+`precise` fails the build; the counts differ by a few where SPIRV-Cross folds a decoration into one
+declaration); `embed_shaders.py` checks a non-empty file starts with `#version`;
+`shaders_table` requires that with GLSL on exactly the entries of `expectedNoGlsl` have none.
+`spirv_to_glsl.py --spirv-cross <exe> --list --in <spv>...` prints name, bytes, extensions and the
+two counts per module. `port/rhi/test/shaders/gen_shaders.sh` writes the RHI test shaders' GLSL
+the same way into `rhi_test_glsl.h`.
+
 ## Tests
 
 | test | checks |
 | --- | --- |
-| `shaders_table` (`port/shaders/test/shaders_table_test.c`) | every embedded entry: SPIR-V with its magic, DXIL a signed DXBC container (none with `ICO_SHADERS_DXIL=OFF`), a known stage and entry, unique names, the expected names present |
+| `shaders_table` (`port/shaders/test/shaders_table_test.c`) | every embedded entry: SPIR-V with its magic, DXIL a signed DXBC container (none with `ICO_SHADERS_DXIL=OFF`), a known stage and entry, unique names, the expected names present, and with GLSL on a zlib stream for every entry but the 17 of `expectedNoGlsl` |
 | `gs_math` (`gs_math_test.c`) | `gs_math.hlsli` as C against `port/test/gs_blend_test.c`'s formulas and the GS rules for TEXA, the alpha test and the Z mapping: exhaustive where the domain is small; the shared constants pinned; the [integer forms](#integer-forms) against the operators they replace |
 | `shaders_pixel` (`shaders_pixel_test.c`) | `sprite.hlsl`, `blit.hlsl` and `blend_int.hlsl` through the Vulkan RHI, texel by texel against `gs_math.hlsli` as C: untextured, modulate, the alpha test, dual-source lerps, additive with `DF_PREMUL`, PABE, FBA, tinted blits, three integer blends; `shaders_pixel_nodual` (`--nodual`, `ICO_VK_FAKE_NO_DUAL=1`) the two-pass fallback; `shaders_pixel_mali` under `ICO_VK_FAKE_LIMITS=mali` |
 | `spirv_check` (`tools/check_spirv.py --sizes`) | every compiled SPIR-V module under the build's `shaders/`: a vertex shader without a vector of booleans, `OpAny`/`OpAll` or a boolean select, its opcodes inside the envelope's set (`OpLoopMerge`, `OpDot`, `OpLogicalNotEqual`, `OpUndef` named), every module within its size budget (a VU vertex shader's plain variant, a pre-pass entry or record stage `_pre_vs` and a main shader `_main_vs` within the plain one), every mesh program's entry with its `vu_X_plain_vs` (`PROGRAM_ENTRIES`), the largest module of each budget class printed last, no array-typed value (OpLoad, OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi, OpSelect, OpCopyObject, OpCopyLogical of an array type) and no local array in a vertex shader ([The envelope](#the-envelope)); the sizes and the shape census printed; the module's binary form decoded in Python, no SPIR-V tool needed |
 | `shaders_d3d11_check` (a build target, `cmake/IcoShaders.cmake`) | every entry compiled by DXC under `ICO_D3D11=1` and HLSL 2018 ([Direct3D 11: run-time compile](#direct3d-11-run-time-compile)) |
+| `rhi_gl_glsl` (`port/rhi/test/rhi_gl_glsl_test.c`) | the OpenGL backend's GLSL inflate: a miniz-deflated text round-trips NUL-terminated, a wrong text length, a corrupt, truncated or missing stream give none |
 | `rhi_d3d11_shader_plan` (`port/rhi/test/rhi_d3d11_shader_plan_test.c`) | the Direct3D 11 route's portable part: macros, include lookup, the flat-register rule over the game's sources and the RHI test shader, the cache key over every table entry, the cache file |
 | `vu1` (`vu1_test.c`) | the VU program shaders against `port/render/vu1_ref/`: hand traces through the `.vsm` code on the CPU, then on Vulkan every vertex shader's probe output, strips drawn through the shipped entries, and the region rule's clipping with the card verdicts handed over as the renderer does; every case whose draw has neither `VU_F_EXTENDED` nor `VU_F_TICKS` drawn again through the plain variants, its probe and pictures byte for byte the extended ones' ([The variants](#the-variants)); the CPU's card test against the reference on every vertex and strip; every case through the record (a mesh case's vertices through its pre-pass entry and its triangles through the record stages, the tick stage under the tick cameras; a particle case's sprites through `vu_particle_pre_vs`), its probe and pictures through `vu_main_vs` or `vu_particle_main_vs` and `vu_ps`, byte for byte the program entry's with `vu_legacy_ps`, the mesh, particle and tick-camera cases counted (none may be zero); the plain variants for the mesh programs' entries; `vu1_mali` under the Mali limits |
 | `port/test/gs_blend_test.c` | not a ctest: a CPU program (`cc -O2`) printing how far a float blender with round-to-nearest drifts from the GS integer blender under feedback |
