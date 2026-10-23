@@ -15,7 +15,7 @@
  * attachments' texture names (gl_fbo_get; a texture's deferred delete drops
  * the framebuffers holding it, gl_fbo_forget_texture), clear with
  * glClearBuffer* with the scissor test off (a clear covers the attachment,
- * as Vulkan's load op) and the write masks open, and invalidate the
+ * as D3D12's clear) and the write masks open, and invalidate the
  * attachments loaded DONT_CARE.  Barriers: OpenGL orders rendering, copies
  * and texture reads itself; only a texture leaving or entering
  * RHI_STATE_STORAGE (image loads and stores) takes a glMemoryBarrier. */

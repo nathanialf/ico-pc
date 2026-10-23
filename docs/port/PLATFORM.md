@@ -1311,7 +1311,7 @@ start-up box (`ico_gpu_driver_android_choose`) falls back to the first zip there
 and `NO_PICKER_APP`. Log lines, all `gpu driver:` on stderr: `Add a driver: opening the file
 picker (pick N)`, `Add from the drivers folder: <name> (pick N)`, `the file picker answered
 (pick N): content://<authority>/...` or `closed without a file`, `the file picker failed:
-<SDL error>`, `a late answer for pick N (now M) ignored`, `the file picker could not open: <why>`, `Add a
+<why>`, `a late answer for pick N (now M) ignored`, `the file picker could not open: <why>`, `Add a
 driver ended: ADDED|NOT A PACKAGE|NO SPACE|NO PICKER|NO PICKER APP|UNREADABLE|CANCELLED`, and the
 install thread's own.
 

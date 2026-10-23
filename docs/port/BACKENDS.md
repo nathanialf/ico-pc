@@ -144,7 +144,6 @@ The OpenGL runs of the renderer's suite are the `_gl` tests ([TESTING.md](TESTIN
   shader interlock) has run the backend tests. The fog buffer path and the probes' depth copies
   on OpenGL have not been run by the renderer's tests yet.
 - The OpenGL fallback in the window: not started in the container (the game is not run there).
-  On Windows the fallback goes to OpenGL, not Direct3D 12, when Vulkan does not start.
 - An OpenGL driver below 4.5 (no MSAA values) has not been met.
 - Direct3D 11: nothing has run on Windows; the profile text, the pre-pass line and the robust
   words are from the limits `d3d11_device.c` reports.

@@ -748,7 +748,10 @@ become a texture of their own (created with them as its contents) copied in on t
 `rhi_cmd_resolve_color` is `ResolveSubresource`; `rhi_cmd_copy_texture_to_buffer` goes into a
 readback buffer through its staging texture and is skipped otherwise
 (`rhi_d3d11: rhi_cmd_copy_texture_to_buffer: only into a readback buffer on Direct3D 11; skipped
-(logged once)`: the vertex pre-pass, its one other caller, is off).
+(logged once)`: its other callers are the vertex pre-pass (`rd_replay_vu.c`), off on Direct3D 11,
+the fog paths (`rd_fog_path.c`: the buffer path's depth copy, the fog probe and the edge probe),
+all gated off on Direct3D 11, and `rd_crack_fill.c`'s count copy, which goes into a readback
+buffer and so is served).
 
 **Swapchain** (`d3d11_swapchain.c`). As D3D12's (three BGRA8 buffers, the frame latency waitable
 object, tearing without vsync, the frame statistics, the resize at a present after the window's
@@ -922,7 +925,7 @@ incomplete one logs `rhi_gl: render pass: framebuffer incomplete (status 0x...; 
 depth|no depth, WxH); the pass draws nothing (N so far)`. `RHI_LOAD_CLEAR` is
 `glClearBufferfv` (`glClearBufferuiv` with the integer per channel for integer targets,
 `glClearBufferfi` for depth and stencil together) with the scissor test off and the write masks
-opened first, since OpenGL's clears honour both (Vulkan's load op clears the whole attachment);
+opened first, since OpenGL's clears honour both (as D3D12's clear, which covers the whole attachment);
 `RHI_LOAD_DONT_CARE` is `glInvalidateFramebuffer`; the store ops are not acted on (OpenGL keeps
 both aspects, which `RHI_STORE_DONT_CARE` allows). A read-only depth target is not cleared
 (`rhi_gl: render pass: a read-only depth target cannot be cleared; clear ignored`). The pass sets
