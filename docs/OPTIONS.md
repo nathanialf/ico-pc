@@ -241,7 +241,14 @@ graphics driver instead of the one that came with the phone.
   game tells you, goes back to **Built-in**, and the note at the bottom of
   this page says so.
 - **Add a driver** opens the file picker so you can choose a driver's zip
-  file.
+  file. The game says when the driver is in, or why it could not be: the
+  file is not a driver package, there is not enough space, the file picker
+  could not be opened, no app on the phone can choose a file, or the chosen
+  file could not be read.
+- **Add from the drivers folder** adds a zip you copied into the `drivers`
+  folder in the game's folder, for when the file picker does not work. It
+  only shows while the folder holds a zip; Left and Right choose between
+  zips, and the game deletes the zip once the driver is in.
 - **Remove this driver** deletes the driver you have chosen. It only shows
   while one of your own drivers is chosen.
 

@@ -127,6 +127,10 @@ In that folder:
 - `memcard` holds your saves: the European disc's in `BESCES-50760ico`,
   the Japanese disc's in `BISCPS-11003ico`, the Korean disc's in
   `BISCPS-56001ico`.
+- `drivers` is where a graphics driver zip goes when the file picker will
+  not open ([Using a different graphics
+  driver](#using-a-different-graphics-driver)). The game makes the folder
+  when it starts.
 - `logs` holds the log file, `ico-pc.log`, which helps with problem
   reports. When the graphics driver stops responding, the game also saves
   a copy of the picture it was drawing there, a file whose name starts
@@ -356,6 +360,15 @@ it. If you do not have a problem, you can skip this.
 2. In the game, open **Options > Graphics driver** and choose **Add a
    driver**. Pick the zip file you downloaded. The game says when the
    driver has been added, or that the file is not a driver package.
+   If the file picker does not open, or the game says that no app on the
+   phone can choose a file, use the game's `drivers` folder instead:
+   with the USB cable, copy the zip into the `drivers` folder in the game's
+   folder ([where it is](#where-your-files-are)), open **Options > Graphics
+   driver** again and choose **Add from the drivers folder**. That row only
+   shows while there is a zip in the folder; Left and Right pick between
+   zips if there are several. The game deletes the zip once the driver has
+   been added. If it says the chosen file could not be read, copy the zip
+   onto the phone first and choose it again.
 3. In the same page, set the **Driver** row to the driver you added.
 4. Close the game completely and start it again. The new driver is used from
    that start.
@@ -382,7 +395,8 @@ these buttons:
 - **Quit**: closes the game.
 
 If the file is not a driver package, the game says so and the box comes
-back, so you can try another one. If the driver does not start at the next
+back, so you can try another one. If the picker cannot open and there is a
+driver zip in the `drivers` folder, the game adds the first one from there. If the driver does not start at the next
 start either, the game says so and shows the box again. Once the game runs,
 the driver stays chosen, and you can change it later in **Options >
 Graphics driver**.

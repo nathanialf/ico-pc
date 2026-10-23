@@ -1281,6 +1281,27 @@ replaced by the phone's own driver with a message box
 (`port/platform/android/gpu_driver_android.h` (`ico_gpu_driver_android_start`)). The package
 handling is pure C and tested on every platform (`port/platform/test/gpu_driver_test.c`).
 
+Add a driver ends in one of seven answers (`UI_GPU_INSTALL_*`, `port/ui/settings.h`), each its own
+popup: `ADDED`, `BAD` (the zip was read and is not a package), `NOSPACE`, `CANCELLED` (silent),
+`NO_PICKER` (`SDL_ShowOpenFileDialog` answered with no list, or there is no drivers root; the SDL
+error stays in the log line), `NO_PICKER_APP` (reserved for the later Java picker: no activity can
+handle the intent) and `UNREADABLE` (the file would not open, the copy failed with space left,
+or the thread did not start). `host_install_begin` answers through the poll rather than returning
+-1 when it cannot ask (it returns -1 only while an install is pending, which the page ignores).
+The drivers folder route needs no picker: `<files>/drivers/` (`IcoAndroidPaths.drivers`) holds
+zips the player copied by USB; `ico_gpu_driver_list_zips` lists the `*.zip` files (any case, no
+`incoming.*`, depth 0), the Graphics driver page shows the row `UI_OPT_GPU_ADD_FILE` while
+`fileCount()` is above 0, and `installFileBegin(i)` runs the picker's own copy thread on the
+zip's path (`SDL_IOFromFile` takes a plain path) and deletes the zip after `ADDED`. `<files>`
+is the internal folder when shared storage is not writable, so the folder can be the install
+root itself; the listing skips everything but top-level zips, so that is harmless. The
+start-up box (`ico_gpu_driver_android_choose`) falls back to the first zip there on `NO_PICKER`
+and `NO_PICKER_APP`. Log lines, all `gpu driver:` on stderr: `Add a driver: opening the file
+picker (pick N)`, `Add from the drivers folder: <name> (pick N)`, `the file picker answered
+(pick N): content://<authority>/...` or `closed without a file`, `the file picker failed:
+<SDL error>`, `a late answer for pick N (now M) ignored`, `Add a driver ended: ADDED|NOT A
+PACKAGE|NO SPACE|NO PICKER|NO PICKER APP|UNREADABLE|CANCELLED`, and the install thread's own.
+
 ## Steam shortcut
 
 Settings > Extras > Add to Steam writes a non-Steam shortcut for the program into the most recent

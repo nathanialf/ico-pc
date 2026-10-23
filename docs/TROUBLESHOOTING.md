@@ -397,6 +397,21 @@ the next start either, the game says so and the box comes back.
 later in Options > Graphics driver. See
 [Using a different graphics driver](ANDROID.md#using-a-different-graphics-driver).
 
+**"The file picker could not be opened."** (on a phone, after **Add a
+driver**) The phone would not open its file picker. Copy the driver's zip
+file into the `drivers` folder in the game's folder with the USB cable, then
+choose **Add from the drivers folder** in Options > Graphics driver (see
+[Using a different graphics driver](ANDROID.md#using-a-different-graphics-driver)).
+If you report it, send `ico-pc.log` from right after you pressed **Add a
+driver**: the line that starts `gpu driver: the file picker` says what the
+phone answered.
+
+**"No app on this device can choose a file."** (on a phone) The phone has no
+app that can offer a file to pick. Use the same way: copy the zip into the
+`drivers` folder and choose **Add from the drivers folder**. The
+`gpu driver: the file picker` line in `ico-pc.log` says what the phone
+answered.
+
 **"No disc image was chosen."** (on a phone) You left the file picker
 without choosing a file. Start the game again and choose your ICO disc
 image.
