@@ -145,6 +145,10 @@ The OpenGL runs of the renderer's suite are the `_gl` tests ([TESTING.md](TESTIN
 - Every OpenGL path above on a real driver: only llvmpipe (Mesa, OpenGL 4.5 core, no fragment
   shader interlock) has run the backend tests. The fog buffer path and the probes' depth copies
   on OpenGL have not been run by the renderer's tests yet.
+- The fill rule on an OpenGL driver other than Mesa's: OpenGL leaves the rule for an edge through
+  pixel centres to the driver; the lower-left clip origin with the vertex y negated gives Mesa's
+  drivers the top-left rule the renderer's sprites need ([RHI.md](RHI.md#opengl), "Clip space"),
+  and the common RHI cells' fill-rule cell is the check to run on another driver.
 - The OpenGL fallback in the window: not started in the container (the game is not run there).
 - An OpenGL driver below 4.5 (no MSAA values) has not been met.
 - Direct3D 11: nothing has run on Windows; the profile text, the pre-pass line and the robust
