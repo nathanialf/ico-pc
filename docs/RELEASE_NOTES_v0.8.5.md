@@ -8,6 +8,6 @@
 
 ## Fixed
 
-- The ripples on wet floors no longer grow little spikes at their corners. Their edges are now drawn the way the PlayStation 2 draws them.
+- The ripples on wet floors no longer grow little spikes at their corners. Their corners now end where the PlayStation 2 ends them.
 - A bright line down the left edge of the screen on wide screens, phones and computers alike, seen in the room with the hanging chain before you meet Yorda. The two outermost columns of the picture, which the PlayStation 2 never showed, now repeat the picture next to them before the glow is made from it, so the glow no longer spreads from them. If the line is still there, send the game's report file and a picture made with the new row above.
-- Hairline gaps between pieces of walls, floors and figures at resolutions above the original, where the mist showed through as bright dots, are filled in from the picture next to them, on computers for now (not yet on phones, tablets, Macs and other machines with a phone-style graphics chip, until we have measured what it costs there). This catches the gaps we could find; if dots remain on your screen, a picture made with the new row above (or F12 on a computer) tells us where.
+- Hairline gaps between pieces of walls, floors and figures at resolutions above the original, where the mist showed through as bright dots, are filled in from the picture next to them (not with MSAA anti-aliasing), on computers for now (not yet on phones, tablets, Macs and other machines with a phone-style graphics chip, until we have measured what it costs there). This catches the gaps we could find; if dots remain on your screen, a picture made with the new row above (or F12 on a computer) tells us where.
