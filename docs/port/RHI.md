@@ -39,6 +39,8 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | `port/rhi/gl/gl_device.c` | the context, the version and extension checks, the debug output, limits, frames, timestamps, the stats entry points |
 | `port/rhi/gl/gl_resource.c` | buffers, textures, samplers, separable programs, bind group layouts and bind groups, deferred deletes, readback |
 | `port/rhi/gl/gl_swapchain.c` | the backbuffer texture, its blit to the window and the swap |
+| `port/rhi/gl/gl_pipeline.c` | pipelines: program pipeline objects, vertex array objects, the fixed-function state; the enum maps |
+| `port/rhi/gl/gl_cmd.c` | command lists, submission, barriers, render passes and the framebuffer cache, draws, copies, resolves |
 | `port/rhi/gl/gl_glsl.h`, `gl_glsl.c` | the shader table's deflated GLSL inflated ([SHADERS.md](SHADERS.md)) |
 | `port/rhi/d3d11/d3d11_shader.h`, `d3d11_shader.c` | the Direct3D 11 backend's run-time HLSL compile through `d3dcompiler_47.dll` and its DXBC cache file ([SHADERS.md](SHADERS.md#direct3d-11-run-time-compile)) |
 | `port/rhi/d3d11/d3d11_internal.h`, `rhi_d3d11.h` | the Direct3D 11 backend's shared state and the contract between its files; its test extras |
@@ -301,7 +303,8 @@ than one colour target, is dropped and the description's value is static). The d
 are the draw's until a set: `rhi_cmd_set_depth_state(cl, test, write, cmp)` and
 `rhi_cmd_set_blend_state(cl, &blend)` after the bind give the next draws their own (a set on a
 pipeline without that group does nothing). D3D12 has neither: its limits say false and the sets are
-no-ops (`port/rhi/d3d12/d3d12_cmd.c`).
+no-ops (`port/rhi/d3d12/d3d12_cmd.c`). On OpenGL both groups are plain state, so both limits are
+true and `dynamicSets` counts what Vulkan would record ([OpenGL](#opengl)).
 
 Vulkan (`port/rhi/vk/vk_device.c` (`vkr_create_device`), `vk_pipeline.c` (`vkr_pipe_prepare`),
 `vk_cmd.c` (`vkr_flush_dynamic`)): depth is Vulkan 1.3's core states, or on a 1.2 device
@@ -793,7 +796,7 @@ whether the device runs on WARP, and the feature level.
 
 OpenGL 4.3 core with `ARB_clip_control` and `ARB_buffer_storage` (both core in 4.5), on Windows and
 Linux. The backend links no GL library: SDL3 makes the context and `SDL_GL_GetProcAddress` gives
-every entry point (`port/rhi/gl/gl_loader.h` `GL_FUNCS`: 135, the 4.3 core ones required, clip
+every entry point (`port/rhi/gl/gl_loader.h` `GL_FUNCS`: 139, the 4.3 core ones required, clip
 control, buffer storage and texture barrier optional), called as `glf.Name` (not `gl`, the
 backend's `RHI_BACKEND_PREFIX`).
 
@@ -812,7 +815,7 @@ from a 4.3 driver with `rhi_gl: the driver has no glName (OpenGL 4.3 core)`. The
 `rhi_gl: <renderer> (OpenGL M.m core|compatibility, <GL_VERSION>; GLSL <version>)[, headless];
 index values up to N`, followed by `rhi_gl: limits: uniform align N, dual-source yes|no, MSAA
 1|2|4|8, interlock yes|no (image units N), texture barrier yes|no, BC yes|no, anisotropy N, max
-texture N, entry points 135 (N optional missing), debug output on|off`.
+texture N, entry points 139 (N optional missing), debug output on|off`.
 
 **Clip space** (`gl_defaults`). `glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE)` gives OpenGL the
 renderer's D3D-style conventions: depth 0 to 1 (reversed-Z GEQUAL as on the other backends), row 0
@@ -864,6 +867,88 @@ are `glQueryCounter(GL_TIMESTAMP)` on a query object per index and slot, made at
 read once the fence has passed (`rhi_gl: GPU timestamps: on (glQueryCounter, 256 per frame
 slot)`). `rhi_wait_idle` is `glFinish`.
 
+**Pipelines** (`port/rhi/gl/gl_pipeline.c`). A pipeline is a program pipeline object holding the
+two separable programs (`glUseProgramStages`), a vertex array object holding the vertex layout
+(`glVertexAttribFormat`, `glVertexAttribIFormat` for the integer formats, `glVertexAttribBinding`,
+`glVertexBindingDivisor` for per-instance bindings: `ARB_vertex_attrib_binding`, core in 4.3; the
+attribute's location is the RHI's, which is the GLSL's `layout(location = N)`), the strides per
+binding, and the fixed-function state kept in the RHI's terms for the draws. OpenGL compiles
+nothing at this point (the programs are linked; a driver may still specialise at the first draw),
+so `rhi_create_pipelines` makes its batch on the calling thread (`threads` 1), calling the wait
+function about every `RHI_PIPELINE_WAIT_MS`. The refusals and their lines are the other backends':
+`rhi_gl: pipeline <name>: invalid description`, `... destination read N not available` (the
+attachment read always; the storage image without `fragmentInterlock` or with a colour target),
+`... no vertex shader`, and `... dual-source blend factors without dual-source blending`; a GL
+error at creation gives `rhi_gl: pipeline <name> not created: GL error 0x....` with the error in
+`pipelineLastError`; a full pool `rhi_gl: pipeline pool full (4160); N refused so far` (the first 8,
+then every 100th). A vertex shader input that no attribute feeds (OpenGL would read (0, 0, 0, 1))
+is logged, not refused: `rhi_gl: pipeline <name>: the vertex shader reads location N, which no
+vertex attribute feeds (N so far)` (the first 8, then every 100th). As on Vulkan, `RHI_DYN_DEPTH`
+stays only with a depth target and `RHI_DYN_BLEND` only with one colour target. `rhi_destroy_pipeline`
+defers the deletes of both objects.
+
+**Command lists** (`port/rhi/gl/gl_cmd.c`). A list executes while it is recorded: every
+`rhi_cmd_*` call makes its OpenGL calls at once, which the RHI's rule that lists are recorded and
+submitted in order allows; `rhi_submit` places the slot's fence. What a list sets (pipeline, bind
+groups with their offsets, vertex and index buffers, stencil reference, dynamic depth and blend) is
+kept in its `GlCmdList` and given to OpenGL at the next draw: the program pipeline and the vertex
+array object when they change, the vertex buffers into that VAO (`glBindVertexBuffer` with the
+pipeline's stride; the element array buffer is the VAO's too, bound after it), the bind groups
+whose id or offsets changed (`glBindBufferRange` for uniform and storage buffers, the dynamic
+uniforms at their base plus the bind-time offset; `glActiveTexture` + `glBindTexture` +
+`glBindSampler` at the texture's unit; `glBindImageTexture` for the storage image), and the
+fixed-function state. That state is shadowed (`GlRaster`): a draw calls only what differs from what
+OpenGL holds (`glEnablei`/`glDisablei(GL_BLEND)`, `glBlendFuncSeparatei`,
+`glBlendEquationSeparatei`, `glColorMaski` per draw buffer, the depth test, `glDepthMask`,
+`glDepthFunc`, the stencil test, `glStencilFuncSeparate` with the list's reference,
+`glStencilOpSeparate`, `glStencilMaskSeparate`); a new list starts from nothing known. A read-only
+depth pass keeps both depth and stencil writes off with the depth-stencil still attached. Dynamic
+depth and blend are plain OpenGL state (`dynamicDepth` and `dynamicBlend` true): the sets keep the
+draw's values, and `dynamicSets` counts the commands the Vulkan backend would record for them
+([Dynamic state](#dynamic-state)). Draws are `glDrawArrays` or `glDrawElementsBaseVertex` (the
+instanced forms above one instance), the index offset in bytes from the list's index buffer; a draw
+outside a pass, in a pass without a framebuffer, without a pipeline or (indexed) without an index
+buffer is skipped with `rhi_gl: a draw skipped: <why> (N so far)`. A command on another list than
+the last one sets that list's bindings, viewport, scissor and framebuffer again.
+
+**Render passes.** A pass binds a framebuffer object from a cache keyed by the attachments' texture
+names (a pass without attachments, the storage destination read's, by its size, made with
+`GL_FRAMEBUFFER_DEFAULT_WIDTH` and `_HEIGHT`); colour attachments in `glDrawBuffers` order, a
+D32F_S8 target at `GL_DEPTH_STENCIL_ATTACHMENT`. The cache holds 256 and drops the least recently
+used when full (`rhi_gl: framebuffer cache full (256): the least recently used one deleted (N so
+far)`); a texture's deferred delete drops the framebuffers holding its name first
+(`gl_fbo_forget_texture`), so a name OpenGL hands out again never meets a stale framebuffer. An
+incomplete one logs `rhi_gl: render pass: framebuffer incomplete (status 0x...; N colour,
+depth|no depth, WxH); the pass draws nothing (N so far)`. `RHI_LOAD_CLEAR` is
+`glClearBufferfv` (`glClearBufferuiv` with the integer per channel for integer targets,
+`glClearBufferfi` for depth and stencil together) with the scissor test off and the write masks
+opened first, since OpenGL's clears honour both (Vulkan's load op clears the whole attachment);
+`RHI_LOAD_DONT_CARE` is `glInvalidateFramebuffer`; the store ops are not acted on (OpenGL keeps
+both aspects, which `RHI_STORE_DONT_CARE` allows). A read-only depth target is not cleared
+(`rhi_gl: render pass: a read-only depth target cannot be cleared; clear ignored`). The pass sets
+the viewport and scissor to its area, clamped to the smallest attachment as on the other backends
+(`rhi_gl: render pass WxH is larger than an attachment ...`, once). Viewports are
+`glViewportIndexedf` and `glDepthRangef`, scissors `glScissor`, unflipped (clip control).
+
+**Barriers and copies.** OpenGL orders rendering, clears, copies and texture fetches within its
+context itself, so `rhi_cmd_barrier` has no layouts to change; a texture leaving or entering
+`RHI_STATE_STORAGE` (image loads and stores) takes one `glMemoryBarrier` (image access, texture
+fetch, framebuffer and texture update bits) per call, counted in `barriers`. No
+`glTextureBarrier`: the RHI never samples a texture its pass draws into. `rhi_cmd_local_read_barrier`
+does nothing (`localRead` is false). Copies run outside passes on the scratch binding points:
+`rhi_cmd_copy_buffer` is `glCopyBufferSubData` (an upload buffer as the destination is refused);
+`rhi_cmd_copy_buffer_to_texture` binds the buffer as `GL_PIXEL_UNPACK_BUFFER` and calls
+`glTexSubImage2D` with `GL_UNPACK_ROW_LENGTH` from the row pitch (row by row for a pitch that is no
+whole number of texels), BC formats `glCompressedTexSubImage2D` by whole block rows;
+`rhi_cmd_copy_texture` is `glCopyImageSubData` (depth and stencil together); the texture to buffer
+copy (the VU vertex pre-pass's record, the fog's depth words, dumps) attaches the texture to the
+scratch read framebuffer and calls `glReadPixels` into the buffer bound as `GL_PIXEL_PACK_BUFFER`
+with `GL_PACK_ROW_LENGTH` (the depth aspect as `GL_DEPTH_COMPONENT`/`GL_FLOAT`, integer formats as
+integers), followed by a `glMemoryBarrier` for vertex, index, uniform and storage reads when the
+buffer is one the shaders read; `rhi_cmd_resolve_color` is `glBlitFramebuffer` between the two
+scratch framebuffers, `GL_NEAREST`, the scissor test off. A refused copy logs `rhi_gl: <entry
+point>: <why> (N so far)` (the first 8, then every 100th).
+
 **Swapchain** (`port/rhi/gl/gl_swapchain.c`). The backbuffer is an RGBA8 texture at the window's
 pixel size (so `rhi_swapchain_format` is `RHI_FMT_RGBA8_UNORM`); `rhi_present` blits it upside down
 into framebuffer 0 (stretched with linear filtering if the window's size has changed since), then
@@ -877,8 +962,8 @@ the window again, so nothing made on it is lost. Creation logs
 **Limits**: dual-source blending where `GL_MAX_DUAL_SOURCE_DRAW_BUFFERS` is at least 1;
 `msaaCounts` the counts `glGetInternalformativ` gives for RGBA8, RGBA8UI and `GL_DEPTH32F_STENCIL8`
 together, within `GL_MAX_SAMPLES`, `GL_MAX_INTEGER_SAMPLES` and the texture sample limits;
-`fragmentInterlock` with `ARB_fragment_shader_interlock` and more than 48 image units (the
-translated shaders' unit; absent on llvmpipe); `bcTextures` with S3TC and BPTC; `uintView`,
+`fragmentInterlock` with `ARB_fragment_shader_interlock` and the image unit the translated
+shaders name (`u`, within the 8 OpenGL 4.3 guarantees; the extension is absent on llvmpipe); `bcTextures` with S3TC and BPTC; `uintView`,
 `dynamicDepth` and `dynamicBlend` true (plain OpenGL state); `maxDynamicUniforms` 4; texture-to-buffer
 copies at a row pitch of 16 and an offset of 4, so the VU vertex pre-pass stays on
 (`colorBytesPerPixel` 0); `vendorId` from the vendor and renderer text; `driverText` the renderer
@@ -1033,6 +1118,7 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 | `rhi_driver_version_test.c` | the driver version text of each vendor's encoding; ctest `rhi_driver_version` |
 | `rhi_d3d12_plan_test.c` | `d3d12_plan.c` on every host; with the shader table, every vertex shader's DXIL inputs against its SPIR-V locations and every DXIL blob signed; ctest `rhi_d3d12_plan` |
 | `rhi_d3d11_shader_plan_test.c` | `d3d11_shader.c`'s portable part on every host: the macros text, the include lookup, the flat-register rule over the game's sources and `rhi_test_hlsl.h` (checked against `rhi_test.hlsl`), the cache key over every table entry, the cache file's round trip and the corrupt files it refuses, the failure log's limit; ctest `rhi_d3d11_shader_plan` |
+| `rhi_gl_test.c` | the common cells on OpenGL with the driver's debug output failing the run, the copies the cells do not make (a colour region into a vertex-read device buffer and on into a readback buffer, a D32F_S8 depth as floats, RGBA32_UINT words, each at a wider row pitch; a target made after one whose framebuffer was dropped), and six swapchain frames on SDL's offscreen driver with a resize; ctest `rhi_gl`, and `rhi_gl_nodual` under `ICO_GL_FAKE_NO_DUAL=1`, both on llvmpipe (`LIBGL_ALWAYS_SOFTWARE=1`, `SDL_VIDEO_DRIVER=offscreen`), skipped without a context |
 | `rhi_d3d12_test.c` | Windows, double-clickable: the cells on WARP, on the hardware adapter, the swapchain on a hidden window, then Vulkan for comparison; writes `rhi_d3d12_test.log` and shows a message box (`--console` for ctest); ctest `rhi_d3d12` |
 | `rhi_d3d11_test.c` | Windows, double-clickable, as `rhi_d3d12_test.c` on Direct3D 11 (the cells' shaders compiled at run time from `rhi_test_hlsl.h` through a one-source table; the destination-read cell skipped by the limits); writes `rhi_d3d11_test.log`; ctest `rhi_d3d11` on a native Windows build only. Built, not run: nothing has run it yet |
 | `compare_backends.cmd`, `compare_png.ps1` | Windows: every dump in `dumps\` rendered by `rd_replay_tool` on both backends, DISPLAY and the presented picture, each pair compared texel by texel and passing within 1 LSB (DISPLAY is expected identical) |

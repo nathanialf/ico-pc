@@ -768,6 +768,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the counters (`rhi_d3d11_shader_plan`). The compile itself runs only on Windows; the
   `shaders_d3d11_check` build target is the build hosts' check of the D3D11 preprocessing
   ([SHADERS.md](SHADERS.md#direct3d-11-run-time-compile)).
+- `rhi_gl_test.c`: the same checks on OpenGL with the driver's debug output on (any error or
+  undefined-behaviour message fails), then the copies the cells do not make (a colour region into a
+  device buffer the vertex stage reads and on into a readback buffer, a D32F_S8 depth as floats, an
+  RGBA32_UINT target as words, each at a row pitch wider than the region; a target made after one
+  whose framebuffer was dropped) and six swapchain frames on an SDL offscreen window with a resize
+  (`rhi_gl`, and `rhi_gl_nodual` under `ICO_GL_FAKE_NO_DUAL=1`). ctest runs both on Mesa's llvmpipe
+  (`LIBGL_ALWAYS_SOFTWARE=1`, `SDL_VIDEO_DRIVER=offscreen`); they skip (77) without an OpenGL
+  context. On llvmpipe the destination-read cells skip (no fragment shader interlock; GLSL has no
+  attachment read).
 - `rhi_gl_glsl_test.c`: the OpenGL backend's GLSL inflate on the CPU (`port/rhi/gl/gl_glsl.c`, miniz):
   a deflated text round-trips NUL-terminated; a wrong text length, a corrupt or truncated stream and
   no stream give none (`rhi_gl_glsl`).
@@ -794,6 +803,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `gs_math_test.c`: `gs_math.hlsli` compiled as C against the [GS](ARCHITECTURE.md#terms) formulas,
   and its integer forms against the operators they replace ([SHADERS.md](SHADERS.md#integer-forms))
   (`gs_math`); `hlsl_shim.h` makes it compile.
+- `shaders_glsl_test.c`: every embedded entry that has GLSL compiled and linked by the OpenGL
+  backend (a separable program of its stage) with the driver's debug output on; a compile or link
+  failure, whose driver log is the backend's line, or a debug output error fails; the `_dstrov`
+  builds count as skipped on a device without fragment shader interlock (llvmpipe); `--list`
+  prints each entry's deflated and text sizes (`shaders_glsl`, on llvmpipe as `rhi_gl`; 77 without
+  an OpenGL context or a table built without GLSL).
 - `shaders_pixel_test.c`: sprite, blit and blend shaders through the Vulkan RHI
   (`shaders_pixel`, `_nodual`, `_mali`); first, on the CPU, `common.hlsli`'s above-1x kernels
   compiled as C against `above1x_ref.c`: the Bayer matrix, the B-spline's weights, the box, the
