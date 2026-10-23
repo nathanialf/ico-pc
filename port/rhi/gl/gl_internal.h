@@ -291,6 +291,9 @@ typedef struct GlState {
     /* scratch framebuffers: a read and a draw one for readbacks, copies,
      * resolves and the present's blit */
     GLuint scratchRead, scratchDraw;
+    /* a zeroed buffer for uniform and storage slots without a usable
+     * binding (gl_resource.c, made at the first need) */
+    GLuint nullBuffer;
 
     /* the swapchain (gl_swapchain.c): the backbuffer texture's id, its
      * size, the vsync asked for; absent headless and after
