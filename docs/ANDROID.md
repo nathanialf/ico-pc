@@ -61,6 +61,8 @@ first ([where it is](#where-your-files-are)).
    every file, so make sure you pick the `.iso`, `.chd` or `.bin` of the
    disc. If you have a `.bin` and a `.cue` (the usual form of the
    Japanese disc), pick the `.bin`: a `.cue` on its own is not the disc.
+   On a phone without the system's own file picker, the game opens
+   another file manager app instead, if one is installed.
 3. The game copies the image into its own folder, naming the copy
    `Ico_PAL`, `Ico_JPN` or `Ico_KOR` and the file's ending, after the disc it is. The screen says **Copying
    the disc image into the app**, with a bar. With a big image this can take
@@ -360,6 +362,8 @@ it. If you do not have a problem, you can skip this.
 2. In the game, open **Options > Graphics driver** and choose **Add a
    driver**. Pick the zip file you downloaded. The game says when the
    driver has been added, or that the file is not a driver package.
+   On a phone without the system's own file picker, the game opens
+   another file manager app instead, if one is installed.
    If the file picker does not open, or the game says that no app on the
    phone can choose a file, use the game's `drivers` folder instead:
    with the USB cable, copy the zip into the `drivers` folder in the game's

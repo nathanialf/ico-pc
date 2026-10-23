@@ -1283,9 +1283,9 @@ handling is pure C and tested on every platform (`port/platform/test/gpu_driver_
 
 Add a driver ends in one of seven answers (`UI_GPU_INSTALL_*`, `port/ui/settings.h`), each its own
 popup: `ADDED`, `BAD` (the zip was read and is not a package), `NOSPACE`, `CANCELLED` (silent),
-`NO_PICKER` (`SDL_ShowOpenFileDialog` answered with no list, or there is no drivers root; the SDL
-error stays in the log line), `NO_PICKER_APP` (reserved for the later Java picker: no activity can
-handle the intent) and `UNREADABLE` (the file would not open, the copy failed with space left,
+`NO_PICKER` (the picker could not be started for a reason other than a missing app, it answered
+without a file address, or there is no drivers root), `NO_PICKER_APP` (no installed app takes
+either picker intent, below) and `UNREADABLE` (the file would not open, the copy failed with space left,
 or the thread did not start). `host_install_begin` answers through the poll rather than returning
 -1 when it cannot ask (it returns -1 only while an install is pending, which the page ignores).
 The drivers folder route needs no picker: `<files>/drivers/` (`IcoAndroidPaths.drivers`) holds
@@ -1299,8 +1299,48 @@ start-up box (`ico_gpu_driver_android_choose`) falls back to the first zip there
 and `NO_PICKER_APP`. Log lines, all `gpu driver:` on stderr: `Add a driver: opening the file
 picker (pick N)`, `Add from the drivers folder: <name> (pick N)`, `the file picker answered
 (pick N): content://<authority>/...` or `closed without a file`, `the file picker failed:
-<SDL error>`, `a late answer for pick N (now M) ignored`, `Add a driver ended: ADDED|NOT A
-PACKAGE|NO SPACE|NO PICKER|NO PICKER APP|UNREADABLE|CANCELLED`, and the install thread's own.
+<SDL error>`, `a late answer for pick N (now M) ignored`, `the file picker could not open: <why>`, `Add a
+driver ended: ADDED|NOT A PACKAGE|NO SPACE|NO PICKER|NO PICKER APP|UNREADABLE|CANCELLED`, and the
+install thread's own.
+
+### The file picker
+
+Android has the app's own file picker, not SDL's (issue 135). SDL's `SDL_ShowOpenFileDialog`
+sends one `ACTION_OPEN_DOCUMENT` intent and keeps one pending dialog in
+`SDLActivity.mFileDialogState`, which is `private static` and cleared only by that dialog's
+answer, so the app cannot clear a dialog that never answered, and a device without a documents
+app fails every pick with a JNI error. SDL's Java is fetched verbatim (`tools/fetch_android.sh`)
+and never edited, so the picker lives in `IcoActivity`:
+`ico_android_pick_file(gen, fn, user, &noApp, why, n)` (`port/platform/android/host_android.h`)
+stores the pending pick (number, callback, user) under a spin lock and calls the static
+`IcoActivity.pickFile(int gen)` on the game's thread (as SDL calls its own `showFileDialog`).
+`pickFile` logs the activity's state (`SDLActivity.mIsResumedCalled`, `mHasFocus`,
+`mCurrentNativeState`) and the app each intent resolves to, then starts `ACTION_OPEN_DOCUMENT`
+(`CATEGORY_OPENABLE`, type `*/*`) with request code `0x1C0D`; on `ActivityNotFoundException`
+it starts `ACTION_GET_CONTENT` the same way. It answers `null` when a picker started, `no app
+for OPEN_DOCUMENT (<e>) nor GET_CONTENT (<e>)` when neither intent has an app (the C side reads
+the `no app` prefix as `*noApp = 1`), or the exception's text. A failed start clears the pending
+pick and returns -1. `IcoActivity.onActivityResult` takes request `0x1C0D` and passes every other
+code to SDL; it calls `nativePickDone(gen, uri, why)` on the activity's thread with the chosen
+URI (`getData()`, else the first clip item), `uri` and `why` both null for a picker closed
+without a file, or `why` set when `RESULT_OK` came without a file. Nothing is persisted: the
+copy runs while the grant lasts. `nativePickDone` copies the strings, takes and clears the
+pending pick under the lock before calling its callback (so the callback may start the next
+pick), and drops an answer whose number is not the pending pick's. The callbacks
+(`gpu_driver_android.c` `pick_done`, `main_host.c` `pick_answer`) run on the activity's thread
+and touch only atomics, the copied address and `SDL_CreateThread`, as SDL's answer callback did.
+The manifest's `<queries>` names both intents, so on Android 11 and later the log can name the
+app they resolve to (the start itself does not need it). The first start's disc picker
+(`main_host.c` `pick_iso_sdl` on Android) uses the same bridge, so it gets the `GET_CONTENT`
+fallback too; Back while it waits gives up through the pick's number. Log lines: `ico_pc: file
+picker: pick N: the activity is resumed|not resumed, focused|not focused, native state
+INIT|RESUMED|PAUSED`, `ico_pc: file picker: pick N: OPEN_DOCUMENT goes to <component>|no app`,
+`ico_pc: file picker: pick N: no app for OPEN_DOCUMENT (<e>); trying GET_CONTENT`, `ico_pc: file
+picker: pick N: GET_CONTENT goes to <component>|no app`, `ico_pc: file picker: a late answer for
+pick N (now M) ignored`, and for the disc picker `ico_pc: the file picker could not open: <why>`
+and `ico_pc: the file picker failed: <why>`. One limit: Android gives every answer the same
+request code, so if an earlier picker that the game gave up on answers after a new pick started,
+that answer is taken as the new pick's (the game only gives up on a picker that did not appear).
 
 ## Steam shortcut
 

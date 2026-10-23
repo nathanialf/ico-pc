@@ -291,6 +291,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   deep stacks, the FP state inside a fiber (`fiber`, `fiber_guard`).
 - `gpu_driver_test.c`: the Android driver packages: `meta.json`, refusals, installs from zips made
   here, the trial marker, and `test_list_zips` (`ico_gpu_driver_list_zips`: `a.zip`, `B.ZIP`, `incoming.*`, a text file, a hidden zip and a folder named `.zip` give two names in byte order, the cap and a missing folder) (`gpu_driver`).
+  The Android file picker ([PLATFORM.md](PLATFORM.md#the-file-picker): `IcoActivity.pickFile`,
+  `ico_android_pick_file`, `nativePickDone`) has no case: it is Java and JNI, and nothing here runs
+  either. It is checked on a phone: `adb logcat -s ico-pc SDL` while pressing Add a driver shows
+  the `ico_pc: file picker: pick N:` lines and the picker; `adb shell pm disable-user --user 0
+  com.android.documentsui` (undone with `pm enable`) gives the `GET_CONTENT` fallback or, with no
+  other picker app, the no picker app popup; a zip pushed to
+  `/sdcard/Android/data/com.defnf.icopc/files/drivers/` shows Add from the drivers folder.
 - `host_config_test.c`: `ico-pc.ini` parsing and rewriting, SHA-1 vectors, path joining, the
   card folders read from the ini the game reads (`ico_host_ini_path`), portable mode, the `[dev]`
   keys exported as environment switches (`ico_dev_env_value`, `test_dev_env`), a restart's
