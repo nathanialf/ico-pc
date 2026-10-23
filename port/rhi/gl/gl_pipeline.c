@@ -324,7 +324,15 @@ static RhiPipeline gl_pipe_create(const RhiPipelineDesc *d, float *ms)
     p->depthFormat = d->depthFormat;
     p->samples = d->samples > 1u ? d->samples : 1u;
     p->dstRead = d->dstRead;
-    p->dynamic = d->dynamic & (RHI_DYN_DEPTH | RHI_DYN_BLEND);
+    /* as Vulkan's (vk_pipeline.c): depth dynamic only with a depth target,
+     * blend only on a pipeline with one colour target */
+    if ((d->dynamic & RHI_DYN_DEPTH) && g_gl.limits.dynamicDepth &&
+        d->depthFormat != RHI_FMT_UNKNOWN) {
+        p->dynamic |= RHI_DYN_DEPTH;
+    }
+    if ((d->dynamic & RHI_DYN_BLEND) && g_gl.limits.dynamicBlend && d->colorCount == 1) {
+        p->dynamic |= RHI_DYN_BLEND;
+    }
     p->layoutCount = d->layoutCount;
     for (uint32_t g = 0; g < d->layoutCount; g++) {
         p->layoutIds[g] = d->layouts[g].id;
