@@ -9,11 +9,20 @@
  * again, as after a resume, and the pipelines come from the backend's
  * cache or are compiled.  The audio is not touched.  Nothing is written:
  * the page writes [video] backend when the player keeps the choice.
+ *
+ * Between Apply and Keep the renderer is on trial: a driver crash or a
+ * device loss writes the report and plans no restart (the file names the
+ * renderer before; diag_host.h ico_diag_set_backend_trial).  A switch back
+ * (Revert, the countdown's end, a renderer that did not start) gives the
+ * crash and loss steps the start's choice again (Automatic's, or the
+ * player's); Keep gives them the kept renderer as the player's.
  */
 #include <SDL3/SDL.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "diag_host.h"
 #include "font.h" /* ui_font_forget_textures */
 #include "input_sdl.h"
 #include "options.h" /* ico_mv_active */
@@ -32,8 +41,48 @@ static struct {
     char want[16]; /* "" none */
     int why;       /* UI_GFX_WHY_* */
     int result;    /* UI_GFX_SWITCH_* of the last one asked */
-    int waited;    /* pumps waited for the game's frame to close */
+    int ended;     /* -3: no renderer left (ico_window_switch_end_text) */
+    char endText[512];
 } s_sw;
+
+/* the start's choice (ico_window_switch_started), Keep's after it: the
+   crash and loss steps' explicit flag and backend for a switch back; and
+   the renderer Automatic started this run ("" when the player chose one) */
+static struct {
+    bool backendExplicit;
+    char backend[16];
+    char automatic[16];
+} s_start = {false, "vulkan", ""};
+
+void ico_window_switch_started(bool backendExplicit, const char *backend)
+{
+    s_start.backendExplicit = backendExplicit;
+    snprintf(s_start.backend, sizeof(s_start.backend), "%s", backend != NULL ? backend : "vulkan");
+    snprintf(s_start.automatic, sizeof(s_start.automatic), "%s",
+             backendExplicit || backend == NULL ? "" : backend);
+}
+
+/* the crash and loss steps' explicit flag for name: the start's (or
+   Keep's) for its renderer, the player's for another */
+static bool explicitFor(const char *name)
+{
+    return strcmp(name, s_start.backend) == 0 ? s_start.backendExplicit : true;
+}
+
+/* a renderer's proper name, for the box */
+static const char *properName(const char *name)
+{
+    if (strcmp(name, "opengl") == 0) {
+        return "OpenGL";
+    }
+    if (strcmp(name, "d3d12") == 0) {
+        return "Direct3D 12";
+    }
+    if (strcmp(name, "d3d11") == 0) {
+        return "Direct3D 11";
+    }
+    return "Vulkan";
+}
 
 const char *ico_window_switch_running(void)
 {
@@ -86,7 +135,7 @@ static const char *refusal(const char *name)
     return NULL;
 }
 
-int ico_window_switch_backend(const char *name)
+int ico_window_switch_backend(const char *name, int trial)
 {
     char old[16];
     const char *why = refusal(name);
@@ -105,12 +154,19 @@ int ico_window_switch_backend(const char *name)
        atlases, the placeholders made again) */
     gif_HostForgetTextures();
     ui_font_forget_textures();
-    if (ico_window_reopen(name)) {
+    /* on trial from before its pipeline set (the likeliest crash) */
+    ico_diag_set_backend_trial(trial ? name : NULL);
+    if (ico_window_reopen(name, trial ? true : explicitFor(name))) {
+        rd_resume_frame();
         return 0;
     }
     fprintf(stderr, "window: Graphics API %s did not start (the lines above say why); back on %s\n",
             name, old);
-    if (ico_window_reopen(old)) {
+    /* back on the start's choice; a switch back that failed has the
+       renderer on trial again */
+    ico_diag_set_backend_trial(trial ? NULL : old);
+    if (ico_window_reopen(old, trial ? explicitFor(old) : true)) {
+        rd_resume_frame();
         return -1;
     }
     fprintf(stderr, "window: Graphics API %s did not start again either; the game ends\n", old);
@@ -124,16 +180,18 @@ int ico_window_switch_pump(void)
     if (s_sw.want[0] == '\0') {
         return 0;
     }
-    /* between two of the game's frames when it can: a frame the game is
-       drawing is dropped with the renderer (half a second at most) */
-    if (rd_frame_open() && ++s_sw.waited < 30) {
-        return 0;
-    }
+    /* after the game's step: the frame dl_Clear opened for the next tick
+       is open again after the switch (rd_resume_frame) and closed without
+       a picture, so the tick of the switch shows none */
     snprintf(want, sizeof(want), "%s", s_sw.want);
     snprintf(old, sizeof(old), "%s", ico_window_switch_running());
     s_sw.want[0] = '\0';
     const Uint64 t0 = SDL_GetTicksNS();
-    const int r = ico_window_switch_backend(want);
+    /* the device's start and the pipeline set are not a hang of the game
+       (the device-lost box's way) */
+    ico_diag_watchdog_pause(1);
+    const int r = ico_window_switch_backend(want, s_sw.why == UI_GFX_WHY_APPLY);
+    ico_diag_watchdog_pause(0);
     const double secs = (double)(SDL_GetTicksNS() - t0) / 1e9;
     if (r == 0 && s_sw.why == UI_GFX_WHY_APPLY) {
         fprintf(stderr, "window: Graphics API %s applied from the menu (was %s), %.1f s\n", want,
@@ -145,7 +203,22 @@ int ico_window_switch_pump(void)
     s_sw.result = r == 0    ? UI_GFX_SWITCH_DONE
                   : r == -2 ? UI_GFX_SWITCH_REFUSED
                             : UI_GFX_SWITCH_FAILED;
-    return r == -3 ? -1 : 0;
+    if (r == -3) {
+        s_sw.ended = 1;
+        snprintf(s_sw.endText, sizeof(s_sw.endText),
+                 "The game's graphics could not start again after Options > Graphics > Apply: "
+                 "neither %s nor %s started.\n"
+                 "The game ends. Your settings were not saved, so the next start uses the "
+                 "renderer it used before.",
+                 properName(want), properName(old));
+        return -1;
+    }
+    return 0;
+}
+
+const char *ico_window_switch_end_text(void)
+{
+    return s_sw.ended ? s_sw.endText : NULL;
 }
 
 /* --- the Graphics page's host (settings.h UiGraphicsHost) --------------- */
@@ -161,7 +234,6 @@ static int hostBegin(const char *name, int why)
     }
     snprintf(s_sw.want, sizeof(s_sw.want), "%s", name);
     s_sw.why = why;
-    s_sw.waited = 0;
     s_sw.result = UI_GFX_SWITCH_PENDING;
     return UI_GFX_SWITCH_PENDING;
 }
@@ -171,9 +243,24 @@ static int hostPoll(void)
     return s_sw.result;
 }
 
+/* Keep: the crash and loss steps take the kept renderer as the player's
+   (the page writes it) */
 static void hostKept(void)
 {
-    fprintf(stderr, "window: Graphics API %s kept\n", ico_window_switch_running());
+    const char *now = ico_window_switch_running();
+
+    ico_diag_set_backend_trial(NULL);
+    s_start.backendExplicit = true;
+    snprintf(s_start.backend, sizeof(s_start.backend), "%s", now);
+    ico_diag_set_backend_choice(1, now);
+    fprintf(stderr, "window: Graphics API %s kept\n", now);
+}
+
+/* the renderer Automatic started this run, NULL when the player chose one
+   at the start (Automatic then starts Vulkan first) */
+static const char *hostAutomatic(void)
+{
+    return s_start.automatic[0] != '\0' ? s_start.automatic : NULL;
 }
 
 void ico_window_switch_install(void)
@@ -184,5 +271,6 @@ void ico_window_switch_install(void)
     h.switchBegin = hostBegin;
     h.switchPoll = hostPoll;
     h.kept = hostKept;
+    h.automatic = hostAutomatic;
     ui_settings_set_graphics_host(&h);
 }

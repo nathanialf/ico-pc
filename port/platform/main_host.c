@@ -145,6 +145,7 @@ extern int systemStatus[]; /* common/src/main.c: [0] the video mode word */
 #include "settings.h"  /* port/ui: Display > Model pack's "None installed" */
 #include "texpack.h"   /* PCSX2 texture packs */
 #include "window_host.h"
+#include "window_switch.h" /* ico_window_switch_end_text */
 
 #endif
 /* Android's window build: the window opens before the game
@@ -2312,6 +2313,22 @@ static int host_main(int argc, char **argv)
            ico_host_step puts the simulation's back */
         ico_fpenv_host_enter();
         if (!ico_window_pump()) {
+            const char *noRenderer = ico_window_switch_end_text();
+            if (noRenderer != NULL) {
+                /* Options > Graphics > Apply left no renderer: the box,
+                   and nothing saved (the file names the renderer before) */
+                char box[1024];
+                const char *rep;
+
+                exit_reason = "no renderer started after Options > Graphics > Apply";
+                ico_host_log_flush();
+                rep = ico_diag_write_report("no renderer started after Options > Graphics > Apply");
+                snprintf(box, sizeof(box), "%s\n\nLog: %s%s%s", noRenderer,
+                         log_file() != NULL ? log_file() : "(none)",
+                         rep != NULL ? "\nTo report it, attach " : "", rep != NULL ? rep : "");
+                ico_host_message_box(box, 1);
+                return 0;
+            }
             exit_reason = "the window was closed";
             /* the close button can end the run on a
                Settings page that was never left (Characters in the model

@@ -1714,15 +1714,25 @@ static int vu_prepass_persist(void)
 static int window_gpu_progress(IcoDiagGpu *out);
 static void window_gpu_hang(void);
 
-/* The window with the backend's flags in mode at w x h (OpenGL: its pixel
-   format first), at the start and when the renderer is switched
-   (ico_window_reopen); NULL with SDL's error */
-static SDL_Window *window_create(int mode, int w, int h)
+/* The window with the backend's flags in mode at w x h and x, y (OpenGL:
+   its pixel format first), at the start (x, y undefined: SDL_CreateWindow's
+   own properties) and when the renderer is switched (ico_window_reopen);
+   NULL with SDL's error */
+static SDL_Window *window_create(int mode, int w, int h, int x, int y)
 {
     if (rhi_backend() == RHI_BACKEND_OPENGL) {
         window_gl_attributes();
     }
-    return SDL_CreateWindow("ICO", w, h, window_flags(mode));
+    SDL_PropertiesID p = SDL_CreateProperties();
+    SDL_SetStringProperty(p, SDL_PROP_WINDOW_CREATE_TITLE_STRING, "ICO");
+    SDL_SetNumberProperty(p, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, w);
+    SDL_SetNumberProperty(p, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, h);
+    SDL_SetNumberProperty(p, SDL_PROP_WINDOW_CREATE_X_NUMBER, x);
+    SDL_SetNumberProperty(p, SDL_PROP_WINDOW_CREATE_Y_NUMBER, y);
+    SDL_SetNumberProperty(p, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, (Sint64)window_flags(mode));
+    SDL_Window *win = SDL_CreateWindowWithProperties(p);
+    SDL_DestroyProperties(p);
+    return win;
 }
 
 /* What hangs on a new window in mode, at the start and when the renderer
@@ -1981,7 +1991,8 @@ open_window:
        after: SDL's X11 backend then writes _NET_WM_STATE before the window
        is mapped, which KWin and gamescope honour (borderless at the desktop
        resolution; no exclusive mode) */
-    s_window = window_create(start.windowMode, WINDOW_W, WINDOW_H);
+    s_window = window_create(start.windowMode, WINDOW_W, WINDOW_H, SDL_WINDOWPOS_UNDEFINED,
+                             SDL_WINDOWPOS_UNDEFINED);
     if (start.windowMode != ICO_WINDOW_WINDOWED) {
         WINDOW_LAST_FULL(start.windowMode);
     }
@@ -2173,6 +2184,8 @@ open_window:
         return -1;
 #endif
     }
+    /* Apply's switch back to the start's choice (window_switch.c) */
+    ico_window_switch_started(backendExplicit, backend);
     /* whether the crash handler's first step would be to delete the file */
     ico_diag_set_pipeline_cache(rhi_pipeline_cache_loaded(), NULL);
     /* a device loss takes the loss order's robust step when robust access
@@ -2479,12 +2492,14 @@ open_window:
    after rd_init (the self-tests; the pipeline set behind "Preparing
    graphics" unless this run makes them as the frames need them) and the
    presenter's state (the display clock, the pointer's capture, the touch
-   zones, video_apply); the time is a pause of the host.  1 up; 0 not (the
-   lines above say why; no window then, the next call makes one) */
-int ico_window_reopen(const char *backend)
+   zones, video_apply); the time is a pause of the host.  The new window is
+   on the old one's display.  1 up; 0 not (the lines above say why; no
+   window then, the next call makes one) */
+int ico_window_reopen(const char *backend, bool backendExplicit)
 {
     static struct {
         int mode, w, h, x, y, place, clock;
+        SDL_DisplayID disp;
     } s_re;
 
     const Uint64 t0 = SDL_GetTicksNS();
@@ -2501,6 +2516,7 @@ int ico_window_reopen(const char *backend)
         s_re.place =
             s_re.mode == ICO_WINDOW_WINDOWED && SDL_GetWindowPosition(s_window, &s_re.x, &s_re.y);
         s_re.clock = s_disp.clock == 1;
+        s_re.disp = SDL_GetDisplayForWindow(s_window);
         rd_suspend();
         if (s_disp.clock != 0) {
             disp_clock_stop();
@@ -2511,13 +2527,12 @@ int ico_window_reopen(const char *backend)
     if (!rhi_create_backend(backend)) {
         return 0; /* rhi said why */
     }
-    s_window = window_create(s_re.mode, s_re.w, s_re.h);
+    const int at = (int)SDL_WINDOWPOS_CENTERED_DISPLAY(s_re.disp);
+    s_window = window_create(s_re.mode, s_re.w, s_re.h, s_re.place ? s_re.x : at,
+                             s_re.place ? s_re.y : at);
     if (s_window == NULL) {
         fprintf(stderr, "window: SDL_CreateWindow: %s\n", SDL_GetError());
         return 0;
-    }
-    if (s_re.place) {
-        SDL_SetWindowPosition(s_window, s_re.x, s_re.y);
     }
     window_attach(s_re.mode);
     SDL_GetWindowSizeInPixels(s_window, &w, &h);
@@ -2534,7 +2549,8 @@ int ico_window_reopen(const char *backend)
     }
     ico_diag_set_pipeline_cache(rhi_pipeline_cache_loaded(), NULL);
     ico_diag_set_robust_off_default(rhi_limits() != NULL && rhi_limits()->robustDefaultOff);
-    ico_diag_set_startup_retry((int)s_retry, window_have_d3d12(), true, s_blendExplicit, backend);
+    ico_diag_set_startup_retry((int)s_retry, window_have_d3d12(), backendExplicit, s_blendExplicit,
+                               backend);
     rd_blend_selftest();
     rd_vuprepass_selftest();
     if (!rd_pipelines_lazy_on()) {
