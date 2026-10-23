@@ -160,7 +160,7 @@ enum { GL_BIND_UNIFORM = 0, GL_BIND_STORAGE, GL_BIND_TEXTURE, GL_BIND_IMAGE };
 #define GL_BIND_STATIC 0xFFu /* GlBindEntry.dyn of a binding without a bind-time offset */
 #define GL_UNIT_TEXTURE_BASE 16u
 #define GL_UNIT_STORAGE_BASE 16u
-#define GL_UNIT_IMAGE_BASE 48u
+#define GL_UNIT_IMAGE_BASE 0u
 
 typedef struct GlBindEntry {
     uint8_t kind;   /* GL_BIND_* */
@@ -180,7 +180,7 @@ typedef struct GlBindGroup {
 
 /* The binding point of an RHI slot of a type (the map above):
  * b -> b, storage buffer t -> 16 + t, sampled texture t -> unit 16 + t,
- * storage texture u -> image unit 48 + u. */
+ * storage texture u -> image unit u (the translation step takes the SPIR-V's 48 off). */
 static inline uint32_t gl_bind_point(RhiBindType type, uint32_t slot)
 {
     switch (type) {

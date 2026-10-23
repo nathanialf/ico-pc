@@ -762,7 +762,7 @@ D3D and Vulkan rule), the scissor test on, pixel rows packed at 1 byte.
 
 **Bindings** (`gl_internal.h` `gl_bind_point`; the GLSL's side in [SHADERS.md](SHADERS.md)): uniform
 block `b` at binding `b`; storage buffer `t` at `16 + t`; sampled texture `t` at texture unit
-`16 + t`; storage image `u` at image unit `48 + u`. GLSL has combined samplers only, so a bind
+`16 + t`; storage image `u` at image unit `u` (the translation step takes the SPIR-V's 48 off: OpenGL 4.3 guarantees only 8 image units). GLSL has combined samplers only, so a bind
 group's sampler goes to the unit of each texture it samples: the group's sampler slot with the
 texture's number, else its lowest one. Integer textures, the RGBA8_UINT view and multisampled
 textures get no sampler object (OpenGL filters none of them; an integer texture under a filtering

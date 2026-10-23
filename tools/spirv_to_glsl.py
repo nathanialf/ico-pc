@@ -16,7 +16,10 @@ or shipped). The SPIR-V binding map the HLSL sources are compiled to
                        texture only read with Load gets a combined sampler with
                        a dummy sampler at the texture's unit; samplers s# have
                        no GLSL object)
-  storage image        layout(binding = 48 + u)            image unit 48 + u
+  storage image        layout(binding = u)                 image unit u
+                       (SPIRV-Cross writes the SPIR-V's 48 + u; the script
+                       takes 48 off: OpenGL 4.3 guarantees only 8 image
+                       units, so unit 48 would exist on no driver)
   dual-source output   layout(location = 0, index = 1)
 
 A module GLSL cannot express (an input attachment: an OpTypeImage whose Dim is
@@ -80,6 +83,24 @@ def extensions(text):
     return sorted(exts)
 
 
+IMAGE_BASE = 48  # the -fvk-u-shift of cmake/IcoShaders.cmake
+IMAGE_DECL = re.compile(r"^layout\(binding = (\d+)(, [^)]*)?\) uniform ((?:coherent |volatile |restrict |readonly |writeonly )*u?image2D\b.*)$",
+                        re.M)
+
+
+def remap_images(text):
+    """A storage image's binding becomes its u register (48 + u -> u): OpenGL
+    4.3 guarantees 8 image units (GL_MAX_IMAGE_UNITS), so the SPIR-V's 48 + u
+    would bind on no driver; the backend binds the image at unit u
+    (port/rhi/gl/gl_internal.h GL_UNIT_IMAGE_BASE 0)."""
+    def sub(m):
+        b = int(m.group(1))
+        if b < IMAGE_BASE:
+            sys.exit(f"spirv_to_glsl: a storage image at binding {b}, below the u shift {IMAGE_BASE}")
+        return f"layout(binding = {b - IMAGE_BASE}{m.group(2) or ''}) uniform {m.group(3)}"
+    return IMAGE_DECL.sub(sub, text)
+
+
 def translate(exe, src, out):
     """Returns (text, nocontraction, precise, extensions) or None for a module
     GLSL cannot express (the output is then an empty file)."""
@@ -97,6 +118,7 @@ def translate(exe, src, out):
     text = r.stdout
     if not text.startswith("#version 430"):
         sys.exit(f"spirv_to_glsl: {src}: output does not start with #version 430")
+    text = remap_images(text)
     precise = len(re.findall(r"\bprecise\b", text))
     if nocontr and not precise:
         sys.exit(f"spirv_to_glsl: {src}: {nocontr} NoContraction decorations, no `precise` in the GLSL")

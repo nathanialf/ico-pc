@@ -361,7 +361,8 @@ static void gl_fill_limits(void)
     o->sampleRateShading = true; /* glMinSampleShading, core since 4.0 */
     /* the destination read through a storage image in rasterization order:
      * ARB_fragment_shader_interlock, and the image unit the translated
-     * shaders name (48 + u) within GL_MAX_IMAGE_UNITS */
+     * shaders name (u, tools/spirv_to_glsl.py takes the SPIR-V's 48 off)
+     * within GL_MAX_IMAGE_UNITS (8 at least on 4.3) */
     o->fragmentInterlock = g_gl.hasInterlock && g_gl.maxImageUnits > (GLint)GL_UNIT_IMAGE_BASE &&
                            !gl_env_on("ICO_GL_FAKE_NO_DST");
     o->rov = false;

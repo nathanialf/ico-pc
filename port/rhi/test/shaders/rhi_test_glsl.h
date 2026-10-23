@@ -127,7 +127,7 @@ static const char glsl_ps_rov[] =
     "#endif\n"
     "layout(early_fragment_tests) in;\n"
     "\n"
-    "layout(binding = 48, rgba8) uniform coherent image2D g_rov;\n"
+    "layout(binding = 0, rgba8) uniform coherent image2D g_rov;\n"
     "\n"
     "layout(location = 0) in vec4 in_var_COLOR0;\n"
     "\n"

@@ -605,7 +605,7 @@ when it creates the shader. The deflated GLSL of the 127 translatable modules is
 | `t#` structured buffer | `layout(binding = 16 + #, std430) readonly buffer`, shader storage binding 16 + # |
 | `t#` texture with `s#` sampler | `layout(binding = 16 + #) uniform sampler2D`: SPIRV-Cross's combined sampler inherits the texture's binding, so the texture unit is 16 + # whatever the sampler (the `s#` slot has no GLSL object) |
 | `t#` texture read only with `Load` | the same combined sampler, built with a dummy sampler, at unit 16 + # |
-| `u#` storage image | `layout(binding = 48 + #, rgba8) uniform image2D`, image unit 48 + # |
+| `u#` storage image | `layout(binding = #, rgba8) uniform image2D`, image unit # (`tools/spirv_to_glsl.py` takes the SPIR-V's 48 off: OpenGL 4.3 guarantees only 8 image units) |
 | dual-source output | `layout(location = 0, index = 0)` and `layout(location = 0, index = 1)` |
 
 Two combined samplers of one texture (one with the dummy sampler, one with `g_sampler`) get the
