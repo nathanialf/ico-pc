@@ -793,7 +793,9 @@ stays queued after each take, through `spu2_render` and the mirror swap
   from the steady 960 frames to the bound's 5,760: about 410 ms of sound, then a hold until the
   game has added 4,800 frames, about 132 ms of ramped silence; about 1.8 gaps a second, a quarter
   of the time silent. With a film's 60 ms bound, about 164 ms of sound and 53 ms gaps. A rate
-  ratio that played slower instead (a pitch drop in place of gaps) is not done. A stream voice's 16 KB SPU ring, whose other half the driver refills as
+  ratio that played slower instead (a pitch drop in place of gaps) is not done. Presents of a frame
+  already shown never hold the game below real time: the window's present allowance drops them
+  before a step runs half a period late ([DISPLAY.md](DISPLAY.md#the-present-allowance)). A stream voice's 16 KB SPU ring, whose other half the driver refills as
   its read position crosses the middle (`port/audio/stream.c` (`schedule`)), holds about 300 ms
   before stale data would play, so a stream never reaches it.
 - A device clock faster than the system's would creep up to the bound (at 50 ppm, 3 ms a minute)

@@ -265,7 +265,21 @@ static struct {
        held), and its line written since the last settings change */
     Uint64 capAboveNs;
     int capAboveLogged;
+    /* the 10 s line's allowance counts at the block's start, and the
+       allowance they are of (the timer path's or the lock's) */
+    const PaceBudget *budgetAtOf;
+    unsigned budgetRefusedAt, budgetDropsAt, budgetClimbsAt;
 } s_pres;
+
+/* The timer path's present allowance starts again (a frame rate change, off
+   the lock, the pace reset), its counts for the 10 s line with it */
+static void timer_budget_reset(void)
+{
+    pace_budget_reset(&s_pres.budget, PACE_ALLOW_MAX);
+    if (s_pres.budgetAtOf == &s_pres.budget) {
+        s_pres.budgetRefusedAt = s_pres.budgetDropsAt = s_pres.budgetClimbsAt = 0;
+    }
+}
 
 /* resolution "auto" (video_options.h ICO_RES_AUTO): the
    replays' costs (perf_drain) against the frame budget, a step down when
@@ -444,7 +458,7 @@ static void video_settings(RdSettings *rs, int w, int h)
     if (s_pres.framerate != ico_video_framerate()) {
         /* a new limit starts a new grid and a new present allowance */
         s_pres.nextPresent = 0;
-        pace_budget_reset(&s_pres.budget, PACE_ALLOW_MAX);
+        timer_budget_reset();
     }
     s_pres.framerate = ico_video_framerate();
     rs->interpolate = (uint8_t)(s_pres.framerate != ICO_FRAMERATE_ORIGINAL);
@@ -1039,7 +1053,7 @@ static void lc_pace_reset(void *u)
     s_pres.cost = 0;
     s_pres.lockN = 0; /* the lock starts again from now */
     s_pres.lastReturn = 0;
-    pace_budget_reset(&s_pres.budget, PACE_ALLOW_MAX);
+    timer_budget_reset();
 }
 
 static int lc_config_dirty(void *u)
@@ -4770,12 +4784,42 @@ static void pace_log(Uint64 now)
         s_pres.audioRatio = ratio;
         ico_audio_set_rate_ratio(ratio);
     }
+    /* the present allowance (pace_policy.h PaceBudget) of the path in use:
+       where it holds the in-between presents, its lowest this block, the
+       presents it refused, its drops and climbs, and the GPU time its climb
+       is gated on */
+    char budget[192];
+    {
+        PaceBudget *b = s_pres.lockN > 0 ? &s_pres.lock.budget : &s_pres.budget;
+        char gpu[48];
+
+        if (s_pres.budgetAtOf != b || b->refused < s_pres.budgetRefusedAt ||
+            b->drops < s_pres.budgetDropsAt || b->climbs < s_pres.budgetClimbsAt) {
+            s_pres.budgetAtOf = b;
+            s_pres.budgetRefusedAt = s_pres.budgetDropsAt = s_pres.budgetClimbsAt = 0;
+        }
+        if (s_pres.gpuNs != 0) {
+            snprintf(gpu, sizeof(gpu), "GPU %.1f ms a presented replay",
+                     (double)s_pres.gpuNs / 1e6);
+        } else {
+            snprintf(gpu, sizeof(gpu), "%s",
+                     rhi_timestamps_supported() ? "GPU not timed yet" : "no GPU timestamps");
+        }
+        snprintf(budget, sizeof(budget),
+                 "; presents held to %u a step (lowest %u, %u refused, %u drops, %u climbs); %s",
+                 b->allow, b->lowest, b->refused - s_pres.budgetRefusedAt,
+                 b->drops - s_pres.budgetDropsAt, b->climbs - s_pres.budgetClimbsAt, gpu);
+        s_pres.budgetRefusedAt = b->refused;
+        s_pres.budgetDropsAt = b->drops;
+        s_pres.budgetClimbsAt = b->climbs;
+        pace_budget_block(b); /* a new block: its lowest from now */
+    }
     fprintf(
         stderr,
         "window: %u presents, %u movie presents%s and %u game frames (%u frame numbers) in "
         "%.1f s: %.1f "
         "presented fps, %.1f game fps; %u vsyncs (%.1f Hz simulated), %u resyncs dropping "
-        "%.0f ms; skipped %u presents (late %u, slow %u); longest replay %.1f ms of %u, %u "
+        "%.0f ms; skipped %u presents (late %u, slow %u)%s; longest replay %.1f ms of %u, %u "
         "over a refresh; %u steps over %.0f ms; "
         "framerate %s%s, present "
         "%s, display %.2f Hz (%.3f presents a refresh), window %dx%d%s; step late max %.1f "
@@ -4784,9 +4828,9 @@ static void pace_log(Uint64 now)
         fn - s_pres.statFrameNo, sec, s_pres.statPresents / sec, s_pres.statFrames / sec,
         s_pres.statVsyncs, s_pres.statVsyncs / sec, s_pres.statResyncs,
         (double)s_pres.statDropped / 1e6, s_pres.statSkipLate + s_pres.statSkipSlow,
-        s_pres.statSkipLate, s_pres.statSkipSlow, maxMs, replays, s_perf.ph.over, s_pres.slowSteps,
-        s_pres.slowMs, ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)), held,
-        rhi_present_mode_name(), dm != NULL ? (double)dm->refresh_rate : 0.0,
+        s_pres.statSkipLate, s_pres.statSkipSlow, budget, maxMs, replays, s_perf.ph.over,
+        s_pres.slowSteps, s_pres.slowMs, ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)),
+        held, rhi_present_mode_name(), dm != NULL ? (double)dm->refresh_rate : 0.0,
         dm != NULL && dm->refresh_rate > 1.0f ? s_pres.statPresents / sec / dm->refresh_rate : 0.0,
         pw, ph, window_fullscreen() ? " fullscreen" : "", (double)s_pres.lateMaxNs / 1e6,
         s_pres.pumpMaxMs, lock);
@@ -5281,6 +5325,10 @@ static void pace_locked(unsigned n, Uint64 period)
         s_pres.lockSeenAt = s_pres.lockLateAt = s_pres.lockEarlyAt = 0;
         s_pres.lockWaitedAt = s_pres.lockSkippedAt = 0;
         s_pres.lockSkippedLateAt = 0;
+        if (s_pres.budgetAtOf == &s_pres.lock.budget) {
+            /* the lock's allowance started again (pace_lock_reset) */
+            s_pres.budgetRefusedAt = s_pres.budgetDropsAt = s_pres.budgetClimbsAt = 0;
+        }
         s_pres.lockWaitNs = 0;
         s_pres.nextPresent = 0;
         {
@@ -5442,7 +5490,7 @@ static void pace(int hz)
         if (s_pres.lockN != 0 || s_pres.budget.max == 0) {
             /* off the lock (or the first pace): the timer path's allowance
                starts again */
-            pace_budget_reset(&s_pres.budget, PACE_ALLOW_MAX);
+            timer_budget_reset();
         }
         s_pres.lockN = 0;
         timing_use(0); /* the presents below as without the timing */

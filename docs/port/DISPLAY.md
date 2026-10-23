@@ -304,9 +304,15 @@ failed), the game frames shown and the frame numbers (which also count the frame
 unshown, so a gap between the two is not a slowdown), the block's seconds, presented and game frames
 a second, the vsyncs and the simulated rate, the resyncs and the lag they dropped, the new frames
 the late-present skip left unpresented (`skipped N presents (late L, slow S)`: by arm, the timer
-path's and the lock's together, the lock having the late arm only, [Pacing](#pacing)), the longest [replay](ARCHITECTURE.md#terms) and the replay count with how many
+path's and the lock's together, the lock having the late arm only, [Pacing](#pacing)), the present
+allowance of the path in use (`presents held to A a step (lowest L, R refused, D drops, C climbs)`:
+the allowance now and its lowest in the block, the in-between presents it refused and its drops and
+climbs in the block; then `GPU G ms a presented replay`, the median of the last 8 presented replays'
+GPU time its climb is gated on, or `no GPU timestamps` where the backend has none, or
+`GPU not timed yet`; [The present allowance](#the-present-allowance)), the longest [replay](ARCHITECTURE.md#terms) and the replay count with how many
 were over a refresh, the slow
-steps, the frame rate option, the present mode, the display's refresh with presents a refresh, the
+steps, the frame rate option (with `(held to the display's X Hz)` while a cap above the refresh
+presents once a refresh, [the present gap](#pacing)), the present mode, the display's refresh with presents a refresh, the
 window's pixel size, "step late max" (the latest a simulation step started against when it was due),
 "pump max" (the longest window event pump, [PLATFORM.md](PLATFORM.md#diagnostics)) and the lock's
 state (`pace_log`), one of:
@@ -329,6 +335,14 @@ lock held (grid G ms, n presents a step, mailbox|fifo, audio rate xR, CLOCK,
 - `no lock (fifo, steps on the game's own timer)`: a cap equal to the refresh with no whole
   multiple;
 - `lock off`.
+
+**Event lines.** A drop of the present allowance writes
+`window: presents held to A a step: the step ended L ms late after P presents (the last present C
+ms, waited F ms for the GPU and D ms for the display; GPU G ms a replay); back to A+1 after 240 steps
+on time if the GPU allows` (one line; the first 8, then every 100th, `ico_log_limited`); climbs are
+counted only. A numeric cap above the display's refresh in mailbox mode writes `window: frame rate N
+is above the display's X Hz: presenting once a refresh (mailbox)` once after each settings change
+(`port/platform/window_host.c` (`budget_drop_line`, `pace`)).
 
 **The display line** (`window: display: ...`, under the lock only): the vblanks taken in the block,
 their mean interval with its minimum and maximum and the rate, the refresh SDL reports, the
@@ -456,8 +470,9 @@ with a fake clock and swapchain; `window_host.c` only supplies its I/O (`pace`, 
    drops the lag past 100 ms (a resync).
 2. **The timer path** (any other frame rate without the lock): presents at the current alpha until
    the deadline. No further present of a frame already shown once the deadline has passed, while
-   presents are slow, off the screen, or (except with a cap equal to the refresh) when the last
-   present's cost would end past the deadline (`pace`). Presents are slow when the median of the
+   presents are slow, off the screen, (except with a cap equal to the refresh) when the last
+   present's cost would end past the deadline, or past the
+   [present allowance](#the-present-allowance) (`pace`). Presents are slow when the median of the
    last 8 present costs is above `max(refresh, period) + period / 2` (a refresh more with an effects
    program loaded), entering after 3 such presents in a row and leaving below 80 % of it
    (`port/platform/pace_policy.h` (`pace_slow_present`, `pace_slow_threshold`)). Presents that
@@ -482,8 +497,11 @@ with a fake clock and swapchain; `window_host.c` only supplies its I/O (`pace`, 
 
 **The present gap** on the timer path: "uncapped" with vsync on is a sixteenth of a refresh less
 than one refresh, and in mailbox mode never fewer than sixty presents a second whatever the display
-reports; a numeric cap is `1 / cap`; "uncapped" without vsync is 0 (back to back)
-(`port/platform/pace_policy.c` (`pace_present_gap`)). The gap counts on a grid (`pace_next_present`:
+reports; a numeric cap is `1 / cap`, except a cap above the refresh in mailbox mode, which takes
+"uncapped"'s gap (`pace_cap_above_refresh`: 120 on a 60 Hz screen presents once a refresh; not a cap
+equal to the refresh, 60 on 59.94 or 60.00; under FIFO the cap keeps `1 / cap`): the display shows
+no more pictures than its refresh, and the rest took the GPU time the shown ones need; "uncapped"
+without vsync is 0 (back to back) (`port/platform/pace_policy.c` (`pace_present_gap`)). The gap counts on a grid (`pace_next_present`:
 the next present is the last one's due time plus the gap, so a late wake-up does not push every
 later one back; a stall restarts the grid).
 
@@ -508,6 +526,54 @@ display the window covers (`video_settings`), the presenter boxes the picture in
 (`port/platform/display_clock.h`). When the desktop compositor composes the window a present is
 shown one composition later, about one refresh more latency than a window flipped to the display; how well the lock
 holds its phase there has not been measured on hardware: the 10 s `lock held` line is the check.
+
+### The present allowance
+
+On the timer path and under the lock a step's presents of a frame already shown (the in-between
+ones; a new frame's present is always made) are held to an allowance, so the simulation, whose clock
+the audio follows, is never held below real time by presents nobody needs
+(`port/platform/pace_policy.h` (`PaceBudget`); `port/platform/pace_policy.c` (`pace_budget_*`)).
+On the timer path it is the last term of the refusal after the cost guard above, which stays as it
+was: a further present of a frame already shown is refused once the step has made as many presents
+as the allowance (`pace`); under the lock it runs inside `pace_lock_vsync` after the late-present
+skip and before the skip guard, a refused slot passing as a skipped one does, so the next present's
+alpha stays the grid's.
+
+- **Late**: a step that ends (the next step's start) half a period or more past its due time and
+  made at least one in-between present. A late step of new frames only (a hitch's catch-up, a load)
+  is not the in-betweens' doing and changes nothing.
+- **Excused**: the last present waited a quarter of a refresh or more for the display (the acquire
+  and the present: FIFO's full queue; not the fence waits, which are the GPU behind) and the step is
+  less than a refresh late, the skip guard's exception restated. `present_once` takes the two waits
+  from the backend's counts (`RhiStats`: `acquireNs` and `presentNs` against `fenceWaitNs`); where
+  the backend times nothing the whole present counts as the display's.
+- **Drop**: on a late step the allowance goes to one below that step's presents, held
+  `PACE_ALLOW_HOLD` (60) steps.
+- **Climb**: after `PACE_ALLOW_CLIMB` (180) further steps on time it goes up by one when the GPU
+  gate lets it: `(allow + 1) * G + step < period`, G the median of the last 8 presented replays'
+  GPU time (`perf_drain`, `pace_hist_add`; two replays late) and step the simulation step's own
+  time; with no GPU time (no timestamps) the climb probes on time alone. Never above
+  `PACE_ALLOW_MAX` (8) on the timer path, n under the lock.
+- A resync does not reset it; a new lock, a frame rate change, leaving the lock and the pace reset
+  (back from the background) do.
+
+Presents that keep up never end a step half a period late, and then nothing binds: the presents
+are those of the rule before (`pace_policy_test` (`testBudgetTimerLoop`): a GPU of 4 or 12 ms a
+picture at 120 a second, the same presents to the one). At 120 Hz under the lock with the fence (a
+replay waits for the GPU's picture two before, `RHI_FRAMES_IN_FLIGHT` 2) and 12 ms of GPU a
+picture, the rule before ends steps up to 20 ms late with the skip guard dropping about one present
+in three; the allowance holds the in-betweens to one a step and no step ends late
+(`pace_loop_test` (`test120Budget`), which prints both). On the timer path at 120 a second the rule
+before keeps up to about 16 ms of GPU a picture in that model (the cost guard holds the presents to
+the GPU's pace); at 20 ms its steps end 11.6 ms late and the allowance keeps them under half a
+period. A GPU-bound phone (20 ms a picture at 60 Hz, n = 1) presents its new frames only, 30 a
+second on time, where the rule before presented 50 a second with steps up to 32 ms late; the
+allowance may reach 0 under the n = 1 lock.
+
+Limits: D3D12 has no mailbox and may lack timestamps (and so may a later GL backend), so the climb
+probes on time alone there: one step a little late every 4 s while the GPU stays too slow. The Steam
+Deck at a cap of 90 is the FIFO timer path with `pace_fifo_hold`; its present that returns on a
+vblank up to a refresh past the deadline is the display's wait and is excused.
 
 ### The vsync lock
 
@@ -574,7 +640,7 @@ was full) and is counted (`waited`, `waitedMaxNs`). The wait is the backend's ow
 it gives one, never more than the present's whole time: on Vulkan the acquire
 (`vkAcquireNextImageKHR`), `vkQueuePresentKHR` and the fence waits; on D3D12 the frame latency wait,
 `Present` and the fence waits; the whole present where the backend times nothing
-(`port/platform/window_host.c` (`lock_io_present`, `lock_io_waited`); `port/rhi/rhi.h`
+(`port/platform/window_host.c` (`present_once`, `lock_io_waited`); `port/rhi/rhi.h`
 (`RhiStats`)).
 
 **The skip guard.** A step that ends past the next step's due time skips the rest of its presents (a
@@ -582,7 +648,9 @@ frame already shown), unless the present before waited for the display and the s
 slot behind: then the lateness is the display's own wait, the queue has pictures to show, and a skip
 would show a picture twice. A step a slot or more behind (a slow GPU, a 30 ms step) still skips, so
 the guard costs at most one slot (`port/platform/pace_policy.c` (`pace_lock_vsync`, `lastBlocked`)).
-`pace_fifo_hold` is not used under the lock.
+`pace_fifo_hold` is not used under the lock. The [present allowance](#the-present-allowance) runs
+before the skip guard (`PaceLock.budget`, max n; `PaceLockIo.displayWaited` gives the last present's
+wait for the display, and without it the allowance is not judged).
 
 **The late-present skip under the lock.** A lock that presents every new frame keeps the game below
 real time on presents slower than the frames, until the resync below. Before each present
@@ -839,8 +907,8 @@ one's pixels: for a measurement, not for play.
 
 | test | checks |
 | --- | --- |
-| `port/platform/test/pace_loop_test.c` | the vsync lock's loop under a fake clock and swapchain (mailbox, FIFO, a FIFO queue, a vblank clock): grid, alphas, phase, drift (`testFifoDrift`), the ratchet (`testFifoRatchet`), D3D12's full queue (`testQueueBlocking`), the skip guard (`testSkipGuard`), the late-present skip under the lock (`testLateSkipLock`), clocks left, off the screen, long steps, pauses; FIFO latest ready (`testLatestReady`), the timer path's FIFO hold (`testFifoHold`), the audio's starting ratio (`testNominalRatio`), the log's trace (`testTrace`) |
-| `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the late-present skip and its loop under a fake clock |
+| `port/platform/test/pace_loop_test.c` | the vsync lock's loop under a fake clock and swapchain (mailbox, FIFO, a FIFO queue, a vblank clock): grid, alphas, phase, drift (`testFifoDrift`), the ratchet (`testFifoRatchet`), D3D12's full queue (`testQueueBlocking`), the skip guard (`testSkipGuard`), the late-present skip under the lock (`testLateSkipLock`), the present allowance with the fence (`test120Budget`), clocks left, off the screen, long steps, pauses; FIFO latest ready (`testLatestReady`), the timer path's FIFO hold (`testFifoHold`), the audio's starting ratio (`testNominalRatio`), the log's trace (`testTrace`) |
+| `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the late-present skip and its loop under a fake clock, the present allowance's rule (`testBudgetRule`) and the timer path with a GPU queue (`testBudgetTimerLoop`) |
 | `port/platform/test/perf_block_test.c` | a block's sums and maxima, the replays over the threshold, the longest-phase text, a reset |
 | `port/platform/test/window_video_test.c` | the window mode requests and their readback on SDL's offscreen driver (77 without one): fullscreen at the desktop's size, Borderless, Windowed back at 960 x 720; Fullscreen through `ico_window_video_mode` holds the desktop's mode (its size and refresh rate) or, where the driver takes none, no mode, and `ico_window_video_desktop_mode` returns which. Whether the display goes exclusive and the swapchain's `VK_EXT_full_screen_exclusive` request are the window system's and a Windows driver's: no test here sees them (lavapipe has no such extension) |
 | `port/platform/test/hotkeys_test.c` | F11, F12, the stats period, F12's file names |
