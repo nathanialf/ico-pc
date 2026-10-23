@@ -8,7 +8,7 @@
  *   0  dual-source blend, SRC1_COLOR factors
  *   1  dual-source blend, SRC1_ALPHA factor with an RGB-only colour mask
  *      (0 and 1 keep the clear colour on a device without dual-source
- *      blending: rhi_vk_nodual fakes one)
+ *      blending: rhi_vk_nodual and rhi_gl_nodual fake one)
  *   2  stencil DECR_WRAP 0 -> 255, then EQUAL 255
  *   3  stencil REPLACE 255, INCR_WRAP -> 0, then EQUAL 0
  *   4  reversed-Z: depth cleared to 0, GEQUAL with writes
@@ -25,6 +25,7 @@
 #include "rhi_test_common.h"
 #include "rhi.h"
 #include "rhi_test_dxil.h"
+#include "rhi_test_glsl.h"
 #include "rhi_test_hlsl.h"
 #include "rhi_test_spv.h"
 #include <stdarg.h>
@@ -1048,9 +1049,12 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
         rhi_test_log("FAIL ICO_VK_FAKE_D24S8 set but %s reported\n", lim->depthStencilFormatName);
         return 1;
     }
-    const char *fake = getenv("ICO_VK_FAKE_NO_DUAL"); /* rhi_vk_nodual */
+    /* rhi_vk_nodual, rhi_gl_nodual */
+    const char *fakeDualName =
+        rhi_backend() == RHI_BACKEND_OPENGL ? "ICO_GL_FAKE_NO_DUAL" : "ICO_VK_FAKE_NO_DUAL";
+    const char *fake = getenv(fakeDualName);
     if (dual && fake && fake[0] && fake[0] != '0') {
-        rhi_test_log("FAIL ICO_VK_FAKE_NO_DUAL set but dualSourceBlend reported\n");
+        rhi_test_log("FAIL %s set but dualSourceBlend reported\n", fakeDualName);
         failures++;
     }
     if (!dual) {
@@ -1059,8 +1063,9 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
     /* the destination read (dstReadCell): reported, and off when faked off */
     rhi_test_log("%s: destination read: fragmentInterlock %d, rov %d, rasterOrderAttachment %d\n",
                  s_label, lim->fragmentInterlock, lim->rov, lim->rasterOrderAttachment);
-    const char *fakeDst =
-        getenv(rhi_backend() == RHI_BACKEND_D3D12 ? "ICO_DX_FAKE_NO_DST" : "ICO_VK_FAKE_NO_DST");
+    const char *fakeDst = getenv(rhi_backend() == RHI_BACKEND_D3D12    ? "ICO_DX_FAKE_NO_DST"
+                                 : rhi_backend() == RHI_BACKEND_OPENGL ? "ICO_GL_FAKE_NO_DST"
+                                                                       : "ICO_VK_FAKE_NO_DST");
     if (fakeDst && fakeDst[0] && fakeDst[0] != '0' &&
         (lim->fragmentInterlock || lim->rov || lim->rasterOrderAttachment)) {
         rhi_test_log("FAIL the destination read faked off but reported\n");
@@ -1084,12 +1089,18 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
     c.layouts[0] = c.l0;
     c.layouts[1] = c.l1;
     c.layouts[2] = c.l2;
-    /* the blob the backend understands: DXIL for D3D12, SPIR-V otherwise
-     * (Direct3D 11 takes the HLSL instead: makeShader) */
+    /* the blob the backend understands: DXIL for D3D12, GLSL text for
+     * OpenGL (plain, with textSize 0: rhi.h RhiShaderDesc), SPIR-V
+     * otherwise (Direct3D 11 takes the HLSL instead: makeShader) */
     const bool dxil = rhi_backend() == RHI_BACKEND_D3D12;
+    const bool glsl = rhi_backend() == RHI_BACKEND_OPENGL;
 #define BLOB(n)                                                                                    \
-    (dxil ? (const void *)dxil_##n : (const void *)spv_##n),                                       \
-        (dxil ? sizeof(dxil_##n) : sizeof(spv_##n))
+    (dxil   ? (const void *)dxil_##n                                                               \
+     : glsl ? (const void *)glsl_##n                                                               \
+            : (const void *)spv_##n),                                                              \
+        (dxil   ? sizeof(dxil_##n)                                                                 \
+         : glsl ? sizeof(glsl_##n)                                                                 \
+                : sizeof(spv_##n))
     c.vs = makeShader(RHI_STAGE_VERTEX, BLOB(vs_main), "vs_main");
     c.psDual = (RhiShader){0};
     if (dual) {
