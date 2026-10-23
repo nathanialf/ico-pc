@@ -2,7 +2,7 @@
  *
  * OpenGL 4.3 core with ARB_clip_control and ARB_buffer_storage, on a context
  * SDL makes (on the game's window, or on a hidden 1x1 window the backend
- * owns when headless); every entry point through gl_loader.h (gl.Name).
+ * owns when headless); every entry point through gl_loader.h (glf.Name).
  * docs/port/RHI.md, "OpenGL backend", describes the conventions:
  *
  *  - Clip space: glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE) at init, so
@@ -352,6 +352,9 @@ static inline uint32_t gl_frame_tag(void)
 }
 
 /* gl_device.c */
+/* A command list of the current frame (rhi_begin_commands hands out
+ * (frame tag << 20) | (index + 1) for lists[index]), NULL for any other id. */
+GlCmdList *gl_get_cmd(RhiCommandList cl);
 /* After a submit's commands: the slot's fence (glFenceSync, then glFlush),
  * replacing an earlier one of the same frame; rhi_submit calls it. */
 void gl_frame_fence(void);

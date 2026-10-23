@@ -2,7 +2,7 @@
  *
  * The backend links no system GL library: every entry point is fetched with
  * SDL_GL_GetProcAddress once the context is current (gl_loader_load) into
- * the struct the other files call through, gl.BindBuffer(...), with the
+ * the struct the other files call through, glf.BindBuffer(...), with the
  * types and enums of SDL's own headers (SDL_opengl.h, SDL_opengl_glext.h).
  * GL_FUNCS lists them: X(required, type, Name) for glName.  A required entry
  * (OpenGL 4.3 core) that the driver does not give fails the load with a line
@@ -180,10 +180,11 @@ typedef struct GlFuncs {
 #undef GL__FIELD
 
 /* The entry points (gl_loader.c); every other file of the backend calls
- * them as gl.Name(...).  The macro comes after SDL's headers, so it renames
- * nothing of theirs. */
+ * them as glf.Name(...).  The macro comes after SDL's headers, so it renames
+ * nothing of theirs; not "gl", which is the backend's RHI_BACKEND_PREFIX
+ * (rhi_backend_names.h pastes it into every entry point's name). */
 extern GlFuncs rhi_gl_funcs;
-#define gl rhi_gl_funcs
+#define glf rhi_gl_funcs
 
 /* Fetches every entry point of GL_FUNCS with SDL_GL_GetProcAddress (the
  * context current).  False when a required one is missing: the line
