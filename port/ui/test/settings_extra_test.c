@@ -722,10 +722,12 @@ static void testGraphicsApi(void)
         ico_toml_free(t);
     }
 
-    /* a value the build does not link shows as written, and steps from Automatic */
+    /* a value the build does not link shows as written, and steps from
+       Automatic (enterMainKeep: enterMain would write a fresh config over
+       the key) */
     useConfig("version = 1\n[video]\nbackend = \"d3d12\"\n");
     ui_settings_set_backend_names(kNames, 2);
-    enterMain(1);
+    enterMainKeep(1);
     CHECK(strcmp(ui_settings_value_text(UI_OPT_GRAPHICS_API), "Direct3D 12") == 0,
           "an unlinked value shows as written");
     ui_settings_step(UI_OPT_GRAPHICS_API, 1);
@@ -736,14 +738,14 @@ static void testGraphicsApi(void)
        their names and step from their place */
     useConfig("version = 1\n[video]\nbackend = \"gl\"\n");
     ui_settings_set_backend_names(kNames, 4);
-    enterMain(1);
+    enterMainKeep(1);
     CHECK(strcmp(ui_settings_value_text(UI_OPT_GRAPHICS_API), "OpenGL") == 0,
           "gl shows as OpenGL (%s)", ui_settings_value_text(UI_OPT_GRAPHICS_API));
     ui_settings_step(UI_OPT_GRAPHICS_API, 1);
     CHECK(strcmp(ico_config_get_string("video.backend", "?"), "d3d12") == 0,
           "Right from gl writes d3d12");
     useConfig("version = 1\n[video]\nbackend = \"VK\"\n");
-    enterMain(1);
+    enterMainKeep(1);
     CHECK(strcmp(ui_settings_value_text(UI_OPT_GRAPHICS_API), "Vulkan") == 0,
           "VK shows as Vulkan (%s)", ui_settings_value_text(UI_OPT_GRAPHICS_API));
     ui_settings_step(UI_OPT_GRAPHICS_API, 1);
@@ -1129,7 +1131,9 @@ static void testReportPicture(void)
 /* Main > Share a bug report, an rc build's row alone (ICO_RC_TOOLS, the
    release candidates' tooling; docs/BUILDING.md).  rc_tools_off: in the
    default build, on a phone with every other Main row shown and a share
-   handler set, the page has its sixteen rows, none of them the share row,
+   handler set, the page has its sixteen rows shown (seventeen built: the
+   Graphics link hides, a phone's build linking Vulkan alone), none of them
+   the share row,
    and no string of the English table is its text (a release has no such
    row, CMakeLists.txt's rc_tools_binary checks the program too).  With
    ICO_RC_TOOLS: the row shows on a phone with a handler, directly below
@@ -1170,6 +1174,9 @@ static void testShareReport(void)
     ui_settings_set_disc_handler(fakeDiscPresent);
     ui_settings_set_frame_dump_handler(fakeReportPicture);
     ui_settings_set_share_report_handler(fakeShareReport);
+    /* a phone's build links Vulkan alone: no Graphics link */
+    static const char *const kPhoneBackends[] = {"vulkan"};
+    ui_settings_set_backend_names(kPhoneBackends, 1);
     int mainL = enterMain(1);
     ico_opt_set_developer_mode(1);
     for (int k = 0; k < 4; k++) {
@@ -1181,8 +1188,9 @@ static void testShareReport(void)
         textRow = strcmp(lt_ext_row_text(labels[i]), kText) == 0 ? i : textRow;
     }
 #if !ICO_RC_TOOLS
-    CHECK(n == 16 && shown == 16,
-          "rc_tools_off: Main has its sixteen rows on a phone with a share handler (%d, %d shown)",
+    CHECK(n == 17 && shown == 16,
+          "rc_tools_off: Main has its sixteen rows shown on a phone with a share handler (%d, %d "
+          "shown)",
           n, shown);
     CHECK(textRow < 0, "rc_tools_off: no Main row is \"%s\" (row %d)", kText, textRow);
     for (int id = 0; id < UI_STR_COUNT; id++) {
@@ -1198,7 +1206,7 @@ static void testShareReport(void)
         at = labels[i] == row ? i : at;
         picAt = labels[i] == pic ? i : picAt;
     }
-    CHECK(n == 17 && shown == 17, "rc tools: seventeen Main rows shown on a phone (%d, %d)", n,
+    CHECK(n == 18 && shown == 17, "rc tools: seventeen Main rows shown on a phone (%d, %d)", n,
           shown);
     CHECK(row >= 0 && an22bShown(UI_PAGE_MAIN, UI_OPT_SHARE_REPORT) && at == textRow,
           "rc tools: the row shows as \"%s\" (%d, %d)", kText, at, textRow);
@@ -1251,6 +1259,7 @@ static void testShareReport(void)
     ui_settings_set_disc_handler(NULL);
     ui_settings_set_frame_dump_handler(NULL);
     ui_settings_set_share_report_handler(NULL);
+    ui_settings_set_backend_names(NULL, 0);
     useConfig("version = 1\n");
 }
 
