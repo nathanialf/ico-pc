@@ -22,6 +22,9 @@ or shipped). The SPIR-V binding map the HLSL sources are compiled to
                        units, so unit 48 would exist on no driver)
   dual-source output   layout(location = 0, index = 1)
 
+A module that queries a multisampled texture's sample count (OpImageQuerySamples:
+textureSamples(), GLSL 4.50 or ARB_texture_query_samples) is written as #version
+450; a driver below 4.5 refuses it and the renderer treats it as missing.
 A module GLSL cannot express (an input attachment: an OpTypeImage whose Dim is
 SubpassData) gets an EMPTY output file, which embed_shaders.py reads as "no
 GLSL" (the file must exist: it is a custom command's OUTPUT). Checks on the
@@ -44,14 +47,16 @@ OP_TYPE_IMAGE = 25
 OP_DECORATE = 71
 DIM_SUBPASS_DATA = 6
 DEC_NO_CONTRACTION = 42
+OP_IMAGE_QUERY_SAMPLES = 107
 
 
 def scan(spv):
-    """(has_subpass_input, no_contraction_count) of a SPIR-V module."""
+    """(has_subpass_input, no_contraction_count, queries_samples) of a SPIR-V
+    module."""
     if len(spv) < 20 or len(spv) % 4 or struct.unpack("<I", spv[:4])[0] != 0x07230203:
         raise ValueError("not a SPIR-V module")
     w = struct.unpack(f"<{len(spv) // 4}I", spv)
-    i, subpass, nocontr = 5, False, 0
+    i, subpass, nocontr, samples = 5, False, 0, False
     while i < len(w):
         n, op = w[i] >> 16, w[i] & 0xFFFF
         if n == 0 or i + n > len(w):
@@ -60,8 +65,10 @@ def scan(spv):
             subpass = True
         elif op == OP_DECORATE and n >= 3 and w[i + 2] == DEC_NO_CONTRACTION:
             nocontr += 1
+        elif op == OP_IMAGE_QUERY_SAMPLES:
+            samples = True
         i += n
-    return subpass, nocontr
+    return subpass, nocontr, samples
 
 
 def extensions(text):
@@ -106,18 +113,23 @@ def translate(exe, src, out):
     GLSL cannot express (the output is then an empty file)."""
     with open(src, "rb") as f:
         spv = f.read()
-    subpass, nocontr = scan(spv)
+    subpass, nocontr, samples = scan(spv)
     if subpass:
         if out:
             open(out, "wb").close()
         return None
-    cmd = [exe] + FLAGS + [src]
+    # textureSamples() (a Texture2DMS GetDimensions sample count) is GLSL 4.50
+    # or ARB_texture_query_samples; a 4.3 driver without the extension cannot
+    # take the module, so it is written as #version 450 (core there) and a
+    # driver below 4.5 leaves it out as a missing module
+    version = "450" if samples else "430"
+    cmd = [exe] + [f if f != "430" else version for f in FLAGS] + [src]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         sys.exit(f"spirv_to_glsl: {src}: spirv-cross failed: {r.stderr.strip()}")
     text = r.stdout
-    if not text.startswith("#version 430"):
-        sys.exit(f"spirv_to_glsl: {src}: output does not start with #version 430")
+    if not text.startswith(f"#version {version}"):
+        sys.exit(f"spirv_to_glsl: {src}: output does not start with #version {version}")
     text = remap_images(text)
     precise = len(re.findall(r"\bprecise\b", text))
     if nocontr and not precise:

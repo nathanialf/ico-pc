@@ -626,7 +626,7 @@ extensions below).
 `#error` (one of the two is required: Mesa's llvmpipe has neither); `GL_ARB_texture_query_samples`
 (required) in `depth_resolve_ps`. No module needs `GL_ARB_enhanced_layouts` (no `layout(offset`).
 
-**The gates** (`tools/spirv_to_glsl.py`): the text starts with `#version 430`; every NoContraction
+**The gates** (`tools/spirv_to_glsl.py`): the text starts with `#version 430` (`#version 450` for a module that queries a multisampled texture's sample count, `textureSamples()`: the MSAA depth resolve, `depth_resolve_ps`; a driver below OpenGL 4.5 refuses it and the renderer treats it as missing); every NoContraction
 decoration of the SPIR-V surfaces as `precise` in the GLSL (a module with the decoration and no
 `precise` fails the build; the counts differ by a few where SPIRV-Cross folds a decoration into one
 declaration); `embed_shaders.py` checks a non-empty file starts with `#version`;

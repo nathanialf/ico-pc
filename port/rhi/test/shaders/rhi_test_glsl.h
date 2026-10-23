@@ -86,8 +86,7 @@ static const char glsl_ps_uint[] =
     "\n";
 
 static const char glsl_ps_depth_resolve[] =
-    "#version 430\n"
-    "#extension GL_ARB_texture_query_samples : require\n"
+    "#version 450\n"
     "\n"
     "layout(binding = 17) uniform sampler2DMS SPIRV_Cross_Combinedg_msDepthSPIRV_Cross_DummySampler;\n"
     "\n"
