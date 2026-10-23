@@ -162,6 +162,13 @@ enum { ICO_DF_ABOVE1X = 33554432 };
  * blended in 256ths (gs_sample_gs_bilinear; rd_replay.c fillDrawCB). */
 enum { ICO_DF_GS_BILINEAR_GRID = 67108864 };
 
+/* DrawCB.mode[0] bits 27 and 28 (common.hlsli DF_AA1_MSB_SET,
+ * DF_AA1_MSB_CLEAR): sprite_aa1_ps keeps only the fragments whose written
+ * alpha (As with FBA's MSB) has its MSB set, or only those whose MSB is
+ * clear: the two draws of a PRIM.AA1 primitive under DATE
+ * (port/render/rd_replay_aa1.inc aa1DateDraw).  Neither: every fragment. */
+enum { ICO_DF_AA1_MSB_SET = 134217728, ICO_DF_AA1_MSB_CLEAR = 268435456 };
+
 /* DrawCB.mode[1] bits 8..: TEXFMT_* in gs_math.hlsli. */
 enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
 

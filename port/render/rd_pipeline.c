@@ -683,7 +683,10 @@ static RhiCompare depthCompare(uint8_t ztst)
  * reference's 1 where the fragment survives date_stencil_ps (ALWAYS), both
  * through the write mask of the bit alone; TEST1 passes where the bit is 1
  * (EQUAL to the reference under the bit's read mask), TEST0 where it is 0
- * (NOTEQUAL), writing nothing.  None of them reads or writes bits 0-5, the
+ * (NOTEQUAL), writing nothing; TEST0_SET is TEST0 replacing the bit with
+ * the reference's 1 where the fragment passes, TEST1_CLR is TEST1 zeroing
+ * it there (PRIM.AA1 under DATE, rd_replay_aa1.inc aa1DateDraw), through
+ * the bit's write mask.  None of them reads or writes bits 0-5, the
  * count's. */
 static void shadowStencil(uint8_t mode, RhiDepthStencilState *ds)
 {
@@ -710,9 +713,16 @@ static void shadowStencil(uint8_t mode, RhiDepthStencilState *ds)
         break;
     case RD_STENCIL_DATE_TEST0:
     case RD_STENCIL_DATE_TEST1:
-        f.compare = mode == RD_STENCIL_DATE_TEST1 ? RHI_CMP_EQUAL : RHI_CMP_NOTEQUAL;
+    case RD_STENCIL_DATE_TEST0_SET:
+    case RD_STENCIL_DATE_TEST1_CLR:
+        f.compare = mode == RD_STENCIL_DATE_TEST1 || mode == RD_STENCIL_DATE_TEST1_CLR
+                        ? RHI_CMP_EQUAL
+                        : RHI_CMP_NOTEQUAL;
+        f.pass = mode == RD_STENCIL_DATE_TEST0_SET
+                     ? RHI_SO_REPLACE
+                     : (mode == RD_STENCIL_DATE_TEST1_CLR ? RHI_SO_ZERO : RHI_SO_KEEP);
         ds->stencilReadMask = RD_DATE_STENCIL_BIT;
-        ds->stencilWriteMask = 0;
+        ds->stencilWriteMask = f.pass == RHI_SO_KEEP ? 0 : RD_DATE_STENCIL_BIT;
         break;
     default:
         f.compare = RHI_CMP_EQUAL;
@@ -1224,8 +1234,7 @@ uint32_t rd__key_dynamic_bits(const RdPipeKeyInt *k)
     }
     uint32_t bits = 0;
     if (g_rd.dynDepth && k->depthFmt != RHI_FMT_UNKNOWN &&
-        (k->gs.stencil == RD_STENCIL_OFF || k->gs.stencil == RD_STENCIL_DATE_TEST0 ||
-         k->gs.stencil == RD_STENCIL_DATE_TEST1)) {
+        (k->gs.stencil == RD_STENCIL_OFF || rd__date_draw_stencil(k->gs.stencil))) {
         /* the shadow count's stencil keys and DATE's two setup keys stay
          * static; a DATE draw's own key (the stencil test of the bit, the
          * draw's depth state) takes the dynamic depth like any other draw */
@@ -2611,6 +2620,8 @@ RdKeyFamily rd__pipe_key_family(const RdPipeKeyInt *k)
     case RD_STENCIL_DATE_SET:
     case RD_STENCIL_DATE_TEST0:
     case RD_STENCIL_DATE_TEST1:
+    case RD_STENCIL_DATE_TEST0_SET:
+    case RD_STENCIL_DATE_TEST1_CLR:
         return RD_KF_DATE;
     default:
         break;
@@ -2917,7 +2928,8 @@ bool rd__date_stencil_pass(RdDrawPass *p)
  * lines, Z write on and off, every blend the families list, the scene
  * depth, sprite_ps and its TEXA twin); the VU draws' twins of the
  * enumerated VU keys under Z GEQUAL with the scene depth (the list 4
- * default: DATM 1); and the two setup keys (RGBA8: the scene class).
+ * default: DATM 1); the PRIM.AA1 strips' DATM 1 pairs (TEST1 and
+ * TEST1_CLR); and the two setup keys (RGBA8: the scene class).
  * Keys missing here are made on first use. */
 uint32_t rd__enumerate_reachable_date(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 {
@@ -2975,6 +2987,33 @@ uint32_t rd__enumerate_reachable_date(RdPipeKeyInt *out, uint32_t max, uint32_t 
             RdPipeKeyInt t = *k;
             t.gs.stencil = RD_STENCIL_DATE_TEST1;
             n = rd__add_pipe_key(out, max, n, &t);
+        }
+    }
+    /* the PRIM.AA1 strips under DATE DATM 1 (the puddle's ripples, TEST
+     * 0x3F000: rd__enumerate_reachable_screen's AA1 keys with the depth):
+     * the pair each primitive draws with through the bit (rd_replay_aa1.inc
+     * aa1DateDraw: TEST1, and TEST1_CLR clearing it), Z write on and off,
+     * the AA1 blends (three blend paths) */
+    static const int kAa1Blends[] = {0, 1, 2, 4, 5, 6, 7};
+    for (int zw = 0; zw < 2; zw++) {
+        for (size_t b = 0; b < sizeof(kAa1Blends) / sizeof(kAa1Blends[0]); b++) {
+            RdStateBlock st;
+            rd__reset_state_block(&st);
+            st.ds.test = rd_test_from_gs(RD_TEST_RGBONLY_DATE1);
+            st.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
+            st.ds.abe = 1;
+            st.ds.blend = (uint8_t)kAa1Blends[b];
+            st.aa1 = 1;
+            RdDrawPass dp[2];
+            const int np = rd__plan_screen_draw_ex(&st, RD_PRIM_TRIANGLES, 1, RD_SPACE_WORLD,
+                                                   RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
+            for (int i = 0; i < np; i++) {
+                if (rd__date_stencil_pass(&dp[i])) {
+                    n = rd__add_pipe_key(out, max, n, &dp[i].key);
+                    dp[i].key.gs.stencil = RD_STENCIL_DATE_TEST1_CLR;
+                    n = rd__add_pipe_key(out, max, n, &dp[i].key);
+                }
+            }
         }
     }
     const RdPipeKeyInt clear = rd__date_setup_key(RD_STENCIL_DATE_CLEAR, RHI_FMT_RGBA8_UNORM);
@@ -3155,7 +3194,11 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
      * with ABE 0; the puddle's ripple strips, puddle.c: TEST 0x3F000, mode 0
      * or 4 with ABE 1), with every game blend literal, Z on and off, with and
      * without a depth target; the edge geometry's zwrite-off keys are among
-     * them */
+     * them.  A DATE key with the depth also has the twins its primitives
+     * draw with on the snapshot path (rd_replay_aa1.inc aa1DatePlan: TEST0
+     * and TEST0_SET, with DF_DATE in the flags; DATM 0's pair on the
+     * stencil path too) and the clear of the bit before them; the stencil
+     * path's DATM 1 pair is DATE's (rd__enumerate_reachable_date) */
     static const uint64_t kAa1Tests[] = {RD_TEST_Z_ALWAYS, RD_TEST_Z_GEQUAL, RD_TEST_RGBONLY_DATE1};
     static const int kAa1Blends[] = {0, 1, 2, 4, 5, 6, 7};
     for (size_t t = 0; t < sizeof(kAa1Tests) / sizeof(kAa1Tests[0]); t++) {
@@ -3175,11 +3218,26 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
                                                                RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
                         for (int i = 0; i < np; i++) {
                             n = rd__add_pipe_key(out, max, n, &dp[i].key);
+                            if ((dp[i].flags & ICO_DF_DATE) &&
+                                dp[i].key.depthFmt != RHI_FMT_UNKNOWN) {
+                                RdPipeKeyInt t = dp[i].key;
+                                t.gs.stencil = RD_STENCIL_DATE_TEST0;
+                                n = rd__add_pipe_key(out, max, n, &t);
+                                t.gs.stencil = RD_STENCIL_DATE_TEST0_SET;
+                                n = rd__add_pipe_key(out, max, n, &t);
+                            }
                         }
                     }
                 }
             }
         }
+    }
+    /* the snapshot path's clear of the bit before such a draw
+     * (rd_replay_tiler.c rd__replay_date_clear: DATE's CLEAR setup key, RGBA8,
+     * the scene class) */
+    if (g_rd.fs[RD_FS_DATE_CLEAR].id) {
+        const RdPipeKeyInt clear = rd__date_setup_key(RD_STENCIL_DATE_CLEAR, RHI_FMT_RGBA8_UNORM);
+        n = rd__add_pipe_key(out, max, n, &clear);
     }
     /* the presentation overlay on the headless output and the
      * swapchain (sprites and triangles; the popups' blend and the glow's) */

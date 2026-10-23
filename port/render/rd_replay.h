@@ -252,6 +252,10 @@ void rd__fill_draw_cb_extra(const Replay *r, const RdDrawPass *dp, const DrawSet
  * rd__replay_date_take  DATE's stencil bit written in the draw's pass
  *                       (bindDrawEx, a draw with DrawSetup.dateStencil);
  *                       false: the draw is skipped
+ * rd__replay_date_clear  DATE's stencil bit cleared over an area in the
+ *                       open pass (a PRIM.AA1 DATE draw on the snapshot
+ *                       path, rd_replay_aa1.inc aa1DateDraw); false: not
+ *                       drawn
  * rd__replay_blur_fold  a staticBlur pair at its pass 1 c drawn as one pass
  *                       (rd__blur_post_sprite); true: drawn, and the loop skips
  *                       rd__replay_fold_skip() commands with their state
@@ -260,6 +264,7 @@ void rd__fill_draw_cb_extra(const Replay *r, const RdDrawPass *dp, const DrawSet
  *                       list number and the frame head's half pixel;
  *                       rd__replay_fold_at the command being replayed */
 bool rd__replay_date_take(Replay *r, const DrawSetup *ds);
+bool rd__replay_date_clear(Replay *r, const DrawSetup *ds, const RhiRect *area);
 bool rd__replay_blur_fold(Replay *r, const RdFrame *f, const RdCmd *c);
 void rd__replay_fold_list(const RdCmd *cmds, uint32_t count, int list, uint32_t headHalf);
 void rd__replay_fold_at(uint32_t index);

@@ -163,11 +163,16 @@ typedef enum RdStencilMode {
      * leaves bit 6, RD_DATE_STENCIL_BIT, alone): CLEAR writes 0 into bit 6,
      * SET writes 1 where date_stencil_ps keeps the fragment (the
      * destination alpha's MSB), TEST0 and TEST1 pass where bit 6 is 0
-     * (DATM 0) or 1 (DATM 1) and write nothing */
+     * (DATM 0) or 1 (DATM 1) and write nothing.  A PRIM.AA1 draw under
+     * DATE draws each primitive as two draws (rd_replay_aa1.inc
+     * aa1DateDraw): TEST0_SET is TEST0 writing 1 into bit 6 where the
+     * fragment passes, TEST1_CLR is TEST1 writing 0 there */
     RD_STENCIL_DATE_CLEAR = RD_STENCIL_RESOLVE_BIT0 + 6,
     RD_STENCIL_DATE_SET,
     RD_STENCIL_DATE_TEST0,
-    RD_STENCIL_DATE_TEST1
+    RD_STENCIL_DATE_TEST1,
+    RD_STENCIL_DATE_TEST0_SET,
+    RD_STENCIL_DATE_TEST1_CLR
 } RdStencilMode;
 
 typedef enum RdTargetFormat {

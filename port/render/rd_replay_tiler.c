@@ -1,6 +1,7 @@
 /* rd_replay_tiler.c: the replay's tiler passes (docs/port/RENDER.md, "The
  * replay"): DATE through the stencil bit's setup (rd__replay_date_take,
- * from rd_replay.c bindDrawEx) and the staticBlur pair fold
+ * from rd_replay.c bindDrawEx; rd__replay_date_clear, the PRIM.AA1 DATE
+ * draws' clear on the snapshot path) and the staticBlur pair fold
  * (rd__replay_blur_fold, from rd_blur_border.c rd__blur_post_sprite; the
  * list loop's look-ahead state, rd__replay_fold_list / _at / _skip).  Both
  * are gated on the device profile (RdProfile.dateStencil, blurFold) and
@@ -114,6 +115,53 @@ bool rd__replay_date_take(Replay *r, const DrawSetup *ds)
     r->dateStSerial = r->writeSerial;
     r->dateStArea = take;
     r->dateStPass = r->passSerial;
+    return true;
+}
+
+/* PRIM.AA1 under DATE on the snapshot path (rd_replay_aa1.inc
+ * aa1DateDraw): bit 6 of the stencil cleared over area (texels, NULL: the
+ * whole target) in the open pass, date_clear_ps under RD_STENCIL_DATE_CLEAR
+ * as rd__replay_date_take clears it, so that the draw's primitives can
+ * mark in it the texels where one of them changed the alpha's MSB.  The
+ * stencil path's record of the bit is dropped (the bit no longer holds the
+ * alpha there).  The caller's draws set their own scissor.  False when the
+ * setup's pipeline or group is missing or no pass is open (nothing drawn) */
+bool rd__replay_date_clear(Replay *r, const DrawSetup *ds, const RhiRect *area)
+{
+    RhiCommandList cl = rd__replay_cl();
+    RdTargetRec *tc = ds->tc;
+    const RdPipeKeyInt kc = rd__date_setup_key(RD_STENCIL_DATE_CLEAR, tc->format);
+    const RhiPipeline pc = rd__get_pipeline(&kc);
+    const RhiBindGroup gt =
+        rd__tex_group(g_rd.dummy, rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP,
+                                              RD_WRAP_CLAMP));
+    if (!pc.id || !gt.id || !r->passOpen) {
+        return false;
+    }
+    RhiRect take = {0, 0, tc->tw, tc->th};
+    if (area && area->w && area->h && area->x >= 0 && area->y >= 0 && (uint32_t)area->x < tc->tw &&
+        (uint32_t)area->y < tc->th) {
+        const uint32_t x = (uint32_t)area->x, y = (uint32_t)area->y;
+        take = *area;
+        take.w = x + take.w > tc->tw ? tc->tw - x : take.w;
+        take.h = y + take.h > tc->th ? tc->th - y : take.h;
+    }
+    IcoDrawCB cb;
+    memset(&cb, 0, sizeof(cb));
+    cb.uvRect[2] = (float)tc->tw;
+    cb.uvRect[3] = (float)tc->th;
+    cb.tex[0] = (float)tc->tw;
+    cb.tex[1] = (float)tc->th;
+    cb.tex[2] = 1.0f / (float)tc->tw;
+    cb.tex[3] = 1.0f / (float)tc->th;
+    rhi_cmd_set_scissor(cl, &take);
+    rd__set_pipeline(cl, pc, &kc);
+    rd__bind_uniform(cl, 0, rd__frame_group(tc->tw, tc->th, 0.0f, 0.0f));
+    rd__bind_uniform(cl, 1, rd__draw_group(&cb));
+    rhi_cmd_set_bind_group(cl, 2, gt);
+    rhi_cmd_set_stencil_ref(cl, 0);
+    rd__replay_draw(cl, 3, 0, 1);
+    r->dateStFor = 0;
     return true;
 }
 

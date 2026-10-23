@@ -2935,7 +2935,7 @@ static void dstPassMode(Replay *r, const RdPipeKeyInt *k)
  * texture or as its input attachment; nothing for the other keys */
 static void dstBind(Replay *r, const RdPipeKeyInt *k)
 {
-    if (k->gs.stencil == RD_STENCIL_DATE_TEST0 || k->gs.stencil == RD_STENCIL_DATE_TEST1) {
+    if (rd__date_draw_stencil(k->gs.stencil)) {
         /* DATE's stencil bit (every caller draws right after) */
         rhi_cmd_set_stencil_ref(s_cl, RD_DATE_STENCIL_BIT);
         g_rdPerf.dateStencilDraws++;
@@ -3146,9 +3146,6 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
     }
     rd__fill_draw_cb_extra(r, dp, ds, cb); /* rd_pixel_plan.c */
 }
-
-/* PRIM.AA1's edge geometry: aa1Prim, axScratch, aa1Expand */
-#include "rd_replay_aa1.inc"
 
 /* Perspective-correct STQ.  A triangle command with texture
  * coordinates in STQ (not uvFixed) whose vertices all have Q > 0 and some
@@ -3417,6 +3414,10 @@ static bool drawExpanded(Replay *r, const RdDrawPass *pass, const DrawSetup *ds,
     return any;
 }
 
+/* PRIM.AA1's edge geometry (aa1Prim, axScratch, aa1Expand) and its draws
+ * under DATE (aa1DatePlan, aa1DateDraw) */
+#include "rd_replay_aa1.inc"
+
 /* The DATE snapshot only where a screen-prim command can draw: its box with
  * the full-screen, UI and mirror decisions doScreen makes after
  * prepareDraw.  False (the whole target) when the draw does not test DATE
@@ -3556,17 +3557,22 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
             stride = sizeof(IcoSpritePlaneVertex);
         }
     }
-    uint32_t nDraw = nv, nFirst = nv;
+    uint32_t nDraw = nv, nFirst = nv, nPrim = 0;
+    int split = 0, aa1Date = 0; /* aa1Date: under DATE, primitive by primitive (aa1DatePlan) */
+    IcoSpriteAa1Vertex *ax = NULL;
+    uint32_t *ends = NULL;
     if (aa1) {
-        int split = 0;
         for (int i = 0; i < np; i++) {
             split |= topo == RD_PRIM_TRIANGLES && dp[i].key.gs.zwrite == RD_ZWRITE_ON;
+            aa1Date |= r->st.ds.test.date != RD_DATE_OFF && (dp[i].key.gs.colorMask & 8);
         }
-        IcoSpriteAa1Vertex *ax = axScratch((uint64_t)nv * 7);
+        ax = axScratch((uint64_t)nv * 7);
+        ends = aa1Date ? aa1Ends(nv) : NULL;
+        aa1Date = ends != NULL;
         if (!ax) {
             return;
         }
-        nDraw = aa1Expand(out, nv, topo, split, ax, &nFirst);
+        nDraw = aa1Expand(out, nv, topo, split && !aa1Date, ax, &nFirst, ends, &nPrim);
         if (nDraw == 0) {
             return;
         }
@@ -3587,7 +3593,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
      * interior and fringes are two draws, which do not join a run: merged,
      * the second pass of one command would follow the first pass of the
      * next) */
-    if (np == 1 && (!aa1 || nFirst == nDraw || nFirst == 0)) {
+    if (np == 1 && !aa1Date && (!aa1 || nFirst == nDraw || nFirst == 0)) {
         RdDrawPass one = dp[0];
         if (aa1 && nFirst == 0) {
             /* AA1 lines: all fringe, drawn with Z write off */
@@ -3665,6 +3671,10 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
 
 immediate:
     flushScreenRun(r);
+    if (aa1Date && !aa1DatePlan(r, dp, np, &ds, dateAt, topo == RD_PRIM_LINES)) {
+        aa1Date = 0; /* drawn as before: the triangles, then their fringes */
+        nDraw = aa1Expand(out, nv, topo, split, ax, &nFirst, NULL, NULL);
+    }
     const uint64_t drawOff = rd__ring_alloc((uint64_t)nDraw * stride, 16);
     if (drawOff == ~0ull) {
         return;
@@ -3673,6 +3683,14 @@ immediate:
     r->sc = nr.sc; /* a pass begun again for the exact blend takes it back */
     rhi_cmd_set_scissor(s_cl, &nr.sc);
     rhi_cmd_set_vertex_buffer(s_cl, 0, g_rd.ring[s_slot], drawOff);
+    if (aa1Date) {
+        g_rdPerf.screenCmds++;
+        g_rdPerf.screenDraws += aa1DateDraw(r, nr.g2, ends, nPrim);
+        for (int i = 0; i < np; i++) {
+            r->writeSerial += (dp[i].key.gs.colorMask & 8) != 0;
+        }
+        return;
+    }
     const RdUniform frameKept = r->frameBG;
     r->frameBG = frame; /* drawExpanded binds it */
     for (int i = 0; i < np; i++) {

@@ -505,7 +505,10 @@ bool aa1_wedge_keep(float4 pos, uint4 w)
 // This happens before the alpha test, and the alpha that results is the
 // blend's As and the alpha written.  A triangle's edge pixel the GS does
 // not draw (aa1_wedge_keep) is discarded: the fringe is drawn longer than
-// its edge and cut here, exactly.
+// its edge and cut here, exactly.  Under DATE each primitive is two draws
+// (rd_replay_aa1.inc aa1DateDraw): DF_AA1_MSB_SET keeps the fragments
+// whose written alpha has its MSB set, DF_AA1_MSB_CLEAR those whose MSB is
+// clear, and the draw's stencil keeps or changes DATE's bit to match.
 GS_PS_ATTR GS_PS_OUT sprite_aa1_ps(SpriteAa1VSOut i)
 {
     uint4 col = sprite_colour(i.pos, i.col, i.uv, 1.0);
@@ -520,6 +523,11 @@ GS_PS_ATTR GS_PS_OUT sprite_aa1_ps(SpriteAa1VSOut i)
         col.a = a;
     }
     if (gs_alpha_discard(g_mode.z, g_mode.w, col.a)) {
+        GS_DISCARD;
+    }
+    const bool msb = (col.a & 0x80u) != 0u || (g_mode.x & DF_FBA) != 0u;
+    if (((g_mode.x & DF_AA1_MSB_SET) != 0u && !msb) ||
+        ((g_mode.x & DF_AA1_MSB_CLEAR) != 0u && msb)) {
         GS_DISCARD;
     }
     GS_RETURN(col, i.pos);

@@ -3108,6 +3108,15 @@ uint32_t rd__enumerate_reachable_date(RdPipeKeyInt *out, uint32_t max, uint32_t 
  * False (unchanged) for a pass without DF_DATE, with a stencil mode of its
  * own or without a depth attachment */
 bool rd__date_stencil_pass(RdDrawPass *p);
+
+/* A DATE draw's own stencil mode (not a setup's): the bit's tests TEST0 and
+ * TEST1, and the PRIM.AA1 pairs' TEST0_SET and TEST1_CLR (rd.h) */
+static inline bool rd__date_draw_stencil(uint8_t m)
+{
+    return m == RD_STENCIL_DATE_TEST0 || m == RD_STENCIL_DATE_TEST1 ||
+           m == RD_STENCIL_DATE_TEST0_SET || m == RD_STENCIL_DATE_TEST1_CLR;
+}
+
 /* the fold's key of a staticBlur pair (fx_blur2_ps over colorFmt, no depth;
  * rd_replay_tiler.c rd__replay_blur_fold) */
 RdPipeKeyInt rd__blur_fold_key(const RdStateBlock *s, RhiFormat colorFmt);

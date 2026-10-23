@@ -318,6 +318,14 @@ cbuffer DrawCB : register(b1, space1)
 // wrap in DF_TEXA_CLAMP_S/T. Never set when the two scales are equal, so
 // never when every target is at scale 1.
 #define DF_ABOVE1X 33554432u
+// PRIM.AA1 under DATE (rd_replay_aa1.inc aa1DateDraw): each primitive is two
+// draws, one keeping the fragments whose written alpha (As, FBA's MSB
+// added) has its MSB set, the other those whose MSB is clear, so the
+// stencil can carry the destination alpha's MSB from one primitive to the
+// next (sprite.hlsl sprite_aa1_ps). shader_consts.h ICO_DF_AA1_MSB_SET,
+// ICO_DF_AA1_MSB_CLEAR.
+#define DF_AA1_MSB_SET 134217728u
+#define DF_AA1_MSB_CLEAR 268435456u
 
 // TEST.DATE. snap is the R8 DATE snapshot (1.0 where the destination alpha
 // had its MSB set when the snapshot was taken). Returns true when the

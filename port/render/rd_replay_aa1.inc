@@ -1,7 +1,9 @@
-/* rd_replay_aa1.inc: PRIM.AA1's edge geometry, included by rd_replay.c
- * where doScreen's helpers stand (it keeps rd_replay.c under the 256 KiB
- * file cap).  doScreen draws what aa1Expand returns through the
- * sprite_aa1_* shaders (port/shaders/sprite.hlsl). */
+/* rd_replay_aa1.inc: PRIM.AA1's edge geometry and its draws under DATE,
+ * included by rd_replay.c after drawExpanded, where doScreen's helpers
+ * stand (it keeps rd_replay.c under the 256 KiB file cap).  doScreen draws
+ * what aa1Expand returns through the sprite_aa1_* shaders
+ * (port/shaders/sprite.hlsl), under DATE primitive by primitive
+ * (aa1DatePlan, aa1DateDraw). */
 
 /* -------------------------------------------------------------- PRIM.AA1
  * The model is PCSX2's software renderer's
@@ -259,11 +261,14 @@ static uint32_t aa1Fringes(const IcoSpriteVertex *t, IcoSpriteAa1Vertex *o)
  * vertices first (*nInterior of them) and every fringe after, for a draw
  * whose fringes need Z write off (two draws); else triangle by triangle,
  * the GS's order, *nInterior = the total (one draw).  Lines are all
- * fringe: *nInterior = 0. */
+ * fringe: *nInterior = 0.  ends (not with split; NULL: none): each
+ * primitive's end, its vertices from the previous one's end (a triangle's
+ * own three first, then its fringes), *nEnds of them (aa1DateDraw) */
 static uint32_t aa1Expand(const IcoSpriteVertex *in, uint32_t n, uint8_t topo, int split,
-                          IcoSpriteAa1Vertex *o, uint32_t *nInterior)
+                          IcoSpriteAa1Vertex *o, uint32_t *nInterior, uint32_t *ends,
+                          uint32_t *nEnds)
 {
-    uint32_t k = 0;
+    uint32_t k = 0, ne = 0;
     if (topo == RD_PRIM_LINES) {
         for (uint32_t i = 0; i + 1 < n; i += 2) {
             const IcoSpriteVertex *a = &in[i], *b = &in[i + 1];
@@ -274,8 +279,14 @@ static uint32_t aa1Expand(const IcoSpriteVertex *in, uint32_t n, uint8_t topo, i
             }
             k += aa1Band(a, b, xMajor ? 0 : -16, xMajor ? -16 : 0, NULL, 0, &o[k]);
             k += aa1Band(a, b, xMajor ? 0 : 16, xMajor ? 16 : 0, NULL, 0, &o[k]);
+            if (ends) {
+                ends[ne++] = k;
+            }
         }
         *nInterior = 0;
+        if (nEnds) {
+            *nEnds = ne;
+        }
         return k;
     }
     const uint32_t clippedBefore = s_aa1Clipped;
@@ -285,9 +296,15 @@ static uint32_t aa1Expand(const IcoSpriteVertex *in, uint32_t n, uint8_t topo, i
         }
         if (!split) {
             k += aa1Fringes(&in[i], &o[k]);
+            if (ends) {
+                ends[ne++] = k;
+            }
         }
     }
     *nInterior = k;
+    if (nEnds) {
+        *nEnds = ne;
+    }
     if (split) {
         for (uint32_t i = 0; i + 2 < n; i += 3) {
             k += aa1Fringes(&in[i], &o[k]);
@@ -299,4 +316,227 @@ static uint32_t aa1Expand(const IcoSpriteVertex *in, uint32_t n, uint8_t topo, i
                 n / 3, s_aa1Clipped, k);
     }
     return k;
+}
+
+/* ------------------------------------------------------ PRIM.AA1 and DATE
+ * The GS tests TEST.DATE against the destination alpha as each pixel is
+ * written, so in an AA1 strip under DATM 1 an edge pixel one triangle
+ * writes with alpha below 0x80 (its coverage) turns away the next
+ * triangle's pixel there (docs/port/DIVERGENCES.md VD-17).  The DATE
+ * snapshot is taken once a draw, so the port drew both.  A PRIM.AA1 draw
+ * under DATE that writes alpha now draws its primitives one at a time, in
+ * the command's order, each in two draws over its own vertices
+ * (aa1DateDraw): the fragments whose written alpha keeps the destination's
+ * MSB as DATE wants it, then those that change it, the second draw's
+ * stencil changing bit 6 (RD_DATE_STENCIL_BIT) where they land.  Within
+ * one primitive the GS's pixels are distinct (a triangle's own pixels and
+ * each edge's lie on different sides of its edges), so the order inside
+ * the pair decides nothing; across primitives the bit carries what the GS
+ * reads.  A triangle's two draws are each split again by Z write (its own
+ * pixels with the pass's, its fringes without: edge pixels write no Z),
+ * so a triangle of a Z-writing draw takes up to four draws.
+ *   the stencil path  (DrawSetup.dateStencil) bit 6 is the alpha's MSB
+ *                     (rd__replay_date_take): DATM 1 tests TEST1 and the
+ *                     MSB-clear fragments TEST1_CLR, DATM 0 tests TEST0 and
+ *                     the MSB-set ones TEST0_SET; DF_DATE off
+ *   the snapshot path the R8 snapshot is DATE's test as before (DF_DATE)
+ *                     and bit 6, cleared over the draw's area first
+ *                     (rd__replay_date_clear), marks the texels a fragment
+ *                     of the draw changed the MSB of: every draw tests
+ *                     TEST0, the changing fragments TEST0_SET.  Under DATM 1
+ *                     a texel that failed the snapshot never passes, and
+ *                     one cleared by the draw fails from then on; DATM 0
+ *                     alike
+ * Every image of a planned pass (the two-pass blend's, the exact blend's
+ * attachment read) tests the bit and the last one writes it, so all of
+ * them see the same bit.  The storage read (no colour attachment: the
+ * shader writes before the stencil test), the MSAA epoch and a depth
+ * without the target's size keep the one test per draw, logged. */
+typedef struct Aa1DateImg {
+    RdPipeKeyInt key;
+    RhiPipeline pipe;
+    RdUniform cb;
+} Aa1DateImg;
+
+/* per planned pass i, part (0: a triangle's own vertices with the pass's
+ * Z write, 1: its fringes with Z write off; one part over every vertex
+ * without Z write and for lines) and selection (0: the fragments that keep
+ * the bit, 1: those that change it), the images drawn */
+typedef struct Aa1DatePlan {
+    Aa1DateImg img[2][2][2][8];
+    uint8_t nImg[2][2][2];
+    uint8_t parts[2];
+    int np, stencil;
+    const Aa1DateImg *first;
+} Aa1DatePlan;
+
+static Aa1DatePlan s_aa1Date;
+
+static uint32_t *s_axEnds;
+
+static uint32_t s_axEndsCap;
+
+/* room for the primitive ends of n expanded vertices (a primitive has at
+ * least two) */
+static uint32_t *aa1Ends(uint32_t n)
+{
+    const uint32_t need = n / 2 + 1;
+    if (need > s_axEndsCap) {
+        uint32_t *p = realloc(s_axEnds, (size_t)need * 2 * sizeof(*p));
+        if (!p) {
+            return NULL;
+        }
+        s_axEnds = p;
+        s_axEndsCap = need * 2;
+    }
+    return s_axEnds;
+}
+
+/* the log: the first command drawn so, and the draws that keep the one
+ * test per draw (the first few, then at each power of two) */
+static uint32_t s_aa1DateDrawn, s_aa1DateKept;
+
+static bool aa1DateKept(const char *why)
+{
+    if (rd__pipeline_gathering()) {
+        return false;
+    }
+    s_aa1DateKept++;
+    if (s_aa1DateKept <= 3 || (s_aa1DateKept & (s_aa1DateKept - 1)) == 0) {
+        rd__log("aa1: a DATE draw keeps DATE's one test per draw (%s): where its primitives "
+                "share an edge both are drawn (%u so far)",
+                why, s_aa1DateKept);
+    }
+    return false;
+}
+
+/* The draws of a PRIM.AA1 command under DATE (dp, np: its planned passes;
+ * lines: a line command), after bindDrawEx: each image's key, pipeline and
+ * DrawCB; then the open pass made the images' kind and, on the snapshot
+ * path, bit 6 cleared over area.  False (nothing drawn): the command is
+ * drawn as before (aa1DateKept says why) */
+static bool aa1DatePlan(Replay *r, const RdDrawPass *dp, int np, const DrawSetup *ds,
+                        const RhiRect *area, int lines)
+{
+    Aa1DatePlan *pl = &s_aa1Date;
+    const RdTargetRec *td = ds->tdId ? rd__target_rec(ds->tdId) : NULL;
+    const int datm = r->st.ds.test.date == RD_DATE_DEST_ALPHA_1;
+    /* the fragments that change the bit: DATM 1 those writing an alpha
+     * below 0x80, DATM 0 those writing 0x80 or more */
+    const uint32_t flipSel = datm ? ICO_DF_AA1_MSB_CLEAR : ICO_DF_AA1_MSB_SET;
+    const uint32_t keepSel = datm ? ICO_DF_AA1_MSB_SET : ICO_DF_AA1_MSB_CLEAR;
+    memset(pl->nImg, 0, sizeof(pl->nImg));
+    pl->np = np;
+    pl->stencil = ds->dateStencil;
+    pl->first = NULL;
+    if (!td || td->tw != ds->tc->tw || td->th != ds->tc->th) {
+        return aa1DateKept("no depth and stencil of the target's size");
+    }
+    if (g_rd.passSamples > 1) {
+        return aa1DateKept("the MSAA epoch");
+    }
+    if (!ds->dateStencil && (ds->dateTex.id == g_rd.dummy.id || !g_rd.fs[RD_FS_DATE_CLEAR].id)) {
+        return aa1DateKept("no DATE snapshot or no DATE clear shader");
+    }
+    for (int i = 0; i < np && i < 2; i++) {
+        const int alpha = (dp[i].key.gs.colorMask & 8) != 0;
+        const int fba = (dp[i].flags & ICO_DF_FBA) != 0;
+        pl->parts[i] = (uint8_t)(!lines && dp[i].key.gs.zwrite == RD_ZWRITE_ON ? 2 : 1);
+        for (int part = 0; part < pl->parts[i]; part++) {
+            for (int sel = 0; sel < 2; sel++) {
+                const uint32_t want = sel ? flipSel : keepSel;
+                if ((sel && !alpha) || (alpha && fba && want == ICO_DF_AA1_MSB_CLEAR)) {
+                    continue; /* nothing written changes the bit; FBA sets every MSB */
+                }
+                RdDrawPass p = dp[i];
+                if (part == 1 || lines) {
+                    p.key.gs.zwrite = RD_ZWRITE_OFF;
+                }
+                p.flags |= alpha ? want : 0u;
+                RdDrawPass ex[8];
+                const int ne = expandPassesMode(&p, 1, dstModeFor(r), false, ex);
+                for (int j = 0; j < ne; j++) {
+                    /* the stencil path's test (expandPasses' twin) */
+                    if (ds->dateStencil && !rd__date_stencil_pass(&ex[j])) {
+                        return aa1DateKept("a pass without DATE's stencil test");
+                    }
+                    RdPipeKeyInt k = ex[j].key;
+                    if (k.dst == RHI_DST_READ_STORAGE) {
+                        return aa1DateKept("the exact blend's storage read");
+                    }
+                    if (k.depthFmt == RHI_FMT_UNKNOWN ||
+                        (!ds->dateStencil && k.gs.stencil != RD_STENCIL_OFF)) {
+                        return aa1DateKept("a pass without the stencil");
+                    }
+                    const uint8_t keep = ds->dateStencil ? k.gs.stencil : RD_STENCIL_DATE_TEST0;
+                    const uint8_t flip = keep == RD_STENCIL_DATE_TEST1 ? RD_STENCIL_DATE_TEST1_CLR
+                                                                       : RD_STENCIL_DATE_TEST0_SET;
+                    k.gs.stencil = sel && j == ne - 1 ? flip : keep;
+                    Aa1DateImg *im = &pl->img[i][part][sel][pl->nImg[i][part][sel]++];
+                    IcoDrawCB cb;
+                    fillDrawCB(r, &ex[j], ds, &cb);
+                    im->key = k;
+                    im->pipe = rd__get_pipeline(&k);
+                    im->cb = rd__draw_group(&cb);
+                    if (!im->pipe.id) {
+                        return aa1DateKept("a pipeline missing");
+                    }
+                    pl->first = pl->first ? pl->first : im;
+                }
+            }
+        }
+    }
+    if (!pl->first) {
+        return aa1DateKept("nothing to draw");
+    }
+    if (!ds->dateStencil) {
+        const RdPipeKeyInt kc = rd__date_setup_key(RD_STENCIL_DATE_CLEAR, ds->tc->format);
+        if (!rd__get_pipeline(&kc).id) {
+            return aa1DateKept("the DATE clear's pipeline missing");
+        }
+    }
+    /* a storage pass begun again with the colour (every image draws in one) */
+    dstPassMode(r, &pl->first->key);
+    frameRefresh(r, ds);
+    if (!ds->dateStencil && !rd__replay_date_clear(r, ds, area)) {
+        return aa1DateKept("the DATE clear could not be drawn");
+    }
+    return true;
+}
+
+/* aa1DatePlan's draws, primitive by primitive (ends, nPrim: aa1Expand's)
+ * from the bound vertex buffer, the scissor set; returns the draws made */
+static uint32_t aa1DateDraw(Replay *r, RhiBindGroup g2, const uint32_t *ends, uint32_t nPrim)
+{
+    const Aa1DatePlan *pl = &s_aa1Date;
+    uint32_t draws = 0;
+    for (uint32_t t = 0, s = 0; t < nPrim; s = ends[t++]) {
+        const uint32_t e = ends[t];
+        for (int i = 0; i < pl->np && i < 2; i++) {
+            for (int part = 0; part < pl->parts[i]; part++) {
+                /* a triangle's own three vertices, then its fringes */
+                const uint32_t first = part ? s + 3 : s;
+                const uint32_t count = pl->parts[i] == 1 ? e - s : (part ? e - s - 3 : 3);
+                for (int sel = 0; sel < 2 && count; sel++) {
+                    for (int j = 0; j < pl->nImg[i][part][sel]; j++) {
+                        const Aa1DateImg *im = &pl->img[i][part][sel][j];
+                        rd__set_pipeline(s_cl, im->pipe, &im->key);
+                        rd__bind_uniform(s_cl, 0, r->frameBG);
+                        rd__bind_uniform(s_cl, 1, im->cb);
+                        rhi_cmd_set_bind_group(s_cl, 2, g2);
+                        dstBind(r, &im->key);
+                        drawCmd(s_cl, count, first, 1);
+                        draws++;
+                    }
+                }
+            }
+        }
+    }
+    if (s_aa1DateDrawn++ == 0) {
+        rd__log("aa1: a DATE draw's primitives drawn one at a time, two draws each through "
+                "DATE's stencil bit, so each sees the alpha the ones before it wrote (the first "
+                "command: %u primitives in %u draws, the %s path)",
+                nPrim, draws, pl->stencil ? "stencil" : "snapshot");
+    }
+    return draws;
 }
