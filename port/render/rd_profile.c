@@ -18,8 +18,10 @@
  *                 store_plan sets the flag, which nothing reads
  *   blurFold      off      off     on        on       off   on       on
  *   robust access off: the Vulkan backend's default (vk_device.c;
- *                 gpu_robust = true turns it on); D3D12 its own bounds
- *   localRead     what the device offers (RhiLimits.localRead; D3D12 none)
+ *                 gpu_robust = true turns it on); D3D12 and D3D11 their
+ *                 own bounds; OpenGL the backend's RhiLimits.robustText
+ *   localRead     what the device offers (RhiLimits.localRead; none on
+ *                 D3D12, D3D11 and OpenGL)
  *   uintViewWork  on       on      off       off      off   off      off
  *   uintViewScene on       on      off       off      off   off      off
  *                 (both only where the backend has the view,
@@ -38,6 +40,14 @@
  *                 since its pass ends the local read's scene pass; [dev]
  *                 crack_fill = true or false sets it, read there, and the
  *                 filler's own line says which)
+ *
+ * The OpenGL and D3D11 classes take the desktop column whatever the
+ * vendor (neither backend reports a tiler: gl_device.c, d3d11_device.c);
+ * what differs from desktop Vulkan comes from their limits, not the class:
+ * no UINT view on D3D11 (uintView false: both uint views off), the VU
+ * vertex pre-pass off on D3D11 (colorBytesPerPixel 32, rd_replay_vu.c
+ * rd__vu_prepass_init) and on on OpenGL (0), no local read on either
+ * (docs/port/BACKENDS.md).
  *
  * The Mali row keeps the blur fold off: the G52 is bound by its ALU, which
  * the fold does not spare.  A tile-based GPU of another vendor (Samsung,
@@ -78,6 +88,8 @@
 typedef enum ProfileClass {
     PC_DESKTOP,
     PC_D3D12,
+    PC_OPENGL, /* the desktop column on the OpenGL backend */
+    PC_D3D11,  /* the desktop column on the D3D11 backend */
     PC_ADRENO_QUALCOMM,
     PC_ADRENO_TURNIP,
     PC_MALI,
@@ -98,7 +110,8 @@ typedef enum ProfileClass {
 #define VENDOR_MESA 0x10005u /* VK_VENDOR_ID_MESA: lavapipe */
 #define VENDOR_MICROSOFT 0x1414u
 
-/* NULL for 0 (unknown: the D3D12 backend) */
+/* NULL for 0 (unknown: the D3D12 backend; OpenGL when the GL_VENDOR and
+ * GL_RENDERER strings name none of AMD, NVIDIA or Intel, as llvmpipe) */
 static const char *vendorName(uint32_t v, char *buf, size_t n)
 {
     switch (v) {
@@ -150,8 +163,15 @@ static bool hasWord(const char *s, const char *word)
 
 static ProfileClass classOf(const RhiLimits *lim)
 {
-    if (rhi_backend() == RHI_BACKEND_D3D12) {
+    switch (rhi_backend()) {
+    case RHI_BACKEND_D3D12:
         return PC_D3D12;
+    case RHI_BACKEND_OPENGL:
+        return PC_OPENGL;
+    case RHI_BACKEND_D3D11:
+        return PC_D3D11;
+    default:
+        break;
     }
     if (lim->moltenvk) {
         return PC_APPLE;
@@ -230,8 +250,10 @@ void rd__profile_init(void)
     const RhiLimits *lim = rhi_limits();
     memset(p, 0, sizeof(*p));
     const ProfileClass c = classOf(lim);
-    const bool d3d12 = c == PC_D3D12;
-    const bool tile = c != PC_DESKTOP && c != PC_D3D12;
+    /* D3D12 and D3D11: no local read in the API ("n/a") and the API's own
+     * bounds on buffer access (both report robustText NULL) */
+    const bool d3d = c == PC_D3D12 || c == PC_D3D11;
+    const bool tile = c != PC_DESKTOP && c != PC_D3D12 && c != PC_OPENGL && c != PC_D3D11;
     p->tiler = lim->tiler;
     p->localRead = lim->localRead;
 
@@ -341,9 +363,10 @@ void rd__profile_init(void)
             p->storePlan ? "planned" : "kept", mark(p, RD_PROFILE_STORE_PLAN),
             p->blurFold ? "on" : "off", mark(p, RD_PROFILE_BLUR_FOLD),
             lim->robustText ? lim->robustText
-            : d3d12         ? "D3D12's own"
+            : c == PC_D3D11 ? "D3D11's own"
+            : d3d           ? "D3D12's own"
                             : "off",
-            d3d12          ? "n/a"
+            d3d            ? "n/a"
             : p->localRead ? "yes"
                            : "no",
             uintWords(p), mark(p, UINT_BITS), p->alphaPlan ? "on" : "off",

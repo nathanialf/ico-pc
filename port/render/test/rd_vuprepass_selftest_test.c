@@ -12,7 +12,9 @@
  *      (g_rd.vuPrepass) and returns false only when it turned it off;
  *   2. the summary text (rd_summary_text) says so: "VU pre-pass on
  *      (self-test: ok)", "VU pre-pass off (self-test: the pictures differ"
- *      or "VU pre-pass off by the settings";
+ *      or "VU pre-pass off by the settings"; and the device profile's
+ *      class (rd_profile.c) names the backend, OpenGL and D3D11 in the
+ *      desktop column: "immediate-mode GPU (... OpenGL):";
  *   3. the reachable set (rd__enumerate_reachable, what the window makes
  *      after it) holds, with the pre-pass on, the main shaders' keys
  *      (vu_main_vs, vu_particle_main_vs), the vu_X_pre_vs entries' and the
@@ -150,6 +152,19 @@ int main(int argc, char **argv)
                        : notRun ? "; VU pre-pass off by the settings ("
                                 : "; VU pre-pass off (self-test: the pictures differ: ";
     CHECK(strstr(sum, want) != NULL, "the summary lacks \"%s\"", want);
+    {
+        /* the class ends with the backend's name: "(Mesa, Vulkan):",
+           "(OpenGL):" (llvmpipe names no vendor gl_device.c knows) */
+        char cls[64];
+        snprintf(cls, sizeof(cls), "%s):", rhi_backend_kind_name(rhi_backend()));
+        CHECK(strstr(rd__profile_text(), cls) != NULL, "the profile \"%s\" lacks \"%s\"",
+              rd__profile_text(), cls);
+        const bool desktop =
+            rhi_backend() == RHI_BACKEND_OPENGL || rhi_backend() == RHI_BACKEND_D3D11;
+        CHECK(!desktop || strncmp(rd__profile_text(), "immediate-mode GPU (", 20) == 0,
+              "the %s profile is not the desktop column: \"%s\"",
+              rhi_backend_kind_name(rhi_backend()), rd__profile_text());
+    }
 
     /* 3. */
     checkSet(wantOn);
