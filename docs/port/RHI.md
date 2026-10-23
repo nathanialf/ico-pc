@@ -44,6 +44,8 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | `port/rhi/d3d11/d3d11_internal.h`, `rhi_d3d11.h` | the Direct3D 11 backend's shared state and the contract between its files; its test extras |
 | `port/rhi/d3d11/d3d11_device.c` | runtime loading, adapter pick, device, debug layer, limits, frame slots, submission, timestamps, the DXBC cache folder |
 | `port/rhi/d3d11/d3d11_resource.c`, `d3d11_swapchain.c` | buffers with their upload shadows, textures, samplers, shaders, bind groups, readback; the DXGI flip-model swapchain |
+| `port/rhi/d3d11/d3d11_pipeline.c` | the Direct3D 11 pipelines: shaders compiled on the workers, input layouts, the shared blend, depth-stencil and rasterizer state objects, the pool |
+| `port/rhi/d3d11/d3d11_cmd.c` | the Direct3D 11 command path on the deferred contexts: passes, bindings, draws, copies, the upload ranges each list reads |
 | `cmake/IcoMoltenVK.cmake` | the MoltenVK slice an Apple build links |
 | `tools/fetch_moltenvk.sh` | MoltenVK and the Apple SDL3 build |
 | `port/rhi/test/` | the backend tests and their shaders |
@@ -687,6 +689,64 @@ RTV, writable and read-only DSV and SRV made at creation. Shaders are recorded a
 `rhi_create_shader` and compiled the first time a pipeline needs them (`d11_shader_compiled`, on the
 pipeline workers, once per shader).
 
+**Pipelines** (`d3d11_pipeline.c`). A pipeline is the vertex and pixel shader, the input layout,
+three state objects, the topology and the strides. `rhi_create_pipelines` works in the D3D12
+backend's three steps: on the calling thread the checks and the state objects; on the Win32 workers
+(`RHI_PIPELINE_THREADS_MAX`, `maxThreads` obeyed, `CreateThread` taken from kernel32 by address as
+on D3D12) the shaders (`d11_shader_compiled`: `d3d11_shader_compile` through the DXBC cache, then
+`CreateVertexShader` or `CreatePixelShader`, once per shader, a failure kept and not retried) and
+`CreateInputLayout` from the vertex shader's DXBC, its RHI locations matched to the input
+signature's elements by register order (`d3dp_location_element`, as on D3D12); on the calling thread
+again the pool slot. The blend (independent per target, the dual-source `SRC1` factors on target 0,
+`*_COLOR` factors in the alpha equation replaced by their alpha twins as on D3D12, blending off on
+an integer target), depth-stencil (the caller's compare: reversed depth is `GEQUAL`; stencil only
+on a format with stencil) and rasterizer (no culling, depth clip and scissor on, multisampling per
+the pipeline's sample count) objects are shared: a table per kind keyed by the description's bytes
+holds one reference each until `rhi_shutdown` (`d11_pipelines_release`); Direct3D 11 keeps at most
+4096 of a kind, and past that a pipeline is not created
+(`rhi_d3d11: pipeline: 4095 distinct <kind> states, the most Direct3D 11 keeps; ...`, once). The
+pool is `RHI_PIPELINE_POOL_MAX` with the other backends' line
+(`rhi_d3d11: pipeline pool full (4160); N refused so far`, the first 8 then every 100th); a
+pipeline whose shader failed logs `rhi_d3d11: pipeline <name> not created: vertex|pixel shader
+<name>: <reason> (N so far)` on the same schedule and counts in `pipelineFailures`
+(`pipelineLastError` the `CreateInputLayout` HRESULT where that failed, else 0). A destroyed
+pipeline's shader and layout references are released with its frame slot.
+
+**Command path** (`d3d11_cmd.c`). Every `rhi_cmd_*` call records on the list's deferred context;
+the deferred context starts each recording with nothing bound. Barriers record nothing (Direct3D 11
+orders every read after every write itself). A render pass unbinds every SRV the list bound
+(a texture must not be a shader resource and a target at once), sets the RTVs and the writable or
+read-only DSV, clears (`ClearRenderTargetView`, integer targets with the integer value as on D3D12;
+`ClearDepthStencilView` unscissored) or discards (`DiscardView` for a `DONT_CARE` load: a colour
+target, or a depth target whose aspects are both `DONT_CARE`), and sets the viewport and scissor to
+the pass (clamped to the smallest attachment, logged once, as on D3D12); its end unbinds the
+targets so a later pass can sample them. `rhi_cmd_set_pipeline` sets the input layout, topology,
+shaders and the three state objects, the blend constant and stencil reference with them;
+`rhi_cmd_set_stencil_ref` and `rhi_cmd_set_blend_constant` set the bound pipeline's object again
+with the new value. At a draw each dirty bind group of the pipeline's layouts binds its entries to
+their own registers in the stages the slot names (both when it names none): uniforms as constant
+buffer windows (`VSSetConstantBuffers1`/`PSSetConstantBuffers1`, first constant = (offset +
+dynamic offset) / 16, the window whole 256-byte blocks), storage buffers and textures as SRVs,
+samplers (the point/clamp default for an empty slot); the destination read's storage texture is
+never bound (`rov` false). `rhi_cmd_set_depth_state` and `rhi_cmd_set_blend_state` log once and do
+nothing (`dynamicDepth`/`dynamicBlend` false). Every range a list reads from an upload buffer is
+noted with `d11_cmd_touch` as it is recorded: the uniform window and storage range of each bound
+entry, the vertex range of each draw (`[first, first + count)` vertices of a per-vertex binding,
+the instances of a per-instance one; an indexed draw's from the binding's offset to the buffer's
+end, the indices being unknown there), the index range of each indexed draw, and the source of a
+buffer copy. Copies: `rhi_cmd_copy_buffer` is `CopySubresourceRegion` into every part of a device
+buffer, or into a readback buffer's staging buffer; `rhi_cmd_copy_buffer_to_texture` (from an
+upload buffer only, logged once otherwise) reads the shadow when it is recorded, with
+`UpdateSubresource1` and a box (BC regions rounded up to whole blocks as on D3D12), except where the
+driver leaves command lists to the runtime (`command lists emulated by the runtime` in the device
+line), whose deferred `UpdateSubresource` applies a box's offset to the source too: there the rows
+become a texture of their own (created with them as its contents) copied in on the GPU;
+`rhi_cmd_copy_texture` is `CopySubresourceRegion` (depth formats whole only);
+`rhi_cmd_resolve_color` is `ResolveSubresource`; `rhi_cmd_copy_texture_to_buffer` goes into a
+readback buffer through its staging texture and is skipped otherwise
+(`rhi_d3d11: rhi_cmd_copy_texture_to_buffer: only into a readback buffer on Direct3D 11; skipped
+(logged once)`: the vertex pre-pass, its one other caller, is off).
+
 **Swapchain** (`d3d11_swapchain.c`). As D3D12's (three BGRA8 buffers, the frame latency waitable
 object, tearing without vsync, the frame statistics, the resize at a present after the window's
 size changed, the same `rhi_present_mode_name` rule), with `FLIP_SEQUENTIAL` where `FLIP_DISCARD`
@@ -719,8 +779,12 @@ memory gauges.
 
 **Unverified**, all of it, and these first: the upload ranges each list notes (a range left out
 draws stale data), the constant buffer windows' offsets, the order of the deferred lists against
-the uploads at submit, `UpdateSubresource1` on a driver that emulates command lists, the flip-model
-resize, the first `rhi_init` on a real card and on WARP.
+the uploads at submit, `UpdateSubresource1` with a box on a deferred context of a driver that
+records command lists itself and the texture-and-copy route where it does not,
+`CopySubresourceRegion` into a constant buffer part of a device buffer, FXC's acceptance of every
+game entry under `vs_5_0`/`ps_5_0`, the input layouts against FXC's input signatures, the
+flip-model resize, the first `rhi_init` on a real card and on WARP. `rhi_d3d11_test.exe` (below,
+[Tests](#tests)) is the first thing to run on a Windows machine.
 
 **Test extras** (`port/rhi/d3d11/rhi_d3d11.h`): the debug layer's error count, whether it is active,
 whether the device runs on WARP, and the feature level.
@@ -970,6 +1034,7 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 | `rhi_d3d12_plan_test.c` | `d3d12_plan.c` on every host; with the shader table, every vertex shader's DXIL inputs against its SPIR-V locations and every DXIL blob signed; ctest `rhi_d3d12_plan` |
 | `rhi_d3d11_shader_plan_test.c` | `d3d11_shader.c`'s portable part on every host: the macros text, the include lookup, the flat-register rule over the game's sources and `rhi_test_hlsl.h` (checked against `rhi_test.hlsl`), the cache key over every table entry, the cache file's round trip and the corrupt files it refuses, the failure log's limit; ctest `rhi_d3d11_shader_plan` |
 | `rhi_d3d12_test.c` | Windows, double-clickable: the cells on WARP, on the hardware adapter, the swapchain on a hidden window, then Vulkan for comparison; writes `rhi_d3d12_test.log` and shows a message box (`--console` for ctest); ctest `rhi_d3d12` |
+| `rhi_d3d11_test.c` | Windows, double-clickable, as `rhi_d3d12_test.c` on Direct3D 11 (the cells' shaders compiled at run time from `rhi_test_hlsl.h` through a one-source table; the destination-read cell skipped by the limits); writes `rhi_d3d11_test.log`; ctest `rhi_d3d11` on a native Windows build only. Built, not run: nothing has run it yet |
 | `compare_backends.cmd`, `compare_png.ps1` | Windows: every dump in `dumps\` rendered by `rd_replay_tool` on both backends, DISPLAY and the presented picture, each pair compared texel by texel and passing within 1 LSB (DISPLAY is expected identical) |
 | `shaders/rhi_test.hlsl`, `gen_shaders.sh` | the tests' shaders, committed as `rhi_test_spv.h` and `rhi_test_dxil.h` so the tests build without DXC, and as `rhi_test_hlsl.h` (the text as a C string, its registers flat under `ICO_D3D11`) for a run-time compile |
 

@@ -750,6 +750,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rhi_vk_mali`).
 - `rhi_d3d12_test.c`: the same checks on D3D12, a Windows GUI program that writes a log and shows
   a message box (`rhi_d3d12`).
+- `rhi_d3d11_test.c`: the same checks on Direct3D 11 (WARP, the hardware adapter, the swapchain on
+  a hidden window, Vulkan for comparison), the cells' shaders compiled at run time from
+  `rhi_test_hlsl.h`; a Windows GUI program that writes `rhi_d3d11_test.log` and shows a message box
+  (`rhi_d3d11`, registered on a native Windows build only). Built only: the `win-x64` and
+  `win-x64-clang` cross builds build it and do not run it, and it has not run on any Windows machine
+  yet.
 - `rhi_d3d12_plan_test.c`: the D3D12 backend's state and barrier bookkeeping on the CPU
   (`rhi_d3d12_plan`).
 - `rhi_d3d11_shader_plan_test.c`: the Direct3D 11 backend's shader route on the CPU
