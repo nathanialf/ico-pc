@@ -3,8 +3,8 @@
  *
  * The Android side of the host layer (host_android.c): the app's folders
  * (the layout is android_paths.h's), free space, the log mirror and the
- * message box, the screen's density and fold. Compiled into libmain.so
- * only.
+ * message box, the screen's density and fold, the file picker. Compiled
+ * into libmain.so only.
  */
 #ifndef ICO_PLATFORM_HOST_ANDROID_H
 #define ICO_PLATFORM_HOST_ANDROID_H
@@ -96,6 +96,26 @@ void ico_android_log_version(void);
 /* Opens the APK's assets/libmain.syms.gz for the crash report's symbol
    lines (diag_host.h ico_diag_set_symbols_fd); not read until a report. */
 void ico_android_open_symbols(void);
+
+/* The app's own file picker (IcoActivity.pickFile, issue 135), not SDL's,
+   whose one pending-dialog slot the app cannot clear. The answer comes on
+   the activity's thread (Android's main thread, not the game's): uri the
+   chosen file's content URI, or NULL; why NULL, or why the picker gave no
+   usable answer; both NULL when the picker was closed without a file. The
+   strings live for the call only. */
+typedef void (*IcoAndroidPickFn)(void *user, int gen, const char *uri, const char *why);
+
+/* Starts the system's document picker (ACTION_OPEN_DOCUMENT, else
+   ACTION_GET_CONTENT) for pick number gen, from the game's thread (the JNI
+   environment is SDL's for the calling thread). fn(user, gen, ...) is
+   called once with its answer, unless a later call replaced the pick
+   first: then that answer is logged as late and dropped. The pending pick
+   is cleared before fn runs, so fn may start the next one. 0 when the
+   picker was started; else -1 with the reason in why and *noApp 1 when no
+   app on the device takes either intent (0 when the start failed some
+   other way). */
+int ico_android_pick_file(int gen, IcoAndroidPickFn fn, void *user, int *noApp, char *why,
+                          size_t n);
 
 /* ICO_RC_TOOLS: the release candidates' tooling (port/ui/settings.h); 0 in
    every other build, which has none of what follows */

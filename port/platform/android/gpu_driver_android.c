@@ -421,29 +421,31 @@ static void start_install_thread(void)
     SDL_DetachThread(t);
 }
 
-static void SDLCALL pick_done(void *user, const char *const *files, int filter)
+/* the picker's answer (host_android.c ico_android_pick_file), on the
+   activity's thread: atomics, s_uri (read by the copy thread made after it)
+   and SDL_CreateThread only, as SDL's own answer callback did before */
+static void pick_done(void *user, int gen, const char *uri, const char *why)
 {
-    (void)filter;
-    const int gen = (int)(intptr_t)user;
+    (void)user;
     if (gen != SDL_GetAtomicInt(&s_pickGen) ||
         SDL_GetAtomicInt(&s_installState) != INSTALL_PICKING) {
         fprintf(stderr, "gpu driver: a late answer for pick %d (now %d) ignored\n", gen,
                 SDL_GetAtomicInt(&s_pickGen));
         return;
     }
-    if (files == NULL) {
-        fprintf(stderr, "gpu driver: the file picker failed: %s\n", SDL_GetError());
+    if (uri == NULL && why != NULL) {
+        fprintf(stderr, "gpu driver: the file picker failed: %s\n", why);
         install_done(UI_GPU_INSTALL_NO_PICKER);
         return;
     }
-    if (files[0] == NULL) {
+    if (uri == NULL) {
         fprintf(stderr, "gpu driver: the file picker answered (pick %d): closed without a file\n",
                 gen);
         install_done(UI_GPU_INSTALL_CANCELLED);
         return;
     }
-    log_answer(gen, files[0]);
-    snprintf(s_uri, sizeof(s_uri), "%s", files[0]);
+    log_answer(gen, uri);
+    snprintf(s_uri, sizeof(s_uri), "%s", uri);
     s_fromFolder = 0;
     SDL_SetAtomicInt(&s_installState, INSTALL_COPYING);
     start_install_thread();
@@ -529,9 +531,13 @@ static int host_install_begin(void)
         return 0;
     }
     SDL_SetAtomicInt(&s_installState, INSTALL_PICKING);
-    /* no filters: Android's picker matches MIME types, and the package's
-       own check says whether the file is one */
-    SDL_ShowOpenFileDialog(pick_done, (void *)(intptr_t)gen, NULL, NULL, 0, NULL, false);
+    /* any type: the package's own check says whether the file is one */
+    char why[512];
+    int noApp = 0;
+    if (ico_android_pick_file(gen, pick_done, NULL, &noApp, why, sizeof(why)) != 0) {
+        fprintf(stderr, "gpu driver: the file picker could not open: %s\n", why);
+        install_done(noApp ? UI_GPU_INSTALL_NO_PICKER_APP : UI_GPU_INSTALL_NO_PICKER);
+    }
     return 0;
 }
 

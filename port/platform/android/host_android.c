@@ -512,6 +512,165 @@ void ico_host_vibrate(int amplitude, int ms)
     (*env)->DeleteLocalRef(env, act);
 }
 
+/* --- the file picker --------------------------------------------------------- */
+
+/* The pending pick: set by the game's thread before the picker starts,
+   taken by the activity's thread when the answer comes, under the spin
+   lock. s_pickLatest is the last pick asked for, for the late-answer
+   line. */
+static SDL_SpinLock s_pickLock;
+static IcoAndroidPickFn s_pickFn;
+static void *s_pickUser;
+static int s_pickGen;
+static int s_pickPending;
+static int s_pickLatest;
+
+/* clears the pending pick if it is still gen's */
+static void pick_slot_drop(int gen)
+{
+    SDL_LockSpinlock(&s_pickLock);
+    if (s_pickPending && s_pickGen == gen) {
+        s_pickPending = 0;
+        s_pickFn = NULL;
+        s_pickUser = NULL;
+    }
+    SDL_UnlockSpinlock(&s_pickLock);
+}
+
+/* Calls the static Java method IcoActivity.pickFile(int gen), which answers
+   null when a picker was started, else the reason; local references are
+   deleted and a Java exception is cleared and named, as in
+   ico_android_share_files. */
+int ico_android_pick_file(int gen, IcoAndroidPickFn fn, void *user, int *noApp, char *why, size_t n)
+{
+    JNIEnv *env = (JNIEnv *)SDL_GetAndroidJNIEnv();
+    jobject act = env != NULL ? (jobject)SDL_GetAndroidActivity() : NULL;
+    jclass cls = NULL;
+    jstring answer = NULL;
+    int rc = -1;
+
+    *noApp = 0;
+    snprintf(why, n, "no JNI environment or activity");
+    if (env == NULL || act == NULL) {
+        if (act != NULL) {
+            (*env)->DeleteLocalRef(env, act);
+        }
+        return -1;
+    }
+    /* the slot first: the answer can only come after the start, on the
+       activity's thread */
+    SDL_LockSpinlock(&s_pickLock);
+    s_pickFn = fn;
+    s_pickUser = user;
+    s_pickGen = gen;
+    s_pickPending = 1;
+    s_pickLatest = gen;
+    SDL_UnlockSpinlock(&s_pickLock);
+    cls = (*env)->GetObjectClass(env, act);
+    jmethodID mid = cls != NULL
+                        ? (*env)->GetStaticMethodID(env, cls, "pickFile", "(I)Ljava/lang/String;")
+                        : NULL;
+    if (mid == NULL) {
+        snprintf(why, n, "no IcoActivity.pickFile(int)");
+        goto out;
+    }
+    answer = (jstring)(*env)->CallStaticObjectMethod(env, cls, mid, (jint)gen);
+    if ((*env)->ExceptionCheck(env)) {
+        snprintf(why, n, "a Java exception in pickFile");
+        goto out;
+    }
+    if (answer != NULL) {
+        const char *s = (*env)->GetStringUTFChars(env, answer, NULL);
+        snprintf(why, n, "%s", s != NULL ? s : "pickFile failed");
+        if (s != NULL) {
+            (*env)->ReleaseStringUTFChars(env, answer, s);
+        }
+        /* IcoActivity.pickFile's words when neither intent has an app */
+        *noApp = strncmp(why, "no app", 6) == 0;
+        goto out;
+    }
+    why[0] = '\0';
+    rc = 0;
+out:
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+    }
+    if (rc != 0) {
+        pick_slot_drop(gen);
+    }
+    if (answer != NULL) {
+        (*env)->DeleteLocalRef(env, answer);
+    }
+    if (cls != NULL) {
+        (*env)->DeleteLocalRef(env, cls);
+    }
+    (*env)->DeleteLocalRef(env, act);
+    return rc;
+}
+
+/* a Java string's UTF-8 copy (SDL_free), NULL for null or no memory */
+static char *pick_string(JNIEnv *env, jstring s)
+{
+    char *copy = NULL;
+
+    if (s != NULL) {
+        const char *c = (*env)->GetStringUTFChars(env, s, NULL);
+        if (c != NULL) {
+            copy = SDL_strdup(c);
+            (*env)->ReleaseStringUTFChars(env, s, c);
+        }
+    }
+    return copy;
+}
+
+/* IcoActivity.nativePickDone (a static native method), on the activity's
+   thread: the answer for pick gen. The pending pick is taken and cleared
+   under the lock, then its callback runs outside it. */
+JNIEXPORT void JNICALL Java_com_defnf_icopc_IcoActivity_nativePickDone(JNIEnv *env, jclass cls,
+                                                                       jint gen, jstring uri,
+                                                                       jstring why)
+{
+    IcoAndroidPickFn fn = NULL;
+    void *user = NULL;
+    int latest;
+
+    (void)cls;
+    char *u = pick_string(env, uri);
+    char *w = pick_string(env, why);
+    if (uri != NULL && u == NULL && w == NULL) {
+        w = SDL_strdup("the chosen file's address could not be read");
+    }
+    SDL_LockSpinlock(&s_pickLock);
+    latest = s_pickLatest;
+    if (s_pickPending && s_pickGen == (int)gen) {
+        fn = s_pickFn;
+        user = s_pickUser;
+        s_pickPending = 0;
+        s_pickFn = NULL;
+        s_pickUser = NULL;
+    }
+    SDL_UnlockSpinlock(&s_pickLock);
+    if (fn == NULL) {
+        fprintf(stderr, "ico_pc: file picker: a late answer for pick %d (now %d) ignored\n",
+                (int)gen, latest);
+    } else {
+        fn(user, (int)gen, u, w);
+    }
+    SDL_free(u);
+    SDL_free(w);
+}
+
+/* IcoActivity.nativePickNote (a static native method): one line from the
+   Java side for the log */
+JNIEXPORT void JNICALL Java_com_defnf_icopc_IcoActivity_nativePickNote(JNIEnv *env, jclass cls,
+                                                                       jstring line)
+{
+    (void)cls;
+    char *s = pick_string(env, line);
+    fprintf(stderr, "ico_pc: file picker: %s\n", s != NULL ? s : "(no text)");
+    SDL_free(s);
+}
+
 #if ICO_RC_TOOLS
 /* --- an rc build's share menu --------------------------------------------- */
 
