@@ -2,13 +2,13 @@
 
 ## New
 
-- **OpenGL**, for a graphics card or driver that has no Vulkan, on Windows and Linux. It needs OpenGL 4.3 with two extensions that every desktop graphics driver of the last ten years has. If Vulkan will not start at all, Automatic now goes on with Direct3D 12 on Windows and then with OpenGL, and you can also choose it yourself (next item). Reports of how it looks and runs on your card are very welcome.
+- **OpenGL**, for a graphics card or driver that has no Vulkan, on Windows and Linux. It needs a graphics driver with OpenGL 4.3 or newer; if yours lacks something it needs, the log file names it. If Vulkan will not start at all, Automatic now goes on with Direct3D 12 on Windows and then with OpenGL, and you can also choose it yourself (next item). Reports of how it looks and runs on your card are very welcome.
 - **Direct3D 11** on Windows, for a computer that has neither Vulkan nor Direct3D 12. It has never run on any Windows machine, so it may not start and may draw wrongly. It is there for someone to try and tell us what happens. Automatic never picks it.
 - **Options > Graphics**, a new page under Effects with a **Graphics API** row: Automatic, Vulkan, OpenGL, Direct3D 12 or Direct3D 11, whichever your download has, used from the next start. Before, this needed an edit to the settings file. It only shows when your download can draw in more than one way. If a choice does not start, pick Automatic again.
-- **Options > Graphics driver > Add from the drivers folder**, on Android: copy a driver's zip file into the game's `drivers` folder with a USB cable and add it from there, without the file picker. The same row is in the box that offers a driver at the first start for the disc.
+- **Options > Graphics driver > Add from the drivers folder**, on Android: copy a driver's zip file into the game's `drivers` folder with a USB cable and add it from there, without the file picker. If the file picker will not open in the box that offers a driver when the graphics do not start, the game uses the first zip in the `drivers` folder.
 
 ## Fixed
 
 - Sound should no longer break up at high resolutions (for example 4x anti-aliasing) with a Frame rate of 120 or more. When the extra pictures between the game's own frames start slowing the game down, they are now dropped first and brought back when the graphics card has time again, so the game and its sound keep their speed. This is our best understanding of what was happening and has not been confirmed on the machine that reported it.
-- A Frame rate above your monitor's refresh rate (for example 120 on a 60 Hz monitor) now draws one picture per refresh, as Uncapped does, because the monitor could not show more. The frame counter shows the difference.
+- With Vertical sync on, a Frame rate above your monitor's refresh rate (for example 120 on a 60 Hz monitor) now draws one picture per refresh, as Uncapped does, because the monitor could not show more.
 - On some Android phones, Add a driver said the file was not a driver when the file picker would not open. It now says what went wrong (the picker did not open, no app on the phone can choose a file, or the file could not be read), tries the phone's other way of choosing a file, and has the new row above for a driver zip copied into the `drivers` folder.
