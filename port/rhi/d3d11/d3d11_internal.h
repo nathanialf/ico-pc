@@ -241,6 +241,7 @@ typedef struct D11Pipeline {
     D3D11_PRIMITIVE_TOPOLOGY topo;
     uint32_t strides[RHI_MAX_VERTEX_ATTRS]; /* per vertex buffer binding */
     uint32_t bindingMask;
+    uint32_t instanceMask; /* the bindings stepped per instance */
     uint32_t layoutCount;
     uint32_t layoutIds[RHI_MAX_BIND_SLOTS];
     uint32_t colorCount;
@@ -288,6 +289,15 @@ typedef struct D11CmdState {
     uint32_t targets[RHI_MAX_COLOR_TARGETS];
     uint32_t depthTarget;
     uint32_t passW, passH;
+    /* d3d11_cmd.c: what the deferred context has bound.  The pipeline's
+     * objects went in at rhi_cmd_set_pipeline (pipelineSet: the id they
+     * came from); the stride each vertex buffer slot was set with; the
+     * SRV registers (t) bound in each stage, unbound at a pass's start so
+     * no texture is a shader resource and a target at once */
+    uint32_t pipelineSet;
+    uint32_t vbStrideSet[RHI_MAX_VERTEX_ATTRS];
+    uint32_t vbSet;      /* slots holding a buffer */
+    uint32_t srvMask[2]; /* [RHI_STAGE_VERTEX], [RHI_STAGE_FRAGMENT]: t registers 0..31 */
 } D11CmdState;
 
 typedef struct D11CommandList {
