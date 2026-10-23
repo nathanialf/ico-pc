@@ -147,6 +147,11 @@ void ui_popup_set_vsync_hz(int hz)
     s_hz = hz > 0 ? hz : UI_POPUP_DEFAULT_HZ;
 }
 
+int ui_popup_vsync_hz(void)
+{
+    return s_hz;
+}
+
 int ui_popup_slide_vsyncs(void)
 {
     return (s_hz * UI_POPUP_SLIDE_TENTHS + 5) / 10;

@@ -577,6 +577,34 @@ static int
 static const char *s_backendNames[MAX_BACKENDS];
 static int s_backendCount;
 
+/* Graphics > Apply (settings.h UiGraphicsHost): the host, and the switch
+   under way or the countdown that follows it */
+static UiGraphicsHost s_gfxHost;
+static int s_gfxHostSet;
+
+enum { GFX_IDLE, GFX_APPLYING, GFX_COUNTDOWN, GFX_REVERTING };
+
+static struct {
+    int state;     /* GFX_* */
+    int left;      /* the countdown's vsyncs left */
+    int focus;     /* the countdown began: the cursor goes to Revert */
+    int haveEntry; /* entry holds the value the page found */
+    char want[16]; /* the renderer Apply asked for */
+    char prev[16]; /* the renderer running before Apply */
+    char entry[32];
+} s_gfx;
+
+/* [video] backend as the page found it (its first step, or Apply), which
+   Revert puts back; forgotten when the page is entered again */
+static void gfxEntry(void)
+{
+    if (!s_gfx.haveEntry) {
+        snprintf(s_gfx.entry, sizeof(s_gfx.entry), "%s",
+                 ico_config_get_string("video.backend", ""));
+        s_gfx.haveEntry = 1;
+    }
+}
+
 void ui_settings_set_backend_names(const char *const *names, int count)
 {
     s_backendCount = 0;
@@ -659,10 +687,137 @@ static void stepBackend(int dir)
     }
     const int to = stepIndex(backendCurrent(), s_backendCount + 1, dir);
     const char *v = to == 0 ? "" : s_backendNames[to - 1];
+    gfxEntry();
     ico_config_set_string("video.backend", v);
     s_dirtyConfig = 1;
     fprintf(stderr, "settings: Graphics API set to %s (used from the next start)\n",
             v[0] ? v : "automatic");
+}
+
+/* the renderer the row's value starts: its name, "vulkan" for Automatic
+   (the start's first try), NULL for a value the build does not link */
+static const char *gfxChosen(void)
+{
+    const int i = backendCurrent();
+    const char *v = ico_config_get_string("video.backend", "");
+    if (i > 0) {
+        return s_backendNames[i - 1];
+    }
+    for (int k = 0; (v == NULL || v[0] == '\0') && k < s_backendCount; k++) {
+        if (strcmp(s_backendNames[k], "vulkan") == 0) {
+            return s_backendNames[k];
+        }
+    }
+    return NULL;
+}
+
+/* Apply's row: shown while the value is a renderer the build has and not
+   the one running, and nothing is under way */
+static int gfxApplyShown(void)
+{
+    const char *c = gfxChosen();
+    return s_gfxHostSet && s_backendCount >= 2 && s_gfx.state == GFX_IDLE && c != NULL &&
+           strcmp(c, s_gfxHost.running()) != 0;
+}
+
+/* what came of a switch the page asked for */
+static void gfxResult(int r)
+{
+    char body[UI_POPUP_TEXT];
+    const int applying = s_gfx.state == GFX_APPLYING;
+    s_gfx.state = GFX_IDLE;
+    if (r == UI_GFX_SWITCH_DONE && applying) {
+        /* the countdown, the cursor on Revert (gfxRefresh) */
+        s_gfx.state = GFX_COUNTDOWN;
+        s_gfx.left = UI_GFX_KEEP_SECONDS * ui_popup_vsync_hz();
+        s_gfx.focus = 1;
+    } else if (r == UI_GFX_SWITCH_FAILED) {
+        /* the host is back on the renderer that ran; the row keeps the
+           player's value (another may be tried) */
+        const char *fmt = ui_str(UI_STR_GRAPHICS_FAILED);
+        const char *bad = applying ? s_gfx.want : s_gfx.prev;
+        const char *kept = applying ? s_gfx.prev : s_gfx.want;
+        snprintf(body, sizeof(body), fmt, backendLabel(bad), backendLabel(kept));
+        ui_popup_push(body, "");
+    }
+}
+
+/* a switch to name; the host answers now or later (gfxPoll) */
+static void gfxBegin(const char *name, int why, int state)
+{
+    s_gfx.state = state;
+    const int r = s_gfxHost.switchBegin(name, why);
+    if (r != UI_GFX_SWITCH_PENDING) {
+        gfxResult(r);
+    }
+}
+
+static void gfxPoll(void)
+{
+    if (s_gfxHostSet && (s_gfx.state == GFX_APPLYING || s_gfx.state == GFX_REVERTING)) {
+        const int r = s_gfxHost.switchPoll();
+        if (r != UI_GFX_SWITCH_PENDING) {
+            gfxResult(r);
+        }
+    }
+}
+
+static void gfxApply(void)
+{
+    const char *c = gfxChosen();
+    if (!gfxApplyShown() || c == NULL) {
+        return;
+    }
+    gfxEntry();
+    snprintf(s_gfx.want, sizeof(s_gfx.want), "%s", c);
+    snprintf(s_gfx.prev, sizeof(s_gfx.prev), "%s", s_gfxHost.running());
+    gfxBegin(s_gfx.want, UI_GFX_WHY_APPLY, GFX_APPLYING);
+}
+
+/* Revert, Circle or the countdown's end: the renderer that ran before, the
+   row's value as the page found it, nothing written */
+static void gfxRevert(int why)
+{
+    if (s_gfx.state != GFX_COUNTDOWN) {
+        return;
+    }
+    ico_config_set_string("video.backend", s_gfx.entry);
+    fprintf(stderr, "settings: Graphics API back to %s (%s)\n",
+            s_gfx.entry[0] ? s_gfx.entry : "automatic",
+            why == UI_GFX_WHY_TIMEOUT ? "not kept in 10 s" : "reverted");
+    gfxBegin(s_gfx.prev, why, GFX_REVERTING);
+}
+
+/* Keep: the row's value is the config's already; written on leaving */
+static void gfxKeep(void)
+{
+    if (s_gfx.state != GFX_COUNTDOWN) {
+        return;
+    }
+    s_gfx.state = GFX_IDLE;
+    s_dirtyConfig = 1;
+    snprintf(s_gfx.entry, sizeof(s_gfx.entry), "%s", ico_config_get_string("video.backend", ""));
+    if (s_gfxHost.kept != NULL) {
+        s_gfxHost.kept();
+    }
+}
+
+void ui_settings_set_graphics_host(const UiGraphicsHost *host)
+{
+    s_gfxHostSet = host != NULL && host->running != NULL && host->switchBegin != NULL &&
+                   host->switchPoll != NULL;
+    if (s_gfxHostSet) {
+        s_gfxHost = *host;
+    }
+    memset(&s_gfx, 0, sizeof(s_gfx));
+}
+
+void ui_settings_vsync(void)
+{
+    gfxPoll();
+    if (s_gfx.state == GFX_COUNTDOWN && --s_gfx.left <= 0) {
+        gfxRevert(UI_GFX_WHY_TIMEOUT);
+    }
 }
 
 /* the zips waiting in the drivers folder, 0 without a host */
@@ -1746,6 +1901,12 @@ static int optShown(int opt, int link)
     }
     if (opt == UI_OPT_LINK && link == UI_PAGE_GRAPHICS) {
         return s_backendCount >= 2; /* one renderer: nothing to choose */
+    }
+    if (opt == UI_OPT_GRAPHICS_APPLY) {
+        return gfxApplyShown();
+    }
+    if (opt == UI_OPT_GRAPHICS_KEEP || opt == UI_OPT_GRAPHICS_REVERT) {
+        return s_gfx.state == GFX_COUNTDOWN;
     }
     if (opt == UI_OPT_LINK && link == UI_PAGE_TOUCH) {
         return touchPresent(); /* Controls > Touch screen */
@@ -2917,6 +3078,15 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         break;
     case UI_PAGE_GRAPHICS:
         addNote(pg, UI_OPT_GRAPHICS_API, UI_STR_GRAPHICS_API_NOTE);
+        addNote(pg, UI_OPT_GRAPHICS_APPLY, UI_STR_GRAPHICS_APPLY_NOTE);
+        /* the countdown's question under Keep and Revert both (gfxNote) */
+        addNote(pg, UI_OPT_GRAPHICS_KEEP, UI_STR_GRAPHICS_KEEP_ASK);
+        for (int i = 1; i < pg->count; i++) {
+            if (pg->rows[i].opt == UI_OPT_GRAPHICS_REVERT) {
+                pg->rows[i].note = pg->rows[i - 1].note; /* Keep's, the row before */
+                pg->rows[i].noteStr = UI_STR_GRAPHICS_KEEP_ASK;
+            }
+        }
         break;
     case UI_PAGE_CONTROLS:
         addNote(pg, UI_OPT_BUTTON_CONFIG, UI_STR_BUTTON_CONFIG_NOTE);
@@ -3371,8 +3541,10 @@ static void build(void)
                                     -1,
                                     -1};
     /* the Graphics API page (its link needs two or more renderers) */
-    static const int apiOpts[] = {UI_OPT_GRAPHICS_API, UI_OPT_BACK};
-    static const int apiStrs[] = {UI_STR_OPT_GRAPHICS_API, UI_STR_BACK};
+    static const int apiOpts[] = {UI_OPT_GRAPHICS_API, UI_OPT_GRAPHICS_APPLY, UI_OPT_GRAPHICS_KEEP,
+                                  UI_OPT_GRAPHICS_REVERT, UI_OPT_BACK};
+    static const int apiStrs[] = {UI_STR_OPT_GRAPHICS_API, UI_STR_GRAPHICS_APPLY,
+                                  UI_STR_GRAPHICS_KEEP, UI_STR_GRAPHICS_REVERT, UI_STR_BACK};
     /* Android's Graphics driver page (its link needs a host) */
     static const int gpuOpts[] = {UI_OPT_GPU_DRIVER, UI_OPT_GPU_ADD, UI_OPT_GPU_ADD_FILE,
                                   UI_OPT_GPU_REMOVE, UI_OPT_BACK};
@@ -4737,7 +4909,10 @@ static void layoutPage(Page *pg, int id)
     int shown[MAX_ROWS], n = 0;
     for (int i = 0; i < pg->count; i++) {
         Row *r = &pg->rows[i];
-        const int show = optShown(r->opt, r->link);
+        /* the Graphics page is the countdown alone while it runs */
+        const int countdown = id == UI_PAGE_GRAPHICS && s_gfx.state == GFX_COUNTDOWN &&
+                              (r->opt == UI_OPT_GRAPHICS_API || r->opt == UI_OPT_BACK);
+        const int show = optShown(r->opt, r->link) && !countdown;
         P(r->label)->defaultMask = !show;
         lt_mask_property(r->label, !show);
         /* a stepped value's row and its two arrows, added after the label */
@@ -4894,6 +5069,71 @@ static void charactersRefresh(Page *pg)
     }
 }
 
+/* the countdown's question with the seconds left (a table string with one
+   %d); the note cache is cleared so setNote writes its own text again */
+static void gfxNote(int row)
+{
+    char text[160], buf[256];
+    const int hz = ui_popup_vsync_hz();
+    const int secs =
+        s_gfx.state == GFX_COUNTDOWN ? (s_gfx.left + hz - 1) / hz : UI_GFX_KEEP_SECONDS;
+    wrapText(intText(UI_STR_GRAPHICS_KEEP_ASK, secs, text, sizeof(text)), NOTE_SIZE, 580.0f, buf,
+             sizeof(buf));
+    lt_ext_set_text(row, buf);
+    const int i = row - LT_GAME_PROPERTY_COUNT;
+    if (i >= 0 && i < LT_EXT_MAX_PROPERTIES) {
+        s_noteStr[i] = -1;
+    }
+}
+
+/* the countdown began: the cursor on Revert, so a second press of Cross
+   meant for Apply goes back */
+static void gfxRefresh(Page *pg)
+{
+    if (!s_gfx.focus || s_gfx.state != GFX_COUNTDOWN || pg->layout < 0) {
+        return;
+    }
+    s_gfx.focus = 0;
+    for (int i = 0; i < pg->count; i++) {
+        if (pg->rows[i].opt == UI_OPT_GRAPHICS_REVERT) {
+            lt_ext_layout(pg->layout)->curItem = pg->rows[i].label;
+        }
+    }
+}
+
+/* the Graphics page's own input: Apply, and the countdown's Keep, Revert
+   and Circle; nothing while a switch is under way.  1 when taken */
+static int gfxProc(const Row *r, int flags)
+{
+    if (s_gfx.state == GFX_APPLYING || s_gfx.state == GFX_REVERTING) {
+        return 1;
+    }
+    if (s_gfx.state == GFX_COUNTDOWN && (flags & PAD_BACK)) {
+        NEGATIVE_SE();
+        gfxRevert(UI_GFX_WHY_REVERT);
+        return 1;
+    }
+    if (r == NULL || !(flags & PAD_OK)) {
+        return 0;
+    }
+    if (r->opt == UI_OPT_GRAPHICS_APPLY) {
+        POSITIVE_SE();
+        gfxApply();
+        return 1;
+    }
+    if (r->opt == UI_OPT_GRAPHICS_KEEP) {
+        POSITIVE_SE();
+        gfxKeep();
+        return 1;
+    }
+    if (r->opt == UI_OPT_GRAPHICS_REVERT) {
+        POSITIVE_SE();
+        gfxRevert(UI_GFX_WHY_REVERT);
+        return 1;
+    }
+    return 0;
+}
+
 static void refreshPage(Page *pg, int id, int cur)
 {
     if (pg->isList) {
@@ -4906,6 +5146,9 @@ static void refreshPage(Page *pg, int id, int cur)
     }
     if (id == UI_PAGE_GPU_DRIVER && s_gpuHostSet) {
         gpuRefresh(pg);
+    }
+    if (id == UI_PAGE_GRAPHICS) {
+        gfxRefresh(pg);
     }
     if (id == UI_PAGE_EXTRAS) {
         /* from the title with the viewer there, Characters opens in it
@@ -4939,7 +5182,11 @@ static void refreshPage(Page *pg, int id, int cur)
             }
         }
         if (r->note >= 0) {
-            setNote(r->note, r->noteStr);
+            if (r->noteStr == UI_STR_GRAPHICS_KEEP_ASK) {
+                gfxNote(r->note);
+            } else {
+                setNote(r->note, r->noteStr);
+            }
             if (cur == r->label && (!lockedNote(r) || locked) && !charsNoteHidden(id, r)) {
                 lt_mask_property(r->note, 0);
             }
@@ -4959,6 +5206,7 @@ static int settingsProc(int first, int item)
     /* the port's strings follow the game's language (ui_host.c does too) */
     ui_settings_apply_language();
     gpuPoll(); /* an install the page started, on any page */
+    gfxPoll(); /* a renderer switch Apply asked for */
     if (id == UI_PAGE_TOUCH_LAYOUT) {
         /* the touch layout editor has the page: begun on the first call,
            stepped every call (the pad word once the page has faded in), and
@@ -4983,6 +5231,9 @@ static int settingsProc(int first, int item)
             ui_list_reset(&pg->list);
         }
         memset(&s_capture, 0, sizeof(s_capture));
+        if (id == UI_PAGE_GRAPHICS && s_gfx.state == GFX_IDLE) {
+            s_gfx.haveEntry = 0; /* Revert's value: as the page is found now */
+        }
     }
     refreshPage(pg, id, lay->curItem);
     if (lt_fade_status() != 2) {
@@ -5018,6 +5269,18 @@ static int settingsProc(int first, int item)
             POSITIVE_SE();
             s_charsRows = 1 - charsShown();
             s_charsHost.switchTo(s_charsRows);
+            refreshPage(pg, id, lay->curItem);
+            return -1;
+        }
+    }
+    if (id == UI_PAGE_GRAPHICS) {
+        const Row *on = NULL;
+        for (int i = 0; i < pg->count; i++) {
+            if (pg->rows[i].label == lay->curItem) {
+                on = &pg->rows[i];
+            }
+        }
+        if (gfxProc(on, flags)) {
             refreshPage(pg, id, lay->curItem);
             return -1;
         }

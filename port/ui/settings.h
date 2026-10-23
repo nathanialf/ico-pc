@@ -225,6 +225,41 @@ void ui_settings_set_gpu_driver_host(const UiGpuDriverHost *host);
    The row stores the choice in the config (written on leaving the page) and
    the window reads it at the next start. */
 void ui_settings_set_backend_names(const char *const *names, int count);
+/* Settings > Graphics > Apply: the renderer switched now, in the game, by
+   the window (port/platform/window_switch.c), which installs this host.
+   running() names the renderer running, as the backend names above;
+   switchBegin(name, why) asks for a switch to name (why: UI_GFX_WHY_*) and
+   answers with a UI_GFX_SWITCH_*: PENDING when it runs later (switchPoll
+   then answers, every frame, until it is no longer PENDING), else what
+   came of it at once; kept() is the player's Keep (the window logs it).
+   FAILED means name did not start and the renderer that ran before is
+   back; REFUSED that nothing was tried.  The Apply row shows while the
+   Graphics API row's value is not the renderer running (Automatic counts
+   as "vulkan"); Apply then turns the page into a 10 s countdown with Keep
+   and Revert: Keep writes the choice, Revert, Circle or the end of the
+   countdown switch back and put the row's value back.  NULL (or never
+   called) hides Apply; the struct is copied. */
+#define UI_GFX_SWITCH_DONE 0
+#define UI_GFX_SWITCH_PENDING 1
+#define UI_GFX_SWITCH_FAILED (-1)
+#define UI_GFX_SWITCH_REFUSED (-2)
+#define UI_GFX_WHY_APPLY 0   /* the Apply row */
+#define UI_GFX_WHY_REVERT 1  /* Revert or Circle in the countdown */
+#define UI_GFX_WHY_TIMEOUT 2 /* the countdown ran out */
+/* the countdown, in seconds of ui_settings_vsync's calls */
+#define UI_GFX_KEEP_SECONDS 10
+
+typedef struct UiGraphicsHost {
+    const char *(*running)(void);
+    int (*switchBegin)(const char *name, int why);
+    int (*switchPoll)(void);
+    void (*kept)(void);
+} UiGraphicsHost;
+
+void ui_settings_set_graphics_host(const UiGraphicsHost *host);
+/* One vsync passed (ui_host.c ui_host_vsync, at the popups' rate,
+   popup.h): the Apply countdown, and a switch the page waits for. */
+void ui_settings_vsync(void);
 /* Settings > Extras > Add to Steam (desktop only): fn adds the program to
    the player's Steam library and returns one of UI_STEAM_*; the menu
    answers with a popup. NULL (or never called) hides the row; Android never
@@ -453,6 +488,12 @@ typedef enum UiSettingsOpt {
     UI_OPT_GPU_REMOVE,
     /* Graphics page: the stepped Graphics API row (config key video.backend) */
     UI_OPT_GRAPHICS_API,
+    /* Graphics page: Apply (shown while the row's value is not the renderer
+       running and the host is set), then the countdown's Keep and Revert
+       (shown only in it) */
+    UI_OPT_GRAPHICS_APPLY,
+    UI_OPT_GRAPHICS_KEEP,
+    UI_OPT_GRAPHICS_REVERT,
     /* Extras > Add to Steam (desktop; shown from the title while a host
        handler is set) */
     UI_OPT_EXTRAS_STEAM,

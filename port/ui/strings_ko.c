@@ -508,7 +508,15 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_SECTION_GRAPHICS] = "그래픽",
     [UI_STR_OPT_GRAPHICS_API] = "그래픽 API",
     [UI_STR_VAL_GRAPHICS_AUTOMATIC] = "자동",
-    [UI_STR_GRAPHICS_API_NOTE] = "다음 실행부터 적용됩니다.",
+    [UI_STR_GRAPHICS_API_NOTE] =
+        "적용하면 바로 바뀝니다. 적용하지 않으면 다음 실행부터 적용됩니다.",
+    [UI_STR_GRAPHICS_APPLY] = "적용",
+    [UI_STR_GRAPHICS_APPLY_NOTE] =
+        "게임을 끝내지 않고 바로 바뀝니다. 잠시 기다려야 할 수 있습니다.",
+    [UI_STR_GRAPHICS_KEEP_ASK] = "이 설정을 유지할까요? %d초 뒤 되돌립니다",
+    [UI_STR_GRAPHICS_KEEP] = "유지",
+    [UI_STR_GRAPHICS_REVERT] = "되돌리기",
+    [UI_STR_GRAPHICS_FAILED] = "%s이(가) 시작되지 않았습니다. %s을(를) 계속 사용합니다",
     [UI_STR_SECTION_GPU_DRIVER] = "그래픽 드라이버",
     [UI_STR_OPT_GPU_DRIVER] = "드라이버",
     [UI_STR_VAL_GPU_BUILTIN] = "내장",

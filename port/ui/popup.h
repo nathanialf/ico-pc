@@ -33,6 +33,8 @@ extern "C" {
    before each call, so a change of the video mode is followed; 0 or less
    restores the default. */
 void ui_popup_set_vsync_hz(int hz);
+/* that rate (settings.c counts the Apply countdown with it) */
+int ui_popup_vsync_hz(void);
 /* the slide and the hold in vsyncs at that rate */
 int ui_popup_slide_vsyncs(void);
 int ui_popup_hold_vsyncs(void);

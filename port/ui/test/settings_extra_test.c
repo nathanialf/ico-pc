@@ -684,7 +684,10 @@ static void testGraphicsApi(void)
     const int pageL = openPage(mainL, 2, UI_PAGE_GRAPHICS);
     const int row = ui_settings_row_of(UI_PAGE_GRAPHICS, UI_OPT_GRAPHICS_API);
     CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Graphics API") == 0, "the Graphics API row");
-    CHECK(noteStarting(UI_PAGE_GRAPHICS, "Used from the next start.") >= 0, "the note");
+    CHECK(noteStarting(UI_PAGE_GRAPHICS,
+                       "Apply switches now; without Apply the choice is used from the next "
+                       "start.") >= 0,
+          "the note");
     CHECK(strcmp(ui_settings_value_text(UI_OPT_GRAPHICS_API), "Automatic") == 0,
           "no key: Automatic");
 
@@ -752,6 +755,275 @@ static void testGraphicsApi(void)
     CHECK(strcmp(ico_config_get_string("video.backend", "?"), "opengl") == 0,
           "Right from VK writes opengl");
     ui_settings_set_backend_names(NULL, 0);
+}
+
+/* Graphics > Apply: a fake host running "vulkan".  Apply shows while the
+   row's value is a renderer the build has and not the one running, never
+   without a host or with one renderer; Cross asks the host once; the
+   countdown's Keep and Revert replace the page, the cursor on Revert, the
+   note counting down; 10 s of vsyncs at 60 Hz switch back with nothing
+   written; Keep writes the choice; Revert and Circle switch back; a
+   renderer that did not start is a popup; a switch the host answers later
+   is polled, the presses meanwhile ignored */
+static char s_gfxRunning[16] = "vulkan";
+static char s_gfxAsked[16][16];
+static int s_gfxWhy[16];
+static int s_gfxBegins, s_gfxPolls, s_gfxKepts;
+static int s_gfxAnswer = UI_GFX_SWITCH_DONE; /* switchBegin's answer */
+static int s_gfxPollAnswers[4], s_gfxPollN, s_gfxPollAt;
+
+static const char *fakeGfxRunning(void)
+{
+    return s_gfxRunning;
+}
+
+static int fakeGfxBegin(const char *name, int why)
+{
+    const int i = s_gfxBegins < 16 ? s_gfxBegins : 15;
+    snprintf(s_gfxAsked[i], sizeof(s_gfxAsked[i]), "%s", name);
+    s_gfxWhy[i] = why;
+    s_gfxBegins++;
+    if (s_gfxAnswer == UI_GFX_SWITCH_DONE) {
+        snprintf(s_gfxRunning, sizeof(s_gfxRunning), "%s", name);
+    }
+    return s_gfxAnswer;
+}
+
+static int fakeGfxPoll(void)
+{
+    s_gfxPolls++;
+    const int r = s_gfxPollAt < s_gfxPollN ? s_gfxPollAnswers[s_gfxPollAt++] : UI_GFX_SWITCH_DONE;
+    if (r == UI_GFX_SWITCH_DONE && s_gfxBegins > 0) {
+        snprintf(s_gfxRunning, sizeof(s_gfxRunning), "%s", s_gfxAsked[s_gfxBegins - 1]);
+    }
+    return r;
+}
+
+static void fakeGfxKept(void)
+{
+    s_gfxKepts++;
+}
+
+static const UiGraphicsHost kGfxHost = {fakeGfxRunning, fakeGfxBegin, fakeGfxPoll, fakeGfxKept};
+
+/* the Graphics page's row for opt is on screen (its label not masked) */
+static int gfxRowOn(UiSettingsOpt opt)
+{
+    const int row = ui_settings_row_of(UI_PAGE_GRAPHICS, opt);
+    return row >= 0 && !lt_ext_prop(row)->defaultMask;
+}
+
+static void gfxVsyncs(int n)
+{
+    for (int i = 0; i < n; i++) {
+        ui_settings_vsync();
+    }
+}
+
+static void testGraphicsApply(void)
+{
+    static const char *const kNames[] = {"vulkan", "opengl"};
+    char p[1100];
+
+    snprintf(s_gfxRunning, sizeof(s_gfxRunning), "vulkan");
+    s_gfxAnswer = UI_GFX_SWITCH_DONE;
+    ui_popup_reset();
+    ui_popup_set_vsync_hz(60);
+    ui_settings_set_graphics_host(NULL);
+    ui_settings_set_backend_names(kNames, 2);
+    useConfig("version = 1\n");
+    const int mainL = enterMain(1);
+    frame(0);
+    int pageL = openPage(mainL, 2, UI_PAGE_GRAPHICS);
+    {
+        int labels[8];
+        const int n = ui_settings_page_rows(UI_PAGE_GRAPHICS, labels, NULL, NULL, 8);
+        CHECK(n == 5, "the page holds Graphics API, Apply, Keep, Revert, Back (%d)", n);
+    }
+
+    /* no host: no Apply, whatever the value */
+    ui_settings_step(UI_OPT_GRAPHICS_API, 1);
+    ui_settings_step(UI_OPT_GRAPHICS_API, 1);
+    frame(0);
+    CHECK(strcmp(ico_config_get_string("video.backend", "?"), "opengl") == 0, "OpenGL chosen");
+    CHECK(!ui_settings_opt_shown(UI_OPT_GRAPHICS_APPLY) && !gfxRowOn(UI_OPT_GRAPHICS_APPLY),
+          "no host: Apply is hidden");
+    ui_settings_step(UI_OPT_GRAPHICS_API, 1);
+    CHECK(strcmp(ico_config_get_string("video.backend", "?"), "") == 0, "back to Automatic");
+
+    /* a host: Automatic and Vulkan running, and Vulkan itself, show none */
+    ui_settings_set_graphics_host(&kGfxHost);
+    frame(0);
+    CHECK(!gfxRowOn(UI_OPT_GRAPHICS_APPLY), "Automatic on Vulkan: no Apply");
+    ui_settings_step(UI_OPT_GRAPHICS_API, 1);
+    frame(0);
+    CHECK(!gfxRowOn(UI_OPT_GRAPHICS_APPLY), "Vulkan on Vulkan: no Apply");
+    CHECK(gfxRowOn(UI_OPT_GRAPHICS_API) && gfxRowOn(UI_OPT_BACK) &&
+              !gfxRowOn(UI_OPT_GRAPHICS_KEEP) && !gfxRowOn(UI_OPT_GRAPHICS_REVERT),
+          "the countdown's rows are hidden");
+    /* one renderer: none either */
+    ui_settings_step(UI_OPT_GRAPHICS_API, 1);
+    ui_settings_set_backend_names(kNames, 1);
+    CHECK(!ui_settings_opt_shown(UI_OPT_GRAPHICS_APPLY), "one renderer: no Apply");
+    ui_settings_set_backend_names(kNames, 2);
+
+    /* OpenGL chosen while Vulkan runs: Apply shows, with its note */
+    frame(0);
+    CHECK(gfxRowOn(UI_OPT_GRAPHICS_APPLY), "OpenGL on Vulkan: Apply shows");
+    CHECK(noteStarting(UI_PAGE_GRAPHICS, "Switches now, without leaving the game.") >= 0,
+          "Apply's note");
+    const int apply = ui_settings_row_of(UI_PAGE_GRAPHICS, UI_OPT_GRAPHICS_APPLY);
+    const int keep = ui_settings_row_of(UI_PAGE_GRAPHICS, UI_OPT_GRAPHICS_KEEP);
+    const int revert = ui_settings_row_of(UI_PAGE_GRAPHICS, UI_OPT_GRAPHICS_REVERT);
+    CHECK(strcmp(lt_ext_row_text(apply), "Apply") == 0 &&
+              strcmp(lt_ext_row_text(keep), "Keep") == 0 &&
+              strcmp(lt_ext_row_text(revert), "Revert") == 0,
+          "the rows' words");
+
+    /* Cross on Apply: the host asked once; the countdown, on Revert */
+    s_gfxBegins = 0;
+    lt_ext_layout(pageL)->curItem = apply;
+    press(0x40);
+    CHECK(s_gfxBegins == 1 && strcmp(s_gfxAsked[0], "opengl") == 0 &&
+              s_gfxWhy[0] == UI_GFX_WHY_APPLY,
+          "Cross on Apply asks for opengl once (%d, %s)", s_gfxBegins, s_gfxAsked[0]);
+    CHECK(gfxRowOn(UI_OPT_GRAPHICS_KEEP) && gfxRowOn(UI_OPT_GRAPHICS_REVERT) &&
+              !gfxRowOn(UI_OPT_GRAPHICS_API) && !gfxRowOn(UI_OPT_BACK) &&
+              !gfxRowOn(UI_OPT_GRAPHICS_APPLY),
+          "the countdown: Keep and Revert alone");
+    CHECK(lt_ext_layout(pageL)->curItem == revert, "the cursor on Revert");
+    {
+        const int note = noteStarting(UI_PAGE_GRAPHICS, "Keep these settings?");
+        CHECK(note >= 0 && strstr(lt_ext_row_text(note), "Reverting in 10 s") != NULL,
+              "the countdown's note: %s", note >= 0 ? lt_ext_row_text(note) : "-");
+        gfxVsyncs(60);
+        frame(0);
+        CHECK(note >= 0 && strstr(lt_ext_row_text(note), "Reverting in 9 s") != NULL,
+              "a second later: %s", note >= 0 ? lt_ext_row_text(note) : "-");
+    }
+    /* the countdown runs out: Vulkan again, the value as it was, nothing kept */
+    gfxVsyncs(600 - 60 - 1);
+    CHECK(s_gfxBegins == 1, "599 vsyncs: still counting (%d)", s_gfxBegins);
+    gfxVsyncs(1);
+    CHECK(s_gfxBegins == 2 && strcmp(s_gfxAsked[1], "vulkan") == 0 &&
+              s_gfxWhy[1] == UI_GFX_WHY_TIMEOUT,
+          "600 vsyncs at 60 Hz: back to vulkan (%d, %s)", s_gfxBegins, s_gfxAsked[1]);
+    CHECK(strcmp(ico_config_get_string("video.backend", "?"), "") == 0,
+          "the value back to Automatic (%s)", ico_config_get_string("video.backend", "?"));
+    CHECK(s_gfxKepts == 0, "nothing kept");
+    frame(0);
+    CHECK(gfxRowOn(UI_OPT_GRAPHICS_API) && gfxRowOn(UI_OPT_BACK) &&
+              !gfxRowOn(UI_OPT_GRAPHICS_KEEP) && !gfxRowOn(UI_OPT_GRAPHICS_APPLY),
+          "the page as before");
+
+    /* Keep: the choice written */
+    ui_settings_step(UI_OPT_GRAPHICS_API, 1);
+    ui_settings_step(UI_OPT_GRAPHICS_API, 1);
+    frame(0);
+    lt_ext_layout(pageL)->curItem = apply;
+    press(0x40);
+    lt_ext_layout(pageL)->curItem = keep;
+    press(0x40);
+    CHECK(s_gfxKepts == 1 && s_gfxBegins == 3 && strcmp(s_gfxRunning, "opengl") == 0,
+          "Keep: kept on opengl (%d, %d, %s)", s_gfxKepts, s_gfxBegins, s_gfxRunning);
+    CHECK(!gfxRowOn(UI_OPT_GRAPHICS_KEEP) && !gfxRowOn(UI_OPT_GRAPHICS_APPLY),
+          "kept: no countdown, no Apply");
+    gfxVsyncs(700);
+    CHECK(s_gfxBegins == 3, "kept: the time runs out on nothing");
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(mainL, 60), "Back leaves the page");
+    CHECK(ui_settings_save() == 0, "save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t != NULL, "the file");
+    if (t) {
+        const char *b = ico_toml_get(t, "video.backend");
+        CHECK(b != NULL && strcmp(b, "opengl") == 0, "Keep: [video] backend = opengl (%s)",
+              b ? b : "-");
+        ico_toml_free(t);
+    }
+
+    /* Revert: OpenGL again, the value back to OpenGL */
+    pageL = openPage(mainL, 2, UI_PAGE_GRAPHICS);
+    ui_settings_step(UI_OPT_GRAPHICS_API, -1);
+    frame(0);
+    CHECK(gfxRowOn(UI_OPT_GRAPHICS_APPLY), "Vulkan on OpenGL: Apply shows");
+    lt_ext_layout(pageL)->curItem = apply;
+    press(0x40);
+    CHECK(s_gfxBegins == 4 && strcmp(s_gfxAsked[3], "vulkan") == 0, "Apply asks for vulkan");
+    press(0x40); /* the cursor is on Revert */
+    CHECK(s_gfxBegins == 5 && strcmp(s_gfxAsked[4], "opengl") == 0 &&
+              s_gfxWhy[4] == UI_GFX_WHY_REVERT,
+          "Revert asks for opengl (%d, %s)", s_gfxBegins, s_gfxAsked[4]);
+    CHECK(strcmp(ico_config_get_string("video.backend", "?"), "opengl") == 0,
+          "Revert: the value back to OpenGL (%s)", ico_config_get_string("video.backend", "?"));
+
+    /* Circle in the countdown is Revert, and stays on the page */
+    ui_settings_step(UI_OPT_GRAPHICS_API, -1);
+    frame(0);
+    lt_ext_layout(pageL)->curItem = apply;
+    press(0x40);
+    press(LT_PAD_TRIANGLE);
+    CHECK(s_gfxBegins == 7 && strcmp(s_gfxAsked[6], "opengl") == 0 &&
+              s_gfxWhy[6] == UI_GFX_WHY_REVERT && current_layout_id == pageL,
+          "Circle reverts on the page (%d, %s)", s_gfxBegins, s_gfxAsked[6]);
+
+    /* a renderer that did not start: the popup, the value as chosen */
+    ui_popup_reset();
+    ui_settings_step(UI_OPT_GRAPHICS_API, -1);
+    frame(0);
+    s_gfxAnswer = UI_GFX_SWITCH_FAILED;
+    lt_ext_layout(pageL)->curItem = apply;
+    press(0x40);
+    CHECK(strcmp(ui_popup_title(), "The Vulkan renderer could not start; OpenGL is kept") == 0,
+          "failed: \"%s\"", ui_popup_title());
+    CHECK(strcmp(ico_config_get_string("video.backend", "?"), "vulkan") == 0 &&
+              gfxRowOn(UI_OPT_GRAPHICS_APPLY) && !gfxRowOn(UI_OPT_GRAPHICS_KEEP),
+          "failed: the value stays Vulkan, Apply again");
+
+    /* refused: nothing */
+    ui_popup_reset();
+    s_gfxAnswer = UI_GFX_SWITCH_REFUSED;
+    press(0x40);
+    CHECK(!ui_popup_active() && !gfxRowOn(UI_OPT_GRAPHICS_KEEP), "refused: no popup, no countdown");
+
+    /* answered later: polled every frame, Cross ignored meanwhile */
+    s_gfxAnswer = UI_GFX_SWITCH_PENDING;
+    s_gfxPollAnswers[0] = s_gfxPollAnswers[1] = s_gfxPollAnswers[2] = UI_GFX_SWITCH_PENDING;
+    s_gfxPollAnswers[3] = UI_GFX_SWITCH_DONE;
+    s_gfxPollN = 4;
+    s_gfxPollAt = 0;
+    s_gfxPolls = 0;
+    const int before = s_gfxBegins;
+    press(0x40); /* Apply, then two frames of polls */
+    CHECK(!gfxRowOn(UI_OPT_GRAPHICS_KEEP) && s_gfxPolls == 2, "pending: no countdown yet (%d)",
+          s_gfxPolls);
+    press(0x40); /* the third poll's frame: ignored; the fourth answers */
+    CHECK(s_gfxBegins == before + 1 && s_gfxPolls == 4 && gfxRowOn(UI_OPT_GRAPHICS_KEEP) &&
+              lt_ext_layout(pageL)->curItem == revert,
+          "pending: polled until done, one switch, then the countdown (%d polls, %d)", s_gfxPolls,
+          s_gfxBegins - before);
+    s_gfxAnswer = UI_GFX_SWITCH_DONE;
+    lt_ext_layout(pageL)->curItem = keep;
+    press(0x40);
+    CHECK(s_gfxKepts == 2 && strcmp(s_gfxRunning, "vulkan") == 0, "kept on vulkan");
+
+    /* the strings, translated in every language */
+    static const UiStrId kIds[] = {UI_STR_GRAPHICS_APPLY,    UI_STR_GRAPHICS_APPLY_NOTE,
+                                   UI_STR_GRAPHICS_KEEP_ASK, UI_STR_GRAPHICS_KEEP,
+                                   UI_STR_GRAPHICS_REVERT,   UI_STR_GRAPHICS_FAILED,
+                                   UI_STR_GRAPHICS_API_NOTE};
+    for (int l = 1; l < UI_LANG_COUNT; l++) {
+        for (unsigned i = 0; i < sizeof(kIds) / sizeof(kIds[0]); i++) {
+            const char *tr = ui_str_in((UiLang)l, kIds[i]);
+            CHECK(tr[0] != '\0' && strcmp(tr, ui_str_in(UI_LANG_EN, kIds[i])) != 0,
+                  "Apply: language %d, string %d translated", l, kIds[i]);
+        }
+    }
+    ui_settings_set_graphics_host(NULL);
+    ui_settings_set_backend_names(NULL, 0);
+    ui_popup_set_vsync_hz(0);
+    ui_popup_reset();
 }
 
 /* Extras > Add to Steam: hidden without a host handler, on the pause menu,
@@ -3449,6 +3721,7 @@ int main(int argc, char **argv)
     /* Settings > Graphics driver, the Quit game label */
     testGpuDriver();
     testGraphicsApi();
+    testGraphicsApply();
     testAddToSteam();
     /* Main > Disc */
     testDiscRow();

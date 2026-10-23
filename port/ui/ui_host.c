@@ -122,6 +122,7 @@ void ui_host_vsync(unsigned int mainTick)
 {
     ui_popup_dev_tick(mainTick);
     ui_popup_vsync();
+    ui_settings_vsync(); /* Graphics > Apply's countdown */
 }
 
 void ui_host_shutdown(void)

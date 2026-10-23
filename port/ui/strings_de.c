@@ -511,7 +511,15 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_SECTION_GRAPHICS] = "Grafik",
     [UI_STR_OPT_GRAPHICS_API] = "Grafik-API",
     [UI_STR_VAL_GRAPHICS_AUTOMATIC] = "Automatisch",
-    [UI_STR_GRAPHICS_API_NOTE] = "Gilt ab dem nächsten Start.",
+    [UI_STR_GRAPHICS_API_NOTE] =
+        "Übernehmen wechselt sofort; ohne Übernehmen gilt die Wahl ab dem nächsten Start.",
+    [UI_STR_GRAPHICS_APPLY] = "Übernehmen",
+    [UI_STR_GRAPHICS_APPLY_NOTE] =
+        "Wechselt sofort, ohne das Spiel zu verlassen. Eine kurze Pause ist normal.",
+    [UI_STR_GRAPHICS_KEEP_ASK] = "Diese Einstellungen behalten? Zurück in %d s",
+    [UI_STR_GRAPHICS_KEEP] = "Behalten",
+    [UI_STR_GRAPHICS_REVERT] = "Zurück",
+    [UI_STR_GRAPHICS_FAILED] = "Der Renderer %s konnte nicht starten; %s bleibt",
     /* Settings > Graphics driver (Android), Quit game */
     [UI_STR_SECTION_GPU_DRIVER] = "Grafiktreiber",
     [UI_STR_OPT_GPU_DRIVER] = "Treiber",

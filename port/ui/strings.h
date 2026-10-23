@@ -617,6 +617,15 @@ typedef enum UiStrId {
     UI_STR_OPT_GRAPHICS_API,
     UI_STR_VAL_GRAPHICS_AUTOMATIC,
     UI_STR_GRAPHICS_API_NOTE,
+    /* Settings > Graphics > Apply: the row and its note, the countdown's
+       note (one %d, the seconds left), Keep, Revert, and the popup when the
+       renderer chosen did not start (two %s: that renderer, the one kept) */
+    UI_STR_GRAPHICS_APPLY,
+    UI_STR_GRAPHICS_APPLY_NOTE,
+    UI_STR_GRAPHICS_KEEP_ASK,
+    UI_STR_GRAPHICS_KEEP,
+    UI_STR_GRAPHICS_REVERT,
+    UI_STR_GRAPHICS_FAILED,
     /* Settings > Graphics driver (Android), Quit game */
     UI_STR_SECTION_GPU_DRIVER,
     UI_STR_OPT_GPU_DRIVER,

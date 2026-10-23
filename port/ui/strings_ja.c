@@ -507,7 +507,15 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_SECTION_GRAPHICS] = "グラフィック",
     [UI_STR_OPT_GRAPHICS_API] = "グラフィックAPI",
     [UI_STR_VAL_GRAPHICS_AUTOMATIC] = "自動",
-    [UI_STR_GRAPHICS_API_NOTE] = "次回の起動から使われます。",
+    [UI_STR_GRAPHICS_API_NOTE] =
+        "「適用」ですぐに切り替わります。適用しない場合は次回の起動から使われます。",
+    [UI_STR_GRAPHICS_APPLY] = "適用",
+    [UI_STR_GRAPHICS_APPLY_NOTE] =
+        "ゲームを終了せずにすぐ切り替えます。しばらく止まることがあります。",
+    [UI_STR_GRAPHICS_KEEP_ASK] = "この設定を使い続けますか？ あと %d s で前の設定に戻します",
+    [UI_STR_GRAPHICS_KEEP] = "このまま",
+    [UI_STR_GRAPHICS_REVERT] = "戻す",
+    [UI_STR_GRAPHICS_FAILED] = "%s のレンダラーを開始できませんでした。%s を使い続けます",
     /* Settings > Graphics driver (Android), Quit game */
     [UI_STR_SECTION_GPU_DRIVER] = "グラフィックドライバー",
     [UI_STR_OPT_GPU_DRIVER] = "ドライバー",
