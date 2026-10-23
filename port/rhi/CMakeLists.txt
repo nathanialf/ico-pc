@@ -348,14 +348,13 @@ endif()
 # --- ico_rhi_opengl -------------------------------------------------------------
 # gl/gl_glsl.c inflates the shader table's GLSL with miniz (ico_miniz,
 # port/data); d3d12/d3d12_plan.c gives the handle pools and the layout rules.
-# The pipelines and the command code (gl/gl_pipeline.c, gl/gl_cmd.c) join the
-# list with their own package: until then the library leaves those entry
-# points undefined.
 if(_ico_have_gl)
     set(_ico_gl_sources
+        gl/gl_cmd.c
         gl/gl_device.c
         gl/gl_glsl.c
         gl/gl_loader.c
+        gl/gl_pipeline.c
         gl/gl_resource.c
         gl/gl_swapchain.c
         d3d12/d3d12_plan.c)
