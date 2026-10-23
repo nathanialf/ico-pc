@@ -2010,7 +2010,7 @@ static void check_v084_box(const IcoTouchLayout *l, const IcoTouchEdits *e, int 
 static void test_v084_forms(void)
 {
     static const IcoTouchInsets kIn[] = {
-        {160.0f, 0.0f, 30.0f, 0.0f}, /* a camera hole on the left, a round right edge */
+        {160.0f, 0.0f, 30.0f, 0.0f}, /* a camera hole on the left, a right inset */
         {100.0f, 0.0f, 0.0f, 0.0f},  /* a notch */
         {0.0f, 90.0f, 0.0f, 40.0f},  /* top and bottom */
         {120.0f, 60.0f, 80.0f, 30.0f},

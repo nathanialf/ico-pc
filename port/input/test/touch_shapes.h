@@ -28,7 +28,7 @@ static const Shape s_shapes[] = {
     {1920, 1080, {0, 0, 0, 0}, 0.0f, NOFOLD, FULL3},      /* desktop, density unknown */
     {2340, 1080, {0, 0, 0, 0}, 420.0f, NOFOLD, FULL3},    /* a 19.5:9 phone */
     {2400, 1080, {100, 0, 0, 0}, 450.0f, NOFOLD, FULL3},  /* a notch on the left */
-    {2400, 1080, {160, 0, 30, 0}, 450.0f, NOFOLD, FULL3}, /* camera hole, round edge */
+    {2400, 1080, {160, 0, 30, 0}, 450.0f, NOFOLD, FULL3}, /* camera hole, a right inset */
     {2176, 1812, {0, 0, 0, 0}, 420.0f, NOFOLD, FULL3},    /* a foldable open */
     {1812, 2176, {0, 0, 0, 0}, 420.0f, NOFOLD, FULL3},    /* the same, portrait */
     {2560, 1600, {0, 0, 0, 0}, 320.0f, NOFOLD, FULL3},    /* a 16:10 tablet */

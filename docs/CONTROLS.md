@@ -387,11 +387,10 @@ Where you put a button is remembered as a real distance from the corners
 of the screen, so a layout feels the same on another phone, and the Touch
 size setting still makes all of it bigger or smaller.
 
-On a phone with a camera hole or rounded corners, the game's own
-arrangement keeps its buttons clear of them, but Edit layout lets you drag
-a button anywhere on the screen, under the camera hole or into the rounded
-corner beside it, and the dots you snap to reach the glass edge too. A
-button goes under the hole once its middle is past the edge of the part of
+On a phone with a camera hole, the game's own arrangement keeps its
+buttons clear of it, but Edit layout lets you drag a button under the
+camera hole, and the dots you snap to reach the glass edge too. A button
+goes under the hole once its middle is past the edge of the part of
 the screen the game keeps its own buttons in; let go of it with its middle
 still inside that part and it stays wholly inside it, against the edge. On
 a gamepad, pressing towards the edge once more takes a button there past

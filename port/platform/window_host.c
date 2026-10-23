@@ -767,7 +767,8 @@ static void touch_env_build(IcoTouchEnv *env, int pw, int ph)
 }
 
 /* The touch overlay's zones from the window's pixel size, its safe area (a
-   notch, rounded corners, the system bars), which SDL gives in points:
+   notch or camera hole, the system bars and gesture strips; not the
+   rounded corners, which SDL does not report), which SDL gives in points:
    scaled to pixels, and the screen's density and fold (touch_env_build).
    On open, when the size, the safe area or the display scale changes, and
    on Android when the activity reports a new density or fold
