@@ -490,7 +490,7 @@ static const struct {
     /* test popups from Main tick 100 (port/ui/popup.h) */
     {"dev.popup_test", "popup_test"},
     /* the renderer backend of the window build: "" (Automatic: Vulkan,
-       then OpenGL), "vulkan" (also "vk"), "d3d12", "opengl" (also "gl") or
+       then Direct3D 12 where linked, then OpenGL), "vulkan" (also "vk"), "d3d12", "opengl" (also "gl") or
        "d3d11", where the build links it (window_host.c, port/rhi/rhi.h
        rhi_create_backend; the Options > Graphics row writes it) */
     {"video.backend", "backend"},
