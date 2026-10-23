@@ -490,10 +490,16 @@ static int poolCell(void)
             failures++;                                                                            \
         }                                                                                          \
     } while (0)
-    const RhiShader vs = rhi_create_shader(&(RhiShaderDesc){
-        RHI_STAGE_VERTEX, spv_vs_main, sizeof(spv_vs_main), "vs_main", "pool vs_main"});
-    const RhiShader ps = rhi_create_shader(&(RhiShaderDesc){
-        RHI_STAGE_FRAGMENT, spv_ps_color, sizeof(spv_ps_color), "ps_color", "pool ps_color"});
+    const RhiShader vs = rhi_create_shader(&(RhiShaderDesc){.stage = RHI_STAGE_VERTEX,
+                                                            .bytecode = spv_vs_main,
+                                                            .bytecodeSize = sizeof(spv_vs_main),
+                                                            .entryPoint = "vs_main",
+                                                            .debugName = "pool vs_main"});
+    const RhiShader ps = rhi_create_shader(&(RhiShaderDesc){.stage = RHI_STAGE_FRAGMENT,
+                                                            .bytecode = spv_ps_color,
+                                                            .bytecodeSize = sizeof(spv_ps_color),
+                                                            .entryPoint = "ps_color",
+                                                            .debugName = "pool ps_color"});
     static const RhiVertexBinding vb = {0, sizeof(PoolVtx), false};
     static const RhiVertexAttr va[3] = {
         {0, 0, RHI_VTX_F32x3, offsetof(PoolVtx, x)},
