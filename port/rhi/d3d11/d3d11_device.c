@@ -519,12 +519,6 @@ void rhi_set_pipeline_cache_path(const char *path)
     }
 }
 
-static bool d11_ends_with(const char *s, const char *tail)
-{
-    const size_t n = strlen(s), t = strlen(tail);
-    return n >= t && _stricmp(s + n - t, tail) == 0;
-}
-
 /* removes folder dir's files, then the folder (one level) */
 static bool d11_remove_folder(const char *dir)
 {
@@ -562,8 +556,8 @@ static void d11_cache_drop_others(const char *prefix, size_t plen, const char *o
     }
     do {
         if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
-            d11_ends_with(fd.cFileName, ".d3d11") && _stricmp(fd.cFileName, ours) != 0 &&
-            n < MAXN && strlen(fd.cFileName) < sizeof(names[0])) {
+            d3d11_shader_cache_is_other(fd.cFileName, ours) && n < MAXN &&
+            strlen(fd.cFileName) < sizeof(names[0])) {
             strcpy(names[n++], fd.cFileName);
         }
     } while (FindNextFileA(h, &fd));
@@ -579,31 +573,26 @@ static void d11_cache_drop_others(const char *prefix, size_t plen, const char *o
     }
 }
 
-/* the folder and the build id from the path; "" without a path */
+/* the folder and the build id from the path (d3d11_shader_cache_folder);
+ * "" without a path */
 static void d11_cache_setup(void)
 {
-    g_d11.cacheDir[0] = '\0';
-    g_d11.buildId[0] = '\0';
-    if (!s_cachePath[0]) {
+    bool window = false;
+    if (!d3d11_shader_cache_folder(s_cachePath, g_d11.cacheDir, sizeof(g_d11.cacheDir),
+                                   g_d11.buildId, sizeof(g_d11.buildId), &window)) {
+        if (s_cachePath[0]) {
+            D11_LOG("shader cache path %s is too long: no shader cache", s_cachePath);
+        }
         return;
     }
-    const char *base = s_cachePath;
-    for (const char *p = s_cachePath; *p; p++) {
-        if (*p == '/' || *p == '\\') {
-            base = p + 1;
+    if (window) {
+        const char *base = g_d11.cacheDir;
+        for (const char *p = g_d11.cacheDir; *p; p++) {
+            if (*p == '/' || *p == '\\') {
+                base = p + 1;
+            }
         }
-    }
-    const size_t plen = (size_t)(base - s_cachePath);
-    const size_t blen = strlen(base);
-    if (strncmp(base, "pipelines-", 10) == 0 && blen > 18 && d11_ends_with(base, ".vkcache")) {
-        /* pipelines-<build>.vkcache -> pipelines-<build>.d3d11, key <build> */
-        snprintf(g_d11.buildId, sizeof(g_d11.buildId), "%.*s", (int)(blen - 18), base + 10);
-        snprintf(g_d11.cacheDir, sizeof(g_d11.cacheDir), "%.*s.d3d11",
-                 (int)(strlen(s_cachePath) - 8), s_cachePath);
-        d11_cache_drop_others(s_cachePath, plen, g_d11.cacheDir + plen);
-    } else {
-        snprintf(g_d11.buildId, sizeof(g_d11.buildId), "%s", base);
-        snprintf(g_d11.cacheDir, sizeof(g_d11.cacheDir), "%s.d3d11", s_cachePath);
+        d11_cache_drop_others(g_d11.cacheDir, (size_t)(base - g_d11.cacheDir), base);
     }
     if (!d3d11_shader_cache_mkdir(g_d11.cacheDir)) {
         D11_LOG("shader cache folder %s could not be made: the shaders are compiled at every "
