@@ -1,7 +1,9 @@
 /* rd_msaa_test.c: the anti-aliasing's MSAA (rd_replay.c, the MSAA epoch).
  *
  * Without a device: rd_aa_samples and rd_aa_supported_mask (the
- * supersampling values only).
+ * supersampling values only).  With a device, the mask without the
+ * epoch's depth resolve (depth_resolve_ps cleared for one call, as an
+ * OpenGL driver below 4.5 leaves it): the supersampling values only.
  * On a Vulkan device (77 without one, or when it lacks 4 samples, a depth it
  * can sample or a fog that reads it: rd_aa_supported_mask without MSAA4),
  * at 4:3 Enhanced 1x, each frame replayed without anti-aliasing and with
@@ -530,6 +532,18 @@ int main(void)
     CHECK((mask & 7u) == 7u, "off and supersampling always supported");
     const bool want4 = (lim->msaaCounts & 4u) && lim->depthSampled && g_rd.fogPath != RD_FOG_BUFFER;
     CHECK(((mask >> RD_AA_MSAA4) & 1u) == (want4 ? 1u : 0u), "MSAA4 listed as the device has it");
+    {
+        /* without the epoch's depth resolve (an OpenGL driver below 4.5
+           refuses depth_resolve_ps, rd__gpu_init): no MSAA value is
+           offered, the supersampling ones are */
+        const RhiShader keep = g_rd.fs[RD_FS_DEPTH_RESOLVE];
+        g_rd.fs[RD_FS_DEPTH_RESOLVE] = (RhiShader){0};
+        const uint32_t without = rd_aa_supported_mask();
+        g_rd.fs[RD_FS_DEPTH_RESOLVE] = keep;
+        CHECK(without == ((1u << RD_AA_OFF) | (1u << RD_AA_SSAA2) | (1u << RD_AA_SSAA4)),
+              "without depth_resolve_ps: off and the supersampling values (0x%x)", without);
+        CHECK(rd_aa_supported_mask() == mask, "the module back: the mask as before");
+    }
     if (!(mask & (1u << RD_AA_MSAA4))) {
         rd_shutdown();
         printf("rd_msaa_test: SKIP: no 4-sample MSAA on this device\n");

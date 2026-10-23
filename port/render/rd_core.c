@@ -1846,6 +1846,11 @@ uint32_t rd_aa_supported_mask(void)
         if (!l->depthSampled) {
             return mask;
         }
+        /* the epoch's depth resolve (depth_resolve_ps) not made: an OpenGL
+           driver below 4.5 refuses it (rd__gpu_init's line) */
+        if (!g_rd.fs[RD_FS_DEPTH_RESOLVE].id) {
+            return mask;
+        }
         for (int aa = RD_AA_MSAA2; aa <= RD_AA_MSAA8; aa++) {
             const uint32_t n = rd_aa_samples(aa);
 

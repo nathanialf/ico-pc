@@ -182,6 +182,16 @@ RhiShader rd__make_shader(const char *name)
     return rhi_create_shader(&d);
 }
 
+/* an optional module (RD_VS/FS_OPTIONAL_FIRST on) is made when the table
+ * has it in this backend's form: OpenGL has no GLSL for the input-attachment
+ * builds (fog_lut_local_ps, date_stencil_ps, fx_local_ps), whose features
+ * need local read, which OpenGL has not */
+static bool optionalBuilt(const char *name)
+{
+    const IcoShaderBlob *b = ico_find_shader(name);
+    return b && (rhi_backend() != RHI_BACKEND_OPENGL || b->glsl);
+}
+
 /* rhi_init succeeded: rd__gpu_shutdown has a device to tear down (without a
  * Vulkan loader rhi_init fails and there is nothing to wait on or destroy). */
 static bool s_rhiUp;
@@ -304,7 +314,7 @@ bool rd__gpu_init(void *sdlWindow)
     for (int i = 0; i < RD_VS_COUNT; i++) {
         /* a module from RD_VS_OPTIONAL_FIRST on that is missing from the
          * table leaves its id empty (its draws take their fallback) */
-        if (i >= RD_VS_OPTIONAL_FIRST && !ico_find_shader(s_vsNames[i])) {
+        if (i >= RD_VS_OPTIONAL_FIRST && !optionalBuilt(s_vsNames[i])) {
             continue;
         }
         g_rd.vs[i] = rd__make_shader(s_vsNames[i]);
@@ -317,7 +327,7 @@ bool rd__gpu_init(void *sdlWindow)
         if (i == RD_FS_FOG_MS && !lim->sampleRateShading) {
             continue;
         }
-        if (i >= RD_FS_OPTIONAL_FIRST && !ico_find_shader(s_fsNames[i])) {
+        if (i >= RD_FS_OPTIONAL_FIRST && !optionalBuilt(s_fsNames[i])) {
             continue; /* as the vertex loop's */
         }
         /* without dual-source blending the gs_dual_out entries are not
@@ -346,7 +356,14 @@ bool rd__gpu_init(void *sdlWindow)
             }
         }
         g_rd.fs[i] = rd__make_shader(s_fsNames[i]);
-        ok = ok && g_rd.fs[i].id;
+        /* the MSAA depth resolve is GLSL 4.50 (textureSamples): an OpenGL
+         * 4.3 or 4.4 driver refuses it, and without it no MSAA value is
+         * offered (rd_aa_supported_mask); the supersampling ones stay */
+        ok = ok && (g_rd.fs[i].id || i == RD_FS_DEPTH_RESOLVE);
+        if (i == RD_FS_DEPTH_RESOLVE && !g_rd.fs[i].id) {
+            rd__log("msaa: depth_resolve_ps was not made on this device (the line above says "
+                    "why): no MSAA value is offered, the supersampling ones are");
+        }
     }
     /* set 0: the Original samplers (one level); sets 1 and 2: the Enhanced
      * filter's trilinear and anisotropic ones over the generated mips
