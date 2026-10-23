@@ -2066,8 +2066,10 @@ static void checkSceneLimit(void)
     rd_shutdown();
 
     if (rhi_backend() != RHI_BACKEND_VULKAN) {
-        /* the failure hook is the Vulkan backend's: the fallback checks below
-           have nothing to drive on another backend */
+        /* the failure hook is the Vulkan backend's (vkr_test_fail_texels_above:
+           texture creations refused above a texel count); D3D12, OpenGL and
+           D3D11 have none, so the fallback checks below have nothing to
+           drive there */
         printf("rd_present: scene fallback checks skipped (backend is not Vulkan)\n");
         return;
     }

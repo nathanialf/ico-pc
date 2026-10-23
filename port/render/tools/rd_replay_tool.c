@@ -3,7 +3,7 @@
  * backend, before against after).
  *
  *   rd_replay_tool <dump> <out.png> [--target NAME] [--present WxH]
- *                  [--pass-dump DIR] [--backend vulkan|d3d12]
+ *                  [--pass-dump DIR] [--backend vulkan|d3d12|opengl|d3d11]
  *
  * <dump> is an .rddump, or the .zip F12 writes: its first .rddump entry is
  * taken (and for --interp's PREV given as a zip, its second, the tick
@@ -26,8 +26,9 @@
  * skipped with a message (the final line counts them).
  *
  * --backend picks the RHI backend (default: the build's default,
- * port/rhi/rhi.h rhi_create_backend), so the same dump can be rendered on
- * Vulkan and D3D12 and the PNGs compared.
+ * port/rhi/rhi.h rhi_create_backend; "vk" and "gl" are taken too), so the
+ * same dump can be rendered on Vulkan, D3D12, OpenGL and D3D11 and the PNGs
+ * compared; a name the build does not link is an error (exit 1).
  *
  * The display options: a dump does not carry them, so the replay takes them
  * here, the PS2 picture by default:
@@ -1422,7 +1423,8 @@ int main(int argc, char **argv)
                 "[--border-mask] [--water-sharp] [--motion-blur original|smooth] [--no-crack-fill] "
                 "[--work-clear RRGGBB] [--no-glow-edge] "
                 "[--filter F] "
-                "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
+                "[--mirror] [--overlay-test] [--backend vulkan|d3d12|opengl|d3d11] [--list] "
+                "[--nop L:A[-B]] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
                 "[--time N] [--keys] "
                 "[--pass-dump DIR] "
