@@ -107,8 +107,10 @@ is Automatic. `window: Graphics API <name> (chosen in the settings or the config
 says which.
 
 1. The chosen backend, or Vulkan for Automatic.
-2. Automatic, Vulkan's `rd_init` failed and the build links OpenGL: `ico_pc: no Vulkan device;
-   using OpenGL`, the window destroyed and made again with `SDL_WINDOW_OPENGL`,
+2. Automatic, Vulkan did not start (SDL refused the `SDL_WINDOW_VULKAN` window, as without a
+   Vulkan loader, after `window: SDL_CreateWindow: <error>`; or `rd_init` failed after
+   `window: no usable vulkan device ...`) and the build links OpenGL (`window_fallback_opengl`):
+   `ico_pc: no Vulkan device; using OpenGL`, the window destroyed and made again with `SDL_WINDOW_OPENGL`,
    `window: Graphics API opengl (automatic, after Vulkan)`, `rd_init` once more. An OpenGL that
    does not start ends the start as any failed start does.
 3. A restart after a crash or a loss follows the start-up retry orders

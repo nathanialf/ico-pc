@@ -1455,6 +1455,28 @@ static bool window_have_d3d12(void)
     return window_have_backend("d3d12");
 }
 
+/* Automatic's fallback: Vulkan did not start (its window, or rd_init: the
+   lines before say which) and the build links OpenGL, so the start goes on
+   with OpenGL once (the caller makes a new window: OpenGL needs one made
+   with SDL_WINDOW_OPENGL, window_flags). False, nothing changed, when the
+   player chose the backend, the backend is not Vulkan or OpenGL is not in
+   the build. A crash or loss on OpenGL takes the start-up retry's orders
+   with "opengl" as the backend (startup_retry.c, unchanged) */
+static bool window_fallback_opengl(bool backendExplicit, StartupRetry retry, bool blendExplicit,
+                                   const char **backend)
+{
+    if (backendExplicit || rhi_backend() != RHI_BACKEND_VULKAN || !window_have_backend("opengl") ||
+        !rhi_create_backend("opengl")) {
+        return false;
+    }
+    *backend = "opengl";
+    fprintf(stderr, "ico_pc: no Vulkan device; using OpenGL\n");
+    ico_diag_set_startup_retry((int)retry, window_have_d3d12(), backendExplicit, blendExplicit,
+                               *backend);
+    fprintf(stderr, "window: Graphics API %s (automatic, after Vulkan)\n", *backend);
+    return true;
+}
+
 /* The platform the build is for, for the summary line */
 static const char *summary_platform(void)
 {
@@ -1822,6 +1844,10 @@ open_window:
     }
     if (s_window == NULL) {
         fprintf(stderr, "window: SDL_CreateWindow: %s\n", SDL_GetError());
+        /* no Vulkan loader: SDL refuses an SDL_WINDOW_VULKAN window */
+        if (window_fallback_opengl(backendExplicit, retry, blendExplicit, &backend)) {
+            goto open_window;
+        }
         SDL_Quit();
         return -1;
     }
@@ -2076,28 +2102,13 @@ open_window:
                                    backend);
         goto open_window;
     }
-    if (!up && !backendExplicit && rhi_backend() == RHI_BACKEND_VULKAN &&
-        window_have_backend("opengl")) {
-        /* Automatic, and Vulkan did not start (no loader, no device, a
-           device the renderer cannot use: the lines above say which): the
-           OpenGL backend where the build links it, once (an OpenGL that
-           does not start either ends the start below). A new window:
-           OpenGL needs one made with SDL_WINDOW_OPENGL (window_flags).
-           A crash or loss on it restarts on OpenGL, or on Direct3D 12
-           where the build has it (startup_retry.c's steps, unchanged) */
-        fprintf(stderr, "ico_pc: no Vulkan device; using OpenGL\n");
-        SDL_DestroyWindow(s_window);
-        s_window = NULL;
-        backend = "opengl";
-        rhi_create_backend(backend);
-        ico_diag_set_startup_retry((int)retry, window_have_d3d12(), backendExplicit, blendExplicit,
-                                   backend);
-        fprintf(stderr, "window: Graphics API %s (automatic, after Vulkan)\n", backend);
-        goto open_window;
-    }
     if (!up) {
         SDL_DestroyWindow(s_window);
         s_window = NULL;
+        /* Automatic: no Vulkan device, or one the renderer cannot use */
+        if (window_fallback_opengl(backendExplicit, retry, blendExplicit, &backend)) {
+            goto open_window;
+        }
         SDL_Quit();
 #ifdef __ANDROID__
         return -2; /* the player chose Quit, or a driver package for the next
