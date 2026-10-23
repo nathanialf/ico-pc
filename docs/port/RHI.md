@@ -33,6 +33,9 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | `port/rhi/d3d12/d3d12_cmd.c`, `d3d12_pipeline.c`, `d3d12_resource.c` | commands and fences; root signatures and pipeline states; committed resources |
 | `port/rhi/d3d12/d3d12_enums.h`, `d3d12_internal.h` | the enum tables; the backend's shared state |
 | `port/rhi/d3d11/d3d11_shader.h`, `d3d11_shader.c` | the Direct3D 11 backend's run-time HLSL compile through `d3dcompiler_47.dll` and its DXBC cache file ([SHADERS.md](SHADERS.md#direct3d-11-run-time-compile)) |
+| `port/rhi/d3d11/d3d11_internal.h`, `rhi_d3d11.h` | the Direct3D 11 backend's shared state and the contract between its files; its test extras |
+| `port/rhi/d3d11/d3d11_device.c` | runtime loading, adapter pick, device, debug layer, limits, frame slots, submission, timestamps, the DXBC cache folder |
+| `port/rhi/d3d11/d3d11_resource.c`, `d3d11_swapchain.c` | buffers with their upload shadows, textures, samplers, shaders, bind groups, readback; the DXGI flip-model swapchain |
 | `cmake/IcoMoltenVK.cmake` | the MoltenVK slice an Apple build links |
 | `tools/fetch_moltenvk.sh` | MoltenVK and the Apple SDL3 build |
 | `port/rhi/test/` | the backend tests and their shaders |
@@ -374,7 +377,8 @@ Vulkan-Headers and volk come from `tools/fetch_deps.sh` (the backend loads the V
 time); without SDL3 the backends are headless-only. The D3D12 backend uses mingw-w64's own headers
 and loads `d3d12.dll` and `dxgi.dll` at run time (`port/rhi/CMakeLists.txt`, header comment).
 
-The Direct3D 11 backend (`ICO_RHI_D3D11`, off until its sources are in) compiles its shaders at
+The Direct3D 11 backend (`ICO_RHI_D3D11`, on for 64-bit Windows; [Direct3D 11](#direct3d-11))
+compiles its shaders at
 run time: `RhiShaderDesc` brings it the HLSL file, the entry, the macros and the embedded sources
 rather than a blob, and `d3d11_shader_compile` (`port/rhi/d3d11/d3d11_shader.c`) turns them into
 DXBC with `d3dcompiler_47.dll`, cached on disk per shader. The route, the cache file, its key and
@@ -598,6 +602,115 @@ the vsync lock takes the display's vblanks from the window's own clock thread on
 
 **Test extras** (`port/rhi/d3d12/rhi_d3d12.h`): the debug layer's error count, whether it is active,
 and whether the device runs on WARP.
+
+## Direct3D 11
+
+The Direct3D 11 backend (`port/rhi/d3d11/`, prefix `d3d11`, `rhi_backend_d3d11`) is for cards and
+drivers that have neither Vulkan nor Direct3D 12. It compiles in the `win-x64` and `win-x64-clang`
+cross builds; it has not run on any Windows machine, so everything below is the design as written,
+not behaviour anyone has seen. `port/rhi/d3d11/d3d11_internal.h` holds the shared state and states
+which file provides what.
+
+**Device** (`port/rhi/d3d11/d3d11_device.c`). `d3d11.dll` and `dxgi.dll` are loaded at run time and
+an injector beside the program is named as on D3D12. Adapters are enumerated discrete first; one is
+suitable when `D3D11CreateDevice` takes it at feature level 11_1 or 11_0 (a list with 11_1 that the
+runtime answers `E_INVALIDARG` is tried again without it); with none, or with
+`ICO_D3D11_ADAPTER=warp`, the device is made on `D3D_DRIVER_TYPE_WARP` (`d11_pick_adapter`,
+`d11_create_device`). The device needs the Direct3D 11.1 interfaces (`ID3D11Device1`,
+`ID3D11DeviceContext1`: Windows 8 and later) and `ConstantBufferOffsetting`; without them `rhi_init`
+fails with `rhi_d3d11: Direct3D 11.1 is needed (...)` (`d11_require_11_1`). Each adapter logs
+`rhi_d3d11: adapter N: <name>` as on D3D12, and the device line is
+
+`rhi_d3d11: <adapter> (D3D11, feature level 11_1|11_0[, WARP][; driver version a.b.c.d]); 11.1
+interfaces yes, partial constant buffer updates yes|no, command lists by the driver|emulated by the
+runtime; tearing yes|no|n/a; debug layer on|off|asked for, not installed; shader cache <dir>|none[;
+headless]`
+
+| variable | effect |
+| --- | --- |
+| `ICO_D3D11_DEBUG` | 1 the debug layer (`D3D11_CREATE_DEVICE_DEBUG`, its info queue drained into the log as `rhi_d3d11 debug <severity> (id N): <text>`) and the DXGI debug factory; 0 off |
+| `ICO_D3D11_ADAPTER` | `warp`, an adapter index or a substring of its name |
+| `ICO_DX_FAKE_NO_TIMESTAMPS` | 1 turns GPU timestamps off, as on D3D12 |
+| `ICO_D3D11_FRAME_LATENCY` | the swapchain's frame latency, as `ICO_D3D12_FRAME_LATENCY` |
+
+A failed call logs `rhi_d3d11: <call> failed (HRESULT 0x...) at <file>:<line>`; a lost device is
+logged once with its removed reason and the last eight submissions (`d11_check`).
+
+**Limits** (`d11_fill_limits`). As D3D12's except: `copyRowPitchAlign` 1 and `copyOffsetAlign` 4
+(uploads to textures are `UpdateSubresource` from the CPU copy), `maxDynamicUniforms` 4, `rov`
+false (Direct3D 11.3 has rasterizer-ordered views; they stay off, untested), and
+`colorBytesPerPixel` 32, which keeps the VU vertex pre-pass off as on the Apple A9 and A10
+(`port/render/rd_replay_vu.c`): its record goes back through a texture-to-buffer copy Direct3D 11
+does not have. The sample counts come from `CheckMultisampleQualityLevels` over RGBA8 UNORM and UINT
+and D32S8, logged as `rhi_d3d11: multisampling: sample counts 0x..`.
+
+**Frames** (`d3d11_device.c`). Each frame slot has eight command lists, each a deferred context made
+on first use and kept. `rhi_begin_commands` hands out the next one; `rhi_end_commands` calls
+`FinishCommandList` (the deferred context's state is cleared); `rhi_submit` first writes the upload
+ranges the list read (below), then `ExecuteCommandList` on the immediate context in submit order,
+then ends the slot's `D3D11_QUERY_EVENT`. `rhi_wait_frame` moves to the next slot and polls its event
+(`GetData`, which also flushes; `Sleep(0)`, then `SwitchToThread`, between polls), then releases the
+slot's command lists, garbage and bind groups (`d11_recycle_frame`). `rhi_wait_idle` ends an event
+of its own and waits for it. A wait past 5 s logs
+`rhi_d3d11: a wait for the GPU has taken over 5 s; still waiting (once)`.
+
+**Upload buffers** (`d3d11_resource.c`). `rhi_map_buffer` of an `RHI_MEM_UPLOAD` buffer hands back
+a CPU copy (the shadow) whose address never changes, as the renderer keeps the pointer. A buffer is
+up to three D3D11 buffers, one per bind class its usage asks for (vertex and index; constant, which
+Direct3D 11 binds alone; structured shader resource, which cannot carry the vertex or index flag),
+all `D3D11_USAGE_DEFAULT`. The command path notes each range a list reads from an upload buffer,
+per class (`d11_cmd_touch`: bind group uniforms and storage ranges, vertex and index ranges with
+their draws' extents, copy sources); `rhi_submit` writes each noted range from the shadow into that
+class's buffer with `UpdateSubresource1` before the list executes (`d11_buffer_flush`), so a list
+sees what the CPU wrote before its submit. Constant buffers take a partial update where the driver
+offers `ConstantBufferPartialUpdate`, else the whole buffer. Uniform bindings are windows into the
+constant buffer (`VSSetConstantBuffers1` and `PSSetConstantBuffers1`, first constant = offset / 16,
+whole 256-byte blocks); storage bindings are structured SRVs of 16-byte elements, eight kept per
+buffer. `RHI_MEM_DEVICE` buffers are filled by copies; an `RHI_MEM_READBACK` buffer is a staging
+buffer plus the shadow, refreshed at `rhi_map_buffer`, and a `rhi_cmd_copy_texture_to_buffer` into
+one goes through a staging texture whose rows are written into the shadow at the map
+(`d11_readback_texture_target`). Textures are typeless with typed views as on D3D12, each with its
+RTV, writable and read-only DSV and SRV made at creation. Shaders are recorded at
+`rhi_create_shader` and compiled the first time a pipeline needs them (`d11_shader_compiled`, on the
+pipeline workers, once per shader).
+
+**Swapchain** (`d3d11_swapchain.c`). As D3D12's (three BGRA8 buffers, the frame latency waitable
+object, tearing without vsync, the frame statistics, the resize at a present after the window's
+size changed, the same `rhi_present_mode_name` rule), with `FLIP_SEQUENTIAL` where `FLIP_DISCARD`
+is refused (Windows 8), logged as `rhi_d3d11: FLIP_DISCARD refused (HRESULT 0x...):
+FLIP_SEQUENTIAL`. Under the flip model buffer 0 is always the one to draw, so it is the one RHI
+texture; its RTV is made again after every `ResizeBuffers`. Creation logs
+`rhi_d3d11: swapchain WxH, 3 buffers, flip discard|flip sequential, frame latency N (waitable)` or
+`..., no waitable object`.
+
+**The shader cache folder** (`d3d11_device.c`, `d11_cache_setup`). The window's pipeline cache path
+`<pref>/pipelines-<build>.vkcache` becomes the folder `<pref>/pipelines-<build>.d3d11`, one DXBC
+file per shader, keyed with `<build>` among the rest ([SHADERS.md](SHADERS.md#direct3d-11-run-time-compile));
+another build's `pipelines-*.d3d11` folder is removed at `rhi_init` with
+`rhi_d3d11: shader cache: dropped <name> (another version of the game)`. Any other path (a test's)
+gets `<path>.d3d11`, nothing dropped. A folder that cannot be made logs
+`rhi_d3d11: shader cache folder <dir> could not be made: the shaders are compiled at every start`.
+`rhi_pipeline_cache_loaded` is true once a shader came from the folder, `rhi_pipeline_cache_save`
+logs the counts (`rhi_d3d11: shader cache <dir>: N hits, M compiles, K failed`; also at the first
+`rhi_wait_idle` after a compile, and at `rhi_shutdown`), `rhi_pipeline_cache_size` is the folder's
+DXBC bytes.
+
+**Timestamps**. Per frame slot a `TIMESTAMP_DISJOINT` query begun at the slot's first submit and
+ended when `rhi_wait_frame` leaves it, around 256 `TIMESTAMP` queries the lists end; read when the
+slot comes round again. A disjoint frame's stamps are dropped (`rhi_d3d11: GPU timestamps: a frame's
+clock was disjoint ...`, once).
+
+**Not implemented on Direct3D 11**: the destination read, the VU vertex pre-pass, the
+`gpu_checkpoints` breadcrumbs, mailbox with vsync, the display's timing of presents, and the
+memory gauges.
+
+**Unverified**, all of it, and these first: the upload ranges each list notes (a range left out
+draws stale data), the constant buffer windows' offsets, the order of the deferred lists against
+the uploads at submit, `UpdateSubresource1` on a driver that emulates command lists, the flip-model
+resize, the first `rhi_init` on a real card and on WARP.
+
+**Test extras** (`port/rhi/d3d11/rhi_d3d11.h`): the debug layer's error count, whether it is active,
+whether the device runs on WARP, and the feature level.
 
 ## Device loss
 

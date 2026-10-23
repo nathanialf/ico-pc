@@ -312,6 +312,7 @@ and macOS).
 | `ICO_SANITIZE` | empty | the `-fsanitize=` list; the `asan` preset sets `address,undefined` |
 | `ICO_RHI_VULKAN` | `ON` | builds the Vulkan renderer backend |
 | `ICO_RHI_D3D12` | `ON` for 64-bit Windows | builds the Direct3D 12 renderer backend next to the Vulkan one |
+| `ICO_RHI_D3D11` | `ON` for 64-bit Windows | builds the Direct3D 11 renderer backend next to the others (it compiles; it has not run on any Windows machine). It needs the toolchain's `d3d11.h`, `d3d11_1.h`, `dxgi1_6.h` and `d3dcompiler.h`, and turns `ICO_SHADERS_HLSL_SOURCE` on, which embeds the HLSL sources the backend compiles at run time |
 | `ICO_RHI_MOLTENVK` | `ON` on Apple | links the Vulkan backend to MoltenVK |
 | `ICO_SHADERS_DXIL` | `ON` | also compiles the shaders to DXIL for the Direct3D 12 backend; the arm64 and Apple presets turn it off |
 | `ICO_SHADERS_GLSL` | `ON` with `ICO_RHI_OPENGL` when `tools/fetch_deps.sh` fetched SPIRV-Cross, else `OFF` | also translates the shaders to GLSL 4.30 with SPIRV-Cross for the OpenGL backend (`ICO_SPIRV_CROSS` names another executable; `SKIP_SPIRV_CROSS=1` skips the fetch) |
