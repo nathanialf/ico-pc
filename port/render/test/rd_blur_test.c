@@ -79,7 +79,11 @@
  *      0x80 (the mask's, never extrapolating the paste); the motion blur's
  *      loop at W = 512, 688, 1376 and 2560 on the device, SCENE's and
  *      DISPLAY's 4:3 columns the 512 run's byte for byte (frames + 2
- *      pixels in from their edges).
+ *      pixels in from their edges); and the glow's left edge at W = 512,
+ *      848 and 2048 (glow_edge_wide): the replay's strip over the columns
+ *      the blur's first pass leaves in the model, SCENE the same over
+ *      magenta and green work buffers (rd__set_work_clear) with it, and
+ *      different at the left edge without it.
  *   x  above 1x: the aura's modes 1, 2 and 3 at Enhanced 4x (NTSC: SCENE
  *      4x, the work buffers at their GS sizes, as at every scale), every
  *      target against the CPU model at its own scale exactly, the
@@ -1564,6 +1568,9 @@ static void feedProbe(void)
     }
 }
 
+/* the model draws the glow's left edge as the replay does (rd__set_glow_edge_fill) */
+static int s_modelGlowEdge = 1;
+
 static void cpuCmd(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *s)
 {
     const RdFrame *f = user;
@@ -1592,6 +1599,15 @@ static void cpuCmd(void *user, int list, uint32_t index, const RdCmd *c, const R
             feedProbe();
         }
         cpuSprite(s, &r);
+        /* the replay's strip over the columns pass 1 of the glow's blur
+         * leaves on a wide frame (rd_blur_border.c glowEdge) */
+        const RdTexRec *tr = s->ds.texEnabled ? rd__tex_rec(s->tex) : NULL;
+        RdPostRec e;
+        if (s_modelGlowEdge && tr && tr->kind == RD_TEXKIND_TARGET && tr->view != RD_VIEW_DEPTH &&
+            rd__glow_edge_strip(c->b[0], &r, (int32_t)s->gsW, rd__target_rec(s->color),
+                                rd__target_rec(tr->target), &e) > 0) {
+            cpuSprite(s, &e);
+        }
         return;
     }
     if (c->type == RDC_COPY) {
@@ -3543,6 +3559,143 @@ static void checkMotionBlurWide(void)
     systemStatus[0] = status0;
 }
 
+/* (w) the glow's left edge on a wide frame (issue 129, rd_blur_border.c
+ * glowEdge): the flare (post 1) at W 848 (the 2364 x 1080 phone's frame:
+ * WORK1 424 wide, pass 1 of blur(n) 5..8 sixteenths right of WORK1's
+ * pixel 0, column 0 left) and 2048 (48:9: 24..37 sixteenths, columns 0..2
+ * left), and W 512 (4:3, no strip).  One frame against the CPU model (the
+ * strip in it), the strips counted (ten a frame, none at 4:3) and WORK1's
+ * columns 0 .. n - 1 the bytes of column n (n from the last pair's
+ * shrink, 25 sixteenths).  Then a frame of the same picture with nothing
+ * cleared in it, replayed with every work buffer first cleared to magenta
+ * and then to green (rd__set_work_clear: rd_replay_tool --work-clear): its
+ * SCENE (the glow's output, what the reduction presents) the same bytes
+ * both ways, so the frame reads no texel it did not draw; with the strip
+ * off the two differ at a wide frame, and only in the left eighth of the
+ * frame (the band the phone showed). */
+static uint8_t s_geA[2048 * QH * 4], s_geB[2048 * QH * 4], s_geW1[1024 * 256 * 4];
+
+static void geReplay(const char *what, const RdFrame *f, uint32_t rgb, uint8_t *out, int fw)
+{
+    uint32_t w = 0, h = 0;
+    rd__set_work_clear(true, rgb);
+    rhi_wait_idle();
+    CHECK(rd__replay_frame(f, 0, false), "%s: replay over %06X", what, (unsigned)rgb);
+    rhi_wait_idle();
+    rd__set_work_clear(false, 0);
+    CHECK(rd__read_target(rd_target(RD_TARGET_SCENE), out, (size_t)fw * QH * 4, &w, &h) &&
+              (int)w == fw && h == QH,
+          "%s: read SCENE (%ux%u)", what, w, h);
+}
+
+/* the largest column where a and b differ, -1 where they do not */
+static int geDiffColumn(const uint8_t *a, const uint8_t *b, int fw)
+{
+    int last = -1;
+    for (int y = 0; y < QH; y++) {
+        for (int x = fw - 1; x > last; x--) {
+            if (memcmp(&a[((size_t)y * fw + x) * 4], &b[((size_t)y * fw + x) * 4], 4) != 0) {
+                last = x;
+                break;
+            }
+        }
+    }
+    return last;
+}
+
+static void checkGlowEdgeWide(void)
+{
+    static const int kW[3] = {W, 848, 2048};
+    const int screenHeight = ScreenHeight, status0 = systemStatus[0];
+    ScreenHeight = QH;
+    systemStatus[0] = 0;
+    GlobalTimer = 0;
+    rd_shutdown();
+    cpuFree();
+    for (int r = 0; r < 3; r++) {
+        const int fw = kW[r], ww = fw / 2;
+        char what[64];
+        setFrameWidth(fw);
+        setStage(1, 0, 64);
+        snprintf(what, sizeof(what), "(w) glow edge W %d", fw);
+        qInit(what, RD_PRESET_ORIGINAL, 0.0f, 0);
+        cpuInit();
+        clearAll();
+        rd__set_glow_edge_fill(true);
+        s_modelGlowEdge = 1;
+        const uint64_t e0 = rd__glow_edge_count();
+        dl_SetDLPriority(0);
+        putImageAt(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), fw, QH, 0, QH, 0, 1);
+        putImageAt(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), fw, QH, 180, 260,
+                   Q_Z_FACE, 1);
+        FullScreenEffectBefore();
+        FullScreenEffectAfter();
+        runFrame(what, failures < 10);
+        const uint64_t strips = rd__glow_edge_count() - e0;
+        CHECK(fw == W ? strips == 0 : (strips > 0 && strips % 10 == 0),
+              "%s: %llu strips drawn (ten a replay, none at 4:3)", what,
+              (unsigned long long)strips);
+        /* the last pass 1 (blur(19), shrink 25): columns 0 .. n - 1 left */
+        const int a = ww / 2 - 128, sh = (a * 16 * 25 + 2048) / 4096, n = (sh + 15) / 16;
+        uint32_t w1w = 0, w1h = 0;
+        CHECK(rd__read_target(rd_target(RD_TARGET_WORK1), s_geW1, sizeof(s_geW1), &w1w, &w1h) &&
+                  (int)w1w == ww && w1h == 256,
+              "%s: read WORK1 (%ux%u)", what, w1w, w1h);
+        int same = 1;
+        for (int y = 0; y < 127 && (int)w1w == ww; y++) {
+            for (int x = 0; x < n; x++) {
+                same &= memcmp(&s_geW1[((size_t)y * ww + x) * 4], &s_geW1[((size_t)y * ww + n) * 4],
+                               4) == 0;
+            }
+        }
+        CHECK(same, "%s: WORK1's columns 0..%d are not column %d's bytes", what, n - 1, n);
+
+        /* the same picture again, nothing cleared in the frame */
+        dl_SetDLPriority(0);
+        putImageAt(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), fw, QH, 0, QH, 0, 1);
+        putImageAt(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), fw, QH, 180, 260,
+                   Q_Z_FACE, 1);
+        FullScreenEffectBefore();
+        FullScreenEffectAfter();
+        dl_Swap();
+        rhi_wait_idle();
+        const RdFrame *f = rd__last_frame();
+        geReplay(what, f, 0xFF00FFu, s_geA, fw);
+        geReplay(what, f, 0x00FF00u, s_geB, fw);
+        const int on = geDiffColumn(s_geA, s_geB, fw);
+        rd__set_glow_edge_fill(false);
+        geReplay(what, f, 0xFF00FFu, s_geA, fw);
+        geReplay(what, f, 0x00FF00u, s_geB, fw);
+        rd__set_glow_edge_fill(true);
+        const int off = geDiffColumn(s_geA, s_geB, fw);
+        printf("  (w) glow edge at W %d: %llu strips, WORK1 columns 0..%d drawn as column %d; "
+               "SCENE over magenta and green work buffers differs up to column %d with the strip, "
+               "%d without it\n",
+               fw, (unsigned long long)strips, n - 1, n, on, off);
+        CHECK(on < 0,
+              "%s: SCENE depends on what the work buffers held before the frame (up to "
+              "column %d)",
+              what, on);
+        if (fw == W) {
+            CHECK(off < 0,
+                  "%s: at 4:3 SCENE depends on the work buffers' old texels without the "
+                  "strip (column %d)",
+                  what, off);
+        } else {
+            CHECK(off >= 0 && off < fw / 8,
+                  "%s: without the strip SCENE should differ in the left eighth alone (column %d)",
+                  what, off);
+        }
+        CHECK(rhi_vk_validation_error_count() == 0, "%s: %u validation errors", what,
+              rhi_vk_validation_error_count());
+        rd_shutdown();
+        cpuFree();
+    }
+    setFrameWidth(W);
+    ScreenHeight = screenHeight;
+    systemStatus[0] = status0;
+}
+
 static void checkPipelines(void);
 
 /* ============================================== (u) the UINT views */
@@ -3735,6 +3888,7 @@ static const IcoShardCase k_cases[] = {
     {"motion_blur_presents_scaled", 41},
     {"feedback_wide", 25},
     {"shrinks_wide_device", 3},
+    {"glow_edge_wide", 2},
     {"motion_blur_wide", 4},
     {"above1x", 38},
     {"effects_scaled", 4},
@@ -3882,6 +4036,9 @@ int main(int argc, char **argv)
     }
     if (ico_shard_take("shrinks_wide_device")) {
         checkShrinksWideDevice(); /* the shrink anchor: re-initialises rd (W 512, 1536) */
+    }
+    if (ico_shard_take("glow_edge_wide")) {
+        checkGlowEdgeWide(); /* the glow's left edge: re-initialises rd (W 512, 848, 2048) */
     }
     if (ico_shard_take("motion_blur_wide")) {
         checkMotionBlurWide(); /* the motion blur's 4:3 columns: re-initialises rd */
