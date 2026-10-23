@@ -101,6 +101,17 @@ if(ICO_RUN_TESTS)
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
+# --- The OpenGL backend's GLSL inflate (CPU only, every target) ----------------
+# gl/gl_glsl.c: the table's deflated GLSL back to text (miniz). Nothing links
+# it into a backend yet (the OpenGL backend's own package does).
+add_executable(rhi_gl_glsl_test test/rhi_gl_glsl_test.c gl/gl_glsl.c)
+target_include_directories(rhi_gl_glsl_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(rhi_gl_glsl_test PRIVATE ico_miniz)
+target_compile_options(rhi_gl_glsl_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME rhi_gl_glsl COMMAND rhi_gl_glsl_test)
+endif()
+
 # --- The driver version text (CPU only, every target) -----------------------
 # rhi_driver_version.c: a Vulkan driverVersion as the vendor writes it (the
 # adapter line of vk_device.c).
