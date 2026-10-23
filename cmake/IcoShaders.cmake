@@ -34,6 +34,14 @@
 #             g_icoShaderSources holds every file of port/shaders; off, the
 #             table is empty)
 #
+# shaders_d3d11_check (ICO_SHADERS_D3D11_CHECK, default ON; a target outside
+# `all`, which the CI's linux job builds): every entry compiled again by DXC to
+# a discarded DXIL blob with -D ICO_D3D11=1 -HV 2018, the macro the Direct3D 11
+# backend's run-time FXC compile defines (reg.hlsli's flat registers) and the
+# language version nearest FXC's. It proves the D3D11 preprocessing compiles
+# on the build hosts; FXC itself (shader model 5.0) runs only on Windows, at
+# run time (docs/port/SHADERS.md, "Direct3D 11: run-time compile").
+#
 # DXC comes from tools/fetch_deps.sh (tools/toolchain/deps/dxc); ICO_DXC
 # overrides the path. Without a compiler the shaders are left out
 # (ICO_SHADERS_AVAILABLE is false), as the other fetched dependencies are.
@@ -43,6 +51,7 @@ option(ICO_SHADERS_DXIL "Also compile the shaders to DXIL for the D3D12 backend"
 option(ICO_SHADERS_GLSL "Also translate the shaders to GLSL for the OpenGL backend" OFF)
 option(ICO_SHADERS_HLSL_SOURCE "Embed the HLSL sources for the Direct3D 11 backend's run-time compile"
        ${ICO_RHI_D3D11})
+option(ICO_SHADERS_D3D11_CHECK "Add the shaders_d3d11_check target (DXC with ICO_D3D11=1)" ON)
 
 set(ICO_SHADERS_AVAILABLE FALSE)
 set(_ico_dxc "${ICO_DXC}")
@@ -66,6 +75,7 @@ set(ICO_DXC_COMMON_FLAGS -O3 -WX -I "${ICO_SHADER_DIR}")
 
 set_property(GLOBAL PROPERTY ICO_SHADER_MANIFEST "")
 set_property(GLOBAL PROPERTY ICO_SHADER_BLOBS "")
+set_property(GLOBAL PROPERTY ICO_SHADER_D3D11_CHECKS "")
 
 function(ico_add_shader name file entry stage)
     if(NOT ICO_SHADERS_AVAILABLE)
@@ -146,6 +156,9 @@ function(ico_add_shader name file entry stage)
     set(glsl "-")
     set_property(GLOBAL APPEND PROPERTY ICO_SHADER_MANIFEST
                  "${name}|${stage_n}|${entry}|${spv}|${dxil}|${glsl}|${_ico_sh_hlslfile}|${_ico_sh_defines}")
+    # shaders_d3d11_check's line for the entry (ico_shaders_library)
+    set_property(GLOBAL APPEND PROPERTY ICO_SHADER_D3D11_CHECKS
+                 "${name}|${profile}|${entry}|${src}|${_ico_sh_defines}")
 endfunction()
 
 function(ico_shaders_library target)
@@ -195,6 +208,38 @@ function(ico_shaders_library target)
     endif()
     if(NOT ICO_SHADERS_HLSL_SOURCE)
         target_compile_definitions(${target} INTERFACE ICO_SHADERS_NO_HLSL_SOURCE=1)
+    endif()
+    # shaders_d3d11_check: every entry with ICO_D3D11=1, the blobs discarded
+    # (written under shaders/d3d11_check, never embedded)
+    if(ICO_SHADERS_D3D11_CHECK)
+        get_property(_checks GLOBAL PROPERTY ICO_SHADER_D3D11_CHECKS)
+        set(_chk_dir "${ICO_SHADER_OUT_DIR}/d3d11_check")
+        set(_chk_cmds "")
+        foreach(_c IN LISTS _checks)
+            if(NOT _c MATCHES "^([^|]*)\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|(.*)$")
+                message(FATAL_ERROR "shaders_d3d11_check: malformed line ${_c}")
+            endif()
+            set(_n "${CMAKE_MATCH_1}")
+            set(_p "${CMAKE_MATCH_2}")
+            set(_e "${CMAKE_MATCH_3}")
+            set(_s "${CMAKE_MATCH_4}")
+            set(_defs "${CMAKE_MATCH_5}")
+            set(_d "")
+            if(_defs)
+                string(REPLACE "," ";" _defs "${_defs}")
+                foreach(_x IN LISTS _defs)
+                    list(APPEND _d -D "${_x}")
+                endforeach()
+            endif()
+            list(APPEND _chk_cmds COMMAND "${ICO_DXC_EXE}" ${ICO_DXC_COMMON_FLAGS} -HV 2018
+                 -D ICO_D3D11=1 ${_d} -T ${_p} -E ${_e} "${_s}" -Fo "${_chk_dir}/${_n}.dxil")
+        endforeach()
+        list(LENGTH _checks _chk_count)
+        add_custom_target(shaders_d3d11_check
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "${_chk_dir}"
+            ${_chk_cmds}
+            COMMENT "DXC: ${_chk_count} shader entries with ICO_D3D11=1 (Direct3D 11 preprocessing)"
+            VERBATIM)
     endif()
     set(ICO_SHADERS_TARGET ${target} PARENT_SCOPE)
 endfunction()

@@ -135,6 +135,9 @@ jobs:
           $CMAKE/cmake --preset linux-x64 -DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC
           $CMAKE/cmake --build build-host/linux-x64 --parallel --target all tests
           $CMAKE/ctest --test-dir build-host/linux-x64 --output-on-failure --parallel 4
+          # every shader entry with the Direct3D 11 macro (ICO_D3D11=1): the
+          # flat-register preprocessing compiles (FXC itself runs on Windows only)
+          $CMAKE/cmake --build build-host/linux-x64 --parallel --target shaders_d3d11_check
 
       - name: linux-x64, window build
         run: |
