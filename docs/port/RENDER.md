@@ -1809,7 +1809,8 @@ modes 0 and 1, bloom in mode 2 with HIGHLIGHT), aura (AURA_WORK, AURA_TAP, FEED1
 sun's eye blur (WORK0 to WORK3) (`port/render/rd.h` (`RdPostKind`)). `rd_blur.c` records each as an
 `RdPostRec` with the corners, UVs, RGBAQ and Z as the GS gets them, the
 [TEX0](ARCHITECTURE.md#terms) size and TFX, and `rd__blur_post_sprite` (`port/render/rd_blur_border.c`) hands it to `doBlurSpriteDraw`, which draws it through `fx_rect_vs` /
-`fx_sprite_ps` in the GS integer arithmetic (`port/render/rd_blur.c`, header comment):
+`fx_sprite_ps` in the GS integer arithmetic (`port/render/rd_blur.c`, header comment; the work
+buffers, the glow's left edge on a wide frame and the work clear: [WORK_BUFFERS.md](WORK_BUFFERS.md)):
 
 - coverage: pixels with `x0 <= X < x1` in 12.4, inside the scissor;
 - UV stepped in integers, 12.4 (the division without the GPU's integer divide,
