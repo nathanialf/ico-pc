@@ -57,7 +57,12 @@
  *   not believed (twice the rate, one that stops, missed wake-ups);
  *   the late-present skip (testLateSkipLock): 39 ms presents of a 30
  *   frames a second game keep real time, never two frames in a row
- *   unpresented, no resync; 2 ms presents never skip.
+ *   unpresented, no resync; 2 ms presents never skip;
+ *   the present allowance (test120Budget): with the fence (a replay waits
+ *   for the GPU's picture two before) and a GPU of 12 ms a picture at 120
+ *   Hz, the second slot's present dropped before the steps run late, one
+ *   present a step and the alphas on the grid; a GPU-bound phone (20 ms a
+ *   picture at 60 Hz) presents its new frames only and keeps real time.
  */
 #include <stdio.h>
 #include <string.h>
@@ -151,6 +156,14 @@ typedef struct Fake {
        skip guard) */
     uint64_t report;
     unsigned waitedSeen;
+    /* the fence (mailbox and FIFO): a present waits for the picture two
+       before it to be ready (RHI_FRAMES_IN_FLIGHT 2), and the GPU draws
+       one picture at a time (ready = max(the last, the submit) + gpu);
+       the last present's waits for the GPU and for the display (FIFO's
+       acquire), the latter for the present allowance */
+    int fence;
+    uint64_t readyAt[4];
+    uint64_t fenceWait, displayWait;
 } Fake;
 
 static uint64_t f_now(void *u)
@@ -258,6 +271,8 @@ static uint64_t f_cost(Fake *f)
 
 static void f_present_mailbox(Fake *f)
 {
+    const uint64_t acquire = f->now;
+
     f_display_to(f, f->now);
     if (f->mode == F_FIFO) {
         /* three images: the acquire waits while one is on the screen and
@@ -267,9 +282,19 @@ static void f_present_mailbox(Fake *f)
             f_display_to(f, f->now);
         }
     }
+    f->displayWait = f->now - acquire;
+    f->fenceWait = 0;
+    if (f->fence && f->nextId >= 2) {
+        /* the picture two before the one made now (ids from 1) */
+        const uint64_t two = f->readyAt[(f->nextId - 1) % 4];
+
+        f->fenceWait = two > f->now ? two - f->now : 0;
+        f->now += f->fenceWait;
+    }
     f->now += f_cost(f);
     f_display_to(f, f->now);
-    uint64_t ready = f->now + f->gpu + (f->gpuJitter ? f_rand(f) % f->gpuJitter : 0);
+    uint64_t ready = (f->fence && f->lastReady > f->now ? f->lastReady : f->now) + f->gpu +
+                     (f->gpuJitter ? f_rand(f) % f->gpuJitter : 0);
 
     if (f->spikeEvery != 0 && (f->nextId + 1) % f->spikeEvery == 0) {
         ready += f->spike;
@@ -284,6 +309,7 @@ static void f_present_mailbox(Fake *f)
         f->nPics--;
     }
     f->pics[f->nPics++] = (Pic){++f->nextId, ready};
+    f->readyAt[f->nextId % 4] = ready;
 }
 
 /* the queue after the vblanks up to now */
@@ -435,6 +461,14 @@ static int f_vblank(void *u, uint64_t *ns)
     return 1;
 }
 
+/* the present allowance's excuse: the last present's wait for the display
+   (FIFO's acquire; 0 in mailbox) */
+static uint64_t f_display_waited(void *u, uint64_t costNs)
+{
+    (void)costNs;
+    return ((Fake *)u)->displayWait;
+}
+
 /* the rule before the skip guard: no present waited (the fake counts the
    ones that did) */
 static uint64_t f_waited_none(void *u, uint64_t costNs)
@@ -458,6 +492,8 @@ typedef struct Opt {
     int clockKind;    /* the display clock offered (PACE_CLOCK_KIND_*) */
     bool noGuard;     /* the skip rule before the guard (f_waited_none) */
     double phaseFrom; /* the step's offset after a vblank measured from (s; 0: not) */
+    bool budget;      /* the present allowance judged (PaceLockIo.displayWaited) */
+    uint64_t gpuNs;   /* the GPU time it is told (PaceLock.gpuNs; 0: not known) */
 } Opt;
 
 typedef struct Run {
@@ -468,7 +504,10 @@ typedef struct Run {
                             the one before */
     int alphaBad;        /* an alpha not the exact fraction, or not increasing in a frame */
     unsigned alphaChecked;
-    double ratio; /* pace_lock_rate_ratio over the last 10 s */
+    unsigned alphaOffGrid;            /* an alpha not k / (2n) for a whole k of 1 .. 2n, or not
+                              increasing in a frame (with slots refused or skipped) */
+    unsigned presentsFrom, stepsFrom; /* from the fake's countFrom */
+    double ratio;                     /* pace_lock_rate_ratio over the last 10 s */
     unsigned repeats, drops;
     /* from the fake's countFrom: skips, presents that waited, the latest
        step, resyncs */
@@ -493,11 +532,13 @@ static Run run(Fake *f, const Opt *o)
                            shown ? f_present_id : NULL,
                            shown ? f_shown : NULL,
                            o->clockKind == PACE_CLOCK_KIND_VBLANK ? f_vblank : NULL,
-                           o->noGuard ? f_waited_none : NULL};
+                           o->noGuard ? f_waited_none : NULL,
+                           o->budget ? f_display_waited : NULL};
     const uint64_t start = f->now, end = start + (uint64_t)(o->seconds * 1e9);
     const uint64_t ratioAt = start + (uint64_t)((o->seconds - 10.0) * 1e9);
     const uint64_t phaseAt = start + (uint64_t)(o->phaseFrom * 1e9);
     unsigned vsync = 0, gapsAtFrame = 0, skippedAt = 0, waitedAt = 0, resyncsAt = 0;
+    unsigned presentsAt = 0, stepsAt = 0;
     bool newFrame = true, ratioStarted = false, counting = false;
 
     memset(&r, 0, sizeof r);
@@ -526,8 +567,17 @@ static Run run(Fake *f, const Opt *o)
         }
         if (newFrame) {
             /* the frame that just closed: its alphas were 1 / (2n) .. 1 */
-            const unsigned gaps = L->skipped + L->unshown + L->skippedLate;
+            const unsigned gaps = L->skipped + L->unshown + L->skippedLate + L->budget.refused;
 
+            for (unsigned i = 0; i < f->nAlpha && vsync > 4; i++) {
+                /* on the grid whatever was left out: k / (2n) */
+                const float x = f->alpha[i] * (float)(2 * o->n);
+
+                if (x < 1.0f || x != (float)(unsigned)x ||
+                    (i > 0 && !(f->alpha[i] > f->alpha[i - 1]))) {
+                    r.alphaOffGrid++;
+                }
+            }
             for (unsigned i = 0; i < f->nAlpha && vsync > 4 && gaps == gapsAtFrame; i++) {
                 r.alphaChecked++;
                 if (f->alpha[i] != pace_lock_alpha(i + 1, o->n, 2) ||
@@ -547,6 +597,12 @@ static Run run(Fake *f, const Opt *o)
             skippedAt = L->skipped;
             waitedAt = L->waited + f->waitedSeen;
             resyncsAt = L->resyncs;
+            presentsAt = f->presents;
+            stepsAt = L->steps;
+        }
+        if (o->budget) {
+            L->gpuNs = o->gpuNs;
+            L->stepNs = o->step;
         }
         const uint64_t due = pace_lock_vsync(L, &io, newFrame);
         const double dev = (double)due - (double)before - periodBefore;
@@ -593,6 +649,8 @@ static Run run(Fake *f, const Opt *o)
     r.skippedFrom = L->skipped - skippedAt;
     r.waitedFrom = L->waited + f->waitedSeen - waitedAt;
     r.resyncsFrom = L->resyncs - resyncsAt;
+    r.presentsFrom = f->presents - presentsAt;
+    r.stepsFrom = L->steps - stepsAt;
     return r;
 }
 
@@ -634,6 +692,7 @@ static void test60(void)
         Opt o = opt(1, R60, 60.0);
 
         o.clockKind = clock ? PACE_CLOCK_KIND_SHOWN : PACE_CLOCK_KIND_NONE;
+        o.budget = true; /* never late: the allowance never binds */
         const Run r = run(&f, &o);
 
         printf("60 Hz%s: %u presents, %u steps, late max %.3f ms, grid off by %.3f ms at most, "
@@ -650,6 +709,7 @@ static void test60(void)
         /* the audio plays 60 / 59.94 faster */
         CHECK(r.ratio > 1.000951 && r.ratio < 1.001051);
         CHECK(!clock || (r.L.clock == PACE_CLOCK_ON && r.L.seen > 3000));
+        CHECK(r.L.budget.allow == 1 && r.L.budget.drops == 0 && r.L.budget.refused == 0);
     }
 }
 
@@ -731,6 +791,8 @@ static void test120(void)
         f.cost = 1 * MS;
         f.gpu = 3 * MS;
         o.clockKind = clock ? PACE_CLOCK_KIND_SHOWN : PACE_CLOCK_KIND_NONE;
+        o.budget = true; /* never late: the allowance stays 2 */
+        o.gpuNs = 3 * MS;
         r = run(&f, &o);
         printf("120 Hz%s: %u presents, %u steps, late max %.3f ms, %u repeated, %u dropped\n",
                clock ? " (clock)" : "", r.presents, r.steps, (double)r.lateMax / 1e6, r.repeats,
@@ -740,8 +802,80 @@ static void test120(void)
         CHECK(r.steps >= 3599 && r.steps <= 3601);
         CHECK(r.alphaBad == 0 && r.alphaChecked >= 7180);
         CHECK(r.repeats == 0 && r.drops == 0);
+        CHECK(r.L.budget.allow == 2 && r.L.budget.drops == 0 && r.L.budget.refused == 0);
     }
     CHECK(pace_lock_alpha(1, 2, 2) == 0.25f && pace_lock_alpha(4, 2, 2) == 1.0f);
+}
+
+/* The present allowance under the lock with the fence: a replay waits for
+   the GPU's picture two before (RHI_FRAMES_IN_FLIGHT 2) and the GPU draws
+   one picture at a time.  120 Hz, a 1 ms present, a 3 ms step and 12 ms of
+   GPU a picture: two presents a step need 24 ms of GPU in 16.7.  The rule
+   before: the second slot's present waits for the GPU, the steps end up to
+   20 ms late and the skip guard drops a present now and then (1.4 a step).
+   With the allowance: after the first second one present a step, no step
+   late, no resync, the alphas on the grid, the allowance at 1 (the GPU gate:
+   2 * 12 + 3 > 16.67 keeps it there).  A GPU-bound phone (20 ms a picture
+   at 60 Hz, n = 1): the rule before presents 50 a second with steps 32 ms
+   late; the allowance its new frames only, 30 a second, on time.  The
+   numbers printed are the trade. */
+static void test120Budget(void)
+{
+    for (int on = 0; on < 2; on++) {
+        Fake f = fake(1e9 / 120.0);
+        Opt o = opt(2, 8333333ull, 60.0);
+        Run r;
+
+        f.fence = 1;
+        f.cost = 1 * MS;
+        f.gpu = 12 * MS;
+        o.budget = on != 0;
+        o.gpuNs = 12 * MS;
+        r = run(&f, &o);
+        printf("120 Hz, GPU 12 ms a picture%s: %.2f presents a step after 1 s, latest step %.3f "
+               "ms, %u skipped, %u refused, allowance %u (%u drops, %u climbs), %u resyncs\n",
+               on ? " with the allowance" : "", (double)r.presentsFrom / (double)r.stepsFrom,
+               (double)r.lateMaxFrom / 1e6, r.skippedFrom, r.L.budget.refused, r.L.budget.allow,
+               r.L.budget.drops, r.L.budget.climbs, r.resyncs);
+        CHECK(r.resyncsFrom == 0);
+        CHECK(r.alphaOffGrid == 0);
+        CHECK(r.L.skippedLate == 0); /* every new frame presented */
+        if (on) {
+            CHECK(r.lateMaxFrom < 8333333ull);
+            CHECK(r.presentsFrom * 10 >= r.stepsFrom * 9 &&
+                  r.presentsFrom * 10 <= r.stepsFrom * 11);
+            CHECK(r.L.budget.allow == 1 && r.L.budget.drops >= 1 && r.L.budget.refused > 0);
+            CHECK(r.skippedFrom == 0);
+        } else {
+            CHECK(r.lateMaxFrom >= 8333333ull / 2);
+            CHECK(r.skippedFrom > 0 && r.L.budget.drops == 0);
+        }
+    }
+    for (int on = 0; on < 2; on++) {
+        Fake f = fake(D60);
+        Opt o = opt(1, R60, 30.0);
+        Run r;
+
+        f.fence = 1;
+        f.cost = 1 * MS;
+        f.gpu = 20 * MS;
+        o.budget = on != 0;
+        o.gpuNs = 20 * MS;
+        r = run(&f, &o);
+        printf("a phone, GPU 20 ms a picture at 60 Hz%s: %.1f presents a second, latest step "
+               "%.3f ms after 1 s, allowance %u, %u resyncs\n",
+               on ? " with the allowance" : "", (double)r.presentsFrom / 29.0,
+               (double)r.lateMaxFrom / 1e6, r.L.budget.allow, r.resyncs);
+        CHECK(r.resyncs == 0);
+        CHECK(r.alphaOffGrid == 0 && r.L.skippedLate == 0);
+        if (on) {
+            CHECK(r.lateMaxFrom < NTSC / 2 + 1 * MS);
+            CHECK(r.L.budget.allow == 0);
+            CHECK(r.presentsFrom * 2 >= r.stepsFrom - 2 && r.presentsFrom * 2 <= r.stepsFrom + 2);
+        } else {
+            CHECK(r.lateMaxFrom >= NTSC / 2);
+        }
+    }
 }
 
 /* Presents that finish near a vblank: the GPU's time jitters by 3 ms.
@@ -1161,7 +1295,8 @@ static void testLateSkipLock(void)
     for (int slow = 0; slow < 2; slow++) {
         Fake f = fake(D60);
         PaceLock L;
-        const PaceLockIo io = {&f, f_now, f_present_track, f_sleep, NULL, NULL, NULL, NULL, NULL};
+        const PaceLockIo io = {&f,   f_now, f_present_track, f_sleep, NULL, NULL, NULL, NULL,
+                               NULL, NULL};
         unsigned frames = 0, run = 0, worst = 0, shown = 0;
 
         f.cost = slow ? 39 * MS : 2 * MS;
@@ -1432,7 +1567,7 @@ static void testNothingPresented(void)
 {
     Fake f = fake(D60);
     PaceLock L;
-    const PaceLockIo io = {&f, f_now, f_none, f_sleep, NULL, NULL, NULL, NULL, NULL};
+    const PaceLockIo io = {&f, f_now, f_none, f_sleep, NULL, NULL, NULL, NULL, NULL, NULL};
     uint64_t due;
 
     pace_lock_reset(&L, 1, R60, NTSC, f.now, true, PACE_CLOCK_KIND_NONE);
@@ -1451,7 +1586,7 @@ static void testFirstFrame(void)
 {
     Fake f = fake(D60);
     PaceLock L;
-    const PaceLockIo io = {&f, f_now, f_present, f_sleep, NULL, NULL, NULL, NULL, NULL};
+    const PaceLockIo io = {&f, f_now, f_present, f_sleep, NULL, NULL, NULL, NULL, NULL, NULL};
 
     pace_lock_reset(&L, 1, R60, NTSC, f.now, true, PACE_CLOCK_KIND_NONE);
     (void)pace_lock_vsync(&L, &io, true);
@@ -1474,7 +1609,7 @@ static void testPause(void)
     for (int paused = 0; paused < 2; paused++) {
         Fake f = fake(D60);
         PaceLock L;
-        const PaceLockIo io = {&f, f_now, f_present, f_sleep, NULL, NULL, NULL, NULL, NULL};
+        const PaceLockIo io = {&f, f_now, f_present, f_sleep, NULL, NULL, NULL, NULL, NULL, NULL};
         uint64_t due;
 
         f.cost = 2 * MS;
@@ -1522,7 +1657,7 @@ static void testChanges(void)
     for (int paused = 0; paused < 2; paused++) {
         Fake f = fake(D60);
         PaceLock L;
-        const PaceLockIo io = {&f, f_now, f_present, f_sleep, NULL, NULL, NULL, NULL, NULL};
+        const PaceLockIo io = {&f, f_now, f_present, f_sleep, NULL, NULL, NULL, NULL, NULL, NULL};
         unsigned changes = 0, late = 0, resyncs = 0;
         uint64_t dropped = 0;
 
@@ -1732,7 +1867,7 @@ static void testTrace(void)
     Fake f = fake(D60);
     PaceLock L;
     const PaceLockIo io = {&f,           f_now,   f_present, f_sleep, f_visible,
-                           f_present_id, f_shown, NULL,      NULL};
+                           f_present_id, f_shown, NULL,      NULL,    NULL};
     char buf[1024];
     unsigned k;
 
@@ -1779,6 +1914,7 @@ int main(void)
     testQueueBlocking();
     testSkipGuard();
     testLateSkipLock();
+    test120Budget();
     testVblankClockLeft();
     if (fails) {
         printf("pace_loop_test: %d failures\n", fails);

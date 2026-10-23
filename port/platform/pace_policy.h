@@ -37,6 +37,76 @@ uint64_t pace_slow_threshold(uint64_t refreshNs, uint64_t periodNs, bool injecto
 bool pace_slow_present(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_t periodNs,
                        bool injector);
 
+/* One cost into the history's ring (count and next only; over and slow
+ * untouched) and the median of the last PACE_HIST_LEN: window_host.c's GPU
+ * time a presented replay for the present allowance's GPU gate. */
+uint64_t pace_hist_add(PaceHist *h, uint64_t costNs);
+
+/* ------------------------------------------------------------------------
+ * The present allowance (docs/port/DISPLAY.md "Pacing"): the presents of a
+ * frame already shown (the in-between ones, optional) a simulation step may
+ * make, on the timer path and under the vsync lock alike, so the simulation
+ * (and the audio, whose clock is the simulation's) never falls behind real
+ * time for them.  A present of a new frame is always allowed (the
+ * late-present skip, pace_late_skip, is the only rule that leaves one out).
+ *
+ * A step is late when it ends (the next step's start) half a period or more
+ * past its due time and it made at least one optional present: a late step
+ * of new frames only (a game hitch's catch-up, a load) is not the optional
+ * presents' doing and no allowance would help it.  Excused: a step whose
+ * last present waited a quarter of a refresh or more for the display (the
+ * acquire and the present: FIFO's full queue) and that is less than a
+ * refresh late, as the lock's skip guard has it; that lateness is the
+ * display's own wait, not the renderer being slow.
+ *
+ * On a late step the allowance goes to one below the step's presents
+ * (allow = presents - 1), held there PACE_ALLOW_HOLD steps; after
+ * PACE_ALLOW_CLIMB more steps on time it goes up by one, when the GPU gate
+ * lets it: no GPU time known (0: no timestamps; the climb then probes) or
+ * (allow + 1) presents' GPU time and a step within a period.  Never above
+ * max (PACE_ALLOW_MAX on the timer path, n under the lock).  A resync does
+ * not reset it; a new lock, a frame rate change and the window's pace reset
+ * do.  Cheap presents never end a step late, and then nothing binds: the
+ * presents are what they were without it. */
+#define PACE_ALLOW_MAX 8
+#define PACE_ALLOW_HOLD 60
+#define PACE_ALLOW_CLIMB 180
+
+typedef struct PaceBudget {
+    unsigned allow, max;   /* optional presents allowed a step (new frames aside), its ceiling */
+    unsigned hold, onTime; /* steps left held after a drop; steps on time since */
+    unsigned presents;     /* this step's presents (new frames among them) */
+    unsigned optional;     /* of them, of a frame already shown */
+    unsigned refused;      /* optional presents refused (the caller counts) */
+    unsigned drops, climbs;
+    unsigned lowest;       /* the lowest allow since the block's start (pace_budget_block) */
+    uint64_t lateMaxNs;    /* the latest step since the block's start */
+    uint64_t dropLateNs;   /* the last drop: how late its step ended */
+    unsigned dropPresents; /* and its presents */
+} PaceBudget;
+
+/* allow = max, the counts cleared. */
+void pace_budget_reset(PaceBudget *b, unsigned max);
+
+/* Whether a present may be made now: always for a new frame, else while the
+ * step's presents are below the allowance. */
+bool pace_budget_allows(const PaceBudget *b, bool newFrame);
+
+/* A present made (newFrame: of a frame not shown before). */
+void pace_budget_present(PaceBudget *b, bool newFrame);
+
+/* The step's end: lateNs how late the next step starts against its due time
+ * (0: on time), periodNs the step's period, refreshNs a display refresh,
+ * displayWaitNs the last present's wait for the display, gpuNs a presented
+ * replay's GPU time (0: not known), stepNs the simulation step's own time.
+ * The rule above; the step's presents cleared for the next.  True when the
+ * allowance changed. */
+bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_t refreshNs,
+                      uint64_t displayWaitNs, uint64_t gpuNs, uint64_t stepNs);
+
+/* A new 10 s block: lowest = allow, lateMaxNs = 0. */
+void pace_budget_block(PaceBudget *b);
+
 /* The least time between two presents while the window presents between
  * game frames.  cap > 0: a frame rate limit, one present per 1/cap s.
  * uncappedVsync: frame rate "uncapped" with vsync on.  Then a sixteenth of
@@ -192,6 +262,13 @@ typedef struct PaceIntervals {
  * the display's own wait, the queue has pictures to show, and a skip is
  * what would make a picture shown twice.  A step a slot or more behind (a
  * slow GPU, a 30 ms step) still skips.
+ * The present allowance (PaceBudget, PaceLock.budget, max n): after the
+ * late-present skip and before the skip guard, a slot whose present would
+ * show a frame already shown is refused (budget.refused) once the step has
+ * made as many presents as the allowance; at 120 Hz with a GPU that needs
+ * 12 ms a picture the second slot's present is dropped before the steps run
+ * late.  Judged only when the window says how long a present waited for the
+ * display (PaceLockIo.displayWaited).
  *
  * Off the screen (PaceLockIo.visible false: minimised, hidden, occluded):
  * no presents, the grid goes on.  A step that ends past the next one's due
@@ -310,6 +387,12 @@ typedef struct PaceLock {
     uint64_t traceId[PACE_LOCK_TRACE_FIRST];
     unsigned traceCount;
     bool traceLogged; /* the caller logged them */
+    /* the present allowance: max n from the reset.  gpuNs (a presented
+       replay's GPU time, 0: not known) and stepNs (the simulation step's
+       own time) the caller sets before each pace_lock_vsync; the last
+       present's wait for the display (PaceLockIo.displayWaited) */
+    PaceBudget budget;
+    uint64_t gpuNs, stepNs, lastDisplayWaitNs;
 } PaceLock;
 
 /* n for a cap equal to the refresh: round(cap * periodNs / 1e9) when the cap
@@ -359,6 +442,11 @@ typedef struct PaceLockIo {
        backend's own blocked time (the acquire, the present, fence waits)
        where it knows it.  NULL: costNs */
     uint64_t (*waited)(void *user, uint64_t costNs);
+    /* how long the last present waited for the display alone (the acquire
+       and the present; not the fence waits, which are the GPU behind),
+       given its whole time: the present allowance's excuse.  NULL: the
+       allowance is not judged (it stays n) */
+    uint64_t (*displayWaited)(void *user, uint64_t costNs);
 } PaceLockIo;
 
 /* One simulated vsync under the lock (L->n > 0), called right after its

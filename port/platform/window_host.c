@@ -5190,7 +5190,8 @@ static void pace_locked(unsigned n, Uint64 period)
                            clock ? lock_io_present_id : NULL,
                            clock ? lock_io_shown : NULL,
                            lock_io_vblank,
-                           lock_io_waited};
+                           lock_io_waited,
+                           NULL};
     char words[256];
 
     ctx.refresh = display_refresh_ns(period);

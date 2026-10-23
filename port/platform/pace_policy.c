@@ -154,6 +154,82 @@ bool pace_slow_present(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_
     return h->slow;
 }
 
+uint64_t pace_hist_add(PaceHist *h, uint64_t costNs)
+{
+    h->cost[h->next] = costNs;
+    h->next = (h->next + 1) % PACE_HIST_LEN;
+    if (h->count < PACE_HIST_LEN) {
+        h->count++;
+    }
+    return median(h);
+}
+
+/* the present allowance (pace_policy.h PaceBudget) */
+void pace_budget_reset(PaceBudget *b, unsigned max)
+{
+    *b = (PaceBudget){0};
+    b->allow = b->max = b->lowest = max;
+}
+
+bool pace_budget_allows(const PaceBudget *b, bool newFrame)
+{
+    return newFrame || b->presents < b->allow;
+}
+
+void pace_budget_present(PaceBudget *b, bool newFrame)
+{
+    b->presents++;
+    if (!newFrame) {
+        b->optional++;
+    }
+}
+
+bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_t refreshNs,
+                      uint64_t displayWaitNs, uint64_t gpuNs, uint64_t stepNs)
+{
+    const unsigned before = b->allow;
+    /* the display's own wait, less than a refresh late: not the renderer
+       (the lock's skip guard's exception) */
+    const bool excused = displayWaitNs * 4 >= refreshNs && lateNs < refreshNs;
+
+    if (lateNs > b->lateMaxNs) {
+        b->lateMaxNs = lateNs;
+    }
+    if (periodNs > 0 && lateNs >= periodNs / 2 && b->optional > 0 && !excused) {
+        /* one below the late step's presents, held */
+        b->allow = b->presents > 0 ? b->presents - 1 : 0;
+        if (b->allow > b->max) {
+            b->allow = b->max;
+        }
+        b->hold = PACE_ALLOW_HOLD;
+        b->onTime = 0;
+        b->drops++;
+        b->dropLateNs = lateNs;
+        b->dropPresents = b->presents;
+        if (b->allow < b->lowest) {
+            b->lowest = b->allow;
+        }
+    } else if (b->hold > 0) {
+        b->hold--;
+    } else if (b->allow < b->max && ++b->onTime >= PACE_ALLOW_CLIMB) {
+        /* one more when the GPU has the time for it (unknown: probe) */
+        if (gpuNs == 0 || (uint64_t)(b->allow + 1) * gpuNs + stepNs < periodNs) {
+            b->allow++;
+            b->climbs++;
+        }
+        b->onTime = 0;
+    }
+    b->presents = 0;
+    b->optional = 0;
+    return b->allow != before;
+}
+
+void pace_budget_block(PaceBudget *b)
+{
+    b->lowest = b->allow;
+    b->lateMaxNs = 0;
+}
+
 /* resolution "auto": the cost samples */
 void pace_samples_reset(PaceSamples *s, uint64_t nowNs)
 {
@@ -263,6 +339,7 @@ void pace_lock_reset(PaceLock *L, unsigned n, uint64_t refreshNs, uint64_t perio
     L->slotNs = (double)refreshNs;
     L->perFrame = 2; /* a game frame every two vsyncs until two closes are seen */
     L->rateClean = true;
+    pace_budget_reset(&L->budget, n);
 }
 
 /* fmod without libm: the remainder of x / s with the sign of x */
@@ -643,6 +720,8 @@ uint64_t pace_lock_vsync(PaceLock *L, const PaceLockIo *io, bool newFrame)
         L->latCount = L->latNext = 0;
         L->phaseSet = false; /* the vblank clock moves the new grid onto them again */
     }
+    L->budget.presents = 0; /* the step's presents (a resync keeps the allowance) */
+    L->budget.optional = 0;
     for (unsigned j = 0; j < L->n; j++) {
         /* the slot: the step's due time for the first present, a refresh
            apart for the others */
@@ -675,6 +754,14 @@ uint64_t pace_lock_vsync(PaceLock *L, const PaceLockIo *io, bool newFrame)
             L->skippedLate++;
             continue;
         }
+        /* the present allowance (PaceBudget): a frame already shown is
+           presented again only while the step's presents are below it.  A
+           refused slot is a slot passed, as a skipped one: the next
+           present's alpha stays the grid's */
+        if (io->displayWaited != NULL && !pace_budget_allows(&L->budget, !L->framePresented)) {
+            L->budget.refused++;
+            continue;
+        }
         if (now >= next && L->framePresented &&
             (!L->lastBlocked || (double)(now - next) >= L->slotNs)) {
             /* behind: no picture again until the step.  Not after a
@@ -692,6 +779,8 @@ uint64_t pace_lock_vsync(PaceLock *L, const PaceLockIo *io, bool newFrame)
            60, each a repeated picture. A present that returns past the
            next step makes that step late by less than a slot, and its
            pictures keep their exact grid alphas, so nothing is seen. */
+        const bool fresh = !L->framePresented;
+
         if (!io->present(io->user, a)) {
             continue; /* nothing presented */
         }
@@ -706,6 +795,10 @@ uint64_t pace_lock_vsync(PaceLock *L, const PaceLockIo *io, bool newFrame)
         L->presents++;
         L->framePresented = true;
         L->skipOpen = false;
+        if (io->displayWaited != NULL) {
+            pace_budget_present(&L->budget, fresh);
+            L->lastDisplayWaitNs = io->displayWaited(io->user, ret - now);
+        }
         lock_trace(L, ret, id > L->lastId ? id : 0);
         L->lastReturn = ret;
         L->lastBlocked = (double)waitNs * 4.0 >= L->slotNs;
@@ -726,6 +819,12 @@ uint64_t pace_lock_vsync(PaceLock *L, const PaceLockIo *io, bool newFrame)
                       (double)(now > slot ? now - slot : 0) * 2.0 >= L->slotNs ||
                           (double)(ret - now) >= L->slotNs);
         }
+    }
+    if (io->displayWaited != NULL) {
+        /* the step ends now: how late the next one starts */
+        now = io->now(io->user);
+        (void)pace_budget_step(&L->budget, now > next ? now - next : 0, (uint64_t)period,
+                               (uint64_t)L->slotNs, L->lastDisplayWaitNs, L->gpuNs, L->stepNs);
     }
     io->sleepUntil(io->user, next);
     L->due = next;
