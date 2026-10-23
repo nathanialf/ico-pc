@@ -683,7 +683,23 @@ per class (`d11_cmd_touch`: bind group uniforms and storage ranges, vertex and i
 their draws' extents, copy sources); `rhi_submit` writes each noted range from the shadow into that
 class's buffer with `UpdateSubresource1` before the list executes (`d11_buffer_flush`), so a list
 sees what the CPU wrote before its submit. Constant buffers take a partial update where the driver
-offers `ConstantBufferPartialUpdate`, else the whole buffer. Uniform bindings are windows into the
+offers `ConstantBufferPartialUpdate`, else the whole buffer.
+
+The cost of those writes: the renderer's ring is
+VERTEX|INDEX|UNIFORM|STORAGE upload memory (`rd_upload.c` `newRing`), so it is three D3D11 buffers.
+Each list's notes are one span per buffer and class, the lowest to the highest byte it read. The
+VU draws' bind group (`rd_replay_vu.c` `vuGroup`, cached per buffer) binds the ring as storage from
+byte 0 to its whole size (or `maxStorageRange`) and passes the stream's start in a uniform, so the
+storage class's note is the whole bound range and every `rhi_submit` with a VU draw writes the
+ring's full capacity (4 MB at first, grown and never shrunk; hundreds of MB after a stage change
+with many pack replacements) into the structured buffer, plus the uniform and index spans. The
+vertex class is written only for the sprite pipelines (the only ones with vertex bindings), from
+each draw's first to last vertex; the indexed draws are the VU draws, which have no vertex
+bindings, so their "binding offset to the buffer end" rule (`d11_flush_vertex_buffers`) does not
+come into play today. No narrower range is known inside the RHI without the renderer saying which
+bytes a frame wrote (a ring high-water mark per frame slot, or the VU group bound over the stream
+only); that is the fix if the copies show up on the old cards this backend is for, and it is not
+measured: Direct3D 11 has not run on any Windows machine. Uniform bindings are windows into the
 constant buffer (`VSSetConstantBuffers1` and `PSSetConstantBuffers1`, first constant = offset / 16,
 whole 256-byte blocks); storage bindings are structured SRVs of 16-byte elements, eight kept per
 buffer. `RHI_MEM_DEVICE` buffers are filled by copies; an `RHI_MEM_READBACK` buffer is a staging
