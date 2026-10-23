@@ -342,8 +342,9 @@ bindings' like any other source before the stick fix, the mirror and the quantis
 `input_sdl.c` wires it: the finger events, cancel on focus loss and backgrounding, the step once a
 vsync (`ico_touch_update`), the layout from the output's size, safe area, density and fold that
 the window hands over (`ico_input_sdl_set_touch_layout`, `ico_input_sdl_set_touch_env`; `window_host.c` logs
-`touch: window WxH px, safe area x,y wxh (insets l t r b)` once per change, or `no safe area
-reported`: SDL gives one combined inset for the bars, the gestures and the camera hole, and
+`touch: window WxH px, safe area x,y wxh (insets l t r b)` once per change of the insets, or `no safe area
+reported`, and on a change of the size alone the first 3 and every 100th, with ` (the size alone
+changed, N times: the first 3 and every 100th logged)`: SDL gives one combined inset for the bars, the gestures and the camera hole, and
 Android reports the hole whether or not the OEM's display override is on, so the port cannot tell
 them apart), and a
 copy for drawing taken at the step (`ico_input_sdl_touch_overlay`). The Settings rows for touch

@@ -780,7 +780,9 @@ static void touch_layout_update(void)
     int pw = 0, ph = 0, ww = 0, wh = 0;
     SDL_Rect r;
     IcoTouchEnv env;
-    static int s_note[7]; /* the last window and safe area logged (pw, ph, x, y, w, h; 1 once) */
+    static int s_note[7]; /* the last window and safe area seen (pw, ph, x, y, w, h; 1 once) */
+    static int s_insets[5] = {-1, -1, -1, -1, -1}; /* the last insets logged (reported; l t r b) */
+    static unsigned s_sizeOnly;                    /* changes of the size alone */
     int note[7] = {0, 0, 0, 0, 0, 0, 1};
 
     if (s_window == NULL || !SDL_GetWindowSizeInPixels(s_window, &pw, &ph) || pw <= 0 || ph <= 0) {
@@ -803,18 +805,35 @@ static void touch_layout_update(void)
     }
     note[0] = pw;
     note[1] = ph;
-    /* once per change (a rotation, a fold, the bars): what the OS gave, since
-       a camera hole's inset cannot be told from the bars' and the default
-       layout keeps clear of all of it while Edit layout reaches the edges */
+    /* once per change of the insets (a rotation, a fold, the bars): what the
+       OS gave, since a camera hole's inset cannot be told from the bars' and
+       the default layout keeps clear of all of it while Edit layout reaches
+       the edges; a change of the size alone (a desktop drag-resize) the
+       first 3 times, then every 100th */
     if (memcmp(note, s_note, sizeof(note)) != 0) {
+        const int insets[5] = {note[6], note[6] ? note[2] : 0, note[6] ? note[3] : 0,
+                               note[6] ? pw - note[2] - note[4] : 0,
+                               note[6] ? ph - note[3] - note[5] : 0};
+        char more[96] = "";
+
         memcpy(s_note, note, sizeof(note));
+        if (memcmp(insets, s_insets, sizeof(insets)) != 0) {
+            memcpy(s_insets, insets, sizeof(insets));
+        } else if (++s_sizeOnly <= 3u || s_sizeOnly % 100u == 0u) {
+            snprintf(more, sizeof(more),
+                     " (the size alone changed, %u times: the first 3 and every 100th logged)",
+                     s_sizeOnly);
+        } else {
+            return;
+        }
         if (note[6]) {
             fprintf(stderr,
-                    "touch: window %dx%d px, safe area %d,%d %dx%d (insets l %d t %d r %d b %d)\n",
+                    "touch: window %dx%d px, safe area %d,%d %dx%d (insets l %d t %d r %d b "
+                    "%d)%s\n",
                     pw, ph, note[2], note[3], note[4], note[5], note[2], note[3],
-                    pw - note[2] - note[4], ph - note[3] - note[5]);
+                    pw - note[2] - note[4], ph - note[3] - note[5], more);
         } else {
-            fprintf(stderr, "touch: window %dx%d px, no safe area reported\n", pw, ph);
+            fprintf(stderr, "touch: window %dx%d px, no safe area reported%s\n", pw, ph, more);
         }
     }
 }
