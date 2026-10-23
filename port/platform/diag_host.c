@@ -3151,6 +3151,21 @@ void ico_diag_set_startup_retry(int step, int have_d3d12, int backend_explicit, 
              backend != NULL && backend[0] != '\0' ? backend : "vulkan");
 }
 
+void ico_diag_set_backend_choice(int backend_explicit, const char *backend)
+{
+    retry_explicit = backend_explicit != 0;
+    snprintf(retry_backend, sizeof retry_backend, "%s",
+             backend != NULL && backend[0] != '\0' ? backend : "vulkan");
+}
+
+/* ico_diag_set_backend_trial: the renderer on trial, "" none */
+static char retry_trial[16];
+
+void ico_diag_set_backend_trial(const char *backend)
+{
+    snprintf(retry_trial, sizeof retry_trial, "%s", backend != NULL ? backend : "");
+}
+
 void ico_diag_set_vu_prepass(int on)
 {
     retry_prepass_on = on != 0;
@@ -3443,8 +3458,16 @@ static void driver_crash_plan(void)
         .prepassPipeline = startup_retry_note_has_vu_pre(activity),
         .backendName = retry_backend,
     };
-    const StartupRetry next = startup_retry_next(&run, reason, sizeof reason);
     relaunch_value[0] = '\0';
+    if (retry_trial[0] != '\0') {
+        /* Apply's renderer, not kept yet: the file names the one before */
+        flog("ico_pc: the graphics driver crashed while preparing the shaders of the %s renderer "
+             "applied from the menu and not kept yet: the game does not start again; the next "
+             "start uses the renderer the settings name",
+             retry_trial);
+        return;
+    }
+    const StartupRetry next = startup_retry_next(&run, reason, sizeof reason);
     if (next == STARTUP_RETRY_NONE) {
         flog("ico_pc: the graphics driver crashed while preparing the shaders: %s", reason);
         return;
@@ -3494,8 +3517,15 @@ int ico_diag_device_lost_restart(int blend_was_fixed)
         .robustOffDefault = retry_robust_off != 0,
         .backendName = retry_backend,
     };
-    const StartupRetry next = startup_retry_next(&run, reason, sizeof reason);
     loss_value[0] = '\0';
+    if (retry_trial[0] != '\0') {
+        ico_diag_log("ico_pc: the graphics card stopped responding on the %s renderer applied "
+                     "from the menu and not kept yet: the game does not start again; the next "
+                     "start uses the renderer the settings name",
+                     retry_trial);
+        return 0;
+    }
+    const StartupRetry next = startup_retry_next(&run, reason, sizeof reason);
     if (next == STARTUP_RETRY_NONE) {
         ico_diag_log("ico_pc: the graphics card stopped responding; the game does not start "
                      "again: %s",

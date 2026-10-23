@@ -676,6 +676,17 @@ void ico_diag_set_vu_prepass(int on);
 void ico_diag_set_robust_off_default(int on);
 void ico_diag_set_startup_retry(int step, int have_d3d12, int backend_explicit, int blend_explicit,
                                 const char *backend);
+/* The renderer the player chose from the menu (Options > Graphics > Apply,
+   window_switch.c): backend_explicit and backend as ico_diag_set_startup_retry
+   sets them, the step and the rest kept (Keep: the choice named; a switch
+   back: the start's own values). */
+void ico_diag_set_backend_choice(int backend_explicit, const char *backend);
+/* The renderer on trial between Apply and Keep (window_switch.c), NULL or
+   "" when none: a driver crash while preparing the shaders or a device loss
+   then writes the report and plans no restart (the settings file still
+   names the renderer that ran before, which the next start uses), and says
+   so in the log. */
+void ico_diag_set_backend_trial(const char *backend);
 /* The graphics device was lost (window_host.c device_lost_quit; the normal
    path, not a crash): the loss step of startup_retry.h this run takes
    next, logged. 1 when there is one: the program then starts again with

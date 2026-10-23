@@ -87,7 +87,10 @@
  *               off by the device's default: robust:<backend>; lossnone, no step left:
  *               0 (the window's box), nothing at exit; lossunprepared, no
  *               relaunch prepared: 0; lossfail, the relaunch fails: the box
- *               saying the game could not start itself again;
+ *               saying the game could not start itself again; losstrial,
+ *               the renderer Options > Graphics > Apply switched to and not
+ *               kept yet (ico_diag_set_backend_trial): 0, no relaunch;
+ *               losskept, then kept (ico_diag_set_backend_choice): its step;
  *   - lossdump: the loss bisect's file steps (ico_diag_note_device_loss,
  *               ico_diag_loss_bisect) with the bisect stubbed: a loss
  *               noted on a run at the restart after a device loss (the
@@ -937,6 +940,15 @@ static void loss_child(const char *mode, const char *log)
         ico_diag_set_robust_off_default(1);
     } else {
         ico_diag_set_startup_retry(STARTUP_RETRY_NONE, 0, 0, 0, "vulkan");
+    }
+    if (strcmp(mode, "losstrial") == 0 || strcmp(mode, "losskept") == 0) {
+        /* Options > Graphics > Apply's renderer on trial (window_switch.c);
+           losskept: then kept, the player's choice */
+        ico_diag_set_backend_trial("opengl");
+        if (strcmp(mode, "losskept") == 0) {
+            ico_diag_set_backend_trial(NULL);
+            ico_diag_set_backend_choice(1, "opengl");
+        }
     }
     if (getenv("ICO_TEST_LOSS_ACT") != NULL) {
         /* the window's order: the activity file at the start, the loss dump
@@ -3009,6 +3021,27 @@ int main(int argc, char **argv)
     CHECK(strstr(s, "test: box:") == NULL);
     if (fails) {
         printf("--- lossnone log ---\n%s\n", s);
+    }
+    /* a loss on the renderer Apply switched to, not kept yet: the report
+       only, no restart (the file names the renderer before); once kept,
+       the loss step on the kept one */
+    r = run(argv[0], "losstrial", log);
+    s = read_file(log);
+    CHECK(r == 0);
+    CHECK(strstr(s, "ico_pc: the graphics card stopped responding on the opengl renderer applied "
+                    "from the menu and not kept yet: the game does not start again") != NULL);
+    CHECK(strstr(s, "test: restart 0\n") != NULL);
+    CHECK(strstr(s, "test: relaunch ") == NULL);
+    if (fails) {
+        printf("--- losstrial log ---\n%s\n", s);
+    }
+    r = run(argv[0], "losskept", log);
+    s = read_file(log);
+    CHECK(r == 0);
+    CHECK(strstr(s, "test: restart 1\n") != NULL);
+    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=blend:opengl") != NULL);
+    if (fails) {
+        printf("--- losskept log ---\n%s\n", s);
     }
     /* no relaunch prepared: 0 as well */
     r = run(argv[0], "lossunprepared", log);
