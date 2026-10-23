@@ -236,22 +236,29 @@ is not shown.
   Direct3D 11, the ones your download has. Without Apply the choice is used from the next
   start. What each one is, what Automatic does and how to undo a choice that does not start:
   [Choosing the renderer](#choosing-the-renderer).
-- **Apply** shows under it when the choice is not what the game draws with now (Automatic
-  counts as Vulkan). It switches at once, without leaving the game or losing your place. The
-  picture stops for a moment, and longer the first time a choice is used while the graphics are
-  prepared. The glow and the motion blur trail start again, as after the game comes back from
-  the background.
+- **Apply** shows under it when the choice is not what the game draws with now. Automatic
+  counts as what it picked this time: Vulkan, or the one the game moved on to when Vulkan did
+  not start, so Apply is not offered for Automatic then. It switches at once, without leaving
+  the game or losing your place, and the window stays on the same screen. The picture stops for
+  a moment, and longer the first time a choice is used while the graphics are prepared. The glow
+  and the motion blur trail start again, as after the game comes back from the background.
 - After Apply the page asks **Keep these settings? Reverting in 10 s**, counting down, with
   **Keep** and **Revert**. Keep saves the choice. Revert, the Back button, or waiting until the
   count reaches 0 switch back to what the game drew with before and put the row back as it was;
-  nothing is saved. If you cannot see the picture after Apply, wait 10 seconds.
+  nothing is saved. If you cannot see the picture after Apply, wait 10 seconds. Until you choose
+  Keep the choice is not saved by anything else either: closing the game during the count keeps
+  the old one for the next start, and if the graphics stop working during the count, the game
+  does not start itself again on the new choice; your next start uses the old one.
 - If the choice does not start, the game goes back at once to what it drew with and a message
-  says so. The row keeps your choice, so you can try another one.
+  says so. The row goes back as it was, as with Revert, so the next start uses one that works;
+  you can pick another one and try again.
+- In the rare case that neither the choice nor the one before it starts again, a message says
+  so and the game closes without saving; the next start uses the one before.
 
 Apply is not offered while a movie plays, in photo mode, in the model viewer or while you
 change the touch controls' layout. Direct3D 11 has not been tried on any computer yet (see
 [Choosing the renderer](#choosing-the-renderer)); trying it with Apply is the safe way, since the
-game comes back by itself if it does not work.
+game comes back by itself if it does not work and nothing is saved until you choose Keep.
 
 ## Graphics driver
 

@@ -1287,17 +1287,26 @@ shows in the log as a size that changed with it.
 Options > Graphics > Apply switches the backend without ending the run ([UI.md](UI.md) has the
 page; the player's side is [OPTIONS.md](../OPTIONS.md#graphics)). The page asks through
 `UiGraphicsHost` (`port/platform/window_switch.c` (`hostBegin`)), which queues the name; the
-event pump runs it after `video_apply`, between two steps of the game and never inside a present,
-waiting up to 30 pumps for the game's frame to close (`rd_frame_open`; a frame still open is
-dropped with the renderer) (`ico_window_switch_pump`). The switch
-(`ico_window_switch_backend`):
+event pump runs it on the next pump, after `video_apply`, between two steps of the game and never
+inside a present (`ico_window_switch_pump`). A frame is always open at pump time: `dl_Swap` closes
+the tick's frame and its `dl_Clear` opens the next one at once (`ico2/seki/src/DisplayList.c`), and
+`gsbHostFrameHead`, `gsb_SetGsDefault` and `FullScreenEffectBefore` record into it in the same
+step. That frame goes with the renderer; `rd_resume_frame` opens one again after the switch so
+the rest of the next tick records into a frame (its `rd_temp_target` slots are freed with it and
+nothing is logged as outside a frame), and that frame is closed without a picture (`rd_end_frame`
+discards it, `RdContext.discardOpen`), since its start went with the old renderer. So the tick
+of the switch has no picture: the new window shows nothing until the tick after it presents. The
+watchdog is paused around the switch (`ico_diag_watchdog_pause`, as the device-lost box does): the
+device's start and a cold pipeline set can take longer than its later limit. The switch
+(`ico_window_switch_backend(name, trial)`; `trial` is Apply's, a switch back is not):
 
 1. Refused, `-2`, nothing touched: a build with one renderer, a name it does not link, a movie
    playing (`mpegPlay`), photo mode, the model viewer, the touch layout editor.
 2. The texture ids kept outside the renderer forgotten: the font pages (re-uploaded from their CPU
    atlases, `ui_font_forget_textures`) and the GS shim's placeholders (`gif_HostForgetTextures`).
-3. `ico_window_reopen` (window_host.c): the window's mode, size and place noted (Windowed: its
-   size and position; otherwise the start's 960 x 720), `rd_suspend` (the renderer shut down keeping
+3. `ico_window_reopen` (window_host.c): the window's mode, size, place and display noted
+   (Windowed: its size and position; otherwise the start's 960 x 720; `SDL_GetDisplayForWindow`),
+   `rd_suspend` (the renderer shut down keeping
    the scene size, the GS state between frames, the frame numbers, the mirror mode and the VU
    lists with their resident programs; the texture cache's entries forgotten; a texture or mesh
    slot first used after `rd_init` takes a generation above every one given out before,
@@ -1305,22 +1314,48 @@ dropped with the renderer) (`ico_window_switch_pump`). The switch
    renderer before names nothing and is made again on its next draw),
    the display clock stopped, the window destroyed, `rhi_create_backend`, a new window through
    `window_create` and `window_attach` (the start's own: the backend's flags and OpenGL's pixel
-   format, the exclusive request, the message hook, the backend's pipeline cache file),
+   format, the exclusive request, the message hook, the backend's pipeline cache file; the
+   window made at the Windowed position, else centred on the display the old one was on,
+   `SDL_WINDOWPOS_CENTERED_DISPLAY`, so Fullscreen and Borderless stay on their monitor; the
+   start passes `SDL_WINDOWPOS_UNDEFINED`, `SDL_CreateWindow`'s own),
    `rd_resume` with `video_settings`, then what the start does after `rd_init`: the crash
-   handler's cache, robust and retry state (`ico_diag_set_startup_retry` with the new backend as
-   chosen), `rd_blend_selftest`, `rd_vuprepass_selftest`, the pipeline set behind the progress
+   handler's cache, robust and retry state (`ico_diag_set_startup_retry`, below),
+   `rd_blend_selftest`, `rd_vuprepass_selftest`, the pipeline set behind the progress
    screen titled "Changing the graphics" unless the run makes pipelines as frames need them
-   (`rd_pipelines_lazy_on`), the cache saved, `rd_fog_selftest`; then the pointer's relative
+   (`rd_pipelines_lazy_on`), the cache saved, `rd_fog_selftest` (which runs the DATE and fx-local
+   self-tests again: their once flag is `RdContext.dateRan`, cleared by every `rd_init`, so the
+   new device's verdicts replace the ones `rd__profile_init` dropped; the start runs them once as
+   before); then the pointer's relative
    mode, the touch zones, the display clock started again, `video_apply(1)` and
    `window_size_recheck`. The time goes into `pausePendingNs`, a pause of the host as a
    swapchain rebuild's is.
 4. The new backend did not start (no window, or `rd_resume` failed): `ico_window_reopen` on the
-   backend that ran, `-1`. That failing too ends the run, `-3` (the pump returns 0).
+   backend that ran, `-1`. That failing too ends the run, `-3`: the pump returns 0 and
+   `main_host.c` shows a box naming both renderers (`ico_window_switch_end_text`), writes a
+   report, logs the exit reason "no renderer started after Options > Graphics > Apply" and saves
+   nothing (`ui_settings_save_on_quit` is not called).
+5. On success (or after the `-1` restore) `rd_resume_frame`.
+
+The crash and loss steps (startup_retry.h) after a switch: `ico_window_open` hands its choice to
+`ico_window_switch_started` once the renderer is up (the player's, or Automatic's with its
+fallback or restart backend). From Apply until Keep the renderer is on trial
+(`ico_diag_set_backend_trial`, set before `ico_window_reopen` so the switch's own pipeline set,
+the likeliest crash point, is covered): a driver crash while preparing the shaders or a device
+loss writes the report and plans no relaunch, since the file still names the renderer before.
+A switch back (Revert, the countdown's end, the `-1` restore) passes the start's explicit flag
+for the start's backend, so an Automatic start keeps Automatic's Direct3D 12 steps; Keep passes
+the kept backend as the player's (`ico_diag_set_backend_choice`). A switch back that failed has
+the Apply renderer running again, on trial.
 
 The audio is not touched. The game's state is the CPU's: its textures are decoded again from its
 memory on the next cache miss, its meshes built again from the packets, and the glow and the
-motion blur trail start again as after a resume. Nothing is written by the window: the page
-writes `[video] backend` on Keep.
+motion blur trail start again as after a resume. Nothing is written by the window. The page keeps
+the choice outside the config from Apply until Keep (`s_gfx.trial`; the config holds the value
+the page found), so every save in between (the close button's `ui_settings_save_on_quit`, any
+`ico_config_save`) writes the value the page found; Keep puts the choice into the config, and a
+FAILED Apply leaves the value the page found there, as Revert does. Automatic on the row counts as
+the host's `automatic()` (the backend Automatic started this run), so a run that fell back from
+Vulkan offers no Apply for Automatic on that backend.
 
 Log lines (stderr, one per event):
 
@@ -1329,14 +1364,25 @@ Log lines (stderr, one per event):
 - `window: Graphics API <old> restored (reverted|not kept in 10 s), <s> s`
 - `window: Graphics API <name> kept`
 - `window: Graphics API <name> not switched to: <reason>`
-- `window: Graphics API <old> did not start again either; the game ends`
+- `window: Graphics API <old> did not start again either; the game ends`, then the exit reason
+  `no renderer started after Options > Graphics > Apply`
+- `ico_pc: the graphics driver crashed while preparing the shaders of the <name> renderer
+  applied from the menu and not kept yet: the game does not start again; the next start uses the
+  renderer the settings name` (the crash report's log)
+- `ico_pc: the graphics card stopped responding on the <name> renderer applied from the menu and
+  not kept yet: the game does not start again; the next start uses the renderer the settings
+  name`
+- `ico_pc: diagnostics: watchdog paused` and `... running again` around each switch
 - after each window: `window: video driver ...` (`window_attach`) and
   `window: <w>x<h> pixels, <backend> on <adapter>, present mode <mode>`
 - the page's own: `settings: Graphics API back to <value|automatic> (reverted|not kept in 10 s)`
+  and, after a FAILED Apply, `settings: Graphics API back to <value|automatic> (<name> did not
+  start)`
 
 Not verified: no switch has run anywhere (the game is not run in the container); the swap was
-syntax-checked only. Open points for the first runs: the window's place on a desktop that
-places new windows itself (Wayland ignores `SDL_SetWindowPosition`), the exclusive fullscreen
+syntax-checked only, and `rd_suspend`/`rd_resume`/`rd_resume_frame` are tested on lavapipe
+(`rd_msaa_test`). Open points for the first runs: the window's place on a desktop that
+places new windows itself (Wayland ignores window positions), the exclusive fullscreen
 mode on a new window, and a frame the game keeps across ticks (`fbKeep` screens) that has no
 picture until the game draws a new one.
 
