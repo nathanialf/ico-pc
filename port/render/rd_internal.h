@@ -1866,9 +1866,11 @@ uint64_t rd__blur_border_strip_count(void);
  * picture), RD_BORDER_OPEN the border open at the frame's exact width (the
  * screen shows them), RD_BORDER_CROPPED the frame cropped at present
  * (16:9: left out, the glow still reads them), RD_BORDER_WINDOW Full
- * pixel's window (SCENE holds the visible columns only: they are not in
- * it).  A fogged frame's SCENE repeats columns 2 and W - 3 over them where
- * OPEN or CROPPED; rd__set_scene_border_repeat(false) (tests) leaves them
+ * pixel's window (SCENE holds the visible columns, and texels of columns
+ * 0..1 and W - 2..W - 1 where its crop is under 2 GS pixels a side: 2560 x
+ * 1080, 2532 x 1170).  A fogged frame's SCENE repeats columns 2 and W - 3
+ * over the texels of them it holds in every state but CLOSED on the PS2's
+ * 512-pixel frame; rd__set_scene_border_repeat(false) (tests) leaves them
  * as drawn; the count of repeats; rd__scene_border_free the copies' texture
  * (the targets made again, shutdown). */
 enum { RD_BORDER_CLOSED = 0, RD_BORDER_OPEN, RD_BORDER_CROPPED, RD_BORDER_WINDOW };

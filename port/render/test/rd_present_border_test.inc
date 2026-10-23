@@ -27,8 +27,12 @@
  * byte for byte the present of the same frame drawn over every column, so
  * nothing of the uncovered columns reaches the screen; without the repeat
  * (rd__set_scene_border_repeat off) it differs near the box's edges and
- * nowhere else; at 4:3 with Full pixel off (the border closed, the PS2's
- * picture) SCENE is kept as drawn. */
+ * nowhere else; the same with the border closed on a wide frame (2340 x
+ * 1080 with Full pixel off: the reduction shows black there, the glow
+ * reads SCENE) and in Full pixel's window on a 2560 x 1080 monitor (the
+ * window's scale 2.8125, its crop under two GS columns a side, so it holds
+ * texels of columns 0 and 1); at 4:3 with Full pixel off (the border
+ * closed, the PS2's picture) SCENE is kept as drawn. */
 
 typedef struct EdgeRun {
     uint8_t *out, *disp;
@@ -268,13 +272,13 @@ static void checkOpenBorderEdge(const char *name, float aspect, uint32_t outW, u
  * moved eight GS pixels in from each edge over itself at FIX 0x40 (the glow
  * reaching in), then the reduction.  full as edgeRun's.  The present, and
  * the repeats the run did */
-static bool sceneBorderRun(float aspect, uint32_t outW, uint32_t outH, int full, int c0, int repeat,
-                           uint8_t *out, uint64_t *repeats)
+static bool sceneBorderRun(float aspect, uint32_t outW, uint32_t outH, float scale, int full,
+                           int c0, int repeat, uint8_t *out, uint64_t *repeats, int *state)
 {
     RdSettings s = originalSettings();
     s.preset = RD_PRESET_ENHANCED;
     s.aspect = aspect;
-    s.sceneScale = 2.0f;
+    s.sceneScale = scale; /* 0: the window's box */
     s.outputWidth = outW;
     s.outputHeight = outH;
     s.fullPixel = (uint8_t)(full == 1);
@@ -367,6 +371,7 @@ static bool sceneBorderRun(float aspect, uint32_t outW, uint32_t outH, int full,
     const bool ok =
         rd__read_present(out, (size_t)outW * outH * 4, &ow, &oh) && ow == outW && oh == outH;
     *repeats = rd__scene_border_repeat_count() - n0;
+    *state = rd__scene_border_state(rd__target_rec(rd_target(RD_TARGET_SCENE).id));
     CHECK(rhi_vk_validation_error_count() == 0, "scene border: %u validation errors",
           rhi_vk_validation_error_count());
     rd_shutdown();
@@ -395,17 +400,19 @@ static uint32_t sceneBorderDiff(const uint8_t *a, const uint8_t *b, uint32_t out
     return n;
 }
 
-/* expect: where the frame's outer columns go (rd__scene_border_state) */
+/* expect: where the frame's outer columns go (rd__scene_border_state);
+ * scale: the scene's (0: the window's box) */
 static void checkSceneBorderRepeat(const char *name, float aspect, uint32_t outW, uint32_t outH,
-                                   int full, int expect)
+                                   float scale, int full, int expect)
 {
     const size_t size = (size_t)outW * outH * 4;
     uint8_t *a = (uint8_t *)malloc(size), *b = (uint8_t *)malloc(size),
             *c = (uint8_t *)malloc(size);
     uint64_t ra = 0, rb = 0, rc = 0;
-    if (!a || !b || !c || !sceneBorderRun(aspect, outW, outH, full, 2, 1, a, &ra) ||
-        !sceneBorderRun(aspect, outW, outH, full, 0, 1, b, &rb) ||
-        !sceneBorderRun(aspect, outW, outH, full, 2, 0, c, &rc)) {
+    int state = -1, sb = -1, sc = -1;
+    if (!a || !b || !c || !sceneBorderRun(aspect, outW, outH, scale, full, 2, 1, a, &ra, &state) ||
+        !sceneBorderRun(aspect, outW, outH, scale, full, 0, 1, b, &rb, &sb) ||
+        !sceneBorderRun(aspect, outW, outH, scale, full, 2, 0, c, &rc, &sc)) {
         CHECK(0, "%s: readback", name);
         free(a);
         free(b);
@@ -422,15 +429,14 @@ static void checkSceneBorderRepeat(const char *name, float aspect, uint32_t outW
     const uint32_t reach = (uint32_t)ceil(14.0 * k);
     uint32_t inner = 0;
     const uint32_t off = sceneBorderDiff(c, b, outW, outH, &box, reach, &inner);
-    if (expect == RD_BORDER_CLOSED || expect == RD_BORDER_WINDOW) {
+    CHECK(state == expect && sb == expect && sc == expect,
+          "%s: the outer columns' place %d (%d, %d), %d expected", name, state, sb, sc, expect);
+    /* only the closed border of the PS2's 4:3 frame keeps SCENE as drawn */
+    if (expect == RD_BORDER_CLOSED && ico_frame_width_for(aspect) == ICO_FRAME_BASE_W) {
         CHECK(ra == 0 && rb == 0 && rc == 0, "%s: SCENE kept as drawn (%llu, %llu, %llu repeats)",
               name, (unsigned long long)ra, (unsigned long long)rb, (unsigned long long)rc);
         CHECK(memcmp(a, c, size) == 0, "%s: the present as without the repeat, byte for byte",
               name);
-        /* Full pixel's window holds no GS column 0, 1, W - 2 or W - 1:
-           nothing is left uncovered in it */
-        CHECK(expect != RD_BORDER_WINDOW || memcmp(a, b, size) == 0,
-              "%s: Full pixel's window: the frame drawn over every column's present", name);
         printf("%s: SCENE kept as drawn (%u pixels from the uncovered columns)\n", name, off);
     } else {
         CHECK(ra == 1 && rb == 1 && rc == 0,
@@ -453,17 +459,24 @@ static void checkSceneBorderRepeat(const char *name, float aspect, uint32_t outW
 static void checkOpenBorderEdges(void)
 {
     /* issue 26: 16:9 Enhanced 2x, Full pixel off (the border mask) */
-    checkSceneBorderRepeat("scene border 16:9 2x off", 16.0f / 9.0f, 1920, 1080, 2,
+    checkSceneBorderRepeat("scene border 16:9 2x off", 16.0f / 9.0f, 1920, 1080, 2.0f, 2,
                            RD_BORDER_CROPPED);
     /* Full pixel on at a whole scale: SCENE holds the whole frame (ox 0) and
-       the present crops it, so the columns are repeated as with it off; the
-       window state (ox > 0) needs a fractional scene scale, which this run
-       does not make */
-    checkSceneBorderRepeat("scene border 16:9 2x on", 16.0f / 9.0f, 1920, 1080, 1,
+       the present crops it, so the columns are repeated as with it off */
+    checkSceneBorderRepeat("scene border 16:9 2x on", 16.0f / 9.0f, 1920, 1080, 2.0f, 1,
                            RD_BORDER_CROPPED);
-    checkSceneBorderRepeat("scene border 2340x1080 2x on", 2340.0f / 1080.0f, 1664, 768, 1,
+    checkSceneBorderRepeat("scene border 2340x1080 2x on", 2340.0f / 1080.0f, 1664, 768, 2.0f, 1,
                            RD_BORDER_OPEN);
-    checkSceneBorderRepeat("scene border 4:3 2x off", 4.0f / 3.0f, 1024, 768, 0, RD_BORDER_CLOSED);
+    /* the border closed on a wide frame: the glow reads SCENE, so it repeats */
+    checkSceneBorderRepeat("scene border 2340x1080 2x off", 2340.0f / 1080.0f, 1664, 768, 2.0f, 0,
+                           RD_BORDER_CLOSED);
+    /* Full pixel's window at the window's scale (ox > 0): a 2560 x 1080
+       monitor's frame of 912 GS pixels, exact 910.22, crops 0.89 a side, so
+       the window holds texels of columns 0 and 1, which are repeated */
+    checkSceneBorderRepeat("scene border 2560x1080 window on", 2560.0f / 1080.0f, 2560, 1080, 0.0f,
+                           1, RD_BORDER_WINDOW);
+    checkSceneBorderRepeat("scene border 4:3 2x off", 4.0f / 3.0f, 1024, 768, 2.0f, 0,
+                           RD_BORDER_CLOSED);
     const float phone = 2340.0f / 1080.0f;
     checkOpenBorderEdge("open edge 2340x1080 2x", phone, 1664, 768, 0.0f, 0);
     checkOpenBorderEdge("open edge 2340x1080 2x mirror", phone, 1664, 768, 0.0f, 1);

@@ -204,10 +204,12 @@ The last row is not one of the game's effects:
   screen, so nothing is rounded, cropped or stretched, and the strip the PS2
   hid under its thin black border is shown too. The two outermost columns
   of dots at each side, which the PS2 never showed and the game does not
-  always draw, repeat the picture next to them instead, so no stray line
-  shows at the very edge. With this row off on a wide screen those columns
-  are hidden, and they are repeated the same way, so they cannot light up
-  the edge of the picture either. The picture is exactly as
+  always draw, show the picture next to them instead of what the game left
+  there. With this row off on a wide screen those columns are hidden or
+  under the black border, and the picture next to them is copied into them
+  the same way before the game makes its glow from the picture, so the
+  glow does not spread what the game left there. On a 4:3 screen with this
+  row off they stay as the PS2 had them. The picture is exactly as
   wide as the window shows it, at every size and shape of window. It needs
   Resolution set to the size of your window (the Enhanced Preset picks it).
   With Original, a fixed Resolution (1x to 16x), the CRT filter or

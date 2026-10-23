@@ -543,10 +543,14 @@ void rd__fog_probe_finish(void)
  *   the frame is cropped (W GS pixels): the present leaves them out but
  *        the glow reads them, SCENE repeats columns 2 and W-3 over them
  *        before it
- *   the border is closed (W GS pixels): the reduction shows black there
+ *   the border is closed (512 GS pixels): the reduction shows black there
  *        but the glow reads them, SCENE keeps them (the PS2's picture)
- *   the frame is cropped to Full pixel's window (W GS pixels): SCENE holds
- *        the visible columns only, these are the screen's edge
+ *   the border is closed (W GS pixels, wider than the PS2's): the
+ *        reduction shows black there but the glow reads them, SCENE
+ *        repeats columns 2 and W-3 over them before it
+ *   the frame is cropped to Full pixel's window (W GS pixels): SCENE
+ *        repeats columns 2 and W-3 over the texels of them it holds before
+ *        the glow
  * and the rest of those 10 s as one total at the next probe after them
  *   fog: probe: outer columns: depth 0 there in N more probes in the
  *        last 10 s (T in all)
@@ -618,8 +622,15 @@ size_t rd__fog_edge_line(char *out, size_t size, const RdFogEdgeColumn c[4], uin
     } else if (n < size && state == RD_BORDER_WINDOW) {
         n += (size_t)snprintf(out + n, size - n,
                               "; the frame is cropped to Full pixel's window (%u GS pixels): SCENE "
-                              "holds the visible columns only, these are the screen's edge",
-                              gsW);
+                              "repeats columns 2 and %u over the texels of them it holds before "
+                              "the glow",
+                              gsW, w3);
+    } else if (n < size && gsW != ICO_FRAME_BASE_W) {
+        n += (size_t)snprintf(out + n, size - n,
+                              "; the border is closed (%u GS pixels, wider than the PS2's): the "
+                              "reduction shows black there but the glow reads them, SCENE repeats "
+                              "columns 2 and %u over them before it",
+                              gsW, w3);
     } else if (n < size) {
         n += (size_t)snprintf(out + n, size - n,
                               "; the border is closed (%u GS pixels): the reduction shows black "

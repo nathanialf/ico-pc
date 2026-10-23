@@ -1124,25 +1124,29 @@ static void checkEdgeLine(void)
         "F0E8D0";
     CHECK(strcmp(line, want) == 0, "(o) the line:\n  %s\n  wanted\n  %s", line, want);
 
-    /* the other three places those columns go: the line names each, so a
+    /* the other places those columns go: the line names each, so a
        16:9 log carries the count too (issue 26) */
     static const struct {
         int state;
         uint32_t gsW;
         const char *tail;
-    } kTails[3] = {
+    } kTails[4] = {
         {RD_BORDER_CROPPED, 688,
          "; the frame is cropped (688 GS pixels): the present leaves them out but the glow reads "
          "them, SCENE repeats columns 2 and 685 over them before it, table entry 0 = n/a"},
         {RD_BORDER_CLOSED, 512,
          "; the border is closed (512 GS pixels): the reduction shows black there but the glow "
          "reads them, SCENE keeps them (the PS2's picture), table entry 0 = n/a"},
-        {RD_BORDER_WINDOW, 688,
-         "; the frame is cropped to Full pixel's window (688 GS pixels): SCENE holds the visible "
-         "columns only, these are the screen's edge, table entry 0 = n/a"},
+        {RD_BORDER_CLOSED, 832,
+         "; the border is closed (832 GS pixels, wider than the PS2's): the reduction shows black "
+         "there but the glow reads them, SCENE repeats columns 2 and 829 over them before it, "
+         "table entry 0 = n/a"},
+        {RD_BORDER_WINDOW, 912,
+         "; the frame is cropped to Full pixel's window (912 GS pixels): SCENE repeats columns 2 "
+         "and 909 over the texels of them it holds before the glow, table entry 0 = n/a"},
     };
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         rd__fog_edge_line(line, sizeof(line), c, kTails[i].gsW, kTails[i].state, NULL);
         const char *tail = strchr(line, ';');
         CHECK(tail && strcmp(tail, kTails[i].tail) == 0,

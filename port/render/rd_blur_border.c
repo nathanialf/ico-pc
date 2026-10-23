@@ -38,11 +38,17 @@
  * columns 2 and W - 3 (rd__scene_border_arm from doFog, done by
  * sceneRepeat before the frame's first post sprite that reads SCENE):
  * texel copies through a small texture of their own, every row, the
- * colour alone, wherever the border is open or the frame cropped
- * (rd__scene_border_state).  With the border closed (Full pixel off at 4:3
- * and at an exact width such as 48:9: the GS's own DISPLAY with its
- * border, the PS2's picture, what the gate's Original 4:3 hashes hold)
- * SCENE is left as the game drew it.  The strips above stay: the
+ * colour alone (rd__scene_border_state): where the border is open, the
+ * frame cropped, in Full pixel's window (its crop is 0 to 8 GS pixels a
+ * side, so on a 2560 x 1080 monitor or a 2532 x 1170 phone it holds texels
+ * of columns 0 and 1: those are copied, and where it holds none nothing
+ * is), and with the border closed on a frame wider than the PS2's 512 GS
+ * pixels (Full pixel off at an exact width such as 2340 x 1080 or 48:9:
+ * the reduction shows black there, but the glow reads SCENE).  Only the
+ * closed border of the PS2's own 4:3 frame (the GS's DISPLAY with its
+ * border, the PS2's picture, what the gate's 4:3 hashes hold) leaves SCENE
+ * as the game drew it.  The repeat bumps the replay's writeSerial (DATE's
+ * snapshot of SCENE is taken again after it).  The strips above stay: the
  * reduction's column 2 blends a quarter of column 3, so its outer columns
  * drawn from SCENE's repeat alone would read column 2 without that
  * quarter.
@@ -204,20 +210,12 @@ static void sceneRepeat(Replay *r)
         return;
     }
     const int state = rd__scene_border_state(t);
-    if (state == RD_BORDER_CLOSED) {
-        return; /* the GS's own border: the PS2's picture */
+    if (state == RD_BORDER_CLOSED && W == ICO_FRAME_BASE_W) {
+        return; /* the GS's own border on the PS2's 4:3 frame: the PS2's picture */
     }
-    if (state == RD_BORDER_WINDOW) {
-        /* Full pixel's window (ox > 0) holds the visible columns only:
-           whatever it holds at its edge is the picture, kept as drawn */
-        static bool logged; /* once a run */
-        if (!logged) {
-            logged = true;
-            rd__log("border: Full pixel's window holds the visible columns only: SCENE is kept as "
-                    "drawn at its edges (reported once)");
-        }
-        return;
-    }
+    /* Full pixel's window (ox > 0) holds texels of columns 0..1 only where
+       its crop is under 2 GS pixels a side; columnTexel(2) <= 0 (and
+       columnTexel(W - 2) >= tw) where it holds none, and nothing is copied */
     const int32_t a2 = columnTexel(t, 2), a3 = columnTexel(t, 3);
     const int32_t bR = columnTexel(t, W - 3), aR = columnTexel(t, W - 2);
     const int32_t cwL = a3 - a2, cwR = aR - bR, tw = (int32_t)t->tw;
@@ -250,13 +248,22 @@ static void sceneRepeat(Replay *r)
     if (right) {
         fillFrom(cl, t->color, aR, tw, cwL, cwR, th, 1);
     }
+    r->writeSerial++; /* SCENE's colour changed (DATE's snapshot reuse) */
     s_sceneRepeats++;
-    static bool logged; /* once a run */
-    if (!logged) {
-        logged = true;
+    static const char *const kWhere[] = {
+        [RD_BORDER_CLOSED] = "the border closed on a wide frame: the glow reads them",
+        [RD_BORDER_OPEN] = "the border open: the glow and the present read them",
+        [RD_BORDER_CROPPED] = "the frame cropped: the glow reads them",
+        [RD_BORDER_WINDOW] = "Full pixel's window holds texels of them: the glow and the "
+                             "present read them",
+    };
+    static bool logged[4]; /* once a run for each place */
+    if (state >= 0 && state < 4 && !logged[state]) {
+        logged[state] = true;
         rd__log("border: the frame's outer two columns a side repeat columns 2 and %d on SCENE "
-                "after the fog (%d GS pixels; the glow and the present read them)",
-                (int)(W - 3), (int)W);
+                "after the fog (%d GS pixels; %s; %d and %d texels a side; reported once)",
+                (int)(W - 3), (int)W, kWhere[state], left ? (int)a2 : 0,
+                right ? (int)(tw - aR) : 0);
     }
 }
 

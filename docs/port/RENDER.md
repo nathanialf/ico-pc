@@ -1886,20 +1886,21 @@ laid right to left from column 2 and the right fill left to right from W - 3, th
 cut at the edge, so at a whole scale each column is column 2 (or W - 3) texel for texel. The RHI
 cannot copy a texture into itself, so the two source columns go through a small texture of their
 own first (`rd border columns`, the columns' widths by SCENE's height, freed with the scene's
-caches and at shutdown: `rd__scene_border_free`). It applies where the frame's outer columns are
-the port's own picture (`rd__scene_border_state`): the border open at the exact width
-(`RD_BORDER_OPEN`) and the frame cropped at present (`RD_BORDER_CROPPED`, Full pixel off at 16:9
-under the border mask, or any scale with SCENE holding the whole frame). With the border closed
-(`RD_BORDER_CLOSED`: Full pixel off at 4:3 and at an exact width such as 48:9, the GS's own DISPLAY
-with its border) SCENE stays as the game drew it, the PS2's picture, which the native-frame gate's
-Original and Enhanced 4:3 hashes hold. Full pixel's window (`RD_BORDER_WINDOW`, `ox > 0`) holds no
-texel of those columns at the usual crops, so nothing is copied there. The strips stay with it: the
+caches and at shutdown: `rd__scene_border_free`), and bumps `writeSerial` (DATE's snapshot). It
+applies in every place of the columns (`rd__scene_border_state`) but one: the border open at the
+exact width (`RD_BORDER_OPEN`), the frame cropped at present (`RD_BORDER_CROPPED`), Full pixel's
+window (`RD_BORDER_WINDOW`, `ox > 0`: its crop is 0 to 8 GS pixels a side, so a 2560 x 1080
+monitor's or a 2532 x 1170 phone's window holds texels of columns 0 and 1, which are copied; where
+`columnTexel(2) <= 0` nothing is), and the border closed on a frame wider than 512 GS pixels
+(`RD_BORDER_CLOSED` at 2340 x 1080 or 48:9 with Full pixel off: the reduction shows black there,
+the glow reads SCENE). Only the closed border of the 4:3 frame (512, the GS's own DISPLAY with its
+border) leaves SCENE as the game drew it, the PS2's picture, which the native-frame gate's 4:3
+hashes hold. The strips stay with it: the
 reduction's column 2 blends a quarter of column 3 (the PS2's +0.75), so DISPLAY's outer columns
 drawn from SCENE's repeat alone would be column 2 without that quarter, not DISPLAY's column 2.
 One line the first time, `rd: border: the frame's outer two columns a side repeat columns 2 and
-W-3 on SCENE after the fog (W GS pixels; the glow and the present read them)`, and on Full pixel's
-window `rd: border: Full pixel's window holds the visible columns only: SCENE is kept as drawn at
-its edges (reported once)` (no repeat there: whatever the window holds at its edge is the picture); `rd__scene_border_repeat_count` counts
+W-3 on SCENE after the fog (W GS pixels; <the place>; L and R texels a side; reported once)`, once
+for each place; `rd__scene_border_repeat_count` counts
 the repeats (`rd_log_frame_state`'s line), `rd__set_scene_border_repeat(false)` leaves SCENE as
 drawn (tests).
 
@@ -2361,9 +2362,10 @@ T-1 in ...; <where they go>, table entry 0 = RRGGBB`, where they go being, as
 pixels): they reach the screen, SCENE repeats columns 2 and W-3 over them before the glow`, `the
 frame is cropped (W GS pixels): the present leaves them out but the glow reads them, SCENE repeats
 columns 2 and W-3 over them before it`, `the border is closed (W GS pixels): the reduction shows
-black there but the glow reads them, SCENE keeps them (the PS2's picture)` or `the frame is
-cropped to Full pixel's window (W GS pixels): SCENE holds the visible columns only, these are the
-screen's edge`; so a 16:9 log carries the count too. The rest of those 10 s is one total at the
+black there but the glow reads them, SCENE keeps them (the PS2's picture)` (512), `the border is
+closed (W GS pixels, wider than the PS2's): ..., SCENE repeats columns 2 and W-3 over them before
+it` or `the frame is cropped to Full pixel's window (W GS pixels): SCENE repeats columns 2 and W-3
+over the texels of them it holds before the glow`; so a 16:9 log carries the count too. The rest of those 10 s is one total at the
 next probe after them, `rd: fog: probe: outer columns: depth 0 there in N more probes in the last
 10 s (T in all)`. Nothing is copied in the self-test's replays, on the multisampled read, or on
 D3D12's depth (copied to a buffer only whole). Rows at Z 0 there mean the game left those columns
