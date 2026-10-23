@@ -1586,8 +1586,15 @@ int main(int argc, char **argv)
         printf("rd_crt_test: options ok; SKIP the pixel checks: no usable device\n");
         return 77;
     }
-    s_llvmpipe = strstr(rhi_adapter_name(), "llvmpipe") != NULL;
-    printf("rd_crt_test: adapter %s\n", rhi_adapter_name());
+    /* the recorded hashes are lavapipe's (Vulkan): the same software
+       rasterizer behind OpenGL (llvmpipe) filters and rounds the modes'
+       float paths its own way, so there the modes are checked for
+       determinism only */
+    s_llvmpipe =
+        strstr(rhi_adapter_name(), "llvmpipe") != NULL && rhi_backend() == RHI_BACKEND_VULKAN;
+    printf("rd_crt_test: adapter %s%s\n", rhi_adapter_name(),
+           rhi_backend() == RHI_BACKEND_OPENGL ? " (OpenGL: the recorded hashes are not checked)"
+                                               : "");
     rd_shutdown();
     checkOff();
     checkModes();
