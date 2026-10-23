@@ -818,7 +818,11 @@ translated shaders' unit; absent on llvmpipe); `bcTextures` with S3TC and BPTC; 
 `dynamicDepth` and `dynamicBlend` true (plain OpenGL state); `maxDynamicUniforms` 4; texture-to-buffer
 copies at a row pitch of 16 and an offset of 4, so the VU vertex pre-pass stays on
 (`colorBytesPerPixel` 0); `vendorId` from the vendor and renderer text; `driverText` the renderer
-and the version; `robustText` "off (OpenGL)".
+and the version; `robustText` "off (OpenGL)". OpenGL 4.3 lets a driver keep 8 storage buffer
+bindings and no vertex shader storage blocks; below the shaders' needs (bindings up to 20 for storage
+buffers and textures, storage blocks in the VU vertex shaders) `rhi_init` logs `rhi_gl: this
+driver's limits are below the shaders' bindings: storage buffer bindings N (21 needed), vertex
+shader storage blocks N (1 needed), texture units N (21 needed); the draws that use them will fail`.
 
 | variable | effect |
 | --- | --- |
