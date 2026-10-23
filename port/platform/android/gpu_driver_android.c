@@ -660,6 +660,19 @@ int ico_gpu_driver_android_choose(char *folder, size_t n, char *why, size_t whyn
         SDL_PumpEvents();
         SDL_Delay(20);
     }
+    if ((r == UI_GPU_INSTALL_NO_PICKER || r == UI_GPU_INSTALL_NO_PICKER_APP) &&
+        host_files_count() > 0) {
+        /* no picker: the first zip in the drivers folder, if the player put one there */
+        fprintf(stderr,
+                "gpu driver: no file picker at the start; trying %s from the drivers folder\n",
+                host_file_name(0));
+        if (host_install_file_begin(0) == 0) {
+            while ((r = host_install_poll()) == UI_GPU_INSTALL_PENDING) {
+                SDL_PumpEvents();
+                SDL_Delay(20);
+            }
+        }
+    }
     if (r != UI_GPU_INSTALL_ADDED) {
         snprintf(why, whyn, "%s",
                  r == UI_GPU_INSTALL_NOSPACE         ? "Not enough free space."
