@@ -176,9 +176,10 @@ tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/setting
 
 | page | rows |
 | --- | --- |
-| Main (`UI_PAGE_MAIN`) | Display, Effects, Graphics driver, Audio, Controls, Gameplay, Language, Achievements, Extras, Save a picture for a bug report, (an rc build on Android: Share a bug report,) Developer mode, Dump textures, Dump models, Back |
+| Main (`UI_PAGE_MAIN`) | Display, Effects, Graphics (`UI_PAGE_GRAPHICS`), Graphics driver, Audio, Controls, Gameplay, Language, Achievements, Extras, Save a picture for a bug report, (an rc build on Android: Share a bug report,) Developer mode, Dump textures, Dump models, Back |
 | Display | Preset, Resolution, Aspect, Anti-aliasing, Window mode, Vsync, Texture pack, Model pack, Frame rate, Video mode, Back |
 | Effects | Full height, Filtering, Brightness, CRT filter, CRT strength, the six game effects (Motion blur Off, Original or Smooth, `UI_OPT_EFFECT_MOTION_BLUR`, stepped round with `stepIndex` and its note `UI_STR_EFFECT_MOTION_BLUR_NOTE`) with Water reflections (Original or Sharp, `UI_OPT_EFFECT_WATER`) after Fog, Full pixel, Back |
+| Graphics | Graphics API (`UI_OPT_GRAPHICS_API`: Automatic, then each name `ui_settings_set_backend_names` was given as Vulkan, OpenGL, Direct3D 12 or Direct3D 11; the shown value and the step base are the config's `video.backend`, an unlinked value shows as written and steps from Automatic; a step writes `video.backend` ("" for Automatic) and sets `s_dirtyConfig`, so the file is written on leaving; the note `UI_STR_GRAPHICS_API_NOTE` says it is used from the next start), Back (the link and the page only with two or more names) |
 | Graphics driver | Driver, Add a driver, Add from the drivers folder (`UI_OPT_GPU_ADD_FILE`, stepped over `fileName(i)`, shown while `fileCount()` is above 0, Cross calls `installFileBegin`), Remove this driver, Back (Android) |
 | Audio | Volume, Music, Effects, Output, Device, Back |
 | Controls | Remap (a list), Button configuration, Vibration, Hold type, Stick fix, the mouse camera's six rows, Circle back, Touch screen (a link, with a touch screen only), Back |
@@ -206,8 +207,8 @@ default it to 0; [BUILDING.md](../BUILDING.md#release-candidate-tools)), and `MA
 (`ico_video_android`) while a handler is set (`ui_settings_set_share_report_handler`: the window
 host's `share_report_arm`; at `ICO_RC_TOOLS` 0 the setter keeps nothing). Cross logs `settings:
 share a bug report (an rc build's row)` and calls the handler once, with no popup (the system's
-share menu opens over the game). With all seventeen rows shown the page starts at line 26, 10
-apart (Back at 186, its box to 226; `pagePitch`).
+share menu opens over the game). With all eighteen rows shown (the Graphics link too) the page starts at line 26, 9
+apart (Back at 179, its box to 219; `pagePitch`; no render check yet).
 
 `buildOptionPage` makes a page: a centred header, then per option a right-aligned label and, for
 a stepped option, a centred value row and the two arrow rows owned by the label, with their pointer
@@ -223,7 +224,7 @@ settings (Brightness, Vibration, Button configuration, Film effect, Players) onl
 the pause menu (Hold type shows from the title too: `[gameplay] hold_type`), Film effect and Players once the game is cleared; Video mode, Model pack and Extras'
 Music, Models and Credits only from the title (Add to Steam also only where the window host installs
 its handler); the dump rows only in developer mode; the Touch screen link only with a touch screen; the
-window and mouse camera rows not on Android; the Graphics driver link only with a driver host on an
+window and mouse camera rows not on Android; the Graphics link only with two or more renderer names (`ui_settings_set_backend_names`), the Graphics driver link only with a driver host on an
 Adreno GPU (`port/ui/settings.c` (`optShown`, `isGameOpt`, `isExtrasOpt`)). `layoutPage` masks the
 hidden rows and spaces the shown ones by the page's pitch table, which keeps Back's box inside the
 226 lines and above the notes (`port/ui/settings.c` (`layoutPage`, `pagePitch`)); Effects' fourteen
@@ -309,7 +310,7 @@ what is pending and calls the quit handler: the [window build](ARCHITECTURE.md#t
 
 The menu knows nothing of the platform; the window host installs what the pages ask: the window
 mode query, the anti-aliasing list and block, the texture and model pack counts, the touch query,
-the touch editor's host (`UiTouchEditHost`), the Quit word, the Graphics driver host (`UiGpuDriverHost`), the Steam handler, the models
+the touch editor's host (`UiTouchEditHost`), the Quit word, the Graphics driver host (`UiGpuDriverHost`), the renderer names (`ui_settings_set_backend_names`, filled from `rhi_backend_name` in `ico_window_open`, so port/ui never links the RHI), the Steam handler, the models
 handler, the Characters host (the model viewer's panel) (`port/ui/settings.h`
 (`ui_settings_set_*`)). A page whose host is missing hides its row.
 
@@ -758,9 +759,10 @@ Japanese disc:
   `config/regions.txt`'s rows and write `[game] disc` (`ico_config_disc_pin`), read at the next
   start; with no pin the row shows the disc playing, which with several discs' data and no pin is the
   one the next start picks (the disc played last). Its note is `UI_STR_DISC_NOTE` ("Takes effect at
-  the next start"). With every Main row shown (the Graphics driver link, Language, Disc and the
-  two dump rows) the page has fifteen rows, 10 lines apart (`pagePitch`); with Save a picture for a
-  bug report too, sixteen, 10 apart from line 30. ctest `settings_extra` (`testDiscRow`,
+  the next start"). With every Main row shown (the Graphics and Graphics driver links, Language, Disc and the
+  two dump rows) the page has sixteen rows, 10 lines apart (`pagePitch`); with Save a picture for a
+  bug report too, seventeen, 10 apart from line 26 (`MAX_ROWS` is 17, 18 in an rc build, whose
+  eighteen rows are 9 apart: not rendered or checked on a phone). ctest `settings_extra` (`testDiscRow`,
   `testReportPicture`).
 - **Glyphs.** The button pictures are the Japanese sheet's (`Tex_menu01/option.tm2`): rows 155,
   321, 320 and 319 (Cross, Circle, Square, Triangle, 32 x 15 texels shown 30 high), 326, 323, 325

@@ -227,6 +227,20 @@ The Preset on the Display page sets Texture filtering, Full-height picture and F
 page too (Enhanced turns Full pixel on, Original turns it off), but it does not change the rest.
 Changes you make here show in photo mode at once.
 
+## Graphics
+
+This page is in the Options menu, under Effects. It only shows when your copy of the game can
+draw in more than one way; if yours can only draw one way, there is nothing to pick and the page
+is not shown. It has one row.
+
+- **Graphics API** picks what the game draws with, from the next start (the row says so under
+  it). **Automatic** is the normal choice: the game uses Vulkan and, on Windows, switches to
+  Direct3D 12 when Vulkan will not start. The other choices are listed after it, the ones your
+  download has: **Vulkan**, **OpenGL** (for a graphics card or driver that has no Vulkan),
+  **Direct3D 12** and **Direct3D 11** (Windows only; Direct3D 11 has not been tried on a real
+  computer yet, so tell us how it goes). If the choice does not start, pick Automatic again, or
+  delete the `backend` line in `config.toml` ([more](#choosing-the-renderer-on-windows)).
+
 ## Graphics driver
 
 This page is in the Options menu, under Effects. It only exists on Android
@@ -555,6 +569,7 @@ Under `[video]`:
 | `crt = false`, `crt_mode = "consumer"`, `crt_strength = 1.0` | The CRT filter and CRT strength rows. `crt_mode` is `"scanlines"`, `"consumer"`, `"trinitron"`, `"pvm"` or `"shadow"`. `crt_strength` goes from `0.0` to `1.0`. |
 | `crt_scanlines`, `crt_mask`, `crt_halation`, `crt_bloom` | Fine tuning of the CRT filter, each from `0.0` to `1.0`: how strong the dark lines are, how strong the fine pattern of dots or stripes is, how much glow surrounds bright spots and how much bright areas spread softly. A line that is missing, or a negative number, keeps the chosen style's own value. |
 | `crt_curvature` | How much the screen bulges, from `0.0` to `0.25`. Missing keeps the style's own value. |
+| `backend = ""` | The Graphics API row of the Graphics page: empty is Automatic, or `"vulkan"`, `"opengl"`, `"d3d12"` or `"d3d11"` where your download has it. Used from the next start. [Choosing the renderer](#choosing-the-renderer-on-windows). |
 | `gpu_driver = ""` | Android only. The Driver row of the Graphics driver page: empty is the phone's own driver. The game also writes a `gpu_driver_failed` line when a driver did not start. [About Android](ANDROID.md#using-a-different-graphics-driver). |
 | `model_pack = true` | The Model pack row. `false` shows the game's own models. |
 | `dump_models = false` | The Dump models row. Only works with Developer mode on. |
@@ -597,7 +612,9 @@ On Android, under `[paths]`:
 
 ## Choosing the renderer on Windows
 
-The game draws with Vulkan unless you tell it otherwise. To try Direct3D 12 instead, open
+The game draws with Vulkan unless you tell it otherwise. The easy way is the **Graphics API**
+row on the [Graphics page](#graphics) of the Options menu. The file does the same: on Windows, to
+try Direct3D 12 instead, open
 `ico-pc.ini` in the `x64` folder, beside `ico_pc_x64.exe`, with Notepad and add this line
 (or `backend = "d3d12"` under `[video]` in `config.toml`):
 
