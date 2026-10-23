@@ -41,6 +41,11 @@
 #   deps/noto-sans-kr/     Noto Sans KR (SIL OFL 1.1), the variable font the
 #                          port's Korean text subset is made from
 #                          (tools/subset_font_ko.py); never built or shipped
+#   deps/spirv-cross/      SPIRV-Cross (Apache-2.0 OR MIT) built from source at
+#                          the Vulkan SDK tag: the shader toolchain's SPIR-V to
+#                          GLSL translator for the OpenGL backend
+#                          (cmake/IcoShaders.cmake, tools/spirv_to_glsl.py);
+#                          never linked or shipped
 #   deps/libchdr/          libchdr (BSD-3-Clause) source tree with its bundled
 #                          LZMA, miniz and zstd decoders, the .chd disc image
 #                          reader; compiled by port/data/CMakeLists.txt
@@ -52,9 +57,10 @@
 #   SDL3_VERSION, SDL3_SRC_SHA256, SDL3_MINGW_SHA256
 #   DXC_VERSION, DXC_LINUX_FILE, DXC_LINUX_SHA256 (x86-64 release)
 #   DXC_COMMIT, DXC_TAR_SHA256 (arm64 source build)
+#   SPIRV_CROSS_TAG, SPIRV_CROSS_COMMIT, SPIRV_CROSS_TAR_SHA256
 #   LIBMPEG2_TAG, LIBMPEG2_COMMIT, LIBMPEG2_TAR_SHA256
 #   LIBCHDR_TAG, LIBCHDR_COMMIT, LIBCHDR_TAR_SHA256, ZSTD_LICENSE_SHA256
-#   SKIP_SDL3_LINUX=1, SKIP_SDL3_MINGW=1, SKIP_VALIDATION_LAYER=1, SKIP_DXC=1,
+#   SKIP_SDL3_LINUX=1, SKIP_SDL3_MINGW=1, SKIP_VALIDATION_LAYER=1, SKIP_DXC=1, SKIP_SPIRV_CROSS=1,
 #   SKIP_LIBMPEG2=1, SKIP_LIBCHDR=1, SKIP_NOTO_JP=1, SKIP_NOTO_KR=1,
 #   SKIP_APPIMAGE=1
 #   APPIMAGETOOL_VERSION, APPIMAGETOOL_SHA256, APPIMAGE_RUNTIME_VERSION,
@@ -818,5 +824,70 @@ else
     cp "$TMP/NotoSansKR-OFL.txt" "$NOTO_KR_DIR/OFL.txt"
     echo "$NOTO_KR_COMMIT" > "$NOTO_KR_DIR/.ico-release"
     echo "==> Noto Sans KR at $NOTO_KR_DIR"
+fi
+# --- 9. SPIRV-Cross (build tool) ------------------------------------------------
+# KhronosGroup/SPIRV-Cross (Apache-2.0 OR MIT) at the Vulkan SDK tag the
+# headers come from, built from source on the host with the pinned CMake:
+# the spirv-cross CLI that cmake/IcoShaders.cmake (ICO_SHADERS_GLSL,
+# tools/spirv_to_glsl.py) runs to translate every shader's SPIR-V to the
+# GLSL the OpenGL backend compiles. Fetched with git and checked twice, as
+# DXC's source is: the commit, then the SHA-256 of `git archive
+# --format=tar` of it (taken 2026-10-23). The
+# CLI is installed at deps/spirv-cross/bin/spirv-cross with the licence
+# texts beside it (the CLI wants every target compiled in; only GLSL is
+# used). Nothing of it is linked or shipped: the embedded GLSL is the
+# translator's output. docs/THIRD_PARTY.md has the versions.
+SPIRV_CROSS_TAG="${SPIRV_CROSS_TAG:-vulkan-sdk-1.4.363.0}"
+SPIRV_CROSS_COMMIT="${SPIRV_CROSS_COMMIT:-f11ba9f0b21ba8fc15153d50a2a1ae31ab1cf8f7}"
+SPIRV_CROSS_TAR_SHA256="${SPIRV_CROSS_TAR_SHA256:-1a7aaa83f76a93e14c4ba8ec027d009739f9e62b4ec25dd3f245d32bc7a11325}"
+SPIRV_CROSS_DIR="$DEST/spirv-cross"
+SPIRV_CROSS_ID="$SPIRV_CROSS_TAG-$SPIRV_CROSS_COMMIT"
+if [[ "${SKIP_SPIRV_CROSS:-0}" == "1" ]]; then
+    echo "==> SKIP_SPIRV_CROSS=1; not fetching SPIRV-Cross"
+elif stamped "$SPIRV_CROSS_DIR" "$SPIRV_CROSS_ID"; then
+    echo "==> SPIRV-Cross ${SPIRV_CROSS_TAG} already at $SPIRV_CROSS_DIR"
+else
+    for t in git g++; do
+        command -v "$t" >/dev/null 2>&1 || {
+            echo "fetch_deps: $t not found; it builds SPIRV-Cross on this host" >&2
+            exit 1
+        }
+    done
+    echo "==> fetching SPIRV-Cross ${SPIRV_CROSS_TAG} source"
+    src="$TMP/spirv-cross-src"
+    git init -q "$src"
+    git -C "$src" fetch -q --depth 1 \
+        https://github.com/KhronosGroup/SPIRV-Cross "refs/tags/${SPIRV_CROSS_TAG}"
+    got="$(git -C "$src" rev-parse 'FETCH_HEAD^{commit}')"
+    if [[ "$got" != "$SPIRV_CROSS_COMMIT" ]]; then
+        echo "fetch_deps: SPIRV-Cross ${SPIRV_CROSS_TAG} is $got, expected $SPIRV_CROSS_COMMIT" >&2
+        exit 1
+    fi
+    git -C "$src" archive --format=tar -o "$TMP/spirv-cross.tar" "$SPIRV_CROSS_COMMIT"
+    echo "${SPIRV_CROSS_TAR_SHA256}  $TMP/spirv-cross.tar" | sha256sum -c -
+    git -C "$src" -c advice.detachedHead=false checkout -q "$SPIRV_CROSS_COMMIT"
+    gen=()
+    if command -v ninja >/dev/null 2>&1 || [[ -x "$ROOT/.venv/bin/ninja" ]]; then
+        gen=(-G Ninja)
+        PATH="$ROOT/.venv/bin:$PATH"
+    fi
+    "$CMAKE_BIN" -S "$src" -B "$TMP/spirv-cross-build" "${gen[@]}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DSPIRV_CROSS_CLI=ON -DSPIRV_CROSS_STATIC=ON -DSPIRV_CROSS_SHARED=OFF \
+        -DSPIRV_CROSS_ENABLE_TESTS=OFF -DSPIRV_CROSS_ENABLE_C_API=OFF \
+        -DSPIRV_CROSS_SKIP_INSTALL=ON >"$TMP/spirv-cross-configure.log" 2>&1 || {
+        tail -n 40 "$TMP/spirv-cross-configure.log" >&2
+        echo "fetch_deps: SPIRV-Cross configure failed" >&2
+        exit 1
+    }
+    "$CMAKE_BIN" --build "$TMP/spirv-cross-build" --parallel 2 --target spirv-cross
+    rm -rf "$SPIRV_CROSS_DIR"
+    mkdir -p "$SPIRV_CROSS_DIR/bin"
+    cp -L "$TMP/spirv-cross-build/spirv-cross" "$SPIRV_CROSS_DIR/bin/spirv-cross"
+    cp "$src/LICENSE" "$SPIRV_CROSS_DIR/LICENSE"
+    cp "$src/LICENSES/MIT.txt" "$SPIRV_CROSS_DIR/LICENSE-MIT.txt"
+    "$SPIRV_CROSS_DIR/bin/spirv-cross" --help >/dev/null 2>&1 || true
+    echo "$SPIRV_CROSS_ID" > "$SPIRV_CROSS_DIR/.ico-release"
+    echo "==> SPIRV-Cross ${SPIRV_CROSS_TAG} (built from source) at $SPIRV_CROSS_DIR"
 fi
 echo "==> deps done: $DEST"
