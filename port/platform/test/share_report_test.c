@@ -66,7 +66,7 @@ static void expect(const IcoShareReport *r, const char *const *names, int n, con
 
 int main(int argc, char **argv)
 {
-    char root[1024];
+    char root[1000]; /* 24 under s_logs/s_dumps: gcc's format-truncation check */
     snprintf(root, sizeof(root), "%s/share_report_test", argc > 1 ? argv[1] : ".");
     snprintf(s_logs, sizeof(s_logs), "%s/logs", root);
     snprintf(s_dumps, sizeof(s_dumps), "%s/dumps", root);
