@@ -20,6 +20,9 @@ Drives port/render/rd_replay_tool over saved frame dumps (.rddump or the F12
             gradient at each old edge column with its +-16 column
             neighbourhood.  An allow-list json suppresses explained
             differences.
+  compare   render every dump with two backends (default Vulkan and OpenGL) and report,
+            per target, exact / within 1 LSB / mismatch (issue 126, docs/port/TESTING.md);
+            exit 1 on any mismatch.  Local only: the dumps are never committed
   selftest  synthetic checks of the gate-b logic (no dumps, no GPU)
 
 The dump list is a text file of paths, one per line ('#' comments, blank lines
@@ -33,6 +36,10 @@ from one run: a few seconds a dump instead of 18 starts), a few at a time;
 a tool without that switch, or --per-target, renders one process per target.
 The whole run holds the shared replay lock (build-host/tmp/replay.lock, or
 ICO_REPLAY_LOCK) so two runs never compete for the GPU/CPU.
+
+--backend NAME (baseline, gate-a, compare) passes --backend NAME to the replay tool, so the
+gates run on that renderer (vulkan, opengl; the build's default without it); an opengl run
+sets LIBGL_ALWAYS_SOFTWARE=1 and SDL_VIDEO_DRIVER=offscreen unless they are already set.
 
 Exit: 0 pass, 1 mismatch or error, 2 usage, 77 skipped (nothing to run).
 Needs Python 3 and Pillow.  Run it as `python3 -I tools/native_frame_check.py`.
@@ -156,8 +163,24 @@ class Lock:
             self.f.close()
 
 
+BACKEND = None  # --backend: the replay tool's renderer (None: the build's default)
+
+
+def backend_args():
+    return ["--backend", BACKEND] if BACKEND else []
+
+
+def tool_env():
+    """The environment of a tool run: Mesa's software GL on SDL's offscreen driver for opengl."""
+    env = os.environ.copy()
+    if BACKEND in ("opengl", "gl"):
+        env.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
+        env.setdefault("SDL_VIDEO_DRIVER", "offscreen")
+    return env
+
+
 def render_args(setting, target):
-    a = list(SETTINGS[setting])
+    a = list(SETTINGS[setting]) + backend_args()
     if target == PRESENT:
         a += ["--present", PRESENT_BOX[setting]]
     else:
@@ -192,7 +215,8 @@ def has_pass_dump(tool):
 
 def pass_args(setting, outdir):
     """The arguments of one --pass-dump run: the setting, every target, the present box."""
-    return list(SETTINGS[setting]) + ["--pass-dump", outdir, "--present", PRESENT_BOX[setting]]
+    return (list(SETTINGS[setting]) + backend_args()
+            + ["--pass-dump", outdir, "--present", PRESENT_BOX[setting]])
 
 
 def render_pass(tool, dump, setting, targets, keep_dir=None):
@@ -204,7 +228,7 @@ def render_pass(tool, dump, setting, targets, keep_dir=None):
     with tempfile.TemporaryDirectory(prefix="nfc") as td:
         cmd = [tool, dump, "-"] + pass_args(setting, td)
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=1200, env=tool_env())
         except subprocess.TimeoutExpired:
             return {t: {"error": "timeout"} for t in names}
         if r.returncode == EXIT_SKIP:
@@ -232,7 +256,7 @@ def render_one(tool, dump, setting, target, keep_to=None):
         out = os.path.join(td, "o.png")
         cmd = [tool, dump, out] + render_args(setting, target)
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=tool_env())
         except subprocess.TimeoutExpired:
             return {"error": "timeout"}, None
         if r.returncode == EXIT_SKIP:
@@ -455,6 +479,75 @@ def cmd_gate_a(args):
                     print("    (no kept baseline picture: re-run baseline with --ref-dir to get the pixel)")
     print("gate-a: %d targets checked, %d mismatches" % (checked, mism))
     return 1 if mism else 0
+
+
+# -------------------------------------------------------------------- compare
+
+def compare_pictures(pa, pb):
+    """('exact' | 'lsb1' | 'mismatch' | 'size', detail) for two PNG files."""
+    from PIL import Image, ImageChops
+    a = Image.open(pa).convert("RGBA")
+    b = Image.open(pb).convert("RGBA")
+    if a.size != b.size:
+        return "size", "%dx%d against %dx%d" % (a.size + b.size)
+    if a.tobytes() == b.tobytes():
+        return "exact", ""
+    diff = ImageChops.difference(a, b)
+    mx = max(hi for _, hi in diff.getextrema())
+    # the number of pixels that differ in any channel
+    n = sum(1 for px in diff.getdata() if px != (0, 0, 0, 0))
+    box = diff.getbbox()
+    detail = "%d of %d pixels differ, largest channel difference %d, within %s" % (
+        n, a.size[0] * a.size[1], mx, box)
+    return ("lsb1" if mx <= 1 else "mismatch"), detail
+
+
+def cmd_compare(args):
+    """Every dump of the list on two backends; per target exact / within 1 LSB / mismatch."""
+    global BACKEND
+    ctest_guard(args)
+    need_pillow()
+    tool = pick_tool(args)
+    dumps = pick_dumps(args)
+    settings = list(SETTINGS)
+    root = args.keep or tempfile.mkdtemp(prefix="nfc-compare-")
+    dirs = {}
+    res = {}
+    with Lock():
+        for side, name in (("a", args.a), ("b", args.b)):
+            BACKEND = name
+            dirs[side] = os.path.join(root, name)
+            print("rendering %d dumps with %s" % (len(dumps), name), flush=True)
+            res[side] = render_all(tool, dumps, args.jobs, dirs[side], TARGETS, settings)
+    BACKEND = None
+    counts = {"exact": 0, "lsb1": 0, "mismatch": 0, "size": 0, "error": 0}
+    bad = []
+    for p in dumps:
+        n = os.path.basename(p)
+        for s in settings:
+            for t in TARGETS + [PRESENT]:
+                ra = res["a"][n][s][t]
+                rb = res["b"][n][s][t]
+                if "error" in ra or "error" in rb:
+                    kind = "error"
+                    detail = "%s: %s; %s: %s" % (args.a, ra.get("error", "renders"),
+                                                  args.b, rb.get("error", "renders"))
+                elif ra == rb:
+                    kind, detail = "exact", ""  # equal hashes: no need to read the pictures
+                else:
+                    kind, detail = compare_pictures(os.path.join(dirs["a"], n, s, t + ".png"),
+                                                    os.path.join(dirs["b"], n, s, t + ".png"))
+                counts[kind] += 1
+                if kind != "exact":
+                    bad.append((kind, n, s, t, detail))
+    for kind, n, s, t, detail in bad:
+        print("%s %s [%s] %s: %s" % (kind.upper(), n, s, t, detail))
+    total = sum(counts.values())
+    print("compare %s against %s: %d targets: %d exact, %d within 1 LSB, %d mismatch, %d size, %d not rendered"
+          % (args.a, args.b, total, counts["exact"], counts["lsb1"], counts["mismatch"],
+             counts["size"], counts["error"]))
+    print("pictures kept in %s" % root)
+    return 1 if counts["mismatch"] or counts["size"] or counts["error"] else 0
 
 
 # --------------------------------------------------------------------- gate B
@@ -755,6 +848,7 @@ def main():
                        help="skip (77) unless ICO_DUMPS is set (the ctests)")
         p.add_argument("--only", help="only dumps whose file name contains this text")
         p.add_argument("--manifest", default=DEFAULT_MANIFEST)
+        p.add_argument("--backend", help="the replay tool's renderer: vulkan, opengl (default: the build's)")
         p.add_argument("--jobs", type=int, default=int(os.environ.get("ICO_NFC_JOBS", "3")))
         p.add_argument("--per-target", action="store_true",
                        help="one rd_replay_tool process per target, even when the tool has --pass-dump")
@@ -773,14 +867,23 @@ def main():
                    help="Effects on: allow a band of R pixels at each old edge (a kernel radius)")
     p.add_argument("--allow", help="allow-list json: {\"diffs\": [{group, aspect, cols, rows, reason}], "
                                    "\"continuity\": [{group, aspect, edge, reason}]}")
+    p = sub.add_parser("compare", help="render every dump with two backends, per target exact / within 1 LSB / mismatch")
+    common(p)
+    p.add_argument("--a", default="vulkan", help="the reference backend (default vulkan)")
+    p.add_argument("--b", default="opengl", help="the backend compared (default opengl)")
+    p.add_argument("--keep", help="keep both backends' pictures in this folder (default: a temporary one, named at the end)")
     sub.add_parser("selftest", help="synthetic checks of the gate-b logic")
     args = ap.parse_args()
     global PER_TARGET
     PER_TARGET = bool(getattr(args, "per_target", False))
+    global BACKEND
+    BACKEND = getattr(args, "backend", None)
     if args.mode == "baseline":
         rc = cmd_baseline(args)
     elif args.mode == "gate-a":
         rc = cmd_gate_a(args)
+    elif args.mode == "compare":
+        rc = cmd_compare(args)
     elif args.mode == "gate-b":
         rc = cmd_gate_b(args)
     else:
