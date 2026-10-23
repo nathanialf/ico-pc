@@ -114,7 +114,9 @@ says which.
    then OpenGL. `ico_pc: no <failed> device; using <next>`, the window destroyed and made again
    with the flags that backend needs (`SDL_WINDOW_OPENGL` for OpenGL),
    `window: Graphics API <next> (automatic, after <failed>)`, `rd_init` once more. When the last
-   one does not start either, the start ends as any failed start does.
+   one does not start either, the start ends as any failed start does. A backend this start
+   already tried is skipped (`window_fallback_tried`): after a restart whose Direct3D 12 did not
+   start and went on with Vulkan, a Vulkan that fails too goes on to OpenGL.
 3. A restart after a crash or a loss follows the start-up retry orders
    ([PLATFORM.md](PLATFORM.md#diagnostics)): their backend steps go between Vulkan and
    Direct3D 12 only; a run on OpenGL or Direct3D 11 takes the same-backend steps, and the

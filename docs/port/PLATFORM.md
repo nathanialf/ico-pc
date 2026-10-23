@@ -541,7 +541,8 @@ OpenGL (`rhi_backend_name` lists them): `ico_pc: no <failed> device; using <next
 destroyed and made again with the flags the backend needs (`window_flags`; for OpenGL after
 `window_gl_attributes`: double buffer, no depth, stencil or sRGB, 4.3 core),
 `ico_diag_set_startup_retry` told the new backend, then `window: Graphics API <next> (automatic,
-after <failed>)`; when the last one does not start either, the start ends as before. A crash or loss on it takes the orders above with `opengl` as the
+after <failed>)`; when the last one does not start either, the start ends as before. A backend
+the start already tried is skipped, the restart's Direct3D 12 included (`window_fallback_tried`). A crash or loss on it takes the orders above with `opengl` as the
 backend (the `d3d12` and `backend` steps go to Direct3D 12 where the build has it; the steps
 themselves are unchanged: there is no OpenGL or Direct3D 11 step). See
 [BACKENDS.md](BACKENDS.md). The step only grows (the loss steps come after

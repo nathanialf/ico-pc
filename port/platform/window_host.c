@@ -1464,21 +1464,39 @@ static bool window_have_d3d12(void)
    player chose the backend or nothing is left to try. A crash or loss on
    the fallback takes the start-up retry's orders with its name as the
    backend (startup_retry.c, unchanged) */
+static const char *const s_fallbackOrder[] = {"d3d12", "opengl"};
+static unsigned s_fallbackTried; /* bit i: s_fallbackOrder[i] already tried this start */
+
+/* A backend this start has tried outside the fallback (the restart's
+   Direct3D 12, before it goes on with Vulkan): the fallback skips it, so a
+   Vulkan that then fails goes on to OpenGL without starting Direct3D 12
+   again */
+static void window_fallback_tried(const char *name)
+{
+    for (unsigned i = 0; i < sizeof s_fallbackOrder / sizeof s_fallbackOrder[0]; i++) {
+        if (strcmp(s_fallbackOrder[i], name) == 0) {
+            s_fallbackTried |= 1u << i;
+        }
+    }
+}
+
 static bool window_fallback_backend(bool backendExplicit, StartupRetry retry, bool blendExplicit,
                                     const char **backend)
 {
-    static const char *const order[] = {"d3d12", "opengl"};
-    static unsigned next; /* the first of order[] not yet tried this start */
     const char *failed = rhi_backend_kind_name(rhi_backend());
 
     if (backendExplicit) {
         return false;
     }
-    while (next < sizeof order / sizeof order[0]) {
-        const char *cand = order[next++];
+    window_fallback_tried(*backend);
+    for (unsigned i = 0; i < sizeof s_fallbackOrder / sizeof s_fallbackOrder[0]; i++) {
+        const char *cand = s_fallbackOrder[i];
 
-        if (strcmp(cand, *backend) == 0 || !window_have_backend(cand) ||
-            !rhi_create_backend(cand)) {
+        if (s_fallbackTried & (1u << i)) {
+            continue;
+        }
+        s_fallbackTried |= 1u << i;
+        if (!window_have_backend(cand) || !rhi_create_backend(cand)) {
             continue;
         }
         fprintf(stderr, "ico_pc: no %s device; using %s\n", failed,
@@ -2107,6 +2125,7 @@ open_window:
                                              : " with the simpler blending");
         SDL_DestroyWindow(s_window);
         s_window = NULL;
+        window_fallback_tried(backend); /* a Vulkan that fails next goes on to OpenGL */
         backend = "vulkan";
         rhi_create_backend(backend);
         if (retry == STARTUP_RETRY_D3D12) {
