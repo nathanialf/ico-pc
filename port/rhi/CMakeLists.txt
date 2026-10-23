@@ -343,6 +343,8 @@ if(_ico_have_d3d11)
         target_link_libraries(ico_rhi_d3d11 PUBLIC SDL3::SDL3)
     endif()
     message(STATUS "ico: D3D11 RHI built (ico_rhi_d3d11)")
+endif()
+
 # --- ico_rhi_opengl -------------------------------------------------------------
 # gl/gl_glsl.c inflates the shader table's GLSL with miniz (ico_miniz,
 # port/data); d3d12/d3d12_plan.c gives the handle pools and the layout rules.
