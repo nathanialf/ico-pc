@@ -812,9 +812,12 @@ bool rhi_recreate_surface(void *window);
  * until the frames in flight that may reference the handle have retired. */
 RhiBuffer rhi_create_buffer(const RhiBufferDesc *desc);
 void rhi_destroy_buffer(RhiBuffer b);
-void *rhi_map_buffer(
-    RhiBuffer
-        b); /* UPLOAD and READBACK only; persistently mapped, returns the same pointer each time */
+/* UPLOAD and READBACK only; persistently mapped, returns the same pointer
+ * each time.  Direct3D 11 refreshes a READBACK buffer's contents only inside
+ * this call (its shadow is written from the staging copy here), so read a
+ * readback after calling it again past the copy's fence, as every caller
+ * does. */
+void *rhi_map_buffer(RhiBuffer b);
 void rhi_unmap_buffer(RhiBuffer b);
 
 RhiTexture rhi_create_texture(const RhiTextureDesc *desc);

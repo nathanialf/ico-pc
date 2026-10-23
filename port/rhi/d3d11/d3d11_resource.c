@@ -351,6 +351,16 @@ ID3D11Texture2D *d11_readback_texture_target(D11Buffer *dst, const D11Texture *s
                 h, rowPitch);
         return NULL;
     }
+    if (dst->texPending) {
+        /* one pending texture copy a readback buffer: the earlier one's rows
+           are lost (no caller does this on Direct3D 11 today) */
+        static bool s_logged;
+        if (!s_logged) {
+            s_logged = true;
+            D11_LOG("rhi_cmd_copy_texture_to_buffer: a second texture copy into one readback "
+                    "buffer before its map replaces the first (logged once)");
+        }
+    }
     if (dst->stagingTex) {
         D3D11_TEXTURE2D_DESC have;
         memset(&have, 0, sizeof(have));

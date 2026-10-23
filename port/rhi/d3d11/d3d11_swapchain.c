@@ -142,6 +142,18 @@ bool d11_swapchain_create(uint32_t w, uint32_t h, bool vsync)
         d.Flags = d11_swap_flags();
         hr = IDXGIFactory2_CreateSwapChainForHwnd(g_d11.factory, (IUnknown *)g_d11.device,
                                                   g_d11.hwnd, &d, NULL, NULL, &g_d11.swapchain);
+        if (FAILED(hr) && g_d11.frameLatency) {
+            /* the frame latency waitable object is Windows 8.1's (DXGI
+             * 1.3): Windows 8.0 refuses the flag; without it Present waits
+             * for the display */
+            D11_LOG("FLIP_SEQUENTIAL with the frame latency waitable object refused (HRESULT "
+                    "0x%08lx): without it",
+                    (unsigned long)hr);
+            g_d11.frameLatency = 0;
+            d.Flags = d11_swap_flags();
+            hr = IDXGIFactory2_CreateSwapChainForHwnd(g_d11.factory, (IUnknown *)g_d11.device,
+                                                      g_d11.hwnd, &d, NULL, NULL, &g_d11.swapchain);
+        }
     }
     if (!D11_CHECK(hr)) {
         g_d11.swapchain = NULL;

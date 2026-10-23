@@ -739,7 +739,8 @@ orders every read after every write itself). A render pass unbinds every SRV the
 (a texture must not be a shader resource and a target at once), sets the RTVs and the writable or
 read-only DSV, clears (`ClearRenderTargetView`, integer targets with the integer value as on D3D12;
 `ClearDepthStencilView` unscissored) or discards (`DiscardView` for a `DONT_CARE` load: a colour
-target, or a depth target whose aspects are both `DONT_CARE`), and sets the viewport and scissor to
+target, or a depth target whose aspects are both `DONT_CARE`, only when the pass covers the whole
+texture, since `DiscardView` drops the whole view), and sets the viewport and scissor to
 the pass (clamped to the smallest attachment, logged once, as on D3D12); its end unbinds the
 targets so a later pass can sample them. `rhi_cmd_set_pipeline` sets the input layout, topology,
 shaders and the three state objects, the blend constant and stencil reference with them;
@@ -774,8 +775,10 @@ buffer and so is served).
 **Swapchain** (`d3d11_swapchain.c`). As D3D12's (three BGRA8 buffers, the frame latency waitable
 object, tearing without vsync, the frame statistics, the resize at a present after the window's
 size changed, the same `rhi_present_mode_name` rule), with `FLIP_SEQUENTIAL` where `FLIP_DISCARD`
-is refused (Windows 8), logged as `rhi_d3d11: FLIP_DISCARD refused (HRESULT 0x...):
-FLIP_SEQUENTIAL`. Under the flip model buffer 0 is always the one to draw, so it is the one RHI
+is refused (Windows 8 and 8.1), logged as `rhi_d3d11: FLIP_DISCARD refused (HRESULT 0x...):
+FLIP_SEQUENTIAL`; where that is refused too while it asks for the frame latency waitable object
+(a Windows 8.1 flag, so on Windows 8.0), the swapchain is made without it (`rhi_d3d11: FLIP_SEQUENTIAL with the frame
+latency waitable object refused (HRESULT 0x...): without it`) and Present waits for the display. Under the flip model buffer 0 is always the one to draw, so it is the one RHI
 texture; its RTV is made again after every `ResizeBuffers`. Creation logs
 `rhi_d3d11: swapchain WxH, 3 buffers, flip discard|flip sequential, frame latency N (waitable)` or
 `..., no waitable object`.

@@ -161,7 +161,11 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
     for (uint32_t i = 0; i < pass->colorCount; i++) {
         const RhiColorAttachment *a = &pass->color[i];
         if (a->load == RHI_LOAD_DONT_CARE) {
-            ID3D11DeviceContext1_DiscardView(c->ctx1, (ID3D11View *)rtv[i]);
+            /* DiscardView drops the whole view: only when the pass covers
+             * it (a discard is a hint; outside the area must be kept) */
+            if (pass->width >= ct[i]->width && pass->height >= ct[i]->height) {
+                ID3D11DeviceContext1_DiscardView(c->ctx1, (ID3D11View *)rtv[i]);
+            }
             continue;
         }
         if (a->load != RHI_LOAD_CLEAR) {
@@ -191,8 +195,10 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
             ID3D11DeviceContext_ClearDepthStencilView(
                 c->ctx, dt->dsv, flags, pass->depth.clearDepth, pass->depth.clearStencil);
         } else if (!pass->depth.readOnlyDepth && pass->depth.depthLoad == RHI_LOAD_DONT_CARE &&
-                   (!stencil || pass->depth.stencilLoad == RHI_LOAD_DONT_CARE)) {
-            /* both aspects undefined: the whole view may be discarded */
+                   (!stencil || pass->depth.stencilLoad == RHI_LOAD_DONT_CARE) &&
+                   pass->width >= dt->width && pass->height >= dt->height) {
+            /* both aspects undefined and the pass over the whole view: it
+             * may be discarded */
             ID3D11DeviceContext1_DiscardView(c->ctx1, (ID3D11View *)dt->dsv);
         }
     }
