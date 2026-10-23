@@ -917,7 +917,7 @@ so `rhi_create_pipelines` makes its batch on the calling thread (`threads` 1), c
 function about every `RHI_PIPELINE_WAIT_MS`. Mesa's llvmpipe compiles a shader variant for each
 program and state at its first draw and keeps it in Mesa's disk cache (`MESA_SHADER_CACHE_DIR`), so
 on a cold cache the first replays that meet new variants log `rd: slow walk N ms ... the rest N ms`
-(the v0.8.6 GL suite's first run logged 22 to 30 s replays; `rd_gsbase_test` whole takes about
+(a first run on this machine logged 22 to 30 s replays; `rd_gsbase_test` whole takes about
 20 s with an empty cache and 2 to 6 s warm on a shared 4-core machine, Vulkan about 2 s). The walk
 times of llvmpipe's OpenGL also hold its vertex shading and binning, which run inside the draw
 calls (on lavapipe the same work lands in the frame's fence wait): `rd_perf_gl`'s steady replay is

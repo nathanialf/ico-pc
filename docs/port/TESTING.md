@@ -664,7 +664,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   DISPLAY neighbours) runs right after the reduction, before `testReductionUint` makes the
   targets again: a target made again holds whatever the driver's memory held until the next
   replay clears it (lavapipe hands the freed DISPLAY's memory back, llvmpipe's OpenGL gives
-  zeros), so DISPLAY read after that is no longer the frame the presenter showed.
+  zeros), so DISPLAY read after that is not the frame the presenter showed.
 - `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`;
   the scene limit's fallback checks drive the Vulkan backend's `vkr_test_fail_texels_above` and
   are skipped on Direct3D 12, OpenGL and Direct3D 11, which have no such hook);
@@ -1026,6 +1026,11 @@ backends (`--a vulkan --b opengl` by default, passed to the replay tool as `--ba
 prints every target that is not byte for byte equal, then one total line:
 
     compare vulkan against opengl: N targets: E exact, L within 1 LSB, M mismatch, S size, X not rendered
+  On this machine (lavapipe against llvmpipe's OpenGL, Mesa 25.0.7, the 22 dumps of
+  `tools/native_frame_dumps.txt`): 396 targets, 389 exact, 6 within 1 LSB and 1 at 2 levels, all
+  seven in blurred work buffers at the Enhanced 2x setting (`AURA_WORK`, `WORK0`: 1 to 3 pixels
+  of 917504 each), the filtered float paths the two drivers round their own way; every integer
+  path (DISPLAY, SCENE, the UINT targets) is exact. A further difference is a bug to report.
 
 `exact` is the same RGBA bytes, `within 1 LSB` no channel differs by more than 1 (a rounding in a
 filtered path), `mismatch` a larger difference (the line gives the differing pixel count, the
