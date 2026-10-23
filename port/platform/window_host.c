@@ -53,6 +53,7 @@
 #include "window_host.h"
 #include "window_lifecycle.h"
 #include "window_pump_win.h"
+#include "window_switch.h"
 #include "window_video.h"
 #ifdef __ANDROID__
 #include "android/gpu_driver_android.h"
@@ -1198,6 +1199,9 @@ typedef struct PipeScreen {
     int drawn;
 } PipeScreen;
 
+/* the screen's title: the start's, or Apply's switch (ico_window_reopen) */
+static const char *s_pipeTitle = "Starting ICO";
+
 static int pipeline_progress(void *ctx, uint32_t done, uint32_t total);
 static int progress_present_notes(const char *title, const char *phase, int pct, int allowCancel,
                                   const char *note0, const char *note1);
@@ -1438,6 +1442,7 @@ static int window_bisect_step(const char *zip, uint32_t pass, uint32_t number,
 /* the restart step this run is at (startup_retry.h; ico_window_open):
    device_lost_quit's box says when a loss step's run lost the card too */
 static StartupRetry s_retry = STARTUP_RETRY_NONE;
+static bool s_blendExplicit; /* the player chose the blending (ico_window_open) */
 
 /* the build links the backend of that rhi_backend_name */
 static bool window_have_backend(const char *want)
@@ -1861,6 +1866,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                 startup_retry_what(retry));
     }
     s_retry = retry;
+    s_blendExplicit = blendExplicit;
     /* read (main_host.c read it before, for the log): nothing started
        from here inherits it */
     ico_diag_forget_startup_retry_env();
@@ -2422,6 +2428,7 @@ open_window:
             names[n++] = name;
         }
         ui_settings_set_backend_names(names, n);
+        ico_window_switch_install(); /* its Apply row */
     }
     /* Main > Disc, shown with two or more discs' game data */
     ui_settings_set_disc_handler(ico_host_disc_archive_present);
@@ -2463,6 +2470,103 @@ open_window:
     }
     ui_touch_set_source(ico_input_sdl_touch_overlay);
     return 0;
+}
+
+/* Options > Graphics > Apply (window_switch.h): the renderer made again on
+   backend in the process, the game's state kept (rd_suspend, rd_resume).
+   The window is made again (Vulkan, OpenGL and Direct3D windows differ,
+   window_flags) in the same mode, size and place, then what the start does
+   after rd_init (the self-tests; the pipeline set behind "Preparing
+   graphics" unless this run makes them as the frames need them) and the
+   presenter's state (the display clock, the pointer's capture, the touch
+   zones, video_apply); the time is a pause of the host.  1 up; 0 not (the
+   lines above say why; no window then, the next call makes one) */
+int ico_window_reopen(const char *backend)
+{
+    static struct {
+        int mode, w, h, x, y, place, clock;
+    } s_re;
+
+    const Uint64 t0 = SDL_GetTicksNS();
+    int w = 0, h = 0;
+    RdSettings rs;
+
+    if (s_window != NULL) {
+        s_re.mode = window_mode_now();
+        s_re.w = WINDOW_W;
+        s_re.h = WINDOW_H;
+        if (s_re.mode == ICO_WINDOW_WINDOWED) {
+            SDL_GetWindowSize(s_window, &s_re.w, &s_re.h);
+        }
+        s_re.place =
+            s_re.mode == ICO_WINDOW_WINDOWED && SDL_GetWindowPosition(s_window, &s_re.x, &s_re.y);
+        s_re.clock = s_disp.clock == 1;
+        rd_suspend();
+        if (s_disp.clock != 0) {
+            disp_clock_stop();
+        }
+        SDL_DestroyWindow(s_window);
+        s_window = NULL;
+    }
+    if (!rhi_create_backend(backend)) {
+        return 0; /* rhi said why */
+    }
+    s_window = window_create(s_re.mode, s_re.w, s_re.h);
+    if (s_window == NULL) {
+        fprintf(stderr, "window: SDL_CreateWindow: %s\n", SDL_GetError());
+        return 0;
+    }
+    if (s_re.place) {
+        SDL_SetWindowPosition(s_window, s_re.x, s_re.y);
+    }
+    window_attach(s_re.mode);
+    SDL_GetWindowSizeInPixels(s_window, &w, &h);
+    WINDOW_PIX_NOTE(w, h);
+    video_settings(&rs, w, h);
+    rd_set_activity_fn(window_activity);
+    if (!rd_resume(&rs, s_window)) {
+        fprintf(stderr,
+                "window: no usable %s device (rd_init failed; the rhi lines above say why)\n",
+                backend);
+        SDL_DestroyWindow(s_window);
+        s_window = NULL;
+        return 0;
+    }
+    ico_diag_set_pipeline_cache(rhi_pipeline_cache_loaded(), NULL);
+    ico_diag_set_robust_off_default(rhi_limits() != NULL && rhi_limits()->robustDefaultOff);
+    ico_diag_set_startup_retry((int)s_retry, window_have_d3d12(), true, s_blendExplicit, backend);
+    rd_blend_selftest();
+    rd_vuprepass_selftest();
+    if (!rd_pipelines_lazy_on()) {
+        static PipeScreen screen;
+
+        s_pipeTitle = "Changing the graphics";
+        rd_set_pipeline_progress(pipeline_progress, &screen);
+        rd_precreate_pipelines();
+        rd_set_pipeline_progress(NULL, NULL);
+        s_pipeTitle = "Starting ICO";
+        ico_diag_set_pipelines(0, 0, 0);
+        if (!s_quitLatched && !rhi_device_lost()) {
+            (void)rhi_pipeline_cache_save();
+        }
+    }
+    ico_diag_set_vu_prepass(rd_vu_prepass_on());
+    rd_fog_selftest();
+    if (s_captured != ICO_CAPTURE_OFF) {
+        SDL_SetWindowRelativeMouseMode(s_window, true);
+    }
+    touch_layout_update();
+    if (s_re.clock) {
+        disp_clock_start();
+        s_pres.lockN = 0;
+    }
+    s_pres.vblankGone = 0;
+    video_apply(1);
+    window_size_recheck("after the renderer was switched");
+    fprintf(stderr, "window: %dx%d pixels, %s on %s, present mode %s\n", w, h,
+            rhi_backend_kind_name(rhi_backend()), rhi_adapter_name(), rhi_present_mode_name());
+    s_pres.pausePendingNs += SDL_GetTicksNS() - t0;
+    return 1;
 }
 
 /* mode is ICO_CAPTURE_* (mouse_look.h): STICK and DELTA hide and
@@ -3760,6 +3864,9 @@ int ico_window_pump(void)
         s_pres.pumpSettingsMs = (double)(SDL_GetTicksNS() - t1) / 1e6;
         pump_slow("settings (video_apply)", t1);
     }
+    if (ico_window_switch_pump() < 0) {
+        return 0; /* Apply's switch left no renderer */
+    }
     /* a hard camera cut or stage change the game signalled during the
        step that just ran: the frame it recorded is not blended from the
        one before (the step closes the previous frame before the game's
@@ -4084,7 +4191,7 @@ static int pipeline_progress(void *ctx, uint32_t done, uint32_t total)
 #endif
     p->drawn = 1;
     /* 1 from a screen that cannot stop: the device was lost */
-    stop = progress_present_notes("Starting ICO", phase,
+    stop = progress_present_notes(s_pipeTitle, phase,
                                   total > 0 ? (int)((uint64_t)done * 100u / total) : -1, 0,
                                   estimate, once);
     /* the present itself took time: the next draw is measured from its end */
@@ -5897,6 +6004,7 @@ void ico_window_close(void)
     ui_settings_set_steam_handler(NULL);
 #endif
     ui_settings_set_backend_names(NULL, 0);
+    ui_settings_set_graphics_host(NULL);
     ui_settings_set_disc_handler(NULL);
     ui_settings_set_frame_dump_handler(NULL);
     ui_settings_set_share_report_handler(NULL);
