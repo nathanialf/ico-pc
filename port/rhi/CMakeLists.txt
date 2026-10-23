@@ -517,6 +517,36 @@ if(_ico_have_vk)
     endif()
 endif()
 
+# rhi_gl_test: the same cells on OpenGL with the driver's debug output on
+# (headless: a hidden window of the backend's own), the copies the cells do
+# not make, then the swapchain on an SDL offscreen window; exits 77 (skipped)
+# without an OpenGL context. In the container Mesa's llvmpipe
+# (LIBGL_ALWAYS_SOFTWARE=1) on SDL's offscreen driver, which makes its
+# contexts through EGL without a display.
+if(_ico_have_gl)
+    add_executable(rhi_gl_test test/rhi_gl_test.c ${_ico_rhi_test_common})
+    target_include_directories(rhi_gl_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/test/shaders")
+    target_compile_options(rhi_gl_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_link_libraries(rhi_gl_test PRIVATE ico_rhi SDL3::SDL3)
+    ico_copy_sdl3_dll(rhi_gl_test)
+    if(ICO_RUN_TESTS)
+        set(_ico_gl_test_env "LIBGL_ALWAYS_SOFTWARE=1" "SDL_VIDEO_DRIVER=offscreen")
+        if(ICO_SANITIZE MATCHES "address")
+            # the OpenGL driver (Mesa, LLVM) keeps allocations past the
+            # context's end, as the Vulkan driver does (rhi_vk above)
+            list(APPEND _ico_gl_test_env "ASAN_OPTIONS=detect_leaks=0")
+        endif()
+        add_test(NAME rhi_gl COMMAND rhi_gl_test)
+        set_tests_properties(rhi_gl PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_gl_test_env}")
+        # the cells without dual-source blending (cells 0 and 1 keep the clear)
+        add_test(NAME rhi_gl_nodual COMMAND rhi_gl_test)
+        set(_ico_gl_nodual_env ${_ico_gl_test_env} "ICO_GL_FAKE_NO_DUAL=1")
+        set_tests_properties(rhi_gl_nodual PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_gl_nodual_env}")
+    endif()
+endif()
+
 # rhi_d3d12_test.exe: the same cells on D3D12, first on WARP, then on the
 # hardware adapter, then the swapchain on a hidden window. Double-clicked it
 # needs no console and no flags: it writes rhi_d3d12_test.log beside itself
