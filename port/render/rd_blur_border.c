@@ -52,9 +52,17 @@
  * reduction's column 2 blends a quarter of column 3, so its outer columns
  * drawn from SCENE's repeat alone would read column 2 without that
  * quarter.
+ *
+ * On a frame wider than 512 GS pixels the glow's blur leaves WORK1's
+ * column 0 (columns 0..3 at the widest) undrawn and reads it (staticBlur.c
+ * anchors its shrinks at the 4:3 part: rd_internal.h rd__glow_edge_strip),
+ * so it carried an earlier frame's texels (the opening's sun) down the
+ * left edge; glowEdge draws those columns after each first pass as its
+ * first drawn column (docs/port/WORK_BUFFERS.md).
  */
 #include <math.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "rd_replay.h"
@@ -338,6 +346,83 @@ static void drawStrips(Replay *r, const RdFrame *f, const RdCmd *c)
     }
 }
 
+/* ------------------------------------------- the glow's left edge (129) */
+
+/* rd__set_glow_edge_fill (rd_internal.h): the strip drawn */
+static bool s_glowEdge = true;
+
+void rd__set_glow_edge_fill(bool on)
+{
+    s_glowEdge = on;
+}
+
+static uint64_t s_glowEdgeDraws;
+
+uint64_t rd__glow_edge_count(void)
+{
+    return s_glowEdgeDraws;
+}
+
+/* After pass 1 of blur(n) on a wide frame: the WORK1 columns its rect
+ * leaves (rd__glow_edge_strip) drawn as its first drawn column, through
+ * rd__replay_blur_sprite_draw with a record of their own (the recorded
+ * frame untouched), in the same state: so pass 2 reads this frame's glow
+ * there and not what an earlier frame left (issue 129: the sun's shrink
+ * from the opening, carried down the left edge of every room after it).
+ * At 4:3 no sprite qualifies: the PS2's picture, byte for byte. */
+static void glowEdge(Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    if (!s_glowEdge || (c->b[0] != RD_POST_FLARE && c->b[0] != RD_POST_BLOOM) ||
+        !r->st.ds.texEnabled) {
+        return;
+    }
+    const RdTexRec *tx = rd__tex_rec(r->st.tex);
+    if (!tx || tx->kind != RD_TEXKIND_TARGET || tx->view == RD_VIEW_DEPTH) {
+        return;
+    }
+    static RdPostRec s_rec;
+    static RdFrame s_sf;
+    RdPostRec p, strip;
+    memcpy(&p, f->payload + c->u[1], sizeof(p));
+    const RdTargetRec *dst = rd__target_rec(r->st.color), *src = rd__target_rec(tx->target);
+    const int n = rd__glow_edge_strip(c->b[0], &p, (int32_t)r->st.gsW, dst, src, &strip);
+    if (n <= 0) {
+        return;
+    }
+    static uint32_t s_loggedW[4]; /* the first four frame widths, once each */
+    const uint32_t fw = 2u * r->st.gsW;
+    for (int k = 0; k < 4; k++) {
+        if (s_loggedW[k] == fw) {
+            break;
+        }
+        if (s_loggedW[k] == 0) {
+            s_loggedW[k] = fw;
+            char cols[32];
+            if (n > 1) {
+                snprintf(cols, sizeof(cols), "columns 0..%d", n - 1);
+            } else {
+                snprintf(cols, sizeof(cols), "column 0");
+            }
+            rd__log("glow: on a frame %u GS pixels wide the blur's first pass leaves %s's %s "
+                    "undrawn (its rect anchored at the 4:3 part) and its second pass reads "
+                    "them: drawn as column %d of this frame, not kept from an earlier one "
+                    "(issue 129; reported once a width)",
+                    (unsigned)fw, rd__target_name(r->st.color), cols, n);
+            break;
+        }
+    }
+    s_rec = strip;
+    s_rec.lutOffset = ~0u; /* the GS model: a work buffer is at scale 1 */
+    s_sf = *f;
+    s_sf.payload = (uint8_t *)&s_rec;
+    s_sf.payloadSize = (uint32_t)sizeof(s_rec);
+    RdCmd sc = *c;
+    sc.u[1] = 0;
+    sc.u[2] = (uint32_t)sizeof(RdPostRec);
+    rd__replay_blur_sprite_draw(r, &s_sf, &sc);
+    s_glowEdgeDraws++;
+}
+
 /* The reduction's textured sprite with the border open: the game draws it
  * inside a scissor two columns and a few rows in from the frame's edge (the
  * black border), and with the wrap it never sets to CLAMP, so the last
@@ -360,6 +445,7 @@ void rd__blur_post_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     if (!rd__replay_border_open() || c->b[0] != RD_POST_REDUCTION || !r->st.ds.texEnabled) {
         rd__replay_blur_sprite_draw(r, f, c);
+        glowEdge(r, f, c); /* the glow's left edge on a wide frame */
         return;
     }
     const RdTargetRec *tc = rd__target_rec(r->st.color);

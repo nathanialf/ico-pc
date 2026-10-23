@@ -11,6 +11,7 @@
  * replay's command list (rd__replay_cl) on the ring of its frame slot
  * (rd__ring_slot).
  */
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
@@ -611,8 +612,11 @@ void rd__upload_meshes(const RdFrame *f, int keep)
  * Without the named ones a start's first frames, which only keep and fade
  * the frame buffer, show what the driver's memory held before (the last
  * run's picture). */
+static void workClear(void);
+
 void rd__clear_new_targets(void)
 {
+    int named = 0;
     for (int i = 0; i < RD_MAX_TARGETS; i++) {
         RdTargetRec *t = &g_rd.targets[i];
         if (!t->live || !t->clearPending || !t->color.id) {
@@ -646,6 +650,122 @@ void rd__clear_new_targets(void)
         rhi_cmd_end_render_pass(rd__replay_cl());
         if (i >= RD_TARGET_COUNT) {
             g_rdPerf.tempClears++;
+        } else {
+            named++;
         }
+    }
+    /* the named targets made again (a start, a new scale or frame width):
+     * the work buffers hold nothing of an earlier frame from here */
+    static int s_madeLogged;
+    if (named > 0 && s_madeLogged < 8) {
+        s_madeLogged++;
+        rd__log("work targets: %d named targets made and cleared (the frame %u GS pixels wide): "
+                "what the work buffers held from earlier frames is gone (reported for the first "
+                "8)",
+                named, (unsigned)g_rd.gsW);
+    }
+    workClear();
+}
+
+/* ------------------------------------------------------- the work clear */
+
+static struct {
+    int state;    /* -1 the environment not read yet, 0 off, 1 on */
+    uint32_t rgb; /* 0xRRGGBB */
+    uint64_t count;
+} s_wc = {-1, 0, 0};
+
+void rd__set_work_clear(bool on, uint32_t rgb)
+{
+    s_wc.state = on ? 1 : 0;
+    s_wc.rgb = rgb & 0xFFFFFFu;
+}
+
+uint64_t rd__work_clear_count(void)
+{
+    return s_wc.count;
+}
+
+/* ICO_RD_WORK_CLEAR=RRGGBB (six hex digits; anything else leaves it off) */
+static void workClearEnv(void)
+{
+    s_wc.state = 0;
+    const char *e = getenv("ICO_RD_WORK_CLEAR");
+    if (!e || !e[0]) {
+        return;
+    }
+    char *end = NULL;
+    const unsigned long v = strtoul(e, &end, 16);
+    if (!end || *end != '\0' || end - e != 6) {
+        rd__log("work clear: ICO_RD_WORK_CLEAR=%s is not six hex digits (RRGGBB): off", e);
+        return;
+    }
+    s_wc.state = 1;
+    s_wc.rgb = (uint32_t)v;
+}
+
+/* the targets read across frames by design, or the frame's own picture */
+static bool workClearKeeps(int i)
+{
+    return i == RD_TARGET_SCENE || i == RD_TARGET_DISPLAY || i == RD_TARGET_DISPLAY_HELD ||
+           i == RD_TARGET_FEED128 || i == RD_TARGET_FEED_HELD;
+}
+
+/* rd_internal.h rd__set_work_clear: every other live target's colour
+ * cleared to the colour, outside any pass, in the state its passes take */
+static void workClear(void)
+{
+    if (s_wc.state < 0) {
+        workClearEnv();
+    }
+    if (s_wc.state != 1) {
+        return;
+    }
+    const float k[3] = {(float)((s_wc.rgb >> 16) & 0xFF), (float)((s_wc.rgb >> 8) & 0xFF),
+                        (float)(s_wc.rgb & 0xFF)};
+    int named = 0, temps = 0;
+    char names[256];
+    size_t at = 0;
+    names[0] = '\0';
+    for (int i = 0; i < RD_MAX_TARGETS; i++) {
+        RdTargetRec *t = &g_rd.targets[i];
+        if (!t->live || !t->color.id || (i < RD_TARGET_COUNT && workClearKeeps(i))) {
+            continue;
+        }
+        const bool readable = rd__pass_wants_readable(t);
+        rd__transition(rd__replay_cl(), t->color, &t->colorState,
+                       readable ? RHI_STATE_RENDER_TARGET_READ : RHI_STATE_RENDER_TARGET);
+        RhiRenderPassDesc p;
+        memset(&p, 0, sizeof(p));
+        p.color[0].texture = t->color;
+        p.color[0].load = RHI_LOAD_CLEAR;
+        p.color[0].readable = readable;
+        const bool uint = t->format == RHI_FMT_RGBA8_UINT || t->format == RHI_FMT_R8_UINT;
+        for (int c = 0; c < 3; c++) {
+            p.color[0].clear[c] = uint ? k[c] : k[c] / 255.0f;
+        }
+        p.color[0].clear[3] = uint ? 128.0f : 128.0f / 255.0f;
+        p.colorCount = 1;
+        p.width = t->tw;
+        p.height = t->th;
+        rhi_cmd_begin_render_pass(rd__replay_cl(), &p);
+        rhi_cmd_end_render_pass(rd__replay_cl());
+        if (i < RD_TARGET_COUNT) {
+            named++;
+            const char *nm = rd__target_name((uint32_t)i + 1u);
+            const int w = snprintf(names + at, sizeof(names) - at, "%s%s", at ? " " : "", nm);
+            if (w > 0 && (size_t)w < sizeof(names) - at) {
+                at += (size_t)w;
+            }
+        } else {
+            temps++;
+        }
+    }
+    if (s_wc.count++ == 0) {
+        rd__log("work clear: every target but SCENE, DISPLAY and the feedback kept across frames "
+                "(DISPLAY_HELD, FEED128, FEED_HELD) cleared to %06X before every frame "
+                "(ICO_RD_WORK_CLEAR, a diagnostic): %d named (%s) and %d temporaries; a texel a "
+                "frame reads before drawing it shows that colour",
+                (unsigned)s_wc.rgb, named, names, temps);
     }
 }

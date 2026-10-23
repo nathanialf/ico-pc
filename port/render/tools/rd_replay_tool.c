@@ -70,6 +70,16 @@
  *                         pixels no draw covered between drawn ones keep the
  *                         clear and take the fog's colour, as before it (an
  *                         A/B of the filler)
+ *   --work-clear RRGGBB   every target but SCENE, DISPLAY and the feedback
+ *                         kept across frames (DISPLAY_HELD, FEED128,
+ *                         FEED_HELD) cleared to RRGGBB at the head of the
+ *                         replay (rd_upload.c, ICO_RD_WORK_CLEAR for the
+ *                         game): a texel the frame reads before drawing it
+ *                         shows the colour downstream (issue 129's stale
+ *                         column; --target and --pass-dump show where)
+ *   --no-glow-edge        the glow's blur drawn as recorded: on a frame wider
+ *                         than 512 its first pass leaves WORK1's column 0
+ *                         (rd_blur_border.c glowEdge, an A/B of the fix)
  *   --filter F            original, trilinear or anisotropic
  *   --mirror              the mirror mode: UI prims flipped at replay, the
  *                         present flipped (any preset)
@@ -1410,6 +1420,7 @@ int main(int argc, char **argv)
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
                 "[--aspect A] [--resolution WxH|Nx] [--full-height] [--full-pixel] "
                 "[--border-mask] [--water-sharp] [--motion-blur original|smooth] [--no-crack-fill] "
+                "[--work-clear RRGGBB] [--no-glow-edge] "
                 "[--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
@@ -1541,6 +1552,17 @@ int main(int argc, char **argv)
             rd__crack_fill_count_all(true); /* the replay's own count */
         } else if (strcmp(argv[i], "--no-crack-fill") == 0) {
             rd__crack_fill_set_enabled(false);
+        } else if (strcmp(argv[i], "--work-clear") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            const char *v = argv[++i];
+            const unsigned long rgb = strtoul(v, &end, 16);
+            if (!end || *end != '\0' || end - v != 6) {
+                fprintf(stderr, "bad --work-clear (six hex digits, RRGGBB)\n");
+                return 1;
+            }
+            rd__set_work_clear(true, (uint32_t)rgb);
+        } else if (strcmp(argv[i], "--no-glow-edge") == 0) {
+            rd__set_glow_edge_fill(false);
         } else if (strcmp(argv[i], "--keys") == 0) {
             keysCheck = true;
         } else if (strcmp(argv[i], "--pass-times") == 0) {

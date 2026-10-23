@@ -1859,6 +1859,31 @@ void rd__blur_border_verts(const RdScreenVtx v[4], int32_t gsW, RdScreenVtx out[
 void rd__set_blur_border_repeat(bool on);
 uint64_t rd__blur_border_strip_count(void);
 
+/* rd_blur.c, the glow's left edge on a wide frame (issue 129): staticBlur.c
+ * blurPass anchors each shrink at the 4:3 part's left edge (sbShrinkAt), so
+ * on a frame wider than 512 GS pixels pass 1 of blur(n) (WORK0 -> WORK1,
+ * U from 8) starts sbShrinkAt(n + 6) sixteenths right of WORK1's pixel 0
+ * (3..8 at 688..848 wide, up to 50 at 2560) and leaves WORK1's column 0
+ * (columns 0..2 at 2048) undrawn, while pass 2 (WORK1 -> WORK0, its U
+ * moved right as much) weighs that column at 8/16 to 13/16.  Nothing else
+ * of the glow draws it, so it kept what an earlier frame left there: the
+ * sun's shrink (eyeBlur, WORK1's top-left 32 rows), and the glow carried a
+ * strip of an earlier picture down the frame's left edge.  The replay draws
+ * those columns as pass 1's first drawn column (rd_blur_border.c):
+ * rd__glow_edge_strip gives the strip of a FLARE or BLOOM sprite p drawn
+ * from one work buffer (src) into another (dst, gsW GS pixels wide, at
+ * scale 1) with U from 8 and its rect starting 1 .. RD_GLOW_EDGE_MAX16
+ * sixteenths right of the target's pixel 0: out covers pixels 0 .. n - 1
+ * with p's rows and the U fx_sprite_ps computes at pixel n, and n is
+ * returned (0, out untouched, for any other sprite: every sprite of a 4:3
+ * frame).  rd__set_glow_edge_fill(false) (tests, rd_replay_tool
+ * --no-glow-edge) draws the glow as recorded; the count of strips drawn. */
+#define RD_GLOW_EDGE_MAX16 64
+int rd__glow_edge_strip(uint32_t kind, const RdPostRec *p, int32_t gsW, const RdTargetRec *dst,
+                        const RdTargetRec *src, RdPostRec *out);
+void rd__set_glow_edge_fill(bool on);
+uint64_t rd__glow_edge_count(void);
+
 /* rd_blur_border.c, SCENE's outer columns (issue 129, issue 26 at 16:9):
  * where the frame's two outer GS columns a side go (scene: SCENE's record,
  * NULL as no crop): RD_BORDER_CLOSED the GS's own border (Full pixel off at
@@ -3098,6 +3123,16 @@ bool rd__ensure_ring(uint64_t need);
 void rd__upload_dirty_textures(void);
 void rd__upload_meshes(const RdFrame *f, int keep);
 void rd__clear_new_targets(void);
+/* rd_upload.c, the work clear (a diagnostic: ICO_RD_WORK_CLEAR=RRGGBB in
+ * the environment, rd_replay_tool --work-clear RRGGBB): at the head of
+ * every replay, after rd__clear_new_targets, the colour of every live
+ * target but SCENE, DISPLAY and the across-frames feedback (DISPLAY_HELD,
+ * FEED128, FEED_HELD) cleared to RRGGBB with alpha 0x80, so a texel a
+ * frame reads before any of its draws wrote it shows that colour
+ * downstream.  rd__set_work_clear overrides the environment (on, rgb);
+ * rd__work_clear_count the replays it cleared at. */
+void rd__set_work_clear(bool on, uint32_t rgb);
+uint64_t rd__work_clear_count(void);
 /* Binds u at group index `group` with its offset (rhi_cmd_set_bind_group_offsets). */
 void rd__bind_uniform(RhiCommandList cl, uint32_t group, RdUniform u);
 /* FrameCB for the presenter and posts (group 0). */

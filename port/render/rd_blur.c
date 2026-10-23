@@ -243,3 +243,35 @@ void rd__blur_border_verts(const RdScreenVtx v[4], int32_t gsW, RdScreenVtx out[
         }
     }
 }
+
+/* The glow's left edge on a wide frame (issue 129, rd_internal.h).  At
+ * 4:3 the anchor shift is 0 and x0 is the target's pixel 0, so nothing is
+ * drawn; the PS2's own deltas at the left edge (the depth of field's
+ * border, the aura's taps) belong to other kinds.  The strip covers X from
+ * pixel 0's coordinate to x0, the pixels the sprite leaves, with u0 = u1 =
+ * U(first covered pixel): the texels and 4-bit weights that column was
+ * drawn with, so its bytes; V is the sprite's, its rows untouched. */
+int rd__glow_edge_strip(uint32_t kind, const RdPostRec *p, int32_t gsW, const RdTargetRec *dst,
+                        const RdTargetRec *src, RdPostRec *out)
+{
+    if ((kind != RD_POST_FLARE && kind != RD_POST_BLOOM) || gsW < 2 || !dst || !src || dst == src ||
+        !rd__work_class(dst) || !rd__work_class(src) || dst->sx != 1.0f || dst->sy != 1.0f ||
+        dst->ox != 0.0f || p->uv[0] != 8.0f) {
+        return 0;
+    }
+    const int32_t o = borderOrigin(gsW);
+    const int32_t x0 = (int32_t)p->rect[0], x1 = (int32_t)p->rect[2];
+    const int32_t u0 = (int32_t)p->uv[0], u1 = (int32_t)p->uv[2];
+    const int32_t d = x0 - o;
+    if ((float)x0 != p->rect[0] || (float)x1 != p->rect[2] || (float)u1 != p->uv[2] || d <= 0 ||
+        d > RD_GLOW_EDGE_MAX16 || x1 <= x0 + 16) {
+        return 0; /* not pass 1 of blur(n) moved off pixel 0 by the anchor */
+    }
+    const int32_t n = (d + 15) / 16; /* pixels 0 .. n - 1 left */
+    const int32_t u = borderU(o + 16 * n, x0, x1, u0, u1);
+    *out = *p;
+    out->rect[0] = (float)o;
+    out->rect[2] = (float)x0;
+    out->uv[0] = out->uv[2] = (float)u;
+    return (int)n;
+}
