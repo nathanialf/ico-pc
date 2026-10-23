@@ -197,8 +197,11 @@ transforms a position: a GS X is drawn where the game put it, at every aspect
 **`DF_*` flags** (DrawCB `g_mode.x`): textured, DECAL, TCC, FBA, PABE, the FIX factor, the
 premultiplied additive forms, DATE and DATM, the AA1 coverage alpha, the TEXA sampler state,
 `Cd * c1` pipelines, the two `_nodual` passes, `DF_GS_LOD` (sampling at the GS's level from Q), the
-destination read's write mask (bits 19..22), `DF_PLANE` (a clip plane) and `DF_NEAREST`
-(`port/shaders/common.hlsli`).
+destination read's write mask (bits 19..22), `DF_PLANE` (a clip plane), `DF_NEAREST`, and
+`DF_AA1_MSB_SET` / `DF_AA1_MSB_CLEAR` (bits 27 and 28: `sprite_aa1_ps` keeps only the fragments
+whose written alpha, As with FBA's MSB, has its MSB set, or only those whose MSB is clear: the two
+draws of a PRIM.AA1 primitive under DATE, `port/render/rd_replay_aa1.inc` `aa1DatePlan`; a
+uniform, so no key of its own) (`port/shaders/common.hlsli`).
 
 **Functions.** Vector forms of the GS arithmetic (`gs_texture_function`, `gs_texa_expand`,
 `gs_bilerp`, `gs_texa_texture`: the GS's bilinear filter with TEXA applied per texel first,

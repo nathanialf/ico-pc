@@ -610,9 +610,19 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   so every fragment adds 48) over SCENE: a four-vertex strip with an acute corner and an
   octagonal ring of eight quads, at alpha 0xFF and again at 0x80, and checks every pixel's red is
   48 times the fragments a C model of PCSX2's `DrawTriangle` and `DrawEdgeTriangle` draws there
-  (the GS's fill for the interiors), the alpha 0xFF wherever one lands, and the As of the single
-  edge pixels at 0x80 within 1; it prints the pixels with 1, 2 and 3 or more fragments and how
-  many fragments the GS's own DATE would reject at 0x80 (DIVERGENCES.md VD-17).
+  (the GS's fill for the interiors) and its DATE keeps, the destination alpha tested as each
+  fragment is written (`GSDrawScanline.cpp`), the alpha 0xFF wherever one lands, the As of the
+  single edge pixels at 0x80 and the alpha of the last kept fragment within 1, and that the
+  model's DATE rejects more than 400 fragments at 0x80 (473 at 450 pixels; DIVERGENCES.md VD-17:
+  the port draws the strips primitive by primitive through DATE's stencil bit). It runs on the
+  device's own DATE path and, where the device has local read and the blend is not the storage
+  read, again through the stencil bit (SCENE made with DATE's local read, setups counted, no
+  snapshot), the DATE stencil draws counted both times; it prints the pixels with 1, 2 and 3 or
+  more fragments and the fragments the model's DATE rejects and keeps.
+  `rd_state`'s `aa1 DATE pairs` case checks the ripple state's pairs are enumerated: TEST0 and
+  TEST0_SET (Z write on and off) in the screen set, TEST1 and TEST1_CLR in DATE's set with
+  `dateStencil` and not without; its tiler set allows DATE's screen twins 224 + 12 and counts one
+  setup key of its own (the CLEAR key is the desktop set's).
   Its VU seams case (`testVuSeams`, at Original 1x and 4x and Enhanced 2.25x and 4x) counts the
   clear's pixels along edges two draws share: S1 a code-32 triangle beside a GIF one, S2 two
   meshes 0.01 GS pixel apart, S3 a code-36 cut triangle beside a kicked one, S4 8 x 8 quads under

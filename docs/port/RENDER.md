@@ -435,7 +435,7 @@ reference 0x40, read mask 0x40, no write) with `DF_DATE` off (`rd__date_stencil_
 pass's own record (the same pass, target and write serial, the area held), so it is written again
 exactly where a snapshot would be retaken, and the open screen run is drawn before the read.
 Within one draw the alpha is the one before its first primitive: the snapshot's semantics, the
-same bytes. Not inside the MSAA epoch, under the exact blend's storage read, on another target or
+same bytes (not PRIM.AA1: **DATE and AA1**). Not inside the MSAA epoch, under the exact blend's storage read, on another target or
 without a depth: the snapshot. The DATE self-test decides per device ([The fog path and its
 self-test](#the-fog-path-and-its-self-test)) (`port/render/rd_replay.c` (`dateStencilFor`,
 `prepareDrawEx`, `bindDrawEx`); `port/render/rd_replay_tiler.c` (`rd__replay_date_take`);
@@ -444,19 +444,21 @@ self-test](#the-fog-path-and-its-self-test)) (`port/render/rd_replay.c` (`dateSt
 (`date_clear_ps`, `date_stencil_ps`)). `--stats`: `DATE snapshots N, DATE stencil draws M (K
 setups)`.
 
-**DATE and AA1.** The snapshot's semantics differ from the GS's where a draw's primitives overlap,
-and an AA1 triangle strip is such a draw: on the GS the fringe a triangle draws along an edge it
-shares with the next leaves alpha below 0x80 (its coverage), so under DATM 1 the next triangle's own
-pixels on that row fail DATE and the row keeps the fringe alone; the port tests every primitive
-against the alpha before the draw and draws both (the drained room's ripples, `puddle.c`: ALPHA
-`Cs * FIX + Cd`, FIX 0x60, DATE DATM 1, Z write, so the zwrite split draws the interiors and then
-the fringes with no retake between). ctest `rd_pixel` (aa1 wedge) prints how many fragments the GS's
-own DATE would reject in its strip at alpha 0x80. Three exact forms exist and none is taken
-(DIVERGENCES.md VD-17): a snapshot per triangle (a pass break and a copy per triangle, hundreds per
-ripple); on the stencil path a two-draw variant whose fringe draw writes the DATE bit as it goes (a
-stencil write per fringe fragment and keys of their own); under the exact blend's storage read a
-test of the live `Cd.a` in the shader (that mode only, every DATE key). A retake between the
-interiors and the fringes alone is no closer: it fixes neither shared edge's order.
+**DATE and AA1.** The GS tests DATE against the alpha as it writes each pixel (PCSX2
+`GSDrawScanline.cpp`), so in an AA1 strip under DATM 1 the edge pixel a triangle writes along a
+shared edge (alpha below 0x80) turns away the next triangle's pixel there; testing every primitive
+against the alpha before the draw added both rows (the ripples' bright outlines, `puddle.c`). A
+PRIM.AA1 draw under DATE that writes alpha is drawn primitive by primitive inside its pass, each
+primitive as two draws, the fragments that keep the alpha's MSB as DATE wants it and then those
+that change it (`DF_AA1_MSB_SET`, `DF_AA1_MSB_CLEAR`), whose stencil carries bit 6 to the next; a
+triangle's split again by Z write: up to four draws a triangle, at most 320 for the 223424 dump's
+ripple command 4:147, no pass break. The stencil path keeps bit 6 the MSB (`TEST1` and
+`TEST1_CLR`, `TEST0` and `TEST0_SET`); the snapshot path keeps `DF_DATE`, clears the bit over the
+area first (`rd__replay_date_clear`) and marks the texels the draw changed (`TEST0`,
+`TEST0_SET`). The storage read, the MSAA epoch and a depth not of the target's size keep one test
+per draw, logged (`aa1: a DATE draw keeps DATE's one test per draw ...`; the first command drawn
+so: `aa1: a DATE draw's primitives drawn one at a time ...`) (`port/render/rd_replay_aa1.inc`
+(`aa1DatePlan`, `aa1DateDraw`), which says why it is exact; ctest `rd_pixel` aa1 wedge).
 
 **The fog's table.** The replay's upload phase copies the first `RD_POST_FOG` record's 256-entry
 table of the lists it draws into the LUT texture, outside any pass; `doFog` copies a table only
@@ -2309,8 +2311,8 @@ PCSX2's hardware renderer draws the edge pixels only on a device whose features 
 (`GSRendererHW.cpp`: `draw_aa1 = !no_rt && PRIM->AA1 && features.aa1`, and `aa1` needs feedback
 loops); the devices' code is not in the tree, and the investigation of the issue found it off on
 Vulkan and Direct3D, where a ring looks thinner and fainter than the GS's. The renderer of the
-reporter's PCSX2 picture is not known. The order of DATE inside the strip is a second, smaller
-difference (**DATE and AA1**, DIVERGENCES.md VD-17).
+reporter's PCSX2 picture is not known. The port's doubled rows along the shared edges were DATE's
+order inside the strip (**DATE and AA1**, DIVERGENCES.md VD-17).
 
 ## The fog path and its self-test
 
