@@ -9,6 +9,9 @@
 #   vu1            the VU1 program shaders against port/render/vu1_ref: hand
 #                  traces (CPU), probe and rendered strips (Vulkan; exit 77
 #                  without a device once the CPU part passes)
+#   shaders_glsl   every entry with GLSL compiled and linked by the OpenGL
+#                  backend with the debug output on (exit 77 without an
+#                  OpenGL context or a table without GLSL)
 add_executable(shaders_table_test shaders_table_test.c)
 target_compile_options(shaders_table_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(shaders_table_test PRIVATE ico_shaders)
@@ -38,6 +41,13 @@ if(TARGET ico_rhi_vk)
     ico_copy_sdl3_dll(vu1_test)
 endif()
 
+if(TARGET ico_rhi_opengl)
+    add_executable(shaders_glsl_test shaders_glsl_test.c)
+    target_compile_options(shaders_glsl_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_link_libraries(shaders_glsl_test PRIVATE ico_shaders ico_rhi SDL3::SDL3)
+    ico_copy_sdl3_dll(shaders_glsl_test)
+endif()
+
 if(ICO_RUN_TESTS)
     add_test(NAME shaders_table COMMAND shaders_table_test)
     add_test(NAME gs_math COMMAND gs_math_test)
@@ -65,6 +75,16 @@ if(ICO_RUN_TESTS)
         set(_env_mali ${_env} "ICO_VK_FAKE_LIMITS=mali")
         set_tests_properties(shaders_pixel_mali PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_env_mali}")
+    endif()
+    if(TARGET shaders_glsl_test)
+        # Mesa's llvmpipe on SDL's offscreen driver in the container
+        set(_env_glsl "LIBGL_ALWAYS_SOFTWARE=1" "SDL_VIDEO_DRIVER=offscreen")
+        if(ICO_SANITIZE MATCHES "address")
+            list(APPEND _env_glsl "ASAN_OPTIONS=detect_leaks=0")
+        endif()
+        add_test(NAME shaders_glsl COMMAND shaders_glsl_test)
+        set_tests_properties(shaders_glsl PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_env_glsl}")
     endif()
     if(TARGET vu1_test)
         add_test(NAME vu1 COMMAND vu1_test)
