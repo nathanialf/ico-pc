@@ -254,8 +254,8 @@ static void sceneRepeat(Replay *r)
         [RD_BORDER_CLOSED] = "the border closed on a wide frame: the glow reads them",
         [RD_BORDER_OPEN] = "the border open: the glow and the present read them",
         [RD_BORDER_CROPPED] = "the frame cropped: the glow reads them",
-        [RD_BORDER_WINDOW] = "Full pixel's window holds texels of them: the glow and the "
-                             "present read them",
+        [RD_BORDER_WINDOW] = ("Full pixel's window holds texels of them: the glow and the "
+                              "present read them"),
     };
     static bool logged[4]; /* once a run for each place */
     if (state >= 0 && state < 4 && !logged[state]) {
