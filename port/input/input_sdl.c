@@ -266,18 +266,22 @@ static const IcoTouchEdits *touch_edits_now(void)
     return s_touchEdit.active ? &s_touchEdit.work : ico_input_live_touch_edits();
 }
 
-/* start-up: one line when the file had edits (none for an untouched config) */
+/* start-up: one line when the file had edits (none for an untouched config);
+   how many of them lie past the safe area (a negative offset: clamped to the
+   window, touch_edit.h ico_touch_edit_outside), the rest clamped inside it as
+   v0.8.4 clamped every edit */
 static void touch_edits_log(void)
 {
     const IcoTouchEdits *e = ico_input_live_touch_edits();
     char list[64] = "";
-    int total = 0, r, c;
+    int total = 0, outside = 0, r, c;
 
     for (r = 0; r < ICO_TOUCH_POSTURES; r++) {
         int n = 0;
 
         for (c = 0; c < ICO_TOUCH_CTL_COUNT; c++) {
             n += e->ctl[r][c].set != 0;
+            outside += ico_touch_edit_outside(&e->ctl[r][c]);
         }
         if (n > 0) {
             const size_t used = strlen(list);
@@ -288,7 +292,10 @@ static void touch_edits_log(void)
         }
     }
     if (total > 0) {
-        fprintf(stderr, "touch: layout edits: %d controls in %s\n", total, list);
+        fprintf(stderr,
+                "touch: layout edits: %d controls in %s (%d past the safe area, the rest kept "
+                "inside it)\n",
+                total, list, outside);
     }
 }
 

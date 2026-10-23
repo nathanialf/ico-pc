@@ -250,6 +250,16 @@ void ico_touch_edit_box_size(const IcoTouchLayout *l, int ctl, const IcoTouchCtl
    clamp the edits get). 1 when it is clear of the band and inside; 0 when
    only inside (or centred on an axis the region is too small for). */
 int ico_touch_edit_clamp(const IcoTouchLayout *l, float *cx, float *cy, float w, float h);
+/* 1 when the set edit c has an offset past the safe area (a negative dx on
+   an L or R anchor, a negative dy on a T or B one): only such a control is
+   clamped to l's bounds; every other (the v0.8.4 forms, whose offsets were
+   never negative) is clamped inside the region and out of its own band as
+   v0.8.4 clamped it, so an older layout file renders as it did. */
+int ico_touch_edit_outside(const IcoTouchCtlEdit *c);
+/* ico_touch_edit_clamp with that choice for the edit c (the clamp
+   ico_touch_layout_edits gives it; the editor's own view of the control). */
+int ico_touch_edit_clamp_ctl(const IcoTouchLayout *l, const IcoTouchCtlEdit *c, float *cx,
+                             float *cy, float w, float h);
 
 /* The toolbar's and confirm strip's hit boxes for a layout
    (ico_touch_edit_toolbar), and the hint line's box (ico_touch_edit_hint_

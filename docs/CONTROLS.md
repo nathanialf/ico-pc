@@ -390,9 +390,14 @@ size setting still makes all of it bigger or smaller.
 On a phone with a camera hole or rounded corners, the game's own
 arrangement keeps its buttons clear of them, but Edit layout lets you drag
 a button anywhere on the screen, under the camera hole or into the rounded
-corner beside it, and the dots you snap to reach the glass edge too. The
-buttons you have not moved stay where the game puts them. The keys along
-the top and the tips at the bottom stay clear of the hole.
+corner beside it, and the dots you snap to reach the glass edge too. A
+button goes under the hole once its middle is past the edge of the part of
+the screen the game keeps its own buttons in; let go of it with its middle
+still inside that part and it stays wholly inside it, against the edge. On
+a gamepad, pressing towards the edge once more takes a button there past
+it. The buttons you have not moved, and those you placed before this
+version, stay where the game puts them. The keys along the top and the
+tips at the bottom stay clear of the hole.
 
 A gamepad works in the editor as well, with the touch screen or without
 it: L1 and R1 pick the next or the last button, the D-pad or the left

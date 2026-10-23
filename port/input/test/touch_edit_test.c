@@ -1812,9 +1812,13 @@ static void test_cutout(void)
     ico_touch_edit_hint_rect(&base, &hint);
     CHECK(tb[0].x >= 160.0f && hint.x >= 160.0f && right_of(&hint) <= 2370.0f);
 
-    /* an offset from the left edge past the region: under the hole */
+    /* a button snapped against the safe edge (v0.8.4's "l0"): flush with
+       the region, not under the hole; an offset past it: under the hole */
     ico_touch_edits_defaults(&e);
     set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_CROSS, "l0 t20");
+    l = ico_touch_layout_edits(2400, 1080, hole, ICO_TOUCH_MEDIUM, &env, &e);
+    CHECK(near_(l.button[ICO_TOUCH_B_CROSS].rect.x, l.region.x, 0.02f));
+    set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_CROSS, "l-0.5 t20");
     l = ico_touch_layout_edits(2400, 1080, hole, ICO_TOUCH_MEDIUM, &env, &e);
     CHECK(l.button[ICO_TOUCH_B_CROSS].rect.x < l.region.x - 1.0f);
     CHECK(l.button[ICO_TOUCH_B_CROSS].rect.x >= -0.02f);
@@ -1884,6 +1888,38 @@ static void test_cutout(void)
     CHECK(ed.refused == 0 && cross->ax == ICO_TOUCH_ANCHOR_L && cross->dx < 0.0f);
     CHECK(g_l.button[ICO_TOUCH_B_CROSS].rect.x >= -0.02f &&
           g_l.button[ICO_TOUCH_B_CROSS].rect.x < 160.0f);
+    /* a drop with the box over the inset but its centre inside the safe
+       area: the offsets at or inside it, so the region's clamp (flush) */
+    ed.work.snap = 0;
+    fe(&ed, 4, cx_of(&g_l, ICO_TOUCH_B_CROSS), cy_of(&g_l, ICO_TOUCH_B_CROSS), ICO_TOUCH_DOWN);
+    etick(&ed, 0);
+    fe(&ed, 4, 200.0f, 600.0f, ICO_TOUCH_MOVE);
+    etick(&ed, 0);
+    fe(&ed, 4, 200.0f, 600.0f, ICO_TOUCH_UP);
+    etick(&ed, 0);
+    CHECK(ed.refused == 0 && cross->ax == ICO_TOUCH_ANCHOR_L && cross->dx >= 0.0f);
+    CHECK(near_(g_l.button[ICO_TOUCH_B_CROSS].rect.x, g_l.region.x, 0.05f));
+    ico_touch_edit_end(&ed, 0);
+
+    /* the gamepad: a nudge out from the safe edge goes past it, under the
+       hole */
+    ico_touch_edits_defaults(&live);
+    set_edit(&live, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_CROSS, "l0 t40");
+    ico_touch_edit_begin(&ed, &live, ICO_TOUCH_RULE_FULL);
+    etick(&ed, 0);
+    cross = &ed.work.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_CROSS];
+    CHECK(near_(g_l.button[ICO_TOUCH_B_CROSS].rect.x, g_l.region.x, 0.02f));
+    etick(&ed, ICO_PAD_R1);
+    etick(&ed, 0);
+    etick(&ed, ICO_PAD_R1);
+    etick(&ed, 0);
+    CHECK(ed.selected == ICO_TOUCH_CTL_CROSS);
+    etick(&ed, ICO_PAD_LEFT);
+    etick(&ed, 0);
+    CHECK(ed.refused == 0 && cross->ax == ICO_TOUCH_ANCHOR_L && cross->dx < 0.0f);
+    CHECK(g_l.button[ICO_TOUCH_B_CROSS].rect.x < g_l.region.x - 1.0f &&
+          g_l.button[ICO_TOUCH_B_CROSS].rect.x >= -0.02f);
+    ico_touch_edit_end(&ed, 0);
     reset_screen(1920, 1080, NULL);
 
     /* SPLIT with a top inset: the band carried out to the window's top; a
@@ -1938,6 +1974,133 @@ static void test_cutout(void)
     }
 }
 
+/* v0.8.4's layout files (every offset at or inside the safe area: its
+   editor snapped the clamped offset and never wrote one below 0) render as
+   v0.8.4 rendered them on a screen with insets: each control's centre from
+   the region's anchor edges, clamped inside the region (the formulas the
+   v0.8.4 tests asserted, with the region's edges for the window's), the
+   moved stick's area cut to the region, the look pad the region at most,
+   a SPLIT's controls beside the region's own band; only an offset below 0
+   is past the safe area (ico_touch_edit_outside). */
+static void check_v084_box(const IcoTouchLayout *l, const IcoTouchEdits *e, int ctl, int z)
+{
+    const IcoTouchCtlEdit *c = &e->ctl[l->rule][ctl];
+    const IcoTouchRect R = l->region;
+    const float q = l->unit;
+    float w, h, cx, cy;
+
+    ico_touch_edit_box_size(l, ctl, c, &w, &h);
+    cx = c->ax == ICO_TOUCH_ANCHOR_L ? R.x + c->dx * q : R.x + R.w - c->dx * q;
+    cy = c->ay == ICO_TOUCH_ANCHOR_T ? R.y + c->dy * q : R.y + R.h - c->dy * q;
+    cx = cx < R.x + 0.5f * w         ? R.x + 0.5f * w
+         : cx > R.x + R.w - 0.5f * w ? R.x + R.w - 0.5f * w
+                                     : cx;
+    cy = cy < R.y + 0.5f * h         ? R.y + 0.5f * h
+         : cy > R.y + R.h - 0.5f * h ? R.y + R.h - 0.5f * h
+                                     : cy;
+    if (!near_(cx_of(l, z), cx, 0.02f) || !near_(cy_of(l, z), cy, 0.02f)) {
+        fprintf(stderr, "  v0.8.4 form: %s at (%.2f, %.2f), (%.2f, %.2f) wanted\n",
+                ico_touch_ctl_name(ctl), (double)cx_of(l, z), (double)cy_of(l, z), (double)cx,
+                (double)cy);
+        CHECK(0);
+    }
+    CHECK(rect_inside(&l->button[z].rect, &R));
+}
+
+static void test_v084_forms(void)
+{
+    static const IcoTouchInsets kIn[] = {
+        {160.0f, 0.0f, 30.0f, 0.0f}, /* a camera hole on the left, a round right edge */
+        {100.0f, 0.0f, 0.0f, 0.0f},  /* a notch */
+        {0.0f, 90.0f, 0.0f, 40.0f},  /* top and bottom */
+        {120.0f, 60.0f, 80.0f, 30.0f},
+    };
+
+    static const struct {
+        int ctl, z;
+        const char *text;
+    } kEd[] = {
+        {ICO_TOUCH_CTL_CROSS, ICO_TOUCH_B_CROSS, "l0 t20"},  /* snapped at the safe edge */
+        {ICO_TOUCH_CTL_CIRCLE, ICO_TOUCH_B_CIRCLE, "r4 b0"}, /* flush, as v0.8.4 wrote it */
+        {ICO_TOUCH_CTL_SQUARE, ICO_TOUCH_B_SQUARE, "l12.5 t30"},
+        {ICO_TOUCH_CTL_R1, ICO_TOUCH_B_R1, "r2.5 t3 s0.70"},
+        {ICO_TOUCH_CTL_L1, ICO_TOUCH_B_L1, "l0 t0"},
+        {ICO_TOUCH_CTL_SELECT, ICO_TOUCH_B_SELECT, "l40 b2 s1.50"},
+        {ICO_TOUCH_CTL_START, ICO_TOUCH_B_START, "r0 b500"},
+    };
+
+    const float k450 = ico_touch_px_per_mm(450.0f), k420 = 420.0f / 25.4f;
+    IcoTouchEnv env = env_of(k450, ICO_TOUCH_FOLD_NONE, 0, 0, 0, 0, 0, 0);
+    IcoTouchEdits e;
+    IcoTouchLayout l;
+    IcoTouchCtlEdit c;
+    unsigned i, j;
+    float q;
+
+    for (i = 0; i < sizeof(kIn) / sizeof(kIn[0]); i++) {
+        /* test_clamp_region_and_band's edits: against the region's edges */
+        ico_touch_edits_defaults(&e);
+        set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_CROSS, "r0 b0");
+        set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_SELECT, "l0 t0 s1.60");
+        set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_STICK, "l0 b0 s1.60");
+        set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_LOOK, "l500 t500 w500 h500");
+        l = ico_touch_layout_edits(2400, 1080, kIn[i], ICO_TOUCH_MEDIUM, &env, &e);
+        q = l.unit;
+        CHECK(near_(right_of(&l.button[ICO_TOUCH_B_CROSS].rect), right_of(&l.region), 0.02f));
+        CHECK(near_(bottom_of(&l.button[ICO_TOUCH_B_CROSS].rect), bottom_of(&l.region), 0.02f));
+        CHECK(near_(l.button[ICO_TOUCH_B_SELECT].rect.x, l.region.x, 0.02f) &&
+              near_(l.button[ICO_TOUCH_B_SELECT].rect.y, l.region.y, 0.02f));
+        CHECK(near_(l.stickHomeX, l.region.x + 17.6f * q, 0.02f) &&
+              near_(l.stickHomeY, bottom_of(&l.region) - 17.6f * q, 0.02f));
+        CHECK(same_rect(l.lookArea, l.region) ||
+              (near_(l.lookArea.x, l.region.x, 0.02f) && near_(l.lookArea.w, l.region.w, 0.02f) &&
+               near_(l.lookArea.h, l.region.h, 0.02f)));
+        check_inside(&l);
+        /* one control at a time, the formulas */
+        for (j = 0; j < sizeof(kEd) / sizeof(kEd[0]); j++) {
+            ico_touch_edits_defaults(&e);
+            set_edit(&e, ICO_TOUCH_RULE_FULL, kEd[j].ctl, kEd[j].text);
+            CHECK(!ico_touch_edit_outside(&e.ctl[ICO_TOUCH_RULE_FULL][kEd[j].ctl]));
+            l = ico_touch_layout_edits(2400, 1080, kIn[i], ICO_TOUCH_MEDIUM, &env, &e);
+            check_v084_box(&l, &e, kEd[j].ctl, kEd[j].z);
+            check_inside(&l);
+        }
+    }
+
+    /* SPLIT with a notch: beside the region's band, inside the region */
+    env = env_of(k420, ICO_TOUCH_FOLD_VERTICAL, 0, 0, 1104.0f, 0.0f, 0.0f, 1840.0f);
+    ico_touch_edits_defaults(&e);
+    set_edit(&e, ICO_TOUCH_RULE_SPLIT, ICO_TOUCH_CTL_CROSS, "l60 b20");
+    set_edit(&e, ICO_TOUCH_RULE_SPLIT, ICO_TOUCH_CTL_CIRCLE, "l72 b20");
+    set_edit(&e, ICO_TOUCH_RULE_SPLIT, ICO_TOUCH_CTL_STICK, "l50 b21");
+    l = ico_touch_layout_edits(2208, 1840, kIn[3], ICO_TOUCH_MEDIUM, &env, &e);
+    CHECK(l.rule == ICO_TOUCH_RULE_SPLIT);
+    CHECK(right_of(&l.button[ICO_TOUCH_B_CROSS].rect) <= l.band.x + 0.02f ||
+          l.button[ICO_TOUCH_B_CROSS].rect.x >= right_of(&l.band) - 0.02f);
+    CHECK(right_of(&l.button[ICO_TOUCH_B_CIRCLE].rect) <= l.band.x + 0.02f ||
+          l.button[ICO_TOUCH_B_CIRCLE].rect.x >= right_of(&l.band) - 0.02f);
+    CHECK(near_(bottom_of(&l.stickArea), bottom_of(&l.region), 0.02f));
+    check_inside(&l);
+
+    /* the switch: a negative offset on an anchored axis alone */
+    memset(&c, 0, sizeof(c));
+    CHECK(!ico_touch_edit_outside(&c) && !ico_touch_edit_outside(NULL));
+    c.set = 1;
+    c.scale = c.alpha = 1.0f;
+    c.ax = ICO_TOUCH_ANCHOR_L;
+    c.ay = ICO_TOUCH_ANCHOR_T;
+    CHECK(!ico_touch_edit_outside(&c));
+    c.dx = -0.5f;
+    CHECK(ico_touch_edit_outside(&c));
+    c.dx = 0.0f;
+    c.ay = ICO_TOUCH_ANCHOR_B;
+    c.dy = -1.0f;
+    CHECK(ico_touch_edit_outside(&c));
+    c.ax = c.ay = ICO_TOUCH_ANCHOR_DEFAULT;
+    c.dx = -3.0f; /* no anchor: the default place */
+    CHECK(!ico_touch_edit_outside(&c));
+}
+
 int main(void)
 {
     test_defaults();
@@ -1955,6 +2118,7 @@ int main(void)
     test_done();
     test_toolbar_clear();
     test_cutout();
+    test_v084_forms();
     if (failures != 0) {
         fprintf(stderr, "touch_edit_test: %d failure(s)\n", failures);
         return 1;

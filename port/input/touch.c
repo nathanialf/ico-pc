@@ -350,9 +350,47 @@ IcoTouchRect ico_touch_clamp_band(const IcoTouchLayout *l)
     return extend_band(l, l->band);
 }
 
-int ico_touch_edit_clamp(const IcoTouchLayout *l, float *cx, float *cy, float w, float h)
+/* where a control's box is kept: inside R and out of the band b */
+typedef struct ClampArea {
+    IcoTouchRect R, b;
+} ClampArea;
+
+/* the bounds and the band carried to them: a control past the safe area */
+static ClampArea area_bounds(const IcoTouchLayout *l)
 {
-    const IcoTouchRect R = l->bounds, b = ico_touch_clamp_band(l);
+    ClampArea k;
+
+    k.R = l->bounds;
+    k.b = ico_touch_clamp_band(l);
+    return k;
+}
+
+/* the region and its own band: a control at or inside the safe area, as
+   v0.8.4 clamped every control (its layout files render as they did) */
+static ClampArea area_region(const IcoTouchLayout *l)
+{
+    ClampArea k;
+
+    k.R = l->region;
+    k.b = l->band;
+    return k;
+}
+
+int ico_touch_edit_outside(const IcoTouchCtlEdit *c)
+{
+    return c != NULL && c->set &&
+           ((c->ax <= ICO_TOUCH_ANCHOR_R && c->dx < 0.0f) ||
+            (c->ay <= ICO_TOUCH_ANCHOR_B && c->dy < 0.0f));
+}
+
+static ClampArea area_for(const IcoTouchLayout *l, const IcoTouchCtlEdit *c)
+{
+    return ico_touch_edit_outside(c) ? area_bounds(l) : area_region(l);
+}
+
+static int clamp_in(ClampArea k, float *cx, float *cy, float w, float h)
+{
+    const IcoTouchRect R = k.R, b = k.b;
     float cand[4][2], best = 0.0f, bx = 0.0f, by = 0.0f;
     int i, found = 0;
 
@@ -389,11 +427,22 @@ int ico_touch_edit_clamp(const IcoTouchLayout *l, float *cx, float *cy, float w,
     return 1;
 }
 
+int ico_touch_edit_clamp(const IcoTouchLayout *l, float *cx, float *cy, float w, float h)
+{
+    return clamp_in(area_bounds(l), cx, cy, w, h);
+}
+
+int ico_touch_edit_clamp_ctl(const IcoTouchLayout *l, const IcoTouchCtlEdit *c, float *cx,
+                             float *cy, float w, float h)
+{
+    return clamp_in(area_for(l, c), cx, cy, w, h);
+}
+
 /* r cut to the region and, when the band crosses the region, to the side of
    it that holds (px, py) */
-static IcoTouchRect cut_to_side(const IcoTouchLayout *l, IcoTouchRect r, float px, float py)
+static IcoTouchRect cut_to_side(ClampArea k, IcoTouchRect r, float px, float py)
 {
-    const IcoTouchRect R = l->bounds, b = ico_touch_clamp_band(l);
+    const IcoTouchRect R = k.R, b = k.b;
     float x0 = maxf_(r.x, R.x), y0 = maxf_(r.y, R.y);
     float x1 = minf_(r.x + r.w, R.x + R.w), y1 = minf_(r.y + r.h, R.y + R.h);
 
@@ -414,9 +463,9 @@ static IcoTouchRect cut_to_side(const IcoTouchLayout *l, IcoTouchRect r, float p
 }
 
 /* the widest the look pad may be beside a band that crosses the region */
-static void look_shrink(const IcoTouchLayout *l, float *w, float *h)
+static void look_shrink(ClampArea k, float *w, float *h)
 {
-    const IcoTouchRect R = l->bounds, b = ico_touch_clamp_band(l);
+    const IcoTouchRect R = k.R, b = k.b;
 
     *w = minf_(*w, R.w);
     *h = minf_(*h, R.h);
@@ -516,6 +565,9 @@ void ico_touch_edit_box_size(const IcoTouchLayout *l, int ctl, const IcoTouchCtl
 static void apply_one(IcoTouchLayout *l, int ctl, const IcoTouchCtlEdit *c)
 {
     const IcoTouchRect R = l->region;
+    /* at or inside the safe area: the region (v0.8.4's clamp); an offset
+       past it: the bounds */
+    const ClampArea k = area_for(l, c);
     const float q = l->unit;
     const int look = ctl == ICO_TOUCH_CTL_LOOK, z = ctl_zone(ctl);
     IcoTouchRect box0;
@@ -534,7 +586,7 @@ static void apply_one(IcoTouchLayout *l, int ctl, const IcoTouchCtlEdit *c)
             /* no side of the band holds it: smaller, then inside the region
                whatever happens (never dropped) */
             if (look) {
-                look_shrink(l, &w, &h);
+                look_shrink(k, &w, &h);
             } else {
                 s = ICO_TOUCH_EDIT_SCALE_MIN;
                 w = bw * s;
@@ -557,7 +609,7 @@ static void apply_one(IcoTouchLayout *l, int ctl, const IcoTouchCtlEdit *c)
         }
         cx = cxA;
         cy = cyA;
-        if (ico_touch_edit_clamp(l, &cx, &cy, w, h)) {
+        if (clamp_in(k, &cx, &cy, w, h)) {
             break;
         }
     }
@@ -600,7 +652,7 @@ static void apply_one(IcoTouchLayout *l, int ctl, const IcoTouchCtlEdit *c)
         if (moved && (c->ax <= ICO_TOUCH_ANCHOR_R || c->ay <= ICO_TOUCH_ANCHOR_B)) {
             const float a = 2.2f * l->stickR; /* half of the 4.4 R square */
 
-            l->stickArea = cut_to_side(l, rect(cx - a, cy - a, 2.0f * a, 2.0f * a), cx, cy);
+            l->stickArea = cut_to_side(k, rect(cx - a, cy - a, 2.0f * a, 2.0f * a), cx, cy);
         }
     } else if (look) {
         l->lookArea = rect(cx - 0.5f * w, cy - 0.5f * h, w, h);

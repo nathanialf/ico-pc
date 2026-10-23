@@ -860,13 +860,34 @@ static void edit_centre(const IcoTouchLayout *l, int ctl, const IcoTouchCtlEdit 
     } else if (c->set && c->ay == ICO_TOUCH_ANCHOR_B) {
         *cy = R.y + R.h - c->dy * q - (look ? 0.5f * *h : 0.0f);
     }
-    ico_touch_edit_clamp(l, cx, cy, *w, *h);
+    ico_touch_edit_clamp_ctl(l, c, cx, cy, *w, *h); /* as apply_one clamps it */
+}
+
+/* c's anchors and offsets for a w x h box centred at (cx, cy): the nearer
+   edge of R on each axis, snapped to grid with snap */
+static void set_offsets(IcoTouchCtlEdit *c, IcoTouchRect R, float q, float cx, float cy, float ex,
+                        float ey, int snap, float grid)
+{
+    const float dl = (cx - ex - R.x) / q, dr = (R.x + R.w - cx - ex) / q;
+    const float dt = (cy - ey - R.y) / q, db = (R.y + R.h - cy - ey) / q;
+
+    c->ax = dl <= dr ? ICO_TOUCH_ANCHOR_L : ICO_TOUCH_ANCHOR_R;
+    c->dx = dl <= dr ? dl : dr;
+    c->ay = dt <= db ? ICO_TOUCH_ANCHOR_T : ICO_TOUCH_ANCHOR_B;
+    c->dy = dt <= db ? dt : db;
+    if (snap) {
+        c->dx = snap_to(c->dx, grid);
+        c->dy = snap_to(c->dy, grid);
+    }
 }
 
 /* ctl of e's posture rule placed with its w x h box centred at (cx, cy):
-   clamped as the layout clamps, anchored to the nearer edge on each axis,
-   the offsets snapped to the grid with snap; an unset control becomes set
-   at scale 1, opacity 1 */
+   clamped inside the bounds (the drop may lie past the safe area),
+   anchored to the nearer edge on each axis, the offsets snapped to the grid
+   with snap; offsets that come out at or inside the safe area are taken
+   again from the box clamped inside the region, as the layout then clamps
+   it (touch.c apply_one: v0.8.4's clamp), so the file holds where it shows;
+   an unset control becomes set at scale 1, opacity 1 */
 static void set_place(IcoTouchEdits *e, int rule, const IcoTouchLayout *l, int ctl, float cx,
                       float cy, float w, float h, int snap)
 {
@@ -875,7 +896,6 @@ static void set_place(IcoTouchEdits *e, int rule, const IcoTouchLayout *l, int c
     const float q = l->unit;
     const int look = ctl == ICO_TOUCH_CTL_LOOK;
     const float ex = look ? 0.5f * w : 0.0f, ey = look ? 0.5f * h : 0.0f;
-    float dl, dr, dt, db;
 
     if (!(q > 0.0f)) {
         return;
@@ -891,17 +911,10 @@ static void set_place(IcoTouchEdits *e, int rule, const IcoTouchLayout *l, int c
         c->w = w / (q * c->scale);
         c->h = h / (q * c->scale);
     }
-    dl = (cx - ex - R.x) / q;
-    dr = (R.x + R.w - cx - ex) / q;
-    dt = (cy - ey - R.y) / q;
-    db = (R.y + R.h - cy - ey) / q;
-    c->ax = dl <= dr ? ICO_TOUCH_ANCHOR_L : ICO_TOUCH_ANCHOR_R;
-    c->dx = dl <= dr ? dl : dr;
-    c->ay = dt <= db ? ICO_TOUCH_ANCHOR_T : ICO_TOUCH_ANCHOR_B;
-    c->dy = dt <= db ? dt : db;
-    if (snap) {
-        c->dx = snap_to(c->dx, e->grid);
-        c->dy = snap_to(c->dy, e->grid);
+    set_offsets(c, R, q, cx, cy, ex, ey, snap, e->grid);
+    if (!ico_touch_edit_outside(c)) {
+        ico_touch_edit_clamp_ctl(l, c, &cx, &cy, w, h); /* the region's clamp */
+        set_offsets(c, R, q, cx, cy, ex, ey, snap, e->grid);
     }
     ico_touch_edit_sanitize(c, ctl);
 }
@@ -1047,6 +1060,24 @@ static void nudge(IcoTouchEditor *ed, const IcoTouchLayout *l, int sx, int sy)
             set_place(&next, ed->rule, l, ctl, nx, cy, w, h, next.snap);
             edit_centre(l, ctl, &next.ctl[ed->rule][ctl], &nx, &ny, &w, &h);
         }
+    }
+    /* held at the safe area's edge with the bounds past it (a camera hole):
+       the centre a grid step past that edge, so the offset comes out below 0
+       and the control goes under the hole (a control whose offsets are at or
+       inside the safe area stays inside it, touch.c apply_one) */
+    if (sx != 0 && (sx > 0 ? nx <= cx : nx >= cx) &&
+        (sx < 0 ? l->bounds.x < l->region.x - 0.5f
+                : l->bounds.x + l->bounds.w > l->region.x + l->region.w + 0.5f)) {
+        nx = (sx < 0 ? l->region.x : l->region.x + l->region.w) + (float)sx * next.grid * l->unit;
+        set_place(&next, ed->rule, l, ctl, nx, ny, w, h, next.snap);
+        edit_centre(l, ctl, &next.ctl[ed->rule][ctl], &nx, &ny, &w, &h);
+    }
+    if (sy != 0 && (sy > 0 ? ny <= cy : ny >= cy) &&
+        (sy < 0 ? l->bounds.y < l->region.y - 0.5f
+                : l->bounds.y + l->bounds.h > l->region.y + l->region.h + 0.5f)) {
+        ny = (sy < 0 ? l->region.y : l->region.y + l->region.h) + (float)sy * next.grid * l->unit;
+        set_place(&next, ed->rule, l, ctl, nx, ny, w, h, next.snap);
+        edit_centre(l, ctl, &next.ctl[ed->rule][ctl], &nx, &ny, &w, &h);
     }
     if (covers(l, ctl, nx, ny, w, h)) {
         ed->refused = ICO_TOUCH_EDIT_REFUSED;

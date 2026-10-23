@@ -318,7 +318,9 @@ struct IcoTouchEdits;
 /* The zones with the player's edits (touch_edit.h) applied after the
    default placement: for each set control of the layout's posture, its
    centre from its anchor edges, its size scaled, clamped inside the region
-   and out of the hinge band; hidden controls get alpha 0. NULL edits, or
+   and out of the hinge band (a control with an offset past the safe area:
+   inside the bounds and out of the band carried to them,
+   touch_edit.h ico_touch_edit_outside); hidden controls get alpha 0. NULL edits, or
    none set, give ico_touch_layout_env's layout exactly (alpha 1 everywhere,
    editGen e->gen or 0). */
 IcoTouchLayout ico_touch_layout_edits(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size,
