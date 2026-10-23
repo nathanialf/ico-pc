@@ -1533,3 +1533,129 @@ if(ICO_RUN_TESTS)
                                     ENVIRONMENT "${_env_static}")
 endif()
 # FIXP end
+
+# ---- The render suite a second time, on the OpenGL backend (issue 126) ----
+# ico_rhi_vk links every backend and rhi_backend.c takes ICO_RHI_BACKEND from the
+# environment as the default one, so the same test programs run on OpenGL with no
+# rebuild: for each test named in _ico_rd_gl_tests below, ico_rd_gl_twin makes
+# <name>_gl from the test as registered above (its command line, skip switches
+# and timeout), with the Vulkan layer variables dropped, ICO_RHI_BACKEND=opengl on
+# Mesa's software GL (llvmpipe) on SDL's offscreen driver (as rhi_gl in
+# port/rhi/CMakeLists.txt), three times the timeout (llvmpipe compiles the VU
+# vertex shaders' GLSL slower than lavapipe takes their SPIR-V), and its own
+# folder, <build>/gl[/...], for the files a test writes (the Vulkan runs' are
+# left alone). The label `gl` selects them: ctest -j1 -L gl.
+#
+# Not twinned:
+#  * a test whose environment holds a Vulkan fake (ICO_VK_FAKE_*, ICO_VK_ATTACHMENT_READ),
+#    which OpenGL ignores: *_mali, *_minlimits, *_d24s8, *_static, rd_crack_d24s8,
+#    rd_crack_tiler(_on), rd_blend_selftest*, rd_date_selftest_sabotage,
+#    rd_fog_selftest_local_sabotage (ico_rd_gl_twin skips these by itself)
+#  * the tests that start the game (model_viewer_headless, gallery_sweep,
+#    credits_headless) or work on the replay tool's files (rd_replay_tool*,
+#    rd_crack's replay, rd_fog_depth_copy_dump*, rd_vustage_ab, the native frame
+#    gates, coverage_corpus; tools/native_frame_check.py compare runs the dumps
+#    on both backends)
+#  * tests with no device (rd_alpha_plan, rd_fx_frame, rd_vu_frac, rd_mip, rd_passring,
+#    rd_filter, rd_bisect_plan, rd_stream_audit, fog_lut*, gsb_cull*, texpack*, gltf)
+#
+# ICO_RD_GL_TOLERANCE: "<test>_gl|<VARIABLE>=<value>" entries add a variable to one
+# twin's environment, for the test's own tolerance switch where it has one. Only
+# filtered or float paths may be named here (the presenter's bilinear blit, the fog
+# LUT, the CRT's filtering), each with its reason; the integer paths (DISPLAY,
+# blend_int, UINT targets, DATE) are bit-exact. No test has such a switch yet (their
+# tolerances are constants in the sources), so the table is empty: a mismatch is a
+# bug to report, not a tolerance to add.
+set(ICO_RD_GL_TOLERANCE)
+
+function(ico_rd_gl_twin name)
+    get_test_property(${name} COMMAND _cmd)
+    if(NOT _cmd OR _cmd STREQUAL "NOTFOUND")
+        message(WARNING "ico: ${name} is not a test, no OpenGL twin")
+        return()
+    endif()
+    get_test_property(${name} ENVIRONMENT _tenv)
+    set(_genv "ICO_RHI_BACKEND=opengl" "LIBGL_ALWAYS_SOFTWARE=1" "SDL_VIDEO_DRIVER=offscreen")
+    if(_tenv AND NOT _tenv STREQUAL "NOTFOUND")
+        foreach(_e IN LISTS _tenv)
+            if(_e MATCHES "^ICO_VK_(FAKE_|ATTACHMENT_READ)")
+                set_property(GLOBAL APPEND PROPERTY ICO_RD_GL_SKIPPED ${name})
+                return()
+            endif()
+            if(_e MATCHES "^(VK_ADD_LAYER_PATH|VK_KHRONOS_VALIDATION_|ICO_VK_VALIDATION)")
+                continue()
+            endif()
+            list(APPEND _genv "${_e}")
+        endforeach()
+    endif()
+    foreach(_t IN LISTS ICO_RD_GL_TOLERANCE)
+        if(_t MATCHES "^${name}_gl\\|(.*)$")
+            list(APPEND _genv "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+    # the folder the test writes in: the build folder's gl/ (or the test's own
+    # folder under it), for the working directory and for any argument that is one
+    set(_bin "${CMAKE_CURRENT_BINARY_DIR}")
+    get_test_property(${name} WORKING_DIRECTORY _wd)
+    if(NOT _wd OR _wd STREQUAL "NOTFOUND")
+        set(_wd "${_bin}")
+    endif()
+    string(REPLACE "${_bin}" "${_bin}/gl" _wd "${_wd}")
+    file(MAKE_DIRECTORY "${_wd}")
+    set(_gcmd)
+    foreach(_a IN LISTS _cmd)
+        string(REPLACE "${_bin}" "${_bin}/gl" _a "${_a}")
+        list(APPEND _gcmd "${_a}")
+    endforeach()
+    add_test(NAME ${name}_gl COMMAND ${_gcmd} WORKING_DIRECTORY "${_wd}")
+    set_tests_properties(${name}_gl PROPERTIES ENVIRONMENT "${_genv}")
+    foreach(_p SKIP_RETURN_CODE SKIP_REGULAR_EXPRESSION)
+        get_test_property(${name} ${_p} _v)
+        if(_v AND NOT _v STREQUAL "NOTFOUND")
+            set_tests_properties(${name}_gl PROPERTIES ${_p} "${_v}")
+        endif()
+    endforeach()
+    # three times the timeout (ctest's default is 1500 s)
+    get_test_property(${name} TIMEOUT _to)
+    if(NOT _to OR _to STREQUAL "NOTFOUND")
+        set(_to 1500)
+    endif()
+    math(EXPR _to "${_to} * 3")
+    set_tests_properties(${name}_gl PROPERTIES TIMEOUT ${_to})
+    get_test_property(${name}_gl LABELS _labels)
+    set_tests_properties(${name}_gl PROPERTIES LABELS "${_labels};gl")
+    set_property(GLOBAL APPEND PROPERTY ICO_RD_GL_DONE ${name}_gl)
+endfunction()
+
+if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_opengl)
+    set(_ico_rd_gl_tests
+        # the programs
+        rd_state rd_pixel rd_native rd_layout rd_tex rd_gsbase ${rd_mesh_SHARDS} modelpack
+        rd_shadow rd_fog ${rd_blur_SHARDS} rd_water rd_raw rd_debug rd_present rd_crt rd_mirror
+        rd_msaa rd_perf rd_interp rd_boot_present rd_dst_usage
+        # the two-pass blend (ICO_RD_NO_DUAL=1 is the renderer's own switch, not a Vulkan fake)
+        rd_pixel_nodual rd_present_nodual rd_fog_nodual rd_shadow_nodual rd_water_nodual
+        rd_raw_nodual rd_mirror_nodual rd_interp_nodual rd_msaa_nodual rd_crack_nodual
+        # the blend paths, the depth copy, the fog's paths
+        rd_pixel_storage rd_fog_storage rd_present_storage rd_pixel_fixed rd_fog_fixed
+        rd_present_fixed rd_crt_fixed rd_pixel_attachment rd_fog_attachment rd_present_attachment
+        rd_crt_attachment rd_perf_attachment rd_fog_depth_copy rd_present_depth_copy
+        rd_fog_buffer rd_fog_local
+        # the crack filler
+        rd_crack rd_crack_4x rd_crack_frac rd_crack_backdrop rd_crack_backdrop_4x
+        rd_crack_backdrop_frac rd_crack_1x rd_crack_original rd_crack_msaa rd_crack_off
+        rd_crack_depth_copy rd_crack_buffer
+        # the self-tests
+        rd_fog_selftest rd_fog_selftest_all rd_fog_selftest_fallback ${_odd_msaa}
+        rd_fog_selftest_7740 rd_fog_selftest_msaa_fallback ${_fullpixel} rd_fog_selftest_local
+        rd_date_selftest rd_vuprepass_selftest rd_vuprepass_selftest_plain
+        rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off rd_vuprepass_selftest_ticks
+        rd_vuprepass_selftest_sabotage_tri)
+    foreach(_n IN LISTS _ico_rd_gl_tests)
+        ico_rd_gl_twin(${_n})
+    endforeach()
+    get_property(_gl_done GLOBAL PROPERTY ICO_RD_GL_DONE)
+    list(LENGTH _gl_done _gl_n)
+    message(STATUS "ico: ${_gl_n} render tests registered again on OpenGL (ctest -L gl)")
+endif()
+# ---- OpenGL twins end ----
