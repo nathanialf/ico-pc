@@ -16,7 +16,7 @@
  *    block b at binding b; storage buffer t at 16 + t; a sampled texture t
  *    at texture unit 16 + t, its sampler object at the same unit (GLSL has
  *    combined samplers only: gl_bind_point); storage image u at image unit
- *    48 + u.  Texture unit 0 and the GL_COPY_READ_BUFFER /
+ *    u.  Texture unit 0 and the GL_COPY_READ_BUFFER /
  *    GL_COPY_WRITE_BUFFER / GL_PIXEL_PACK_BUFFER / GL_PIXEL_UNPACK_BUFFER
  *    binding points are scratch: any create, copy or readback may change
  *    them, and the active texture unit is unknown between calls.  The
