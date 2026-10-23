@@ -1656,8 +1656,11 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
         rd_crack_depth_copy rd_crack_buffer
         # the self-tests
         rd_fog_selftest rd_fog_selftest_all rd_fog_selftest_fallback ${_odd_msaa}
-        rd_fog_selftest_7740 rd_fog_selftest_msaa_fallback ${_fullpixel} rd_fog_selftest_local
-        rd_date_selftest rd_vuprepass_selftest rd_vuprepass_selftest_plain
+        rd_fog_selftest_7740 rd_fog_selftest_msaa_fallback ${_fullpixel}
+        # not rd_fog_selftest_local and rd_date_selftest: their expected results
+        # name the local-read fog path and the DATE stencil path, which OpenGL
+        # has not (localRead false: the copy and inplace paths, DATE by snapshot)
+        rd_vuprepass_selftest rd_vuprepass_selftest_plain
         rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off rd_vuprepass_selftest_ticks
         rd_vuprepass_selftest_sabotage_tri)
     foreach(_n IN LISTS _ico_rd_gl_tests)
