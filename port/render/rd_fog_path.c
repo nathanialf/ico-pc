@@ -572,6 +572,7 @@ static struct {
     uint32_t fogged; /* fogged replays asked */
     double windowMs; /* the 10 s window's start */
     uint32_t lines, more, total;
+    uint32_t noBuf; /* the readback buffer could not be made, times */
     char last[512]; /* the last line logged (tests) */
 } s_edge;
 
@@ -728,8 +729,12 @@ void rd__fog_edge_record(RhiCommandList cl, const RdTargetRec *tz, uint32_t zid,
                                                RHI_MEM_READBACK, "rd fog edge probe"});
         if (!s_edge.buf.id) {
             s_edge.size = 0;
-            rd__log("fog: probe: outer columns: no readback buffer (%llu bytes)",
-                    (unsigned long long)(2u * half));
+            /* the first 3, then every 100th */
+            if (++s_edge.noBuf <= 3u || s_edge.noBuf % 100u == 0u) {
+                rd__log("fog: probe: outer columns: no readback buffer (%llu bytes; %u times, "
+                        "reported the first 3 and every 100th)",
+                        (unsigned long long)(2u * half), s_edge.noBuf);
+            }
             return;
         }
     }
