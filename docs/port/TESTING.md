@@ -946,6 +946,67 @@ of the pre-passes', and `rd_crack.cmake`, which matches the crack filler's `crac
 and `rd_vustage_ab.cmake` over the dump corpus (`port/render/CMakeLists.txt`). The ctest `rd_replay_tool` renders `rd_pixel`'s dump with
 `--present 640x480`; it requires `rd_pixel` to have run first (`FIXTURES_REQUIRED rd_dump`).
 
+## The render suite on OpenGL
+
+`port/render/CMakeLists.txt` registers a second copy of the render tests on the OpenGL backend
+(issue 126). `ico_rhi_vk` links every backend and `port/rhi/rhi_backend.c` takes
+`ICO_RHI_BACKEND` from the environment as the default one, so no rebuild is needed:
+`ico_rd_gl_twin(<name>)` reads the test `<name>` as registered (its command line, working
+directory, skip switches and environment) and adds `<name>_gl` with
+
+- the environment `ICO_RHI_BACKEND=opengl`, `LIBGL_ALWAYS_SOFTWARE=1` (Mesa's llvmpipe) and
+  `SDL_VIDEO_DRIVER=offscreen` (the shape of `rhi_gl` in `port/rhi/CMakeLists.txt`), the
+  Vulkan layer variables (`VK_ADD_LAYER_PATH`, `VK_KHRONOS_VALIDATION_*`, `ICO_VK_VALIDATION`)
+  dropped and the test's own `ICO_RD_*` switches and `ASAN_OPTIONS` kept;
+- exit 77 as a skip, the label `gl` besides `render`, and three times the timeout (1500 s where
+  the test sets none: llvmpipe compiles the GLSL of the VU vertex shaders slower than lavapipe
+  takes their SPIR-V);
+- a folder of its own, `<build>/port/render/gl/` (or the test's folder under it), for the working
+  directory and for every argument that was the build folder, so a `_gl` test never overwrites a
+  Vulkan test's files (`rd_pixel_gl` leaves its dump in `gl/`, not where the fixture
+  `rd_dump` is read).
+
+`ctest -j1 -L gl` runs them; they exist when `ICO_RHI_OPENGL` and `ICO_SHADERS_GLSL` are on
+and `ico_rhi_opengl` is linked (the configure line `render tests registered again on OpenGL`
+gives the count). They are skipped (77) where the sources say a test is Vulkan-only or a
+context is missing.
+
+Not twinned: any test whose environment holds `ICO_VK_FAKE_*` or `ICO_VK_ATTACHMENT_READ`
+(OpenGL ignores them: `*_mali`, `*_minlimits`, `*_d24s8`, `*_static`, `rd_crack_d24s8`,
+`rd_crack_tiler`, `rd_crack_tiler_on`, `rd_blend_selftest*`, `rd_date_selftest_sabotage`,
+`rd_fog_selftest_local_sabotage`; `ico_rd_gl_twin` skips these itself), the tests that start the
+game or work on the replay tool's files (`rd_replay_tool*`, `rd_fog_depth_copy_dump*`,
+`rd_vustage_ab`, the frame gates, `coverage_corpus`; the compare below covers the dumps), and the
+tests with no device (`rd_alpha_plan`, `rd_fx_frame`, `rd_vu_frac`, `rd_mip`, `rd_passring`,
+`rd_filter`, `rd_bisect_plan`, `rd_stream_audit`, `fog_lut*`, `gsb_cull*`, `texpack*`, `gltf`).
+The two-pass blend copies (`*_nodual`, `ICO_RD_NO_DUAL=1`, the renderer's own switch) are
+twinned. The sources decide what else skips: `ctest -L gl` output lists the skipped ones.
+
+The tolerance table is `ICO_RD_GL_TOLERANCE` (entries `<name>_gl|<VARIABLE>=<value>`, added to
+that twin's environment). It may name only a test's own tolerance switch on a filtered or float
+path (the presenter's bilinear blit, the fog LUT, the CRT's filtering), with the reason beside
+the entry; the integer paths (DISPLAY, blend_int, UINT targets, DATE) are bit-exact. No test has
+such a switch today (the tolerances are constants in the sources), so the table is empty: a `_gl`
+failure is a finding to report, not a tolerance to add.
+
+`python3 -I tools/native_frame_check.py compare` renders every dump of the list (default
+`tools/native_frame_dumps.txt`, or `--dumps` / `ICO_DUMPS`) at the two gate settings with two
+backends (`--a vulkan --b opengl` by default, passed to the replay tool as `--backend`; an
+`opengl` run sets `LIBGL_ALWAYS_SOFTWARE=1` and `SDL_VIDEO_DRIVER=offscreen` unless set) and
+prints every target that is not byte for byte equal, then one total line:
+
+    compare vulkan against opengl: N targets: E exact, L within 1 LSB, M mismatch, S size, X not rendered
+
+`exact` is the same RGBA bytes, `within 1 LSB` no channel differs by more than 1 (a rounding in a
+filtered path), `mismatch` a larger difference (the line gives the differing pixel count, the
+largest channel difference and the box they lie in), `size` a different picture size and `not
+rendered` a target one side did not write. Exit 1 on any mismatch, size or not rendered, 77 when
+there is no list, dump, tool or Pillow. `--keep DIR` keeps both backends' pictures
+(`DIR/vulkan/<dump>/<setting>/<target>.png`, `DIR/opengl/...`) for a closer look; without it they
+are in a temporary folder named on the last line. `--backend NAME` also works on `baseline` and
+`gate-a`. The dumps are machine-local and never committed, so this is a local command; CI has no
+ctest for it.
+
 ## Tests that need the disc
 
 These cache variables point the tests at the player's files ([../BUILDING.md](../BUILDING.md#tests)
@@ -1193,6 +1254,9 @@ hand.
   in what it emits updates `tools/test/region_blocks/expected.c`, `expected_report.tsv` or
   `expected_bits.txt` after reading the difference, and a new class or pattern gets a block in
   `fixture.c`.
+- A change to the renderer that either backend runs: `ctest -j1 -L gl` ([The render suite on
+  OpenGL](#the-render-suite-on-opengl)) besides `-L render`, and `native_frame_check.py compare`
+  when the pictures of a dump may differ between the backends.
 - A change to these documents: `docs_check`.
 
 ## CI
