@@ -231,14 +231,19 @@ void ui_settings_set_backend_names(const char *const *names, int count);
    switchBegin(name, why) asks for a switch to name (why: UI_GFX_WHY_*) and
    answers with a UI_GFX_SWITCH_*: PENDING when it runs later (switchPoll
    then answers, every frame, until it is no longer PENDING), else what
-   came of it at once; kept() is the player's Keep (the window logs it).
+   came of it at once; kept() is the player's Keep (the window logs it);
+   automatic() (may be NULL) names the renderer Automatic started this run
+   (its fallback after a renderer that did not start, or the restart's),
+   NULL when that is Vulkan or the player chose the renderer at the start.
    FAILED means name did not start and the renderer that ran before is
    back; REFUSED that nothing was tried.  The Apply row shows while the
    Graphics API row's value is not the renderer running (Automatic counts
-   as "vulkan"); Apply then turns the page into a 10 s countdown with Keep
-   and Revert: Keep writes the choice, Revert, Circle or the end of the
-   countdown switch back and put the row's value back.  NULL (or never
-   called) hides Apply; the struct is copied. */
+   as automatic()'s, else "vulkan"); Apply then turns the page into a 10 s
+   countdown with Keep and Revert: Keep writes the choice, Revert, Circle
+   or the end of the countdown switch back.  From Apply until Keep the
+   config holds the value the page found (every save writes that one, the
+   row shows the choice), and so does it after a FAILED Apply.  NULL (or
+   never called) hides Apply; the struct is copied. */
 #define UI_GFX_SWITCH_DONE 0
 #define UI_GFX_SWITCH_PENDING 1
 #define UI_GFX_SWITCH_FAILED (-1)
@@ -254,6 +259,7 @@ typedef struct UiGraphicsHost {
     int (*switchBegin)(const char *name, int why);
     int (*switchPoll)(void);
     void (*kept)(void);
+    const char *(*automatic)(void);
 } UiGraphicsHost;
 
 void ui_settings_set_graphics_host(const UiGraphicsHost *host);

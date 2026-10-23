@@ -761,8 +761,11 @@ static void testGraphicsApi(void)
    countdown's Keep and Revert replace the page, the cursor on Revert, the
    note counting down; 10 s of vsyncs at 60 Hz switch back with nothing
    written; Keep writes the choice; Revert and Circle switch back; a
-   renderer that did not start is a popup; a switch the host answers later
-   is polled, the presses meanwhile ignored */
+   renderer that did not start is a popup and the value the page found
+   back; a switch the host answers later is polled, the presses meanwhile
+   ignored; a save during the countdown (the close button's) writes the
+   value the page found; Automatic on a run whose Automatic started OpenGL
+   offers no Apply on OpenGL */
 static char s_gfxRunning[16] = "vulkan";
 static char s_gfxAsked[16][16];
 static int s_gfxWhy[16];
@@ -802,7 +805,16 @@ static void fakeGfxKept(void)
     s_gfxKepts++;
 }
 
-static const UiGraphicsHost kGfxHost = {fakeGfxRunning, fakeGfxBegin, fakeGfxPoll, fakeGfxKept};
+/* the renderer Automatic started this run, "" for none (Vulkan) */
+static char s_gfxAuto[16];
+
+static const char *fakeGfxAutomatic(void)
+{
+    return s_gfxAuto[0] != '\0' ? s_gfxAuto : NULL;
+}
+
+static const UiGraphicsHost kGfxHost = {fakeGfxRunning, fakeGfxBegin, fakeGfxPoll, fakeGfxKept,
+                                        fakeGfxAutomatic};
 
 /* the Graphics page's row for opt is on screen (its label not masked) */
 static int gfxRowOn(UiSettingsOpt opt)
@@ -975,15 +987,22 @@ static void testGraphicsApply(void)
     press(0x40);
     CHECK(strcmp(ui_popup_title(), "The Vulkan renderer could not start; OpenGL is kept") == 0,
           "failed: \"%s\"", ui_popup_title());
-    CHECK(strcmp(ico_config_get_string("video.backend", "?"), "vulkan") == 0 &&
-              gfxRowOn(UI_OPT_GRAPHICS_APPLY) && !gfxRowOn(UI_OPT_GRAPHICS_KEEP),
-          "failed: the value stays Vulkan, Apply again");
+    frame(0);
+    CHECK(strcmp(ico_config_get_string("video.backend", "?"), "opengl") == 0 &&
+              !gfxRowOn(UI_OPT_GRAPHICS_APPLY) && !gfxRowOn(UI_OPT_GRAPHICS_KEEP),
+          "failed: the value back to OpenGL, as the page found it (%s), no Apply",
+          ico_config_get_string("video.backend", "?"));
+    ui_settings_step(UI_OPT_GRAPHICS_API, -1);
+    frame(0);
+    lt_ext_layout(pageL)->curItem = apply;
 
-    /* refused: nothing */
+    /* refused: nothing, the value as chosen */
     ui_popup_reset();
     s_gfxAnswer = UI_GFX_SWITCH_REFUSED;
     press(0x40);
     CHECK(!ui_popup_active() && !gfxRowOn(UI_OPT_GRAPHICS_KEEP), "refused: no popup, no countdown");
+    CHECK(strcmp(ico_config_get_string("video.backend", "?"), "vulkan") == 0,
+          "refused: the value stays Vulkan (%s)", ico_config_get_string("video.backend", "?"));
 
     /* answered later: polled every frame, Cross ignored meanwhile */
     s_gfxAnswer = UI_GFX_SWITCH_PENDING;
@@ -1005,6 +1024,47 @@ static void testGraphicsApply(void)
     lt_ext_layout(pageL)->curItem = keep;
     press(0x40);
     CHECK(s_gfxKepts == 2 && strcmp(s_gfxRunning, "vulkan") == 0, "kept on vulkan");
+
+    /* a save during the countdown (the close button ends the run with
+       ui_settings_save_on_quit): the value the page found, not the one on
+       trial; the countdown goes on, and Keep then writes the choice */
+    ui_settings_step(UI_OPT_GRAPHICS_API, 1);
+    frame(0);
+    lt_ext_layout(pageL)->curItem = apply;
+    press(0x40);
+    CHECK(gfxRowOn(UI_OPT_GRAPHICS_KEEP) && strcmp(s_gfxRunning, "opengl") == 0,
+          "on trial: opengl");
+    CHECK(ui_settings_save_on_quit() == 0, "save on quit in the countdown");
+    {
+        IcoToml *q = ico_toml_load(p);
+        const char *b = q != NULL ? ico_toml_get(q, "video.backend") : NULL;
+        CHECK(b != NULL && strcmp(b, "vulkan") == 0,
+              "save in the countdown: [video] backend = vulkan, not the trial (%s)", b ? b : "-");
+        ico_toml_free(q);
+    }
+    CHECK(gfxRowOn(UI_OPT_GRAPHICS_KEEP), "the countdown goes on after the save");
+    lt_ext_layout(pageL)->curItem = keep;
+    press(0x40);
+    CHECK(ui_settings_save() == 0, "save after Keep");
+    {
+        IcoToml *q = ico_toml_load(p);
+        const char *b = q != NULL ? ico_toml_get(q, "video.backend") : NULL;
+        CHECK(b != NULL && strcmp(b, "opengl") == 0,
+              "Keep then save: [video] backend = opengl (%s)", b ? b : "-");
+        ico_toml_free(q);
+    }
+
+    /* Automatic on a run whose Automatic went on to OpenGL: no Apply on
+       OpenGL (it would start Vulkan, which did not); on Vulkan, Apply
+       starts OpenGL */
+    snprintf(s_gfxAuto, sizeof(s_gfxAuto), "opengl");
+    ico_config_set_string("video.backend", "");
+    frame(0);
+    CHECK(!gfxRowOn(UI_OPT_GRAPHICS_APPLY), "Automatic after a fallback to OpenGL: no Apply");
+    snprintf(s_gfxRunning, sizeof(s_gfxRunning), "vulkan");
+    frame(0);
+    CHECK(gfxRowOn(UI_OPT_GRAPHICS_APPLY), "Automatic (OpenGL this run) on Vulkan: Apply");
+    s_gfxAuto[0] = '\0';
 
     /* the strings, translated in every language */
     static const UiStrId kIds[] = {UI_STR_GRAPHICS_APPLY,    UI_STR_GRAPHICS_APPLY_NOTE,

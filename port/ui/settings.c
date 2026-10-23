@@ -592,7 +592,19 @@ static struct {
     char want[16]; /* the renderer Apply asked for */
     char prev[16]; /* the renderer running before Apply */
     char entry[32];
+    /* the row's value from Apply until Keep, outside the config (which
+       holds entry: every save path writes that, the close button's too) */
+    char trial[32];
 } s_gfx;
+
+/* [video] backend as the row shows it: the trial while Apply's switch or
+   the countdown is under way, else the config's */
+static const char *backendValue(void)
+{
+    return s_gfx.state == GFX_APPLYING || s_gfx.state == GFX_COUNTDOWN
+               ? s_gfx.trial
+               : ico_config_get_string("video.backend", "");
+}
 
 /* [video] backend as the page found it (its first step, or Apply), which
    Revert puts back; forgotten when the page is entered again */
@@ -640,7 +652,7 @@ static const char *backendCanon(const char *v, char *buf, unsigned size)
 static int backendCurrent(void)
 {
     char buf[32];
-    const char *v = backendCanon(ico_config_get_string("video.backend", ""), buf, sizeof(buf));
+    const char *v = backendCanon(backendValue(), buf, sizeof(buf));
     for (int i = 0; i < s_backendCount; i++) {
         if (strcmp(v, s_backendNames[i]) == 0) {
             return i + 1;
@@ -672,7 +684,7 @@ static const char *backendLabel(const char *name)
 
 static const char *backendText(char *buf, unsigned size)
 {
-    const char *v = ico_config_get_string("video.backend", "");
+    const char *v = backendValue();
     if (v == NULL || v[0] == '\0') {
         return ui_str(UI_STR_VAL_GRAPHICS_AUTOMATIC);
     }
@@ -694,17 +706,20 @@ static void stepBackend(int dir)
             v[0] ? v : "automatic");
 }
 
-/* the renderer the row's value starts: its name, "vulkan" for Automatic
-   (the start's first try), NULL for a value the build does not link */
+/* the renderer the row's value starts: its name; for Automatic the one it
+   started this run (the host's automatic(): a fallback or a restart's), else
+   "vulkan" (the start's first try); NULL for a value the build does not
+   link */
 static const char *gfxChosen(void)
 {
     const int i = backendCurrent();
-    const char *v = ico_config_get_string("video.backend", "");
+    const char *v = backendValue();
+    const char *a = s_gfxHostSet && s_gfxHost.automatic != NULL ? s_gfxHost.automatic() : NULL;
     if (i > 0) {
         return s_backendNames[i - 1];
     }
     for (int k = 0; (v == NULL || v[0] == '\0') && k < s_backendCount; k++) {
-        if (strcmp(s_backendNames[k], "vulkan") == 0) {
+        if (strcmp(s_backendNames[k], a != NULL ? a : "vulkan") == 0) {
             return s_backendNames[k];
         }
     }
@@ -731,9 +746,17 @@ static void gfxResult(int r)
         s_gfx.state = GFX_COUNTDOWN;
         s_gfx.left = UI_GFX_KEEP_SECONDS * ui_popup_vsync_hz();
         s_gfx.focus = 1;
+    } else if (r == UI_GFX_SWITCH_REFUSED && applying) {
+        /* nothing tried: the row keeps the player's value */
+        ico_config_set_string("video.backend", s_gfx.trial);
     } else if (r == UI_GFX_SWITCH_FAILED) {
-        /* the host is back on the renderer that ran; the row keeps the
-           player's value (another may be tried) */
+        /* the host is back on the renderer that ran; after Apply the value
+           the page found stays (the config held it since Apply), so the
+           file names a renderer that starts, as after Revert */
+        if (applying) {
+            fprintf(stderr, "settings: Graphics API back to %s (%s did not start)\n",
+                    s_gfx.entry[0] ? s_gfx.entry : "automatic", s_gfx.want);
+        }
         const char *fmt = ui_str(UI_STR_GRAPHICS_FAILED);
         const char *bad = applying ? s_gfx.want : s_gfx.prev;
         const char *kept = applying ? s_gfx.prev : s_gfx.want;
@@ -771,6 +794,10 @@ static void gfxApply(void)
     gfxEntry();
     snprintf(s_gfx.want, sizeof(s_gfx.want), "%s", c);
     snprintf(s_gfx.prev, sizeof(s_gfx.prev), "%s", s_gfxHost.running());
+    /* the choice on trial outside the config, which holds the value the
+       page found until Keep */
+    snprintf(s_gfx.trial, sizeof(s_gfx.trial), "%s", ico_config_get_string("video.backend", ""));
+    ico_config_set_string("video.backend", s_gfx.entry);
     gfxBegin(s_gfx.want, UI_GFX_WHY_APPLY, GFX_APPLYING);
 }
 
@@ -788,15 +815,16 @@ static void gfxRevert(int why)
     gfxBegin(s_gfx.prev, why, GFX_REVERTING);
 }
 
-/* Keep: the row's value is the config's already; written on leaving */
+/* Keep: the choice into the config, written on leaving */
 static void gfxKeep(void)
 {
     if (s_gfx.state != GFX_COUNTDOWN) {
         return;
     }
     s_gfx.state = GFX_IDLE;
+    ico_config_set_string("video.backend", s_gfx.trial);
     s_dirtyConfig = 1;
-    snprintf(s_gfx.entry, sizeof(s_gfx.entry), "%s", ico_config_get_string("video.backend", ""));
+    snprintf(s_gfx.entry, sizeof(s_gfx.entry), "%s", s_gfx.trial);
     if (s_gfxHost.kept != NULL) {
         s_gfxHost.kept();
     }
