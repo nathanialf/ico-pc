@@ -375,6 +375,75 @@ bool d3d11_shader_cache_mkdir(const char *dir)
 #endif
 }
 
+/* the case-insensitive tail test of the folder names (Windows file names) */
+static bool d3d11s_ends_with(const char *s, const char *tail)
+{
+    const size_t n = strlen(s), t = strlen(tail);
+    if (n < t) {
+        return false;
+    }
+    for (size_t i = 0; i < t; i++) {
+        char a = s[n - t + i], b = tail[i];
+        a = (a >= 'A' && a <= 'Z') ? (char)(a - 'A' + 'a') : a;
+        b = (b >= 'A' && b <= 'Z') ? (char)(b - 'A' + 'a') : b;
+        if (a != b) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool d3d11_shader_cache_folder(const char *path, char *dir, size_t dirn, char *build, size_t buildn,
+                               bool *window)
+{
+    if (dir && dirn) {
+        dir[0] = '\0';
+    }
+    if (build && buildn) {
+        build[0] = '\0';
+    }
+    if (window) {
+        *window = false;
+    }
+    if (!path || !path[0] || !dir || !dirn || !build || !buildn) {
+        return false;
+    }
+    const char *base = path;
+    for (const char *p = path; *p; p++) {
+        if (*p == '/' || *p == '\\') {
+            base = p + 1;
+        }
+    }
+    const size_t len = strlen(path), blen = strlen(base);
+    int n, m;
+    /* pipelines-<build>.vkcache: "pipelines-" is 10 characters, ".vkcache" 8 */
+    if (strncmp(base, "pipelines-", 10) == 0 && blen > 18 && d3d11s_ends_with(base, ".vkcache")) {
+        n = snprintf(dir, dirn, "%.*s.d3d11", (int)(len - 8), path);
+        m = snprintf(build, buildn, "%.*s", (int)(blen - 18), base + 10);
+        if (window) {
+            *window = true;
+        }
+    } else {
+        n = snprintf(dir, dirn, "%s.d3d11", path);
+        m = snprintf(build, buildn, "%s", base);
+    }
+    if (n < 0 || (size_t)n >= dirn || m < 0 || (size_t)m >= buildn) {
+        dir[0] = '\0';
+        build[0] = '\0';
+        if (window) {
+            *window = false;
+        }
+        return false;
+    }
+    return true;
+}
+
+bool d3d11_shader_cache_is_other(const char *name, const char *ours)
+{
+    return name && ours && strncmp(name, "pipelines", 9) == 0 && d3d11s_ends_with(name, ".d3d11") &&
+           strcmp(name, ours) != 0;
+}
+
 /* ------------------------------------------------------------- counters */
 static uint32_t s_hits, s_compiles, s_failed;
 

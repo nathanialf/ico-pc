@@ -83,6 +83,18 @@ bool d3d11_shader_cache_write(const char *path, uint64_t key, const void *dxbc, 
 /* mkdir dir (one level); true when it exists afterwards */
 bool d3d11_shader_cache_mkdir(const char *dir);
 
+/* The DXBC cache folder and the build its keys carry, from the path
+ * rhi_set_pipeline_cache_path takes.  The window's
+ * <pref>/pipelines-<build>.vkcache gives <pref>/pipelines-<build>.d3d11 and
+ * <build>, with *window true (the backend then drops other builds'
+ * folders); any other path gives <path>.d3d11 and the path's last
+ * component.  false, both "", for NULL, "" or a result past dirn/buildn. */
+bool d3d11_shader_cache_folder(const char *path, char *dir, size_t dirn, char *build, size_t buildn,
+                               bool *window);
+/* A folder name another build's cache has: pipelines*.d3d11 (the tail in
+ * any case), not ours. */
+bool d3d11_shader_cache_is_other(const char *name, const char *ours);
+
 /* ---------------------------------------------------------- the counters */
 typedef struct D3d11ShaderStats {
     uint32_t hits;     /* cache files used instead of a compile */

@@ -473,6 +473,56 @@ static void testCacheFile(void)
 #endif
 }
 
+/* ------------------------------------------------------ the cache folder */
+static void testCacheFolder(void)
+{
+    char dir[256], build[64];
+    bool window = true;
+    memset(dir, 'x', sizeof(dir));
+    memset(build, 'x', sizeof(build));
+    CHECK(d3d11_shader_cache_folder("C:\\Users\\a\\pref\\pipelines-v0.8.6-3-gabc.vkcache", dir,
+                                    sizeof(dir), build, sizeof(build), &window) &&
+              window,
+          "the window's path");
+    CHECK(strcmp(dir, "C:\\Users\\a\\pref\\pipelines-v0.8.6-3-gabc.d3d11") == 0,
+          "beside the Vulkan file: %s", dir);
+    CHECK(strcmp(build, "v0.8.6-3-gabc") == 0, "the build: %s", build);
+    CHECK(d3d11_shader_cache_folder("/home/a/.local/share/ico/pipelines-unknown.vkcache", dir,
+                                    sizeof(dir), build, sizeof(build), &window) &&
+              window && strcmp(dir, "/home/a/.local/share/ico/pipelines-unknown.d3d11") == 0 &&
+              strcmp(build, "unknown") == 0,
+          "a forward-slash path: %s, %s", dir, build);
+    CHECK(d3d11_shader_cache_folder("rhi_test.cache", dir, sizeof(dir), build, sizeof(build),
+                                    &window) &&
+              !window && strcmp(dir, "rhi_test.cache.d3d11") == 0 &&
+              strcmp(build, "rhi_test.cache") == 0,
+          "a test's path: %s, %s", dir, build);
+    CHECK(d3d11_shader_cache_folder("pipelines-.vkcache", dir, sizeof(dir), build, sizeof(build),
+                                    &window) &&
+              !window && strcmp(dir, "pipelines-.vkcache.d3d11") == 0,
+          "no build in the name: not the window's form (%s)", dir);
+    CHECK(!d3d11_shader_cache_folder(NULL, dir, sizeof(dir), build, sizeof(build), &window) &&
+              !window && dir[0] == '\0' && build[0] == '\0',
+          "no path");
+    CHECK(!d3d11_shader_cache_folder("", dir, sizeof(dir), build, sizeof(build), NULL),
+          "an empty path");
+    char tiny[8];
+    CHECK(!d3d11_shader_cache_folder("pipelines-abc.vkcache", tiny, sizeof(tiny), build,
+                                     sizeof(build), &window) &&
+              tiny[0] == '\0' && build[0] == '\0' && !window,
+          "a folder past its room");
+    CHECK(d3d11_shader_cache_is_other("pipelines-v0.8.5.d3d11", "pipelines-v0.8.6.d3d11"),
+          "another build's folder");
+    CHECK(d3d11_shader_cache_is_other("pipelines-v0.8.5.D3D11", "pipelines-v0.8.6.d3d11"),
+          "the tail in any case");
+    CHECK(!d3d11_shader_cache_is_other("pipelines-v0.8.6.d3d11", "pipelines-v0.8.6.d3d11"),
+          "ours is kept");
+    CHECK(!d3d11_shader_cache_is_other("pipelines-v0.8.5.vkcache", "pipelines-v0.8.6.d3d11") &&
+              !d3d11_shader_cache_is_other("saves.d3d11", "pipelines-v0.8.6.d3d11") &&
+              !d3d11_shader_cache_is_other(NULL, "pipelines-v0.8.6.d3d11"),
+          "nothing else");
+}
+
 /* --------------------------------------------------- the log and counters */
 static void testCounters(void)
 {
@@ -522,6 +572,7 @@ int main(void)
            "that part\n");
 #endif
     testCacheFile();
+    testCacheFolder();
     testCounters();
     for (unsigned i = 0; i < s_gameCount; i++) {
         free(s_gameText[i]);
