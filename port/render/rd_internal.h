@@ -991,6 +991,9 @@ typedef struct RdProfile {
     bool fxPlan;
     bool fxDstLocal;
     bool vuPlanesFrac;
+    /* the crack filler above 1x on by default (rd_crack_fill.c): off on a
+     * tile-based GPU until measured; [dev] crack_fill over it */
+    bool crackFill;
     /* rd_profile.c: the device class's name for the lines; per flag
      * (RD_PROFILE_*) whether a [dev] key set it and whether a self-test
      * turned it off (rd__profile_self_test_off) */
@@ -3319,8 +3322,9 @@ void rd__blur_smooth_counts(uint64_t *drawn, uint64_t *restarts, uint64_t *origi
  * through the crack), between texels in front of it within the reach takes
  * the nearer one's colour and depth.
  * rd__crack_fill_init      rd_init: the switch (ICO_RD_CRACK_FILL=0, [dev]
- *                          crack_fill = false: off; on by default) and the
- *                          counters from zero
+ *                          crack_fill = false: off; =1, true: on; unset:
+ *                          RdProfile.crackFill, on but on a tile-based GPU)
+ *                          and the counters from zero
  * rd__crack_fill_scene_made  rd_core.c after the named targets were made:
  *                          the state line when it changed ("crack fill: on
  *                          above 1x (scale ..., reach ...)", "off", "not
@@ -3328,7 +3332,7 @@ void rd__blur_smooth_counts(uint64_t *drawn, uint64_t *restarts, uint64_t *origi
  * rd__crack_fill_set_enabled  the replay tool's --no-crack-fill, tests: the
  *                          switch for the run, over the environment
  * rd__crack_fill_count_all  every filled replay counted (tests, the tool's
- *                          --stats), not one in RD_CRACK_COUNT_EVERY
+ *                          --stats); the game counts none
  * rd__crack_fill_wait      waits for the GPU and reads the count in flight
  * rd__crack_fill_counts    since rd_init: replays filled, replays counted,
  *                          the pixels those filled, the last and the
@@ -3359,7 +3363,6 @@ void rd__crack_fill_shutdown(void);
 /* a texel is in front of a crack's texel when nearer by more than
  * 1 / RD_CRACK_BEHIND of its own depth (blit.hlsl crack_front) */
 #define RD_CRACK_BEHIND 64u
-#define RD_CRACK_COUNT_EVERY 16u
 
 /* rd_png.c: 8-bit RGBA (or RGB with withAlpha = 0), stored deflate.  The
  * source is RGBA8 either way, rows pitch (>= w * 4) bytes apart. */

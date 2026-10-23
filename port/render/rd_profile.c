@@ -32,6 +32,12 @@
  *                 (fx_local_ps, rd_fx_plan.c)
  *   vuPlanesFrac  on on every class: the VU pixel side without the planes
  *                 at a fractional scale (rd_pixel_plan.c)
+ *   crackFill     on       on      off       off      off   off      off
+ *                 (the crack filler above 1x, rd_crack_fill.c: off on a
+ *                 tile-based GPU until its cost is measured on a phone,
+ *                 since its pass ends the local read's scene pass; [dev]
+ *                 crack_fill = true or false sets it, read there, and the
+ *                 filler's own line says which)
  *
  * The Mali row keeps the blur fold off: the G52 is bound by its ALU, which
  * the fold does not spare.  A tile-based GPU of another vendor (Samsung,
@@ -241,6 +247,7 @@ void rd__profile_init(void)
     p->fxPlan = true;
     p->fxDstLocal = tile && p->localRead;
     p->vuPlanesFrac = true;
+    p->crackFill = !tile; /* rd_crack_fill.c reads ICO_RD_CRACK_FILL over it */
 
     /* the [dev] keys, through the host's environment */
     const char *notHere = NULL; /* a [dev] key asked for what the device lacks */

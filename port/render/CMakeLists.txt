@@ -1065,6 +1065,23 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_crack_${_v} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                        ENVIRONMENT "${_crk_env_${_v}}")
     endforeach()
+    # a tile-based GPU (ICO_VK_FAKE_LIMITS=moltenvk: the Apple row of the
+    # device profile): the filler off by default until measured on a phone,
+    # nothing drawn; [dev] crack_fill = true (ICO_RD_CRACK_FILL=1) turns it
+    # on there, the fill as on the desktop (the local read's scene pass
+    # ended for it where lavapipe has local read)
+    add_test(NAME rd_crack_tiler
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> -DARGS=2
+                     "-DEXPECT=rd: crack fill: off on this tile-based GPU until measured \\(the pass ends the scene pass\\); \\[dev\\] crack_fill = true turns it on"
+                     "-DDENY=rd: crack fill: on above 1x \\(" -P "${_crk}")
+    add_test(NAME rd_crack_tiler_on
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> -DARGS=2
+                     "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail} \\(on by \\[dev\\] crack_fill = true on this tile-based GPU\\)"
+                     -P "${_crk}")
+    set_tests_properties(rd_crack_tiler PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                   ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk")
+    set_tests_properties(rd_crack_tiler_on PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                      ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk;ICO_RD_CRACK_FILL=1")
     add_test(NAME rd_replay_tool_crack
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DARGS=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump|${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_crack.png|--enhanced|--resolution|2x|--stats|--no-crack-fill"

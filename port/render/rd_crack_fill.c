@@ -52,19 +52,33 @@
  * tool's --no-crack-fill).  The local read's tiler path ends its scene pass
  * for it (the fog then begins it again, readable).
  *
- * The counters: the filled pixels are counted on the GPU, one replay in
- * RD_CRACK_COUNT_EVERY (every one for the tests and the replay tool's
- * --stats, rd__crack_fill_count_all): crack_count_ps runs the same test
- * over 16 x 16 texels a texel into a small RGBA8 target (n & 255, n >> 8),
- * copied into a readback buffer and summed once the GPU is past that
- * replay (RHI_FRAMES_IN_FLIGHT replays later, as the fog's edge probe).
+ * On by default where the device profile says so (RdProfile.crackFill):
+ * every desktop GPU; off on a tile-based GPU until its cost is measured on
+ * a phone (the pass ends the local read's scene pass and stores and
+ * reloads SCENE and its depth), where [dev] crack_fill = true
+ * (ICO_RD_CRACK_FILL=1) turns it on.
+ *
+ * The counters: the filled pixels are counted on the GPU only for the
+ * tests and the replay tool's --stats (rd__crack_fill_count_all), never in
+ * the game: crack_count_ps runs the same test over 16 x 16 texels a texel
+ * into a small RGBA8 target (n & 255, n >> 8), copied into a readback
+ * buffer and summed once the GPU is past that replay (RHI_FRAMES_IN_FLIGHT
+ * replays later, as the fog's edge probe).  A missing count pipeline
+ * leaves the fill drawn, uncounted.
  * The lines:
  *   rd: crack fill: on above 1x (scale 2x2, reach 1x1 texels: a run of
  *       texels no draw covered, or drawn over 1/64 of the depth behind both
  *       its ends, with a texel in front at each end takes the nearer end);
- *       [dev] crack_fill = false turns it off      (start, a new scale)
+ *       [dev] crack_fill = false turns it off      (start, a new scale;
+ *       " (on by [dev] crack_fill = true on this tile-based GPU)" after it
+ *       where the profile has it off)
+ *   rd: crack fill: off on this tile-based GPU until measured (the pass
+ *       ends the scene pass); [dev] crack_fill = true turns it on   (start)
+ *   rd: crack fill: T replays filled (scale SXxSY; reach RXxRY texels; not
+ *       counted in the game)                       (10 s summary)
  *   rd: crack fill: N pixels filled over M replays counted of T filled
- *       (max K a replay; scale SXxSY; reach RXxRY texels)   (10 s summary)
+ *       (max K a replay; scale SXxSY; reach RXxRY texels)   (the same,
+ *       counting: the tests, the replay tool's --stats)
  *   rd: crack fill: N fogged replays above 1x not filled (...)   (the same)
  *   rd: crack fill: not drawn ...: <reason> (reported once)   (events) */
 #include <math.h>
@@ -87,8 +101,12 @@ static const char *const kSkipWhy[SKIP_COUNT] = {
     "no memory for the copies of the scene's colour and depth",
 };
 
+/* why the switch is what it is (the state line) */
+enum { WHY_PROFILE, WHY_DEV, WHY_FORCED };
+
 static struct {
-    bool enabled; /* ICO_RD_CRACK_FILL, or the replay tool's switch */
+    bool enabled; /* ICO_RD_CRACK_FILL, the profile, or the replay tool's switch */
+    int why;      /* WHY_* */
     bool countAll;
     /* the count's target and readback (one in flight) */
     RhiTexture countTex;
@@ -136,27 +154,36 @@ static void note(void)
     const RdTargetRec *t = sceneRec();
     const float sx = t ? t->sx : 1.0f, sy = t ? t->sy : 1.0f;
     char line[sizeof(s_cf.noted)];
-    if (!s_cf.enabled) {
+    /* on by [dev] where the profile has it off (a tile-based GPU) */
+    const char *dev = s_cf.enabled && s_cf.why == WHY_DEV && !g_rd.profile.crackFill
+                          ? " (on by [dev] crack_fill = true on this tile-based GPU)"
+                          : "";
+    if (!s_cf.enabled && s_cf.why == WHY_PROFILE) {
+        snprintf(line, sizeof(line),
+                 "crack fill: off on this tile-based GPU until measured (the pass ends the scene "
+                 "pass); [dev] crack_fill = true turns it on");
+    } else if (!s_cf.enabled) {
         snprintf(line, sizeof(line), "crack fill: off (%s)",
-                 s_forced == 0 ? "the replay tool's --no-crack-fill"
-                               : "[dev] crack_fill = false, ICO_RD_CRACK_FILL=0");
+                 s_cf.why == WHY_FORCED ? "the replay tool's --no-crack-fill"
+                                        : "[dev] crack_fill = false, ICO_RD_CRACK_FILL=0");
     } else if (g_rd.settings.preset != RD_PRESET_ENHANCED) {
         snprintf(line, sizeof(line),
                  "crack fill: on above 1x, not drawn under the Original preset; [dev] "
-                 "crack_fill = false turns it off");
+                 "crack_fill = false turns it off%s",
+                 dev);
     } else if (!(sx > 1.0f || sy > 1.0f)) {
         snprintf(line, sizeof(line),
                  "crack fill: on above 1x, not drawn at scale %.4gx%.4g (the GS's own grid); "
-                 "[dev] crack_fill = false turns it off",
-                 (double)sx, (double)sy);
+                 "[dev] crack_fill = false turns it off%s",
+                 (double)sx, (double)sy, dev);
     } else {
         snprintf(line, sizeof(line),
                  "crack fill: on above 1x (scale %.4gx%.4g, reach %ux%u texels: a run of texels "
                  "no draw covered, or drawn over 1/%u of the depth behind both its ends, with a "
                  "texel in front at each end takes the nearer end); [dev] crack_fill = false "
-                 "turns it off",
+                 "turns it off%s",
                  (double)sx, (double)sy, rd__crack_fill_reach(sx), rd__crack_fill_reach(sy),
-                 RD_CRACK_BEHIND);
+                 RD_CRACK_BEHIND, dev);
     }
     if (strcmp(line, s_cf.noted) != 0) {
         snprintf(s_cf.noted, sizeof(s_cf.noted), "%s", line);
@@ -173,8 +200,20 @@ void rd__crack_fill_init(void)
     s_cf.countTex = tex; /* freed by rd__crack_fill_shutdown */
     s_cf.buf = buf;
     s_cf.countAll = countAll;
+    /* the replay tool's switch, else [dev] crack_fill (0, false, off or no:
+     * off; any other word: on), else the device profile's default */
     const char *env = getenv("ICO_RD_CRACK_FILL");
-    s_cf.enabled = s_forced >= 0 ? s_forced != 0 : !(env && strcmp(env, "0") == 0);
+    if (s_forced >= 0) {
+        s_cf.enabled = s_forced != 0;
+        s_cf.why = WHY_FORCED;
+    } else if (env && env[0]) {
+        s_cf.enabled = !(strcmp(env, "0") == 0 || strcmp(env, "false") == 0 ||
+                         strcmp(env, "off") == 0 || strcmp(env, "no") == 0);
+        s_cf.why = WHY_DEV;
+    } else {
+        s_cf.enabled = g_rd.profile.crackFill;
+        s_cf.why = WHY_PROFILE;
+    }
 }
 
 void rd__crack_fill_scene_made(void)
@@ -187,6 +226,7 @@ void rd__crack_fill_set_enabled(bool on)
 {
     s_forced = on ? 1 : 0;
     s_cf.enabled = on;
+    s_cf.why = WHY_FORCED;
     note();
 }
 
@@ -271,7 +311,12 @@ void rd__crack_fill_counts(RdCrackCounts *out)
 void rd__crack_fill_block(void)
 {
     note();
-    if (s_cf.bFilled) {
+    if (s_cf.bFilled && !s_cf.bCounted) {
+        rd__log("crack fill: %llu replays filled (scale %.4gx%.4g; reach %ux%u texels; not counted "
+                "in the game)",
+                (unsigned long long)s_cf.bFilled, (double)s_cf.sx, (double)s_cf.sy, s_cf.rx,
+                s_cf.ry);
+    } else if (s_cf.bFilled) {
         rd__log("crack fill: %llu pixels filled over %llu replays counted of %llu filled (max %u a "
                 "replay; scale %.4gx%.4g; reach %ux%u texels)",
                 (unsigned long long)s_cf.bPixels, (unsigned long long)s_cf.bCounted,
@@ -387,9 +432,12 @@ void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, RdDepthCo
     const RdPipeKeyInt kFill = rd__crack_fill_key(0), kCount = rd__crack_fill_key(1);
     const RhiPipeline pFill =
         g_rd.fs[RD_FS_CRACK_FILL].id ? rd__get_pipeline(&kFill) : (RhiPipeline){0};
-    const RhiPipeline pCount =
-        g_rd.fs[RD_FS_CRACK_COUNT].id ? rd__get_pipeline(&kCount) : (RhiPipeline){0};
-    if (!pFill.id || !pCount.id) {
+    /* the count's pipeline only where counting (the tests, --stats): a
+     * missing one leaves the fill drawn, uncounted */
+    const RhiPipeline pCount = s_cf.countAll && g_rd.fs[RD_FS_CRACK_COUNT].id
+                                   ? rd__get_pipeline(&kCount)
+                                   : (RhiPipeline){0};
+    if (!pFill.id) {
         if (!rd__pipeline_gathering()) { /* a gathering replay names the keys only */
             skip(SKIP_PIPES, tc);
         }
@@ -438,8 +486,8 @@ void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, RdDepthCo
     s_cf.filled++;
     s_cf.bFilled++;
 
-    /* the count, one replay in RD_CRACK_COUNT_EVERY with none in flight */
-    if (s_cf.pending || !(s_cf.countAll || (s_cf.filled - 1u) % RD_CRACK_COUNT_EVERY == 0u)) {
+    /* the count, only for the tests and --stats, with none in flight */
+    if (!s_cf.countAll || !pCount.id || s_cf.pending) {
         return;
     }
     const uint32_t cw = (w + CRACK_BLOCK - 1u) / CRACK_BLOCK,

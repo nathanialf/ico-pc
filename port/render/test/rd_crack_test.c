@@ -255,7 +255,7 @@ int main(int argc, char **argv)
     rd__crack_fill_count_all(true);
     RdCrackCounts c0;
     rd__crack_fill_counts(&c0);
-    const bool envOn = c0.enabled; /* ICO_RD_CRACK_FILL */
+    const bool envOn = c0.enabled; /* ICO_RD_CRACK_FILL, else the profile's default */
     /* the first fogged replay is the fog probe's (its own read, the exact
      * table entry; under MSAA the resolved depth): one before the two
      * compared, which then draw the fog alike */
@@ -275,7 +275,7 @@ int main(int argc, char **argv)
     const bool active = envOn && !original && !msaa && (sx > 1.0f || sy > 1.0f);
     printf("  SCENE %ux%u texels, scale %gx%g, reach %ux%u; the filler %s%s\n", t->tw, t->th,
            (double)sx, (double)sy, rx, ry,
-           active ? "draws" : (envOn ? "on, not drawn here" : "off (ICO_RD_CRACK_FILL=0)"),
+           active ? "draws" : (envOn ? "on, not drawn here" : "off (the switch or the profile)"),
            s_backdrop ? "; over a backdrop" : "");
 
     Picture off, on;

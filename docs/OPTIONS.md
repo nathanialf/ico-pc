@@ -70,6 +70,9 @@ How the picture looks.
   gaps where pieces of the world meet, which the finer picture would
   otherwise show as rows of dots in the colour of the room's mist along
   the edges of walls and floors; at 1x they are as small as on the PS2.
+  On phones, tablets, Macs and other machines with a phone-style graphics
+  chip the gaps are not filled in yet, until we have measured what it
+  costs there.
   For the cleanest edges where pieces of the world meet, pick a whole
   number (2x, 3x, 4x and so on): at the size of your window, which is
   usually not a whole number, the edges are placed a little less exactly.

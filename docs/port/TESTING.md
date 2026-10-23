@@ -448,6 +448,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rd_crack_original`, `rd_crack_msaa`, `rd_crack_off`) no fill pass and the same bytes; the same
   2x run on the depth copy, the buffer path, D24S8 (no depth readback: colours only) and the
   two-pass blend (`rd_crack_depth_copy`, `rd_crack_buffer`, `rd_crack_d24s8`, `rd_crack_nodual`).
+  Under the MoltenVK report (`ICO_VK_FAKE_LIMITS=moltenvk`, a tile-based profile) `rd_crack_tiler`
+  finds the filler off by default and nothing drawn, and `rd_crack_tiler_on`
+  (`ICO_RD_CRACK_FILL=1`) the fill as on the desktop with the `(on by [dev] ...)` mark.
   Each run's `rd: crack fill:` state line is matched (`-DEXPECT`, `-DEXPECT2`; `-DDENY` must not
   match); `rd_replay_tool_crack` runs the tool on `rd_pixel`'s dump with `--enhanced --resolution
   2x --stats --no-crack-fill` and matches `crack fill: off (the replay tool's --no-crack-fill)`
