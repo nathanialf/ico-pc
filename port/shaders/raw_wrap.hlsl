@@ -32,10 +32,10 @@ struct WrapAccIn
     VK_LOC(1) float2 uv : TEXCOORD0; // normalised
 };
 
-Texture2D<float4> g_texture : register(t1, space2);
-SamplerState g_sampler : register(s1, space2);
+Texture2D<float4> g_texture : ICO_REG(t1, 2);
+SamplerState g_sampler : ICO_REG(s1, 2);
 // wrap_resolve_ps: the destination as it was before the command
-Texture2D<float4> g_dest : register(t2, space2);
+Texture2D<float4> g_dest : ICO_REG(t2, 2);
 
 float4 wrap_acc_ps(WrapAccIn i) : SV_Target0
 {

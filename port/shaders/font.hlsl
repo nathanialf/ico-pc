@@ -29,9 +29,9 @@ struct SpriteVSOut
     VK_LOC(1) float2 uv : TEXCOORD0; // normalised
 };
 
-Texture2D<float4> g_atlas : register(t1, space2);
-SamplerState g_sampler : register(s1, space2);
-Texture2D<float> g_dateSnap : register(t2, space2);
+Texture2D<float4> g_atlas : ICO_REG(t1, 2);
+SamplerState g_sampler : ICO_REG(s1, 2);
+Texture2D<float> g_dateSnap : ICO_REG(t2, 2);
 
 GS_PS_ATTR GS_PS_OUT font_ps(SpriteVSOut i)
 {

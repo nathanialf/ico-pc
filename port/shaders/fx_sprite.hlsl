@@ -114,9 +114,9 @@ float4 fx_rect_vs(uint id : SV_VertexID) : SV_Position
 
 #ifdef ICO_UINT_SRC
 // fx_sprite_u_ps: the integer texel through the RGBA8_UINT view
-Texture2D<uint4> g_texture : register(t1, space2);
-SamplerState g_sampler : register(s1, space2);
-Texture2D<uint4> g_dest : register(t2, space2);
+Texture2D<uint4> g_texture : ICO_REG(t1, 2);
+SamplerState g_sampler : ICO_REG(s1, 2);
+Texture2D<uint4> g_dest : ICO_REG(t2, 2);
 
 uint4 fx_load(Texture2D<uint4> t, int2 c)
 {
@@ -124,12 +124,12 @@ uint4 fx_load(Texture2D<uint4> t, int2 c)
 }
 #elif defined(ICO_FX_DST_LOCAL)
 // fx_local_ps: rd's layoutLocal (t1 the input attachment, t2 the texture)
-Texture2D<float4> g_texture : register(t2, space2);
+Texture2D<float4> g_texture : ICO_REG(t2, 2);
 #ifdef __spirv__
-[[vk::input_attachment_index(0)]] SubpassInput<float4> g_destIn : register(t1, space2);
+[[vk::input_attachment_index(0)]] SubpassInput<float4> g_destIn : ICO_REG(t1, 2);
 #define FX_DST_LOCAL_READ 1
 #else
-Texture2D<float4> g_dest : register(t1, space2);
+Texture2D<float4> g_dest : ICO_REG(t1, 2);
 #endif
 
 uint4 fx_load(Texture2D<float4> t, int2 c)
@@ -137,9 +137,9 @@ uint4 fx_load(Texture2D<float4> t, int2 c)
     return uint4(floor(t.Load(int3(c, 0)) * 255.0 + 0.5));
 }
 #else
-Texture2D<float4> g_texture : register(t1, space2);
-SamplerState g_sampler : register(s1, space2);
-Texture2D<float4> g_dest : register(t2, space2);
+Texture2D<float4> g_texture : ICO_REG(t1, 2);
+SamplerState g_sampler : ICO_REG(s1, 2);
+Texture2D<float4> g_dest : ICO_REG(t2, 2);
 
 uint4 fx_load(Texture2D<float4> t, int2 c)
 {

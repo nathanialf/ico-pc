@@ -1781,8 +1781,7 @@ int main(int argc, char **argv)
     }
     if (noDevice || !rd_init(gw, gh, &s, NULL)) {
         if (!noDevice && !list) {
-            fprintf(stderr, "no usable %s device\n",
-                    rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan");
+            fprintf(stderr, "no usable %s device\n", rhi_backend_kind_name(rhi_backend()));
             return 77;
         }
         noDevice = true;

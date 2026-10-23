@@ -112,7 +112,7 @@
 #define RHI__TABLE_FIELD(n) __typeof__(rhi_##n) *n;
 
 typedef struct RhiBackendTable {
-    const char *name; /* "vulkan", "d3d12": the rhi_create_backend name */
+    const char *name; /* "vulkan", "d3d12", "opengl", "d3d11": the rhi_create_backend name */
     RHI_BACKEND_FUNCS(RHI__TABLE_FIELD)
 } RhiBackendTable;
 
@@ -124,5 +124,7 @@ typedef struct RhiBackendTable {
 
 extern const RhiBackendTable rhi_backend_vk;
 extern const RhiBackendTable rhi_backend_d3d12;
+extern const RhiBackendTable rhi_backend_gl;
+extern const RhiBackendTable rhi_backend_d3d11;
 
 #endif /* PORT_RHI_RHI_BACKEND_H */

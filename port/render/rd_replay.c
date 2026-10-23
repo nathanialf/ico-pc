@@ -110,6 +110,34 @@ const char *rd__fs_name(uint8_t fs)
 
 /* ------------------------------------------------------------------ init */
 
+/* g_icoShaderSources (shaders_gen.h) as RhiShaderSource rows, for the
+ * Direct3D 11 backend's run-time compile; empty without
+ * ICO_SHADERS_HLSL_SOURCE */
+#define RD_SHADER_SOURCES_MAX 32
+
+static const RhiShaderSource *shaderSources(unsigned *count)
+{
+    static RhiShaderSource s_rows[RD_SHADER_SOURCES_MAX];
+    static unsigned s_count;
+    static bool s_made;
+
+    if (!s_made) {
+        s_made = true;
+        for (unsigned i = 0; i < g_icoShaderSourceCount && i < RD_SHADER_SOURCES_MAX; i++) {
+            s_rows[i].name = g_icoShaderSources[i].name;
+            s_rows[i].text = g_icoShaderSources[i].text;
+            s_rows[i].len = g_icoShaderSources[i].len;
+            s_count = i + 1;
+        }
+        if (g_icoShaderSourceCount > RD_SHADER_SOURCES_MAX) {
+            rd__log("shader sources: %u embedded, %u kept", g_icoShaderSourceCount,
+                    RD_SHADER_SOURCES_MAX);
+        }
+    }
+    *count = s_count;
+    return s_rows;
+}
+
 RhiShader rd__make_shader(const char *name)
 {
     const IcoShaderBlob *b = ico_find_shader(name);
@@ -120,12 +148,34 @@ RhiShader rd__make_shader(const char *name)
     RhiShaderDesc d;
     memset(&d, 0, sizeof(d));
     d.stage = b->stage == ICO_SHADER_STAGE_VERTEX ? RHI_STAGE_VERTEX : RHI_STAGE_FRAGMENT;
-    if (rhi_backend() == RHI_BACKEND_D3D12) {
+    switch (rhi_backend()) {
+    case RHI_BACKEND_D3D12:
         d.bytecode = b->dxil;
         d.bytecodeSize = b->dxil_len;
-    } else {
+        break;
+    case RHI_BACKEND_OPENGL:
+        /* the GLSL translated from the SPIR-V; an entry without one (the
+         * input-attachment builds, Vulkan only) is missing on this backend
+         * and its feature stays off, as a name not in the table */
+        if (!b->glsl) {
+            rd__log("shader %s has no GLSL build", name);
+            return (RhiShader){0};
+        }
+        d.bytecode = b->glsl;
+        d.bytecodeSize = b->glsl_len;
+        d.textSize = b->glsl_text_len;
+        break;
+    case RHI_BACKEND_D3D11:
+        /* compiled by the backend from the embedded HLSL (the sources table
+         * copied once into the RHI's own type) */
+        d.hlslFile = b->hlslFile;
+        d.defines = b->defines;
+        d.sources = shaderSources(&d.sourceCount);
+        break;
+    default:
         d.bytecode = b->spirv;
         d.bytecodeSize = b->spirv_len;
+        break;
     }
     d.entryPoint = b->entry;
     d.debugName = b->name;

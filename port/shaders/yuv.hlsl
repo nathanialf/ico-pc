@@ -53,7 +53,7 @@ YuvVSOut yuv_vs(uint id : SV_VertexID)
     return o;
 }
 
-Texture2D<float4> g_texture : register(t1, space2);
+Texture2D<float4> g_texture : ICO_REG(t1, 2);
 
 int plane_texel(int x, int y)
 {

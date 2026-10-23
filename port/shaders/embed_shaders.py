@@ -2,20 +2,29 @@
 """embed_shaders.py: turn compiled shader blobs into shaders_gen.c/.h.
 
 Called by cmake/IcoShaders.cmake with a manifest, one shader per line:
-    name|stage|entry|spirv-file|dxil-file
+    name|stage|entry|spirv-file|dxil-file|glsl-file|hlsl-file|defines
 the output directory and a version string. A dxil-file of "-" means no
 DXIL for that shader (ICO_SHADERS_DXIL=OFF): its table entry has dxil NULL
-and dxil_len 0. Writes shaders_gen.h (the table's
-declaration) and shaders_gen.c (the byte arrays and the table). Also checks
-the blobs: SPIR-V must start with its magic number, DXIL must be a DXBC
-container whose hash is not zero (an unsigned container has a zero hash:
-D3D12 would refuse it without experimental shader models).
+and dxil_len 0. A glsl-file of "-" likewise (ICO_SHADERS_GLSL=OFF, or an
+entry GLSL cannot express); a GLSL file is embedded deflated (zlib, so the
+OpenGL backend inflates it with miniz), with its text length kept.
+hlsl-file is the entry's HLSL file name and defines its macros ("A=1,B=2"):
+what the Direct3D 11 backend compiles at run time; with --sources FILE...
+every file given is embedded in g_icoShaderSources by its base name for the
+includes to resolve against (ICO_SHADERS_HLSL_SOURCE), else that table is
+empty. Writes shaders_gen.h (the table's declaration) and shaders_gen.c
+(the byte arrays and the table). Also checks the blobs: SPIR-V must start
+with its magic number, DXIL must be a DXBC container whose hash is not zero
+(an unsigned container has a zero hash: D3D12 would refuse it without
+experimental shader models), GLSL must start with #version.
 
-usage: embed_shaders.py MANIFEST OUTDIR VERSION
+usage: embed_shaders.py MANIFEST OUTDIR VERSION [--sources FILE...]
 """
 import argparse
+import os
 import struct
 import sys
+import zlib
 
 STAGES = {"vertex": 0, "fragment": 1}
 
@@ -43,10 +52,25 @@ typedef struct IcoShaderBlob {
     const uint8_t *dxil; /* signed DXIL in a DXBC container; NULL when built without */
     size_t dxil_len;
     const char *entry; /* entry point inside the SPIR-V (RhiShaderDesc.entryPoint) */
+    const uint8_t *glsl;  /* the GLSL for OpenGL, zlib-deflated; NULL when built without */
+    size_t glsl_len;      /* the deflated bytes */
+    size_t glsl_text_len; /* the GLSL text's length once inflated */
+    const char *hlslFile; /* the HLSL file the entry is in ("sprite.hlsl") */
+    const char *defines;  /* the entry's macros, "A=1,B=2" ("" for none) */
 } IcoShaderBlob;
+
+/* an embedded HLSL source file (ICO_SHADERS_HLSL_SOURCE): the Direct3D 11
+ * backend's run-time compile resolves includes against these by name */
+typedef struct IcoShaderSource {
+    const char *name; /* the base name ("common.hlsli") */
+    const char *text; /* NUL-terminated */
+    size_t len;       /* without the NUL */
+} IcoShaderSource;
 
 extern const IcoShaderBlob g_icoShaders[];
 extern const unsigned g_icoShaderCount;
+extern const IcoShaderSource g_icoShaderSources[];
+extern const unsigned g_icoShaderSourceCount;
 
 /* NULL when no shader has that name. */
 const IcoShaderBlob *ico_find_shader(const char *name);
@@ -59,9 +83,11 @@ const IcoShaderBlob *ico_find_shader(const char *name);
 """
 
 
-def check(name, spv, dxil):
+def check(name, spv, dxil, glsl):
     if len(spv) < 20 or len(spv) % 4 or struct.unpack("<I", spv[:4])[0] != 0x07230203:
         sys.exit(f"embed_shaders: {name}: SPIR-V is not a SPIR-V module")
+    if glsl is not None and not glsl.lstrip().startswith(b"#version"):
+        sys.exit(f"embed_shaders: {name}: GLSL does not start with #version")
     if dxil is None:
         return
     if len(dxil) < 24 or dxil[:4] != b"DXBC":
@@ -85,9 +111,12 @@ def read_bytes(path):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("manifest", help="one shader per line: name|stage|entry|spirv-file|dxil-file")
+    ap.add_argument("manifest",
+                    help="one shader per line: name|stage|entry|spirv-file|dxil-file|glsl-file|hlsl-file|defines")
     ap.add_argument("outdir", help="where shaders_gen.c and shaders_gen.h are written")
     ap.add_argument("version", help="the version string the generated files name")
+    ap.add_argument("--sources", nargs="*", default=[],
+                    help="HLSL source files to embed for the Direct3D 11 backend's run-time compile")
     a = ap.parse_args()
     manifest, outdir, version = a.manifest, a.outdir, a.version
     rows = []
@@ -97,30 +126,59 @@ def main():
         line = line.strip()
         if not line:
             continue
-        name, stage, entry, spv_path, dxil_path = line.split("|")
+        name, stage, entry, spv_path, dxil_path, glsl_path, hlsl_file, defines = line.split("|")
         spv = read_bytes(spv_path)
         dxil = None if dxil_path == "-" else read_bytes(dxil_path)
-        check(name, spv, dxil)
-        rows.append((name, STAGES[stage], entry, spv, dxil))
+        glsl = None if glsl_path == "-" else read_bytes(glsl_path)
+        check(name, spv, dxil, glsl)
+        if not hlsl_file or "/" in hlsl_file or '"' in hlsl_file or '"' in defines:
+            sys.exit(f"embed_shaders: {name}: hlsl file or defines malformed")
+        rows.append((name, STAGES[stage], entry, spv, dxil, glsl, hlsl_file, defines))
     rows.sort(key=lambda r: r[0])
     names = [r[0] for r in rows]
     if len(set(names)) != len(names):
         sys.exit("embed_shaders: duplicate shader name")
+    sources = []
+    for path in a.sources:
+        text = read_bytes(path)
+        if b"\0" in text:
+            sys.exit(f"embed_shaders: {path}: a NUL in a shader source")
+        sources.append((os.path.basename(path), text))
+    sources.sort(key=lambda s: s[0])
+    if len(set(s[0] for s in sources)) != len(sources):
+        sys.exit("embed_shaders: duplicate shader source name")
 
     out = [f"/* shaders_gen.c: generated by port/shaders/embed_shaders.py ({version}); do not edit. */",
            '#include "shaders_gen.h"', "#include <string.h>", ""]
-    for i, (_, _, _, spv, dxil) in enumerate(rows):
+    for i, (_, _, _, spv, dxil, glsl, _, _) in enumerate(rows):
         out.append(array(f"spv_{i}", spv))
         if dxil is not None:
             out.append(array(f"dxil_{i}", dxil))
+        if glsl is not None:
+            out.append(array(f"glsl_{i}", zlib.compress(glsl, 9)))
+        out.append("")
+    for i, (_, text) in enumerate(sources):
+        out.append(array(f"src_{i}", text + b"\0"))
         out.append("")
     out.append("const IcoShaderBlob g_icoShaders[] = {")
-    for i, (name, stage, entry, _, dxil) in enumerate(rows):
+    for i, (name, stage, entry, _, dxil, glsl, hlsl_file, defines) in enumerate(rows):
         dx = "NULL, 0" if dxil is None else f"dxil_{i}, sizeof(dxil_{i})"
-        out.append(f'    {{"{name}", {stage}, spv_{i}, sizeof(spv_{i}), {dx}, "{entry}"}},')
+        gl = "NULL, 0, 0" if glsl is None else f"glsl_{i}, sizeof(glsl_{i}), {len(glsl)}"
+        out.append(f'    {{"{name}", {stage}, spv_{i}, sizeof(spv_{i}), {dx}, "{entry}", {gl}, '
+                   f'"{hlsl_file}", "{defines}"}},')
     out += [
         "};",
         f"const unsigned g_icoShaderCount = {len(rows)};",
+        "",
+        "const IcoShaderSource g_icoShaderSources[] = {",
+    ]
+    for i, (name, text) in enumerate(sources):
+        out.append(f'    {{"{name}", (const char *)src_{i}, {len(text)}}},')
+    if not sources:
+        out.append("    {NULL, NULL, 0},")
+    out += [
+        "};",
+        f"const unsigned g_icoShaderSourceCount = {len(sources)};",
         "",
         "const IcoShaderBlob *ico_find_shader(const char *name)",
         "{",

@@ -1,9 +1,10 @@
 /* rhi_backend.c: the rhi.h entry points, forwarded to the backend
  * rhi_create_backend selected (rhi_backend.h describes the scheme).
  *
- * The backends linked into the build are listed by ICO_RHI_HAVE_VK and
- * ICO_RHI_HAVE_D3D12 (port/rhi/CMakeLists.txt), Vulkan first, so it is the
- * default; [video] backend or ICO_RHI_BACKEND picks another. */
+ * The backends linked into the build are listed by ICO_RHI_HAVE_VK,
+ * ICO_RHI_HAVE_D3D12, ICO_RHI_HAVE_GL and ICO_RHI_HAVE_D3D11
+ * (port/rhi/CMakeLists.txt), Vulkan first, so it is the default; [video]
+ * backend or ICO_RHI_BACKEND picks another. */
 #include "rhi_backend.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,6 +16,12 @@ static const RhiBackendTable *const s_backends[] = {
 #endif
 #ifdef ICO_RHI_HAVE_D3D12
     &rhi_backend_d3d12,
+#endif
+#ifdef ICO_RHI_HAVE_GL
+    &rhi_backend_gl,
+#endif
+#ifdef ICO_RHI_HAVE_D3D11
+    &rhi_backend_d3d11,
 #endif
     NULL};
 
@@ -40,9 +47,11 @@ static bool nameEq(const char *a, const char *b)
 
 static const RhiBackendTable *find(const char *name)
 {
-    /* "vk" is accepted for "vulkan" */
+    /* "vk" is accepted for "vulkan", "gl" for "opengl" */
     if (name && nameEq(name, "vk")) {
         name = "vulkan";
+    } else if (name && nameEq(name, "gl")) {
+        name = "opengl";
     }
     for (const RhiBackendTable *const *p = s_backends; *p; p++) {
         if (name && nameEq(name, (*p)->name)) {
@@ -87,6 +96,23 @@ const char *rhi_backend_name(uint32_t index)
         }
     }
     return NULL;
+}
+
+const char *rhi_backend_kind_name(RhiBackendKind kind)
+{
+    switch (kind) {
+    case RHI_BACKEND_VULKAN:
+        return "Vulkan";
+    case RHI_BACKEND_D3D12:
+        return "D3D12";
+    case RHI_BACKEND_METAL:
+        return "Metal";
+    case RHI_BACKEND_OPENGL:
+        return "OpenGL";
+    case RHI_BACKEND_D3D11:
+        return "D3D11";
+    }
+    return "?";
 }
 
 static const RhiBackendTable *be(void)

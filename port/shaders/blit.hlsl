@@ -25,8 +25,8 @@ BlitVSOut blit_vs(uint id : SV_VertexID)
     return o;
 }
 
-Texture2D<float4> g_texture : register(t1, space2);
-SamplerState g_sampler : register(s1, space2);
+Texture2D<float4> g_texture : ICO_REG(t1, 2);
+SamplerState g_sampler : ICO_REG(s1, 2);
 
 uint4 blit_color(float2 uv)
 {
@@ -52,7 +52,7 @@ float4 blit_ps(BlitVSOut i) : SV_Target0
 // the API (ReShade) finds the scene's depth at the picture's pixels and far in
 // the bars. Depth grows with GS Z, near 1 and far 0 (gs_z_to_depth):
 // RESHADE_DEPTH_INPUT_IS_REVERSED=1.
-Texture2D<float> g_sceneDepth : register(t2, space2);
+Texture2D<float> g_sceneDepth : ICO_REG(t2, 2);
 
 struct BlitDepthOut {
     VK_LOC(0) float4 c : SV_Target0;
@@ -160,7 +160,7 @@ float4 aa_reduce_ps(BlitVSOut i) : SV_Target0
 // depth_upsample_ps: the other way, the single-sampled depth (t1) into
 // every sample of the multisampled one, when an epoch starts on a scene
 // that already holds a picture.
-Texture2DMS<float> g_msDepth : register(t1, space2);
+Texture2DMS<float> g_msDepth : ICO_REG(t1, 2);
 
 float depth_resolve_ps(BlitVSOut i) : SV_Depth
 {
@@ -175,7 +175,7 @@ float depth_resolve_ps(BlitVSOut i) : SV_Depth
     return d;
 }
 
-Texture2D<float> g_ssDepth : register(t1, space2);
+Texture2D<float> g_ssDepth : ICO_REG(t1, 2);
 
 float depth_upsample_ps(BlitVSOut i) : SV_Depth
 {
@@ -218,7 +218,7 @@ float depth_upsample_ps(BlitVSOut i) : SV_Depth
 #define CRACK_REACH_MAX 3
 #define CRACK_BLOCK 16
 
-Texture2D<float> g_crackDepth : register(t1, space2);
+Texture2D<float> g_crackDepth : ICO_REG(t1, 2);
 
 // texel q of the depth copy z, 0 (unwritten) outside it
 float crack_depth(Texture2D<float> z, int2 q, int2 size)

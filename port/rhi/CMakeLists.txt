@@ -33,6 +33,17 @@ if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
 endif()
 option(ICO_RHI_D3D12 "Build the D3D12 backend of port/rhi (ico_rhi_d3d12; Windows only)"
        ${_ico_d3d12_default})
+# The OpenGL backend (port/rhi/gl, ico_rhi_opengl, prefix gl) and the Direct3D
+# 11 backend (port/rhi/d3d11, ico_rhi_d3d11, prefix d3d11): their sources
+# arrive with their own packages, which turn these defaults on where they
+# apply (OpenGL on every desktop target with SDL3; D3D11 on 64-bit Windows).
+# Until then the options exist so the shader table's columns (GLSL,
+# cmake/IcoShaders.cmake ICO_SHADERS_GLSL; the embedded HLSL sources,
+# ICO_SHADERS_HLSL_SOURCE) can be asked for.
+option(ICO_RHI_OPENGL "Build the OpenGL backend of port/rhi (ico_rhi_opengl)" OFF)
+option(ICO_RHI_D3D11 "Build the Direct3D 11 backend of port/rhi (ico_rhi_d3d11; Windows only)" OFF)
+set(_ico_have_gl OFF)
+set(_ico_have_d3d11 OFF)
 
 # --- The D3D12 plan test (CPU only, every target) ------------------------------
 # The D3D12 backend's header-free bookkeeping (d3d12/d3d12_plan.c): state
@@ -229,6 +240,14 @@ endif()
 if(_ico_have_d3d12)
     target_compile_definitions(ico_rhi PRIVATE ICO_RHI_HAVE_D3D12=1)
     target_link_libraries(ico_rhi PUBLIC ico_rhi_d3d12)
+endif()
+if(_ico_have_gl)
+    target_compile_definitions(ico_rhi PRIVATE ICO_RHI_HAVE_GL=1)
+    target_link_libraries(ico_rhi PUBLIC ico_rhi_opengl)
+endif()
+if(_ico_have_d3d11)
+    target_compile_definitions(ico_rhi PRIVATE ICO_RHI_HAVE_D3D11=1)
+    target_link_libraries(ico_rhi PUBLIC ico_rhi_d3d11)
 endif()
 
 # port/render and port/shaders/test link ico_rhi_vk and test for it: keep

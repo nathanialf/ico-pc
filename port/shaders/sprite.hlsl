@@ -184,12 +184,12 @@ SpriteVSOut sprite_world_vs(SpriteVSIn i)
     return sprite_vertex(i);
 }
 
-Texture2D<float4> g_texture : register(t1, space2);
-SamplerState g_sampler : register(s1, space2);
+Texture2D<float4> g_texture : ICO_REG(t1, 2);
+SamplerState g_sampler : ICO_REG(s1, 2);
 // The DATE snapshot: R8, 1.0 where the bound target's alpha MSB
 // was set, addressed in target pixels. Read only under DF_DATE; otherwise a
 // 1x1 dummy is bound and never fetched.
-Texture2D<float> g_dateSnap : register(t2, space2);
+Texture2D<float> g_dateSnap : ICO_REG(t2, 2);
 
 // gs_bspline_bilinear4 with its weights and places from kSpriteBspline
 float4 sprite_bspline4(float2 tc, float2 size)
@@ -653,7 +653,7 @@ void date_clear_ps(DateSnapIn i)
 // built with ICO_DATE_STENCIL=1 alone: the input attachment's declaration
 // adds the InputAttachment capability to every entry of the file
 #if defined(ICO_DATE_STENCIL) && defined(__spirv__)
-[[vk::input_attachment_index(0)]] SubpassInput<float4> g_dateIn : register(t1, space2);
+[[vk::input_attachment_index(0)]] SubpassInput<float4> g_dateIn : ICO_REG(t1, 2);
 #define DATE_LOCAL_READ 1
 #endif
 

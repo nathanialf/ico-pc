@@ -82,16 +82,16 @@ struct FogPSIn {
 #if defined(FOG_LOCAL) && defined(__spirv__)
 // the depth attachment: no InputAttachmentIndex (the depth's mapping
 // without VkRenderingInputAttachmentIndexInfoKHR); binding 17 = t1
-SubpassInput<float> g_fogDepthIn : register(t1, space2);
+SubpassInput<float> g_fogDepthIn : ICO_REG(t1, 2);
 #define FOG_LOCAL_READ 1
 #elif defined(FOG_MS)
-Texture2DMS<float> g_fogDepth : register(t1, space2);
+Texture2DMS<float> g_fogDepth : ICO_REG(t1, 2);
 #elif defined(FOG_BUFFER)
-Texture2D<uint> g_fogDepth : register(t1, space2);
+Texture2D<uint> g_fogDepth : ICO_REG(t1, 2);
 #else
-Texture2D<float> g_fogDepth : register(t1, space2);
+Texture2D<float> g_fogDepth : ICO_REG(t1, 2);
 #endif
-Texture2D<float4> g_fogLut : register(t2, space2);
+Texture2D<float4> g_fogLut : ICO_REG(t2, 2);
 
 #define FOG_ZTST_NEVER 0u
 #define FOG_ZTST_ALWAYS 1u

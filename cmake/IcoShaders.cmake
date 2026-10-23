@@ -21,12 +21,28 @@
 # table's dxil is NULL with dxil_len 0, for a target without the D3D12
 # backend.
 #
+# The table has three more columns for the other backends (the manifest
+# line is name|stage|entry|spv|dxil|glsl|hlslfile|defines):
+#   glsl      the GLSL translated from the SPIR-V for the OpenGL backend
+#             (ICO_SHADERS_GLSL; deflated by embed_shaders.py, inflated by the
+#             backend); "-" for an entry without one (an input-attachment
+#             build, which GLSL cannot express), or everywhere with the
+#             option off (glsl NULL, glsl_len 0)
+#   hlslfile  the HLSL file's name and defines the entry's -D macros
+#             ("A=1,B=2", "" for none): what the Direct3D 11 backend compiles
+#             at run time from the embedded sources (ICO_SHADERS_HLSL_SOURCE:
+#             g_icoShaderSources holds every file of port/shaders; off, the
+#             table is empty)
+#
 # DXC comes from tools/fetch_deps.sh (tools/toolchain/deps/dxc); ICO_DXC
 # overrides the path. Without a compiler the shaders are left out
 # (ICO_SHADERS_AVAILABLE is false), as the other fetched dependencies are.
 
 set(ICO_DXC "" CACHE FILEPATH "DXC executable (default: tools/toolchain/deps/dxc/bin/dxc)")
 option(ICO_SHADERS_DXIL "Also compile the shaders to DXIL for the D3D12 backend" ON)
+option(ICO_SHADERS_GLSL "Also translate the shaders to GLSL for the OpenGL backend" OFF)
+option(ICO_SHADERS_HLSL_SOURCE "Embed the HLSL sources for the Direct3D 11 backend's run-time compile"
+       ${ICO_RHI_D3D11})
 
 set(ICO_SHADERS_AVAILABLE FALSE)
 set(_ico_dxc "${ICO_DXC}")
@@ -61,6 +77,10 @@ function(ico_add_shader name file entry stage)
     foreach(_d IN LISTS _ico_sh_DEFINES)
         list(APPEND _ico_sh_d -D "${_d}")
     endforeach()
+    # the manifest's defines column: "A=1,B=2" (a comma, not the list's
+    # semicolon, so the manifest line stays one string)
+    list(JOIN _ico_sh_DEFINES "," _ico_sh_defines)
+    get_filename_component(_ico_sh_hlslfile "${file}" NAME)
     string(TOLOWER "${stage}" stage_l)
     if(stage_l STREQUAL "vertex" OR stage_l STREQUAL "vs")
         set(stage_n vertex)
@@ -121,8 +141,11 @@ function(ico_add_shader name file entry stage)
             VERBATIM)
         set_property(GLOBAL APPEND PROPERTY ICO_SHADER_BLOBS "${spv}")
     endif()
+    # the GLSL column: "-" until the translation step (ICO_SHADERS_GLSL,
+    # tools/spirv_to_glsl.py) fills it in
+    set(glsl "-")
     set_property(GLOBAL APPEND PROPERTY ICO_SHADER_MANIFEST
-                 "${name}|${stage_n}|${entry}|${spv}|${dxil}")
+                 "${name}|${stage_n}|${entry}|${spv}|${dxil}|${glsl}|${_ico_sh_hlslfile}|${_ico_sh_defines}")
 endfunction()
 
 function(ico_shaders_library target)
@@ -141,11 +164,23 @@ function(ico_shaders_library target)
                     OUTPUT_STRIP_TRAILING_WHITESPACE)
     string(REGEX MATCH "[^\n]*" _ver_line "${_ver}")
     set(ICO_DXC_VERSION "${_ver_line}" CACHE INTERNAL "")
+    # the embedded HLSL sources (ICO_SHADERS_HLSL_SOURCE): every file of
+    # port/shaders the entries include, by name
+    set(_ico_sh_sources "")
+    set(_ico_sh_sources_arg "")
+    if(ICO_SHADERS_HLSL_SOURCE)
+        file(GLOB _ico_sh_sources CONFIGURE_DEPENDS "${ICO_SHADER_DIR}/*.hlsl"
+             "${ICO_SHADER_DIR}/*.hlsli" "${ICO_SHADER_DIR}/*.h")
+        list(SORT _ico_sh_sources)
+        set(_ico_sh_sources_arg --sources ${_ico_sh_sources})
+    endif()
     add_custom_command(
         OUTPUT "${ICO_SHADER_OUT_DIR}/shaders_gen.c" "${ICO_SHADER_OUT_DIR}/shaders_gen.h"
         COMMAND "${Python3_EXECUTABLE}" "${ICO_SHADER_DIR}/embed_shaders.py"
                 "${ICO_SHADER_OUT_DIR}/manifest.txt" "${ICO_SHADER_OUT_DIR}" "DXC ${ICO_DXC_VERSION}"
+                ${_ico_sh_sources_arg}
         DEPENDS ${blobs} "${ICO_SHADER_OUT_DIR}/manifest.txt" "${ICO_SHADER_DIR}/embed_shaders.py"
+                ${_ico_sh_sources}
         COMMENT "Embedding shaders into shaders_gen.c"
         VERBATIM)
     add_library(${target} STATIC "${ICO_SHADER_OUT_DIR}/shaders_gen.c")
@@ -154,6 +189,12 @@ function(ico_shaders_library target)
     if(NOT ICO_SHADERS_DXIL)
         # the table's users that check the DXIL (shaders_table_test)
         target_compile_definitions(${target} INTERFACE ICO_SHADERS_NO_DXIL=1)
+    endif()
+    if(NOT ICO_SHADERS_GLSL)
+        target_compile_definitions(${target} INTERFACE ICO_SHADERS_NO_GLSL=1)
+    endif()
+    if(NOT ICO_SHADERS_HLSL_SOURCE)
+        target_compile_definitions(${target} INTERFACE ICO_SHADERS_NO_HLSL_SOURCE=1)
     endif()
     set(ICO_SHADERS_TARGET ${target} PARENT_SCOPE)
 endfunction()

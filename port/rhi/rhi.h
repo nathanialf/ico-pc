@@ -254,14 +254,33 @@ typedef struct RhiTextureBarrier {
 typedef enum RhiShaderStage { RHI_STAGE_VERTEX = 0, RHI_STAGE_FRAGMENT = 1 } RhiShaderStage;
 
 /* Shaders are precompiled at build time by DXC from one HLSL source to
- * SPIR-V (Vulkan) and DXIL (D3D12) and embedded as byte arrays; the
- * backend receives whichever blob it understands. */
+ * SPIR-V (Vulkan) and DXIL (D3D12), translated to GLSL (OpenGL) from the
+ * SPIR-V, and embedded as byte arrays; the backend receives whichever blob
+ * it understands (port/render/rd_replay.c rd__make_shader picks it by
+ * rhi_backend).  The Direct3D 11 backend compiles the HLSL itself at run
+ * time (shader model 5.0 has no build-time compiler on the build hosts):
+ * it receives the source file's name, the entry, the macros and the table
+ * of embedded sources instead of a blob. */
+typedef struct RhiShaderSource {
+    const char *name; /* the file name as the sources include it ("common.hlsli") */
+    const char *text;
+    size_t len;
+} RhiShaderSource;
+
 typedef struct RhiShaderDesc {
     RhiShaderStage stage;
-    const void *bytecode;
+    const void *bytecode; /* SPIR-V (Vulkan), DXIL (D3D12), or deflated GLSL (OpenGL) */
     size_t bytecodeSize;
-    const char *entryPoint; /* the entry's name (IcoShaderBlob.entry); Vulkan only */
+    size_t textSize;        /* OpenGL: the GLSL's inflated length (zlib deflate, no header) */
+    const char *entryPoint; /* the entry's name (IcoShaderBlob.entry); Vulkan and D3D11 */
     const char *debugName;
+    /* Direct3D 11 only: the HLSL file the entry is in, the -D macros of its
+     * table entry ("A=1,B=2", "" for none) and the embedded sources the
+     * includes resolve against */
+    const char *hlslFile;
+    const char *defines;
+    const RhiShaderSource *sources;
+    unsigned sourceCount;
 } RhiShaderDesc;
 
 /* --------------------------------------------------------- bind groups
@@ -720,12 +739,17 @@ typedef struct RhiDeviceDesc {
 typedef enum RhiBackendKind {
     RHI_BACKEND_VULKAN = 0,
     RHI_BACKEND_D3D12 = 1,
-    RHI_BACKEND_METAL = 2
+    RHI_BACKEND_METAL = 2, /* no backend of its own: Vulkan over MoltenVK */
+    RHI_BACKEND_OPENGL = 3,
+    RHI_BACKEND_D3D11 = 4
 } RhiBackendKind;
 
 bool rhi_init(const RhiDeviceDesc *desc);
 void rhi_shutdown(void);
 RhiBackendKind rhi_backend(void);
+/* "Vulkan", "D3D12", "Metal", "OpenGL", "D3D11": the kind's name for log
+ * lines and summaries (not a backend entry point: rhi_backend.c) */
+const char *rhi_backend_kind_name(RhiBackendKind kind);
 const RhiLimits *rhi_limits(void);
 const char *rhi_adapter_name(void);
 /* True once the device is gone (Vulkan VK_ERROR_DEVICE_LOST; D3D12
@@ -1233,8 +1257,8 @@ bool rhi_layer_switched_on(const char *layer, const char *(*env)(const char *nam
 
 /* --------------------------------------------------- backend selection
  * rhi_create_backend selects the backend every call
- * above goes to: "vulkan" or "d3d12" (case-insensitive), NULL or "" for the
- * default.  The default is the ICO_RHI_BACKEND environment variable when it
+ * above goes to: "vulkan" ("vk"), "d3d12", "opengl" ("gl") or "d3d11"
+ * (case-insensitive), NULL or "" for the default.  The default is the ICO_RHI_BACKEND environment variable when it
  * names a linked backend, else the first linked one (Vulkan when it is
  * linked).  Call it before rhi_init; without a call the default is used.
  * Returns false, selection unchanged, for a name that is not linked into

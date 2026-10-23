@@ -321,7 +321,8 @@ void rd__profile_init(void)
                              : c == PC_APPLE         ? "MoltenVK, "
                                                      : "";
         snprintf(p->cls, sizeof p->cls, "%s GPU (%s%s%s%s)", tile ? "tile-based" : "immediate-mode",
-                 vendor ? vendor : "", vendor ? ", " : "", driver, d3d12 ? "D3D12" : "Vulkan");
+                 vendor ? vendor : "", vendor ? ", " : "", driver,
+                 rhi_backend_kind_name(rhi_backend()));
     }
     makeText(p);
 

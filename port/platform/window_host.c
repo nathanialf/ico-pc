@@ -1466,7 +1466,7 @@ static void log_summary(const IcoVideoOptions *o, const char *res, const char *f
         "window mode %s; %s; index values up to %u; robust access %s; controller %s%s; disc %s; %s; %s",
         ico_diag_version(), summary_platform(), rhi_adapter_name(),
         l->driverText != NULL ? l->driverText : "driver unknown",
-        rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", video_preset_label(o), res,
+        rhi_backend_kind_name(rhi_backend()), video_preset_label(o), res,
         ico_video_aspect_name(o->aspect), fr, ico_video_window_mode_name(o->windowMode), rd,
         (unsigned)l->maxDrawIndexedIndexValue,
         l->robustText != NULL ? l->robustText
@@ -2214,11 +2214,10 @@ open_window:
                 "texture filter %s, %s height, framerate %s), window mode %s, vsync %s, "
                 "texture pack %s, "
                 "dump textures %s, model pack %s, dump models %s, depth %s, motion blur %s\n",
-                w, h, s_fullscreen ? " fullscreen" : "",
-                rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", rhi_adapter_name(),
-                video_preset_label(&o), ico_video_resolution_name(&o, res, sizeof(res)),
-                ico_video_aspect_name(o.aspect), ico_video_filter_name(o.filter),
-                o.fullHeight ? "full" : "half",
+                w, h, s_fullscreen ? " fullscreen" : "", rhi_backend_kind_name(rhi_backend()),
+                rhi_adapter_name(), video_preset_label(&o),
+                ico_video_resolution_name(&o, res, sizeof(res)), ico_video_aspect_name(o.aspect),
+                ico_video_filter_name(o.filter), o.fullHeight ? "full" : "half",
                 ico_video_framerate_name(ico_video_framerate(), fr, sizeof(fr)),
                 ico_video_window_mode_name(o.windowMode), o.vsync ? "on" : "off",
                 o.texturePack ? "on" : "off",

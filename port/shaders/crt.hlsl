@@ -32,7 +32,9 @@
 #define VK_LOC(n)
 #endif
 
-cbuffer CrtCB : register(b1, space1)
+#include "reg.hlsli"
+
+cbuffer CrtCB : ICO_REG(b1, 1)
 {
     float4 c_src;  // the source grid: w, h in pixels, 1 / w, 1 / h
     float4 c_box;  // the box: w, h, x, y in output pixels
@@ -46,9 +48,9 @@ cbuffer CrtCB : register(b1, space1)
     float4 c_pad1;
 };
 
-Texture2D<float4> g_texture : register(t1, space2);
-Texture2D<float4> g_bloom : register(t2, space2);
-SamplerState g_sampler : register(s1, space2);
+Texture2D<float4> g_texture : ICO_REG(t1, 2);
+Texture2D<float4> g_bloom : ICO_REG(t2, 2);
+SamplerState g_sampler : ICO_REG(s1, 2);
 
 struct CrtVSOut
 {

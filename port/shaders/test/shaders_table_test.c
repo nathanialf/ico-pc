@@ -147,6 +147,8 @@ static const char *const expectedDst[] = {
 int main(void)
 {
     int failures = 0;
+    unsigned glslCount = 0;
+    (void)glslCount;
     for (unsigned i = 0; i < g_icoShaderCount; i++) {
         const IcoShaderBlob *b = &g_icoShaders[i];
         const uint8_t *s = b->spirv, *d = b->dxil;
@@ -172,6 +174,40 @@ int main(void)
             failures++;
         }
 #endif
+#ifdef ICO_SHADERS_NO_GLSL
+        /* built without GLSL (ICO_SHADERS_GLSL=OFF) */
+        if (b->glsl || b->glsl_len || b->glsl_text_len) {
+            printf("FAIL %s: GLSL in a table built without\n", b->name);
+            failures++;
+        }
+#else
+        /* an entry GLSL cannot express has none; the rest are deflated text
+         * (the translation step's own test compiles them) */
+        if (b->glsl && (b->glsl_len < 8 || b->glsl_text_len < 16 || b->glsl[0] != 0x78)) {
+            printf("FAIL %s: GLSL is not a zlib stream\n", b->name);
+            failures++;
+        }
+        glslCount += b->glsl != NULL;
+#endif
+        /* the Direct3D 11 columns: the HLSL file (always named; a source
+         * of the embedded set when the sources are embedded) and the macros */
+        if (!b->hlslFile || !b->hlslFile[0] || !b->defines || strlen(b->hlslFile) < 6 ||
+            strcmp(b->hlslFile + strlen(b->hlslFile) - 5, ".hlsl") != 0) {
+            printf("FAIL %s: hlslFile or defines\n", b->name);
+            failures++;
+        }
+#ifndef ICO_SHADERS_NO_HLSL_SOURCE
+        {
+            int found = 0;
+            for (unsigned k = 0; k < g_icoShaderSourceCount; k++) {
+                found |= strcmp(g_icoShaderSources[k].name, b->hlslFile) == 0;
+            }
+            if (!found) {
+                printf("FAIL %s: %s is not among the embedded sources\n", b->name, b->hlslFile);
+                failures++;
+            }
+        }
+#endif
         if (b->stage != ICO_SHADER_STAGE_VERTEX && b->stage != ICO_SHADER_STAGE_FRAGMENT) {
             printf("FAIL %s: stage\n", b->name);
             failures++;
@@ -186,10 +222,35 @@ int main(void)
             printf("FAIL %s: stage does not match the name\n", b->name);
             failures++;
         }
-        printf("  %-16s %-8s spirv %6zu B  dxil %6zu B\n", b->name,
-               b->stage == ICO_SHADER_STAGE_VERTEX ? "vertex" : "fragment", b->spirv_len,
-               b->dxil_len);
+        printf("  %-16s %-8s spirv %6zu B  dxil %6zu B  glsl %6zu B (%6zu B text)  %s %s\n",
+               b->name, b->stage == ICO_SHADER_STAGE_VERTEX ? "vertex" : "fragment", b->spirv_len,
+               b->dxil_len, b->glsl_len, b->glsl_text_len, b->hlslFile, b->defines);
     }
+#ifndef ICO_SHADERS_NO_GLSL
+    if (glslCount == 0) {
+        printf("FAIL: a table built with GLSL has no GLSL\n");
+        failures++;
+    }
+#endif
+#ifdef ICO_SHADERS_NO_HLSL_SOURCE
+    if (g_icoShaderSourceCount != 0) {
+        printf("FAIL: sources in a table built without\n");
+        failures++;
+    }
+#else
+    if (g_icoShaderSourceCount == 0) {
+        printf("FAIL: a table built with the HLSL sources has none\n");
+        failures++;
+    }
+    for (unsigned k = 0; k < g_icoShaderSourceCount; k++) {
+        const IcoShaderSource *s = &g_icoShaderSources[k];
+        if (!s->name || !s->text || s->len == 0 || strlen(s->text) != s->len) {
+            printf("FAIL source %u: name, text or length\n", k);
+            failures++;
+        }
+    }
+    printf("  %u HLSL sources embedded\n", g_icoShaderSourceCount);
+#endif
     for (unsigned i = 0; i < sizeof(expected) / sizeof(expected[0]); i++) {
         if (!ico_find_shader(expected[i])) {
             printf("FAIL %s: not in the table\n", expected[i]);

@@ -14,6 +14,8 @@
 #ifndef ICO_COMMON_HLSLI
 #define ICO_COMMON_HLSLI
 
+#include "reg.hlsli"
+
 #include "gs_math.hlsli"
 
 // ------------------------------------------------------------- Above 1x
@@ -194,7 +196,7 @@ GS_FN uint gs_fog_channel(uint lo, uint hi, uint f, uint mul, uint b)
 // Matrices are column-major float[16] (element
 // [column * 4 + row]) used as mul(M, v) with column vectors; rd's RdCamera
 // carries them in that order.
-cbuffer FrameCB : register(b0, space0)
+cbuffer FrameCB : ICO_REG(b0, 0)
 {
     column_major float4x4 g_view;
     column_major float4x4 g_proj;
@@ -258,7 +260,7 @@ cbuffer FrameCB : register(b0, space0)
 //            texels over its width (ox / tw: the normalised U subtracted,
 //            gs_uv_norm), else 0; w fx_sprite_ps's resampling steps above
 //            1x (fx_sprite.hlsl), else 0
-cbuffer DrawCB : register(b1, space1)
+cbuffer DrawCB : ICO_REG(b1, 1)
 {
     uint4 g_col;
     uint4 g_mode;
@@ -921,7 +923,7 @@ uint4 gs_dst_pixel(uint4 col, uint4 dst, uint flags)
 #ifdef __spirv__
 [[vk::image_format("rgba8")]]
 #endif
-globallycoherent RasterizerOrderedTexture2D<unorm float4> g_dstRov : register(u0, space3);
+globallycoherent RasterizerOrderedTexture2D<unorm float4> g_dstRov : ICO_REG(u0, 3);
 
 // A discard here (GS_DISCARD) marks the fragment instead of ending it:
 // the entry runs on to GS_RETURN, whose critical section stores the pixel

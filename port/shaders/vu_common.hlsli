@@ -116,7 +116,7 @@
 // vu_lo, vu_hi  the triangle stage: the program's region test bounds
 //          (vu_inside; the cluster's VU memory 0 and 1, the others VU_LO0
 //          and VU_HI4094)
-cbuffer VuCB : register(b2, space1)
+cbuffer VuCB : ICO_REG(b2, 1)
 {
     float4 vu_mem[36];
     uint4 vu_draw;
@@ -134,12 +134,12 @@ cbuffer VuCB : register(b2, space1)
 // VU memory 16..255: the cluster program's bones (vu_skin.hlsl), and for
 // every mesh program the card bits from qword vu_strip.w (vu_strip_card;
 // rd_replay_vu.c doVuDraw puts them after the bones a skinned mesh reads)
-cbuffer VuBoneCB : register(b3, space1)
+cbuffer VuBoneCB : ICO_REG(b3, 1)
 {
     float4 vu_bone[240];
 };
 
-StructuredBuffer<float4> vu_stream : register(t0, space1);
+StructuredBuffer<float4> vu_stream : ICO_REG(t0, 1);
 
 // vu_draw.z
 #define VU_CLIP_MASK 3u
@@ -1593,7 +1593,7 @@ VuVSOut vu_mesh_out(VuVtx a, VuVtx b, VuVtx c, uint kick, uint corner, uint mark
 // floats as their bits: plane 0 h; plane 1 p.x, p.y, GS Z, RGBA (a byte a
 // channel, R lowest); plane 2 S, T, Q and the flags (bit 0 inside, bit 1
 // gsOk, bits 2..7 clipf).  GS X and Y are vu_divide's vu_ftoi4 of p.
-StructuredBuffer<uint4> vu_rec_buf : register(t4, space1);
+StructuredBuffer<uint4> vu_rec_buf : ICO_REG(t4, 1);
 
 // Vertex v of the draw as the pre-pass recorded it (vu_rec.x + v, a
 // texel of each plane, vu_rec.y texels apart)
@@ -1763,9 +1763,9 @@ float4 vu_corner_position(VuVtx me, uint mode, uint at)
 
 // ------------------------------------------------------------ pixel side
 
-Texture2D<float4> g_texture : register(t1, space2);
-SamplerState g_sampler : register(s1, space2);
-Texture2D<float> g_dateSnap : register(t2, space2);
+Texture2D<float4> g_texture : ICO_REG(t1, 2);
+SamplerState g_sampler : ICO_REG(s1, 2);
+Texture2D<float> g_dateSnap : ICO_REG(t2, 2);
 
 // S/Q, T/Q: the texture's normalised UV.  On a Full pixel crop of the
 // frame (g_scale.z set, rd_replay.c fillDrawCB) the STs, normalised to the
