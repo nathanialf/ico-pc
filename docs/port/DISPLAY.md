@@ -305,9 +305,10 @@ unshown, so a gap between the two is not a slowdown), the block's seconds, prese
 a second, the vsyncs and the simulated rate, the resyncs and the lag they dropped, the new frames
 the late-present skip left unpresented (`skipped N presents (late L, slow S)`: by arm, the timer
 path's and the lock's together, the lock having the late arm only, [Pacing](#pacing)), the present
-allowance of the path in use (`presents held to A a step (lowest L, R refused, D drops, C climbs)`:
-the allowance now and its lowest in the block, the in-between presents it refused and its drops and
-climbs in the block; then `GPU G ms a presented replay`, the median of the last 8 presented replays'
+allowance of the path in use (`presents held to A a step (lowest L, R refused, D drops, C climbs)`,
+or `presents not held (...)` while the timer path's allowance is unbound, and `lowest not held` when
+it was unbound all block: the allowance now and its lowest in the block, the in-between presents it
+refused and its drops and climbs in the block; then `GPU G ms a presented replay`, the median of the last 8 presented replays'
 GPU time its climb is gated on, or `no GPU timestamps` where the backend has none, or
 `GPU not timed yet`; [The present allowance](#the-present-allowance)), the longest [replay](ARCHITECTURE.md#terms) and the replay count with how many
 were over a refresh, the slow
@@ -339,7 +340,7 @@ lock held (grid G ms, n presents a step, mailbox|fifo, audio rate xR, CLOCK,
 **Event lines.** A drop of the present allowance writes
 `window: presents held to A a step: the step ended L ms late after P presents (the last present C
 ms, waited F ms for the GPU and D ms for the display; GPU G ms a replay); back to A+1 after 240 steps
-on time if the GPU allows` (one line; the first 8, then every 100th, `ico_log_limited`); climbs are
+on time if the GPU allows` (`back to not held` on the timer path at its ceiling) (one line; the first 8, then every 100th, `ico_log_limited`); climbs are
 counted only. A numeric cap above the display's refresh in mailbox mode writes `window: frame rate N
 is above the display's X Hz: presenting once a refresh (mailbox)` once after each settings change
 (`port/platform/window_host.c` (`budget_drop_line`, `pace`)).
@@ -535,7 +536,8 @@ the audio follows, is never held below real time by presents nobody needs
 (`port/platform/pace_policy.h` (`PaceBudget`); `port/platform/pace_policy.c` (`pace_budget_*`)).
 On the timer path it is the last term of the refusal after the cost guard above, which stays as it
 was: a further present of a frame already shown is refused once the step has made as many presents
-as the allowance (`pace`); under the lock it runs inside `pace_lock_vsync` after the late-present
+(the new frame's included) as the allowance (`pace`). The timer path's allowance starts unbound
+(`PACE_ALLOW_NONE`, `pace_budget_reset_unbound`), so nothing is refused before its first drop; under the lock it runs inside `pace_lock_vsync` after the late-present
 skip and before the skip guard, a refused slot passing as a skipped one does, so the next present's
 alpha stays the grid's.
 
@@ -547,19 +549,22 @@ alpha stays the grid's.
   less than a refresh late, the skip guard's exception restated. `present_once` takes the two waits
   from the backend's counts (`RhiStats`: `acquireNs` and `presentNs` against `fenceWaitNs`); where
   the backend times nothing the whole present counts as the display's.
-- **Drop**: on a late step the allowance goes to one below that step's presents, held
-  `PACE_ALLOW_HOLD` (60) steps.
+- **Drop**: on a late step the allowance goes to one below that step's presents, at most its
+  ceiling (below), held `PACE_ALLOW_HOLD` (60) steps.
 - **Climb**: after `PACE_ALLOW_CLIMB` (180) further steps on time it goes up by one when the GPU
   gate lets it: `(allow + 1) * G + step < period`, G the median of the last 8 presented replays'
   GPU time (`perf_drain`, `pace_hist_add`; two replays late) and step the simulation step's own
-  time; with no GPU time (no timestamps) the climb probes on time alone. Never above
-  `PACE_ALLOW_MAX` (8) on the timer path, n under the lock.
+  time; with no GPU time (no timestamps) the climb probes on time alone. The ceiling is
+  `PACE_ALLOW_MAX` (8) on the timer path, where one more climb from it makes the allowance unbound
+  again, and n under the lock, which it never passes.
 - A resync does not reset it; a new lock, a frame rate change, leaving the lock and the pace reset
   (back from the background) do.
 
 Presents that keep up never end a step half a period late, and then nothing binds: the presents
 are those of the rule before (`pace_policy_test` (`testBudgetTimerLoop`): a GPU of 4 or 12 ms a
-picture at 120 a second, the same presents to the one). At 120 Hz under the lock with the fence (a
+picture at 120 a second, and back-to-back presents of 1 ms (Uncapped without vsync, about 13 a
+step), the same presents to the one; `testBudgetUnbound`: 15 presents a step on time are never
+refused). At 120 Hz under the lock with the fence (a
 replay waits for the GPU's picture two before, `RHI_FRAMES_IN_FLIGHT` 2) and 12 ms of GPU a
 picture, the rule before ends steps up to 20 ms late with the skip guard dropping about one present
 in three; the allowance holds the in-betweens to one a step and no step ends late
@@ -570,7 +575,8 @@ period. A GPU-bound phone (20 ms a picture at 60 Hz, n = 1) presents its new fra
 second on time, where the rule before presented 50 a second with steps up to 32 ms late; the
 allowance may reach 0 under the n = 1 lock.
 
-Limits: D3D12 has no mailbox and may lack timestamps (and so may a later GL backend), so the climb
+Limits: D3D12 has no mailbox and may lack timestamps (as may OpenGL without `ARB_timer_query` and
+Direct3D 11 where its timestamp queries cannot be made), so the climb
 probes on time alone there: one step a little late every 4 s while the GPU stays too slow. The Steam
 Deck at a cap of 90 is the FIFO timer path with `pace_fifo_hold`; its present that returns on a
 vblank up to a refresh past the deadline is the display's wait and is excused.

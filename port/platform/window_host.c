@@ -271,11 +271,12 @@ static struct {
     unsigned budgetRefusedAt, budgetDropsAt, budgetClimbsAt;
 } s_pres;
 
-/* The timer path's present allowance starts again (a frame rate change, off
-   the lock, the pace reset), its counts for the 10 s line with it */
+/* The timer path's present allowance starts again, unbound until a drop (a
+   frame rate change, off the lock, the pace reset), its counts for the 10 s
+   line with it */
 static void timer_budget_reset(void)
 {
-    pace_budget_reset(&s_pres.budget, PACE_ALLOW_MAX);
+    pace_budget_reset_unbound(&s_pres.budget, PACE_ALLOW_MAX);
     if (s_pres.budgetAtOf == &s_pres.budget) {
         s_pres.budgetRefusedAt = s_pres.budgetDropsAt = s_pres.budgetClimbsAt = 0;
     }
@@ -4886,7 +4887,7 @@ static void pace_log(Uint64 now)
     char budget[192];
     {
         PaceBudget *b = s_pres.lockN > 0 ? &s_pres.lock.budget : &s_pres.budget;
-        char gpu[48];
+        char gpu[48], held[40], lowest[24];
 
         if (s_pres.budgetAtOf != b || b->refused < s_pres.budgetRefusedAt ||
             b->drops < s_pres.budgetDropsAt || b->climbs < s_pres.budgetClimbsAt) {
@@ -4900,10 +4901,21 @@ static void pace_log(Uint64 now)
             snprintf(gpu, sizeof(gpu), "%s",
                      rhi_timestamps_supported() ? "GPU not timed yet" : "no GPU timestamps");
         }
-        snprintf(budget, sizeof(budget),
-                 "; presents held to %u a step (lowest %u, %u refused, %u drops, %u climbs); %s",
-                 b->allow, b->lowest, b->refused - s_pres.budgetRefusedAt,
-                 b->drops - s_pres.budgetDropsAt, b->climbs - s_pres.budgetClimbsAt, gpu);
+        /* the timer path before its first drop, or climbed back past its
+           ceiling: unbound, nothing held */
+        if (b->allow == PACE_ALLOW_NONE) {
+            snprintf(held, sizeof(held), "presents not held");
+        } else {
+            snprintf(held, sizeof(held), "presents held to %u a step", b->allow);
+        }
+        if (b->lowest == PACE_ALLOW_NONE) {
+            snprintf(lowest, sizeof(lowest), "not held");
+        } else {
+            snprintf(lowest, sizeof(lowest), "%u", b->lowest);
+        }
+        snprintf(budget, sizeof(budget), "; %s (lowest %s, %u refused, %u drops, %u climbs); %s",
+                 held, lowest, b->refused - s_pres.budgetRefusedAt, b->drops - s_pres.budgetDropsAt,
+                 b->climbs - s_pres.budgetClimbsAt, gpu);
         s_pres.budgetRefusedAt = b->refused;
         s_pres.budgetDropsAt = b->drops;
         s_pres.budgetClimbsAt = b->climbs;
@@ -5272,12 +5284,21 @@ static uint64_t lock_io_display_waited(void *u, uint64_t costNs)
    counted a drop): the event line, the first 8 then every 100th */
 static void budget_drop_line(const PaceBudget *b)
 {
-    const unsigned back = b->allow < b->max ? b->allow + 1 : b->max;
+    char back[24];
 
+    /* where the next climb goes: one more, or (the timer path at its
+       ceiling) unbound again */
+    if (b->allow < b->max) {
+        snprintf(back, sizeof(back), "%u", b->allow + 1);
+    } else if (b->unbind) {
+        snprintf(back, sizeof(back), "not held");
+    } else {
+        snprintf(back, sizeof(back), "%u", b->max);
+    }
     ico_log_limited("window: presents held",
                     "window: presents held to %u a step: the step ended %.1f ms late after %u "
                     "presents (the last present %.1f ms, waited %.1f ms for the GPU and %.1f ms "
-                    "for the display; GPU %.1f ms a replay); back to %u after %u steps on time if "
+                    "for the display; GPU %.1f ms a replay); back to %s after %u steps on time if "
                     "the GPU allows",
                     b->allow, (double)b->dropLateNs / 1e6, b->dropPresents,
                     (double)s_pres.cost / 1e6, (double)s_pres.fenceWaitNs / 1e6,

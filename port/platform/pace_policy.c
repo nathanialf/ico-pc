@@ -179,6 +179,14 @@ void pace_budget_reset(PaceBudget *b, unsigned max)
     b->allow = b->max = b->lowest = max;
 }
 
+void pace_budget_reset_unbound(PaceBudget *b, unsigned max)
+{
+    *b = (PaceBudget){0};
+    b->max = max;
+    b->allow = b->lowest = PACE_ALLOW_NONE;
+    b->unbind = true;
+}
+
 bool pace_budget_allows(const PaceBudget *b, bool newFrame)
 {
     return newFrame || b->presents < b->allow;
@@ -219,10 +227,12 @@ bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_
         }
     } else if (b->hold > 0) {
         b->hold--;
-    } else if (b->allow < b->max && ++b->onTime >= PACE_ALLOW_CLIMB) {
-        /* one more when the GPU has the time for it (unknown: probe) */
-        if (gpuNs == 0 || (uint64_t)(b->allow + 1) * gpuNs + stepNs < periodNs) {
-            b->allow++;
+    } else if (b->allow != PACE_ALLOW_NONE && (b->allow < b->max || b->unbind) &&
+               ++b->onTime >= PACE_ALLOW_CLIMB) {
+        /* one more when the GPU has the time for it (unknown: probe); past
+           max, unbound again where the allowance started so */
+        if (gpuNs == 0 || ((uint64_t)b->allow + 1) * gpuNs + stepNs < periodNs) {
+            b->allow = b->allow < b->max ? b->allow + 1 : PACE_ALLOW_NONE;
             b->climbs++;
         }
         b->onTime = 0;

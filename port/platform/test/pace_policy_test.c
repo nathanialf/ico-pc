@@ -20,8 +20,11 @@
  * frames a second game on 39 ms presents keeps real time with no resync and
  * every other frame at least, the one-step rule fell behind).
  * The present allowance (testBudgetRule: the drop, hold, climb, GPU gate,
- * excuse and limits; testBudgetTimerLoop: the timer path with a GPU queue,
- * nothing binds on a GPU that keeps up, the in-betweens dropped before a
+ * excuse and limits; testBudgetUnbound: the timer path's start unbound, 15
+ * presents a step never refused, a drop to max at most and the climb past
+ * it unbound again; testBudgetTimerLoop: the timer path with a GPU queue,
+ * nothing binds on a GPU that keeps up, back-to-back cheap presents
+ * unchanged, the in-betweens dropped before a
  * step ends half a period late on one that does not, FIFO's display wait
  * excused).
  */
@@ -1025,6 +1028,54 @@ static void testBudgetRule(void)
     }
 }
 
+/* The timer path's allowance (pace_budget_reset_unbound): unbound at the
+   start, so 15 presents a step (a new frame and 14 in-betweens) with no late
+   step are never refused and nothing changes; a late step of 15 drops it to
+   max (8), not 14, and the climb past max after the hold makes it unbound
+   again; a drop to 1 climbs one at a time to max and then unbound. */
+static void testBudgetUnbound(void)
+{
+    PaceBudget b;
+    unsigned refused = 0, changes = 0;
+
+    pace_budget_reset_unbound(&b, PACE_ALLOW_MAX);
+    CHECK(b.allow == PACE_ALLOW_NONE && b.lowest == PACE_ALLOW_NONE && b.max == PACE_ALLOW_MAX);
+    for (unsigned k = 0; k < 600; k++) {
+        for (unsigned i = 0; i < 15; i++) {
+            if (!pace_budget_allows(&b, i == 0)) {
+                refused++;
+            }
+            pace_budget_present(&b, i == 0);
+        }
+        changes += pace_budget_step(&b, 0, PERIOD, REFRESH, 0, 0, 3 * MS) ? 1u : 0u;
+    }
+    CHECK(refused == 0 && changes == 0 && b.allow == PACE_ALLOW_NONE && b.drops == 0);
+    CHECK(b.climbs == 0 && b.lowest == PACE_ALLOW_NONE);
+    /* a late step of 15: held to max, not 14 */
+    CHECK(budgetSteps(&b, 1, 15, true, 10 * MS, 0, 0) == 1 && b.allow == PACE_ALLOW_MAX);
+    CHECK(b.drops == 1 && b.lowest == PACE_ALLOW_MAX && b.dropPresents == 15);
+    /* the hold and PACE_ALLOW_CLIMB - 1 on time: still max; the next: unbound */
+    CHECK(budgetSteps(&b, PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB - 1, 1, true, 0, 0, 0) == 0);
+    CHECK(b.allow == PACE_ALLOW_MAX);
+    CHECK(budgetSteps(&b, 1, 1, true, 0, 0, 0) == 1 && b.allow == PACE_ALLOW_NONE);
+    CHECK(b.climbs == 1);
+    /* unbound: no climb counted on time */
+    CHECK(budgetSteps(&b, 1000, 1, true, 0, 0, 0) == 0 && b.climbs == 1);
+    /* a drop to 1, then one a climb: 2 .. max, then unbound */
+    CHECK(budgetSteps(&b, 1, 2, true, 10 * MS, 0, 0) == 1 && b.allow == 1);
+    CHECK(budgetSteps(&b, PACE_ALLOW_HOLD, 1, true, 0, 0, 0) == 0 && b.allow == 1);
+    CHECK(budgetSteps(&b, PACE_ALLOW_CLIMB * (PACE_ALLOW_MAX - 1), 1, true, 0, 0, 0) ==
+          PACE_ALLOW_MAX - 1);
+    CHECK(b.allow == PACE_ALLOW_MAX);
+    CHECK(budgetSteps(&b, PACE_ALLOW_CLIMB, 1, true, 0, 0, 0) == 1 && b.allow == PACE_ALLOW_NONE);
+    /* the block's lowest from an unbound allowance: unbound */
+    pace_budget_block(&b);
+    CHECK(b.lowest == PACE_ALLOW_NONE);
+    /* the lock's allowance (pace_budget_reset) never goes unbound */
+    pace_budget_reset(&b, 2);
+    CHECK(!b.unbind && budgetSteps(&b, 2000, 1, true, 0, 0, 0) == 0 && b.allow == 2);
+}
+
 /* window_host.c pace's timer path with the present allowance under a fake
    clock: a game frame every two steps of 3 ms, presents on a gap's grid
    (8.33 ms: a cap of 120 without the clamp, as under D3D12's FIFO; 0: back
@@ -1053,7 +1104,7 @@ static BudgetRun budgetLoop(unsigned steps, uint64_t gpuNs, uint64_t gapNs, bool
     uint32_t frame = 0, presented = 0, skipFrame = 0;
     bool skipOpen = false, slow = false;
 
-    pace_budget_reset(&b, PACE_ALLOW_MAX);
+    pace_budget_reset_unbound(&b, PACE_ALLOW_MAX); /* as window_host.c timer_budget_reset */
     for (unsigned k = 0; k < steps; k++) {
         t += stepNs;
         if (k % 2 == 0) {
@@ -1155,7 +1206,21 @@ static void testBudgetTimerLoop(void)
 
         CHECK(r.presents == old.presents && r.drops == 0 && r.refused == 0);
         CHECK(r.resyncs == 0 && old.resyncs == 0 && r.lateMax < PERIOD / 2);
-        CHECK(r.shown == r.frames && r.allow == PACE_ALLOW_MAX);
+        CHECK(r.shown == r.frames && r.allow == PACE_ALLOW_NONE);
+    }
+    {
+        /* Uncapped without vsync: back to back (gap 0), 1 ms a present and a
+           GPU of 1 ms, about 13 presents a step held only by the cost guard
+           (more than PACE_ALLOW_MAX, which bound them before the allowance
+           started unbound): the presents are the rule before's to the one */
+        const BudgetRun old = budgetLoop(600, 1 * MS, 0, false, 0, false);
+        const BudgetRun r = budgetLoop(600, 1 * MS, 0, true, 0, false);
+
+        printf("pace_policy_test: back-to-back presents of 1 ms: %u presents (%.1f a step), the "
+               "rule before %u, %u refused, %u drops\n",
+               r.presents, (double)r.presents / 600.0, old.presents, r.refused, r.drops);
+        CHECK(r.presents == old.presents && r.refused == 0 && r.drops == 0);
+        CHECK(r.presents > 600u * PACE_ALLOW_MAX && r.allow == PACE_ALLOW_NONE);
     }
     {
         const BudgetRun old = budgetLoop(600, 20 * MS, gap, false, 0, false);
@@ -1187,6 +1252,7 @@ int main(void)
 {
     PaceHist h = {0};
     testBudgetRule();
+    testBudgetUnbound();
     testBudgetTimerLoop();
     testLateSkipLate();
     testLateSkipSlow();

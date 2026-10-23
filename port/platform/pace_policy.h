@@ -15,6 +15,7 @@
 #ifndef ICO_PLATFORM_PACE_POLICY_H
 #define ICO_PLATFORM_PACE_POLICY_H
 
+#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -64,16 +65,24 @@ uint64_t pace_hist_add(PaceHist *h, uint64_t costNs);
  * PACE_ALLOW_CLIMB more steps on time it goes up by one, when the GPU gate
  * lets it: no GPU time known (0: no timestamps; the climb then probes) or
  * (allow + 1) presents' GPU time and a step within a period.  Never above
- * max (PACE_ALLOW_MAX on the timer path, n under the lock).  A resync does
- * not reset it; a new lock, a frame rate change and the window's pace reset
- * do.  Cheap presents never end a step late, and then nothing binds: the
- * presents are what they were without it. */
+ * max (PACE_ALLOW_MAX on the timer path, n under the lock).  The timer
+ * path's allowance starts unbound (allow PACE_ALLOW_NONE,
+ * pace_budget_reset_unbound): nothing is refused until the first drop,
+ * which goes to one below the step's presents and no higher than max, and
+ * a climb past max returns it to unbound.  A resync does not reset it; a
+ * new lock, a frame rate change and the window's pace reset do.  Cheap
+ * presents never end a step late, and then nothing binds: the presents are
+ * what they were without it. */
 #define PACE_ALLOW_MAX 8
+#define PACE_ALLOW_NONE UINT_MAX /* allow: no limit (the timer path before a drop) */
 #define PACE_ALLOW_HOLD 60
 #define PACE_ALLOW_CLIMB 180
 
 typedef struct PaceBudget {
-    unsigned allow, max;   /* optional presents allowed a step (new frames aside), its ceiling */
+    unsigned allow, max;   /* presents allowed a step, the new frame's included (a new frame's
+                              own present is always allowed): PACE_ALLOW_NONE unbound; the
+                              ceiling a drop leaves it at most */
+    bool unbind;           /* a climb past max returns allow to PACE_ALLOW_NONE */
     unsigned hold, onTime; /* steps left held after a drop; steps on time since */
     unsigned presents;     /* this step's presents (new frames among them) */
     unsigned optional;     /* of them, of a frame already shown */
@@ -85,8 +94,12 @@ typedef struct PaceBudget {
     unsigned dropPresents; /* and its presents */
 } PaceBudget;
 
-/* allow = max, the counts cleared. */
+/* allow = max, the counts cleared (the lock: max n). */
 void pace_budget_reset(PaceBudget *b, unsigned max);
+
+/* allow = PACE_ALLOW_NONE (nothing refused), max the ceiling after a drop,
+ * the counts cleared (the timer path: max PACE_ALLOW_MAX). */
+void pace_budget_reset_unbound(PaceBudget *b, unsigned max);
 
 /* Whether a present may be made now: always for a new frame, else while the
  * step's presents are below the allowance. */
