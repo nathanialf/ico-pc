@@ -759,10 +759,14 @@ static void testNavigation(void)
     CHECK(NonLinearCameraMove == 3 && ui_get_language() == UI_LANG_FR, "right: French (%d)",
           NonLinearCameraMove);
     CHECK(s_sounds[0] > cur0, "the cursor sound");
-    int labels[20], values[20];
-    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, values, 20);
-    CHECK(strstr(lt_ext_row_text(values[6]), "Français") != NULL, "the value row: %s",
-          lt_ext_row_text(values[6]));
+    int labels[20], opts[20], values[20];
+    const int mn = ui_settings_page_rows(UI_PAGE_MAIN, labels, opts, values, 20);
+    int lang = 0; /* Language's row (7: after the Graphics link) */
+    while (lang < mn - 1 && opts[lang] != UI_OPT_LANGUAGE) {
+        lang++;
+    }
+    CHECK(strstr(lt_ext_row_text(values[lang]), "Français") != NULL, "the value row: %s",
+          lt_ext_row_text(values[lang]));
     CHECK(strcmp(lt_ext_row_text(labels[0]), "Affichage") == 0, "labels follow the language");
     CHECK(strcmp(ico_config_get_string("game.language", ""), "fr") == 0, "[game] language");
     press(0x8000); /* left: English again */
@@ -1451,26 +1455,24 @@ static void testCirclePortScreens(void)
     int mainL = ui_settings_page_layout(UI_PAGE_MAIN);
     pauseToMain();
 
-    static const struct {
-        int row; /* main page row */
-        UiSettingsPage page;
-    } kPages[] = {{0, UI_PAGE_DISPLAY},  {1, UI_PAGE_EFFECTS},  {3, UI_PAGE_AUDIO},
-                  {4, UI_PAGE_CONTROLS}, {5, UI_PAGE_GAMEPLAY}, {9, UI_PAGE_ACHIEVEMENTS}};
+    /* each page from the main page's row that opens it (mainLink) */
+    static const UiSettingsPage kPages[] = {UI_PAGE_DISPLAY,  UI_PAGE_EFFECTS,
+                                            UI_PAGE_AUDIO,    UI_PAGE_CONTROLS,
+                                            UI_PAGE_GAMEPLAY, UI_PAGE_ACHIEVEMENTS};
 
-    int labels[20];
-    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
     for (unsigned i = 0; i < sizeof(kPages) / sizeof(kPages[0]); i++) {
-        lt_ext_layout(mainL)->curItem = labels[kPages[i].row];
+        const int link = mainLink(kPages[i]);
+        lt_ext_layout(mainL)->curItem = link;
         press(0x40);
-        CHECK(settle(ui_settings_page_layout(kPages[i].page), 60), "page %d opens", kPages[i].page);
+        CHECK(settle(ui_settings_page_layout(kPages[i]), 60), "page %d opens", kPages[i]);
         int leaves = s_leaves;
         press(0x20);
         CHECK(settle(mainL, 60) && s_leaves == leaves + 1, "Circle: page %d back to the menu",
-              kPages[i].page);
-        CHECK(lt_ext_layout(mainL)->curItem == labels[kPages[i].row], "on its row");
+              kPages[i]);
+        CHECK(lt_ext_layout(mainL)->curItem == link, "on its row");
     }
     /* Controls -> Remap -> Circle -> Controls */
-    lt_ext_layout(mainL)->curItem = labels[4];
+    lt_ext_layout(mainL)->curItem = mainLink(UI_PAGE_CONTROLS);
     press(0x40);
     int ctlL = ui_settings_page_layout(UI_PAGE_CONTROLS);
     CHECK(settle(ctlL, 60), "Controls");
@@ -2304,9 +2306,7 @@ static void testGallery(void)
 {
     gallery_set_engine(&kFakeEngine);
     int mainL = enterMain(1);
-    int ml[20];
-    ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 20);
-    lt_ext_layout(mainL)->curItem = ml[10]; /* Extras */
+    lt_ext_layout(mainL)->curItem = mainLink(UI_PAGE_EXTRAS);
     press(0x40);
     int exL = ui_settings_page_layout(UI_PAGE_EXTRAS);
     CHECK(settle(exL, 60), "gallery: Extras");

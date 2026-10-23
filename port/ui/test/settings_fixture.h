@@ -106,6 +106,7 @@ void la_host_film_effect(int mode);
 int enterMain(int title);
 int enterMainKeep(int title);
 int openPage(int mainL, int mainRow, UiSettingsPage page);
+int mainLink(UiSettingsPage page);
 extern IcoGsSnapshot s_gs;
 void gsSampler(IcoGsSnapshot *out);
 int rowWithText(UiSettingsPage page, const char *str);

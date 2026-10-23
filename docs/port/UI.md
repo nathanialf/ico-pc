@@ -864,7 +864,8 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
 `test/settings_fixture.h` and `settings_fixture.c` are the shared fixture: stubs for the game's
 imports, fake tables (`fakeTables`, `setRow`, `setLayout`), the tick drivers (`frame`, `settle`,
 `press`), the config helpers (`useConfig`, `writeFile`), the navigation (`enterMain`, `openPage`,
-`pauseToMain`), the row lookups (`labelsAre`, `rowWithText`, `noteStarting`, `checkPageFits`)
+`pauseToMain`), the row lookups (`labelsAre`, `rowWithText`, `noteStarting`, `checkPageFits`,
+`mainLink`: the Main row that opens a page, so a walk does not count Main's rows)
 and the fake hosts; it is compiled once per test executable, with `SETTINGS_RENDER` for
 `settings_render` (`port/ui/test/settings_fixture.h`, header comment). [TESTING.md](TESTING.md)
 has how to run them.

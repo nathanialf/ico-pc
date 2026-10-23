@@ -674,19 +674,22 @@ static int render(void)
     frame(0);
     snap("settings_main.png");
 
+    /* each page by the main page's row that opens it (mainLink: the rows
+       move when one is added, as the Graphics link after Effects did) */
     static const struct {
-        int row; /* main page row */
+        UiSettingsPage page;
         int downs;
         const char *name;
-    } pages[] = {{0, 0, "settings_display.png"},     {0, 9, "settings_display_videomode.png"},
-                 {1, 0, "settings_effects.png"},     {3, 0, "settings_audio.png"},
-                 {4, 1, "settings_controls.png"},    {5, 0, "settings_gameplay.png"},
-                 {8, 0, "settings_achievements.png"}};
+    } pages[] = {{UI_PAGE_DISPLAY, 0, "settings_display.png"},
+                 {UI_PAGE_DISPLAY, 9, "settings_display_videomode.png"},
+                 {UI_PAGE_EFFECTS, 0, "settings_effects.png"},
+                 {UI_PAGE_AUDIO, 0, "settings_audio.png"},
+                 {UI_PAGE_CONTROLS, 1, "settings_controls.png"},
+                 {UI_PAGE_GAMEPLAY, 0, "settings_gameplay.png"},
+                 {UI_PAGE_ACHIEVEMENTS, 0, "settings_achievements.png"}};
 
-    int labels[20];
-    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
     for (unsigned i = 0; i < sizeof(pages) / sizeof(pages[0]); i++) {
-        lt_ext_layout(mainL)->curItem = labels[pages[i].row];
+        lt_ext_layout(mainL)->curItem = mainLink(pages[i].page);
         press(0x40);
         for (int k = 0; k < 30; k++) {
             frame(0);
@@ -705,7 +708,7 @@ static int render(void)
                           "Speakers (USB Audio Interface with a very long product name)");
     ico_config_set_string("audio.output", "mono");
     ico_opt_reload();
-    lt_ext_layout(mainL)->curItem = labels[3];
+    lt_ext_layout(mainL)->curItem = mainLink(UI_PAGE_AUDIO);
     press(0x40);
     for (int k = 0; k < 30; k++) {
         frame(0);
@@ -724,7 +727,7 @@ static int render(void)
        layout (its note: no editor here, so the locked one) */
     {
         ui_settings_set_touch_query(renderTouch);
-        lt_ext_layout(mainL)->curItem = labels[4];
+        lt_ext_layout(mainL)->curItem = mainLink(UI_PAGE_CONTROLS);
         press(0x40);
         const int ctlL = ui_settings_page_layout(UI_PAGE_CONTROLS);
         CHECK(settle(ctlL, 60), "Controls (touch)");
@@ -753,7 +756,7 @@ static int render(void)
         ui_settings_set_touch_query(NULL);
     }
     /* Controls -> Remap, then a capture in progress */
-    lt_ext_layout(mainL)->curItem = labels[4];
+    lt_ext_layout(mainL)->curItem = mainLink(UI_PAGE_CONTROLS);
     press(0x40);
     CHECK(settle(ui_settings_page_layout(UI_PAGE_CONTROLS), 60), "Controls");
     press(0x40);
@@ -824,11 +827,12 @@ static int render(void)
         ui_set_scale(ui_scale_for(1, e.outputHeight));
         lt_switch_layout(mainL);
         CHECK(settle(mainL, 60), "the menu at 4x");
-        lt_ext_layout(mainL)->curItem = labels[6]; /* Language: its note */
+        lt_ext_layout(mainL)->curItem =
+            ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_LANGUAGE); /* Language: its note */
         frame(0);
         frame(0);
         snap4("settings_main_4x.png");
-        lt_ext_layout(mainL)->curItem = labels[0];
+        lt_ext_layout(mainL)->curItem = mainLink(UI_PAGE_DISPLAY);
         press(0x40);
         CHECK(settle(ui_settings_page_layout(UI_PAGE_DISPLAY), 60), "Display at 4x");
         frame(0);
@@ -843,13 +847,11 @@ static int render(void)
         press(0x4000);
         press(0x40);
         CHECK(settle(mainL, 60), "the menu from the title");
-        int ml[20];
-        ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 20);
-        lt_ext_layout(mainL)->curItem = ml[9]; /* Achievements */
+        lt_ext_layout(mainL)->curItem = mainLink(UI_PAGE_ACHIEVEMENTS);
         frame(0);
         frame(0);
         snap4("settings_main_title_4x.png");
-        lt_ext_layout(mainL)->curItem = ml[10]; /* Extras */
+        lt_ext_layout(mainL)->curItem = mainLink(UI_PAGE_EXTRAS);
         press(0x40);
         int exL = ui_settings_page_layout(UI_PAGE_EXTRAS);
         CHECK(settle(exL, 60), "Extras at 4x");
@@ -925,24 +927,26 @@ static int render(void)
         rd_set_settings(&e);
         ui_set_scale(ui_scale_for(1, e.outputHeight));
         s_reduce = 1;
-        int ml[20];
-        ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 20);
         lt_switch_layout(mainL);
         CHECK(settle(mainL, 60), "the menu at 1080p");
-        lt_ext_layout(mainL)->curItem = ml[6];
+        lt_ext_layout(mainL)->curItem = ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_LANGUAGE);
         frame(0);
         snap1080("settings_main");
 
         static const struct {
-            int row, downs;
+            UiSettingsPage page;
+            int downs;
             const char *name;
-        } pg[] = {{0, 0, "settings_display"},  {1, 0, "settings_effects"},
-                  {3, 0, "settings_audio"},    {4, 1, "settings_controls"},
-                  {5, 0, "settings_gameplay"}, {8, 0, "settings_achievements"},
-                  {9, 2, "settings_extras"}};
+        } pg[] = {{UI_PAGE_DISPLAY, 0, "settings_display"},
+                  {UI_PAGE_EFFECTS, 0, "settings_effects"},
+                  {UI_PAGE_AUDIO, 0, "settings_audio"},
+                  {UI_PAGE_CONTROLS, 1, "settings_controls"},
+                  {UI_PAGE_GAMEPLAY, 0, "settings_gameplay"},
+                  {UI_PAGE_ACHIEVEMENTS, 0, "settings_achievements"},
+                  {UI_PAGE_EXTRAS, 2, "settings_extras"}};
 
         for (unsigned i = 0; i < sizeof(pg) / sizeof(pg[0]); i++) {
-            lt_ext_layout(mainL)->curItem = ml[pg[i].row];
+            lt_ext_layout(mainL)->curItem = mainLink(pg[i].page);
             press(0x40);
             for (int k = 0; k < 30; k++) {
                 frame(0);
@@ -1013,7 +1017,7 @@ static int render(void)
             press(0x4000);
             press(0x40);
             CHECK(settle(mainL, 60), "the menu from the title at 1080p");
-            lt_ext_layout(mainL)->curItem = ml[10]; /* Extras */
+            lt_ext_layout(mainL)->curItem = mainLink(UI_PAGE_EXTRAS);
             press(0x40);
             int exL = ui_settings_page_layout(UI_PAGE_EXTRAS);
             CHECK(settle(exL, 60), "Extras at 1080p");

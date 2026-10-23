@@ -705,6 +705,22 @@ int openPage(int mainL, int mainRow, UiSettingsPage page)
     return l;
 }
 
+/* the main page's row that opens page (its label row), -1: the walks
+   find a page by its link, so a row added to the main page (the Graphics
+   link after Effects) moves none of them */
+int mainLink(UiSettingsPage page)
+{
+    int labels[20];
+    const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
+    const int want = ui_settings_page_layout(page);
+    for (int i = 0; i < n; i++) {
+        if (lt_ext_prop(labels[i])->right == want) {
+            return labels[i];
+        }
+    }
+    return -1;
+}
+
 /* --- helpers shared by the settings test programs --- */
 
 /* the pause menu journey lines' game state, set by the tests (ico_gs_set_sampler) */
