@@ -320,6 +320,38 @@ static void write_file(const char *dir, const char *name, const char *text)
     }
 }
 
+static void test_list_zips(void)
+{
+    char names[8][160], dir[1200];
+
+    path_in(dir, sizeof(dir), s_work, "zips");
+    ico_mkdir(dir);
+    write_file(dir, "a.zip", "x");
+    write_file(dir, "B.ZIP", "x");
+    write_file(dir, "incoming.zip", "x");
+    write_file(dir, "incoming.zip.tmp", "x");
+    write_file(dir, "notes.txt", "x");
+    write_file(dir, ".hidden.zip", "x");
+    write_file(dir, "zip", "x");
+    {
+        char sub[1200];
+        path_in(sub, sizeof(sub), dir, "folder.zip");
+        ico_mkdir(sub);
+        write_file(sub, "inner.zip", "x");
+    }
+    memset(names, 0, sizeof(names));
+    const int n = ico_gpu_driver_list_zips(dir, names, 8);
+    CHECK(n == 2);
+    if (n == 2) {
+        CHECK(strcmp(names[0], "B.ZIP") == 0); /* byte order */
+        CHECK(strcmp(names[1], "a.zip") == 0);
+    }
+    CHECK(ico_gpu_driver_list_zips(dir, names, 1) == 1);
+    CHECK(ico_gpu_driver_list_zips(dir, names, 0) == 0);
+    path_in(dir, sizeof(dir), s_work, "nowhere");
+    CHECK(ico_gpu_driver_list_zips(dir, names, 8) == 0);
+}
+
 static void test_list(void)
 {
     IcoGpuDriver d[ICO_GPU_DRIVER_LIST_MAX];
@@ -439,6 +471,7 @@ int main(int argc, char **argv)
     test_meta();
     test_install();
     test_list();
+    test_list_zips();
     test_trial();
 
     if (failures == 0) {

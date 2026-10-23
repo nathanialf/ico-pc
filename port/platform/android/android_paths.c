@@ -73,6 +73,7 @@ int ico_android_layout(const char *files, const char *cache, const char *serial,
     bad |= join(p->logs, sizeof(p->logs), p->files, "logs");
     bad |= join(p->log, sizeof(p->log), p->files, "logs/ico-pc.log");
     bad |= join(p->dumps, sizeof(p->dumps), p->files, "dumps");
+    bad |= join(p->drivers, sizeof(p->drivers), p->files, "drivers");
     if (serial == NULL) {
         serial = "SCES-50760";
     }

@@ -518,6 +518,13 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_FAILED] =
         "El controlador elegido no se inició la última vez. Se usa el controlador del teléfono.",
     [UI_STR_GPU_DRIVER_NOSPACE] = "No hay espacio suficiente para este controlador.",
+    [UI_STR_GPU_DRIVER_NO_PICKER] =
+        "No se pudo abrir el selector de archivos. Puedes copiar el archivo zip del controlador en la carpeta drivers del juego.",
+    [UI_STR_GPU_DRIVER_NO_PICKER_APP] =
+        "Este dispositivo no tiene ninguna aplicación para elegir un archivo. Copia el archivo zip del controlador en la carpeta drivers del juego.",
+    [UI_STR_GPU_DRIVER_UNREADABLE] =
+        "No se pudo leer el archivo elegido. Cópialo primero a este dispositivo y vuelve a elegirlo.",
+    [UI_STR_GPU_DRIVER_ADD_FILE] = "Añadir desde la carpeta drivers",
     [UI_STR_QUIT_GAME] = "Salir del juego",
     [UI_STR_QUIT_GAME_CONFIRM] = "¿Salir del juego?",
     /* Controls > the mouse camera rows */

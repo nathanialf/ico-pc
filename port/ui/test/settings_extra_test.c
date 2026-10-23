@@ -248,6 +248,8 @@ static void testItemSelectArg(void)
 static int s_gpuN = 0, s_gpuSel = -1, s_gpuFailed = -1, s_gpuAdreno = 1;
 static int s_gpuBegins, s_gpuPolls, s_gpuRemoved = -99, s_gpuSelects;
 static int s_gpuResult[8], s_gpuResultN, s_gpuResultAt;
+static int s_gpuFiles, s_gpuFileBegins, s_gpuFileBegun = -99;
+static const char *const kGpuFileNames[2] = {"turnip-a.zip", "B.ZIP"};
 static const char *const kGpuNames[3] = {"Turnip 24.1", "Turnip 25.0", "Mesa"};
 
 static int gpuCount(void)
@@ -300,8 +302,26 @@ static void gpuRemove(int i)
     s_gpuN--;
 }
 
-static const UiGpuDriverHost kGpuHost = {gpuCount,  gpuName,  gpuSelected, gpuSelect, gpuLastFailed,
-                                         gpuAdreno, gpuBegin, gpuPoll,     gpuRemove};
+static int gpuFileCount(void)
+{
+    return s_gpuFiles;
+}
+
+static const char *gpuFileName(int i)
+{
+    return kGpuFileNames[i];
+}
+
+static int gpuFileBegin(int i)
+{
+    s_gpuFileBegins++;
+    s_gpuFileBegun = i;
+    return 0;
+}
+
+static const UiGpuDriverHost kGpuHost = {gpuCount,      gpuName,      gpuSelected, gpuSelect,
+                                         gpuLastFailed, gpuAdreno,    gpuBegin,    gpuPoll,
+                                         gpuRemove,     gpuFileCount, gpuFileName, gpuFileBegin};
 
 static int an22bShown(UiSettingsPage page, UiSettingsOpt opt)
 {
@@ -461,9 +481,19 @@ static void testGpuDriver(void)
     static const struct {
         int result;
         const char *title;
-    } kAnswers[] = {{UI_GPU_INSTALL_BAD, "This file is not a driver package."},
-                    {UI_GPU_INSTALL_NOSPACE, "Not enough space to add this driver."},
-                    {UI_GPU_INSTALL_CANCELLED, ""}};
+    } kAnswers[] = {
+        {UI_GPU_INSTALL_BAD, "This file is not a driver package."},
+        {UI_GPU_INSTALL_NOSPACE, "Not enough space to add this driver."},
+        {UI_GPU_INSTALL_NO_PICKER,
+         "The file picker could not be opened. You can copy the driver\xE2\x80\x99s zip "
+         "file into the game\xE2\x80\x99s drivers folder instead."},
+        {UI_GPU_INSTALL_NO_PICKER_APP,
+         "No app on this device can choose a file. Copy the driver\xE2\x80\x99s zip file "
+         "into the game\xE2\x80\x99s drivers folder instead."},
+        {UI_GPU_INSTALL_UNREADABLE,
+         "The chosen file could not be read. Copy it onto this device first, then "
+         "choose it again."},
+        {UI_GPU_INSTALL_CANCELLED, ""}};
 
     for (unsigned i = 0; i < sizeof(kAnswers) / sizeof(kAnswers[0]); i++) {
         ui_popup_reset();
@@ -476,6 +506,50 @@ static void testGpuDriver(void)
         CHECK((kAnswers[i].title[0] != '\0') == ui_popup_active(), "answer %d: popup or silence",
               kAnswers[i].result);
     }
+
+    /* Add from the drivers folder: hidden with no zip, shown with two, Left
+       and Right go round them, Cross adds the shown one and the same poll
+       answers; a second Cross while the copy runs is ignored */
+    ui_popup_reset();
+    s_gpuFiles = 0;
+    frame(0);
+    CHECK(!an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_ADD_FILE), "no zip: the folder row is hidden");
+    s_gpuFiles = 2;
+    frame(0);
+    CHECK(an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_ADD_FILE), "two zips: the folder row shows");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_GPU_ADD_FILE), "turnip-a.zip") == 0, "first zip: %s",
+          ui_settings_value_text(UI_OPT_GPU_ADD_FILE));
+    ui_settings_step(UI_OPT_GPU_ADD_FILE, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_GPU_ADD_FILE), "B.ZIP") == 0, "Right: %s",
+          ui_settings_value_text(UI_OPT_GPU_ADD_FILE));
+    ui_settings_step(UI_OPT_GPU_ADD_FILE, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_GPU_ADD_FILE), "turnip-a.zip") == 0,
+          "Right wraps: %s", ui_settings_value_text(UI_OPT_GPU_ADD_FILE));
+    ui_settings_step(UI_OPT_GPU_ADD_FILE, -1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_GPU_ADD_FILE), "B.ZIP") == 0, "Left wraps: %s",
+          ui_settings_value_text(UI_OPT_GPU_ADD_FILE));
+    lt_ext_layout(gpuL)->curItem = ui_settings_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_ADD_FILE);
+    s_gpuFileBegins = 0;
+    s_gpuFileBegun = -99;
+    s_gpuBegins = 0;
+    for (int k = 0; k < 4; k++) {
+        s_gpuResult[k] = UI_GPU_INSTALL_PENDING; /* the polls of the two presses' frames */
+    }
+    s_gpuResult[4] = UI_GPU_INSTALL_UNREADABLE;
+    s_gpuResultN = 5;
+    s_gpuResultAt = 0;
+    press(0x40);
+    press(0x40); /* still copying: ignored */
+    CHECK(s_gpuFileBegins == 1 && s_gpuFileBegun == 1 && s_gpuBegins == 0,
+          "Cross adds the shown zip once (%d, zip %d, picker %d)", s_gpuFileBegins, s_gpuFileBegun,
+          s_gpuBegins);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    CHECK(strcmp(ui_popup_title(), "The chosen file could not be read. Copy it onto this device "
+                                   "first, then choose it again.") == 0,
+          "unreadable: \"%s\"", ui_popup_title());
+    s_gpuFiles = 0;
 
     /* Remove: Built-in is chosen, the host deletes the chosen one, a box says so */
     ui_popup_reset();
@@ -544,11 +618,12 @@ static void testGpuDriver(void)
 
     /* the strings, in all five languages */
     static const UiStrId kIds[] = {
-        UI_STR_SECTION_GPU_DRIVER, UI_STR_OPT_GPU_DRIVER,     UI_STR_VAL_GPU_BUILTIN,
-        UI_STR_GPU_DRIVER_ADD,     UI_STR_GPU_DRIVER_REMOVE,  UI_STR_GPU_DRIVER_NOTE,
-        UI_STR_GPU_DRIVER_ADDED,   UI_STR_GPU_DRIVER_BAD,     UI_STR_GPU_DRIVER_REMOVED,
-        UI_STR_GPU_DRIVER_FAILED,  UI_STR_GPU_DRIVER_NOSPACE, UI_STR_QUIT_GAME,
-        UI_STR_QUIT_GAME_CONFIRM};
+        UI_STR_SECTION_GPU_DRIVER,    UI_STR_OPT_GPU_DRIVER,       UI_STR_VAL_GPU_BUILTIN,
+        UI_STR_GPU_DRIVER_ADD,        UI_STR_GPU_DRIVER_REMOVE,    UI_STR_GPU_DRIVER_NOTE,
+        UI_STR_GPU_DRIVER_ADDED,      UI_STR_GPU_DRIVER_BAD,       UI_STR_GPU_DRIVER_REMOVED,
+        UI_STR_GPU_DRIVER_FAILED,     UI_STR_GPU_DRIVER_NOSPACE,   UI_STR_QUIT_GAME,
+        UI_STR_QUIT_GAME_CONFIRM,     UI_STR_GPU_DRIVER_NO_PICKER, UI_STR_GPU_DRIVER_NO_PICKER_APP,
+        UI_STR_GPU_DRIVER_UNREADABLE, UI_STR_GPU_DRIVER_ADD_FILE};
     static const UiLang kLangs[5] = {UI_LANG_EN, UI_LANG_FR, UI_LANG_DE, UI_LANG_IT, UI_LANG_ES};
     for (int l = 0; l < 5; l++) {
         for (unsigned i = 0; i < sizeof(kIds) / sizeof(kIds[0]); i++) {

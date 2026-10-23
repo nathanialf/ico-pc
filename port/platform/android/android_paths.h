@@ -15,6 +15,8 @@
  *   <files>/memcard/                   the memory cards
  *   <files>/logs/ico-pc.log            the log (+ perf csv, pad recordings)
  *   <files>/dumps/
+ *   <files>/drivers/                   driver zips dropped by hand (Add from the
+ *                                      drivers folder; the game deletes one once added)
  *   <files>/textures/<serial>/replacements/   (SCES-50760, SCPS-11003 or SCPS-56001)
  *   <files>/Ico_PAL.<ext>              the picker's copy of the disc image
  *                                      (Ico_JPN.<ext> or Ico_KOR.<ext>
@@ -43,6 +45,7 @@ typedef struct IcoAndroidPaths {
     char logs[ICO_ANDROID_PATH_MAX];           /* files/logs */
     char log[ICO_ANDROID_PATH_MAX];            /* files/logs/ico-pc.log */
     char dumps[ICO_ANDROID_PATH_MAX];          /* files/dumps */
+    char drivers[ICO_ANDROID_PATH_MAX];        /* files/drivers */
     char textures[ICO_ANDROID_PATH_MAX];       /* files/textures/<serial>/replacements */
     char pipeline_cache[ICO_ANDROID_PATH_MAX]; /* cache/pipelines.vkcache */
 } IcoAndroidPaths;

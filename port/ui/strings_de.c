@@ -521,6 +521,13 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_FAILED] =
         "Der gewählte Treiber startete beim letzten Mal nicht. Der Treiber des Telefons ist in Gebrauch.",
     [UI_STR_GPU_DRIVER_NOSPACE] = "Nicht genug Speicherplatz für diesen Treiber.",
+    [UI_STR_GPU_DRIVER_NO_PICKER] =
+        "Die Dateiauswahl konnte nicht geöffnet werden. Sie können die Zip-Datei des Treibers stattdessen in den Ordner drivers des Spiels kopieren.",
+    [UI_STR_GPU_DRIVER_NO_PICKER_APP] =
+        "Auf diesem Gerät gibt es keine App zum Auswählen einer Datei. Kopieren Sie die Zip-Datei des Treibers in den Ordner drivers des Spiels.",
+    [UI_STR_GPU_DRIVER_UNREADABLE] =
+        "Die gewählte Datei konnte nicht gelesen werden. Kopieren Sie sie zuerst auf dieses Gerät und wählen Sie sie dann erneut.",
+    [UI_STR_GPU_DRIVER_ADD_FILE] = "Aus dem Ordner drivers hinzufügen",
     [UI_STR_QUIT_GAME] = "Spiel beenden",
     [UI_STR_QUIT_GAME_CONFIRM] = "Spiel beenden?",
     /* Controls > the mouse camera rows */

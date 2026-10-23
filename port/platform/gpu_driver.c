@@ -587,6 +587,43 @@ int ico_gpu_driver_list(const char *root, IcoGpuDriver *out, int max)
     return c.n;
 }
 
+typedef struct ZipCtx {
+    char (*names)[160];
+    int max, n;
+} ZipCtx;
+
+static int zipCb(const char *path, const char *name, void *user)
+{
+    ZipCtx *c = user;
+    const size_t len = strlen(name);
+    (void)path;
+
+    if (c->n >= c->max) {
+        return 1;
+    }
+    if (len < 5 || len >= sizeof(c->names[0]) || strncmp(name, "incoming.", 9) == 0) {
+        return 0;
+    }
+    const char *ext = name + len - 4;
+    if (ext[0] != '.' || (ext[1] | 0x20) != 'z' || (ext[2] | 0x20) != 'i' ||
+        (ext[3] | 0x20) != 'p') {
+        return 0;
+    }
+    memcpy(c->names[c->n], name, len + 1);
+    c->n++;
+    return 0;
+}
+
+int ico_gpu_driver_list_zips(const char *dir, char (*names)[160], int max)
+{
+    ZipCtx c = {names, max, 0};
+    if (max <= 0 || dir == NULL || ico_path_kind(dir, NULL, NULL) != 1) {
+        return 0;
+    }
+    ico_dir_walk(dir, 0, zipCb, &c);
+    return c.n;
+}
+
 int ico_gpu_driver_remove(const char *root, const char *folder)
 {
     char dir[1024];

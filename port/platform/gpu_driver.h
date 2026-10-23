@@ -117,6 +117,13 @@ int ico_gpu_driver_install_zip_max(const char *root, const char *zipPath, int ap
    whose libraryName is there.  The count (0 when root does not exist). */
 int ico_gpu_driver_list(const char *root, IcoGpuDriver *out, int max);
 
+/* The driver zips lying in the folder dir (the game's drivers folder in the
+   app's files, where a USB cable can put them): the names of its files that
+   end in ".zip" in any case, hidden files and the installer's own
+   "incoming.*" left out, in the order of ico_dir_walk (byte order), at most
+   max, each name under 160 bytes.  The count (0 when dir does not exist). */
+int ico_gpu_driver_list_zips(const char *dir, char (*names)[160], int max);
+
 /* Deletes <root>/<folder>/ and its files.  0, or -1 (a bad folder name, or
    something could not be deleted). */
 int ico_gpu_driver_remove(const char *root, const char *folder);

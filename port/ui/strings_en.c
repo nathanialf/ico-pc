@@ -515,6 +515,13 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_FAILED] =
         "The driver you chose did not start last time. The phone’s own driver is in use.",
     [UI_STR_GPU_DRIVER_NOSPACE] = "Not enough space to add this driver.",
+    [UI_STR_GPU_DRIVER_NO_PICKER] =
+        "The file picker could not be opened. You can copy the driver’s zip file into the game’s drivers folder instead.",
+    [UI_STR_GPU_DRIVER_NO_PICKER_APP] =
+        "No app on this device can choose a file. Copy the driver’s zip file into the game’s drivers folder instead.",
+    [UI_STR_GPU_DRIVER_UNREADABLE] =
+        "The chosen file could not be read. Copy it onto this device first, then choose it again.",
+    [UI_STR_GPU_DRIVER_ADD_FILE] = "Add from the drivers folder",
     [UI_STR_QUIT_GAME] = "Quit game",
     [UI_STR_QUIT_GAME_CONFIRM] = "Quit the game?",
     /* Controls > the mouse camera rows */

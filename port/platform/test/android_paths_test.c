@@ -46,6 +46,7 @@ static void test_layout(void)
     CHECK(strcmp(p.logs, FILES "/logs") == 0);
     CHECK(strcmp(p.log, FILES "/logs/ico-pc.log") == 0);
     CHECK(strcmp(p.dumps, FILES "/dumps") == 0);
+    CHECK(strcmp(p.drivers, FILES "/drivers") == 0);
     CHECK(strcmp(p.textures, FILES "/textures/SCES-50760/replacements") == 0);
     CHECK(strcmp(p.pipeline_cache, CACHE "/pipelines.vkcache") == 0);
     CHECK(ico_android_image_path(&p, NULL, "iso", img, sizeof(img)) == 0 &&

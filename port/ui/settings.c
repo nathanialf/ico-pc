@@ -568,6 +568,28 @@ static int touchRule(void)
 static UiGpuDriverHost s_gpuHost;
 static int s_gpuHostSet;
 static int s_gpuPending; /* an install is running: installPoll every frame */
+static int
+    s_gpuFileCur; /* the zip of the drivers folder the Add from the drivers folder row shows */
+
+/* the zips waiting in the drivers folder, 0 without a host */
+static int gpuFileCount(void)
+{
+    const int n = s_gpuHostSet ? s_gpuHost.fileCount() : 0;
+    return n > 0 ? n : 0;
+}
+
+/* the shown zip, kept inside the list (a zip came or went since) */
+static int gpuFileIndex(void)
+{
+    const int n = gpuFileCount();
+    if (s_gpuFileCur >= n) {
+        s_gpuFileCur = n - 1;
+    }
+    if (s_gpuFileCur < 0) {
+        s_gpuFileCur = 0;
+    }
+    return s_gpuFileCur;
+}
 
 static int gpuSelected(void)
 {
@@ -576,16 +598,9 @@ static int gpuSelected(void)
     return i >= 0 && i < n ? i : -1;
 }
 
-/* the Driver row's text: Built-in or the chosen name, cut to its box (the
-   shrink to fit does the rest); a driver that did not start last time is
-   said in the page's note (gpuRefresh), where a sentence fits */
-static const char *gpuText(char *buf, unsigned size)
+/* a name cut to the Driver rows' value box (the shrink to fit does the rest) */
+static const char *gpuFit(char *buf, unsigned size, const char *name)
 {
-    const int i = gpuSelected();
-    if (i < 0) {
-        return ui_str(UI_STR_VAL_GPU_BUILTIN);
-    }
-    const char *name = s_gpuHost.name(i);
     name = name != NULL ? name : "";
     const size_t len = strlen(name);
     size_t n = len;
@@ -602,6 +617,24 @@ static const char *gpuText(char *buf, unsigned size)
         } while (n > 0 && ((unsigned char)name[n] & 0xC0u) == 0x80u);
     }
     return buf;
+}
+
+/* the Driver row's text: Built-in or the chosen name, cut to its box; a
+   driver that did not start last time is said in the page's note
+   (gpuRefresh), where a sentence fits */
+static const char *gpuText(char *buf, unsigned size)
+{
+    const int i = gpuSelected();
+    if (i < 0) {
+        return ui_str(UI_STR_VAL_GPU_BUILTIN);
+    }
+    return gpuFit(buf, size, s_gpuHost.name(i));
+}
+
+/* the Add from the drivers folder row's text: the shown zip's name */
+static const char *gpuFileText(char *buf, unsigned size)
+{
+    return gpuFit(buf, size, s_gpuHost.fileName(gpuFileIndex()));
 }
 
 /* the page's one note: the Adreno-and-restart line, or that the chosen
@@ -651,6 +684,15 @@ static void stepGpuDriver(int dir)
     }
 }
 
+/* Add from the drivers folder: Left and Right go round the zips there */
+static void stepGpuFile(int dir)
+{
+    const int n = gpuFileCount();
+    if (n > 0) {
+        s_gpuFileCur = stepIndex(gpuFileIndex(), n, dir);
+    }
+}
+
 /* Add a driver: the host opens its file picker and copies the file in the
    background; gpuPoll takes the result */
 static void gpuAdd(void)
@@ -659,6 +701,18 @@ static void gpuAdd(void)
         return;
     }
     if (s_gpuHost.installBegin() == 0) {
+        s_gpuPending = 1;
+    }
+}
+
+/* Add from the drivers folder: the host copies the zip in the background
+   and gpuPoll takes the result, as for the picker */
+static void gpuAddFile(void)
+{
+    if (s_gpuPending || !s_gpuHostSet || !s_gpuHost.adreno() || gpuFileCount() == 0) {
+        return;
+    }
+    if (s_gpuHost.installFileBegin(gpuFileIndex()) == 0) {
         s_gpuPending = 1;
     }
 }
@@ -679,6 +733,12 @@ static void gpuPoll(void)
         ui_popup_push(ui_str(UI_STR_GPU_DRIVER_BAD), "");
     } else if (r == UI_GPU_INSTALL_NOSPACE) {
         ui_popup_push(ui_str(UI_STR_GPU_DRIVER_NOSPACE), "");
+    } else if (r == UI_GPU_INSTALL_NO_PICKER) {
+        ui_popup_push(ui_str(UI_STR_GPU_DRIVER_NO_PICKER), "");
+    } else if (r == UI_GPU_INSTALL_NO_PICKER_APP) {
+        ui_popup_push(ui_str(UI_STR_GPU_DRIVER_NO_PICKER_APP), "");
+    } else if (r == UI_GPU_INSTALL_UNREADABLE) {
+        ui_popup_push(ui_str(UI_STR_GPU_DRIVER_UNREADABLE), "");
     } /* cancelled: nothing to say */
 }
 
@@ -701,7 +761,8 @@ void ui_settings_set_gpu_driver_host(const UiGpuDriverHost *host)
     s_gpuHostSet = host != NULL && host->count != NULL && host->name != NULL &&
                    host->selected != NULL && host->select != NULL && host->lastFailed != NULL &&
                    host->adreno != NULL && host->installBegin != NULL &&
-                   host->installPoll != NULL && host->remove != NULL;
+                   host->installPoll != NULL && host->remove != NULL && host->fileCount != NULL &&
+                   host->fileName != NULL && host->installFileBegin != NULL;
     if (s_gpuHostSet) {
         s_gpuHost = *host;
     }
@@ -1474,6 +1535,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return deviceText(buf, size);
     case UI_OPT_GPU_DRIVER:
         return s_gpuHostSet ? gpuText(buf, size) : ui_str(UI_STR_VAL_GPU_BUILTIN);
+    case UI_OPT_GPU_ADD_FILE:
+        return gpuFileCount() > 0 ? gpuFileText(buf, size) : "";
     case UI_OPT_STICK_FIX:
         return onOff(ico_opt_stick_fix());
     case UI_OPT_ACH_POPUPS:
@@ -1591,6 +1654,9 @@ static int optShown(int opt, int link)
     if (opt == UI_OPT_GPU_ADD) {
         return s_gpuHostSet && s_gpuHost.adreno() != 0;
     }
+    if (opt == UI_OPT_GPU_ADD_FILE) {
+        return s_gpuHostSet && s_gpuHost.adreno() != 0 && gpuFileCount() > 0;
+    }
     if (opt == UI_OPT_GPU_REMOVE) {
         return s_gpuHostSet && gpuSelected() >= 0;
     }
@@ -1665,7 +1731,7 @@ int ui_settings_opt_shown(UiSettingsOpt opt)
 static int steppable(int opt)
 {
     return (opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER) /* includes the Effects rows */ ||
-           opt == UI_OPT_GPU_DRIVER;
+           opt == UI_OPT_GPU_DRIVER || opt == UI_OPT_GPU_ADD_FILE;
 }
 
 static int resolutionLocked(void)
@@ -1930,6 +1996,9 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         break;
     case UI_OPT_GPU_DRIVER:
         stepGpuDriver(dir);
+        break;
+    case UI_OPT_GPU_ADD_FILE:
+        stepGpuFile(dir);
         break;
     case UI_OPT_STICK_FIX:
         ico_opt_set_stick_fix(!ico_opt_stick_fix());
@@ -3195,10 +3264,11 @@ static void build(void)
                                     -1,
                                     -1};
     /* Android's Graphics driver page (its link needs a host) */
-    static const int gpuOpts[] = {UI_OPT_GPU_DRIVER, UI_OPT_GPU_ADD, UI_OPT_GPU_REMOVE,
-                                  UI_OPT_BACK};
+    static const int gpuOpts[] = {UI_OPT_GPU_DRIVER, UI_OPT_GPU_ADD, UI_OPT_GPU_ADD_FILE,
+                                  UI_OPT_GPU_REMOVE, UI_OPT_BACK};
     static const int gpuStrs[] = {UI_STR_OPT_GPU_DRIVER, UI_STR_GPU_DRIVER_ADD,
-                                  UI_STR_GPU_DRIVER_REMOVE, UI_STR_BACK};
+                                  UI_STR_GPU_DRIVER_ADD_FILE, UI_STR_GPU_DRIVER_REMOVE,
+                                  UI_STR_BACK};
     static const int fxOpts[] = {UI_OPT_FULL_HEIGHT,
                                  UI_OPT_FILTER,
                                  UI_OPT_BRIGHTNESS,
@@ -4925,6 +4995,10 @@ static int settingsProc(int first, int item)
         if ((flags & PAD_OK) && r->opt == UI_OPT_GPU_ADD) {
             POSITIVE_SE();
             gpuAdd();
+        }
+        if ((flags & PAD_OK) && r->opt == UI_OPT_GPU_ADD_FILE) {
+            POSITIVE_SE();
+            gpuAddFile();
         }
         if ((flags & PAD_OK) && r->opt == UI_OPT_GPU_REMOVE) {
             POSITIVE_SE();

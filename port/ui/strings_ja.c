@@ -517,6 +517,13 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_FAILED] =
         "選んだドライバーは前回起動しませんでした。端末内蔵のドライバーを使っています。",
     [UI_STR_GPU_DRIVER_NOSPACE] = "空き容量が足りず、追加できません",
+    [UI_STR_GPU_DRIVER_NO_PICKER] =
+        "ファイル選択画面を開けませんでした。代わりにドライバーのzipファイルをゲームのdriversフォルダーにコピーできます",
+    [UI_STR_GPU_DRIVER_NO_PICKER_APP] =
+        "この端末にはファイルを選べるアプリがありません。ドライバーのzipファイルをゲームのdriversフォルダーにコピーしてください",
+    [UI_STR_GPU_DRIVER_UNREADABLE] =
+        "選んだファイルを読み込めませんでした。先にこの端末へコピーしてから、もう一度選んでください",
+    [UI_STR_GPU_DRIVER_ADD_FILE] = "driversフォルダーから追加",
     [UI_STR_QUIT_GAME] = "ゲームを終了",
     [UI_STR_QUIT_GAME_CONFIRM] = "ゲームを終了しますか？",
     /* Controls > the mouse camera rows */

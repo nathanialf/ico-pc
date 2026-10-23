@@ -184,11 +184,14 @@ void ui_settings_set_quit_is_game(int (*fn)(void));
    installed drivers, sorted as the host likes; -1 means the phone's own
    (built-in) driver.  Every pointer must be set.  The strings returned stay
    valid until the next call into the host. */
-#define UI_GPU_INSTALL_PENDING 0   /* the file picker or the copy is still running */
-#define UI_GPU_INSTALL_ADDED 1     /* a driver was installed (count() grew) */
-#define UI_GPU_INSTALL_BAD 2       /* the file is not a usable driver package */
-#define UI_GPU_INSTALL_CANCELLED 3 /* the picker was dismissed; the page says nothing */
-#define UI_GPU_INSTALL_NOSPACE 4   /* the device ran out of space */
+#define UI_GPU_INSTALL_PENDING 0       /* the file picker or the copy is still running */
+#define UI_GPU_INSTALL_ADDED 1         /* a driver was installed (count() grew) */
+#define UI_GPU_INSTALL_BAD 2           /* the file was read and is not a usable driver package */
+#define UI_GPU_INSTALL_CANCELLED 3     /* the picker was dismissed; the page says nothing */
+#define UI_GPU_INSTALL_NOSPACE 4       /* the device ran out of space */
+#define UI_GPU_INSTALL_NO_PICKER 5     /* the file picker could not be opened */
+#define UI_GPU_INSTALL_NO_PICKER_APP 6 /* no app on the device can choose a file */
+#define UI_GPU_INSTALL_UNREADABLE 7    /* the chosen file could not be opened or copied */
 
 typedef struct UiGpuDriverHost {
     int (*count)(void);         /* drivers installed */
@@ -202,6 +205,13 @@ typedef struct UiGpuDriverHost {
     int (*installBegin)(void);  /* open the picker; 0 started, -1 could not start */
     int (*installPoll)(void);   /* UI_GPU_INSTALL_*; called every frame while pending */
     void (*remove)(int i);      /* delete driver i (the page then selects built-in) */
+    /* the driver zips waiting in the game's drivers folder (the way in when
+       the picker does not open): how many, the name of file i, and start
+       adding file i (0 started, -1 could not start); the same installPoll
+       answers */
+    int (*fileCount)(void);
+    const char *(*fileName)(int i);
+    int (*installFileBegin)(int i);
 } UiGpuDriverHost;
 
 /* NULL (or never called) hides the link and the page. The struct is copied. */
@@ -424,6 +434,9 @@ typedef enum UiSettingsOpt {
        driver (file picker), Remove this driver */
     UI_OPT_GPU_DRIVER,
     UI_OPT_GPU_ADD,
+    /* the stepped zip in the drivers folder; Cross adds it (shown while
+       the folder holds a zip) */
+    UI_OPT_GPU_ADD_FILE,
     UI_OPT_GPU_REMOVE,
     /* Extras > Add to Steam (desktop; shown from the title while a host
        handler is set) */

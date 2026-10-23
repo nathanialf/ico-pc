@@ -34,6 +34,13 @@ static int s_count;
 static int s_listed;
 static char s_name[256];
 
+/* the driver zips in the game's drivers folder (the way in when the file
+   picker does not open) */
+#define ZIP_MAX 16
+static char s_zips[ZIP_MAX][160];
+static int s_zipCount;
+static int s_zipsListed;
+
 /* <internal files>/drivers, made if missing; NULL when unknown */
 static const char *driver_root(void)
 {
@@ -58,6 +65,25 @@ static void list_refresh(void)
     const char *root = driver_root();
     s_count = root != NULL ? ico_gpu_driver_list(root, s_list, ICO_GPU_DRIVER_LIST_MAX) : 0;
     s_listed = 1;
+}
+
+/* <files>/drivers, made if missing so a USB cable finds it; relisted */
+static void zips_refresh(void)
+{
+    const IcoAndroidPaths *p = ico_android_paths();
+    s_zipCount = 0;
+    if (p != NULL && p->drivers[0] != '\0') {
+        ico_mkdir(p->drivers);
+        s_zipCount = ico_gpu_driver_list_zips(p->drivers, s_zips, ZIP_MAX);
+    }
+    s_zipsListed = 1;
+}
+
+static void zips_ensure(void)
+{
+    if (!s_zipsListed) {
+        zips_refresh();
+    }
 }
 
 static void list_ensure(void)
@@ -300,10 +326,10 @@ enum { INSTALL_IDLE = 0, INSTALL_PICKING, INSTALL_COPYING, INSTALL_DONE };
 static SDL_AtomicInt s_installState;
 static SDL_AtomicInt s_installResult; /* UI_GPU_INSTALL_* once DONE */
 static SDL_AtomicInt s_pickGen;
-/* the last pick ended because the picker could not be opened (set before
-   install_done) */
-static SDL_AtomicInt s_pickFailed;
+/* the file to copy: the picker's content URI, or a zip's path in the drivers
+   folder (s_fromFolder, deleted once it is added) */
 static char s_uri[2048];
+static int s_fromFolder;
 /* the folder the last install made; written before install_done, read once
    the state says DONE */
 static char s_installed[160];
@@ -326,7 +352,7 @@ static int SDLCALL install_thread(void *user)
     SDL_IOStream *src = SDL_IOFromFile(s_uri, "rb");
     if (src == NULL) {
         fprintf(stderr, "gpu driver: cannot open the chosen file: %s\n", SDL_GetError());
-        install_done(UI_GPU_INSTALL_BAD);
+        install_done(UI_GPU_INSTALL_UNREADABLE);
         return 0;
     }
     const Sint64 size = SDL_GetIOSize(src);
@@ -345,7 +371,8 @@ static int SDLCALL install_thread(void *user)
     if (c != 0) {
         const long long now = ico_android_free_bytes(root);
         fprintf(stderr, "gpu driver: copying the chosen file failed: %s\n", why);
-        install_done(now >= 0 && now < (1ll << 20) ? UI_GPU_INSTALL_NOSPACE : UI_GPU_INSTALL_BAD);
+        install_done(now >= 0 && now < (1ll << 20) ? UI_GPU_INSTALL_NOSPACE
+                                                   : UI_GPU_INSTALL_UNREADABLE);
         return 0;
     }
     const int r = ico_gpu_driver_install_zip(root, zip, SDL_GetAndroidSDKVersion(), folder,
@@ -354,6 +381,12 @@ static int SDLCALL install_thread(void *user)
     if (r == ICO_GPU_DRIVER_OK) {
         fprintf(stderr, "gpu driver: installed %s\n", folder);
         snprintf(s_installed, sizeof(s_installed), "%s", folder);
+        if (s_fromFolder) {
+            /* added: the zip is not wanted twice (as the disc copy goes) */
+            if (ico_remove(s_uri) != 0) {
+                fprintf(stderr, "gpu driver: could not delete %s\n", s_uri);
+            }
+        }
         install_done(UI_GPU_INSTALL_ADDED);
     } else {
         fprintf(stderr, "gpu driver: the chosen file was not installed: %s\n", why);
@@ -362,32 +395,58 @@ static int SDLCALL install_thread(void *user)
     return 0;
 }
 
+/* the picker's answer for the log: the content URI's authority only (the
+   rest names the player's file), or what kind of answer it was */
+static void log_answer(int gen, const char *file)
+{
+    const char *auth = strncmp(file, "content://", 10) == 0 ? file + 10 : NULL;
+    if (auth != NULL) {
+        const char *end = strchr(auth, '/');
+        fprintf(stderr, "gpu driver: the file picker answered (pick %d): content://%.*s/...\n", gen,
+                (int)(end != NULL ? (size_t)(end - auth) : strlen(auth)), auth);
+    } else {
+        fprintf(stderr, "gpu driver: the file picker answered (pick %d): a file path\n", gen);
+    }
+}
+
+/* the copy thread for s_uri; the state is COPYING already */
+static void start_install_thread(void)
+{
+    SDL_Thread *t = SDL_CreateThread(install_thread, "ico-gpu-driver", NULL);
+    if (t == NULL) {
+        fprintf(stderr, "gpu driver: SDL_CreateThread: %s\n", SDL_GetError());
+        install_done(UI_GPU_INSTALL_UNREADABLE);
+        return;
+    }
+    SDL_DetachThread(t);
+}
+
 static void SDLCALL pick_done(void *user, const char *const *files, int filter)
 {
     (void)filter;
-    if ((int)(intptr_t)user != SDL_GetAtomicInt(&s_pickGen) ||
+    const int gen = (int)(intptr_t)user;
+    if (gen != SDL_GetAtomicInt(&s_pickGen) ||
         SDL_GetAtomicInt(&s_installState) != INSTALL_PICKING) {
+        fprintf(stderr, "gpu driver: a late answer for pick %d (now %d) ignored\n", gen,
+                SDL_GetAtomicInt(&s_pickGen));
         return;
     }
     if (files == NULL) {
         fprintf(stderr, "gpu driver: the file picker failed: %s\n", SDL_GetError());
-        SDL_SetAtomicInt(&s_pickFailed, 1);
-        install_done(UI_GPU_INSTALL_BAD);
+        install_done(UI_GPU_INSTALL_NO_PICKER);
         return;
     }
     if (files[0] == NULL) {
+        fprintf(stderr, "gpu driver: the file picker answered (pick %d): closed without a file\n",
+                gen);
         install_done(UI_GPU_INSTALL_CANCELLED);
         return;
     }
+    log_answer(gen, files[0]);
     snprintf(s_uri, sizeof(s_uri), "%s", files[0]);
+    s_fromFolder = 0;
     SDL_SetAtomicInt(&s_installState, INSTALL_COPYING);
-    SDL_Thread *t = SDL_CreateThread(install_thread, "ico-gpu-driver", NULL);
-    if (t == NULL) {
-        fprintf(stderr, "gpu driver: SDL_CreateThread: %s\n", SDL_GetError());
-        install_done(UI_GPU_INSTALL_BAD);
-        return;
-    }
-    SDL_DetachThread(t);
+    start_install_thread();
 }
 
 /* --- the Settings page's host ---------------------------------------------------- */
@@ -437,21 +496,86 @@ static int host_adreno(void)
                             strstr(name, "ADRENO") != NULL);
 }
 
-static int host_install_begin(void)
+static int host_files_count(void)
+{
+    zips_ensure();
+    return s_zipCount;
+}
+
+static const char *host_file_name(int i)
+{
+    zips_ensure();
+    return i >= 0 && i < s_zipCount ? s_zips[i] : "";
+}
+
+static int install_busy(void)
 {
     const int state = SDL_GetAtomicInt(&s_installState);
-    if (state == INSTALL_PICKING || state == INSTALL_COPYING || driver_root() == NULL) {
+    return state == INSTALL_PICKING || state == INSTALL_COPYING;
+}
+
+static int host_install_begin(void)
+{
+    if (install_busy()) {
         return -1;
     }
-    SDL_SetAtomicInt(&s_installResult, UI_GPU_INSTALL_PENDING);
-    SDL_SetAtomicInt(&s_pickFailed, 0);
-    s_installed[0] = '\0';
-    SDL_SetAtomicInt(&s_installState, INSTALL_PICKING);
     const int gen = SDL_AddAtomicInt(&s_pickGen, 1) + 1;
+    fprintf(stderr, "gpu driver: Add a driver: opening the file picker (pick %d)\n", gen);
+    SDL_SetAtomicInt(&s_installResult, UI_GPU_INSTALL_PENDING);
+    s_installed[0] = '\0';
+    if (driver_root() == NULL) {
+        /* the page always gets an answer: the poll hands it over */
+        install_done(UI_GPU_INSTALL_NO_PICKER);
+        return 0;
+    }
+    SDL_SetAtomicInt(&s_installState, INSTALL_PICKING);
     /* no filters: Android's picker matches MIME types, and the package's
        own check says whether the file is one */
     SDL_ShowOpenFileDialog(pick_done, (void *)(intptr_t)gen, NULL, NULL, 0, NULL, false);
     return 0;
+}
+
+/* add the zip i of the drivers folder: the same copy thread, no picker */
+static int host_install_file_begin(int i)
+{
+    const IcoAndroidPaths *p = ico_android_paths();
+    zips_ensure();
+    if (install_busy() || i < 0 || i >= s_zipCount) {
+        return -1;
+    }
+    const int gen = SDL_AddAtomicInt(&s_pickGen, 1) + 1;
+    fprintf(stderr, "gpu driver: Add from the drivers folder: %s (pick %d)\n", s_zips[i], gen);
+    SDL_SetAtomicInt(&s_installResult, UI_GPU_INSTALL_PENDING);
+    s_installed[0] = '\0';
+    if (p == NULL || driver_root() == NULL ||
+        snprintf(s_uri, sizeof(s_uri), "%s/%s", p->drivers, s_zips[i]) >= (int)sizeof(s_uri)) {
+        install_done(UI_GPU_INSTALL_UNREADABLE);
+        return 0;
+    }
+    s_fromFolder = 1;
+    SDL_SetAtomicInt(&s_installState, INSTALL_COPYING);
+    start_install_thread();
+    return 0;
+}
+
+static const char *result_text(int r)
+{
+    switch (r) {
+    case UI_GPU_INSTALL_ADDED:
+        return "ADDED";
+    case UI_GPU_INSTALL_BAD:
+        return "NOT A PACKAGE";
+    case UI_GPU_INSTALL_NOSPACE:
+        return "NO SPACE";
+    case UI_GPU_INSTALL_NO_PICKER:
+        return "NO PICKER";
+    case UI_GPU_INSTALL_NO_PICKER_APP:
+        return "NO PICKER APP";
+    case UI_GPU_INSTALL_UNREADABLE:
+        return "UNREADABLE";
+    default:
+        return "CANCELLED";
+    }
 }
 
 static int host_install_poll(void)
@@ -465,6 +589,8 @@ static int host_install_poll(void)
     }
     const int r = SDL_GetAtomicInt(&s_installResult);
     SDL_SetAtomicInt(&s_installState, INSTALL_IDLE);
+    fprintf(stderr, "gpu driver: Add a driver ended: %s\n", result_text(r));
+    zips_refresh(); /* an added zip is gone from the folder */
     if (r == UI_GPU_INSTALL_ADDED) {
         list_refresh();
     }
@@ -506,6 +632,9 @@ static const UiGpuDriverHost k_host = {
     .installBegin = host_install_begin,
     .installPoll = host_install_poll,
     .remove = host_remove,
+    .fileCount = host_files_count,
+    .fileName = host_file_name,
+    .installFileBegin = host_install_file_begin,
 };
 
 const UiGpuDriverHost *ico_gpu_driver_android_host(void)
@@ -533,10 +662,12 @@ int ico_gpu_driver_android_choose(char *folder, size_t n, char *why, size_t whyn
     }
     if (r != UI_GPU_INSTALL_ADDED) {
         snprintf(why, whyn, "%s",
-                 r == UI_GPU_INSTALL_NOSPACE       ? "Not enough free space."
-                 : r == UI_GPU_INSTALL_CANCELLED   ? "No file was chosen."
-                 : SDL_GetAtomicInt(&s_pickFailed) ? "The file picker could not be opened."
-                                                   : "That file is not a graphics driver package.");
+                 r == UI_GPU_INSTALL_NOSPACE         ? "Not enough free space."
+                 : r == UI_GPU_INSTALL_CANCELLED     ? "No file was chosen."
+                 : r == UI_GPU_INSTALL_NO_PICKER     ? "The file picker could not be opened."
+                 : r == UI_GPU_INSTALL_NO_PICKER_APP ? "No app on this device can choose a file."
+                 : r == UI_GPU_INSTALL_UNREADABLE ? "The chosen file could not be read."
+                                                  : "That file is not a graphics driver package.");
         return 0;
     }
     const int i = find_folder(s_installed); /* host_install_poll refreshed the list */
