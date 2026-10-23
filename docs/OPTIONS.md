@@ -234,9 +234,10 @@ draw in more than one way; if yours can only draw one way, there is nothing to p
 is not shown. It has one row.
 
 - **Graphics API** picks what the game draws with, from the next start (the row says so under
-  it). **Automatic** is the normal choice: the game uses Vulkan, and OpenGL when Vulkan will not
-  start at all (where your download has OpenGL). On Windows, after a crash of the graphics
-  driver, the game may start itself again with Direct3D 12. The other choices are listed after it, the ones your
+  it). **Automatic** is the normal choice: the game uses Vulkan; when Vulkan will not start at
+  all it goes on with Direct3D 12 on Windows, else with OpenGL, whichever your download has.
+  On Windows, after a crash of the graphics driver, the game may start itself again with
+  Direct3D 12. The other choices are listed after it, the ones your
   download has: **Vulkan**, **OpenGL** (for a graphics card or driver that has no Vulkan),
   **Direct3D 12** and **Direct3D 11** (Windows only; Direct3D 11 has not been tried on a real
   computer yet, so tell us how it goes). If the choice does not start, pick Automatic again, or

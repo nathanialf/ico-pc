@@ -107,12 +107,14 @@ is Automatic. `window: Graphics API <name> (chosen in the settings or the config
 says which.
 
 1. The chosen backend, or Vulkan for Automatic.
-2. Automatic, Vulkan did not start (SDL refused the `SDL_WINDOW_VULKAN` window, as without a
+2. Automatic, the backend did not start (SDL refused the `SDL_WINDOW_VULKAN` window, as without a
    Vulkan loader, after `window: SDL_CreateWindow: <error>`; or `rd_init` failed after
-   `window: no usable vulkan device ...`) and the build links OpenGL (`window_fallback_opengl`):
-   `ico_pc: no Vulkan device; using OpenGL`, the window destroyed and made again with `SDL_WINDOW_OPENGL`,
-   `window: Graphics API opengl (automatic, after Vulkan)`, `rd_init` once more. An OpenGL that
-   does not start ends the start as any failed start does.
+   `window: no usable vulkan device ...`): the next backend the build links is tried, once each
+   (`window_fallback_backend`): Direct3D 12 first where it is linked (Windows: the tested one),
+   then OpenGL. `ico_pc: no <failed> device; using <next>`, the window destroyed and made again
+   with the flags that backend needs (`SDL_WINDOW_OPENGL` for OpenGL),
+   `window: Graphics API <next> (automatic, after <failed>)`, `rd_init` once more. When the last
+   one does not start either, the start ends as any failed start does.
 3. A restart after a crash or a loss follows the start-up retry orders
    ([PLATFORM.md](PLATFORM.md#diagnostics)): their backend steps go between Vulkan and
    Direct3D 12 only; a run on OpenGL or Direct3D 11 takes the same-backend steps, and the

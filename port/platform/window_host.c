@@ -1455,26 +1455,40 @@ static bool window_have_d3d12(void)
     return window_have_backend("d3d12");
 }
 
-/* Automatic's fallback: Vulkan did not start (its window, or rd_init: the
-   lines before say which) and the build links OpenGL, so the start goes on
-   with OpenGL once (the caller makes a new window: OpenGL needs one made
+/* Automatic's fallback: the backend did not start (its window, or rd_init:
+   the lines before say which), so the start goes on with the next one the
+   build links, once each: after Vulkan, Direct3D 12 (Windows: the tested
+   one), then OpenGL (the caller makes a new window: OpenGL needs one made
    with SDL_WINDOW_OPENGL, window_flags). False, nothing changed, when the
-   player chose the backend, the backend is not Vulkan or OpenGL is not in
-   the build. A crash or loss on OpenGL takes the start-up retry's orders
-   with "opengl" as the backend (startup_retry.c, unchanged) */
-static bool window_fallback_opengl(bool backendExplicit, StartupRetry retry, bool blendExplicit,
-                                   const char **backend)
+   player chose the backend or nothing is left to try. A crash or loss on
+   the fallback takes the start-up retry's orders with its name as the
+   backend (startup_retry.c, unchanged) */
+static bool window_fallback_backend(bool backendExplicit, StartupRetry retry, bool blendExplicit,
+                                    const char **backend)
 {
-    if (backendExplicit || rhi_backend() != RHI_BACKEND_VULKAN || !window_have_backend("opengl") ||
-        !rhi_create_backend("opengl")) {
+    static const char *const order[] = {"d3d12", "opengl"};
+    static unsigned next; /* the first of order[] not yet tried this start */
+    const char *failed = rhi_backend_kind_name(rhi_backend());
+
+    if (backendExplicit) {
         return false;
     }
-    *backend = "opengl";
-    fprintf(stderr, "ico_pc: no Vulkan device; using OpenGL\n");
-    ico_diag_set_startup_retry((int)retry, window_have_d3d12(), backendExplicit, blendExplicit,
-                               *backend);
-    fprintf(stderr, "window: Graphics API %s (automatic, after Vulkan)\n", *backend);
-    return true;
+    while (next < sizeof order / sizeof order[0]) {
+        const char *cand = order[next++];
+
+        if (strcmp(cand, *backend) == 0 || !window_have_backend(cand) ||
+            !rhi_create_backend(cand)) {
+            continue;
+        }
+        fprintf(stderr, "ico_pc: no %s device; using %s\n", failed,
+                rhi_backend_kind_name(rhi_backend()));
+        *backend = cand;
+        ico_diag_set_startup_retry((int)retry, window_have_d3d12(), backendExplicit, blendExplicit,
+                                   *backend);
+        fprintf(stderr, "window: Graphics API %s (automatic, after %s)\n", *backend, failed);
+        return true;
+    }
+    return false;
 }
 
 /* The platform the build is for, for the summary line */
@@ -1845,7 +1859,7 @@ open_window:
     if (s_window == NULL) {
         fprintf(stderr, "window: SDL_CreateWindow: %s\n", SDL_GetError());
         /* no Vulkan loader: SDL refuses an SDL_WINDOW_VULKAN window */
-        if (window_fallback_opengl(backendExplicit, retry, blendExplicit, &backend)) {
+        if (window_fallback_backend(backendExplicit, retry, blendExplicit, &backend)) {
             goto open_window;
         }
         SDL_Quit();
@@ -2106,7 +2120,7 @@ open_window:
         SDL_DestroyWindow(s_window);
         s_window = NULL;
         /* Automatic: no Vulkan device, or one the renderer cannot use */
-        if (window_fallback_opengl(backendExplicit, retry, blendExplicit, &backend)) {
+        if (window_fallback_backend(backendExplicit, retry, blendExplicit, &backend)) {
             goto open_window;
         }
         SDL_Quit();

@@ -535,13 +535,13 @@ appends to the log, logs
 (`port/platform/window_host.c` (`ico_window_open`)). Apart from the steps, a start whose backend
 the player did not name (`[video] backend` empty: Automatic) and whose Vulkan does not start (SDL
 refuses the `SDL_WINDOW_VULKAN` window, as without a Vulkan loader, or `rd_init` fails: no device,
-a device the renderer cannot use) goes on once with OpenGL where the build links
-it (`rhi_backend_name` lists `opengl`): `ico_pc: no Vulkan device; using OpenGL`, the window
-destroyed and made again with `SDL_WINDOW_OPENGL` (`window_flags`, after `window_gl_attributes`:
-double buffer, no depth, stencil or sRGB, 4.3 core), `ico_diag_set_startup_retry` told the new
-backend, then `window: Graphics API opengl (automatic, after Vulkan)`
-(`window_fallback_opengl`); an OpenGL that does not start
-either ends the start as before. A crash or loss on it takes the orders above with `opengl` as the
+a device the renderer cannot use) goes on with the next backend the build links, once each
+(`window_fallback_backend`, [BACKENDS.md](BACKENDS.md)): Direct3D 12 where it is linked, then
+OpenGL (`rhi_backend_name` lists them): `ico_pc: no <failed> device; using <next>`, the window
+destroyed and made again with the flags the backend needs (`window_flags`; for OpenGL after
+`window_gl_attributes`: double buffer, no depth, stencil or sRGB, 4.3 core),
+`ico_diag_set_startup_retry` told the new backend, then `window: Graphics API <next> (automatic,
+after <failed>)`; when the last one does not start either, the start ends as before. A crash or loss on it takes the orders above with `opengl` as the
 backend (the `d3d12` and `backend` steps go to Direct3D 12 where the build has it; the steps
 themselves are unchanged: there is no OpenGL or Direct3D 11 step). See
 [BACKENDS.md](BACKENDS.md). The step only grows (the loss steps come after
