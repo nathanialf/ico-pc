@@ -190,7 +190,7 @@ static int entryGame(int e)
 #define PAL_COPYRIGHT_Y 195
 
 /* Main's sixteen, and the rc builds' Share a bug report (ICO_RC_TOOLS) */
-#define MAX_ROWS (16 + ICO_RC_TOOLS)
+#define MAX_ROWS (17 + ICO_RC_TOOLS)
 
 typedef struct Row {
     int opt;   /* UiSettingsOpt */
@@ -570,6 +570,77 @@ static int s_gpuHostSet;
 static int s_gpuPending; /* an install is running: installPoll every frame */
 static int
     s_gpuFileCur; /* the zip of the drivers folder the Add from the drivers folder row shows */
+
+/* the renderers the build links (ui_settings_set_backend_names): the config
+   values the Graphics API row writes after "" (Automatic) */
+#define MAX_BACKENDS 8
+static const char *s_backendNames[MAX_BACKENDS];
+static int s_backendCount;
+
+void ui_settings_set_backend_names(const char *const *names, int count)
+{
+    s_backendCount = 0;
+    for (int i = 0; names != NULL && i < count && i < MAX_BACKENDS; i++) {
+        if (names[i] != NULL && names[i][0] != '\0') {
+            s_backendNames[s_backendCount++] = names[i];
+        }
+    }
+}
+
+/* the Graphics API row: Automatic is index 0, then each name; the config's
+   value decides (a value the build does not link reads as Automatic when
+   stepped and shows as written) */
+static int backendCurrent(void)
+{
+    const char *v = ico_config_get_string("video.backend", "");
+    for (int i = 0; i < s_backendCount; i++) {
+        if (v != NULL && strcmp(v, s_backendNames[i]) == 0) {
+            return i + 1;
+        }
+    }
+    return 0;
+}
+
+/* a renderer's name as the player knows it (proper names, not translated) */
+static const char *backendLabel(const char *name)
+{
+    if (strcmp(name, "vulkan") == 0) {
+        return "Vulkan";
+    }
+    if (strcmp(name, "opengl") == 0) {
+        return "OpenGL";
+    }
+    if (strcmp(name, "d3d12") == 0) {
+        return "Direct3D 12";
+    }
+    if (strcmp(name, "d3d11") == 0) {
+        return "Direct3D 11";
+    }
+    return name;
+}
+
+static const char *backendText(char *buf, unsigned size)
+{
+    const char *v = ico_config_get_string("video.backend", "");
+    if (v == NULL || v[0] == '\0') {
+        return ui_str(UI_STR_VAL_GRAPHICS_AUTOMATIC);
+    }
+    snprintf(buf, size, "%s", backendLabel(v));
+    return buf;
+}
+
+static void stepBackend(int dir)
+{
+    if (s_backendCount < 2) {
+        return;
+    }
+    const int to = stepIndex(backendCurrent(), s_backendCount + 1, dir);
+    const char *v = to == 0 ? "" : s_backendNames[to - 1];
+    ico_config_set_string("video.backend", v);
+    s_dirtyConfig = 1;
+    fprintf(stderr, "settings: Graphics API set to %s (used from the next start)\n",
+            v[0] ? v : "automatic");
+}
 
 /* the zips waiting in the drivers folder, 0 without a host */
 static int gpuFileCount(void)
@@ -1537,6 +1608,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return s_gpuHostSet ? gpuText(buf, size) : ui_str(UI_STR_VAL_GPU_BUILTIN);
     case UI_OPT_GPU_ADD_FILE:
         return gpuFileCount() > 0 ? gpuFileText(buf, size) : "";
+    case UI_OPT_GRAPHICS_API:
+        return backendText(buf, size);
     case UI_OPT_STICK_FIX:
         return onOff(ico_opt_stick_fix());
     case UI_OPT_ACH_POPUPS:
@@ -1648,6 +1721,9 @@ static int optShown(int opt, int link)
            hidden elsewhere) */
         return s_gpuHostSet && s_gpuHost.adreno() != 0;
     }
+    if (opt == UI_OPT_LINK && link == UI_PAGE_GRAPHICS) {
+        return s_backendCount >= 2; /* one renderer: nothing to choose */
+    }
     if (opt == UI_OPT_LINK && link == UI_PAGE_TOUCH) {
         return touchPresent(); /* Controls > Touch screen */
     }
@@ -1731,7 +1807,7 @@ int ui_settings_opt_shown(UiSettingsOpt opt)
 static int steppable(int opt)
 {
     return (opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER) /* includes the Effects rows */ ||
-           opt == UI_OPT_GPU_DRIVER || opt == UI_OPT_GPU_ADD_FILE;
+           opt == UI_OPT_GPU_DRIVER || opt == UI_OPT_GPU_ADD_FILE || opt == UI_OPT_GRAPHICS_API;
 }
 
 static int resolutionLocked(void)
@@ -1999,6 +2075,9 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         break;
     case UI_OPT_GPU_ADD_FILE:
         stepGpuFile(dir);
+        break;
+    case UI_OPT_GRAPHICS_API:
+        stepBackend(dir);
         break;
     case UI_OPT_STICK_FIX:
         ico_opt_set_stick_fix(!ico_opt_stick_fix());
@@ -2606,9 +2685,16 @@ static int pagePitch(int page, int n, int *y0)
         }
         return 13;
     }
+    if (page == UI_PAGE_MAIN && n > 17) {
+        /* eighteen, an rc build's with the Graphics link: from 26, Back at
+           179, its box to 219 */
+        *y0 = 26;
+        return 9;
+    }
     if (page == UI_PAGE_MAIN && n > 16) {
-        /* seventeen, an rc build's alone (Share a bug report too,
-           ICO_RC_TOOLS): from 26, Back at 186, its box to 226 */
+        /* seventeen (every row but Share a bug report, which an rc build
+           adds: the Graphics link and the Graphics driver link both): from
+           26, Back at 186, its box to 226 */
         *y0 = 26;
         return 10;
     }
@@ -2805,6 +2891,9 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
                 pg->rows[i].noteStr = UI_STR_GPU_DRIVER_NOTE;
             }
         }
+        break;
+    case UI_PAGE_GRAPHICS:
+        addNote(pg, UI_OPT_GRAPHICS_API, UI_STR_GRAPHICS_API_NOTE);
         break;
     case UI_PAGE_CONTROLS:
         addNote(pg, UI_OPT_BUTTON_CONFIG, UI_STR_BUTTON_CONFIG_NOTE);
@@ -3218,34 +3307,29 @@ static void build(void)
        (ICO_RC_TOOLS, on a phone); Dump textures and Dump models under
        Developer mode, shown while it is on */
     static const int mainOpts[] = {
-        UI_OPT_LINK,         UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,
-        UI_OPT_LINK,         UI_OPT_LINK,          UI_OPT_LANGUAGE,    UI_OPT_MENU_LANGUAGE,
-        UI_OPT_DISC,         UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_REPORT_PICTURE,
+        UI_OPT_LINK,           UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,
+        UI_OPT_LINK,           UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LANGUAGE,
+        UI_OPT_MENU_LANGUAGE,  UI_OPT_DISC,          UI_OPT_LINK,        UI_OPT_LINK,
+        UI_OPT_REPORT_PICTURE,
 #if ICO_RC_TOOLS
         UI_OPT_SHARE_REPORT,
 #endif
-        UI_OPT_DEVELOPER,    UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
-    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
-                                   UI_STR_SECTION_EFFECTS,
-                                   UI_STR_SECTION_GPU_DRIVER,
-                                   UI_STR_SECTION_AUDIO,
-                                   UI_STR_SECTION_CONTROLS,
-                                   UI_STR_SECTION_GAMEPLAY,
-                                   UI_STR_SECTION_LANGUAGE,
-                                   UI_STR_OPT_MENU_LANGUAGE,
-                                   UI_STR_OPT_DISC,
-                                   UI_STR_SECTION_ACHIEVEMENTS,
-                                   UI_STR_EXTRAS,
+        UI_OPT_DEVELOPER,      UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
+    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,      UI_STR_SECTION_EFFECTS,
+                                   UI_STR_SECTION_GRAPHICS,     UI_STR_SECTION_GPU_DRIVER,
+                                   UI_STR_SECTION_AUDIO,        UI_STR_SECTION_CONTROLS,
+                                   UI_STR_SECTION_GAMEPLAY,     UI_STR_SECTION_LANGUAGE,
+                                   UI_STR_OPT_MENU_LANGUAGE,    UI_STR_OPT_DISC,
+                                   UI_STR_SECTION_ACHIEVEMENTS, UI_STR_EXTRAS,
                                    UI_STR_OPT_REPORT_PICTURE,
 #if ICO_RC_TOOLS
                                    UI_STR_OPT_SHARE_REPORT,
 #endif
-                                   UI_STR_OPT_DEVELOPER_MODE,
-                                   UI_STR_OPT_DUMP_TEXTURES,
-                                   UI_STR_OPT_DUMP_MODELS,
-                                   UI_STR_BACK};
+                                   UI_STR_OPT_DEVELOPER_MODE,   UI_STR_OPT_DUMP_TEXTURES,
+                                   UI_STR_OPT_DUMP_MODELS,      UI_STR_BACK};
     static const int mainLinks[] = {UI_PAGE_DISPLAY,
                                     UI_PAGE_EFFECTS,
+                                    UI_PAGE_GRAPHICS,
                                     UI_PAGE_GPU_DRIVER,
                                     UI_PAGE_AUDIO,
                                     UI_PAGE_CONTROLS,
@@ -3263,6 +3347,9 @@ static void build(void)
                                     -1,
                                     -1,
                                     -1};
+    /* the Graphics API page (its link needs two or more renderers) */
+    static const int apiOpts[] = {UI_OPT_GRAPHICS_API, UI_OPT_BACK};
+    static const int apiStrs[] = {UI_STR_OPT_GRAPHICS_API, UI_STR_BACK};
     /* Android's Graphics driver page (its link needs a host) */
     static const int gpuOpts[] = {UI_OPT_GPU_DRIVER, UI_OPT_GPU_ADD, UI_OPT_GPU_ADD_FILE,
                                   UI_OPT_GPU_REMOVE, UI_OPT_BACK};
@@ -3446,6 +3533,8 @@ static void build(void)
                     N_OF(gameOpts), UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_EFFECTS, UI_STR_SECTION_EFFECTS, fxOpts, fxStrs, NULL, N_OF(fxOpts),
                     UI_PAGE_MAIN);
+    buildOptionPage(UI_PAGE_GRAPHICS, UI_STR_SECTION_GRAPHICS, apiOpts, apiStrs, NULL,
+                    N_OF(apiOpts), UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_GPU_DRIVER, UI_STR_SECTION_GPU_DRIVER, gpuOpts, gpuStrs, NULL,
                     N_OF(gpuOpts), UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_EXTRAS, UI_STR_EXTRAS, extrasOpts, extrasStrs, extrasLinks,

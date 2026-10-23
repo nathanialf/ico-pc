@@ -502,6 +502,10 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "Original moves the trail on with the game’s own frames. Smooth moves it on with every frame shown, the same length of trail.",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Cinematic bars",
     [UI_STR_OPT_FULL_PIXEL] = "Full pixel (exact screen pixels)",
+    [UI_STR_SECTION_GRAPHICS] = "Graphics",
+    [UI_STR_OPT_GRAPHICS_API] = "Graphics API",
+    [UI_STR_VAL_GRAPHICS_AUTOMATIC] = "Automatic",
+    [UI_STR_GRAPHICS_API_NOTE] = "Used from the next start.",
     /* Settings > Graphics driver (Android), Quit game */
     [UI_STR_SECTION_GPU_DRIVER] = "Graphics driver",
     [UI_STR_OPT_GPU_DRIVER] = "Driver",

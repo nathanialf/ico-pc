@@ -505,6 +505,10 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
         "Original hace avanzar la estela con los fotogramas del juego. Fluido la hace avanzar con cada fotograma mostrado, con la misma longitud de estela.",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Franjas de cine",
     [UI_STR_OPT_FULL_PIXEL] = "Píxeles exactos de pantalla",
+    [UI_STR_SECTION_GRAPHICS] = "Gráficos",
+    [UI_STR_OPT_GRAPHICS_API] = "API gráfica",
+    [UI_STR_VAL_GRAPHICS_AUTOMATIC] = "Automático",
+    [UI_STR_GRAPHICS_API_NOTE] = "Se aplica en el próximo inicio.",
     /* Settings > Graphics driver (Android), Quit game */
     [UI_STR_SECTION_GPU_DRIVER] = "Controlador gráfico",
     [UI_STR_OPT_GPU_DRIVER] = "Controlador",

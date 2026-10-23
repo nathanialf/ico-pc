@@ -611,6 +611,12 @@ typedef enum UiStrId {
     UI_STR_OPT_EFFECT_CINEMATIC_BARS,
     /* Effects > Full pixel */
     UI_STR_OPT_FULL_PIXEL,
+    /* Settings > Graphics: the page and its link, the Graphics API row,
+       Automatic and the note */
+    UI_STR_SECTION_GRAPHICS,
+    UI_STR_OPT_GRAPHICS_API,
+    UI_STR_VAL_GRAPHICS_AUTOMATIC,
+    UI_STR_GRAPHICS_API_NOTE,
     /* Settings > Graphics driver (Android), Quit game */
     UI_STR_SECTION_GPU_DRIVER,
     UI_STR_OPT_GPU_DRIVER,

@@ -505,6 +505,10 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
         "Originale fa avanzare la scia con i fotogrammi del gioco. Fluido la fa avanzare a ogni fotogramma mostrato, con la stessa lunghezza di scia.",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Bande cinema",
     [UI_STR_OPT_FULL_PIXEL] = "Pixel esatti dello schermo",
+    [UI_STR_SECTION_GRAPHICS] = "Grafica",
+    [UI_STR_OPT_GRAPHICS_API] = "API grafica",
+    [UI_STR_VAL_GRAPHICS_AUTOMATIC] = "Automatico",
+    [UI_STR_GRAPHICS_API_NOTE] = "Si applica al prossimo avvio.",
     /* Settings > Graphics driver (Android), Quit game */
     [UI_STR_SECTION_GPU_DRIVER] = "Driver grafico",
     [UI_STR_OPT_GPU_DRIVER] = "Driver",

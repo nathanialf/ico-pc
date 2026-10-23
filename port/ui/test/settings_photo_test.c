@@ -683,8 +683,8 @@ static int render(void)
                  {4, 1, "settings_controls.png"},    {5, 0, "settings_gameplay.png"},
                  {8, 0, "settings_achievements.png"}};
 
-    int labels[16];
-    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    int labels[20];
+    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
     for (unsigned i = 0; i < sizeof(pages) / sizeof(pages[0]); i++) {
         lt_ext_layout(mainL)->curItem = labels[pages[i].row];
         press(0x40);
@@ -843,8 +843,8 @@ static int render(void)
         press(0x4000);
         press(0x40);
         CHECK(settle(mainL, 60), "the menu from the title");
-        int ml[16];
-        ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
+        int ml[20];
+        ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 20);
         lt_ext_layout(mainL)->curItem = ml[9]; /* Achievements */
         frame(0);
         frame(0);
@@ -925,8 +925,8 @@ static int render(void)
         rd_set_settings(&e);
         ui_set_scale(ui_scale_for(1, e.outputHeight));
         s_reduce = 1;
-        int ml[16];
-        ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
+        int ml[20];
+        ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 20);
         lt_switch_layout(mainL);
         CHECK(settle(mainL, 60), "the menu at 1080p");
         lt_ext_layout(mainL)->curItem = ml[6];

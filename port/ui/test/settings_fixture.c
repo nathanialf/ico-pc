@@ -685,8 +685,8 @@ int enterMainKeep(int title)
 /* the main page's row `mainRow` (all rows counted), Cross: its page */
 int openPage(int mainL, int mainRow, UiSettingsPage page)
 {
-    int labels[16];
-    const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    int labels[20];
+    const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
     const int want = ui_settings_page_layout(page);
     /* the row that opens the page (mainRow, or the one whose link it is:
        the main page's rows moved when Menu language came in) */

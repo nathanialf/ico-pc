@@ -112,8 +112,8 @@ static void testExtras(void)
     char log[512];
     for (int title = 0; title < 2; title++) {
         int mainL = enterMain(title);
-        int labels[16], opts[16];
-        int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, opts, NULL, 16);
+        int labels[20], opts[20];
+        int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, opts, NULL, 20);
         int ex = ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_LINK), idx = 0;
         for (int i = 0; i < n; i++) {
             if (strcmp(lt_ext_row_text(labels[i]), "Extras") == 0) {
@@ -847,9 +847,9 @@ static void testCharacters(void)
         const int mainL = enterMain(1);
         const int exL = openPage(mainL, 8, UI_PAGE_EXTRAS);
         const int l = ui_settings_page_layout(UI_PAGE_CHARACTERS);
-        int el[8], ml[16], ex = -1;
+        int el[8], ml[20], ex = -1;
         ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 8);
-        const int mn = ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
+        const int mn = ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 20);
         for (int i = 0; i < mn; i++) {
             if (strcmp(lt_ext_row_text(ml[i]), "Extras") == 0) {
                 ex = ml[i];
@@ -1152,8 +1152,8 @@ static void testOtherDiscExtras(const char *slug)
 {
     CHECK(ico_region_select(slug) == 0, "the %s region", slug);
     const int mainL = enterMain(1);
-    int labels[16];
-    const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    int labels[20];
+    const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
     const int exL = ui_settings_page_layout(UI_PAGE_EXTRAS);
     int ex = -1;
     for (int i = 0; i < n; i++) {

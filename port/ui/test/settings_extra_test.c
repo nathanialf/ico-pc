@@ -332,8 +332,8 @@ static int an22bShown(UiSettingsPage page, UiSettingsOpt opt)
 /* the main page's Graphics driver link: its row, -1 */
 static int an22bLink(void)
 {
-    int labels[16];
-    const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    int labels[20];
+    const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
     for (int i = 0; i < n; i++) {
         if (strcmp(lt_ext_row_text(labels[i]), "Graphics driver") == 0) {
             return labels[i];
@@ -395,15 +395,15 @@ static void testGpuDriver(void)
     int mainL = enterMain(1);
     frame(0);
     {
-        int labels[16];
-        ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        int labels[20];
+        ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
         const int link = an22bLink();
-        CHECK(link == labels[2] && !lt_ext_prop(link)->defaultMask,
-              "host: the link shows after Effects (%d)", link);
+        CHECK(link == labels[3] && !lt_ext_prop(link)->defaultMask,
+              "host: the link shows after Effects and Graphics (%d)", link);
         CHECK(lt_ext_prop(link)->right == ui_settings_page_layout(UI_PAGE_GPU_DRIVER),
               "the link opens the page");
     }
-    const int gpuL = openPage(mainL, 2, UI_PAGE_GPU_DRIVER);
+    const int gpuL = openPage(mainL, 3, UI_PAGE_GPU_DRIVER);
     const int driver = ui_settings_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
     CHECK(strcmp(ui_settings_value_text(UI_OPT_GPU_DRIVER), "Built-in") == 0, "Built-in at first");
     CHECK(an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_ADD), "Add shows on an Adreno");
@@ -592,8 +592,8 @@ static void testGpuDriver(void)
         frame(0);
     }
     {
-        int labels[16], prev = -1, shown = 0, last = -1;
-        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        int labels[20], prev = -1, shown = 0, last = -1;
+        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
         for (int i = 0; i < n; i++) {
             const LtProperty *r = lt_ext_prop(labels[i]);
             if (r->defaultMask) {
@@ -617,13 +617,17 @@ static void testGpuDriver(void)
     CHECK(lt_ext_prop(an22bLink())->defaultMask, "the host removed: the link hides again");
 
     /* the strings, in all five languages */
-    static const UiStrId kIds[] = {
-        UI_STR_SECTION_GPU_DRIVER,    UI_STR_OPT_GPU_DRIVER,       UI_STR_VAL_GPU_BUILTIN,
-        UI_STR_GPU_DRIVER_ADD,        UI_STR_GPU_DRIVER_REMOVE,    UI_STR_GPU_DRIVER_NOTE,
-        UI_STR_GPU_DRIVER_ADDED,      UI_STR_GPU_DRIVER_BAD,       UI_STR_GPU_DRIVER_REMOVED,
-        UI_STR_GPU_DRIVER_FAILED,     UI_STR_GPU_DRIVER_NOSPACE,   UI_STR_QUIT_GAME,
-        UI_STR_QUIT_GAME_CONFIRM,     UI_STR_GPU_DRIVER_NO_PICKER, UI_STR_GPU_DRIVER_NO_PICKER_APP,
-        UI_STR_GPU_DRIVER_UNREADABLE, UI_STR_GPU_DRIVER_ADD_FILE};
+    static const UiStrId kIds[] = {UI_STR_SECTION_GPU_DRIVER,       UI_STR_OPT_GPU_DRIVER,
+                                   UI_STR_VAL_GPU_BUILTIN,          UI_STR_GPU_DRIVER_ADD,
+                                   UI_STR_GPU_DRIVER_REMOVE,        UI_STR_GPU_DRIVER_NOTE,
+                                   UI_STR_GPU_DRIVER_ADDED,         UI_STR_GPU_DRIVER_BAD,
+                                   UI_STR_GPU_DRIVER_REMOVED,       UI_STR_GPU_DRIVER_FAILED,
+                                   UI_STR_GPU_DRIVER_NOSPACE,       UI_STR_QUIT_GAME,
+                                   UI_STR_QUIT_GAME_CONFIRM,        UI_STR_GPU_DRIVER_NO_PICKER,
+                                   UI_STR_GPU_DRIVER_NO_PICKER_APP, UI_STR_GPU_DRIVER_UNREADABLE,
+                                   UI_STR_GPU_DRIVER_ADD_FILE,      UI_STR_SECTION_GRAPHICS,
+                                   UI_STR_OPT_GRAPHICS_API,         UI_STR_VAL_GRAPHICS_AUTOMATIC,
+                                   UI_STR_GRAPHICS_API_NOTE};
     static const UiLang kLangs[5] = {UI_LANG_EN, UI_LANG_FR, UI_LANG_DE, UI_LANG_IT, UI_LANG_ES};
     for (int l = 0; l < 5; l++) {
         for (unsigned i = 0; i < sizeof(kIds) / sizeof(kIds[0]); i++) {
@@ -632,6 +636,102 @@ static void testGpuDriver(void)
     }
     CHECK(strcmp(ui_str_in(UI_LANG_ES, UI_STR_QUIT_GAME_CONFIRM), "\xC2\xBFSalir del juego?") == 0,
           "Spanish question");
+}
+
+/* Options > Graphics, the Graphics API row: the link and the page show with
+   two or more renderers named by the host; the row goes round Automatic and
+   the names, shows the config's value and writes [video] backend on leaving */
+static int graphicsLink(void)
+{
+    int labels[20];
+    const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
+    for (int i = 0; i < n; i++) {
+        if (lt_ext_prop(labels[i])->right == ui_settings_page_layout(UI_PAGE_GRAPHICS)) {
+            return labels[i];
+        }
+    }
+    return -1;
+}
+
+static void testGraphicsApi(void)
+{
+    static const char *const kNames[] = {"vulkan", "opengl", "d3d12", "d3d11"};
+    char p[1100];
+    int labels[20];
+
+    ui_settings_set_backend_names(NULL, 0);
+    useConfig("version = 1\n");
+    int mainL = enterMain(1);
+    frame(0);
+    int link = graphicsLink();
+    CHECK(link >= 0 && lt_ext_prop(link)->defaultMask,
+          "no renderer names: the Graphics link hides");
+    ui_settings_set_backend_names(kNames, 1);
+    mainL = enterMain(1);
+    frame(0);
+    link = graphicsLink();
+    CHECK(link >= 0 && lt_ext_prop(link)->defaultMask, "one renderer: the Graphics link hides");
+
+    /* two or more: the link shows right after Effects */
+    ui_settings_set_backend_names(kNames, 4);
+    mainL = enterMain(1);
+    frame(0);
+    link = graphicsLink();
+    const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
+    CHECK(n > 3 && labels[2] == link && !lt_ext_prop(link)->defaultMask &&
+              strcmp(lt_ext_row_text(link), "Graphics") == 0,
+          "four renderers: the Graphics link shows after Effects");
+    const int pageL = openPage(mainL, 2, UI_PAGE_GRAPHICS);
+    const int row = ui_settings_row_of(UI_PAGE_GRAPHICS, UI_OPT_GRAPHICS_API);
+    CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Graphics API") == 0, "the Graphics API row");
+    CHECK(noteStarting(UI_PAGE_GRAPHICS, "Used from the next start.") >= 0, "the note");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_GRAPHICS_API), "Automatic") == 0,
+          "no key: Automatic");
+
+    /* Right goes round the names in the order given, back to Automatic */
+    static const char *const kShown[] = {"Vulkan", "OpenGL", "Direct3D 12", "Direct3D 11"};
+    static const char *const kKeys[] = {"vulkan", "opengl", "d3d12", "d3d11"};
+    for (int i = 0; i < 4; i++) {
+        ui_settings_step(UI_OPT_GRAPHICS_API, 1);
+        CHECK(strcmp(ui_settings_value_text(UI_OPT_GRAPHICS_API), kShown[i]) == 0,
+              "Right %d shows %s (%s)", i, kShown[i], ui_settings_value_text(UI_OPT_GRAPHICS_API));
+        CHECK(strcmp(ico_config_get_string("video.backend", "?"), kKeys[i]) == 0,
+              "Right %d writes %s", i, kKeys[i]);
+    }
+    ui_settings_step(UI_OPT_GRAPHICS_API, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_GRAPHICS_API), "Automatic") == 0,
+          "Right wraps to Automatic");
+    CHECK(strcmp(ico_config_get_string("video.backend", "?"), "") == 0,
+          "Automatic writes an empty backend");
+    ui_settings_step(UI_OPT_GRAPHICS_API, -1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_GRAPHICS_API), "Direct3D 11") == 0,
+          "Left wraps to the last");
+
+    /* leaving the page writes the file */
+    ui_settings_step(UI_OPT_GRAPHICS_API, -1);
+    ui_settings_step(UI_OPT_GRAPHICS_API, -1);
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(mainL, 60), "Back leaves the page (%d)", pageL);
+    CHECK(ui_settings_save() == 0, "save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t != NULL, "the file");
+    if (t) {
+        const char *b = ico_toml_get(t, "video.backend");
+        CHECK(b != NULL && strcmp(b, "opengl") == 0, "[video] backend = opengl (%s)", b ? b : "-");
+        ico_toml_free(t);
+    }
+
+    /* a value the build does not link shows as written, and steps from Automatic */
+    useConfig("version = 1\n[video]\nbackend = \"d3d12\"\n");
+    ui_settings_set_backend_names(kNames, 2);
+    enterMain(1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_GRAPHICS_API), "Direct3D 12") == 0,
+          "an unlinked value shows as written");
+    ui_settings_step(UI_OPT_GRAPHICS_API, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_GRAPHICS_API), "Vulkan") == 0,
+          "an unlinked value steps from Automatic");
+    ui_settings_set_backend_names(NULL, 0);
 }
 
 /* Extras > Add to Steam: hidden without a host handler, on the pause menu,
@@ -685,8 +785,8 @@ static void testDiscRow(void)
     frame(0);
     CHECK(an22bShown(UI_PAGE_MAIN, UI_OPT_DISC), "disc: both discs' game data, shown");
     {
-        int labels[16];
-        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        int labels[20];
+        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
         int at = -1, menu = -1;
         for (int i = 0; i < n; i++) {
             at = labels[i] == ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_DISC) ? i : at;
@@ -773,8 +873,8 @@ static void testDiscRow(void)
         frame(0);
     }
     {
-        int labels[16], shown = 0;
-        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        int labels[20], shown = 0;
+        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
         for (int i = 0; i < n; i++) {
             const int on = !lt_ext_prop(labels[i])->defaultMask && !lt_ext_prop(labels[i])->masked;
             shown += on;
@@ -912,8 +1012,8 @@ static void testReportPicture(void)
     CHECK(an22bShown(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE) && !ico_opt_developer_mode(),
           "report picture: developer mode off, the row is shown");
     {
-        int labels[16];
-        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        int labels[20];
+        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
         const int rp = ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE);
         const int dev = ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_DEVELOPER);
         int at = -1, devAt = -1;
@@ -937,8 +1037,8 @@ static void testReportPicture(void)
     CHECK(ui_settings_note_row_of(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE) >= 0,
           "report picture: the row has its note");
     {
-        int labels[16];
-        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        int labels[20];
+        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
         int at = -1, dev = -1;
         for (int i = 0; i < n; i++) {
             at = labels[i] == row ? i : at;
@@ -972,8 +1072,8 @@ static void testReportPicture(void)
         frame(0);
     }
     {
-        int labels[16], shown = 0;
-        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        int labels[20], shown = 0;
+        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
         for (int i = 0; i < n; i++) {
             shown += !lt_ext_prop(labels[i])->defaultMask && !lt_ext_prop(labels[i])->masked;
         }
@@ -1514,8 +1614,8 @@ static void click(void)
 /* the main page's row labelled strId, among all its rows (openPage's index) */
 static int i17bMainIndex(int strId)
 {
-    int labels[16];
-    const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    int labels[20];
+    const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
     for (int i = 0; i < n; i++) {
         if (strcmp(lt_ext_row_text(labels[i]), ui_str((UiStrId)strId)) == 0) {
             return i;
@@ -1539,7 +1639,7 @@ static int i17bArrow(int l, int label, int role)
 static void testPointer(void)
 {
     char before[64], after[64];
-    int labels[16];
+    int labels[20];
 
     ui_mouse_reset();
     ui_mouse_set_view(640, 480, 0, 0, 640, 480);
@@ -1585,7 +1685,7 @@ static void testPointer(void)
     const int iDisp = i17bMainIndex(UI_STR_SECTION_DISPLAY);
     const int iAch = i17bMainIndex(UI_STR_SECTION_ACHIEVEMENTS);
     const int iCtl = i17bMainIndex(UI_STR_SECTION_CONTROLS);
-    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
     CHECK(iDisp >= 0 && iAch >= 0 && iCtl >= 0, "the main page's rows (%d %d %d)", iDisp, iAch,
           iCtl);
     lt_ext_layout(mainL)->curItem = labels[iCtl];
@@ -1892,8 +1992,8 @@ static void testAchievementPopups(void)
     CHECK(strcmp(ui_settings_value_text(UI_OPT_ACH_POPUPS), "Off") == 0, "pop-ups: Off");
     CHECK(ico_ach_popups_enabled() == 0, "pop-ups: the getter reads Off at once");
     press(LT_PAD_TRIANGLE);
-    int mainLabels[16];
-    ui_settings_page_rows(UI_PAGE_MAIN, mainLabels, NULL, NULL, 16);
+    int mainLabels[20];
+    ui_settings_page_rows(UI_PAGE_MAIN, mainLabels, NULL, NULL, 20);
     CHECK(settle(mainL, 60) && lt_ext_layout(mainL)->curItem == mainLabels[iAch],
           "pop-ups: Triangle back to the menu, on Achievements");
     t = ico_toml_load(p);
@@ -1951,7 +2051,7 @@ static const char *rowsValueOf(UiSettingsPage page, UiSettingsOpt opt)
 static void testDuplicatedRows(void)
 {
     static const UiLang kLangs[5] = {UI_LANG_EN, UI_LANG_DE, UI_LANG_ES, UI_LANG_FR, UI_LANG_IT};
-    int labels[16], opts[16];
+    int labels[20], opts[20];
     char p[1100];
     IcoToml *t;
 
@@ -2047,7 +2147,7 @@ static void testDuplicatedRows(void)
 
     /* the first match, where an option stands on a page more than once */
     {
-        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, opts, NULL, 16);
+        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, opts, NULL, 20);
         int first = -1;
         for (int i = 0; i < n && first < 0; i++) {
             first = opts[i] == UI_OPT_LINK ? labels[i] : first;
@@ -2865,8 +2965,8 @@ static void testOtherDiscPointer(const char *slug)
     ui_mouse_reset();
     ui_mouse_set_view(640, 480, 0, 0, 640, 480);
     const int mainL = enterMain(1);
-    int labels[16];
-    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    int labels[20];
+    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
     const int iDisp = i17bMainIndex(UI_STR_SECTION_DISPLAY);
     CHECK(iDisp >= 0, "the Display row");
     mouseFrame();
@@ -3321,6 +3421,7 @@ int main(int argc, char **argv)
     testItemSelectArg();
     /* Settings > Graphics driver, the Quit game label */
     testGpuDriver();
+    testGraphicsApi();
     testAddToSteam();
     /* Main > Disc */
     testDiscRow();

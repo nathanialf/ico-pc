@@ -31,11 +31,14 @@
 
 static void testBuild(void)
 {
-    static const int mainOpts[] = {
-        UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,
-        UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LANGUAGE,    UI_OPT_MENU_LANGUAGE,
-        UI_OPT_DISC,      UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_REPORT_PICTURE,
-        UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
+    static const int mainOpts[] = {UI_OPT_LINK,           UI_OPT_LINK,      UI_OPT_LINK,
+                                   UI_OPT_LINK,           UI_OPT_LINK,      UI_OPT_LINK,
+                                   UI_OPT_LINK,           UI_OPT_LANGUAGE,  UI_OPT_MENU_LANGUAGE,
+                                   UI_OPT_DISC,           UI_OPT_LINK,      UI_OPT_LINK,
+                                   UI_OPT_REPORT_PICTURE, UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES,
+                                   UI_OPT_DUMP_MODELS,    UI_OPT_BACK};
+    static const int apiOpts[] = {UI_OPT_GRAPHICS_API, UI_OPT_BACK};
+    static const int apiStrs[] = {UI_STR_OPT_GRAPHICS_API, UI_STR_BACK};
     static const int fxOpts[] = {UI_OPT_FULL_HEIGHT,
                                  UI_OPT_FILTER,
                                  UI_OPT_BRIGHTNESS,
@@ -66,6 +69,7 @@ static void testBuild(void)
                                  UI_STR_BACK};
     static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
                                    UI_STR_SECTION_EFFECTS,
+                                   UI_STR_SECTION_GRAPHICS,
                                    UI_STR_SECTION_GPU_DRIVER,
                                    UI_STR_SECTION_AUDIO,
                                    UI_STR_SECTION_CONTROLS,
@@ -139,7 +143,8 @@ static void testBuild(void)
     ui_settings_reset();
     ui_set_language(UI_LANG_EN);
     ui_settings_install();
-    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 16), "main page rows");
+    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 17), "main page rows");
+    CHECK(labelsAre(UI_PAGE_GRAPHICS, apiOpts, apiStrs, 2), "Graphics page rows");
     CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 14), "effects rows");
     {
         /* Characters (a link), then Add to Steam (hidden without a host
@@ -180,7 +185,7 @@ static void testBuild(void)
     /* sections open their pages; the rows loop like the Options rows */
     int main = ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_LINK);
     CHECK(lt_ext_prop(main)->right == ui_settings_page_layout(UI_PAGE_DISPLAY), "Display opens");
-    int labels[16], n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    int labels[20], n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
     CHECK(lt_ext_prop(labels[n - 1])->downItem == labels[0] &&
               lt_ext_prop(labels[0])->upItem == labels[n - 1],
           "main rows wrap");
@@ -754,8 +759,8 @@ static void testNavigation(void)
     CHECK(NonLinearCameraMove == 3 && ui_get_language() == UI_LANG_FR, "right: French (%d)",
           NonLinearCameraMove);
     CHECK(s_sounds[0] > cur0, "the cursor sound");
-    int labels[16], values[16];
-    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, values, 16);
+    int labels[20], values[20];
+    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, values, 20);
     CHECK(strstr(lt_ext_row_text(values[6]), "Français") != NULL, "the value row: %s",
           lt_ext_row_text(values[6]));
     CHECK(strcmp(lt_ext_row_text(labels[0]), "Affichage") == 0, "labels follow the language");
@@ -1452,8 +1457,8 @@ static void testCirclePortScreens(void)
     } kPages[] = {{0, UI_PAGE_DISPLAY},  {1, UI_PAGE_EFFECTS},  {3, UI_PAGE_AUDIO},
                   {4, UI_PAGE_CONTROLS}, {5, UI_PAGE_GAMEPLAY}, {9, UI_PAGE_ACHIEVEMENTS}};
 
-    int labels[16];
-    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    int labels[20];
+    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
     for (unsigned i = 0; i < sizeof(kPages) / sizeof(kPages[0]); i++) {
         lt_ext_layout(mainL)->curItem = labels[kPages[i].row];
         press(0x40);
@@ -2299,8 +2304,8 @@ static void testGallery(void)
 {
     gallery_set_engine(&kFakeEngine);
     int mainL = enterMain(1);
-    int ml[16];
-    ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
+    int ml[20];
+    ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 20);
     lt_ext_layout(mainL)->curItem = ml[10]; /* Extras */
     press(0x40);
     int exL = ui_settings_page_layout(UI_PAGE_EXTRAS);
@@ -2975,8 +2980,8 @@ static void testTexturePack(void)
     }
     CHECK(rowShown(UI_PAGE_MAIN, UI_OPT_DUMP_TEXTURES), "dump row shown in developer mode");
     {
-        int labels[16];
-        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        int labels[20];
+        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
         const LtProperty *back = lt_ext_prop(labels[n - 1]);
         CHECK(back->dispY == 40 + 12 * 12, "thirteen rows 12 lines apart: Back at %d", back->dispY);
         CHECK(back->dispY + back->dispH <= 226, "Back's box ends at %d", back->dispY + back->dispH);
@@ -3311,8 +3316,8 @@ static void testOtherDisc(void)
           "no Video mode, Language or Circle goes back row; Menu language");
     /* Circle opens Display, Cross goes back; Circle opens it again,
        Triangle goes back; Cross on the main page goes back to the title */
-    int labels[16];
-    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    int labels[20];
+    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
     const int dispL = ui_settings_page_layout(UI_PAGE_DISPLAY);
     lt_ext_layout(mainL)->curItem = labels[0];
     press(0x20);

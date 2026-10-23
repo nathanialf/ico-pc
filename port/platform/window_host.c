@@ -1628,8 +1628,10 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     RdSettings rs;
     int w = 0, h = 0;
 
-    /* [video] backend (config.toml) or backend= (ico-pc.ini): "vulkan", the
-       default, or "d3d12" where the build has it */
+    /* [video] backend (config.toml) or backend= (ico-pc.ini), also the
+       Options > Graphics > Graphics API row: "", the default, is Vulkan first
+       with the D3D12 fallback; "vulkan", "opengl", "d3d12" or "d3d11" where
+       the build has it */
     const char *chosen = ico_config_get_string("video.backend", NULL);
     const bool backendExplicit = chosen != NULL && chosen[0] != '\0';
     const char *backend = backendExplicit ? chosen : "vulkan";
@@ -1735,6 +1737,8 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     }
     ico_diag_set_startup_retry((int)retry, window_have_d3d12(), backendExplicit, blendExplicit,
                                backend);
+    fprintf(stderr, "window: Graphics API %s (%s)\n", backend,
+            backendExplicit ? "chosen in the settings or the config file" : "automatic");
     /* the name the desktop shows for the game, e.g. in KDE's list of what
        keeps the computer awake (SDL's D-Bus inhibit sends it); Android and
        iOS set SDL_HINT_APP_NAME, which SDL prefers */
@@ -2292,6 +2296,17 @@ open_window:
     /* Extras > Add to Steam (Windows and Linux; see steam_add_handler) */
     ui_settings_set_steam_handler(steam_add_handler);
 #endif
+    /* Graphics > Graphics API lists the renderers this build links (the page
+       shows with two or more) */
+    {
+        static const char *names[8];
+        int n = 0;
+        const char *name;
+        for (uint32_t i = 0; n < 8 && (name = rhi_backend_name(i)) != NULL; i++) {
+            names[n++] = name;
+        }
+        ui_settings_set_backend_names(names, n);
+    }
     /* Main > Disc, shown with two or more discs' game data */
     ui_settings_set_disc_handler(ico_host_disc_archive_present);
     /* Main > Save a picture for a bug report (above Developer mode, always shown) */
@@ -5745,6 +5760,7 @@ void ico_window_close(void)
 #if !defined(__ANDROID__) && !defined(ICO_IOS)
     ui_settings_set_steam_handler(NULL);
 #endif
+    ui_settings_set_backend_names(NULL, 0);
     ui_settings_set_disc_handler(NULL);
     ui_settings_set_frame_dump_handler(NULL);
     ui_settings_set_share_report_handler(NULL);

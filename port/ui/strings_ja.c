@@ -504,6 +504,10 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
         "「オリジナル」はブラーをゲームのフレームごとに動かします。「なめらか」は表示するフレームごとに動かします。ブラーの長さは同じです。",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "上下の黒帯",
     [UI_STR_OPT_FULL_PIXEL] = "ドットバイドット",
+    [UI_STR_SECTION_GRAPHICS] = "グラフィック",
+    [UI_STR_OPT_GRAPHICS_API] = "グラフィックAPI",
+    [UI_STR_VAL_GRAPHICS_AUTOMATIC] = "自動",
+    [UI_STR_GRAPHICS_API_NOTE] = "次回の起動から使われます。",
     /* Settings > Graphics driver (Android), Quit game */
     [UI_STR_SECTION_GPU_DRIVER] = "グラフィックドライバー",
     [UI_STR_OPT_GPU_DRIVER] = "ドライバー",

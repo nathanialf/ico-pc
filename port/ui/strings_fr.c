@@ -507,6 +507,10 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
         "Original fait avancer la traînée avec les images du jeu. Fluide la fait avancer à chaque image affichée, pour la même longueur de traînée.",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Bandes cinéma",
     [UI_STR_OPT_FULL_PIXEL] = "Pixels exacts de l'écran",
+    [UI_STR_SECTION_GRAPHICS] = "Graphismes",
+    [UI_STR_OPT_GRAPHICS_API] = "API graphique",
+    [UI_STR_VAL_GRAPHICS_AUTOMATIC] = "Automatique",
+    [UI_STR_GRAPHICS_API_NOTE] = "Appliqué au prochain démarrage.",
     /* Settings > Graphics driver (Android), Quit game */
     [UI_STR_SECTION_GPU_DRIVER] = "Pilote graphique",
     [UI_STR_OPT_GPU_DRIVER] = "Pilote",

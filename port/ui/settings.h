@@ -216,6 +216,15 @@ typedef struct UiGpuDriverHost {
 
 /* NULL (or never called) hides the link and the page. The struct is copied. */
 void ui_settings_set_gpu_driver_host(const UiGpuDriverHost *host);
+/* Settings > Graphics (the page after Effects on the main page): the
+   renderers this build links, as the names the config key [video] backend
+   takes ("vulkan", "opengl", "d3d12", "d3d11"), in the order the Graphics
+   API row steps them after Automatic.  At most 8 are kept; the strings must
+   outlive the menu (the renderer's own names do).  The page and its link
+   show only with two or more names; NULL or a count under two hides them.
+   The row stores the choice in the config (written on leaving the page) and
+   the window reads it at the next start. */
+void ui_settings_set_backend_names(const char *const *names, int count);
 /* Settings > Extras > Add to Steam (desktop only): fn adds the program to
    the player's Steam library and returns one of UI_STEAM_*; the menu
    answers with a popup. NULL (or never called) hides the row; Android never
@@ -324,6 +333,10 @@ typedef enum UiSettingsPage {
     /* Touch screen > Edit layout: one masked row; the touch layout editor
        (touch_edit_ui.c) takes the page's input and the overlay draws it */
     UI_PAGE_TOUCH_LAYOUT,
+    /* Graphics (main page, after Effects): the Graphics API row; the link
+       shows only while the build has more than one renderer
+       (ui_settings_set_backend_names) */
+    UI_PAGE_GRAPHICS,
     UI_PAGE_COUNT
 } UiSettingsPage;
 
@@ -438,6 +451,8 @@ typedef enum UiSettingsOpt {
        the folder holds a zip) */
     UI_OPT_GPU_ADD_FILE,
     UI_OPT_GPU_REMOVE,
+    /* Graphics page: the stepped Graphics API row (config key video.backend) */
+    UI_OPT_GRAPHICS_API,
     /* Extras > Add to Steam (desktop; shown from the title while a host
        handler is set) */
     UI_OPT_EXTRAS_STEAM,

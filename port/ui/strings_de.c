@@ -508,6 +508,10 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "Original bewegt die Spur mit den Bildern des Spiels weiter. Flüssig bewegt sie mit jedem gezeigten Bild weiter, bei gleicher Länge der Spur.",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Kinobalken",
     [UI_STR_OPT_FULL_PIXEL] = "Exakte Bildschirmpixel",
+    [UI_STR_SECTION_GRAPHICS] = "Grafik",
+    [UI_STR_OPT_GRAPHICS_API] = "Grafik-API",
+    [UI_STR_VAL_GRAPHICS_AUTOMATIC] = "Automatisch",
+    [UI_STR_GRAPHICS_API_NOTE] = "Gilt ab dem nächsten Start.",
     /* Settings > Graphics driver (Android), Quit game */
     [UI_STR_SECTION_GPU_DRIVER] = "Grafiktreiber",
     [UI_STR_OPT_GPU_DRIVER] = "Treiber",
