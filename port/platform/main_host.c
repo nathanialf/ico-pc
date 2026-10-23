@@ -593,6 +593,7 @@ typedef struct PickState {
 static PickState s_pick;
 static SDL_AtomicInt s_pick_gen;
 
+#ifndef __ANDROID__
 static void SDLCALL pick_done(void *user, const char *const *files, int filter)
 {
     (void)filter;
@@ -605,6 +606,7 @@ static void SDLCALL pick_done(void *user, const char *const *files, int filter)
     }
     SDL_SetAtomicInt(&s_pick.done, 1);
 }
+#endif
 
 /* a new dialog's number, for SDL_ShowOpenFileDialog's user */
 static void *pick_begin(void)
@@ -637,11 +639,36 @@ static const char *pick_prompt_discs(void)
 
 #define PICK_PROMPT_FILES "A .iso, .chd or .bin file (with a .bin and a .cue, pick the .bin)"
 
-/* no filters: Android's picker matches MIME types, and a disc image has
-   none it knows (the extractor checks the file) */
+/* the app's picker's answer (host_android.h ico_android_pick_file), on the
+   activity's thread */
+static void pick_answer(void *user, int gen, const char *uri, const char *why)
+{
+    (void)user;
+    if (gen != SDL_GetAtomicInt(&s_pick_gen)) {
+        return;
+    }
+    if (uri != NULL) {
+        snprintf(s_pick.path, sizeof(s_pick.path), "%s", uri);
+        s_pick.ok = 1;
+    } else if (why != NULL) {
+        fprintf(stderr, "ico_pc: the file picker failed: %s\n", why);
+    }
+    SDL_SetAtomicInt(&s_pick.done, 1);
+}
+
+/* the app's own picker (IcoActivity.pickFile: the document picker, else
+   any app that gets content), any type: a disc image has no type Android
+   knows (the extractor checks the file) */
 static int pick_iso_sdl(char *out, size_t size)
 {
-    SDL_ShowOpenFileDialog(pick_done, pick_begin(), NULL, NULL, 0, NULL, false);
+    char why[512];
+    int noApp = 0;
+    const int gen = (int)(intptr_t)pick_begin();
+
+    if (ico_android_pick_file(gen, pick_answer, NULL, &noApp, why, sizeof(why)) != 0) {
+        fprintf(stderr, "ico_pc: the file picker could not open: %s\n", why);
+        return -1;
+    }
     while (SDL_GetAtomicInt(&s_pick.done) == 0) {
         /* the window keeps drawing behind the picker; Back while it shows
            (the picker did not come up) gives up */
@@ -655,7 +682,7 @@ static int pick_iso_sdl(char *out, size_t size)
         SDL_Delay(20);
     }
     if (!s_pick.ok) {
-        fprintf(stderr, "ico_pc: no file chosen in the picker (%s)\n", SDL_GetError());
+        fprintf(stderr, "ico_pc: no file chosen in the picker\n");
         return -1;
     }
     snprintf(out, size, "%s", s_pick.path);
