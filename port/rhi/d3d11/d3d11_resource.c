@@ -871,7 +871,12 @@ static bool d11_fill_entry(D11BindEntry *e, const RhiBindSlot *s, const RhiBindi
             D11_LOG("bind group: b%u: invalid uniform buffer or offset", s->slot);
             return false;
         }
-        const uint64_t size = b->size ? b->size : buf->size - b->offset;
+        /* size 0 (static uniforms): to the end, at most the 64 KiB a
+         * shader sees of one constant buffer */
+        uint64_t size = b->size ? b->size : buf->size - b->offset;
+        if (!b->size && size > 65536u) {
+            size = 65536u;
+        }
         if ((s->type == RHI_BIND_UNIFORM_BUFFER_DYNAMIC && !b->size) || size > 65536u ||
             size > buf->size - b->offset) {
             D11_LOG("bind group: b%u: invalid uniform range (offset %llu, size %llu)", s->slot,
