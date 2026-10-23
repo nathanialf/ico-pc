@@ -489,8 +489,10 @@ static const struct {
     {"dev.unlock_credits", "unlock_credits"},
     /* test popups from Main tick 100 (port/ui/popup.h) */
     {"dev.popup_test", "popup_test"},
-    /* the renderer backend of the window build, "vulkan" (default) or "d3d12"
-       (window_host.c, port/rhi/rhi.h rhi_create_backend) */
+    /* the renderer backend of the window build: "" (Automatic: Vulkan,
+       then OpenGL), "vulkan" (also "vk"), "d3d12", "opengl" (also "gl") or
+       "d3d11", where the build links it (window_host.c, port/rhi/rhi.h
+       rhi_create_backend; the Options > Graphics row writes it) */
     {"video.backend", "backend"},
     /* the A/B switches a bug report may ask for (ico_dev_env_value):
        fixed-function blending, the fog's depth path, the GPU loss

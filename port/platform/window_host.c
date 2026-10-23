@@ -990,7 +990,13 @@ static int quit_is_game(void)
    size. */
 static SDL_WindowFlags window_flags(int mode)
 {
-    const SDL_WindowFlags vk = rhi_backend() == RHI_BACKEND_VULKAN ? SDL_WINDOW_VULKAN : 0;
+    /* the graphics API the backend draws through: a Vulkan surface or an
+       OpenGL context (gl_device.c refuses a window made without
+       SDL_WINDOW_OPENGL); Direct3D takes the window's HWND as it is */
+    const RhiBackendKind kind = rhi_backend();
+    const SDL_WindowFlags vk = kind == RHI_BACKEND_VULKAN   ? SDL_WINDOW_VULKAN
+                               : kind == RHI_BACKEND_OPENGL ? SDL_WINDOW_OPENGL
+                                                            : 0;
 
 #if defined(__ANDROID__) || defined(ICO_IOS)
     (void)mode;
@@ -1004,6 +1010,23 @@ static SDL_WindowFlags window_flags(int mode)
            (mode == ICO_WINDOW_FULLSCREEN ? SDL_WINDOW_FULLSCREEN : 0) |
            (mode == ICO_WINDOW_BORDERLESS ? SDL_WINDOW_BORDERLESS : 0);
 #endif
+}
+
+/* The OpenGL backend's window: the pixel format SDL picks at
+   SDL_CreateWindow (WGL and GLX choose it with the window) without depth,
+   stencil or sRGB (the renderer draws into its own textures and blits one
+   to the window, gl_swapchain.c), double-buffered, and the 4.3 core
+   context gl_device.c asks for (it sets the context's attributes again,
+   with its debug flag) */
+static void window_gl_attributes(void)
+{
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 0);
+    SDL_GL_SetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 0);
 }
 
 /* --- Android: the app's lifecycle (window_lifecycle.h) --------------------
@@ -1415,15 +1438,21 @@ static int window_bisect_step(const char *zip, uint32_t pass, uint32_t number,
    device_lost_quit's box says when a loss step's run lost the card too */
 static StartupRetry s_retry = STARTUP_RETRY_NONE;
 
-static bool window_have_d3d12(void)
+/* the build links the backend of that rhi_backend_name */
+static bool window_have_backend(const char *want)
 {
     const char *name;
     for (uint32_t i = 0; (name = rhi_backend_name(i)) != NULL; i++) {
-        if (strcmp(name, "d3d12") == 0) {
+        if (strcmp(name, want) == 0) {
             return true;
         }
     }
     return false;
+}
+
+static bool window_have_d3d12(void)
+{
+    return window_have_backend("d3d12");
 }
 
 /* The platform the build is for, for the summary line */
@@ -1500,8 +1529,10 @@ static void log_summary(const IcoVideoOptions *o, const char *res, const char *f
         rhi_backend_kind_name(rhi_backend()), video_preset_label(o), res,
         ico_video_aspect_name(o->aspect), fr, ico_video_window_mode_name(o->windowMode), rd,
         (unsigned)l->maxDrawIndexedIndexValue,
-        l->robustText != NULL ? l->robustText
-                              : (rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12's own" : "off"),
+        l->robustText != NULL                ? l->robustText
+        : rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12's own"
+        : rhi_backend() == RHI_BACKEND_D3D11 ? "D3D11's own"
+                                             : "off",
         pads[0] != '\0' ? pads : "none yet", summary_joystick_scan(),
         disc != NULL ? disc : ICO_DIAG_DISC_UNKNOWN,
         ico_host_pref_is_portable() ? "portable" : "user profile", ico_audio_mode_text());
@@ -1629,9 +1660,11 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     int w = 0, h = 0;
 
     /* [video] backend (config.toml) or backend= (ico-pc.ini), also the
-       Options > Graphics > Graphics API row: "", the default, is Vulkan first
-       with the D3D12 fallback; "vulkan", "opengl", "d3d12" or "d3d11" where
-       the build has it */
+       Options > Graphics > Graphics API row: "", the default, is Vulkan first,
+       OpenGL when Vulkan does not start (below, after rd_init) and Direct3D
+       12 on a restart after a crash or loss (startup_retry.h); "vulkan",
+       "opengl", "d3d12" or "d3d11" where the build has it (rhi_create_backend
+       also takes "vk" and "gl") */
     const char *chosen = ico_config_get_string("video.backend", NULL);
     const bool backendExplicit = chosen != NULL && chosen[0] != '\0';
     const char *backend = backendExplicit ? chosen : "vulkan";
@@ -1780,6 +1813,9 @@ open_window:
        after: SDL's X11 backend then writes _NET_WM_STATE before the window
        is mapped, which KWin and gamescope honour (borderless at the desktop
        resolution; no exclusive mode) */
+    if (rhi_backend() == RHI_BACKEND_OPENGL) {
+        window_gl_attributes();
+    }
     s_window = SDL_CreateWindow("ICO", WINDOW_W, WINDOW_H, window_flags(start.windowMode));
     if (start.windowMode != ICO_WINDOW_WINDOWED) {
         WINDOW_LAST_FULL(start.windowMode);
@@ -2038,6 +2074,25 @@ open_window:
         s_retry = retry;
         ico_diag_set_startup_retry((int)retry, window_have_d3d12(), backendExplicit, blendExplicit,
                                    backend);
+        goto open_window;
+    }
+    if (!up && !backendExplicit && rhi_backend() == RHI_BACKEND_VULKAN &&
+        window_have_backend("opengl")) {
+        /* Automatic, and Vulkan did not start (no loader, no device, a
+           device the renderer cannot use: the lines above say which): the
+           OpenGL backend where the build links it, once (an OpenGL that
+           does not start either ends the start below). A new window:
+           OpenGL needs one made with SDL_WINDOW_OPENGL (window_flags).
+           A crash or loss on it restarts on OpenGL, or on Direct3D 12
+           where the build has it (startup_retry.c's steps, unchanged) */
+        fprintf(stderr, "ico_pc: no Vulkan device; using OpenGL\n");
+        SDL_DestroyWindow(s_window);
+        s_window = NULL;
+        backend = "opengl";
+        rhi_create_backend(backend);
+        ico_diag_set_startup_retry((int)retry, window_have_d3d12(), backendExplicit, blendExplicit,
+                                   backend);
+        fprintf(stderr, "window: Graphics API %s (automatic, after Vulkan)\n", backend);
         goto open_window;
     }
     if (!up) {
