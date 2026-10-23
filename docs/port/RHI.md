@@ -927,7 +927,8 @@ opened first, since OpenGL's clears honour both (Vulkan's load op clears the who
 both aspects, which `RHI_STORE_DONT_CARE` allows). A read-only depth target is not cleared
 (`rhi_gl: render pass: a read-only depth target cannot be cleared; clear ignored`). The pass sets
 the viewport and scissor to its area, clamped to the smallest attachment as on the other backends
-(`rhi_gl: render pass WxH is larger than an attachment ...`, once). Viewports are
+(`rhi_gl: render pass WxH is larger than an attachment ...`, once). Its end opens the colour write masks
+again, so the blits between passes (a resolve, the present) never meet a closed one. Viewports are
 `glViewportIndexedf` and `glDepthRangef`, scissors `glScissor`, unflipped (clip control).
 
 **Barriers and copies.** OpenGL orders rendering, clears, copies and texture fetches within its
