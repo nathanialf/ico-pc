@@ -5,6 +5,9 @@
 #   ico_rhi_vulkan  the Vulkan backend (option ICO_RHI_VULKAN, default ON)
 #   ico_rhi_d3d12   the D3D12 backend (option ICO_RHI_D3D12, default ON for
 #                   64-bit Windows: the win-x64 and win-x64-clang presets)
+#   ico_rhi_d3d11   the Direct3D 11 backend (option ICO_RHI_D3D11, default ON
+#                   for 64-bit Windows; compile-only in v0.8.6: it has not
+#                   run on any Windows machine)
 #   ico_rhi         rhi_backend.c, the rhi.h entry points forwarded to the
 #                   backend rhi_create_backend selects; links the backends
 #   ico_rhi_vk      what port/render and the shader tests link (the name
@@ -20,7 +23,9 @@
 # window surface. Without the Vulkan pieces the Vulkan backend is left out;
 # without SDL3 the backends are built headless-only (rhi_init with a window
 # fails). The D3D12 backend uses the mingw-w64 toolchain's own d3d12.h,
-# dxgi1_6.h and libdxguid.a, and loads d3d12.dll and dxgi.dll at run time.
+# dxgi1_6.h and libdxguid.a, and loads d3d12.dll and dxgi.dll at run time;
+# the Direct3D 11 backend its d3d11.h, d3d11_1.h, dxgi1_6.h and d3dcompiler.h,
+# and loads d3d11.dll, dxgi.dll and d3dcompiler_47.dll at run time.
 
 option(ICO_RHI_VULKAN "Build the Vulkan backend of port/rhi (ico_rhi_vulkan)" ON)
 option(ICO_RHI_MOLTENVK "Link the Vulkan backend to MoltenVK on Apple platforms" ${APPLE})
@@ -33,15 +38,18 @@ if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
 endif()
 option(ICO_RHI_D3D12 "Build the D3D12 backend of port/rhi (ico_rhi_d3d12; Windows only)"
        ${_ico_d3d12_default})
-# The OpenGL backend (port/rhi/gl, ico_rhi_opengl, prefix gl) and the Direct3D
-# 11 backend (port/rhi/d3d11, ico_rhi_d3d11, prefix d3d11): their sources
-# arrive with their own packages, which turn these defaults on where they
-# apply (OpenGL on every desktop target with SDL3; D3D11 on 64-bit Windows).
-# Until then the options exist so the shader table's columns (GLSL,
-# cmake/IcoShaders.cmake ICO_SHADERS_GLSL; the embedded HLSL sources,
-# ICO_SHADERS_HLSL_SOURCE) can be asked for.
+# The OpenGL backend (port/rhi/gl, ico_rhi_opengl, prefix gl): its sources
+# arrive with their own package, which turns the default on where it applies
+# (every desktop target with SDL3). Until then the option exists so the
+# shader table's GLSL column (cmake/IcoShaders.cmake ICO_SHADERS_GLSL) can be
+# asked for.
 option(ICO_RHI_OPENGL "Build the OpenGL backend of port/rhi (ico_rhi_opengl)" OFF)
-option(ICO_RHI_D3D11 "Build the Direct3D 11 backend of port/rhi (ico_rhi_d3d11; Windows only)" OFF)
+# The Direct3D 11 backend (port/rhi/d3d11, ico_rhi_d3d11, prefix d3d11): on
+# by default where D3D12 is (64-bit Windows). It compiles the embedded HLSL
+# at run time (d3d11/d3d11_shader.c), so the shader table carries the
+# sources with it (cmake/IcoShaders.cmake ICO_SHADERS_HLSL_SOURCE).
+option(ICO_RHI_D3D11 "Build the Direct3D 11 backend of port/rhi (ico_rhi_d3d11; Windows only)"
+       ${_ico_d3d12_default})
 set(_ico_have_gl OFF)
 set(_ico_have_d3d11 OFF)
 
@@ -75,8 +83,8 @@ endif()
 # flat-register rule over the test shaders (rhi_test_hlsl.h, checked against
 # rhi_test.hlsl) and the game's sources (the embedded ones with
 # ICO_SHADERS_HLSL_SOURCE, else port/shaders' files), the cache key over the
-# shader table's entries and the cache file. Nothing links d3d11_shader.c
-# into a backend yet (the Direct3D 11 backend's own package does).
+# shader table's entries and the cache file. ico_rhi_d3d11 links the same
+# file (its run-time compile).
 add_executable(rhi_d3d11_shader_plan_test test/rhi_d3d11_shader_plan_test.c
                d3d11/d3d11_shader.c)
 target_include_directories(rhi_d3d11_shader_plan_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -202,7 +210,27 @@ if(ICO_RHI_D3D12)
     endif()
 endif()
 
-if(NOT _ico_have_vk AND NOT _ico_have_d3d12)
+# --- Direct3D 11 headers ------------------------------------------------------
+if(ICO_RHI_D3D11)
+    if(NOT WIN32)
+        message(STATUS "ico: D3D11 RHI is Windows-only; not built for ${CMAKE_SYSTEM_NAME}")
+    else()
+        include(CheckIncludeFile)
+        check_include_file(d3d11.h ICO_HAVE_D3D11_H)
+        check_include_file(d3d11_1.h ICO_HAVE_D3D11_1_H)
+        check_include_file(dxgi1_6.h ICO_HAVE_DXGI1_6_H)
+        check_include_file(d3dcompiler.h ICO_HAVE_D3DCOMPILER_H)
+        if(ICO_HAVE_D3D11_H AND ICO_HAVE_D3D11_1_H AND ICO_HAVE_DXGI1_6_H AND
+           ICO_HAVE_D3DCOMPILER_H)
+            set(_ico_have_d3d11 ON)
+        else()
+            message(STATUS "ico: D3D11 RHI not built: the toolchain lacks d3d11.h, d3d11_1.h, "
+                           "dxgi1_6.h or d3dcompiler.h")
+        endif()
+    endif()
+endif()
+
+if(NOT _ico_have_vk AND NOT _ico_have_d3d12 AND NOT _ico_have_d3d11)
     return()
 endif()
 
@@ -269,6 +297,34 @@ if(_ico_have_d3d12)
         target_link_libraries(ico_rhi_d3d12 PUBLIC SDL3::SDL3)
     endif()
     message(STATUS "ico: D3D12 RHI built (ico_rhi_d3d12)")
+endif()
+
+# --- ico_rhi_d3d11 --------------------------------------------------------------
+# d3d11_cmd.c and d3d11_pipeline.c (the command path and the pipelines) come
+# with the backend's second package; d3d12_plan.c brings the handle pools,
+# the bind group layouts and the DXBC input signature reader.
+if(_ico_have_d3d11)
+    add_library(ico_rhi_d3d11 STATIC
+        d3d11/d3d11_cmd.c
+        d3d11/d3d11_device.c
+        d3d11/d3d11_pipeline.c
+        d3d11/d3d11_resource.c
+        d3d11/d3d11_shader.c
+        d3d11/d3d11_swapchain.c
+        d3d12/d3d12_plan.c)
+    target_include_directories(ico_rhi_d3d11 PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_definitions(ico_rhi_d3d11 PRIVATE RHI_BACKEND_PREFIX=d3d11
+                               ${_ico_rhi_debug_default})
+    target_compile_options(ico_rhi_d3d11 PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    # the IIDs (IID_ID3D11Device1, ...); d3d11.dll, dxgi.dll and
+    # d3dcompiler_47.dll are loaded at run time (d3d11_device.c,
+    # d3d11_shader.c)
+    target_link_libraries(ico_rhi_d3d11 PRIVATE dxguid)
+    if(SDL3_FOUND)
+        target_compile_definitions(ico_rhi_d3d11 PRIVATE ICO_RHI_HAVE_SDL=1)
+        target_link_libraries(ico_rhi_d3d11 PUBLIC SDL3::SDL3)
+    endif()
+    message(STATUS "ico: D3D11 RHI built (ico_rhi_d3d11)")
 endif()
 
 # --- ico_rhi: the dispatcher ----------------------------------------------------
