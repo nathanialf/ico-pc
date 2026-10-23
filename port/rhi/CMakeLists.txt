@@ -70,6 +70,37 @@ if(ICO_RUN_TESTS)
     add_test(NAME rhi_d3d12_plan COMMAND rhi_d3d12_plan_test)
 endif()
 
+# --- The Direct3D 11 shader route test (CPU only, every target) ---------------
+# d3d11/d3d11_shader.c's portable part: the macros, the include lookup, the
+# flat-register rule over the test shaders (rhi_test_hlsl.h, checked against
+# rhi_test.hlsl) and the game's sources (the embedded ones with
+# ICO_SHADERS_HLSL_SOURCE, else port/shaders' files), the cache key over the
+# shader table's entries and the cache file. Nothing links d3d11_shader.c
+# into a backend yet (the Direct3D 11 backend's own package does).
+add_executable(rhi_d3d11_shader_plan_test test/rhi_d3d11_shader_plan_test.c
+               d3d11/d3d11_shader.c)
+target_include_directories(rhi_d3d11_shader_plan_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                           "${CMAKE_CURRENT_SOURCE_DIR}/test/shaders")
+target_compile_definitions(rhi_d3d11_shader_plan_test PRIVATE
+    ICO_RHI_TEST_SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/shaders"
+    ICO_GAME_SHADER_DIR="${CMAKE_SOURCE_DIR}/port/shaders")
+target_compile_options(rhi_d3d11_shader_plan_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                       ${ICO_PORT_WARNINGS})
+# the table's entries (hlslFile and defines are in every table; the sources
+# only with ICO_SHADERS_HLSL_SOURCE, which ico_shaders says through
+# ICO_SHADERS_NO_HLSL_SOURCE)
+function(_ico_rhi_d3d11_shader_test_shaders)
+    if(TARGET ico_shaders)
+        target_link_libraries(rhi_d3d11_shader_plan_test PRIVATE ico_shaders)
+        target_compile_definitions(rhi_d3d11_shader_plan_test PRIVATE ICO_HAVE_SHADER_TABLE=1)
+    endif()
+endfunction()
+cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL _ico_rhi_d3d11_shader_test_shaders)
+if(ICO_RUN_TESTS)
+    add_test(NAME rhi_d3d11_shader_plan COMMAND rhi_d3d11_shader_plan_test
+             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
 # --- The driver version text (CPU only, every target) -----------------------
 # rhi_driver_version.c: a Vulkan driverVersion as the vendor writes it (the
 # adapter line of vk_device.c).
