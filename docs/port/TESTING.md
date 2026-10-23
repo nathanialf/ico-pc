@@ -752,6 +752,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   a message box (`rhi_d3d12`).
 - `rhi_d3d12_plan_test.c`: the D3D12 backend's state and barrier bookkeeping on the CPU
   (`rhi_d3d12_plan`).
+- `rhi_d3d11_shader_plan_test.c`: the Direct3D 11 backend's shader route on the CPU
+  (`port/rhi/d3d11/d3d11_shader.c`): the macros text and its malformed forms, the include lookup,
+  the flat-register rule on hand-made sources, on `rhi_test_hlsl.h` (which must equal
+  `rhi_test.hlsl`: run `gen_shaders.sh` after editing it) and on the game's sources (the embedded
+  ones, else `port/shaders` read from the source tree), the cache key's inputs and its distinctness
+  over the shader table, the cache file's round trip in a folder of the build directory and the
+  wrong key, changed byte, short, long and non-DXBC files it refuses, the failure log's limit and
+  the counters (`rhi_d3d11_shader_plan`). The compile itself runs only on Windows; the
+  `shaders_d3d11_check` build target is the build hosts' check of the D3D11 preprocessing
+  ([SHADERS.md](SHADERS.md#direct3d-11-run-time-compile)).
 - `rhi_driver_version_test.c`: the driver version text of the adapter line
   (`port/rhi/rhi_driver_version.c`) for each vendor's packing, the Qualcomm and MoltenVK rules and
   the colour bytes a pixel of each Apple GPU family (`rhi_metal_color_bytes`)

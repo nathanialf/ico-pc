@@ -32,6 +32,7 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | `port/rhi/d3d12/d3d12_swapchain.c` | the DXGI flip-model swapchain, the waitable object, frame statistics |
 | `port/rhi/d3d12/d3d12_cmd.c`, `d3d12_pipeline.c`, `d3d12_resource.c` | commands and fences; root signatures and pipeline states; committed resources |
 | `port/rhi/d3d12/d3d12_enums.h`, `d3d12_internal.h` | the enum tables; the backend's shared state |
+| `port/rhi/d3d11/d3d11_shader.h`, `d3d11_shader.c` | the Direct3D 11 backend's run-time HLSL compile through `d3dcompiler_47.dll` and its DXBC cache file ([SHADERS.md](SHADERS.md#direct3d-11-run-time-compile)) |
 | `cmake/IcoMoltenVK.cmake` | the MoltenVK slice an Apple build links |
 | `tools/fetch_moltenvk.sh` | MoltenVK and the Apple SDL3 build |
 | `port/rhi/test/` | the backend tests and their shaders |
@@ -373,6 +374,12 @@ Vulkan-Headers and volk come from `tools/fetch_deps.sh` (the backend loads the V
 time); without SDL3 the backends are headless-only. The D3D12 backend uses mingw-w64's own headers
 and loads `d3d12.dll` and `dxgi.dll` at run time (`port/rhi/CMakeLists.txt`, header comment).
 
+The Direct3D 11 backend (`ICO_RHI_D3D11`, off until its sources are in) compiles its shaders at
+run time: `RhiShaderDesc` brings it the HLSL file, the entry, the macros and the embedded sources
+rather than a blob, and `d3d11_shader_compile` (`port/rhi/d3d11/d3d11_shader.c`) turns them into
+DXBC with `d3dcompiler_47.dll`, cached on disk per shader. The route, the cache file, its key and
+its log lines are in [SHADERS.md](SHADERS.md#direct3d-11-run-time-compile).
+
 ## Vulkan
 
 **Device** (`port/rhi/vk/vk_device.c`). A device needs Vulkan 1.2, dynamic rendering (core 1.3 or
@@ -713,9 +720,10 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 | `rhi_vk_enum_test.c` | every `rhi.h` enumeration has a Vulkan mapping; the layer classifiers and `rhi_layer_switched_on`; ctest `rhi_vk_enum` |
 | `rhi_driver_version_test.c` | the driver version text of each vendor's encoding; ctest `rhi_driver_version` |
 | `rhi_d3d12_plan_test.c` | `d3d12_plan.c` on every host; with the shader table, every vertex shader's DXIL inputs against its SPIR-V locations and every DXIL blob signed; ctest `rhi_d3d12_plan` |
+| `rhi_d3d11_shader_plan_test.c` | `d3d11_shader.c`'s portable part on every host: the macros text, the include lookup, the flat-register rule over the game's sources and `rhi_test_hlsl.h` (checked against `rhi_test.hlsl`), the cache key over every table entry, the cache file's round trip and the corrupt files it refuses, the failure log's limit; ctest `rhi_d3d11_shader_plan` |
 | `rhi_d3d12_test.c` | Windows, double-clickable: the cells on WARP, on the hardware adapter, the swapchain on a hidden window, then Vulkan for comparison; writes `rhi_d3d12_test.log` and shows a message box (`--console` for ctest); ctest `rhi_d3d12` |
 | `compare_backends.cmd`, `compare_png.ps1` | Windows: every dump in `dumps\` rendered by `rd_replay_tool` on both backends, DISPLAY and the presented picture, each pair compared texel by texel and passing within 1 LSB (DISPLAY is expected identical) |
-| `shaders/rhi_test.hlsl`, `gen_shaders.sh` | the tests' shaders, committed as `rhi_test_spv.h` and `rhi_test_dxil.h` so the tests build without DXC |
+| `shaders/rhi_test.hlsl`, `gen_shaders.sh` | the tests' shaders, committed as `rhi_test_spv.h` and `rhi_test_dxil.h` so the tests build without DXC, and as `rhi_test_hlsl.h` (the text as a C string, its registers flat under `ICO_D3D11`) for a run-time compile |
 
 The Vulkan tests exit 77 (skipped) without a device; under the fetched validation layer `rhi_vk`
 fails on any validation error (`port/rhi/CMakeLists.txt`; `port/rhi/test/*`, header comments).

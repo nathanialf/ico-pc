@@ -1,8 +1,9 @@
 # Shaders
 
 The port's shaders are HLSL in `port/shaders`, compiled at build time by DXC to SPIR-V for Vulkan
-and signed DXIL for Direct3D 12 and embedded in the program as byte arrays; there is no compiler at
-run time. This document covers the build, every source file, the binding scheme, the constant
+and signed DXIL for Direct3D 12 and embedded in the program as byte arrays; the one compiler at
+run time is Direct3D 11's, which compiles the embedded sources
+([Direct3D 11: run-time compile](#direct3d-11-run-time-compile)). This document covers the build, every source file, the binding scheme, the constant
 layouts shared with C and the tests. Which entry the [replay](ARCHITECTURE.md#terms) binds for what
 is [RENDER.md](RENDER.md); the VU programs' rules are [VU1_PROGRAMS.md](VU1_PROGRAMS.md); the
 interface that loads the blobs is [RHI.md](RHI.md).
@@ -153,8 +154,9 @@ The replay looks entries up by the names in `s_vsNames` and `s_fsNames` (`port/r
 4. Add the name to the expected lists of `port/shaders/test/shaders_table_test.c` (`expected`, or
    the list of its kind: `expectedPlanes`, `expectedAa`, `expectedVariants`, `expectedNoDual`,
    `expectedDst`, `expectedPlain`, `expectedPrepass`).
-5. Run `shaders_table`, `gs_math`, `shaders_pixel*`, `vu1*` (a VU entry) and `rhi_d3d12_plan` (every
-   vertex shader's DXIL inputs against its SPIR-V locations), then the render tests
+5. Run `shaders_table`, `gs_math`, `shaders_pixel*`, `vu1*` (a VU entry), `rhi_d3d12_plan` (every
+   vertex shader's DXIL inputs against its SPIR-V locations) and `rhi_d3d11_shader_plan`, and build
+   `shaders_d3d11_check` (the entry under `ICO_D3D11`), then the render tests
    ([TESTING.md](TESTING.md#portrendertest)).
 
 ## The binding scheme
@@ -511,6 +513,76 @@ cut is about 9,500 of a plain mesh program's words (`vu_prelit_vs` without it: 1
 because at 4:3 it decides whether a triangle wholly beside the picture is drawn, and the plain
 variant must give the extended one's picture.
 
+## Direct3D 11: run-time compile
+
+The Direct3D 11 backend takes no blob from the table: shader model 5.0's compiler, FXC, exists only
+on Windows, and the build hosts are Linux, so the program compiles the HLSL itself at run time with
+`d3dcompiler_47.dll` and keeps the results on disk. FXC at build time (no Linux FXC), SPIR-V
+translated to HLSL (still FXC) and committed DXBC (stale with no Windows tester) were the
+alternatives; each needs a Windows machine in the build.
+
+**What the table carries.** With `ICO_SHADERS_HLSL_SOURCE` (on where `ICO_RHI_D3D11` is) every
+`*.hlsl`, `*.hlsli` and `*.h` of `port/shaders` is embedded by base name in `g_icoShaderSources`, and
+every entry names its file (`hlslFile`) and its macros (`defines`, `"A=1,B=2"`, the entry's
+`DEFINES`); `rd__make_shader` hands them to the backend in `RhiShaderDesc` (`hlslFile`, `defines`,
+`sources`, `sourceCount`, `entryPoint`) instead of a blob (`port/shaders/embed_shaders.py`;
+`port/render/rd_replay.c`).
+
+**Flat registers.** FXC has no register spaces. Every declaration goes through `ICO_REG(r, s)`
+(`port/shaders/reg.hlsli`): `register(r, space s)` for DXC, `register(r)` under `ICO_D3D11`. The
+register numbers are distinct across the groups (`b0`; `b1`..`b3`, `t0`, `t4`; `t1`..`t4`,
+`s1`..`s4`; `u0`), so the flat namespace has no collision. A source line that names a space in
+`register(...)` outside a comment, a string, a preprocessor line or `reg.hlsli` breaks the rule
+(`d3d11_shader_check_sources`).
+
+**The compile.** `d3d11_shader_compile` (`port/rhi/d3d11/d3d11_shader.c`) runs on the backend's
+pipeline workers, concurrently: it loads `d3dcompiler_47.dll` once (System32 first, then the usual
+search; `InitOnceExecuteOnce`), resolves `hlslFile` among the sources, and calls `D3DCompile` on
+that text with the target `vs_5_0` or `ps_5_0`, `D3DCOMPILE_OPTIMIZATION_LEVEL3`, the entry's
+macros plus `ICO_D3D11=1`, and an `ID3DInclude` written as a C vtable whose `Open` hands out the
+embedded text of the file named (by name, else by its last path component) and whose `Close` does
+nothing. Warnings do not fail the compile; the first warning text is logged once. The DXBC is
+`malloc`'d for the caller.
+
+**The cache.** One file per shader, `<dir>/<key>.dxbc` (16 hex digits), read before compiling (a
+hit skips the compile) and written after (`<path>.<n>.tmp` renamed over the file, so workers that
+compile the same key at once leave one whole file). The key is FNV-1a 64 over the entry, the stage,
+the file name, the macros, every embedded source's name and text in the table's order, the
+compiler's file version and the program's version, each field length-prefixed
+(`d3d11_shader_cache_key`); FNV, not xxh3, because `port/rhi` does not depend on `port/render`.
+The file:
+
+| offset | bytes | holds |
+| --- | --- | --- |
+| 0 | 8 | `ICODXBC1` |
+| 8 | 8 | the key, little-endian |
+| 16 | 8 | the DXBC's length, little-endian (at most 16 MiB) |
+| 24 | 8 | FNV-1a 64 of the DXBC, little-endian |
+| 32 | length | the DXBC container (`DXBC` ...) |
+
+A file with another magic or key, a length that does not match the file, a wrong hash or a body
+that is not a DXBC container is a miss, and the compile writes over it
+(`d3d11_shader_cache_read`, `d3d11_shader_cache_write`).
+
+**Log lines** (`stderr`, so `ico-pc.log`):
+
+| line | when |
+| --- | --- |
+| `rhi_d3d11: shader compiler d3dcompiler_47.dll loaded (<file version>) from <path>` | the first compile; `version unknown` when the file carries none |
+| `rhi_d3d11: d3dcompiler_47.dll not found or without D3DCompile (error <n>): the Direct3D 11 renderer cannot compile its shaders` | once, instead |
+| `rhi_d3d11: shader <name>: <file> <entry> (<target>) failed to compile (HRESULT 0x...): <compiler message>` | the first eight failures (a shader with no source or malformed macros says so instead) |
+| `rhi_d3d11: <n> shaders failed so far` | every 100th failure after them |
+| `rhi_d3d11: shader compiler warnings (first shader with any, <name>): <text>` | once |
+| `rhi_d3d11: shader cache <dir> could not be written: the shaders are compiled at every start` | once |
+| `rhi_d3d11: shader cache <dir>: <n> hits, <m> compiles, <k> failed` | `d3d11_shader_stats(dir, &stats, true)`, for the backend to call after the start-up set and at shutdown |
+
+**The DXC check.** `shaders_d3d11_check` (option `ICO_SHADERS_D3D11_CHECK`, on; outside `all`)
+compiles every entry again with DXC, `-HV 2018 -D ICO_D3D11=1` and its own macros, to blobs under
+`<build>/shaders/d3d11_check` that nothing embeds; the CI's linux job builds it. It proves the
+D3D11 preprocessing compiles on the build hosts. Only Windows runs FXC itself, so an FXC-only
+error (shader model 5.0 limits, FXC's own warnings) shows first in a Windows player's log
+(`cmake/IcoShaders.cmake`).
+
 ## Tests
 
 | test | checks |
@@ -519,6 +591,8 @@ variant must give the extended one's picture.
 | `gs_math` (`gs_math_test.c`) | `gs_math.hlsli` as C against `port/test/gs_blend_test.c`'s formulas and the GS rules for TEXA, the alpha test and the Z mapping: exhaustive where the domain is small; the shared constants pinned; the [integer forms](#integer-forms) against the operators they replace |
 | `shaders_pixel` (`shaders_pixel_test.c`) | `sprite.hlsl`, `blit.hlsl` and `blend_int.hlsl` through the Vulkan RHI, texel by texel against `gs_math.hlsli` as C: untextured, modulate, the alpha test, dual-source lerps, additive with `DF_PREMUL`, PABE, FBA, tinted blits, three integer blends; `shaders_pixel_nodual` (`--nodual`, `ICO_VK_FAKE_NO_DUAL=1`) the two-pass fallback; `shaders_pixel_mali` under `ICO_VK_FAKE_LIMITS=mali` |
 | `spirv_check` (`tools/check_spirv.py --sizes`) | every compiled SPIR-V module under the build's `shaders/`: a vertex shader without a vector of booleans, `OpAny`/`OpAll` or a boolean select, its opcodes inside the envelope's set (`OpLoopMerge`, `OpDot`, `OpLogicalNotEqual`, `OpUndef` named), every module within its size budget (a VU vertex shader's plain variant, a pre-pass entry or record stage `_pre_vs` and a main shader `_main_vs` within the plain one), every mesh program's entry with its `vu_X_plain_vs` (`PROGRAM_ENTRIES`), the largest module of each budget class printed last, no array-typed value (OpLoad, OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi, OpSelect, OpCopyObject, OpCopyLogical of an array type) and no local array in a vertex shader ([The envelope](#the-envelope)); the sizes and the shape census printed; the module's binary form decoded in Python, no SPIR-V tool needed |
+| `shaders_d3d11_check` (a build target, `cmake/IcoShaders.cmake`) | every entry compiled by DXC under `ICO_D3D11=1` and HLSL 2018 ([Direct3D 11: run-time compile](#direct3d-11-run-time-compile)) |
+| `rhi_d3d11_shader_plan` (`port/rhi/test/rhi_d3d11_shader_plan_test.c`) | the Direct3D 11 route's portable part: macros, include lookup, the flat-register rule over the game's sources and the RHI test shader, the cache key over every table entry, the cache file |
 | `vu1` (`vu1_test.c`) | the VU program shaders against `port/render/vu1_ref/`: hand traces through the `.vsm` code on the CPU, then on Vulkan every vertex shader's probe output, strips drawn through the shipped entries, and the region rule's clipping with the card verdicts handed over as the renderer does; every case whose draw has neither `VU_F_EXTENDED` nor `VU_F_TICKS` drawn again through the plain variants, its probe and pictures byte for byte the extended ones' ([The variants](#the-variants)); the CPU's card test against the reference on every vertex and strip; every case through the record (a mesh case's vertices through its pre-pass entry and its triangles through the record stages, the tick stage under the tick cameras; a particle case's sprites through `vu_particle_pre_vs`), its probe and pictures through `vu_main_vs` or `vu_particle_main_vs` and `vu_ps`, byte for byte the program entry's with `vu_legacy_ps`, the mesh, particle and tick-camera cases counted (none may be zero); the plain variants for the mesh programs' entries; `vu1_mali` under the Mali limits |
 | `port/test/gs_blend_test.c` | not a ctest: a CPU program (`cc -O2`) printing how far a float blender with round-to-nearest drifts from the GS integer blender under feedback |
 
