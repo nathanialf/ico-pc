@@ -204,10 +204,54 @@ static inline uint32_t gl_bind_point(RhiBindType type, uint32_t slot)
  * gl_cmd.c may add fields. */
 #define GL_MAX_CMD_LISTS 8
 
+/* The dynamic depth and blend groups (rhi_cmd_set_depth_state,
+ * rhi_cmd_set_blend_state) in OpenGL's terms: the values a draw wants and
+ * the values the list last gave (RhiStats.dynamicSets counts the commands
+ * the Vulkan backend would record for them). */
+typedef struct GlDepthDyn {
+    bool test, write;
+    GLenum func;
+} GlDepthDyn;
+
+typedef struct GlBlendDyn {
+    bool enable;
+    GLenum src, dst, eq, srcA, dstA, eqA;
+    uint8_t mask; /* bits 0..3 = R G B A */
+} GlBlendDyn;
+
 typedef struct GlCmdList {
     bool recording, submitted;
     bool inPass;
     uint64_t serial; /* unique per recording, never 0 */
+
+    /* gl_cmd.c: what the list has set; applied at its draws */
+    uint32_t pipeline;                   /* the pipeline's id, 0 none */
+    uint32_t groups[RHI_MAX_BIND_SLOTS]; /* bind group ids */
+    uint32_t offsets[RHI_MAX_BIND_SLOTS][RHI_MAX_DYNAMIC_OFFSETS];
+    uint32_t groupDirty;                 /* groups to bind again */
+    GLuint vbName[RHI_MAX_VERTEX_ATTRS]; /* vertex buffers per binding */
+    uint64_t vbOffset[RHI_MAX_VERTEX_ATTRS];
+    uint32_t vbDirty; /* bindings to bind again */
+    GLuint vbVao;     /* the VAO they were bound into */
+    GLuint ibName;    /* the index buffer */
+    uint64_t ibOffset;
+    bool ibU32, ibDirty;
+    uint8_t stencilRef;
+    bool blendConstSet;
+    float blendConst[4];
+    bool viewportSet, scissorSet;
+    RhiViewport viewport;
+    RhiRect scissor;
+    /* the open pass: its framebuffer (0: none usable, the draws skipped),
+     * a read-only depth (no depth or stencil writes) */
+    GLuint passFbo;
+    bool passBad;
+    bool readOnlyDepth;
+    /* the dynamic groups (vk_cmd.c's model): set since the bind, given
+     * since a bind of a pipeline with the group static, wanted, given */
+    uint32_t dynSet, dynValid;
+    GlDepthDyn depthWant, depthHave;
+    GlBlendDyn blendWant, blendHave;
 } GlCmdList;
 
 /* ---------------------------------------------------- deferred deletes
@@ -401,6 +445,13 @@ void gl_fbo_forget_texture(GLuint name);
  * current). */
 void gl_cmd_init(void);
 void gl_cmd_shutdown(void);
+
+/* gl_pipeline.c: the OpenGL values of the RHI's fixed-function enums
+ * (shared with gl_cmd.c's dynamic state) */
+GLenum gl_blend_factor(RhiBlendFactor f);
+GLenum gl_blend_op(RhiBlendOp op);
+GLenum gl_compare(RhiCompare c);
+GLenum gl_stencil_op(RhiStencilOp op);
 
 /* gl_swapchain.c */
 bool gl_swapchain_create(uint32_t w, uint32_t h, bool vsync);

@@ -39,6 +39,7 @@
     X(1, PFNGLHINTPROC, Hint)                                                            \
     /* rasterizer, viewport, output merger */                                            \
     X(1, PFNGLVIEWPORTPROC, Viewport)                                                    \
+    X(1, PFNGLVIEWPORTINDEXEDFPROC, ViewportIndexedf)                                    \
     X(1, PFNGLSCISSORPROC, Scissor)                                                      \
     X(1, PFNGLDEPTHRANGEFPROC, DepthRangef)                                              \
     X(1, PFNGLCULLFACEPROC, CullFace)                                                    \
@@ -104,6 +105,7 @@
     X(1, PFNGLBINDFRAMEBUFFERPROC, BindFramebuffer)                                      \
     X(1, PFNGLFRAMEBUFFERTEXTURE2DPROC, FramebufferTexture2D)                            \
     X(1, PFNGLFRAMEBUFFERTEXTUREPROC, FramebufferTexture)                                \
+    X(1, PFNGLFRAMEBUFFERPARAMETERIPROC, FramebufferParameteri)                          \
     X(1, PFNGLCHECKFRAMEBUFFERSTATUSPROC, CheckFramebufferStatus)                        \
     X(1, PFNGLDRAWBUFFERSPROC, DrawBuffers)                                              \
     X(1, PFNGLDRAWBUFFERPROC, DrawBuffer)                                                \
@@ -116,6 +118,8 @@
     X(1, PFNGLCREATESHADERPROGRAMVPROC, CreateShaderProgramv)                            \
     X(1, PFNGLGETPROGRAMIVPROC, GetProgramiv)                                            \
     X(1, PFNGLGETPROGRAMINFOLOGPROC, GetProgramInfoLog)                                  \
+    X(1, PFNGLGETPROGRAMINTERFACEIVPROC, GetProgramInterfaceiv)                          \
+    X(1, PFNGLGETPROGRAMRESOURCEIVPROC, GetProgramResourceiv)                            \
     X(1, PFNGLDELETEPROGRAMPROC, DeleteProgram)                                          \
     X(1, PFNGLUSEPROGRAMPROC, UseProgram)                                                \
     X(1, PFNGLGENPROGRAMPIPELINESPROC, GenProgramPipelines)                              \
