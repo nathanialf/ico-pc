@@ -53,9 +53,12 @@ jobs:
             libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
             libpipewire-0.3-dev libspa-0.2-dev \
             libdbus-1-dev libxss-dev \
+            libgl-dev libglx-dev libegl-dev libgl1 libegl1 libgl1-mesa-dri \
             libvulkan1 mesa-vulkan-drivers
           # lavapipe (mesa-vulkan-drivers): the render tests run on the CPU
           # Vulkan driver instead of skipping
+          # llvmpipe (libgl1-mesa-dri, libgl1, libegl1): the OpenGL tests run on
+          # the CPU OpenGL driver; the GL headers build SDL with GLX and EGL
 
       - name: Python tools (venv)
         run: |
@@ -195,6 +198,7 @@ jobs:
             libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
             libpipewire-0.3-dev libspa-0.2-dev \
             libdbus-1-dev libxss-dev \
+            libgl-dev libglx-dev libegl-dev libgl1 libegl1 libgl1-mesa-dri \
             libvulkan1 mesa-vulkan-drivers
 
       - name: Python tools (venv)
@@ -271,8 +275,9 @@ jobs:
             libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
             libpipewire-0.3-dev libspa-0.2-dev \
             libdbus-1-dev libxss-dev \
+            libgl-dev libglx-dev libegl-dev libgl1 libegl1 libgl1-mesa-dri \
             libwayland-dev wayland-protocols libxkbcommon-dev libdecor-0-dev \
-            libdrm-dev libgbm-dev libegl-dev \
+            libdrm-dev libgbm-dev \
             libvulkan1 mesa-vulkan-drivers
 
       - name: Python tools (venv)

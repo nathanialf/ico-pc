@@ -176,8 +176,11 @@ SDL3_LINUX="$DEST/sdl3/linux-$ICO_HOST_ARCH"
 # rebuilt. "+wayland+kmsdrm": the arm64 build's video backends;
 # "+wlnotices": the Wayland protocols' notices are copied beside it.
 # "+dbus+xss": D-Bus and the X11 screensaver extension, how SDL keeps the
-# desktop from locking or sleeping while the game runs (issue 86).
-SDL3_LINUX_ID="SDL3-${SDL3_VERSION}+audio3$(by_arch "" "+wayland+kmsdrm+wlnotices")+dbus+xss"
+# desktop from locking or sleeping while the game runs (issue 86). "+gl":
+# OpenGL contexts through GLX and EGL, for the OpenGL renderer (issue 126;
+# without the GL headers SDL's X11 driver says "SDL not configured with
+# OpenGL/GLX support" and its offscreen driver makes no context).
+SDL3_LINUX_ID="SDL3-${SDL3_VERSION}+audio3$(by_arch "" "+wayland+kmsdrm+wlnotices")+dbus+xss+gl"
 SDL3_LINUX_VIDEO=()
 if [[ "$ICO_HOST_ARCH" == "arm64" ]]; then
     SDL3_LINUX_VIDEO=(-DSDL_X11=ON -DSDL_WAYLAND=ON -DSDL_KMSDRM=ON)
@@ -310,6 +313,30 @@ else
         declare -n XSS_DEBS="XSS_DEBS_$DEB_ARCH"
         unpack_debs "$X11DEV" "${XSS_DEBS[@]}"
     fi
+    # OpenGL: SDL compiles its GLX and EGL context code only when it finds
+    # GL/gl.h, GL/glext.h and GL/glx.h (sdlchecks.cmake CheckOpenGL and
+    # CheckGLX) and EGL/egl.h (CheckEGL), and loads libGL, libEGL and the
+    # driver at run time, so the package gains no dependency. The headers
+    # of Debian 13's libglvnd packages (gl.h, glext.h, glcorearb.h and
+    # KHR/khrplatform.h in libgl-dev; glx.h in libglx-dev; egl.h in
+    # libegl-dev), the SHA-256s from the trixie main/binary-amd64 and
+    # main/binary-arm64 Packages indexes (their InRelease signature checked
+    # with the Debian archive keyring, 2026-10-23).
+    if ! [[ -f /usr/include/GL/gl.h && -f /usr/include/GL/glext.h && -f /usr/include/GL/glx.h &&
+        -f /usr/include/EGL/egl.h && -f /usr/include/KHR/khrplatform.h ]]; then
+        GL_DEBS_amd64=(
+            "pool/main/libg/libglvnd/libgl-dev_1.7.0-1+b2_amd64.deb 2c5044a44bc7cd7a196d554ca6ff78ae0358fbb98b7d2cce49176bdc6a816fe4"
+            "pool/main/libg/libglvnd/libglx-dev_1.7.0-1+b2_amd64.deb 93d456321c07009491b942783db8c57065b616db713ef5f6a0c629ca078c4ea0"
+            "pool/main/libg/libglvnd/libegl-dev_1.7.0-1+b2_amd64.deb 97fcfff08a5de0a510066d55260a30fbd3ccbd87da6c2f317e6efe17566b9f5a"
+        )
+        GL_DEBS_arm64=(
+            "pool/main/libg/libglvnd/libgl-dev_1.7.0-1+b2_arm64.deb 0597b9a8eb74e0f7b63772f659e3b539cb95d1483f00d9c97682ef81db42345a"
+            "pool/main/libg/libglvnd/libglx-dev_1.7.0-1+b2_arm64.deb 2dd366ac2da670dba3dfc7ed9569ff8821c06c1eb71ab2456159dae2e7868466"
+            "pool/main/libg/libglvnd/libegl-dev_1.7.0-1+b2_arm64.deb 888639a18354093c289ed1de95e75f927fb6979a3433b733eb2e9d9a8347b02e"
+        )
+        declare -n GL_DEBS="GL_DEBS_$DEB_ARCH"
+        unpack_debs "$X11DEV" "${GL_DEBS[@]}"
+    fi
     pkgconf=()
     if ! command -v pkg-config >/dev/null 2>&1; then
         PKGCONF_DEBS_amd64=(
@@ -368,7 +395,8 @@ PKGCONF
         "${SDL3_LINUX_VIDEO[@]}" \
         -DSDL_ALSA=ON -DSDL_ALSA_SHARED=ON \
         -DSDL_PULSEAUDIO=ON -DSDL_PULSEAUDIO_SHARED=ON \
-        -DSDL_PIPEWIRE=ON -DSDL_PIPEWIRE_SHARED=ON -DSDL_DBUS=ON | tee "$TMP/sdl3-configure.log"
+        -DSDL_PIPEWIRE=ON -DSDL_PIPEWIRE_SHARED=ON -DSDL_DBUS=ON \
+        -DSDL_OPENGL=ON -DSDL_OPENGLES=ON | tee "$TMP/sdl3-configure.log"
     # the audio backends this build has (the configure summary)
     grep -E "SDL_(ALSA|PULSEAUDIO|PIPEWIRE|JACK|SNDIO|OSS)\b.*: *(ON|OFF)" "$TMP/sdl3-configure.log" || true
     # all three are required: the player's desktop runs PipeWire or
@@ -399,6 +427,17 @@ PKGCONF
         echo "fetch_deps: SDL3 configured without D-Bus: the desktop may sleep while the" \
             "game runs; install libdbus-1-dev and pkg-config (or let this script fetch" \
             "Debian's libdbus-1-dev and pkgconf)" >&2
+        exit 1
+    fi
+    # OpenGL contexts (the OpenGL renderer): GLX on X11, EGL for the
+    # offscreen driver (the headless tests) and Wayland
+    grep -E "SDL_OPENGL(ES)?\b.*: *(ON|OFF)" "$TMP/sdl3-configure.log" || true
+    if ! grep -qE "SDL_OPENGL\b.*: *ON *$" "$TMP/sdl3-configure.log" ||
+        ! grep -qE "^HAVE_OPENGL_GLX:INTERNAL=1$" "$TMP/sdl3-build/CMakeCache.txt" ||
+        ! grep -qE "^HAVE_OPENGL_EGL:INTERNAL=1$" "$TMP/sdl3-build/CMakeCache.txt"; then
+        echo "fetch_deps: SDL3 configured without OpenGL (GLX and EGL): the headers" \
+            "(libgl-dev, libglx-dev, libegl-dev) were not found; the OpenGL renderer" \
+            "would make no context" >&2
         exit 1
     fi
     "$CMAKE_BIN" --build "$TMP/sdl3-build" --parallel
