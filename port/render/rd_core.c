@@ -1288,12 +1288,18 @@ RdTexRec *rd__tex_rec(uint32_t id)
     return t;
 }
 
+/* the highest generation a texture of an earlier rd_init had (rd_shutdown):
+ * a slot used for the first time after rd_init starts above it, so an id
+ * kept from before (a cache entry, a font page) names no texture of this
+ * renderer */
+static uint32_t s_texGenFloor;
+
 static uint32_t texAlloc(void)
 {
     for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
         RdTexRec *t = &g_rd.textures[i];
         if (!t->live) {
-            uint32_t gen = (t->gen + 1) & 0xFFFF;
+            uint32_t gen = ((t->gen ? t->gen : s_texGenFloor) + 1) & 0xFFFF;
             memset(t, 0, sizeof(*t));
             t->gen = gen ? gen : 1;
             t->live = 1;
@@ -1736,6 +1742,9 @@ void rd_shutdown(void)
     }
     for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
         RdTexRec *t = &g_rd.textures[i];
+        if (t->gen > s_texGenFloor) {
+            s_texGenFloor = t->gen;
+        }
         if (t->live) {
             if (t->rhi.id && g_rd.hasDevice) {
                 rhi_destroy_texture(t->rhi);
@@ -1757,6 +1766,64 @@ void rd_shutdown(void)
     free(g_rd.textures);
     free(g_rd.meshes);
     memset(&g_rd, 0, sizeof(g_rd));
+}
+
+/* What the game set up on the renderer and does not set again, kept across
+ * rd_suspend and rd_resume: the scene size (rd_reset_scene, GsBase.c sets it
+ * only when it changes), the GS state the next frame starts from, the frame
+ * numbers (the window's pacing counts them), the mirror mode (set on a
+ * change of the option) and the VU lists (their resident programs).  What
+ * the game makes again on demand is not: the textures (the cache misses and
+ * decodes them again from the game's memory, rdtex_reset), the meshes (a
+ * kept id names none, rd_vu_mesh_valid), the targets' pictures (the blur
+ * trail and glow start again, as after a resume) and the pipelines. */
+static struct {
+    bool held;
+    uint32_t gsW, gsH, frameCounter;
+    RdStateBlock persistent;
+    bool mirror;
+    void *vu;
+} s_carry;
+
+void rd_suspend(void)
+{
+    if (!g_rd.inited) {
+        return;
+    }
+    s_carry.held = true;
+    s_carry.gsW = g_rd.gsW;
+    s_carry.gsH = g_rd.gsH;
+    s_carry.frameCounter = g_rd.frameCounter;
+    s_carry.persistent = g_rd.persistent;
+    s_carry.mirror = g_rd.mirrorRun;
+    s_carry.vu = rd__vu_take();
+    rd_shutdown(); /* the open frame, if any, is dropped with the rest */
+    rdtex_reset(); /* the entries name textures rd_shutdown destroyed */
+}
+
+bool rd_resume(const RdSettings *settings, void *sdlWindow)
+{
+    if (!rd_init(s_carry.held ? s_carry.gsW : 512, s_carry.held ? s_carry.gsH : 512, settings,
+                 sdlWindow)) {
+        return false; /* the carry stays for the next try */
+    }
+    if (s_carry.held) {
+        RdStateBlock st = s_carry.persistent;
+        st.tex = 0; /* a texture of the renderer before */
+        if (st.color > RD_TARGET_COUNT) {
+            st.color = RD_TARGET_SCENE + 1; /* a temporary target, gone */
+        }
+        if (st.depth > RD_TARGET_COUNT) {
+            st.depth = RD_TARGET_SCENE + 1;
+        }
+        g_rd.persistent = st;
+        g_rd.frameCounter = s_carry.frameCounter;
+        g_rd.interpFloor = s_carry.frameCounter + 1; /* nothing to blend from */
+        g_rd.mirrorRun = s_carry.mirror;
+        rd__vu_give(s_carry.vu);
+        memset(&s_carry, 0, sizeof(s_carry));
+    }
+    return true;
 }
 
 static void fogSceneRemade(void *arg)

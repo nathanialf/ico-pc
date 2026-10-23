@@ -491,6 +491,16 @@ typedef enum RdFilterUpgrade {
  * blending is not refused: rd blends in two passes, rd_set_no_dual). */
 bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, void *sdlWindow);
 void rd_shutdown(void);
+/* The renderer swapped in the process (port/platform/window_switch.c):
+ * rd_suspend is rd_shutdown keeping what the game set up on the renderer
+ * and does not set again (the scene size, the GS state between frames, the
+ * frame numbers, the mirror mode, the VU lists' resident programs) and
+ * forgetting the texture cache's entries; rd_resume is rd_init at the kept
+ * scene size with that state put back (false: not started, the state kept
+ * for another try).  The game's own textures and meshes are made again on
+ * their next draw. */
+void rd_suspend(void);
+bool rd_resume(const RdSettings *settings, void *sdlWindow);
 /* gsb_Init on a 50/60 Hz switch (kanbanBoot's gsResetFunc) recreates the
  * scene-sized targets. */
 void rd_reset_scene(uint32_t gsWidth, uint32_t gsHeight);

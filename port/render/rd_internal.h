@@ -958,6 +958,12 @@ void rd__vu_cards_fill_frame(RdFrame *f);
 /* rd_mesh.c: the per-list VU images (rd_set_vu_common updates all 13). */
 void rd__vu_init(void);
 void rd__vu_shutdown(void);
+/* The per-list VU images as the game left them (the resident program of
+ * each list, mc_TransMicroCode, which the game does not upload again while
+ * it stays resident), taken out before rd_shutdown frees them and put back
+ * after rd_init made fresh ones (rd_suspend, rd_resume); NULL: nothing. */
+void *rd__vu_take(void);
+void rd__vu_give(void *lists);
 void rd__vu_load_common(const RdVuCommon *block);
 void rd__mesh_shutdown(void);
 /* rd_begin_frame, after the frame number advanced: frees the

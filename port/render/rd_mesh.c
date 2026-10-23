@@ -275,6 +275,12 @@ static void evict(void)
                  freed);
 }
 
+/* the highest generation a mesh of an earlier rd_init had (rd__mesh_shutdown):
+ * a slot used for the first time after rd_init starts above it, so an id
+ * the game kept from before (a packet's mesh, Packet.c pac_HostMeshFor)
+ * names no mesh of this renderer and is built again (rd_vu_mesh_valid) */
+static uint32_t s_genFloor;
+
 static RdMeshRec *meshAlloc(uint32_t *id)
 {
     if (!g_rd.meshes) {
@@ -286,7 +292,7 @@ static RdMeshRec *meshAlloc(uint32_t *id)
             if (m->live) {
                 continue;
             }
-            uint32_t gen = (m->gen + 1) & 0xFFFF;
+            uint32_t gen = ((m->gen ? m->gen : s_genFloor) + 1) & 0xFFFF;
             memset(m, 0, sizeof(*m));
             m->gen = gen ? gen : 1;
             m->live = 1;
@@ -1995,6 +2001,9 @@ void rd__mesh_shutdown(void)
         if (g_rd.meshes[i].live) {
             meshFree(&g_rd.meshes[i]);
         }
+        if (g_rd.meshes[i].gen > s_genFloor) {
+            s_genFloor = g_rd.meshes[i].gen;
+        }
     }
     s_staleCount = 0;
 }
@@ -2029,6 +2038,21 @@ void rd__vu_shutdown(void)
 {
     free(s_vu);
     s_vu = NULL;
+}
+
+void *rd__vu_take(void)
+{
+    RdVuList *v = s_vu;
+    s_vu = NULL;
+    return v;
+}
+
+void rd__vu_give(void *lists)
+{
+    if (lists != NULL) {
+        free(s_vu);
+        s_vu = lists;
+    }
 }
 
 static RdVuList *curVu(void)
