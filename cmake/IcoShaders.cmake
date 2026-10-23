@@ -24,10 +24,14 @@
 # The table has three more columns for the other backends (the manifest
 # line is name|stage|entry|spv|dxil|glsl|hlslfile|defines):
 #   glsl      the GLSL translated from the SPIR-V for the OpenGL backend
-#             (ICO_SHADERS_GLSL; deflated by embed_shaders.py, inflated by the
-#             backend); "-" for an entry without one (an input-attachment
-#             build, which GLSL cannot express), or everywhere with the
-#             option off (glsl NULL, glsl_len 0)
+#             (ICO_SHADERS_GLSL, tools/spirv_to_glsl.py: SPIRV-Cross, GLSL
+#             4.30; deflated by embed_shaders.py, inflated by the backend).
+#             The file of an entry GLSL cannot express (an input-attachment
+#             build) is empty and embeds as none (glsl NULL, glsl_len 0); "-"
+#             everywhere with the option off. The option defaults ON when
+#             ICO_RHI_OPENGL is ON and SPIRV-Cross is there
+#             (tools/fetch_deps.sh section 9; ICO_SPIRV_CROSS overrides the
+#             path); a build tool like DXC, never linked or shipped
 #   hlslfile  the HLSL file's name and defines the entry's -D macros
 #             ("A=1,B=2", "" for none): what the Direct3D 11 backend compiles
 #             at run time from the embedded sources (ICO_SHADERS_HLSL_SOURCE:
@@ -48,7 +52,22 @@
 
 set(ICO_DXC "" CACHE FILEPATH "DXC executable (default: tools/toolchain/deps/dxc/bin/dxc)")
 option(ICO_SHADERS_DXIL "Also compile the shaders to DXIL for the D3D12 backend" ON)
-option(ICO_SHADERS_GLSL "Also translate the shaders to GLSL for the OpenGL backend" OFF)
+set(ICO_SPIRV_CROSS "" CACHE FILEPATH
+    "SPIRV-Cross executable (default: tools/toolchain/deps/spirv-cross/bin/spirv-cross)")
+set(_ico_spirv_cross "${ICO_SPIRV_CROSS}")
+if(NOT _ico_spirv_cross)
+    set(_ico_spirv_cross "${ICO_DEPS_DIR}/spirv-cross/bin/spirv-cross")
+endif()
+set(ICO_SPIRV_CROSS_EXE "${_ico_spirv_cross}")
+set(_ico_glsl_default OFF)
+if(ICO_RHI_OPENGL AND EXISTS "${ICO_SPIRV_CROSS_EXE}")
+    set(_ico_glsl_default ON)
+endif()
+option(ICO_SHADERS_GLSL "Also translate the shaders to GLSL for the OpenGL backend" ${_ico_glsl_default})
+if(ICO_SHADERS_GLSL AND NOT EXISTS "${ICO_SPIRV_CROSS_EXE}")
+    message(FATAL_ERROR "ICO_SHADERS_GLSL is ON but there is no SPIRV-Cross at ${ICO_SPIRV_CROSS_EXE} "
+                        "(run tools/fetch_deps.sh, or set ICO_SPIRV_CROSS)")
+endif()
 option(ICO_SHADERS_HLSL_SOURCE "Embed the HLSL sources for the Direct3D 11 backend's run-time compile"
        ${ICO_RHI_D3D11})
 option(ICO_SHADERS_D3D11_CHECK "Add the shaders_d3d11_check target (DXC with ICO_D3D11=1)" ON)
@@ -151,9 +170,21 @@ function(ico_add_shader name file entry stage)
             VERBATIM)
         set_property(GLOBAL APPEND PROPERTY ICO_SHADER_BLOBS "${spv}")
     endif()
-    # the GLSL column: "-" until the translation step (ICO_SHADERS_GLSL,
-    # tools/spirv_to_glsl.py) fills it in
+    # the GLSL column: the translation of the SPIR-V (ICO_SHADERS_GLSL,
+    # tools/spirv_to_glsl.py; an empty file for a module GLSL cannot express),
+    # else "-"
     set(glsl "-")
+    if(ICO_SHADERS_GLSL)
+        set(glsl "${ICO_SHADER_OUT_DIR}/${name}.glsl")
+        add_custom_command(
+            OUTPUT "${glsl}"
+            COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/spirv_to_glsl.py"
+                    --spirv-cross "${ICO_SPIRV_CROSS_EXE}" --in "${spv}" --out "${glsl}"
+            DEPENDS "${spv}" "${CMAKE_SOURCE_DIR}/tools/spirv_to_glsl.py" "${ICO_SPIRV_CROSS_EXE}"
+            COMMENT "SPIRV-Cross ${name}: GLSL"
+            VERBATIM)
+        set_property(GLOBAL APPEND PROPERTY ICO_SHADER_BLOBS "${glsl}")
+    endif()
     set_property(GLOBAL APPEND PROPERTY ICO_SHADER_MANIFEST
                  "${name}|${stage_n}|${entry}|${spv}|${dxil}|${glsl}|${_ico_sh_hlslfile}|${_ico_sh_defines}")
     # shaders_d3d11_check's line for the entry (ico_shaders_library)

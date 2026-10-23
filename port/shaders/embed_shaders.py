@@ -16,7 +16,7 @@ empty. Writes shaders_gen.h (the table's declaration) and shaders_gen.c
 (the byte arrays and the table). Also checks the blobs: SPIR-V must start
 with its magic number, DXIL must be a DXBC container whose hash is not zero
 (an unsigned container has a zero hash: D3D12 would refuse it without
-experimental shader models), GLSL must start with #version.
+experimental shader models), a non-empty GLSL must start with #version.
 
 usage: embed_shaders.py MANIFEST OUTDIR VERSION [--sources FILE...]
 """
@@ -130,6 +130,8 @@ def main():
         spv = read_bytes(spv_path)
         dxil = None if dxil_path == "-" else read_bytes(dxil_path)
         glsl = None if glsl_path == "-" else read_bytes(glsl_path)
+        if glsl is not None and not glsl:
+            glsl = None
         check(name, spv, dxil, glsl)
         if not hlsl_file or "/" in hlsl_file or '"' in hlsl_file or '"' in defines:
             sys.exit(f"embed_shaders: {name}: hlsl file or defines malformed")

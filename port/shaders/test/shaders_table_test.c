@@ -144,6 +144,29 @@ static const char *const expectedDst[] = {
     "vu_texa_ps_dstatt",
 };
 
+/* the entries GLSL cannot express (tools/spirv_to_glsl.py: an input
+ * attachment, SPIR-V Dim SubpassData): the _dstatt builds, the local fog-LUT
+ * and fx passes and the date stencil. With GLSL on, exactly these have none. */
+static const char *const expectedNoGlsl[] = {
+    "date_stencil_ps",
+    "fog_lut_buffer_ps_dstatt",
+    "fog_lut_local_ps",
+    "fog_lut_local_ps_nodual",
+    "fog_lut_ps_dstatt",
+    "font_ps_dstatt",
+    "font_sheet_ps_dstatt",
+    "fx_local_ps",
+    "sprite_aa1_ps_dstatt",
+    "sprite_ps_dstatt",
+    "sprite_ps_planes_dstatt",
+    "sprite_stq_ps_dstatt",
+    "sprite_stq_ps_planes_dstatt",
+    "sprite_texa_ps_dstatt",
+    "sprite_texa_ps_planes_dstatt",
+    "vu_ps_dstatt",
+    "vu_texa_ps_dstatt",
+};
+
 int main(void)
 {
     int failures = 0;
@@ -188,6 +211,20 @@ int main(void)
             failures++;
         }
         glslCount += b->glsl != NULL;
+        {
+            int expectNone = 0;
+            for (size_t k = 0; k < sizeof expectedNoGlsl / sizeof expectedNoGlsl[0]; k++) {
+                expectNone |= strcmp(expectedNoGlsl[k], b->name) == 0;
+            }
+            if (expectNone != (b->glsl == NULL)) {
+                printf("FAIL %s: %s GLSL\n", b->name, expectNone ? "has" : "lacks");
+                failures++;
+            }
+            if (b->glsl == NULL && (b->glsl_len || b->glsl_text_len)) {
+                printf("FAIL %s: GLSL length without GLSL\n", b->name);
+                failures++;
+            }
+        }
 #endif
         /* the Direct3D 11 columns: the HLSL file (always named; a source
          * of the embedded set when the sources are embedded) and the macros */
@@ -229,6 +266,12 @@ int main(void)
 #ifndef ICO_SHADERS_NO_GLSL
     if (glslCount == 0) {
         printf("FAIL: a table built with GLSL has no GLSL\n");
+        failures++;
+    }
+    printf("GLSL: %u entries with, %u without (expected without: %zu)\n", glslCount,
+           g_icoShaderCount - glslCount, sizeof expectedNoGlsl / sizeof expectedNoGlsl[0]);
+    if (g_icoShaderCount - glslCount != sizeof expectedNoGlsl / sizeof expectedNoGlsl[0]) {
+        printf("FAIL: the entries without GLSL are not the expected set\n");
         failures++;
     }
 #endif
