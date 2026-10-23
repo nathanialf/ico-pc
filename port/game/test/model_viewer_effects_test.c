@@ -35,7 +35,7 @@
  *
  * playable (the ELF run only) issue 136: the viewer's list rule
  *         (model_viewer_motion.c).  With nothing loaded but the stage's own
- *         motions (area 0), GIRL YORO_F (664-668 plain, area 0) are playable
+ *         motions (area 0), 664-668 (HINT_POINT_*, NO_WALK*: plain, area 0) are playable
  *         and 674 "GIRL YORO_F(HETARI)", a node-blend motion whose second
  *         partner (669, area 4) is not loaded, is not, and names that
  *         partner; with 669 loaded 674 is; and for every motion of every
