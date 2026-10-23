@@ -224,6 +224,9 @@ static const int32_t kAwRing[18][2] = {
     {1486, 3070}, {1571, 3043}, {1441, 2777}, {1533, 2794}, {1754, 2551}, {1798, 2602},
     {2241, 2524}, {2213, 2579}, {2618, 2712}, {2533, 2738}, {2664, 3004}, {2572, 2987}};
 
+/* the oracle takes the strips (the first recording only) */
+static int s_awFeed;
+
 /* one strip drawn (dx: added to x, 12.4) and fed to the oracle */
 static void awStrip(const int32_t (*s)[2], int n, int32_t dx, const uint8_t col[4])
 {
@@ -236,19 +239,22 @@ static void awStrip(const int32_t (*s)[2], int n, int32_t dx, const uint8_t col[
         v[i] = vtx(ox + p[i][0], oy + p[i][1], 0, col, 0, 0);
     }
     rd_screen_prims(RD_PRIM_TRIANGLE_STRIP, v, (uint32_t)n, RD_SPACE_WORLD, 1, 0);
-    for (int i = 0; i + 2 < n; i++) {
+    for (int i = 0; i + 2 < n && s_awFeed; i++) {
         awTriangle(p[i], p[i + 1], p[i + 2], col[3]);
     }
 }
 
-static void testAa1Wedge(void)
+/* the frame: SCENE with its own depth (the zwrite split runs as in the
+ * game), the ripple's state, columns 0..255 at alpha 0xFF (no coverage
+ * alpha, nothing for DATE to reject) and 256..511 the same strips at alpha
+ * 0x80 (the coverage alpha: the GS's own DATE rejects a later triangle's
+ * pixel where an earlier edge pixel left alpha below 0x80, VD-17); then
+ * replayed once more, so g_rdPerf holds that replay's counts.  False when
+ * the frame could not be had */
+static bool awRecord(void)
 {
     static const uint8_t clr[4] = {0, 0, 0, 0x80};
     static const uint8_t opaque[4] = {64, 64, 64, 0xFF}, half[4] = {64, 64, 64, 0x80};
-    memset(s_awN, 0, sizeof(s_awN));
-    memset(s_awRej, 0, sizeof(s_awRej));
-    memset(s_awLive, 0x80, sizeof(s_awLive));
-    memset(s_awAs, 0, sizeof(s_awAs));
     rd_begin_frame();
     rd_select_list(0);
     rd_clear_target(rd_target(RD_TARGET_SCENE), clr, 1, 0);
@@ -260,9 +266,6 @@ static void testAa1Wedge(void)
     rd_blend(RD_BLEND_CS_FIX_ADD_CD, 0x60, 1);
     rd_z_write(1);
     rd_test_gs(0x3C000); /* DATE DATM 1, Z ALWAYS */
-    /* columns 0..255: alpha 0xFF (no coverage alpha, nothing for DATE to
-     * reject: the GS and the port's per-draw DATE agree); 256..511 the same
-     * strips at alpha 0x80 (the coverage alpha, VD-17) */
     awStrip(kAwAcute, 4, 0, opaque);
     awStrip(kAwRing, 18, 0, opaque);
     awStrip(kAwAcute, 4, 256 * 16, half);
@@ -270,34 +273,47 @@ static void testAa1Wedge(void)
     rd_aa1(0);
     opaque2D();
     rd_end_frame(0);
+    const RdFrame *f = rd__last_frame();
+    const bool ok = f && rd__replay_frame(f, 0, false);
+    rhi_wait_idle();
+    return ok;
+}
+
+/* SCENE against the oracle, the GS's live DATE included: each pixel's red
+ * is 48 times the fragments the GS keeps there (the ones its DATE rejects
+ * left out), its alpha the last kept one's As; path names the DATE path */
+static void awCheck(const char *path)
+{
     uint32_t w, h;
     const uint8_t *img = readTarget(RD_TARGET_SCENE, &w, &h);
     if (!img) {
+        CHECK(false, "aa1 wedge (%s): SCENE not read", path);
         return;
     }
-    CHECK(w >= 512 && h >= 256, "aa1 wedge: SCENE %ux%u", w, h);
+    CHECK(w >= 512 && h >= 256, "aa1 wedge (%s): SCENE %ux%u", path, w, h);
     if (w < 512 || h < 256) {
         return;
     }
     int bad[2] = {0, 0}, n1[2] = {0, 0}, n2[2] = {0, 0}, n3[2] = {0, 0};
-    int maxd = 0, edge1 = 0, rejected = 0, rejectedPx = 0;
+    int maxd = 0, maxLive = 0, edge1 = 0, rejected = 0, rejectedPx = 0, kept = 0;
     for (int y = 0; y < 256; y++) {
         for (int x = 0; x < 512; x++) {
             const int half2 = x >= 256;
-            const int n = s_awN[y][x];
+            const int n = s_awN[y][x], g = n - s_awRej[y][x];
             const uint8_t *p = img + ((size_t)y * w + (size_t)x) * 4;
-            const int want = 48 * n > 255 ? 255 : 48 * n;
+            const int want = 48 * g > 255 ? 255 : 48 * g;
             n1[half2] += n == 1;
             n2[half2] += n == 2;
             n3[half2] += n >= 3;
             if (p[0] != want || p[1] != want || p[2] != want) {
                 if (bad[half2]++ < 8) {
-                    printf("FAIL aa1 wedge (%d,%d): %u, expected %d (%d fragments in the GS)\n", x,
-                           y, p[0], want, n);
+                    printf("FAIL aa1 wedge (%s) (%d,%d): %u, expected %d (%d fragments in the "
+                           "GS, %d kept by its DATE)\n",
+                           path, x, y, p[0], want, n, g);
                 }
             }
             if (!half2 && n > 0 && p[3] != 0xFF && bad[0]++ < 8) {
-                printf("FAIL aa1 wedge (%d,%d): alpha %u, expected 0xFF\n", x, y, p[3]);
+                printf("FAIL aa1 wedge (%s) (%d,%d): alpha %u, expected 0xFF\n", path, x, y, p[3]);
             }
             if (half2 && n == 1) {
                 /* one fragment: its As is the alpha written */
@@ -305,26 +321,78 @@ static void testAa1Wedge(void)
                 maxd = d > maxd ? d : maxd;
                 edge1 += s_awAs[y][x] < 0x80;
             }
+            if (half2 && g > 0) {
+                /* the last fragment the GS's DATE kept wrote the alpha */
+                const int d = abs((int)p[3] - (int)s_awLive[y][x]);
+                maxLive = d > maxLive ? d : maxLive;
+                kept += g;
+            }
             if (half2 && s_awRej[y][x]) {
                 rejected += s_awRej[y][x];
                 rejectedPx++;
             }
         }
     }
-    printf("  aa1 wedge, alpha 0xFF: GS fragments 1 at %d pixels, 2 at %d, 3 or more at %d; %d "
-           "pixels off\n",
-           n1[0], n2[0], n3[0], bad[0]);
-    printf("  aa1 wedge, alpha 0x80: 1 at %d, 2 at %d, 3+ at %d; %d pixels off; As of the %d "
-           "single edge pixels within %d LSB\n",
-           n1[1], n2[1], n3[1], bad[1], edge1, maxd);
-    printf("  aa1 wedge, alpha 0x80 (VD-17): the GS's own DATE rejects %d later fragments at %d "
-           "pixels (an earlier edge pixel left alpha below 0x80); the port's per-draw DATE "
-           "draws them\n",
-           rejected, rejectedPx);
+    printf("  aa1 wedge (%s), alpha 0xFF: GS fragments 1 at %d pixels, 2 at %d, 3 or more at %d; "
+           "%d pixels off\n",
+           path, n1[0], n2[0], n3[0], bad[0]);
+    printf("  aa1 wedge (%s), alpha 0x80: 1 at %d, 2 at %d, 3+ at %d; the GS's own DATE "
+           "rejects %d later fragments at %d pixels (an earlier edge pixel left alpha below "
+           "0x80) and keeps %d; %d pixels off; As of the %d single edge pixels within %d LSB, "
+           "of the last kept fragment within %d\n",
+           path, n1[1], n2[1], n3[1], rejected, rejectedPx, kept, bad[1], edge1, maxd, maxLive);
     CHECK(bad[0] == 0 && n1[0] > 9000 && n2[0] > 700 && n3[0] > 0,
-          "aa1 wedge, alpha 0xFF: %d pixels off the GS's (%d/%d/%d)", bad[0], n1[0], n2[0], n3[0]);
-    CHECK(bad[1] == 0 && n1[1] == n1[0] && n2[1] == n2[0],
-          "aa1 wedge, alpha 0x80: %d pixels off the GS's count", bad[1]);
-    CHECK(maxd <= 1 && edge1 > 500, "aa1 wedge: As of single edge pixels: %d LSB off (%d pixels)",
-          maxd, edge1);
+          "aa1 wedge (%s), alpha 0xFF: %d pixels off the GS's (%d/%d/%d)", path, bad[0], n1[0],
+          n2[0], n3[0]);
+    CHECK(bad[1] == 0 && n1[1] == n1[0] && n2[1] == n2[0] && rejected > 400,
+          "aa1 wedge (%s), alpha 0x80: %d pixels off the GS's live DATE (%d fragments it rejects)",
+          path, bad[1], rejected);
+    CHECK(maxd <= 1 && edge1 > 500 && maxLive <= 1,
+          "aa1 wedge (%s): As of single edge pixels %d LSB off (%d pixels), of the last kept "
+          "fragment %d",
+          path, maxd, edge1, maxLive);
+}
+
+/* The strips on the device's own DATE path (the snapshot on a desktop
+ * profile, the stencil bit where the profile has dateStencil), then, where
+ * the device has local read and the blend is not the storage read
+ * (dateStencilFor), through the stencil bit: both draw the strips primitive
+ * by primitive (rd_replay_aa1.inc aa1DatePlan), counted among the DATE
+ * stencil draws, and give the oracle's bytes */
+static void testAa1Wedge(void)
+{
+    memset(s_awN, 0, sizeof(s_awN));
+    memset(s_awRej, 0, sizeof(s_awRej));
+    memset(s_awLive, 0x80, sizeof(s_awLive));
+    memset(s_awAs, 0, sizeof(s_awAs));
+    s_awFeed = 1;
+    bool ok = awRecord();
+    s_awFeed = 0;
+    const char *own = g_rd.profile.dateStencil ? "stencil" : "snapshot";
+    CHECK(ok && g_rdPerf.dateStencilDraws > 0,
+          "aa1 wedge (%s): replayed, %u DATE stencil draws (the primitives' pairs), %u snapshots",
+          own, g_rdPerf.dateStencilDraws, g_rdPerf.dateSnapshots);
+    awCheck(own);
+    if (g_rd.profile.dateStencil || !rhi_limits()->localRead || !g_rd.fs[RD_FS_DATE_STENCIL].id ||
+        !g_rd.fs[RD_FS_DATE_CLEAR].id || !g_rd.layoutLocal.id ||
+        g_rd.dstMode == RD_BLEND_EXACT_STORAGE) {
+        const char *why = g_rd.profile.dateStencil ? "was the device's own"
+                                                   : "skipped (no local read, no DATE stencil "
+                                                     "shaders or the storage read)";
+        printf("  aa1 wedge: the stencil path %s\n", why);
+        return;
+    }
+    g_rd.profile.dateStencil = true;
+    rd_reset_scene(512, 512); /* SCENE made with DATE's local read */
+    ok = awRecord();
+    const uint32_t takes = g_rdPerf.dateStencilTakes, snaps = g_rdPerf.dateSnapshots;
+    const uint32_t draws = g_rdPerf.dateStencilDraws;
+    CHECK(ok && takes > 0 && snaps == 0 && draws > 0,
+          "aa1 wedge (stencil): replayed, %u setups, %u snapshots, %u DATE stencil draws", takes,
+          snaps, draws);
+    awCheck("stencil");
+    g_rd.profile.dateStencil = false;
+    rd_reset_scene(512, 512);
+    rhi_wait_idle();
+    rd__pipeline_cache_clear(); /* the bit's keys are outside the reachable set again */
 }

@@ -41,6 +41,9 @@
  *              (rd_dump.c sheetFromHalo)
  *   aa1 plans  PRIM.AA1 keys: the AA1 shaders, triangles, blending with ABE
  *              0 (DF_AA1_FULL), no Z write on lines; aa1 0 unchanged
+ *   aa1 DATE pairs  the ripple's keys under DATE drawn primitive by
+ *              primitive: the snapshot path's TEST0 / TEST0_SET pairs in the
+ *              screen set, the stencil path's TEST1 / TEST1_CLR in DATE's
  *   aura filter the model viewer's draw filter around the
  *              mirage's list 8: a GRID keyed by a second object inside the
  *              open window is kept (and after it), a third object's is not;
@@ -1341,6 +1344,78 @@ static bool keyIn(const RdPipeKeyInt *keys, uint32_t n, const RdPipeKeyInt *k)
     return false;
 }
 
+/* PRIM.AA1 under DATE (the puddle's ripples, puddle.c: TEST 0x3F000,
+ * ALPHA mode 0, ABE 1, Z write): every primitive is two draws
+ * (rd_replay_aa1.inc aa1DatePlan), and their keys are enumerated: the
+ * snapshot path's TEST0 and TEST0_SET in the screen set, Z write on (a
+ * triangle's own pixels) and off (its fringes), and the stencil path's
+ * TEST1 and TEST1_CLR in DATE's set (rd__enumerate_reachable_date, the
+ * profile's dateStencil with stand-in shader ids); none of them in DATE's
+ * set without dateStencil */
+static void testAa1DatePairs(void)
+{
+    static RdPipeKeyInt keys[RD_PIPELINE_REACHABLE_MAX];
+    RdStateBlock s;
+    RdDrawPass dp[2];
+    rd__reset_state_block(&s);
+    s.ds.test = rd_test_from_gs(RD_TEST_RGBONLY_DATE1);
+    s.ds.zwrite = RD_ZWRITE_ON;
+    s.ds.abe = 1;
+    s.ds.blend = RD_BLEND_CS_FIX_ADD_CD;
+    s.aa1 = 1;
+    const int n = rd__plan_screen_draw_ex(&s, RD_PRIM_TRIANGLES, 1, RD_SPACE_WORLD,
+                                          RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
+    const uint32_t ns = rd__enumerate_reachable_screen(keys, RD_PIPELINE_REACHABLE_MAX);
+    static const uint8_t kSnap[2] = {RD_STENCIL_DATE_TEST0, RD_STENCIL_DATE_TEST0_SET};
+    static const uint8_t kBit[2] = {RD_STENCIL_DATE_TEST1, RD_STENCIL_DATE_TEST1_CLR};
+    int snap = 0, bit = 0, bitOff = 0;
+    for (int zw = 0; zw < 2 && n == 1; zw++) {
+        for (int m = 0; m < 2; m++) {
+            RdPipeKeyInt k = dp[0].key;
+            k.gs.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
+            k.gs.stencil = kSnap[m];
+            snap += keyIn(keys, ns, &k);
+        }
+    }
+    const RdProfile keepProfile = g_rd.profile;
+    const RhiShader keepSt = g_rd.fs[RD_FS_DATE_STENCIL], keepCl = g_rd.fs[RD_FS_DATE_CLEAR];
+    if (g_rd.fs[RD_FS_DATE_STENCIL].id == 0) {
+        g_rd.fs[RD_FS_DATE_STENCIL].id = 0x7F000020u; /* stand-ins: never made */
+    }
+    if (g_rd.fs[RD_FS_DATE_CLEAR].id == 0) {
+        g_rd.fs[RD_FS_DATE_CLEAR].id = 0x7F000021u;
+    }
+    for (int on = 0; on < 2 && n == 1; on++) {
+        g_rd.profile.dateStencil = on != 0;
+        const uint32_t nd = rd__enumerate_reachable_date(keys, RD_PIPELINE_REACHABLE_MAX, 0);
+        RdDrawPass t = dp[0];
+        const bool twin = rd__date_stencil_pass(&t);
+        for (int zw = 0; zw < 2 && twin; zw++) {
+            for (int m = 0; m < 2; m++) {
+                RdPipeKeyInt k = t.key;
+                k.gs.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
+                k.gs.stencil = kBit[m];
+                if (on) {
+                    bit += keyIn(keys, nd, &k);
+                } else {
+                    bitOff += keyIn(keys, nd, &k);
+                }
+            }
+        }
+    }
+    g_rd.fs[RD_FS_DATE_STENCIL] = keepSt;
+    g_rd.fs[RD_FS_DATE_CLEAR] = keepCl;
+    g_rd.profile = keepProfile;
+    printf("  aa1 DATE pairs: the ripple's plan %d pass(es); snapshot pairs enumerated %d of 4, "
+           "stencil pairs %d of 4 (%d without dateStencil)\n",
+           n, snap, bit, bitOff);
+    CHECK(n == 1 && (dp[0].flags & ICO_DF_DATE) && (dp[0].flags & ICO_DF_DATM) && snap == 4 &&
+              bit == 4 && bitOff == 0,
+          "aa1 DATE pairs: %d passes, snapshot pairs %d of 4, stencil pairs %d of 4 (%d without "
+          "dateStencil)",
+          n, snap, bit, bitOff);
+}
+
 /* how many of keys[0..n) are k, field for field */
 static uint32_t keyCount(const RdPipeKeyInt *keys, uint32_t n, const RdPipeKeyInt *k)
 {
@@ -1676,9 +1751,13 @@ static void testDynamicNormalise(RdPipeKeyInt *keys)
  * (Z test, Z write, mask) combinations of its four TEST words (0x3400D
  * ALWAYS, Z write on and off; 0x3F000 the same under DATM 1; 0x3F001 mask
  * 7 without Z write; 0x5C000 GEQUAL, on and off) x 4 blend paths x 2
- * prims x 2 spaces x 2 fragment shaders = 224, its VU twins at most the
- * static set's GEQUAL VU keys; a DATE draw's twin takes the dynamic depth
- * (rd__key_dynamic_bits: the two TEST modes), the two setup keys stay static,
+ * prims x 2 spaces x 2 fragment shaders = 224, and the PRIM.AA1 strips'
+ * DATM 1 pairs (TEST1 and TEST1_CLR) at most 3 blend paths x 2 Z writes x
+ * 2 modes = 12 more, its VU twins at most the static set's GEQUAL VU keys
+ * (the AA1 strips' snapshot-path pairs, TEST0 and TEST0_SET, and the
+ * CLEAR setup key are the desktop set's, so one setup key is the tiler
+ * set's own); a DATE draw's twin takes the dynamic depth
+ * (rd__key_dynamic_bits: the TEST modes), the two setup keys stay static,
  * so dynamic depth shrinks the DATE part.  Printed, with the plan's careful-set target (about
  * 150-200 keys with dynamic depth and no EDS3) beside them. */
 static bool isVuVs(uint8_t vs)
@@ -1688,8 +1767,7 @@ static bool isVuVs(uint8_t vs)
 
 static bool isDateStencil(uint8_t m)
 {
-    return m == RD_STENCIL_DATE_CLEAR || m == RD_STENCIL_DATE_SET || m == RD_STENCIL_DATE_TEST0 ||
-           m == RD_STENCIL_DATE_TEST1;
+    return m == RD_STENCIL_DATE_CLEAR || m == RD_STENCIL_DATE_SET || rd__date_draw_stencil(m);
 }
 
 /* The largest set a device meets (an Adreno 710 phone at 2340x1080,
@@ -1908,13 +1986,15 @@ static void testTilerSet(RdPipeKeyInt *keys)
               "tiler %s: %u keys twice, %u desktop keys missing, %u (and %u) keys of no tiler "
               "family",
               kMode[mode], dup, missing, other, otherBare);
-        CHECK(n == nd + date + fogLocal + fold && setup == 2 && fogLocal == 1 && fold == 1 &&
+        /* the setup's SET key (its CLEAR key is the desktop set's: the
+           PRIM.AA1 DATE draws clear the bit on the snapshot path) */
+        CHECK(n == nd + date + fogLocal + fold && setup == 1 && fogLocal == 1 && fold == 1 &&
                   nb == nd + 1 && foldBare == 1,
               "tiler %s: %u = %u + %u + %u + %u (setup %u), without local read %u = %u + 1",
               kMode[mode], n, nd, date, fogLocal, fold, setup, nb, nd);
-        CHECK(dateScreen > 0 && dateScreen <= 224u && dateVu > 0 && dateVu <= vuGeq,
-              "tiler %s: DATE screen twins %u (at most 224), VU twins %u (at most %u)", kMode[mode],
-              dateScreen, dateVu, vuGeq);
+        CHECK(dateScreen > 0 && dateScreen <= 236u && dateVu > 0 && dateVu <= vuGeq,
+              "tiler %s: DATE screen twins %u (at most 224 + 12), VU twins %u (at most %u)",
+              kMode[mode], dateScreen, dateVu, vuGeq);
         CHECK(mode != 1 || date < date0,
               "dynamic depth: DATE's part %u, static %u (the TEST twins take the dynamic depth)",
               date, date0);
@@ -2600,6 +2680,7 @@ int main(int argc, char **argv)
     testDumpBlock(dir);
     testDumpSheetV11(dir);
     testAa1Plans();
+    testAa1DatePairs();
     testEnumeration();
     testRegionScale();
     testAuraFilter();
