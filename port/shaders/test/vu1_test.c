@@ -2321,8 +2321,12 @@ static RhiShader makeShader(const char *name)
         FAILF("shader %s not in the table\n", name);
         return (RhiShader){0};
     }
-    RhiShaderDesc d = {b->stage == ICO_SHADER_STAGE_VERTEX ? RHI_STAGE_VERTEX : RHI_STAGE_FRAGMENT,
-                       b->spirv, b->spirv_len, b->entry, b->name};
+    RhiShaderDesc d = {0};
+    d.stage = b->stage == ICO_SHADER_STAGE_VERTEX ? RHI_STAGE_VERTEX : RHI_STAGE_FRAGMENT;
+    d.bytecode = b->spirv;
+    d.bytecodeSize = b->spirv_len;
+    d.entryPoint = b->entry;
+    d.debugName = b->name;
     RhiShader s = rhi_create_shader(&d);
     if (!s.id) {
         FAILF("shader %s not created\n", name);

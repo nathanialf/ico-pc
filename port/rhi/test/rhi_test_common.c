@@ -162,7 +162,12 @@ static RhiPipeline makePipeline(const Ctx *c, RhiShader ps, RhiFormat color, Rhi
 
 static RhiShader makeShader(RhiShaderStage stage, const void *code, size_t size, const char *entry)
 {
-    RhiShaderDesc d = {stage, code, size, entry, entry};
+    RhiShaderDesc d = {0};
+    d.stage = stage;
+    d.bytecode = code;
+    d.bytecodeSize = size;
+    d.entryPoint = entry;
+    d.debugName = entry;
     RhiShader s = rhi_create_shader(&d);
     if (!s.id) {
         rhi_test_log("FAIL shader %s not created\n", entry);
