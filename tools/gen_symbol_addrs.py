@@ -66,6 +66,7 @@ MAP_LINE = re.compile(r"^ (\.\w+)\s+0x([0-9a-f]+)\s+0x([0-9a-f]+)\s+(\S+\.o)\s*$
 TITLE = {
     "jpn": "Japanese retail target (SCPS_110.03)",
     "kor": "Korean retail target (SCPS_560.01)",
+    "cn": "Asian retail target (SCPS_550.01)",
     "ntsc": "USA retail target (SCUS_971.13)",
     "aug6": "Aug-6-2001 prototype target (SCUS_971.13)",
     "jun26": "Jun-26-2001 demo target (CUS97113/SCPS_000.00)",
