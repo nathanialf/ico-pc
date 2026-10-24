@@ -50,6 +50,12 @@ typedef struct PObjMdl { /* field names derived */
     unsigned int shade : 4;   /* MakePacket's tag bits 18-21, the PObj's shade */
     unsigned int lod : 4;     /* MakePacket's tag bits 22-25, the PObj's level of detail */
     unsigned int : 20;
+    /* PC port: host-only, after the European record's 0x8C bytes: the USA disc's
+       record starts with these two paths (config/data_schema.ntsc.txt's extend
+       rows); a disc without them leaves them empty: the model file, then the
+       shadow model file */
+    char modelPath[64];
+    char shadowPath[64];
 } PObjMdl; /* derived name */
 
 /* the data-only members texture-path and model-path */
