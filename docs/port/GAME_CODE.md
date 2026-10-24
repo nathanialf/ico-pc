@@ -317,7 +317,11 @@ disc (SCES-50760) and the other discs is an inline block on the targets' macros,
 disc (SCPS-56001) is a build of the Japanese program, so most of its blocks are shared arms,
 `#if defined(VERSION_JPN) || defined(VERSION_KOR)`, with `#ifdef VERSION_KOR` nested inside one
 where the Korean text differs (its
-[docs/TARGETS.md](https://github.com/nathanialf/ico/blob/main/docs/TARGETS.md) "Korean retail"). The port
+[docs/TARGETS.md](https://github.com/nathanialf/ico/blob/main/docs/TARGETS.md) "Korean retail"). The
+three 2001 builds (the USA disc SCUS-97113, `VERSION_NTSC`; the August 6 prototype, `VERSION_AUG6`;
+the June 26 magazine demo SCUS-97158, `VERSION_JUN26`) are PAL's text with their own lines, nested
+in the arm of an earlier target's block where one already stands, up to five deep, and never as
+`#elif` arms (its TARGETS.md "USA retail", "Aug-6-2001 prototype", "Jun-26-2001 demo"). The port
 compiles one game core that plays every disc in `config/regions.txt`, so each block becomes a
 run-time form on `ico_region`, the row of that table the identified disc selects (set once at disc
 mount, before any game code runs). No game source holds a `VERSION_` block or a conditional on the
@@ -334,8 +338,18 @@ macro per way to group some of the non-PAL rows into arms, named `PAL_` and the 
 joined by `_`, one argument per arm in table order after the PAL arm: for the rows pal, jpn, kor
 these are `PAL_JPN(pal, jpn)`, `PAL_KOR(pal, kor)`, `PAL_JPNKOR(pal, jpnkor)` (one value for both
 rows) and `PAL_JPN_KOR(pal, jpn, kor)`, whose test chain runs from the last arm down (three named
-rows give 14 selectors; `selector_groupings`: the config's pal, jpn, kor have two named rows and four selectors). With two rows the header holds `PAL_JPN` alone and is
-byte for byte the two-row header. `LN(pal, jpn, kor)` is upstream's per-target `__LINE__` values
+rows give 14 selectors; `selector_groupings`: the config's pal, jpn, kor have two named rows and four selectors). The groupings grow as Bell numbers (five
+named rows: 202 selectors and 26 sets), so the header defines the singletons, `LN`'s selector and
+only the selectors and sets the code names (`header_forms`): `used_names` collects every
+`PAL_<...>(` and `ICO_<...>` under `ico2/`, `sce/` and `port/` (the port layer and its tests
+include `region.h` too), `region.h` itself aside, a plain scan of the bytes so the result depends on
+the files alone; a name that is no form of the table is ignored, and a selector's arms bring their
+sets. A form's name is fixed by its rows (`PAL_JPNKORNTSC(pal, jpnkorntsc)`,
+`PAL_NTSCAUG6_JUN26(pal, ntscaug6, jun26)`, `ICO_NTSCAUG6JUN26`), so a new use adds its lines and
+moves no other; `load_regions` refuses a table where two forms would spell alike. `convert` runs
+`gen-header` after itself, and `check` compares `region.h` with the header of the tree's used
+forms. A line past 110 columns is broken after a `:` of its chain. With two rows the header holds
+`PAL_JPN` alone and is byte for byte the two-row header. `LN(pal, jpn, kor)` is upstream's per-target `__LINE__` values
 for the debug allocators and asserts, one per row (its arity is the row count; `check` holds
 `region.h` to it), as the selector naming every row. A selector's first argument is the PAL arm; a
 region it does not name takes the PAL arm, which is upstream's own rule, so a site never changes
@@ -362,21 +376,32 @@ block shape: `#if C`, any number of `#elif C` arms, an optional `#else`, `#endif
 and parentheses (`parse_condition`); `#ifdef VERSION_A` and `#ifndef VERSION_A` are the same as
 `#if defined(VERSION_A)` and `#if !defined(VERSION_A)`. Upstream writes `#ifdef VERSION_JPN`,
 `#if defined(VERSION_JPN) || defined(VERSION_KOR)`, `#if !defined(VERSION_JPN) &&
-!defined(VERSION_KOR)` and `#elif defined(VERSION_A) || defined(VERSION_B)`. One region block may
-sit in an arm of another (upstream's `#ifdef VERSION_KOR` inside a shared arm, whose `#else` is
-then the Japanese text). A row no condition names takes the arm the PAL row takes. A macro that is
-not a row (add the row first), a block nested two deep, a bare `VERSION_X` without `defined`, a
-condition mixing in another macro, an `#elif` naming a row an earlier arm took, an `#elif` after
-`#else`, or a directive naming a `VERSION_` macro any other way stops the tool with the line
-(`find_blocks`).
+!defined(VERSION_KOR)` and `#elif defined(VERSION_A) || defined(VERSION_B)`. Region blocks nest, in any arm and to any depth
+up to `MAX_DEPTH` (8): upstream's `#ifdef VERSION_KOR` inside a shared arm, whose `#else` is then
+the Japanese text; `#ifdef VERSION_NTSC` inside the PAL arm of a Japanese block; `#ifdef
+VERSION_AUG6` inside `#if defined(VERSION_NTSC) || defined(VERSION_AUG6)`; `#ifdef VERSION_JUN26`
+inside that, three and four deep; `#ifndef VERSION_AUG6` inside the three-name negative block `#if
+!defined(VERSION_JPN) && !defined(VERSION_KOR) && !defined(VERSION_NTSC)`; and the demo's own
+block beside a four-name condition (`e3.c`). Each content line is compiled by the rows that every
+region condition around it holds for, the intersection along the directive stack (a conditional on
+another macro passes its rows through), so a row no condition names takes the arm the PAL row
+takes. Upstream's tree (04206909a, six rows) opens 3035, 3452, 3310, 1428 and 15 region blocks
+at depths 1 to 5 in 310 files, and every row's text the tool reads there equals the one an
+independent evaluator of the `VERSION_` conditionals gives. A line inside a block that no row
+compiles (an `#ifdef VERSION_KOR` inside a Japanese-only arm) is a `review dead` line of `report`,
+since the conversion drops it (upstream has none). A macro that is not a row (add the row first),
+a block nested past `MAX_DEPTH`, a bare `VERSION_X` without `defined`, a condition mixing in
+another macro, an `#elif` naming a row an earlier arm took, an `#elif` after `#else`, or a
+directive naming a `VERSION_` macro any other way stops the tool with the line (`find_blocks`).
 
-The tool reads each block as per-row texts: for every row of the table, the lines that row's build
-compiles. The arms are the distinct texts, each keyed by the set of rows that compile it
+The tool reads each top-level block as per-row texts: for every row of the table, the lines that
+row's build compiles. The arms are the distinct texts, each keyed by the set of rows that compile it
 (`Arm.key`, a tuple of slugs in table order; the arm holding PAL's text is `pal`, with every row
 that shares it). So `#if defined(VERSION_JPN) || defined(VERSION_KOR) J #else P #endif` has the
-arms `jpnkor` and `pal`, and with the Korean text nested in it, `jpn`, `kor` and `pal`. A nested
-block whose shared lines sit around the inner block is rebuilt flat in memory with those lines in
-each arm (`flatten_blocks`), and goes back as written when no class converts it. Every class below
+arms `jpnkor` and `pal`, and with the Korean text nested in it, `jpn`, `kor` and `pal`. Two rows whose texts are the same bytes share an arm even when upstream wrote them as two
+places (the demo's block beside the four-name condition becomes one `jpnkorntscaug6jun26` arm). A
+nested block whose shared lines sit around the inner block is rebuilt flat in memory with those
+lines in each arm (`flatten_blocks`), and goes back as written when no class converts it. Every class below
 works on these arms: a selector names the sets whose value differs from PAL's, rows with one value
 sharing an argument (`selector_call`), a statement form tests the set's predicate. `convert
 [--root DIR] [PATH...]` rewrites each block by the first class that fits and keeps the PAL arm's
@@ -388,7 +413,7 @@ bytes and indentation:
 | `token` | the arms have the same tokens but for literals | each differing literal as `PAL_JPN(p, j)`, `PAL_JPNKOR(p, jk)` when the two rows agree on it, `PAL_JPN_KOR(p, j, k)` when they do not, suffixes kept (`class_a1_tokens`) |
 | `initialised` | one arm declares a local with an initialiser, the other without | the initialised arm (`class_a1p_initialised`) |
 | `span` | the arms differ in one balanced span | `PAL_JPN(span_pal, span_jpn)`, the span widened until it is a whole operand in its place (`class_a3p_span`, `span_ok`) |
-| `if-else` | whole statements in two or more arms, no declaration or label at an arm's top level | `if (ICO_JPN) { J } else { P }` (a shared arm: `if (ICO_JPNKOR)`), named arms first in upstream's order and PAL last, so a later upstream edit lands line for line; three arms give `if (ICO_US) {...} else if (ICO_JPN) {...} else {...}` (`class_a3_statements`) |
+| `if-else` | whole statements in two or more arms, no declaration or label at an arm's top level | `if (ICO_JPN) { J } else { P }` (a shared arm: `if (ICO_JPNKOR)`), named arms first in upstream's order and PAL last, so a later upstream edit lands line for line; three arms give `if (ICO_NTSC) {...} else if (ICO_JPN) {...} else {...}`, five give the chain over five predicates (`ICO_JPNKOR`, `ICO_JUN26`, `ICO_AUG6`, `ICO_NTSC`, then PAL) (`class_a3_statements`) |
 | `one-region` | statements in one arm only | `if (ICO_JPN) { J }`, `if (ICO_JPNKOR) { JK }` or `if (!ICO_JPN) { P }`, `if (!ICO_JPNKOR) { P }` for the negated pair; an arm of declarations alone, whose initialisers call and assign nothing, is kept for every region (`class_a4_one_region`) |
 | `file-scope` | one arm at file scope: includes, prototypes, externs, typedefs, definitions no other file-scope block defines | the arm, for every region (`class_a5a_file_scope`) |
 
@@ -398,8 +423,11 @@ after `>>` or `<<` (a bit position: the loader moves the Japanese bits to PAL's)
 dimension, inside `sizeof`, after `+` or `-` in a statement with a `(char *)`, `(int *)`, `(float
 *)` or `(short *)` cast (a raw offset), inside a struct, on a member name (the structs differ), and
 on a delta of exactly 16 on a value of 0x200 and up (the Japanese `ActWork` has no `boxDir`)
-(`deny_reason`, `offset16`, `is_member`). A `span` that reads a motion record's bit words keeps
-PAL's span (`bit_word_span`). An automatic local's initialiser takes the selector; a static local's
+(`deny_reason`, `offset16`, `is_member`). A literal that differs in a `case` label of a switch `case-shift`
+does not own (a block that closes a statement, opens the switch and holds its first label, as in
+`layout_action.c`'s `la_save_confirm_complete`) makes the block no `token` block: a label is no
+place for a selector, so it stays hand work (`unbalanced`). A `span` that reads a motion record's
+bit words keeps PAL's span (`bit_word_span`). An automatic local's initialiser takes the selector; a static local's
 cannot (it is a constant context) and is the `data-twin` hand item. A substituted numeric delta
 outside the id families planning found (`DELTAS_KNOWN`: 2, 3, 4, 19, 23, 24, 28, 29, 30, 32, 48, and
 the Korean property deltas 34, 35, 36 measured on upstream c2f4ed40e, where PAL - KOR is PAL - JPN
@@ -469,31 +497,53 @@ one commit at a time.
 `region.c` holds the look-ups over it.
 
 `--selftest` converts `tools/test/region_blocks/fixture.c` in a scratch tree with that
-directory's four-row `regions.txt` (pal, jpn, kor and a dummy us, so a fourth target's arity path is
-tested) and `region_twins.txt`, compares the result, `report --all` and `report --bits` with
-`expected.c`, `expected_report.tsv` and `expected_bits.txt` (the expected files are the
-specification: each line is read by hand when they change), converts again (nothing may change),
-runs `check` (exit 2), the `check_contexts.c` rules, `check`'s `LN` arity and `ico_discs[]`
-problems, feeds the parser its malformed shapes and the forms it must read, checks `gen-header`'s
-four-row selectors (14), the three-row header's shape and the two-row header against
-`region_two_rows.h` byte for byte, `gen-table`'s rows, `rename` on `rename.c` against
-`rename_expected.c` (idempotent, and a no-op for two rows), and runs `gcc -fsyntax-only` on the
-result with none, `-DVERSION_JPN` and `-DVERSION_KOR`.
+directory's six-row `regions.txt` (pal, jpn, kor and upstream's ntsc, aug6 and jun26, so the
+later targets' arity paths are tested before the port's table has them) and `region_twins.txt`,
+compares the result, `report --all` and `report --bits` with `expected.c`, `expected_report.tsv`
+and `expected_bits.txt` (the expected files are the specification: each line is read by hand when
+they change), converts again (nothing may change), runs `check` (exit 2), the `check_contexts.c`
+rules, `check`'s `LN` arity and `ico_discs[]` problems, feeds the parser its malformed shapes (a
+block nested past `MAX_DEPTH` among them) and the forms it must read (three and eight deep, a
+block no row compiles and its `dead` line), checks `gen-header`'s full six-row header (202
+selectors, 26 sets), the used-forms header (the named selectors, `LN`'s, the sets their arms
+name, a name that is no form ignored), that the command writes the tree's used forms, the
+three-row header's shape and the two-row header against `region_two_rows.h` byte for byte,
+`gen-table`'s rows, `rename` on `rename.c` against `rename_expected.c` (kor on jpn; idempotent,
+and a no-op for two rows), on `rename_expected.c` against `rename_pal_expected.c` (six rows, the
+three later ones on pal: no selector moves), a mixed `--base aug6=jpn` map, the refused `--base`
+values, and the command over a tree (`--check` exits 1, the rename, `--check` exits 0), and runs
+`gcc -fsyntax-only` on the result against the tree's generated `region.h` with none and each row's
+`-DVERSION_<SLUG>`. The fixture's blocks of the later targets are upstream's documented shapes
+(its BUILDING.md "Targets and version blocks" and TARGETS.md): NTSC nested in the PAL arm of a
+Japanese block, AUG6 in the arm of the Japanese lines it shares, AUG6 twice in a USA arm beside a
+shared line (`st22a.c`), the demo inside the prototype inside the USA arm, an else-if chain over
+five texts three deep, `#ifndef VERSION_AUG6` and `#if !defined(VERSION_AUG6) &&
+!defined(VERSION_JUN26)` in the three-name negative block, the `e3.c` side-by-side block, a nested
+`#elif`, a whole function body in the demo's arm past `LARGE_LINES` (`large-variant`), a six-argument
+`LN`, and the `layout_action.c` label block.
 
-`rename [--root DIR] [--check] [--set SLUGS]` rewrites the two-row spelling for a table that gains
-a row sharing the Japanese arm: under `ico2/` and `sce/` only (`region.h` is `gen-header`'s, the port
-layer's `ICO_JPN` uses are decided one by one), `PAL_JPN(` becomes `PAL_JPNKOR(`, the identifier
-`ICO_JPN` becomes `ICO_JPNKOR`, and `LN(a, b)` becomes `LN(a, b, b)`, balanced-parenthesis aware,
-also inside a `#define`; comments and strings stay, and a second run changes nothing
-(`rename_bytes`). The set is every named row of `config/regions.txt` unless `--set jpn,kor` names it:
-the assumption is that each target after the Japanese one is a build of the Japanese program, as
-the Korean one is (a row outside the set would take PAL's value in `LN`). `--check` prints per file
-what would change and exits 1 if anything would. On main before the Korean merge it rewrites 98
-files: 2543 `PAL_JPN(`, 168 `ICO_JPN` (one more sits in a comment) and 194 `LN(`. It belongs to the
-spelling commit before the merge only: after the merge, `rename --check` lists the sites only the
-Japanese disc runs, which keep `PAL_JPN` and `ICO_JPN` (after the Korean merge six, in
-`cdvd.c` (the disc type and the two `sceCdStatus` waits), `ios.c` (the media mode), `pad.c` (the
-failed read) and `e3.c` (`viewScale`)), and is not run again.
+`rename [--root DIR] [--check] [--base [ROW=]SLUG]...` rewrites the code's spelling for the rows
+the table gained, under `ico2/` and `sce/` only (`region.h` is `gen-header`'s, the port layer's
+uses are decided one by one). The rows the code is spelt for are the first N, N the fewest
+arguments an `LN(` takes in the tree (`tree_ln_arity`); each later row has a base, one of those N
+(`--base SLUG` for every new row, `--base ROW=SLUG` for one, repeatable; `pal` by default). Each
+`LN(...)` with fewer arguments than rows gains one per missing row, its base's argument:
+`LN(a, b, c)` becomes `LN(a, b, c, a, a, a)` for three rows on pal, balanced-parenthesis aware,
+also inside a `#define` (`ln_calls`). A row on a non-PAL row joins every selector arm and predicate
+set its base is in (`rename_map`): with kor on jpn, `PAL_JPN(` becomes `PAL_JPNKOR(` and `ICO_JPN`
+`ICO_JPNKOR`, and with aug6 on jpn `PAL_JPN_KOR(` would become `PAL_JPNAUG6_KOR(`; a row on pal
+joins nothing, since a region a selector does not name takes the PAL arm already, so the three 2001
+targets (PAL's text with their own lines) change `LN` alone. A name that already names a new row
+is left, comments and strings stay, `ICO_PAL` is counted for review when a row joins on pal (it no
+longer covers that row's disc), and a tree whose `LN` calls all take one argument per row is left,
+so a second run changes nothing (`rename_bytes`). `--check` prints per file what would change and
+exits 1 if anything would. Before the Korean merge (two rows to three, `--base kor=jpn`, the
+Japanese program's build) it rewrote 98 files: 2543 `PAL_JPN(`, 168 `ICO_JPN` (one more sits in a
+comment) and 194 `LN(`; the sites only the Japanese disc runs were then given back `PAL_JPN` and
+`ICO_JPN` by hand (six, in `cdvd.c` (the disc type and the two `sceCdStatus` waits), `ios.c` (the
+media mode), `pad.c` (the failed read) and `e3.c` (`viewScale`)). On main before the 2001 targets'
+merge (three rows to six, every new row on pal) it rewrites 194 `LN(` in 20 files and nothing else.
+It belongs to the spelling commit before the merge only.
 
 ### Merging upstream
 
@@ -504,12 +554,14 @@ against one converted line, and the next merge has an upstream commit as its bas
 2. From the port's tree, `python3 tools/region_blocks.py report --root ../ico-upconv --bits` for
    `config/motion_bits.<slug>.txt` and `report --root ../ico-upconv` for the hand list, then
    `convert --root ../ico-upconv` (a root without `config/regions.txt` takes the port's,
-   `need_regions`, and one without `config/region_twins.txt` the port's twins, `need_twins`), then `clang-format -i --style=file:<port>/.clang-format` from the port's venv
-   over the files it changed, and commit there with `--no-verify` (upstream's tree has no
-   `region.h`, and its hooks are upstream's).
+   `need_regions`, and one without `config/region_twins.txt` the port's twins, `need_twins`; it
+   writes that tree's `region.h` with the forms its converted code names), then `clang-format -i --style=file:<port>/.clang-format` from the port's venv
+   over the files it changed, and commit there with `--no-verify` (upstream's `typedef.h` does
+   not include `region.h`, and its hooks are upstream's).
 3. Merge with an explicit base, so that a change of spelling on main (a target joining) is not a
-   conflict at every site. On a branch from `main`: if the table gained a row sharing the Japanese
-   arm, `tools/region_blocks.py rename` and `gen-header` first, committed alone (spelling only).
+   conflict at every site. On a branch from `main`: if the table gained rows, `tools/region_blocks.py rename`
+   (with `--base` naming a new row's base when it is not pal) and `gen-header` first, committed alone
+   (spelling only).
    Then B, the previous upstream base (the merge base of `main` and upstream/main) converted with
    the current table and renamed the same way, in its own worktree and committed with
    `--no-verify`; T, upstream/main converted (steps 1 and 2). For `ico2/` and `sce/`, a three-way
@@ -564,8 +616,9 @@ against one converted line, and the next merge has an upstream commit as its bas
 
 1. Add the row to `config/regions.txt` (slug, upstream macro, disc id, boot ELF, product name) and
    run `tools/region_blocks.py gen-header` and `gen-table`: `region.h` gains `ICO_REGION_<SLUG>`,
-   `ICO_<SLUG>` and the selectors naming the new row, `port/core/region_table.c` the row's entry;
-   nothing existing changes. From here `check` names each missing piece with its step.
+   `ICO_<SLUG>` and `LN`'s one more argument (the selectors and sets naming the new row come as the
+   converted code names them: `convert` runs `gen-header`), `port/core/region_table.c` the row's
+   entry; no selector changes, and `rename` (step 4) respells the `LN` calls. From here `check` names each missing piece with its step.
 2. `port/core/region_<slug>.c` with `const IcoRegionInfo ico_region_info_<slug>` (its numbers
    resolved by name against that disc's tables, as `region_jpn.c` documents per field), listed in
    `port/core/CMakeLists.txt` and declared in `port/core/region.h`; the disc row and manifest, the
@@ -583,8 +636,9 @@ against one converted line, and the next merge has an upstream commit as its bas
    differ ([DATA.md](DATA.md)).
 4. Game code: the merge above. Upstream's `#elif defined(VERSION_<SLUG>)` arms convert to the new
    selectors and to `else if (ICO_<SLUG>)` chains, arms shared with another row to the set's
-   selectors and predicate (`PAL_JPNKOR`, `ICO_JPNKOR`); a row that shares the Japanese arm first
-   takes `rename` on main (step 3). The hand list takes the same patterns, twins with `_<set>`
+   selectors and predicate (`PAL_JPNKOR`, `ICO_JPNKOR`); every new row first takes `rename` on main
+   (step 3) with its base (`pal` for a target that is PAL's text with its own lines, as the three
+   2001 targets are; the Korean row's was `jpn`). The hand list takes the same patterns, twins with `_<set>`
    names.
 5. The per-region tests take the slug as a parameter and gain one `add_test` line each; a strings
    table only when the target brings a menu language.
