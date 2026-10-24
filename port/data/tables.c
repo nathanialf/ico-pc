@@ -164,7 +164,11 @@ static const IcoEeObject *find_object(const IcoTableSet *set, uint32_t addr)
     return NULL;
 }
 
-/* An object pointer word: the member's string pool first, then the registry. */
+/* An object pointer word: the member's string pool first, then the registry,
+   then a record of one of the set's tables (the June 2001 demo's enemy sets
+   point into each other's tables, which have no registry objects:
+   gen_data_desc.py --manifest checks each such word points at a record's
+   start): that record of the host array. */
 static void *resolve_data(const IcoTableSet *set, const IcoTableRow *row, uint32_t v)
 {
     const IcoTableRow *p;
@@ -177,7 +181,22 @@ static void *resolve_data(const IcoTableSet *set, const IcoTableRow *row, uint32
         }
     }
     o = find_object(set, v);
-    return o != NULL ? o->obj : NULL;
+    if (o != NULL) {
+        return o->obj;
+    }
+    for (p = set->rows; p < set->rows + set->row_count; p++) {
+        uint32_t lo = p->ee_lo + p->start, off;
+
+        if (p->record == NULL || v < lo || v - lo >= p->count * p->record->ee_size) {
+            continue;
+        }
+        off = v - lo;
+        if (off % p->record->ee_size != 0) {
+            return NULL;
+        }
+        return (char *)p->host + (size_t)(off / p->record->ee_size) * p->record->host_size;
+    }
+    return NULL;
 }
 
 static int decode_record(const IcoTableSet *set, const IcoTableRow *row, uint32_t index,
