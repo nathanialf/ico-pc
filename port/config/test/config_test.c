@@ -479,19 +479,30 @@ static void test_first_run(void)
     CHECK(text != NULL && strstr(text, "Edit layout") != NULL && strstr(text, "\n[touch") == NULL);
     CHECK(ico_config_get_string("touch.snap", NULL) == NULL);
     CHECK(ico_config_get_string("touch.full.cross", NULL) == NULL);
+    CHECK(ico_config_get_string("touch.format", NULL) == NULL);
+    /* the comments name the format key, the 0.7 to 3.0 size and both words */
+    CHECK(text != NULL && strstr(text, "with format = 2 (the editor writes it") != NULL &&
+          strstr(text, "(s, 0.7 to 3.0)") != NULL &&
+          strstr(text, "\"hidden\" keeps a button working but does not draw it") != NULL &&
+          strstr(text, "\"off\" switches it") != NULL && strstr(text, "1.6") == NULL);
     /* a two-dot path is a nested table: touch.full.cross lands in [touch.full],
        after the first-run comments */
     ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_set_int("touch.format", 2) == 0);
     CHECK(ico_config_set_string("touch.full.cross", "r20 b10.5 s1.00 o100") == 0);
+    CHECK(ico_config_set_string("touch.full.dpad", "l8.4 b8.4 s3.00 off") == 0);
     CHECK(ico_config_save() == 0);
     {
         char *saved = read_file(toml);
-        CHECK(saved != NULL &&
-              strstr(saved, "[touch.full]\ncross = \"r20 b10.5 s1.00 o100\"") != NULL);
+        CHECK(saved != NULL && strstr(saved, "[touch]\nformat = 2\n") != NULL &&
+              strstr(saved, "[touch.full]\ncross = \"r20 b10.5 s1.00 o100\"\n"
+                            "dpad = \"l8.4 b8.4 s3.00 off\"") != NULL);
         free(saved);
     }
     ico_config_reset(toml, "no-such.ini");
     CHECK_STR(ico_config_get_string("touch.full.cross", "?"), "r20 b10.5 s1.00 o100");
+    CHECK_STR(ico_config_get_string("touch.full.dpad", "?"), "l8.4 b8.4 s3.00 off");
+    CHECK(ico_config_get_int("touch.format", 0) == 2);
     remove(toml);
     ico_config_reset(toml, "no-such.ini");
     CHECK(ico_config_write_first_run() == 0);

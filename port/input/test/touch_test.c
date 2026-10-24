@@ -843,17 +843,18 @@ static void test_buttons(void)
     CHECK(step(&t, 1 * S).buttons == ICO_PAD_START);
     ico_touch_event(&t, 0, 0.0f, 0.0f, ICO_TOUCH_CANCEL, 1 * S);
 
-    /* a hidden button (the edits' alpha 0) is under no finger: L2 hidden,
-       a finger on its spot presses nothing (no area is there either) */
+    /* an Off button (the edits' alpha 0, active 0) is under no finger: L2
+       Off, a finger on its spot presses nothing (no area is there either) */
     {
         IcoTouchEdits e;
         IcoTouchLayout h;
 
         ico_touch_edits_defaults(&e);
         CHECK(ico_touch_edit_parse(&e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_L2], ICO_TOUCH_CTL_L2,
-                                   "hidden") == 0);
+                                   "off") == 0);
         h = ico_touch_layout_edits(1920, 1080, no_insets(), ICO_TOUCH_LARGE, NULL, &e);
         CHECK(h.button[ICO_TOUCH_B_L2].alpha == 0.0f && h.button[ICO_TOUCH_B_L1].alpha == 1.0f);
+        CHECK(!h.button[ICO_TOUCH_B_L2].active && h.button[ICO_TOUCH_B_L1].active);
         CHECK(memcmp(&h.button[ICO_TOUCH_B_L2].rect, &l.button[ICO_TOUCH_B_L2].rect,
                      sizeof(IcoTouchRect)) == 0);
         g_l = &h;
@@ -1288,6 +1289,120 @@ static void test_gamepad_drop(void)
           ico_touch_mode_opacity(&t, ICO_TOUCH_MODE_AUTO, 0, 6 * S) > 0.99f);
 }
 
+/* Hidden (alpha 0, still taking touches) against Off (neither), on the
+   mapper: a Hidden button hits and an Off one does not, a Hidden stick or
+   look pad starts as a shown one, an Off one starts nothing; what a finger
+   is taken by (ico_touch_takes), each control's state, and when the menus
+   take taps (the D-pad, Cross or Circle Off: ico_touch_menu_taps) */
+static void test_hidden_off(void)
+{
+    static const struct {
+        int ctl;
+        const char *name;
+    } kAll[] = {{ICO_TOUCH_CTL_DPAD, "dpad"},
+                {ICO_TOUCH_CTL_CROSS, "cross"},
+                {ICO_TOUCH_CTL_CIRCLE, "circle"},
+                {ICO_TOUCH_CTL_SQUARE, "square"},
+                {ICO_TOUCH_CTL_TRIANGLE, "triangle"},
+                {ICO_TOUCH_CTL_R1, "r1"},
+                {ICO_TOUCH_CTL_L1, "l1"},
+                {ICO_TOUCH_CTL_L2, "l2"},
+                {ICO_TOUCH_CTL_R2, "r2"},
+                {ICO_TOUCH_CTL_SELECT, "select"},
+                {ICO_TOUCH_CTL_START, "start"},
+                {ICO_TOUCH_CTL_STICK, "stick"},
+                {ICO_TOUCH_CTL_LOOK, "look"}};
+
+    const IcoTouchLayout base = ico_touch_layout(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM);
+    IcoTouchEdits e;
+    IcoTouchLayout l;
+    IcoTouchState t;
+    IcoVirtualPad v;
+    float x, y;
+    unsigned i;
+    int k;
+
+    for (k = 0; k < ICO_TOUCH_CTL_COUNT; k++) {
+        CHECK(ico_touch_ctl_state(&base, k) == ICO_TOUCH_SHOWN);
+    }
+    CHECK(ico_touch_ctl_state(&base, -1) == ICO_TOUCH_SHOWN && !ico_touch_menu_taps(&base));
+    centre_of(&base, ICO_TOUCH_B_START, &x, &y);
+    CHECK(ico_touch_takes(&base, x, y) && ico_touch_takes(&base, base.stickHomeX, base.stickHomeY));
+
+    /* Start Hidden presses Start; Off presses nothing */
+    for (k = 0; k < 2; k++) {
+        ico_touch_edits_defaults(&e);
+        CHECK(ico_touch_edit_parse(&e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_START],
+                                   ICO_TOUCH_CTL_START, k == 0 ? "hidden" : "off") == 0);
+        l = ico_touch_layout_edits(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM, NULL, &e);
+        g_l = &l;
+        CHECK(l.button[ICO_TOUCH_B_START].alpha == 0.0f &&
+              l.button[ICO_TOUCH_B_START].active == (k == 0));
+        CHECK(ico_touch_ctl_state(&l, ICO_TOUCH_CTL_START) ==
+              (k == 0 ? ICO_TOUCH_HIDDEN : ICO_TOUCH_OFF));
+        CHECK(!ico_touch_menu_taps(&l)); /* Start Off: Back is Start */
+        memset(&t, 0, sizeof(t));
+        ico_touch_reset(&t, 1 * S);
+        ev(&t, 1, x, y, ICO_TOUCH_DOWN, 1 * S);
+        v = step(&t, 1 * S);
+        CHECK(v.buttons == (k == 0 ? ICO_PAD_START : 0u) && v.menu_buttons == v.buttons);
+        /* taken either way: Hidden by Start, Off by the look pad's area under it */
+        CHECK(ico_touch_takes(&l, x, y));
+    }
+
+    /* the stick and the look pad: Hidden starts them, Off does not */
+    for (k = 0; k < 2; k++) {
+        ico_touch_edits_defaults(&e);
+        CHECK(ico_touch_edit_parse(&e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_STICK],
+                                   ICO_TOUCH_CTL_STICK, k == 0 ? "hidden" : "off") == 0);
+        CHECK(ico_touch_edit_parse(&e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_LOOK],
+                                   ICO_TOUCH_CTL_LOOK,
+                                   k == 0 ? "l50 t0 w60 h30 hidden" : "l50 t0 w60 h30 off") == 0);
+        l = ico_touch_layout_edits(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM, NULL, &e);
+        g_l = &l;
+        CHECK(l.stickActive == (k == 0) && l.lookActive == (k == 0) && l.stickAlpha == 0.0f &&
+              l.lookAlpha == 0.0f);
+        memset(&t, 0, sizeof(t));
+        ico_touch_reset(&t, 1 * S);
+        ev(&t, 1, l.stickHomeX, l.stickHomeY, ICO_TOUCH_DOWN, 1 * S);
+        ev(&t, 1, l.stickHomeX + 0.5f * l.stickR, l.stickHomeY, ICO_TOUCH_MOVE, 1 * S);
+        x = l.lookArea.x + 0.5f * l.lookArea.w;
+        y = l.lookArea.y + 0.5f * l.lookArea.h;
+        ev(&t, 2, x, y, ICO_TOUCH_DOWN, 1 * S);
+        ev(&t, 2, x, y + l.lookR, ICO_TOUCH_MOVE, 1 * S);
+        v = step(&t, 1 * S);
+        if (k == 0) {
+            CHECK(near_(v.lx, 0.5f, 0.002f) && near_(v.ry, 1.0f, 0.002f) && t.stickActive &&
+                  t.lookActive);
+        } else {
+            CHECK(v.lx == 0.0f && v.ry == 0.0f && !t.stickActive && !t.lookActive);
+            CHECK(!ico_touch_takes(&l, l.stickHomeX, l.stickHomeY) && !ico_touch_takes(&l, x, y));
+        }
+    }
+
+    /* the menus take taps with the D-pad, Cross or Circle Off, not for any
+       other control Off or for those three Hidden */
+    for (i = 0; i < sizeof(kAll) / sizeof(kAll[0]); i++) {
+        const int menu = kAll[i].ctl == ICO_TOUCH_CTL_DPAD || kAll[i].ctl == ICO_TOUCH_CTL_CROSS ||
+                         kAll[i].ctl == ICO_TOUCH_CTL_CIRCLE;
+
+        CHECK(strcmp(ico_touch_ctl_name(kAll[i].ctl), kAll[i].name) == 0);
+        ico_touch_edits_defaults(&e);
+        CHECK(ico_touch_edit_parse(&e.ctl[ICO_TOUCH_RULE_FULL][kAll[i].ctl], kAll[i].ctl, "off") ==
+              0);
+        l = ico_touch_layout_edits(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM, NULL, &e);
+        CHECK(ico_touch_ctl_state(&l, kAll[i].ctl) == ICO_TOUCH_OFF);
+        if (ico_touch_menu_taps(&l) != menu) {
+            fprintf(stderr, "  %s off: menu taps %d\n", kAll[i].name, ico_touch_menu_taps(&l));
+            CHECK(0);
+        }
+        CHECK(ico_touch_edit_parse(&e.ctl[ICO_TOUCH_RULE_FULL][kAll[i].ctl], kAll[i].ctl,
+                                   "hidden") == 0);
+        l = ico_touch_layout_edits(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM, NULL, &e);
+        CHECK(ico_touch_ctl_state(&l, kAll[i].ctl) == ICO_TOUCH_HIDDEN && !ico_touch_menu_taps(&l));
+    }
+}
+
 int main(void)
 {
     test_layouts();
@@ -1300,6 +1415,7 @@ int main(void)
     test_merged_frame();
     test_stick_every_direction();
     test_gamepad_drop();
+    test_hidden_off();
     if (failures != 0) {
         fprintf(stderr, "touch_test: %d failure(s)\n", failures);
         return 1;

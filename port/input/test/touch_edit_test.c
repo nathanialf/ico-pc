@@ -146,13 +146,14 @@ static const char *layout_diff(const IcoTouchLayout *a, const IcoTouchLayout *b)
         const IcoTouchButton *p = &a->button[z], *q = &b->button[z];
 
         if (!same_rect(p->rect, q->rect) || p->round != q->round || p->pad != q->pad ||
-            p->alpha != q->alpha) {
+            p->alpha != q->alpha || p->active != q->active) {
             snprintf(buf, sizeof(buf), "button %d", z);
             return buf;
         }
     }
-    if (a->stickAlpha != b->stickAlpha || a->lookAlpha != b->lookAlpha) {
-        return "stickAlpha/lookAlpha";
+    if (a->stickAlpha != b->stickAlpha || a->lookAlpha != b->lookAlpha ||
+        a->stickActive != b->stickActive || a->lookActive != b->lookActive) {
+        return "stickAlpha/lookAlpha/stickActive/lookActive";
     }
     if (a->editGen != b->editGen) {
         return "editGen";
@@ -187,9 +188,10 @@ static void test_defaults(void)
             env.fold = s->fold;
             base = ico_touch_layout_env(s->w, s->h, s->insets, sz, &env);
             for (z = 0; z < ICO_TOUCH_BUTTONS; z++) {
-                CHECK(base.button[z].alpha == 1.0f);
+                CHECK(base.button[z].alpha == 1.0f && base.button[z].active == 1);
             }
             CHECK(base.stickAlpha == 1.0f && base.lookAlpha == 1.0f && base.editGen == 0);
+            CHECK(base.stickActive == 1 && base.lookActive == 1);
 
             l = shape_layout(s, sz, NULL);
             d = layout_diff(&l, &base);
@@ -216,6 +218,8 @@ static void test_defaults(void)
                     set_edit(&e, p, ICO_TOUCH_CTL_CROSS, "l30 t30 s1.40 o50");
                     set_edit(&e, p, ICO_TOUCH_CTL_LOOK, "hidden");
                     set_edit(&e, p, ICO_TOUCH_CTL_DPAD, "r40 b30");
+                    set_edit(&e, p, ICO_TOUCH_CTL_START, "off");
+                    set_edit(&e, p, ICO_TOUCH_CTL_STICK, "l30 b20 s3.00 hidden");
                 }
             }
             l = shape_layout(s, sz, &e);
@@ -441,11 +445,6 @@ static IcoVirtualPad finger_at(const IcoTouchLayout *l, float x, float y, float 
 
 static void test_hidden(void)
 {
-    static const int never[] = {ICO_TOUCH_CTL_DPAD,   ICO_TOUCH_CTL_CROSS,    ICO_TOUCH_CTL_CIRCLE,
-                                ICO_TOUCH_CTL_SQUARE, ICO_TOUCH_CTL_TRIANGLE, ICO_TOUCH_CTL_R1,
-                                ICO_TOUCH_CTL_START,  ICO_TOUCH_CTL_STICK};
-    static const int may[] = {ICO_TOUCH_CTL_SELECT, ICO_TOUCH_CTL_L1, ICO_TOUCH_CTL_L2,
-                              ICO_TOUCH_CTL_R2, ICO_TOUCH_CTL_LOOK};
     volatile float zero = 0.0f;
     IcoTouchEdits e;
     IcoTouchCtlEdit c;
@@ -453,48 +452,49 @@ static void test_hidden(void)
     IcoVirtualPad v;
     int i;
 
-    /* the rails: the protected eight cannot be hidden, the other five can */
-    for (i = 0; i < (int)(sizeof(never) / sizeof(never[0])); i++) {
+    /* no protected set: every control can be Hidden ("hidden": not drawn,
+       still works) and Off ("off": neither), at its default place */
+    CHECK(!ico_touch_ctl_hideable(-1) && !ico_touch_ctl_hideable(ICO_TOUCH_CTL_COUNT));
+    for (i = 0; i < ICO_TOUCH_CTL_COUNT; i++) {
+        CHECK(ico_touch_ctl_hideable(i));
         memset(&c, 0x5A, sizeof(c));
-        CHECK(!ico_touch_ctl_hideable(never[i]));
-        CHECK(ico_touch_edit_parse(&c, never[i], "hidden") == -1 && c.set == 0);
-    }
-    for (i = 0; i < (int)(sizeof(may) / sizeof(may[0])); i++) {
-        CHECK(ico_touch_ctl_hideable(may[i]));
-        CHECK(ico_touch_edit_parse(&c, may[i], "hidden") == 0 && c.set && c.alpha == 0.0f);
+        CHECK(ico_touch_edit_parse(&c, i, "hidden") == 0 && c.set && c.alpha == 0.0f &&
+              c.active == 1);
+        CHECK(c.ax == ICO_TOUCH_ANCHOR_DEFAULT && c.ay == ICO_TOUCH_ANCHOR_DEFAULT);
+        memset(&c, 0x5A, sizeof(c));
+        CHECK(ico_touch_edit_parse(&c, i, "off") == 0 && c.set && c.alpha == 0.0f && c.active == 0);
         CHECK(c.ax == ICO_TOUCH_ANCHOR_DEFAULT && c.ay == ICO_TOUCH_ANCHOR_DEFAULT);
     }
 
-    /* sanitize */
+    /* sanitize: no opacity floor on any control; a drawn control works */
     memset(&c, 0, sizeof(c));
     c.set = 1;
     c.alpha = 0.1f;
-    c.scale = 3.0f;
+    c.scale = 4.0f;
     c.dx = -3.0f;
     c.ax = 7;
     c.w = 30.0f;
     ico_touch_edit_sanitize(&c, ICO_TOUCH_CTL_CROSS);
-    CHECK(c.alpha == ICO_TOUCH_EDIT_ALPHA_MIN && c.scale == ICO_TOUCH_EDIT_SCALE_MAX);
+    CHECK(near_(c.alpha, 0.1f, 1e-6f) && c.active == 1 && c.scale == ICO_TOUCH_EDIT_SCALE_MAX);
     /* a negative offset is kept (past the safe area); not a number is 0; far out is the rail */
     CHECK(c.dx == -3.0f && c.ax == ICO_TOUCH_ANCHOR_DEFAULT && c.w == 0.0f);
     c.dx = zero / zero;
     c.dy = -900.0f;
     ico_touch_edit_sanitize(&c, ICO_TOUCH_CTL_CROSS);
     CHECK(c.dx == 0.0f && c.dy == -ICO_TOUCH_EDIT_OFFSET_MAX);
-    c.alpha = 0.1f;
-    c.scale = 3.0f;
-    ico_touch_edit_sanitize(&c, ICO_TOUCH_CTL_CROSS);
     c.alpha = 0.0f;
+    c.active = 0;
     c.scale = 0.1f;
     ico_touch_edit_sanitize(&c, ICO_TOUCH_CTL_CROSS);
-    CHECK(c.alpha == 0.25f && c.scale == ICO_TOUCH_EDIT_SCALE_MIN);
-    c.alpha = 0.0f;
-    ico_touch_edit_sanitize(&c, ICO_TOUCH_CTL_SELECT);
-    CHECK(c.alpha == 0.0f);
+    CHECK(c.alpha == 0.0f && c.active == 0 && c.scale == ICO_TOUCH_EDIT_SCALE_MIN); /* Off */
+    c.active = 1;
+    ico_touch_edit_sanitize(&c, ICO_TOUCH_CTL_DPAD);
+    CHECK(c.alpha == 0.0f && c.active == 1); /* Hidden */
+    c.active = 0;
     c.alpha = 1.5f;
     c.scale = zero / zero; /* not a number */
     ico_touch_edit_sanitize(&c, ICO_TOUCH_CTL_SELECT);
-    CHECK(c.alpha == 1.0f && c.scale == 1.0f);
+    CHECK(c.alpha == 1.0f && c.scale == 1.0f && c.active == 1);
     c.w = 5.0f;
     c.h = 0.0f;
     ico_touch_edit_sanitize(&c, ICO_TOUCH_CTL_LOOK);
@@ -502,39 +502,77 @@ static void test_hidden(void)
     memset(&c, 0, sizeof(c));
     c.alpha = 0.0f; /* unset: left alone */
     ico_touch_edit_sanitize(&c, ICO_TOUCH_CTL_CROSS);
-    CHECK(c.set == 0 && c.alpha == 0.0f);
+    CHECK(c.set == 0 && c.alpha == 0.0f && c.active == 0);
 
-    /* L2 hidden: drawn nowhere, its spot presses nothing; the rest as before */
+    /* L2 Off: drawn nowhere, its spot presses nothing; the rest as before */
     ico_touch_edits_defaults(&e);
-    set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_L2, "hidden");
+    set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_L2, "off");
     l = ico_touch_layout_edits(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM, NULL, &e);
-    CHECK(l.button[ICO_TOUCH_B_L2].alpha == 0.0f);
+    CHECK(l.button[ICO_TOUCH_B_L2].alpha == 0.0f && l.button[ICO_TOUCH_B_L2].active == 0);
+    CHECK(ico_touch_ctl_state(&l, ICO_TOUCH_CTL_L2) == ICO_TOUCH_OFF);
     CHECK(same_rect(l.button[ICO_TOUCH_B_L2].rect, base.button[ICO_TOUCH_B_L2].rect));
     v = finger_at(&base, cx_of(&base, ICO_TOUCH_B_L2), cy_of(&base, ICO_TOUCH_B_L2), 0, 0);
     CHECK(v.buttons == ICO_PAD_L2);
     v = finger_at(&l, cx_of(&l, ICO_TOUCH_B_L2), cy_of(&l, ICO_TOUCH_B_L2), 0, 0);
     CHECK(v.buttons == 0 && v.lx == 0.0f && v.rx == 0.0f);
     l.button[ICO_TOUCH_B_L2].alpha = 1.0f;
+    l.button[ICO_TOUCH_B_L2].active = 1;
     l.editGen = 0;
     CHECK(layout_diff(&l, &base) == NULL);
+    /* L2 Hidden: drawn nowhere, its spot still presses L2 */
+    set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_L2, "hidden");
+    l = ico_touch_layout_edits(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM, NULL, &e);
+    CHECK(l.button[ICO_TOUCH_B_L2].alpha == 0.0f && l.button[ICO_TOUCH_B_L2].active == 1);
+    CHECK(ico_touch_ctl_state(&l, ICO_TOUCH_CTL_L2) == ICO_TOUCH_HIDDEN);
+    v = finger_at(&l, cx_of(&l, ICO_TOUCH_B_L2), cy_of(&l, ICO_TOUCH_B_L2), 0, 0);
+    CHECK(v.buttons == ICO_PAD_L2);
+    /* the D-pad Hidden: its four keys still press; Off: none does */
+    set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_DPAD, "hidden");
+    l = ico_touch_layout_edits(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM, NULL, &e);
+    CHECK(ico_touch_ctl_state(&l, ICO_TOUCH_CTL_DPAD) == ICO_TOUCH_HIDDEN);
+    v = finger_at(&l, cx_of(&l, ICO_TOUCH_B_LEFT), cy_of(&l, ICO_TOUCH_B_LEFT), 0, 0);
+    CHECK(v.buttons == ICO_PAD_LEFT);
+    set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_DPAD, "r40 b30 s1.20 off");
+    l = ico_touch_layout_edits(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM, NULL, &e);
+    CHECK(ico_touch_ctl_state(&l, ICO_TOUCH_CTL_DPAD) == ICO_TOUCH_OFF);
+    for (i = ICO_TOUCH_B_UP; i <= ICO_TOUCH_B_RIGHT; i++) {
+        CHECK(l.button[i].alpha == 0.0f && l.button[i].active == 0);
+        v = finger_at(&l, cx_of(&l, i), cy_of(&l, i), 0, 0);
+        CHECK(v.buttons == 0);
+    }
+    /* Off moved: it is where the line puts it (shown again, it is there) */
+    CHECK(near_(l.dpadX, 1920.0f - 40.0f * l.unit, 0.02f));
 
-    /* the look pad hidden: a finger on it does nothing */
+    /* the look pad Off: a finger on it does nothing; Hidden: it looks */
     v = finger_at(&base, 1100.0f, 300.0f, base.lookR, 0.0f);
     CHECK(near_(v.rx, 1.0f, 0.002f) && v.buttons == 0);
-    set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_LOOK, "hidden");
+    ico_touch_edits_defaults(&e);
+    set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_LOOK, "off");
     l = ico_touch_layout_edits(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM, NULL, &e);
-    CHECK(l.lookAlpha == 0.0f && same_rect(l.lookArea, base.lookArea));
+    CHECK(l.lookAlpha == 0.0f && l.lookActive == 0 && same_rect(l.lookArea, base.lookArea));
     v = finger_at(&l, 1100.0f, 300.0f, l.lookR, 0.0f);
     CHECK(v.rx == 0.0f && v.ry == 0.0f && v.buttons == 0);
+    set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_LOOK, "hidden");
+    l = ico_touch_layout_edits(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM, NULL, &e);
+    CHECK(l.lookAlpha == 0.0f && l.lookActive == 1);
+    v = finger_at(&l, 1100.0f, 300.0f, l.lookR, 0.0f);
+    CHECK(near_(v.rx, 1.0f, 0.002f) && v.buttons == 0);
 
-    /* the step skips a stick area at alpha 0 (the rails never give one; the
-       layout's contract still holds) */
+    /* the stick: Off starts nothing, Hidden starts it as shown */
     l = base;
     v = finger_at(&l, l.stickHomeX, l.stickHomeY, 0.5f * l.stickR, 0.0f);
     CHECK(near_(v.lx, 0.5f, 0.002f));
-    l.stickAlpha = 0.0f;
+    ico_touch_edits_defaults(&e);
+    set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_STICK, "off");
+    l = ico_touch_layout_edits(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM, NULL, &e);
+    CHECK(l.stickAlpha == 0.0f && l.stickActive == 0);
     v = finger_at(&l, l.stickHomeX, l.stickHomeY, 0.5f * l.stickR, 0.0f);
     CHECK(v.lx == 0.0f && v.ly == 0.0f);
+    set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_STICK, "hidden");
+    l = ico_touch_layout_edits(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM, NULL, &e);
+    CHECK(l.stickAlpha == 0.0f && l.stickActive == 1);
+    v = finger_at(&l, l.stickHomeX, l.stickHomeY, 0.5f * l.stickR, 0.0f);
+    CHECK(near_(v.lx, 0.5f, 0.002f));
 }
 
 static void test_stick_look_areas(void)
@@ -609,7 +647,8 @@ static void test_flat_crease(void)
     CHECK(l.rule == ICO_TOUCH_RULE_TABLETOP);
     CHECK(near_(cx_of(&l, ICO_TOUCH_B_CROSS), 2176.0f - 30.0f * l.unit, 0.02f));
     CHECK(near_(cy_of(&l, ICO_TOUCH_B_CROSS), 1812.0f - 10.5f * l.unit, 0.02f));
-    /* a hidden control on the crease does not count; a shown one does */
+    /* an Off control on the crease does not count; a Hidden one does (a
+       finger there would press it unseen), and a shown one */
     ico_touch_edits_defaults(&e);
     {
         IcoTouchCtlEdit *c = &e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_L2];
@@ -621,12 +660,24 @@ static void test_flat_crease(void)
         c->dy = 55.0f;
         c->scale = 1.0f;
         c->alpha = 0.0f;
+        c->active = 0;
         CHECK(ico_touch_layout_edits(2176, 1812, no_insets(), ICO_TOUCH_MEDIUM, &env, &e).rule ==
               ICO_TOUCH_RULE_FULL);
+        c->active = 1;
+        CHECK(ico_touch_layout_edits(2176, 1812, no_insets(), ICO_TOUCH_MEDIUM, &env, &e).rule ==
+              ICO_TOUCH_RULE_TABLETOP);
         c->alpha = 0.5f;
         CHECK(ico_touch_layout_edits(2176, 1812, no_insets(), ICO_TOUCH_MEDIUM, &env, &e).rule ==
               ICO_TOUCH_RULE_TABLETOP);
     }
+    /* the stick Off on the crease: not counted either (its square is) */
+    ico_touch_edits_defaults(&e);
+    set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_STICK, "l24 t55 off");
+    CHECK(ico_touch_layout_edits(2176, 1812, no_insets(), ICO_TOUCH_MEDIUM, &env, &e).rule ==
+          ICO_TOUCH_RULE_FULL);
+    set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_STICK, "l24 t55 hidden");
+    CHECK(ico_touch_layout_edits(2176, 1812, no_insets(), ICO_TOUCH_MEDIUM, &env, &e).rule ==
+          ICO_TOUCH_RULE_TABLETOP);
     /* Large puts R1 on the crease by default; moved off it, FULL stays */
     ico_touch_edits_defaults(&e);
     CHECK(ico_touch_layout_edits(2176, 1812, no_insets(), ICO_TOUCH_LARGE, &env, &e).rule ==
@@ -721,6 +772,14 @@ static void test_text_round_trip(void)
     check_round_trip(ICO_TOUCH_CTL_DPAD, "l12.25 t4 s0.75 o40");
     check_round_trip(ICO_TOUCH_CTL_L2, "hidden");
     check_round_trip(ICO_TOUCH_CTL_LOOK, "hidden");
+    check_round_trip(ICO_TOUCH_CTL_DPAD, "hidden");
+    check_round_trip(ICO_TOUCH_CTL_START, "off");
+    check_round_trip(ICO_TOUCH_CTL_STICK, "off");
+    /* Hidden and Off keep a place and a size: the word after them */
+    check_round_trip(ICO_TOUCH_CTL_START, "r20 t3 s1.50 hidden");
+    check_round_trip(ICO_TOUCH_CTL_DPAD, "l8.4 b8.4 s0.70 off");
+    check_round_trip(ICO_TOUCH_CTL_LOOK, "l50 t0 w60 h30 hidden");
+    check_round_trip(ICO_TOUCH_CTL_CROSS, "r20 b10.5 s3.00 o100");
     /* the optional tokens: s 1 and o 100 when absent; any spacing */
     CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_CROSS, "  r20\tb10.5  ") == 0);
     CHECK(c.set && c.ax == ICO_TOUCH_ANCHOR_R && c.ay == ICO_TOUCH_ANCHOR_B && c.scale == 1.0f &&
@@ -728,18 +787,41 @@ static void test_text_round_trip(void)
     CHECK(strcmp(ico_touch_edit_text(&c, buf, sizeof(buf)), "r20 b10.5 s1.00 o100") == 0);
     CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_CROSS, "b10 o50 l3.5 s1.25") == 0);
     CHECK(strcmp(ico_touch_edit_text(&c, buf, sizeof(buf)), "l3.5 b10 s1.25 o50") == 0);
-    /* "default" is unset; an opacity under the floor is the floor */
+    /* "default" is unset; no opacity floor on any control */
     memset(&c, 0x5A, sizeof(c));
     CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_CROSS, "default") == 0 && c.set == 0);
     CHECK(strcmp(ico_touch_edit_text(&c, buf, sizeof(buf)), "default") == 0);
-    CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_CROSS, "r20 b10 o10") == 0 && c.alpha == 0.25f);
+    CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_CROSS, "r20 b10 o10") == 0 &&
+          near_(c.alpha, 0.1f, 1e-6f) && c.active == 1);
     CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_SELECT, "r20 b10 o10") == 0 &&
           near_(c.alpha, 0.1f, 1e-6f));
-    CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_SELECT, "r20 b10 o0") == 0 && c.alpha == 0.0f);
-    CHECK(strcmp(ico_touch_edit_text(&c, buf, sizeof(buf)), "r20 b10 s1.00 o0") ==
-          0); /* place kept */
+    /* "o0" reads as Hidden (format 2) and is written as the word, the place kept */
+    CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_SELECT, "r20 b10 o0") == 0 && c.alpha == 0.0f &&
+          c.active == 1);
+    CHECK(strcmp(ico_touch_edit_text(&c, buf, sizeof(buf)), "r20 b10 s1.00 hidden") == 0);
+    CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_SELECT, "r20 b10 off") == 0 && c.alpha == 0.0f &&
+          c.active == 0);
+    CHECK(strcmp(ico_touch_edit_text(&c, buf, sizeof(buf)), "r20 b10 s1.00 off") == 0);
     CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_SELECT, "hidden") == 0 && c.alpha == 0.0f);
     CHECK(strcmp(ico_touch_edit_text(&c, buf, sizeof(buf)), "hidden") == 0);
+    CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_CROSS, "off  ") == 0 && c.active == 0);
+    CHECK(strcmp(ico_touch_edit_text(&c, buf, sizeof(buf)), "off") == 0);
+    /* the word anywhere among the tokens */
+    CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_CROSS, "off r20 b10") == 0 && c.active == 0 &&
+          c.ax == ICO_TOUCH_ANCHOR_R);
+    /* a hand-made edit at alpha 0: the word by active, never o0 */
+    memset(&c, 0, sizeof(c));
+    c.set = 1;
+    c.ax = ICO_TOUCH_ANCHOR_L;
+    c.ay = ICO_TOUCH_ANCHOR_T;
+    c.dx = 4.0f;
+    c.dy = 6.0f;
+    c.scale = 1.0f;
+    CHECK(strcmp(ico_touch_edit_text(&c, buf, sizeof(buf)), "l4 t6 s1.00 off") == 0);
+    c.active = 1;
+    CHECK(strcmp(ico_touch_edit_text(&c, buf, sizeof(buf)), "l4 t6 s1.00 hidden") == 0);
+    c.alpha = 0.004f; /* drawn, rounds to 0 %: the word, not o0 */
+    CHECK(strcmp(ico_touch_edit_text(&c, buf, sizeof(buf)), "l4 t6 s1.00 hidden") == 0);
 
     /* bad tokens, out of range, twice, missing anchors */
     check_rejected(ICO_TOUCH_CTL_CROSS, "");
@@ -764,14 +846,20 @@ static void test_text_round_trip(void)
     check_rejected(ICO_TOUCH_CTL_CROSS, "r20 l5 b10");
     check_rejected(ICO_TOUCH_CTL_CROSS, "r20 b10 t5");
     check_rejected(ICO_TOUCH_CTL_CROSS, "r20 b10 s1 s1");
-    check_rejected(ICO_TOUCH_CTL_CROSS, "r20 b10 s1.70");
+    check_rejected(ICO_TOUCH_CTL_CROSS, "r20 b10 s3.10");
     check_rejected(ICO_TOUCH_CTL_CROSS, "r20 b10 s0.60");
     check_rejected(ICO_TOUCH_CTL_CROSS, "r20 b10 o101");
     check_rejected(ICO_TOUCH_CTL_CROSS, "r501 b0");
     check_rejected(ICO_TOUCH_CTL_CROSS, "r20 b10 w30 h30");
-    check_rejected(ICO_TOUCH_CTL_CROSS, "hidden");
     check_rejected(ICO_TOUCH_CTL_L2, "hidden r20");
     check_rejected(ICO_TOUCH_CTL_L2, "default hidden");
+    check_rejected(ICO_TOUCH_CTL_L2, "hidden off");
+    check_rejected(ICO_TOUCH_CTL_L2, "hidden hidden");
+    check_rejected(ICO_TOUCH_CTL_L2, "r20 b10 o50 hidden");
+    check_rejected(ICO_TOUCH_CTL_L2, "r20 b10 off o0");
+    check_rejected(ICO_TOUCH_CTL_L2, "default r20 b10");
+    check_rejected(ICO_TOUCH_CTL_L2, "off b10");
+    check_rejected(ICO_TOUCH_CTL_L2, "Off");
     check_rejected(ICO_TOUCH_CTL_LOOK, "l0 t0 w10 h30");
     check_rejected(ICO_TOUCH_CTL_LOOK, "l0 t0 w600 h30");
     check_rejected(ICO_TOUCH_CTL_LOOK, "l0 t0 w30 w30");
@@ -1027,7 +1115,7 @@ static void test_pinch_and_steppers(void)
     CHECK(near_(g_l.button[ICO_TOUCH_B_CROSS].rect.w, 2.0f * 5.5f * 1.4f * q, 0.01f));
     CHECK(near_(cx_of(&g_l, ICO_TOUCH_B_CROSS), x, 0.05f) &&
           near_(cy_of(&g_l, ICO_TOUCH_B_CROSS), y, 0.05f));
-    /* snapped to 0.05 on release: 1.4 x 1.17 = 1.638 -> clamp 1.6 */
+    /* past the rail: 1.4 x 3 = 4.2 -> clamp 3.0 */
     fe(&ed, 1, x, y, ICO_TOUCH_DOWN);
     fe(&ed, 2, x + 100.0f, y, ICO_TOUCH_DOWN);
     etick(&ed, 0);
@@ -1039,35 +1127,52 @@ static void test_pinch_and_steppers(void)
     fe(&ed, 1, x, y, ICO_TOUCH_DOWN);
     fe(&ed, 2, x + 100.0f, y, ICO_TOUCH_DOWN);
     etick(&ed, 0);
-    fe(&ed, 2, x + 92.0f, y, ICO_TOUCH_MOVE); /* 1.6 x 0.92 = 1.472 -> 1.45 */
+    fe(&ed, 2, x + 92.0f, y, ICO_TOUCH_MOVE); /* 3.0 x 0.92 = 2.76 -> 2.75 on release */
     fe(&ed, 2, x + 92.0f, y, ICO_TOUCH_UP);
     fe(&ed, 1, x, y, ICO_TOUCH_UP);
     etick(&ed, 0);
-    CHECK(near_(cross->scale, 1.45f, 1e-5f) && ed.undos == 3);
+    CHECK(near_(cross->scale, 2.75f, 1e-5f) && ed.undos == 3);
 
-    /* the size steps (the gamepad's R2/L2): 0.1 within 0.7..1.6, a step
+    /* the size steps (the gamepad's R2/L2): 0.1 within 0.7..3.0, a step
        that changes nothing pushes no undo */
     size_step(&ed, 1);
-    CHECK(near_(cross->scale, 1.55f, 1e-5f) && ed.undos == 4);
+    CHECK(near_(cross->scale, 2.85f, 1e-5f) && ed.undos == 4);
     size_step(&ed, 1);
-    CHECK(near_(cross->scale, 1.6f, 1e-5f) && ed.undos == 5);
+    CHECK(near_(cross->scale, 2.95f, 1e-5f) && ed.undos == 5);
     size_step(&ed, 1);
-    CHECK(near_(cross->scale, 1.6f, 1e-5f) && ed.undos == 5);
+    CHECK(near_(cross->scale, 3.0f, 1e-5f) && ed.undos == 6);
+    size_step(&ed, 1);
+    CHECK(near_(cross->scale, 3.0f, 1e-5f) && ed.undos == 6);
     size_step(&ed, -1);
-    CHECK(near_(cross->scale, 1.5f, 1e-5f) && ed.selected == ICO_TOUCH_CTL_CROSS);
+    CHECK(near_(cross->scale, 2.9f, 1e-5f) && ed.selected == ICO_TOUCH_CTL_CROSS);
 
-    /* opacity: 10 % steps, Cross stops at 25 % */
-    for (i = 0; i < 10; i++) {
+    /* opacity: 10 % steps down to 10 %, then Hidden, then Off; up the same
+       way back, Hidden coming back at 10 % */
+    for (i = 0; i < 9; i++) {
         tap_key(&ed, ICO_TOUCH_ED_TB_OP_DN);
     }
-    CHECK(cross->alpha == 0.25f);
+    CHECK(near_(cross->alpha, 0.1f, 1e-5f) && cross->active == 1);
+    tap_key(&ed, ICO_TOUCH_ED_TB_OP_DN);
+    CHECK(cross->alpha == 0.0f && cross->active == 1); /* Hidden */
+    CHECK(ico_touch_ctl_state(&g_l, ICO_TOUCH_CTL_CROSS) == ICO_TOUCH_HIDDEN);
+    tap_key(&ed, ICO_TOUCH_ED_TB_OP_DN);
+    CHECK(cross->alpha == 0.0f && cross->active == 0); /* Off */
+    CHECK(ico_touch_ctl_state(&g_l, ICO_TOUCH_CTL_CROSS) == ICO_TOUCH_OFF);
+    i = ed.undos;
+    tap_key(&ed, ICO_TOUCH_ED_TB_OP_DN); /* Off stays Off: nothing to undo */
+    CHECK(cross->alpha == 0.0f && cross->active == 0 && ed.undos == i);
     tap_key(&ed, ICO_TOUCH_ED_TB_OP_UP);
-    CHECK(near_(cross->alpha, 0.35f, 1e-5f));
-    CHECK(near_(g_l.button[ICO_TOUCH_B_CROSS].alpha, 0.35f, 1e-5f));
+    CHECK(cross->alpha == 0.0f && cross->active == 1); /* Hidden */
+    tap_key(&ed, ICO_TOUCH_ED_TB_OP_UP);
+    CHECK(near_(cross->alpha, 0.1f, 1e-5f) && cross->active == 1);
+    tap_key(&ed, ICO_TOUCH_ED_TB_OP_UP);
+    CHECK(near_(cross->alpha, 0.2f, 1e-5f));
+    CHECK(near_(g_l.button[ICO_TOUCH_B_CROSS].alpha, 0.2f, 1e-5f));
     ico_touch_edit_view(&ed, &g_l, &v);
     CHECK(v.active && v.rule == ICO_TOUCH_RULE_FULL && v.selected == ICO_TOUCH_CTL_CROSS);
-    CHECK(near_(v.selScale, 1.5f, 1e-5f) && near_(v.selAlpha, 0.35f, 1e-5f));
-    CHECK(v.snap == 1 && v.grid == 4.0f && v.hidden == 0 && v.undos == ed.undos && v.changed);
+    CHECK(near_(v.selScale, 2.9f, 1e-5f) && near_(v.selAlpha, 0.2f, 1e-5f) && v.selActive);
+    CHECK(v.snap == 1 && v.grid == 4.0f && v.hidden == 0 && v.off == 0 && v.undos == ed.undos &&
+          v.changed);
     ico_touch_edit_toolbar(&g_l, tb, cf);
     CHECK(same_rect(v.tb[0], tb[0]) &&
           same_rect(v.tb[ICO_TOUCH_ED_TB_COUNT - 1], tb[ICO_TOUCH_ED_TB_COUNT - 1]) &&
@@ -1077,7 +1182,7 @@ static void test_pinch_and_steppers(void)
     CHECK(near_(v.ctl[ICO_TOUCH_CTL_DPAD].w, 24.0f * q, 0.01f));
     CHECK(near_(v.ctl[ICO_TOUCH_CTL_STICK].w, 2.0f * g_l.stickR, 0.01f));
 
-    /* Select reaches Hidden */
+    /* Select reaches Hidden, then Off */
     tap(&ed, cx_of(&g_l, ICO_TOUCH_B_SELECT), cy_of(&g_l, ICO_TOUCH_B_SELECT));
     etick(&ed, 0);
     CHECK(ed.selected == ICO_TOUCH_CTL_SELECT);
@@ -1085,10 +1190,19 @@ static void test_pinch_and_steppers(void)
         tap_key(&ed, ICO_TOUCH_ED_TB_OP_DN);
     }
     CHECK(ed.work.ctl[0][ICO_TOUCH_CTL_SELECT].alpha == 0.0f);
-    CHECK(g_l.button[ICO_TOUCH_B_SELECT].alpha == 0.0f);
+    CHECK(g_l.button[ICO_TOUCH_B_SELECT].alpha == 0.0f && g_l.button[ICO_TOUCH_B_SELECT].active);
     ico_touch_edit_view(&ed, &g_l, &v);
-    CHECK(v.hidden == (1u << ICO_TOUCH_CTL_SELECT) && v.selAlpha == 0.0f);
-    /* hidden, it is still there to select and bring back */
+    CHECK(v.hidden == (1u << ICO_TOUCH_CTL_SELECT) && v.off == 0 && v.selAlpha == 0.0f &&
+          v.selActive == 1);
+    tap_key(&ed, ICO_TOUCH_ED_TB_OP_DN);
+    CHECK(!g_l.button[ICO_TOUCH_B_SELECT].active);
+    ico_touch_edit_view(&ed, &g_l, &v);
+    CHECK(v.off == (1u << ICO_TOUCH_CTL_SELECT) && v.hidden == 0 && v.selAlpha == 0.0f &&
+          v.selActive == 0);
+    /* Off, it is still there to select and bring back */
+    tap(&ed, 1000.0f, 900.0f);
+    etick(&ed, 0);
+    CHECK(ed.selected == -1);
     tap(&ed, cx_of(&g_l, ICO_TOUCH_B_SELECT), cy_of(&g_l, ICO_TOUCH_B_SELECT));
     etick(&ed, 0);
     CHECK(ed.selected == ICO_TOUCH_CTL_SELECT);
@@ -1097,22 +1211,31 @@ static void test_pinch_and_steppers(void)
     tap_key(&ed, ICO_TOUCH_ED_TB_ALL);
     CHECK(ed.all == 1);
     size_step(&ed, -1);
-    CHECK(near_(cross->scale, 1.4f, 1e-5f));
+    CHECK(near_(cross->scale, 2.8f, 1e-5f));
     CHECK(ed.work.ctl[0][ICO_TOUCH_CTL_L1].set &&
           near_(ed.work.ctl[0][ICO_TOUCH_CTL_L1].scale, 0.9f, 1e-5f));
     CHECK(ed.work.ctl[0][ICO_TOUCH_CTL_LOOK].set &&
           near_(ed.work.ctl[0][ICO_TOUCH_CTL_LOOK].scale, 0.9f, 1e-5f));
     CHECK(near_(ed.work.ctl[0][ICO_TOUCH_CTL_SELECT].scale, 0.9f, 1e-5f));
-    tap_key(&ed, ICO_TOUCH_ED_TB_OP_UP);
-    CHECK(near_(ed.work.ctl[0][ICO_TOUCH_CTL_SELECT].alpha, 0.1f, 1e-5f));
-    CHECK(near_(cross->alpha, 0.45f, 1e-5f));
+    tap_key(&ed, ICO_TOUCH_ED_TB_OP_UP); /* each its own step: Select Off -> Hidden */
+    CHECK(ed.work.ctl[0][ICO_TOUCH_CTL_SELECT].alpha == 0.0f &&
+          ed.work.ctl[0][ICO_TOUCH_CTL_SELECT].active == 1);
+    CHECK(near_(cross->alpha, 0.3f, 1e-5f));
     CHECK(ed.work.ctl[0][ICO_TOUCH_CTL_STICK].alpha == 1.0f);
+    CHECK(!ico_touch_menu_taps(&g_l));
+    /* every control down to Off, the D-pad and Start too: the menus take taps */
     for (i = 0; i < 12; i++) {
         tap_key(&ed, ICO_TOUCH_ED_TB_OP_DN);
     }
     for (i = 0; i < ICO_TOUCH_CTL_COUNT; i++) {
-        CHECK(ed.work.ctl[0][i].alpha == (ico_touch_ctl_hideable(i) ? 0.0f : 0.25f));
+        CHECK(ed.work.ctl[0][i].alpha == 0.0f && ed.work.ctl[0][i].active == 0);
+        CHECK(ico_touch_ctl_state(&g_l, i) == ICO_TOUCH_OFF);
     }
+    CHECK(ico_touch_menu_taps(&g_l));
+    CHECK(!ico_touch_takes(&g_l, cx_of(&g_l, ICO_TOUCH_B_CROSS), cy_of(&g_l, ICO_TOUCH_B_CROSS)));
+    CHECK(!ico_touch_takes(&g_l, g_l.stickHomeX, g_l.stickHomeY));
+    ico_touch_edit_view(&ed, &g_l, &v);
+    CHECK(v.off == (1u << ICO_TOUCH_CTL_COUNT) - 1u && v.hidden == 0 && v.overlap == 0);
     tap_key(&ed, ICO_TOUCH_ED_TB_ALL);
     CHECK(ed.all == 0);
     ico_touch_edit_end(&ed, 0);
@@ -1448,8 +1571,8 @@ static int edits_equal(const IcoTouchEdits *a, const IcoTouchEdits *b)
             const IcoTouchCtlEdit *x = &a->ctl[r][c], *y = &b->ctl[r][c];
 
             if (x->set != y->set || x->ax != y->ax || x->ay != y->ay || x->dx != y->dx ||
-                x->dy != y->dy || x->scale != y->scale || x->alpha != y->alpha || x->w != y->w ||
-                x->h != y->h) {
+                x->dy != y->dy || x->scale != y->scale || x->alpha != y->alpha ||
+                x->active != y->active || x->w != y->w || x->h != y->h) {
                 return 0;
             }
         }
@@ -2101,6 +2224,319 @@ static void test_v084_forms(void)
     CHECK(!ico_touch_edit_outside(&c));
 }
 
+/* --- Hidden and Off (issue 136) ------------------------------------------- */
+
+/* the older files' words: without [touch] format = 2, "hidden" and "o0"
+   were a control neither drawn nor working, so they read as Off, and are
+   written back as "off" */
+static void test_format_migration(void)
+{
+    IcoTouchCtlEdit c;
+    char buf[64];
+
+    memset(&c, 0x5A, sizeof(c));
+    CHECK(ico_touch_edit_parse_format(&c, ICO_TOUCH_CTL_SELECT, "hidden", 1) == 0 && c.set &&
+          c.alpha == 0.0f && c.active == 0 && c.ax == ICO_TOUCH_ANCHOR_DEFAULT);
+    CHECK(strcmp(ico_touch_edit_text(&c, buf, sizeof(buf)), "off") == 0);
+    memset(&c, 0x5A, sizeof(c));
+    CHECK(ico_touch_edit_parse_format(&c, ICO_TOUCH_CTL_L1, "l9 t17 s1.00 o0", 1) == 0 &&
+          c.alpha == 0.0f && c.active == 0 && c.ax == ICO_TOUCH_ANCHOR_L &&
+          near_(c.dx, 9.0f, 1e-5f));
+    CHECK(strcmp(ico_touch_edit_text(&c, buf, sizeof(buf)), "l9 t17 s1.00 off") == 0);
+    /* the rest reads as it always did */
+    CHECK(ico_touch_edit_parse_format(&c, ICO_TOUCH_CTL_L1, "l9 t17 s1.20 o50", 1) == 0 &&
+          near_(c.alpha, 0.5f, 1e-6f) && c.active == 1);
+    CHECK(ico_touch_edit_parse_format(&c, ICO_TOUCH_CTL_L1, "off", 1) == 0 && c.active == 0);
+    memset(&c, 0x5A, sizeof(c));
+    CHECK(ico_touch_edit_parse_format(&c, ICO_TOUCH_CTL_L1, "default", 1) == 0 && c.set == 0);
+    /* format 2 (and anything newer): hidden and o0 are Hidden, off Off */
+    CHECK(ico_touch_edit_parse_format(&c, ICO_TOUCH_CTL_L1, "hidden", 2) == 0 && c.active == 1);
+    CHECK(ico_touch_edit_parse_format(&c, ICO_TOUCH_CTL_L1, "l9 t17 o0", 2) == 0 &&
+          c.alpha == 0.0f && c.active == 1);
+    CHECK(ico_touch_edit_parse_format(&c, ICO_TOUCH_CTL_L1, "l9 t17 o0", 3) == 0 && c.active == 1);
+    CHECK(ico_touch_edit_parse_format(&c, ICO_TOUCH_CTL_L1, "off", 2) == 0 && c.active == 0);
+    CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_L1, "hidden") == 0 && c.active == 1);
+    /* the grammar's refusals hold in either format */
+    memset(&c, 0x5A, sizeof(c));
+    CHECK(ico_touch_edit_parse_format(&c, ICO_TOUCH_CTL_L1, "hidden off", 1) == -1 && c.set == 0);
+    CHECK(ico_touch_edit_parse_format(&c, ICO_TOUCH_CTL_L1, "l9 t17 o0 hidden", 1) == -1);
+}
+
+/* the editor with Hidden and Off controls: the gamepad's Square and Cross
+   step 10 % -> Hidden -> Off -> Hidden -> 10 %; a Hidden control is inside
+   the overlap and refuse rules (it still takes touches), an Off one is not */
+static void test_hidden_off_editor(void)
+{
+    IcoTouchEdits live;
+    IcoTouchEditor ed;
+    IcoTouchEditView v;
+    IcoTouchLayout base;
+    IcoTouchCtlEdit *cross, *sel;
+    float sx, sy, tx, ty;
+    int i;
+
+    reset_screen(1920, 1080, NULL);
+    ico_touch_edits_defaults(&live);
+    ico_touch_edit_begin(&ed, &live, ICO_TOUCH_RULE_FULL);
+    etick(&ed, 0);
+    cross = &ed.work.ctl[0][ICO_TOUCH_CTL_CROSS];
+    etick(&ed, ICO_PAD_R1);
+    etick(&ed, 0);
+    etick(&ed, ICO_PAD_R1);
+    etick(&ed, 0);
+    CHECK(ed.selected == ICO_TOUCH_CTL_CROSS);
+    for (i = 0; i < 9; i++) {
+        etick(&ed, ICO_PAD_SQUARE);
+        etick(&ed, 0);
+    }
+    CHECK(near_(cross->alpha, 0.1f, 1e-5f) && cross->active == 1);
+    etick(&ed, ICO_PAD_SQUARE);
+    etick(&ed, 0);
+    CHECK(cross->alpha == 0.0f && cross->active == 1);
+    ico_touch_edit_view(&ed, &g_l, &v);
+    CHECK(v.hidden == (1u << ICO_TOUCH_CTL_CROSS) && v.off == 0 && v.selActive == 1);
+    etick(&ed, ICO_PAD_SQUARE);
+    etick(&ed, 0);
+    CHECK(cross->alpha == 0.0f && cross->active == 0);
+    ico_touch_edit_view(&ed, &g_l, &v);
+    CHECK(v.off == (1u << ICO_TOUCH_CTL_CROSS) && v.hidden == 0 && v.selActive == 0);
+    etick(&ed, ICO_PAD_CROSS);
+    etick(&ed, 0);
+    CHECK(cross->alpha == 0.0f && cross->active == 1);
+    etick(&ed, ICO_PAD_CROSS);
+    etick(&ed, 0);
+    CHECK(near_(cross->alpha, 0.1f, 1e-5f) && cross->active == 1);
+    /* Undo walks back through Hidden and Off */
+    tap_key(&ed, ICO_TOUCH_ED_TB_UNDO);
+    CHECK(cross->alpha == 0.0f && cross->active == 1);
+    tap_key(&ed, ICO_TOUCH_ED_TB_UNDO);
+    CHECK(cross->alpha == 0.0f && cross->active == 0);
+    ico_touch_edit_end(&ed, 0);
+
+    /* the refuse rule: Select dropped on Start's centre springs back while
+       Start is shown or Hidden, lands while Start is Off */
+    for (i = 0; i < 2; i++) {
+        ico_touch_edits_defaults(&live);
+        CHECK(ico_touch_edit_parse(&live.ctl[0][ICO_TOUCH_CTL_START], ICO_TOUCH_CTL_START,
+                                   i == 0 ? "hidden" : "off") == 0);
+        ico_touch_edit_begin(&ed, &live, ICO_TOUCH_RULE_FULL);
+        etick(&ed, 0);
+        base = g_l;
+        sel = &ed.work.ctl[0][ICO_TOUCH_CTL_SELECT];
+        sx = cx_of(&base, ICO_TOUCH_B_SELECT);
+        sy = cy_of(&base, ICO_TOUCH_B_SELECT);
+        tx = cx_of(&base, ICO_TOUCH_B_START);
+        ty = cy_of(&base, ICO_TOUCH_B_START);
+        fe(&ed, 3, sx, sy, ICO_TOUCH_DOWN);
+        fe(&ed, 3, tx, ty, ICO_TOUCH_MOVE);
+        etick(&ed, 0);
+        fe(&ed, 3, tx, ty, ICO_TOUCH_UP);
+        etick(&ed, 0);
+        if (i == 0) {
+            CHECK(ed.refused == ICO_TOUCH_EDIT_REFUSED && !sel->set); /* Hidden: refused */
+        } else {
+            CHECK(ed.refused == 0 && sel->set); /* Off: nothing there to press */
+            CHECK(near_(cx_of(&g_l, ICO_TOUCH_B_SELECT), tx, 0.6f * g_l.unit * 4.0f));
+        }
+        ico_touch_edit_end(&ed, 0);
+    }
+
+    /* the overlap mask: Cross over Square is amber while Square is Hidden,
+       not while it is Off */
+    for (i = 0; i < 2; i++) {
+        ico_touch_edits_defaults(&live);
+        CHECK(ico_touch_edit_parse(&live.ctl[0][ICO_TOUCH_CTL_CROSS], ICO_TOUCH_CTL_CROSS,
+                                   "r28 b12") == 0);
+        CHECK(ico_touch_edit_parse(&live.ctl[0][ICO_TOUCH_CTL_SQUARE], ICO_TOUCH_CTL_SQUARE,
+                                   i == 0 ? "hidden" : "off") == 0);
+        ico_touch_edit_begin(&ed, &live, ICO_TOUCH_RULE_FULL);
+        etick(&ed, 0);
+        if (i == 0) {
+            CHECK((ed.overlap & (1u << ICO_TOUCH_CTL_CROSS)) &&
+                  (ed.overlap & (1u << ICO_TOUCH_CTL_SQUARE)));
+        } else {
+            CHECK(ed.overlap == 0);
+        }
+        /* either way Square stays selectable on its dashed outline */
+        tap(&ed, cx_of(&g_l, ICO_TOUCH_B_SQUARE) - 3.0f * g_l.unit,
+            cy_of(&g_l, ICO_TOUCH_B_SQUARE));
+        etick(&ed, 0);
+        CHECK(ed.selected == ICO_TOUCH_CTL_SQUARE);
+        ico_touch_edit_end(&ed, 0);
+    }
+}
+
+/* a control's box on l, as the editor outlines it */
+static IcoTouchRect box_of(const IcoTouchLayout *l, int ctl)
+{
+    static const int zone[ICO_TOUCH_CTL_COUNT] = {-1,
+                                                  ICO_TOUCH_B_CROSS,
+                                                  ICO_TOUCH_B_CIRCLE,
+                                                  ICO_TOUCH_B_SQUARE,
+                                                  ICO_TOUCH_B_TRIANGLE,
+                                                  ICO_TOUCH_B_R1,
+                                                  ICO_TOUCH_B_L1,
+                                                  ICO_TOUCH_B_L2,
+                                                  ICO_TOUCH_B_R2,
+                                                  ICO_TOUCH_B_SELECT,
+                                                  ICO_TOUCH_B_START,
+                                                  -1,
+                                                  -1};
+    IcoTouchRect r;
+
+    if (ctl == ICO_TOUCH_CTL_DPAD) {
+        const IcoTouchRect u = l->button[ICO_TOUCH_B_UP].rect, d = l->button[ICO_TOUCH_B_DOWN].rect,
+                           a = l->button[ICO_TOUCH_B_LEFT].rect,
+                           b = l->button[ICO_TOUCH_B_RIGHT].rect;
+        r.x = a.x;
+        r.y = u.y;
+        r.w = b.x + b.w - a.x;
+        r.h = d.y + d.h - u.y;
+        return r;
+    }
+    if (ctl == ICO_TOUCH_CTL_STICK) {
+        r.x = l->stickHomeX - l->stickR;
+        r.y = l->stickHomeY - l->stickR;
+        r.w = r.h = 2.0f * l->stickR;
+        return r;
+    }
+    if (ctl == ICO_TOUCH_CTL_LOOK) {
+        return l->lookArea;
+    }
+    return l->button[zone[ctl]].rect;
+}
+
+static int overlaps_(const IcoTouchRect *a, const IcoTouchRect *b)
+{
+    return a->x < b->x + b->w - 0.01f && b->x < a->x + a->w - 0.01f && a->y < b->y + b->h - 0.01f &&
+           b->y < a->y + a->h - 0.01f;
+}
+
+/* sizes up to 300 %: the rail, and every control at 3.0 on screen (inside
+   the region, out of a SPLIT band, at least 70 %, at most 300 %) in the
+   three postures on a phone and on the reporter's 12.4-inch 3000 x 2000
+   tablet; at 3.0 a control larger than the region shrinks to fit it */
+static void test_size_300(void)
+{
+    static const char *const kAt[] = {"l0 t0", "r0 t0", "l0 b0", "r0 b0", "l60 t30", "r45 b20"};
+
+    static const struct {
+        uint32_t w, h;
+        float dpi;
+    } kScreen[] = {{2340, 1080, 420.0f}, {3000, 2000, 290.77f}};
+
+    IcoTouchCtlEdit c;
+    IcoTouchEdits e;
+    IcoTouchLayout l;
+    char line[64];
+    unsigned si, ai;
+    int p, k;
+
+    CHECK(ICO_TOUCH_EDIT_SCALE_MAX == 3.0f && ICO_TOUCH_EDIT_SCALE_MIN == 0.7f);
+    CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_CROSS, "r20 b10 s3.00") == 0 && c.scale == 3.0f);
+    CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_CROSS, "r20 b10 s3.004") == 0 && c.scale == 3.0f);
+    CHECK(ico_touch_edit_parse(&c, ICO_TOUCH_CTL_DPAD, "l8.4 b8.4 s2.5 hidden") == 0 &&
+          near_(c.scale, 2.5f, 1e-6f) && c.active == 1);
+    check_rejected(ICO_TOUCH_CTL_CROSS, "r20 b10 s3.01");
+    memset(&c, 0, sizeof(c));
+    c.set = 1;
+    c.scale = 9.0f;
+    c.alpha = 1.0f;
+    ico_touch_edit_sanitize(&c, ICO_TOUCH_CTL_STICK);
+    CHECK(c.scale == ICO_TOUCH_EDIT_SCALE_MAX);
+
+    for (si = 0; si < sizeof(kScreen) / sizeof(kScreen[0]); si++) {
+        const float k0 = ico_touch_px_per_mm(kScreen[si].dpi);
+        const float W = (float)kScreen[si].w, H = (float)kScreen[si].h;
+
+        for (p = 0; p < ICO_TOUCH_POSTURES; p++) {
+            const IcoTouchEnv env =
+                p == ICO_TOUCH_RULE_FULL ? env_of(k0, ICO_TOUCH_FOLD_NONE, 0, 0, 0, 0, 0, 0)
+                : p == ICO_TOUCH_RULE_SPLIT
+                    ? env_of(k0, ICO_TOUCH_FOLD_VERTICAL, 0, 0, 0.5f * W, 0.0f, 0.0f, H)
+                    : env_of(k0, ICO_TOUCH_FOLD_HORIZONTAL, 1, 0, 0.0f, 0.5f * H, W, 0.0f);
+
+            for (k = 0; k < ICO_TOUCH_CTL_COUNT; k++) {
+                for (ai = 0; ai < sizeof(kAt) / sizeof(kAt[0]); ai++) {
+                    IcoTouchRect b, b1;
+                    float w1, h1;
+
+                    snprintf(line, sizeof(line), "%s%s s3.00", kAt[ai],
+                             k == ICO_TOUCH_CTL_LOOK ? " w40 h25" : "");
+                    ico_touch_edits_defaults(&e);
+                    set_edit(&e, p, k, line);
+                    l = ico_touch_layout_edits(kScreen[si].w, kScreen[si].h, no_insets(),
+                                               ICO_TOUCH_MEDIUM, &env, &e);
+                    CHECK(l.rule == p);
+                    b = box_of(&l, k);
+                    ico_touch_edit_box_size(&l, k, NULL, &w1, &h1);
+                    b1.w = w1;
+                    b1.h = h1;
+                    if (!rect_inside(&b, &l.region) ||
+                        (p == ICO_TOUCH_RULE_SPLIT && overlaps_(&b, &l.band)) ||
+                        (k != ICO_TOUCH_CTL_LOOK &&
+                         (b.w < 0.7f * b1.w - 0.05f || b.w > 3.0f * b1.w + 0.05f))) {
+                        fprintf(stderr, "  %ux%u %s %s \"%s\": box %.1f,%.1f %.1fx%.1f\n",
+                                kScreen[si].w, kScreen[si].h, ico_touch_posture_name(p),
+                                ico_touch_ctl_name(k), line, (double)b.x, (double)b.y, (double)b.w,
+                                (double)b.h);
+                        CHECK(0);
+                    }
+                    /* the tablet's FULL region holds every control at 300 % */
+                    if (si == 1 && p == ICO_TOUCH_RULE_FULL && k != ICO_TOUCH_CTL_LOOK) {
+                        CHECK(near_(b.w, 3.0f * b1.w, 0.05f) && near_(b.h, 3.0f * b1.h, 0.05f));
+                    }
+                }
+            }
+        }
+    }
+    /* the phone: a 300 % D-pad (72 q) is taller than the region (about 65 q):
+       the largest that fits, not the old fall back to 70 % */
+    ico_touch_edits_defaults(&e);
+    set_edit(&e, ICO_TOUCH_RULE_FULL, ICO_TOUCH_CTL_DPAD, "l40 t30 s3.00");
+    {
+        const IcoTouchEnv env =
+            env_of(ico_touch_px_per_mm(420.0f), ICO_TOUCH_FOLD_NONE, 0, 0, 0, 0, 0, 0);
+        IcoTouchRect b;
+
+        l = ico_touch_layout_edits(2340, 1080, no_insets(), ICO_TOUCH_MEDIUM, &env, &e);
+        b = box_of(&l, ICO_TOUCH_CTL_DPAD);
+        CHECK(l.region.h < 72.0f * l.unit && near_(b.h, l.region.h, 0.05f));
+        CHECK(b.w > 2.5f * 24.0f * l.unit);
+    }
+
+    /* the editor: the D-pad stepped up to 300 % over the stick is allowed,
+       both amber (as any overlap) */
+    {
+        IcoTouchEdits live;
+        IcoTouchEditor ed;
+        IcoTouchCtlEdit *dp;
+
+        reset_screen(1920, 1080, NULL);
+        ico_touch_edits_defaults(&live);
+        ico_touch_edit_begin(&ed, &live, ICO_TOUCH_RULE_FULL);
+        etick(&ed, 0);
+        etick(&ed, ICO_PAD_R1);
+        etick(&ed, 0);
+        CHECK(ed.selected == ICO_TOUCH_CTL_DPAD);
+        dp = &ed.work.ctl[0][ICO_TOUCH_CTL_DPAD];
+        for (k = 0; k < 25; k++) {
+            size_step(&ed, 1);
+        }
+        CHECK(near_(dp->scale, 3.0f, 1e-5f) && ed.refused == 0);
+        CHECK((ed.overlap & (1u << ICO_TOUCH_CTL_DPAD)) &&
+              (ed.overlap & (1u << ICO_TOUCH_CTL_STICK)));
+        {
+            IcoTouchEditView v;
+
+            ico_touch_edit_view(&ed, &g_l, &v);
+            CHECK(near_(v.selScale, 3.0f, 1e-5f));
+        }
+        check_inside(&g_l);
+        ico_touch_edit_end(&ed, 0);
+    }
+}
+
 int main(void)
 {
     test_defaults();
@@ -2119,6 +2555,9 @@ int main(void)
     test_toolbar_clear();
     test_cutout();
     test_v084_forms();
+    test_format_migration();
+    test_hidden_off_editor();
+    test_size_300();
     if (failures != 0) {
         fprintf(stderr, "touch_edit_test: %d failure(s)\n", failures);
         return 1;

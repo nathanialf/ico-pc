@@ -1335,7 +1335,8 @@ static void test_touch_config(void)
     CHECK(touch_equal(ico_input_live_touch_edits(), &def));
 
     /* [touch] and [touch.split] lines onto the struct; a bad line is ignored,
-       the rest applied */
+       the rest applied; without format = 2 (a v0.8.5 file) "hidden" is Off,
+       on any control (v0.8.5 refused it on the D-pad) */
     t = ico_toml_parse("[touch]\n"
                        "snap = false\n"
                        "grid = 8\n"
@@ -1351,15 +1352,16 @@ static void test_touch_config(void)
     ico_touch_edits_defaults(&e);
     n = ico_input_apply_touch_toml(&e, t);
     ico_toml_free(t);
-    CHECK(n == 6); /* snap, grid, cross, l2, look, stick */
+    CHECK(n == 7); /* snap, grid, cross, l2, dpad, look, stick */
     CHECK(e.snap == 0 && e.grid == 8.0f && e.gen == 1);
     c = &e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_CROSS];
     CHECK(c->set && c->ax == ICO_TOUCH_ANCHOR_R && c->ay == ICO_TOUCH_ANCHOR_B);
     CHECK(near_(c->dx, 20.0f, 1e-4f) && near_(c->dy, 10.5f, 1e-4f));
     CHECK(near_(c->scale, 1.3f, 1e-4f) && near_(c->alpha, 0.8f, 1e-4f));
     c = &e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_L2];
-    CHECK(c->set && c->alpha == 0.0f);                            /* hidden */
-    CHECK(!e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_DPAD].set);   /* cannot be hidden */
+    CHECK(c->set && c->alpha == 0.0f && c->active == 0); /* format 1's hidden: Off */
+    c = &e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_DPAD];
+    CHECK(c->set && c->alpha == 0.0f && c->active == 0);          /* so is the D-pad's */
     CHECK(!e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_CIRCLE].set); /* not a layout */
     c = &e.ctl[ICO_TOUCH_RULE_SPLIT][ICO_TOUCH_CTL_LOOK];
     CHECK(c->set && c->ax == ICO_TOUCH_ANCHOR_L && c->ay == ICO_TOUCH_ANCHOR_T);
@@ -1410,6 +1412,7 @@ static void test_touch_config(void)
         k->dy = 10.5f;
         k->scale = 1.25f;
         k->alpha = 0.5f;
+        k->active = 1;
         k = &e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_L2];
         k->set = 1;
         k->ax = ICO_TOUCH_ANCHOR_L;
@@ -1426,13 +1429,15 @@ static void test_touch_config(void)
         k->dy = 0.0f;
         k->scale = 1.0f;
         k->alpha = 1.0f;
+        k->active = 1;
         k->w = 60.0f;
         k->h = 30.0f;
     }
     n = ico_input_write_touch_edits(&e);
-    CHECK(n == 5); /* snap, grid, three controls */
+    CHECK(n == 6); /* the format, snap, grid, three controls */
     CHECK(ico_config_save() == 0);
     text = touch_file_read();
+    CHECK(strstr(text, "format = 2\n") != NULL);
     CHECK(strstr(text, "# my settings\n") != NULL && strstr(text, "# the grid\n") != NULL);
     CHECK(strstr(text, "unknown = 7\n") != NULL && strstr(text, "volume = 0.5\n") != NULL);
     CHECK(strstr(text, "snap = false") != NULL && strstr(text, "grid = 8") != NULL);
@@ -1449,11 +1454,12 @@ static void test_touch_config(void)
 
     /* an edited-then-reset control is rewritten as "default", the line stays */
     memset(&e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_CROSS], 0, sizeof(IcoTouchCtlEdit));
-    CHECK(ico_input_write_touch_edits(&e) == 5); /* snap, grid, cross default, l2, look */
+    CHECK(ico_input_write_touch_edits(&e) == 6); /* format, snap, grid, cross default, l2, look */
     CHECK(ico_config_save() == 0);
     text = touch_file_read();
     CHECK(strstr(text, "cross = \"default\"") != NULL);
-    CHECK(strstr(text, "l2 = \"l4 t6 s1.00 o0\"") != NULL); /* hidden where it was put */
+    CHECK(strstr(text, "l2 = \"l4 t6 s1.00 off\"") != NULL); /* Off where it was put */
+    CHECK(strstr(text, " o0") == NULL);
     free(text);
     ico_config_reset(kTouchFile, "");
     ico_touch_edits_defaults(&f);
@@ -1463,7 +1469,7 @@ static void test_touch_config(void)
     {
         char *again;
         text = touch_file_read();
-        CHECK(ico_input_write_touch_edits(&e) == 4); /* cross already says default */
+        CHECK(ico_input_write_touch_edits(&e) == 5); /* cross already says default */
         CHECK(ico_config_save() == 0);
         again = touch_file_read();
         CHECK(strcmp(text, again) == 0);
@@ -1474,7 +1480,8 @@ static void test_touch_config(void)
     /* snap and grid round trip, including back to the defaults (the keys are
        in the file now, so they are written) */
     ico_touch_edits_defaults(&e);
-    CHECK(ico_input_write_touch_edits(&e) == 4); /* snap, grid (in the file), l2 and look reset */
+    CHECK(ico_input_write_touch_edits(&e) == 5); /* format, snap, grid (in the file), l2 and
+                                                    look reset */
     CHECK(ico_config_save() == 0);
     ico_config_reset(kTouchFile, "");
     ico_touch_edits_defaults(&f);
@@ -1488,6 +1495,52 @@ static void test_touch_config(void)
     ico_touch_edits_defaults(&f);
     ico_input_reload_touch_edits(&f);
     CHECK(f.grid == 4.0f && f.snap == 1);
+
+    /* the migration: a v0.8.5 file (no format) reads "hidden" and "o0" as
+       Off, and the next write gives it format = 2 and the word off, the
+       place kept; read again it is the same */
+    touch_use("version = 1\n[touch.full]\nselect = \"hidden\"\nl1 = \"l9 t17 s1.00 o0\"\n"
+              "cross = \"r20 b10.5 s1.30 o80\"\n");
+    ico_touch_edits_defaults(&f);
+    ico_input_reload_touch_edits(&f);
+    c = &f.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_SELECT];
+    CHECK(c->set && c->alpha == 0.0f && c->active == 0 && c->ax == ICO_TOUCH_ANCHOR_DEFAULT);
+    c = &f.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_L1];
+    CHECK(c->set && c->alpha == 0.0f && c->active == 0 && c->ax == ICO_TOUCH_ANCHOR_L &&
+          near_(c->dy, 17.0f, 1e-4f));
+    c = &f.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_CROSS];
+    CHECK(c->set && near_(c->alpha, 0.8f, 1e-4f) && c->active == 1);
+    text = touch_file_read();
+    CHECK(strstr(text, "format") == NULL); /* read only: nothing rewritten on load */
+    free(text);
+    CHECK(ico_input_write_touch_edits(&f) == 4); /* format, select, l1, cross */
+    CHECK(ico_config_save() == 0);
+    text = touch_file_read();
+    CHECK(strstr(text, "[touch]\nformat = 2\n") != NULL);
+    CHECK(strstr(text, "select = \"off\"") != NULL);
+    CHECK(strstr(text, "l1 = \"l9 t17 s1.00 off\"") != NULL);
+    CHECK(strstr(text, "cross = \"r20 b10.5 s1.30 o80\"") != NULL);
+    CHECK(strstr(text, "\"hidden\"") == NULL && strstr(text, " o0") == NULL);
+    free(text);
+    ico_config_reset(kTouchFile, "");
+    ico_touch_edits_defaults(&e);
+    ico_input_reload_touch_edits(&e);
+    CHECK(touch_equal(&e, &f));
+
+    /* format = 2: "hidden" and "o0" are Hidden (still working), "off" Off */
+    touch_use("version = 1\n[touch]\nformat = 2\n[touch.full]\nselect = \"hidden\"\n"
+              "l1 = \"l9 t17 o0\"\nstart = \"off\"\ndpad = \"l8.4 b8.4 s3.00 hidden\"\n");
+    ico_touch_edits_defaults(&f);
+    ico_input_reload_touch_edits(&f);
+    CHECK(f.ctl[0][ICO_TOUCH_CTL_SELECT].alpha == 0.0f && f.ctl[0][ICO_TOUCH_CTL_SELECT].active);
+    CHECK(f.ctl[0][ICO_TOUCH_CTL_L1].alpha == 0.0f && f.ctl[0][ICO_TOUCH_CTL_L1].active);
+    CHECK(f.ctl[0][ICO_TOUCH_CTL_START].set && !f.ctl[0][ICO_TOUCH_CTL_START].active);
+    CHECK(f.ctl[0][ICO_TOUCH_CTL_DPAD].active && f.ctl[0][ICO_TOUCH_CTL_DPAD].scale == 3.0f);
+    /* a format that is not a number: logged, read as the older one */
+    touch_use("version = 1\n[touch]\nformat = \"two\"\n[touch.full]\nselect = \"hidden\"\n");
+    ico_touch_edits_defaults(&f);
+    ico_input_reload_touch_edits(&f);
+    CHECK(f.ctl[0][ICO_TOUCH_CTL_SELECT].set && !f.ctl[0][ICO_TOUCH_CTL_SELECT].active);
     remove(kTouchFile);
     ico_config_reset(NULL, NULL);
 }
