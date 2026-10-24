@@ -68,6 +68,10 @@
  *   RD_SHADOW_FRAME_CAMERA, rd_internal.h: 0 in the dumps from before them,
  *   whose CPU-projected draws the interpolation blends in screen space as
  *   it did; the version is unchanged)
+ *   (RDC_SCREEN's b[5] RD_SCREEN_ST_SHIFT with f[0] and f[1], rd.h
+ *   rd_frame_projected_st, the ripples' texture shift: 0 in the dumps from
+ *   before it, whose re-projected vertices keep their tick's STs as they
+ *   did; the version is unchanged)
  *   (RdCamera.freeCamera, photo mode's free camera: the byte was padding,
  *   0 in the dumps from before it; the version is unchanged)
  *   (RDC_GRID's b[5], f[0] and f[1], rd.h rd_grid_screen_st: 0 in the dumps
