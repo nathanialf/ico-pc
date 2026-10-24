@@ -515,7 +515,9 @@ settles (the error names the row that would). The rules and rows, each with the 
 | an integer the disc holds wider than PAL's field | `narrow <member> <field>` | `ICO_TF_BITS` of the host's width from the disc's word; `gen_data_desc.py --manifest` refuses an ELF one of whose values does not fit | `narrow motion-def dirFrames`: an `int` here, PAL's `short`; every one of the 1087 values fits (90, 360, small counts, -1) |
 | a field the disc has and PAL lacks, which converted code reads | `extend <member> <field>`, the field in the port's header after PAL's own (`PC port: host-only`) | copied by name on the disc that has it; on every other disc (PAL's included) no descriptor field, 0 by the record clear | `extend model-path modelPath` and `shadowPath` (`PObjMdl`'s two 64-byte paths, `charFileManager.h`); `extend act-mode-def holdDir`, `saveInfo`, `pullUp`, `stopMail` (`ActModeRec`'s bits 1, 3, 6, 8 here, read by the USA arms of `ACTGame_BeforeFunc`, `ACTGame_SaveActorInformation`, `handoff_heroin` and a stopped enemy's mail, as upstream's header names them) |
 | a field the disc has that no code the port compiles reads | `drop <member> <field>` (reported; the divergence is recorded below) | not loaded | `drop tex-property word10`, `word3C`; `drop act-mode-def bit4`, `bit13`; `drop motion-def path` |
-| a table PAL has none of | `extra <member> <type> <count>` (the member's own schema row names its header and symbol) | the host array holds `count` records of `type`, defined after PAL's tables with an id after theirs; a disc without it loads none | none here (the June 2001 demo's tables use it) |
+| an unsigned struct bit-field the disc holds narrower | copied at the disc's width, the host's high bits 0 (reported) | `ICO_TF_BITS` with the disc's bit and width | none here (the June 2001 demo's `StgPre.kidnapSeconds`: 8 bits, PAL's 9) |
+| a disc field PAL holds under another name | `rename <member> <field>=<PAL field>`; the PAL field may be one element of a scalar array, `path[i]`, and every element then needs a row (the disc's separate fields gathered) | copied into that field; a gathered array is one field per element (`rootOffset[0]` ..) | none here (the June 2001 demo's `MotionDef.word0FC`, its `word100`, and `rootOffsetX/Y/Z`, PAL's `rootOffset[0..2]`) |
+| a table PAL has none of | `extra <member> <type> <count>` (`-` for a single object; the member's own schema row names its header and symbol) | the host array holds `count` records of `type`, defined after PAL's tables with an id after theirs; a disc without it loads none; a pointer word into one of the set's tables (no registry object) resolves to that record of its host array (`gen_data_desc.py --manifest` refuses a word off a record's start) | none here (the June 2001 demo's icon record and enemy sets use it) |
 
 `extend` rows are read from every `config/data_schema.*.txt`, so the PAL set and every other set
 know the host-only fields whatever `config/regions.txt` lists: PAL's own descriptors assert its
@@ -648,6 +650,78 @@ flags2 bit 6, read in `boyact.c`, set in the same two motions, and the preview d
 `config/data_schema.aug6.txt` is upstream's, unchanged, with the port's rows appended;
 `config/data_members.aug6.txt` is upstream's. `port/core/region_aug6.c` lands with the rows.
 
+### The June 2001 magazine demo's set
+
+`port/data/gen/jun26/` is the demo disc's set (`SCUS-97158`; its BOOT2 is the magazine's menu
+`SCUS_971.58`, the game is `CUS97113/SCPS_000.00`, whose tables the set reads:
+[the path rule](#a-disc-whose-game-is-in-a-folder-the-path-rule)), written before its row is
+listed, with the same `--version jun26` commands and the tests `data_desc_fresh_jun26` and
+`ee_layout_fresh_jun26`. It is a program of its own, two months older than the USA one: 119 data
+members in 121 rows (69 of PAL's, `staffroll_dat` with two; none of PAL's three unmapped runs;
+no `enemy-def`, source upstream), 823 functions and 2 objects in the manifest (`enemymodel01`,
+EnemyInit.c's own set list, and `scpDummyGObj`), 5115 function and 3144 data symbols
+(`--base-elf`'s byte check passed; 120 data-member symbols sit at their member-table addresses).
+`model-path` holds 1474 records of 0x14C (PAL 1637 of 0x8C).
+
+Fifty members are tables PAL has none of (the `extra` rows):
+
+- `mc-icon-sys` (`sceMcIconSys`, `mcdata.h`): mcdata.o's icon.sys record, built into the program.
+  Upstream's code reads it nowhere: the demo's `iosMcIconWriteIconsys` writes the icon.sys its
+  DATA.DF holds (`iconFile`'s `icon/icon.sys`, the DATA.DF's 49th member, 964 bytes, another
+  record than this one). It is loaded for the port's save code to name, and nothing reads it yet.
+- the 49 enemy-set tables of `EnemyInit.o` (`enemy-model02-kindlist` .. `enemy-set-table`,
+  records `EnemyKindRec`, `EnemyModelSet`, `EnemySet` and the kind lists and position tables, all
+  in `EnemyInit.h`): the demo's `enemy_Initialize` reads `enemySetTable`'s nine rows
+  (`EnemyKindNum` 9, upstream EnemyInit.c's `VERSION_JUN26` arm). Row 0 is EnemyInit.c's own
+  `enemymodel01` (a registry object); the other rows point at the set lists, the lists at the
+  sets, the sets at their kind records and position tables, the kind records into the kind
+  lists. Those pointers have no registry objects: the loader resolves each to the record of the
+  host array it points at (`tables.c` `resolve_data`), and a kind list of several names is one
+  host array named by its first (`enemymodel02Kind16[580]`; the reference writes it the same
+  way, `&enemymodel02Kind16[2]` for `enemymodel02Kind17`). EnemyInit.c's PAL table keeps its own
+  static `enemySetTable` (one row); the demo's is `table_defs.c`'s, which the merge's JUN26 arm
+  reads.
+
+Records laid out otherwise, and their rows (`config/data_schema.jun26.txt`'s port section, each
+commented with its readers): `ParallelMotionRow`, `TexRec` and `LayoutClothDef` take the USA
+disc's rows; `LtProperty` (0x58, from `texData`: PAL's `word0` (-1), `word4`, `word8`, `wordC`,
+`word14`, `word40` and the PAL-only `ownerItem`, `selectMode`, `selectable` default, `word28`
+dropped); `ItemBreakRec` (0x10: no modes and no `hitAnim`, which only `BreakItemWithAttackHit`
+reads, a function the demo does not have); `PObjMdl` (the USA disc's two extended paths, then a
+cloth name and a 32-byte name, dropped: no C reader); `ActModeRec` (the August 2001 preview's
+record); `SeBank` (`hdPath[32]`, PAL 48); `StgPre` (0x18C: no `word148`, `word160`, `word17C` or
+`ledgeRange`, read only by PAL's arms; `kidnapSeconds` 8 bits; the demo's `attrTopGirl`, read by
+`ACTGame_SetActors_Debug` where PAL's arms read `flag0`, renamed onto `flag0`, and the demo's own
+`flag0` dropped); `MotionDef` (0x184: five effect and five sound slots and one vibration slot,
+the rest -1.0 and 0; `palSpeedRatio` 1.0, `girlDirFrames` 0, both read only by PAL's arms;
+`dirFrames` narrowed; `rootOffsetX/Y/Z` gathered into `rootOffset[0..2]`, which the demo's arm of
+`rootUpdateDirectPlay` reads exactly as PAL's reads the array; `word0FC` renamed onto `word100`,
+the two arms of `CheckEnemyBrainMode` testing them alike; the Japanese `comment` and the motion
+`path` dropped; no `flags2` word, its bits in `flags`).
+
+`config/motion_bits.jun26.txt`: the scanner pairs most reads; `UNPAIRED_BY_SLUG` explains the
+demo's twins in the blocks that do not pair (thirteen keys) and `HAND_ROWS` gives the bits only they give, checked on the two ELFs:
+of the 1028 motions whose names are unique on both (the demo has 1168, PAL 1148), the number that
+set the PAL bit and the demo's alike is 1026 for the call status field (PAL modeBits 16-17, the
+demo's 27-28, a two-bit field: PAL's bit 18 has no counterpart), 1023 for the sign bit (the
+demo's flags bit 14, `ACTGame_BeforeFunc`), all 1028 for the landing test (PAL flags 25, the
+demo's 20) and 1027 for `findChainInJump`'s IK rate (PAL flags2 bit 5, the demo's
+`chainIkRate`, flags bit 3). Fourteen PAL bits are written 0 (`jun26=-`), each read only by
+PAL's twin of a function the demo writes otherwise: modeBits 18, flags 4, 5, 6, 8, 9, 10, 12, 13,
+14, 15 and 16 (`jumpHit`) and flags2 6 and 8. Two of them are named on both discs and still not
+the same bit: the bit upstream's header names `jumpHit` on the demo (flags 16) is PAL's flags bit
+28 by `act-env.c`'s pair (all 1028 agree; the demo's `actCommonJump` reads no bit), so a zero row
+takes PAL's `jumpHit` off the name mapping; and the demo's `chainHang` (flags 11), which its
+`findChainInJump` reads where PAL reads flags2 bit 8 (all 1028 agree), fills the host's
+`chainHang` by name, so flags2 bit 8 is 0 on this disc (a disc bit fills one host bit): the
+merge keeps the demo's arm's named read. Named bits whose data differ on the two ELFs (the demo
+is a prototype): `carried` (PAL flags 7, 3 motions; the demo's flags 7, 7 motions, the same 7 as
+PAL's unnamed bit 2) and `handIK` (PAL modeBits 26-27, the demo's 29-30, 994 and 1011 agree);
+each follows the demo's code, which reads its own bit for the purpose PAL's code reads PAL's.
+
+`config/data_schema.jun26.txt` and `config/data_members.jun26.txt` are upstream's, unchanged, with
+the port's rows appended to the schema. `port/core/region_jun26.c` lands with the rows.
+
 ### Adding a target's set
 
 For a new row of `config/regions.txt`, the data step of adding a target ([GAME_CODE.md](GAME_CODE.md)
@@ -684,7 +758,8 @@ tools/gen_data_desc.py --manifest --version kor --elf baserom/kor/baseelf.elf
 tools/gen_data_desc.py
 ```
 
-The preview disc's set was made the same way with `--version aug6` and `baserom/aug6`, and the
+The preview disc's set was made the same way with `--version aug6` and `baserom/aug6`, the June
+2001 demo's with `--version jun26` and `baserom/jun26`, and the
 USA set (upstream 3947e0641, its row pending):
 
 ```
