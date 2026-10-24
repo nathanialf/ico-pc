@@ -623,4 +623,41 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Copying the disc image into the app",
     [UI_STR_ISO_COPYING_LONG] =
         "Copying the disc image into the app. It is a large image: this takes a few minutes",
+    [UI_STR_SECTION_VARIANTS] = "Game variants",
+    [UI_STR_OPT_VAR_TOUGHNESS] = "Shade toughness",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
+        "American: every Shade as tough as on the North American disc, and no tougher on later playthroughs. Achievements stay on.",
+    [UI_STR_VAL_VAR_AMERICAN] = "American",
+    [UI_STR_VAL_VAR_NOT_TOUGHER] = "Not tougher later",
+    [UI_STR_OPT_VAR_ONE_HIT] = "One hit per swing",
+    [UI_STR_OPT_VAR_ONE_HIT_NOTE] =
+        "Each swing of Ico’s weapon can hurt a Shade only once. Switches achievements off.",
+    [UI_STR_OPT_VAR_NEVER_DODGE] = "Shades never dodge",
+    [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] =
+        "The Shades never step aside from Ico’s swings. Switches achievements off.",
+    [UI_STR_OPT_VAR_AGGRESSION] = "Shade aggression",
+    [UI_STR_VAL_VAR_AGG_OWN] = "Their own",
+    [UI_STR_VAL_VAR_AGG_BOLD_PATIENT] = "Bold, patient",
+    [UI_STR_VAL_VAR_AGG_BOLD_QUICK] = "Bold, quick",
+    [UI_STR_VAL_VAR_AGG_WARY_PATIENT] = "Wary, patient",
+    [UI_STR_VAL_VAR_AGG_WARY_QUICK] = "Wary, quick",
+    [UI_STR_OPT_VAR_AGGRESSION_NOTE] =
+        "How the Shades fight: bold or wary, patient or quick. Their own keeps each Shade’s habits. Achievements stay on.",
+    [UI_STR_OPT_VAR_NO_HINTS] = "No hints",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE] =
+        "Yorda gives no hints about where to go, as on the North American disc. Achievements stay on.",
+    [UI_STR_OPT_VAR_BARRIER] = "Queen barrier",
+    [UI_STR_VAL_VAR_HITS_5] = "5 hits",
+    [UI_STR_VAL_VAR_HITS_7] = "7 hits",
+    [UI_STR_OPT_VAR_BARRIER_NOTE] =
+        "How many hits it takes to break the Queen’s barrier. Achievements stay on.",
+    [UI_STR_OPT_VAR_NO_LOOK] = "No cutscene look-around",
+    [UI_STR_OPT_VAR_NO_LOOK_NOTE] =
+        "The right stick no longer looks around during cutscenes. Achievements stay on.",
+    [UI_STR_OPT_VAR_IGNORE_CAMS] = "Ignore cutscene cameras",
+    [UI_STR_OPT_VAR_IGNORE_CAMS_NOTE] =
+        "Cutscenes can look wrong; the game may show places it never meant you to see. Switches achievements off.",
+    [UI_STR_OPT_VAR_DEBUG_MENU] = "Debug menu",
+    [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] =
+        "The game’s own debug menu, for developers. Switches achievements off.",
 };
