@@ -1,6 +1,6 @@
 /* rd_crack_test.c: the crack filler above 1x (rd_crack_fill.c, issue 26).
  *
- *   rd_crack_test 2|4|1|frac|original [msaa|backdrop]
+ *   rd_crack_test 2|4|1|frac|original [msaa|backdrop|fold]
  *
  * On a Vulkan device (77 without one, or without MSAA4 when msaa is
  * given), a 640 x 448 frame under Enhanced at scale 2, 4 or 1, at the
@@ -43,8 +43,18 @@
  * entry 0) that the frame without anti-aliasing holds (the covered-majority
  * resolve: a pixel takes the clear's depth only when more than half its
  * samples lay in the crack, not when one did), and the slit,
- * wider than a pixel, keeps the clear's fog on every texel.  The log lines
- * are matched by test/rd_crack.cmake. */
+ * wider than a pixel, keeps the clear's fog on every texel.  With fold (the
+ * fog's local read: a tile-based profile, ICO_VK_FAKE_LIMITS=moltenvk, or
+ * ICO_RD_FOG_PATH=local; 77 without local read) the fill is drawn in the
+ * pass the fog keeps: the replay with the filler drew one fill, inside the
+ * scene pass (RdCrackCounts.folded), the fog drew by the local read
+ * (RdPerfRecord.fogLocalDraws) in that replay, and the replay has one
+ * render pass more than without the filler (besides the count's), not
+ * two; then the fog's path is set to the depth copy (the desktop's form:
+ * the fill's own pass, the fog on the colour alone) and the frame
+ * replayed with the filler: SCENE's colour and depth equal the folded
+ * replay's byte for byte.  The log lines are matched by
+ * test/rd_crack.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -193,6 +203,9 @@ typedef struct Picture {
     float *z; /* NULL where the depth does not read back (D24S8) */
     uint32_t w, h;
     uint32_t fills; /* RdPerfRecord.crackFillPasses of its replay */
+    /* its render passes, the count's among them (crackCountPasses), and
+     * the fog's draws by the local read */
+    uint32_t passes, countPasses, fogLocal;
 } Picture;
 
 static bool replay(bool fill, Picture *p)
@@ -200,6 +213,9 @@ static bool replay(bool fill, Picture *p)
     rd__crack_fill_set_enabled(fill);
     recordFrame();
     p->fills = g_rdPerf.crackFillPasses;
+    p->passes = g_rdPerf.passKinds[RD_PERF_PASS_RENDER];
+    p->countPasses = g_rdPerf.crackCountPasses;
+    p->fogLocal = g_rdPerf.fogLocalDraws;
     rhi_wait_idle();
     const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     if (!t) {
@@ -233,13 +249,14 @@ int main(int argc, char **argv)
 {
     printf("rd_crack_test\n");
     if (argc < 2) {
-        printf("usage: rd_crack_test 2|4|1|frac|original [msaa|backdrop]\n");
+        printf("usage: rd_crack_test 2|4|1|frac|original [msaa|backdrop|fold]\n");
         return 2;
     }
     const bool original = strcmp(argv[1], "original") == 0;
     const bool frac = strcmp(argv[1], "frac") == 0;
     const bool msaa = argc > 2 && strcmp(argv[2], "msaa") == 0;
     s_backdrop = argc > 2 && strcmp(argv[2], "backdrop") == 0;
+    const bool inPass = argc > 2 && strcmp(argv[2], "fold") == 0;
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = original ? RD_PRESET_ORIGINAL : RD_PRESET_ENHANCED;
@@ -258,6 +275,17 @@ int main(int argc, char **argv)
         printf("rd_crack_test: SKIP: MSAA4 is not offered here\n");
         rd_shutdown();
         return 77;
+    }
+    if (inPass && !rhi_limits()->localRead) {
+        printf("rd_crack_test: SKIP: no local read here\n");
+        rd_shutdown();
+        return 77;
+    }
+    if (inPass && !(g_rd.fogPath == RD_FOG_LOCAL && g_rd.profile.fogLocal)) {
+        printf("rd_crack_test: the fog's path is %s, not the local read (profile fog local %d)\n",
+               rd__fog_path_name(g_rd.fogPath), (int)g_rd.profile.fogLocal);
+        rd_shutdown();
+        return 1;
     }
     rd__crack_fill_count_all(true);
     RdCrackCounts c0;
@@ -402,6 +430,56 @@ int main(int argc, char **argv)
         if (msaa) {
             CHECK(c1.skipped > c0.skipped, "the MSAA replay not counted as left unfilled");
         }
+    }
+    if (inPass) {
+        /* one fill in the scene pass the local fog keeps: one render pass
+           more than without the filler, the count's apart */
+        const int extra = (int)on.passes - (int)on.countPasses - (int)off.passes;
+        printf("  fold: %llu of %llu fills inside the scene pass; render passes %u without the "
+               "filler, %u with it (%u the count's); fog draws by the local read %u and %u\n",
+               (unsigned long long)(c1.folded - c0.folded),
+               (unsigned long long)(c1.filled - c0.filled), off.passes, on.passes, on.countPasses,
+               off.fogLocal, on.fogLocal);
+        CHECK(active, "the filler does not draw here");
+        CHECK(c1.folded - c0.folded == 1, "%llu fills inside the scene pass",
+              (unsigned long long)(c1.folded - c0.folded));
+        CHECK(off.fogLocal > 0 && on.fogLocal > 0, "fog draws by the local read: %u and %u",
+              off.fogLocal, on.fogLocal);
+        CHECK(extra == 1, "%d render passes more with the filler, not 1", extra);
+        /* the desktop's form: the fog's depth copy (the fill in its own
+           pass), a replay for the switch first */
+        rd__set_fog_path(RD_FOG_COPY);
+        Picture cp;
+        memset(&cp, 0, sizeof(cp));
+        bool okCp = replay(true, &cp);
+        free(cp.px);
+        free(cp.z);
+        memset(&cp, 0, sizeof(cp));
+        RdCrackCounts c2;
+        rd__crack_fill_counts(&c2);
+        okCp = replay(true, &cp) && okCp && cp.w == w && cp.h == h;
+        rd__crack_fill_wait();
+        RdCrackCounts c3;
+        rd__crack_fill_counts(&c3);
+        CHECK(okCp, "SCENE readback on the depth copy");
+        const size_t n = (size_t)w * h;
+        size_t diffPx = 0, diffZ = 0;
+        for (size_t i = 0; okCp && i < n; i++) {
+            diffPx += memcmp(&cp.px[i * 4], &on.px[i * 4], 4) != 0;
+            diffZ += on.z && cp.z && memcmp(&cp.z[i], &on.z[i], sizeof(float)) != 0;
+        }
+        printf("  the depth copy's replay: %u fills (%llu inside the scene pass), fog draws by "
+               "the local read %u; %zu texels' colour and %zu depths differ from the folded "
+               "replay\n",
+               cp.fills, (unsigned long long)(c3.folded - c2.folded), cp.fogLocal, diffPx, diffZ);
+        CHECK(cp.fills == 1 && c3.folded == c2.folded && cp.fogLocal == 0,
+              "the depth copy's replay: %u fills, %llu folded, %u local fog draws", cp.fills,
+              (unsigned long long)(c3.folded - c2.folded), cp.fogLocal);
+        CHECK(diffPx == 0 && diffZ == 0,
+              "the folded replay against the depth copy's: %zu colours, %zu depths differ", diffPx,
+              diffZ);
+        free(cp.px);
+        free(cp.z);
     }
     if (msaa) {
         /* the same frame without anti-aliasing and without the filler (a
