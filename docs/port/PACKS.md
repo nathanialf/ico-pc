@@ -75,7 +75,7 @@ indexed and the option on, or the dump on.
 ### Folders
 
 Each disc has its own serial folder, the one PCSX2 uses for it: `SCES-50760` for the European
-disc, `SCPS-11003` for the Japanese one, `SCPS-56001` for the Korean one, `SCUS-97113` for the
+disc, `SCPS-11003` for the Japanese one, `SCPS-56001` for the Korean one, `SCPS-55001` for the Asian one, `SCUS-97113` for the
 North American one and for the August 2001 preview disc (it boots the same `SCUS_971.13`, so PCSX2
 names its folder so: pack files are named by texture hash, and a USA pack serves both; the
 preview disc's id stays `PROTO-20010806` everywhere else), and `SCUS-97158` for the June 2001
