@@ -1,0 +1,62 @@
+# config/motion_bits.jun26.txt -- the bits of MotionDef's bit words (modeBits, flags,
+# flags2) that game code reads by shift or mask, where the June 2001 magazine demo
+# (SCUS-97158) keeps them. Written by tools/gen_ee_layout.py --bits from
+# upstream's sources: a VERSION_JUN26 block's reads are paired with its PAL arm's,
+# read for read; a read outside any block is the same bit on both discs. The named
+# bit-fields map by name (config/ee_layout.jun26.txt) and are not listed. The loader's
+# bit map (ICO_TF_BITMAP, tools/gen_data_desc.py) builds each PAL host word from these.
+#   MotionDef <pal word> pal=<first bit> width=<bits> jun26=<word>:<first bit>
+#   (pal=- declares a target bit no host bit takes; jun26=- a PAL bit written 0)
+upstream 3947e0641f5cd232ab3828f9e09944d6bbf3b2c5
+# Blocks not paired read for read, checked by hand (UNPAIRED in the script):
+#   ico2/fumi/src/act-game.c:740: ACTGame_GetCurrentCallStatus: PAL's modeBits 16-18 are the demo's 27-28 (the hand rows)
+#   ico2/fumi/src/act-game.c:2342: PAL flags bit 10: the demo's twin reads no bit there (written 0)
+#   ico2/fumi/src/act-game.c:2655: ACTGame_BeforeFunc: PAL's sign bit (flags 31) is the demo's flags bit 14 (the hand row); PAL's flags bit 14 has no reader in the demo (written 0)
+#   ico2/fumi/src/act-game.c:6021: masked by `mode &= 7` after: PAL bits 19-21, the row pal=19 width=3
+#   ico2/fumi/src/act-way.c:22: PAL flags bit 12: the demo's twin reads no bit there (written 0)
+#   ico2/fumi/src/boyact.c:66: findChainInJump: the demo reads chainHang (flags 11, by name) for PAL's flags2 bit 8, nothing for flags2 bit 6, chainIkRate (flags 3) for flags2 bit 5: the hand rows
+#   ico2/fumi/src/boyact.c:4128: PAL flags bit 13: the demo's twin reads no bit there (written 0)
+#   ico2/fumi/src/boyact.c:8187: PAL flags bit 8: the demo's twin reads no bit there (written 0)
+#   ico2/fumi/src/commonact.c:452: the demo's arm reads modeBits 16-18, flags 20 and 19 (intr10Live, named) for PAL's modeBits 19-21 and flags 25 and 24; PAL's cases 259, 240 and 241 (flags 9, 5, 5) are PAL's alone: the hand rows 25, 9 and 5
+#   ico2/fumi/src/commonact.c:2299: a PAL-only read of flags bit 4 (written 0)
+#   ico2/fumi/src/commonact.c:7084: PAL flags bit 6: the demo's twin reads no bit there (written 0)
+#   ico2/fumi/src/commonact.c:9747: a PAL-only read of flags bit 4 (written 0)
+#   ico2/fumi/src/girl_act.c:2183: PAL flags bit 15: the demo's twin reads no bit there (written 0)
+#   ico2/omori/src/chain.c:1207: PAL flags bit 11 (chainHang): the demo's chain.c twin reads no bit; the host's chainHang holds the demo's by name (its findChainInJump reads it)
+MotionDef modeBits pal=0 width=8 jun26=modeBits:0  # ico2/fumi/src/act-game.c:6021
+MotionDef modeBits pal=8 width=4 jun26=modeBits:8  # ico2/fumi/src/act-game.c:2991, ico2/sugipon/src/handManager.c:264
+MotionDef modeBits pal=12 width=4 jun26=modeBits:12  # ico2/fumi/src/act-game.c:2991, ico2/sugipon/src/handManager.c:261
+MotionDef modeBits pal=16 width=2 jun26=modeBits:27  # by hand: ACTGame_GetCurrentCallStatus switches on PAL's modeBits 16-18 (h.hi & 7), the demo's 27-28 (>> 27 & 3, no case 3); 1026 of 1028 agree in each bit
+MotionDef modeBits pal=18 width=1 jun26=-  # by hand: the demo's call status field has two bits (ACTGame_GetCurrentCallStatus's case 3 is PAL's alone)
+MotionDef modeBits pal=19 width=3 jun26=modeBits:16  # ico2/fumi/src/act-env.c:772, ico2/fumi/src/act-game.c:316
+MotionDef modeBits pal=22 width=2 jun26=modeBits:21  # ico2/fumi/src/girl_act.c:8320
+MotionDef modeBits pal=24 width=2 jun26=modeBits:19  # ico2/fumi/src/act-env.c:772
+MotionDef flags2 pal=0 width=1 jun26=flags:13  # ico2/fumi/src/act-game.c:2991
+MotionDef flags2 pal=1 width=1 jun26=flags:12  # ico2/fumi/src/commonact.c:7184
+MotionDef flags2 pal=2 width=1 jun26=modeBits:31  # ico2/fumi/src/act-game.c:2991
+MotionDef flags2 pal=3 width=1 jun26=flags:0  # ico2/fumi/src/act-game.c:2991
+MotionDef flags2 pal=5 width=1 jun26=flags:3  # by hand: findChainInJump's 0.8 IK rate: PAL reads flags2 bit 5, the demo its chainIkRate (flags bit 3); 1027 of 1028 agree
+MotionDef flags2 pal=6 width=1 jun26=-  # by hand: findChainInJump: the demo's arm has no test of it (0 keeps PAL's == 0 true)
+MotionDef flags2 pal=7 width=1 jun26=flags:4  # ico2/fumi/src/act-game.c:2991
+MotionDef flags2 pal=8 width=1 jun26=-  # by hand: findChainInJump's 300/100 range: the demo's arm reads its chainHang by name (flags bit 11, the host's chainHang by name; all 1028 agree with PAL flags2 bit 8), so a host bit can take it once only
+MotionDef flags pal=0 width=1 jun26=flags:9  # ico2/fumi/src/girl_act.c:6061
+MotionDef flags pal=1 width=1 jun26=flags:8  # ico2/fumi/src/act.c:1121
+MotionDef flags pal=3 width=1 jun26=flags:6  # ico2/fumi/src/enemy_act.c:550
+MotionDef flags pal=4 width=1 jun26=-  # by hand: only PAL's commonact.c twins read it (2299, 9747; the demo has neither block)
+MotionDef flags pal=5 width=1 jun26=-  # by hand: only PAL's intr cases 240 and 241 read it (the demo's twin has neither)
+MotionDef flags pal=6 width=1 jun26=-  # by hand: only PAL's commonact.c twin reads it
+MotionDef flags pal=8 width=1 jun26=-  # by hand: only PAL's boyact.c twin reads it
+MotionDef flags pal=9 width=1 jun26=-  # by hand: only PAL's intr case 259 reads it (the demo's commonact.c twin has no such case)
+MotionDef flags pal=10 width=1 jun26=-  # by hand: only PAL's actGame_SendMailToBirds reads it (the demo's twin reads no bit)
+MotionDef flags pal=12 width=1 jun26=-  # by hand: only PAL's act-way.c twin reads it
+MotionDef flags pal=13 width=1 jun26=-  # by hand: only PAL's boyact.c twin reads it
+MotionDef flags pal=14 width=1 jun26=-  # by hand: only PAL's ACTGame_BeforeFunc reads it (with actModeTbl's bit14); no PAL motion sets it
+MotionDef flags pal=15 width=1 jun26=-  # by hand: only PAL's girl_act.c twin reads it
+MotionDef flags pal=16 width=1 jun26=-  # by hand: jumpHit: only PAL's actCommonJump reads it (the demo's twin reads no bit); the bit upstream's header names jumpHit on the demo, flags 16, is PAL's flags bit 28 (act-env.c's pair; all 1028 agree, 1025 with PAL's jumpHit)
+MotionDef flags pal=18 width=1 jun26=flags:22  # ico2/fumi/src/act-game.c:290
+MotionDef flags pal=25 width=1 jun26=flags:20  # by hand: commonact.c's landing test reads PAL bit 25, the demo's bit 20; all 1028 agree
+MotionDef flags pal=26 width=1 jun26=flags:24  # ico2/fumi/src/act-game.c:2226
+MotionDef flags pal=28 width=1 jun26=flags:16  # ico2/fumi/src/act-env.c:772
+MotionDef flags pal=29 width=1 jun26=flags:15  # ico2/fumi/src/commonact.c:8590, ico2/fumi/src/girl_act.c:8320
+MotionDef flags pal=30 width=1 jun26=flags:23  # ico2/fumi/src/act-game.c:2226
+MotionDef flags pal=31 width=1 jun26=flags:14  # by hand: ACTGame_BeforeFunc's root test reads PAL's sign bit, the demo's flags bit 14; 1023 of 1028 agree (no other bit of the demo agrees in more)
