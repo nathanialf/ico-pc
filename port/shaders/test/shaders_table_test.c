@@ -104,7 +104,8 @@ static const char *const expectedPrepass[] = {
 static const char *const retired[] = {"vu_tri_vs", "vu_legacy_ps", "vu_legacy_texa_ps"};
 
 /* the anti-aliasing's (rd_present.c, rd_replay.c's MSAA epoch) */
-static const char *const expectedAa[] = {"aa_reduce_ps", "depth_resolve_ps", "depth_upsample_ps"};
+static const char *const expectedAa[] = {"aa_reduce_ps", "depth_resolve_ps", "depth_upsample_ps",
+                                         "msaa_resolve_ps"};
 
 /* the same entries compiled with other macros: the fog reading the
  * depth's words (FOG_BUFFER, rd_fog_path.c) and the multisampled depth per
