@@ -220,6 +220,28 @@ original game's behaviour (`port/game/options.h`, header comment).
 | `hold_type` | string | `"hold"` | `"hold"`: keep R1 held to hold Yorda's hand (the game's Hold type A); `"toggle"`: press R1 once to take it and again to let go (B). Wins over the memory card's `controlType`; another word reads as `"hold"` and is logged once. A pad recording's header records it |
 | `developer_mode` | bool | `false` | the development build's debug menu and options |
 
+### [variants]
+
+Extras > Game variants ([UI.md](UI.md#extras--game-variants), [OPTIONS.md](../OPTIONS.md#game-variants)).
+Read once by `port/game/variants.c` the first time each is asked for (`ico_variant_*`); every default is
+the game as the disc ships it. All eight are in a pad recording's header (`record_keys`). A word
+or number that is no value reads as the default and is logged once.
+
+| key | type | default | meaning |
+| --- | --- | --- | --- |
+| `shade_toughness` | string | `"original"` | `"original"` (the disc's table), `"american"` (every Shade as tough as on the North American disc, and no tougher on later playthroughs) or `"no_plus"` (the disc's Shades, no tougher on later playthroughs) |
+| `one_hit` | bool | `false` | a swing hurts a Shade only once (`debug_one_hit_only`); suspends achievements |
+| `never_dodge` | bool | `false` | the Shades never dodge (`debug_ignore_dodge`); suspends achievements |
+| `aggression` | string | `"own"` | `"own"` (each Shade's own), `"bold_patient"`, `"bold_quick"`, `"wary_patient"` or `"wary_quick"` (`debug_enemy_battle_type`) |
+| `no_hints` | bool | `false` | no hints, as on the North American disc |
+| `barrier_hits` | int | absent (not in the template) | `5` or `7`: the hits the Queen's barrier takes; absent, the disc's own (`7` on `jun26`, else `5`); the Settings row writes it |
+| `no_cutscene_look` | bool | `false` | no camera look-around in cutscenes |
+| `ignore_cutscene_cameras` | bool | `false` | the cutscenes' cameras are ignored (`debug_ignore_demo_camera`); suspends achievements |
+
+The Debug menu row has no key: its press marks the Debug menu used until the options are reloaded,
+which suspends achievements too (`ico_variants_suspend_achievements`, read by `gamestate.c` beside
+developer mode).
+
 ### [mirror]
 
 `slot_N` (bool) and `slot_N_sum` (int, the save's game-block checksum) for save file N
