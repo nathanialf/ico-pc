@@ -12,7 +12,7 @@ from, and how the one program plays every disc (the regions).
 | `ico2/<programmer>/` | the game's sources, one directory per programmer (`common`, `fumi`, `ito`, `omori`, `script`, `seki`, `sugipon`), each with `src/` (or `ios/`, `isys/`, `sound/`, and `ito/mpeg/`, the PS2 movie player that is not compiled) and `include/` |
 | `ico2/vusrc/` | the VU1 [microprograms](ARCHITECTURE.md#terms), kept as the reference for the renderer's shaders; never compiled |
 | `sce/` | Sony's SDK headers the game includes, and `sce/libsndn2/sound.c`, the one `sce/` source compiled |
-| `config/link_order.pal.txt` | the retail link's object list: the inventory of the game's translation units and data members |
+| `config/link_order.<slug>.txt` | each target's retail link object list (their union is the host build's source list): the inventory of the game's translation units and data members |
 | `cmake/IcoSources.cmake` | the host source lists, generated from the link order |
 | `cmake/IcoFlags.cmake` | the semantics options, the record-layout options and both warning sets |
 | `cmake/IcoExclusions.cmake` | game sources left out of the build (both lists empty) |
@@ -30,9 +30,15 @@ from, and how the one program plays every disc (the regions).
 
 ## What is compiled
 
-`tools/gen_sources.py` writes `cmake/IcoSources.cmake` from `config/link_order.pal.txt`
-(`read_link_order`): every `ico2/...c` line is a source and every `data:<member>` line a data
-member, in the retail link's order. Each source lands in the list of its programmer directory
+`tools/gen_sources.py` writes `cmake/IcoSources.cmake` from the union of `config/link_order.*.txt`
+(`link_orders`, `read_link_order`, `union`; a target is in the union when its link order exists, the
+rows of `config/regions.txt` are not consulted): every `ico2/...c` line is a source and every
+`data:<member>` line a data member, in the retail link's order (pal's first; a line only a later
+target has goes after the line it follows in that target's order). A source only some targets link
+is compiled for all of them. A source a link order lists that the tree does not hold yet (a target's
+file that arrives with a merge) is written to `ICO_PENDING_SOURCES`, which nothing compiles; `--check`
+names it on stderr ("pending the merge") and still passes, and once the file exists `--check` fails
+until the script moves it into its programmer's list. Each source lands in the list of its programmer directory
 (`ICO_SOURCES_common` ... `ICO_SOURCES_sugipon`, in `ICO_PROGRAMMERS` order), except the ones under
 `ico2/ito/mpeg/` (`EE_ONLY_DIRS`), which go to `ICO_EE_ONLY_SOURCES`: the PS2 movie player, nine
 files `port/fmv` replaces, listed so the inventory stays complete and never compiled. The 73

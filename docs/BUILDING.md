@@ -734,7 +734,7 @@ What stays in the tree besides the host build, and why:
 | kept | for |
 | --- | --- |
 | `sce/`, `ico2/vusrc/` | the game includes `sce/`'s headers under the SDK names; the [VU1](port/ARCHITECTURE.md#terms) sources are the shaders' reference. Only `sce/libsndn2/sound.c` is in a host target (`ico_sndn2`) |
-| `config/link_order.pal.txt`, `config/data_*.pal.txt`, `config/link.pal.ld` | the source list `gen_sources.py` reads, the data members' schema, and the retail link script as a record of the PS2 layout. Nothing links with them |
+| `config/link_order.<slug>.txt`, `config/data_*.pal.txt`, `config/link.pal.ld` | the source list `gen_sources.py` reads, the data members' schema, and the retail link script as a record of the PS2 layout. Nothing links with them |
 | `config/symbol_addrs.pal*.txt`, `config/struct_classes.txt`, `config/tables_manifest.txt` | the generators' inputs (`tools/gen_data_desc.py`, `tools/gen_data_c.py`, `tools/gen_layout_asserts.py`) |
 | `config/ico.pal.yaml` | the PS2 build's splat layout, a record; nothing reads it (its first line) |
 | `tools/extract_elf.sh`, `tools/extract_elf.py` | the maintainer step below |
