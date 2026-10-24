@@ -47,8 +47,9 @@
  * it (on nothing: deselects); moved ICO_TOUCH_EDIT_DRAG_MM q it drags the
  * control (clamped live as the layout clamps it), released it drops: the
  * anchors become the nearer edge on each axis, snapped to the grid's
- * multiples when Snap is on, and a drop whose shape covers another shown
- * control's centre springs back (refused). A second finger, anywhere,
+ * multiples when Snap is on, and a drop whose shape covers the centre of
+ * another control that takes touches (shown or Hidden; an Off one is left
+ * out) springs back (refused). A second finger, anywhere,
  * while the first is down on a control pinches that control (selected
  * already by the first finger's down, no tap needed): scale x (distance
  * now / distance at the second finger's down), clamped, snapped to 0.05
@@ -476,6 +477,9 @@ void ico_touch_edit_sanitize(IcoTouchCtlEdit *c, int ctl)
     if (c->alpha != c->alpha) {
         c->alpha = 1.0f; /* not a number */
     }
+    /* a control that is drawn takes touches; one that is not is Hidden
+       (active) or Off */
+    c->active = c->alpha > 0.0f || c->active != 0;
     c->alpha =
         clampf(c->alpha, ico_touch_ctl_hideable(ctl) ? 0.0f : ICO_TOUCH_EDIT_ALPHA_MIN, 1.0f);
     if (ctl == ICO_TOUCH_CTL_LOOK) {
@@ -666,20 +670,11 @@ static IcoTouchRect ctl_box(const IcoTouchLayout *l, int ctl)
     return z >= 0 ? l->button[z].rect : mkrect(0.0f, 0.0f, 0.0f, 0.0f);
 }
 
-static int ctl_hidden(const IcoTouchLayout *l, int ctl)
+/* an Off control: outside the overlap and refuse rules (a Hidden one is
+   inside them: it still takes touches, so covering it would press it) */
+static int ctl_off(const IcoTouchLayout *l, int ctl)
 {
-    const int z = zone_of(ctl);
-
-    if (ctl == ICO_TOUCH_CTL_DPAD) {
-        return !(l->button[ICO_TOUCH_B_UP].alpha > 0.0f);
-    }
-    if (ctl == ICO_TOUCH_CTL_STICK) {
-        return !(l->stickAlpha > 0.0f);
-    }
-    if (ctl == ICO_TOUCH_CTL_LOOK) {
-        return !(l->lookAlpha > 0.0f);
-    }
-    return z >= 0 && !(l->button[z].alpha > 0.0f);
+    return ico_touch_ctl_state(l, ctl) == ICO_TOUCH_OFF;
 }
 
 /* a disc (x, y the centre, w the radius) or a rect */
@@ -761,8 +756,8 @@ static int shapes_touch(int ca, IcoTouchRect a, int cb, IcoTouchRect b)
     return 0;
 }
 
-/* 1 << ctl for each shown control whose shape shares a point with another
-   shown control's (the look pad left out) */
+/* 1 << ctl for each control that takes touches (shown or Hidden) whose
+   shape shares a point with another such control's (the look pad left out) */
 static unsigned int overlap_mask(const IcoTouchLayout *l)
 {
     IcoTouchRect b[ICO_TOUCH_CTL_COUNT];
@@ -773,11 +768,11 @@ static unsigned int overlap_mask(const IcoTouchLayout *l)
         b[i] = ctl_box(l, i);
     }
     for (i = 0; i < ICO_TOUCH_CTL_LOOK; i++) {
-        if (ctl_hidden(l, i)) {
+        if (ctl_off(l, i)) {
             continue;
         }
         for (j = i + 1; j < ICO_TOUCH_CTL_LOOK; j++) {
-            if (!ctl_hidden(l, j) && shapes_touch(i, b[i], j, b[j])) {
+            if (!ctl_off(l, j) && shapes_touch(i, b[i], j, b[j])) {
                 m |= (1u << i) | (1u << j);
             }
         }
@@ -786,7 +781,8 @@ static unsigned int overlap_mask(const IcoTouchLayout *l)
 }
 
 /* the shape of ctl centred at (cx, cy) in a w x h box covers the centre of
-   another shown control of l (the look pad on neither side) */
+   another control of l that takes touches (shown or Hidden; the look pad on
+   neither side) */
 static int covers(const IcoTouchLayout *l, int ctl, float cx, float cy, float w, float h)
 {
     Prim p[2];
@@ -799,7 +795,7 @@ static int covers(const IcoTouchLayout *l, int ctl, float cx, float cy, float w,
     for (o = 0; o < ICO_TOUCH_CTL_LOOK; o++) {
         IcoTouchRect b;
 
-        if (o == ctl || ctl_hidden(l, o)) {
+        if (o == ctl || ctl_off(l, o)) {
             continue;
         }
         b = ctl_box(l, o);
@@ -828,9 +824,9 @@ static int edits_differ(const IcoTouchEdits *a, const IcoTouchEdits *b)
             if (x->set != y->set) {
                 return 1;
             }
-            if (x->set &&
-                (x->ax != y->ax || x->ay != y->ay || x->dx != y->dx || x->dy != y->dy ||
-                 x->scale != y->scale || x->alpha != y->alpha || x->w != y->w || x->h != y->h)) {
+            if (x->set && (x->ax != y->ax || x->ay != y->ay || x->dx != y->dx || x->dy != y->dy ||
+                           x->scale != y->scale || x->alpha != y->alpha || x->active != y->active ||
+                           x->w != y->w || x->h != y->h)) {
                 return 1;
             }
         }
@@ -906,6 +902,7 @@ static void set_place(IcoTouchEdits *e, int rule, const IcoTouchLayout *l, int c
         c->set = 1;
         c->scale = 1.0f;
         c->alpha = 1.0f;
+        c->active = 1;
     }
     if (look) {
         c->w = w / (q * c->scale);
@@ -1593,12 +1590,20 @@ void ico_touch_edit_view(const IcoTouchEditor *ed, const IcoTouchLayout *l, IcoT
     out->overlap = overlap_mask(l);
     for (i = 0; i < ICO_TOUCH_CTL_COUNT; i++) {
         out->ctl[i] = ctl_box(l, i);
-        if (ctl_hidden(l, i)) {
+        switch (ico_touch_ctl_state(l, i)) {
+        case ICO_TOUCH_HIDDEN:
             out->hidden |= 1u << i;
+            break;
+        case ICO_TOUCH_OFF:
+            out->off |= 1u << i;
+            break;
+        default:
+            break;
         }
     }
     out->refused = ed->refused;
     out->selScale = out->selAlpha = 1.0f;
+    out->selActive = 1;
     if (ed->selected >= 0 && ed->selected < ICO_TOUCH_CTL_COUNT && ed->rule >= 0 &&
         ed->rule < ICO_TOUCH_POSTURES) {
         const IcoTouchCtlEdit *c = &ed->work.ctl[ed->rule][ed->selected];
@@ -1606,6 +1611,7 @@ void ico_touch_edit_view(const IcoTouchEditor *ed, const IcoTouchLayout *l, IcoT
         if (c->set) {
             out->selScale = c->scale;
             out->selAlpha = c->alpha;
+            out->selActive = c->active != 0;
         }
     }
     ico_touch_edit_toolbar(l, out->tb, out->confirm);

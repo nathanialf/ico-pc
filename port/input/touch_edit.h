@@ -13,7 +13,8 @@
  * multiplier, and for the look pad its size in q. An unset control is at
  * its default place. The layout builder (ico_touch_layout_edits) applies
  * them after place(): the rects clamped inside the region and out of the
- * hinge band, hidden controls (alpha 0) skipped by the hit test.
+ * hinge band; a control at alpha 0 is not drawn, and Off (active 0) also
+ * skipped by the hit test (a Hidden one, active 1, still takes touches).
  *
  * The rails: scale ICO_TOUCH_EDIT_SCALE_MIN..MAX; alpha at least
  * ICO_TOUCH_EDIT_ALPHA_MIN for every control that is not hideable
@@ -69,7 +70,10 @@ typedef struct IcoTouchCtlEdit {
                              the safe area, under the camera hole); the
                              look pad's edges on those sides */
     float scale;          /* ICO_TOUCH_EDIT_SCALE_MIN..MAX, 1 = the default size */
-    float alpha;          /* 0..1 times the Touch opacity setting; 0 = hidden */
+    float alpha;          /* 0..1 times the Touch opacity setting; 0 = not drawn */
+    unsigned char active; /* 1: takes touches. Shown: alpha > 0 (active forced to 1);
+                             Hidden: alpha 0, active 1 (works, not drawn); Off:
+                             alpha 0, active 0 (neither) */
     float w, h;           /* ICO_TOUCH_CTL_LOOK only: the pad's size in q at scale 1;
                              0 its default size */
 } IcoTouchCtlEdit;

@@ -237,6 +237,45 @@ static int open_pads(void)
     return n;
 }
 
+/* the layout in play: one line naming its Hidden and Off controls when that
+   list changes (a load, Done, a fold, a size change), "touch: hidden: start,
+   dpad; off: select, l2"; one line when it is empty again; nothing for a
+   layout with none */
+static void touch_states_log(const IcoTouchLayout *l)
+{
+    static char s_last[256];
+    char hidden[128] = "", off[128] = "", line[256];
+    int c;
+
+    for (c = 0; c < ICO_TOUCH_CTL_COUNT; c++) {
+        const int st = ico_touch_ctl_state(l, c);
+        char *list = st == ICO_TOUCH_HIDDEN ? hidden : st == ICO_TOUCH_OFF ? off : NULL;
+        size_t used;
+
+        if (list == NULL) {
+            continue;
+        }
+        used = strlen(list);
+        snprintf(list + used, sizeof(hidden) - used, "%s%s", used > 0 ? ", " : "",
+                 ico_touch_ctl_name(c));
+    }
+    if (hidden[0] == '\0' && off[0] == '\0') {
+        line[0] = '\0';
+    } else {
+        snprintf(line, sizeof(line), "hidden: %s; off: %s", hidden[0] ? hidden : "none",
+                 off[0] ? off : "none");
+    }
+    if (strcmp(line, s_last) == 0) {
+        return;
+    }
+    if (line[0] != '\0') {
+        fprintf(stderr, "touch: %s\n", line);
+    } else {
+        fprintf(stderr, "touch: every control shown again\n");
+    }
+    snprintf(s_last, sizeof(s_last), "%s", line);
+}
+
 static void touch_rebuild(void)
 {
     IcoTouchInsets in = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -257,6 +296,9 @@ static void touch_rebuild(void)
     s_touchLayout = ico_touch_layout_edits(
         (uint32_t)s_touchW, (uint32_t)s_touchH, in, s_bind.touch_size, &s_touchEnv,
         s_touchEdit.active ? &s_touchEdit.work : ico_input_live_touch_edits());
+    if (!s_touchEdit.active) {
+        touch_states_log(&s_touchLayout);
+    }
 }
 
 /* the edits the layout should carry now: the editor's working copy while
@@ -420,6 +462,51 @@ int ico_input_sdl_touch_overlay(IcoTouchOverlay *out)
     return 1;
 }
 
+/* The menus by taps while the layout has the D-pad, Cross or Circle Off
+   (ico_touch_menu_taps): a finger that goes down over a menu (the pointer's
+   ico_pointer_menu) on no working control is the mouse's click there, so a
+   player who switched every control off still gets from Back's pause menu
+   to Options > Controls > Touch screen > Reset. One finger at a time; the
+   first such click of a run is logged. */
+static uint64_t s_tapFinger;
+static int s_tapDown;
+
+static void touch_menu_tap(const SDL_Event *e, int kind)
+{
+#if defined(__ANDROID__) || defined(ICO_IOS)
+    const int phone = 1;
+#else
+    const int phone = 0;
+#endif
+    static int s_tapLogged;
+    const uint64_t id = (uint64_t)e->tfinger.fingerID;
+    const int mode = ico_touch_effective_mode(s_bind.touch_mode, s_raw.gamepads, phone);
+
+    if (kind == ICO_TOUCH_DOWN) {
+        if (s_tapDown || !ico_pointer_menu() || !ico_touch_menu_taps(&s_touchLayout) ||
+            !ico_touch_accepts(mode, s_raw.gamepads) ||
+            ico_touch_takes(&s_touchLayout, e->tfinger.x * (float)s_touchLayout.outW,
+                            e->tfinger.y * (float)s_touchLayout.outH)) {
+            return;
+        }
+        if (!s_tapLogged) {
+            s_tapLogged = 1;
+            fprintf(stderr, "touch: the d-pad, cross or circle is off: a tap on a menu row "
+                            "clicks it\n");
+        }
+        s_tapFinger = id;
+        s_tapDown = 1;
+        ico_pointer_move(e->tfinger.x, e->tfinger.y);
+        ico_pointer_button(1);
+    } else if (s_tapDown &&
+               (kind == ICO_TOUCH_CANCEL || (kind == ICO_TOUCH_UP && id == s_tapFinger))) {
+        /* the place stays: a tap shorter than a Main tick is still taken
+           there (ico_pointer_take reads the click with its place) */
+        s_tapDown = 0;
+        ico_pointer_button(0);
+    }
+}
+
 static void touch_finger(const SDL_Event *e, int kind)
 {
     if (SDL_GetTouchDeviceType(e->tfinger.touchID) != SDL_TOUCH_DEVICE_DIRECT) {
@@ -431,6 +518,7 @@ static void touch_finger(const SDL_Event *e, int kind)
                              e->tfinger.y, kind, e->tfinger.timestamp);
         return;
     }
+    touch_menu_tap(e, kind);
     ico_touch_event(&s_touch, (uint64_t)e->tfinger.fingerID, e->tfinger.x, e->tfinger.y, kind,
                     e->tfinger.timestamp);
 }

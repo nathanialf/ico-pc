@@ -166,7 +166,9 @@ typedef struct IcoTouchButton {
     int round;         /* 1: a disc of radius rect.w / 2 (the faces, R1) */
     unsigned int pad;  /* its ICO_PAD_* bit */
     float alpha;       /* the edits' opacity multiplier, 1 at the default;
-                          0 hidden: drawn nowhere, skipped by the hit test */
+                          0: drawn nowhere (Hidden or Off, by active) */
+    int active;        /* 1: it takes touches (shown or Hidden); 0 Off: skipped by
+                          the hit test */
 } IcoTouchButton;
 
 /* The editable controls (touch_edit.h): the four D-pad keys are one
@@ -210,8 +212,11 @@ typedef struct IcoTouchLayout {
     float faceX, faceY;    /* the face-button diamond's centre */
     float dpadX, dpadY;    /* the D-pad cluster's centre */
     IcoTouchButton button[ICO_TOUCH_BUTTONS];
-    float stickAlpha, lookAlpha; /* the edits' opacity multipliers (1 default; 0 hidden:
-                                    the area starts nothing) */
+    float stickAlpha, lookAlpha; /* the edits' opacity multipliers (1 default; 0: not
+                                    drawn) */
+    int stickActive, lookActive; /* 1: the area starts the stick or the look pad (shown
+                                    or Hidden); 0 Off: it starts nothing. Not
+                                    IcoTouchState's stickActive (a finger holds it) */
     unsigned int editGen;        /* IcoTouchEdits.gen the layout was built with (0 none) */
 } IcoTouchLayout;
 
@@ -274,10 +279,15 @@ typedef struct IcoTouchEditView {
     int snap;             /* the grid drawn */
     float grid;           /* its pitch, q */
     unsigned int overlap; /* 1 << ctl: drawn amber */
-    unsigned int hidden;  /* 1 << ctl: drawn dashed with the word Hidden */
+    unsigned int hidden;  /* 1 << ctl: Hidden (alpha 0, still takes touches): drawn
+                             dashed with the word Hidden */
+    unsigned int off;     /* 1 << ctl: Off (alpha 0, takes no touch): drawn dashed and
+                             dimmer with the word Off */
     int refused;          /* > 0: the "cannot cover another's middle" note shows */
     float selScale;       /* the selected control's scale and alpha, for the keys' values */
     float selAlpha;
+    int selActive;           /* the selected control takes touches (selAlpha 0: Hidden, else
+                             Off) */
     IcoTouchRect tb[10];     /* the toolbar strip's cells (ICO_TOUCH_ED_TB_*: eight keys and
                                 the two readouts, display only) */
     IcoTouchRect confirm[3]; /* the confirm strip (ICO_TOUCH_ED_CF_*), state CONFIRM_RESET */
@@ -320,15 +330,34 @@ struct IcoTouchEdits;
    centre from its anchor edges, its size scaled, clamped inside the region
    and out of the hinge band (a control with an offset past the safe area:
    inside the bounds and out of the band carried to them,
-   touch_edit.h ico_touch_edit_outside); hidden controls get alpha 0. NULL edits, or
-   none set, give ico_touch_layout_env's layout exactly (alpha 1 everywhere,
-   editGen e->gen or 0). */
+   touch_edit.h ico_touch_edit_outside); Hidden and Off controls get alpha 0,
+   Off ones active 0 too. NULL edits, or none set, give ico_touch_layout_env's
+   layout exactly (alpha and active 1 everywhere, editGen e->gen or 0). */
 IcoTouchLayout ico_touch_layout_edits(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size,
                                       const IcoTouchEnv *env, const struct IcoTouchEdits *edits);
 
 /* The hinge band carried along the hinge out to the layout's bounds (zero
    for no band). The editor's clamp and grid keep clear of this. */
 IcoTouchRect ico_touch_clamp_band(const struct IcoTouchLayout *l);
+
+/* What a control (ICO_TOUCH_CTL_*) is on the layout: SHOWN (drawn, takes
+   touches), HIDDEN (not drawn, takes touches), OFF (neither); the D-pad by
+   its Up key. SHOWN for a control out of range. */
+enum { ICO_TOUCH_SHOWN = 0, ICO_TOUCH_HIDDEN = 1, ICO_TOUCH_OFF = 2 };
+
+int ico_touch_ctl_state(const IcoTouchLayout *l, int ctl);
+
+/* 1 when a finger going down at (x, y), output pixels, would be taken by a
+   working control (a button that is not Off, the stick's or the look pad's
+   area unless that is Off): what ico_touch_step would classify it as. */
+int ico_touch_takes(const IcoTouchLayout *l, float x, float y);
+
+/* 1 when the layout leaves the menus without what they are used with by
+   touch: the D-pad, Cross or Circle is Off. The device layer then lets a tap
+   that ico_touch_takes nothing of click the menu row under it (the mouse's
+   click, port/input/pointer.h), so with every control Off, Back (the pause
+   menu) and taps still reach Options > Controls > Touch screen > Reset. */
+int ico_touch_menu_taps(const IcoTouchLayout *l);
 
 /* Clear every finger and output, look_decay to ICO_TOUCH_LOOK_DECAY (set
    the bindings' mouse_decay after), and show the overlay from nowNs with
