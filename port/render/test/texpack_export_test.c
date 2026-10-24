@@ -723,8 +723,16 @@ static int runSynthetic(const char *work)
                   strstr(mip.s[0], "@0") != NULL && strstr(mip.s[1], "@1") != NULL,
               "two levels, a file each (%d)", mip.n);
         StrList t4 = {0};
-        CHECK(rowOf(man, "object/t4.tm2", flags, sizeof(flags), &t4) == 0 && t4.n == 3,
-              "a 16-bit CLUT: a name per TEXA mode (%d)", t4.n);
+        CHECK(rowOf(man, "object/t4.tm2", flags, sizeof(flags), &t4) == 0 && t4.n >= 1 &&
+                  t4.n <= 3 && strcmp(flags, "-") == 0,
+              "a 16-bit CLUT: a name per TEXA mode that differs, none a duplicate (%d, %s)", t4.n,
+              flags);
+        for (int i = 0; i < t4.n; i++) {
+            for (int j = 0; j < i; j++) {
+                CHECK(strcmp(t4.s[i], t4.s[j]) != 0, "the 16-bit CLUT's names differ: %s", t4.s[i]);
+            }
+            CHECK(t4.s[i][0] == '+', "the 16-bit CLUT's names are written: %s", t4.s[i]);
+        }
         CHECK(rowOf(man, "data_EG01.jim@0x8800", flags, sizeof(flags), NULL) == 0,
               "the second record has a row");
         /* the manifest's names are the oracle's */
@@ -886,8 +894,24 @@ static int runDisc(const char *disc, const char *namesPath, const char *work)
           "the export's names are texpack_names.txt's (%d, %d)", listed.n, want.n);
     CHECK(st.done - st.bad == lines, "%d items less %d bad are the %d lines of the names file",
           st.done, st.bad, lines);
-    CHECK(st.written == listed.n && st.duplicates > 0, "%d names once, %d duplicates", st.written,
+    /* a file per name: a level of one texture that is another texture's
+       level 0 (the same texels, the same size) is one file under two
+       "@level" tokens */
+    StrList files = {0};
+    for (int i = 0; i < listed.n; i++) {
+        char f[128];
+        snprintf(f, sizeof(f), "%s", listed.s[i]);
+        char *at = strchr(f, '@');
+        if (at != NULL) {
+            *at = '\0';
+        }
+        strAdd(&files, f);
+    }
+    strUnique(&files);
+    CHECK(st.written == files.n && st.duplicates > 0,
+          "%d names once (%d tokens, %d files), %d duplicates", st.written, listed.n, files.n,
           st.duplicates);
+    strFree(&files);
     printf("texpack_export_test: disc: %d items (%d tim2, %d records), %d names to write, %d "
            "duplicates, %d refused (%d short CLUT)\n",
            st.done, st.tim2, st.jimRecords, st.written, st.duplicates, st.refused,

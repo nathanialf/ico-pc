@@ -2549,8 +2549,9 @@ static void testGameOptions(void)
     press(0x4000);
     press(0x4000);
     press(0x4000);
+    press(0x4000);
     CHECK(lt_ext_layout(gameL)->curItem == film,
-          "down four times from Yorda (past Natural chains): Film effect");
+          "down five times from Yorda (past Natural chains and Skip the opening): Film effect");
     optionScreenMode = 0;
     s_filmCalls = 0;
     CHECK(strcmp(ui_settings_value_text(UI_OPT_FILM_EFFECT), "Off") == 0, "film effect Off (%s)",

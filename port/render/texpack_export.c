@@ -293,6 +293,17 @@ static int doLevel(TexpackExport *x, const TexpackWalkItem *it, const TexpackSou
         if (tn->startLevel != b || tn->mipChain) {
             continue;
         }
+        /* two TEXA modes of one level can give one name (no entry the
+           alpha rule tells apart): one file, one token, not a duplicate */
+        int own = 0;
+        for (int j = 0; j < i && !own; j++) {
+            const TexpackName *o = &names[j];
+            own = o->startLevel == b && !o->mipChain && o->tex0Hash == tn->tex0Hash &&
+                  o->clutHash == tn->clutHash && o->bits == tn->bits;
+        }
+        if (own) {
+            continue;
+        }
         if (texpack_format_name(tn, base, sizeof(base)) < 0) {
             continue;
         }
