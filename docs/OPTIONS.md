@@ -92,8 +92,8 @@ How the picture looks.
   card. MSAA smooths the world as it is drawn before the shadows and the
   mist; the mist, the glow and everything drawn after them are not smoothed
   by it (supersampling smooths those too). A gap thinner than half a pixel
-  between two pieces of the world no longer shows as a line of mist with
-  MSAA; a wider gap still does, as with the original.
+  between two pieces of the world does not show as a line of mist with
+  MSAA; a wider gap does, as in the original.
   While the Preset is **Original**, this row stays at **Off** and cannot be
   changed. Pick **Enhanced**, or change one of the Preset's rows, to use
   it. The row shows your saved choice. When the game is not using it,
