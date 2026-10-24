@@ -79,6 +79,13 @@ void gif_HostDrawKeyText(const char *s, int part);
    does the VU draws around them.  The GIF_SP_WORLD helpers of GifPacket.c
    (rotTransPers) are marked without it. */
 void gif_HostFrameProjected(int on);
+/* PC port: until called with (0, 0), the frame-projected primitives decoded
+   have STQs that follow their screen position: S / Q grows by dsx and T / Q
+   by dsy per 12.4 unit of GS X and Y (puddle.c drawRipples, whose STs into
+   the reflection block are its projected points scaled), so the presenter
+   moves each vertex's S / Q and T / Q with the vertex where it re-projects
+   it (rd.h rd_frame_projected_st) */
+void gif_HostFrameProjectedSt(float dsx, float dsy);
 
 #endif /* ICO_RD */
 
