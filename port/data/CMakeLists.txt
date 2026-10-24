@@ -254,12 +254,12 @@ if(ICO_DATA_PYTHON)
     add_test(NAME data_desc_fresh
              COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_data_desc.py" --check
              WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-    # the USA disc's and the August 2001 disc's sets, written before
+    # the USA disc's, the August 2001 disc's and the June 2001 demo's sets, written before
     # config/regions.txt lists their rows (gen_data_c.py PENDING_ROWS):
     # port/data/gen/<slug>/ must be what the table with the pending rows up to
     # that slug gives (once the rows land, data_desc_fresh checks them with
     # the others and these check them again)
-    foreach(_slug ntsc aug6)
+    foreach(_slug ntsc aug6 jun26)
         add_test(NAME data_desc_fresh_${_slug}
                  COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_data_desc.py" --check
                          --version ${_slug}
@@ -273,7 +273,7 @@ if(ICO_DATA_PYTHON)
     # each other disc's config/ee_layout.<slug>.txt must be what its recorded
     # upstream revision gives (exit 0 with a note when that revision is not in
     # the clone)
-    foreach(_slug jpn kor ntsc aug6)
+    foreach(_slug jpn kor ntsc aug6 jun26)
         add_test(NAME ee_layout_fresh_${_slug}
                  COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_ee_layout.py"
                          --version ${_slug} --check
@@ -299,6 +299,8 @@ set(ICO_BASE_ELF_NTSC "${CMAKE_SOURCE_DIR}/baserom/ntsc/baseelf.elf" CACHE FILEP
     "The North American base ELF the loader test's reference tables are written from")
 set(ICO_BASE_ELF_AUG6 "${CMAKE_SOURCE_DIR}/baserom/aug6/baseelf.elf" CACHE FILEPATH
     "The August 2001 preview disc's base ELF the loader test's reference tables are written from")
+set(ICO_BASE_ELF_JUN26 "${CMAKE_SOURCE_DIR}/baserom/jun26/baseelf.elf" CACHE FILEPATH
+    "The June 2001 magazine demo's base ELF (CUS97113/SCPS_000.00) the loader test's reference tables are written from")
 # The members a disc's config/data_members.<slug>.txt lists. ICO_DATA_MEMBERS
 # is the union of every link order's (tools/gen_sources.py), so a member only
 # some discs have (the USA disc has no hint table, the June 2001 demo tables
