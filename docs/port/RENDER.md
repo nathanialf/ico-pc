@@ -2697,7 +2697,8 @@ there. So the frame's view is the tick before's bit for bit, every draw that is 
 tick's block through it, a moving matched draw the tick before's block re-based (a few ulps from the
 recorded one), the CPU-projected draws are re-projected and the draws of the tick before alone are
 placed as at any other alpha, and the draws carry the ticks' cameras (`RD_VU_TICK_CAMERAS`). An
-object that did not move is drawn where it stood at the tick before, whichever kind of draw it is.
+object that did not move is drawn where it stood at the tick before, whichever kind of draw it is. The
+ripples' STs move with their vertices ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-ripples-between-ticks)).
 
 **Payloads of two sizes.** A VU draw's payload carries its card section
 ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)) only under the region rule (`port/render/rd_mesh.c`
