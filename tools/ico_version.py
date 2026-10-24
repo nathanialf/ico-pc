@@ -1,24 +1,27 @@
 """Shared version-slug detection and per-version paths for ICO tooling.
 
-The targets and where their files are:
+The targets:
 
-    branch   slug   link order                    base files
-    ------   ----   ---------------------------   -----------------------------
-    main     pal    config/link_order.pal.txt     baserom/pal/baseelf.elf
-    main     jpn    config/link_order.jpn.txt     baserom/jpn/baseelf.elf
-    main     kor    config/link_order.kor.txt     baserom/kor/baseelf.elf
-    ntsc     us     (the ntsc branch's config)    baserom/baseelf.elf
-    aug6     aug6   (the aug6 branch's config)    baserom/aug6/baseelf.elf
+    slug   disc                                 boot ELF
+    ----   ----------------------------------   -----------
+    pal    PAL retail, SCES-50760               SCES_507.60
+    jpn    Japanese retail, SCPS-11003 (1.02)   SCPS_110.03
+    kor    Korean retail, SCPS-56001            SCPS_560.01
+    ntsc   USA retail, SLUS-20218               SCUS_971.13
+    aug6   Aug-6-2001 prototype                 SCUS_971.13
+    jun26  Jun-26-2001 demo, on the US          CUS97113/SCPS_000.00
+           PlayStation Magazine's disc
+           SCUS-97158
 
-`us` keeps its base files at the top of `baserom/` (it was the first target);
-every other slug gets its own `baserom/<slug>/` subdirectory. `baserom/` is
-gitignored and can hold every target's files side by side.
+A target is configured in a tree when config/link_order.<slug>.txt exists
+(configured_versions()). Its extracted base files are
+baserom/<slug>/baseelf.elf (`baserom/` is gitignored and holds every
+target's files side by side).
 
 An explicit `VERSION` environment variable wins; otherwise the slug is the
 first one in VERSIONS order whose `config/link_order.<slug>.txt` exists
-(configured_versions()); this tree carries pal's, jpn's and kor's (upstream's
-records; tools/gen_sources.py reads pal's as the one source inventory), so it
-is pal.
+(configured_versions()), which is pal here; tools/gen_sources.py reads the
+union of every configured target's link order.
 
 DISCS is upstream's table of what each target's disc image is called and how
 tools name it in messages (the file under baserom/, the product code, the
@@ -32,7 +35,7 @@ import sys
 from pathlib import Path
 
 # Detection order.
-VERSIONS = ("pal", "jpn", "kor", "us", "aug6", "jun26")
+VERSIONS = ("pal", "jpn", "kor", "ntsc", "aug6", "jun26")
 
 # Per-target disc image.
 #   region  : how messages describe the disc
@@ -74,7 +77,7 @@ DISCS = {
         # The Korean disc ships no map or listing either.
         "extras": ("SYSTEM.CNF",),
     },
-    "us": {
+    "ntsc": {
         "region": "USA retail",
         "product": "SLUS-20218",
         "where": "USA",
@@ -115,18 +118,16 @@ def configured_versions(repo_root: Path) -> list[str]:
 
 
 def detect_version(repo_root: Path) -> str:
-    """The target slug: $VERSION, else the first configured one, else us."""
+    """The target slug: $VERSION, else the first configured one, else ntsc."""
     v = os.environ.get("VERSION")
     if v:
         return v
     have = configured_versions(repo_root)
-    return have[0] if have else "us"
+    return have[0] if have else "ntsc"
 
 
 def baserom_dir(repo_root: Path, version: str) -> Path:
     """Directory holding this target's extracted base files."""
-    if version == "us":
-        return repo_root / "baserom"
     return repo_root / "baserom" / version
 
 
@@ -139,6 +140,27 @@ def sha1sums_path(repo_root: Path, version: str) -> Path:
     """The recorded SHA-1s of this target's base files,
     config/sha1sums.<version>.txt (keyed by basename)."""
     return repo_root / "config" / f"sha1sums.{version}.txt"
+
+
+def disc_name(version: str) -> str:
+    """The disc as messages name it, e.g. `PAL retail disc (SCES-50760)`
+    ("" for a slug with no DISCS row)."""
+    d = DISCS.get(version)
+    if d is None:
+        return ""
+    return f"{d['region']} disc" + (f" ({d['product']})" if d["product"] else "")
+
+
+def disc_image(repo_root: Path, version: str) -> Path | None:
+    """The disc image file the user copies under baserom/ for this target."""
+    d = DISCS.get(version)
+    return repo_root / "baserom" / d["image"] if d else None
+
+
+def disc_cue(repo_root: Path, version: str) -> Path | None:
+    """The raw image's cue sheet, or None for a cooked ISO (or no recipe)."""
+    d = DISCS.get(version)
+    return repo_root / "baserom" / d["cue"] if d and d["cue"] else None
 
 
 _KEYS = {
