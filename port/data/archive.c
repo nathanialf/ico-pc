@@ -391,9 +391,12 @@ int ico_archive_info_acceptable(const IcoArchiveInfo *info, char *why, size_t wh
         say(why, whysize, "the source image was not verified (rule '%s')", info->accepted_by);
         return 0;
     }
+    /* a row with no image hash on file (the magazine demo) is accepted by the ELF rule only */
     if (strcmp(info->accepted_by, ICO_RULE_ISO_SHA1) == 0 &&
-        (!is_hex40(info->iso_sha1) || strcmp(info->iso_sha1, disc->iso_sha1) != 0)) {
-        say(why, whysize, "source image SHA-1 %s, expected %s", info->iso_sha1, disc->iso_sha1);
+        (disc->iso_sha1 == NULL || !is_hex40(info->iso_sha1) ||
+         strcmp(info->iso_sha1, disc->iso_sha1) != 0)) {
+        say(why, whysize, "source image SHA-1 %s, expected %s", info->iso_sha1,
+            disc->iso_sha1 != NULL ? disc->iso_sha1 : "(none on file)");
         return 0;
     }
     if (strcmp(info->elf_sha1, disc->elf_sha1) != 0) {
