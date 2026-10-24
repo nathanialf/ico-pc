@@ -1286,11 +1286,11 @@ static void testAddToSteam(void)
     CHECK(strcmp(lt_ext_row_text(row), "Add to Steam") == 0, "the row's text \"%s\"",
           lt_ext_row_text(row));
     {
-        int el[8];
-        const int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 8);
+        int el[9];
+        const int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 9);
 
-        CHECK(en == 8 && el[4] == row,
-              "eight rows, Add to Steam then Export textures, the pop-ups and Back (%d)", en);
+        CHECK(en == 9 && el[5] == row,
+              "nine rows, Add to Steam then Export textures, the pop-ups and Back (%d)", en);
     }
 
     /* Cross: the handler once, its answer as the popup */
@@ -1389,19 +1389,19 @@ static void testExportTextures(void)
     CHECK(strcmp(lt_ext_row_text(row), "Export textures") == 0, "export: the row's text \"%s\"",
           lt_ext_row_text(row));
     {
-        int el[8];
-        const int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 8);
+        int el[9];
+        const int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 9);
 
-        CHECK(en == 8 && el[4] == ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_STEAM) &&
-                  el[5] == row && el[6] == ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_ACH_POPUPS),
-              "export: eight rows, Add to Steam, Export textures, the pop-ups (%d)", en);
+        CHECK(en == 9 && el[5] == ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_STEAM) &&
+                  el[6] == row && el[7] == ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_ACH_POPUPS),
+              "export: nine rows, Add to Steam, Export textures, the pop-ups (%d)", en);
         /* Down from Add to Steam lands on it, Down again on the pop-ups */
-        lt_ext_layout(exL)->curItem = el[4];
+        lt_ext_layout(exL)->curItem = el[5];
         frame(0);
         press(0x4000);
         CHECK(lt_ext_layout(exL)->curItem == row, "export: Down from Add to Steam lands on it");
         press(0x4000);
-        CHECK(lt_ext_layout(exL)->curItem == el[6], "export: Down from it lands on the pop-ups");
+        CHECK(lt_ext_layout(exL)->curItem == el[7], "export: Down from it lands on the pop-ups");
     }
     ui_settings_set_steam_handler(NULL);
     lt_ext_layout(exL)->curItem = row;
@@ -4135,6 +4135,302 @@ static void testTouchEditorPage(void)
     memset(&s_ted, 0, sizeof(s_ted));
 }
 
+/* ---------------------------------------------------- Extras > Game variants */
+
+/* stderr to a file for a stretch: the log lines the page writes */
+static int s_varErrSaved = -1;
+
+static void varErrCapture(void)
+{
+    char p[1100];
+    path(p, sizeof(p), "settings_test_stderr.txt");
+    fflush(stderr);
+    s_varErrSaved = dup(2);
+    FILE *f = freopen(p, "wb", stderr);
+    (void)f;
+}
+
+static void varErrRelease(char *out, size_t n)
+{
+    char p[1100];
+    path(p, sizeof(p), "settings_test_stderr.txt");
+    fflush(stderr);
+    dup2(s_varErrSaved, 2);
+    close(s_varErrSaved);
+    clearerr(stderr);
+    out[0] = '\0';
+    FILE *f = fopen(p, "rb");
+    if (f) {
+        size_t got = fread(out, 1, n - 1, f);
+        out[got] = '\0';
+        fclose(f);
+    }
+}
+
+/* the note row starting with prefix, its text on one line contains want */
+static int varNoteHas(const char *prefix, const char *want)
+{
+    const int note = noteStarting(UI_PAGE_VARIANTS, prefix);
+    char flat[512];
+    if (note < 0) {
+        return 0;
+    }
+    snprintf(flat, sizeof(flat), "%s", lt_ext_row_text(note));
+    for (char *c = flat; *c; c++) {
+        *c = *c == '\n' ? ' ' : *c;
+    }
+    return strstr(flat, want) != NULL;
+}
+
+/* Extras > Game variants from the title or the pause menu: the link after
+   Characters, the page's rows and values (the game as shipped), a step on
+   every row (the value text, the [variants] key, the saved file), each
+   row's note and whether it says achievements go off, the achievements rule,
+   and the Debug menu row (hidden without Developer mode; a press marks the
+   menu used and calls the hook, whose stub logs once).  who: the disc */
+static void testVariantsPage(const char *who, int title, int *debugPressed)
+{
+    static const char *const kLabels[10] = {"Shade toughness",
+                                            "One hit per swing",
+                                            "Shades never dodge",
+                                            "Shade aggression",
+                                            "No hints",
+                                            "Queen barrier",
+                                            "No cutscene look-around",
+                                            "Ignore cutscene cameras",
+                                            "Debug menu",
+                                            "Back"};
+    static const char *const kDefaults[8] = {"Original", "Off",    "Off", "Their own",
+                                             "Off",      "5 hits", "Off", "Off"};
+    char p[1100], log[1024];
+
+    useConfig("version = 1\n");
+    stage_no = title ? 1 : 11;
+    const int mainL = enterMain(title);
+    const int exL = openPage(mainL, 8, UI_PAGE_EXTRAS);
+    int el[9];
+    const int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 9);
+    CHECK(en == 9 && strcmp(lt_ext_row_text(el[4]), "Game variants") == 0 &&
+              !lt_ext_prop(el[4])->defaultMask &&
+              lt_ext_prop(el[4])->right == ui_settings_page_layout(UI_PAGE_VARIANTS),
+          "%s %s: the Game variants link after Characters, on both entries", who,
+          title ? "title" : "pause");
+    lt_ext_layout(exL)->curItem = el[4];
+    frame(0);
+    press(0x40);
+    const int varL = ui_settings_page_layout(UI_PAGE_VARIANTS);
+    CHECK(settle(varL, 60), "%s: Cross on Game variants opens the page", who);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+
+    int lb[16], lo[16], lv[16];
+    const int n = ui_settings_page_rows(UI_PAGE_VARIANTS, lb, lo, lv, 16);
+    CHECK(n == 10, "%s: ten rows (%d)", who, n);
+    for (int i = 0; i < n && i < 10; i++) {
+        CHECK(strcmp(lt_ext_row_text(lb[i]), kLabels[i]) == 0, "%s: row %d is \"%s\" (\"%s\")", who,
+              i, kLabels[i], lt_ext_row_text(lb[i]));
+    }
+    /* the game as shipped: every value, and every key unset */
+    for (int i = 0; i < 8; i++) {
+        CHECK(strcmp(lt_ext_row_text(lv[i]), kDefaults[i]) == 0,
+              "%s: row %d starts \"%s\" (\"%s\")", who, i, kDefaults[i], lt_ext_row_text(lv[i]));
+    }
+    CHECK(ico_variant_shade_toughness() == ICO_TOUGHNESS_ORIGINAL && !ico_variant_one_hit() &&
+              !ico_variant_never_dodge() && ico_variant_aggression() == ICO_AGGRESSION_OWN &&
+              !ico_variant_no_hints() && ico_variant_barrier_hits() == 5 &&
+              !ico_variant_no_cutscene_look() && !ico_variant_ignore_cutscene_cameras() &&
+              !ico_variants_suspend_achievements(),
+          "%s: the accessors answer the shipped game", who);
+    /* the Debug menu row is Developer mode's */
+    CHECK(lt_ext_prop(lb[8])->defaultMask && !lt_ext_prop(lb[9])->defaultMask,
+          "%s: no Debug menu row without Developer mode", who);
+    checkPageFits(UI_PAGE_VARIANTS, "Game variants (nine rows)");
+
+    /* Shade toughness: Original, American, Not tougher later, around, both ways */
+    lt_ext_layout(varL)->curItem = lb[0];
+    frame(0);
+    press(0x2000);
+    CHECK(strcmp(lt_ext_row_text(lv[0]), "American") == 0 &&
+              ico_variant_shade_toughness() == ICO_TOUGHNESS_AMERICAN &&
+              strcmp(ico_config_get_string("variants.shade_toughness", ""), "american") == 0,
+          "%s: Right: American and its key", who);
+    press(0x2000);
+    CHECK(strcmp(lt_ext_row_text(lv[0]), "Not tougher later") == 0 &&
+              ico_variant_shade_toughness() == ICO_TOUGHNESS_NO_PLUS &&
+              strcmp(ico_config_get_string("variants.shade_toughness", ""), "no_plus") == 0,
+          "%s: Right: Not tougher later and its key", who);
+    press(0x2000);
+    CHECK(strcmp(lt_ext_row_text(lv[0]), "Original") == 0, "%s: Right wraps to Original", who);
+    press(0x8000);
+    CHECK(strcmp(lt_ext_row_text(lv[0]), "Not tougher later") == 0,
+          "%s: Left wraps to Not tougher later", who);
+    CHECK(!ico_variants_suspend_achievements(), "%s: Toughness keeps the achievements", who);
+    press(0x2000);
+    CHECK(varNoteHas("American: every Shade as tough as on the North American disc",
+                     "no tougher on later playthroughs. Achievements stay on."),
+          "%s: the toughness note, achievements stay on", who);
+
+    /* the aggression row: five values around */
+    lt_ext_layout(varL)->curItem = lb[3];
+    frame(0);
+    {
+        static const char *const kAgg[5] = {"Bold, patient", "Bold, quick", "Wary, patient",
+                                            "Wary, quick", "Their own"};
+        static const char *const kAggKey[5] = {"bold_patient", "bold_quick", "wary_patient",
+                                               "wary_quick", "own"};
+        for (int k = 0; k < 5; k++) {
+            press(0x2000);
+            CHECK(strcmp(lt_ext_row_text(lv[3]), kAgg[k]) == 0 &&
+                      strcmp(ico_config_get_string("variants.aggression", ""), kAggKey[k]) == 0,
+                  "%s: aggression step %d is \"%s\" (\"%s\")", who, k, kAgg[k],
+                  lt_ext_row_text(lv[3]));
+        }
+    }
+    CHECK(!ico_variants_suspend_achievements(), "%s: aggression keeps the achievements", who);
+    press(0x8000);
+    CHECK(strcmp(lt_ext_row_text(lv[3]), "Wary, quick") == 0 &&
+              ico_variant_aggression() == ICO_AGGRESSION_WARY_QUICK,
+          "%s: Left from Their own: Wary, quick", who);
+    press(0x2000);
+
+    /* the barrier: 5 hits, 7 hits, around; written as a number */
+    lt_ext_layout(varL)->curItem = lb[5];
+    frame(0);
+    press(0x2000);
+    CHECK(strcmp(lt_ext_row_text(lv[5]), "7 hits") == 0 && ico_variant_barrier_hits() == 7 &&
+              ico_config_get_int("variants.barrier_hits", 0) == 7,
+          "%s: Right: 7 hits and the key", who);
+    CHECK(!ico_variants_suspend_achievements(), "%s: the barrier keeps the achievements", who);
+    CHECK(varNoteHas("How many hits it takes to break the Queen", "Achievements stay on."),
+          "%s: the barrier note", who);
+    press(0x2000);
+    CHECK(strcmp(lt_ext_row_text(lv[5]), "5 hits") == 0 && ico_variant_barrier_hits() == 5 &&
+              ico_config_get_int("variants.barrier_hits", 0) == 5,
+          "%s: Right again: 5 hits, named in the file", who);
+
+    /* the switches: On and the key; the notes; the achievements rule */
+    static const struct {
+        int row;
+        IcoVariantId id;
+        const char *key;
+        const char *notePrefix;
+        int suspends;
+    } kSw[] = {
+        {1, ICO_VARIANT_ONE_HIT, "variants.one_hit", "Each swing of Ico", 1},
+        {2, ICO_VARIANT_NEVER_DODGE, "variants.never_dodge", "The Shades never step aside", 1},
+        {4, ICO_VARIANT_NO_HINTS, "variants.no_hints", "Yorda gives no hints", 0},
+        {6, ICO_VARIANT_NO_CUTSCENE_LOOK, "variants.no_cutscene_look", "The right stick no longer",
+         0},
+        {7, ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS, "variants.ignore_cutscene_cameras",
+         "Cutscenes can look wrong", 1},
+    };
+
+    for (int k = 0; k < (int)(sizeof(kSw) / sizeof(kSw[0])); k++) {
+        lt_ext_layout(varL)->curItem = lb[kSw[k].row];
+        frame(0);
+        press(0x2000);
+        CHECK(strcmp(lt_ext_row_text(lv[kSw[k].row]), "On") == 0 &&
+                  ico_variant_get(kSw[k].id) == 1 && ico_config_get_bool(kSw[k].key, 0) == 1,
+              "%s: %s: On and the key", who, kLabels[kSw[k].row]);
+        CHECK(ico_variants_suspend_achievements() == kSw[k].suspends, "%s: %s: achievements %s",
+              who, kLabels[kSw[k].row], kSw[k].suspends ? "off" : "on");
+        CHECK(varNoteHas(kSw[k].notePrefix,
+                         kSw[k].suspends ? "Switches achievements off." : "Achievements stay on."),
+              "%s: %s: the note says %s", who, kLabels[kSw[k].row],
+              kSw[k].suspends ? "off" : "stay on");
+        press(0x8000);
+        CHECK(strcmp(lt_ext_row_text(lv[kSw[k].row]), "Off") == 0 &&
+                  ico_variant_get(kSw[k].id) == 0 && ico_config_get_bool(kSw[k].key, 1) == 0,
+              "%s: %s: Left: Off", who, kLabels[kSw[k].row]);
+        CHECK(!ico_variants_suspend_achievements(), "%s: %s: achievements back on", who,
+              kLabels[kSw[k].row]);
+    }
+
+    /* the saved file keeps what was chosen */
+    lt_ext_layout(varL)->curItem = lb[1];
+    frame(0);
+    press(0x2000);
+    lt_ext_layout(varL)->curItem = lb[0];
+    frame(0);
+    press(0x2000);
+    CHECK(ui_settings_save() == 0, "%s: save", who);
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t != NULL && ico_toml_get_bool(t, "variants.one_hit", 0) == 1 &&
+              ico_toml_has(t, "variants.shade_toughness") &&
+              strcmp(ico_toml_get(t, "variants.shade_toughness"), "american") == 0 &&
+              ico_toml_get_bool(t, "variants.never_dodge", 1) == 0,
+          "%s: saved: variants.one_hit = true, shade_toughness = \"american\"", who);
+    if (t != NULL) {
+        ico_toml_free(t);
+    }
+
+    /* Developer mode shows the Debug menu row; a press marks it used and
+       calls the hook (ico_variants_open_debug_menu), whose stub logs once */
+    press(0x10);
+    CHECK(settle(exL, 60), "%s: Back to Extras", who);
+    ico_opt_set_developer_mode(1);
+    lt_ext_layout(exL)->curItem = el[4];
+    frame(0);
+    press(0x40);
+    CHECK(settle(varL, 60), "%s: Game variants again", who);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    CHECK(!lt_ext_prop(lb[8])->defaultMask, "%s: the Debug menu row with Developer mode on", who);
+    checkPageFits(UI_PAGE_VARIANTS, "Game variants (ten rows)");
+    CHECK(strcmp(lt_ext_row_text(lb[8]), "Debug menu") == 0 && lv[8] < 0,
+          "%s: the Debug menu is a press row, no value", who);
+    lt_ext_layout(varL)->curItem = lb[8];
+    frame(0);
+    CHECK(varNoteHas("The game\xE2\x80\x99s own debug menu", "Switches achievements off."),
+          "%s: the Debug menu note", who);
+    ico_variants_debug_menu_clear();
+    ico_variant_set(ICO_VARIANT_ONE_HIT, 0);
+    ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, 0);
+    CHECK(!ico_variants_suspend_achievements() || ico_opt_developer_mode(),
+          "%s: nothing but Developer mode suspends before the press", who);
+    varErrCapture();
+    press(0x40);
+    varErrRelease(log, sizeof(log));
+    CHECK(strstr(log, "variants: the Debug menu is opened from Options") != NULL,
+          "%s: the press is logged (\"%s\")", who, log);
+    if (!*debugPressed) {
+        CHECK(strstr(log, "variants: the debug menu hook is not wired yet") != NULL,
+              "%s: the stub hook logs once (\"%s\")", who, log);
+        *debugPressed = 1;
+    } else {
+        CHECK(strstr(log, "not wired yet") == NULL, "%s: the stub does not log twice", who);
+    }
+    CHECK(ico_variants_suspend_achievements() == 1, "%s: the Debug menu opened: achievements off",
+          who);
+    ico_variants_debug_menu_clear();
+    ico_opt_set_developer_mode(0);
+    press(0x10);
+    CHECK(settle(exL, 60), "%s: Back to Extras at the end", who);
+    useConfig("version = 1\n");
+    ico_opt_reload();
+}
+
+static void testVariants(void)
+{
+    int debugPressed = 0;
+    testVariantsPage("pal", 1, &debugPressed);
+    testVariantsPage("pal", 0, &debugPressed);
+}
+
+/* the same on the Japanese or Korean disc (ctests settings_extra_jpn,
+   settings_extra_kor): the page is every disc's */
+static void testVariantsOtherDisc(const char *slug)
+{
+    int debugPressed = 0;
+    CHECK(ico_region_select(slug) == 0, "the %s disc selected", slug);
+    testVariantsPage(slug, 1, &debugPressed);
+    testVariantsPage(slug, 0, &debugPressed);
+    CHECK(ico_region_select("pal") == 0, "the European disc again");
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -4148,6 +4444,8 @@ int main(int argc, char **argv)
         testOtherDiscHints(argv[2]);
         /* Skip the opening: the title's menu after the boot, on that disc */
         testSkipOpeningTitle(argv[2]);
+        /* Extras > Game variants on that disc */
+        testVariantsOtherDisc(argv[2]);
         printf("settings_extra_test %s: %s\n", argv[2], failures ? "failed" : "ok");
         return failures ? 1 : 0;
     }
@@ -4200,6 +4498,8 @@ int main(int argc, char **argv)
     testNaturalChains();
     testSkipOpening();
     testSkipOpeningTitle("pal");
+    /* Extras > Game variants */
+    testVariants();
     /* the version in the Options menu */
     testVersion();
     /* Menu language, the Japanese and Korean discs */
