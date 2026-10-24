@@ -66,9 +66,9 @@ _Static_assert(MF_ORIGIN >= MF_GAP_X && MF_ORIGIN >= MF_GAP_Y && MF_ORIGIN % MF_
    that changes every tick (the Models viewer's "Frame N / M") keeps its
    steady rows where they are and recycles the counter's bands, where a
    whole-page rule alone finds every page drawn each frame and draws new
-   words with the plain font once the pages are full.  Only when every shelf of every page of
-   the scale holds a strip drawn in the last MF_EVICT_FRAMES frames does a
-   word fall back to the plain font (ui_menu_font_fallbacks counts those,
+   words with the plain font once the pages are full.  Only when every
+   shelf of every page of the scale holds a strip drawn in the last
+   MF_EVICT_FRAMES frames does a word fall back to the plain font (ui_menu_font_fallbacks counts those,
    ui_menu_font_shelf_reclaims the emptied shelves; both logged). */
 #define MF_PAGE_MAX 4096
 #define MF_PAGES 4        /* pages per style */

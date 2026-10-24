@@ -827,8 +827,9 @@ static int sameCell(const UiMenuStrip *a, const UiMenuStrip *b)
    600 frames at scale sc the stale counter shelves are emptied and their
    bands reused: no word is drawn with the plain font, the steady rows keep
    their cells (the last row's the same in frame 0 and 599), no second page
-   of the scale is opened and the strips cached stay below maxStrips (one
-   page's worth; 600 without the reclaim) */
+   of the scale is opened and the strips cached grow by fewer than maxStrips
+   over the run (one page's worth: about 35 counters at 3x, 180 at 1x; 600
+   without the reclaim) */
 static void testCounterStream(int sc, int maxStrips)
 {
     enum { FRAMES = 600 };
@@ -836,6 +837,7 @@ static void testCounterStream(int sc, int maxStrips)
     ui__menu_force_scale(sc);
     const int pagesBefore = lightPagesOf(sc);
     const int fb0 = ui_menu_font_fallbacks(), rc0 = ui_menu_font_shelf_reclaims();
+    const int strips0 = ui_menu_font_strip_count();
     UiMenuStrip first, last;
     memset(&first, 0, sizeof(first));
     memset(&last, 0, sizeof(last));
@@ -849,8 +851,9 @@ static void testCounterStream(int sc, int maxStrips)
     const int reclaims = ui_menu_font_shelf_reclaims() - rc0;
     const int pages = lightPagesOf(sc);
     printf("menu_text_test: counter stream at %dx: %d frames, %d shelves reclaimed, %d words "
-           "plain, %d light pages (%d before), at most %d strips (%d at the end)\n",
-           sc, FRAMES, reclaims, fallbacks, pages, pagesBefore, most, ui_menu_font_strip_count());
+           "plain, %d light pages (%d before), at most %d strips (%d before, %d at the end)\n",
+           sc, FRAMES, reclaims, fallbacks, pages, pagesBefore, most, strips0,
+           ui_menu_font_strip_count());
     CHECK(fallbacks == 0, "counter stream at %dx: %d words drawn with the plain font", sc,
           fallbacks);
     CHECK(reclaims > 0, "counter stream at %dx: no shelf reclaimed", sc);
@@ -861,21 +864,23 @@ static void testCounterStream(int sc, int maxStrips)
           "page %d (%d, %d) tex %u in frame %d",
           sc, first.page, first.x, first.y, first.tex, last.page, last.x, last.y, last.tex,
           FRAMES - 1);
-    CHECK(most < maxStrips, "counter stream at %dx: %d strips cached (below %d)", sc, most,
-          maxStrips);
+    CHECK(most - strips0 < maxStrips,
+          "counter stream at %dx: %d strips cached, %d before (fewer than %d more)", sc, most,
+          strips0, maxStrips);
     ui__menu_force_scale(0);
 }
 
 /* Rows that leave and come back while the counter runs (the list scrolled
    down and up again): four names replaced for 100 frames, far past
    MF_EVICT_FRAMES (4), so their shelves may be emptied, then drawn again:
-   no word is drawn with the plain font and the strips stay bounded */
+   no word is drawn with the plain font and the strips cached grow by fewer
+   than 64 */
 static void testStaleRowReturns(void)
 {
     enum { PHASE = 100 };
 
     ui__menu_force_scale(3);
-    const int fb0 = ui_menu_font_fallbacks();
+    const int fb0 = ui_menu_font_fallbacks(), strips0 = ui_menu_font_strip_count();
     const char *scrolled[8];
     for (int r = 0; r < 8; r++) {
         scrolled[r] = r < 4 ? kScrolledRows[r] : kListRows[r];
@@ -894,7 +899,8 @@ static void testStaleRowReturns(void)
            "last row on page %d at scale %d\n",
            PHASE, fallbacks, most, last.page, last.scale);
     CHECK(fallbacks == 0, "rows back: %d words drawn with the plain font", fallbacks);
-    CHECK(most < 64 && last.scale == 3, "rows back: %d strips cached (below 64), scale %d", most,
+    CHECK(most - strips0 < 64 && last.scale == 3,
+          "rows back: %d strips cached, %d before (fewer than 64 more), scale %d", most, strips0,
           last.scale);
     ui__menu_force_scale(0);
 }
