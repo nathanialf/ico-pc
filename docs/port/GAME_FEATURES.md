@@ -12,6 +12,7 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | --- | --- |
 | `port/game/options.h`, `options.c` | the gameplay options, their config keys and defaults, the mirror flag per save slot, the stereo/mono choice |
 | `port/game/door_grace.h`, `door_grace.c` | the doorway fix's arm and arrival grace |
+| `port/game/variants.h`, `variants.c` | the game variants ([variants]): values, config keys, the achievements rule, the debug-menu hook stub |
 | `port/render/rd_chain.h`, `rd_content_chain.c` | Natural chains: the two chains, the Null's transform, the links' clip planes |
 | `port/game/achievements.h`, `achievements.c` | the achievement table, its conditions, the counters, `achievements.toml`, the popups |
 | `port/include/ico_gamestate.h`, `port/game/gamestate.c` | the read-only game-state view: the snapshot, the signals, the run, the retail address table |
@@ -51,6 +52,7 @@ defaults are [CONFIG.md](CONFIG.md#gameplay)'s; the differences from the PS2 are
 | `[gameplay] natural_chains` | `BgAnimation.c` (window build) |
 | `[gameplay] skip_opening` | `kanbanBoot.c`, `op.c`, `main_host.c` (its log line) |
 | `[gameplay] hold_type` | `mcard.c`, `layout_action.c`, `settings.c` |
+| `[variants] *` (Extras > Game variants) | `port/game/variants.c` (the accessors; the game hooks are read through `ico_variant_*`); `gamestate.c` (the achievements rule) |
 | `[gameplay] mirror` | `pad_host.c`, `audio_host.c`, rd, `photo_ui.c` |
 | `[gameplay] developer_mode` | `main.c`, `debug.c`, the port |
 | `[game] circle_back` | `layout_action.c`, `layout_texture.c` |
