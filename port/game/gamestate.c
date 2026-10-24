@@ -53,7 +53,7 @@ unsigned char ACTGame_FLAG_TETSUNAGI(void); /* fumi/src/act-game.c */
 
 void ico_gs_sample_live(IcoGsSnapshot *s)
 {
-    int i;
+    int i, nflags;
 
     memset(s, 0, sizeof(*s));
     s->valid = 1;
@@ -72,7 +72,14 @@ void ico_gs_sample_live(IcoGsSnapshot *s)
     s->layout = current_layout_id;
     memcpy(s->system_status, systemStatus, sizeof(s->system_status));
     memcpy(s->mc_preview, IosMcPreviewInfo, sizeof(s->mc_preview));
-    for (i = 0; i < ICO_GS_GFLAG_BYTES * 8; i++) {
+    /* the disc's own flag count: gFlag is 46 bytes on the North American and
+       August 2001 discs, 44 on the June 2001 demo (region.h gflag_count), and
+       gflagChk past the array would read the next global */
+    nflags = ico_region_cur()->gflag_count;
+    if (nflags > ICO_GS_GFLAG_BYTES * 8) {
+        nflags = ICO_GS_GFLAG_BYTES * 8;
+    }
+    for (i = 0; i < nflags; i++) {
         if (gflagChk(i)) {
             s->gflags[i >> 3] |= (unsigned char)(1u << (i & 7));
         }
@@ -551,6 +558,10 @@ typedef struct PeekRow {
 #define ROW(addr, field, name)                                                                     \
     {{(addr), sizeof(((IcoGsSnapshot *)0)->field), (name)}, offsetof(IcoGsSnapshot, field)}
 
+/* a row whose game-side object is smaller than the snapshot's field (the
+   served size is the disc's own) */
+#define ROWN(addr, field, bytes, name) {{(addr), (bytes), (name)}, offsetof(IcoGsSnapshot, field)}
+
 static const PeekRow s_peek_pal[] = {
     ROW(0x002A50C0u, gflags, "gflags"),                             /* gflagChk 0x00181A48 */
     ROW(0x0028F4C0u, system_status, "systemStatus"),                /* la_game_loading */
@@ -604,6 +615,79 @@ static const PeekRow s_peek_kor[] = {
     ROW(0x00634ECCu, layout, "current_layout_id"),                  /* kor.data.txt, map */
 };
 
+/* The North American disc (SCUS-97113), the August 2001 preview and the June
+   2001 demo: the same twelve rows, at each link's addresses (the lists were
+   written from each link's symbol table: config/symbol_addrs.<slug>.data.txt).
+   Three rows differ from the other discs: the story flags are gFlag (46
+   bytes, 44 on the demo; gflag.c names it gFlag, not gflags), the card
+   preview record is 16 bytes (IosMcPreviewInfo size:0x10), and there is no
+   gFlagGameClear (no New Game+ on these discs: the snapshot's game_clear
+   stays 0) and no language word served (NonLinearCameraMove is read for the
+   European disc only). */
+static const PeekRow s_peek_ntsc[] = {
+    ROWN(0x0028A520u, gflags, 46, "gFlag"),                         /* ntsc.data.txt */
+    ROW(0x00274EC0u, system_status, "systemStatus"),                /* ntsc.data.txt */
+    ROWN(0x00280F78u, mc_preview, 16, "IosMcPreviewInfo"),          /* ntsc.data.txt */
+    ROW(0x00631960u, frame_count, "frame_count"),                   /* ntsc.data.txt */
+    ROW(0x00631990u, stage_no, "stage_no"),                         /* ntsc.data.txt */
+    ROW(0x006319A0u, before_stage_no, "before_stage_no"),           /* ntsc.data.txt */
+    ROW(0x00631AF0u, gameover_flag, "gameover_flag"),               /* ntsc.data.txt */
+    ROW(0x00631AF4u, gameover_layout_flag, "gameover_layout_flag"), /* ntsc.data.txt */
+    ROW(0x00631B14u, current_stage_no, "current_stage_no"),         /* ntsc.data.txt */
+    ROW(0x006325B0u, save_stage, "gFlagSaveStage"),                 /* ntsc.data.txt */
+    ROW(0x00632F74u, time_count, "gamesysTimeCount"),               /* ntsc.data.txt */
+    ROW(0x0063314Cu, layout, "current_layout_id"),                  /* ntsc.data.txt */
+};
+
+static const PeekRow s_peek_aug6[] = {
+    ROWN(0x00286890u, gflags, 46, "gFlag"),                         /* aug6.data.txt */
+    ROW(0x00271240u, system_status, "systemStatus"),                /* aug6.data.txt */
+    ROWN(0x0027D2F8u, mc_preview, 16, "IosMcPreviewInfo"),          /* aug6.data.txt */
+    ROW(0x0062BAE0u, frame_count, "frame_count"),                   /* aug6.data.txt */
+    ROW(0x0062BB10u, stage_no, "stage_no"),                         /* aug6.data.txt */
+    ROW(0x0062BB20u, before_stage_no, "before_stage_no"),           /* aug6.data.txt */
+    ROW(0x0062BC70u, gameover_flag, "gameover_flag"),               /* aug6.data.txt */
+    ROW(0x0062BC74u, gameover_layout_flag, "gameover_layout_flag"), /* aug6.data.txt */
+    ROW(0x0062BC94u, current_stage_no, "current_stage_no"),         /* aug6.data.txt */
+    ROW(0x0062C710u, save_stage, "gFlagSaveStage"),                 /* aug6.data.txt */
+    ROW(0x0062D0B4u, time_count, "gamesysTimeCount"),               /* aug6.data.txt */
+    ROW(0x0062D28Cu, layout, "current_layout_id"),                  /* aug6.data.txt */
+};
+
+static const PeekRow s_peek_jun26[] = {
+    ROWN(0x00272D30u, gflags, 44, "gFlag"),                         /* jun26.data.txt */
+    ROW(0x0025D540u, system_status, "systemStatus"),                /* jun26.data.txt */
+    ROWN(0x002695B8u, mc_preview, 16, "IosMcPreviewInfo"),          /* jun26.data.txt */
+    ROW(0x006793E0u, frame_count, "frame_count"),                   /* jun26.data.txt */
+    ROW(0x00679410u, stage_no, "stage_no"),                         /* jun26.data.txt */
+    ROW(0x00679420u, before_stage_no, "before_stage_no"),           /* jun26.data.txt */
+    ROW(0x00679570u, gameover_flag, "gameover_flag"),               /* jun26.data.txt */
+    ROW(0x00679574u, gameover_layout_flag, "gameover_layout_flag"), /* jun26.data.txt */
+    ROW(0x00679594u, current_stage_no, "current_stage_no"),         /* jun26.data.txt */
+    ROW(0x0067A000u, save_stage, "gFlagSaveStage"),                 /* jun26.data.txt */
+    ROW(0x0067A96Cu, time_count, "gamesysTimeCount"),               /* jun26.data.txt */
+    ROW(0x0067AB3Cu, layout, "current_layout_id"),                  /* jun26.data.txt */
+};
+
+/* The Asian disc (SCPS-55001): the Korean program's globals at the Asian
+   link's addresses (config/symbol_addrs.cn.data.txt; gflags, a static, from
+   the link's symbol table), no NonLinearCameraMove either */
+static const PeekRow s_peek_cn[] = {
+    ROW(0x002A3040u, gflags, "gflags"),                             /* cn.data.txt (static) */
+    ROW(0x0028D440u, system_status, "systemStatus"),                /* cn.data.txt */
+    ROW(0x00299940u, mc_preview, "IosMcPreviewInfo"),               /* cn.data.txt */
+    ROW(0x00633860u, frame_count, "frame_count"),                   /* cn.data.txt */
+    ROW(0x00633890u, stage_no, "stage_no"),                         /* cn.data.txt */
+    ROW(0x006338A0u, before_stage_no, "before_stage_no"),           /* cn.data.txt */
+    ROW(0x00633A24u, gameover_flag, "gameover_flag"),               /* cn.data.txt */
+    ROW(0x00633A28u, gameover_layout_flag, "gameover_layout_flag"), /* cn.data.txt */
+    ROW(0x00633A44u, current_stage_no, "current_stage_no"),         /* cn.data.txt */
+    ROW(0x00634548u, game_clear, "gFlagGameClear"),                 /* cn.data.txt */
+    ROW(0x0063454Cu, save_stage, "gFlagSaveStage"),                 /* cn.data.txt */
+    ROW(0x00634F4Cu, time_count, "gamesysTimeCount"),               /* cn.data.txt */
+    ROW(0x0063513Cu, layout, "current_layout_id"),                  /* cn.data.txt */
+};
+
 typedef struct PeekTable {
     const PeekRow *rows;
     int count;
@@ -616,13 +700,31 @@ _Static_assert(sizeof(s_peek_jpn) / sizeof(s_peek_jpn[0]) <=
 _Static_assert(sizeof(s_peek_kor) / sizeof(s_peek_kor[0]) <=
                    sizeof(s_peek_pal) / sizeof(s_peek_pal[0]),
                "peek rows");
+_Static_assert(sizeof(s_peek_ntsc) / sizeof(s_peek_ntsc[0]) <=
+                   sizeof(s_peek_pal) / sizeof(s_peek_pal[0]),
+               "peek rows");
+_Static_assert(sizeof(s_peek_aug6) / sizeof(s_peek_aug6[0]) <=
+                   sizeof(s_peek_pal) / sizeof(s_peek_pal[0]),
+               "peek rows");
+_Static_assert(sizeof(s_peek_jun26) / sizeof(s_peek_jun26[0]) <=
+                   sizeof(s_peek_pal) / sizeof(s_peek_pal[0]),
+               "peek rows");
+_Static_assert(sizeof(s_peek_cn) / sizeof(s_peek_cn[0]) <=
+                   sizeof(s_peek_pal) / sizeof(s_peek_pal[0]),
+               "peek rows");
 
 /* config/regions.txt's order */
 static const PeekTable s_peek_tables[ICO_REGION_COUNT] = {
     {s_peek_pal, (int)(sizeof(s_peek_pal) / sizeof(s_peek_pal[0]))},
     {s_peek_jpn, (int)(sizeof(s_peek_jpn) / sizeof(s_peek_jpn[0]))},
     {s_peek_kor, (int)(sizeof(s_peek_kor) / sizeof(s_peek_kor[0]))},
+    {s_peek_ntsc, (int)(sizeof(s_peek_ntsc) / sizeof(s_peek_ntsc[0]))},
+    {s_peek_aug6, (int)(sizeof(s_peek_aug6) / sizeof(s_peek_aug6[0]))},
+    {s_peek_jun26, (int)(sizeof(s_peek_jun26) / sizeof(s_peek_jun26[0]))},
+    {s_peek_cn, (int)(sizeof(s_peek_cn) / sizeof(s_peek_cn[0]))},
 };
+_Static_assert(sizeof(s_peek_tables) / sizeof(s_peek_tables[0]) == 7 && ICO_REGION_COUNT == 7,
+               "a peek table for each row of config/regions.txt");
 
 static const PeekTable *peek_table(void)
 {
