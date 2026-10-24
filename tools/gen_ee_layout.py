@@ -867,6 +867,21 @@ HAND_ROWS = [
     ("kor", "flags", 2, 1, "flags", 6,
      "no reader in either tree; the Korean ELF's 1148 flags words equal the Japanese "
      "ELF's, so the same 7 motions (834, 839, 840, 848-851) set KOR bit 6"),
+    # The Asian disc: the Korean program, and its motion-def run is word for word the
+    # Korean ELF's (459,200 bytes, no differing word), so every Korean row holds. The
+    # scan of upstream's merged sources pairs all the Korean rows but these four.
+    ("cn", "flags", 2, 1, "flags", 6,
+     "no reader in either tree; the Asian ELF's motion-def run equals the Korean ELF's word "
+     "for word, so the same 7 motions (834, 839, 840, 848-851) set CN bit 6"),
+    ("cn", "flags", 5, 1, "flags", 3,
+     "the Korean pair (commonact.c's intr cases 240 and 241) for the Korean program; the "
+     "motion-def run equals the Korean ELF's word for word"),
+    ("cn", "flags", 9, 1, "flags", 10,
+     "the Korean pair (commonact.c's intr case 259) for the Korean program; the motion-def "
+     "run equals the Korean ELF's word for word"),
+    ("cn", "flags", 25, 1, "flags", 24,
+     "the Korean pair (commonact.c's landing test) for the Korean program; the motion-def "
+     "run equals the Korean ELF's word for word"),
     # The USA disc, from the blocks UNPAIRED_BY_SLUG lists. "N motions agree": of
     # the 1042 motions whose names are unique on both discs (the USA disc has
     # 1087 motions, PAL 1148), N set the PAL bit and the USA bit alike.
