@@ -338,6 +338,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
         "The Japanese disc image (SCPS-11003) the disc tests read, never committed")
     set(ICO_DISC_IMAGE_KOR "${CMAKE_SOURCE_DIR}/baserom/Ico_KOR.iso" CACHE FILEPATH
         "The Korean disc image (SCPS-56001) the disc tests read, never committed")
+    set(ICO_DISC_IMAGE_NTSC "${CMAKE_SOURCE_DIR}/baserom/Ico_USA.iso" CACHE FILEPATH
+        "The North American disc image (SCUS-97113) the disc tests read, never committed")
 endif()
 add_executable(fpenv_test port/platform/fpenv_test.c)
 target_compile_options(fpenv_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
