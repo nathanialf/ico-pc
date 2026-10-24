@@ -19,7 +19,7 @@
  *
  * With DISC_IMAGE the loader reads the set's boot ELF (SCES_507.60) through
  * the VFS, as ico_pc does; without it (or when the image is absent) it reads
- * BASE_ELF. --set SLUG (jpn, kor, ntsc, aug6, jun26) loads that disc's descriptor set and
+ * BASE_ELF. --set SLUG (jpn, kor, ntsc, aug6, jun26, cn) loads that disc's descriptor set and
  * compares with its reference (ico_ref_<slug>_<name>: gen_data_c.py --version
  * <slug>, the disc's bytes in the PAL record's form by
  * config/ee_layout.<slug>.txt, with the defaults and the permuted bit words),
@@ -116,6 +116,18 @@ static const Sym syms_jun26[] = {
 };
 #endif
 
+#ifdef ICO_TABLES_TEST_CN
+#define X(name) extern char ico_ref_cn_##name[];
+ICO_TABLE_SYMBOLS(X)
+#undef X
+
+static const Sym syms_cn[] = {
+#define X(name) {#name, name, ico_ref_cn_##name},
+    ICO_TABLE_SYMBOLS(X)
+#undef X
+};
+#endif
+
 typedef struct RefSet {
     const char *slug;
     const Sym *syms;
@@ -136,6 +148,9 @@ static const RefSet ref_sets[] = {
 #endif
 #ifdef ICO_TABLES_TEST_JUN26
     {"jun26", syms_jun26},
+#endif
+#ifdef ICO_TABLES_TEST_CN
+    {"cn", syms_cn},
 #endif
     {NULL, NULL},
 };
