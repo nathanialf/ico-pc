@@ -274,7 +274,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `hidden` and `o0` read as Off (`test_format_migration`), the editor over synthetic fingers and
   gamepad words (the opacity steps through Hidden and Off, the overlap and refuse rules counting
   Hidden and skipping Off: `test_hidden_off_editor`), sizes up to 300 % on screen in the three
-  postures on a phone and a 3000 x 2000 tablet (`test_size_300`), and the toolbar clear of every
+  postures on a phone and a 3000 x 2000 tablet, and on the phone folded SPLIT with a 160-pixel
+  inset on the left or the right edge a 300 % D-pad, stick, Cross or Select anchored on either
+  side kept on its own side of the fold, the D-pad and stick marked `fitted` (`test_size_300`),
+  and the toolbar clear of every
   default control (`touch_edit`).
 
 ### port/math/test

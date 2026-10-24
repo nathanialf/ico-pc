@@ -616,30 +616,38 @@ static void apply_one(IcoTouchLayout *l, int ctl, const IcoTouchCtlEdit *c)
     h = bh * s;
 
     /* the centre from the anchors (the look pad's anchor-side edges) */
-    for (i = 0; i < 3; i++) {
-        if (i == 1) {
+    for (i = 0; i < 4; i++) {
+        if (i == 1 && look) {
+            /* it does not fit: the look pad to the widest side */
+            look_shrink(k, &w, &h);
+        } else if (i == 1 || i == 2) {
             /* it does not fit (larger than the area, up to 3.0, or no side of
-               the band holds it): the look pad to the widest side; a control
-               to the largest scale whose box fits that side, at least
-               ICO_TOUCH_EDIT_SCALE_MIN */
-            if (look) {
-                look_shrink(k, &w, &h);
-            } else {
-                float fw = w, fh = h;
+               the band holds it): the largest scale, at least
+               ICO_TOUCH_EDIT_SCALE_MIN, whose box fits first the side of the
+               band its anchored centre is on (a SPLIT fold's sides can differ,
+               a camera hole's inset on one edge: fitted to the wider one it
+               would be drawn across the fold), then the widest side */
+            float fw = w, fh = h;
 
-                look_shrink(k, &fw, &fh);
-                if (w > 0.0f && h > 0.0f) {
-                    s = maxf_(s * minf_(fw / w, fh / h), ICO_TOUCH_EDIT_SCALE_MIN);
-                }
-                w = bw * s;
-                h = bh * s;
-            }
-        } else if (i == 2) {
-            /* still not: the smallest, then inside the region whatever
-               happens (never dropped); the look pad is as small as it gets */
             if (look) {
-                break;
+                break; /* as small as it gets */
             }
+            if (i == 1) {
+                const IcoTouchRect side = cut_to_side(k, k.R, cxA, cyA);
+
+                fw = minf_(fw, side.w);
+                fh = minf_(fh, side.h);
+            } else {
+                look_shrink(k, &fw, &fh);
+            }
+            if (w > 0.0f && h > 0.0f) {
+                s = maxf_(s * minf_(fw / w, fh / h), ICO_TOUCH_EDIT_SCALE_MIN);
+            }
+            w = bw * s;
+            h = bh * s;
+        } else if (i == 3) {
+            /* still not: the smallest, then inside the region whatever
+               happens (never dropped) */
             s = ICO_TOUCH_EDIT_SCALE_MIN;
             w = bw * s;
             h = bh * s;
@@ -663,6 +671,10 @@ static void apply_one(IcoTouchLayout *l, int ctl, const IcoTouchCtlEdit *c)
         if (clamp_in(k, &cx, &cy, w, h)) {
             break;
         }
+    }
+
+    if (look ? w < bw * s - 0.01f || h < bh * s - 0.01f : s < c->scale - 1e-4f) {
+        l->fitted |= 1u << ctl;
     }
 
     /* at its default place and size (a "hidden" line): the rects stay

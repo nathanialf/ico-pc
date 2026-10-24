@@ -277,6 +277,34 @@ static void touch_states_log(const IcoTouchLayout *l)
     snprintf(s_last, sizeof(s_last), "%s", line);
 }
 
+/* the edited controls drawn smaller than their size (a 300 % D-pad on a
+   phone, or beside a fold): one line when that list changes, "touch: drawn
+   smaller than set to fit the screen: dpad, stick", one when it empties */
+static void touch_fitted_log(const IcoTouchLayout *l)
+{
+    static unsigned int s_last;
+    char list[128] = "";
+    int c;
+
+    if (l->fitted == s_last) {
+        return;
+    }
+    s_last = l->fitted;
+    for (c = 0; c < ICO_TOUCH_CTL_COUNT; c++) {
+        if (l->fitted & (1u << c)) {
+            const size_t used = strlen(list);
+
+            snprintf(list + used, sizeof(list) - used, "%s%s", used > 0 ? ", " : "",
+                     ico_touch_ctl_name(c));
+        }
+    }
+    if (list[0] != '\0') {
+        fprintf(stderr, "touch: drawn smaller than set to fit the screen: %s\n", list);
+    } else {
+        fprintf(stderr, "touch: every control drawn at its set size again\n");
+    }
+}
+
 static void touch_rebuild(void)
 {
     IcoTouchInsets in = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -299,6 +327,7 @@ static void touch_rebuild(void)
         s_touchEdit.active ? &s_touchEdit.work : ico_input_live_touch_edits());
     if (!s_touchEdit.active) {
         touch_states_log(&s_touchLayout);
+        touch_fitted_log(&s_touchLayout);
     }
 }
 

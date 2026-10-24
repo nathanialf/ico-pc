@@ -218,6 +218,9 @@ typedef struct IcoTouchLayout {
                                     or Hidden); 0 Off: it starts nothing. Not
                                     IcoTouchState's stickActive (a finger holds it) */
     unsigned int editGen;        /* IcoTouchEdits.gen the layout was built with (0 none) */
+    unsigned int fitted;         /* 1 << ICO_TOUCH_CTL_*: an edited control drawn smaller
+                                    than its size to fit the region or its side of the
+                                    hinge band (0 for the default layout) */
 } IcoTouchLayout;
 
 /* one finger slot (internal; the drawing reads IcoTouchDrawInfo) */

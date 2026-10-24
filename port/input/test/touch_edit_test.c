@@ -2505,6 +2505,72 @@ static void test_size_300(void)
         CHECK(b.w > 2.5f * 24.0f * l.unit);
     }
 
+    /* the phone folded SPLIT with a camera hole's inset on one edge: the
+       sides of the fold differ (about 59 q and 69 q), and a 300 % D-pad
+       (72 q), stick (66 q) or button anchored on the narrower side is fitted
+       to its own side, not to the wider one and drawn across the fold */
+    {
+        static const char *const kLeft[] = {"l0 t0 s3.00", "l0 b0 s3.00", "l20 t10 s3.00"};
+        static const char *const kRight[] = {"r0 t0 s3.00", "r0 b0 s3.00", "r20 b10 s3.00"};
+        static const int kCtl[] = {ICO_TOUCH_CTL_DPAD, ICO_TOUCH_CTL_STICK, ICO_TOUCH_CTL_CROSS,
+                                   ICO_TOUCH_CTL_SELECT};
+        const IcoTouchEnv env = env_of(ico_touch_px_per_mm(420.0f), ICO_TOUCH_FOLD_VERTICAL, 0, 0,
+                                       1170.0f, 0.0f, 0.0f, 1080.0f);
+        unsigned ci;
+        int side, hole;
+
+        for (hole = 0; hole < 2; hole++) {
+            /* hole 0: the inset on the left edge; 1: on the right */
+            const IcoTouchInsets in = {hole == 0 ? 160.0f : 0.0f, 0.0f, hole == 1 ? 160.0f : 0.0f,
+                                       0.0f};
+
+            ico_touch_edits_defaults(&e);
+            l = ico_touch_layout_edits(2340, 1080, in, ICO_TOUCH_MEDIUM, &env, &e);
+            CHECK(l.rule == ICO_TOUCH_RULE_SPLIT && l.band.w > 0.0f && l.fitted == 0u);
+            {
+                const float wl = l.band.x - l.region.x;
+                const float wr = l.region.x + l.region.w - (l.band.x + l.band.w);
+                const float narrow = hole == 0 ? wl : wr, wide = hole == 0 ? wr : wl;
+
+                /* the case bites: a 300 % stick fits the wider side's width
+                   only */
+                CHECK(narrow < 64.0f * l.unit && wide > 66.0f * l.unit);
+            }
+            for (ci = 0; ci < sizeof(kCtl) / sizeof(kCtl[0]); ci++) {
+                for (side = 0; side < 2; side++) {
+                    for (ai = 0; ai < 3; ai++) {
+                        const char *at = side == 0 ? kLeft[ai] : kRight[ai];
+                        IcoTouchRect b;
+                        int ok;
+
+                        ico_touch_edits_defaults(&e);
+                        set_edit(&e, ICO_TOUCH_RULE_SPLIT, kCtl[ci], at);
+                        l = ico_touch_layout_edits(2340, 1080, in, ICO_TOUCH_MEDIUM, &env, &e);
+                        b = box_of(&l, kCtl[ci]);
+                        /* the D-pad and the stick are taller than the
+                           region at 300 %: drawn smaller, and the layout
+                           says so (the log's list) */
+                        ok =
+                            (!(kCtl[ci] == ICO_TOUCH_CTL_DPAD || kCtl[ci] == ICO_TOUCH_CTL_STICK) ||
+                             (l.fitted & (1u << kCtl[ci])) != 0u) &&
+                            rect_inside(&b, &l.region) && !overlaps_(&b, &l.band) &&
+                            (side == 0 ? b.x + b.w <= l.band.x + 0.01f
+                                       : b.x >= l.band.x + l.band.w - 0.01f);
+                        if (!ok) {
+                            fprintf(stderr,
+                                    "  split, inset %s, %s \"%s\": box %.1f,%.1f %.1fx%.1f, "
+                                    "band %.1f..%.1f\n",
+                                    hole == 0 ? "left" : "right", ico_touch_ctl_name(kCtl[ci]), at,
+                                    (double)b.x, (double)b.y, (double)b.w, (double)b.h,
+                                    (double)l.band.x, (double)(l.band.x + l.band.w));
+                            CHECK(0);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /* the editor: the D-pad stepped up to 300 % over the stick is allowed,
        both amber (as any overlap) */
     {

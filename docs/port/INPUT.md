@@ -386,9 +386,12 @@ every change bumps.
   inside the region and out of its own band, the clamp every edit had before the bounds, so such
   a file renders as it did (`ico_touch_edit_clamp`, the bounds' form,
   is the editor's drag preview); the nearer side of the band that holds it; shrunk toward the
-  largest scale whose box fits the region (or the widest side of its band) when it does not fit,
-  as a 300 % D-pad or stick taller than a phone's region, then to the minimum scale when even
-  that fails; never dropped. The editor's drop (`set_place`) keeps offsets
+  largest scale whose box fits when it does not fit, as a 300 % D-pad or stick taller than a
+  phone's region: first the region, or with a band crossing it the side its anchored centre is on
+  (`cut_to_side`'s rule; a SPLIT fold's sides differ with a camera hole's inset on one edge, and a
+  box fitted to the wider side would be drawn across the fold), then the widest side
+  (`look_shrink`), then the minimum scale when even that fails; never dropped. A control drawn
+  smaller than its size sets its bit in the layout's `fitted` mask. The editor's drop (`set_place`) keeps offsets
   past the safe area and takes the others again from the region's clamp, so the file holds where
   the control shows; a D-pad nudge held at the safe edge with room past it goes a grid step past
   it. The start line `touch: layout edits: N controls in <postures> (K past the safe area, the
@@ -397,7 +400,9 @@ every change bumps.
   `stickActive` and `lookActive` (`set_state`), and `editGen` from `gen`. The device layer logs
   the Hidden and Off controls of the layout in play by name each time that list changes
   (`touch: hidden: start, dpad; off: select, l2`; `touch: every control shown again` when it is
-  empty again; `port/input/input_sdl.c` (`touch_states_log`)). A moved
+  empty again; `port/input/input_sdl.c` (`touch_states_log`)), and the controls drawn smaller
+  than set (`fitted`) the same way (`touch: drawn smaller than set to fit the screen: dpad,
+  stick`; `touch: every control drawn at its set size again`; `touch_fitted_log`). A moved
   stick's area is a square of 4.4 R around its home cut to its side of the band (a stick still at
   `place()`'s home, with only another size or opacity, keeps `place()`'s wide area); a moved look
   pad has its own rect; the look sensitivity radius stays the default. The flat-crease check that
