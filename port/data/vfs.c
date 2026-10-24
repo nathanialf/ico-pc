@@ -13,6 +13,7 @@
 struct IcoVfs {
     const IcoVfsBackend *backend;
     void *state;
+    char *location; /* what it was mounted from, for ico_vfs_reopen */
 };
 
 static IcoVfs *discVfs;
@@ -30,13 +31,31 @@ IcoVfs *ico_vfs_mount(const IcoVfsBackend *backend, const char *location)
         return NULL;
     }
     vfs = calloc(1, sizeof(*vfs));
-    if (vfs == NULL) {
+    if (vfs != NULL) {
+        vfs->location = malloc(strlen(location) + 1);
+    }
+    if (vfs == NULL || vfs->location == NULL) {
+        free(vfs);
         backend->unmount(state);
         return NULL;
     }
+    memcpy(vfs->location, location, strlen(location) + 1);
     vfs->backend = backend;
     vfs->state = state;
     return vfs;
+}
+
+IcoVfs *ico_vfs_reopen(const IcoVfs *vfs)
+{
+    if (vfs == NULL) {
+        return NULL;
+    }
+    return ico_vfs_mount(vfs->backend, vfs->location);
+}
+
+const char *ico_vfs_location(const IcoVfs *vfs)
+{
+    return vfs != NULL ? vfs->location : NULL;
 }
 
 void ico_vfs_unmount(IcoVfs *vfs)
@@ -48,6 +67,7 @@ void ico_vfs_unmount(IcoVfs *vfs)
         discVfs = NULL;
     }
     vfs->backend->unmount(vfs->state);
+    free(vfs->location);
     free(vfs);
 }
 

@@ -114,6 +114,19 @@ int ico_disc_image_read(IcoDiscImage *img, uint64_t offset, void *dst, size_t le
 IcoVfs *ico_vfs_mount(const IcoVfsBackend *backend, const char *location);
 void ico_vfs_unmount(IcoVfs *vfs);
 
+/* A second, independent mount of vfs's volume: the same backend on the same
+   location (ico_vfs_mount again, so the Korean DATA.DF shift is found
+   again), with state of its own (the image backend its own file handle
+   and, for a .chd, its own hunk buffers; the archive its own FILE*).  An
+   IcoVfs is not thread-safe, but two mounts share nothing: one thread may
+   read one while another reads the other (the texture export,
+   port/render/texpack_export.c, reads its reopen of ico_vfs_disc()).  NULL
+   when the volume cannot be mounted again (the reason on stderr); the new
+   mount is unmounted on its own and may outlive vfs. */
+IcoVfs *ico_vfs_reopen(const IcoVfs *vfs);
+/* The location vfs was mounted from (NULL for NULL). */
+const char *ico_vfs_location(const IcoVfs *vfs);
+
 /* The disc the libcdvd layer reads (port/data/cdvd_host.c).  Setting it
    does not take ownership; NULL detaches it ("no disc"). */
 void ico_vfs_set_disc(IcoVfs *vfs);

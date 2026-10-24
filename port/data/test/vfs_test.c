@@ -361,6 +361,62 @@ static void test_vfs_synthetic(IcoVfs *vfs)
     CHECK(ico_vfs_read_sectors(vfs, 0xFFFFFFFFu, 2, buf) != 0);
 }
 
+/* ico_vfs_reopen: a second mount of the same image answers every look-up
+   and sector read as the first, and each survives the other's unmount */
+static void test_reopen(IcoVfs *vfs)
+{
+    static const char *const paths[] = {"SYSTEM.CNF",  "DFDATAS/DATA.DF", "DFDATAS",
+                                        "SLUS_000.00", "MANY/F00.BIN",    "MANY/F59.BIN",
+                                        "MISSING.BIN"};
+    unsigned char a[ICO_VFS_SECTOR];
+    unsigned char b[ICO_VFS_SECTOR];
+    IcoVfs *two = ico_vfs_reopen(vfs);
+    IcoVfs *three;
+    uint32_t lsn;
+    size_t i;
+    int same = 1;
+
+    CHECK(ico_vfs_reopen(NULL) == NULL);
+    CHECK(two != NULL && two != vfs);
+    if (two == NULL) {
+        return;
+    }
+    CHECK(strcmp(ico_vfs_location(two), ico_vfs_location(vfs)) == 0);
+    CHECK(ico_vfs_volume_sectors(two) == ico_vfs_volume_sectors(vfs));
+    for (i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+        IcoVfsEntry x;
+        IcoVfsEntry y;
+        int rx = ico_vfs_stat(vfs, paths[i], &x);
+        int ry = ico_vfs_stat(two, paths[i], &y);
+
+        CHECK(rx == ry);
+        if (rx == 0 && ry == 0) {
+            CHECK(x.lsn == y.lsn && x.size == y.size && x.is_dir == y.is_dir &&
+                  strcmp(x.name, y.name) == 0 && memcmp(x.date, y.date, 7) == 0);
+        }
+    }
+    /* interleaved: a read of one between reads of the other */
+    for (lsn = 0; lsn < SYN_SECTORS; lsn++) {
+        memset(a, 0, sizeof(a));
+        memset(b, 1, sizeof(b));
+        if (ico_vfs_read_sectors(vfs, lsn, 1, a) != 0 ||
+            ico_vfs_read_sectors(two, lsn, 1, b) != 0 || memcmp(a, b, sizeof(a)) != 0) {
+            same = 0;
+        }
+    }
+    CHECK(same);
+    CHECK(ico_vfs_read_sectors(two, SYN_SECTORS, 1, b) != 0);
+    /* the reopen outlives nothing it shares: the first still reads after
+       the second is gone, and a reopen of the reopen reads too */
+    three = ico_vfs_reopen(two);
+    CHECK(three != NULL);
+    ico_vfs_unmount(two);
+    CHECK(ico_vfs_read_sectors(vfs, SYN_CNF, 1, a) == 0);
+    CHECK(three != NULL && ico_vfs_read_sectors(three, SYN_CNF, 1, b) == 0 &&
+          memcmp(a, b, sizeof(a)) == 0);
+    ico_vfs_unmount(three);
+}
+
 /* The DATA.DF directory as fumi/ios/cdvd.c's unifile_read_func walks it:
    {count, {name[32], offset, size} x count}, each member's LSN being DATA.DF's
    LSN + offset / 2048.  Returns the entry count, or -1. */
@@ -1110,6 +1166,7 @@ static int run_synthetic(const char *dir)
         return 1;
     }
     test_vfs_synthetic(vfs);
+    test_reopen(vfs);
     CHECK(check_unifile(vfs, 3) == 3);
     test_cdvd_host(vfs);
     test_clock_source();

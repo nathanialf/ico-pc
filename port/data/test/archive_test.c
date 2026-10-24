@@ -407,6 +407,22 @@ static int run_synth(const char *dir)
         CHECK(ico_vfs_read_sectors(ar, 0xFFFFFFFFu, 2, sec) != 0);
     }
     CHECK(check_unifile(ar, 3) == 3);
+    {
+        /* ico_vfs_reopen: a second archive mount of its own (FILE* and
+           entry table), reading the same sectors interleaved with the
+           first, and the first still reading after it is gone */
+        IcoVfs *two = ico_vfs_reopen(ar);
+
+        CHECK(two != NULL);
+        if (two != NULL) {
+            same_stat(ar, two, "\\DFDATAS\\DATA.DF;1");
+            same_stat(ar, two, "SLUS_000.00");
+            CHECK(same_file_sectors(ar, two, "DFDATAS/DATA.DF"));
+            CHECK(same_sectors(ar, two, SYN_CNF, 3));
+            ico_vfs_unmount(two);
+            CHECK(same_sectors(iso, ar, SYN_CNF, 3));
+        }
+    }
     same_search(iso, ar, "\\DFDATAS\\DATA.DF;1");
     same_search(iso, ar, "\\SLUS_000.00;1");
     same_search(iso, ar, "\\SYSTEM.CNF;1");
