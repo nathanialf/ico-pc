@@ -756,6 +756,38 @@ typedef enum UiStrId {
     UI_STR_ISO_COPY_FAILED,
     UI_STR_ISO_COPYING,
     UI_STR_ISO_COPYING_LONG,
+    /* Extras > Game variants (port/game/variants.h): the page's name (also the
+       Extras link), the eight rows with their notes and values (a note ends
+       with whether the row switches achievements off) and the Debug menu
+       row (shown with Developer mode); Original is UI_STR_VAL_ORIGINAL */
+    UI_STR_SECTION_VARIANTS,
+    UI_STR_OPT_VAR_TOUGHNESS,
+    UI_STR_OPT_VAR_TOUGHNESS_NOTE,
+    UI_STR_VAL_VAR_AMERICAN,
+    UI_STR_VAL_VAR_NOT_TOUGHER,
+    UI_STR_OPT_VAR_ONE_HIT,
+    UI_STR_OPT_VAR_ONE_HIT_NOTE,
+    UI_STR_OPT_VAR_NEVER_DODGE,
+    UI_STR_OPT_VAR_NEVER_DODGE_NOTE,
+    UI_STR_OPT_VAR_AGGRESSION,
+    UI_STR_VAL_VAR_AGG_OWN,
+    UI_STR_VAL_VAR_AGG_BOLD_PATIENT,
+    UI_STR_VAL_VAR_AGG_BOLD_QUICK,
+    UI_STR_VAL_VAR_AGG_WARY_PATIENT,
+    UI_STR_VAL_VAR_AGG_WARY_QUICK,
+    UI_STR_OPT_VAR_AGGRESSION_NOTE,
+    UI_STR_OPT_VAR_NO_HINTS,
+    UI_STR_OPT_VAR_NO_HINTS_NOTE,
+    UI_STR_OPT_VAR_BARRIER,
+    UI_STR_VAL_VAR_HITS_5,
+    UI_STR_VAL_VAR_HITS_7,
+    UI_STR_OPT_VAR_BARRIER_NOTE,
+    UI_STR_OPT_VAR_NO_LOOK,
+    UI_STR_OPT_VAR_NO_LOOK_NOTE,
+    UI_STR_OPT_VAR_IGNORE_CAMS,
+    UI_STR_OPT_VAR_IGNORE_CAMS_NOTE,
+    UI_STR_OPT_VAR_DEBUG_MENU,
+    UI_STR_OPT_VAR_DEBUG_MENU_NOTE,
     UI_STR_COUNT
 } UiStrId;
 
