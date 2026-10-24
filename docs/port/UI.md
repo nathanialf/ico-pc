@@ -187,7 +187,7 @@ tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/setting
 | Edit layout (`UI_PAGE_TOUCH_LAYOUT`) | no shown rows: the editor's own screen ([The touch layout editor](#the-touch-layout-editor)) |
 | Gameplay | Yorda safe, Stick fix, Door fix, Natural chains, Skip the opening (`UI_OPT_SKIP_OPENING`), Film effect, Players, Back |
 | Achievements | a list, the popups switch |
-| Extras | Music, Models, Credits, Characters, Add to Steam, Achievement popups, Back |
+| Extras | Music, Models, Credits, Characters, Add to Steam, Export textures (`UI_OPT_EXTRAS_EXPORT_TEXTURES`), Achievement popups, Back |
 | Music | the music gallery, a list |
 | Characters | nine colour rows, Switch, Randomize, Reset, Back |
 
@@ -223,7 +223,8 @@ Which rows show depends on where the menu was entered and what the machine has: 
 settings (Brightness, Vibration, Button configuration, Film effect, Players) only from
 the pause menu (Hold type shows from the title too: `[gameplay] hold_type`), Film effect and Players once the game is cleared; Video mode, Model pack and Extras'
 Music, Models and Credits only from the title (Add to Steam also only where the window host installs
-its handler); the dump rows only in developer mode; the Touch screen link only with a touch screen; the
+its handler, Export textures only while a `UiTextureExportHost` is set, the window build's; neither is in
+`isExtrasOpt`, which is the three rows that leave the stage); the dump rows only in developer mode; the Touch screen link only with a touch screen; the
 window and mouse camera rows not on Android; the Graphics link only with two or more renderer names (`ui_settings_set_backend_names`), the Graphics driver link only with a driver host on an
 Adreno GPU (`port/ui/settings.c` (`optShown`, `isGameOpt`, `isExtrasOpt`)). `layoutPage` masks the
 hidden rows and spaces the shown ones by the page's pitch table, which keeps Back's box inside the
@@ -310,7 +311,7 @@ what is pending and calls the quit handler: the [window build](ARCHITECTURE.md#t
 
 The menu knows nothing of the platform; the window host installs what the pages ask: the window
 mode query, the anti-aliasing list and block, the texture and model pack counts, the touch query,
-the touch editor's host (`UiTouchEditHost`), the Quit word, the Graphics driver host (`UiGpuDriverHost`), the renderer names (`ui_settings_set_backend_names`, filled from `rhi_backend_name` in `ico_window_open`, so port/ui never links the RHI), the Graphics page's Apply host (`UiGraphicsHost`, below), the Steam handler, the models
+the touch editor's host (`UiTouchEditHost`), the Quit word, the Graphics driver host (`UiGpuDriverHost`), the renderer names (`ui_settings_set_backend_names`, filled from `rhi_backend_name` in `ico_window_open`, so port/ui never links the RHI), the Graphics page's Apply host (`UiGraphicsHost`, below), the Steam handler, the texture export host (`UiTextureExportHost`, below), the models
 handler, the Characters host (the model viewer's panel) (`port/ui/settings.h`
 (`ui_settings_set_*`)). A page whose host is missing hides its row.
 
@@ -346,6 +347,42 @@ run (its fallback or a restart's), NULL for Vulkan or a start the player chose. 
   in `video.backend`.
 
 ctest `settings_extra` (`testGraphicsApply`).
+
+### Extras > Export textures
+
+`UiTextureExportHost` (`port/ui/settings.h`) is set by `port/platform/window_host.c` in
+`ico_window_open` (`s_texExportHost`: `begin` and `cancel` are `texpack_export_begin` and
+`texpack_export_cancel`, `poll` is `tex_export_poll`, which copies `texpack_export_poll`'s state,
+`done`, `total` and `written` and writes `dir` as `textures/<pack_serial>/dumps`, the folder as the
+player reads it; the states are asserted equal, `UI_TEXEXPORT_*` = `TEXPACK_EXPORT_*`) and cleared
+in `ico_window_close`, which then calls `texpack_export_shutdown` before `rd_shutdown`;
+`main_host.c` also registers `texpack_export_shutdown` with `at_shutdown` after
+`texpack_shutdown`, so the worker joins before the pack closes ([PACKS.md](PACKS.md)). The headless
+build installs no host, so the row stays hidden there and in the UI tests without a fake.
+
+- The row shows from the title only (`optShown`), after Add to Steam; its note is
+  `UI_STR_EXPORT_TEXTURES_NOTE`. Dump textures does not hide it (the same names, a file already
+  there is kept).
+- Cross (`texExportPress`): while the host's state is `UI_TEXEXPORT_RUNNING`, `cancel()` (log
+  `extras: export textures: stop asked at D of T`); otherwise `begin()`: 0 sets
+  `s_texExportPending` (log `extras: export textures: started`), -1 shows the failed popup at once
+  (log `extras: export textures: could not start`; the core logs its reason).
+- Each refresh (`refreshPage`) polls the host: running, the label is `UI_STR_EXPORT_TEXTURES_STOP`
+  and the note `UI_STR_EXPORT_TEXTURES_PROGRESS` (two `%d`: done, total), written by
+  `texExportNote` outside `setNote`'s cache, as `gfxNote`; else `UI_STR_EXTRAS_EXPORT_TEXTURES` and
+  the note.
+- The end (`texExportEnd`, from `ui_settings_vsync`, so on any screen, the menu left or a game
+  started): pending and the state DONE, STOPPED or FAILED clears pending, logs `extras: export
+  textures ended: state S, D of T, W written` and pushes `UI_STR_EXPORT_TEXTURES_DONE` with
+  `_DONE_BODY` (`%d` the files written, `%s` the folder), `_STOPPED` with `_STOPPED_BODY` (`%d`
+  written) or `_FAILED` with `_FAILED_BODY` (`%s` the folder).
+- The bodies and the progress are filled by `fmtText`, which copies a table string's `%d` and
+  `%s` in without handing the table to printf and falls back to the English string when a
+  translation's conversions are not the expected ones (`strings_complete` already requires them
+  equal).
+
+ctest `settings_extra` (`testExportTextures`, a fake host), `settings_extras` (the rows hidden
+without a host and on the pause menu).
 
 ## Strings and languages
 
@@ -633,7 +670,8 @@ right edge of the 4:3 picture for 0.3 s, held for 4 s, sliding out for 0.3 s, co
 call, `ico_host_vsync_hz()` (15, 200 and 15 at 50 Hz; 18, 240 and 18 at 60 Hz, the Japanese disc's
 and the European disc's 60 Hz mode; `port/ui/popup.h` (`UI_POPUP_QUEUE`, `ui_popup_set_vsync_hz`,
 `ui_popup_slide_vsyncs`, `ui_popup_hold_vsyncs`), 50 Hz by default in the tests). Achievements, photo mode, the model viewer, the Graphics driver page and
-Extras > Add to Steam push them (`port/ui/settings.c` (`steamAdd`)). They are drawn on the
+Extras > Add to Steam and Export textures push them (`port/ui/settings.c` (`steamAdd`,
+`texExportEnd`)); `ui_popup_title` and `ui_popup_body` give the one showing (tests). They are drawn on the
 presentation overlay (`rd_set_present_overlay`) at every [present](ARCHITECTURE.md#terms), after the
 box blit and at the output's resolution: outside the game's frame, so a frame the GS keeps never
 shows one twice, and never mirrored (`port/ui/popup.h`, header comment; `port/ui/ui_host.c`
