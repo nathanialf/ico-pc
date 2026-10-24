@@ -10,6 +10,8 @@
 
 ## Fixed
 
+- **Options > Extras > Models** no longer closes the game when an animation is chosen that the model cannot play on the stage it is shown in (its movement needs a second animation the stage does not carry). Those animations are now left out of the list, and the log says how many.
+- In the Models viewer, the names in the animation list and the Animation line kept their lettering only for a while; after some seconds of play new names were drawn in plain letters, as the frame counter had used up the room the game keeps for its menu lettering. The room is now reused as the counter moves on, so every name keeps the same look.
 - Sound should no longer break up at high resolutions (for example 4x anti-aliasing) with a Frame rate of 120 or more. When the extra pictures between the game's own frames start slowing the game down, they are now dropped first and brought back when the graphics card has time again, so the game and its sound keep their speed. This is our best understanding of what was happening and has not been confirmed on the machine that reported it.
 - With Vertical sync on, a Frame rate above your monitor's refresh rate (for example 120 on a 60 Hz monitor) now draws one picture per refresh, as Uncapped does, because the monitor could not show more.
 - On some Android phones, Add a driver said the file was not a driver when the file picker would not open. It now says what went wrong (the picker did not open, no app on the phone can choose a file, or the file could not be read), tries the phone's other way of choosing a file, and has the new row above for a driver zip copied into the `drivers` folder.
