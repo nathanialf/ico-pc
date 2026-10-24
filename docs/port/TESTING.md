@@ -1240,9 +1240,15 @@ The audits over the game sources are tools, some run as ctests on native builds 
 each refuses is in [GAME_CODE.md](GAME_CODE.md#audits). The region converter's two runs are of
 that kind (pre-commit step 8, CI's `No compile-time region block in the game sources`):
 `python3 -I tools/region_blocks.py --selftest` converts `tools/test/region_blocks/fixture.c` (one
-block per class, a three-target block, `LN`, the deny-listed forms, both kinds of switch, a twin)
-and compares it, the report and the bit rows with the files beside it, then compiles the result
-with `gcc -fsyntax-only`; `python3 -I tools/region_blocks.py check` holds `ico2/` and `sce/` to the
+block per class over a six-row table, `#elif` and three-target blocks, the later targets' nesting
+shapes to four deep from upstream's BUILDING.md and TARGETS.md (the prototype inside a USA arm, the
+demo inside both, the three-name negative block with the prototype's exclusion nested, `e3.c`'s
+side-by-side block, a nested `#elif`), a demo arm past `LARGE_LINES`, a block holding a switch's
+first label, a six-argument `LN`, the deny-listed forms, both kinds of switch, a twin) and compares
+it, the report and the bit rows with the files beside it, checks the full and the used-forms
+`region.h`, `rename` for kor on jpn and for three rows on pal (`rename_pal_expected.c`), the parser
+to `MAX_DEPTH` and a block no row compiles, then compiles the result with `gcc -fsyntax-only`
+against the generated header under each row's macro; `python3 -I tools/region_blocks.py check` holds `ico2/` and `sce/` to the
 region rules and the region glue and exits 0, 2 (raw blocks remain, all hand items; the hook
 warns, CI fails) or 1 (a rule broken) ([GAME_CODE.md](GAME_CODE.md#regions)). Other tests check generated files and
 tables: `layout_asserts` (a program compiled from the generated asserts), `layout_asserts_fresh`,
