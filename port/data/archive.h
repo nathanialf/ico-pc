@@ -6,14 +6,19 @@
  * written once by the first-run extractor (extract.h) from the user's disc
  * image.
  *
- *   disc/<PATH>   the disc file PATH ("DFDATAS/DATA.DF", "SCES_507.60"),
- *                 byte for byte
+ *   disc/<PATH>   the disc file PATH ("DFDATAS/DATA.DF", "SCES_507.60";
+ *                 on a disc whose game is in a folder, IcoDiscInfo.game_dir,
+ *                 under it: "CUS97113/DFDATAS/DATA.DF"), byte for byte
  *   tail/<PATH>   the bytes after PATH's end up to its last sector's end,
  *                 only when they are not all zero (the PAL disc has none)
- *   meta.json     the source image (SHA-1, size, the rule that accepted it),
- *                 the extractor, the disc id, the volume's sector count and,
- *                 for every disc file and directory the archive answers for,
- *                 its path, ISO name, first LSN, size and date
+ *   meta.json     the source image (SHA-1, size, the rule that accepted it;
+ *                 for a disc with no image SHA-1 on file the image is not
+ *                 hashed and "sha1" holds the game ELF's), the extractor,
+ *                 the disc id, the volume's sector count and, for every disc
+ *                 file and directory the archive answers for, its path, ISO
+ *                 name, first LSN, size and date (an entry with no "data"
+ *                 is looked up as on the disc but not stored: the boot file
+ *                 of a disc whose BOOT2 names a menu)
  *
  * The backend (`ico_vfs_archive`) answers look-ups from meta.json and reads
  * sectors by LSN: each stored file covers the LSNs it had on the disc, so
@@ -68,7 +73,8 @@ typedef struct IcoDiscInfo {
     const char *boot_elf;  /* SYSTEM.CNF's BOOT2 file, "SCES_507.60" */
     const char *game_dir;  /* "" (the game is the disc's root), or the folder that holds it
                               when BOOT2 names a menu ("CUS97113" on the magazine demo) */
-    const char *elf_path;  /* the file elf_sha1 is of, by disc path ("SCES_507.60") */
+    const char *elf_path;  /* the file elf_sha1 is of, by disc path ("SCES_507.60"; the
+                              game's ELF in game_dir when there is one, not the menu) */
     const char *df_path;   /* DATA.DF's disc path ("DFDATAS/DATA.DF", game_dir's prefixed) */
     const char *iso_sha1;  /* the whole image's SHA-1; NULL for a disc identified by its
                               elf_sha1 and DATA.DF manifest alone (the magazine demo) */
@@ -106,6 +112,11 @@ int ico_disc_boot_rows(const char *boot_elf);
    lower-case hex digits); NULL for none. */
 const IcoDiscInfo *ico_disc_by_boot_elf(const char *boot_elf, const char *elf_sha1);
 const IcoDiscInfo *ico_disc_by_slug(const char *slug);
+/* For the tests' synthetic images, as ico_vfs_iso9660_force_df_shift is:
+   one more row the look-ups above answer after the table's (a disc whose
+   game is in a folder, game_dir, before the table has one); NULL removes
+   it. The wording below stays the table's. */
+void ico_disc_set_test_row(const IcoDiscInfo *row);
 
 /* Wording built from the rows, so a new row needs no new text.  Each
    returns a static buffer (filled on first use).

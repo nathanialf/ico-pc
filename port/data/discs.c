@@ -331,6 +331,13 @@ static const IcoDfManifestEntry dfMembersKor[] = {
 
 #define N_MEMBERS(a) ((uint32_t)(sizeof(a) / sizeof((a)[0])))
 
+/* the tests' row after the table's (ico_disc_set_test_row), NULL for none */
+static const IcoDiscInfo *testRow;
+
+/* the rows the look-ups answer: the table's, then the tests' row when set */
+static int row_count(void);
+static const IcoDiscInfo *row_at(int i);
+
 /* config/regions.txt, row for row (region_select checks the slug, the disc
    id, the boot file and the product name against it) */
 const IcoDiscInfo ico_discs[ICO_REGION_COUNT] = {
@@ -356,9 +363,9 @@ const IcoDiscInfo *ico_disc_by_id(const char *id)
 {
     int i;
 
-    for (i = 0; id != NULL && i < ICO_REGION_COUNT; i++) {
-        if (strcmp(ico_discs[i].id, id) == 0) {
-            return &ico_discs[i];
+    for (i = 0; id != NULL && i < row_count(); i++) {
+        if (strcmp(row_at(i)->id, id) == 0) {
+            return row_at(i);
         }
     }
     return NULL;
@@ -368,9 +375,9 @@ const IcoDiscInfo *ico_disc_by_boot(const char *boot_elf)
 {
     int i;
 
-    for (i = 0; boot_elf != NULL && i < ICO_REGION_COUNT; i++) {
-        if (strcmp(ico_discs[i].boot_elf, boot_elf) == 0) {
-            return &ico_discs[i];
+    for (i = 0; boot_elf != NULL && i < row_count(); i++) {
+        if (strcmp(row_at(i)->boot_elf, boot_elf) == 0) {
+            return row_at(i);
         }
     }
     return NULL;
@@ -380,8 +387,8 @@ int ico_disc_boot_rows(const char *boot_elf)
 {
     int i, n = 0;
 
-    for (i = 0; boot_elf != NULL && i < ICO_REGION_COUNT; i++) {
-        n += strcmp(ico_discs[i].boot_elf, boot_elf) == 0;
+    for (i = 0; boot_elf != NULL && i < row_count(); i++) {
+        n += strcmp(row_at(i)->boot_elf, boot_elf) == 0;
     }
     return n;
 }
@@ -390,10 +397,10 @@ const IcoDiscInfo *ico_disc_by_boot_elf(const char *boot_elf, const char *elf_sh
 {
     int i;
 
-    for (i = 0; boot_elf != NULL && elf_sha1 != NULL && i < ICO_REGION_COUNT; i++) {
-        if (strcmp(ico_discs[i].boot_elf, boot_elf) == 0 &&
-            strcmp(ico_discs[i].elf_sha1, elf_sha1) == 0) {
-            return &ico_discs[i];
+    for (i = 0; boot_elf != NULL && elf_sha1 != NULL && i < row_count(); i++) {
+        if (strcmp(row_at(i)->boot_elf, boot_elf) == 0 &&
+            strcmp(row_at(i)->elf_sha1, elf_sha1) == 0) {
+            return row_at(i);
         }
     }
     return NULL;
@@ -403,12 +410,27 @@ const IcoDiscInfo *ico_disc_by_slug(const char *slug)
 {
     int i;
 
-    for (i = 0; slug != NULL && i < ICO_REGION_COUNT; i++) {
-        if (strcmp(ico_discs[i].slug, slug) == 0) {
-            return &ico_discs[i];
+    for (i = 0; slug != NULL && i < row_count(); i++) {
+        if (strcmp(row_at(i)->slug, slug) == 0) {
+            return row_at(i);
         }
     }
     return NULL;
+}
+
+void ico_disc_set_test_row(const IcoDiscInfo *row)
+{
+    testRow = row;
+}
+
+static int row_count(void)
+{
+    return ICO_REGION_COUNT + (testRow != NULL);
+}
+
+static const IcoDiscInfo *row_at(int i)
+{
+    return i < ICO_REGION_COUNT ? &ico_discs[i] : testRow;
 }
 
 /* Wording over the rows: "a, b or c". */
