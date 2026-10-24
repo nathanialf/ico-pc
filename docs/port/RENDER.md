@@ -2416,7 +2416,7 @@ the seams of walls and floors (issue 26: rows of them on a doorway's edge and a 
 
 Under the Enhanced preset, with SCENE's scale above 1 on either axis, `doFog` calls
 `rd__crack_fill` for SCENE's own fog after the pass before it ends (the local read's scene pass
-too; the fog then begins it again, readable) and before the fog reads the depth
+too) and before the fog reads the depth
 (`port/render/rd_crack_fill.c`). It copies SCENE's colour into its snapshot texture
 (`rd__replay_take_snap`) and SCENE's depth into the fog's depth copy object
 (`rd__depth_copy_take`, the copy path's own texture, made on the other paths), and draws one
@@ -2463,13 +2463,13 @@ Not drawn at scale 1 on both axes, under the Original preset, on any replay with
 would change that picture's edges), in the fog's self-test (`rd__fog_exact` without the probe),
 for a fog of any target but SCENE, without a sampleable depth (`RhiLimits.depthSampled`), and with
 `[dev] crack_fill = false` (`ICO_RD_CRACK_FILL=0`; the replay tool's `--no-crack-fill`). On by
-default where the device profile has `crackFill`: every desktop GPU; off on a tile-based GPU until
-its cost is measured on a phone (the pass ends the local read's scene pass), where `[dev]
-crack_fill = true` (`ICO_RD_CRACK_FILL=1`) turns it on. Its two
+default where the device profile has `crackFill`: every class, tile-based GPUs included. Its two
 keys join the fog's family in the start-up set (`rd__enumerate_reachable_fog`). Cost above 1x: a
 copy of SCENE's colour and of its depth (12 bytes a texel copied, 99 MB at 3840 x 2160) and one
 pass reading thirteen depth texels per texel (the runs' ends, both axes) and four more where a
 drawn texel lies behind both ends of a run (the texels beyond them); the depth copy texture (8 bytes a texel) is the copy path's own and is made on the other paths.
+
+On a tile-based GPU the fill is drawn inside the scene pass the fog's local read keeps ([the fold](WORK_BUFFERS.md#the-crack-fill-inside-the-local-fogs-pass)).
 
 The count, only under `rd__crack_fill_count_all` (the tests, the replay tool's `--stats`; never in
 the game, and a missing count pipeline leaves the fill uncounted): `crack_count_ps` runs the
@@ -2480,18 +2480,19 @@ in G), which is copied into a readback buffer and summed once the GPU is past th
 
 - `rd: crack fill: on above 1x (scale 2x2, reach 1x1 texels: a run of texels no draw covered, or
   drawn over 1/64 of the depth behind both its ends, with a texel in front at each end takes the
-  nearer end); [dev] crack_fill = false turns it off` (with ` (on by [dev] crack_fill = true on
-  this tile-based GPU)` after it there), or `... on above 1x, not drawn at scale 1x1 (the GS's own grid); ...`, `... on above 1x,
+  nearer end); [dev] crack_fill = false turns it off` (with ` (drawn inside the scene pass with the
+  local fog)` after it once a fill was drawn so), or `... on above 1x, not drawn at scale 1x1 (the GS's own grid); ...`, `... on above 1x,
   not drawn under the Original preset; ...`, `rd: crack fill: off ([dev] crack_fill = false,
-  ICO_RD_CRACK_FILL=0)`, `rd: crack fill: off on this tile-based GPU until measured (the pass ends
-  the scene pass); [dev] crack_fill = true turns it on`: at the start and whenever SCENE is made
+  ICO_RD_CRACK_FILL=0)`: at the start and whenever SCENE is made
   again or the state changes (one line for each change);
-- `rd: crack fill: T replays filled (scale SXxSY; reach RXxRY texels; not counted in the game)`
+- `rd: crack fill: T replays filled (scale SXxSY; reach RXxRY texels; not counted in the game[; F inside the scene pass with the local fog])`
   in the 10 s summary (`rd__crack_fill_block`, `rd_interp.c` `presentLog`), when it filled; when
   counting, `rd: crack fill: N pixels filled over M replays counted of T filled (max K a replay;
   scale SXxSY; reach RXxRY texels)`;
 - `rd: crack fill: not drawn on SCENE at scale SXxSY: <why> (reported once)`, once a run for each
-  reason (MSAA, no sampleable depth, its pipelines missing, no memory for the copies), and for the
+  reason (MSAA, no sampleable depth, its pipelines missing, no memory for the copies) and
+  `rd: crack fill: the pass after the copies was not begun with the depth readable: ...` (the fold
+  refused, once), and for the
   last three `rd: crack fill: N fogged replays above 1x not filled (...)` in the 10 s summary;
 - `--stats`: `<dump>: stats: crack fill on|off: P passes, N pixels filled (M replays counted;
   scale SXxSY, reach RXxRY texels; S fogged replays above 1x not filled)`.
