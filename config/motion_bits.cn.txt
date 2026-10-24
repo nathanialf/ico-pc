@@ -1,0 +1,49 @@
+# config/motion_bits.cn.txt -- the bits of MotionDef's bit words (modeBits, flags,
+# flags2) that game code reads by shift or mask, where the Asian disc
+# (SCPS-55001) keeps them. Written by tools/gen_ee_layout.py --bits from
+# upstream's sources: a VERSION_CN block's reads are paired with its PAL arm's,
+# read for read; a read outside any block is the same bit on both discs. The named
+# bit-fields map by name (config/ee_layout.cn.txt) and are not listed. The loader's
+# bit map (ICO_TF_BITMAP, tools/gen_data_desc.py) builds each PAL host word from these.
+#   MotionDef <pal word> pal=<first bit> width=<bits> cn=<word>:<first bit>
+#   (pal=- declares a target bit no host bit takes; cn=- a PAL bit written 0)
+upstream 9bd61a82531728404697b9c2b96d3def179abf77
+# Blocks not paired read for read, checked by hand (UNPAIRED in the script):
+#   ico2/fumi/src/act-game.c:6021: masked by `mode &= 7` after: PAL bits 19-21, the row pal=19 width=3
+#   ico2/fumi/src/commonact.c:452: PAL flags bit 24 (byte 0x18F bit 0) = intr10Live, named on both
+#   ico2/fumi/src/commonact.c:4820: PAL flags bit 16 (MotRecJ's halfword 0x18E) = jumpHit, named on both
+#   ico2/fumi/src/commonact.c:7739: PAL flags bit 7 (CarryMot's byte 0x18C) = carried, named on both
+MotionDef modeBits pal=0 width=8 cn=modeBits:0  # ico2/fumi/src/act-game.c:7235, ico2/fumi/src/act-game.c:6021
+MotionDef modeBits pal=8 width=4 cn=modeBits:8  # ico2/fumi/src/act-game.c:5655, ico2/fumi/src/act-game.c:5726, ico2/fumi/src/act-game.c:2991, ico2/sugipon/src/handManager.c:264
+MotionDef modeBits pal=12 width=4 cn=modeBits:12  # ico2/fumi/src/act-game.c:5648, ico2/fumi/src/act-game.c:5689, ico2/fumi/src/act-game.c:2991, ico2/sugipon/src/handManager.c:261
+MotionDef modeBits pal=16 width=3 cn=modeBits:19  # ico2/fumi/src/act-game.c:740
+MotionDef modeBits pal=19 width=3 cn=modeBits:16  # ico2/fumi/src/act-env.c:772, ico2/fumi/src/act-game.c:316
+MotionDef modeBits pal=22 width=2 cn=modeBits:22  # ico2/fumi/src/girl_act.c:9384, ico2/fumi/src/girl_act.c:8326
+MotionDef modeBits pal=24 width=2 cn=modeBits:26  # ico2/fumi/src/act-env.c:772
+MotionDef flags2 pal=0 width=1 cn=flags2:1  # ico2/fumi/src/act-game.c:2991
+MotionDef flags2 pal=1 width=1 cn=flags2:2  # ico2/fumi/src/commonact.c:7188
+MotionDef flags2 pal=2 width=2 cn=flags2:3  # ico2/fumi/src/act-game.c:2991
+MotionDef flags2 pal=5 width=2 cn=flags2:6  # ico2/fumi/src/boyact.c:66
+MotionDef flags2 pal=7 width=1 cn=flags2:8  # ico2/fumi/src/act-game.c:2991
+MotionDef flags2 pal=8 width=1 cn=flags2:9  # ico2/fumi/src/boyact.c:66
+MotionDef flags pal=0 width=1 cn=flags:8  # ico2/fumi/src/girl_act.c:6065
+MotionDef flags pal=1 width=1 cn=flags:7  # ico2/fumi/src/act.c:1121
+MotionDef flags pal=2 width=1 cn=flags:6  # by hand: no reader in either tree; the Asian ELF's motion-def run equals the Korean ELF's word for word, so the same 7 motions (834, 839, 840, 848-851) set CN bit 6
+MotionDef flags pal=3 width=1 cn=flags:5  # ico2/fumi/src/enemy_act.c:550
+MotionDef flags pal=4 width=1 cn=flags:4  # ico2/fumi/src/commonact.c:2320, ico2/fumi/src/commonact.c:9757
+MotionDef flags pal=5 width=1 cn=flags:3  # by hand: the Korean pair (commonact.c's intr cases 240 and 241) for the Korean program; the motion-def run equals the Korean ELF's word for word
+MotionDef flags pal=6 width=1 cn=flags:2  # ico2/fumi/src/commonact.c:7088
+MotionDef flags pal=8 width=1 cn=flags:0  # ico2/fumi/src/boyact.c:8187
+MotionDef flags pal=9 width=1 cn=flags:10  # by hand: the Korean pair (commonact.c's intr case 259) for the Korean program; the motion-def run equals the Korean ELF's word for word
+MotionDef flags pal=10 width=1 cn=flags:11  # ico2/fumi/src/act-game.c:2342
+MotionDef flags pal=12 width=1 cn=flags:15  # ico2/fumi/src/act-way.c:22
+MotionDef flags pal=13 width=1 cn=flags:19  # ico2/fumi/src/boyact.c:4128
+MotionDef flags pal=14 width=1 cn=flags:18  # ico2/fumi/src/act-game.c:2655
+MotionDef flags pal=15 width=1 cn=flags:17  # ico2/fumi/src/girl_act.c:2187
+MotionDef flags pal=18 width=1 cn=flags:20  # ico2/fumi/src/act-game.c:290
+MotionDef flags pal=25 width=1 cn=flags:24  # by hand: the Korean pair (commonact.c's landing test) for the Korean program; the motion-def run equals the Korean ELF's word for word
+MotionDef flags pal=26 width=1 cn=flags:23  # ico2/fumi/src/act-game.c:2226
+MotionDef flags pal=28 width=1 cn=flags:30  # ico2/fumi/src/act-env.c:772
+MotionDef flags pal=29 width=1 cn=flags:31  # ico2/fumi/src/commonact.c:8594, ico2/fumi/src/girl_act.c:8326
+MotionDef flags pal=30 width=1 cn=flags:22  # ico2/fumi/src/act-game.c:2226
+MotionDef flags pal=31 width=1 cn=flags2:0  # ico2/fumi/src/act-game.c:2655
