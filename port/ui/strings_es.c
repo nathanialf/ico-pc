@@ -627,4 +627,41 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Copiando la imagen de disco en la aplicación",
     [UI_STR_ISO_COPYING_LONG] =
         "Copiando la imagen de disco en la aplicación. Es una imagen grande: tardará unos minutos",
+    [UI_STR_SECTION_VARIANTS] = "Variantes del juego",
+    [UI_STR_OPT_VAR_TOUGHNESS] = "Dureza de las sombras",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
+        "Americana: cada sombra tan resistente como en el disco norteamericano, y no más resistente en las partidas siguientes. Los logros siguen activos.",
+    [UI_STR_VAL_VAR_AMERICAN] = "Americana",
+    [UI_STR_VAL_VAR_NOT_TOUGHER] = "Sin aumento",
+    [UI_STR_OPT_VAR_ONE_HIT] = "Un golpe por ataque",
+    [UI_STR_OPT_VAR_ONE_HIT_NOTE] =
+        "Cada ataque de Ico solo puede herir a una sombra una vez. Desactiva los logros.",
+    [UI_STR_OPT_VAR_NEVER_DODGE] = "Las sombras nunca esquivan",
+    [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] =
+        "Las sombras nunca esquivan los golpes de Ico. Desactiva los logros.",
+    [UI_STR_OPT_VAR_AGGRESSION] = "Agresividad de las sombras",
+    [UI_STR_VAL_VAR_AGG_OWN] = "Propia",
+    [UI_STR_VAL_VAR_AGG_BOLD_PATIENT] = "Audaz, paciente",
+    [UI_STR_VAL_VAR_AGG_BOLD_QUICK] = "Audaz, rápido",
+    [UI_STR_VAL_VAR_AGG_WARY_PATIENT] = "Cauto, paciente",
+    [UI_STR_VAL_VAR_AGG_WARY_QUICK] = "Cauto, rápido",
+    [UI_STR_OPT_VAR_AGGRESSION_NOTE] =
+        "Cómo luchan las sombras: audaces o cautas, pacientes o rápidas. Los logros siguen activos.",
+    [UI_STR_OPT_VAR_NO_HINTS] = "Sin pistas",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE] =
+        "Yorda no da pistas sobre adónde ir, como en el disco norteamericano. Los logros siguen activos.",
+    [UI_STR_OPT_VAR_BARRIER] = "Barrera de la Reina",
+    [UI_STR_VAL_VAR_HITS_5] = "5 golpes",
+    [UI_STR_VAL_VAR_HITS_7] = "7 golpes",
+    [UI_STR_OPT_VAR_BARRIER_NOTE] =
+        "Cuántos golpes hacen falta para romper la barrera de la Reina. Los logros siguen activos.",
+    [UI_STR_OPT_VAR_NO_LOOK] = "Sin cámara libre en escenas",
+    [UI_STR_OPT_VAR_NO_LOOK_NOTE] =
+        "El stick derecho ya no mueve la cámara durante las escenas. Los logros siguen activos.",
+    [UI_STR_OPT_VAR_IGNORE_CAMS] = "Ignorar cámaras de escenas",
+    [UI_STR_OPT_VAR_IGNORE_CAMS_NOTE] =
+        "Las escenas pueden verse mal; el juego puede mostrar lugares que nunca quiso que vieras. Desactiva los logros.",
+    [UI_STR_OPT_VAR_DEBUG_MENU] = "Menú de depuración",
+    [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] =
+        "El menú de depuración del juego, para desarrolladores. Desactiva los logros.",
 };
