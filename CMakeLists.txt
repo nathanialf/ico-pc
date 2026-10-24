@@ -342,6 +342,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
         "The North American disc image (SCUS-97113) the disc tests read, never committed")
     set(ICO_DISC_IMAGE_AUG6 "${CMAKE_SOURCE_DIR}/baserom/Ico_AUG6.iso" CACHE FILEPATH
         "The August 2001 preview disc image (PROTO-20010806) the disc tests read, never committed")
+    set(ICO_DISC_IMAGE_JUN26 "${CMAKE_SOURCE_DIR}/baserom/Ico_JUN26.iso" CACHE FILEPATH
+        "The June 2001 magazine demo's disc image (SCUS-97158) the disc tests read, never committed")
 endif()
 add_executable(fpenv_test port/platform/fpenv_test.c)
 target_compile_options(fpenv_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
