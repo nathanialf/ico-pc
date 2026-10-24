@@ -1956,7 +1956,11 @@ typedef struct RdPerfRecord {
        the later changes were not timed apart (their time stayed with the
        effect, or the scene, before them) */
     uint8_t gpuPostPartial;
-    uint8_t _pad2[2];
+    /* MSAA: where the replay's epoch closed (rd_replay.c msaaEnd): 0 not
+     * closed (no epoch), else the list + 1, RD_LIST_COUNT + 1 the replay's
+     * end */
+    uint8_t msaaCloseAt;
+    uint8_t _pad2;
     /* MSAA (RdSettings.antiAlias): the replay's sample count (0 without)
      * and the epoch's resolves of SCENE (0 or 1 a replay) */
     uint32_t msaaSamples, msaaResolves;
