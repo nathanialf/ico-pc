@@ -187,7 +187,8 @@ tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/setting
 | Edit layout (`UI_PAGE_TOUCH_LAYOUT`) | no shown rows: the editor's own screen ([The touch layout editor](#the-touch-layout-editor)) |
 | Gameplay | Yorda safe, Stick fix, Door fix, Natural chains, Skip the opening (`UI_OPT_SKIP_OPENING`), Film effect, Players, Back |
 | Achievements | a list, the popups switch |
-| Extras | Music, Models, Credits, Characters, Add to Steam, Export textures (`UI_OPT_EXTRAS_EXPORT_TEXTURES`), Achievement popups, Back |
+| Extras | Music, Models, Credits, Characters, Game variants (`UI_PAGE_VARIANTS`), Add to Steam, Export textures (`UI_OPT_EXTRAS_EXPORT_TEXTURES`), Achievement popups, Back |
+| Game variants (`UI_PAGE_VARIANTS`) | Shade toughness, One hit per swing, Shades never dodge, Shade aggression, No hints, Queen barrier, No cutscene look-around, Ignore cutscene cameras (`UI_OPT_VAR_*`, one per `IcoVariantId`), Debug menu (`UI_OPT_VAR_DEBUG_MENU`, a press row, shown with Developer mode on), Back |
 | Music | the music gallery, a list |
 | Characters | nine colour rows, Switch, Randomize, Reset, Back |
 
@@ -782,6 +783,38 @@ the last tick had the item select off (`lt_host_select_disabled`), a cursor move
 frame (`lt_host_point_item`), and whether a card screen's empty slot is pickable
 (`la_host_mc_slot_pickable`: on the Save screen, not on Load) (`ico2/common/src/layout_texture.c`;
 `ico2/common/src/layout_action.c`).
+
+### Extras > Game variants
+
+`UI_PAGE_VARIANTS`, a link on Extras after Characters (from the title and the pause menu: it is not
+one of the three rows `isExtrasOpt` hides), its page built like Controls and Gameplay from the tables
+`varOpts` and `varStrs` in `build`. Eight stepped rows, one `UI_OPT_VAR_*` per `IcoVariantId`
+(`port/game/variants.h`; a `_Static_assert` keeps the order), then Debug menu (`UI_OPT_VAR_DEBUG_MENU`,
+a press row after `UI_OPT_DEVELOPER` in the enum, so not stepped) and Back. The value text is
+`variantText`; a step is `ico_variant_step`, which writes `[variants] <key>` in memory and logs
+`variants: <key> = <value>`; the page's leaving saves the file as every page does.
+
+- Values: Shade toughness Original, American, Not tougher later (`no_plus`); Shade aggression Their
+  own, Bold patient, Bold quick, Wary patient, Wary quick; Queen barrier 5 hits, 7 hits (shown as the
+  disc ships it until a step, which writes the number); the others Off, On.
+- Each row's note (`UI_STR_OPT_VAR_*_NOTE`) is under the page while the cursor is on the row and ends
+  with the rule: "Switches achievements off." for One hit per swing, Shades never dodge, Ignore
+  cutscene cameras and Debug menu (`ico_variants_suspend_achievements`, read by `gamestate.c`
+  beside `ico_opt_developer_mode`), "Achievements stay on." for the others.
+- Debug menu is shown only while Developer mode is on (`optShown`). Cross calls
+  `ico_variants_debug_menu_pressed`, which logs `variants: the Debug menu is opened from Options`,
+  marks the menu used (achievements off until `ico_variants_debug_menu_clear` or an options reload)
+  and calls the hook `ico_variants_open_debug_menu`, which the game hooks implement; the stub in
+  `variants.c` logs `variants: the debug menu hook is not wired yet` once.
+- Pitch: nine rows 18 apart (Back at 184), ten with Debug menu 16 apart (`pagePitch`).
+- Log lines: the values once at the first read (`variants: shade_toughness=... ignore_cutscene_cameras=0`),
+  each change, the achievements rule when it changes (`variants: achievements are off (one_hit ...)`,
+  `... are back on`), a value that is none (`variants: [variants] <key> = "<word>" is not a value; using
+  <default>`).
+
+ctests `settings` (the page's rows), `settings_extra`, `settings_extra_jpn`, `settings_extra_kor`
+(`testVariantsPage`: the link, labels, values, a step and the key and the saved file on every row, the
+notes and the achievements rule, the Debug menu row and its press), `variants`, `config`.
 
 ## Galleries and photo mode
 
