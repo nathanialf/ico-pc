@@ -470,6 +470,19 @@ static void test_first_run(void)
     CHECK(text != NULL && strstr(text, "skip_opening = false") != NULL);
     CHECK_STR(ico_config_get_string("gameplay.hold_type", "?"), "hold"); /* Hold type A */
     CHECK(text != NULL && strstr(text, "hold_type = \"hold\"") != NULL);
+    /* the game variants: every line the game as shipped; the barrier's
+       number is left out (the disc's own) */
+    CHECK_STR(ico_config_get_string("variants.shade_toughness", "?"), "original");
+    CHECK(ico_config_get_bool("variants.one_hit", 1) == 0);
+    CHECK(ico_config_get_bool("variants.never_dodge", 1) == 0);
+    CHECK_STR(ico_config_get_string("variants.aggression", "?"), "own");
+    CHECK(ico_config_get_bool("variants.no_hints", 1) == 0);
+    CHECK(ico_config_get_string("variants.barrier_hits", NULL) == NULL);
+    CHECK(ico_config_get_bool("variants.no_cutscene_look", 1) == 0);
+    CHECK(ico_config_get_bool("variants.ignore_cutscene_cameras", 1) == 0);
+    CHECK(text != NULL && strstr(text, "\n[variants]\n") != NULL &&
+          strstr(text, "shade_toughness = \"original\"") != NULL &&
+          strstr(text, "aggression = \"own\"") != NULL && strstr(text, "\nbarrier_hits") == NULL);
     CHECK_STR(ico_config_get_string("paths.iso", "?"), "");
     /* photo mode's keys */
     CHECK(ico_config_get_float("photo.stick_speed", 0.0) == 1.0);
