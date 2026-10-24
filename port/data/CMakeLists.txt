@@ -254,10 +254,23 @@ if(ICO_DATA_PYTHON)
     add_test(NAME data_desc_fresh
              COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_data_desc.py" --check
              WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    # the USA disc's set, written before config/regions.txt lists its row
+    # (gen_data_c.py PENDING_ROWS): port/data/gen/ntsc/ must be what the
+    # table with that row gives (once the row lands, data_desc_fresh checks
+    # it with the others and this one checks it again)
+    add_test(NAME data_desc_fresh_ntsc
+             COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_data_desc.py" --check
+                     --version ntsc
+             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    # the record map's rules (extend, drop, default, narrow, a moved
+    # bit-field) on a made-up record, with the version-block readers
+    add_test(NAME data_map_selftest
+             COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_ee_layout.py" --selftest
+             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     # each other disc's config/ee_layout.<slug>.txt must be what its recorded
     # upstream revision gives (exit 0 with a note when that revision is not in
     # the clone)
-    foreach(_slug jpn kor)
+    foreach(_slug jpn kor ntsc)
         add_test(NAME ee_layout_fresh_${_slug}
                  COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_ee_layout.py"
                          --version ${_slug} --check
@@ -279,6 +292,23 @@ set(ICO_BASE_ELF_JPN "${CMAKE_SOURCE_DIR}/baserom/jpn/baseelf.elf" CACHE FILEPAT
     "The Japanese base ELF the loader test's reference tables are written from")
 set(ICO_BASE_ELF_KOR "${CMAKE_SOURCE_DIR}/baserom/kor/baseelf.elf" CACHE FILEPATH
     "The Korean base ELF the loader test's reference tables are written from")
+set(ICO_BASE_ELF_NTSC "${CMAKE_SOURCE_DIR}/baserom/ntsc/baseelf.elf" CACHE FILEPATH
+    "The North American base ELF the loader test's reference tables are written from")
+# The members a disc's config/data_members.<slug>.txt lists. ICO_DATA_MEMBERS
+# is the union of every link order's (tools/gen_sources.py), so a member only
+# some discs have (the USA disc has no hint table, the June 2001 demo tables
+# PAL lacks) is in it: each disc's reference writes only its own members.
+function(ico_disc_members slug out)
+    file(STRINGS "${CMAKE_SOURCE_DIR}/config/data_members.${slug}.txt" _lines
+         REGEX "^(data|rodata|sdata)[ \t]")
+    set(_names "")
+    foreach(_line ${_lines})
+        string(REGEX REPLACE "^[a-z]+[ \t]+([^ \t]+).*$" "\\1" _name "${_line}")
+        list(APPEND _names "${_name}")
+    endforeach()
+    list(REMOVE_DUPLICATES _names)
+    set(${out} ${_names} PARENT_SCOPE)
+endfunction()
 set(_ico_have_elftools 1)
 if(ICO_DATA_PYTHON)
     execute_process(COMMAND "${ICO_DATA_PYTHON}" -c "import elftools"
@@ -292,7 +322,11 @@ if(ICO_DATA_PYTHON AND _ico_have_elftools EQUAL 0 AND EXISTS "${ICO_BASE_ELF}")
         "${CMAKE_SOURCE_DIR}/config/symbol_addrs.pal.txt"
         "${CMAKE_SOURCE_DIR}/config/symbol_addrs.pal.data.txt")
     set(_refs "")
+    ico_disc_members(pal _members_pal)
     foreach(m ${ICO_DATA_MEMBERS})
+        if(NOT m IN_LIST _members_pal)
+            continue()
+        endif()
         set(out "${CMAKE_CURRENT_BINARY_DIR}/ref/${m}.c")
         add_custom_command(
             OUTPUT "${out}"
@@ -328,7 +362,11 @@ if(ICO_DATA_PYTHON AND _ico_have_elftools EQUAL 0 AND EXISTS "${ICO_BASE_ELF}")
             "${CMAKE_SOURCE_DIR}/config/symbol_addrs.${_slug}.txt"
             "${CMAKE_SOURCE_DIR}/config/symbol_addrs.${_slug}.data.txt")
         set(_refs_slug "")
+        ico_disc_members(${_slug} _members_slug)
         foreach(m ${ICO_DATA_MEMBERS})
+            if(NOT m IN_LIST _members_slug)
+                continue()
+            endif()
             set(out "${CMAKE_CURRENT_BINARY_DIR}/ref_${_slug}/${m}.c")
             add_custom_command(
                 OUTPUT "${out}"
