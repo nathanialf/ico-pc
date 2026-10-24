@@ -63,9 +63,11 @@ enum { ROLE_PENDING = 0, ROLE_BUTTON, ROLE_STICK, ROLE_LOOK, ROLE_IGNORED };
  * the default dimension (Q_DPAD_KEY, Q_RECT_W x Q_RECT_H, Q_FACE_R, Q_R1_R,
  * ICO_TOUCH_STICK_MM; the look pad w x h q) times the scale. The box is
  * then clamped inside R and pushed out of the hinge band to the nearer side
- * that holds it (shrunk to ICO_TOUCH_EDIT_SCALE_MIN, the look pad to the
- * side's width, when no side does; inside R regardless when even that
- * fails: a control is never dropped), and its rects are written as place()
+ * that holds it (when it does not fit, a size up to 3.0 being larger than a
+ * phone's region: shrunk to the largest scale that fits the widest side,
+ * the look pad to that side's size; then to ICO_TOUCH_EDIT_SCALE_MIN;
+ * inside R regardless when even that fails: a control is never dropped),
+ * and its rects are written as place()
  * writes them. The opacity goes into button[].alpha, stickAlpha and
  * lookAlpha (0: not drawn), and whether it takes touches into
  * button[].active, stickActive and lookActive (0 Off: hit() skips the
@@ -614,17 +616,33 @@ static void apply_one(IcoTouchLayout *l, int ctl, const IcoTouchCtlEdit *c)
     h = bh * s;
 
     /* the centre from the anchors (the look pad's anchor-side edges) */
-    for (i = 0; i < 2; i++) {
+    for (i = 0; i < 3; i++) {
         if (i == 1) {
-            /* no side of the band holds it: smaller, then inside the region
-               whatever happens (never dropped) */
+            /* it does not fit (larger than the area, up to 3.0, or no side of
+               the band holds it): the look pad to the widest side; a control
+               to the largest scale whose box fits that side, at least
+               ICO_TOUCH_EDIT_SCALE_MIN */
             if (look) {
                 look_shrink(k, &w, &h);
             } else {
-                s = ICO_TOUCH_EDIT_SCALE_MIN;
+                float fw = w, fh = h;
+
+                look_shrink(k, &fw, &fh);
+                if (w > 0.0f && h > 0.0f) {
+                    s = maxf_(s * minf_(fw / w, fh / h), ICO_TOUCH_EDIT_SCALE_MIN);
+                }
                 w = bw * s;
                 h = bh * s;
             }
+        } else if (i == 2) {
+            /* still not: the smallest, then inside the region whatever
+               happens (never dropped); the look pad is as small as it gets */
+            if (look) {
+                break;
+            }
+            s = ICO_TOUCH_EDIT_SCALE_MIN;
+            w = bw * s;
+            h = bh * s;
         }
         if (c->ax == ICO_TOUCH_ANCHOR_L) {
             cxA = R.x + c->dx * q + (look ? 0.5f * w : 0.0f);

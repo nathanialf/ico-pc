@@ -1015,6 +1015,8 @@ static int targets(const IcoTouchEditor *ed, int out[ICO_TOUCH_CTL_COUNT])
 static void step_size(IcoTouchEditor *ed, const IcoTouchLayout *l, int dir)
 {
     IcoTouchEdits next = ed->work;
+    const long lo = round_l(ICO_TOUCH_EDIT_SCALE_MIN * 100.0f),
+               hi = round_l(ICO_TOUCH_EDIT_SCALE_MAX * 100.0f);
     int t[ICO_TOUCH_CTL_COUNT], n = targets(ed, t), i;
 
     for (i = 0; i < n; i++) {
@@ -1023,7 +1025,7 @@ static void step_size(IcoTouchEditor *ed, const IcoTouchLayout *l, int dir)
 
         ensure_set(&next, ed->rule, l, t[i]);
         p = round_l(c->scale * 100.0f) + 10 * dir;
-        p = p < 70 ? 70 : p > 160 ? 160 : p;
+        p = p < lo ? lo : p > hi ? hi : p;
         c->scale = (float)p / 100.0f;
         ico_touch_edit_sanitize(c, t[i]);
     }
