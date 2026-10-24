@@ -1,8 +1,9 @@
 /* tools/region_blocks.py --selftest input: one block per class. The self test
  * copies it to ico2/common/src/fixture.c in a scratch tree with this
- * directory's regions.txt (four rows: pal, jpn, kor, us) and region_twins.txt,
- * converts it, and compares the result with expected.c, the report with
- * expected_report.tsv and `report --bits` with expected_bits.txt. */
+ * directory's regions.txt (six rows: pal, jpn, kor, ntsc, aug6, jun26) and
+ * region_twins.txt, converts it, and compares the result with expected.c,
+ * the report with expected_report.tsv and `report --bits` with
+ * expected_bits.txt. */
 #include "region.h"
 
 /* header typedef: the layouts differ (layout-typedef) */
@@ -113,7 +114,7 @@ float fx_tokens(char *file)
 #else
     stage_SetAnimation(625);
 #endif
-    alloc(64, LN(560, 557, 557, 560));
+    alloc(64, LN(560, 557, 557, 560, 561, 562));
 #ifdef VERSION_JPN
     return framePlayed / 50.0f;
 #else
@@ -249,9 +250,9 @@ void fx_statements(int video)
 
 void fx_three(void)
 {
-    /* three targets: the selector over the rows that differ (PAL_JPN_US,
-       PAL_US, PAL_JPN), and an else-if chain */
-#ifdef VERSION_US
+    /* three targets: the selector over the rows that differ (PAL_JPN_NTSC,
+       PAL_NTSC, PAL_JPN), and an else-if chain */
+#ifdef VERSION_NTSC
     draw(31, 7);
     stage_SetAnimation(700);
     alloc(8, 1);
@@ -264,7 +265,7 @@ void fx_three(void)
     stage_SetAnimation(700);
     alloc(4, 1);
 #endif
-#ifdef VERSION_US
+#ifdef VERSION_NTSC
     set_mode(9);
 #elif defined(VERSION_JPN)
     if (stage_no) {
@@ -311,7 +312,7 @@ void fx_twin(void)
 /* the Korean build is the Japanese program: arms shared by two rows
    (an `#if` naming both macros joined by ||, the set JPNKOR), a KOR
    block nested in a shared arm (its #else is the Japanese text), a KOR
-   block beside PAL text (its #else serves pal, jpn and us), the negated
+   block beside PAL text (its #else serves every other row), the negated
    pair, an #elif with ||, and a JPN-only block the other rows skip */
 #if defined(VERSION_JPN) || defined(VERSION_KOR)
 void DummyIcoKor(void);
@@ -388,7 +389,7 @@ void fx_shared(MotionRec *row, int video, int lsn)
 #else
     set_mode(7);
 #endif
-    /* KOR beside PAL: the #else serves pal, jpn and us */
+    /* KOR beside PAL: the #else serves every other row */
 #ifdef VERSION_KOR
     set_mode(5);
 #else
@@ -398,14 +399,14 @@ void fx_shared(MotionRec *row, int video, int lsn)
     lsn += 153600;
 #endif
     /* an #elif with || */
-#ifdef VERSION_US
+#ifdef VERSION_NTSC
     draw(25, 7);
 #elif defined(VERSION_JPN) || defined(VERSION_KOR)
     draw(26, 9);
 #else
     draw(29, 9);
 #endif
-    /* JPN only: KOR and US take PAL's (empty) arm */
+    /* JPN only: the other rows take PAL's (empty) arm */
 #ifdef VERSION_JPN
     viewScale = 150;
 #endif
@@ -448,6 +449,208 @@ int fx_shared_switch(int stage)
 #endif
         set_mode(2);
         break;
+    }
+    return 0;
+}
+
+/* the three later targets (upstream's docs/TARGETS.md shapes): blocks
+   nested to four deep, each line's rows the intersection of the conditions
+   around it, a row no condition names taking the PAL row's arm */
+extern void lt_switch_layout(int id);
+extern void gflagOn(int id);
+extern int enable_game_pause;
+
+void fx_nested(int video)
+{
+    /* NTSC nested in the PAL arm of a shared Japanese block: one token over
+       three texts */
+#if defined(VERSION_JPN) || defined(VERSION_KOR)
+    lt_switch_layout(51);
+#else
+#ifdef VERSION_NTSC
+    lt_switch_layout(50);
+#else
+    lt_switch_layout(54);
+#endif
+#endif
+    /* AUG6 nested in the arm of the Japanese lines it shares */
+#if defined(VERSION_JPN) || defined(VERSION_KOR) || defined(VERSION_AUG6)
+#ifdef VERSION_AUG6
+    draw(38, 1);
+#else
+    draw(40, 1);
+#endif
+#else
+    draw(36, 1);
+#endif
+    /* AUG6 nested twice in a USA arm beside shared lines (st22a.c): rebuilt
+       flat, the shared line in each arm, the story flags and the animation
+       per row (the animation deltas are review lines) */
+#if defined(VERSION_NTSC) || defined(VERSION_AUG6)
+#ifdef VERSION_AUG6
+    gflagOn(293);
+#else
+    gflagOn(294);
+#endif
+    lt_switch_layout(51);
+#ifdef VERSION_AUG6
+    gflagOn(294);
+    stage_SetAnimation(683);
+#else
+    gflagOn(295);
+    stage_SetAnimation(684);
+#endif
+#else
+    gflagOn(323);
+    lt_switch_layout(51);
+    gflagOn(324);
+    stage_SetAnimation(758);
+#endif
+    /* two deep: the demo inside the prototype inside the USA arm (a mail id
+       per row) */
+#if defined(VERSION_NTSC) || defined(VERSION_AUG6) || defined(VERSION_JUN26)
+#if defined(VERSION_AUG6) || defined(VERSION_JUN26)
+#ifdef VERSION_JUN26
+    draw(377, 0);
+#else
+    draw(393, 0);
+#endif
+#else
+    draw(397, 0);
+#endif
+#else
+    draw(430, 0);
+#endif
+    /* three deep, whole statements: an else-if chain over five texts, the
+       demo's and the prototype's sharing a line */
+#if defined(VERSION_JPN) || defined(VERSION_KOR)
+    set_mode(1);
+#else
+#if defined(VERSION_NTSC) || defined(VERSION_AUG6) || defined(VERSION_JUN26)
+#if defined(VERSION_AUG6) || defined(VERSION_JUN26)
+#ifdef VERSION_JUN26
+    enable_game_pause = 0;
+#endif
+    gsb_ResetSnap();
+#else
+    set_mode(2);
+#endif
+#else
+    if (video) {
+        set_mode(3);
+    }
+#endif
+#endif
+    /* PAL-only lines: the three-name condition with the prototype's
+       exclusion nested (a four-name line would pass the column limit), then
+       with the demo's too */
+#if !defined(VERSION_JPN) && !defined(VERSION_KOR) && !defined(VERSION_NTSC)
+#ifndef VERSION_AUG6
+    draw(7, 7);
+#endif
+#endif
+#if !defined(VERSION_JPN) && !defined(VERSION_KOR) && !defined(VERSION_NTSC)
+#if !defined(VERSION_AUG6) && !defined(VERSION_JUN26)
+    draw(8, 8);
+#endif
+#endif
+    /* the demo's own block beside the four-name condition (e3.c): the two
+       texts are one, so one set of five rows */
+#ifdef VERSION_JUN26
+    set_mode(12);
+#else
+#if defined(VERSION_JPN) || defined(VERSION_KOR) || defined(VERSION_NTSC) || defined(VERSION_AUG6)
+    set_mode(12);
+#else
+    gsb_ResetSnap();
+#endif
+#endif
+    /* the same over a nested #elif */
+#if defined(VERSION_NTSC) || defined(VERSION_AUG6) || defined(VERSION_JUN26)
+#ifdef VERSION_JUN26
+    draw(13, 3);
+#elif defined(VERSION_AUG6)
+    draw(13, 2);
+#else
+    draw(13, 1);
+#endif
+#else
+    draw(13, 0);
+#endif
+}
+
+/* a whole function body in the demo's arm, past LARGE_LINES (large-variant) */
+void fx_large(void)
+{
+#ifdef VERSION_JUN26
+    draw(1, 0);
+    draw(2, 0);
+    draw(3, 0);
+    draw(4, 0);
+    draw(5, 0);
+    draw(6, 0);
+    draw(7, 0);
+    draw(8, 0);
+    draw(9, 0);
+    draw(10, 0);
+    draw(11, 0);
+    draw(12, 0);
+    draw(13, 0);
+    draw(14, 0);
+    draw(15, 0);
+    draw(16, 0);
+    draw(17, 0);
+    draw(18, 0);
+    draw(19, 0);
+    draw(20, 0);
+    draw(21, 0);
+    draw(22, 0);
+    draw(23, 0);
+    draw(24, 0);
+    draw(25, 0);
+    draw(26, 0);
+    draw(27, 0);
+    draw(28, 0);
+    draw(29, 0);
+    draw(30, 0);
+    draw(31, 0);
+    draw(32, 0);
+    draw(33, 0);
+    draw(34, 0);
+    draw(35, 0);
+    draw(36, 0);
+    draw(37, 0);
+    draw(38, 0);
+    draw(39, 0);
+    draw(40, 0);
+    draw(41, 0);
+    draw(42, 0);
+#else
+    set_mode(0);
+#endif
+}
+
+/* a block that closes a statement, opens a switch and holds its first label
+   (layout_action.c): the label is no place for a selector, and case-shift
+   owns no such switch, so the block is hand work (unbalanced) */
+int fx_label(int item)
+{
+    if (item != -1) {
+#ifdef VERSION_NTSC
+        draw(233, 234);
+    }
+    switch (item) {
+    case 233:
+#else
+        draw(264, 265);
+    }
+    switch (item) {
+    case 264:
+#endif
+        set_mode(1);
+        break;
+    case 7:
+        set_mode(2);
     }
     return 0;
 }

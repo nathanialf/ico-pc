@@ -1,3 +1,3 @@
-MotionModeBits jpn=16 pal=19 width=3 # fixture.c:133
-MotionModeBits jpn=16 pal=19 width=3 # fixture.c:343
-MotionModeBits kor=16 pal=19 width=3 # fixture.c:343
+MotionModeBits jpn=16 pal=19 width=3 # fixture.c:134
+MotionModeBits jpn=16 pal=19 width=3 # fixture.c:344
+MotionModeBits kor=16 pal=19 width=3 # fixture.c:344

@@ -9,18 +9,24 @@ between the discs is an inline block on the target's macro,
   #ifndef VERSION_JPN P  #endif
   #if defined(VERSION_JPN) || defined(VERSION_KOR)  JK  #else  P  #endif
   #if !defined(VERSION_JPN) && !defined(VERSION_KOR)  P  #endif
-  #ifdef VERSION_US U #elif defined(VERSION_JPN) || defined(VERSION_KOR) J #else P #endif
+  #ifdef VERSION_NTSC N #elif defined(VERSION_JPN) || defined(VERSION_KOR) J #else P #endif
+  #if defined(VERSION_JPN) || defined(VERSION_KOR) JK #else
+  #ifdef VERSION_NTSC N #else P #endif #endif                 (nested, upstream's way)
 
 A condition is any boolean expression over defined(VERSION_X) with ||, &&,
-! and parentheses (#ifdef/#ifndef are sugar for it); a region block may hold
-one more region block in an arm (upstream's `#ifdef VERSION_KOR` inside a
-JPN||KOR arm, whose #else is the Japanese text). A row no condition names
-takes the arm the PAL row takes, which is upstream's own rule. The tool reads
-a block as per-row texts (the lines each row's build compiles) and its arms
-as the distinct texts, each keyed by the SET of rows that compile it (a
-tuple of slugs in table order; the PAL row's arm is "pal"). A nested block
-is rebuilt flat in memory (`flatten_blocks`), its shared lines repeated in
-each arm; a block no class converts goes back as written.
+! and parentheses (#ifdef/#ifndef are sugar for it). Region blocks nest to
+any depth up to MAX_DEPTH (upstream nests five deep: `#ifdef VERSION_JUN26`
+inside a prototype arm inside a USA arm inside the PAL arm of a Japanese
+block); each content line is compiled by the rows every condition around it
+holds for (the intersection along the directive stack), so a row no
+condition names takes the arm the PAL row takes, which is upstream's own
+rule. The tool reads a top-level block as per-row texts (the lines each
+row's build compiles) and its arms as the distinct texts, each keyed by the
+SET of rows that compile it (a tuple of slugs in table order; the PAL row's
+arm is "pal"). A nested block is rebuilt flat in memory (`flatten_blocks`),
+its shared lines repeated in each arm; a block no class converts goes back
+as written. A line inside a block that no row compiles is a `review dead`
+line of `report` (the conversion drops it).
 
 The port compiles one game core that plays every disc in config/regions.txt
 (one row per target: slug, upstream macro, disc id, boot ELF, product name;
@@ -30,11 +36,17 @@ ICO_<SLUG>, ICO_<SET> for every set of two or more non-PAL rows (a set's
 name is its rows' slugs concatenated in table order: ICO_JPNKOR is
 ICO_JPN || ICO_KOR), and one selector macro per grouping of non-PAL rows
 into arms, named PAL_ and the arms' set names joined by _: PAL_JPN(pal, jpn),
-PAL_JPNKOR(pal, jpnkor), PAL_JPN_KOR(pal, jpn, kor). The first argument is
-the PAL arm (upstream's #else), then one per arm in table order; a region a
-macro does not name takes the PAL arm. A selector names the rows whose value
-differs from PAL's, rows with one value sharing an argument. LN(pal, jpn,
-kor) takes one value per row (its arity is the row count).
+PAL_JPNKOR(pal, jpnkor), PAL_JPN_KOR(pal, jpn, kor), PAL_JPNKORNTSC(pal,
+jpnkorntsc), PAL_NTSCAUG6_JUN26(pal, ntscaug6, jun26). The first argument is the PAL arm
+(upstream's #else), then one per arm in table order; a region a macro does
+not name takes the PAL arm. A selector names the rows whose value differs
+from PAL's, rows with one value sharing an argument. LN(pal, jpn, kor, ...)
+takes one value per row (its arity is the row count). The groupings grow as
+Bell numbers (six rows: 202 selectors, 26 sets), so region.h defines the
+singletons, LN's selector and only the selectors and sets the code names
+(`used_names`: every `PAL_<...>(` and `ICO_<...>` under ico2/, sce/ and
+port/); `convert` runs gen-header after itself, and `check` holds region.h
+to that.
 
 `convert` rewrites each block by the first class that fits, keeping the PAL
 arm's bytes and indentation (the class names are the `auto` lines of
@@ -92,15 +104,19 @@ The files are EUC-JP: the tool reads and writes bytes and never decodes.
                          exit 2: raw blocks remain and every one is a hand
                          item, or a row's glue piece is missing (listed);
                          exit 1: a rule misfired (listed)
-  tools/region_blocks.py rename [--root DIR] [--check] [--set SLUGS]
-                         rewrite the two-row spelling under ico2/ and sce/
-                         for the rows sharing the Japanese arm (every named
-                         row, or --set): PAL_JPN( -> PAL_JPNKOR(, ICO_JPN ->
-                         ICO_JPNKOR, LN(a, b) -> LN(a, b, b); tokens only,
-                         idempotent; --check reports and exits 1 if any
+  tools/region_blocks.py rename [--root DIR] [--check] [--base [ROW=]SLUG]...
+                         rewrite the spelling under ico2/ and sce/ for the
+                         rows the table gained (the rows past the fewest
+                         arguments an LN( takes): each new row takes its
+                         base's value in LN (default pal: LN(a, b, c) ->
+                         LN(a, b, c, a, a, a)) and joins the selector arms
+                         and sets its base is in (kor=jpn: PAL_JPN( ->
+                         PAL_JPNKOR(, ICO_JPN -> ICO_JPNKOR; a row on pal
+                         changes no selector); tokens only, idempotent;
+                         --check reports and exits 1 if any
   tools/region_blocks.py gen-header [--root DIR]
                          write ico2/common/include/region.h from
-                         config/regions.txt
+                         config/regions.txt and the forms the tree names
   tools/region_blocks.py gen-table [--root DIR]
                          write port/core/region_table.c (ico_region_info[]
                          in the table's order) from config/regions.txt
@@ -110,8 +126,10 @@ The files are EUC-JP: the tool reads and writes bytes and never decodes.
                          (report --all) and expected_bits.txt; check
                          check_contexts.c beside it (exactly its lines
                          marked "refused" refused), rename.c with
-                         rename_expected.c, and gen-header's two-row output
-                         with region_two_rows.h
+                         rename_expected.c (kor on jpn) and that with
+                         rename_pal_expected.c (six rows, the later three
+                         on pal), and gen-header's two-row output with
+                         region_two_rows.h
 """
 
 import argparse
@@ -147,6 +165,8 @@ COMPAT_DIR = "port/compat"
 # 36 x2, JPN - KOR 6 x140; the switch heads of layout_action.c 29..36):
 # the Japanese deltas plus the six rows the Korean tex-property table lacks
 DELTAS_KNOWN = {2, 3, 4, 19, 23, 24, 28, 29, 30, 32, 34, 35, 36, 48}
+# region blocks nest this deep at most (upstream's tree nests five deep)
+MAX_DEPTH = 8
 # an arm longer than this is a large in-function variant: hand work
 LARGE_LINES = 40
 
@@ -198,6 +218,17 @@ def load_regions(root):
     for r in rows[1:]:
         if r.macro != "VERSION_" + r.upper:
             raise RegionError("%s: row %s: the macro must be VERSION_%s" % (REGIONS_TXT, r.slug, r.upper))
+    for r in rows:
+        if not re.match(r"^[a-z][a-z0-9]*$", r.slug):
+            raise RegionError("%s: row %s: a slug is lower-case letters and digits" % (REGIONS_TXT, r.slug))
+    # a form's name is its rows' slugs concatenated: no two forms may spell alike
+    seen = {}
+    for grouping in selector_groupings(rows):
+        name = selector_name(grouping)
+        if name in seen:
+            raise RegionError("%s: the selectors %s and %s are both spelt %s: rename a slug"
+                              % (REGIONS_TXT, seen[name], [g.slug for g in grouping], name))
+        seen[name] = [g.slug for g in grouping]
     return rows
 
 
@@ -225,7 +256,7 @@ class Group:
 
 def selector_subsets(regions):
     """Every non-empty set of non-PAL rows, each in table order, in mask order
-    (JPN, US, JPN_US for rows pal, jpn, us)."""
+    (JPN, NTSC, JPN_NTSC for rows pal, jpn, ntsc)."""
     named = regions[1:]
     subsets = []
     for mask in range(1, 1 << len(named)):
@@ -279,10 +310,101 @@ def ln_params(regions):
     return ", ".join(r.slug for r in regions)
 
 
-def gen_header(regions):
-    """The text of region.h for these rows."""
-    index_list = ", ".join("%d %s" % (r.index, r.slug) for r in regions)
+USED_DIRS = ("ico2", "sce", "port")
+USED_EXTS = (".c", ".h", ".inc", ".cpp", ".cc", ".m", ".mm")
+USED_NAME = re.compile(rb"\b(PAL_[A-Z0-9_]+)[ \t]*\(|\b(ICO_[A-Z0-9]+)\b")
+
+
+def used_names(root):
+    """The selector and set names the tree's code spells: every `PAL_<...>(`
+    and `ICO_<...>` under ico2/, sce/ and port/ (port/ too: the port layer
+    and its tests include region.h), region.h itself aside. A plain scan of
+    the bytes, comments included, so the result depends on the files alone;
+    a name that is no form of the table is ignored by gen_header."""
+    header = os.path.normpath(os.path.join(root, HEADER))
+    names = set()
+    for d in USED_DIRS:
+        top = os.path.join(root, d)
+        if not os.path.isdir(top):
+            continue
+        for dirpath, dirnames, filenames in os.walk(top):
+            dirnames.sort()
+            for f in sorted(filenames):
+                p = os.path.join(dirpath, f)
+                if not f.endswith(USED_EXTS) or os.path.normpath(p) == header:
+                    continue
+                for m in USED_NAME.finditer(read(p)):
+                    names.add((m.group(1) or m.group(2)).decode("ascii"))
+    return names
+
+
+def header_forms(regions, used=None):
+    """(selector groupings, shared sets, every form?) region.h defines: all of
+    them when `used` is None, else the selectors `used` names, LN's selector
+    (every named row its own arm), and the shared sets those selectors' arms
+    or `used` name. The singletons ICO_<SLUG> are always defined."""
+    groupings = selector_groupings(regions)
     shared = shared_sets(regions)
+    if used is None:
+        return groupings, shared, True
+    full = selector_name(regions[1:]) if len(regions) > 1 else None
+    keep = [g for g in groupings if selector_name(g) in used or selector_name(g) == full]
+    want = set(n[len("ICO_"):] for n in used if n.startswith("ICO_"))
+    for grouping in keep:
+        want.update(g.upper for g in grouping if len(g.regions) > 1)
+    sets = [g for g in shared if g.upper in want]
+    return keep, sets, len(keep) == len(groupings) and len(sets) == len(shared)
+
+
+# region.h: a line past HEADER_WIDTH (the three-row header's longest is 107) is broken to lines
+# of HEADER_FILL
+HEADER_WIDTH = 110
+HEADER_FILL = 96
+
+
+def wrap_define(line):
+    """A `#define NAME(params) body` line past HEADER_WIDTH as continued
+    lines: the head alone, then the body broken after a ` : ` (each line but
+    the last ends in a backslash; the body indented one step, its later
+    lines one more column, under the opening parenthesis's content)."""
+    if len(line) <= HEADER_WIDTH:
+        return [line]
+    head, body = line[:line.index(")") + 1], line[line.index(")") + 2:]
+    parts = body.split(" : ")
+    pieces = [x + " :" for x in parts[:-1]] + [parts[-1]]
+    out = [head + " \\"]
+    cur = "    " + pieces[0]
+    for piece in pieces[1:]:
+        if len(cur) + 1 + len(piece) + 2 > HEADER_FILL:
+            out.append(cur + " \\")
+            cur = "     " + piece
+        else:
+            cur += " " + piece
+    out.append(cur)
+    return out
+
+
+def wrap_comment(text):
+    """A one-line `/* ... */` comment past HEADER_WIDTH as a block comment."""
+    if len(text) <= HEADER_WIDTH:
+        return [text]
+    out = []
+    cur = "/*"
+    for w in text[3:-3].split(" "):
+        if len(cur) + 1 + len(w) > HEADER_FILL and cur != " *":
+            out.append(cur)
+            cur = " *"
+        cur += " " + w
+    out.append(cur + " */")
+    return out
+
+
+def gen_header(regions, used=None):
+    """The text of region.h for these rows: the singletons, and the selectors
+    and shared sets `used` names (used_names; None: every form) with LN's
+    selector."""
+    index_list = ", ".join("%d %s" % (r.index, r.slug) for r in regions)
+    groupings, shared, complete = header_forms(regions, used)
     out = []
     out.append("/* ico2/common/include/region.h -- GENERATED by tools/region_blocks.py gen-header from")
     out.append(" * config/regions.txt; do not edit by hand.")
@@ -294,8 +416,13 @@ def gen_header(regions):
     out.append("#ifndef ICO_REGION_H")
     out.append("#define ICO_REGION_H")
     out.append("")
-    out.append("extern int ico_region; /* row index into config/regions.txt: %s; set once at disc mount */"
-               % index_list)
+    decl = "extern int ico_region; /* row index into config/regions.txt: %s; set once at disc mount */" % index_list
+    if len(decl) > HEADER_WIDTH:
+        out.extend(wrap_comment("/* ico_region: the row index into config/regions.txt: %s; set once at disc mount. */"
+                                % index_list))
+        out.append("extern int ico_region;")
+    else:
+        out.append(decl)
     out.append("")
     for r in regions:
         out.append("#define ICO_REGION_%s %d" % (r.upper, r.index))
@@ -310,22 +437,28 @@ def gen_header(regions):
         for g in shared:
             out.append("#define ICO_%s (%s)" % (g.upper, " || ".join("ICO_%s" % r.upper for r in g.regions)))
     out.append("")
-    out.append("/* Selector macros: the first argument is the PAL arm (upstream's #else), then one arm per")
+    note = ["/* Selector macros: the first argument is the PAL arm (upstream's #else), then one arm per"]
     if shared:
-        out.append(" * named region set in table order (a set of rows sharing an arm is one argument:")
-        out.append(" * PAL_%s(pal, %s)); a region a macro does not name takes the PAL arm. */"
-                   % (shared[0].upper, shared[0].slug))
+        note.append(" * named region set in table order (a set of rows sharing an arm is one argument:")
+        note.append(" * PAL_%s(pal, %s)); a region a macro does not name takes the PAL arm."
+                    % (shared[0].upper, shared[0].slug))
     else:
-        out.append(" * named region in table order; a region a macro does not name takes the PAL arm. */")
-    for grouping in selector_groupings(regions):
+        note.append(" * named region in table order; a region a macro does not name takes the PAL arm.")
+    if not complete:
+        note.append(" * Only the forms the code names are defined (gen-header scans ico2/, sce/ and port/) and")
+        note.append(" * LN's; a form's name is fixed by its rows, so a new use adds its lines and moves no other.")
+    note[-1] += " */"
+    out.extend(note)
+    for grouping in groupings:
         params = ", ".join(["pal"] + [g.slug for g in grouping])
         chain = "".join("ICO_%s ? (%s) : " % (g.upper, g.slug) for g in reversed(grouping))
-        out.append("#define %s(%s) (%s(pal))" % (selector_name(grouping), params, chain))
+        out.extend(wrap_define("#define %s(%s) (%s(pal))" % (selector_name(grouping), params, chain)))
     out.append("")
-    out.append("/* LN(%s): upstream's per-target __LINE__ values for the debug allocators and asserts. */"
-               % ln_params(regions))
+    out.extend(wrap_comment("/* LN(%s): upstream's per-target __LINE__ values for the debug allocators and asserts. */"
+                            % ln_params(regions)))
     if len(regions) > 1:
-        out.append("#define LN(%s) %s(%s)" % (ln_params(regions), selector_name(regions[1:]), ln_params(regions)))
+        out.extend(wrap_define("#define LN(%s) %s(%s)" % (ln_params(regions), selector_name(regions[1:]),
+                                                          ln_params(regions))))
     else:
         out.append("#define LN(pal) (pal)")
     out.append("")
@@ -620,6 +753,7 @@ class Block:
         self.directive_lines = set()
         self.orig_start = orig_start
         self.synth = None         # the source bytes when the block was rebuilt flat
+        self.dead = []            # source lines inside it that no row compiles
 
     @property
     def line(self):
@@ -638,6 +772,7 @@ class RawBlock:
         self.end = None
         self.directive_lines = set()   # the region directives of the block and the one nested in it
         self.texts = {}                # slug -> [line index]
+        self.dead = []                 # non-blank lines inside it that no row compiles
 
 
 COND_TOKEN = re.compile(rb"[ \t]*(defined|VERSION_\w+|\|\||&&|!|\(|\)|\S+)")
@@ -736,6 +871,8 @@ def find_blocks(lines, states, regions, path):
         rows = live()
         for slug in rows:
             raw.texts.setdefault(slug, []).extend(range(lo, hi))
+        if not rows:
+            raw.dead.extend(k for k in range(lo, hi) if lines[k].strip())
 
     raw = None
     prev = 0
@@ -759,8 +896,9 @@ def find_blocks(lines, states, regions, path):
                 content(s, e)
                 stack.append(None)
                 continue
-            if depth >= 2:
-                raise RegionError("%s: a region block nested two deep (one level of nesting is read)" % where)
+            if depth >= MAX_DEPTH:
+                raise RegionError("%s: a region block nested %d deep (the tool reads %d levels)"
+                                  % (where, depth + 1, MAX_DEPTH))
             if kind == b"if":
                 rows = parse_condition(code.strip(), by_macro, every, where)
             else:
@@ -915,6 +1053,7 @@ def flatten_blocks(lines, raws, regions):
             blk.directive_lines = set(range(blk.start, blk.end)) - owned
             blk.synth = b"".join(lines[raw.start:raw.end])
         blk.orig_directive_lines = raw.directive_lines
+        blk.dead = raw.dead
         blocks.append(blk)
     copy(at, len(lines))
     return out, line_map, blocks
@@ -1600,10 +1739,11 @@ def class_a1_tokens(sf, block, keep_labels):
     if not diffs:
         return Outcome("token", sf.arm_bytes(block.pal), "arms equal"), []
     label_positions = set()
-    if keep_labels:
-        for c in case_labels(pal):
-            label_positions.update(range(c + 1, label_end(pal, c)))
+    for c in case_labels(pal):
+        label_positions.update(range(c + 1, label_end(pal, c)))
     for i, vals in diffs:
+        if i in label_positions and not keep_labels:
+            return None  # a label differs in a switch case-shift does not own: no selector in a label
         if is_member(pal, i) and all(o.kind == "ident" for _, o in vals):
             continue
         if not is_literal(pal[i]) or any(not is_literal(o) for _, o in vals):
@@ -2304,6 +2444,10 @@ def analyse(sf, twins=()):
             subkind, detail = result
             an.outcomes.append((block, None))
             an.reports.append(Report(sf.path, block.line, "hand", subkind, detail))
+        if block.dead:
+            an.reports.append(Report(sf.path, block.line, "review", "dead",
+                                     "%d line(s) no row compiles (first at line %d): the conversion drops them"
+                                     % (len(block.dead), block.dead[0] + 1)))
         fn = view.function_name(k) if in_func else None
         defined = [fn] if fn else [it.name for a in block.arms()
                                    for it in (file_scope_items(sf.toks(block, a)) or []) if it.kind == "function"]
@@ -2452,6 +2596,8 @@ def cmd_convert(root, paths):
     hand = counts.get("hand", 0)
     if hand:
         print("region_blocks: %d block(s) stay raw: `tools/region_blocks.py report` lists them" % hand)
+    # the selectors the conversion wrote are region.h's to define
+    cmd_gen_header(root, regions)
     return 1 if errors else 0
 
 
@@ -2847,7 +2993,7 @@ def cmd_check(root, quiet=False):
                     problems.append("%s:%d: the twin %s %s" % (r, line, word, why))
     # region.h
     if have_table:
-        want = gen_header(regions)
+        want = gen_header(regions, used_names(root))
         if os.path.exists(header):
             have = read(header)
             if have != want:
@@ -2918,23 +3064,30 @@ def cmd_gen_table(root):
     return 0
 
 
-def cmd_gen_header(root):
-    regions = load_regions(root)
+def cmd_gen_header(root, regions=None):
+    """Write region.h from the table (or `regions`, the table a convert of a
+    root without one used) and the forms the tree names (used_names)."""
+    if regions is None:
+        regions = load_regions(root)
     if regions is None:
         raise RegionError("%s is missing: gen-header writes region.h from it" % REGIONS_TXT)
     path = os.path.join(root, HEADER)
-    want = gen_header(regions)
+    used = used_names(root)
+    want = gen_header(regions, used)
+    groupings, shared, _ = header_forms(regions, used)
     if os.path.exists(path) and read(path) == want:
         print("region_blocks: %s is up to date" % HEADER)
         return 0
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as fh:
         fh.write(want)
-    print("region_blocks: wrote %s (%d regions)" % (HEADER, len(regions)))
+    print("region_blocks: wrote %s (%d regions, %d selectors, %d shared sets)"
+          % (HEADER, len(regions), len(groupings), len(shared)))
     return 0
 
 
 # --------------------------------------------------------------------------
-# rename: the two-row spelling to the shared-arm spelling
+# rename: the spelling of a shorter table to the whole table's
 
 
 def rename_tokens(data):
@@ -2953,106 +3106,188 @@ def rename_tokens(data):
     return out
 
 
-def rename_bytes(data, regions, shared):
-    """data with the two-row spelling rewritten for the row set `shared`
-    (the rows that share the Japanese arm, jpn first): PAL_JPN( -> PAL_<SET>(,
-    the identifier ICO_JPN -> ICO_<SET>, and LN(a, b) -> LN(a, b, ...) with
-    one value per row of the table (b for a row of the set, a for any
-    other). Comments and strings are never touched. Returns (bytes,
-    {spelling: count})."""
-    group = Group(shared)
-    sel = selector_name([group]).encode()
-    pred = b"ICO_" + group.upper.encode()
+def ln_calls(toks):
+    """[(LN token index, [(first, last) token index per argument], close)]
+    for every LN( call; an argument with no token is (None, None)."""
+    calls = []
+    for k, t in enumerate(toks):
+        if t.kind != "ident" or t.text != b"LN" or k + 1 >= len(toks) or toks[k + 1].text != b"(":
+            continue
+        depth = 0
+        args = []
+        lo = k + 2
+        close = None
+        for j in range(k + 1, len(toks)):
+            x = toks[j].text
+            if x in OPENERS:
+                depth += 1
+            elif x in CLOSERS:
+                depth -= 1
+                if depth == 0:
+                    close = j
+                    break
+            elif x == b"," and depth == 1:
+                args.append((lo, j - 1) if j > lo else (None, None))
+                lo = j + 1
+        if close is None:
+            continue
+        args.append((lo, close - 1) if close > lo else (None, None))
+        calls.append((k, args, close))
+    return calls
+
+
+def rename_map(regions, old_count, bases):
+    """{old spelling: new spelling} for the selectors (PAL_...) and predicates
+    (ICO_...) over the first old_count rows, when rows join with `bases`
+    ({new slug: base slug}): a new row joins every arm and set its base is
+    in; a row based on PAL joins nothing (it takes the PAL arm already)."""
+    old = regions[:old_count]
+    joins = {}
+    for r in regions[old_count:]:
+        if bases[r.slug] != "pal":
+            joins.setdefault(bases[r.slug], []).append(r)
+    mapping = {}
+    if not joins:
+        return mapping
+
+    def grown(group):
+        return Group(list(group.regions) + [x for r in group.regions for x in joins.get(r.slug, [])])
+
+    for grouping in selector_groupings(old):
+        new = sorted((grown(g) for g in grouping), key=lambda g: g.index)
+        mapping[selector_name(grouping)] = selector_name(new)
+    for subset in selector_subsets(old):
+        g = Group(subset)
+        mapping["ICO_" + g.upper] = "ICO_" + grown(g).upper
+    return {k: v for k, v in mapping.items() if k != v}
+
+
+def rename_bytes(data, regions, bases, old_count):
+    """data with the spelling of a table of old_count rows rewritten for the
+    whole table, the rows after them joining with `bases` ({slug: base
+    slug}, every new row): each LN(...) with fewer arguments than rows gains
+    one per missing row, its base's argument (LN(a, b, c) -> LN(a, b, c, a,
+    a, a) for three rows based on PAL); a selector or predicate over the old
+    rows grows by the new rows whose base it names (PAL_JPN( -> PAL_JPNKOR(,
+    ICO_JPN -> ICO_JPNKOR for kor based on jpn); a name that already names a
+    new row is left. Comments and strings are never touched. Returns
+    (bytes, {spelling: count}); the count "ICO_PAL" is the uses of ICO_PAL,
+    which no longer covers a row based on PAL (left for review)."""
+    mapping = rename_map(regions, old_count, bases)
+    index = {r.slug: r.index for r in regions}
+    pal_based = any(bases[r.slug] == "pal" for r in regions[old_count:])
     toks = rename_tokens(data)
     edits = []
-    counts = {"PAL_JPN": 0, "ICO_JPN": 0, "LN": 0}
+    counts = {"PAL_": 0, "ICO_": 0, "LN": 0, "ICO_PAL": 0}
     for k, t in enumerate(toks):
         if t.kind != "ident":
             continue
-        nxt = toks[k + 1] if k + 1 < len(toks) else None
-        paren = nxt is not None and nxt.text == b"("
-        if t.text == b"PAL_JPN" and paren and sel != b"PAL_JPN":
-            edits.append((t.start, t.end, sel))
-            counts["PAL_JPN"] += 1
-        elif t.text == b"ICO_JPN" and pred != b"ICO_JPN":
-            edits.append((t.start, t.end, pred))
-            counts["ICO_JPN"] += 1
-        elif t.text == b"LN" and paren and len(regions) > 2:
-            depth = 0
-            commas = []
-            close = None
-            for j in range(k + 1, len(toks)):
-                x = toks[j].text
-                if x in OPENERS:
-                    depth += 1
-                elif x in CLOSERS:
-                    depth -= 1
-                    if depth == 0:
-                        close = j
-                        break
-                elif x == b"," and depth == 1:
-                    commas.append(j)
-            if close is None or len(commas) != 1 or commas[0] == k + 2 or close == commas[0] + 1:
-                continue
-            first = data[toks[k + 2].start:toks[commas[0] - 1].end]
-            second = data[toks[commas[0] + 1].start:toks[close - 1].end]
-            first = rename_bytes(first, regions, shared)[0]
-            second = rename_bytes(second, regions, shared)[0]
-            extra = [second if r.slug in group.slugs else first for r in regions[2:]]
-            at = toks[close - 1].end
-            edits.append((at, at, b"".join(b", " + v for v in extra)))
-            counts["LN"] += 1
+        word = t.text.decode("latin-1")
+        paren = k + 1 < len(toks) and toks[k + 1].text == b"("
+        if word.startswith("PAL_") and paren and word in mapping:
+            edits.append((t.start, t.end, mapping[word].encode()))
+            counts["PAL_"] += 1
+        elif word.startswith("ICO_") and word in mapping:
+            edits.append((t.start, t.end, mapping[word].encode()))
+            counts["ICO_"] += 1
+        elif word == "ICO_PAL" and pal_based:
+            counts["ICO_PAL"] += 1
+    for k, args, close in ln_calls(toks):
+        if len(args) >= len(regions) or any(a[0] is None for a in args):
+            continue
+        texts = [rename_bytes(data[toks[lo].start:toks[hi].end], regions, bases, old_count)[0]
+                 for lo, hi in args]
+        extra = []
+        for r in regions[len(args):]:
+            base = bases.get(r.slug)
+            if base is None or index[base] >= len(args):
+                raise RegionError("LN with %d argument(s): row %s needs a base among the first %d rows"
+                                  % (len(args), r.slug, len(args)))
+            extra.append(texts[index[base]])
+        at = toks[close - 1].end
+        edits.append((at, at, b"".join(b", " + v for v in extra)))
+        counts["LN"] += 1
     return apply_edits(data, edits), counts
 
 
-def shared_rows(regions, spec=None):
-    """The rows that share the Japanese arm: `spec` (comma-separated slugs),
-    else every named row of the table (the Korean build is the Japanese
-    program; a later target that is not names its rows with --set)."""
+def rename_bases(regions, old_count, specs):
+    """{new slug: base slug} from the --base values: `SLUG` for every new
+    row, `ROW=SLUG` for one (later values win); the default is pal. A base
+    is one of the first old_count rows."""
     slugs = [r.slug for r in regions]
-    if spec:
-        want = [s.strip() for s in spec.split(",") if s.strip()]
-        for s in want:
-            if s not in slugs[1:]:
-                raise RegionError("--set: %s is not a named row of %s" % (s, REGIONS_TXT))
-        if "jpn" not in want:
-            raise RegionError("--set: the set renames the Japanese spelling, so it holds jpn")
-        return [r for r in regions if r.slug in want]
-    if "jpn" not in slugs[1:2]:
-        raise RegionError("%s: rename maps the Japanese row's spelling; row 1 is not jpn" % REGIONS_TXT)
-    return list(regions[1:])
+    new = slugs[old_count:]
+    bases = dict((s, "pal") for s in new)
+    for spec in specs or ():
+        row, _, base = spec.rpartition("=")
+        rows = [row] if row else new
+        for x in rows:
+            if x not in new:
+                raise RegionError("--base %s: %s is not a row the table gains (%s)"
+                                  % (spec, x, ", ".join(new) or "none"))
+        if base not in slugs[:old_count]:
+            raise RegionError("--base %s: the base is one of the rows the code already spells (%s)"
+                              % (spec, ", ".join(slugs[:old_count])))
+        for x in rows:
+            bases[x] = base
+    return bases
 
 
-def cmd_rename(root, check, spec=None):
-    """Rewrite the two-row spelling under ico2/ and sce/ (region.h aside:
-    gen-header writes it). --check: report, write nothing, exit 1 when
-    anything would change."""
-    regions = need_regions(root)
-    shared = shared_rows(regions, spec)
+def tree_ln_arity(root, regions):
+    """The fewest arguments an LN( call under ico2/ and sce/ takes, when
+    fewer than the table's rows (the row count the code is spelt for), else
+    the row count."""
     header = os.path.normpath(os.path.join(root, HEADER))
-    totals = {"PAL_JPN": 0, "ICO_JPN": 0, "LN": 0}
+    least = len(regions)
+    for p in tree_files(root):
+        if os.path.normpath(p) == header or p.endswith((".s", ".S")):
+            continue
+        data = read(p)
+        if b"LN" not in data:
+            continue
+        for _, args, _ in ln_calls(rename_tokens(data)):
+            if 2 <= len(args) < least and all(a[0] is not None for a in args):
+                least = len(args)
+    return least
+
+
+def cmd_rename(root, check, base_specs=None):
+    """Rewrite the spelling of the code under ico2/ and sce/ for rows the
+    table gained (region.h aside: gen-header writes it). --check: report,
+    write nothing, exit 1 when anything would change."""
+    regions = need_regions(root)
+    old_count = tree_ln_arity(root, regions)
+    bases = rename_bases(regions, old_count, base_specs)
+    header = os.path.normpath(os.path.join(root, HEADER))
+    totals = {"PAL_": 0, "ICO_": 0, "LN": 0, "ICO_PAL": 0}
     files = 0
     for p in tree_files(root):
         if os.path.normpath(p) == header or p.endswith((".s", ".S")):
             continue
         data = read(p)
-        if b"PAL_JPN" not in data and b"ICO_JPN" not in data and b"LN" not in data:
+        if b"PAL_" not in data and b"ICO_" not in data and b"LN" not in data:
             continue
-        new, counts = rename_bytes(data, regions, shared)
+        new, counts = rename_bytes(data, regions, bases, old_count)
+        if counts["ICO_PAL"]:
+            print("%s: %d ICO_PAL: a row based on PAL does not take it (review each)"
+                  % (rel(root, p), counts["ICO_PAL"]))
+        totals["ICO_PAL"] += counts["ICO_PAL"]
         if new == data:
             continue
         files += 1
-        for k, v in counts.items():
-            totals[k] += v
-        print("%s: %s" % (rel(root, p), ", ".join("%d %s" % (counts[k], k) for k in ("PAL_JPN", "ICO_JPN", "LN"))))
+        for k in ("PAL_", "ICO_", "LN"):
+            totals[k] += counts[k]
+        print("%s: %d selector(s), %d predicate(s), %d LN" % (rel(root, p), counts["PAL_"], counts["ICO_"],
+                                                              counts["LN"]))
         if not check:
             with open(p, "wb") as fh:
                 fh.write(new)
-    group = Group(shared)
-    print("region_blocks: %s %d file(s): %d PAL_JPN( -> %s(, %d ICO_JPN -> ICO_%s, %d LN(a, b) -> LN(%s)"
-          % ("rename would rewrite" if check else "renamed in", files, totals["PAL_JPN"],
-             selector_name([group]), totals["ICO_JPN"], group.upper, totals["LN"], ln_params(regions)))
-    if not check and os.path.exists(header) and read(header) != gen_header(regions):
+    joined = ", ".join("%s on %s" % (r.slug, bases[r.slug]) for r in regions[old_count:]) or "no row"
+    print("region_blocks: %s %d file(s) for %d -> %d rows (%s): %d selector(s), %d predicate(s), "
+          "%d LN -> LN(%s)%s"
+          % ("rename would rewrite" if check else "renamed in", files, old_count, len(regions), joined,
+             totals["PAL_"], totals["ICO_"], totals["LN"], ln_params(regions),
+             "; %d ICO_PAL to review" % totals["ICO_PAL"] if totals["ICO_PAL"] else ""))
+    if not check and os.path.exists(header) and read(header) != gen_header(regions, used_names(root)):
         print("region_blocks: %s is stale: run tools/region_blocks.py gen-header" % HEADER)
     return 1 if check and files else 0
 
@@ -3074,23 +3309,45 @@ def selftest():
         shutil.copy(os.path.join(FIXTURE_DIR, "fixture.c"), target)
         quiet = Quiet()
 
-        # gen-header over the four-row table (pal, jpn, kor, us)
+        # gen-header over the six-row table (pal, jpn, kor, ntsc, aug6, jun26)
         with quiet:
             cmd_gen_header(tmp)
         header = read(os.path.join(tmp, HEADER))
         rows = load_regions(tmp)
-        for want in (b"#define ICO_REGION_US 3", b"#define ICO_US (ico_region == ICO_REGION_US)",
-                     b"#define ICO_JPNKORUS (ICO_JPN || ICO_KOR || ICO_US)",
-                     b"#define PAL_US(pal, us) (ICO_US ? (us) : (pal))",
-                     b"#define PAL_JPN_US(pal, jpn, us) (ICO_US ? (us) : ICO_JPN ? (jpn) : (pal))",
-                     b"#define PAL_JPNKOR_US(pal, jpnkor, us) (ICO_US ? (us) : ICO_JPNKOR ? (jpnkor) : (pal))",
-                     b"#define PAL_JPN(pal, jpn) (ICO_JPN ? (jpn) : (pal))",
-                     b"#define LN(pal, jpn, kor, us) PAL_JPN_KOR_US(pal, jpn, kor, us)"):
-            if want not in header:
-                failures.append("gen-header: no line %r" % want)
-        selectors = re.findall(rb"^#define (PAL_\w+)\(", header, re.M)
-        if len(selectors) != 14:
-            failures.append("gen-header: %d selectors for three named rows, want 14" % len(selectors))
+        full = gen_header(rows)
+        for want in (b"#define ICO_REGION_NTSC 3", b"#define ICO_REGION_JUN26 5",
+                     b"#define ICO_NTSC (ico_region == ICO_REGION_NTSC)",
+                     b"#define ICO_JPNKORNTSC (ICO_JPN || ICO_KOR || ICO_NTSC)",
+                     b"#define ICO_NTSCAUG6JUN26 (ICO_NTSC || ICO_AUG6 || ICO_JUN26)",
+                     b"#define PAL_NTSC(pal, ntsc) (ICO_NTSC ? (ntsc) : (pal))",
+                     b"#define PAL_JPN_NTSC(pal, jpn, ntsc) (ICO_NTSC ? (ntsc) : ICO_JPN ? (jpn) : (pal))",
+                     b"#define PAL_JPNKOR_NTSC(pal, jpnkor, ntsc) (ICO_NTSC ? (ntsc) : ICO_JPNKOR ? (jpnkor) : (pal))",
+                     b"#define PAL_NTSCJUN26_AUG6(pal, ntscjun26, aug6) (ICO_AUG6 ? (aug6) : ICO_NTSCJUN26 ? "
+                     b"(ntscjun26) : (pal))",
+                     b"#define LN(pal, jpn, kor, ntsc, aug6, jun26) PAL_JPN_KOR_NTSC_AUG6_JUN26(pal, jpn, kor, "
+                     b"ntsc, aug6, jun26)"):
+            if want not in full:
+                failures.append("gen-header: no line %r in the full header" % want)
+        selectors = re.findall(rb"^#define (PAL_\w+)\(", full, re.M)
+        if len(selectors) != 202 or len(set(selectors)) != 202:
+            failures.append("gen-header: %d selectors for five named rows, want 202 (Bell 6 - 1)" % len(selectors))
+        if len(re.findall(rb"^#define ICO_[A-Z0-9]+ \(ICO_", full, re.M)) != 26:
+            failures.append("gen-header: want 26 shared sets for five named rows")
+        # the used forms only: a selector the code names, LN's, and the sets their arms name
+        used = gen_header(rows, {"PAL_JPNKOR", "PAL_NTSCAUG6_JUN26", "ICO_AUG6JUN26", "ICO_KOR", "ICO_WORD",
+                                 "PAL_JPN_US", "PAL_NOT_A_FORM"})
+        got = (re.findall(rb"^#define (PAL_\w+)\(", used, re.M),
+               re.findall(rb"^#define (ICO_[A-Z0-9]+) \(ICO_", used, re.M))
+        want = ([b"PAL_JPNKOR", b"PAL_NTSCAUG6_JUN26", b"PAL_JPN_KOR_NTSC_AUG6_JUN26"],
+                [b"ICO_JPNKOR", b"ICO_NTSCAUG6", b"ICO_AUG6JUN26"])
+        if got != want:
+            failures.append("gen-header: the used forms are %s, want %s" % (got, want))
+        if b"Only the forms the code names are defined" not in used:
+            failures.append("gen-header: a header of the used forms does not say so")
+        if gen_header(rows, set()).count(b"#define PAL_") != 1:
+            failures.append("gen-header: a tree naming no selector does not get LN's alone")
+        if header != gen_header(rows, used_names(tmp)):
+            failures.append("gen-header: the command did not write the used forms of the tree")
         # the three-row shape (pal, jpn, kor), in order
         three = gen_header(rows[:3])
         want = b"\n".join((b"#define ICO_JPN (ico_region == ICO_REGION_JPN)",
@@ -3113,15 +3370,19 @@ def selftest():
         if want not in three:
             failures.append("gen-header: the three-row header is not the documented shape:\n%s"
                             % three.decode("ascii"))
+        if gen_header(rows[:3], {"PAL_JPN", "PAL_KOR", "PAL_JPNKOR", "PAL_JPN_KOR"}) != three:
+            failures.append("gen-header: the three-row header of every form differs from the full one")
         # two rows: the header main carried before the Korean row, byte for byte
+        if gen_header(rows[:2], set()) != gen_header(rows[:2]):
+            failures.append("gen-header: the two-row header of the used forms is not the full one")
         if gen_header(rows[:2]) != read(os.path.join(FIXTURE_DIR, "region_two_rows.h")):
             failures.append("gen-header: the two-row header differs from region_two_rows.h:\n" +
                             diff_text(read(os.path.join(FIXTURE_DIR, "region_two_rows.h")).decode("ascii"),
                                       gen_header(rows[:2]).decode("ascii")))
         table = gen_table(rows)
-        for want in (b"extern const IcoRegionInfo ico_region_info_us;",
+        for want in (b"extern const IcoRegionInfo ico_region_info_ntsc;",
                      b"    &ico_region_info_pal,\n    &ico_region_info_jpn,\n    &ico_region_info_kor,\n"
-                     b"    &ico_region_info_us,\n};"):
+                     b"    &ico_region_info_ntsc,\n    &ico_region_info_aug6,\n    &ico_region_info_jun26,\n};"):
             if want not in table:
                 failures.append("gen-table: no line %r" % want)
 
@@ -3184,8 +3445,9 @@ def selftest():
                      b'    [ICO_REGION_KOR] = {"SCPS-56001", "jpn", "SCPS_560.01"},\n};\n')
         with quiet:
             cmd_check(tmp)
-        for want in ("LN takes 2 argument(s), config/regions.txt has 4 rows",
-                     'no [ICO_REGION_KOR] entry naming "kor"', 'no [ICO_REGION_US] entry naming "us"'):
+        for want in ("LN takes 2 argument(s), config/regions.txt has 6 rows",
+                     'no [ICO_REGION_KOR] entry naming "kor"', 'no [ICO_REGION_NTSC] entry naming "ntsc"',
+                     'no [ICO_REGION_JUN26] entry naming "jun26"'):
             if want not in quiet.text:
                 failures.append("check: no problem %r" % want)
         if 'entry naming "jpn"' in quiet.text or 'entry naming "pal"' in quiet.text:
@@ -3196,10 +3458,10 @@ def selftest():
 
         # the parser's tripwires, and the forms it reads
         for name, text in (("unknown macro", b"#ifdef VERSION_EU\nint a;\n#endif\n"),
-                           ("nesting two deep", b"#ifdef VERSION_JPN\n#ifdef VERSION_US\n#ifdef VERSION_KOR\n"
-                            b"#endif\n#endif\n#endif\n"),
+                           ("nesting past MAX_DEPTH", b"#ifdef VERSION_JPN\n" * (MAX_DEPTH + 1) +
+                            b"#endif\n" * (MAX_DEPTH + 1)),
                            ("a bare macro", b"#if VERSION_JPN\nint a;\n#endif\n"),
-                           ("#elif form", b"#ifdef VERSION_JPN\nint a;\n#elif VERSION_US\nint b;\n#endif\n"),
+                           ("#elif form", b"#ifdef VERSION_JPN\nint a;\n#elif VERSION_NTSC\nint b;\n#endif\n"),
                            ("another macro", b"#if X && defined(VERSION_JPN)\nint a;\n#endif\n"),
                            ("a taken row", b"#ifdef VERSION_JPN\nint a;\n#elif defined(VERSION_JPN) || "
                             b"defined(VERSION_KOR)\nint b;\n#endif\n"),
@@ -3215,9 +3477,14 @@ def selftest():
                 ("defined without parentheses", b"#if defined VERSION_KOR\nint a;\n#endif\n", [("kor",)]),
                 ("a negated group", b"#if !(defined(VERSION_JPN) || defined(VERSION_KOR))\nint a;\n#endif\n",
                  [("jpn", "kor")]),
-                ("one level of nesting", b"#ifdef VERSION_JPN\n#ifdef VERSION_US\nint a;\n#endif\n#endif\n",
-                 []),
-                ("&&", b"#if defined(VERSION_JPN) || defined(VERSION_KOR) && !defined(VERSION_US)\nint a;\n"
+                ("a block no row compiles", b"#ifdef VERSION_JPN\n#ifdef VERSION_NTSC\nint a;\n#endif\n"
+                 b"#endif\n", []),
+                ("three deep", b"#if defined(VERSION_NTSC) || defined(VERSION_AUG6) || defined(VERSION_JUN26)\n"
+                 b"#if defined(VERSION_AUG6) || defined(VERSION_JUN26)\n#ifdef VERSION_JUN26\nint a;\n#endif\n"
+                 b"#endif\n#endif\n", [("jun26",)]),
+                ("eight deep", b"#ifndef VERSION_NTSC\n" * 7 + b"#ifdef VERSION_JPN\nint a;\n" +
+                 b"#endif\n" * 8, [("jpn",)]),
+                ("&&", b"#if defined(VERSION_JPN) || defined(VERSION_KOR) && !defined(VERSION_NTSC)\nint a;\n"
                  b"#endif\n", [("jpn", "kor")])):
             try:
                 got = [a.key for b in SourceFile("t.c", text, load_regions(tmp)).blocks for a in b.named]
@@ -3225,23 +3492,66 @@ def selftest():
                     failures.append("parser: %s: named arms %s, want %s" % (name, got, want))
             except RegionError as e:
                 failures.append("parser refused %s: %s" % (name, e))
+        dead = SourceFile("t.c", b"#ifdef VERSION_JPN\n#ifdef VERSION_NTSC\nint a;\n#endif\n#endif\n",
+                          load_regions(tmp)).blocks[0].dead
+        if dead != [2]:
+            failures.append("parser: the line no row compiles is %s, want [2]" % dead)
 
-        # rename: the two-row spelling for the three-row table (pal, jpn, kor)
+        # rename: the two-row spelling for the three-row table, kor on jpn (the Korean merge)
         src = read(os.path.join(FIXTURE_DIR, "rename.c"))
-        got, _ = rename_bytes(src, rows[:3], shared_rows(rows[:3]))
+        kor_on_jpn = rename_bases(rows[:3], 2, ["kor=jpn"])
+        got, _ = rename_bytes(src, rows[:3], kor_on_jpn, 2)
         want_bytes = read(os.path.join(FIXTURE_DIR, "rename_expected.c"))
         if got != want_bytes:
             failures.append("rename differs from rename_expected.c:\n" +
                             diff_text(want_bytes.decode("latin-1"), got.decode("latin-1")))
-        if rename_bytes(got, rows[:3], shared_rows(rows[:3]))[0] != got:
+        if rename_bytes(got, rows[:3], kor_on_jpn, 2)[0] != got:
             failures.append("rename is not idempotent")
-        if rename_bytes(src, rows[:2], shared_rows(rows[:2]))[0] != src:
+        if rename_bytes(src, rows[:2], {}, 2)[0] != src:
             failures.append("rename changed a file for the two-row table")
+        # the three later rows on PAL (the default): LN grows by PAL's value, no selector moves
+        on_pal = rename_bases(rows, 3, None)
+        if on_pal != {"ntsc": "pal", "aug6": "pal", "jun26": "pal"}:
+            failures.append("rename: the default bases are %s, want pal for each new row" % on_pal)
+        got6, counts = rename_bytes(want_bytes, rows, on_pal, 3)
+        want6 = read(os.path.join(FIXTURE_DIR, "rename_pal_expected.c"))
+        if got6 != want6:
+            failures.append("rename --base pal differs from rename_pal_expected.c:\n" +
+                            diff_text(want6.decode("latin-1"), got6.decode("latin-1")))
+        if counts["PAL_"] or counts["ICO_"] or rename_bytes(got6, rows, on_pal, 3)[0] != got6:
+            failures.append("rename --base pal moved a selector or is not idempotent")
+        # a row on a non-PAL row joins its sets; a name naming a new row stays
+        mixed = rename_map(rows, 3, rename_bases(rows, 3, ["pal", "aug6=jpn"]))
+        for k, v in (("PAL_JPN", "PAL_JPNAUG6"), ("PAL_JPNKOR", "PAL_JPNKORAUG6"),
+                     ("PAL_JPN_KOR", "PAL_JPNAUG6_KOR"), ("ICO_JPN", "ICO_JPNAUG6"),
+                     ("ICO_JPNKOR", "ICO_JPNKORAUG6")):
+            if mixed.get(k) != v:
+                failures.append("rename --base aug6=jpn: %s -> %s, want %s" % (k, mixed.get(k), v))
+        if "PAL_KOR" in mixed or "PAL_NTSC" in mixed:
+            failures.append("rename --base aug6=jpn renamed a form without jpn or one over a new row")
+        for spec in (["ntsc=kor2"], ["pal=jpn"], ["jpn=pal"]):
+            try:
+                rename_bases(rows, 3, spec)
+                failures.append("rename_bases accepted --base %s" % spec[0])
+            except RegionError:
+                pass
+        # the command: the tree's shortest LN sets the old row count; --check, then a no-op
+        ren = os.path.join(tmp, "ico2", "common", "src", "rename.c")
+        with open(ren, "wb") as fh:
+            fh.write(want_bytes)
+        with quiet:
+            first = cmd_rename(tmp, True)
+            cmd_rename(tmp, False)
+            second = cmd_rename(tmp, True)
+        if first != 1 or second != 0 or read(ren) != want6:
+            failures.append("rename --check / rename over the tree: exits %d, %d, want 1, 0:\n%s"
+                            % (first, second, quiet.text))
+        os.remove(ren)
 
         # the emitted forms are C
         gcc = shutil.which("gcc") or shutil.which("cc")
         if gcc:
-            for extra in ([], ["-DVERSION_JPN"], ["-DVERSION_KOR"]):
+            for extra in [[]] + [["-D" + r.macro] for r in rows[1:]]:
                 cmd = [gcc, "-fsyntax-only", "-std=gnu99", "-Werror=implicit-function-declaration",
                        "-I", os.path.join(tmp, "ico2", "common", "include")] + extra + [target]
                 proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -3297,17 +3607,21 @@ def main():
     p.add_argument("--bits", action="store_true", help="candidate rows for config/motion_bits.<slug>.txt")
     p = sub.add_parser("check", help="verify the region rules")
     p.add_argument("--root", default=ROOT)
-    p = sub.add_parser("rename", help="rewrite the two-row spelling (PAL_JPN, ICO_JPN, LN(a, b)) for the rows "
-                       "that share the Japanese arm",
-                       description="Rewrite, under ico2/ and sce/ only, the two-row spelling for the set of "
-                       "rows that share the Japanese arm: PAL_JPN( -> PAL_<SET>(, the identifier ICO_JPN -> "
-                       "ICO_<SET>, LN(a, b) -> LN(a, b, b) (one value per row of the table). The set is every "
-                       "named row of config/regions.txt (the assumption: each target after the Japanese one "
-                       "is a build of the Japanese program, as the Korean one is) unless --set names it. "
-                       "Tokens only: comments and strings stay; idempotent. region.h is left to gen-header.")
+    p = sub.add_parser("rename", help="rewrite the code's spelling for the rows the table gained (LN's arity, "
+                       "the selectors of rows based on another)",
+                       description="Rewrite, under ico2/ and sce/ only, the spelling of a shorter table (the "
+                       "fewest arguments an LN( takes in the tree) for the whole of config/regions.txt: each "
+                       "short LN(...) gains one argument per new row, its base row's value (LN(a, b, c) -> "
+                       "LN(a, b, c, a, a, a) for three rows based on PAL); a new row based on a non-PAL row "
+                       "joins every selector arm and predicate set that row is in (PAL_JPN( -> PAL_JPNKOR(, "
+                       "ICO_JPN -> ICO_JPNKOR for kor on jpn), and a row based on PAL changes no selector. "
+                       "Tokens only: comments and strings stay; idempotent (a tree whose LN calls all take "
+                       "one argument per row is left). region.h is left to gen-header.")
     p.add_argument("--root", default=ROOT)
     p.add_argument("--check", action="store_true", help="report what would change, write nothing (exit 1 if any)")
-    p.add_argument("--set", dest="set_spec", help="the rows sharing the Japanese arm, comma-separated (jpn,kor)")
+    p.add_argument("--base", dest="bases", action="append", metavar="[ROW=]SLUG",
+                   help="the row whose text a new row takes: SLUG for every new row, ROW=SLUG for one "
+                   "(repeatable; default pal)")
     p = sub.add_parser("gen-table", help="write %s" % REGION_TABLE)
     p.add_argument("--root", default=ROOT)
     p = sub.add_parser("gen-header", help="write %s" % HEADER)
@@ -3323,7 +3637,7 @@ def main():
         if args.cmd == "check":
             return cmd_check(os.path.abspath(args.root))
         if args.cmd == "rename":
-            return cmd_rename(os.path.abspath(args.root), args.check, args.set_spec)
+            return cmd_rename(os.path.abspath(args.root), args.check, args.bases)
         if args.cmd == "gen-table":
             return cmd_gen_table(os.path.abspath(args.root))
         if args.cmd == "gen-header":

@@ -1,9 +1,12 @@
 # The self test's table of regions: config/regions.txt's rows (pal, jpn, kor)
-# and a fourth target, us, so the converter's arity path (#elif arms, PAL_US,
-# PAL_JPN_US, the 14 selectors of three named rows, a four-argument LN) is
-# tested before a fourth target exists.
-# slug  upstream-macro  disc-id     boot-elf     product-name
-pal     -               SCES-50760  SCES_507.60  the European disc
-jpn     VERSION_JPN     SCPS-11003  SCPS_110.03  the Japanese disc
-kor     VERSION_KOR     SCPS-56001  SCPS_560.01  the Korean disc
-us      VERSION_US      SLUS-20218  SLUS_202.18  the American disc
+# and upstream's three later targets (ntsc, aug6, jun26), so the converter's
+# arity paths (#elif arms, blocks nested four deep, the sets of six rows, a
+# six-argument LN, the used-forms header) are tested before the port's table
+# has them.
+# slug  upstream-macro  disc-id         boot-elf     product-name
+pal     -               SCES-50760      SCES_507.60  the European disc
+jpn     VERSION_JPN     SCPS-11003      SCPS_110.03  the Japanese disc
+kor     VERSION_KOR     SCPS-56001      SCPS_560.01  the Korean disc
+ntsc    VERSION_NTSC    SCUS-97113      SCUS_971.13  the North American disc
+aug6    VERSION_AUG6    PROTO-20010806  SCUS_971.13  the August 2001 preview disc
+jun26   VERSION_JUN26   SCUS-97158      SCUS_971.58  the June 2001 magazine demo

@@ -1,7 +1,11 @@
 /* tools/region_blocks.py --selftest input for `rename`, with the table's
  * first three rows (pal, jpn, kor): the two-row spelling becomes the
- * spelling of the rows sharing the Japanese arm (rename_expected.c).
- * Comments and strings keep PAL_JPN(a, b), ICO_JPN and LN(a, b). */
+ * spelling of the rows sharing the Japanese arm, kor on jpn (`--base
+ * kor=jpn`; rename_expected.c).
+ * With the six rows and the three later ones on PAL (the default --base),
+ * rename_expected.c becomes rename_pal_expected.c: LN gains PAL's value per
+ * new row, no selector moves. Comments and strings keep PAL_JPN(a, b),
+ * ICO_JPN and LN(a, b). */
 #include "region.h"
 
 static int items_pal[2], items_jpn[2];
