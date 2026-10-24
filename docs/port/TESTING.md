@@ -1277,7 +1277,8 @@ download from `tools/fetch_deps.sh`, the committed file byte for byte the tool's
 `content_table_chains`, `content_table_chains_jpn` (`--version jpn`: the Japanese disc's boot
 ELF, tables and groups) and `content_table_chains_kor` (`--version kor`; `port/test/CMakeLists.txt`),
 `data_desc_fresh` (with the audit of MotionDef's bit reads), `tables_manifest`,
-`tables_manifest_jpn` and `tables_manifest_kor`, `ee_layout_fresh_jpn` and `ee_layout_fresh_kor` (each disc's `ee_layout` file is what its recorded upstream revision gives)
+`tables_manifest_jpn` and `tables_manifest_kor`, `ee_layout_fresh_jpn`, `ee_layout_fresh_kor` and `ee_layout_fresh_ntsc` (each disc's `ee_layout` file is what its recorded upstream revision gives),
+`data_desc_fresh_ntsc` (`gen_data_desc.py --check --version ntsc`: the USA set, written before `config/regions.txt` lists its row, is what the table with its pending row gives; [DATA.md](DATA.md#the-usa-discs-set)), `data_map_selftest` (`gen_ee_layout.py --selftest`: the version-block readers and `record_map`'s rules on a made-up record, each map row with and without it: a moved bit-field copied from the disc's bit, a shorter array with its `default ... =0` row, a wider integer with its `narrow` row, a missing field's default, a host-only field the disc lacks left to the record clear, and the error for each row taken away and for a row that settles nothing; [DATA.md](DATA.md#the-map-rows))
 (`port/data/CMakeLists.txt`), and the package staging (`package_textures`,
 [PACKS.md](PACKS.md#tests)).
 
