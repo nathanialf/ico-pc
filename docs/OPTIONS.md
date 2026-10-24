@@ -424,9 +424,9 @@ page, and it is the same setting in both places.
 ## Extras
 
 On the title screen's Options this page has Music, Models, Credits,
-Character Customization, Add to Steam (on Windows and Linux), Export
-textures and Achievement pop-ups. In the pause menu's Options it has only Character Customization
-and Achievement pop-ups.
+Character Customization, Game variants, Add to Steam (on Windows and Linux),
+Export textures and Achievement pop-ups. In the pause menu's Options it has only
+Character Customization, Game variants and Achievement pop-ups.
 
 - **Music:** listen to the game's music and sound effects.
 - **Models:** the model viewer. Look closely at the characters and some
@@ -435,6 +435,8 @@ and Achievement pop-ups.
   finished the game.
 - **Character Customization:** change the colours of Ico and Yorda.
   [Details below](#character-customization).
+- **Game variants:** change how the game plays.
+  [Details below](#game-variants).
 - **Achievement pop-ups** is the switch that is also the first row of the
   [Achievements](#achievements) list. Turn it on or off in either place.
 - **Add to Steam** (on the title screen's Extras page only; it finds Steam
@@ -465,6 +467,42 @@ and Achievement pop-ups.
   game draws while it runs, such as fog and glow; those need **Dump
   textures**). A [spreadsheet per disc](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/README.md)
   lists every file a pack can hold and which pictures share one name.
+
+### Game variants
+
+Options > Extras > Game variants, from the title screen or the pause menu,
+on every disc. Every row starts as the game shipped on your disc, and the line
+under a row says what it does and whether it switches achievements off. The
+rows that switch them off do so for as long as they are on, like Developer
+mode, so you cannot earn an achievement by accident while playing a changed
+game. Turn them off again and achievements come back.
+
+- **Shade toughness:** **Original** keeps your disc's Shades. **American**
+  makes every Shade as tough as on the North American disc, and no tougher on
+  later playthroughs. **Not tougher later** keeps your disc's Shades but they
+  do not get tougher on later playthroughs. Achievements stay on.
+- **One hit per swing:** a swing of Ico's weapon can hurt a Shade only once.
+  Switches achievements off.
+- **Shades never dodge:** Shades never step aside from Ico's swings.
+  Switches achievements off.
+- **Shade aggression:** how the Shades fight. **Their own** leaves each
+  Shade as the game made it. The other four make them all **Bold** or
+  **Wary**, and **patient** or **quick**. Achievements stay on.
+- **No hints:** Yorda gives no hints about where to go, as on the North
+  American disc. Achievements stay on.
+- **Queen barrier:** how many hits it takes to break the Queen's barrier,
+  5 or 7. Your disc's own number is shown until you choose. Achievements stay
+  on.
+- **No cutscene look-around:** the right stick does not move the camera
+  during cutscenes. Achievements stay on.
+- **Ignore cutscene cameras:** the game's cutscene cameras are not used.
+  Cutscenes can look wrong, and the game may show places it never meant you to
+  see. Switches achievements off.
+- **Debug menu** (only while [Developer mode](#developer-mode) is on): opens
+  the game's own debug menu, made for the people who built the game. Switches
+  achievements off.
+
+The same choices are kept in `config.toml`, under the heading `[variants]`.
 
 ### Character Customization
 
