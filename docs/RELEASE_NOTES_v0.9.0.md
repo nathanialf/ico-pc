@@ -5,6 +5,7 @@
 - **The June 2001 magazine demo disc** (`Ico_JUN26.iso`): setting it up keeps only ICO's part of the disc (about 280 MB, none of the other games on it) and checks that part instead of reading the whole 4.4 GB image, so the first start is much quicker. On Android the 4.4 GB image is first copied into the app, which needs about 5.6 GB free and takes a few minutes; the screen says so while it copies. The message shown when there is not enough space, and the one shown when the copy fails, now come in the menu language you chose under Options, when you have chosen one.
 ## Fixed
 
+- On phones, tablets and Macs, the thin dotted lines of mist along the seams of walls and floors above the original resolution are now filled in, as on other computers.
 - With MSAA anti-aliasing on, hairline gaps along walls and floors no longer show as dotted lines of mist.
 - With MSAA anti-aliasing on, small openings onto the sky no longer glow brighter or wider than with it off.
 - MSAA anti-aliasing finishes each picture once instead of twice in scenes with shadows, so it costs less.
