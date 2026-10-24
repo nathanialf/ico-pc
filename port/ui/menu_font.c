@@ -63,6 +63,7 @@ _Static_assert(MF_ORIGIN >= MF_GAP_X && MF_ORIGIN >= MF_GAP_Y && MF_ORIGIN % MF_
 #define MF_STRIPS 1024    /* strips cached at once */
 #define MF_EVICT_FRAMES 4 /* rd frames a page must have gone undrawn before it is reset */
 #define MF_LINES 16       /* lines of one text */
+#define MF_SHELVES 128    /* shelves of one page (a 1x page holds about 50 of a menu's rows) */
 /* texels of margin round a port text's ink: the rim (rd's ICO_SHEET_RX and
    ICO_SHEET_RY, 6 and 4; ctest menu_look checks the pair) and the bilinear
    read one texel past it */
@@ -135,14 +136,23 @@ static const UiSheetInk kSheetInk[UI_LANG_SHEET_COUNT] = {
    rim, a white fill (the vertex colour makes them black, white or grey) */
 static const UiSheetInk kPlainInk = {0, 0, 255, 1, 0};
 
+/* a band of a page's rows that strips fill left to right (shelfFit) */
+typedef struct MfShelf {
+    int y, h;           /* its rows: [y, y + h), strip texels */
+    int x;              /* the next strip's column; the page's width once closed */
+    int strips;         /* the strips on it */
+    uint32_t lastFrame; /* rd_frame_number when one of them was last drawn or placed */
+} MfShelf;
+
 typedef struct MfPage {
-    uint8_t *cov; /* w x h coverage, NULL while unused; above 1x the rim
+    uint8_t *cov;                /* w x h coverage, NULL while unused; above 1x the rim
                      below it (w x h more) */
-    int scale;    /* strip texels a sheet texel */
-    int w, h;     /* the coverage's texels (pageW, pageH); the texture is
+    int scale;                   /* strip texels a sheet texel */
+    int w, h;                    /* the coverage's texels (pageW, pageH); the texture is
                      twice as tall above 1x */
-    uint32_t tex; /* the rd sheet texture, 0 until first drawn */
-    int shelfX, shelfY, shelfH;
+    uint32_t tex;                /* the rd sheet texture, 0 until first drawn */
+    MfShelf shelves[MF_SHELVES]; /* top to bottom; the last is the open one */
+    int nShelves;
     uint32_t lastFrame; /* rd_frame_number at its last draw */
 } MfPage;
 
@@ -161,6 +171,7 @@ typedef struct MfStrip {
     unsigned layout;     /* a port text's alignment flags */
     int scale;           /* strip texels a sheet texel */
     int cls, page, x, y; /* the page's texels */
+    int shelf;           /* its shelf on the page */
     int w, h;            /* sheet texels (w * scale x h * scale on the page) */
     int ox, oy;          /* a port text's top-left from its snapped anchor: texels, rows */
 } MfStrip;
@@ -800,7 +811,6 @@ static int evictable(const MfPage *p, uint32_t now)
 static void resetPage(int cls, int page)
 {
     MfPage *p = &s_mf.pages[cls][page];
-    const int sc = p->scale > 0 ? p->scale : 1;
     for (int i = 0; i < MF_STRIPS; i++) {
         MfStrip *s = &s_mf.strips[i];
         if (s->used && s->cls == cls && s->page == page) {
@@ -811,8 +821,7 @@ static void resetPage(int cls, int page)
     if (p->cov) {
         memset(p->cov, 0, pageBytes(p));
     }
-    p->shelfX = p->shelfY = MF_ORIGIN * sc;
-    p->shelfH = 0;
+    p->nShelves = 0;
 }
 
 /* a page's coverage gone too: the slot free for a page of any scale */
@@ -834,8 +843,7 @@ static int newPage(MfPage *p, int sc)
     p->scale = sc;
     p->w = pageW(sc);
     p->h = pageH(sc);
-    p->shelfX = p->shelfY = MF_ORIGIN * sc;
-    p->shelfH = 0;
+    p->nShelves = 0;
     p->tex = 0;
     return 1;
 }
@@ -848,24 +856,51 @@ static int alignUp(int v, int sc)
 
 /* a w x h cell (strip texels) on page p's shelves, its corner on MF_ALIGN
    sheet texels and MF_GAP_X / MF_GAP_Y sheet texels clear of every other
-   strip */
-static int shelfFit(MfPage *p, int w, int h, int *x, int *y)
+   strip; *shelf its shelf.  In order: the open shelf (the last, which grows
+   down to the tallest strip on it), a band an emptied shelf left
+   (reclaimShelf: a strip no taller than the band, beside the strips placed
+   on it since), a new shelf below the last.  A strip too wide for the open
+   shelf closes it, as the single shelf cursor did, so a page whose shelves
+   are never emptied is packed as before. */
+static int shelfFit(MfPage *p, int w, int h, int *x, int *y, int *shelf)
 {
     const int sc = p->scale, gx = MF_GAP_X * sc, gy = MF_GAP_Y * sc;
-    if (p->shelfX + w + gx > p->w) {
-        p->shelfY = alignUp(p->shelfY + p->shelfH + gy, sc);
-        p->shelfX = MF_ORIGIN * sc;
-        p->shelfH = 0;
+    const int n = p->nShelves;
+    MfShelf *last = n > 0 ? &p->shelves[n - 1] : NULL;
+    int i = -1, across = 0;
+    if (last) {
+        across = last->x + w + gx > p->w;
+        if (!across && last->y + h + gy <= p->h) {
+            i = n - 1;
+        }
     }
-    if (p->shelfY + h + gy > p->h) {
-        return 0;
+    for (int j = 0; i < 0 && j < n - 1; j++) {
+        const MfShelf *b = &p->shelves[j];
+        if (h <= b->h && b->x + w + gx <= p->w) {
+            i = j;
+        }
     }
-    *x = p->shelfX;
-    *y = p->shelfY;
-    p->shelfX = alignUp(p->shelfX + w + gx, sc);
-    if (h > p->shelfH) {
-        p->shelfH = h;
+    if (i < 0) {
+        if (across) {
+            last->x = p->w; /* closed: nothing more goes beside its strips */
+        }
+        const int ny = last ? alignUp(last->y + last->h + gy, sc) : MF_ORIGIN * sc;
+        if (n >= MF_SHELVES || ny + h + gy > p->h) {
+            return 0;
+        }
+        i = p->nShelves++;
+        p->shelves[i] = (MfShelf){ny, 0, MF_ORIGIN * sc, 0, 0};
     }
+    MfShelf *s = &p->shelves[i];
+    *x = s->x;
+    *y = s->y;
+    *shelf = i;
+    s->x = alignUp(s->x + w + gx, sc);
+    if (h > s->h) {
+        s->h = h; /* the last shelf only: a band's strips are no taller than it */
+    }
+    s->strips++;
+    s->lastFrame = rd_frame_number();
     return 1;
 }
 
@@ -891,7 +926,7 @@ static int evictOne(int cls, int sc, uint32_t now)
    shelf of a page of that scale in use, a new page (in a free slot or one
    of another scale that no frame can still name), or the least recently
    drawn page of the scale reset */
-static int allocCell(int cls, int sc, int w, int h, int *page, int *x, int *y)
+static int allocCell(int cls, int sc, int w, int h, int *page, int *x, int *y, int *shelf)
 {
     if (w > pageW(sc) - (MF_ORIGIN + MF_GAP_X) * sc ||
         h > pageH(sc) - (MF_ORIGIN + MF_GAP_Y) * sc) {
@@ -900,7 +935,7 @@ static int allocCell(int cls, int sc, int w, int h, int *page, int *x, int *y)
     const uint32_t now = rd_frame_number();
     for (int pg = 0; pg < MF_PAGES; pg++) {
         MfPage *p = &s_mf.pages[cls][pg];
-        if (p->cov && p->scale == sc && shelfFit(p, w, h, x, y)) {
+        if (p->cov && p->scale == sc && shelfFit(p, w, h, x, y, shelf)) {
             *page = pg;
             return 1;
         }
@@ -914,14 +949,14 @@ static int allocCell(int cls, int sc, int w, int h, int *page, int *x, int *y)
             if (!newPage(p, sc)) {
                 return 0;
             }
-            if (shelfFit(p, w, h, x, y)) {
+            if (shelfFit(p, w, h, x, y, shelf)) {
                 *page = pg;
                 return 1;
             }
         }
     }
     const int pg = evictOne(cls, sc, now);
-    if (pg >= 0 && shelfFit(&s_mf.pages[cls][pg], w, h, x, y)) {
+    if (pg >= 0 && shelfFit(&s_mf.pages[cls][pg], w, h, x, y, shelf)) {
         *page = pg;
         return 1;
     }
@@ -1023,6 +1058,16 @@ static uint32_t pageTex(int cls, int page, int lang)
     return p->tex;
 }
 
+/* a strip drawn now: its shelf too (reclaimShelf leaves a shelf that some
+   frame still draws); pageTex marks the page */
+static void touchStrip(const MfStrip *s)
+{
+    MfPage *p = &s_mf.pages[s->cls][s->page];
+    if (s->shelf >= 0 && s->shelf < p->nShelves) {
+        p->shelves[s->shelf].lastFrame = rd_frame_number();
+    }
+}
+
 /* the light and faint pages restyled for lang (its rim and fill levels):
    read at the replay, so nothing is rasterised again */
 static void styleLight(int lang)
@@ -1067,13 +1112,14 @@ static MfStrip *itemStrip(const UiMenuTextItem *it, int item, int lang, int cls,
         MfStrip *s = &s_mf.strips[i];
         if (s->used && s->hash == h && !s->text && s->item == item && s->lang == lang &&
             s->cls == cls && s->scale == sc) {
+            touchStrip(s);
             return s;
         }
     }
     const int w = it->w, hgt = it->h;
     MfStrip *s = newStrip();
-    int page, x, y;
-    if (!s || !allocCell(cls, sc, w * sc, hgt * sc, &page, &x, &y)) {
+    int page, x, y, shelf;
+    if (!s || !allocCell(cls, sc, w * sc, hgt * sc, &page, &x, &y, &shelf)) {
         return NULL;
     }
     uint8_t *cov = calloc((size_t)(w * sc) * (size_t)(hgt * sc), 1);
@@ -1092,9 +1138,11 @@ static MfStrip *itemStrip(const UiMenuTextItem *it, int item, int lang, int cls,
     s->page = page;
     s->x = x;
     s->y = y;
+    s->shelf = shelf;
     s->w = w;
     s->h = hgt;
     placeCoverage(s, cov);
+    touchStrip(s);
     free(cov);
     return s;
 }
@@ -1120,6 +1168,7 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls, 
         if (s->used && s->hash == h && s->text && s->cls == cls && s->scale == sc && s->em == em &&
             memcmp(&s->geo, &g, sizeof(g)) == 0 && s->layout == layout &&
             strcmp(s->text, utf8) == 0) {
+            touchStrip(s);
             return s;
         }
     }
@@ -1129,8 +1178,8 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls, 
     }
     const int w = t.w, hgt = t.h, ox = t.ox, oy = t.oy;
     MfStrip *s = newStrip();
-    int page, x, y;
-    if (!s || !allocCell(cls, sc, w * sc, hgt * sc, &page, &x, &y)) {
+    int page, x, y, shelf;
+    if (!s || !allocCell(cls, sc, w * sc, hgt * sc, &page, &x, &y, &shelf)) {
         return NULL;
     }
     uint8_t *cov = calloc((size_t)(w * sc) * (size_t)(hgt * sc), 1);
@@ -1156,11 +1205,13 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls, 
     s->page = page;
     s->x = x;
     s->y = y;
+    s->shelf = shelf;
     s->w = w;
     s->h = hgt;
     s->ox = ox;
     s->oy = oy;
     placeCoverage(s, cov);
+    touchStrip(s);
     free(cov);
     return s;
 }
