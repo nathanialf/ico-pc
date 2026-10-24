@@ -503,7 +503,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   near each other in depth, so the cracks hold the plane's depth and colour and are filled the
   same (the discontinuity form) while the slit keeps the plane;
   at 1x, under Original, under MSAA4 and with `ICO_RD_CRACK_FILL=0` (`rd_crack_1x`,
-  `rd_crack_original`, `rd_crack_msaa`, `rd_crack_off`) no fill pass and the same bytes; the same
+  `rd_crack_original`, `rd_crack_msaa`, `rd_crack_off`) no fill pass and the same bytes; under
+  MSAA4 the frame is replayed again without anti-aliasing and the filler: along the edge the
+  MSAA4 picture holds at most 5 % of its texels with the clear's depth (colours without a depth
+  readback) and the slit keeps the clear's fog on every texel; the same
   2x run on the depth copy, the buffer path, D24S8 (no depth readback: colours only) and the
   two-pass blend (`rd_crack_depth_copy`, `rd_crack_buffer`, `rd_crack_d24s8`, `rd_crack_nodual`).
   Under the MoltenVK report (`ICO_VK_FAKE_LIMITS=moltenvk`, a tile-based profile) `rd_crack_tiler`
@@ -606,8 +609,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   vertex pre-pass's entry among them, `testVuPre`) and the loss bisect's line; pure
   (`rd_passring`).
 - `rd_msaa_test.c`: the anti-aliasing's MSAA against the frame without it (`rd_msaa`); with
-  `depth_resolve_ps` cleared for one call (an OpenGL driver below 4.5 refuses it) the supported
-  mask holds the supersampling values only; on any device, `testSuspend` (Options > Graphics >
+  `msaa_resolve_ps` or `depth_resolve_ps` cleared for one call (a backend that cannot make one)
+  the supported mask holds the supersampling values only; `testShadowReset`: a frame whose list 3
+  holds the shadow count with a reset on SCENE's depth resolves once a replay
+  (`RdPerfRecord.msaaResolves` 1, two when the reset's stencil clear closes the epoch again from
+  inside `msaaEnd`), closes at list 3 (`msaaCloseAt` 4) and leaves SCENE byte for byte as the same
+  frame without the reset; `testSkySlit`: two triangles of one surface over the clear with a 1/16
+  pixel crack along their shared edge, the shadow count, then `cleanUpFB`'s glow mask (a sprite
+  at GS Z 1, alpha 192, alpha only, GEQUAL without Z writes): MSAA4 marks no more texels along the
+  crack than the frame without anti-aliasing (the covered-majority resolve,
+  [MSAA.md](MSAA.md)) and some silhouette pixels' colours still differ; on any device, `testSuspend` (Options > Graphics >
   Apply's renderer switch): `rd_suspend` with a frame open, `rd_resume` carrying the scene size,
   the frame counter, the mirror mode and the GS state (its texture cleared), a texture id from
   before naming nothing, the DATE self-test's flag cleared, no frame open until
