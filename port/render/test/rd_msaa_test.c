@@ -1,9 +1,10 @@
 /* rd_msaa_test.c: the anti-aliasing's MSAA (rd_replay.c, the MSAA epoch).
  *
  * Without a device: rd_aa_samples and rd_aa_supported_mask (the
- * supersampling values only).  With a device, the mask without the
- * epoch's depth resolve (depth_resolve_ps cleared for one call, as an
- * OpenGL driver below 4.5 leaves it): the supersampling values only.
+ * supersampling values only).  With a device, the mask without either of
+ * the epoch's resolves (msaa_resolve_ps or depth_resolve_ps cleared for one
+ * call, as a backend that cannot make one leaves it): the supersampling
+ * values only.
  * On a Vulkan device (77 without one, or when it lacks 4 samples, a depth it
  * can sample or a fog that reads it: rd_aa_supported_mask without MSAA4),
  * at 4:3 Enhanced 1x, each frame replayed without anti-aliasing and with
@@ -33,6 +34,24 @@
  *            anti-aliasing on every pixel away from an edge, and the
  *            triangle covers its interior (the depth resolve takes the
  *            smallest sample; the largest failed the re-draw on a slope);
+ *   shadowreset the scene frame, then list 3's shadow count (a shadow
+ *            reset on SCENE's depth, a volume, the count's resolve: the
+ *            pass that closes the epoch in gameplay): one resolve a replay
+ *            (two when the reset's pending stencil clear closes the epoch
+ *            a second time from inside msaaEnd), the epoch
+ *            closed at list 3 (RdPerfRecord.msaaCloseAt 4), and SCENE byte
+ *            for byte the frame's without the reset;
+ *   skyslit  two triangles of one surface over the clear (depth 0) whose
+ *            shared diagonal edge is 1/16 GS pixel apart (DIVERGENCES.md
+ *            VD-20's crack), the shadow count closing the epoch, then
+ *            staticBlur.c cleanUpFB's fillZCol: a sprite at GS Z 1, alpha
+ *            192, the alpha alone, Z test GEQUAL without writes, which
+ *            marks every texel whose depth is the clear's as a glow source.
+ *            Along the crack MSAA4 marks no more texels than the frame
+ *            without anti-aliasing (the covered-majority resolve; with
+ *            the smallest sample every pixel with one sample in the crack
+ *            took the clear's depth and was marked), and the triangles' silhouettes
+ *            still differ (the edges stay anti-aliased);
  *   original the Original preset with MSAA4 asked for: the frame without
  *            anti-aliasing, byte for byte.
  * Before them, on any device, the renderer suspended and resumed (testSuspend:
@@ -481,6 +500,191 @@ static void testRedraw(void)
     compareEdges("redraw", 0);
 }
 
+/* the last records' sample count, resolves (the largest over the records
+ * popped) and close (RdPerfRecord.msaaCloseAt of the last) */
+static void drainClose(uint32_t *resolvesMax, uint32_t *closeAt)
+{
+    RdPerfRecord rec;
+    *resolvesMax = *closeAt = 0;
+    while (rd_perf_pop(&rec)) {
+        if (rec.msaaResolves > *resolvesMax) {
+            *resolvesMax = rec.msaaResolves;
+        }
+        *closeAt = rec.msaaCloseAt;
+    }
+}
+
+/* list 3: the shadow count (Shadow.c's: the count's target with SCENE's
+ * depth, a reset of its stencil, a volume, the count's resolve), as
+ * rd_perf_test draws it */
+static void shadowCount(int reset)
+{
+    const RdTarget scene = rd_target(RD_TARGET_SCENE);
+    rd_select_list(3);
+    const RdTarget cnt = rd_shadow_count_target(GW, GH);
+    rd_set_target(cnt, scene, GW, GH, 0);
+    rd_z_write(0);
+    rd_test_gs(0x30000);
+    rd_abe(0);
+    rd_texture_off();
+    if (reset) {
+        rd_shadow_reset();
+    }
+    rd_test_gs(RD_TEST_Z_GEQUAL);
+    rd_blend_func(RD_BLEND_CS_FIX_ADD_CD, 0x80);
+    rd_col_clamp(0);
+    RdScreenVtx t[3] = {vtx(100 * 16, 100 * 16, 0x30000000u, kGrey, 0, 0),
+                        vtx(220 * 16, 110 * 16, 0x30000000u, kGrey, 0, 0),
+                        vtx(150 * 16, 230 * 16, 0x30000000u, kGrey, 0, 0)};
+    const int8_t sign[1] = {1};
+    rd_shadow_tris(t, sign, 1, 0);
+    rd_shadow_resolve();
+    rd_col_clamp(1);
+}
+
+static void shadowFrame(int reset)
+{
+    const RdTarget scene = rd_target(RD_TARGET_SCENE);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_set_target(scene, scene, GW, GH, 0);
+    rd_clear_target(scene, kClear, 1, 0);
+    rd_abe(0);
+    rd_fba(0);
+    rd_gouraud(0);
+    rd_texture_off();
+    rd_z_write(1);
+    rd_test_gs(RD_TEST_Z_GEQUAL);
+    tri(20 * 16 + 3, 20 * 16 + 7, 260 * 16 + 9, 60 * 16 + 1, 90 * 16 + 5, 240 * 16 + 11,
+        0x40000000u, kRed);
+    tri(150 * 16 + 1, 40 * 16 + 5, 420 * 16 + 13, 120 * 16 + 2, 200 * 16 + 7, 260 * 16 + 9,
+        0x60000000u, kBlue);
+    shadowCount(reset);
+    rd_end_frame(0);
+}
+
+static void testShadowReset(void)
+{
+    uint32_t resolves = 0, closeAt = 0;
+    settings(RD_PRESET_ENHANCED, RD_AA_MSAA4);
+    shadowFrame(0);
+    if (!readScene(s_off)) {
+        return;
+    }
+    shadowFrame(1);
+    if (!readScene(s_on)) {
+        return;
+    }
+    int differ = 0;
+    for (size_t i = 0; i < sizeof(s_off); i += 4) {
+        differ += memcmp(&s_off[i], &s_on[i], 4) != 0;
+    }
+    CHECK(differ == 0, "shadowreset: %d pixels of SCENE differ from the frame without the reset",
+          differ);
+    /* the records of the frames with the reset alone */
+    drainClose(&resolves, &closeAt);
+    for (int i = 0; i < RHI_FRAMES_IN_FLIGHT + 2; i++) {
+        shadowFrame(1);
+    }
+    rhi_wait_idle();
+    shadowFrame(1);
+    drainClose(&resolves, &closeAt);
+    printf("  shadowreset: %d pixels differ; at most %u resolves a replay, the epoch closed at "
+           "%u (list + 1)\n",
+           differ, resolves, closeAt);
+    CHECK(resolves == 1, "shadowreset: %u resolves a replay (one expected)", resolves);
+    CHECK(closeAt == 4, "shadowreset: the epoch closed at %u (list 3 + 1 expected)", closeAt);
+}
+
+/* testSkySlit's frame: the crack's two triangles (colours a and b), the
+ * shadow count, the glow source mask */
+#define SLIT_X0 300 /* the shared edge from (SLIT_X0, SLIT_TOP) to (SLIT_LEFT, SLIT_BOTTOM) */
+#define SLIT_LEFT 40
+#define SLIT_TOP 40
+#define SLIT_BOTTOM 400
+
+static void skySlitFrame(void)
+{
+    static const uint8_t fillZCol[4] = {0, 0, 0, 192};
+    const RdTarget scene = rd_target(RD_TARGET_SCENE);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_set_target(scene, scene, GW, GH, 0);
+    rd_clear_target(scene, kClear, 1, 0);
+    rd_abe(0);
+    rd_fba(0);
+    rd_gouraud(0);
+    rd_texture_off();
+    rd_z_write(1);
+    rd_test_gs(RD_TEST_Z_GEQUAL);
+    /* the second triangle's shared edge one 12.4 step right (VD-20) */
+    tri(SLIT_LEFT * 16, SLIT_TOP * 16, SLIT_X0 * 16, SLIT_TOP * 16, SLIT_LEFT * 16,
+        SLIT_BOTTOM * 16, 0x40000000u, kRed);
+    tri(SLIT_X0 * 16 + 1, SLIT_TOP * 16, SLIT_X0 * 16, SLIT_BOTTOM * 16, SLIT_LEFT * 16 + 1,
+        SLIT_BOTTOM * 16, 0x40000000u, kGreen);
+    shadowCount(1);
+    /* cleanUpFB's second sprite: GEQUAL at Z 1, no Z write, the alpha alone */
+    rd_select_list(7);
+    rd_set_target(scene, scene, GW, GH, 0);
+    rd_color_mask(0x00FFFFFFu);
+    rd_abe(0);
+    rd_z_write(0);
+    rd_test_gs(RD_TEST_Z_GEQUAL);
+    rd_texture_off();
+    RdScreenVtx v[2] = {vtx(0, 0, 1u, fillZCol, 0, 0), vtx(GW * 16, GH * 16, 1u, fillZCol, 0, 0)};
+    rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_FULLFRAME, 1, 0);
+    rd_color_mask(0);
+    rd_end_frame(0);
+}
+
+/* the glow sources (alpha 192) within two pixels of the crack, away from
+ * its ends */
+static int slitSources(const uint8_t *a, int *near)
+{
+    int n = 0;
+    *near = 0;
+    for (int y = 80; y < 360; y++) {
+        const double ex = SLIT_X0 - (double)(SLIT_X0 - SLIT_LEFT) * ((double)y + 0.5 - SLIT_TOP) /
+                                        (double)(SLIT_BOTTOM - SLIT_TOP);
+        for (int x = 0; x < GW; x++) {
+            if ((double)x + 0.5 < ex - 2.0 || (double)x + 0.5 > ex + 2.0) {
+                continue;
+            }
+            (*near)++;
+            n += a[((size_t)y * GW + (size_t)x) * 4 + 3] == 192;
+        }
+    }
+    return n;
+}
+
+static void testSkySlit(void)
+{
+    settings(RD_PRESET_ENHANCED, RD_AA_OFF);
+    skySlitFrame();
+    if (!readScene(s_off)) {
+        return;
+    }
+    settings(RD_PRESET_ENHANCED, RD_AA_MSAA4);
+    skySlitFrame();
+    if (!readScene(s_on)) {
+        return;
+    }
+    int near = 0;
+    const int off = slitSources(s_off, &near), on = slitSources(s_on, &near);
+    int sky = 0, rgb = 0;
+    for (size_t i = 0; i < sizeof(s_off); i += 4) {
+        sky += s_off[i + 3] == 192;
+        rgb += memcmp(&s_off[i], &s_on[i], 3) != 0;
+    }
+    printf("  skyslit: glow sources along the crack %d without anti-aliasing, %d with MSAA4 (of %d "
+           "texels); %d in the frame without; %d pixels' colour differ\n",
+           off, on, near, sky, rgb);
+    CHECK(near > 500, "skyslit: the crack's band holds %d texels", near);
+    CHECK(sky > 10000, "skyslit: the clear outside the triangles marked by %d texels", sky);
+    CHECK(on <= off, "skyslit: MSAA4 marks %d glow sources along the crack, without %d", on, off);
+    CHECK(rgb > 0, "skyslit: no silhouette pixel differs: the edges were not anti-aliased");
+}
+
 static void testOriginal(void)
 {
     settings(RD_PRESET_ORIGINAL, RD_AA_OFF);
@@ -582,16 +786,20 @@ int main(void)
     const bool want4 = (lim->msaaCounts & 4u) && lim->depthSampled && g_rd.fogPath != RD_FOG_BUFFER;
     CHECK(((mask >> RD_AA_MSAA4) & 1u) == (want4 ? 1u : 0u), "MSAA4 listed as the device has it");
     {
-        /* without the epoch's depth resolve (an OpenGL driver below 4.5
-           refuses depth_resolve_ps, rd__gpu_init): no MSAA value is
-           offered, the supersampling ones are */
-        const RhiShader keep = g_rd.fs[RD_FS_DEPTH_RESOLVE];
-        g_rd.fs[RD_FS_DEPTH_RESOLVE] = (RhiShader){0};
-        const uint32_t without = rd_aa_supported_mask();
-        g_rd.fs[RD_FS_DEPTH_RESOLVE] = keep;
-        CHECK(without == ((1u << RD_AA_OFF) | (1u << RD_AA_SSAA2) | (1u << RD_AA_SSAA4)),
-              "without depth_resolve_ps: off and the supersampling values (0x%x)", without);
-        CHECK(rd_aa_supported_mask() == mask, "the module back: the mask as before");
+        /* without either of the epoch's resolves (a backend that cannot
+           make one, rd__gpu_init): no MSAA value is offered, the
+           supersampling ones are */
+        static const int kResolves[2] = {RD_FS_DEPTH_RESOLVE, RD_FS_MSAA_RESOLVE};
+        for (int k = 0; k < 2; k++) {
+            const RhiShader keep = g_rd.fs[kResolves[k]];
+            g_rd.fs[kResolves[k]] = (RhiShader){0};
+            const uint32_t without = rd_aa_supported_mask();
+            g_rd.fs[kResolves[k]] = keep;
+            CHECK(without == ((1u << RD_AA_OFF) | (1u << RD_AA_SSAA2) | (1u << RD_AA_SSAA4)),
+                  "without %s: off and the supersampling values (0x%x)",
+                  rd__fs_name((uint8_t)kResolves[k]), without);
+            CHECK(rd_aa_supported_mask() == mask, "the module back: the mask as before");
+        }
     }
     testSuspend(&s);
     if (!(mask & (1u << RD_AA_MSAA4))) {
@@ -604,6 +812,8 @@ int main(void)
     testDate();
     testFog();
     testRedraw();
+    testShadowReset();
+    testSkySlit();
     testOriginal();
     CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
           rhi_vk_validation_error_count());
