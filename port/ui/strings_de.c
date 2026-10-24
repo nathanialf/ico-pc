@@ -632,4 +632,41 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Das Disc-Image wird in die App kopiert",
     [UI_STR_ISO_COPYING_LONG] =
         "Das Disc-Image wird in die App kopiert. Es ist groß: Das dauert einige Minuten",
+    [UI_STR_SECTION_VARIANTS] = "Spielvarianten",
+    [UI_STR_OPT_VAR_TOUGHNESS] = "Härte der Schatten",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
+        "Amerikanisch: alle Schatten so zäh wie auf der nordamerikanischen Disc, in späteren Durchgängen nicht zäher. Erfolge bleiben aktiv.",
+    [UI_STR_VAL_VAR_AMERICAN] = "Amerikanisch",
+    [UI_STR_VAL_VAR_NOT_TOUGHER] = "Ohne Verschärfung",
+    [UI_STR_OPT_VAR_ONE_HIT] = "Ein Treffer pro Schlag",
+    [UI_STR_OPT_VAR_ONE_HIT_NOTE] =
+        "Jeder Schlag kann einen Schatten nur einmal treffen. Schaltet die Erfolge ab.",
+    [UI_STR_OPT_VAR_NEVER_DODGE] = "Schatten weichen nie aus",
+    [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] =
+        "Die Schatten weichen Icos Schlägen nie aus. Schaltet die Erfolge ab.",
+    [UI_STR_OPT_VAR_AGGRESSION] = "Angriffslust der Schatten",
+    [UI_STR_VAL_VAR_AGG_OWN] = "Eigene",
+    [UI_STR_VAL_VAR_AGG_BOLD_PATIENT] = "Mutig, geduldig",
+    [UI_STR_VAL_VAR_AGG_BOLD_QUICK] = "Mutig, schnell",
+    [UI_STR_VAL_VAR_AGG_WARY_PATIENT] = "Vorsichtig, geduldig",
+    [UI_STR_VAL_VAR_AGG_WARY_QUICK] = "Vorsichtig, schnell",
+    [UI_STR_OPT_VAR_AGGRESSION_NOTE] =
+        "Wie die Schatten kämpfen: mutig oder vorsichtig, geduldig oder schnell. Die Erfolge bleiben aktiv.",
+    [UI_STR_OPT_VAR_NO_HINTS] = "Keine Hinweise",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE] =
+        "Yorda gibt keine Hinweise, wohin es weitergeht, wie auf der nordamerikanischen Disc. Die Erfolge bleiben aktiv.",
+    [UI_STR_OPT_VAR_BARRIER] = "Barriere der Königin",
+    [UI_STR_VAL_VAR_HITS_5] = "5 Treffer",
+    [UI_STR_VAL_VAR_HITS_7] = "7 Treffer",
+    [UI_STR_OPT_VAR_BARRIER_NOTE] =
+        "Wie viele Treffer nötig sind, um die Barriere der Königin zu brechen. Die Erfolge bleiben aktiv.",
+    [UI_STR_OPT_VAR_NO_LOOK] = "Zwischensequenzen ohne Umsehen",
+    [UI_STR_OPT_VAR_NO_LOOK_NOTE] =
+        "Der rechte Stick dreht die Kamera in Zwischensequenzen nicht mehr. Die Erfolge bleiben aktiv.",
+    [UI_STR_OPT_VAR_IGNORE_CAMS] = "Kamerafahrten ignorieren",
+    [UI_STR_OPT_VAR_IGNORE_CAMS_NOTE] =
+        "Zwischensequenzen können falsch aussehen; das Spiel zeigt womöglich Orte, die es nie zeigen wollte. Schaltet die Erfolge ab.",
+    [UI_STR_OPT_VAR_DEBUG_MENU] = "Debug-Menü",
+    [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] =
+        "Das Debug-Menü des Spiels, für Entwickler. Schaltet die Erfolge ab.",
 };
