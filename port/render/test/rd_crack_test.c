@@ -36,8 +36,15 @@
  *           (rd__crack_fill_counts, every replay counted) equals the
  *           texels it changed;
  * at 1x, under Original, under MSAA or with ICO_RD_CRACK_FILL=0 no fill
- * pass is drawn and the two replays are byte-identical.  The log lines are
- * matched by test/rd_crack.cmake. */
+ * pass is drawn and the two replays are byte-identical.  With msaa
+ * (MSAA4, the filler not drawn) the frame is replayed again without
+ * anti-aliasing and without the filler: along the edge the MSAA picture
+ * holds at most 5 % of the texels with the clear's depth (the fog's table
+ * entry 0) that the frame without anti-aliasing holds (the covered-majority
+ * resolve: a pixel takes the clear's depth only when more than half its
+ * samples lay in the crack, not when one did), and the slit,
+ * wider than a pixel, keeps the clear's fog on every texel.  The log lines
+ * are matched by test/rd_crack.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -395,6 +402,54 @@ int main(int argc, char **argv)
         if (msaa) {
             CHECK(c1.skipped > c0.skipped, "the MSAA replay not counted as left unfilled");
         }
+    }
+    if (msaa) {
+        /* the same frame without anti-aliasing and without the filler (a
+           replay for the switch first) against the MSAA picture: the
+           texels along the edge with the clear's depth, or without a depth
+           readback its fog's colour */
+        st.antiAlias = (uint8_t)RD_AA_OFF;
+        rd_set_settings(&st);
+        Picture aa;
+        memset(&aa, 0, sizeof(aa));
+        bool okAa = replay(false, &aa);
+        free(aa.px);
+        free(aa.z);
+        memset(&aa, 0, sizeof(aa));
+        okAa = replay(false, &aa) && okAa && aa.w == w && aa.h == h;
+        CHECK(okAa, "SCENE readback without anti-aliasing");
+        const bool depth = off.z && aa.z;
+        const uint8_t *refAa = okAa ? &aa.px[((size_t)1 * w + 1) * 4] : ref;
+        const float refAaZ = depth ? aa.z[(size_t)1 * w + 1] : 0.0f;
+        int clearMs = 0, clearAa = 0;
+        for (uint32_t y = 0; okAa && y < h; y++) {
+            const double gy = gsX(y, sy);
+            const double ex = EDGE_X0 - (EDGE_X0 - LEFT) * (gy - TOP) / (BOTTOM - TOP);
+            if (gy < BAND0 || gy > BAND1) {
+                continue;
+            }
+            for (uint32_t x = 0; x < w; x++) {
+                const double gx = gsX(x, sx);
+                if (gx <= ex - 2.0 / sx || gx >= ex + 2.0 / sx) {
+                    continue;
+                }
+                const size_t i = (size_t)y * w + x;
+                clearMs += depth ? off.z[i] == refZ : memcmp(&off.px[i * 4], ref, 4) == 0;
+                clearAa += depth ? aa.z[i] == refAaZ : memcmp(&aa.px[i * 4], refAa, 4) == 0;
+            }
+        }
+        printf("  MSAA4 against no anti-aliasing (the filler off): %d and %d texels along the edge "
+               "with the clear's %s\n",
+               clearMs, clearAa, depth ? "depth" : "fog colour");
+        CHECK(clearAa > 0, "no crack without anti-aliasing at %gx%g", (double)sx, (double)sy);
+        CHECK(clearMs * 20 <= clearAa,
+              "MSAA4: %d texels along the edge with the clear's %s, more than 5 %% of the %d "
+              "without anti-aliasing",
+              clearMs, depth ? "depth" : "fog colour", clearAa);
+        CHECK(slitAll > 0 && slitOff == slitAll,
+              "MSAA4: the slit keeps the clear's fog on %d of %d texels", slitOff, slitAll);
+        free(aa.px);
+        free(aa.z);
     }
     /* the reach: ceil(scale / 2) above 1x, at most 3 */
     CHECK(rd__crack_fill_reach(1.0f) == 0u && rd__crack_fill_reach(0.5f) == 0u &&
