@@ -34,11 +34,13 @@
  * animations with and without the water height, particles).
  *
  * playable (the ELF run only) issue 136: the viewer's list rule
- *         (model_viewer_motion.c).  With nothing loaded but the stage's own
- *         motions (area 0), 664-668 (HINT_POINT_*, NO_WALK*: plain, area 0) are playable
- *         and 674 "GIRL YORO_F(HETARI)", a node-blend motion whose second
- *         partner (669, area 4) is not loaded, is not, and names that
- *         partner; with 669 loaded 674 is; and for every motion of every
+ *         (model_viewer_motion.c).  With the dynamic pool empty (area 4
+ *         unloaded, every other area loaded: the reporter's Yorda stage, where
+ *         the swap motion 542 GIRL YORO_F was loaded), 664-668 (HINT_POINT_*,
+ *         NO_WALK*: plain, area 0) are playable and 674 "GIRL YORO_F(HETARI)",
+ *         a node-blend motion whose second partner (669, area 4) is not
+ *         loaded, is not, and names that partner; with 669 loaded 674 is; and
+ *         for every motion of every
  *         viewer model "playable" means every partner of its blend list is in
  *         range, a plain motion and loaded.
  *
@@ -596,7 +598,7 @@ static void testPlayable(void)
 
     CHECK(ico_tables_count(ICO_TID_blendMotionKind) > 0, "playable: the blend table is empty");
     for (int i = 0; i < MV_MOTION_KINDS; i++) {
-        motionTable[i] = motionKind[i].area == 0 ? &dummy : NULL;
+        motionTable[i] = motionKind[i].area != 4 ? &dummy : NULL;
     }
     for (int id = 664; id <= 668; id++) {
         CHECK(ico_mv_motion_playable(id, NULL), "playable: motion %d \"%s\" is not", id,
@@ -631,8 +633,8 @@ static void testPlayable(void)
             ok ? offered++ : left++;
         }
     }
-    printf("playable: %d offered, %d left out (%d node-blend) with only the area 0 motions "
-           "loaded\n",
+    printf("playable: %d offered, %d left out (%d node-blend) with the dynamic pool (area 4) "
+           "empty\n",
            offered, left, blended);
     CHECK(left > 0 && blended > 0, "playable: nothing was left out");
     for (int i = 0; i < MV_MOTION_KINDS; i++) {
