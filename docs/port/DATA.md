@@ -22,7 +22,7 @@ disc's boot ELF, and the port's own reads of DATA.DF. The repository holds no di
 | `port/data/sifdev_host.c` | `sceOpen` and the other sifdev file calls, for the development kit's `host0:` device |
 | `port/data/iop_ram.h`, `iop_ram.c` | `ico_iop_ram`, the 2 MB of IOP RAM, and the IOP heap allocator |
 | `port/data/tables.h`, `tables.c` | the runtime loader of the 73 data tables |
-| `port/data/gen/` | the generated table definitions (`table_defs.c`), descriptor types (`table_desc.h`), the sets' list (`table_sets.c`, `tables.cmake`) and one descriptor set per disc (`pal/`, `jpn/`, `kor/`, and `ntsc/` ahead of its row: `table_desc.c`, `ee_symbols.c`, `tables.cmake`) |
+| `port/data/gen/` | the generated table definitions (`table_defs.c`), descriptor types (`table_desc.h`), the sets' list (`table_sets.c`, `tables.cmake`) and one descriptor set per disc (`pal/`, `jpn/`, `kor/`, and `ntsc/` and `aug6/` ahead of their rows: `table_desc.c`, `ee_symbols.c`, `tables.cmake`) |
 | `port/data/df_pack.h`, `df_pack.c` | reads of DATA.DF's loose files and pack members for the port's own screens |
 | `port/data/json.h`, `json.c` | the JSON reader (`ico_json`) |
 | `port/data/chdr_miniz_names.h` | prefixes the second miniz copy inside libchdr |
@@ -30,8 +30,8 @@ disc's boot ELF, and the port's own reads of DATA.DF. The repository holds no di
 | `port/platform/android/iso_import.h`, `iso_import.c` | the Android first start's copy of the chosen image |
 | `ico2/fumi/ios/cdvd.c`, `ico2/seki/src/FileManager.c` | the game's side: the cdvd manager and the boot loader |
 | `config/tables_manifest.txt`, `tables_manifest.<slug>.txt` | per disc, the CRC-32 of every table row and the addresses the tables' pointers hold |
-| `config/ee_layout.<slug>.txt`, `motion_bits.<slug>.txt` | the other discs' record layouts and MotionDef's shift-read bits (`tools/gen_ee_layout.py`; jpn, kor, ntsc) |
-| `config/symbol_addrs.<slug>{,.data}.txt` | the names at the other ELFs' addresses (`tools/gen_symbol_addrs.py`; jpn, kor, ntsc) |
+| `config/ee_layout.<slug>.txt`, `motion_bits.<slug>.txt` | the other discs' record layouts and MotionDef's shift-read bits (`tools/gen_ee_layout.py`; jpn, kor, ntsc, aug6) |
+| `config/symbol_addrs.<slug>{,.data}.txt` | the names at the other ELFs' addresses (`tools/gen_symbol_addrs.py`; jpn, kor, ntsc, aug6) |
 
 ## Layers
 
@@ -597,6 +597,57 @@ empty on both discs (modeBits 11, 12, 15; flags 30) the row is the code's pairin
 `port/core/region_ntsc.c` (its numbers resolved by name against this disc's tables and sources)
 lands with the rows.
 
+### The August 2001 preview disc's set
+
+`port/data/gen/aug6/` is the preview disc's set (`PROTO-20010806`; it boots `SCUS_971.13` like the
+USA disc, and `ico_disc_identify` tells the two apart by the ELF's SHA-1), written before its row
+is listed, with the same `--version aug6` commands and `data_desc_fresh_aug6` and
+`ee_layout_fresh_aug6` tests as the USA disc's ([above](#the-usa-discs-set)). It is an earlier build of the game:
+69 data members in 71 rows (`staffroll_dat` has two), none of PAL's
+three unmapped runs (`hintTable`, `motSyncPairs`, `jimakuFileName`) and no `enemy-def` (source
+upstream, as for the USA disc), 864 functions and 1 object in the manifest, 5339 function and 3001
+data symbols (`--base-elf`'s byte check passed; 70 data-member symbols sit at their member-table
+addresses).
+
+Nine record types are laid out otherwise (the tenth, `EnemyDef`, is source upstream). Seven are
+the USA disc's and take the USA disc's rows of the map, the same for the same field
+(`parallel-motion-tbl`'s 37 motions, `item-kind-def`, `model-path`'s two extended paths,
+`texture-path`'s 32 bytes, `layout-cloth-def`'s two points, `motion-def`'s five effect slots, its
+`dirFrames` narrowed and its dropped `path`), with one difference in `tex-property`: the record is
+the USA disc's 0x6C, but its word at 0x10 and the one at 0x3C are named `word14` and `word40` as
+PAL's (no C reader of either), so they are copied by name and no `drop` row is needed;
+`ownerItem` (-1), `selectMode` and `selectable` (0) are defaults as the USA disc's. Its
+`motion-def` has the same layout as the USA disc's (`MotionDef` 0x190, the name at 0xC8) and 1089
+rows (USA 1087).
+
+The other two are this build's own:
+
+- `stage-all`: `StgPre` is 0x190, PAL's fields to 0x15B, then the words after it in another order
+  (copied by name) and no `ledgeRange`, which only PAL's arms of `act-env.c` read (`default
+  stage-all ledgeRange=0.0`: a range of 0 never matches).
+- `act-mode-def`: the flag word at 0x4C has nine bits (`escort` 0, `holdDir` 1, `skipMarked` 2,
+  `saveInfo` 3, `bit9` 4, `softIk` 5, `onChain` 6, `bit1` 7, `carried` 8); `bit9` and `bit1` are
+  PAL's bits of those names, moved, and the words at 0x44 and 0x48 are exchanged (copied by name).
+  `holdDir` and `saveInfo` are two of the host-only bits the USA disc's rows extend (this disc has
+  those two and neither of `pullUp` and `stopMail`, which are 0 here by the record clear). PAL's
+  `attractWait`, `hintCount`, `bit5`, `keepHand`, `bit7`, `bit10`, `bit12` and `bit14` have no bit
+  here and default 0.
+
+`config/motion_bits.aug6.txt` has the same rows as the USA disc's, bit for bit. The unpaired blocks
+are the same functions' twins (`UNPAIRED_BY_SLUG` carries the preview disc's own keys), and the
+hand rows (`HAND_ROWS`) were checked on the two ELFs the same way: of the 1042 motions whose names
+are unique on both, the number that set the PAL bit and the preview bit alike is all 1042 for
+flags bits 2, 5, 9 and 25 (the preview disc's `_ACTCorrectMsg` reads bit 8 for PAL's 5 in cases 221
+and 222, bit 12 for PAL's 9 in case 240, the landing test reads bit 19 for PAL's 25) and 1037 for
+the sign bit (preview bit 28, `ACTGame_BeforeFunc`). The six PAL bits that have no preview
+counterpart (`chainHang` 11, 12, 13, 14, 15 and `jumpHit` 16) are written 0; for `jumpHit` the
+one preview bit that agrees in all 1042 motions (flags2 bit 3) is the counterpart of PAL's
+flags2 bit 6, read in `boyact.c`, set in the same two motions, and the preview disc's
+`actCommonJump` sends a mail and reads no bit.
+
+`config/data_schema.aug6.txt` is upstream's, unchanged, with the port's rows appended;
+`config/data_members.aug6.txt` is upstream's. `port/core/region_aug6.c` lands with the rows.
+
 ### Adding a target's set
 
 For a new row of `config/regions.txt`, the data step of adding a target ([GAME_CODE.md](GAME_CODE.md)
@@ -633,7 +684,8 @@ tools/gen_data_desc.py --manifest --version kor --elf baserom/kor/baseelf.elf
 tools/gen_data_desc.py
 ```
 
-The USA set (upstream 3947e0641, its row pending):
+The preview disc's set was made the same way with `--version aug6` and `baserom/aug6`, and the
+USA set (upstream 3947e0641, its row pending):
 
 ```
 git show 3947e0641:config/data_schema.ntsc.txt > config/data_schema.ntsc.txt   # + the port section
