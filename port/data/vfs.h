@@ -127,6 +127,21 @@ IcoVfs *ico_vfs_reopen(const IcoVfs *vfs);
 /* The location vfs was mounted from (NULL for NULL). */
 const char *ico_vfs_location(const IcoVfs *vfs);
 
+/* Where the game's files are on the volume, read once at mount from
+   SYSTEM.CNF's BOOT2 file and the disc row that boots with it (archive.h
+   IcoDiscInfo.game_dir): "" for a disc whose game is the root (every
+   retail disc), "CUS97113" on the June 2001 magazine demo, whose BOOT2 is
+   the magazine's menu; "" when SYSTEM.CNF names no row.  The game's own
+   requests spell the folder out ("cdrom0:\\CUS97113\\LIBSD.IRX;1"), so
+   they need none of this: it is for the port's own reads.
+   ico_vfs_df_path: DATA.DF's path, the row's df_path ("DFDATAS/DATA.DF",
+   "CUS97113/DFDATAS/DATA.DF"; "DFDATAS/DATA.DF" for no row).
+   ico_vfs_game_path: `file` ("SNDN2DRV.IRX") under the game's folder into
+   out; 0, or -1 when it does not fit.  NULL vfs: the root's answers. */
+const char *ico_vfs_game_dir(const IcoVfs *vfs);
+const char *ico_vfs_df_path(const IcoVfs *vfs);
+int ico_vfs_game_path(const IcoVfs *vfs, const char *file, char *out, size_t outsz);
+
 /* The disc the libcdvd layer reads (port/data/cdvd_host.c).  Setting it
    does not take ownership; NULL detaches it ("no disc"). */
 void ico_vfs_set_disc(IcoVfs *vfs);

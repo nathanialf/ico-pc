@@ -10,11 +10,61 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "archive.h" /* the disc rows: game_dir, df_path */
+
 struct IcoVfs {
     const IcoVfsBackend *backend;
     void *state;
-    char *location; /* what it was mounted from, for ico_vfs_reopen */
+    char *location;   /* what it was mounted from, for ico_vfs_reopen */
+    char gameDir[32]; /* ico_vfs_game_dir */
+    char dfPath[64];  /* ico_vfs_df_path */
 };
+
+#define DF_PATH_ROOT "DFDATAS/DATA.DF"
+
+static int loggedGameDir;
+
+/* The game's folder and DATA.DF's path from the row SYSTEM.CNF's boot file
+   names (archive.h); logged when the game is in a folder. */
+static void find_game_dir(IcoVfs *vfs)
+{
+    char cnf[1024], boot[64];
+    const IcoDiscInfo *row = NULL;
+    IcoVfsFile f;
+    int64_t n;
+
+    snprintf(vfs->dfPath, sizeof(vfs->dfPath), "%s", DF_PATH_ROOT);
+    if (ico_vfs_open(vfs, "SYSTEM.CNF", &f) != 0) {
+        return;
+    }
+    n = ico_vfs_read(&f, 0, cnf, sizeof(cnf) - 1);
+    if (n <= 0) {
+        return;
+    }
+    cnf[n] = '\0';
+    if (ico_disc_cnf_boot(cnf, boot, sizeof(boot)) == 0) {
+        row = ico_disc_by_boot(boot);
+    }
+    if (row == NULL || row->game_dir == NULL || row->game_dir[0] == '\0') {
+        return;
+    }
+    if (strlen(row->game_dir) >= sizeof(vfs->gameDir) ||
+        strlen(row->df_path) >= sizeof(vfs->dfPath)) {
+        fprintf(stderr, "vfs: %s: the game's folder %s is too long a name\n", vfs->location,
+                row->game_dir);
+        return;
+    }
+    snprintf(vfs->gameDir, sizeof(vfs->gameDir), "%s", row->game_dir);
+    snprintf(vfs->dfPath, sizeof(vfs->dfPath), "%s", row->df_path);
+    /* once a run: the image and its archive are mounted several times */
+    if (!loggedGameDir) {
+        loggedGameDir = 1;
+        fprintf(stderr,
+                "vfs: the boot file %s is %s's menu; its game is in the folder %s (DATA.DF: "
+                "%s)\n",
+                boot, row->id, vfs->gameDir, vfs->dfPath);
+    }
+}
 
 static IcoVfs *discVfs;
 
@@ -42,6 +92,7 @@ IcoVfs *ico_vfs_mount(const IcoVfsBackend *backend, const char *location)
     memcpy(vfs->location, location, strlen(location) + 1);
     vfs->backend = backend;
     vfs->state = state;
+    find_game_dir(vfs);
     return vfs;
 }
 
@@ -56,6 +107,24 @@ IcoVfs *ico_vfs_reopen(const IcoVfs *vfs)
 const char *ico_vfs_location(const IcoVfs *vfs)
 {
     return vfs != NULL ? vfs->location : NULL;
+}
+
+const char *ico_vfs_game_dir(const IcoVfs *vfs)
+{
+    return vfs != NULL ? vfs->gameDir : "";
+}
+
+const char *ico_vfs_df_path(const IcoVfs *vfs)
+{
+    return vfs != NULL ? vfs->dfPath : DF_PATH_ROOT;
+}
+
+int ico_vfs_game_path(const IcoVfs *vfs, const char *file, char *out, size_t outsz)
+{
+    const char *dir = ico_vfs_game_dir(vfs);
+    int n = snprintf(out, outsz, "%s%s%s", dir, dir[0] != '\0' ? "/" : "", file);
+
+    return n >= 0 && (size_t)n < outsz ? 0 : -1;
 }
 
 void ico_vfs_unmount(IcoVfs *vfs)
