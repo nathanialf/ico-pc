@@ -7,3 +7,4 @@
 - With MSAA anti-aliasing on, hairline gaps along walls and floors no longer show as dotted lines of mist.
 - With MSAA anti-aliasing on, small openings onto the sky no longer glow brighter or wider than with it off.
 - MSAA anti-aliasing finishes each picture once instead of twice in scenes with shadows, so it costs less.
+- The puddle ripples no longer slide against their reflection while the camera moves.
