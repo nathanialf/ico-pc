@@ -22,16 +22,16 @@ disc's boot ELF, and the port's own reads of DATA.DF. The repository holds no di
 | `port/data/sifdev_host.c` | `sceOpen` and the other sifdev file calls, for the development kit's `host0:` device |
 | `port/data/iop_ram.h`, `iop_ram.c` | `ico_iop_ram`, the 2 MB of IOP RAM, and the IOP heap allocator |
 | `port/data/tables.h`, `tables.c` | the runtime loader of the 73 data tables |
-| `port/data/gen/` | the generated table definitions (`table_defs.c`), descriptor types (`table_desc.h`), the sets' list (`table_sets.c`, `tables.cmake`) and one descriptor set per disc (`pal/`, `jpn/`, `kor/`: `table_desc.c`, `ee_symbols.c`, `tables.cmake`) |
+| `port/data/gen/` | the generated table definitions (`table_defs.c`), descriptor types (`table_desc.h`), the sets' list (`table_sets.c`, `tables.cmake`) and one descriptor set per disc (`pal/`, `jpn/`, `kor/`, and `ntsc/` ahead of its row: `table_desc.c`, `ee_symbols.c`, `tables.cmake`) |
 | `port/data/df_pack.h`, `df_pack.c` | reads of DATA.DF's loose files and pack members for the port's own screens |
 | `port/data/json.h`, `json.c` | the JSON reader (`ico_json`) |
 | `port/data/chdr_miniz_names.h` | prefixes the second miniz copy inside libchdr |
 | `port/data/CMakeLists.txt` | the libraries (`ico_port_data`, `ico_miniz`, `ico_libchdr`, `ico_json`) and the tests |
 | `port/platform/android/iso_import.h`, `iso_import.c` | the Android first start's copy of the chosen image |
 | `ico2/fumi/ios/cdvd.c`, `ico2/seki/src/FileManager.c` | the game's side: the cdvd manager and the boot loader |
-| `config/tables_manifest.txt`, `tables_manifest.jpn.txt`, `tables_manifest.kor.txt` | per disc, the CRC-32 of every table row and the addresses the tables' pointers hold |
-| `config/ee_layout.jpn.txt`, `motion_bits.jpn.txt`, `ee_layout.kor.txt`, `motion_bits.kor.txt` | the Japanese and Korean discs' record layouts and MotionDef's shift-read bits (`tools/gen_ee_layout.py`) |
-| `config/symbol_addrs.jpn{,.data}.txt`, `symbol_addrs.kor{,.data}.txt` | the names at the Japanese and Korean ELFs' addresses (`tools/gen_symbol_addrs.py`) |
+| `config/tables_manifest.txt`, `tables_manifest.<slug>.txt` | per disc, the CRC-32 of every table row and the addresses the tables' pointers hold |
+| `config/ee_layout.<slug>.txt`, `motion_bits.<slug>.txt` | the other discs' record layouts and MotionDef's shift-read bits (`tools/gen_ee_layout.py`; jpn, kor, ntsc) |
+| `config/symbol_addrs.<slug>{,.data}.txt` | the names at the other ELFs' addresses (`tools/gen_symbol_addrs.py`; jpn, kor, ntsc) |
 
 ## Layers
 
@@ -429,8 +429,11 @@ names numbers by (`port/core/region.h`: `stage_count`, `layout_count`, `property
 `ico_tables_count`, and ends the run with a box naming the disc when one differs (`ico_pc: the
 data tables: <table> has N records on <disc>, the port expects M`). `ico_tables_count(ICO_TID_<symbol>)` gives the records a table
 received (`texProperty` 436 on the European disc, 412 on the Japanese, 406 on the Korean), `ico_tables_loaded_set()`
-the set. [GAME_CODE.md](GAME_CODE.md#data-tables) covers the generator and the maintainer's
-reference test.
+the set. Each record is cleared before its fields are written (the record clear): what no field
+writes is 0 whatever an earlier load left, which is what a host-only field the disc lacks, the
+elements of an array past the disc's count and a bit-field's default take ([the map
+rows](#the-map-rows)). [GAME_CODE.md](GAME_CODE.md#data-tables) covers the generator and the
+maintainer's reference test.
 
 ### The descriptor sets
 
@@ -438,8 +441,9 @@ reference test.
 `config/regions.txt`, in its order: `ico_table_set_pal`, `ico_table_set_jpn` and
 `ico_table_set_kor`, each with its boot
 file, product name, rows and registry. `load_tables` takes row 0 until the disc identification
-picks the row. Every set fills the same host arrays: PAL's counts are the largest of every table
-(the Japanese disc has 944 `objAction`, 3736 `objLayout`, 412 `texProperty`, 1621 `modelData`, 76
+picks the row. Every set fills the same host arrays, each as large as the largest set's count of
+that table (PAL's on the three discs before the USA one, whose `staffRollNameData` has 1072 entries,
+`pairMotion` 33 and `motSyncPairs` 7 against PAL's 964, 31 and 5; the Japanese disc has 944 `objAction`, 3736 `objLayout`, 412 `texProperty`, 1621 `modelData`, 76
 `texLayout`, 2 `jimakuFileName`, 5 `movieFile`, 104 `stageData`, 1357 `objTableScene`, 950
 `stageTable`, 53 `texFile`); a string pool's buffer is the largest set's (`staffroll_dat`'s
 `.rodata` is 3808 bytes on the Japanese disc, 3792 on the European).
@@ -493,14 +497,116 @@ shift by `PAL_JPN(` is an error (a bit position is a layout, and the host's is P
 a read inside a region's own arm (`if (ICO_JPN) { ... }`, the arguments after the first of
 `PAL_JPN(`), which would read the disc's position in the PAL host word.
 
+### The map rows
+
+A disc's record maps onto PAL's host record by path name (`tools/gen_ee_layout.py` `record_map`,
+shared by the descriptor sets and by `gen_data_c.py --version`'s reference). Where the name alone
+does not settle a field, the disc's `config/data_schema.<slug>.txt` says how in its port section,
+one row per field; a row that settles nothing is refused, and so is a field no rule and no row
+settles (the error names the row that would). The rules and rows, each with the USA disc's own case
+(`config/data_schema.ntsc.txt`) as its worked example:
+
+| case | rule or row | the loader | the USA disc |
+| --- | --- | --- | --- |
+| same path, kind, size and count | copied | `ICO_TF_INT` .. `ICO_TF_DATA` at the disc's offset | most fields |
+| a struct bit-field of the same name and width elsewhere in its unit | copied from the disc's bit (reported) | `ICO_TF_BITS` with the disc's bit | `ActModeRec.carried`: bit 0 on PAL, 11 here; `LtProperty.masked`, `defaultMask` |
+| a PAL field the disc lacks | `default <member> <field>=<value>` | `ICO_TF_DEFAULT`; a bit-field's or an array's default is 0, the record clear (no descriptor field) | `default tex-property ownerItem=-1` (PAL's "none"); `default motion-def eff[5].t=-1.0` (a frame no motion reaches) |
+| a scalar array the disc holds fewer elements of | `default <member> <field>=0` | the disc's elements copied, the rest 0 (the record clear) | `default parallel-motion-tbl motion=0`: `motion[37]` here, `motion[44]` on PAL; `default texture-path path=0`: `char path[32]`, PAL's 48 |
+| an integer the disc holds wider than PAL's field | `narrow <member> <field>` | `ICO_TF_BITS` of the host's width from the disc's word; `gen_data_desc.py --manifest` refuses an ELF one of whose values does not fit | `narrow motion-def dirFrames`: an `int` here, PAL's `short`; every one of the 1087 values fits (90, 360, small counts, -1) |
+| a field the disc has and PAL lacks, which converted code reads | `extend <member> <field>`, the field in the port's header after PAL's own (`PC port: host-only`) | copied by name on the disc that has it; on every other disc (PAL's included) no descriptor field, 0 by the record clear | `extend model-path modelPath` and `shadowPath` (`PObjMdl`'s two 64-byte paths, `charFileManager.h`); `extend act-mode-def holdDir`, `saveInfo`, `pullUp`, `stopMail` (`ActModeRec`'s bits 1, 3, 6, 8 here, read by the USA arms of `ACTGame_BeforeFunc`, `ACTGame_SaveActorInformation`, `handoff_heroin` and a stopped enemy's mail, as upstream's header names them) |
+| a field the disc has that no code the port compiles reads | `drop <member> <field>` (reported; the divergence is recorded below) | not loaded | `drop tex-property word10`, `word3C`; `drop act-mode-def bit4`, `bit13`; `drop motion-def path` |
+| a table PAL has none of | `extra <member> <type> <count>` (the member's own schema row names its header and symbol) | the host array holds `count` records of `type`, defined after PAL's tables with an id after theirs; a disc without it loads none | none here (the June 2001 demo's tables use it) |
+
+`extend` rows are read from every `config/data_schema.*.txt`, so the PAL set and every other set
+know the host-only fields whatever `config/regions.txt` lists: PAL's own descriptors assert its
+fields' EE offsets and the host size (`PObjMdl` 0x10C on the host, 0x8C on the disc; `ActModeRec`
+0x54 and 0x50), its rows read records at the disc's size, and `gen_data_c.py`'s PAL reference
+writes the host-only fields as 0 (`pal_maps`). A host-only field must follow every field of PAL's
+record; `config/struct_classes.txt` gives both records their host size for the layout asserts. A
+record another declaration views at a fixed size cannot grow this way: `MotionDef`'s three views
+(`MotEnt` in `charFileManager.c`, `ScnPre` in `icoMisc.c`, `ChainParaRow` in `chain.c`, each 0x194
+bytes) are why the USA disc's `MotionDef.path` is dropped, not extended.
+
+The worked example of `extra`, checked on a scratch copy and not committed: with
+`unmapped_00533FC0` (`MotSyncPair motSyncPairs[]`) taken out of PAL's, the Japanese and the
+Korean schemas, members and manifests, the row `extra unmapped_00533FC0 MotSyncPair 8` in the USA
+schema gives `MotSyncPair motSyncPairs[8];` in `table_defs.c` after PAL's tables (and `boy.h`
+among its includes), `ICO_TID_motSyncPairs` after PAL's ids, and a USA row loading 7 records of
+the host's 8; the other three sets have no row for it.
+
+The divergences the USA disc's `drop` rows record: `LtProperty.word10` and `word3C` have no C
+reader on any disc (upstream's header says so); `ActModeRec.bit4` and `bit13` are set in no USA
+mode and read by nothing ("nothing in September reads it"); `MotionDef.path` (the motion file's
+name, 64 bytes at 0x88) is read only by `_ACTDebugPrint`, the developer overlay, which shows no
+path on this disc until the merge extends the record with its views.
+
+A count-of row (`staffroll_dat`'s `staffRollNameDataNum`) is derived on the host from its array's
+size as the PS2 build derived it while every set agrees with it; when a set's count of the array
+differs from the host array's or its `less` from another set's (the USA disc's 1072 entries with
+none less, PAL's 964 less two), every set loads the int from its own ELF instead: a record row of
+`int` at the symbol's offset after the pool row, `ICO_TID_staffRollNameDataNum` among the ids, and
+`int staffRollNameDataNum;` in `table_defs.c` without its derivation.
+
+### The USA disc's set
+
+`port/data/gen/ntsc/` is the North American disc's set (SCUS-97113, `SCUS_971.13`), written
+before `config/regions.txt` lists its row. The pre-commit hook's `gen_data_desc.py --check`
+refuses a row without its set, and the rows of the three 2001 targets land together with the last
+of them; until then `gen_data_c.py` `PENDING_ROWS` holds the three rows exactly as they will be
+listed, and the generators take one of their slugs: `gen_ee_layout.py --version ntsc`,
+`gen_data_desc.py --manifest --version ntsc`, `gen_data_desc.py --version ntsc` (only
+`port/data/gen/ntsc/`, as the table with the pending rows up to `ntsc` gives it; the shared files
+stay the listed rows'), `gen_data_desc.py --check --version ntsc` (the `data_desc_fresh_ntsc` test)
+and `gen_data_c.py --version ntsc`. A slug `config/regions.txt` lists takes its row from there, so
+the list has no effect once the rows land, and is removed then; the regenerated shared files
+(`table_desc.h`, `table_defs.c`, `table_sets.c`, `tables.cmake`) and the other sets' pool sizes,
+host counts and stubs then follow the six rows.
+
+The USA build is a program of its own, older than the European one: 70 data members (no
+`hintTable`, no `jimakuFileName`; `enemy-def` is committed source upstream, `enemyKind.c`, and no
+set is written for it), eight record types laid out otherwise (`ParallelMotionRow`, `LtProperty`,
+`ItemBreakRec`, `PObjMdl`, `MotionDef`, `LayoutClothDef`, `TexRec`, `ActModeRec`), and MotionDef's
+bit words in other places (`config/motion_bits.ntsc.txt`, below). Its rows of the map:
+`tex-property` defaults `ownerItem` -1 and `word14`, `word40`, `selectMode`, `selectable` 0 (read
+only by PAL's arms) and drops `word10`, `word3C`; `item-kind-def` defaults `stayMode`, `breakMode`,
+`hitMode` 0 (the USA record has none, so no USA code reads them);
+`texture-path` takes its 32 path bytes and `cameraMove` 0; `model-path` extends the two paths;
+`act-mode-def` defaults `bit1`, `attractWait`, `hintCount`, `bit5`, `bit7`, `bit9` 0 (the girl's
+attract wait and hint count are PAL's; no hint system here), extends four bits and drops two;
+`motion-def` defaults the effect slots 5..11 and the vibration slot 1 (-1.0 and 0: the USA record
+holds 5 and 1), `palSpeedRatio` 1.0, `girlDirFrames` 0 (the USA record has none: its code reads
+`dirFrames` for both actors), narrows `dirFrames` and drops `path`; `layout-cloth-def` defaults `pt[2]`, `pt[3]` 0 (two
+cloth points here, four on PAL); `parallel-motion-tbl` takes its 37 motions (the USA readers loop
+to 37).
+
+`config/motion_bits.ntsc.txt`: the named bit-fields map by name (`carried` flags bit 7 on PAL, 10
+here; `dropNode4Turn` PAL flags2 bit 9, flags bit 5 here; `fuchiMode`, `handIK`, `dirAdjust`, and
+the rest); upstream's blocks pair the shift reads, and for this disc the pairing reads only the
+reads whose statement names a motion record (`subject_reads`, as `motion_reads` already did for
+the shared lines: a pad's or a texture's `flags & 8` in a block once paired with a motion's). The
+blocks that do not pair one for one are function twins; each is listed with where its bits come
+from (`UNPAIRED_BY_SLUG`), and the bits only they give are hand rows (`HAND_ROWS`), each with its
+reader and the evidence of the two ELFs: of the 1042 motions whose names are unique on both discs,
+the number that set the PAL bit and the USA bit alike (all 1042 for flags bits 2, 5, 9 and 25;
+1037 for the sign bit, USA bit 28). Six PAL bits have no USA counterpart and are written 0
+(`ntsc=-`): `chainHang` (flags 11), flags 12, 13, 14, 15 and `jumpHit` (flags 16), each read only by
+PAL's twin of a function the USA disc writes otherwise; the audit counts such a bit as filled. Every
+row was checked against that column comparison: no row disagrees with it, and where the column is
+empty on both discs (modeBits 11, 12, 15; flags 30) the row is the code's pairing alone.
+
+`port/core/region_ntsc.c` (its numbers resolved by name against this disc's tables and sources)
+lands with the rows.
+
 ### Adding a target's set
 
 For a new row of `config/regions.txt`, the data step of adding a target ([GAME_CODE.md](GAME_CODE.md)
-has the rest):
+has the rest). A row the table does not list yet is first added to `gen_data_c.py` `PENDING_ROWS`
+([the USA disc's set](#the-usa-discs-set)), and step 5 is then `gen_data_desc.py --version <slug>`:
 
 1. `tools/gen_ee_layout.py --version <slug> --upstream <rev>` writes `config/ee_layout.<slug>.txt`
    (upstream's `config/data_schema.<slug>.txt` and `data_members.<slug>.txt` copied into
-   `config/` first, unchanged, with the port's `default` rows appended to the schema).
+   `config/` first, unchanged, with the port's map rows appended to the schema: [the map
+   rows](#the-map-rows); each error of step 5 names the row it needs).
 2. `tools/gen_symbol_addrs.py --region <slug> --elf <decomp>/build/<slug>/ico.syms.elf --map
    <decomp>/build/<slug>/ico.<slug>.map --base-elf baserom/<slug>/baseelf.elf` writes
    `config/symbol_addrs.<slug>{,.data}.txt` (with a `TITLE` entry for the slug).
@@ -511,7 +617,8 @@ has the rest):
 5. `tools/gen_data_desc.py` writes `port/data/gen/<slug>/` and the shared files; each error names
    the field, default or bit to settle.
 6. `port/data/CMakeLists.txt`: the slug in the `foreach(_slug jpn kor)` lists, which build its
-   reference (`gen_data_c.py --version <slug>` from `ICO_BASE_ELF_<SLUG>`) and add
+   reference (`gen_data_c.py --version <slug>` from `ICO_BASE_ELF_<SLUG>`, for the members its own
+   `data_members.<slug>.txt` lists: `ICO_DATA_MEMBERS` is every link order's union) and add
    `tables_loader_<slug>`, `tables_manifest_<slug>` and `ee_layout_fresh_<slug>`; and its
    reference in `port/data/test/tables_test.c`'s `ref_sets[]`.
 
@@ -524,6 +631,19 @@ tools/gen_symbol_addrs.py --region kor --elf /primary/dev/ico/build/kor/ico.syms
     --map /primary/dev/ico/build/kor/ico.kor.map --base-elf baserom/kor/baseelf.elf
 tools/gen_data_desc.py --manifest --version kor --elf baserom/kor/baseelf.elf
 tools/gen_data_desc.py
+```
+
+The USA set (upstream 3947e0641, its row pending):
+
+```
+git show 3947e0641:config/data_schema.ntsc.txt > config/data_schema.ntsc.txt   # + the port section
+git show 3947e0641:config/data_members.ntsc.txt > config/data_members.ntsc.txt
+tools/gen_ee_layout.py --version ntsc --upstream 3947e0641
+tools/gen_ee_layout.py --version ntsc --upstream 3947e0641 --bits
+tools/gen_symbol_addrs.py --region ntsc --elf /primary/dev/ico/build/ntsc/ico.syms.elf \
+    --map /primary/dev/ico/build/ntsc/ico.ntsc.map --base-elf baserom/ntsc/baseelf.elf
+tools/gen_data_desc.py --manifest --version ntsc --elf baserom/ntsc/baseelf.elf
+tools/gen_data_desc.py --version ntsc
 ```
 
 `gen_ee_layout.py --version pal --upstream <rev>` lays upstream's PAL arm out against the port's
