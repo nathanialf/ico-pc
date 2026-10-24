@@ -1842,7 +1842,9 @@ void rd_vu_card_counts(uint64_t *strips, uint64_t *triangles, double *ms);
  * bloom and the sun's eye blur), DOF (depth of field), SOFTEN (the screen
  * softening: the AA0/AA1 passes and the pass into SCENE right after them),
  * CRT (the CRT filter's passes in the present), MSAA (the anti-aliasing's
- * resolve of the multisampled SCENE, rd_replay.c msaaEnd). */
+ * resolve of the multisampled SCENE, rd_replay.c msaaEnd), CRACK (the crack
+ * filler above 1x before the fog: its copies of SCENE's colour and depth,
+ * its count and its draw, rd_crack_fill.c; inside the fog's list). */
 enum {
     RD_PERF_POST_REDUCTION = 0,
     RD_PERF_POST_FOG,
@@ -1854,6 +1856,8 @@ enum {
     RD_PERF_POST_CRT,
     /* the MSAA epoch's resolves of SCENE (rd_replay.c msaaEnd) */
     RD_PERF_POST_MSAA,
+    /* the crack filler above 1x (rd_crack_fill.c rd__crack_fill) */
+    RD_PERF_POST_CRACK,
     RD_PERF_POST_COUNT
 };
 
@@ -2038,7 +2042,8 @@ typedef struct RdPerfRecord {
      * a present; one on a restart) */
     uint32_t blurSmoothPasses;
     /* The crack filler above 1x (rd_crack_fill.c): crackFillPasses its
-     * passes this replay (0 or 1, before the fog), crackCountPasses the
+     * fills this replay (0 or 1, before the fog; on the local read drawn in
+     * the pass the fog then keeps, not a pass of its own), crackCountPasses the
      * passes that counted what it filled (the tests and the replay tool's
      * --stats only; the count is read back later, rd__crack_fill_counts) */
     uint32_t crackFillPasses, crackCountPasses;
