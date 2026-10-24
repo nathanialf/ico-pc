@@ -2678,6 +2678,12 @@ void rd_screen_prims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace 
     c->u[1] = count;
     c->b[3] = g_rd.textQuads ? RD_SCREEN_TEXT_QUADS : 0; /* deferred text's quads */
     c->b[4] = rd__frame_projected() ? RD_SCREEN_FRAME_CAMERA : 0;
+    float st[2];
+    if (c->b[4] == RD_SCREEN_FRAME_CAMERA && rd__frame_projected_st(st)) {
+        c->b[5] = RD_SCREEN_ST_SHIFT; /* rd.h rd_frame_projected_st */
+        c->f[0] = st[0];
+        c->f[1] = st[1];
+    }
     setKey(c, key);
     g_rd.stats.draws++;
 }
