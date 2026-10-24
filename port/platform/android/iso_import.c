@@ -144,19 +144,26 @@ static uint64_t tenths_up(uint64_t bytes)
     return (bytes + 99999999ull) / 100000000ull;
 }
 
-void ico_iso_space_text(char *out, size_t size, uint64_t needBytes, uint64_t freeBytes,
-                        const char *folder)
+void ico_iso_space_text(char *out, size_t size, const char *fmt, uint64_t needBytes,
+                        uint64_t freeBytes, const char *folder)
 {
     /* tenths of a GB: what is needed up, what is free down, so the two
        never read the same */
     const uint64_t need = tenths_up(needBytes), have = freeBytes / 100000000ull;
 
-    snprintf(out, size,
-             "This disc image needs %llu.%llu GB free in %s; %llu.%llu GB is free.\n"
-             "Free up some space (apps, videos or downloads you no longer need) and start "
-             "the game again.",
-             (unsigned long long)(need / 10), (unsigned long long)(need % 10), folder,
-             (unsigned long long)(have / 10), (unsigned long long)(have % 10));
+    /* fmt is a string table's (strings_complete holds its conversions to English's) */
+    snprintf(out, size, fmt != NULL ? fmt : ICO_ISO_NEED_SPACE_EN, (unsigned long long)(need / 10),
+             (unsigned long long)(need % 10), folder, (unsigned long long)(have / 10),
+             (unsigned long long)(have % 10));
+}
+
+void ico_iso_copy_failed_text(char *out, size_t size, const char *fmt, uint64_t needBytes,
+                              const char *folder)
+{
+    const uint64_t gb10 = tenths_up(needBytes);
+
+    snprintf(out, size, fmt != NULL ? fmt : ICO_ISO_COPY_FAILED_EN, folder,
+             (unsigned long long)(gb10 / 10), (unsigned long long)(gb10 % 10));
 }
 
 /* whether name ends in a dot and the three letters of `ext`, in any case */
@@ -247,7 +254,7 @@ int ico_iso_is_cue(const char *name, const void *head, size_t headLen)
 #ifdef __ANDROID__
 
 int ico_iso_import(const char *uri, char *out, size_t outSize, IcoExtractProgressFn progress,
-                   void *ctx, char *why, size_t n)
+                   void *ctx, const IcoIsoImportTexts *texts, char *why, size_t n)
 {
     const IcoAndroidPaths *p = ico_android_paths();
     char tmp[PATH_MAX_LEN + 8], copyWhy[512];
@@ -334,12 +341,15 @@ int ico_iso_import(const char *uri, char *out, size_t outSize, IcoExtractProgres
                 (long long)size, freeBytes, p->files,
                 (unsigned long long)ico_iso_need_bytes((uint64_t)size));
         SDL_CloseIO(io);
-        ico_iso_space_text(why, n, ico_iso_need_bytes((uint64_t)size), (uint64_t)freeBytes,
-                           p->files);
+        ico_iso_space_text(why, n, texts != NULL ? texts->need_space : NULL,
+                           ico_iso_need_bytes((uint64_t)size), (uint64_t)freeBytes, p->files);
         return ICO_ISO_IMPORT_FAILED;
     }
-    fprintf(stderr, "ico_pc: copying the disc image %s (%lld bytes%s; %lld free) to %s\n", uri,
-            (long long)size, size > 0 ? "" : ", size unknown", freeBytes, out);
+    fprintf(stderr, "ico_pc: copying the disc image %s (%lld bytes%s; %lld free) to %s%s\n", uri,
+            (long long)size, size > 0 ? "" : ", size unknown", freeBytes, out,
+            size > 0 && (uint64_t)size > ICO_ISO_LONG_COPY_BYTES
+                ? " (a large image: the copy takes minutes)"
+                : "");
     t0 = SDL_GetTicksNS();
     r = ico_iso_copy(io, tmp, progress, ctx, copyWhy, sizeof(copyWhy));
     SDL_CloseIO(io);
@@ -352,13 +362,8 @@ int ico_iso_import(const char *uri, char *out, size_t outSize, IcoExtractProgres
     if (r != 0) {
         fprintf(stderr, "ico_pc: the copy failed after %.1f s: %s\n", secs, copyWhy);
         if (size > 0) {
-            const uint64_t gb10 = tenths_up(ico_iso_need_bytes((uint64_t)size));
-
-            snprintf(why, n,
-                     "The disc image could not be copied into %s.\n"
-                     "Check that about %llu.%llu GB is free and that the file is still there, "
-                     "then start the game again. The log says why.",
-                     p->files, (unsigned long long)(gb10 / 10), (unsigned long long)(gb10 % 10));
+            ico_iso_copy_failed_text(why, n, texts != NULL ? texts->copy_failed : NULL,
+                                     ico_iso_need_bytes((uint64_t)size), p->files);
         } else {
             snprintf(why, n,
                      "The disc image could not be copied into %s.\n"

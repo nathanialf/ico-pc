@@ -27,6 +27,30 @@
    and a margin. SI gigabytes, as Android's Settings and Files app count. */
 #define ICO_ISO_IMPORT_SPARE_BYTES 1200000000ull
 
+/* An image whose copy takes minutes on a phone (the 4.4 GB magazine demo,
+   not the CD- and DVD-sized retail images): the progress line says so
+   (UI_STR_ISO_COPYING_LONG). SI bytes. */
+#define ICO_ISO_LONG_COPY_BYTES 2000000000ull
+
+/* The texts in English, as the port's English table has them (port/ui
+   strings_en.c UI_STR_ISO_NEED_SPACE, UI_STR_ISO_COPY_FAILED; the iso_import
+   ctest compares them): what these helpers use with fmt NULL. */
+#define ICO_ISO_NEED_SPACE_EN                                                                      \
+    "This disc image needs %llu.%llu GB free in %s; %llu.%llu GB is free.\n"                       \
+    "Free up some space (apps, videos or downloads you no longer need) and start the game "        \
+    "again."
+#define ICO_ISO_COPY_FAILED_EN                                                                     \
+    "The disc image could not be copied into %s.\n"                                                \
+    "Check that about %llu.%llu GB is free and that the file is still there, then start the "      \
+    "game again. The log says why."
+
+/* The player's words for the import's boxes, in the port's language
+   (main_host.c fills them from ui_str); a NULL member is the English one. */
+typedef struct IcoIsoImportTexts {
+    const char *need_space;  /* UI_STR_ISO_NEED_SPACE: %llu %llu %s %llu %llu */
+    const char *copy_failed; /* UI_STR_ISO_COPY_FAILED: %s %llu %llu */
+} IcoIsoImportTexts;
+
 /* ico_iso_import's results */
 #define ICO_ISO_IMPORT_OK 0
 #define ICO_ISO_IMPORT_CANCELLED 1
@@ -53,9 +77,16 @@ uint64_t ico_iso_need_bytes(uint64_t imageBytes);
 
 /* The message when the space is short: "This disc image needs N GB free in
    <folder>; M GB is free." and what to do, N rounded up and M down to a
-   tenth of a GB. */
-void ico_iso_space_text(char *out, size_t size, uint64_t needBytes, uint64_t freeBytes,
-                        const char *folder);
+   tenth of a GB (fmt: the table's UI_STR_ISO_NEED_SPACE, NULL for
+   ICO_ISO_NEED_SPACE_EN). */
+void ico_iso_space_text(char *out, size_t size, const char *fmt, uint64_t needBytes,
+                        uint64_t freeBytes, const char *folder);
+
+/* The message when a copy of known size failed: the folder and the space
+   it needs, rounded up to a tenth of a GB (fmt: UI_STR_ISO_COPY_FAILED,
+   NULL for ICO_ISO_COPY_FAILED_EN). */
+void ico_iso_copy_failed_text(char *out, size_t size, const char *fmt, uint64_t needBytes,
+                              const char *folder);
 
 /* "chd" when the first bytes of the file (head, headLen; may be NULL) are a
    CHD header ("MComprHD"), "bin" when 16 or more of them start with a raw
@@ -79,9 +110,10 @@ int ico_iso_is_cue(const char *name, const void *head, size_t headLen);
    <files>/Ico_PAL.<ext> (ico_iso_copy, progress as there), whose path goes
    to out. ICO_ISO_IMPORT_OK; ICO_ISO_IMPORT_CANCELLED; or
    ICO_ISO_IMPORT_FAILED with why holding the text for the player's message
-   box (the details are logged). */
+   box (the details are logged; the space boxes in texts' words, NULL for
+   English). */
 int ico_iso_import(const char *uri, char *out, size_t outSize, IcoExtractProgressFn progress,
-                   void *ctx, char *why, size_t n);
+                   void *ctx, const IcoIsoImportTexts *texts, char *why, size_t n);
 
 #endif
 
