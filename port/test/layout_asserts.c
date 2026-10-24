@@ -28,6 +28,7 @@
 #include "gobj_process.h"
 #include "jimaku.h"
 #include "mcard.h"
+#include "mcdata.h"
 #include "memory.h"
 #include "message.h"
 #include "pad.h"
@@ -54,6 +55,7 @@
 #include "script.h"
 #include "BgAnimation.h"
 #include "DisplayP2O.h"
+#include "EnemyInit.h"
 #include "Light.h"
 #include "Packet.h"
 #include "Primitive.h"
@@ -1546,6 +1548,23 @@ OFF(IconFile, name, 0x0);
 OFF(IconFile, size, 0x20);
 SIZE(IconFile, 0x24); /* comment */
 
+/* sceMcIconSys: overlay, ico2/fumi/include/mcdata.h:20 */
+OFF(sceMcIconSys, Head, 0x0);
+OFF(sceMcIconSys, Reserv1, 0x4);
+OFF(sceMcIconSys, OffsLF, 0x6);
+OFF(sceMcIconSys, Reserv2, 0x8);
+OFF(sceMcIconSys, TransRate, 0xC);
+OFF(sceMcIconSys, BgColor, 0x10);
+OFF(sceMcIconSys, LightDir, 0x50);
+OFF(sceMcIconSys, LightColor, 0x80);
+OFF(sceMcIconSys, Ambient, 0xB0);
+OFF(sceMcIconSys, TitleName, 0xC0);
+OFF(sceMcIconSys, FnameView, 0x104);
+OFF(sceMcIconSys, FnameCopy, 0x144);
+OFF(sceMcIconSys, FnameDel, 0x184);
+OFF(sceMcIconSys, Reserve3, 0x1C4);
+SIZE(sceMcIconSys, 0x3C4); /* config */
+
 /* IosMemPart: runtime, ico2/fumi/include/memory.h:15 */
 #if ICO_LAYOUT_EE
 OFF(IosMemPart, tag, 0x0);
@@ -2421,6 +2440,29 @@ OFF(PObjModel, boxes, 0x44);
 OFF(PObjModel, groups, 0x48);
 OFF(PObjModel, pad4C, 0x4C);
 OFF(PObjModel, box, 0x50);
+#endif
+
+/* EnemyKindRec: runtime, ico2/seki/include/EnemyInit.h:24 */
+#if ICO_LAYOUT_EE
+OFF(EnemyKindRec, list, 0x0);
+OFF(EnemyKindRec, kind, 0x4);
+SIZE(EnemyKindRec, 0x8); /* config */
+#endif
+
+/* EnemyModelSet: runtime, ico2/seki/include/EnemyInit.h:30 */
+#if ICO_LAYOUT_EE
+OFF(EnemyModelSet, kinds, 0x0);
+OFF(EnemyModelSet, kindNum, 0x4);
+OFF(EnemyModelSet, pos, 0x8);
+OFF(EnemyModelSet, posNum, 0xC);
+SIZE(EnemyModelSet, 0x10); /* config */
+#endif
+
+/* EnemySet: runtime, ico2/seki/include/EnemyInit.h:38 */
+#if ICO_LAYOUT_EE
+OFF(EnemySet, list, 0x0);
+OFF(EnemySet, n, 0x4);
+SIZE(EnemySet, 0x8); /* config */
 #endif
 
 /* LightMatrix: runtime, ico2/seki/include/Light.h:24 */
