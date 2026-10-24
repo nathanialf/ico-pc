@@ -146,16 +146,35 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_GRAPHICS, apiOpts, apiStrs, 5), "Graphics page rows");
     CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 14), "effects rows");
     {
-        /* Characters (a link), then Add to Steam and Export textures
-           (hidden without a host) before the pop-ups and Back */
-        static const int extrasOpts[] = {
-            UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,          UI_OPT_EXTRAS_CREDITS, UI_OPT_LINK,
-            UI_OPT_EXTRAS_STEAM, UI_OPT_EXTRAS_EXPORT_TEXTURES, UI_OPT_ACH_POPUPS,     UI_OPT_BACK};
-        static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC,   UI_STR_EXTRAS_MODELS,
-                                         UI_STR_EXTRAS_CREDITS, UI_STR_SECTION_CHARACTERS,
-                                         UI_STR_EXTRAS_STEAM,   UI_STR_EXTRAS_EXPORT_TEXTURES,
-                                         UI_STR_OPT_ACH_POPUPS, UI_STR_BACK};
-        CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 8), "Extras page rows");
+        /* Characters and Game variants (links), then Add to Steam and
+           Export textures (hidden without a host) before the pop-ups and
+           Back */
+        static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC,
+                                         UI_OPT_EXTRAS_MODELS,
+                                         UI_OPT_EXTRAS_CREDITS,
+                                         UI_OPT_LINK,
+                                         UI_OPT_LINK,
+                                         UI_OPT_EXTRAS_STEAM,
+                                         UI_OPT_EXTRAS_EXPORT_TEXTURES,
+                                         UI_OPT_ACH_POPUPS,
+                                         UI_OPT_BACK};
+        static const int extrasStrs[] = {
+            UI_STR_EXTRAS_MUSIC,           UI_STR_EXTRAS_MODELS,    UI_STR_EXTRAS_CREDITS,
+            UI_STR_SECTION_CHARACTERS,     UI_STR_SECTION_VARIANTS, UI_STR_EXTRAS_STEAM,
+            UI_STR_EXTRAS_EXPORT_TEXTURES, UI_STR_OPT_ACH_POPUPS,   UI_STR_BACK};
+        CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 9), "Extras page rows");
+        /* Game variants: the eight variants, the Debug menu, Back */
+        static const int varOpts[] = {UI_OPT_VAR_TOUGHNESS,   UI_OPT_VAR_ONE_HIT,
+                                      UI_OPT_VAR_NEVER_DODGE, UI_OPT_VAR_AGGRESSION,
+                                      UI_OPT_VAR_NO_HINTS,    UI_OPT_VAR_BARRIER,
+                                      UI_OPT_VAR_NO_LOOK,     UI_OPT_VAR_IGNORE_CAMS,
+                                      UI_OPT_VAR_DEBUG_MENU,  UI_OPT_BACK};
+        static const int varStrs[] = {UI_STR_OPT_VAR_TOUGHNESS,   UI_STR_OPT_VAR_ONE_HIT,
+                                      UI_STR_OPT_VAR_NEVER_DODGE, UI_STR_OPT_VAR_AGGRESSION,
+                                      UI_STR_OPT_VAR_NO_HINTS,    UI_STR_OPT_VAR_BARRIER,
+                                      UI_STR_OPT_VAR_NO_LOOK,     UI_STR_OPT_VAR_IGNORE_CAMS,
+                                      UI_STR_OPT_VAR_DEBUG_MENU,  UI_STR_BACK};
+        CHECK(labelsAre(UI_PAGE_VARIANTS, varOpts, varStrs, 10), "Game variants page rows");
     }
     CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 11),
           "display rows (Frame rate without a framerate key)");
