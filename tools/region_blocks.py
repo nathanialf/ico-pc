@@ -481,10 +481,13 @@ def gen_table(regions):
     for r in regions:
         out.append("extern const IcoRegionInfo ico_region_info_%s;" % r.slug)
     out.append("")
+    # one row per line however many rows there are: clang-format packs a longer list
+    out.append("/* clang-format off */")
     out.append("const IcoRegionInfo *const ico_region_info[ICO_REGION_COUNT] = {")
     for r in regions:
         out.append("    &ico_region_info_%s," % r.slug)
     out.append("};")
+    out.append("/* clang-format on */")
     return ("\n".join(out) + "\n").encode("ascii")
 
 
