@@ -5224,6 +5224,178 @@ static void testReproject(void)
     rd_destroy_vu_mesh(mesh);
 }
 
+/* ------------------------------------------- the ripples' texture shift
+ * (rd.h rd_frame_projected_st, rd_interp.c reprojStShift; issue 106).
+ * puddle.c's ripple strips are projected on the CPU by the frame camera
+ * and sample the reflection block at STs that are their projected points
+ * scaled (q 1); between ticks the strip is re-projected through the blended
+ * camera while the block moves with it, so each vertex's S / Q and T / Q
+ * must move by its own screen move times the scale */
+
+static const char kObjRs;
+
+/* S / Q and T / Q a 12.4 unit: the 256 x 256 block's texel a pixel */
+#define RS_F (1.0f / 256.0f / 16.0f)
+
+/* tick k: the camera pans 12 units right and 6 up a tick (no turn, so the
+ * wall keeps its depth); list 0 a keyed wall (a VU mesh); list 4 a
+ * reflection camera pushed and popped (with a strip drawn inside, which
+ * stays unmarked), then a strip on the wall at z 300 under
+ * rd_frame_projected, its STs its GS position times RS_F about the centre
+ * plus a half (q 1, as drawRipple's), with the shift when on, key 0,
+ * sampling the gradient */
+static void rsFrame(RdMesh mesh, RdTex grad, int k, int on)
+{
+    rd_begin_frame();
+    frameHead();
+    double v[16], q[16], qv[16];
+    s6View(0.0, (const double[3]){12.0 * k, 6.0 * k, 0.0}, v);
+    rpProj(q);
+    mul4(q, v, qv);
+    RdCamera cam;
+    memset(&cam, 0, sizeof(cam));
+    for (int i = 0; i < 16; i++) {
+        cam.view[i] = (float)v[i];
+        cam.proj[i] = (float)q[i];
+    }
+    cam.zoom = (float)LOCK_ZOOM;
+    rd_set_camera(&cam);
+    lockDraw(mesh, q, v, qv, v, RD_VU_VIEW_WORLD, RD_KEY(&kObjRs, 0, 0));
+    static const int kCorner[6] = {0, 1, 2, 1, 3, 2};
+    RdScreenVtx s[6];
+    for (int i = 0; i < 6; i++) {
+        const int c = kCorner[i];
+        const double w[3] = {c & 1 ? 40.0 : -40.0, c & 2 ? 20.0 : -20.0, 300.0};
+        rpCpuVertex(v, q, w, 0.0f, 0.0f, &s[i]);
+        s[i].s = (float)(s[i].x - 32768) * RS_F + 0.5f;
+        s[i].t = (float)(s[i].y - 32768) * RS_F + 0.5f;
+        s[i].q = 1.0f;
+    }
+    rd_select_list(4);
+    rd_set_target(rd_target(RD_TARGET_WORK0), (RdTarget){0}, TW, TH, 0);
+    opaque2D();
+    rd_sampler_filter(RD_FILTER_NEAREST, RD_FILTER_NEAREST);
+    rd_sampler_wrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_texture(grad, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_push_camera(&cam);
+    rd_frame_projected(1);
+    rd_frame_projected_st(RS_F, RS_F);
+    rd_screen_prims(RD_PRIM_TRIANGLES, s, 6, RD_SPACE_WORLD, 0, 0);
+    rd_frame_projected_st(0.0f, 0.0f);
+    rd_frame_projected(0);
+    rd_pop_camera();
+    rd_frame_projected(1);
+    rd_frame_projected_st(on ? RS_F : 0.0f, on ? RS_F : 0.0f);
+    rd_screen_prims(RD_PRIM_TRIANGLES, s, 6, RD_SPACE_WORLD, 0, 0);
+    rd_frame_projected_st(0.0f, 0.0f);
+    rd_frame_projected(0);
+    rd_texture_off();
+    rd_end_frame(0);
+}
+
+/* the gradient: R the texel's column, B its row, G 255 (the strip's mark) */
+static RdTex rsGradient(void)
+{
+    static uint8_t px[256 * 256 * 4];
+    for (int y = 0; y < 256; y++) {
+        for (int x = 0; x < 256; x++) {
+            uint8_t *p = &px[(y * 256 + x) * 4];
+            p[0] = (uint8_t)x;
+            p[1] = 255;
+            p[2] = (uint8_t)y;
+            p[3] = 0x80;
+        }
+    }
+    return rd_create_texture(256, 256, px, RD_TEXA_7F_81_AEM, "ripple block");
+}
+
+/* half way, on and off: the shifted strip's vertices have S / Q and T / Q
+ * the tick's plus their move times RS_F; unshifted, the tick's; the strip
+ * recorded inside the pushed camera carries no shift */
+static void testRippleSt(void)
+{
+    RdMesh mesh = makeMesh();
+    RdTex grad = rsGradient();
+    RdInterpStats st;
+    for (int on = 1; on >= 0; on--) {
+        rsFrame(mesh, grad, 0, on);
+        rsFrame(mesh, grad, 1, on);
+        const RdFrame *cu = rd__last_frame();
+        const RdCmd *rc = rpScreen(cu, 4, 0), *tc = rpScreen(cu, 4, 1);
+        CHECK(rc && tc && rc->b[4] == 0 && rc->b[5] == 0 && tc->b[4] == RD_SCREEN_FRAME_CAMERA &&
+                  tc->b[5] == (on ? RD_SCREEN_ST_SHIFT : 0) && tc->f[0] == (on ? RS_F : 0.0f) &&
+                  tc->f[1] == (on ? RS_F : 0.0f),
+              "ripple STs %s: the reflection's strip unmarked (%d %d), the strip marked %d shift "
+              "%d (%g, %g)",
+              on ? "on" : "off", rc ? rc->b[4] : -1, rc ? rc->b[5] : -1, tc ? tc->b[4] : -1,
+              tc ? tc->b[5] : -1, tc ? (double)tc->f[0] : 0.0, tc ? (double)tc->f[1] : 0.0);
+        const RdFrame *f = rd__interp_frame(rd__prev_frame(), cu, 0.5f, 1, &st);
+        const RdCmd *oc = rpScreen(f, 4, 1);
+        const RdScreenVtx *o = screenVtx(f, oc), *t = screenVtx(cu, tc);
+        double worst = 0.0;
+        int moved = 0;
+        for (int i = 0; o && t && i < 6; i++) {
+            const double ds = on ? (double)(o[i].x - t[i].x) * RS_F : 0.0;
+            const double dt = on ? (double)(o[i].y - t[i].y) * RS_F : 0.0;
+            worst = fmax(worst, fabs((double)(o[i].s / o[i].q) - (t[i].s / t[i].q + ds)));
+            worst = fmax(worst, fabs((double)(o[i].t / o[i].q) - (t[i].t / t[i].q + dt)));
+            moved += abs(o[i].x - t[i].x) > 16 * 4 && abs(o[i].y - t[i].y) > 16 * 2;
+        }
+        CHECK(o && t && oc->u[1] == 6 && moved == 6 && worst < 1e-5 &&
+                  st.stShifted == (on ? 1u : 0u),
+              "ripple STs %s: half way each vertex's S / Q and T / Q are the tick's%s (worst "
+              "%.2e, %d of 6 moved, %u shifted draws)",
+              on ? "on" : "off", on ? " plus its move times the scale" : "", worst, moved,
+              st.stShifted);
+    }
+    rd_destroy_texture(grad);
+    rd_destroy_vu_mesh(mesh);
+}
+
+/* on a device: half way, every strip pixel (G 255) of WORK0 at column c and
+ * row r samples the gradient where its place shows it, R c and B r + 64
+ * (the block's texel under the pixel, GS 1920 + c, 1984 + r) within one
+ * level; without the shift (the tick's STs on the moved strip) more than two
+ * levels off */
+static void testRippleStPixels(void)
+{
+    RdMesh mesh = makeMesh();
+    RdTex grad = rsGradient();
+    for (int on = 1; on >= 0; on--) {
+        rsFrame(mesh, grad, 0, on);
+        rsFrame(mesh, grad, 1, on);
+        const RdFrame *f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, NULL);
+        const uint8_t *p =
+            f && rd__replay_frame(f, 0, false) ? (rhi_wait_idle(), readWork0()) : NULL;
+        int n = 0, worst = 0;
+        for (int y = 0; p && y < TH; y++) {
+            for (int x = 0; x < TW; x++) {
+                const uint8_t *c = p + ((size_t)y * TW + x) * 4;
+                if (c[1] != 255) {
+                    continue;
+                }
+                const int e =
+                    abs(c[0] - x) > abs(c[2] - (y + 64)) ? abs(c[0] - x) : abs(c[2] - (y + 64));
+                worst = e > worst ? e : worst;
+                n++;
+            }
+        }
+        if (on) {
+            CHECK(p && n > 4000 && worst <= 1,
+                  "ripple STs on: half way %d strip pixels sample the block where they stand "
+                  "(worst %d levels)",
+                  n, worst);
+        } else {
+            CHECK(p && n > 4000 && worst > 2,
+                  "ripple STs off: half way the strip samples the tick's place (%d pixels, worst "
+                  "%d levels)",
+                  n, worst);
+        }
+    }
+    rd_destroy_texture(grad);
+    rd_destroy_vu_mesh(mesh);
+}
+
 /* ------------------------------------- shadow volumes and primitives of
  * one tick through the blended camera (rd_interp.c reprojShadow,
  * reprojPrim) */
@@ -5661,6 +5833,7 @@ static void runCpu(void)
     testPairedOrKept();
     testReproject();
     testReprojectOneTick();
+    testRippleSt();
     testStillSeams();
     testStillSeamsAlpha0();
     testSeamsSizeTail();
@@ -5884,6 +6057,7 @@ int main(void)
         testMiragePresents();
         testPresent();
         testEyeTicks();
+        testRippleStPixels();
         CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
         const uint32_t verr = rhi_vk_validation_error_count();
         CHECK(verr == 0, "%u validation errors", verr);
