@@ -189,15 +189,25 @@ static int file_count(const char *needle)
    that reads them), the Japanese (config/symbol_addrs.jpn.data.txt) and
    the Korean (config/symbol_addrs.kor.data.txt: gflags 0x002A3040, stage_no
    0x00633610, gFlagGameClear 0x006342D8, current_layout_id 0x00634ECC,
-   IosMcPreviewInfo 0x00299940), in config/regions.txt's order */
+   IosMcPreviewInfo 0x00299940), the North American, August 2001 and June
+   2001 discs' (their symbol_addrs.<slug>.data.txt: the story flags are gFlag
+   there, 46/46/44 bytes, and there is no gFlagGameClear) and the Asian
+   disc's, in config/regions.txt's order.  gameClear 0: the disc has no such
+   word; rows: how many rows the disc's peek table has; flagBytes: the story
+   flags' served size; previewBytes: IosMcPreviewInfo's */
 typedef struct PeekWant {
     unsigned int stageNo, gflags, gameClear, layout, preview;
+    int rows, flagBytes, previewBytes;
 } PeekWant;
 
 static const PeekWant kPeekWant[] = {
-    {0x00639D10u, 0x002A50C0u, 0x0063AA00u, 0x0063B60Cu, 0x0029B9D0u}, /* pal */
-    {0x00633810u, 0x002A2FC0u, 0x006344C8u, 0x006350BCu, 0x002998C0u}, /* jpn */
-    {0x00633610u, 0x002A3040u, 0x006342D8u, 0x00634ECCu, 0x00299940u}, /* kor */
+    {0x00639D10u, 0x002A50C0u, 0x0063AA00u, 0x0063B60Cu, 0x0029B9D0u, 14, 50, 24}, /* pal */
+    {0x00633810u, 0x002A2FC0u, 0x006344C8u, 0x006350BCu, 0x002998C0u, 13, 50, 24}, /* jpn */
+    {0x00633610u, 0x002A3040u, 0x006342D8u, 0x00634ECCu, 0x00299940u, 13, 50, 24}, /* kor */
+    {0x00631990u, 0x0028A520u, 0, 0x0063314Cu, 0x00280F78u, 12, 46, 16},           /* ntsc */
+    {0x0062BB10u, 0x00286890u, 0, 0x0062D28Cu, 0x0027D2F8u, 12, 46, 16},           /* aug6 */
+    {0x00679410u, 0x00272D30u, 0, 0x0067AB3Cu, 0x002695B8u, 12, 44, 16},           /* jun26 */
+    {0x00633890u, 0x002A3040u, 0x00634548u, 0x0063513Cu, 0x00299940u, 13, 50, 24}, /* cn */
 };
 _Static_assert(sizeof(kPeekWant) / sizeof(kPeekWant[0]) == ICO_REGION_COUNT,
                "a row of retail addresses for each row of config/regions.txt");
@@ -238,14 +248,14 @@ static void test_view(void)
     g.system_status[0] = 1;
 
     /* the retail addresses, the selected disc's (gamestate.c s_peek_pal,
-       s_peek_jpn, s_peek_kor: the Japanese and Korean discs have no
-       NonLinearCameraMove row), each checked against kPeekWant's literals */
+       s_peek_jpn, ...: only the European disc has a NonLinearCameraMove
+       row), each checked against kPeekWant's literals */
     {
         const int pal = ico_region == ICO_REGION_PAL;
         const PeekWant *w = &kPeekWant[ico_region];
         const unsigned int stageNo = w->stageNo;
         const unsigned int gflags = w->gflags;
-        const unsigned int gameClear = w->gameClear;
+        const unsigned int gameClear = w->gameClear; /* 0: none on this disc */
         const unsigned int layout = w->layout;
         const unsigned int preview = w->preview;
 
@@ -258,21 +268,26 @@ static void test_view(void)
         CHECK(ico_gs_peek(stageNo + 3, 1, &v) == 0 && v == 0x11u);
         CHECK(ico_gs_peek(stageNo + 3, 2, &v) == -1); /* runs past stage_no */
         CHECK(ico_gs_peek(gflags + 1, 1, &v) == 0 && v == 0xA5u);
-        CHECK(ico_gs_peek(gflags + 49, 1, &v) == 0);
-        CHECK(ico_gs_peek(gflags + 50, 1, &v) == -1);
-        CHECK(ico_gs_peek(gameClear, 4, &v) == 0 && v == 1u); /* gFlagGameClear */
+        CHECK(ico_gs_peek(gflags + w->flagBytes - 1, 1, &v) == 0);
+        CHECK(ico_gs_peek(gflags + w->flagBytes, 1, &v) == -1);
+        if (gameClear != 0) {
+            CHECK(ico_gs_peek(gameClear, 4, &v) == 0 && v == 1u); /* gFlagGameClear */
+        }
         CHECK(ico_gs_peek(layout, 4, &v) == 0 &&
               v == (unsigned)R->layout_save_complete); /* current_layout_id */
         CHECK(ico_gs_peek(preview + 8, 4, &v) == 0 && v == 50u * 3725u);
+        CHECK(ico_gs_peek(preview + w->previewBytes - 4, 4, &v) == 0);
+        CHECK(ico_gs_peek(preview + w->previewBytes, 4, &v) == -1);
         if (pal) {
             CHECK(ico_gs_peek(0x00639EA4u, 4, &v) == -1); /* boyGObj: a pointer, not served */
         }
         CHECK(ico_gs_peek(0x01000000u, 4, &v) == -1); /* heap */
         CHECK(ico_gs_peek(stageNo, 3, &v) == -1);
         n = ico_gs_peek_table(&table);
-        /* PAL's 14 rows; the Japanese (and the Korean, its layout) 13: no
-           NonLinearCameraMove row */
-        CHECK(n == (pal ? 14 : 13) && table[0].addr == gflags && table[0].size == 50);
+        /* PAL's 14 rows; the Japanese, Korean and Asian discs 13 (no
+           NonLinearCameraMove row); the North American, August 2001 and June
+           2001 discs 12 (neither it nor gFlagGameClear) */
+        CHECK(n == w->rows && table[0].addr == gflags && table[0].size == (unsigned)w->flagBytes);
     }
 }
 
