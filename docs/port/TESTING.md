@@ -227,7 +227,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   viewer model stepped through `ExecFrameDependSequence` in the game (each stage animation skipped)
   and in the viewer (no stage animation or particle, the game's sounds and vibration); synthetic
   tables (`model_viewer_effects`) and the PAL base ELF's, where BOY SWIM reaches the guard
-  (`model_viewer_effects_elf`, 77 without the ELF).
+  (`model_viewer_effects_elf`, 77 without the ELF). `testPlayable`: every region's motion count
+  inside `MV_MOTION_TABLE_SIZE`, motion 674 left out until its partner 669 is loaded, and over
+  every viewer model a node-blend motion offered exactly when its partners are loaded, with the
+  dynamic pool empty and again with every motion loaded (some offered then).
 - `model_viewer_headless.cmake` with `model_viewer_pad.txt`: the headless game driven from boot to
   the first model, an animation and back (`model_viewer_headless`).
 - `options_test.c`: the gameplay options' defaults and setters (Hold type: `hold` by default, `toggle`

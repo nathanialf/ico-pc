@@ -420,7 +420,9 @@ the stage's own (`area` 0); a node-blend motion needs every partner of its `blen
 (from `blendKind` to the 1147 end marker, inside the loaded table) to be a plain motion that passes
 the same test, because `getNodeBlendedFloatingMotion` reads each partner's data and the game only
 requests these motions where it loaded them (issue 136: motion 674 on Yorda's stage, partner 669
-not loaded). `play()` refuses an id that fails it and logs once per id; the `stage ... loaded`
+not loaded). `play()` refuses an id that fails it and logs once per id (`model_viewer: motion
+"<name>" is not loaded here (partner "<name>")`, or `(its own data)` for a plain motion); the
+per-motion arrays are sized by `MV_MOTION_TABLE_SIZE` (`motionTable`'s 1150); the `stage ... loaded`
 line carries the count left out. The development build's own filter
 (`ico2/sugipon/src/motionViewer.c`) tests only the plain case.
 

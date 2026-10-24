@@ -106,7 +106,7 @@ extern SERandEntry randomSEKind[];
 static int failures;
 
 /* motionFileManager.c's table of the loaded motions' data (not compiled in) */
-int *motionTable[1150];
+int *motionTable[MV_MOTION_TABLE_SIZE];
 
 #define CHECK(c, ...)                                                                              \
     do {                                                                                           \
@@ -596,6 +596,11 @@ static void testPlayable(void)
     static int dummy;
     int missing = -2;
 
+    for (int r = 0; r < ICO_REGION_COUNT; r++) {
+        CHECK(ico_region_info[r]->mv_motion_kinds <= MV_MOTION_TABLE_SIZE,
+              "region %d: %d motions, motionTable holds %d", r, ico_region_info[r]->mv_motion_kinds,
+              MV_MOTION_TABLE_SIZE);
+    }
     CHECK(ico_tables_count(ICO_TID_blendMotionKind) > 0, "playable: the blend table is empty");
     for (int i = 0; i < MV_MOTION_KINDS; i++) {
         motionTable[i] = motionKind[i].area != 4 ? &dummy : NULL;
@@ -622,10 +627,9 @@ static void testPlayable(void)
             int ok = ico_mv_motion_playable(id, NULL);
             if (motionKind[id].blendKind != 320) {
                 blended++;
-                CHECK(!ok || partnersLoaded(id),
-                      "playable: %d \"%s\" offered, a partner is not "
-                      "loaded",
-                      id, motionKind[id].name);
+                CHECK(ok == partnersLoaded(id), "playable: %d \"%s\" %s, its partners %s loaded",
+                      id, motionKind[id].name, ok ? "offered" : "left out",
+                      ok ? "are not all" : "are all");
             } else {
                 CHECK(ok == (motionKind[id].area == 0 || motionTable[id] != NULL),
                       "playable: plain %d disagrees with the loaded rule", id);
@@ -637,6 +641,26 @@ static void testPlayable(void)
            "empty\n",
            offered, left, blended);
     CHECK(left > 0 && blended > 0, "playable: nothing was left out");
+
+    /* every motion's data loaded: a node-blend motion whose list is well
+       formed is offered, so a rule that left every blend out fails here */
+    for (int i = 0; i < MV_MOTION_KINDS; i++) {
+        motionTable[i] = &dummy;
+    }
+    int blendOffered = 0;
+    for (int k = 0; k < mv_modelCount; k++) {
+        for (int id = mv_models[k].motFirst; id < mv_models[k].motLast; id++) {
+            if (motionKind[id].blendKind == 320) {
+                continue;
+            }
+            int ok = ico_mv_motion_playable(id, NULL);
+            CHECK(ok == partnersLoaded(id), "playable, all loaded: %d \"%s\" %s", id,
+                  motionKind[id].name, ok ? "offered against the rule" : "left out");
+            blendOffered += ok;
+        }
+    }
+    printf("playable: %d node-blend motions offered with every motion loaded\n", blendOffered);
+    CHECK(blendOffered > 0, "playable: no node-blend motion offered with every motion loaded");
     for (int i = 0; i < MV_MOTION_KINDS; i++) {
         motionTable[i] = NULL;
     }

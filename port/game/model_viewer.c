@@ -852,11 +852,16 @@ static void play(void)
     int missing = -1;
     if (!ico_mv_motion_playable(id, &missing)) {
         /* the list leaves these out; a motion the stage cannot hold is not started */
-        static unsigned char logged[1150];
+        static unsigned char logged[MV_MOTION_TABLE_SIZE];
         if (id >= 0 && id < (int)sizeof logged && !logged[id]) {
             logged[id] = 1;
-            fprintf(stderr, "model_viewer: motion \"%s\" is not loaded here (partner \"%s\")\n",
-                    motionName(id), motionName(missing));
+            if (missing >= 0) {
+                fprintf(stderr, "model_viewer: motion \"%s\" is not loaded here (partner \"%s\")\n",
+                        motionName(id), motionName(missing));
+            } else {
+                fprintf(stderr, "model_viewer: motion \"%s\" is not loaded here (its own data)\n",
+                        motionName(id));
+            }
         }
         return;
     }
