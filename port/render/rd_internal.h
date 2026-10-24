@@ -92,7 +92,8 @@ typedef enum RdCmdType {
     /* actions */
     RDC_CLEAR,       /* u[0] target, b[0..3] rgba, b[4] clearDepth, u[1] GS z */
     RDC_SCREEN,      /* b[0] RdPrim, b[1] RdSpace, b[2] uvFixed, b[3] RD_SCREEN_TEXT_QUADS,
-                      * b[4] RD_SCREEN_FRAME_CAMERA; u[0] payload offset of RdScreenVtx[u[1]] */
+                      * b[4] RD_SCREEN_FRAME_CAMERA, b[5] RD_SCREEN_ST_SHIFT with f[0], f[1];
+                      * u[0] payload offset of RdScreenVtx[u[1]] */
     RDC_EXACT_BLEND, /* u[0] src target, u[1] dst target: the GS integer blend of the state
                       * block's ALPHA/FIX/COLCLAMP through blend_int (RdPostParams.exactInt) */
     RDC_COPY,        /* u[0] src target, u[1] dst target, u[2] payload offset of RdCopyRec */
@@ -153,6 +154,13 @@ enum { RD_OTEXT_ITEM = 0, RD_OTEXT_OP = 1 };
  * dumps recorded before the mark (they keep the screen-space blend). */
 #define RD_SCREEN_FRAME_CAMERA 1
 #define RD_SHADOW_FRAME_CAMERA 1
+
+/* RDC_SCREEN's b[5] (with b[4] RD_SCREEN_FRAME_CAMERA): the draw's STQs
+ * follow the screen (rd.h rd_frame_projected_st), S / Q by f[0] and T / Q by
+ * f[1] per 12.4 unit of X and Y, so rd_interp.c moves each re-projected
+ * vertex's S / Q and T / Q by its own move times them.  0 in every other
+ * draw and in the dumps from before it (their STs stay the tick's) */
+#define RD_SCREEN_ST_SHIFT 1
 
 /* A VU draw's u[3] in a frame rd_interp.c blended between two ticks: its
  * block is the frame camera's (rd_interp.c CAM_FULL), placed
@@ -2048,8 +2056,11 @@ typedef struct RdInterpStats {
     uint32_t prevKept;
     uint32_t prevHeld;
     /* draws projected on the CPU by their tick's camera (RD_SCREEN_FRAME_CAMERA,
-     * RD_SHADOW_FRAME_CAMERA) taken through the world onto the blended camera */
+     * RD_SHADOW_FRAME_CAMERA) taken through the world onto the blended camera;
+     * of them, the screen draws whose S / Q and T / Q moved with their
+     * vertices (RD_SCREEN_ST_SHIFT: the ripples) */
     uint32_t reprojected;
+    uint32_t stShifted;
     /* The still draws (rd_interp.c stillDraw): blended parts of the world
      * whose object did not move between the ticks while the camera did,
      * each drawn from the tick's block through the blended camera
@@ -3294,7 +3305,10 @@ bool rd__dump_peek(const char *path, RdDumpInfo *info);
  *   rd__camera_scopes   the number of scopes recorded in f
  *   rd__frame_projected rd_frame_projected is on and no rd_push_camera scope
  *                      is open: the draw recorded now gets
- *                      RD_SCREEN_FRAME_CAMERA / RD_SHADOW_FRAME_CAMERA */
+ *                      RD_SCREEN_FRAME_CAMERA / RD_SHADOW_FRAME_CAMERA
+ *   rd__frame_projected_st rd_frame_projected_st's pair into st; true when
+ *                      it is not (0, 0): a frame-projected screen draw gets
+ *                      RD_SCREEN_ST_SHIFT */
 typedef struct RdCameraScope {
     int32_t list;
     uint32_t start, end; /* command indices [start, end) of the list; end is
@@ -3321,6 +3335,7 @@ void rd__grid_screen_st_take(uint8_t *kind, float *sx, float *sy);
 const RdCamera *rd__camera_at(const RdFrame *f, int list, uint32_t index);
 uint32_t rd__camera_scopes(const RdFrame *f, const RdCameraScope **scopes);
 bool rd__frame_projected(void);
+bool rd__frame_projected_st(float st[2]);
 /* the pipelines of these files' screen-prim states that the screen families
  * leave out (rd__enumerate_reachable adds them) */
 uint32_t rd__enumerate_reachable_water(RdPipeKeyInt *out, uint32_t max, uint32_t n);
