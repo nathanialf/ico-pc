@@ -410,6 +410,9 @@ typedef enum UiSettingsPage {
        shows only while the build has more than one renderer
        (ui_settings_set_backend_names) */
     UI_PAGE_GRAPHICS,
+    /* Extras > Game variants (port/game/variants.h): the eight [variants]
+       rows, the Debug menu (Developer mode only), Back */
+    UI_PAGE_VARIANTS,
     UI_PAGE_COUNT
 } UiSettingsPage;
 
@@ -497,6 +500,16 @@ typedef enum UiSettingsOpt {
     UI_OPT_CHAR_ICO_SHORTS,
     UI_OPT_CHAR_YORDA_SKIN,
     UI_OPT_CHAR_YORDA_DRESS,
+    /* Extras > Game variants, one row per IcoVariantId in its order
+       (UI_OPT_VAR_TOUGHNESS + id): [variants] keys, port/game/variants.h */
+    UI_OPT_VAR_TOUGHNESS,
+    UI_OPT_VAR_ONE_HIT,
+    UI_OPT_VAR_NEVER_DODGE,
+    UI_OPT_VAR_AGGRESSION,
+    UI_OPT_VAR_NO_HINTS,
+    UI_OPT_VAR_BARRIER,
+    UI_OPT_VAR_NO_LOOK,
+    UI_OPT_VAR_IGNORE_CAMS,
     UI_OPT_DEVELOPER,
     /* actions */
     UI_OPT_BACK,
@@ -549,6 +562,9 @@ typedef enum UiSettingsOpt {
     /* Main's row "Save a picture for a bug report", above Developer mode:
        the host's frame dump, 3 s later (ui_settings_set_frame_dump_handler) */
     UI_OPT_REPORT_PICTURE,
+    /* Game variants' Debug menu: a press row, shown while Developer mode
+       is on (ico_variants_debug_menu_pressed) */
+    UI_OPT_VAR_DEBUG_MENU,
 #if ICO_RC_TOOLS
     /* Main's row "Share a bug report" below it, rc builds on Android alone
        (ui_settings_set_share_report_handler) */
