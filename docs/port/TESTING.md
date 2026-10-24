@@ -510,8 +510,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   2x run on the depth copy, the buffer path, D24S8 (no depth readback: colours only) and the
   two-pass blend (`rd_crack_depth_copy`, `rd_crack_buffer`, `rd_crack_d24s8`, `rd_crack_nodual`).
   Under the MoltenVK report (`ICO_VK_FAKE_LIMITS=moltenvk`, a tile-based profile) `rd_crack_tiler`
-  finds the filler off by default and nothing drawn, and `rd_crack_tiler_on`
-  (`ICO_RD_CRACK_FILL=1`) the fill as on the desktop with the `(on by [dev] ...)` mark.
+  and `rd_crack_tiler_on` (`ICO_RD_CRACK_FILL=1`) find the filler on by default, as on every
+  class (the old `off on this tile-based GPU` line denied). `rd_crack_tiler_fold` (`rd_crack_test
+  2 fold`, 77 without local read) checks the fold on the fog's local read: one fill, drawn inside
+  the scene pass the fog keeps (`RdCrackCounts.folded`), the fog by the local read in the same
+  replay (`fogLocalDraws`), one render pass more than without the filler besides the count's (not
+  two), and SCENE's colour and depth byte-identical to a replay on the depth copy path (the fill in
+  its own pass); `rd_crack_tiler_fold_mali` the same under `ICO_VK_FAKE_LIMITS=mali` with
+  `ICO_RD_FOG_PATH=local`. Both match the state line's `(drawn inside the scene pass with the
+  local fog)`.
   Each run's `rd: crack fill:` state line is matched (`-DEXPECT`, `-DEXPECT2`; `-DDENY` must not
   match); `rd_replay_tool_crack` runs the tool on `rd_pixel`'s dump with `--enhanced --resolution
   2x --stats --no-crack-fill` and matches `crack fill: off (the replay tool's --no-crack-fill)`
