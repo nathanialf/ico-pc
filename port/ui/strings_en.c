@@ -576,6 +576,17 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED] = "Could not add to Steam",
     [UI_STR_STEAM_FAILED_BODY] =
         "The shortcut list could not be changed.\nThe README shows how to add it by hand.",
+    [UI_STR_EXTRAS_EXPORT_TEXTURES] = "Export textures",
+    [UI_STR_EXPORT_TEXTURES_STOP] = "Stop exporting",
+    [UI_STR_EXPORT_TEXTURES_NOTE] =
+        "For pack makers: saves every picture on your disc under its PCSX2 name, in the game's textures folder.",
+    [UI_STR_EXPORT_TEXTURES_PROGRESS] = "Exporting textures: %d of %d",
+    [UI_STR_EXPORT_TEXTURES_DONE] = "Textures exported",
+    [UI_STR_EXPORT_TEXTURES_DONE_BODY] = "Saved %d pictures to\n%s",
+    [UI_STR_EXPORT_TEXTURES_STOPPED] = "Export stopped",
+    [UI_STR_EXPORT_TEXTURES_STOPPED_BODY] = "Stopped after %d pictures",
+    [UI_STR_EXPORT_TEXTURES_FAILED] = "Could not export textures",
+    [UI_STR_EXPORT_TEXTURES_FAILED_BODY] = "The folder %s\ncould not be written",
     [UI_STR_LANG_KO] = "한국어",
     /* Controls > Touch screen and the touch layout editor */
     [UI_STR_SECTION_TOUCH] = "Touch screen",

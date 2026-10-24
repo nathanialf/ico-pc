@@ -64,6 +64,9 @@ void ui_popup_reset(void);
 int ui_popup_panel(float rect[4]);
 /* The current popup's title (tests); "" when none is showing. */
 const char *ui_popup_title(void);
+/* Its body as shown (the Japanese and Korean line breaks in), "" when none
+   is showing (tests). */
+const char *ui_popup_body(void);
 
 #ifdef __cplusplus
 }

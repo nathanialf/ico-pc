@@ -840,9 +840,12 @@ void ui_settings_set_graphics_host(const UiGraphicsHost *host)
     memset(&s_gfx, 0, sizeof(s_gfx));
 }
 
+static void texExportEnd(void);
+
 void ui_settings_vsync(void)
 {
     gfxPoll();
+    texExportEnd();
     if (s_gfx.state == GFX_COUNTDOWN && --s_gfx.left <= 0) {
         gfxRevert(UI_GFX_WHY_TIMEOUT);
     }
@@ -1054,6 +1057,21 @@ void ui_settings_set_steam_handler(int (*fn)(void))
     s_steamFn = fn;
 }
 
+/* Extras > Export textures: the host's job (settings.h); s_texExportPending
+   from a start the row made until its end popup (ui_settings_vsync) */
+static UiTextureExportHost s_texExportHost;
+static int s_texExportHostSet, s_texExportPending;
+
+void ui_settings_set_texture_export_host(const UiTextureExportHost *host)
+{
+    s_texExportHostSet =
+        host != NULL && host->begin != NULL && host->poll != NULL && host->cancel != NULL;
+    if (s_texExportHostSet) {
+        s_texExportHost = *host;
+    }
+    s_texExportPending = 0;
+}
+
 /* Main > Save a picture for a bug report: the host's frame dump, armed */
 static void (*s_frameDumpFn)(void);
 
@@ -1214,6 +1232,141 @@ static const char *intText(UiStrId id, int v, char *buf, unsigned size)
         snprintf(buf, size, "%d %s", v, t);
     }
     return buf;
+}
+
+/* whether a table string's conversions are exactly want's, in order ('d'
+   a number, 's' a text; "%%" prints and counts for none) */
+static int fmtMatches(const char *t, const char *want)
+{
+    for (; *t != '\0'; t++) {
+        if (t[0] != '%') {
+            continue;
+        }
+        if (t[1] == '%') {
+            t++;
+            continue;
+        }
+        if (*want == '\0' || t[1] != *want) {
+            return 0;
+        }
+        want++;
+        t++;
+    }
+    return *want == '\0';
+}
+
+/* a table string with the conversions want names ('d' the next of v[], 's'
+   str), copied out without handing the table to printf; a translation
+   whose conversions are not want's falls back to the English one (and an
+   English one that is not either is copied as written) */
+static const char *fmtText(UiStrId id, const char *want, const int *v, const char *str, char *buf,
+                           unsigned size)
+{
+    const char *t = ui_str(id);
+    unsigned n = 0;
+    int vi = 0, fill = 1;
+    if (!fmtMatches(t, want)) {
+        t = ui_str_in(UI_LANG_EN, id);
+        fill = fmtMatches(t, want);
+    }
+    for (; *t != '\0' && n + 1 < size; t++) {
+        char part[96];
+        if (fill && t[0] == '%' && (t[1] == 'd' || t[1] == 's')) {
+            if (t[1] == 'd') {
+                snprintf(part, sizeof(part), "%d", v[vi++]);
+            } else {
+                snprintf(part, sizeof(part), "%s", str != NULL ? str : "");
+            }
+            for (const char *p = part; *p != '\0' && n + 1 < size; p++) {
+                buf[n++] = *p;
+            }
+            t++;
+            continue;
+        }
+        buf[n++] = *t;
+        if (fill && t[0] == '%' && t[1] == '%') {
+            t++;
+        }
+    }
+    buf[n] = '\0';
+    return buf;
+}
+
+/* Extras > Export textures: the job's state now (IDLE without a host) */
+static int texExportPoll(UiTextureExportStatus *st)
+{
+    memset(st, 0, sizeof(*st));
+    if (!s_texExportHostSet) {
+        return UI_TEXEXPORT_IDLE;
+    }
+    st->state = s_texExportHost.poll(st);
+    st->dir[sizeof(st->dir) - 1] = '\0';
+    return st->state;
+}
+
+/* the end popup for an export that ended in state */
+static void texExportPopup(int state, const UiTextureExportStatus *st)
+{
+    char body[256];
+    const int v[1] = {st->written}; /* the pictures saved */
+    if (state == UI_TEXEXPORT_DONE) {
+        ui_popup_push(
+            ui_str(UI_STR_EXPORT_TEXTURES_DONE),
+            fmtText(UI_STR_EXPORT_TEXTURES_DONE_BODY, "ds", v, st->dir, body, sizeof(body)));
+    } else if (state == UI_TEXEXPORT_STOPPED) {
+        ui_popup_push(
+            ui_str(UI_STR_EXPORT_TEXTURES_STOPPED),
+            fmtText(UI_STR_EXPORT_TEXTURES_STOPPED_BODY, "d", v, NULL, body, sizeof(body)));
+    } else {
+        ui_popup_push(
+            ui_str(UI_STR_EXPORT_TEXTURES_FAILED),
+            fmtText(UI_STR_EXPORT_TEXTURES_FAILED_BODY, "s", v, st->dir, body, sizeof(body)));
+    }
+}
+
+/* an export the row started that has ended: its popup, on whatever screen
+   is up (ui_settings_vsync, and before the row starts another) */
+static void texExportEnd(void)
+{
+    UiTextureExportStatus st;
+    int state;
+    if (!s_texExportPending) {
+        return;
+    }
+    state = texExportPoll(&st);
+    if (state != UI_TEXEXPORT_DONE && state != UI_TEXEXPORT_STOPPED &&
+        state != UI_TEXEXPORT_FAILED) {
+        return;
+    }
+    s_texExportPending = 0;
+    fprintf(stderr, "extras: export textures ended: state %d, %d of %d, %d written\n", state,
+            st.done, st.total, st.written);
+    ui_settings_apply_language();
+    texExportPopup(state, &st);
+}
+
+/* Cross on the row: Stop exporting while one runs, else a new export (the
+   failed popup at once when it cannot start) */
+static void texExportPress(void)
+{
+    UiTextureExportStatus st;
+    if (!s_texExportHostSet) {
+        return;
+    }
+    texExportEnd();
+    if (texExportPoll(&st) == UI_TEXEXPORT_RUNNING) {
+        s_texExportHost.cancel();
+        fprintf(stderr, "extras: export textures: stop asked at %d of %d\n", st.done, st.total);
+        return;
+    }
+    if (s_texExportHost.begin() == 0) {
+        s_texExportPending = 1;
+        fprintf(stderr, "extras: export textures: started\n");
+        return;
+    }
+    fprintf(stderr, "extras: export textures: could not start\n");
+    texExportPoll(&st); /* the folder, for the popup */
+    texExportPopup(UI_TEXEXPORT_FAILED, &st);
 }
 
 /* the Touch opacity row's steps, percent */
@@ -1955,6 +2108,9 @@ static int optShown(int opt, int link)
     }
     if (opt == UI_OPT_EXTRAS_STEAM) {
         return onTitle() && s_steamFn != NULL;
+    }
+    if (opt == UI_OPT_EXTRAS_EXPORT_TEXTURES) {
+        return onTitle() && s_texExportHostSet;
     }
     if (opt == UI_OPT_CHAR_SWITCH) {
         return ui_settings_characters_in_viewer();
@@ -3152,6 +3308,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
             }
         }
         addNote(pg, UI_OPT_EXTRAS_CREDITS, UI_STR_EXTRAS_LOCKED_NOTE);
+        addNote(pg, UI_OPT_EXTRAS_EXPORT_TEXTURES, UI_STR_EXPORT_TEXTURES_NOTE);
         addNote(pg, UI_OPT_ACH_POPUPS, UI_STR_ACH_POPUPS_ALSO_NOTE);
         break;
     case UI_PAGE_CHARACTERS: {
@@ -3619,17 +3776,13 @@ static void build(void)
     /* Characters after Credits (from both entries; the other three
        from the title only) */
     static const int extrasOpts[] = {
-        UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS, UI_OPT_EXTRAS_CREDITS,
-        UI_OPT_LINK,         UI_OPT_EXTRAS_STEAM,  UI_OPT_ACH_POPUPS,
-        UI_OPT_BACK};
-    static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC,
-                                     UI_STR_EXTRAS_MODELS,
-                                     UI_STR_EXTRAS_CREDITS,
-                                     UI_STR_SECTION_CHARACTERS,
-                                     UI_STR_EXTRAS_STEAM,
-                                     UI_STR_OPT_ACH_POPUPS,
-                                     UI_STR_BACK};
-    static const int extrasLinks[] = {-1, -1, -1, UI_PAGE_CHARACTERS, -1, -1, -1};
+        UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,          UI_OPT_EXTRAS_CREDITS, UI_OPT_LINK,
+        UI_OPT_EXTRAS_STEAM, UI_OPT_EXTRAS_EXPORT_TEXTURES, UI_OPT_ACH_POPUPS,     UI_OPT_BACK};
+    static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC,   UI_STR_EXTRAS_MODELS,
+                                     UI_STR_EXTRAS_CREDITS, UI_STR_SECTION_CHARACTERS,
+                                     UI_STR_EXTRAS_STEAM,   UI_STR_EXTRAS_EXPORT_TEXTURES,
+                                     UI_STR_OPT_ACH_POPUPS, UI_STR_BACK};
+    static const int extrasLinks[] = {-1, -1, -1, UI_PAGE_CHARACTERS, -1, -1, -1, -1};
     /* the characters' colours, one row per IcoAppPart; Switch shows
        only inside the model viewer */
     static const int charOpts[] = {UI_OPT_CHAR_ICO_SKIN,
@@ -5120,6 +5273,21 @@ static void gfxNote(int row)
     }
 }
 
+/* Export textures' note while it runs: "Exporting textures: done of total";
+   the note cache is cleared as gfxNote's */
+static void texExportNote(int row, const UiTextureExportStatus *st)
+{
+    char text[160], buf[256];
+    const int v[2] = {st->done, st->total};
+    wrapText(fmtText(UI_STR_EXPORT_TEXTURES_PROGRESS, "dd", v, NULL, text, sizeof(text)), NOTE_SIZE,
+             580.0f, buf, sizeof(buf));
+    lt_ext_set_text(row, buf);
+    const int i = row - LT_GAME_PROPERTY_COUNT;
+    if (i >= 0 && i < LT_EXT_MAX_PROPERTIES) {
+        s_noteStr[i] = -1;
+    }
+}
+
 /* the countdown began: the cursor on Revert, so a second press of Cross
    meant for Apply goes back */
 static void gfxRefresh(Page *pg)
@@ -5201,6 +5369,17 @@ static void refreshPage(Page *pg, int id, int cur)
         if (r->value >= 0) {
             lt_ext_set_text(r->value, ui_settings_value_text((UiSettingsOpt)r->opt));
         }
+        if (r->opt == UI_OPT_EXTRAS_EXPORT_TEXTURES) {
+            /* Stop exporting while one runs, its progress as the note */
+            UiTextureExportStatus st;
+            const int running = texExportPoll(&st) == UI_TEXEXPORT_RUNNING;
+            lt_ext_set_str(r->label,
+                           running ? UI_STR_EXPORT_TEXTURES_STOP : UI_STR_EXTRAS_EXPORT_TEXTURES);
+            r->noteStr = running ? UI_STR_EXPORT_TEXTURES_PROGRESS : UI_STR_EXPORT_TEXTURES_NOTE;
+            if (running && r->note >= 0) {
+                texExportNote(r->note, &st);
+            }
+        }
         if (r->opt == UI_OPT_TOUCH_EDIT) {
             /* locked: Cross does nothing, the note says why */
             P(r->label)->right = locked ? -1 : s_pages[UI_PAGE_TOUCH_LAYOUT].layout;
@@ -5218,8 +5397,8 @@ static void refreshPage(Page *pg, int id, int cur)
         if (r->note >= 0) {
             if (r->noteStr == UI_STR_GRAPHICS_KEEP_ASK) {
                 gfxNote(r->note);
-            } else {
-                setNote(r->note, r->noteStr);
+            } else if (r->noteStr != UI_STR_EXPORT_TEXTURES_PROGRESS) {
+                setNote(r->note, r->noteStr); /* the progress was written above */
             }
             if (cur == r->label && (!lockedNote(r) || locked) && !charsNoteHidden(id, r)) {
                 lt_mask_property(r->note, 0);
@@ -5390,6 +5569,11 @@ static int settingsProc(int first, int item)
         if ((flags & PAD_OK) && r->opt == UI_OPT_EXTRAS_STEAM) {
             POSITIVE_SE();
             steamAdd();
+        }
+        if ((flags & PAD_OK) && r->opt == UI_OPT_EXTRAS_EXPORT_TEXTURES) {
+            POSITIVE_SE();
+            texExportPress();
+            refreshPage(pg, id, lay->curItem);
         }
         if ((flags & PAD_OK) && r->opt == UI_OPT_REPORT_PICTURE) {
             POSITIVE_SE();

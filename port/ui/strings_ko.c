@@ -578,6 +578,17 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED] = "Steam에 추가하지 못했습니다",
     [UI_STR_STEAM_FAILED_BODY] =
         "바로 가기 목록을 바꾸지 못했습니다.\n직접 추가하는 방법은 README에 있습니다.",
+    [UI_STR_EXTRAS_EXPORT_TEXTURES] = "텍스처 내보내기",
+    [UI_STR_EXPORT_TEXTURES_STOP] = "내보내기 중지",
+    [UI_STR_EXPORT_TEXTURES_NOTE] =
+        "팩 제작자용: 디스크의 이미지를 모두 PCSX2 이름으로 게임의 textures 폴더에 저장합니다.",
+    [UI_STR_EXPORT_TEXTURES_PROGRESS] = "텍스처 내보내는 중: %d / %d",
+    [UI_STR_EXPORT_TEXTURES_DONE] = "텍스처를 저장했습니다",
+    [UI_STR_EXPORT_TEXTURES_DONE_BODY] = "이미지 %d개를\n%s에 저장했습니다",
+    [UI_STR_EXPORT_TEXTURES_STOPPED] = "내보내기를 중지했습니다",
+    [UI_STR_EXPORT_TEXTURES_STOPPED_BODY] = "이미지 %d개를 저장한 뒤 중지했습니다",
+    [UI_STR_EXPORT_TEXTURES_FAILED] = "텍스처를 내보내지 못했습니다",
+    [UI_STR_EXPORT_TEXTURES_FAILED_BODY] = "%s 폴더에\n쓰지 못했습니다",
     [UI_STR_LANG_KO] = "한국어",
     /* Controls > Touch screen and the touch layout editor */
     [UI_STR_SECTION_TOUCH] = "터치 화면",

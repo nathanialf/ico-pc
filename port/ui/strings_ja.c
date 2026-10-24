@@ -579,6 +579,17 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED] = "Steamに追加できませんでした",
     [UI_STR_STEAM_FAILED_BODY] =
         "ショートカット一覧を変更できませんでした。\n手動で追加する方法はREADMEにあります。",
+    [UI_STR_EXTRAS_EXPORT_TEXTURES] = "テクスチャを書き出す",
+    [UI_STR_EXPORT_TEXTURES_STOP] = "書き出しを中止",
+    [UI_STR_EXPORT_TEXTURES_NOTE] =
+        "パック制作者向け：ディスクのすべての画像をPCSX2の名前で、ゲームのtexturesフォルダーに保存します。",
+    [UI_STR_EXPORT_TEXTURES_PROGRESS] = "テクスチャを書き出し中：%d / %d",
+    [UI_STR_EXPORT_TEXTURES_DONE] = "テクスチャを書き出しました",
+    [UI_STR_EXPORT_TEXTURES_DONE_BODY] = "%d個の画像を\n%sに保存しました",
+    [UI_STR_EXPORT_TEXTURES_STOPPED] = "書き出しを中止しました",
+    [UI_STR_EXPORT_TEXTURES_STOPPED_BODY] = "%d個の画像を保存して中止しました",
+    [UI_STR_EXPORT_TEXTURES_FAILED] = "テクスチャを書き出せませんでした",
+    [UI_STR_EXPORT_TEXTURES_FAILED_BODY] = "フォルダー%sに\n書き込めませんでした",
     [UI_STR_LANG_KO] = "한국어",
     /* Controls > Touch screen and the touch layout editor */
     [UI_STR_SECTION_TOUCH] = "タッチ画面",

@@ -261,6 +261,11 @@ const char *ui_popup_title(void)
     return s_count > 0 ? s_queue[s_head].title : "";
 }
 
+const char *ui_popup_body(void)
+{
+    return s_count > 0 ? s_queue[s_head].body : "";
+}
+
 int ui_popup_panel(float rect[4])
 {
     Panel pn;

@@ -579,6 +579,17 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED] = "No se pudo añadir a Steam",
     [UI_STR_STEAM_FAILED_BODY] =
         "No se pudo cambiar la lista de accesos directos.\nEl README explica cómo añadirlo a mano.",
+    [UI_STR_EXTRAS_EXPORT_TEXTURES] = "Exportar texturas",
+    [UI_STR_EXPORT_TEXTURES_STOP] = "Detener la exportación",
+    [UI_STR_EXPORT_TEXTURES_NOTE] =
+        "Para creadores de paquetes: guarda cada imagen del disco con su nombre PCSX2, en la carpeta textures del juego.",
+    [UI_STR_EXPORT_TEXTURES_PROGRESS] = "Exportando texturas: %d de %d",
+    [UI_STR_EXPORT_TEXTURES_DONE] = "Texturas exportadas",
+    [UI_STR_EXPORT_TEXTURES_DONE_BODY] = "%d imágenes guardadas en\n%s",
+    [UI_STR_EXPORT_TEXTURES_STOPPED] = "Exportación detenida",
+    [UI_STR_EXPORT_TEXTURES_STOPPED_BODY] = "Detenida tras %d imágenes",
+    [UI_STR_EXPORT_TEXTURES_FAILED] = "No se pudieron exportar las texturas",
+    [UI_STR_EXPORT_TEXTURES_FAILED_BODY] = "No se pudo escribir en la carpeta\n%s",
     [UI_STR_LANG_KO] = "한국어",
     /* Controls > Touch screen and the touch layout editor */
     [UI_STR_SECTION_TOUCH] = "Pantalla táctil",

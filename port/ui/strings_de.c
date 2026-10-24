@@ -583,6 +583,17 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED] = "Hinzufügen zu Steam fehlgeschlagen",
     [UI_STR_STEAM_FAILED_BODY] =
         "Die Verknüpfungsliste ließ sich nicht ändern.\nDie README zeigt das Hinzufügen von Hand.",
+    [UI_STR_EXTRAS_EXPORT_TEXTURES] = "Texturen exportieren",
+    [UI_STR_EXPORT_TEXTURES_STOP] = "Export anhalten",
+    [UI_STR_EXPORT_TEXTURES_NOTE] =
+        "Für Paketersteller: speichert jedes Bild der Disc unter seinem PCSX2-Namen im Ordner textures des Spiels.",
+    [UI_STR_EXPORT_TEXTURES_PROGRESS] = "Texturen werden exportiert: %d von %d",
+    [UI_STR_EXPORT_TEXTURES_DONE] = "Texturen exportiert",
+    [UI_STR_EXPORT_TEXTURES_DONE_BODY] = "%d Bilder gespeichert in\n%s",
+    [UI_STR_EXPORT_TEXTURES_STOPPED] = "Export angehalten",
+    [UI_STR_EXPORT_TEXTURES_STOPPED_BODY] = "Angehalten nach %d Bildern",
+    [UI_STR_EXPORT_TEXTURES_FAILED] = "Export der Texturen fehlgeschlagen",
+    [UI_STR_EXPORT_TEXTURES_FAILED_BODY] = "Der Ordner %s\nkonnte nicht beschrieben werden",
     [UI_STR_LANG_KO] = "한국어",
     /* Controls > Touch screen and the touch layout editor */
     [UI_STR_SECTION_TOUCH] = "Touchscreen",

@@ -277,6 +277,38 @@ void ui_settings_vsync(void);
 #define UI_STEAM_NO_USER 4   /* no Steam account to add it to */
 #define UI_STEAM_FAILED 5    /* the shortcut list could not be changed */
 void ui_settings_set_steam_handler(int (*fn)(void));
+/* Settings > Extras > Export textures (the title only): every picture on the
+   disc saved under its PCSX2 name into the dumps folder, a job the host runs
+   in the background (window_host.c over port/render/texpack_export.h; the
+   UI knows nothing of it).  begin() starts it: 0 started, -1 not (the menu
+   shows the failed popup at once); poll() fills *out and returns its state,
+   called by the row every frame and by ui_settings_vsync while an export the
+   menu started has not ended, so its end popup comes on any screen;
+   cancel() asks a running one to stop.  dir is the folder as the player
+   reads it ("textures/SCES-50760/dumps"), for the popups.  NULL (or never
+   called) hides the row (the headless build, tests); every pointer must be
+   set; the struct is copied. */
+#define UI_TEXEXPORT_IDLE 0    /* none since the start */
+#define UI_TEXEXPORT_RUNNING 1 /* walking the disc */
+#define UI_TEXEXPORT_DONE 2    /* went through every picture */
+#define UI_TEXEXPORT_STOPPED 3 /* cancel() stopped it */
+#define UI_TEXEXPORT_FAILED 4  /* the disc could not be read or nothing could be written */
+
+typedef struct UiTextureExportStatus {
+    int state;   /* UI_TEXEXPORT_* */
+    int done;    /* pictures handled */
+    int total;   /* pictures expected (0 until the disc's index is read) */
+    int written; /* files written */
+    char dir[96];
+} UiTextureExportStatus;
+
+typedef struct UiTextureExportHost {
+    int (*begin)(void);
+    int (*poll)(UiTextureExportStatus *out);
+    void (*cancel)(void);
+} UiTextureExportHost;
+
+void ui_settings_set_texture_export_host(const UiTextureExportHost *host);
 /* Main > Save a picture for a bug report (always shown, directly above
    Developer mode: a player's row, no developer mode needed): fn arms the host's frame dump (window_host.c frame_dump: the
    picture, the frame's rd dump and the log in a zip in the dumps folder,
@@ -504,6 +536,9 @@ typedef enum UiSettingsOpt {
     /* Extras > Add to Steam (desktop; shown from the title while a host
        handler is set) */
     UI_OPT_EXTRAS_STEAM,
+    /* Extras > Export textures (shown from the title while a host is set,
+       ui_settings_set_texture_export_host); Stop exporting while it runs */
+    UI_OPT_EXTRAS_EXPORT_TEXTURES,
     /* Controls > Touch screen's actions: Edit layout (opens
        UI_PAGE_TOUCH_LAYOUT; locked while Touch controls is Off or without
        an editor host), Reset layout (the posture the phone is in now) and
