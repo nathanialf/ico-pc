@@ -373,8 +373,8 @@ So that you never lock yourself out of the menus or the game:
   the same way, Hidden and then 10 %, where you left it.
 - If you switch off the D-pad, Cross or Circle, you can tap the menus
   directly instead: the Back gesture or button opens the pause menu during
-  play, and a tap on a line picks it. So you can always get to **Options >
-  Controls > Touch screen > Reset layout**.
+  play, and a tap on a line picks it. So **Options > Controls > Touch
+  screen > Reset layout** stays reachable.
 - A button cannot be dropped onto the middle of another one; it jumps
   back and a note says why. Buttons that overlap at the edges are drawn
   in amber, and the one drawn first gets the touch.
