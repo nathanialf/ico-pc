@@ -84,6 +84,8 @@ typedef struct TexpackWalkItem {
     uint32_t clutColors; /* as the file holds it */
     uint32_t clutSize;   /* the CLUT's bytes in the file */
     uint32_t imageSize;
+    size_t bytes; /* the TIM2's own: 16 + headerSize + imageSize + clutSize (0
+                     for TEXPACK_WALK_NOT_TIM2 and _BAD_HEADER) */
     uint32_t w, h, levels;
     int nonPow2; /* w or h is no power of two */
     int scroll;  /* the ICO block scrolls the CLUT (tex_textureAnimation): the

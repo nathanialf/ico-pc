@@ -187,6 +187,19 @@ if(TARGET SDL3::SDL3-shared)
                                 PROPERTIES COMPILE_DEFINITIONS "ICO_TEXPACK_THREAD=1")
 endif()
 
+# ico_texpack_export: every texture on the disc as PNGs under the runtime
+# dump's names (texpack_export.h): the synchronous core and the job on an SDL
+# thread (without SDL the job is not offered: texpack_export_begin fails).
+add_library(ico_texpack_export STATIC texpack_export.c)
+target_include_directories(ico_texpack_export PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(ico_texpack_export PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(ico_texpack_export PUBLIC ico_render ico_texpack_walk ico_host_fs)
+if(TARGET SDL3::SDL3-shared)
+    target_link_libraries(ico_texpack_export PUBLIC SDL3::SDL3-shared)
+    set_source_files_properties(texpack_export.c TARGET_DIRECTORY ico_texpack_export
+                                PROPERTIES COMPILE_DEFINITIONS "ICO_TEXPACK_EXPORT_THREAD=1")
+endif()
+
 # rd_replay_tool: a dump to a PNG, headless.
 # (and a F12 .zip: platform/dump_zip.c reads it)
 add_executable(rd_replay_tool tools/rd_replay_tool.c ../platform/dump_zip.c)

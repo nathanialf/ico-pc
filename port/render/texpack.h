@@ -164,6 +164,13 @@ struct RdTexImage; /* rd_tex.h */
    raw (0x80 = 1.0), what a PCSX2 dump holds.  Works without a pack (after
    texpack_init); returns the files written. */
 int texpack_dump(const TexpackSource *src, uint32_t boundLevel, const struct RdTexImage *im);
+/* The folder texpack_dump writes to (<user folder>/textures/<serial>/dumps,
+   the selected disc's serial), made when missing, into out: 0, or -1
+   before texpack_init, without a user folder, when it cannot be made or
+   when it does not fit in size bytes.  The texture export
+   (texpack_export.h) writes there too, so the two share one definition of
+   the folder.  The game thread, as texpack_dump. */
+int texpack_dump_dir(char *out, size_t size);
 
 /* What texpack_init found and what the loader did since, for the log's
    summary and the tests. */

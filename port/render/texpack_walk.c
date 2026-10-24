@@ -126,6 +126,7 @@ int texpack_walk_tim2(const char *member, int kind, const uint8_t *d, size_t siz
         out->bad = TEXPACK_WALK_BAD_HEADER;
         return out->bad;
     }
+    out->bytes = 16 + (size_t)headerSize + imageSize + clutSize;
     out->nonPow2 = w != (1u << twth(w)) || h != (1u << twth(h));
 
     TexpackSource *src = &out->src;

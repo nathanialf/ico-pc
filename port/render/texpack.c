@@ -117,6 +117,7 @@ static struct {
 
     /* dumps */
     int dumpDirReady;
+    int dumpDirLogged; /* the "writing texture dumps" line, once a dump needs the folder */
     char dumpDir[1100];
     uint32_t dumped;
 } s_tp;
@@ -1178,7 +1179,9 @@ void texpack_budget_release(RdTex t)
 
 /* -------------------------------------------------------------- dumps */
 
-static int ensureDumpDir(void)
+/* <user folder>/textures/<serial>/dumps made once (the dumps and the
+   export share it: texpack_dump_dir) */
+static int makeDumpDir(void)
 {
     if (s_tp.dumpDirReady) {
         return s_tp.dumpDirReady > 0 ? 0 : -1;
@@ -1203,8 +1206,33 @@ static int ensureDumpDir(void)
         fprintf(stderr, "textures: cannot make %s; no texture dumps\n", s_tp.dumpDir);
         return -1;
     }
-    fprintf(stderr, "textures: writing texture dumps to %s\n", s_tp.dumpDir);
     s_tp.dumpDirReady = 1;
+    return 0;
+}
+
+static int ensureDumpDir(void)
+{
+    if (makeDumpDir() != 0) {
+        return -1;
+    }
+    if (!s_tp.dumpDirLogged) {
+        fprintf(stderr, "textures: writing texture dumps to %s\n", s_tp.dumpDir);
+        s_tp.dumpDirLogged = 1;
+    }
+    return 0;
+}
+
+int texpack_dump_dir(char *out, size_t size)
+{
+    /* before texpack_init the folder is not known: leave dumpDirReady
+       alone, so a later dump still makes it */
+    if (out == NULL || size == 0 || !s_tp.inited || makeDumpDir() != 0) {
+        return -1;
+    }
+    if (strlen(s_tp.dumpDir) >= size) {
+        return -1;
+    }
+    memcpy(out, s_tp.dumpDir, strlen(s_tp.dumpDir) + 1);
     return 0;
 }
 

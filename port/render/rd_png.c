@@ -11,6 +11,7 @@
 #include <string.h>
 #include "host_fs.h"
 #include "rd_internal.h"
+#include "rd_png.h"
 
 static uint32_t s_crcTable[256];
 
@@ -26,6 +27,11 @@ static void crcInit(void)
         }
         s_crcTable[n] = c;
     }
+}
+
+void rd_png_prepare(void)
+{
+    crcInit();
 }
 
 static uint32_t crcUpdate(uint32_t crc, const uint8_t *p, size_t n)
