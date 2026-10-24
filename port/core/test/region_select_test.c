@@ -104,7 +104,22 @@ static void test_regions_txt(const char *path)
             CHECK(strcmp(d->archive_name, r->archive_name) == 0 &&
                   strcmp(d->image_base, r->image_base) == 0 && strcmp(d->id, r->pack_serial) == 0);
             CHECK(ico_disc_by_slug(slug) == d && ico_disc_by_id(disc) == d &&
-                  ico_disc_by_boot(boot) == d);
+                  ico_disc_by_boot_elf(boot, d->elf_sha1) == d);
+            /* a boot file two rows share answers with the first of them, and the rows agree
+               on what that answer is used for: the DATA.DF shift and the drive type */
+            CHECK(ico_disc_boot_rows(boot) >= 1);
+            if (ico_disc_by_boot(boot) != d) {
+                CHECK(ico_disc_by_boot(boot)->df_lsn_shift == d->df_lsn_shift &&
+                      ico_disc_by_boot(boot)->cd_type == d->cd_type &&
+                      ico_disc_boot_rows(boot) == 2);
+            }
+            /* the paths: DATA.DF under the game's folder (game_dir, "" or a folder) */
+            CHECK(d->elf_path != NULL && d->df_path != NULL && d->game_dir != NULL &&
+                  strlen(d->df_path) > strlen(d->game_dir) &&
+                  strcmp(d->df_path + strlen(d->game_dir) + (d->game_dir[0] ? 1 : 0),
+                         "DFDATAS/DATA.DF") == 0);
+            /* only a row with no image hash on file may leave it NULL */
+            CHECK(d->iso_sha1 != NULL || strcmp(d->slug, "jun26") == 0);
             CHECK(d->member_count == d->df_count && d->members != NULL);
         }
         row++;

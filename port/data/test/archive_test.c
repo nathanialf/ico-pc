@@ -305,8 +305,10 @@ static int run_synth(const char *dir)
         IcoArchiveInfo good = info;
 
         snprintf(good.disc_id, sizeof(good.disc_id), "%s", d->id);
-        snprintf(good.accepted_by, sizeof(good.accepted_by), "%s", ICO_RULE_ISO_SHA1);
-        snprintf(good.iso_sha1, sizeof(good.iso_sha1), "%s", d->iso_sha1);
+        snprintf(good.accepted_by, sizeof(good.accepted_by), "%s",
+                 d->iso_sha1 != NULL ? ICO_RULE_ISO_SHA1 : ICO_RULE_ELF_DATADF);
+        snprintf(good.iso_sha1, sizeof(good.iso_sha1), "%s",
+                 d->iso_sha1 != NULL ? d->iso_sha1 : info.iso_sha1);
         snprintf(good.elf_sha1, sizeof(good.elf_sha1), "%s", d->elf_sha1);
         CHECK(ico_archive_info_acceptable(&good, why, sizeof(why)));
         /* the other disc's boot ELF under this disc's id */
@@ -320,25 +322,56 @@ static int run_synth(const char *dir)
     {
         IcoArchiveInfo other = info;
 
-        snprintf(other.disc_id, sizeof(other.disc_id), "SCUS-97113");
+        snprintf(other.disc_id, sizeof(other.disc_id), "SLES-00000");
         snprintf(other.accepted_by, sizeof(other.accepted_by), "%s", ICO_RULE_ISO_SHA1);
         CHECK(!ico_archive_info_acceptable(&other, why, sizeof(why)));
     }
-    /* the table: distinct ids, boot files and archives; look-ups both ways */
-    CHECK(strcmp(ico_discs[0].archive_name, ico_discs[1].archive_name) != 0);
-    CHECK(strcmp(ico_discs[0].archive_name, ico_discs[2].archive_name) != 0);
-    CHECK(strcmp(ico_discs[1].archive_name, ico_discs[2].archive_name) != 0);
+    /* the table: distinct ids, slugs and archives; look-ups both ways */
+    {
+        int a, b;
+
+        for (a = 0; a < ICO_REGION_COUNT; a++) {
+            for (b = a + 1; b < ICO_REGION_COUNT; b++) {
+                CHECK(strcmp(ico_discs[a].id, ico_discs[b].id) != 0 &&
+                      strcmp(ico_discs[a].slug, ico_discs[b].slug) != 0 &&
+                      strcmp(ico_discs[a].archive_name, ico_discs[b].archive_name) != 0 &&
+                      strcmp(ico_discs[a].image_base, ico_discs[b].image_base) != 0);
+                /* a boot file is shared only where the boot ELFs differ (ico_disc_identify) */
+                CHECK(strcmp(ico_discs[a].boot_elf, ico_discs[b].boot_elf) != 0 ||
+                      strcmp(ico_discs[a].elf_sha1, ico_discs[b].elf_sha1) != 0);
+            }
+        }
+    }
     CHECK(ico_disc_by_id("SCES-50760") == &ico_discs[0] &&
           ico_disc_by_id("SCPS-11003") == &ico_discs[1] &&
           ico_disc_by_id("SCPS-56001") == &ico_discs[2] && ico_disc_by_id("SLUS-20000") == NULL);
     CHECK(ico_disc_by_boot("SCES_507.60") == &ico_discs[0] &&
           ico_disc_by_boot("SCPS_110.03") == &ico_discs[1] &&
           ico_disc_by_boot("SCPS_560.01") == &ico_discs[2] && ico_disc_by_boot("") == NULL);
+    CHECK(ico_disc_boot_rows("SCES_507.60") == 1 && ico_disc_boot_rows("SLUS_000.00") == 0 &&
+          ico_disc_boot_rows(NULL) == 0);
+    CHECK(ico_disc_by_boot_elf("SCPS_110.03", ico_discs[1].elf_sha1) == &ico_discs[1] &&
+          ico_disc_by_boot_elf("SCPS_110.03", ico_discs[0].elf_sha1) == NULL &&
+          ico_disc_by_boot_elf("SCPS_110.03", NULL) == NULL);
+    /* ico_disc_identify: a boot name one row has needs no hash; one the volume's rows do not
+       have is no disc. The shared-name decision by the boot ELF's SHA-1 (SCUS_971.13) has
+       its cases when the later rows land. */
+    {
+        IcoVfs *syn = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
+
+        CHECK(syn != NULL);
+        CHECK(ico_disc_identify(syn, "SCPS_110.03", NULL) == &ico_discs[1]);
+        CHECK(ico_disc_identify(syn, "SLUS_000.00", NULL) == NULL);
+        ico_vfs_unmount(syn);
+    }
     CHECK(ico_discs[0].df_count == 193 && ico_discs[1].df_count == 183 &&
           ico_discs[2].df_count == 183);
     /* only a disc with a shifted DATA.DF carries a shift (the Korean disc) */
     CHECK(ico_discs[0].df_lsn_shift == 0 && ico_discs[1].df_lsn_shift == 0 &&
           ico_discs[2].df_lsn_shift == 153600);
+    CHECK(ico_discs[0].game_dir[0] == '\0' &&
+          strcmp(ico_discs[0].df_path, "DFDATAS/DATA.DF") == 0 &&
+          strcmp(ico_discs[0].elf_path, ico_discs[0].boot_elf) == 0);
     CHECK(ico_discs[2].df_size == 866859008u - 153600u * 2048u);
 
     /* the entries are stored, the boot file has its tail */
@@ -518,8 +551,9 @@ static int run_disc_archive(const char *iso_path, const char *dir, const char *s
            (unsigned long long)res.archive_bytes, res.rule);
     /* both rules hold for the image: the image's hash, and the ELF plus
        DATA.DF's manifest (what a re-dump with other padding is accepted by) */
-    CHECK(strcmp(res.rule, ICO_RULE_ISO_SHA1) == 0);
-    CHECK(strcmp(res.iso_sha1, disc->iso_sha1) == 0 && res.iso_size == disc->iso_bytes);
+    CHECK(strcmp(res.rule, disc->iso_sha1 != NULL ? ICO_RULE_ISO_SHA1 : ICO_RULE_ELF_DATADF) == 0);
+    CHECK((disc->iso_sha1 == NULL || strcmp(res.iso_sha1, disc->iso_sha1) == 0) &&
+          res.iso_size == disc->iso_bytes);
     CHECK(strcmp(res.elf_sha1, disc->elf_sha1) == 0);
     CHECK(res.datadf_ok);
     if (!res.datadf_ok) {

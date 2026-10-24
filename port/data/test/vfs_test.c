@@ -1453,7 +1453,7 @@ static int run_same(const char *iso, const char *image, const char *slug)
         printf("vfs_test same: image SHA-1 %s, %llu bytes (the image: %s, %llu bytes)\n", ha,
                (unsigned long long)na, hb, (unsigned long long)nb);
         CHECK(na == nb && strcmp(ha, hb) == 0);
-        CHECK(strcmp(ha, disc->iso_sha1) == 0 && na == disc->iso_bytes);
+        CHECK((disc->iso_sha1 == NULL || strcmp(ha, disc->iso_sha1) == 0) && na == disc->iso_bytes);
     }
     printf("vfs_test same %s: %s\n", image, failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
