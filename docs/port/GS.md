@@ -233,7 +233,9 @@ need those registers record on rd directly (below).
 `dl_Swap` call it before the list changes. `gif_HostScreenPrims` puts primitives in order with the
 decoder's own (DisplayFont.c's glyphs). `gif_HostDrawKey` and `gif_HostDrawKeyText` set the RdKey
 the next 2D primitives carry, so the presenter can pair a layout row or a string across ticks.
-`gif_HostFrameProjected` marks primitives projected on the CPU through the frame camera.
+`gif_HostFrameProjected` marks primitives projected on the CPU through the frame camera;
+`gif_HostFrameProjectedSt` gives them STs that follow the screen, moved with each re-projected
+vertex ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-ripples-between-ticks)).
 `gif_HostFrameReset` forgets the frame's alias blocks from `gif_Init`, which `dl_Clear` calls
 (`ico2/seki/include/GifHost.h`; `ico2/seki/src/GifPacket.c` (`gif_Init`)).
 
