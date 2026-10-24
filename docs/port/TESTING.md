@@ -173,6 +173,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   Japanese reference, `--set kor` the Korean one, and each disc's ELF refused by the other sets
   (`tables_loader_jpn` with `ICO_BASE_ELF_JPN`, `tables_loader_kor` with `ICO_BASE_ELF_KOR`, skipped
   without them).
+- The Asian disc's tests (`data_desc_fresh_cn`, `ee_layout_fresh_cn`, `tables_loader_cn`,
+  `tables_manifest_cn`, `archive_disc_cn`, `archive_manifest_cn`, `vfs_disc_cn`) are the Korean
+  disc's with `ICO_BASE_ELF_CN` (`baserom/cn/baseelf.elf`) and `ICO_DISC_IMAGE_CN`
+  (`baserom/Ico_CN.iso`), each skipped (77) without its file; `tables_test.c` holds the set
+  against the reference `gen_data_c.py --version cn` writes (`ref_sets[]`), `archive_test.c` the
+  row (`SCPS-55001`, `SCPS_550.01`, 183 members, DATA.DF 153,600 sectors in, a DVD) and
+  `region_select_test.c` the row's selectors (`ICO_KORCN`, `PAL_JPNKORCN`, LN's seventh
+  argument), its stage rows and every value of `region_cn.c`.
 - `vfs_test.c`: the [VFS](ARCHITECTURE.md#terms) and its ISO9660 backend, the
   [libcdvd](ARCHITECTURE.md#terms), [SIF](ARCHITECTURE.md#terms) and [IOP](ARCHITECTURE.md#terms)
   RAM layers, and `ico_vfs_reopen`'s second mount read interleaved with the first
