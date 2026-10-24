@@ -94,8 +94,8 @@
 enum { SKIP_MSAA, SKIP_DEPTH, SKIP_PIPES, SKIP_MEMORY, SKIP_COUNT };
 
 static const char *const kSkipWhy[SKIP_COUNT] = {
-    ("MSAA is asked for (the fog then reads the multisampled scene or its resolve: "
-     "DIVERGENCES.md VD-22)"),
+    ("MSAA is asked for (its resolve gives a crack's pixel the surfaces beside it unless "
+     "more than half its samples lie in the crack: DIVERGENCES.md VD-22)"),
     "the scene's depth cannot be sampled on this device",
     "its shaders or pipelines are missing",
     "no memory for the copies of the scene's colour and depth",
