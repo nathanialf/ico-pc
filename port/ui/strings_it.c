@@ -553,6 +553,9 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_OPT_NATURAL_CHAINS] = "Catene naturali",
     [UI_STR_OPT_NATURAL_CHAINS_NOTE] =
         "Una catena che scende per Ico mantiene gli anelli della giusta misura per tutta la discesa.",
+    [UI_STR_OPT_SKIP_OPENING] = "Salta l’introduzione",
+    [UI_STR_OPT_SKIP_OPENING_NOTE] =
+        "Il gioco parte dalla schermata del titolo, senza il cartello Sony e senza la scena d’apertura. Si applica al prossimo avvio.",
     [UI_STR_OPT_AA] = "Anti-aliasing",
     [UI_STR_OPT_AA_NOTE] =
         "Attenua i bordi seghettati. Il supersampling disegna l’immagine più grande e poi la riduce; il MSAA leviga i bordi delle forme.",

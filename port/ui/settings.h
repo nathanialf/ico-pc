@@ -441,6 +441,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_YORDA,
     UI_OPT_DOOR_FIX,       /* [gameplay] door_fix, the doorway fix */
     UI_OPT_NATURAL_CHAINS, /* [gameplay] natural_chains (port/render/rd_chain.h) */
+    UI_OPT_SKIP_OPENING,   /* [gameplay] skip_opening: the boot starts at the title */
     UI_OPT_FILM_EFFECT,    /* the game's optionScreenMode 0..4, once cleared */
     UI_OPT_PLAYERS,        /* the game's girlControlMode, 1 or 2, once cleared */
     UI_OPT_ACH_POPUPS,     /* [game] achievements, On/Off: the achievement pop-ups, on the

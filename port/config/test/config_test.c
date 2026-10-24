@@ -465,7 +465,9 @@ static void test_first_run(void)
     CHECK_STR(ico_config_get_string("audio.output", "?"), "auto");
     CHECK_STR(ico_config_get_string("audio.device", "?"), "");
     CHECK_STR(ico_config_get_string("game.language", "?"), "auto");
-    CHECK(ico_config_get_bool("gameplay.natural_chains", 1) == 0);       /* Natural chains, off */
+    CHECK(ico_config_get_bool("gameplay.natural_chains", 1) == 0); /* Natural chains, off */
+    CHECK(ico_config_get_bool("gameplay.skip_opening", 1) == 0);   /* Skip the opening, off */
+    CHECK(text != NULL && strstr(text, "skip_opening = false") != NULL);
     CHECK_STR(ico_config_get_string("gameplay.hold_type", "?"), "hold"); /* Hold type A */
     CHECK(text != NULL && strstr(text, "hold_type = \"hold\"") != NULL);
     CHECK_STR(ico_config_get_string("paths.iso", "?"), "");

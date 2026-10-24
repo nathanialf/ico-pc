@@ -105,6 +105,13 @@ static inline int tick(int *pt) /* derived name */
     return 0;
 }
 
+/* PC port: port/game/options.c: [gameplay] skip_opening */
+extern int ico_opt_skip_opening(void);
+
+/* PC port: actOpDemo01 has run once (Skip the opening applies to the boot's
+   first entry only) */
+static int opDemoEntered; /* port */
+
 void actOpDemo01(GObj *volatile self)
 {
     GObj *x = self;
@@ -131,6 +138,18 @@ void actOpDemo01(GObj *volatile self)
 
     scpFadeOut(255.0f, 0, 0, 0);
     titleAdpcm = 0;
+
+    /* PC port: Skip the opening: the boot's first entry starts at the
+       title, in the state the Start skip of the opening scene leaves
+       (mode 0 below); later entries (End Game, the attract movie's
+       return) are untouched */
+    if (opDemoEntered == 0) {
+        opDemoEntered = 1;
+        if (ico_opt_skip_opening() && opDemoMode == 0) {
+            opDemoMode = 1;
+            opDemoNextMode = 2;
+        }
+    }
 
     while (1) {
         titleSubEnd = 0;

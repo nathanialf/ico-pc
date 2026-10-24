@@ -125,16 +125,13 @@ static void testBuild(void)
         UI_STR_OPT_TOUCH_MODE, UI_STR_OPT_TOUCH_SIZE,  UI_STR_OPT_TOUCH_OPACITY,
         UI_STR_OPT_TOUCH_EDIT, UI_STR_OPT_TOUCH_SNAP,  UI_STR_OPT_TOUCH_GRID,
         UI_STR_TOUCH_RESET,    UI_STR_TOUCH_RESET_ALL, UI_STR_BACK};
-    static const int gameOpts[] = {
-        UI_OPT_YORDA,       UI_OPT_STICK_FIX, UI_OPT_DOOR_FIX, UI_OPT_NATURAL_CHAINS,
-        UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,   UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_YORDA,
-                                   UI_STR_OPT_STICK_FIX,
-                                   UI_STR_OPT_DOOR_FIX,
-                                   UI_STR_OPT_NATURAL_CHAINS,
-                                   UI_STR_OPT_FILM_EFFECT,
-                                   UI_STR_OPT_PLAYERS,
-                                   UI_STR_BACK};
+    static const int gameOpts[] = {UI_OPT_YORDA,          UI_OPT_STICK_FIX,    UI_OPT_DOOR_FIX,
+                                   UI_OPT_NATURAL_CHAINS, UI_OPT_SKIP_OPENING, UI_OPT_FILM_EFFECT,
+                                   UI_OPT_PLAYERS,        UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA,        UI_STR_OPT_STICK_FIX,
+                                   UI_STR_OPT_DOOR_FIX,     UI_STR_OPT_NATURAL_CHAINS,
+                                   UI_STR_OPT_SKIP_OPENING, UI_STR_OPT_FILM_EFFECT,
+                                   UI_STR_OPT_PLAYERS,      UI_STR_BACK};
     static const int listOpts[8] = {UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST,
                                     UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST};
     static const int listStrs[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
@@ -179,7 +176,7 @@ static void testBuild(void)
                   lt_ext_prop(cl[12])->right == ui_settings_page_layout(UI_PAGE_TOUCH),
               "Touch screen opens its page");
     }
-    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 7), "gameplay rows");
+    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 8), "gameplay rows");
     /* the pop-ups switch is an item of the list (first, before the achievements), not a row of its own */
     CHECK(labelsAre(UI_PAGE_ACHIEVEMENTS, listOpts, listStrs, 8), "achievement slots");
     CHECK(labelsAre(UI_PAGE_REMAP, listOpts, listStrs, 8), "remap slots");

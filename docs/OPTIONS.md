@@ -356,7 +356,7 @@ The six mouse rows do not show on phones and tablets.
 
 ## Gameplay
 
-The first four are off unless you turn them on, on a phone too.
+The first five are off unless you turn them on, on a phone too.
 
 - **Shadows never take Yorda** makes the game gentler. A few scenes in the
   story still show her being taken.
@@ -374,6 +374,12 @@ The first four are off unless you turn them on, on a phone too.
   links look squashed until the chain is all the way down. With this on, the
   links stay the right size and more of the chain shows as it comes down. It
   only changes the picture, not the game.
+- **Skip the opening** starts the game at the title screen, without the
+  Sony sign ("Sony Computer Entertainment Europe Presents" on the European
+  disc) and the opening scene.
+  The memory card check still runs, and its warning still shows if the card
+  is missing or full. It takes effect the next time you start the game.
+  Without it, Start still skips the opening scene once the sign has gone.
 
 Two more rows are the game's own, and only show up in the pause menu's
 Options once you have finished the game:

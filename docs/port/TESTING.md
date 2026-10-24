@@ -1199,7 +1199,7 @@ headless build replays a player's session with `pad_script=<the file>`; it is on
 window build, in `logs/input-<time>.txt`, and off headless (`input_record=`). Its header records
 the values of `video.video_mode`, `game.language`, `gameplay.mirror`, `gameplay.stick_fix`,
 `gameplay.yorda_safe`, `gameplay.developer_mode`, `dev.start_stage`, `gameplay.door_fix`,
-`video.anti_aliasing` and `gameplay.hold_type`, and the native frame's width and aspect (`port/platform/main_host.c`,
+`video.anti_aliasing`, `gameplay.hold_type` and `gameplay.skip_opening` (the boot's ticks), and the native frame's width and aspect (`port/platform/main_host.c`,
 `record_keys`, `record_header`; `ico_input_record_frame_lines`).
 
 The trace (`trace=` or `--trace FILE`) writes a header naming its columns and then one line per Main

@@ -185,7 +185,7 @@ tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/setting
 | Controls | Remap (a list), Button configuration, Vibration, Hold type, Stick fix, the mouse camera's six rows, Circle back, Touch screen (a link, with a touch screen only), Back |
 | Touch screen (`UI_PAGE_TOUCH`) | Touch controls, Touch size, Touch opacity, Edit layout (`UI_OPT_TOUCH_EDIT`), Snap to grid, Grid size, Reset layout, Reset all layouts, Back |
 | Edit layout (`UI_PAGE_TOUCH_LAYOUT`) | no shown rows: the editor's own screen ([The touch layout editor](#the-touch-layout-editor)) |
-| Gameplay | Yorda safe, Stick fix, Door fix, Natural chains, Film effect, Players, Back |
+| Gameplay | Yorda safe, Stick fix, Door fix, Natural chains, Skip the opening (`UI_OPT_SKIP_OPENING`), Film effect, Players, Back |
 | Achievements | a list, the popups switch |
 | Extras | Music, Models, Credits, Characters, Add to Steam, Achievement popups, Back |
 | Music | the music gallery, a list |

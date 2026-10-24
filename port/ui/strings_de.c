@@ -556,6 +556,9 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_NATURAL_CHAINS] = "Natürliche Ketten",
     [UI_STR_OPT_NATURAL_CHAINS_NOTE] =
         "Eine Kette, die für Ico herabgelassen wird, behält auf dem ganzen Weg die richtige Gliedergröße.",
+    [UI_STR_OPT_SKIP_OPENING] = "Vorspann überspringen",
+    [UI_STR_OPT_SKIP_OPENING_NOTE] =
+        "Das Spiel beginnt im Titelbildschirm, ohne das Sony-Schild und ohne die Eröffnungsszene. Gilt ab dem nächsten Start.",
     [UI_STR_OPT_AA] = "Kantenglättung",
     [UI_STR_OPT_AA_NOTE] =
         "Glättet gezackte Kanten. Supersampling zeichnet das Bild größer und verkleinert es; MSAA glättet die Kanten von Formen.",

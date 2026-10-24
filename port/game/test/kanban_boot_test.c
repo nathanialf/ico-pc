@@ -46,6 +46,20 @@
  * the European 41 (step 302), the Japanese 11 and the Korean 5 (step 101,
  * PAL_KOR(11, 5); upstream kanbanBoot.c), and the other program's value is
  * the one that checks again.
+ * With Skip the opening on ([gameplay] skip_opening, read at bootStep 0;
+ * the runs above have it off): over the load, in both of the stage
+ * manager's orders, no presents sign is asked for, the card check's steps
+ * keep their ticks, ico_kanban_boot_holds_keep is 1 from bootStep 2 to 7
+ * and 0 after, every frame from the check's step 2 to the boot's end is a
+ * keep frame, and the tick that sets kanbanBootEnd lets go of it (its frame
+ * is not a keep frame): two ticks after bootStep 3 on the European disc,
+ * two after the load's end on the Japanese program, which waits for the
+ * load at step 5.  With no card and with a full card, the card warning
+ * still comes up twice and lets go of the keep at its own sign as without
+ * the option (every frame before it is a keep frame); after the start
+ * without a card the check's end takes the keep again until the boot's end,
+ * and, with the signs fading over several ticks (here 8), step 7 waits for
+ * the warning's signs to be gone and ends in the tick after.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -95,7 +109,18 @@ static struct {
     /* the tick each step was first logged at (kanbanBootMain's entry), -1
        before: card steps 100, 101, 300 and -1, bootStep 3 */
     int at100, at101, at300, atEnd, atBoot3;
+    /* the ticks a sign takes to fade once deleted (0: at once, the runs
+       without the option), and each sign's ticks left */
+    int fadeTicks, fade[16];
 } s;
+
+/* port/game/options.c's [gameplay] skip_opening, the test's */
+static int s_skip;
+
+int ico_opt_skip_opening(void)
+{
+    return s_skip;
+}
 
 enum { CARD_ROOM, CARD_NONE, CARD_FULL };
 
@@ -108,7 +133,8 @@ Kanban *kanbanReqAdd(int no, int pri)
     if (no >= 0 && no < 8) {
         s.adds[no]++;
     }
-    Kanban *k = &s_signs[s_signCount++ % 16];
+    Kanban *k = &s_signs[s_signCount % 16];
+    s.fade[s_signCount++ % 16] = 0;
     memset(k, 0, sizeof(*k));
     k->layout = &texLayout[no + 1];
     k->key = 1; /* answered at once */
@@ -122,17 +148,42 @@ Kanban *kanbanReqAdd(int no, int pri)
 void kanbanReqDel(Kanban *self)
 {
     self->layout = 0;
+    s.fade[self - s_signs] = 0;
+}
+
+/* a deleted sign is gone at once, or after s.fadeTicks of signsTick */
+static void fadeSign(Kanban *k)
+{
+    if (k->layout == 0 || s.fade[k - s_signs] > 0) {
+        return;
+    }
+    if (s.fadeTicks == 0) {
+        k->layout = 0;
+    } else {
+        s.fade[k - s_signs] = s.fadeTicks;
+    }
 }
 
 void kanbanReqDelFade(Kanban *self)
 {
-    self->layout = 0;
+    fadeSign(self);
 }
 
 void kanbanReqAllDelFade(void)
 {
     for (int i = 0; i < 16; i++) {
-        s_signs[i].layout = 0;
+        fadeSign(&s_signs[i]);
+    }
+}
+
+/* kanbanExec's fade, after kanbanBootMain in the tick (icoMisc.c): a sign
+   whose fade ends leaves the list */
+static void signsTick(void)
+{
+    for (int i = 0; i < 16; i++) {
+        if (s.fade[i] > 0 && --s.fade[i] == 0) {
+            s_signs[i].layout = 0;
+        }
     }
 }
 
@@ -430,6 +481,184 @@ static void bootOverLoad(const char *what, int releaseLate)
            leaks, signTick);
 }
 
+/* --- Skip the opening ---------------------------------------------------- */
+
+/* the option on, over stage 1's load as bootOverLoad (a later boot) */
+static void bootSkipOverLoad(const char *what, int releaseLate)
+{
+    int kickKeep[LOAD_TICKS] = {0};
+    int step2Tick = -1, endTick = -1, holdsBad = 0;
+
+    memset(&s, 0, sizeof(s));
+    s.at100 = s.at101 = s.at300 = s.atEnd = s.atBoot3 = -1;
+    s.savePresent = 1;
+    memset(IosMcProductFile, 0, sizeof(IosMcProductFile));
+    bootStep = mcCheckStep = bootStarted = bootKanbanDone = 0;
+    mcRetryCount = 10;
+    bootKanban = bootKanbanSub = waitKanban = 0;
+    systemStatus[0] = ico_boot_video_mode();
+    NonLinearCameraMove = ico_boot_language();
+    fbKeep = 1;
+    fadeStatus = 1;
+    systemStatus[6] = 1;
+    s_skip = 1;
+    kanbanBootInit();
+    kanbanBootStart();
+    while (!kanbanBootEnd && s.ticks < LOAD_TICKS) {
+        if (!releaseLate && s.ticks == LOAD_END_TICK) {
+            stageManagerLoadEnd();
+        }
+        kanbanBootMain();
+        signsTick();
+        if (releaseLate && s.ticks == LOAD_END_TICK - 1) {
+            stageManagerLoadEnd();
+        }
+        if (step2Tick < 0 && bootStep == 2 && mcCheckStep > 2) {
+            step2Tick = s.ticks;
+        }
+        if (bootStep >= 2 && bootStep <= 7 && !ico_kanban_boot_holds_keep()) {
+            holdsBad++;
+            CHECK(0, "%s: tick %d: bootStep %d does not hold the keep", what, s.ticks, bootStep);
+        }
+        if (kanbanBootEnd && endTick < 0) {
+            endTick = s.ticks;
+        }
+        kickKeep[s.ticks] = fbKeep;
+        s.ticks++;
+    }
+    s_skip = 0;
+    CHECK(kanbanBootEnd && endTick >= 0, "%s: the boot ends (%d ticks)", what, s.ticks);
+    CHECK(bootStep == 8 && !ico_kanban_boot_holds_keep(), "%s: no hold after the end (step %d)",
+          what, bootStep);
+    CHECK(s.adds[SIGN_PRESENTS] == 0 && s.adds[SIGN_WARNING] == 0,
+          "%s: no presents sign, no card warning (%d, %d)", what, s.adds[SIGN_PRESENTS],
+          s.adds[SIGN_WARNING]);
+    CHECK(s.chdirs == 1 && s.badStep == 0, "%s: one card check (%d), no step 102 or 190..202 (%d)",
+          what, s.chdirs, s.badStep);
+    /* the card check's ticks are the option-off run's; then steps 3 to 5
+       in one tick (no wait), 6, and 7 at once (no sign to fade) */
+    const int wantEnd = s_jpn ? LOAD_END_TICK + 2 : LOAD_END_TICK + 6;
+    if (s_jpn) {
+        CHECK(s.atBoot3 >= 0 && s.atBoot3 < LOAD_END_TICK && endTick == wantEnd,
+              "%s: bootStep 3 at tick %d, before the load's end; the end at %d (want %d)", what,
+              s.atBoot3, endTick, wantEnd);
+    } else {
+        CHECK(s.at101 == LOAD_END_TICK + 1 && s.at300 == LOAD_END_TICK + 2 &&
+                  s.atEnd == LOAD_END_TICK + 3 && s.atBoot3 == LOAD_END_TICK + 4 &&
+                  endTick == s.atBoot3 + 2,
+              "%s: steps 101, 300, -1, bootStep 3 and the end at ticks %d, %d, %d, %d, %d (want "
+              "%d to %d, %d)",
+              what, s.at101, s.at300, s.atEnd, s.atBoot3, endTick, LOAD_END_TICK + 1,
+              LOAD_END_TICK + 4, wantEnd);
+    }
+    if (step2Tick < 0 || endTick < 0) {
+        return;
+    }
+    int leaks = 0;
+    for (int t = step2Tick; t < endTick; t++) {
+        if (!kickKeep[t]) {
+            leaks++;
+            CHECK(0, "%s: tick %d (before the end at %d): the frame is not a keep frame", what, t,
+                  endTick);
+        }
+    }
+    CHECK(!kickKeep[endTick], "%s: the end's tick %d lets go of the keep", what, endTick);
+    CHECK(fbKeep == 0 && fadeStatus == 0, "%s: fbKeep %d, fadeStatus %d at the end", what, fbKeep,
+          fadeStatus);
+    printf("  %s: load ends at tick %d; bootStep 3 at %d, the end at %d; keep frames from tick %d "
+           "to %d (%d not kept, %d ticks not holding)\n",
+           what, LOAD_END_TICK, s.atBoot3, endTick, step2Tick, endTick - 1, leaks, holdsBad);
+}
+
+/* the option on with the card warning (bootNoCard's answers), the signs
+   fading over SKIP_FADE ticks */
+#define SKIP_FADE 8
+
+static void bootSkipNoCard(const char *what, int card, int startItem, int retryItem)
+{
+    int kickKeep[1000] = {0};
+    int step2Tick = -1, warnTick = -1, startTick = -1, goneTick = -1, endTick = -1, waits = 0;
+
+    memset(&s, 0, sizeof(s));
+    s.at100 = s.at101 = s.at300 = s.atEnd = s.atBoot3 = -1;
+    s.card = card;
+    s.answers[0] = retryItem;
+    s.answers[1] = startItem;
+    s.fadeTicks = SKIP_FADE;
+    memset(IosMcProductFile, 0, sizeof(IosMcProductFile));
+    bootStep = mcCheckStep = bootStarted = bootKanbanDone = 0;
+    mcRetryCount = 10;
+    bootKanban = bootKanbanSub = waitKanban = 0;
+    fbKeep = 1; /* main.c's load of stage 1 */
+    fadeStatus = 0;
+    systemStatus[6] = 0;
+    systemStatus[0] = ico_boot_video_mode();
+    NonLinearCameraMove = ico_boot_language();
+    s_skip = 1;
+    kanbanBootInit();
+    kanbanBootStart();
+    while (!kanbanBootEnd && s.ticks < 1000) {
+        const int warnings = s.adds[SIGN_WARNING];
+        const int stepBefore = bootStep;
+        if (bootStep == 7 && bootWarningUp()) {
+            waits++; /* step 7 waits for the warning's signs */
+        }
+        kanbanBootMain();
+        const int up = bootWarningUp();
+        signsTick();
+        if (step2Tick < 0 && bootStep == 2 && mcCheckStep > 2) {
+            step2Tick = s.ticks;
+        }
+        if (warnTick < 0 && s.adds[SIGN_WARNING] != warnings) {
+            warnTick = s.ticks;
+        }
+        if (startTick < 0 && stepBefore == 2 && bootStep == 3) {
+            startTick = s.ticks; /* the check's end */
+        }
+        if (up && !bootWarningUp()) {
+            goneTick = s.ticks; /* the last of the warning's signs left */
+        }
+        if (kanbanBootEnd && endTick < 0) {
+            endTick = s.ticks;
+        }
+        kickKeep[s.ticks] = fbKeep;
+        s.ticks++;
+    }
+    s_skip = 0;
+    CHECK(kanbanBootEnd && endTick >= 0, "%s: the boot ends past the card warning (%d ticks)", what,
+          s.ticks);
+    CHECK(s.adds[SIGN_WARNING] == 2 && s.adds[SIGN_PRESENTS] == 0,
+          "%s: the card warning twice (%d), no presents sign (%d)", what, s.adds[SIGN_WARNING],
+          s.adds[SIGN_PRESENTS]);
+    CHECK(s.reloads == 0 && s.layoutSwitches == 0 && s.gsResets == 0 && s.badStep == 0,
+          "%s: no reload, layout switch, gsResetFunc or step 102/190..202", what);
+    if (step2Tick < 0 || warnTick < 0 || startTick < 0 || endTick < 0) {
+        CHECK(0, "%s: ticks step 2 %d, warning %d, start %d, end %d", what, step2Tick, warnTick,
+              startTick, endTick);
+        return;
+    }
+    for (int t = step2Tick; t < warnTick; t++) {
+        CHECK(kickKeep[t], "%s: tick %d, before the warning at %d: not a keep frame", what, t,
+              warnTick);
+    }
+    CHECK(!kickKeep[warnTick],
+          "%s: the warning's tick %d lets go of the keep, as without the option", what, warnTick);
+    for (int t = startTick; t < endTick; t++) {
+        CHECK(kickKeep[t],
+              "%s: tick %d, from the check's end at %d to the end at %d: not a keep "
+              "frame",
+              what, t, startTick, endTick);
+    }
+    CHECK(!kickKeep[endTick], "%s: the end's tick %d lets go of the keep", what, endTick);
+    CHECK(waits > 0 && goneTick >= 0 && endTick == goneTick + 1,
+          "%s: step 7 waited %d ticks for the warning's signs, gone at %d, the end at %d", what,
+          waits, goneTick, endTick);
+    CHECK(fbKeep == 0, "%s: the frame buffer released", what);
+    printf("  %s: keep frames to the warning at tick %d, again from the check's end at %d; step 7 "
+           "waited %d ticks, the signs gone at %d, the end at %d\n",
+           what, warnTick, startTick, waits, goneTick, endTick);
+}
+
 int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
@@ -461,7 +690,11 @@ int main(int argc, char **argv)
         const int retryItem = !s_jpn ? 40 : ICO_KOR ? 11 : 5;
         bootNoCard("no card", CARD_NONE, startItem, retryItem);
         bootNoCard("a full card", CARD_FULL, startItem, retryItem);
+        bootSkipNoCard("Skip the opening, no card", CARD_NONE, startItem, retryItem);
+        bootSkipNoCard("Skip the opening, a full card", CARD_FULL, startItem, retryItem);
     }
+    bootSkipOverLoad("Skip the opening over the load, the stage manager first", 0);
+    bootSkipOverLoad("Skip the opening over the load, the stage manager after the tick", 1);
     remove(p);
     if (failures) {
         printf("kanban_boot_test %s: %d failures\n", ico_region_cur()->slug, failures);

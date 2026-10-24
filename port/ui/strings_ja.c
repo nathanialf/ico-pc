@@ -552,6 +552,9 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_NATURAL_CHAINS] = "自然な鎖",
     [UI_STR_OPT_NATURAL_CHAINS_NOTE] =
         "イコのところへ降りてくる鎖の輪が、最後まで正しい大きさのままになります。",
+    [UI_STR_OPT_SKIP_OPENING] = "オープニングをスキップ",
+    [UI_STR_OPT_SKIP_OPENING_NOTE] =
+        "ソニーのロゴとオープニングの場面を出さずに、タイトル画面から始まります。次回の起動から使われます。",
     [UI_STR_OPT_AA] = "アンチエイリアス",
     [UI_STR_OPT_AA_NOTE] =
         "ギザギザの輪郭をなめらかにします。スーパーサンプリングは大きく描いて縮小し、MSAAは形の輪郭をなめらかにします。",

@@ -49,6 +49,7 @@ defaults are [CONFIG.md](CONFIG.md#gameplay)'s; the differences from the PS2 are
 | `[gameplay] yorda_safe` | `ebrain.c`, `enemy_act.c`, `backStage.c` |
 | `[gameplay] door_fix` | `door_grace.c`, from `boyact.c` |
 | `[gameplay] natural_chains` | `BgAnimation.c` (window build) |
+| `[gameplay] skip_opening` | `kanbanBoot.c`, `op.c`, `main_host.c` (its log line) |
 | `[gameplay] hold_type` | `mcard.c`, `layout_action.c`, `settings.c` |
 | `[gameplay] mirror` | `pad_host.c`, `audio_host.c`, rd, `photo_ui.c` |
 | `[gameplay] developer_mode` | `main.c`, `debug.c`, the port |

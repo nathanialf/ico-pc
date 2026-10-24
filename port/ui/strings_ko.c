@@ -551,6 +551,9 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_NATURAL_CHAINS] = "자연스러운 사슬",
     [UI_STR_OPT_NATURAL_CHAINS_NOTE] =
         "이코에게 내려오는 사슬의 고리가 끝까지 올바른 크기를 유지합니다.",
+    [UI_STR_OPT_SKIP_OPENING] = "오프닝 건너뛰기",
+    [UI_STR_OPT_SKIP_OPENING_NOTE] =
+        "소니 로고와 오프닝 장면 없이 타이틀 화면에서 시작합니다. 다음 실행부터 적용됩니다.",
     [UI_STR_OPT_AA] = "안티에일리어싱",
     [UI_STR_OPT_AA_NOTE] =
         "들쭉날쭉한 윤곽을 매끄럽게 합니다. 슈퍼샘플링은 크게 그린 뒤 줄이고, MSAA는 도형의 윤곽을 매끄럽게 합니다.",

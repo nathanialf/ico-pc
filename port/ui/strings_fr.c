@@ -556,6 +556,9 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_OPT_NATURAL_CHAINS] = "Chaînes naturelles",
     [UI_STR_OPT_NATURAL_CHAINS_NOTE] =
         "Une chaîne qui descend pour Ico garde des maillons à la bonne taille tout du long.",
+    [UI_STR_OPT_SKIP_OPENING] = "Passer l’introduction",
+    [UI_STR_OPT_SKIP_OPENING_NOTE] =
+        "Le jeu démarre sur l’écran titre, sans le panneau Sony ni la scène d’ouverture. Appliqué au prochain démarrage.",
     [UI_STR_OPT_AA] = "Anticrénelage",
     [UI_STR_OPT_AA_NOTE] =
         "Atténue les bords crénelés. Le supersampling dessine l’image en plus grand puis la réduit ; le MSAA lisse les bords des formes.",

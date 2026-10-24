@@ -552,6 +552,9 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_OPT_NATURAL_CHAINS] = "Cadenas naturales",
     [UI_STR_OPT_NATURAL_CHAINS_NOTE] =
         "Una cadena que baja para Ico conserva sus eslabones del tamaño correcto durante todo el descenso.",
+    [UI_STR_OPT_SKIP_OPENING] = "Saltar la introducción",
+    [UI_STR_OPT_SKIP_OPENING_NOTE] =
+        "El juego empieza en la pantalla de título, sin el cartel de Sony ni la escena de apertura. Se aplica en el próximo inicio.",
     [UI_STR_OPT_AA] = "Antialiasing",
     [UI_STR_OPT_AA_NOTE] =
         "Suaviza los bordes dentados. El supermuestreo dibuja la imagen más grande y la reduce; el MSAA suaviza los bordes de las formas.",

@@ -21,6 +21,11 @@
  *                                 links' size and shows more of itself as it
  *                                 comes down (port/render/rd_chain.h); draw
  *                                 only, so no pad-recording key
+ *   [gameplay] skip_opening
+ *                          false  the boot starts at the title screen: no
+ *                                 Sony presents sign and no opening scene
+ *                                 (common/src/kanbanBoot.c, script/src/op.c);
+ *                                 a pad-recording key (boot timing)
  *   [gameplay] hold_type   "hold" Yorda's hand: "hold" keeps R1 held (the
  *                                 game's Hold type A); "toggle" takes it with
  *                                 one press and lets go with another (B)
@@ -42,7 +47,8 @@
  * Game code (ico2/) reads ico_opt_yorda_safe() and ico_opt_developer_mode()
  * under #ifdef ICO_HOST only; door_fix is read by door_grace.c, which the
  * game's exit check calls; natural_chains by seki/src/BgAnimation.c under
- * #ifdef ICO_RD (the window build).
+ * #ifdef ICO_RD (the window build); skip_opening by common/src/kanbanBoot.c
+ * and script/src/op.c.
  */
 #ifndef ICO_PORT_GAME_OPTIONS_H
 #define ICO_PORT_GAME_OPTIONS_H
@@ -70,6 +76,11 @@ void ico_opt_set_door_fix(int on);
 /* [gameplay] natural_chains (default false): Natural chains (rd_chain.h) */
 int ico_opt_natural_chains(void);
 void ico_opt_set_natural_chains(int on);
+/* [gameplay] skip_opening (default false): Skip the opening, read by the
+   boot (kanbanBoot.c at its start, op.c at the title script's first entry),
+   so a change takes effect at the next start */
+int ico_opt_skip_opening(void);
+void ico_opt_set_skip_opening(int on);
 /* Mirror mode: ico_input negates the stick X (ico_input_mirror), the audio
    host swaps the pan (ico_audio_pan_mirror), the renderer flips the picture
    (rd.h rd_set_mirror, through the listener below).

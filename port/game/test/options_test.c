@@ -123,6 +123,15 @@ static void test_defaults(void)
     CHECK(ico_opt_natural_chains() == 1);
     ico_opt_reload();
     CHECK(ico_opt_natural_chains() == 0);
+    /* Skip the opening: the same (off, the setter's 0 or 1, back on reload) */
+    CHECK(ico_opt_skip_opening() == 0);
+    ico_opt_set_skip_opening(4);
+    CHECK(ico_opt_skip_opening() == 1);
+    ico_opt_set_skip_opening(0);
+    CHECK(ico_opt_skip_opening() == 0);
+    ico_opt_set_skip_opening(1);
+    ico_opt_reload();
+    CHECK(ico_opt_skip_opening() == 0);
     /* Hold type: hold (0) by default, the setter keeps 0 or 1, a reload
        goes back to the config's (absent: hold) */
     CHECK(ico_opt_hold_type() == ICO_HOLD_HOLD);
@@ -160,7 +169,8 @@ static void test_config(const char *dir)
         return;
     }
     fputs("[gameplay]\nstick_fix = true\nyorda_safe = true\ndoor_fix = true\nmirror = true\n"
-          "developer_mode = true\nnatural_chains = true\n[dev]\ndebug_option = 1\n",
+          "developer_mode = true\nnatural_chains = true\nskip_opening = true\n[dev]\n"
+          "debug_option = 1\n",
           f);
     fclose(f);
     ico_config_reset(path, "/nonexistent/options_test.ini");
@@ -169,6 +179,7 @@ static void test_config(const char *dir)
     CHECK(ico_opt_yorda_safe() == 1);
     CHECK(ico_opt_door_fix() == 1);
     CHECK(ico_opt_natural_chains() == 1);
+    CHECK(ico_opt_skip_opening() == 1);
     CHECK(ico_opt_mirror() == 1);
     /* developer mode and the debug option file switch */
     CHECK(ico_opt_developer_mode() == 1);

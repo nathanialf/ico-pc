@@ -416,9 +416,9 @@ static void timestamp(char *out, size_t size, const char *fmt)
 /* The config values the simulation depends on, written into the recording's
    header and compared when a recording is replayed as the pad script. */
 static const char *const record_keys[] = {
-    "video.video_mode",    "game.language",           "gameplay.mirror", "gameplay.stick_fix",
-    "gameplay.yorda_safe", "gameplay.developer_mode", "dev.start_stage", "gameplay.door_fix",
-    "video.anti_aliasing", "gameplay.hold_type",
+    "video.video_mode",    "game.language",           "gameplay.mirror",       "gameplay.stick_fix",
+    "gameplay.yorda_safe", "gameplay.developer_mode", "dev.start_stage",       "gameplay.door_fix",
+    "video.anti_aliasing", "gameplay.hold_type",      "gameplay.skip_opening",
 };
 
 #define RECORD_MAGIC "# ico-pc input recording"
@@ -2288,6 +2288,9 @@ static int host_main(int argc, char **argv)
     open_model_pack(exe_dir);
 #endif
     start_watchdog(watchdog);
+    if (ico_opt_skip_opening()) {
+        fprintf(stderr, "boot: the opening is skipped (Options > Gameplay > Skip the opening)\n");
+    }
     ico_diag_milestone("boot starts (ico_host_init)");
     ico_host_init();
     ico_diag_milestone("boot ran until every thread waits");

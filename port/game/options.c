@@ -20,6 +20,7 @@ static int s_stick_fix = -1;
 static int s_yorda_safe = -1;
 static int s_door_fix = -1;
 static int s_natural_chains = -1;
+static int s_skip_opening = -1;
 static int s_mirror = -1;
 static int s_developer_mode = -1;
 static int s_circle_back = -1;
@@ -94,6 +95,16 @@ int ico_opt_natural_chains(void)
 void ico_opt_set_natural_chains(int on)
 {
     s_natural_chains = on != 0;
+}
+
+int ico_opt_skip_opening(void)
+{
+    return get(&s_skip_opening, "gameplay.skip_opening");
+}
+
+void ico_opt_set_skip_opening(int on)
+{
+    s_skip_opening = on != 0;
 }
 
 int ico_opt_mirror(void)
@@ -350,7 +361,7 @@ void ico_opt_hold_type_toggled(int type)
 void ico_opt_reload(void)
 {
     s_stick_fix = s_yorda_safe = s_door_fix = s_mirror = s_developer_mode = s_circle_back = -1;
-    s_natural_chains = -1;
+    s_natural_chains = s_skip_opening = -1;
     s_output = -2;
     s_ui_language = -2;
     s_hold_type = -1;

@@ -79,9 +79,35 @@ extern void iosMcLoadProductBlock(McMgr *mp);
    manager asks ico_kanban_boot_holds_keep before it lets go.  No step
    waits on fbKeep, so every step keeps its tick. */
 
+/* PC port: port/game/options.c: [gameplay] skip_opening */
+extern int ico_opt_skip_opening(void);
+
+/* PC port: Skip the opening, read as the boot starts (bootStep 0): no Sony
+   presents sign and no five-second wait (steps 2 and 3), and actOpDemo01
+   goes to the title (op.c).  The keep then lasts from the card check to
+   step 7, which lets go of it in the tick it sets kanbanBootEnd, the tick
+   actOpDemo01's scpFadeOut(255) starts (kanbanBootMain runs before the
+   objects, icoMisc.c), so the screen stays black until the title's fade-in.
+   The card warning still lets go of it at its own sign (step 301, jpn step
+   100) and its backdrop covers the frames; once it is answered the check's
+   end takes the keep again while the warning fades, as a second check does
+   at step 2, and step 7 waits for the warning's signs to be gone as it
+   waits for the presents sign without the option. */
+static int bootSkipOpening; /* port */
+
 int ico_kanban_boot_holds_keep(void)
 {
+    if (bootSkipOpening) {
+        return bootStep >= 2 && bootStep <= 7;
+    }
     return bootStep == 2;
+}
+
+/* PC port: a card warning's signs are still up (Skip the opening's step 7) */
+static int bootWarningUp(void)
+{
+    return (bootKanban != 0 && bootKanban->layout != 0) ||
+           (bootKanbanSub != 0 && bootKanbanSub->layout != 0);
 }
 
 /* The Japanese disc's card check: no language, camera or video-mode steps;
@@ -164,7 +190,9 @@ static int kanbanBootMcCheck_jpn(void)
         mcCheckStep = 1;
         break;
     default:
-        fbKeep = 0;
+        /* PC port: with Skip the opening the keep stays (or, after a card
+           warning, is taken again) until step 7 */
+        fbKeep = bootSkipOpening ? 1 : 0;
         fadeStatus = 0;
         ret = 1;
         break;
@@ -417,7 +445,9 @@ static int kanbanBootMcCheck(void)
         mcCheckStep = 1;
         break;
     default:
-        fbKeep = 0;
+        /* PC port: with Skip the opening the keep stays (or, after a card
+           warning, is taken again) until step 7 */
+        fbKeep = bootSkipOpening ? 1 : 0;
         fadeStatus = 0;
         ret = 1;
         break;
@@ -440,6 +470,7 @@ void kanbanBootMain(void)
         isysGObjActiveLink(0, 1);
         systemStatus[5] = 0;
         mcCheckStep = 0;
+        bootSkipOpening = ico_opt_skip_opening() != 0; /* PC port */
         bootStep++;
         /* fallthrough */
     case 1:
@@ -452,11 +483,13 @@ void kanbanBootMain(void)
             return;
         }
         kanbanReqAllDelFade();
-        waitKanban = kanbanReqAdd(PAL_JPNKOR(2, 0), 1);
+        /* PC port: Skip the opening puts up no presents sign */
+        waitKanban = bootSkipOpening ? 0 : kanbanReqAdd(PAL_JPNKOR(2, 0), 1);
         bootStep++;
         break;
     case 3:
-        waitTimer = (60 - systemStatus[0] * 10) / systemStatus[1] * 5;
+        /* PC port: and no wait with Skip the opening */
+        waitTimer = bootSkipOpening ? 0 : (60 - systemStatus[0] * 10) / systemStatus[1] * 5;
         bootStep++;
         /* fallthrough */
     case 4:
@@ -477,10 +510,15 @@ void kanbanBootMain(void)
         bootStep++;
         break;
     case 7:
-        if (waitKanban->layout != 0) {
+        /* PC port: with Skip the opening (no presents sign) the wait is for
+           a card warning's signs, and the keep ends with the boot */
+        if (waitKanban != 0 ? waitKanban->layout != 0 : bootWarningUp()) {
             return;
         }
         kanbanBootEnd = 1;
+        if (bootSkipOpening) {
+            fbKeep = 0;
+        }
         bootStep++;
         break;
     }
