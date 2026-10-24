@@ -153,12 +153,17 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the Japanese and Korean DATA.DF manifests in `discs.c` with the image (`archive_manifest_jpn`,
   `archive_manifest_kor`); `shift <dir>` builds a synthetic image whose DATA.DF entry lists the
   Korean shift and checks the ISO9660 look-up (sector plus 153,600, size minus the shift in bytes,
-  refusal when the directory is not larger), with no disc (`archive_shift`).
+  refusal when the directory is not larger), with no disc (`archive_shift`); `synth` also reads a
+  second archive mount (`ico_vfs_reopen`) interleaved with the first.
 - `make_raw_cd.py`, `disc_raw_test.cmake`: a MODE2/2352 `.bin` and its `.cue` made from the
   Japanese `.iso` into the build folder at test time (zero EDC/ECC, which the reader ignores), and
   for the `.chd` test a `chdman createcd` of the `.cue` (skipped without `chdman` on `PATH`), each
   checked by `vfs_test same` against the `.iso` (`vfs_disc_jpn_bin`, `vfs_disc_jpn_cue`,
   `vfs_disc_jpn_chd`).
+- `df_index_test.c`: `df_pack.h`'s `IcoDfIndex` over a second mount of the disc against the global
+  index: the directory, a loose file's bytes, every member's name and row, a member's bytes,
+  `ico_df_index_read_pack` against one read per member and its stop, the global index untouched
+  (`df_index_disc`).
 - `iso_import_test.c`: the Android first start's copy of the chosen image over SDL memory streams
   (`iso_import`).
 - `json_test.c`: `port/data/json.h`: numbers, strings, nesting, the depth limit, malformed input
@@ -170,7 +175,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   without them).
 - `vfs_test.c`: the [VFS](ARCHITECTURE.md#terms) and its ISO9660 backend, the
   [libcdvd](ARCHITECTURE.md#terms), [SIF](ARCHITECTURE.md#terms) and [IOP](ARCHITECTURE.md#terms)
-  RAM layers (`vfs_synthetic`, `vfs_disc`, `vfs_disc_jpn`, `vfs_disc_kor`); `same <iso> <image>`: the same
+  RAM layers, and `ico_vfs_reopen`'s second mount read interleaved with the first
+  (`vfs_synthetic`, `vfs_disc`, `vfs_disc_jpn`, `vfs_disc_kor`); `same <iso> <image>`: the same
   directory records, boot ELF and DATA.DF SHA-1s and image SHA-1 in both.
 - `sha1.h` is the tests' SHA-1.
 
@@ -774,9 +780,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `vu_ps`'s inputs matching the outputs of every VU vertex shader that draws (the main shaders,
   the programs' entries and their plain builds).
 - `rd_water_test.c`: the surfaces that render to and sample from textures (`rd_water`).
-- `texpack_disc_test.c`: the PCSX2 names of every texture on the disc, and how many of a pack's
-  files they reach (`texpack_disc`).
+- `texpack_disc_test.c`: the PCSX2 names of every texture on the disc (the walk of
+  `port/render/texpack_walk.h`), and how many of a pack's files they reach (`texpack_disc`).
 - `texpack_e2e_test.c`: the texture pack end to end on the real pieces (`texpack_e2e`).
+- `texpack_export_test.c`: the texture export's core on TIM2 files it makes: the names written are
+  the level-alone candidates, each PNG at the padded size, a file already there kept, short and
+  24-bit CLUTs refused, a repeated texture one file and a duplicate, the manifest's counts and
+  flags, a second run writing nothing, a stopped and a dry run (`texpack_export`); `--disc` a dry
+  export of the disc against `texpack_names.txt` and a cancel (`texpack_export_disc`).
 - `texpack_load_test.c`: the DDS and PNG loaders on files built in memory; with a pack, its files
   (`texpack_load`, `texpack_pack_files`).
 - `texpack_name_test.c`: XXH3, the swizzle and the names against PCSX2's rules (`texpack_name`).
@@ -1070,7 +1081,8 @@ These cache variables point the tests at the player's files ([../BUILDING.md](..
 has their defaults; the registrations are in `port/*/CMakeLists.txt`):
 
 - `ICO_DISC_IMAGE`, the PAL image. Without it `vfs_disc`, `archive_disc`, `appearance_disc`,
-  `fmv_fields`, `gsb_cull_stage`, `texpack_disc`, `menu_look`, `menu_text`, `gallery`,
+  `fmv_fields`, `gsb_cull_stage`, `texpack_disc`, `texpack_export_disc`, `df_index_disc`,
+  `menu_look`, `menu_text`, `gallery`,
   `content_table_chains` and the headless game runs below skip; `sndn2`, `fmv`, `shadow_spawn` and
   `rd_mesh` run only their synthetic part, and `tables_loader` reads the base ELF instead.
 - `ICO_DISC_IMAGE_KOR`, the Korean image (`baserom/Ico_KOR.iso`). Without it `vfs_disc_kor`,

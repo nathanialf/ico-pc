@@ -67,6 +67,7 @@ So every backend serves one flat LSN space with the disc's own numbering (`port/
 | call | what |
 | --- | --- |
 | `ico_vfs_mount(backend, location)`, `ico_vfs_unmount` | open a volume through a backend table; the reason for a failure goes to stderr |
+| `ico_vfs_reopen(vfs)`, `ico_vfs_location` | a second mount of the same volume: same backend, same location, state of its own (the image's file handle and CHD hunk buffers, the archive's `FILE*`; the Korean DATA.DF shift found again), so another thread can read it while the game reads the first |
 | `ico_vfs_set_disc`, `ico_vfs_disc` | the volume the libcdvd layer reads (not owned; `NULL` is "no disc") |
 | `ico_vfs_normalize` | any accepted spelling to `DIR/FILE` |
 | `ico_vfs_stat`, `ico_vfs_open`, `ico_vfs_size` | a look-up: LSN, size, ISO date, directory flag, name as the volume spells it |
@@ -482,7 +483,24 @@ other entries are loose files (`.int` streams, `.smb`, `.pss`, `.jim`).
 loose file; `ico_df_find_member` and `ico_df_read_member` for a pack member by its full name
 (`sound/ICO_SE/com_v.hd`), first match in directory order. The members' index is built once per
 volume, on the first look-up, by inflating each pack's header and directory; a member is read by
-inflating its pack from the start to the member's end.
+inflating its pack from the start to the member's end. These calls share one index, the game
+thread's: passing them another volume starts it over.
+
+A reader on another thread keeps an index of its own: `ico_df_index_open(vfs)` reads the directory
+and indexes every pack at once into an `IcoDfIndex` that shares nothing with the global one or
+another instance, and `ico_df_index_entries`, `_entry_name`, `_entry_size`, `_entry_find`,
+`_read_entry`, `_pack_count`, `_member_count`, `_member_name`, `_member_at`, `_pack_members`,
+`_find` and `_read_member` are the instance's versions of the calls above; members are numbered as
+`ico_df_member_name` numbers them (the packs in directory order, each in its own order).
+`ico_df_index_read_pack(idx, pack, fn, user)` inflates a pack once, start to end, and hands every
+member to `fn` in order with its bytes (one buffer the size of the pack's largest member), where
+reading each member alone would inflate the pack from the start once per member; `fn` returning
+non-zero stops it (1), a read or inflate error returns -1. `ico_df_index_close` frees it. The
+texture walk (`port/render/texpack_walk.h`) reads the disc this way, and the texture export runs it
+on its own thread over `ico_vfs_reopen`'s mount ([PACKS.md](PACKS.md#dumping)). Two mounts of one
+file are safe: the image backend's state (`Iso`, its `IcoDiscImage`, the CHD's `chd_file`) and the
+archive's (`Arch` and its `FILE*`) are per mount, and the only shared static in the backends is
+`ico_vfs_iso9660_force_df_shift`'s test override (`port/data/iso9660.c`, `port/data/archive.c`).
 
 ## JSON
 

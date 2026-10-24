@@ -323,6 +323,51 @@ Both dumps need developer mode as well as their key (`port/platform/window_host.
   normal word, bone count, box and `colorScale` 128 (`port/render/gltf.h`, what `gltf_write`
   writes; `port/render/modelpack.c`, `modelpack_dump`, the extras).
 
+### Exporting every texture of the disc
+
+The texture export (`port/render/texpack_export.h`, library `ico_texpack_export`; the Options row
+is in `port/ui/settings.c`) writes every TIM2 on the player's disc into the same `dumps` folder,
+under the names the runtime dump gives them, without playing. The walk
+(`port/render/texpack_walk.h`, library `ico_texpack_walk`, which links only `ico_texpack_name` and
+`ico_port_data`) reads DATA.DF through an `IcoDfIndex` of its own
+([DATA.md](DATA.md#datadf-for-the-ports-own-screens)) and hands every `*.tm2` member of the packs, then every TIM2 record of the loose `*.jim` subtitle
+files, then those of the `*.jim` members, with the `TexpackSource` the hook builds
+(`ico2/seki/src/Texture.c` (`texHostPack`, `texHostTexture`), a Latin-1 file: `grep -a`).
+`texpack_disc_test` is its other user. Per item the export applies the runtime's rules: a 24-bit
+CLUT and a CLUT shorter than the format's 16 or 256 entries name nothing and are refused; each level
+the game can bind is named by `texpack_candidates(src, level)`, keeping the names whose start level
+is that level and that are no mip chain (`texpack_dump`); the level is decoded from the
+`RdTexImage` `texHostTexture` builds (`rdtex_decode`, padded to 2^TW x 2^TH, raw GS alpha), with a
+copy through `rdtex_apply_texa` per TEXA-dependent name. A name is written once per run, a file
+already there is kept, and every file goes to `<name>.png.tmp` first and is renamed
+(`ico_rename_replace`), so a dump running at the same time and the pack loader never see half a
+file. `dumps/manifest.txt` lists every item (member, kind, type, size, size in texels, levels,
+CLUT, flags, names with a mark: `+` written, `=` already there, `~` a duplicate, `!` failed), with
+a header of counts and one line on what no export can make: the pictures the game draws while it
+runs (fog, glow, blur, depth of field), the movies, the later palettes of a CLUT-scroll texture and
+names joining several levels (PCSX2 with mipmapping on); Dump textures stays for those.
+
+PAL: 8630 TIM2 items (6310 `.tm2` members, 2320 `.jim` records), 11240 level-0 names, 6 refused
+(24-bit CLUT), 841 mipmapped, 156 with a CLUT scroll; every level alone is 9932 names, about 1730
+files and 160 MB after the deduplication (`rd_png.c` stores the pixels uncompressed).
+
+The job (`texpack_export_begin`, `_poll`, `_cancel`, `_shutdown`) runs one export on an SDL thread
+at `SDL_THREAD_PRIORITY_LOW` over `ico_vfs_reopen(ico_vfs_disc())`, never the game's mount or the
+global DATA.DF index; `begin` takes the folder from `texpack_dump_dir` (the dump's own definition
+of it) and builds rd_png's CRC table first (`rd_png_prepare`, `port/render/rd_png.h`). The worker
+checks the cancel flag between items and sets its final state last, after the manifest;
+`texpack_export_shutdown` joins it and must run before `texpack_shutdown`, `rd_shutdown` and
+`SDL_Quit`.
+
+| line | when |
+| --- | --- |
+| `textures: export started, %d items, folder %s` | the walk starts (the items `texpack_walk_total` expects) |
+| `textures: export %d of %d items, %d written` | every 1000 items |
+| `textures: export cannot write %s: %s (errno %d, failed write %d)` | the first 8 failed writes, then every 100th |
+| `textures: export complete: items ..., failed %d, manifest %s` | the end, every counter (`stopped after %d of %d` or `failed` in place of `complete`) |
+| `textures: export not started: %s` | `texpack_export_begin` refused (one running, no dump folder, no disc, the disc not mountable again, no thread) |
+| `textures: export failed: the disc's DATA.DF could not be read` | the worker's index could not be built |
+
 The model viewer's save button arms a one-shot dump of every part of the object on screen, dumping
 on or off, rewriting files already there (`modelpack_dump_object_once`,
 `modelpack_dump_object_status`;
@@ -339,4 +384,9 @@ archives, and the version information (`tools/test/package_textures_test.sh`, th
 `CMakeLists.txt` (`package_textures`)). The loaders and names have their own C tests, listed in
 [TESTING.md](TESTING.md#test-programs-by-area): `texpack_name`, `texpack_load`,
 `texpack_pack_files` (`texpack_load_test --pack` on the files of `ICO_TEXPACK_DIR`), `texpack`,
-`texpack_disc`, `texpack_e2e`, `gltf`, `modelpack`.
+`texpack_disc`, `texpack_e2e`, `gltf`, `modelpack`. The export has `texpack_export` (no disc:
+synthetic TIM2s through the core, the file set against the level-alone names, the PNG sizes, a file
+already there, the refusals, a duplicate, the manifest, a second run, a stopped one, a dry one) and
+`texpack_export_disc` (a dry export of the disc names exactly `texpack_names.txt`'s level-alone
+tokens less the short CLUTs, and a cancel after 100 items stops there); `df_index_disc` and
+`vfs_synthetic` cover the index and the second mount it reads through.
