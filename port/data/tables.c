@@ -360,8 +360,13 @@ int ico_tables_load_elf(const IcoTableSet *set, const uint8_t *elf, size_t size,
             continue;
         }
         for (i = 0; i < row->count; i++) {
-            if (decode_record(set, row, i, b + row->start + i * row->record->ee_size,
-                              (char *)row->host + (size_t)i * row->record->host_size, err,
+            char *host = (char *)row->host + (size_t)i * row->record->host_size;
+
+            /* the record clear: what no field writes is 0 (a host-only field
+               this disc lacks, the elements of an array past the disc's, a
+               default bit-field), whatever an earlier load left */
+            memset(host, 0, row->record->host_size);
+            if (decode_record(set, row, i, b + row->start + i * row->record->ee_size, host, err,
                               errsz) != 0) {
                 loaded_set = NULL;
                 return -1;
