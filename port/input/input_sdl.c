@@ -17,6 +17,7 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include "../core/region.h" /* ico_region_cur: the disc's confirm */
 #include "host_config.h"
 #include "input.h"
 #include "input_sdl.h"
@@ -464,7 +465,9 @@ int ico_input_sdl_touch_overlay(IcoTouchOverlay *out)
 
 /* The menus by taps while the layout has the D-pad, Cross or Circle Off
    (ico_touch_menu_taps): a finger that goes down over a menu (the pointer's
-   ico_pointer_menu) on no working control is the mouse's click there, so a
+   ico_pointer_menu) on no working control (ico_touch_blocks_menu_tap: a
+   button, or the stick while the disc's confirm works; never the look pad,
+   which does nothing in a menu) is the mouse's click there, so a
    player who switched every control off still gets from Back's pause menu
    to Options > Controls > Touch screen > Reset. One finger at a time: a
    new finger that goes down while the click is held (its lift went to the
@@ -482,6 +485,13 @@ static void touch_tap_drop(void)
         s_tapDown = 0;
         ico_pointer_button(0);
     }
+}
+
+/* the disc's confirm control: Cross, Circle on the Japanese and Korean
+   discs (port/core/region.h pad_confirm, the pad word's Circle bit 0x20) */
+static int confirm_ctl(void)
+{
+    return ico_region_cur()->pad_confirm == 0x20 ? ICO_TOUCH_CTL_CIRCLE : ICO_TOUCH_CTL_CROSS;
 }
 
 static void touch_menu_tap(const SDL_Event *e, int kind)
@@ -509,8 +519,8 @@ static void touch_menu_tap(const SDL_Event *e, int kind)
         }
         if (!ico_pointer_menu() || !ico_touch_menu_taps(&s_touchLayout) ||
             !ico_touch_accepts(mode, s_raw.gamepads) ||
-            ico_touch_takes(&s_touchLayout, e->tfinger.x * (float)s_touchLayout.outW,
-                            e->tfinger.y * (float)s_touchLayout.outH)) {
+            ico_touch_blocks_menu_tap(&s_touchLayout, e->tfinger.x * (float)s_touchLayout.outW,
+                                      e->tfinger.y * (float)s_touchLayout.outH, confirm_ctl())) {
             return;
         }
         if (!s_tapLogged) {

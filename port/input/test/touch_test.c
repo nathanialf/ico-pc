@@ -1403,6 +1403,66 @@ static void test_hidden_off(void)
     }
 }
 
+/* The menus' tap click on a 2340 x 1080 phone at 420 dpi with the disc's
+   confirm Off: the look pad's area never blocks it, the stick's only while
+   the confirm works, a working button always. */
+static void test_menu_tap_areas(void)
+{
+    const IcoTouchEnv env = env_of(420.0f, ICO_TOUCH_FOLD_NONE, 0, 0, 0, 0, 0, 0);
+    IcoTouchEdits e;
+    IcoTouchLayout l;
+    float lx = 0.0f, ly = 0.0f, sx = 0.0f, sy = 0.0f, bx, by;
+    int k;
+
+    for (k = 0; k < 2; k++) {
+        /* k 0: the European disc, Cross confirms and is Off; k 1: the
+           Japanese and Korean discs, Circle */
+        const int confirm = k == 0 ? ICO_TOUCH_CTL_CROSS : ICO_TOUCH_CTL_CIRCLE;
+        const int other = k == 0 ? ICO_TOUCH_CTL_CIRCLE : ICO_TOUCH_CTL_CROSS;
+
+        ico_touch_edits_defaults(&e);
+        CHECK(ico_touch_edit_parse(&e.ctl[ICO_TOUCH_RULE_FULL][confirm], confirm, "off") == 0);
+        l = ico_touch_layout_edits(2340, 1080, no_insets(), ICO_TOUCH_MEDIUM, &env, &e);
+        CHECK(l.rule == ICO_TOUCH_RULE_FULL && ico_touch_menu_taps(&l));
+        CHECK(l.stickActive && l.lookActive);
+        CHECK(look_point(&l, &lx, &ly) && free_point(&l, l.stickArea, &sx, &sy));
+        CHECK(!in_area(&l.stickArea, lx, ly) && !in_area(&l.lookArea, sx, sy));
+        /* the mapper still takes both: only the menus' click goes past them */
+        CHECK(ico_touch_takes(&l, lx, ly) && ico_touch_takes(&l, sx, sy));
+        CHECK(!ico_touch_blocks_menu_tap(&l, lx, ly, confirm));
+        CHECK(!ico_touch_blocks_menu_tap(&l, sx, sy, confirm));
+        /* with the other disc's confirm (working) the stick blocks, the
+           look pad still not */
+        CHECK(ico_touch_blocks_menu_tap(&l, sx, sy, other));
+        CHECK(!ico_touch_blocks_menu_tap(&l, lx, ly, other));
+        /* a working button blocks either way, a Hidden one too */
+        centre_of(&l, ICO_TOUCH_B_SQUARE, &bx, &by);
+        CHECK(ico_touch_blocks_menu_tap(&l, bx, by, confirm) &&
+              ico_touch_blocks_menu_tap(&l, bx, by, other));
+        CHECK(ico_touch_edit_parse(&e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_SQUARE],
+                                   ICO_TOUCH_CTL_SQUARE, "hidden") == 0);
+        l = ico_touch_layout_edits(2340, 1080, no_insets(), ICO_TOUCH_MEDIUM, &env, &e);
+        CHECK(ico_touch_blocks_menu_tap(&l, bx, by, confirm));
+        /* the Off confirm's own place is a click */
+        centre_of(&l, k == 0 ? ICO_TOUCH_B_CROSS : ICO_TOUCH_B_CIRCLE, &bx, &by);
+        CHECK(!ico_touch_blocks_menu_tap(&l, bx, by, confirm) || in_area(&l.stickArea, bx, by));
+    }
+
+    /* the D-pad Off with Cross working: the stick still blocks (it moves the
+       cursor, Cross confirms), the look pad does not; the stick Off never */
+    ico_touch_edits_defaults(&e);
+    CHECK(ico_touch_edit_parse(&e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_DPAD], ICO_TOUCH_CTL_DPAD,
+                               "off") == 0);
+    l = ico_touch_layout_edits(2340, 1080, no_insets(), ICO_TOUCH_MEDIUM, &env, &e);
+    CHECK(ico_touch_menu_taps(&l) && free_point(&l, l.stickArea, &sx, &sy));
+    CHECK(ico_touch_blocks_menu_tap(&l, sx, sy, ICO_TOUCH_CTL_CROSS));
+    CHECK(look_point(&l, &lx, &ly) && !ico_touch_blocks_menu_tap(&l, lx, ly, ICO_TOUCH_CTL_CROSS));
+    CHECK(ico_touch_edit_parse(&e.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_STICK],
+                               ICO_TOUCH_CTL_STICK, "off") == 0);
+    l = ico_touch_layout_edits(2340, 1080, no_insets(), ICO_TOUCH_MEDIUM, &env, &e);
+    CHECK(!l.stickActive && !ico_touch_blocks_menu_tap(&l, sx, sy, ICO_TOUCH_CTL_CROSS));
+}
+
 int main(void)
 {
     test_layouts();
@@ -1416,6 +1476,7 @@ int main(void)
     test_stick_every_direction();
     test_gamepad_drop();
     test_hidden_off();
+    test_menu_tap_areas();
     if (failures != 0) {
         fprintf(stderr, "touch_test: %d failure(s)\n", failures);
         return 1;

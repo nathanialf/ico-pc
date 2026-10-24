@@ -875,6 +875,13 @@ int ico_touch_takes(const IcoTouchLayout *l, float x, float y)
            (l->lookActive && in_rect(&l->lookArea, x, y));
 }
 
+int ico_touch_blocks_menu_tap(const IcoTouchLayout *l, float x, float y, int confirmCtl)
+{
+    return hit(l, x, y) >= 0 ||
+           (l->stickActive && ico_touch_ctl_state(l, confirmCtl) != ICO_TOUCH_OFF &&
+            in_rect(&l->stickArea, x, y));
+}
+
 int ico_touch_menu_taps(const IcoTouchLayout *l)
 {
     return ico_touch_ctl_state(l, ICO_TOUCH_CTL_DPAD) == ICO_TOUCH_OFF ||

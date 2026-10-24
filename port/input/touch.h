@@ -354,10 +354,20 @@ int ico_touch_takes(const IcoTouchLayout *l, float x, float y);
 
 /* 1 when the layout leaves the menus without what they are used with by
    touch: the D-pad, Cross or Circle is Off. The device layer then lets a tap
-   that ico_touch_takes nothing of click the menu row under it (the mouse's
+   that no control blocks (ico_touch_blocks_menu_tap) click the menu row
+   under it (the mouse's
    click, port/input/pointer.h), so with every control Off, Back (the pause
    menu) and taps still reach Options > Controls > Touch screen > Reset. */
 int ico_touch_menu_taps(const IcoTouchLayout *l);
+
+/* 1 when a finger going down at (x, y), output pixels, over a menu is not
+   the menus' tap click (ico_touch_menu_taps) but a control's: a button that
+   is not Off, or the stick's area while the stick is not Off and the disc's
+   confirm control confirmCtl (ICO_TOUCH_CTL_CROSS, ICO_TOUCH_CTL_CIRCLE on
+   the Japanese and Korean discs) is not Off either. In a menu the look pad
+   does nothing and the stick only moves the cursor, so neither keeps a tap
+   from a row the player has no other way to confirm. */
+int ico_touch_blocks_menu_tap(const IcoTouchLayout *l, float x, float y, int confirmCtl);
 
 /* Clear every finger and output, look_decay to ICO_TOUCH_LOOK_DECAY (set
    the bindings' mouse_decay after), and show the overlay from nowNs with

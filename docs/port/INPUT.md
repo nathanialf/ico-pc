@@ -410,18 +410,28 @@ every change bumps.
   rules count Hidden controls (a finger there would press them unseen) and leave Off ones out
   (`controls_touch`; `touch_edit.c` (`ctl_off`)). `ico_touch_ctl_state` reports SHOWN, HIDDEN or
   OFF for a control of a layout, `ico_touch_takes` whether a finger down at a point would be taken
-  by a working control.
+  by a working control (the menus' tap click asks `ico_touch_blocks_menu_tap`, below).
 - **The menus with every control Off**: Back (Escape) presses Start in play, so the pause menu
   opens without the overlay, but the menus are worked with the D-pad and Cross (Circle on the
   Japanese and Korean discs), and on a phone the system makes no mouse events from touches
   (`SDL_HINT_TOUCH_MOUSE_EVENTS` 0, `port/platform/android/main_android.c`) while the desktop's are
   dropped while the overlay is on (`touch_synth_mouse`). So while the D-pad, Cross or Circle is Off
-  (`ico_touch_menu_taps`), a finger that goes down over a menu (`ico_pointer_menu`) on no working
-  control is the mouse's click there (`ico_pointer_move` and `ico_pointer_button`; one finger at a
-  time; `port/input/input_sdl.c` (`touch_menu_tap`)): the click the menus already take from a mouse
+  (`ico_touch_menu_taps`), a finger that goes down over a menu (`ico_pointer_menu`) where no
+  control blocks it is the mouse's click there (`ico_pointer_move` and `ico_pointer_button`;
+  `port/input/input_sdl.c` (`touch_menu_tap`)): the click the menus already take from a mouse
   ([UI.md](UI.md#the-mouse-in-menus)), so Options > Controls > Touch screen > Reset stays reachable.
-  The first such tap of a run logs `touch: the d-pad, cross or circle is off: a tap on a menu row
-  clicks it`.
+  `ico_touch_blocks_menu_tap(l, x, y, confirmCtl)` decides what blocks: a button that is not Off
+  (Hidden too), and the stick's area only while the stick and the disc's confirm control
+  (`confirmCtl`: Cross, Circle on the Japanese and Korean discs, from `port/core/region.h`
+  `pad_confirm`) are not Off. The look pad's area never blocks (it does nothing in a menu), nor does
+  the stick's once the confirm is Off (it only moves the cursor there), so a row under either can
+  still be tapped. One finger at a time: the click is let go on the finger's lift or a cancel, when
+  focus is lost (`touch_cancel`) and when the editor opens or closes (its fingers go to the
+  editor), and a finger that goes down while a click is still held lets that click go first and
+  takes its own, so a lift that never came cannot keep the click held. The first such tap of a run
+  logs `touch: the d-pad, cross or circle is off: a tap on a menu row clicks it`; a click let go by
+  a new finger logs `touch: a menu tap's lift was lost: released it for the next tap (N)`, the
+  first three times.
 - **The rails**: every control may be Hidden or Off (`ico_touch_ctl_hideable` is true for all,
   with no opacity floor), `alpha` is 0 to 1, `active` is 1 whenever `alpha` is above 0, and `scale` is always in range.
   `ico_touch_edit_sanitize` enforces them on every editor change and on every parsed config line.
