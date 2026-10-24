@@ -1082,7 +1082,7 @@ if(ICO_RUN_TESTS)
                      -P "${_crk}")
     add_test(NAME rd_crack_msaa
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> "-DARGS=2|msaa"
-                     "-DEXPECT=rd: crack fill: not drawn on SCENE at scale 2x2: MSAA is asked for"
+                     "-DEXPECT=rd: crack fill: not drawn on SCENE at scale 2x2: MSAA is asked for \\(its resolve gives a crack's pixel the surfaces beside it unless more than half its samples lie in the crack"
                      -P "${_crk}")
     add_test(NAME rd_crack_off
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> -DARGS=2
