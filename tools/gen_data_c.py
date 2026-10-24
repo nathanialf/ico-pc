@@ -52,7 +52,11 @@ struct, or a struct tag (`struct Name { ... };`, which the C then spells
 function), arrays, nested structs and bit-fields, laid out by the EE's rules (4-byte
 pointers and ints, 8-byte long long and double, bit-fields from the low bit
 of their declared type's unit). A base type with a trailing [N] is an array
-element (char[32]: the C defines `char name[count][32]`).
+element (char[32]: the C defines `char name[][32]`, the initializer giving
+the count). A type the named header does not define is looked up in the
+headers it includes, found by upstream's compile include paths (include_dirs); an array
+typedef (sceVu0FVECTOR, `float [4]` aligned to 16) keeps its alignment and is
+spelled by its name (`sceVu0FVECTOR name[] = { {...}, ... }`).
 
 The port's headers carry no `#ifdef VERSION_<SLUG>` block: the converter
 (tools/region_blocks.py) removes them at each upstream merge, so strip_c,
@@ -61,6 +65,7 @@ git by tools/gen_ee_layout.py, go through version_lines first.
 """
 
 import argparse
+import os
 import re
 import struct
 import sys
@@ -366,6 +371,31 @@ VERSION_LINES_SELF_TEST = (
      {"pal": "#if 0 x #elif 1 y #else w #endif", "jpn": "#if 0 x j #elif 1 y #else w #endif"}),
     ("#ifdef VERSION_JPN\n#if 1\nj\n#else\nq\n#endif\n#endif",
      {"pal": "", "jpn": "#if 1 j #else q #endif"}),
+    # a fourth target nested in the PAL arm, and named in the shared conditions
+    ("#if defined(VERSION_JPN) || defined(VERSION_KOR)\njk\n#else\n#ifdef VERSION_NTSC\nn\n#else\np\n#endif\n#endif",
+     {"pal": "p", "jpn": "jk", "kor": "jk", "ntsc": "n"}),
+    ("#if defined(VERSION_JPN) || defined(VERSION_KOR) || defined(VERSION_NTSC)\njkn\n#else\np\n#endif",
+     {"pal": "p", "jpn": "jkn", "kor": "jkn", "ntsc": "jkn"}),
+    ("#if !defined(VERSION_JPN) && !defined(VERSION_KOR) && !defined(VERSION_NTSC)\np\n#endif",
+     {"pal": "p", "jpn": "", "kor": "", "ntsc": ""}),
+    # a fifth target named beside the fourth, with its own block inside that arm, or nested in the PAL arm of both
+    ("#if defined(VERSION_NTSC) || defined(VERSION_AUG6)\n#ifdef VERSION_AUG6\na\n#else\nn\n#endif\nna\n#else\np\n#endif",
+     {"pal": "p", "jpn": "p", "ntsc": "n na", "aug6": "a na"}),
+    ("#if defined(VERSION_JPN) || defined(VERSION_KOR)\njk\n#else\n#ifdef VERSION_NTSC\nn\n#else\n#ifdef VERSION_AUG6\na\n#else\np\n#endif\n#endif\n#endif",
+     {"pal": "p", "kor": "jk", "ntsc": "n", "aug6": "a"}),
+    ("#if !defined(VERSION_NTSC) && !defined(VERSION_AUG6)\np\n#endif", {"pal": "p", "jpn": "p", "ntsc": "", "aug6": ""}),
+    ("#if defined(VERSION_JPN) || defined(VERSION_KOR) || defined(VERSION_AUG6)\njka\n#else\np\n#endif",
+     {"pal": "p", "jpn": "jka", "ntsc": "p", "aug6": "jka"}),
+    # a sixth target named beside the fifth, with its own block inside that arm, excluded inside the
+    # three-name PAL-only block, or nested in the PAL arm of all the others
+    ("#if defined(VERSION_AUG6) || defined(VERSION_JUN26)\n#ifdef VERSION_JUN26\nd\n#else\na\n#endif\nad\n#else\np\n#endif",
+     {"pal": "p", "ntsc": "p", "aug6": "a ad", "jun26": "d ad"}),
+    ("#if defined(VERSION_NTSC) || defined(VERSION_AUG6) || defined(VERSION_JUN26)\nnad\n#else\np\n#endif",
+     {"pal": "p", "jpn": "p", "ntsc": "nad", "aug6": "nad", "jun26": "nad"}),
+    ("#if !defined(VERSION_JPN) && !defined(VERSION_KOR) && !defined(VERSION_NTSC)\n#if !defined(VERSION_AUG6) && !defined(VERSION_JUN26)\np\n#endif\n#endif",
+     {"pal": "p", "jpn": "", "ntsc": "", "aug6": "", "jun26": ""}),
+    ("#if defined(VERSION_JPN) || defined(VERSION_KOR)\njk\n#else\n#ifdef VERSION_NTSC\nn\n#else\n#ifdef VERSION_AUG6\na\n#else\n#ifdef VERSION_JUN26\nd\n#else\np\n#endif\n#endif\n#endif\n#endif",
+     {"pal": "p", "kor": "jk", "ntsc": "n", "aug6": "a", "jun26": "d"}),
 )
 
 
@@ -407,6 +437,36 @@ def tokenize(text):
     return re.findall(r"0[xX][0-9a-fA-F]+|\d+|[A-Za-z_]\w*|\.\.\.|[{}()\[\];,*:=+\-/]", text)
 
 
+# Where an #include in a header is searched, in the order upstream's
+# tools/compile_c.sh gives the compile (the port carries no compile_c.sh):
+# the including file's programmer directory first, then these programmers'
+# include directories, then the sce/ archives'.
+INCLUDE_PROGRAMMERS = ("sugipon", "omori", "common", "ito", "fumi", "seki", "script")
+INCLUDE_ARCHIVES = ("libc", "libm", "libvu0", "libkernl", "libpkt", "libgraph", "libdma",
+                    "libpad", "libscf", "libmpeg", "libmc", "libipu", "libcdvd", "libsndn2")
+
+
+def include_dirs(path):
+    """The directories an #include in the header at path (repo-relative) is
+    searched in, in upstream's tools/compile_c.sh order: the including file's
+    programmer's include dir, the cross-programmer dirs, then the sce/
+    archive dirs."""
+    parts = Path(path).parts
+    own = [parts[1]] if parts[0] == "ico2" and len(parts) > 2 else []
+    dirs = [f"ico2/{p}/include" for p in dict.fromkeys(own + list(INCLUDE_PROGRAMMERS))]
+    return [d for d in dirs if (ROOT / d).is_dir()] + [f"sce/{a}" for a in INCLUDE_ARCHIVES]
+
+
+INCLUDE = re.compile(r'^\s*#\s*include\s*([<"])([^>"]+)[>"]', re.M)
+HEADERS = {}
+
+
+def header(path):
+    if path not in HEADERS:
+        HEADERS[path] = Header(path)
+    return HEADERS[path]
+
+
 class Header:
     def __init__(self, path, text=None):
         """The header at path in the tree, or (text given) that text, read as
@@ -417,6 +477,15 @@ class Header:
             text = (ROOT / path).read_text(encoding="latin-1")
         self.toks = tokenize(strip_c(text))
         self.cache = {}
+        # the headers it includes, as the compile finds them: "x.h" beside
+        # it first, then the include paths; one the tree lacks is skipped
+        self.includes = []
+        for quote, name in INCLUDE.findall(re.sub(r"/\*.*?\*/", " ", text, flags=re.S)):
+            here = [str(Path(path).parent)] if quote == '"' else []
+            for d in here + include_dirs(path):
+                if (ROOT / d / name).is_file():
+                    self.includes.append(os.path.normpath(f"{d}/{name}"))
+                    break
 
     def typedef(self, name):
         if name in self.cache:
@@ -463,6 +532,26 @@ class Header:
                         ty.size = -(-ty.size // ty.align) * ty.align
                 self.cache[name] = ty
                 return ty
+            # `typedef <type> name[N] [attrs];`: an array type, which the C
+            # spells by its name; aligned(N) raises its alignment
+            if t[j] == "[" and t[i - 1] != "*":
+                k = i - 1
+                while k >= 0 and t[k] not in (";", "}", "{"):
+                    k -= 1
+                e = t.index("]", j)
+                while t[e + 1] == "[":
+                    e = t.index("]", e + 1)
+                if t[k + 1] == "typedef" and t[k + 2] not in ("struct", "union"):
+                    _, ty = self._declarator([name] + t[j:e + 1], self.base_type(t[k + 2:i]))
+                    j = e + 1
+                    while t[j] == "__attribute__":
+                        j, al = self._attribute(j)
+                        if al:
+                            ty.align = max(ty.align, al)
+                    if t[j] == ";":
+                        ty.name = name
+                        self.cache[name] = ty
+                        return ty
             # `typedef <type> name;`
             if t[j] == ";":
                 k = i - 1
@@ -479,7 +568,45 @@ class Header:
                 ty.name = f"{t[i - 1]} {name}"
                 self.cache[name] = ty
                 return ty
+        # a type a header it includes defines
+        ty = self.included(name, {self.path})
+        if ty is not None:
+            self.cache[name] = ty
+            return ty
         fail(f"{self.path}: no typedef or struct tag {name}")
+
+    def included(self, name, seen):
+        """name as the first header this one includes (and so on, depth first)
+        that defines it, or None."""
+        for path in self.includes:
+            if path in seen:
+                continue
+            seen.add(path)
+            h = header(path)
+            if name in h.cache or h.defines(name):
+                return h.typedef(name)
+            ty = h.included(name, seen)
+            if ty is not None:
+                return ty
+        return None
+
+    def defines(self, name):
+        """Whether this header's own text declares name as a typedef or tag."""
+        t = self.toks
+        for i in range(1, len(t)):
+            if t[i] != name:
+                continue
+            if t[i - 1] in ("struct", "union") and i + 1 < len(t) and t[i + 1] == "{":
+                return True
+            k = i - 1
+            depth = 0
+            while k >= 0 and not (depth == 0 and t[k] in (";", "{")):
+                depth += t[k] == "}"
+                depth -= t[k] == "{"
+                k -= 1
+            if t[k + 1] == "typedef" and t[i + 1] in (";", "[", "__attribute__"):
+                return True
+        return False
 
     def _match_back(self, k):
         depth = 0
@@ -821,7 +948,7 @@ def c_decl(ty, name):
     if ty.kind == "ptr":
         inner = c_decl(ty.target, "*" + name)
         return inner if inner is not None else f"void *{name}"
-    if ty.kind == "struct" and getattr(ty, "name", None):
+    if ty.kind in ("struct", "array") and getattr(ty, "name", None):
         return f"{ty.name} {name}"
     return None
 
@@ -995,6 +1122,8 @@ def c_type(ty, spelled):
     if ty.kind == "ptr":
         inner, star, dims = c_type(ty.target, spelled[:-1])
         return inner, star + "*", dims
+    if ty.kind == "array" and getattr(ty, "name", None):
+        return ty.name, "", ""  # an array typedef (sceVu0FVECTOR), by its name
     if ty.kind == "array":
         inner, star, dims = c_type(ty.elem, spelled[:spelled.rindex("[")])
         return inner, star, f"[{ty.n}]" + dims
@@ -1041,7 +1170,7 @@ def write_c(member, rows, datas, layout):
                 headers.append(s["header"])
             continue
         data = datas[row["section"]]
-        ty = Header(s["header"]).typedef(s["type"])
+        ty = header(s["header"]).typedef(s["type"])
         start = start_of(s, row)
         n = s["count"] or 1
         stride = tmaps[s["type"]][1] if tmaps else ty.size
@@ -1072,8 +1201,12 @@ def write_c(member, rows, datas, layout):
             if s["count"] is None:
                 defs.append(f"{const}{tname} {star}{name}{dims} = {one(0)};")
             else:
+                # The bound is left to the initializer, as the developers
+                # wrote their tables (`[]`): under -G 8 gcc puts an array of
+                # 8 bytes or less declared with its bound in .sdata, and one
+                # declared `[]` in .data (EnemyInit.o's 8-byte tables).
                 arrays[name] = last - first
-                defs.append(f"{const}{tname} {star}{name}[{last - first}]{dims} = {{")
+                defs.append(f"{const}{tname} {star}{name}[]{dims} = {{")
                 defs.extend(f"    {one(i * stride)}," for i in range(first, last))
                 defs.append("};")
             defs.append("")
@@ -1111,6 +1244,26 @@ def write_if_changed(path, text):
     if path.exists() and path.read_bytes() == raw:
         return
     path.write_bytes(raw)
+
+
+def array_typedef_self_test():
+    """[failures] of the array typedef reader: an array typedef with
+    aligned(N) that a header provides only through its #include (Light.h
+    includes <libvu0.h>) is read with its element, count and alignment, and
+    spelled by its name with the array's initializer."""
+    h = header("ico2/seki/include/Light.h")
+    got = []
+    v = h.typedef("sceVu0FVECTOR")
+    got.append((v.kind, v.size, v.align, v.n, v.elem.name, v.name))
+    m = h.typedef("sceVu0FMATRIX")
+    got.append((m.kind, m.size, m.align, m.n, m.elem.n, m.name))
+    got.append(c_type(v, "sceVu0FVECTOR") + (c_decl(h.typedef("sceVu0FVECTOR*").target, "p"),))
+    got.append(Writer(struct.pack("<4f", 1, 0.5, -2, 0), 0, None, set()).value(v, 0, ""))
+    want = [("array", 16, 16, 4, "float", "sceVu0FVECTOR"),
+            ("array", 64, 16, 4, 4, "sceVu0FMATRIX"),
+            ("sceVu0FVECTOR", "", "", "sceVu0FVECTOR p"),
+            "{1.0f, 0.5f, -2.0f, 0.0f}"]
+    return [f"array typedef: got {g!r}, want {w!r}" for g, w in zip(got, want) if g != w]
 
 
 def main():

@@ -927,7 +927,7 @@ def main():
     ap.add_argument("--bits", action="store_true", help="write config/motion_bits.<slug>.txt")
     a = ap.parse_args()
     if a.selftest:
-        bad = g.version_lines_self_test() + region_lines_self_test()
+        bad = g.version_lines_self_test() + g.array_typedef_self_test() + region_lines_self_test()
         for x in bad:
             print(f"gen_ee_layout: selftest: {x}", file=sys.stderr)
         print(f"gen_ee_layout: selftest {'FAILED' if bad else 'passed'}")
