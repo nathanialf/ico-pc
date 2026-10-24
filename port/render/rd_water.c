@@ -261,6 +261,22 @@ bool rd__frame_projected(void)
     return s_frameProjected && rd_camera_depth() == 0;
 }
 
+/* rd_frame_projected_st's pair, the recording thread's as above */
+static float s_frameProjectedSt[2];
+
+void rd_frame_projected_st(float dsx, float dsy)
+{
+    s_frameProjectedSt[0] = dsx;
+    s_frameProjectedSt[1] = dsy;
+}
+
+bool rd__frame_projected_st(float st[2])
+{
+    st[0] = s_frameProjectedSt[0];
+    st[1] = s_frameProjectedSt[1];
+    return st[0] != 0.0f || st[1] != 0.0f;
+}
+
 const RdCamera *rd__camera_at(const RdFrame *f, int list, uint32_t index)
 {
     const RdCamera *cam = f != NULL && f->hasCamera ? &f->camera : NULL;
