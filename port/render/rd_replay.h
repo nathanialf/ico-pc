@@ -142,6 +142,27 @@ void rd__replay_fill_draw_cb(const Replay *r, const RdDrawPass *dp, const DrawSe
                              IcoDrawCB *cb);
 bool rd__replay_prepare_draw(Replay *r, DrawSetup *ds, const RhiRect *dateArea);
 uint32_t rd__replay_msaa_want(void);
+
+/* rd_msaa.c: the MSAA epoch's resolve (rd_replay.c msaaEnd; docs/port/MSAA.md).
+ * rd__msaa_resolve: one pass of msaa_resolve_ps into SCENE's (ts) colour and
+ * depth (DONT_CARE loads, the stencil loaded and kept) from SCENE_MS's
+ * colour and depth (samples each, put in SHADER_READ), the covered-majority
+ * rule against clearDepth when hasClear (else off, a line once a run).
+ * rd__msaa_close_note: where the epoch closed (the list in force, or the
+ * replay's end), its line once a list and cause; returns
+ * RdPerfRecord.msaaCloseAt's value */
+enum {
+    RD_MSAA_CLOSE_READ,   /* SCENE's colour or depth read, copied or snapshot (the hook) */
+    RD_MSAA_CLOSE_SHADOW, /* a pass on SCENE's depth with another colour (the shadow count's) */
+    RD_MSAA_CLOSE_DEPTH,  /* a pass on SCENE with another depth */
+    RD_MSAA_CLOSE_END,    /* the replay's end */
+    RD_MSAA_CLOSE_COUNT
+};
+
+void rd__msaa_resolve(RhiCommandList cl, RdTargetRec *ts, RhiTexture color, RhiState *colorState,
+                      RhiTexture depth, RhiState *depthState, uint32_t samples, bool hasClear,
+                      float clearDepth);
+uint8_t rd__msaa_close_note(int cause);
 const void *rd__replay_pass_push(RdPassKind kind, uint32_t color, uint32_t cw, uint32_t ch,
                                  uint32_t depth, uint32_t dw, uint32_t dh, int storage, int post);
 /* rd_replay.c frameRefresh's FrameCB of a VU draw of the camera picture
