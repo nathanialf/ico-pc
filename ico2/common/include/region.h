@@ -40,6 +40,7 @@ extern int ico_region;
 #define PAL_KOR(pal, kor) (ICO_KOR ? (kor) : (pal))
 #define PAL_JPNKOR(pal, jpnkor) (ICO_JPNKOR ? (jpnkor) : (pal))
 #define PAL_JPN_KOR(pal, jpn, kor) (ICO_KOR ? (kor) : ICO_JPN ? (jpn) : (pal))
+#define PAL_JUN26(pal, jun26) (ICO_JUN26 ? (jun26) : (pal))
 #define PAL_JPN_KOR_NTSC_AUG6_JUN26(pal, jpn, kor, ntsc, aug6, jun26) \
     (ICO_JUN26 ? (jun26) : ICO_AUG6 ? (aug6) : ICO_NTSC ? (ntsc) : ICO_KOR ? (kor) : \
      ICO_JPN ? (jpn) : (pal))
