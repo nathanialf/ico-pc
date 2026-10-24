@@ -38,6 +38,7 @@
 #include "photo_ui.h"
 #include "settings.h"
 #include "strings.h"
+#include "variants.h"
 #include "sysconf.h"
 #include "ui_hint.h"
 #include "ui_list.h"
