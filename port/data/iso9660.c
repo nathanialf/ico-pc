@@ -88,6 +88,7 @@ typedef struct {
     uint32_t root_size;
     uint8_t root_date[7];
     uint32_t df_shift; /* sectors: IcoDiscInfo.df_lsn_shift of the disc SYSTEM.CNF names */
+    char df_path[64];  /* the DATA.DF the shift applies to: that disc's df_path */
 } Iso;
 
 static int seek64(FILE *fp, uint64_t off)
@@ -740,6 +741,7 @@ static void iso_find_df_shift(Iso *iso)
     uint32_t n;
     unsigned char sec[ICO_VFS_SECTOR];
 
+    snprintf(iso->df_path, sizeof(iso->df_path), "%s", "DFDATAS/DATA.DF");
     if (forcedShift >= 0) {
         iso->df_shift = (uint32_t)forcedShift;
         return;
@@ -757,6 +759,7 @@ static void iso_find_df_shift(Iso *iso)
     disc = ico_disc_by_boot(boot);
     if (disc != NULL) {
         iso->df_shift = disc->df_lsn_shift;
+        snprintf(iso->df_path, sizeof(iso->df_path), "%s", disc->df_path);
     }
 }
 
@@ -935,7 +938,7 @@ static int iso_lookup(void *state, const char *path, IcoVfsEntry *out)
             p++;
         }
     }
-    if (iso->df_shift != 0 && strcmp(path, "DFDATAS/DATA.DF") == 0) {
+    if (iso->df_shift != 0 && strcmp(path, iso->df_path) == 0) {
         uint64_t skip = (uint64_t)iso->df_shift * ICO_VFS_SECTOR;
 
         /* the archive header lies df_shift sectors after the directory's LSN
