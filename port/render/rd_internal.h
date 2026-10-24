@@ -1005,8 +1005,8 @@ typedef struct RdProfile {
     bool fxPlan;
     bool fxDstLocal;
     bool vuPlanesFrac;
-    /* the crack filler above 1x on by default (rd_crack_fill.c): off on a
-     * tile-based GPU until measured; [dev] crack_fill over it */
+    /* the crack filler above 1x on by default on every class
+     * (rd_crack_fill.c); [dev] crack_fill over it */
     bool crackFill;
     /* rd_profile.c: the device class's name for the lines; per flag
      * (RD_PROFILE_*) whether a [dev] key set it and whether a self-test
@@ -3411,7 +3411,7 @@ void rd__blur_smooth_counts(uint64_t *drawn, uint64_t *restarts, uint64_t *origi
  * the nearer one's colour and depth.
  * rd__crack_fill_init      rd_init: the switch (ICO_RD_CRACK_FILL=0, [dev]
  *                          crack_fill = false: off; =1, true: on; unset:
- *                          RdProfile.crackFill, on but on a tile-based GPU)
+ *                          RdProfile.crackFill, on on every class)
  *                          and the counters from zero
  * rd__crack_fill_scene_made  rd_core.c after the named targets were made:
  *                          the state line when it changed ("crack fill: on
@@ -3425,13 +3425,16 @@ void rd__blur_smooth_counts(uint64_t *drawn, uint64_t *restarts, uint64_t *origi
  * rd__crack_fill_counts    since rd_init: replays filled, replays counted,
  *                          the pixels those filled, the last and the
  *                          largest count, the fogged replays above 1x not
- *                          filled, the last fill's scale and reach
+ *                          filled, the filled ones drawn inside the scene
+ *                          pass with the local fog, the last fill's scale
+ *                          and reach
  * rd__crack_fill_block     the 10 s summary's lines (rd_interp.c presentLog)
  * rd__crack_fill_reach     the reach on an axis at scale s: ceil(s / 2)
  *                          above 1, at most RD_CRACK_REACH_MAX, else 0
  * rd__crack_fill_shutdown  rd_shutdown: the count's target and buffer */
 typedef struct RdCrackCounts {
     uint64_t filled, counted, pixels, skipped;
+    uint64_t folded; /* of the filled, drawn in the pass the local fog keeps */
     uint32_t last, max;
     float sx, sy;
     uint32_t rx, ry;
