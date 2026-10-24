@@ -254,14 +254,17 @@ if(ICO_DATA_PYTHON)
     add_test(NAME data_desc_fresh
              COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_data_desc.py" --check
              WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-    # the USA disc's set, written before config/regions.txt lists its row
-    # (gen_data_c.py PENDING_ROWS): port/data/gen/ntsc/ must be what the
-    # table with that row gives (once the row lands, data_desc_fresh checks
-    # it with the others and this one checks it again)
-    add_test(NAME data_desc_fresh_ntsc
-             COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_data_desc.py" --check
-                     --version ntsc
-             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    # the USA disc's and the August 2001 disc's sets, written before
+    # config/regions.txt lists their rows (gen_data_c.py PENDING_ROWS):
+    # port/data/gen/<slug>/ must be what the table with the pending rows up to
+    # that slug gives (once the rows land, data_desc_fresh checks them with
+    # the others and these check them again)
+    foreach(_slug ntsc aug6)
+        add_test(NAME data_desc_fresh_${_slug}
+                 COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_data_desc.py" --check
+                         --version ${_slug}
+                 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    endforeach()
     # the record map's rules (extend, drop, default, narrow, a moved
     # bit-field) on a made-up record, with the version-block readers
     add_test(NAME data_map_selftest
@@ -270,7 +273,7 @@ if(ICO_DATA_PYTHON)
     # each other disc's config/ee_layout.<slug>.txt must be what its recorded
     # upstream revision gives (exit 0 with a note when that revision is not in
     # the clone)
-    foreach(_slug jpn kor ntsc)
+    foreach(_slug jpn kor ntsc aug6)
         add_test(NAME ee_layout_fresh_${_slug}
                  COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_ee_layout.py"
                          --version ${_slug} --check
@@ -294,6 +297,8 @@ set(ICO_BASE_ELF_KOR "${CMAKE_SOURCE_DIR}/baserom/kor/baseelf.elf" CACHE FILEPAT
     "The Korean base ELF the loader test's reference tables are written from")
 set(ICO_BASE_ELF_NTSC "${CMAKE_SOURCE_DIR}/baserom/ntsc/baseelf.elf" CACHE FILEPATH
     "The North American base ELF the loader test's reference tables are written from")
+set(ICO_BASE_ELF_AUG6 "${CMAKE_SOURCE_DIR}/baserom/aug6/baseelf.elf" CACHE FILEPATH
+    "The August 2001 preview disc's base ELF the loader test's reference tables are written from")
 # The members a disc's config/data_members.<slug>.txt lists. ICO_DATA_MEMBERS
 # is the union of every link order's (tools/gen_sources.py), so a member only
 # some discs have (the USA disc has no hint table, the June 2001 demo tables
