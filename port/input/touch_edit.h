@@ -46,9 +46,9 @@ enum { ICO_TOUCH_ANCHOR_T = 0, ICO_TOUCH_ANCHOR_B = 1 };
 enum { ICO_TOUCH_ANCHOR_DEFAULT = 2 };
 
 #define ICO_TOUCH_EDIT_SCALE_MIN 0.7f /* a face at 0.7 is 7.7 mm across: Android's 48 dp */
-#define ICO_TOUCH_EDIT_SCALE_MAX                                                                   \
-    3.0f /* a tablet's (v0.8.5 and before: 1.6); a box larger
-                                         than the region is shrunk to fit it (touch.c) */
+/* the largest size, a tablet's (1.6 before v0.8.6); a box larger than the
+   region is drawn at the largest size that fits it (touch.c apply_one) */
+#define ICO_TOUCH_EDIT_SCALE_MAX 3.0f
 #define ICO_TOUCH_EDIT_GRID_DEFAULT 4.0f
 #define ICO_TOUCH_EDIT_UNDO 8
 #define ICO_TOUCH_EDIT_LOOK_MIN 20.0f    /* the look pad's least width and height, q */

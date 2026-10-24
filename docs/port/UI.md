@@ -693,16 +693,18 @@ writes the edits and reads them back (`ico_input_write_touch_edits`,
 The host (`UiTouchEditHost`: `editor`, `begin`, `end`, `rule`, `layout`; `port/ui/settings.h`) is
 installed by the window host; without it the row is locked.
 
-`touch_ui.c` draws every control at its layout alpha and skips a hidden one. While the snapshot's
-`edit` view is active it draws at opacity 1, floors every control at 0.35, draws hidden ones
-dashed with the word Hidden, outlines the look pad's area, hatches the hinge band, dots the grid
+`touch_ui.c` draws every control at its layout alpha and skips a Hidden or Off one (alpha 0).
+While the snapshot's `edit` view is active it draws at opacity 1, floors every control at 0.35,
+draws Hidden ones dashed with the word Hidden and Off ones (`active` 0) dashed at half strength
+(`OFF_DIM`) with the word Off (`UI_STR_TED_OFF`), the D-pad key by key with its word across its
+middle row and the stick's ring with its word, outlines the look pad's area, hatches the hinge band, dots the grid
 from the anchor edges when snap is on, carried out to the bounds' edges (the window's, so the
 dots reach under a camera hole) and skipping the band carried to them (so the dots are where the
 drops land), outlines the
 selection with its name and the overlapping controls in amber (`kWarn`), and draws the toolbar
 strip along the top: each cell one line of words shrunk to fit ("Snap: On", "Grid: 4 mm",
 "Opacity -"), the keys framed, the two readouts on a fainter backing without a frame ("Size 120
-%" and "75 %" for the selected control, Hidden at 0, "All" with All lit, "-" with nothing
+%" and "75 %" for the selected control, Hidden or Off at 0, "All" with All lit, "-" with nothing
 selected); the opacity keys and the readouts dim with no selection and not All, Undo with
 nothing to undo. While Reset asks, its three choices lie over Done to All with the cursor key lit
 and the rest of the strip dims. The hint line or the refused or overlap note is drawn in the

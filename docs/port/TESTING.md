@@ -119,7 +119,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 
 - `config_test.c`: `config.toml`'s reader and writer, round trips, the ini over `config.toml` over
   default precedence, the first-run template (Hold type `hold`, `effect_motion_blur_mode =
-  "original"`), the language answer, `[game] disc` (`auto`, the slugs, an unknown value as
+  "original"`, the touch comments naming `format = 2`, the 0.7 to 3.0 size and the words `hidden`
+  and `off`; `touch.format` and a `[touch.full]` line written and read back), the language answer, `[game] disc` (`auto`, the slugs, an unknown value as
   auto logged once a load) and `[game] last_disc` (read, written, not in the template), the wall
   clock and the [EE](ARCHITECTURE.md#terms) timers (`config`).
 - `null_devices_test.c`: the pad as an empty console answers it (`null_devices`).
@@ -252,20 +253,26 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 
 - `input_record_test.c`: the pad recording's format, round trip through the script reader, the
   change-only rule and the sample point (`input_record`).
-- `input_test.c`: the `[touch]` tables onto the layout edits and back, bindings from config text, dead zone, quantisation, the stick fix, merging, the
+- `input_test.c`: the `[touch]` tables onto the layout edits and back (the `format` key, a file without the key reading `hidden` and `o0` as Off, rewritten as `off`), bindings from config text, dead zone, quantisation, the stick fix, merging, the
   [libpad](ARCHITECTURE.md#terms) buffer, rumble, Escape (`input`).
 - `mouse_camera_test.c`: the mouse camera's speed and range for the hand camera (`mouse_camera`).
 - `pad_script_test.c`: the `--pad-script` reader and what the null pad then shows the game's pad
   code (`pad_script`).
 - `touch_test.c`: the touch overlay's layouts over a table of screens (`test/touch_shapes.h`), the
-  sticks and buttons, every default layout's alpha 1 and `editGen` 0, a hidden L2 pressing nothing
-  (`touch`).
+  sticks and buttons, every default layout's alpha 1 and `editGen` 0, an Off L2 pressing nothing,
+  and `test_hidden_off`: a Hidden Start pressing Start and an Off one nothing, a Hidden stick and
+  look pad starting and Off ones not, `ico_touch_takes`, `ico_touch_ctl_state`, and the menus taking
+  taps only with the D-pad, Cross or Circle Off (`touch`).
 - `touch_edit_test.c`: the layout edits and the editor ([INPUT.md](INPUT.md#layout-edits)): an
   unedited layout equal to the default to the byte, the anchor arithmetic, the clamp (a camera
   hole's negative offsets in `test_cutout`; the region's clamp for offsets at or inside the safe
-  area on four inset screens in `test_v084_forms`), hidden
-  controls and the rails, the config text round trip, the editor over synthetic fingers and
-  gamepad words, and the toolbar clear of every default control (`touch_edit`).
+  area on four inset screens in `test_v084_forms`), Hidden and Off
+  controls and the rails, the config text round trip with `hidden` and `off`, the older files'
+  `hidden` and `o0` read as Off (`test_format_migration`), the editor over synthetic fingers and
+  gamepad words (the opacity steps through Hidden and Off, the overlap and refuse rules counting
+  Hidden and skipping Off: `test_hidden_off_editor`), sizes up to 300 % on screen in the three
+  postures on a phone and a 3000 x 2000 tablet (`test_size_300`), and the toolbar clear of every
+  default control (`touch_edit`).
 
 ### port/math/test
 

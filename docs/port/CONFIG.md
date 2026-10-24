@@ -287,6 +287,7 @@ comment block in the first-run text (`port/config/config.c` (`first_run_text`)).
 
 | key | type | default | meaning |
 | --- | --- | --- | --- |
+| `format` | number | unset | `2`: the lines are in the current grammar (`hidden` keeps a control working, `off` switches it off); the editor writes it with every layout. Without it (a file written before the key existed) `hidden` and `o0` are read as `off`, what they meant in such a file, and the editor's next save writes `format = 2` and `off` |
 | `snap` | bool | `true` | Snap to grid: a dropped control's offsets round to the grid |
 | `grid` | number | `4` | 2, 4 or 8, millimetres of the layout; any other value is logged and ignored |
 | `full.<control>`, `split.<control>`, `tabletop.<control>` | string | unset | one control's place, size and opacity in one posture ([INPUT.md](INPUT.md#layout-edits)) |
@@ -300,32 +301,38 @@ key in it is first set. The controls are `dpad`, `cross`, `circle`, `square`, `t
 | --- | --- |
 | `l<n>` or `r<n>` | the control's centre (the look pad's edge) `n` millimetres from the left or right edge of the screen's safe area (`tabletop`: of the part below the fold); negative (`l-3`, down to -500) lies past that edge, under a camera hole or a rounded corner, and the control is kept inside the window |
 | `t<n>` or `b<n>` | the same from the top or bottom edge |
-| `s<scale>` | size times `scale`, 0.7 to 1.6 (the default size when absent) |
-| `o<percent>` | opacity times the Touch opacity row's value, 0 to 100 (100 when absent); at least 25 on a control that cannot be hidden |
+| `s<scale>` | size times `scale`, 0.7 to 3.0 (the default size when absent); a control too large for the screen is drawn at the largest size that fits |
+| `o<percent>` | opacity times the Touch opacity row's value, 0 to 100 (100 when absent); `o0` is read as `hidden` |
 | `w<n> h<n>` | the look pad only: its size in millimetres, 20 to 500 (its default size when absent) |
-| `hidden` | alone: a hideable control (`select`, `l1`, `l2`, `r2`, `look`) at its default place, not drawn and not touchable |
+| `hidden` | in place of `o`: the control is not drawn but still works; alone at its default place, or after its place and size |
+| `off` | in place of `o`: the control is not drawn and does not work; alone or after its place and size, as `hidden` |
 | `default` | alone: the control is not edited (what a reset control that is in the file becomes) |
 
 Numbers are in layout millimetres, the unit the Touch size setting scales, so an arrangement keeps
 its real distance from the corners on another phone. The look pad's offsets are its edges on the
-anchor sides: `look = "r0 t0 w60 h30"` is the upper right corner. A hidden control that was moved
-is written with its position and `o0` (`l4 t6 s1.00 o0`) instead of `hidden`, so showing it again
-puts it back. Example:
+anchor sides: `look = "r0 t0 w60 h30"` is the upper right corner. Every control can be `hidden` or
+`off`, the D-pad and Start too. A Hidden or Off control that was moved is written with its
+position and size before the word (`l4 t6 s1.00 hidden`), so showing it again puts it back. With
+the D-pad, Cross or Circle off, a tap on a menu row clicks it, so the menus (and Options > Controls
+> Touch screen > Reset) still work by touch ([INPUT.md](INPUT.md#layout-edits)). Example:
 
 ```toml
 [touch]
+format = 2
 snap = true
 grid = 4
 
 [touch.full]
-cross = "r20 b10.5 s1.00 o100"
+cross = "r20 b10.5 s2.50 o100"
+dpad  = "off"
+start = "r40 t3 s1.00 hidden"
 l2    = "hidden"
 look  = "l50 t0 w60 h30 o100"
 ```
 
-A line that does not parse, is out of range or says `hidden` for a control that cannot be hidden is
-logged once as `touch: ignoring full.l2 = "..." (why)` and ignored: the control stays at its
-default place. Deleting the tables or any line gives the default back.
+A line that does not parse or is out of range is logged once as `touch: ignoring full.l2 = "..."
+(why)` and ignored: the control stays at its default place. Deleting the tables or any line gives
+the default back.
 
 ### [photo]
 
