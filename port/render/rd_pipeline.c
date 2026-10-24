@@ -2646,6 +2646,7 @@ RdKeyFamily rd__pipe_key_family(const RdPipeKeyInt *k)
     case RD_FS_FOG_LOCAL:
     case RD_FS_DEPTH_RESOLVE:
     case RD_FS_DEPTH_UPSAMPLE:
+    case RD_FS_MSAA_RESOLVE:
     case RD_FS_CRACK_FILL:
     case RD_FS_CRACK_COUNT:
         return RD_KF_FOG;
@@ -2880,7 +2881,25 @@ uint32_t rd__enumerate_reachable_fog(RdPipeKeyInt *out, uint32_t max, uint32_t n
             n = rd__add_pipe_key(out, max, n, &k);
         }
     }
+    /* the MSAA epoch's single-sampled resolves into SCENE (rd_replay.c
+     * msaaEnd): the colour and depth together, the depth alone */
+    for (int d = 0; d < 2; d++) {
+        if (g_rd.fs[d ? RD_FS_DEPTH_RESOLVE : RD_FS_MSAA_RESOLVE].id) {
+            const RdPipeKeyInt k = rd__msaa_resolve_key(d);
+            n = rd__add_pipe_key(out, max, n, &k);
+        }
+    }
     return n;
+}
+
+RdPipeKeyInt rd__msaa_resolve_key(int depthOnly)
+{
+    RdPipeKeyInt k = depthOnly ? rd__post_key(RD_VS_BLIT, RD_FS_DEPTH_RESOLVE, RHI_FMT_UNKNOWN)
+                               : rd__post_key(RD_VS_BLIT, RD_FS_MSAA_RESOLVE, RHI_FMT_RGBA8_UNORM);
+    k.depthFmt = RHI_FMT_D32F_S8;
+    k.gs.ztst = RD_ZTST_ALWAYS;
+    k.gs.zwrite = RD_ZWRITE_ON;
+    return k;
 }
 
 RdPipeKeyInt rd__crack_fill_key(int count)
