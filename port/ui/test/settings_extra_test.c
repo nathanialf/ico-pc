@@ -1289,8 +1289,8 @@ static void testAddToSteam(void)
         int el[8];
         const int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 8);
 
-        CHECK(en == 7 && el[4] == row, "seven rows, Add to Steam then the pop-ups and Back (%d)",
-              en);
+        CHECK(en == 8 && el[4] == row,
+              "eight rows, Add to Steam then Export textures, the pop-ups and Back (%d)", en);
     }
 
     /* Cross: the handler once, its answer as the popup */
@@ -1321,6 +1321,182 @@ static void testAddToSteam(void)
 
             CHECK(t[0] != '\0' && strcmp(t, ui_str_in(UI_LANG_EN, kIds[i])) != 0,
                   "language %d, string %d translated", l, kIds[i]);
+        }
+    }
+}
+
+/* Extras > Export textures (issue 137) through a fake host: hidden without
+   one and on the pause menu; on the title after Add to Steam, with its note;
+   Cross begins once, the label reads Stop exporting and the note the
+   progress; Cross again cancels; the end popup comes from ui_settings_vsync,
+   also after leaving the page; a start that fails shows its popup at once;
+   the strings are translated in every language */
+static int s_texBegins, s_texCancels, s_texBeginAnswer;
+static UiTextureExportStatus s_tex;
+
+static int fakeTexBegin(void)
+{
+    s_texBegins++;
+    if (s_texBeginAnswer == 0) {
+        s_tex.state = UI_TEXEXPORT_RUNNING;
+    }
+    return s_texBeginAnswer;
+}
+
+static int fakeTexPoll(UiTextureExportStatus *out)
+{
+    *out = s_tex;
+    snprintf(out->dir, sizeof(out->dir), "textures/SCES-50760/dumps");
+    return out->state;
+}
+
+static void fakeTexCancel(void)
+{
+    s_texCancels++;
+}
+
+static void testExportTextures(void)
+{
+    static const UiTextureExportHost kHost = {fakeTexBegin, fakeTexPoll, fakeTexCancel};
+    int mainL, exL, row;
+
+    ui_popup_reset();
+    memset(&s_tex, 0, sizeof(s_tex));
+    s_texBegins = s_texCancels = s_texBeginAnswer = 0;
+    ui_settings_set_texture_export_host(NULL);
+
+    /* no host (headless, tests): hidden */
+    mainL = enterMain(1);
+    exL = openPage(mainL, 8, UI_PAGE_EXTRAS);
+    CHECK(ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_EXPORT_TEXTURES) >= 0 &&
+              !an22bShown(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_EXPORT_TEXTURES),
+          "export: no host, the row is hidden");
+
+    /* a host, on the pause menu: hidden */
+    ui_settings_set_texture_export_host(&kHost);
+    mainL = enterMain(0);
+    exL = openPage(mainL, 8, UI_PAGE_EXTRAS);
+    CHECK(!an22bShown(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_EXPORT_TEXTURES),
+          "export: pause menu, the row is hidden");
+
+    /* on the title: shown after Add to Steam, before the pop-ups */
+    ui_settings_set_steam_handler(fakeSteam);
+    mainL = enterMain(1);
+    exL = openPage(mainL, 8, UI_PAGE_EXTRAS);
+    row = ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_EXPORT_TEXTURES);
+    CHECK(an22bShown(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_EXPORT_TEXTURES),
+          "export: title, the row shows");
+    CHECK(strcmp(lt_ext_row_text(row), "Export textures") == 0, "export: the row's text \"%s\"",
+          lt_ext_row_text(row));
+    {
+        int el[8];
+        const int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 8);
+
+        CHECK(en == 8 && el[4] == ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_STEAM) &&
+                  el[5] == row && el[6] == ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_ACH_POPUPS),
+              "export: eight rows, Add to Steam, Export textures, the pop-ups (%d)", en);
+        /* Down from Add to Steam lands on it, Down again on the pop-ups */
+        lt_ext_layout(exL)->curItem = el[4];
+        frame(0);
+        press(0x4000);
+        CHECK(lt_ext_layout(exL)->curItem == row, "export: Down from Add to Steam lands on it");
+        press(0x4000);
+        CHECK(lt_ext_layout(exL)->curItem == el[6], "export: Down from it lands on the pop-ups");
+    }
+    ui_settings_set_steam_handler(NULL);
+    lt_ext_layout(exL)->curItem = row;
+    frame(0);
+    {
+        const int note = noteStarting(UI_PAGE_EXTRAS, "For pack makers: saves every");
+        CHECK(note >= 0 && lt_ext_prop(note)->masked == 0, "export: the note under the row");
+    }
+
+    /* Cross: begin once, Stop exporting, the progress after a frame */
+    s_tex.done = 3;
+    s_tex.total = 10;
+    press(0x40);
+    CHECK(s_texBegins == 1 && s_texCancels == 0, "export: Cross began it (%d, %d)", s_texBegins,
+          s_texCancels);
+    CHECK(!ui_popup_active(), "export: no popup while it runs");
+    frame(0);
+    CHECK(strcmp(lt_ext_row_text(row), "Stop exporting") == 0, "export: running, \"%s\"",
+          lt_ext_row_text(row));
+    {
+        const int note = noteStarting(UI_PAGE_EXTRAS, "Exporting textures: 3 of 10");
+        CHECK(note >= 0 && lt_ext_prop(note)->masked == 0, "export: the progress note");
+    }
+    s_tex.done = 4;
+    frame(0);
+    CHECK(noteStarting(UI_PAGE_EXTRAS, "Exporting textures: 4 of 10") >= 0,
+          "export: the progress follows");
+    ui_settings_vsync();
+    CHECK(!ui_popup_active(), "export: the vsync shows nothing while it runs");
+
+    /* Cross again: cancel, no second begin */
+    press(0x40);
+    CHECK(s_texBegins == 1 && s_texCancels == 1, "export: Cross again cancelled (%d, %d)",
+          s_texBegins, s_texCancels);
+
+    /* it ends: the popup from the vsync, once */
+    s_tex.state = UI_TEXEXPORT_DONE;
+    s_tex.written = 7;
+    ui_settings_vsync();
+    CHECK(ui_popup_active() && strcmp(ui_popup_title(), "Textures exported") == 0 &&
+              strcmp(ui_popup_body(), "Saved 7 pictures to\ntextures/SCES-50760/dumps") == 0,
+          "export: done popup \"%s\" / \"%s\"", ui_popup_title(), ui_popup_body());
+    ui_popup_reset();
+    ui_settings_vsync();
+    CHECK(!ui_popup_active(), "export: the end popup comes once");
+    frame(0);
+    CHECK(strcmp(lt_ext_row_text(row), "Export textures") == 0 &&
+              noteStarting(UI_PAGE_EXTRAS, "For pack makers: saves every") >= 0,
+          "export: ended, the row and its note again (\"%s\")", lt_ext_row_text(row));
+
+    /* started, the page left, then stopped: the popup still comes */
+    s_tex.written = 0;
+    press(0x40);
+    CHECK(s_texBegins == 2 && s_tex.state == UI_TEXEXPORT_RUNNING, "export: a second start");
+    press(0x10);
+    CHECK(settle(mainL, 60), "export: back on Main");
+    s_tex.state = UI_TEXEXPORT_STOPPED;
+    s_tex.written = 4;
+    ui_settings_vsync();
+    CHECK(ui_popup_active() && strcmp(ui_popup_title(), "Export stopped") == 0 &&
+              strcmp(ui_popup_body(), "Stopped after 4 pictures") == 0,
+          "export: stopped popup off the page \"%s\" / \"%s\"", ui_popup_title(), ui_popup_body());
+    ui_popup_reset();
+
+    /* a start that fails: its popup at once, nothing pending */
+    s_texBeginAnswer = -1;
+    exL = openPage(mainL, 8, UI_PAGE_EXTRAS);
+    lt_ext_layout(exL)->curItem = row;
+    frame(0);
+    press(0x40);
+    CHECK(s_texBegins == 3 && ui_popup_active() &&
+              strcmp(ui_popup_title(), "Could not export textures") == 0 &&
+              strcmp(ui_popup_body(),
+                     "The folder textures/SCES-50760/dumps\ncould not be written") == 0,
+          "export: failed popup \"%s\" / \"%s\"", ui_popup_title(), ui_popup_body());
+    CHECK(current_layout_id == exL, "export: stays on the page");
+    ui_popup_reset();
+    s_tex.state = UI_TEXEXPORT_FAILED;
+    ui_settings_vsync();
+    CHECK(!ui_popup_active(), "export: a start that failed leaves nothing pending");
+    ui_settings_set_texture_export_host(NULL);
+    s_texBeginAnswer = 0;
+
+    static const UiStrId kIds[] = {
+        UI_STR_EXTRAS_EXPORT_TEXTURES,  UI_STR_EXPORT_TEXTURES_STOP,
+        UI_STR_EXPORT_TEXTURES_NOTE,    UI_STR_EXPORT_TEXTURES_PROGRESS,
+        UI_STR_EXPORT_TEXTURES_DONE,    UI_STR_EXPORT_TEXTURES_DONE_BODY,
+        UI_STR_EXPORT_TEXTURES_STOPPED, UI_STR_EXPORT_TEXTURES_STOPPED_BODY,
+        UI_STR_EXPORT_TEXTURES_FAILED,  UI_STR_EXPORT_TEXTURES_FAILED_BODY};
+    for (int l = 1; l < UI_LANG_COUNT; l++) {
+        for (unsigned i = 0; i < sizeof(kIds) / sizeof(kIds[0]); i++) {
+            const char *t = ui_str_in((UiLang)l, kIds[i]);
+
+            CHECK(t[0] != '\0' && strcmp(t, ui_str_in(UI_LANG_EN, kIds[i])) != 0,
+                  "export: language %d, string %d translated", l, kIds[i]);
         }
     }
 }
@@ -3842,6 +4018,7 @@ int main(int argc, char **argv)
     testGraphicsApi();
     testGraphicsApply();
     testAddToSteam();
+    testExportTextures();
     /* Main > Disc */
     testDiscRow();
     testReportPicture();
