@@ -41,8 +41,8 @@ enum { ICO_TOUCH_ANCHOR_L = 0, ICO_TOUCH_ANCHOR_R = 1 };
 
 enum { ICO_TOUCH_ANCHOR_T = 0, ICO_TOUCH_ANCHOR_B = 1 };
 
-/* ax or ay of a control at its default place on that axis: the text
-   "hidden" parses to it (a hidden control with no position) */
+/* ax or ay of a control at its default place on that axis: the words
+   "hidden" and "off" alone parse to it (a control with no position) */
 enum { ICO_TOUCH_ANCHOR_DEFAULT = 2 };
 
 #define ICO_TOUCH_EDIT_SCALE_MIN 0.7f /* a face at 0.7 is 7.7 mm across: Android's 48 dp */
@@ -64,14 +64,17 @@ extern const float ico_touch_edit_grids[3];
 typedef struct IcoTouchCtlEdit {
     unsigned char set;    /* 0: the default place (nothing stored or written) */
     unsigned char ax, ay; /* ICO_TOUCH_ANCHOR_* (DEFAULT: the default place) */
+    unsigned char active; /* 1: takes touches. Shown: alpha > 0 (sanitize makes it 1);
+                             Hidden: alpha 0, active 1 (works, not drawn); Off:
+                             alpha 0, active 0 (neither). Beside the anchors, so the
+                             struct has no padding (the edits are compared with
+                             memcmp) */
     float dx, dy;         /* the control's centre from those edges, in q (negative: past
                              the safe area, under the camera hole); the
                              look pad's edges on those sides */
     float scale;          /* ICO_TOUCH_EDIT_SCALE_MIN..MAX, 1 = the default size */
-    float alpha;          /* 0..1 times the Touch opacity setting; 0 = not drawn */
-    unsigned char active; /* 1: takes touches. Shown: alpha > 0 (active forced to 1);
-                             Hidden: alpha 0, active 1 (works, not drawn); Off:
-                             alpha 0, active 0 (neither) */
+    float alpha;          /* 0..1 times the Touch opacity setting; 0 = not drawn
+                             (Hidden or Off, by active) */
     float w, h;           /* ICO_TOUCH_CTL_LOOK only: the pad's size in q at scale 1;
                              0 its default size */
 } IcoTouchCtlEdit;
@@ -101,28 +104,38 @@ int ico_touch_posture_from_name(const char *name);
    0 for the stick and the look pad. */
 unsigned int ico_touch_ctl_zones(int ctl);
 
+/* The [touch] tables' format: [touch] format = 2 is written with every
+   layout from v0.8.6 on; a file without it (v0.8.4, v0.8.5) is format 1. */
+#define ICO_TOUCH_EDIT_FORMAT 2
+
 /* One control's edit as config text and back. Text: whitespace-separated
    tokens "l<n>"|"r<n>" (the x anchor and offset), "t<n>"|"b<n>", "s<scale>"
    (optional, 1 when absent), "o<percent>" (optional, 100 when absent), and
-   for the look pad "w<n> h<n>" (optional, its default size when absent); an offset may be negative ("l-3":
-   past the safe area);
-   "hidden" alone (a hideable control at its default place with alpha 0; a
-   hidden control that was moved writes its position, "s1.00" and "o0" instead, so
-   it keeps its place when shown again); "default" alone (unset). Numbers are plain decimals (a sign only on
-   an offset, no exponent, a point whatever the locale). Examples "r20 b10.5 s1.00
-   o100", "l50 t0 w60 h30 o100". ico_touch_edit_text writes the same form
-   into buf and returns it: offsets and sizes to two decimals with trailing
-   zeros dropped, the scale to two decimals always (the look pad's only
-   when not 1 with a size), the opacity as a whole percent; "default" for
-   an unset edit or one at its default place. ico_touch_edit_parse fills
-   *c for ctl and returns 0, or -1 for a token it does not know (w/h on a
-   control that is not the look pad), a value out of range (offsets
-   -ICO_TOUCH_EDIT_OFFSET_MAX..ICO_TOUCH_EDIT_OFFSET_MAX, s SCALE_MIN..MAX, o 0..100, w/h LOOK_MIN..
-   OFFSET_MAX), a token twice, a missing anchor, or "hidden" on a control
-   that cannot be hidden: *c is then left unset. A parsed edit is
-   sanitized (an o under the floor of a control that cannot be hidden
-   becomes the floor). */
+   for the look pad "w<n> h<n>" (optional, its default size when absent);
+   an offset may be negative ("l-3": past the safe area). At opacity 0 a
+   word instead of "o": "hidden" (Hidden: not drawn, still takes touches) or
+   "off" (Off: neither), alone (at the default place) or after the place
+   and size ("l4 t6 s1.00 hidden", "r20 b10 s1.50 off": shown again, it is
+   where the player put it); "default" alone (unset). Numbers are plain
+   decimals (a sign only on an offset, no exponent, a point whatever the
+   locale). Examples "r20 b10.5 s1.00 o100", "l50 t0 w60 h30 o100".
+   ico_touch_edit_text writes the same form into buf and returns it:
+   offsets and sizes to two decimals with trailing zeros dropped, the scale
+   to two decimals always (the look pad's only when not 1 with a size), the
+   opacity as a whole percent, or the word at 0 (never "o0"); "default" for
+   an unset edit or one shown at its default place.
+   ico_touch_edit_parse_format fills *c for ctl and returns 0, or -1 for a
+   token it does not know (w/h on a control that is not the look pad), a
+   value out of range (offsets -ICO_TOUCH_EDIT_OFFSET_MAX..OFFSET_MAX, s
+   SCALE_MIN..MAX, o 0..100, w/h LOOK_MIN..OFFSET_MAX), a token twice, two
+   words, a word with an "o", "default" with anything, or a missing anchor:
+   *c is then left unset. format is the file's ([touch] format; 1 without
+   the key): from ICO_TOUCH_EDIT_FORMAT on, "hidden" and "o0" are Hidden
+   and "off" Off; under it "hidden" and "o0" are Off too (what v0.8.4 and
+   v0.8.5 meant by them: the control neither drawn nor working). A parsed
+   edit is sanitized. ico_touch_edit_parse is the current format's. */
 const char *ico_touch_edit_text(const IcoTouchCtlEdit *c, char *buf, unsigned size);
+int ico_touch_edit_parse_format(IcoTouchCtlEdit *c, int ctl, const char *text, int format);
 int ico_touch_edit_parse(IcoTouchCtlEdit *c, int ctl, const char *text);
 /* The rails on one edit in place: scale clamped to the range, alpha to 0..1
    (a NaN 1), active 1 whenever alpha > 0 (a drawn control works), offsets

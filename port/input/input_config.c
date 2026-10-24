@@ -376,12 +376,55 @@ IcoTouchEdits *ico_input_live_touch_edits(void)
 /* A bad line is logged once per key and run, until it reads well again (the
    settings file is read again after every save). */
 static unsigned char s_touchLogged[ICO_TOUCH_POSTURES][ICO_TOUCH_CTL_COUNT];
-static unsigned char s_touchLoggedSnap, s_touchLoggedGrid;
+static unsigned char s_touchLoggedSnap, s_touchLoggedGrid, s_touchLoggedFormat;
 
+/* why a control's line did not parse, for the log: the cases a hand edit
+   most likely makes, else the general one */
 static const char *touch_why(int ctl, const char *text)
 {
+    char tok[32];
+    const char *p = text;
+    int words = 0, haveO = 0, n = 0, badS = 0;
+
     (void)ctl;
-    (void)text;
+    while (*p != '\0') {
+        size_t k = 0;
+
+        while (*p == ' ' || *p == '\t') {
+            p++;
+        }
+        while (*p != '\0' && *p != ' ' && *p != '\t' && k + 1 < sizeof(tok)) {
+            tok[k++] = *p++;
+        }
+        while (*p != '\0' && *p != ' ' && *p != '\t') {
+            p++; /* a token longer than any valid one */
+        }
+        tok[k] = '\0';
+        if (k == 0) {
+            continue;
+        }
+        n++;
+        if (strcmp(tok, "default") == 0 || strcmp(tok, "hidden") == 0 || strcmp(tok, "off") == 0) {
+            words++;
+        } else if (tok[0] == 'o') {
+            haveO = 1;
+        } else if (tok[0] == 's') {
+            char *end = NULL;
+            const double v = strtod(tok + 1, &end);
+
+            badS |= end == tok + 1 || v < ICO_TOUCH_EDIT_SCALE_MIN - 0.005 ||
+                    v > ICO_TOUCH_EDIT_SCALE_MAX + 0.005;
+        }
+    }
+    if (words > 1 || (words == 1 && strstr(text, "default") != NULL && n > 1)) {
+        return "default stands alone; hidden or off once, alone or after the place";
+    }
+    if (words == 1 && haveO) {
+        return "hidden and off take no o";
+    }
+    if (badS) {
+        return "the size s is 0.7 to 3.0";
+    }
     return "not a valid layout";
 }
 
@@ -393,7 +436,7 @@ static int apply_touch(IcoTouchEdits *e, const char *(*get)(const void *, const 
 {
     char path[64];
     const char *v;
-    int r, c, n = 0;
+    int r, c, n = 0, format, migrated = 0;
 
     v = get(src, "touch.snap");
     if (v != NULL && (strcmp(v, "true") == 0 || strcmp(v, "1") == 0)) {
@@ -436,6 +479,25 @@ static int apply_touch(IcoTouchEdits *e, const char *(*get)(const void *, const 
         s_touchLoggedGrid = 0;
     }
 
+    /* the lines' format: 2 written since v0.8.6; none (v0.8.4, v0.8.5) is
+       1, whose "hidden" and "o0" read as Off (touch_edit.h) */
+    v = get(src, "touch.format");
+    format = 1;
+    if (v != NULL) {
+        char *end = NULL;
+        const long f = strtol(v, &end, 10);
+
+        if (end != v && *end == '\0' && f >= 1) {
+            format = f >= ICO_TOUCH_EDIT_FORMAT ? ICO_TOUCH_EDIT_FORMAT : (int)f;
+            s_touchLoggedFormat = 0;
+        } else if (!s_touchLoggedFormat) {
+            fprintf(stderr, "touch: ignoring format = \"%s\" (use %d)\n", v, ICO_TOUCH_EDIT_FORMAT);
+            s_touchLoggedFormat = 1;
+        }
+    } else {
+        s_touchLoggedFormat = 0;
+    }
+
     for (r = 0; r < ICO_TOUCH_POSTURES; r++) {
         for (c = 0; c < ICO_TOUCH_CTL_COUNT; c++) {
             IcoTouchCtlEdit *ed = &e->ctl[r][c];
@@ -448,7 +510,7 @@ static int apply_touch(IcoTouchEdits *e, const char *(*get)(const void *, const 
                 s_touchLogged[r][c] = 0;
                 continue;
             }
-            if (ico_touch_edit_parse(ed, c, v) != 0) {
+            if (ico_touch_edit_parse_format(ed, c, v, format) != 0) {
                 memset(ed, 0, sizeof(*ed));
                 if (!s_touchLogged[r][c]) {
                     fprintf(stderr, "touch: ignoring %s.%s = \"%s\" (%s)\n",
@@ -460,8 +522,14 @@ static int apply_touch(IcoTouchEdits *e, const char *(*get)(const void *, const 
             ed->set = 1;
             ico_touch_edit_sanitize(ed, c);
             s_touchLogged[r][c] = 0;
+            migrated += format < ICO_TOUCH_EDIT_FORMAT && !ed->active;
             n++;
         }
+    }
+    if (migrated > 0) {
+        fprintf(stderr,
+                "touch: [touch] without format 2: \"hidden\" and o0 read as off (%d controls)\n",
+                migrated);
     }
     return n;
 }
@@ -499,6 +567,31 @@ void ico_input_reload_touch_edits(IcoTouchEdits *e)
     }
 }
 
+/* a [touch] line will be written: snap or grid off their defaults, a set
+   control, or a [touch] key already in the file */
+static int touch_lines(const IcoTouchEdits *e, const IcoTouchEdits *def)
+{
+    char path[64];
+    int r, c;
+
+    if (e->snap != def->snap || e->grid != def->grid || ico_touch_edits_any(e, -1) ||
+        ico_config_get_string("touch.snap", NULL) != NULL ||
+        ico_config_get_string("touch.grid", NULL) != NULL ||
+        ico_config_get_string("touch.format", NULL) != NULL) {
+        return 1;
+    }
+    for (r = 0; r < ICO_TOUCH_POSTURES; r++) {
+        for (c = 0; c < ICO_TOUCH_CTL_COUNT; c++) {
+            snprintf(path, sizeof(path), "touch.%s.%s", ico_touch_posture_name(r),
+                     ico_touch_ctl_name(c));
+            if (ico_config_get_string(path, NULL) != NULL) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 int ico_input_write_touch_edits(const IcoTouchEdits *e)
 {
     IcoTouchEdits def;
@@ -507,6 +600,15 @@ int ico_input_write_touch_edits(const IcoTouchEdits *e)
     int r, c, n = 0;
 
     ico_touch_edits_defaults(&def);
+    /* the format first (it heads [touch]), with any line: the lines below
+       are written in its grammar ("hidden" Hidden, "off" Off), so an older
+       file's "o0" and "hidden" are rewritten as what they were read as */
+    if (touch_lines(e, &def)) {
+        if (ico_config_set_int("touch.format", ICO_TOUCH_EDIT_FORMAT) != 0) {
+            return -1;
+        }
+        n++;
+    }
     if (e->snap != def.snap || ico_config_get_string("touch.snap", NULL) != NULL) {
         if (ico_config_set_bool("touch.snap", e->snap != 0) != 0) {
             return -1;

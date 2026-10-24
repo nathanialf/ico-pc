@@ -357,19 +357,23 @@ void ico_input_reload_bindings(IcoBindings *b);
    false), touch.grid (2, 4 or 8, else logged and the current grid kept) and
    the string touch.<posture>.<control> ("full", "split", "tabletop"; the
    names of ico_touch_ctl_name): "default" or absent leaves the control
-   unset, else the text (touch_edit.h grammar) is parsed and sanitized. A
+   unset, else the text (touch_edit.h grammar) is parsed in the file's
+   touch.format (1 without the key: "hidden" and "o0" read as Off, logged
+   as "touch: [touch] without format 2: ... (N controls)") and sanitized. A
    line that does not parse is logged once per key and run
    ("touch: ignoring full.l2 = "..." (why)") and leaves the control at its
    default. gen is bumped when anything was applied. Returns the number of
-   keys applied (t may be NULL: 0).
+   keys applied, the format not counted (t may be NULL: 0).
    ico_input_reload_touch_edits: *e rebuilt from the defaults and the
    config's keys as port/config reads them (after a save); gen is bumped
    only when the result differs from what was live.
-   ico_input_write_touch_edits: the writer, through ico_config_set_*: snap
-   and grid when they differ from the default or are in the file, each set
-   control as its text, and each unset control whose key is in the file as
-   "default" (lines are never deleted). A config nothing was edited in gains
-   no key. Returns the number of keys set, or -1. The caller saves. */
+   ico_input_write_touch_edits: the writer, through ico_config_set_*:
+   touch.format = ICO_TOUCH_EDIT_FORMAT whenever any [touch] line is
+   written or already there, snap and grid when they differ from the
+   default or are in the file, each set control as its text, and each
+   unset control whose key is in the file as "default" (lines are never
+   deleted). A config nothing was edited in gains no key. Returns the
+   number of keys set (the format among them), or -1. The caller saves. */
 struct IcoTouchEdits;
 struct IcoToml;
 struct IcoTouchEdits *ico_input_live_touch_edits(void);

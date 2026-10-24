@@ -398,15 +398,18 @@ static const char first_run_text[] =
     "\n"
     "# The touch screen buttons you arranged yourself (Options > Controls > Touch\n"
     "# screen > Edit layout writes these lines; nothing is here until you do).\n"
-    "# snap = true or false and grid = 2, 4 or 8 (millimetres) go under [touch].\n"
-    "# Each posture of the phone (full, split, tabletop) has its own table, for\n"
-    "# example [touch.full], with a line per button: dpad, cross, circle, square,\n"
-    "# triangle, r1, l1, l2, r2, select, start, stick or look. A line reads\n"
-    "# cross = \"r20 b10.5 s1.00 o100\": the distance in millimetres from the left\n"
-    "# (l) or right (r) edge and from the top (t) or bottom (b) edge, the size\n"
-    "# (s, 0.7 to 1.6) and the opacity (o, percent). The look area also has its\n"
-    "# size, w and h. \"hidden\" hides select, l1, l2, r2 or look; \"default\" or\n"
-    "# no line puts a button back. Deleting these lines resets the layout.\n";
+    "# snap = true or false and grid = 2, 4 or 8 (millimetres) go under [touch],\n"
+    "# with format = 2 (the editor writes it; without it \"hidden\" and o0 mean\n"
+    "# off, as before version 0.8.6). Each posture of the phone (full, split,\n"
+    "# tabletop) has its own table, for example [touch.full], with a line per\n"
+    "# button: dpad, cross, circle, square, triangle, r1, l1, l2, r2, select,\n"
+    "# start, stick or look. A line reads cross = \"r20 b10.5 s1.00 o100\": the\n"
+    "# distance in millimetres from the left (l) or right (r) edge and from the\n"
+    "# top (t) or bottom (b) edge, the size (s, 0.7 to 3.0) and the opacity (o,\n"
+    "# percent). The look area also has its size, w and h. In place of o,\n"
+    "# \"hidden\" keeps a button working but does not draw it; \"off\" switches it\n"
+    "# off (either alone, or after the place and size). \"default\" or no line\n"
+    "# puts a button back. Deleting these lines resets the layout.\n";
 
 int ico_config_write_first_run(void)
 {

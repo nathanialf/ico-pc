@@ -264,12 +264,13 @@ const char *ico_touch_edit_text(const IcoTouchCtlEdit *c, char *buf, unsigned si
         return buf;
     }
     if (c->ax > ICO_TOUCH_ANCHOR_R || c->ay > ICO_TOUCH_ANCHOR_B) {
-        /* no position to write: hidden at the default place, else nothing */
-        put_s(&o, !(c->alpha > 0.0f) ? "hidden" : "default");
+        /* no position to write: Hidden or Off at the default place, else
+           nothing */
+        put_s(&o, c->alpha > 0.0f ? "default" : c->active ? "hidden" : "off");
         return buf;
     }
-    /* a hidden control with a position keeps it ("l4 t6 o0"): shown again,
-       it is where the player put it */
+    /* a Hidden or Off control with a position keeps it ("l4 t6 s1.00
+       hidden"): shown again, it is where the player put it */
     put_num(&o, c->ax == ICO_TOUCH_ANCHOR_L ? 'l' : 'r', c->dx, 0, 1);
     put_num(&o, c->ay == ICO_TOUCH_ANCHOR_T ? 't' : 'b', c->dy, 0, 1);
     sized = c->w > 0.0f || c->h > 0.0f;
@@ -288,6 +289,11 @@ const char *ico_touch_edit_text(const IcoTouchCtlEdit *c, char *buf, unsigned si
     }
     if (o.n > 0) {
         put_c(&o, ' ');
+    }
+    if (pct <= 0) {
+        /* the word, never "o0" (which v0.8.5 and before wrote for Off) */
+        put_s(&o, c->active || c->alpha > 0.0f ? "hidden" : "off");
+        return buf;
     }
     put_c(&o, 'o');
     put_u(&o, (unsigned long)pct);
@@ -331,9 +337,17 @@ static int parse_num(const char *s, float *out)
 
 int ico_touch_edit_parse(IcoTouchCtlEdit *c, int ctl, const char *text)
 {
+    return ico_touch_edit_parse_format(c, ctl, text, ICO_TOUCH_EDIT_FORMAT);
+}
+
+enum { WORD_NONE = 0, WORD_DEFAULT, WORD_HIDDEN, WORD_OFF };
+
+int ico_touch_edit_parse_format(IcoTouchCtlEdit *c, int ctl, const char *text, int format)
+{
     IcoTouchCtlEdit e;
     char tok[32];
     int haveX = 0, haveY = 0, haveS = 0, haveO = 0, haveW = 0, haveH = 0, ntok = 0, word = 0;
+    int nwords = 0, active;
     const int look = ctl == ICO_TOUCH_CTL_LOOK;
     const char *p = text;
 
@@ -366,12 +380,9 @@ int ico_touch_edit_parse(IcoTouchCtlEdit *c, int ctl, const char *text)
         }
         tok[n] = '\0';
         ntok++;
-        if (strcmp(tok, "default") == 0) {
-            word = 1;
-            continue;
-        }
-        if (strcmp(tok, "hidden") == 0) {
-            word = 2;
+        if (strcmp(tok, "default") == 0 || strcmp(tok, "hidden") == 0 || strcmp(tok, "off") == 0) {
+            word = tok[0] == 'd' ? WORD_DEFAULT : tok[0] == 'h' ? WORD_HIDDEN : WORD_OFF;
+            nwords++;
             continue;
         }
         /* an offset may carry a minus sign (out past the safe area) */
@@ -428,25 +439,34 @@ int ico_touch_edit_parse(IcoTouchCtlEdit *c, int ctl, const char *text)
             return -1;
         }
     }
-    if (ntok == 0) {
-        return -1;
+    if (ntok == 0 || nwords > 1 || (word == WORD_DEFAULT && ntok != 1) || (word != 0 && haveO)) {
+        return -1; /* "default" stands alone; "hidden" or "off" once, with no o */
     }
-    if (word != 0) {
-        if (ntok != 1) {
-            return -1; /* "default" and "hidden" stand alone */
-        }
-        if (word == 2) {
-            c->set = 1;
-            c->ax = c->ay = ICO_TOUCH_ANCHOR_DEFAULT;
-            c->scale = 1.0f;
-            c->alpha = 0.0f;
-        }
+    /* the state at opacity 0: format 2 (written since v0.8.6) reads "hidden"
+       and "o0" as Hidden, "off" as Off; an older file's "hidden" and "o0"
+       meant a control that was not drawn and did not work, so they read as
+       Off there */
+    active = format >= ICO_TOUCH_EDIT_FORMAT && word != WORD_OFF;
+    if (word == WORD_DEFAULT) {
+        return 0;
+    }
+    if (word != 0 && ntok == 1) {
+        /* alone: at the default place */
+        c->set = 1;
+        c->ax = c->ay = ICO_TOUCH_ANCHOR_DEFAULT;
+        c->scale = 1.0f;
+        c->alpha = 0.0f;
+        c->active = (unsigned char)active;
         return 0;
     }
     if (!haveX || !haveY) {
         return -1;
     }
     e.set = 1;
+    if (word != 0) {
+        e.alpha = 0.0f;
+    }
+    e.active = (unsigned char)(e.alpha > 0.0f || active);
     ico_touch_edit_sanitize(&e, ctl);
     *c = e;
     return 0;
