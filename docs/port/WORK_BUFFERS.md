@@ -2,8 +2,9 @@
 
 The targets `staticBlur.c`'s effects and the screen softening draw through on their way back into
 SCENE, their sizes at each frame width, the glow chain's rectangles in them, the column the glow's
-blur leaves on a frame wider than the PS2's, what stays in them from one frame to the next, and the
-work clear that shows a texel read before it was drawn. The sprites themselves are drawn by the GS
+blur leaves on a frame wider than the PS2's, what stays in them from one frame to the next, the
+work clear that shows a texel read before it was drawn, and how the puddle's ripples sample their
+reflection block between ticks. The sprites themselves are drawn by the GS
 sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 
 ## Files
@@ -15,6 +16,7 @@ sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 | `port/render/rd_blur.c` | the strip over the glow's left edge (`rd__glow_edge_strip`) |
 | `port/render/rd_blur_border.c` | the strip drawn after the blur's first pass (`glowEdge`, from `rd__blur_post_sprite`) |
 | `ico2/sugipon/src/staticBlur.c` | the effects, their rectangles in the PS2's numbers and the port's widening (`SB_X`, `sbShrinkAt`, `sbShrinkSpan`, `sbWorkRect`) |
+| `ico2/sugipon/src/puddle.c`, `port/render/rd_interp.c` | the ripples' texture shift between ticks (`drawRipples`; `reprojStShift`) |
 
 ## Sizes per frame width
 
@@ -148,3 +150,36 @@ A replay with the work clear against the same replay without it differs exactly 
 reads a texel it did not draw. ctest `rd_blur`'s `glow_edge_wide` case runs
 the flare at 512, 848 and 2048 wide over magenta and green work buffers: SCENE is the same bytes
 both ways with the strip, and differs in the left eighth of the frame without it.
+
+## The ripples between ticks
+
+The drained room's ripple rings (issue 106) are strips projected on the CPU through the frame camera
+(`ico2/sugipon/src/puddle.c` (`drawRipple`); `gif_DrawStripFST`), and their STs into the puddle's
+reflection block are their projected points scaled: S = (x - 2048) 0.9 / width + 1.5 and T = (y -
+2048) 0.9 / height + 1.5 a pixel, with Q 1; the outer ring's STs come from a rotated spoke point, so
+they are not a function of the ring's own position. Between ticks the presenter re-projects each
+vertex through the blended camera ([RENDER.md](RENDER.md#camera-blending)) while the block's
+reflection, drawn under its pushed camera, moves with that camera too. With the tick's STs kept, the
+rings sampled the reflection where the tick had put them, about half a tick's motion off at the
+half-tick presents, all rings at once.
+
+`drawRipples` sets `gif_HostFrameProjectedSt(0.9 / width / 16, 0.9 / height / 16)` (the scale a 12.4
+unit) around its strips; the decoder ends a batch when it changes and passes it to
+`rd_frame_projected_st` at the flush, and `rd_screen_prims` records it in the frame-projected draw
+(RDC_SCREEN `b[5]` `RD_SCREEN_ST_SHIFT`, `f[0]`, `f[1]`; `port/render/rd_core.c`). Where the
+presenter re-projects such a draw's vertex, after `reprojStq`, it adds the vertex's own move from
+the tick's X and Y times the scale to S / Q and T / Q (`port/render/rd_interp.c` (`reprojStShift`):
+`s += dX f[0] q`, `t += dY f[1] q`), in the draws that are the tick's alone and in matched pairs
+(dX from cur's X). The STs are only shifted, never made again from XY. Dumps from before it have
+`b[5]` 0 and replay as they did. Measured on the v13782 dump (`--list`'s vertices read from the
+file): dS/dX = 8.1758e-05 = 0.9 / 688 / 16 and dT/dY = 1.25555e-04 = 0.9 / 448 / 16, both
+positive, the inner ring's vertices within one 12.4 unit of the formula, the outer ring's up to 208
+off it.
+
+`rd_replay_tool --list` shows ` st-shift (dsx,dsy)` on such a draw; `--interp` counts the
+re-projected draws with their texture shifted, and the 10 s `interp:` summary's fourth line ends
+with "N re-projected draws with their texture shifted (the ripples)". ctest `rd_interp_test`'s
+`testRippleSt` (the vertices: S / Q and T / Q the tick's plus the move times the scale, the tick's
+without the shift, a strip under a pushed camera unmarked) and `testRippleStPixels` (on a device:
+every strip pixel samples a 256 x 256 gradient where it stands within one level half way through a
+pan, more than two levels off without the shift) pin it.
