@@ -10,7 +10,8 @@ epoch itself (which passes draw multisampled, the sprites' half-texel move, the 
 
 | File | What it holds |
 | --- | --- |
-| `port/render/rd_replay.c` | the epoch (the section "the MSAA epoch"; `msaaPass`, `msaaAttach`, `msaaEnd`, `msaaResolveDraw`, `msaaCloseNote`) and the transition hook that closes it (`rd__transition`) |
+| `port/render/rd_replay.c` | the epoch (the section "the MSAA epoch"; `msaaPass`, `msaaAttach`, `msaaEnd`) and the transition hook that closes it (`rd__transition`) |
+| `port/render/rd_msaa.c` | the resolve pass (`rd__msaa_resolve`) and the close line (`rd__msaa_close_note`) |
 | `port/shaders/blit.hlsl` | the resolves (`msaa_resolve_ps`, `depth_resolve_ps`) and the depth spread over the samples (`depth_upsample_ps`) |
 | `port/render/rd_pipeline.c` | the resolves' keys (`rd__msaa_resolve_key`), in the fog's family of the start-up set (`rd__enumerate_reachable_fog`) |
 | `port/render/rd_core.c` | the counts offered (`rd_aa_supported_mask`) |
@@ -30,7 +31,7 @@ sample where the device shades per sample.
 A sample is uncovered when its depth equals the depth the epoch cleared SCENE_MS's depth to,
 exactly: no draw reached it. The clear's value is recorded when a pass into SCENE_MS begins with
 its depth's load op CLEAR (`port/render/rd_replay.c` (`msaaAttach`)) and handed to the shader
-bit for bit. A pixel of n samples with u uncovered:
+bit for bit (`port/render/rd_msaa.c` (`rd__msaa_resolve`)). A pixel of n samples with u uncovered:
 
 - is uncovered when more than half its samples are (2u > n): its colour is the mean of all its
   samples and its depth the smallest of all, which is the clear's;
