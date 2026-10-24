@@ -9,7 +9,10 @@
  * turned into CSM1 order when the file holds it in index order) and given
  * its candidate names (texpack_candidates) for every level the game can
  * bind, and so is every TIM2 record of the subtitle files (*.jim, loose
- * and in the packs).  They go to texpack_names.txt in the working directory, one line
+ * and in the packs).  The walk and the parse are texpack_walk.h's (the
+ * texture export's too); a CLUT shorter than the format's is named here
+ * padded with zeros, where the runtime and the export name no such
+ * texture.  They go to texpack_names.txt in the working directory, one line
  * per texture:
  *
  *   member type clutType WxH levels unstable : name@startLevel[/chain] ...
@@ -27,6 +30,7 @@
 #include "df_pack.h"
 #include "rd_tex.h"
 #include "texpack_name.h"
+#include "texpack_walk.h"
 #include "vfs.h"
 
 #ifdef _WIN32
@@ -47,63 +51,6 @@ static int failures;
             printf("\n");                                                                          \
         }                                                                                          \
     } while (0)
-
-static uint32_t rd16(const uint8_t *p)
-{
-    return (uint32_t)p[0] | (uint32_t)p[1] << 8;
-}
-
-static uint32_t rd32(const uint8_t *p)
-{
-    return rd16(p) | rd16(p + 2) << 16;
-}
-
-/* Texture.c getTWTH: the smallest n with 2^n >= size, -1 past 1024 */
-static int twth(uint32_t size)
-{
-    for (int i = 0; i < 11; i++) {
-        if ((1u << i) >= size) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-/* Texture.c texTBW: 64-texel units, PSMT8/PSMT4 rounded up to even */
-static uint32_t tbwOf(uint32_t psm, uint32_t w)
-{
-    uint32_t n = (w + 63) >> 6;
-    return psm == RDTEX_PSMT8 || psm == RDTEX_PSMT4 ? n + (n & 1) : n;
-}
-
-/* rd_tex.c rdtex_image_bytes for the five TIM2 formats (rd_tex.c is in
-   ico_render, which needs a device library; this test does not) */
-static size_t imageBytes(uint32_t psm, uint32_t w, uint32_t h)
-{
-    size_t n = (size_t)w * h;
-    switch (psm) {
-    case RDTEX_PSMCT32:
-        return n * 4;
-    case RDTEX_PSMCT24:
-        return n * 3;
-    case RDTEX_PSMCT16:
-        return n * 2;
-    case RDTEX_PSMT8:
-        return n;
-    default:
-        return (n + 1) / 2;
-    }
-}
-
-/* Texture.c tex_convertClutCSM2ToCSM1 (rd_tex.c rdtex_clut_to_csm1) */
-static void clutToCsm1(uint8_t *clut, uint32_t entry)
-{
-    uint8_t tmp[256 * 4];
-    memcpy(tmp, clut, 256 * entry);
-    for (uint32_t i = 0; i < 256; i++) {
-        memcpy(clut + rdtex_csm1_index(i, 256) * entry, tmp + i * entry, entry);
-    }
-}
 
 /* ------------------------------------------------------------ names */
 
@@ -184,104 +131,65 @@ static char *s_texScroll; /* per texture number: its CLUT scrolls (Texture.c tex
 static int s_texCount;
 
 /* one TIM2 member: its candidates into s_disc and a line of f */
-static void doTexture(const char *member, const uint8_t *d, size_t size, FILE *f)
+static void doTexture(const TexpackWalkItem *it, FILE *f)
 {
-    static const uint32_t psmOf[TYPE_COUNT] = {
-        0, RDTEX_PSMCT16, RDTEX_PSMCT24, RDTEX_PSMCT32, RDTEX_PSMT4, RDTEX_PSMT8};
-    uint8_t clut[256 * 4];
-    TexpackSource src;
+    const char *member = it->member;
     TexpackName names[TEXPACK_MAX_CANDIDATES];
 
-    if (size < 16 + 0x30 || memcmp(d, "TIM2", 4) != 0) {
+    if (it->bad == TEXPACK_WALK_NOT_TIM2) {
         s_bad++;
         printf("  %s: not a TIM2 file\n", member);
         return;
     }
-    const uint8_t *pic = d + 16;
-    uint32_t clutSize = rd32(pic + 0x04);
-    uint32_t imageSize = rd32(pic + 0x08);
-    uint32_t headerSize = rd16(pic + 0x0C);
-    uint32_t clutColors = rd16(pic + 0x0E);
-    uint32_t levels = pic[0x11];
-    uint32_t clutType = pic[0x12];
-    uint32_t type = pic[0x13];
-    uint32_t w = rd16(pic + 0x14);
-    uint32_t h = rd16(pic + 0x16);
-    const uint8_t *image = pic + headerSize;
-
-    if (type < 1 || type >= TYPE_COUNT || levels < 1 || levels > TEXPACK_MAX_LEVELS ||
-        twth(w) < 0 || twth(h) < 0 || 16 + (size_t)headerSize + imageSize + clutSize > size) {
+    if (it->bad == TEXPACK_WALK_BAD_HEADER) {
         s_bad++;
-        printf("  %s: TIM2 header out of range (type %u, %u levels, %ux%u)\n", member, type, levels,
-               w, h);
+        printf("  %s: TIM2 header out of range (type %u, %u levels, %ux%u)\n", member, it->type,
+               it->levels, it->w, it->h);
         return;
     }
+    uint32_t type = it->type;
+    uint32_t clutType = it->clutType;
+    uint32_t clutColors = it->clutColors;
+    uint32_t w = it->w;
+    uint32_t h = it->h;
+    uint32_t levels = it->levels;
     s_tim2++;
     Stats *st = &s_type[type];
     st->textures++;
     if (levels > 1) {
         st->mipmapped++;
     }
-    if (w != (1u << twth(w)) || h != (1u << twth(h))) {
+    if (it->nonPow2) {
         st->nonPow2++;
     }
 
-    memset(&src, 0, sizeof(src));
-    src.psm = psmOf[type];
-    src.levels = levels;
-    size_t at = 0;
-    for (uint32_t i = 0; i < levels; i++) {
-        TexpackLevel *l = &src.lv[i];
-        size_t bytes = levels == 1 ? imageSize : rd32(pic + 0x30 + 0x10 + 4 * i);
-        l->tw = (uint8_t)(twth(w) - (int)i);
-        l->th = (uint8_t)(twth(h) - (int)i);
-        l->w = w >> i;
-        l->h = h >> i;
-        l->tbw = tbwOf(src.psm, l->w);
-        l->pixels = image + at;
+    TexpackSource src = it->src;
+    uint32_t checked = it->bad == TEXPACK_WALK_BAD_LEVEL ? it->badLevel + 1 : levels;
+    for (uint32_t i = 0; i < checked; i++) {
+        const TexpackLevel *l = &src.lv[i];
         CHECK(l->tbw * 64 >= (1u << l->tw), "%s level %u: TBW %u covers 2^%u", member, i, l->tbw,
               l->tw);
-        CHECK(bytes >= imageBytes(src.psm, l->w, l->h) && at + bytes <= imageSize,
-              "%s level %u: %zu bytes for %ux%u", member, i, bytes, l->w, l->h);
-        if (at + bytes > imageSize || bytes < imageBytes(src.psm, l->w, l->h)) {
-            return;
-        }
-        at += bytes;
+    }
+    if (it->bad == TEXPACK_WALK_BAD_LEVEL) {
+        const TexpackLevel *l = &src.lv[it->badLevel];
+        CHECK(0, "%s level %u: %zu bytes for %ux%u", member, it->badLevel, it->badBytes, l->w,
+              l->h);
+        return;
     }
 
     if (type == 4 || type == 5) {
         uint32_t entry = (clutType & 0x3F) == 1 ? 2 : (clutType & 0x3F) == 2 ? 3 : 4;
-        src.cpsm = entry == 2 ? RDTEX_PSMCT16 : entry == 3 ? RDTEX_PSMCT24 : RDTEX_PSMCT32;
-        if (src.cpsm == RDTEX_PSMCT24) {
+        if (it->clut24) {
             st->clut24++;
         }
         if (entry == 2 && clutColors == 256) {
             st->clut16x256++;
         }
-        /* tex_transVramClutTex uploads an 8x2 image for 16 entries, else
-           16x16 (whatever the file holds) */
-        src.clutColors = clutColors == 16 ? 16 : 256;
         if (clutColors != 16 && clutColors != 256) {
             st->odd++;
         }
-        memset(clut, 0, sizeof(clut));
-        memcpy(clut, image + imageSize, clutSize < sizeof(clut) ? clutSize : sizeof(clut));
-        /* tex_convertClutCSM2ToCSM1 */
-        if ((clutType >> 7) != 0 && clutColors == 256) {
-            clutToCsm1(clut, entry);
-        }
-        src.clut = clut;
     }
-
-    /* the ICO block after the headers (tex_makeTexturePacket): a CLUT
-       scroll (csSpd, csStp, csBgn != csEnd: tex_textureAnimation) rewrites
-       the CLUT while the game runs, so the names of the frames after the
-       first cannot be made from the disc */
-    static const uint32_t kMipHeader[8] = {0, 0, 32, 32, 32, 48, 48, 48};
-    const uint8_t *ext = pic + 0x30 + kMipHeader[levels];
-    int scroll = ext + 0x24 <= image && memcmp(ext, "ICO", 4) == 0 && rd32(ext + 0x1C) != 0 &&
-                 rd32(ext + 0x20) != 0 && rd32(ext + 0x14) != rd32(ext + 0x18) &&
-                 (type == 4 || type == 5);
+    int scroll = it->scroll;
     st->scroll += scroll;
 
     int tex = s_texCount++;
@@ -302,7 +210,7 @@ static void doTexture(const char *member, const uint8_t *d, size_t size, FILE *f
         return;
     }
     fprintf(f, "%s %s 0x%02x %ux%u %u clut %u/%uB scroll %d", member, kType[type], clutType, w, h,
-            levels, clutColors, clutSize, scroll);
+            levels, clutColors, it->clutSize, scroll);
     char line[TEXPACK_MAX_CANDIDATES * (TEXPACK_NAME_MAX + 16)];
     size_t ll = 0;
     line[0] = 0;
@@ -336,22 +244,17 @@ static void doTexture(const char *member, const uint8_t *d, size_t size, FILE *f
     fprintf(f, " %d :%s\n", unstable, line);
 }
 
-static int isJim(const char *name)
+/* the walk's callback: an unreadable member fails, every other item is
+   named */
+static int onItem(void *user, const TexpackWalkItem *it)
 {
-    size_t n = strlen(name);
-    return n >= 4 && (strcmp(name + n - 4, ".jim") == 0 || strcmp(name + n - 4, ".JIM") == 0);
-}
-
-/* every TIM2 inside a file of records (a .jim) */
-static void doRecords(const char *file, const uint8_t *d, size_t size, FILE *f)
-{
-    for (size_t off = 0; off + 16 <= size; off += 16) {
-        if (memcmp(d + off, "TIM2", 4) == 0) {
-            char name[300];
-            snprintf(name, sizeof(name), "%s@0x%zx", file, off);
-            doTexture(name, d + off, size - off, f);
-        }
+    FILE *f = user;
+    if (it->bad == TEXPACK_WALK_UNREADABLE) {
+        CHECK(0, "%s can be read", it->member);
+        return 0;
     }
+    doTexture(it, f);
+    return 0;
 }
 
 /* ------------------------------------------------------------ the pack */
@@ -553,9 +456,8 @@ int main(int argc, char **argv)
         printf("texpack_disc_test: SKIP (%s is not a readable disc image)\n", disc);
         return 77;
     }
-    IcoDfMember m;
-    ico_df_find_member(vfs, "", &m); /* builds the index */
-    int members = ico_df_index_members();
+    IcoDfIndex *idx = ico_df_index_open(vfs);
+    int members = ico_df_index_member_count(idx);
     CHECK(members > 0, "DATA.DF has members (%d)", members);
 
     FILE *f = fopen("texpack_names.txt", "w");
@@ -563,60 +465,13 @@ int main(int argc, char **argv)
     if (f == NULL) {
         return 1;
     }
-    for (int i = 0; i < members; i++) {
-        const char *name = ico_df_member_name(i);
-        size_t n = strlen(name);
-        if (n < 4 || (strcmp(name + n - 4, ".tm2") != 0 && strcmp(name + n - 4, ".TM2") != 0)) {
-            continue;
-        }
-        if (ico_df_member(i, &m) != 0) {
-            CHECK(0, "member %d", i);
-            continue;
-        }
-        uint8_t *d = malloc(m.size ? m.size : 1);
-        if (d == NULL || ico_df_read_member(vfs, &m, d) != 0) {
-            CHECK(0, "%s can be read", name);
-            free(d);
-            continue;
-        }
-        doTexture(name, d, m.size, f);
-        free(d);
-    }
-    /* the subtitles: a TIM2 per 0x8800-byte record of the .jim files
-       (jimaku.c reads them record by record into a buffer it hands to
-       tex_InitTexture), loose in DATA.DF and in the packs */
-    for (int i = 0;; i++) {
-        const char *name = ico_df_entry_name(vfs, i);
-        if (name == NULL) {
-            break;
-        }
-        if (!isJim(name)) {
-            continue;
-        }
-        int64_t n = ico_df_size(vfs, name);
-        uint8_t *d = n > 0 ? malloc((size_t)n) : NULL;
-        if (d == NULL || ico_df_read(vfs, name, 0, d, (size_t)n) != n) {
-            CHECK(0, "%s can be read", name);
-            free(d);
-            continue;
-        }
-        doRecords(name, d, (size_t)n, f);
-        free(d);
-    }
-    for (int i = 0; i < members; i++) {
-        const char *name = ico_df_member_name(i);
-        if (!isJim(name) || ico_df_member(i, &m) != 0) {
-            continue;
-        }
-        uint8_t *d = malloc(m.size ? m.size : 1);
-        if (d == NULL || ico_df_read_member(vfs, &m, d) != 0) {
-            CHECK(0, "%s can be read", name);
-            free(d);
-            continue;
-        }
-        doRecords(name, d, m.size, f);
-        free(d);
-    }
+    /* the .tm2 members, then the subtitles: a TIM2 per 0x8800-byte record
+       of the .jim files (jimaku.c reads them record by record into a
+       buffer it hands to tex_InitTexture), loose in DATA.DF and in the
+       packs (texpack_walk.h) */
+    TexpackWalkStats ws;
+    CHECK(idx == NULL || texpack_walk_disc(vfs, idx, onItem, f, &ws) == 0, "the walk ends");
+    ico_df_index_close(idx);
     fclose(f);
     qsort(s_disc.k, (size_t)s_disc.n, sizeof(Key), keyCmp);
 

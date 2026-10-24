@@ -44,12 +44,20 @@ add_executable(texpack_name_test test/texpack_name_test.c)
 target_compile_options(texpack_name_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(texpack_name_test PRIVATE ico_texpack_name)
 
+# ico_texpack_walk: every TIM2 of the disc as the game loads it
+# (texpack_walk.h), read through df_pack's IcoDfIndex: texpack_disc_test's
+# walk and the texture export's (texpack_export.h).  No render device.
+add_library(ico_texpack_walk STATIC texpack_walk.c)
+target_include_directories(ico_texpack_walk PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(ico_texpack_walk PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(ico_texpack_walk PUBLIC ico_texpack_name ico_port_data)
+
 # texpack_disc_test: every TIM2 of the disc named, written to
 # texpack_names.txt; with a PCSX2 replacements folder (ICO_TEXPACK_DIR) the
 # pack's files matched against those names.  Skipped (77) without the disc.
 add_executable(texpack_disc_test test/texpack_disc_test.c)
 target_compile_options(texpack_disc_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-target_link_libraries(texpack_disc_test PRIVATE ico_texpack_name ico_port_data)
+target_link_libraries(texpack_disc_test PRIVATE ico_texpack_walk)
 
 # ico_bisect_plan: the loss bisect's second-level planner (rd_bisect_plan.h:
 # which draws of the lost pass the next step replays).  Pure C, built in
