@@ -13,6 +13,9 @@ how the dumps that pack makers start from are written. The player's side is
 | `port/render/xxh3.h`, `xxh3.c` | XXH3-64, the hash of texture names and of model parts |
 | `port/render/texpack.h`, `texpack.c` | the texture pack: folders, index, loader thread, RAM cache, pump, budget, dumps |
 | `port/render/texpack_png.c`, `texpack_dds.c`, `texpack_image.c` | the PNG and DDS loaders and their shared image |
+| `port/render/texpack_walk.h`, `texpack_walk.c` | every TIM2 of the disc with the hook's source, for `texpack_disc_test` and the export |
+| `port/render/texpack_export.h`, `texpack_export.c` | the texture export: the core, the manifest, the job on its own thread |
+| `port/render/rd_png.h` | the PNG writer for callers outside the renderer, and `rd_png_prepare` |
 | `port/render/modelpack.h`, `modelpack.c` | the model pack: folders, index, glTF to VU conversion, replacement meshes, dumps |
 | `port/render/gltf.h`, `gltf.c` | the glTF 2.0 reader and writer |
 | `ico2/seki/src/Texture.c` | the texture hook (`texHostPack`) and the per-frame pump (`tex_ResetVram`) |
