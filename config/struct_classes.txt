@@ -27,7 +27,7 @@
 
 # --- common/include/charFileManager.h ---------------------------------------
 TexRec               overlay   # ELF texture-path
-PObjMdl              overlay   # ELF model-path
+PObjMdl              overlay   size=0x10C # ELF model-path: 0x8C bytes on the disc, then the port's host-only modelPath and shadowPath (the USA disc's, config/data_schema.ntsc.txt extend rows); the loader copies field by field
 # --- common/include/kanban.h -------------------------------------------------
 Kanban               runtime   # kanban.c's sign list, allocated per sign (kanbanReqAdd)
 # --- common/include/layout_texture.h -----------------------------------------
@@ -74,7 +74,7 @@ LookTarget           overlay   # ELF look-target-data
 # --- fumi/include/act-parallel-control.h -------------------------------------
 ParallelMotionRow    overlay   # ELF parallel-motion-tbl
 # --- fumi/include/act.h ------------------------------------------------------
-ActModeRec           runtime   # ELF act-mode-def, filled by the table loader (port/data/tables.c, 5B); EE layout asserted by port/data/gen/table_desc.c. ent[].act is a function pointer
+ActModeRec           runtime   size=0x54 # 0x50 on the disc, then the port's host-only word of the USA disc's bits (holdDir, saveInfo, pullUp, stopMail: config/data_schema.ntsc.txt extend rows); ELF act-mode-def, filled by the table loader (port/data/tables.c, 5B); EE layout asserted by port/data/gen/table_desc.c. ent[].act is a function pointer
 IntrMail             runtime   # ELF act-intrlist, filled by the table loader (port/data/tables.c, 5B); EE layout asserted by port/data/gen/table_desc.c. accept, extra, handler, motion are function pointers
 # --- fumi/include/adpcm_init.h -----------------------------------------------
 AdpcmOpenReq         runtime   # soundDataOpen's request, in memory only
