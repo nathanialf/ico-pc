@@ -30,8 +30,8 @@ disc's boot ELF, and the port's own reads of DATA.DF. The repository holds no di
 | `port/platform/android/iso_import.h`, `iso_import.c` | the Android first start's copy of the chosen image |
 | `ico2/fumi/ios/cdvd.c`, `ico2/seki/src/FileManager.c` | the game's side: the cdvd manager and the boot loader |
 | `config/tables_manifest.txt`, `tables_manifest.<slug>.txt` | per disc, the CRC-32 of every table row and the addresses the tables' pointers hold |
-| `config/ee_layout.<slug>.txt`, `motion_bits.<slug>.txt` | the other discs' record layouts and MotionDef's shift-read bits (`tools/gen_ee_layout.py`; jpn, kor, ntsc, aug6) |
-| `config/symbol_addrs.<slug>{,.data}.txt` | the names at the other ELFs' addresses (`tools/gen_symbol_addrs.py`; jpn, kor, ntsc, aug6) |
+| `config/ee_layout.<slug>.txt`, `motion_bits.<slug>.txt` | the other discs' record layouts and MotionDef's shift-read bits (`tools/gen_ee_layout.py`; jpn, kor, ntsc, aug6, jun26, cn) |
+| `config/symbol_addrs.<slug>{,.data}.txt` | the names at the other ELFs' addresses (`tools/gen_symbol_addrs.py`; jpn, kor, ntsc, aug6, jun26, cn) |
 
 ## Layers
 
@@ -724,6 +724,42 @@ each follows the demo's code, which reads its own bit for the purpose PAL's code
 `config/data_schema.jun26.txt` and `config/data_members.jun26.txt` are upstream's, unchanged, with
 the port's rows appended to the schema. `port/core/region_jun26.c` is its region file.
 
+### The Asian disc's set
+
+`port/data/gen/cn/` is the Asian retail disc's set (`SCPS-55001`, `SCPS_550.01`, SYSTEM.CNF
+`VER = 1.02`, a DVD), made with the commands of [the Korean set](#adding-a-targets-set)
+(`--version cn`, upstream 9bd61a825, `baserom/cn/baseelf.elf`, the decompilation's `build/cn`
+link for the symbols) with its row pending in `gen_data_c.py` `PENDING_ROWS`, and landed with
+`config/regions.txt`'s seventh row. It is the Korean program with the Japanese records and data:
+74 member rows in 72 members, no `enemy-def` (source upstream). Written by `gen_data_c.py
+--version cn` in the PAL record's form, all 72 members' C equals the Japanese ELF's member for
+member, and differs from the Korean ELF's in three (`tex-property` with the Japanese 412 rows,
+`texture-layout`, `staffroll_dat`'s pool). So `config/ee_layout.cn.txt` is the Japanese layout
+(71 record types), the schema's port section is the Japanese and Korean one (two `default` rows,
+no map row), and `config/motion_bits.cn.txt` equals the Korean rows bit for bit: the `motion-def`
+run is word for word the Korean ELF's (459,200 bytes, no differing word), the scan of upstream's
+merged sources pairs all but four rows (PAL flags bits 2, 5, 9 and 25), and `HAND_ROWS` gives
+those with the Korean disc's bits as their evidence.
+
+The disc is a DVD like the Korean one and its `DATA.DF` has the same shift: the directory lists
+`\DFDATAS\DATA.DF` at LSN 3157 and the archive header (`b7000000 "COMMON.DF"`) is 153,600
+sectors on, so `df_lsn_shift` is 153,600 and `df_size` 552,847,360 (867,420,160 less the shift in
+bytes); 183 members, directory CRC-32 `0xe3f7de26` (`build-host/tmp/kor/df_manifest.py`'s
+block). The image is 873,889,792 bytes (SHA-1 `9bc77511b08a78dd9f7f3ddabde07fb5682c51b1`), the
+boot ELF 5,489,952 bytes (`f3e784b6811af2de9570be5575d6db5962300bcd`, equal to the decompilation's
+`build/cn/ico.elf`). The memory card directory is `BISCPS-55001ico`, the product file the
+Japanese 0x1E8 record. The disc's menu sheets (`Tex_menu01`) are lettered in Traditional Chinese;
+`region_cn.c`'s `ui_lang_default` (English) and `menu_sheet` (the Japanese sheets' look) are
+stand-ins until the port has Chinese text and a measured sheet look.
+
+`config/data_schema.cn.txt` and `config/data_members.cn.txt` are upstream's, unchanged, with the
+port's two rows appended to the schema. Its row is the seventh and last of `config/regions.txt`
+because upstream's `LN` takes its arguments in the order the targets were added (pal, jpn, kor,
+ntsc, aug6, jun26, cn): `region_blocks.py rename --base cn=kor` took the sixth-row tree to seven
+rows (`PAL_JPNKOR` is `PAL_JPNKORCN`, `ICO_JPNKOR` is `ICO_JPNKORCN`, and every `LN(...)` gained
+the Korean value as its seventh argument, the Asian build having the Korean numbers but for
+`pad.c`'s 18 Japanese ones, which the merge sets). `port/core/region_cn.c` is its region file.
+
 ### Adding a target's set
 
 For a new row of `config/regions.txt`, the data step of adding a target ([GAME_CODE.md](GAME_CODE.md)
@@ -761,7 +797,8 @@ tools/gen_data_desc.py
 ```
 
 The preview disc's set was made the same way with `--version aug6` and `baserom/aug6`, the June
-2001 demo's with `--version jun26` and `baserom/jun26`, and the
+2001 demo's with `--version jun26` and `baserom/jun26`, the Asian disc's with `--version cn` and
+`baserom/cn` (upstream 9bd61a825), and the
 USA set (upstream 3947e0641, its row pending):
 
 ```
