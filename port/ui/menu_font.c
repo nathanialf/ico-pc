@@ -181,6 +181,7 @@ static struct {
     MfStrip strips[MF_STRIPS];
     int lightLang; /* the language the light pages are styled for; -1 none */
     int warnedFull;
+    int reclaims; /* shelves emptied for new strips (reclaimShelf), this run */
     int hasLast;
     UiMenuStrip last;
 } s_mf = {.lightLang = -1};
@@ -904,6 +905,77 @@ static int shelfFit(MfPage *p, int w, int h, int *x, int *y, int *shelf)
     return 1;
 }
 
+/* Empties shelf i of a style's page: its strips forgotten, its rows of
+   coverage cleared across the page and, above 1x, the rim's rows of the
+   strips' sheet texels and the one round them that placeCoverage wrote
+   ([y - scale, y + h + scale): the shelves' MF_GAP_Y of 5 sheet texels
+   keeps those clear of a neighbour's, which reach a sheet texel past its
+   strips), the same rows of the texture replaced (whole rows of the page
+   are contiguous; rd uploads the union of the changed rows at the next
+   replay).  The texture stays.  The band keeps its rows for strips no
+   taller (shelfFit); empty shelves at the bottom are dropped, so the open
+   shelf is the last one with strips. */
+static void reclaimShelf(int cls, int page, int i)
+{
+    MfPage *p = &s_mf.pages[cls][page];
+    MfShelf *b = &p->shelves[i];
+    const int sc = p->scale;
+    for (int k = 0; k < MF_STRIPS; k++) {
+        MfStrip *s = &s_mf.strips[k];
+        if (s->used && s->cls == cls && s->page == page && s->shelf == i) {
+            freeStrip(s);
+        }
+    }
+    if (b->h > 0) {
+        uint8_t *rows = p->cov + (size_t)b->y * (size_t)p->w;
+        memset(rows, 0, (size_t)b->h * (size_t)p->w);
+        if (p->tex) {
+            rd_update_texture_rect((RdTex){p->tex}, 0, (uint32_t)b->y, (uint32_t)p->w,
+                                   (uint32_t)b->h, rows);
+        }
+        if (sc > 1) {
+            const int ry = b->y - sc, rh = b->h + 2 * sc;
+            uint8_t *rim = p->cov + (size_t)p->w * (size_t)p->h + (size_t)ry * (size_t)p->w;
+            memset(rim, 0, (size_t)rh * (size_t)p->w);
+            if (p->tex) {
+                rd_update_texture_rect((RdTex){p->tex}, 0, (uint32_t)(p->h + ry), (uint32_t)p->w,
+                                       (uint32_t)rh, rim);
+            }
+        }
+    }
+    b->x = MF_ORIGIN * sc;
+    b->strips = 0;
+    while (p->nShelves > 0 && p->shelves[p->nShelves - 1].strips == 0) {
+        p->nShelves--;
+    }
+    s_mf.reclaims++;
+}
+
+/* Every shelf with strips that no recorded or replayed frame can still
+   name (none drawn for MF_EVICT_FRAMES frames: evictable's rule at a
+   shelf's grain) on a style's pages of scale sc (0 any) emptied; returns
+   how many.  A page whose words change every tick (a counter beside the
+   rows that stay) so keeps its live rows where they are and takes the new
+   strips in the bands the old ones left. */
+static int reclaimStale(int cls, int sc, uint32_t now)
+{
+    int n = 0;
+    for (int pg = 0; pg < MF_PAGES; pg++) {
+        MfPage *p = &s_mf.pages[cls][pg];
+        if (!p->cov || (sc && p->scale != sc)) {
+            continue;
+        }
+        for (int i = p->nShelves - 1; i >= 0; i--) {
+            const MfShelf *b = &p->shelves[i];
+            if (i < p->nShelves && b->strips > 0 && now - b->lastFrame >= MF_EVICT_FRAMES) {
+                reclaimShelf(cls, pg, i);
+                n++;
+            }
+        }
+    }
+    return n;
+}
+
 /* the page drawn least recently of a style (of scale sc; 0 any) that no
    frame can still name: reset and returned; -1 when every page is in use */
 static int evictOne(int cls, int sc, uint32_t now)
@@ -922,10 +994,12 @@ static int evictOne(int cls, int sc, uint32_t now)
     return best;
 }
 
-/* room for a w x h strip (strip texels) of scale sc in a style's pages: a
-   shelf of a page of that scale in use, a new page (in a free slot or one
-   of another scale that no frame can still name), or the least recently
-   drawn page of the scale reset */
+/* room for a w x h strip (strip texels) of scale sc in a style's pages, in
+   order: a shelf of a page of that scale in use; the same after the stale
+   shelves of those pages are emptied (reclaimStale); a new page (in a free
+   slot or one of another scale that no frame can still name); the least
+   recently drawn page of the scale reset.  Only when every shelf of every
+   page holds a strip some frame still draws is nothing found */
 static int allocCell(int cls, int sc, int w, int h, int *page, int *x, int *y, int *shelf)
 {
     if (w > pageW(sc) - (MF_ORIGIN + MF_GAP_X) * sc ||
@@ -933,11 +1007,16 @@ static int allocCell(int cls, int sc, int w, int h, int *page, int *x, int *y, i
         return 0;
     }
     const uint32_t now = rd_frame_number();
-    for (int pg = 0; pg < MF_PAGES; pg++) {
-        MfPage *p = &s_mf.pages[cls][pg];
-        if (p->cov && p->scale == sc && shelfFit(p, w, h, x, y, shelf)) {
-            *page = pg;
-            return 1;
+    for (int pass = 0; pass < 2; pass++) {
+        for (int pg = 0; pg < MF_PAGES; pg++) {
+            MfPage *p = &s_mf.pages[cls][pg];
+            if (p->cov && p->scale == sc && shelfFit(p, w, h, x, y, shelf)) {
+                *page = pg;
+                return 1;
+            }
+        }
+        if (pass > 0 || reclaimStale(cls, sc, now) == 0) {
+            break;
         }
     }
     for (int pg = 0; pg < MF_PAGES; pg++) {
@@ -968,8 +1047,9 @@ static int allocCell(int cls, int sc, int w, int h, int *page, int *x, int *y, i
     return 0;
 }
 
-/* a free strip slot; when every slot is taken, a page that no frame can
-   still name is reset (its strips with it) */
+/* a free strip slot; when every slot is taken, the shelves of every style
+   and scale that no frame can still name are emptied (their strips with
+   them), else a page that no frame can still name is reset */
 static MfStrip *newStrip(void)
 {
     for (int pass = 0; pass < 2; pass++) {
@@ -978,8 +1058,14 @@ static MfStrip *newStrip(void)
                 return &s_mf.strips[i];
             }
         }
+        if (pass > 0) {
+            break;
+        }
         const uint32_t now = rd_frame_number();
         int freed = 0;
+        for (int c = 0; c < MF_CLASSES; c++) {
+            freed += reclaimStale(c, 0, now);
+        }
         for (int c = 0; c < MF_CLASSES && !freed; c++) {
             freed = evictOne(c, 0, now) >= 0;
         }
