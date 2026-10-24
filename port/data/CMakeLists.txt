@@ -151,6 +151,19 @@ if(ICO_RUN_TESTS)
     endif()
 endif()
 
+# df_index_test: df_pack.h's index of its own (IcoDfIndex, what the texture
+# export reads the disc with off the game thread) against the global one
+# over a second mount of the user's disc: the directory, the members, a
+# member's bytes, a pack read in one pass and a stopped one, and the global
+# index untouched; skipped (77) without the disc.
+add_executable(df_index_test test/df_index_test.c)
+target_compile_options(df_index_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(df_index_test PRIVATE ico_port_data)
+if(ICO_RUN_TESTS)
+    add_test(NAME df_index_disc COMMAND df_index_test "${ICO_DISC_IMAGE}")
+    set_tests_properties(df_index_disc PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
 # The archive: extraction into
 # a temporary archive and mount, compared with the ISO backend. `synth` uses
 # vfs_test's synthetic image and runs everywhere; `disc` reads the user's
