@@ -77,19 +77,45 @@ ROOT = Path(__file__).resolve().parent.parent
 REGIONS = ROOT / "config/regions.txt"
 
 
-def regions():
+# The rows config/regions.txt gains once every one of them has its data set
+# (the disc-identify package's rows patch lands them together with the last
+# set: the pre-commit hook's gen_data_desc.py --check refuses a row without
+# its set). Until then a set's files are written and checked against these
+# rows (--version <slug>), spelt exactly as that patch spells them; a slug
+# config/regions.txt lists takes its row from there, so this list has no
+# effect once the rows land, and is then removed.
+PENDING_ROWS = """
+ntsc VERSION_NTSC SCUS-97113 SCUS_971.13 the North American disc
+aug6 VERSION_AUG6 PROTO-20010806 SCUS_971.13 the August 2001 preview disc
+jun26 VERSION_JUN26 SCUS-97158 SCUS_971.58 the June 2001 magazine demo
+"""
+
+
+def region_row(line, where):
+    f = line.split(None, 4)
+    if len(f) != 5:
+        fail(f"{where}: expected 'slug macro disc-id boot-elf product name'")
+    return dict(slug=f[0], macro=f[1], disc_id=f[2], boot_elf=f[3], product=f[4].strip())
+
+
+def regions(pending=False):
     """config/regions.txt's rows in order: dicts of slug, macro, disc_id,
-    boot_elf and product (the rest of the line)."""
+    boot_elf and product (the rest of the line). pending: followed by the
+    PENDING_ROWS config/regions.txt does not list yet (each marked
+    pending=True), for the generators' --version of such a slug."""
     out = []
     for n, line in enumerate(REGIONS.read_text().splitlines(), 1):
         if not line.strip() or line.lstrip().startswith("#"):
             continue
-        f = line.split(None, 4)
-        if len(f) != 5:
-            fail(f"{REGIONS}:{n}: expected 'slug macro disc-id boot-elf product name'")
-        out.append(dict(slug=f[0], macro=f[1], disc_id=f[2], boot_elf=f[3], product=f[4].strip()))
+        out.append(region_row(line, f"{REGIONS}:{n}"))
     if not out or out[0]["slug"] != "pal":
         fail(f"{REGIONS}: row 0 must be pal (the host layout)")
+    if pending:
+        listed = {r["slug"] for r in out}
+        for line in PENDING_ROWS.strip().splitlines():
+            r = region_row(line, "gen_data_c.PENDING_ROWS")
+            if r["slug"] not in listed:
+                out.append(dict(r, pending=True))
     return out
 
 
@@ -154,12 +180,12 @@ def rom_bytes(elf, lo, hi, section):
 
 def parse_schema(path=None):
     """The schema's rows, by member: one row per section the member's C defines.
-    `default` rows (parse_defaults) are skipped."""
+    The port's map rows (PORT_VERBS: parse_port_rows) are skipped."""
     path = SCHEMA if path is None else path
     rows = {}
     for n, line in enumerate(path.read_text().splitlines(), 1):
         f = line.split("#", 1)[0].split()
-        if not f or f[0] == "default":
+        if not f or f[0] in PORT_VERBS:
             continue
         if len(f) not in (6, 7) or f[1] not in ("data", "rodata", "sdata"):
             fail(f"{path}:{n}: expected '<member> <section> <type> <header> <count> <symbols> [hex=... | count-of=...]'")
@@ -188,20 +214,93 @@ def parse_schema(path=None):
     return rows
 
 
+# The port's rows of a target's schema (its "---- The port" section): how the
+# target's records map onto the host (PAL) records where a field's name alone
+# does not (tools/gen_ee_layout.py record_map; docs/port/DATA.md "The map
+# rows"). Each names a member and a field path of its record type:
+#   default <member> <field>=<value>  a PAL field the disc's record lacks
+#                                     takes the value; for a scalar array the
+#                                     disc holds fewer elements of, the rest
+#                                     take it (0 only: the loader's record
+#                                     clear)
+#   extend <member> <field>           a field the disc has and PAL lacks that
+#                                     converted code reads: the port's header
+#                                     holds it after PAL's fields ("PC port:
+#                                     host-only"), every disc without it leaves
+#                                     it 0
+#   drop <member> <field>             a field the disc has and no code the
+#                                     port compiles reads: not loaded
+#   narrow <member> <field>           an integer the disc holds wider than
+#                                     PAL's field: the low bits, which every
+#                                     record's value fits (--manifest checks)
+#   extra <member> <type> <count>     a table PAL has none of: the host array
+#                                     holds count records of type (the
+#                                     member's own row names its header and
+#                                     symbol); a disc without it loads none
+PORT_VERBS = ("default", "extend", "drop", "narrow", "extra")
+
+
+def parse_port_rows(path=None):
+    """The schema's port rows: {'default': {(member, field): value text},
+    'extend', 'drop', 'narrow': {(member, field)}, 'extra': {member: (type,
+    count)}}."""
+    path = SCHEMA if path is None else path
+    out = {"default": {}, "extend": set(), "drop": set(), "narrow": set(), "extra": {}}
+    for n, line in enumerate(path.read_text().splitlines(), 1):
+        f = line.split("#", 1)[0].split()
+        if not f or f[0] not in PORT_VERBS:
+            continue
+        verb = f[0]
+        if verb == "default":
+            if len(f) != 3 or "=" not in f[2]:
+                fail(f"{path}:{n}: expected 'default <member> <field>=<value>'")
+            field, value = f[2].split("=", 1)
+            out["default"][(f[1], field)] = value
+        elif verb == "extra":
+            if len(f) != 4 or not f[3].isdigit():
+                fail(f"{path}:{n}: expected 'extra <member> <type> <count>'")
+            out["extra"][f[1]] = (f[2], int(f[3]))
+        else:
+            if len(f) != 3 or "=" in f[2]:
+                fail(f"{path}:{n}: expected '{verb} <member> <field>'")
+            out[verb].add((f[1], f[2]))
+    clash = [k for k in out["extend"] | out["drop"] | out["narrow"] if k in out["default"]]
+    clash += [k for k in out["extend"] if k in out["drop"] | out["narrow"]]
+    clash += [k for k in out["drop"] if k in out["narrow"]]
+    if clash:
+        fail(f"{path}: {clash[0][0]} {clash[0][1]} has two map rows")
+    return out
+
+
 def parse_defaults(path=None):
     """The schema's `default <member> <field>=<value>` rows: the value a field
     of the host (PAL) record takes when the target's record has no field of
     that name. {(member, field): value text}."""
-    path = SCHEMA if path is None else path
+    return parse_port_rows(path)["default"]
+
+
+def schema_paths():
+    """Every target's config/data_schema.<slug>.txt, PAL's first."""
+    return sorted((ROOT / "config").glob("data_schema.*.txt"),
+                  key=lambda p: (p.name != "data_schema.pal.txt", p.name))
+
+
+def host_only():
+    """{record type: {top-level field names}}: the host-only fields of the
+    port's headers, every schema's `extend` rows (a field the host holds after
+    PAL's own for the disc that has it; every other disc's record, PAL's among
+    them, leaves it 0). Read from every config/data_schema.*.txt, so the PAL
+    set and the other sets agree whatever config/regions.txt lists."""
     out = {}
-    for n, line in enumerate(path.read_text().splitlines(), 1):
-        f = line.split("#", 1)[0].split()
-        if not f or f[0] != "default":
-            continue
-        if len(f) != 3 or "=" not in f[2]:
-            fail(f"{path}:{n}: expected 'default <member> <field>=<value>'")
-        field, value = f[2].split("=", 1)
-        out[(f[1], field)] = value
+    for path in schema_paths():
+        rows = parse_schema(path)
+        for member, field in parse_port_rows(path)["extend"]:
+            if member not in rows:
+                fail(f"{path.relative_to(ROOT)}: extend {member}: no row of that member")
+            typ = rows[member][0]["type"]
+            if not re.fullmatch(r"[A-Za-z_]\w*", field):
+                fail(f"{path.relative_to(ROOT)}: extend {member} {field}: a top-level field name")
+            out.setdefault(typ, set()).add(field)
     return out
 
 
@@ -1072,8 +1171,27 @@ class MappedWriter(Writer):
     def mapped(self, ty, rbase, path, lpath):
         mp = self.maps.get(lpath)
         if mp is not None:
+            if mp.how == "copy" and mp.count != mp.host.count:
+                # the disc's shorter array: its elements, the rest 0
+                el = ty.elem
+                sub = T("array", el.size * mp.count, ty.align, elem=el, n=mp.count)
+                return self.value(sub, rbase + mp.src.ee_off, path)
             if mp.how == "copy":
                 return self.value(ty, rbase + mp.src.ee_off, path, mp.src.bit)
+            if mp.how == "narrow":
+                # the disc's wider integer: its low bits, which must hold it
+                src, off = mp.src, rbase + mp.src.ee_off
+                v = int.from_bytes(self.data[off:off + src.ee_size], "little", signed=src.signed)
+                lo, hi = (-(1 << (8 * ty.size - 1)), 1 << (8 * ty.size - 1)) if ty.signed else \
+                    (0, 1 << (8 * ty.size))
+                if not lo <= v < hi:
+                    self.errors.append(f"0x{self.base + off:08X} {path}: {v} does not fit the "
+                                       f"host's {ty.size}-byte field (narrow)")
+                return int_text(v & ((1 << (8 * ty.size)) - 1), ty, path in self.hexf)
+            if mp.how == "clear" or mp.how == "default" and ty.kind not in ("int", "float"):
+                # a host-only field the disc lacks, or an array's default 0:
+                # the record clear's value
+                return "0" if ty.kind in ("int", "float", "bitfield", "ptr", "fptr") else "{0}"
             if mp.how == "default":
                 if ty.kind == "float":
                     return float_text(struct.pack("<f", float(mp.value)))
@@ -1096,12 +1214,32 @@ class MappedWriter(Writer):
         fail(f"{lpath or '(element)'}: no field of the host record's map")
 
 
+def pal_maps(rows):
+    """{type: ({host path: Mapped}, the EE size)} of the member's record rows
+    whose type has host-only fields (a schema's `extend` rows), for PAL: every
+    other field copied from its own offset, the host-only ones 0, the record
+    read at PAL's EE size."""
+    import gen_ee_layout as L
+    only = host_only()
+    out = {}
+    for s, _ in rows:
+        if s is None or s["count_of"] or s["type"] in out or s["type"] not in only:
+            continue
+        ty = Header(s["header"]).typedef(s["type"])
+        hf = []
+        L.flatten(ty, "", 0, hf, words=True)
+        maps = {f.path: L.Mapped(f, "clear" if L.top_name(f.path) in only[s["type"]] else "copy",
+                                 src=f) for f in hf}
+        out[s["type"]] = (maps, L.ee_part_size(ty, only[s["type"]], s["type"]))
+    return out
+
+
 def target_maps(rows):
     """{type: ({host path: Mapped}, the target's record size)} of the
     member's record rows, for the current non-PAL VERSION."""
     import gen_ee_layout as L
     recs, _ = L.parse_layout(VERSION)
-    defaults, bits = parse_defaults(), L.parse_bits(VERSION)
+    port, bits, only = parse_port_rows(), L.parse_bits(VERSION), host_only()
     out = {}
     for s, _ in rows:
         if s is None or s["count_of"] or s["type"] in out:
@@ -1109,7 +1247,7 @@ def target_maps(rows):
         ty = Header(s["header"]).typedef(s["type"])
         hf = []
         L.flatten(ty, "", 0, hf, words=True)
-        maps = L.record_map(VERSION, s["type"], s["member"], hf, recs, defaults, bits)
+        maps = L.record_map(VERSION, s["type"], s["member"], hf, recs, port, bits, host_only=only)
         out[s["type"]] = ({m.host.path: m for m in maps}, recs[s["type"]].size)
     return out
 
@@ -1150,7 +1288,7 @@ def declared_writable(header, name):
 
 def write_c(member, rows, datas, layout):
     pool = [(r["lo"], r["hi"], datas[r["section"]]) for _, r in rows]
-    tmaps = target_maps(rows) if VERSION != "pal" else {}
+    tmaps = target_maps(rows) if VERSION != "pal" else pal_maps(rows)
     defs, headers, funcs, objs = [], [], {}, {}
     arrays = {}
     for s, row in rows:
@@ -1173,14 +1311,14 @@ def write_c(member, rows, datas, layout):
         ty = header(s["header"]).typedef(s["type"])
         start = start_of(s, row)
         n = s["count"] or 1
-        stride = tmaps[s["type"]][1] if tmaps else ty.size
+        stride = tmaps[s["type"]][1] if s["type"] in tmaps else ty.size
         size = stride * n
         span = row["hi"] - row["lo"] - start
         if size > span or any(data[start + size:]):
             fail(f"{member}: {n} x {s['type']} ({stride} B) = {size} B from offset {start}, "
                  f"but the ROM's .{row['section']} range holds {span} B" +
                  (" with nonzero bytes after it" if size <= span else ""))
-        if tmaps:
+        if s["type"] in tmaps:
             w = MappedWriter(data[start:], row["lo"] + start, layout, s["hex"], pool,
                              tmaps[s["type"]][0])
 
@@ -1270,7 +1408,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--c", required=True, metavar="MEMBER")
     ap.add_argument("--version", default="pal", metavar="SLUG",
-                    help="the target, a slug of config/regions.txt (default pal)")
+                    help="the target, a slug of config/regions.txt or PENDING_ROWS (default pal)")
     ap.add_argument("--elf", type=Path, default=None,
                     help="the target's base ELF (default baserom/<slug>/baseelf.elf)")
     ap.add_argument("--symbol-map", action="store_true", required=True,
@@ -1279,8 +1417,8 @@ def main():
                     help="another splat-format list (repeatable)")
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
-    if a.version not in [r["slug"] for r in regions()]:
-        fail(f"{a.version} is not a slug of {REGIONS.relative_to(ROOT)}")
+    if a.version not in [r["slug"] for r in regions(pending=True)]:
+        fail(f"{a.version} is not a slug of {REGIONS.relative_to(ROOT)} (or of PENDING_ROWS)")
     set_version(a.version)
     if a.elf is None:
         a.elf = BASE_ELF
