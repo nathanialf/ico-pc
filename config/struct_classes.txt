@@ -110,6 +110,8 @@ JimakuArg            runtime   # subtitle request message (jimaku.c, script TUs)
 JimakuFileName       overlay   # ELF unmapped_0055FBD0 (jimakuFileName)
 # --- fumi/include/mcard.h ----------------------------------------------------
 IconFile             overlay   # ELF iconfile
+# --- fumi/include/mcdata.h ---------------------------------------------------
+sceMcIconSys         overlay   size=0x3C4 # ELF mc-icon-sys (the June 2001 demo's extra table, config/data_schema.jun26.txt); pointer-free, copied field by field by the table loader
 # --- fumi/include/memory.h ---------------------------------------------------
 IosMemPart           runtime  size=0x48   # partition record at the head of each heap partition (memory.c); 80-byte header slot
 IosMemNode           runtime  size=0x40   # block header in front of every allocation (memory.c); 0x50 on 64-bit hosts
@@ -176,6 +178,9 @@ ObjActMailEnt        overlay   # ELF obj-trigger
 EffectArg            runtime   # effect argument on the stack (e3.c)
 WarpRec              overlay   # ELF girl-warp-list
 # --- seki/include ------------------------------------------------------------
+EnemyKindRec         runtime   size=0x8 # ELF enemy-model*-kinds (the June 2001 demo's extra tables, config/data_schema.jun26.txt), filled by the table loader; list points into an enemy-model*-kindlist table
+EnemyModelSet        runtime   size=0x10 # ELF enemy-model*-set and EnemyInit.c's model 01 set; kinds and pos point at the set's tables
+EnemySet             runtime   size=0x8 # ELF enemy-set-table (the June 2001 demo's), EnemyInit.c's one-row PAL table; list points at a set list
 BgaAnim              runtime   # bga_InitData's 0x30-byte allocation
 BgaHeader            overlay   # .bga file head, relocated in place; dobjs, roots and anim are EE address words (eeword.h)
 BgaEnvEnt            overlay   # .bga envelope entry; data is an EE word relocated in place
