@@ -77,8 +77,9 @@ enum {
     TEXPACK_EXPORT_DONE = 2,    /* went through every item */
     TEXPACK_EXPORT_STOPPED = 3, /* texpack_export_cancel (or shutdown) stopped it */
     TEXPACK_EXPORT_FAILED = 4,  /* the disc's index could not be read, the
-                                   manifest could not be written, or every
-                                   write failed */
+                                   manifest could not be written, or a file
+                                   could not be written (a full disk: the
+                                   counters say how many were) */
 };
 
 /* What an export did so far (the counters) and where. */
@@ -149,7 +150,9 @@ int texpack_export_run(IcoVfs *vfs, const char *dumpDir, const char *serial, uns
  * sets its final state last, after the manifest.  It shares nothing else
  * with the game but rd_png's CRC table (built by begin, rd_png_prepare),
  * so the game may go on dumping textures meanwhile: the names are the
- * same, a file already there is kept and both write through a .tmp file.
+ * same, a file already there is kept, and the export writes through a .tmp
+ * file so the game's dump never sees a half file (the dump writes its final
+ * name directly).
  *
  * Shutdown order: texpack_export_shutdown joins the worker; call it before
  * texpack_shutdown, rd_shutdown and SDL_Quit: register it with main_host.c's

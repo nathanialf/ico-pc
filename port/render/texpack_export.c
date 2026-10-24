@@ -578,7 +578,7 @@ int texpack_export_close(TexpackExport *x, int stopped, int total, TexpackExport
         fprintf(stderr, "textures: export cannot write %s: %s (errno %d)\n",
                 path[0] ? path : x->dir, strerror(e), e);
     }
-    if (manifest != 0 || (x->st.written == 0 && x->st.failed > 0)) {
+    if (manifest != 0 || (x->st.failed > 0 && !stopped)) {
         state = TEXPACK_EXPORT_FAILED;
     } else {
         state = stopped ? TEXPACK_EXPORT_STOPPED : TEXPACK_EXPORT_DONE;

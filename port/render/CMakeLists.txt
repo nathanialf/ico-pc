@@ -194,8 +194,11 @@ add_library(ico_texpack_export STATIC texpack_export.c)
 target_include_directories(ico_texpack_export PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(ico_texpack_export PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_texpack_export PUBLIC ico_render ico_texpack_walk ico_host_fs)
-if(TARGET SDL3::SDL3-shared)
-    target_link_libraries(ico_texpack_export PUBLIC SDL3::SDL3-shared)
+# SDL3::SDL3 stands for the shared library where there is one and for the
+# static one on the Apple builds (fetch_moltenvk.sh builds SDL_SHARED=OFF), so
+# the row works on every window build
+if(TARGET SDL3::SDL3)
+    target_link_libraries(ico_texpack_export PUBLIC SDL3::SDL3)
     set_source_files_properties(texpack_export.c TARGET_DIRECTORY ico_texpack_export
                                 PROPERTIES COMPILE_DEFINITIONS "ICO_TEXPACK_EXPORT_THREAD=1")
 endif()

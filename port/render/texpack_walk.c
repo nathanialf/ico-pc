@@ -135,6 +135,10 @@ int texpack_walk_tim2(const char *member, int kind, const uint8_t *d, size_t siz
     size_t at = 0;
     for (uint32_t i = 0; i < levels; i++) {
         TexpackLevel *l = &src->lv[i];
+        if (levels > 1 && (size_t)0x30 + 0x10 + 4 * (i + 1) > headerSize) {
+            out->bad = TEXPACK_WALK_BAD_HEADER;
+            return out->bad;
+        }
         size_t bytes = levels == 1 ? imageSize : rd32(pic + 0x30 + 0x10 + 4 * i);
         l->tw = (uint8_t)(twth(w) - (int)i);
         l->th = (uint8_t)(twth(h) - (int)i);

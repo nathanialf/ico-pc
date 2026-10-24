@@ -1229,6 +1229,14 @@ int texpack_dump_dir(char *out, size_t size)
     if (out == NULL || size == 0 || !s_tp.inited || makeDumpDir() != 0) {
         return -1;
     }
+    /* the player may have removed the folder since (to redo an export):
+       make it again, so the export's writes do not all fail */
+    if (ico_path_kind(s_tp.dumpDir, NULL, NULL) != 1) {
+        s_tp.dumpDirReady = 0;
+        if (makeDumpDir() != 0) {
+            return -1;
+        }
+    }
     if (strlen(s_tp.dumpDir) >= size) {
         return -1;
     }

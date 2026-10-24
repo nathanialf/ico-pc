@@ -29,7 +29,7 @@ FIXTURE = "\n".join([
     "object/sdf/boy/model/../texture/arm2.tm2 PSMT4 0x03 64x64 1 clut 16/64B scroll 0 0 : %s@0" % name(2),
     "object/sdf/boy/model/../texture/hand.tm2 PSMT8 0x03 32x32 3 clut 256/1024B scroll 0 0 : %s@0 %s@0/chain %s@1 %s@2" % (name(3), name(4), name(5), name(6)),
     "object/sdf/girl/texture/hair.tm2 PSMT4 0x03 64x64 1 clut 16/64B scroll 1 0 : %s@0" % name(7),
-    "object/sdf/girl/texture/skin.tm2 PSMT4 0x03 64x64 1 clut 16/64B scroll 0 0 : %s@0 %s@0" % (name(2), name(8)),
+    "object/sdf/girl/texture/skin.tm2 PSMT4 0x03 64x64 1 clut 16/64B scroll 0 1 : %s@0 %s@0" % (name(2), name(8)),
     "object/sdf/sky/model/../texture/fog1.tm2 PSMT8 0x02 64x64 1 - : refused",
     "Tex_menu01/title.tm2 PSMT4 0x03 256x256 1 clut 16/64B scroll 0 0 : %s@0" % name(9),
     "text/menu_PAL_FR/menu_PAL_01.tm2 PSMT4 0x03 512x256 1 clut 16/64B scroll 0 0 : %s@0" % name(10),
@@ -93,6 +93,7 @@ def main():
         check(by[name(6) + ".png"]["size"] == "8x8", "size 2")
         check(by[name(3) + ".png"]["notes"] == "has 2 smaller sizes (their own rows)", "levels note")
         check(by[name(7) + ".png"]["notes"].startswith("colours cycle"), "colours cycle note")
+        check(by[name(8) + ".png"]["notes"] == "", "the unstable flag is not a colour cycle")
         none = [r for r in rows if r["file"] == ""]
         check(len(none) == 1 and none[0]["first used by"] == "sky/texture/fog1.tm2" and
               "24-bit palette" in none[0]["notes"] and none[0]["in the European pack"] == "",

@@ -454,7 +454,8 @@ and Achievement pop-ups.
   then your disc's number, then `dumps`; about 160 MB for the European
   disc). It is for people who make [texture packs](TEXTURE_PACKS.md#make-a-texture-pack).
   While it runs the row reads **Stop exporting** and the line under it shows
-  how many pictures are done. A message says how many were saved when it
+  how many of the disc's pictures it has looked at (fewer files are saved,
+  since many pictures share a name). A message says how many were saved when it
   ends or is stopped, even if you have left the menu by then, or says that
   the folder could not be written. A picture already in the folder is kept,
   so you can run it again. The file `manifest.txt` in the same folder lists

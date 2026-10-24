@@ -154,8 +154,9 @@ To get the pictures to work from:
 1. On the title screen, open **Options > Extras** and choose **Export
    textures**. You do not need Developer mode for this.
 2. Wait. The row changes to **Stop exporting** and the line under it counts
-   the pictures saved so far; choose it again to stop early. When it ends, a
-   message tells you how many pictures were saved. The message also comes
+   the pictures it has looked at so far (many share a name, so fewer files
+   are saved than pictures looked at); choose it again to stop early. When
+   it ends, a message tells you how many pictures were saved. The message also comes
    if you left the menu or started playing meanwhile.
 
 The game saves each picture of your disc as a PNG file, under the same name

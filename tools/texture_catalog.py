@@ -82,8 +82,8 @@ def parse(path):
             m = re.search(r"clut (\d+)/", left)
             if m:
                 t.colors = int(m.group(1))
-            m = re.search(r"scroll (\d+) (\d+)", left)
-            t.scroll = bool(m) and m.groups() != ("0", "0")
+            m = re.search(r"scroll (\d+) (\d+)", left)  # the scroll flag, then the unstable flag
+            t.scroll = bool(m) and m.group(1) != "0"
             t.refused = right.strip() == "refused"
             t.names = []
             if not t.refused:
