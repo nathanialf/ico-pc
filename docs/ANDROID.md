@@ -182,8 +182,8 @@ short for the chosen Touch size) and never cover each other. They fade away
 when you stop touching the screen and come back when you touch it.
 **Options > Controls > Touch screen** has **Touch size** and **Touch
 opacity** to make them bigger or smaller and more or less see-through, and
-**Edit layout** to move, resize, hide or switch them off yourself, for each way you
-hold or fold the phone.
+**Edit layout** to move, resize, hide or switch them off yourself, for each
+way you hold or fold the phone.
 [The full description](CONTROLS.md#touch-controls-phones-and-tablets).
 If Ico does not run in every direction you push the on-screen stick, turn
 on **Options > Gameplay > Analogue stick fix**.

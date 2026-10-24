@@ -412,8 +412,10 @@ Cross), and Triangle or Circle is Done.
 The arrangement is kept in the settings file, in the part called `[touch]`.
 If you ever want the game's own arrangement back, use the Reset rows, or
 delete the `[touch]` lines from the file with the game closed. In that file
-a button is written as `hidden` or `off`. A layout saved by an earlier
-version keeps its hidden buttons switched off, as they were.
+a button is written as `hidden` or `off`. If you write `hidden` into the
+settings file by hand, also add the line `format = 2` under `[touch]`. In a
+file without that line `hidden` means switched off, so the hidden buttons
+of a layout the game saved without it stay switched off, as they were.
 
 On Android, the phone's **Back** button or gesture opens the pause menu,
 like Start. [More about Android](ANDROID.md#controls).
