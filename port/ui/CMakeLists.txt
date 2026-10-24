@@ -471,8 +471,9 @@ target_link_libraries(settings_render PRIVATE ico_render ico_math ${_ui_settings
 # menu_text_test: the menu text table (against the disc's
 # texProperty when the image is there), the strings, the hook through the real
 # layout_texture.c (the table's rows a text strip, the others their texture
-# sprite) on the recording, then a port row into SCENE on a Vulkan device
-# (exit 77 without one)
+# sprite) on the recording, the page cache's shelf reclaim under a string
+# that changes every frame (issue 136), then a port row into SCENE on a Vulkan
+# device (exit 77 without one)
 add_executable(menu_text_test test/menu_text_test.c $<TARGET_OBJECTS:ico_ui_rd>
     "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_texture.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"

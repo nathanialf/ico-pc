@@ -22,6 +22,12 @@
  *   - no deferral: under the Enhanced preset the layout records no
  *     RDC_OVERLAY_TEXT item or op and no tagged glyph quads, everything in
  *     the scene list at 1x.
+ *   - a string that changes every frame (the Models viewer's "Frame N / M",
+ *     issue 136) beside eight steady rows, 600 frames at 3x and at 1x: the
+ *     stale shelves are reclaimed, no word falls back to the plain font, the
+ *     steady rows keep their cells, no second page opens and the strips stay
+ *     bounded; rows that leave for 100 frames and come back fall back to
+ *     nothing either.
  * Then on a Vulkan device (exit 77 without one; lavapipe here): a port row
  * "New Game" in the title's place through exec_layout_texture into SCENE:
  * the text covers pixels only inside the row's rectangle (with the rim's
@@ -754,6 +760,145 @@ static void testDigits(void)
     printf("menu_text_test: digits: %d strips, %d texture sprites\n", strips, texture);
 }
 
+/* ------------------------------------------- a string that changes every tick */
+
+/* the Models viewer's list (port/game/model_viewer.c): eight names, the
+   animation row and the frame counter, a new string every frame */
+static const char *const kListRows[8] = {
+    "GIRL STAND",
+    "GIRL WALK",
+    "GIRL RUN",
+    "GIRL YORO_F",
+    "GIRL HINT_POINT",
+    "GIRL NO_WALK",
+    "Animation: GIRL STAND",
+    "Model: Yorda",
+};
+static const char *const kScrolledRows[4] = {
+    "GIRL JUMP",
+    "GIRL SIT",
+    "GIRL CALL",
+    "GIRL FALL",
+};
+
+/* one rd frame (rd_frame_number advances at its end): the counter, then
+   the rows in order; *last the strip of the last row drawn */
+static void streamFrame(int frame, int frames, const char *const rows[8], UiMenuStrip *last)
+{
+    static const uint8_t col[4] = {0x80, 0x80, 0x80, 0x80};
+    char counter[32];
+    snprintf(counter, sizeof(counter), "Frame %d / %d", frame, frames);
+    rd_discard_frame(); /* the one dl_Clear opened (layoutFrame) */
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_select_list(11);
+    ui_draw_menu_text(380.0f, 400.0f, UI_MENU_TEXT_SIZE, col, counter, UI_ALIGN_LEFT, UI_INK_LIGHT,
+                      NULL);
+    for (int r = 0; r < 8; r++) {
+        ui_draw_menu_text(60.0f, 40.0f + 36.0f * (float)r, UI_MENU_TEXT_SIZE, col, rows[r],
+                          UI_ALIGN_LEFT, UI_INK_LIGHT, NULL);
+    }
+    if (last && !ui_menu_font_last_strip(last)) {
+        memset(last, 0, sizeof(*last));
+    }
+    rd_end_frame(0);
+}
+
+/* the light pages of a scale's size (menu_font.c pageW / pageH) */
+static int lightPagesOf(int sc)
+{
+    const int pw = sc > 1 ? 1024 * sc : 1024, ph = sc > 1 ? 1024 * sc / 4 : 1024;
+    int n = 0;
+    for (int p = 0; p < 8; p++) {
+        int w = 0, h = 0;
+        n += ui_menu_font_page(0, p, &w, &h) != NULL && w == pw && h == ph;
+    }
+    return n;
+}
+
+static int sameCell(const UiMenuStrip *a, const UiMenuStrip *b)
+{
+    return a->cls == b->cls && a->page == b->page && a->x == b->x && a->y == b->y &&
+           a->tex == b->tex && a->w == b->w && a->h == b->h && a->scale == b->scale;
+}
+
+/* Issue 136: the viewer's "Frame N / M" is a new strip every frame.  Over
+   600 frames at scale sc the stale counter shelves are emptied and their
+   bands reused: no word is drawn with the plain font, the steady rows keep
+   their cells (the last row's the same in frame 0 and 599), no second page
+   of the scale is opened and the strips cached stay below maxStrips (one
+   page's worth; 600 without the reclaim) */
+static void testCounterStream(int sc, int maxStrips)
+{
+    enum { FRAMES = 600 };
+
+    ui__menu_force_scale(sc);
+    const int pagesBefore = lightPagesOf(sc);
+    const int fb0 = ui_menu_font_fallbacks(), rc0 = ui_menu_font_shelf_reclaims();
+    UiMenuStrip first, last;
+    memset(&first, 0, sizeof(first));
+    memset(&last, 0, sizeof(last));
+    int most = 0;
+    for (int f = 0; f < FRAMES; f++) {
+        streamFrame(f, FRAMES, kListRows, f == 0 ? &first : f == FRAMES - 1 ? &last : NULL);
+        const int n = ui_menu_font_strip_count();
+        most = n > most ? n : most;
+    }
+    const int fallbacks = ui_menu_font_fallbacks() - fb0;
+    const int reclaims = ui_menu_font_shelf_reclaims() - rc0;
+    const int pages = lightPagesOf(sc);
+    printf("menu_text_test: counter stream at %dx: %d frames, %d shelves reclaimed, %d words "
+           "plain, %d light pages (%d before), at most %d strips (%d at the end)\n",
+           sc, FRAMES, reclaims, fallbacks, pages, pagesBefore, most, ui_menu_font_strip_count());
+    CHECK(fallbacks == 0, "counter stream at %dx: %d words drawn with the plain font", sc,
+          fallbacks);
+    CHECK(reclaims > 0, "counter stream at %dx: no shelf reclaimed", sc);
+    CHECK(pages <= (pagesBefore > 0 ? pagesBefore : 1),
+          "counter stream at %dx: %d light pages of the scale (%d before)", sc, pages, pagesBefore);
+    CHECK(first.scale == sc && sameCell(&first, &last),
+          "counter stream at %dx: the steady row moved: page %d (%d, %d) tex %u in frame 0, "
+          "page %d (%d, %d) tex %u in frame %d",
+          sc, first.page, first.x, first.y, first.tex, last.page, last.x, last.y, last.tex,
+          FRAMES - 1);
+    CHECK(most < maxStrips, "counter stream at %dx: %d strips cached (below %d)", sc, most,
+          maxStrips);
+    ui__menu_force_scale(0);
+}
+
+/* Rows that leave and come back while the counter runs (the list scrolled
+   down and up again): four names replaced for 100 frames, far past
+   MF_EVICT_FRAMES (4), so their shelves may be emptied, then drawn again:
+   no word is drawn with the plain font and the strips stay bounded */
+static void testStaleRowReturns(void)
+{
+    enum { PHASE = 100 };
+
+    ui__menu_force_scale(3);
+    const int fb0 = ui_menu_font_fallbacks();
+    const char *scrolled[8];
+    for (int r = 0; r < 8; r++) {
+        scrolled[r] = r < 4 ? kScrolledRows[r] : kListRows[r];
+    }
+    int most = 0;
+    UiMenuStrip last;
+    memset(&last, 0, sizeof(last));
+    for (int f = 0; f < 3 * PHASE; f++) {
+        streamFrame(f, 3 * PHASE, f >= PHASE && f < 2 * PHASE ? scrolled : kListRows,
+                    f == 3 * PHASE - 1 ? &last : NULL);
+        const int n = ui_menu_font_strip_count();
+        most = n > most ? n : most;
+    }
+    const int fallbacks = ui_menu_font_fallbacks() - fb0;
+    printf("menu_text_test: rows back after %d frames: %d words plain, at most %d strips, the "
+           "last row on page %d at scale %d\n",
+           PHASE, fallbacks, most, last.page, last.scale);
+    CHECK(fallbacks == 0, "rows back: %d words drawn with the plain font", fallbacks);
+    CHECK(most < 64 && last.scale == 3, "rows back: %d strips cached (below 64), scale %d", most,
+          last.scale);
+    ui__menu_force_scale(0);
+}
+
 /* A port row placed on a game menu row's box, with the same label and
    size, puts its capitals where the sheet's lettering has them: OK (181, a
    20-texel row whose capitals sit at texel 9.0) and a port row "OK" at size
@@ -858,6 +1003,9 @@ static void testHook(void)
     testScaledStrips();
     testPortRowAnchor();
     testDigits();
+    testCounterStream(3, 64);
+    testStaleRowReturns();
+    testCounterStream(1, 256);
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded writes", gif_HostUndecodedTotal());
     ui__set_record_hook(NULL);
     rd_shutdown();
