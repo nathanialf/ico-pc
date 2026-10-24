@@ -104,7 +104,7 @@ OFF(PObjMdl, offset, 0x70);
 OFF(PObjMdl, lightScale, 0x7C);
 OFF(PObjMdl, ambientScale, 0x80);
 OFF(PObjMdl, shadowLength, 0x84);
-SIZE(PObjMdl, 0x8C); /* comment */
+SIZE(PObjMdl, 0x10C); /* config */
 
 /* Kanban: runtime, ico2/common/include/kanban.h:19 */
 #if ICO_LAYOUT_EE
@@ -1226,10 +1226,10 @@ OFF(ActModeRec, ent, 0x0);
 OFF(ActModeRec, name, 0x24);
 OFF(ActModeRec, intrList, 0x44);
 OFF(ActModeRec, mail, 0x48);
-SIZE(ActModeRec, 0x50); /* comment */
+SIZE(ActModeRec, 0x54); /* config */
 #endif
 
-/* IntrMail: runtime, ico2/fumi/include/act.h:79 */
+/* IntrMail: runtime, ico2/fumi/include/act.h:88 */
 #if ICO_LAYOUT_EE
 OFF(IntrMail, motion, 0x0);
 OFF(IntrMail, extra, 0x4);
