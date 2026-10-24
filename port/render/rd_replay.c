@@ -4812,7 +4812,7 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         }
     }
     /* above 1x the pixels no draw covered between drawn ones (rd_crack_fill.c) */
-    rd__crack_fill(r, tc, tz, &s_fogDepth, s_ms.active || s_ms.want > 1u);
+    rd__crack_fill(r, tc, tz, &s_fogDepth, s_ms.active || s_ms.want > 1u, local);
     /* the GS's BITBLT of the Z buffer to 0x2800: the depth in place, its
      * copy, its words or the pass's own depth attachment (g_rd.fogPath);
      * the pass below binds the colour target alone but on the local read,
