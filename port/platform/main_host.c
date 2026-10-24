@@ -419,9 +419,26 @@ static void timestamp(char *out, size_t size, const char *fmt)
 /* The config values the simulation depends on, written into the recording's
    header and compared when a recording is replayed as the pad script. */
 static const char *const record_keys[] = {
-    "video.video_mode",    "game.language",           "gameplay.mirror",       "gameplay.stick_fix",
-    "gameplay.yorda_safe", "gameplay.developer_mode", "dev.start_stage",       "gameplay.door_fix",
-    "video.anti_aliasing", "gameplay.hold_type",      "gameplay.skip_opening",
+    "video.video_mode",
+    "game.language",
+    "gameplay.mirror",
+    "gameplay.stick_fix",
+    "gameplay.yorda_safe",
+    "gameplay.developer_mode",
+    "dev.start_stage",
+    "gameplay.door_fix",
+    "video.anti_aliasing",
+    "gameplay.hold_type",
+    "gameplay.skip_opening",
+    /* the game variants (port/game/variants.h): each changes the simulation */
+    "variants.shade_toughness",
+    "variants.one_hit",
+    "variants.never_dodge",
+    "variants.aggression",
+    "variants.no_hints",
+    "variants.barrier_hits",
+    "variants.no_cutscene_look",
+    "variants.ignore_cutscene_cameras",
 };
 
 #define RECORD_MAGIC "# ico-pc input recording"
