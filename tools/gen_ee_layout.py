@@ -351,10 +351,13 @@ class Mapped:
     reads, span: bytes, bits: 32 entries, each the target's bit from base or
     None), 'narrow' (src the target's wider integer: its low bits), 'clear' (a
     host-only field the target lacks: no descriptor field, the record clear
-    leaves it 0)."""
+    leaves it 0), 'gather' (a scalar array whose elements the target holds as
+    fields of other names, `rename` rows: srcs, one target Field each)."""
 
-    def __init__(self, host, how, src=None, value=None, base=0, span=0, bits=None, count=None):
+    def __init__(self, host, how, src=None, value=None, base=0, span=0, bits=None, count=None,
+                 srcs=None):
         self.host, self.how, self.src, self.value = host, how, src, value
+        self.srcs = srcs  # 'gather': the target's Field of each element
         self.base, self.span, self.bits = base, span, bits
         self.count = host.count if count is None else count
         self.zeros = set()  # bitmap: host bits a motion_bits row writes 0 (<slug>=-)
@@ -399,7 +402,8 @@ def record_map(slug, typ, member, host_fields, recs=None, port=None, bits_rows=N
     (gen_data_c.host_only). The rules, each refusing what it does not settle:
       - same path, kind, size and count: copied;
       - a struct bit-field of the same name and width elsewhere in its unit:
-        copied from the target's bit (reported);
+        copied from the target's bit (reported); an unsigned one the target
+        holds narrower: its bits, the host's high bits 0 (reported);
       - a scalar array the target holds fewer elements of: copied, the rest 0,
         only with a `default <member> <field>=0` row (reported);
       - an integer the target holds wider: its low bits, only with a `narrow`
@@ -407,7 +411,9 @@ def record_map(slug, typ, member, host_fields, recs=None, port=None, bits_rows=N
       - a PAL field the target lacks: the schema's `default` row; a host-only
         field (an `extend` row of some schema) the target lacks: left 0;
       - a target field with no PAL name: an error unless the host holds it
-        (`extend`) or a `drop` row says no code reads it (reported);
+        (`extend`), a `rename` row names the PAL field (or the element of a
+        PAL scalar array, every element then named) it is copied into, or a
+        `drop` row says no code reads it (reported);
       - a bit word: a 32-entry bit map from the named bit-fields (by path,
         else by name over the record's bit words) and the rows of
         config/motion_bits.<slug>.txt.
@@ -428,6 +434,8 @@ def record_map(slug, typ, member, host_fields, recs=None, port=None, bits_rows=N
     defaults = port["default"]
     if bits_rows is None:
         bits_rows = parse_bits(slug)
+    renames = {h: d for (m, h), d in port.get("rename", {}).items() if m == member}
+    renamed = set()
     used, out = set(), []
     tgt_words = [f for f in rec.fields if f.kind == "BITWORD"]
     # every named target bit, by its full path and by its name
@@ -448,9 +456,13 @@ def record_map(slug, typ, member, host_fields, recs=None, port=None, bits_rows=N
     for hf in host_fields:
         if hf.kind == "BITWORD":
             words = {w.path: w for w in tgt_words}
-            if hf.path not in words:
+            if hf.path not in words and not tgt_words:
                 fail(f"{typ}.{hf.path}: a bit word on the host, not one in "
                      f"config/ee_layout.{slug}.txt")
+            if hf.path not in words:
+                # a host bit word the target has none of: its bits come from
+                # the target's other bit words (by name, or a motion_bits row)
+                note(f"{hf.path}: no such word on {slug}: its bits from the other bit words")
             used.add(hf.path)
             bits = [None] * 32
             abs_bits = [None] * 32  # (target word, bit)
@@ -464,8 +476,15 @@ def record_map(slug, typ, member, host_fields, recs=None, port=None, bits_rows=N
                     fail(f"{typ}: {slug} {w.path} bit {b} feeds {taken[k]} and "
                          f"{hf.path} bit {hbit}")
                 taken[k] = f"{hf.path} bit {hbit}"
+            zeroed = {pb + i for r in rows if r[1] == hf.path and r[2] is not None and
+                      r[4] is None for pb, wd in [(r[2], r[3])] for i in range(wd)}
             for p, hb, wd in hf.bitnames:
                 full = join(hf.path, p)
+                if all(hb + i in zeroed for i in range(wd)):
+                    # a named PAL bit a `<slug>=-` row writes 0: the target's
+                    # bit of that name is not it (its readers say otherwise)
+                    note(f"{full}: written 0 on {slug} (a motion_bits row), not mapped by name")
+                    continue
                 hit = by_full.get(full)
                 if hit is None:
                     leaf = by_leaf.get(p.rsplit(".", 1)[-1], [])
@@ -513,7 +532,29 @@ def record_map(slug, typ, member, host_fields, recs=None, port=None, bits_rows=N
             out.append(mp)
             continue
         key = (member, hf.path)
-        src = rec.by_path.get(hf.path)
+        dpath = renames.get(hf.path, hf.path)
+        src = rec.by_path.get(dpath)
+        elems = [renames.get(f"{hf.path}[{i}]") for i in range(hf.count)] if hf.count > 1 else []
+        if src is None and any(elems):
+            if not all(elems):
+                fail(f"{typ}.{hf.path}: rename rows in {schema} name some of its {hf.count} "
+                     "elements, not all")
+            srcs = []
+            for i, e in enumerate(elems):
+                s = rec.by_path.get(e)
+                if s is None or s.kind != hf.kind or s.ee_size != hf.ee_size or s.count != 1 or \
+                        s.signed != hf.signed:
+                    fail(f"{typ}.{hf.path}[{i}]: 'rename {member} {e}={hf.path}[{i}]': {slug} has "
+                         f"no {KIND_WORD.get(hf.kind, hf.kind)} of {hf.ee_size} bytes named {e}")
+                srcs.append(s)
+                used.add(e)
+                renamed.add(f"{hf.path}[{i}]")
+            note(f"{hf.path}: {slug}'s {', '.join(elems)} (rename)")
+            out.append(Mapped(hf, "gather", srcs=srcs))
+            continue
+        if src is not None and dpath != hf.path:
+            note(f"{hf.path}: {slug}'s {dpath} (rename)")
+            renamed.add(hf.path)
         if src is None:
             if top_name(hf.path) in mine:
                 out.append(Mapped(hf, "clear"))
@@ -523,7 +564,7 @@ def record_map(slug, typ, member, host_fields, recs=None, port=None, bits_rows=N
                 continue
             fail(f"{typ}.{hf.path or '(element)'}: a PAL field {slug} lacks, and no "
                  f"'default {member} {hf.path}=<value>' row in {schema}")
-        used.add(hf.path)
+        used.add(dpath)
         hk = "BYTES" if hf.kind == "BITWORD" else hf.kind
         same = (src.kind == hk and src.ee_size == hf.ee_size and src.signed == hf.signed)
         if same and src.count == hf.count and \
@@ -532,6 +573,14 @@ def record_map(slug, typ, member, host_fields, recs=None, port=None, bits_rows=N
             continue
         if same and hk == "BITS" and src.width == hf.width and src.count == hf.count:
             note(f"{hf.path}: bit {hf.bit} on PAL, {src.bit} on {slug}: copied from its bit")
+            out.append(Mapped(hf, "copy", src=src))
+            continue
+        if same and hk == "BITS" and not hf.signed and src.width < hf.width and \
+                src.count == hf.count == 1:
+            # an unsigned bit-field the disc holds narrower: its bits, the
+            # host's high bits 0 (every value fits)
+            note(f"{hf.path}: {src.width} bits at bit {src.bit} on {slug}, {hf.width} at "
+                 f"{hf.bit} on PAL: copied, the high bits 0")
             out.append(Mapped(hf, "copy", src=src))
             continue
         if same and hk in ("INT", "FLOAT") and src.count < hf.count:
@@ -568,6 +617,7 @@ def record_map(slug, typ, member, host_fields, recs=None, port=None, bits_rows=N
     stale += [f"default {m} {p}" for (m, p) in sorted(defaults) if m == member and
               not any(x.host.path == p and x.how in ("default", "copy") and
                       (x.how == "default" or x.count < x.host.count) for x in out)]
+    stale += [f"rename {member} {d}={h}" for h, d in sorted(renames.items()) if h not in renamed]
     tops = {top_name(f.path) for f in rec.fields}
     stale += [f"extend {m} {p}" for m, p in sorted(port["extend"]) if m == member and
               (p not in tops or p not in mine)]
@@ -868,6 +918,48 @@ HAND_ROWS = [
      "jumpHit: the August actCommonJump sends mail 174 and reads no bit; the one August bit that "
      "agrees in all 1042 (flags2 bit 3) is the counterpart of PAL's flags2 bit 6 (boyact.c's read), "
      "set in the same 2 motions"),
+    # The June 2001 demo, from the blocks UNPAIRED_BY_SLUG lists. "N motions
+    # agree": of the 1028 motions whose names are unique on both discs (the
+    # demo has 1168 motions, PAL 1148), N set the PAL bit and the demo's alike.
+    ("jun26", "modeBits", 16, 2, "modeBits", 27,
+     "ACTGame_GetCurrentCallStatus switches on PAL's modeBits 16-18 (h.hi & 7), the demo's "
+     "27-28 (>> 27 & 3, no case 3); 1026 of 1028 agree in each bit"),
+    ("jun26", "modeBits", 18, 1, None, 0,
+     "the demo's call status field has two bits (ACTGame_GetCurrentCallStatus's case 3 is "
+     "PAL's alone)"),
+    ("jun26", "flags", 31, 1, "flags", 14,
+     "ACTGame_BeforeFunc's root test reads PAL's sign bit, the demo's flags bit 14; 1023 of "
+     "1028 agree (no other bit of the demo agrees in more)"),
+    ("jun26", "flags", 14, 1, None, 0,
+     "only PAL's ACTGame_BeforeFunc reads it (with actModeTbl's bit14); no PAL motion sets it"),
+    ("jun26", "flags", 25, 1, "flags", 20,
+     "commonact.c's landing test reads PAL bit 25, the demo's bit 20; all 1028 agree"),
+    ("jun26", "flags", 9, 1, None, 0,
+     "only PAL's intr case 259 reads it (the demo's commonact.c twin has no such case)"),
+    ("jun26", "flags", 5, 1, None, 0,
+     "only PAL's intr cases 240 and 241 read it (the demo's twin has neither)"),
+    ("jun26", "flags", 10, 1, None, 0,
+     "only PAL's actGame_SendMailToBirds reads it (the demo's twin reads no bit)"),
+    ("jun26", "flags", 12, 1, None, 0, "only PAL's act-way.c twin reads it"),
+    ("jun26", "flags", 13, 1, None, 0, "only PAL's boyact.c twin reads it"),
+    ("jun26", "flags", 8, 1, None, 0, "only PAL's boyact.c twin reads it"),
+    ("jun26", "flags", 4, 1, None, 0,
+     "only PAL's commonact.c twins read it (2299, 9747; the demo has neither block)"),
+    ("jun26", "flags", 6, 1, None, 0, "only PAL's commonact.c twin reads it"),
+    ("jun26", "flags", 15, 1, None, 0, "only PAL's girl_act.c twin reads it"),
+    ("jun26", "flags", 16, 1, None, 0,
+     "jumpHit: only PAL's actCommonJump reads it (the demo's twin reads no bit); the bit "
+     "upstream's header names jumpHit on the demo, flags 16, is PAL's flags bit 28 (act-env.c's "
+     "pair; all 1028 agree, 1025 with PAL's jumpHit)"),
+    ("jun26", "flags2", 5, 1, "flags", 3,
+     "findChainInJump's 0.8 IK rate: PAL reads flags2 bit 5, the demo its chainIkRate "
+     "(flags bit 3); 1027 of 1028 agree"),
+    ("jun26", "flags2", 6, 1, None, 0,
+     "findChainInJump: the demo's arm has no test of it (0 keeps PAL's == 0 true)"),
+    ("jun26", "flags2", 8, 1, None, 0,
+     "findChainInJump's 300/100 range: the demo's arm reads its chainHang by name (flags bit "
+     "11, the host's chainHang by name; all 1028 agree with PAL flags2 bit 8), so a host "
+     "bit can take it once only"),
 ]
 
 
@@ -917,6 +1009,35 @@ UNPAIRED_BY_SLUG = [
      "PAL flags bit 15: the August twin reads no bit there (written 0)"),
     ("aug6", "flags >> 11) & 1)) { lim = 70.0f; }",
      "PAL flags bit 11 (chainHang): the August twin reads no bit there (written 0)"),
+    ("jun26", "modeBits.h.hi & 7) { case 1:",
+     "ACTGame_GetCurrentCallStatus: PAL's modeBits 16-18 are the demo's 27-28 (the hand rows)"),
+    ("jun26", "flags >> 10) & 1)",
+     "PAL flags bit 10: the demo's twin reads no bit there (written 0)"),
+    ("jun26", "->flags >= 0 || GOBJ_SUB(self)->ctrl.",
+     "ACTGame_BeforeFunc: PAL's sign bit (flags 31) is the demo's flags bit 14 (the hand row); "
+     "PAL's flags bit 14 has no reader in the demo (written 0)"),
+    ("jun26", "flags.word >> 12) & 1)",
+     "PAL flags bit 12: the demo's twin reads no bit there (written 0)"),
+    ("jun26", "CHAINROW(self)->flags2.word >> 8) & 1) ? 300.0f",
+     "findChainInJump: the demo reads chainHang (flags 11, by name) for PAL's flags2 bit 8, "
+     "nothing for flags2 bit 6, chainIkRate (flags 3) for flags2 bit 5: the hand rows"),
+    ("jun26", "CHAINROW(self)->flags.word >> 13) & 1) && ACTGame_F",
+     "PAL flags bit 13: the demo's twin reads no bit there (written 0)"),
+    ("jun26", "if ((row->flags.word >> 8) & 1)",
+     "PAL flags bit 8: the demo's twin reads no bit there (written 0)"),
+    ("jun26", "case 259: if (((motionKind + GOBJ_SUB(self)->ctrl.motion)->flags.word >> 9) & 1)",
+     "the demo's arm reads modeBits 16-18, flags 20 and 19 (intr10Live, named) for PAL's "
+     "modeBits 19-21 and flags 25 and 24; PAL's cases 259, 240 and 241 (flags 9, 5, 5) are "
+     "PAL's alone: the hand rows 25, 9 and 5"),
+    ("jun26", "flags.word >> 4) & 1) {",
+     "a PAL-only read of flags bit 4 (written 0)"),
+    ("jun26", "flags.word >> 6) & 1 &&",
+     "PAL flags bit 6: the demo's twin reads no bit there (written 0)"),
+    ("jun26", "if ((rec->flags.word >> 15) & 1)",
+     "PAL flags bit 15: the demo's twin reads no bit there (written 0)"),
+    ("jun26", "flags >> 11) & 1)) {",
+     "PAL flags bit 11 (chainHang): the demo's chain.c twin reads no bit; the host's chainHang "
+     "holds the demo's by name (its findChainInJump reads it)"),
 ]
 
 
@@ -1020,6 +1141,11 @@ def scan_bits(slug, rev):
                     named[(hf.path, hb + i)] = (src[0], src[1] + i)
     rows = []
     for (pw, pb), (tw, tb, where) in sorted(pairs.items(), key=lambda x: (WORDS.index(x[0][0]), x[0][1])):
+        if (pw, pb) in named and tw is None and where.startswith("by hand"):
+            # a hand row writing 0 a named PAL bit whose namesake on the
+            # target is another bit (record_map leaves it unmapped by name)
+            rows.append([pw, pb, 1, tw, tb, where])
+            continue
         if (pw, pb) in named:
             if named[(pw, pb)] != (tw, tb):
                 fail(f"{where}: PAL {pw} bit {pb} reads {slug} {tw}:{tb}, but the named bit-field "
@@ -1217,6 +1343,36 @@ def record_map_self_test():
         got = str(e)
     if not isinstance(got, list) or ("only", "clear") not in got:
         bad.append(f"record_map: a host-only field the target lacks: {got!r}")
+    # rename rows: a scalar under another name, a scalar array's elements as
+    # named fields (gather); an unsigned bit-field held narrower
+    h2 = [F("INT", "w100", 0, 4, signed=True), F("FLOAT", "off", 4, 4, count=2),
+          F("BITS", "cnt", 12, 4, bit=4, width=9)]
+    t2 = EeRecord("S", 0x10, "h")
+    for f in [F("FLOAT", "offY", 0, 4), F("INT", "wFC", 4, 4, signed=True), F("FLOAT", "offX", 8, 4),
+              F("BITS", "cnt", 12, 4, bit=3, width=8)]:
+        t2.fields.append(f)
+        t2.by_path[f.path] = f
+    ren = {"default": {}, "extend": set(), "drop": set(), "narrow": set(), "extra": {},
+           "rename": {("m", "w100"): "wFC", ("m", "off[0]"): "offX", ("m", "off[1]"): "offY"}}
+
+    def run2(port):
+        try:
+            got = record_map("t", "S", "m", h2, {"S": t2}, port, [], [], {})
+            return [(x.host.path, x.how, x.src.ee_off if x.src else
+                     [s.ee_off for s in x.srcs] if x.srcs else None) for x in got]
+        except SystemExit as e:
+            return str(e)
+    want2 = [("w100", "copy", 4), ("off", "gather", [8, 0]), ("cnt", "copy", 12)]
+    if run2(ren) != want2:
+        bad.append(f"record_map: rename rows: {run2(ren)}, want {want2}")
+    part = dict(ren, rename={k: v for k, v in ren["rename"].items() if k[1] != "off[1]"})
+    got = run2(part)
+    if not isinstance(got, str) or "not all" not in got:
+        bad.append(f"record_map: a rename of some elements: {got!r}")
+    stale = dict(ren, rename={**ren["rename"], ("m", "nope"): "wFC2"})
+    got = run2(stale)
+    if not isinstance(got, str) or "settle nothing: rename m wFC2=nope" not in got:
+        bad.append(f"record_map: a stale rename row: {got!r}")
     return bad
 
 
