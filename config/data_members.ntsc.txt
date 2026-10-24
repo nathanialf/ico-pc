@@ -1,0 +1,220 @@
+# config/data_members.ntsc.txt -- the ICO USA retail ELF's data-only ico2000.a members.
+#
+# One row per (member, section) for the members of
+# config/data_members.pal.txt that this ELF holds: the 70 members MAIN.MAP
+# lists with .data/.rodata/.sdata but no .text, plus the unmapped runs (member
+# name unmapped_<VMA>, the VMA being PAL's, kept as the member's name). Two of
+# PAL's rows have none here, hintTable (unmapped_002ADBA0) and jimakuFileName
+# (unmapped_0055FBD0): this build has neither table nor any code that reads
+# one (the group comments below say where each would sit). Each member, typed
+# by config/data_schema.ntsc.txt, is written as one C translation unit by
+# tools/gen_data_c.py (build/data/<member>.c, its rows the sections of that
+# one object), which reads this table and the user's own
+# baserom/ntsc/baseelf.elf; the bytes are never committed.
+#
+# Columns: <section> <member> <rom_lo> <rom_hi> <symbol>@<offset>,...
+#   section   the section the bytes occupy in the retail ELF
+#   rom_lo/hi VMA range [lo, hi) in baserom/ntsc/baseelf.elf (rom offset + 0x100000)
+#   symbols   the PAL member's names (MAIN.MAP's, or the derived name its C
+#             reader uses), offset from rom_lo
+#
+# Derivation. The USA disc ships no map or listing, and MAIN.MAP is a
+# different, later link: no address below comes from either. The names are
+# PAL's, carried by member order. Every start was found in this ELF:
+#   1. Code. Each function the census (tools/correlate_elf.py) pairs with a
+#      PAL function of the same length loads the same data the same way, so
+#      a %hi/%lo pair or a $gp offset in the PAL function and the same
+#      instruction in the twin give the PAL address and this ELF's address of
+#      one datum. Where PAL's reader has no twin here, its USA counterpart is
+#      the function config/stubs.ntsc.txt names after it (a body equal with
+#      immediates masked, or PAL's size and order); a member's base is pinned
+#      only when that function reads it. Every member's base read by code
+#      ("code:", the readers common to both builds) is pinned this way, and
+#      so is the .data, .rodata or .sdata of each code-owning neighbour.
+#   2. Neighbours. Each run lies between two code-owning objects whose
+#      sections are pinned by step 1; the group comments name them. A
+#      member no code reads is bounded by the pinned members on each side.
+#   3. Content. Each row was decoded with PAL's record type
+#      (config/data_schema.pal.txt) and compared with PAL's member record by
+#      record, pointer words compared as the address the PAL target has in
+#      this link (functions by the census, data by step 1), strings by
+#      content: "same" is equal record for record, "changed-content" is the
+#      same layout with other values (ids into changed tables, text),
+#      "layout-changed" is the same record type with rows added or removed,
+#      "record-changed" is a record PAL's type does not hold: the code that
+#      reads it multiplies the index by another stride, and the row gives
+#      that stride and the field offsets the twin functions' loads and
+#      stores map (PAL offset -> offset here). Every member decoded with
+#      PAL's type has every pointer inside this ELF's image, every string
+#      terminated, every float field finite and no nonzero padding.
+# rom_hi is the next start, or the record count times the stride where zero
+# fill for the next start's alignment follows. Where the span differs from
+# PAL's the row says so and gives both row counts. The USA build is the
+# older one (September 2001), and most of its tables hold fewer rows than
+# PAL's. Every byte between the two neighbours of each run is claimed by a
+# row below or is zero fill of at most 7 bytes: this ELF has no data run
+# PAL's table lacks. The member order inside each run is PAL's, with three
+# differences the code fixes: motSyncPairs (unmapped_00533FC0) is first in
+# its .data run, before item-kind-def; weapon-def is in .rodata, last in the
+# first .rodata run; and texture-path is in .rodata, between spider-def and
+# way-group, as on the Japanese disc.
+
+# ---- .data: after mv_main.o .data, before DObj.o .data (both found by code references in twin functions; mv_main.o's 0x98 bytes end where accessary starts, tex-property ends where DObj.o's first word, read by CSVSYSTEM_InitDObj, starts). PAL's hintTable (unmapped_002ADBA0) is not in this run and no code here reads one: its readers (CreateKyomiGObj, LwsKyomiGeo, MakeHintSaveInfo, ReadHintSaveInfo, FinishHint, Hint_Init) are all absent, and lws_kyomi.o keeps SetParamKyomiGObj only.
+# accessary: code: InitBoxGeo, InitCageGeo, InitFloorLeverGeo+3 read it. span 0x348 != PAL 0x410 (-200 B); 21 rows for PAL's 26; content layout-changed
+data accessary 0x28ca88 0x28cdd0 accessary@0x0
+# act-data-tbl: code: WithMailFunc_Idling, subCommonIdle read it. span 0x3c = PAL; content changed-content
+data act-data-tbl 0x28cdd0 0x28ce0c actDataTbl@0x0
+# act-intrlist: code: BeforeFunc read it. span 0x4bc0 != PAL 0x5208 (-1608 B); 808 rows for PAL's 875; content layout-changed
+data act-intrlist 0x28ce10 0x2919d0 actIntrList@0x0
+# camera-set: code: GetPluralCameraSet, wakeup_cameraedit read it. span 0xae0 = PAL; content same
+data camera-set 0x2919d0 0x2924b0 cameraSetList@0x0
+# game-param: code: _ACTGame_GetParamF read it. span 0x90 != PAL 0xb0 (-32 B); 36 rows for PAL's 44; content layout-changed
+data game-param 0x2924b0 0x292540 gameParam@0x0
+# motion-orient: code: ControlMotionOrient, GetMotionOrient, WithMailFunc_Idling+4 read it; getMotionOrient, normalMotionShift and parallelMotionShift read its last row at 0x29F038 (PAL: 0x2BC4A8), which ends it at row 2166. span 0xcb10 != PAL 0xe760 (-7248 B); 2166 rows for PAL's 2468; content layout-changed
+data motion-orient 0x292540 0x29f050 motionOrient@0x0
+# node-fix-ofs: code: Cling.176 read it; Cling.176 here is the USA function whose body equals PAL's with immediates masked. span 0x21c = PAL; content changed-content
+data node-fix-ofs 0x29f050 0x29f26c clingData@0x0
+# obj-action: code: GirlForceFieldDL, ObjAction_CorrectGeo, stage_ApplyData+1 read it. span 0x3f48 != PAL 0x4b90 (-3144 B); 810 rows for PAL's 967; content layout-changed
+data obj-action 0x29f270 0x2a31b8 objAction@0x0
+# obj-kind-data: code: CreateLayoutedGObj, HotInitSceneObjects, SetLodLevel+9 read it. span 0x1a90 != PAL 0x1b58 (-200 B); 68 rows for PAL's 70; content layout-changed
+data obj-kind-data 0x2a31b8 0x2a4c48 objKindData@0x0
+# obj-layout: code: CallEnemy, CheckEnemyBrainMode, DirectCallEnemy+36 read it. span 0x401b4 != PAL 0x45bf8 (-23108 B); 3455 rows for PAL's 3759; content layout-changed
+data obj-layout 0x2a4c48 0x2e4dfc objLayout@0x0
+# parallel-motion-tbl: code: ActPara_InitSystem, ActPara_MakeTbl read it; 71 rows of 0x94 bytes, int motion[37] (PAL: 86 rows of int motion[44]): ActPara_MakeTbl multiplies the row by 148 (PAL 176), loops 71 rows (PAL 86) over 37 status bits (PAL 44) and ends a random run at motion 1086 (PAL 1147); ActPara_InitSystem copies 71 rows at a 148-byte stride. PAL's ParallelMotionRow does not hold these bytes. span 0x290c != PAL 0x3b20 (-4628 B); 71 rows for PAL's 86; content record-changed
+data parallel-motion-tbl 0x2e4e00 0x2e770c parallelMotionTbl@0x0
+# sekind: code: _soundSeDefPlay, debug_SETest_color, soundSeEnvNotUseClose+1 read it. span 0xae0 != PAL 0xb18 (-56 B); 1392 rows for PAL's 1420; content layout-changed
+data sekind 0x2e7710 0x2e81f0 seKind@0x0
+# tex-property: code: default_item_select, display_layout, display_primary_texture_layout+8 read it; 384 rows of 0x6C bytes (PAL LtProperty 0x70): lt_link_layout, lt_mask_property, display_texture and display_texture_fade_cancel_chk multiply by 108 and read PAL 0x1C->0x18, 0x20..0x3C->0x1C..0x38, 0x44..0x54->0x40..0x50, 0x58 (texFileNo)->0x64, 0x5C->0x60, 0x60..0x68->0x54..0x5C, 0x6C (flags)->0x68, the mask bit 1 where PAL's is bit 4. PAL's LtProperty does not hold these bytes. span 0xa200 != PAL 0xbec0 (-7360 B); 384 rows for PAL's 436; content record-changed
+data tex-property 0x2e81f0 0x2f23f0 texProperty@0x0
+
+# ---- .data: after staffroll.o .data, before a_p_1.o .data (code references; no fill on either side)
+# staffroll_dat: code: staffRollNameOut read it; 1072 words for PAL's 964, none null: 854 point at the .sdata blank, one at a second .sdata literal, the rest into the .rodata pool. span 0x10c0 != PAL 0xf10 (+432 B); content layout-changed
+data staffroll_dat 0x4bd990 0x4bea50 staffRollNameData@0x0
+
+# ---- .data: after st99a.o .data, before vobj.o .data (code references; puddle.o and waterDot.o are not in this link, and st99a.o's .data, read up to +0xC0 by actSt17aTest, ends where motSyncPairs starts)
+# unmapped_00533FC0: code: synchronizeMotionOutputOriginForGirl read it; the reader here is the USA function whose body equals PAL's with immediates masked (loop bound 6, PAL 4: 7 pairs for PAL's 5); first in the run here, before item-kind-def, not between prog-se-link and texture-layout as in PAL. span 0x38 != PAL 0x28 (+16 B); content layout-changed
+data unmapped_00533FC0 0x4d4150 0x4d4188 motSyncPairs@0x0
+# item-kind-def: code: BreakItemFromOutside, uncarriedItemGeo read it; 7 rows of 0x14 bytes (PAL ItemBreakRec 0x20): the USA uncarriedItemGeo and BreakItemFromOutside (bodies after PAL's by order) multiply by 20 and read PAL 0x00 (stayAnim)->0x00, 0x08 (breakAnim)->0x04, 0x10 (dropAnim)->0x08, 0x1C (flags, bit 0)->0x10; PAL's three mode words (0x04, 0x0C, 0x18) have no reader here and 0x0C is unread. PAL's ItemBreakRec does not hold these bytes. span 0x8c != PAL 0xe0 (-84 B); content record-changed
+data item-kind-def 0x4d4188 0x4d4214 itemKind@0x0
+# mirror-motion-def: code: shiftMotionData read it. span 0x18 != PAL 0x30 (-24 B); 3 rows for PAL's 6; content layout-changed
+data mirror-motion-def 0x4d4218 0x4d4230 mirrorMotionTable@0x0
+# model-path: code: InitPObj, MakePacket read it; 1582 rows of 0x10C bytes (PAL PObjMdl 0x8C, 1637 rows): two 64-byte file paths lead the record (0x00, 0x40), then PAL's fields 0x80 further on: ReadSkeltonFile reads the skeleton path at +0x80, ReadCollisionFile the collision path at +0xB0, InitPObj offset[3] at 0xF0, MakePacket the scales at 0xFC/0x100 and the bit word at 0x108, AllocPObj 0x104; all multiply by 268 and stop at 1582. PAL's PObjMdl does not hold these bytes. span 0x67828 != PAL 0x37f40 (+194792 B); 1582 rows for PAL's 1637; content record-changed
+data model-path 0x4d4230 0x53ba58 modelData@0x0
+# prog-se-link: code: executeSEPackageByGObj, executeSEPackageWithNoGObj read it. span 0x5c4 != PAL 0x600 (-60 B); 123 rows for PAL's 128; content layout-changed
+data prog-se-link 0x53ba58 0x53c01c progSELink@0x0
+# texture-layout: code: default_item_select, display_primary_texture_layout, display_texture+6 read it. span 0x1068 != PAL 0x1180 (-280 B); 75 rows for PAL's 80; content layout-changed
+data texture-layout 0x53c020 0x53d088 texLayout@0x0
+# way-point: code: ExtractWayData read it. span 0x133ac != PAL 0x13fd0 (-3108 B); 2813 rows for PAL's 2924; content layout-changed
+data way-point 0x53d088 0x550434 wayPointSheet@0x0
+# weapon-fumble-def: code: ReleaseWeaponWithFumbleSequential read it. span 0x1f8 = PAL; content changed-content
+data weapon-fumble-def 0x550438 0x550630 weaponFumbleGeo@0x0
+
+# ---- .rodata: after mv_vobuf.o .rodata, before DObj.o .rodata (code references). PAL's jimakuFileName (unmapped_0055FBD0) has no place here: init-func ends where ACTLookTargetSystem_Exec reads look-target-data, and jimaku.o names its one file with a string literal in its own .rodata.
+# act-mode-def: code: ACTGame_isHangChain, BeforeFunc, IsGirlStatusEscortEnable+5 read it. span 0x2490 != PAL 0x2580 (-240 B); 117 rows for PAL's 120; content layout-changed
+rodata act-mode-def 0x55cfd8 0x55f468 actModeTbl@0x0
+# adpcmfile: code: AdpcmOpen, adpcmDataSet, adpcmTickProc2+1 read it. span 0x1800 != PAL 0x1a40 (-576 B); 96 rows for PAL's 105; content layout-changed
+rodata adpcmfile 0x55f468 0x560c68 adpcmFile@0x0
+# attack-def: code: AttackMail read it; 19 rows for PAL's 20; AttackMail's stride 36 as in PAL. span 0x2ac != PAL 0x2d0 (-36 B); content layout-changed
+rodata attack-def 0x560c68 0x560f14 attackData@0x0
+# auto-escort: code: IsGirlStatusEscortEnable read it. span 0xa10 != PAL 0xab8 (-168 B); 92 rows for PAL's 98; content layout-changed
+rodata auto-escort 0x560f18 0x561928 autoEscortData@0x0
+# exit-data: code: ACTGame_SetActors_Debug, ACTGame_StageChangeGObj, ACTGame_StageChangeGObjID+10 read it. span 0x2828 != PAL 0x28c8 (-160 B); 257 rows for PAL's 261; content layout-changed
+rodata exit-data 0x561928 0x564150 exitData@0x0
+# generator-sub-position: code: GetGeneratorSafePosition read it. span 0x60 != PAL 0x70 (-16 B); 6 rows for PAL's 7; content layout-changed
+rodata generator-sub-position 0x564150 0x5641b0 generatorSubPosition@0x0
+# girl-warp-list: code: warpGirlInStage, warpGirlOutStage read it. span 0x898 = PAL; content changed-content
+rodata girl-warp-list 0x5641b0 0x564a48 girlWarpList@0x0
+# iconfile: iosMcManager reads +0x24 as in PAL. span 0xb4 = PAL; content same
+rodata iconfile 0x564a48 0x564afc iconFile@0x0
+# idle-mot-def: code: subCommonIdle read it. span 0x84 = PAL; content changed-content
+rodata idle-mot-def 0x564b00 0x564b84 idlingDef@0x0
+# init-func: code: debugCdvdLoadInfoSegDispFunc, iosCdvdMgrPackLoad read it. span 0x3a8 = PAL; content same
+rodata init-func 0x564b88 0x564f30 initFunc@0x0
+# look-target-data: code: ACTLookTargetSystem_Exec read it. span 0x12c != PAL 0x148 (-28 B); 25 rows for PAL's 27; content layout-changed
+rodata look-target-data 0x564f30 0x56505c lookTargetData@0x0
+# motion-def: code: ACTEnvGetTest, ACTGame_BeforeFunc, ACTGame_CheckHandMotion+56 read it; 1087 rows of 0x190 bytes (PAL MotionDef 0x194, 1148 rows; ActPara_MakeTbl's terminator 1086 is the last id): a file path at 0x88 and the name at 0xC8 (PAL 0xC0), 1069 names equal to PAL's; the aligned reads of the twin functions give PAL 0x13C->0x140, 0x140->0x144, 0x144->0x164, 0x148->0x16C, 0x14C->0x174, 0x150->0x15C, 0x154->0x178, 0x174->0x14C, 0x178->0x148, 0x180->0x182, 0x184->0x180, 0x188->0x184, 0x18C->0x188, 0x190->0x18C (UpdateFrameCounter, shiftMotionData, execFrameTrigger, GetMotionPlaySpeedRatio, getMotionGeometry, ACTGame_CheckPriInputFrame, GetCurrentMotionDirectionAdjustFlag, ACTGame_CheckHandMotion, WeaponGeo, PAIR_IsStatus_BOY_WAIT). PAL's MotionDef does not hold these bytes. span 0x6a270 != PAL 0x713b0 (-28992 B); 1087 rows for PAL's 1148; content record-changed
+rodata motion-def 0x565060 0x5cf2d0 motionKind@0x0
+# motion-ik-eff-def: code: ACTGame_CommonLoop, HandManager read it. span 0x70 = PAL; content same
+rodata motion-ik-eff-def 0x5cf2d0 0x5cf340 motionIKEffKind@0x0
+# motion-orient-def: code: SetMotionRequest, _ACTDebugPrint, motKindMenuProc+2 read it. span 0x24e0 != PAL 0x28e0 (-1024 B); 295 rows for PAL's 327; content layout-changed
+rodata motion-orient-def 0x5cf340 0x5d1820 motionOriKind@0x0
+# motion-random-def: code: ActPara_MakeTbl read it; 74 words for PAL's 100, the last a 1086 terminator. span 0x128 != PAL 0x190 (-104 B); content layout-changed
+rodata motion-random-def 0x5d1820 0x5d1948 randomMotionKind@0x0
+# moviefile: no code reference; bounded by motion-random-def and obj-light, both pinned; 5 rows for PAL's 7. span 0xa0 != PAL 0xe0 (-64 B); content layout-changed
+rodata moviefile 0x5d1948 0x5d19e8 movieFile@0x0
+# obj-light: code: light_AddLight read it. span 0x30 = PAL; content same
+rodata obj-light 0x5d19e8 0x5d1a18 objectLight@0x0
+# pair-motion: code: actCommonBecarry read it. span 0x108 != PAL 0xf8 (+16 B); 33 rows for PAL's 31; content layout-changed
+rodata pair-motion 0x5d1a18 0x5d1b20 pairMotion@0x0
+# param-escape-run: code: ChangeRunMode.135 read it. span 0x40 = PAL; content same
+rodata param-escape-run 0x5d1b20 0x5d1b60 paramEscapeRun@0x0
+# se-env: code: soundSeEnvNotUseClose, soundSeEnvPlay read it. span 0x2e7c = PAL; content changed-content
+rodata se-env 0x5d1b60 0x5d49dc seEnv@0x0
+# sedef: code: _soundSeDefPlay, debug_SETest, debug_SETest_color+5 read it. span 0x1458c != PAL 0x14e38 (-2220 B); 1389 rows for PAL's 1426; content layout-changed
+rodata sedef 0x5d49e0 0x5e8f6c seDef@0x0
+# sefile: code: ReadSoundBdFile, ReadSoundHdFile, soundSeEnvNotUseClose read it. span 0x28a0 = PAL; content same
+rodata sefile 0x5e8f70 0x5eb810 seFile@0x0
+# selist: code: _soundSeDefPlay, soundSeEnvNotUseClose, soundSeKindBuild read it. span 0x76f0 != PAL 0x77e8 (-248 B); 3806 rows for PAL's 3837; content layout-changed
+rodata selist 0x5eb810 0x5f2f00 seList@0x0
+# shocklist: code: _soundSeDefStop, iosPadActRequest read it. span 0xb8 != PAL 0xe0 (-40 B); 23 rows for PAL's 28; content layout-changed
+rodata shocklist 0x5f2f00 0x5f2fb8 shockList@0x0
+# stage-all: code: ACTGame_SetActors_Debug, ACTGetEnvironment, CameraSetCameraSet_Default+40 read it. span 0xa420 != PAL 0xa748 (-808 B); 104 rows for PAL's 106; content layout-changed
+rodata stage-all 0x5f2fb8 0x5fd3d8 stageData@0x0
+# stage-anim-model: code: stage_Init read it. span 0x2a00 != PAL 0x2b08 (-264 B); 1344 rows for PAL's 1377; content layout-changed
+rodata stage-anim-model 0x5fd3d8 0x5ffdd8 objTableScene@0x0
+# stage-anim: code: stage_ApplyData, stage_Init read it. span 0x12540 != PAL 0x15dac (-14444 B); 816 rows for PAL's 973; content layout-changed
+rodata stage-anim 0x5ffdd8 0x612318 stageTable@0x0
+# stream-motion-def: no read of row 0; actSt04aGateChk, actSt04aGateOpenChk, actSt04aGateOpen2ReadyChk, actSt25aQueenTalkChk, actSt25aQueenDeadReadyChk and actE3GateChk read rows 1, 2, 3, 6, 8 and 9 at PAL's offsets. span 0x1e0 = PAL; content same
+rodata stream-motion-def 0x612318 0x6124f8 streamMotion@0x0
+# weapon-def: code: ACTGame_GetMotOrientFromWeapon, AttackMail, GetWeaponWeight+5 read it; in .rodata here (PAL: .data), last in the run after stream-motion-def; 8 rows for PAL's 10, the same 36-byte record (ACTGame_GetMotOrientFromWeapon, AttackMail and GetWeaponWeight multiply by 36 and read PAL's offsets). span 0x120 != PAL 0x168 (-72 B); content layout-changed
+rodata weapon-def 0x6124f8 0x612618 weaponKind@0x0
+
+# ---- .rodata: after staffroll.o .rodata, before a_p_1.o .rodata (code references)
+# staffroll_dat: the pool the .data pointers target, from staffroll.o's .rodata end to a_p_1.o's (both read by code); 206 distinct targets for PAL's 170. span 0x11a0 != PAL 0xed0 (+720 B); content changed-content
+rodata staffroll_dat 0x6173b0 0x618550 -
+
+# ---- .rodata: after mv_vibuf.o .rodata, before PObj.o .rodata (code references, as in PAL)
+# blend-motion-def: code: GetMotionPlaySpeedRatio, getMotionGeometry, getNodeBlendedFloatingMotion read it. span 0xe50 != PAL 0x1410 (-1472 B); 229 rows for PAL's 321; content layout-changed
+rodata blend-motion-def 0x61c710 0x61d560 blendMotionKind@0x0
+# enemy-def: code: CanThisEnemyFly, GetEnemyBattleType, GetEnemyDefDodgeRange+1 read it; 45 rows of 0x14 bytes (PAL EnemyDef 0x1C): CanThisEnemyFly, GetEnemyBattleType and GetEnemyDefDodgeRange (the USA functions after PAL's by order) multiply by 20 and read PAL 0x14 (dodge)->0x08, the attribute word 0x18->0x10 with flyType in bits 0-1 and battleType in bits 2-3 (PAL 8-9 and 10-11), and setEnemyObject PAL 0x10 (scale)->0x0C. PAL's EnemyDef does not hold these bytes. span 0x384 != PAL 0x4f0 (-364 B); content record-changed
+# enemy-def is committed source since 2026-10-24, ico2/sugipon/src/enemyKind.c (the one exception to the data-member rule, docs/LEGAL.md); its run is 0x61d560..0x61d8e4.
+# enemy-model-grp: code: GetRealModelId read it. span 0x190 = PAL; content same
+rodata enemy-model-grp 0x61d8e8 0x61da78 enemymodelGroup@0x0
+# enemy-model-tbl: code: GetRealModelId read it. span 0x64 = PAL; content changed-content
+rodata enemy-model-tbl 0x61da78 0x61dadc enemymodelTable@0x0
+# enemy-random-def: code: setEnemyObject read it. span 0xa8 != PAL 0xb0 (-8 B); 21 rows for PAL's 22; content layout-changed
+rodata enemy-random-def 0x61dae0 0x61db88 randomEnemyKind@0x0
+# enemy-random-variation-def: code: setEnemyObject read it. span 0x150 != PAL 0x158 (-8 B); 84 rows for PAL's 86; content layout-changed
+rodata enemy-random-variation-def 0x61db88 0x61dcd8 randomEnemyVariationKind@0x0
+# layout-cloth-def: code: InitAttackCheckBoundaryManagerGeo, InitFlagGeo read it; 31 rows of 0x50 bytes (PAL LayoutClothDef 0x68, 36 rows): InitAttackCheckBoundaryManagerGeo multiplies by 80 (PAL 104) and reads PAL 0x54 (attr)->0x3C and 0x5C (count)->0x44; InitFlagGeo's aligned reads add 0x50 (kind)->0x38, 0x58 (rows)->0x40, 0x60 (length)->0x48, 0x64 (weight)->0x4C, and 0x3C->0x20, 0x48->0x28 inside pt[][]. PAL's LayoutClothDef does not hold these bytes. span 0x9b0 != PAL 0xea0 (-1264 B); 31 rows for PAL's 36; content record-changed
+rodata layout-cloth-def 0x61dcd8 0x61e688 layoutClothDef@0x0
+# motion-eff-condition-def: code: execEff read it. span 0xa8 != PAL 0x268 (-448 B); 14 rows for PAL's 51; content layout-changed
+rodata motion-eff-condition-def 0x61e688 0x61e730 motEffCondKind@0x0
+# motion-eff-def: code: InitIcoMisc, playEff read it. span 0x2d0 != PAL 0x388 (-184 B); 20 rows for PAL's 25; content layout-changed
+rodata motion-eff-def 0x61e730 0x61ea00 motionEffKind@0x0
+# motion-eff-random-def: code: execEff read it. span 0x18 != PAL 0x28 (-16 B); 6 rows for PAL's 10; content layout-changed
+rodata motion-eff-random-def 0x61ea00 0x61ea18 randomEffKind@0x0
+# motion-limit-def: code: SetNodeRotationLimitDataTable read it. span 0x900 = PAL; content changed-content
+rodata motion-limit-def 0x61ea18 0x61f318 motionLimitDef@0x0
+# motion-se-condition-def: code: playSEConditionID read it. span 0x978 != PAL 0x9e8 (-112 B); 202 rows for PAL's 211; content layout-changed
+rodata motion-se-condition-def 0x61f318 0x61fc90 motSECondKind@0x0
+# motion-se-random-def: code: playSERandomID read it. span 0x22e8 != PAL 0x23f8 (-272 B); 1117 rows for PAL's 1151; content layout-changed
+rodata motion-se-random-def 0x61fc90 0x621f78 randomSEKind@0x0
+# obj-trigger-def: code: ObjAction_MailCenter read it. span 0x2c = PAL; content changed-content
+rodata obj-trigger-def 0x621f78 0x621fa4 objTriggerDef@0x0
+# obj-trigger: code: ObjAction_MailCenter read it; 31 rows for PAL's 33 (ObjAction_MailCenter's loop bound 31, PAL 33). span 0xf8 != PAL 0x108 (-16 B); content layout-changed
+rodata obj-trigger 0x621fa8 0x6220a0 objTrigger@0x0
+# parallel-motion-orient: no code reference; bounded by obj-trigger (its end fixed by the loop bound) and particle-effect, both pinned; 41 rows for PAL's 54. span 0x334 != PAL 0x438 (-260 B); content layout-changed
+rodata parallel-motion-orient 0x6220a0 0x6223d4 parallelMotionOrient@0x0
+# particle-effect: code: GetParticleIDWithName, InitIcoMisc, execEffectTool read it. span 0x1090 != PAL 0x1310 (-640 B); 53 rows for PAL's 61; content layout-changed
+rodata particle-effect 0x6223d8 0x623468 particleEffectFile@0x0
+# spider-def: code: InitAP1, InitSpiderLayoutGeo, MakeAP1GObj+2 read it. span 0xc0 = PAL; content changed-content
+rodata spider-def 0x623468 0x623528 spiderDef@0x0
+# texture-path: code: init_textures_of_specified_property read it; in .rodata here (PAL: .data), between spider-def and way-group; 52 rows of a 32-byte record, char path[32] (init_textures_of_specified_property shifts the texFile index by 5, PAL multiplies by 52; every row is one terminated string): PAL's TexRec (52 bytes) does not hold these bytes. span 0x680 != PAL 0xf08 (-2184 B); 52 rows for PAL's 74; content record-changed
+rodata texture-path 0x623528 0x623ba8 texFile@0x0
+# way-group: code: ExtractWayData read it. span 0xa35c != PAL 0xa978 (-1564 B); 697 rows for PAL's 723; content layout-changed
+rodata way-group 0x623ba8 0x62df04 wayGroupSheet@0x0
+
+# ---- .sdata: after staffroll.o .sdata, before a_p_1.o .sdata (code references)
+# staffroll_dat: staffRollNameOut reads the count at +0xC by $gp; the run holds an 8-byte string literal PAL does not have, the blank and the count, 1072, the whole table (PAL: 962, its 964 entries less two nulls); bounded by staffroll.o's .sdata (its last read at 0x6331B4) and a_p_1.o's. span 0x10 != PAL 0x8 (+8 B); content layout-changed
+sdata staffroll_dat 0x6331b8 0x6331c8 staffRollNameDataNum@0xc
