@@ -956,9 +956,15 @@ static int shelfFit(MfPage *p, int w, int h, int *x, int *y, int *shelf)
    strips' sheet texels and the one round them that placeCoverage wrote
    ([y - scale, y + h + scale): the shelves' MF_GAP_Y of 5 sheet texels
    keeps those clear of a neighbour's, which reach a sheet texel past its
-   strips), the same rows of the texture replaced (whole rows of the page
-   are contiguous; rd uploads the union of the changed rows at the next
-   replay).  The texture stays.  The band keeps its rows for strips no
+   strips).  At 1x the same rows of the texture are replaced (whole rows of
+   the page are contiguous, about 30 KB; the 1x rim is drawn from the
+   coverage 6 and 4 texels round a strip, so the band must read empty).
+   Above 1x the texture is left as it was: rd keeps one rectangle per
+   texture to upload, and the coverage band and the rim band, p->h rows
+   apart, would make it most of the page (2.6 MB at 3x); no quad samples a
+   reclaimed band (no frame rd keeps names its strips), and placeCoverage
+   uploads a new strip with the sheet texel round it, the one its bilinear
+   read takes.  The texture stays.  The band keeps its rows for strips no
    taller (shelfFit); empty shelves at the bottom are dropped, so the open
    shelf is the last one with strips. */
 static void reclaimShelf(int cls, int page, int i)
@@ -975,18 +981,15 @@ static void reclaimShelf(int cls, int page, int i)
     if (b->h > 0) {
         uint8_t *rows = p->cov + (size_t)b->y * (size_t)p->w;
         memset(rows, 0, (size_t)b->h * (size_t)p->w);
-        if (p->tex) {
+        if (sc == 1 && p->tex) {
             rd_update_texture_rect((RdTex){p->tex}, 0, (uint32_t)b->y, (uint32_t)p->w,
                                    (uint32_t)b->h, rows);
         }
         if (sc > 1) {
+            /* CPU side only: placeCoverage uploads what a new strip needs */
             const int ry = b->y - sc, rh = b->h + 2 * sc;
             uint8_t *rim = p->cov + (size_t)p->w * (size_t)p->h + (size_t)ry * (size_t)p->w;
             memset(rim, 0, (size_t)rh * (size_t)p->w);
-            if (p->tex) {
-                rd_update_texture_rect((RdTex){p->tex}, 0, (uint32_t)(p->h + ry), (uint32_t)p->w,
-                                       (uint32_t)rh, rim);
-            }
         }
     }
     b->x = MF_ORIGIN * sc;
@@ -1134,7 +1137,11 @@ static MfStrip *newStrip(void)
 }
 
 /* the strip's coverage (w x h bytes) into its page, and onto the page's
-   texture when it has one */
+   texture when it has one.  Above 1x the coverage goes up over the strip
+   and the sheet texel round it ([x - scale, x + w + scale) x [y - scale,
+   y + h + scale), from the page's coverage), as the rim does: a reclaimed
+   band is cleared on the CPU side only (reclaimShelf), so the border the
+   bilinear read takes round a new strip reaches the texture here. */
 static void placeCoverage(const MfStrip *s, const uint8_t *cov)
 {
     MfPage *p = &s_mf.pages[s->cls][s->page];
@@ -1143,32 +1150,43 @@ static void placeCoverage(const MfStrip *s, const uint8_t *cov)
         memcpy(p->cov + (size_t)(s->y + r) * (size_t)p->w + (size_t)s->x,
                cov + (size_t)r * (size_t)w, (size_t)w);
     }
-    if (p->tex) {
+    if (p->scale == 1) {
+        if (p->tex) {
+            rd_update_texture_rect((RdTex){p->tex}, (uint32_t)s->x, (uint32_t)s->y, (uint32_t)w,
+                                   (uint32_t)h, cov);
+        }
+        return;
+    }
+    /* the rim below, over the strip and the sheet texel round it that
+       the magnified rim's bilinear read takes (one value a
+       sheet texel; the gaps keep other strips' rims out) */
+    uint8_t *rim = p->cov + (size_t)p->w * (size_t)p->h;
+    const int sc = p->scale;
+    const int rx = s->x - sc, ry = s->y - sc, rw = w + 2 * sc, rh = h + 2 * sc;
+    rd_sheet_rim(p->cov, (uint32_t)p->w, (uint32_t)p->h, (uint32_t)p->scale, rx, ry, rw, rh, rim);
+    if (!p->tex) {
+        return;
+    }
+    uint8_t *px = malloc((size_t)rw * (size_t)rh);
+    if (!px) {
+        /* the strip itself at least, as before the border was uploaded */
         rd_update_texture_rect((RdTex){p->tex}, (uint32_t)s->x, (uint32_t)s->y, (uint32_t)w,
                                (uint32_t)h, cov);
+        return;
     }
-    if (p->scale > 1) {
-        /* the rim below, over the strip and the sheet texel round it that
-           the magnified rim's bilinear read takes (one value a
-           sheet texel; the gaps keep other strips' rims out) */
-        uint8_t *rim = p->cov + (size_t)p->w * (size_t)p->h;
-        const int sc = p->scale;
-        const int rx = s->x - sc, ry = s->y - sc, rw = w + 2 * sc, rh = h + 2 * sc;
-        rd_sheet_rim(p->cov, (uint32_t)p->w, (uint32_t)p->h, (uint32_t)p->scale, rx, ry, rw, rh,
-                     rim);
-        if (p->tex) {
-            uint8_t *px = malloc((size_t)rw * (size_t)rh);
-            if (px) {
-                for (int r = 0; r < rh; r++) {
-                    memcpy(px + (size_t)r * (size_t)rw,
-                           rim + (size_t)(ry + r) * (size_t)p->w + (size_t)rx, (size_t)rw);
-                }
-                rd_update_texture_rect((RdTex){p->tex}, (uint32_t)rx, (uint32_t)(p->h + ry),
-                                       (uint32_t)rw, (uint32_t)rh, px);
-                free(px);
-            }
-        }
+    for (int r = 0; r < rh; r++) {
+        memcpy(px + (size_t)r * (size_t)rw, p->cov + (size_t)(ry + r) * (size_t)p->w + (size_t)rx,
+               (size_t)rw);
     }
+    rd_update_texture_rect((RdTex){p->tex}, (uint32_t)rx, (uint32_t)ry, (uint32_t)rw, (uint32_t)rh,
+                           px);
+    for (int r = 0; r < rh; r++) {
+        memcpy(px + (size_t)r * (size_t)rw, rim + (size_t)(ry + r) * (size_t)p->w + (size_t)rx,
+               (size_t)rw);
+    }
+    rd_update_texture_rect((RdTex){p->tex}, (uint32_t)rx, (uint32_t)(p->h + ry), (uint32_t)rw,
+                           (uint32_t)rh, px);
+    free(px);
 }
 
 /* the page's texture, made whole from the coverage at its first draw, in

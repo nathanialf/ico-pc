@@ -781,6 +781,9 @@ static const char *const kScrolledRows[4] = {
     "GIRL FALL",
 };
 
+/* the counter's strip in the last streamFrame (zero when it drew none) */
+static UiMenuStrip s_counterStrip;
+
 /* one rd frame (rd_frame_number advances at its end): the counter, then
    the rows in order; *last the strip of the last row drawn */
 static void streamFrame(int frame, int frames, const char *const rows[8], UiMenuStrip *last)
@@ -795,6 +798,9 @@ static void streamFrame(int frame, int frames, const char *const rows[8], UiMenu
     rd_select_list(11);
     ui_draw_menu_text(380.0f, 400.0f, UI_MENU_TEXT_SIZE, col, counter, UI_ALIGN_LEFT, UI_INK_LIGHT,
                       NULL);
+    if (!ui_menu_font_last_strip(&s_counterStrip)) {
+        memset(&s_counterStrip, 0, sizeof(s_counterStrip));
+    }
     for (int r = 0; r < 8; r++) {
         ui_draw_menu_text(60.0f, 40.0f + 36.0f * (float)r, UI_MENU_TEXT_SIZE, col, rows[r],
                           UI_ALIGN_LEFT, UI_INK_LIGHT, NULL);
@@ -823,6 +829,31 @@ static int sameCell(const UiMenuStrip *a, const UiMenuStrip *b)
            a->tex == b->tex && a->w == b->w && a->h == b->h && a->scale == b->scale;
 }
 
+/* Above 1x: whether the texture's texels (rd's copy, what the next replay
+   uploads) equal the page's coverage and rim over strip s and the sheet
+   texel round it, the texels its quad's bilinear read takes (a reclaimed
+   band is cleared on the CPU side only; placeCoverage uploads that
+   border with a new strip) */
+static int stripTexelsMatch(const UiMenuStrip *s)
+{
+    int pw = 0, ph = 0;
+    const uint8_t *cov = ui_menu_font_page(s->cls, s->page, &pw, &ph);
+    const RdTexRec *t = rd__tex_rec(s->tex);
+    if (!cov || !t || !t->pixels || t->w != (uint32_t)pw || t->h != (uint32_t)(2 * ph)) {
+        return 0;
+    }
+    const int sc = s->scale, x0 = s->x - sc, y0 = s->y - sc, w = s->w + 2 * sc;
+    for (int plane = 0; plane < 2; plane++) {
+        for (int r = y0; r < s->y + s->h + sc; r++) {
+            const size_t at = (size_t)(plane * ph + r) * (size_t)pw + (size_t)x0;
+            if (memcmp(t->pixels + at, cov + at, (size_t)w) != 0) {
+                return 0;
+            }
+        }
+    }
+    return 1;
+}
+
 /* Issue 136: the viewer's "Frame N / M" is a new strip every frame.  Over
    600 frames at scale sc the stale counter shelves are emptied and their
    bands reused: no word is drawn with the plain font, the steady rows keep
@@ -841,11 +872,49 @@ static void testCounterStream(int sc, int maxStrips)
     UiMenuStrip first, last;
     memset(&first, 0, sizeof(first));
     memset(&last, 0, sizeof(last));
-    int most = 0;
+    int most = 0, badTexels = 0, reclaimFrames = 0;
+    uint64_t mostReclaimUpload = 0, pageTexels = 0;
     for (int f = 0; f < FRAMES; f++) {
+        /* above 1x, the rectangle rd would upload for the frame: the
+           page's texture marked clean before it (record-only rd uploads
+           nothing itself) */
+        RdTexRec *t = sc > 1 && s_counterStrip.tex ? rd__tex_rec(s_counterStrip.tex) : NULL;
+        const int rcBefore = ui_menu_font_shelf_reclaims();
+        if (t) {
+            t->dirty = 0;
+        }
         streamFrame(f, FRAMES, kListRows, f == 0 ? &first : f == FRAMES - 1 ? &last : NULL);
         const int n = ui_menu_font_strip_count();
         most = n > most ? n : most;
+        if (sc > 1 && s_counterStrip.tex) {
+            badTexels += !stripTexelsMatch(&s_counterStrip);
+            if (t && t == rd__tex_rec(s_counterStrip.tex) &&
+                ui_menu_font_shelf_reclaims() > rcBefore) {
+                const uint64_t a = t->dirty ? (uint64_t)(t->dirtyX1 - t->dirtyX0) *
+                                                  (uint64_t)(t->dirtyY1 - t->dirtyY0)
+                                            : 0;
+                mostReclaimUpload = a > mostReclaimUpload ? a : mostReclaimUpload;
+                pageTexels = (uint64_t)t->w * (uint64_t)t->h;
+                reclaimFrames++;
+            }
+        }
+    }
+    if (sc > 1) {
+        /* the counter's strip reaches the texture with its border on every
+           frame, and a frame that empties shelves uploads no more than the
+           new strips' rectangles: well under half the texture (the band's
+           whole rows, coverage and rim, were most of it) */
+        CHECK(badTexels == 0,
+              "counter stream at %dx: %d frames whose counter's texels differ "
+              "from the coverage",
+              sc, badTexels);
+        CHECK(reclaimFrames > 0 && mostReclaimUpload * 4 < pageTexels,
+              "counter stream at %dx: %d reclaim frames, the largest upload %llu of %llu texels",
+              sc, reclaimFrames, (unsigned long long)mostReclaimUpload,
+              (unsigned long long)pageTexels);
+        printf("menu_text_test: counter stream at %dx: the largest upload on a reclaim frame %llu "
+               "of the texture's %llu texels\n",
+               sc, (unsigned long long)mostReclaimUpload, (unsigned long long)pageTexels);
     }
     const int fallbacks = ui_menu_font_fallbacks() - fb0;
     const int reclaims = ui_menu_font_shelf_reclaims() - rc0;

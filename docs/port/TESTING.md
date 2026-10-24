@@ -895,8 +895,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   fill, 41.8 rim, measured on the disc).
 - `menu_look_test.c`: the menus' Arimo text against the game's menu sheets from the disc
   (`menu_look`); `menu_sheets.c`/`.h` decode the sheets.
-- `menu_text_test.c`: the game's menu words and the port's rows drawn in the sheets' look
-  (`menu_text`).
+- `menu_text_test.c`: the game's menu words and the port's rows drawn in the sheets' look; the
+  Models viewer's counter drawn for 600 frames at 3x and 1x (`testCounterStream`: shelves
+  reclaimed, no plain-font word, no second page, the steady rows in place; at 3x the counter's
+  coverage and rim in rd's copy of the texture equal the page's over the strip and the sheet texel
+  round it on every frame, and a frame that empties shelves uploads under a quarter of the
+  texture) (`menu_text`).
 - `settings_test.c`, `settings_extra_test.c`, `settings_extras_test.c`: the Settings menu over
   fake tables, CPU only (`settings`, `settings_extra`, `settings_extras`); `settings_test.c`'s
   `testEffects` steps Motion blur round Off, Original (the default) and Smooth, each step saved as

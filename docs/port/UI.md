@@ -536,9 +536,18 @@ shelf below the last (`shelfFit`). When no page of the strip's scale has room, e
 pages with strips that no frame has drawn for `MF_EVICT_FRAMES` (4) frames is emptied
 (`reclaimStale`, `reclaimShelf`): its strips are forgotten, its coverage rows and, above 1x, its rim
 rows (the band and one sheet texel above and below, which `placeCoverage` writes; the 5-texel
-`MF_GAP_Y` keeps them clear of the neighbouring shelves') are cleared across the page and replaced
-in the texture with `rd_update_texture_rect` (the texture is kept; rd uploads the union of the
-changed rows at the next replay), and empty shelves at the bottom are dropped. Four frames is the
+`MF_GAP_Y` keeps them clear of the neighbouring shelves') are cleared across the page, and empty
+shelves at the bottom are dropped. The texture is kept. At 1x the cleared rows are replaced in it
+with `rd_update_texture_rect` (about 30 KB: there is no rim plane, and the 1x shader draws the rim
+from the coverage 6 and 4 texels round a strip, so the band must read empty). Above 1x the texture
+is not touched by the reclaim: rd keeps one rectangle per texture to upload, and the coverage band
+and the rim band, `p->h` rows apart, would make it most of the page (about 2.6 MB at 3x, the
+whole texture when two shelves are emptied at once). No quad samples a reclaimed band, and
+`placeCoverage` uploads each new strip's coverage and rim over the strip and the one sheet texel
+round it (`[x - scale, x + w + scale) x [y - scale, y + h + scale)`), the border its bilinear read
+takes, so the cleared texels a new strip needs reach the texture with it; ctest `menu_text`
+checks those texels against the coverage on every frame of the 3x counter stream and that a frame
+that empties shelves uploads under a quarter of the texture. Four frames is the
 whole-page rule's margin: `RD_FRAME_RING` keeps three frames, so none can still name a cleared
 texel. Only after that does the cache open a new page, then drop the page drawn least recently once
 no recent frame can name it. A full strip table (`MF_STRIPS`, 1024) empties the stale shelves of
