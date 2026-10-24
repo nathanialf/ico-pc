@@ -2,6 +2,7 @@
 
 ## New
 
+- **The June 2001 magazine demo disc** (`Ico_JUN26.iso`): setting it up keeps only ICO's part of the disc (about 280 MB, none of the other games on it) and checks that part instead of reading the whole 4.4 GB image, so the first start is much quicker. On Android the 4.4 GB image is first copied into the app, which needs about 5.6 GB free and takes a few minutes; the screen says so while it copies. The message shown when there is not enough space, and the one shown when the copy fails, now come in the menu language you chose under Options, when you have chosen one.
 ## Fixed
 
 - With MSAA anti-aliasing on, hairline gaps along walls and floors no longer show as dotted lines of mist.
