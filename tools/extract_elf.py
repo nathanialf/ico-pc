@@ -14,6 +14,8 @@ configured one, and its DISCS table names each target's disc):
     jpn   baserom/Ico_JPN.bin + .cue     baseelf.elf + SYSTEM.CNF
     kor   baserom/Ico_KOR.iso            baseelf.elf + SYSTEM.CNF
           (plain 2048-byte-sector ISO)
+    cn    baserom/Ico_CN.iso             baseelf.elf + SYSTEM.CNF
+          (plain 2048-byte-sector ISO)
     ntsc  baserom/Ico_USA.bin + .cue     baseelf.elf + SYSTEM.CNF
     aug6  baserom/Ico_AUG6.bin + .cue    baseelf.elf
                                            + MAIN.MAP TRFILE.TXT SYSTEM.CNF
@@ -25,8 +27,8 @@ baserom/Ico_<REGION>.iso beside it, which is then read like the PAL image.
 
 The boot ELF's name is never hard-coded: it comes from the disc's SYSTEM.CNF
 `BOOT2` line (SCES_507.60 on PAL, SCPS_110.03 on the Japanese disc,
-SCPS_560.01 on the Korean disc, SCUS_971.13 on the USA disc and the
-prototype). A demo on a disc shared with other games is started by the
+SCPS_560.01 on the Korean disc, SCPS_550.01 on the Asian disc, SCUS_971.13 on the USA disc
+and the prototype). A demo on a disc shared with other games is started by the
 disc's menu, which SYSTEM.CNF boots instead, so its DISCS row names the
 ELF's path on the disc as `boot` (jun26: CUS97113/SCPS_000.00).
 

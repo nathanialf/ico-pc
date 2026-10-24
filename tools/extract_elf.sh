@@ -14,6 +14,8 @@
 #                                         + SYSTEM.CNF
 #   kor  : baserom/Ico_KOR.iso         -> baserom/kor/baseelf.elf
 #                                         + SYSTEM.CNF
+#   cn   : baserom/Ico_CN.iso          -> baserom/cn/baseelf.elf
+#                                         + SYSTEM.CNF
 #   ntsc : baserom/Ico_USA.bin + .cue  -> baserom/ntsc/baseelf.elf
 #                                         + SYSTEM.CNF
 #   aug6 : baserom/Ico_AUG6.bin + .cue -> baserom/aug6/baseelf.elf
