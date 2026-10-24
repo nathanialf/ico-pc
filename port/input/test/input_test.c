@@ -1500,7 +1500,7 @@ static void test_touch_config(void)
        Off, and the next write gives it format = 2 and the word off, the
        place kept; read again it is the same */
     touch_use("version = 1\n[touch.full]\nselect = \"hidden\"\nl1 = \"l9 t17 s1.00 o0\"\n"
-              "cross = \"r20 b10.5 s1.30 o80\"\n");
+              "cross = \"r20 b10.5 s1.30 o80\"\nl2 = \"off\"\n");
     ico_touch_edits_defaults(&f);
     ico_input_reload_touch_edits(&f);
     c = &f.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_SELECT];
@@ -1510,15 +1510,19 @@ static void test_touch_config(void)
           near_(c->dy, 17.0f, 1e-4f));
     c = &f.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_CROSS];
     CHECK(c->set && near_(c->alpha, 0.8f, 1e-4f) && c->active == 1);
+    /* an "off" (not migrated, Off in both formats) */
+    c = &f.ctl[ICO_TOUCH_RULE_FULL][ICO_TOUCH_CTL_L2];
+    CHECK(c->set && c->alpha == 0.0f && c->active == 0);
     text = touch_file_read();
     CHECK(strstr(text, "format") == NULL); /* read only: nothing rewritten on load */
     free(text);
-    CHECK(ico_input_write_touch_edits(&f) == 4); /* format, select, l1, cross */
+    CHECK(ico_input_write_touch_edits(&f) == 5); /* select, l1, cross, l2, then the format */
     CHECK(ico_config_save() == 0);
     text = touch_file_read();
     CHECK(strstr(text, "[touch]\nformat = 2\n") != NULL);
     CHECK(strstr(text, "select = \"off\"") != NULL);
-    CHECK(strstr(text, "l1 = \"l9 t17 s1.00 off\"") != NULL);
+    CHECK(strstr(text, "l1 = \"l9 t17 s1.00 off\"") != NULL &&
+          strstr(text, "l2 = \"off\"") != NULL);
     CHECK(strstr(text, "cross = \"r20 b10.5 s1.30 o80\"") != NULL);
     CHECK(strstr(text, "\"hidden\"") == NULL && strstr(text, " o0") == NULL);
     free(text);

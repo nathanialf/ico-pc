@@ -372,7 +372,8 @@ void ico_input_reload_bindings(IcoBindings *b);
    written or already there, snap and grid when they differ from the
    default or are in the file, each set control as its text, and each
    unset control whose key is in the file as "default" (lines are never
-   deleted). A config nothing was edited in gains no key. Returns the
+   deleted); the format is set last, after every line succeeded. A config
+   nothing was edited in gains no key. Returns the
    number of keys set (the format among them), or -1. The caller saves. */
 struct IcoTouchEdits;
 struct IcoToml;

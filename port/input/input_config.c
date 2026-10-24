@@ -522,7 +522,14 @@ static int apply_touch(IcoTouchEdits *e, const char *(*get)(const void *, const 
             ed->set = 1;
             ico_touch_edit_sanitize(ed, c);
             s_touchLogged[r][c] = 0;
-            migrated += format < ICO_TOUCH_EDIT_FORMAT && !ed->active;
+            if (format < ICO_TOUCH_EDIT_FORMAT && !ed->active) {
+                /* only a line the current format reads otherwise ("hidden",
+                   o0: Hidden there) was migrated; an "off" means Off in both */
+                IcoTouchCtlEdit now;
+
+                memset(&now, 0, sizeof(now));
+                migrated += ico_touch_edit_parse(&now, c, v) == 0 && now.active;
+            }
             n++;
         }
     }
@@ -597,18 +604,18 @@ int ico_input_write_touch_edits(const IcoTouchEdits *e)
     IcoTouchEdits def;
     char path[64], text[96];
     const char *old;
-    int r, c, n = 0;
+    int r, c, n = 0, format;
 
     ico_touch_edits_defaults(&def);
-    /* the format first (it heads [touch]), with any line: the lines below
-       are written in its grammar ("hidden" Hidden, "off" Off), so an older
-       file's "o0" and "hidden" are rewritten as what they were read as */
-    if (touch_lines(e, &def)) {
-        if (ico_config_set_int("touch.format", ICO_TOUCH_EDIT_FORMAT) != 0) {
-            return -1;
-        }
-        n++;
-    }
+    /* the format goes with any line: the lines below are written in its
+       grammar ("hidden" Hidden, "off" Off), so an older file's "o0" and
+       "hidden" are rewritten as what they were read as.  It is set last,
+       once every line is: a save after a failed line (the settings save
+       still writes the file) keeps the old format over what it has, where
+       a new "hidden" reads as Off, never format 2 over an old "hidden"
+       (Off) that would then read as Hidden.  Asked before the lines, as it
+       looks at what the file has. */
+    format = touch_lines(e, &def);
     if (e->snap != def.snap || ico_config_get_string("touch.snap", NULL) != NULL) {
         if (ico_config_set_bool("touch.snap", e->snap != 0) != 0) {
             return -1;
@@ -640,6 +647,12 @@ int ico_input_write_touch_edits(const IcoTouchEdits *e)
             }
             n++;
         }
+    }
+    if (format) {
+        if (ico_config_set_int("touch.format", ICO_TOUCH_EDIT_FORMAT) != 0) {
+            return -1;
+        }
+        n++;
     }
     return n;
 }

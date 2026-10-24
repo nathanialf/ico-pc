@@ -459,10 +459,12 @@ every change bumps.
   (`full`, `split`, `tabletop`) of `<control> = "<text>"` ([CONFIG.md](CONFIG.md#touch)).
   `ico_input_apply_touch_toml` reads it at start (the lines in the file's `format`, 1 without the
   key; `touch: [touch] without format 2: "hidden" and o0 read as off (N controls)` when an older
-  file had any; a `format` that is not a number is logged and read as 1),
-  `ico_input_write_touch_edits` writes the live edits (`format = 2` first whenever any `[touch]`
-  line is written or already there, so an older file is rewritten with `off` on the editor's next
-  save and never on load; a key only when it differs from the default or is already in the file;
+  file had any, N counting only the lines format 2 would read as Hidden, not an `off`; a `format`
+  that is not a number is logged and read as 1),
+  `ico_input_write_touch_edits` writes the live edits (`format = 2` whenever any `[touch]` line is
+  written or already there, set after every line succeeded, so a save after a failed line never
+  leaves format 2 over an older file's `hidden`; an older file is rewritten with `off` on the
+  editor's next save and never on load; a key only when it differs from the default or is already in the file;
   a reset control whose key is in the file becomes `default`; an untouched config gains nothing),
   `ico_input_reload_touch_edits` reads the saved file back, and `ico_input_live_touch_edits` is the
   one live table, as `ico_input_live_bindings` is for the bindings (`port/input/input_config.c`).
