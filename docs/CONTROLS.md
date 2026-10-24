@@ -335,7 +335,8 @@ only shows up on a device with a touch screen. The page has these rows:
 If the buttons are in your way, **Edit layout** lets you move them, make
 them bigger or smaller and more or less see-through. While the editor is
 open the buttons are drawn at full strength so you can see what you are
-doing. Buttons you hid show as dashed outlines with the word Hidden.
+doing. A button you made hidden or switched off shows as a dashed outline
+with the word Hidden or Off, so you can still tap it to pick it again.
 
 The editor's keys are a thin strip along the top of the screen, and its
 tips sit in a line at the bottom, so most of the picture stays clear while
@@ -349,8 +350,9 @@ you arrange the buttons.
 - **Resize:** put two fingers on a button and pinch to resize it (the
   second finger can land anywhere once the first is on the button). The
   strip shows its size, such as **Size 120 %**. A button can be 70 % to
-  160 % of its normal size. With a gamepad, L2 and R2 make it smaller and
-  bigger.
+  300 % of its normal size; on a small screen a very large button is drawn
+  as large as the screen allows. With a gamepad, L2 and R2 make it smaller
+  and bigger.
 - **See-through:** the **Opacity -** and **Opacity +** keys; the number
   between them is the button's opacity.
 - **All:** makes the Opacity keys (and a gamepad's L2 and R2) change every
@@ -362,15 +364,17 @@ you arrange the buttons.
   Circle on a gamepad, do the same. Done always keeps what you see; to go
   back, use Undo or Reset first.
 
-What you cannot do, so that you never lock yourself out of the menus or the
-game:
+So that you never lock yourself out of the menus or the game:
 
-- The D-pad, Cross, Circle, Square, Triangle, R1, Start and the stick can
-  not be hidden, and never go below 25 % opacity. The menus and the game
-  need them.
-- Select, L1, L2, R2 and the look pad can be hidden: keep pressing
-  **Opacity -** until the button shows Hidden, and press **Opacity +** to
-  bring it back where you left it.
+- Any button can be hidden or switched off, the D-pad, Start and the stick
+  too. Keep pressing **Opacity -**: after 10 % the button shows **Hidden**
+  (you do not see it, but it still works where it was), and one more press
+  shows **Off** (it is gone and does nothing). **Opacity +** brings it back
+  the same way, Hidden and then 10 %, where you left it.
+- If you switch off the D-pad, Cross or Circle, you can tap the menus
+  directly instead: the Back gesture or button opens the pause menu during
+  play, and a tap on a line picks it. So you can always get to **Options >
+  Controls > Touch screen > Reset layout**.
 - A button cannot be dropped onto the middle of another one; it jumps
   back and a note says why. Buttons that overlap at the edges are drawn
   in amber, and the one drawn first gets the touch.
@@ -407,7 +411,9 @@ Cross), and Triangle or Circle is Done.
 
 The arrangement is kept in the settings file, in the part called `[touch]`.
 If you ever want the game's own arrangement back, use the Reset rows, or
-delete the `[touch]` lines from the file with the game closed.
+delete the `[touch]` lines from the file with the game closed. In that file
+a button is written as `hidden` or `off`. A layout saved by an earlier
+version keeps its hidden buttons switched off, as they were.
 
 On Android, the phone's **Back** button or gesture opens the pause menu,
 like Start. [More about Android](ANDROID.md#controls).

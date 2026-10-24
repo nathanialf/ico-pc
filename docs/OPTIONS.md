@@ -345,8 +345,8 @@ The six mouse rows do not show on phones and tablets.
   - **Touch size** and **Touch opacity** set how big and how see-through
     the buttons are. Their size is a real size, so they feel about the
     same on every screen (smaller only when the screen cannot hold them).
-  - **Edit layout** opens the editor, where you move, resize and hide
-    buttons. It is dimmed while Touch controls is Off.
+  - **Edit layout** opens the editor, where you move, resize, hide and
+    switch off buttons. It is dimmed while Touch controls is Off.
     [Arranging the buttons yourself](CONTROLS.md#arranging-the-buttons-yourself).
   - **Snap to grid** and **Grid size** (2 mm, 4 mm or 8 mm) set where a
     button you let go of lands in the editor.
