@@ -570,13 +570,10 @@ multisampled twin, SCENE_MS. The epoch opens at the first pass into SCENE (with 
 none) and every such pass draws into SCENE_MS; it closes at the first command that reads or writes
 SCENE's single-sampled colour or depth any other way (a texture read of SCENE, a DATE snapshot, a
 copy or exact blend, the wrap's snapshot, the shadow count's pass, the end of the replay). Closing
-resolves the colour by the samples' mean and the depth by the smallest sample (the farthest under
-GEQUAL), so a surface the game draws again after the close with GEQUAL passes where it passed at
-1x. Integer-aligned sprites drawn inside it are moved half a texel so they cover whole pixels; the
+resolves once under the covered-majority rule ([MSAA.md](MSAA.md)). Integer-aligned sprites drawn inside it are moved half a texel so they cover whole pixels; the
 fog runs per sample inside the epoch when the device has sample-rate shading
 (`port/render/rd_replay.c`, "the MSAA epoch"; `msaaPass`, `msaaEnd`, `msaaSpriteExpand`). Otherwise
-the fog reads the resolved depth, so a pixel with one sample a gap left uncovered takes the full fog
-([DIVERGENCES.md](DIVERGENCES.md) VD-22); the log says once a run which one ran (`fog: in the MSAA
+the fog reads the resolved depth ([DIVERGENCES.md](DIVERGENCES.md) VD-22); the log says once a run which one ran (`fog: in the MSAA
 epoch per sample ...` or `... on the resolved picture ...`, `port/render/rd_replay.c` (`doFog`)). When no
 way of reading the multisampled depth passed the fog's self-test, rd draws without MSAA and
 `rd_aa_msaa_blocked` says so (`port/render/rd.h` (`rd_aa_msaa_blocked`)).
