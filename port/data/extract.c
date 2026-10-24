@@ -4,10 +4,12 @@
  * The first-run extractor (extract.h): the user's disc image to its archive
  * (archive.h). It mounts the image with the ISO9660 backend, reads which disc
  * it is from SYSTEM.CNF's boot file (ico_discs), walks the root and DFDATAS
- * directories, hashes the whole image, then streams each chosen file into a
- * ZIP written by miniz with no compression, hashing the boot ELF and taking
- * the CRC-32 of DATA.DF's directory and members on the way, and writes
- * meta.json last, once the image has been accepted by that disc's rules.
+ * directories (or, for a disc whose game is in a folder, that folder and its
+ * DFDATAS), hashes the whole image (not for a disc with no image SHA-1 on
+ * file), then streams each chosen file into a ZIP written by miniz with no
+ * compression, hashing the game's ELF and taking the CRC-32 of DATA.DF's
+ * directory and members on the way, and writes meta.json last, once the
+ * image has been accepted by that disc's rules.
  */
 #define _FILE_OFFSET_BITS 64
 
@@ -28,9 +30,8 @@
 #include <windows.h>
 #endif
 
-#define DF_PATH "DFDATAS/DATA.DF"
 #define CNF_PATH "SYSTEM.CNF"
-#define STORE_DIR "DFDATAS" /* stored whole, recursively */
+#define STORE_DIR "DFDATAS" /* stored whole, recursively (in the root, or in game_dir) */
 #define ITEMS_MAX 1024
 #define DEPTH_MAX 8
 #define DIR_REC_MIN 34
@@ -173,7 +174,9 @@ typedef struct DfState {
     int out_of_order;
 } DfState;
 
-static int df_begin(DfState *df, IcoVfs *iso, char *why, size_t whysize)
+/* DATA.DF at `path` (the row's df_path): its directory read, the CRCs
+   started. */
+static int df_begin(DfState *df, IcoVfs *iso, const char *path, char *why, size_t whysize)
 {
     IcoVfsFile f;
     unsigned char hdr[4];
@@ -181,18 +184,18 @@ static int df_begin(DfState *df, IcoVfs *iso, char *why, size_t whysize)
     uint32_t i;
 
     memset(df, 0, sizeof(*df));
-    if (ico_vfs_open(iso, DF_PATH, &f) != 0) {
-        say(why, whysize, "the image has no " DF_PATH);
+    if (ico_vfs_open(iso, path, &f) != 0) {
+        say(why, whysize, "the image has no %s", path);
         return -1;
     }
     df->size = f.entry.size;
     if (ico_vfs_read(&f, 0, hdr, 4) != 4) {
-        say(why, whysize, DF_PATH ": cannot read its directory");
+        say(why, whysize, "%s: cannot read its directory", path);
         return -1;
     }
     df->count = ico_le32(hdr);
     if (df->count == 0 || df->count > DF_MEMBERS_MAX || 4u + 40u * (uint64_t)df->count > df->size) {
-        say(why, whysize, DF_PATH ": not a member directory (count %u)", (unsigned)df->count);
+        say(why, whysize, "%s: not a member directory (count %u)", path, (unsigned)df->count);
         return -1;
     }
     df->dir_len = 4u + 40u * df->count;
@@ -200,7 +203,7 @@ static int df_begin(DfState *df, IcoVfs *iso, char *why, size_t whysize)
     df->m = calloc(df->count, sizeof(*df->m));
     if (dir == NULL || df->m == NULL || ico_vfs_read(&f, 0, dir, df->dir_len) != df->dir_len) {
         free(dir);
-        say(why, whysize, DF_PATH ": cannot read its directory");
+        say(why, whysize, "%s: cannot read its directory", path);
         return -1;
     }
     for (i = 0; i < df->count; i++) {
@@ -208,7 +211,7 @@ static int df_begin(DfState *df, IcoVfs *iso, char *why, size_t whysize)
         df->m[i].size = ico_le32(dir + 4 + 40 * i + 36);
         if ((uint64_t)df->m[i].offset + df->m[i].size > df->size) {
             free(dir);
-            say(why, whysize, DF_PATH ": member %u lies outside the file", (unsigned)i);
+            say(why, whysize, "%s: member %u lies outside the file", path, (unsigned)i);
             return -1;
         }
         df->m[i].crc = (uint32_t)mz_crc32(MZ_CRC32_INIT, NULL, 0);
@@ -315,7 +318,9 @@ int ico_extract_print_datadf_manifest(IcoVfs *iso, const char *slug, FILE *out)
         camel[k] = k == 0 ? up[k] : slug[k];
     }
     up[k] = camel[k] = '\0';
-    if (df_begin(&df, iso, why, sizeof(why)) != 0 || ico_vfs_open(iso, DF_PATH, &f) != 0) {
+    /* DATA.DF where the volume's disc keeps it (vfs.h ico_vfs_df_path) */
+    if (df_begin(&df, iso, ico_vfs_df_path(iso), why, sizeof(why)) != 0 ||
+        ico_vfs_open(iso, ico_vfs_df_path(iso), &f) != 0) {
         fprintf(stderr, "manifest: %s\n", why);
         free(df.m);
         return -1;
@@ -358,7 +363,9 @@ typedef struct Ex {
     int n;
     char boot[64];           /* BOOT2's file, normalized */
     const IcoDiscInfo *disc; /* the row of that boot file, or NULL */
-    char elf_path[64];       /* the boot ELF hashed: the row's, else BOOT2's file */
+    char elf_path[64];       /* the ELF hashed: the row's, else BOOT2's file */
+    char game_dir[32];       /* the row's game_dir: "" (the root) or the game's folder */
+    char df_path[64];        /* DATA.DF's path: the row's, else DFDATAS/DATA.DF */
 
     IcoExtractProgressFn progress;
     void *ctx;
@@ -402,21 +409,66 @@ static int add_item(Ex *x, const char *path, int store, char *why, size_t whysiz
     return 0;
 }
 
-static int root_file_wanted(const Ex *x, const char *comp)
+/* What a directory's walk keeps (walk): */
+enum {
+    WALK_ROOT, /* the volume's root */
+    WALK_GAME, /* the game's folder (a row with a game_dir) */
+    WALK_ALL   /* DFDATAS, in the root or the game's folder: everything below */
+};
+
+/* *.IRX: the port reads SNDN2DRV.IRX's pitch table and LIBSD.IRX's values;
+   the rest are small and kept for later checks */
+static int is_irx(const char *comp)
 {
     size_t n = strlen(comp);
 
+    return n > 4 && strcmp(comp + n - 4, ".IRX") == 0;
+}
+
+/* A file of the root or the game's folder: 0 skipped, 1 stored, 2 listed in
+   meta.json without its bytes (the boot file of a disc whose BOOT2 is a
+   menu: libcdvd's identify and sceCdSearchFile find it as on the disc, a read
+   of its sectors fails). */
+static int file_wanted(const Ex *x, int mode, const char *path, const char *comp)
+{
+    if (mode == WALK_GAME) {
+        return (x->elf_path[0] != '\0' && strcmp(path, x->elf_path) == 0) || is_irx(comp) ? 1 : 0;
+    }
+    if (strcmp(comp, CNF_PATH) == 0) {
+        return 1;
+    }
+    if (x->game_dir[0] != '\0') {
+        /* the menu's root: SYSTEM.CNF, and the boot file looked up but not stored */
+        return x->boot[0] != '\0' && strcmp(comp, x->boot) == 0 ? 2 : 0;
+    }
     /* DUMMY.TXT is the file after DATA.DF on the PAL disc (LSN 443201, where
        DATA.DF's last sector ends): kept so a read that runs over DATA.DF's
        end finds what the disc had there (the Japanese disc has none: its
        DATA.DF is the last file) */
-    return strcmp(comp, CNF_PATH) == 0 ||
-           (x->elf_path[0] != '\0' && strcmp(comp, x->elf_path) == 0) ||
-           strcmp(comp, "DUMMY.TXT") == 0 || (x->boot[0] != '\0' && strcmp(comp, x->boot) == 0) ||
-           (n > 4 && strcmp(comp + n - 4, ".IRX") == 0);
+    return (x->elf_path[0] != '\0' && strcmp(path, x->elf_path) == 0) ||
+                   strcmp(comp, "DUMMY.TXT") == 0 ||
+                   (x->boot[0] != '\0' && strcmp(comp, x->boot) == 0) || is_irx(comp)
+               ? 1
+               : 0;
 }
 
-static int walk(Ex *x, const char *dir, const IcoVfsEntry *d, int store_all, int depth, char *why,
+/* The walk's mode below the directory comp of a walk in `mode`, or -1 for a
+   directory not walked. */
+static int dir_mode(const Ex *x, int mode, const char *comp)
+{
+    if (mode == WALK_ALL) {
+        return WALK_ALL;
+    }
+    if (x->game_dir[0] != '\0') {
+        if (mode == WALK_ROOT) {
+            return strcmp(comp, x->game_dir) == 0 ? WALK_GAME : -1;
+        }
+        return strcmp(comp, STORE_DIR) == 0 ? WALK_ALL : -1;
+    }
+    return mode == WALK_ROOT && strcmp(comp, STORE_DIR) == 0 ? WALK_ALL : -1;
+}
+
+static int walk(Ex *x, const char *dir, const IcoVfsEntry *d, int mode, int depth, char *why,
                 size_t whysize)
 {
     unsigned char *buf;
@@ -445,7 +497,7 @@ static int walk(Ex *x, const char *dir, const IcoVfsEntry *d, int store_all, int
             char comp[40];
             char path[ICO_VFS_PATH_MAX];
             unsigned i, k = 0;
-            int is_dir;
+            int is_dir, sub, want;
 
             if (rlen == 0) {
                 break;
@@ -472,16 +524,22 @@ static int walk(Ex *x, const char *dir, const IcoVfsEntry *d, int store_all, int
             }
             snprintf(path, sizeof(path), "%s%s%s", dir, dir[0] ? "/" : "", comp);
             is_dir = (rec[25] & 2) != 0;
-            if (is_dir && (store_all || (depth == 0 && strcmp(comp, STORE_DIR) == 0))) {
-                IcoVfsEntry sub;
+            if (is_dir) {
+                sub = dir_mode(x, mode, comp);
+                if (sub >= 0) {
+                    IcoVfsEntry e;
 
-                r = add_item(x, path, 0, why, whysize);
-                if (r == 0) {
-                    sub = x->items[x->n - 1].e;
-                    r = walk(x, path, &sub, 1, depth + 1, why, whysize);
+                    r = add_item(x, path, 0, why, whysize);
+                    if (r == 0) {
+                        e = x->items[x->n - 1].e;
+                        r = walk(x, path, &e, sub, depth + 1, why, whysize);
+                    }
                 }
-            } else if (!is_dir && (store_all || (depth == 0 && root_file_wanted(x, comp)))) {
-                r = add_item(x, path, 1, why, whysize);
+                continue;
+            }
+            want = mode == WALK_ALL ? 1 : file_wanted(x, mode, path, comp);
+            if (want != 0) {
+                r = add_item(x, path, want == 1, why, whysize);
             }
         }
     }
@@ -684,7 +742,7 @@ static int store_item(Ex *x, mz_zip_archive *zip, const Item *it, int *tail_out,
     x->f.vfs = x->iso;
     x->f.entry = it->e;
     x->is_elf = x->elf_path[0] != '\0' && strcmp(it->path, x->elf_path) == 0;
-    x->is_df = strcmp(it->path, DF_PATH) == 0;
+    x->is_df = strcmp(it->path, x->df_path) == 0;
     x->next = 0;
     x->read_err = 0;
     if (x->is_elf) {
@@ -852,6 +910,50 @@ int ico_extract_image_sha1(const char *iso_path, char hex[41], uint64_t *bytes, 
     return 0;
 }
 
+int ico_extract_verify_files(const char *iso_path, const IcoDiscInfo *disc, char elf_hex[41],
+                             char *why, size_t whysize)
+{
+    static unsigned char chunk[HASH_CHUNK];
+    IcoVfs *iso;
+    IcoVfsFile f;
+    DfState df;
+    uint64_t o;
+    int ok = 0;
+
+    elf_hex[0] = '\0';
+    if (disc == NULL) {
+        say(why, whysize, "no disc to check the image against");
+        return -1;
+    }
+    iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
+    if (iso == NULL) {
+        say(why, whysize, "cannot read the disc image %s", iso_path);
+        return -1;
+    }
+    memset(&df, 0, sizeof(df));
+    if (!hash_vfs_file(iso, disc->elf_path, elf_hex)) {
+        say(why, whysize, "the image's %s cannot be read", disc->elf_path);
+    } else if (strcmp(elf_hex, disc->elf_sha1) != 0) {
+        say(why, whysize, "%s SHA-1 %s, %s's is %s", disc->elf_path, elf_hex, disc->id,
+            disc->elf_sha1);
+    } else if (df_begin(&df, iso, disc->df_path, why, whysize) == 0 &&
+               ico_vfs_open(iso, disc->df_path, &f) == 0) {
+        for (o = 0; o < df.size;) {
+            int64_t n = ico_vfs_read(&f, o, chunk, sizeof(chunk));
+
+            if (n <= 0) {
+                break;
+            }
+            df_update(&df, o, chunk, (size_t)n);
+            o += (uint64_t)n;
+        }
+        ok = df_matches(&df, disc, why, whysize);
+    }
+    free(df.m);
+    ico_vfs_unmount(iso);
+    return ok ? 0 : -1;
+}
+
 int ico_extract_archive(const char *iso_path, const char *out_path, unsigned flags,
                         IcoExtractProgressFn progress, void *ctx, IcoExtractResult *res, char *why,
                         size_t whysize)
@@ -864,7 +966,7 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
     Ex x;
     Buf meta;
     int *tails = NULL;
-    int iso_ok, elf_ok;
+    int iso_ok, elf_ok, hash;
     int i, ok = 0;
     double t0, t1;
     char dfwhy[256] = "";
@@ -907,11 +1009,15 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
         disc_id_of(x.boot, res->disc_id, sizeof(res->disc_id));
     }
     snprintf(x.elf_path, sizeof(x.elf_path), "%s", x.disc != NULL ? x.disc->elf_path : x.boot);
+    /* the game's folder and DATA.DF: the row's (archive.h game_dir, df_path) */
+    snprintf(x.game_dir, sizeof(x.game_dir), "%s", x.disc != NULL ? x.disc->game_dir : "");
+    snprintf(x.df_path, sizeof(x.df_path), "%s",
+             x.disc != NULL ? x.disc->df_path : ico_vfs_df_path(x.iso));
     if (add_item(&x, "", 0, why, whysize) != 0) {
         goto done;
     }
     root = x.items[0].e;
-    if (walk(&x, "", &root, 0, 0, why, whysize) != 0) {
+    if (walk(&x, "", &root, WALK_ROOT, 0, why, whysize) != 0) {
         goto done;
     }
     for (i = 0; i < x.n; i++) {
@@ -925,27 +1031,37 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
         say(why, whysize, "%s holds none of the game's files", iso_path);
         goto done;
     }
-    if (df_begin(&x.df, x.iso, dfwhy, sizeof(dfwhy)) != 0) {
+    if (df_begin(&x.df, x.iso, x.df_path, dfwhy, sizeof(dfwhy)) != 0) {
         x.df.valid = 0;
     }
+    /* a row with no image SHA-1 on file (the magazine demo, 4.4 GB) is accepted by its
+       game ELF and DATA.DF alone: its image is not hashed */
+    hash = x.disc == NULL || x.disc->iso_sha1 != NULL;
     {
         /* the bytes the hash reads: the ISO's, whatever the container */
         IcoDiscImage *img = ico_disc_image_open(iso_path);
 
-        x.total = (img != NULL ? ico_disc_image_bytes(img) : 0) + res->bytes;
+        res->iso_size = img != NULL ? ico_disc_image_bytes(img) : 0;
+        x.total = (hash ? res->iso_size : 0) + res->bytes;
         ico_disc_image_close(img);
     }
 
     /* 1. the image's SHA-1 */
     t0 = now_s();
-    if (hash_image(&x, iso_path, res, why, whysize) != 0) {
+    if (hash && hash_image(&x, iso_path, res, why, whysize) != 0) {
         res->cancelled = x.cancelled;
         res->unreadable = !x.cancelled; /* cut short or damaged */
         goto done;
     }
+    res->iso_hashed = hash;
+    if (!hash) {
+        fprintf(stderr,
+                "extract: %s has no image SHA-1 on file: the %llu-byte image is not hashed; "
+                "%s's SHA-1 and %s's manifest decide\n",
+                x.disc->id, (unsigned long long)res->iso_size, x.elf_path, x.df_path);
+    }
     t1 = now_s();
     res->hash_seconds = t1 - t0;
-    /* a row with no image hash (the magazine demo) is accepted by its ELF and DATA.DF alone */
     iso_ok =
         x.disc != NULL && x.disc->iso_sha1 != NULL && strcmp(res->iso_sha1, x.disc->iso_sha1) == 0;
 
@@ -975,6 +1091,7 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
     if (x.elf_seen && x.elf_in_order) {
         sha1_hex(&x.elf, res->elf_sha1);
     }
+
     elf_ok = x.disc != NULL && strcmp(res->elf_sha1, x.disc->elf_sha1) == 0;
     res->datadf_ok = df_matches(&x.df, x.disc, dfwhy[0] ? NULL : dfwhy, sizeof(dfwhy));
     snprintf(res->datadf_why, sizeof(res->datadf_why), "%s", res->datadf_ok ? "" : dfwhy);
@@ -1003,12 +1120,18 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
                                     "Image SHA-1 %s (expected %s);\n"
                                     "%s SHA-1 %s (expected %s);\n"
                                     "DATA.DF: %s.",
-                iso_path, ico_disc_list_text(), x.disc->boot_elf, x.disc->id, res->iso_sha1,
+                iso_path, ico_disc_list_text(), x.disc->boot_elf, x.disc->id,
+                hash ? res->iso_sha1 : "(not hashed)",
                 x.disc->iso_sha1 != NULL ? x.disc->iso_sha1 : "(none: by ELF and DATA.DF)",
                 x.disc->elf_path, res->elf_sha1[0] ? res->elf_sha1 : "(absent)", x.disc->elf_sha1,
                 res->datadf_ok ? "matches" : res->datadf_why);
         }
         goto done;
+    }
+
+    if (!hash) {
+        /* meta.json's source.sha1: the game ELF's, the hash this disc is known by */
+        snprintf(res->iso_sha1, sizeof(res->iso_sha1), "%s", res->elf_sha1);
     }
 
     /* 4. meta.json, the directory, and the move into place (a few seconds

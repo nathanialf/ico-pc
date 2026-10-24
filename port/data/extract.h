@@ -15,10 +15,24 @@
  * under DFDATAS/ (DATA.DF whole). meta.json also lists the root and DFDATAS
  * directories, so look-ups of them answer as on the disc.
  *
+ * A disc whose game is in a folder (archive.h IcoDiscInfo.game_dir: the June
+ * 2001 magazine demo, whose BOOT2 is the magazine's menu SCUS_971.58 and whose
+ * game is CUS97113/): SYSTEM.CNF; the boot file listed in meta.json without
+ * its bytes (looked up as on the disc, never read); in the folder, the
+ * row's elf_path (CUS97113/SCPS_000.00), every *.IRX and DFDATAS/ whole,
+ * under their disc paths ("CUS97113/DFDATAS/DATA.DF"), with the folder and
+ * DFDATAS listed. Nothing else of the disc (the menu's other files, the
+ * other games' folders, SCE_DD) is stored. The game asks for
+ * "cdrom0:\\CUS97113\\..." and the archive answers through the same
+ * look-up as for a root file.
+ *
  * How it accepts the image, in order (the rule goes into meta.json and the
  * log):
  *   iso-sha1            the whole image's SHA-1 is the row's iso_sha1 (for
- *                       a .chd or .bin, the SHA-1 of the ISO it holds)
+ *                       a .chd or .bin, the SHA-1 of the ISO it holds); a
+ *                       row with no iso_sha1 (the magazine demo) skips the
+ *                       image's hash, and meta.json's source.sha1 is then
+ *                       the game ELF's
  *   elf-sha1+datadf-crc the boot ELF hashes to the row's elf_sha1 and
  *                       DATA.DF has that disc's size, directory and
  *                       members: the CRC-32 of its directory and of each of
@@ -63,7 +77,8 @@
     "The log says why."
 
 /* Progress: phase "open" (reading the image's directory; done and total 0),
-   "hash" (the image's SHA-1), "extract", then "finish" (writing the archive's
+   "hash" (the image's SHA-1; none for a disc with no image SHA-1 on file,
+   whose total is then the bytes stored alone), "extract", then "finish" (writing the archive's
    directory and moving it into place; done and total 0).  In "hash" and
    "extract" done and total count bytes over both phases (the image's size
    plus the bytes stored).  Return nonzero to cancel (ignored in "open" and
@@ -71,11 +86,12 @@
 typedef int (*IcoExtractProgressFn)(void *ctx, const char *phase, uint64_t done, uint64_t total);
 
 typedef struct IcoExtractResult {
-    char rule[32]; /* ICO_RULE_* (archive.h), or "" when refused */
-    char iso_sha1[41];
+    char rule[32];     /* ICO_RULE_* (archive.h), or "" when refused */
+    char iso_sha1[41]; /* the image's SHA-1; the game ELF's when iso_hashed is 0 */
     uint64_t iso_size;
-    char elf_sha1[41];    /* the boot ELF as stored, "" if absent */
-    int datadf_ok;        /* DATA.DF matched the manifest */
+    int iso_hashed;    /* 0: a disc with no image SHA-1 on file, the image was not read through */
+    char elf_sha1[41]; /* the boot ELF as stored, "" if absent */
+    int datadf_ok;     /* DATA.DF matched the manifest */
     char datadf_why[256]; /* why not */
     char disc_id[16];     /* from SYSTEM.CNF's BOOT2 ("SCES-50760", "SCPS-11003") */
     uint32_t files;       /* files stored */
@@ -104,6 +120,14 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
    (vfs.h, IcoDiscImage). 0, or -1 with the reason in why. */
 int ico_extract_image_sha1(const char *iso_path, char hex[41], uint64_t *bytes, char *why,
                            size_t whysize);
+
+/* The check without the image's SHA-1, for a disc that has none on file
+   (the magazine demo; main_host.c's start from the image): disc's
+   elf_path hashes to its elf_sha1 (written to elf_hex, "" when unread)
+   and its df_path matches its DATA.DF manifest (reads DATA.DF through).
+   0, or -1 with the reason in why. */
+int ico_extract_verify_files(const char *iso_path, const IcoDiscInfo *disc, char elf_hex[41],
+                             char *why, size_t whysize);
 
 /* Which disc a mounted volume is: the ico_discs row that boots with `boot`
    (SYSTEM.CNF's BOOT2 file); when two rows share the name (SCUS_971.13: the
