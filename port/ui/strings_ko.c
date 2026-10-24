@@ -620,4 +620,11 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
         "버튼을 눌러 선택하고, 드래그로 이동하며, 두 번째 손끝으로 크기를 변경합니다.",
     [UI_STR_TED_OVERLAP] = "버튼이 서로 덮여 있습니다. 먼저 그려진 버튼이 우선합니다.",
     [UI_STR_TED_COVERED] = "다른 버튼의 가운데에는 놓을 수 없습니다.",
+    [UI_STR_ISO_NEED_SPACE] =
+        "이 디스크 이미지에는 %llu.%llu GB의 여유 공간이 필요합니다(위치: %s). 남은 공간은 %llu.%llu GB입니다.\n더 이상 쓰지 않는 앱, 동영상, 다운로드를 지운 뒤 게임을 다시 시작하세요.",
+    [UI_STR_ISO_COPY_FAILED] =
+        "디스크 이미지를 %s에 복사할 수 없습니다.\n%llu.%llu GB 정도의 여유 공간이 있는지, 파일이 아직 있는지 본 뒤 게임을 다시 시작하세요. 이유는 로그에 있습니다.",
+    [UI_STR_ISO_COPYING] = "디스크 이미지를 앱으로 복사하는 중",
+    [UI_STR_ISO_COPYING_LONG] =
+        "디스크 이미지를 앱으로 복사하는 중. 이미지가 커서 수 분이 소요됩니다",
 };

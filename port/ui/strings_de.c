@@ -625,4 +625,11 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "Eine Taste antippen, um sie auszuwählen. Ziehen verschiebt sie, zwei Finger ändern die Größe.",
     [UI_STR_TED_OVERLAP] = "Überlappende Tasten: die zuerst gezeichnete gewinnt.",
     [UI_STR_TED_COVERED] = "Eine Taste kann die Mitte einer anderen nicht verdecken.",
+    [UI_STR_ISO_NEED_SPACE] =
+        "Dieses Disc-Image braucht %llu,%llu GB freien Speicher in %s; frei sind %llu,%llu GB.\nGeben Sie Speicher frei (Apps, Videos oder Downloads, die Sie nicht mehr brauchen), und starten Sie das Spiel erneut.",
+    [UI_STR_ISO_COPY_FAILED] =
+        "Das Disc-Image konnte nicht nach %s kopiert werden.\nPrüfen Sie, ob etwa %llu,%llu GB frei sind und die Datei noch vorhanden ist, und starten Sie das Spiel erneut. Der Grund steht im Protokoll.",
+    [UI_STR_ISO_COPYING] = "Das Disc-Image wird in die App kopiert",
+    [UI_STR_ISO_COPYING_LONG] =
+        "Das Disc-Image wird in die App kopiert. Es ist groß: Das dauert einige Minuten",
 };

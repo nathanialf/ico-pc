@@ -616,4 +616,11 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_TED_HINT] = "Tap a button to select it. Drag to move. Pinch to resize.",
     [UI_STR_TED_OVERLAP] = "Overlapping buttons: the one drawn first wins.",
     [UI_STR_TED_COVERED] = "A button cannot cover the middle of another.",
+    [UI_STR_ISO_NEED_SPACE] =
+        "This disc image needs %llu.%llu GB free in %s; %llu.%llu GB is free.\nFree up some space (apps, videos or downloads you no longer need) and start the game again.",
+    [UI_STR_ISO_COPY_FAILED] =
+        "The disc image could not be copied into %s.\nCheck that about %llu.%llu GB is free and that the file is still there, then start the game again. The log says why.",
+    [UI_STR_ISO_COPYING] = "Copying the disc image into the app",
+    [UI_STR_ISO_COPYING_LONG] =
+        "Copying the disc image into the app. It is a large image: this takes a few minutes",
 };

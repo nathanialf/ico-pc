@@ -745,6 +745,17 @@ typedef enum UiStrId {
     UI_STR_TED_HINT,
     UI_STR_TED_OVERLAP,
     UI_STR_TED_COVERED,
+    /* Android's first start, the copy of the chosen disc image into the app
+       (port/platform/android/iso_import.h, main_host.c): the box when the
+       space is short (printf: the GB needed as two numbers, the whole and
+       the tenth, the folder, the GB free as two numbers), the box when the
+       copy failed (the folder, the GB needed as two numbers), and the
+       progress line, its second form for an image over
+       ICO_ISO_LONG_COPY_BYTES (the 4.4 GB magazine demo) */
+    UI_STR_ISO_NEED_SPACE,
+    UI_STR_ISO_COPY_FAILED,
+    UI_STR_ISO_COPYING,
+    UI_STR_ISO_COPYING_LONG,
     UI_STR_COUNT
 } UiStrId;
 

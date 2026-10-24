@@ -620,4 +620,11 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
         "Tocca un pulsante per sceglierlo. Trascina per spostarlo. Pizzica per ridimensionarlo.",
     [UI_STR_TED_OVERLAP] = "Pulsanti sovrapposti: vince quello disegnato per primo.",
     [UI_STR_TED_COVERED] = "Un pulsante non può coprire il centro di un altro.",
+    [UI_STR_ISO_NEED_SPACE] =
+        "Questa immagine del disco richiede %llu,%llu GB liberi in %s; ne sono liberi %llu,%llu GB.\nLibera un po’ di spazio (app, video o download che non ti servono più) e riavvia il gioco.",
+    [UI_STR_ISO_COPY_FAILED] =
+        "Impossibile copiare l’immagine del disco in %s.\nControlla che ci siano circa %llu,%llu GB liberi e che il file sia ancora lì, poi riavvia il gioco. Il registro indica il motivo.",
+    [UI_STR_ISO_COPYING] = "Copia dell’immagine del disco nell’app",
+    [UI_STR_ISO_COPYING_LONG] =
+        "Copia dell’immagine del disco nell’app. È un’immagine grande: ci vorranno alcuni minuti",
 };
