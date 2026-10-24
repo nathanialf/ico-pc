@@ -1533,6 +1533,20 @@ void rd_pop_camera(void);
  *                    reflection's camera).  Recording only; off by default */
 int rd_camera_depth(void);
 void rd_frame_projected(int on);
+/* rd_frame_projected_st  while (dsx, dsy) is not (0, 0), the screen prims
+ *                    recorded under rd_frame_projected have STQs that follow
+ *                    the screen: S / Q grows by dsx and T / Q by dsy per 12.4
+ *                    unit of GS X and Y (puddle.c drawRipples: its STs into
+ *                    the reflection block are its projected points scaled,
+ *                    0.9 / width and 0.9 / height a pixel).  Where the
+ *                    presenter re-projects a vertex through the blended
+ *                    camera it moves the vertex's S / Q and T / Q by its own
+ *                    screen move times these (rd_interp.c), as the block
+ *                    moves; the STs are never made from the position (a
+ *                    ripple's outer ring's are a rotated point's).  Recorded
+ *                    in the draw (RDC_SCREEN b[5], f[0], f[1]); recording
+ *                    only; (0, 0) by default */
+void rd_frame_projected_st(float dsx, float dsy);
 
 /* rd_grid_screen_st's formulas, pool.c's per vertex q (h its wave height in
  * ST.w, M the grid's world to GS screen, (x, y) = (M q).xy / w its GS
