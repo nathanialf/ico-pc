@@ -4,7 +4,7 @@ The targets `staticBlur.c`'s effects and the screen softening draw through on th
 SCENE, their sizes at each frame width, the glow chain's rectangles in them, the column the glow's
 blur leaves on a frame wider than the PS2's, what stays in them from one frame to the next, the
 work clear that shows a texel read before it was drawn, and how the puddle's ripples sample their
-reflection block between ticks. The sprites themselves are drawn by the GS
+reflection block between ticks, and where the crack filler is drawn on a tile-based GPU. The sprites themselves are drawn by the GS
 sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 
 ## Files
@@ -16,6 +16,7 @@ sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 | `port/render/rd_blur.c` | the strip over the glow's left edge (`rd__glow_edge_strip`) |
 | `port/render/rd_blur_border.c` | the strip drawn after the blur's first pass (`glowEdge`, from `rd__blur_post_sprite`) |
 | `ico2/sugipon/src/staticBlur.c` | the effects, their rectangles in the PS2's numbers and the port's widening (`SB_X`, `sbShrinkAt`, `sbShrinkSpan`, `sbWorkRect`) |
+| `port/render/rd_crack_fill.c` | the crack fill drawn inside the local fog's pass (`rd__crack_fill`'s `local`) |
 | `ico2/sugipon/src/puddle.c`, `port/render/rd_interp.c` | the ripples' texture shift between ticks (`drawRipples`; `reprojStShift`) |
 
 ## Sizes per frame width
@@ -183,3 +184,23 @@ with "N re-projected draws with their texture shifted (the ripples)". ctest `rd_
 without the shift, a strip under a pushed camera unmarked) and `testRippleStPixels` (on a device:
 every strip pixel samples a 256 x 256 gradient where it stands within one level half way through a
 pan, more than two levels off without the shift) pin it.
+
+## The crack fill inside the local fog's pass
+
+The crack filler is described in [RENDER.md](RENDER.md#crack-filling-above-1x). On a tile-based
+GPU the fog draws by the local read (`RD_FOG_LOCAL`): inside the scene pass, reading the depth as an input attachment. The copies end
+that pass, so the fill is drawn in the pass begun again over SCENE and its depth, both loaded, the
+depth readable (`rd__replay_begin_pass`, as `bindDraw` begins it), and that pass is left open:
+`doFog` keeps it (`bindDrawKeep`: colour, depth and readability match) and its local-read barrier
+orders the fill's depth writes before the fog reads them. One pass stores and loads SCENE once
+fewer than a fill pass of its own followed by the fog's reopened pass (about 36 MB a replay at
+1664 x 896). A readable depth's layout (`RENDERING_LOCAL_READ`, `port/rhi/vk/vk_cmd.c`
+(`rhi_cmd_begin_render_pass`)) is an attachment the depth tests write, as every scene draw in that
+pass does, so the fill's test-ALWAYS writes are allowed; the fill samples the copies, never the
+attachment. The count moved before the fill (it reads the depth copy alone). A pass begun without
+the depth readable is ended after the fill as on the other paths, with a line once. The fill's GPU
+time, copies and draw, is the picture effect `crack fill` (`RD_PERF_POST_CRACK`): the 10 s
+`effects:` line, the perf CSV's `gpu_crack_fill_ms` and the tool's `gpu:` line. In `--pass-times`
+the folded pass is labelled `fog`. Tests: `rd_crack_tiler`, `rd_crack_tiler_on`,
+`rd_crack_tiler_fold`, `rd_crack_tiler_fold_mali` ([TESTING.md](TESTING.md)); the fold's SCENE
+equals the unfolded replay's byte for byte.
