@@ -13,17 +13,7 @@ static float (*enemyPositionTable[1][27])[4]; /* derived name */
 
 typedef ICO_QW Qw128; /* derived name */
 
-/* the stage table's record: a pointer and a count */
-typedef struct EnemySet {        /* field names derived */
-    struct EnemyModelSet **list; /* 0x0 */
-    int n;                       /* 0x4 */
-} EnemySet;                      /* derived name */
-
-/* one kind's position list and the kind it places */
-typedef struct EnemyKindRec { /* field names derived */
-    int *list;                /* 0x0 */
-    int kind;                 /* 0x4 */
-} EnemyKindRec;               /* derived name */
+/* PC port: EnemySet, EnemyKindRec and EnemyModelSet are in EnemyInit.h */
 
 /* the set's j-th EnemyKindRec: on the EE its two words are read by hand
    (indexing the typed array moves the bytes); the host record is two words
@@ -31,14 +21,6 @@ typedef struct EnemyKindRec { /* field names derived */
 #define ENEMY_REC_DECL(rec, set, j) EnemyKindRec *rec = &(set)->kinds[j]
 #define ENEMY_REC_KIND(rec) ((rec)->kind)
 #define ENEMY_REC_LIST(rec) ((rec)->list)
-
-/* a model file's placement set: its kind lists and its position table */
-typedef struct EnemyModelSet { /* field names derived */
-    EnemyKindRec *kinds;       /* 0x0 */
-    int kindNum;               /* 0x4 */
-    float (*pos)[4];           /* 0x8 */
-    int posNum;                /* 0xC */
-} EnemyModelSet;               /* derived name */
 
 /* The stage enemy model set: for each enemy kind, the positions (indices
    into the position table, -1 closing each list) it is placed at, in the
