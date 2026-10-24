@@ -1107,22 +1107,36 @@ if(ICO_RUN_TESTS)
                                                        ENVIRONMENT "${_crk_env_${_v}}")
     endforeach()
     # a tile-based GPU (ICO_VK_FAKE_LIMITS=moltenvk: the Apple row of the
-    # device profile): the filler off by default until measured on a phone,
-    # nothing drawn; [dev] crack_fill = true (ICO_RD_CRACK_FILL=1) turns it
-    # on there, the fill as on the desktop (the local read's scene pass
-    # ended for it where lavapipe has local read)
+    # device profile): the filler on by default as on every class, the old
+    # "off on this tile-based GPU until measured" line denied; [dev]
+    # crack_fill = true (ICO_RD_CRACK_FILL=1) the same.  rd_crack_tiler_fold
+    # (rd_crack_test 2 fold, 77 without local read): on the fog's local read
+    # the fill is drawn in the scene pass the fog keeps (one pass more than
+    # without the filler, not two; the fog by the local read in the same
+    # replay) and SCENE equals the depth copy path's byte for byte; _mali
+    # the same under a phone GPU's limits (ICO_VK_FAKE_LIMITS=mali, the fog's
+    # local read by ICO_RD_FOG_PATH=local on the desktop row)
+    set(_crk_old_off "rd: crack fill: off on this tile-based GPU")
     add_test(NAME rd_crack_tiler
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> -DARGS=2
-                     "-DEXPECT=rd: crack fill: off on this tile-based GPU until measured \\(the pass ends the scene pass\\); \\[dev\\] crack_fill = true turns it on"
-                     "-DDENY=rd: crack fill: on above 1x \\(" -P "${_crk}")
+                     "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail}"
+                     "-DDENY=${_crk_old_off}" -P "${_crk}")
     add_test(NAME rd_crack_tiler_on
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> -DARGS=2
-                     "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail} \\(on by \\[dev\\] crack_fill = true on this tile-based GPU\\)"
-                     -P "${_crk}")
-    set_tests_properties(rd_crack_tiler PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                     "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail}"
+                     "-DDENY=${_crk_old_off}" -P "${_crk}")
+    foreach(_v tiler_fold tiler_fold_mali)
+        add_test(NAME rd_crack_${_v}
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> "-DARGS=2|fold"
+                         "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail} \\(drawn inside the scene pass with the local fog\\)"
+                         -P "${_crk}")
+    endforeach()
+    set_tests_properties(rd_crack_tiler rd_crack_tiler_fold PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                    ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk")
     set_tests_properties(rd_crack_tiler_on PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                       ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk;ICO_RD_CRACK_FILL=1")
+    set_tests_properties(rd_crack_tiler_fold_mali PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                             ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=mali;ICO_RD_FOG_PATH=local")
     add_test(NAME rd_replay_tool_crack
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DARGS=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump|${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_crack.png|--enhanced|--resolution|2x|--stats|--no-crack-fill"
@@ -1590,7 +1604,7 @@ endif()
 # Not twinned:
 #  * a test whose environment holds a Vulkan fake (ICO_VK_FAKE_*, ICO_VK_ATTACHMENT_READ),
 #    which OpenGL ignores: *_mali, *_minlimits, *_d24s8, *_static, rd_crack_d24s8,
-#    rd_crack_tiler(_on), rd_blend_selftest*, rd_date_selftest_sabotage,
+#    rd_crack_tiler(_on, _fold, _fold_mali), rd_blend_selftest*, rd_date_selftest_sabotage,
 #    rd_fog_selftest_local_sabotage (ico_rd_gl_twin skips these by itself)
 #  * the tests that start the game (model_viewer_headless, gallery_sweep,
 #    credits_headless) or work on the replay tool's files (rd_replay_tool*,
