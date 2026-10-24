@@ -210,6 +210,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   program), the roll start's log line, which names the disc (`credits_jpn`, `credits_kor`).
 - `door_grace_test.c`: the doorway fix's arm and grace and a copy of the exit check's guard
   (`door_grace`).
+- `variants_test.c`: the game variants (`port/game/variants.h`) on the CPU: every default is the game as
+  shipped (the barrier's number the disc's: 5, 7 on `jun26`), every `[variants]` key steps through
+  all its values, saves and reads back, a word or number that is no value reads as the default, the
+  setters clamp and the steps wrap, and the achievements rule (One hit per swing, Shades never
+  dodge, Cutscene cameras ignored and a Debug menu press suspend; toughness, aggression, No hints,
+  the barrier and the look-around do not; a reload clears the Debug menu's mark); one run per disc
+  (`variants`, `variants_jpn`, `variants_kor`).
 - `hand_ik_test.c`: the hand records as `ACTGame_ConnectHand` sets them through the real
   `handManager.c`: every target finite, a NaN into `GetTableArcCos` giving 0 and a counted fault
   (`hand_ik`).
@@ -1230,7 +1237,7 @@ headless build replays a player's session with `pad_script=<the file>`; it is on
 window build, in `logs/input-<time>.txt`, and off headless (`input_record=`). Its header records
 the values of `video.video_mode`, `game.language`, `gameplay.mirror`, `gameplay.stick_fix`,
 `gameplay.yorda_safe`, `gameplay.developer_mode`, `dev.start_stage`, `gameplay.door_fix`,
-`video.anti_aliasing`, `gameplay.hold_type` and `gameplay.skip_opening` (the boot's ticks), and the native frame's width and aspect (`port/platform/main_host.c`,
+`video.anti_aliasing`, `gameplay.hold_type` and `gameplay.skip_opening` (the boot's ticks), the eight `variants.*` keys (the barrier's is `(unset)` until chosen), and the native frame's width and aspect (`port/platform/main_host.c`,
 `record_keys`, `record_header`; `ico_input_record_frame_lines`).
 
 The trace (`trace=` or `--trace FILE`) writes a header naming its columns and then one line per Main
