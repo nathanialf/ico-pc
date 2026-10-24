@@ -100,9 +100,14 @@ file and product name of every row against the table):
 | DATA.DF shift (`df_lsn_shift`) | 0 | 0 | 153,600 sectors |
 
 Which disc an image is comes from its `SYSTEM.CNF`: the `BOOT2` line's file, normalized
-(`SCPS_110.03`), is looked up by `ico_disc_by_boot`; `ico_extract_identify` (`extract.h`) does
-this reading only the directory, so the program knows the disc before it hashes anything. The
-row's values then verify the image. An image whose boot file is none of the rows', or that is not an
+(`SCPS_110.03`), is looked up by `ico_disc_identify` (`extract.h`); `ico_extract_identify` does
+this for an image path. A boot file one row has is answered from the directory alone, so the
+program knows the disc before it hashes anything. When two rows boot with one file (`SCUS_971.13`: the North
+American disc and the August 2001 preview, once their rows exist): there the boot ELF (`elf_path`, 4 MB) is hashed and
+the row with that `elf_sha1` is the disc (`ico_disc_by_boot_elf`), logged once. The magazine demo
+boots its menu `SCUS_971.58` and its game lives in the `CUS97113` folder (`game_dir`, `df_path`);
+its row has no image hash (`iso_sha1` is NULL) and is accepted by the ELF and DATA.DF rule only.
+The row's values then verify the image. An image whose boot file is none of the rows', or that is not an
 unmodified copy of its row's disc, gets one box text everywhere (`ICO_WRONG_DISC_TEXT`,
 `extract.h`: the extractor, `main_host.c`, the Android import); one that cannot be read gets
 `ICO_UNREADABLE_DISC_TEXT`. `LIBSD.IRX` and `SNDN2DRV.IRX` are byte-identical on all three discs
