@@ -57,7 +57,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON) # gnu11
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# The source lists must match config/link_order.pal.txt.
+# The source lists must match the union of config/link_order.*.txt.
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_FOUND)
     execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/gen_sources.py" --check
@@ -66,8 +66,8 @@ if(Python3_FOUND)
         message(WARNING "cmake/IcoSources.cmake is out of date: run tools/gen_sources.py")
     endif()
 endif()
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-             "${CMAKE_SOURCE_DIR}/config/link_order.pal.txt")
+file(GLOB _ico_link_orders CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/config/link_order.*.txt")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_ico_link_orders})
 
 set(ICO_COMPAT_DIR "${CMAKE_SOURCE_DIR}/port/compat")
 set(ICO_GAME_DEFINITIONS ICO_HOST=1)

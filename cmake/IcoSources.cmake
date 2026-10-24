@@ -1,6 +1,6 @@
-# cmake/IcoSources.cmake: written by tools/gen_sources.py from
-# config/link_order.pal.txt. Do not edit; rerun the script.
-# Order is the retail link's.
+# cmake/IcoSources.cmake: written by tools/gen_sources.py from the union of
+# config/link_order.*.txt (pal jpn kor). Do not edit; rerun the script.
+# Order is the retail link's (pal's first).
 
 set(ICO_PROGRAMMERS common fumi ito omori script seki sugipon)
 
@@ -259,7 +259,11 @@ set(ICO_EE_ONLY_SOURCES
     ico2/ito/mpeg/mv_vibuf.c
 )
 
-# 73 data-only members, build/data/<member>.c (tools/gen_data_c.py)
+# 0 sources a link order lists that the tree does not hold yet (pending the merge; never compiled)
+set(ICO_PENDING_SOURCES
+)
+
+# 73 data-only members of the union, build/data/<member>.c (tools/gen_data_c.py)
 set(ICO_DATA_MEMBERS
     accessary
     act-data-tbl
