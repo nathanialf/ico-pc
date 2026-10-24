@@ -6,6 +6,7 @@
 //   blit_depth_ps blit_ps plus SV_Depth from the scene's depth (the present's
 //                effects depth)
 //   aa_reduce_ps the supersampled DISPLAY box-averaged to the present box
+//   msaa_resolve_ps, depth_resolve_ps, depth_upsample_ps the MSAA epoch
 //   crack_fill_ps, crack_count_ps the crack filler above 1x (rd_crack_fill.c)
 // Texture function flags are DrawCB.g_mode.x: with DF_TEXTURED clear the
 // pass writes the tint colour alone (fade, letterbox).
@@ -147,32 +148,110 @@ float4 aa_reduce_ps(BlitVSOut i) : SV_Target0
     return float4((sum + area / 2u) / area) * (1.0 / 255.0);
 }
 
-// MSAA (rd_replay.c, the MSAA epoch). depth_resolve_ps: the multisampled
-// scene depth (t1, Texture2DMS read with Load at each sample) into the
-// single-sampled one as SV_Depth, the smallest sample (the depth grows with
-// GS Z and the game tests GEQUAL: the farthest depth any sample saw), in a
-// depth-only pass over the whole target, test ALWAYS with writes.  The
-// sample patterns are centred on the pixel centre, so on a plane the
-// smallest sample is at or below the centre's depth: a surface drawn again
-// after the epoch single-sampled (the glow's GEQUAL re-draws) passes where
-// it passed at 1x; the largest sample lies above the centre on any slope
-// and would fail them.
+// MSAA (rd_replay.c, the MSAA epoch; docs/port/MSAA.md). The epoch's close
+// resolves SCENE_MS into SCENE. msaa_resolve_ps, when the epoch drew both the
+// colour and the depth: the colour (t1) and the depth (t2), each a
+// Texture2DMS read with Load at each sample, into SCENE's colour (SV_Target0)
+// and depth (SV_Depth) in one pass over the whole target, test ALWAYS with
+// writes. DrawCB.g_param:
+//   x  the sample count n (2, 4 or 8; the loop stops at 8)
+//   y  the depth the epoch cleared SCENE_MS's depth to (passed bit for bit)
+//   z  1: the covered-majority rule; 0 (the epoch loaded the depth from
+//      SCENE, no clear to tell an uncovered sample by): the mean and the
+//      smallest of all samples
+// A sample is uncovered when its depth is the clear's exactly (no draw
+// reached it). A pixel is uncovered only when more than half its samples
+// are (2u > n): it resolves to the mean colour and the smallest depth of
+// all its samples, as the hardware resolve and the smallest sample did.
+// Otherwise it resolves to the mean colour and the smallest depth of its
+// covered samples: a gap between two parts thinner than half a pixel takes
+// the surfaces beside it, not the clear's depth (which the fog's table reads
+// as its entry 0 and the glow's mask as a sky texel). Where every sample is
+// covered (a silhouette between two surfaces) that is the mean and smallest
+// of all: edge anti-aliasing stays. The mean is integer, each channel
+// (sum + k / 2) / k over the k samples' 8-bit values, so every backend
+// rounds alike. Scalar accumulators only (no array-typed values: the
+// Pascal and Adreno compilers, tools/check_spirv.py).
+// depth_resolve_ps, when the epoch drew the depth alone: the smallest
+// sample (n in g_param.x) into SCENE's depth, a depth-only pass. Both take
+// the smallest because the depth grows with GS Z and the game tests GEQUAL
+// (the farthest depth any sample saw); the sample patterns are centred on
+// the pixel centre, so on a plane the smallest sample is at or below the
+// centre's depth: a surface drawn again after the epoch single-sampled (the
+// glow's GEQUAL re-draws) passes where it passed at 1x; the largest sample
+// lies above the centre on any slope and would fail them.
+// Neither asks the texture for its sample count (GetDimensions on a
+// Texture2DMS is GLSL 4.50's textureSamples): both stay GLSL 4.30.
 // depth_upsample_ps: the other way, the single-sampled depth (t1) into
 // every sample of the multisampled one, when an epoch starts on a scene
 // that already holds a picture.
 Texture2DMS<float> g_msDepth : ICO_REG(t1, 2);
+Texture2DMS<float4> g_msColor : ICO_REG(t1, 2);
+Texture2DMS<float> g_msColorDepth : ICO_REG(t2, 2);
 
 float depth_resolve_ps(BlitVSOut i) : SV_Depth
 {
-    uint w, h, n;
-    g_msDepth.GetDimensions(w, h, n);
-    int2 p = int2(i.pos.xy);
+    const uint n = min(uint(g_param.x), 8u);
+    const int2 p = int2(i.pos.xy);
     float d = 1.0;
-    // the port's MSAA has 2, 4 or 8 samples (rd_core.c rd_aa_samples)
-    for (uint s = 0u; s < min(n, 8u); s++) {
+    for (uint s = 0u; s < n; s++) {
         d = min(d, g_msDepth.Load(p, int(s)));
     }
     return d;
+}
+
+struct MsaaResolveOut {
+    VK_LOC(0) float4 c : SV_Target0;
+    float d : SV_Depth;
+};
+
+MsaaResolveOut msaa_resolve_ps(BlitVSOut i)
+{
+    const uint n = min(uint(g_param.x), 8u);
+    const float clearDepth = g_param.y;
+    const bool rule = g_param.z != 0.0;
+    const int2 p = int2(i.pos.xy);
+    // all samples, then the covered ones
+    uint ar = 0u, ag = 0u, ab = 0u, aa = 0u;
+    uint cr = 0u, cg = 0u, cb = 0u, ca = 0u, k = 0u;
+    float dAll = 1.0, dCov = 1.0;
+    for (uint s = 0u; s < n; s++) {
+        const float4 c = g_msColor.Load(p, int(s));
+        const float d = g_msColorDepth.Load(p, int(s));
+        const uint r = uint(floor(c.x * 255.0 + 0.5));
+        const uint g = uint(floor(c.y * 255.0 + 0.5));
+        const uint b = uint(floor(c.z * 255.0 + 0.5));
+        const uint a = uint(floor(c.w * 255.0 + 0.5));
+        ar += r;
+        ag += g;
+        ab += b;
+        aa += a;
+        dAll = min(dAll, d);
+        if (!rule || d != clearDepth) {
+            cr += r;
+            cg += g;
+            cb += b;
+            ca += a;
+            k += 1u;
+            dCov = min(dCov, d);
+        }
+    }
+    // uncovered: more than half the samples held the clear's depth
+    if (2u * (n - k) > n) {
+        cr = ar;
+        cg = ag;
+        cb = ab;
+        ca = aa;
+        k = n;
+        dCov = dAll;
+    }
+    k = max(k, 1u);
+    const uint h = k / 2u;
+    MsaaResolveOut o;
+    o.c = float4(float((cr + h) / k), float((cg + h) / k), float((cb + h) / k),
+                 float((ca + h) / k)) * (1.0 / 255.0);
+    o.d = dCov;
+    return o;
 }
 
 Texture2D<float> g_ssDepth : ICO_REG(t1, 2);
