@@ -529,8 +529,8 @@ static const struct {
     /* false: the VU vertex pre-pass off, every VU draw the old way (an
        A/B; port/render/rd_replay_vu.c rd__vu_prepass_init) */
     {"dev.vu_prepass", "vu_prepass"},
-    /* false: the crack filler above 1x off (an A/B), true: on where the
-       device profile has it off (a tile-based GPU; port/render/rd_crack_fill.c
+    /* false: the crack filler above 1x off (an A/B), true: on, as the
+       device profile has it on every class (port/render/rd_crack_fill.c
        rd__crack_fill_init) */
     {"dev.crack_fill", "crack_fill"},
     /* true: every replay timed pass by pass, logs/ico-pc-passes.csv
