@@ -11,6 +11,7 @@
 #include "appearance.h"
 #include "config.h"
 #include "region.h" /* port/core: the per-disc keys (ico_region_key_prefixed) */
+#include "variants.h"
 
 /* options.h: the model viewer is up */
 int ico_mv_active;
@@ -367,4 +368,6 @@ void ico_opt_reload(void)
     s_hold_type = -1;
     /* the characters' colours ([characters], appearance.h) */
     ico_appearance_reload();
+    /* the game variants ([variants], variants.h) */
+    ico_variants_reload();
 }
