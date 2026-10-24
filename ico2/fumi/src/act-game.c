@@ -843,8 +843,8 @@ inline void ACTGameView_Add(GObj *self, GObj *target)
     int n = actGameView.num++;
     if (n >= 100) {
         debug_StdPrintfDummy("too many view check object");
-        debug_assert("src/act-game.c", LN(1791, 1788, 1788));
-        __assert("src/act-game.c", LN(1791, 1788, 1788), "0");
+        debug_assert("src/act-game.c", LN(1791, 1788, 1788, 1791, 1791, 1791));
+        __assert("src/act-game.c", LN(1791, 1788, 1788, 1791, 1791, 1791), "0");
     }
     actGameView.obj[n] = target;
     actGameView.view[n] = 0;
@@ -3174,8 +3174,8 @@ void RequestChangeHandMode(GObj *self, int mode, int pri, int flag, GObj *p5, in
         hmc = (HandModeCmd *)&GOBJ_ACT(self)->enemy->handDisconnect;
         break;
     default:
-        debug_assert("src/act-game.c", LN(4727, 4723, 4723));
-        __assert("src/act-game.c", LN(4727, 4723, 4723), "0");
+        debug_assert("src/act-game.c", LN(4727, 4723, 4723, 4727, 4727, 4727));
+        __assert("src/act-game.c", LN(4727, 4723, 4723, 4727, 4727, 4727), "0");
         break;
     }
     if (pri < 3) {

@@ -735,11 +735,16 @@ static void test_disc_keys(void)
     close(saved);
     clearerr(stderr);
     text = read_file(log);
-    CHECK(text != NULL &&
-          strstr(text, "config: [game] disc = \"usa\" is not one of auto, pal, jpn, kor; auto\n") !=
-              NULL &&
-          strstr(text, "config: [game] disc = \"JPN\" is not one of auto, pal, jpn, kor; auto\n") !=
-              NULL);
+    CHECK(
+        text != NULL &&
+        strstr(
+            text,
+            "config: [game] disc = \"usa\" is not one of auto, pal, jpn, kor, ntsc, aug6, jun26; auto\n") !=
+            NULL &&
+        strstr(
+            text,
+            "config: [game] disc = \"JPN\" is not one of auto, pal, jpn, kor, ntsc, aug6, jun26; auto\n") !=
+            NULL);
     if (text != NULL) {
         /* once a load: two reads of "usa", one line */
         const char *first = strstr(text, "\"usa\"");

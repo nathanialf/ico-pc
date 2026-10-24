@@ -1242,8 +1242,8 @@ void ACTGetEnvironment(void *self, void *dir, float *orient, EnvFlag *flags, Act
                         sub->wish2.ll |= 0x200;
                         break;
                     default:
-                        debug_assert("src/act-env.c", LN(2633, 2623, 2623));
-                        __assert("src/act-env.c", LN(2633, 2623, 2623), "0");
+                        debug_assert("src/act-env.c", LN(2633, 2623, 2623, 2633, 2633, 2633));
+                        __assert("src/act-env.c", LN(2633, 2623, 2623, 2633, 2633, 2633), "0");
                         break;
                     }
                 }

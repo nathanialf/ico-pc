@@ -75,7 +75,11 @@ indexed and the option on, or the dump on.
 ### Folders
 
 Each disc has its own serial folder, the one PCSX2 uses for it: `SCES-50760` for the European
-disc, `SCPS-11003` for the Japanese one and `SCPS-56001` for the Korean one. The serial is the selected disc's `pack_serial`
+disc, `SCPS-11003` for the Japanese one, `SCPS-56001` for the Korean one, `SCUS-97113` for the
+North American one and for the August 2001 preview disc (it boots the same `SCUS_971.13`, so PCSX2
+names its folder so: pack files are named by texture hash, and a USA pack serves both; the
+preview disc's id stays `PROTO-20010806` everywhere else), and `SCUS-97158` for the June 2001
+magazine demo (its BOOT2 serial). The serial is the selected disc's `pack_serial`
 (`port/core/region.h`), which `main_host.c` passes as `TexpackConfig.serial` once the disc is
 identified (`open_texture_pack`; a `NULL` serial is also the selected disc's); a pack in another
 disc's folder is not read. `texpack_init` walks, in order, in the

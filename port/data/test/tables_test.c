@@ -19,7 +19,7 @@
  *
  * With DISC_IMAGE the loader reads the set's boot ELF (SCES_507.60) through
  * the VFS, as ico_pc does; without it (or when the image is absent) it reads
- * BASE_ELF. --set SLUG (jpn, kor) loads that disc's descriptor set and
+ * BASE_ELF. --set SLUG (jpn, kor, ntsc, aug6, jun26) loads that disc's descriptor set and
  * compares with its reference (ico_ref_<slug>_<name>: gen_data_c.py --version
  * <slug>, the disc's bytes in the PAL record's form by
  * config/ee_layout.<slug>.txt, with the defaults and the permuted bit words),
@@ -80,6 +80,42 @@ static const Sym syms_kor[] = {
 };
 #endif
 
+#ifdef ICO_TABLES_TEST_NTSC
+#define X(name) extern char ico_ref_ntsc_##name[];
+ICO_TABLE_SYMBOLS(X)
+#undef X
+
+static const Sym syms_ntsc[] = {
+#define X(name) {#name, name, ico_ref_ntsc_##name},
+    ICO_TABLE_SYMBOLS(X)
+#undef X
+};
+#endif
+
+#ifdef ICO_TABLES_TEST_AUG6
+#define X(name) extern char ico_ref_aug6_##name[];
+ICO_TABLE_SYMBOLS(X)
+#undef X
+
+static const Sym syms_aug6[] = {
+#define X(name) {#name, name, ico_ref_aug6_##name},
+    ICO_TABLE_SYMBOLS(X)
+#undef X
+};
+#endif
+
+#ifdef ICO_TABLES_TEST_JUN26
+#define X(name) extern char ico_ref_jun26_##name[];
+ICO_TABLE_SYMBOLS(X)
+#undef X
+
+static const Sym syms_jun26[] = {
+#define X(name) {#name, name, ico_ref_jun26_##name},
+    ICO_TABLE_SYMBOLS(X)
+#undef X
+};
+#endif
+
 typedef struct RefSet {
     const char *slug;
     const Sym *syms;
@@ -91,6 +127,15 @@ static const RefSet ref_sets[] = {
 #endif
 #ifdef ICO_TABLES_TEST_KOR
     {"kor", syms_kor},
+#endif
+#ifdef ICO_TABLES_TEST_NTSC
+    {"ntsc", syms_ntsc},
+#endif
+#ifdef ICO_TABLES_TEST_AUG6
+    {"aug6", syms_aug6},
+#endif
+#ifdef ICO_TABLES_TEST_JUN26
+    {"jun26", syms_jun26},
 #endif
     {NULL, NULL},
 };

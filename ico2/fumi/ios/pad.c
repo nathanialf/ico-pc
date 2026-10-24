@@ -247,8 +247,8 @@ static int controler_stable_check(IosPadDevRec *dev)
             dev->phase = -1;
             dev->errCount = cnt;
             dev->lastTermId = id;
-            debug_assert(__FILE__, LN(468, 465, 468));
-            __assert(__FILE__, LN(468, 465, 468), "0");
+            debug_assert(__FILE__, LN(468, 465, 468, 468, 468, 468));
+            __assert(__FILE__, LN(468, 465, 468, 468, 468, 468), "0");
             return -1;
         }
         if (state == 6 || state == 2) {
@@ -280,8 +280,8 @@ int iosPadDevInit(void *desc)
 
     if (scePadInit(0) != 1) {
         debug_StdPrintfDummy("pad:init error\n");
-        debug_assert(__FILE__, LN(553, 550, 553));
-        __assert(__FILE__, LN(553, 550, 553), "0");
+        debug_assert(__FILE__, LN(553, 550, 553, 553, 553, 553));
+        __assert(__FILE__, LN(553, 550, 553, 553, 553, 553), "0");
         return 0;
     }
     for (i = 0; i < 2; i++) {
@@ -294,8 +294,8 @@ int iosPadDevInit(void *desc)
         dev->state = 0xFFFF;
         if (scePadPortOpen(i, 0, dev->dmaBuf) == 0) {
             debug_StdPrintfDummy("ERROR: scePadPortOpen port%d slot%d\n", i, 0);
-            debug_assert(__FILE__, LN(569, 566, 569));
-            __assert(__FILE__, LN(569, 566, 569), "0");
+            debug_assert(__FILE__, LN(569, 566, 569, 569, 569, 569));
+            __assert(__FILE__, LN(569, 566, 569, 569, 569, 569), "0");
         }
     }
     iosPadConfCustom = iosPadConfDefault;

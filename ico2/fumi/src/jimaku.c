@@ -287,8 +287,8 @@ static void jimakuMgrNext(JimakuArg *p)
     g->node->stamp = lock_execIcoMisc;
     if (g->node->tex == -1) {
         debug_StdPrintfDummy("already exist\n");
-        debug_assert(__FILE__, LN(688, 655, 658));
-        __assert(__FILE__, LN(688, 655, 658), "0");
+        debug_assert(__FILE__, LN(688, 655, 658, 688, 688, 688));
+        __assert(__FILE__, LN(688, 655, 658, 688, 688, 688), "0");
     }
     sub->n = (sub->n + 1) % 4;
     if (iosSemaWait(&jimakuShownSema) < 0) {

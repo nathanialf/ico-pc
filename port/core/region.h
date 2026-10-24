@@ -60,12 +60,13 @@ typedef struct IcoGlyphRow {
 
 typedef struct IcoRegionInfo {
     /* --- the disc ------------------------------------------------------ */
-    const char *slug;         /* "pal", "jpn", "kor": config/regions.txt's first column */
+    const char
+        *slug; /* "pal", "jpn", "kor", "ntsc", "aug6", "jun26": config/regions.txt's first column */
     const char *disc_id;      /* "SCES-50760": its third */
     const char *boot_elf;     /* "SCES_507.60": its fourth */
     const char *pack_serial;  /* texture and model pack folders (PCSX2's) */
-    const char *archive_name; /* "ico.o2r", "ico-jpn.o2r", "ico-kor.o2r" */
-    const char *image_base;   /* "Ico_PAL", "Ico_JPN", "Ico_KOR" */
+    const char *archive_name; /* "ico.o2r", "ico-jpn.o2r", "ico-kor.o2r", "ico-ntsc.o2r", ... */
+    const char *image_base;   /* "Ico_PAL", "Ico_JPN", "Ico_KOR", "Ico_USA" (ntsc), ... */
     /* config.toml keys kept per disc (options.c, achievements.c): the
        European disc keeps the names it always had ("" prefix and suffix) */
     const char *key_prefix; /* [mirror] <prefix>slot_N: "", "jpn_", "kor_" */
@@ -185,6 +186,9 @@ typedef struct IcoRegionInfo {
 extern const IcoRegionInfo ico_region_info_pal;
 extern const IcoRegionInfo ico_region_info_jpn;
 extern const IcoRegionInfo ico_region_info_kor;
+extern const IcoRegionInfo ico_region_info_ntsc;
+extern const IcoRegionInfo ico_region_info_aug6;
+extern const IcoRegionInfo ico_region_info_jun26;
 extern const IcoRegionInfo *const ico_region_info[ICO_REGION_COUNT];
 
 /* The selected region's table: ico_region_info[ico_region]. */

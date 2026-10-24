@@ -150,8 +150,8 @@ static inline int get_texture_no_of_property(int idx) /* derived name */
             debug_StdPrintfDummy("tex_id %d\n", n);
         }
         debug_StdPrintfDummy("no texture loaded.(%s)\n", src);
-        debug_assert(__FILE__, LN(272, 265, 265));
-        __assert(__FILE__, LN(272, 265, 265), "0");
+        debug_assert(__FILE__, LN(272, 265, 265, 272, 272, 272));
+        __assert(__FILE__, LN(272, 265, 265, 272, 272, 272), "0");
     }
     return no;
 }

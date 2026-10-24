@@ -443,15 +443,16 @@ static void initWheels(GObj *self, SObjSimpleSetting *lay)
         }
         w->wheelDObj->nodeMtx = 0;
         w->wheelDObj->nodeQuat = 0;
-        w->wheelDObj->nodeMtx =
-            (ICO_WORD)iosMallocDebug(ios_partition_seki, 128, __FILE__, LN(560, 557, 557));
-        w->wheelDObj->nodeQuat =
-            (ICO_WORD)iosMallocDebug(ios_partition_seki, 32, __FILE__, LN(560, 557, 557));
+        w->wheelDObj->nodeMtx = (ICO_WORD)iosMallocDebug(ios_partition_seki, 128, __FILE__,
+                                                         LN(560, 557, 557, 560, 560, 560));
+        w->wheelDObj->nodeQuat = (ICO_WORD)iosMallocDebug(ios_partition_seki, 32, __FILE__,
+                                                          LN(560, 557, 557, 560, 560, 560));
         w->wheelDObj->nodeNum = 2;
         if (w->wheelDObj->nodes != 0) {
             iosFree((void *)(ICO_PHYS(ICO_ADDR(w->wheelDObj->nodes))));
         }
-        w->wheelDObj->nodes = iosMallocDebug(ios_partition_seki, 160, __FILE__, LN(560, 557, 557));
+        w->wheelDObj->nodes =
+            iosMallocDebug(ios_partition_seki, 160, __FILE__, LN(560, 557, 557, 560, 560, 560));
 
         for (i = 0; i < 2; i++) {
             {
@@ -2047,7 +2048,7 @@ static unsigned char boxSerial = 0; /* derived name */
 BoxWork *InitBoxGeo(GObj *self, SObjSimpleSetting *lay)
 {
     BoxWork *w = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(BoxWork, 416), __FILE__,
-                                LN(2017, 2003, 2003));
+                                LN(2017, 2003, 2003, 2017, 2017, 2017));
     GObj *o;
     GObj *g;
     int sub;

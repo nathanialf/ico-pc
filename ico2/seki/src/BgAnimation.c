@@ -167,8 +167,8 @@ char *bga_InitData(char *data)
 
     if (strncmp(p->magic, "BGA", 3) != 0) {
         debug_StdPrintfDummy("this is not bga file.\n");
-        debug_assert(__FILE__, LN(952, 911, 911));
-        __assert(__FILE__, LN(952, 911, 911), "FALSE");
+        debug_assert(__FILE__, LN(952, 911, 911, 952, 952, 952));
+        __assert(__FILE__, LN(952, 911, 911, 952, 952, 952), "FALSE");
     }
     p->dobjs += ICO_EEW(p);
     p->mode = -1;
@@ -250,8 +250,8 @@ inline char *bga_InitSdfCamera(char *data)
 
     if (strncmp(p->id, "SDF", 3) != 0) {
         debug_StdPrintfDummy("this is not sdf camera file.\n");
-        debug_assert(__FILE__, LN(1045, 1004, 1004));
-        __assert(__FILE__, LN(1045, 1004, 1004), "FALSE");
+        debug_assert(__FILE__, LN(1045, 1004, 1004, 1045, 1045, 1045));
+        __assert(__FILE__, LN(1045, 1004, 1004, 1045, 1045, 1045), "FALSE");
     }
     return data;
 }
@@ -342,8 +342,8 @@ static void bga_initLightEnvelope(BgaDObjEnt *p)
                     BGA_OBJ(struct BgaLightEnv *, p->u.light)->col[3] = 1.0f;
                 } else {
                     debug_Assert("Light Object not exists.\n");
-                    debug_assert(__FILE__, LN(1089, 1048, 1048));
-                    __assert(__FILE__, LN(1089, 1048, 1048), "0");
+                    debug_assert(__FILE__, LN(1089, 1048, 1048, 1089, 1089, 1089));
+                    __assert(__FILE__, LN(1089, 1048, 1048, 1089, 1089, 1089), "0");
                 }
                 break;
             case 7:
@@ -356,8 +356,8 @@ static void bga_initLightEnvelope(BgaDObjEnt *p)
                     BGA_OBJ(struct BgaLightEnv *, p->u.light)->col2[3] = 1.0f;
                 } else {
                     debug_Assert("Shadow Object not exists.\n");
-                    debug_assert(__FILE__, LN(1109, 1068, 1068));
-                    __assert(__FILE__, LN(1109, 1068, 1068), "0");
+                    debug_assert(__FILE__, LN(1109, 1068, 1068, 1109, 1109, 1109));
+                    __assert(__FILE__, LN(1109, 1068, 1068, 1109, 1109, 1109), "0");
                 }
                 break;
             }
@@ -380,8 +380,8 @@ static void bga_initLightEnvelope(BgaDObjEnt *p)
                     BGA_OBJ(struct BgaLightEnv *, p->u.light)->outer[2] =
                         1.0f / (((float *)d)[5] * 50.0f);
                 } else {
-                    debug_assert(__FILE__, LN(1141, 1100, 1100));
-                    __assert(__FILE__, LN(1141, 1100, 1100), "0");
+                    debug_assert(__FILE__, LN(1141, 1100, 1100, 1141, 1141, 1141));
+                    __assert(__FILE__, LN(1141, 1100, 1100, 1141, 1141, 1141), "0");
                 }
                 break;
             }
@@ -403,8 +403,8 @@ void bga_ApplyDObject(BgaDObjEnt *p, GObj **objs, int n, int no)
     case 13:
         i = GetParticleIDWithName(p->name);
         if (i != -1) {
-            p->u.obj =
-                BGA_OBJW(iosMallocDebug(ios_partition_seki, 48, __FILE__, LN(1177, 1136, 1136)));
+            p->u.obj = BGA_OBJW(iosMallocDebug(ios_partition_seki, 48, __FILE__,
+                                               LN(1177, 1136, 1136, 1177, 1177, 1177)));
             BGA_OBJ(BgaParticleEnt *, p->u.obj)->u.b.id = i;
             BGA_OBJ(BgaParticleEnt *, p->u.obj)->u.b.loop =
                 GetParticleLoopFlag(BGA_OBJ(BgaParticleEnt *, p->u.obj)->u.b.id);
@@ -431,8 +431,8 @@ void bga_ApplyDObject(BgaDObjEnt *p, GObj **objs, int n, int no)
                 sprintf(buf, "OBJECT FILE \"%s\" NOT EXISTS.\n", p->name);
                 /* "model data file [%s] does not exist" */
                 debug_StdPrintfDummy("モデルデータファイル[%s]がありません.\n\n", p->name);
-                debug_assertMessage(__FILE__, LN(1201, 1160, 1160), buf);
-                __assert(__FILE__, LN(1201, 1160, 1160), "e");
+                debug_assertMessage(__FILE__, LN(1201, 1160, 1160, 1201, 1201, 1201), buf);
+                __assert(__FILE__, LN(1201, 1160, 1160, 1201, 1201, 1201), "e");
             }
             if (strcmp(BGA_GEOM_NAME(BGA_GOBJ_GEOM(objs[i])), p->name) == 0) {
                 p->u.obj = BGA_OBJW(BGA_GOBJ_GEOM(objs[i]));
@@ -1623,8 +1623,8 @@ static void bga_calcEnvelope(BgaDObjEnt *p, float dt, float w, int cut, int loop
             break;
         default:
             debug_StdPrintfDummy("Illegal Envelope Type : %p(%d)\n", e, e->type);
-            debug_assert(__FILE__, LN(2116, 1685, 1685));
-            __assert(__FILE__, LN(2116, 1685, 1685), "0");
+            debug_assert(__FILE__, LN(2116, 1685, 1685, 2116, 2116, 2116));
+            __assert(__FILE__, LN(2116, 1685, 1685, 2116, 2116, 2116), "0");
             break;
         }
     }
@@ -2417,8 +2417,8 @@ static void bga_addLightning(int kind, BgaLightningDef *def, float *vec, int id,
             }
             default:
                 debug_StdPrintfDummy("illegal lightning data set.\n");
-                debug_assert(__FILE__, LN(2960, 2502, 2502));
-                __assert(__FILE__, LN(2960, 2502, 2502), "0");
+                debug_assert(__FILE__, LN(2960, 2502, 2502, 2960, 2960, 2960));
+                __assert(__FILE__, LN(2960, 2502, 2502, 2960, 2960, 2960), "0");
                 return;
             }
         }
@@ -2426,7 +2426,7 @@ static void bga_addLightning(int kind, BgaLightningDef *def, float *vec, int id,
     /* the EE allocates 352 bytes for the 0x158-byte record; a 64-bit host's
        record is larger */
     p = iosMallocDebug(ios_partition_seki, sizeof(BgaLightning) > 352 ? sizeof(BgaLightning) : 352,
-                       __FILE__, LN(2968, 2510, 2510));
+                       __FILE__, LN(2968, 2510, 2510, 2968, 2968, 2968));
     p->next = bgaLightningList;
     p->id = id;
     p->n = 1;
@@ -2453,8 +2453,8 @@ static void bga_addLightning(int kind, BgaLightningDef *def, float *vec, int id,
     }
     default:
         debug_StdPrintfDummy("illegal lightning data set.\n");
-        debug_assert(__FILE__, LN(2994, 2536, 2536));
-        __assert(__FILE__, LN(2994, 2536, 2536), "0");
+        debug_assert(__FILE__, LN(2994, 2536, 2536, 2994, 2994, 2994));
+        __assert(__FILE__, LN(2994, 2536, 2536, 2994, 2994, 2994), "0");
         break;
     }
 }
@@ -2538,8 +2538,8 @@ void bga_DispLightning(void)
         if (g == 0) {
             debug_StdPrintfDummy(
                 "Lightning data does not found! maybe, start point < end point.\n");
-            debug_assert(__FILE__, LN(3067, 2609, 2609));
-            __assert(__FILE__, LN(3067, 2609, 2609), "0");
+            debug_assert(__FILE__, LN(3067, 2609, 2609, 3067, 3067, 3067));
+            __assert(__FILE__, LN(3067, 2609, 2609, 3067, 3067, 3067), "0");
             continue;
         }
         col = bga_lightningColor(g);

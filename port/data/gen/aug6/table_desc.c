@@ -85,6 +85,56 @@
 #include "ico2/omori/include/objact.h"
 #include "ico2/sugipon/include/particleEffect.h"
 #include "ico2/sugipon/include/spider.h"
+#include "ico2/fumi/include/mcdata.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
 #undef actModeTbl
 #undef adpcmFile
 #undef attackData
@@ -199,6 +249,56 @@ extern MotOriParallelEnt parallelMotionOrient[];
 extern ParticleEffectFile particleEffectFile[];
 extern SpiderKindRec spiderDef[];
 extern WaySrcGrp wayGroupSheet[];
+extern sceMcIconSys mcIconSys;
+extern int enemymodel02Kind16[];
+extern EnemyKindRec enemymodel02Kinds[];
+extern sceVu0FVECTOR enemymodel02Pos[];
+extern EnemyModelSet enemymodel02Set;
+extern EnemyModelSet *enemymodel02[];
+extern int enemymodel03Kind16[];
+extern EnemyKindRec enemymodel03Kinds[];
+extern sceVu0FVECTOR enemymodel03Pos[];
+extern EnemyModelSet enemymodel03Set;
+extern EnemyModelSet *enemymodel03[];
+extern int enemymodel04Kind16[];
+extern EnemyKindRec enemymodel04Kinds[];
+extern sceVu0FVECTOR enemymodel04Pos[];
+extern EnemyModelSet enemymodel04Set;
+extern EnemyModelSet *enemymodel04[];
+extern int enemymodel05Kind16[];
+extern EnemyKindRec enemymodel05Kinds[];
+extern sceVu0FVECTOR enemymodel05Pos[];
+extern EnemyModelSet enemymodel05Set;
+extern int enemymodel05bKind0[];
+extern EnemyKindRec enemymodel05bKinds[];
+extern sceVu0FVECTOR enemymodel05bPos[];
+extern EnemyModelSet enemymodel05bSet;
+extern EnemyModelSet *enemymodel05[];
+extern int enemymodel06Kind16[];
+extern EnemyKindRec enemymodel06Kinds[];
+extern sceVu0FVECTOR enemymodel06Pos[];
+extern EnemyModelSet enemymodel06Set;
+extern EnemyModelSet *enemymodel06[];
+extern int enemymodel07Kind16[];
+extern EnemyKindRec enemymodel07Kinds[];
+extern sceVu0FVECTOR enemymodel07Pos[];
+extern EnemyModelSet enemymodel07Set;
+extern EnemyModelSet *enemymodel07[];
+extern int enemymodel08Kind16[];
+extern EnemyKindRec enemymodel08Kinds[];
+extern sceVu0FVECTOR enemymodel08Pos[];
+extern EnemyModelSet enemymodel08Set;
+extern EnemyModelSet *enemymodel08[];
+extern int enemymodel09Kind16[];
+extern EnemyKindRec enemymodel09Kinds[];
+extern sceVu0FVECTOR enemymodel09Pos[];
+extern EnemyModelSet enemymodel09Set;
+extern int enemymodel09bKind3[];
+extern EnemyKindRec enemymodel09bKinds[];
+extern sceVu0FVECTOR enemymodel09bPos[];
+extern EnemyModelSet enemymodel09bSet;
+extern EnemyModelSet *enemymodel09[];
+extern EnemySet enemySetTable[];
 extern char ico_table_pool_staffroll_dat_rodata[];
 extern char ico_table_pool_staffroll_dat_sdata[];
 extern const IcoEeFunc ico_ee_funcs_aug6[];
@@ -2260,7 +2360,7 @@ static const IcoTableRow rows_aug6[] = {
     {"act-mode-def", "actModeTbl", ICO_TABLE_RODATA, 0x00557188u, 0x00559618u, 0xF048BF6Cu, 0, 117,
      &record_ActModeRec, (void *)actModeTbl, 120, ICO_TID_actModeTbl},
     {"attack-def", "attackData", ICO_TABLE_RODATA, 0x00559618u, 0x005598C4u, 0x5E1D95D7u, 0, 19,
-     &record_AttackKindEntry, (void *)attackData, 20, ICO_TID_attackData},
+     &record_AttackKindEntry, (void *)attackData, 21, ICO_TID_attackData},
     {"auto-escort", "autoEscortData", ICO_TABLE_RODATA, 0x005598C8u, 0x0055A2D8u, 0x2C65E1B2u, 0,
      92, &record_EscortPoint, (void *)autoEscortData, 98, ICO_TID_autoEscortData},
     {"exit-data", "exitData", ICO_TABLE_RODATA, 0x0055A2D8u, 0x0055CB00u, 0x9E8EC6E9u, 0, 257,
@@ -2269,7 +2369,7 @@ static const IcoTableRow rows_aug6[] = {
      0xDAB57C88u, 0, 6, &record_SafePosOffset, (void *)generatorSubPosition, 7,
      ICO_TID_generatorSubPosition},
     {"girl-warp-list", "girlWarpList", ICO_TABLE_RODATA, 0x0055CB60u, 0x0055D3F8u, 0xC4032BD0u, 0,
-     25, &record_WarpRec, (void *)girlWarpList, 25, ICO_TID_girlWarpList},
+     25, &record_WarpRec, (void *)girlWarpList, 26, ICO_TID_girlWarpList},
     {"iconfile", "iconFile", ICO_TABLE_RODATA, 0x0055D3F8u, 0x0055D4ACu, 0x54008B8Au, 0, 5,
      &record_IconFile, (void *)iconFile, 5, ICO_TID_iconFile},
     {"idle-mot-def", "idlingDef", ICO_TABLE_RODATA, 0x0055D4B0u, 0x0055D534u, 0xD2F1821Cu, 0, 11,
@@ -2279,7 +2379,7 @@ static const IcoTableRow rows_aug6[] = {
     {"look-target-data", "lookTargetData", ICO_TABLE_RODATA, 0x0055D8E0u, 0x0055DA0Cu, 0x2833E0EAu,
      0, 25, &record_LookTarget, (void *)lookTargetData, 27, ICO_TID_lookTargetData},
     {"motion-def", "motionKind", ICO_TABLE_RODATA, 0x0055DA10u, 0x005C7FA0u, 0x07939615u, 0, 1089,
-     &record_MotionDef, (void *)motionKind, 1148, ICO_TID_motionKind},
+     &record_MotionDef, (void *)motionKind, 1168, ICO_TID_motionKind},
     {"motion-ik-eff-def", "motionIKEffKind", ICO_TABLE_RODATA, 0x005C7FA0u, 0x005C8010u,
      0xA473EF7Au, 0, 7, &record_HandModeRow, (void *)motionIKEffKind, 7, ICO_TID_motionIKEffKind},
     {"motion-orient-def", "motionOriKind", ICO_TABLE_RODATA, 0x005C8010u, 0x005CA4B0u, 0x960235CCu,
@@ -2291,7 +2391,7 @@ static const IcoTableRow rows_aug6[] = {
     {"obj-light", "objectLight", ICO_TABLE_RODATA, 0x005CA678u, 0x005CA6A8u, 0xC886589Bu, 0, 3,
      &record_ObjLight, (void *)objectLight, 3, ICO_TID_objectLight},
     {"pair-motion", "pairMotion", ICO_TABLE_RODATA, 0x005CA6A8u, 0x005CA7B0u, 0xE90E501Cu, 0, 33,
-     &record_BecPair, (void *)pairMotion, 33, ICO_TID_pairMotion},
+     &record_BecPair, (void *)pairMotion, 36, ICO_TID_pairMotion},
     {"param-escape-run", "paramEscapeRun", ICO_TABLE_RODATA, 0x005CA7B0u, 0x005CA7F0u, 0x5AD13085u,
      0, 8, &record_EscapeRange, (void *)paramEscapeRun, 8, ICO_TID_paramEscapeRun},
     {"se-env", "seEnv", ICO_TABLE_RODATA, 0x005CA7F0u, 0x005CD66Cu, 0x3A7143DBu, 0, 425,

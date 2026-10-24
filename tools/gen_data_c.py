@@ -77,18 +77,13 @@ ROOT = Path(__file__).resolve().parent.parent
 REGIONS = ROOT / "config/regions.txt"
 
 
-# The rows config/regions.txt gains once every one of them has its data set
-# (the disc-identify package's rows patch lands them together with the last
-# set: the pre-commit hook's gen_data_desc.py --check refuses a row without
-# its set). Until then a set's files are written and checked against these
-# rows (--version <slug>), spelt exactly as that patch spells them; a slug
-# config/regions.txt lists takes its row from there, so this list has no
-# effect once the rows land, and is then removed.
-PENDING_ROWS = """
-ntsc VERSION_NTSC SCUS-97113 SCUS_971.13 the North American disc
-aug6 VERSION_AUG6 PROTO-20010806 SCUS_971.13 the August 2001 preview disc
-jun26 VERSION_JUN26 SCUS-97158 SCUS_971.58 the June 2001 magazine demo
-"""
+# The rows a target adds to config/regions.txt before its data set exists
+# (the pre-commit hook's gen_data_desc.py --check refuses a listed row
+# without its set): a set's files are written and checked against these rows
+# (--version <slug>), spelt as the row will be, until the row lands with its
+# set (docs/port/DATA.md "Adding a target's set"). None is pending: the three
+# 2001 targets' rows (ntsc, aug6, jun26) are in config/regions.txt.
+PENDING_ROWS = ""
 
 
 def region_row(line, where):

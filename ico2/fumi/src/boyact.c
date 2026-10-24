@@ -781,8 +781,8 @@ static void BoyBgaManager(void *self, int id, void *dst)
             goto found;
         }
     }
-    debug_assert(__FILE__, LN(1731, 1724, 1724));
-    __assert(__FILE__, LN(1731, 1724, 1724), "0");
+    debug_assert(__FILE__, LN(1731, 1724, 1724, 1731, 1731, 1731));
+    __assert(__FILE__, LN(1731, 1724, 1724, 1731, 1731, 1731), "0");
     p = 0;
 found:
     v = *(int *)dst;
@@ -1728,8 +1728,8 @@ static inline int SwapBoyWeapon(void *oldW, void *newW, void *boy) /* derived na
         return 0;
     }
     if (newW == 0) {
-        debug_assert(__FILE__, LN(3007, 3000, 3000));
-        __assert(__FILE__, LN(3007, 3000, 3000), "next");
+        debug_assert(__FILE__, LN(3007, 3000, 3000, 3007, 3007, 3007));
+        __assert(__FILE__, LN(3007, 3000, 3000, 3007, 3007, 3007), "next");
         return 0;
     }
     PickupWeapon(newW, boy, 0x16);
@@ -3663,8 +3663,8 @@ inline int IsBoyStatus_EnemyMustWait(void)
     unsigned int st;
 
     if (boyGObj == 0) {
-        debug_assert(__FILE__, LN(5795, 5779, 5779));
-        __assert(__FILE__, LN(5795, 5779, 5779), "0");
+        debug_assert(__FILE__, LN(5795, 5779, 5779, 5795, 5795, 5795));
+        __assert(__FILE__, LN(5795, 5779, 5779, 5795, 5795, 5795), "0");
         return 0;
     }
     sub = GOBJ_ACT(boyGObj);

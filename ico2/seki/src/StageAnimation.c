@@ -104,8 +104,8 @@ static void stage_MakeGObj(int *dat, int no)
     g = isysGObjAdd(0, 0, 0);
     if (g == 0) {
         debug_StdPrintfDummy("stage_MakeGObj:can't alloc gobj %d\n", no);
-        debug_assert(__FILE__, LN(541, 525, 525));
-        __assert(__FILE__, LN(541, 525, 525), "0");
+        debug_assert(__FILE__, LN(541, 525, 525, 541, 541, 541));
+        __assert(__FILE__, LN(541, 525, 525, 541, 541, 541), "0");
     }
     e->kind[e->flags.b.count] = kind;
     g->labelType = 1;
@@ -125,8 +125,8 @@ static void stage_MakeGObj(int *dat, int no)
     e->flags.i = w;
     if (((w << 22) >> 22) >= 64) {
         debug_Assert("Too much Stage Animation Objects.\n");
-        debug_assert(__FILE__, LN(562, 546, 546));
-        __assert(__FILE__, LN(562, 546, 546), "0");
+        debug_assert(__FILE__, LN(562, 546, 546, 562, 562, 562));
+        __assert(__FILE__, LN(562, 546, 546, 562, 562, 562), "0");
     }
 }
 
@@ -167,8 +167,8 @@ void stage_ApplyData(char *name, char *data)
         }
     }
     sprintf(buf, "stage_ApplyData:Data is not registered. \n\n%s\n", name);
-    debug_assertMessage(__FILE__, LN(617, 601, 601), buf);
-    __assert(__FILE__, LN(617, 601, 601), "e");
+    debug_assertMessage(__FILE__, LN(617, 601, 601, 617, 617, 617), buf);
+    __assert(__FILE__, LN(617, 601, 601, 617, 617, 617), "e");
 }
 
 /* stage_Init reaches the table's records through a pointer */
@@ -268,8 +268,8 @@ int stage_Init(void)
                                                  stageAnimCount, 87);
                             /* "too many BgAnimation kinds in one stage" */
                             debug_StdPrintfDummy("1ステージ中の BgAnimation の種類が多すぎます\n");
-                            debug_assert(__FILE__, LN(702, 686, 686));
-                            __assert(__FILE__, LN(702, 686, 686), "0");
+                            debug_assert(__FILE__, LN(702, 686, 686, 702, 702, 702));
+                            __assert(__FILE__, LN(702, 686, 686, 702, 702, 702), "0");
                         }
                     }
                 }
@@ -281,8 +281,8 @@ int stage_Init(void)
             /* "stgBgas has %d, over MAX_ANIM_GOBJ %d" */
             debug_StdPrintfDummy("stgBgas が%d有り MAX_ANIM_GOBJ %dを越えました\n",
                                  STG[i].flags.b.count, 64);
-            debug_assert(__FILE__, LN(712, 696, 696));
-            __assert(__FILE__, LN(712, 696, 696), "0");
+            debug_assert(__FILE__, LN(712, 696, 696, 712, 712, 712));
+            __assert(__FILE__, LN(712, 696, 696, 712, 712, 712), "0");
         }
         max = max < STG[i].flags.b.count ? STG[i].flags.b.count : max;
     }
@@ -323,10 +323,10 @@ int stage_Init(void)
                 STG_SUB(e->obj[k])->nodeQuat = 0;
                 STG_SUB(e->obj[k])->nodeMtx =
                     (ICO_WORD)iosMallocDebug(ios_partition_seki, STG_SUB(e->obj[k])->nodeNum << 6,
-                                             __FILE__, LN(761, 745, 745));
+                                             __FILE__, LN(761, 745, 745, 761, 761, 761));
                 STG_SUB(e->obj[k])->nodeQuat =
                     (ICO_WORD)iosMallocDebug(ios_partition_seki, STG_SUB(e->obj[k])->nodeNum << 4,
-                                             __FILE__, LN(761, 745, 745));
+                                             __FILE__, LN(761, 745, 745, 761, 761, 761));
                 /* the reallocation block's count line, as chain.c, boy.c and
                    box.c spell the same block, here passed the count field
                    itself: a store of the field to itself */
@@ -336,7 +336,7 @@ int stage_Init(void)
                 }
                 STG_SUB(e->obj[k])->nodes =
                     iosMallocDebug(ios_partition_seki, STG_SUB(e->obj[k])->nodeNum * 80, __FILE__,
-                                   LN(761, 745, 745));
+                                   LN(761, 745, 745, 761, 761, 761));
                 for (t = 0; t < STG_SUB(e->obj[k])->nodeNum; t++) {
                     STG_SUB(e->obj[k])->nodes[t].flags.ll &= ~1;
                     STG_SUB(e->obj[k])->nodes[t].flags.ll &= ~2;
@@ -460,8 +460,8 @@ inline int stage_CheckAnimationFinish(int key)
         }
     }
     debug_StdPrintfDummy("stage_CheckAnimationFinish:illegal Animation No.\n");
-    debug_assert(__FILE__, LN(909, 893, 893));
-    __assert(__FILE__, LN(909, 893, 893), "0");
+    debug_assert(__FILE__, LN(909, 893, 893, 909, 909, 909));
+    __assert(__FILE__, LN(909, 893, 893, 909, 909, 909), "0");
     return 0;
 }
 
@@ -492,8 +492,8 @@ int stage_ContinueAnimation(int key, int next)
         }
     }
     debug_StdPrintfDummy("stage_ContinueAnimation:illegal Animation No.\n");
-    debug_assert(__FILE__, LN(954, 938, 938));
-    __assert(__FILE__, LN(954, 938, 938), "0");
+    debug_assert(__FILE__, LN(954, 938, 938, 954, 954, 954));
+    __assert(__FILE__, LN(954, 938, 938, 954, 954, 954), "0");
     return 0;
 }
 
@@ -999,7 +999,7 @@ BgaPlayNode *stage_MakePlayBgAnimation(int key)
     /* BgaPlayNode is 64 bytes on the EE and 80 on a 64-bit host (its list
        links are pointers): the BgAnimation.c idiom keeps the EE's 64 */
     p = iosMallocDebug(ios_partition_seki, sizeof(BgaPlayNode) > 64 ? sizeof(BgaPlayNode) : 64,
-                       __FILE__, LN(1494, 1481, 1481));
+                       __FILE__, LN(1494, 1481, 1481, 1494, 1494, 1494));
     if (p == 0) {
         /* "cannot allocate memory for the stage segment (heap exhausted)" */
         debug_StdPrintfDummy("ステージセグメントにメモリが確保できません.(ヒープメモリ不足)\n");

@@ -26,12 +26,12 @@ static void test_select(void)
     CHECK(ico_region == ICO_REGION_JPN && ico_region_cur() == &ico_region_info_jpn);
     CHECK(ICO_JPN && !ICO_PAL && !ICO_KOR && ICO_JPNKOR && PAL_JPN(1, 2) == 2 &&
           PAL_KOR(1, 3) == 1 && PAL_JPNKOR(1, 2) == 2 && PAL_JPN_KOR(1, 2, 3) == 2 &&
-          LN(10, 20, 30) == 20);
+          LN(10, 20, 30, 40, 50, 60) == 20);
     CHECK(ico_region_select("kor") == 0);
     CHECK(ico_region == ICO_REGION_KOR && ico_region_cur() == &ico_region_info_kor);
     CHECK(ICO_KOR && !ICO_PAL && !ICO_JPN && ICO_JPNKOR && PAL_JPN(1, 2) == 1 &&
           PAL_KOR(1, 3) == 3 && PAL_JPNKOR(1, 2) == 2 && PAL_JPN_KOR(1, 2, 3) == 3 &&
-          LN(10, 20, 30) == 30);
+          LN(10, 20, 30, 40, 50, 60) == 30);
     CHECK(ico_region_select("jpn") == 0 && ico_region == ICO_REGION_JPN);
     /* an unknown slug, a disc id and NULL keep the selection */
     CHECK(ico_region_select("usa") == -1 && ico_region == ICO_REGION_JPN);
@@ -41,23 +41,45 @@ static void test_select(void)
     CHECK(ico_region == ICO_REGION_PAL && ico_region_cur() == &ico_region_info_pal);
     CHECK(ICO_PAL && !ICO_JPN && !ICO_KOR && !ICO_JPNKOR && PAL_JPN(1, 2) == 1 &&
           PAL_KOR(1, 3) == 1 && PAL_JPNKOR(1, 2) == 1 && PAL_JPN_KOR(1, 2, 3) == 1 &&
-          LN(10, 20, 30) == 10);
+          LN(10, 20, 30, 40, 50, 60) == 10);
 
-    CHECK(ico_region_count() == ICO_REGION_COUNT && ICO_REGION_COUNT == 3);
+    /* the three later rows: each selects, ico_region follows, and LN takes its own argument */
+    CHECK(ico_region_select("ntsc") == 0 && ico_region == ICO_REGION_NTSC &&
+          ico_region_cur() == &ico_region_info_ntsc && ICO_NTSC && !ICO_PAL && !ICO_AUG6 &&
+          LN(10, 20, 30, 40, 50, 60) == 40);
+    CHECK(ico_region_select("aug6") == 0 && ico_region == ICO_REGION_AUG6 &&
+          ico_region_cur() == &ico_region_info_aug6 && ICO_AUG6 && !ICO_NTSC &&
+          LN(10, 20, 30, 40, 50, 60) == 50);
+    CHECK(ico_region_select("jun26") == 0 && ico_region == ICO_REGION_JUN26 &&
+          ico_region_cur() == &ico_region_info_jun26 && ICO_JUN26 && !ICO_AUG6 &&
+          LN(10, 20, 30, 40, 50, 60) == 60);
+    CHECK(ico_region_select("pal") == 0);
+
+    CHECK(ico_region_count() == ICO_REGION_COUNT && ICO_REGION_COUNT == 6);
     CHECK(ico_region_at(0) == &ico_region_info_pal && ico_region_at(1) == &ico_region_info_jpn &&
-          ico_region_at(2) == &ico_region_info_kor && ico_region_at(3) == NULL &&
-          ico_region_at(-1) == NULL);
+          ico_region_at(2) == &ico_region_info_kor && ico_region_at(3) == &ico_region_info_ntsc &&
+          ico_region_at(4) == &ico_region_info_aug6 && ico_region_at(5) == &ico_region_info_jun26 &&
+          ico_region_at(6) == NULL && ico_region_at(-1) == NULL);
     CHECK(ico_region_info[ICO_REGION_PAL] == &ico_region_info_pal &&
           ico_region_info[ICO_REGION_JPN] == &ico_region_info_jpn &&
-          ico_region_info[ICO_REGION_KOR] == &ico_region_info_kor);
+          ico_region_info[ICO_REGION_KOR] == &ico_region_info_kor &&
+          ico_region_info[ICO_REGION_NTSC] == &ico_region_info_ntsc &&
+          ico_region_info[ICO_REGION_AUG6] == &ico_region_info_aug6 &&
+          ico_region_info[ICO_REGION_JUN26] == &ico_region_info_jun26);
     CHECK(ico_region_by_slug("pal") == &ico_region_info_pal &&
           ico_region_by_slug("jpn") == &ico_region_info_jpn &&
-          ico_region_by_slug("kor") == &ico_region_info_kor && ico_region_by_slug("usa") == NULL &&
-          ico_region_by_slug(NULL) == NULL);
+          ico_region_by_slug("kor") == &ico_region_info_kor &&
+          ico_region_by_slug("ntsc") == &ico_region_info_ntsc &&
+          ico_region_by_slug("aug6") == &ico_region_info_aug6 &&
+          ico_region_by_slug("jun26") == &ico_region_info_jun26 &&
+          ico_region_by_slug("usa") == NULL && ico_region_by_slug(NULL) == NULL);
     CHECK(ico_region_by_disc_id("SCES-50760") == &ico_region_info_pal &&
           ico_region_by_disc_id("SCPS-11003") == &ico_region_info_jpn &&
           ico_region_by_disc_id("SCPS-56001") == &ico_region_info_kor &&
-          ico_region_by_disc_id("SCUS-97113") == NULL && ico_region_by_disc_id("jpn") == NULL &&
+          ico_region_by_disc_id("SCUS-97113") == &ico_region_info_ntsc &&
+          ico_region_by_disc_id("PROTO-20010806") == &ico_region_info_aug6 &&
+          ico_region_by_disc_id("SCUS-97158") == &ico_region_info_jun26 &&
+          ico_region_by_disc_id("SLES-00000") == NULL && ico_region_by_disc_id("jpn") == NULL &&
           ico_region_by_disc_id(NULL) == NULL);
 }
 
@@ -105,15 +127,16 @@ static void test_regions_txt(const char *path)
                   strcmp(d->image_base, r->image_base) == 0 && strcmp(d->id, r->pack_serial) == 0);
             CHECK(ico_disc_by_slug(slug) == d && ico_disc_by_id(disc) == d &&
                   ico_disc_by_boot_elf(boot, d->elf_sha1) == d);
-            /* a boot file two rows share answers with the first of them, and the rows agree
-               on what that answer is used for: the DATA.DF shift and the drive type */
+            /* a boot file two rows share (SCUS_971.13) answers with the first of them, and
+               the rows agree on what the first answer is used for: the DATA.DF shift (iso9660.c)
+               and the drive type (cdvd_host.c) */
             CHECK(ico_disc_boot_rows(boot) >= 1);
             if (ico_disc_by_boot(boot) != d) {
                 CHECK(ico_disc_by_boot(boot)->df_lsn_shift == d->df_lsn_shift &&
                       ico_disc_by_boot(boot)->cd_type == d->cd_type &&
                       ico_disc_boot_rows(boot) == 2);
             }
-            /* the paths: DATA.DF under the game's folder (game_dir, "" or a folder) */
+            /* the paths: the boot ELF at the root or in the game's folder, DATA.DF under it */
             CHECK(d->elf_path != NULL && d->df_path != NULL && d->game_dir != NULL &&
                   strlen(d->df_path) > strlen(d->game_dir) &&
                   strcmp(d->df_path + strlen(d->game_dir) + (d->game_dir[0] ? 1 : 0),

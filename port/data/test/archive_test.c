@@ -344,7 +344,8 @@ static int run_synth(const char *dir)
                       strcmp(ico_discs[a].slug, ico_discs[b].slug) != 0 &&
                       strcmp(ico_discs[a].archive_name, ico_discs[b].archive_name) != 0 &&
                       strcmp(ico_discs[a].image_base, ico_discs[b].image_base) != 0);
-                /* a boot file is shared only where the boot ELFs differ (ico_disc_identify) */
+                /* a boot file is shared only where the boot ELFs differ, which is what
+                   ico_disc_identify decides by */
                 CHECK(strcmp(ico_discs[a].boot_elf, ico_discs[b].boot_elf) != 0 ||
                       strcmp(ico_discs[a].elf_sha1, ico_discs[b].elf_sha1) != 0);
             }
@@ -352,34 +353,62 @@ static int run_synth(const char *dir)
     }
     CHECK(ico_disc_by_id("SCES-50760") == &ico_discs[0] &&
           ico_disc_by_id("SCPS-11003") == &ico_discs[1] &&
-          ico_disc_by_id("SCPS-56001") == &ico_discs[2] && ico_disc_by_id("SLUS-20000") == NULL);
+          ico_disc_by_id("SCPS-56001") == &ico_discs[2] &&
+          ico_disc_by_id("SCUS-97113") == &ico_discs[ICO_REGION_NTSC] &&
+          ico_disc_by_id("PROTO-20010806") == &ico_discs[ICO_REGION_AUG6] &&
+          ico_disc_by_id("SCUS-97158") == &ico_discs[ICO_REGION_JUN26] &&
+          ico_disc_by_id("SLUS-20000") == NULL);
     CHECK(ico_disc_by_boot("SCES_507.60") == &ico_discs[0] &&
           ico_disc_by_boot("SCPS_110.03") == &ico_discs[1] &&
-          ico_disc_by_boot("SCPS_560.01") == &ico_discs[2] && ico_disc_by_boot("") == NULL);
-    CHECK(ico_disc_boot_rows("SCES_507.60") == 1 && ico_disc_boot_rows("SLUS_000.00") == 0 &&
-          ico_disc_boot_rows(NULL) == 0);
-    CHECK(ico_disc_by_boot_elf("SCPS_110.03", ico_discs[1].elf_sha1) == &ico_discs[1] &&
-          ico_disc_by_boot_elf("SCPS_110.03", ico_discs[0].elf_sha1) == NULL &&
-          ico_disc_by_boot_elf("SCPS_110.03", NULL) == NULL);
-    /* ico_disc_identify: a boot name one row has needs no hash; one the volume's rows do not
-       have is no disc. The shared-name decision by the boot ELF's SHA-1 (SCUS_971.13) has
-       its cases when the later rows land. */
+          ico_disc_by_boot("SCPS_560.01") == &ico_discs[2] &&
+          ico_disc_by_boot("SCUS_971.58") == &ico_discs[ICO_REGION_JUN26] &&
+          ico_disc_by_boot("") == NULL);
+    /* SCUS_971.13 boots two discs: the first row answers by name, the boot ELF's SHA-1 decides */
+    CHECK(ico_disc_boot_rows("SCUS_971.13") == 2 && ico_disc_boot_rows("SCES_507.60") == 1 &&
+          ico_disc_boot_rows("SLUS_000.00") == 0 && ico_disc_boot_rows(NULL) == 0);
+    CHECK(ico_disc_by_boot("SCUS_971.13") == &ico_discs[ICO_REGION_NTSC] &&
+          ico_discs[ICO_REGION_NTSC].df_lsn_shift == ico_discs[ICO_REGION_AUG6].df_lsn_shift &&
+          ico_discs[ICO_REGION_NTSC].cd_type == ico_discs[ICO_REGION_AUG6].cd_type);
+    CHECK(ico_disc_by_boot_elf("SCUS_971.13", ico_discs[ICO_REGION_NTSC].elf_sha1) ==
+              &ico_discs[ICO_REGION_NTSC] &&
+          ico_disc_by_boot_elf("SCUS_971.13", ico_discs[ICO_REGION_AUG6].elf_sha1) ==
+              &ico_discs[ICO_REGION_AUG6] &&
+          ico_disc_by_boot_elf("SCUS_971.13", ico_discs[0].elf_sha1) == NULL &&
+          ico_disc_by_boot_elf("SCUS_971.13", NULL) == NULL);
+    /* ico_disc_identify: the given hash picks the row; a name only one row has needs none;
+       a volume without the shared name's ELF (the synthetic image has no SCUS_971.13) is no
+       disc when no hash is given. The hash read from a real SCUS_971.13 is the disc boot's
+       (ico_pc logs it once: "boot file SCUS_971.13 is shared by 2 discs"). */
     {
         IcoVfs *syn = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
 
         CHECK(syn != NULL);
+        CHECK(ico_disc_identify(syn, "SCUS_971.13", ico_discs[ICO_REGION_NTSC].elf_sha1) ==
+              &ico_discs[ICO_REGION_NTSC]);
+        CHECK(ico_disc_identify(syn, "SCUS_971.13", ico_discs[ICO_REGION_AUG6].elf_sha1) ==
+              &ico_discs[ICO_REGION_AUG6]);
+        CHECK(ico_disc_identify(syn, "SCUS_971.13", ico_discs[0].elf_sha1) == NULL);
+        CHECK(ico_disc_identify(syn, "SCUS_971.13", NULL) == NULL);
         CHECK(ico_disc_identify(syn, "SCPS_110.03", NULL) == &ico_discs[1]);
+        CHECK(ico_disc_identify(syn, "SCUS_971.58", NULL) == &ico_discs[ICO_REGION_JUN26]);
         CHECK(ico_disc_identify(syn, "SLUS_000.00", NULL) == NULL);
         ico_vfs_unmount(syn);
     }
     CHECK(ico_discs[0].df_count == 193 && ico_discs[1].df_count == 183 &&
-          ico_discs[2].df_count == 183);
+          ico_discs[2].df_count == 183 && ico_discs[ICO_REGION_NTSC].df_count == 172 &&
+          ico_discs[ICO_REGION_AUG6].df_count == 172 && ico_discs[ICO_REGION_JUN26].df_count == 49);
+    /* the magazine demo's game lives in a folder and has no image hash on file */
+    CHECK(strcmp(ico_discs[ICO_REGION_JUN26].game_dir, "CUS97113") == 0 &&
+          ico_discs[ICO_REGION_JUN26].iso_sha1 == NULL &&
+          strcmp(ico_discs[ICO_REGION_JUN26].df_path, "CUS97113/DFDATAS/DATA.DF") == 0 &&
+          strcmp(ico_discs[ICO_REGION_JUN26].elf_path, "CUS97113/SCPS_000.00") == 0 &&
+          ico_discs[ICO_REGION_NTSC].iso_sha1 != NULL &&
+          ico_discs[ICO_REGION_AUG6].iso_sha1 != NULL);
     /* only a disc with a shifted DATA.DF carries a shift (the Korean disc) */
     CHECK(ico_discs[0].df_lsn_shift == 0 && ico_discs[1].df_lsn_shift == 0 &&
-          ico_discs[2].df_lsn_shift == 153600);
-    CHECK(ico_discs[0].game_dir[0] == '\0' &&
-          strcmp(ico_discs[0].df_path, "DFDATAS/DATA.DF") == 0 &&
-          strcmp(ico_discs[0].elf_path, ico_discs[0].boot_elf) == 0);
+          ico_discs[2].df_lsn_shift == 153600 && ico_discs[ICO_REGION_NTSC].df_lsn_shift == 0 &&
+          ico_discs[ICO_REGION_AUG6].df_lsn_shift == 0 &&
+          ico_discs[ICO_REGION_JUN26].df_lsn_shift == 0);
     CHECK(ico_discs[2].df_size == 866859008u - 153600u * 2048u);
 
     /* the entries are stored, the boot file has its tail */

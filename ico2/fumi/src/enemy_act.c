@@ -884,8 +884,8 @@ void actEnemyRestart(GObj *self, float *pos, float *dir, int kind, GObj *mother)
         idx = 3;
         break;
     default:
-        debug_assert("src/enemy_act.c", LN(2161, 2158, 2158));
-        __assert("src/enemy_act.c", LN(2161, 2158, 2158), "0");
+        debug_assert("src/enemy_act.c", LN(2161, 2158, 2158, 2161, 2161, 2161));
+        __assert("src/enemy_act.c", LN(2161, 2158, 2158, 2161, 2161, 2161), "0");
     }
     GOBJ_ACT(self)->enemy->battleType = idx;
     setBattleStatus(self);
@@ -1583,8 +1583,8 @@ static void BrainMode_Requset(void *self, int req, ICO_WORD_PTR(GObj *) arg)
         break;
     default:
         debug_StdPrintfDummy("undefined mode [%d]\n", req);
-        debug_assert("src/enemy_act.c", LN(3102, 3099, 3099));
-        __assert("src/enemy_act.c", LN(3102, 3099, 3099), "0");
+        debug_assert("src/enemy_act.c", LN(3102, 3099, 3099, 3102, 3102, 3102));
+        __assert("src/enemy_act.c", LN(3102, 3099, 3099, 3102, 3102, 3102), "0");
         break;
     }
 }

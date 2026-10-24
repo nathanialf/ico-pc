@@ -902,10 +902,10 @@ void debug_Assert(char *fmt, ...)
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-    debug_assertMessage("src/debug.c", LN(1392, 1389, 1389), buf);
-    __assert("src/debug.c", LN(1392, 1389, 1389), "e");
-    debug_assert("src/debug.c", LN(1393, 1390, 1390));
-    __assert("src/debug.c", LN(1393, 1390, 1390), "0");
+    debug_assertMessage("src/debug.c", LN(1392, 1389, 1389, 1392, 1392, 1392), buf);
+    __assert("src/debug.c", LN(1392, 1389, 1389, 1392, 1392, 1392), "e");
+    debug_assert("src/debug.c", LN(1393, 1390, 1390, 1393, 1393, 1393));
+    __assert("src/debug.c", LN(1393, 1390, 1390, 1393, 1393, 1393), "0");
 }
 
 /* the host log file (the DEBUG build opens it) */
@@ -1248,62 +1248,71 @@ int debug_Load(char **dst, char *name, int kind)
         switch (kind) {
         case 0:
         default:
-            *dst = iosMallocDebug(ios_partition_seki, sz, "src/debug.c", LN(1958, 1955, 1955));
+            *dst = iosMallocDebug(ios_partition_seki, sz, "src/debug.c",
+                                  LN(1958, 1955, 1955, 1958, 1958, 1958));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_seki->start) * 100.0f / 10059776.0f);
             break;
         case 1:
-            *dst = iosMallocDebug(ios_partition_sugipon, sz, "src/debug.c", LN(1965, 1962, 1962));
+            *dst = iosMallocDebug(ios_partition_sugipon, sz, "src/debug.c",
+                                  LN(1965, 1962, 1962, 1965, 1965, 1965));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 524288.0f,
                                  (*dst + sz - ios_partition_sugipon->start) * 100.0f / 524288.0f);
             break;
         case 2:
-            *dst = iosMallocDebug(ios_partition_common, sz, "src/debug.c", LN(1973, 1970, 1970));
+            *dst = iosMallocDebug(ios_partition_common, sz, "src/debug.c",
+                                  LN(1973, 1970, 1970, 1973, 1973, 1973));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to static object area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 2.0f,
                                  (*dst + sz - ios_partition_common->start) * 100.0f / 2.0f);
             break;
         case 3:
-            *dst = iosMallocDebug(ios_partition_smotion, sz, "src/debug.c", LN(1982, 1979, 1979));
+            *dst = iosMallocDebug(ios_partition_smotion, sz, "src/debug.c",
+                                  LN(1982, 1979, 1979, 1982, 1982, 1982));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to static motion area.(%2.1f%%/%2.1f%%)\n",
                                  sz * 100.0f / 1179648.0f,
                                  (*dst + sz - ios_partition_smotion->start) * 100.0f / 1179648.0f);
             break;
         case 5:
-            *dst = iosMallocDebug(ios_partition_dmotion, sz, "src/debug.c", LN(1991, 1988, 1988));
+            *dst = iosMallocDebug(ios_partition_dmotion, sz, "src/debug.c",
+                                  LN(1991, 1988, 1988, 1991, 1991, 1991));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to dynamic motion area.(%2.1f%%/%2.1f%%)\n",
                                  sz * 100.0f / 3670016.0f,
                                  (*dst + sz - ios_partition_dmotion->start) * 100.0f / 3670016.0f);
             break;
         case 6:
-            *dst = iosMallocDebug(ios_partition_hara, sz, "src/debug.c", LN(2000, 1997, 1997));
+            *dst = iosMallocDebug(ios_partition_hara, sz, "src/debug.c",
+                                  LN(2000, 1997, 1997, 2000, 2000, 2000));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_hara->start) * 100.0f);
             break;
         case 7:
-            *dst = iosMallocDebug(ios_partition_oomori, sz, "src/debug.c", LN(2007, 2004, 2004));
+            *dst = iosMallocDebug(ios_partition_oomori, sz, "src/debug.c",
+                                  LN(2007, 2004, 2004, 2007, 2007, 2007));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_oomori->start) * 100.0f / 327680.0f);
             break;
         case 8:
-            *dst = iosMallocDebug(ios_partition_horagai, sz, "src/debug.c", LN(2014, 2011, 2011));
+            *dst = iosMallocDebug(ios_partition_horagai, sz, "src/debug.c",
+                                  LN(2014, 2011, 2011, 2014, 2014, 2014));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to horagai-area.\n");
             break;
         case 9:
-            *dst = iosMallocDebug(ios_partition_sound, sz, "src/debug.c", LN(2019, 2016, 2016));
+            *dst = iosMallocDebug(ios_partition_sound, sz, "src/debug.c",
+                                  LN(2019, 2016, 2016, 2019, 2019, 2019));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to sound-area.\n");
             break;
         case 10:
-            *dst =
-                iosMallocDebug(ios_partition_sound_semi, sz, "src/debug.c", LN(2024, 2021, 2021));
+            *dst = iosMallocDebug(ios_partition_sound_semi, sz, "src/debug.c",
+                                  LN(2024, 2021, 2021, 2024, 2024, 2024));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to sound_semi-area.\n");
             break;

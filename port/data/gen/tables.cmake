@@ -79,8 +79,58 @@ set(ICO_TABLE_SYMBOLS
     particleEffectFile
     spiderDef
     wayGroupSheet
+    mcIconSys
+    enemymodel02Kind16
+    enemymodel02Kinds
+    enemymodel02Pos
+    enemymodel02Set
+    enemymodel02
+    enemymodel03Kind16
+    enemymodel03Kinds
+    enemymodel03Pos
+    enemymodel03Set
+    enemymodel03
+    enemymodel04Kind16
+    enemymodel04Kinds
+    enemymodel04Pos
+    enemymodel04Set
+    enemymodel04
+    enemymodel05Kind16
+    enemymodel05Kinds
+    enemymodel05Pos
+    enemymodel05Set
+    enemymodel05bKind0
+    enemymodel05bKinds
+    enemymodel05bPos
+    enemymodel05bSet
+    enemymodel05
+    enemymodel06Kind16
+    enemymodel06Kinds
+    enemymodel06Pos
+    enemymodel06Set
+    enemymodel06
+    enemymodel07Kind16
+    enemymodel07Kinds
+    enemymodel07Pos
+    enemymodel07Set
+    enemymodel07
+    enemymodel08Kind16
+    enemymodel08Kinds
+    enemymodel08Pos
+    enemymodel08Set
+    enemymodel08
+    enemymodel09Kind16
+    enemymodel09Kinds
+    enemymodel09Pos
+    enemymodel09Set
+    enemymodel09bKind3
+    enemymodel09bKinds
+    enemymodel09bPos
+    enemymodel09bSet
+    enemymodel09
+    enemySetTable
 )
-set(ICO_TABLE_SLUGS pal jpn kor)
+set(ICO_TABLE_SLUGS pal jpn kor ntsc aug6 jun26)
 set(ICO_TABLE_SOURCES "${CMAKE_CURRENT_LIST_DIR}/table_defs.c"
     "${CMAKE_CURRENT_LIST_DIR}/table_sets.c")
 set(ICO_TABLE_EE_SYMBOLS "")

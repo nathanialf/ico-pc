@@ -204,6 +204,19 @@ if(ICO_RUN_TESTS)
              COMMAND archive_test manifest-check kor "${ICO_DISC_IMAGE_KOR}"
                      "${CMAKE_CURRENT_SOURCE_DIR}/discs.c")
     set_tests_properties(archive_manifest_kor PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+    # the North American disc, the August 2001 preview disc and the June 2001
+    # magazine demo (whose game is the image's CUS97113 folder): each disc
+    # extracted and checked, and the DATA.DF manifest discs.c holds for it
+    foreach(_slug ntsc aug6 jun26)
+        string(TOUPPER "${_slug}" _up)
+        add_test(NAME archive_disc_${_slug} COMMAND archive_test disc "${ICO_DISC_IMAGE_${_up}}"
+                                                    "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
+        set_tests_properties(archive_disc_${_slug} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
+        add_test(NAME archive_manifest_${_slug}
+                 COMMAND archive_test manifest-check ${_slug} "${ICO_DISC_IMAGE_${_up}}"
+                         "${CMAKE_CURRENT_SOURCE_DIR}/discs.c")
+        set_tests_properties(archive_manifest_${_slug} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+    endforeach()
 endif()
 
 # iso_import_test: the Android first start's copy of the
@@ -254,8 +267,8 @@ if(ICO_DATA_PYTHON)
     add_test(NAME data_desc_fresh
              COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_data_desc.py" --check
              WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-    # the USA disc's, the August 2001 disc's and the June 2001 demo's sets, written before
-    # config/regions.txt lists their rows (gen_data_c.py PENDING_ROWS):
+    # the USA disc's, the August 2001 disc's and the June 2001 demo's sets, each
+    # checked alone (written before config/regions.txt listed their rows):
     # port/data/gen/<slug>/ must be what the table with the pending rows up to
     # that slug gives (once the rows land, data_desc_fresh checks them with
     # the others and these check them again)
@@ -350,12 +363,12 @@ if(ICO_DATA_PYTHON AND _ico_have_elftools EQUAL 0 AND EXISTS "${ICO_BASE_ELF}")
         list(APPEND _renames "${sym}=ico_ref_${sym}")
     endforeach()
     set_source_files_properties(${_refs} PROPERTIES COMPILE_DEFINITIONS "${_renames}")
-    # each other disc's reference (jpn, kor), when its ELF is present:
+    # each other disc's reference (jpn, kor, ntsc, aug6, jun26), when its ELF is present:
     # ico_ref_<slug>_<name>, gen_data_c.py --version <slug>, and
     # ICO_TABLES_TEST_<SLUG> for tables_test's table of references
     set(_refs_other "")
     set(_refs_defs "")
-    foreach(_slug jpn kor)
+    foreach(_slug jpn kor ntsc aug6 jun26)
         string(TOUPPER "${_slug}" _up)
         if(NOT EXISTS "${ICO_BASE_ELF_${_up}}")
             continue()
@@ -418,7 +431,7 @@ if(ICO_DATA_PYTHON AND _ico_have_elftools EQUAL 0 AND EXISTS "${ICO_BASE_ELF}")
         # each other disc's set against its ELF (through the VFS when its
         # image is present), each ELF refused by the other's set (the PAL
         # ELF); skipped (77) without that disc's ELF
-        foreach(_slug jpn kor)
+        foreach(_slug jpn kor ntsc aug6 jun26)
             string(TOUPPER "${_slug}" _up)
             add_test(NAME tables_loader_${_slug}
                      COMMAND tables_test --set ${_slug} "${ICO_BASE_ELF_${_up}}"

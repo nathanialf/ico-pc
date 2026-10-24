@@ -10,11 +10,17 @@
 extern const IcoRegionInfo ico_region_info_pal;
 extern const IcoRegionInfo ico_region_info_jpn;
 extern const IcoRegionInfo ico_region_info_kor;
+extern const IcoRegionInfo ico_region_info_ntsc;
+extern const IcoRegionInfo ico_region_info_aug6;
+extern const IcoRegionInfo ico_region_info_jun26;
 
 /* clang-format off */
 const IcoRegionInfo *const ico_region_info[ICO_REGION_COUNT] = {
     &ico_region_info_pal,
     &ico_region_info_jpn,
     &ico_region_info_kor,
+    &ico_region_info_ntsc,
+    &ico_region_info_aug6,
+    &ico_region_info_jun26,
 };
 /* clang-format on */

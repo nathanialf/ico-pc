@@ -584,8 +584,8 @@ static void shiftMotionOrientEndFunc(void *self)
         /* EUC-JP: "the SE internal processing seems wrong for some reason; report it to Sugiyama" */
         debug_StdPrintfDummy(
             "何らかの理由でSEの内部処理がおかしいようです。杉山に報告してください。\n");
-        debug_assert(__FILE__, LN(745, 739, 739));
-        __assert(__FILE__, LN(745, 739, 739), "0");
+        debug_assert(__FILE__, LN(745, 739, 739, 745, 745, 745));
+        __assert(__FILE__, LN(745, 739, 739, 745, 745, 745), "0");
     }
     StopSEPackageWithGroupVariation(self, 0);
     StopSEPackageWithGroupVariation(self, 1);
@@ -930,8 +930,8 @@ static void getNodeBlendedFloatingMotion(StreamElem *dst, float *root, int id, i
     if (i == 0) {
         /* EUC-JP: "(%s) the motion to blend is not defined" */
         debug_StdPrintfDummy("(%s)混ぜるモーションが定義されていません。\n", motionKind[id].name);
-        debug_assert(__FILE__, LN(1228, 1222, 1222));
-        __assert(__FILE__, LN(1228, 1222, 1222), "0");
+        debug_assert(__FILE__, LN(1228, 1222, 1222, 1228, 1228, 1228));
+        __assert(__FILE__, LN(1228, 1222, 1222, 1228, 1228, 1228), "0");
     }
 }
 
@@ -957,8 +957,8 @@ static inline void assertMotionLoaded(struct MotCtrl *w, int *md) /* derived nam
 
         sprintf(buf, "THE MOTION \"%s\"(%d)\nDID NOT LOAD IN THIS STAGE\nOR IS INVALID ID.\n",
                 motionKind[w->motion].name, w->motion);
-        debug_assertMessage(__FILE__, LN(1275, 1269, 1269), buf);
-        __assert(__FILE__, LN(1275, 1269, 1269), "e");
+        debug_assertMessage(__FILE__, LN(1275, 1269, 1269, 1275, 1275, 1275), buf);
+        __assert(__FILE__, LN(1275, 1269, 1269, 1275, 1275, 1275), "e");
     }
 }
 
@@ -977,8 +977,8 @@ static inline void assertMotionNodeCount(struct MotCtrl *w, int *md, int n) /* d
             buf,
             "THE NUMBER OF NODE DATAS OF MOTION\n\"%s\"(%d SKELTONS) DOES NOT MATCH\nTHE NUMBER OF SKELTON NODES(%d SKELTONS)\n",
             motionKind[w->motion].name, i - 1, n);
-        debug_assertMessage(__FILE__, LN(1287, 1281, 1281), buf);
-        __assert(__FILE__, LN(1287, 1281, 1281), "e");
+        debug_assertMessage(__FILE__, LN(1287, 1281, 1281, 1287, 1287, 1287), buf);
+        __assert(__FILE__, LN(1287, 1281, 1281, 1287, 1287, 1287), "e");
     }
 }
 
@@ -1466,8 +1466,8 @@ void SetNodeRotationLimitDataTable(void *self, int from, int to)
             /* EUC-JP: "the node the node rotation limit data names is not in the skeleton" */
             debug_StdPrintfDummy(
                 "ノード回転リミットデータの示すノードがスケルトン中にありません。\n");
-            debug_assert(__FILE__, LN(1838, 1832, 1832));
-            __assert(__FILE__, LN(1838, 1832, 1832), "0");
+            debug_assert(__FILE__, LN(1838, 1832, 1832, 1838, 1838, 1838));
+            __assert(__FILE__, LN(1838, 1832, 1832, 1838, 1838, 1838), "0");
         }
         /* a 4-byte word cannot hold the row's address: the row, one-based
            (motMan_getFinalMatrix.c.inc reads it back) */

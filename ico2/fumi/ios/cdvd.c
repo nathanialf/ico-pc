@@ -218,8 +218,8 @@ static void iosCdvdStManager(void)
         if (iosMsgRecv(&stReqQ, (IosMsgWord *)&req, mode) == -1) {
             if (req->state != 1) {
                 sprintf(buf, "stream mode error %d\n", req->state);
-                debug_assertMessage(__FILE__, LN(518, 513, 518), buf);
-                __assert(__FILE__, LN(518, 513, 518), "e");
+                debug_assertMessage(__FILE__, LN(518, 513, 518, 518, 518, 518), buf);
+                __assert(__FILE__, LN(518, 513, 518, 518, 518, 518), "e");
             }
             if (req->readPos > req->writePos) {
                 n = req->readPos - req->writePos;
@@ -229,8 +229,8 @@ static void iosCdvdStManager(void)
                 n = 0;
                 if (req->count != req->size) {
                     sprintf(buf2, "stream size illigual %d\n", req->count);
-                    debug_assertMessage(__FILE__, LN(546, 541, 546), buf2);
-                    __assert(__FILE__, LN(546, 541, 546), "e");
+                    debug_assertMessage(__FILE__, LN(546, 541, 546, 546, 546, 546), buf2);
+                    __assert(__FILE__, LN(546, 541, 546, 546, 546, 546), "e");
                 }
             }
             if (n > 16) {
@@ -244,8 +244,8 @@ static void iosCdvdStManager(void)
             retry:
                 if (sceCdRead(req->owner->lsn, n, p, &req->owner->mode) == 0) {
                     sprintf(buf2, "read command fail\n");
-                    debug_assertMessage(__FILE__, LN(569, 564, 569), buf2);
-                    __assert(__FILE__, LN(569, 564, 569), "e");
+                    debug_assertMessage(__FILE__, LN(569, 564, 569, 569, 569, 569), buf2);
+                    __assert(__FILE__, LN(569, 564, 569, 569, 569, 569), "e");
                 }
                 sceCdSync(0);
                 err = sceCdGetError();
@@ -325,8 +325,8 @@ static inline int getFileLsn(char *name, int *size) /* derived name */
         if (strcmp(name, iosCdvdSrhBuff[i].name) == 0)
             goto found;
     }
-    debug_assert(__FILE__, LN(749, 744, 749));
-    __assert(__FILE__, LN(749, 744, 749), "0");
+    debug_assert(__FILE__, LN(749, 744, 749, 749, 749, 749));
+    __assert(__FILE__, LN(749, 744, 749, 749, 749, 749), "0");
 found:
     *size = iosCdvdSrhBuff[i].size;
     return iosCdvdSrhBuff[i].lsn;
@@ -424,8 +424,8 @@ static void iosCdvdMgrStStop(IosCdvdHandle *self)
     iosMsgRecv(&stAckQ, &msg, 1);
     if (msg != 2) {
         sprintf(buf, "stream manager stop command error %d\n", msg);
-        debug_assertMessage(__FILE__, LN(906, 896, 906), buf);
-        __assert(__FILE__, LN(906, 896, 906), "e");
+        debug_assertMessage(__FILE__, LN(906, 896, 906, 906, 906, 906), buf);
+        __assert(__FILE__, LN(906, 896, 906, 906, 906, 906), "e");
     }
     self->result = 0;
     close_inflate_handler(self->inflate);
@@ -493,7 +493,8 @@ static void iosCdvdMgrLoad(IosCdvdHandle *self)
 
 void temp_loadfunc(IosCdvdHandle *self, char *name, int size, int id, int kind, int word08, int seg)
 {
-    void *p = (void *)iosMallocDebug(ios_partition_seki, size, __FILE__, LN(1102, 1092, 1102));
+    void *p = (void *)iosMallocDebug(ios_partition_seki, size, __FILE__,
+                                     LN(1102, 1092, 1102, 1102, 1102, 1102));
 
     iosCdvdHandlerRead(self, p, size);
     debug_StdPrintfDummy("temp_loadfunc::%s  (size:%d)(segid=%d)\n", name, size, seg);
@@ -599,7 +600,8 @@ static void iosCdvdMgrPackLoad(IosCdvdHandle *self)
         systemStatus[7] = *num;
         systemStatus[8] = 0;
         size = *num * sizeof(PackEnt);
-        ent = (PackEnt *)iosMallocDebug(ios_partition_seki, size, __FILE__, LN(1174, 1164, 1174));
+        ent = (PackEnt *)iosMallocDebug(ios_partition_seki, size, __FILE__,
+                                        LN(1174, 1164, 1174, 1174, 1174, 1174));
         iosCdvdHandlerRead(self, ent, size);
         pk = ent;
         for (seg = 0; seg < *num; seg++, pk++) {
@@ -655,8 +657,8 @@ static int iosCdStRead(unsigned int n, int *buf, int flag, int *result, char *se
                 iosMsgRecv(&stAckQ, &msg, 1);
                 if (msg != 1) {
                     sprintf(msgbuf, "stream manager load end command error %d\n", msg);
-                    debug_assertMessage(__FILE__, LN(1304, 1294, 1304), msgbuf);
-                    __assert(__FILE__, LN(1304, 1294, 1304), "e");
+                    debug_assertMessage(__FILE__, LN(1304, 1294, 1304, 1304, 1304, 1304), msgbuf);
+                    __assert(__FILE__, LN(1304, 1294, 1304, 1304, 1304, 1304), "e");
                 }
             }
         }
@@ -728,8 +730,8 @@ void iosCdvdHandlerReadNoInflate(IosCdvdHandle *self, void *buf, int n)
         if (sz == 0) {
             sprintf(msg, "CDVD read buff empty readSectorCnt:%d buffCnt%d\n", self->readSectorCnt,
                     self->buffCnt);
-            debug_assertMessage(__FILE__, LN(1417, 1407, 1417), msg);
-            __assert(__FILE__, LN(1417, 1407, 1417), "e");
+            debug_assertMessage(__FILE__, LN(1417, 1407, 1417, 1417, 1417, 1417), msg);
+            __assert(__FILE__, LN(1417, 1407, 1417, 1417, 1417, 1417), "e");
         }
         if (sz >= left) {
             sz = left;
@@ -933,8 +935,8 @@ CdvdBgReq *iosCdvdBackGroundMgrAdd(const char *name, void *readFunc, void *readA
             debug_StdPrintfDummy("** %d %s %p\n", i, bgReqTable[i].name, bgReqTable[i].readFunc);
         }
     }
-    debug_assert(__FILE__, LN(1890, 1880, 1890));
-    __assert(__FILE__, LN(1890, 1880, 1890), "0");
+    debug_assert(__FILE__, LN(1890, 1880, 1890, 1890, 1890, 1890));
+    __assert(__FILE__, LN(1890, 1880, 1890, 1890, 1890, 1890), "0");
 found:
     bg = &bgReqTable[i];
     bg->flags.busy = 1;
@@ -1162,7 +1164,8 @@ void iosCdvdDirectStOpen(IosCdvdHandle *self)
     self->result = 0;
     iosCdvdMgrSearchFile(self);
     self->sectors = ((unsigned int)(self->file.size - 1) >> 11) + 1;
-    mem = iosSifAllocIopHeapDebug(576 * 2048 + 16, __FILE__, LN(2472, 2460, 2472));
+    mem =
+        iosSifAllocIopHeapDebug(576 * 2048 + 16, __FILE__, LN(2472, 2460, 2472, 2472, 2472, 2472));
     /* an allocation check compiled out of the retail build; its message
      * stays in .rodata */
     if (0) {

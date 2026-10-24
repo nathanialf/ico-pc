@@ -167,8 +167,8 @@ static void StartPendulum(GObj *gobj, GObj *owner, float *pos)
         }
     }
     if (nearestNode == -1) {
-        debug_assert(__FILE__, LN(563, 557, 557));
-        __assert(__FILE__, LN(563, 557, 557), "nearestNode!=-1");
+        debug_assert(__FILE__, LN(563, 557, 557, 563, 563, 563));
+        __assert(__FILE__, LN(563, 557, 557, 563, 563, 563), "nearestNode!=-1");
     }
     cw->holdNode = nearestNode;
     cw->holdNode =
@@ -703,12 +703,12 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
     if (n < 2) {
         /* "the chain is too short (set it with the Y-scale of the placement table)" */
         debug_StdPrintfDummy("鎖の長さが短かすぎます(配置表のY-scaleで指定します)");
-        debug_assert(__FILE__, LN(1178, 1172, 1172));
-        __assert(__FILE__, LN(1178, 1172, 1172), "0");
+        debug_assert(__FILE__, LN(1178, 1172, 1172, 1178, 1178, 1178));
+        __assert(__FILE__, LN(1178, 1172, 1172, 1178, 1178, 1178), "0");
     }
 
     cw = iosMallocDebug(ios_partition_sugipon, (n << 5) + sizeof(ChainRecord), __FILE__,
-                        LN(1181, 1175, 1175));
+                        LN(1181, 1175, 1175, 1181, 1181, 1181));
 
     /* the record is wider here (8-byte pointers): copy the typed template */
     *cw = chainRecordDefault;
@@ -781,15 +781,15 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
 
     *(char **)&((ChainExtPtr *)&gobj->dobj)->sub->nodeQuat = 0;
     *(char **)&((ChainExtPtr *)&gobj->dobj)->sub->nodeMtx = (char *)iosMallocDebug(
-        ios_partition_seki, (cw->nodes - 1) << 6, __FILE__, LN(1245, 1239, 1239));
+        ios_partition_seki, (cw->nodes - 1) << 6, __FILE__, LN(1245, 1239, 1239, 1245, 1245, 1245));
     *(char **)&((ChainExtPtr *)&gobj->dobj)->sub->nodeQuat = (char *)iosMallocDebug(
-        ios_partition_seki, (cw->nodes - 1) << 4, __FILE__, LN(1245, 1239, 1239));
+        ios_partition_seki, (cw->nodes - 1) << 4, __FILE__, LN(1245, 1239, 1239, 1245, 1245, 1245));
     ((ChainExtPtr *)&gobj->dobj)->sub->nodeNum = cw->nodes - 1;
     if (((ChainExtPtr *)&gobj->dobj)->sub->nodes != 0) {
         iosFree((void *)ICO_PHYS(ICO_ADDR(((ChainExtPtr *)&gobj->dobj)->sub->nodes)));
     }
-    ((ChainExtPtr *)&gobj->dobj)->sub->nodes =
-        iosMallocDebug(ios_partition_seki, (cw->nodes - 1) * 80, __FILE__, LN(1245, 1239, 1239));
+    ((ChainExtPtr *)&gobj->dobj)->sub->nodes = iosMallocDebug(
+        ios_partition_seki, (cw->nodes - 1) * 80, __FILE__, LN(1245, 1239, 1239, 1245, 1245, 1245));
 
     for (i = 0; i < cw->nodes - 1; i++) {
         ((ChainExtPtr *)&gobj->dobj)->sub->nodes[i].flags.ll &= ~1;
@@ -1225,8 +1225,8 @@ static void PlumbPointUpdateChain(GObj *gobj, float *pos)
         }
     }
     if (nearestNode == -1) {
-        debug_assert(__FILE__, LN(1675, 1669, 1669));
-        __assert(__FILE__, LN(1675, 1669, 1669), "nearestNode!=-1");
+        debug_assert(__FILE__, LN(1675, 1669, 1669, 1675, 1675, 1675));
+        __assert(__FILE__, LN(1675, 1669, 1669, 1675, 1675, 1675), "nearestNode!=-1");
     }
     cw->holdNode = nearestNode;
     cw->holdNode =

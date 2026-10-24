@@ -85,6 +85,56 @@
 #include "ico2/omori/include/objact.h"
 #include "ico2/sugipon/include/particleEffect.h"
 #include "ico2/sugipon/include/spider.h"
+#include "ico2/fumi/include/mcdata.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
+#include "ico2/seki/include/EnemyInit.h"
 #undef actModeTbl
 #undef adpcmFile
 #undef attackData
@@ -141,6 +191,7 @@ extern unsigned short seKind[];
 extern LtProperty texProperty[];
 extern WeaponDef weaponKind[];
 extern char *staffRollNameData[];
+extern int staffRollNameDataNum;
 extern ItemBreakRec itemKind[];
 extern MotOriAlt mirrorMotionTable[];
 extern PObjMdl modelData[];
@@ -198,6 +249,56 @@ extern MotOriParallelEnt parallelMotionOrient[];
 extern ParticleEffectFile particleEffectFile[];
 extern SpiderKindRec spiderDef[];
 extern WaySrcGrp wayGroupSheet[];
+extern sceMcIconSys mcIconSys;
+extern int enemymodel02Kind16[];
+extern EnemyKindRec enemymodel02Kinds[];
+extern sceVu0FVECTOR enemymodel02Pos[];
+extern EnemyModelSet enemymodel02Set;
+extern EnemyModelSet *enemymodel02[];
+extern int enemymodel03Kind16[];
+extern EnemyKindRec enemymodel03Kinds[];
+extern sceVu0FVECTOR enemymodel03Pos[];
+extern EnemyModelSet enemymodel03Set;
+extern EnemyModelSet *enemymodel03[];
+extern int enemymodel04Kind16[];
+extern EnemyKindRec enemymodel04Kinds[];
+extern sceVu0FVECTOR enemymodel04Pos[];
+extern EnemyModelSet enemymodel04Set;
+extern EnemyModelSet *enemymodel04[];
+extern int enemymodel05Kind16[];
+extern EnemyKindRec enemymodel05Kinds[];
+extern sceVu0FVECTOR enemymodel05Pos[];
+extern EnemyModelSet enemymodel05Set;
+extern int enemymodel05bKind0[];
+extern EnemyKindRec enemymodel05bKinds[];
+extern sceVu0FVECTOR enemymodel05bPos[];
+extern EnemyModelSet enemymodel05bSet;
+extern EnemyModelSet *enemymodel05[];
+extern int enemymodel06Kind16[];
+extern EnemyKindRec enemymodel06Kinds[];
+extern sceVu0FVECTOR enemymodel06Pos[];
+extern EnemyModelSet enemymodel06Set;
+extern EnemyModelSet *enemymodel06[];
+extern int enemymodel07Kind16[];
+extern EnemyKindRec enemymodel07Kinds[];
+extern sceVu0FVECTOR enemymodel07Pos[];
+extern EnemyModelSet enemymodel07Set;
+extern EnemyModelSet *enemymodel07[];
+extern int enemymodel08Kind16[];
+extern EnemyKindRec enemymodel08Kinds[];
+extern sceVu0FVECTOR enemymodel08Pos[];
+extern EnemyModelSet enemymodel08Set;
+extern EnemyModelSet *enemymodel08[];
+extern int enemymodel09Kind16[];
+extern EnemyKindRec enemymodel09Kinds[];
+extern sceVu0FVECTOR enemymodel09Pos[];
+extern EnemyModelSet enemymodel09Set;
+extern int enemymodel09bKind3[];
+extern EnemyKindRec enemymodel09bKinds[];
+extern sceVu0FVECTOR enemymodel09bPos[];
+extern EnemyModelSet enemymodel09bSet;
+extern EnemyModelSet *enemymodel09[];
+extern EnemySet enemySetTable[];
 extern char ico_table_pool_staffroll_dat_rodata[];
 extern char ico_table_pool_staffroll_dat_sdata[];
 extern const IcoEeFunc ico_ee_funcs_kor[];
@@ -313,6 +414,7 @@ _Static_assert(sizeof((((WeaponDef *)0)->blur)) == 4, "WeaponDef.blur: kor size"
 _Static_assert(sizeof((((WeaponDef *)0)->color)) == 4, "WeaponDef.color: kor size");
 _Static_assert(sizeof((((WeaponDef *)0)->motOrient)) == 4, "WeaponDef.motOrient: kor size");
 _Static_assert(sizeof((((WeaponDef *)0)->flags)) == 4, "WeaponDef.flags: kor size");
+_Static_assert(sizeof((*(ico_td_rec_int *)0)) == 4, "int.(element): kor size");
 _Static_assert(sizeof((((ItemBreakRec *)0)->stayAnim)) == 4, "ItemBreakRec.stayAnim: kor size");
 _Static_assert(sizeof((((ItemBreakRec *)0)->stayMode)) == 4, "ItemBreakRec.stayMode: kor size");
 _Static_assert(sizeof((((ItemBreakRec *)0)->breakAnim)) == 4, "ItemBreakRec.breakAnim: kor size");
@@ -503,7 +605,6 @@ _Static_assert(sizeof((((MotionDef *)0)->flags2)) == 4, "MotionDef.flags2: kor s
 _Static_assert(sizeof((((HandModeRow *)0)->dir)) == 12, "HandModeRow.dir: kor size");
 _Static_assert(sizeof((((HandModeRow *)0)->mode)) == 4, "HandModeRow.mode: kor size");
 _Static_assert(sizeof((((MotOriName *)0)->s)) == 32, "MotOriName.s: kor size");
-_Static_assert(sizeof((*(ico_td_rec_int *)0)) == 4, "int.(element): kor size");
 _Static_assert(sizeof((((ObjLight *)0)->col)) == 12, "ObjLight.col: kor size");
 _Static_assert(sizeof((((ObjLight *)0)->range)) == 4, "ObjLight.range: kor size");
 _Static_assert(sizeof((((BecPair *)0)->mot)) == 4, "BecPair.mot: kor size");
@@ -1212,6 +1313,10 @@ static const IcoTableField fields_char_[] = {
     {"", 0, sizeof((*(ico_td_rec_char_ *)0)), 0, 4, 1, ICO_TF_DATA, 0, 0, 0, NULL, NULL, 0},
 };
 
+static const IcoTableField fields_int[] = {
+    {"", 0, sizeof((*(ico_td_rec_int *)0)), 0, 4, 1, ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
+};
+
 static const IcoTableField fields_ItemBreakRec[] = {
     {"stayAnim", offsetof(ItemBreakRec, stayAnim), sizeof((((ItemBreakRec *)0)->stayAnim)), 0, 4, 1,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
@@ -1687,10 +1792,6 @@ static const IcoTableField fields_HandModeRow[] = {
 static const IcoTableField fields_MotOriName[] = {
     {"s", offsetof(MotOriName, s), sizeof((((MotOriName *)0)->s)[0]), 0, 1, 32, ICO_TF_INT, 1, 0, 0,
      NULL, NULL, 0},
-};
-
-static const IcoTableField fields_int[] = {
-    {"", 0, sizeof((*(ico_td_rec_int *)0)), 0, 4, 1, ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
 static const IcoTableField fields_ObjLight[] = {
@@ -2169,6 +2270,8 @@ static const IcoTableRecord record_WeaponDef = {
     sizeof(fields_WeaponDef) / sizeof(fields_WeaponDef[0])};
 static const IcoTableRecord record_char_ = {"char*", sizeof(ico_td_rec_char_), 0x4, fields_char_,
                                             sizeof(fields_char_) / sizeof(fields_char_[0])};
+static const IcoTableRecord record_int = {"int", sizeof(ico_td_rec_int), 0x4, fields_int,
+                                          sizeof(fields_int) / sizeof(fields_int[0])};
 static const IcoTableRecord record_ItemBreakRec = {
     "ItemBreakRec", sizeof(ItemBreakRec), 0x20, fields_ItemBreakRec,
     sizeof(fields_ItemBreakRec) / sizeof(fields_ItemBreakRec[0])};
@@ -2235,8 +2338,6 @@ static const IcoTableRecord record_HandModeRow = {
 static const IcoTableRecord record_MotOriName = {
     "MotOriName", sizeof(MotOriName), 0x20, fields_MotOriName,
     sizeof(fields_MotOriName) / sizeof(fields_MotOriName[0])};
-static const IcoTableRecord record_int = {"int", sizeof(ico_td_rec_int), 0x4, fields_int,
-                                          sizeof(fields_int) / sizeof(fields_int[0])};
 static const IcoTableRecord record_ObjLight = {"ObjLight", sizeof(ObjLight), 0x10, fields_ObjLight,
                                                sizeof(fields_ObjLight) /
                                                    sizeof(fields_ObjLight[0])};
@@ -2349,11 +2450,14 @@ static const IcoTableRow rows_kor[] = {
     {"weapon-def", "weaponKind", ICO_TABLE_DATA, 0x00315870u, 0x003159D8u, 0xAB7A97D2u, 0, 10,
      &record_WeaponDef, (void *)weaponKind, 10, ICO_TID_weaponKind},
     {"staffroll_dat", "staffRollNameData", ICO_TABLE_DATA, 0x004E0FD0u, 0x004E1EE0u, 0x6416B739u, 0,
-     964, &record_char_, (void *)staffRollNameData, 964, ICO_TID_staffRollNameData},
+     964, &record_char_, (void *)staffRollNameData, 1072, ICO_TID_staffRollNameData},
     {"staffroll_dat", NULL, ICO_TABLE_RODATA, 0x00617120u, 0x00618000u, 0xD5CB5026u, 0, 0, NULL,
-     ico_table_pool_staffroll_dat_rodata, 3808, ICO_TID_COUNT},
+     ico_table_pool_staffroll_dat_rodata, 4512, ICO_TID_COUNT},
     {"staffroll_dat", NULL, ICO_TABLE_SDATA, 0x00634F30u, 0x00634F38u, 0x425625EBu, 0, 0, NULL,
-     ico_table_pool_staffroll_dat_sdata, 8, ICO_TID_COUNT},
+     ico_table_pool_staffroll_dat_sdata, 16, ICO_TID_COUNT},
+    {"staffroll_dat", "staffRollNameDataNum", ICO_TABLE_SDATA, 0x00634F30u, 0x00634F38u,
+     0x425625EBu, 4, 1, &record_int, (void *)&staffRollNameDataNum, 1,
+     ICO_TID_staffRollNameDataNum},
     {"item-kind-def", "itemKind", ICO_TABLE_DATA, 0x004F8380u, 0x004F8460u, 0xA82E5CA1u, 0, 7,
      &record_ItemBreakRec, (void *)itemKind, 7, ICO_TID_itemKind},
     {"mirror-motion-def", "mirrorMotionTable", ICO_TABLE_DATA, 0x004F8460u, 0x004F8490u,
@@ -2363,7 +2467,7 @@ static const IcoTableRow rows_kor[] = {
     {"prog-se-link", "progSELink", ICO_TABLE_DATA, 0x0052FB10u, 0x00530110u, 0xFE177CBEu, 0, 128,
      &record_SePackage, (void *)progSELink, 128, ICO_TID_progSELink},
     {"unmapped_00533FC0", "motSyncPairs", ICO_TABLE_DATA, 0x00530110u, 0x00530138u, 0x7A9F37ECu, 0,
-     5, &record_MotSyncPair, (void *)motSyncPairs, 5, ICO_TID_motSyncPairs},
+     5, &record_MotSyncPair, (void *)motSyncPairs, 7, ICO_TID_motSyncPairs},
     {"texture-layout", "texLayout", ICO_TABLE_DATA, 0x00530138u, 0x005311D8u, 0x6A53F8F1u, 0, 76,
      &record_LtProp, (void *)texLayout, 80, ICO_TID_texLayout},
     {"way-point", "wayPointSheet", ICO_TABLE_DATA, 0x005311D8u, 0x005451A8u, 0xA907B170u, 0, 2924,
@@ -2375,7 +2479,7 @@ static const IcoTableRow rows_kor[] = {
     {"adpcmfile", "adpcmFile", ICO_TABLE_RODATA, 0x00554E40u, 0x00556880u, 0x4FA98FBBu, 0, 105,
      &record_AdpcmDataRec, (void *)adpcmFile, 105, ICO_TID_adpcmFile},
     {"attack-def", "attackData", ICO_TABLE_RODATA, 0x00556880u, 0x00556B50u, 0x001019E3u, 0, 20,
-     &record_AttackKindEntry, (void *)attackData, 20, ICO_TID_attackData},
+     &record_AttackKindEntry, (void *)attackData, 21, ICO_TID_attackData},
     {"auto-escort", "autoEscortData", ICO_TABLE_RODATA, 0x00556B50u, 0x00557608u, 0x0B5C8F4Au, 0,
      98, &record_EscortPoint, (void *)autoEscortData, 98, ICO_TID_autoEscortData},
     {"exit-data", "exitData", ICO_TABLE_RODATA, 0x00557608u, 0x00559ED0u, 0xF86C646Bu, 0, 261,
@@ -2384,7 +2488,7 @@ static const IcoTableRow rows_kor[] = {
      0x413172CFu, 0, 7, &record_SafePosOffset, (void *)generatorSubPosition, 7,
      ICO_TID_generatorSubPosition},
     {"girl-warp-list", "girlWarpList", ICO_TABLE_RODATA, 0x00559F40u, 0x0055A7D8u, 0x974AC9F7u, 0,
-     25, &record_WarpRec, (void *)girlWarpList, 25, ICO_TID_girlWarpList},
+     25, &record_WarpRec, (void *)girlWarpList, 26, ICO_TID_girlWarpList},
     {"iconfile", "iconFile", ICO_TABLE_RODATA, 0x0055A7D8u, 0x0055A88Cu, 0x54008B8Au, 0, 5,
      &record_IconFile, (void *)iconFile, 5, ICO_TID_iconFile},
     {"idle-mot-def", "idlingDef", ICO_TABLE_RODATA, 0x0055A890u, 0x0055A914u, 0x36B9A62Bu, 0, 11,
@@ -2396,7 +2500,7 @@ static const IcoTableRow rows_kor[] = {
     {"look-target-data", "lookTargetData", ICO_TABLE_RODATA, 0x0055AD00u, 0x0055AE48u, 0xEB17DBA4u,
      0, 27, &record_LookTarget, (void *)lookTargetData, 27, ICO_TID_lookTargetData},
     {"motion-def", "motionKind", ICO_TABLE_RODATA, 0x0055AE48u, 0x005CB008u, 0xFA810939u, 0, 1148,
-     &record_MotionDef, (void *)motionKind, 1148, ICO_TID_motionKind},
+     &record_MotionDef, (void *)motionKind, 1168, ICO_TID_motionKind},
     {"motion-ik-eff-def", "motionIKEffKind", ICO_TABLE_RODATA, 0x005CB008u, 0x005CB078u,
      0xA473EF7Au, 0, 7, &record_HandModeRow, (void *)motionIKEffKind, 7, ICO_TID_motionIKEffKind},
     {"motion-orient-def", "motionOriKind", ICO_TABLE_RODATA, 0x005CB078u, 0x005CD958u, 0x4AE801B2u,
@@ -2408,7 +2512,7 @@ static const IcoTableRow rows_kor[] = {
     {"obj-light", "objectLight", ICO_TABLE_RODATA, 0x005CDB88u, 0x005CDBB8u, 0xC886589Bu, 0, 3,
      &record_ObjLight, (void *)objectLight, 3, ICO_TID_objectLight},
     {"pair-motion", "pairMotion", ICO_TABLE_RODATA, 0x005CDBB8u, 0x005CDCB0u, 0x8EA39BB6u, 0, 31,
-     &record_BecPair, (void *)pairMotion, 31, ICO_TID_pairMotion},
+     &record_BecPair, (void *)pairMotion, 36, ICO_TID_pairMotion},
     {"param-escape-run", "paramEscapeRun", ICO_TABLE_RODATA, 0x005CDCB0u, 0x005CDCF0u, 0x5AD13085u,
      0, 8, &record_EscapeRange, (void *)paramEscapeRun, 8, ICO_TID_paramEscapeRun},
     {"se-env", "seEnv", ICO_TABLE_RODATA, 0x005CDCF0u, 0x005D0B6Cu, 0xD156A6EBu, 0, 425,
@@ -2474,9 +2578,9 @@ static const IcoTableRow rows_kor[] = {
      &record_WaySrcGrp, (void *)wayGroupSheet, 723, ICO_TID_wayGroupSheet},
 };
 
-_Static_assert(sizeof(rows_kor) / sizeof(rows_kor[0]) == 75, "kor: rows");
+_Static_assert(sizeof(rows_kor) / sizeof(rows_kor[0]) == 76, "kor: rows");
 
 /* the Korean disc (SCPS-56001): config/regions.txt's row 2 */
 const IcoTableSet ico_table_set_kor = {
     "kor", "SCPS-56001",     "SCPS_560.01", "the Korean disc",  rows_kor,
-    75,    ico_ee_funcs_kor, 913,           ico_ee_objects_kor, 1};
+    76,    ico_ee_funcs_kor, 913,           ico_ee_objects_kor, 1};

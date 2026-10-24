@@ -104,21 +104,24 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
     case 0:
     case 2:
     case 4:
-        *adr = iosMallocDebug(ios_partition_seki, asize, "src/FileManager.c", LN(349, 331, 331));
+        *adr = iosMallocDebug(ios_partition_seki, asize, "src/FileManager.c",
+                              LN(349, 331, 331, 349, 349, 349));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
                              ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_seki->start) *
                                  100.0f / 10059776.0f);
         break;
     case 1:
-        *adr = iosMallocDebug(ios_partition_sugipon, asize, "src/FileManager.c", LN(357, 339, 339));
+        *adr = iosMallocDebug(ios_partition_sugipon, asize, "src/FileManager.c",
+                              LN(357, 339, 339, 357, 357, 357));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", asize * 100.0f / 524288.0f,
                              ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_sugipon->start) *
                                  100.0f / 524288.0f);
         break;
     case 3:
-        *adr = iosMallocDebug(ios_partition_smotion, asize, "src/FileManager.c", LN(366, 348, 348));
+        *adr = iosMallocDebug(ios_partition_smotion, asize, "src/FileManager.c",
+                              LN(366, 348, 348, 366, 366, 366));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to static motion area.(%2.1f%%/%2.1f%%)\n",
                              asize * 100.0f / 1179648.0f,
@@ -126,7 +129,8 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
                                  100.0f / 1179648.0f);
         break;
     case 5:
-        *adr = iosMallocDebug(ios_partition_dmotion, asize, "src/FileManager.c", LN(375, 357, 357));
+        *adr = iosMallocDebug(ios_partition_dmotion, asize, "src/FileManager.c",
+                              LN(375, 357, 357, 375, 375, 375));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to dynamic motion area.(%2.1f%%/%2.1f%%)\n",
                              asize * 100.0f / 3670016.0f,
@@ -134,32 +138,36 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
                                  100.0f / 3670016.0f);
         break;
     case 6:
-        *adr = iosMallocDebug(ios_partition_hara, asize, "src/FileManager.c", LN(384, 366, 366));
+        *adr = iosMallocDebug(ios_partition_hara, asize, "src/FileManager.c",
+                              LN(384, 366, 366, 384, 384, 384));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
                              ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_hara->start) *
                                  100.0f);
         break;
     case 7:
-        *adr = iosMallocDebug(ios_partition_oomori, asize, "src/FileManager.c", LN(392, 374, 374));
+        *adr = iosMallocDebug(ios_partition_oomori, asize, "src/FileManager.c",
+                              LN(392, 374, 374, 392, 392, 392));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
                              ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_oomori->start) *
                                  100.0f / 327680.0f);
         break;
     case 8:
-        *adr = iosMallocDebug(ios_partition_horagai, asize, "src/FileManager.c", LN(400, 382, 382));
+        *adr = iosMallocDebug(ios_partition_horagai, asize, "src/FileManager.c",
+                              LN(400, 382, 382, 400, 400, 400));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to horagai-area.\n");
         break;
     case 9:
-        *adr = iosMallocDebug(ios_partition_sound, asize, "src/FileManager.c", LN(405, 387, 387));
+        *adr = iosMallocDebug(ios_partition_sound, asize, "src/FileManager.c",
+                              LN(405, 387, 387, 405, 405, 405));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to sound-area.\n");
         break;
     case 10:
-        *adr =
-            iosMallocDebug(ios_partition_sound_semi, asize, "src/FileManager.c", LN(410, 392, 392));
+        *adr = iosMallocDebug(ios_partition_sound_semi, asize, "src/FileManager.c",
+                              LN(410, 392, 392, 410, 410, 410));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to sound_semi-area.\n");
         break;
@@ -216,8 +224,8 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
     }
 
     if (err != 0) {
-        debug_assert("src/FileManager.c", LN(440, 422, 422));
-        __assert("src/FileManager.c", LN(440, 422, 422), "FALSE");
+        debug_assert("src/FileManager.c", LN(440, 422, 422, 440, 440, 440));
+        __assert("src/FileManager.c", LN(440, 422, 422, 440, 440, 440), "FALSE");
     }
     return size;
 }

@@ -551,8 +551,9 @@ none less, PAL's 964 less two), every set loads the int from its own ELF instead
 
 ### The USA disc's set
 
-`port/data/gen/ntsc/` is the North American disc's set (SCUS-97113, `SCUS_971.13`), written
-before `config/regions.txt` lists its row. The pre-commit hook's `gen_data_desc.py --check`
+`port/data/gen/ntsc/` is the North American disc's set (SCUS-97113, `SCUS_971.13`). It was
+written before `config/regions.txt` listed its row; the three 2001 rows landed together with the
+June 2001 demo's set, and `PENDING_ROWS` is empty since. The pre-commit hook's `gen_data_desc.py --check`
 refuses a row without its set, and the rows of the three 2001 targets land together with the last
 of them; until then `gen_data_c.py` `PENDING_ROWS` holds the three rows exactly as they will be
 listed, and the generators take one of their slugs: `gen_ee_layout.py --version ntsc`,
@@ -596,8 +597,8 @@ PAL's twin of a function the USA disc writes otherwise; the audit counts such a 
 row was checked against that column comparison: no row disagrees with it, and where the column is
 empty on both discs (modeBits 11, 12, 15; flags 30) the row is the code's pairing alone.
 
-`port/core/region_ntsc.c` (its numbers resolved by name against this disc's tables and sources)
-lands with the rows.
+`port/core/region_ntsc.c` is its region file (its numbers resolved by name against this disc's
+tables and sources).
 
 ### The August 2001 preview disc's set
 
@@ -648,7 +649,7 @@ flags2 bit 6, read in `boyact.c`, set in the same two motions, and the preview d
 `actCommonJump` sends a mail and reads no bit.
 
 `config/data_schema.aug6.txt` is upstream's, unchanged, with the port's rows appended;
-`config/data_members.aug6.txt` is upstream's. `port/core/region_aug6.c` lands with the rows.
+`config/data_members.aug6.txt` is upstream's. `port/core/region_aug6.c` is its region file.
 
 ### The June 2001 magazine demo's set
 
@@ -721,7 +722,7 @@ PAL's unnamed bit 2) and `handIK` (PAL modeBits 26-27, the demo's 29-30, 994 and
 each follows the demo's code, which reads its own bit for the purpose PAL's code reads PAL's.
 
 `config/data_schema.jun26.txt` and `config/data_members.jun26.txt` are upstream's, unchanged, with
-the port's rows appended to the schema. `port/core/region_jun26.c` lands with the rows.
+the port's rows appended to the schema. `port/core/region_jun26.c` is its region file.
 
 ### Adding a target's set
 

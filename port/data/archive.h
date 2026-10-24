@@ -94,8 +94,13 @@ typedef struct IcoDiscInfo {
 
 /* [ICO_REGION_PAL] the European release SCES-50760 (a DVD),
    [ICO_REGION_JPN] the Japanese release SCPS-11003 (a CD) and
-   [ICO_REGION_KOR] the Korean release SCPS-56001 (a DVD); defined in
-   discs.c with the manifests */
+   [ICO_REGION_KOR] the Korean release SCPS-56001 (a DVD),
+   [ICO_REGION_NTSC] the North American release SCUS-97113 (a CD),
+   [ICO_REGION_AUG6] the August 2001 preview PROTO-20010806 (a CD; boots
+   SCUS_971.13 like the North American disc, told apart by the boot ELF's
+   SHA-1) and [ICO_REGION_JUN26] the June 2001 magazine demo SCUS-97158 (a
+   DVD; its game is in the CUS97113 folder); defined in discs.c with the
+   manifests */
 extern const IcoDiscInfo ico_discs[ICO_REGION_COUNT];
 
 /* The row whose id ("SCPS-11003"), boot file ("SCPS_110.03", as

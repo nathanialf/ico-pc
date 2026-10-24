@@ -779,7 +779,7 @@ void ReflectCameraSetBinary(CamGroup *src, int count)
     }
 
     cameraSetBuf = iosMallocDebug(ios_partition_oomori, GetSizeOfCameraSetBinary(src, count),
-                                  __FILE__, LN(1577, 1575, 1575));
+                                  __FILE__, LN(1577, 1575, 1575, 1577, 1577, 1577));
     cameraSetGroups = cameraSetBuf;
     cameraSetGroupsEnd = cameraSetBuf + count * 76;
     cameraSetGroupNum = count;
@@ -1000,8 +1000,8 @@ inline void *GetPluralCameraSet(int id)
     }
     /* EUC-JP: "[%s] was not found\n" */
     debug_StdPrintfDummy("[%s]が見つかりません\n", cameraSetList[id]);
-    debug_assert(__FILE__, LN(2036, 2034, 2034));
-    __assert(__FILE__, LN(2036, 2034, 2034), "0");
+    debug_assert(__FILE__, LN(2036, 2034, 2034, 2036, 2036, 2036));
+    __assert(__FILE__, LN(2036, 2034, 2034, 2036, 2036, 2036), "0");
     return 0;
 }
 
@@ -1012,8 +1012,8 @@ inline void AddPluralCameraSet(int id, char *name)
     if (pluralCameraSetNum >= 10) {
         /* EUC-JP: "at most [%d] camera sets can be registered in one stage." */
         debug_StdPrintfDummy("１ステージに登録できるカメラセットは、最大[%d]個です。", 10);
-        debug_assert(__FILE__, LN(2045, 2043, 2043));
-        __assert(__FILE__, LN(2045, 2043, 2043), "0");
+        debug_assert(__FILE__, LN(2045, 2043, 2043, 2045, 2045, 2045));
+        __assert(__FILE__, LN(2045, 2043, 2043, 2045, 2045, 2045), "0");
     }
     p = &pluralCameraSet[pluralCameraSetNum];
     p->id = id;
@@ -1042,7 +1042,7 @@ static inline CamSetFile *allocCameraSet(CamSetFile *f) /* derived name */
     CamSetFile *p;
 
     p = (CamSetFile *)iosMallocDebug(ios_partition_seki, 16 + f->count * 76 + f->total * 92,
-                                     __FILE__, LN(2166, 2164, 2164));
+                                     __FILE__, LN(2166, 2164, 2164, 2166, 2166, 2166));
     *p = *f;
     p->magic = 0x1234;
     p->ver = 3;
@@ -1175,8 +1175,8 @@ static void *ReadCameraSet(CamSetFile *f, int stage)
         debug_StdPrintfDummy(
             "カメラデータのバージョンに異常があります。大森まで知らせてください\n");
         debug_StdPrintfDummy("illegal camera data version [%d]\n", f->ver);
-        debug_assert(__FILE__, LN(2355, 2353, 2353));
-        __assert(__FILE__, LN(2355, 2353, 2353), "0");
+        debug_assert(__FILE__, LN(2355, 2353, 2353, 2355, 2355, 2355));
+        __assert(__FILE__, LN(2355, 2353, 2353, 2355, 2355, 2355), "0");
         break;
     }
     return p;

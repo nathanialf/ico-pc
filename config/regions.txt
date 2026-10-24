@@ -5,3 +5,6 @@
 pal  -            SCES-50760  SCES_507.60  the European disc
 jpn  VERSION_JPN  SCPS-11003  SCPS_110.03  the Japanese disc
 kor  VERSION_KOR  SCPS-56001  SCPS_560.01  the Korean disc
+ntsc VERSION_NTSC SCUS-97113 SCUS_971.13 the North American disc
+aug6 VERSION_AUG6 PROTO-20010806 SCUS_971.13 the August 2001 preview disc
+jun26 VERSION_JUN26 SCUS-97158 SCUS_971.58 the June 2001 magazine demo

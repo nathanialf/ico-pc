@@ -66,6 +66,7 @@ typedef enum IcoTableId {
     ICO_TID_texProperty,
     ICO_TID_weaponKind,
     ICO_TID_staffRollNameData,
+    ICO_TID_staffRollNameDataNum,
     ICO_TID_itemKind,
     ICO_TID_mirrorMotionTable,
     ICO_TID_modelData,
@@ -123,6 +124,56 @@ typedef enum IcoTableId {
     ICO_TID_particleEffectFile,
     ICO_TID_spiderDef,
     ICO_TID_wayGroupSheet,
+    ICO_TID_mcIconSys,
+    ICO_TID_enemymodel02Kind16,
+    ICO_TID_enemymodel02Kinds,
+    ICO_TID_enemymodel02Pos,
+    ICO_TID_enemymodel02Set,
+    ICO_TID_enemymodel02,
+    ICO_TID_enemymodel03Kind16,
+    ICO_TID_enemymodel03Kinds,
+    ICO_TID_enemymodel03Pos,
+    ICO_TID_enemymodel03Set,
+    ICO_TID_enemymodel03,
+    ICO_TID_enemymodel04Kind16,
+    ICO_TID_enemymodel04Kinds,
+    ICO_TID_enemymodel04Pos,
+    ICO_TID_enemymodel04Set,
+    ICO_TID_enemymodel04,
+    ICO_TID_enemymodel05Kind16,
+    ICO_TID_enemymodel05Kinds,
+    ICO_TID_enemymodel05Pos,
+    ICO_TID_enemymodel05Set,
+    ICO_TID_enemymodel05bKind0,
+    ICO_TID_enemymodel05bKinds,
+    ICO_TID_enemymodel05bPos,
+    ICO_TID_enemymodel05bSet,
+    ICO_TID_enemymodel05,
+    ICO_TID_enemymodel06Kind16,
+    ICO_TID_enemymodel06Kinds,
+    ICO_TID_enemymodel06Pos,
+    ICO_TID_enemymodel06Set,
+    ICO_TID_enemymodel06,
+    ICO_TID_enemymodel07Kind16,
+    ICO_TID_enemymodel07Kinds,
+    ICO_TID_enemymodel07Pos,
+    ICO_TID_enemymodel07Set,
+    ICO_TID_enemymodel07,
+    ICO_TID_enemymodel08Kind16,
+    ICO_TID_enemymodel08Kinds,
+    ICO_TID_enemymodel08Pos,
+    ICO_TID_enemymodel08Set,
+    ICO_TID_enemymodel08,
+    ICO_TID_enemymodel09Kind16,
+    ICO_TID_enemymodel09Kinds,
+    ICO_TID_enemymodel09Pos,
+    ICO_TID_enemymodel09Set,
+    ICO_TID_enemymodel09bKind3,
+    ICO_TID_enemymodel09bKinds,
+    ICO_TID_enemymodel09bPos,
+    ICO_TID_enemymodel09bSet,
+    ICO_TID_enemymodel09,
+    ICO_TID_enemySetTable,
     ICO_TID_COUNT
 } IcoTableId;
 
@@ -174,11 +225,14 @@ typedef struct IcoTableSet {
     uint32_t object_count;
 } IcoTableSet;
 
-#define ICO_TABLE_SET_COUNT 3
+#define ICO_TABLE_SET_COUNT 6
 
 extern const IcoTableSet ico_table_set_pal;
 extern const IcoTableSet ico_table_set_jpn;
 extern const IcoTableSet ico_table_set_kor;
+extern const IcoTableSet ico_table_set_ntsc;
+extern const IcoTableSet ico_table_set_aug6;
+extern const IcoTableSet ico_table_set_jun26;
 
 /* The sets in config/regions.txt's order (port/data/gen/table_sets.c): the
    index is the region's row. */
@@ -259,6 +313,56 @@ extern const IcoTableSet *const ico_table_sets[ICO_TABLE_SET_COUNT];
     X(parallelMotionOrient)                                                                        \
     X(particleEffectFile)                                                                          \
     X(spiderDef)                                                                                   \
-    X(wayGroupSheet)
+    X(wayGroupSheet)                                                                               \
+    X(mcIconSys)                                                                                   \
+    X(enemymodel02Kind16)                                                                          \
+    X(enemymodel02Kinds)                                                                           \
+    X(enemymodel02Pos)                                                                             \
+    X(enemymodel02Set)                                                                             \
+    X(enemymodel02)                                                                                \
+    X(enemymodel03Kind16)                                                                          \
+    X(enemymodel03Kinds)                                                                           \
+    X(enemymodel03Pos)                                                                             \
+    X(enemymodel03Set)                                                                             \
+    X(enemymodel03)                                                                                \
+    X(enemymodel04Kind16)                                                                          \
+    X(enemymodel04Kinds)                                                                           \
+    X(enemymodel04Pos)                                                                             \
+    X(enemymodel04Set)                                                                             \
+    X(enemymodel04)                                                                                \
+    X(enemymodel05Kind16)                                                                          \
+    X(enemymodel05Kinds)                                                                           \
+    X(enemymodel05Pos)                                                                             \
+    X(enemymodel05Set)                                                                             \
+    X(enemymodel05bKind0)                                                                          \
+    X(enemymodel05bKinds)                                                                          \
+    X(enemymodel05bPos)                                                                            \
+    X(enemymodel05bSet)                                                                            \
+    X(enemymodel05)                                                                                \
+    X(enemymodel06Kind16)                                                                          \
+    X(enemymodel06Kinds)                                                                           \
+    X(enemymodel06Pos)                                                                             \
+    X(enemymodel06Set)                                                                             \
+    X(enemymodel06)                                                                                \
+    X(enemymodel07Kind16)                                                                          \
+    X(enemymodel07Kinds)                                                                           \
+    X(enemymodel07Pos)                                                                             \
+    X(enemymodel07Set)                                                                             \
+    X(enemymodel07)                                                                                \
+    X(enemymodel08Kind16)                                                                          \
+    X(enemymodel08Kinds)                                                                           \
+    X(enemymodel08Pos)                                                                             \
+    X(enemymodel08Set)                                                                             \
+    X(enemymodel08)                                                                                \
+    X(enemymodel09Kind16)                                                                          \
+    X(enemymodel09Kinds)                                                                           \
+    X(enemymodel09Pos)                                                                             \
+    X(enemymodel09Set)                                                                             \
+    X(enemymodel09bKind3)                                                                          \
+    X(enemymodel09bKinds)                                                                          \
+    X(enemymodel09bPos)                                                                            \
+    X(enemymodel09bSet)                                                                            \
+    X(enemymodel09)                                                                                \
+    X(enemySetTable)
 
 #endif /* ICO_PORT_DATA_TABLE_DESC_H */
