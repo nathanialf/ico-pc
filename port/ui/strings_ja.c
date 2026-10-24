@@ -627,4 +627,40 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "ディスクイメージをアプリにコピーしています",
     [UI_STR_ISO_COPYING_LONG] =
         "ディスクイメージをアプリにコピーしています。大きなイメージなので数分かかります",
+    [UI_STR_SECTION_VARIANTS] = "ゲームのバリエーション",
+    [UI_STR_OPT_VAR_TOUGHNESS] = "影の強さ",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
+        "北米版：影の強さが北米版ディスクと同じになり、2周目以降も強くなりません。実績はそのままです。",
+    [UI_STR_VAL_VAR_AMERICAN] = "北米版",
+    [UI_STR_VAL_VAR_NOT_TOUGHER] = "強くならない",
+    [UI_STR_OPT_VAR_ONE_HIT] = "一振り一回だけ命中",
+    [UI_STR_OPT_VAR_ONE_HIT_NOTE] =
+        "イコの一振りは、影に一度しか当たりません。実績が無効になります。",
+    [UI_STR_OPT_VAR_NEVER_DODGE] = "影がよけない",
+    [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] = "影はイコの攻撃をよけません。実績が無効になります。",
+    [UI_STR_OPT_VAR_AGGRESSION] = "影の攻め方",
+    [UI_STR_VAL_VAR_AGG_OWN] = "元のまま",
+    [UI_STR_VAL_VAR_AGG_BOLD_PATIENT] = "大胆・じっくり",
+    [UI_STR_VAL_VAR_AGG_BOLD_QUICK] = "大胆・すばやく",
+    [UI_STR_VAL_VAR_AGG_WARY_PATIENT] = "慎重・じっくり",
+    [UI_STR_VAL_VAR_AGG_WARY_QUICK] = "慎重・すばやく",
+    [UI_STR_OPT_VAR_AGGRESSION_NOTE] =
+        "影の戦い方を、大胆か慎重か、じっくりかすばやくかで変えます。実績はそのままです。",
+    [UI_STR_OPT_VAR_NO_HINTS] = "ヒントなし",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE] =
+        "北米版と同じく、ヨルダが進む先のヒントを出しません。実績はそのままです。",
+    [UI_STR_OPT_VAR_BARRIER] = "女王の結界",
+    [UI_STR_VAL_VAR_HITS_5] = "5回",
+    [UI_STR_VAL_VAR_HITS_7] = "7回",
+    [UI_STR_OPT_VAR_BARRIER_NOTE] =
+        "女王の結界を壊すのに必要な攻撃の回数です。実績はそのままです。",
+    [UI_STR_OPT_VAR_NO_LOOK] = "ムービー中に見回さない",
+    [UI_STR_OPT_VAR_NO_LOOK_NOTE] =
+        "ムービー中に右スティックで見回せなくなります。実績はそのままです。",
+    [UI_STR_OPT_VAR_IGNORE_CAMS] = "ムービーのカメラを無視",
+    [UI_STR_OPT_VAR_IGNORE_CAMS_NOTE] =
+        "ムービーがおかしく見えることがあり、本来見せない場所が映ることもあります。実績が無効になります。",
+    [UI_STR_OPT_VAR_DEBUG_MENU] = "デバッグメニュー",
+    [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] =
+        "ゲーム本来のデバッグメニューです（開発者向け）。実績が無効になります。",
 };
