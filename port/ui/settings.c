@@ -37,6 +37,7 @@
 #include "sysconf.h"
 #include "touch_edit.h"    /* the touch layout edits (port/input) */
 #include "touch_edit_ui.h" /* the Edit layout page */
+#include "variants.h"      /* Extras > Game variants */
 #include "ui_hint.h"
 #include "ui_list.h"
 #include "video_options.h"
@@ -1394,6 +1395,40 @@ static const char *onOff(int v)
     return ui_str(v ? UI_STR_ON : UI_STR_OFF);
 }
 
+/* Extras > Game variants: one row per IcoVariantId, in its order */
+static int isVarOpt(int opt)
+{
+    return opt >= UI_OPT_VAR_TOUGHNESS && opt <= UI_OPT_VAR_IGNORE_CAMS;
+}
+
+_Static_assert(UI_OPT_VAR_IGNORE_CAMS - UI_OPT_VAR_TOUGHNESS + 1 == ICO_VARIANT_COUNT &&
+                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_AGGRESSION == UI_OPT_VAR_AGGRESSION &&
+                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_BARRIER_HITS == UI_OPT_VAR_BARRIER &&
+                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_NO_CUTSCENE_LOOK == UI_OPT_VAR_NO_LOOK,
+               "a Settings row for each variant, in variants.h's order");
+
+static const char *variantText(int opt)
+{
+    static const int tough[ICO_TOUGHNESS_COUNT] = {UI_STR_VAL_ORIGINAL, UI_STR_VAL_VAR_AMERICAN,
+                                                   UI_STR_VAL_VAR_NOT_TOUGHER};
+    static const int agg[ICO_AGGRESSION_COUNT] = {
+        UI_STR_VAL_VAR_AGG_OWN, UI_STR_VAL_VAR_AGG_BOLD_PATIENT, UI_STR_VAL_VAR_AGG_BOLD_QUICK,
+        UI_STR_VAL_VAR_AGG_WARY_PATIENT, UI_STR_VAL_VAR_AGG_WARY_QUICK};
+    const IcoVariantId id = (IcoVariantId)(opt - UI_OPT_VAR_TOUGHNESS);
+    const int v = ico_variant_get(id);
+
+    switch (id) {
+    case ICO_VARIANT_SHADE_TOUGHNESS:
+        return ui_str(tough[v >= 0 && v < ICO_TOUGHNESS_COUNT ? v : 0]);
+    case ICO_VARIANT_AGGRESSION:
+        return ui_str(agg[v >= 0 && v < ICO_AGGRESSION_COUNT ? v : 0]);
+    case ICO_VARIANT_BARRIER_HITS:
+        return ui_str(v == 1 ? UI_STR_VAL_VAR_HITS_7 : UI_STR_VAL_VAR_HITS_5);
+    default:
+        return onOff(v);
+    }
+}
+
 /* The game's own language (NonLinearCameraMove, 2..6), -1 on a disc that
    has none (port/core/region.h has_game_language: the Japanese and
    Korean ones) */
@@ -2052,6 +2087,15 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     }
     case UI_OPT_DEVELOPER:
         return onOff(ico_opt_developer_mode());
+    case UI_OPT_VAR_TOUGHNESS:
+    case UI_OPT_VAR_ONE_HIT:
+    case UI_OPT_VAR_NEVER_DODGE:
+    case UI_OPT_VAR_AGGRESSION:
+    case UI_OPT_VAR_NO_HINTS:
+    case UI_OPT_VAR_BARRIER:
+    case UI_OPT_VAR_NO_LOOK:
+    case UI_OPT_VAR_IGNORE_CAMS:
+        return variantText(opt);
     case UI_OPT_EXTRAS_CREDITS:
         return creditsUnlocked() ? "" : ui_str(UI_STR_ACH_LOCKED);
     default:
@@ -2128,6 +2172,9 @@ static int optShown(int opt, int link)
     }
     if (opt == UI_OPT_DUMP_TEXTURES || opt == UI_OPT_DUMP_MODELS) {
         return ico_opt_developer_mode(); /* for pack authors */
+    }
+    if (opt == UI_OPT_VAR_DEBUG_MENU) {
+        return ico_opt_developer_mode(); /* the game's debug menu */
     }
     if (opt == UI_OPT_REPORT_PICTURE) {
         /* the window build, developer mode or not: a player's report row */
@@ -2247,6 +2294,12 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
            textures follow within a frame (Texture.c reads the serial) */
         const IcoAppPart p = charPart(opt);
         ico_appearance_set(p, stepIndex(ico_appearance_get(p), ico_appearance_choices(p), dir));
+        s_dirtyConfig = 1;
+        return;
+    }
+    if (isVarOpt(opt)) {
+        /* [variants] <key>, written in memory; the page's leaving saves */
+        ico_variant_step((IcoVariantId)(opt - UI_OPT_VAR_TOUGHNESS), dir);
         s_dirtyConfig = 1;
         return;
     }
@@ -3036,6 +3089,9 @@ static int pagePitch(int page, int n, int *y0)
         return 14;
     }
     *y0 = 40;
+    if (page == UI_PAGE_VARIANTS && n > 9) {
+        return 16; /* ten rows (Developer mode's Debug menu): Back at 184 */
+    }
     if (page == UI_PAGE_EFFECTS && n > 13) {
         *y0 = 30;
         return 12; /* fourteen rows: Back at 186, its box to 222 */
@@ -3310,6 +3366,18 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_EXTRAS_CREDITS, UI_STR_EXTRAS_LOCKED_NOTE);
         addNote(pg, UI_OPT_EXTRAS_EXPORT_TEXTURES, UI_STR_EXPORT_TEXTURES_NOTE);
         addNote(pg, UI_OPT_ACH_POPUPS, UI_STR_ACH_POPUPS_ALSO_NOTE);
+        break;
+    case UI_PAGE_VARIANTS:
+        /* each row says whether it switches achievements off */
+        addNote(pg, UI_OPT_VAR_TOUGHNESS, UI_STR_OPT_VAR_TOUGHNESS_NOTE);
+        addNote(pg, UI_OPT_VAR_ONE_HIT, UI_STR_OPT_VAR_ONE_HIT_NOTE);
+        addNote(pg, UI_OPT_VAR_NEVER_DODGE, UI_STR_OPT_VAR_NEVER_DODGE_NOTE);
+        addNote(pg, UI_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_AGGRESSION_NOTE);
+        addNote(pg, UI_OPT_VAR_NO_HINTS, UI_STR_OPT_VAR_NO_HINTS_NOTE);
+        addNote(pg, UI_OPT_VAR_BARRIER, UI_STR_OPT_VAR_BARRIER_NOTE);
+        addNote(pg, UI_OPT_VAR_NO_LOOK, UI_STR_OPT_VAR_NO_LOOK_NOTE);
+        addNote(pg, UI_OPT_VAR_IGNORE_CAMS, UI_STR_OPT_VAR_IGNORE_CAMS_NOTE);
+        addNote(pg, UI_OPT_VAR_DEBUG_MENU, UI_STR_OPT_VAR_DEBUG_MENU_NOTE);
         break;
     case UI_PAGE_CHARACTERS: {
         /* a swatch right of each colour row's arrows, then one note row
@@ -3776,13 +3844,27 @@ static void build(void)
     /* Characters after Credits (from both entries; the other three
        from the title only) */
     static const int extrasOpts[] = {
-        UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,          UI_OPT_EXTRAS_CREDITS, UI_OPT_LINK,
-        UI_OPT_EXTRAS_STEAM, UI_OPT_EXTRAS_EXPORT_TEXTURES, UI_OPT_ACH_POPUPS,     UI_OPT_BACK};
-    static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC,   UI_STR_EXTRAS_MODELS,
-                                     UI_STR_EXTRAS_CREDITS, UI_STR_SECTION_CHARACTERS,
-                                     UI_STR_EXTRAS_STEAM,   UI_STR_EXTRAS_EXPORT_TEXTURES,
-                                     UI_STR_OPT_ACH_POPUPS, UI_STR_BACK};
-    static const int extrasLinks[] = {-1, -1, -1, UI_PAGE_CHARACTERS, -1, -1, -1, -1};
+        UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS, UI_OPT_EXTRAS_CREDITS,         UI_OPT_LINK,
+        UI_OPT_LINK,         UI_OPT_EXTRAS_STEAM,  UI_OPT_EXTRAS_EXPORT_TEXTURES, UI_OPT_ACH_POPUPS,
+        UI_OPT_BACK};
+    static const int extrasStrs[] = {
+        UI_STR_EXTRAS_MUSIC,           UI_STR_EXTRAS_MODELS,    UI_STR_EXTRAS_CREDITS,
+        UI_STR_SECTION_CHARACTERS,     UI_STR_SECTION_VARIANTS, UI_STR_EXTRAS_STEAM,
+        UI_STR_EXTRAS_EXPORT_TEXTURES, UI_STR_OPT_ACH_POPUPS,   UI_STR_BACK};
+    static const int extrasLinks[] = {-1, -1, -1, UI_PAGE_CHARACTERS, UI_PAGE_VARIANTS, -1,
+                                      -1, -1, -1};
+    /* Extras > Game variants (from both entries, with the Characters link
+       before it): the eight [variants] rows, the Debug menu (Developer mode
+       only) and Back */
+    static const int varOpts[] = {
+        UI_OPT_VAR_TOUGHNESS,  UI_OPT_VAR_ONE_HIT, UI_OPT_VAR_NEVER_DODGE, UI_OPT_VAR_AGGRESSION,
+        UI_OPT_VAR_NO_HINTS,   UI_OPT_VAR_BARRIER, UI_OPT_VAR_NO_LOOK,     UI_OPT_VAR_IGNORE_CAMS,
+        UI_OPT_VAR_DEBUG_MENU, UI_OPT_BACK};
+    static const int varStrs[] = {UI_STR_OPT_VAR_TOUGHNESS,   UI_STR_OPT_VAR_ONE_HIT,
+                                  UI_STR_OPT_VAR_NEVER_DODGE, UI_STR_OPT_VAR_AGGRESSION,
+                                  UI_STR_OPT_VAR_NO_HINTS,    UI_STR_OPT_VAR_BARRIER,
+                                  UI_STR_OPT_VAR_NO_LOOK,     UI_STR_OPT_VAR_IGNORE_CAMS,
+                                  UI_STR_OPT_VAR_DEBUG_MENU,  UI_STR_BACK};
     /* the characters' colours, one row per IcoAppPart; Switch shows
        only inside the model viewer */
     static const int charOpts[] = {UI_OPT_CHAR_ICO_SKIN,
@@ -3893,6 +3975,8 @@ static void build(void)
     _Static_assert(N_OF(ctlOpts) <= MAX_ROWS, "the ctlOpts rows fit the page's row budget");
     _Static_assert(N_OF(gameOpts) <= MAX_ROWS, "the gameOpts rows fit the page's row budget");
     _Static_assert(N_OF(extrasOpts) <= MAX_ROWS, "the extrasOpts rows fit the page's row budget");
+    _Static_assert(sizeof(varOpts) == sizeof(varStrs), "a string for each Game variants row");
+    _Static_assert(N_OF(varOpts) <= MAX_ROWS, "the Game variants rows fit");
 
     ui_font_init(); /* the notes are wrapped by measuring */
     memset(s_pages, 0, sizeof(s_pages));
@@ -3930,6 +4014,8 @@ static void build(void)
        the count at install */
     buildOptionPage(UI_PAGE_CHARACTERS, UI_STR_SECTION_CHARACTERS, charOpts, charStrs, NULL,
                     N_OF(charOpts), UI_PAGE_EXTRAS);
+    buildOptionPage(UI_PAGE_VARIANTS, UI_STR_SECTION_VARIANTS, varOpts, varStrs, NULL,
+                    N_OF(varOpts), UI_PAGE_EXTRAS);
     buildListPage(UI_PAGE_ACHIEVEMENTS, UI_STR_SECTION_ACHIEVEMENTS, &kAchDef, UI_PAGE_MAIN);
     buildListPage(UI_PAGE_REMAP, UI_STR_OPT_REMAP, &kRemapDef, UI_PAGE_CONTROLS);
     buildListPage(UI_PAGE_MUSIC, UI_STR_EXTRAS_MUSIC, &kGalDef, UI_PAGE_EXTRAS);
@@ -5574,6 +5660,12 @@ static int settingsProc(int first, int item)
             POSITIVE_SE();
             texExportPress();
             refreshPage(pg, id, lay->curItem);
+        }
+        if ((flags & PAD_OK) && r->opt == UI_OPT_VAR_DEBUG_MENU) {
+            /* Game variants > Debug menu: marks it used (achievements off)
+               and calls the hook that opens the game's menu */
+            POSITIVE_SE();
+            ico_variants_debug_menu_pressed();
         }
         if ((flags & PAD_OK) && r->opt == UI_OPT_REPORT_PICTURE) {
             POSITIVE_SE();
