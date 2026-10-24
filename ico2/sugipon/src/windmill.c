@@ -38,7 +38,7 @@ int InitWindMillGeo(ICO_WORD owner, WmLayout *src)
 
     lay = *src;
     for (i = 0; i < 4; i++) {
-        if (stage_no == PAL_JPNKOR(101, 99)) {
+        if (stage_no == PAL_JPNKORCN(101, 99)) {
             lay.id = 20;
         } else {
             lay.id = 18;
@@ -49,7 +49,7 @@ int InitWindMillGeo(ICO_WORD owner, WmLayout *src)
         GOBJ_SUB(gobj)->parent.node = 0;
         SetFlag4PointFixID(gobj, i, 0);
 
-        if (stage_no == PAL_JPNKOR(101, 99)) {
+        if (stage_no == PAL_JPNKORCN(101, 99)) {
             lay.id = 21;
         } else {
             lay.id = 19;

@@ -438,9 +438,9 @@ Sub15C *CSVSYSTEM_InitDObj(int id, SObjSimpleSetting *lay)
     d->disp = 1;
     d->colRotate = 1;
     d->cylinderOn = 1;
-    d->modelId = PAL_JPNKOR(1552, 1548);
+    d->modelId = PAL_JPNKORCN(1552, 1548);
     d->accessary = -1;
-    if (id != PAL_JPNKOR(1552, 1548)) {
+    if (id != PAL_JPNKORCN(1552, 1548)) {
         CSVSYSTEM_ReadCharFiles(d, id);
     }
     debug_StdPrintfDummy("\x1b[35mALLOCED DOBJ\x1b[m\n");

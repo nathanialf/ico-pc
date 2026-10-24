@@ -444,7 +444,7 @@ void StageManager(void)
             ico_stage_change_to = msg->stage; /* PC port: kanbanTitleCover's target */
 #endif
             exit_stage(msg->stage);
-            lt_switch_layout(PAL_JPNKOR(0x35, 50));
+            lt_switch_layout(PAL_JPNKORCN(0x35, 50));
             systemStatus[6] = 1;
             systemStatus[5] = 1;
             stgMgrWakeupRequest = 1;

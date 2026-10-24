@@ -83,11 +83,11 @@ void actSt10lInit(void)
     if (gflagChk(289) != 0) {
         SetWayGroupActive(22, 1);
         SetWayGroupActive(23, 1);
-        stage_SetAnimation(PAL_JPNKOR(379, 375), 0, 89);
+        stage_SetAnimation(PAL_JPNKORCN(379, 375), 0, 89);
     } else {
         SetWayGroupActive(20, 1);
         SetWayGroupActive(21, 1);
-        stage_SetAnimation(PAL_JPNKOR(379, 375), 0, 0);
+        stage_SetAnimation(PAL_JPNKORCN(379, 375), 0, 0);
     }
 }
 
@@ -116,7 +116,7 @@ void actSt10lFloorLeft(GObj *volatile self)
         _ACTWait(1);
     }
 
-    stage_SetAnimation(PAL_JPNKOR(379, 375), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(379, 375), 1, 0);
 
     SetWayGroupActive(20, 0);
     SetWayGroupActive(21, 0);
@@ -125,7 +125,7 @@ void actSt10lFloorLeft(GObj *volatile self)
 
     gflagOn(289);
 
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(379, 375), 89, 1) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(379, 375), 89, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -138,7 +138,7 @@ void actSt10lFloorLeft(GObj *volatile self)
 
     if (gflagChk(295) == 0) {
         scpBoyControlReadDisable = 0;
-        lt_switch_layout(PAL_JPNKOR(54, 51));
+        lt_switch_layout(PAL_JPNKORCN(54, 51));
         scpWakeupEnemyAll();
 
         if (girlGObj != 0) {
@@ -168,7 +168,7 @@ void actSt10lFloorRight(GObj *volatile self)
         _ACTWait(1);
     }
 
-    stage_SetAnimation(PAL_JPNKOR(379, 375), 1, 90);
+    stage_SetAnimation(PAL_JPNKORCN(379, 375), 1, 90);
 
     SetWayGroupActive(20, 1);
     SetWayGroupActive(21, 1);
@@ -177,7 +177,7 @@ void actSt10lFloorRight(GObj *volatile self)
 
     gflagOff(289);
 
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(379, 375), 180, 1) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(379, 375), 180, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -185,7 +185,7 @@ void actSt10lFloorRight(GObj *volatile self)
     _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1] * 11);
 
     scpBoyControlReadDisable = 0;
-    lt_switch_layout(PAL_JPNKOR(54, 51));
+    lt_switch_layout(PAL_JPNKORCN(54, 51));
     scpWakeupEnemyAll();
 
     if (girlGObj != 0) {
@@ -208,16 +208,16 @@ void actSt10lGondolaUp(GObj *volatile self)
         _ACTWait(1);
     }
 
-    stage_SetAnimation(PAL_JPNKOR(380, 376), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(380, 376), 1, 0);
 
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(380, 376), 169, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(380, 376), 169, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     iosPadActRequest(boyPad, 16);
 
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(380, 376), 179, 1) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(380, 376), 179, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -234,7 +234,7 @@ void actSt10lGondolaUp(GObj *volatile self)
 
     scpBoyControlReadDisable = 0;
     scpWakeupEnemyAll();
-    lt_switch_layout(PAL_JPNKOR(54, 51));
+    lt_switch_layout(PAL_JPNKORCN(54, 51));
 
     gondolaUp_mes[0].func = actSt10lGondolaMain;
     sub->mail = gondolaUp_mes;
@@ -254,16 +254,16 @@ void actSt10lGondolaDown(GObj *volatile self)
         _ACTWait(1);
     }
 
-    stage_SetAnimation(PAL_JPNKOR(380, 376), 1, 180);
+    stage_SetAnimation(PAL_JPNKORCN(380, 376), 1, 180);
 
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(380, 376), 340, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(380, 376), 340, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     iosPadActRequest(boyPad, 17);
 
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(380, 376), 360, 1) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(380, 376), 360, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -282,7 +282,7 @@ void actSt10lGondolaDown(GObj *volatile self)
 
     scpBoyControlReadDisable = 0;
     scpWakeupEnemyAll();
-    lt_switch_layout(PAL_JPNKOR(54, 51));
+    lt_switch_layout(PAL_JPNKORCN(54, 51));
 
     gondolaDown_mes[0].func = actSt10lGondolaMain;
     sub->mail = gondolaDown_mes;
@@ -299,7 +299,7 @@ void actSt10lEneCam2Chk(GObj *volatile self)
         _ACTWait(1);
     }
 
-    lt_switch_layout(PAL_JPNKOR(55, 52));
+    lt_switch_layout(PAL_JPNKORCN(55, 52));
     scpBoyControlReadDisable = 1;
 
     save = iosPadActRequestEnable;
@@ -308,7 +308,7 @@ void actSt10lEneCam2Chk(GObj *volatile self)
     scpKillEnemyOne(992);
     scpKillEnemyOne(993);
     scpKillSpiderGroup(994);
-    scpSleepEnemyOne(PAL_JPNKOR(3757, 3734));
+    scpSleepEnemyOne(PAL_JPNKORCN(3757, 3734));
     scpSleepEnemyOne(991);
     scpSleepEnemyOne(1006);
     scpSleepSpiderGroupOne(1007);
@@ -319,19 +319,19 @@ void actSt10lEneCam2Chk(GObj *volatile self)
 
     iosPadActRequestEnable = save;
 
-    stage_SetAnimation(PAL_JPNKOR(381, 377), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(381, 377), 1, 0);
 
-    while (stage_CheckAnimationFinish(PAL_JPNKOR(381, 377)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN(381, 377)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1] * 3);
 
-    lt_switch_layout(PAL_JPNKOR(54, 51));
+    lt_switch_layout(PAL_JPNKORCN(54, 51));
     scpBoyControlReadDisable = 0;
 
-    scpWakeupEnemyOne(PAL_JPNKOR(3757, 3734));
+    scpWakeupEnemyOne(PAL_JPNKORCN(3757, 3734));
     scpWakeupEnemyOne(992);
     scpWakeupEnemyOne(993);
     scpWakeupSpiderGroupOne(994);
@@ -351,13 +351,13 @@ void actSt10lEneCam3Chk(GObj *volatile self)
     gflagOn(295);
     FinishHint(14);
 
-    stage_SetAnimation(PAL_JPNKOR(382, 378), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(382, 378), 1, 0);
 
     buf[0] = eneCam3ChkPos.d[0];
     buf[1] = eneCam3ChkPos.d[1];
     _SCPMoveCharactorByWay(girlGObj, 0, (float *)buf, 100.0f, 0);
 
-    while (stage_CheckAnimationFinish(PAL_JPNKOR(382, 378)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN(382, 378)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -366,14 +366,14 @@ void actSt10lEneCam3Chk(GObj *volatile self)
 
     _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1] * 3);
 
-    lt_switch_layout(PAL_JPNKOR(54, 51));
+    lt_switch_layout(PAL_JPNKORCN(54, 51));
     scpBoyControlReadDisable = 0;
     scpWakeupEnemyAll();
 }
 
 void actSt10lChainMove(GObj *volatile self)
 {
-    lt_switch_layout(PAL_JPNKOR(55, 52));
+    lt_switch_layout(PAL_JPNKORCN(55, 52));
     scpSleepEnemyAll();
 
     gflagOn(287);
@@ -387,10 +387,10 @@ void actSt10lChainMove(GObj *volatile self)
         _ACTWait(1);
     }
 
-    stage_SetAnimation(PAL_JPNKOR(384, 380), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(384, 380), 1, 0);
     SetCameraFlag_LwsCutBack();
 
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(384, 380), 240, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(384, 380), 240, 0) == 0) {
         if ((pad[0].flags & 0x800) && scpAdpcmPlayRequestNum() == 0) {
             scpFadeOut(16.0f, 0, 0, 0);
             scpAdpcmFadeCloseFunc(&chain10l, 512);
@@ -402,7 +402,7 @@ void actSt10lChainMove(GObj *volatile self)
                 _ACTWait(1);
             }
 
-            stage_SetAnimation(PAL_JPNKOR(384, 380), 1, 239);
+            stage_SetAnimation(PAL_JPNKORCN(384, 380), 1, 239);
             scpFadeIn(3.0f);
             break;
         }
@@ -411,11 +411,11 @@ void actSt10lChainMove(GObj *volatile self)
 
     scpWakeupEnemyAll();
     scpBoyControlReadDisable = 0;
-    lt_switch_layout(PAL_JPNKOR(54, 51));
+    lt_switch_layout(PAL_JPNKORCN(54, 51));
 
     _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1]);
 
-    stage_SetAnimation(PAL_JPNKOR(384, 380), 0, 0);
+    stage_SetAnimation(PAL_JPNKORCN(384, 380), 0, 0);
 
     scpSearchGobj(985)->active = 1;
 }
@@ -428,7 +428,7 @@ void actSt10lChain(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(287) == 0) {
-        stage_SetAnimation(PAL_JPNKOR(384, 380), 0, 0);
+        stage_SetAnimation(PAL_JPNKORCN(384, 380), 0, 0);
 
         scpSearchGobj(985)->active = 0;
 
@@ -437,7 +437,7 @@ void actSt10lChain(GObj *volatile self)
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-        stage_SetAnimation(PAL_JPNKOR(384, 380), 0, 0);
+        stage_SetAnimation(PAL_JPNKORCN(384, 380), 0, 0);
         FinishHint(13);
     }
 }
@@ -463,11 +463,11 @@ void actSt10lGondola(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(291) != 0) {
-        stage_SetAnimation(PAL_JPNKOR(380, 376), 0, 0);
+        stage_SetAnimation(PAL_JPNKORCN(380, 376), 0, 0);
         _ACTWait(10);
-        stage_SetAnimation(PAL_JPNKOR(380, 376), 0, 179);
+        stage_SetAnimation(PAL_JPNKORCN(380, 376), 0, 179);
     } else {
-        stage_SetAnimation(PAL_JPNKOR(380, 376), 0, 0);
+        stage_SetAnimation(PAL_JPNKORCN(380, 376), 0, 0);
     }
 
     gondola_mes[0].func = actSt10lGondolaMain;
@@ -483,7 +483,7 @@ void actSt10lSekizo(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
-    scpSekizou(self, 288, PAL_JPNKOR(383, 379), 0, 19, 0.0f, -72.0f, 1274.0f, 76.0f, -72.0f,
+    scpSekizou(self, 288, PAL_JPNKORCN(383, 379), 0, 19, 0.0f, -72.0f, 1274.0f, 76.0f, -72.0f,
                1274.0f);
 }
 
@@ -760,7 +760,7 @@ void actSt10lFloorSwitch(GObj *volatile self)
     Act *sub = GOBJ_ACT(self);
 
     sub->mainMail = 0;
-    lt_switch_layout(PAL_JPNKOR(55, 52));
+    lt_switch_layout(PAL_JPNKORCN(55, 52));
     scpBoyControlReadDisable = 1;
     scpSleepEnemyAll();
 
@@ -792,7 +792,7 @@ void actSt10lGondolaSwitch(GObj *volatile self)
     Act *sub = GOBJ_ACT(self);
 
     sub->mainMail = 0;
-    lt_switch_layout(PAL_JPNKOR(55, 52));
+    lt_switch_layout(PAL_JPNKORCN(55, 52));
     scpBoyControlReadDisable = 1;
     scpSleepEnemyAll();
 

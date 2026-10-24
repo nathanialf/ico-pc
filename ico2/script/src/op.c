@@ -92,14 +92,14 @@ void actTitleShortCut(GObj *volatile self);
    is written out in case 0 and again in case 1. */
 static inline int tick(int *pt) /* derived name */
 {
-    if ((current_layout_id == PAL_JPNKOR(12, 9) || current_layout_id == PAL_JPNKOR(13, 10)) &&
+    if ((current_layout_id == PAL_JPNKORCN(12, 9) || current_layout_id == PAL_JPNKORCN(13, 10)) &&
         lt_continue_selected == 0) {
         (*pt)--;
     } else {
         *pt = (60 - systemStatus[0] * 10) / systemStatus[1] * 10;
     }
     if (*pt < 0) {
-        current_layout_id = PAL_JPNKOR(55, 52);
+        current_layout_id = PAL_JPNKORCN(55, 52);
         return 1;
     }
     return 0;
@@ -173,7 +173,7 @@ void actOpDemo01(GObj *volatile self)
         }
         opTitleLogoMode = 0;
 
-        if (ICO_JPNKOR) {
+        if (ICO_JPNKORCN) {
             stage_SetAnimation(567, -1, -2);
             stage_SetAnimation(559, -1, -2);
             stage_SetAnimation(560, -1, -2);
@@ -184,7 +184,7 @@ void actOpDemo01(GObj *volatile self)
         stage_SetAnimation(563, -1, -2);
         stage_SetAnimation(564, -1, -2);
         stage_SetAnimation(565, -1, -2);
-        if (!ICO_JPNKOR) {
+        if (!ICO_JPNKORCN) {
             stage_SetAnimation(567, -1, -2);
             stage_SetAnimation(568, -1, -2);
             stage_SetAnimation(569, -1, -2);
@@ -193,7 +193,7 @@ void actOpDemo01(GObj *volatile self)
         switch (opDemoMode) {
         case 0:
             debug_StdPrintfDummy("mode 0");
-            current_layout_id = PAL_JPNKOR(55, 52);
+            current_layout_id = PAL_JPNKORCN(55, 52);
 
             if (titleAdpcm != 0) {
                 scpAdpcmFadeCloseFunc(&titleAdpcm, 288);
@@ -232,7 +232,7 @@ void actOpDemo01(GObj *volatile self)
         case 1:
             debug_StdPrintfDummy("mode 1");
             opTitleLogoMode = 1;
-            lt_switch_layout(PAL_JPNKOR(12, 9));
+            lt_switch_layout(PAL_JPNKORCN(12, 9));
             th = actCreateSubThread(actTitleShortCut, 21);
 
             t = (60 - systemStatus[0] * 10) / systemStatus[1] * 10;
@@ -240,7 +240,7 @@ void actOpDemo01(GObj *volatile self)
             while (1) {
                 _ACTWait(1);
                 if (titleSubEnd != 0 && tick(&t)) {
-                    lt_switch_layout(PAL_JPNKOR(55, 52));
+                    lt_switch_layout(PAL_JPNKORCN(55, 52));
                     opDemoMode = opDemoNextMode;
                     break;
                 }
@@ -262,7 +262,7 @@ void actOpDemo01(GObj *volatile self)
             }
             titleAdpcm = 0;
             _ACTWait(1);
-            if (ICO_JPNKOR) {
+            if (ICO_JPNKORCN) {
                 stgmgrForceSwitchWithFade(57, 256.0f, 4.0f);
             } else {
                 stgmgrForceSwitchWithFade(systemStatus[0] != 0 ? 58 : 57, 256.0f, 4.0f);
@@ -298,7 +298,7 @@ void actTitleShortCut(GObj *volatile self)
     if (titleAdpcm == 0) {
         scpAdpcmPlayRequestFunc(56, &titleAdpcm, 0, 0, 1);
     }
-    stage_SetAnimation(PAL_JPNKOR(571, 567), 1, 1351);
+    stage_SetAnimation(PAL_JPNKORCN(571, 567), 1, 1351);
 
     SetHandCameraLimitInDemo(0, 0);
     SetZoomMaxValInDemo(0);
@@ -317,7 +317,7 @@ void actTitleShortCut(GObj *volatile self)
 
     scpFadeIn(3.0f);
 
-    while (stage_CheckAnimationFinish(PAL_JPNKOR(571, 567)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN(571, 567)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -348,7 +348,7 @@ void actTitleReadTimeDemo0(GObj *volatile self)
     monitorCameraHold = 0;
 
     _ACTWait(1);
-    lt_switch_layout(PAL_JPNKOR(55, 52));
+    lt_switch_layout(PAL_JPNKORCN(55, 52));
 
     _ACTWait(1);
 
@@ -372,9 +372,9 @@ void actTitleReadTimeDemo0(GObj *volatile self)
     ResetHandCameraLimitInDemo();
     ResetZoomMaxValInDemo();
 
-    stage_SetAnimation(PAL_JPNKOR(563, 559), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(563, 559), 1, 0);
 
-    while (stage_ContinueAnimation(PAL_JPNKOR(563, 559), PAL_JPNKOR(564, 560)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(563, 559), PAL_JPNKORCN(564, 560)) == 0) {
         _ACTWait(1);
     }
 
@@ -385,7 +385,7 @@ void actTitleReadTimeDemo0(GObj *volatile self)
     scpPlayMot(scpSearchGobj(61), 1065);
     scpSearchGobj(61)->active = 1;
 
-    while (stage_ContinueAnimation(PAL_JPNKOR(564, 560), PAL_JPNKOR(565, 561)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(564, 560), PAL_JPNKORCN(565, 561)) == 0) {
         _ACTWait(1);
     }
 
@@ -403,7 +403,7 @@ void actTitleReadTimeDemo0(GObj *volatile self)
     scpPlayMot(scpSearchGobj(60), 1059);
     scpPlayMot(scpSearchGobj(61), 1066);
 
-    while (stage_ContinueAnimation(PAL_JPNKOR(565, 561), PAL_JPNKOR(566, 562)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(565, 561), PAL_JPNKORCN(566, 562)) == 0) {
         _ACTWait(1);
     }
 
@@ -415,7 +415,7 @@ void actTitleReadTimeDemo0(GObj *volatile self)
     scpPlayMot(scpSearchGobj(60), 1060);
     scpPlayMot(scpSearchGobj(61), 1067);
 
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(566, 562), 60, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(566, 562), 60, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -423,7 +423,7 @@ void actTitleReadTimeDemo0(GObj *volatile self)
     scpSearchGobj(60)->active = 0;
     scpSearchGobj(57)->active = 0;
 
-    while (stage_ContinueAnimation(PAL_JPNKOR(566, 562), PAL_JPNKOR(567, 563)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(566, 562), PAL_JPNKORCN(567, 563)) == 0) {
         _ACTWait(1);
     }
 
@@ -438,14 +438,14 @@ void actTitleReadTimeDemo0(GObj *volatile self)
     scpPlayMot(scpSearchGobj(60), 1061);
     scpPlayMot(scpSearchGobj(61), 1068);
 
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(567, 563), 90, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(567, 563), 90, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     scpSearchGobj(54)->active = 0;
 
-    while (stage_ContinueAnimation(PAL_JPNKOR(567, 563), PAL_JPNKOR(568, 564)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(567, 563), PAL_JPNKORCN(568, 564)) == 0) {
         _ACTWait(1);
     }
 
@@ -460,7 +460,7 @@ void actTitleReadTimeDemo0(GObj *volatile self)
 
     scpSearchGobj(57)->active = 0;
 
-    while (stage_ContinueAnimation(PAL_JPNKOR(568, 564), PAL_JPNKOR(569, 565)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(568, 564), PAL_JPNKORCN(569, 565)) == 0) {
         _ACTWait(1);
     }
 
@@ -487,7 +487,7 @@ void actTitleReadTimeDemo0(GObj *volatile self)
 
     scpSearchGobj(46)->active = 0;
 
-    while (stage_ContinueAnimation(PAL_JPNKOR(569, 565), PAL_JPNKOR(571, 567)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(569, 565), PAL_JPNKORCN(571, 567)) == 0) {
         _ACTWait(1);
     }
 
@@ -511,7 +511,7 @@ void actTitleReadTimeDemo0(GObj *volatile self)
     _ACTWait(1000);
 
     opTitleLogoMode = 1;
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(571, 567), 1300, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(571, 567), 1300, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -520,7 +520,7 @@ void actTitleReadTimeDemo0(GObj *volatile self)
 
     debug_StdPrintfDummy("game mode %d %d\n", frame_count, gflagChk(386));
 
-    lt_switch_layout(PAL_JPNKOR(12, 9));
+    lt_switch_layout(PAL_JPNKORCN(12, 9));
 
     if (titleAdpcm == 0) {
         scpAdpcmPlayRequestFunc(56, &titleAdpcm, 0, 0, 1);
@@ -558,7 +558,7 @@ void actOpDemo01_2(GObj *volatile self)
     adpcm_conte01_sea = 0;
     op2 = 0;
 
-    lt_switch_layout(PAL_JPNKOR(55, 52));
+    lt_switch_layout(PAL_JPNKORCN(55, 52));
     scpBoyControlReadDisable = 1;
 
     scpAdpcmPlayRequestFunc(7, &adpcm_conte01_sea, 0, 0, 1);
@@ -591,7 +591,7 @@ void actOpDemo01_2Chk(GObj *volatile self)
 
     scpPlayStart(boyGObj);
 
-    stage_SetAnimation(PAL_JPNKOR(572, 568), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(572, 568), 1, 0);
 
     stgmgrNextStagePreLoadForceStageSet(exitData[stageData[stage_no].ent[0]].nextStage);
 
@@ -605,7 +605,7 @@ void actOpDemo01_2Chk(GObj *volatile self)
     scpPlayMot(scpSearchGobj(2314), 1034);
     scpSearchGobj(2314)->active = 1;
 
-    while (stage_ContinueAnimation(PAL_JPNKOR(572, 568), PAL_JPNKOR(573, 569)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(572, 568), PAL_JPNKORCN(573, 569)) == 0) {
         _ACTWait(1);
     }
 
@@ -618,7 +618,7 @@ void actOpDemo01_2Chk(GObj *volatile self)
 
     stage_SetAnimation(8, 1, 0);
 
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(573, 569), 340, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(573, 569), 340, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -627,10 +627,10 @@ void actOpDemo01_2Chk(GObj *volatile self)
     while (scpFadeChk() != 0) {
         _ACTWait(45);
     }
-    stage_SetAnimation(PAL_JPNKOR(573, 569), -1, -2);
+    stage_SetAnimation(PAL_JPNKORCN(573, 569), -1, -2);
     scpFadeIn(3.0f);
 
-    stage_SetAnimation(PAL_JPNKOR(574, 570), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(574, 570), 1, 0);
 
     scpAdpcmPlayRequestFunc(10, &op2, 0, 1, 1);
 
@@ -641,7 +641,7 @@ void actOpDemo01_2Chk(GObj *volatile self)
     scpPlayMot(scpSearchGobj(2313), 1013);
     scpPlayMot(scpSearchGobj(2314), 1036);
 
-    while (stage_ContinueAnimation(PAL_JPNKOR(574, 570), PAL_JPNKOR(575, 571)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(574, 570), PAL_JPNKORCN(575, 571)) == 0) {
         _ACTWait(1);
     }
 
@@ -654,7 +654,7 @@ void actOpDemo01_2Chk(GObj *volatile self)
 
     stage_SetAnimation(10, 1, 0);
 
-    while (stage_CheckAnimationFinish(PAL_JPNKOR(575, 571)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN(575, 571)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -672,10 +672,10 @@ void actOpDemo02(GObj *volatile self)
         scpPlayMot(boyGObj, 0);
     }
 
-    lt_switch_layout(PAL_JPNKOR(55, 52));
+    lt_switch_layout(PAL_JPNKORCN(55, 52));
     scpBoyControlReadDisable = 1;
 
-    stage_SetAnimation(PAL_JPNKOR(151, 147), 0, 0);
+    stage_SetAnimation(PAL_JPNKORCN(151, 147), 0, 0);
 
     scpAdpcmPlayRequestFunc(8, &demoAdpcm, 0, 1, 1);
     while (demoAdpcm == 0) {
@@ -727,7 +727,7 @@ void actSt24aConte01_2(GObj *volatile self)
 
     scpPlayStart(boyGObj);
 
-    stage_SetAnimation(PAL_JPNKOR(576, 572), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(576, 572), 1, 0);
 
     stage_SetAnimation(11, 1, 0);
 
@@ -740,7 +740,7 @@ void actSt24aConte01_2(GObj *volatile self)
     scpPlayMot(scpSearchGobj(2338), 1038);
     scpSearchGobj(2338)->active = 1;
 
-    while (stage_ContinueAnimation(PAL_JPNKOR(576, 572), PAL_JPNKOR(577, 573)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(576, 572), PAL_JPNKORCN(577, 573)) == 0) {
         _ACTWait(1);
     }
 
@@ -756,9 +756,9 @@ void actSt24aConte01_2(GObj *volatile self)
 
     _ACTWait(120);
 
-    stage_SetAnimation(PAL_JPNKOR(151, 147), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(151, 147), 1, 0);
 
-    while (stage_ContinueAnimation(PAL_JPNKOR(577, 573), PAL_JPNKOR(578, 574)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(577, 573), PAL_JPNKORCN(578, 574)) == 0) {
         _ACTWait(1);
     }
 
@@ -771,7 +771,7 @@ void actSt24aConte01_2(GObj *volatile self)
 
     stage_SetAnimation(13, 1, 0);
 
-    while (stage_ContinueAnimation(PAL_JPNKOR(578, 574), PAL_JPNKOR(579, 575)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(578, 574), PAL_JPNKORCN(579, 575)) == 0) {
         _ACTWait(1);
     }
 
@@ -790,10 +790,10 @@ void actSt24aConte01_2(GObj *volatile self)
     while (scpFadeChk() != 0) {
         _ACTWait(45);
     }
-    stage_SetAnimation(PAL_JPNKOR(579, 575), -1, -2);
+    stage_SetAnimation(PAL_JPNKORCN(579, 575), -1, -2);
     scpFadeIn(3.0f);
 
-    stage_SetAnimation(PAL_JPNKOR(580, 576), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(580, 576), 1, 0);
 
     stage_SetAnimation(15, 0, 0);
 
@@ -802,7 +802,7 @@ void actSt24aConte01_2(GObj *volatile self)
     scpPlayMot(scpSearchGobj(2337), 1019);
     scpPlayMot(scpSearchGobj(2338), 1041);
 
-    while (stage_CheckAnimationFinish(PAL_JPNKOR(580, 576)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN(580, 576)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -847,14 +847,14 @@ inline void actOpDemo03(GObj *volatile self)
     Act *act = actInitialize(self);
     _ACTWait(1);
 
-    lt_switch_layout(PAL_JPNKOR(55, 52));
+    lt_switch_layout(PAL_JPNKORCN(55, 52));
     scpBoyControlReadDisable = 1;
 
-    if (!ICO_JPNKOR) {
+    if (!ICO_JPNKORCN) {
         stage_SetAnimation(176, 0, 0);
     }
     stage_SetAnimation(172, 0, 0);
-    if (ICO_JPNKOR) {
+    if (ICO_JPNKORCN) {
         stage_SetAnimation(168, 0, 0);
     }
 
@@ -910,7 +910,7 @@ void actSt13aConte01_3(GObj *volatile self)
 
     scpPlayStart(boyGObj);
 
-    stage_SetAnimation(PAL_JPNKOR(581, 577), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(581, 577), 1, 0);
 
     scpPlayMot(boyGObj, 278);
     scpPlayMot(scpSearchGobj(2364), 998);
@@ -923,7 +923,7 @@ void actSt13aConte01_3(GObj *volatile self)
     _ACTWait(1);
     stage_SetAnimation(16, 1, 0);
 
-    while (stage_ContinueAnimation(PAL_JPNKOR(581, 577), PAL_JPNKOR(582, 578)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(581, 577), PAL_JPNKORCN(582, 578)) == 0) {
         _ACTWait(1);
     }
 
@@ -935,7 +935,7 @@ void actSt13aConte01_3(GObj *volatile self)
     _ACTWait(1);
     stage_SetAnimation(17, 1, 0);
 
-    while (stage_ContinueAnimation(PAL_JPNKOR(582, 578), PAL_JPNKOR(583, 579)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(582, 578), PAL_JPNKORCN(583, 579)) == 0) {
         _ACTWait(1);
     }
 
@@ -944,9 +944,9 @@ void actSt13aConte01_3(GObj *volatile self)
 
     _ACTWait(1);
     stage_SetAnimation(18, 1, 0);
-    stage_SetAnimation(PAL_JPNKOR(176, 172), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(176, 172), 1, 0);
 
-    while (stage_ContinueAnimation(PAL_JPNKOR(583, 579), PAL_JPNKOR(584, 580)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(583, 579), PAL_JPNKORCN(584, 580)) == 0) {
         _ACTWait(1);
     }
 
@@ -959,9 +959,9 @@ void actSt13aConte01_3(GObj *volatile self)
 
     _ACTWait(1);
     stage_SetAnimation(19, 1, 0);
-    stage_SetAnimation(PAL_JPNKOR(172, 168), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(172, 168), 1, 0);
 
-    while (stage_ContinueAnimation(PAL_JPNKOR(584, 580), PAL_JPNKOR(585, 581)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(584, 580), PAL_JPNKORCN(585, 581)) == 0) {
         _ACTWait(1);
     }
 

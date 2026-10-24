@@ -37,7 +37,7 @@ void actSt05eWaterStop(GObj *volatile self)
 {
     GProc *th;
 
-    lt_switch_layout(PAL_JPNKOR(55, 52));
+    lt_switch_layout(PAL_JPNKORCN(55, 52));
 
     demoEnd = 0;
     demoSkipped = 0;
@@ -60,8 +60,8 @@ void actSt05eWaterStop(GObj *volatile self)
         while (lt_fade_status() != 2) {
             _ACTWait(1);
         }
-        stage_SetAnimation(PAL_JPNKOR(267, 263), 0, -1);
-        stage_SetAnimation(PAL_JPNKOR(266, 262), -1, -2);
+        stage_SetAnimation(PAL_JPNKORCN(267, 263), 0, -1);
+        stage_SetAnimation(PAL_JPNKORCN(266, 262), -1, -2);
         scpFadeIn(3.0f);
     }
 
@@ -69,7 +69,7 @@ void actSt05eWaterStop(GObj *volatile self)
     scpSearchGobj(1554)->active = 0;
 
     scpBoyControlReadDisable = 0;
-    lt_switch_layout(PAL_JPNKOR(54, 51));
+    lt_switch_layout(PAL_JPNKORCN(54, 51));
 
     scpWakeupEnemyAll();
 
@@ -92,16 +92,16 @@ void actSt05eSolarChk(GObj *volatile self)
     FinishHint(26);
 
     if (gflagChk(243) == 0 || gflagChk(244) == 0 || gflagChk(245) == 0) {
-        lt_switch_layout(PAL_JPNKOR(55, 52));
+        lt_switch_layout(PAL_JPNKORCN(55, 52));
         scpBoyControlReadDisable = 1;
 
         scpSleepEnemyAll();
 
         scpAdpcmPlayRequestFunc(54, &solar, 1, 1, 1);
 
-        stage_SetAnimation(PAL_JPNKOR(268, 264), 1, 0);
+        stage_SetAnimation(PAL_JPNKORCN(268, 264), 1, 0);
 
-        while (stage_CheckAnimationFinish(PAL_JPNKOR(268, 264)) == 0) {
+        while (stage_CheckAnimationFinish(PAL_JPNKORCN(268, 264)) == 0) {
             if ((pad[0].flags & 0x800) && scpAdpcmPlayRequestNum() == 0) {
                 scpFadeOut(16.0f, 0, 0, 0);
                 while (scpFadeChk() != 0) {
@@ -110,7 +110,7 @@ void actSt05eSolarChk(GObj *volatile self)
                 while (lt_fade_status() != 2) {
                     _ACTWait(1);
                 }
-                stage_SetAnimation(PAL_JPNKOR(268, 264), 0, -1);
+                stage_SetAnimation(PAL_JPNKORCN(268, 264), 0, -1);
                 scpFadeIn(3.0f);
                 break;
             }
@@ -121,7 +121,7 @@ void actSt05eSolarChk(GObj *volatile self)
             scpAdpcmFadeCloseFunc(&solar, 80);
         }
 
-        lt_switch_layout(PAL_JPNKOR(54, 51));
+        lt_switch_layout(PAL_JPNKORCN(54, 51));
 
         scpBoyControlReadDisable = 0;
         scpWakeupEnemyAll();
@@ -152,7 +152,7 @@ void actSt05eWater(GObj *volatile self)
     } else {
         scpSearchGobj(1554)->active = 0;
 
-        stage_SetAnimation(PAL_JPNKOR(266, 262), -1, -2);
+        stage_SetAnimation(PAL_JPNKORCN(266, 262), -1, -2);
     }
 }
 
@@ -221,11 +221,11 @@ static void actSt05eWaterStopSub(GObj *volatile self)
 {
     _ACTWait(60);
 
-    stage_SetAnimation(PAL_JPNKOR(267, 263), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(267, 263), 1, 0);
 
-    stage_SetAnimation(PAL_JPNKOR(266, 262), -1, -2);
+    stage_SetAnimation(PAL_JPNKORCN(266, 262), -1, -2);
 
-    while (stage_CheckAnimationFinish(PAL_JPNKOR(267, 263)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN(267, 263)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);

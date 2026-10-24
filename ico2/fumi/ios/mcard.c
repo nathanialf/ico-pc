@@ -46,7 +46,7 @@ char *iOSMcSaveSeg_jpn[6] = {"BISCPS-11003ico", "icon.sys",    "boy_blk.ico",
 char *iOSMcSaveSeg_kor[6] = {"BISCPS-56001ico", "icon.sys",    "boy_blk.ico",
                              "boy_blk.ico",     "boy_blk.ico", "game."};
 
-#define iOSMcSaveSeg PAL_JPN_KOR(iOSMcSaveSeg_pal, iOSMcSaveSeg_jpn, iOSMcSaveSeg_kor)
+#define iOSMcSaveSeg PAL_JPN_KORCN(iOSMcSaveSeg_pal, iOSMcSaveSeg_jpn, iOSMcSaveSeg_kor)
 
 static int mcLockCount = 0; /* derived name */
 
@@ -182,13 +182,13 @@ static inline int product_write(McMgr *self)
     (IosMcProductFile + self->port)->outputMode = soundOutputModeGet();
     (IosMcProductFile + self->port)->vibration = iosPadActRequestEnable;
     (IosMcProductFile + self->port)->controlType = optionControlType;
-    if (!ICO_JPNKOR) {
+    if (!ICO_JPNKORCN) {
         (IosMcProductFile + self->port)->cameraMove = NonLinearCameraMove;
         (IosMcProductFile + self->port)->palMode = systemStatus[0];
     }
     *(McBlk *)(IosMcProductFile + self->port)->padConf = *(McBlk *)iosPadConfCustom.bit;
     iosMcHandlerWrite(self, (unsigned char *)(IosMcProductFile + self->port),
-                      PAL_JPNKOR(sizeof(McProductFile), MC_PRODUCT_FILE_JPN_SIZE));
+                      PAL_JPNKORCN(sizeof(McProductFile), MC_PRODUCT_FILE_JPN_SIZE));
     return 0;
 }
 
@@ -196,7 +196,7 @@ static inline int product_read(McMgr *self)
 {
     int idx = self->port;
     iosMcHandlerRead(self, (unsigned char *)&IosMcProductFile[idx],
-                     PAL_JPNKOR(sizeof(McProductFile), MC_PRODUCT_FILE_JPN_SIZE));
+                     PAL_JPNKORCN(sizeof(McProductFile), MC_PRODUCT_FILE_JPN_SIZE));
     return self->result;
 }
 
@@ -524,7 +524,7 @@ retry:
 
     if (mp->flags.ll & 2) {
         *(McName *)mp->path =
-            *(McName *)PAL_JPN_KOR("/BESCES-50760ico", "/BISCPS-11003ico", "/BISCPS-56001ico");
+            *(McName *)PAL_JPN_KORCN("/BESCES-50760ico", "/BISCPS-11003ico", "/BISCPS-56001ico");
         iosMcMgrMkdir(mp);
         if (mp->result != 0 && mp->result != -4) {
             return;
@@ -532,7 +532,7 @@ retry:
     }
 
     *(McName *)mp->dirName =
-        *(McName *)PAL_JPN_KOR("/BESCES-50760ico", "/BISCPS-11003ico", "/BISCPS-56001ico");
+        *(McName *)PAL_JPN_KORCN("/BESCES-50760ico", "/BISCPS-11003ico", "/BISCPS-56001ico");
     iosMcMgrChdir(mp);
 
     if (mp->result != 0) {

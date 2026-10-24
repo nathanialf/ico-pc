@@ -11,6 +11,6 @@ _Static_assert(ICO_TABLE_SET_COUNT == ICO_REGION_COUNT,
 
 /* config/regions.txt's rows in order */
 const IcoTableSet *const ico_table_sets[ICO_TABLE_SET_COUNT] = {
-    &ico_table_set_pal,  &ico_table_set_jpn,  &ico_table_set_kor,
-    &ico_table_set_ntsc, &ico_table_set_aug6, &ico_table_set_jun26,
+    &ico_table_set_pal,  &ico_table_set_jpn,   &ico_table_set_kor, &ico_table_set_ntsc,
+    &ico_table_set_aug6, &ico_table_set_jun26, &ico_table_set_cn,
 };

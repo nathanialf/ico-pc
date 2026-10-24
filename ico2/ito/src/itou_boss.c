@@ -268,7 +268,7 @@ static void effect_end_func(int id)
 
     if (isysGObjSearchFromObjKindID_begin(65) != 0) {
         e = &capsule[GetParticleEffectData(id)->user.capsule];
-        pbga_start(&e->bga, PAL_JPNKOR(552, 548));
+        pbga_start(&e->bga, PAL_JPNKORCN(552, 548));
         _CopyVector(e->bga->pos, e->pos);
         CopyQuaternion(e->bga->rot, e->quat);
         e->state = 2;
@@ -321,7 +321,7 @@ void bossCtrlBeforeFunc(GObj *self)
 inline int InqCapsuleGhostBossStage(void)
 {
     int r = 0;
-    if (stage_no == PAL_JPNKOR(86, 84) || stage_no == 3 || stage_no == 46)
+    if (stage_no == PAL_JPNKORCN(86, 84) || stage_no == 3 || stage_no == 46)
         r = 1;
     return r;
 }
@@ -416,7 +416,7 @@ static void gene_enemy(volatile ICO_WORD gobj)
     for (;; _ACTWait(1)) {
         total = 0;
         alive = 0;
-        if (stage_no == PAL_JPNKOR(86, 84)) {
+        if (stage_no == PAL_JPNKORCN(86, 84)) {
             if ((pad[0].flags & 0x40) != 0) {
                 gflag[0] = 1;
             }
@@ -535,7 +535,7 @@ inline void actBossCtrlStart(void *gobj)
         no++;
         o = isysGObjSearchFromObjKindID_next(o);
     }
-    if (ICO_KOR) {
+    if (ICO_KORCN) {
         /* the Korean build's printf to the TTY: the port's TTY, scePrintf */
         scePrintf("n generator %d\n", no);
     } else {
@@ -560,7 +560,7 @@ inline ICO_WORD InitBossCtrlGeo(void *gobj)
     ret = (ICO_WORD)iosMallocDebug(ios_partition_sugipon, 0, __FILE__, 350);
     actInitialize(gobj);
     actInitialize_ext_charcter(gobj);
-    if (ICO_KOR) {
+    if (ICO_KORCN) {
         /* the Korean build's printf to the TTY: the port's TTY, scePrintf */
         scePrintf("N_CAPSULE %d\n", 53);
     } else {
@@ -611,7 +611,7 @@ void BossCtrlDL(void)
         e = &base[k];
         if (e->state >= 2) {
             if (stage_DispBgAnimation(&e->bga) != 0) {
-                pbga_start(&e->bga, PAL_JPNKOR(553, 549));
+                pbga_start(&e->bga, PAL_JPNKORCN(553, 549));
                 _CopyVector(e->bga->pos, e->pos);
                 CopyQuaternion(e->bga->rot, e->quat);
             }

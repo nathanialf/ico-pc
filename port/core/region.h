@@ -60,8 +60,8 @@ typedef struct IcoGlyphRow {
 
 typedef struct IcoRegionInfo {
     /* --- the disc ------------------------------------------------------ */
-    const char
-        *slug; /* "pal", "jpn", "kor", "ntsc", "aug6", "jun26": config/regions.txt's first column */
+    const char *
+        slug; /* "pal", "jpn", "kor", "ntsc", "aug6", "jun26", "cn": config/regions.txt's first column */
     const char *disc_id;      /* "SCES-50760": its third */
     const char *boot_elf;     /* "SCES_507.60": its fourth */
     const char *pack_serial;  /* texture and model pack folders (PCSX2's) */
@@ -189,6 +189,7 @@ extern const IcoRegionInfo ico_region_info_kor;
 extern const IcoRegionInfo ico_region_info_ntsc;
 extern const IcoRegionInfo ico_region_info_aug6;
 extern const IcoRegionInfo ico_region_info_jun26;
+extern const IcoRegionInfo ico_region_info_cn;
 extern const IcoRegionInfo *const ico_region_info[ICO_REGION_COUNT];
 
 /* The selected region's table: ico_region_info[ico_region]. */

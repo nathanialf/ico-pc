@@ -36,12 +36,12 @@ void actSt01bInit(void)
 {
     if (gflagChk(70) == 0) {
         SetWayGroupActive(2, 0);
-        stage_SetAnimation(PAL_JPNKOR(183, 179), 0, 0);
-        return stage_SetAnimation(PAL_JPNKOR(180, 176), 0, 0);
+        stage_SetAnimation(PAL_JPNKORCN(183, 179), 0, 0);
+        return stage_SetAnimation(PAL_JPNKORCN(180, 176), 0, 0);
     }
     SetWayGroupActive(2, 1);
-    stage_SetAnimation(PAL_JPNKOR(183, 179), 0, -1);
-    stage_SetAnimation(PAL_JPNKOR(180, 176), 0, -1);
+    stage_SetAnimation(PAL_JPNKORCN(183, 179), 0, -1);
+    stage_SetAnimation(PAL_JPNKORCN(180, 176), 0, -1);
     return FinishHint(9);
 }
 
@@ -55,24 +55,24 @@ void actSt01bEneChk(GObj *volatile self)
             scpTriggerFloorAttr(girlGObj, 0x2000000) == 0)) {
         _ACTWait(1);
     }
-    lt_switch_layout(PAL_JPNKOR(55, 52));
+    lt_switch_layout(PAL_JPNKORCN(55, 52));
     scpBoyControlReadDisable = 1;
-    scpSleepEnemyOne(PAL_JPNKOR(3757, 3734));
+    scpSleepEnemyOne(PAL_JPNKORCN(3757, 3734));
     _ACTWait(30);
     gflagOn(68);
     gflagOn(69);
-    stage_SetAnimation(PAL_JPNKOR(182, 178), 1, 0);
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(182, 178), 90, 0) == 0) {
+    stage_SetAnimation(PAL_JPNKORCN(182, 178), 1, 0);
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(182, 178), 90, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
-    while (stage_CheckAnimationFinish(PAL_JPNKOR(182, 178)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN(182, 178)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
-    lt_switch_layout(PAL_JPNKOR(54, 51));
+    lt_switch_layout(PAL_JPNKORCN(54, 51));
     scpBoyControlReadDisable = 0;
-    scpWakeupEnemyOne(PAL_JPNKOR(3757, 3734));
+    scpWakeupEnemyOne(PAL_JPNKORCN(3757, 3734));
 }
 
 /* .sdata */
@@ -101,19 +101,19 @@ static void actSt01bFloorChkSub(GObj *volatile self)
         _ACTWait(1);
     }
     AdpcmPlay(st01b_floor->stream);
-    stage_SetAnimation(PAL_JPNKOR(180, 176), 1, 0);
-    stage_SetAnimation(PAL_JPNKOR(181, 177), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(180, 176), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(181, 177), 1, 0);
     pos = floorChkSubPos;
     seHandle = soundSeDefPlay(1325, 0, pos.f, 1);
     _ACTWait(90);
     soundSeDefStop(seHandle);
     seHandle = -1;
     soundSeDefPlay(1288, 0, 0, 1);
-    stage_SetAnimation(PAL_JPNKOR(183, 179), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(183, 179), 1, 0);
     st01b_yure = iosPadActRequest(boyPad, 9);
     st01b_yure_vol = 128;
     iosPadActVolumeSet(st01b_yure, 128);
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(183, 179), 180, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(183, 179), 180, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -129,7 +129,7 @@ void actSt01bFloorChk(GObj *volatile self)
     while (scpIsHangChainOptional(boyGObj, 805) == 0) {
         _ACTWait(1);
     }
-    lt_switch_layout(PAL_JPNKOR(55, 52));
+    lt_switch_layout(PAL_JPNKORCN(55, 52));
     scpBoyControlReadDisable = 1;
     scpSleepEnemyAll();
     gflagOn(70);
@@ -167,9 +167,9 @@ void actSt01bFloorChk(GObj *volatile self)
     iosThreadSetPri(&th->thread, 34);
 
     if (notdone) {
-        stage_SetAnimation(PAL_JPNKOR(181, 177), 1, -1);
-        stage_SetAnimation(PAL_JPNKOR(180, 176), 1, -1);
-        stage_SetAnimation(PAL_JPNKOR(183, 179), 0, 180);
+        stage_SetAnimation(PAL_JPNKORCN(181, 177), 1, -1);
+        stage_SetAnimation(PAL_JPNKORCN(180, 176), 1, -1);
+        stage_SetAnimation(PAL_JPNKORCN(183, 179), 0, 180);
         if (seHandle >= 0) {
             soundSeDefStop(seHandle);
             soundSeDefPlay(1288, 0, 0, 1);
@@ -183,7 +183,7 @@ void actSt01bFloorChk(GObj *volatile self)
     iosPadActStop(st01b_yure);
     scpWakeupEnemyAll();
     scpBoyControlReadDisable = 0;
-    lt_switch_layout(PAL_JPNKOR(54, 51));
+    lt_switch_layout(PAL_JPNKORCN(54, 51));
 }
 
 void actSt01bSekizo(GObj *volatile self)
@@ -193,7 +193,7 @@ void actSt01bSekizo(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
-    scpSekizou(self, 65, PAL_JPNKOR(178, 174), 0, 18, 1000.0f, 528.0f, -150.0f, 1000.0f, 528.0f,
+    scpSekizou(self, 65, PAL_JPNKORCN(178, 174), 0, 18, 1000.0f, 528.0f, -150.0f, 1000.0f, 528.0f,
                -100.0f);
 }
 

@@ -130,7 +130,7 @@ set(ICO_TABLE_SYMBOLS
     enemymodel09
     enemySetTable
 )
-set(ICO_TABLE_SLUGS pal jpn kor ntsc aug6 jun26)
+set(ICO_TABLE_SLUGS pal jpn kor ntsc aug6 jun26 cn)
 set(ICO_TABLE_SOURCES "${CMAKE_CURRENT_LIST_DIR}/table_defs.c"
     "${CMAKE_CURRENT_LIST_DIR}/table_sets.c")
 set(ICO_TABLE_EE_SYMBOLS "")

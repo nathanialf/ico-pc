@@ -305,7 +305,7 @@ void ExecIcoMisc(void)
         ExecGameOverEffect();
         seEnvMute = 0;
     } else {
-        if (current_layout_id == PAL_JPNKOR(28, 25)) {
+        if (current_layout_id == PAL_JPNKORCN(28, 25)) {
             seEnvMute = 1;
         }
         if (seEnvMute != 0) {
@@ -336,12 +336,12 @@ void ExecIcoMisc(void)
     if (fall_death_active != 0) {
         if (boyGObj != 0) {
             if (GOBJ_SUB(boyGObj)->ctrl.fallHeight > 1000.0f) {
-                lt_switch_layout(PAL_JPNKOR(62, 59));
+                lt_switch_layout(PAL_JPNKORCN(62, 59));
             }
         }
         if (girlGObj != 0) {
             if (GOBJ_SUB(girlGObj)->ctrl.fallHeight > 1000.0f) {
-                lt_switch_layout(PAL_JPNKOR(62, 59));
+                lt_switch_layout(PAL_JPNKORCN(62, 59));
             }
         }
     }

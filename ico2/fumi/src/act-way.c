@@ -306,7 +306,7 @@ int ACTWayMove_NextDetail(GObj *self, float *node, float *goal, unsigned char d,
     float dy;
     int n;
 
-    if (ICO_JPNKOR) {
+    if (ICO_JPNKORCN) {
         /* disabled in retail: the way-begin-position (WBP) report */
         if (0) {
             debug_StdPrintfDummy("WBP <<begin>>\n");

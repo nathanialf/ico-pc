@@ -739,11 +739,11 @@ static void test_disc_keys(void)
         text != NULL &&
         strstr(
             text,
-            "config: [game] disc = \"usa\" is not one of auto, pal, jpn, kor, ntsc, aug6, jun26; auto\n") !=
+            "config: [game] disc = \"usa\" is not one of auto, pal, jpn, kor, ntsc, aug6, jun26, cn; auto\n") !=
             NULL &&
         strstr(
             text,
-            "config: [game] disc = \"JPN\" is not one of auto, pal, jpn, kor, ntsc, aug6, jun26; auto\n") !=
+            "config: [game] disc = \"JPN\" is not one of auto, pal, jpn, kor, ntsc, aug6, jun26, cn; auto\n") !=
             NULL);
     if (text != NULL) {
         /* once a load: two reads of "usa", one line */

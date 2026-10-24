@@ -9,7 +9,7 @@
 #define ICO_REGION_H
 
 /* ico_region: the row index into config/regions.txt: 0 pal, 1 jpn, 2 kor, 3 ntsc, 4 aug6, 5
- * jun26; set once at disc mount. */
+ * jun26, 6 cn; set once at disc mount. */
 extern int ico_region;
 
 #define ICO_REGION_PAL 0
@@ -18,7 +18,8 @@ extern int ico_region;
 #define ICO_REGION_NTSC 3
 #define ICO_REGION_AUG6 4
 #define ICO_REGION_JUN26 5
-#define ICO_REGION_COUNT 6
+#define ICO_REGION_CN 6
+#define ICO_REGION_COUNT 7
 
 #define ICO_PAL (ico_region == ICO_REGION_PAL)
 #define ICO_JPN (ico_region == ICO_REGION_JPN)
@@ -26,10 +27,13 @@ extern int ico_region;
 #define ICO_NTSC (ico_region == ICO_REGION_NTSC)
 #define ICO_AUG6 (ico_region == ICO_REGION_AUG6)
 #define ICO_JUN26 (ico_region == ICO_REGION_JUN26)
+#define ICO_CN (ico_region == ICO_REGION_CN)
 
 /* A set of rows that share one arm upstream (`#if defined(VERSION_A) || defined(VERSION_B)`),
  * named by its slugs concatenated in table order. */
 #define ICO_JPNKOR (ICO_JPN || ICO_KOR)
+#define ICO_KORCN (ICO_KOR || ICO_CN)
+#define ICO_JPNKORCN (ICO_JPN || ICO_KOR || ICO_CN)
 
 /* Selector macros: the first argument is the PAL arm (upstream's #else), then one arm per
  * named region set in table order (a set of rows sharing an arm is one argument:
@@ -41,12 +45,16 @@ extern int ico_region;
 #define PAL_JPNKOR(pal, jpnkor) (ICO_JPNKOR ? (jpnkor) : (pal))
 #define PAL_JPN_KOR(pal, jpn, kor) (ICO_KOR ? (kor) : ICO_JPN ? (jpn) : (pal))
 #define PAL_JUN26(pal, jun26) (ICO_JUN26 ? (jun26) : (pal))
-#define PAL_JPN_KOR_NTSC_AUG6_JUN26(pal, jpn, kor, ntsc, aug6, jun26) \
-    (ICO_JUN26 ? (jun26) : ICO_AUG6 ? (aug6) : ICO_NTSC ? (ntsc) : ICO_KOR ? (kor) : \
-     ICO_JPN ? (jpn) : (pal))
+#define PAL_KORCN(pal, korcn) (ICO_KORCN ? (korcn) : (pal))
+#define PAL_JPNKORCN(pal, jpnkorcn) (ICO_JPNKORCN ? (jpnkorcn) : (pal))
+#define PAL_JPN_KORCN(pal, jpn, korcn) (ICO_KORCN ? (korcn) : ICO_JPN ? (jpn) : (pal))
+#define PAL_JPN_KOR_NTSC_AUG6_JUN26_CN(pal, jpn, kor, ntsc, aug6, jun26, cn) \
+    (ICO_CN ? (cn) : ICO_JUN26 ? (jun26) : ICO_AUG6 ? (aug6) : ICO_NTSC ? (ntsc) : \
+     ICO_KOR ? (kor) : ICO_JPN ? (jpn) : (pal))
 
-/* LN(pal, jpn, kor, ntsc, aug6, jun26): upstream's per-target __LINE__ values for the debug
+/* LN(pal, jpn, kor, ntsc, aug6, jun26, cn): upstream's per-target __LINE__ values for the debug
  * allocators and asserts. */
-#define LN(pal, jpn, kor, ntsc, aug6, jun26) PAL_JPN_KOR_NTSC_AUG6_JUN26(pal, jpn, kor, ntsc, aug6, jun26)
+#define LN(pal, jpn, kor, ntsc, aug6, jun26, cn) \
+    PAL_JPN_KOR_NTSC_AUG6_JUN26_CN(pal, jpn, kor, ntsc, aug6, jun26, cn)
 
 #endif /* ICO_REGION_H */

@@ -146,12 +146,12 @@ static inline int get_texture_no_of_property(int idx) /* derived name */
     no = tex_GetTextureNo(name);
 
     if (no < 0) {
-        if (!ICO_JPNKOR) {
+        if (!ICO_JPNKORCN) {
             debug_StdPrintfDummy("tex_id %d\n", n);
         }
         debug_StdPrintfDummy("no texture loaded.(%s)\n", src);
-        debug_assert(__FILE__, LN(272, 265, 265, 272, 272, 272));
-        __assert(__FILE__, LN(272, 265, 265, 272, 272, 272), "0");
+        debug_assert(__FILE__, LN(272, 265, 265, 272, 272, 272, 265));
+        __assert(__FILE__, LN(272, 265, 265, 272, 272, 272, 265), "0");
     }
     return no;
 }
@@ -181,10 +181,10 @@ static inline int kanban_layout_key(LtProp *pr) /* derived name */
     } else {
         unsigned long long button = pad[0].flags;
 
-        if (button & PAL_JPNKOR(0x40, 0x20)) {
+        if (button & PAL_JPNKORCN(0x40, 0x20)) {
             ret = 1;
         } else {
-            ret = (button & PAL_JPNKOR(0x10, 0x40)) ? 2 : 0;
+            ret = (button & PAL_JPNKORCN(0x10, 0x40)) ? 2 : 0;
         }
     }
     return ret;
@@ -308,7 +308,7 @@ static void init_textures_of_specified_property(int first, int last)
     int no;
 
     for (i = first; i < last; i++) {
-        if (!ICO_JPNKOR) {
+        if (!ICO_JPNKORCN) {
             debug_StdPrintfDummy("propertyId %d\n", i);
         }
         no = get_texture_no_of_property(i);
@@ -324,7 +324,7 @@ void kanbanInit(int no)
     if (no != 0) {
         init_textures_of_property_range(stageData[no].layoutFirst, stageData[no].layoutLast);
     } else {
-        init_textures_of_property_range(0, PAL_JPNKOR(1, 4));
+        init_textures_of_property_range(0, PAL_JPNKORCN(1, 4));
         kanbanReqAllDel();
         kanbanCommonRead = 1;
     }
@@ -393,7 +393,7 @@ static void display_texture(LtProp *pr, LtProperty *e, KanbanCol *col)
         gif_StartPacketPri(11);
         gif_SetZTest(0);
 
-        for (i = 0; i < r[2] * r[3] / PAL_JPNKOR(300, 1200); i++) {
+        for (i = 0; i < r[2] * r[3] / PAL_JPNKORCN(300, 1200); i++) {
             pt[0] = r[0] + rand() % r[2];
             pt[1] = r[1] + rand() % r[3];
             alpha = rand() % 127 + 32;

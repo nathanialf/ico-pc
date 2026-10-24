@@ -25,7 +25,7 @@ static int lightningAnims_pal[2] = {758, 759}; /* derived name */
 
 static int lightningAnims_jpn[2] = {754, 755}; /* derived name */
 
-#define lightningAnims PAL_JPNKOR(lightningAnims_pal, lightningAnims_jpn)
+#define lightningAnims PAL_JPNKORCN(lightningAnims_pal, lightningAnims_jpn)
 
 /* the lightning's volume for height y */
 static inline float getVolume(float y) /* derived name */
@@ -128,11 +128,11 @@ void actSt22aIntroChk(GObj *volatile self)
 
     gflagOn(323);
     scpSekizouCheckPoint();
-    lt_switch_layout(PAL_JPNKOR(55, 52));
+    lt_switch_layout(PAL_JPNKORCN(55, 52));
     scpBoyControlReadDisable = 1;
     scpPlayStart(boyGObj);
     gflagOn(324);
-    stage_SetAnimation(PAL_JPNKOR(758, 754), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(758, 754), 1, 0);
     _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1] * 10);
     scpFadeIn(6.0f);
     th = actCreateSubThread(actSt22aIntroSub, 21);
@@ -154,7 +154,7 @@ void actSt22aIntroChk(GObj *volatile self)
             stage_SetAnimation(anims.id[i], 1, -1);
             _ACTWait(1);
         }
-        stage_SetAnimation(PAL_JPNKOR(759, 755), 1, -1);
+        stage_SetAnimation(PAL_JPNKORCN(759, 755), 1, -1);
         StabilizeAllLayoutedCage();
         scpPlayPosSet(boyGObj, -808.0f, 148.0f, -1053.0f);
         pos = introFacePos;
@@ -171,7 +171,7 @@ void actSt22aIntroChk(GObj *volatile self)
         scpPlayMot(boyGObj, 0);
     }
     scpPlayEnd(boyGObj);
-    lt_switch_layout(PAL_JPNKOR(54, 51));
+    lt_switch_layout(PAL_JPNKORCN(54, 51));
     scpBoyControlReadDisable = 0;
 }
 
@@ -180,9 +180,9 @@ void actSt22aIntroSub(GObj *volatile self)
     StVec pos;
     float dir[4];
 
-    stage_SetAnimation(PAL_JPNKOR(758, 754), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(758, 754), 1, 0);
     scpPlayMot(boyGObj, 397);
-    while (stage_ContinueAnimation(PAL_JPNKOR(758, 754), PAL_JPNKOR(759, 755)) == 0) {
+    while (stage_ContinueAnimation(PAL_JPNKORCN(758, 754), PAL_JPNKORCN(759, 755)) == 0) {
         _ACTWait(1);
     }
     scpPlayPosSet(boyGObj, -707.0f, 148.0f, -1112.0f);
@@ -190,7 +190,7 @@ void actSt22aIntroSub(GObj *volatile self)
     sceVu0SubVector(dir, &pos, test_CURRENTROOT(boyGObj));
     scpPlayMotDir(boyGObj, dir);
     scpPlayMot(boyGObj, 398);
-    while (stage_CheckAnimationFinish(PAL_JPNKOR(759, 755)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN(759, 755)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);

@@ -62,7 +62,7 @@ void actSt18aIntroChk(GObj *volatile self)
         _ACTWait(1);
     }
 
-    lt_switch_layout(PAL_JPNKOR(55, 52));
+    lt_switch_layout(PAL_JPNKORCN(55, 52));
 
     gflagOn(55);
 
@@ -70,9 +70,9 @@ void actSt18aIntroChk(GObj *volatile self)
 
     _ACTWait(1);
 
-    stage_SetAnimation(PAL_JPNKOR(354, 350), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(354, 350), 1, 0);
 
-    while (stage_CheckAnimationFinish(PAL_JPNKOR(354, 350)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN(354, 350)) == 0) {
         if ((pad[0].flags & 0x800) && scpAdpcmPlayRequestNum() == 0) {
             scpFadeOut(16.0f, 0, 0, 0);
 
@@ -83,7 +83,7 @@ void actSt18aIntroChk(GObj *volatile self)
                 _ACTWait(1);
             }
 
-            stage_SetAnimation(PAL_JPNKOR(354, 350), 1, -1);
+            stage_SetAnimation(PAL_JPNKORCN(354, 350), 1, -1);
             SetCameraFlag_LwsCutBack();
             scpFadeIn(3.0f);
             break;
@@ -91,7 +91,7 @@ void actSt18aIntroChk(GObj *volatile self)
         _ACTWait(1);
     }
 
-    lt_switch_layout(PAL_JPNKOR(54, 51));
+    lt_switch_layout(PAL_JPNKORCN(54, 51));
     scpBoyControlReadDisable = 0;
 }
 
@@ -113,11 +113,11 @@ void actSt18aSwitchLChk(GObj *volatile self)
         _ACTWait(1);
     }
 
-    stage_SetAnimation(PAL_JPNKOR(121, 117), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(121, 117), 1, 0);
 
     soundSeDefPlay(1220, 0, 0, 1);
 
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(121, 117), 45, 1) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(121, 117), 45, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -147,17 +147,17 @@ void actSt18aSwitchLUpChk(GObj *volatile self)
     _ACTWait(15);
     gflagOff(58);
 
-    stage_SetAnimation(PAL_JPNKOR(121, 117), 1, 46);
+    stage_SetAnimation(PAL_JPNKORCN(121, 117), 1, 46);
     soundSeDefPlay(1220, 0, 0, 1);
 
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(121, 117), 50, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(121, 117), 50, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     scpWakeupItemWithBoundary(3054.0f, 1530.0f, -3061.0f, 100.0f);
 
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(121, 117), 90, 1) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(121, 117), 90, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -186,11 +186,11 @@ void actSt18aSwitchRChk(GObj *volatile self)
         _ACTWait(1);
     }
 
-    stage_SetAnimation(PAL_JPNKOR(122, 118), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(122, 118), 1, 0);
 
     soundSeDefPlay(1220, 0, 0, 1);
 
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(122, 118), 45, 1) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(122, 118), 45, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -220,17 +220,17 @@ void actSt18aSwitchRUpChk(GObj *volatile self)
     _ACTWait(15);
     gflagOff(59);
 
-    stage_SetAnimation(PAL_JPNKOR(122, 118), 1, 46);
+    stage_SetAnimation(PAL_JPNKORCN(122, 118), 1, 46);
     soundSeDefPlay(1220, 0, 0, 1);
 
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(122, 118), 50, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(122, 118), 50, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     scpWakeupItemWithBoundary(1451.0f, 1530.0f, -3039.0f, 100.0f);
 
-    while (stage_CheckAnimationFrame(PAL_JPNKOR(122, 118), 90, 1) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN(122, 118), 90, 1) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -257,7 +257,7 @@ void actSt18aDoorChk(GObj *volatile self)
         _ACTWait(1);
     }
 
-    lt_switch_layout(PAL_JPNKOR(55, 52));
+    lt_switch_layout(PAL_JPNKORCN(55, 52));
     scpBoyControlReadDisable = 1;
     scpSleepEnemyAll();
 
@@ -283,7 +283,7 @@ void actSt18aDoorChk(GObj *volatile self)
             _ACTWait(1);
         }
 
-        stage_SetAnimation(PAL_JPNKOR(123, 119), 0, -1);
+        stage_SetAnimation(PAL_JPNKORCN(123, 119), 0, -1);
 
         if (doorChkDone == 0) {
             soundSeDefPlay(1222, 0, 0, 1);
@@ -293,7 +293,7 @@ void actSt18aDoorChk(GObj *volatile self)
     }
 
     scpWakeupEnemyAll();
-    lt_switch_layout(PAL_JPNKOR(54, 51));
+    lt_switch_layout(PAL_JPNKORCN(54, 51));
 
     doorChk_mes[0].func = actSt18aDoorDownChk;
     sub->mail = doorChk_mes;
@@ -313,12 +313,12 @@ void actSt18aDoorDownChk(GObj *volatile self)
     _ACTWait(15);
     gflagOff(60);
 
-    stage_SetAnimation(PAL_JPNKOR(124, 120), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(124, 120), 1, 0);
 
     soundSeDefPlay(1221, 0, 0, 1);
     _ACTWait(50);
     soundSeDefPlay(1222, 0, 0, 1);
-    while (stage_CheckAnimationFinish(PAL_JPNKOR(124, 120)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN(124, 120)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -408,14 +408,14 @@ void actSt18aDoor(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(60) == 0) {
-        stage_SetAnimation(PAL_JPNKOR(123, 119), 0, 0);
+        stage_SetAnimation(PAL_JPNKORCN(123, 119), 0, 0);
 
         door_mes[0].func = actSt18aDoorChk;
         act->mail = door_mes;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-        stage_SetAnimation(PAL_JPNKOR(123, 119), 0, -1);
+        stage_SetAnimation(PAL_JPNKORCN(123, 119), 0, -1);
 
         doorDown_mes[0].func = actSt18aDoorDownChk;
         act->mail = doorDown_mes;
@@ -432,14 +432,14 @@ void actSt18aSwitchL(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(58) == 0) {
-        stage_SetAnimation(PAL_JPNKOR(121, 117), 0, 0);
+        stage_SetAnimation(PAL_JPNKORCN(121, 117), 0, 0);
 
         switchL_mes[0].func = actSt18aSwitchLChk;
         act->mail = switchL_mes;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-        stage_SetAnimation(PAL_JPNKOR(121, 117), 0, 45);
+        stage_SetAnimation(PAL_JPNKORCN(121, 117), 0, 45);
 
         switchLUp_mes[0].func = actSt18aSwitchLUpChk;
         act->mail = switchLUp_mes;
@@ -456,14 +456,14 @@ void actSt18aSwitchR(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(59) == 0) {
-        stage_SetAnimation(PAL_JPNKOR(122, 118), 0, 0);
+        stage_SetAnimation(PAL_JPNKORCN(122, 118), 0, 0);
 
         switchR_mes[0].func = actSt18aSwitchRChk;
         act->mail = switchR_mes;
         ACTSendMailCorrect(self, 430);
         _ACTWait(0);
     } else {
-        stage_SetAnimation(PAL_JPNKOR(122, 118), 0, 45);
+        stage_SetAnimation(PAL_JPNKORCN(122, 118), 0, 45);
 
         switchRUp_mes[0].func = actSt18aSwitchRUpChk;
         act->mail = switchRUp_mes;
@@ -561,7 +561,7 @@ static void actSt18aDoorChkSub(GObj *volatile self)
 {
     _ACTWait(60);
 
-    stage_SetAnimation(PAL_JPNKOR(123, 119), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN(123, 119), 1, 0);
 
     if (scpTriggerFloorAttr(boyGObj, 0x5000000) != 0) {
         SetCameraFlag_LwsCutBack();
@@ -571,7 +571,7 @@ static void actSt18aDoorChkSub(GObj *volatile self)
     _ACTWait(50);
     doorChkDone = 1;
     soundSeDefPlay(1222, 0, 0, 1);
-    while (stage_CheckAnimationFinish(PAL_JPNKOR(123, 119)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN(123, 119)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);

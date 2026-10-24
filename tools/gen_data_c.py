@@ -82,10 +82,9 @@ REGIONS = ROOT / "config/regions.txt"
 # without its set): a set's files are written and checked against these rows
 # (--version <slug>), spelt as the row will be, until the row lands with its
 # set (docs/port/DATA.md "Adding a target's set"). None is pending: the three
-# 2001 targets' rows (ntsc, aug6, jun26) are in config/regions.txt.
-PENDING_ROWS = """
-cn VERSION_CN SCPS-55001 SCPS_550.01 the Asian disc
-"""
+# 2001 targets' rows (ntsc, aug6, jun26) and the Asian disc's (cn) are in
+# config/regions.txt.
+PENDING_ROWS = ""
 
 
 def region_row(line, where):

@@ -83,7 +83,7 @@ typedef struct IcoDiscInfo {
     uint32_t df_size;      /* DATA.DF's size (as the volume reports it, see df_lsn_shift) */
     uint32_t df_count;     /* its directory's member count */
     uint32_t df_dir_crc;   /* the CRC-32 of its directory */
-    uint32_t df_lsn_shift; /* 0; 153600 on the Korean disc (see above) */
+    uint32_t df_lsn_shift; /* 0; 153600 on the Korean and Asian discs (see above) */
     const IcoDfManifestEntry *members; /* df_count entries */
     uint32_t member_count;             /* entries in members (df_count) */
     const char *archive_name;          /* "ico.o2r", "ico-jpn.o2r" */
@@ -93,14 +93,15 @@ typedef struct IcoDiscInfo {
 } IcoDiscInfo;
 
 /* [ICO_REGION_PAL] the European release SCES-50760 (a DVD),
-   [ICO_REGION_JPN] the Japanese release SCPS-11003 (a CD) and
+   [ICO_REGION_JPN] the Japanese release SCPS-11003 (a CD),
    [ICO_REGION_KOR] the Korean release SCPS-56001 (a DVD),
    [ICO_REGION_NTSC] the North American release SCUS-97113 (a CD),
    [ICO_REGION_AUG6] the August 2001 preview PROTO-20010806 (a CD; boots
    SCUS_971.13 like the North American disc, told apart by the boot ELF's
-   SHA-1) and [ICO_REGION_JUN26] the June 2001 magazine demo SCUS-97158 (a
-   DVD; its game is in the CUS97113 folder); defined in discs.c with the
-   manifests */
+   SHA-1), [ICO_REGION_JUN26] the June 2001 magazine demo SCUS-97158 (a
+   DVD; its game is in the CUS97113 folder) and [ICO_REGION_CN] the Asian
+   release SCPS-55001 (a DVD, its DATA.DF shifted as the Korean disc's);
+   defined in discs.c with the manifests */
 extern const IcoDiscInfo ico_discs[ICO_REGION_COUNT];
 
 /* The row whose id ("SCPS-11003"), boot file ("SCPS_110.03", as

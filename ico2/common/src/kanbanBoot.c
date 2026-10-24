@@ -179,7 +179,7 @@ static int kanbanBootMcCheck_jpn(void)
         if (bootKanban->key != 1) {
             break;
         }
-        if (bootKanban->layout->curItem == PAL_KOR(11, 5)) {
+        if (bootKanban->layout->curItem == PAL_KORCN(11, 5)) {
             mcCheckStep = -1;
             kanbanReqDelFade(bootKanbanSub);
             kanbanReqDelFade(bootKanban);
@@ -208,7 +208,7 @@ static int kanbanBootMcCheck(void)
     int lang;
     int ret = 0;
 
-    if (ICO_JPNKOR) {
+    if (ICO_JPNKORCN) {
         return kanbanBootMcCheck_jpn();
     }
 
@@ -484,7 +484,7 @@ void kanbanBootMain(void)
         }
         kanbanReqAllDelFade();
         /* PC port: Skip the opening puts up no presents sign */
-        waitKanban = bootSkipOpening ? 0 : kanbanReqAdd(PAL_JPNKOR(2, 0), 1);
+        waitKanban = bootSkipOpening ? 0 : kanbanReqAdd(PAL_JPNKORCN(2, 0), 1);
         bootStep++;
         break;
     case 3:

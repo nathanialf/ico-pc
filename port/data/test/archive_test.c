@@ -357,11 +357,13 @@ static int run_synth(const char *dir)
           ico_disc_by_id("SCUS-97113") == &ico_discs[ICO_REGION_NTSC] &&
           ico_disc_by_id("PROTO-20010806") == &ico_discs[ICO_REGION_AUG6] &&
           ico_disc_by_id("SCUS-97158") == &ico_discs[ICO_REGION_JUN26] &&
+          ico_disc_by_id("SCPS-55001") == &ico_discs[ICO_REGION_CN] &&
           ico_disc_by_id("SLUS-20000") == NULL);
     CHECK(ico_disc_by_boot("SCES_507.60") == &ico_discs[0] &&
           ico_disc_by_boot("SCPS_110.03") == &ico_discs[1] &&
           ico_disc_by_boot("SCPS_560.01") == &ico_discs[2] &&
           ico_disc_by_boot("SCUS_971.58") == &ico_discs[ICO_REGION_JUN26] &&
+          ico_disc_by_boot("SCPS_550.01") == &ico_discs[ICO_REGION_CN] &&
           ico_disc_by_boot("") == NULL);
     /* SCUS_971.13 boots two discs: the first row answers by name, the boot ELF's SHA-1 decides */
     CHECK(ico_disc_boot_rows("SCUS_971.13") == 2 && ico_disc_boot_rows("SCES_507.60") == 1 &&
@@ -391,12 +393,14 @@ static int run_synth(const char *dir)
         CHECK(ico_disc_identify(syn, "SCUS_971.13", NULL) == NULL);
         CHECK(ico_disc_identify(syn, "SCPS_110.03", NULL) == &ico_discs[1]);
         CHECK(ico_disc_identify(syn, "SCUS_971.58", NULL) == &ico_discs[ICO_REGION_JUN26]);
+        CHECK(ico_disc_identify(syn, "SCPS_550.01", NULL) == &ico_discs[ICO_REGION_CN]);
         CHECK(ico_disc_identify(syn, "SLUS_000.00", NULL) == NULL);
         ico_vfs_unmount(syn);
     }
     CHECK(ico_discs[0].df_count == 193 && ico_discs[1].df_count == 183 &&
           ico_discs[2].df_count == 183 && ico_discs[ICO_REGION_NTSC].df_count == 172 &&
-          ico_discs[ICO_REGION_AUG6].df_count == 172 && ico_discs[ICO_REGION_JUN26].df_count == 49);
+          ico_discs[ICO_REGION_AUG6].df_count == 172 &&
+          ico_discs[ICO_REGION_JUN26].df_count == 49 && ico_discs[ICO_REGION_CN].df_count == 183);
     /* the magazine demo's game lives in a folder and has no image hash on file */
     CHECK(strcmp(ico_discs[ICO_REGION_JUN26].game_dir, "CUS97113") == 0 &&
           ico_discs[ICO_REGION_JUN26].iso_sha1 == NULL &&
@@ -404,12 +408,17 @@ static int run_synth(const char *dir)
           strcmp(ico_discs[ICO_REGION_JUN26].elf_path, "CUS97113/SCPS_000.00") == 0 &&
           ico_discs[ICO_REGION_NTSC].iso_sha1 != NULL &&
           ico_discs[ICO_REGION_AUG6].iso_sha1 != NULL);
-    /* only a disc with a shifted DATA.DF carries a shift (the Korean disc) */
+    /* only a disc with a shifted DATA.DF carries a shift (the Korean and Asian discs) */
     CHECK(ico_discs[0].df_lsn_shift == 0 && ico_discs[1].df_lsn_shift == 0 &&
           ico_discs[2].df_lsn_shift == 153600 && ico_discs[ICO_REGION_NTSC].df_lsn_shift == 0 &&
           ico_discs[ICO_REGION_AUG6].df_lsn_shift == 0 &&
-          ico_discs[ICO_REGION_JUN26].df_lsn_shift == 0);
+          ico_discs[ICO_REGION_JUN26].df_lsn_shift == 0 &&
+          ico_discs[ICO_REGION_CN].df_lsn_shift == 153600);
     CHECK(ico_discs[2].df_size == 866859008u - 153600u * 2048u);
+    /* the Asian disc is a DVD with its DATA.DF 153600 sectors into the 867,420,160-byte file */
+    CHECK(ico_discs[ICO_REGION_CN].df_size == 867420160u - 153600u * 2048u &&
+          ico_discs[ICO_REGION_CN].cd_type == 0x14 && ico_discs[ICO_REGION_CN].iso_sha1 != NULL &&
+          strcmp(ico_discs[ICO_REGION_CN].game_dir, "") == 0);
 
     /* the entries are stored, the boot file has its tail */
     {

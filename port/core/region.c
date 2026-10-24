@@ -89,9 +89,11 @@ int ico_region_key_suffixed(const char *base, char *out, int size)
 int ico_region_stage(int pal_stage)
 {
     /* memoryPAL (58) and memoryPAL576 (59): the European table's only rows
-       the Japanese one lacks (the Korean disc's stageData is the Japanese
-       one) */
-    if ((ico_region == ICO_REGION_JPN || ico_region == ICO_REGION_KOR) && pal_stage >= 58) {
+       the Japanese one lacks (the Korean and Asian discs' stageData is the
+       Japanese one) */
+    if ((ico_region == ICO_REGION_JPN || ico_region == ICO_REGION_KOR ||
+         ico_region == ICO_REGION_CN) &&
+        pal_stage >= 58) {
         return pal_stage - 2;
     }
     return pal_stage;

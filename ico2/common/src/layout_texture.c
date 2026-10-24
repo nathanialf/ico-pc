@@ -225,10 +225,10 @@ static inline int lt_property_visible(int no) /* derived name */
 {
     int vis = 1;
 
-    if (gFlagGameClear == 0 && current_layout_id == PAL_JPNKOR(58, 55) &&
-        no >= PAL_JPN_KOR(300, 277, 271) &&
-        (no < PAL_JPN_KOR(308, 285, 279) ||
-         (no < PAL_JPN_KOR(330, 307, 301) ? no >= PAL_JPN_KOR(325, 302, 296) : 0))) {
+    if (gFlagGameClear == 0 && current_layout_id == PAL_JPNKORCN(58, 55) &&
+        no >= PAL_JPN_KORCN(300, 277, 271) &&
+        (no < PAL_JPN_KORCN(308, 285, 279) ||
+         (no < PAL_JPN_KORCN(330, 307, 301) ? no >= PAL_JPN_KORCN(325, 302, 296) : 0))) {
         vis = 0;
     }
     return vis;
@@ -251,7 +251,7 @@ static inline void lt_draw_layout(int no) /* derived name */
    out-of-line function and the second site set 3. */
 static inline void lt_switch_layout_7(int no) /* derived name */
 {
-    if ((fadeState == 2 && no != current_layout_id) || no == PAL_JPNKOR(62, 59)) {
+    if ((fadeState == 2 && no != current_layout_id) || no == PAL_JPNKORCN(62, 59)) {
         nextLayout = no;
         display_texture_fade_cancel_chk(current_layout_id, no);
         if (fadeType == 1) {
@@ -265,7 +265,7 @@ static inline void lt_switch_layout_7(int no) /* derived name */
 
 static inline void lt_switch_layout_3(int no) /* derived name */
 {
-    if ((fadeState == 2 && no != current_layout_id) || no == PAL_JPNKOR(62, 59)) {
+    if ((fadeState == 2 && no != current_layout_id) || no == PAL_JPNKORCN(62, 59)) {
         nextLayout = no;
         display_texture_fade_cancel_chk(current_layout_id, no);
         if (fadeType == 1) {
@@ -295,7 +295,7 @@ static void default_item_select(int no)
     if (fadeCallback == 0) {
         lt_analog2Pad();
         prev = p->curItem;
-        if ((pad[0].flags & PAL_JPNKOR(0x50, 0x60)) == 0) {
+        if ((pad[0].flags & PAL_JPNKORCN(0x50, 0x60)) == 0) {
             if ((pad[0].flags & 0x1000) && e->upItem >= 0) {
                 p->curItem = e->upItem;
                 while (!lt_property_visible(p->curItem)) {
@@ -325,7 +325,7 @@ static void default_item_select(int no)
     }
 
     e = &LT_PROP(p->curItem);
-    if (pad[0].flags & PAL_JPNKOR(0x40, 0x20)) {
+    if (pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) {
         if (e->right >= 0) {
             if (fadeState == 2) {
                 soundSeDefPlay(412, 0xFFFFFFFE, 0, 0);
@@ -334,7 +334,7 @@ static void default_item_select(int no)
             }
         }
     }
-    if (pad[0].flags & PAL_JPNKOR(LT_BACK_BUTTONS, 0x40)) {
+    if (pad[0].flags & PAL_JPNKORCN(LT_BACK_BUTTONS, 0x40)) {
         if (e->left >= 0) {
             if (fadeState == 2) {
                 soundSeDefPlay(413, 0xFFFFFFFE, 0, 0);
@@ -697,10 +697,10 @@ static void display_primary_texture_layout(int no, int sel)
         sel = p->proc(ltSelectFlag, sel);
         if (sel != -1) {
             flag = 0;
-            if ((pad[0].flags & PAL_JPNKOR(0x40, 0x20)) != 0) {
+            if ((pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) != 0) {
                 flag = m == 1;
             }
-            if ((fadeState == 2 && sel != current_layout_id) || sel == PAL_JPNKOR(62, 59)) {
+            if ((fadeState == 2 && sel != current_layout_id) || sel == PAL_JPNKORCN(62, 59)) {
                 nextLayout = sel;
                 display_texture_fade_cancel_chk(current_layout_id, sel);
                 if (fadeType == 1) {
@@ -710,7 +710,7 @@ static void display_primary_texture_layout(int no, int sel)
                     fadeState = flag ? 7 : 3;
                 }
             }
-        } else if ((pad[0].flags & PAL_JPNKOR(0x40, 0x20)) != 0) {
+        } else if ((pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) != 0) {
             if (m == 2) {
                 nextFadeState = m;
                 fadeState = 7;
@@ -823,7 +823,7 @@ void lt_host_point_item(int no, int item)
    ticks before it reads Start. */
 int lt_host_boot_settled(void)
 {
-    return current_layout_id != PAL_JPNKOR(7, 4) && fadeState == 2;
+    return current_layout_id != PAL_JPNKORCN(7, 4) && fadeState == 2;
 }
 
 /* init_textures_of_specified_property is a file static, as is
@@ -912,23 +912,23 @@ void init_layout_texture(int stage)
     if (stage == 1) {
         gflagInit();
         if (layout_boot_flag == 0) {
-            current_layout_id = PAL_JPNKOR(7, 4);
+            current_layout_id = PAL_JPNKORCN(7, 4);
         } else if (mpegPlayReturnStage == stage) {
             mpegPlayReturnStage = 0;
             if (stage_after_skipping_demo == 0xFFFFFFFE) {
                 title_demo_mode = title_demo_mode ^ 1;
-                current_layout_id = PAL_JPNKOR(13, 10);
+                current_layout_id = PAL_JPNKORCN(13, 10);
             } else if (stage_after_skipping_demo == 0xFFFFFFFF) {
-                current_layout_id = PAL_JPNKOR(10, 7);
+                current_layout_id = PAL_JPNKORCN(10, 7);
                 title_demo_mode = title_demo_mode ^ 1;
             } else {
-                current_layout_id = PAL_JPNKOR(13, 10);
+                current_layout_id = PAL_JPNKORCN(13, 10);
             }
         } else {
-            current_layout_id = PAL_JPNKOR(13, 10);
+            current_layout_id = PAL_JPNKORCN(13, 10);
         }
     } else {
-        current_layout_id = PAL_JPNKOR(54, 51);
+        current_layout_id = PAL_JPNKORCN(54, 51);
     }
     lt_init_stage_textures(stage);
     LT_LAYOUT(current_layout_id).curItem = LT_LAYOUT(current_layout_id).defaultItem;
@@ -939,7 +939,7 @@ void init_layout_texture(int stage)
 
 inline void lt_switch_layout(int no)
 {
-    if ((fadeState == 2 && no != current_layout_id) || no == PAL_JPNKOR(62, 59)) {
+    if ((fadeState == 2 && no != current_layout_id) || no == PAL_JPNKORCN(62, 59)) {
         nextLayout = no;
         display_texture_fade_cancel_chk(current_layout_id, no);
         if (fadeType == 1) {

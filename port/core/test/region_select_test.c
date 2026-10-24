@@ -6,9 +6,10 @@
  * else selects; the selectors and LN on each row; the disc ids map to their
  * rows; the per-disc config keys; the stage rows on each disc
  * (ico_region_stage); ico_region_info[] in config/regions.txt's order (the
- * file, the program's argument, read at test time); and every Japanese and
- * Korean value the table was resolved to (region_jpn.c, region_kor.c), so a
- * change to one is a change made on purpose. CPU only.
+ * file, the program's argument, read at test time); and every Japanese,
+ * Korean and Asian value the table was resolved to (region_jpn.c,
+ * region_kor.c, region_cn.c), so a change to one is a change made on
+ * purpose. CPU only.
  */
 #include <stdio.h>
 #include <string.h>
@@ -26,12 +27,12 @@ static void test_select(void)
     CHECK(ico_region == ICO_REGION_JPN && ico_region_cur() == &ico_region_info_jpn);
     CHECK(ICO_JPN && !ICO_PAL && !ICO_KOR && ICO_JPNKOR && PAL_JPN(1, 2) == 2 &&
           PAL_KOR(1, 3) == 1 && PAL_JPNKOR(1, 2) == 2 && PAL_JPN_KOR(1, 2, 3) == 2 &&
-          LN(10, 20, 30, 40, 50, 60) == 20);
+          LN(10, 20, 30, 40, 50, 60, 70) == 20);
     CHECK(ico_region_select("kor") == 0);
     CHECK(ico_region == ICO_REGION_KOR && ico_region_cur() == &ico_region_info_kor);
     CHECK(ICO_KOR && !ICO_PAL && !ICO_JPN && ICO_JPNKOR && PAL_JPN(1, 2) == 1 &&
           PAL_KOR(1, 3) == 3 && PAL_JPNKOR(1, 2) == 2 && PAL_JPN_KOR(1, 2, 3) == 3 &&
-          LN(10, 20, 30, 40, 50, 60) == 30);
+          LN(10, 20, 30, 40, 50, 60, 70) == 30);
     CHECK(ico_region_select("jpn") == 0 && ico_region == ICO_REGION_JPN);
     /* an unknown slug, a disc id and NULL keep the selection */
     CHECK(ico_region_select("usa") == -1 && ico_region == ICO_REGION_JPN);
@@ -41,44 +42,55 @@ static void test_select(void)
     CHECK(ico_region == ICO_REGION_PAL && ico_region_cur() == &ico_region_info_pal);
     CHECK(ICO_PAL && !ICO_JPN && !ICO_KOR && !ICO_JPNKOR && PAL_JPN(1, 2) == 1 &&
           PAL_KOR(1, 3) == 1 && PAL_JPNKOR(1, 2) == 1 && PAL_JPN_KOR(1, 2, 3) == 1 &&
-          LN(10, 20, 30, 40, 50, 60) == 10);
+          LN(10, 20, 30, 40, 50, 60, 70) == 10);
 
     /* the three later rows: each selects, ico_region follows, and LN takes its own argument */
     CHECK(ico_region_select("ntsc") == 0 && ico_region == ICO_REGION_NTSC &&
           ico_region_cur() == &ico_region_info_ntsc && ICO_NTSC && !ICO_PAL && !ICO_AUG6 &&
-          LN(10, 20, 30, 40, 50, 60) == 40);
+          LN(10, 20, 30, 40, 50, 60, 70) == 40);
     CHECK(ico_region_select("aug6") == 0 && ico_region == ICO_REGION_AUG6 &&
           ico_region_cur() == &ico_region_info_aug6 && ICO_AUG6 && !ICO_NTSC &&
-          LN(10, 20, 30, 40, 50, 60) == 50);
+          LN(10, 20, 30, 40, 50, 60, 70) == 50);
     CHECK(ico_region_select("jun26") == 0 && ico_region == ICO_REGION_JUN26 &&
           ico_region_cur() == &ico_region_info_jun26 && ICO_JUN26 && !ICO_AUG6 &&
-          LN(10, 20, 30, 40, 50, 60) == 60);
+          LN(10, 20, 30, 40, 50, 60, 70) == 60);
+    /* the Asian disc: the Korean arm of every selector the Korean disc is in (the rename
+       row), LN's seventh argument */
+    CHECK(ico_region_select("cn") == 0 && ico_region == ICO_REGION_CN &&
+          ico_region_cur() == &ico_region_info_cn && ICO_CN && !ICO_KOR && !ICO_JUN26 &&
+          ICO_KORCN && ICO_JPNKORCN && !ICO_JPN && PAL_KORCN(1, 2) == 2 &&
+          PAL_JPNKORCN(1, 2) == 2 && PAL_JPN_KORCN(1, 2, 3) == 3 && PAL_JPN(1, 2) == 1 &&
+          LN(10, 20, 30, 40, 50, 60, 70) == 70);
     CHECK(ico_region_select("pal") == 0);
 
-    CHECK(ico_region_count() == ICO_REGION_COUNT && ICO_REGION_COUNT == 6);
+    CHECK(ico_region_count() == ICO_REGION_COUNT && ICO_REGION_COUNT == 7);
     CHECK(ico_region_at(0) == &ico_region_info_pal && ico_region_at(1) == &ico_region_info_jpn &&
           ico_region_at(2) == &ico_region_info_kor && ico_region_at(3) == &ico_region_info_ntsc &&
           ico_region_at(4) == &ico_region_info_aug6 && ico_region_at(5) == &ico_region_info_jun26 &&
-          ico_region_at(6) == NULL && ico_region_at(-1) == NULL);
+          ico_region_at(6) == &ico_region_info_cn && ico_region_at(7) == NULL &&
+          ico_region_at(-1) == NULL);
     CHECK(ico_region_info[ICO_REGION_PAL] == &ico_region_info_pal &&
           ico_region_info[ICO_REGION_JPN] == &ico_region_info_jpn &&
           ico_region_info[ICO_REGION_KOR] == &ico_region_info_kor &&
           ico_region_info[ICO_REGION_NTSC] == &ico_region_info_ntsc &&
           ico_region_info[ICO_REGION_AUG6] == &ico_region_info_aug6 &&
-          ico_region_info[ICO_REGION_JUN26] == &ico_region_info_jun26);
+          ico_region_info[ICO_REGION_JUN26] == &ico_region_info_jun26 &&
+          ico_region_info[ICO_REGION_CN] == &ico_region_info_cn);
     CHECK(ico_region_by_slug("pal") == &ico_region_info_pal &&
           ico_region_by_slug("jpn") == &ico_region_info_jpn &&
           ico_region_by_slug("kor") == &ico_region_info_kor &&
           ico_region_by_slug("ntsc") == &ico_region_info_ntsc &&
           ico_region_by_slug("aug6") == &ico_region_info_aug6 &&
           ico_region_by_slug("jun26") == &ico_region_info_jun26 &&
-          ico_region_by_slug("usa") == NULL && ico_region_by_slug(NULL) == NULL);
+          ico_region_by_slug("cn") == &ico_region_info_cn && ico_region_by_slug("usa") == NULL &&
+          ico_region_by_slug(NULL) == NULL);
     CHECK(ico_region_by_disc_id("SCES-50760") == &ico_region_info_pal &&
           ico_region_by_disc_id("SCPS-11003") == &ico_region_info_jpn &&
           ico_region_by_disc_id("SCPS-56001") == &ico_region_info_kor &&
           ico_region_by_disc_id("SCUS-97113") == &ico_region_info_ntsc &&
           ico_region_by_disc_id("PROTO-20010806") == &ico_region_info_aug6 &&
           ico_region_by_disc_id("SCUS-97158") == &ico_region_info_jun26 &&
+          ico_region_by_disc_id("SCPS-55001") == &ico_region_info_cn &&
           ico_region_by_disc_id("SLES-00000") == NULL && ico_region_by_disc_id("jpn") == NULL &&
           ico_region_by_disc_id(NULL) == NULL);
 }
@@ -185,6 +197,12 @@ static void test_consistency(void)
           strcmp(ico_region_info_kor.key_prefix, ico_region_info_jpn.key_prefix) != 0 &&
           strcmp(ico_region_info_kor.key_suffix, ico_region_info_pal.key_suffix) != 0 &&
           strcmp(ico_region_info_kor.key_suffix, ico_region_info_jpn.key_suffix) != 0);
+    CHECK(strcmp(ico_region_info_cn.key_prefix, ico_region_info_pal.key_prefix) != 0 &&
+          strcmp(ico_region_info_cn.key_prefix, ico_region_info_jpn.key_prefix) != 0 &&
+          strcmp(ico_region_info_cn.key_prefix, ico_region_info_kor.key_prefix) != 0 &&
+          strcmp(ico_region_info_cn.key_suffix, ico_region_info_pal.key_suffix) != 0 &&
+          strcmp(ico_region_info_cn.key_suffix, ico_region_info_jpn.key_suffix) != 0 &&
+          strcmp(ico_region_info_cn.key_suffix, ico_region_info_kor.key_suffix) != 0);
     CHECK(ico_region_info_pal.mc_product_size == 0x1F0);
     CHECK(ico_region_info_pal.reduction_crops_rows == 1);
 }
@@ -423,6 +441,113 @@ static void test_kor_values(void)
     }
 }
 
+/* the Asian values, as region_cn.c resolved them by name: the disc's own fields, and every
+   other field the Japanese one (the Asian ELF's 72 members' C, in the PAL record's form, is the
+   Japanese ELF's, member for member: tex-property 412 rows, the Japanese property rows) */
+static void test_cn_values(void)
+{
+    const IcoRegionInfo *c = &ico_region_info_cn;
+    const IcoRegionInfo *j = &ico_region_info_jpn;
+    int i;
+
+#define STR(f, v) CHECK_STR(c->f, v)
+#define NUM(f, v) CHECK(c->f == (v))
+#define SAME(f) CHECK(c->f == j->f, "cn " #f " %d, jpn %d", (int)c->f, (int)j->f)
+    STR(slug, "cn");
+    STR(disc_id, "SCPS-55001");
+    STR(boot_elf, "SCPS_550.01");
+    STR(pack_serial, "SCPS-55001");
+    STR(archive_name, "ico-cn.o2r");
+    STR(image_base, "Ico_CN");
+    STR(key_prefix, "cn_");
+    STR(key_suffix, "_cn");
+    STR(mc_save_dir, "BISCPS-55001ico");
+    NUM(mc_product_size, 0x1E8);
+    NUM(property_count, 412);
+    NUM(area_name_row_base, 105);
+    NUM(row_pause_options, 271);
+    NUM(pause_first, 269);
+    NUM(pause_last, 274);
+    NUM(stage_count, 104);
+    NUM(layout_count, 76);
+    /* the menu sheets are Traditional Chinese, which the port has no text or measured look for:
+       English and the Japanese sheets' look stand in until a text package replaces them */
+    NUM(ui_lang_default, 0);
+    NUM(menu_sheet, 5);
+    SAME(has_50hz_row);
+    SAME(has_game_language);
+    SAME(fixed_60hz);
+    SAME(pad_confirm);
+    SAME(pad_back);
+    SAME(reduction_crops_rows);
+    SAME(stage_title);
+    SAME(stage_credits);
+    SAME(stage_end);
+    SAME(stage_veil);
+    SAME(gallery_first);
+    SAME(gallery_last);
+    SAME(last_shipped_stage);
+    SAME(area_name_end_as);
+    SAME(start_stage_max);
+    SAME(layout_pause);
+    SAME(layout_title_continue);
+    SAME(layout_title_new);
+    SAME(layout_options);
+    SAME(layout_key_config);
+    SAME(layout_vibe);
+    SAME(layout_play);
+    SAME(layout_scene);
+    SAME(layout_mc_files);
+    SAME(layout_load);
+    SAME(layout_save_complete);
+    SAME(row_pause_back);
+    SAME(row_pause_end);
+    SAME(row_mc_picture);
+    SAME(row_mc_item);
+    SAME(row_title_continue);
+    SAME(row_title_new);
+    SAME(row_title_new_only);
+    SAME(row_title_copyright);
+    SAME(row_title_copyright2);
+    SAME(anim_none);
+    SAME(chain_group_st10l);
+    SAME(chain_group_st19a);
+    SAME(veil_model);
+    SAME(veil_kind);
+    SAME(reel_row);
+    SAME(veil_anim_row);
+    SAME(mv_motion_kinds);
+    SAME(mv_orient_rows);
+    SAME(gflag_new_game);
+    SAME(gflag_queen_dead);
+    SAME(gflag_beach_secret);
+    SAME(gflag_count);
+    SAME(credits_song);
+    SAME(credits_roll_ms);
+    SAME(credits_entrance_exit);
+    SAME(credits_boy_label);
+    SAME(n_adpcm);
+    SAME(n_sefile);
+    SAME(n_sedef);
+    SAME(n_selist);
+    SAME(n_seenv);
+    SAME(stream_music_last);
+    SAME(stream_voice_first);
+    SAME(stream_voice_last);
+    SAME(gallery_title_theme);
+#undef STR
+#undef NUM
+#undef SAME
+    for (i = 0; i < ICO_GLYPH_COUNT; i++) {
+        CHECK(c->glyph[i].row == j->glyph[i].row && c->glyph[i].u == j->glyph[i].u &&
+              c->glyph[i].v == j->glyph[i].v && c->glyph[i].w == j->glyph[i].w &&
+              c->glyph[i].h == j->glyph[i].h && c->glyph[i].disp_h == j->glyph[i].disp_h);
+    }
+    for (i = 0; i < ICO_REGION_ACH_STAGES; i++) {
+        CHECK(c->ach_stages[i] == j->ach_stages[i]);
+    }
+}
+
 static void test_keys(void)
 {
     char k[64];
@@ -443,6 +568,11 @@ static void test_keys(void)
           strcmp(k, "mirror.kor_slot_3") == 0);
     CHECK(ico_region_key_suffixed("stats.stages", k, sizeof(k)) == 0 &&
           strcmp(k, "stats.stages_kor") == 0);
+    CHECK(ico_region_select("cn") == 0);
+    CHECK(ico_region_key_prefixed("mirror", "slot_3", k, sizeof(k)) == 0 &&
+          strcmp(k, "mirror.cn_slot_3") == 0);
+    CHECK(ico_region_key_suffixed("stats.stages", k, sizeof(k)) == 0 &&
+          strcmp(k, "stats.stages_cn") == 0);
     CHECK(ico_region_key_prefixed("run", "slot_0", k, 8) == -1);
     CHECK(ico_region_key_suffixed("stats.stages", k, 12) == -1);
     CHECK(ico_region_select("pal") == 0);
@@ -468,6 +598,12 @@ static void test_stage(void)
           ico_region_stage(105) == 103);
     CHECK(ico_region_stage(ico_region_info_pal.stage_credits) == ico_region_info_kor.stage_credits);
     CHECK(ico_region_stage(ico_region_info_pal.stage_end) == ico_region_info_kor.stage_end);
+    /* and the Asian disc's (its stage-all C is the Japanese one) */
+    CHECK(ico_region_select("cn") == 0);
+    CHECK(ico_region_stage(0) == 0 && ico_region_stage(57) == 57 && ico_region_stage(58) == 56 &&
+          ico_region_stage(105) == 103);
+    CHECK(ico_region_stage(ico_region_info_pal.stage_credits) == ico_region_info_cn.stage_credits);
+    CHECK(ico_region_stage(ico_region_info_pal.stage_end) == ico_region_info_cn.stage_end);
     CHECK(ico_region_select("pal") == 0);
 }
 
@@ -478,6 +614,7 @@ int main(int argc, char **argv)
     test_consistency();
     test_jpn_values();
     test_kor_values();
+    test_cn_values();
     test_keys();
     test_stage();
     return ico_check_summary("region_select_test");

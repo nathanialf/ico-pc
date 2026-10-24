@@ -194,7 +194,7 @@ static int _infoUpdate(void)
     int n;
     int i;
 
-    if (ICO_JPNKOR) {
+    if (ICO_JPNKORCN) {
         return _infoUpdate_jpn();
     }
 
@@ -408,7 +408,7 @@ inline float GetStreamMotionData(char *dst, int no)
         return -1.0f;
     }
     getStreamMotionData(dst, streamEntry[no].cur, no);
-    return (float)framePlayed / PAL_JPNKOR(2997.0f, 50.0f);
+    return (float)framePlayed / PAL_JPNKORCN(2997.0f, 50.0f);
 }
 
 static void _transRingBuf(int *idx_p, char *dst, int size, char *src, int amt)
@@ -482,9 +482,9 @@ void ExecStreamMotionManager(void)
 void MallocStreamMotionBuffer(void)
 {
     ringBuf = iosMallocDebug(ios_partition_sugipon, 163840, "src/streamMotionManager.c",
-                             LN(602, 570, 570, 602, 602, 602));
+                             LN(602, 570, 570, 602, 602, 602, 570));
     readBufRaw = iosMallocDebug(ios_partition_sugipon, 163904, "src/streamMotionManager.c",
-                                LN(604, 572, 572, 604, 604, 604));
+                                LN(604, 572, 572, 604, 604, 604, 572));
     readBuf = (char *)((ICO_WORD)(readBufRaw + 63) & ~(ICO_WORD)63);
     if (ringBuf == 0 || readBuf == 0) {
         /* "could not allocate the stream buffer memory" */

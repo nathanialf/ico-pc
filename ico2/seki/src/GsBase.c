@@ -200,14 +200,14 @@ void gsb_Init(void *db)
         omode = 3;
         break;
     }
-    if (!ICO_JPNKOR) {
+    if (!ICO_JPNKORCN) {
         sceGsResetGraph(0, systemStatus[1] == 1, omode, 1);
     }
     /* FRAME: the native width; the latch below sets this boot's (the stub
        records nothing, port/null/gfx_null.c) */
     sceGsSetDefDBuff(db, 0, gsFrame.w, ScreenHeight, 2, 0x30, fbClear);
     gsb_SetFrame(db, 0, 0, 0x30, 2);
-    if (ICO_JPNKOR) {
+    if (ICO_JPNKORCN) {
         sceGsResetGraph(0, systemStatus[1] == 1, omode, 1);
     }
     sceGsSyncV(0);
@@ -384,7 +384,7 @@ static void gsb_Reduction_jpn(void)
  * current target asks for. */
 void gsb_Reduction(void)
 {
-    if (ICO_JPNKOR) {
+    if (ICO_JPNKORCN) {
         gsb_Reduction_jpn();
         return;
     }
@@ -677,7 +677,7 @@ static int scissorLastState_jpn = 51; /* derived name */
 static int scissorLastState_pal = 54; /* derived name */
 
 /* the first state differs as the layout ids do (the Japanese ids 3 lower) */
-#define scissorLastState (*PAL_JPNKOR(&scissorLastState_pal, &scissorLastState_jpn))
+#define scissorLastState (*PAL_JPNKORCN(&scissorLastState_pal, &scissorLastState_jpn))
 
 static float scissorLevel = 0.0f; /* derived name */
 
@@ -701,7 +701,7 @@ static void gsb_scissorOnDemo(void)
     unsigned char col[4];
     int i;
 
-    if (current_layout_id == PAL_JPNKOR(55, 52) && scissorLastState != current_layout_id) {
+    if (current_layout_id == PAL_JPNKORCN(55, 52) && scissorLastState != current_layout_id) {
         scissorStep = 2.5f;
     } else if (scissorLastState != current_layout_id) {
         scissorStep = -2.5f;
@@ -1176,7 +1176,7 @@ static const int filmNoiseGroup_jpn[] = {-1, 63, 64, 65, 66}; /* derived name */
 
 static const int filmNoiseGroup_pal[] = {-1, 67, 68, 69, 70}; /* derived name */
 
-#define filmNoiseGroup PAL_JPNKOR(filmNoiseGroup_pal, filmNoiseGroup_jpn)
+#define filmNoiseGroup PAL_JPNKORCN(filmNoiseGroup_pal, filmNoiseGroup_jpn)
 
 inline void gsb_ResetFilmNoise(void)
 {
@@ -1694,7 +1694,7 @@ void gsb_SetVSMatrix(int w, int h, float d)
     float zoom;
 
     center_X = center_Y = 2048.0f;
-    if (ICO_JPNKOR) {
+    if (ICO_JPNKORCN) {
         currentFocusDistance = d;
     } else {
         if (d == 0.0f) {
@@ -1720,7 +1720,7 @@ void gsb_SetVSMatrix(int w, int h, float d)
     zoom = (float)GlobalStageSetting.viewScale * zoomCurrent * d * (float)debug_zoom_per *
            (float)ScreenWidth / 640.0f / 100.0f / 100.0f;
     vsParam[0] = zoom;
-    if (!ICO_JPNKOR) {
+    if (!ICO_JPNKORCN) {
         if (debug_snapshot_reserve != 0 || (pad[1].now & 0x800) != 0) {
             vsParam[0] = zoom * (float)debug_snapshot_num / 100.0f;
         }
@@ -1740,7 +1740,7 @@ void gsb_SetVSMatrix(int w, int h, float d)
                        (float *)(matrixptr + 0x240), (float *)(matrixptr + 0x340), vsParam);
     gsbHostCullMargin((float *)(matrixptr + 0x240));
     gsbHostCullMargin((float *)(matrixptr + 0x680));
-    if (ICO_JPNKOR) {
+    if (ICO_JPNKORCN) {
         /* The field of view print of PAL's debug listing (SRCFILE.TXT,
          * GsBase.c 2305-2306); the release build keeps its two tests.  The
          * format text is derived: it is on no disc. */

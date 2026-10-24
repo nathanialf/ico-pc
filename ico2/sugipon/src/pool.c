@@ -297,8 +297,8 @@ void SetFallDownSplash(GObj *pool, GObj *self)
         setNodePursueParticleEffectWithUpperLimit(48, self, 47, pos[1]);
     }
 
-    stage_SetLoopFlag(PAL_JPNKOR(499, 495), 0);
-    stage_SetFrameStep(PAL_JPNKOR(499, 495), 1);
+    stage_SetLoopFlag(PAL_JPNKORCN(499, 495), 0);
+    stage_SetFrameStep(PAL_JPNKORCN(499, 495), 1);
 
     EntryMultiBgaManagerNoKind(w->splash, w->splashNo, pos);
     w->splashNo = (w->splashNo + 1) % 2;
@@ -734,7 +734,7 @@ static void dispPool(GObj *self)
 #ifdef ICO_RD
     poolHostGridSt(RD_GRID_ST_SURFACE);
 #endif
-    if (ICO_JPNKOR) {
+    if (ICO_JPNKORCN) {
         if (debug_snapshot_reserve == 0) {
             prim_DispMesh3D(w->surface, dispLightColor, dispLightNormal, -1);
         }
@@ -758,7 +758,7 @@ static void dispPool(GObj *self)
     CopyMatrix(m3, (char *)(matrixptr + 0x200));
     CopyMatrix(m4, (char *)(matrixptr + 0x340));
 
-    if (ICO_JPNKOR) {
+    if (ICO_JPNKORCN) {
         debug_snapshot_reserve--;
     }
     gsb_SetVSMatrix(0xCC, 0xCC, (float)currentFocusDistance);
@@ -782,7 +782,7 @@ static void dispPool(GObj *self)
         CopyMatrix(MatrixDrive_GetMatrix(), &w->dobj->matrix);
         /* the spinning stage is 101 on the European disc, 99 on the Japanese
            one (stages from 58 two lower); stage 15 is the same on both */
-        if (stage_no == PAL_JPNKOR(101, 99)) {
+        if (stage_no == PAL_JPNKORCN(101, 99)) {
             MatrixDrive_RotMatrixZ((w->spin << 16) / 1600);
         } else if (stage_no == 15) {
             MatrixDrive_RotMatrixZ(-(w->spin << 16) / 1600);
@@ -814,7 +814,7 @@ static void dispPool(GObj *self)
 #endif
     vsWidth = ScreenWidth; /* SCALE: gsb_SetVSMatrix's full-screen record */
     vsHeight = ScreenHeight;
-    if (ICO_JPNKOR) {
+    if (ICO_JPNKORCN) {
         debug_snapshot_reserve++;
     }
 
@@ -861,8 +861,8 @@ void PoolDL(GObj *self)
 {
     PoolWork *w = GOBJ_SUB(self)->work;
 
-    DispMultiBgaManagerWithKind(PAL_JPNKOR(498, 494), w->bga, 10);
-    DispMultiBgaManagerWithKind(PAL_JPNKOR(499, 495), w->splash, 2);
+    DispMultiBgaManagerWithKind(PAL_JPNKORCN(498, 494), w->bga, 10);
+    DispMultiBgaManagerWithKind(PAL_JPNKORCN(499, 495), w->splash, 2);
     if (systemStatus[5] == 0) {
         w->phase =
             (short)(int)((float)w->phase +

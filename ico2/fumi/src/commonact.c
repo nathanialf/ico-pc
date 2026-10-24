@@ -490,7 +490,7 @@ int _ACTCorrectMsg(GObj *self, int msg, void *param)
         if (GOBJ_ACT(self)->unguardable != 0) {
             debug_StdPrintfDummy("!!! unable guard flag get\n");
         }
-        if (stage_no == PAL_JPNKOR(85, 83) || debug_use_new_queen_battle != 0) {
+        if (stage_no == PAL_JPNKORCN(85, 83) || debug_use_new_queen_battle != 0) {
             if (GOBJ_ACT(self)->stoneHit != 0) {
                 if (ACTGame_NoWeapon(self) != 0 && sk->actMode != 14) {
                     msg = 110;
@@ -788,7 +788,7 @@ void WithMailFunc_AttackRejectInQueen(GObj *self)
         ReleaseWeaponWithFumbleSequential(w);
         s->weapon = 0;
     }
-    if (stage_no == PAL_JPNKOR(85, 83) || debug_use_new_queen_battle != 0) {
+    if (stage_no == PAL_JPNKORCN(85, 83) || debug_use_new_queen_battle != 0) {
         void *e = isysGObjSearchFromObjKindID_begin(54);
         if (e != 0) {
             iosOmSendMail(e, 0xD, self);
@@ -1568,9 +1568,9 @@ static inline void dieNotifyObjects(GObj *self) /* derived name */
 {
     void *g;
 
-    if (self->labelId == PAL_JPNKOR(3757, 3734)) {
-        gamesysObjInfoCls(4, PAL_JPNKOR(0xEAD, 3734));
-        gamesysObjInfoCls(PAL_JPNKOR(0x21, 33), PAL_JPNKOR(0xEAE, 3735));
+    if (self->labelId == PAL_JPNKORCN(3757, 3734)) {
+        gamesysObjInfoCls(4, PAL_JPNKORCN(0xEAD, 3734));
+        gamesysObjInfoCls(PAL_JPNKORCN(0x21, 33), PAL_JPNKORCN(0xEAE, 3735));
     }
     g = isysGObjSearchFromObjKindID_begin(0x2F);
     if (g == 0) {
@@ -1598,7 +1598,7 @@ void actCommonDie(GObj *volatile self)
     DownFunc(self);
     GOBJ_ACT(self)->hit = 1;
     dieNotifyObjects(self);
-    if (self->labelId == PAL_JPNKOR(3757, 3734)) {
+    if (self->labelId == PAL_JPNKORCN(3757, 3734)) {
         ResetReviveCountEnemy(self);
     }
     while (1) {
@@ -1931,7 +1931,7 @@ void actCommonBox(GObj *volatile self)
     }
     ((Act *)(char *)s)->box = box;
     actMotDirToWall(self);
-    if (!ICO_JPNKOR) {
+    if (!ICO_JPNKORCN) {
         sceVu0ScaleVector(GOBJ_WORK(self)->boxDir, s->env.wallOrient, -1.0f);
     }
     while (1) {
@@ -1986,7 +1986,7 @@ void actCommonBox(GObj *volatile self)
             GetBoxGlobalHoldPoint(pos, box, hold);
             SetDirectRootPositionNoFittingWithNodePointXZ(
                 (void *)self, 22, pos, GOBJ_SUB(self)->ctrl.frameFlag1 != 0 ? 1.0f : 0.3f);
-            if (ICO_JPNKOR) {
+            if (ICO_JPNKORCN) {
                 /* a local debug switch, off: mark the global hold point. The
                    ROM's stack slot order needs the block here, and the August
                    TRFILE (3132-3136) and PAL's listing (3379-3383) have five
@@ -2469,7 +2469,7 @@ static inline float calcFlyAccel(float *a, float *b) /* derived name */
     h = d[1];
     d[1] = 0.0f;
     h += -VectorLength(d) *
-         (stage_no == PAL_JPNKOR(86, 84) || stage_no == 3 || stage_no == 46 ? 2.5f : 0.5f);
+         (stage_no == PAL_JPNKORCN(86, 84) || stage_no == 3 || stage_no == 46 ? 2.5f : 0.5f);
     return clampUnit(h * 0.005f);
 }
 
@@ -2678,7 +2678,7 @@ static int completeEmergency(GObj *self, float spd, int *cnt104)
         debug_StdPrintfDummy("EMERGENCY COMPLETE CHECK : SPEEDSQ:%f LENSQ:%f\n",
                              VectorLengthSquare((char *)GOBJ_SUB(self)->root.move), spd);
     }
-    if (stage_no != PAL_JPNKOR(86, 84) && stage_no != 3 && stage_no != 46) {
+    if (stage_no != PAL_JPNKORCN(86, 84) && stage_no != 3 && stage_no != 46) {
         if (VectorLengthSquare((char *)GOBJ_SUB(self)->root.move) < 50.0f && spd < 1000.0f) {
             return 1;
         }
@@ -2784,7 +2784,7 @@ static void flyCoreLoop(GObj *self, GObj *target, int checkStuck)
         flags |= 1;
         SetFlyLimit(self);
     }
-    if (stage_no == PAL_JPNKOR(86, 84) || stage_no == 3 || stage_no == 46) {
+    if (stage_no == PAL_JPNKORCN(86, 84) || stage_no == 3 || stage_no == 46) {
         emgpos[0] = GOBJ_WORK(self)->emgPosX;
         emgpos[1] = GOBJ_WORK(self)->emgPosY;
         emgpos[2] = GOBJ_WORK(self)->emgPosZ;
@@ -2794,7 +2794,7 @@ static void flyCoreLoop(GObj *self, GObj *target, int checkStuck)
         GetRootMotionMatrix(mat, self);
         if (target) {
             GetRootPosition(root, target);
-            if (stage_no == PAL_JPNKOR(86, 84) || stage_no == 3 || stage_no == 46) {
+            if (stage_no == PAL_JPNKORCN(86, 84) || stage_no == 3 || stage_no == 46) {
                 root[0] = emgpos[0];
                 root[1] = emgpos[1];
                 root[2] = emgpos[2];
@@ -2842,7 +2842,7 @@ static void flyCoreLoop(GObj *self, GObj *target, int checkStuck)
                 debug_PrintfDummy(10, y += 10, 0x80FF0080, "EMERGENCY BY DANGER LOOP");
             acc = calcVertAccel(root, mat[3]);
             _ACTMotDirSmzDirect(self, dir);
-            if (stage_no != PAL_JPNKOR(86, 84) && stage_no != 3 && stage_no != 46) {
+            if (stage_no != PAL_JPNKORCN(86, 84) && stage_no != 3 && stage_no != 46) {
                 SetDarkVolumeEffect(mat[3], 100.0f);
             }
             if (completeEmergency(self, spd, &cnt104)) {
@@ -2862,7 +2862,7 @@ static void flyCoreLoop(GObj *self, GObj *target, int checkStuck)
                         0.92f);
         if (((int)(act->flags20.ll >> 21) & 1) == 0) {
             FlyPt v = {{0.0f, 0.0f,
-                        stage_no == PAL_JPNKOR(86, 84) || stage_no == 3 || stage_no == 46
+                        stage_no == PAL_JPNKORCN(86, 84) || stage_no == 3 || stage_no == 46
                             ? 3.0f
                             : (checkStuck ? GetEnemyFlyXZAccel(self) : 1.0f),
                         0.0f}};
@@ -2872,7 +2872,7 @@ static void flyCoreLoop(GObj *self, GObj *target, int checkStuck)
             _AddVectorXYZ((char *)GOBJ_SUB(self)->root.move, (char *)GOBJ_SUB(self)->root.move, &v);
             GOBJ_SUB(self)->root.move[1] += acc * 2.0f;
         }
-        if ((stage_no == PAL_JPNKOR(86, 84) || stage_no == 3 || stage_no == 46) &&
+        if ((stage_no == PAL_JPNKORCN(86, 84) || stage_no == 3 || stage_no == 46) &&
             (60 - systemStatus[0] * 10) / systemStatus[1] * 10 < cnt104) {
             SetFlyLimit(self);
             stuck = 1;
@@ -3788,7 +3788,7 @@ void ACT_LAYOUT_GAMEOVER(void)
     if (gameover_layout_flag == 0) {
         gameover_layout_flag = 1;
         ico_gs_signal(ICO_GS_EV_GAME_OVER, 0);
-        lt_switch_layout(PAL_JPNKOR(62, 59));
+        lt_switch_layout(PAL_JPNKORCN(62, 59));
     }
 }
 
@@ -4289,7 +4289,7 @@ inline void motCommonBoxPush(GObj *volatile self)
 
     s->pushDir = 1;
     while (1) {
-        if (ICO_JPNKOR) {
+        if (ICO_JPNKORCN) {
             actMotDirToWall(self);
         } else {
             if (IsThisBoxTruck(s->box) == 0) {
@@ -4308,7 +4308,7 @@ inline void motCommonBoxPull(GObj *volatile self)
 
     s->pushDir = -1;
     while (1) {
-        if (ICO_JPNKOR) {
+        if (ICO_JPNKORCN) {
             actMotDirToWall(self);
         } else {
             if (IsThisBoxTruck(s->box) == 0) {

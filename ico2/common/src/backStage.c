@@ -230,15 +230,15 @@ void backStageProcessOutStage(void)
     } else {
         o = isysGObjSearchFromObjKindID_begin(4);
         while (o != 0) {
-            if (o->labelId == PAL_JPNKOR(3757, 3734)) {
-                gamesysObjInfoCls(4, PAL_JPNKOR(3757, 3734));
+            if (o->labelId == PAL_JPNKORCN(3757, 3734)) {
+                gamesysObjInfoCls(4, PAL_JPNKORCN(3757, 3734));
             }
             o = isysGObjSearchFromObjKindID_next(o);
         }
         o = isysGObjSearchFromObjKindID_begin(33);
         while (o != 0) {
-            if (o->labelId == PAL_JPNKOR(3758, 3735)) {
-                gamesysObjInfoCls(33, PAL_JPNKOR(3758, 3735));
+            if (o->labelId == PAL_JPNKORCN(3758, 3735)) {
+                gamesysObjInfoCls(33, PAL_JPNKORCN(3758, 3735));
             }
             o = isysGObjSearchFromObjKindID_next(o);
         }
@@ -262,7 +262,7 @@ void backStageProcessMain(void)
     if (gflagChk(390) != 0) {
         return;
     }
-    if (current_layout_id != PAL_JPNKOR(54, 51)) {
+    if (current_layout_id != PAL_JPNKORCN(54, 51)) {
         return;
     }
     if (stage_no == gameSysObjInfo[1].stage) {
@@ -278,18 +278,18 @@ void backStageProcessMain(void)
                 s->work[0] = 4;
             } else {
                 memset(&tmp, 0, sizeof(tmp));
-                tmp.f[0] = objLayout[PAL_JPNKOR(3758, 3735)].rot[0];
-                tmp.f[1] = objLayout[PAL_JPNKOR(3758, 3735)].rot[1];
-                tmp.f[2] = objLayout[PAL_JPNKOR(3758, 3735)].rot[2];
+                tmp.f[0] = objLayout[PAL_JPNKORCN(3758, 3735)].rot[0];
+                tmp.f[1] = objLayout[PAL_JPNKORCN(3758, 3735)].rot[1];
+                tmp.f[2] = objLayout[PAL_JPNKORCN(3758, 3735)].rot[2];
                 rot = tmp;
-                g1 = gamesysObjInfoPosNewStageSet(PAL_JPNKOR(0xEAD, 3734), 4,
+                g1 = gamesysObjInfoPosNewStageSet(PAL_JPNKORCN(0xEAD, 3734), 4,
                                                   gameSysObjInfo[1].stage, gameSysObjInfo[1].pos,
                                                   gameSysObjInfo[1].rot);
                 kidnapObjIdx = (unsigned int)((char *)g1 - (char *)gameSysObjInfo) >> 6;
                 pos.f[0] = nestPos[0];
                 pos.f[2] = nestPos[2];
                 pos.f[1] = nestPos[1] - 10.0f;
-                g2 = gamesysObjInfoPosNewStageSet(PAL_JPNKOR(0xEAE, 3735), PAL_JPNKOR(0x21, 33),
+                g2 = gamesysObjInfoPosNewStageSet(PAL_JPNKORCN(0xEAE, 3735), PAL_JPNKORCN(0x21, 33),
                                                   gameSysObjInfo[1].stage, pos.f, rot.f);
                 SetInfoSpKidnapGenerator(g2->work);
                 SetInfoSpKidnapEnemy(g1->work);

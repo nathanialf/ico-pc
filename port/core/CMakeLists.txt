@@ -9,7 +9,7 @@
 #               linked by the program and by every test program that
 #               compiles game sources (the top-level CMakeLists.txt,
 #               ico_link_region), since the game code reads ico_region
-add_library(ico_region STATIC region.c region_table.c region_pal.c region_jpn.c region_kor.c region_ntsc.c region_aug6.c region_jun26.c)
+add_library(ico_region STATIC region.c region_table.c region_pal.c region_jpn.c region_kor.c region_ntsc.c region_aug6.c region_jun26.c region_cn.c)
 target_include_directories(ico_region PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
                                              "${CMAKE_SOURCE_DIR}/ico2/common/include")
 target_compile_options(ico_region PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
