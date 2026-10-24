@@ -526,9 +526,32 @@ line rounded to whole strip texels per sheet texel, from 1 up to `ICO_SHEET_SCAL
 overlay, the output's pixels per y unit), so the letters are sharp at every resolution while the
 quad and the look stay the 1x strip's (`port/ui/menu_font.c` (`mfScale`); `port/ui/menu_font.h`
 (`ui_draw_menu_text`)). Each drawn text is one strip in a page cache of four pages per style for
-three styles, a page 1024 x 1024 at 1x and up to 4096 x 2048 at 4x; a full set drops its page drawn
-least recently once no recent frame can name it (`port/ui/menu_font.c` (`MF_PAGE`, `MF_PAGES`,
-`MF_EVICT_FRAMES`)).
+three styles, a page 1024 x 1024 at 1x and up to 4096 x 2048 at 4x (`port/ui/menu_font.c`
+(`MF_PAGE`, `MF_PAGES`)). A page is filled in shelves, bands of rows packed left to right, each
+holding its rows, its cursor, its strip count and the rd frame number at which one of its strips
+was last drawn or placed (`MfShelf`, at most `MF_SHELVES` 128 a page; every cache hit marks the
+strip's shelf). A new strip goes, in order, on the open shelf (the last one, which grows down to
+its tallest strip), in a band an emptied shelf left (a strip no taller than the band), or on a new
+shelf below the last (`shelfFit`). When no page of the strip's scale has room, every shelf of those
+pages with strips that no frame has drawn for `MF_EVICT_FRAMES` (4) frames is emptied
+(`reclaimStale`, `reclaimShelf`): its strips are forgotten, its coverage rows and, above 1x, its rim
+rows (the band and one sheet texel above and below, which `placeCoverage` writes; the 5-texel
+`MF_GAP_Y` keeps them clear of the neighbouring shelves') are cleared across the page and replaced
+in the texture with `rd_update_texture_rect` (the texture is kept; rd uploads the union of the
+changed rows at the next replay), and empty shelves at the bottom are dropped. Four frames is the
+whole-page rule's margin: `RD_FRAME_RING` keeps three frames, so none can still name a cleared
+texel. Only after that does the cache open a new page, then drop the page drawn least recently once
+no recent frame can name it. A full strip table (`MF_STRIPS`, 1024) empties the stale shelves of
+every style and scale before it drops a page. A screen with a string that changes every tick (the
+Models viewer's "Frame N / M", issue 136) so keeps its steady rows in place and recycles the
+counter's bands, where a whole-page rule alone finds every page drawn each frame and draws every
+new word with the plain font once the pages are full. A word still falls back to the plain font only when every
+shelf of every page of its scale holds a strip drawn in the last four frames; the log counts those
+(`ui: menu text: N words drawn with the plain font so far (S strips cached, M shelves reclaimed)`)
+and the reclaims (`ui: menu text: M shelves reclaimed so far (S strips cached, N words drawn with
+the plain font)`), each at its first, tenth, hundredth and every further power of ten, beside the
+once-a-run `ui: the menu text pages are full` (`ui_menu_font_fallbacks`,
+`ui_menu_font_shelf_reclaims`; ctest `menu_text` draws the counter for 600 frames at 3x and 1x).
 
 The inks (`UiMenuTextInk`): light letters with the dark rim (the menu rows; the port's text always
 has the full rim), and dark, plain and grey letters without one (the white panel's prompts, the
