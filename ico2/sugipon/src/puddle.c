@@ -455,6 +455,13 @@ void drawRipples(GObj *self, int pri)
 
     gif_StartPacketPri(pri);
 
+#ifdef ICO_RD
+    /* PC port: drawRipple's STs are its projected points times sx and sy
+       about the centre, per pixel; per 12.4 unit here, so a vertex the
+       presenter re-projects between ticks keeps sampling the reflection
+       where its new position shows it (rd.h rd_frame_projected_st) */
+    gif_HostFrameProjectedSt(0.9f / (float)gsFrame.w / 16.0f, 0.9f / (float)ScreenHeight / 16.0f);
+#endif
     p = w->rip;
     t = &w->rip[0].t;
     for (i = 5; i >= 0; i--) {
@@ -464,6 +471,9 @@ void drawRipples(GObj *self, int pri)
         p++;
         t += sizeof(Ripple) / sizeof(float);
     }
+#ifdef ICO_RD
+    gif_HostFrameProjectedSt(0.0f, 0.0f); /* PC port */
+#endif
 
     gif_EndPacket();
 }
