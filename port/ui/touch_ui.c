@@ -223,10 +223,14 @@ static const uint8_t kDot[4] = {0x80, 0x80, 0x80, 0x30}, kBand[4] = {0x40, 0x40,
 #define EDIT_ALPHA_FLOOR 0.35f
 /* a key that does nothing now (Size and Opacity with nothing selected) */
 #define KEY_DIM 0.4f
+/* an Off control's dashed outline and word against a Hidden one's (which
+   still takes touches) */
+#define OFF_DIM 0.5f
 
 /* The opacity a control is drawn at: its edits' alpha, at most 1, at least
-   EDIT_ALPHA_FLOOR while editing; -1 for a hidden one (alpha 0: nothing in
-   play, a dashed outline and the word Hidden while editing). */
+   EDIT_ALPHA_FLOOR while editing; -1 for a Hidden or Off one (alpha 0:
+   nothing in play, a dashed outline and the word Hidden or Off while
+   editing, an Off one's dimmer). */
 static float shownAlpha(const IcoTouchOverlay *o, float a)
 {
     if (!(a > 0.0f)) {
@@ -288,10 +292,22 @@ static void drawDpad(const IcoTouchOverlay *o, float th)
     const uint8_t *eu = hu ? kEdgeHeld : kEdge, *ed = hd ? kEdgeHeld : kEdge,
                   *el = hl ? kEdgeHeld : kEdge, *er = hr ? kEdgeHeld : kEdge;
 
-    const float a = shownAlpha(o, u->alpha); /* the D-pad is one control, never hidden */
+    const float a = shownAlpha(o, u->alpha);
 
     if (!(x1 < x2) || !(x0 < x1) || !(x2 < x3) || !(y0 < y1) || !(y1 < y2) || !(y2 < y3) ||
-        2.0f * th >= x2 - x1 || 2.0f * th >= y2 - y1 || a < 0.0f) {
+        2.0f * th >= x2 - x1 || 2.0f * th >= y2 - y1) {
+        return;
+    }
+    if (a < 0.0f) {
+        /* Hidden or Off: only the editor shows where it is, each key dashed */
+        if (o->edit.active) {
+            s_d.alpha = u->active ? 1.0f : OFF_DIM;
+            dashedFrame(x1, y0, x2, y1, th, kEdge);
+            dashedFrame(x1, y2, x2, y3, th, kEdge);
+            dashedFrame(x0, y1, x1, y2, th, kEdge);
+            dashedFrame(x2, y1, x3, y2, th, kEdge);
+            s_d.alpha = 1.0f;
+        }
         return;
     }
     s_d.alpha = a;
@@ -340,13 +356,15 @@ static void drawButtons(const IcoTouchOverlay *o, float th)
             continue;
         }
         if (a < 0.0f) {
-            /* hidden: only the editor shows where it is */
+            /* Hidden or Off: only the editor shows where it is (Off dimmer) */
             if (o->edit.active) {
+                s_d.alpha = b->active ? 1.0f : OFF_DIM;
                 if (b->round) {
                     dashedRing(cx, cy, b->rect.w * 0.5f - th * 0.5f, th, kEdge);
                 } else {
                     dashedFrame(x0, y0, x1, y1, th, kEdge);
                 }
+                s_d.alpha = 1.0f;
             }
             continue;
         }
@@ -380,9 +398,13 @@ static void drawSticks(const IcoTouchOverlay *o, float th)
             ring(l->stickHomeX, l->stickHomeY, l->stickR - th * 0.5f, th, kEdge);
             ring(l->stickHomeX, l->stickHomeY, l->runR, th * 0.6f, kRun);
             disc(l->stickHomeX, l->stickHomeY, l->stickR * 0.38f, kKnob);
+        } else if (l->stickR > 0.0f) {
+            /* Hidden or Off: its ring dashed (Off dimmer) */
+            s_d.alpha = l->stickActive ? 1.0f : OFF_DIM;
+            dashedRing(l->stickHomeX, l->stickHomeY, l->stickR - th * 0.5f, th, kEdge);
         }
         if (a->w > 2.0f * th && a->h > 2.0f * th) {
-            s_d.alpha = la >= 0.0f ? la : 1.0f;
+            s_d.alpha = la >= 0.0f ? la : l->lookActive ? 1.0f : OFF_DIM;
             if (la >= 0.0f) {
                 frame(a->x, a->y, a->x + a->w, a->y + a->h, th * 0.6f, kRun);
             } else {
@@ -477,7 +499,7 @@ static uint32_t drawGlyphs(const IcoTouchOverlay *o)
             }
             done |= 1u << z;
             if (ca < 0.0f) {
-                continue; /* hidden: no picture (the editor writes Hidden) */
+                continue; /* Hidden or Off: no picture (the editor writes the word) */
             }
             if (lt_ext_glyph_source(glyphOf(z), uvwh) < 0) {
                 continue;
@@ -554,13 +576,18 @@ static void drawLabels(const RdOverlayCtx *ctx, const IcoTouchOverlay *o, uint32
     for (int z = 0; z < ICO_TOUCH_BUTTONS; z++) {
         const IcoTouchButton *b = &o->layout.button[z];
         const float ca = shownAlpha(o, b->alpha);
-        /* a hidden one's word is Hidden while editing (none in play) */
-        const char *name =
-            ca < 0.0f ? (o->edit.active && z > ICO_TOUCH_B_RIGHT ? ui_str(UI_STR_TED_HIDDEN) : NULL)
-            : ((withGlyph >> z) & 1u) ? NULL
-                                      : labelOf(z);
+        /* a Hidden or Off one's word is Hidden or Off while editing (none in
+           play; the D-pad's is written once, below) */
+        const char *name = ca < 0.0f ? (o->edit.active && z > ICO_TOUCH_B_RIGHT
+                                            ? ui_str(b->active ? UI_STR_TED_HIDDEN : UI_STR_TED_OFF)
+                                            : NULL)
+                           : ((withGlyph >> z) & 1u) ? NULL
+                                                     : labelOf(z);
         const int held = (o->info.pressed >> z) & 1u;
-        float a = (held ? 128.0f : 104.0f) * s_d.opacity * (ca < 0.0f ? 1.0f : ca);
+        float a = (held ? 128.0f : 104.0f) * s_d.opacity *
+                  (ca >= 0.0f  ? ca
+                   : b->active ? 1.0f
+                               : OFF_DIM);
         uint8_t c[4] = {0x80, 0x80, 0x80, 0};
 
         if (name == NULL || b->rect.w <= 0.0f || b->rect.h <= 0.0f) {
@@ -578,6 +605,29 @@ static void drawLabels(const RdOverlayCtx *ctx, const IcoTouchOverlay *o, uint32
         float gx, gy;
         pxToGrid(ctx, px, py, &gx, &gy);
         ui_draw_text(gx, gy, size, c, name, UI_ALIGN_CENTER | UI_VALIGN_MIDDLE);
+    }
+    {
+        /* the D-pad's word, Hidden or Off, across its middle row of keys
+           while editing */
+        const IcoTouchButton *u = &o->layout.button[ICO_TOUCH_B_UP],
+                             *lk = &o->layout.button[ICO_TOUCH_B_LEFT],
+                             *rk = &o->layout.button[ICO_TOUCH_B_RIGHT];
+        const float wPx = (rk->rect.x + rk->rect.w - lk->rect.x) * s_d.kx,
+                    hBox = lk->rect.h * s_d.ky;
+        if (o->edit.active && !(u->alpha > 0.0f) && wPx > 0.0f && hBox > 0.0f) {
+            const char *name = ui_str(u->active ? UI_STR_TED_HIDDEN : UI_STR_TED_OFF);
+            const float a = 104.0f * s_d.opacity * (u->active ? 1.0f : OFF_DIM);
+            uint8_t c[4] = {0x80, 0x80, 0x80, (uint8_t)(a > 128.0f ? 128.0f : a + 0.5f)};
+            float size = 0.45f * hBox * 448.0f / bh, gx, gy;
+            for (int i = 0;
+                 i < 24 && size > 4.0f && ui_measure_text(size, name) * W / 640.0f > 0.85f * wPx;
+                 i++) {
+                size *= 0.92f;
+            }
+            pxToGrid(ctx, (lk->rect.x + (rk->rect.x + rk->rect.w - lk->rect.x) * 0.5f) * s_d.kx,
+                     (lk->rect.y + lk->rect.h * 0.5f) * s_d.ky, &gx, &gy);
+            ui_draw_text(gx, gy, size, c, name, UI_ALIGN_CENTER | UI_VALIGN_MIDDLE);
+        }
     }
     ui_end_overlay();
 }
@@ -802,7 +852,7 @@ static const char *intText(UiStrId id, int v, char *buf, size_t size)
 
 /* a strip cell's words, one line: its name, with its value where it has
    one ("Snap: On", "Grid: 4 mm"); the readouts the selected control's
-   size and opacity ("Size 120 %", "75 %", Hidden at 0), "All" with All
+   size and opacity ("Size 120 %", "75 %", Hidden or Off at 0), "All" with All
    lit, "-" with nothing selected */
 static void keyWords(const IcoTouchEditView *v, int k, char *out, size_t n)
 {
@@ -837,7 +887,7 @@ static void keyWords(const IcoTouchEditView *v, int k, char *out, size_t n)
         if (v->all) {
             snprintf(out, n, "%s", ui_str(UI_STR_TED_ALL));
         } else if (sel && !(v->selAlpha > 0.0f)) {
-            snprintf(out, n, "%s", ui_str(UI_STR_TED_HIDDEN));
+            snprintf(out, n, "%s", ui_str(v->selActive ? UI_STR_TED_HIDDEN : UI_STR_TED_OFF));
         } else if (sel) {
             snprintf(out, n, "%d %%", (int)(v->selAlpha * 100.0f + 0.5f));
         } else {
@@ -989,13 +1039,27 @@ static void drawEditor(const RdOverlayCtx *ctx, const IcoTouchOverlay *o, float 
         textAt(&g, b->x + b->w * 0.5f, y, lineH, (float)o->layout.outW, 1.0f, ctlName(v->selected));
     }
     {
-        /* the look pad's word, or Hidden, in its area: nothing else shows it */
+        /* the look pad's word, or Hidden or Off, in its area: nothing else
+           shows it */
         const IcoTouchRect *a = &o->layout.lookArea;
         if (rectShown(a)) {
             const float la = shownAlpha(o, o->layout.lookAlpha);
+            const int on = o->layout.lookActive;
             textAt(&g, a->x + a->w * 0.5f, a->y + a->h * 0.5f, lineH, a->w * 0.9f,
-                   la < 0.0f ? 1.0f : la,
-                   la < 0.0f ? ui_str(UI_STR_TED_HIDDEN) : ctlName(ICO_TOUCH_CTL_LOOK));
+                   la >= 0.0f ? la
+                   : on       ? 1.0f
+                              : OFF_DIM,
+                   la >= 0.0f ? ctlName(ICO_TOUCH_CTL_LOOK)
+                              : ui_str(on ? UI_STR_TED_HIDDEN : UI_STR_TED_OFF));
+        }
+    }
+    {
+        /* the stick's word when it is Hidden or Off, in its dashed ring */
+        const IcoTouchLayout *l = &o->layout;
+        if (l->stickR > 0.0f && !(l->stickAlpha > 0.0f)) {
+            textAt(&g, l->stickHomeX, l->stickHomeY, lineH, 1.6f * l->stickR,
+                   l->stickActive ? 1.0f : OFF_DIM,
+                   ui_str(l->stickActive ? UI_STR_TED_HIDDEN : UI_STR_TED_OFF));
         }
     }
     ui_end_overlay();

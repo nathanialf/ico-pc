@@ -29,10 +29,11 @@
  *     a dot under the finger;
  *   - a held button or key brighter;
  *   - each control at its layout edits' opacity (IcoTouchButton.alpha,
- *     stickAlpha, lookAlpha); a hidden one (alpha 0) not at all;
+ *     stickAlpha, lookAlpha); a Hidden or Off one (alpha 0) not at all;
  *   - while the Edit layout page is open (IcoTouchOverlay.edit.active), at
  *     full strength whatever the fades say, every control at least
- *     35 % opaque, the hidden ones as a dashed outline with the word Hidden,
+ *     35 % opaque, the Hidden ones as a dashed outline with the word Hidden
+ *     and the Off ones (active 0) the same, dimmer, with the word Off,
  *     the stick where it rests and the look pad's area outlined with its
  *     name; under them the hinge band hatched and, with Snap on, a dot at
  *     each grid step from the edges the editor anchors to; over them the

@@ -600,6 +600,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_TED_ALL_SCREENS] = "すべての画面",
     [UI_STR_TED_CANCEL] = "キャンセル",
     [UI_STR_TED_HIDDEN] = "表示なし",
+    [UI_STR_TED_OFF] = "オフ",
     [UI_STR_TED_STICK] = "スティック",
     [UI_STR_TED_LOOK] = "視点パッド",
     [UI_STR_TED_HINT] = "ボタンをタップして選び、ドラッグで移動、ピンチで大きさを変えます。",

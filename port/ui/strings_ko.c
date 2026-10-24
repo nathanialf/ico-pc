@@ -599,6 +599,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_TED_ALL_SCREENS] = "화면 전부",
     [UI_STR_TED_CANCEL] = "그만두기",
     [UI_STR_TED_HIDDEN] = "숨겨짐",
+    [UI_STR_TED_OFF] = "끔",
     [UI_STR_TED_STICK] = "스틱",
     [UI_STR_TED_LOOK] = "시점 패드",
     [UI_STR_TED_HINT] =

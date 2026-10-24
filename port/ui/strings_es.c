@@ -599,6 +599,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_TED_ALL_SCREENS] = "Todas las pantallas",
     [UI_STR_TED_CANCEL] = "Cancelar",
     [UI_STR_TED_HIDDEN] = "Oculto",
+    [UI_STR_TED_OFF] = "Desactivado",
     [UI_STR_TED_STICK] = "Stick",
     [UI_STR_TED_LOOK] = "Zona de cámara",
     [UI_STR_TED_HINT] =

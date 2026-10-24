@@ -55,8 +55,11 @@
  * now / distance at the second finger's down), clamped, snapped to 0.05
  * on the release. The strip has no size keys (its size cell is a
  * readout); the gamepad's L2/R2 step the size by 0.1. Opacity steps are
- * 10 %. Size and opacity steps act on the selected control, or with All
- * on every one. Every change pushes the work before it on the undo stack
+ * 10 % down to 10 %, then Hidden, then Off (alpha_step; up the reverse,
+ * Hidden coming back at 10 %). Size and opacity steps act on the selected
+ * control, or with All on every one; a Hidden or Off control stays
+ * selectable (its box is the layout's, drawn dashed) so it can be brought
+ * back. Every change pushes the work before it on the undo stack
  * (8 deep, the oldest dropped); Undo pops. The look pad is outside the overlap and
  * refuse rules (it lies under buttons by design). A cancel (focus lost)
  * or a posture change drops a drag or pinch (the control back where the
@@ -82,8 +85,7 @@ void ico_touch_edits_defaults(IcoTouchEdits *e)
 
 int ico_touch_ctl_hideable(int ctl)
 {
-    return ctl == ICO_TOUCH_CTL_SELECT || ctl == ICO_TOUCH_CTL_L1 || ctl == ICO_TOUCH_CTL_L2 ||
-           ctl == ICO_TOUCH_CTL_R2 || ctl == ICO_TOUCH_CTL_LOOK;
+    return ctl >= 0 && ctl < ICO_TOUCH_CTL_COUNT;
 }
 
 const char *ico_touch_ctl_name(int ctl)
@@ -434,9 +436,6 @@ int ico_touch_edit_parse(IcoTouchCtlEdit *c, int ctl, const char *text)
             return -1; /* "default" and "hidden" stand alone */
         }
         if (word == 2) {
-            if (!ico_touch_ctl_hideable(ctl)) {
-                return -1;
-            }
             c->set = 1;
             c->ax = c->ay = ICO_TOUCH_ANCHOR_DEFAULT;
             c->scale = 1.0f;
@@ -480,8 +479,7 @@ void ico_touch_edit_sanitize(IcoTouchCtlEdit *c, int ctl)
     /* a control that is drawn takes touches; one that is not is Hidden
        (active) or Off */
     c->active = c->alpha > 0.0f || c->active != 0;
-    c->alpha =
-        clampf(c->alpha, ico_touch_ctl_hideable(ctl) ? 0.0f : ICO_TOUCH_EDIT_ALPHA_MIN, 1.0f);
+    c->alpha = clampf(c->alpha, 0.0f, 1.0f);
     if (ctl == ICO_TOUCH_CTL_LOOK) {
         c->w =
             c->w > 0.0f ? clampf(c->w, ICO_TOUCH_EDIT_LOOK_MIN, ICO_TOUCH_EDIT_OFFSET_MAX) : 0.0f;
@@ -1012,6 +1010,37 @@ static void step_size(IcoTouchEditor *ed, const IcoTouchLayout *l, int dir)
     commit(ed, &next);
 }
 
+/* One opacity step of c. Down: 100 % .. 10 % by 10 (an opacity between
+   the steps to the next one down, at least 10 %), then Hidden (alpha 0,
+   still taking touches), then Off (neither), where it stays. Up the
+   reverse: Off to Hidden, Hidden to 10 % (not the opacity it had before:
+   the file keeps none for a control at 0), then by 10 up to 100 %. */
+static void alpha_step(IcoTouchCtlEdit *c, int dir)
+{
+    long p = round_l(c->alpha * 100.0f);
+
+    if (dir < 0) {
+        if (!(c->alpha > 0.0f)) {
+            c->active = 0; /* Hidden -> Off; Off stays */
+            return;
+        }
+        if (p <= 10) {
+            c->alpha = 0.0f; /* -> Hidden */
+            c->active = 1;
+            return;
+        }
+        p = p - 10 < 10 ? 10 : p - 10;
+    } else {
+        if (!(c->alpha > 0.0f) && !c->active) {
+            c->active = 1; /* Off -> Hidden */
+            return;
+        }
+        p = !(c->alpha > 0.0f) ? 10 : p + 10 > 100 ? 100 : p + 10;
+    }
+    c->alpha = (float)p / 100.0f;
+    c->active = 1;
+}
+
 static void step_alpha(IcoTouchEditor *ed, const IcoTouchLayout *l, int dir)
 {
     IcoTouchEdits next = ed->work;
@@ -1019,13 +1048,9 @@ static void step_alpha(IcoTouchEditor *ed, const IcoTouchLayout *l, int dir)
 
     for (i = 0; i < n; i++) {
         IcoTouchCtlEdit *c = &next.ctl[ed->rule][t[i]];
-        const long lo = ico_touch_ctl_hideable(t[i]) ? 0 : 25;
-        long p;
 
         ensure_set(&next, ed->rule, l, t[i]);
-        p = round_l(c->alpha * 100.0f) + 10 * dir;
-        p = p < lo ? lo : p > 100 ? 100 : p;
-        c->alpha = (float)p / 100.0f;
+        alpha_step(c, dir);
         ico_touch_edit_sanitize(c, t[i]);
     }
     commit(ed, &next);

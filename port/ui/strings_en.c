@@ -596,6 +596,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_TED_ALL_SCREENS] = "All screens",
     [UI_STR_TED_CANCEL] = "Cancel",
     [UI_STR_TED_HIDDEN] = "Hidden",
+    [UI_STR_TED_OFF] = "Off",
     [UI_STR_TED_STICK] = "Stick",
     [UI_STR_TED_LOOK] = "Look pad",
     [UI_STR_TED_HINT] = "Tap a button to select it. Drag to move. Pinch to resize.",

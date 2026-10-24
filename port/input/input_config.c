@@ -380,9 +380,8 @@ static unsigned char s_touchLoggedSnap, s_touchLoggedGrid;
 
 static const char *touch_why(int ctl, const char *text)
 {
-    if (strcmp(text, "hidden") == 0 && !ico_touch_ctl_hideable(ctl)) {
-        return "this button cannot be hidden";
-    }
+    (void)ctl;
+    (void)text;
     return "not a valid layout";
 }
 

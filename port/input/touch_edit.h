@@ -16,12 +16,11 @@
  * hinge band; a control at alpha 0 is not drawn, and Off (active 0) also
  * skipped by the hit test (a Hidden one, active 1, still takes touches).
  *
- * The rails: scale ICO_TOUCH_EDIT_SCALE_MIN..MAX; alpha at least
- * ICO_TOUCH_EDIT_ALPHA_MIN for every control that is not hideable
- * (ico_touch_ctl_hideable: Select, L1, L2, R2 and the look pad are; the
- * D-pad, the faces, R1, Start and the stick never, the menus and the game
- * need them); ico_touch_edit_sanitize enforces both on every setter and on
- * every parsed config line.
+ * The rails: scale ICO_TOUCH_EDIT_SCALE_MIN..MAX; alpha 0..1 for every
+ * control (each can be Hidden or Off: Android's Back still opens the pause
+ * menu, and with the D-pad, Cross or Circle Off a tap clicks a menu row,
+ * touch.h ico_touch_menu_taps); ico_touch_edit_sanitize enforces them on
+ * every setter and on every parsed config line.
  *
  * The editor: a state machine fed the output's finger events while the
  * Edit layout page is open (the mapper steps but merges nothing then,
@@ -48,7 +47,6 @@ enum { ICO_TOUCH_ANCHOR_DEFAULT = 2 };
 
 #define ICO_TOUCH_EDIT_SCALE_MIN 0.7f /* a face at 0.7 is 7.7 mm across: Android's 48 dp */
 #define ICO_TOUCH_EDIT_SCALE_MAX 1.6f
-#define ICO_TOUCH_EDIT_ALPHA_MIN 0.25f /* the floor of a control that cannot be hidden */
 #define ICO_TOUCH_EDIT_GRID_DEFAULT 4.0f
 #define ICO_TOUCH_EDIT_UNDO 8
 #define ICO_TOUCH_EDIT_LOOK_MIN 20.0f    /* the look pad's least width and height, q */
@@ -88,7 +86,9 @@ typedef struct IcoTouchEdits {
 
 /* Every control unset, snap on, grid ICO_TOUCH_EDIT_GRID_DEFAULT, gen 0. */
 void ico_touch_edits_defaults(IcoTouchEdits *e);
-/* 1 for Select, L1, L2, R2 and the look pad: the controls a player may hide. */
+/* 1 for every control (ICO_TOUCH_CTL_*; 0 out of range): each may be
+   Hidden or Off (v0.8.5 and before: Select, L1, L2, R2 and the look pad
+   only, with a 25 % floor on the rest). */
 int ico_touch_ctl_hideable(int ctl);
 /* The config names: "dpad", "cross", "circle", "square", "triangle", "r1",
    "l1", "l2", "r2", "select", "start", "stick", "look"; and back (-1 none). */
@@ -125,7 +125,7 @@ unsigned int ico_touch_ctl_zones(int ctl);
 const char *ico_touch_edit_text(const IcoTouchCtlEdit *c, char *buf, unsigned size);
 int ico_touch_edit_parse(IcoTouchCtlEdit *c, int ctl, const char *text);
 /* The rails on one edit in place: scale clamped to the range, alpha to 0..1
-   and at least ICO_TOUCH_EDIT_ALPHA_MIN unless ctl is hideable, offsets
+   (a NaN 1), active 1 whenever alpha > 0 (a drawn control works), offsets
    -ICO_TOUCH_EDIT_OFFSET_MAX..OFFSET_MAX (a NaN 0), an unknown anchor DEFAULT, the look pad's
    size 0 or ICO_TOUCH_EDIT_LOOK_MIN..OFFSET_MAX (w and h 0 on the others).
    An unset edit is left alone. */
