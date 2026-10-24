@@ -1713,7 +1713,7 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | `fxPlan` (`[dev] fx_plan`) | on | on | on | on | on | on | on |
 | `fxDstLocal` (`[dev] fx_dst_local`) | off | off | on where local read is offered | same | same | same | same |
 | `vuPlanesFrac` (`[dev] vu_planes`) | on | on | on | on | on | on | on |
-| `crackFill` (`[dev] crack_fill`) | on | on | off until measured | off | off | off | off |
+| `crackFill` (`[dev] crack_fill`) | on | on | on | on | on | on | on |
 
 The blend row is `rd_dst_read.c`'s ([Destination reads and blend
 paths](#destination-reads-and-blend-paths)), robust access the Vulkan backend's
@@ -2798,7 +2798,7 @@ without waiting. The timestamps carry the effect whose work they end, so the rec
 per list, for the uploads, for the VU vertex pre-pass (`gpuPrepassMs`, from `RD_PERF_TS_PREPASS`
 after the uploads to list 0: its pass and its copies), for the present, and per picture effect
 (`RD_PERF_POST_*`: reduction,
-fog, motion blur, aura, glow, depth of field, softening, CRT, MSAA resolve)
+fog, motion blur, aura, glow, depth of field, softening, CRT, MSAA resolve, crack fill)
 (`port/render/rd_perf.c`; `port/render/rd.h` (`RdPerfRecord`, `rd_perf_pop`)). An effect is the
 one the colour target in force belongs to (the softening's and the aura's targets) or the one the
 last post sprite names, and a post sprite's ends with its list: the next list starts with its
