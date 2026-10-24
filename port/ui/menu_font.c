@@ -57,11 +57,23 @@ _Static_assert(MF_ORIGIN >= MF_GAP_X && MF_ORIGIN >= MF_GAP_Y && MF_ORIGIN % MF_
    texels). Pages of another scale than a draw's are emptied once no frame can
    name them (MF_EVICT_FRAMES), so a resolution change re-rasterises the words
    it shows within a few frames and a popup on the output (a scale of its own)
-   can share a style's pages with the scene's words. */
+   can share a style's pages with the scene's words.
+   A page is filled in shelves, bands of rows packed left to right, each
+   marked with the frame one of its strips was last drawn.  When a strip
+   finds no room, the shelves no frame can still name (MF_EVICT_FRAMES
+   frames undrawn) are emptied and their bands take new strips no taller
+   than they are, before another page is opened: a screen with a string
+   that changes every tick (the Models viewer's "Frame N / M") keeps its
+   steady rows where they are and recycles the counter's bands, where the
+   page-only rule found no page undrawn and drew new words with the plain
+   font once the pages were full.  Only when every shelf of every page of
+   the scale holds a strip drawn in the last MF_EVICT_FRAMES frames does a
+   word fall back to the plain font (ui_menu_font_fallbacks counts those,
+   ui_menu_font_shelf_reclaims the emptied shelves; both logged). */
 #define MF_PAGE_MAX 4096
 #define MF_PAGES 4        /* pages per style */
 #define MF_STRIPS 1024    /* strips cached at once */
-#define MF_EVICT_FRAMES 4 /* rd frames a page must have gone undrawn before it is reset */
+#define MF_EVICT_FRAMES 4 /* rd frames a page or a shelf must go undrawn before it is emptied */
 #define MF_LINES 16       /* lines of one text */
 #define MF_SHELVES 128    /* shelves of one page (a 1x page holds about 50 of a menu's rows) */
 /* texels of margin round a port text's ink: the rim (rd's ICO_SHEET_RX and
@@ -181,7 +193,8 @@ static struct {
     MfStrip strips[MF_STRIPS];
     int lightLang; /* the language the light pages are styled for; -1 none */
     int warnedFull;
-    int reclaims; /* shelves emptied for new strips (reclaimShelf), this run */
+    int reclaims;  /* shelves emptied for new strips (reclaimShelf), this run */
+    int fallbacks; /* words drawn with the plain font for want of room, this run */
     int hasLast;
     UiMenuStrip last;
 } s_mf = {.lightLang = -1};
@@ -692,6 +705,39 @@ int ui_menu_font_strip_count(void)
     return n;
 }
 
+int ui_menu_font_fallbacks(void)
+{
+    return s_mf.fallbacks;
+}
+
+int ui_menu_font_shelf_reclaims(void)
+{
+    return s_mf.reclaims;
+}
+
+/* the counts logged at 1, 10, 100, ... (a total, not a line a frame) */
+#ifdef ICO_RD
+static int logCount(int n)
+{
+    while (n >= 10 && n % 10 == 0) {
+        n /= 10;
+    }
+    return n == 1;
+}
+
+/* a word drawn with the plain font: counted and logged */
+static void noteFallback(void)
+{
+    s_mf.fallbacks++;
+    if (logCount(s_mf.fallbacks)) {
+        fprintf(stderr,
+                "ui: menu text: %d words drawn with the plain font so far (%d strips cached, "
+                "%d shelves reclaimed)\n",
+                s_mf.fallbacks, ui_menu_font_strip_count(), s_mf.reclaims);
+    }
+}
+#endif
+
 /* tests: the strips' scale set (0: mfScale's own); only the drawn path reads it */
 #ifdef ICO_RD
 static int s_forceScale;
@@ -949,6 +995,12 @@ static void reclaimShelf(int cls, int page, int i)
         p->nShelves--;
     }
     s_mf.reclaims++;
+    if (logCount(s_mf.reclaims)) {
+        fprintf(stderr,
+                "ui: menu text: %d shelves reclaimed so far (%d strips cached, %d words drawn "
+                "with the plain font)\n",
+                s_mf.reclaims, ui_menu_font_strip_count(), s_mf.fallbacks);
+    }
 }
 
 /* Every shelf with strips that no recorded or replayed frame can still
@@ -1339,9 +1391,10 @@ void ui_draw_menu_text(float x, float y, float size, const uint8_t rgba[4], cons
     const MfStrip *s =
         textStrip(utf8, size * 0.5f, flags & (UI_ALIGN_MASK | UI_VALIGN_MASK), cls, mfScale());
     if (!s) {
-        /* every page of the style holds words a recorded frame still
-           draws: the plain glyphs rather than nothing, so a screen whose
-           strings change every tick never goes blank */
+        /* every shelf of every page of the style holds words a recorded
+           frame still draws: the plain glyphs rather than nothing, so a
+           screen whose strings change every tick never goes blank */
+        noteFallback();
         ui_draw_text_xf(x, y, size, col, utf8, flags & ~(unsigned)UI_KEEP_STATE, xf);
         return;
     }
@@ -1427,6 +1480,9 @@ void ui_menu_word_draw(const UiMenuTextItem *it, int lang, const int box[4], con
                          : -2;
     const MfStrip *s = itemStrip(it, item, lang, cls, mfScale());
     if (!s) {
+        if (!glow) {
+            noteFallback(); /* the glow pass of the same word draws nothing */
+        }
         itemFallback(it, lang, box, uv, col, glow);
         return;
     }

@@ -145,6 +145,11 @@ int ui_menu_font_is_page(uint32_t tex);
 const uint8_t *ui_menu_font_page(int cls, int page, int *w, int *h);
 /* the strips cached now */
 int ui_menu_font_strip_count(void);
+/* the words drawn with the plain font because no page had room, and the
+   shelves emptied for new words (a band of a page whose strips no frame
+   still draws), since the start; 0 without rd */
+int ui_menu_font_fallbacks(void);
+int ui_menu_font_shelf_reclaims(void);
 
 #ifdef __cplusplus
 }
