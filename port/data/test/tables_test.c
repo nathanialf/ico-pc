@@ -154,6 +154,63 @@ static int zero_tail(const IcoTableRow *row, const char *host, size_t from)
     return 1;
 }
 
+/* The reference's twin of a host pointer into a host table (the June 2001
+   demo's enemy sets point into each other's tables): the same offset in that
+   table's reference; NULL when it points into none (a registry object or a
+   string pool: the same address on both sides). */
+static const char *ref_of(const IcoTableSet *set, const Sym *syms, const char *p)
+{
+    size_t i;
+
+    for (i = 0; i < ICO_SYM_COUNT; i++) {
+        const IcoTableRow *row = row_of(set, syms[i].name);
+
+        if (row != NULL && row->record != NULL && p >= syms[i].host &&
+            p < syms[i].host + (size_t)row->host_count * row->record->host_size) {
+            return syms[i].ref + (p - syms[i].host);
+        }
+    }
+    return NULL;
+}
+
+/* A record table's size bytes against the reference, its pointers into host
+   tables compared by their offset there (ref_of). */
+static int same_records(const IcoTableSet *set, const Sym *syms, const IcoTableRow *row,
+                        const char *host, const char *ref, size_t size)
+{
+    const IcoTableRecord *rec = row->record;
+    char *buf;
+    uint32_t k, f;
+    int same;
+
+    if (memcmp(host, ref, size) == 0) {
+        return 1;
+    }
+    buf = malloc(size ? size : 1);
+    if (buf == NULL) {
+        return 0;
+    }
+    memcpy(buf, host, size);
+    for (k = 0; k < row->count; k++) {
+        for (f = 0; f < rec->field_count; f++) {
+            char *at = buf + (size_t)k * rec->host_size + rec->fields[f].host_offset;
+            const char *p, *r;
+
+            if (rec->fields[f].kind != ICO_TF_DATA) {
+                continue;
+            }
+            memcpy(&p, at, sizeof(p));
+            r = p != NULL ? ref_of(set, syms, p) : NULL;
+            if (r != NULL) {
+                memcpy(at, &r, sizeof(r));
+            }
+        }
+    }
+    same = memcmp(buf, ref, size) == 0;
+    free(buf);
+    return same;
+}
+
 /* Every table of the set against its compiled reference; the number that
    differ. */
 static int compare_all(const IcoTableSet *set, const Sym *syms, int verbose)
@@ -188,7 +245,7 @@ static int compare_all(const IcoTableSet *set, const Sym *syms, int verbose)
             }
         } else {
             size = (size_t)row->count * row->record->host_size;
-            same = memcmp(syms[i].host, syms[i].ref, size) == 0;
+            same = same_records(set, syms, row, syms[i].host, syms[i].ref, size);
             if (same && row->count < row->host_count && !zero_tail(row, syms[i].host, size)) {
                 if (verbose) {
                     printf("     %s: records %u.. are not zero\n", syms[i].name,
