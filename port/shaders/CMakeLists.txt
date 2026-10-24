@@ -21,10 +21,13 @@ ico_add_shader(blit_depth_ps blit.hlsl blit_depth_ps fragment)
 ico_add_shader(box_reduce_ps blit.hlsl box_reduce_ps fragment)
 # supersampling: DISPLAY box-averaged to the present box (rd_present.c)
 ico_add_shader(aa_reduce_ps blit.hlsl aa_reduce_ps fragment)
-# MSAA: the multisampled scene depth resolved (smallest sample) and the
-# single-sampled one spread over the samples (rd_replay.c, the MSAA epoch)
+# MSAA: the multisampled scene depth resolved (smallest sample), the
+# single-sampled one spread over the samples, and the colour and depth
+# resolved together under the covered-majority rule (rd_replay.c, the MSAA
+# epoch; docs/port/MSAA.md)
 ico_add_shader(depth_resolve_ps blit.hlsl depth_resolve_ps fragment)
 ico_add_shader(depth_upsample_ps blit.hlsl depth_upsample_ps fragment)
+ico_add_shader(msaa_resolve_ps blit.hlsl msaa_resolve_ps fragment)
 # tests only, rd__camera_probe
 ico_add_shader(camera_probe_ps blit.hlsl camera_probe_ps fragment)
 ico_add_shader(blend_int_vs blend_int.hlsl blend_int_vs vertex)
