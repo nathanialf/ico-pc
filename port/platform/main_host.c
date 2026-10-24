@@ -951,7 +951,11 @@ static const IcoDiscInfo *verify_iso(const char *iso)
     }
     secs = (double)(clock() - start) / CLOCKS_PER_SEC;
     fprintf(stderr, "ico_pc: SHA-1 %s, %llu bytes, %.1f s\n", hex, (unsigned long long)bytes, secs);
-    if (strcmp(hex, disc->iso_sha1) != 0) {
+    if (disc->iso_sha1 == NULL) {
+        /* the magazine demo's image has no hash on file: the extractor accepts it by its
+           boot ELF and DATA.DF (extract.h) */
+        fprintf(stderr, "ico_pc: %s has no image SHA-1 on file; SHA-1 %s noted\n", disc->id, hex);
+    } else if (strcmp(hex, disc->iso_sha1) != 0) {
         /* the checksums are for the log; the box says what to use instead */
         fprintf(stderr, "ico_pc: the image's SHA-1 is %s, %s's is %s\n", hex, disc->id,
                 disc->iso_sha1);
@@ -1390,9 +1394,9 @@ static int mount_archive(const char *path, const IcoDiscInfo *want, const IcoDis
         snprintf(why, whysize, "it cannot be mounted");
         return -1;
     }
-    if (ico_vfs_open(vfs, row->boot_elf, &f) != 0) {
+    if (ico_vfs_open(vfs, row->elf_path, &f) != 0) {
         ico_vfs_unmount(vfs);
-        snprintf(why, whysize, "it holds no %s", row->boot_elf);
+        snprintf(why, whysize, "it holds no %s", row->elf_path);
         return -1;
     }
     ico_sha1_init(&s);
@@ -1411,7 +1415,7 @@ static int mount_archive(const char *path, const IcoDiscInfo *want, const IcoDis
     }
     if (off != f.entry.size || strcmp(hex, row->elf_sha1) != 0) {
         ico_vfs_unmount(vfs);
-        snprintf(why, whysize, "its %s reads back with SHA-1 %s", row->boot_elf, hex);
+        snprintf(why, whysize, "its %s reads back with SHA-1 %s", row->elf_path, hex);
         return -1;
     }
     ico_vfs_set_disc(vfs);
@@ -1636,7 +1640,7 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
             "(SHA-1 %.1f s, copy %.1f s)\n",
             want->id, want->product_name, want->boot_elf, res.iso_sha1,
             (unsigned long long)res.iso_size, res.rule,
-            strcmp(res.rule, ICO_RULE_ISO_SHA1) == 0 ? "the image's SHA-1" : want->boot_elf,
+            strcmp(res.rule, ICO_RULE_ISO_SHA1) == 0 ? "the image's SHA-1" : want->elf_path,
             strcmp(res.rule, ICO_RULE_ISO_SHA1) == 0
                 ? ""
                 : "'s SHA-1 and DATA.DF's manifest: a re-dump of the disc",
@@ -2202,7 +2206,8 @@ static int host_main(int argc, char **argv)
         }
         /* the disc by its boot file, verified or not */
         {
-            const IcoDiscInfo *disc = ico_disc_by_boot(ico_cdvd_host_boot_name());
+            const IcoDiscInfo *disc =
+                ico_disc_identify(ico_vfs_disc(), ico_cdvd_host_boot_name(), NULL);
 
             if (disc == NULL) {
                 fprintf(stderr, "ico_pc: the image's boot file '%s' is none of the discs'\n",

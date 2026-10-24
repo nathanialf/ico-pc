@@ -105,9 +105,18 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
 int ico_extract_image_sha1(const char *iso_path, char hex[41], uint64_t *bytes, char *why,
                            size_t whysize);
 
-/* Which disc the image is, by SYSTEM.CNF's BOOT2 file: its ico_discs row,
-   or NULL (not readable, or another disc). Copies the boot file's name
-   ("" when none) into boot when given. Reads the directory only. */
+/* Which disc a mounted volume is: the ico_discs row that boots with `boot`
+   (SYSTEM.CNF's BOOT2 file); when two rows share the name (SCUS_971.13: the
+   North American disc and the August 2001 preview) the row whose elf_sha1
+   the boot ELF has, hashed from the volume (elf_sha1 NULL) or given (40
+   lower-case hex digits). NULL for none, or when the ELF cannot be read.
+   Logs the hash once when it had to decide. */
+const IcoDiscInfo *ico_disc_identify(IcoVfs *vfs, const char *boot, const char *elf_sha1);
+
+/* Which disc the image is, by SYSTEM.CNF's BOOT2 file (ico_disc_identify):
+   its ico_discs row, or NULL (not readable, or another disc). Copies the
+   boot file's name ("" when none) into boot when given. Reads the directory,
+   and the boot ELF (4 MB) when two discs share the name. */
 const IcoDiscInfo *ico_extract_identify(const char *iso_path, char *boot, size_t size);
 
 /* Prints the DATA.DF manifest of the disc mounted as `iso` in the form

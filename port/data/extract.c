@@ -508,8 +508,59 @@ static void read_boot_name(IcoVfs *iso, char *boot, size_t size)
     (void)ico_disc_cnf_boot(cnf, boot, size);
 }
 
+/* The ELF's SHA-1 through the volume: 1 with the 40 hex digits in hex, 0 when
+   the file is absent or cannot be read through. */
+static int hash_vfs_file(IcoVfs *vfs, const char *path, char hex[41])
+{
+    static unsigned char chunk[1 << 16];
+    IcoVfsFile f;
+    IcoSha1 s;
+    uint64_t off;
+
+    hex[0] = '\0';
+    if (vfs == NULL || path == NULL || ico_vfs_open(vfs, path, &f) != 0) {
+        return 0;
+    }
+    ico_sha1_init(&s);
+    for (off = 0; off < f.entry.size;) {
+        int64_t n = ico_vfs_read(&f, off, chunk, sizeof(chunk));
+
+        if (n <= 0) {
+            return 0;
+        }
+        ico_sha1_update(&s, chunk, (size_t)n);
+        off += (uint64_t)n;
+    }
+    sha1_hex(&s, hex);
+    return 1;
+}
+
+const IcoDiscInfo *ico_disc_identify(IcoVfs *vfs, const char *boot, const char *elf_sha1)
+{
+    const IcoDiscInfo *first = ico_disc_by_boot(boot);
+    char hex[41];
+
+    if (first == NULL || ico_disc_boot_rows(boot) == 1) {
+        return first;
+    }
+    /* two rows boot with this file (SCUS_971.13: ntsc and aug6): the boot ELF says which */
+    if (elf_sha1 == NULL) {
+        if (!hash_vfs_file(vfs, first->elf_path, hex)) {
+            fprintf(stderr, "ico_pc: disc: %s is shared by %d discs and its %s cannot be read\n",
+                    boot, ico_disc_boot_rows(boot), first->elf_path);
+            return NULL;
+        }
+        elf_sha1 = hex;
+    }
+    first = ico_disc_by_boot_elf(boot, elf_sha1);
+    fprintf(stderr, "ico_pc: disc: boot file %s is shared by %d discs; its SHA-1 %s: %s\n", boot,
+            ico_disc_boot_rows(boot), elf_sha1, first != NULL ? first->id : "none of them");
+    return first;
+}
+
 const IcoDiscInfo *ico_extract_identify(const char *iso_path, char *boot, size_t size)
 {
+    const IcoDiscInfo *row;
     IcoVfs *iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
     char name[64];
 
@@ -520,11 +571,12 @@ const IcoDiscInfo *ico_extract_identify(const char *iso_path, char *boot, size_t
         return NULL;
     }
     read_boot_name(iso, name, sizeof(name));
+    row = ico_disc_identify(iso, name, NULL);
     ico_vfs_unmount(iso);
     if (boot != NULL && size > 0) {
         snprintf(boot, size, "%s", name);
     }
-    return ico_disc_by_boot(name);
+    return row;
 }
 
 /* "SCES_507.60" -> "SCES-50760" */
@@ -846,10 +898,15 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
         goto done;
     }
     read_boot_name(x.iso, x.boot, sizeof(x.boot));
-    disc_id_of(x.boot, res->disc_id, sizeof(res->disc_id));
-    /* the row by the boot file first; its rules below */
-    x.disc = ico_disc_by_boot(x.boot);
-    snprintf(x.elf_path, sizeof(x.elf_path), "%s", x.disc != NULL ? x.disc->boot_elf : x.boot);
+    /* the row by the boot file (and the boot ELF's SHA-1 where two rows
+       share the name); its rules below */
+    x.disc = ico_disc_identify(x.iso, x.boot, NULL);
+    if (x.disc != NULL) {
+        snprintf(res->disc_id, sizeof(res->disc_id), "%s", x.disc->id);
+    } else {
+        disc_id_of(x.boot, res->disc_id, sizeof(res->disc_id));
+    }
+    snprintf(x.elf_path, sizeof(x.elf_path), "%s", x.disc != NULL ? x.disc->elf_path : x.boot);
     if (add_item(&x, "", 0, why, whysize) != 0) {
         goto done;
     }
@@ -888,7 +945,9 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
     }
     t1 = now_s();
     res->hash_seconds = t1 - t0;
-    iso_ok = x.disc != NULL && strcmp(res->iso_sha1, x.disc->iso_sha1) == 0;
+    /* a row with no image hash (the magazine demo) is accepted by its ELF and DATA.DF alone */
+    iso_ok =
+        x.disc != NULL && x.disc->iso_sha1 != NULL && strcmp(res->iso_sha1, x.disc->iso_sha1) == 0;
 
     /* 2. the files */
     x.out = ico_archive_fopen(tmp, "wb");
@@ -945,8 +1004,9 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
                                     "%s SHA-1 %s (expected %s);\n"
                                     "DATA.DF: %s.",
                 iso_path, ico_disc_list_text(), x.disc->boot_elf, x.disc->id, res->iso_sha1,
-                x.disc->iso_sha1, x.disc->boot_elf, res->elf_sha1[0] ? res->elf_sha1 : "(absent)",
-                x.disc->elf_sha1, res->datadf_ok ? "matches" : res->datadf_why);
+                x.disc->iso_sha1 != NULL ? x.disc->iso_sha1 : "(none: by ELF and DATA.DF)",
+                x.disc->elf_path, res->elf_sha1[0] ? res->elf_sha1 : "(absent)", x.disc->elf_sha1,
+                res->datadf_ok ? "matches" : res->datadf_why);
         }
         goto done;
     }
