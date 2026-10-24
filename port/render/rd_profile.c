@@ -34,12 +34,12 @@
  *                 (fx_local_ps, rd_fx_plan.c)
  *   vuPlanesFrac  on on every class: the VU pixel side without the planes
  *                 at a fractional scale (rd_pixel_plan.c)
- *   crackFill     on       on      off       off      off   off      off
- *                 (the crack filler above 1x, rd_crack_fill.c: off on a
- *                 tile-based GPU until its cost is measured on a phone,
- *                 since its pass ends the local read's scene pass; [dev]
- *                 crack_fill = true or false sets it, read there, and the
- *                 filler's own line says which)
+ *   crackFill     on on every class (the crack filler above 1x,
+ *                 rd_crack_fill.c: on the local read's path it draws in
+ *                 the pass the fog then keeps, so a tile-based GPU pays
+ *                 its copies and one pass; [dev] crack_fill = true or
+ *                 false sets it, read there, and the filler's own line
+ *                 says which)
  *
  * The OpenGL and D3D11 classes take the desktop column whatever the
  * vendor (neither backend reports a tiler: gl_device.c, d3d11_device.c);
@@ -269,7 +269,7 @@ void rd__profile_init(void)
     p->fxPlan = true;
     p->fxDstLocal = tile && p->localRead;
     p->vuPlanesFrac = true;
-    p->crackFill = !tile; /* rd_crack_fill.c reads ICO_RD_CRACK_FILL over it */
+    p->crackFill = true; /* rd_crack_fill.c reads ICO_RD_CRACK_FILL over it */
 
     /* the [dev] keys, through the host's environment */
     const char *notHere = NULL; /* a [dev] key asked for what the device lacks */
