@@ -56,7 +56,9 @@
  *                           A prim the frame camera projected on the CPU
  *                           (RD_SCREEN_FRAME_CAMERA) blends its vertices'
  *                           world points and is seen through the blended
- *                           camera ("CPU-projected draws" below)
+ *                           camera ("CPU-projected draws" below); one
+ *                           marked RD_SCREEN_ST_SHIFT (the ripples) moves
+ *                           each vertex's S / Q and T / Q with it
  *   RDC_SHADOW_STRIP        XY and Z of each vertex; Shadow.c's volumes
  *                           prism by prism (blendPrisms), in the world when
  *                           marked RD_SHADOW_FRAME_CAMERA
@@ -1569,7 +1571,14 @@ static bool camRebase(float (*m)[4], const double *e, int mats, const double *l,
  * sentinel, a clamped Z) keeps the screen-space rule alone, and a vertex
  * St cannot draw puts the whole prism on it; a prism that moved has its
  * faces signed again for the blended camera, matched or of one tick
- * (prismSigns, reprojShadow).  Nothing is re-projected with a still
+ * (prismSigns, reprojShadow).  A screen draw marked RD_SCREEN_ST_SHIFT
+ * (rd.h rd_frame_projected_st: puddle.c's ripples, whose STs into the
+ * reflection block are their projected points scaled, while the block
+ * itself moves with the blended camera) has each re-projected vertex's
+ * S / Q and T / Q moved by its own screen move from the tick's X and Y times
+ * f[0] and f[1] (reprojStShift), so a ring samples the reflection where its
+ * new place shows it; the STs are only shifted, never made from XY (the
+ * outer ring's are a rotated point's).  Nothing is re-projected with a still
  * camera (s_cam.still) or outside a blend, so those frames are byte for
  * byte what they were.  The reflection prims recorded under rd_push_camera
  * are never marked. */
@@ -1596,6 +1605,13 @@ static bool s_rpAnyX;
 static bool s_rpOff; /* rd__interp_set_reproject(false) */
 
 static uint32_t s_reproj; /* draws re-projected, this present */
+
+/* the draw being re-projected carries RD_SCREEN_ST_SHIFT: its S / Q and T / Q
+ * per 12.4 unit of X and Y (reprojStShift); the draws so shifted, this
+ * present */
+static bool s_rpStOn;
+static float s_rpSt[2];
+static uint32_t s_stShift;
 
 void rd__interp_set_reproject(bool on)
 {
@@ -1724,6 +1740,34 @@ static void reprojStq(RdScreenVtx *v, double w, double wNew)
     v->q = (float)((double)v->q * k);
 }
 
+/* o (re-projected from tick) with its S / Q and T / Q moved by its move in
+ * X and Y times s_rpSt, at its new q, when the draw carries
+ * RD_SCREEN_ST_SHIFT (stShiftBegin) */
+static void reprojStShift(RdScreenVtx *o, const RdScreenVtx *tick)
+{
+    if (!s_rpStOn) {
+        return;
+    }
+    const double q = (double)o->q;
+    o->s = (float)((double)o->s + (double)(o->x - tick->x) * (double)s_rpSt[0] * q);
+    o->t = (float)((double)o->t + (double)(o->y - tick->y) * (double)s_rpSt[1] * q);
+}
+
+/* the shift for the screen draw c's vertices from here (stq: c's STQ is
+ * not uvFixed), until stShiftEnd; true when c carries one */
+static bool stShiftBegin(const RdCmd *c, bool stq)
+{
+    s_rpStOn = stq && c->type == RDC_SCREEN && c->b[5] == RD_SCREEN_ST_SHIFT;
+    s_rpSt[0] = s_rpStOn ? c->f[0] : 0.0f;
+    s_rpSt[1] = s_rpStOn ? c->f[1] : 0.0f;
+    return s_rpStOn;
+}
+
+static void stShiftEnd(void)
+{
+    s_rpStOn = false;
+}
+
 /* why a vertex was not re-projected: it has no world point (Z 0 or
  * saturated, not in front of its tick's camera), or St cannot draw its
  * point (not in front, or past the frame's window or ftoi4's range) */
@@ -1755,6 +1799,7 @@ static bool reprojVertex(const double *inv, RdScreenVtx *v, const double *d, boo
     }
     if (stq) {
         reprojStq(&o, w, wNew);
+        reprojStShift(&o, v);
     }
     *v = o;
     return true;
@@ -1785,6 +1830,7 @@ static bool reprojBlend(RdScreenVtx *o, const RdScreenVtx *p, float t, bool stq,
     }
     if (stq) {
         reprojStq(&r, wc, wNew);
+        reprojStShift(&r, o);
     }
     *o = r;
     return true;
@@ -1891,9 +1937,11 @@ static void reprojDraw(RdCmd *c, uint8_t *v, const double *inv)
         const uint32_t n = c->u[1];
         const uint32_t m = primVerts(c->b[0], n);
         const bool stq = c->b[2] == 0;
+        s_stShift += stShiftBegin(c, stq);
         for (uint32_t i = 0; m > 0 && i + m <= n; i += m) {
             (void)reprojPrim(inv, &o[i], m, NULL, stq);
         }
+        stShiftEnd();
     } else {
         reprojShadow(c, o, inv);
     }
@@ -3129,6 +3177,7 @@ static int blendScreen(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const 
      * primitive by primitive, all or none (reprojPrim's rule): a primitive
      * with a vertex that cannot be blends in screen space whole */
     const bool world = s_rp.on && frameProjected(pc) && frameProjected(cc);
+    s_stShift += world && stShiftBegin(cc, cc->b[2] == 0); /* cur's STs, cur's shift */
     const uint32_t m = primVerts(cc->b[0], n);
     for (uint32_t i0 = 0; m > 0 && i0 < n; i0 += m) {
         const uint32_t e = i0 + m <= n ? i0 + m : n;
@@ -3168,6 +3217,7 @@ static int blendScreen(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const 
             }
         }
     }
+    stShiftEnd();
     s_reproj += world;
     return R_LERP;
 }
@@ -5481,6 +5531,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     s_rebased = s_rebasedCur = 0;
     s_still = s_stillReRounded = s_curWorld = s_tickCams = 0;
     s_reproj = 0;
+    s_stShift = 0;
     s_out.hasTickCams = 0;
     if (blend) {
         camSetup(prev, cur, t); /* the blended camera */
@@ -5650,6 +5701,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     st.placed = (uint32_t)s_placed;
     st.gridSt = (uint32_t)s_gridSt;
     st.reprojected = s_reproj;
+    st.stShifted = s_stShift;
     st.gridStCamera = (uint32_t)s_gridStCam;
     st.stillDraws = (uint32_t)s_still;
     st.stillReRounded = (uint32_t)s_stillReRounded;
@@ -5695,8 +5747,9 @@ static struct {
     /* lit draws whose previous lights were re-paired (pairLights), draws of
      * a key drawn several times paired by their place (placeSlot), grids
      * whose screen-space STs blended (s_gridScreenSt) and those pool.c's
-     * formula made through the blended camera (gridCameraSts) */
-    uint64_t lightPaired, placed, gridSt, gridStCamera;
+     * formula made through the blended camera (gridCameraSts); the
+     * re-projected draws whose STs moved with them (reprojStShift) */
+    uint64_t lightPaired, placed, gridSt, gridStCamera, stShifted;
     /* unmatched keyed draws by reason, draws paired with a draw of another
      * place, VU draws of the tick before alone kept and held */
     uint64_t unmatchedWhy[RD_UNMATCHED_COUNT], apart, prevKept, prevHeld;
@@ -5778,6 +5831,7 @@ static void presentLog(void)
     s_pres.placed += st->placed;
     s_pres.gridSt += st->gridSt;
     s_pres.gridStCamera += st->gridStCamera;
+    s_pres.stShifted += st->stShifted;
     for (int k = 0; k < RD_UNMATCHED_COUNT; k++) {
         s_pres.unmatchedWhy[k] += st->unmatchedWhy[k];
     }
@@ -5832,13 +5886,15 @@ static void presentLog(void)
             (unsigned long long)s_pres.held, (unsigned long long)s_pres.lightRot, s_pres.scratchMax,
             RD_INTERP_SCRATCH, (unsigned long long)s_pres.scratchBytesMax);
     /* a fourth line: the lights' slots, the same-key instances, the pool's
-     * screen-space STs */
+     * screen-space STs, the ripples' shifted STs */
     rd__log("interp: %llu lit draws whose previous lights were re-paired by direction; %llu draws "
             "of a key drawn several times paired by their place in the world instead of their "
             "order; %llu grids sampling a target whose STs blended, %llu whose STs the pool's "
-            "formula made through the blended camera",
+            "formula made through the blended camera; %llu re-projected draws with their "
+            "texture shifted (the ripples)",
             (unsigned long long)s_pres.lightPaired, (unsigned long long)s_pres.placed,
-            (unsigned long long)s_pres.gridSt, (unsigned long long)s_pres.gridStCamera);
+            (unsigned long long)s_pres.gridSt, (unsigned long long)s_pres.gridStCamera,
+            (unsigned long long)s_pres.stShifted);
     /* a fifth line: why keyed draws stayed unmatched, and the VU draws of
      * the tick before alone */
     const uint64_t *u = s_pres.unmatchedWhy;
