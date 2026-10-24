@@ -44,6 +44,8 @@
 #include "settings.h"
 #include "startup_retry.h"
 #include "texpack.h"
+#include "texpack_export.h"
+#include "../core/region.h" /* the dumps folder's serial */
 #include "touch_ui.h"
 #include "trace_host.h"
 #include "ui_host.h"
@@ -532,6 +534,27 @@ static int steam_add_handler(void)
     return ico_steam_add_this_game();
 }
 #endif
+
+/* Extras > Export textures: the job (texpack_export.h) as the menu's */
+_Static_assert(TEXPACK_EXPORT_RUNNING == UI_TEXEXPORT_RUNNING &&
+                   TEXPACK_EXPORT_DONE == UI_TEXEXPORT_DONE &&
+                   TEXPACK_EXPORT_STOPPED == UI_TEXEXPORT_STOPPED &&
+                   TEXPACK_EXPORT_FAILED == UI_TEXEXPORT_FAILED,
+               "the export's states are the menu's");
+
+static int tex_export_poll(UiTextureExportStatus *out)
+{
+    TexpackExportStatus s;
+    out->state = texpack_export_poll(&s);
+    out->done = s.done;
+    out->total = s.total;
+    out->written = s.written;
+    snprintf(out->dir, sizeof(out->dir), "textures/%s/dumps", ico_region_cur()->pack_serial);
+    return out->state;
+}
+
+static const UiTextureExportHost s_texExportHost = {texpack_export_begin, tex_export_poll,
+                                                    texpack_export_cancel};
 
 /* The window's mode now, from SDL's flags: fullscreen, a
    frameless window, or windowed.  Android's window is fullscreen. */
@@ -2431,6 +2454,7 @@ open_window:
     /* Extras > Add to Steam (Windows and Linux; see steam_add_handler) */
     ui_settings_set_steam_handler(steam_add_handler);
 #endif
+    ui_settings_set_texture_export_host(&s_texExportHost);
     /* Graphics > Graphics API lists the renderers this build links (the page
        shows with two or more) */
     {
@@ -6019,6 +6043,8 @@ void ico_window_close(void)
 #if !defined(__ANDROID__) && !defined(ICO_IOS)
     ui_settings_set_steam_handler(NULL);
 #endif
+    ui_settings_set_texture_export_host(NULL);
+    texpack_export_shutdown(); /* joins its worker, before rd_shutdown */
     ui_settings_set_backend_names(NULL, 0);
     ui_settings_set_graphics_host(NULL);
     ui_settings_set_disc_handler(NULL);

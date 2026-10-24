@@ -141,9 +141,10 @@ extern int systemStatus[]; /* common/src/main.c: [0] the video mode word */
 
 #include <SDL3/SDL.h>
 #include "rhi.h"
-#include "modelpack.h" /* model packs */
-#include "settings.h"  /* port/ui: Display > Model pack's "None installed" */
-#include "texpack.h"   /* PCSX2 texture packs */
+#include "modelpack.h"      /* model packs */
+#include "settings.h"       /* port/ui: Display > Model pack's "None installed" */
+#include "texpack.h"        /* PCSX2 texture packs */
+#include "texpack_export.h" /* Options > Extras > Export textures */
 #include "window_host.h"
 #include "window_switch.h" /* ico_window_switch_end_text */
 
@@ -1923,6 +1924,8 @@ static void open_texture_pack(const char *exe_dir)
     tc.developer = ico_opt_developer_mode();
     texpack_init(&tc);
     at_shutdown(texpack_shutdown);
+    /* the Export textures job joins first (last in, first out) */
+    at_shutdown(texpack_export_shutdown);
 }
 
 /* A model pack from the same folders, read and converted
