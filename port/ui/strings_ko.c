@@ -627,4 +627,39 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "디스크 이미지를 앱으로 복사하는 중",
     [UI_STR_ISO_COPYING_LONG] =
         "디스크 이미지를 앱으로 복사하는 중. 이미지가 커서 수 분이 소요됩니다",
+    [UI_STR_SECTION_VARIANTS] = "게임 변형",
+    [UI_STR_OPT_VAR_TOUGHNESS] = "그림자 강도",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
+        "북미판: 그림자가 북미판 디스크와 같은 강도가 되고, 이후 플레이에서도 강해지지 않습니다. 업적은 그대로 유지됩니다.",
+    [UI_STR_VAL_VAR_AMERICAN] = "북미판",
+    [UI_STR_VAL_VAR_NOT_TOUGHER] = "강해지지 않음",
+    [UI_STR_OPT_VAR_ONE_HIT] = "휘두르기당 한 번 적중",
+    [UI_STR_OPT_VAR_ONE_HIT_NOTE] =
+        "이코가 한 번 휘두르면 그림자에게 한 번만 맞습니다. 업적이 꺼집니다.",
+    [UI_STR_OPT_VAR_NEVER_DODGE] = "그림자가 피하지 않음",
+    [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] = "그림자가 이코의 공격을 피하지 않습니다. 업적이 꺼집니다.",
+    [UI_STR_OPT_VAR_AGGRESSION] = "그림자의 공격성",
+    [UI_STR_VAL_VAR_AGG_OWN] = "기본",
+    [UI_STR_VAL_VAR_AGG_BOLD_PATIENT] = "대담, 느긋하게",
+    [UI_STR_VAL_VAR_AGG_BOLD_QUICK] = "대담, 빠르게",
+    [UI_STR_VAL_VAR_AGG_WARY_PATIENT] = "신중, 느긋하게",
+    [UI_STR_VAL_VAR_AGG_WARY_QUICK] = "신중, 빠르게",
+    [UI_STR_OPT_VAR_AGGRESSION_NOTE] =
+        "그림자의 싸움 방식을 대담하거나 신중하게, 느긋하거나 빠르게 바꿉니다. 업적은 그대로 유지됩니다.",
+    [UI_STR_OPT_VAR_NO_HINTS] = "힌트 없음",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE] =
+        "북미판처럼 요르다가 갈 곳을 알려 주지 않습니다. 업적은 그대로 유지됩니다.",
+    [UI_STR_OPT_VAR_BARRIER] = "여왕의 방벽",
+    [UI_STR_VAL_VAR_HITS_5] = "5회",
+    [UI_STR_VAL_VAR_HITS_7] = "7회",
+    [UI_STR_OPT_VAR_BARRIER_NOTE] =
+        "여왕의 방벽을 부수는 데 필요한 공격 횟수입니다. 업적은 그대로 유지됩니다.",
+    [UI_STR_OPT_VAR_NO_LOOK] = "컷신 중 둘러보기 끄기",
+    [UI_STR_OPT_VAR_NO_LOOK_NOTE] =
+        "컷신 중에 오른쪽 스틱으로 둘러볼 수 없습니다. 업적은 그대로 유지됩니다.",
+    [UI_STR_OPT_VAR_IGNORE_CAMS] = "컷신 카메라 무시",
+    [UI_STR_OPT_VAR_IGNORE_CAMS_NOTE] =
+        "컷신이 이상하게 보일 수 있으며, 게임이 보여 주려던 적 없는 곳이 나올 수 있습니다. 업적이 꺼집니다.",
+    [UI_STR_OPT_VAR_DEBUG_MENU] = "디버그 메뉴",
+    [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] = "게임 자체의 디버그 메뉴입니다(개발자용). 업적이 꺼집니다.",
 };
