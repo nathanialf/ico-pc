@@ -1,0 +1,113 @@
+# MSAA
+
+How the renderer's multisampled anti-aliasing resolves the scene: where the multisampled part of a
+frame ends, the rule that turns each pixel's samples into one colour and one depth, why the depth
+is the part that matters to the game's later passes, and the lines and tests that show it. The
+epoch itself (which passes draw multisampled, the sprites' half-texel move, the per-sample fog) is
+[RENDER.md](RENDER.md#the-replay), "The MSAA epoch".
+
+## Files
+
+| File | What it holds |
+| --- | --- |
+| `port/render/rd_replay.c` | the epoch (the section "the MSAA epoch"; `msaaPass`, `msaaAttach`, `msaaEnd`, `msaaResolveDraw`, `msaaCloseNote`) and the transition hook that closes it (`rd__transition`) |
+| `port/shaders/blit.hlsl` | the resolves (`msaa_resolve_ps`, `depth_resolve_ps`) and the depth spread over the samples (`depth_upsample_ps`) |
+| `port/render/rd_pipeline.c` | the resolves' keys (`rd__msaa_resolve_key`), in the fog's family of the start-up set (`rd__enumerate_reachable_fog`) |
+| `port/render/rd_core.c` | the counts offered (`rd_aa_supported_mask`) |
+| `port/render/test/rd_msaa_test.c` | the epoch against the frame without anti-aliasing |
+
+## Where the epoch closes
+
+The epoch closes at the first command that reads or writes SCENE's own colour or depth outside a
+pass into SCENE_MS (`port/render/rd_replay.c` (`msaaPass`, `rd__transition`)). In gameplay that is
+the shadow count's pass in list 3, which binds SCENE's depth with the count's colour: lists 0 to 2
+are anti-aliased, and the fog, the list 5 additive meshes, the glow and the aura draw on the
+resolved picture. A frame without a shadow keeps the epoch open to the fog, which then runs per
+sample where the device shades per sample.
+
+## The resolve rule
+
+A sample is uncovered when its depth equals the depth the epoch cleared SCENE_MS's depth to,
+exactly: no draw reached it. The clear's value is recorded when a pass into SCENE_MS begins with
+its depth's load op CLEAR (`port/render/rd_replay.c` (`msaaAttach`)) and handed to the shader
+bit for bit. A pixel of n samples with u uncovered:
+
+- is uncovered when more than half its samples are (2u > n): its colour is the mean of all its
+  samples and its depth the smallest of all, which is the clear's;
+- otherwise takes the mean colour and the smallest depth of its covered samples. Where every
+  sample is covered (a silhouette between two surfaces) that is the mean and smallest of all, so
+  edge anti-aliasing stays.
+
+| samples n | uncovered when u is |
+| --- | --- |
+| 2 | 2 |
+| 4 | 3 or 4 |
+| 8 | 5 to 8 |
+
+A gap between two parts of the world thinner than half a pixel (the 1/16 pixel crack of
+[DIVERGENCES.md](DIVERGENCES.md) VD-20) therefore resolves to the surfaces beside it. The depth is
+what matters: the fog reads the clear's depth through its table as entry 0, the full fog colour,
+and `ico2/sugipon/src/staticBlur.c` (`cleanUpFB`) marks every texel at the clear's depth as a glow
+source (its second sprite at GS Z 1 with GEQUAL, alpha 192). With the smallest of all samples a
+pixel with one sample in such a gap took the clear's depth: a line of fog along the seam and a
+glow source beside every small opening onto the sky. A gap of half a pixel or more still takes the
+clear's depth, as at 1x.
+
+Without a clear of SCENE_MS's depth in the epoch (its depth loaded from SCENE) no sample can be
+told apart as uncovered: the rule is off and every pixel takes the mean and the smallest of all
+its samples, with a line once a run.
+
+The depth is the smallest because the depth grows with GS Z and the game tests GEQUAL, and the
+sample patterns are centred on the pixel centre: on a plane the smallest sample lies at or below
+the centre's depth, so a surface the game draws again after the close with GEQUAL passes where it
+passed at 1x.
+
+## The integer mean
+
+Each channel's mean is integer: the k samples' 8-bit values summed and `(sum + k / 2) / k`, so
+every backend rounds alike (`port/shaders/blit.hlsl` (`msaa_resolve_ps`)). The shader keeps
+scalar accumulators only: no array-typed value, which some drivers' compilers fail on
+(`tools/check_spirv.py`).
+
+## One resolve a picture
+
+The close records what is open into SCENE_MS first (the pass, a clear pending on SCENE) and a
+shadow reset pending on SCENE's depth (its stencil clear as a pass of its own), then resolves
+once (`port/render/rd_replay.c` (`msaaEnd`)). The reset's stencil clear transitions SCENE's depth,
+which is the hook that closes the epoch; `s_ms.closing` keeps that transition from closing it a
+second time from inside the first close. Without the guard every frame with a shadow resolved
+twice.
+
+With both the colour and the depth drawn in the epoch the resolve is one fullscreen pass of
+`msaa_resolve_ps` into SCENE's colour and depth (both loads DONT_CARE, the stencil loaded and
+kept). The colour alone resolves by the device's resolve (`rhi_cmd_resolve_color`), the depth
+alone by `depth_resolve_ps` (the smallest sample). The passes into SCENE_MS do not store its
+stencil: the shadow window's stencil is SCENE's own.
+
+Neither resolve shader asks the texture for its sample count: the count is a constant
+(`DrawCB.g_param.x`), so the OpenGL translation stays GLSL 4.30 (`texelFetch` on a
+`sampler2DMS`). Direct3D 11 and 12 read the multisampled texture through a `Texture2DMS` view
+(`port/rhi/d3d11/d3d11_resource.c`, `port/rhi/d3d12/d3d12_pipeline.c`). A backend that cannot
+make either module offers no MSAA count, the supersampling ones stay (`port/render/rd_core.c`
+(`rd_aa_supported_mask`)).
+
+## Log lines
+
+| line | when |
+| --- | --- |
+| `msaa: the epoch closes at list L (why): lists 0-(L-1) anti-aliased and list L up to there, the fog and the glow run on the resolved picture (reported once a list and cause)` | the first close at each list for each cause (the shadow count's pass, a read or copy of SCENE, a pass on SCENE with another depth) |
+| `msaa: the epoch stays open to the replay's end: every list anti-aliased ... (reported once)` | a replay whose epoch lasted to its end |
+| `msaa: the epoch's depth was loaded from the scene, not cleared in it: ... (reported once)` | the rule off |
+| `window: msaa: N samples, resolves R per replay, the last closed at list L` | the 10 s summary (`port/platform/window_host.c`); R is 1.0 or below |
+| `fog: in the MSAA epoch on the resolved picture (each pixel's smallest covered sample unless more than half its samples were uncovered: ...)` | once a run (`port/render/rd_replay.c` (`doFog`)) |
+| `msaa: msaa_resolve_ps was not made on this device ...` | start-up, a module missing |
+
+## Tests
+
+`rd_msaa` (`port/render/test/rd_msaa_test.c`): `testShadowReset` (one resolve a replay with a
+shadow reset, the close at list 3, SCENE byte for byte the frame's without the reset) and
+`testSkySlit` (the crack and `cleanUpFB`'s mask: no more glow sources along the crack with MSAA4
+than without anti-aliasing, the silhouettes still anti-aliased), beside the epoch's other cases.
+`rd_crack_msaa` (`port/render/test/rd_crack_test.c` `msaa`): along the crack the MSAA4 picture
+holds at most 5 % of the clear's-depth texels of the frame without anti-aliasing, and the slit
+wider than a pixel keeps the clear's fog.
