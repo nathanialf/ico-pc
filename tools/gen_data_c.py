@@ -233,19 +233,26 @@ def parse_schema(path=None):
 #   narrow <member> <field>           an integer the disc holds wider than
 #                                     PAL's field: the low bits, which every
 #                                     record's value fits (--manifest checks)
+#   rename <member> <field>=<host>    a field the disc has that PAL holds
+#                                     under another name (host: a PAL field,
+#                                     or one element of a PAL scalar array,
+#                                     path[i], every element then named by a
+#                                     row): copied into that field
 #   extra <member> <type> <count>     a table PAL has none of: the host array
-#                                     holds count records of type (the
-#                                     member's own row names its header and
-#                                     symbol); a disc without it loads none
-PORT_VERBS = ("default", "extend", "drop", "narrow", "extra")
+#                                     holds count records of type (- for a
+#                                     single object; the member's own row
+#                                     names its header and symbol); a disc
+#                                     without it loads none
+PORT_VERBS = ("default", "extend", "drop", "narrow", "rename", "extra")
 
 
 def parse_port_rows(path=None):
     """The schema's port rows: {'default': {(member, field): value text},
-    'extend', 'drop', 'narrow': {(member, field)}, 'extra': {member: (type,
-    count)}}."""
+    'extend', 'drop', 'narrow': {(member, field)}, 'rename': {(member, host
+    field): the disc's field}, 'extra': {member: (type, count)}}."""
     path = SCHEMA if path is None else path
-    out = {"default": {}, "extend": set(), "drop": set(), "narrow": set(), "extra": {}}
+    out = {"default": {}, "extend": set(), "drop": set(), "narrow": set(), "rename": {},
+           "extra": {}}
     for n, line in enumerate(path.read_text().splitlines(), 1):
         f = line.split("#", 1)[0].split()
         if not f or f[0] not in PORT_VERBS:
@@ -256,10 +263,17 @@ def parse_port_rows(path=None):
                 fail(f"{path}:{n}: expected 'default <member> <field>=<value>'")
             field, value = f[2].split("=", 1)
             out["default"][(f[1], field)] = value
+        elif verb == "rename":
+            if len(f) != 3 or "=" not in f[2]:
+                fail(f"{path}:{n}: expected 'rename <member> <field>=<host field>'")
+            field, host = f[2].split("=", 1)
+            if (f[1], host) in out["rename"]:
+                fail(f"{path}:{n}: {f[1]} {host} has two rename rows")
+            out["rename"][(f[1], host)] = field
         elif verb == "extra":
-            if len(f) != 4 or not f[3].isdigit():
-                fail(f"{path}:{n}: expected 'extra <member> <type> <count>'")
-            out["extra"][f[1]] = (f[2], int(f[3]))
+            if len(f) != 4 or not (f[3].isdigit() or f[3] == "-"):
+                fail(f"{path}:{n}: expected 'extra <member> <type> <count>' (- for one object)")
+            out["extra"][f[1]] = (f[2], None if f[3] == "-" else int(f[3]))
         else:
             if len(f) != 3 or "=" in f[2]:
                 fail(f"{path}:{n}: expected '{verb} <member> <field>'")
@@ -267,6 +281,7 @@ def parse_port_rows(path=None):
     clash = [k for k in out["extend"] | out["drop"] | out["narrow"] if k in out["default"]]
     clash += [k for k in out["extend"] if k in out["drop"] | out["narrow"]]
     clash += [k for k in out["drop"] if k in out["narrow"]]
+    clash += [k for k in out["rename"] if k in out["default"] or k in out["narrow"]]
     if clash:
         fail(f"{path}: {clash[0][0]} {clash[0][1]} has two map rows")
     return out
@@ -1082,10 +1097,12 @@ class Writer:
                 return c_string(bs[v - lo:nul])
         return None
 
-    def value(self, ty, off, path, bitpos=0):
+    def value(self, ty, off, path, bitpos=0, width=None):
         d = self.data
         if ty.kind == "bitfield":
-            v = int.from_bytes(d[off:off + ty.size], "little") >> bitpos & ((1 << ty.width) - 1)
+            # width: the disc's, when it holds the field narrower (unsigned)
+            width = ty.width if width is None else width
+            v = int.from_bytes(d[off:off + ty.size], "little") >> bitpos & ((1 << width) - 1)
             if path in self.hexf:
                 return f"0x{v:X}" if v else "0"
             if ty.base.signed and v >= 1 << (ty.width - 1):
@@ -1113,6 +1130,12 @@ class Writer:
             if name is None:
                 self.errors.append(f"0x{self.base + off:08X} {path}: {err}")
                 return f"0 /* 0x{v:08X} */"
+            if not func and name in ALIASES:
+                # a name inside an extra table written as one array (write_c)
+                first, idx = ALIASES[name]
+                decl = c_decl(ty.target, f"{first}[]")
+                self.objs[first] = decl if decl is not None else f"char {first}[]"
+                return f"&{first}[{idx}]"
             if func:
                 ret = c_decl(ty.ret, "") or "void "
                 if self.funcs.setdefault(name, ret) != ret:
@@ -1177,7 +1200,12 @@ class MappedWriter(Writer):
                 sub = T("array", el.size * mp.count, ty.align, elem=el, n=mp.count)
                 return self.value(sub, rbase + mp.src.ee_off, path)
             if mp.how == "copy":
-                return self.value(ty, rbase + mp.src.ee_off, path, mp.src.bit)
+                return self.value(ty, rbase + mp.src.ee_off, path, mp.src.bit,
+                                  mp.src.width if mp.src.kind == "BITS" else None)
+            if mp.how == "gather":
+                # a scalar array the disc holds as separately named fields
+                return "{" + ", ".join(self.value(ty.elem, rbase + s.ee_off, path)
+                                       for s in mp.srcs) + "}"
             if mp.how == "narrow":
                 # the disc's wider integer: its low bits, which must hold it
                 src, off = mp.src, rbase + mp.src.ee_off
@@ -1286,7 +1314,33 @@ def declared_writable(header, name):
     return False
 
 
+# PC port: {name: (first name, element index)} of the target's extra tables
+# (its schema's `extra` rows) that hold several names: the reference writes
+# such a table as one array named by its first name, as the host defines it
+# (port/data/gen/table_defs.c), and a pointer to another of its names as that
+# array's element, so tables_test compares it with the host's by its offset in
+# the table (the June 2001 demo's enemy sets point into each other's tables).
+ALIASES = {}
+
+
+def extra_aliases():
+    """ALIASES for the current VERSION."""
+    ALIASES.clear()
+    if VERSION == "pal":
+        return
+    extra = parse_port_rows()["extra"]
+    for member, rows in parse_schema().items():
+        if member not in extra:
+            continue
+        for s in rows:
+            if len(s["syms"]) > 1:
+                first = s["syms"][0][0]
+                for name, idx in s["syms"]:
+                    ALIASES[name] = (first, idx)
+
+
 def write_c(member, rows, datas, layout):
+    extra_aliases()
     pool = [(r["lo"], r["hi"], datas[r["section"]]) for _, r in rows]
     tmaps = target_maps(rows) if VERSION != "pal" else pal_maps(rows)
     defs, headers, funcs, objs = [], [], {}, {}
@@ -1331,7 +1385,11 @@ def write_c(member, rows, datas, layout):
                 return w.value(ty, off, '')
         bounds = [i for _, i in s["syms"]] + [n]
         tname, star, dims = c_type(ty, s["type"])
-        for (name, first), last in zip(s["syms"], bounds[1:]):
+        syms = s["syms"]
+        if syms[0][0] in ALIASES:
+            # an extra table of several names: one array (ALIASES)
+            syms, bounds = syms[:1], [0, n]
+        for (name, first), last in zip(syms, bounds[1:]):
             # a header's declaration without const (declared_writable): the
             # definition drops const to agree with it
             const = ("const " if row["section"] == "rodata" and
