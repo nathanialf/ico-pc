@@ -466,10 +466,23 @@ int ico_input_sdl_touch_overlay(IcoTouchOverlay *out)
    (ico_touch_menu_taps): a finger that goes down over a menu (the pointer's
    ico_pointer_menu) on no working control is the mouse's click there, so a
    player who switched every control off still gets from Back's pause menu
-   to Options > Controls > Touch screen > Reset. One finger at a time; the
-   first such click of a run is logged. */
+   to Options > Controls > Touch screen > Reset. One finger at a time: a
+   new finger that goes down while the click is held (its lift went to the
+   editor, or its id was never seen again) lets the old click go and takes
+   its own, so the click never stays stuck; touch_tap_drop lets it go
+   wherever fingers are dropped (focus lost, the editor opened or closed).
+   The first such click of a run is logged, and the first few stale clicks
+   a new finger replaced. */
 static uint64_t s_tapFinger;
 static int s_tapDown;
+
+static void touch_tap_drop(void)
+{
+    if (s_tapDown) {
+        s_tapDown = 0;
+        ico_pointer_button(0);
+    }
+}
 
 static void touch_menu_tap(const SDL_Event *e, int kind)
 {
@@ -483,7 +496,18 @@ static void touch_menu_tap(const SDL_Event *e, int kind)
     const int mode = ico_touch_effective_mode(s_bind.touch_mode, s_raw.gamepads, phone);
 
     if (kind == ICO_TOUCH_DOWN) {
-        if (s_tapDown || !ico_pointer_menu() || !ico_touch_menu_taps(&s_touchLayout) ||
+        if (s_tapDown) {
+            static int s_staleLogged;
+            /* the held click's lift never came: let it go first */
+            touch_tap_drop();
+            if (++s_staleLogged <= 3) {
+                fprintf(stderr,
+                        "touch: a menu tap's lift was lost: released it for the next "
+                        "tap (%d)\n",
+                        s_staleLogged);
+            }
+        }
+        if (!ico_pointer_menu() || !ico_touch_menu_taps(&s_touchLayout) ||
             !ico_touch_accepts(mode, s_raw.gamepads) ||
             ico_touch_takes(&s_touchLayout, e->tfinger.x * (float)s_touchLayout.outW,
                             e->tfinger.y * (float)s_touchLayout.outH)) {
@@ -525,6 +549,7 @@ static void touch_finger(const SDL_Event *e, int kind)
 
 static void touch_cancel(void)
 {
+    touch_tap_drop();
     if (s_touchEdit.active) {
         /* focus lost: the editor drops a drag and keeps its edits */
         ico_touch_edit_event(&s_touchEdit, 0, 0.0f, 0.0f, ICO_TOUCH_CANCEL, SDL_GetTicksNS());
@@ -920,7 +945,8 @@ IcoTouchEditor *ico_input_sdl_touch_editor(void)
 void ico_input_sdl_touch_edit_begin(void)
 {
     /* the mapper lets go of every finger first: none stays pressed under
-       the editor */
+       the editor, nor the menus' tap click (its lift goes to the editor) */
+    touch_tap_drop();
     ico_touch_event(&s_touch, 0, 0.0f, 0.0f, ICO_TOUCH_CANCEL, SDL_GetTicksNS());
     ico_touch_edit_begin(&s_touchEdit, ico_input_live_touch_edits(), s_touchLayout.rule);
     touch_rebuild();
@@ -929,7 +955,9 @@ void ico_input_sdl_touch_edit_begin(void)
 void ico_input_sdl_touch_edit_end(int keep)
 {
     ico_touch_edit_end(&s_touchEdit, keep);
-    /* a finger still down (the one that tapped Done) is not the mapper's */
+    /* a finger still down (the one that tapped Done) is not the mapper's,
+       nor a menu tap's */
+    touch_tap_drop();
     ico_touch_event(&s_touch, 0, 0.0f, 0.0f, ICO_TOUCH_CANCEL, SDL_GetTicksNS());
     touch_rebuild();
 }
