@@ -350,6 +350,7 @@ static struct {
        (rd.h RdPerfRecord.blockOtherScaleReads, issue 106) */
     uint64_t blockOtherScale;
     uint32_t msaaSamples; /* the block's largest count (0: no MSAA) */
+    uint32_t msaaCloseAt; /* the block's last epoch close (rd.h RdPerfRecord.msaaCloseAt) */
     uint64_t bufCreated, bufDestroyed, texCreated, texDestroyed, allocs, fenceWaits, waitIdles,
         readbacks;
 } s_perf;
@@ -4568,6 +4569,9 @@ static void perf_drain(void)
         if (r.msaaSamples > s_perf.msaaSamples) {
             s_perf.msaaSamples = r.msaaSamples;
         }
+        if (r.msaaCloseAt) {
+            s_perf.msaaCloseAt = r.msaaCloseAt;
+        }
         s_perf.bufCreated += r.buffersCreated;
         s_perf.bufDestroyed += r.buffersDestroyed;
         s_perf.texCreated += r.texturesCreated;
@@ -4731,9 +4735,16 @@ static void perf_log(void)
             s_perf.fxAdditive / n, s_perf.fxLocal / n, s_perf.vuNoPlanes / n);
     if (s_perf.msaaSamples) {
         /* the anti-aliasing's cost: its resolves' GPU time is the effects'
-           "MSAA resolve" above */
-        fprintf(stderr, "window: msaa: %u samples, resolves %.1f per replay\n", s_perf.msaaSamples,
-                (double)s_perf.msaaResolves / n);
+           "MSAA resolve" above (one a replay at most); where the last
+           replay's epoch closed (what came before it is anti-aliased) */
+        char at[48] = "";
+        if (s_perf.msaaCloseAt > RD_LIST_COUNT) {
+            snprintf(at, sizeof(at), ", the last closed at the replay's end");
+        } else if (s_perf.msaaCloseAt) {
+            snprintf(at, sizeof(at), ", the last closed at list %u", s_perf.msaaCloseAt - 1u);
+        }
+        fprintf(stderr, "window: msaa: %u samples, resolves %.1f per replay%s\n",
+                s_perf.msaaSamples, (double)s_perf.msaaResolves / n, at);
     }
     if (s_perf.blockOtherScale) {
         /* the puddles', the pools' and the queen barrier's render-to-texture
