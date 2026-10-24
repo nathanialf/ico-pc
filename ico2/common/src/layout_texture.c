@@ -812,6 +812,20 @@ void lt_host_point_item(int no, int item)
     glowCount = 0;
 }
 
+/* PC port: Skip the opening (ico2/script/src/op.c actOpDemo01, GL-14).
+   Whether the boot's layout (PAL 7, la_boot_memory_card_check) has handed
+   over to the scene layout it returns once kanbanBootEnd is set (PAL 55,
+   la_game_demo: the switch is made in the tick after the end, the boot's
+   layout having no fade-out) and that layout's fade-in (1 s) is done, so a
+   lt_switch_layout asked for now is taken.  lt_switch_layout drops a
+   request while a fade runs (fadeState != 2); the Start skip of the opening
+   always finds this state, since the scene waits for its stream and 30
+   ticks before it reads Start. */
+int lt_host_boot_settled(void)
+{
+    return current_layout_id != PAL_JPNKOR(7, 4) && fadeState == 2;
+}
+
 /* init_textures_of_specified_property is a file static, as is
    ico2/common/src/kanban's function of the same name */
 /* texProperty's texNo column, &texProperty[0].texNo */

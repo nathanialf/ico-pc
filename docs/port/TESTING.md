@@ -943,8 +943,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   as the Japanese or Korean disc over the fixture's tables at that disc's numbers (`settings_jpn`,
   `settings_extra_jpn`, `settings_extras_jpn`; `kor` the same, `settings_kor`, `settings_extra_kor`,
   `settings_extras_kor`, with the numbers from the Korean region row): the rows it has not, Menu language, Circle
-  confirming, Cross and Triangle going back, the title's rows, the notes' serial, the mouse and
-  the prompts.
+  confirming, Cross and Triangle going back, the title's rows, the notes' serial, the mouse,
+  the prompts and the boot's hand-over to the title with Skip the opening
+  (`testSkipOpeningTitle`).
 - `settings_photo_test.c`: the Settings screens through rd on a device, written as PNGs
   (`settings_render`, which also draws the Touch screen page and the editor page); with `jpn` or `kor`, that disc's title and main page (`settings_render_jpn`,
   `settings_render_kor`).

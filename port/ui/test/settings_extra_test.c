@@ -3357,6 +3357,151 @@ static void testSkipOpening(void)
     gFlagGameClear = 0;
 }
 
+/* Skip the opening at the boot (ico2/script/src/op.c actOpDemo01, GL-14) on
+   the real layout_texture.c, with the disc's fade times (texLayout, the same
+   on the three discs): the boot's layout (PAL 7, la_boot_memory_card_check:
+   -1 until kanbanBootEnd, then the scene layout) fades in and out in no
+   time, the scene layout (PAL 55, la_game_demo) in and out over 1 s, the
+   title (PAL 12, la_title_continue_or_new) in over 1.5 s.  A Main tick runs
+   the layouts (ExecIcoMisc's exec_layout_texture), then kanbanBootMain
+   (whose step 7 ends the boot), then the scripts (iosOmMain).  Without a
+   wait the script asks for the title two ticks after the end (its wait for
+   scpFadeOut(255)), while the scene layout fades in, and lt_switch_layout
+   drops the request: the title has no menu (the skip's first form).  The
+   script waits on lt_host_boot_settled first; the switch is taken, the
+   title comes up and its rows take the pad.  The Start skip's earliest
+   press finds the same state.  Not modelled: actOpDemo01's thread itself
+   (its ticks are written out here), the title's card check
+   (la_title_continue_or_new shows Continue and New Game once it has
+   decided) */
+static int s_bootEnded, s_sceneFirst;
+
+static int bootCheckProc(int first, int item)
+{
+    (void)first;
+    (void)item;
+    return s_bootEnded ? PAL_JPNKOR(0x37, 0x34) : -1; /* la_boot_memory_card_check */
+}
+
+static int sceneProc(int first, int item)
+{
+    (void)item;
+    s_sceneFirst += first != 0;
+    return -1; /* la_game_demo, no Start */
+}
+
+/* stage 1's layouts at the end of its load, then the ticks up to the boot's
+   end: the boot's layout up and settled, the end set after the end tick's
+   layouts */
+static void bootToEnd(const char *slug)
+{
+    const int boot = PAL_JPNKOR(7, 4);
+    const int scene = fxLayout(55);
+
+    fakeTables();
+    lt_ext_reset();
+    ui_settings_reset();
+    memset(pad, 0, sizeof(pad));
+    pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
+    setLayout(boot, 0, 0, -1, -1);
+    texLayout[boot].fadeInTime = texLayout[boot].fadeOutTime = 0.0f;
+    texLayout[boot].colA = 1.0f;
+    texLayout[boot].proc = bootCheckProc;
+    setLayout(scene, fxRow(292), fxRow(292), -1, -1);
+    texLayout[scene].fadeInTime = texLayout[scene].fadeOutTime = 1.0f;
+    texLayout[scene].proc = sceneProc;
+    texLayout[fxLayout(11)].fadeInTime = texLayout[fxLayout(11)].fadeOutTime = 0.5f;
+    for (int l = 12; l <= 13; l++) {
+        texLayout[fxLayout(l)].fadeInTime = 1.5f;
+        texLayout[fxLayout(l)].fadeOutTime = 0.5f;
+    }
+    s_bootEnded = s_sceneFirst = 0;
+    layout_boot_flag = 0;
+    mpegPlayReturnStage = 0;
+    init_layout_texture(1);
+    CHECK(current_layout_id == boot, "%s: stage 1 starts on the boot's layout (%d)", slug,
+          current_layout_id);
+    for (int i = 0; i < 5; i++) {
+        frame(0);
+    }
+    CHECK(current_layout_id == boot && lt_fade_status() == 2,
+          "%s: the boot's layout up and settled (%d)", slug, lt_fade_status());
+    s_bootEnded = 1; /* kanbanBootMain step 7, after the end tick's layouts */
+}
+
+static void testSkipOpeningTitle(const char *slug)
+{
+    CHECK(ico_region_select(slug) == 0, "the %s disc selected", slug);
+    useConfig("version = 1\n");
+    const int scene = fxLayout(55);
+    const int title = fxLayout(12);
+
+    CHECK(PAL_JPNKOR(0x37, 0x34) == scene, "%s: the boot's layout hands over to %d", slug, scene);
+    /* 50 Hz and 60 Hz: 25 and 30 ticks a second */
+    for (int hz60 = 0; hz60 < 2; hz60++) {
+        systemStatus[0] = hz60 ? 0 : 1;
+        const int second = (60 - systemStatus[0] * 10) / systemStatus[1];
+
+        /* without the wait: the title asked for two ticks after the end */
+        bootToEnd(slug);
+        CHECK(lt_fade_status() == 2 && lt_host_boot_settled() == 0,
+              "%s %d: the end tick: settled, but not handed over", slug, second);
+        frame(0);
+        CHECK(current_layout_id == scene && lt_fade_status() == 0,
+              "%s %d: the tick after: the scene layout, fading in (%d, %d)", slug, second,
+              current_layout_id, lt_fade_status());
+        frame(0);
+        CHECK(lt_host_boot_settled() == 0, "%s %d: two ticks after: still fading in", slug, second);
+        lt_switch_layout(title);
+        for (int i = 0; i < 4 * second; i++) {
+            frame(0);
+        }
+        CHECK(current_layout_id == scene,
+              "%s %d: that switch is dropped and the title never comes (%d)", slug, second,
+              current_layout_id);
+
+        /* the fix: the script waits a tick at a time on lt_host_boot_settled,
+           then mode 1 asks for the title in the same tick */
+        bootToEnd(slug);
+        int waited = 0;
+        while (lt_host_boot_settled() == 0 && waited < 10 * second) {
+            frame(0);
+            waited++;
+        }
+        CHECK(current_layout_id == scene && lt_fade_status() == 2 && waited == 1 + second,
+              "%s %d: the wait ends on the scene layout settled, %d ticks after the end (want %d)",
+              slug, second, waited, 1 + second);
+        CHECK(s_sceneFirst == 1, "%s %d: the scene layout's proc had its first call (%d)", slug,
+              second, s_sceneFirst);
+        lt_switch_layout(title);
+        CHECK(lt_fade_status() == 3, "%s %d: the title's switch is taken (%d)", slug, second,
+              lt_fade_status());
+        CHECK(settle(title, 4 * second), "%s %d: the title comes up (%d, %d)", slug, second,
+              current_layout_id, lt_fade_status());
+        CHECK(texLayout[title].curItem == fxRow(49), "%s %d: the cursor on Continue (%d)", slug,
+              second, texLayout[title].curItem);
+        press(0x4000);
+        CHECK(texLayout[title].curItem == fxRow(50), "%s %d: Down: New Game (%d)", slug, second,
+              texLayout[title].curItem);
+
+        /* the Start skip of the opening: mode 0 starts two ticks after the
+           end, waits a tick at least for its stream and 30 more, and reads
+           Start in the tick after */
+        bootToEnd(slug);
+        for (int i = 0; i < 2 + 1 + 30 + 1; i++) {
+            frame(0);
+        }
+        CHECK(lt_host_boot_settled() && current_layout_id == scene,
+              "%s %d: the Start skip's earliest press finds the scene layout settled", slug,
+              second);
+        lt_switch_layout(title);
+        CHECK(settle(title, 4 * second), "%s %d: Start: the title comes up (%d)", slug, second,
+              current_layout_id);
+    }
+    systemStatus[0] = 1;
+    ico_region_select("pal");
+}
+
 /* the rows of layout page whose text is str */
 static int rowsWithText(UiSettingsPage page, const char *str)
 {
@@ -4001,6 +4146,8 @@ int main(int argc, char **argv)
         testOtherDisc(argv[2]);
         testOtherDiscPointer(argv[2]);
         testOtherDiscHints(argv[2]);
+        /* Skip the opening: the title's menu after the boot, on that disc */
+        testSkipOpeningTitle(argv[2]);
         printf("settings_extra_test %s: %s\n", argv[2], failures ? "failed" : "ok");
         return failures ? 1 : 0;
     }
@@ -4052,6 +4199,7 @@ int main(int argc, char **argv)
     testTouchEditorPage();
     testNaturalChains();
     testSkipOpening();
+    testSkipOpeningTitle("pal");
     /* the version in the Options menu */
     testVersion();
     /* Menu language, the Japanese and Korean discs */

@@ -940,7 +940,10 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   the rows it has not and the Menu language row, Circle confirming and Cross or Triangle going
   back, the title's rows and the copyright's halves placed, the notes naming SCPS-11003, Extras,
   the mouse (a click is Circle; the buttons traded in menus only), the prompts' Circle, the menu
-  language Japanese by default (`settings_title_jpn.png`, `settings_main_jpn.png`).
+  language Japanese by default (`settings_title_jpn.png`, `settings_main_jpn.png`), and the
+  boot's hand-over to the title with Skip the opening (`testSkipOpeningTitle`, which the European
+  run makes too: the boot's layout to the scene layout, the title's switch only once that layout
+  has faded in, `lt_host_boot_settled`).
 - `menu_text` (`test/menu_text_test.c`): the menu text table against the boot ELF's rows, every
   string drawable, the hook through the real `layout_texture.c`.
 - `menu_look` (`test/menu_look_test.c`, `test/menu_sheets.c`): the menus' strips against the

@@ -112,6 +112,9 @@ extern int ico_opt_skip_opening(void);
    first entry only) */
 static int opDemoEntered; /* port */
 
+/* PC port: port/platform/diag_host.c: a line in the log */
+extern void ico_host_milestone(const char *what);
+
 void actOpDemo01(GObj *volatile self)
 {
     GObj *x = self;
@@ -142,12 +145,24 @@ void actOpDemo01(GObj *volatile self)
     /* PC port: Skip the opening: the boot's first entry starts at the
        title, in the state the Start skip of the opening scene leaves
        (mode 0 below); later entries (End Game, the attract movie's
-       return) are untouched */
+       return) are untouched.  It first waits, as the scene does before
+       it reads Start, until the boot's layout has handed over to the
+       scene layout (la_boot_memory_card_check's switch, in the tick after
+       kanbanBootEnd) and that layout's 1 s fade-in is done: mode 1's
+       lt_switch_layout to the title is dropped while a fade runs, and
+       without the wait it would come two ticks after the end (the wait
+       for scpFadeOut(255) below), during that fade-in, and the title
+       would come up without its menu */
     if (opDemoEntered == 0) {
         opDemoEntered = 1;
         if (ico_opt_skip_opening() && opDemoMode == 0) {
             opDemoMode = 1;
             opDemoNextMode = 2;
+            while (lt_host_boot_settled() == 0) {
+                _ACTWait(1);
+            }
+            ico_host_milestone("boot: Skip the opening: the menu screen has settled, the title's "
+                               "menu is asked for");
         }
     }
 

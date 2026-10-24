@@ -121,5 +121,9 @@ static inline int lt_rect_spans_grid(int x, int w)
 int lt_host_property_visible(int no);
 int lt_host_select_disabled(void);
 void lt_host_point_item(int no, int item);
+/* PC port: Skip the opening's wait before the title's switch (ico2/script/
+   src/op.c actOpDemo01): the boot's layout has handed over to the scene
+   layout and the fade has settled, so lt_switch_layout takes a request */
+int lt_host_boot_settled(void);
 
 #endif /* LAYOUT_TEXTURE_H */
