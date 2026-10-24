@@ -1,0 +1,240 @@
+# config/data_schema.aug6.txt -- the data-only members written as C.
+#
+# One row per (member, section) of config/data_members.aug6.txt that
+# tools/gen_data_c.py writes as one C translation unit instead of assembly.
+# The row holds facts about the member's type, never its values: the build
+# reads the values from the user's own baserom/aug6/baseelf.elf and writes
+# build/data/<member>.c, which ninja compiles with the game's flags
+# (tools/compile_c.sh). Nothing generated is committed (docs/LEGAL.md).
+#
+# Columns: <member> <section> <type> <header> <count> <symbols> [hex=<field>,...]
+#   member    the member's name in config/data_members.aug6.txt
+#   section   data, rodata or sdata: the table row the definition fills;
+#             rodata rows are defined const
+#   type      the element type: a typedef or a struct tag the header
+#             defines, or a C base type with its words joined by '_'
+#             (unsigned_short), with a trailing '*' for a pointer to it
+#             (char*) or a trailing [N] for an array of N (char[32])
+#   header    the header that defines it, repo-relative
+#   count     the number of elements the member holds, or '-' for a single
+#             object
+#   symbols   the PAL member's names, <name>@<element index>; each names one
+#             array, and the arrays follow each other in the order given
+#             from the offset the table gives the first name (0 when it
+#             gives none)
+#   hex=      fields spelled in hex because they hold masks (dotted paths for
+#             nested fields); every other number is decimal
+#   count-of= <array>[-<k>]: a single int whose value is derived, not read
+#             from the disc: the element count of an array the member
+#             defines before it, less k, written as sizeof over that array
+#
+# The rows are PAL's (config/data_schema.pal.txt) with each count re-derived
+# from this ELF: the member's span over the record stride the reading code
+# uses. PAL's three unmapped runs (hintTable, motSyncPairs, jimakuFileName)
+# have no row here (no such table in this build), and weapon-def and
+# texture-path are rodata rows.
+#
+# Ten records are not PAL's, and their headers need this target's type
+# before the generator's ROM check can pass (offsets PAL -> here, from the
+# loads and stores of each reader and its aug6 counterpart). The first eight
+# are the USA (September 2001) records, offset for offset where this ELF's
+# code reads them, and every row of each decodes clean with the USA type:
+#   parallel-motion-tbl  ParallelMotionRow is int motion[37] (0x94; PAL 44).
+#   tex-property  LtProperty is 0x6C (PAL 0x70): 0x18->0x14, 0x1C->0x18,
+#                 0x20..0x3C->0x1C..0x38, 0x44..0x54->0x40..0x50,
+#                 0x58->0x64, 0x5C->0x60, 0x60..0x68->0x54..0x5C,
+#                 0x6C->0x68, the mask in bit 1 (PAL bit 4).
+#   item-kind-def ItemBreakRec is 0x14 (PAL 0x20): 0x00->0x00, 0x08->0x04,
+#                 0x10->0x08, 0x1C->0x10; PAL's mode words absent.
+#   model-path    PObjMdl is 0x10C (PAL 0x8C): two 64-byte paths at 0x00 and
+#                 0x40, then PAL's fields 0x80 further on.
+#   motion-def    MotionDef is 0x190 (PAL 0x194): the name at 0xC8 (PAL
+#                 0xC0); 0x13C->0x140, 0x140->0x144, 0x144->0x164,
+#                 0x148->0x16C, 0x14C->0x174, 0x150->0x15C, 0x154->0x178,
+#                 0x160->0x154, 0x164->0x17C, 0x168->0x150, 0x174->0x14C,
+#                 0x178->0x148, 0x180->0x182, 0x184->0x180, 0x188->0x184,
+#                 0x18C->0x188, 0x190->0x18C.
+#   enemy-def     EnemyDef is 0x14 (PAL 0x1C): life at 0x08 as in PAL,
+#                 0x10->0x0C, the attribute word 0x18->0x10.
+#   layout-cloth-def  LayoutClothDef is 0x50 (PAL 0x68): 0x3C->0x20,
+#                 0x48->0x28, 0x50->0x38, 0x54->0x3C, 0x58->0x40, 0x5C->0x44,
+#                 0x60->0x48, 0x64->0x4C.
+#   texture-path  TexRec is char path[32] (0x20; PAL 0x34), in .rodata.
+# Two are this build's own:
+#   stage-all     StgPre is 0x190 (PAL 0x194): PAL's fields to 0x15B, then
+#                 0x168->0x160, 0x16C->0x164, 0x164->0x168, 0x170->0x16C,
+#                 0x184->0x17C, 0x15C->0x180, 0x188->0x184, 0x18C->0x188,
+#                 0x190->0x18C (the bits of both flag words unchanged); no
+#                 ledgeRange (PAL 0x180). The words no code reads take the
+#                 free slots by their values in the rows paired by data file
+#                 name: 0x160->0x15C, 0x174->0x170, 0x178->0x174,
+#                 0x17C->0x178.
+#   act-mode-def  ActModeRec is PAL's 0x50 with the words at 0x44 and 0x48
+#                 exchanged (mail at 0x44, the first actIntrList row at
+#                 0x48) and the flag bits at 0x4C renumbered: onChain bit 6
+#                 (PAL 2), softIk bit 5 (PAL 8), skipMarked bit 2 (PAL 11),
+#                 bit 3 (PAL 10), bit 1 (PAL 12).
+#
+# A table row of the member with no schema row here is its own string pool
+# (staffroll_dat's .rodata, and the head of its .sdata, which here holds an
+# 8-byte string literal before the empty string): the char pointers into it are
+# written as string literals and the compiler lays the pool out.
+# staffroll_dat's count, staffRollNameDataNum, is the table's 1072 entries:
+# this table has no null entries at its end (PAL: 964 less two).
+#
+# A label some source spells inside the member (build/data_labels.txt, the
+# D_<VMA> placeholders) is not an array of its own: gen_data_c.py binds it to
+# the member's first symbol plus its offset in build/data/<member>.alias.ld.
+
+accessary data AccessaryRec ico2/sugipon/include/box.h 21 accessary@0
+act-data-tbl data IdleRangeRec ico2/fumi/include/commonact.h 3 actDataTbl@0
+act-intrlist data IntrMail ico2/fumi/include/act.h 800 actIntrList@0 hex=flags
+camera-set data char[32] ico2/omori/include/camera-ico2.h 87 cameraSetList@0
+game-param data float ico2/fumi/include/act-game.h 36 gameParam@0
+motion-orient data MotionOrientEntry ico2/sugipon/include/motionOrientManager.h 2139 motionOrient@0
+node-fix-ofs data ClingRec ico2/fumi/include/commonact.h 15 clingData@0
+obj-action data OaRecB ico2/common/include/typedef.h 809 objAction@0 hex=flags
+obj-kind-data data ObjKindEnt ico2/common/include/typedef.h 67 objKindData@0
+obj-layout data GenGeo ico2/common/include/typedef.h 3417 objLayout@0 hex=procPri,flags
+parallel-motion-tbl data ParallelMotionRow ico2/fumi/include/act-parallel-control.h 71 parallelMotionTbl@0
+sekind data unsigned_short ico2/fumi/include/s_init.h 1392 seKind@0
+tex-property data LtProperty ico2/common/include/layout_texture.h 384 texProperty@0
+staffroll_dat data char* ico2/common/include/staffroll.h 1072 staffRollNameData@0
+item-kind-def data ItemBreakRec ico2/sugipon/include/item.h 7 itemKind@0 hex=flags
+mirror-motion-def data MotOriAlt ico2/sugipon/include/motionOrientManager.h 3 mirrorMotionTable@0
+model-path data PObjMdl ico2/common/include/charFileManager.h 1576 modelData@0
+prog-se-link data SePackage ico2/sugipon/include/frameDependSequence.h 123 progSELink@0
+texture-layout data LtProp ico2/common/include/layout_texture.h 75 texLayout@0
+way-point data WaySrcPt ico2/fumi/include/way_tool.h 2792 wayPointSheet@0
+weapon-fumble-def data FumbleRow ico2/sugipon/include/weapon.h 21 weaponFumbleGeo@0
+act-mode-def rodata ActModeRec ico2/fumi/include/act.h 117 actModeTbl@0
+attack-def rodata AttackKindEntry ico2/omori/include/attackhit.h 19 attackData@0
+auto-escort rodata EscortPoint ico2/fumi/include/girl_act.h 92 autoEscortData@0
+exit-data rodata ExitData ico2/common/include/typedef.h 257 exitData@0
+generator-sub-position rodata SafePosOffset ico2/omori/include/generator.h 6 generatorSubPosition@0
+girl-warp-list rodata WarpRec ico2/script/include/script.h 25 girlWarpList@0
+iconfile rodata IconFile ico2/fumi/include/mcard.h 5 iconFile@0
+idle-mot-def rodata IdlingDef ico2/fumi/include/commonact.h 11 idlingDef@0
+init-func rodata PackKind ico2/fumi/include/cdvd.h 26 initFunc@0
+look-target-data rodata LookTarget ico2/fumi/include/act-game.h 25 lookTargetData@0
+motion-def rodata MotionDef ico2/sugipon/include/motionOrientManager.h 1089 motionKind@0 hex=modeBits.word,flags.word,flags2.word
+motion-ik-eff-def rodata HandModeRow ico2/sugipon/include/handManager.h 7 motionIKEffKind@0
+motion-orient-def rodata MotOriName ico2/sugipon/include/motionOrientManager.h 293 motionOriKind@0
+motion-random-def rodata int ico2/fumi/include/act-parallel-control.h 74 randomMotionKind@0
+moviefile rodata MotOriName ico2/sugipon/include/motionOrientManager.h 5 movieFile@0
+obj-light rodata ObjLight ico2/seki/include/Light.h 3 objectLight@0
+pair-motion rodata BecPair ico2/fumi/include/commonact.h 33 pairMotion@0
+param-escape-run rodata EscapeRange ico2/fumi/include/girl_act.h 8 paramEscapeRun@0
+se-env rodata SeEnvDef ico2/fumi/include/s_init.h 425 seEnv@0
+sedef rodata SeDef ico2/fumi/include/s_init.h 1389 seDef@0
+sefile rodata SeBank ico2/fumi/include/s_init.h 104 seFile@0
+selist rodata SeKind ico2/fumi/include/s_init.h 3806 seList@0
+shocklist rodata PadActDef ico2/fumi/include/pad.h 23 shockList@0
+stage-all rodata StgPre ico2/common/include/typedef.h 104 stageData@0
+stage-anim-model rodata StgObjDat ico2/seki/include/StageAnimation.h 1340 objTableScene@0
+stage-anim rodata StageAnimDef ico2/seki/include/StageAnimation.h 815 stageTable@0
+stream-motion-def rodata StreamMotionFile ico2/sugipon/include/streamMotionManager.h 10 streamMotion@0
+weapon-def rodata WeaponDef ico2/sugipon/include/weapon.h 8 weaponKind@0
+adpcmfile rodata AdpcmDataRec ico2/fumi/include/adpcm_init.h 96 adpcmFile@0
+blend-motion-def rodata MotOriSub ico2/sugipon/include/motionOrientManager.h 229 blendMotionKind@0
+enemy-model-grp rodata EnemyMdlRec ico2/common/include/sceneManager.h 10 enemymodelGroup@0
+enemy-model-tbl rodata int ico2/common/include/sceneManager.h 25 enemymodelTable@0
+enemy-random-def rodata EnemyKindRange ico2/sugipon/include/enemy.h 21 randomEnemyKind@0
+enemy-random-variation-def rodata int ico2/sugipon/include/enemy.h 84 randomEnemyVariationKind@0
+layout-cloth-def rodata LayoutClothDef ico2/sugipon/include/attackCheckBoundary.h 31 layoutClothDef@0 hex=attr
+motion-eff-condition-def rodata VibCondEntry ico2/sugipon/include/frameDependSequence.h 14 motEffCondKind@0
+motion-eff-def rodata EffEntry ico2/sugipon/include/frameDependSequence.h 20 motionEffKind@0 hex=flags
+motion-eff-random-def rodata int ico2/sugipon/include/frameDependSequence.h 6 randomEffKind@0
+motion-limit-def rodata MotOriLimit ico2/sugipon/include/motionOrientManager.h 48 motionLimitDef@0
+motion-se-condition-def rodata SECondEntry ico2/sugipon/include/frameDependSequence.h 202 motSECondKind@0
+motion-se-random-def rodata SERandEntry ico2/sugipon/include/frameDependSequence.h 1117 randomSEKind@0
+obj-trigger-def rodata int ico2/omori/include/objact.h 11 objTriggerDef@0
+obj-trigger rodata ObjActMailEnt ico2/omori/include/objact.h 31 objTrigger@0
+parallel-motion-orient rodata MotOriParallelEnt ico2/sugipon/include/motionOrientManager.h 41 parallelMotionOrient@0
+particle-effect rodata ParticleEffectFile ico2/sugipon/include/particleEffect.h 53 particleEffectFile@0
+spider-def rodata SpiderKindRec ico2/sugipon/include/spider.h 6 spiderDef@0
+texture-path rodata TexRec ico2/common/include/charFileManager.h 52 texFile@0
+way-group rodata WaySrcGrp ico2/fumi/include/way_tool.h 693 wayGroupSheet@0
+staffroll_dat sdata int ico2/common/include/staffroll.h - staffRollNameDataNum@0 count-of=staffRollNameData
+
+# ---- The port (this section only; the rows above are upstream's, unchanged).
+# The port compiles no member: the host keeps PAL's layout of every record
+# (the port's headers), tools/gen_data_desc.py writes the loader's descriptor
+# set (port/data/gen/ntsc/) from the rows above, config/ee_layout.ntsc.txt
+# (this disc's records, from upstream's headers) and config/motion_bits.ntsc.txt,
+# and tools/gen_data_c.py --version ntsc writes the loader test's reference
+# from the user's baserom/ntsc/baseelf.elf. The map rows (docs/port/DATA.md,
+# "The map rows") settle what a field's name alone does not. A PAL field this
+# disc's record lacks is read only by PAL's arms (this disc's code cannot name
+# it), so its default is the value that means "none" or 0.
+#
+# parallel-motion-tbl: motion[37] here, PAL's 44 (the USA readers loop to 37)
+default parallel-motion-tbl motion=0
+# tex-property: PAL's ownerItem (-1: none), word14, word40, selectMode and
+# selectable are not in this record; word10 and word3C have no C reader
+default tex-property ownerItem=-1
+default tex-property selectMode=0
+default tex-property selectable=0
+# item-kind-def: no stay, break or hit mode words in this record
+default item-kind-def stayMode=0
+default item-kind-def breakMode=0
+default item-kind-def hitMode=0
+# model-path: the record starts with the model and shadow model files'
+# paths (no C reader upstream; the port keeps them, PObjMdl's host-only
+# fields in charFileManager.h)
+extend model-path modelPath
+extend model-path shadowPath
+# texture-path: char path[32] (PAL 48), no cameraMove (PAL's language word)
+default texture-path path=0
+default texture-path cameraMove=0
+# act-mode-def: the flag word at 0x4C has nine bits here; PAL's attractWait,
+# hintCount, bit5, keepHand, bit7, bit10, bit12 and bit14 are not in it (the
+# girl's attract wait and hint count are PAL's; no hint system here), so
+# only PAL's arms read them; bit9 and bit1 are PAL's bits of those names, moved.
+# Its bits holdDir (1) and saveInfo (3) are read by the August arms of
+# ACTGame_BeforeFunc and ACTGame_SaveActorInformation (ActModeRec's host-only
+# bits in act.h); the words at 0x44 and 0x48 are exchanged (copied by name)
+default act-mode-def attractWait=0
+default act-mode-def hintCount=0
+default act-mode-def bit5=0
+default act-mode-def keepHand=0
+default act-mode-def bit7=0
+default act-mode-def bit10=0
+default act-mode-def bit12=0
+default act-mode-def bit14=0
+extend act-mode-def holdDir
+extend act-mode-def saveInfo
+# stage-all: StgPre is 0x190 with PAL's fields after 0x15B in another order (copied
+# by name); no ledgeRange (PAL 0x180): only PAL's arms of act-env.c read it
+# (the girl's nearness across a ledge), and 0 means no range
+default stage-all ledgeRange=0.0
+# motion-def: five effect slots (PAL 12) and one vibration slot (PAL 2): the
+# rest take -1.0 (a frame no motion reaches) and 0; palSpeedRatio is PAL's 50 Hz
+# step (1.0, the identity); no girlDirFrames (the USA code reads dirFrames for
+# both actors); dirFrames is an int here (PAL short: every value fits, 90, 360,
+# small counts, -1); the motion file's path at 0x88 is read only by
+# _ACTDebugPrint, and MotionDef cannot grow on the host (motionKind's 0x194-byte
+# views MotEnt, ScnPre, ChainParaRow)
+default motion-def eff[5].t=-1.0
+default motion-def eff[5].no=0
+default motion-def eff[6].t=-1.0
+default motion-def eff[6].no=0
+default motion-def eff[7].t=-1.0
+default motion-def eff[7].no=0
+default motion-def eff[8].t=-1.0
+default motion-def eff[8].no=0
+default motion-def eff[9].t=-1.0
+default motion-def eff[9].no=0
+default motion-def eff[10].t=-1.0
+default motion-def eff[10].no=0
+default motion-def eff[11].t=-1.0
+default motion-def eff[11].no=0
+default motion-def vib[1].t=-1.0
+default motion-def vib[1].no=0
+default motion-def palSpeedRatio=1.0
+default motion-def girlDirFrames=0
+narrow motion-def dirFrames
+drop motion-def path
+# layout-cloth-def: two cloth points (PAL four)
+default layout-cloth-def pt[2]=0
+default layout-cloth-def pt[3]=0
