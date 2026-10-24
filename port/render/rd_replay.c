@@ -96,7 +96,8 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     "camera_probe_ps", "vu_ps", "fog_lut_ps", "fx_sprite_ps", "wrap_acc_ps", "wrap_resolve_ps",
     "font_ps", "font_sheet_ps", "sprite_aa1_ps", "box_reduce_ps", "sprite_stq_ps", "crt_bloom_ps",
     "crt_blur_ps", "crt_ps", "sprite_texa_ps", "vu_texa_ps", "blit_depth_ps", "fog_lut_buffer_ps",
-    "aa_reduce_ps", "fog_lut_ms_ps", "depth_resolve_ps", "depth_upsample_ps", "vu_pre_ps",
+    "aa_reduce_ps", "fog_lut_ms_ps", "depth_resolve_ps", "depth_upsample_ps", "msaa_resolve_ps",
+    "vu_pre_ps",
     /* RD_FS_OPTIONAL_FIRST on */
     "sprite_ps_planes", "sprite_texa_ps_planes", "sprite_stq_ps_planes", "fog_lut_local_ps",
     "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps", "date_stencil_ps", "vu_np_ps",
@@ -356,13 +357,15 @@ bool rd__gpu_init(void *sdlWindow)
             }
         }
         g_rd.fs[i] = rd__make_shader(s_fsNames[i]);
-        /* the MSAA depth resolve is GLSL 4.50 (textureSamples): an OpenGL
-         * 4.3 or 4.4 driver refuses it, and without it no MSAA value is
-         * offered (rd_aa_supported_mask); the supersampling ones stay */
-        ok = ok && (g_rd.fs[i].id || i == RD_FS_DEPTH_RESOLVE);
-        if (i == RD_FS_DEPTH_RESOLVE && !g_rd.fs[i].id) {
-            rd__log("msaa: depth_resolve_ps was not made on this device (the line above says "
-                    "why): no MSAA value is offered, the supersampling ones are");
+        /* the MSAA epoch's resolves (blit.hlsl: Texture2DMS read at each
+         * sample): a backend that cannot make one leaves MSAA out of
+         * rd_aa_supported_mask, the supersampling values stay */
+        const bool msaaResolve = i == RD_FS_DEPTH_RESOLVE || i == RD_FS_MSAA_RESOLVE;
+        ok = ok && (g_rd.fs[i].id || msaaResolve);
+        if (msaaResolve && !g_rd.fs[i].id) {
+            rd__log("msaa: %s was not made on this device (the line above says why): no MSAA "
+                    "value is offered, the supersampling ones are",
+                    s_fsNames[i]);
         }
     }
     /* set 0: the Original samplers (one level); sets 1 and 2: the Enhanced
@@ -569,11 +572,21 @@ static struct {
     bool ended;                      /* it closed this replay (no re-entry) */
     bool internal;                   /* the epoch's own transitions of SCENE (no hook) */
     bool colorLive, depthLive;       /* the pair's colour / depth hold the picture */
+    /* msaaEnd is recording the close (the open pass, a pending clear or
+     * shadow reset, the resolve): a transition of SCENE's textures meanwhile
+     * does not close the epoch again (the hook) */
+    bool closing;
+    /* the epoch cleared SCENE_MS's depth (a pass into it with the depth's
+     * load op CLEAR; the last such clear's value): the resolve's
+     * covered-majority rule tells an uncovered sample by that depth
+     * (msaa_resolve_ps); without one the rule is off */
+    bool hasClear;
+    float clearDepth;
     bool failLogged;
     struct Replay *r;
 } s_ms;
 
-static void msaaEnd(struct Replay *r);
+static void msaaEnd(struct Replay *r, int cause); /* cause: RD_MSAA_CLOSE_* */
 
 static bool s_fogResolvedForced; /* rd__msaa_test_fog_resolved */
 
@@ -591,9 +604,9 @@ void rd__transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState wan
      * into SCENE_MS (read, copied, drawn single-sampled) closes it first,
      * resolving the picture into them (msaaEnd); even a transition to the
      * state they are in (the epoch put them in their attachment states) */
-    if (s_ms.active && !s_ms.internal && t.id != 0 &&
+    if (s_ms.active && !s_ms.internal && !s_ms.closing && t.id != 0 &&
         (t.id == s_ms.sceneColor || t.id == s_ms.sceneDepth) && cl.id == s_cl.id) {
-        msaaEnd(s_ms.r);
+        msaaEnd(s_ms.r, RD_MSAA_CLOSE_READ);
     }
     if (!t.id || *cur == want) {
         return;
@@ -1118,7 +1131,7 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
 static bool msaaPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, uint32_t did);
 
 static void msaaAttach(RdTargetRec *c, RdTargetRec *d, RhiLoadOp colorLoad, RhiLoadOp depthLoad,
-                       RhiTexture *colorTex, RhiTexture *depthTex);
+                       float clearDepth, RhiTexture *colorTex, RhiTexture *depthTex);
 
 static bool depthWantsReadable(const RdTargetRec *c, const RdTargetRec *d);
 
@@ -1306,7 +1319,10 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
     const bool readable = wantReadable && !ms;
     const bool depthRead = !ms && !storage && depthWantsReadable(c, d);
     if (ms) {
-        msaaAttach(c, d, colorLoad, depthLoad, &colorTex, &depthTex);
+        msaaAttach(c, d, colorLoad, depthLoad, clearDepth, &colorTex, &depthTex);
+        /* SCENE_MS's stencil is never read after its pass (the shadow
+         * window's stencil is SCENE's own, the epoch closed before it) */
+        stencilStore = RHI_STORE_DONT_CARE;
     } else {
         rd__transition(s_cl, c->color, &c->colorState,
                        storage    ? RHI_STATE_STORAGE
@@ -1383,11 +1399,14 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
  *    COLCLAMP 0 wrap's snapshot, a pass binding SCENE's depth with another
  *    colour (the shadow count) or SCENE with another depth, and the end of
  *    the replay (dumps and readbacks then read the resolved SCENE);
- *  - closing resolves: the colour by rhi_cmd_resolve_color (the mean of the
- *    samples) into SCENE's colour, the depth by depth_resolve_ps (the
- *    smallest sample: the farthest under GEQUAL) into SCENE's depth, each
- *    only when the epoch drew it.  Everything after draws single-sampled;
- *    the epoch does not open again in the replay.  The smallest because the
+ *    in gameplay the shadow count's pass in list 3 (rd__msaa_close_note);
+ *  - closing (msaaEnd, once: s_ms.closing) records what is open into
+ *    SCENE_MS and a pending shadow reset, then resolves (docs/port/MSAA.md):
+ *    colour and depth by msaa_resolve_ps (the covered-majority rule against
+ *    the epoch's clear depth), the colour alone by rhi_cmd_resolve_color,
+ *    the depth alone by depth_resolve_ps.  Everything after draws
+ *    single-sampled; the epoch does not open again in the replay.  The
+ *    depth is the smallest (covered) sample because the
  *    sample patterns are centred on the pixel centre: on a plane it is at
  *    or below the centre's depth, so a surface the game draws again after
  *    the close with GEQUAL against SCENE's depth (the flare mask's and the
@@ -1407,7 +1426,8 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
  *    msaaSpriteExpand), so clears and backdrops keep full coverage; the
  *    per-sample fog's sprite too (doFog);
  *  - the stencil of SCENE_MS is not the shadow window's: the shadow
- *    commands draw on SCENE's own depth after the epoch closed. */
+ *    commands draw on SCENE's own depth after the epoch closed, so the
+ *    passes into SCENE_MS do not store it. */
 static void msaaFree(void)
 {
     if (s_ms.color.id) {
@@ -1430,8 +1450,8 @@ void rd__msaa_free(void)
  * size (made or remade here); the epoch closed. */
 static void msaaFrameBegin(Replay *r)
 {
-    s_ms.active = s_ms.ended = s_ms.internal = false;
-    s_ms.colorLive = s_ms.depthLive = false;
+    s_ms.active = s_ms.ended = s_ms.internal = s_ms.closing = false;
+    s_ms.colorLive = s_ms.depthLive = s_ms.hasClear = false;
     s_ms.r = r;
     s_ms.want = 1;
     s_ms.sceneColor = s_ms.sceneDepth = 0;
@@ -1504,6 +1524,7 @@ static void msaaFullscreen(RdFsId fs, RhiFormat colorFmt, RhiTexture src, RhiVie
     cb.tex[1] = (float)h;
     cb.tex[2] = 1.0f / (float)w;
     cb.tex[3] = 1.0f / (float)h;
+    cb.param[0] = (float)s_ms.samples; /* depth_resolve_ps's count */
     RhiBinding b[3];
     memset(b, 0, sizeof(b));
     b[0].slot = 1;
@@ -1586,52 +1607,63 @@ static bool msaaPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, ui
         return true; /* opened (msaaAttach) once the pass before has ended */
     }
     if (s_ms.active && (cScene || (d && did == scene))) {
-        msaaEnd(r);
+        msaaEnd(r, cScene ? RD_MSAA_CLOSE_DEPTH : RD_MSAA_CLOSE_SHADOW);
     }
     return false;
 }
 
 /* Closes the epoch: the open pass (and a clear pending on SCENE) recorded
- * into SCENE_MS, then the colour and depth the epoch drew resolved into
- * SCENE's own textures */
-static void msaaEnd(struct Replay *r)
+ * into SCENE_MS, a shadow reset pending on SCENE's depth recorded on it,
+ * then the colour and depth the epoch drew resolved into SCENE's own
+ * textures, once (s_ms.closing) */
+static void msaaEnd(struct Replay *r, int cause)
 {
-    if (!s_ms.active || s_ms.internal) {
+    if (!s_ms.active || s_ms.internal || s_ms.closing) {
         return;
     }
+    s_ms.closing = true;
     endPass(r); /* the run, the pass, a pending clear: still into SCENE_MS */
     s_ms.active = false;
     s_ms.ended = true;
     RdTargetRec *ts = rd__target_rec(RD_TARGET_SCENE + 1);
     if (!ts || ts->color.id != s_ms.sceneColor || ts->depth.id != s_ms.sceneDepth) {
+        s_ms.closing = false;
         return;
     }
     s_ms.internal = true;
+    g_rdPerf.msaaCloseAt = rd__msaa_close_note(cause);
+    const bool rule = s_ms.colorLive && s_ms.depthLive && g_rd.fs[RD_FS_MSAA_RESOLVE].id;
     rd__perf_pass(s_cl, RD_PERF_PASS_MSAA, RD_TARGET_SCENE + 1u, ts->tw, ts->th, RD_PERF_POST_MSAA);
     rd__perf_post(s_cl, RD_PERF_POST_MSAA); /* the resolves' GPU time */
-    if (s_ms.colorLive) {
-        rd__transition(s_cl, s_ms.color, &s_ms.colorState, RHI_STATE_COPY_SRC);
-        rd__transition(s_cl, ts->color, &ts->colorState, RHI_STATE_COPY_DST);
-        rhi_cmd_resolve_color(s_cl, s_ms.color, ts->color);
-    }
-    if (s_ms.depthLive) {
-        rd__transition(s_cl, s_ms.depth, &s_ms.depthState, RHI_STATE_SHADER_READ);
-        rd__transition(s_cl, ts->depth, &ts->depthState, RHI_STATE_DEPTH_WRITE);
-        RhiRenderPassDesc p;
-        memset(&p, 0, sizeof(p));
-        p.depth.texture = ts->depth;
-        p.depth.depthLoad = RHI_LOAD_LOAD; /* every texel is written; the stencil kept */
-        p.depth.stencilLoad = RHI_LOAD_LOAD;
-        p.width = ts->tw;
-        p.height = ts->th;
-        rhi_cmd_begin_render_pass(s_cl, &p);
-        setViewport(ts->tw, ts->th);
-        msaaFullscreen(RD_FS_DEPTH_RESOLVE, RHI_FMT_UNKNOWN, s_ms.depth, RHI_ASPECT_DEPTH, ts->tw,
-                       ts->th);
-        rhi_cmd_end_render_pass(s_cl);
+    if (rule) {
+        rd__msaa_resolve(s_cl, ts, s_ms.color, &s_ms.colorState, s_ms.depth, &s_ms.depthState,
+                         s_ms.samples, s_ms.hasClear, s_ms.clearDepth);
+    } else {
+        if (s_ms.colorLive) {
+            rd__transition(s_cl, s_ms.color, &s_ms.colorState, RHI_STATE_COPY_SRC);
+            rd__transition(s_cl, ts->color, &ts->colorState, RHI_STATE_COPY_DST);
+            rhi_cmd_resolve_color(s_cl, s_ms.color, ts->color);
+        }
+        if (s_ms.depthLive) {
+            rd__transition(s_cl, s_ms.depth, &s_ms.depthState, RHI_STATE_SHADER_READ);
+            rd__transition(s_cl, ts->depth, &ts->depthState, RHI_STATE_DEPTH_WRITE);
+            RhiRenderPassDesc p;
+            memset(&p, 0, sizeof(p));
+            p.depth.texture = ts->depth;
+            p.depth.depthLoad = RHI_LOAD_LOAD; /* every texel is written; the stencil kept */
+            p.depth.stencilLoad = RHI_LOAD_LOAD;
+            p.width = ts->tw;
+            p.height = ts->th;
+            rhi_cmd_begin_render_pass(s_cl, &p);
+            setViewport(ts->tw, ts->th);
+            msaaFullscreen(RD_FS_DEPTH_RESOLVE, RHI_FMT_UNKNOWN, s_ms.depth, RHI_ASPECT_DEPTH,
+                           ts->tw, ts->th);
+            rhi_cmd_end_render_pass(s_cl);
+        }
     }
     rd__perf_post(s_cl, r ? r->perfPost : -1);
     s_ms.internal = false;
+    s_ms.closing = false;
     g_rdPerf.msaaResolves++;
 }
 
@@ -1639,7 +1671,7 @@ static void msaaEnd(struct Replay *r)
  * attachment states, an attachment the epoch has not drawn and the pass
  * loads first spread from SCENE (msaaUpsample) */
 static void msaaAttach(RdTargetRec *c, RdTargetRec *d, RhiLoadOp colorLoad, RhiLoadOp depthLoad,
-                       RhiTexture *colorTex, RhiTexture *depthTex)
+                       float clearDepth, RhiTexture *colorTex, RhiTexture *depthTex)
 {
     if (!s_ms.active) {
         /* the epoch opens: SCENE's textures in their attachment states, so
@@ -1652,7 +1684,7 @@ static void msaaAttach(RdTargetRec *c, RdTargetRec *d, RhiLoadOp colorLoad, RhiL
         }
         s_ms.internal = false;
         s_ms.active = true;
-        s_ms.colorLive = s_ms.depthLive = false;
+        s_ms.colorLive = s_ms.depthLive = s_ms.hasClear = false;
     }
     if (!s_ms.colorLive && colorLoad == RHI_LOAD_LOAD) {
         msaaUpsample(c, 0);
@@ -1665,6 +1697,12 @@ static void msaaAttach(RdTargetRec *c, RdTargetRec *d, RhiLoadOp colorLoad, RhiL
             msaaUpsample(d, 1);
         }
         s_ms.depthLive = true;
+        if (depthLoad == RHI_LOAD_CLEAR) {
+            /* the whole depth cleared: the resolve's "uncovered" (the last
+             * clear's value, as the hardware stores it: a float) */
+            s_ms.hasClear = true;
+            s_ms.clearDepth = clearDepth;
+        }
         rd__transition(s_cl, s_ms.depth, &s_ms.depthState, RHI_STATE_DEPTH_WRITE);
         *depthTex = s_ms.depth;
     }
@@ -4816,17 +4854,19 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     if (fogEpoch) {
         /* which depth the fog of an MSAA frame read, once a run each
-         * (DIVERGENCES.md VD-22): per sample, or the resolve's smallest
-         * sample, where a pixel with one sample the triangles left
-         * uncovered (the clear's Z 0) takes the fog table's entry 0 */
+         * (DIVERGENCES.md VD-22): per sample, or the resolve's, each
+         * pixel's smallest covered sample unless more than half its samples
+         * were uncovered (the clear's depth: then the fog table's entry 0
+         * over the whole pixel; msaa_resolve_ps) */
         static bool loggedMs, loggedResolved; /* rd__log_once's flags are full */
         bool *logged = fogMs ? &loggedMs : &loggedResolved;
         if (!*logged) {
             *logged = true;
-            rd__log("fog: in the MSAA epoch %s", fogMs ? "per sample (each sample's own depth)"
-                                                       : "on the resolved picture (the smallest "
-                                                         "sample's depth: a pixel with one "
-                                                         "uncovered sample takes full fog)");
+            rd__log("fog: in the MSAA epoch %s",
+                    fogMs ? "per sample (each sample's own depth)"
+                          : "on the resolved picture (each pixel's smallest covered sample unless "
+                            "more than half its samples were uncovered: only those take full "
+                            "fog)");
         }
     }
 
@@ -5858,7 +5898,8 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
             break;
         }
     }
-    msaaEnd(&r); /* an epoch still open: SCENE resolved before anything reads it */
+    msaaEnd(&r,
+            RD_MSAA_CLOSE_END); /* an epoch still open: SCENE resolved before anything reads it */
     endPass(&r);
     s_ms.r = NULL;
     rd__diag_frame(f, s_ms.want);
