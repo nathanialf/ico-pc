@@ -154,6 +154,8 @@ extern int systemStatus[]; /* common/src/main.c: [0] the video mode word */
    picker and copies it, and its progress is drawn in the game's window. */
 #if defined(__ANDROID__) && !defined(ICO_HEADLESS)
 #define ICO_ANDROID_UI 1
+#include "strings.h" /* port/ui: the first start's copy texts (UI_STR_ISO_*) */
+#include "ui_lang.h" /* port/ui: their language before a disc is chosen */
 #endif
 
 #if defined(__linux__) && !defined(__ANDROID__) && !defined(ICO_HEADLESS)
@@ -912,8 +914,10 @@ static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char 
 }
 
 /* Which disc the image is, by its boot file (SYSTEM.CNF's BOOT2), then
-   its SHA-1 against that disc's: the row, or a box (fatal) for an image
-   that is none of the discs or not an unmodified copy of one. */
+   its SHA-1 against that disc's (for a disc with no image SHA-1 on file, the
+   magazine demo, its game ELF's SHA-1 and DATA.DF's manifest, the
+   extractor's rule): the row, or a box (fatal) for an image that is none of
+   the discs or not an unmodified copy of one. */
 static const IcoDiscInfo *verify_iso(const char *iso)
 {
     const IcoDiscInfo *disc;
@@ -943,6 +947,22 @@ static const IcoDiscInfo *verify_iso(const char *iso)
     }
     fprintf(stderr, "ico_pc: the image's boot file is %s: %s (%s)\n", boot, disc->id,
             disc->product_name);
+    if (disc->iso_sha1 == NULL) {
+        /* no image hash on file (the 4.4 GB magazine demo): the game ELF and DATA.DF,
+           as the extractor accepts it (extract.h) */
+        fprintf(stderr, "ico_pc: %s has no image SHA-1 on file; checking %s and %s...\n", disc->id,
+                disc->elf_path, disc->df_path);
+        if (ico_extract_verify_files(iso, disc, hex, why, sizeof(why)) != 0) {
+            fprintf(stderr, "ico_pc: %s\n", why);
+            ico_host_fatal(log_file(), ICO_WRONG_DISC_TEXT, iso, ico_disc_list_text());
+            return NULL;
+        }
+        secs = (double)(clock() - start) / CLOCKS_PER_SEC;
+        fprintf(stderr, "ico_pc: %s SHA-1 %s and DATA.DF's manifest match, %.1f s\n",
+                disc->elf_path, hex, secs);
+        fprintf(stderr, "ico_pc: disc image verified (%s)\n", disc->id);
+        return disc;
+    }
     /* the ISO's bytes, also for a .chd or .bin (extract.h) */
     fprintf(stderr, "ico_pc: checking the disc image's SHA-1...\n");
     if (ico_extract_image_sha1(iso, hex, &bytes, why, sizeof(why)) != 0) {
@@ -951,11 +971,7 @@ static const IcoDiscInfo *verify_iso(const char *iso)
     }
     secs = (double)(clock() - start) / CLOCKS_PER_SEC;
     fprintf(stderr, "ico_pc: SHA-1 %s, %llu bytes, %.1f s\n", hex, (unsigned long long)bytes, secs);
-    if (disc->iso_sha1 == NULL) {
-        /* the magazine demo's image has no hash on file: the extractor accepts it by its
-           boot ELF and DATA.DF (extract.h) */
-        fprintf(stderr, "ico_pc: %s has no image SHA-1 on file; SHA-1 %s noted\n", disc->id, hex);
-    } else if (strcmp(hex, disc->iso_sha1) != 0) {
+    if (strcmp(hex, disc->iso_sha1) != 0) {
         /* the checksums are for the log; the box says what to use instead */
         fprintf(stderr, "ico_pc: the image's SHA-1 is %s, %s's is %s\n", hex, disc->id,
                 disc->iso_sha1);
@@ -1010,15 +1026,18 @@ static int use_iso_mode(const IcoIni *ini)
 static void progress_ui_open(void) {}
 
 /* 1 when the player asked to stop.  pct < 0: a step with no byte count,
-   shown as its words alone with no bar. */
-static int progress_ui_update(const char *phase, int pct)
+   shown as its words alone with no bar; total: the phase's bytes (the copy
+   of an image over ICO_ISO_LONG_COPY_BYTES says it takes minutes). */
+static int progress_ui_update(const char *phase, int pct, uint64_t total)
 {
-    const char *words = strcmp(phase, "copy") == 0     ? "Copying the disc image into the app"
-                        : strcmp(phase, "save") == 0   ? "Saving the copy"
-                        : strcmp(phase, "open") == 0   ? "Opening the disc image"
-                        : strcmp(phase, "hash") == 0   ? "Checking the disc image"
-                        : strcmp(phase, "finish") == 0 ? "Finishing the game's data"
-                                                       : "Preparing the game's data";
+    const char *words =
+        strcmp(phase, "copy") == 0
+            ? ui_str(total > ICO_ISO_LONG_COPY_BYTES ? UI_STR_ISO_COPYING_LONG : UI_STR_ISO_COPYING)
+        : strcmp(phase, "save") == 0   ? "Saving the copy"
+        : strcmp(phase, "open") == 0   ? "Opening the disc image"
+        : strcmp(phase, "hash") == 0   ? "Checking the disc image"
+        : strcmp(phase, "finish") == 0 ? "Finishing the game's data"
+                                       : "Preparing the game's data";
 
     return ico_window_progress("Setting up ICO (first start only)", words, pct);
 }
@@ -1048,7 +1067,7 @@ static void progress_ui_open(void)
 }
 
 /* 1 when the player closed the window (cancel). */
-static int progress_ui_update(const char *phase, int pct)
+static int progress_ui_update(const char *phase, int pct, uint64_t total)
 {
     SDL_Event ev;
     char title[128];
@@ -1135,7 +1154,7 @@ static int extract_progress(void *ctx, const char *phase, uint64_t done, uint64_
 
         if (now - p->ui_at >= 0.05 || done == total) {
             p->ui_at = now;
-            return progress_ui_update(phase, pct);
+            return progress_ui_update(phase, pct, total);
         }
     }
 #endif
@@ -1195,7 +1214,16 @@ static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, i
     }
     fprintf(stderr, "ico_pc: disc image chosen in the file picker: %s\n", uri);
     memset(&prog, 0, sizeof(prog));
-    r = ico_iso_import(uri, iso, ICO_PATH_MAX, extract_progress, &prog, why, sizeof(why));
+    /* the copy's words in the player's [ui] language when one is set; otherwise English
+       until the disc, which decides the language, is read (select_disc) */
+    ui_set_language(ui_lang_resolve(ico_opt_ui_language(), -1, 0, 2));
+    {
+        const IcoIsoImportTexts texts = {ui_str(UI_STR_ISO_NEED_SPACE),
+                                         ui_str(UI_STR_ISO_COPY_FAILED)};
+
+        r = ico_iso_import(uri, iso, ICO_PATH_MAX, extract_progress, &prog, &texts, why,
+                           sizeof(why));
+    }
     if (r == ICO_ISO_IMPORT_CANCELLED) {
         return 1;
     }
@@ -1634,16 +1662,17 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
                        iso, cand[0]);
     }
     fprintf(stderr,
-            "ico_pc: first run: %s (%s, boot file %s): disc image SHA-1 %s, %llu bytes; "
+            "ico_pc: first run: %s (%s, boot file %s): disc image %s %s, %llu bytes; "
             "accepted by %s (%s%s)\n"
             "ico_pc: first run: %u files, %llu bytes, into %s (%llu bytes) in %.1f s "
             "(SHA-1 %.1f s, copy %.1f s)\n",
-            want->id, want->product_name, want->boot_elf, res.iso_sha1,
+            want->id, want->product_name, want->boot_elf,
+            res.iso_hashed ? "SHA-1" : "not hashed (none on file), game ELF SHA-1", res.iso_sha1,
             (unsigned long long)res.iso_size, res.rule,
             strcmp(res.rule, ICO_RULE_ISO_SHA1) == 0 ? "the image's SHA-1" : want->elf_path,
-            strcmp(res.rule, ICO_RULE_ISO_SHA1) == 0
-                ? ""
-                : "'s SHA-1 and DATA.DF's manifest: a re-dump of the disc",
+            strcmp(res.rule, ICO_RULE_ISO_SHA1) == 0 ? ""
+            : res.iso_hashed ? "'s SHA-1 and DATA.DF's manifest: a re-dump of the disc"
+                             : "'s SHA-1 and DATA.DF's manifest",
             (unsigned)res.files, (unsigned long long)res.bytes, cand[0],
             (unsigned long long)res.archive_bytes, res.hash_seconds + res.extract_seconds,
             res.hash_seconds, res.extract_seconds);
