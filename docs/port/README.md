@@ -20,6 +20,7 @@ In reading order.
 | [GS.md](GS.md) | What the port adds under the game's GS layer: the register decoder and the hand-offs to rd. |
 | [VU1_PROGRAMS.md](VU1_PROGRAMS.md) | The five VU1 microprograms, their shaders, their CPU oracles and the region rule. |
 | [RENDER.md](RENDER.md) | rd: recording, state, the replay, pipelines, post passes, dumps and the replay tool. |
+| [MSAA.md](MSAA.md) | The MSAA resolve: where the multisampled part of a frame ends, the covered-majority rule, one resolve a picture, its lines and tests. |
 | [WORK_BUFFERS.md](WORK_BUFFERS.md) | The post effects' work buffers: sizes per frame width, the glow chain's rects, its left edge on a wide frame, what stays across frames and the work clear. |
 | [DISPLAY.md](DISPLAY.md) | The native frame, the video options and presets, pacing and the vsync lock, presentation, interpolation and the CRT filter. |
 | [RHI.md](RHI.md) | The render hardware interface and its Vulkan, Direct3D 12, Direct3D 11, OpenGL and MoltenVK backends. |
