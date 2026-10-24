@@ -7,6 +7,7 @@ The targets:
     pal    PAL retail, SCES-50760               SCES_507.60
     jpn    Japanese retail, SCPS-11003 (1.02)   SCPS_110.03
     kor    Korean retail, SCPS-56001            SCPS_560.01
+    cn     Asian retail, SCPS-55001             SCPS_550.01
     ntsc   USA retail, SLUS-20218               SCUS_971.13
     aug6   Aug-6-2001 prototype                 SCUS_971.13
     jun26  Jun-26-2001 demo, on the US          CUS97113/SCPS_000.00
@@ -35,7 +36,7 @@ import sys
 from pathlib import Path
 
 # Detection order.
-VERSIONS = ("pal", "jpn", "kor", "ntsc", "aug6", "jun26")
+VERSIONS = ("pal", "jpn", "kor", "cn", "ntsc", "aug6", "jun26")
 
 # Per-target disc image.
 #   region  : how messages describe the disc
@@ -75,6 +76,15 @@ DISCS = {
         "image": "Ico_KOR.iso",
         "cue": "",
         # The Korean disc ships no map or listing either.
+        "extras": ("SYSTEM.CNF",),
+    },
+    "cn": {
+        "region": "Asian retail",
+        "product": "SCPS-55001",
+        "where": "Asia",
+        "image": "Ico_CN.iso",
+        "cue": "",
+        # The Asian (Traditional Chinese) disc ships no map or listing.
         "extras": ("SYSTEM.CNF",),
     },
     "ntsc": {
