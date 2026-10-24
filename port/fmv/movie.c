@@ -215,7 +215,7 @@ static int find_in_datadf(const char *base, uint32_t *lsn, uint32_t *size)
     uint32_t count, bytes, secs, i;
     int found = -1;
 
-    if (vfs == NULL || ico_vfs_stat(vfs, "DFDATAS/DATA.DF", &df) != 0) {
+    if (vfs == NULL || ico_vfs_stat(vfs, ico_vfs_df_path(vfs), &df) != 0) {
         return -1;
     }
     if (ico_vfs_read_sectors(vfs, df.lsn, 1, sec) != 0) {

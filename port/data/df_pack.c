@@ -13,7 +13,6 @@
 #include "miniz_tinfl.h"
 #include "../include/ico_endian.h"
 
-#define DF_PATH "DFDATAS/DATA.DF"
 #define DF_ENTRY 40
 #define PACK_HEADER 16
 #define PACK_ENTRY 0x224
@@ -68,7 +67,9 @@ static int nameEq(const char *a, const char *b)
 /* x's DATA.DF opened into *df and its directory read (once) */
 static int dirLoad(IcoDfIndex *x, IcoVfsFile *df)
 {
-    if (x->vfs == NULL || ico_vfs_open(x->vfs, DF_PATH, df) != 0) {
+    /* DATA.DF where the volume's disc keeps it: DFDATAS/, or under the game's folder
+       (vfs.h ico_vfs_df_path) */
+    if (x->vfs == NULL || ico_vfs_open(x->vfs, ico_vfs_df_path(x->vfs), df) != 0) {
         return -1;
     }
     if (x->dirCount >= 0) {
