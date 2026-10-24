@@ -1173,10 +1173,13 @@ typedef enum RdFsId {
     /* MSAA (rd_replay.c, the MSAA epoch): fog_lut_ms_ps, the fog per sample
      * reading the multisampled depth (created only with sample-rate
      * shading); depth_resolve_ps and depth_upsample_ps, the scene depth
-     * between its multisampled and single-sampled textures */
+     * between its multisampled and single-sampled textures; msaa_resolve_ps,
+     * the colour and the depth resolved together under the covered-majority
+     * rule (docs/port/MSAA.md) */
     RD_FS_FOG_MS,
     RD_FS_DEPTH_RESOLVE,
     RD_FS_DEPTH_UPSAMPLE,
+    RD_FS_MSAA_RESOLVE,
     /* vu_pre_ps: the vertex pre-pass's records into its three RGBA32_UINT
      * targets (rd_replay_vu.c rd__vu_prepass) */
     RD_FS_VU_PRE,
@@ -1677,6 +1680,10 @@ uint32_t rd__enumerate_reachable_fog(RdPipeKeyInt *out, uint32_t max, uint32_t n
  * crack_fill_ps with the scene depth (D32F_S8) attached, its test ALWAYS
  * with writes (SV_Depth), no blend; count 1 crack_count_ps alone. */
 RdPipeKeyInt rd__crack_fill_key(int count);
+/* the MSAA epoch's resolve into SCENE (rd_replay.c msaaEnd): msaa_resolve_ps
+ * into RGBA8 with D32F_S8 (depthOnly 0), depth_resolve_ps into D32F_S8 alone
+ * (1); test ALWAYS with Z writes, in the fog's family and the start-up set */
+RdPipeKeyInt rd__msaa_resolve_key(int depthOnly);
 /* rd_replay.c: frees the fog's LUT texture (rd__gpu_shutdown); the fog samples
  * the depth target itself. */
 void rd__fog_shutdown(void);
