@@ -136,6 +136,7 @@ add_library(ico_render STATIC
     rd_interp.c # interpolation between the retained frames
     rd_join.c
     rd_mesh.c
+    rd_msaa.c # the MSAA epoch's resolve pass (the covered-majority rule) and its close line
     rd_passring.c # the last passes recorded, for the device-loss report
     rd_profile.c # the device profile: what this device class gets 
     rd_content_hide.c # the content table: stage geometry made for the 4:3 picture
