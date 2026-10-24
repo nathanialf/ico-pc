@@ -7,12 +7,16 @@ reference copy) are, on the host, empty arrays that port/data/tables.c
 fills at boot from the ELF on the user's disc. This script writes what
 that loader needs to know, all of it types, offsets, sizes and names, from
 the same inputs gen_data_c.py reads, once per disc of config/regions.txt
-(a descriptor set; the slug is pal, jpn or kor):
+(a descriptor set; the slug is a row's: pal, jpn, kor; or, with --version, a
+row gen_data_c.PENDING_ROWS holds until config/regions.txt lists it, ntsc):
 
   config/data_members.<slug>.txt  each member's rows: section and EE range
   config/data_schema.<slug>.txt   each row's record type, header and count,
-                                  and (non-PAL) the defaults of the PAL
-                                  fields the disc's records lack
+                                  and (non-PAL) the map rows: default,
+                                  extend, drop, narrow, extra (gen_data_c
+                                  PORT_VERBS; docs/port/DATA.md "The map
+                                  rows"); every schema's extend rows name
+                                  the host-only fields all sets know
   the record headers              the host records, PAL's layout: the PAL set
                                   is the identity, laid out by the EE's rules
                                   (gen_data_c.Header)
@@ -57,6 +61,10 @@ identity map would change nothing and cost a loop per word).
 Modes:
 
   tools/gen_data_desc.py               rewrite port/data/gen/ (every set)
+  tools/gen_data_desc.py --version SLUG [--check]
+                                       a pending row's set only: <slug>/ as the
+                                       table with the pending rows up to it gives
+                                       it (the shared files stay the listed rows')
   tools/gen_data_desc.py --check       exit 1 if port/data/gen/ is stale; never
                                        opens an ELF, so the files are shown to
                                        be a function of committed text only;
@@ -169,6 +177,22 @@ class Record:
         self.word_fields = []
         flatten(self.ty, "", 0, self.word_fields, words=True)
         self.pointers = has_pointer(self.ty)
+        # host-only fields (a schema's `extend` rows): after PAL's own, no
+        # bytes of PAL's record; ee_fields and ee_size are PAL's record
+        self.host_only = host_only().get(s["type"], set())
+        self.ee_fields = [f for f in self.fields if L.top_name(f.path) not in self.host_only]
+        self.ee_size = self.ty.size
+        if self.host_only:
+            self.ee_size = L.ee_part_size(self.ty, self.host_only, s["type"])
+
+
+_HOST_ONLY = []
+
+
+def host_only():
+    if not _HOST_ONLY:
+        _HOST_ONLY.append(g.host_only())
+    return _HOST_ONLY[0]
 
 
 # ------------------------------------------------------------ manifest -------
@@ -194,8 +218,8 @@ def set_pointer_fields(slug, typ, host_rec, ee_recs):
     path and kind on every set (record_map checks it), so the host type says
     which point at chars."""
     chars = char_targets(host_rec.ty)
-    fields = host_rec.fields if slug == "pal" else ee_recs[typ].fields
-    size = host_rec.ty.size if slug == "pal" else ee_recs[typ].size
+    fields = host_rec.ee_fields if slug == "pal" else ee_recs[typ].fields
+    size = host_rec.ee_size if slug == "pal" else ee_recs[typ].size
     return [(f.path, f.ee_off, f.kind == "FUNC", chars.get(f.path, False))
             for f in fields if f.kind in ("FUNC", "DATA")], size
 
@@ -238,6 +262,8 @@ def compute_manifest(elf_path, slug="pal"):
                         kind = "func" if func else "obj"
                         if refs.setdefault((v, kind), name) != name:
                             fail(f"0x{v:08X} names both {refs[(v, kind)]} and {name}")
+    if slug != "pal":
+        check_narrow(elf_path, slug, ee_recs, host)
     for (v, kind), name in sorted(refs.items()):
         lines.append(f"{kind} 0x{v:08x} {name}")
     rel = manifest_path(slug).relative_to(ROOT).as_posix()
@@ -257,6 +283,37 @@ def compute_manifest(elf_path, slug="pal"):
         f"{sum(1 for k in refs if k[1] == 'obj')} objects.",
     ]
     return "\n".join(head + lines) + "\n"
+
+
+def check_narrow(elf_path, slug, ee_recs, host):
+    """Every value a `narrow` row's field holds on the disc fits the host's
+    narrower field (its low bits are all the loader keeps)."""
+    from elftools.elf.elffile import ELFFile
+    with version(slug):
+        narrow = g.parse_port_rows()["narrow"]
+    if not narrow:
+        return
+    with open(elf_path, "rb") as fh:
+        elf = ELFFile(fh)
+        for m, rows in members(slug):
+            for s, r in rows:
+                fields = [p for mm, p in narrow if mm == m]
+                if is_pool(s) or not fields:
+                    continue
+                rec = ee_recs[s["type"]]
+                hf = {f.path: f for f in host[s["type"]].fields}
+                d = g.rom_bytes(elf, r["lo"], r["hi"], r["section"])
+                start = g.start_of(s, r)
+                for p in fields:
+                    src, h = rec.by_path[p], hf[p]
+                    bits = 8 * h.ee_size
+                    lo, hi = (-(1 << (bits - 1)), 1 << (bits - 1)) if h.signed else (0, 1 << bits)
+                    for i in range(s["count"] or 1):
+                        at = start + i * rec.size + src.ee_off
+                        v = int.from_bytes(d[at:at + src.ee_size], "little", signed=src.signed)
+                        if not lo <= v < hi:
+                            fail(f"{m} [{i}].{p} at 0x{r['lo'] + at:08X}: {v} does not fit the "
+                                 f"host's {h.ee_size}-byte field (narrow {m} {p})")
 
 
 def parse_manifest(slug="pal"):
@@ -303,6 +360,8 @@ class Set:
         with version(slug):
             layout = g.SymbolMap()
         host = host_records()
+        with version(slug):
+            self.extras = g.parse_port_rows()["extra"]
         self.tables = []  # (member, schema row, table row, host Record or None, crc)
         self.headers = []
         used = set()
@@ -318,8 +377,11 @@ class Set:
                 rec = None
                 if not is_pool(s):
                     rec = host.get(s["type"])
+                    if rec is None and m in self.extras:
+                        rec = extra_record(s)
                     if rec is None:
-                        fail(f"{slug}: {m}: record type {s['type']} is not one of PAL's")
+                        fail(f"{slug}: {m}: record type {s['type']} is not one of PAL's (an "
+                             f"'extra {m} {s['type']} <count>' row declares a table PAL lacks)")
                 self.tables.append((m, s, r, rec, crcs[key]))
         if len(crcs) != len(used):
             fail(f"{manifest_path(slug).relative_to(ROOT)} has rows the table does not")
@@ -344,8 +406,20 @@ class Set:
 
     def ee_size(self, rec):
         if self.slug == "pal":
-            return rec.ty.size
+            return rec.ee_size
         return self.ee_recs[rec.schema["type"]].size
+
+    def load_counts(self, names):
+        """A count-of row whose count the sets cannot all derive (count_rows):
+        also a record row, the int the disc's ELF holds at its symbol, after
+        its pool row."""
+        out = []
+        for t in self.tables:
+            out.append(t)
+            m, s, r, rec, crc = t
+            if s is not None and s["count_of"] and s["syms"][0][0] in names:
+                out.append((m, s, r, host_records()["int"], crc))
+        self.tables = out
 
     def record_types(self):
         out = []
@@ -355,8 +429,91 @@ class Set:
         return out
 
 
-def all_sets():
-    return [Set(r) for r in g.regions()]
+_EXTRA = {}
+
+
+def extra_record(s):
+    """The host Record of a table PAL has none of (an `extra` row)."""
+    if s["type"] not in _EXTRA:
+        _EXTRA[s["type"]] = Record(s)
+    return _EXTRA[s["type"]]
+
+
+def all_sets(upto=None):
+    """The sets of config/regions.txt's rows; upto, a slug of PENDING_ROWS:
+    followed by the pending rows up to it, as the table will list them."""
+    rows = g.regions(pending=upto is not None)
+    if upto is not None:
+        rows = rows[:[r["slug"] for r in rows].index(upto) + 1]
+    sets = [Set(r) for r in rows]
+    names = count_rows(sets)
+    for st in sets:
+        st.load_counts(names)
+    return sets
+
+
+class HostTable:
+    """A host array every set fills: PAL's tables in PAL's order, then the
+    extra tables. count: the largest set's (PAL's on the three discs before
+    the 2001 builds), None for a single object."""
+
+    def __init__(self, name, s, rec, count, member):
+        self.name, self.s, self.rec, self.count, self.member = name, s, rec, count, member
+
+
+def host_tables(sets):
+    """[HostTable] of the record tables (count-of ints a set loads among them)."""
+    out, by = [], {}
+    for st in sets:
+        for m, s, r, rec, _ in st.tables:
+            if rec is None:
+                continue
+            name = s["syms"][0][0]
+            if st is sets[0] or name in by:
+                pass
+            elif m not in st.extras:
+                fail(f"{st.slug}: {m}: {name} is not one of PAL's tables")
+            t = by.get(name)
+            if t is None:
+                count = s["count"]
+                if st is not sets[0]:
+                    typ, count = st.extras[m]
+                    if typ != s["type"]:
+                        fail(f"{st.slug}: extra {m} {typ}: its row's type is {s['type']}")
+                t = by[name] = HostTable(name, s, rec, count, m)
+                out.append(t)
+            elif (s["count"] is None) != (t.count is None):
+                fail(f"{st.slug}: {m}: {name} is an array here and a single object on another set")
+            elif s["count"] is not None and s["count"] > t.count:
+                if t.member in st.extras or st is sets[0]:
+                    fail(f"{st.slug}: {m}: {s['count']} records of {name}, its extra row holds "
+                         f"{t.count}")
+                t.count = s["count"]
+    return out
+
+
+def count_rows(sets):
+    """The count-of rows (staffroll_dat's staffRollNameDataNum) the host cannot
+    derive from its array's size as the PS2 build did: some set's count of the
+    array differs from the host array's or its `less` from another set's. Each
+    set then loads the int from its ELF (Set.load_counts)."""
+    counts = {}
+    for st in sets:
+        for _, s, _, rec, _ in st.tables:
+            if rec is not None and s["count"] is not None:
+                counts[s["syms"][0][0]] = max(counts.get(s["syms"][0][0], 0), s["count"])
+    seen, out = {}, set()
+    for st in sets:
+        for _, s, _, rec, _ in st.tables:
+            if s is None or not s["count_of"] or rec is not None:
+                continue
+            arr, less = s["count_of"]
+            cnt = [x["count"] for _, x, _, rr, _ in st.tables
+                   if x is not None and rr is not None and x["syms"][0][0] == arr]
+            name = s["syms"][0][0]
+            if cnt != [counts.get(arr)] or seen.setdefault(name, less) != less:
+                out.add(name)
+    return out
 
 
 # ------------------------------------------------------- the bit audit -------
@@ -403,7 +560,9 @@ def audit_bits(sets, root=ROOT):
             continue
         for mp in st.maps["MotionDef"]:
             if mp.how == "bitmap":
-                mapped[(st.slug, mp.host.path)] = {i for i, b in enumerate(mp.bits) if b is not None}
+                # a bit the disc has none of (a `<slug>=-` row: 0) is filled too
+                mapped[(st.slug, mp.host.path)] = \
+                    {i for i, b in enumerate(mp.bits) if b is not None} | mp.zeros
     errs = []
     files = sorted(p for p in (root / "ico2").rglob("*") if p.suffix in (".c", ".h", ".inc"))
     for p in files:
@@ -495,9 +654,19 @@ def default_bits(value, f):
     fail(f"{f.path}: a default for a {f.kind} field")
 
 
-def gen_header(sets, pal):
-    symbols = [s["syms"][0][0] for _, s, _, _, _ in pal.tables if s is not None]
-    ids = [s["syms"][0][0] for _, s, _, rec, _ in pal.tables if rec is not None]
+def table_symbols(pal, host):
+    """The tables' C names in PAL's order (pools' count-of ints among them),
+    then the extra tables'."""
+    out = []
+    for _, s, _, _, _ in pal.tables:
+        if s is not None and s["syms"][0][0] not in out:
+            out.append(s["syms"][0][0])
+    return out + [t.name for t in host if t.name not in out]
+
+
+def gen_header(sets, pal, host):
+    symbols = table_symbols(pal, host)
+    ids = [t.name for t in host]
     h = [SHARED_NOTE, "#ifndef ICO_PORT_DATA_TABLE_DESC_H", "#define ICO_PORT_DATA_TABLE_DESC_H", "",
          "#include <stdint.h>", "",
          "/* What a field of a record holds (port/data/tables.c decodes each kind). */",
@@ -607,37 +776,27 @@ def gen_header(sets, pal):
     return "\n".join(h), symbols
 
 
-def gen_defs(sets, pal):
-    headers = pal.headers
-    symbols = [s["syms"][0][0] for _, s, _, _, _ in pal.tables if s is not None]
+def host_headers(pal, host):
+    """The headers the shared files include: PAL's, then the extra tables'."""
+    return pal.headers + [t.s["header"] for t in host
+                          if t.s["header"] not in pal.headers and t.member not in
+                          [m for m, _, _, _, _ in pal.tables]]
+
+
+def gen_defs(sets, pal, host):
+    headers = host_headers(pal, host)
+    symbols = table_symbols(pal, host)
     renamed = const_declared(headers, set(symbols))
-    counts = {s["syms"][0][0]: s["count"] for _, s, _, rec, _ in pal.tables if rec is not None}
     pal_pools = {(m, r["section"]) for m, s, r, rec, _ in pal.tables if rec is None}
-    pool_size, count_of = {}, {}
+    loaded = {t.name for t in host if t.s["count_of"]}
+    pool_size = {}
     for st in sets:
         for m, s, r, rec, _ in st.tables:
-            if rec is not None:
-                name = s["syms"][0][0]
-                if name not in counts:
-                    fail(f"{st.slug}: {m}: {name} is not one of PAL's tables")
-                if (s["count"] is None) != (counts[name] is None) or \
-                        (s["count"] or 0) > (counts[name] or 0):
-                    fail(f"{st.slug}: {m}: {s['count']} records of {name}, PAL's array holds "
-                         f"{counts[name]}: the host arrays are PAL's (the largest)")
-            else:
+            if rec is None:
                 k = (m, r["section"])
                 if k not in pal_pools:
                     fail(f"{st.slug}: {m} .{r['section']}: a string pool PAL does not have")
                 pool_size[k] = max(pool_size.get(k, 0), r["hi"] - r["lo"])
-            if s is not None and s["count_of"]:
-                arr, less = s["count_of"]
-                cnt = [x["count"] for _, x, _, rr, _ in st.tables
-                       if x is not None and rr is not None and x["syms"][0][0] == arr]
-                count_of.setdefault(s["syms"][0][0], set()).add((tuple(cnt), less))
-    for name, vals in count_of.items():
-        if len(vals) != 1:
-            fail(f"{name}: derived from its array's host size, but the sets' counts differ "
-                 f"({sorted(vals)})")
     d = [SHARED_NOTE,
          "/* The 73 data tables, defined on the host without initialisers: they",
          " * land in .bss and port/data/tables.c fills them from the user's ELF",
@@ -649,23 +808,20 @@ def gen_defs(sets, pal):
          ""]
     d += include_block(headers, renamed)
     d.append("")
-    pools = []
-    for m, s, r, rec, _ in pal.tables:
-        if rec is None:
-            pools.append((m, r))
-            continue
-        name = s["syms"][0][0]
-        if s["count"] is None:
-            d.append(f"{rec.base} {rec.star}{name}{rec.dims};")
+    pools = [(m, r) for m, s, r, rec, _ in pal.tables if rec is None]
+    for t in host:
+        rec = t.rec
+        if t.count is None:
+            d.append(f"{rec.base} {rec.star}{t.name}{rec.dims};")
         else:
-            d.append(f"{rec.base} {rec.star}{name}[{s['count']}]{rec.dims};")
+            d.append(f"{rec.base} {rec.star}{t.name}[{t.count}]{rec.dims};")
     d.append("")
     d.append("/* The members' string pools: copied from the ELF, the targets of their")
     d.append("   char pointers (staffroll_dat), as large as the largest set's. */")
     for m, r in pools:
         d.append(f"char ico_table_pool_{c_ident(m)}_{r['section']}[{pool_size[(m, r['section'])]}];")
     for m, s, r, rec, _ in pal.tables:
-        if s is not None and s["count_of"]:
+        if s is not None and s["count_of"] and rec is None and s["syms"][0][0] not in loaded:
             arr, less = s["count_of"]
             d.append("")
             d.append(f"/* {m}: the count of {arr}, derived as the PS2 build derives it (the")
@@ -677,31 +833,55 @@ def gen_defs(sets, pal):
 
 
 def field_list(st, rec):
-    """[(host Field, ee_off, ee_size, kind, extra)] of a record in a set."""
+    """[(host Field, ee_off, ee_size, kind, extra)] of a record in a set. The
+    Field is the host's, but for its count (the elements copied: fewer than
+    the host's for a shorter array on the disc, extra then the host's count)
+    and, for a bit-field, its bit and width on the disc (a moved bit-field,
+    or a narrowed integer read as its low bits). A host-only field the disc
+    lacks has none (the loader's record clear leaves it 0)."""
     if st.slug == "pal":
-        return [(f, f.ee_off, f.ee_size, f.kind, None) for f in rec.fields]
+        return [(f, f.ee_off, f.ee_size, f.kind, None) for f in rec.ee_fields]
     out = []
     for mp in st.maps[rec.schema["type"]]:
         f = mp.host
-        if mp.how == "copy":
+        if mp.how == "copy" and mp.src.kind == "BITS" and mp.src.bit != f.bit:
+            g2 = Field("BITS", f.path, f.ee_off, f.ee_size, signed=f.signed, bit=mp.src.bit,
+                       width=f.width)
+            out.append((g2, mp.src.ee_off, mp.src.ee_size, "BITS", None))
+        elif mp.how == "copy" and mp.count != f.count:
+            g2 = Field(f.kind, f.path, f.ee_off, f.ee_size, count=mp.count, signed=f.signed)
+            out.append((g2, mp.src.ee_off, mp.src.ee_size, mp.src.kind, f.count))
+        elif mp.how == "copy":
             out.append((f, mp.src.ee_off, mp.src.ee_size, mp.src.kind, None))
+        elif mp.how == "default" and (f.kind == "BITS" or f.count != 1 or f.ee_size > 4):
+            # a bit-field or an array: no ICO_TF_DEFAULT can store it, and 0
+            # is the loader's record clear
+            if float(mp.value) != 0:
+                fail(f"{st.slug}: {rec.schema['type']}.{f.path}: a default for a bit-field or "
+                     "an array is 0 (the loader's record clear)")
+            continue
         elif mp.how == "default":
             out.append((f, 0, 0, "DEFAULT", default_bits(mp.value, f)))
+        elif mp.how == "narrow":
+            g2 = Field("BITS", f.path, f.ee_off, f.ee_size, signed=f.signed, bit=0,
+                       width=8 * f.ee_size)
+            out.append((g2, mp.src.ee_off, mp.src.ee_size, "BITS", None))
+        elif mp.how == "clear":
+            continue
         else:
             out.append((f, mp.base, mp.span, "BITMAP", mp.bits))
     return out
 
 
-def gen_set(st, pal, pool_size, earlier):
+def gen_set(st, pal, host, pool_size, earlier):
     """<slug>/table_desc.c, <slug>/ee_symbols.c and <slug>/tables.cmake."""
     slug = st.slug
     note = header_note(slug)
-    headers = pal.headers
-    symbols = [s["syms"][0][0] for _, s, _, _, _ in pal.tables if s is not None]
+    headers = host_headers(pal, host)
+    symbols = table_symbols(pal, host)
     renamed = const_declared(headers, set(symbols))
-    host_counts = {s["syms"][0][0]: (s["count"] or 1) for _, s, _, rec, _ in pal.tables
-                   if rec is not None}
-    defined = [(s["syms"][0][0], rec, s) for _, s, _, rec, _ in pal.tables if rec is not None]
+    host_counts = {t.name: (t.count or 1) for t in host}
+    defined = [(t.name, t.rec, t.s) for t in host]
     pools = [(m, r) for m, s, r, rec, _ in pal.tables if rec is None]
     records = st.record_types()
 
@@ -742,15 +922,22 @@ def gen_set(st, pal, pool_size, earlier):
             guard = rec.pointers
             if guard:
                 c.append("#if ICO_TD_EE_HOST")
-            c.append(f"_Static_assert(sizeof({T}) == {rec.ty.size}, \"{rec.schema['type']}: EE size\");")
-            for f in rec.fields:
+            if rec.host_only:
+                c.append(f"/* {rec.schema['type']}: {rec.ee_size} bytes on the disc; the host-only "
+                         f"{', '.join(sorted(rec.host_only))} after them */")
+                c.append(f"_Static_assert(sizeof({T}) == {rec.ty.size}, "
+                         f"\"{rec.schema['type']}: host size\");")
+            else:
+                c.append(f"_Static_assert(sizeof({T}) == {rec.ty.size}, "
+                         f"\"{rec.schema['type']}: EE size\");")
+            for f in rec.ee_fields:
                 if f.kind == "BITS" or not f.path:
                     continue
                 c.append(f"_Static_assert(offsetof({T}, {f.path}) == {f.ee_off}, "
                          f"\"{rec.schema['type']}.{f.path}: EE offset\");")
             if guard:
                 c.append("#endif")
-            for f in rec.fields:
+            for f in rec.ee_fields:
                 if f.kind in ("INT", "FLOAT", "BYTES"):
                     sz = f"sizeof({member_expr(T, f.path)})"
                     c.append(f"_Static_assert({sz} == {f.ee_size * f.count}, "
@@ -765,7 +952,7 @@ def gen_set(st, pal, pool_size, earlier):
             T = rec.ctype
             for f, eo, es, kind, extra in field_list(st, rec):
                 if kind in ("INT", "FLOAT", "BYTES"):
-                    want = es * f.count
+                    want = es * (extra or f.count)
                 elif kind in ("DEFAULT", "BITMAP"):
                     want = f.ee_size
                 else:
@@ -817,7 +1004,7 @@ def gen_set(st, pal, pool_size, earlier):
         c.append("")
     for rec in records:
         T = rec.ctype
-        size = rec.ty.size if slug == "pal" else f"0x{st.ee_size(rec):X}"
+        size = rec.ee_size if slug == "pal" else f"0x{st.ee_size(rec):X}"
         c.append(f"static const IcoTableRecord record_{rec.key} = {{\"{rec.schema['type']}\", "
                  f"sizeof({T}), {size}, fields_{rec.key}, "
                  f"sizeof(fields_{rec.key}) / sizeof(fields_{rec.key}[0])}};")
@@ -843,7 +1030,7 @@ def gen_set(st, pal, pool_size, earlier):
              f"\"{slug}: rows\");")
     c.append("")
     reg = st.region
-    index = [r["slug"] for r in g.regions()].index(slug)
+    index = [r["slug"] for r in g.regions(pending=True)].index(slug)
     c.append(f"/* {reg['product']} ({reg['disc_id']}): config/regions.txt's row {index} */")
     c.append(f"const IcoTableSet ico_table_set_{slug} = {{\"{slug}\", \"{reg['disc_id']}\", "
              f"\"{reg['boot_elf']}\", \"{reg['product']}\", rows_{slug}, {len(st.tables)}, "
@@ -918,17 +1105,20 @@ def gen_set(st, pal, pool_size, earlier):
     return "\n".join(c), "\n".join(e), "\n".join(cm)
 
 
-def generate():
-    """{path under port/data/gen: text}, the sets and the audit's errors."""
-    sets = all_sets()
+def generate(upto=None):
+    """{path under port/data/gen: text}, the sets and the audit's errors.
+    upto, a slug of gen_data_c.PENDING_ROWS: the sets of the table with the
+    pending rows up to it (all_sets)."""
+    sets = all_sets(upto)
     pal = sets[0]
-    h, symbols = gen_header(sets, pal)
-    defs, pool_size = gen_defs(sets, pal)
+    host = host_tables(sets)
+    h, symbols = gen_header(sets, pal, host)
+    defs, pool_size = gen_defs(sets, pal, host)
     files = {"table_desc.h": fmt(h, "table_desc.h"),
              "table_defs.c": fmt(defs, "table_defs.c")}
     names = (set(), set())
     for st in sets:
-        c, e, cm = gen_set(st, pal, pool_size, names)
+        c, e, cm = gen_set(st, pal, host, pool_size, names)
         files[f"{st.slug}/table_desc.c"] = fmt(c, f"{st.slug}/table_desc.c")
         files[f"{st.slug}/ee_symbols.c"] = fmt(e, f"{st.slug}/ee_symbols.c")
         files[f"{st.slug}/tables.cmake"] = cm
@@ -992,9 +1182,10 @@ def main():
     ap.add_argument("--out-dir", type=Path, default=OUT_DIR)
     ap.add_argument("-v", "--verbose", action="store_true", help="print the sets' mapping notes")
     a = ap.parse_args()
-    slugs = [r["slug"] for r in g.regions()]
+    slugs = [r["slug"] for r in g.regions(pending=True)]
     if a.version not in slugs:
-        fail(f"{a.version} is not a slug of config/regions.txt ({', '.join(slugs)})")
+        fail(f"{a.version} is not a slug of config/regions.txt or gen_data_c.PENDING_ROWS "
+             f"({', '.join(slugs)})")
     if a.manifest or a.check_manifest:
         elf = a.elf or ROOT / f"baserom/{a.version}/baseelf.elf"
         if not elf.exists():
@@ -1009,7 +1200,15 @@ def main():
             return 0
         path.write_text(text)
         return 0
-    files, sets, errs = generate()
+    pending = a.version not in [r["slug"] for r in g.regions()]
+    files, sets, errs = generate(a.version if pending else None)
+    if pending:
+        # a set of a row config/regions.txt does not list yet: its own files
+        # only, as the table with the pending rows up to it gives them (the
+        # shared files stay the listed rows'; they change when the rows land)
+        files = {n: t for n, t in files.items() if n.startswith(f"{a.version}/")}
+        sets = [st for st in sets if st.slug == a.version]
+        errs = [e for e in errs if f"the {a.version} set" in e]
     if a.verbose:
         for st in sets:
             for n in st.notes:
@@ -1019,7 +1218,7 @@ def main():
     if a.check:
         stale = [n for n, t in files.items()
                  if not (a.out_dir / n).exists() or (a.out_dir / n).read_text() != t]
-        stale += [n for n in FORMER if (a.out_dir / n).exists()]
+        stale += [n for n in FORMER if not pending and (a.out_dir / n).exists()]
         if stale:
             print(f"gen_data_desc: stale in {a.out_dir}: {', '.join(stale)} "
                   "(run tools/gen_data_desc.py)", file=sys.stderr)
@@ -1030,7 +1229,7 @@ def main():
         p.parent.mkdir(parents=True, exist_ok=True)
         if not p.exists() or p.read_text() != t:
             p.write_text(t)
-    for n in FORMER:
+    for n in FORMER if not pending else ():
         if (a.out_dir / n).exists():
             (a.out_dir / n).unlink()
     return 1 if errs else 0
