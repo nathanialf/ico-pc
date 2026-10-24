@@ -179,6 +179,9 @@ if(ICO_RUN_TESTS)
     # a DATA.DF listed df_lsn_shift sectors before its archive (the Korean
     # disc's layout) in a synthetic image: no disc needed
     add_test(NAME archive_shift COMMAND archive_test shift "${CMAKE_CURRENT_BINARY_DIR}")
+    # a disc whose BOOT2 is a menu and whose game is a folder (the June 2001
+    # magazine demo's layout) in a synthetic image, with a row of the test's
+    add_test(NAME archive_subfolder COMMAND archive_test sub "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME archive_disc COMMAND archive_test disc "${ICO_DISC_IMAGE}"
                                        "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(archive_disc PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
@@ -207,17 +210,25 @@ endif()
 # chosen disc image (port/platform/android/iso_import.c), on Linux with SDL's
 # memory streams for the content:// one: the copy byte for byte with its
 # progress, a cancel leaving nothing, a write failure's reason, the space
-# arithmetic. The Linux window build only; SDL3 is found after this
+# arithmetic, the 4.4 GB demo's boxes in the seven languages. The Linux window build only; SDL3 is found after this
 # directory (port/rhi), so the target is made at the end of the configure.
 function(_ico_data_iso_import_test)
     if(NOT TARGET SDL3::SDL3-shared)
         return()
     endif()
+    # the seven string tables (port/ui, plain data): the boxes' words in each language;
+    # port/ui's "strings.h" by -iquote, so <strings.h> stays the C library's
+    set(_iso_import_tables)
+    foreach(_lang en fr de it es ja ko)
+        list(APPEND _iso_import_tables "${CMAKE_SOURCE_DIR}/port/ui/strings_${_lang}.c")
+    endforeach()
     add_executable(iso_import_test "${CMAKE_SOURCE_DIR}/port/data/test/iso_import_test.c"
-                                   "${CMAKE_SOURCE_DIR}/port/platform/android/iso_import.c")
+                                   "${CMAKE_SOURCE_DIR}/port/platform/android/iso_import.c"
+                                   ${_iso_import_tables})
     target_include_directories(iso_import_test PRIVATE "${CMAKE_SOURCE_DIR}/port/data"
                                "${CMAKE_SOURCE_DIR}/port/platform/android")
-    target_compile_options(iso_import_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_compile_options(iso_import_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
+                           "SHELL:-iquote ${CMAKE_SOURCE_DIR}/port/ui")
     target_link_libraries(iso_import_test PRIVATE SDL3::SDL3-shared)
     add_test(NAME iso_import COMMAND iso_import_test "${CMAKE_BINARY_DIR}/port/data")
 endfunction()

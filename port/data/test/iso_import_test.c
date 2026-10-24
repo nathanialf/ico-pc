@@ -14,6 +14,10 @@
  *   name     a name that does not end in .tmp is refused
  *   need     ico_iso_need_bytes, the space message's rounding, the
  *            extension from the header and the name
+ *   large    the 4.4 GB magazine demo's copy: the 5.6 GB it needs in every
+ *            language's space and copy-failed boxes (port/ui's seven tables,
+ *            English's equal to the built-in text), the long copy line only
+ *            for an image over ICO_ISO_LONG_COPY_BYTES
  *
  * Usage: iso_import_test <scratch dir>
  */
@@ -25,6 +29,7 @@
 #include <unistd.h>
 #include <SDL3/SDL.h>
 #include "iso_import.h"
+#include "strings.h" /* port/ui's tables (-iquote), the boxes' words */
 
 static int failures;
 
@@ -225,9 +230,9 @@ static void checkNeed(void)
     /* needed rounded up, free rounded down */
     static const char want1[] = "This disc image needs 2.7 GB free in /data/files; 1.1 GB is free.";
     static const char want2[] = "This disc image needs 2.6 GB free in /f; 0.0 GB is free.";
-    ico_iso_space_text(text, sizeof(text), 2600000001ull, 1199999999ull, "/data/files");
+    ico_iso_space_text(text, sizeof(text), NULL, 2600000001ull, 1199999999ull, "/data/files");
     CHECK(strncmp(text, want1, sizeof(want1) - 1) == 0, "need: the message \"%s\"", text);
-    ico_iso_space_text(text, sizeof(text), 2600000000ull, 0, "/f");
+    ico_iso_space_text(text, sizeof(text), NULL, 2600000000ull, 0, "/f");
     CHECK(strncmp(text, want2, sizeof(want2) - 1) == 0, "need: the message \"%s\"", text);
     CHECK(strcmp(ico_iso_ext_for(NULL, chd, sizeof(chd)), "chd") == 0, "ext: a CHD header");
     CHECK(strcmp(ico_iso_ext_for("x.chd", iso, sizeof(iso)), "iso") == 0,
@@ -287,6 +292,65 @@ static void checkNeed(void)
     }
 }
 
+/* "5.6" or "5,6" (the table's decimal sign) in text */
+static int hasTenths(const char *text, const char *dot)
+{
+    char comma[8];
+
+    snprintf(comma, sizeof(comma), "%s", dot);
+    comma[1] = ',';
+    return strstr(text, dot) != NULL || strstr(text, comma) != NULL;
+}
+
+static void checkLarge(void)
+{
+    static const char *const *const tables[] = {ui_strings_en, ui_strings_fr, ui_strings_de,
+                                                ui_strings_it, ui_strings_es, ui_strings_ja,
+                                                ui_strings_ko};
+    static const char *const names[] = {"en", "fr", "de", "it", "es", "ja", "ko"};
+    /* Ico_JUN26.iso, the June 2001 magazine demo (a DVD-9 image) */
+    const uint64_t image = 4386521088ull;
+    const uint64_t need = ico_iso_need_bytes(image);
+    static const char want[] =
+        "This disc image needs 5.6 GB free in /data/files; 5.0 GB is free.\n";
+    static const char wantFail[] =
+        "The disc image could not be copied into /f.\nCheck that about 5.6 GB is free";
+    char text[1024];
+    size_t l;
+
+    CHECK(need == 5586521088ull, "large: needs %llu", (unsigned long long)need);
+    /* the long copy line: the demo's image only, not the retail DVD (907,706,368 bytes,
+       the European disc) or CD images */
+    CHECK(image > ICO_ISO_LONG_COPY_BYTES && 907706368ull <= ICO_ISO_LONG_COPY_BYTES,
+          "large: the long copy line's threshold");
+    ico_iso_space_text(text, sizeof(text), NULL, need, 5000000000ull, "/data/files");
+    CHECK(strncmp(text, want, sizeof(want) - 1) == 0, "large: the message \"%s\"", text);
+    ico_iso_copy_failed_text(text, sizeof(text), NULL, need, "/f");
+    CHECK(strncmp(text, wantFail, sizeof(wantFail) - 1) == 0, "large: the failure \"%s\"", text);
+    /* the English table is the built-in text */
+    CHECK(strcmp(ui_strings_en[UI_STR_ISO_NEED_SPACE], ICO_ISO_NEED_SPACE_EN) == 0,
+          "large: UI_STR_ISO_NEED_SPACE differs from ICO_ISO_NEED_SPACE_EN");
+    CHECK(strcmp(ui_strings_en[UI_STR_ISO_COPY_FAILED], ICO_ISO_COPY_FAILED_EN) == 0,
+          "large: UI_STR_ISO_COPY_FAILED differs from ICO_ISO_COPY_FAILED_EN");
+    for (l = 0; l < sizeof(tables) / sizeof(tables[0]); l++) {
+        const char *copying = tables[l][UI_STR_ISO_COPYING];
+        const char *longer = tables[l][UI_STR_ISO_COPYING_LONG];
+
+        ico_iso_space_text(text, sizeof(text), tables[l][UI_STR_ISO_NEED_SPACE], need,
+                           5000000000ull, "/data/files");
+        CHECK(hasTenths(text, "5.6") && hasTenths(text, "5.0") &&
+                  strstr(text, "/data/files") != NULL && strchr(text, '%') == NULL,
+              "large: %s space box \"%s\"", names[l], text);
+        ico_iso_copy_failed_text(text, sizeof(text), tables[l][UI_STR_ISO_COPY_FAILED], need, "/f");
+        CHECK(hasTenths(text, "5.6") && strstr(text, "/f") != NULL && strchr(text, '%') == NULL,
+              "large: %s copy-failed box \"%s\"", names[l], text);
+        /* the long line is the short one with the minutes said after it */
+        CHECK(copying != NULL && longer != NULL && strlen(longer) > strlen(copying) &&
+                  strncmp(longer, copying, strlen(copying)) == 0,
+              "large: %s copy lines", names[l]);
+    }
+}
+
 int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
@@ -301,6 +365,7 @@ int main(int argc, char **argv)
     checkFail(dir, data);
     checkName(dir, data);
     checkNeed();
+    checkLarge();
     free(data);
     if (failures) {
         printf("iso_import_test: %d failures\n", failures);

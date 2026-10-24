@@ -429,7 +429,8 @@ static int check_unifile(IcoVfs *vfs, int expect_count)
     uint32_t i;
     int ok = 1;
 
-    if (ico_vfs_open(vfs, "\\DFDATAS\\DATA.DF;1", &f) != 0) {
+    /* DATA.DF where the volume's disc keeps it (DFDATAS/, or in the game's folder) */
+    if (ico_vfs_open(vfs, ico_vfs_df_path(vfs), &f) != 0) {
         return -1;
     }
     if (ico_vfs_read(&f, 0, hdr, 4) != 4) {

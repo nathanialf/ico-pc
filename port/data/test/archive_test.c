@@ -13,6 +13,13 @@
  *                                    in archive.h): the ISO backend's
  *                                    shifted entry, the libcdvd search, the
  *                                    extraction and the archive (no disc)
+ *   archive_test sub <dir>           a synthetic image whose BOOT2 is a menu
+ *                                    and whose game is a folder (the June
+ *                                    2001 magazine demo's layout, archive.h
+ *                                    game_dir), with a row the test supplies:
+ *                                    the folder's files under their paths,
+ *                                    no image hash, the ELF and DATA.DF rule,
+ *                                    the game's requests through libcdvd
  *   archive_test disc <iso> <dir> [slug]
  *                                    the user's image of the disc `slug`
  *                                    (a slug of config/regions.txt, pal by
@@ -48,6 +55,7 @@
 
 #include <time.h>
 #include "archive.h"
+#include "df_pack.h"
 #include "extract.h"
 #include "miniz.h"
 
@@ -501,7 +509,7 @@ static int run_synth(const char *dir)
 static int run_disc_archive(const char *iso_path, const char *dir, const char *slug)
 {
     static unsigned char a[1 << 20], b[1 << 20];
-    char ar_path[1024], why[1024], hex[41], boot[64], search[80];
+    char ar_path[1024], why[1024], hex[41], boot[64], search[80], dfsearch[80];
     const IcoDiscInfo *disc = NULL;
     const char *tmpdir = getenv("TMPDIR");
     IcoExtractResult res;
@@ -533,7 +541,16 @@ static int run_disc_archive(const char *iso_path, const char *dir, const char *s
     /* which disc the image is, by its boot file */
     CHECK(ico_extract_identify(iso_path, boot, sizeof(boot)) == disc);
     CHECK(strcmp(boot, disc->boot_elf) == 0);
-    snprintf(search, sizeof(search), "\\%s;1", disc->boot_elf);
+    /* the game's ELF and DATA.DF as the game asks for them ("\\CUS97113\\DFDATAS\\DATA.DF;1"
+       on a disc whose game is in a folder) */
+    snprintf(search, sizeof(search), "\\%s;1", disc->elf_path);
+    snprintf(dfsearch, sizeof(dfsearch), "\\%s;1", disc->df_path);
+    for (i = 0; search[i] != '\0'; i++) {
+        search[i] = search[i] == '/' ? '\\' : search[i];
+    }
+    for (i = 0; dfsearch[i] != '\0'; i++) {
+        dfsearch[i] = dfsearch[i] == '/' ? '\\' : dfsearch[i];
+    }
     snprintf(ar_path, sizeof(ar_path), "%s/archive_test_disc-%ld.o2r",
              tmpdir != NULL && tmpdir[0] != '\0' ? tmpdir : dir, (long)time(NULL));
 
@@ -563,8 +580,13 @@ static int run_disc_archive(const char *iso_path, const char *dir, const char *s
     CHECK(ico_archive_read_info(ar_path, &info, why, sizeof(why)) == 0);
     CHECK(ico_archive_info_acceptable(&info, why, sizeof(why)));
     /* meta.json names the disc and the rule; the row's ELF is the one */
-    CHECK(strcmp(info.disc_id, disc->id) == 0 && strcmp(info.accepted_by, ICO_RULE_ISO_SHA1) == 0 &&
+    CHECK(strcmp(info.disc_id, disc->id) == 0 &&
+          strcmp(info.accepted_by,
+                 disc->iso_sha1 != NULL ? ICO_RULE_ISO_SHA1 : ICO_RULE_ELF_DATADF) == 0 &&
           strcmp(info.elf_sha1, disc->elf_sha1) == 0);
+    /* a disc with no image SHA-1 on file is not hashed: the source's SHA-1 is its ELF's */
+    CHECK(res.iso_hashed == (disc->iso_sha1 != NULL));
+    CHECK(disc->iso_sha1 != NULL || strcmp(info.iso_sha1, disc->elf_sha1) == 0);
     printf("archive_test disc: meta.json: disc %s, accepted by %s\n", info.disc_id,
            info.accepted_by);
 
@@ -584,7 +606,7 @@ static int run_disc_archive(const char *iso_path, const char *dir, const char *s
         IcoVfsFile dfi;
         unsigned char head[4];
 
-        CHECK(ico_vfs_open(iso, "DFDATAS/DATA.DF", &dfi) == 0);
+        CHECK(ico_vfs_open(iso, disc->df_path, &dfi) == 0);
         CHECK(dfi.entry.size == disc->df_size);
         CHECK(ico_vfs_read(&dfi, 0, head, 4) == 4 && rd32(head) == disc->df_count);
         /* the directory's own record lies df_lsn_shift sectors earlier */
@@ -593,7 +615,7 @@ static int run_disc_archive(const char *iso_path, const char *dir, const char *s
             IcoVfs *raw = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
             IcoVfsEntry rawe;
 
-            CHECK(raw != NULL && ico_vfs_stat(raw, "DFDATAS/DATA.DF", &rawe) == 0);
+            CHECK(raw != NULL && ico_vfs_stat(raw, disc->df_path, &rawe) == 0);
             if (raw != NULL) {
                 CHECK(rawe.lsn + disc->df_lsn_shift == dfi.entry.lsn);
                 CHECK(rawe.size == dfi.entry.size + disc->df_lsn_shift * ICO_VFS_SECTOR);
@@ -617,59 +639,91 @@ static int run_disc_archive(const char *iso_path, const char *dir, const char *s
         off += (uint64_t)n;
     }
     sha1_final_hex(&sha, hex);
-    printf("archive_test disc: %s from the archive: SHA-1 %s\n", disc->boot_elf, hex);
+    printf("archive_test disc: %s from the archive: SHA-1 %s\n", disc->elf_path, hex);
     CHECK(strcmp(hex, disc->elf_sha1) == 0);
 
-    /* look-ups and the small files, sector for sector: the root files each
-       disc has (the Japanese and Korean discs have no MCXMAN, MCXSERV, PANICSYS or
-       DUMMY.TXT; its IOPRP224.IMG is not stored) */
-    {
-        static const char *const pal[] = {
-            "",
-            "DFDATAS",
-            "DFDATAS/DATA.DF",
-            "SYSTEM.CNF",
-            "SCES_507.60",
-            "SNDN2DRV.IRX",
-            "LIBSD.IRX",
-            "SIO2MAN.IRX",
-            "PADMAN.IRX",
-            "MCMAN.IRX",
-            "MCSERV.IRX",
-            "MCXMAN.IRX",
-            "MCXSERV.IRX",
-            "PANICSYS.IRX",
-            "DUMMY.TXT",
-        };
-        /* the discs without those files (jpn, kor): the boot file is the
-           row's, the fifth path */
-        char bootPath[32];
-        const char *other[] = {
-            "",           "DFDATAS",      "DFDATAS/DATA.DF", "SYSTEM.CNF",
-            bootPath,     "SNDN2DRV.IRX", "LIBSD.IRX",       "SIO2MAN.IRX",
-            "PADMAN.IRX", "MCMAN.IRX",    "MCSERV.IRX",
-        };
-        const int isPal = disc == &ico_discs[0];
-        const char *const *paths = isPal ? pal : other;
-        const uint32_t n = isPal ? (uint32_t)(sizeof(pal) / sizeof(pal[0]))
-                                 : (uint32_t)(sizeof(other) / sizeof(other[0]));
+    if (disc->game_dir[0] != '\0') {
+        /* a disc whose game is in a folder (the magazine demo): the folder's ELF, its
+           six modules and DATA.DF, SYSTEM.CNF; the menu (the boot file) listed, not stored */
+        static const char *const mods[] = {"SNDN2DRV.IRX", "LIBSD.IRX", "SIO2MAN.IRX",
+                                           "PADMAN.IRX",   "MCMAN.IRX", "MCSERV.IRX"};
+        char p[96];
+        IcoVfsEntry e;
 
-        snprintf(bootPath, sizeof(bootPath), "%s", disc->boot_elf);
-        for (i = 0; i < n; i++) {
-            same_stat(iso, ar, paths[i]);
-            if (i >= 3) {
-                CHECK(same_file_sectors(iso, ar, paths[i]));
-            }
+        same_stat(iso, ar, "");
+        same_stat(iso, ar, disc->game_dir);
+        snprintf(p, sizeof(p), "%s/DFDATAS", disc->game_dir);
+        same_stat(iso, ar, p);
+        same_stat(iso, ar, disc->boot_elf);
+        CHECK(ico_vfs_stat(ar, disc->boot_elf, &e) == 0 &&
+              ico_vfs_read_sectors(ar, e.lsn, 1, a) != 0);
+        same_stat(iso, ar, "SYSTEM.CNF");
+        CHECK(same_file_sectors(iso, ar, "SYSTEM.CNF"));
+        same_stat(iso, ar, disc->elf_path);
+        CHECK(same_file_sectors(iso, ar, disc->elf_path));
+        for (i = 0; i < sizeof(mods) / sizeof(mods[0]); i++) {
+            snprintf(p, sizeof(p), "%s/%s", disc->game_dir, mods[i]);
+            same_stat(iso, ar, p);
+            CHECK(same_file_sectors(iso, ar, p));
+            snprintf(p, sizeof(p), "cdrom0:\\%s\\%s;1", disc->game_dir, mods[i]);
+            same_search(iso, ar, p);
         }
-        /* the 9 files stored from the Japanese and Korean discs: 8 in the root and DATA.DF */
-        if (!isPal) {
-            CHECK(res.files == 9);
-            CHECK(ico_vfs_stat(ar, "MCXMAN.IRX", NULL) != 0 &&
-                  ico_vfs_stat(ar, "DUMMY.TXT", NULL) != 0 &&
-                  ico_vfs_stat(ar, "IOPRP224.IMG", NULL) != 0);
+        CHECK(res.files == 9);
+        /* the menu's root and the other games' folders are not kept */
+        CHECK(ico_vfs_stat(ar, "SCE_DD", NULL) != 0 && ico_vfs_stat(ar, "DFDATAS", NULL) != 0);
+    } else {
+        /* look-ups and the small files, sector for sector: the root files each
+           disc has (the Japanese and Korean discs have no MCXMAN, MCXSERV, PANICSYS or
+           DUMMY.TXT; its IOPRP224.IMG is not stored) */
+        {
+            static const char *const pal[] = {
+                "",
+                "DFDATAS",
+                "DFDATAS/DATA.DF",
+                "SYSTEM.CNF",
+                "SCES_507.60",
+                "SNDN2DRV.IRX",
+                "LIBSD.IRX",
+                "SIO2MAN.IRX",
+                "PADMAN.IRX",
+                "MCMAN.IRX",
+                "MCSERV.IRX",
+                "MCXMAN.IRX",
+                "MCXSERV.IRX",
+                "PANICSYS.IRX",
+                "DUMMY.TXT",
+            };
+            /* the discs without those files (jpn, kor): the boot file is the
+               row's, the fifth path */
+            char bootPath[32];
+            const char *other[] = {
+                "",           "DFDATAS",      "DFDATAS/DATA.DF", "SYSTEM.CNF",
+                bootPath,     "SNDN2DRV.IRX", "LIBSD.IRX",       "SIO2MAN.IRX",
+                "PADMAN.IRX", "MCMAN.IRX",    "MCSERV.IRX",
+            };
+            const int isPal = disc == &ico_discs[0];
+            const char *const *paths = isPal ? pal : other;
+            const uint32_t n = isPal ? (uint32_t)(sizeof(pal) / sizeof(pal[0]))
+                                     : (uint32_t)(sizeof(other) / sizeof(other[0]));
+
+            snprintf(bootPath, sizeof(bootPath), "%s", disc->boot_elf);
+            for (i = 0; i < n; i++) {
+                same_stat(iso, ar, paths[i]);
+                if (i >= 3) {
+                    CHECK(same_file_sectors(iso, ar, paths[i]));
+                }
+            }
+            /* the 9 files stored from the Japanese and Korean discs: 8 in the root and DATA.DF */
+            if (!isPal) {
+                CHECK(res.files == 9);
+                CHECK(ico_vfs_stat(ar, "MCXMAN.IRX", NULL) != 0 &&
+                      ico_vfs_stat(ar, "DUMMY.TXT", NULL) != 0 &&
+                      ico_vfs_stat(ar, "IOPRP224.IMG", NULL) != 0);
+            }
         }
     }
     same_search(iso, ar, search);
+    same_search(iso, ar, dfsearch);
     same_search(iso, ar, "\\DFDATAS\\DATA.DF;1");
     same_search(iso, ar, "\\SYSTEM.CNF;1");
     same_search(iso, ar, "\\SNDN2DRV.IRX;1");
@@ -684,8 +738,8 @@ static int run_disc_archive(const char *iso_path, const char *dir, const char *s
     ico_cdvd_host_reset();
 
     /* all of DATA.DF, through both backends: equal chunk by chunk, CRC-32 */
-    CHECK(ico_vfs_open(iso, "DFDATAS/DATA.DF", &fi) == 0);
-    CHECK(ico_vfs_open(ar, "DFDATAS/DATA.DF", &fa) == 0);
+    CHECK(ico_vfs_open(iso, disc->df_path, &fi) == 0);
+    CHECK(ico_vfs_open(ar, disc->df_path, &fa) == 0);
     df = fi.entry;
     crc_i = crc_a = (uint32_t)mz_crc32(MZ_CRC32_INIT, NULL, 0);
     ok = 1;
@@ -963,6 +1017,386 @@ static int run_shift(const char *dir)
     return failures ? 1 : 0;
 }
 
+/* --- a disc whose game is in a folder ------------------------------------------- */
+
+/* The June 2001 magazine demo's layout in miniature: SYSTEM.CNF's BOOT2 is a
+   menu at the root (SLUS_999.99), the game is the folder GAME with its ELF,
+   its modules and its own DFDATAS/DATA.DF, and the root holds files of the
+   menu and of other games (ROOT.IRX, MODULES/) the archive leaves out. No
+   row of the table boots SLUS_999.99, so the test supplies one
+   (ico_disc_set_test_row) with no image SHA-1, as the demo's row has. */
+#define SUB_SECTORS 40
+#define SUB_ROOT 18
+#define SUB_GAME 19
+#define SUB_DFDATAS 20
+#define SUB_MODULES 21
+#define SUB_CNF 22
+#define SUB_MENU 23 /* the root's boot file: the menu */
+#define SUB_ELF 24  /* two sectors: GAME/SLUS_000.00 */
+#define SUB_LIBSD 26
+#define SUB_IOPRP 27
+#define SUB_ROOT_IRX 28
+#define SUB_X_IRX 29
+#define SUB_DATADF 30 /* seven sectors */
+#define SUB_OTHER 37
+#define SUB_README 38
+#define SUB_MENU_SIZE 100
+#define SUB_ELF_SIZE 3000
+#define SUB_LIBSD_SIZE 500
+#define SUB_SMALL_SIZE 100
+#define SUB_DATADF_SIZE 12289
+#define SUB_OTHER_SIZE 200
+#define SUB_README_SIZE 50
+
+static const char subCnf[] = "BOOT2 = cdrom0:\\SLUS_999.99;1\r\nVER = 1.00\r\nVMODE = NTSC\r\n";
+static unsigned char subImg[SUB_SECTORS * 2048];
+static char subElfSha1[41];
+static IcoDfManifestEntry subMembers[3];
+static IcoDiscInfo subRow = {
+    .id = "SLUS-99999",
+    .slug = "sub",
+    .boot_elf = "SLUS_999.99",
+    .game_dir = "GAME",
+    .elf_path = "GAME/SLUS_000.00",
+    .df_path = "GAME/DFDATAS/DATA.DF",
+    .iso_sha1 = NULL,
+    .elf_sha1 = subElfSha1,
+    .iso_bytes = SUB_SECTORS * 2048u,
+    .df_size = SUB_DATADF_SIZE,
+    .df_count = 3,
+    .members = subMembers,
+    .member_count = 3,
+    .archive_name = "ico-sub.o2r",
+    .image_base = "Ico_SUB",
+    .cd_type = ICO_CD_TYPE_PS2DVD,
+    .product_name = "the test's folder disc",
+};
+
+/* a directory's "." and "..", its records, and its own size in "." */
+static unsigned put_dir_head(unsigned char *s, uint32_t self, uint32_t parent)
+{
+    unsigned o = put_rec(s, self, 0, 1, "\0", 1);
+
+    return o + put_rec(s + o, parent, 0, 1, "\1", 1);
+}
+
+static void fill(uint32_t lsn, uint32_t size)
+{
+    uint32_t i;
+
+    for (i = 0; i < size; i++) {
+        subImg[lsn * 2048 + i] = synthByte(lsn, i);
+    }
+}
+
+static void build_subfolder(void)
+{
+    unsigned char *s;
+    unsigned o;
+    uint32_t dfdSize, modSize, gameSize, rootSize, i;
+    Sha1 sha;
+
+    memset(subImg, 0, sizeof(subImg));
+    s = subImg + SUB_DFDATAS * 2048;
+    o = put_dir_head(s, SUB_DFDATAS, SUB_GAME);
+    o += put_named(s + o, SUB_DATADF, SUB_DATADF_SIZE, 0, "DATA.DF;1");
+    o += put_named(s + o, SUB_OTHER, SUB_OTHER_SIZE, 0, "OTHER.BIN;1");
+    dfdSize = o;
+    put32both(s + 10, dfdSize);
+
+    s = subImg + SUB_MODULES * 2048;
+    o = put_dir_head(s, SUB_MODULES, SUB_ROOT);
+    o += put_named(s + o, SUB_X_IRX, SUB_SMALL_SIZE, 0, "X.IRX;1");
+    modSize = o;
+    put32both(s + 10, modSize);
+
+    s = subImg + SUB_GAME * 2048;
+    o = put_dir_head(s, SUB_GAME, SUB_ROOT);
+    o += put_named(s + o, SUB_DFDATAS, dfdSize, 1, "DFDATAS");
+    o += put_named(s + o, SUB_IOPRP, SUB_SMALL_SIZE, 0, "IOPRP.IMG;1");
+    o += put_named(s + o, SUB_LIBSD, SUB_LIBSD_SIZE, 0, "LIBSD.IRX;1");
+    o += put_named(s + o, SUB_README, SUB_README_SIZE, 0, "README.TXT;1");
+    o += put_named(s + o, SUB_ELF, SUB_ELF_SIZE, 0, "SLUS_000.00;1");
+    gameSize = o;
+    put32both(s + 10, gameSize);
+
+    s = subImg + SUB_ROOT * 2048;
+    o = put_dir_head(s, SUB_ROOT, SUB_ROOT);
+    o += put_named(s + o, SUB_GAME, gameSize, 1, "GAME");
+    o += put_named(s + o, SUB_MODULES, modSize, 1, "MODULES");
+    o += put_named(s + o, SUB_ROOT_IRX, SUB_SMALL_SIZE, 0, "ROOT.IRX;1");
+    o += put_named(s + o, SUB_MENU, SUB_MENU_SIZE, 0, "SLUS_999.99;1");
+    o += put_named(s + o, SUB_CNF, (uint32_t)strlen(subCnf), 0, "SYSTEM.CNF;1");
+    rootSize = o;
+    put32both(s + 10, rootSize);
+    put32both(s + 34 + 10, rootSize);
+
+    s = subImg + 16 * 2048;
+    s[0] = 1;
+    memcpy(s + 1, "CD001", 5);
+    s[6] = 1;
+    put32both(s + 80, SUB_SECTORS);
+    s[128] = 0x00;
+    s[129] = 0x08;
+    put_rec(s + 156, SUB_ROOT, rootSize, 1, "\0", 1);
+    s = subImg + 17 * 2048;
+    s[0] = 255;
+    memcpy(s + 1, "CD001", 5);
+    s[6] = 1;
+
+    memcpy(subImg + SUB_CNF * 2048, subCnf, strlen(subCnf));
+    fill(SUB_MENU, SUB_MENU_SIZE);
+    fill(SUB_ELF, SUB_ELF_SIZE);
+    fill(SUB_LIBSD, SUB_LIBSD_SIZE);
+    fill(SUB_IOPRP, SUB_SMALL_SIZE);
+    fill(SUB_ROOT_IRX, SUB_SMALL_SIZE);
+    fill(SUB_X_IRX, SUB_SMALL_SIZE);
+    fill(SUB_OTHER, SUB_OTHER_SIZE);
+    fill(SUB_README, SUB_README_SIZE);
+    /* DATA.DF: the synthetic image's directory of three members */
+    s = subImg + SUB_DATADF * 2048;
+    put32le(s, 3);
+    strcpy((char *)s + 4, "alpha.pak");
+    put32le(s + 4 + 32, 2048);
+    put32le(s + 4 + 36, 100);
+    strcpy((char *)s + 44, "beta.int");
+    put32le(s + 44 + 32, 4096);
+    put32le(s + 44 + 36, 5000);
+    strcpy((char *)s + 84, "gamma.smb");
+    put32le(s + 84 + 32, 12288);
+    put32le(s + 84 + 36, 1);
+    for (i = 2048; i < SUB_DATADF_SIZE; i++) {
+        s[i] = synthByte(SUB_DATADF, i);
+    }
+
+    /* the row's verification values, computed from the image as discs.c's are from a disc */
+    sha1_init(&sha);
+    sha1_update(&sha, subImg + SUB_ELF * 2048, SUB_ELF_SIZE);
+    sha1_final_hex(&sha, subElfSha1);
+    subRow.df_dir_crc = (uint32_t)mz_crc32(MZ_CRC32_INIT, s, 4 + 40 * 3);
+    for (i = 0; i < 3; i++) {
+        subMembers[i].offset = rd32(s + 4 + 40 * i + 32);
+        subMembers[i].size = rd32(s + 4 + 40 * i + 36);
+        subMembers[i].crc =
+            (uint32_t)mz_crc32(MZ_CRC32_INIT, s + subMembers[i].offset, subMembers[i].size);
+    }
+}
+
+static int write_image(const char *path, const unsigned char *img, size_t n)
+{
+    FILE *fp = fopen(path, "wb");
+
+    if (fp == NULL) {
+        return -1;
+    }
+    if (fwrite(img, 1, n, fp) != n) {
+        fclose(fp);
+        return -1;
+    }
+    return fclose(fp);
+}
+
+/* An image with one byte changed at (lsn, off) is refused by the ELF and
+   DATA.DF rule, with `reason` in the text and nothing left behind. */
+static void check_refused(const char *dir, uint32_t lsn, uint32_t off, const char *reason)
+{
+    static unsigned char bad[sizeof(subImg)];
+    char path[1024], ar_path[1040], why[1024], hex[41];
+    IcoExtractResult res;
+
+    snprintf(path, sizeof(path), "%s/archive_test_sub_bad.iso", dir);
+    snprintf(ar_path, sizeof(ar_path), "%s.o2r", path);
+    memcpy(bad, subImg, sizeof(bad));
+    bad[lsn * 2048 + off] ^= 0x01;
+    CHECK(write_image(path, bad, sizeof(bad)) == 0);
+    CHECK(ico_extract_verify_files(path, &subRow, hex, why, sizeof(why)) != 0);
+    CHECK(strstr(why, reason) != NULL);
+    if (strstr(why, reason) == NULL) {
+        fprintf(stderr, "  verify: \"%s\" lacks \"%s\"\n", why, reason);
+    }
+    CHECK(ico_extract_archive(path, ar_path, 0, NULL, NULL, &res, why, sizeof(why)) != 0);
+    CHECK(res.wrong_disc && res.rule[0] == '\0' && !res.iso_hashed);
+    CHECK(strstr(why, "is not a disc image this port plays") != NULL &&
+          strstr(why, "(not hashed)") != NULL);
+    CHECK(!file_exists(ar_path));
+    remove(path);
+}
+
+static int run_sub(const char *dir)
+{
+    static const char *const stored[] = {
+        "SYSTEM.CNF",           "GAME/SLUS_000.00",       "GAME/LIBSD.IRX",
+        "GAME/DFDATAS/DATA.DF", "GAME/DFDATAS/OTHER.BIN",
+    };
+    static const char *const left_out[] = {
+        "ROOT.IRX", "MODULES", "MODULES/X.IRX", "GAME/IOPRP.IMG", "GAME/README.TXT",
+    };
+    char iso_path[1024], ar_path[1024], why[1024], hex[41], boot[64], path[64];
+    IcoExtractResult res;
+    IcoArchiveInfo info;
+    IcoVfs *iso, *ar;
+    unsigned char sec[2048], buf[16];
+    sceCdlFILE fp;
+    int calls = 0;
+    uint32_t i;
+    int ok;
+
+    snprintf(iso_path, sizeof(iso_path), "%s/archive_test_sub.iso", dir);
+    snprintf(ar_path, sizeof(ar_path), "%s/archive_test_sub.o2r", dir);
+    remove(ar_path);
+    build_subfolder();
+    if (write_image(iso_path, subImg, sizeof(subImg)) != 0) {
+        fprintf(stderr, "cannot write %s\n", iso_path);
+        return 1;
+    }
+
+    /* 1. no row boots the menu: no disc, and the walk keeps the root's files only */
+    ico_disc_set_test_row(NULL);
+    CHECK(ico_extract_identify(iso_path, NULL, 0) == NULL);
+    iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
+    CHECK(iso != NULL && ico_vfs_game_dir(iso)[0] == '\0' &&
+          strcmp(ico_vfs_df_path(iso), "DFDATAS/DATA.DF") == 0);
+    ico_vfs_unmount(iso);
+    CHECK(ico_extract_archive(iso_path, ar_path, ICO_EXTRACT_NO_VERIFY, NULL, NULL, &res, why,
+                              sizeof(why)) == 0);
+    CHECK(res.files == 3 && res.iso_hashed); /* SYSTEM.CNF, SLUS_999.99, ROOT.IRX */
+    remove(ar_path);
+
+    /* 2. the row: the folder, DATA.DF's path, a file's path under the folder */
+    ico_disc_set_test_row(&subRow);
+    CHECK(ico_extract_identify(iso_path, boot, sizeof(boot)) == &subRow &&
+          strcmp(boot, "SLUS_999.99") == 0);
+    iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
+    CHECK(iso != NULL);
+    if (iso == NULL) {
+        ico_disc_set_test_row(NULL);
+        return 1;
+    }
+    CHECK(strcmp(ico_vfs_game_dir(iso), "GAME") == 0 &&
+          strcmp(ico_vfs_df_path(iso), "GAME/DFDATAS/DATA.DF") == 0);
+    CHECK(ico_vfs_game_path(iso, "LIBSD.IRX", path, sizeof(path)) == 0 &&
+          strcmp(path, "GAME/LIBSD.IRX") == 0);
+    CHECK(ico_vfs_game_path(iso, "LIBSD.IRX", path, 8) != 0);
+    CHECK(ico_vfs_game_dir(NULL)[0] == '\0' &&
+          strcmp(ico_vfs_df_path(NULL), "DFDATAS/DATA.DF") == 0);
+    ico_vfs_unmount(iso);
+
+    /* 3. the start-from-the-image check: the game ELF and DATA.DF, no image hash */
+    CHECK(ico_extract_verify_files(iso_path, &subRow, hex, why, sizeof(why)) == 0);
+    CHECK(strcmp(hex, subElfSha1) == 0);
+
+    /* 4. the extraction, verified: no hash phase, the ELF and DATA.DF rule, the
+       game ELF's SHA-1 as the source's */
+    phase_seq[0] = '\0';
+    CHECK(ico_extract_archive(iso_path, ar_path, 0, progress_cb, &calls, &res, why, sizeof(why)) ==
+          0);
+    if (failures) {
+        fprintf(stderr, "archive_test sub: extraction failed: %s\n", why);
+    }
+    CHECK(strcmp(phase_seq, "oef") == 0);
+    CHECK(strcmp(res.rule, ICO_RULE_ELF_DATADF) == 0 && !res.iso_hashed && res.datadf_ok);
+    CHECK(strcmp(res.disc_id, "SLUS-99999") == 0);
+    CHECK(res.iso_size == SUB_SECTORS * 2048u);
+    CHECK(strcmp(res.elf_sha1, subElfSha1) == 0 && strcmp(res.iso_sha1, subElfSha1) == 0);
+    CHECK(res.files == 5);
+    CHECK(res.bytes ==
+          strlen(subCnf) + SUB_ELF_SIZE + SUB_LIBSD_SIZE + SUB_DATADF_SIZE + SUB_OTHER_SIZE);
+    CHECK(ico_archive_read_info(ar_path, &info, why, sizeof(why)) == 0);
+    CHECK(strcmp(info.accepted_by, ICO_RULE_ELF_DATADF) == 0 &&
+          strcmp(info.iso_sha1, subElfSha1) == 0 && info.iso_size == SUB_SECTORS * 2048u);
+    /* the root, GAME, GAME/DFDATAS, the five files and the menu listed without data */
+    CHECK(info.stored == 5 && info.entries == 9);
+    CHECK(ico_archive_info_acceptable(&info, why, sizeof(why)));
+    {
+        /* the image rule for a row with no image hash on file is refused */
+        IcoArchiveInfo other = info;
+
+        snprintf(other.accepted_by, sizeof(other.accepted_by), "%s", ICO_RULE_ISO_SHA1);
+        CHECK(!ico_archive_info_acceptable(&other, why, sizeof(why)));
+    }
+    {
+        mz_zip_archive z;
+
+        memset(&z, 0, sizeof(z));
+        CHECK(mz_zip_reader_init_file(&z, ar_path, 0));
+        for (i = 0; i < sizeof(stored) / sizeof(stored[0]); i++) {
+            snprintf(path, sizeof(path), "disc/%s", stored[i]);
+            CHECK(mz_zip_reader_locate_file(&z, path, NULL, 0) >= 0);
+        }
+        for (i = 0; i < sizeof(left_out) / sizeof(left_out[0]); i++) {
+            snprintf(path, sizeof(path), "disc/%s", left_out[i]);
+            CHECK(mz_zip_reader_locate_file(&z, path, NULL, 0) < 0);
+        }
+        /* the menu is not stored */
+        CHECK(mz_zip_reader_locate_file(&z, "disc/SLUS_999.99", NULL, 0) < 0);
+        mz_zip_reader_end(&z);
+    }
+
+    /* 5. the archive answers the folder's paths as the image does */
+    iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
+    ar = ico_vfs_mount_archive(ar_path);
+    CHECK(iso != NULL && ar != NULL);
+    if (iso == NULL || ar == NULL) {
+        ico_disc_set_test_row(NULL);
+        return 1;
+    }
+    CHECK(strcmp(ico_vfs_df_path(ar), "GAME/DFDATAS/DATA.DF") == 0);
+    same_stat(iso, ar, "");
+    same_stat(iso, ar, "GAME");
+    same_stat(iso, ar, "GAME/DFDATAS");
+    same_stat(iso, ar, "\\GAME\\DFDATAS\\DATA.DF;1");
+    same_stat(iso, ar, "cdrom0:\\GAME\\LIBSD.IRX;1");
+    same_stat(iso, ar, "SLUS_999.99");
+    same_stat(iso, ar, "DFDATAS/DATA.DF"); /* neither: the root has no DFDATAS */
+    for (i = 0; i < sizeof(stored) / sizeof(stored[0]); i++) {
+        same_stat(iso, ar, stored[i]);
+        CHECK(same_file_sectors(iso, ar, stored[i]));
+    }
+    for (i = 0; i < sizeof(left_out) / sizeof(left_out[0]); i++) {
+        CHECK(ico_vfs_stat(iso, left_out[i], NULL) == 0 &&
+              ico_vfs_stat(ar, left_out[i], NULL) != 0);
+    }
+    /* the menu's entry answers, its bytes are not there */
+    CHECK(ico_vfs_read_sectors(ar, SUB_MENU, 1, sec) != 0);
+    /* the game's requests through libcdvd: the same records from both */
+    same_search(iso, ar, "\\GAME\\DFDATAS\\DATA.DF;1");
+    same_search(iso, ar, "cdrom0:\\GAME\\LIBSD.IRX;1");
+    same_search(iso, ar, "\\GAME\\SLUS_000.00;1");
+    same_search(iso, ar, "\\SLUS_999.99;1");
+    same_search(iso, ar, "\\DFDATAS\\DATA.DF;1");
+    ico_cdvd_host_reset();
+    ico_vfs_set_disc(ar);
+    memset(&fp, 0xEE, sizeof(fp));
+    CHECK(sceCdSearchFile((struct sceCdlFILE *)&fp, "cdrom0:\\GAME\\DFDATAS\\DATA.DF;1") == 1);
+    CHECK(fp.lsn == SUB_DATADF && fp.size == SUB_DATADF_SIZE);
+    /* the drive's answers for the archive: the row's type and the menu as the boot file */
+    CHECK(sceCdGetDiskType() == ICO_CD_TYPE_PS2DVD);
+    CHECK(ico_cdvd_host_boot_name() != NULL &&
+          strcmp(ico_cdvd_host_boot_name(), "SLUS_999.99") == 0);
+    ico_vfs_set_disc(NULL);
+    ico_cdvd_host_reset();
+    /* the port's own DATA.DF reads (df_pack.h) find the folder's */
+    CHECK(ico_df_has(ar, "beta.int") == 1 && ico_df_size(ar, "beta.int") == 5000);
+    CHECK(ico_df_read(ar, "beta.int", 0, buf, sizeof(buf)) == (int64_t)sizeof(buf));
+    ok = 1;
+    for (i = 0; i < sizeof(buf); i++) {
+        ok &= buf[i] == synthByte(SUB_DATADF, 4096 + i);
+    }
+    CHECK(ok);
+    ico_vfs_unmount(ar);
+    ico_vfs_unmount(iso);
+
+    /* 6. a changed game ELF, a changed DATA.DF member: refused without the image hash */
+    check_refused(dir, SUB_ELF, 1000, "GAME/SLUS_000.00 SHA-1");
+    check_refused(dir, SUB_DATADF, 4096 + 7, "DATA.DF member 1");
+
+    ico_disc_set_test_row(NULL);
+    remove(ar_path);
+    remove(iso_path);
+    printf("archive_test sub: %s\n", failures ? "FAILED" : "ok");
+    return failures ? 1 : 0;
+}
+
 static int run_manifest(const char *slug, const char *iso_path)
 {
     IcoVfs *iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
@@ -1100,6 +1534,9 @@ int main(int argc, char **argv)
     if (argc == 3 && strcmp(argv[1], "shift") == 0) {
         return run_shift(argv[2]);
     }
+    if (argc == 3 && strcmp(argv[1], "sub") == 0) {
+        return run_sub(argv[2]);
+    }
     if (argc == 3 && strcmp(argv[1], "manifest") == 0) {
         return run_manifest("pal", argv[2]);
     }
@@ -1110,7 +1547,8 @@ int main(int argc, char **argv)
         return run_manifest_check(argv[2], argv[3], argv[4]);
     }
     fprintf(stderr,
-            "usage: %s synth <dir> | shift <dir> | disc <iso> <dir> [slug] | manifest [--region "
+            "usage: %s synth <dir> | shift <dir> | sub <dir> | disc <iso> <dir> [slug] | manifest "
+            "[--region "
             "slug] <iso> | manifest-check <slug> <iso> <discs.c>\n",
             argv[0]);
     return 2;
