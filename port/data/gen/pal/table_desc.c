@@ -488,7 +488,8 @@ _Static_assert(offsetof(MotOriAlt, alt) == 4, "MotOriAlt.alt: EE offset");
 _Static_assert(sizeof((((MotOriAlt *)0)->req)) == 4, "MotOriAlt.req: size");
 _Static_assert(sizeof((((MotOriAlt *)0)->alt)) == 4, "MotOriAlt.alt: size");
 
-_Static_assert(sizeof(PObjMdl) == 140, "PObjMdl: EE size");
+/* PObjMdl: 140 bytes on the disc; the host-only modelPath, shadowPath after them */
+_Static_assert(sizeof(PObjMdl) == 268, "PObjMdl: host size");
 _Static_assert(offsetof(PObjMdl, path) == 0, "PObjMdl.path: EE offset");
 _Static_assert(offsetof(PObjMdl, collPath) == 48, "PObjMdl.collPath: EE offset");
 _Static_assert(offsetof(PObjMdl, offset) == 112, "PObjMdl.offset: EE offset");
@@ -574,7 +575,8 @@ _Static_assert(sizeof((((FumbleRow *)0)->rotX)) == 4, "FumbleRow.rotX: size");
 _Static_assert(sizeof((((FumbleRow *)0)->rotZ)) == 4, "FumbleRow.rotZ: size");
 
 #if ICO_TD_EE_HOST
-_Static_assert(sizeof(ActModeRec) == 80, "ActModeRec: EE size");
+/* ActModeRec: 80 bytes on the disc; the host-only holdDir, pullUp, saveInfo, stopMail after them */
+_Static_assert(sizeof(ActModeRec) == 84, "ActModeRec: host size");
 _Static_assert(offsetof(ActModeRec, ent[0].act) == 0, "ActModeRec.ent[0].act: EE offset");
 _Static_assert(offsetof(ActModeRec, ent[0].word4) == 4, "ActModeRec.ent[0].word4: EE offset");
 _Static_assert(offsetof(ActModeRec, ent[0].word8) == 8, "ActModeRec.ent[0].word8: EE offset");
