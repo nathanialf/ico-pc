@@ -231,6 +231,9 @@ def compute_manifest(elf_path, slug="pal"):
         layout = g.SymbolMap()
     ee_recs = L.parse_layout(slug)[0] if slug != "pal" else None
     host = host_records()
+    with version(slug):
+        extras = g.parse_port_rows()["extra"]
+    inside = extra_ranges(slug, extras, ee_recs)
     lines, refs = [], {}
     with open(elf_path, "rb") as fh:
         elf = ELFFile(fh)
@@ -243,7 +246,12 @@ def compute_manifest(elf_path, slug="pal"):
                              f"crc32=0x{zlib.crc32(d):08x}")
                 if is_pool(s):
                     continue
-                hrec = host[s["type"]]
+                hrec = host.get(s["type"])
+                if hrec is None and m in extras:
+                    hrec = extra_record(s)
+                if hrec is None:
+                    fail(f"{slug}: {m}: record type {s['type']} is not one of PAL's (an "
+                         f"'extra {m} {s['type']} <count>' row declares a table PAL lacks)")
                 if not hrec.pointers:
                     continue
                 ptrs, size = set_pointer_fields(slug, s["type"], hrec, ee_recs)
@@ -255,6 +263,13 @@ def compute_manifest(elf_path, slug="pal"):
                         if v == 0:
                             continue
                         if chars and any(lo <= v < hi for lo, hi in pools):
+                            continue
+                        into = [x for x in inside if x[0] <= v < x[1]]
+                        if into:
+                            tlo, _, tsize, tm = into[0]
+                            if (v - tlo) % tsize:
+                                fail(f"{m} [{i}].{path} at 0x{r['lo'] + at:08X}: 0x{v:08X} is "
+                                     f"inside a record of {tm}, not at one")
                             continue
                         name, err = layout.name_at(v, func)
                         if name is None:
@@ -283,6 +298,25 @@ def compute_manifest(elf_path, slug="pal"):
         f"{sum(1 for k in refs if k[1] == 'obj')} objects.",
     ]
     return "\n".join(head + lines) + "\n"
+
+
+def extra_ranges(slug, extras, ee_recs):
+    """[(lo, hi, EE record size, member)]: the records of a set's extra
+    tables. A pointer word into one (the June 2001 demo's enemy sets point at
+    each other's tables) is no registry object: the loader resolves it to the
+    record of that table's host array (port/data/tables.c resolve_data), so
+    it must point at a record's start."""
+    out = []
+    for m, rows in members(slug):
+        if m not in extras:
+            continue
+        for s, r in rows:
+            if is_pool(s):
+                continue
+            size = ee_recs[s["type"]].size
+            lo = r["lo"] + g.start_of(s, r)
+            out.append((lo, lo + (s["count"] or 1) * size, size, m))
+    return out
 
 
 def check_narrow(elf_path, slug, ee_recs, host):
@@ -844,9 +878,11 @@ def field_list(st, rec):
     out = []
     for mp in st.maps[rec.schema["type"]]:
         f = mp.host
-        if mp.how == "copy" and mp.src.kind == "BITS" and mp.src.bit != f.bit:
+        if mp.how == "copy" and mp.src.kind == "BITS" and (mp.src.bit, mp.src.width) != \
+                (f.bit, f.width):
+            # a moved bit-field, or an unsigned one the disc holds narrower
             g2 = Field("BITS", f.path, f.ee_off, f.ee_size, signed=f.signed, bit=mp.src.bit,
-                       width=f.width)
+                       width=mp.src.width)
             out.append((g2, mp.src.ee_off, mp.src.ee_size, "BITS", None))
         elif mp.how == "copy" and mp.count != f.count:
             g2 = Field(f.kind, f.path, f.ee_off, f.ee_size, count=mp.count, signed=f.signed)
@@ -868,6 +904,13 @@ def field_list(st, rec):
             out.append((g2, mp.src.ee_off, mp.src.ee_size, "BITS", None))
         elif mp.how == "clear":
             continue
+        elif mp.how == "gather":
+            # a scalar array the disc holds as fields of other names (rename
+            # rows): one field per element
+            for i, s in enumerate(mp.srcs):
+                g2 = Field(f.kind, f"{f.path}[{i}]", f.ee_off + i * f.ee_size, f.ee_size,
+                           signed=f.signed)
+                out.append((g2, s.ee_off, s.ee_size, s.kind, None))
         else:
             out.append((f, mp.base, mp.span, "BITMAP", mp.bits))
     return out
