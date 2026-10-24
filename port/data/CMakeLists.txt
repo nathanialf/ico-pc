@@ -131,6 +131,10 @@ if(ICO_RUN_TESTS)
     # df_lsn_shift); the CD bin/cue/chd twins do not apply
     add_test(NAME vfs_disc_kor COMMAND vfs_test disc "${ICO_DISC_IMAGE_KOR}" kor)
     set_tests_properties(vfs_disc_kor PROPERTIES SKIP_RETURN_CODE 77)
+    # the Asian disc (a DVD, as the Korean one): its .iso only, with its DATA.DF
+    # 153600 sectors after the directory's LSN as the Korean disc's
+    add_test(NAME vfs_disc_cn COMMAND vfs_test disc "${ICO_DISC_IMAGE_CN}" cn)
+    set_tests_properties(vfs_disc_cn PROPERTIES SKIP_RETURN_CODE 77)
     set(_ico_raw_python "${Python3_EXECUTABLE}")
     if(NOT _ico_raw_python)
         find_program(_ico_raw_python NAMES python3 python)
@@ -204,10 +208,12 @@ if(ICO_RUN_TESTS)
              COMMAND archive_test manifest-check kor "${ICO_DISC_IMAGE_KOR}"
                      "${CMAKE_CURRENT_SOURCE_DIR}/discs.c")
     set_tests_properties(archive_manifest_kor PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
-    # the North American disc, the August 2001 preview disc and the June 2001
-    # magazine demo (whose game is the image's CUS97113 folder): each disc
-    # extracted and checked, and the DATA.DF manifest discs.c holds for it
-    foreach(_slug ntsc aug6 jun26)
+    # the North American disc, the August 2001 preview disc, the June 2001
+    # magazine demo (whose game is the image's CUS97113 folder) and the Asian
+    # disc (a DVD with the Korean disc's shifted DATA.DF; its manifest is
+    # computed by build-host/tmp/kor/df_manifest.py): each disc extracted and
+    # checked, and the DATA.DF manifest discs.c holds for it
+    foreach(_slug ntsc aug6 jun26 cn)
         string(TOUPPER "${_slug}" _up)
         add_test(NAME archive_disc_${_slug} COMMAND archive_test disc "${ICO_DISC_IMAGE_${_up}}"
                                                     "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
@@ -267,12 +273,12 @@ if(ICO_DATA_PYTHON)
     add_test(NAME data_desc_fresh
              COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_data_desc.py" --check
              WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-    # the USA disc's, the August 2001 disc's and the June 2001 demo's sets, each
+    # the USA disc's, the August 2001 disc's, the June 2001 demo's and the Asian disc's sets, each
     # checked alone (written before config/regions.txt listed their rows):
     # port/data/gen/<slug>/ must be what the table with the pending rows up to
     # that slug gives (once the rows land, data_desc_fresh checks them with
     # the others and these check them again)
-    foreach(_slug ntsc aug6 jun26)
+    foreach(_slug ntsc aug6 jun26 cn)
         add_test(NAME data_desc_fresh_${_slug}
                  COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_data_desc.py" --check
                          --version ${_slug}
@@ -286,7 +292,7 @@ if(ICO_DATA_PYTHON)
     # each other disc's config/ee_layout.<slug>.txt must be what its recorded
     # upstream revision gives (exit 0 with a note when that revision is not in
     # the clone)
-    foreach(_slug jpn kor ntsc aug6 jun26)
+    foreach(_slug jpn kor ntsc aug6 jun26 cn)
         add_test(NAME ee_layout_fresh_${_slug}
                  COMMAND "${ICO_DATA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/gen_ee_layout.py"
                          --version ${_slug} --check
@@ -314,6 +320,8 @@ set(ICO_BASE_ELF_AUG6 "${CMAKE_SOURCE_DIR}/baserom/aug6/baseelf.elf" CACHE FILEP
     "The August 2001 preview disc's base ELF the loader test's reference tables are written from")
 set(ICO_BASE_ELF_JUN26 "${CMAKE_SOURCE_DIR}/baserom/jun26/baseelf.elf" CACHE FILEPATH
     "The June 2001 magazine demo's base ELF (CUS97113/SCPS_000.00) the loader test's reference tables are written from")
+set(ICO_BASE_ELF_CN "${CMAKE_SOURCE_DIR}/baserom/cn/baseelf.elf" CACHE FILEPATH
+    "The Asian base ELF (SCPS_550.01) the loader test's reference tables are written from")
 # The members a disc's config/data_members.<slug>.txt lists. ICO_DATA_MEMBERS
 # is the union of every link order's (tools/gen_sources.py), so a member only
 # some discs have (the USA disc has no hint table, the June 2001 demo tables
@@ -363,12 +371,12 @@ if(ICO_DATA_PYTHON AND _ico_have_elftools EQUAL 0 AND EXISTS "${ICO_BASE_ELF}")
         list(APPEND _renames "${sym}=ico_ref_${sym}")
     endforeach()
     set_source_files_properties(${_refs} PROPERTIES COMPILE_DEFINITIONS "${_renames}")
-    # each other disc's reference (jpn, kor, ntsc, aug6, jun26), when its ELF is present:
+    # each other disc's reference (jpn, kor, ntsc, aug6, jun26, cn), when its ELF is present:
     # ico_ref_<slug>_<name>, gen_data_c.py --version <slug>, and
     # ICO_TABLES_TEST_<SLUG> for tables_test's table of references
     set(_refs_other "")
     set(_refs_defs "")
-    foreach(_slug jpn kor ntsc aug6 jun26)
+    foreach(_slug jpn kor ntsc aug6 jun26 cn)
         string(TOUPPER "${_slug}" _up)
         if(NOT EXISTS "${ICO_BASE_ELF_${_up}}")
             continue()
@@ -431,7 +439,7 @@ if(ICO_DATA_PYTHON AND _ico_have_elftools EQUAL 0 AND EXISTS "${ICO_BASE_ELF}")
         # each other disc's set against its ELF (through the VFS when its
         # image is present), each ELF refused by the other's set (the PAL
         # ELF); skipped (77) without that disc's ELF
-        foreach(_slug jpn kor ntsc aug6 jun26)
+        foreach(_slug jpn kor ntsc aug6 jun26 cn)
             string(TOUPPER "${_slug}" _up)
             add_test(NAME tables_loader_${_slug}
                      COMMAND tables_test --set ${_slug} "${ICO_BASE_ELF_${_up}}"
