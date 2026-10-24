@@ -21,7 +21,7 @@ how the dumps that pack makers start from are written. The player's side is
 | `ico2/seki/src/Texture.c` | the texture hook (`texHostPack`) and the per-frame pump (`tex_ResetVram`) |
 | `ico2/seki/src/Packet.c` | the mesh hooks: lookup at build, the dump, the morph decline |
 | `port/platform/main_host.c` | `open_texture_pack`, `open_model_pack` |
-| `tools/texture_catalog.py`, `docs/textures/` | the generator of the checked-in texture catalogue and its output ([below](#exporting-every-texture-of-the-disc)) |
+| `tools/texture_catalog.py`, `docs/textures/` | the generator of the checked-in texture sheets (one CSV per disc) and its output ([below](#exporting-every-texture-of-the-disc)) |
 | `tools/test/texture_catalog_test.py` | its self-test (`texture_catalog`) |
 | `tools/package_textures_lib.sh` | the folders and README notes of the release packages |
 | `tools/test/package_textures_test.sh` | the test of that staging and the archive checks |
@@ -373,25 +373,30 @@ checks the cancel flag between items and sets its final state last, after the ma
 | `textures: export not started: %s` | `texpack_export_begin` refused (one running, no dump folder, no disc, the disc not mountable again, no thread) |
 | `textures: export failed: the disc's DATA.DF could not be read` | the worker's index could not be built |
 
-The checked-in catalogue: `docs/textures/europe/`, `japan/` and `korea/` (named for the region, since `tools/check_no_rom.sh` refuses a path with a disc serial in it) hold a catalogue of every texture on each disc (README.md with the counts and
-the group table, one markdown file per group, split below 240 KiB): the disc path, format, size,
-levels, the level-alone names, the first texture that carries the same name, and for the Japanese
-and Korean discs whether the European disc has the names. It is generated, not written by hand, and
-the files are checked in. To regenerate (nothing here starts the game):
+The checked-in sheets: `docs/textures/europe.csv`, `japan.csv` and `korea.csv` (named for the
+region, since `tools/check_no_rom.sh` refuses a path with a disc serial in it) hold one row per
+level-alone name of the disc, in the order the names first appear: the replacement file name, the
+level's size, the format in words, the first texture that carries the name (`object/sdf/` dropped),
+every place that uses it (the stage or character folder, the menu folder, the subtitle file), how
+many other textures carry it, for the Japanese and Korean discs whether the European disc has the
+name, and notes (a smaller level of a bigger texture, a CLUT scroll, no name). A texture with no
+name (24-bit CLUT) is a row with an empty file column. They are generated, not written by hand
+(`docs/textures/README.md` explains the columns to pack makers). To regenerate (nothing here starts
+the game):
 
 ```
-build-host/linux-x64/port/render/texpack_disc_test <image>        # writes texpack_names.txt in the build directory
-python3 -I tools/texture_catalog.py <names.txt> --serial SCES-50760 --out docs/textures/europe/
-python3 -I tools/texture_catalog.py <names.txt> --serial SCPS-11003 --out docs/textures/japan/ --european <PAL names.txt>
-python3 -I tools/texture_catalog.py <names.txt> --serial SCPS-56001 --out docs/textures/korea/ --european <PAL names.txt>
+build-host/linux-x64/port/render/texpack_disc_test <image>        # writes texpack_names.txt in the working directory
+python3 -I tools/texture_catalog.py <names.txt> --serial SCES-50760 --out docs/textures/europe.csv
+python3 -I tools/texture_catalog.py <names.txt> --serial SCPS-11003 --out docs/textures/japan.csv --european <PAL names.txt>
+python3 -I tools/texture_catalog.py <names.txt> --serial SCPS-56001 --out docs/textures/korea.csv --european <PAL names.txt>
 ```
 
 Run `texpack_disc_test` on `Ico_PAL.iso`, `Ico_JPN.iso` and `Ico_KOR.iso`; `--check` regenerates in
-memory and exits 1 when a file on disk differs or is left over. The names files are not in the
-repository, so the check is for maintainers, not CI; a texture names change (`texpack_candidates`,
-the walk's rules) means regenerating. A disc added later is one more run with its serial. The
-self-test is `tools/test/texture_catalog_test.py` (ctest `texture_catalog`). Counts per disc are in
-each README.
+memory and exits 1 when the file on disk differs. The names files are not in the repository, so the
+check is for maintainers, not CI; a texture names change (`texpack_candidates`, the walk's rules)
+means regenerating. A disc added later is one more run with its serial. The European sheet is
+240 KiB, under the 256 KiB cap; a column added later must keep it there. The self-test is
+`tools/test/texture_catalog_test.py` (ctest `texture_catalog`).
 
 The model viewer's save button arms a one-shot dump of every part of the object on screen, dumping
 on or off, rewriting files already there (`modelpack_dump_object_once`,

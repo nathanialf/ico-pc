@@ -460,8 +460,8 @@ and Achievement pop-ups.
   so you can run it again. The file `manifest.txt` in the same folder lists
   every picture, what was saved and what an export cannot make (what the
   game draws while it runs, such as fog and glow; those need **Dump
-  textures**). A [catalogue of every picture on each disc](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/europe/README.md)
-  shows which pictures share one name.
+  textures**). A [spreadsheet per disc](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/README.md)
+  lists every file a pack can hold and which pictures share one name.
 
 ### Character Customization
 

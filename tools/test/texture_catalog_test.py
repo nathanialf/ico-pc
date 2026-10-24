@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """python3 -I tools/test/texture_catalog_test.py
 
-Runs tools/texture_catalog.py on a 12-line fixture: the grouping, the Same as
-link, the European column, the split at the size cap and --check.
+Runs tools/texture_catalog.py on a 12-line names file: one row per name, the
+first user and the count of the others, the notes, the European column,
+--check and repeatable output.
 """
-import importlib.util
+import csv
+import io
 import os
 import subprocess
 import sys
@@ -20,7 +22,7 @@ def name(n):
     return H % n
 
 
-# a 12-line names file of a made-up disc: two objects, a menu folder, a subtitle file
+# a made-up disc: two characters, a menu folder, a subtitle file
 FIXTURE = "\n".join([
     "Font/font.tm2 PSMT4 0x03 256x256 1 clut 16/64B scroll 0 0 : %s@0" % name(1),
     "object/sdf/boy/model/../texture/arm.tm2 PSMT4 0x03 64x64 1 clut 16/64B scroll 0 0 : %s@0" % name(2),
@@ -57,8 +59,12 @@ def run(*args):
 
 
 def read(p):
-    with open(p, encoding="utf-8") as f:
+    with open(p, encoding="utf-8", newline="") as f:
         return f.read()
+
+
+def rows_of(p):
+    return list(csv.DictReader(io.StringIO(read(p))))
 
 
 def main():
@@ -67,80 +73,57 @@ def main():
         euro = os.path.join(d, "euro.txt")
         open(names, "w").write(FIXTURE)
         open(euro, "w").write(EURO)
-        out = os.path.join(d, "out")
+        out = os.path.join(d, "japan.csv")
 
         r = run(names, "--serial", "TEST-00001", "--out", out, "--european", euro)
         check(r.returncode == 0, "generation exits 0: " + r.stderr)
-        files = sorted(os.listdir(out))
-        check(files == ["Font.md", "README.md", "Tex_menu01.md", "data_EG01-jim.md",
-                        "object-boy.md", "object-girl.md", "object-sky.md",
-                        "text-menu_PAL_FR.md"], "group files: %r" % files)
-
-        boy = read(os.path.join(out, "object-boy.md"))
-        girl = read(os.path.join(out, "object-girl.md"))
-        # `model/..` collapses and only level-alone names are listed
-        check("object/sdf/boy/texture/arm.tm2" in boy, "path without model/..")
-        check("/chain" not in boy and name(4) not in boy, "chain names left out")
-        check("`%s@1`" % name(5) in boy and "`%s@2`" % name(6) in boy, "one name per level")
-        check("several sizes" in boy, "note for levels")
-        # Same as: the first holder says first, the later ones link to it
-        rows = {l.split(" | ")[0]: l for l in boy.splitlines() if l.startswith("| object")}
-        check("| first |" in rows["| object/sdf/boy/texture/arm.tm2"], "first holder")
-        check("[arm.tm2](object-boy.md)" in rows["| object/sdf/boy/texture/arm2.tm2"], "same-group link")
-        skin = [l for l in girl.splitlines() if "skin.tm2" in l][0]
-        check("[arm.tm2](object-boy.md)<br>first" in skin, "link per name: " + skin)
-        check("colours cycle" in girl, "colours cycle note")
-        sky = read(os.path.join(out, "object-sky.md"))
-        check("no name (24-bit palette)" in sky and "| none |" in sky, "refused row")
-        # the European column
-        check(" same |" in [l for l in boy.splitlines() if "arm.tm2" in l][0], "European same")
-        check(" partly |" in skin, "European partly: " + skin)
-        check(" new |" in read(os.path.join(out, "data_EG01-jim.md")), "European new")
-        check("| European |" in boy, "European header")
-        readme = read(os.path.join(out, "README.md"))
-        check("- Textures: 12\n" in readme, "texture count")
-        check("- Different names: 12\n" in readme, "unique names")
-        check("- Names that an earlier texture already carries: 2\n" in readme, "covered names")
-        check("- Textures with no name: 1\n" in readme, "unnamed")
-        check("(same): 6\n" in readme and "(partly): 1\n" in readme, "European counts")
-        check("Dump textures" in readme, "not-on-disc list")
+        rows = rows_of(out)
+        check(list(rows[0].keys()) == ["file", "size", "format", "first used by", "where",
+                                       "also used by", "in the European pack", "notes"],
+              "columns: %r" % list(rows[0].keys()))
+        # one row per name (12 names) plus the one texture with no name
+        check(len(rows) == 13, "13 rows (%d)" % len(rows))
+        by = {r["file"]: r for r in rows}
+        arm = by[name(2) + ".png"]
+        check(arm["first used by"] == "boy/texture/arm.tm2" and arm["also used by"] == "2" and
+              arm["where"] == "boy girl", "first user and the count: %r" % arm)
+        check(name(4) + ".png" not in by, "chain names left out")
+        check(by[name(5) + ".png"]["size"] == "16x16" and
+              by[name(5) + ".png"]["notes"] == "size 1 of a 32x32 texture", "a smaller size's row")
+        check(by[name(6) + ".png"]["size"] == "8x8", "size 2")
+        check(by[name(3) + ".png"]["notes"] == "has 2 smaller sizes (their own rows)", "levels note")
+        check(by[name(7) + ".png"]["notes"].startswith("colours cycle"), "colours cycle note")
+        none = [r for r in rows if r["file"] == ""]
+        check(len(none) == 1 and none[0]["first used by"] == "sky/texture/fog1.tm2" and
+              "24-bit palette" in none[0]["notes"] and none[0]["in the European pack"] == "",
+              "the texture with no name: %r" % none)
+        check(by[name(12) + ".png"]["where"] == "data_EG01.jim", "a subtitle record's place")
+        check(by[name(10) + ".png"]["where"] == "text/menu_PAL_FR", "a menu sheet's place")
+        check(arm["in the European pack"] == "yes" and by[name(8) + ".png"]["in the European pack"] == "no",
+              "the European column")
+        check(by[name(1) + ".png"]["format"] == "16 colours" and
+              by[name(3) + ".png"]["format"] == "256 colours", "format words")
+        # the first appearance keeps the disc's order
+        check([r["file"] for r in rows[:3]] == [name(1) + ".png", name(2) + ".png", name(3) + ".png"],
+              "the disc's order")
 
         # without --european there is no European column
-        out2 = os.path.join(d, "out2")
+        out2 = os.path.join(d, "europe.csv")
         r = run(names, "--serial", "TEST-00001", "--out", out2)
-        check(r.returncode == 0 and "European" not in read(os.path.join(out2, "object-boy.md")),
-              "no European column without the option")
-
-        # the split at the cap
-        out3 = os.path.join(d, "out3")
-        r = run(names, "--serial", "TEST-00001", "--out", out3, "--cap", "500")
-        check(r.returncode == 0, "split run: " + r.stderr)
-        f3 = sorted(os.listdir(out3))
-        check("object-boy-2.md" in f3, "split file exists: %r" % f3)
-        for fn in f3:
-            if fn != "README.md":
-                check(len(open(os.path.join(out3, fn), "rb").read()) < 800, "part %s small" % fn)
-        # a later link points to the part that holds the texture
-        check("(object-boy.md)" in read(os.path.join(out3, "object-girl-2.md")), "link to part one")
-        check("object-boy-2.md" in read(os.path.join(out3, "README.md")), "README lists the parts")
+        check(r.returncode == 0 and "in the European pack" not in rows_of(out2)[0], "no European column")
 
         # --check
         r = run(names, "--serial", "TEST-00001", "--out", out, "--european", euro, "--check")
         check(r.returncode == 0, "check is clean")
-        with open(os.path.join(out, "object-boy.md"), "a") as f:
+        with open(out, "a") as f:
             f.write("x\n")
         r = run(names, "--serial", "TEST-00001", "--out", out, "--european", euro, "--check")
         check(r.returncode == 1, "check fails on a changed file")
-        run(names, "--serial", "TEST-00001", "--out", out, "--european", euro)
-        open(os.path.join(out, "stray.md"), "w").write("x")
-        r = run(names, "--serial", "TEST-00001", "--out", out, "--european", euro, "--check")
-        check(r.returncode == 1, "check fails on a left-over file")
         # the same input gives the same bytes
         run(names, "--serial", "TEST-00001", "--out", out2 + "b", "--european", euro)
         run(names, "--serial", "TEST-00001", "--out", out2 + "c", "--european", euro)
-        check(all(read(os.path.join(out2 + "b", f)) == read(os.path.join(out2 + "c", f))
-                  for f in os.listdir(out2 + "b")), "repeatable")
-    print("texture_catalog_test: %s" % ("FAILED (%d)" % fails if fails else "ok"))
+        check(read(out2 + "b") == read(out2 + "c"), "repeatable output")
+    print("texture_catalog_test: %s" % ("OK" if fails == 0 else "%d failures" % fails))
     return 1 if fails else 0
 
 

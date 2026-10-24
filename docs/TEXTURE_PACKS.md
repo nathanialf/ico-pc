@@ -172,11 +172,14 @@ Give your picture the name of the file you replace, put it in the
 you start it.
 
 Many pictures on the disc share one name, so one replacement covers all of
-them. To see every picture's name and which ones share a name before you
-draw anything, read the catalogue of your disc:
-[European](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/europe/README.md),
-[Japanese](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/japan/README.md),
-[Korean](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/korea/README.md).
+them. A spreadsheet per disc lists every file a pack can hold, where the
+picture is used, how many others share its name, and (for the Japanese and
+Korean discs) whether a European pack already covers it:
+[European](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/europe.csv),
+[Japanese](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/japan.csv),
+[Korean](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/korea.csv)
+(the columns are explained in
+[docs/textures/README.md](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/README.md)).
 
 ### Pictures the export cannot make
 
