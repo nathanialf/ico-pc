@@ -627,4 +627,41 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Copia dell’immagine del disco nell’app",
     [UI_STR_ISO_COPYING_LONG] =
         "Copia dell’immagine del disco nell’app. È un’immagine grande: ci vorranno alcuni minuti",
+    [UI_STR_SECTION_VARIANTS] = "Varianti di gioco",
+    [UI_STR_OPT_VAR_TOUGHNESS] = "Resistenza delle ombre",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
+        "Americana: ogni ombra resistente come nel disco nordamericano, e non più resistente nelle partite successive. Gli obiettivi restano attivi.",
+    [UI_STR_VAL_VAR_AMERICAN] = "Americana",
+    [UI_STR_VAL_VAR_NOT_TOUGHER] = "Senza aumenti",
+    [UI_STR_OPT_VAR_ONE_HIT] = "Un colpo per attacco",
+    [UI_STR_OPT_VAR_ONE_HIT_NOTE] =
+        "Ogni attacco di Ico può colpire un’ombra una sola volta. Disattiva gli obiettivi.",
+    [UI_STR_OPT_VAR_NEVER_DODGE] = "Le ombre non schivano mai",
+    [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] =
+        "Le ombre non evitano mai i colpi di Ico. Disattiva gli obiettivi.",
+    [UI_STR_OPT_VAR_AGGRESSION] = "Aggressività delle ombre",
+    [UI_STR_VAL_VAR_AGG_OWN] = "Proprio",
+    [UI_STR_VAL_VAR_AGG_BOLD_PATIENT] = "Audace, paziente",
+    [UI_STR_VAL_VAR_AGG_BOLD_QUICK] = "Audace, veloce",
+    [UI_STR_VAL_VAR_AGG_WARY_PATIENT] = "Cauto, paziente",
+    [UI_STR_VAL_VAR_AGG_WARY_QUICK] = "Cauto, veloce",
+    [UI_STR_OPT_VAR_AGGRESSION_NOTE] =
+        "Come combattono le ombre: audaci o caute, pazienti o veloci. Gli obiettivi restano attivi.",
+    [UI_STR_OPT_VAR_NO_HINTS] = "Niente suggerimenti",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE] =
+        "Yorda non dà suggerimenti su dove andare, come nel disco nordamericano. Gli obiettivi restano attivi.",
+    [UI_STR_OPT_VAR_BARRIER] = "Barriera della Regina",
+    [UI_STR_VAL_VAR_HITS_5] = "5 colpi",
+    [UI_STR_VAL_VAR_HITS_7] = "7 colpi",
+    [UI_STR_OPT_VAR_BARRIER_NOTE] =
+        "Quanti colpi servono per rompere la barriera della Regina. Gli obiettivi restano attivi.",
+    [UI_STR_OPT_VAR_NO_LOOK] = "Filmati senza visuale libera",
+    [UI_STR_OPT_VAR_NO_LOOK_NOTE] =
+        "Lo stick destro non muove più la visuale durante i filmati. Gli obiettivi restano attivi.",
+    [UI_STR_OPT_VAR_IGNORE_CAMS] = "Ignora le camere dei filmati",
+    [UI_STR_OPT_VAR_IGNORE_CAMS_NOTE] =
+        "I filmati possono sembrare sbagliati; il gioco può mostrare luoghi che non voleva farti vedere. Disattiva gli obiettivi.",
+    [UI_STR_OPT_VAR_DEBUG_MENU] = "Menu di debug",
+    [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] =
+        "Il menu di debug del gioco, per sviluppatori. Disattiva gli obiettivi.",
 };
