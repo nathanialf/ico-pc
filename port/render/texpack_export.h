@@ -152,9 +152,10 @@ int texpack_export_run(IcoVfs *vfs, const char *dumpDir, const char *serial, uns
  * same, a file already there is kept and both write through a .tmp file.
  *
  * Shutdown order: texpack_export_shutdown joins the worker; call it before
- * texpack_shutdown, rd_shutdown and SDL_Quit (main_host.c registers it with
- * at_shutdown after texpack_shutdown, so it runs first; window_host.c calls
- * it before rd_shutdown).  It may be called any number of times. */
+ * texpack_shutdown, rd_shutdown and SDL_Quit: register it with main_host.c's
+ * at_shutdown after texpack_shutdown's registration (the list runs last in,
+ * first out, so the export joins first) and call it in window_host.c before
+ * rd_shutdown.  It may be called any number of times. */
 
 /* Starts an export of the selected disc into texpack_dump_dir's folder.
    The game thread.  0 started; -1 (and a "textures: export not started"
