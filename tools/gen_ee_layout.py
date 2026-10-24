@@ -839,6 +839,35 @@ HAND_ROWS = [
     ("ntsc", "flags", 15, 1, None, 0, "only PAL's girl_act.c twin reads it; set in one PAL motion"),
     ("ntsc", "flags", 16, 1, None, 0,
      "jumpHit: the USA actCommonJump reads no bit (commonact.c's VERSION_NTSC twin)"),
+    # The August 2001 preview disc, same method: of the 1042 motions whose names
+    # are unique on both ELFs (it has 1089 motions), N set the PAL bit and the
+    # August bit alike.
+    ("aug6", "flags", 2, 1, "flags", 2,
+     "no reader in either tree; all 1042 motions agree (7 set it)"),
+    ("aug6", "flags", 5, 1, "flags", 8,
+     "commonact.c's _ACTCorrectMsg reads PAL bit 5 (cases 240 and 241), the August bit 8 "
+     "(cases 221 and 222); all 1042 agree"),
+    ("aug6", "flags", 9, 1, "flags", 12,
+     "commonact.c's _ACTCorrectMsg reads PAL bit 9 (case 259), the August bit 12 (case 240); "
+     "all 1042 agree"),
+    ("aug6", "flags", 25, 1, "flags", 19,
+     "commonact.c's landing test reads PAL bit 25, the August bit 19 (case 10); all 1042 agree"),
+    ("aug6", "flags", 31, 1, "flags", 28,
+     "ACTGame_BeforeFunc's root test reads PAL's sign bit, the August bit 28; 1037 of 1042 agree "
+     "(no other August bit agrees in more)"),
+    ("aug6", "flags", 11, 1, None, 0,
+     "chainHang: only PAL's chain.c reads it; no August bit agrees with it in all 1042"),
+    ("aug6", "flags", 12, 1, None, 0,
+     "only PAL's act-way.c twin reads it; no August bit agrees with it in all 1042"),
+    ("aug6", "flags", 13, 1, None, 0,
+     "only PAL's boyact.c twin reads it; no August bit agrees with it in all 1042"),
+    ("aug6", "flags", 14, 1, None, 0, "only PAL's ACTGame_BeforeFunc reads it; no PAL motion sets it"),
+    ("aug6", "flags", 15, 1, None, 0,
+     "only PAL's girl_act.c twin reads it; no August bit agrees with it in all 1042"),
+    ("aug6", "flags", 16, 1, None, 0,
+     "jumpHit: the August actCommonJump sends mail 174 and reads no bit; the one August bit that "
+     "agrees in all 1042 (flags2 bit 3) is the counterpart of PAL's flags2 bit 6 (boyact.c's read), "
+     "set in the same 2 motions"),
 ]
 
 
@@ -866,6 +895,28 @@ UNPAIRED_BY_SLUG = [
      "PAL flags bit 15: the USA twin reads no bit there (written 0)"),
     ("ntsc", "flags >> 11) & 1)) { lim = 70.0f; }",
      "PAL flags bit 11 (chainHang): the USA twin reads no bit there (written 0)"),
+    # The August 2001 preview disc: its MotionDef is laid out as the USA disc's
+    # (same bit-field places), and its twins of the same functions read no bit PAL's
+    # read (same blocks as the USA's, fewer of them: the arms the two share are not blocks).
+    ("aug6", "case 259: if (((motionKind + GOBJ_SUB(self)->ctrl.motion)->flags.word >> 9) & 1)",
+     "the August arm reads flags 12, 8, 8, modeBits 16-18, flags 19 and 18 (intr10Live, named) "
+     "for PAL's flags 9, 5, 5, modeBits 19-21 and flags 25: the hand rows 9, 5 and 25"),
+    ("aug6", "->flags >= 0 || GOBJ_SUB(self)->ctrl.",
+     "ACTGame_BeforeFunc: PAL's sign bit (flags 31) is the August disc's flags bit 28, "
+     "PAL's flags bit 14 has no August reader (written 0)"),
+    ("aug6", "flags.word >> 12) & 1)) { return 1;",
+     "PAL flags bit 12: the August twin reads no bit there (written 0)"),
+    ("aug6", "CHAINROW(self)->flags.word >> 13) & 1) && ACTGame_F",
+     "PAL flags bit 13: the August twin reads no bit there (written 0)"),
+    ("aug6", "flags.word >> 29) & 1) { SetDirectR",
+     "PAL flags bit 29 is the August bit 27 (girl_act.c's pair); the August arm also reads "
+     "its flags bit 0 (PAL bit 4, commonact.c's pair)"),
+    ("aug6", "if ((rec->flags.word >> 4) & 1) { GetSkeltonP",
+     "a PAL-only read of flags bit 4, the August bit 0 (commonact.c's pair)"),
+    ("aug6", "if ((rec->flags.word >> 15) & 1) { send = 1;",
+     "PAL flags bit 15: the August twin reads no bit there (written 0)"),
+    ("aug6", "flags >> 11) & 1)) { lim = 70.0f; }",
+     "PAL flags bit 11 (chainHang): the August twin reads no bit there (written 0)"),
 ]
 
 
