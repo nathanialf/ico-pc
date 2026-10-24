@@ -781,8 +781,12 @@ static const char *const kScrolledRows[4] = {
     "GIRL FALL",
 };
 
-/* the counter's strip in the last streamFrame (zero when it drew none) */
-static UiMenuStrip s_counterStrip;
+/* the counter's and the first row's strips in the last streamFrame (zero
+   when it drew none) */
+static UiMenuStrip s_counterStrip, s_firstRowStrip;
+/* the size of rows 0 to 3 in streamFrame (testStaleRowReturns sets another,
+   so they make shelves of their own) */
+static float s_upperRowSize = UI_MENU_TEXT_SIZE;
 
 /* one rd frame (rd_frame_number advances at its end): the counter, then
    the rows in order; *last the strip of the last row drawn */
@@ -802,8 +806,12 @@ static void streamFrame(int frame, int frames, const char *const rows[8], UiMenu
         memset(&s_counterStrip, 0, sizeof(s_counterStrip));
     }
     for (int r = 0; r < 8; r++) {
-        ui_draw_menu_text(60.0f, 40.0f + 36.0f * (float)r, UI_MENU_TEXT_SIZE, col, rows[r],
-                          UI_ALIGN_LEFT, UI_INK_LIGHT, NULL);
+        ui_draw_menu_text(60.0f, 40.0f + 36.0f * (float)r,
+                          r < 4 ? s_upperRowSize : UI_MENU_TEXT_SIZE, col, rows[r], UI_ALIGN_LEFT,
+                          UI_INK_LIGHT, NULL);
+        if (r == 0 && !ui_menu_font_last_strip(&s_firstRowStrip)) {
+            memset(&s_firstRowStrip, 0, sizeof(s_firstRowStrip));
+        }
     }
     if (last && !ui_menu_font_last_strip(last)) {
         memset(last, 0, sizeof(*last));
@@ -939,38 +947,83 @@ static void testCounterStream(int sc, int maxStrips)
     ui__menu_force_scale(0);
 }
 
+/* the coverage of strip u's cell on its page now (w x h bytes into out,
+   at most cap); 0 when the page is gone or the cell does not fit */
+static int cellCoverage(const UiMenuStrip *u, uint8_t *out, size_t cap)
+{
+    int pw = 0, ph = 0;
+    const uint8_t *cov = ui_menu_font_page(u->cls, u->page, &pw, &ph);
+    if (!cov || u->w <= 0 || u->h <= 0 || u->x + u->w > pw || u->y + u->h > ph ||
+        (size_t)u->w * (size_t)u->h > cap) {
+        return 0;
+    }
+    for (int r = 0; r < u->h; r++) {
+        memcpy(out + (size_t)r * (size_t)u->w, cov + (size_t)(u->y + r) * (size_t)pw + (size_t)u->x,
+               (size_t)u->w);
+    }
+    return 1;
+}
+
 /* Rows that leave and come back while the counter runs (the list scrolled
-   down and up again): four names replaced for 100 frames, far past
-   MF_EVICT_FRAMES (4), so their shelves may be emptied, then drawn again:
-   no word is drawn with the plain font and the strips cached grow by fewer
-   than 64 */
+   down and up again): the four upper names, drawn at another size so they
+   are not on the steady rows' shelves, replaced for 100 frames, far past
+   MF_EVICT_FRAMES (4).  Their shelf is emptied meanwhile (the first row's
+   cell no longer holds its letters just before they return), then they
+   are drawn again: the first row's letters the same as before, no word
+   drawn with the plain font, the strips cached growing by fewer than 64 */
 static void testStaleRowReturns(void)
 {
-    enum { PHASE = 100 };
+    enum { PHASE = 100, CELL = 1 << 18 };
 
     ui__menu_force_scale(3);
+    s_upperRowSize = 1.25f * UI_MENU_TEXT_SIZE;
     const int fb0 = ui_menu_font_fallbacks(), strips0 = ui_menu_font_strip_count();
     const char *scrolled[8];
     for (int r = 0; r < 8; r++) {
         scrolled[r] = r < 4 ? kScrolledRows[r] : kListRows[r];
     }
-    int most = 0;
-    UiMenuStrip last;
+    int most = 0, gone = 0, same = 0;
+    UiMenuStrip last, before;
     memset(&last, 0, sizeof(last));
-    for (int f = 0; f < 3 * PHASE; f++) {
+    memset(&before, 0, sizeof(before));
+    uint8_t *was = calloc(CELL, 1), *now = calloc(CELL, 1);
+    int haveWas = 0;
+    for (int f = 0; f < 3 * PHASE && was && now; f++) {
         streamFrame(f, 3 * PHASE, f >= PHASE && f < 2 * PHASE ? scrolled : kListRows,
                     f == 3 * PHASE - 1 ? &last : NULL);
         const int n = ui_menu_font_strip_count();
         most = n > most ? n : most;
+        if (f == PHASE - 1) {
+            before = s_firstRowStrip;
+            haveWas = before.scale == 3 && cellCoverage(&before, was, CELL);
+        } else if (f == 2 * PHASE - 1 && haveWas) {
+            /* the scrolled-in name's strip, not the first row's: its old
+               cell emptied or reused */
+            gone = !cellCoverage(&before, now, CELL) ||
+                   memcmp(was, now, (size_t)before.w * (size_t)before.h) != 0;
+        } else if (f == 3 * PHASE - 1 && haveWas) {
+            const UiMenuStrip *back = &s_firstRowStrip;
+            same = back->scale == 3 && back->w == before.w && back->h == before.h &&
+                   cellCoverage(back, now, CELL) &&
+                   memcmp(was, now, (size_t)before.w * (size_t)before.h) == 0;
+        }
     }
     const int fallbacks = ui_menu_font_fallbacks() - fb0;
     printf("menu_text_test: rows back after %d frames: %d words plain, at most %d strips, the "
-           "last row on page %d at scale %d\n",
-           PHASE, fallbacks, most, last.page, last.scale);
+           "first row's cell %s meanwhile, back at page %d (%d, %d), was (%d, %d); the last row "
+           "on page %d at scale %d\n",
+           PHASE, fallbacks, most, gone ? "emptied" : "kept", s_firstRowStrip.page,
+           s_firstRowStrip.x, s_firstRowStrip.y, before.x, before.y, last.page, last.scale);
+    CHECK(was && now && haveWas, "rows back: no first-row strip at 3x before it left");
+    CHECK(gone, "rows back: the first row's shelf was never emptied while it was away");
+    CHECK(same, "rows back: the first row did not come back with the same letters");
     CHECK(fallbacks == 0, "rows back: %d words drawn with the plain font", fallbacks);
     CHECK(most - strips0 < 64 && last.scale == 3,
           "rows back: %d strips cached, %d before (fewer than 64 more), scale %d", most, strips0,
           last.scale);
+    free(was);
+    free(now);
+    s_upperRowSize = UI_MENU_TEXT_SIZE;
     ui__menu_force_scale(0);
 }
 
