@@ -1256,6 +1256,11 @@ ELF, tables and groups) and `content_table_chains_kor` (`--version kor`; `port/t
 (`port/data/CMakeLists.txt`), and the package staging (`package_textures`,
 [PACKS.md](PACKS.md#tests)).
 
+`texture_catalog` runs `tools/test/texture_catalog_test.py`: `tools/texture_catalog.py` on a 12-line
+fixture (the grouping, the Same as link, the European column, the split at a small size cap, `--check`
+returning 1 on a changed or left-over file, repeatable output). It needs Python only
+([PACKS.md](PACKS.md#exporting-every-texture-of-the-disc)).
+
 `docs_check` runs `tools/check_docs.py` over README.md, `docs/*.md` and `docs/port/*.md`: relative
 links and their anchors, history and package-code wording, issue numbers and internal words in the
 player guides, TODOs, and the package's list of player guides; `tools/check_docs_allow.txt` holds

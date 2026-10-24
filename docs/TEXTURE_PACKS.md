@@ -149,18 +149,54 @@ change one. If the file does not have these lines, add them under
 
 ## Make a texture pack
 
-To see which file name the game expects for a texture:
+To get the pictures to work from:
+
+1. On the title screen, open **Options > Extras** and choose **Export
+   textures**. You do not need Developer mode for this.
+2. Wait. The row changes to **Stop exporting** and the line under it counts
+   the pictures saved so far; choose it again to stop early. When it ends, a
+   message tells you how many pictures were saved. The message also comes
+   if you left the menu or started playing meanwhile.
+
+The game saves each picture of your disc as a PNG file, under the same name
+PCSX2 uses, in `textures/SCES-50760/dumps` (European disc) or
+`textures/SCPS-11003/dumps` (Japanese disc) or
+`textures/SCPS-56001/dumps` (Korean disc) in the folder with your saves. For
+the European disc that is about 1700 files and about 160 MB, so make sure
+there is room. A file already there is kept, so running it again only adds
+what is missing. The folder also gets a file named `manifest.txt` that
+lists every picture of the disc, what was saved and what was left out.
+
+Give your picture the name of the file you replace, put it in the
+`replacements` folder for the same disc, and the game uses it the next time
+you start it.
+
+Many pictures on the disc share one name, so one replacement covers all of
+them. To see every picture's name and which ones share a name before you
+draw anything, read the catalogue of your disc:
+[European](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/europe/README.md),
+[Japanese](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/japan/README.md),
+[Korean](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/korea/README.md).
+
+### Pictures the export cannot make
+
+The export saves what the disc holds as pictures. It cannot save:
+
+- the fog, glow, blur and depth-of-field pictures the game makes while it
+  runs;
+- the movies;
+- the later colours of the textures whose colours cycle (only the first
+  colours are on the disc);
+- names that combine several sizes of one texture.
+
+For those, play with the game saving them as they appear:
 
 1. Turn on the **Developer mode** row on the Options menu's first page.
 2. Turn on **Dump textures**, the row that appears under it.
 3. Play to the place where the texture appears.
 
-The game saves each texture as a PNG picture, under the same name PCSX2
-uses, in `textures/SCES-50760/dumps` (European disc) or
-`textures/SCPS-11003/dumps` (Japanese disc) or
-`textures/SCPS-56001/dumps` (Korean disc) in the folder with your saves.
-Give your picture that name, put it in the `replacements` folder for the
-same disc, and the game uses it the next time you start it.
+The game saves them in the same folder, under the same kind of name. The
+`manifest.txt` repeats this list.
 
 You cannot earn achievements while Developer mode is on, so turn it off
 again when you are done. Achievements stay off until you go back to the

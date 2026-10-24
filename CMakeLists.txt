@@ -360,6 +360,7 @@ endif()
 # (no build, no game)
 if(Python3_FOUND)
     add_test(NAME docs_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_docs.py")
+    add_test(NAME texture_catalog COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/test/texture_catalog_test.py")
 endif()
 
 # the rc-only tooling's gate (ICO_RC_TOOLS above): the checker's own cases

@@ -422,8 +422,8 @@ page, and it is the same setting in both places.
 ## Extras
 
 On the title screen's Options this page has Music, Models, Credits,
-Character Customization, Add to Steam (on Windows and Linux) and Achievement
-pop-ups. In the pause menu's Options it has only Character Customization
+Character Customization, Add to Steam (on Windows and Linux), Export
+textures and Achievement pop-ups. In the pause menu's Options it has only Character Customization
 and Achievement pop-ups.
 
 - **Music:** listen to the game's music and sound effects.
@@ -448,6 +448,20 @@ and Achievement pop-ups.
   list, `shortcuts.vdf.bak`, beside Steam's own list. If you move the game
   to another folder, add it again from there. The row is only on Windows
   and Linux, the Steam Deck included.
+- **Export textures** (on the title screen's Extras page only; it needs no
+  Developer mode): saves every picture on your disc as a PNG file, under
+  the name PCSX2 gives it, in the game's `textures` folder (`textures/`,
+  then your disc's number, then `dumps`; about 160 MB for the European
+  disc). It is for people who make [texture packs](TEXTURE_PACKS.md#make-a-texture-pack).
+  While it runs the row reads **Stop exporting** and the line under it shows
+  how many pictures are done. A message says how many were saved when it
+  ends or is stopped, even if you have left the menu by then, or says that
+  the folder could not be written. A picture already in the folder is kept,
+  so you can run it again. The file `manifest.txt` in the same folder lists
+  every picture, what was saved and what an export cannot make (what the
+  game draws while it runs, such as fog and glow; those need **Dump
+  textures**). A [catalogue of every picture on each disc](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/europe/README.md)
+  shows which pictures share one name.
 
 ### Character Customization
 

@@ -225,7 +225,8 @@ device: see [Can I play more than one disc?](docs/FAQ.md#can-i-play-more-than-on
   [The full answer](docs/FAQ.md#ico-walks-instead-of-running).
 - **How do I use a texture pack?** Copy it into the `textures` folder that
   comes with the game (on a Mac or an iPhone, the guide says where to make
-  one). [Step by step](docs/TEXTURE_PACKS.md).
+  one). [Step by step](docs/TEXTURE_PACKS.md). To make one, **Options >
+  Extras > Export textures** saves the game's own pictures to start from.
 - **Can I turn off the blur or the glow?** Yes, in **Options > Effects**.
   [What each one does](docs/OPTIONS.md#effects).
 - **Does Lossless Scaling work?** It should, with **Options > Display >

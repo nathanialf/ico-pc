@@ -142,6 +142,11 @@ In that folder:
   `textures/SCPS-11003/replacements` one for the Japanese disc and
   `textures/SCPS-56001/replacements` one for the Korean disc. The game
   makes the folder for the disc you play when it starts.
+- `textures/SCES-50760/dumps` (and `SCPS-11003`, `SCPS-56001` for the other
+  discs) holds the pictures saved by **Options > Extras > Export textures**
+  and by Dump textures, with a list named `manifest.txt`. You can copy them
+  to a computer with the USB cable to draw new ones. The export takes about
+  160 MB for the European disc.
 - `models/SCES-50760/replacements` is where a
   [model pack](MODEL_PACKS.md) for the European disc goes, and
   `models/SCPS-11003/replacements` one for the Japanese disc and

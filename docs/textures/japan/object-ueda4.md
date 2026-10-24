@@ -1,0 +1,60 @@
+# SCPS-11003: object/ueda4
+
+[Back to the catalogue of SCPS-11003](README.md)
+
+| Texture | Format | Size | Levels | Names | Same as | European | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| object/sdf/ueda4/texture/explode_fire.tm2 | 16 colours | 64x64 | 1 | `5e09393e2eb41f11-96d97bac31b55edb-00001994@0` | first | same |  |
+| object/sdf/ueda4/texture/explode_smoke.tm2 | 16 colours | 128x128 | 1 | `61d061b71ca60928-bc0007b31d74f4d6-00001dd4@0` | first | same |  |
+| object/sdf/ueda4/texture/explode_smoke_ad.tm2 | 16 colours | 128x128 | 1 | `f0999543b0b9764-c239f67fa46711ea-00001dd4@0` | first | same |  |
+| object/sdf/ueda4/texture/flare.tm2 | 16 colours | 64x64 | 1 | `bbda1fff8ab4453b-e7443a16fd11a1e8-00001994@0` | first | same |  |
+| object/sdf/ueda4/texture/ripple.tm2 | 16 colours | 64x64 | 1 | `fa88c4aa68bcc8de-569f73fc026da28e-00001994@0` | first | same |  |
+| object/sdf/ueda4/texture/shockwave.tm2 | 16 colours | 128x128 | 1 | `4196d8289924bf17-c46af3b90885354a-00001dd4@0` | first | same |  |
+| object/sdf/ueda4/texture/splash_p1.tm2 | 16 colours | 64x64 | 1 | `2bdbf26d6b553baf-114e12ab39c1ee38-00001994@0` | first | same |  |
+| object/sdf/ueda4/texture/splash_particle.tm2 | 16 colours | 64x64 | 1 | `b88eac5cf9cb0169-c17e3abb554bdaa7-00001994@0` | first | same |  |
+| object/sdf/ueda4/texture/water_rip.tm2 | 16 colours | 64x64 | 1 | `e83fc672b24f5665-e3e8e9dae1ef5ed0-00001994@0` | [water_rip.tm2](object-st24b.md) | same |  |
+| object/sdf/ueda4/texture/wf_exp.tm2 | 16 colours | 64x64 | 1 | `320a08fd40100cc9-7815aca807d62cd6-00001994@0` | first | same |  |
+| object/sdf/ueda4/texture/white.tm2 | 16 colours | 32x32 | 1 | `b2987a9d949e807c-fa4a0997467e6115-00001554@0` | [white.tm2](object-bird.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | first | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/bubble.tm2 | 16 colours | 32x32 | 1 | `cfcffcd150b1d099-91aba52dc5d8145a-00001554@0` | first | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/water_rip.tm2 | 16 colours | 64x64 | 1 | `e83fc672b24f5665-e3e8e9dae1ef5ed0-00001994@0` | [water_rip.tm2](object-st24b.md) | same |  |
+| object/sdf/ueda4/texture/bubble.tm2 | 16 colours | 32x32 | 1 | `cfcffcd150b1d099-91aba52dc5d8145a-00001554@0` | [bubble.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/water_rip.tm2 | 16 colours | 64x64 | 1 | `e83fc672b24f5665-e3e8e9dae1ef5ed0-00001994@0` | [water_rip.tm2](object-st24b.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/bubble.tm2 | 16 colours | 32x32 | 1 | `cfcffcd150b1d099-91aba52dc5d8145a-00001554@0` | [bubble.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/water_rip.tm2 | 16 colours | 64x64 | 1 | `e83fc672b24f5665-e3e8e9dae1ef5ed0-00001994@0` | [water_rip.tm2](object-st24b.md) | same |  |
+| object/sdf/ueda4/texture/bubble.tm2 | 16 colours | 32x32 | 1 | `cfcffcd150b1d099-91aba52dc5d8145a-00001554@0` | [bubble.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/water_rip.tm2 | 16 colours | 64x64 | 1 | `e83fc672b24f5665-e3e8e9dae1ef5ed0-00001994@0` | [water_rip.tm2](object-st24b.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/bubble.tm2 | 16 colours | 32x32 | 1 | `cfcffcd150b1d099-91aba52dc5d8145a-00001554@0` | [bubble.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/water_rip.tm2 | 16 colours | 64x64 | 1 | `e83fc672b24f5665-e3e8e9dae1ef5ed0-00001994@0` | [water_rip.tm2](object-st24b.md) | same |  |
+| object/sdf/ueda4/texture/bubble.tm2 | 16 colours | 32x32 | 1 | `cfcffcd150b1d099-91aba52dc5d8145a-00001554@0` | [bubble.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/water_rip.tm2 | 16 colours | 64x64 | 1 | `e83fc672b24f5665-e3e8e9dae1ef5ed0-00001994@0` | [water_rip.tm2](object-st24b.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/bubble.tm2 | 16 colours | 32x32 | 1 | `cfcffcd150b1d099-91aba52dc5d8145a-00001554@0` | [bubble.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/water_rip.tm2 | 16 colours | 64x64 | 1 | `e83fc672b24f5665-e3e8e9dae1ef5ed0-00001994@0` | [water_rip.tm2](object-st24b.md) | same |  |
+| object/sdf/ueda4/texture/bubble.tm2 | 16 colours | 32x32 | 1 | `cfcffcd150b1d099-91aba52dc5d8145a-00001554@0` | [bubble.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/water_rip.tm2 | 16 colours | 64x64 | 1 | `e83fc672b24f5665-e3e8e9dae1ef5ed0-00001994@0` | [water_rip.tm2](object-st24b.md) | same |  |
+| object/sdf/ueda4/texture/water_rip.tm2 | 16 colours | 64x64 | 1 | `e83fc672b24f5665-e3e8e9dae1ef5ed0-00001994@0` | [water_rip.tm2](object-st24b.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/bubble.tm2 | 16 colours | 32x32 | 1 | `cfcffcd150b1d099-91aba52dc5d8145a-00001554@0` | [bubble.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/water_rip.tm2 | 16 colours | 64x64 | 1 | `e83fc672b24f5665-e3e8e9dae1ef5ed0-00001994@0` | [water_rip.tm2](object-st24b.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
+| object/sdf/ueda4/texture/sun_glow_test2.tm2 | 16 colours | 128x128 | 1 | `fe576a9dfda29d4-10ce91c9cb256256-00001dd4@0` | [sun_glow_test2.tm2](object-ueda4.md) | same |  |
