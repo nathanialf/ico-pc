@@ -69,6 +69,15 @@ typedef struct { /* field names derived */
     unsigned int escort : 1; /* bit 13, an escort status */
     unsigned int bit14 : 1;
     unsigned int : 17;
+    /* PC port: host-only, after the European record's 0x50 bytes: flag bits of
+       the USA disc's word at 0x4C (bits 1, 3, 6, 8 there) that no European mode
+       has (config/data_schema.ntsc.txt's extend rows); a disc without them
+       leaves them 0 */
+    unsigned int holdDir : 1;  /* Act flags18 bit 45: the stick does not turn the boy */
+    unsigned int saveInfo : 1; /* ACTGame_SaveActorInformation saves the position */
+    unsigned int pullUp : 1;   /* handoff_heroin does not let the girl go */
+    unsigned int stopMail : 1; /* a stopped enemy without the girl mails 242 */
+    unsigned int : 28;
 } ActModeRec; /* derived name */
 extern const ActModeRec actModeTbl[];
 
