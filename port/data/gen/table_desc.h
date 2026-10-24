@@ -163,7 +163,8 @@ typedef struct IcoEeObject {
 typedef struct IcoTableSet {
     const char *slug;     /* config/regions.txt's */
     const char *disc_id;  /* SCES-50760 */
-    const char *boot_elf; /* the boot ELF's path on the disc (SYSTEM.CNF's BOOT2) */
+    const char *boot_elf; /* the ELF the tables are read from, its path on the disc (SYSTEM.CNF's
+                             BOOT2, or the schema's elf row: the June 2001 demo's game) */
     const char *product;  /* the disc as messages name it: "the European disc" */
     const IcoTableRow *rows;
     uint32_t row_count;

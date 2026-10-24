@@ -653,7 +653,8 @@ flags2 bit 6, read in `boyact.c`, set in the same two motions, and the preview d
 ### The June 2001 magazine demo's set
 
 `port/data/gen/jun26/` is the demo disc's set (`SCUS-97158`; its BOOT2 is the magazine's menu
-`SCUS_971.58`, the game is `CUS97113/SCPS_000.00`, whose tables the set reads:
+`SCUS_971.58`, the game is `CUS97113/SCPS_000.00`, whose tables the set reads: the schema's
+`elf CUS97113/SCPS_000.00` row gives the set's `boot_elf` where the BOOT2 file is not the game's;
 [the path rule](#a-disc-whose-game-is-in-a-folder-the-path-rule)), written before its row is
 listed, with the same `--version jun26` commands and the tests `data_desc_fresh_jun26` and
 `ee_layout_fresh_jun26`. It is a program of its own, two months older than the USA one: 119 data

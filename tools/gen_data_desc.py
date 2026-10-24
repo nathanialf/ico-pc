@@ -785,7 +785,8 @@ def gen_header(sets, pal, host):
           "typedef struct IcoTableSet {",
           "    const char *slug;     /* config/regions.txt's */",
           "    const char *disc_id;  /* SCES-50760 */",
-          "    const char *boot_elf; /* the boot ELF's path on the disc (SYSTEM.CNF's BOOT2) */",
+          "    const char *boot_elf; /* the ELF the tables are read from, its path on the disc (SYSTEM.CNF's",
+          "                             BOOT2, or the schema's elf row: the June 2001 demo's game) */",
           "    const char *product;  /* the disc as messages name it: \"the European disc\" */",
           "    const IcoTableRow *rows;",
           "    uint32_t row_count;",
@@ -1073,10 +1074,12 @@ def gen_set(st, pal, host, pool_size, earlier):
              f"\"{slug}: rows\");")
     c.append("")
     reg = st.region
+    with version(slug):
+        elf = g.parse_port_rows()["elf"] or reg["boot_elf"]
     index = [r["slug"] for r in g.regions(pending=True)].index(slug)
     c.append(f"/* {reg['product']} ({reg['disc_id']}): config/regions.txt's row {index} */")
     c.append(f"const IcoTableSet ico_table_set_{slug} = {{\"{slug}\", \"{reg['disc_id']}\", "
-             f"\"{reg['boot_elf']}\", \"{reg['product']}\", rows_{slug}, {len(st.tables)}, "
+             f"\"{elf}\", \"{reg['product']}\", rows_{slug}, {len(st.tables)}, "
              f"ico_ee_funcs_{slug}, {len(funcs)}, ico_ee_objects_{slug}, {len(objs)}}};")
     c.append("")
 

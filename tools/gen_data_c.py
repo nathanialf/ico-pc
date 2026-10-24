@@ -238,21 +238,27 @@ def parse_schema(path=None):
 #                                     or one element of a PAL scalar array,
 #                                     path[i], every element then named by a
 #                                     row): copied into that field
+#   elf <path>                        the disc file the set's tables are read
+#                                     from when it is not the BOOT2 file
+#                                     (config/regions.txt's boot-elf): the June
+#                                     2001 demo boots the magazine's menu, its
+#                                     game is CUS97113/SCPS_000.00
 #   extra <member> <type> <count>     a table PAL has none of: the host array
 #                                     holds count records of type (- for a
 #                                     single object; the member's own row
 #                                     names its header and symbol); a disc
 #                                     without it loads none
-PORT_VERBS = ("default", "extend", "drop", "narrow", "rename", "extra")
+PORT_VERBS = ("default", "extend", "drop", "narrow", "rename", "elf", "extra")
 
 
 def parse_port_rows(path=None):
     """The schema's port rows: {'default': {(member, field): value text},
     'extend', 'drop', 'narrow': {(member, field)}, 'rename': {(member, host
-    field): the disc's field}, 'extra': {member: (type, count)}}."""
+    field): the disc's field}, 'extra': {member: (type, count)}, 'elf': the
+    path or None}."""
     path = SCHEMA if path is None else path
     out = {"default": {}, "extend": set(), "drop": set(), "narrow": set(), "rename": {},
-           "extra": {}}
+           "extra": {}, "elf": None}
     for n, line in enumerate(path.read_text().splitlines(), 1):
         f = line.split("#", 1)[0].split()
         if not f or f[0] not in PORT_VERBS:
@@ -263,6 +269,10 @@ def parse_port_rows(path=None):
                 fail(f"{path}:{n}: expected 'default <member> <field>=<value>'")
             field, value = f[2].split("=", 1)
             out["default"][(f[1], field)] = value
+        elif verb == "elf":
+            if len(f) != 2 or out["elf"] is not None:
+                fail(f"{path}:{n}: expected one 'elf <path on the disc>'")
+            out["elf"] = f[1]
         elif verb == "rename":
             if len(f) != 3 or "=" not in f[2]:
                 fail(f"{path}:{n}: expected 'rename <member> <field>=<host field>'")

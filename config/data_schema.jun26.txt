@@ -369,3 +369,6 @@ default layout-cloth-def pt[3]=0
 # as the USA disc
 default texture-path path=0
 default texture-path cameraMove=0
+# The ELF the tables are read from: the game's, in the disc's folder (BOOT2 is
+# the magazine's menu SCUS_971.58; port/data/discs.c's elf_path)
+elf CUS97113/SCPS_000.00

@@ -2726,6 +2726,13 @@ static const IcoTableRow rows_jun26[] = {
 _Static_assert(sizeof(rows_jun26) / sizeof(rows_jun26[0]) == 122, "jun26: rows");
 
 /* the June 2001 magazine demo (SCUS-97158): config/regions.txt's row 5 */
-const IcoTableSet ico_table_set_jun26 = {
-    "jun26", "SCUS-97158",       "SCUS_971.58", "the June 2001 magazine demo", rows_jun26,
-    122,     ico_ee_funcs_jun26, 823,           ico_ee_objects_jun26,          2};
+const IcoTableSet ico_table_set_jun26 = {"jun26",
+                                         "SCUS-97158",
+                                         "CUS97113/SCPS_000.00",
+                                         "the June 2001 magazine demo",
+                                         rows_jun26,
+                                         122,
+                                         ico_ee_funcs_jun26,
+                                         823,
+                                         ico_ee_objects_jun26,
+                                         2};
