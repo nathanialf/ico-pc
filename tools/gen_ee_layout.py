@@ -63,6 +63,15 @@ Modes:
       are PAL's layout, asserted against the EE by port/data/gen/
       table_desc.h's _Static_asserts, and a second copy could only drift.
 
+A field the name alone does not map takes a map row of the target's schema
+(gen_data_c.PORT_VERBS): default (a PAL field the disc lacks, or the rest of
+a shorter array), extend (a host-only field of the port's header the disc
+has), drop (a disc field no code reads), narrow (a wider integer's low bits),
+extra (a table PAL has none of); record_map's docstring has the rules and
+docs/port/DATA.md "The map rows" a worked example of each. --version also
+takes a slug of gen_data_c.PENDING_ROWS (a row config/regions.txt does not
+list yet).
+
 The module is also the shared reader: gen_data_desc.py (the descriptor set)
 and gen_data_c.py --version (the loader test's reference) map a target's
 fields onto the PAL host struct through record_map(), so the loader and its
@@ -227,7 +236,7 @@ def layout_text(slug, rev):
     sha = rev_sha(rev)
     if sha is None:
         fail(f"{rev} is not a commit in this clone")
-    product = {r["slug"]: r for r in g.regions()}[slug]
+    product = {r["slug"]: r for r in g.regions(pending=True)}[slug]
     cache, lines = {}, []
     recs = schema_records(slug)
     for typ, header in recs:
@@ -335,35 +344,88 @@ def parse_bits(slug):
 
 class Mapped:
     """One host field of a target's record, mapped from the target's layout.
-    how: 'copy' (src the target's Field), 'default' (value: the text of the
-    schema's default row), 'bitmap' (base: the target's first byte the map
+    how: 'copy' (src the target's Field; count, the elements copied, is less
+    than the host field's for a scalar array the target holds fewer of, the
+    rest left 0 by the loader's record clear), 'default' (value: the text of
+    the schema's default row), 'bitmap' (base: the target's first byte the map
     reads, span: bytes, bits: 32 entries, each the target's bit from base or
-    None)."""
+    None), 'narrow' (src the target's wider integer: its low bits), 'clear' (a
+    host-only field the target lacks: no descriptor field, the record clear
+    leaves it 0)."""
 
-    def __init__(self, host, how, src=None, value=None, base=0, span=0, bits=None):
+    def __init__(self, host, how, src=None, value=None, base=0, span=0, bits=None, count=None):
         self.host, self.how, self.src, self.value = host, how, src, value
         self.base, self.span, self.bits = base, span, bits
+        self.count = host.count if count is None else count
+        self.zeros = set()  # bitmap: host bits a motion_bits row writes 0 (<slug>=-)
 
 
-def record_map(slug, typ, member, host_fields, recs=None, defaults=None, bits_rows=None,
-               report=None):
+def ee_part_size(ty, names, typ):
+    """The EE size of a record type without its host-only fields (names): its
+    fields up to the first of them, laid out by the EE's rules. They must be
+    the record's last fields."""
+    if ty.kind != "struct" or ty.union:
+        fail(f"{typ}: host-only fields need a struct")
+    tops = [n for n, _, _, _ in ty.fields]
+    missing = sorted(set(names) - set(tops))
+    if missing:
+        fail(f"{typ}: extend {', '.join(missing)}: no field of that name in the port's header")
+    first = min(tops.index(n) for n in names)
+    if any(n not in names for n in tops[first:]):
+        fail(f"{typ}: the host-only fields ({', '.join(sorted(names))}) must follow every field "
+             "of PAL's record")
+    end, align = 0, 1
+    for name, f, o, b in ty.fields[:first]:
+        unit = f.size if f.kind == "bitfield" else f.size
+        end = max(end, o + unit)
+        align = max(align, f.align if hasattr(f, "align") else 1)
+    size = -(-end // align) * align
+    if size > ty.fields[first][2]:
+        fail(f"{typ}: the host-only field {tops[first]} overlaps PAL's record")
+    return size
+
+
+def top_name(path):
+    """The record's top-level field a leaf path is in."""
+    return re.split(r"[.\[]", path, maxsplit=1)[0]
+
+
+def record_map(slug, typ, member, host_fields, recs=None, port=None, bits_rows=None,
+               report=None, host_only=None):
     """The host (PAL) fields of a record type, each mapped onto the target's
     layout BY PATH NAME: [Mapped] in host order. host_fields: the PAL
-    record's flatten(..., words=True). A target field with no PAL name is an
-    error; a PAL field the target lacks takes the schema's default row (an
-    error without one); a bit word is a 32-entry bit map from the named
-    bit-fields (by path, else by name over the record's bit words) and the
-    rows of config/motion_bits.<slug>.txt. report, a list, collects notes
-    (a named bit that moved words, a target bit no host bit takes)."""
+    record's flatten(..., words=True). port: the target schema's map rows
+    (gen_data_c.parse_port_rows); host_only: {type: host-only field names}
+    (gen_data_c.host_only). The rules, each refusing what it does not settle:
+      - same path, kind, size and count: copied;
+      - a struct bit-field of the same name and width elsewhere in its unit:
+        copied from the target's bit (reported);
+      - a scalar array the target holds fewer elements of: copied, the rest 0,
+        only with a `default <member> <field>=0` row (reported);
+      - an integer the target holds wider: its low bits, only with a `narrow`
+        row;
+      - a PAL field the target lacks: the schema's `default` row; a host-only
+        field (an `extend` row of some schema) the target lacks: left 0;
+      - a target field with no PAL name: an error unless the host holds it
+        (`extend`) or a `drop` row says no code reads it (reported);
+      - a bit word: a 32-entry bit map from the named bit-fields (by path,
+        else by name over the record's bit words) and the rows of
+        config/motion_bits.<slug>.txt.
+    report, a list, collects notes (a named bit that moved words, a target bit
+    no host bit takes, the rows used)."""
     if recs is None:
         recs, _ = parse_layout(slug)
     if typ not in recs:
         fail(f"config/ee_layout.{slug}.txt has no record {typ}: rerun tools/gen_ee_layout.py")
     rec = recs[typ]
-    if defaults is None:
+    if port is None:
         g.set_version(slug)
-        defaults = g.parse_defaults()
+        port = g.parse_port_rows()
         g.set_version("pal")
+    if host_only is None:
+        host_only = g.host_only()
+    mine = host_only.get(typ, set())
+    defaults = port["default"]
     if bits_rows is None:
         bits_rows = parse_bits(slug)
     used, out = set(), []
@@ -378,6 +440,11 @@ def record_map(slug, typ, member, host_fields, recs=None, defaults=None, bits_ro
     taken = {}  # (target word path, target bit) -> host word/bit that takes it
     named_used = set()
     rows = [r for r in bits_rows if r[0] == typ]
+    schema = f"config/data_schema.{slug}.txt"
+
+    def note(text):
+        if report is not None:
+            report.append(f"{typ}: {text}")
     for hf in host_fields:
         if hf.kind == "BITWORD":
             words = {w.path: w for w in tgt_words}
@@ -441,25 +508,71 @@ def record_map(slug, typ, member, host_fields, recs=None, defaults=None, bits_ro
                     bits[i] = 8 * (a[0].ee_off - base) + a[1]
                     if bits[i] >= 255:
                         fail(f"{typ}.{hf.path}: bit map entry {bits[i]} does not fit a byte")
-            out.append(Mapped(hf, "bitmap", base=base, span=span, bits=bits))
+            mp = Mapped(hf, "bitmap", base=base, span=span, bits=bits)
+            mp.zeros = {i for i, a in enumerate(abs_bits) if a == "zero"}
+            out.append(mp)
             continue
+        key = (member, hf.path)
         src = rec.by_path.get(hf.path)
         if src is None:
-            if (member, hf.path) in defaults:
-                out.append(Mapped(hf, "default", value=defaults[(member, hf.path)]))
+            if top_name(hf.path) in mine:
+                out.append(Mapped(hf, "clear"))
+                continue
+            if key in defaults:
+                out.append(Mapped(hf, "default", value=defaults[key]))
                 continue
             fail(f"{typ}.{hf.path or '(element)'}: a PAL field {slug} lacks, and no "
-                 f"'default {member} {hf.path}=<value>' row in config/data_schema.{slug}.txt")
-        hk = "BYTES" if hf.kind == "BITWORD" else hf.kind
-        if src.kind != hk or src.ee_size != hf.ee_size or src.count != hf.count or \
-                src.signed != hf.signed or (hk == "BITS" and (src.bit, src.width) != (hf.bit, hf.width)):
-            fail(f"{typ}.{hf.path or '(element)'}: {KIND_WORD[hf.kind]} of {hf.ee_size} x {hf.count} "
-                 f"on PAL, {KIND_WORD[src.kind]} of {src.ee_size} x {src.count} on {slug}")
+                 f"'default {member} {hf.path}=<value>' row in {schema}")
         used.add(hf.path)
-        out.append(Mapped(hf, "copy", src=src))
+        hk = "BYTES" if hf.kind == "BITWORD" else hf.kind
+        same = (src.kind == hk and src.ee_size == hf.ee_size and src.signed == hf.signed)
+        if same and src.count == hf.count and \
+                (hk != "BITS" or (src.bit, src.width) == (hf.bit, hf.width)):
+            out.append(Mapped(hf, "copy", src=src))
+            continue
+        if same and hk == "BITS" and src.width == hf.width and src.count == hf.count:
+            note(f"{hf.path}: bit {hf.bit} on PAL, {src.bit} on {slug}: copied from its bit")
+            out.append(Mapped(hf, "copy", src=src))
+            continue
+        if same and hk in ("INT", "FLOAT") and src.count < hf.count:
+            if defaults.get(key) not in ("0", "0.0"):
+                fail(f"{typ}.{hf.path}: {src.count} elements on {slug}, {hf.count} on PAL: a "
+                     f"'default {member} {hf.path}=0' row in {schema} takes the rest as 0")
+            note(f"{hf.path}: the {src.count} elements {slug} holds of PAL's {hf.count}, the "
+                 "rest 0 (default)")
+            out.append(Mapped(hf, "copy", src=src, count=src.count))
+            continue
+        if hk == "INT" and src.kind == "INT" and src.count == hf.count == 1 and \
+                src.ee_size > hf.ee_size and src.signed == hf.signed:
+            if key not in port["narrow"]:
+                fail(f"{typ}.{hf.path}: {src.ee_size} bytes on {slug}, {hf.ee_size} on PAL: a "
+                     f"'narrow {member} {hf.path}' row in {schema} keeps its low bits")
+            note(f"{hf.path}: the low {8 * hf.ee_size} bits of {slug}'s {8 * src.ee_size} (narrow)")
+            out.append(Mapped(hf, "narrow", src=src))
+            continue
+        fail(f"{typ}.{hf.path or '(element)'}: {KIND_WORD[hf.kind]} of {hf.ee_size} x {hf.count} "
+             f"on PAL, {KIND_WORD[src.kind]} of {src.ee_size} x {src.count} on {slug}")
     extra = [f.path for f in rec.fields if f.path not in used]
+    dropped = [p for p in extra if (member, p) in port["drop"]]
+    for p in dropped:
+        note(f"{slug}'s {p} has no host field: not loaded (drop)")
+    extra = [p for p in extra if p not in dropped]
     if extra:
-        fail(f"{typ}: {slug} fields with no PAL field of that name: {', '.join(extra)}")
+        fail(f"{typ}: {slug} fields with no PAL field of that name: {', '.join(extra)} (an "
+             f"'extend {member} <field>' row in {schema} with the field in the port's header, "
+             f"or a 'drop {member} <field>' row when no code reads it)")
+    stale = [f"{v} {m} {p}" for v in ("drop", "narrow") for m, p in sorted(port[v])
+             if m == member and (v == "drop" and p not in dropped or
+                                 v == "narrow" and not any(x.how == "narrow" and x.host.path == p
+                                                           for x in out))]
+    stale += [f"default {m} {p}" for (m, p) in sorted(defaults) if m == member and
+              not any(x.host.path == p and x.how in ("default", "copy") and
+                      (x.how == "default" or x.count < x.host.count) for x in out)]
+    tops = {top_name(f.path) for f in rec.fields}
+    stale += [f"extend {m} {p}" for m, p in sorted(port["extend"]) if m == member and
+              (p not in tops or p not in mine)]
+    if stale:
+        fail(f"{typ}: {schema} rows that settle nothing: {', '.join(stale)}")
     # every named target bit and every motion_bits source must land somewhere
     for w in tgt_words:
         for p, b, wd in w.bitnames:
@@ -483,11 +596,12 @@ def record_maps(slug, host_records):
     host_records: {type: (member, PAL host fields with words=True)}."""
     recs, _ = parse_layout(slug)
     g.set_version(slug)
-    defaults = g.parse_defaults()
+    port = g.parse_port_rows()
     g.set_version("pal")
     rows = parse_bits(slug)
     report = []
-    maps = {t: record_map(slug, t, m, hf, recs, defaults, rows, report)
+    only = g.host_only()
+    maps = {t: record_map(slug, t, m, hf, recs, port, rows, report, only)
             for t, (m, hf) in host_records.items()}
     return maps, recs, report
 
@@ -573,15 +687,28 @@ def motion_reads(text, positions=False):
     the statement before the read. With positions, each tuple also carries
     the read's offset in fold(text): (line, pos, word, bits, name)."""
     folded = fold(text)
+    out = []
+    for pos, w, bits, name in subject_reads(folded, subjects(folded)):
+        line = folded.count("\n", 0, pos) + 1
+        out.append((line, pos, w, bits, name) if positions else (line, w, bits, name))
+    return out
+
+
+def subjects(folded):
+    """The subject pattern of a folded file: motionKind, CHAINROW and the
+    variables it declares MotionDef * or MotionRec *."""
     names = {m.group(2) for m in SUBJECT.finditer(folded)} | {"motionKind", "CHAINROW"}
-    subj = re.compile(r"\b(" + "|".join(sorted(names)) + r")\b")
+    return re.compile(r"\b(" + "|".join(sorted(names)) + r")\b")
+
+
+def subject_reads(folded, subj):
+    """find_reads(folded) less the reads whose statement before the read names
+    no subject (a pad's or a texture's flags word)."""
     out = []
     for pos, w, bits, name in find_reads(folded):
         start = max(folded.rfind(";", 0, pos), folded.rfind("{", 0, pos), folded.rfind("}", 0, pos))
-        if not subj.search(folded[start + 1:pos]):
-            continue
-        line = folded.count("\n", 0, pos) + 1
-        out.append((line, pos, w, bits, name) if positions else (line, w, bits, name))
+        if subj.search(folded[start + 1:pos]):
+            out.append((pos, w, bits, name))
     return out
 
 
@@ -690,11 +817,63 @@ HAND_ROWS = [
     ("kor", "flags", 2, 1, "flags", 6,
      "no reader in either tree; the Korean ELF's 1148 flags words equal the Japanese "
      "ELF's, so the same 7 motions (834, 839, 840, 848-851) set KOR bit 6"),
+    # The USA disc, from the blocks UNPAIRED_BY_SLUG lists. "N motions agree": of
+    # the 1042 motions whose names are unique on both discs (the USA disc has
+    # 1087 motions, PAL 1148), N set the PAL bit and the USA bit alike.
+    ("ntsc", "flags", 2, 1, "flags", 2,
+     "no reader in either tree; all 1042 motions agree (7 set it)"),
+    ("ntsc", "flags", 5, 1, "flags", 8,
+     "commonact.c's intr cases 240 and 241 read PAL bit 5, the USA bit 8; all 1042 agree"),
+    ("ntsc", "flags", 9, 1, "flags", 12,
+     "commonact.c's intr case 259 reads PAL bit 9, the USA bit 12; all 1042 agree"),
+    ("ntsc", "flags", 25, 1, "flags", 19,
+     "commonact.c's landing test reads PAL bit 25, the USA bit 19; all 1042 agree"),
+    ("ntsc", "flags", 31, 1, "flags", 28,
+     "ACTGame_BeforeFunc's root test reads PAL's sign bit, the USA bit 28; 1037 of 1042 agree "
+     "(no other USA bit agrees in more)"),
+    ("ntsc", "flags", 11, 1, None, 0,
+     "chainHang: only PAL's chain.c reads it; no USA bit agrees with it in all 1042"),
+    ("ntsc", "flags", 12, 1, None, 0, "only PAL's act-way.c twin reads it; set in one PAL motion"),
+    ("ntsc", "flags", 13, 1, None, 0, "only PAL's boyact.c twin reads it"),
+    ("ntsc", "flags", 14, 1, None, 0, "only PAL's ACTGame_BeforeFunc reads it; no PAL motion sets it"),
+    ("ntsc", "flags", 15, 1, None, 0, "only PAL's girl_act.c twin reads it; set in one PAL motion"),
+    ("ntsc", "flags", 16, 1, None, 0,
+     "jumpHit: the USA actCommonJump reads no bit (commonact.c's VERSION_NTSC twin)"),
 ]
 
 
-def explain(pal_text):
+# The same for one target only, checked before UNPAIRED: (slug, a text of
+# the block's PAL arm, why). The USA disc's blocks are often whole function
+# twins whose reads do not pair one for one; each row says where the bits of
+# its reads come from instead.
+UNPAIRED_BY_SLUG = [
+    ("ntsc", "->flags >= 0 || GOBJ_SUB(self)->ctrl.",
+     "ACTGame_BeforeFunc: PAL's sign bit (flags 31) is the USA flags bit 28 (the hand row), "
+     "PAL's flags bit 14 has no USA reader (written 0)"),
+    ("ntsc", "flags.word >> 12) & 1)) { return 1;",
+     "PAL flags bit 12: the USA twin reads no bit there (written 0)"),
+    ("ntsc", "CHAINROW(self)->flags.word >> 13) & 1) && ACTGame_F",
+     "PAL flags bit 13: the USA twin reads no bit there (written 0)"),
+    ("ntsc", "case 259: if (((motionKind + GOBJ_SUB(self)->ctrl.motion)->flags.word >> 9) & 1)",
+     "the USA arm reads flags 12, 8, 8, modeBits 16-18, flags 19 and 18 (intr10Live, named) for "
+     "PAL's flags 9, 5, 5, modeBits 19-21 and flags 25: the hand rows 9, 5 and 25"),
+    ("ntsc", "flags.word >> 29) & 1) { SetDirectR",
+     "PAL flags bit 29 is the USA bit 27 (girl_act.c's pair); the USA arm also reads its flags "
+     "bit 0 (PAL bit 4, commonact.c's pair)"),
+    ("ntsc", "if ((rec->flags.word >> 4) & 1) { GetSkeltonP",
+     "a PAL-only read of flags bit 4, the USA bit 0 (commonact.c's pair)"),
+    ("ntsc", "if ((rec->flags.word >> 15) & 1) { send = 1;",
+     "PAL flags bit 15: the USA twin reads no bit there (written 0)"),
+    ("ntsc", "flags >> 11) & 1)) { lim = 70.0f; }",
+     "PAL flags bit 11 (chainHang): the USA twin reads no bit there (written 0)"),
+]
+
+
+def explain(pal_text, slug=None):
     flat = " ".join(pal_text.split())
+    for s, key, why in UNPAIRED_BY_SLUG:
+        if s == slug and key in flat:
+            return why
     for key, why in UNPAIRED:
         if key in flat:
             return why
@@ -748,9 +927,10 @@ def scan_bits(slug, rev):
                 continue  # a named read: mapped by name
             for b in bits:
                 add(w, b, w, b, f"{path}:{line}")
+        subj = subjects(fold(text))
         for first, jt, pt in blocks:
-            jr = [r for r in find_reads(fold(jt)) if r[1] in WORDS]
-            pr = [r for r in find_reads(fold(pt)) if r[1] in WORDS]
+            jr = [r for r in subject_reads(fold(jt), subj) if r[1] in WORDS]
+            pr = [r for r in subject_reads(fold(pt), subj) if r[1] in WORDS]
             if not jr and not pr:
                 continue
             if not (re.search(r"motionKind|CHAINROW|\brow\b|\brec\d?\b", jt + pt)):
@@ -770,7 +950,7 @@ def scan_bits(slug, rev):
     for hs, pw, pb, wd, tw, tb, why in HAND_ROWS:
         if hs == slug:
             for i in range(wd):
-                add(pw, pb + i, tw, tb + i, f"by hand: {why}")
+                add(pw, pb + i, tw, None if tw is None else tb + i, f"by hand: {why}")
     # drop what the named bits already give
     named = {}
     for hf in pal.fields:
@@ -800,7 +980,7 @@ def scan_bits(slug, rev):
     # merge runs of consecutive bits with one source
     merged = []
     for r in rows:
-        if merged and merged[-1][0] == r[0] and merged[-1][3] == r[3] and \
+        if merged and merged[-1][0] == r[0] and merged[-1][3] == r[3] and r[3] is not None and \
                 merged[-1][1] + merged[-1][2] == r[1] and merged[-1][4] + merged[-1][2] == r[4] and \
                 merged[-1][5] == r[5]:
             merged[-1][2] += 1
@@ -810,7 +990,7 @@ def scan_bits(slug, rev):
 
 
 def bits_text(slug, rows, sha, notes=()):
-    product = {r["slug"]: r for r in g.regions()}[slug]
+    product = {r["slug"]: r for r in g.regions(pending=True)}[slug]
     head = [
         f"# config/motion_bits.{slug}.txt -- the bits of MotionDef's bit words (modeBits, flags,",
         f"# flags2) that game code reads by shift or mask, where {product['product']}",
@@ -824,9 +1004,9 @@ def bits_text(slug, rows, sha, notes=()):
         f"upstream {sha}",
     ]
     head += ["# Blocks not paired read for read, checked by hand (UNPAIRED in the script):"]
-    head += [f"#   {where}: {explain(pt)}" for where, _, pt in notes]
-    body = [f"MotionDef {pw} pal={pb} width={wd} {slug}={tw}:{tb}  # {where}"
-            for pw, pb, wd, tw, tb, where in rows]
+    head += [f"#   {where}: {explain(pt, slug)}" for where, _, pt in notes]
+    body = [f"MotionDef {pw} pal={pb} width={wd} {slug}={'-' if tw is None else f'{tw}:{tb}'}"
+            f"  # {where}" for pw, pb, wd, tw, tb, where in rows]
     return "\n".join(head + body) + "\n"
 
 
@@ -838,14 +1018,20 @@ def pal_self_check(rev):
     if sha is None:
         fail(f"{rev} is not a commit in this clone")
     cache, diffs = {}, []
+    only = g.host_only()
     for typ, header in schema_records("pal"):
         up = upstream_type(sha, "pal", header, typ, cache)
         port = g.Header(header).typedef(typ)
         a, b = [], []
         flatten(up, "", 0, a, words=True)
         flatten(port, "", 0, b, words=True)
-        if up.size != port.size:
-            diffs.append(f"{typ}: size 0x{up.size:X} upstream, 0x{port.size:X} in the port")
+        size = port.size
+        if typ in only:
+            # the port's host-only fields (a schema's extend rows) are not PAL's
+            b = [f for f in b if top_name(f.path) not in only[typ]]
+            size = ee_part_size(port, only[typ], typ)
+        if up.size != size:
+            diffs.append(f"{typ}: size 0x{up.size:X} upstream, 0x{size:X} in the port")
         ka = [(f.path, f.ee_off, f.ee_size, f.count, f.kind, f.signed, f.bit, f.width,
                tuple(f.bitnames)) for f in a]
         kb = [(f.path, f.ee_off, f.ee_size, f.count, f.kind, f.signed, f.bit, f.width,
@@ -918,25 +1104,92 @@ def region_lines_self_test():
     return bad
 
 
+def record_map_self_test():
+    """[failures] of record_map's rules on a made-up record: the host (PAL)
+    fields against a target's, with each map row and without it."""
+    F = Field
+    host = [F("INT", "a", 0, 4, signed=True), F("BITS", "b", 4, 4, bit=3, width=2),
+            F("INT", "arr", 8, 4, count=4, signed=True), F("INT", "w", 24, 2, signed=True),
+            F("FLOAT", "gone", 28, 4), F("INT", "only", 32, 1, count=8, signed=True)]
+    tgt = EeRecord("R", 0x20, "h")
+    for f in [F("INT", "a", 4, 4, signed=True), F("BITS", "b", 0, 4, bit=7, width=2),
+              F("INT", "arr", 8, 4, count=3, signed=True), F("INT", "w", 20, 4, signed=True),
+              F("INT", "only", 24, 1, count=8, signed=True), F("INT", "junk", 0, 4)]:
+        tgt.fields.append(f)
+        tgt.by_path[f.path] = f
+    full = {"default": {("m", "arr"): "0", ("m", "gone"): "1.5"}, "extend": {("m", "only")},
+            "drop": {("m", "junk")}, "narrow": {("m", "w")}, "extra": {}}
+
+    def run(port, only=("only",)):
+        rows = {k: (dict(v) if isinstance(v, dict) else set(v)) for k, v in port.items()}
+        try:
+            notes = []
+            got = record_map("t", "R", "m", host, {"R": tgt}, rows, [], notes, {"R": set(only)})
+            return [(x.host.path, x.how, x.count, x.src.ee_off if x.src else None) for x in got]
+        except SystemExit as e:
+            return str(e)
+    bad = []
+    want = [("a", "copy", 1, 4), ("b", "copy", 1, 0), ("arr", "copy", 3, 8), ("w", "narrow", 1, 20),
+            ("gone", "default", 1, None), ("only", "copy", 8, 24)]
+    if run(full) != want:
+        bad.append(f"record_map: every row: {run(full)}, want {want}")
+    cases = [("no default for the shorter array", ("default", ("m", "arr")), "takes the rest as 0"),
+             ("no default for a missing field", ("default", ("m", "gone")), "a PAL field t lacks"),
+             ("no narrow row", ("narrow", ("m", "w")), "keeps its low bits"),
+             ("no drop row", ("drop", ("m", "junk")), "fields with no PAL field of that name")]
+    for what, (verb, key), text in cases:
+        rows = {k: (dict(v) if isinstance(v, dict) else set(v)) for k, v in full.items()}
+        if verb == "default":
+            del rows[verb][key]
+        else:
+            rows[verb].discard(key)
+        got = run(rows)
+        if not isinstance(got, str) or text not in got:
+            bad.append(f"record_map: {what}: {got!r}, want an error with {text!r}")
+    rows = {k: (dict(v) if isinstance(v, dict) else set(v)) for k, v in full.items()}
+    rows["drop"].add(("m", "nothing"))
+    got = run(rows)
+    if not isinstance(got, str) or "settle nothing: drop m nothing" not in got:
+        bad.append(f"record_map: a stale drop row: {got!r}")
+    # a host-only field a target lacks: no field, the record clear's 0
+    lack = EeRecord("R", 0x20, "h")
+    for f in tgt.fields:
+        if f.path != "only":
+            lack.fields.append(f)
+            lack.by_path[f.path] = f
+    rows = {k: (dict(v) if isinstance(v, dict) else set(v)) for k, v in full.items()}
+    rows["extend"] = set()
+    try:
+        got = [(x.host.path, x.how) for x in
+               record_map("t", "R", "m", host, {"R": lack}, rows, [], [], {"R": {"only"}})]
+    except SystemExit as e:
+        got = str(e)
+    if not isinstance(got, list) or ("only", "clear") not in got:
+        bad.append(f"record_map: a host-only field the target lacks: {got!r}")
+    return bad
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--version", help="a slug of config/regions.txt")
+    ap.add_argument("--version", help="a slug of config/regions.txt (or gen_data_c.PENDING_ROWS)")
     ap.add_argument("--selftest", action="store_true", help="test the version-block readers")
     ap.add_argument("--upstream", help="the upstream revision to read (upstream/main)")
     ap.add_argument("--check", action="store_true", help="exit 1 if the layout file is stale")
     ap.add_argument("--bits", action="store_true", help="write config/motion_bits.<slug>.txt")
     a = ap.parse_args()
     if a.selftest:
-        bad = g.version_lines_self_test() + g.array_typedef_self_test() + region_lines_self_test()
+        bad = (g.version_lines_self_test() + g.array_typedef_self_test() +
+               region_lines_self_test() + record_map_self_test())
         for x in bad:
             print(f"gen_ee_layout: selftest: {x}", file=sys.stderr)
         print(f"gen_ee_layout: selftest {'FAILED' if bad else 'passed'}")
         return 1 if bad else 0
     if not a.version:
         fail("give --version <slug> (or --selftest)")
-    slugs = [r["slug"] for r in g.regions()]
+    slugs = [r["slug"] for r in g.regions(pending=True)]
     if a.version not in slugs:
-        fail(f"{a.version} is not a slug of config/regions.txt ({', '.join(slugs)})")
+        fail(f"{a.version} is not a slug of config/regions.txt or gen_data_c.PENDING_ROWS "
+             f"({', '.join(slugs)})")
     if a.version == "pal":
         if not a.upstream:
             fail("--version pal compares upstream's PAL arm with the port's headers: give --upstream")
@@ -953,7 +1206,7 @@ def main():
         if not a.upstream:
             fail("--bits needs --upstream")
         rows, notes, sha = scan_bits(a.version, a.upstream)
-        unknown = [n for n in notes if explain(n[2]) is None]
+        unknown = [n for n in notes if explain(n[2], a.version) is None]
         for where, what, pt in unknown:
             print(f"gen_ee_layout: {where}: {what}: not paired, and not in UNPAIRED", file=sys.stderr)
         if unknown:
