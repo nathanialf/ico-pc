@@ -722,6 +722,14 @@ add_executable(texpack_e2e_test test/texpack_e2e_test.c)
 target_compile_options(texpack_e2e_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(texpack_e2e_test PRIVATE ico_render)
 
+# texpack_export_test: the texture export's core on TIM2 files it makes
+# (the names, the PNG sizes, a file already there, the refusals, duplicates,
+# a second run, a stopped one, a dry one, the manifest); with --disc a dry
+# export of the disc against texpack_disc_test's texpack_names.txt.
+add_executable(texpack_export_test test/texpack_export_test.c)
+target_compile_options(texpack_export_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(texpack_export_test PRIVATE ico_texpack_export)
+
 # rd_stream_audit_test: the VU stream bounds audit (docs/port/RENDER.md, "The
 # stream bounds audit"): every stream index the VU vertex shaders can read for
 # every VU draw of the dumps, computed on the CPU and checked against the
@@ -735,7 +743,7 @@ target_include_directories(rd_stream_audit_test PRIVATE ../platform
 target_link_libraries(rd_stream_audit_test PRIVATE ico_render ico_vu1_ref ico_miniz ico_host_fs)
 
 # Windows: SDL3.dll beside the programs
-ico_copy_sdl3_dll(texpack_test texpack_e2e_test rd_replay_tool rd_state_test rd_pixel_test
+ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_tool rd_state_test rd_pixel_test
                   rd_layout_test rd_tex_test rd_gsbase_test rd_mesh_test modelpack_test
                   rd_shadow_test rd_fog_test rd_fog_selftest_test rd_blend_selftest_test
                   rd_vuprepass_selftest_test rd_blur_test rd_water_test rd_raw_test rd_debug_test
@@ -765,6 +773,14 @@ if(ICO_RUN_TESTS)
              COMMAND texpack_e2e_test "${CMAKE_CURRENT_BINARY_DIR}/texpack_names.txt"
                      "${_ico_texpack_textures}" "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(texpack_e2e PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_REQUIRED texpack_names)
+    add_test(NAME texpack_export COMMAND texpack_export_test "${CMAKE_CURRENT_BINARY_DIR}")
+    # a dry export of the disc names what texpack_disc wrote: 77 without the
+    # disc or the names
+    add_test(NAME texpack_export_disc
+             COMMAND texpack_export_test --disc "${ICO_DISC_IMAGE}"
+                     "${CMAKE_CURRENT_BINARY_DIR}/texpack_names.txt" "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(texpack_export_disc PROPERTIES SKIP_RETURN_CODE 77
+                         FIXTURES_REQUIRED texpack_names)
     set_tests_properties(rd_tex PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_gsbase COMMAND rd_gsbase_test)
     set_tests_properties(rd_gsbase PROPERTIES SKIP_RETURN_CODE 77)
