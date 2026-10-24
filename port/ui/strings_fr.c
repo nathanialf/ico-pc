@@ -631,4 +631,41 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Copie de l’image disque dans l’application",
     [UI_STR_ISO_COPYING_LONG] =
         "Copie de l’image disque dans l’application. C’est une grande image : cela prend quelques minutes",
+    [UI_STR_SECTION_VARIANTS] = "Variantes du jeu",
+    [UI_STR_OPT_VAR_TOUGHNESS] = "Résistance des ombres",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
+        "Américain : chaque ombre aussi résistante que sur le disque nord-américain, sans durcir aux parties suivantes. Les succès restent actifs.",
+    [UI_STR_VAL_VAR_AMERICAN] = "Américain",
+    [UI_STR_VAL_VAR_NOT_TOUGHER] = "Sans durcissement",
+    [UI_STR_OPT_VAR_ONE_HIT] = "Un seul coup par attaque",
+    [UI_STR_OPT_VAR_ONE_HIT_NOTE] =
+        "Chaque coup d’Ico ne peut blesser une ombre qu’une fois. Désactive les succès.",
+    [UI_STR_OPT_VAR_NEVER_DODGE] = "Les ombres n’esquivent jamais",
+    [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] =
+        "Les ombres n’évitent jamais les coups d’Ico. Désactive les succès.",
+    [UI_STR_OPT_VAR_AGGRESSION] = "Agressivité des ombres",
+    [UI_STR_VAL_VAR_AGG_OWN] = "D’origine",
+    [UI_STR_VAL_VAR_AGG_BOLD_PATIENT] = "Hardi, patient",
+    [UI_STR_VAL_VAR_AGG_BOLD_QUICK] = "Hardi, rapide",
+    [UI_STR_VAL_VAR_AGG_WARY_PATIENT] = "Prudent, patient",
+    [UI_STR_VAL_VAR_AGG_WARY_QUICK] = "Prudent, rapide",
+    [UI_STR_OPT_VAR_AGGRESSION_NOTE] =
+        "La façon de combattre des ombres : hardie ou prudente, patiente ou rapide. Les succès restent actifs.",
+    [UI_STR_OPT_VAR_NO_HINTS] = "Sans indices",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE] =
+        "Yorda ne donne aucun indice sur la direction à prendre, comme sur le disque nord-américain. Les succès restent actifs.",
+    [UI_STR_OPT_VAR_BARRIER] = "Barrière de la Reine",
+    [UI_STR_VAL_VAR_HITS_5] = "5 coups",
+    [UI_STR_VAL_VAR_HITS_7] = "7 coups",
+    [UI_STR_OPT_VAR_BARRIER_NOTE] =
+        "Nombre de coups nécessaires pour briser la barrière de la Reine. Les succès restent actifs.",
+    [UI_STR_OPT_VAR_NO_LOOK] = "Vue figée en cinématique",
+    [UI_STR_OPT_VAR_NO_LOOK_NOTE] =
+        "Le stick droit ne permet plus de regarder autour pendant les cinématiques. Les succès restent actifs.",
+    [UI_STR_OPT_VAR_IGNORE_CAMS] = "Ignorer les caméras des scènes",
+    [UI_STR_OPT_VAR_IGNORE_CAMS_NOTE] =
+        "Les scènes peuvent mal s’afficher ; le jeu peut montrer des lieux qu’il ne voulait pas montrer. Désactive les succès.",
+    [UI_STR_OPT_VAR_DEBUG_MENU] = "Menu de débogage",
+    [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] =
+        "Le menu de débogage du jeu, pour les développeurs. Désactive les succès.",
 };
