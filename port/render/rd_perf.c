@@ -90,7 +90,7 @@ static bool s_postPartial; /* an effect change found no free index */
 
 static const char *const s_postNames[RD_PERF_POST_COUNT] = {
     "reduction",      "fog",       "motion blur", "aura",         "glow",
-    "depth of field", "softening", "CRT",         "MSAA resolve",
+    "depth of field", "softening", "CRT",         "MSAA resolve", "crack fill",
 };
 
 const char *rd_perf_post_name(int post)
