@@ -66,8 +66,13 @@ typedef struct IcoDiscInfo {
     const char *id;        /* "SCES-50760" (meta.json's disc_id) */
     const char *slug;      /* "pal": the region's row (config/regions.txt) */
     const char *boot_elf;  /* SYSTEM.CNF's BOOT2 file, "SCES_507.60" */
-    const char *iso_sha1;  /* the whole image's SHA-1 */
-    const char *elf_sha1;  /* the boot ELF's SHA-1 */
+    const char *game_dir;  /* "" (the game is the disc's root), or the folder that holds it
+                              when BOOT2 names a menu ("CUS97113" on the magazine demo) */
+    const char *elf_path;  /* the file elf_sha1 is of, by disc path ("SCES_507.60") */
+    const char *df_path;   /* DATA.DF's disc path ("DFDATAS/DATA.DF", game_dir's prefixed) */
+    const char *iso_sha1;  /* the whole image's SHA-1; NULL for a disc identified by its
+                              elf_sha1 and DATA.DF manifest alone (the magazine demo) */
+    const char *elf_sha1;  /* elf_path's SHA-1 */
     uint64_t iso_bytes;    /* the image's size */
     uint32_t df_size;      /* DATA.DF's size (as the volume reports it, see df_lsn_shift) */
     uint32_t df_count;     /* its directory's member count */
@@ -89,9 +94,17 @@ extern const IcoDiscInfo ico_discs[ICO_REGION_COUNT];
 
 /* The row whose id ("SCPS-11003"), boot file ("SCPS_110.03", as
    SYSTEM.CNF names it after normalizing) or slug ("jpn") is given; NULL
-   for none. */
+   for none. A boot file two rows share (SCUS_971.13: ntsc and aug6) gives
+   the first of them: use it only for what the rows share (df_lsn_shift and
+   cd_type, which the tests hold equal) and name the disc with
+   ico_disc_identify (extract.h) or ico_disc_by_boot_elf. */
 const IcoDiscInfo *ico_disc_by_id(const char *id);
 const IcoDiscInfo *ico_disc_by_boot(const char *boot_elf);
+/* How many rows boot with that file (1, or 2 for SCUS_971.13; 0 for none). */
+int ico_disc_boot_rows(const char *boot_elf);
+/* The row that boots with boot_elf and whose elf_sha1 is elf_sha1 (40
+   lower-case hex digits); NULL for none. */
+const IcoDiscInfo *ico_disc_by_boot_elf(const char *boot_elf, const char *elf_sha1);
 const IcoDiscInfo *ico_disc_by_slug(const char *slug);
 
 /* Wording built from the rows, so a new row needs no new text.  Each

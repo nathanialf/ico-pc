@@ -334,17 +334,17 @@ static const IcoDfManifestEntry dfMembersKor[] = {
 /* config/regions.txt, row for row (region_select checks the slug, the disc
    id, the boot file and the product name against it) */
 const IcoDiscInfo ico_discs[ICO_REGION_COUNT] = {
-    [ICO_REGION_PAL] = {"SCES-50760", "pal", "SCES_507.60",
+    [ICO_REGION_PAL] = {"SCES-50760", "pal", "SCES_507.60", "", "SCES_507.60", "DFDATAS/DATA.DF",
                         "1017b53f6e80f41f823369b0be1d8c69f7e16dc6",
                         "da3644c54c26fe760f3b6a591a5fc2eab396ed2b", 907706368u, DF_PAL_SIZE,
                         DF_PAL_COUNT, DF_PAL_DIR_CRC, 0u, dfMembersPal, N_MEMBERS(dfMembersPal),
                         "ico.o2r", "Ico_PAL", 0x14 /* SCECdPS2DVD */, "the European disc"},
-    [ICO_REGION_JPN] = {"SCPS-11003", "jpn", "SCPS_110.03",
+    [ICO_REGION_JPN] = {"SCPS-11003", "jpn", "SCPS_110.03", "", "SCPS_110.03", "DFDATAS/DATA.DF",
                         "95ee72becbc7fba85e9c0f6aa6fc932c705b37b3",
                         "580da1dcc4c239a1608a10300e7e220fe5d35525", 559693824u, DF_JPN_SIZE,
                         DF_JPN_COUNT, DF_JPN_DIR_CRC, 0u, dfMembersJpn, N_MEMBERS(dfMembersJpn),
                         "ico-jpn.o2r", "Ico_JPN", 0x12 /* SCECdPS2CD */, "the Japanese disc"},
-    [ICO_REGION_KOR] = {"SCPS-56001", "kor", "SCPS_560.01",
+    [ICO_REGION_KOR] = {"SCPS-56001", "kor", "SCPS_560.01", "", "SCPS_560.01", "DFDATAS/DATA.DF",
                         "156b63e5824b03e60e0d45c4e86fc424d9e1dd1b",
                         "f9b00596d133c698df20c8ffe4ca2d7107e236bb", 873332736u, DF_KOR_SIZE,
                         DF_KOR_COUNT, DF_KOR_DIR_CRC, 153600u, dfMembersKor,
@@ -370,6 +370,29 @@ const IcoDiscInfo *ico_disc_by_boot(const char *boot_elf)
 
     for (i = 0; boot_elf != NULL && i < ICO_REGION_COUNT; i++) {
         if (strcmp(ico_discs[i].boot_elf, boot_elf) == 0) {
+            return &ico_discs[i];
+        }
+    }
+    return NULL;
+}
+
+int ico_disc_boot_rows(const char *boot_elf)
+{
+    int i, n = 0;
+
+    for (i = 0; boot_elf != NULL && i < ICO_REGION_COUNT; i++) {
+        n += strcmp(ico_discs[i].boot_elf, boot_elf) == 0;
+    }
+    return n;
+}
+
+const IcoDiscInfo *ico_disc_by_boot_elf(const char *boot_elf, const char *elf_sha1)
+{
+    int i;
+
+    for (i = 0; boot_elf != NULL && elf_sha1 != NULL && i < ICO_REGION_COUNT; i++) {
+        if (strcmp(ico_discs[i].boot_elf, boot_elf) == 0 &&
+            strcmp(ico_discs[i].elf_sha1, elf_sha1) == 0) {
             return &ico_discs[i];
         }
     }
