@@ -6,6 +6,17 @@ void vu1ref_init(Vu1Ref *r)
 {
     memset(r, 0, sizeof(*r));
     r->vf[0][3] = 1.0f;
+    r->variant = VU1_VARIANT_PAL;
+}
+
+void vu1ref_set_variant(Vu1Ref *r, int variant)
+{
+    r->variant = variant == VU1_VARIANT_JUN26 ? VU1_VARIANT_JUN26 : VU1_VARIANT_PAL;
+}
+
+const char *vu1_variant_name(int variant)
+{
+    return variant == VU1_VARIANT_PAL ? "pal" : variant == VU1_VARIANT_JUN26 ? "jun26" : "?";
 }
 
 void vu1ref_load_common(Vu1Ref *r, const float qw[16][4])

@@ -32,11 +32,28 @@ extern "C" {
 /* VU1 data memory is 16 KB: 1024 quadwords. */
 #define VU1_MEM_QW 1024
 
+/* Which disc's programs the state runs.  PAL is the retail text every disc but
+ * the June 2001 demo carries (cluster, mesh, normal_c, normal_l); JUN26 is the
+ * demo's own text, which differs in schedule and in
+ * VU1_JUN26_SEMANTIC_DIFFS places listed in tools/test/vu1/jun26_vs_pal.md
+ * (tools/vu_variant_diff.py).  Particle is the same program on both.  The
+ * references and shaders so far model PAL and the dataflow the two texts
+ * share; a branch per semantic difference is the demo's work (VU-JUN26). */
+enum { VU1_VARIANT_PAL = 0, VU1_VARIANT_JUN26 = 1 };
+
+/* The semantic differences jun26_vs_pal.md lists (tools/vu_variant_diff.py
+ * --check-table holds the two equal). */
+#define VU1_JUN26_SEMANTIC_DIFFS 1
+
 typedef struct Vu1Ref {
     float mem[VU1_MEM_QW][4]; /* VU1 data memory */
     float vf[32][4];          /* VF registers; vf[0] is (0, 0, 0, 1) */
     int32_t vi[16];           /* VI registers (16-bit on the VU; kept sign-extended) */
+    int variant;              /* VU1_VARIANT_*: vu1ref_init leaves PAL */
 } Vu1Ref;
+
+/* "pal" or "jun26" (any other value: "?"). */
+const char *vu1_variant_name(int variant);
 
 /* One vertex as the program sends it to the GS (GIF PACKED, regs ST, RGBAQ,
  * XYZ2). */
@@ -112,6 +129,10 @@ typedef struct VuParticleOut {
 /* ------------------------------------------------------------- state */
 
 void vu1ref_init(Vu1Ref *r);
+/* The programs the state runs (VU1_VARIANT_*); a value out of range is PAL.
+ * The state is otherwise the same: the registers and memory the SET_*
+ * routines fill are the same quadwords in both texts. */
+void vu1ref_set_variant(Vu1Ref *r, int variant);
 /* gsb_MakeCommonMatrix's UNPACK of 16 qwords to VU memory 0..15
  * (RdVuCommon). */
 void vu1ref_load_common(Vu1Ref *r, const float qw[16][4]);
