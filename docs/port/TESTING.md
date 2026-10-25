@@ -130,11 +130,18 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   with the disc its first argument selects: the European disc's `BESCES-50760ico` and 0x1F0-byte
   product record (`save`), the Japanese disc's `BISCPS-11003ico` and 0x1E8-byte record, the same
   bytes up to 0x1E8 (`save_jpn`), the Korean disc's `BISCPS-56001ico` with the same 0x1E8 record
-  (`save_kor`), the Asian disc's `BISCPS-55001ico` with the same record (`save_cn`); each imports a card holding its directory and one other disc's side by side and
-  the other disc's `.psu` beside their own ([SAVES.md](SAVES.md#tests)). The North American,
-  August 2001 and June 2001 discs (a 0x18C-byte record) have no `save_<slug>` run yet: part B
-  lays the record out byte by byte, which waits for the merged `mcard.c` ([SAVES.md](SAVES.md#the-seven-discs)).
-  A load reads `optionControlType` from `[gameplay] hold_type`, not from the card's `controlType`.
+  (`save_kor`), the Asian disc's `BISCPS-55001ico` with the same record (`save_cn`), the North
+  American disc's `BASCUS-97113ico` and the August 2001 preview's (the same directory) with their
+  own 0x18C-byte record and a 25,596-byte game block with no option words (`save_ntsc`,
+  `save_aug6`), and the June 2001 demo's `BISCUS-97113ico` with the preview's record, a 20,480-byte
+  game block and icon files that end in a 4-byte sum and are written only when absent
+  (`save_jun26`); each imports a card holding its directory and one other disc's side by side and
+  the other disc's `.psu` beside their own ([SAVES.md](SAVES.md#tests)). Part B lays each disc's record out byte by byte
+  and pins every row's `mc_save_dir` to the game's own `iOSMcSaveSeg_*` name
+  ([SAVES.md](SAVES.md#the-seven-discs)). A load reads `optionControlType` from `[gameplay]
+  hold_type`, not from the card's `controlType`; on the three 2001 discs the load does not touch it,
+  nor `optionScreenMode`, `girlControlMode` or the record's `fileNo` and `serial`, which the card
+  does not hold.
 
 ### port/core/test
 
@@ -248,6 +255,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the language word 0 and 60 Hz throughout (`kanban_boot_jpn`, `kanban_boot_kor`). Each run also
   boots with no card and with a full one: the card warning's item that checks again brings it back,
   the item that starts without a card (European 41, Japanese 11, Korean 5) lets the boot go on.
+  The North American disc and the August 2001 preview (`kanban_boot_ntsc`, `kanban_boot_aug6`)
+  run that check without its retries (4 card checks over the warning's two answers with no card
+  as with a full one, not 22) and with the Korean disc's item 5 to start. The June 2001 demo
+  (`kanban_boot_jun26`) has no card check in its boot (`kanbanBootMain_jun26`): the test pins one
+  presents sign in the first tick, no card check or warning with any card, the frame buffer let go of
+  in tick 1, the 90-tick wait, step 5's wait for stage 1's load and the end two ticks after, with
+  and without Skip the opening.
 - `model_viewer_cam_test.c`: the viewer's camera step without the game (`model_viewer_cam`).
 - `model_viewer_test.c`: the viewer's table against its motion-kind blocks and the game's table
   sizes, its names in five languages (`model_viewer`); its Japanese model column is checked by
@@ -290,8 +304,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`kPeekWant`, checked against `gamestate.c`'s tables, which are written from
   `config/symbol_addrs.<slug>.data.txt`: the North American, August 2001 and June 2001 discs have
   `gFlag` and no `gFlagGameClear`, so 12 rows). `kanban_boot_cn` runs the Japanese program's check
-  on the Asian disc; the North American, August 2001 and June 2001 discs have their own boot check, so
-  they have no `kanban_boot` run until the merged `kanbanBoot.c` is read for its steps.
+  on the Asian disc; `kanban_boot_ntsc`, `kanban_boot_aug6` and `kanban_boot_jun26` run the
+  three 2001 discs' boots (above).
 - `photo_test.c`: photo mode's state and both cameras, identity, moves, limits; the Film effect's
   cycle off, 1 to 4, Deja vu (5), off, `film_effect = 5` read back as Deja vu and a value past it
   as off (`photo`).
