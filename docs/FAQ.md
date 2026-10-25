@@ -241,9 +241,11 @@ ICO's part (about 280 MB) and the image can go afterwards.
 
 ## Can I play more than one disc?
 
-Yes. Each disc gets its own copy of the game's files, its own saves and its
-own folders for texture and model packs, so setting up another disc
-does not touch the others.
+Yes. Each disc gets its own copy of the game's files and its own saves, so
+setting up another disc does not touch the others. Each disc also has its
+own folders for texture and model packs, except that the North American disc
+and the August 2001 preview share theirs, since a pack made for one fits the
+other.
 
 To add another disc, give the game its image the same way as the first
 time: on Windows and Linux, put it beside the program named `Ico_PAL.iso`
