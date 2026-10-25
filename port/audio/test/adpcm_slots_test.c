@@ -27,6 +27,9 @@
 
 #include "../../../ico2/fumi/sound/adpcm_init.c"
 
+/* port/core's run-time region (the test does not link port/core): the European disc */
+int ico_region;
+
 static int failures;
 static int checks;
 
