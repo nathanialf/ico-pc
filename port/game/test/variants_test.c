@@ -240,14 +240,11 @@ static void test_suspend(void)
     /* the Debug menu: the press marks it used until cleared or reloaded */
     use_config(NULL);
     CHECK(ico_variants_suspend_achievements() == 0);
-    /* nothing bound here: the press returns 0 (Options stays) and still
-       counts as used */
+    /* nothing bound here: the press returns 0 (Options stays) and does not
+       count as used (the menu never opened) */
     CHECK(ico_variants_debug_menu_pressed() == 0);
-    CHECK(ico_variants_suspend_achievements() == 1);
-    ico_variants_debug_menu_clear();
     CHECK(ico_variants_suspend_achievements() == 0);
-    ico_variants_debug_menu_pressed();
-    ico_opt_reload();
+    ico_variants_debug_menu_clear();
     CHECK(ico_variants_suspend_achievements() == 0);
 }
 
@@ -325,15 +322,28 @@ static void test_apply(void)
     CHECK(s_one_hit == 1 && s_battle == 1 && s_dodge == 0 && s_hand == 1);
     /* the Debug menu through the bound opener */
     s_opens = 0;
+    CHECK(ico_variants_suspend_achievements() == 1); /* one_hit from the file */
+    use_config("[variants]\n");
+    bind_retail();
+    CHECK(ico_variants_suspend_achievements() == 0);
+    s_opens = 0;
     CHECK(ico_variants_debug_menu_pressed() == 1 && s_opens == 1);
-    CHECK(ico_variants_open_debug_menu() == 1 && s_opens == 2);
+    /* the open marks it used: achievements off until cleared or reloaded */
+    CHECK(ico_variants_suspend_achievements() == 1);
+    ico_variants_debug_menu_clear();
+    CHECK(ico_variants_suspend_achievements() == 0);
+    ico_variants_debug_menu_pressed();
+    CHECK(ico_variants_suspend_achievements() == 1);
+    ico_opt_reload();
+    CHECK(ico_variants_suspend_achievements() == 0);
+    CHECK(ico_variants_open_debug_menu() == 1 && s_opens == 3);
     /* unbound: nothing written, no opener */
     use_config(NULL);
     ico_variants_bind_debug(NULL, NULL, NULL, NULL, NULL, NULL);
     s_one_hit = 5;
     ico_variant_set(ICO_VARIANT_ONE_HIT, 1);
     CHECK(s_one_hit == 5);
-    CHECK(ico_variants_open_debug_menu() == 0 && s_opens == 2);
+    CHECK(ico_variants_open_debug_menu() == 0 && s_opens == 3);
     use_config(NULL);
 }
 
