@@ -53,7 +53,7 @@ static GObj *CreateKyomiGObj_aug6jun26(int no)
     lay[8] = 1.0f;
     lay[9] = 1.0f;
     lay[10] = 1.0f;
-    gobj = CreateLayoutedGObj(59, 68, -1, 0, lay, 1, 7, 0);
+    gobj = CreateLayoutedGObj(PAL_JUN26(59, 58), PAL_JUN26(68, 51), -1, 0, lay, 1, 7, 0);
     brainStatusDefaultSet(&brainGirl, gobj, 1);
     return gobj;
 }
@@ -195,8 +195,37 @@ void ReadHintSaveInfo(void)
     READ_HINT_SAVE_BITS(hintWork.save + 4, 1);
 }
 
+static void SetParamKyomiGObj_jun26(GObj *gobj, float *root, float *param)
+{
+    float pos[4];
+    float lv;
+    int on1;
+    int on2;
+
+    on1 = 1;
+    lv = param[0];
+    if (param[1] < 0.5f) {
+        on1 = 0;
+    }
+    on2 = 1;
+    if (param[2] < 0.5f) {
+        on2 = 0;
+    }
+    if (on2 != 0) {
+        on1 = 1;
+    }
+    SetDirectRootPosition(gobj, root);
+    UpdateRootMatrix(gobj);
+    GetRootPosition(pos, gobj);
+    brainSetLevelGop(gobj, lv, on1, on2);
+}
+
 void SetParamKyomiGObj(GObj *gobj, float *root, float *param)
 {
+    if (ICO_JUN26) {
+        SetParamKyomiGObj_jun26(gobj, root, param);
+        return;
+    }
     float pos[4];
     float lv;
     int on1;

@@ -108,12 +108,12 @@ static inline void brainSetTargetSub(Brain *b, GObj *gobj, float lvl, int k) /* 
     BrainTarget *t;
     int i;
 
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < PAL_NTSCAUG6JUN26(40, 20); i++) {
         if (b->tgt[i].gobj == 0) {
             break;
         }
     }
-    if (i == 40) {
+    if (i == PAL_NTSCAUG6JUN26(40, 20)) {
         return;
     }
     t = &b->tgt[i];
@@ -176,8 +176,53 @@ static inline int brainTargetInView(Brain *b, BrainTarget *t) /* derived name */
     return ACTGameView_Check(b->girl, t->gobj) != 0;
 }
 
+static void brainLevelProcess_jun26(Brain *b)
+{
+    int i;
+
+    b->threshold = b->threshold - _ACTGame_GetParamF(19) * 0.1f;
+    if (b->threshold < b->minThreshold) {
+        b->threshold = b->minThreshold;
+    }
+    for (i = 0; i < 20; i++) {
+        BrainTarget *t = &b->tgt[i];
+
+        if (t->gobj == 0) {
+            continue;
+        }
+        if (t->gobj->active == 0) {
+            t->level = 0.0f;
+            continue;
+        }
+        if (b->lock != 0) {
+            t->level = 0.0f;
+            continue;
+        }
+        if (brainTargetInView(b, t) == 0) {
+            continue;
+        }
+        brainLevelUp(t);
+        if (t->levelCap < t->level) {
+            float r;
+            t->level = t->level - t->rate / 10.0f;
+            if (t->level < t->levelCap) {
+                r = t->levelCap;
+            } else if (t->level > 3.40282347e+38f) {
+                r = 3.40282347e+38f;
+            } else {
+                r = t->level;
+            }
+            t->level = r;
+        }
+    }
+}
+
 void brainLevelProcess(Brain *b)
 {
+    if (ICO_JUN26) {
+        brainLevelProcess_jun26(b);
+        return;
+    }
     int i;
 
     b->threshold = b->threshold - _ACTGame_GetParamF(PAL_NTSCAUG6JUN26(24, 22)) * 0.1f;
@@ -249,8 +294,90 @@ static inline float brainTargetLevel(Brain *b, BrainTarget *t) /* derived name *
     return t->level;
 }
 
+static void brainGetTarget_jun26(Brain *b)
+{
+    BrainTarget *best = 0;
+    BrainTarget *t;
+    float r;
+    /* the winner index */
+    volatile int idx;
+    int n;
+    int lv;
+    int i;
+
+    for (i = 0; i < 20; i++) {
+        if (b->tgt[i].gobj == 0) {
+            continue;
+        }
+        t = &b->tgt[i];
+        if (best == 0 || brainTargetLevel(b, t) > brainTargetLevel(b, best)) {
+            best = t;
+            idx = i;
+        }
+    }
+
+    if (b->spMode != 0) {
+        b->spMode = 0;
+        b->spCount = b->spCount + 1;
+    } else {
+        b->spCount = b->spCount - 1;
+    }
+    if (b->spCount >= 0) {
+        n = b->spCount > (60 - systemStatus[0] * 10) / systemStatus[1] / 3 +
+                             (60 - systemStatus[0] * 10) / systemStatus[1] / 12
+                ? (60 - systemStatus[0] * 10) / systemStatus[1] / 3 +
+                      (60 - systemStatus[0] * 10) / systemStatus[1] / 12
+                : b->spCount;
+    } else {
+        n = 0;
+    }
+    b->spCount = n;
+
+    if ((60 - systemStatus[0] * 10) / systemStatus[1] / 3 < b->spCount) {
+        best = b->cur;
+        for (i = 0; i < 20; i++) {
+            t = &b->tgt[i];
+            if (t == best) {
+                idx = i;
+                break;
+            }
+        }
+    }
+
+    b->idx = -1;
+    if (best != 0) {
+        b->idx = idx;
+        lv = (int)(brainTargetLevel(b, best) - b->threshold);
+
+        b->targetLevel = (float)lv / 10.0f;
+        if (b->targetLevel < 0.0f) {
+            r = 0.0f;
+        } else if (b->targetLevel > 1.0f) {
+            r = 1.0f;
+        } else {
+            r = b->targetLevel;
+        }
+        b->targetLevel = r;
+        if (lv > 0) {
+            if (best->lookOnly != 0 || lv < 2) {
+                b->targetType = 1;
+            } else if (lv < 4) {
+                b->targetType = 2;
+            } else {
+                b->targetType = 3;
+            }
+        } else {
+            b->targetType = 0;
+        }
+    }
+}
+
 void brainGetTarget(Brain *b)
 {
+    if (ICO_JUN26) {
+        brainGetTarget_jun26(b);
+        return;
+    }
     BrainTarget *best = 0;
     BrainTarget *t;
     float r;

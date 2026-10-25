@@ -195,7 +195,7 @@ inline int GetStageFromLabel(int label)
     int UseStageNo = -1;
     int i;
 
-    for (i = 0; i < PAL_JPNKORNTSCAUG6JUN26CN(106, 104); i++) {
+    for (i = 0; i < PAL_JPNKORNTSCAUG6CN_JUN26(106, 104, 103); i++) {
         if (label >= stageData[i].labelTop && label < stageData[i].labelEnd) {
             UseStageNo = i;
             break;
@@ -255,7 +255,7 @@ int eBrainGetTargetGeneratorFromLabel(int label)
         return ret;
 
     UseStageNo = -1;
-    for (i = 0; i < PAL_JPNKORNTSCAUG6JUN26CN(106, 104); i++) {
+    for (i = 0; i < PAL_JPNKORNTSCAUG6CN_JUN26(106, 104, 103); i++) {
         if (label >= stageData[i].labelTop && label < stageData[i].labelEnd) {
             UseStageNo = i;
             break;

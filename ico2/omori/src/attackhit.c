@@ -139,7 +139,7 @@ static inline int GetAttackKindIndex(Sub15C *p) /* derived name */
     int id = p->ctrl.motion;
     int i;
 
-    for (i = 0; i < PAL_NTSCAUG6JUN26(20, 19); i++) {
+    for (i = 0; i < PAL_NTSCAUG6_JUN26(20, 19, 21); i++) {
         if (id == attackData[i].motion) {
             return i;
         }
@@ -277,7 +277,7 @@ static inline void SetupAttackPack_ntscaug6jun26(AttackPack *pack, GObj *gop, in
 
     pack->radius1 = pack->radius0 = radius;
 
-    if (gop != 0 && gop->kind == 52) {
+    if (gop != 0 && gop->kind == PAL_JUN26(52, 51)) {
         pack->thickness = pack->radius1 - 100.0f;
     } else {
         pack->thickness = 0.0f;
@@ -543,8 +543,10 @@ static void AttackMail_aug6jun26(GObj *self, AttackPack *pack)
     GOBJ_ACT(self)->attackDir[0] = v2[0];
     GOBJ_ACT(self)->attackDir[1] = v2[1];
     GOBJ_ACT(self)->attackDir[2] = v2[2];
-    if (pack->hasDir != 0) {
-        sceVu0ScaleVector(GOBJ_ACT(self)->attackDir, pack->dir, -1.0f);
+    if (!ICO_JUN26) {
+        if (pack->hasDir != 0) {
+            sceVu0ScaleVector(GOBJ_ACT(self)->attackDir, pack->dir, -1.0f);
+        }
     }
 }
 
@@ -706,7 +708,89 @@ static int AttackCheckHit_ntsc(AttackPack *pack, GObj *gobj, short *out)
     return j;
 }
 
-static int AttackCheckHit_aug6jun26(AttackPack *pack, GObj *gobj, short *out)
+static int AttackCheckHit_jun26(AttackPack *pack, GObj *gobj, short *out)
+{
+    float w[4];
+    unsigned char flags[112];
+    Sub15C *sk;
+    int n;
+    int i;
+    int j;
+    int hitR;
+    float rad;
+    float t;
+
+    sk = GOBJ_SUB(gobj);
+    n = sk->skelNodeNum;
+    if (n == 0) {
+        n = 1;
+    }
+    switch (gobj->kind) {
+    case 51:
+        rad = QueenBallRadius(gobj);
+        rad = rad + _ACTGame_GetParamF(25);
+        hitR = (int)rad;
+        i = 0;
+        break;
+
+    case 52:
+        if (QueenBarrierInqBreakable() == 0) {
+            hitR = 0;
+            i = 0;
+            break;
+        }
+        rad = QueenBarrierRadius(gobj);
+        rad = rad + _ACTGame_GetParamF(26);
+        hitR = (int)rad;
+        i = 0;
+        break;
+
+    case 60:
+        hitR = (int)GetAttackCheckBoundaryRadius(gobj);
+        i = 0;
+        break;
+
+    case 59:
+        hitR = 50;
+        i = 0;
+        break;
+
+    case 4:
+        hitR = (int)(GOBJ_ACT(gobj)->enemy->bodySize * 30.0f);
+        i = 0;
+        break;
+
+    default:
+        hitR = 30;
+        i = 0;
+        break;
+    }
+    for (i = 0; i < n; i++) {
+        flags[i] = 0;
+    }
+    for (t = 0.0f; t < pack->radius0; t += pack->radius1) {
+        _InterGV(w, pack->to, pack->center, t, pack->radius0 - t);
+        for (i = 0; i < n; i++) {
+            if (_DistSqGV((float *)(sk->nodeMtx + (i << 6) + 48), w) <
+                ((float)hitR + pack->radius1) * ((float)hitR + pack->radius1)) {
+                if (!(_DistSqGV((float *)(sk->nodeMtx + (i << 6) + 48), w) <
+                      ((float)hitR + pack->thickness) * ((float)hitR + pack->thickness))) {
+                    flags[i] = 1;
+                }
+            }
+        }
+    }
+    for (i = 0, j = 0; i < n; i++) {
+        if (flags[i] != 0) {
+            out[j] = i;
+            j++;
+        }
+    }
+    out[j] = -1;
+    return j;
+}
+
+static int AttackCheckHit_aug6(AttackPack *pack, GObj *gobj, short *out)
 {
     float w[4];
     unsigned char flags[112];
@@ -790,11 +874,14 @@ static int AttackCheckHit_aug6jun26(AttackPack *pack, GObj *gobj, short *out)
 
 static int AttackCheckHit(AttackPack *pack, GObj *gobj, short *out)
 {
+    if (ICO_JUN26) {
+        return AttackCheckHit_jun26(pack, gobj, out);
+    }
     if (ICO_NTSC) {
         return AttackCheckHit_ntsc(pack, gobj, out);
     }
-    if (ICO_AUG6JUN26) {
-        return AttackCheckHit_aug6jun26(pack, gobj, out);
+    if (ICO_AUG6) {
+        return AttackCheckHit_aug6(pack, gobj, out);
     }
     float w[4];
     unsigned char flags[112];
@@ -1002,12 +1089,16 @@ static GObj *AttackGenerate_aug6jun26(AttackPack *pack)
         if (GOBJ_ACT(g)->hit != 0) {
             continue;
         }
-        if (g->kind == 4 && GOBJ_ACT(g)->actMode == 100) {
-            continue;
+        if (!ICO_JUN26) {
+            if (g->kind == 4 && GOBJ_ACT(g)->actMode == 100) {
+                continue;
+            }
         }
         debug_StdPrintfDummy("invincible ok\n");
-        if (g == boyGObj && ACTChkAttackIgnore_BOY(g, pack->actor) != 0) {
-            continue;
+        if (!ICO_JUN26) {
+            if (g == boyGObj && ACTChkAttackIgnore_BOY(g, pack->actor) != 0) {
+                continue;
+            }
         }
         /* the enemy work records the nodes the attack hits */
         if (AttackCheckHit(pack, g, GOBJ_ACT(g)->enemy->hitNodes) == 0) {
@@ -1117,8 +1208,8 @@ inline GObj *AttackCenter(GObj *gop, int group, float *pos, float *ofs, float ra
     AttackPack pack;
 
     if (gop == 0) {
-        debug_assert(__FILE__, LN(931, 931, 931, 749, 729, 931, 931));
-        __assert(__FILE__, LN(931, 931, 931, 749, 729, 931, 931), "gop!=NULL");
+        debug_assert(__FILE__, LN(931, 931, 931, 749, 729, 704, 931));
+        __assert(__FILE__, LN(931, 931, 931, 749, 729, 704, 931), "gop!=NULL");
     }
     SetupAttackPack(&pack, gop, group, pos, ofs, radius);
     return AttackGenerate(&pack);
@@ -1142,8 +1233,8 @@ inline void AttackCenter_WithDir(GObj *gop, int group, float *pos, float *dir, f
     AttackPack pack;
 
     if (gop == 0) {
-        debug_assert(__FILE__, LN(951, 951, 951, 768, 748, 951, 951));
-        __assert(__FILE__, LN(951, 951, 951, 768, 748, 951, 951), "gop!=NULL");
+        debug_assert(__FILE__, LN(951, 951, 951, 768, 748, 748, 951));
+        __assert(__FILE__, LN(951, 951, 951, 768, 748, 748, 951), "gop!=NULL");
     }
     SetupAttackPack(&pack, gop, group, pos, dir, radius);
     if (dir != 0) {

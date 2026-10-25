@@ -626,7 +626,7 @@ static ChainPendulum chainPendulumDefault = {
     /* derived name */
     {0.0f, 0.0f, 0.0f, 0.0f}, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 360.0f, 45.0f, 1};
 
-static ChainRecord chainRecordDefault = {
+static ChainRecord chainRecordDefault_pal = {
     /* derived name */
     0,
     0,
@@ -650,6 +650,33 @@ static ChainRecord chainRecordDefault = {
     0,
     1,
     0};
+
+static ChainRecord chainRecordDefault_jun26 = {
+    /* derived name */
+    0,
+    0,
+    {0.0f, 0.0f, 0.0f, 0.0f},
+    {{0.0f, 0.0f, 0.0f, 0.0f}, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0},
+    0,
+    0,
+    -1,
+    0,
+    0.0f,
+    0,
+    0,
+    {0.0f, 0.0f, 0.0f, 0.0f},
+    {0.0f, 0.0f, 0.0f, 0.0f},
+    0,
+    {{0, 0}, 0},
+    {0.0f, 0.0f, 0.0f, 0.0f},
+    1,
+    0,
+    70.0f,
+    0,
+    0,
+    0}; /* hangable starts 0 in this build */
+
+#define chainRecordDefault (*PAL_JUN26(&chainRecordDefault_pal, &chainRecordDefault_jun26))
 
 /* The geometry request the caller fills in: the anchor position, whether to
  * look for the wall the chain hangs against and the direction to look in, the
@@ -812,7 +839,126 @@ static ChainRecord *InitChainGeo_ntsc(GObj *gobj, ChainGeoReq *req)
     return cw;
 }
 
-static ChainRecord *InitChainGeo_aug6jun26(GObj *gobj, ChainGeoReq *req)
+static ChainRecord *InitChainGeo_jun26(GObj *gobj, ChainGeoReq *req)
+{
+    ChainRecord *cw;
+    int n;
+    int i;
+
+    n = (int)(req->length / 50.0f + 0.5f);
+
+    if (n < 2) {
+        /* "the chain is too short (set it with the Y-scale of the placement table)" */
+        debug_StdPrintfDummy("鎖の長さが短かすぎます(配置表のY-scaleで指定します)");
+        debug_assert(__FILE__, 1113);
+        __assert(__FILE__, 1113, "0");
+    }
+
+    cw = iosMallocDebug(ios_partition_sugipon, (n << 5) + sizeof(ChainRecord), __FILE__, 1116);
+
+    /* the record is wider here (8-byte pointers): copy the typed template */
+    *cw = chainRecordDefault;
+
+    cw->nodes = n;
+    cw->node = (ChainNode *)(cw + 1);
+    cw->holdNode = -1;
+    if (req->hangRange != -1.0f) {
+        cw->hangRange = req->hangRange;
+    }
+
+    *(ChainPendTemplate *)&cw->pdl = *(ChainPendTemplate *)&chainPendulumDefault;
+
+    cw->pdl.limit = req->limit;
+    cw->pdl.limit = cw->pdl.limit < 5.0f ? 5.0f : (90.0f < cw->pdl.limit ? 90.0f : cw->pdl.limit);
+
+    ResetChainNodes(cw, (float *)req);
+
+    if (req->wallCheck != 0.0f) {
+        sceVu0FVECTOR p0 = {0.0f, 0.0f, -25.0f, 1.0f};
+        sceVu0FVECTOR p1 = {0.0f, 0.0f, 25.0f, 1.0f};
+        ClipWork w;
+        /* PC port: the original sets only the two
+           points, so _Clip reads the radius and the skip filter from
+           whatever the stack holds, and the wall it picks (climb.wall,
+           wallOrient: the climb-off's wall plane) followed the host's
+           garbage. The host starts from radius 0 and no filter: the wall
+           the segment crosses behind the chain. */
+        memset(&w, 0, sizeof(w));
+        sceVu0UnitMatrix(MatrixDrive_GetMatrix());
+        MatrixDrive_TransMatrix(req->pos[0], req->pos[1] + 10.0f, req->pos[2]);
+        MatrixDrive_RotMatrixY((short)(int)(req->wallDir * 32768.0f / 3.1415927f));
+        sceVu0ApplyMatrix(w.pt[0], MatrixDrive_GetMatrix(), p0);
+        sceVu0ApplyMatrix(w.pt[1], MatrixDrive_GetMatrix(), p1);
+        ClipWall(&w);
+        if (w.wall.elem == 0) {
+            /* "cannot find the wall above the chain. / is the direction wrong, or is
+             * it placed where there is no wall?" (in yellow) */
+            debug_StdPrintfDummy(
+                "\033[33m鎖の上の壁を見付けることができません。\n方向が間違っているか、壁が無いところに置いていませんか?\033[m\n");
+        } else {
+            memcpy(&cw->climb.wallSrc, &w.wall.o, sizeof(w.wall.o));
+            cw->climb.wall = w.wall.elem;
+            GetOrientOfWall(cw->wallOrient, w.wall.elem, &w.wall.o);
+            cw->wallHit = 1;
+        }
+    } else {
+        cw->climb.wallSrc.obj = 0;
+        cw->climb.wallSrc.node = 0;
+        cw->climb.wall = 0;
+        cw->wallHit = 0;
+    }
+
+    if (req->dirCorrect < 0.0f) {
+        cw->hasDirCorrect = 0;
+    } else {
+        cw->hasDirCorrect = 1;
+        cw->dirCorrect = req->dirCorrect;
+    }
+
+    if (((ChainExtPtr *)&gobj->dobj)->sub->nodeMtx != 0) {
+        iosFree((void *)ICO_PHYS(((ChainExtPtr *)&gobj->dobj)->sub->nodeMtx));
+    }
+    if (((ChainExtPtr *)&gobj->dobj)->sub->nodeQuat != 0) {
+        iosFree((void *)ICO_PHYS(((ChainExtPtr *)&gobj->dobj)->sub->nodeQuat));
+    }
+    /* the node matrix and quaternion buffers are stored here as the pointers
+       iosMallocDebug returns; typedef.h's Sub15C holds them as words */
+    *(char **)&((ChainExtPtr *)&gobj->dobj)->sub->nodeMtx = 0;
+
+    *(char **)&((ChainExtPtr *)&gobj->dobj)->sub->nodeQuat = 0;
+    *(char **)&((ChainExtPtr *)&gobj->dobj)->sub->nodeMtx =
+        (char *)iosMallocDebug(ios_partition_seki, (cw->nodes - 1) << 6, __FILE__, 1180);
+    *(char **)&((ChainExtPtr *)&gobj->dobj)->sub->nodeQuat =
+        (char *)iosMallocDebug(ios_partition_seki, (cw->nodes - 1) << 4, __FILE__, 1180);
+    ((ChainExtPtr *)&gobj->dobj)->sub->nodeNum = cw->nodes - 1;
+    if (((ChainExtPtr *)&gobj->dobj)->sub->nodes != 0) {
+        iosFree((void *)ICO_PHYS(ICO_ADDR(((ChainExtPtr *)&gobj->dobj)->sub->nodes)));
+    }
+    ((ChainExtPtr *)&gobj->dobj)->sub->nodes =
+        iosMallocDebug(ios_partition_seki, (cw->nodes - 1) * 80, __FILE__, 1180);
+
+    for (i = 0; i < cw->nodes - 1; i++) {
+        ((ChainExtPtr *)&gobj->dobj)->sub->nodes[i].flags.ll &= ~1;
+        ((ChainExtPtr *)&gobj->dobj)->sub->nodes[i].flags.ll &= ~2;
+        ((ChainExtPtr *)&gobj->dobj)->sub->nodes[i].pos[0] = 0.0f;
+        ((ChainExtPtr *)&gobj->dobj)->sub->nodes[i].pos[1] = 0.0f;
+        ((ChainExtPtr *)&gobj->dobj)->sub->nodes[i].pos[2] = 0.0f;
+        ((ChainExtPtr *)&gobj->dobj)->sub->nodes[i].pos[3] = 1.0f;
+        ((ChainExtPtr *)&gobj->dobj)->sub->nodes[i].flags.ll &= ~4;
+        ((ChainExtPtr *)&gobj->dobj)->sub->nodes[i].fade = 0.0f;
+        ((ChainExtPtr *)&gobj->dobj)->sub->nodes[i].alpha = 1.0f;
+        ((short *)&((ChainExtPtr *)&gobj->dobj)->sub->nodes[i].flags)[1] = 0;
+        ((ChainExtPtr *)&gobj->dobj)->sub->nodes[i].scale[0] = 1.0f;
+        ((ChainExtPtr *)&gobj->dobj)->sub->nodes[i].scale[1] = 1.0f;
+        ((ChainExtPtr *)&gobj->dobj)->sub->nodes[i].scale[2] = 1.0f;
+    }
+
+    ((ChainExtPtr *)&gobj->dobj)->sub->dispType = 2;
+
+    return cw;
+}
+
+static ChainRecord *InitChainGeo_aug6(GObj *gobj, ChainGeoReq *req)
 {
     ChainRecord *cw;
     int n;
@@ -828,7 +974,7 @@ static ChainRecord *InitChainGeo_aug6jun26(GObj *gobj, ChainGeoReq *req)
     }
 
     cw = iosMallocDebug(ios_partition_sugipon, (n << 5) + sizeof(ChainRecord), __FILE__,
-                        LN(1181, 1175, 1175, 1181, 1121, 1116, 1175));
+                        LN(1181, 1175, 1175, 1181, 1121, 1121, 1175));
 
     /* the record is wider here (8-byte pointers): copy the typed template */
     *cw = chainRecordDefault;
@@ -934,11 +1080,14 @@ static ChainRecord *InitChainGeo_aug6jun26(GObj *gobj, ChainGeoReq *req)
 
 ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
 {
+    if (ICO_JUN26) {
+        return InitChainGeo_jun26(gobj, req);
+    }
     if (ICO_NTSC) {
         return InitChainGeo_ntsc(gobj, req);
     }
-    if (ICO_AUG6JUN26) {
-        return InitChainGeo_aug6jun26(gobj, req);
+    if (ICO_AUG6) {
+        return InitChainGeo_aug6(gobj, req);
     }
     ChainRecord *cw;
     int n;
@@ -954,7 +1103,7 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
     }
 
     cw = iosMallocDebug(ios_partition_sugipon, (n << 5) + sizeof(ChainRecord), __FILE__,
-                        LN(1181, 1175, 1175, 1181, 1121, 1116, 1175));
+                        LN(1181, 1175, 1175, 1181, 1121, 1121, 1175));
 
     /* the record is wider here (8-byte pointers): copy the typed template */
     *cw = chainRecordDefault;
@@ -1121,8 +1270,48 @@ typedef struct { /* field names derived */
 extern ChainParaRow motionKind[];
 static void TestChainUpDown(GObj *gobj, GObj *boy);
 
+static inline int GetChainSimulateMode_jun26(GObj *gobj) /* derived name */
+{
+    ChainRecord *cw = GOBJ_SUB(gobj)->work;
+    int mode = 1;
+
+    if (cw->hold != 0) {
+        GObj *holder = cw->owner;
+        int st = GOBJ_ACT(holder)->actMode;
+
+        mode = 6;
+        if (st != 58) {
+            mode = st == 59 ? 9 : 3;
+        }
+
+        switch (GOBJ_SUB(holder)->ctrl.motion) {
+        case 130:
+        case 131:
+            mode = 4;
+            break;
+        case 127:
+            mode = 10;
+            break;
+        case 126:
+            mode = 7;
+            break;
+        case 128:
+        case 129:
+            mode = 8;
+            break;
+        case 135:
+            mode = 2;
+            break;
+        case 141:
+            mode = 5;
+            break;
+        }
+    }
+    return mode;
+}
+
 /* the simulation mode the boy's motion selects, for ChainGeo */
-static inline int GetChainSimulateMode_ntscaug6jun26(GObj *gobj) /* derived name */
+static inline int GetChainSimulateMode_ntscaug6(GObj *gobj) /* derived name */
 {
     ChainRecord *cw = GOBJ_SUB(gobj)->work;
     int mode = 1;
@@ -1164,8 +1353,11 @@ static inline int GetChainSimulateMode_ntscaug6jun26(GObj *gobj) /* derived name
 
 static inline int GetChainSimulateMode(GObj *gobj) /* derived name */
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return GetChainSimulateMode_ntscaug6jun26(gobj);
+    if (ICO_JUN26) {
+        return GetChainSimulateMode_jun26(gobj);
+    }
+    if (ICO_NTSCAUG6) {
+        return GetChainSimulateMode_ntscaug6(gobj);
     }
     ChainRecord *cw = GOBJ_SUB(gobj)->work;
     int mode = 1;
@@ -1480,7 +1672,7 @@ static void ChainGeo_aug6jun26(GObj *gobj)
             iosOmSendMail(boyGObj, 21, gobj);
         }
         if (_DistSqGV(p, cw->rootPos) < 900.0f) {
-            iosOmSendMail(boyGObj, 152, gobj);
+            iosOmSendMail(boyGObj, PAL_JUN26(152, 150), gobj);
         }
     }
 
@@ -1905,8 +2097,8 @@ static void PlumbPointUpdateChain(GObj *gobj, float *pos)
         }
     }
     if (nearestNode == -1) {
-        debug_assert(__FILE__, LN(1675, 1669, 1669, 1607, 1600, 1675, 1669));
-        __assert(__FILE__, LN(1675, 1669, 1669, 1607, 1600, 1675, 1669), "nearestNode!=-1");
+        debug_assert(__FILE__, LN(1675, 1669, 1669, 1607, 1600, 1595, 1669));
+        __assert(__FILE__, LN(1675, 1669, 1669, 1607, 1600, 1595, 1669), "nearestNode!=-1");
     }
     cw->holdNode = nearestNode;
     cw->holdNode =
@@ -2017,7 +2209,7 @@ static inline int GetChainClimbMode(GObj *boy, int motion) /* derived name */
 static inline int GetChainClimbMode_ntscaug6jun26(GObj *boy, int motion) /* derived name */
 {
     int mode = -1;
-    switch (motion) {
+    switch (motion - PAL_JUN26(0, 9)) { /* PC port: the demo's motions 9 higher */
     case 117:
         mode = 4; if (GOBJ_ACT(boy)->actMode != 63) {
             mode = 0;

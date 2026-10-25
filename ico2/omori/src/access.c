@@ -4,7 +4,11 @@
 
 /* the path sprintf builds and this file hands back (the European size; the Japanese
    disc's is 512) */
-static char accessPath[528]; /* derived name */
+static char accessPath_pal[528]; /* derived name */
+
+static char accessPath_jun26[512]; /* derived name */
+
+#define accessPath PAL_JUN26(accessPath_pal, accessPath_jun26)
 
 /* Callers pass the stage and the DF flag (StageManager.c, icoMisc.c), which
    goes straight through to GetDataFileName2.  The DEBUG build reads the data

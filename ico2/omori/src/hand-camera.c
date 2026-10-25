@@ -26,8 +26,64 @@ static unsigned char handCameraMode; /* derived name */
    SetLimitHandCameraCorrect writes */
 static float handCameraWork[7]; /* derived name */
 
+static void RotateAccordingToStick_PatternThree_jun26(float *pitch, float *yaw, float x, float y)
+{
+    float *p = handCameraWork;
+    float len = FSqrt(x * x + y * y);
+    float ang = atan2f(y, x);
+    float v[4] = {len, 0.0f, 0.0f, 0.0f};
+    float spd;
+    float da;
+    float db;
+    float t;
+    float d;
+    float k;
+
+    _ApplyRyGV(v, -ang);
+    x = v[0];
+    y = v[2];
+
+    if (len < 0.1f)
+        spd = handCameraRate * 0.008726646f * _ACTGame_GetParamF(13);
+    else
+        spd = handCameraRate * 0.008726646f * _ACTGame_GetParamF(12);
+
+    /* PC port: the mouse camera speed, applied by ico_mouse_camera_step */
+    k = ico_mouse_camera_speed();
+
+    db = x * (p[5] * 3.1415927f / 180.0f) - *yaw;
+
+    if (y > 0.0f) {
+        t = p[2];
+    } else {
+        t = p[3];
+        if (t < 0.0f)
+            t = -t;
+    }
+    da = y * t - *pitch;
+
+    d = FSqrt(da * da + db * db);
+
+    if (k != 1.0f) {
+        /* PC port: the same step for the mouse camera's other speeds */
+        ico_mouse_camera_step(&da, &db, d, spd, k);
+    } else if (d < spd * 10.0f) {
+        da = da / 10.0f;
+        db = db / 10.0f;
+    } else if (spd < d) {
+        da = da * spd / d;
+        db = db * spd / d;
+    }
+    *pitch += da;
+    *yaw += db;
+}
+
 static void RotateAccordingToStick_PatternThree(float *pitch, float *yaw, float x, float y)
 {
+    if (ICO_JUN26) {
+        RotateAccordingToStick_PatternThree_jun26(pitch, yaw, x, y);
+        return;
+    }
     float *p = handCameraWork;
     float len = FSqrt(x * x + y * y);
     float ang = atan2f(y, x);

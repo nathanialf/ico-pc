@@ -23,8 +23,74 @@ static int fightSoundState = 0; /* derived name */
 /* set while the girl is held (status 9) or taken off the stage */
 static int fightSoundGirlTaken = 0; /* derived name */
 
+static void fightSoundProcessMain_jun26(void)
+{
+    int req;
+    int cond = 0;
+
+    req = 0x110004;
+    fightSnd.handle = soundDataAreaSearch(&req);
+    if (fightSnd.handle == 0) {
+        fightSnd.volume = 0;
+        if (fightSoundPause == 1) {
+            return;
+        }
+    }
+    if (systemStatus[6] != 0) {
+        return;
+    }
+    if (systemStatus[5] == 0 && fightSoundPause != 1) {
+        if (boyGObj != 0) {
+            cond = 0;
+            if (_ACTCharStatus_Check(boyGObj, 13) != 0) {
+                cond = 1;
+            }
+        }
+        if (systemStatus[6] == 0) {
+            fightSoundGirlTaken = 0;
+            if ((girlGObj != 0 && _ACTCharStatus_Check(girlGObj, 7) != 0) ||
+                gamesysAnotherStageTsuresari != 0) {
+                fightSoundGirlTaken = 1;
+            }
+        }
+    } else {
+        fightSoundGirlTaken = 0;
+        cond = 0;
+    }
+    if (fightSnd.handle == 0) {
+        if (cond != 0 || fightSoundGirlTaken != 0) {
+            if (systemStatus[6] == 0) {
+                soundDataOpen(&fightSnd.req, 2, 4, 2, 0);
+                fightSoundState = 1;
+            }
+        }
+    }
+    if (fightSnd.handle == 0) {
+        return;
+    }
+    if (cond == 0 && fightSoundGirlTaken == 0) {
+        fightSnd.volume -= 96;
+        if (fightSnd.volume < 0) {
+            fightSnd.volume = 0;
+        }
+    } else {
+        fightSnd.volume += 96;
+        if (fightSnd.volume > 6144) {
+            fightSnd.volume = 6144;
+        }
+    }
+    AdpcmVolumeSet(fightSnd.handle, fightSnd.volume);
+    if (fightSnd.volume == 0) {
+        fightSoundState = 2;
+    }
+}
+
 static void fightSoundProcessMain(void)
 {
+    if (ICO_JUN26) {
+        fightSoundProcessMain_jun26();
+        return;
+    }
     int req;
     int cond = 0;
     int step;

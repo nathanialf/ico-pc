@@ -28,8 +28,19 @@ inline void ObjAction_Init(void)
     }
 }
 
+static inline void objActionCorrectFlag_jun26(OaRecB *p) /* derived name */
+{
+    if ((p->flags & 1) == 1u) {
+        p->mode = 763;
+    }
+}
+
 static inline void objActionCorrectFlag(OaRecB *p) /* derived name */
 {
+    if (ICO_JUN26) {
+        objActionCorrectFlag_jun26(p);
+        return;
+    }
     if ((p->flags & 1) == 1u) {
         p->mode = PAL_JPNKORCN_NTSC_AUG6JUN26(972, 949, 815, 814);
     }
@@ -42,7 +53,14 @@ static inline void objActionCorrectMode_ntsc(OaRecB *p) /* derived name */
     }
 }
 
-static inline void objActionCorrectMode_aug6jun26(OaRecB *p) /* derived name */
+static inline void objActionCorrectMode_jun26(OaRecB *p) /* derived name */
+{
+    if (p->mode == 763) {
+        p->mode = p->baseMode;
+    }
+}
+
+static inline void objActionCorrectMode_aug6(OaRecB *p) /* derived name */
 {
     if (p->mode == 814) {
         p->mode = p->baseMode;
@@ -51,12 +69,16 @@ static inline void objActionCorrectMode_aug6jun26(OaRecB *p) /* derived name */
 
 static inline void objActionCorrectMode(OaRecB *p) /* derived name */
 {
+    if (ICO_JUN26) {
+        objActionCorrectMode_jun26(p);
+        return;
+    }
     if (ICO_NTSC) {
         objActionCorrectMode_ntsc(p);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        objActionCorrectMode_aug6jun26(p);
+    if (ICO_AUG6) {
+        objActionCorrectMode_aug6(p);
         return;
     }
     if (p->mode == PAL_JPNKORCN(972, 949)) {

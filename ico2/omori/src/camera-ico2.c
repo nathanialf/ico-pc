@@ -204,7 +204,82 @@ inline void SetCameraTargetPosition(void *target, void *eye, float fov)
     monitorCamera.work.ext.f[0] = fov;
 }
 
-static void ico2camera_GetTargetPos_aug6jun26(unsigned char flag)
+static void ico2camera_GetTargetPos_jun26(int reset)
+{
+    unsigned char flag = reset;
+    GObj *p1;
+    GObj *p2;
+    float v0[4];
+    float v1[4];
+    float v2[4];
+    float A[4];
+    float B[4];
+    float C[4];
+    int i;
+
+    CameraGetTargets(&p1, &p2);
+    if (p1 == 0) {
+        return;
+    }
+    if (p2 != 0) {
+        GetRootPositionForCamera(A, p1);
+        GetRootPositionForCamera(B, p2);
+        sceVu0ScaleVector(A, A, -1.0f);
+        sceVu0ScaleVector(B, B, -1.0f);
+        v1[0] = A[0];
+        v1[1] = A[1];
+        v1[2] = A[2];
+        v0[0] = B[0];
+        v0[1] = B[1];
+        v0[2] = B[2];
+        v2[0] = A[0];
+        v2[1] = A[1];
+        v2[2] = A[2];
+    } else {
+        GetRootPositionForCamera(C, p1);
+        sceVu0ScaleVector(C, C, -1.0f);
+        v0[0] = C[0];
+        v0[1] = C[1];
+        v0[2] = C[2];
+        v1[0] = C[0];
+        v1[1] = C[1];
+        v1[2] = C[2];
+        v2[0] = C[0];
+        v2[1] = C[1];
+        v2[2] = C[2];
+    }
+    {
+        groupProbePos[0] = v2[0];
+        groupProbePos[1] = v2[1];
+        groupProbePos[2] = v2[2];
+    }
+    if (flag != 0) {
+        float x = v0[0];
+        float y = v0[1];
+        float z = v0[2];
+        targetAStart[0] = x;
+        targetAStart[1] = y;
+        targetAStart[2] = z;
+        targetAPrev[0] = x;
+        targetAPrev[1] = y;
+        targetAPrev[2] = z;
+        targetBPrev[0] = v1[0];
+        targetBPrev[1] = v1[1];
+        targetBPrev[2] = v1[2];
+    }
+    for (i = 0; i < 3; i++) {
+        targetASmooth[i] = (v0[i] + targetAPrev[i] * 3.0f) * 0.25f;
+        targetBSmooth[i] = (v1[i] + targetBPrev[i] * 3.0f) * 0.25f;
+    }
+    targetAPrev[0] = targetASmooth[0];
+    targetAPrev[1] = targetASmooth[1];
+    targetAPrev[2] = targetASmooth[2];
+    targetBPrev[0] = targetBSmooth[0];
+    targetBPrev[1] = targetBSmooth[1];
+    targetBPrev[2] = targetBSmooth[2];
+}
+
+static void ico2camera_GetTargetPos_aug6(unsigned char flag)
 {
     GObj *p1;
     GObj *p2;
@@ -280,8 +355,12 @@ static void ico2camera_GetTargetPos_aug6jun26(unsigned char flag)
 
 static void ico2camera_GetTargetPos(int reset)
 {
-    if (ICO_AUG6JUN26) {
-        ico2camera_GetTargetPos_aug6jun26(reset);
+    if (ICO_JUN26) {
+        ico2camera_GetTargetPos_jun26(reset);
+        return;
+    }
+    if (ICO_AUG6) {
+        ico2camera_GetTargetPos_aug6(reset);
         return;
     }
     unsigned char flag = reset;
@@ -529,7 +608,113 @@ static void monitorMonitorCamera_ntsc(CamWork *cam, CamWork *out)
     monitorCamera.dbgA[2] = vDbg[2];
 }
 
-static void monitorMonitorCamera_aug6jun26(CamWork *cam, CamWork *out)
+static void monitorMonitorCamera_jun26(CamWork *cam, CamWork *out)
+{
+    float vDiff[4];
+    float vDbg[4];
+    float vEye[4];
+    float vOut[4];
+    float vAt[4];
+    float vAt2[4];
+    float vSpare[4];
+    int k;
+    float len;
+    float t;
+    float d;
+    float d1;
+    float d2;
+
+    if (monitorCamera.active != 0) {
+        monitorCamera.work = *cam;
+        monitorCamera.moveDist = 0.0f;
+        monitorCamera.atRate = 0.0f;
+        monitorCamera.active = 0;
+        monitorCamera.dbgA[0] = 0.0f;
+        monitorCamera.dbgA[1] = 0.0f;
+        monitorCamera.dbgA[2] = 0.0f;
+        monitorCamera.dbgB[0] = 0.0f;
+        monitorCamera.dbgB[1] = 0.0f;
+        monitorCamera.dbgB[2] = 0.0f;
+        *out = *cam;
+        return;
+    }
+    *out = *cam;
+    vDiff[0] = cam->eye.f[0] - monitorCamera.work.eye.f[0];
+    vDiff[1] = cam->eye.f[1] - monitorCamera.work.eye.f[1];
+    vDiff[2] = cam->eye.f[2] - monitorCamera.work.eye.f[2];
+    sceVu0SubVector(vEye, cam, &monitorCamera.work);
+    len = FSqrt(vEye[0] * vEye[0] + vEye[1] * vEye[1] + vEye[2] * vEye[2]);
+    if (handCameraEyeRate * 11.0f < len) {
+        if (handCameraEyeRate < monitorCamera.moveDist) {
+            monitorCamera.moveDist = handCameraEyeRate;
+        }
+        if (monitorCamera.moveDist < len) {
+            len = monitorCamera.moveDist + (handCameraEyeRate / 30.0f);
+            sceVu0Normalize(vEye, vEye);
+            sceVu0ScaleVector(vEye, vEye, len);
+            sceVu0AddVector(out, &monitorCamera.work, vEye);
+        } else {
+            len = handCameraEyeRate;
+            sceVu0Normalize(vEye, vEye);
+            sceVu0ScaleVector(vEye, vEye, len);
+            sceVu0AddVector(out, &monitorCamera.work, vEye);
+        }
+    } else {
+        _InterGV(out->eye.f, cam->eye.f, monitorCamera.work.eye.f, 10.0f, 1.0f);
+        for (k = 0; k < 3; k++) {}
+    }
+    sceVu0SubVector(vOut, out, &monitorCamera.work);
+    t = FSqrt(vOut[0] * vOut[0] + vOut[1] * vOut[1] + vOut[2] * vOut[2]);
+    monitorCamera.moveDist = t;
+#ifdef DEBUG
+    sceVu0SubVector(vSpare, &cam->at, &monitorCamera.work.at);
+    scePrintf("monitor camera move %f at %f %f %f\n", t, vSpare[0], vSpare[1], vSpare[2]);
+#endif
+    d = handCameraAtRate;
+    if (d < 0.0f) {
+        d = -d;
+    }
+    sceVu0SubVector(vAt, &cam->at, &monitorCamera.work.at);
+    len = FSqrt(vAt[0] * vAt[0] + vAt[1] * vAt[1] + vAt[2] * vAt[2]);
+    sceVu0Normalize(vAt, vAt);
+    if (d * 9.0f < len) {
+        monitorCamera.atRate = monitorCamera.atRate + 0.5f;
+        if (d < monitorCamera.atRate) {
+            monitorCamera.atRate = d;
+        }
+        sceVu0ScaleVector(vAt, vAt, monitorCamera.atRate);
+        sceVu0AddVector(&out->at, &monitorCamera.work.at, vAt);
+    } else {
+        _InterGV(out->at.f, cam->at.f, monitorCamera.work.at.f, 8.0f, 1.0f);
+        sceVu0SubVector(vAt, &out->at, &monitorCamera.work.at);
+        len = FSqrt(vAt[0] * vAt[0] + vAt[1] * vAt[1] + vAt[2] * vAt[2]);
+        if (d < len) {
+            len = d;
+        }
+        sceVu0Normalize(vAt, vAt);
+        sceVu0ScaleVector(vAt, vAt, len);
+        sceVu0AddVector(&out->at, &monitorCamera.work.at, vAt);
+        sceVu0SubVector(vAt2, &out->at, &monitorCamera.work.at);
+        len = FSqrt(vAt2[0] * vAt2[0] + vAt2[1] * vAt2[1] + vAt2[2] * vAt2[2]);
+        monitorCamera.atRate = len;
+        if (d < len) {
+            monitorCamera.atRate = d;
+        }
+    }
+    if (out->ext.f[0] - monitorCamera.work.ext.f[0] != 0.0f) {
+        d1 = _DistGV(out, cam);
+        d2 = _DistGV(out, &monitorCamera.work);
+        if (d1 + d2 != 0.0f) {
+            out->ext.f[0] = (out->ext.f[0] * d2 + monitorCamera.work.ext.f[0] * d1) / (d1 + d2);
+        }
+    }
+    monitorCamera.work = *out;
+    monitorCamera.dbgA[0] = vDbg[0];
+    monitorCamera.dbgA[1] = vDbg[1];
+    monitorCamera.dbgA[2] = vDbg[2];
+}
+
+static void monitorMonitorCamera_aug6(CamWork *cam, CamWork *out)
 {
     float vDiff[4];
     float vDbg[4];
@@ -641,12 +826,16 @@ static void monitorMonitorCamera_aug6jun26(CamWork *cam, CamWork *out)
 
 static void monitorMonitorCamera(CamWork *cam, CamWork *out)
 {
+    if (ICO_JUN26) {
+        monitorMonitorCamera_jun26(cam, out);
+        return;
+    }
     if (ICO_NTSC) {
         monitorMonitorCamera_ntsc(cam, out);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        monitorMonitorCamera_aug6jun26(cam, out);
+    if (ICO_AUG6) {
+        monitorMonitorCamera_aug6(cam, out);
         return;
     }
     float vDiff[4];
@@ -1134,8 +1323,50 @@ void InitIco2Camera(void)
    fourth lane its own room */
 static float lastTargetOffset[4] = {0.0f, 0.0f, 0.0f}; /* derived name */
 
+static void GetTargetOffset_jun26(GObj *gobj, float *v, unsigned char flag)
+{
+    float ofs[4];
+    float w[4];
+    Sub15C *p;
+    int n;
+
+    if (gobj == default_cameratarget_gobj && gobj != 0) {
+        n = (int)(_GetDirection(test_CURRENTORIENT(gobj)) / 3.1415927f * 180.0f);
+        ofs[0] = v[0];
+        ofs[1] = v[1];
+        ofs[2] = -v[2];
+        ofs[3] = 0.0f; /* PC port: the stack word the EE left there */
+        if (flag) {
+            lastTargetOffset[0] = 0.0f;
+            lastTargetOffset[1] = 0.0f;
+            lastTargetOffset[2] = 0.0f;
+        }
+        _ApplyRyGV(ofs, (float)n * 3.1415927f / 180.0f);
+        p = GOBJ_SUB(gobj);
+        if (3.0f < FSqrt(p->root.move[0] * p->root.move[0] + p->root.move[2] * p->root.move[2])) {
+            sceVu0SubVector(w, ofs, lastTargetOffset);
+            if (FSqrt(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]) < 1.5f) {
+                lastTargetOffset[0] = ofs[0];
+                lastTargetOffset[1] = ofs[1];
+                lastTargetOffset[2] = ofs[2];
+            } else {
+                sceVu0Normalize(w, w);
+                sceVu0ScaleVector(w, w, 1.5f);
+                sceVu0AddVector(lastTargetOffset, lastTargetOffset, w);
+            }
+        }
+        v[0] = lastTargetOffset[0];
+        v[1] = lastTargetOffset[1];
+        v[2] = lastTargetOffset[2];
+    }
+}
+
 static void GetTargetOffset(GObj *gobj, float *v, unsigned char flag)
 {
+    if (ICO_JUN26) {
+        GetTargetOffset_jun26(gobj, v, flag);
+        return;
+    }
     float ofs[4];
     float w[4];
     Sub15C *p;
@@ -1370,7 +1601,152 @@ static void SetCameraMatrix_Ico2_ntsc(int flag)
     SetWSMatrix(&cw);
 }
 
-static void SetCameraMatrix_Ico2_aug6jun26(int f8)
+static void SetCameraMatrix_Ico2_jun26(int flag)
+{
+    CamWork cw = monitorCamera.work;
+    float vA[4];
+    float vB[4];
+    CamWork cw2;
+    int cut;
+    int enable;
+    int mode = 1;
+    int changed = 0;
+    unsigned char f8;
+    int group;
+
+    if (cameraGroupChanged != 0) {
+        flag = 1;
+        cameraGroupChanged = 0;
+        changed = 1;
+    }
+    if (flag) {
+        changed = mode;
+    }
+    f8 = flag;
+    ico2camera_GetTargetPos(f8);
+    group = findCameraGroupContaining(groupProbePos);
+    if (changed && group == -1) {
+        group = ico2camera_GetGroupNearest(groupProbePos);
+    }
+    if (group == -1) {
+        cw = monitorCamera.work;
+        cw.at.f[0] = targetASmooth[0];
+        cw.at.f[1] = targetASmooth[1];
+        cw.at.f[2] = targetASmooth[2];
+        memset(vA, 0, 16);
+        GetTargetOffset(default_cameratarget_gobj, vA, 0);
+        sceVu0AddVector(cw.at.f, cw.at.f, vA);
+    } else {
+        if (flag != 0 || (cameraGroupCurrent != -1 &&
+                          ((CamGroup *)cameraSetGroups)[group].kind !=
+                              ((CamGroup *)cameraSetGroups)[cameraGroupCurrent].kind)) {
+            initMonitorCamera(1);
+            ico_video_camera_cut();
+            f8 = 1;
+        }
+        memset(vA, 0, 16);
+        memset(vB, 0, 16);
+        CameraMove(group, targetBSmooth, (float *)&cw, vA, vB);
+        cw.at.f[0] = targetASmooth[0];
+        cw.at.f[1] = targetASmooth[1];
+        cw.at.f[2] = targetASmooth[2];
+        GetTargetOffset(default_cameratarget_gobj, vA, f8);
+        sceVu0AddVector(cw.at.f, cw.at.f, vA);
+        sceVu0AddVector(cw.at.f, cw.at.f, vB);
+        cameraGroupCurrent = group;
+    }
+    {
+        int cutType; /* PC port: the European cut type, unused by the August preview */
+
+        InsertCamera_Exec((float *)&cw, &cut, &cutType, &enable);
+    }
+    if (cut != 0) {
+        initMonitorCamera(1);
+    }
+    if (enable != 0) {
+        mode = 0;
+    }
+    monitorMonitorCamera(&cw, &cw2);
+    cw = cw2;
+    if (debug_camera_flag != 0) {
+        debug_Marker(cw.at.f, 0, 0, 255, 100.0f, 0.0f);
+    }
+    sceVu0ScaleVector(&cw, &cw, -1.0f);
+    sceVu0ScaleVector(cw.at.f, cw.at.f, -1.0f);
+    {
+        float sx;
+        float sz;
+        float mag;
+
+        /* This build reads the stick twice. The first reading below (pad[0]'s
+           first two analog bytes, the magnitude clamped to 1, the square dead zone at 0.4
+           and a squared response past 0.4 on each axis, the same tests as
+           camera-root.c's CameraEditManual: a positive and a negative test per
+           axis) is overwritten by the iosPad reading after it, so it is dead.
+           Its words that remain are the FSqrt call and the two 0.4f <= tests:
+           the response bodies feed the negative tests, which die only in the
+           flow pass after reload, so the two tests keep their branches until
+           the last jump pass removes them. The response constants are derived
+           (no literal of the dead code survives): the words fix only the shape,
+           bodies without the 0.4f constant (the tests' 0.4f is in $f3, past
+           the bodies' two temporaries and the shared -0.4f), and the clamp
+           (its label puts the dead zone's first 0.0f in $f0). aug6's TRFILE
+           has no code on the lines of the clamp and of the response. */
+        if (pad[0].now & 2) {
+            mode = 0;
+        }
+        if (mode) {
+            sx = (pad[0].ana[0] - 127) / 128.0f;
+            sz = (pad[0].ana[1] - 127) / 128.0f;
+        } else {
+            sx = sz = 0.0f;
+        }
+        mag = FSqrt(sx * sx + sz * sz);
+        if (1.0f < mag) {
+            mag = 1.0f;
+        }
+        if ((sx < 0.0f ? -sx : sx) < 0.4f && (sz < 0.0f ? -sz : sz) < 0.4f) {
+            sx = sz = 0.0f;
+        }
+        if (0.4f <= sx) {
+            sx = sx * sx * 2.5f;
+        }
+        if (sx <= -0.4f) {
+            sx = -sx * sx * 2.5f;
+        }
+        if (0.4f <= sz) {
+            sz = sz * sz * 2.5f;
+        }
+        if (sz <= -0.4f) {
+            sz = -sz * sz * 2.5f;
+        }
+        {
+            IosPadCtx padCtx;
+            IosPadStick st;
+
+            iosPadConnect(&padCtx, 0, 0, &iosPadConfDefault);
+            iosPadRead(&padCtx);
+            iosPadGetStick(&padCtx, &st, 1, 2, 2, 0);
+            {
+                Mat4 dir = {{(float)st.x - 127.5f, 0.0f, (float)st.y - 127.5f, 0.0f}};
+
+                sceVu0Normalize(&dir, &dir);
+                mag = st.mag;
+                sx = dir.f[0] * mag;
+                sz = dir.f[2] * mag;
+            }
+        }
+        if (systemStatus[5] != 0 || IsAbleBoyControl() == 0 || mode == 0) {
+            ClearHandCameraCorrect();
+        } else {
+            HandCameraCorrect(&cw, cw.at.f, 0, sx, sz,
+                              60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+        }
+    }
+    SetWSMatrix(&cw);
+}
+
+static void SetCameraMatrix_Ico2_aug6(int f8)
 {
     CamWork cw = monitorCamera.work;
     float vA[4];
@@ -1524,12 +1900,16 @@ static void SetCameraMatrix_Ico2_aug6jun26(int f8)
 
 void SetCameraMatrix_Ico2(int flag)
 {
+    if (ICO_JUN26) {
+        SetCameraMatrix_Ico2_jun26(flag);
+        return;
+    }
     if (ICO_NTSC) {
         SetCameraMatrix_Ico2_ntsc(flag);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        SetCameraMatrix_Ico2_aug6jun26(flag);
+    if (ICO_AUG6) {
+        SetCameraMatrix_Ico2_aug6(flag);
         return;
     }
     CamWork cw = monitorCamera.work;
@@ -1643,8 +2023,8 @@ inline void AddPluralCameraSet(int id, char *name)
     if (pluralCameraSetNum >= 10) {
         /* EUC-JP: "at most [%d] camera sets can be registered in one stage." */
         debug_StdPrintfDummy("１ステージに登録できるカメラセットは、最大[%d]個です。", 10);
-        debug_assert(__FILE__, LN(2045, 2043, 2043, 1984, 1982, 2045, 2043));
-        __assert(__FILE__, LN(2045, 2043, 2043, 1984, 1982, 2045, 2043), "0");
+        debug_assert(__FILE__, LN(2045, 2043, 2043, 1984, 1982, 1974, 2043));
+        __assert(__FILE__, LN(2045, 2043, 2043, 1984, 1982, 1974, 2043), "0");
     }
     p = &pluralCameraSet[pluralCameraSetNum];
     p->id = id;
@@ -1806,8 +2186,8 @@ static void *ReadCameraSet(CamSetFile *f, int stage)
         debug_StdPrintfDummy(
             "カメラデータのバージョンに異常があります。大森まで知らせてください\n");
         debug_StdPrintfDummy("illegal camera data version [%d]\n", f->ver);
-        debug_assert(__FILE__, LN(2355, 2353, 2353, 2294, 2292, 2355, 2353));
-        __assert(__FILE__, LN(2355, 2353, 2353, 2294, 2292, 2355, 2353), "0");
+        debug_assert(__FILE__, LN(2355, 2353, 2353, 2294, 2292, 2284, 2353));
+        __assert(__FILE__, LN(2355, 2353, 2353, 2294, 2292, 2284, 2353), "0");
         break;
     }
     return p;
