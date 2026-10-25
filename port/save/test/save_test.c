@@ -33,7 +33,8 @@
  * BISCPS-11003ico and a 0x1E8-byte product file, the same record's first
  * 0x1E8 bytes (cameraMove and palMode, its last two words, are the European
  * disc's only); kor, the Korean disc, BISCPS-56001ico and the Japanese
- * record (0x1E8, region_kor.c mc_product_size). game.00N is 25,600 bytes on
+ * record (0x1E8, region_kor.c mc_product_size); cn, the Asian disc,
+ * BISCPS-55001ico and the same 0x1E8 record. game.00N is 25,600 bytes on
  * all. Part C also imports a card holding two discs' directories (the
  * selected one and another), each into its own folder.
  */
@@ -270,8 +271,8 @@ static void bg_manager(void)
 #define CARD_M "save_test_card_m"
 /* the selected disc's save directory (fumi/ios/mcard.c's product name, the
    region table's mc_save_dir: BESCES-50760ico, BISCPS-11003ico,
-   BISCPS-56001ico) and its product file's size before the 4-byte sum
-   (mc_product_size: 0x1F0, the Japanese and Korean discs' 0x1E8, the first
+   BISCPS-56001ico, BISCPS-55001ico) and its product file's size before the 4-byte sum
+   (mc_product_size: 0x1F0, the Japanese, Korean and Asian discs' 0x1E8, the first
    0x1E8 bytes of the same record) */
 #define PRODUCT (ico_region_cur()->mc_save_dir)
 #define PSIZE (ico_region_cur()->mc_product_size)
@@ -751,6 +752,7 @@ static void driver(void *arg)
           offsetof(McProductFile, palMode) == 0x1EC);
     CHECK(ico_region_info_jpn.mc_product_size == (int)offsetof(McProductFile, cameraMove));
     CHECK(ico_region_info_kor.mc_product_size == (int)offsetof(McProductFile, cameraMove));
+    CHECK(ico_region_info_cn.mc_product_size == (int)offsetof(McProductFile, cameraMove));
     printf("part B: the %s disc, %s/, a product file of %d + 4 bytes\n", ico_region_cur()->slug,
            PRODUCT, PSIZE);
     rm_card(CARD_B);
@@ -1542,11 +1544,15 @@ static void test_import(const char *cli)
     /* another disc's region (the first row that is not the selected one):
        its directory imports beside the selected one's; lo and hi are the
        two in the table's order, as the command line lists them */
-    const int otherRegion = ico_region == 0 ? 1 : 0;
-    const int lo = ico_region < otherRegion ? ico_region : otherRegion;
-    const int hi = ico_region < otherRegion ? otherRegion : ico_region;
-    const char *otherDir = ico_region_at(otherRegion)->mc_save_dir;
-    const unsigned both = (1u << ico_region) | (1u << otherRegion);
+    /* the importer names a directory's first row: the North American and the
+       August 2001 discs share BASCUS-97113ico, which reads as the North
+       American disc's (mc_import.c save_dir_region) */
+    int home = ico_region;
+    int r;
+    int otherRegion;
+    int lo, hi;
+    const char *otherDir;
+    unsigned both;
     char text[1024];
     char want[256];
     char allDirs[160] = "";
@@ -1558,12 +1564,32 @@ static void test_import(const char *cli)
     int format;
     int i;
 
-    /* "BESCES-50760ico or BISCPS-11003ico or BISCPS-56001ico": every row */
+    for (r = ico_region_count() - 1; r >= 0; r--) {
+        if (strcmp(ico_region_at(r)->mc_save_dir, PRODUCT) == 0) {
+            home = r;
+        }
+    }
+    otherRegion = home == 0 ? 1 : 0;
+    lo = home < otherRegion ? home : otherRegion;
+    hi = home < otherRegion ? otherRegion : home;
+    otherDir = ico_region_at(otherRegion)->mc_save_dir;
+    both = (1u << home) | (1u << otherRegion);
+
+    /* "BESCES-50760ico or BISCPS-11003ico or ...": every distinct directory, in
+       the table's order (a row whose directory an earlier row has is left out) */
     for (i = 0; i < ico_region_count(); i++) {
         size_t len = strlen(allDirs);
+        int first = 1;
 
-        snprintf(allDirs + len, sizeof(allDirs) - len, "%s%s", i > 0 ? " or " : "",
-                 ico_region_at(i)->mc_save_dir);
+        for (r = 0; r < i; r++) {
+            if (strcmp(ico_region_at(r)->mc_save_dir, ico_region_at(i)->mc_save_dir) == 0) {
+                first = 0;
+            }
+        }
+        if (first) {
+            snprintf(allDirs + len, sizeof(allDirs) - len, "%s%s", len > 0 ? " or " : "",
+                     ico_region_at(i)->mc_save_dir);
+        }
     }
     snprintf(noSave, sizeof(noSave), "no ICO save (%s) in ", allDirs);
     img = malloc(IMG_SIZE);
@@ -1597,7 +1623,7 @@ static void test_import(const char *cli)
        directory skipped and named, the deleted entries ignored */
     CHECK(ico_mc_import("save_test_card.ps2", CARD_I, 0, &res) == 0);
     CHECK(res.format == ICO_MC_FMT_RAW && res.files == NTF);
-    CHECK(res.regions == 1u << ico_region);
+    CHECK(res.regions == 1u << home);
     CHECK(res.skipped == 1 && strcmp(res.skippedName[0], OTHER) == 0);
     check_folder(CARD_I);
     CHECK(file_size(cpath(CARD_I, "game.001")) < 0);
@@ -1710,11 +1736,11 @@ static void test_import(const char *cli)
 }
 
 /* save_test SLUG MC_IMPORT: SLUG the region to play (config/regions.txt,
-   pal, jpn or kor), MC_IMPORT tools/mc_import (ctest passes both) */
+   pal, jpn, kor or cn), MC_IMPORT tools/mc_import (ctest passes both) */
 int main(int argc, char **argv)
 {
     if (argc < 2 || ico_region_select(argv[1]) != 0) {
-        printf("FAIL usage: save_test pal|jpn|kor MC_IMPORT\n");
+        printf("FAIL usage: save_test pal|jpn|kor|cn MC_IMPORT\n");
         return 1;
     }
     printf("save_test: the %s disc (%s)\n", ico_region_cur()->slug, ico_region_cur()->disc_id);
