@@ -1211,8 +1211,8 @@ static void ACTGetEnvironment_ntsc(void *self, void *dir, float *orient, EnvFlag
     }
     if (dist < 50.0f && absRotyFromBack(orient, env->wallOrient) < 40 &&
         (self == boyGObj || (130.0f < hgt && obj->kind != 16)))
-        ((Act *)sub )->wish2.ll |= (1ULL << 59);
-    if (((int)(((Act *)sub )->wish2.ll >> 59) & 1) && 65.0f < PosOrFar(hgt) &&
+        ((Act *)sub )->wish1.ll |= (1ULL << 59);
+    if (((int)(((Act *)sub )->wish1.ll >> 59) & 1) && 65.0f < PosOrFar(hgt) &&
         (float)wallDeg < 30.0f)
         ((Act *)sub )->wish0.ll |= (1ULL << 41);
     if (dist < 60.0f) {
@@ -1228,9 +1228,9 @@ static void ACTGetEnvironment_ntsc(void *self, void *dir, float *orient, EnvFlag
             obj->kind != 53) {
             if (e) {
                 if (CheckWallAttribute(self, 0xE000))
-                    ((Act *)sub )->wish1.ll |= (1ULL << 59);
+                    ((Act *)sub )->wish0.ll |= (1ULL << 59);
                 else
-                    ((Act *)sub )->wish1.ll |= (1ULL << 60);
+                    ((Act *)sub )->wish0.ll |= (1ULL << 60);
             }
         }
     }
@@ -1640,7 +1640,7 @@ static void ACTGetEnvironment_ntsc(void *self, void *dir, float *orient, EnvFlag
         float hd = -GetHeightOfFieldPlaneDifference(boyGObj, self);
 
         if (((int)(((Act *)sub )->wish1.ll >> 11) & 1) && 5.0f < hd) {
-            ((Act *)sub )->wish2.ll |= (1ULL << 62);
+            ((Act *)sub )->wish1.ll |= (1ULL << 62);
             ((Act *)sub )->wish2.ll |= 4;
         }
         if (((int)(((Act *)sub )->wish1.ll >> 12) & 1) && 60.0f < hd) {
@@ -1733,11 +1733,11 @@ static void ACTGetEnvironment_ntsc(void *self, void *dir, float *orient, EnvFlag
     if (CheckFloorAttribute(self, 0x50)) {
         sub->wish1.ll |= 0x20;
         if (GOBJ_SUB(self)->ctrl.waterDepth > (self == boyGObj ? 110.0f : 135.0f)) {
-            ((Act *)sub)->wish1.ll |= 0x2000;
+            ((Act *)sub)->wish1.ll |= 0x40;
             debug_StdPrintfDummy("enter water\n");
         }
         if (GOBJ_SUB(self)->ctrl.waterDepth < (self == boyGObj ? 105.0f : 130.0f)) {
-            ((Act *)sub)->wish1.ll |= 0x4000;
+            ((Act *)sub)->wish1.ll |= 0x80;
             debug_StdPrintfDummy("exit water\n");
         }
     }
@@ -2175,8 +2175,8 @@ static void ACTGetEnvironment_jun26(void *self, void *dir, float *orient, EnvFla
     }
     if (dist < 50.0f && absRotyFromBack(orient, env->wallOrient) < 40 &&
         (self == boyGObj || (130.0f < hgt && obj->kind != 16)))
-        ((Act *)sub )->wish2.ll |= (1ULL << 52);
-    if (((int)(((Act *)sub )->wish2.ll >> 52) & 1) && 65.0f < PosOrFar(hgt) &&
+        ((Act *)sub )->wish1.ll |= (1ULL << 52);
+    if (((int)(((Act *)sub )->wish1.ll >> 52) & 1) && 65.0f < PosOrFar(hgt) &&
         (float)wallDeg < 30.0f)
         ((Act *)sub )->wish0.ll |= (1ULL << 41);
     if (dist < 60.0f) {
@@ -2509,12 +2509,12 @@ static void ACTGetEnvironment_jun26(void *self, void *dir, float *orient, EnvFla
         float hd = -GetHeightOfFieldPlaneDifference(boyGObj, self);
 
         if (((int)(((Act *)sub )->wish1.ll >> 8) & 1) && 5.0f < hd) {
-            ((Act *)sub )->wish2.ll |= (1ULL << 55);
-            ((Act *)sub )->wish2.ll |= (1ULL << 59);
+            ((Act *)sub )->wish1.ll |= (1ULL << 55);
+            ((Act *)sub )->wish1.ll |= (1ULL << 59);
         }
         if (((int)(((Act *)sub )->wish1.ll >> 9) & 1) && 60.0f < hd) {
             if (GOBJ_ACT(boyGObj)->actMode == 55)
-                ((Act *)sub )->wish2.ll |= (1ULL << 60);
+                ((Act *)sub )->wish1.ll |= (1ULL << 60);
         }
         if (((int)(((Act *)sub )->wish1.ll >> 10) & 1) && 195.0f < hd)
             envDebugPrint();
@@ -2578,7 +2578,7 @@ static void ACTGetEnvironment_jun26(void *self, void *dir, float *orient, EnvFla
         }
     }
     if (CheckFloorAttribute(self, 0x800) || CheckFloorAttribute(self, 0x900))
-        ((Act *)sub )->wish1.ll |= 0x100;
+        ((Act *)sub )->wish1.ll |= 0x20;
     if (CheckFloorAttribute(self, 0x800000)) {
         float p60[4];
 
@@ -2600,11 +2600,11 @@ static void ACTGetEnvironment_jun26(void *self, void *dir, float *orient, EnvFla
     }
     if (CheckFloorAttribute(self, 0x50)) {
         if (GOBJ_SUB(self)->ctrl.waterDepth > 135.0f) {
-            ((Act *)sub )->wish1.ll |= 0x2000;
+            ((Act *)sub )->wish1.ll |= 8;
             debug_StdPrintfDummy("enter water\n");
         }
         if (GOBJ_SUB(self)->ctrl.waterDepth < 130.0f) {
-            ((Act *)sub )->wish1.ll |= 0x4000;
+            ((Act *)sub )->wish1.ll |= 0x10;
             debug_StdPrintfDummy("exit water\n");
         }
     }
@@ -2653,10 +2653,10 @@ static void ACTGetEnvironment_jun26(void *self, void *dir, float *orient, EnvFla
             if (x != 0) {
                 if (!IsTorchLightOn((GObj *)x)) {
                     if (t30 != 0)
-                        ((Act *)sub )->wish1.ll |= 0x4000000;
+                        ((Act *)sub )->wish1.ll |= 0x800000;
                 } else {
                     if (t19 != 0)
-                        ((Act *)sub )->wish1.ll |= 0x10000000;
+                        ((Act *)sub )->wish1.ll |= 0x2000000;
                 }
             }
         }
@@ -3061,8 +3061,8 @@ static void ACTGetEnvironment_aug6(void *self, void *dir, float *orient, EnvFlag
     }
     if (dist < 50.0f && absRotyFromBack(orient, env->wallOrient) < 40 &&
         (self == boyGObj || (130.0f < hgt && obj->kind != 16)))
-        ((Act *)sub )->wish2.ll |= (1ULL << 58);
-    if (((int)(((Act *)sub )->wish2.ll >> 58) & 1) && 65.0f < PosOrFar(hgt) &&
+        ((Act *)sub )->wish1.ll |= (1ULL << 58);
+    if (((int)(((Act *)sub )->wish1.ll >> 58) & 1) && 65.0f < PosOrFar(hgt) &&
         (float)wallDeg < 30.0f)
         ((Act *)sub )->wish0.ll |= (1ULL << 41);
     if (dist < 60.0f) {
@@ -3078,9 +3078,9 @@ static void ACTGetEnvironment_aug6(void *self, void *dir, float *orient, EnvFlag
             obj->kind != 53) {
             if (e) {
                 if (CheckWallAttribute(self, 0xE000))
-                    ((Act *)sub )->wish1.ll |= (1ULL << 59);
+                    ((Act *)sub )->wish0.ll |= (1ULL << 59);
                 else
-                    ((Act *)sub )->wish1.ll |= (1ULL << 60);
+                    ((Act *)sub )->wish0.ll |= (1ULL << 60);
             }
         }
     }
@@ -3470,7 +3470,7 @@ static void ACTGetEnvironment_aug6(void *self, void *dir, float *orient, EnvFlag
         float hd = -GetHeightOfFieldPlaneDifference(boyGObj, self);
 
         if (((int)(((Act *)sub )->wish1.ll >> 11) & 1) && 5.0f < hd) {
-            ((Act *)sub )->wish2.ll |= (1ULL << 61);
+            ((Act *)sub )->wish1.ll |= (1ULL << 61);
             ((Act *)sub )->wish2.ll |= 2;
         }
         if (((int)(((Act *)sub)->wish1.ll >> 12) & 1) && 60.0f < hd) {
@@ -3562,11 +3562,11 @@ static void ACTGetEnvironment_aug6(void *self, void *dir, float *orient, EnvFlag
     if (CheckFloorAttribute(self, 0x50)) {
         sub->wish1.ll |= 0x20;
         if (GOBJ_SUB(self)->ctrl.waterDepth > (self == boyGObj ? 110.0f : 135.0f)) {
-            ((Act *)sub)->wish1.ll |= 0x2000;
+            ((Act *)sub)->wish1.ll |= 0x40;
             debug_StdPrintfDummy("enter water\n");
         }
         if (GOBJ_SUB(self)->ctrl.waterDepth < (self == boyGObj ? 105.0f : 130.0f)) {
-            ((Act *)sub)->wish1.ll |= 0x4000;
+            ((Act *)sub)->wish1.ll |= 0x80;
             debug_StdPrintfDummy("exit water\n");
         }
     }
