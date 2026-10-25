@@ -216,11 +216,19 @@ ico_settings_test(settings_extras_test test/settings_extras_test.c)
 # settings tests go in settings_extra_test.c
 ico_settings_test(settings_extra_test test/settings_extra_test.c)
 if(ICO_RUN_TESTS)
+    # the three 2001 discs (the North American disc, the August 2001 preview,
+    # the June 2001 demo): Extras > Game variants on each (settings_extra_test
+    # main; the other runs' checks are the Japanese program's)
+    foreach(_slug ntsc aug6 jun26)
+        add_test(NAME settings_extra_${_slug}
+                 COMMAND settings_extra_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
+    endforeach()
     # the four settings executables write the same settings_test.toml in
     # this directory: never in parallel
     set_tests_properties(settings settings_extras settings_extra settings_jpn settings_extras_jpn
                          settings_extra_jpn settings_kor settings_extras_kor settings_extra_kor
-                         settings_cn settings_extras_cn settings_extra_cn
+                         settings_cn settings_extras_cn settings_extra_cn settings_extra_ntsc
+                         settings_extra_aug6 settings_extra_jun26
                          PROPERTIES RESOURCE_LOCK settings_toml)
 endif()
 

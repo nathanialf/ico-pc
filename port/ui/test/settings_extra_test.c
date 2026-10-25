@@ -4216,7 +4216,7 @@ static int varNoteHas(const char *prefix, const char *want)
    Characters, the page's rows and values (the game as shipped), a step on
    every row (the value text, the [variants] key, the saved file), each
    row's note and whether it says achievements go off, the achievements rule,
-   and the Debug menu row (hidden without Developer mode; a press marks the
+   and the Debug menu row (hidden without Developer mode; a press that opens it marks the
    menu used; with nothing bound it says so and Options stays, with the
    game's opener bound it opens the menu once and Options closes: to the
    title from the title, into the game, as the pause menu's Back, from the
@@ -4237,6 +4237,11 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     static const char *const kDefaults[8] = {"Original", "Off",    "Off", "Their own",
                                              "Off",      "5 hits", "Off", "Off"};
     char p[1100], log[4096];
+    /* the June 2001 demo ships a 7-hit barrier and offers no American
+       toughness; the three 2001 discs' No hints and No cutscene look-around
+       notes say the rows change nothing there (settings.c variantNote) */
+    const int demo = ICO_JUN26;
+    const int y2001 = ICO_NTSCAUG6JUN26;
 
     /* the rows are read in English on every disc (the Japanese, Korean and
        Asian discs default to their own text): the config's choice, kept
@@ -4270,12 +4275,13 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     }
     /* the game as shipped: every value, and every key unset */
     for (int i = 0; i < 8; i++) {
-        CHECK(strcmp(lt_ext_row_text(lv[i]), kDefaults[i]) == 0,
-              "%s: row %d starts \"%s\" (\"%s\")", who, i, kDefaults[i], lt_ext_row_text(lv[i]));
+        const char *def = i == 5 && demo ? "7 hits" : kDefaults[i];
+        CHECK(strcmp(lt_ext_row_text(lv[i]), def) == 0, "%s: row %d starts \"%s\" (\"%s\")", who, i,
+              def, lt_ext_row_text(lv[i]));
     }
     CHECK(ico_variant_shade_toughness() == ICO_TOUGHNESS_ORIGINAL && !ico_variant_one_hit() &&
               !ico_variant_never_dodge() && ico_variant_aggression() == ICO_AGGRESSION_OWN &&
-              !ico_variant_no_hints() && ico_variant_barrier_hits() == 5 &&
+              !ico_variant_no_hints() && ico_variant_barrier_hits() == (demo ? 7 : 5) &&
               !ico_variant_no_cutscene_look() && !ico_variant_ignore_cutscene_cameras() &&
               !ico_variants_suspend_achievements(),
           "%s: the accessors answer the shipped game", who);
@@ -4284,14 +4290,17 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
           "%s: no Debug menu row without Developer mode", who);
     checkPageFits(UI_PAGE_VARIANTS, "Game variants (nine rows)");
 
-    /* Shadow toughness: Original, American, Not tougher later, around, both ways */
+    /* Shadow toughness: Original, American, Not tougher later, around, both
+       ways (Original and Not tougher later on the June 2001 demo) */
     lt_ext_layout(varL)->curItem = lb[0];
     frame(0);
-    press(0x2000);
-    CHECK(strcmp(lt_ext_row_text(lv[0]), "American") == 0 &&
-              ico_variant_shade_toughness() == ICO_TOUGHNESS_AMERICAN &&
-              strcmp(ico_config_get_string("variants.shade_toughness", ""), "american") == 0,
-          "%s: Right: American and its key", who);
+    if (!demo) {
+        press(0x2000);
+        CHECK(strcmp(lt_ext_row_text(lv[0]), "American") == 0 &&
+                  ico_variant_shade_toughness() == ICO_TOUGHNESS_AMERICAN &&
+                  strcmp(ico_config_get_string("variants.shade_toughness", ""), "american") == 0,
+              "%s: Right: American and its key", who);
+    }
     press(0x2000);
     CHECK(strcmp(lt_ext_row_text(lv[0]), "Not tougher later") == 0 &&
               ico_variant_shade_toughness() == ICO_TOUGHNESS_NO_PLUS &&
@@ -4304,8 +4313,10 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
           "%s: Left wraps to Not tougher later", who);
     CHECK(!ico_variants_suspend_achievements(), "%s: Toughness keeps the achievements", who);
     press(0x2000);
-    CHECK(varNoteHas("American: every Shadow as tough as on the North American disc",
-                     "no tougher on later playthroughs. Achievements stay on."),
+    CHECK(demo ? varNoteHas("American is not offered on this demo",
+                            "no tougher on later playthroughs. Achievements stay on.")
+               : varNoteHas("American: every Shadow as tough as on the North American disc",
+                            "no tougher on later playthroughs. Achievements stay on."),
           "%s: the toughness note, achievements stay on", who);
 
     /* the aggression row: five values around */
@@ -4331,23 +4342,34 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
           "%s: Left from Their own: Wary, quick", who);
     press(0x2000);
 
-    /* the barrier: 5 hits, 7 hits, around; written as a number */
+    /* the barrier: 5 hits, 7 hits, around; written as a number (from 7 on
+       the June 2001 demo) */
     lt_ext_layout(varL)->curItem = lb[5];
     frame(0);
     press(0x2000);
-    CHECK(strcmp(lt_ext_row_text(lv[5]), "7 hits") == 0 && ico_variant_barrier_hits() == 7 &&
-              ico_config_get_int("variants.barrier_hits", 0) == 7,
-          "%s: Right: 7 hits and the key", who);
+    {
+        const int other = demo ? 5 : 7;
+        char txt[16];
+        snprintf(txt, sizeof(txt), "%d hits", other);
+        CHECK(strcmp(lt_ext_row_text(lv[5]), txt) == 0 && ico_variant_barrier_hits() == other &&
+                  ico_config_get_int("variants.barrier_hits", 0) == other,
+              "%s: Right: %s and the key", who, txt);
+    }
     CHECK(!ico_variants_suspend_achievements(), "%s: the barrier keeps the achievements", who);
     CHECK(varNoteHas("How many hits it takes to break the Queen", "Achievements stay on."),
           "%s: the barrier note", who);
     press(0x2000);
-    CHECK(strcmp(lt_ext_row_text(lv[5]), "5 hits") == 0 && ico_variant_barrier_hits() == 5 &&
-              ico_config_get_int("variants.barrier_hits", 0) == 5,
-          "%s: Right again: 5 hits, named in the file", who);
+    {
+        const int back = demo ? 7 : 5;
+        char txt[16];
+        snprintf(txt, sizeof(txt), "%d hits", back);
+        CHECK(strcmp(lt_ext_row_text(lv[5]), txt) == 0 && ico_variant_barrier_hits() == back &&
+                  ico_config_get_int("variants.barrier_hits", 0) == back,
+              "%s: Right again: %s, named in the file", who, txt);
+    }
 
     /* the switches: On and the key; the notes; the achievements rule */
-    static const struct {
+    struct {
         int row;
         IcoVariantId id;
         const char *key;
@@ -4362,6 +4384,11 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
         {7, ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS, "variants.ignore_cutscene_cameras",
          "Cutscenes can look wrong", 1},
     };
+
+    if (y2001) {
+        kSw[2].notePrefix = "This version of the game gives no hints";
+        kSw[3].notePrefix = "This version of the game has no look-around";
+    }
 
     for (int k = 0; k < (int)(sizeof(kSw) / sizeof(kSw[0])); k++) {
         lt_ext_layout(varL)->curItem = lb[kSw[k].row];
@@ -4396,14 +4423,16 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     IcoToml *t = ico_toml_load(p);
     CHECK(t != NULL && ico_toml_get_bool(t, "variants.one_hit", 0) == 1 &&
               ico_toml_has(t, "variants.shade_toughness") &&
-              strcmp(ico_toml_get(t, "variants.shade_toughness"), "american") == 0 &&
+              strcmp(ico_toml_get(t, "variants.shade_toughness"), demo ? "no_plus" : "american") ==
+                  0 &&
               ico_toml_get_bool(t, "variants.never_dodge", 1) == 0,
-          "%s: saved: variants.one_hit = true, shade_toughness = \"american\"", who);
+          "%s: saved: variants.one_hit = true, shade_toughness = \"%s\"", who,
+          demo ? "no_plus" : "american");
     if (t != NULL) {
         ico_toml_free(t);
     }
 
-    /* Developer mode shows the Debug menu row; a press marks it used and
+    /* Developer mode shows the Debug menu row; a press that opens it marks it used and
        calls the hook (ico_variants_open_debug_menu), which opens the menu
        through the opener the game binds (debug.c debug_MenuOpen) */
     press(0x10);
@@ -4434,14 +4463,14 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     varErrCapture();
     press(lt_ext_confirm_button()); /* Circle on the Japanese-program discs */
     varErrRelease(log, sizeof(log));
-    CHECK(strstr(log, "variants: the Debug menu is opened from Options") != NULL,
-          "%s: the press is logged (\"%s\")", who, log);
+    CHECK(strstr(log, "variants: the Debug menu is opened from Options") == NULL,
+          "%s: unbound, the press opens nothing (\"%s\")", who, log);
     CHECK(strstr(log, "variants: the Debug menu cannot open: the game has not bound it") != NULL,
           "%s: unbound, the press says so (\"%s\")", who, log);
     CHECK(current_layout_id == varL, "%s: unbound, Options stays on Game variants (%d)", who,
           current_layout_id);
-    CHECK(ico_variants_suspend_achievements() == 1, "%s: the Debug menu pressed: achievements off",
-          who);
+    CHECK(ico_variants_suspend_achievements() == 0,
+          "%s: the Debug menu did not open: achievements stay on", who);
     ico_variants_debug_menu_clear();
 
     /* the game's switches and opener bound (as debug_VariableInit does): the
@@ -4492,7 +4521,8 @@ static void testVariants(void)
 }
 
 /* the same on the Japanese or Korean disc (ctests settings_extra_jpn,
-   settings_extra_kor): the page is every disc's */
+   settings_extra_kor) and the three 2001 discs (settings_extra_ntsc, _aug6,
+   _jun26): the page is every disc's */
 static void testVariantsOtherDisc(const char *slug)
 {
     int debugPressed = 0;
@@ -4510,6 +4540,20 @@ int main(int argc, char **argv)
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
     setEnv("LC_ALL", NULL);
     setEnv("LANG", "en_GB.UTF-8");
+    if (argc > 2 && (strcmp(argv[2], "ntsc") == 0 || strcmp(argv[2], "aug6") == 0 ||
+                     strcmp(argv[2], "jun26") == 0)) {
+        /* ctests settings_extra_ntsc, _aug6, _jun26: the three 2001 discs
+           (Cross confirms, as on the European disc): Extras > Game variants
+           on that disc (the demo's 7-hit barrier and its toughness row, the
+           2001 discs' notes). The Japanese-program runs' other checks
+           (Circle confirms, the boot's layout 0x34) are not these discs' */
+        CHECK(ico_region_select(argv[2]) == 0 && lt_ext_confirm_button() == 0x40,
+              "the %s disc: Cross confirms", argv[2]);
+        CHECK(ico_region_select("pal") == 0, "the European disc again");
+        testVariantsOtherDisc(argv[2]);
+        printf("settings_extra_test %s: %s\n", argv[2], failures ? "failed" : "ok");
+        return failures ? 1 : 0;
+    }
     if (argc > 2) {
         /* ctests settings_extra_jpn, settings_extra_kor: the European disc,
            then the other disc's pad, rows, languages and notes, then back */
