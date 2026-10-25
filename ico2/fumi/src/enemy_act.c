@@ -1800,7 +1800,7 @@ static void actEnemyKidnapEnd_jun26(GObj *volatile self)
                                through volatile views, the object only
                                after the flag */
                             *(volatile int *)&gameover_flag = 1;
-                            *(volatile int *)&q.i[0] = (ICO_WORD)target;
+                            *(volatile ICO_WORD *)&q.i[0] = (ICO_WORD)target;
                             q.i[1] = 0;
                             stage_SetParentOfGObj(394, &q);
                             stage_SetAnimation(394, 1, 0);
