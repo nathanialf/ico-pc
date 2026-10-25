@@ -21,7 +21,7 @@ script is run again, which moves it into its programmer's list.
 Each C source lands in one list per programmer directory (the directory
 decides its include path, as the period build had it), or in
 ICO_EE_ONLY_SOURCES when port/ replaces it for good (the ito/mpeg movie
-player: port/fmv). There is one host source list: the renderer-owned
+player: port/fmv; the demo disc's menu hand-back, demoDisc.c). There is one host source list: the renderer-owned
 files the port's renderer rewrote (all of
 seki/src, the sugipon and ito effect files, common/src/debug.c and
 debug_exception.c) compile like every other game source, in both the
@@ -47,10 +47,15 @@ PROGRAMMERS = ["common", "fumi", "ito", "omori", "script", "seki", "sugipon"]
 # good: the ito/mpeg movie player, replaced by port/fmv. Listed in
 # ICO_EE_ONLY_SOURCES so the inventory stays complete.
 EE_ONLY_DIRS = ("ico2/ito/mpeg/",)
+# The June 2001 demo's hand-back to the magazine menu (sceDemoStart reads the menu's
+# arguments, sceDemoEnd reloads the menu's ELF): the port has no menu to start it or to go
+# back to: the demo's start takes the port's own settings instead (a port stub that comes
+# with the demo's game rows), and sceDemoEnd is never called.
+EE_ONLY_FILES = ("ico2/common/src/demoDisc.c",)
 
 
 def is_ee_only(path):
-    return path.startswith(EE_ONLY_DIRS)
+    return path.startswith(EE_ONLY_DIRS) or path in EE_ONLY_FILES
 
 
 def link_orders():

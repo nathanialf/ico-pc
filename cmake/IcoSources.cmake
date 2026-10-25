@@ -4,7 +4,7 @@
 
 set(ICO_PROGRAMMERS common fumi ito omori script seki sugipon)
 
-# ico2/common: 20 non-renderer sources
+# ico2/common: 19 non-renderer sources
 set(ICO_SOURCES_common
     ico2/common/src/main.c
     ico2/common/src/DObj.c
@@ -25,7 +25,6 @@ set(ICO_SOURCES_common
     ico2/common/src/staffroll.c
     ico2/common/src/GobjProc.c
     ico2/common/src/PObj.c
-    ico2/common/src/demoDisc.c
 )
 
 # ico2/fumi: 41 non-renderer sources
@@ -248,7 +247,7 @@ set(ICO_SOURCES_sugipon
     ico2/sugipon/src/enemyKind.c
 )
 
-# 9 PS2-only sources (replaced on the host by port/; never compiled here)
+# 10 PS2-only sources (replaced on the host by port/; never compiled here)
 set(ICO_EE_ONLY_SOURCES
     ico2/ito/mpeg/mv_main.c
     ico2/ito/mpeg/mv_readbuf.c
@@ -259,6 +258,7 @@ set(ICO_EE_ONLY_SOURCES
     ico2/ito/mpeg/mv_disp.c
     ico2/ito/mpeg/mv_sub.c
     ico2/ito/mpeg/mv_vibuf.c
+    ico2/common/src/demoDisc.c
 )
 
 # 0 sources a link order lists that the tree does not hold yet (pending the merge; never compiled)
