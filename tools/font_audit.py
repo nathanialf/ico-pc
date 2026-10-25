@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """font_audit.py: every code point the port's text uses is inside the unicode
 ranges the embedded font subsets were built with (Arimo's, the Japanese
-text's font's for the characters Arimo has none for, and the Korean text's
-font's for Hangul).
+text's font's for the characters Arimo has none for, the Korean text's
+font's for Hangul and the Chinese text's font's for its own table's
+ideographs).
 
 Collects the code points of the string literals of port/ui/strings_*.c and
 port/game/model_viewer_table.c, and of the corpus
@@ -10,8 +11,10 @@ port/game/model_viewer_table.c, and of the corpus
 with the ranges recorded in port/ui/embed_font.cmake (the "# subset:" line,
 Arimo's, the "# subset-ja:" line, Noto Sans JP's subset that
 tools/subset_font_ja.py writes, and the "# subset-ko:" line, Noto Sans KR's
-subset that tools/subset_font_ko.py writes; the Japanese table, strings_ja.c,
-and the Korean one, strings_ko.c, must be inside the three together).
+subset that tools/subset_font_ko.py writes, and the "# subset-zh:" line,
+Noto Sans TC's subset that tools/subset_font_zh.py writes; the Japanese table,
+strings_ja.c, the Korean one, strings_ko.c, and the Chinese one,
+strings_zh.c, must be inside the four together).
 The check on the font's own cmap
 is font_coverage (it asks the embedded font for each code point); this one
 runs without a build and names the code points to add to the subset.
@@ -115,7 +118,8 @@ def main():
     try:
         ranges = cmake_ranges(cmake)
         covered = (parse_ranges(ranges) | parse_ranges(cmake_ranges(cmake, "subset-ja"))
-                   | parse_ranges(cmake_ranges(cmake, "subset-ko")))
+                   | parse_ranges(cmake_ranges(cmake, "subset-ko"))
+                   | parse_ranges(cmake_ranges(cmake, "subset-zh")))
     except (ValueError, OSError) as e:
         print("font_audit: %s" % e)
         return 2
@@ -132,7 +136,7 @@ def main():
         for lit in literals(p):
             add(lit, os.path.relpath(p, ROOT))
     corpus = sorted(glob.glob(os.path.join(ROOT, "port/ui/test/font_corpus/*.txt")))
-    if len(corpus) < 7:
+    if len(corpus) < 8:
         print("font_audit: %d corpus files, expected one per language" % len(corpus))
         return 1
     for p in corpus:
