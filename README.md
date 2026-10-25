@@ -227,10 +227,9 @@ whole game; the differences are the original releases' own:
 - **Video mode.** The European disc offers 50 Hz or 60 Hz; the other discs
   are always 60 Hz.
 - **The port's own menus** (Options, the extras, photo mode) can be shown in
-  English, French, German, Italian, Spanish, Japanese or Korean, with the **Menu
-  language** row on the first page of the Options menu
-  ([more](docs/OPTIONS.md#language)). There is no Chinese text for them yet:
-  on the Asian disc they are in English until you choose another language.
+  English, French, German, Italian, Spanish, Japanese, Korean or Traditional
+  Chinese, with the **Menu language** row on the first page of the Options menu
+  ([more](docs/OPTIONS.md#language)). On the Asian disc they start in Chinese.
 - **The August 2001 preview disc** is a pre-release version of the game,
   from before it came out, with English text. It is not the finished game:
   it can differ from it in places, as the original disc does.
@@ -239,12 +238,15 @@ whole game; the differences are the original releases' own:
   program needs the whole disc image once, at the first start (about 4.4 GB),
   and keeps only ICO's part afterwards (about 280 MB).
 
-The model viewer (under Extras) is not right yet on the North American disc,
-the preview disc and the magazine demo: it can show the wrong model there.
+The model viewer (under Extras) is not right yet on the North American disc
+and the preview disc: it can show the wrong model there. On the magazine
+demo, a model from a part of the game the demo's disc does not hold does not
+open.
 
-Saves, texture packs and model packs are
-kept apart for each disc, so you can set up more than one on the same
-device: see [Can I play more than one disc?](docs/FAQ.md#can-i-play-more-than-one-disc)
+Each disc keeps its own saves, so you can set up more than one on the same
+device. The North American disc and the August 2001 preview share one folder
+for texture packs and one for model packs, since a pack made for one fits
+the other: see [Can I play more than one disc?](docs/FAQ.md#can-i-play-more-than-one-disc)
 
 ## Questions people ask first
 
