@@ -586,6 +586,396 @@ static void test_cn_values(void)
     }
 }
 
+/* the North American disc's values, as region_ntsc.c resolved them by name: every field
+   (pinned so a swapped in-range number fails) */
+static void test_ntsc_values(void)
+{
+    const IcoRegionInfo *x = &ico_region_info_ntsc;
+    CHECK_STR(x->slug, "ntsc");
+    CHECK_STR(x->disc_id, "SCUS-97113");
+    CHECK_STR(x->boot_elf, "SCUS_971.13");
+    CHECK_STR(x->pack_serial, "SCUS-97113");
+    CHECK_STR(x->archive_name, "ico-ntsc.o2r");
+    CHECK_STR(x->image_base, "Ico_USA");
+    CHECK_STR(x->key_prefix, "ntsc_");
+    CHECK_STR(x->key_suffix, "_ntsc");
+    CHECK_STR(x->mc_save_dir, "BASCUS-97113ico");
+    CHECK(x->mc_product_size == 0x18C);
+    CHECK(x->has_50hz_row == 0);
+    CHECK(x->has_game_language == 0);
+    CHECK(x->ui_lang_default == 0);
+    CHECK(x->menu_sheet == 0);
+    CHECK(x->fixed_60hz == 1);
+    CHECK(x->pad_confirm == 0x40);
+    CHECK(x->pad_back == 0x10);
+    CHECK(x->reduction_crops_rows == 0);
+    CHECK(x->stage_count == 104);
+    CHECK(x->stage_title == 1);
+    CHECK(x->stage_credits == 58);
+    CHECK(x->stage_end == 61);
+    CHECK(x->stage_veil == 40);
+    CHECK(x->gallery_first == 1);
+    CHECK(x->gallery_last == 39);
+    CHECK(x->last_shipped_stage == 56);
+    CHECK(x->ach_stages[0] == 11);
+    CHECK(x->ach_stages[1] == 13);
+    CHECK(x->ach_stages[2] == 15);
+    CHECK(x->ach_stages[3] == 18);
+    CHECK(x->ach_stages[4] == 22);
+    CHECK(x->ach_stages[5] == 25);
+    CHECK(x->ach_stages[6] == 26);
+    CHECK(x->ach_stages[7] == 27);
+    CHECK(x->ach_stages[8] == 31);
+    CHECK(x->ach_stages[9] == 37);
+    CHECK(x->ach_stages[10] == 39);
+    CHECK(x->area_name_row_base == 98);
+    CHECK(x->area_name_end_as == 61);
+    CHECK(x->start_stage_max == 103);
+    CHECK(x->layout_count == 75);
+    CHECK(x->layout_pause == 53);
+    CHECK(x->layout_title_continue == 9);
+    CHECK(x->layout_title_new == 10);
+    CHECK(x->layout_options == 54);
+    CHECK(x->layout_key_config == 55);
+    CHECK(x->layout_vibe == 6);
+    CHECK(x->layout_play == 50);
+    CHECK(x->layout_scene == 51);
+    CHECK(x->layout_mc_files == 11);
+    CHECK(x->layout_load == 22);
+    CHECK(x->layout_save_complete == 37);
+    CHECK(x->property_count == 384);
+    CHECK(x->row_pause_options == 263);
+    CHECK(x->row_pause_back == 264);
+    CHECK(x->row_pause_end == 265);
+    CHECK(x->row_mc_picture == 17);
+    CHECK(x->row_mc_item == 27);
+    CHECK(x->row_title_continue == 14);
+    CHECK(x->row_title_new == 15);
+    CHECK(x->row_title_new_only == 16);
+    CHECK(x->row_title_copyright == 12);
+    CHECK(x->row_title_copyright2 == 13);
+    CHECK(x->pause_first == 261);
+    CHECK(x->pause_last == 266);
+    CHECK(x->anim_none == 815);
+    CHECK(x->chain_group_st10l == 731);
+    CHECK(x->chain_group_st19a == 636);
+    CHECK(x->veil_model == 1563);
+    CHECK(x->veil_kind == 35);
+    CHECK(x->reel_row == -1);
+    CHECK(x->veil_anim_row == 66);
+    CHECK(x->mv_motion_kinds == 1084);
+    CHECK(x->mv_orient_rows == 2166);
+    CHECK(x->gflag_new_game == 349);
+    CHECK(x->gflag_queen_dead == 307);
+    CHECK(x->gflag_beach_secret == -1);
+    CHECK(x->gflag_count == 368);
+    CHECK(x->credits_song == 47);
+    CHECK(x->credits_roll_ms == 151050);
+    CHECK(x->credits_entrance_exit == 212);
+    CHECK(x->credits_boy_label == 51);
+    CHECK(x->credits_staff_packs == 1);
+    CHECK(x->n_adpcm == 96);
+    CHECK(x->n_sefile == 104);
+    CHECK(x->n_sedef == 1389);
+    CHECK(x->n_selist == 3806);
+    CHECK(x->n_seenv == 425);
+    CHECK(x->stream_music_last == 95);
+    CHECK(x->stream_voice_first == 96);
+    CHECK(x->stream_voice_last == 95);
+    CHECK(x->gallery_title_theme == 54);
+    CHECK(x->mc_card_suffix == NULL);
+    CHECK(x->glyph[ICO_GLYPH_CROSS].row == 146 && x->glyph[ICO_GLYPH_CROSS].u == 224 &&
+          x->glyph[ICO_GLYPH_CROSS].v == 240 && x->glyph[ICO_GLYPH_CROSS].w == 32 &&
+          x->glyph[ICO_GLYPH_CROSS].h == 15 && x->glyph[ICO_GLYPH_CROSS].disp_h == 30);
+    CHECK(x->glyph[ICO_GLYPH_CIRCLE].row == 293 && x->glyph[ICO_GLYPH_CIRCLE].u == 192 &&
+          x->glyph[ICO_GLYPH_CIRCLE].v == 240 && x->glyph[ICO_GLYPH_CIRCLE].w == 32 &&
+          x->glyph[ICO_GLYPH_CIRCLE].h == 15 && x->glyph[ICO_GLYPH_CIRCLE].disp_h == 30);
+    CHECK(x->glyph[ICO_GLYPH_SQUARE].row == 292 && x->glyph[ICO_GLYPH_SQUARE].u == 160 &&
+          x->glyph[ICO_GLYPH_SQUARE].v == 240 && x->glyph[ICO_GLYPH_SQUARE].w == 32 &&
+          x->glyph[ICO_GLYPH_SQUARE].h == 15 && x->glyph[ICO_GLYPH_SQUARE].disp_h == 30);
+    CHECK(x->glyph[ICO_GLYPH_TRIANGLE].row == 148 && x->glyph[ICO_GLYPH_TRIANGLE].u == 128 &&
+          x->glyph[ICO_GLYPH_TRIANGLE].v == 240 && x->glyph[ICO_GLYPH_TRIANGLE].w == 32 &&
+          x->glyph[ICO_GLYPH_TRIANGLE].h == 15 && x->glyph[ICO_GLYPH_TRIANGLE].disp_h == 30);
+    CHECK(x->glyph[ICO_GLYPH_L1].row == 298 && x->glyph[ICO_GLYPH_L1].u == 0 &&
+          x->glyph[ICO_GLYPH_L1].v == 160 && x->glyph[ICO_GLYPH_L1].w == 64 &&
+          x->glyph[ICO_GLYPH_L1].h == 20 && x->glyph[ICO_GLYPH_L1].disp_h == 40);
+    CHECK(x->glyph[ICO_GLYPH_R1].row == 295 && x->glyph[ICO_GLYPH_R1].u == 128 &&
+          x->glyph[ICO_GLYPH_R1].v == 160 && x->glyph[ICO_GLYPH_R1].w == 64 &&
+          x->glyph[ICO_GLYPH_R1].h == 20 && x->glyph[ICO_GLYPH_R1].disp_h == 40);
+    CHECK(x->glyph[ICO_GLYPH_L2].row == 297 && x->glyph[ICO_GLYPH_L2].u == 64 &&
+          x->glyph[ICO_GLYPH_L2].v == 160 && x->glyph[ICO_GLYPH_L2].w == 64 &&
+          x->glyph[ICO_GLYPH_L2].h == 20 && x->glyph[ICO_GLYPH_L2].disp_h == 40);
+    CHECK(x->glyph[ICO_GLYPH_R2].row == 296 && x->glyph[ICO_GLYPH_R2].u == 192 &&
+          x->glyph[ICO_GLYPH_R2].v == 160 && x->glyph[ICO_GLYPH_R2].w == 64 &&
+          x->glyph[ICO_GLYPH_R2].h == 20 && x->glyph[ICO_GLYPH_R2].disp_h == 40);
+    CHECK(x->glyph[ICO_GLYPH_LEFT].row == 270 && x->glyph[ICO_GLYPH_LEFT].u == 198 &&
+          x->glyph[ICO_GLYPH_LEFT].v == 20 && x->glyph[ICO_GLYPH_LEFT].w == 20 &&
+          x->glyph[ICO_GLYPH_LEFT].h == 20 && x->glyph[ICO_GLYPH_LEFT].disp_h == 40);
+    CHECK(x->glyph[ICO_GLYPH_RIGHT].row == 271 && x->glyph[ICO_GLYPH_RIGHT].u == 230 &&
+          x->glyph[ICO_GLYPH_RIGHT].v == 20 && x->glyph[ICO_GLYPH_RIGHT].w == 20 &&
+          x->glyph[ICO_GLYPH_RIGHT].h == 20 && x->glyph[ICO_GLYPH_RIGHT].disp_h == 40);
+}
+
+/* the August 2001 preview's values, as region_aug6.c resolved them by name: every field
+   (pinned so a swapped in-range number fails) */
+static void test_aug6_values(void)
+{
+    const IcoRegionInfo *x = &ico_region_info_aug6;
+    CHECK_STR(x->slug, "aug6");
+    CHECK_STR(x->disc_id, "PROTO-20010806");
+    CHECK_STR(x->boot_elf, "SCUS_971.13");
+    CHECK_STR(x->pack_serial, "SCUS-97113");
+    CHECK_STR(x->archive_name, "ico-aug6.o2r");
+    CHECK_STR(x->image_base, "Ico_AUG6");
+    CHECK_STR(x->key_prefix, "aug6_");
+    CHECK_STR(x->key_suffix, "_aug6");
+    CHECK_STR(x->mc_save_dir, "BASCUS-97113ico");
+    CHECK(x->mc_product_size == 0x18C);
+    CHECK_STR(x->mc_card_suffix, "-preview");
+    CHECK(x->has_50hz_row == 0);
+    CHECK(x->has_game_language == 0);
+    CHECK(x->ui_lang_default == 0);
+    CHECK(x->menu_sheet == 0);
+    CHECK(x->fixed_60hz == 1);
+    CHECK(x->pad_confirm == 0x40);
+    CHECK(x->pad_back == 0x10);
+    CHECK(x->reduction_crops_rows == 0);
+    CHECK(x->stage_count == 104);
+    CHECK(x->stage_title == 1);
+    CHECK(x->stage_credits == 58);
+    CHECK(x->stage_end == 61);
+    CHECK(x->stage_veil == 40);
+    CHECK(x->gallery_first == 1);
+    CHECK(x->gallery_last == 39);
+    CHECK(x->last_shipped_stage == 56);
+    CHECK(x->ach_stages[0] == 11);
+    CHECK(x->ach_stages[1] == 13);
+    CHECK(x->ach_stages[2] == 15);
+    CHECK(x->ach_stages[3] == 18);
+    CHECK(x->ach_stages[4] == 22);
+    CHECK(x->ach_stages[5] == 25);
+    CHECK(x->ach_stages[6] == 26);
+    CHECK(x->ach_stages[7] == 27);
+    CHECK(x->ach_stages[8] == 31);
+    CHECK(x->ach_stages[9] == 37);
+    CHECK(x->ach_stages[10] == 39);
+    CHECK(x->area_name_row_base == 98);
+    CHECK(x->area_name_end_as == 61);
+    CHECK(x->start_stage_max == 103);
+    CHECK(x->layout_count == 75);
+    CHECK(x->layout_pause == 53);
+    CHECK(x->layout_title_continue == 9);
+    CHECK(x->layout_title_new == 10);
+    CHECK(x->layout_options == 54);
+    CHECK(x->layout_key_config == 55);
+    CHECK(x->layout_vibe == 6);
+    CHECK(x->layout_play == 50);
+    CHECK(x->layout_scene == 51);
+    CHECK(x->layout_mc_files == 11);
+    CHECK(x->layout_load == 22);
+    CHECK(x->layout_save_complete == 37);
+    CHECK(x->property_count == 384);
+    CHECK(x->row_pause_options == 263);
+    CHECK(x->row_pause_back == 264);
+    CHECK(x->row_pause_end == 265);
+    CHECK(x->row_mc_picture == 17);
+    CHECK(x->row_mc_item == 27);
+    CHECK(x->row_title_continue == 14);
+    CHECK(x->row_title_new == 15);
+    CHECK(x->row_title_new_only == 16);
+    CHECK(x->row_title_copyright == 12);
+    CHECK(x->row_title_copyright2 == 13);
+    CHECK(x->pause_first == 261);
+    CHECK(x->pause_last == 266);
+    CHECK(x->anim_none == 814);
+    CHECK(x->chain_group_st10l == 731);
+    CHECK(x->chain_group_st19a == 636);
+    CHECK(x->veil_model == 1558);
+    CHECK(x->veil_kind == 35);
+    CHECK(x->reel_row == -1);
+    CHECK(x->veil_anim_row == 66);
+    CHECK(x->mv_motion_kinds == 1086);
+    CHECK(x->mv_orient_rows == 2139);
+    CHECK(x->gflag_new_game == 348);
+    CHECK(x->gflag_queen_dead == 306);
+    CHECK(x->gflag_beach_secret == -1);
+    CHECK(x->gflag_count == 368);
+    CHECK(x->credits_song == 47);
+    CHECK(x->credits_roll_ms == 151050);
+    CHECK(x->credits_entrance_exit == 212);
+    CHECK(x->credits_boy_label == 50);
+    CHECK(x->credits_staff_packs == 1);
+    CHECK(x->n_adpcm == 96);
+    CHECK(x->n_sefile == 104);
+    CHECK(x->n_sedef == 1389);
+    CHECK(x->n_selist == 3806);
+    CHECK(x->n_seenv == 425);
+    CHECK(x->stream_music_last == 95);
+    CHECK(x->stream_voice_first == 96);
+    CHECK(x->stream_voice_last == 95);
+    CHECK(x->gallery_title_theme == 54);
+    CHECK(x->glyph[ICO_GLYPH_CROSS].row == 146 && x->glyph[ICO_GLYPH_CROSS].u == 224 &&
+          x->glyph[ICO_GLYPH_CROSS].v == 240 && x->glyph[ICO_GLYPH_CROSS].w == 32 &&
+          x->glyph[ICO_GLYPH_CROSS].h == 15 && x->glyph[ICO_GLYPH_CROSS].disp_h == 30);
+    CHECK(x->glyph[ICO_GLYPH_CIRCLE].row == 293 && x->glyph[ICO_GLYPH_CIRCLE].u == 192 &&
+          x->glyph[ICO_GLYPH_CIRCLE].v == 240 && x->glyph[ICO_GLYPH_CIRCLE].w == 32 &&
+          x->glyph[ICO_GLYPH_CIRCLE].h == 15 && x->glyph[ICO_GLYPH_CIRCLE].disp_h == 30);
+    CHECK(x->glyph[ICO_GLYPH_SQUARE].row == 292 && x->glyph[ICO_GLYPH_SQUARE].u == 160 &&
+          x->glyph[ICO_GLYPH_SQUARE].v == 240 && x->glyph[ICO_GLYPH_SQUARE].w == 32 &&
+          x->glyph[ICO_GLYPH_SQUARE].h == 15 && x->glyph[ICO_GLYPH_SQUARE].disp_h == 30);
+    CHECK(x->glyph[ICO_GLYPH_TRIANGLE].row == 148 && x->glyph[ICO_GLYPH_TRIANGLE].u == 128 &&
+          x->glyph[ICO_GLYPH_TRIANGLE].v == 240 && x->glyph[ICO_GLYPH_TRIANGLE].w == 32 &&
+          x->glyph[ICO_GLYPH_TRIANGLE].h == 15 && x->glyph[ICO_GLYPH_TRIANGLE].disp_h == 30);
+    CHECK(x->glyph[ICO_GLYPH_L1].row == 298 && x->glyph[ICO_GLYPH_L1].u == 0 &&
+          x->glyph[ICO_GLYPH_L1].v == 160 && x->glyph[ICO_GLYPH_L1].w == 64 &&
+          x->glyph[ICO_GLYPH_L1].h == 20 && x->glyph[ICO_GLYPH_L1].disp_h == 40);
+    CHECK(x->glyph[ICO_GLYPH_R1].row == 295 && x->glyph[ICO_GLYPH_R1].u == 128 &&
+          x->glyph[ICO_GLYPH_R1].v == 160 && x->glyph[ICO_GLYPH_R1].w == 64 &&
+          x->glyph[ICO_GLYPH_R1].h == 20 && x->glyph[ICO_GLYPH_R1].disp_h == 40);
+    CHECK(x->glyph[ICO_GLYPH_L2].row == 297 && x->glyph[ICO_GLYPH_L2].u == 64 &&
+          x->glyph[ICO_GLYPH_L2].v == 160 && x->glyph[ICO_GLYPH_L2].w == 64 &&
+          x->glyph[ICO_GLYPH_L2].h == 20 && x->glyph[ICO_GLYPH_L2].disp_h == 40);
+    CHECK(x->glyph[ICO_GLYPH_R2].row == 296 && x->glyph[ICO_GLYPH_R2].u == 192 &&
+          x->glyph[ICO_GLYPH_R2].v == 160 && x->glyph[ICO_GLYPH_R2].w == 64 &&
+          x->glyph[ICO_GLYPH_R2].h == 20 && x->glyph[ICO_GLYPH_R2].disp_h == 40);
+    CHECK(x->glyph[ICO_GLYPH_LEFT].row == 270 && x->glyph[ICO_GLYPH_LEFT].u == 198 &&
+          x->glyph[ICO_GLYPH_LEFT].v == 20 && x->glyph[ICO_GLYPH_LEFT].w == 20 &&
+          x->glyph[ICO_GLYPH_LEFT].h == 20 && x->glyph[ICO_GLYPH_LEFT].disp_h == 40);
+    CHECK(x->glyph[ICO_GLYPH_RIGHT].row == 271 && x->glyph[ICO_GLYPH_RIGHT].u == 230 &&
+          x->glyph[ICO_GLYPH_RIGHT].v == 20 && x->glyph[ICO_GLYPH_RIGHT].w == 20 &&
+          x->glyph[ICO_GLYPH_RIGHT].h == 20 && x->glyph[ICO_GLYPH_RIGHT].disp_h == 40);
+}
+
+/* the June 2001 demo's values, as region_jun26.c resolved them by name: every field
+   (pinned so a swapped in-range number fails) */
+static void test_jun26_values(void)
+{
+    const IcoRegionInfo *x = &ico_region_info_jun26;
+    CHECK_STR(x->slug, "jun26");
+    CHECK_STR(x->disc_id, "SCUS-97158");
+    CHECK_STR(x->boot_elf, "SCUS_971.58");
+    CHECK_STR(x->pack_serial, "SCUS-97158");
+    CHECK_STR(x->archive_name, "ico-jun26.o2r");
+    CHECK_STR(x->image_base, "Ico_JUN26");
+    CHECK_STR(x->key_prefix, "jun26_");
+    CHECK_STR(x->key_suffix, "_jun26");
+    CHECK_STR(x->mc_save_dir, "BISCUS-97113ico");
+    CHECK(x->mc_product_size == 0x18C);
+    CHECK(x->has_50hz_row == 0);
+    CHECK(x->has_game_language == 0);
+    CHECK(x->ui_lang_default == 0);
+    CHECK(x->menu_sheet == 0);
+    CHECK(x->fixed_60hz == 1);
+    CHECK(x->pad_confirm == 0x40);
+    CHECK(x->pad_back == 0x10);
+    CHECK(x->reduction_crops_rows == 0);
+    CHECK(x->stage_count == 103);
+    CHECK(x->stage_title == 1);
+    CHECK(x->stage_credits == 59);
+    CHECK(x->stage_end == 61);
+    CHECK(x->stage_veil == 40);
+    CHECK(x->gallery_first == 1);
+    CHECK(x->gallery_last == 39);
+    CHECK(x->last_shipped_stage == 57);
+    CHECK(x->ach_stages[0] == 11);
+    CHECK(x->ach_stages[1] == 13);
+    CHECK(x->ach_stages[2] == 15);
+    CHECK(x->ach_stages[3] == 18);
+    CHECK(x->ach_stages[4] == 22);
+    CHECK(x->ach_stages[5] == 25);
+    CHECK(x->ach_stages[6] == 26);
+    CHECK(x->ach_stages[7] == 27);
+    CHECK(x->ach_stages[8] == 31);
+    CHECK(x->ach_stages[9] == 37);
+    CHECK(x->ach_stages[10] == 39);
+    CHECK(x->area_name_row_base == 98);
+    CHECK(x->area_name_end_as == 61);
+    CHECK(x->start_stage_max == 102);
+    CHECK(x->layout_count == 75);
+    CHECK(x->layout_pause == 53);
+    CHECK(x->layout_title_continue == 9);
+    CHECK(x->layout_title_new == 10);
+    CHECK(x->layout_options == 54);
+    CHECK(x->layout_key_config == 55);
+    CHECK(x->layout_vibe == 6);
+    CHECK(x->layout_play == 50);
+    CHECK(x->layout_scene == 51);
+    CHECK(x->layout_mc_files == 11);
+    CHECK(x->layout_load == 22);
+    CHECK(x->layout_save_complete == 37);
+    CHECK(x->property_count == 384);
+    CHECK(x->row_pause_options == 263);
+    CHECK(x->row_pause_back == 264);
+    CHECK(x->row_pause_end == 265);
+    CHECK(x->row_mc_picture == 17);
+    CHECK(x->row_mc_item == 27);
+    CHECK(x->row_title_continue == 14);
+    CHECK(x->row_title_new == 15);
+    CHECK(x->row_title_new_only == 16);
+    CHECK(x->row_title_copyright == 12);
+    CHECK(x->row_title_copyright2 == 13);
+    CHECK(x->pause_first == 261);
+    CHECK(x->pause_last == 266);
+    CHECK(x->anim_none == 763);
+    CHECK(x->chain_group_st10l == 731);
+    CHECK(x->chain_group_st19a == 636);
+    CHECK(x->veil_model == -1);
+    CHECK(x->veil_kind == 35);
+    CHECK(x->reel_row == -1);
+    CHECK(x->veil_anim_row == 60);
+    CHECK(x->mv_motion_kinds == 1165);
+    CHECK(x->mv_orient_rows == 2166);
+    CHECK(x->gflag_new_game == 333);
+    CHECK(x->gflag_queen_dead == 292);
+    CHECK(x->gflag_beach_secret == -1);
+    CHECK(x->gflag_count == 352);
+    CHECK(x->credits_song == 46);
+    CHECK(x->credits_roll_ms == 151050);
+    CHECK(x->credits_entrance_exit == 212);
+    CHECK(x->credits_boy_label == 47);
+    CHECK(x->credits_staff_packs == 0);
+    CHECK(x->n_adpcm == 90);
+    CHECK(x->n_sefile == 104);
+    CHECK(x->n_sedef == 1337);
+    CHECK(x->n_selist == 3781);
+    CHECK(x->n_seenv == 420);
+    CHECK(x->stream_music_last == 89);
+    CHECK(x->stream_voice_first == 90);
+    CHECK(x->stream_voice_last == 89);
+    CHECK(x->gallery_title_theme == 51);
+    CHECK(x->mc_card_suffix == NULL);
+    CHECK(x->glyph[ICO_GLYPH_CROSS].row == 146 && x->glyph[ICO_GLYPH_CROSS].u == 224 &&
+          x->glyph[ICO_GLYPH_CROSS].v == 240 && x->glyph[ICO_GLYPH_CROSS].w == 32 &&
+          x->glyph[ICO_GLYPH_CROSS].h == 15 && x->glyph[ICO_GLYPH_CROSS].disp_h == 30);
+    CHECK(x->glyph[ICO_GLYPH_CIRCLE].row == 293 && x->glyph[ICO_GLYPH_CIRCLE].u == 192 &&
+          x->glyph[ICO_GLYPH_CIRCLE].v == 240 && x->glyph[ICO_GLYPH_CIRCLE].w == 32 &&
+          x->glyph[ICO_GLYPH_CIRCLE].h == 15 && x->glyph[ICO_GLYPH_CIRCLE].disp_h == 30);
+    CHECK(x->glyph[ICO_GLYPH_SQUARE].row == 292 && x->glyph[ICO_GLYPH_SQUARE].u == 160 &&
+          x->glyph[ICO_GLYPH_SQUARE].v == 240 && x->glyph[ICO_GLYPH_SQUARE].w == 32 &&
+          x->glyph[ICO_GLYPH_SQUARE].h == 15 && x->glyph[ICO_GLYPH_SQUARE].disp_h == 30);
+    CHECK(x->glyph[ICO_GLYPH_TRIANGLE].row == 148 && x->glyph[ICO_GLYPH_TRIANGLE].u == 128 &&
+          x->glyph[ICO_GLYPH_TRIANGLE].v == 240 && x->glyph[ICO_GLYPH_TRIANGLE].w == 32 &&
+          x->glyph[ICO_GLYPH_TRIANGLE].h == 15 && x->glyph[ICO_GLYPH_TRIANGLE].disp_h == 30);
+    CHECK(x->glyph[ICO_GLYPH_L1].row == 298 && x->glyph[ICO_GLYPH_L1].u == 0 &&
+          x->glyph[ICO_GLYPH_L1].v == 160 && x->glyph[ICO_GLYPH_L1].w == 64 &&
+          x->glyph[ICO_GLYPH_L1].h == 20 && x->glyph[ICO_GLYPH_L1].disp_h == 40);
+    CHECK(x->glyph[ICO_GLYPH_R1].row == 295 && x->glyph[ICO_GLYPH_R1].u == 128 &&
+          x->glyph[ICO_GLYPH_R1].v == 160 && x->glyph[ICO_GLYPH_R1].w == 64 &&
+          x->glyph[ICO_GLYPH_R1].h == 20 && x->glyph[ICO_GLYPH_R1].disp_h == 40);
+    CHECK(x->glyph[ICO_GLYPH_L2].row == 297 && x->glyph[ICO_GLYPH_L2].u == 64 &&
+          x->glyph[ICO_GLYPH_L2].v == 160 && x->glyph[ICO_GLYPH_L2].w == 64 &&
+          x->glyph[ICO_GLYPH_L2].h == 20 && x->glyph[ICO_GLYPH_L2].disp_h == 40);
+    CHECK(x->glyph[ICO_GLYPH_R2].row == 296 && x->glyph[ICO_GLYPH_R2].u == 192 &&
+          x->glyph[ICO_GLYPH_R2].v == 160 && x->glyph[ICO_GLYPH_R2].w == 64 &&
+          x->glyph[ICO_GLYPH_R2].h == 20 && x->glyph[ICO_GLYPH_R2].disp_h == 40);
+    CHECK(x->glyph[ICO_GLYPH_LEFT].row == 270 && x->glyph[ICO_GLYPH_LEFT].u == 198 &&
+          x->glyph[ICO_GLYPH_LEFT].v == 20 && x->glyph[ICO_GLYPH_LEFT].w == 20 &&
+          x->glyph[ICO_GLYPH_LEFT].h == 20 && x->glyph[ICO_GLYPH_LEFT].disp_h == 40);
+    CHECK(x->glyph[ICO_GLYPH_RIGHT].row == 271 && x->glyph[ICO_GLYPH_RIGHT].u == 230 &&
+          x->glyph[ICO_GLYPH_RIGHT].v == 20 && x->glyph[ICO_GLYPH_RIGHT].w == 20 &&
+          x->glyph[ICO_GLYPH_RIGHT].h == 20 && x->glyph[ICO_GLYPH_RIGHT].disp_h == 40);
+}
+
 static void test_keys(void)
 {
     char k[64];
@@ -622,8 +1012,8 @@ static void test_stage(void)
     CHECK(ico_region_stage(0) == 0 && ico_region_stage(57) == 57 && ico_region_stage(58) == 58 &&
           ico_region_stage(60) == 60 && ico_region_stage(105) == 105);
     CHECK(ico_region_select("jpn") == 0);
-    CHECK(ico_region_stage(0) == 0 && ico_region_stage(57) == 57 && ico_region_stage(58) == 56 &&
-          ico_region_stage(105) == 103);
+    CHECK(ico_region_stage(0) == 0 && ico_region_stage(57) == 57 && ico_region_stage(58) == -1 &&
+          ico_region_stage(59) == -1 && ico_region_stage(60) == 58 && ico_region_stage(105) == 103);
     /* the European rows the table names land on the Japanese ones */
     CHECK(ico_region_stage(ico_region_info_pal.stage_credits) == ico_region_info_jpn.stage_credits);
     CHECK(ico_region_stage(ico_region_info_pal.stage_end) == ico_region_info_jpn.stage_end);
@@ -632,16 +1022,52 @@ static void test_stage(void)
     CHECK(ico_region_stage(ico_region_info_pal.stage_veil) == ico_region_info_jpn.stage_veil);
     /* the Korean disc's stageData is the Japanese one */
     CHECK(ico_region_select("kor") == 0);
-    CHECK(ico_region_stage(0) == 0 && ico_region_stage(57) == 57 && ico_region_stage(58) == 56 &&
-          ico_region_stage(105) == 103);
+    CHECK(ico_region_stage(0) == 0 && ico_region_stage(57) == 57 && ico_region_stage(58) == -1 &&
+          ico_region_stage(59) == -1 && ico_region_stage(60) == 58 && ico_region_stage(105) == 103);
     CHECK(ico_region_stage(ico_region_info_pal.stage_credits) == ico_region_info_kor.stage_credits);
     CHECK(ico_region_stage(ico_region_info_pal.stage_end) == ico_region_info_kor.stage_end);
     /* and the Asian disc's (its stage-all C is the Japanese one) */
     CHECK(ico_region_select("cn") == 0);
-    CHECK(ico_region_stage(0) == 0 && ico_region_stage(57) == 57 && ico_region_stage(58) == 56 &&
-          ico_region_stage(105) == 103);
+    CHECK(ico_region_stage(0) == 0 && ico_region_stage(57) == 57 && ico_region_stage(58) == -1 &&
+          ico_region_stage(59) == -1 && ico_region_stage(60) == 58 && ico_region_stage(105) == 103);
     CHECK(ico_region_stage(ico_region_info_pal.stage_credits) == ico_region_info_cn.stage_credits);
     CHECK(ico_region_stage(ico_region_info_pal.stage_end) == ico_region_info_cn.stage_end);
+    /* the North American disc and the August 2001 preview: the same 104 rows
+       as the Japanese disc, matched by name (staff1 58, end 61) */
+    for (int r = ICO_REGION_NTSC; r <= ICO_REGION_AUG6; r++) {
+        CHECK(ico_region_select(ico_region_at(r)->slug) == 0);
+        CHECK(ico_region_stage(0) == 0 && ico_region_stage(57) == 57 &&
+              ico_region_stage(58) == -1 && ico_region_stage(59) == -1 &&
+              ico_region_stage(60) == 58 && ico_region_stage(105) == 103);
+        CHECK(ico_region_stage(ico_region_info_pal.stage_credits) ==
+              ico_region_at(r)->stage_credits);
+        CHECK(ico_region_stage(ico_region_info_pal.stage_end) == ico_region_at(r)->stage_end);
+        CHECK(ico_region_stage(ico_region_info_pal.stage_veil) == ico_region_at(r)->stage_veil);
+        CHECK(ico_region_stage(ico_region_info_pal.last_shipped_stage) ==
+              ico_region_at(r)->last_shipped_stage);
+        CHECK(ico_region_stage(ico_region_info_pal.start_stage_max) ==
+              ico_region_at(r)->start_stage_max);
+    }
+    /* the June 2001 demo's own order (its 103 rows, by name): 03t4demo 49,
+       its 04a4demo 50 (no European row), 04b4demo 51 .. memory 58, staff1 59,
+       staff2 60, end 61, temp 62 .. itou_boss 84, boss_test 85 .. its last
+       E3 row 102; no memoryPAL, memoryPAL576, staff3 or itou_st03t */
+    CHECK(ico_region_select("jun26") == 0);
+    CHECK(ico_region_stage(49) == 49 && ico_region_stage(50) == 51 && ico_region_stage(57) == 58);
+    CHECK(ico_region_stage(58) == -1 && ico_region_stage(59) == -1 && ico_region_stage(62) == -1 &&
+          ico_region_stage(87) == -1);
+    CHECK(ico_region_stage(60) == 59 && ico_region_stage(61) == 60 && ico_region_stage(63) == 61);
+    CHECK(ico_region_stage(64) == 62 && ico_region_stage(86) == 84 && ico_region_stage(88) == 85 &&
+          ico_region_stage(94) == 91 && ico_region_stage(105) == 102 &&
+          ico_region_stage(106) == -1);
+    CHECK(ico_region_stage(ico_region_info_pal.stage_credits) ==
+          ico_region_info_jun26.stage_credits);
+    CHECK(ico_region_stage(ico_region_info_pal.stage_end) == ico_region_info_jun26.stage_end);
+    CHECK(ico_region_stage(ico_region_info_pal.stage_veil) == ico_region_info_jun26.stage_veil);
+    CHECK(ico_region_stage(ico_region_info_pal.last_shipped_stage) ==
+          ico_region_info_jun26.last_shipped_stage);
+    CHECK(ico_region_stage(ico_region_info_pal.start_stage_max) ==
+          ico_region_info_jun26.start_stage_max);
     CHECK(ico_region_select("pal") == 0);
 }
 
@@ -653,6 +1079,9 @@ int main(int argc, char **argv)
     test_jpn_values();
     test_kor_values();
     test_cn_values();
+    test_ntsc_values();
+    test_aug6_values();
+    test_jun26_values();
     test_keys();
     test_stage();
     return ico_check_summary("region_select_test");
