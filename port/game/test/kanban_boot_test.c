@@ -28,7 +28,9 @@
  *     that sees the load's end and, the other order the threads can take,
  *     between the tick before it and that tick's kick.  The step ticks are
  *     the log's.
- * With a region slug ("jpn", "kor", "cn": ctests kanban_boot_jpn, kanban_boot_kor, kanban_boot_cn) the same runs on that disc,
+ * With a region slug ("jpn", "kor", "cn", "ntsc", "aug6", "jun26": ctests kanban_boot_jpn,
+ * kanban_boot_kor, kanban_boot_cn, kanban_boot_ntsc, kanban_boot_aug6, kanban_boot_jun26) the
+ * same runs on that disc,
  * whose card check is kanbanBootMcCheck_jpn: no language step, no video
  * step, no read of the card's system file (so neither cameraMove nor
  * palMode), NonLinearCameraMove 0 (the disc has no language word) and
@@ -46,6 +48,20 @@
  * the European 41 (step 302), the Japanese 11 and the Korean 5 (step 101,
  * PAL_KOR(11, 5); upstream kanbanBoot.c), and the other program's value is
  * the one that checks again.
+ * The North American disc and the August 2001 preview run the same check
+ * (kanbanBootMcCheck_jpn; ico_region_info_ntsc and _aug6 have no language word and
+ * a fixed 60 Hz) with two differences kanbanBoot.c carries for them: the check
+ * has no retries (a card check is the two ports, 2 chdirs, 4 over the warning's two
+ * answers with no card as with a full one, not 22), and the warning's "continue" is the
+ * Korean disc's item 5 (11 checks again), whose signs are left to step 2's
+ * kanbanReqAllDelFade.
+ * The June 2001 demo has no card check in its boot at all (kanbanBootMain_jun26;
+ * its kanbanBootMcCheck_jun26 is not reached): the presents sign (sign 0) goes up
+ * in the first tick, step 3 lets go of the kept frame (fbKeep 0) whatever the
+ * card holds, the wait is (60 - systemStatus[0] * 10) / systemStatus[1] * 3 ticks,
+ * the boot then waits for the load and ends two ticks after.  Its runs are
+ * bootDemo's: no chdir, no card warning with no card or a full one, with and
+ * without Skip the opening and over the load.
  * With Skip the opening on ([gameplay] skip_opening, read at bootStep 0;
  * the runs above have it off): over the load, in both of the stage
  * manager's orders, no presents sign is asked for, the card check's steps
@@ -73,7 +89,9 @@
 #include "../../../ico2/common/src/kanbanBoot.c"
 
 static int failures;
-static int s_jpn; /* the Japanese program's run (the Japanese, Korean and Asian discs) */
+static int s_jpn;  /* the Japanese program's run (every disc but the European) */
+static int s_2001; /* the North American disc and the August 2001 preview: no card retries */
+static int s_demo; /* the June 2001 demo: kanbanBootMain_jun26, no card check */
 
 /* the language main.c sets from [game] language "de": German (4) on the
    European disc, 0 on the Japanese one (no language word) */
@@ -302,7 +320,8 @@ static void boot(const char *what, int savePresent)
     CHECK(s.reloads == 0, "%s: no reload of stage 1 (%d)", what, s.reloads);
     CHECK(s.layoutSwitches == 0, "%s: no layout switch (%d)", what, s.layoutSwitches);
     CHECK(s.gsResets == 0, "%s: no gsResetFunc (%d)", what, s.gsResets);
-    CHECK(s.chdirs == 1, "%s: one card check (%d chdirs)", what, s.chdirs);
+    CHECK(s.chdirs == (s_demo ? 0 : 1), "%s: %d card check(s) (%d chdirs)", what, s_demo ? 0 : 1,
+          s.chdirs);
     /* the Japanese check never reads the card's system file: no
        cameraMove, no palMode */
     CHECK(s.loads == (s_jpn ? 0 : savePresent), "%s: the system file loaded %d times", what,
@@ -319,6 +338,13 @@ static void boot(const char *what, int savePresent)
     CHECK(s.adds[SIGN_WARNING] == 0, "%s: no card warning (%d)", what, s.adds[SIGN_WARNING]);
     CHECK(s.badStep == 0, "%s: no tick in steps 102 or 190..202 (%d)", what, s.badStep);
     CHECK(fbKeep == 0, "%s: the frame buffer released", what);
+    if (s_demo) {
+        /* the sign's wait, then steps 5 (no load), 6 and 7 */
+        const int wait = (60 - 0 * 10) / systemStatus[1] * 3;
+
+        CHECK(s.ticks == wait + 4, "%s: the demo's boot ends after %d ticks (%d)", what, wait + 4,
+              s.ticks);
+    }
     printf("  %s: %d ticks, %d chdir, %d load, %d reloads, %d gsResetFunc\n", what, s.ticks,
            s.chdirs, s.loads, s.reloads, s.gsResets);
 }
@@ -330,11 +356,12 @@ static void boot(const char *what, int savePresent)
    card checks between, then the presents sign and the end. The card checks:
    with no card, the check retries ten times (mcRetryCount) over both ports
    before the first warning and once more after the first answer (20 and 2
-   chdirs); with a full card it does not retry (2 and 2). */
+   chdirs); with a full card it does not retry (2 and 2). The North American
+   disc and the August 2001 preview never retry (2 and 2 with no card too). */
 static void bootNoCard(const char *what, int card, int startItem, int retryItem)
 {
     const int subSign = card == CARD_NONE ? (s_jpn ? 1 : 3) : (s_jpn ? 2 : 4);
-    const int wantChdirs = card == CARD_NONE ? 22 : 4;
+    const int wantChdirs = card == CARD_NONE && !s_2001 ? 22 : 4;
 
     memset(&s, 0, sizeof(s));
     s.at100 = s.at101 = s.at300 = s.atEnd = s.atBoot3 = -1;
@@ -438,6 +465,23 @@ static void bootOverLoad(const char *what, int releaseLate)
     CHECK(s.adds[SIGN_PRESENTS] == 1 && s.adds[SIGN_WARNING] == 0,
           "%s: the presents sign once, no card warning (%d, %d)", what, s.adds[SIGN_PRESENTS],
           s.adds[SIGN_WARNING]);
+    if (s_demo) {
+        /* no card check: the sign in the first tick, the frame buffer let go of
+           by tick 1, step 5 waiting for the load, steps 6 and 7 after it */
+        CHECK(s.chdirs == 0 && s.at100 < 0 && s.at101 < 0 && s.at300 < 0,
+              "%s: no card check (%d chdirs)", what, s.chdirs);
+        CHECK(signTick == 0, "%s: the presents sign asked for at tick %d (want 0)", what, signTick);
+        CHECK(s.ticks == LOAD_END_TICK + 3, "%s: the boot ends after %d ticks (want %d)", what,
+              s.ticks, LOAD_END_TICK + 3);
+        for (int t = 1; t < s.ticks; t++) {
+            CHECK(!kickKeep[t], "%s: tick %d is a keep frame", what, t);
+        }
+        CHECK(fbKeep == 0 && fadeStatus == 0, "%s: fbKeep %d, fadeStatus %d at the end", what,
+              fbKeep, fadeStatus);
+        printf("  %s: the sign at tick %d, the load ends at %d, the boot at %d\n", what, signTick,
+               LOAD_END_TICK, s.ticks);
+        return;
+    }
     if (s_jpn) {
         /* the Japanese check does not wait for the load: a card with the
            save ends it at step 4, and the presents sign is asked for in the
@@ -659,6 +703,78 @@ static void bootSkipNoCard(const char *what, int card, int startItem, int retryI
            what, warnTick, startTick, waits, goneTick, endTick);
 }
 
+/* --- the June 2001 demo's boot ------------------------------------------ */
+
+/* kanbanBootMain_jun26 on a card that is there, absent or full, with the
+   presents sign or Skip the opening, with the stage manager's load running
+   until tick loadEnd (0: no load): no chdir, no card sign, the frame buffer let
+   go of in tick 1 (step 3), the wait, step 5 for the load, steps 6 and 7. */
+static void bootDemo(const char *what, int card, int skip, int loadEnd)
+{
+    int kickKeep[LOAD_TICKS] = {0};
+    int signTick = -1;
+    const int wait = skip ? 0 : (60 - systemStatus[0] * 10) / systemStatus[1] * 3;
+    int step5 = wait + 1; /* the tick step 5 is first reached (step 4's timer is -1) */
+
+    memset(&s, 0, sizeof(s));
+    s.at100 = s.at101 = s.at300 = s.atEnd = s.atBoot3 = -1;
+    s.card = card;
+    s.savePresent = card == CARD_ROOM;
+    memset(IosMcProductFile, 0, sizeof(IosMcProductFile));
+    bootStep = mcCheckStep = bootStarted = bootKanbanDone = 0;
+    mcRetryCount = 10;
+    bootKanban = bootKanbanSub = waitKanban = 0;
+    systemStatus[0] = ico_boot_video_mode();
+    NonLinearCameraMove = ico_boot_language();
+    fbKeep = loadEnd > 0;
+    fadeStatus = loadEnd > 0;
+    systemStatus[6] = loadEnd > 0;
+    s_skip = skip;
+    kanbanBootInit();
+    kanbanBootStart();
+    while (!kanbanBootEnd && s.ticks < LOAD_TICKS) {
+        const int signs = s.adds[SIGN_PRESENTS];
+
+        if (loadEnd > 0 && s.ticks == loadEnd) {
+            stageManagerLoadEnd();
+        }
+        kanbanBootMain();
+        signsTick();
+        if (signTick < 0 && s.adds[SIGN_PRESENTS] != signs) {
+            signTick = s.ticks;
+        }
+        kickKeep[s.ticks] = fbKeep;
+        CHECK(systemStatus[0] == 0 && NonLinearCameraMove == 0,
+              "%s: tick %d: 60 Hz and language 0 stay (%d, %d)", what, s.ticks, systemStatus[0],
+              NonLinearCameraMove);
+        s.ticks++;
+    }
+    s_skip = 0;
+    if (loadEnd > step5) {
+        step5 = loadEnd;
+    }
+    CHECK(kanbanBootEnd, "%s: the boot ends (%d ticks)", what, s.ticks);
+    CHECK(s.ticks == step5 + 3,
+          "%s: the boot ends after %d ticks (want %d: step 5 at %d, then "
+          "steps 6 and 7)",
+          what, s.ticks, step5 + 3, step5);
+    CHECK(s.chdirs == 0 && s.loads == 0, "%s: no card check, no system file (%d chdirs, %d loads)",
+          what, s.chdirs, s.loads);
+    CHECK(s.adds[1] == 0 && s.adds[2] == 0 && s.adds[SIGN_WARNING] == 0,
+          "%s: no card sign or warning (%d, %d, %d)", what, s.adds[1], s.adds[2],
+          s.adds[SIGN_WARNING]);
+    CHECK(s.adds[SIGN_PRESENTS] == (skip ? 0 : 1) && signTick == (skip ? -1 : 0),
+          "%s: the presents sign %d times, at tick %d", what, s.adds[SIGN_PRESENTS], signTick);
+    CHECK(s.reloads == 0 && s.layoutSwitches == 0 && s.gsResets == 0 && s.badStep == 0,
+          "%s: no reload, layout switch, gsResetFunc or step 102/190..202", what);
+    for (int t = 1; t < s.ticks; t++) {
+        CHECK(!kickKeep[t], "%s: tick %d is a keep frame (step 3 lets go in tick 1)", what, t);
+    }
+    CHECK(fbKeep == 0, "%s: the frame buffer released", what);
+    printf("  %s: %d ticks, the sign %d times, no card check\n", what, s.ticks,
+           s.adds[SIGN_PRESENTS]);
+}
+
 int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
@@ -668,8 +784,12 @@ int main(int argc, char **argv)
             printf("kanban_boot_test: no region %s\n", argv[2]);
             return 1;
         }
-        /* s_jpn: the Japanese program (the Japanese, Korean and Asian discs: ICO_JPNKORCN) */
-        s_jpn = ICO_JPNKORCN;
+        /* s_jpn: the Japanese program's flow (every disc but the European: the
+           Japanese, Korean and Asian discs, and the three 2001 discs, whose boot is
+           kanbanBootMcCheck_jpn but for what the header says) */
+        s_jpn = ICO_JPNKORNTSCAUG6JUN26CN;
+        s_2001 = ICO_NTSCAUG6;
+        s_demo = ICO_JUN26;
         /* select_disc (main_host.c): the Japanese program's word starts at 0 */
         systemStatus[0] = 0;
     }
@@ -681,21 +801,31 @@ int main(int argc, char **argv)
     boot("later boot (a save)", 1);
     bootOverLoad("over the load, the stage manager first", 0);
     bootOverLoad("over the load, the stage manager after the tick", 1);
-    {
+    if (s_demo) {
+        /* no card check in the demo's boot: the card, none or a full one change nothing */
+        bootDemo("no card", CARD_NONE, 0, 0);
+        bootDemo("a full card", CARD_FULL, 0, 0);
+        bootDemo("Skip the opening", CARD_ROOM, 1, 0);
+        bootDemo("Skip the opening, no card", CARD_NONE, 1, 0);
+        bootDemo("over the load, the stage manager first", CARD_ROOM, 0, LOAD_END_TICK);
+        bootDemo("Skip the opening over the load", CARD_ROOM, 1, LOAD_END_TICK);
+    } else {
         /* the item that starts without a card, and one that checks again:
            the European 41 (step 302; 40 stands for any other item), the
            Japanese and Asian 11 and the Korean 5 (step 101's PAL_KORNTSCAUG6JUN26(11, 5):
            the Asian ELF's kanbanBootMcCheck at 0x1B94F8 loads 11 where the Korean one
            at 0x1B9528 loads 5), each checked against the other disc's value */
-        const int startItem = !s_jpn ? 41 : ICO_KOR ? 5 : 11;
-        const int retryItem = !s_jpn ? 40 : ICO_KOR ? 11 : 5;
+        const int startItem = !s_jpn ? 41 : ICO_KOR || s_2001 ? 5 : 11;
+        const int retryItem = !s_jpn ? 40 : ICO_KOR || s_2001 ? 11 : 5;
         bootNoCard("no card", CARD_NONE, startItem, retryItem);
         bootNoCard("a full card", CARD_FULL, startItem, retryItem);
         bootSkipNoCard("Skip the opening, no card", CARD_NONE, startItem, retryItem);
         bootSkipNoCard("Skip the opening, a full card", CARD_FULL, startItem, retryItem);
     }
-    bootSkipOverLoad("Skip the opening over the load, the stage manager first", 0);
-    bootSkipOverLoad("Skip the opening over the load, the stage manager after the tick", 1);
+    if (!s_demo) {
+        bootSkipOverLoad("Skip the opening over the load, the stage manager first", 0);
+        bootSkipOverLoad("Skip the opening over the load, the stage manager after the tick", 1);
+    }
     remove(p);
     if (failures) {
         printf("kanban_boot_test %s: %d failures\n", ico_region_cur()->slug, failures);
