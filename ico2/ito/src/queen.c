@@ -2118,9 +2118,14 @@ static const int barrierLayoutDefault_pal[] = {3527}; /* derived name */
 static const int barrierLayoutDefault_jun26[] = {3065}; /* derived name */
 
 /* the Japanese disc's layout ids are 23 lower */
+static const int barrierLayoutDefault_ntsc[] = {3256}; /* derived name */
+
+static const int barrierLayoutDefault_aug6[] = {3226}; /* derived name */
+
 #define barrierLayoutDefault                                                                       \
-    PAL_JPNKORCN_JUN26(barrierLayoutDefault_pal, barrierLayoutDefault_jpn,                         \
-                       barrierLayoutDefault_jun26)
+    PAL_JPNKORCN_NTSC_AUG6_JUN26(barrierLayoutDefault_pal, barrierLayoutDefault_jpn,               \
+                                 barrierLayoutDefault_ntsc, barrierLayoutDefault_aug6,             \
+                                 barrierLayoutDefault_jun26)
 
 static const char damageFmt[] = "damage:%d"; /* derived name */
 
