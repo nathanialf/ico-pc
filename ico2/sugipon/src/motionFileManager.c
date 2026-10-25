@@ -16,12 +16,14 @@ extern const MotionDef motionKind[];
 
 /* every motion's loaded data, indexed by motion number; charFileManager
    fills the entries, the resets clear them */
-int *motionTable[1150] = {0};
+int *motionTable[1170] = {0}; /* the June 2001 demo's 1170, the largest (PAL 1150, the USA disc's
+
+                                 1086, the August preview's 1088) */
 
 inline void ResetDynamicMotionManager(void)
 {
     int i;
-    for (i = 0; i <= 1146; i++) {
+    for (i = 0; i <= PAL_NTSC_AUG6(1146, 1085, 1087); i++) {
         if (motionKind[i].area == 4) {
             motionTable[i] = 0;
         }
@@ -32,7 +34,7 @@ inline void ResetDynamicMotionManager(void)
 inline void ResetStatic2MotionManager(int seg)
 {
     int i;
-    for (i = 0; i <= 1146; i++) {
+    for (i = 0; i <= PAL_NTSC_AUG6(1146, 1085, 1087); i++) {
         if (motionKind[i].area == seg) {
             motionTable[i] = 0;
         }

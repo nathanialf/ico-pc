@@ -75,10 +75,10 @@ extern const int mv_blockCount;
    KEEP, ALWAYS and NULL) and the motion-orient table's (motionOrient[2468])
    (the running disc's, port/core/region.h: the same on both discs) */
 #define MV_MOTION_KINDS (ico_region_cur()->mv_motion_kinds)
-/* motionFileManager.c's motionTable[1150] (its header declares it without
-   a size): what the viewer's per-motion arrays are sized by; every region's
-   MV_MOTION_KINDS is below it (the model_viewer_effects test) */
-#define MV_MOTION_TABLE_SIZE 1150
+/* motionFileManager.c's motionTable[1170], the largest disc's (the June 2001 demo's; its
+   header declares it without a size): what the viewer's per-motion arrays are sized by; every
+   region's MV_MOTION_KINDS is below it (the model_viewer_effects test) */
+#define MV_MOTION_TABLE_SIZE 1170
 #define MV_ORIENT_ROWS (ico_region_cur()->mv_orient_rows)
 
 /* model_viewer_motion.c: whether the viewer can play motion `id` on the stage

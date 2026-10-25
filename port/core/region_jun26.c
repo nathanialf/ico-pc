@@ -169,8 +169,8 @@ const IcoRegionInfo ico_region_info_jun26 = {
     .reel_row = -1,
     .veil_anim_row = 60,     /* stageTable st13c/anim/deja_lightning.bga (PAL 79) */
     .mv_motion_kinds = 1165, /* motion-def 1168 rows: 1165 motions, then KEEP, ALWAYS, NULL
-                                (more than model_viewer.h MV_MOTION_TABLE_SIZE 1150: owed
-                                to the merge) */
+                                (model_viewer.h MV_MOTION_TABLE_SIZE is this disc's motionTable,
+                                1170) */
     .mv_orient_rows = 2166,  /* data_schema.jun26.txt motion-orient 2166 */
 
     .gflag_new_game = 333,   /* layout_action.c la_vibe_select (the JUN26 arm): gflagOn(333)
