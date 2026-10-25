@@ -135,8 +135,28 @@ static void test_regions_txt(const char *path)
             CHECK(strcmp(d->product_name, line + at) == 0,
                   "ico_discs[%d]'s product name '%s', config/regions.txt's '%s'", row,
                   d->product_name, line + at);
-            CHECK(strcmp(d->archive_name, r->archive_name) == 0 &&
-                  strcmp(d->image_base, r->image_base) == 0 && strcmp(d->id, r->pack_serial) == 0);
+            /* the pack folder is the disc's id, or (the August 2001 preview,
+               which has no product code) the serial spelled from its boot
+               file: SCUS_971.13 -> SCUS-97113 */
+            {
+                char fromBoot[32];
+                size_t k, o = 0;
+
+                for (k = 0; boot[k] != '\0' && o + 1 < sizeof(fromBoot); k++) {
+                    if (boot[k] == '_') {
+                        fromBoot[o++] = '-';
+                    } else if (boot[k] != '.') {
+                        fromBoot[o++] = boot[k];
+                    }
+                }
+                fromBoot[o] = '\0';
+                CHECK(strcmp(d->archive_name, r->archive_name) == 0 &&
+                          strcmp(d->image_base, r->image_base) == 0 &&
+                          (strcmp(d->id, r->pack_serial) == 0 ||
+                           strcmp(fromBoot, r->pack_serial) == 0),
+                      "ico_discs[%d]'s pack folder %s: the id %s or the boot serial %s", row,
+                      r->pack_serial, d->id, fromBoot);
+            }
             CHECK(ico_disc_by_slug(slug) == d && ico_disc_by_id(disc) == d &&
                   ico_disc_by_boot_elf(boot, d->elf_sha1) == d);
             /* a boot file two rows share (SCUS_971.13) answers with the first of them, and

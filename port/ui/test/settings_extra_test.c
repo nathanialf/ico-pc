@@ -4214,6 +4214,10 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     char p[1100], log[1024];
 
     useConfig("version = 1\n");
+    /* the rows are read in English on every disc (the Japanese and Korean
+       discs default to their own text) */
+    ico_opt_set_ui_language(UI_LANG_EN);
+    ui_settings_apply_language();
     stage_no = title ? 1 : 11;
     const int mainL = enterMain(title);
     const int exL = openPage(mainL, 8, UI_PAGE_EXTRAS);
@@ -4437,7 +4441,9 @@ static void testVariantsOtherDisc(const char *slug)
     CHECK(ico_region_select(slug) == 0, "the %s disc selected", slug);
     testVariantsPage(slug, 1, &debugPressed);
     testVariantsPage(slug, 0, &debugPressed);
+    ico_opt_set_ui_language(-1);
     CHECK(ico_region_select("pal") == 0, "the European disc again");
+    ui_settings_apply_language();
 }
 
 int main(int argc, char **argv)

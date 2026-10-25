@@ -113,7 +113,9 @@ static void test_round_trip(void)
 
             use_config(NULL);
             v = ico_variant_get((IcoVariantId)id);
-            /* step forward to value WANT (wrapping) */
+            /* step forward to value WANT (wrapping); the shipped value needs
+               no step, and then the key is not written */
+            const int stepped = v != want;
             while (v != want) {
                 v = ico_variant_step((IcoVariantId)id, 1);
             }
@@ -122,7 +124,7 @@ static void test_round_trip(void)
             {
                 char path[64];
                 snprintf(path, sizeof(path), "variants.%s", ico_variant_key((IcoVariantId)id));
-                CHECK(ico_config_get_string(path, NULL) != NULL);
+                CHECK((ico_config_get_string(path, NULL) != NULL) == stepped);
             }
             ico_config_reset(s_path, "/nonexistent/variants_test.ini");
             ico_opt_reload();

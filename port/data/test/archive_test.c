@@ -751,8 +751,15 @@ static int run_disc_archive(const char *iso_path, const char *dir, const char *s
                     CHECK(same_file_sectors(iso, ar, paths[i]));
                 }
             }
-            /* the 9 files stored from the Japanese and Korean discs: 8 in the root and DATA.DF */
-            if (!isPal) {
+            /* the 9 files stored from the Japanese and Korean discs: 8 in
+               the root and DATA.DF; the August 2001 preview's root holds
+               the European root's files (its 9 IRX, DUMMY.TXT): 13 */
+            if (!isPal && strcmp(disc->slug, "aug6") == 0) {
+                CHECK(res.files == 13);
+                CHECK(ico_vfs_stat(ar, "MCXMAN.IRX", NULL) == 0 &&
+                      ico_vfs_stat(ar, "DUMMY.TXT", NULL) == 0 &&
+                      ico_vfs_stat(ar, "IOPRP224.IMG", NULL) != 0);
+            } else if (!isPal) {
                 CHECK(res.files == 9);
                 CHECK(ico_vfs_stat(ar, "MCXMAN.IRX", NULL) != 0 &&
                       ico_vfs_stat(ar, "DUMMY.TXT", NULL) != 0 &&

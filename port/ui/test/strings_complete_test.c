@@ -174,7 +174,9 @@ static void testResolve(void)
     CHECK(ui_lang_resolve(UI_LANG_COUNT, -1, 1, 5) == UI_LANG_IT, "out of range is auto");
     /* the region rows' port-text fields (port/core/region.h: plain numbers
        there) are UiLang and sheet-language ids; a disc whose game picks
-       its language names neither, one that does not names both */
+       its language names neither, one that does not names both (the
+       Japanese and Korean discs their own sheets, the English-only 2001
+       discs the European English sheet) */
     for (int i = 0; i < ico_region_count(); i++) {
         const IcoRegionInfo *r = ico_region_at(i);
         CHECK(r->ui_lang_default >= -1 && r->ui_lang_default < UI_LANG_COUNT &&
@@ -182,7 +184,7 @@ static void testResolve(void)
                   r->menu_sheet != UI_SHEET_JA_TITLE,
               "%s: ui_lang_default %d, menu_sheet %d", r->slug, r->ui_lang_default, r->menu_sheet);
         CHECK(r->has_game_language ? r->ui_lang_default < 0 && r->menu_sheet < 0
-                                   : r->ui_lang_default >= 0 && r->menu_sheet >= UI_LANG_PAL_COUNT,
+                                   : r->ui_lang_default >= 0 && r->menu_sheet >= 0,
               "%s: the game's language or the disc's own", r->slug);
     }
     CHECK(ico_region_select("jpn") == 0 && ico_region_cur()->ui_lang_default == UI_LANG_JA &&

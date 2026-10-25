@@ -905,7 +905,7 @@ two path strings PAL's do not). On the Japanese disc:
   `ui_settings_set_disc_handler`, asked once after each call. Its values, `UI_STR_DISC_PAL`,
   `UI_STR_DISC_JPN`, `UI_STR_DISC_KOR`, `UI_STR_DISC_NTSC`, `UI_STR_DISC_AUG6`, `UI_STR_DISC_JUN26`
   and `UI_STR_DISC_CN` ("Europe (SCES-50760)", "Japan (SCPS-11003)", "Korea (SCPS-56001)", "USA
-  (SCUS-97113)", "Preview 2001-08", "Demo 2001-06 (SCUS-97158)", "Asia (SCPS-55001)" in English; the
+  (SCUS-97113)", "Preview 2001-08", "Demo 2001-06", "Asia (SCPS-55001)" in English; the
   four newest are the same Latin text in every language, "Asia" translated where it differs), step through
   `config/regions.txt`'s rows and write `[game] disc` (`ico_config_disc_pin`), read at the next
   start; with no pin the row shows the disc playing, which with several discs' data and no pin is the
