@@ -371,6 +371,26 @@ if(Python3_FOUND)
     add_test(NAME texture_catalog COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/test/texture_catalog_test.py")
 endif()
 
+# the June 2001 demo's VU1 programs against the retail ones (tools/vu_variant_diff.py,
+# tools/vu_variant_equiv.py, tools/test/vu1/): vu1_variant_table holds the diff, its
+# per-hunk table, the count in vu1_ref.h and the draw flag in agreement (no decomp);
+# vu1_variant_diff and vu1_variant_equiv regenerate the diff and the symbolic
+# comparison from the decomp's text (ICO_DECOMP_DIR) and compare them byte for byte
+# with the committed files; skipped (77) without a decomp or a cpp
+set(ICO_DECOMP_DIR "" CACHE PATH "The decomp checkout (ico2/vusrc/*.vsm) for the vu1_variant_diff and vu1_variant_equiv tests")
+if(Python3_FOUND AND NOT CMAKE_CROSSCOMPILING)
+    add_test(NAME vu1_variant_table
+             COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/vu_variant_diff.py" --check-table)
+    add_test(NAME vu1_variant_diff
+             COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/vu_variant_diff.py"
+                     --check "${CMAKE_SOURCE_DIR}/tools/test/vu1/jun26_vs_pal.diff")
+    add_test(NAME vu1_variant_equiv
+             COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/vu_variant_equiv.py"
+                     --check "${CMAKE_SOURCE_DIR}/tools/test/vu1/jun26_vs_pal_equiv.txt")
+    set_tests_properties(vu1_variant_diff vu1_variant_equiv PROPERTIES SKIP_RETURN_CODE 77
+                         ENVIRONMENT "ICO_DECOMP_DIR=${ICO_DECOMP_DIR}")
+endif()
+
 # the rc-only tooling's gate (ICO_RC_TOOLS above): the checker's own cases
 # and the package scripts' use of it (rc_tools_gate), and this build's
 # program holding the rc row's text exactly when ICO_RC_TOOLS is on
