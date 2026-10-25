@@ -1165,6 +1165,15 @@ static void testDiscRow(void)
               "disc: language %d: the label and values fit (%.1f, %.1f, %.1f, %.1f)", g, (double)lw,
               (double)pw, (double)jw, (double)kw);
     }
+    /* and the other four rows' values (the North American disc, the August
+       2001 preview, the June 2001 demo, the Asian disc) */
+    for (int g = 0; g < UI_LANG_COUNT; g++) {
+        for (int id = UI_STR_DISC_NTSC; id <= UI_STR_DISC_CN; id++) {
+            const float w =
+                ui_measure_menu_text(UI_MENU_TEXT_SIZE, ui_str_in((UiLang)g, (UiStrId)id));
+            CHECK(w * 0.6f <= 176.0f, "disc: language %d: value %d fits (%.1f)", g, id, (double)w);
+        }
+    }
     CHECK(strcmp(ui_settings_value_text(UI_OPT_DISC), "Europe (SCES-50760)") == 0,
           "disc: no pin, the disc playing: %s", ui_settings_value_text(UI_OPT_DISC));
     ui_settings_step(UI_OPT_DISC, 1);
