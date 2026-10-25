@@ -128,8 +128,15 @@ void ui__menu_force_scale(int scale);
 #define UI_MENU_BOLD_Y 0.3f
 /* Tests: the letters' extra weight across and down (UI_MENU_BOLD_X / Y) set */
 void ui__menu_set_bold(float bx, float by);
-/* Tests (menu_look_jpn, its Korean twin): a Japanese or Korean sheet's
-   geometry (UI_SHEET_JA, UI_SHEET_JA_TITLE or UI_SHEET_KO) for the port's text (menu_font.c sheetGeo: the em over the one asked for, the
+/* Which ideograph a character is drawn as: on (the port's language is
+   Chinese, settings.c ui_settings_apply_language) draws it from the Chinese
+   font (Traditional forms) before the Japanese one, which draws it as
+   the Japanese text wants it.  The glyph cache keeps both (font.c glyphIn),
+   and ui__font_chinese_first says which is set (menu_font.c's strips). */
+void ui__font_prefer_chinese(int on);
+int ui__font_chinese_first(void);
+/* Tests (menu_look_jpn, its Korean and Asian twins): a Japanese, Korean or Chinese sheet's
+   geometry (UI_SHEET_JA, UI_SHEET_JA_TITLE, UI_SHEET_KO or UI_SHEET_ZH) for the port's text (menu_font.c sheetGeo: the em over the one asked for, the
    width over UI_SHEET_WIDTH, the Japanese and Korean glyphs' gap, the weight across
    and down) set and read */
 void ui__menu_set_ja_geometry(int sheet, float em, float wx, float gap, float bx, float by);
