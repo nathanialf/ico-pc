@@ -182,6 +182,9 @@ int debug_SelectCsvWindow(char *title, int x, int y, int rows, const void *base,
 
 int debug_SelectStage(void);
 void debug_Menu_off(void);
+/* PC port: opens the debug menu as SELECT does in developer mode (Options >
+   Extras > Game variants > Debug menu, through port/game/variants.c) */
+void debug_MenuOpen(void);
 void debug_SetDmaCallback(void);
 void debug_StdPrintfDummy(const char *fmt, ...);
 void debug_openLog(void);
