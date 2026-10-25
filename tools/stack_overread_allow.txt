@@ -35,7 +35,15 @@ ico2/fumi/src/boyact.c:actBoyItemAfter:dir:write-only the 2001 builds' item-afte
 ico2/fumi/src/commonact.c:actCommonBackhand_ntsc:frame:write-only the USA disc's twin of actCommonBackhand: the same dead int store.
 ico2/fumi/src/commonact.c:actCommonBackhand_aug6jun26:frame:write-only the August preview's twin of actCommonBackhand: the same dead int store.
 ico2/ito/src/act_bird.c:subBirdBrainMain_ntsc:q:write-only the USA disc's twin of subBirdBrainMain: the same dead q[1] store.
-ico2/ito/src/act_bird.c:subBirdBrainMain_aug6jun26:q:write-only the August preview's twin of subBirdBrainMain: the same dead q[1] store.
+ico2/ito/src/act_bird.c:subBirdBrainMain_aug6:q:write-only the August preview's twin of subBirdBrainMain: the same dead q[1] store.
+ico2/ito/src/act_bird.c:subBirdBrainMain_jun26:q:write-only the June 2001 demo's twin of subBirdBrainMain: the same dead q[1] store.
 ico2/omori/src/camera-ico2.c:monitorMonitorCamera_ntsc:vDiff:write-only the USA disc's twin of monitorMonitorCamera: the same dead vector store; every call on it stays inside its 16 bytes.
-ico2/omori/src/camera-ico2.c:monitorMonitorCamera_aug6jun26:vDiff:write-only the August preview's twin of monitorMonitorCamera: the same dead vector store; every call on it stays inside its 16 bytes.
+ico2/omori/src/camera-ico2.c:monitorMonitorCamera_aug6:vDiff:write-only the August preview's twin of monitorMonitorCamera: the same dead vector store; every call on it stays inside its 16 bytes.
+ico2/omori/src/camera-ico2.c:monitorMonitorCamera_jun26:vDiff:write-only the June 2001 demo's twin of monitorMonitorCamera: the same dead vector store; every call on it stays inside its 16 bytes.
 ico2/sugipon/src/box.c:AlignBox_aug6jun26:npos:write-only the August preview's AlignBox copies the root position into npos and never reads it; the copy writes 16 bytes into 16.
+ico2/common/src/StageManager.c:stgmgrNextStagePreLoad_jun26:ret:write-only the June 2001 demo's twin of stgmgrNextStagePreLoad: the same dead int store.
+ico2/fumi/src/commonact.c:actCommonLever_jun26:p:write-only the June 2001 demo's twin of actCommonLever: p is filled and never used; every call on it stays inside its 16 bytes.
+ico2/fumi/src/girl_act.c:actGirlDitch3mReady_jun26:now:write-only the June 2001 demo's twin of actGirlDitch3mReady: the same dead GetRootPosition; it writes 16 bytes into 16.
+ico2/ito/src/queen.c:QueenBarrierGeo_jun26:rootPos:write-only the June 2001 demo's twin of QueenBarrierGeo: GetRootPosition writes the root position and nothing uses it; it writes 16 bytes into 16.
+ico2/omori/src/lws_kyomi.c:SetParamKyomiGObj_jun26:pos:write-only the June 2001 demo's twin of SetParamKyomiGObj: the same dead GetRootPosition; it writes 16 bytes into 16.
+ico2/seki/src/Texture.c:tex_makeTexturePacket_jun26:magic:write-only the June 2001 demo's tex_makeTexturePacket clears a 5-byte magic buffer with memset(magic, 0, 5) and never reads it; the memset stays inside its 5 bytes.

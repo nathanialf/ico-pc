@@ -1071,7 +1071,7 @@ OFF(McMgr, mask, 0x9C0);
 SIZE(McMgr, 0xA00); /* comment */
 #endif
 
-/* HandClInfo: runtime, ico2/fumi/include/act-game.h:21 */
+/* HandClInfo: runtime, ico2/fumi/include/act-game.h:20 */
 #if ICO_LAYOUT_EE
 OFF(HandClInfo, on, 0x0);
 OFF(HandClInfo, hit, 0x1);
@@ -1084,7 +1084,7 @@ OFF(HandClInfo, pad22, 0x22);
 OFF(HandClInfo, orient2, 0x30);
 #endif
 
-/* ActEffRec: runtime, ico2/fumi/include/act-game.h:35 */
+/* ActEffRec: runtime, ico2/fumi/include/act-game.h:34 */
 #if ICO_LAYOUT_EE
 OFF(ActEffRec, pos, 0x0);
 OFF(ActEffRec, dir, 0x10);
@@ -1094,7 +1094,7 @@ OFF(ActEffRec, kind, 0x28);
 OFF(ActEffRec, pad2C, 0x2C);
 #endif
 
-/* ActWork: runtime, ico2/fumi/include/act-game.h:47 */
+/* ActWork: runtime, ico2/fumi/include/act-game.h:46 */
 #if ICO_LAYOUT_EE
 OFF(ActWork, paraTbl, 0x0);
 OFF(ActWork, pad158, 0x158);
