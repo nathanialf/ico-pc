@@ -2105,9 +2105,9 @@ static void ACTRunIntrCorrect_aug6jun26(GObj *self, IntrMail *intr, IntrMail *co
     }
     if (s->actMode == 26) {
         if (s->modeFrame < ((60 - systemStatus[0] * 10) / systemStatus[1]) / 3) {
-            actIntrList[348].flags |= 0x40000;
+            actIntrList[PAL_JUN26(348, 340)].flags |= 0x40000;
         } else {
-            actIntrList[348].flags &= ~0x40000;
+            actIntrList[PAL_JUN26(348, 340)].flags &= ~0x40000;
         }
     }
 }
