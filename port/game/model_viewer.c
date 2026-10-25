@@ -94,6 +94,8 @@
 #include "Texture.h"
 
 #include "font.h"
+#include "../core/region.h" /* ico_region_cur: the disc's id and stage count */
+#include "df_pack.h"        /* port/data: ico_df_has, whether DATA.DF holds a stage's pack */
 #include "layout_ext.h"
 #include "model_viewer.h"
 #include "model_viewer_cam.h"
@@ -309,6 +311,48 @@ static void mvStart(int row);
 static void mvToTitle(void);
 static void putBackShadow(void);
 
+/* PC port: whether model row's host stage can load on this disc. The June
+   2001 demo's DATA.DF holds 49 of the retail discs' entries (no STGLOG,
+   STGTTL, STGSTAFF*, ...: region_jun26.c), and a stage whose pack is not
+   there loads nothing and dies building its objects (main.c's start_stage
+   refusal), so on the demo a model whose stage's pack (stageData's
+   dataFile, .DF) is not in DATA.DF is refused with a line; every other
+   disc holds every host stage's pack (the viewer's survey). 1 when the disc
+   cannot be asked. */
+static int modelStageOnDisc(int row, const char *what)
+{
+    const int stage = mv_model_stage(&mv_models[row]);
+    char name[48];
+    IcoVfs *vfs;
+    int has;
+
+    if (!ICO_JUN26) {
+        return 1;
+    }
+    if (stage <= 0 || stage >= ico_region_cur()->stage_count) {
+        fprintf(stderr,
+                "model_viewer: %s not opened: \"%s\" has no stage on this disc (the European "
+                "stage %d has no row here)\n",
+                what, modelNameEn(row), mv_models[row].stage);
+        return 0;
+    }
+    vfs = ico_vfs_disc();
+    if (vfs == NULL) {
+        return 1;
+    }
+    snprintf(name, sizeof(name), "%s.DF", stageData[stage].dataFile);
+    has = ico_df_has(vfs, name);
+    if (has == 0) {
+        fprintf(stderr,
+                "model_viewer: %s not opened: \"%s\" lives on stage %d (%s), whose pack %s is "
+                "not in this disc's DATA.DF (%s)\n",
+                what, modelNameEn(row), stage, stageData[stage].name, name,
+                ico_region_cur()->disc_id);
+        return 0;
+    }
+    return 1;
+}
+
 static int listInput(void *user, int d, int flags)
 {
     (void)user;
@@ -326,6 +370,10 @@ static int listInput(void *user, int d, int flags)
             lt_ext_layout(to)->defaultItem = row;
         }
         return to;
+    }
+    if ((flags & PAD_OK) && d >= 0 && d < mv_modelCount && !modelStageOnDisc(d, "the model")) {
+        NEGATIVE_SE();
+        return -1;
     }
     if ((flags & PAD_OK) && d >= 0 && d < mv_modelCount) {
         POSITIVE_SE();
@@ -500,6 +548,9 @@ int ico_mv_characters_enter(void)
         fprintf(stderr, "model_viewer: characters not opened: no models (%d)\n", mv_modelCount);
         return -1;
     }
+    if (!modelStageOnDisc(MV_ROW_ICO, "characters")) {
+        return -1;
+    }
     s_chars = 1;
     s_returnExtras = 0;
     fprintf(stderr, "model_viewer: characters\n");
@@ -518,7 +569,7 @@ int ico_mv_characters_shown(void)
 void ico_mv_characters_switch(int character)
 {
     if (s_chars && s_state == MV_VIEW && (character == MV_ROW_ICO || character == MV_ROW_YORDA) &&
-        character != s_model) {
+        character != s_model && modelStageOnDisc(character, "the other character")) {
         mvStart(character);
     }
 }

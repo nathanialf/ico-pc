@@ -325,8 +325,10 @@ if(TARGET ico_pc)
     # Extras, asked by seki/src/RegistPacket.c
     add_library(ico_model_viewer_live OBJECT model_viewer.c model_viewer_cam.c model_viewer_motion.c model_viewer_table.c title_logo.c)
     ico_include_dirs(sugipon _ico_mv_game_incs)
+    # port/data: df_pack.h (the June 2001 demo's DATA.DF asked for a stage's pack)
     target_include_directories(ico_model_viewer_live PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
-                               ${_ico_mv_game_incs})
+                               ${_ico_mv_game_incs}
+                               $<TARGET_PROPERTY:ico_port_data,INTERFACE_INCLUDE_DIRECTORIES>)
     if(NOT ICO_HEADLESS)
         target_include_directories(ico_model_viewer_live PRIVATE "${CMAKE_SOURCE_DIR}/port/render")
     endif()
