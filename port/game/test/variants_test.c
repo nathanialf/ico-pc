@@ -529,7 +529,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "variants_test: no region %s\n", argv[2]);
         return 1;
     }
-    snprintf(s_path, sizeof(s_path), "%s/variants_test.toml", dir);
+    /* a file per disc: ctest runs the seven discs' tests in parallel */
+    snprintf(s_path, sizeof(s_path), "%s/variants_test_%s.toml", dir, ico_region_cur()->slug);
     test_defaults();
     test_names();
     test_round_trip();
