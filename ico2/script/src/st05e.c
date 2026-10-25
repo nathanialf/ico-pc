@@ -22,35 +22,47 @@ static ActMail waterMain_mes_pal[2] = {{406, actSt05eWaterSwitch}, {429}}; /* de
 
 static ActMail waterMain_mes_ntsc[2] = {{376, actSt05eWaterSwitch}, {396}}; /* derived name */
 
-static ActMail waterMain_mes_aug6jun26[2] = {{372, actSt05eWaterSwitch}, {392}}; /* derived name */
+static ActMail waterMain_mes_aug6[2] = {{372, actSt05eWaterSwitch}, {392}}; /* derived name */
+
+static ActMail waterMain_mes_jun26[2] = {{356, actSt05eWaterSwitch}, {376}}; /* derived name */
 
 #define waterMain_mes                                                                              \
-    PAL_NTSC_AUG6JUN26(waterMain_mes_pal, waterMain_mes_ntsc, waterMain_mes_aug6jun26)
+    PAL_NTSC_AUG6_JUN26(waterMain_mes_pal, waterMain_mes_ntsc, waterMain_mes_aug6,                 \
+                        waterMain_mes_jun26)
 
 static ActMail water_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail water_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail water_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail water_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-#define water_mes PAL_NTSC_AUG6JUN26(water_mes_pal, water_mes_ntsc, water_mes_aug6jun26)
+static ActMail water_mes_jun26[2] = {{377}, {376}}; /* derived name */
+
+#define water_mes                                                                                  \
+    PAL_NTSC_AUG6_JUN26(water_mes_pal, water_mes_ntsc, water_mes_aug6, water_mes_jun26)
 
 static ActMail waterSwitch_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail waterSwitch_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail waterSwitch_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail waterSwitch_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+static ActMail waterSwitch_mes_jun26[2] = {{377}, {376}}; /* derived name */
 
 #define waterSwitch_mes                                                                            \
-    PAL_NTSC_AUG6JUN26(waterSwitch_mes_pal, waterSwitch_mes_ntsc, waterSwitch_mes_aug6jun26)
+    PAL_NTSC_AUG6_JUN26(waterSwitch_mes_pal, waterSwitch_mes_ntsc, waterSwitch_mes_aug6,           \
+                        waterSwitch_mes_jun26)
 
 static ActMail solar_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail solar_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail solar_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail solar_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-#define solar_mes PAL_NTSC_AUG6JUN26(solar_mes_pal, solar_mes_ntsc, solar_mes_aug6jun26)
+static ActMail solar_mes_jun26[2] = {{377}, {376}}; /* derived name */
+
+#define solar_mes                                                                                  \
+    PAL_NTSC_AUG6_JUN26(solar_mes_pal, solar_mes_ntsc, solar_mes_aug6, solar_mes_jun26)
 
 /* .sbss: the demo's own end flag, raised by the subthread the wait loop below
    spins for, and its complement, true when the player skipped the demo with
@@ -93,28 +105,34 @@ static void actSt05eWaterStop_aug6jun26(GObj *volatile self)
 {
     lt_switch_layout(51);
 
-    actCreateSubThread(actSt05eWaterFlagOn, 21);
+    if (ICO_JUN26) {
+        gflagOn(197);
+    } else {
+        actCreateSubThread(actSt05eWaterFlagOn, 21);
 
-    scpSleepEnemyAll();
+        scpSleepEnemyAll();
+    }
 
     _ACTWait(60);
 
-    stage_SetAnimation(235, 1, 0);
+    stage_SetAnimation(PAL_JUN26(235, 210), 1, 0);
 
-    stage_SetAnimation(234, -1, -2);
+    stage_SetAnimation(PAL_JUN26(234, 209), -1, -2);
 
-    while (stage_CheckAnimationFinish(235) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JUN26(235, 210)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
-    scpSearchGobj(1445)->active = 1;
-    scpSearchGobj(1444)->active = 0;
+    scpSearchGobj(PAL_JUN26(1445, 1379))->active = 1;
+    scpSearchGobj(PAL_JUN26(1444, 1378))->active = 0;
 
     scpBoyControlReadDisable = 0;
     lt_switch_layout(50);
 
-    scpWakeupEnemyAll();
+    if (!ICO_JUN26) {
+        scpWakeupEnemyAll();
+    }
 
     SetWayGroupActive(5, 1);
 }
@@ -215,7 +233,46 @@ static void actSt05eSolarChk_ntsc(GObj *volatile self)
     gflagOn(208);
 }
 
-static void actSt05eSolarChk_aug6jun26(GObj *volatile self)
+static void actSt05eSolarChk_jun26(GObj *volatile self)
+{
+    while (scpIsRotObjectZPlusDirInclude(1380, 265, 275) == 0) {
+        _ACTWait(1);
+    }
+
+    scpSearchGobj(1380)->active = 0;
+    scpSearchGobj(1381)->active = 1;
+
+    if (gflagChk(209) == 0 || gflagChk(210) == 0 || gflagChk(211) == 0) {
+        lt_switch_layout(51);
+        scpBoyControlReadDisable = 1;
+
+        scpAdpcmPlayRequestFunc(2, &solar, 1, 1, 1);
+
+        stage_SetAnimation(211, 1, 0);
+
+        while (stage_CheckAnimationFinish(211) == 0) {
+            _ACTWait(1);
+        }
+        _ACTWait(1);
+
+        if (solar != 0) {
+            scpAdpcmFadeClose(solar, 80);
+        }
+
+        lt_switch_layout(50);
+
+        scpBoyControlReadDisable = 0;
+    }
+
+    gflagOn(198);
+    gflagOff(212);
+    gflagOff(213);
+    gflagOff(215);
+
+    gflagOn(199);
+}
+
+static void actSt05eSolarChk_aug6(GObj *volatile self)
 {
     while (scpIsRotObjectZPlusDirInclude(1446, 265, 275) == 0) {
         _ACTWait(1);
@@ -259,12 +316,16 @@ static void actSt05eSolarChk_aug6jun26(GObj *volatile self)
 
 void actSt05eSolarChk(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt05eSolarChk_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actSt05eSolarChk_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actSt05eSolarChk_aug6jun26(self);
+    if (ICO_AUG6) {
+        actSt05eSolarChk_aug6(self);
         return;
     }
     while (scpIsRotObjectZPlusDirInclude(1556, 269, 271) == 0) {
@@ -328,17 +389,17 @@ void actSt05eWater(GObj *volatile self)
     Act *act = actInitialize(self);
     _ACTWait(1);
 
-    if (gflagChk(PAL_NTSCAUG6JUN26(231, 206)) == 0) {
-        scpSearchGobj(PAL_NTSC_AUG6JUN26(1555, 1451, 1445))->active = 0;
+    if (gflagChk(PAL_NTSCAUG6_JUN26(231, 206, 197)) == 0) {
+        scpSearchGobj(PAL_NTSC_AUG6_JUN26(1555, 1451, 1445, 1379))->active = 0;
 
         water_mes[0].func = actSt05eWaterMain;
         act->mail = water_mes;
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(430, 397, 393, 377));
         _ACTWait(0);
     } else {
-        scpSearchGobj(PAL_NTSC_AUG6JUN26(1554, 1450, 1444))->active = 0;
+        scpSearchGobj(PAL_NTSC_AUG6_JUN26(1554, 1450, 1444, 1378))->active = 0;
 
-        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(266, 262, 235, 234), -1, -2);
+        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6_JUN26(266, 262, 235, 234, 209), -1, -2);
     }
 }
 
@@ -366,15 +427,15 @@ static void actSt05eSolar_aug6jun26(GObj *volatile self)
     Act *act = actInitialize(self);
     _ACTWait(1);
 
-    if (gflagChk(207) == 0) {
-        scpSearchGobj(1447)->active = 0;
+    if (gflagChk(PAL_JUN26(207, 198)) == 0) {
+        scpSearchGobj(PAL_JUN26(1447, 1381))->active = 0;
 
         solar_mes[0].func = actSt05eSolarChk;
         act->mail = solar_mes;
-        ACTSendMailCorrect(self, 393);
+        ACTSendMailCorrect(self, PAL_JUN26(393, 377));
         _ACTWait(0);
     } else {
-        scpSearchGobj(1446)->active = 0;
+        scpSearchGobj(PAL_JUN26(1446, 1380))->active = 0;
     }
 }
 
@@ -408,8 +469,23 @@ void actSt05eSolar(GObj *volatile self)
     }
 }
 
+static void actSt05eWaterMain_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    scpBoyControlReadDisable = 0;
+
+    sub->mainMail = waterMain_mes;
+    while (1) {
+        _ACTWait(1);
+    }
+}
+
 void actSt05eWaterMain(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt05eWaterMain_jun26(self);
+        return;
+    }
     Act *sub = GOBJ_ACT(self);
 
     sub->mainMail = waterMain_mes;
@@ -427,7 +503,7 @@ void actSt05eWaterSwitch(GObj *volatile self)
     sub->mainMail = 0;
     waterSwitch_mes[0].func = actSt05eWaterStop;
     sub->mail = waterSwitch_mes;
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(430, 397, 393, 377));
     _ACTWait(0);
 }
 

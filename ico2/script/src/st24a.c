@@ -20,9 +20,12 @@ static ActMail sword_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail sword_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail sword_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail sword_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-#define sword_mes PAL_NTSC_AUG6JUN26(sword_mes_pal, sword_mes_ntsc, sword_mes_aug6jun26)
+static ActMail sword_mes_jun26[2] = {{377}, {376}}; /* derived name */
+
+#define sword_mes                                                                                  \
+    PAL_NTSC_AUG6_JUN26(sword_mes_pal, sword_mes_ntsc, sword_mes_aug6, sword_mes_jun26)
 
 static ActMail demoCam_mes[2] = {{430}, {429}}; /* derived name */
 
@@ -82,21 +85,21 @@ static void actSt24aSwordChk_aug6jun26(GObj *volatile self)
     scpBoyControlReadDisable = 1;
     scpPlayStart(boyGObj);
     scpPlayMot(boyGObj, 0);
-    gflagOn(299);
-    soundSeDefPlay(1316, 0, 0, 1);
+    gflagOn(PAL_JUN26(299, 285));
+    soundSeDefPlay(PAL_JUN26(1316, 1285), 0, 0, 1);
     _ACTWait(60);
-    scpAdpcmPlayRequestFunc(33, &sword, 1, 1, 1);
+    scpAdpcmPlayRequestFunc(PAL_JUN26(33, 36), &sword, 1, 1, 1);
     while (sword == 0) {
         _ACTWait(1);
     }
-    stage_SetAnimation(132, 1, 0);
+    stage_SetAnimation(PAL_JUN26(132, 119), 1, 0);
     scpPlayPosSet(boyGObj, 1685.0f, -1080.0f, -550.0f);
     *(Vec16 *)v = swordChkPos;
     sceVu0SubVector(dir, v, test_CURRENTROOT(boyGObj));
     scpPlayMotDir(boyGObj, dir);
     _ACTWait(300);
-    scpPlayMot(boyGObj, 246);
-    while (stage_CheckAnimationFinish(132) == 0) {
+    scpPlayMot(boyGObj, PAL_JUN26(246, 253));
+    while (stage_CheckAnimationFinish(PAL_JUN26(132, 119)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -193,8 +196,26 @@ static void actSt24aDemoCamChk(GObj *volatile self)
     scpBoyControlReadDisable = 0;
 }
 
+static void actSt24aSword_jun26(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *act = actInitialize(self);
+    _ACTWait(1);
+
+    if (gflagChk(285) == 0) {
+        sword_mes[0].func = actSt24aSwordChk;
+        act->mail = sword_mes;
+        ACTSendMailCorrect(self, 377);
+        _ACTWait(0);
+    }
+}
+
 void actSt24aSword(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt24aSword_jun26(self);
+        return;
+    }
     GObj *x = self;
     Act *act = actInitialize(self);
     _ACTWait(1);
@@ -215,7 +236,7 @@ void actSt24aSaku(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
-    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(151, 147, 131, 130), 0, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6_JUN26(151, 147, 131, 130, 117), 0, 0);
 }
 
 void actSt24aDemoCam(GObj *volatile self)

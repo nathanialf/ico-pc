@@ -42,7 +42,26 @@ static void gflagInit_ntsc(void)
     itouGFlagInit();
 }
 
-static void gflagInit_aug6jun26(void)
+static void gflagInit_jun26(void)
+{
+    int keep = gflagChk(330);
+
+    memset(gFlag, 0, sizeof(gFlag));
+    before_stage_no = 0;
+    if (keep != 0) {
+        gflagOn(330);
+    }
+    Boy_Init();
+    StageOrientInit();
+    gamesysObjInfoInit();
+    Generator_Init();
+    warpGirlInit();
+    systemStatus[3] = 0;
+    memset(IosMcPreviewInfo, 0, 16);
+    gamesysVersionDiff = 0;
+}
+
+static void gflagInit_aug6(void)
 {
     int keep = gflagChk(345);
 
@@ -64,12 +83,16 @@ static void gflagInit_aug6jun26(void)
 
 void gflagInit(void)
 {
+    if (ICO_JUN26) {
+        gflagInit_jun26();
+        return;
+    }
     if (ICO_NTSC) {
         gflagInit_ntsc();
         return;
     }
-    if (ICO_AUG6JUN26) {
-        gflagInit_aug6jun26();
+    if (ICO_AUG6) {
+        gflagInit_aug6();
         return;
     }
     int keep = gflagChk(379);

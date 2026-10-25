@@ -34,66 +34,83 @@ static ActMail bridgeMain_mes_pal[2] = {{406, actSt20aBridgeSwitch}, {429}}; /* 
 
 static ActMail bridgeMain_mes_ntsc[2] = {{376, actSt20aBridgeSwitch}, {396}}; /* derived name */
 
-static ActMail bridgeMain_mes_aug6jun26[2] = {{372, actSt20aBridgeSwitch},
-                                              {392}}; /* derived name */
+static ActMail bridgeMain_mes_aug6[2] = {{372, actSt20aBridgeSwitch}, {392}}; /* derived name */
+
+static ActMail bridgeMain_mes_jun26[2] = {{356, actSt20aBridgeSwitch}, {376}}; /* derived name */
 
 #define bridgeMain_mes                                                                             \
-    PAL_NTSC_AUG6JUN26(bridgeMain_mes_pal, bridgeMain_mes_ntsc, bridgeMain_mes_aug6jun26)
+    PAL_NTSC_AUG6_JUN26(bridgeMain_mes_pal, bridgeMain_mes_ntsc, bridgeMain_mes_aug6,              \
+                        bridgeMain_mes_jun26)
 
 static ActMail bridge_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail bridge_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail bridge_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail bridge_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-#define bridge_mes PAL_NTSC_AUG6JUN26(bridge_mes_pal, bridge_mes_ntsc, bridge_mes_aug6jun26)
+static ActMail bridge_mes_jun26[2] = {{377}, {376}}; /* derived name */
+
+#define bridge_mes                                                                                 \
+    PAL_NTSC_AUG6_JUN26(bridge_mes_pal, bridge_mes_ntsc, bridge_mes_aug6, bridge_mes_jun26)
 
 static ActMail bridgeSwitch_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail bridgeSwitch_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail bridgeSwitch_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail bridgeSwitch_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+static ActMail bridgeSwitch_mes_jun26[2] = {{377}, {376}}; /* derived name */
 
 #define bridgeSwitch_mes                                                                           \
-    PAL_NTSC_AUG6JUN26(bridgeSwitch_mes_pal, bridgeSwitch_mes_ntsc, bridgeSwitch_mes_aug6jun26)
+    PAL_NTSC_AUG6_JUN26(bridgeSwitch_mes_pal, bridgeSwitch_mes_ntsc, bridgeSwitch_mes_aug6,        \
+                        bridgeSwitch_mes_jun26)
 
 static ActMail gondolaMain_mes_pal[2] = {{407, actSt20aGondolaSwitch}, {429}}; /* derived name */
 
 static ActMail gondolaMain_mes_ntsc[2] = {{377, actSt20aGondolaSwitch}, {396}}; /* derived name */
 
-static ActMail gondolaMain_mes_aug6jun26[2] = {{373, actSt20aGondolaSwitch},
-                                               {392}}; /* derived name */
+static ActMail gondolaMain_mes_aug6[2] = {{373, actSt20aGondolaSwitch}, {392}}; /* derived name */
+
+static ActMail gondolaMain_mes_jun26[2] = {{357, actSt20aGondolaSwitch}, {376}}; /* derived name */
 
 #define gondolaMain_mes                                                                            \
-    PAL_NTSC_AUG6JUN26(gondolaMain_mes_pal, gondolaMain_mes_ntsc, gondolaMain_mes_aug6jun26)
+    PAL_NTSC_AUG6_JUN26(gondolaMain_mes_pal, gondolaMain_mes_ntsc, gondolaMain_mes_aug6,           \
+                        gondolaMain_mes_jun26)
 
 static ActMail gondola_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail gondola_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail gondola_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail gondola_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-#define gondola_mes PAL_NTSC_AUG6JUN26(gondola_mes_pal, gondola_mes_ntsc, gondola_mes_aug6jun26)
+static ActMail gondola_mes_jun26[2] = {{377}, {376}}; /* derived name */
+
+#define gondola_mes                                                                                \
+    PAL_NTSC_AUG6_JUN26(gondola_mes_pal, gondola_mes_ntsc, gondola_mes_aug6, gondola_mes_jun26)
 
 static ActMail gondolaSwitchUp_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail gondolaSwitchUp_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail gondolaSwitchUp_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail gondolaSwitchUp_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+static ActMail gondolaSwitchUp_mes_jun26[2] = {{377}, {376}}; /* derived name */
 
 #define gondolaSwitchUp_mes                                                                        \
-    PAL_NTSC_AUG6JUN26(gondolaSwitchUp_mes_pal, gondolaSwitchUp_mes_ntsc,                          \
-                       gondolaSwitchUp_mes_aug6jun26)
+    PAL_NTSC_AUG6_JUN26(gondolaSwitchUp_mes_pal, gondolaSwitchUp_mes_ntsc,                         \
+                        gondolaSwitchUp_mes_aug6, gondolaSwitchUp_mes_jun26)
 
 static ActMail gondolaSwitchDown_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail gondolaSwitchDown_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail gondolaSwitchDown_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail gondolaSwitchDown_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+static ActMail gondolaSwitchDown_mes_jun26[2] = {{377}, {376}}; /* derived name */
 
 #define gondolaSwitchDown_mes                                                                      \
-    PAL_NTSC_AUG6JUN26(gondolaSwitchDown_mes_pal, gondolaSwitchDown_mes_ntsc,                      \
-                       gondolaSwitchDown_mes_aug6jun26)
+    PAL_NTSC_AUG6_JUN26(gondolaSwitchDown_mes_pal, gondolaSwitchDown_mes_ntsc,                     \
+                        gondolaSwitchDown_mes_aug6, gondolaSwitchDown_mes_jun26)
 
 static ActMail gondolaDown_mes_pal[2] = {{430}, {429}}; /* derived name */
 
@@ -117,33 +134,43 @@ static ActMail exit_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail exit_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail exit_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail exit_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-#define exit_mes PAL_NTSC_AUG6JUN26(exit_mes_pal, exit_mes_ntsc, exit_mes_aug6jun26)
+static ActMail exit_mes_jun26[2] = {{377}, {376}}; /* derived name */
+
+#define exit_mes PAL_NTSC_AUG6_JUN26(exit_mes_pal, exit_mes_ntsc, exit_mes_aug6, exit_mes_jun26)
 
 static ActMail ene_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail ene_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail ene_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail ene_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-#define ene_mes PAL_NTSC_AUG6JUN26(ene_mes_pal, ene_mes_ntsc, ene_mes_aug6jun26)
+static ActMail ene_mes_jun26[2] = {{377}, {376}}; /* derived name */
+
+#define ene_mes PAL_NTSC_AUG6_JUN26(ene_mes_pal, ene_mes_ntsc, ene_mes_aug6, ene_mes_jun26)
 
 static ActMail fence_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail fence_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail fence_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail fence_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-#define fence_mes PAL_NTSC_AUG6JUN26(fence_mes_pal, fence_mes_ntsc, fence_mes_aug6jun26)
+static ActMail fence_mes_jun26[2] = {{377}, {376}}; /* derived name */
+
+#define fence_mes                                                                                  \
+    PAL_NTSC_AUG6_JUN26(fence_mes_pal, fence_mes_ntsc, fence_mes_aug6, fence_mes_jun26)
 
 static ActMail fence2_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail fence2_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail fence2_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail fence2_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-#define fence2_mes PAL_NTSC_AUG6JUN26(fence2_mes_pal, fence2_mes_ntsc, fence2_mes_aug6jun26)
+static ActMail fence2_mes_jun26[2] = {{377}, {376}}; /* derived name */
+
+#define fence2_mes                                                                                 \
+    PAL_NTSC_AUG6_JUN26(fence2_mes_pal, fence2_mes_ntsc, fence2_mes_aug6, fence2_mes_jun26)
 
 static ActMail fenceDownChk_mes_pal[2] = {{430}, {429}}; /* derived name */
 
@@ -187,11 +214,11 @@ static ActMail hint1_mes[2] = {{430}, {429}}; /* derived name */
 
 void actSt20aInit(void)
 {
-    if (gflagChk(PAL_NTSC_AUG6JUN26(315, 288, 287)) == 0) {
-        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(148, 144, 128, 127), 0, 0);
+    if (gflagChk(PAL_NTSC_AUG6_JUN26(315, 288, 287, 275)) == 0) {
+        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6_JUN26(148, 144, 128, 127, 114), 0, 0);
         SetWayGroupActive(4, 0);
     } else {
-        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(148, 144, 128, 127), 0, -1);
+        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6_JUN26(148, 144, 128, 127, 114), 0, -1);
         SetWayGroupActive(4, 1);
     }
 }
@@ -223,6 +250,10 @@ unsigned int st20a_yure = 0;
 
 unsigned char st20a_yure_vol = 0;
 
+void actSt20aBridgeMain(GObj *volatile self);
+inline void actSt20aBridgeSwitch(GObj *volatile self);
+void actSt20aBridgeDown(GObj *volatile self);
+
 static void actSt20aBridgeDown_ntsc(GObj *volatile self)
 {
     lt_switch_layout(51);
@@ -252,25 +283,37 @@ static void actSt20aBridgeDown_ntsc(GObj *volatile self)
 static void actSt20aBridgeDown_aug6jun26(GObj *volatile self)
 {
     lt_switch_layout(51);
-    scpSleepEnemyAll();
-    gflagOn(287);
-    gflagOff(357);
-    _ACTWait(30);
-    scpAdpcmPlayRequestFunc(69, &brg20a, 1, 1, 1);
-    while (brg20a == 0) {
-        _ACTWait(1);
+    if (ICO_JUN26) {
+        gflagOn(275);
+    } else {
+        scpSleepEnemyAll();
+        gflagOn(287);
+        gflagOff(357);
     }
-    stage_SetAnimation(127, 1, 0);
+    _ACTWait(30);
+    if (ICO_JUN26) {
+        scpAdpcmPlayRequestFunc(64, 0, 1, 1, 1);
+        _ACTWait(30);
+        stage_SetAnimation(114, 1, 0);
+    } else {
+        scpAdpcmPlayRequestFunc(69, &brg20a, 1, 1, 1);
+        while (brg20a == 0) {
+            _ACTWait(1);
+        }
+        stage_SetAnimation(127, 1, 0);
+    }
     st20a_yure = iosPadActRequest(boyPad, 9);
     st20a_yure_vol = 128;
     iosPadActVolumeSet(st20a_yure, 128);
-    while (stage_CheckAnimationFinish(127) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JUN26(127, 114)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
     iosPadActStop(st20a_yure);
     SetWayGroupActive(4, 1);
-    scpWakeupEnemyAll();
+    if (!ICO_JUN26) {
+        scpWakeupEnemyAll();
+    }
     scpBoyControlReadDisable = 0;
     lt_switch_layout(50);
 }
@@ -321,6 +364,11 @@ void actSt20aBridgeDown(GObj *volatile self)
     lt_switch_layout(PAL_JPNKORCN(54, 51));
 }
 
+void actSt20aGondolaMain(GObj *volatile self);
+inline void actSt20aGondolaSwitch(GObj *volatile self);
+void actSt20aGondolaDown(GObj *volatile self);
+void actSt20aGondolaUp(GObj *volatile self);
+
 static void actSt20aGondolaDown_ntsc(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
@@ -355,7 +403,42 @@ static void actSt20aGondolaDown_ntsc(GObj *volatile self)
     _ACTWait(0);
 }
 
-static void actSt20aGondolaDown_aug6jun26(GObj *volatile self)
+static void actSt20aGondolaDown_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    static ActMail gondolaDown_mes_l[2] = {{377}, {376}}; /* derived name */
+
+    SetGirlDangerGObj(boyGObj);
+    scpAdpcmPlayRequestFunc(62, &gondola_down, 1, 1, 1);
+    while (gondola_down == 0) {
+        _ACTWait(1);
+    }
+    stage_SetAnimation(113, 1, 0);
+    gflagOn(276);
+    while (stage_CheckAnimationFrame(113, 150, 0) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    iosPadActRequest(boyPad, 17);
+    while (stage_CheckAnimationFrame(113, 500, 1) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    iosPadActRequest(boyPad, 16);
+    if (gondola_down != 0) {
+        scpAdpcmFadeClose(gondola_down, 256);
+    }
+    while (scpAdpcmCloseChk(gondola_down) != 0) {
+        _ACTWait(1);
+    }
+    ClearGirlDangerGObj();
+    gondolaDown_mes_l[0].func = actSt20aGondolaMain;
+    sub->mail = gondolaDown_mes_l;
+    ACTSendMailCorrect(self, 377);
+    _ACTWait(0);
+}
+
+static void actSt20aGondolaDown_aug6(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
 
@@ -391,12 +474,16 @@ static void actSt20aGondolaDown_aug6jun26(GObj *volatile self)
 
 void actSt20aGondolaDown(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aGondolaDown_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actSt20aGondolaDown_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actSt20aGondolaDown_aug6jun26(self);
+    if (ICO_AUG6) {
+        actSt20aGondolaDown_aug6(self);
         return;
     }
     Act *sub = GOBJ_ACT(self);
@@ -463,7 +550,40 @@ static void actSt20aGondolaUp_ntsc(GObj *volatile self)
     _ACTWait(0);
 }
 
-static void actSt20aGondolaUp_aug6jun26(GObj *volatile self)
+static void actSt20aGondolaUp_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    static ActMail gondolaUp_mes_l[2] = {{377}, {376}}; /* derived name */
+
+    scpAdpcmPlayRequestFunc(63, &gondola_up, 1, 1, 1);
+    while (gondola_up == 0) {
+        _ACTWait(1);
+    }
+    stage_SetAnimation(113, 1, 500);
+    gflagOff(276);
+    while (stage_CheckAnimationFrame(113, 820, 0) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    iosPadActRequest(boyPad, 17);
+    while (stage_CheckAnimationFrame(113, 1000, 1) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    iosPadActRequest(boyPad, 16);
+    if (gondola_up != 0) {
+        scpAdpcmFadeClose(gondola_up, 256);
+    }
+    while (scpAdpcmCloseChk(gondola_up) != 0) {
+        _ACTWait(1);
+    }
+    gondolaUp_mes_l[0].func = actSt20aGondolaMain;
+    sub->mail = gondolaUp_mes_l;
+    ACTSendMailCorrect(self, 377);
+    _ACTWait(0);
+}
+
+static void actSt20aGondolaUp_aug6(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
 
@@ -497,12 +617,16 @@ static void actSt20aGondolaUp_aug6jun26(GObj *volatile self)
 
 void actSt20aGondolaUp(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aGondolaUp_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actSt20aGondolaUp_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actSt20aGondolaUp_aug6jun26(self);
+    if (ICO_AUG6) {
+        actSt20aGondolaUp_aug6(self);
         return;
     }
     Act *sub = GOBJ_ACT(self);
@@ -535,8 +659,49 @@ void actSt20aGondolaUp(GObj *volatile self)
     _ACTWait(0);
 }
 
+static void actSt20aFence_jun26(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *sub = (Act *)actInitialize(self);
+
+    _ACTWait(1);
+    if (gflagChk(270) == 0) {
+        SetWayGroupActive(19, 1);
+
+        scpSearchGobj(1766)->active = 0;
+        scpSearchGobj(1767)->active = 0;
+
+        scpLinkBGAtoLayoutedTarget(1764, 115);
+        stage_SetAnimation(115, 0, 30);
+
+        fence_mes[0].func = actSt20aFenceUpChk;
+        sub->mail = fence_mes;
+        ACTSendMailCorrect(self, 377);
+        _ACTWait(0);
+    } else {
+        SetWayGroupActive(19, 0);
+
+        scpSearchGobj(1764)->active = 0;
+        scpSearchGobj(1765)->active = 0;
+
+        gflagOff(270);
+
+        scpLinkBGAtoLayoutedTarget(1766, 115);
+        stage_SetAnimation(115, 0, 0);
+
+        fence2_mes[0].func = actSt20aFenceDownChk2;
+        sub->mail = fence2_mes;
+        ACTSendMailCorrect(self, 377);
+        _ACTWait(0);
+    }
+}
+
 void actSt20aFence(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aFence_jun26(self);
+        return;
+    }
     GObj *x = self;
     Act *sub = (Act *)actInitialize(self);
 
@@ -657,7 +822,28 @@ static void actSt20aFenceDownChk_ntsc(GObj *volatile self)
     _ACTWait(0);
 }
 
-static void actSt20aFenceDownChk_aug6jun26(GObj *volatile self)
+inline static void actSt20aFenceDownChk_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    static ActMail fenceDownChk_mes_l[2] = {{377}, {376}}; /* derived name */
+
+    while (scpTriggerBall(self, scpSearchGobj(1764), 5.0f) == 0) {
+        _ACTWait(1);
+    }
+    stage_SetAnimation(115, 1, 0);
+    while (stage_CheckAnimationFrame(115, 30, 1) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    SetWayGroupActive(19, 1);
+    gflagOff(280);
+    fenceDownChk_mes_l[0].func = actSt20aFenceUpChk;
+    sub->mail = fenceDownChk_mes_l;
+    ACTSendMailCorrect(self, 377);
+    _ACTWait(0);
+}
+
+static void actSt20aFenceDownChk_aug6(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
 
@@ -684,12 +870,16 @@ static void actSt20aFenceDownChk_aug6jun26(GObj *volatile self)
 
 void actSt20aFenceDownChk(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aFenceDownChk_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actSt20aFenceDownChk_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actSt20aFenceDownChk_aug6jun26(self);
+    if (ICO_AUG6) {
+        actSt20aFenceDownChk_aug6(self);
         return;
     }
     Act *sub = GOBJ_ACT(self);
@@ -748,7 +938,28 @@ static void actSt20aFenceUpChk_ntsc(GObj *volatile self)
     _ACTWait(0);
 }
 
-static void actSt20aFenceUpChk_aug6jun26(GObj *volatile self)
+inline static void actSt20aFenceUpChk_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    static ActMail fenceUpChk_mes_l[2] = {{377}, {376}}; /* derived name */
+
+    while (scpTriggerBall(self, scpSearchGobj(1764), 5.0f) != 0) {
+        _ACTWait(1);
+    }
+    SetWayGroupActive(19, 0);
+    stage_SetAnimation(115, 1, 31);
+    while (stage_CheckAnimationFinish(115) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    gflagOn(280);
+    fenceUpChk_mes_l[0].func = actSt20aFenceDownChk;
+    sub->mail = fenceUpChk_mes_l;
+    ACTSendMailCorrect(self, 377);
+    _ACTWait(0);
+}
+
+static void actSt20aFenceUpChk_aug6(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
 
@@ -775,12 +986,16 @@ static void actSt20aFenceUpChk_aug6jun26(GObj *volatile self)
 
 void actSt20aFenceUpChk(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aFenceUpChk_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actSt20aFenceUpChk_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actSt20aFenceUpChk_aug6jun26(self);
+    if (ICO_AUG6) {
+        actSt20aFenceUpChk_aug6(self);
         return;
     }
     Act *sub = GOBJ_ACT(self);
@@ -839,7 +1054,28 @@ static void actSt20aFenceDownChk2_ntsc(GObj *volatile self)
     _ACTWait(0);
 }
 
-static void actSt20aFenceDownChk2_aug6jun26(GObj *volatile self)
+inline static void actSt20aFenceDownChk2_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    static ActMail fenceDownChk2_mes_l[2] = {{377}, {376}}; /* derived name */
+
+    while (scpTriggerBall(self, scpSearchGobj(1766), 5.0f) == 0) {
+        _ACTWait(1);
+    }
+    stage_SetAnimation(115, 1, 0);
+    while (stage_CheckAnimationFrame(115, 30, 1) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    SetWayGroupActive(19, 1);
+    gflagOff(280);
+    fenceDownChk2_mes_l[0].func = actSt20aFenceUpChk2;
+    sub->mail = fenceDownChk2_mes_l;
+    ACTSendMailCorrect(self, 377);
+    _ACTWait(0);
+}
+
+static void actSt20aFenceDownChk2_aug6(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
 
@@ -876,12 +1112,16 @@ static void actSt20aFenceDownChk2_aug6jun26(GObj *volatile self)
 
 void actSt20aFenceDownChk2(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aFenceDownChk2_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actSt20aFenceDownChk2_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actSt20aFenceDownChk2_aug6jun26(self);
+    if (ICO_AUG6) {
+        actSt20aFenceDownChk2_aug6(self);
         return;
     }
     Act *sub = GOBJ_ACT(self);
@@ -940,7 +1180,28 @@ static void actSt20aFenceUpChk2_ntsc(GObj *volatile self)
     _ACTWait(0);
 }
 
-static void actSt20aFenceUpChk2_aug6jun26(GObj *volatile self)
+inline static void actSt20aFenceUpChk2_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    static ActMail fenceUpChk2_mes_l[2] = {{377}, {376}}; /* derived name */
+
+    while (scpTriggerBall(self, scpSearchGobj(1766), 5.0f) != 0) {
+        _ACTWait(1);
+    }
+    SetWayGroupActive(19, 0);
+    stage_SetAnimation(115, 1, 31);
+    while (stage_CheckAnimationFinish(115) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    gflagOn(280);
+    fenceUpChk2_mes_l[0].func = actSt20aFenceDownChk2;
+    sub->mail = fenceUpChk2_mes_l;
+    ACTSendMailCorrect(self, 377);
+    _ACTWait(0);
+}
+
+static void actSt20aFenceUpChk2_aug6(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
 
@@ -967,12 +1228,16 @@ static void actSt20aFenceUpChk2_aug6jun26(GObj *volatile self)
 
 void actSt20aFenceUpChk2(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aFenceUpChk2_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actSt20aFenceUpChk2_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actSt20aFenceUpChk2_aug6jun26(self);
+    if (ICO_AUG6) {
+        actSt20aFenceUpChk2_aug6(self);
         return;
     }
     Act *sub = GOBJ_ACT(self);
@@ -1002,8 +1267,26 @@ void actSt20aFenceUpChk2(GObj *volatile self)
     _ACTWait(0);
 }
 
+static inline void actSt20aBridge_jun26(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *sub = (Act *)actInitialize(self);
+
+    _ACTWait(1);
+    if (gflagChk(275) == 0) {
+        bridge_mes[0].func = actSt20aBridgeMain;
+        sub->mail = bridge_mes;
+        ACTSendMailCorrect(self, 377);
+        _ACTWait(0);
+    }
+}
+
 void actSt20aBridge(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aBridge_jun26(self);
+        return;
+    }
     GObj *x = self;
     Act *sub = (Act *)actInitialize(self);
 
@@ -1016,8 +1299,31 @@ void actSt20aBridge(GObj *volatile self)
     }
 }
 
+static inline void actSt20aGondola_jun26(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *sub = (Act *)actInitialize(self);
+
+    _ACTWait(1);
+    if (gflagChk(276) != 0) {
+        stage_SetAnimation(113, 0, 0);
+        _ACTWait(10);
+        stage_SetAnimation(113, 0, 500);
+    } else {
+        stage_SetAnimation(113, 0, 0);
+    }
+    gondola_mes[0].func = actSt20aGondolaMain;
+    sub->mail = gondola_mes;
+    ACTSendMailCorrect(self, 377);
+    _ACTWait(0);
+}
+
 void actSt20aGondola(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aGondola_jun26(self);
+        return;
+    }
     GObj *x = self;
     Act *sub = (Act *)actInitialize(self);
 
@@ -1035,8 +1341,24 @@ void actSt20aGondola(GObj *volatile self)
     _ACTWait(0);
 }
 
+static inline void actSt20aExit_jun26(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *sub = (Act *)actInitialize(self);
+
+    _ACTWait(1);
+    exit_mes[0].func = actSt20aExitChk;
+    sub->mail = exit_mes;
+    ACTSendMailCorrect(self, 377);
+    _ACTWait(0);
+}
+
 void actSt20aExit(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aExit_jun26(self);
+        return;
+    }
     GObj *x = self;
     Act *sub = (Act *)actInitialize(self);
 
@@ -1047,8 +1369,28 @@ void actSt20aExit(GObj *volatile self)
     _ACTWait(0);
 }
 
+static inline void actSt20aElv_jun26(GObj *volatile self)
+{
+    GObj *x = self;
+
+    actInitialize(self);
+    _ACTWait(1);
+    if (gflagChk(270) != 0) {
+        scpSearchGobj(1764)->active = 0;
+        scpSearchGobj(1765)->active = 0;
+        gflagOff(270);
+    } else {
+        scpSearchGobj(1766)->active = 0;
+        scpSearchGobj(1767)->active = 0;
+    }
+}
+
 void actSt20aElv(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aElv_jun26(self);
+        return;
+    }
     GObj *x = self;
 
     actInitialize(self);
@@ -1063,8 +1405,26 @@ void actSt20aElv(GObj *volatile self)
     }
 }
 
+static inline void actSt20aEne_jun26(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *sub = (Act *)actInitialize(self);
+
+    _ACTWait(1);
+    if (gflagChk(278) == 0) {
+        ene_mes[0].func = actSt20aEneChk;
+        sub->mail = ene_mes;
+        ACTSendMailCorrect(self, 377);
+        _ACTWait(0);
+    }
+}
+
 void actSt20aEne(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aEne_jun26(self);
+        return;
+    }
     GObj *x = self;
     Act *sub = (Act *)actInitialize(self);
 
@@ -1077,8 +1437,31 @@ void actSt20aEne(GObj *volatile self)
     }
 }
 
+static inline void actSt20aEnemy1_jun26(GObj *volatile self)
+{
+    GObj *x = self;
+
+    actInitialize(self);
+    _ACTWait(1);
+    Generator_Mask(self);
+    while (gflagChk(279) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    Generator_MaskOff(self);
+    Generator_Call(self);
+    _ACTWait(60);
+    Generator_Call(self);
+    _ACTWait(60);
+    Generator_Call(self);
+}
+
 void actSt20aEnemy1(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aEnemy1_jun26(self);
+        return;
+    }
     GObj *x = self;
 
     actInitialize(self);
@@ -1096,8 +1479,31 @@ void actSt20aEnemy1(GObj *volatile self)
     Generator_Call(self);
 }
 
+static inline void actSt20aEnemy2_jun26(GObj *volatile self)
+{
+    GObj *x = self;
+
+    actInitialize(self);
+    _ACTWait(1);
+    Generator_Mask(self);
+    while (gflagChk(279) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    Generator_MaskOff(self);
+    Generator_Call(self);
+    _ACTWait(60);
+    Generator_Call(self);
+    _ACTWait(60);
+    Generator_Call(self);
+}
+
 void actSt20aEnemy2(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aEnemy2_jun26(self);
+        return;
+    }
     GObj *x = self;
 
     actInitialize(self);
@@ -1160,8 +1566,7 @@ void actSt20aGirlPos(GObj *volatile self)
     }
 }
 
-/* the actor entry's parameter is its frame home: the thread switch writes it */
-void actSt20aBridgeMain(GObj *volatile self)
+static inline void actSt20aBridgeMain_jun26(GObj *volatile self)
 {
     GOBJ_ACT(self)->mainMail = bridgeMain_mes;
     scpBoyControlReadDisable = 0;
@@ -1170,8 +1575,38 @@ void actSt20aBridgeMain(GObj *volatile self)
     }
 }
 
+/* the actor entry's parameter is its frame home: the thread switch writes it */
+void actSt20aBridgeMain(GObj *volatile self)
+{
+    if (ICO_JUN26) {
+        actSt20aBridgeMain_jun26(self);
+        return;
+    }
+    GOBJ_ACT(self)->mainMail = bridgeMain_mes;
+    scpBoyControlReadDisable = 0;
+    while (1) {
+        _ACTWait(1);
+    }
+}
+
+static inline void actSt20aBridgeSwitch_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+
+    scpBoyControlReadDisable = 1;
+    bridgeSwitch_mes[0].func = actSt20aBridgeDown;
+    sub->mainMail = 0;
+    sub->mail = bridgeSwitch_mes;
+    ACTSendMailCorrect(self, 377);
+    _ACTWait(0);
+}
+
 void actSt20aBridgeSwitch(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aBridgeSwitch_jun26(self);
+        return;
+    }
     Act *sub = GOBJ_ACT(self);
 
     scpBoyControlReadDisable = 1;
@@ -1201,8 +1636,25 @@ static void actSt20aBridgeDownSub(GObj *volatile self)
     _ACTWait(0);
 }
 
+static inline void actSt20aGondolaMain_jun26(GObj *volatile self)
+{
+    Act *p = GOBJ_ACT(self);
+
+    lt_switch_layout(50);
+    scpBoyControlReadDisable = 0;
+    scpWakeupEnemyAll();
+    p->mainMail = gondolaMain_mes;
+    while (1) {
+        _ACTWait(1);
+    }
+}
+
 void actSt20aGondolaMain(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aGondolaMain_jun26(self);
+        return;
+    }
     Act *p = GOBJ_ACT(self);
 
     lt_switch_layout(PAL_JPNKORCN_NTSCAUG6JUN26(54, 51, 50));
@@ -1214,8 +1666,32 @@ void actSt20aGondolaMain(GObj *volatile self)
     }
 }
 
+static inline void actSt20aGondolaSwitch_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+
+    sub->mainMail = 0;
+    lt_switch_layout(51);
+    scpBoyControlReadDisable = 1;
+    scpSleepEnemyAll();
+    if (gflagChk(276) != 0) {
+        gondolaSwitchUp_mes[0].func = actSt20aGondolaUp;
+        sub->mail = gondolaSwitchUp_mes;
+        ACTSendMailCorrect(self, 377);
+        _ACTWait(0);
+    }
+    gondolaSwitchDown_mes[0].func = actSt20aGondolaDown;
+    sub->mail = gondolaSwitchDown_mes;
+    ACTSendMailCorrect(self, 377);
+    _ACTWait(0);
+}
+
 void actSt20aGondolaSwitch(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aGondolaSwitch_jun26(self);
+        return;
+    }
     Act *sub = GOBJ_ACT(self);
 
     sub->mainMail = 0;
@@ -1234,8 +1710,26 @@ void actSt20aGondolaSwitch(GObj *volatile self)
     _ACTWait(0);
 }
 
+static inline void actSt20aExitChk_jun26(GObj *volatile self)
+{
+    while (scpTriggerBall(self, boyGObj, 400.0f) == 0 ||
+           scpTriggerFloorAttr(boyGObj, 0x2000000) == 0) {
+        _ACTWait(1);
+    }
+    gflagOn(277);
+    gflagOff(270);
+    if (girlGObj != 0 && scpTriggerFloorAttr(girlGObj, 0x2000000) != 0) {
+        RequestStageChange(4, boyGObj, girlGObj, 16.0f, 16.0f);
+    }
+    RequestStageChange(4, boyGObj, 0, 16.0f, 16.0f);
+}
+
 void actSt20aExitChk(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aExitChk_jun26(self);
+        return;
+    }
     while (scpTriggerBall(self, boyGObj, 400.0f) == 0 ||
            scpTriggerFloorAttr(boyGObj, 0x2000000) == 0) {
         _ACTWait(1);
@@ -1249,8 +1743,31 @@ void actSt20aExitChk(GObj *volatile self)
     RequestStageChange(4, boyGObj, 0, 2.0f, 8.0f);
 }
 
+inline void actSt20aEneChk(GObj *volatile self);
+void actSt20aFenceDownChk(GObj *volatile self);
+inline void actSt20aFenceUpChk(GObj *volatile self);
+void actSt20aFenceDownChk2(GObj *volatile self);
+inline void actSt20aFenceUpChk2(GObj *volatile self);
+
+static inline void actSt20aEneChk_jun26(GObj *volatile self)
+{
+    if (girlGObj == 0) {
+        _ACTWait(0);
+    }
+    while (gflagChk(275) == 0 || scpTriggerFloorAttr(girlGObj, 0x3000000) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    gflagOn(278);
+    gflagOn(279);
+}
+
 void actSt20aEneChk(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt20aEneChk_jun26(self);
+        return;
+    }
     if (girlGObj == 0) {
         _ACTWait(0);
     }

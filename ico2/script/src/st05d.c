@@ -39,9 +39,12 @@ static ActMail door2Up_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail door2Up_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail door2Up_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail door2Up_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-#define door2Up_mes PAL_NTSC_AUG6JUN26(door2Up_mes_pal, door2Up_mes_ntsc, door2Up_mes_aug6jun26)
+static ActMail door2Up_mes_jun26[2] = {{377}, {376}}; /* derived name */
+
+#define door2Up_mes                                                                                \
+    PAL_NTSC_AUG6_JUN26(door2Up_mes_pal, door2Up_mes_ntsc, door2Up_mes_aug6, door2Up_mes_jun26)
 
 static ActMail door2UpChk_mes_pal[2] = {{430}, {429}}; /* derived name */
 
@@ -65,17 +68,37 @@ static ActMail ene_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail ene_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail ene_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail ene_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-#define ene_mes PAL_NTSC_AUG6JUN26(ene_mes_pal, ene_mes_ntsc, ene_mes_aug6jun26)
+static ActMail ene_mes_jun26[2] = {{377}, {376}}; /* derived name */
+
+#define ene_mes PAL_NTSC_AUG6_JUN26(ene_mes_pal, ene_mes_ntsc, ene_mes_aug6, ene_mes_jun26)
 
 static ActMail crestHint_mes[2] = {{430}, {429}}; /* derived name */
 
 void actSt05dDoor2DownChk(GObj *volatile self);
 void actSt05dDoor2UpChk(GObj *volatile self);
 
+static void actSt05dDoor2_jun26(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *act = actInitialize(self);
+
+    _ACTWait(1);
+
+    stage_SetAnimation(282, 0, 0);
+    door2Up_mes[0].func = actSt05dDoor2UpChk;
+    act->mail = door2Up_mes;
+    ACTSendMailCorrect(self, 377);
+    _ACTWait(0);
+}
+
 void actSt05dDoor2(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt05dDoor2_jun26(self);
+        return;
+    }
     GObj *x = self;
     Act *act = actInitialize(self);
 
@@ -98,8 +121,49 @@ void actSt05dDoor2(GObj *volatile self)
     }
 }
 
+static void actSt05dDoor2UpChk_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    static ActMail door2UpChk_mes_l[2] = {{377}, {376}}; /* derived name */
+    long long buf[2];
+
+    while (scpTriggerFloorAttrTargetMan(self, 0x2000000) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(15);
+
+    actCreateSubThread(actSt05dDoor2UpEffect, 21);
+
+    scpWakeupItemWithBoundary(-603.0f, -1773.0f, -5680.0f, 100.0f);
+    scpWakeupItemWithBoundary(-815.0f, -1773.0f, -5676.0f, 100.0f);
+
+    stage_SetAnimation(282, 1, 0);
+
+    buf[0] = door2UpChkPos.d[0];
+    buf[1] = door2UpChkPos.d[1];
+    soundSeDefPlay(1170, 0, (float *)buf, 1);
+    _ACTWait(30);
+    soundSeDefPlay(1171, 0, (float *)buf, 1);
+    _ACTWait(30);
+    soundSeDefPlay(1172, 0, (float *)buf, 1);
+
+    while (stage_CheckAnimationFinish(282) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    door2UpChk_mes_l[0].func = actSt05dDoor2DownChk;
+    sub->mail = door2UpChk_mes_l;
+    ACTSendMailCorrect(self, 377);
+    _ACTWait(0);
+}
+
 void actSt05dDoor2UpChk(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt05dDoor2UpChk_jun26(self);
+        return;
+    }
     Act *sub = GOBJ_ACT(self);
     long long buf[2];
 
@@ -133,8 +197,49 @@ void actSt05dDoor2UpChk(GObj *volatile self)
     _ACTWait(0);
 }
 
+static void actSt05dDoor2DownChk_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    static ActMail door2DownChk_mes_l[2] = {{377}, {376}}; /* derived name */
+    long long buf[2];
+
+    while (scpTriggerFloorAttrTargetMan(self, 0x2000000) != 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(15);
+
+    actCreateSubThread(actSt05dDoor2DownEffect, 21);
+
+    scpWakeupItemWithBoundary(-603.0f, -1773.0f, -5680.0f, 100.0f);
+    scpWakeupItemWithBoundary(-815.0f, -1773.0f, -5676.0f, 100.0f);
+
+    stage_SetAnimation(283, 1, 0);
+
+    buf[0] = door2UpChkPos.d[0];
+    buf[1] = door2UpChkPos.d[1];
+    soundSeDefPlay(1170, 0, (float *)buf, 1);
+    _ACTWait(30);
+    soundSeDefPlay(1171, 0, (float *)buf, 1);
+    _ACTWait(30);
+    soundSeDefPlay(1172, 0, (float *)buf, 1);
+
+    while (stage_CheckAnimationFinish(283) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    door2DownChk_mes_l[0].func = actSt05dDoor2UpChk;
+    sub->mail = door2DownChk_mes_l;
+    ACTSendMailCorrect(self, 377);
+    _ACTWait(0);
+}
+
 void actSt05dDoor2DownChk(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt05dDoor2DownChk_jun26(self);
+        return;
+    }
     Act *sub = GOBJ_ACT(self);
     long long buf[2];
 
@@ -188,10 +293,10 @@ static void actSt05dEne_aug6jun26(GObj *volatile self)
     Act *act = actInitialize(self);
     _ACTWait(1);
 
-    if (gflagChk(153) == 0) {
+    if (gflagChk(PAL_JUN26(153, 146)) == 0) {
         ene_mes[0].func = actSt05dEneChk;
         act->mail = ene_mes;
-        ACTSendMailCorrect(self, 393);
+        ACTSendMailCorrect(self, PAL_JUN26(393, 377));
         _ACTWait(0);
     }
 }
@@ -257,7 +362,7 @@ static void actSt05dEnemy1_aug6jun26(GObj *volatile self)
     _ACTWait(1);
     Generator_Mask(self);
 
-    while (gflagChk(154) == 0) {
+    while (gflagChk(PAL_JUN26(154, 147)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -303,7 +408,7 @@ void actSt05dEnemy2(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
     Generator_Mask(self);
-    while (gflagChk(PAL_NTSCAUG6JUN26(172, 154)) == 0) {
+    while (gflagChk(PAL_NTSCAUG6_JUN26(172, 154, 147)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -329,12 +434,21 @@ void actSt05dCrestHint(GObj *volatile self)
     }
 }
 
-void actSt05dDoor2Event(int x)
+static inline void actSt05dDoor2Event_jun26(int x)
 {
     volatile int local = x;
 }
 
-void actSt05dDoor2UpEffect(GObj *volatile self)
+void actSt05dDoor2Event(int x)
+{
+    if (ICO_JUN26) {
+        actSt05dDoor2Event_jun26(x);
+        return;
+    }
+    volatile int local = x;
+}
+
+static inline void actSt05dDoor2UpEffect_jun26(GObj *volatile self)
 {
     long long b1[2];
     long long b2[2];
@@ -358,7 +472,35 @@ void actSt05dDoor2UpEffect(GObj *volatile self)
     }
 }
 
-void actSt05dDoor2DownEffect(GObj *volatile self)
+void actSt05dDoor2UpEffect(GObj *volatile self)
+{
+    if (ICO_JUN26) {
+        actSt05dDoor2UpEffect_jun26(self);
+        return;
+    }
+    long long b1[2];
+    long long b2[2];
+    long long v0a = door2UpEffectPos.d[0];
+    long long v0b = door2UpEffect2Pos.d[0];
+    int i;
+    for (i = 0; i < 50; i++) {
+        switch (i) {
+        case 0:
+            b1[0] = v0a;
+            b1[1] = door2UpEffectPos.d[1];
+            scpEffectStart((int *)b1, 0);
+            break;
+        case 30:
+            b2[0] = v0b;
+            b2[1] = door2UpEffect2Pos.d[1];
+            scpEffectStart((int *)b2, 0);
+            break;
+        }
+        _ACTWait(1);
+    }
+}
+
+static inline void actSt05dDoor2DownEffect_jun26(GObj *volatile self)
 {
     long long b1[2];
     long long b2[2];
@@ -382,8 +524,53 @@ void actSt05dDoor2DownEffect(GObj *volatile self)
     }
 }
 
+void actSt05dDoor2DownEffect(GObj *volatile self)
+{
+    if (ICO_JUN26) {
+        actSt05dDoor2DownEffect_jun26(self);
+        return;
+    }
+    long long b1[2];
+    long long b2[2];
+    long long v0a = door2UpEffect2Pos.d[0];
+    long long v0b = door2UpEffectPos.d[0];
+    int i;
+    for (i = 0; i < 50; i++) {
+        switch (i) {
+        case 0:
+            b1[0] = v0a;
+            b1[1] = door2UpEffect2Pos.d[1];
+            scpEffectStart((int *)b1, 0);
+            break;
+        case 30:
+            b2[0] = v0b;
+            b2[1] = door2UpEffectPos.d[1];
+            scpEffectStart((int *)b2, 0);
+            break;
+        }
+        _ACTWait(1);
+    }
+}
+
+static inline void actSt05dEneChk_jun26(GObj *volatile self)
+{
+    if (girlGObj == 0) {
+        _ACTWait(0);
+    }
+    while (girlGObj == 0 || gflagChk(145) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    gflagOn(146);
+    gflagOn(147);
+}
+
 void actSt05dEneChk(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt05dEneChk_jun26(self);
+        return;
+    }
     if (girlGObj == 0) {
         _ACTWait(0);
     }

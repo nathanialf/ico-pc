@@ -13,6 +13,7 @@
 #include "generator.h"
 #include "script.h"
 #include "main.h"
+#include "spider.h"
 
 static void actSt04cIntroChkSub(GObj *volatile self);
 
@@ -48,20 +49,20 @@ void actSt04cDoorDownChk(GObj *volatile self)
 
     actCreateSubThread(actSt04cDoorDownEffect, 21);
 
-    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(253, 249, 225, 224), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6_JUN26(253, 249, 225, 224, 199), 1, 0);
 
     pos = doorDownChkPos;
 
     _ACTWait(30);
-    soundSeDefPlay(PAL_NTSCAUG6JUN26(1221, 1197), 0, pos.f, 1);
+    soundSeDefPlay(PAL_NTSCAUG6_JUN26(1221, 1197, 1171), 0, pos.f, 1);
     _ACTWait(30);
-    soundSeDefPlay(PAL_NTSCAUG6JUN26(1222, 1198), 0, pos.f, 1);
+    soundSeDefPlay(PAL_NTSCAUG6_JUN26(1222, 1198, 1172), 0, pos.f, 1);
 
-    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6JUN26(253, 249, 225, 224)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6_JUN26(253, 249, 225, 224, 199)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
-    gflagOn(PAL_NTSCAUG6JUN26(162, 145));
+    gflagOn(PAL_NTSCAUG6_JUN26(162, 145, 138));
 }
 
 /* .sbss: the demo's own end flag, raised by the subthread the wait loop below
@@ -107,14 +108,18 @@ static void actSt04cIntroChk_aug6jun26(GObj *volatile self)
 
     lt_switch_layout(51);
 
-    gflagOff(356);
+    if (ICO_JUN26) {
+        gflagOn(137);
+    } else {
+        gflagOff(356);
 
-    gflagOn(144);
+        gflagOn(144);
+    }
     scpBoyControlReadDisable = 1;
 
-    stage_SetAnimation(318, 1, 0);
+    stage_SetAnimation(PAL_JUN26(318, 286), 1, 0);
 
-    while (stage_CheckAnimationFinish(318) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JUN26(318, 286)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -236,39 +241,41 @@ static void actSt04lDoorChk_aug6jun26(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
-    while (gflagChk(179) == 0) {
-        switch (GetAttackCheckBoundaryManagerStatus(scpSearchGobj(1007))) {
+    while (gflagChk(PAL_JUN26(179, 172)) == 0) {
+        switch (GetAttackCheckBoundaryManagerStatus(scpSearchGobj(PAL_JUN26(1007, 958)))) {
         case 0:
             _ACTWait(1);
             break;
 
         case 1:
-            stage_SetAnimation(203, 1, 0);
-            while (stage_CheckAnimationFinish(203) == 0) {
-                _ACTWait(1);
+            if (!ICO_JUN26) {
+                stage_SetAnimation(203, 1, 0);
+                while (stage_CheckAnimationFinish(203) == 0) {
+                    _ACTWait(1);
+                }
             }
             _ACTWait(1);
             break;
 
         case 2:
-            scpSearchGobj(1007)->active = 0;
+            scpSearchGobj(PAL_JUN26(1007, 958))->active = 0;
 
             lt_switch_layout(51);
 
             scpBoyControlReadDisable = 1;
             scpSleepEnemyAll();
 
-            gflagOn(179);
+            gflagOn(PAL_JUN26(179, 172));
 
-            stage_SetAnimation(202, 1, 0);
+            stage_SetAnimation(PAL_JUN26(202, 182), 1, 0);
 
-            h = soundSeDefPlay(1306, 0, 0, 1);
+            h = soundSeDefPlay(PAL_JUN26(1306, 1275), 0, 0, 1);
 
-            _ACTWait(90);
+            _ACTWait(PAL_JUN26(90, 180));
 
             soundSeDefStop(h);
 
-            soundSeDefPlay(1307, 0, 0, 1);
+            soundSeDefPlay(PAL_JUN26(1307, 1276), 0, 0, 1);
 
             scpWakeupEnemyAll();
             scpBoyControlReadDisable = 0;
@@ -361,8 +368,8 @@ void actSt04cSolarXL(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
-    if (gflagChk(PAL_NTSCAUG6JUN26(138, 124)) == 0) {
-        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(302, 298, 269, 268), -1, -2);
+    if (gflagChk(PAL_NTSCAUG6_JUN26(138, 124, 117)) == 0) {
+        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6_JUN26(302, 298, 269, 268, 242), -1, -2);
     }
 }
 
@@ -370,34 +377,45 @@ static ActMail doorDown_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail doorDown_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail doorDown_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail doorDown_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-#define doorDown_mes PAL_NTSC_AUG6JUN26(doorDown_mes_pal, doorDown_mes_ntsc, doorDown_mes_aug6jun26)
+static ActMail doorDown_mes_jun26[2] = {{377}, {376}}; /* derived name */
+
+#define doorDown_mes                                                                               \
+    PAL_NTSC_AUG6_JUN26(doorDown_mes_pal, doorDown_mes_ntsc, doorDown_mes_aug6, doorDown_mes_jun26)
 
 static ActMail ene_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail ene_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail ene_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail ene_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-#define ene_mes PAL_NTSC_AUG6JUN26(ene_mes_pal, ene_mes_ntsc, ene_mes_aug6jun26)
+static ActMail ene_mes_jun26[2] = {{377}, {376}}; /* derived name */
+
+#define ene_mes PAL_NTSC_AUG6_JUN26(ene_mes_pal, ene_mes_ntsc, ene_mes_aug6, ene_mes_jun26)
 
 static ActMail intro_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail intro_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail intro_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail intro_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-#define intro_mes PAL_NTSC_AUG6JUN26(intro_mes_pal, intro_mes_ntsc, intro_mes_aug6jun26)
+static ActMail intro_mes_jun26[2] = {{377}, {376}}; /* derived name */
+
+#define intro_mes                                                                                  \
+    PAL_NTSC_AUG6_JUN26(intro_mes_pal, intro_mes_ntsc, intro_mes_aug6, intro_mes_jun26)
 
 static ActMail st04lDoor_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail st04lDoor_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail st04lDoor_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail st04lDoor_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+static ActMail st04lDoor_mes_jun26[2] = {{377}, {376}}; /* derived name */
 
 #define st04lDoor_mes                                                                              \
-    PAL_NTSC_AUG6JUN26(st04lDoor_mes_pal, st04lDoor_mes_ntsc, st04lDoor_mes_aug6jun26)
+    PAL_NTSC_AUG6_JUN26(st04lDoor_mes_pal, st04lDoor_mes_ntsc, st04lDoor_mes_aug6,                 \
+                        st04lDoor_mes_jun26)
 
 static void actSt04lDoor_ntsc(GObj *volatile self)
 {
@@ -423,15 +441,15 @@ static void actSt04lDoor_aug6jun26(GObj *volatile self)
     Act *act = actInitialize(self);
     _ACTWait(1);
 
-    if (gflagChk(179) == 0) {
-        stage_SetAnimation(202, 0, 0);
+    if (gflagChk(PAL_JUN26(179, 172)) == 0) {
+        stage_SetAnimation(PAL_JUN26(202, 182), 0, 0);
         st04lDoor_mes[0].func = actSt04lDoorChk;
         act->mail = st04lDoor_mes;
-        ACTSendMailCorrect(self, 393);
+        ACTSendMailCorrect(self, PAL_JUN26(393, 377));
         _ACTWait(0);
     } else {
-        stage_SetAnimation(202, 0, -1);
-        scpSearchGobj(1007)->active = 0;
+        stage_SetAnimation(PAL_JUN26(202, 182), 0, -1);
+        scpSearchGobj(PAL_JUN26(1007, 958))->active = 0;
     }
 }
 
@@ -468,10 +486,10 @@ void actSt04cIntro(GObj *volatile self)
     Act *act = actInitialize(self);
     _ACTWait(1);
 
-    if (gflagChk(PAL_NTSCAUG6JUN26(161, 144)) == 0) {
+    if (gflagChk(PAL_NTSCAUG6_JUN26(161, 144, 137)) == 0) {
         intro_mes[0].func = actSt04cIntroChk;
         act->mail = intro_mes;
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(430, 397, 393, 377));
         _ACTWait(0);
     }
 }
@@ -481,10 +499,10 @@ void actSt04cDoorDown(GObj *volatile self)
     GObj *x = self;
     Act *act = actInitialize(self);
 
-    if (gflagChk(PAL_NTSCAUG6JUN26(162, 145)) == 0) {
+    if (gflagChk(PAL_NTSCAUG6_JUN26(162, 145, 138)) == 0) {
         doorDown_mes[0].func = actSt04cDoorDownChk;
         act->mail = doorDown_mes;
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(430, 397, 393, 377));
         _ACTWait(0);
     }
 }
@@ -495,10 +513,10 @@ void actSt04cEne(GObj *volatile self)
     Act *act = actInitialize(self);
     _ACTWait(1);
 
-    if (gflagChk(PAL_NTSCAUG6JUN26(163, 146)) == 0) {
+    if (gflagChk(PAL_NTSCAUG6_JUN26(163, 146, 139)) == 0) {
         ene_mes[0].func = actSt04cEneChk;
         act->mail = ene_mes;
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(430, 397, 393, 377));
         _ACTWait(0);
     }
 }
@@ -511,7 +529,7 @@ void actSt04cEnemy1(GObj *volatile self)
     _ACTWait(1);
 
     Generator_Mask(self);
-    while (gflagChk(PAL_NTSCAUG6JUN26(164, 147)) == 0) {
+    while (gflagChk(PAL_NTSCAUG6_JUN26(164, 147, 140)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -530,7 +548,7 @@ void actSt04cEnemy2(GObj *volatile self)
     _ACTWait(1);
 
     Generator_Mask(self);
-    while (gflagChk(PAL_NTSCAUG6JUN26(164, 147)) == 0) {
+    while (gflagChk(PAL_NTSCAUG6_JUN26(164, 147, 140)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -548,8 +566,8 @@ void actSt04cWaterXL(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
-    if (gflagChk(PAL_NTSCAUG6JUN26(230, 205)) != 0) {
-        scpSearchGobj(PAL_NTSC_AUG6JUN26(1094, 1006, 1003))->active = 0;
+    if (gflagChk(PAL_NTSCAUG6_JUN26(230, 205, 196)) != 0) {
+        scpSearchGobj(PAL_NTSC_AUG6_JUN26(1094, 1006, 1003, 955))->active = 0;
     }
 }
 
@@ -587,8 +605,28 @@ void actSt04cDoorDownEffect(GObj *volatile self)
     }
 }
 
+static void actSt04cEneChk_jun26(GObj *volatile self)
+{
+    if (girlGObj == 0) {
+        _ACTWait(0);
+    }
+    while (scpTriggerFloorAttr(girlGObj, 0xB000000) == 0) {
+        _ACTWait(1);
+    }
+
+    WakeUpSpidersFromGenerator(scpSearchGobj(962));
+    WakeUpSpidersFromGenerator(scpSearchGobj(963));
+    _ACTWait(1);
+    gflagOn(139);
+    gflagOn(140);
+}
+
 void actSt04cEneChk(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt04cEneChk_jun26(self);
+        return;
+    }
     if (girlGObj == 0) {
         _ACTWait(0);
     }

@@ -38,8 +38,75 @@ static inline void warpGirlOutSet(int id, int noSet) /* derived name */
     warpFound = 1;
 }
 
+static void warpGirlOutStage_jun26(int stage, int noSet)
+{
+    float b0[4]; /* the trigger box, corner 0 */
+    float b1[4]; /* the trigger box, corner 1 */
+    float rpos[4];
+    int i;
+
+    if (gameSysObjInfo[1].stage != stage) {
+        return;
+    }
+    if (girlGObj == 0) {
+        int n = 10;
+
+        debug_StdPrintfDummy("\x1b[36m");
+        while (n-- != 0) {
+            /* warpGirl.c: odd to come through here outside DEBUG STAGE SELECT */
+            debug_StdPrintfDummy(
+                "warpGirl.c:もしDEBUG STAGE SELECTでなくてここを通ったら おかしい！");
+        }
+        debug_StdPrintfDummy("\x1b[0m");
+        return;
+    }
+    warpGirlId = 0;
+    warpFound = 0;
+    for (i = 1; i < 26 && warpFound == 0; i++) {
+        const WarpRec *w = &girlWarpList[i];
+
+        if (w->from != stage) {
+            continue;
+        }
+        switch (w->kind) {
+        case 0:
+            warpGirlOutSet(i, noSet);
+            break;
+        case 2:
+            if (gflagChk(w->gflag) == 0) {
+                continue;
+            }
+            /* fall through */
+        case 1:
+            memset(b1, 0, 16);
+            b1[0] = w->box1[2];
+            b1[1] = w->box1[1];
+            b1[2] = w->box1[0];
+            *(WarpVec *)b0 = *(WarpVec *)b1;
+            memset(rpos, 0, 16);
+            rpos[0] = w->box0[2];
+            rpos[1] = w->box0[1];
+            rpos[2] = w->box0[0];
+            *(WarpVec *)b1 = *(WarpVec *)rpos;
+            GetRootPosition(rpos, girlGObj);
+            if (scpTriggerPosBox(rpos, b0, b1) == 0) {
+                continue;
+            }
+            warpGirlOutSet(i, noSet);
+            break;
+        default:
+            ICO_BREAK();
+            break;
+        }
+    }
+}
+
 void warpGirlOutStage(int stage, int noSet)
 {
+    if (ICO_JUN26) {
+        warpGirlOutStage_jun26(stage, noSet);
+        return;
+    }
     float b0[4]; /* the trigger box, corner 0 */
     float b1[4]; /* the trigger box, corner 1 */
     float rpos[4];
@@ -114,8 +181,48 @@ void warpGirlOutStage(int stage, int noSet)
     }
 }
 
+static void warpGirlInStage_jun26(int stageNo)
+{
+    float pos[4];
+    float rot[4];
+    float ry;
+    const WarpRec *w = &girlWarpList[warpGirlId];
+
+    if (IsGirlEscortedInNextStage() != 0) {
+        return;
+    }
+    if (w->to0 == stageNo) {
+        pos[0] = -w->arrive0[3];
+        pos[1] = -w->arrive0[2];
+        pos[2] = -w->arrive0[1];
+        ry = w->arrive0[0];
+    } else if (w->to1 == stageNo) {
+        pos[0] = -w->arrive1[3];
+        pos[1] = -w->arrive1[2];
+        pos[2] = -w->arrive1[1];
+        ry = w->arrive1[0];
+    } else if (w->to2 == stageNo) {
+        pos[0] = -w->arrive2[3];
+        pos[1] = -w->arrive2[2];
+        pos[2] = -w->arrive2[1];
+        ry = w->arrive2[0];
+    } else {
+        return;
+    }
+    rot[0] = 0.0f;
+    rot[1] = ry;
+    rot[2] = 0.0f;
+    sceVu0ScaleVector(rot, rot, 0.017453292f);
+    debug_StdPrintfDummy("girl %p\n", girlGObj);
+    gamesysObjInfoPosNewStageSet(124, 2, stageNo, pos, rot);
+}
+
 void warpGirlInStage(int stageNo)
 {
+    if (ICO_JUN26) {
+        warpGirlInStage_jun26(stageNo);
+        return;
+    }
     float pos[4];
     float rot[4];
     float ry;

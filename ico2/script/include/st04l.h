@@ -23,6 +23,8 @@ extern unsigned int oriup4c;
 extern unsigned char oridown4c;
 extern unsigned int st04l_yure;
 extern unsigned char st04l_yure_vol;
+extern unsigned int sekizo_4l;
+extern unsigned char sekizo_4l_vol;
 void actSt04eSolarBeamChk(GObj *volatile self);
 void actSt04lBrg1Chk(GObj *volatile self);
 void actSt04lBrg1WayChk(GObj *volatile self);

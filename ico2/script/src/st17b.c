@@ -13,9 +13,12 @@ static ActMail check_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail check_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail check_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail check_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-#define check_mes PAL_NTSC_AUG6JUN26(check_mes_pal, check_mes_ntsc, check_mes_aug6jun26)
+static ActMail check_mes_jun26[2] = {{377}, {376}}; /* derived name */
+
+#define check_mes                                                                                  \
+    PAL_NTSC_AUG6_JUN26(check_mes_pal, check_mes_ntsc, check_mes_aug6, check_mes_jun26)
 
 static ActMail intro_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
@@ -34,8 +37,28 @@ void actSt17bTest(GObj *volatile self)
     _ACTWait(1);
 }
 
+static void actSt17bCheck_jun26(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *act = (Act *)actInitialize(self);
+
+    _ACTWait(1);
+    scpAdpcmPlayRequestFunc(87, &lightning2, 1, 0, 1);
+
+    if (gflagChk(33) == 0) {
+        check_mes[0].func = actSt17bCheckChk;
+        act->mail = check_mes;
+        ACTSendMailCorrect(self, 377);
+        _ACTWait(0);
+    }
+}
+
 void actSt17bCheck(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt17bCheck_jun26(self);
+        return;
+    }
     GObj *x = self;
     Act *act = (Act *)actInitialize(self);
 

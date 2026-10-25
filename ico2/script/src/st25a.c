@@ -31,6 +31,11 @@
 #include "script.h"
 #include "jimaku.h"
 
+/* .sdata: the texture script.c's scpObj1882 scrolls (the TU's .sdata opens
+   with it, 8-aligned, at the demo's 0x67A020), then the ADPCM request slots
+   the scenes hand scpAdpcmPlayRequestFunc and wait on. */
+const char wall01Tex[] = "wall01"; /* derived name */
+
 static void actSt25aElevCharaChk(GObj *volatile self);
 
 /* .sdata: the ADPCM request slots the scenes hand scpAdpcmPlayRequestFunc
@@ -40,6 +45,10 @@ static SqEntry *conte11 = 0; /* derived name */
 SqEntry *conte12 = 0;
 
 SqEntry *sd2 = 0;
+
+/* the second half of conte12's stream: actSt25aObj1881 (or its check)
+   requests it, actSt25aObj1896Chk plays it */
+static SqEntry *conte12b = 0; /* derived name */
 
 static int conte12Flag = 0; /* derived name */
 
@@ -94,6 +103,12 @@ static const char queenBallScrTexture[] = "queen_ball_scr"; /* derived name */
 
 static const char sekikaBoyTexture[] = "sekika_boy"; /* derived name */
 
+static ActMail obj1881_mes[2] = {{377}, {376}}; /* derived name */
+
+static ActMail obj1880_mes[2] = {{377}, {376}}; /* derived name */
+
+static ActMail obj1896_mes[2] = {{377}, {376}}; /* derived name */
+
 /* .data: ten actor mail records.  Each is
    the usual pair, the 430 entry whose handler the sender fills in and the 429
    terminator.  queen_appear_mes is the only one another TU sends, so it is the
@@ -102,10 +117,13 @@ static ActMail queen_before_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail queen_before_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail queen_before_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail queen_before_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+ActMail queen_before_mes_jun26[2] = {{377}, {376}}; /* derived name */
 
 #define queen_before_mes                                                                           \
-    PAL_NTSC_AUG6JUN26(queen_before_mes_pal, queen_before_mes_ntsc, queen_before_mes_aug6jun26)
+    PAL_NTSC_AUG6_JUN26(queen_before_mes_pal, queen_before_mes_ntsc, queen_before_mes_aug6,        \
+                        queen_before_mes_jun26)
 
 ActMail queen_appear_mes_pal[2] = {{430}, {429}};
 
@@ -117,10 +135,13 @@ static ActMail queen_talk_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail queen_talk_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail queen_talk_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail queen_talk_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+static ActMail queen_talk_mes_jun26[2] = {{377}, {376}}; /* derived name */
 
 #define queen_talk_mes                                                                             \
-    PAL_NTSC_AUG6JUN26(queen_talk_mes_pal, queen_talk_mes_ntsc, queen_talk_mes_aug6jun26)
+    PAL_NTSC_AUG6_JUN26(queen_talk_mes_pal, queen_talk_mes_ntsc, queen_talk_mes_aug6,              \
+                        queen_talk_mes_jun26)
 
 static ActMail queen_dead_ready_mes_pal[2] = {{430}, {429}}; /* derived name */
 
@@ -132,19 +153,25 @@ static ActMail queen_dead_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail queen_dead_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail queen_dead_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail queen_dead_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+static ActMail queen_dead_mes_jun26[2] = {{377}, {376}}; /* derived name */
 
 #define queen_dead_mes                                                                             \
-    PAL_NTSC_AUG6JUN26(queen_dead_mes_pal, queen_dead_mes_ntsc, queen_dead_mes_aug6jun26)
+    PAL_NTSC_AUG6_JUN26(queen_dead_mes_pal, queen_dead_mes_ntsc, queen_dead_mes_aug6,              \
+                        queen_dead_mes_jun26)
 
 static ActMail queen_attack_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail queen_attack_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail queen_attack_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail queen_attack_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+static ActMail queen_attack_mes_jun26[2] = {{377}, {376}}; /* derived name */
 
 #define queen_attack_mes                                                                           \
-    PAL_NTSC_AUG6JUN26(queen_attack_mes_pal, queen_attack_mes_ntsc, queen_attack_mes_aug6jun26)
+    PAL_NTSC_AUG6_JUN26(queen_attack_mes_pal, queen_attack_mes_ntsc, queen_attack_mes_aug6,        \
+                        queen_attack_mes_jun26)
 
 static ActMail elev_up_mes[2] = {{430}, {429}}; /* derived name */
 
@@ -159,12 +186,35 @@ static void actSt25aQueenDeadReadyChk(GObj *volatile self);
 void actItouQueenAttackChk(GObj *volatile self);
 void actConte11(GObj *volatile self);
 void actConte11Jimaku(GObj *volatile self);
+void actSt25aObj1881Chk(GObj *volatile self);
+void actSt25aObj1880Chk(GObj *volatile self);
+void actConte12Jimaku2(GObj *volatile self);
+
+static void actSt25aQueenAppear_jun26(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *sub = actInitialize(self);
+
+    _ACTWait(1);
+
+    if (gflagChk(287) == 0) {
+        scpSearchGobj(1863)->active = 0;
+        queen_appear_mes[0].func = actSt25aQueenAppearChk;
+        sub->mail = queen_appear_mes;
+        ACTSendMailCorrect(self, 377);
+        _ACTWait(0);
+    }
+}
 
 /* Before flag 302 this hands the actor queen_appear_mes and posts it; after
  * it, it shows object 1966, plays its motion and starts the face shadow
  * scrolls and the stage animations. */
 void actSt25aQueenAppear(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt25aQueenAppear_jun26(self);
+        return;
+    }
     GObj *x = self;
     Act *act = (Act *)actInitialize(self);
 
@@ -189,8 +239,28 @@ void actSt25aQueenAppear(GObj *volatile self)
     stage_SetAnimation(PAL_AUG6JUN26(138, 137), 1, 0);
 }
 
+static void actSt25aQueenAppearChk_jun26(GObj *volatile self)
+{
+    while (scpTriggerFloorAttr(boyGObj, 0x2000000) == 0 || gflagChk(286) == 0) {
+        _ACTWait(1);
+    }
+    gflagOn(287);
+    actCreateSubThread(actConte11Jimaku, 21);
+    while (conte11 == 0) {
+        _ACTWait(1);
+    }
+    AdpcmPlay(conte11->stream);
+    scpBoyControlReadDisable = 1;
+    _ACTWait(120);
+    actCreateSubThread(actConte11, 21);
+}
+
 void actSt25aQueenAppearChk(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt25aQueenAppearChk_jun26(self);
+        return;
+    }
     while (scpTriggerFloorAttr(boyGObj, 0x2000000) == 0 ||
            gflagChk(PAL_NTSC_AUG6JUN26(331, 301, 300)) == 0) {
         _ACTWait(1);
@@ -214,8 +284,60 @@ void actSt25aQueenAppearChk(GObj *volatile self)
     actCreateSubThread(actConte11, 21);
 }
 
+static void actConte11_jun26(GObj *volatile self)
+{
+    Vec4St25A ofs;
+    float dir[4];
+
+    lt_switch_layout(51);
+    scpPlayStart(boyGObj);
+
+    stage_SetAnimation(642, 1, 0);
+    stage_SetAnimation(121, 1, 0);
+
+    scpPlayMot(boyGObj, 405);
+    scpSearchGobj(1863)->active = 1;
+    scpPlayMot(scpSearchGobj(1863), 1123);
+
+    tex_SetUVScroll(faceShadowTex, 0.0f, 0.0f, 0.25f, 0.0625f, 0.99f, 0.99f, 1);
+    tex_SetUVScroll(faceShadowTex00, 0.0f, 0.0f, 0.25f, 0.0625f, 0.1f, 0.1f, 1);
+
+    while (stage_ContinueAnimation(642, 643) == 0) {
+        _ACTWait(1);
+    }
+    while (stage_CheckAnimationFrame(643, 10, 0) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    tex_SetUVScroll(faceShadowTex, 0.0f, 0.0f, 0.25f, 0.0625f, 0.8f, 0.8f, 1);
+    tex_SetUVScroll(faceShadowTex00, 0.0f, 0.0f, 0.25f, 0.0625f, 0.45f, 0.45f, 1);
+
+    scpPlayMot(scpSearchGobj(1863), 1124);
+
+    scpPlayMot(boyGObj, 0);
+    ofs = sekikaOfs;
+    sceVu0SubVector(dir, &ofs, test_CURRENTROOT(boyGObj));
+    scpPlayMotDir(boyGObj, dir);
+
+    SetCameraFlag_LwsCutBack();
+    while (stage_CheckAnimationFinish(643) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    scpPlayEnd(boyGObj);
+
+    scpBoyControlReadDisable = 0;
+    lt_switch_layout(50);
+}
+
 void actConte11(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actConte11_jun26(self);
+        return;
+    }
     Vec4St25A ofs;
     float dir[4];
 
@@ -316,8 +438,46 @@ static int demoEnd;
 
 static int eventDone; /* derived name */
 
+static void actSt25aQueenTalkChk_jun26(GObj *volatile self)
+{
+    unsigned int i;
+
+    conte12 = sd2 = 0;
+
+    while (scpTriggerFloorAttr(boyGObj, 0x3000000) == 0 || gflagChk(287) == 0) {
+        _ACTWait(1);
+    }
+
+    lt_switch_layout(51);
+    scpBoyControlReadDisable = 1;
+
+    scpPlayMot(boyGObj, 0);
+
+    StandbyStreamMotion(streamMotion[6].path);
+    i = 0;
+    while (CheckReadyStreamMotion() == 0) {
+        i++;
+        debug_StdPrintfDummy(streamWaitFmt, i);
+        _ACTWait(1);
+    }
+
+    gflagOn(288);
+
+    scpAdpcmPlayRequestFunc(42, &conte12, 1, 1, 1);
+    while (conte12 == 0) {
+        _ACTWait(1);
+    }
+
+    actCreateSubThread(actConte12, 21);
+    actCreateSubThread(actConte12Jimaku, 21);
+}
+
 void actSt25aQueenTalkChk(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt25aQueenTalkChk_jun26(self);
+        return;
+    }
     TalkWork w;
     unsigned int i;
     unsigned int n;
@@ -612,7 +772,60 @@ static void actConte12_ntsc(GObj *volatile self)
     _ACTWait(0);
 }
 
-static void actConte12_aug6jun26(GObj *volatile self)
+static void actConte12_jun26(GObj *volatile self)
+{
+    conte12b = 0;
+
+    scpSearchGobj(1863)->active = 1;
+    EntryStreamMotion(boyGObj);
+    EntryStreamMotion(scpSearchGobj(1863));
+    PlayStreamMotion();
+
+    stage_SetAnimation(662, 1, 0);
+    while (stage_ContinueAnimation(662, 663) == 0) {
+        _ACTWait(PAL_JUN26(1, 50));
+    }
+    while (stage_ContinueAnimation(663, 664) == 0) {
+        _ACTWait(1);
+    }
+    while (stage_ContinueAnimation(664, 665) == 0) {
+        _ACTWait(1);
+    }
+    while (stage_ContinueAnimation(665, 666) == 0) {
+        _ACTWait(1);
+    }
+    while (stage_ContinueAnimation(666, 667) == 0) {
+        _ACTWait(1);
+    }
+    while (stage_ContinueAnimation(667, 668) == 0) {
+        _ACTWait(1);
+    }
+    while (stage_ContinueAnimation(668, 669) == 0) {
+        _ACTWait(1);
+    }
+    while (stage_ContinueAnimation(669, 670) == 0) {
+        _ACTWait(1);
+    }
+    while (stage_ContinueAnimation(670, 671) == 0) {
+        _ACTWait(1);
+    }
+    while (stage_ContinueAnimation(671, 672) == 0) {
+        _ACTWait(1);
+    }
+
+    while (stage_CheckAnimationFinish(672) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    gflagOn(290);
+
+    scpPlayEnd(boyGObj);
+    scpBoyControlReadDisable = 0;
+    lt_switch_layout(50);
+}
+
+static void actConte12_aug6(GObj *volatile self)
 {
     conte12Flag = 0;
 
@@ -740,12 +953,16 @@ static void actConte12_aug6jun26(GObj *volatile self)
 
 void actConte12(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actConte12_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actConte12_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actConte12_aug6jun26(self);
+    if (ICO_AUG6) {
+        actConte12_aug6(self);
         return;
     }
     conte12Flag = 0;
@@ -946,8 +1163,85 @@ void actConte12(GObj *volatile self)
     _ACTWait(0);
 }
 
+static void actConte12Jimaku_jun26(GObj *volatile self)
+{
+    float t;
+    float tn;
+    int n;
+
+    t = 0.0f;
+    do {
+        switch ((int)t) {
+        case 1:
+            jimakuBegin(&jimaku_msg);
+            break;
+        case 341:
+            jimaku_msg.sub.block = 96;
+            jimaku_msg.sub.jump = -1;
+            jimakuOn = 1;
+            jimakuJump(&jimaku_msg);
+            break;
+        case 521:
+            jimaku_msg.sub.block = 97;
+            jimaku_msg.sub.jump = -1;
+            jimakuOn = 1;
+            jimakuJump(&jimaku_msg);
+            break;
+        case 801:
+            jimaku_msg.sub.block = 98;
+            jimaku_msg.sub.jump = -1;
+            jimakuOn = 1;
+            jimakuJump(&jimaku_msg);
+            break;
+        case 1031:
+            jimaku_msg.sub.block = 99;
+            jimaku_msg.sub.jump = -1;
+            jimakuOn = 1;
+            jimakuJump(&jimaku_msg);
+            break;
+        case 1301:
+            jimaku_msg.sub.block = 100;
+            jimaku_msg.sub.jump = 200;
+            jimakuOn = 1;
+            jimakuJump(&jimaku_msg);
+            break;
+        case 1781:
+            jimaku_msg.sub.block = 104;
+            jimaku_msg.sub.jump = 200;
+            jimakuOn = 1;
+            jimakuJump(&jimaku_msg);
+            break;
+        case 2261:
+            jimaku_msg.sub.block = 105;
+            jimaku_msg.sub.jump = 150;
+            jimakuOn = 1;
+            jimakuJump(&jimaku_msg);
+            break;
+        case 2561:
+            jimaku_msg.sub.block = 106;
+            jimaku_msg.sub.jump = -1;
+            jimakuOn = 1;
+            jimakuJump(&jimaku_msg);
+            break;
+        }
+
+        n = (int)t;
+        tn = t + (float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 60.0f;
+        if (n != (int)tn) {
+            _ACTWait(1);
+            t = tn;
+        } else {
+            t = tn + 1.0f;
+        }
+    } while (t < 3000.0f);
+}
+
 void actConte12Jimaku(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actConte12Jimaku_jun26(self);
+        return;
+    }
     float t;
     float tn;
     int n;
@@ -1024,6 +1318,174 @@ void actConte12Jimaku(GObj *volatile self)
         }
     } while (t < 4200.0f);
     _ACTWait(0);
+}
+
+/* The objects with no name of their own (obj-layout rows 1880, 1881 and
+   1896) are named for their row, as script.c's scpObj1882 is.
+
+   obj-layout row 1881's process: until flag 290 is set (the end of
+   actConte12) it hands the actor obj1881_mes; after it, it puts the scene
+   back as the first half of the conte left it and readies the second. */
+void actSt25aObj1881(GObj *volatile self) /* derived name */
+{
+    GObj *x = self;
+    Act *sub = actInitialize(self);
+    unsigned int i;
+
+    _ACTWait(1);
+
+    conte12b = 0;
+
+    if (gflagChk(290) == 0) {
+        obj1881_mes[0].func = actSt25aObj1881Chk;
+        sub->mail = obj1881_mes;
+        ACTSendMailCorrect(self, 377);
+        _ACTWait(0);
+        return;
+    }
+
+    stage_SetAnimation(121, 0, -1);
+    scpSearchGobj(1872)->active = 0;
+    tex_SetUVScroll(faceShadowTex, 0.0f, 0.0f, 0.25f, 0.0625f, 0.8f, 0.8f, 1);
+    scpPlayPosSet(scpSearchGobj(1934), 100.0f, 850.0f, -400.0f);
+    scpPlayPosSet(scpSearchGobj(1935), 100.0f, 850.0f, 400.0f);
+    scpPlayMot(scpSearchGobj(1863), 1123);
+
+    StandbyStreamMotion(streamMotion[7].path);
+    i = 0;
+    while (CheckReadyStreamMotion() == 0) {
+        debug_StdPrintfDummy(streamWaitFmt, ++i);
+        _ACTWait(1);
+    }
+    scpAdpcmPlayRequestFunc(43, &conte12b, 1, 1, 0);
+
+    gflagOn(291);
+    jimakuBegin(&jimaku_msg);
+}
+
+/* the second half of conte12, posted by obj-layout row 1896's process: when
+   flag 291 is raised (actSt25aObj1880Chk) it plays the scene to the queen's
+   attack, then hands the boy back. */
+void actSt25aObj1896Chk(GObj *volatile self) /* derived name */
+{
+    Vec4St25A pos;
+    Vec4St25A dir;
+
+    while (gflagChk(291) == 0) {
+        _ACTWait(1);
+    }
+    gflagOn(332);
+    gflagOff(291);
+    CheckPoint();
+    gflagOff(332);
+
+    lt_switch_layout(51);
+    scpBoyControlReadDisable = 1;
+    scpPlayMot(boyGObj, 0);
+    scpPlayStart(boyGObj);
+    scpPlayStart(scpSearchGobj(1863));
+
+    while (conte12b == 0) {
+        _ACTWait(1);
+    }
+    AdpcmPlay(conte12b->stream);
+
+    scpSearchGobj(1863)->active = 1;
+    EntryStreamMotion(boyGObj);
+    EntryStreamMotion(scpSearchGobj(1863));
+    PlayStreamMotion();
+
+    actCreateSubThread(actConte12Jimaku2, 21);
+
+    stage_SetAnimation(673, 1, 0);
+    while (stage_ContinueAnimation(673, 674) == 0) {
+        _ACTWait(1);
+    }
+
+    DeleteBoyWeapon();
+    stage_SetAnimation(122, 1, 0);
+
+    iosPadActRequest(boyPad, 15);
+    while (stage_CheckAnimationFrame(674, 15, 0) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    iosPadActRequest(boyPad, 16);
+    while (stage_CheckAnimationFrame(674, 30, 0) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    iosPadActRequest(boyPad, 16);
+    while (stage_CheckAnimationFrame(674, 50, 0) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    iosPadActRequest(boyPad, 17);
+    while (stage_CheckAnimationFrame(674, 60, 0) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    iosPadActRequest(boyPad, 16);
+
+    while (stage_ContinueAnimation(674, 675) == 0) {
+        _ACTWait(1);
+    }
+
+    scpLinkBGAtoLayoutedTarget(1872, 387);
+
+    while (stage_ContinueAnimation(675, 676) == 0) {
+        _ACTWait(1);
+    }
+    while (stage_ContinueAnimation(676, 677) == 0) {
+        _ACTWait(1);
+    }
+
+    _ACTWait(15);
+    scpSearchGobj(1872)->active = 1;
+    stage_SetAnimation(122, -1, -2);
+
+    while (stage_ContinueAnimation(677, 678) == 0) {
+        _ACTWait(1);
+    }
+    while (stage_ContinueAnimation(678, 679) == 0) {
+        _ACTWait(1);
+    }
+
+    QueenStartAttack();
+    gflagOn(289);
+
+    while (stage_CheckAnimationFinish(679) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    scpPlayMot(scpSearchGobj(1863), 1091);
+    scpPlayPosSet(scpSearchGobj(1863), 1650.0f, 625.0f, 0.0f);
+
+    memset(pos.f, 0, 16);
+    pos.f[3] = 1.0f;
+    sceVu0SubVector(dir.f, pos.f, test_CURRENTROOT(scpSearchGobj(1863)));
+    scpPlayMotDir(scpSearchGobj(1863), dir.f);
+    scpPlayEnd(scpSearchGobj(1863));
+
+    scpPlayMot(boyGObj, 0);
+    scpPlayEnd(boyGObj);
+    scpBoyControlReadDisable = 0;
+    lt_switch_layout(50);
+
+    CameraSetCameraSet(51);
+
+    while (fightSoundPlayChk() != 0) {
+        _ACTWait(1);
+    }
+
+    scpAdpcmPlayRequestFunc(44, &sd2, 1, 0, 1);
+
+    stage_SetAnimation(124, -1, -2);
+
+    stage_SetLoopFlag(125, 1);
+
+    stage_SetAnimation(125, 1, 0);
 }
 
 static void actSt25aQueenDeadChk_ntsc(GObj *volatile self)
@@ -1149,7 +1611,131 @@ static void actSt25aQueenDeadChk_ntsc(GObj *volatile self)
     RequestStageChange(4, boyGObj, 0, 1.0f, 8.0f);
 }
 
-static void actSt25aQueenDeadChk_aug6jun26(GObj *volatile self)
+static void actSt25aQueenDeadChk_jun26(GObj *volatile self)
+{
+    unsigned int i;
+
+    dead = 0;
+    while (1) {
+        if (gflagChk(289) != 0 && scpGameStat_BoyWeaponkind() == 5 &&
+            scpTriggerBall(self, boyGObj, 150.0f) != 0 &&
+            (ForMotionViewer_GetCurrentMotion(boyGObj) == 51 ||
+             ForMotionViewer_GetCurrentMotion(boyGObj) == 52 ||
+             ForMotionViewer_GetCurrentMotion(boyGObj) == 53 ||
+             ForMotionViewer_GetCurrentMotion(boyGObj) == 54 ||
+             ForMotionViewer_GetCurrentMotion(boyGObj) == 62)) {
+            break;
+        }
+        _ACTWait(1);
+    }
+
+    iosPadActRequest(boyPad, 16);
+
+    lt_switch_layout(51);
+    scpBoyControlReadDisable = 1;
+    scpPlayStart(boyGObj);
+    scpPlayStart(scpSearchGobj(1863));
+
+    StandbyStreamMotion(streamMotion[8].path);
+    i = 0;
+    while (CheckReadyStreamMotion() == 0) {
+        i++;
+        debug_StdPrintfDummy(streamWaitFmt, i);
+        _ACTWait(1);
+    }
+
+    if (sd2 != 0) {
+        scpAdpcmFadeClose(sd2, 256);
+    }
+
+    scpKillEnemyAll();
+
+    gflagOn(292);
+    gflagOn(5);
+
+    scpAdpcmPlayRequestFunc(45, &dead, 1, 1, 1);
+    while (dead == 0) {
+        _ACTWait(1);
+    }
+
+    scpSearchGobj(1863)->active = 1;
+    EntryStreamMotion(boyGObj);
+    EntryStreamMotion(scpSearchGobj(1863));
+    PlayStreamMotion();
+
+    actCreateSubThread(actConte13Jimaku, 21);
+
+    stage_SetAnimation(680, 1, 0);
+
+    scpSearchGobj(1934)->active = 0;
+    scpSearchGobj(1935)->active = 0;
+
+    while (stage_ContinueAnimation(680, 681) == 0) {
+        _ACTWait(1);
+    }
+    while (stage_ContinueAnimation(681, 682) == 0) {
+        _ACTWait(1);
+    }
+    while (stage_ContinueAnimation(682, 683) == 0) {
+        _ACTWait(1);
+    }
+
+    GOBJ_SUB(scpSearchGobj(1863))->streamScale = 0;
+    while (stage_ContinueAnimation(683, 684) == 0) {
+        _ACTWait(1);
+    }
+
+    GOBJ_SUB(scpSearchGobj(1863))->streamScale = 1;
+    while (stage_ContinueAnimation(684, 685) == 0) {
+        _ACTWait(1);
+    }
+    while (stage_ContinueAnimation(685, 686) == 0) {
+        _ACTWait(1);
+    }
+
+    stage_SetAnimation(378, 1, 0);
+    iosPadActRequest(boyPad, 15);
+    DeleteBoyWeapon();
+    stage_SetAnimation(123, 1, 0);
+
+    while (stage_ContinueAnimation(686, 687) == 0) {
+        _ACTWait(1);
+    }
+    while (stage_ContinueAnimation(687, 688) == 0) {
+        _ACTWait(1);
+    }
+
+    while (stage_CheckAnimationFrame(688, 15, 0) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    iosPadActRequest(boyPad, 17);
+
+    while (stage_ContinueAnimation(688, 689) == 0) {
+        _ACTWait(1);
+    }
+
+    while (stage_CheckAnimationFrame(689, 10, 0) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    iosPadActRequest(boyPad, 15);
+
+    scpSearchGobj(1863)->active = 0;
+
+    while (stage_ContinueAnimation(689, 691) == 0) {
+        _ACTWait(1);
+    }
+
+    while (stage_CheckAnimationFinish(691) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    RequestStageChange(4, boyGObj, 0, 16.0f, 16.0f);
+}
+
+static void actSt25aQueenDeadChk_aug6(GObj *volatile self)
 {
     unsigned int i;
 
@@ -1289,12 +1875,16 @@ static void actSt25aQueenDeadChk_aug6jun26(GObj *volatile self)
 
 void actSt25aQueenDeadChk(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt25aQueenDeadChk_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actSt25aQueenDeadChk_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actSt25aQueenDeadChk_aug6jun26(self);
+    if (ICO_AUG6) {
+        actSt25aQueenDeadChk_aug6(self);
         return;
     }
     while (QueenInqDead() == 0) {
@@ -1489,6 +2079,20 @@ void BoySekikaTexScroll(void)
     tex_SetUVScroll(sekikaBoyTexture, 0.0f, 0.0f, 0.0f, 0.01f, 0.0f, 0.5f, 1);
 }
 
+/* obj-layout row 1880's process: hands the actor obj1880_mes */
+void actSt25aObj1880(GObj *volatile self) /* derived name */
+{
+    GObj *x = self;
+    Act *sub = actInitialize(self);
+
+    _ACTWait(1);
+
+    obj1880_mes[0].func = actSt25aObj1880Chk;
+    sub->mail = obj1880_mes;
+    ACTSendMailCorrect(self, 377);
+    _ACTWait(0);
+}
+
 static void actSt25aElevChk(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
@@ -1600,8 +2204,28 @@ void actSt25aQueenBefore(GObj *volatile self)
     }
 }
 
+static void actSt25aQueenTalk_jun26(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *sub = actInitialize(self);
+
+    _ACTWait(1);
+
+    if (gflagChk(288) == 0) {
+        scpSearchGobj(1872)->active = 0;
+        queen_talk_mes[0].func = actSt25aQueenTalkChk;
+        sub->mail = queen_talk_mes;
+        ACTSendMailCorrect(self, 377);
+        _ACTWait(0);
+    }
+}
+
 void actSt25aQueenTalk(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt25aQueenTalk_jun26(self);
+        return;
+    }
     GObj *x = self;
     Act *sub = actInitialize(self);
 
@@ -1640,7 +2264,24 @@ void actSt25aQueenDead(GObj *volatile self)
 
     queen_dead_mes[0].func = actSt25aQueenDeadChk;
     sub->mail = queen_dead_mes;
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(430, 397, 393, 377));
+    _ACTWait(0);
+}
+
+/* obj-layout row 1896's process: pauses the fight sound and hands the actor
+   obj1896_mes */
+void actSt25aObj1896(GObj *volatile self) /* derived name */
+{
+    GObj *x = self;
+    Act *sub = actInitialize(self);
+
+    _ACTWait(1);
+
+    fightSoundProcessRequestPause();
+
+    obj1896_mes[0].func = actSt25aObj1896Chk;
+    sub->mail = obj1896_mes;
+    ACTSendMailCorrect(self, 377);
     _ACTWait(0);
 }
 
@@ -1653,7 +2294,7 @@ void actItouQueenAttack(GObj *volatile self)
 
     queen_attack_mes[0].func = actItouQueenAttackChk;
     sub->mail = queen_attack_mes;
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(430, 397, 393, 377));
     _ACTWait(0);
 }
 
@@ -1686,8 +2327,8 @@ void actSwordEff(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
-    scpLinkBGAtoLayoutedTarget(PAL_NTSC_AUG6JUN26(2098, 1926, 1902),
-                               PAL_JPNKORCN_NTSC_AUG6JUN26(487, 483, 423, 422));
+    scpLinkBGAtoLayoutedTarget(PAL_NTSC_AUG6_JUN26(2098, 1926, 1902, 1826),
+                               PAL_JPNKORCN_NTSC_AUG6_JUN26(487, 483, 423, 422, 387));
 }
 
 void actSwordEffXL(GObj *volatile self)
@@ -1698,10 +2339,10 @@ void actSwordEffXL(GObj *volatile self)
     _ACTWait(1);
 
     if (scpGameStat_BoyWeaponkind() == 5) {
-        scpLinkBGAtoLayoutedTarget(PAL_NTSC_AUG6JUN26(2098, 1926, 1902),
-                                   PAL_JPNKORCN_NTSC_AUG6JUN26(487, 483, 423, 422));
+        scpLinkBGAtoLayoutedTarget(PAL_NTSC_AUG6_JUN26(2098, 1926, 1902, 1826),
+                                   PAL_JPNKORCN_NTSC_AUG6_JUN26(487, 483, 423, 422, 387));
     } else {
-        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(487, 483, 423, 422), -1, -2);
+        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6_JUN26(487, 483, 423, 422, 387), -1, -2);
     }
 }
 
@@ -1711,9 +2352,9 @@ void actSt25aQueenBeforeChk(GObj *volatile self)
     while (scpTriggerFloorAttr(boyGObj, 0x1000000) == 0) {
         _ACTWait(1);
     }
-    gflagOn(PAL_NTSC_AUG6JUN26(331, 301, 300));
+    gflagOn(PAL_NTSC_AUG6_JUN26(331, 301, 300, 286));
     jimakuBegin(&jimaku_msg);
-    scpAdpcmPlayRequestFunc(PAL_NTSCAUG6JUN26(39, 38), &conte11, 1, 1, 0);
+    scpAdpcmPlayRequestFunc(PAL_NTSCAUG6_JUN26(39, 38, 41), &conte11, 1, 1, 0);
 }
 
 void actConte11Jimaku(GObj *volatile self)
@@ -1746,6 +2387,73 @@ void actConte11Jimaku(GObj *volatile self)
     } while (t < 1500.0f);
 }
 
+/* obj-layout row 1881's check: when actConte12 has run (flag 290) it readies
+   the second half's stream motion and requests its stream */
+void actSt25aObj1881Chk(GObj *volatile self) /* derived name */
+{
+    unsigned int i;
+
+    while (gflagChk(290) == 0) {
+        _ACTWait(1);
+    }
+    StandbyStreamMotion(streamMotion[7].path);
+    i = 0;
+    while (CheckReadyStreamMotion() == 0) {
+        i++;
+        debug_StdPrintfDummy(streamWaitFmt, i);
+        _ACTWait(1);
+    }
+    scpAdpcmPlayRequestFunc(43, &conte12b, 1, 1, 0);
+}
+
+/* obj-layout row 1880's check: the boy swinging the sword (weapon kind 5)
+   within reach of the object after flag 287 raises flag 291 */
+void actSt25aObj1880Chk(GObj *volatile self) /* derived name */
+{
+    while (1) {
+        if (gflagChk(287) != 0 && scpGameStat_BoyWeaponkind() == 5 &&
+            scpTriggerBall(self, boyGObj, 150.0f) != 0 &&
+            (ForMotionViewer_GetCurrentMotion(boyGObj) == 51 ||
+             ForMotionViewer_GetCurrentMotion(boyGObj) == 52 ||
+             ForMotionViewer_GetCurrentMotion(boyGObj) == 53 ||
+             ForMotionViewer_GetCurrentMotion(boyGObj) == 54 ||
+             ForMotionViewer_GetCurrentMotion(boyGObj) == 62)) {
+            break;
+        }
+        _ACTWait(1);
+    }
+    gflagOn(291);
+}
+
+/* the subtitles of conte12's second half */
+void actConte12Jimaku2(GObj *volatile self) /* derived name */
+{
+    float t;
+    float tn;
+    int n;
+
+    t = 0.0f;
+    do {
+        switch ((int)t) {
+        case 575:
+            jimaku_msg.sub.block = 109;
+            jimaku_msg.sub.jump = -1;
+            jimakuOn = 1;
+            jimakuJump(&jimaku_msg);
+            break;
+        }
+
+        n = (int)t;
+        tn = t + (float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 60.0f;
+        if (n != (int)tn) {
+            _ACTWait(1);
+            t = tn;
+        } else {
+            t = tn + 1.0f;
+        }
+    } while (t < 3100.0f);
+}
+
 static void actSt25aQueenDeadReadyChk(GObj *volatile self)
 {
     int i;
@@ -1772,8 +2480,8 @@ void actSt25aQueenDeadEvent(int x)
 void actItouQueenAttackChk(GObj *volatile self)
 {
     while (1) {
-        while (ForMotionViewer_GetCurrentMotion(scpSearchGobj(PAL_JPNKORCN_NTSC_AUG6JUN26(
-                   3526, 3503, 3255, 3225))) != PAL_NTSC_AUG6JUN26(1078, 1017, 1019)) {
+        while (ForMotionViewer_GetCurrentMotion(scpSearchGobj(PAL_JPNKORCN_NTSC_AUG6_JUN26(
+                   3526, 3503, 3255, 3225, 3064))) != PAL_NTSC_AUG6_JUN26(1078, 1017, 1019, 1097)) {
             _ACTWait(1);
         }
         tex_SetUVScroll(queenBallScrTexture, 0.0f, 0.0f, 0.001f, 0.01f, 0.99f, 0.99f, 1);

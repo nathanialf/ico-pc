@@ -15,6 +15,7 @@
 #include "typedef.h"
 #include "gamesys.h"
 #include "main.h"
+#include "StageManager.h"
 
 /* .sdata: the lightning stream handle and the two animation numbers the
    lightning plays. */
@@ -63,9 +64,12 @@ static ActMail intro_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail intro_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail intro_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
+static ActMail intro_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-#define intro_mes PAL_NTSC_AUG6JUN26(intro_mes_pal, intro_mes_ntsc, intro_mes_aug6jun26)
+static ActMail intro_mes_jun26[2] = {{377}, {376}}; /* derived name */
+
+#define intro_mes                                                                                  \
+    PAL_NTSC_AUG6_JUN26(intro_mes_pal, intro_mes_ntsc, intro_mes_aug6, intro_mes_jun26)
 
 /* the point the boy turns to face when the intro is skipped */
 static const StVec introFacePos = {{-2000.0f, 0.0f, -1129.0f, 1.0f}}; /* derived name */
@@ -73,8 +77,28 @@ static const StVec introFacePos = {{-2000.0f, 0.0f, -1129.0f, 1.0f}}; /* derived
 /* no header declares it; gamesys.c defines it */
 void actSt22aIntroChk(GObj *volatile self);
 
+static void actSt22aIntro_jun26(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *act = actInitialize(self);
+
+    _ACTWait(1);
+    scpAdpcmPlayRequestFunc(87, &lightning, 1, 0, 1);
+    if (gflagChk(281) == 0) {
+        scpFadeOut(255.0f, 0, 0, 0);
+        intro_mes[0].func = actSt22aIntroChk;
+        act->mail = intro_mes;
+        ACTSendMailCorrect(self, 377);
+        _ACTWait(0);
+    }
+}
+
 void actSt22aIntro(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt22aIntro_jun26(self);
+        return;
+    }
     GObj *x = self;
     Act *act = actInitialize(self);
     StVec pos;
@@ -123,8 +147,48 @@ typedef struct St22Anims { /* field names derived */
     int id[2];
 } St22Anims; /* derived name */
 
+static void actSt22aIntroChk_jun26(GObj *volatile self)
+{
+    StVec pos;
+    float dir[4];
+
+    while (scpTriggerBall(self, boyGObj, 1000.0f) == 0) {
+        _ACTWait(1);
+    }
+    CheckPoint();
+    lt_switch_layout(51);
+    scpBoyControlReadDisable = 1;
+    scpPlayStart(boyGObj);
+    gflagOn(281);
+    stage_SetAnimation(634, 1, 0);
+    _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1] * 10);
+    scpFadeIn(6.0f);
+    stage_SetAnimation(634, 1, 0);
+    scpPlayMot(boyGObj, 400);
+    while (stage_ContinueAnimation(634, 635) == 0) {
+        _ACTWait(1);
+    }
+    scpPlayPosSet(boyGObj, -707.0f, 148.0f, -1112.0f);
+    pos = introFacePos;
+    sceVu0SubVector(dir, &pos, test_CURRENTROOT(boyGObj));
+    scpPlayMotDir(boyGObj, dir);
+    scpPlayMot(boyGObj, 401);
+    while (stage_CheckAnimationFinish(635) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    scpPlayMot(boyGObj, 0);
+    scpPlayEnd(boyGObj);
+    lt_switch_layout(50);
+    scpBoyControlReadDisable = 0;
+}
+
 void actSt22aIntroChk(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actSt22aIntroChk_jun26(self);
+        return;
+    }
     St22Anims anims;
     StVec pos;
     float dir[4];
