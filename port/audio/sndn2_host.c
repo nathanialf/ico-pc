@@ -29,8 +29,9 @@
 #include "vfs.h"
 
 /* SNDN2DRV.IRX in the game's folder of the disc (byte-identical on the European and the
-   Japanese disc), its size, the June 2001 demo's size (its own module, the pitch table at the same
-   offset and the same 608 entries), and the pitch table's file offset and size in it. */
+   Japanese disc), its size, the 2001 discs' size (the North American disc's, the August 2001
+   preview's and the June 2001 demo's module are 20,925 bytes: the pitch table at the same offset
+   and the same 608 entries), and the pitch table's file offset and size in it. */
 #define IRX_PATH "SNDN2DRV.IRX"
 #define IRX_SIZE 20941u
 #define IRX_SIZE_DEMO 20925u

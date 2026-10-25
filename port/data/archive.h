@@ -1,8 +1,9 @@
 /*
  * port/data/archive.h
  *
- * The extracted game data, `ico.o2r` (the European disc) or `ico-jpn.o2r`
- * (the Japanese disc): a ZIP whose entries are stored, not compressed,
+ * The extracted game data, one archive per disc (ico_discs' archive_name:
+ * `ico.o2r` for the European disc, `ico-jpn.o2r` for the Japanese one,
+ * `ico-kor.o2r`, `ico-ntsc.o2r`, ... for the others): a ZIP whose entries are stored, not compressed,
  * written once by the first-run extractor (extract.h) from the user's disc
  * image.
  *

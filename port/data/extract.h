@@ -3,7 +3,8 @@
  *
  * The first-run extractor:
  * reads the user's disc image once and writes its archive (archive.h:
- * `ico.o2r` for the European disc, `ico-jpn.o2r` for the Japanese one).
+ * the row's archive_name, `ico.o2r` for the European disc, `ico-jpn.o2r`
+ * for the Japanese one, and one of its own for each other disc).
  * Which disc it is comes from SYSTEM.CNF's BOOT2 file, matched against
  * ico_discs (archive.h) by name; that row's values verify it.
  *
