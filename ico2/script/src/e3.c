@@ -114,7 +114,12 @@ static ActMail warning_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail warning_mes_jun26[2] = {{377}, {376}}; /* derived name */
 
-#define warning_mes PAL_JUN26(warning_mes_pal, warning_mes_jun26)
+static ActMail warning_mes_ntsc[2] = {{397}, {396}}; /* derived name */
+
+static ActMail warning_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define warning_mes                                                                                \
+    PAL_NTSC_AUG6_JUN26(warning_mes_pal, warning_mes_ntsc, warning_mes_aug6, warning_mes_jun26)
 
 static ActMail title_mes_pal[2] = {{430}, {429}}; /* derived name */
 
