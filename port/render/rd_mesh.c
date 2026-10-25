@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../core/region.h" /* ico_region: which disc's VU programs */
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "shader_consts.h"
@@ -2025,6 +2026,27 @@ static RdVuList *s_vu;
 
 static Vu1Ref s_scratch;
 
+/* The programs the running disc's VU1 runs (vu1_ref.h VU1_VARIANT_*): the June
+ * 2001 demo has its own cluster, mesh, normal_c and normal_l.  Read from
+ * ico_region each time the lists are set up, since a replay selects the dump's
+ * region after the renderer starts; says so once a run. */
+static void vuSyncVariant(void)
+{
+    const int variant = ico_region == ICO_REGION_JUN26 ? VU1_VARIANT_JUN26 : VU1_VARIANT_PAL;
+    for (int l = 0; s_vu && l < RD_LIST_COUNT; l++) {
+        vu1ref_set_variant(&s_vu[l].ref, variant);
+    }
+    vu1ref_set_variant(&s_scratch, variant);
+    static bool logged; /* once a run (rd__log_once's flags are full) */
+    if (variant == VU1_VARIANT_JUN26 && !logged) {
+        logged = true;
+        rd__log("vu1: the June 2001 demo's programs (variant %s): %d semantic difference%s from "
+                "the retail ones, listed in tools/test/vu1/jun26_vs_pal.md",
+                vu1_variant_name(variant), VU1_JUN26_SEMANTIC_DIFFS,
+                VU1_JUN26_SEMANTIC_DIFFS == 1 ? "" : "s");
+    }
+}
+
 void rd__vu_init(void)
 {
     free(s_vu);
@@ -2032,6 +2054,7 @@ void rd__vu_init(void)
     for (int l = 0; s_vu && l < RD_LIST_COUNT; l++) {
         vu1ref_init(&s_vu[l].ref);
     }
+    vuSyncVariant();
 }
 
 void rd__vu_shutdown(void)
@@ -2071,6 +2094,7 @@ void rd__vu_load_common(const RdVuCommon *block)
         s_vu[l].endTagHit = 0;
         s_vu[l].scroll = 0;
     }
+    vuSyncVariant();
 }
 
 void rd_vu_program(int id)
