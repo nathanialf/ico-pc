@@ -32,11 +32,30 @@ static int demoEnd;
 
 static int demoSkipped; /* derived name */
 
-static ActMail waterMain_mes[2] = {{406, actSt04eWaterSwitch}, {429}}; /* derived name */
+static ActMail waterMain_mes_pal[2] = {{406, actSt04eWaterSwitch}, {429}}; /* derived name */
 
-static ActMail water_mes[2] = {{430}, {429}}; /* derived name */
+static ActMail waterMain_mes_ntsc[2] = {{376, actSt04eWaterSwitch}, {396}}; /* derived name */
 
-static ActMail waterSwitch_mes[2] = {{430}, {429}}; /* derived name */
+static ActMail waterMain_mes_aug6[2] = {{372, actSt04eWaterSwitch}, {392}}; /* derived name */
+
+#define waterMain_mes PAL_NTSC_AUG6(waterMain_mes_pal, waterMain_mes_ntsc, waterMain_mes_aug6)
+
+static ActMail water_mes_pal[2] = {{430}, {429}}; /* derived name */
+
+static ActMail water_mes_ntsc[2] = {{397}, {396}}; /* derived name */
+
+static ActMail water_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define water_mes PAL_NTSC_AUG6(water_mes_pal, water_mes_ntsc, water_mes_aug6)
+
+static ActMail waterSwitch_mes_pal[2] = {{430}, {429}}; /* derived name */
+
+static ActMail waterSwitch_mes_ntsc[2] = {{397}, {396}}; /* derived name */
+
+static ActMail waterSwitch_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define waterSwitch_mes                                                                            \
+    PAL_NTSC_AUG6(waterSwitch_mes_pal, waterSwitch_mes_ntsc, waterSwitch_mes_aug6)
 
 static ActMail hint1_mes[2] = {{430}, {429}}; /* derived name */
 
@@ -52,8 +71,76 @@ static float seChkPos[4] = {0.0f, -171.0f, -8000.0f, 0.0f}; /* derived name */
 
 static ActMail hint1WakeUp_mes[2] = {{430}, {429}}; /* derived name */
 
+static void actSt04eWaterStop_ntsc(GObj *volatile self)
+{
+    lt_switch_layout(51);
+
+    actCreateSubThread(actSt04eWaterFlagOn, 21);
+
+    scpSleepEnemyAll();
+
+    _ACTWait(60);
+
+    stage_SetAnimation(234, 1, 0);
+
+    stage_SetAnimation(233, -1, -2);
+
+    while (stage_CheckAnimationFinish(234) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    scpSearchGobj(1177)->active = 1;
+    scpSearchGobj(1176)->active = 0;
+
+    scpBoyControlReadDisable = 0;
+    lt_switch_layout(50);
+
+    scpWakeupEnemyAll();
+
+    SetWayGroupActive(5, 1);
+}
+
+static void actSt04eWaterStop_aug6(GObj *volatile self)
+{
+    lt_switch_layout(51);
+
+    actCreateSubThread(actSt04eWaterFlagOn, 21);
+
+    scpSleepEnemyAll();
+
+    _ACTWait(60);
+
+    stage_SetAnimation(233, 1, 0);
+
+    stage_SetAnimation(232, -1, -2);
+
+    while (stage_CheckAnimationFinish(233) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    scpSearchGobj(1173)->active = 1;
+    scpSearchGobj(1172)->active = 0;
+
+    scpBoyControlReadDisable = 0;
+    lt_switch_layout(50);
+
+    scpWakeupEnemyAll();
+
+    SetWayGroupActive(5, 1);
+}
+
 void actSt04eWaterStop(GObj *volatile self)
 {
+    if (ICO_NTSC) {
+        actSt04eWaterStop_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        actSt04eWaterStop_aug6(self);
+        return;
+    }
     GProc *th;
 
     lt_switch_layout(PAL_JPNKORCN(55, 52));
@@ -194,8 +281,54 @@ void actSt04eSe(GObj *volatile self)
     _ACTWait(0);
 }
 
+static void actSt04eWater_ntsc(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *act = actInitialize(self);
+    _ACTWait(1);
+
+    SetRotObjectLockFlag(scpSearchGobj(1178), 1);
+
+    if (gflagChk(205) == 0) {
+        scpSearchGobj(1177)->active = 0;
+        water_mes[0].func = actSt04eWaterMain;
+        act->mail = water_mes;
+        ACTSendMailCorrect(self, 397);
+        _ACTWait(0);
+    } else {
+        scpSearchGobj(1176)->active = 0;
+        stage_SetAnimation(233, -1, -2);
+    }
+}
+
+static void actSt04eWater_aug6(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *act = actInitialize(self);
+    _ACTWait(1);
+
+    if (gflagChk(205) == 0) {
+        scpSearchGobj(1173)->active = 0;
+        water_mes[0].func = actSt04eWaterMain;
+        act->mail = water_mes;
+        ACTSendMailCorrect(self, 393);
+        _ACTWait(0);
+    } else {
+        scpSearchGobj(1172)->active = 0;
+        stage_SetAnimation(232, -1, -2);
+    }
+}
+
 void actSt04eWater(GObj *volatile self)
 {
+    if (ICO_NTSC) {
+        actSt04eWater_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        actSt04eWater_aug6(self);
+        return;
+    }
     GObj *x = self;
     Act *act = actInitialize(self);
     _ACTWait(1);
@@ -234,12 +367,23 @@ void actSt04eWaterSwitch(GObj *volatile self)
 
     waterSwitch_mes[0].func = actSt04eWaterStop;
     sub->mail = waterSwitch_mes;
-    ACTSendMailCorrect(self, 430);
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
     _ACTWait(0);
+}
+
+static void actSt04eWaterFlagOn_ntscaug6(GObj *volatile self)
+{
+    _ACTWait(
+        ico_d2i(ico_dmul(ico_i2d((60 - systemStatus[0] * 10) / systemStatus[1]), ICO_D(11.0))));
+    gflagOn(205);
 }
 
 void actSt04eWaterFlagOn(GObj *volatile self)
 {
+    if (ICO_NTSCAUG6) {
+        actSt04eWaterFlagOn_ntscaug6(self);
+        return;
+    }
     int t = ico_d2i(ico_dmul(ico_i2d((60 - systemStatus[0] * 10) / systemStatus[1]), ICO_D(6.0)));
 
     riverFadeSpeed = 0.005f;

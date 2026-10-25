@@ -38,13 +38,13 @@ SqEntry *ed3 = 0;
 
 SqEntry *ed4 = 0;
 
-int ed5 = 0;
+SqEntry *ed5 = 0;
 
 SqEntry *ed6 = 0;
 
 SqEntry *sea = 0;
 
-int happy_end = 0;
+SqEntry *happy_end = 0;
 
 static SqEntry *staff3 = 0; /* derived name */
 
@@ -52,44 +52,202 @@ static SqEntry *endDemo14 = 0; /* derived name */
 
 static SqEntry *st27aEnd = 0; /* derived name */
 
-static ActMail demo01_mes[2] = {{430}, {429}}; /* derived name */
+static ActMail demo01_mes_pal[2] = {{430}, {429}}; /* derived name */
 
-static ActMail demo02_mes[2] = {{430}, {429}}; /* derived name */
+static ActMail demo01_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail demo03_mes[2] = {{430}, {429}}; /* derived name */
+static ActMail demo01_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-static ActMail demo04_mes[2] = {{430}, {429}}; /* derived name */
+#define demo01_mes PAL_NTSC_AUG6(demo01_mes_pal, demo01_mes_ntsc, demo01_mes_aug6)
 
-static ActMail demo05_mes[2] = {{430}, {429}}; /* derived name */
+static ActMail demo02_mes_pal[2] = {{430}, {429}}; /* derived name */
 
-static ActMail demo06_mes[2] = {{430}, {429}}; /* derived name */
+static ActMail demo02_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail demo07_mes[2] = {{430}, {429}}; /* derived name */
+static ActMail demo02_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-static ActMail demo10_mes[2] = {{430}, {429}}; /* derived name */
+#define demo02_mes PAL_NTSC_AUG6(demo02_mes_pal, demo02_mes_ntsc, demo02_mes_aug6)
 
-static ActMail demo11_mes[2] = {{430}, {429}}; /* derived name */
+static ActMail demo03_mes_pal[2] = {{430}, {429}}; /* derived name */
 
-static ActMail demo12_mes[2] = {{430}, {429}}; /* derived name */
+static ActMail demo03_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail demo13_mes[2] = {{430}, {429}}; /* derived name */
+static ActMail demo03_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-static ActMail staff1_mes[2] = {{430}, {429}}; /* derived name */
+#define demo03_mes PAL_NTSC_AUG6(demo03_mes_pal, demo03_mes_ntsc, demo03_mes_aug6)
 
-static ActMail staff2_mes[2] = {{430}, {429}}; /* derived name */
+static ActMail demo04_mes_pal[2] = {{430}, {429}}; /* derived name */
 
-static ActMail staff3_mes[2] = {{430}, {429}}; /* derived name */
+static ActMail demo04_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail ed_demo14_mes[2] = {{430}, {429}}; /* derived name */
+static ActMail demo04_mes_aug6[2] = {{393}, {392}}; /* derived name */
 
-static ActMail st27aEnd_mes[2] = {{430}, {429}}; /* derived name */
+#define demo04_mes PAL_NTSC_AUG6(demo04_mes_pal, demo04_mes_ntsc, demo04_mes_aug6)
 
-static ActMail logo_mes[2] = {{430}, {429}}; /* derived name */
+static ActMail demo05_mes_pal[2] = {{430}, {429}}; /* derived name */
+
+static ActMail demo05_mes_ntsc[2] = {{397}, {396}}; /* derived name */
+
+static ActMail demo05_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define demo05_mes PAL_NTSC_AUG6(demo05_mes_pal, demo05_mes_ntsc, demo05_mes_aug6)
+
+static ActMail demo06_mes_pal[2] = {{430}, {429}}; /* derived name */
+
+static ActMail demo06_mes_ntsc[2] = {{397}, {396}}; /* derived name */
+
+static ActMail demo06_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define demo06_mes PAL_NTSC_AUG6(demo06_mes_pal, demo06_mes_ntsc, demo06_mes_aug6)
+
+static ActMail demo07_mes_pal[2] = {{430}, {429}}; /* derived name */
+
+static ActMail demo07_mes_ntsc[2] = {{397}, {396}}; /* derived name */
+
+static ActMail demo07_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define demo07_mes PAL_NTSC_AUG6(demo07_mes_pal, demo07_mes_ntsc, demo07_mes_aug6)
+
+static ActMail demo10_mes_pal[2] = {{430}, {429}}; /* derived name */
+
+static ActMail demo10_mes_ntsc[2] = {{397}, {396}}; /* derived name */
+
+static ActMail demo10_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define demo10_mes PAL_NTSC_AUG6(demo10_mes_pal, demo10_mes_ntsc, demo10_mes_aug6)
+
+static ActMail demo11_mes_pal[2] = {{430}, {429}}; /* derived name */
+
+static ActMail demo11_mes_ntsc[2] = {{397}, {396}}; /* derived name */
+
+static ActMail demo11_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define demo11_mes PAL_NTSC_AUG6(demo11_mes_pal, demo11_mes_ntsc, demo11_mes_aug6)
+
+static ActMail demo12_mes_pal[2] = {{430}, {429}}; /* derived name */
+
+static ActMail demo12_mes_ntsc[2] = {{397}, {396}}; /* derived name */
+
+static ActMail demo12_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define demo12_mes PAL_NTSC_AUG6(demo12_mes_pal, demo12_mes_ntsc, demo12_mes_aug6)
+
+static ActMail demo13_mes_pal[2] = {{430}, {429}}; /* derived name */
+
+static ActMail demo13_mes_ntsc[2] = {{397}, {396}}; /* derived name */
+
+static ActMail demo13_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define demo13_mes PAL_NTSC_AUG6(demo13_mes_pal, demo13_mes_ntsc, demo13_mes_aug6)
+
+static ActMail staff1_mes_pal[2] = {{430}, {429}}; /* derived name */
+
+static ActMail staff1_mes_ntsc[2] = {{397}, {396}}; /* derived name */
+
+static ActMail staff1_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define staff1_mes PAL_NTSC_AUG6(staff1_mes_pal, staff1_mes_ntsc, staff1_mes_aug6)
+
+static ActMail staff2_mes_pal[2] = {{430}, {429}}; /* derived name */
+
+static ActMail staff2_mes_ntsc[2] = {{397}, {396}}; /* derived name */
+
+static ActMail staff2_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define staff2_mes PAL_NTSC_AUG6(staff2_mes_pal, staff2_mes_ntsc, staff2_mes_aug6)
+
+static ActMail staff3_mes_pal[2] = {{430}, {429}}; /* derived name */
+
+static ActMail staff3_mes_ntsc[2] = {{397}, {396}}; /* derived name */
+
+static ActMail staff3_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define staff3_mes PAL_NTSC_AUG6(staff3_mes_pal, staff3_mes_ntsc, staff3_mes_aug6)
+
+static ActMail demo14_mes[2] = {{397}, {396}}; /* derived name */
+
+static ActMail ed_demo14_mes_pal[2] = {{430}, {429}}; /* derived name */
+
+static ActMail ed_demo14_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define ed_demo14_mes PAL_AUG6(ed_demo14_mes_pal, ed_demo14_mes_aug6)
+
+static ActMail st27aEnd_mes_pal[2] = {{430}, {429}}; /* derived name */
+
+static ActMail st27aEnd_mes_ntsc[2] = {{397}, {396}}; /* derived name */
+
+static ActMail st27aEnd_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define st27aEnd_mes PAL_NTSC_AUG6(st27aEnd_mes_pal, st27aEnd_mes_ntsc, st27aEnd_mes_aug6)
+
+static ActMail logo_mes_pal[2] = {{430}, {429}}; /* derived name */
+
+static ActMail logo_mes_ntsc[2] = {{397}, {396}}; /* derived name */
+
+static ActMail logo_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define logo_mes PAL_NTSC_AUG6(logo_mes_pal, logo_mes_ntsc, logo_mes_aug6)
 
 static ActMail end_mes[2] = {{430}, {429}}; /* derived name */
 
+static void actEndDemo01_ntsc(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *act = actInitialize(self);
+
+    _ACTWait(1);
+
+    if (gflagChk(308) == 0 && gflagChk(312) == 0) {
+        lt_switch_layout(51);
+        scpBoyControlReadDisable = 1;
+        scpFadeOut(255.0f, 0, 0, 0);
+        stage_SetAnimation(766, 0, 0);
+        stage_SetAnimation(31, 0, -1);
+        stage_SetAnimation(25, 0, 0);
+        stage_SetAnimation(34, 0, -1);
+        stage_SetAnimation(32, 0, -1);
+        stage_SetAnimation(33, 0, -1);
+        demo01_mes[0].func = actEndDemo01Chk;
+        act->mail = demo01_mes;
+        ACTSendMailCorrect(self, 397);
+        _ACTWait(0);
+    }
+}
+
+static void actEndDemo01_aug6(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *act = actInitialize(self);
+
+    _ACTWait(1);
+
+    if (gflagChk(307) == 0 && gflagChk(311) == 0) {
+        lt_switch_layout(51);
+        scpBoyControlReadDisable = 1;
+        scpFadeOut(255.0f, 0, 0, 0);
+        stage_SetAnimation(765, 0, 0);
+        stage_SetAnimation(31, 0, -1);
+        stage_SetAnimation(25, 0, 0);
+        stage_SetAnimation(34, 0, -1);
+        stage_SetAnimation(32, 0, -1);
+        stage_SetAnimation(33, 0, -1);
+        demo01_mes[0].func = actEndDemo01Chk;
+        act->mail = demo01_mes;
+        ACTSendMailCorrect(self, 393);
+        _ACTWait(0);
+    }
+}
+
 void actEndDemo01(GObj *volatile self)
 {
+    if (ICO_NTSC) {
+        actEndDemo01_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        actEndDemo01_aug6(self);
+        return;
+    }
     GObj *x = self;
     Act *act = actInitialize(self);
 
@@ -118,71 +276,95 @@ void actConte14_1(GObj *volatile self)
 {
     scpPlayStart(boyGObj);
 
-    stage_SetAnimation(PAL_JPNKORCN(814, 810), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(814, 810, 740, 739), 1, 0);
 
-    scpPlayMot(scpSearchGobj(2515), 809);
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2515, 2307, 2278)), PAL_NTSC_AUG6(809, 764, 766));
 
-    scpSearchGobj(2515)->active = 1;
+    scpSearchGobj(PAL_NTSC_AUG6(2515, 2307, 2278))->active = 1;
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(814, 810), PAL_JPNKORCN(815, 811)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(814, 815), stage_ContinueAnimation(810, 811),
+               stage_ContinueAnimation(740, 741), stage_ContinueAnimation(739, 740)) == 0) {
         _ACTWait(1);
     }
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(815, 811), PAL_JPNKORCN(816, 812)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(815, 816), stage_ContinueAnimation(811, 812),
+               stage_ContinueAnimation(741, 742), stage_ContinueAnimation(740, 741)) == 0) {
         _ACTWait(1);
     }
 
-    stage_SetAnimation(55, 1, 0);
+    stage_SetAnimation(PAL_NTSCAUG6(55, 52), 1, 0);
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(816, 812), PAL_JPNKORCN(817, 813)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(816, 817), stage_ContinueAnimation(812, 813),
+               stage_ContinueAnimation(742, 743), stage_ContinueAnimation(741, 742)) == 0) {
         _ACTWait(1);
     }
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(817, 813), PAL_JPNKORCN(818, 814)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(817, 818), stage_ContinueAnimation(813, 814),
+               stage_ContinueAnimation(743, 744), stage_ContinueAnimation(742, 743)) == 0) {
         _ACTWait(1);
     }
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(818, 814), PAL_JPNKORCN(819, 815)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(818, 819), stage_ContinueAnimation(814, 815),
+               stage_ContinueAnimation(744, 745), stage_ContinueAnimation(743, 744)) == 0) {
         _ACTWait(1);
     }
 
-    scpPlayMot(scpSearchGobj(2515), 810);
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2515, 2307, 2278)), PAL_NTSC_AUG6(810, 765, 767));
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(819, 815), PAL_JPNKORCN(820, 816)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(819, 820), stage_ContinueAnimation(815, 816),
+               stage_ContinueAnimation(745, 746), stage_ContinueAnimation(744, 745)) == 0) {
         _ACTWait(1);
     }
 
-    scpSearchGobj(2515)->active = 0;
+    scpSearchGobj(PAL_NTSC_AUG6(2515, 2307, 2278))->active = 0;
 
-    scpPlayMot(scpSearchGobj(2516), 811);
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2516, 2308, 2279)), PAL_NTSC_AUG6(811, 766, 768));
 
-    scpSearchGobj(2516)->active = 1;
+    scpSearchGobj(PAL_NTSC_AUG6(2516, 2308, 2279))->active = 1;
 
-    scpLinkBGAtoLayoutedTargetSkeltonWithLocalRotationFlag(2516, 0, PAL_JPNKORCN(554, 550), 0);
+    if (ICO_NTSC) {
+        scpLinkBGAtoLayoutedTargetSkeltonWithLocalRotationFlag(2308, 0, 483, 0);
+    } else if (ICO_AUG6) {
+        scpLinkBGAtoLayoutedTargetSkeltonWithLocalRotationFlag(2279, 0, 482, 0);
+    } else {
+        scpLinkBGAtoLayoutedTargetSkeltonWithLocalRotationFlag(2516, 0, PAL_JPNKORCN(554, 550), 0);
+    }
 
-    stage_SetLoopFlag(PAL_JPNKORCN(554, 550), 1);
+    stage_SetLoopFlag(PAL_JPNKORCN_NTSC_AUG6(554, 550, 483, 482), 1);
 
-    stage_SetAnimation(PAL_JPNKORCN(554, 550), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(554, 550, 483, 482), 1, 0);
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(820, 816), PAL_JPNKORCN(821, 817)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(820, 821), stage_ContinueAnimation(816, 817),
+               stage_ContinueAnimation(746, 747), stage_ContinueAnimation(745, 746)) == 0) {
         _ACTWait(1);
     }
 
-    scpPlayMot(scpSearchGobj(2516), 812);
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2516, 2308, 2279)), PAL_NTSC_AUG6(812, 767, 769));
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(821, 817), PAL_JPNKORCN(822, 818)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(821, 822), stage_ContinueAnimation(817, 818),
+               stage_ContinueAnimation(747, 748), stage_ContinueAnimation(746, 747)) == 0) {
         _ACTWait(1);
     }
 
-    scpPlayMot(scpSearchGobj(2516), 813);
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2516, 2308, 2279)), PAL_NTSC_AUG6(813, 768, 770));
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(822, 818), PAL_JPNKORCN(823, 819)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(822, 823), stage_ContinueAnimation(818, 819),
+               stage_ContinueAnimation(748, 749), stage_ContinueAnimation(747, 748)) == 0) {
         _ACTWait(1);
     }
 
-    scpPlayMot(scpSearchGobj(2516), 814);
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2516, 2308, 2279)), PAL_NTSC_AUG6(814, 769, 771));
 
-    while (stage_CheckAnimationFinish(PAL_JPNKORCN(823, 819)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6(823, 819, 749, 748)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -201,34 +383,23 @@ void actEndDemo02(GObj *volatile self)
         scpPlayMot(boyGObj, 0);
     }
 
-    lt_switch_layout(PAL_JPNKORCN(55, 52));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(55, 52, 51));
     scpBoyControlReadDisable = 1;
     scpFadeOut(255.0f, 0, 0, 0);
-    if (ICO_JPNKORCN) {
-        scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(3, 0, 550, 0);
-        stage_SetLoopFlag(550, 1);
-        stage_SetAnimation(550, 1, 0);
-        stage_SetAnimation(821, 0, 0);
-        stage_SetAnimation(552, 0, -1);
-        stage_SetAnimation(553, 0, -1);
-        stage_SetAnimation(555, 0, -1);
-    } else {
-        scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(3, 0, 554, 0);
-        stage_SetLoopFlag(554, 1);
-        stage_SetAnimation(554, 1, 0);
-        stage_SetAnimation(825, 0, 0);
-    }
-    stage_SetAnimation(556, 0, -1);
-    stage_SetAnimation(557, 0, -1);
-    if (!ICO_JPNKORCN) {
-        stage_SetAnimation(559, 0, -1);
-        stage_SetAnimation(560, 0, -1);
-        stage_SetAnimation(561, 0, -1);
-    }
+    scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(
+        3, 0, PAL_JPNKORCN_NTSC_AUG6(554, 550, 483, 482), 0);
+    stage_SetLoopFlag(PAL_JPNKORCN_NTSC_AUG6(554, 550, 483, 482), 1);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(554, 550, 483, 482), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(825, 821, 751, 750), 0, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(556, 552, 485, 484), 0, -1);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(557, 553, 486, 485), 0, -1);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(559, 555, 488, 487), 0, -1);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(560, 556, 489, 488), 0, -1);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(561, 557, 490, 489), 0, -1);
     SelectBoyCrown(boyGObj, 2);
     demo02_mes[0].func = actEndDemo02Chk;
     act->mail = demo02_mes;
-    ACTSendMailCorrect(self, 430);
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -236,76 +407,150 @@ void actConte14_2(GObj *volatile self)
 {
     scpPlayStart(boyGObj);
 
-    stage_SetAnimation(PAL_JPNKORCN(824, 820), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(824, 820, 750, 749), 1, 0);
 
-    scpPlayMot(boyGObj, 441);
+    scpPlayMot(boyGObj, PAL_NTSCAUG6(441, 435));
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(824, 820), PAL_JPNKORCN(825, 821)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(824, 825), stage_ContinueAnimation(820, 821),
+               stage_ContinueAnimation(750, 751), stage_ContinueAnimation(749, 750)) == 0) {
         _ACTWait(1);
     }
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(825, 821), PAL_JPNKORCN(826, 822)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(825, 826), stage_ContinueAnimation(821, 822),
+               stage_ContinueAnimation(751, 752), stage_ContinueAnimation(750, 751)) == 0) {
         _ACTWait(1);
     }
 
-    scpPlayMot(scpSearchGobj(2686), 815);
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2686, 2470, 2441)), PAL_NTSC_AUG6(815, 770, 772));
 
-    scpSearchGobj(2686)->active = 1;
+    scpSearchGobj(PAL_NTSC_AUG6(2686, 2470, 2441))->active = 1;
 
     _ACTWait(1);
 
-    stage_SetAnimation(PAL_JPNKORCN(827, 823), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(827, 823, 753, 752), 1, 0);
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(826, 822), PAL_JPNKORCN(828, 824)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(826, 828), stage_ContinueAnimation(822, 824),
+               stage_ContinueAnimation(752, 754), stage_ContinueAnimation(751, 753)) == 0) {
         _ACTWait(1);
     }
 
-    scpPlayMot(boyGObj, 442);
+    scpPlayMot(boyGObj, PAL_NTSCAUG6(442, 436));
 
-    scpPlayMot(scpSearchGobj(2686), 816);
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2686, 2470, 2441)), PAL_NTSC_AUG6(816, 771, 773));
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(828, 824), PAL_JPNKORCN(829, 825)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(828, 829), stage_ContinueAnimation(824, 825),
+               stage_ContinueAnimation(754, 755), stage_ContinueAnimation(753, 754)) == 0) {
         _ACTWait(1);
     }
 
-    scpPlayMot(boyGObj, 443);
+    scpPlayMot(boyGObj, PAL_NTSCAUG6(443, 437));
 
-    scpPlayMot(scpSearchGobj(2686), 817);
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2686, 2470, 2441)), PAL_NTSC_AUG6(817, 772, 774));
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(829, 825), PAL_JPNKORCN(830, 826)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(829, 830), stage_ContinueAnimation(825, 826),
+               stage_ContinueAnimation(755, 756), stage_ContinueAnimation(754, 755)) == 0) {
         _ACTWait(1);
     }
 
-    scpPlayMot(boyGObj, 444);
+    scpPlayMot(boyGObj, PAL_NTSCAUG6(444, 438));
 
-    scpPlayMot(scpSearchGobj(2686), 818);
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2686, 2470, 2441)), PAL_NTSC_AUG6(818, 773, 775));
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(830, 826), PAL_JPNKORCN(831, 827)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(830, 831), stage_ContinueAnimation(826, 827),
+               stage_ContinueAnimation(756, 757), stage_ContinueAnimation(755, 756)) == 0) {
         _ACTWait(1);
     }
 
-    scpPlayMot(boyGObj, 445);
+    scpPlayMot(boyGObj, PAL_NTSCAUG6(445, 439));
 
-    scpPlayMot(scpSearchGobj(2686), 819);
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2686, 2470, 2441)), PAL_NTSC_AUG6(819, 774, 776));
 
     _ACTWait(1);
 
-    stage_SetAnimation(PAL_JPNKORCN(832, 828), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(832, 828, 758, 757), 1, 0);
 
-    while (stage_CheckAnimationFinish(PAL_JPNKORCN(831, 827)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6(831, 827, 757, 756)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     scpPlayEnd(boyGObj);
 
-    lt_switch_layout(PAL_JPNKORCN(54, 51));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(54, 51, 50));
 
     RequestStageChange(3, boyGObj, 0, 1.0f, 8.0f);
 }
 
+static void actEndDemo06_ntsc(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *act = actInitialize(self);
+
+    _ACTWait(1);
+
+    if (gflagChk(313) == 0 && gflagChk(312) != 0) {
+        lt_switch_layout(51);
+        scpBoyControlReadDisable = 1;
+        scpLinkBGAtoLayoutedTargetSkeltonWithLocalRotationFlag(2308, 0, 483, 0);
+        stage_SetLoopFlag(483, 1);
+        stage_SetAnimation(483, 1, 0);
+        stage_SetAnimation(766, 0, 0);
+        stage_SetAnimation(31, 0, -1);
+        stage_SetAnimation(25, 0, 0);
+        stage_SetAnimation(34, 0, -1);
+        stage_SetAnimation(32, 0, -1);
+        stage_SetAnimation(33, 0, -1);
+        SelectBoyCrown(boyGObj, 2);
+        demo06_mes[0].func = actEndDemo06Chk;
+        act->mail = demo06_mes;
+        ACTSendMailCorrect(self, 397);
+        _ACTWait(0);
+    }
+}
+
+static void actEndDemo06_aug6(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *act = actInitialize(self);
+
+    _ACTWait(1);
+
+    if (gflagChk(312) == 0 && gflagChk(311) != 0) {
+        lt_switch_layout(51);
+        scpBoyControlReadDisable = 1;
+        scpLinkBGAtoLayoutedTargetSkeltonWithLocalRotationFlag(2279, 0, 482, 0);
+        stage_SetLoopFlag(482, 1);
+        stage_SetAnimation(482, 1, 0);
+        stage_SetAnimation(765, 0, 0);
+        stage_SetAnimation(31, 0, -1);
+        stage_SetAnimation(25, 0, 0);
+        stage_SetAnimation(34, 0, -1);
+        stage_SetAnimation(32, 0, -1);
+        stage_SetAnimation(33, 0, -1);
+        SelectBoyCrown(boyGObj, 2);
+        demo06_mes[0].func = actEndDemo06Chk;
+        act->mail = demo06_mes;
+        ACTSendMailCorrect(self, 393);
+        _ACTWait(0);
+    }
+}
+
 void actEndDemo06(GObj *volatile self)
 {
+    if (ICO_NTSC) {
+        actEndDemo06_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        actEndDemo06_aug6(self);
+        return;
+    }
     GObj *x = self;
     Act *act = actInitialize(self);
 
@@ -340,27 +585,29 @@ void actConte14_6(GObj *volatile self)
 
     scpPlayStart(boyGObj);
 
-    stage_SetAnimation(PAL_JPNKORCN(838, 834), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(838, 834, 764, 763), 1, 0);
 
-    stage_SetAnimation(PAL_JPNKORCN(840, 836), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(840, 836, 766, 765), 1, 0);
 
-    stage_SetAnimation(PAL_JPNKORCN(841, 837), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(841, 837, 767, 766), 1, 0);
 
-    scpPlayMot(boyGObj, 446);
+    scpPlayMot(boyGObj, PAL_NTSCAUG6(446, 440));
 
-    scpPlayMot(scpSearchGobj(2516), 820);
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2516, 2308, 2279)), PAL_NTSC_AUG6(820, 775, 777));
 
-    scpSearchGobj(2516)->active = 1;
+    scpSearchGobj(PAL_NTSC_AUG6(2516, 2308, 2279))->active = 1;
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(838, 834), PAL_JPNKORCN(839, 835)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(838, 839), stage_ContinueAnimation(834, 835),
+               stage_ContinueAnimation(764, 765), stage_ContinueAnimation(763, 764)) == 0) {
         _ACTWait(1);
     }
 
-    scpPlayMot(boyGObj, 447);
+    scpPlayMot(boyGObj, PAL_NTSCAUG6(447, 441));
 
-    scpPlayMot(scpSearchGobj(2516), 821);
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2516, 2308, 2279)), PAL_NTSC_AUG6(821, 776, 778));
 
-    while (stage_CheckAnimationFinish(PAL_JPNKORCN(839, 835)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6(839, 835, 765, 764)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -375,19 +622,20 @@ void actEndDemo07(GObj *volatile self)
 
     _ACTWait(1);
 
-    lt_switch_layout(PAL_JPNKORCN(55, 52));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(55, 52, 51));
     scpBoyControlReadDisable = 1;
     scpFadeOut(255.0f, 0, 0, 0);
-    scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(3, 0, PAL_JPNKORCN(554, 550), 0);
-    stage_SetAnimation(PAL_JPNKORCN(173, 169), 0, 0);
-    stage_SetLoopFlag(PAL_JPNKORCN(554, 550), 1);
-    stage_SetAnimation(PAL_JPNKORCN(554, 550), 1, 0);
+    scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(
+        3, 0, PAL_JPNKORCN_NTSC_AUG6(554, 550, 483, 482), 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(173, 169, 152, 151), 0, 0);
+    stage_SetLoopFlag(PAL_JPNKORCN_NTSC_AUG6(554, 550, 483, 482), 1);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(554, 550, 483, 482), 1, 0);
 
-    if (gflagChk(345) == 0) {
+    if (gflagChk(PAL_NTSC_AUG6(345, 314, 313)) == 0) {
         SelectBoyCrown(boyGObj, 2);
         demo07_mes[0].func = actEndDemo07Chk;
         act->mail = demo07_mes;
-        ACTSendMailCorrect(self, 430);
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
         _ACTWait(0);
     }
 }
@@ -410,15 +658,15 @@ void actConte14_7(GObj *volatile self)
 
     scpPlayStart(boyGObj);
 
-    stage_SetAnimation(PAL_JPNKORCN(842, 838), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(842, 838, 768, 767), 1, 0);
 
-    stage_SetAnimation(PAL_JPNKORCN(173, 169), 1, 471);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(173, 169, 152, 151), 1, 471);
 
     _ACTWait(1);
 
     scpPlayPosSet(boyGObj, -4757.0f, -660.0f, 2646.0f);
 
-    scpPlayPosSet(scpSearchGobj(2388), -4757.0f, -664.0f, 2646.0f);
+    scpPlayPosSet(scpSearchGobj(PAL_NTSC_AUG6(2388, 2181, 2156)), -4757.0f, -664.0f, 2646.0f);
 
     _ACTWait(1);
 
@@ -429,16 +677,17 @@ void actConte14_7(GObj *volatile self)
 
     ofs[0] = conte14_7Pos.d[0];
     ofs[1] = conte14_7Pos.d[1];
-    sceVu0SubVector(dir, ofs, test_CURRENTROOT(scpSearchGobj(2388)));
-    scpPlayMotDir(scpSearchGobj(2388), dir);
+    sceVu0SubVector(dir, ofs, test_CURRENTROOT(scpSearchGobj(PAL_NTSC_AUG6(2388, 2181, 2156))));
+    scpPlayMotDir(scpSearchGobj(PAL_NTSC_AUG6(2388, 2181, 2156)), dir);
 
-    scpPlayMotNode(boyGObj, 448, scpSearchGobj(2388), 44);
+    scpPlayMotNode(boyGObj, PAL_NTSCAUG6(448, 442), scpSearchGobj(PAL_NTSC_AUG6(2388, 2181, 2156)),
+                   44);
 
-    scpPlayMot(scpSearchGobj(2388), 822);
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2388, 2181, 2156)), PAL_NTSC_AUG6(822, 777, 779));
 
-    scpSearchGobj(2388)->active = 1;
+    scpSearchGobj(PAL_NTSC_AUG6(2388, 2181, 2156))->active = 1;
 
-    while (stage_CheckAnimationFinish(PAL_JPNKORCN(842, 838)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6(842, 838, 768, 767)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -453,23 +702,274 @@ void actEndDemo10(GObj *volatile self)
 
     _ACTWait(1);
 
-    lt_switch_layout(PAL_JPNKORCN(55, 52));
-    scpBoyControlReadDisable = 1;
-    scpFadeOut(255.0f, 0, 0, 0);
-    scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(3, 0, PAL_JPNKORCN(554, 550), 0);
-    scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(3, 52, 58, 0);
-    stage_SetLoopFlag(PAL_JPNKORCN(554, 550), 1);
-    stage_SetAnimation(PAL_JPNKORCN(554, 550), 1, 0);
-    SelectBoyCrown(boyGObj, 2);
-    stage_SetAnimation(PAL_JPNKORCN(850, 846), 0, 0);
-    demo10_mes[0].func = actEndDemo10Chk;
-    act->mail = demo10_mes;
-    ACTSendMailCorrect(self, 430);
+    if (ICO_AUG6) {
+        lt_switch_layout(51);
+        scpBoyControlReadDisable = 1;
+        scpFadeOut(255.0f, 0, 0, 0);
+        scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(3, 0, 482, 0);
+        stage_SetLoopFlag(482, 1);
+        stage_SetAnimation(482, 1, 0);
+        SelectBoyCrown(boyGObj, 2);
+        stage_SetAnimation(775, 0, 0);
+        demo10_mes[0].func = actEndDemo10Chk;
+        act->mail = demo10_mes;
+        ACTSendMailCorrect(self, 393);
+    } else if (ICO_NTSC) {
+        lt_switch_layout(51);
+        scpBoyControlReadDisable = 1;
+        scpFadeOut(255.0f, 0, 0, 0);
+        scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(3, 0, 483, 0);
+        stage_SetLoopFlag(483, 1);
+        stage_SetAnimation(483, 1, 0);
+        SelectBoyCrown(boyGObj, 2);
+        stage_SetAnimation(776, 0, 0);
+        demo10_mes[0].func = actEndDemo10Chk;
+        act->mail = demo10_mes;
+        ACTSendMailCorrect(self, 397);
+    } else if (ICO_JPNKORCN) {
+        lt_switch_layout(52);
+        scpBoyControlReadDisable = 1;
+        scpFadeOut(255.0f, 0, 0, 0);
+        scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(3, 0, 550, 0);
+        scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(3, 52, 58, 0);
+        stage_SetLoopFlag(550, 1);
+        stage_SetAnimation(550, 1, 0);
+        SelectBoyCrown(boyGObj, 2);
+        stage_SetAnimation(846, 0, 0);
+        demo10_mes[0].func = actEndDemo10Chk;
+        act->mail = demo10_mes;
+        ACTSendMailCorrect(self, 430);
+    } else {
+        lt_switch_layout(55);
+        scpBoyControlReadDisable = 1;
+        scpFadeOut(255.0f, 0, 0, 0);
+        scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(3, 0, 554, 0);
+        scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(3, 52, 58, 0);
+        stage_SetLoopFlag(554, 1);
+        stage_SetAnimation(554, 1, 0);
+        SelectBoyCrown(boyGObj, 2);
+        stage_SetAnimation(850, 0, 0);
+        demo10_mes[0].func = actEndDemo10Chk;
+        act->mail = demo10_mes;
+        ACTSendMailCorrect(self, 430);
+    }
     _ACTWait(0);
+}
+
+static void actConte14_10_ntsc(GObj *volatile self)
+{
+    preload(3);
+
+    scpPlayStart(boyGObj);
+
+    stage_SetAnimation(769, 1, 0);
+
+    scpPlayMot(boyGObj, 443);
+
+    scpPlayMot(scpSearchGobj(1940), 778);
+
+    scpSearchGobj(1940)->active = 1;
+
+    _ACTWait(1);
+
+    stage_SetAnimation(42, 1, 0);
+
+    stage_SetAnimation(770, 1, 0);
+
+    while (stage_ContinueAnimation(769, 771) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 444);
+
+    scpPlayMot(scpSearchGobj(1940), 779);
+
+    _ACTWait(1);
+
+    stage_SetAnimation(43, 1, 0);
+
+    while (stage_ContinueAnimation(771, 772) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 445);
+
+    scpPlayMot(scpSearchGobj(1940), 780);
+
+    _ACTWait(1);
+
+    stage_SetAnimation(44, 1, 0);
+
+    while (stage_ContinueAnimation(772, 773) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 446);
+
+    scpPlayMot(scpSearchGobj(1940), 781);
+
+    _ACTWait(1);
+
+    stage_SetAnimation(45, 1, 0);
+
+    while (stage_ContinueAnimation(773, 774) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 447);
+
+    scpPlayMot(scpSearchGobj(1940), 782);
+
+    _ACTWait(1);
+
+    stage_SetAnimation(46, 1, 0);
+
+    while (stage_ContinueAnimation(774, 775) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 448);
+
+    _ACTWait(1);
+
+    stage_SetAnimation(47, 1, 0);
+
+    stage_SetAnimation(53, 1, 0);
+
+    stage_SetAnimation(776, 1, 0);
+
+    while (stage_ContinueAnimation(775, 777) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 449);
+
+    _ACTWait(1);
+
+    stage_SetAnimation(48, 1, 0);
+
+    stage_SetAnimation(54, 1, 0);
+
+    while (stage_CheckAnimationFinish(777) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    RequestStageChange(3, boyGObj, girlGObj, 1.0f, 8.0f);
+}
+
+static void actConte14_10_aug6(GObj *volatile self)
+{
+    preload(3);
+
+    scpPlayStart(boyGObj);
+
+    stage_SetAnimation(768, 1, 0);
+
+    scpPlayMot(boyGObj, 443);
+
+    scpPlayMot(scpSearchGobj(1916), 780);
+
+    scpSearchGobj(1916)->active = 1;
+
+    _ACTWait(1);
+
+    stage_SetAnimation(42, 1, 0);
+
+    stage_SetAnimation(769, 1, 0);
+
+    while (stage_ContinueAnimation(768, 770) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 444);
+
+    scpPlayMot(scpSearchGobj(1916), 781);
+
+    _ACTWait(1);
+
+    stage_SetAnimation(43, 1, 0);
+
+    while (stage_ContinueAnimation(770, 771) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 445);
+
+    scpPlayMot(scpSearchGobj(1916), 782);
+
+    _ACTWait(1);
+
+    stage_SetAnimation(44, 1, 0);
+
+    while (stage_ContinueAnimation(771, 772) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 446);
+
+    scpPlayMot(scpSearchGobj(1916), 783);
+
+    _ACTWait(1);
+
+    stage_SetAnimation(45, 1, 0);
+
+    while (stage_ContinueAnimation(772, 773) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 447);
+
+    scpPlayMot(scpSearchGobj(1916), 784);
+
+    _ACTWait(1);
+
+    stage_SetAnimation(46, 1, 0);
+
+    while (stage_ContinueAnimation(773, 774) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 448);
+
+    _ACTWait(1);
+
+    stage_SetAnimation(47, 1, 0);
+
+    stage_SetAnimation(53, 1, 0);
+
+    stage_SetAnimation(775, 1, 0);
+
+    while (stage_ContinueAnimation(774, 776) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 449);
+
+    _ACTWait(1);
+
+    stage_SetAnimation(48, 1, 0);
+
+    stage_SetAnimation(54, 1, 0);
+
+    while (stage_CheckAnimationFinish(776) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    RequestStageChange(3, boyGObj, girlGObj, 1.0f, 8.0f);
 }
 
 void actConte14_10(GObj *volatile self)
 {
+    if (ICO_NTSC) {
+        actConte14_10_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        actConte14_10_aug6(self);
+        return;
+    }
     preload(3);
 
     scpPlayStart(boyGObj);
@@ -580,21 +1080,23 @@ void actConte14_13(GObj *volatile self)
 
     preload(6);
 
-    stage_SetAnimation(PAL_JPNKORCN(854, 850), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(854, 850, 780, 779), 1, 0);
 
-    scpPlayMot(boyGObj, 456);
+    scpPlayMot(boyGObj, PAL_NTSCAUG6(456, 450));
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(854, 850), PAL_JPNKORCN(855, 851)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(854, 855), stage_ContinueAnimation(850, 851),
+               stage_ContinueAnimation(780, 781), stage_ContinueAnimation(779, 780)) == 0) {
         _ACTWait(1);
     }
 
-    stage_SetAnimation(53, 1, 0);
+    stage_SetAnimation(PAL_NTSCAUG6(53, 50), 1, 0);
 
-    stage_SetAnimation(PAL_JPNKORCN(465, 461), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(465, 461, 402, 401), 1, 0);
 
-    scpPlayMot(boyGObj, 456);
+    scpPlayMot(boyGObj, PAL_NTSCAUG6(456, 450));
 
-    while (stage_CheckAnimationFinish(PAL_JPNKORCN(855, 851)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6(855, 851, 781, 780)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -604,30 +1106,284 @@ void actConte14_13(GObj *volatile self)
     RequestStageChange(6, boyGObj, girlGObj, 1.0f, 8.0f);
 }
 
-void actStaff1(GObj *volatile self)
+static void actStaff1_aug6(GObj *volatile self)
 {
     GObj *x = self;
     Act *act = actInitialize(self);
 
     _ACTWait(1);
 
-    lt_switch_layout(PAL_JPNKORCN(55, 52));
+    lt_switch_layout(51);
     scpBoyControlReadDisable = 1;
-    stage_SetAnimation(30, 0, -1);
-    stage_SetAnimation(26, 0, 0);
+    stage_SetAnimation(29, 0, 0);
+    stage_SetAnimation(25, 0, 0);
+    stage_SetAnimation(32, 0, 0);
     stage_SetAnimation(33, 0, 0);
-    stage_SetAnimation(34, 0, 0);
-    stage_SetAnimation(36, 0, 0);
-    stage_SetAnimation(38, 0, 0);
+    stage_SetAnimation(35, 0, 0);
+    stage_SetAnimation(37, 0, 0);
+    staff1_mes[0].func = actStaff1Chk;
+    act->mail = staff1_mes;
+    ACTSendMailCorrect(self, 393);
+    _ACTWait(0);
+}
+
+static void actStaff1_ntsc(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *act = actInitialize(self);
+
+    _ACTWait(1);
+
+    lt_switch_layout(51);
+    scpBoyControlReadDisable = 1;
+    stage_SetAnimation(29, 0, 0);
+    stage_SetAnimation(25, 0, 0);
+    stage_SetAnimation(32, 0, 0);
+    stage_SetAnimation(33, 0, 0);
+    stage_SetAnimation(35, 0, 0);
+    stage_SetAnimation(37, 0, 0);
+    staff1_mes[0].func = actStaff1Chk;
+    act->mail = staff1_mes;
+    ACTSendMailCorrect(self, 397);
+    _ACTWait(0);
+}
+
+void actStaff1(GObj *volatile self)
+{
+    if (ICO_AUG6) {
+        actStaff1_aug6(self);
+        return;
+    }
+    if (ICO_NTSC) {
+        actStaff1_ntsc(self);
+        return;
+    }
+    GObj *x = self;
+    Act *act = actInitialize(self);
+
+    _ACTWait(1);
+
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(55, 52, 51));
+    scpBoyControlReadDisable = 1;
+    if (ICO_NTSCAUG6) {
+        stage_SetAnimation(29, 0, 0);
+        stage_SetAnimation(25, 0, 0);
+        stage_SetAnimation(32, 0, 0);
+    } else {
+        stage_SetAnimation(30, 0, -1);
+        stage_SetAnimation(26, 0, 0);
+    }
+    stage_SetAnimation(33, 0, 0);
+    if (!ICO_NTSCAUG6) {
+        stage_SetAnimation(34, 0, 0);
+        stage_SetAnimation(36, 0, 0);
+        stage_SetAnimation(38, 0, 0);
+    }
     stage_SetAnimation(35, 0, 0);
     staff1_mes[0].func = actStaff1Chk;
     act->mail = staff1_mes;
-    ACTSendMailCorrect(self, 430);
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
     _ACTWait(0);
+}
+
+static void actStaff1Demo_ntsc(GObj *volatile self)
+{
+    preload(1);
+
+    staffRollStart(1.0f, 255);
+
+    stage_SetAnimation(523, 1, 0);
+
+    while (stage_ContinueAnimation(523, 524) == 0) {
+        _ACTWait(1);
+    }
+
+    stage_SetAnimation(25, 1, 0);
+
+    scpPlayMot(boyGObj, 282);
+
+    while (stage_ContinueAnimation(524, 526) == 0) {
+        _ACTWait(1);
+    }
+
+    while (stage_ContinueAnimation(526, 527) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 283);
+
+    _ACTWait(130);
+
+    stage_SetAnimation(31, 1, 0);
+
+    while (stage_ContinueAnimation(527, 528) == 0) {
+        _ACTWait(1);
+    }
+
+    while (stage_ContinueAnimation(528, 529) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 284);
+
+    while (stage_ContinueAnimation(529, 530) == 0) {
+        _ACTWait(1);
+    }
+
+    while (stage_ContinueAnimation(530, 531) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 286);
+
+    while (stage_ContinueAnimation(531, 532) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 287);
+
+    while (stage_ContinueAnimation(532, 533) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 288);
+
+    while (stage_ContinueAnimation(533, 534) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 289);
+
+    while (stage_ContinueAnimation(534, 535) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 290);
+
+    while (stage_ContinueAnimation(535, 536) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 291);
+
+    while (stage_CheckAnimationFrame(536, 100, 0) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    scpFadeOut(8.0f, 0, 0, 0);
+
+    while (scpFadeChk() != 0) {
+        _ACTWait(1);
+    }
+
+    RequestStageChange(1, boyGObj, girlGObj, 0.0f, 8.0f);
+}
+
+static void actStaff1Demo_aug6(GObj *volatile self)
+{
+    preload(1);
+
+    staffRollStart(1.0f, 255);
+
+    stage_SetAnimation(522, 1, 0);
+
+    while (stage_ContinueAnimation(522, 523) == 0) {
+        _ACTWait(1);
+    }
+
+    stage_SetAnimation(25, 1, 0);
+
+    scpPlayMot(boyGObj, 282);
+
+    while (stage_ContinueAnimation(523, 525) == 0) {
+        _ACTWait(1);
+    }
+
+    while (stage_ContinueAnimation(525, 526) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 283);
+
+    _ACTWait(130);
+
+    stage_SetAnimation(31, 1, 0);
+
+    while (stage_ContinueAnimation(526, 527) == 0) {
+        _ACTWait(1);
+    }
+
+    while (stage_ContinueAnimation(527, 528) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 284);
+
+    while (stage_ContinueAnimation(528, 529) == 0) {
+        _ACTWait(1);
+    }
+
+    while (stage_ContinueAnimation(529, 530) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 286);
+
+    while (stage_ContinueAnimation(530, 531) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 287);
+
+    while (stage_ContinueAnimation(531, 532) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 288);
+
+    while (stage_ContinueAnimation(532, 533) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 289);
+
+    while (stage_ContinueAnimation(533, 534) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 290);
+
+    while (stage_ContinueAnimation(534, 535) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 291);
+
+    while (stage_CheckAnimationFrame(535, 100, 0) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    scpFadeOut(8.0f, 0, 0, 0);
+
+    while (scpFadeChk() != 0) {
+        _ACTWait(1);
+    }
+
+    RequestStageChange(1, boyGObj, girlGObj, 0.0f, 8.0f);
 }
 
 void actStaff1Demo(GObj *volatile self)
 {
+    if (ICO_NTSC) {
+        actStaff1Demo_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        actStaff1Demo_aug6(self);
+        return;
+    }
     preload(1);
 
     staffRollStart(1.0f, 255);
@@ -724,8 +1480,244 @@ void actStaff1Demo(GObj *volatile self)
     RequestStageChange(1, boyGObj, girlGObj, 0.0f, 8.0f);
 }
 
+static void actStaff2Demo_ntsc(GObj *volatile self)
+{
+    preload(1);
+
+    stage_SetAnimation(577, 1, 0);
+
+    stage_SetAnimation(238, 1, 0);
+
+    scpPlayMot(boyGObj, 321);
+
+    scpPlayMot(scpSearchGobj(2585), 692);
+
+    scpSearchGobj(2585)->active = 1;
+
+    while (stage_ContinueAnimation(577, 578) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 322);
+
+    scpPlayMot(scpSearchGobj(2585), 693);
+
+    while (stage_ContinueAnimation(578, 579) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 323);
+
+    scpPlayMot(scpSearchGobj(2585), 694);
+
+    while (stage_ContinueAnimation(579, 580) == 0) {
+        _ACTWait(1);
+    }
+
+    while (stage_ContinueAnimation(580, 581) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 324);
+
+    scpPlayMot(scpSearchGobj(2585), 695);
+
+    while (stage_ContinueAnimation(581, 582) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 325);
+
+    scpPlayMot(scpSearchGobj(2585), 696);
+
+    while (stage_ContinueAnimation(582, 583) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 326);
+
+    scpPlayMot(scpSearchGobj(2585), 697);
+
+    while (stage_ContinueAnimation(583, 584) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 327);
+
+    while (stage_ContinueAnimation(584, 599) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 335);
+
+    scpPlayMot(scpSearchGobj(2585), 703);
+
+    while (stage_ContinueAnimation(599, 600) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 336);
+
+    scpPlayMot(scpSearchGobj(2585), 704);
+
+    while (stage_ContinueAnimation(600, 601) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 337);
+
+    scpPlayMot(scpSearchGobj(2585), 705);
+
+    while (stage_ContinueAnimation(601, 602) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 338);
+
+    scpPlayMot(scpSearchGobj(2585), 706);
+
+    while (stage_CheckAnimationFrame(602, 200, 0) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    reg_SetScissorSw(0);
+
+    SetStaticBlur(1);
+
+    scpFadeOut(8.0f, 0, 0, 0);
+
+    while (scpFadeChk() != 0) {
+        _ACTWait(1);
+    }
+
+    RequestStageChange(1, boyGObj, girlGObj, 0.0f, 8.0f);
+}
+
+static void actStaff2Demo_aug6(GObj *volatile self)
+{
+    preload(1);
+
+    stage_SetAnimation(576, 1, 0);
+
+    stage_SetAnimation(237, 1, 0);
+
+    scpPlayMot(boyGObj, 321);
+
+    scpPlayMot(scpSearchGobj(2556), 694);
+
+    scpSearchGobj(2556)->active = 1;
+
+    while (stage_ContinueAnimation(576, 577) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 322);
+
+    scpPlayMot(scpSearchGobj(2556), 695);
+
+    while (stage_ContinueAnimation(577, 578) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 323);
+
+    scpPlayMot(scpSearchGobj(2556), 696);
+
+    while (stage_ContinueAnimation(578, 579) == 0) {
+        _ACTWait(1);
+    }
+
+    while (stage_ContinueAnimation(579, 580) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 324);
+
+    scpPlayMot(scpSearchGobj(2556), 697);
+
+    while (stage_ContinueAnimation(580, 581) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 325);
+
+    scpPlayMot(scpSearchGobj(2556), 698);
+
+    while (stage_ContinueAnimation(581, 582) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 326);
+
+    scpPlayMot(scpSearchGobj(2556), 699);
+
+    while (stage_ContinueAnimation(582, 583) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 327);
+
+    while (stage_ContinueAnimation(583, 598) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 335);
+
+    scpPlayMot(scpSearchGobj(2556), 705);
+
+    while (stage_ContinueAnimation(598, 599) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 336);
+
+    scpPlayMot(scpSearchGobj(2556), 706);
+
+    while (stage_ContinueAnimation(599, 600) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 337);
+
+    scpPlayMot(scpSearchGobj(2556), 707);
+
+    while (stage_ContinueAnimation(600, 601) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 338);
+
+    scpPlayMot(scpSearchGobj(2556), 708);
+
+    while (stage_CheckAnimationFrame(601, 200, 0) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    reg_SetScissorSw(0);
+
+    SetStaticBlur(1);
+
+    scpFadeOut(8.0f, 0, 0, 0);
+
+    while (scpFadeChk() != 0) {
+        _ACTWait(1);
+    }
+
+    RequestStageChange(1, boyGObj, girlGObj, 0.0f, 8.0f);
+}
+
 void actStaff2Demo(GObj *volatile self)
 {
+    if (ICO_NTSC) {
+        actStaff2Demo_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        actStaff2Demo_aug6(self);
+        return;
+    }
     preload(1);
 
     stage_SetAnimation(PAL_JPNKORCN(907, 903), 1, 0);
@@ -838,8 +1830,184 @@ void actStaff2Demo(GObj *volatile self)
     RequestStageChange(1, boyGObj, girlGObj, 0.0f, 8.0f);
 }
 
+static void actStaff3Demo_ntsc(GObj *volatile self)
+{
+    long long ofs[2];
+    float dir[4];
+
+    stage_SetAnimation(554, 1, 0);
+
+    scpPlayPosSet(scpSearchGobj(2637), -7.0f, -5725.0f, 18.0f);
+
+    ofs[0] = staff3DemoPos.d[0];
+    ofs[1] = staff3DemoPos.d[1];
+    sceVu0SubVector(dir, ofs, test_CURRENTROOT(scpSearchGobj(2637)));
+    scpPlayMotDir(scpSearchGobj(2637), dir);
+
+    scpPlayMot(scpSearchGobj(2637), 633);
+
+    scpSearchGobj(2637)->active = 1;
+
+    scpPlayMot(boyGObj, 302);
+
+    while (stage_ContinueAnimation(554, 555) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 303);
+
+    while (stage_ContinueAnimation(555, 556) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 304);
+
+    while (stage_ContinueAnimation(556, 557) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 305);
+
+    while (stage_ContinueAnimation(557, 565) == 0) {
+        _ACTWait(1);
+    }
+
+    stage_SetAnimation(61, 0, -1);
+
+    scpPlayMot(scpSearchGobj(2637), 683);
+
+    while (stage_ContinueAnimation(565, 566) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(scpSearchGobj(2637), 684);
+
+    while (stage_ContinueAnimation(566, 567) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 312);
+
+    scpPlayMot(scpSearchGobj(2637), 685);
+
+    while (stage_ContinueAnimation(567, 568) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 313);
+
+    scpPlayMot(scpSearchGobj(2637), 686);
+
+    while (stage_ContinueAnimation(568, 570) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 314);
+
+    scpPlayMot(scpSearchGobj(2637), 687);
+
+    while (stage_CheckAnimationFrame(570, 200, 0) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    scpFadeOut(6.0f, 0, 0, 0);
+}
+
+static void actStaff3Demo_aug6(GObj *volatile self)
+{
+    long long ofs[2];
+    float dir[4];
+
+    stage_SetAnimation(553, 1, 0);
+
+    scpPlayPosSet(scpSearchGobj(2607), -7.0f, -5725.0f, 18.0f);
+
+    ofs[0] = staff3DemoPos.d[0];
+    ofs[1] = staff3DemoPos.d[1];
+    sceVu0SubVector(dir, ofs, test_CURRENTROOT(scpSearchGobj(2607)));
+    scpPlayMotDir(scpSearchGobj(2607), dir);
+
+    scpPlayMot(scpSearchGobj(2607), 635);
+
+    scpSearchGobj(2607)->active = 1;
+
+    scpPlayMot(boyGObj, 302);
+
+    while (stage_ContinueAnimation(553, 554) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 303);
+
+    while (stage_ContinueAnimation(554, 555) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 304);
+
+    while (stage_ContinueAnimation(555, 556) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 305);
+
+    while (stage_ContinueAnimation(556, 564) == 0) {
+        _ACTWait(1);
+    }
+
+    stage_SetAnimation(61, 0, -1);
+
+    scpPlayMot(scpSearchGobj(2607), 685);
+
+    while (stage_ContinueAnimation(564, 565) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(scpSearchGobj(2607), 686);
+
+    while (stage_ContinueAnimation(565, 566) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 312);
+
+    scpPlayMot(scpSearchGobj(2607), 687);
+
+    while (stage_ContinueAnimation(566, 567) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 313);
+
+    scpPlayMot(scpSearchGobj(2607), 688);
+
+    while (stage_ContinueAnimation(567, 569) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 314);
+
+    scpPlayMot(scpSearchGobj(2607), 689);
+
+    while (stage_CheckAnimationFrame(569, 200, 0) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    scpFadeOut(6.0f, 0, 0, 0);
+}
+
 void actStaff3Demo(GObj *volatile self)
 {
+    if (ICO_NTSC) {
+        actStaff3Demo_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        actStaff3Demo_aug6(self);
+        return;
+    }
     long long ofs[2];
     float dir[4];
 
@@ -933,7 +2101,7 @@ void actEndDemo14(GObj *volatile self)
 
     _ACTWait(1);
 
-    lt_switch_layout(PAL_JPNKORCN(55, 52));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(55, 52, 51));
     scpBoyControlReadDisable = 1;
     fbKeep = 1;
     scpFadeOut(3.0f, 255, 255, 255);
@@ -945,17 +2113,37 @@ void actEndDemo14(GObj *volatile self)
     fbKeep = 0;
     ScpCallCameraSetTarget(7046.0f, -77.0f, 1678.0f);
 
-    scpAdpcmPlayRequestFunc(95, &endDemo14, 1, 0, 1);
+    if (ICO_NTSC) {
+        scpAdpcmPlayRequestFunc(93, &sea, 1, 0, 1);
 
-    while (endDemo14 == 0) {
-        _ACTWait(1);
+        while (sea == 0) {
+            _ACTWait(1);
+        }
+    } else if (ICO_AUG6) {
+        scpAdpcmPlayRequestFunc(93, &sea, 1, 0, 1);
+    } else {
+        scpAdpcmPlayRequestFunc(95, &endDemo14, 1, 0, 1);
+
+        while (endDemo14 == 0) {
+            _ACTWait(1);
+        }
     }
 
     SelectBoyCrown(boyGObj, 2);
-    SetGirlClothDispSwitch(scpSearchGobj(2253), 1, 2);
-    ed_demo14_mes[0].func = actEndDemo14Chk;
-    act->mail = ed_demo14_mes;
-    ACTSendMailCorrect(self, 430);
+    if (ICO_NTSC) {
+        demo14_mes[0].func = actEndDemo14Chk;
+        act->mail = demo14_mes;
+        ACTSendMailCorrect(self, 397);
+    } else if (ICO_AUG6) {
+        ed_demo14_mes[0].func = actEndDemo14Chk;
+        act->mail = ed_demo14_mes;
+        ACTSendMailCorrect(self, 393);
+    } else {
+        SetGirlClothDispSwitch(scpSearchGobj(2253), 1, 2);
+        ed_demo14_mes[0].func = actEndDemo14Chk;
+        act->mail = ed_demo14_mes;
+        ACTSendMailCorrect(self, 430);
+    }
     _ACTWait(0);
 }
 
@@ -968,49 +2156,59 @@ void actConte14_14(GObj *volatile self)
 
     scpFadeIn(6.0f);
 
-    stage_SetAnimation(PAL_JPNKORCN(860, 856), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(860, 856, 786, 785), 1, 0);
 
-    scpPlayMot(boyGObj, 461);
+    scpPlayMot(boyGObj, PAL_NTSCAUG6(461, 455));
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(860, 856), PAL_JPNKORCN(861, 857)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(860, 861), stage_ContinueAnimation(856, 857),
+               stage_ContinueAnimation(786, 787), stage_ContinueAnimation(785, 786)) == 0) {
         _ACTWait(1);
     }
 
-    scpPlayMot(boyGObj, 462);
+    scpPlayMot(boyGObj, PAL_NTSCAUG6(462, 456));
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(861, 857), PAL_JPNKORCN(862, 858)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(861, 862), stage_ContinueAnimation(857, 858),
+               stage_ContinueAnimation(787, 788), stage_ContinueAnimation(786, 787)) == 0) {
         _ACTWait(1);
     }
 
-    scpPlayMot(boyGObj, 463);
+    scpPlayMot(boyGObj, PAL_NTSCAUG6(463, 457));
 
     _ACTWait(1);
 
-    stage_SetAnimation(54, 1, 0);
+    stage_SetAnimation(PAL_NTSCAUG6(54, 51), 1, 0);
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(862, 858), PAL_JPNKORCN(863, 859)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(862, 863), stage_ContinueAnimation(858, 859),
+               stage_ContinueAnimation(788, 789), stage_ContinueAnimation(787, 788)) == 0) {
         _ACTWait(1);
     }
 
-    scpPlayMot(boyGObj, 464);
+    scpPlayMot(boyGObj, PAL_NTSCAUG6(464, 458));
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(863, 859), PAL_JPNKORCN(864, 860)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(863, 864), stage_ContinueAnimation(859, 860),
+               stage_ContinueAnimation(789, 790), stage_ContinueAnimation(788, 789)) == 0) {
         _ACTWait(1);
     }
 
-    scpPlayMot(boyGObj, 465);
+    scpPlayMot(boyGObj, PAL_NTSCAUG6(465, 459));
 
-    while (stage_ContinueAnimation(PAL_JPNKORCN(864, 860), PAL_JPNKORCN(865, 861)) == 0) {
+    while (PAL_JPNKORCN_NTSC_AUG6(
+               stage_ContinueAnimation(864, 865), stage_ContinueAnimation(860, 861),
+               stage_ContinueAnimation(790, 791), stage_ContinueAnimation(789, 790)) == 0) {
         _ACTWait(1);
     }
 
-    scpPlayMot(boyGObj, 466);
+    scpPlayMot(boyGObj, PAL_NTSCAUG6(466, 460));
 
-    scpPlayMot(scpSearchGobj(2253), 829);
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2253, 2067, 2042)), PAL_NTSC_AUG6(829, 784, 786));
 
-    scpSearchGobj(2253)->active = 1;
+    scpSearchGobj(PAL_NTSC_AUG6(2253, 2067, 2042))->active = 1;
 
-    while (stage_CheckAnimationFinish(PAL_JPNKORCN(865, 861)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6(865, 861, 791, 790)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -1028,13 +2226,51 @@ void actConte14_14(GObj *volatile self)
 
     scpBoyControlReadDisable = 0;
 
-    lt_switch_layout(PAL_JPNKORCN(54, 51));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(54, 51, 50));
 
-    gflagOff(338);
+    gflagOff(PAL_NTSC_AUG6(338, 307, 306));
+}
+
+static void actSt27aEnd_ntsc(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *act = actInitialize(self);
+
+    _ACTWait(1);
+
+    if (gflagChk(323) == 0) {
+        st27aEnd_mes[0].func = actSt27aEndChk;
+        act->mail = st27aEnd_mes;
+        ACTSendMailCorrect(self, 397);
+        _ACTWait(0);
+    }
+}
+
+static void actSt27aEnd_aug6(GObj *volatile self)
+{
+    GObj *x = self;
+    Act *act = actInitialize(self);
+
+    _ACTWait(1);
+
+    if (gflagChk(322) == 0) {
+        st27aEnd_mes[0].func = actSt27aEndChk;
+        act->mail = st27aEnd_mes;
+        ACTSendMailCorrect(self, 393);
+        _ACTWait(0);
+    }
 }
 
 void actSt27aEnd(GObj *volatile self)
 {
+    if (ICO_NTSC) {
+        actSt27aEnd_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        actSt27aEnd_aug6(self);
+        return;
+    }
     GObj *x = self;
     Act *act = actInitialize(self);
 
@@ -1059,8 +2295,90 @@ void actSt27aEnd(GObj *volatile self)
     }
 }
 
+static void actSt27aEndChk_ntsc(GObj *volatile self)
+{
+    float max;
+    float t;
+
+    while (scpTriggerFloorAttr(boyGObj, 0x1000000) == 0) {
+        _ACTWait(1);
+    }
+
+    lt_switch_layout(51);
+    scpBoyControlReadDisable = 1;
+
+    scpPlayStart(boyGObj);
+    scpPlayMot(boyGObj, 0);
+
+    if (sea != 0) {
+        scpAdpcmFadeClose(sea, 27);
+    }
+    scpAdpcmPlayRequestFunc(49, &happy_end, 0, 1, 1);
+    while (happy_end == 0) {
+        _ACTWait(1);
+    }
+
+    gflagOn(323);
+
+    actCreateSubThread(actSt27aEndDemo, 21);
+
+    max = (float)((60 - systemStatus[0] * 10) / systemStatus[1] * 20);
+    t = (float)((60 - systemStatus[0] * 10) / systemStatus[1] * 20);
+    while (t > 0.0f) {
+        scpSeEnvMasterVolRate = t / max;
+        t -= 1.0f;
+        _ACTWait(1);
+    }
+    scpSeEnvMasterVolRate = 0;
+}
+
+static void actSt27aEndChk_aug6(GObj *volatile self)
+{
+    float max;
+    float t;
+
+    while (scpTriggerFloorAttr(boyGObj, 0x1000000) == 0) {
+        _ACTWait(1);
+    }
+
+    lt_switch_layout(51);
+    scpBoyControlReadDisable = 1;
+
+    scpPlayStart(boyGObj);
+    scpPlayMot(boyGObj, 0);
+
+    if (sea != 0) {
+        scpAdpcmFadeClose(sea, 27);
+    }
+    scpAdpcmPlayRequestFunc(49, &happy_end, 0, 1, 1);
+    while (happy_end == 0) {
+        _ACTWait(1);
+    }
+
+    gflagOn(322);
+
+    actCreateSubThread(actSt27aEndDemo, 21);
+
+    max = (float)((60 - systemStatus[0] * 10) / systemStatus[1] * 20);
+    t = (float)((60 - systemStatus[0] * 10) / systemStatus[1] * 20);
+    while (t > 0.0f) {
+        scpSeEnvMasterVolRate = t / max;
+        t -= 1.0f;
+        _ACTWait(1);
+    }
+    scpSeEnvMasterVolRate = 0;
+}
+
 void actSt27aEndChk(GObj *volatile self)
 {
+    if (ICO_NTSC) {
+        actSt27aEndChk_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        actSt27aEndChk_aug6(self);
+        return;
+    }
     float max;
     float t;
 
@@ -1098,8 +2416,84 @@ void actSt27aEndChk(GObj *volatile self)
     scpSeEnvMasterVolRate = 0;
 }
 
+static void actSt27aEndDemo_ntsc(GObj *volatile self)
+{
+    stage_SetAnimation(792, 1, 0);
+
+    scpPlayMot(boyGObj, 461);
+
+    scpPlayMot(scpSearchGobj(2067), 785);
+
+    scpSearchGobj(2067)->active = 1;
+
+    while (stage_ContinueAnimation(792, 793) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 462);
+
+    scpPlayMot(scpSearchGobj(2067), 786);
+
+    while (stage_ContinueAnimation(793, 794) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 463);
+
+    scpPlayMot(scpSearchGobj(2067), 787);
+
+    while (stage_CheckAnimationFinish(794) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    RequestStageChange(1, boyGObj, girlGObj, 1.0f, 8.0f);
+}
+
+static void actSt27aEndDemo_aug6(GObj *volatile self)
+{
+    stage_SetAnimation(791, 1, 0);
+
+    scpPlayMot(boyGObj, 461);
+
+    scpPlayMot(scpSearchGobj(2042), 787);
+
+    scpSearchGobj(2042)->active = 1;
+
+    while (stage_ContinueAnimation(791, 792) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 462);
+
+    scpPlayMot(scpSearchGobj(2042), 788);
+
+    while (stage_ContinueAnimation(792, 793) == 0) {
+        _ACTWait(1);
+    }
+
+    scpPlayMot(boyGObj, 463);
+
+    scpPlayMot(scpSearchGobj(2042), 789);
+
+    while (stage_CheckAnimationFinish(793) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+
+    RequestStageChange(1, boyGObj, girlGObj, 1.0f, 8.0f);
+}
+
 void actSt27aEndDemo(GObj *volatile self)
 {
+    if (ICO_NTSC) {
+        actSt27aEndDemo_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        actSt27aEndDemo_aug6(self);
+        return;
+    }
     stage_SetAnimation(PAL_JPNKORCN(866, 862), 1, 0);
 
     if (gflagChk(354) == 0) {
@@ -1207,8 +2601,28 @@ void actSt27aEndDemo(GObj *volatile self)
 /* The step between the logo and the save. The Japanese and Korean discs (the November
    build) name it actEndLogoFade and have no per-language logo animation before the wait
    (the !ICO_JPNKOR block); the body is one for every disc under the European name. */
+static void actEndLogoChk_ntscaug6(GObj *volatile self)
+{
+    scpBoyControlReadDisable = 1;
+    enable_game_pause = 0;
+    preload(1);
+    _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1] * 30);
+
+    scpFadeOut(6.0f, 0, 0, 0);
+
+    while (scpFadeChk() != 0) {
+        _ACTWait(1);
+    }
+
+    RequestStageChange(1, boyGObj, 0, 255.0f, 8.0f);
+}
+
 void actEndLogoChk(GObj *volatile self)
 {
+    if (ICO_NTSCAUG6) {
+        actEndLogoChk_ntscaug6(self);
+        return;
+    }
     GObj *x = self;
     Act *act = actInitialize(self);
     int id = 60;
@@ -1274,15 +2688,17 @@ void actEndDemo03(GObj *volatile self)
         scpPlayMot(boyGObj, 0);
     }
 
-    lt_switch_layout(PAL_JPNKORCN(55, 52));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(55, 52, 51));
     scpBoyControlReadDisable = 1;
     scpFadeOut(255.0f, 0, 0, 0);
-    stage_SetAnimation(PAL_JPNKORCN(74, 70), 0, -1);
-    stage_SetAnimation(PAL_JPNKORCN(75, 71), 0, -1);
-    stage_SetAnimation(PAL_JPNKORCN(77, 73), 0, -1);
+    if (!ICO_NTSCAUG6) {
+        stage_SetAnimation(PAL_JPNKORCN(74, 70), 0, -1);
+        stage_SetAnimation(PAL_JPNKORCN(75, 71), 0, -1);
+        stage_SetAnimation(PAL_JPNKORCN(77, 73), 0, -1);
+    }
     demo03_mes[0].func = actEndDemo03Chk;
     act->mail = demo03_mes;
-    ACTSendMailCorrect(self, 430);
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -1297,12 +2713,12 @@ void actEndDemo04(GObj *volatile self)
         scpPlayMot(boyGObj, 0);
     }
 
-    lt_switch_layout(PAL_JPNKORCN(55, 52));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(55, 52, 51));
     scpBoyControlReadDisable = 1;
     scpFadeOut(255.0f, 0, 0, 0);
     demo04_mes[0].func = actEndDemo04Chk;
     act->mail = demo04_mes;
-    ACTSendMailCorrect(self, 430);
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -1313,11 +2729,11 @@ void actEndDemo05(GObj *volatile self)
 
     _ACTWait(1);
 
-    lt_switch_layout(PAL_JPNKORCN(55, 52));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(55, 52, 51));
     scpBoyControlReadDisable = 1;
     demo05_mes[0].func = actEndDemo05Chk;
     act->mail = demo05_mes;
-    ACTSendMailCorrect(self, 430);
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -1328,12 +2744,12 @@ void actEndDemo11(GObj *volatile self)
 
     _ACTWait(1);
 
-    lt_switch_layout(PAL_JPNKORCN(55, 52));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(55, 52, 51));
     scpBoyControlReadDisable = 1;
     SelectBoyCrown(boyGObj, 2);
     demo11_mes[0].func = actEndDemo11Chk;
     act->mail = demo11_mes;
-    ACTSendMailCorrect(self, 430);
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -1344,12 +2760,12 @@ void actEndDemo12(GObj *volatile self)
 
     _ACTWait(1);
 
-    lt_switch_layout(PAL_JPNKORCN(55, 52));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(55, 52, 51));
     scpBoyControlReadDisable = 1;
-    stage_SetAnimation(PAL_JPNKORCN(80, 76), 0, -1);
+    stage_SetAnimation(PAL_JPNKORCN_NTSCAUG6(80, 76, 67), 0, -1);
     demo12_mes[0].func = actEndDemo12Chk;
     act->mail = demo12_mes;
-    ACTSendMailCorrect(self, 430);
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -1360,13 +2776,13 @@ void actEndDemo13(GObj *volatile self)
 
     _ACTWait(1);
 
-    lt_switch_layout(PAL_JPNKORCN(55, 52));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(55, 52, 51));
     scpBoyControlReadDisable = 1;
     scpFadeOut(255.0f, 255, 255, 255);
     SelectBoyCrown(boyGObj, 2);
     demo13_mes[0].func = actEndDemo13Chk;
     act->mail = demo13_mes;
-    ACTSendMailCorrect(self, 430);
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -1377,15 +2793,24 @@ void actStaff2(GObj *volatile self)
 
     _ACTWait(1);
 
-    lt_switch_layout(PAL_JPNKORCN(55, 52));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(55, 52, 51));
     scpBoyControlReadDisable = 1;
-    scpSetBoyWeaponGObj(scpSearchGobj(2795));
-    scpSearchGobj(2793)->dobj->ctrl.seMute = 1;
-    scpSearchGobj(2794)->dobj->ctrl.seMute = 1;
-    stage_SetAnimation(PAL_JPNKORCN(269, 265), 0, 0);
+    if (ICO_NTSC) {
+        scpSetBoyWeaponGObj(scpSearchGobj(2591));
+        stage_SetAnimation(238, 0, 0);
+        stage_SetAnimation(258, 0, 0);
+    } else if (ICO_AUG6) {
+        stage_SetAnimation(237, 0, 0);
+        stage_SetAnimation(257, 0, 0);
+    } else {
+        scpSetBoyWeaponGObj(scpSearchGobj(2795));
+        scpSearchGobj(2793)->dobj->ctrl.seMute = 1;
+        scpSearchGobj(2794)->dobj->ctrl.seMute = 1;
+        stage_SetAnimation(PAL_JPNKORCN(269, 265), 0, 0);
+    }
     staff2_mes[0].func = actStaff2Chk;
     act->mail = staff2_mes;
-    ACTSendMailCorrect(self, 430);
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -1396,15 +2821,24 @@ void actStaff3(GObj *volatile self)
 
     _ACTWait(1);
 
-    lt_switch_layout(PAL_JPNKORCN(55, 52));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(55, 52, 51));
     scpBoyControlReadDisable = 1;
-    scpFadeOut(255.0f, 0, 0, 0);
-    DeleteBoyWeapon();
-    stage_SetAnimation(PAL_JPNKORCN(72, 68), 0, 0);
-    stage_SetAnimation(PAL_JPNKORCN(77, 73), 0, 0);
+    if (ICO_NTSC) {
+        DeleteBoyWeapon();
+        stage_SetAnimation(59, 0, 0);
+        stage_SetAnimation(64, 0, 0);
+    } else if (ICO_AUG6) {
+        stage_SetAnimation(59, 0, 0);
+        stage_SetAnimation(64, 0, 0);
+    } else {
+        scpFadeOut(255.0f, 0, 0, 0);
+        DeleteBoyWeapon();
+        stage_SetAnimation(PAL_JPNKORCN(72, 68), 0, 0);
+        stage_SetAnimation(PAL_JPNKORCN(77, 73), 0, 0);
+    }
     staff3_mes[0].func = actStaff3Chk;
     act->mail = staff3_mes;
-    ACTSendMailCorrect(self, 430);
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -1417,13 +2851,13 @@ void actEndLogo(GObj *volatile self)
 
     logo_mes[0].func = actEndLogoChk;
     act->mail = logo_mes;
-    ACTSendMailCorrect(self, 430);
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
     _ACTWait(0);
 }
 
 void actEndDemo01Chk(GObj *volatile self)
 {
-    scpAdpcmPlayRequestFunc(43, &ed1, 0, 1, 1);
+    scpAdpcmPlayRequestFunc(PAL_NTSCAUG6(43, 42), &ed1, 0, 1, 1);
 
     while (ed1 == 0) {
         _ACTWait(1);
@@ -1439,14 +2873,14 @@ void actEndDemo01Chk(GObj *volatile self)
 
     gflagOn(4);
 
-    gflagOn(339);
+    gflagOn(PAL_NTSC_AUG6(339, 308, 307));
 
     actCreateSubThread(actConte14_1, 21);
 }
 
 void actEndDemo02Chk(GObj *volatile self)
 {
-    scpAdpcmPlayRequestFunc(44, &ed2, 0, 1, 1);
+    scpAdpcmPlayRequestFunc(PAL_NTSCAUG6(44, 43), &ed2, 0, 1, 1);
 
     while (ed2 == 0) {
         _ACTWait(1);
@@ -1456,14 +2890,14 @@ void actEndDemo02Chk(GObj *volatile self)
 
     scpFadeIn(6.0f);
 
-    gflagOn(340);
+    gflagOn(PAL_NTSC_AUG6(340, 309, 308));
 
     actCreateSubThread(actConte14_2, 21);
 }
 
 void actEndDemo03Chk(GObj *volatile self)
 {
-    scpAdpcmPlayRequestFunc(45, &ed3, 0, 1, 1);
+    scpAdpcmPlayRequestFunc(PAL_NTSCAUG6(45, 44), &ed3, 0, 1, 1);
 
     while (ed3 == 0) {
         _ACTWait(1);
@@ -1473,16 +2907,16 @@ void actEndDemo03Chk(GObj *volatile self)
 
     scpFadeIn(6.0f);
 
-    gflagOn(341);
+    gflagOn(PAL_NTSC_AUG6(341, 310, 309));
 
     actCreateSubThread(actConte14_3, 21);
 }
 
 void actConte14_3(GObj *volatile self)
 {
-    stage_SetAnimation(PAL_JPNKORCN(833, 829), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(833, 829, 759, 758), 1, 0);
 
-    while (stage_CheckAnimationFinish(PAL_JPNKORCN(833, 829)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6(833, 829, 759, 758)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -1492,7 +2926,7 @@ void actConte14_3(GObj *volatile self)
 
 void actEndDemo04Chk(GObj *volatile self)
 {
-    scpAdpcmPlayRequestFunc(46, &ed4, 0, 1, 1);
+    scpAdpcmPlayRequestFunc(PAL_NTSCAUG6(46, 45), &ed4, 0, 1, 1);
 
     while (ed4 == 0) {
         _ACTWait(1);
@@ -1502,16 +2936,16 @@ void actEndDemo04Chk(GObj *volatile self)
 
     scpFadeIn(6.0f);
 
-    gflagOn(342);
+    gflagOn(PAL_NTSC_AUG6(342, 311, 310));
 
     actCreateSubThread(actConte14_4, 21);
 }
 
 void actConte14_4(GObj *volatile self)
 {
-    stage_SetAnimation(PAL_JPNKORCN(834, 830), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(834, 830, 760, 759), 1, 0);
 
-    while (stage_CheckAnimationFinish(PAL_JPNKORCN(834, 830)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6(834, 830, 760, 759)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -1521,7 +2955,7 @@ void actConte14_4(GObj *volatile self)
 
 void actEndDemo05Chk(GObj *volatile self)
 {
-    gflagOn(343);
+    gflagOn(PAL_NTSC_AUG6(343, 312, 311));
 
     actCreateSubThread(actConte14_5, 21);
 }
@@ -1530,9 +2964,9 @@ void actConte14_5(GObj *volatile self)
 {
     preload(6);
 
-    stage_SetAnimation(PAL_JPNKORCN(835, 831), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(835, 831, 761, 760), 1, 0);
 
-    while (stage_CheckAnimationFinish(PAL_JPNKORCN(835, 831)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6(835, 831, 761, 760)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -1542,35 +2976,55 @@ void actConte14_5(GObj *volatile self)
 
 void actEndDemo06Chk(GObj *volatile self)
 {
-    scpAdpcmPlayRequestFunc(47, &sea, 0, 1, 1);
-
-    while (sea == 0) {
-        _ACTWait(1);
+    if (ICO_NTSC) {
+        gflagOff(308);
+    } else if (ICO_AUG6) {
+        gflagOff(307);
+    } else {
+        scpAdpcmPlayRequestFunc(47, &sea, 0, 1, 1);
     }
 
-    scpFadeIn(6.0f);
+    if (ICO_NTSC) {
+        gflagOff(312);
+    } else if (ICO_AUG6) {
+        gflagOff(311);
+    } else {
+        while (sea == 0) {
+            _ACTWait(1);
+        }
 
-    gflagOff(339);
+        scpFadeIn(6.0f);
 
-    gflagOff(343);
+        gflagOff(339);
+
+        gflagOff(343);
+    }
 
     actCreateSubThread(actConte14_6, 21);
 }
 
 void actEndDemo07Chk(GObj *volatile self)
 {
-    _ACTWait(30);
+    if (ICO_NTSCAUG6) {
+        scpAdpcmPlayRequestFunc(46, &ed5, 0, 1, 1);
+
+        while (ed5 == 0) {
+            _ACTWait(1);
+        }
+    } else {
+        _ACTWait(30);
+    }
 
     scpFadeIn(6.0f);
 
-    gflagOn(345);
+    gflagOn(PAL_NTSC_AUG6(345, 314, 313));
 
     actCreateSubThread(actConte14_7, 21);
 }
 
 void actEndDemo10Chk(GObj *volatile self)
 {
-    scpAdpcmPlayRequestFunc(48, &ed6, 0, 1, 0);
+    scpAdpcmPlayRequestFunc(PAL_NTSCAUG6(48, 47), &ed6, 0, 1, PAL_NTSCAUG6(0, 1));
 
     while (ed6 == 0) {
         _ACTWait(1);
@@ -1578,7 +3032,7 @@ void actEndDemo10Chk(GObj *volatile self)
 
     scpFadeIn(6.0f);
 
-    gflagOn(348);
+    gflagOn(PAL_NTSC_AUG6(348, 317, 316));
 
     actCreateSubThread(actConte14_10, 21);
 
@@ -1618,7 +3072,7 @@ void actConte14_10_Jimaku(GObj *volatile self)
 
 void actEndDemo11Chk(GObj *volatile self)
 {
-    gflagOn(349);
+    gflagOn(PAL_NTSC_AUG6(349, 318, 317));
 
     actCreateSubThread(actConte14_11, 21);
 }
@@ -1629,9 +3083,9 @@ void actConte14_11(GObj *volatile self)
 
     scpPlayStart(boyGObj);
 
-    stage_SetAnimation(PAL_JPNKORCN(852, 848), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(852, 848, 778, 777), 1, 0);
 
-    while (stage_CheckAnimationFinish(PAL_JPNKORCN(852, 848)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6(852, 848, 778, 777)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -1641,18 +3095,18 @@ void actConte14_11(GObj *volatile self)
 
 void actEndDemo12Chk(GObj *volatile self)
 {
-    gflagOn(350);
+    gflagOn(PAL_NTSC_AUG6(350, 319, 318));
 
     actCreateSubThread(actConte14_12, 21);
 }
 
 void actConte14_12(GObj *volatile self)
 {
-    stage_SetAnimation(PAL_JPNKORCN(853, 849), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(853, 849, 779, 778), 1, 0);
 
     preload(4);
 
-    while (stage_CheckAnimationFinish(PAL_JPNKORCN(853, 849)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6(853, 849, 779, 778)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -1662,7 +3116,7 @@ void actConte14_12(GObj *volatile self)
 
 void actEndDemo13Chk(GObj *volatile self)
 {
-    gflagOn(351);
+    gflagOn(PAL_NTSC_AUG6(351, 320, 319));
 
     actCreateSubThread(actConte14_13, 21);
 }
@@ -1689,13 +3143,15 @@ void actStaff2Chk(GObj *volatile self)
 
 void actStaff3Chk(GObj *volatile self)
 {
-    scpAdpcmPlayRequestFunc(49, &staff3, 0, 1, 1);
+    if (!ICO_NTSCAUG6) {
+        scpAdpcmPlayRequestFunc(49, &staff3, 0, 1, 1);
 
-    while (staff3 == 0) {
-        _ACTWait(1);
+        while (staff3 == 0) {
+            _ACTWait(1);
+        }
+
+        scpFadeIn(6.0f);
     }
-
-    scpFadeIn(6.0f);
 
     actCreateSubThread(actStaff3Demo, 21);
 
@@ -1719,7 +3175,11 @@ void actStaff3RollChk(GObj *volatile self)
     }
 
     if (ed6 != 0) {
-        scpAdpcmFadeCloseFunc(&ed6, 80);
+        if (ICO_NTSCAUG6) {
+            scpAdpcmFadeClose(ed6, 80);
+        } else {
+            scpAdpcmFadeCloseFunc(&ed6, 80);
+        }
     }
 
     RequestStageChange(1, boyGObj, 0, 16.0f, 0.001f);
@@ -1727,7 +3187,7 @@ void actStaff3RollChk(GObj *volatile self)
 
 void actEndDemo14Chk(GObj *volatile self)
 {
-    gflagOn(352);
+    gflagOn(PAL_NTSC_AUG6(352, 321, 320));
 
     actCreateSubThread(actConte14_14, 21);
 }

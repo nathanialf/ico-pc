@@ -16,7 +16,13 @@
 
 static void actSt24aSwordSub(GObj *volatile self);
 
-static ActMail sword_mes[2] = {{430}, {429}}; /* derived name */
+static ActMail sword_mes_pal[2] = {{430}, {429}}; /* derived name */
+
+static ActMail sword_mes_ntsc[2] = {{397}, {396}}; /* derived name */
+
+static ActMail sword_mes_aug6[2] = {{393}, {392}}; /* derived name */
+
+#define sword_mes PAL_NTSC_AUG6(sword_mes_pal, sword_mes_ntsc, sword_mes_aug6)
 
 static ActMail demoCam_mes[2] = {{430}, {429}}; /* derived name */
 
@@ -29,8 +35,87 @@ static const Vec16 swordChkPos = {{1685.0f, -1080.0f, -1000.0f, 1.0f}}; /* deriv
 /* .sdata: the sword's object. */
 SqEntry *sword = 0;
 
+static void actSt24aSwordChk_ntsc(GObj *volatile self)
+{
+    float v[4];
+    float dir[4];
+
+    while (scpGameStat_BoyWeaponkind() != 5 || scpTriggerBall(self, boyGObj, 300.0f) == 0) {
+        _ACTWait(1);
+    }
+    lt_switch_layout(51);
+    scpBoyControlReadDisable = 1;
+    scpPlayStart(boyGObj);
+    gflagOn(300);
+    soundSeDefPlay(1316, 0, 0, 1);
+    _ACTWait(60);
+    scpAdpcmPlayRequestFunc(33, &sword, 1, 1, 1);
+    while (sword == 0) {
+        _ACTWait(1);
+    }
+    stage_SetAnimation(133, 1, 0);
+    scpPlayPosSet(boyGObj, 1685.0f, -1080.0f, -550.0f);
+    *(Vec16 *)v = swordChkPos;
+    sceVu0SubVector(dir, v, test_CURRENTROOT(boyGObj));
+    scpPlayMotDir(boyGObj, dir);
+    _ACTWait(300);
+    scpPlayMot(boyGObj, 246);
+    while (stage_CheckAnimationFinish(133) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    scpPlayMot(boyGObj, 0);
+    scpPlayEnd(boyGObj);
+    lt_switch_layout(50);
+    scpBoyControlReadDisable = 0;
+}
+
+static void actSt24aSwordChk_aug6(GObj *volatile self)
+{
+    float v[4];
+    float dir[4];
+
+    while (scpGameStat_BoyWeaponkind() != 5 || scpTriggerBall(self, boyGObj, 300.0f) == 0) {
+        _ACTWait(1);
+    }
+    lt_switch_layout(51);
+    scpBoyControlReadDisable = 1;
+    scpPlayStart(boyGObj);
+    scpPlayMot(boyGObj, 0);
+    gflagOn(299);
+    soundSeDefPlay(1316, 0, 0, 1);
+    _ACTWait(60);
+    scpAdpcmPlayRequestFunc(33, &sword, 1, 1, 1);
+    while (sword == 0) {
+        _ACTWait(1);
+    }
+    stage_SetAnimation(132, 1, 0);
+    scpPlayPosSet(boyGObj, 1685.0f, -1080.0f, -550.0f);
+    *(Vec16 *)v = swordChkPos;
+    sceVu0SubVector(dir, v, test_CURRENTROOT(boyGObj));
+    scpPlayMotDir(boyGObj, dir);
+    _ACTWait(300);
+    scpPlayMot(boyGObj, 246);
+    while (stage_CheckAnimationFinish(132) == 0) {
+        _ACTWait(1);
+    }
+    _ACTWait(1);
+    scpPlayMot(boyGObj, 0);
+    scpPlayEnd(boyGObj);
+    lt_switch_layout(50);
+    scpBoyControlReadDisable = 0;
+}
+
 void actSt24aSwordChk(GObj *volatile self)
 {
+    if (ICO_NTSC) {
+        actSt24aSwordChk_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        actSt24aSwordChk_aug6(self);
+        return;
+    }
     float v[4];
     float dir[4];
     GProc *th;
@@ -116,10 +201,10 @@ void actSt24aSword(GObj *volatile self)
 
     ScpCallCameraSetTarget(363.0f, 1307.0f, -3297.0f);
 
-    if (gflagChk(329) == 0) {
+    if (gflagChk(PAL_NTSC_AUG6(329, 300, 299)) == 0) {
         sword_mes[0].func = actSt24aSwordChk;
         act->mail = sword_mes;
-        ACTSendMailCorrect(self, 430);
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
         _ACTWait(0);
     }
 }
@@ -130,7 +215,7 @@ void actSt24aSaku(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
-    stage_SetAnimation(PAL_JPNKORCN(151, 147), 0, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(151, 147, 131, 130), 0, 0);
 }
 
 void actSt24aDemoCam(GObj *volatile self)

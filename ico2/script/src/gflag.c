@@ -11,6 +11,9 @@
 #include "main.h"
 
 /* the story flag bitmap, one bit per event flag; saved and restored whole */
+unsigned char gFlag[46] = {0};
+
+/* the story flag bitmap, one bit per event flag; saved and restored whole */
 static unsigned char gflags[50] = {0}; /* derived name */
 
 /* .sdata: the game-clear state, saved and loaded with the flags, then the
@@ -19,8 +22,56 @@ int gFlagGameClear = 0; /* derived name */
 
 int gFlagSaveStage = 0;
 
+static void gflagInit_ntsc(void)
+{
+    int keep = gflagChk(346);
+
+    memset(gFlag, 0, sizeof(gFlag));
+    before_stage_no = 0;
+    if (keep != 0) {
+        gflagOn(346);
+    }
+    Boy_Init();
+    StageOrientInit();
+    gamesysObjInfoInit();
+    Generator_Init();
+    warpGirlInit();
+    systemStatus[3] = 0;
+    memset(IosMcPreviewInfo, 0, 16);
+    gamesysVersionDiff = 0;
+    itouGFlagInit();
+}
+
+static void gflagInit_aug6(void)
+{
+    int keep = gflagChk(345);
+
+    memset(gFlag, 0, sizeof(gFlag));
+    before_stage_no = 0;
+    if (keep != 0) {
+        gflagOn(345);
+    }
+    Boy_Init();
+    StageOrientInit();
+    gamesysObjInfoInit();
+    Generator_Init();
+    warpGirlInit();
+    systemStatus[3] = 0;
+    memset(IosMcPreviewInfo, 0, 16);
+    gamesysVersionDiff = 0;
+    itouGFlagInit();
+}
+
 void gflagInit(void)
 {
+    if (ICO_NTSC) {
+        gflagInit_ntsc();
+        return;
+    }
+    if (ICO_AUG6) {
+        gflagInit_aug6();
+        return;
+    }
     int keep = gflagChk(379);
 
     memset(gflags, 0, sizeof(gflags));
@@ -44,28 +95,44 @@ void gflagSave(GamesysMemCursor *fp)
 {
     gFlagSaveStage = stage_no;
     gamesysMemoryHandlerWrite(fp, &gFlagSaveStage, 4);
-    gamesysMemoryHandlerWrite(fp, &gFlagGameClear, 4);
-    gamesysMemoryHandlerWrite(fp, gflags, sizeof(gflags));
+    if (ICO_NTSCAUG6) {
+        gamesysMemoryHandlerWrite(fp, gFlag, sizeof(gFlag));
+    } else {
+        gamesysMemoryHandlerWrite(fp, &gFlagGameClear, 4);
+        gamesysMemoryHandlerWrite(fp, gflags, sizeof(gflags));
+    }
 }
 
 void gflagLoad(GamesysMemCursor *fp)
 {
     gamesysMemoryHandlerRead(fp, &gFlagSaveStage, 4);
-    gamesysMemoryHandlerRead(fp, &gFlagGameClear, 4);
-    gamesysMemoryHandlerRead(fp, gflags, sizeof(gflags));
+    if (ICO_NTSCAUG6) {
+        gamesysMemoryHandlerRead(fp, gFlag, sizeof(gFlag));
+    } else {
+        gamesysMemoryHandlerRead(fp, &gFlagGameClear, 4);
+        gamesysMemoryHandlerRead(fp, gflags, sizeof(gflags));
+    }
 }
 
 int gflagChk(int bit_idx)
 {
-    return (gflags[bit_idx >> 3] >> (bit_idx & 7)) & 1;
+    return (PAL_NTSCAUG6(gflags[bit_idx >> 3], gFlag[bit_idx >> 3]) >> (bit_idx & 7)) & 1;
 }
 
 void gflagOn(int bit_idx)
 {
-    gflags[bit_idx >> 3] |= 1 << (bit_idx & 7);
+    if (ICO_NTSCAUG6) {
+        gFlag[bit_idx >> 3] |= 1 << (bit_idx & 7);
+    } else {
+        gflags[bit_idx >> 3] |= 1 << (bit_idx & 7);
+    }
 }
 
 void gflagOff(int bit_idx)
 {
-    gflags[bit_idx >> 3] &= ~(1 << (bit_idx & 7));
+    if (ICO_NTSCAUG6) {
+        gFlag[bit_idx >> 3] &= ~(1 << (bit_idx & 7));
+    } else {
+        gflags[bit_idx >> 3] &= ~(1 << (bit_idx & 7));
+    }
 }

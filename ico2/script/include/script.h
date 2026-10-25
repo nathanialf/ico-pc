@@ -10,6 +10,15 @@
 
 #include "typedef.h"
 
+
+#include "gobj.h"
+
+#include "enemy_act.h"
+
+#include "act_a_p_1.h"
+
+#include "act-game.h"
+
 struct GObj;
 
 struct SqEntry;
@@ -34,13 +43,20 @@ void scpActivateAllWithKind(int kind);
 void scpDisActivateAllWithKind(int kind);
 void scpLinkBGAtoLayoutedTarget(int id, int key);
 void scpLinkBGAtoLayoutedTargetSkelton(int id, int focus, int key);
-void scpLinkBGAtoLayoutedTargetSkeltonWithLocalRotationFlag(int id, int focus, int key, int localRotation);
-inline void scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(int kind, int focus, int key, int localRotation);
+void scpLinkBGAtoLayoutedTargetSkeltonWithLocalRotationFlag(int id, int focus, int key,
+                                                            int localRotation);
+inline void scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(int kind, int focus, int key,
+                                                               int localRotation);
 WallCfg *scpGetWallCollision(float x0, float y0, float z0, float x1, float y1, float z1);
 void scpDoorTypeUp(struct GObj *volatile self);
 inline void scpDoorTypeUpSwitch(struct GObj *volatile self);
 void scpAdpcmPlayRequestFunc(int kind, struct SqEntry **id, int ch, int loopNum, int play);
 int scpAdpcmPlayRequestNum(void);
+
+
+int scpAdpcmFadeClose(struct SqEntry *p, short fade);
+
+int scpAdpcmCloseChk(struct SqEntry *p);
 int scpAdpcmFadeCloseFunc(struct SqEntry **h, short fade);
 int scpAdpcmCloseChkFunc(struct SqEntry **h);
 void scpDeamon(struct GObj *volatile self);
@@ -65,6 +81,9 @@ inline void scpKillEnemyAll(void);
 inline void scpMaskGeneratorAll(void);
 void scpKillEnemyOne(int id);
 int _SCPMoveCharactorByWay(struct GObj *self, ICO_WORD tgt, float *dir, float speed, int flags);
+
+
+void _SCPBoySupportGirl(float x0, float y0, float z0, float x1, float y1, float z1);
 
 int _SCPMoveByWay_ToChar(struct GObj *self, struct GObj *target, int deg, int flags, float scale,
                          float speed);
@@ -120,6 +139,9 @@ void scpTorchLightOn(int id);
 void scpTorchLightOff(int id);
 void scpSetCageVelocityFriction(int id, float friction);
 void scpPlayMotDir(struct GObj *self, float *dir);
+
+
+void scpPlayJump(struct GObj *self, int orient);
 void scpPlayMot(struct GObj *self, int mot);
 void scpPlayStart(struct GObj *self);
 void scpPlayEnd(struct GObj *self);

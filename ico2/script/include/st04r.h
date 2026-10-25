@@ -14,11 +14,11 @@ struct SqEntry;
 
 /* st04r.o's .sdata globals */
 extern struct SqEntry *solar4r;
-extern int ball1_4r;
-extern int ball2_4r;
-extern int ball3_4r;
+extern struct SqEntry *ball1_4r;
+extern struct SqEntry *ball2_4r;
+extern struct SqEntry *ball3_4r;
 extern struct SqEntry *crest1_4r;
-extern int crest2_4r;
+extern struct SqEntry *crest2_4r;
 extern struct SqEntry *crest3_4r;
 extern struct SqEntry *stair5d;
 extern struct SqEntry *sekizo5c;
@@ -26,6 +26,11 @@ extern unsigned char st05d_hasi;
 extern int st04r_yure;
 extern unsigned char st04r_yure_vol;
 extern int sekizo_4r;
+
+
+extern unsigned char sekizo_4r_vol;
+
+void actSt04rBarricadeChk(GObj *volatile self);
 void actSt04rBrg1Chk(GObj *volatile self);
 void actSt04rBrg1WayChk(GObj *volatile self);
 void actSt04rBrg2Chk(GObj *volatile self);

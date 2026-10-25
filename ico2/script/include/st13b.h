@@ -23,6 +23,10 @@ extern struct SqEntry *st13b_up;
 extern struct SqEntry *st13b_down;
 extern struct SqEntry *sekizo_13b;
 extern struct SqEntry *sekizo_13b_vol;
+
+void actConte10a(GObj *volatile self);
+
+void actConte10b(GObj *volatile self);
 extern int st13b_yure;
 extern unsigned char st13b_yure_vol;
 void actConte10c(GObj *volatile self);

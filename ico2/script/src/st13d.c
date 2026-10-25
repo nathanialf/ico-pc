@@ -32,7 +32,7 @@ void actSt13dExit(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
-    if (gflagChk(18) == 0) {
+    if (gflagChk(PAL_NTSCAUG6(18, 17)) == 0) {
         ScpCallCameraOff();
     }
 

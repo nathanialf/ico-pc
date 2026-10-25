@@ -18,7 +18,7 @@ extern struct SqEntry *ball2_4l;
 extern struct SqEntry *ball3_4l;
 extern struct SqEntry *crest1;
 extern struct SqEntry *crest2;
-extern int solar4l;
+extern struct SqEntry *solar4l;
 extern unsigned int oriup4c;
 extern unsigned char oridown4c;
 extern unsigned int st04l_yure;
