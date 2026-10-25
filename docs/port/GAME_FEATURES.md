@@ -12,7 +12,7 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | --- | --- |
 | `port/game/options.h`, `options.c` | the gameplay options, their config keys and defaults, the mirror flag per save slot, the stereo/mono choice |
 | `port/game/door_grace.h`, `door_grace.c` | the doorway fix's arm and arrival grace |
-| `port/game/variants.h`, `variants.c` | the game variants ([variants]): values, config keys, the achievements rule, the debug-menu hook stub |
+| `port/game/variants.h`, `variants.c` | the game variants ([variants]): values, config keys, the achievements rule, the debug switches and debug-menu opener the game binds, the hint rule, the enemy row reader |
 | `port/render/rd_chain.h`, `rd_content_chain.c` | Natural chains: the two chains, the Null's transform, the links' clip planes |
 | `port/game/achievements.h`, `achievements.c` | the achievement table, its conditions, the counters, `achievements.toml`, the popups |
 | `port/include/ico_gamestate.h`, `port/game/gamestate.c` | the read-only game-state view: the snapshot, the signals, the run, the retail address table |
@@ -52,7 +52,7 @@ defaults are [CONFIG.md](CONFIG.md#gameplay)'s; the differences from the PS2 are
 | `[gameplay] natural_chains` | `BgAnimation.c` (window build) |
 | `[gameplay] skip_opening` | `kanbanBoot.c`, `op.c`, `main_host.c` (its log line) |
 | `[gameplay] hold_type` | `mcard.c`, `layout_action.c`, `settings.c` |
-| `[variants] *` (Extras > Game variants) | `port/game/variants.c` (the accessors; the game hooks are read through `ico_variant_*`); `gamestate.c` (the achievements rule) |
+| `[variants] *` (Extras > Game variants) | `port/game/variants.c`; the game hooks in `debug.c`, `enemy.c`, `enemy_act.c`, `queen.c`, `lws_kyomi.c`, `girl.c` ([Game variants](#game-variants)); `settings.c` (the Debug menu row); `gamestate.c` (the achievements rule) |
 | `[gameplay] mirror` | `pad_host.c`, `audio_host.c`, rd, `photo_ui.c` |
 | `[gameplay] developer_mode` | `main.c`, `debug.c`, the port |
 | `[game] circle_back` | `layout_action.c`, `layout_texture.c` |
@@ -204,6 +204,59 @@ Options screen row, reached only on a disc whose layout tables are not recognise
 `ico_opt_hold_type_toggled`, which writes the key and saves at once
 (`ico2/common/src/layout_action.c` (`la_game_option`, case 318); `port/game/options.c`). The
 North American disc has no option and is always the toggle.
+
+### Game variants
+
+Options > Extras > Game variants (`[variants]`, [CONFIG.md](CONFIG.md#variants)). The values are
+`port/game/variants.c`'s; the game reads them in three ways, and with every row at its shipped value
+it runs as before (each hook below gives the game's own value or row then).
+
+The debug switches. `debug_VariableInit` (`ico2/common/src/debug.c`), after the retail values
+and the developer's option file, hands `ico_variants_bind_debug` the five switches the variants
+hold and `debug_MenuOpen`. `ico_variants_apply` writes them at the bind, at every
+`ico_variants_reload` (so every `ico_opt_reload`) and at every `ico_variant_set` (so every step of
+the page): a variant that is on holds its switch at its value, one at its shipped value leaves the
+switch alone, and switching one off puts back the value the game had when the variant took it.
+`variants.c` names no game symbol, so `ico_options` links into the tests without the game, and the
+program's link order (`libico_game.a` before `libico_options.a`) needs nothing from the game.
+
+| row | switch | read by |
+| --- | --- | --- |
+| One hit per swing | `debug_one_hit_only` 1 | `ico2/omori/src/attackhit.c` |
+| Shadows never dodge | `debug_ignore_dodge` 1 | `ico2/fumi/src/enemy_act.c` |
+| Shadow aggression | `debug_enemy_battle_type`: bold/wary = Positive/Negative, patient/quick = Low/High (`debugEnemyBattleName` 0 Positive-Low, 1 Negative-Low, 2 Positive-High, 3 Negative-High); Their own: untouched | `actEnemyStart` and its twins (`enemy_act.c`) |
+| Ignore cutscene cameras | `debug_ignore_demo_camera` 1 | `ico2/omori/src/camera-root.c` |
+| No cutscene look-around | `debug_hand_camera` 0, the USA disc's value (it never sets it) | `camera-root.c`: the right-stick block under `handCameraLimitP/V` (`SetHandCameraLimitInDemo`) and the cutscene zoom range |
+
+The enemy table. Every read of `enemyKind` in `ico2/sugipon/src/enemy.c` (`setEnemyObject` and its
+June 2001 twin, `InitEnemyGeo`, `CanThisEnemyFly`, `GetEnemyBattleType`, `GetEnemyDefLife`,
+`GetEnemyDefDodgeRange`, `GetEnemyDefParaIndex`) goes through `ENEMY_DEF(kind)`, i.e.
+`ico_variant_enemy_def(enemyKind, enemyKindRows, enemyKind_ntsc, enemyKindRows_ntsc, kind)`. It
+returns the disc's own row while Shadow toughness is not American and aggression is the Shadow's
+own; else a copy: American takes the USA row's life, scale, fly type and battle type and keeps the
+disc's model, particle, `float0C` (the fly acceleration), dodge range and parameter row, and a row
+whose model is the disc's "no model" (the table's last row's) is left whole; an aggression other
+than Their own sets the battle type of every row (`actEnemyRestart`, which every spawn runs, reads
+it through `GetEnemyBattleType`). A kind outside the table reads its last row (logged once). The
+tables are `ico2/sugipon/src/enemyKind.c`'s, one per disc in the European record, with their row
+counts (`enemyKindRows_*`; the June 2001 demo's is its own 18 rows, the others 45).
+`getEnemyRestartLife` (`enemy_act.c`) uses the first playthrough's factor (`gameParam[38]`) on
+every playthrough when Shadow toughness is American or Not tougher later; the 2001 builds' and the
+USA disc's restarts have no factor.
+
+Local reads.
+
+| row | site |
+| --- | --- |
+| No hints | `ico_hints_on()` (0 on the USA disc and the 2001 builds, and with No hints on): `LwsKyomiGeo` (`ico2/omori/src/lws_kyomi.c`) keeps the hint from being the stage's waiting one, so its timer stands still and a playing hint animation stops; `GirlAI` (`ico2/sugipon/src/girl.c`) does not ready or play the hint voice. The hints' finished and asleep flags (`FinishHint`, `SleepHint`, `WakeupHint`, set by the stage scripts), `Hint_Init` and the save's hint block are untouched, so a save keeps the scripts' progress and turning hints back on resumes them |
+| Queen barrier | `ico_variant_barrier_hits()` (5, or 7 on the June 2001 demo, unless chosen): `QueenBarrierGeo` and its June 2001 twin (the hit that breaks it) and `QueenBarrierDL` (the barrier's fade divisor), `ico2/ito/src/queen.c`; the tables indexed by the hit count have 11 rows |
+| Debug menu | the row's press (`port/ui/settings.c`) calls `ico_variants_debug_menu_pressed`, which opens the menu through the bound `debug_MenuOpen` (`menuState` 1 as SELECT sets it, `debugBackGroundDisableFlag` 1, the first row) and returns 1; Options then closes (`closeForDebugMenu`): from the title back to the title, from the pause menu into the game as the pause menu's Back does (`la_host_resume_play`, `ico2/common/src/layout_action.c`: the sound resumed, `la_game_loop`). `debug_Menu` runs in developer mode only (`main.c`), and the row shows only then. Unbound, the press logs and Options stays |
+
+Log lines: `variants: the game's debug switches are bound (...)` once per `debug_VariableInit`;
+`variants: applied shade_toughness=... ; one_hit_only=... hand_camera=...` once per apply (a
+switch the variants do not hold shows as `(game's)`); `variants: enemy kind N is past this disc's M
+enemy rows; its last row stands in` once; `variants: the Debug menu cannot open: the game has not
+bound it`; `settings: Options closed for the Debug menu (to the title|back to the game)`.
 
 ## Achievements and the game-state view
 
