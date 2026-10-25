@@ -191,6 +191,13 @@ int ico_host_saves_dir(char *out, size_t size);
    1 with out set, 0 when not configured (no card in port 1; out ""), -1 when
    the path does not fit (out ""). A pure read, like ico_host_saves_dir. */
 int ico_host_saves2_dir(char *out, size_t size);
+/* PC port: a card folder's sibling for a disc whose saves cannot share the
+   card (the August 2001 preview: port/core/region.h mc_card_suffix): dir
+   with suffix appended after any trailing separators ("memcard" ->
+   "memcard-preview", "cards/" -> "cards-preview"). NULL or "" suffix, or an
+   empty dir: unchanged. 0, or -1 when it does not fit in size (dir
+   unchanged). */
+int ico_host_card_dir_beside(char *dir, size_t size, const char *suffix);
 
 /* config.toml: a small TOML subset, enough for [sections] and key = value
    lines. Section headers are `[name]` or `[a.b]`; a key's path is

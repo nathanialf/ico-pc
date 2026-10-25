@@ -2260,7 +2260,9 @@ int ico_host_logs_dir(char *out, size_t size)
    game's own ico-pc.ini (ico_host_ini_path: the per-user folder in a macOS
    app bundle) over config.toml and nothing else: no environment variable is
    set and no folder made, so they can be called from the game fiber
-   (sceMcInit). */
+   (sceMcInit). PC port: they give the folder every disc's card shares but
+   the August 2001 preview's, which sceMcInit moves beside it
+   (ico_host_card_dir_beside). */
 
 /* The folder a card path key names: relative paths from the executable's
    folder. 1 when the key is set, 0 when it is absent or empty, -1 when the
@@ -2273,6 +2275,35 @@ static int card_dir_key(const IcoIni *ini, const char *dir, const char *key, cha
         return 0;
     }
     return ico_path_join(out, size, dir, v) == 0 ? 1 : -1;
+}
+
+/* PC port: the August 2001 preview's card is a folder of its own beside the
+   configured one (<card>-preview: memcard-preview beside memcard, and the
+   same for saves= and saves2=). The preview's game names the North American
+   disc's directory, BASCUS-97113ico, but its records are not that disc's
+   (its product file lists the files as stage, cleared, play time, sofa;
+   its story flags from 300 on are one lower), so on one card each disc
+   would misread and rewrite the other's saves. The game still writes its
+   own BASCUS-97113ico inside the folder. port/save/mc_host.c sceMcInit
+   applies it (port/core/region.h mc_card_suffix) to what
+   ico_host_saves_dir and ico_host_saves2_dir give. */
+int ico_host_card_dir_beside(char *dir, size_t size, const char *suffix)
+{
+    size_t n;
+
+    if (suffix == NULL || suffix[0] == '\0' || dir == NULL || dir[0] == '\0') {
+        return 0;
+    }
+    n = strlen(dir);
+    /* "cards/" names the folder cards: its sibling is cards-preview */
+    while (n > 1 && (dir[n - 1] == '/' || dir[n - 1] == '\\')) {
+        n--;
+    }
+    if (n + strlen(suffix) + 1 > size) {
+        return -1;
+    }
+    memcpy(dir + n, suffix, strlen(suffix) + 1);
+    return 0;
 }
 
 int ico_host_saves2_dir(char *out, size_t size)
