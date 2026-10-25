@@ -3390,7 +3390,7 @@ static int bootCheckProc(int first, int item)
 {
     (void)first;
     (void)item;
-    return s_bootEnded ? PAL_JPNKOR(0x37, 0x34) : -1; /* la_boot_memory_card_check */
+    return s_bootEnded ? PAL_JPNKORCN(0x37, 0x34) : -1; /* la_boot_memory_card_check */
 }
 
 static int sceneProc(int first, int item)
@@ -3405,7 +3405,8 @@ static int sceneProc(int first, int item)
    layouts */
 static void bootToEnd(const char *slug)
 {
-    const int boot = PAL_JPNKOR(7, 4);
+    /* the Japanese program's boot layout on the Japanese, Korean and Asian discs */
+    const int boot = PAL_JPNKORCN(7, 4);
     const int scene = fxLayout(55);
 
     fakeTables();
@@ -3446,7 +3447,7 @@ static void testSkipOpeningTitle(const char *slug)
     const int scene = fxLayout(55);
     const int title = fxLayout(12);
 
-    CHECK(PAL_JPNKOR(0x37, 0x34) == scene, "%s: the boot's layout hands over to %d", slug, scene);
+    CHECK(PAL_JPNKORCN(0x37, 0x34) == scene, "%s: the boot's layout hands over to %d", slug, scene);
     /* 50 Hz and 60 Hz: 25 and 30 ticks a second */
     for (int hz60 = 0; hz60 < 2; hz60++) {
         systemStatus[0] = hz60 ? 0 : 1;
