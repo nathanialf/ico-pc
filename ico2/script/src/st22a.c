@@ -26,7 +26,13 @@ static int lightningAnims_pal[2] = {758, 759}; /* derived name */
 
 static int lightningAnims_jpn[2] = {754, 755}; /* derived name */
 
-#define lightningAnims PAL_JPNKORCN(lightningAnims_pal, lightningAnims_jpn)
+static int lightningAnims_ntsc[2] = {684, 685}; /* derived name */
+
+static int lightningAnims_aug6[2] = {683, 684}; /* derived name */
+
+#define lightningAnims                                                                             \
+    PAL_JPNKORCN_NTSC_AUG6(lightningAnims_pal, lightningAnims_jpn, lightningAnims_ntsc,            \
+                           lightningAnims_aug6)
 
 /* the lightning's volume for height y */
 static inline float getVolume(float y) /* derived name */
