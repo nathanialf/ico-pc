@@ -28,11 +28,12 @@
 #include "stream_watch.h"
 #include "vfs.h"
 
-/* SNDN2DRV.IRX on the disc (byte-identical on the European and the
-   Japanese disc), its size, and the pitch table's file
-   offset and size in it. */
+/* SNDN2DRV.IRX in the game's folder of the disc (byte-identical on the European and the
+   Japanese disc), its size, the June 2001 demo's size (its own module, the pitch table at the same
+   offset and the same 608 entries), and the pitch table's file offset and size in it. */
 #define IRX_PATH "SNDN2DRV.IRX"
 #define IRX_SIZE 20941u
+#define IRX_SIZE_DEMO 20925u
 #define IRX_PITCH_OFFSET 0x3900u
 #define IRX_PITCH_BYTES (ICO_SNDN2_PITCH_ENTRIES * 2u)
 
@@ -122,11 +123,14 @@ int ico_sndn2_pitch_load(void)
     const char *why = NULL;
     int i;
 
+    char path[64];
+
     if (disc == NULL) {
         why = "no disc is mounted";
-    } else if (ico_vfs_open(disc, IRX_PATH, &f) != 0) {
+    } else if (ico_vfs_game_path(disc, IRX_PATH, path, sizeof(path)) != 0 ||
+               ico_vfs_open(disc, path, &f) != 0) {
         why = "the disc has no " IRX_PATH;
-    } else if (ico_vfs_size(&f) != IRX_SIZE) {
+    } else if (ico_vfs_size(&f) != IRX_SIZE && ico_vfs_size(&f) != IRX_SIZE_DEMO) {
         why = IRX_PATH " is not the disc's (size)";
     } else if (ico_vfs_read(&f, IRX_PITCH_OFFSET, raw, sizeof(raw)) != (int64_t)sizeof(raw)) {
         why = IRX_PATH " cannot be read";
@@ -148,7 +152,8 @@ int ico_sndn2_pitch_load(void)
         return H.pitch_source;
     }
     ico_sndn2_pitch_set(t);
-    fprintf(stderr, "sndn2: pitch table: 608 entries from the disc's " IRX_PATH "\n");
+    fprintf(stderr, "sndn2: pitch table: 608 entries from the disc's %s (%lld bytes)\n", path,
+            (long long)ico_vfs_size(&f));
     return H.pitch_source;
 }
 

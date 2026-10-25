@@ -141,9 +141,12 @@ int ico_libsd_load(void)
     unsigned diff;
     int m;
 
+    char path[64];
+
     if (disc == NULL) {
         why = "no disc is mounted";
-    } else if (ico_vfs_open(disc, ICO_LIBSD_IRX_PATH, &f) != 0) {
+    } else if (ico_vfs_game_path(disc, ICO_LIBSD_IRX_PATH, path, sizeof(path)) != 0 ||
+               ico_vfs_open(disc, path, &f) != 0) {
         why = "the disc has no " ICO_LIBSD_IRX_PATH;
     } else if (ico_vfs_size(&f) != ICO_LIBSD_IRX_SIZE) {
         why = ICO_LIBSD_IRX_PATH " is not the disc's (size)";
@@ -165,9 +168,8 @@ int ico_libsd_load(void)
     }
     ico_libsd_apply(&v);
     diff = ico_libsd_diff_builtin(&v);
-    fprintf(
-        stderr,
-        "libsd: reverb presets, work area sizes and idle block from the disc's " ICO_LIBSD_IRX_PATH);
+    fprintf(stderr, "libsd: reverb presets, work area sizes and idle block from the disc's %s",
+            path);
     if (diff != 0) {
         fputs("; differing from the built-in values in", stderr);
         for (m = 0; m < SPU2_REVERB_MODES; m++)

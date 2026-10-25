@@ -16,8 +16,8 @@
 #include "spu2.h"
 #include "spu2_sd.h"
 
-/* LIBSD.IRX on the disc (byte-identical on the European and the Japanese
-   disc): its size, and the module addresses (in .data)
+/* LIBSD.IRX in the game's folder of the disc (byte-identical on the European and the Japanese
+   disc and the June 2001 demo): its size, and the module addresses (in .data)
    of the three tables, found through the code that reads them:
    sceSdSetEffectAttr (0x900) loads sizes[mode] from 0x41C8 and copies the
    0x44-byte preset at 0x41F0 + mode * 0x44; InitVoices (0x3BA0) writes 16
