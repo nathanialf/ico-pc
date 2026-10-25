@@ -40,10 +40,10 @@ int ico_opt_ui_language(void)
     return s_choice;
 }
 
-static const char *const kNames[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja", "ko"};
+static const char *const kNames[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh"};
 static const char *const *const kTables[UI_LANG_COUNT] = {
     ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it,
-    ui_strings_es, ui_strings_ja, ui_strings_ko};
+    ui_strings_es, ui_strings_ja, ui_strings_ko, ui_strings_zh};
 
 /* s's printf conversions, their letters in order ("%%" is none) */
 static void conversions(const char *s, char *out, size_t n)
@@ -160,6 +160,7 @@ static void testResolve(void)
     /* the rule over its inputs */
     CHECK(ui_lang_resolve(-1, UI_LANG_JA, 0, 3) == UI_LANG_JA, "auto, the Japanese disc: Japanese");
     CHECK(ui_lang_resolve(-1, UI_LANG_KO, 0, 3) == UI_LANG_KO, "auto, a Korean disc: Korean");
+    CHECK(ui_lang_resolve(-1, UI_LANG_ZH, 0, 3) == UI_LANG_ZH, "auto, the Asian disc: Chinese");
     CHECK(ui_lang_resolve(-1, -1, 1, 3) == UI_LANG_FR, "auto, the European disc: the game's");
     CHECK(ui_lang_resolve(-1, -1, 1, 6) == UI_LANG_ES, "auto, the European disc: Spanish");
     CHECK(ui_lang_resolve(-1, -1, 0, 3) == UI_LANG_EN, "auto, no game language: English");
@@ -168,6 +169,7 @@ static void testResolve(void)
     for (int c = 0; c < UI_LANG_COUNT; c++) {
         CHECK(ui_lang_resolve(c, UI_LANG_JA, 0, 3) == (UiLang)c &&
                   ui_lang_resolve(c, UI_LANG_KO, 0, 3) == (UiLang)c &&
+                  ui_lang_resolve(c, UI_LANG_ZH, 0, 3) == (UiLang)c &&
                   ui_lang_resolve(c, -1, 1, 4) == (UiLang)c,
               "a chosen language %s wins on every disc", kNames[c]);
     }
@@ -193,6 +195,9 @@ static void testResolve(void)
     CHECK(ico_region_select("kor") == 0 && ico_region_cur()->ui_lang_default == UI_LANG_KO &&
               ico_region_cur()->menu_sheet == UI_SHEET_KO,
           "the Korean disc: Korean text over the Korean sheets");
+    CHECK(ico_region_select("cn") == 0 && ico_region_cur()->ui_lang_default == UI_LANG_ZH &&
+              ico_region_cur()->menu_sheet == UI_SHEET_ZH,
+          "the Asian disc: Chinese text over the Chinese sheets");
     ico_region_select("pal");
     /* through the running disc */
     ico_region_select("pal");
@@ -208,6 +213,11 @@ static void testResolve(void)
     CHECK(ui_settings_resolve_language() == UI_LANG_KO, "the Korean disc: Korean");
     s_choice = UI_LANG_EN;
     CHECK(ui_settings_resolve_language() == UI_LANG_EN, "the Korean disc, English chosen");
+    ico_region_select("cn");
+    s_choice = -1;
+    CHECK(ui_settings_resolve_language() == UI_LANG_ZH, "the Asian disc: Chinese");
+    s_choice = UI_LANG_EN;
+    CHECK(ui_settings_resolve_language() == UI_LANG_EN, "the Asian disc, English chosen");
     ico_region_select("pal");
     s_choice = UI_LANG_JA;
     CHECK(ui_settings_resolve_language() == UI_LANG_JA, "the European disc, Japanese chosen");
@@ -241,6 +251,15 @@ static void testBreaks(void)
               !ui_break_before('(', 0x3042) && ui_break_before(')', 0x3042),
           "the ASCII brackets and punctuation keep the same rules");
     CHECK(!ui_break_before(0, 0x3042), "no break at the text's start");
+    /* Chinese: the ideographs and the fullwidth marks the table uses break as
+       the Japanese text does (no spaces), never before 。，？！：、」） */
+    CHECK(ui_wide_char(0x9078) && ui_wide_char(0x7E41) && ui_wide_char(0xFF0C) &&
+              ui_wide_char(0xFF1F) && ui_break_before(0x9078, 0x9805) &&
+              !ui_break_before(0x9805, 0x3002) && !ui_break_before(0x9805, 0xFF0C) &&
+              !ui_break_before(0x9805, 0xFF1F) && !ui_break_before(0x9805, 0xFF01) &&
+              !ui_break_before(0x9805, 0xFF1A) && !ui_break_before(0x9805, 0x3001) &&
+              !ui_break_before(0x9805, 0x300D) && !ui_break_before(0xFF08, 0x9805),
+          "Chinese breaks between ideographs, not before its closing marks");
     /* Korean: Hangul is not wide (it breaks at its spaces), the compatibility
        jamo inside the CJK block neither */
     CHECK(ui_hangul_char(0xD55C) && ui_hangul_char(0xAC00) && ui_hangul_char(0xD7A3) &&
