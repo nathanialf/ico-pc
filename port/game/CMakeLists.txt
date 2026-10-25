@@ -42,9 +42,16 @@ if(ICO_RUN_TESTS)
     # kor_slot_N); each in its own folder (the test's config files sit in it)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/options_jpn")
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/options_kor")
+    foreach(_slug ntsc aug6 jun26 cn)
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/options_${_slug}")
+    endforeach()
     add_test(NAME options COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}" pal)
     add_test(NAME options_jpn COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}/options_jpn" jpn)
     add_test(NAME options_kor COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}/options_kor" kor)
+    foreach(_slug ntsc aug6 jun26 cn)
+        add_test(NAME options_${_slug}
+                 COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}/options_${_slug}" ${_slug})
+    endforeach()
 endif()
 
 # IsPointIsInScreen's x bound (ico2/omori/src/poly-flat.c, compiled into the
@@ -85,6 +92,9 @@ if(ICO_RUN_TESTS)
     add_test(NAME variants COMMAND variants_test "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME variants_jpn COMMAND variants_test "${CMAKE_CURRENT_BINARY_DIR}" jpn)
     add_test(NAME variants_kor COMMAND variants_test "${CMAKE_CURRENT_BINARY_DIR}" kor)
+    foreach(_slug ntsc aug6 jun26 cn)
+        add_test(NAME variants_${_slug} COMMAND variants_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
+    endforeach()
 endif()
 
 # Photo mode's state and camera: the orbit, the clamps, the
@@ -160,6 +170,11 @@ if(ICO_RUN_TESTS)
     add_test(NAME kanban_boot_jpn COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" jpn)
     # and on the Korean disc, which runs the Japanese program's check
     add_test(NAME kanban_boot_kor COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" kor)
+    # and the Asian disc, the same program (kanbanBootMcCheck_jpn).  The North
+    # American, August 2001 and June 2001 discs have their own boot check
+    # (kanbanBoot.c's VERSION_NTSC/AUG6/JUN26 arms): their runs follow the
+    # merged game code's steps
+    add_test(NAME kanban_boot_cn COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" cn)
 endif()
 
 # The hand records Ico and Yorda hold hands with
@@ -277,11 +292,19 @@ if(ICO_RUN_TESTS)
     # folder (the test's files sit in it)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/achievements_jpn")
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/achievements_kor")
+    foreach(_slug ntsc aug6 jun26 cn)
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/achievements_${_slug}")
+    endforeach()
     add_test(NAME achievements COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}" pal)
     add_test(NAME achievements_jpn
              COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}/achievements_jpn" jpn)
     add_test(NAME achievements_kor
              COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}/achievements_kor" kor)
+    foreach(_slug ntsc aug6 jun26 cn)
+        add_test(NAME achievements_${_slug}
+                 COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}/achievements_${_slug}"
+                         ${_slug})
+    endforeach()
 endif()
 
 # --- The model viewer -----------------------------------
@@ -365,4 +388,8 @@ if(ICO_RUN_TESTS)
     add_test(NAME credits_jpn COMMAND credits_test "${CMAKE_CURRENT_BINARY_DIR}" jpn)
     # and the Korean disc's (the Japanese values: STAFF1 58, the scene layout 52)
     add_test(NAME credits_kor COMMAND credits_test "${CMAKE_CURRENT_BINARY_DIR}" kor)
+    # and the other four discs' (credits_test.c test_region lists each row's numbers)
+    foreach(_slug ntsc aug6 jun26 cn)
+        add_test(NAME credits_${_slug} COMMAND credits_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
+    endforeach()
 endif()
