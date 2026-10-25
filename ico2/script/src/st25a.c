@@ -783,7 +783,7 @@ static void actConte12_jun26(GObj *volatile self)
 
     stage_SetAnimation(662, 1, 0);
     while (stage_ContinueAnimation(662, 663) == 0) {
-        _ACTWait(PAL_JUN26(1, 50));
+        _ACTWait(1);
     }
     while (stage_ContinueAnimation(663, 664) == 0) {
         _ACTWait(1);

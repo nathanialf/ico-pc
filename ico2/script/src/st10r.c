@@ -927,7 +927,7 @@ static void actSt10rChainMove_ntsc(GObj *volatile self)
     scpAdpcmPlayRequestFunc(91, &chain10r, 1, 1, 1);
 
     while (chain10r == 0) {
-        _ACTWait(PAL_NTSC(1, 180));
+        _ACTWait(1);
     }
 
     stage_SetAnimation(351, 1, 0);
@@ -997,7 +997,7 @@ static void actSt10rChainMove_aug6(GObj *volatile self)
     scpAdpcmPlayRequestFunc(91, &chain10r, 1, 1, 1);
 
     while (chain10r == 0) {
-        _ACTWait(PAL_AUG6(1, 180));
+        _ACTWait(1);
     }
 
     stage_SetAnimation(350, 1, 0);

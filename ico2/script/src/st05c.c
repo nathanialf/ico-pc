@@ -155,7 +155,7 @@ static void actSt04rDoorChk_ntsc(GObj *volatile self)
         case 1:
             stage_SetAnimation(301, 1, 0);
             while (stage_CheckAnimationFinish(301) == 0) {
-                _ACTWait(PAL_NTSC(1, 90));
+                _ACTWait(1);
             }
             _ACTWait(1);
             break;
@@ -229,7 +229,7 @@ static void actSt04rDoorChk_aug6(GObj *volatile self)
         case 1:
             stage_SetAnimation(300, 1, 0);
             while (stage_CheckAnimationFinish(300) == 0) {
-                _ACTWait(PAL_AUG6(1, 90));
+                _ACTWait(1);
             }
             _ACTWait(1);
             break;
@@ -336,7 +336,7 @@ static void actSt04rDoor2Chk_ntsc(GObj *volatile self)
         case 1:
             stage_SetAnimation(302, 1, 0);
             while (stage_CheckAnimationFinish(302) == 0) {
-                _ACTWait(PAL_NTSC(1, 90));
+                _ACTWait(1);
             }
             _ACTWait(1);
             break;
@@ -410,7 +410,7 @@ static void actSt04rDoor2Chk_aug6(GObj *volatile self)
         case 1:
             stage_SetAnimation(301, 1, 0);
             while (stage_CheckAnimationFinish(301) == 0) {
-                _ACTWait(PAL_AUG6(1, 90));
+                _ACTWait(1);
             }
             _ACTWait(1);
             break;

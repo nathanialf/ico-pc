@@ -615,7 +615,7 @@ static void actSt13aSekizoChk_jun26(GObj *volatile self)
 
     while (scpTriggerBall(self, boyGObj, 200.0f) == 0 || scpGameStat_BoyWeaponkind() != 5 ||
            ForMotionViewer_GetCurrentMotion(boyGObj) == 83) {
-        _ACTWait(PAL_JUN26(1, 60));
+        _ACTWait(1);
     }
 
     scpSekizouCheckPoint();

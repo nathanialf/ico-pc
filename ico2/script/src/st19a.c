@@ -195,7 +195,7 @@ inline static void actSt19aOriUp_jun26(GObj *volatile self)
     stage_SetAnimation(108, 1, 0);
     gflagOn(271);
     while (stage_CheckAnimationFrame(108, 89, 1) == 0) {
-        _ACTWait(PAL_JUN26(1, 60));
+        _ACTWait(1);
     }
     _ACTWait(1);
     _ACTWait(60);
