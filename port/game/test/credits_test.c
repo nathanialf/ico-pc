@@ -18,7 +18,8 @@
  * stubs of the game's side: a start whose stage never comes up fails after
  * its bound with the flag kept, requests the title, and puts the game's
  * state back as the title is entered; one that never
- * left the title is put back at once.
+ * left the title is put back at once.  On a disc without the staff scenes'
+ * packs (the June 2001 demo) the start is refused and nothing changes.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -350,8 +351,33 @@ static void runTicks(unsigned int n)
     }
 }
 
+/* a disc whose DATA.DF has no STGSTAFF1.DF: the start is refused (logged
+   "credits: failed: this disc ... has no staff roll"), nothing is kept,
+   switched or moved */
+static void test_engine_refused(void)
+{
+    ico_credits_engine_install();
+    stage_no = 1;
+    systemStatus[6] = 0;
+    s_world = 7;
+    s_switchTo = -1;
+    s_simpleTo = -1;
+    s_loads = 0;
+    memset(s_gflags, 0, sizeof(s_gflags));
+    s_gflags[10] = 1;
+    CHECK(ico_credits_start() < 0);
+    CHECK(!ico_credits_active() && s_switchTo == -1 && s_world == 7 && s_loads == 0);
+    runTicks(5000);
+    CHECK(!ico_credits_active() && s_simpleTo == -1 && s_loads == 0 && s_gflags[10] == 1);
+    ico_credits_set_engine(NULL);
+}
+
 static void test_engine_failure(void)
 {
+    if (!ico_region_cur()->credits_staff_packs) {
+        test_engine_refused();
+        return;
+    }
     ico_credits_engine_install();
     /* a stage change that starts and never ends */
     stage_no = 1;
@@ -365,7 +391,10 @@ static void test_engine_failure(void)
     const int to = ico_credits_start();
     CHECK(to == ico_region_cur()->layout_scene && ico_credits_active() &&
           s_switchTo == ICO_CREDITS_STAGE);
-    CHECK(s_world == 216); /* the boy at the ending's entrance */
+    /* the boy at the ending's entrance: the disc's exit into STAFF1 (216 on
+       the European disc, 212 on the North American and the August 2001
+       preview; test_region holds each row's) */
+    CHECK(s_world == ico_region_cur()->credits_entrance_exit);
     /* the roll's start logs the song's place against the table's (the
        engine's roll: no song opened here, so -1) */
     ico_roll_started(3);
@@ -416,21 +445,23 @@ static void test_region(void)
     /* each disc's numbers as its region file states them, literal here (not
        read back from the table under test), in config/regions.txt's order:
        STAFF1, the empty scene layout, the roll's offset in the song, the
-       song's adpcmFile row, the exit row into STAFF1, the boy's record.  The
+       song's adpcmFile row, the exit row into STAFF1, the boy's record,
+       whether DATA.DF holds the staff scenes' packs (STGSTAFF1.DF ..).  The
        Japanese, Korean and Asian discs share the Japanese program's numbers
        (region_kor.c's and region_cn.c's rows copy region_jpn.c's); the North
        American, August 2001 and June 2001 discs differ in the exit, the boy
-       and, on the demo, the song and STAFF1 (TARGETS.md) */
+       and, on the demo, the song and STAFF1 (TARGETS.md); the demo's DATA.DF
+       (49 entries) has none of the staff scenes' packs */
     static const struct {
-        int stage, scene, roll_ms, song, exit, boy;
+        int stage, scene, roll_ms, song, exit, boy, packs;
     } want[] = {
-        {60, 55, 151080, 47, 216, 54}, /* pal */
-        {58, 52, 151050, 47, 216, 54}, /* jpn */
-        {58, 52, 151050, 47, 216, 54}, /* kor */
-        {58, 51, 151050, 47, 212, 51}, /* ntsc */
-        {58, 51, 151050, 47, 212, 50}, /* aug6 */
-        {59, 51, 151050, 46, 212, 47}, /* jun26 */
-        {58, 52, 151050, 47, 216, 54}, /* cn */
+        {60, 55, 151080, 47, 216, 54, 1}, /* pal */
+        {58, 52, 151050, 47, 216, 54, 1}, /* jpn */
+        {58, 52, 151050, 47, 216, 54, 1}, /* kor */
+        {58, 51, 151050, 47, 212, 51, 1}, /* ntsc */
+        {58, 51, 151050, 47, 212, 50, 1}, /* aug6 */
+        {59, 51, 151050, 46, 212, 47, 0}, /* jun26 */
+        {58, 52, 151050, 47, 216, 54, 1}, /* cn */
     };
 
     const int n = (int)(sizeof(want) / sizeof(want[0]));
@@ -447,6 +478,7 @@ static void test_region(void)
     CHECK(ico_region_cur()->credits_roll_ms == want[ico_region].roll_ms);
     CHECK(ico_region_cur()->credits_entrance_exit == want[ico_region].exit &&
           ico_region_cur()->credits_boy_label == want[ico_region].boy);
+    CHECK(ico_region_cur()->credits_staff_packs == want[ico_region].packs);
 }
 
 int main(int argc, char **argv)
