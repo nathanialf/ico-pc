@@ -28,6 +28,18 @@
 #include "sceneManager.h"
 #include "Primitive.h"
 
+/* PC port: Options > Extras > Game variants (port/game/variants.c): every
+   read of the disc's enemyKind row goes through the variants' reader, which
+   gives the disc's own row while Shadow toughness and Shadow aggression are as
+   the disc ships them, a copy with the USA disc's life, scale and attribute
+   bits (American) or the chosen battle type (aggression) otherwise, and
+   never a row past the disc's table */
+extern const EnemyDef *ico_variant_enemy_def(const EnemyDef *disc, int rows, const EnemyDef *usa,
+                                             int usaRows, int kind);
+
+#define ENEMY_DEF(kind) /* PC port */                                                              \
+    ico_variant_enemy_def(enemyKind, enemyKindRows, enemyKind_ntsc, enemyKindRows_ntsc, (kind))
+
 typedef struct { /* field names derived */
     float x;
     float y;
@@ -279,18 +291,18 @@ retry:
         goto retry;
     }
     p = sub->nodes;
-    sc = enemyKind[kind].scale;
+    sc = ENEMY_DEF(kind)->scale;
     p->scale[2] = sc;
     p->scale[1] = sc;
     p->scale[0] = sc;
     w->scale = sc;
-    obj = enemyKind[kind].model;
+    obj = ENEMY_DEF(kind)->model;
     if (obj != 1425) {
         GOBJ_SUB(self)->model = GetPObjAddress(obj);
         debug_StdPrintfDummy("%p\n", GOBJ_SUB(self)->model);
         w->loaded = 1;
     }
-    pid = enemyKind[kind].particle;
+    pid = ENEMY_DEF(kind)->particle;
     if (pid != -1) {
         setEnemyParticleObject(self, pid);
     }
@@ -318,19 +330,19 @@ retry:
         goto retry;
     }
     p = sub->nodes;
-    sc = enemyKind[kind].scale;
+    sc = ENEMY_DEF(kind)->scale;
     p->scale[2] = sc;
     p->scale[1] = sc;
     p->scale[0] = sc;
     w->scale = sc;
-    obj = enemyKind[kind].model;
+    obj = ENEMY_DEF(kind)->model;
     if (obj != PAL_JPNKORCN_NTSC_AUG6(0x610, 1548, 1515, 1510)) {
         GOBJ_SUB(self)->model = GetPObjAddress(obj);
         GOBJ_SUB(self)->modelId = obj;
         debug_StdPrintfDummy("%p\n", GOBJ_SUB(self)->model);
         w->loaded = 1;
     }
-    pid = enemyKind[kind].particle;
+    pid = ENEMY_DEF(kind)->particle;
     if (pid != -1) {
         setEnemyParticleObject(self, pid);
     }
@@ -639,7 +651,7 @@ void *InitEnemyGeo(GObj *self, SObjSimpleSetting *param)
     } else if (ICO_AUG6JUN26) {
         InitMotionOrient(self, 1797, 2080, 24, 36, 790);
     } else {
-        w->flyXZAccel = enemyKind[kind].float0C;
+        w->flyXZAccel = ENEMY_DEF(kind)->float0C;
         InitMotionOrient(self, 0x84A, 0x967, 0x18, 0x24, 0x342);
     }
     no = enemyVariation;
@@ -1016,27 +1028,27 @@ void SetEnemyWingRatio(GObj *self, float ratio)
 
 int CanThisEnemyFly(GObj *self)
 {
-    return enemyKind[((EnemyWork *)GOBJ_SUB(self)->work)->def].flyType;
+    return ENEMY_DEF(((EnemyWork *)GOBJ_SUB(self)->work)->def)->flyType;
 }
 
 int GetEnemyBattleType(GObj *self)
 {
-    return enemyKind[((EnemyWork *)GOBJ_SUB(self)->work)->def].battleType;
+    return ENEMY_DEF(((EnemyWork *)GOBJ_SUB(self)->work)->def)->battleType;
 }
 
 float GetEnemyDefLife(GObj *self)
 {
-    return enemyKind[((EnemyWork *)GOBJ_SUB(self)->work)->def].life;
+    return ENEMY_DEF(((EnemyWork *)GOBJ_SUB(self)->work)->def)->life;
 }
 
 float GetEnemyDefDodgeRange(GObj *self)
 {
-    return enemyKind[((EnemyWork *)GOBJ_SUB(self)->work)->def].dodge;
+    return ENEMY_DEF(((EnemyWork *)GOBJ_SUB(self)->work)->def)->dodge;
 }
 
 float GetEnemyDefParaIndex(GObj *self)
 {
-    return enemyKind[((EnemyWork *)GOBJ_SUB(self)->work)->def].paraIndex;
+    return ENEMY_DEF(((EnemyWork *)GOBJ_SUB(self)->work)->def)->paraIndex;
 }
 
 void ResetEnemyPositionInfo(GObj *self)
