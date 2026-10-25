@@ -4,16 +4,20 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thank you for reporting it. Please say which disc you play and attach the report file: the same problem can differ between the three discs.
+        Thank you for reporting it. Please say which disc you play and attach the report file: the same problem can differ between the seven discs.
   - type: dropdown
     id: disc
     attributes:
       label: Which disc do you play?
-      description: The number is printed on the disc and on the case. The first lines of the log name it too.
+      description: The number is printed on the disc and on the case (the preview has none). The first lines of the log name it too.
       options:
         - the European disc (SCES-50760)
         - the Japanese disc (SCPS-11003)
         - the Korean disc (SCPS-56001)
+        - the North American disc (SCUS-97113)
+        - the Asian disc (SCPS-55001)
+        - the August 2001 preview disc
+        - the June 2001 magazine demo (SCUS-97158)
     validations:
       required: true
   - type: input
