@@ -664,7 +664,7 @@ typedef struct { /* field names derived */
 static IntrMail *act_check_intr_list_jun26(void *self, IntrMail *m, void **out)
 {
     Act *w = GOBJ_ACT(self);
-    IntrList *k = (IntrList *)(self + 0x54);
+    IntrList *k = ICO_RAWP(IntrList *, self, 0x54, (IntrList *)&((GObj *)self)->mailBox);
     MotOriReq buf;
     int i;
 
