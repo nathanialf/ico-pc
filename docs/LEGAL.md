@@ -54,6 +54,20 @@ respective owners.
   `config/stubs.kor.txt`, `config/symbol_addrs.kor.txt` and
   `config/symbol_addrs.kor.data.txt`). Its layouts and bit positions come
   from upstream's headers and sources as the Japanese disc's do.
+- The same configuration for the other four discs the program plays, under
+  their slugs `ntsc` (the North American disc, SCUS-97113), `aug6` (the August
+  2001 preview disc, which has no product number), `jun26` (the June 2001
+  magazine demo, SCUS-97158) and `cn` (the Asian disc, SCPS-55001), of the
+  same kinds and on the same terms: `config/data_members.<slug>.txt`,
+  `config/data_schema.<slug>.txt`, `config/ee_layout.<slug>.txt`,
+  `config/motion_bits.<slug>.txt`, `config/tables_manifest.<slug>.txt` and
+  `config/symbol_addrs.<slug>.txt` with `config/symbol_addrs.<slug>.data.txt`
+  (the names and addresses of the decompilation's link of that disc, a record
+  of that link as the others are). The expected sizes and SHA-1s of each
+  disc's image and boot file are in `port/data/discs.c`, facts about the
+  disc, not copies of it.
+- The enemy table, `ico2/sugipon/src/enemyKind.c`: the one game data table
+  committed as source ([the exception](#the-enemy-table-enemykindc)).
 
 ## What is not in this repository, and must never be added
 
@@ -118,7 +132,7 @@ generator as `sizeof` over the table, not read from the disc.
 
 ## Exemptions
 
-Two kinds of committed content look like what the list above forbids and
+Three kinds of committed content look like what the list above forbids and
 are allowed, each for the reason given. Nothing else is exempt.
 
 ### The loader's address registries, `port/data/gen/<slug>/ee_symbols.c`
@@ -129,8 +143,9 @@ Japanese disc's of the same shape (`jpn/ee_symbols.c`, 913 functions and one obj
 addresses, every name one the PAL registry also names; the names and addresses are the `func` /
 `obj` lines of `config/tables_manifest.jpn.txt` and pairs of `config/symbol_addrs.jpn.txt`, the
 decompilation's link of that ELF); the Korean disc's (`kor/ee_symbols.c`, 913 functions and one
-object) is built the same way from `config/tables_manifest.kor.txt` and `config/symbol_addrs.kor.txt`.
-What follows holds for all three. The "no bulk symbol tables" rule above
+object) is built the same way from `config/tables_manifest.kor.txt` and `config/symbol_addrs.kor.txt`,
+and the other four discs' (`ntsc`, `aug6`, `jun26`, `cn`) from their own manifests and symbol lists.
+What follows holds for all seven. The "no bulk symbol tables" rule above
 (and "Identifiers as references") does not apply to it, for these reasons:
 
 - **What it holds.** Only the addresses that the data tables' pointer words
@@ -170,6 +185,24 @@ What follows holds for all three. The "no bulk symbol tables" rule above
 A change that adds entries for any other reason than a table's pointer word,
 or names something the tree does not define, is not covered by this
 exemption.
+
+### The enemy table, `enemyKind.c`
+
+The table of enemy kinds that `enemy.c` reads (the decompilation's member
+`enemy-def`) is committed as C source in `ico2/sugipon/src/enemyKind.c`, by
+the decision of the project owner on 2026-10-24, as it is on the
+decompilation's main branch (its `docs/LEGAL.md` has the same exception).
+The port offers the North American disc's enemy tuning as a play variant on
+every disc (Options > Extras > Game variants), which needs that table
+without the North American disc. The table holds only numbers, one row per
+enemy kind: the model and particle ids, the life, the scale, the dodge range
+and the attribute bits. It holds no names, text or layouts, and it is written
+as source a developer would write, not as bytes. It comes in three forms in
+the port's record layout: the European disc's table (the Japanese and Korean
+discs' are the same), the North American disc's (the preview's is the same),
+and the June 2001 demo's. It is the only exception:
+every other data member is still filled from the user's own disc at start-up
+and never committed, and `tools/check_no_rom.sh` is unchanged for them.
 
 ### Exemptions from the IP-safety scan
 
@@ -304,16 +337,20 @@ source and leaked SDKs stay forbidden on every branch.
 You must legally own a copy of *ICO* for the PlayStation 2 and supply the
 disc image yourself: the European release (`SCES-50760`, boot ELF
 `SCES_507.60`) the Japanese release (`SCPS-11003`, boot ELF
-`SCPS_110.03`) or the Korean release (`SCPS-56001`, boot ELF `SCPS_560.01`).
-From each disc the program reads `SYSTEM.CNF`, the boot ELF, the big data
-file `DATA.DF` and the sound driver files (the IRX files), the same files
-for all three. The build needs no disc data. On its first run the
+`SCPS_110.03`), the Korean release (`SCPS-56001`, boot ELF `SCPS_560.01`),
+the North American release (`SCUS-97113`, boot ELF `SCUS_971.13`), the Asian
+release (`SCPS-55001`, boot ELF `SCPS_550.01`), the August 2001 preview disc
+(boot ELF `SCUS_971.13`, told from the North American disc by the ELF's
+SHA-1) or the June 2001 magazine demo (`SCUS-97158`). From each disc the
+program reads `SYSTEM.CNF`, the boot ELF, the big data
+file `DATA.DF` and the sound driver files (the IRX files), the same kinds of
+files for all seven (the demo's are in the game's folder of the magazine disc). The build needs no disc data. On its first run the
 program checks the image's SHA-1 against that disc's (or, for a re-dump,
 the boot ELF's SHA-1 and the manifest of the data file) and keeps no
 archive made from any other file: the game's data is written to a
 temporary file and kept as the local archive only when the check passes
 (`ico.o2r` for the European disc, `ico-jpn.o2r` for the Japanese disc,
-`ico-kor.o2r` for the Korean disc, so all three can sit in the same user folder); the
+`ico-kor.o2r` for the Korean disc, `ico-ntsc.o2r`, `ico-aug6.o2r`, `ico-jun26.o2r` and `ico-cn.o2r` for the others, so all seven can sit in the same user folder); the
 maintainers' ELF extraction checks `config/sha1sums.pal.txt` (`config/sha1sums.jpn.txt` for
 the Japanese disc, `config/sha1sums.kor.txt` for the Korean disc). A SHA-1 is a fingerprint, not a copy of the work; the disc image and the
 ELF remain the property of their rightsholders.
