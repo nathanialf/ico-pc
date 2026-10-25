@@ -3316,7 +3316,7 @@ static void testVariantPlumbing(void)
         FAILF("variant: SET_MESH_MATRIX differs between the variants\n");
     }
     /* the flag in IcoVuCB.draw[2] (vu_common.hlsli VU_F_JUN26 / g_vuVariant): its own bit,
-     * beside the others, and the block keeps its 816 bytes */
+     * beside the others, and the block keeps its 832 bytes (shader_consts.h's assert) */
     const uint32_t others[] = {ICO_VU_CLIP_MASK, ICO_VU_PROBE,    ICO_VU_CUT_ONLY,
                                ICO_VU_KICK_ONLY, ICO_VU_EXTENDED, ICO_VU_BEHIND_EYE,
                                ICO_VU_TICKS};
@@ -3328,8 +3328,8 @@ static void testVariantPlumbing(void)
             FAILF("variant: ICO_VU_JUN26 shares a bit with flag 0x%x\n", (unsigned)others[i]);
         }
     }
-    if (sizeof(IcoVuCB) != 816) {
-        FAILF("variant: IcoVuCB is %zu bytes, not 816\n", sizeof(IcoVuCB));
+    if (sizeof(IcoVuCB) != 832) {
+        FAILF("variant: IcoVuCB is %zu bytes, not 832\n", sizeof(IcoVuCB));
     }
     /* the hand traces of the June 2001 text, to be written with the shader branches
      * (VU-JUN26): named here so the list is in the test's output; none is run */

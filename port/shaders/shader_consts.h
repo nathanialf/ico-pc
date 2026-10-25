@@ -358,7 +358,7 @@ _Static_assert(sizeof(IcoSpriteStqVertex) == 24, "STQ vertex size");
  * stream (float4 quadwords as the VIF unpacked them), b2 = IcoVuCB,
  * b3 = IcoVuBoneCB (the cluster's bones; every mesh program's card bits). */
 
-/* VuCB: group 1, slot 2 (register b2, space1). 816 bytes.
+/* VuCB: group 1, slot 2 (register b2, space1). 832 bytes.
  *   mem    VU1 data memory 0..35 as the program reads it: 0..15 the common
  *          block (RdVuCommon), 16..27 the per-object matrices, 28..35 the
  *          light matrices (vu_common.hlsli lists what each program keeps

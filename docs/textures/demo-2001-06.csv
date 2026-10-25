@@ -1,0 +1,460 @@
+file,size,format,first used by,where,also used by,in the European pack,notes
+a43ba68b5a664f25-93a6dce750156de9-00002214.png,256x256,16 colours,Font/font.tm2,Font,0,no,
+5857eeb77b1a8b7c-d4b88e692502f803-00001e14.png,256x128,16 colours,Tex_menu01/scei.tm2,Tex_menu01,0,no,
+173c2d809edd8580-b29879ad3afaf469-00002214.png,256x256,16 colours,Tex_menu01/title.tm2,Tex_menu01,0,no,
+cd5b2b5a5535d10b-bcae28546f8a6eac-00001994.png,64x64,16 colours,boy/texture/b_arm.tm2,boy,0,yes,
+9a9b6baa5d63c790-4a61bf92e06ea7ad-00001554.png,32x32,16 colours,boy/texture/b_arm_l.tm2,boy,0,yes,
+8730520463b597b-47475a55df89bc8e-00001994.png,64x64,16 colours,boy/texture/b_armring.tm2,boy,0,yes,
+553c494c4c4e0cb8-ddf4039a479ba456-00001554.png,32x32,16 colours,boy/texture/b_armring_l.tm2,boy,0,no,
+767835e43f2c252-63ab3227fe22f8d7-00001dd4.png,128x128,16 colours,boy/texture/b_face2.tm2,boy,0,yes,
+4f2c8e73764c9f9a-1c29060e2e4c135c-00001994.png,64x64,16 colours,boy/texture/b_face2_l.tm2,boy,0,yes,
+5756a3002ca79ddb-ef3ed2b2911ac888-00001994.png,64x64,16 colours,boy/texture/b_hair02.tm2,boy,0,yes,
+40ae5488e188ed02-1655e8ae072b6f28-00001554.png,32x32,16 colours,boy/texture/b_head_top.tm2,boy,0,yes,
+ab41066ba879e3f2-c5d169292461a550-00001554.png,32x32,16 colours,boy/texture/b_head_top_l.tm2,boy,0,yes,
+6b27b6e3205842d4-2791aa44f69e9569-00001dd4.png,128x128,16 colours,boy/texture/b_lashe2.tm2,boy,0,yes,
+3c51f15307bf162b-5a1e346161726c39-00001dd4.png,128x128,16 colours,boy/texture/b_mantle.tm2,boy,0,yes,
+92bc23223c986ab0-d47f60a936e40070-00001994.png,64x64,16 colours,boy/texture/b_mantle_l.tm2,boy,0,yes,
+e977a17d3e849b5c-5c8686c160d2086e-00001994.png,64x64,16 colours,boy/texture/b_pants.tm2,boy,0,yes,
+e1cc337b670a52f4-c24198090de8559a-00001554.png,32x32,16 colours,boy/texture/b_pants_l.tm2,boy,0,yes,
+5e562cef30575a6f-304ffba814e424b-00001994.png,64x64,16 colours,boy/texture/b_shoes.tm2,boy,0,yes,
+9679695bf641fc29-eb5f8f865cd60ac0-00001554.png,32x32,16 colours,boy/texture/b_shoes_l.tm2,boy,0,yes,
+8153c723cbf71e60-51dc03dbdf494549-00001dd4.png,128x128,16 colours,boy/texture/b_suit.tm2,boy,0,yes,
+5b81b4265b655b2a-cfad7ff3ae30e021-00001994.png,64x64,16 colours,boy/texture/b_suit_l.tm2,boy,0,yes,
+9932e81ccf6a57ca-1a0cec4a23c84cff-00001554.png,32x32,16 colours,boy/texture/eye02.tm2,boy,0,yes,
+a52f4295cf05a73-9c25e4a2101ee1a4-00001554.png,32x32,16 colours,boy/texture/eye02_ref.tm2,boy,0,yes,
+26cb43c75cf22ccc-53b6e72d32fe6357-00001554.png,32x32,16 colours,boy/texture/eye_inner.tm2,boy,0,yes,
+ed7f685a46699e9b-ac83053da47feaeb-00001554.png,32x32,16 colours,boy/texture/horn.tm2,boy,0,yes,
+bc97a97fb4bd05c1-b553b58658b3dcfc-00001554.png,32x32,16 colours,boy/texture/horn_l.tm2,boy,0,yes,
+16a0dc3451de4cdf-b55b8cd398be993c-00001554.png,32x32,16 colours,boy/texture/horn_ref.tm2,boy,0,yes,
+ce3b9eb444acc903-f0fed6f766012ee6-00001993.png,64x64,256 colours,boy/texture/tape_b.tm2,boy,0,no,
+8245efe58d909e6b-7beb9a397f94d821-00001993.png,64x64,256 colours,boy/texture/tape_boro.tm2,boy,0,no,
+76d0e91e292e11d3-4f1da337f21b25a1-00001554.png,32x32,16 colours,boy/texture/test_small_ref.tm2,boy girl,1,yes,
+db7ce5fd79f4ada9-64f567b2f64e0cf7-00001994.png,64x64,16 colours,boy/texture/toothD01.tm2,boy,0,yes,
+803ab85121510a07-cb745aa41515cd9c-00001994.png,64x64,16 colours,boy/texture/toothU01.tm2,boy,0,yes,
+c2267e6cbb671771-951a3497c45edc3c-00001993.png,64x64,256 colours,enemy/anim/fractal.tm2,e3 enemy st01b,2,yes,has 2 smaller sizes (their own rows)
+5255dae7f1931e2b-951a3497c45edc3c-00001553.png,32x32,256 colours,enemy/anim/fractal.tm2,e3 enemy st01b,2,yes,size 1 of a 64x64 texture
+9d6418569fdf840e-951a3497c45edc3c-00001113.png,16x16,256 colours,enemy/anim/fractal.tm2,e3 enemy st01b,2,yes,size 2 of a 64x64 texture
+1f3639c6e0f84c20-96141ed7cc9bf03c-00001994.png,64x64,16 colours,enemy/texture/enemy_sprite.tm2,enemy,0,yes,
+3d6eb4304ed14729-f4866d4cdee65805-00001554.png,32x32,16 colours,enemy/texture/guard_black.tm2,enemy,0,yes,
+85a342f88c9a4381-5bd9f17d3497d899-00001994.png,64x64,16 colours,enemy/texture/guard_black_flash.tm2,enemy,0,yes,
+fe576a9dfda29d4-cd153d44d14cf0c9-00001dd4.png,128x128,16 colours,enemy_sp_cls/texture/enemy_sp.tm2,enemy_sp_cls,0,no,
+a4d10fc799e259f1-20aaf38eb2bfe9b0-00001554.png,32x32,16 colours,girl/texture/eye10.tm2,girl queen,1,yes,
+a99881c74258db40-fe85d98abf156cd0-00001554.png,32x32,16 colours,girl/texture/eye_inner2.tm2,girl,0,yes,
+3abe7309d7183c4e-1fca196df2030caf-00001994.png,64x64,16 colours,girl/texture/eye_shadow5.tm2,girl,0,yes,
+2abd5fbfc1975289-d62bc277327d5a17-00001994.png,64x64,16 colours,girl/texture/eye_shadow6.tm2,girl,0,yes,
+ab22ef3c14fdffae-fb554450f494f4ac-00001dd4.png,128x128,16 colours,girl/texture/facft05_36.tm2,girl,0,yes,
+a1a0aeec60195229-5e567030fb581809-00001994.png,64x64,16 colours,girl/texture/fuku03.tm2,girl,0,yes,
+183f253bcb2c44f6-2ab0880f3a239c99-00001994.png,64x64,16 colours,girl/texture/fuku04.tm2,girl,0,yes,
+5d6ec90cca099b3-37bb6803ea777f90-00001994.png,64x64,16 colours,girl/texture/fuku06.tm2,girl,0,yes,
+f491574c87cb9cc7-f9dc1560bbdcc1af-00001dd3.png,128x128,256 colours,girl/texture/fuku22.tm2,girl,0,no,
+573da2651ca4b50a-f7c1694e178ceadb-00001dd4.png,128x128,16 colours,girl/texture/g_hair10.tm2,girl,0,no,
+d1629c05932880a3-2ff56e81585e3a24-00001dd4.png,128x128,16 colours,girl/texture/g_hair7.tm2,girl,0,no,
+b11bc674ece9df10-79fb1ef727bd33e8-00001dd4.png,128x128,16 colours,girl/texture/g_hair8.tm2,girl,0,no,
+bc7b922eef454c6c-d21449aaec8b6c9d-00001dd4.png,128x128,16 colours,girl/texture/g_hair9.tm2,girl,0,no,
+7ea0b6bc42b065a-b80bdda8d86cc834-00001993.png,64x64,256 colours,girl/texture/hada_red.tm2,girl,0,no,
+b0cf42865b3def36-46094d0dbba04796-00001993.png,64x64,256 colours,girl/texture/hada_red2.tm2,girl,0,no,
+6923dabaf15c3cf5-89c2033296b8602c-00001554.png,32x32,16 colours,girl/texture/poncho005.tm2,girl,0,yes,
+9d2eb558a11d743d-96da8c720eea84a2-00001554.png,32x32,16 colours,obj_com04/texture/go_black.tm2,obj_com04,0,yes,
+e237dc097fa31ba0-d8b20ceebac763cb-00001554.png,32x32,16 colours,obj_com04/texture/null.tm2,obj_com04,0,yes,
+9e7703c3405e9fe3-119f816fcc9a28ae-00001994.png,64x64,16 colours,obj_com04/texture/queen_ball.tm2,obj_com04,0,yes,
+fafde98a494d6019-525b38245ba7e6ad-00001dd4.png,128x128,16 colours,obj_com04/texture/sekizo_ad.tm2,obj_com04,0,yes,
+2770419c9505e4c9-3f878019b4d1d340-00001dd4.png,128x128,16 colours,obj_com04/texture/verti.tm2,obj_com04,0,yes,
+37563eee65c4eefc-52082cdb5eb69154-00001dd4.png,128x128,16 colours,obj_com04/texture/web_eff_na1.tm2,obj_com04 queen,1,yes,
+15885c265cd00f13-94eb94d67c88a28f-00001994.png,64x64,16 colours,obj_com04/texture/web_eff_na2.tm2,obj_com04,0,yes,
+cfcffcd150b1d099-91aba52dc5d8145a-00001554.png,32x32,16 colours,ueda4/texture/bubble.tm2,ueda4,0,yes,
+5e09393e2eb41f11-96d97bac31b55edb-00001994.png,64x64,16 colours,ueda4/texture/explode_fire.tm2,ueda4,0,yes,
+61d061b71ca60928-bc0007b31d74f4d6-00001dd4.png,128x128,16 colours,ueda4/texture/explode_smoke.tm2,ueda4,0,yes,
+f0999543b0b9764-c239f67fa46711ea-00001dd4.png,128x128,16 colours,ueda4/texture/explode_smoke_ad.tm2,ueda4,0,yes,
+bbda1fff8ab4453b-e7443a16fd11a1e8-00001994.png,64x64,16 colours,ueda4/texture/flare.tm2,ueda4,0,yes,
+fa88c4aa68bcc8de-569f73fc026da28e-00001994.png,64x64,16 colours,ueda4/texture/ripple.tm2,ueda4,0,yes,
+4196d8289924bf17-c46af3b90885354a-00001dd4.png,128x128,16 colours,ueda4/texture/shockwave.tm2,ueda4,0,yes,
+2bdbf26d6b553baf-114e12ab39c1ee38-00001994.png,64x64,16 colours,ueda4/texture/splash_p1.tm2,ueda4,0,yes,
+b88eac5cf9cb0169-c17e3abb554bdaa7-00001994.png,64x64,16 colours,ueda4/texture/splash_particle.tm2,ueda4,0,yes,
+e83fc672b24f5665-e3e8e9dae1ef5ed0-00001994.png,64x64,16 colours,ueda4/texture/water_rip.tm2,ueda4,0,yes,
+320a08fd40100cc9-7815aca807d62cd6-00001994.png,64x64,16 colours,ueda4/texture/wf_exp.tm2,ueda4,0,yes,
+b2987a9d949e807c-fa4a0997467e6115-00001554.png,32x32,16 colours,ueda4/texture/white.tm2,e3 queen st26a ueda4,4,yes,
+82a22ea417b53dd8-8da49a4ed612684c-00001994.png,64x64,16 colours,enemy/texture/enemy07_hane01.tm2,enemy,11,yes,
+fa89278bf3e85a02-f4866d4cdee65805-00001994.png,64x64,16 colours,enemy/texture/enemy_hit07.tm2,enemy queen,12,yes,
+45302bd4606886c8-1e2a515509e0f835-00002214.png,256x256,16 colours,Tex_menu01/mc01.tm2,Tex_menu01,8,no,
+a4e1f1d534d495f8-ae6988aaf0016738-00002214.png,256x256,16 colours,Tex_menu01/mc02.tm2,Tex_menu01,8,no,
+45f683be58fc433b-44f72d6b83b266cd-00002214.png,256x256,16 colours,Tex_menu01/mc04.tm2,Tex_menu01,8,no,
+21c44417f7126a7f-38fd393ac040c265-00002213.png,256x256,256 colours,Tex_menu01/option.tm2,Tex_menu01,8,no,
+a9dffbfefc59bdbb-2581fb730f198076-00002214.png,256x256,16 colours,Tex_menu01/stage.tm2,Tex_menu01,8,no,
+1538cac05852b0b8-55e88cf2fa5d2062-00001994.png,64x64,16 colours,boy/model/mace.tm2,boy,8,yes,
+f95ccf229e72d3fc-8dc196cb58b18dca-00001994.png,64x64,16 colours,boy/model/mace_l.tm2,boy,8,yes,
+4215f2399a16475e-5e0302c9c2bf090b-00002214.png,256x256,16 colours,e3/st13b/texture/e3_ver.tm2,e3,0,no,
+6bc946b09d80b409-2cbabbbfa81739d4-00002214.png,256x256,16 colours,e3/st13b/texture/p_start.tm2,e3,0,no,
+de6ffe3d32ced64b-a507148903afcb8a-00002654.png,512x512,16 colours,e3/st13b/texture/scei_cr.tm2,e3,0,no,
+e997f3381dbc55e-6050a3a10f92b8be-00001994.png,64x64,16 colours,girl_obj/hair/chain.tm2,girl_obj obj_com04,7,yes,
+b626451557178c4d-a5e1a3b4c6a1e8b8-00001dd4.png,128x128,16 colours,girl_obj/hair/g_hair.tm2,girl_obj,8,no,
+2912c28c5a704ab0-de87ab93e2b27f82-00001dd4.png,128x128,16 colours,girl_obj/hair/g_hair_l.tm2,girl_obj,8,no,
+57af7d16fecff658-57b23d1733bf305b-00001994.png,64x64,16 colours,obj_com01/texture/bomb.tm2,obj_com01,8,yes,
+87fe740fa424e828-e5aa484e7033e0c2-00001554.png,32x32,16 colours,obj_com01/texture/bomb_ref.tm2,obj_com01,8,yes,
+f4bdbb51f64ef377-1480afbcca7e1be9-00001994.png,64x64,16 colours,obj_com01/texture/bomb_top.tm2,obj_com01,8,yes,
+479c8c21fd328f45-df09a02eb096399c-00002213.png,256x256,256 colours,obj_com01/texture/enemy_tex01.tm2,obj_com01,8,no,
+3d6eb4304ed14729-e61506236c611860-00001554.png,32x32,16 colours,obj_com01/texture/null.tm2,obj_com01,8,yes,
+e0b305cdf0edb430-1b44bcce0a8a93e2-00002213.png,256x256,256 colours,obj_com01/texture/sekizo.tm2,obj_com01,5,yes,has 2 smaller sizes (their own rows)
+d041d2bc17f32132-1b44bcce0a8a93e2-00001dd3.png,128x128,256 colours,obj_com01/texture/sekizo.tm2,obj_com01,5,yes,size 1 of a 256x256 texture
+64f17924a2441891-1b44bcce0a8a93e2-00001993.png,64x64,256 colours,obj_com01/texture/sekizo.tm2,obj_com01,5,yes,size 2 of a 256x256 texture
+bfac58822b0a5563-29c9561dd11147b4-00001994.png,64x64,16 colours,obj_com01/texture/sord_a_edge.tm2,obj_com01,8,yes,
+137304e62c49733b-d3bf5bc0bdcbd71e-00001994.png,64x64,16 colours,obj_com01/texture/sord_a_edge_ref.tm2,obj_com01,8,yes,
+1de5828c4b9f0ca5-845b5639047ae672-00001994.png,64x64,16 colours,obj_com01/texture/sord_a_grip.tm2,obj_com01,8,yes,
+6b20c968634b735f-98935c1e267bd5a4-00001994.png,64x64,16 colours,obj_com01/texture/sord_a_gripend.tm2,obj_com01,8,yes,
+255e67b16106a921-9ac05c5236e643df-00002213.png,256x256,256 colours,obj_com01/texture/wbox_drum_taru.tm2,obj_com01,8,yes,
+598eba465bac0c18-7225c9602bcdeb39-00001dd4.png,128x128,16 colours,obj_com01/texture/wbox_drum_taru_l.tm2,obj_com01,8,yes,
+c26f23d42e666d95-bf1fc35385450b3e-00001dd4.png,128x128,16 colours,obj_com01/model/temp/long_sord_cloth.tm2,obj_com01,8,yes,
+27dc9fb247291784-00001540.png,32x32,32-bit,obj_com04/texture/lightning_test.tm2,obj_com04,8,no,
+2e28ceedf510bc79-894c2f730d41ba3d-00001dd4.png,128x128,16 colours,obj_com04/texture/pot02.tm2,obj_com04,8,yes,
+60398018acaab496-60b196c04f891a77-00001994.png,64x64,16 colours,obj_com04/texture/web_n2.tm2,obj_com04,8,no,
+2bf75768cf499daf-cac2810d4f81dd80-00001994.png,64x64,16 colours,st02a/texture/bird_feather.tm2,st02a,8,yes,
+ec7619ac30ff7d97-8a7ce10e03e66450-00001dd3.png,128x128,256 colours,st13b/texture/broken01.tm2,st13b,1,yes,
+3ed3f3e374e61b0c-166446c1e4dd41d6-00001dd3.png,128x128,256 colours,st13b/texture/ca_steel.tm2,e3 st13b st13c,3,yes,
+3531304759e6a412-277ae52fb7b6aee-00001dd3.png,128x128,256 colours,st13b/texture/cap_in.tm2,st13b,1,yes,
+42a16c449b637e8d-6994ebdb3cca29a2-00001dd3.png,128x128,256 colours,st13b/texture/cap_in2.tm2,st13b,1,yes,
+1e5d780085383c43-717c1ac9afaf44b1-00001dd3.png,128x128,256 colours,st13b/texture/cap_pillar.tm2,st13b,1,yes,
+efcddd9ba1698d1b-7a467141a18a03c5-00001dd3.png,128x128,256 colours,st13b/texture/cap_table.tm2,st13b,1,yes,
+f1e48074b8aca659-18fa2e237eab9be0-00002213.png,256x256,256 colours,st13b/texture/door_other.tm2,st13b,1,yes,
+1ff367719796da47-51ad40397d2678ce-00001993.png,64x64,256 colours,st13b/texture/flare1.tm2,st13b,1,yes,
+fe1601d7784a8568-d57bf93a98a1f2ca-00001993.png,64x64,256 colours,st13b/texture/flare2.tm2,st13b,1,yes,
+653787caeca38317-759c5a617e7f57b0-00002213.png,256x256,256 colours,st13b/texture/floor1.tm2,st13b,1,yes,has 2 smaller sizes (their own rows)
+ee587947e831a63d-759c5a617e7f57b0-00001dd3.png,128x128,256 colours,st13b/texture/floor1.tm2,st13b,1,yes,size 1 of a 256x256 texture
+5de39d24753471d-759c5a617e7f57b0-00001993.png,64x64,256 colours,st13b/texture/floor1.tm2,st13b,1,yes,size 2 of a 256x256 texture
+a023490079f951e7-33b2930834022f1a-00001dd3.png,128x128,256 colours,st13b/texture/floor2.tm2,st13b,1,yes,has 1 smaller sizes (their own rows)
+6db606b3a9a17292-33b2930834022f1a-00001993.png,64x64,256 colours,st13b/texture/floor2.tm2,st13b,1,yes,size 1 of a 128x128 texture
+3261ff590963fac6-4489aebd6ff83e0e-00001dd3.png,128x128,256 colours,st13b/texture/kakou_gan.tm2,st13b,1,yes,
+ce6d6d7a89e7ff1c-cb40534331d4730-00002213.png,256x256,256 colours,st13b/texture/nurikabe.tm2,st13b,1,yes,has 2 smaller sizes (their own rows)
+daf33f8a6f36365b-cb40534331d4730-00001dd3.png,128x128,256 colours,st13b/texture/nurikabe.tm2,st13b,1,yes,size 1 of a 256x256 texture
+d3534ec94c20d4bc-cb40534331d4730-00001993.png,64x64,256 colours,st13b/texture/nurikabe.tm2,st13b,1,yes,size 2 of a 256x256 texture
+2f4d093e7703fde5-b3455a3b65c10038-00002213.png,256x256,256 colours,st13b/texture/saku_cap.tm2,st13b,1,yes,
+6bbb5e1bb3e9fc12-4d4077dc908eed12-00002214.png,256x256,16 colours,st13b/texture/saku_cap_ad.tm2,st13b,1,no,
+69578aa4ed16ed03-6ccf781b958f07b9-00001dd4.png,128x128,16 colours,st13b/texture/st13b_fuchi01.tm2,st13b,1,yes,has 1 smaller sizes (their own rows)
+e6f7ec39d0978a6e-6ccf781b958f07b9-00001994.png,64x64,16 colours,st13b/texture/st13b_fuchi01.tm2,st13b,1,yes,size 1 of a 128x128 texture
+7b4c8651cb98a6bb-21bc1f99292e5bc5-00001dd4.png,128x128,16 colours,st13b/texture/st13b_fuchi02.tm2,st13b,1,yes,has 1 smaller sizes (their own rows)
+808b21fdfdd81b93-21bc1f99292e5bc5-00001994.png,64x64,16 colours,st13b/texture/st13b_fuchi02.tm2,st13b,1,yes,size 1 of a 128x128 texture
+2aac80f83f502775-566621507b4bcf6c-00001dd3.png,128x128,256 colours,st13b/texture/w05.tm2,st13b,1,yes,
+ee040105da8eb1e9-328f602d22070758-00001dd3.png,128x128,256 colours,st26a/texture/C.tm2,st26a,0,no,
+c7c9ed46af521e1c-672156cd13ddc49d-00001dd3.png,128x128,256 colours,st26a/texture/C_frare.tm2,st26a,0,yes,
+8302a7e9fd85b2d0-328f602d22070758-00001dd3.png,128x128,256 colours,st26a/texture/I.tm2,st26a,0,no,
+bc6cf056f8263b6a-d124d63ec8994fee-00001dd3.png,128x128,256 colours,st26a/texture/I_frare.tm2,st26a,0,yes,
+f0f5f784893ea27e-bb4d66bc1eb0dac4-00001dd4.png,128x128,16 colours,st26a/texture/O_frare_tm.tm2,st26a,0,yes,
+60f8b90cff212b4b-944c6970a43bf78e-00001dd4.png,128x128,16 colours,st26a/texture/O_tm.tm2,st26a,0,no,
+f1316b88d31d22be-f074b63729bc709-00001993.png,64x64,256 colours,st26a/texture/fog1.tm2,st26a,0,yes,has 2 smaller sizes (their own rows)
+6f720608e5c5b6-f074b63729bc709-00001553.png,32x32,256 colours,st26a/texture/fog1.tm2,st26a,0,yes,size 1 of a 64x64 texture
+375db514ab78d3fe-f074b63729bc709-00001113.png,16x16,256 colours,st26a/texture/fog1.tm2,st26a,0,yes,size 2 of a 64x64 texture
+35cd0e1c43966a58-f783f34ed4cd3728-00002653.png,512x512,256 colours,e3/st13b/texture/control.tm2,e3,0,no,
+b7ce04b81707a4d0-136ed54dbf538bc8-00001dd3.png,128x128,256 colours,home/kuro.tm2,home,1,yes,has 2 smaller sizes (their own rows)
+93d76fe148c689ba-136ed54dbf538bc8-00001993.png,64x64,256 colours,home/kuro.tm2,home,1,yes,size 1 of a 128x128 texture
+de5f15ab6daf7941-136ed54dbf538bc8-00001553.png,32x32,256 colours,home/kuro.tm2,home,1,yes,size 2 of a 128x128 texture
+d6957cfbe6f6fa51-284a4cd86b1d9f2-00001dd4.png,128x128,16 colours,e3/st01b/texture/face.tm2,e3,0,yes,
+560033b27f70c9a6-6cd18bf5073408b1-00001994.png,64x64,16 colours,e3/st01b/texture/flare1.tm2,e3,0,yes,
+83dc288396145cf-758b302dd38829b4-00001dd4.png,128x128,16 colours,e3/st01b/texture/st01b_crashed.tm2,e3,0,yes,has 1 smaller sizes (their own rows)
+9e9ea2111819e99b-758b302dd38829b4-00001994.png,64x64,16 colours,e3/st01b/texture/st01b_crashed.tm2,e3,0,yes,size 1 of a 128x128 texture
+4961c1f9709392a1-3c84199c2f18cb82-00001dd4.png,128x128,16 colours,e3/st01b/texture/st01b_fuchi01.tm2,e3,0,yes,has 1 smaller sizes (their own rows)
+5c97a39d66bfb633-3c84199c2f18cb82-00001994.png,64x64,16 colours,e3/st01b/texture/st01b_fuchi01.tm2,e3,0,yes,size 1 of a 128x128 texture
+bdad6dc1b4489706-7036ab08e4353d5d-00002653.png,512x512,256 colours,e3/st01b/texture/st1b_base.tm2,e3,0,yes,has 3 smaller sizes (their own rows)
+4d05bc5037b4af02-7036ab08e4353d5d-00002213.png,256x256,256 colours,e3/st01b/texture/st1b_base.tm2,e3,0,yes,size 1 of a 512x512 texture
+5c9b380c73c5a17a-7036ab08e4353d5d-00001dd3.png,128x128,256 colours,e3/st01b/texture/st1b_base.tm2,e3,0,yes,size 2 of a 512x512 texture
+fca0fbd1d948aef2-7036ab08e4353d5d-00001993.png,64x64,256 colours,e3/st01b/texture/st1b_base.tm2,e3,0,yes,size 3 of a 512x512 texture
+e317be03233a4d18-d0878c70599832c6-00002213.png,256x256,256 colours,e3/st01b/texture/st1b_concletexz.tm2,e3,0,yes,has 2 smaller sizes (their own rows)
+8294e9f8d6d92b0c-d0878c70599832c6-00001dd3.png,128x128,256 colours,e3/st01b/texture/st1b_concletexz.tm2,e3,0,yes,size 1 of a 256x256 texture
+d84d385788d059e6-d0878c70599832c6-00001993.png,64x64,256 colours,e3/st01b/texture/st1b_concletexz.tm2,e3,0,yes,size 2 of a 256x256 texture
+ff2512c369012cce-626cfdf446b919d6-00001994.png,64x64,16 colours,enemy/texture/enemy_hane.tm2,enemy,1,no,
+830d1a3959ea71cb-a8491cc9ca57ab84-00001553.png,32x32,256 colours,obj_com04/texture/web_n.tm2,obj_com04,1,no,
+df9065a8998b932b-cba724637cd2d571-00002213.png,256x256,256 colours,st01b/texture/st1b_concleteaa.tm2,st01b,0,yes,has 2 smaller sizes (their own rows)
+4915afa3bfa28ac2-cba724637cd2d571-00001dd3.png,128x128,256 colours,st01b/texture/st1b_concleteaa.tm2,st01b,0,yes,size 1 of a 256x256 texture
+d8e1ff1983d85f7b-cba724637cd2d571-00001993.png,64x64,256 colours,st01b/texture/st1b_concleteaa.tm2,st01b,0,yes,size 2 of a 256x256 texture
+bf0b5b07ccb0166b-214431cd4f9438c7-00002214.png,256x256,16 colours,st01b/texture/st1b_concletexx.tm2,st01b,0,yes,has 2 smaller sizes (their own rows)
+6f060ee41e92f42-214431cd4f9438c7-00001dd4.png,128x128,16 colours,st01b/texture/st1b_concletexx.tm2,st01b,0,yes,size 1 of a 256x256 texture
+d307279988f9d9d1-214431cd4f9438c7-00001994.png,64x64,16 colours,st01b/texture/st1b_concletexx.tm2,st01b,0,yes,size 2 of a 256x256 texture
+2d8e493cdaa4fedf-68444d31afa57559-00001dd3.png,128x128,256 colours,st01b/texture/st1b_sakuyy.tm2,st01b,0,yes,has 1 smaller sizes (their own rows)
+a68d1f72cc188fab-68444d31afa57559-00001993.png,64x64,256 colours,st01b/texture/st1b_sakuyy.tm2,st01b,0,yes,size 1 of a 128x128 texture
+42af969eaf094bed-c136b1e87a41dc17-00001dd3.png,128x128,256 colours,st01b/texture/st1b_window.tm2,st01b,0,yes,
+92744b9c0384ed72-b9aa74d8f375d89c-00002214.png,256x256,16 colours,st01b/texture/tile_comp.tm2,st01b,0,yes,has 2 smaller sizes (their own rows)
+1655228f03398286-b9aa74d8f375d89c-00001dd4.png,128x128,16 colours,st01b/texture/tile_comp.tm2,st01b,0,yes,size 1 of a 256x256 texture
+8638e31e62441263-b9aa74d8f375d89c-00001994.png,64x64,16 colours,st01b/texture/tile_comp.tm2,st01b,0,yes,size 2 of a 256x256 texture
+681d6851971db457-abaa7028eab9fb89-00001dd4.png,128x128,16 colours,bird/texture/lb_all.tm2,bird,2,yes,
+8d4162e6d5185b5b-a0366ac97813503c-00001dd4.png,128x128,16 colours,bird/texture/lb_all_l.tm2,bird,2,yes,
+be5dc3ebb3ce6202-7be99d7e57a9a3d1-000019d4.png,128x64,16 colours,e3/st04a/texture/4a_daiza.tm2,e3,0,no,
+7eec0a49d0fe647d-ceffec4177b5d876-00001dd4.png,128x128,16 colours,e3/st04a/texture/4a_sekizo.tm2,e3,0,yes,has 1 smaller sizes (their own rows)
+fd901b1f1705e94f-ceffec4177b5d876-00001994.png,64x64,16 colours,e3/st04a/texture/4a_sekizo.tm2,e3,0,yes,size 1 of a 128x128 texture
+3d6eb4304ed14729-3bd3f27355f1a475-00001554.png,32x32,16 colours,e3/st04a/texture/brg_sdw.tm2,e3,0,yes,
+5a50919ca3fd27a-9acfb6be6edb3019-00001e14.png,256x128,16 colours,e3/st04a/texture/brock04b_ks.tm2,e3,0,yes,
+fc636d01ea282278-39810295c51959e0-00002214.png,256x256,16 colours,e3/st04a/texture/brock04b_m.tm2,e3,0,yes,has 2 smaller sizes (their own rows)
+4729f7f7ec9fb5c1-39810295c51959e0-00001dd4.png,128x128,16 colours,e3/st04a/texture/brock04b_m.tm2,e3,0,yes,size 1 of a 256x256 texture
+978fb2d30f1cf863-39810295c51959e0-00001994.png,64x64,16 colours,e3/st04a/texture/brock04b_m.tm2,e3,0,yes,size 2 of a 256x256 texture
+4def5e9758783aea-7fac1cade7e57e3c-000019d4.png,128x64,16 colours,e3/st04a/texture/ct_bg.tm2,e3,0,yes,
+3caecca07a70427d-8148849041e56da5-00002654.png,512x512,16 colours,e3/st04a/texture/ct_cliff_a.tm2,e3,0,yes,has 3 smaller sizes (their own rows)
+b4f830233fa17fed-8148849041e56da5-00002214.png,256x256,16 colours,e3/st04a/texture/ct_cliff_a.tm2,e3,0,yes,size 1 of a 512x512 texture
+9b6ee0eb5ec6ad11-8148849041e56da5-00001dd4.png,128x128,16 colours,e3/st04a/texture/ct_cliff_a.tm2,e3,0,yes,size 2 of a 512x512 texture
+e3702962b6d4709-8148849041e56da5-00001994.png,64x64,16 colours,e3/st04a/texture/ct_cliff_a.tm2,e3,0,yes,size 3 of a 512x512 texture
+8d5fce5c64dc2c33-99df2a4fe6e45a44-00001dd4.png,128x128,16 colours,e3/st04a/texture/ct_enkei_cliff.tm2,e3,0,no,
+a595aa100125bf64-9d7470587d20c1d2-00001994.png,64x64,16 colours,e3/st04a/texture/ct_forest_b.tm2,e3,0,yes,
+3c5ad9959565c607-bfb5d2cb1bef5a04-00001994.png,64x64,16 colours,e3/st04a/texture/ct_forest_c.tm2,e3,0,yes,
+b968a5ee05c50189-7f3c7061b0a180a6-00002214.png,256x256,16 colours,e3/st04a/texture/kusa.tm2,e3,0,yes,has 2 smaller sizes (their own rows)
+7949d3ba094ccb12-7f3c7061b0a180a6-00001dd4.png,128x128,16 colours,e3/st04a/texture/kusa.tm2,e3,0,yes,size 1 of a 256x256 texture
+e555ef31f50c0c00-7f3c7061b0a180a6-00001994.png,64x64,16 colours,e3/st04a/texture/kusa.tm2,e3,0,yes,size 2 of a 256x256 texture
+3843dea83f65d0cf-22027342426884b2-00001e14.png,256x128,16 colours,e3/st04a/texture/kusa_alp.tm2,e3,0,yes,
+65b306dd76a1303a-bb631df7385785f8-00001994.png,64x64,16 colours,e3/st04a/texture/op_tree_rend02.tm2,e3,0,no,
+7aaa6d2d65333f20-b22987e57d0e5382-00001994.png,64x64,16 colours,e3/st04a/texture/op_tsuta.tm2,e3,0,yes,
+2663bbdaa59e359e-9407168f1695c92e-00002214.png,256x256,16 colours,e3/st04a/texture/piller.tm2,e3,0,yes,has 2 smaller sizes (their own rows)
+995967ed8997c1f0-9407168f1695c92e-00001dd4.png,128x128,16 colours,e3/st04a/texture/piller.tm2,e3,0,yes,size 1 of a 256x256 texture
+7465d16e946122ac-9407168f1695c92e-00001994.png,64x64,16 colours,e3/st04a/texture/piller.tm2,e3,0,yes,size 2 of a 256x256 texture
+aa6ff405c309229e-22a14f49cf48cca9-00001dd4.png,128x128,16 colours,e3/st04a/texture/tileaa.tm2,e3,0,yes,has 1 smaller sizes (their own rows)
+542fd9f394b48449-22a14f49cf48cca9-00001994.png,64x64,16 colours,e3/st04a/texture/tileaa.tm2,e3,0,yes,size 1 of a 128x128 texture
+e276529dc466b2be-e05f892adb5440fd-00002214.png,256x256,16 colours,e3/st04a/texture/tileaa_ks.tm2,e3,0,no,has 2 smaller sizes (their own rows)
+12632984b89548ec-e05f892adb5440fd-00001dd4.png,128x128,16 colours,e3/st04a/texture/tileaa_ks.tm2,e3,0,no,size 1 of a 256x256 texture
+c12d4b3f60859079-e05f892adb5440fd-00001994.png,64x64,16 colours,e3/st04a/texture/tileaa_ks.tm2,e3,0,no,size 2 of a 256x256 texture
+570dc61731d3840-4110e90147cd9e21-00001dd3.png,128x128,256 colours,obj_com01/texture/st04_taimatsu.tm2,obj_com01,0,yes,has 1 smaller sizes (their own rows)
+4c458f58c8df1324-4110e90147cd9e21-00001993.png,64x64,256 colours,obj_com01/texture/st04_taimatsu.tm2,obj_com01,0,yes,size 1 of a 128x128 texture
+cab7a524a571f16c-2ca6154631a71b46-00002214.png,256x256,16 colours,obj_com04/texture/cloud.tm2,obj_com04,2,yes,
+de80c1a911be15c4-363174d007dc0747-00001994.png,64x64,16 colours,obj_com04/texture/sky.tm2,obj_com04,2,yes,
+74547b849fe456c-a652b2c90d4d0fb3-00001993.png,64x64,256 colours,queen/texture/eye_shadow5.tm2,queen,0,yes,
+871e5d62ed0d9efe-fb87a99d355dfcad-00001994.png,64x64,16 colours,queen/texture/eye_shadow6.tm2,queen,0,yes,
+f880c7f5d48f04bb-9f83bc149dbe27a0-00001dd4.png,128x128,16 colours,queen/texture/face_sadow.tm2,queen,0,yes,
+733170c08828bc28-5513561ef6e700a2-00001dd4.png,128x128,16 colours,queen/texture/face_sadow_sd.tm2,queen,0,yes,
+9c2d4102bb18df40-f9c4152bdf2e6baf-00001dd4.png,128x128,16 colours,queen/texture/face_sadow_sd_00.tm2,queen,0,yes,
+3ee5c70e2befb22-1f1026563bbf453e-00001dd4.png,128x128,16 colours,queen/texture/facft05_46.tm2,queen,0,no,
+3d6eb4304ed14729-f4c0309e1031e56-00001554.png,32x32,16 colours,queen/texture/q_eye_inner.tm2,queen,0,yes,
+4278057a7d4494a7-7341eefbfd0850e0-00001dd4.png,128x128,16 colours,queen/texture/queen_effect.tm2,queen,0,yes,colours cycle: only the first colours are on the disc
+6b6994e600de0797-e23a28301d8ccfd5-00002214.png,256x256,16 colours,queen/texture/queen_effect2.tm2,queen,0,yes,colours cycle: only the first colours are on the disc
+2815466e9c940754-91fdc90cb2c7fd22-00001994.png,64x64,16 colours,st04a/texture/g_mon_sp1.tm2,st04a,0,no,
+b7eabb5e83c5b26-f7c47213f1906e32-00001994.png,64x64,16 colours,st04a/texture/g_mon_sp2.tm2,st04a,0,no,
+291005f44ee9fd7-c99b329b65643854-00001dd4.png,128x128,16 colours,st04a/texture/g_mong.tm2,st04a,0,yes,has 1 smaller sizes (their own rows)
+cccae1e0d3f61a1c-c99b329b65643854-00001994.png,64x64,16 colours,st04a/texture/g_mong.tm2,st04a,0,yes,size 1 of a 128x128 texture
+a1ce825e4e4cd06-ef8519803dd28aa0-00001994.png,64x64,16 colours,st04a/texture/g_mong_l.tm2,st04a,0,yes,
+d00fa43f0fe8507b-d1ee19f95cecdeb1-00001dd4.png,128x128,16 colours,st04a/texture/g_mtl.tm2,st04a,0,yes,has 1 smaller sizes (their own rows)
+8924b4e33961e4dc-d1ee19f95cecdeb1-00001994.png,64x64,16 colours,st04a/texture/g_mtl.tm2,st04a,0,yes,size 1 of a 128x128 texture
+4eb7cb9e714aa817-269a5ba70bfa851a-00001994.png,64x64,16 colours,st04a/texture/g_mtl_l.tm2,st04a,0,yes,
+78c74bd7e5b2dcec-c6e98a0f046814f5-00001dd4.png,128x128,16 colours,st04a/texture/g_zou.tm2,st04a,0,yes,has 1 smaller sizes (their own rows)
+aeefd2968abcad8-c6e98a0f046814f5-00001994.png,64x64,16 colours,st04a/texture/g_zou.tm2,st04a,0,yes,size 1 of a 128x128 texture
+8733bae023fa16fd-44d01db19d302856-00001994.png,64x64,16 colours,st04a/texture/g_zou_l.tm2,st04a,0,yes,
+510c2d9804b5fd6f-d944e41f6da0b397-00001e14.png,256x128,16 colours,st04a/texture/monyo.tm2,st04a,0,yes,
+44feeed906fb0bd3-80825cec6170cefb-00001e14.png,256x128,16 colours,st04a/texture/monyo_sp.tm2,st04a,0,yes,
+d9cec92a761e0f1f-41c4eaf48561c315-00001e13.png,256x128,256 colours,st04a/texture/monyo_sp_cc.tm2,st04a,0,yes,colours cycle: only the first colours are on the disc
+fdd63b157be63b4c-53a0085b15300096-00001993.png,64x64,256 colours,st04b/texture/fractal.tm2,st04b,0,yes,
+fe576a9dfda29d4-10ce91c9cb256256-00001dd4.png,128x128,16 colours,ueda4/texture/sun_glow_test2.tm2,ueda4,2,yes,
+4e23a14b7bd4d6c0-7352a96fc985e35-00001dd3.png,128x128,256 colours,e3/st09a/texture/broken01.tm2,e3,0,yes,has 1 smaller sizes (their own rows)
+417bf005cc8b4dc9-7352a96fc985e35-00001993.png,64x64,256 colours,e3/st09a/texture/broken01.tm2,e3,0,yes,size 1 of a 128x128 texture
+7154af0cd0778325-ad0669aa91078f1-00001993.png,64x64,256 colours,e3/st09a/texture/grass02a.tm2,e3,0,yes,
+d06cfcb7e8c052a-9f2ccfb2980054bc-00001993.png,64x64,256 colours,e3/st09a/texture/grass3t1.tm2,e3,0,yes,
+a34e6219dd841e68-605630d9654ffb6-00001993.png,64x64,256 colours,e3/st09a/texture/kusa_iwa2.tm2,e3,0,yes,has 1 smaller sizes (their own rows)
+b38e656558989cbf-605630d9654ffb6-00001553.png,32x32,256 colours,e3/st09a/texture/kusa_iwa2.tm2,e3,0,yes,size 1 of a 64x64 texture
+d35c6c76f0d6484f-8f9b9c1508645323-00001dd4.png,128x128,16 colours,e3/st09a/texture/mizu.tm2,e3,0,yes,has 1 smaller sizes (their own rows)
+7828e0b4a7ab1123-8f9b9c1508645323-00001994.png,64x64,16 colours,e3/st09a/texture/mizu.tm2,e3,0,yes,size 1 of a 128x128 texture
+644bd91e6d4acacc-f308961054489e40-00001dd4.png,128x128,16 colours,e3/st09a/texture/mizu_iwa.tm2,e3,0,yes,has 1 smaller sizes (their own rows)
+ac743c825e103dc4-f308961054489e40-00001994.png,64x64,16 colours,e3/st09a/texture/mizu_iwa.tm2,e3,0,yes,size 1 of a 128x128 texture
+a8c14a388aa058a2-52bf313a95d3ee85-00001dd4.png,128x128,16 colours,e3/st09a/texture/mizu_koke.tm2,e3,0,yes,has 1 smaller sizes (their own rows)
+10ff86e271dbce61-52bf313a95d3ee85-00001994.png,64x64,16 colours,e3/st09a/texture/mizu_koke.tm2,e3,0,yes,size 1 of a 128x128 texture
+ef7b7c3789bdef2a-a7051ae521492f4a-00001dd4.png,128x128,16 colours,e3/st09a/texture/st09a_enkei01.tm2,e3,0,yes,
+aa5b192467d7451b-cbeba122c8971817-00001dd4.png,128x128,16 colours,e3/st09a/texture/st09a_enkei02.tm2,e3,0,yes,
+39877ab383dfe6e-16c62d1cc5323fbd-00001dd4.png,128x128,16 colours,e3/st09a/texture/st09a_enkei03.tm2,e3,0,yes,
+656d4acc67b8f1cc-5cc575cef94dfe00-00001dd4.png,128x128,16 colours,e3/st09a/texture/st09a_enkei04.tm2,e3,0,no,
+87f5f161407493f6-1cf175eafb7a7783-00002213.png,256x256,256 colours,e3/st09a/texture/st09a_fuchi01.tm2,e3,0,yes,has 2 smaller sizes (their own rows)
+8c2817d5edfc7b1-1cf175eafb7a7783-00001dd3.png,128x128,256 colours,e3/st09a/texture/st09a_fuchi01.tm2,e3,0,yes,size 1 of a 256x256 texture
+ec6759c71fed1cc1-1cf175eafb7a7783-00001993.png,64x64,256 colours,e3/st09a/texture/st09a_fuchi01.tm2,e3,0,yes,size 2 of a 256x256 texture
+452d348f739f6334-13d5469194a700f0-00001dd4.png,128x128,16 colours,e3/st09a/texture/st09a_fuchi02.tm2,e3,0,yes,has 1 smaller sizes (their own rows)
+5024cf3823e3a5ac-13d5469194a700f0-00001994.png,64x64,16 colours,e3/st09a/texture/st09a_fuchi02.tm2,e3,0,yes,size 1 of a 128x128 texture
+df26f5590613b307-7f064bd00bdc6b05-00001dd4.png,128x128,16 colours,e3/st09a/texture/st09a_gakekusa.tm2,e3,0,yes,has 1 smaller sizes (their own rows)
+6fcc2f9935b1a730-7f064bd00bdc6b05-00001994.png,64x64,16 colours,e3/st09a/texture/st09a_gakekusa.tm2,e3,0,yes,size 1 of a 128x128 texture
+be4d11d126e70d75-d306cc00baefa6e1-00002213.png,256x256,256 colours,e3/st09a/texture/wall01_broken_harf.tm2,e3,0,yes,has 2 smaller sizes (their own rows)
+b1fcd1f3c4a48ce-d306cc00baefa6e1-00001dd3.png,128x128,256 colours,e3/st09a/texture/wall01_broken_harf.tm2,e3,0,yes,size 1 of a 256x256 texture
+b5c37502c2f05ba-d306cc00baefa6e1-00001993.png,64x64,256 colours,e3/st09a/texture/wall01_broken_harf.tm2,e3,0,yes,size 2 of a 256x256 texture
+3964d2fded966d04-2476ab0c8096770e-00001dd3.png,128x128,256 colours,e3/st09a/texture/wall01_kusa.tm2,e3,0,yes,has 1 smaller sizes (their own rows)
+2b7b28cd9279ef4b-2476ab0c8096770e-00001993.png,64x64,256 colours,e3/st09a/texture/wall01_kusa.tm2,e3,0,yes,size 1 of a 128x128 texture
+e60b9c135e907529-70f3edda6e9b4bd9-00001dd3.png,128x128,256 colours,obj_com02/texture/swit1.tm2,obj_com02,0,yes,
+c48914b079a12d6a-2979a333cc8bd40d-00001993.png,64x64,256 colours,obj_com02/texture/swit1_l.tm2,obj_com02,0,no,
+57cdf146eca1e939-b2c9774eabbe476a-00001993.png,64x64,256 colours,obj_com02/texture/swit6.tm2,obj_com02,1,yes,
+a3a26152600d6168-be2dbfe39e35cde8-00001553.png,32x32,256 colours,obj_com02/texture/swit6_l.tm2,obj_com02,1,no,
+fbde3bad9db91140-fd64cc67a5263e3f-00001554.png,32x32,16 colours,st09a/texture/9abase.tm2,st09a,0,yes,
+a6ef78912bf60f06-3b28c222715a9f08-00002214.png,256x256,16 colours,st09a/texture/9aumi1.tm2,st09a,1,yes,
+45fcc29a9d180f4f-408200a2ee5811c9-00001dd4.png,128x128,16 colours,st09a/texture/9aumi_spc.tm2,st09a,0,yes,colours cycle: only the first colours are on the disc
+3c511f5fc687efbb-3dcab51ce9a8d114-00001dd4.png,128x128,16 colours,st09a/texture/ca_steel.tm2,st09a,0,yes,has 1 smaller sizes (their own rows)
+1bcc942df439f2d6-3dcab51ce9a8d114-00001994.png,64x64,16 colours,st09a/texture/ca_steel.tm2,st09a,0,yes,size 1 of a 128x128 texture
+907bf0d960b7abac-b36306afcb3ac8f3-00002213.png,256x256,256 colours,st09a/texture/gake.tm2,st09a,0,yes,has 2 smaller sizes (their own rows)
+13ed26637a750edc-b36306afcb3ac8f3-00001dd3.png,128x128,256 colours,st09a/texture/gake.tm2,st09a,0,yes,size 1 of a 256x256 texture
+3005d58e413c3600-b36306afcb3ac8f3-00001993.png,64x64,256 colours,st09a/texture/gake.tm2,st09a,0,yes,size 2 of a 256x256 texture
+2d64ca1566b79fb5-523f42f274dbeef3-00002213.png,256x256,256 colours,st09a/texture/kusa01.tm2,st09a,0,yes,has 2 smaller sizes (their own rows)
+1f0bb14d8a61b547-523f42f274dbeef3-00001dd3.png,128x128,256 colours,st09a/texture/kusa01.tm2,st09a,0,yes,size 1 of a 256x256 texture
+7bbc09e29ffb62ae-523f42f274dbeef3-00001993.png,64x64,256 colours,st09a/texture/kusa01.tm2,st09a,0,yes,size 2 of a 256x256 texture
+59b9b571cacbb383-baaf8c0cb1434db4-00002213.png,256x256,256 colours,st09a/texture/kusa_iwa.tm2,st09a,0,yes,has 2 smaller sizes (their own rows)
+dba99a8137cac551-baaf8c0cb1434db4-00001dd3.png,128x128,256 colours,st09a/texture/kusa_iwa.tm2,st09a,0,yes,size 1 of a 256x256 texture
+e12ac11295776c37-baaf8c0cb1434db4-00001993.png,64x64,256 colours,st09a/texture/kusa_iwa.tm2,st09a,0,yes,size 2 of a 256x256 texture
+fd92729d07a7bca8-a6f5aed0cc5c4867-00001553.png,32x32,256 colours,st09a/texture/mirror_sky.tm2,e3 st09a,1,yes,
+1414b7a12be5de47-c1497898159aed10-00001994.png,64x64,16 colours,st09a/texture/pond_ref.tm2,st09a,0,yes,colours cycle: only the first colours are on the disc
+cbcf7cd96a724c41-a55bb497d1087cb6-00001553.png,32x32,256 colours,st09a/texture/shadow.tm2,st09a,0,no,has 1 smaller sizes (their own rows)
+50ca09c67938bc26-a55bb497d1087cb6-00001113.png,16x16,256 colours,st09a/texture/shadow.tm2,st09a,0,no,size 1 of a 32x32 texture
+6851805c8ac7851a-75bd2672cda6a5d5-00002213.png,256x256,256 colours,st09a/texture/wall01.tm2,st09a,0,yes,has 2 smaller sizes (their own rows)
+9f67a13f8f69aedd-75bd2672cda6a5d5-00001dd3.png,128x128,256 colours,st09a/texture/wall01.tm2,st09a,0,yes,size 1 of a 256x256 texture
+19fc7bc27c07e5e3-75bd2672cda6a5d5-00001993.png,64x64,256 colours,st09a/texture/wall01.tm2,st09a,0,yes,size 2 of a 256x256 texture
+32cb5c90566e7a87-ed2aad965946b205-00002213.png,256x256,256 colours,st09a/texture/wall01_broken.tm2,st09a,0,yes,has 2 smaller sizes (their own rows)
+793da87d9321f60e-ed2aad965946b205-00001dd3.png,128x128,256 colours,st09a/texture/wall01_broken.tm2,st09a,0,yes,size 1 of a 256x256 texture
+3e05bae1321be1ff-ed2aad965946b205-00001993.png,64x64,256 colours,st09a/texture/wall01_broken.tm2,st09a,0,yes,size 2 of a 256x256 texture
+47d14b284eaa1df6-2469742bb9ad9b97-00002213.png,256x256,256 colours,st09a/texture/wall02.tm2,st09a,0,yes,has 2 smaller sizes (their own rows)
+780976b28c886e81-2469742bb9ad9b97-00001dd3.png,128x128,256 colours,st09a/texture/wall02.tm2,st09a,0,yes,size 1 of a 256x256 texture
+3e7ccb8453b4cbf0-2469742bb9ad9b97-00001993.png,64x64,256 colours,st09a/texture/wall02.tm2,st09a,0,yes,size 2 of a 256x256 texture
+c5a39257b14cf771-5c3f4dc2b8cb4960-00002213.png,256x256,256 colours,st09a/texture/windmill.tm2,st09a,0,no,
+ce03c4dd4f0b52c2-bd837801dbda0cda-00001dd3.png,128x128,256 colours,st09a/texture/windmill_door.tm2,st09a,0,yes,
+b9a62db69788582-78b5ade7c572690a-00001dd3.png,128x128,256 colours,st09a/texture/wood01.tm2,st09a,0,yes,has 1 smaller sizes (their own rows)
+23a7b1651983c96a-78b5ade7c572690a-00001993.png,64x64,256 colours,st09a/texture/wood01.tm2,st09a,0,yes,size 1 of a 128x128 texture
+8b6e1dc731aa0d27-6f0f7c1a782f6003-00001993.png,64x64,256 colours,obj_com02/texture/6a_lever1.tm2,obj_com02,0,yes,
+310381ce2c9f09b6-6ec939ca30e5e62c-00001dd3.png,128x128,256 colours,st00a/texture/0door.tm2,e3 st00a,1,yes,
+6e2dea01a88a108d-ebdd07797dce3aa2-00002214.png,256x256,16 colours,st00a/texture/broken.tm2,st00a,0,yes,has 2 smaller sizes (their own rows)
+240cb94f1ef5831c-ebdd07797dce3aa2-00001dd4.png,128x128,16 colours,st00a/texture/broken.tm2,st00a,0,yes,size 1 of a 256x256 texture
+727d6aa3555ab050-ebdd07797dce3aa2-00001994.png,64x64,16 colours,st00a/texture/broken.tm2,st00a,0,yes,size 2 of a 256x256 texture
+778b8dce360c7223-3673b0fd49286831-00002214.png,256x256,16 colours,st00a/texture/st0_a.tm2,st00a,0,yes,has 2 smaller sizes (their own rows)
+79af06dcdc3789e5-3673b0fd49286831-00001dd4.png,128x128,16 colours,st00a/texture/st0_a.tm2,st00a,0,yes,size 1 of a 256x256 texture
+9ce78834529dacc-3673b0fd49286831-00001994.png,64x64,16 colours,st00a/texture/st0_a.tm2,st00a,0,yes,size 2 of a 256x256 texture
+4c5c49187e8ec5de-a113f74349f0fbcf-00001dd3.png,128x128,256 colours,e3/st13c/texture/17a_wall.tm2,e3,0,yes,has 2 smaller sizes (their own rows)
+ab5dedab7347d7f8-a113f74349f0fbcf-00001993.png,64x64,256 colours,e3/st13c/texture/17a_wall.tm2,e3,0,yes,size 1 of a 128x128 texture
+2a4cd664b005f0ac-a113f74349f0fbcf-00001553.png,32x32,256 colours,e3/st13c/texture/17a_wall.tm2,e3,0,yes,size 2 of a 128x128 texture
+6400e4cf3ccc4d9b-215080f7443db23b-00001dd3.png,128x128,256 colours,e3/st13c/texture/broken01.tm2,e3,0,yes,
+81fc4ce923d16bf7-defe514de3e8f076-00001dd3.png,128x128,256 colours,e3/st13c/texture/floor1.tm2,e3,1,yes,has 2 smaller sizes (their own rows)
+7593d6e0c1b3184f-defe514de3e8f076-00001993.png,64x64,256 colours,e3/st13c/texture/floor1.tm2,e3,1,yes,size 1 of a 128x128 texture
+8fb272c9f6180a28-defe514de3e8f076-00001553.png,32x32,256 colours,e3/st13c/texture/floor1.tm2,e3,1,yes,size 2 of a 128x128 texture
+343e5e113b342aba-885114c8282fedbf-00001993.png,64x64,256 colours,e3/st13c/texture/kei_fla.tm2,e3,0,yes,
+7c77e3e912846821-541357e17857e10a-00001dd3.png,128x128,256 colours,e3/st13c/texture/penki.tm2,e3,1,yes,
+3ae21d8d10bd9f68-ab1d9f7356c9057f-00001dd3.png,128x128,256 colours,e3/st13c/texture/q_door.tm2,e3,1,yes,
+4e77bd5d7176bebd-7235d4385a8d42c7-00001e13.png,256x128,256 colours,e3/st13c/texture/saku.tm2,e3,0,no,
+6e4d227955fa3fdd-afbe8cd68d470fbc-00001dd3.png,128x128,256 colours,e3/st13c/texture/st13c_fuchi01.tm2,e3,1,yes,has 1 smaller sizes (their own rows)
+2addedacbf0c6f39-afbe8cd68d470fbc-00001993.png,64x64,256 colours,e3/st13c/texture/st13c_fuchi01.tm2,e3,1,yes,size 1 of a 128x128 texture
+a8e2b5d68b16ac9b-9ad9cb9c0ff26a3a-00001dd3.png,128x128,256 colours,e3/st13c/texture/st13c_fuchi02.tm2,e3,1,yes,has 1 smaller sizes (their own rows)
+1957151f96d00b2e-9ad9cb9c0ff26a3a-00001993.png,64x64,256 colours,e3/st13c/texture/st13c_fuchi02.tm2,e3,1,yes,size 1 of a 128x128 texture
+48f7a80e9a16a550-6c7464a35d2dfac0-00002213.png,256x256,256 colours,e3/st13c/texture/w01.tm2,e3,0,yes,
+df166b423862a668-228b20fd6600c5e-00001dd3.png,128x128,256 colours,e3/st13c/texture/w05.tm2,e3,1,yes,has 1 smaller sizes (their own rows)
+a7c6822ac5f1cd51-228b20fd6600c5e-00001993.png,64x64,256 colours,e3/st13c/texture/w05.tm2,e3,1,yes,size 1 of a 128x128 texture
+70b1f6931d513380-56eec5409400441e-00001994.png,64x64,16 colours,obj_com04/texture/dust.tm2,obj_com04,0,yes,
+93788ef98357bc2-8183a1996955fa39-00001dd3.png,128x128,256 colours,st13c/texture/ca_floor.tm2,st13c,0,yes,
+e4df890d3375ba75-534ac8da2846de0-00001dd3.png,128x128,256 colours,st13c/texture/ca_rings.tm2,st13c,0,yes,
+123d2147e4dcf5f8-339d53053e17eaf0-00001dd3.png,128x128,256 colours,st13c/texture/ca_top.tm2,st13c,0,yes,
+35692ddbc38620aa-7563c152a1760ae3-00001dd3.png,128x128,256 colours,st13c/texture/curtain1.tm2,st13c,1,yes,
+ce9521ee4845c666-5664a38e64512916-00001dd3.png,128x128,256 colours,st13c/texture/curtain2.tm2,st13c,1,yes,
+1ee95af10b3d8ff0-f3015307d0237fee-00001993.png,64x64,256 colours,st13c/texture/curtain3.tm2,st13c,1,no,
+ea528308c3257747-3aa334d3c222c82-00002213.png,256x256,256 colours,st13c/texture/doortrap.tm2,e3 st13c,1,yes,
+e9e176828ffafb10-62aa036c52dde931-00001993.png,64x64,256 colours,st13c/texture/fractal_saku.tm2,st13c,1,yes,
+51f1db3ef58bb109-844e17436e0ff04c-00001dd4.png,128x128,16 colours,e3/st13d/texture/17a_iwa.tm2,e3,0,yes,
+6d84367c5292a4a9-910dad842a134293-00002214.png,256x256,16 colours,e3/st13d/texture/17a_wall.tm2,e3,0,yes,has 2 smaller sizes (their own rows)
+d35a6277faa59088-910dad842a134293-00001dd4.png,128x128,16 colours,e3/st13d/texture/17a_wall.tm2,e3,0,yes,size 1 of a 256x256 texture
+b72ee7d894d648e-910dad842a134293-00001994.png,64x64,16 colours,e3/st13d/texture/17a_wall.tm2,e3,0,yes,size 2 of a 256x256 texture
+d7ba6c8d63b05efc-97ddf8330fd4e840-00002214.png,256x256,16 colours,e3/st13d/texture/enkei.tm2,e3,0,yes,
+eaa9f39f26d2d9f6-5bf9876acc291c71-00001e13.png,256x128,256 colours,e3/st13d/texture/saku.tm2,e3,0,no,
+c961348f7bc9cf98-9eaae0c93c600a8-00002214.png,256x256,16 colours,e3/st13d/texture/w01.tm2,e3,0,yes,has 2 smaller sizes (their own rows)
+92b6711ff82d7b75-9eaae0c93c600a8-00001dd4.png,128x128,16 colours,e3/st13d/texture/w01.tm2,e3,0,yes,size 1 of a 256x256 texture
+99cf38d36ac9681d-9eaae0c93c600a8-00001994.png,64x64,16 colours,e3/st13d/texture/w01.tm2,e3,0,yes,size 2 of a 256x256 texture
+ea5d9b1f3d1b50eb-ac33cc86c5964ffd-00001993.png,64x64,256 colours,obj_com03/texture/chain.tm2,obj_com03,0,yes,
+82e8d70f1ee99a84-7b2c9be601b1eec9-00001553.png,32x32,256 colours,obj_com04/texture/sea_blue.tm2,obj_com04,0,yes,
+c42e37c3da99c0b3-a2314459b2ae09b0-00002213.png,256x256,256 colours,obj_com04/texture/sea_far_ud.tm2,obj_com04,1,yes,
+398b202228549d67-c4db6a6f6d3da7f7-00002213.png,256x256,256 colours,obj_com04/texture/sea_far_ud2.tm2,obj_com04,0,yes,
+aa52cbc15b8f1e9e-2aa898fa3e31a5e2-00002213.png,256x256,256 colours,obj_com04/texture/sea_far_ud_spc.tm2,obj_com04,0,yes,
+665cb682afeebfc7-a60a009209f5510d-00002654.png,512x512,16 colours,e3/st13b/texture/warning.tm2,e3,0,no,
+c62a060e8a7839d-65615a1d197fe60b-00001e13.png,256x128,256 colours,data.jim@0x0,Tex_jimaku/data.jim data.jim,1,yes,
+d77fe9a9f0c8039f-8a1507aac111bf9e-00001e13.png,256x128,256 colours,data.jim@0x8800,Tex_jimaku/data.jim data.jim,1,yes,
+f4582a7998a944a1-a347e477fa5f1f04-00001e13.png,256x128,256 colours,data.jim@0x11000,Tex_jimaku/data.jim data.jim,1,yes,
+e1d7050ca0638e81-b12a69aab5f61cc-00001e13.png,256x128,256 colours,data.jim@0x19800,Tex_jimaku/data.jim data.jim,1,yes,
+a37b35527760d5d1-4d4865f0ca7b9874-00001e13.png,256x128,256 colours,data.jim@0x22000,Tex_jimaku/data.jim data.jim,1,yes,
+94f28799e058a6aa-cb96350784a12e5d-00001e13.png,256x128,256 colours,data.jim@0x2a800,Tex_jimaku/data.jim data.jim,1,yes,
+6a80e1072ddfbd77-d18e52eb61b6053e-00001e13.png,256x128,256 colours,data.jim@0x33000,Tex_jimaku/data.jim data.jim,1,yes,
+5dc69bcedb5ad947-1fedc9d47ef9fce4-00001e13.png,256x128,256 colours,data.jim@0x3b800,Tex_jimaku/data.jim data.jim,1,yes,
+71b33bf2fecbd9cf-b7bc89950bc71cab-00001e13.png,256x128,256 colours,data.jim@0x44000,Tex_jimaku/data.jim data.jim,1,yes,
+113c48b195092246-d17e05726498026c-00001e13.png,256x128,256 colours,data.jim@0x4c800,Tex_jimaku/data.jim data.jim,1,yes,
+a79dd67df15b04ba-bead11c1930a29d-00001e13.png,256x128,256 colours,data.jim@0x55000,Tex_jimaku/data.jim data.jim,1,yes,
+f98a3cefe181322e-14e140f15669e893-00001e13.png,256x128,256 colours,data.jim@0x5d800,Tex_jimaku/data.jim data.jim,1,yes,
+44a6eda2299aaad-cb027833445e5863-00001e13.png,256x128,256 colours,data.jim@0x66000,Tex_jimaku/data.jim data.jim,1,yes,
+96d0a5201fc47ed3-e2dd7f4fd0d673f3-00001e13.png,256x128,256 colours,data.jim@0x6e800,Tex_jimaku/data.jim data.jim,1,yes,
+d2cff1be582fe99f-f74a2bfe8f12cbee-00001e13.png,256x128,256 colours,data.jim@0x77000,Tex_jimaku/data.jim data.jim,1,yes,
+d9906ff936ae7c69-b599104dab750d7a-00001e13.png,256x128,256 colours,data.jim@0x7f800,Tex_jimaku/data.jim data.jim,1,yes,
+184cc65f34fee629-f3689d57cbe5b5cf-00001e13.png,256x128,256 colours,data.jim@0x88000,Tex_jimaku/data.jim data.jim,1,yes,
+8a4e484098a20026-11cfa755d3905a3b-00001e13.png,256x128,256 colours,data.jim@0x90800,Tex_jimaku/data.jim data.jim,1,yes,
+52f1a49332084287-add18be749e16fe3-00001e13.png,256x128,256 colours,data.jim@0x99000,Tex_jimaku/data.jim data.jim,1,yes,
+2f7cc9782ae5e20c-989f9d45d6b1a904-00001e13.png,256x128,256 colours,data.jim@0xa1800,Tex_jimaku/data.jim data.jim,1,yes,
+8e48b7f95d31af30-de3d723f6f7152a2-00001e13.png,256x128,256 colours,data.jim@0xaa000,Tex_jimaku/data.jim data.jim,1,yes,
+6b8b9f156a9e22b2-5af3fe114ce4d318-00001e13.png,256x128,256 colours,data.jim@0xb2800,Tex_jimaku/data.jim data.jim,1,yes,
+15a269b31c2ed671-bdda67cbfaf566cd-00001e13.png,256x128,256 colours,data.jim@0xbb000,Tex_jimaku/data.jim data.jim,1,yes,
+7791dbe5cab57afc-1f68f46136c80b09-00001e13.png,256x128,256 colours,data.jim@0xc3800,Tex_jimaku/data.jim data.jim,1,yes,
+be834f31f22a892e-a8b6e5931c08c2f0-00001e13.png,256x128,256 colours,data.jim@0xcc000,Tex_jimaku/data.jim data.jim,1,yes,
+dc6e9ad9680aa0f-6c772800c690c561-00001e13.png,256x128,256 colours,data.jim@0xd4800,Tex_jimaku/data.jim data.jim,1,yes,
+18f198d75ef4d848-4efa09ef42081ed8-00001e13.png,256x128,256 colours,data.jim@0xdd000,Tex_jimaku/data.jim data.jim,1,yes,
+b8fbafc9ab9ff62d-e83902255996274f-00001e13.png,256x128,256 colours,data.jim@0xe5800,Tex_jimaku/data.jim data.jim,3,yes,
+5ac21566d0b231b7-9b1f1245f3006f11-00001e13.png,256x128,256 colours,data.jim@0xee000,Tex_jimaku/data.jim data.jim,1,yes,
+59eaa19ae67028df-2fce6a886e684fa4-00001e13.png,256x128,256 colours,data.jim@0xf6800,Tex_jimaku/data.jim data.jim,1,yes,
+8537170fbc2bf6db-3c6f5d11a0af158b-00001e13.png,256x128,256 colours,data.jim@0xff000,Tex_jimaku/data.jim data.jim,1,yes,
+a8d1c9b2650fb64c-9a6e7a469810f8e3-00001e13.png,256x128,256 colours,data.jim@0x107800,Tex_jimaku/data.jim data.jim,1,yes,
+9591ca5168e7bca0-15bca3f06869fd09-00001e13.png,256x128,256 colours,data.jim@0x110000,Tex_jimaku/data.jim data.jim,1,yes,
+6bdbbaa2ad86f447-f76637de0d0cc50a-00001e13.png,256x128,256 colours,data.jim@0x118800,Tex_jimaku/data.jim data.jim,1,yes,
+839d93bb186c1fc2-125a38a6b67d627e-00001e13.png,256x128,256 colours,data.jim@0x121000,Tex_jimaku/data.jim data.jim,1,yes,
+df6b704337cfbc8f-f132462d2dff61c1-00001e13.png,256x128,256 colours,data.jim@0x129800,Tex_jimaku/data.jim data.jim,1,yes,
+60ae95e5fb3eb022-124ef7cd4c96c24a-00001e13.png,256x128,256 colours,data.jim@0x132000,Tex_jimaku/data.jim data.jim,1,yes,
+7ea7ffd2d340974f-7525ca8d3cd19842-00001e13.png,256x128,256 colours,data.jim@0x13a800,Tex_jimaku/data.jim data.jim,1,no,
+a802d964ad3e2621-fa06d2f0c139a6fb-00001e13.png,256x128,256 colours,data.jim@0x143000,Tex_jimaku/data.jim data.jim,1,yes,
+53a8fa731e3c8dfc-afec1a3033329ef8-00001e13.png,256x128,256 colours,data.jim@0x14b800,Tex_jimaku/data.jim data.jim,1,yes,
+386367101618a845-818b0ee5bd1a8da8-00001e13.png,256x128,256 colours,data.jim@0x154000,Tex_jimaku/data.jim data.jim,1,yes,
+bf11b55403650b70-63c34ce1720ad2-00001e13.png,256x128,256 colours,data.jim@0x15c800,Tex_jimaku/data.jim data.jim,1,yes,
+e68f12362be0ba6b-cd99b2a3aef63ef3-00001e13.png,256x128,256 colours,data.jim@0x165000,Tex_jimaku/data.jim data.jim,1,yes,
+3fee62e15b6bf16c-6a279f11bcdc5e23-00001e13.png,256x128,256 colours,data.jim@0x16d800,Tex_jimaku/data.jim data.jim,1,yes,
+bb1e6973db962f99-85bd7e182827a3f3-00001e13.png,256x128,256 colours,data.jim@0x176000,Tex_jimaku/data.jim data.jim,1,yes,
+afe4942e3eeb6641-b76c308011ce5d81-00001e13.png,256x128,256 colours,data.jim@0x17e800,Tex_jimaku/data.jim data.jim,1,yes,
+35040624987de11b-646c9390cef28f6c-00001e13.png,256x128,256 colours,data.jim@0x187000,Tex_jimaku/data.jim data.jim,1,yes,
+bf276faddf055821-3f363e86b18122c0-00001e13.png,256x128,256 colours,data.jim@0x18f800,Tex_jimaku/data.jim data.jim,1,yes,
+ab3e800a359aa488-4a3a495576102ae5-00001e13.png,256x128,256 colours,data.jim@0x198000,Tex_jimaku/data.jim data.jim,1,yes,
+a8e4472c6e6d2ffc-b09afa3773cc8e63-00001e13.png,256x128,256 colours,data.jim@0x1a0800,Tex_jimaku/data.jim data.jim,1,yes,
+e3a076815aa45cd5-9a70be9a1e81ac79-00001e13.png,256x128,256 colours,data.jim@0x1a9000,Tex_jimaku/data.jim data.jim,1,yes,
+d5cd4f6ad467167c-b7a884466412d28e-00001e13.png,256x128,256 colours,data.jim@0x1b1800,Tex_jimaku/data.jim data.jim,1,yes,
+1670442c9143886a-5a87bdec16b540f4-00001e13.png,256x128,256 colours,data.jim@0x1ba000,Tex_jimaku/data.jim data.jim,1,yes,
+1fb94d89eab7b8f2-9c7ff62b82a85d50-00001e13.png,256x128,256 colours,data.jim@0x1c2800,Tex_jimaku/data.jim data.jim,1,yes,
+86e6547b371cc9cd-5c790ee9143ebe5-00001e13.png,256x128,256 colours,data.jim@0x1cb000,Tex_jimaku/data.jim data.jim,1,yes,
+3225c6041c6f1520-d11d19190b2e1ba0-00001e13.png,256x128,256 colours,data.jim@0x1d3800,Tex_jimaku/data.jim data.jim,1,yes,
+db0ac80c7716900c-75427dba190f49-00001e13.png,256x128,256 colours,data.jim@0x1dc000,Tex_jimaku/data.jim data.jim,1,yes,
+dec1412bc5395b6c-6d0fff63b41ac204-00001e13.png,256x128,256 colours,data.jim@0x1e4800,Tex_jimaku/data.jim data.jim,1,yes,
+c71586613055faa7-2b2ec8cf80b63e35-00001e13.png,256x128,256 colours,data.jim@0x1ed000,Tex_jimaku/data.jim data.jim,1,yes,
+ce291be588ab4100-45aa903e27c9769f-00001e13.png,256x128,256 colours,data.jim@0x1f5800,Tex_jimaku/data.jim data.jim,1,yes,
+5b4a4ba4b4fcac4-dc6f59243ab4f37d-00001e13.png,256x128,256 colours,data.jim@0x1fe000,Tex_jimaku/data.jim data.jim,1,yes,
+7d817b71495e4836-9f37d4c99a9522c8-00001e13.png,256x128,256 colours,data.jim@0x206800,Tex_jimaku/data.jim data.jim,1,yes,
+6798d6a069622402-d31e5c9eab300b61-00001e13.png,256x128,256 colours,data.jim@0x20f000,Tex_jimaku/data.jim data.jim,1,yes,
+ace779950cb08057-376810767fc95d0a-00001e13.png,256x128,256 colours,data.jim@0x217800,Tex_jimaku/data.jim data.jim,1,yes,
+996c75ee4a59717e-68ce8b3766479ec3-00001e13.png,256x128,256 colours,data.jim@0x220000,Tex_jimaku/data.jim data.jim,1,yes,
+4544fe39fa487b0b-f1af81ba1dc70cfc-00001e13.png,256x128,256 colours,data.jim@0x228800,Tex_jimaku/data.jim data.jim,1,yes,
+20681dfb33322f8f-b9000834c48ab097-00001e13.png,256x128,256 colours,data.jim@0x231000,Tex_jimaku/data.jim data.jim,1,yes,
+a588f5375fdee1ef-5a1413c91f2b0ca2-00001e13.png,256x128,256 colours,data.jim@0x239800,Tex_jimaku/data.jim data.jim,1,yes,
+71f4f1420ebaed2-8c9e4be477a228f4-00001e13.png,256x128,256 colours,data.jim@0x242000,Tex_jimaku/data.jim data.jim,1,yes,
+c578e2c719d550c-e442c1b7ff17c6c9-00001e13.png,256x128,256 colours,data.jim@0x24a800,Tex_jimaku/data.jim data.jim,1,yes,
+3fd897fba5506e3d-89a8d7bf1df8cc1c-00001e13.png,256x128,256 colours,data.jim@0x253000,Tex_jimaku/data.jim data.jim,1,yes,
+c4dbf66787719739-81c0c537ad419f23-00001e13.png,256x128,256 colours,data.jim@0x25b800,Tex_jimaku/data.jim data.jim,1,yes,
+dd43fb9a37a25efc-3529e76051b8b3e4-00001e13.png,256x128,256 colours,data.jim@0x264000,Tex_jimaku/data.jim data.jim,1,yes,
+7b4c5771a77eecb2-bd43fa9f156006e3-00001e13.png,256x128,256 colours,data.jim@0x26c800,Tex_jimaku/data.jim data.jim,1,yes,
+252f6feefdd73cfc-d21a84bff3a5bfd7-00001e13.png,256x128,256 colours,data.jim@0x275000,Tex_jimaku/data.jim data.jim,1,yes,
+fcd55831ddb665c5-6dafbd5127df2fa8-00001e13.png,256x128,256 colours,data.jim@0x27d800,Tex_jimaku/data.jim data.jim,1,yes,
+70c16eeadf54e17a-61bafd3e1bbd58d7-00001e13.png,256x128,256 colours,data.jim@0x286000,Tex_jimaku/data.jim data.jim,1,yes,
+13483977ab7c4572-f2e22b6d65b1cad-00001e13.png,256x128,256 colours,data.jim@0x28e800,Tex_jimaku/data.jim data.jim,1,yes,
+4a91dd14be4a1307-a24a699181d487d1-00001e13.png,256x128,256 colours,data.jim@0x297000,Tex_jimaku/data.jim data.jim,1,yes,
+66426c11cf111f3-ea558235b4bb7b1b-00001e13.png,256x128,256 colours,data.jim@0x29f800,Tex_jimaku/data.jim data.jim,1,yes,
+d055853f990348a7-4fe96cc65510d59a-00001e13.png,256x128,256 colours,data.jim@0x2a8000,Tex_jimaku/data.jim data.jim,1,yes,
+e6aafba4ea51d318-703b21353ddfa838-00001e13.png,256x128,256 colours,data.jim@0x2b0800,Tex_jimaku/data.jim data.jim,1,yes,
+d0a40a7e24b07619-2e48184e970a126a-00001e13.png,256x128,256 colours,data.jim@0x2b9000,Tex_jimaku/data.jim data.jim,1,yes,
+a5259f3253884abc-9b83a2cc34ef18dd-00001e13.png,256x128,256 colours,data.jim@0x2c1800,Tex_jimaku/data.jim data.jim,1,yes,
+63775d2bb065ed41-55d6660c7754ed62-00001e13.png,256x128,256 colours,data.jim@0x2ca000,Tex_jimaku/data.jim data.jim,1,yes,
+7f688ff630ba9bb2-96b1ed48d3bc1755-00001e13.png,256x128,256 colours,data.jim@0x2d2800,Tex_jimaku/data.jim data.jim,3,yes,
+522def3274e4e165-9b4c4ec4ce68a7b1-00001e13.png,256x128,256 colours,data.jim@0x2db000,Tex_jimaku/data.jim data.jim,1,yes,
+1ebeaff2eda88fe7-7710ad57d071efab-00001e13.png,256x128,256 colours,data.jim@0x2e3800,Tex_jimaku/data.jim data.jim,1,yes,
+515f8c06cc5b08d0-f054c2c32045af33-00001e13.png,256x128,256 colours,data.jim@0x2f4800,Tex_jimaku/data.jim data.jim,1,yes,
+8307eeb354b484ba-1352cf2df6eba088-00001e13.png,256x128,256 colours,data.jim@0x305800,Tex_jimaku/data.jim data.jim,1,yes,
+9c8c0ffb9b5655f0-c1fee92758aee72c-00001e13.png,256x128,256 colours,data.jim@0x30e000,Tex_jimaku/data.jim data.jim,1,yes,
+94328880ca87c366-dfa8d57c2cf8c8a-00001e13.png,256x128,256 colours,data.jim@0x316800,Tex_jimaku/data.jim data.jim,1,yes,
+6e6ab0c9e2c773a8-84877f2e442f6f44-00001e13.png,256x128,256 colours,data.jim@0x31f000,Tex_jimaku/data.jim data.jim,1,yes,
+2234c138db198adc-28f849e13b4c3cb2-00001e13.png,256x128,256 colours,data.jim@0x327800,Tex_jimaku/data.jim data.jim,1,yes,
+ba22d88927bca77a-743399d3afc4e682-00001e13.png,256x128,256 colours,data.jim@0x330000,Tex_jimaku/data.jim data.jim,1,yes,
+eef4d34718a793ac-4f7ab63509230006-00001e13.png,256x128,256 colours,data.jim@0x338800,Tex_jimaku/data.jim data.jim,1,yes,
+c643bb56b6c7a48a-4e4a03d64377b0f8-00001e13.png,256x128,256 colours,data.jim@0x341000,Tex_jimaku/data.jim data.jim,1,yes,
+2f16ef1dd359cde4-5ab94ff242fa9c4f-00001e13.png,256x128,256 colours,data.jim@0x349800,Tex_jimaku/data.jim data.jim,1,no,
+524b35401ae8a04-adcfa7531371ea-00001e13.png,256x128,256 colours,data.jim@0x352000,Tex_jimaku/data.jim data.jim,1,no,
+35e428112c370eaf-bb179387bea33fe0-00001e13.png,256x128,256 colours,data.jim@0x35a800,Tex_jimaku/data.jim data.jim,1,yes,
+16f7f9fe184e2e51-68cdeb0c3954cc23-00001e13.png,256x128,256 colours,data.jim@0x363000,Tex_jimaku/data.jim data.jim,1,yes,
+ea8c5b624c3dde7c-7bae60392aed8035-00001e13.png,256x128,256 colours,data.jim@0x36b800,Tex_jimaku/data.jim data.jim,1,yes,
+65de9c5a3c9fe965-ee86b27cb9131e6-00001e13.png,256x128,256 colours,data.jim@0x374000,Tex_jimaku/data.jim data.jim,1,yes,
+2ed4d9a71106a09f-3d32f1b0617fd90f-00001e13.png,256x128,256 colours,data.jim@0x37c800,Tex_jimaku/data.jim data.jim,1,yes,
+b15fc74c78fa509d-cb380ad78fa1fcc3-00001e13.png,256x128,256 colours,data.jim@0x385000,Tex_jimaku/data.jim data.jim,1,yes,
+4c67a5439a24e53c-32bee66a3c7cae95-00001e13.png,256x128,256 colours,data.jim@0x38d800,Tex_jimaku/data.jim data.jim,1,yes,
+c8a50661033ec34b-b041881c6a36af8b-00001e13.png,256x128,256 colours,data.jim@0x396000,Tex_jimaku/data.jim data.jim,1,yes,
+c51bccf5e3c12e5b-5363dd3ffbd17651-00001e13.png,256x128,256 colours,data.jim@0x39e800,Tex_jimaku/data.jim data.jim,1,yes,
+c17b62c8f0984215-4185e1186cb771b7-00001e13.png,256x128,256 colours,data.jim@0x3a7000,Tex_jimaku/data.jim data.jim,1,yes,
+5169ce8f9a252493-bc016f4cce0d15cc-00001e13.png,256x128,256 colours,data.jim@0x3af800,Tex_jimaku/data.jim data.jim,1,yes,
+777f08d6d21912a1-4942edee50a0e8fa-00001e13.png,256x128,256 colours,data.jim@0x3b8000,Tex_jimaku/data.jim data.jim,1,yes,
+146023f95f3c0934-2e4627f43626e826-00001e13.png,256x128,256 colours,data.jim@0x3c0800,Tex_jimaku/data.jim data.jim,5,yes,
