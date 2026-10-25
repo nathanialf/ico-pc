@@ -15,7 +15,7 @@ extern "C" {
 #endif
 
 /* The language the port's text is in now: the [ui] language the player
-   chose ("en" .. "ko"), else ("auto", the default) the disc's: its region
+   chose ("en" .. "zh"), else ("auto", the default) the disc's: its region
    row's ui_lang_default (port/core/region.h: Japanese on the Japanese
    disc), else the game's language (NonLinearCameraMove) on a disc
    whose game picks one (IcoRegionInfo.has_game_language: the European
