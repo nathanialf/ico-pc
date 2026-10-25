@@ -8220,7 +8220,7 @@ static void actGirlHand_ntsc(GObj *volatile self)
     ACTGame_ConnectHand();
     HandMgr_Init();
     for (;;) {
-        sub->flags20.ll &= ~0x100000;
+        sub->flags20.ll &= ~0x200;
         GetBoyMode(&mode, &p1, &p2, &p3);
         sceVu0ScaleVector(look, test_CURRENTORIENT((void *)self), 200.0f);
         look[1] = 0.0f;
@@ -8412,7 +8412,7 @@ static void actGirlHand_ntsc(GObj *volatile self)
                         st = 0;
                     }
                 }
-                ICO_RAW(long long, sub, 0x20, sub->flags20.ll) |= 8;
+                sub->flags18.ll |= 1ULL << 58;
                 if (mode == 3) {
                     st = 2;
                 }
@@ -8434,7 +8434,7 @@ static void actGirlHand_ntsc(GObj *volatile self)
                         st = 1;
                     }
                 }
-                sub->flags20.ll |= 8;
+                sub->flags18.ll |= 1ULL << 58;
                 break;
             }
             case 3:
@@ -8506,7 +8506,7 @@ static void actGirlHand_jun26(GObj *volatile self)
     ACTGame_ConnectHand();
     HandMgr_Init();
     for (;;) {
-        sub->flags20.ll &= ~64;
+        sub->flags20.ll &= ~0x10;
         GetBoyMode(&mode, &p1, &p2, &p3);
         sceVu0ScaleVector(look, test_CURRENTORIENT((void *)self), 200.0f);
         look[1] = 0.0f;
@@ -8701,7 +8701,7 @@ static void actGirlHand_jun26(GObj *volatile self)
             case 2: {
                 float speed = (dist - 90.0f) * 4.0f / 90.0f + 1.0f;
                 sub->motReq = SetMotionRequest((void *)self, 15, sub->env.motOriReq);
-                ICO_RAW(long long, sub, 0x20, sub->flags20.ll) |= 0x40;
+                ICO_RAW(long long, sub, 0x20, sub->flags20.ll) |= 0x10;
                 HandMgr_Speed(self, speed);
                 if (mode == 1) {
                     st = 3;
@@ -8714,7 +8714,7 @@ static void actGirlHand_jun26(GObj *volatile self)
                         st = 1;
                     }
                 }
-                sub->flags20.ll |= 8;
+                sub->flags18.ll |= 1ULL << 56;
                 break;
             }
             case 3:
@@ -8998,7 +8998,7 @@ static void actGirlHand_aug6(GObj *volatile self)
                         st = 1;
                     }
                 }
-                sub->flags20.ll |= 8;
+                sub->flags18.ll |= 1ULL << 57;
                 break;
             }
             case 3:
@@ -9688,7 +9688,7 @@ static inline void actGirlBHang_ntsc(GObj *volatile self)
 {
     int rope = 0;
 
-    if (((int *)GOBJ_WORK(self)->modeHist)[1] == PAL_JPNKORCN(0x5A, 90)) {
+    if (((int *)GOBJ_WORK(self)->modeHist)[1] == 87) {
         rope = ((int *)GOBJ_WORK(self)->modeHist)[0] == 4;
     }
     for (;;) {
@@ -9713,7 +9713,7 @@ static inline void actGirlBHang_aug6(GObj *volatile self)
     Act *s = GOBJ_ACT(self);
     int rope = 0;
 
-    if (((int *)GOBJ_WORK(self)->modeHist)[1] == PAL_JPNKORCN(0x5A, 90)) {
+    if (((int *)GOBJ_WORK(self)->modeHist)[1] == 87) {
         rope = ((int *)GOBJ_WORK(self)->modeHist)[0] == 4;
     }
     for (;;) {
@@ -10232,7 +10232,7 @@ static void actGirlStart_jun26(void *self)
     if (debug_brain_flag != 0) {
         actCreateSubThread(subGirlBrainMain, 20);
     }
-    ICO_RAW(IntrMail *, p, 0xD0, ((Act *)p)->mainMail) = (IntrMail *)&actIntrList[67];
+    ICO_RAW(IntrMail *, p, 0xD0, ((Act *)p)->mainMail) = (IntrMail *)&actIntrList[65];
     actCreateSubThread(subGirlControl, 21);
     actCreateSubThread(subGirlCollision, 21);
     actCreateSubThread(subCommonIdle, 21);
