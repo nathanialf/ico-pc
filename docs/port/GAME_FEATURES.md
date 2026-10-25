@@ -233,6 +233,13 @@ ticks apart, `5 * ico_gs_tick_hz()`: 125 ticks at 25 Hz (the European disc's 50 
 (`port/game/achievements.h` (`ico_ach_popup_gap_ticks`, `ico_ach_popups_enabled`)). The stages and
 story flags the conditions name are the disc's, from the region table (`port/core/region.h`
 (`ach_stages`, `gflag_queen_dead`, `gflag_beach_secret`); the Korean disc's equal the Japanese disc's.
+The eleven stages are the same rows on all seven discs (each disc's `stageData` read by name). The
+queen's flag is 338 on the European, Japanese, Korean and Asian discs, 307 on the North American,
+306 on the August 2001 preview and 292 on the June 2001 demo (`ico2/script/src/st25a.c`
+(`actSt25aQueenDeadChk` and its `_ntsc`, `_aug6`, `_jun26` arms)). The beach secret is flag 354 on
+the first four; the three 2001 discs' `actSt27aEndChk` arms set no flag for a held item
+(`ico2/script/src/end.c`), so their row is -1 and `shore_secret` cannot be earned there, logged once
+as `achievements: this disc has no beach secret; that achievement cannot be earned`.
 
 To add one: a row in `s_defs` (`ACH(id, NAME, c_fn, hidden)`, `port/game/achievements.c`), its
 condition `c_fn` over the game-state view, and the strings `UI_STR_ACH_<NAME>` and
@@ -539,7 +546,14 @@ stage as a load from the title does and puts the boy at the entrance the real en
 1 is entered again, `ico_credits_stage_enter` (`ico2/common/src/StageManager.c`
 (`start_stage_Load_thread`)) puts the state back with `gamesysMemoryLoad`. A start that never
 reaches STAFF1 is logged as a failure and the title requested (`port/game/credits_live.c`, header
-comment, `REACH_TICKS`). Achievements are suspended while it plays.
+comment, `REACH_TICKS`). Achievements are suspended while it plays. The entrance and the boy's
+record are the disc's (`credits_entrance_exit`, `credits_boy_label`: exitData 216 and label 54 on
+the European, Japanese, Korean and Asian discs; exitData 212 and labels 51, 50 and 47 on the North
+American disc, the August 2001 preview and the June 2001 demo, `ico2/fumi/src/act-game.c`
+(`ACTGame_SetActors_Debug`)). The June 2001 demo's DATA.DF (49 entries) has no `STGSTAFF1.DF`,
+`STGSTAFF2.DF` or `STGSTAFF3.DF`, so its row has `credits_staff_packs` 0 and the start is refused
+before anything changes, logged as `credits: failed: this disc (SCUS-97158) has no staff roll: its
+DATA.DF holds no STGSTAFF1.DF (stage 59), so the ending's staff scenes cannot be played`.
 
 ## The title logo
 
