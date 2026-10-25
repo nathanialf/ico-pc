@@ -9,9 +9,10 @@
  * <save directory>, game.000 ...}, the directory the game names (port/core
  * region.h mc_save_dir: BESCES-50760ico for the European disc,
  * BISCPS-11003ico for the Japanese one, BISCPS-56001ico for the Korean
- * one), so the discs' saves share a card as on a PS2. The host names no directory and checks no file's size: the
+ * one, and a row's own for each other disc), so the discs' saves share a card as on a PS2. The host names no directory and checks no file's size: the
  * product file is the region's mc_product_size and its 4-byte sum (0x1F0
- * on the European disc, 0x1E8 on the Japanese and Korean ones), as the game writes it.
+ * on the European disc, 0x1E8 on the Japanese, Korean and Asian ones, 0x18C on
+ * the three 2001 discs), as the game writes it.
  * Nothing else is written, and nothing at all before the game's first
  * Mkdir.
  *
