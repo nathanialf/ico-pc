@@ -46,7 +46,8 @@ inline void isysGObjAlloc(int n)
     GObj *tbl;
     unsigned int i;
 
-    gobjTable = iosMallocDebug(ios_partition_isys, n * sizeof(GObj), __FILE__, 174);
+    gobjTable = iosMallocDebug(ios_partition_isys, n * sizeof(GObj), __FILE__,
+                               LN(174, 174, 174, 174, 174, 171, 174));
     gobjMax = n;
     tbl = gobjTable;
     for (i = 0; i < n; i++) {
@@ -91,7 +92,7 @@ static __inline__ void kindTableRemove(GObj *g) /* derived name */
 {
     int kind = g->kind;
     GObj *p;
-    if ((unsigned int)(kind - 1) < 69) {
+    if ((unsigned int)(kind - 1) < PAL_NTSC_AUG6(69, 67, 66)) {
         p = gobjKindHead[kind];
         if (p == g) {
             gobjKindHead[kind] = g->kindNext;
@@ -358,7 +359,7 @@ inline void isysGObjKindTableAdd(GObj *g, int kind)
         }
     }
     g->kind = kind;
-    if ((unsigned int)kind < 70) {
+    if ((unsigned int)kind < PAL_NTSC_AUG6(70, 68, 67)) {
         if (gobjKindHead[kind] == 0) {
             gobjKindHead[kind] = g;
         } else {
@@ -484,7 +485,7 @@ inline void *isysGObjSearchFromObjKindID_begin(int kind)
     if (debugKindOld != 0) {
         return searchGObjOfObjKind(gobjTable - 1, kind);
     }
-    if ((unsigned int)(kind - 1) < 69) {
+    if ((unsigned int)(kind - 1) < PAL_NTSC_AUG6(69, 67, 66)) {
         return gobjKindHead[kind];
     }
     return 0;

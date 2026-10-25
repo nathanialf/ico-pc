@@ -19,7 +19,16 @@ void actBoyHang(GObj *volatile self);
 void actBoyBHang(GObj *volatile self);
 void actBoyFall(GObj *volatile self);
 void actBoyCall(GObj *volatile self);
+
+
+void actBoyItem(GObj *volatile self);
+
+void actBoyItemAfter(GObj *volatile self);
+
+void actBoyCliffHesitate(GObj *volatile self);
 void actBoyHangBefore(GObj *volatile self);
+
+void actBoyReadyMove(GObj *volatile self);
 void actBoyBeslam(GObj *volatile self);
 void actBoyRescueSrc(GObj *volatile self);
 void actBoySupportGBBegin(GObj *volatile self);
@@ -65,6 +74,9 @@ void ACTSearchGObj(void *self, int kind, int maxDeg, ICO_WORD *out_id, float *ou
 void afterBoySwim(GObj *volatile self);
 void actBoyJump(GObj *volatile self);
 inline void afterBoyTakeWeapon(GObj *volatile self);
+
+
+inline void afterCommonItem(GObj *volatile self);
 inline void afterBoyHangG3M(int x);
 inline void afterBoyRescueGirlBhang(GObj *volatile self);
 inline void subBoyBrainMain(int arg);

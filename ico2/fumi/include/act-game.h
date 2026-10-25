@@ -8,6 +8,9 @@
 #ifndef ACT_GAME_H
 #define ACT_GAME_H
 
+
+#include "typedef.h" /* WayRequest, which ActWork carries at 0x580 (JPN, KOR and CN 0x570) */
+
 #include "typedef.h" /* WayRequest, which ActWork carries at 0x580 (JPN and KOR 0x570) */
 #include "clipCollisionManager.h"
 
@@ -240,6 +243,7 @@ void _GetRootObjectOrient(void *orient, struct GObj *obj);
 void ACTItemForceDrop(struct GObj *self);
 inline void GetOtherStageGirlOrient(float *orient, float *root);
 int ACTChkAttackIgnore_BOY(struct GObj *self, struct GObj *actor);
+int ACTChkAttackIgnore_BOY_aug6(struct GObj *self, struct GObj *actor); /* boyact.c */
 int ACTChkAttackIgnore_GIRL(struct GObj *self, struct GObj *actor);
 int ACTChkAttackIgnore_ENEMY(struct GObj *self, struct GObj *actor);
 unsigned char ACTCheckCollis_VIEW(float f, void *p0, void *p1, void *actor);

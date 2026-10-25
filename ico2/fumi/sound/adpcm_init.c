@@ -155,8 +155,8 @@ SqEntry *adpcmDataSet(ICO_WORD_PTR(void *) src, int no, int bank, int ch, int si
             goto found;
         }
     }
-    debug_assert(adpcmSrcFile, 363);
-    __assert(adpcmSrcFile, 363, "0");
+    debug_assert(adpcmSrcFile, LN(363, 363, 363, 360, 317, 317, 363));
+    __assert(adpcmSrcFile, LN(363, 363, 363, 360, 317, 317, 363), "0");
 found:
     p = (AdpcmStream *)((char *)adpcmStream + i * 0x58);
     p->used = 1;
@@ -175,8 +175,8 @@ found:
         p->chAttr = 0x40000;
         break;
     default:
-        debug_assert(adpcmSrcFile, 381);
-        __assert(adpcmSrcFile, 381, "0");
+        debug_assert(adpcmSrcFile, LN(381, 381, 381, 378, 335, 381, 381));
+        __assert(adpcmSrcFile, LN(381, 381, 381, 378, 335, 381, 381), "0");
     }
     p->mask = 0;
     for (j = 0; j < p->n; j++) {
@@ -305,8 +305,8 @@ static inline void AdpcmIopBuffFree(AdpcmStream *self) /* derived name */
     int no = (adr - adpcmIopBase) / 0x5C000;
 
     if (no >= 3) {
-        debug_assert(adpcmSrcFile, 143);
-        __assert(adpcmSrcFile, 143, "0");
+        debug_assert(adpcmSrcFile, LN(143, 143, 143, 143, 125, 143, 143));
+        __assert(adpcmSrcFile, LN(143, 143, 143, 143, 125, 143, 143), "0");
     }
     adpcmIopBuffUsed[no] = 0;
 }
@@ -334,8 +334,8 @@ void AdpcmClose(SqEntry *obj)
                 goto found;
             }
         }
-        debug_assert(adpcmSrcFile, 605);
-        __assert(adpcmSrcFile, 605, "0");
+        debug_assert(adpcmSrcFile, LN(605, 605, 605, 600, 557, 605, 605));
+        __assert(adpcmSrcFile, LN(605, 605, 605, 600, 557, 605, 605), "0");
     found:
         /* PC port: a stream whose fade ran out is closed "fade",
            one closed by a call (or by AdpcmFadingCloseNow) "now" */
@@ -450,8 +450,38 @@ inline void AdpcmStreamHeap(void)
     }
 }
 
+static void AdpcmStreamInit_aug6(void)
+{
+    int i;
+    int *p;
+    int r;
+
+    for (i = 0, p = adpcmSpuSlot; i < 4; i++, p++) {
+        *p = SgGetSpuSlotMalloc(1);
+    }
+    r = iosSifAllocIopHeapDebug(0xB8800, adpcmSrcFile, 77);
+    if (r & 0x7FF) {
+        adpcmIopBase = (r / 0x800 + 1) * 0x800;
+    } else {
+        adpcmIopBase = r;
+    }
+    debug_StdPrintfDummy("iop adpcm alloced 0x%x ,%x \n", adpcmIopBase, 0x5C000 * 2);
+    SgStAdpcmInit();
+    for (i = 0; i < 2; i++) {
+        *(int *)((char *)adpcmStream + i * 0x58) = 0;
+    }
+    for (i = 0; i < 2; i++) {
+        adpcmIopBuffUsed[i] = 0;
+    }
+    adpcmPause = 0;
+}
+
 inline void AdpcmStreamInit(void)
 {
+    if (ICO_AUG6) {
+        AdpcmStreamInit_aug6();
+        return;
+    }
     int i;
     int *p;
 

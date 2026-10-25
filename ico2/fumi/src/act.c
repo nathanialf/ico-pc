@@ -82,8 +82,30 @@ void actCreateMotionThread(void (*func)(), int pri, GProc **proc)
     }
 }
 
+static inline GProc *actCreateSubThread_ntscaug6(void (*func)(), int pri)
+{
+    GProc *p;
+
+    if (debug_act_sub_thread) {
+        Act *lval = GOBJ_ACT(isysCurrentGObj);
+        debug_StdPrintfDummy("acst[%p]\n", isysCurrentGObj);
+        debug_StdPrintfDummy("    [%d]\n", isysCurrentGObj->labelId);
+        debug_StdPrintfDummy("    [%d]\n", isysCurrentGObj->kind);
+        if (lval != 0) {
+            debug_StdPrintfDummy("lval[%p]\n", lval);
+            debug_StdPrintfDummy("    [%d]\n", lval->actMode);
+        }
+    }
+    p = isysGObjProcAdd(isysCurrentGObj, func, 0, pri);
+    p->thread.sleeping = 1;
+    return p;
+}
+
 GProc *actCreateSubThread(void (*func)(), int pri)
 {
+    if (ICO_NTSCAUG6) {
+        return actCreateSubThread_ntscaug6(func, pri);
+    }
     unsigned short fld;
     GProc *p;
 
@@ -209,7 +231,8 @@ inline void actInitialize_geo(void *self) {}
 void actInitialize_ext_charcter(GObj *self)
 {
     Act *g = GOBJ_ACT(self);
-    char *p = (char *)iosMallocDebug(ios_partition_seki, sizeof(EnemyBattleWork), __FILE__, 885);
+    char *p = (char *)iosMallocDebug(ios_partition_seki, sizeof(EnemyBattleWork), __FILE__,
+                                     PAL_NTSC_AUG6(885, 850, 844));
 
     memset(p, 0, sizeof(EnemyBattleWork));
     g->enemy = (EnemyBattleWork *)p;
@@ -242,8 +265,64 @@ typedef struct { /* field names derived */
     int a950[10];
 } ActExt; /* derived name */
 
+static inline void actInitialize_only_charcter_ntsc(char *self)
+{
+    Act *g = GOBJ_ACT(self);
+    char *p =
+        (char *)iosMallocDebug(ios_partition_seki, ICO_MAX_SIZE(ActWork, 0x980), __FILE__, 872);
+    ActWork *q;
+    int i;
+
+    memset(p, 0, ICO_MAX_SIZE(ActWork, 0x980));
+    g->work = p;
+    q = GOBJ_WORK(self);
+    q->defIkRate0 = GOBJ_SUB(self)->root.ikRate0;
+    q->defIkRate1 = GOBJ_SUB(self)->root.ikRate1;
+    q->defIkRate2 = GOBJ_SUB(self)->root.ikRate2;
+    q->escortOffset = -1.0f;
+    q->disappearSpeed = 1.0f;
+    q->viewState = 0;
+    for (i = 0; i < 10; i++) {
+        q->modeHist[i] = 0;
+        q->frameHist[i] = 0;
+        q->prevHist[i] = 388;
+    }
+}
+
+static inline void actInitialize_only_charcter_aug6(char *self)
+{
+    Act *g = GOBJ_ACT(self);
+    char *p =
+        (char *)iosMallocDebug(ios_partition_seki, ICO_MAX_SIZE(ActWork, 0x980), __FILE__, 866);
+    ActWork *q;
+    int i;
+
+    memset(p, 0, ICO_MAX_SIZE(ActWork, 0x980));
+    g->work = p;
+    q = GOBJ_WORK(self);
+    q->defIkRate0 = GOBJ_SUB(self)->root.ikRate0;
+    q->defIkRate1 = GOBJ_SUB(self)->root.ikRate1;
+    q->defIkRate2 = GOBJ_SUB(self)->root.ikRate2;
+    q->escortOffset = -1.0f;
+    q->disappearSpeed = 1.0f;
+    q->viewState = 0;
+    for (i = 0; i < 10; i++) {
+        q->modeHist[i] = 0;
+        q->frameHist[i] = 0;
+        q->prevHist[i] = 384;
+    }
+}
+
 void actInitialize_only_charcter(char *self)
 {
+    if (ICO_NTSC) {
+        actInitialize_only_charcter_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        actInitialize_only_charcter_aug6(self);
+        return;
+    }
     Act *g = GOBJ_ACT(self);
     char *p =
         (char *)iosMallocDebug(ios_partition_seki, ICO_MAX_SIZE(ActWork, 0x980), __FILE__, 907);
@@ -270,8 +349,144 @@ void actInitialize_only_charcter(char *self)
 /* the EE code's zero fills after the field stores (restart position, sound
    words, chain slots, wish words, environment, pad and stick records) cover
    nothing the stores touched, and the whole record was zeroed first */
+static Act *actInitialize_ntsc(GObj *self)
+{
+    Act *w = (Act *)iosMallocDebug(ios_partition_seki, ICO_MAX_SIZE(Act, 0x850), __FILE__, 898);
+
+    self->act = w;
+    memset(w, 0, ICO_MAX_SIZE(Act, 0x850));
+
+    w->actProc = (struct GProc *)isysCurrentGObjProcess;
+    w->brainProc = 0;
+    w->motProc = 0;
+    w->motProc2 = 0;
+    w->after = 0;
+    ACT_AFTER_PROC(w) = 0;
+    w->enemy = 0;
+    w->work = 0;
+    w->frame = 0;
+
+    w->flags18.ll |= 1LL << 32;
+    w->flags18.ll |= 1LL << 33;
+    w->flags18.ll &= ~(1LL << 35);
+    w->flags18.ll &= ~(1LL << 36);
+    w->flags18.ll |= 1LL << 38;
+    w->flags18.ll &= ~(1LL << 39);
+    w->flags18.ll |= 1LL << 41;
+    w->flags18.ll &= ~(1LL << 42);
+    w->flags18.ll |= 1LL << 43;
+    w->flags18.ll |= 1LL << 44;
+    w->flags18.ll &= ~(1LL << 46);
+    w->flags18.ll &= ~(1LL << 47);
+
+    w->handFreeFrame = 0;
+    w->actMode = 0;
+    w->pushDir = 0;
+    w->modeFrame = 0;
+    w->wayMode = 0;
+    w->way.nearWp = 0;
+    w->way.reached = 0;
+    w->actKind = -1;
+    w->way.guideFirst = -1;
+    w->way.fromWp = 0;
+    w->mainMail = 0;
+    w->mail = 0;
+    w->motReq = 0;
+    w->reserved = 0;
+    w->carried = 0;
+    w->brainTarget = 0;
+    w->weapon = 0;
+    w->curItem = 0;
+    w->brainAim = 0;
+    w->infoPos = 0;
+    w->brainStatus = 0;
+    w->mother = 0;
+
+    w->flags20.ll |= 0x1000;
+    w->flags20.ll &= ~0x2000;
+    w->flags20.ll |= 0x10000;
+    w->flags20.ll |= 0x4000000;
+
+    w->attacker = 0;
+    w->hit = 0;
+    w->padConf = iosPadConfDefault;
+
+    return w;
+}
+
+static Act *actInitialize_aug6(GObj *self)
+{
+    Act *w = (Act *)iosMallocDebug(ios_partition_seki, ICO_MAX_SIZE(Act, 0x850), __FILE__, 892);
+
+    self->act = w;
+    memset(w, 0, ICO_MAX_SIZE(Act, 0x850));
+
+    w->actProc = (struct GProc *)isysCurrentGObjProcess;
+    w->brainProc = 0;
+    w->motProc = 0;
+    w->motProc2 = 0;
+    w->after = 0;
+    ACT_AFTER_PROC(w) = 0;
+    w->enemy = 0;
+    w->work = 0;
+    w->frame = 0;
+
+    w->flags18.ll |= 1LL << 32;
+    w->flags18.ll |= 1LL << 33;
+    w->flags18.ll &= ~(1LL << 35);
+    w->flags18.ll &= ~(1LL << 36);
+    w->flags18.ll |= 1LL << 38;
+    w->flags18.ll &= ~(1LL << 39);
+    w->flags18.ll |= 1LL << 41;
+    w->flags18.ll &= ~(1LL << 42);
+    w->flags18.ll |= 1LL << 43;
+    w->flags18.ll |= 1LL << 44;
+    w->flags18.ll &= ~(1LL << 46);
+    w->flags18.ll &= ~(1LL << 47);
+
+    w->handFreeFrame = 0;
+    w->actMode = 0;
+    w->pushDir = 0;
+    w->modeFrame = 0;
+    w->wayMode = 0;
+    w->way.nearWp = 0;
+    w->way.reached = 0;
+    w->actKind = -1;
+    w->way.guideFirst = -1;
+    w->way.fromWp = 0;
+    w->mainMail = 0;
+    w->mail = 0;
+    w->motReq = 0;
+    w->reserved = 0;
+    w->carried = 0;
+    w->brainTarget = 0;
+    w->weapon = 0;
+    w->curItem = 0;
+    w->brainAim = 0;
+    w->infoPos = 0;
+    w->brainStatus = 0;
+    w->mother = 0;
+
+    w->flags20.ll |= 0x200;
+    w->flags20.ll &= ~0x400;
+    w->flags20.ll |= 0x2000;
+    w->flags20.ll |= 0x80000;
+
+    w->attacker = 0;
+    w->hit = 0;
+    w->padConf = iosPadConfDefault;
+
+    return w;
+}
+
 Act *actInitialize(GObj *self)
 {
+    if (ICO_NTSC) {
+        return actInitialize_ntsc(self);
+    }
+    if (ICO_AUG6) {
+        return actInitialize_aug6(self);
+    }
     Act *w = (Act *)iosMallocDebug(ios_partition_seki, ICO_MAX_SIZE(Act, 0x850), __FILE__, 934);
 
     self->act = w;
@@ -370,7 +585,7 @@ static IntrMail *act_check_intr_list(void *self, IntrMail *m, void **out)
     int i;
 
     if (m != 0) {
-        while ((short)m->kind != 429) {
+        while ((short)m->kind != PAL_NTSC_AUG6(429, 396, 392)) {
             if ((m->flags >> 18) & 1) {
                 for (i = 0; i < k->n; i++) {
                     int mot;
@@ -404,8 +619,132 @@ static IntrMail *act_check_intr_list(void *self, IntrMail *m, void **out)
     return 0;
 }
 
+static void act_check_mail_ntsc(void *self, IntrMail *m)
+{
+    IntrList *k = ICO_RAWP(IntrList *, self, 0x54, (IntrList *)&((GObj *)self)->mailBox);
+    Act *w = GOBJ_ACT(self);
+    int i;
+    int id;
+
+    if (m == 0) {
+        debug_StdPrintfDummy("intr list is null\n");
+        return;
+    }
+    for (i = 0; i < k->n; i++) {
+        id = k->ent[i].id;
+        switch (id) {
+        case 253:
+            w->flags18.ll |= 0x8000LL << 48;
+            break;
+        case 31:
+            w->flags18.ll |= 0x8000LL << 44;
+            break;
+        case 32:
+            w->flags18.ll |= 0x8000LL << 45;
+            break;
+        case 58:
+            w->flags18.ll |= 0x8000LL << 38;
+            break;
+        case 395:
+            GOBJ_ACT(self)->enemy->word2B0 = 0;
+            break;
+        case 15:
+            w->flags18.ll |= 0x8000LL << 40;
+            break;
+        case 16:
+            w->flags18.ll |= 0x8000LL << 39;
+            break;
+        case 7:
+            w->flags20.ll |= 0x800;
+            break;
+        case 34:
+            w->flags18.ll |= 0x8000LL << 46;
+            break;
+        }
+    }
+    while ((short)m->kind != 396) {
+        if ((m->flags >> 18) & 1) {
+            for (i = 0; i < k->n; i++) {
+                id = k->ent[i].id;
+                if (id == (short)m->kind) {
+                    if (m->handler != 0) {
+                        m->handler(self, id, k->ent[i].f4);
+                    }
+                }
+            }
+        }
+        m++;
+    }
+}
+
+static void act_check_mail_aug6(void *self, IntrMail *m)
+{
+    IntrList *k = ICO_RAWP(IntrList *, self, 0x54, (IntrList *)&((GObj *)self)->mailBox);
+    Act *w = GOBJ_ACT(self);
+    int i;
+    int id;
+
+    if (m == 0) {
+        debug_StdPrintfDummy("intr list is null\n");
+        return;
+    }
+    for (i = 0; i < k->n; i++) {
+        id = k->ent[i].id;
+        switch (id) {
+        case 250:
+            w->flags18.ll |= 0x8000LL << 47;
+            break;
+        case 31:
+            w->flags18.ll |= 0x8000LL << 43;
+            break;
+        case 32:
+            w->flags18.ll |= 0x8000LL << 44;
+            break;
+        case 57:
+            w->flags18.ll |= 0x8000LL << 37;
+            break;
+        case 391:
+            GOBJ_ACT(self)->enemy->word2B0 = 0;
+            break;
+        case 15:
+            w->flags18.ll |= 0x8000LL << 39;
+            break;
+        case 16:
+            w->flags18.ll |= 0x8000LL << 38;
+            break;
+        case 7:
+            w->flags20.ll |= 0x100;
+            break;
+        case 34:
+            w->flags18.ll |= 0x8000LL << 45;
+            break;
+        }
+    }
+    while ((short)m->kind != 392) {
+        if ((m->flags >> 18) & 1) {
+            for (i = 0; i < k->n; i++) {
+                id = k->ent[i].id;
+                if (id == (short)m->kind) {
+                    if (m->handler != 0) {
+                        m->handler(self, id, k->ent[i].f4);
+                    }
+                }
+            }
+        }
+        m++;
+    }
+}
+
 static void act_check_mail(void *self, IntrMail *m)
 {
+    if (ICO_NTSC) {
+        act_check_mail_ntsc(self, m);
+        return;
+    }
+    if (ICO_AUG6) {
+        act_check_mail_aug6(self, m);
+        return;
+    }
     IntrList *k = ICO_RAWP(IntrList *, self, 0x54, (IntrList *)&((GObj *)self)->mailBox);
     Act *w = GOBJ_ACT(self);
     int i;
@@ -490,28 +829,66 @@ void BeforeFunc(GObj *self)
     w->intrData = 0;
     w->modeFrame += 1;
     w->frame += 1;
-    w->flags18.ll &= ~(1LL << 52);
-    w->flags18.ll &= ~(1LL << 62);
-    w->flags18.ll &= ~(1LL << 63);
-    w->flags20.ll &= ~(1LL << 0);
-    w->flags20.ll &= ~(1LL << 1);
-    w->flags20.ll &= ~(1LL << 2);
-    w->flags20.ll &= ~(1LL << 3);
-    w->flags20.ll &= ~(1LL << 4);
-    w->flags20.ll &= ~(1LL << 5);
-    w->flags20.ll &= ~(1LL << 8);
-    w->flags20.ll &= ~(1LL << 10);
-    w->flags20.ll &= ~(1LL << 18);
-    w->flags20.ll &= ~(1LL << 22);
-    w->flags20.ll &= ~(1LL << 37);
-    w->flags20.ll &= ~(1LL << 44);
-    w->flags20.ll &= ~(1LL << 45);
-    w->flags20.ll &= ~(1LL << 12);
-    w->flags20.ll &= ~(1LL << 31);
-    w->flags18.ll &= ~(1LL << 36);
-    w->flags18.ll &= ~(1LL << 37);
-    w->flags18.ll &= ~(1LL << 38);
-    w->flags20.ll &= ~(1LL << 35);
+    if (ICO_NTSC) {
+        w->flags18.ll &= ~(1LL << 47);
+        w->flags18.ll &= ~(1LL << 53);
+        w->flags18.ll &= ~(1LL << 54);
+        w->flags18.ll &= ~(1LL << 55);
+        w->flags18.ll &= ~(1LL << 56);
+        w->flags18.ll &= ~(1LL << 57);
+        w->flags18.ll &= ~(1LL << 58);
+        w->flags18.ll &= ~(1LL << 59);
+        w->flags18.ll &= ~(1LL << 60);
+        w->flags18.ll &= ~(1LL << 63);
+        w->flags20.ll &= ~(1LL << 1);
+        w->flags20.ll &= ~(1LL << 7);
+        w->flags20.ll &= ~(1LL << 11);
+        w->flags20.ll &= ~(1LL << 21);
+        w->flags20.ll &= ~(1LL << 27);
+        w->flags20.ll &= ~(1LL << 28);
+        w->flags20.ll &= ~(1LL << 3);
+        w->flags20.ll &= ~(1LL << 18);
+    } else if (ICO_AUG6) {
+        w->flags18.ll &= ~(1LL << 47);
+        w->flags18.ll &= ~(1LL << 52);
+        w->flags18.ll &= ~(1LL << 53);
+        w->flags18.ll &= ~(1LL << 54);
+        w->flags18.ll &= ~(1LL << 55);
+        w->flags18.ll &= ~(1LL << 56);
+        w->flags18.ll &= ~(1LL << 57);
+        w->flags18.ll &= ~(1LL << 58);
+        w->flags18.ll &= ~(1LL << 59);
+        w->flags18.ll &= ~(1LL << 62);
+        w->flags20.ll &= ~(1LL << 0);
+        w->flags20.ll &= ~(1LL << 4);
+        w->flags20.ll &= ~(1LL << 8);
+        w->flags20.ll &= ~(1LL << 14);
+        w->flags20.ll &= ~(1LL << 20);
+        w->flags20.ll &= ~(1LL << 21);
+    } else {
+        w->flags18.ll &= ~(1LL << 52);
+        w->flags18.ll &= ~(1LL << 62);
+        w->flags18.ll &= ~(1LL << 63);
+        w->flags20.ll &= ~(1LL << 0);
+        w->flags20.ll &= ~(1LL << 1);
+        w->flags20.ll &= ~(1LL << 2);
+        w->flags20.ll &= ~(1LL << 3);
+        w->flags20.ll &= ~(1LL << 4);
+        w->flags20.ll &= ~(1LL << 5);
+        w->flags20.ll &= ~(1LL << 8);
+        w->flags20.ll &= ~(1LL << 10);
+        w->flags20.ll &= ~(1LL << 18);
+        w->flags20.ll &= ~(1LL << 22);
+        w->flags20.ll &= ~(1LL << 37);
+        w->flags20.ll &= ~(1LL << 44);
+        w->flags20.ll &= ~(1LL << 45);
+        w->flags20.ll &= ~(1LL << 12);
+        w->flags20.ll &= ~(1LL << 31);
+        w->flags18.ll &= ~(1LL << 36);
+        w->flags18.ll &= ~(1LL << 37);
+        w->flags18.ll &= ~(1LL << 38);
+        w->flags20.ll &= ~(1LL << 35);
+    }
     w->gobj80 = 0;
     w->gobj84 = 0;
     if (self == (void *)boyGObj) {
@@ -592,7 +969,9 @@ void BeforeFunc(GObj *self)
         if (intr->accept != 0) {
             intr->accept((char *)self, ent->id, ent->f4);
         }
-        ACTAcceptMail(self, (short)intr->kind);
+        if (!ICO_NTSCAUG6) {
+            ACTAcceptMail(self, (short)intr->kind);
+        }
     }
     w->soundFlag &= ~1;
     w->reserved = 0;

@@ -24,7 +24,7 @@ typedef struct GProc {     /* field names derived */
     void (*func)();        /* 0x1C, the body of an inline process */
     ICO_WORD_PTR(void *) arg; /* 0x20, a sub thread's request record (RequestClipCollision, RequestGetWayBegin) */
     IOSThread thread; /* 0x24, the thread a threaded process runs on */
-} GProc;              /* derived name */
+} GProc; /* derived name */
 
 /* gobj_process.c's `inline` functions, in the order of their definitions'
  * out-of-line copies at the end of the object (first-declaration order). */

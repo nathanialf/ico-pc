@@ -27,7 +27,7 @@ inline int CreateWayGroup(void)
 {
     int i;
 
-    for (i = 0; i < 94; i++) {
+    for (i = 0; i < PAL_AUG6(94, 64); i++) {
         WayGroup *wg = &way_group[i];
 
         if (wg->used == 0) {
@@ -93,7 +93,7 @@ inline int CreateWayPoint(float *pos)
 {
     int i;
 
-    for (i = 0; i < 275; i++) {
+    for (i = 0; i < PAL_AUG6(275, 215); i++) {
         WayPoint *node = &way_point[i];
 
         if (node->used == 0) {
@@ -233,7 +233,7 @@ int CreateBridge(float *a, float *b)
 inline WayGroup *WayGroup_begin(void)
 {
     WayGroup *p = way_group - 1;
-    WayGroup *end = p + 94;
+    WayGroup *end = p + PAL_AUG6(94, 64);
     if (p != 0 && p != end) {
         do {
             p++;
@@ -246,7 +246,7 @@ inline WayGroup *WayGroup_begin(void)
 
 inline WayGroup *WayGroup_next(WayGroup *p)
 {
-    WayGroup *end = &way_group[93];
+    WayGroup *end = &way_group[PAL_AUG6(93, 63)];
     if (p != 0 && p != end) {
         WayGroup *q = p;
         do {
@@ -261,7 +261,7 @@ inline WayGroup *WayGroup_next(WayGroup *p)
 inline WayGroup *WayBridge_begin(void)
 {
     WayGroup *p = way_group - 1;
-    WayGroup *end = p + 94;
+    WayGroup *end = p + PAL_AUG6(94, 64);
     if (p != 0 && p != end) {
         do {
             p++;
@@ -274,7 +274,7 @@ inline WayGroup *WayBridge_begin(void)
 
 inline WayGroup *WayBridge_next(WayGroup *p)
 {
-    WayGroup *end = &way_group[93];
+    WayGroup *end = &way_group[PAL_AUG6(93, 63)];
     if (p != 0 && p != end) {
         WayGroup *q = p;
         do {
@@ -289,7 +289,7 @@ inline WayGroup *WayBridge_next(WayGroup *p)
 inline WayGroup *WayBridgeAll_begin(void)
 {
     WayGroup *p = way_group - 1;
-    WayGroup *end = p + 94;
+    WayGroup *end = p + PAL_AUG6(94, 64);
     if (p != 0 && p != end) {
         do {
             p++;
@@ -302,7 +302,7 @@ inline WayGroup *WayBridgeAll_begin(void)
 
 inline WayGroup *WayBridgeAll_next(WayGroup *p)
 {
-    WayGroup *end = &way_group[93];
+    WayGroup *end = &way_group[PAL_AUG6(93, 63)];
     if (p != 0 && p != end) {
         WayGroup *q = p;
         do {
@@ -317,7 +317,7 @@ inline WayGroup *WayBridgeAll_next(WayGroup *p)
 inline WayGroup *WayBridgeVar_begin(void)
 {
     WayGroup *p = way_group - 1;
-    WayGroup *end = way_group - 1 + 94;
+    WayGroup *end = way_group - 1 + PAL_AUG6(94, 64);
     if (p == 0)
         goto ret0;
     if (p == end)
@@ -334,7 +334,7 @@ ret0:
 
 inline WayGroup *WayBridgeVar_next(WayGroup *g)
 {
-    WayGroup *p, *end = &way_group[93];
+    WayGroup *p, *end = &way_group[PAL_AUG6(93, 63)];
     if (g != 0 && g != end) {
         for (p = g + 1;; p++) {
             if (p->used != 0 && p->bridge != 0 && p->active != 0)
@@ -349,7 +349,7 @@ inline WayGroup *WayBridgeVar_next(WayGroup *g)
 inline WayPoint *WayPoint_begin(void)
 {
     WayPoint *p = way_point - 1;
-    WayPoint *end = way_point - 1 + 275;
+    WayPoint *end = way_point - 1 + PAL_AUG6(275, 215);
     if (p == 0)
         goto ret0;
     if (p == end)
@@ -366,7 +366,7 @@ ret0:
 
 inline WayPoint *WayPoint_next(WayPoint *p)
 {
-    WayPoint *end = &way_point[274];
+    WayPoint *end = &way_point[PAL_AUG6(274, 214)];
     if (p == 0)
         goto ret0;
     if (p == end)
@@ -421,7 +421,7 @@ void InitWayPointSystem(void)
 {
     int i;
 
-    for (i = 0; i < 275; i++) {
+    for (i = 0; i < PAL_AUG6(275, 215); i++) {
         WayPoint *node = &way_point[i];
 
         node->used = 0;
@@ -431,7 +431,7 @@ void InitWayPointSystem(void)
         node->group = -1;
     }
 
-    for (i = 0; i < 94; i++) {
+    for (i = 0; i < PAL_AUG6(94, 64); i++) {
         WayGroup *wg = &way_group[i];
 
         wg->used = 0;

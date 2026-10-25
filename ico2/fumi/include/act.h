@@ -93,7 +93,7 @@ typedef struct IntrMail {                           /* field names derived */
     unsigned short kind;                            /* 0x10, the mail id */
     short mode;                                     /* 0x12, the act mode it switches to */
     unsigned int flags;                             /* 0x14, bit 18: entry live */
-} IntrMail; /* derived name */
+} IntrMail;                                         /* derived name */
 extern IntrMail actIntrList[];
 
 #endif /* ACT_H */

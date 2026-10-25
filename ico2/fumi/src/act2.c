@@ -19,7 +19,7 @@ void BeforeFunc2(GObj *self)
             if (p == 0) {
                 continue;
             }
-            while (p->mail != 429) {
+            while (p->mail != PAL_NTSC_AUG6(429, 396, 392)) {
                 for (j = 0; j < mb->num; j++) {
                     if (mb->mail[j].type == p->mail) {
                         goto found;

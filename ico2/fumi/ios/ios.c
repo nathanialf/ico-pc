@@ -94,6 +94,8 @@ static void ios_init_plus(void)
     SgSndn2RemoteInit();
     sceSifInitIopHeap();
     debug_StdPrintfDummy("allocate IOP heap memory - \n");
+    /* the August 2001 preview allocates its CD stream ring here (iosCdvd.stMem); the port's
+       stream open allocates it on every disc (cdvd.c iosCdvdDirectStOpen) */
     soundAllocIopHeap();
     soundInit();
     screen_offset_x = 0;
@@ -102,7 +104,9 @@ static void ios_init_plus(void)
 
 void iosInitialize(void)
 {
-    iosCdvdMediaType = PAL_JPN(2, 1); /* cdvd.c: JPN 1, a CD; KOR 2, a DVD, as PAL */
+    /* cdvd.c: JPN, the USA disc and the August 2001 preview 1, a CD (the 2001 builds' own
+       initial value); KOR and CN 2, a DVD, as PAL */
+    iosCdvdMediaType = PAL_JPNNTSCAUG6(2, 1);
     debug_StdPrintfDummy("iosInitialize()\n");
     iosThreadInit();
     /* the same range, inside the host's EE RAM arena, ending
@@ -111,24 +115,27 @@ void iosInitialize(void)
        the arena may sit anywhere on a 64-bit host. The partitions are carved
        from the root's end down, so the stage partition, the last, keeps the
        EE's start and the others move up. */
-    ios_partition_root = iosMallocInitPartition(ico_arena_ee_addr(PAL_JPNKORCN(0x760000, 0x780000)),
-                                                ico_arena_ee_addr(0x1FEFFF0 + ICO_HOST_HEAP_EXTRA));
-    ios_partition_common = iosMallocSetPartition(ios_partition_root,
-                                                 ICO_PART_SIZE(4227072, ICO_HOST_COMMON_EXTRA), 16);
+    ios_partition_root =
+        iosMallocInitPartition(ico_arena_ee_addr(PAL_JPNKORNTSCAUG6CN(0x760000, 0x780000)),
+                               ico_arena_ee_addr(0x1FEFFF0 + ICO_HOST_HEAP_EXTRA));
+    ios_partition_common = iosMallocSetPartition(
+        ios_partition_root, ICO_PART_SIZE(PAL_NTSCAUG6(4227072, 4194304), ICO_HOST_COMMON_EXTRA),
+        16);
     ios_partition_smotion = iosMallocSetPartition(
         ios_partition_root, ICO_PART_SIZE(1179648, ICO_HOST_SMOTION_EXTRA), 16);
     ios_partition_s2motion = iosMallocSetPartition(
         ios_partition_root, ICO_PART_SIZE(3145728, ICO_HOST_S2MOTION_EXTRA), 16);
     ios_partition_event = iosMallocSetPartition(ios_partition_root, 262144, 16);
-    ios_partition_oomori = iosMallocSetPartition(ios_partition_root, 327680, 16);
+    ios_partition_oomori = iosMallocSetPartition(ios_partition_root, PAL_AUG6(327680, 262144), 16);
     ios_partition_horagai = iosMallocSetPartition(ios_partition_root, 1, 16);
-    ios_partition_sound = iosMallocSetPartition(ios_partition_root, 32768, 16);
+    ios_partition_sound = iosMallocSetPartition(ios_partition_root, PAL_AUG6(32768, 98304), 16);
     ios_partition_sound_semi = iosMallocSetPartition(ios_partition_root, 20480, 16);
     ios_partition_shock = iosMallocSetPartition(ios_partition_root, 10240, 16);
     ios_partition_hara = iosMallocSetPartition(ios_partition_root, 1, 16);
     ios_partition_isys = ios_partition_seki = ios_partition_sugipon = ios_partition_dmotion =
         iosMallocSetPartition(ios_partition_root,
-                              ICO_PART_SIZE(PAL_JPNKORCN(15826944, 15695872), ICO_HOST_STAGE_EXTRA),
+                              ICO_PART_SIZE(PAL_JPNKORCN_NTSCAUG6(15826944, 15695872, 15728640),
+                                            ICO_HOST_STAGE_EXTRA),
                               16);
     iosMallocSetPartitionName(ios_partition_isys, "stage");
     iosMallocSetPartitionName(ios_partition_smotion, "stat mot");

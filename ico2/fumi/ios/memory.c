@@ -467,8 +467,8 @@ void *iosFree(void *ptr)
     if (ptr == 0) {
         debug_StdPrintfDummy("null memory pointer\n");
         ICO_BREAK();
-        debug_assertMessage(__FILE__, 820, "IOSFREE(): NULL MEMORY POINTER\n");
-        __assert(__FILE__, 820, "e");
+        debug_assertMessage(__FILE__, PAL_AUG6(820, 804), "IOSFREE(): NULL MEMORY POINTER\n");
+        __assert(__FILE__, PAL_AUG6(820, 804), "e");
         return 0;
     }
     prev = (IosMemNode *)((char *)ptr - 16);
@@ -482,8 +482,8 @@ void *iosFree(void *ptr)
     if (strcmp(node->tag, "<ALLOC>________") != 0) {
         sprintf(buf, "IOSFREE():\n\tPREV MAGIC: %s\n\t CUR MAGIC: %s\n\tNEXT MAGIC: %s\n",
                 node->prev->tag, node->tag, node->next->tag);
-        debug_assertMessage(__FILE__, 836, buf);
-        __assert(__FILE__, 836, "e");
+        debug_assertMessage(__FILE__, PAL_AUG6(836, 820), buf);
+        __assert(__FILE__, PAL_AUG6(836, 820), "e");
         return 0;
     }
 #ifdef ICO_HEAP_STATS
@@ -534,8 +534,9 @@ void *iosFree(void *ptr)
                     prev->next = next;
                     next->prev = prev;
                 } else {
-                    debug_assertMessage(__FILE__, 905, "IOSFREE(): MEMORY LINK MISS\n");
-                    __assert(__FILE__, 905, "e");
+                    debug_assertMessage(__FILE__, PAL_AUG6(905, 889),
+                                        "IOSFREE(): MEMORY LINK MISS\n");
+                    __assert(__FILE__, PAL_AUG6(905, 889), "e");
                     return 0;
                 }
             } else {
@@ -599,19 +600,19 @@ tail_node:
         node->part->head = node;
         node->free_next->free_prev = node;
     }
-    debug_assertMessage(__FILE__, 962, "IOSFREE(): ALLOC NULL\n");
-    __assert(__FILE__, 962, "e");
+    debug_assertMessage(__FILE__, PAL_AUG6(962, 946), "IOSFREE(): ALLOC NULL\n");
+    __assert(__FILE__, PAL_AUG6(962, 946), "e");
     goto tag_free;
 err_3b5:
-    debug_assertMessage(__FILE__, 965, "IOSFREE(): MEMORY LINK MISS\n");
-    __assert(__FILE__, 965, "e");
+    debug_assertMessage(__FILE__, PAL_AUG6(965, 949), "IOSFREE(): MEMORY LINK MISS\n");
+    __assert(__FILE__, PAL_AUG6(965, 949), "e");
     return 0;
 tag_free:
     *(IosMemTag *)node = *(IosMemTag *)"<FREE AREA>____";
     goto ret_ptr;
 err_3bf:
-    debug_assertMessage(__FILE__, 975, "IOSFREE(): ??\n");
-    __assert(__FILE__, 975, "e");
+    debug_assertMessage(__FILE__, PAL_AUG6(975, 959), "IOSFREE(): ??\n");
+    __assert(__FILE__, PAL_AUG6(975, 959), "e");
 ret_ptr:
     return ptr;
 }
@@ -749,8 +750,9 @@ void *iosReallocDebug(void *ptr, unsigned int size)
     int d;
 
     if (ptr == 0) {
-        debug_assertMessage(__FILE__, 1182, "IOSREALLOC():\nNULL MEMORY POINTER AT MALLOC\n");
-        __assert(__FILE__, 1182, "e");
+        debug_assertMessage(__FILE__, PAL_AUG6(1182, 1166),
+                            "IOSREALLOC():\nNULL MEMORY POINTER AT MALLOC\n");
+        __assert(__FILE__, PAL_AUG6(1182, 1166), "e");
         return 0;
     }
     next = ptr;
@@ -764,8 +766,8 @@ void *iosReallocDebug(void *ptr, unsigned int size)
     if (strcmp(node->tag, "<ALLOC>________") != 0) {
         sprintf(buf, "IOSFREE():\n\tPREV MAGIC: %s\n\t CUR MAGIC: %s\n\tNEXT MAGIC: %s\n",
                 node->prev->tag, node->tag, node->next->tag);
-        debug_assertMessage(__FILE__, 1199, buf);
-        __assert(__FILE__, 1199, "e");
+        debug_assertMessage(__FILE__, PAL_AUG6(1199, 1183), buf);
+        __assert(__FILE__, PAL_AUG6(1199, 1183), "e");
         return 0;
     }
     nd = node->next;

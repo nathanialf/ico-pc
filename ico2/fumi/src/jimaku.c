@@ -41,6 +41,7 @@ static IosSema jimakuShownSema; /* derived name */
 static IosSema jimakuFrameSema; /* derived name */
 
 #include "jimaku.h"
+#include "layout_texture.h" /* jimaku's texProperty rows: 434, 435 (JPN and CN 410, 411; KOR 404, 405) */
 #include "layout_texture.h" /* jimaku's texProperty rows: 434, 435 (JPN 410, 411; KOR 404, 405) */
 #include "gflag.h"
 
@@ -193,8 +194,52 @@ static int jimakuHandler(CdvdBgReq *self, JimakuArg *p)
     return 0;
 }
 
+static void jimakuMgrBegin_ntscaug6(JimakuArg *p)
+{
+    JimakuSub *sub = &p->sub;
+    int i;
+    struct jWayGroup *g;
+
+    if (systemStatus[10] != 0) {
+        return;
+    }
+    systemStatus[10] = 1;
+    iosSemaCreate(&jimakuReadSema, 0, 1, 0);
+    iosSemaCreate(&jimakuShownSema, 0, 1, 0);
+    iosSemaCreate(&jimakuFrameSema, 0, 1, 0);
+    for (i = 0; i < 4; i++) {
+        g = &jimakuRing[i];
+        g->node = &jimakuRing[(i + 1) % 4];
+        g->buf = jimakuBuf[i];
+    }
+    sub->n = 0;
+    jimakuRing[0].block = -1;
+    jimakuRing[0].state = 3;
+    jimakuRing[0].tex = -1;
+    sub->ringPos = 1;
+    sub->bg =
+        (void *)iosCdvdBackGroundMgrAdd("Tex_jimaku/data.jim", jimakuHandler, p, 0, 0, 0, 0, 0);
+    {
+        JimakuSub *q = &p->sub;
+        int m;
+
+        iosCdvdBackGroundMgrSeek(q->bg, q->block * 0x8800);
+        m = (q->ringPos = (q->n + 1) % 4);
+        while (m != q->n) {
+            jimakuRing[m].block = -1;
+            jimakuRing[m].state = 3;
+            jimakuRing[m].tex = -1;
+            m = (m + 1) % 4;
+        }
+    }
+}
+
 static void jimakuMgrBegin(JimakuArg *p)
 {
+    if (ICO_NTSCAUG6) {
+        jimakuMgrBegin_ntscaug6(p);
+        return;
+    }
     JimakuSub *sub = &p->sub;
     int st = 0;
     int i;
@@ -284,11 +329,11 @@ static void jimakuMgrNext(JimakuArg *p)
     sprintf(buf, "jimaku%02d.tm2", (sub->n + 1) % 4);
     g->node->tex = tex_InitTexture(buf, g->node->buf);
     tex_SetSamplingType(tex_GetTextureData(g->node->tex), 1, 1);
-    g->node->stamp = lock_execIcoMisc;
+    g->node->stamp = PAL_AUG6(lock_execIcoMisc, GlobalTimer);
     if (g->node->tex == -1) {
         debug_StdPrintfDummy("already exist\n");
-        debug_assert(__FILE__, LN(688, 655, 658, 688, 688, 688, 658));
-        __assert(__FILE__, LN(688, 655, 658, 688, 688, 688, 658), "0");
+        debug_assert(__FILE__, LN(688, 655, 658, 626, 626, 598, 658));
+        __assert(__FILE__, LN(688, 655, 658, 626, 626, 598, 658), "0");
     }
     sub->n = (sub->n + 1) % 4;
     if (iosSemaWait(&jimakuShownSema) < 0) {
@@ -408,8 +453,143 @@ void jimakuEnd(JimakuArg *msg)
     jimakuMgrEnd(msg);
 }
 
+static void jimakuDisp_ntsc(JimakuArg *msg)
+{
+    struct jWayGroup *g = &jimakuRing[msg->sub.n];
+    int c;
+
+    if (systemStatus[10] == 0) {
+        return;
+    }
+    c = g->stamp;
+    if ((unsigned int)(c + jimakuDispTime) < (unsigned int)lock_execIcoMisc) {
+        jimakuDispOn = 0;
+    }
+    if ((unsigned int)(c + 5) < (unsigned int)lock_execIcoMisc) {
+        iosSemaReferStatus(&jimakuShownSema);
+        if (jimakuShownSema.status.numWaitThreads > 0) {
+            iosSemaSignal(&jimakuShownSema);
+        }
+    }
+    if (systemStatus[10] != 0) {
+        iosSemaReferStatus(&jimakuFrameSema);
+        if (jimakuFrameSema.status.numWaitThreads > 0) {
+            iosSemaSignal(&jimakuFrameSema);
+        }
+    }
+    if (jimakuDispOn != 0) {
+        int v = g->tex;
+        texProperty[383].texNo = v;
+        texProperty[382].texNo = v;
+        if (v < 0) {
+            return;
+        }
+        if (jimakuOn != 0) {
+            JIM_HOST_KEY(g, 0);
+            display_texture(&texProperty[382]);
+            JIM_HOST_KEY(g, 1);
+            display_texture(&texProperty[383]);
+            JIM_HOST_KEY(0, 0);
+        }
+    }
+}
+
+static void jimakuDisp_aug6(JimakuArg *msg)
+{
+    struct jWayGroup *g = &jimakuRing[msg->sub.n];
+    int c;
+
+    if (systemStatus[10] == 0) {
+        return;
+    }
+    c = g->stamp;
+    if ((unsigned int)(c + jimakuDispTime) < (unsigned int)GlobalTimer) {
+        jimakuDispOn = 0;
+    }
+    if ((unsigned int)(c + 5) < (unsigned int)GlobalTimer) {
+        iosSemaReferStatus(&jimakuShownSema);
+        if (jimakuShownSema.status.numWaitThreads > 0) {
+            iosSemaSignal(&jimakuShownSema);
+        }
+    }
+    if (systemStatus[10] != 0) {
+        iosSemaReferStatus(&jimakuFrameSema);
+        if (jimakuFrameSema.status.numWaitThreads > 0) {
+            iosSemaSignal(&jimakuFrameSema);
+        }
+    }
+    if (jimakuDispOn != 0) {
+        int v = g->tex;
+        texProperty[383].texNo = v;
+        texProperty[382].texNo = v;
+        if (v < 0) {
+            return;
+        }
+        if (jimakuOn != 0) {
+            JIM_HOST_KEY(g, 0);
+            display_texture(&texProperty[382]);
+            JIM_HOST_KEY(g, 1);
+            display_texture(&texProperty[383]);
+            JIM_HOST_KEY(0, 0);
+        }
+    }
+}
+
+static void jimakuDisp_cn(JimakuArg *msg)
+{
+    struct jWayGroup *g = &jimakuRing[msg->sub.n];
+    int c;
+
+    if (systemStatus[10] == 0) {
+        return;
+    }
+    c = g->stamp;
+    if ((unsigned int)(c + jimakuDispTime) < (unsigned int)lock_execIcoMisc) {
+        jimakuDispOn = 0;
+    }
+    if ((unsigned int)(c + 5) < (unsigned int)lock_execIcoMisc) {
+        iosSemaReferStatus(&jimakuShownSema);
+        if (jimakuShownSema.status.numWaitThreads > 0) {
+            iosSemaSignal(&jimakuShownSema);
+        }
+    }
+    if (systemStatus[10] != 0) {
+        iosSemaReferStatus(&jimakuFrameSema);
+        if (jimakuFrameSema.status.numWaitThreads > 0) {
+            iosSemaSignal(&jimakuFrameSema);
+        }
+    }
+    if (jimakuDispOn != 0) {
+        int v = g->tex;
+        texProperty[411].texNo = v;
+        texProperty[410].texNo = v;
+        if (v < 0) {
+            return;
+        }
+        if (jimakuOn != 0) {
+            JIM_HOST_KEY(g, 0);
+            display_texture(&texProperty[410]);
+            JIM_HOST_KEY(g, 1);
+            display_texture(&texProperty[411]);
+            JIM_HOST_KEY(0, 0);
+        }
+    }
+}
+
 void jimakuDisp(JimakuArg *msg)
 {
+    if (ICO_NTSC) {
+        jimakuDisp_ntsc(msg);
+        return;
+    }
+    if (ICO_AUG6) {
+        jimakuDisp_aug6(msg);
+        return;
+    }
+    if (ICO_CN) {
+        jimakuDisp_cn(msg);
+        return;
+    }
     struct jWayGroup *g = &jimakuRing[msg->sub.n];
     int c;
 

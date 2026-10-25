@@ -51,7 +51,7 @@ void sndInit(int idx)
     short attrOff;
     soundSeKindBuild();
     adpcmPauseRequest(0);
-    attrOff = 0x18C;
+    attrOff = PAL_AUG6(0x18C, 0x188);
     /* the EE's record offset of the reverb depth; StgPre is larger on the
        host, so the field by name */
     (void)attrOff;

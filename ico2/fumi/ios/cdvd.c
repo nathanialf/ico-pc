@@ -305,10 +305,13 @@ static inline void iosCdvdDiskReadyBlock(void)
     if (sceCdDiskReady(1) != 2) {
         sceCdlFILE fp;
         char file[32];
-        strcpy(file, PAL_JPN_KORCN("SCES_507.60", "SCPS_110.03", "SCPS_560.01"));
+        strcpy(file, PAL_JPN_KOR_NTSCAUG6_CN("SCES_507.60", "SCPS_110.03", "SCPS_560.01",
+                                             "SCUS_971.13", "SCPS_550.01"));
         iosCdvdChgFileName(file);
         debug_StdPrintfDummy("wait insert ico disk %s %s\n",
-                             PAL_JPN_KORCN("SCES_507.60", "SCPS_110.03", "SCPS_560.01"), file);
+                             PAL_JPN_KOR_NTSCAUG6_CN("SCES_507.60", "SCPS_110.03", "SCPS_560.01",
+                                                     "SCUS_971.13", "SCPS_550.01"),
+                             file);
         do {
             sceCdDiskReady(0);
         } while (sceCdGetDiskType() != cdDiskType || sceCdSearchFile(&fp, file) == 0);
@@ -494,7 +497,7 @@ static void iosCdvdMgrLoad(IosCdvdHandle *self)
 void temp_loadfunc(IosCdvdHandle *self, char *name, int size, int id, int kind, int word08, int seg)
 {
     void *p = (void *)iosMallocDebug(ios_partition_seki, size, __FILE__,
-                                     LN(1102, 1092, 1102, 1102, 1102, 1102, 1102));
+                                     LN(1102, 1092, 1102, 828, 802, 790, 1102));
 
     iosCdvdHandlerRead(self, p, size);
     debug_StdPrintfDummy("temp_loadfunc::%s  (size:%d)(segid=%d)\n", name, size, seg);
@@ -601,7 +604,7 @@ static void iosCdvdMgrPackLoad(IosCdvdHandle *self)
         systemStatus[8] = 0;
         size = *num * sizeof(PackEnt);
         ent = (PackEnt *)iosMallocDebug(ios_partition_seki, size, __FILE__,
-                                        LN(1174, 1164, 1174, 1174, 1174, 1174, 1174));
+                                        LN(1174, 1164, 1174, 898, 872, 860, 1174));
         iosCdvdHandlerRead(self, ent, size);
         pk = ent;
         for (seg = 0; seg < *num; seg++, pk++) {
@@ -835,7 +838,9 @@ void iosCdvdManager(void)
     IosCdvdHandle *msg;
     IosCdvdHandle *req;
 
-    cdDiskType = PAL_JPN(20, 18); /* JPN: a PlayStation 2 CD; KOR a DVD, as PAL */
+    /* JPN, the USA disc and the August 2001 preview: a PlayStation 2 CD; KOR and CN a DVD,
+       as PAL */
+    cdDiskType = PAL_JPNNTSCAUG6(20, 18);
     sceCdInit(0);
     sceCdMmode(iosCdvdMediaType);
     sceFsReset();
@@ -1021,7 +1026,8 @@ static void cdWait(int *busy)
                 systemStatus[0x14 / 4] = 1;
                 cdWaitParamSet = 1;
             }
-            strcpy(file, PAL_JPN_KORCN("SCES_507.60", "SCPS_110.03", "SCPS_560.01"));
+            strcpy(file, PAL_JPN_KOR_NTSCAUG6_CN("SCES_507.60", "SCPS_110.03", "SCPS_560.01",
+                                                 "SCUS_971.13", "SCPS_550.01"));
             chgFileName(file);
             r = sceCdDiskReady(1);
             if (r == 2 && sceCdGetDiskType() == cdDiskType && sceCdSearchFile(&fp, file) != 0) {
@@ -1166,7 +1172,7 @@ void iosCdvdDirectStOpen(IosCdvdHandle *self)
     iosCdvdMgrSearchFile(self);
     self->sectors = ((unsigned int)(self->file.size - 1) >> 11) + 1;
     mem = iosSifAllocIopHeapDebug(576 * 2048 + 16, __FILE__,
-                                  LN(2472, 2460, 2472, 2472, 2472, 2472, 2472));
+                                  LN(2472, 2460, 2472, 2140, 2472, 2472, 2472));
     /* an allocation check compiled out of the retail build; its message
      * stays in .rodata */
     if (0) {

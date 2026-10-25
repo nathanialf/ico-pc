@@ -83,8 +83,49 @@ void HandMgr_Print(void)
     }
 }
 
+static void HandMgr_Speed_ntscaug6(GObj *self, float f)
+{
+    float lim = 1.5f;
+    int m;
+    if (handmgr.heightGap) {
+        f = f + f;
+        lim = 2.0f;
+    }
+    f = f < 1.0f ? 1.0f : (lim < f ? lim : f);
+    f = f < 1.0f ? 1.0f : (_ACTGame_GetParamF(8) < f ? _ACTGame_GetParamF(8) : f);
+    ACTGame_SetMotionPlaySpeedRatio_Reserve((void *)self, f, 2);
+    m = GOBJ_ACT(boyGObj)->actMode;
+    if ((unsigned int)m < 4) {
+        if (m != 0) {
+            float one = 1.0f;
+            float r;
+            if (one < f) {
+                f = one - (f - one);
+            }
+            r = f < _ACTGame_GetParamF(7) ? _ACTGame_GetParamF(7) : (one < f ? one : f);
+            ACTGame_SetMotionPlaySpeedRatio_Reserve((void *)self, r, 2);
+        }
+    }
+    if (handmgr.handDist < 60.0f) {
+        ACTGame_SetMotionPlaySpeedRatio_Reserve((void *)self, 0.9f, 3);
+    }
+    if (90.0f < handmgr.handDist) {
+        float r;
+        if (GOBJ_ACT(boyGObj)->curItem != 0) {
+            r = 2.0f;
+        } else {
+            r = 1.3f;
+        }
+        ACTGame_SetMotionPlaySpeedRatio_Reserve((void *)self, r, 3);
+    }
+}
+
 void HandMgr_Speed(GObj *self, float f)
 {
+    if (ICO_NTSCAUG6) {
+        HandMgr_Speed_ntscaug6(self, f);
+        return;
+    }
     float lim = 1.5f;
     int m;
     if (handmgr.heightGap) {

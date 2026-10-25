@@ -135,8 +135,9 @@ void MakeCollisionDependGObjList(void)
         }
     }
     if (colObjListNum >= 0x100) {
-        debug_assertMessage(__FILE__, 533, "TOO MANY COLLISION DEPEND GOBJS\n");
-        __assert(__FILE__, 533, "e");
+        debug_assertMessage(__FILE__, LN(533, 533, 533, 533, 533, 523, 533),
+                            "TOO MANY COLLISION DEPEND GOBJS\n");
+        __assert(__FILE__, LN(533, 533, 533, 533, 533, 523, 533), "e");
     }
     /* a debug dump of the list, compiled out of the retail build; its label
      * table and format stay in the data */
@@ -462,7 +463,7 @@ inline void ResetCollisionPC(void)
 
 void DispCollisionPC(void)
 {
-    if (game_pause == 0) {
+    if (PAL_AUG6(game_pause, graphics_ready) == 0) {
         return;
     }
     pcTime = 0 - pcTime; /* no EE timer 0 on the host */
@@ -1649,8 +1650,8 @@ int GetEdgeOfFloor(float *out, FcFloorEnt *e, float *p1, float *p2)
             }
             debug_StdPrintfDummy("%02d: src:%8f dst:%8f\n", i, g1, g2);
         }
-        debug_assert(__FILE__, 2006);
-        __assert(__FILE__, 2006, "0");
+        debug_assert(__FILE__, LN(2006, 2006, 2006, 2006, 2006, 1975, 2006));
+        __assert(__FILE__, LN(2006, 2006, 2006, 2006, 2006, 1975, 2006), "0");
     }
     return i;
 }

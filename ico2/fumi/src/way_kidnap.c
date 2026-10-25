@@ -327,10 +327,10 @@ int WayPointWithRangeFromPos2(float *pos, WVTObj *w, float *dst, int chk)
     int j;
     int k;
 
-    for (i = 0; i < 275; i++) {
+    for (i = 0; i < PAL_AUG6(275, 215); i++) {
         searchNodes[i] = 0;
     }
-    for (k = 0; k < 94; k++) {
+    for (k = 0; k < PAL_AUG6(94, 64); k++) {
         edgeDone[k] = 0;
     }
     GetWay_begin(pos, w, pos);
@@ -369,7 +369,7 @@ int WayPointWithRangeFromPos2(float *pos, WVTObj *w, float *dst, int chk)
             break;
         }
         if (edge->bridge == 0) {
-            for (k = 0; k < 94; k++) {
+            for (k = 0; k < PAL_AUG6(94, 64); k++) {
                 if (way_group[k].used == 0) {
                     continue;
                 }
@@ -422,7 +422,7 @@ ret:
            active group that allows a nest */
         debug_StdPrintfDummy(
             "見付からないので全WAYPOOINTから アクティブグループで巣許可の一番近いポイントを検索");
-        for (i = 0; i < 275; i++) {
+        for (i = 0; i < PAL_AUG6(275, 215); i++) {
             cur = &way_point[i];
             if (cur->used == 0 || cur->bridgeEnd != 0 || way_group[cur->group].active == 0) {
                 continue;

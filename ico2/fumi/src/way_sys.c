@@ -47,7 +47,8 @@ WayPoint *_FUNC_GetWay_begin(float *from, WVTObj *w, float *goal, int threaded)
         goto out;
     }
 
-    if ((unsigned int)w->stampFrame < (unsigned int)(lock_execIcoMisc - 1) || w->nearWp == 0) {
+    if ((unsigned int)w->stampFrame < (unsigned int)(PAL_AUG6(lock_execIcoMisc, GlobalTimer) - 1) ||
+        w->nearWp == 0) {
         if (w->guideFirst >= 0) {
             wp = findTemp(goal, way_point[w->guideFirst].group);
         } else {
@@ -76,7 +77,7 @@ WayPoint *_FUNC_GetWay_begin(float *from, WVTObj *w, float *goal, int threaded)
 
     w->nearWp = wp;
     w->fromWp = wp0;
-    w->stampFrame = lock_execIcoMisc;
+    w->stampFrame = PAL_AUG6(lock_execIcoMisc, GlobalTimer);
     DeleteGuideWay(w);
     debug_StdPrintfDummy("GetWay_begin\n");
     debug_StdPrintfDummy("gid t:%d m:%d\n", wp0->group, wp->group);
@@ -480,10 +481,14 @@ WayPoint *GetWay_next(WVTObj *w, float *pos)
     int blocked;
     float lim;
 
-    w->stampFrame = lock_execIcoMisc;
-    if (w->chk.cur == 0 || w->chk.cur->used == 0) {
-        debug_StdPrintfDummy("illigal way ");
-        return 0;
+    if (ICO_AUG6) {
+        w->stampFrame = GlobalTimer;
+    } else {
+        w->stampFrame = lock_execIcoMisc;
+        if (w->chk.cur == 0 || w->chk.cur->used == 0) {
+            debug_StdPrintfDummy("illigal way ");
+            return 0;
+        }
     }
     ez_circle(w->nearWp->pos, pos, 0x80800000, 30.0f);
 

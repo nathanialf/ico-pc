@@ -176,17 +176,102 @@ _Static_assert(offsetof(McProductFile, cameraMove) == MC_PRODUCT_FILE_JPN_SIZE,
 _Static_assert(offsetof(McProductFile, palMode) == 0x1EC,
                "McProductFile: palMode is the last European word");
 
+/* PC port: the USA disc's and the August 2001 preview's product file, 0x18C bytes, is laid
+   out otherwise (typedef.h keeps the European McProductFile on every disc): twenty
+   16-byte previews (USA: stage, play time, sofa, a word no code reads; the preview:
+   stage, cleared, play time, sofa), then the sound mode, the output mode, the vibration
+   and the 64 pad bytes.  The card gets the disc's own bytes, converted from and to the
+   host record. */
+#define MC_PRODUCT_FILE_2001_SIZE 0x18C
+
+static unsigned char mcProduct2001[MC_PRODUCT_FILE_2001_SIZE];
+
+extern void ico_diag_milestone(const char *fmt, ...); /* PC port: port/platform/diag_host.h */
+
+static void mc_product_2001_note(void)
+{
+    static int noted;
+
+    if (!noted) {
+        noted = 1;
+        ico_diag_milestone("mc: the product file is this disc's own 0x%X-byte record, converted "
+                           "from and to the European layout the game keeps",
+                           MC_PRODUCT_FILE_2001_SIZE);
+    }
+}
+
+static void mc_product_to_2001(const McProductFile *p, unsigned char *d)
+{
+    int i;
+    int w[4];
+
+    for (i = 0; i < 20; i++) {
+        const McFileInfo *f = &p->file[i];
+
+        w[0] = (int)f->stage;
+        if (ICO_AUG6) {
+            w[1] = f->cleared;
+            w[2] = f->playTime;
+            w[3] = f->sofa;
+        } else {
+            w[1] = f->playTime;
+            w[2] = f->sofa;
+            w[3] = f->word10;
+        }
+        memcpy(d + i * 16, w, 16);
+    }
+    memcpy(d + 0x140, &p->soundMode, 4);
+    memcpy(d + 0x144, &p->outputMode, 4);
+    memcpy(d + 0x148, &p->vibration, 4);
+    memcpy(d + 0x14C, p->padConf, 64);
+}
+
+static void mc_product_from_2001(McProductFile *p, const unsigned char *d)
+{
+    int i;
+    int w[4];
+
+    for (i = 0; i < 20; i++) {
+        McFileInfo *f = &p->file[i];
+
+        memcpy(w, d + i * 16, 16);
+        f->stage = (unsigned int)w[0];
+        if (ICO_AUG6) {
+            f->cleared = w[1];
+            f->playTime = w[2];
+            f->sofa = w[3];
+        } else {
+            f->playTime = w[1];
+            f->sofa = w[2];
+            f->word10 = w[3];
+        }
+    }
+    memcpy(&p->soundMode, d + 0x140, 4);
+    memcpy(&p->outputMode, d + 0x144, 4);
+    memcpy(&p->vibration, d + 0x148, 4);
+    memcpy(p->padConf, d + 0x14C, 64);
+}
+
 static inline int product_write(McMgr *self)
 {
     (IosMcProductFile + self->port)->soundMode = systemStatus[11];
     (IosMcProductFile + self->port)->outputMode = soundOutputModeGet();
     (IosMcProductFile + self->port)->vibration = iosPadActRequestEnable;
-    (IosMcProductFile + self->port)->controlType = optionControlType;
-    if (!ICO_JPNKORCN) {
+    if (ICO_JPNKORCN) {
+        (IosMcProductFile + self->port)->controlType = optionControlType;
+    } else if (ICO_NTSCAUG6) {
+    } else {
+        (IosMcProductFile + self->port)->controlType = optionControlType;
         (IosMcProductFile + self->port)->cameraMove = NonLinearCameraMove;
         (IosMcProductFile + self->port)->palMode = systemStatus[0];
     }
     *(McBlk *)(IosMcProductFile + self->port)->padConf = *(McBlk *)iosPadConfCustom.bit;
+    if (ICO_NTSCAUG6) {
+        mc_product_2001_note();
+        mc_product_to_2001(IosMcProductFile + self->port, mcProduct2001);
+        iosMcHandlerWrite(self, mcProduct2001, MC_PRODUCT_FILE_2001_SIZE);
+        return 0;
+    }
     iosMcHandlerWrite(self, (unsigned char *)(IosMcProductFile + self->port),
                       PAL_JPNKORCN(sizeof(McProductFile), MC_PRODUCT_FILE_JPN_SIZE));
     return 0;
@@ -195,6 +280,12 @@ static inline int product_write(McMgr *self)
 static inline int product_read(McMgr *self)
 {
     int idx = self->port;
+    if (ICO_NTSCAUG6) {
+        mc_product_2001_note();
+        iosMcHandlerRead(self, mcProduct2001, MC_PRODUCT_FILE_2001_SIZE);
+        mc_product_from_2001(&IosMcProductFile[idx], mcProduct2001);
+        return self->result;
+    }
     iosMcHandlerRead(self, (unsigned char *)&IosMcProductFile[idx],
                      PAL_JPNKORCN(sizeof(McProductFile), MC_PRODUCT_FILE_JPN_SIZE));
     return self->result;
@@ -202,14 +293,32 @@ static inline int product_read(McMgr *self)
 
 static inline int gameblock_write(McMgr *self, void *buf)
 {
-    iosMcHandlerWrite(self, buf, 25588);
-    iosMcHandlerWrite(self, (unsigned char *)&optionScreenMode, 4);
-    iosMcHandlerWrite(self, (unsigned char *)&girlControlMode, 4);
+    if (ICO_NTSCAUG6) {
+        iosMcHandlerWrite(self, buf, 25596);
+    } else {
+        iosMcHandlerWrite(self, buf, 25588);
+        iosMcHandlerWrite(self, (unsigned char *)&optionScreenMode, 4);
+        iosMcHandlerWrite(self, (unsigned char *)&girlControlMode, 4);
+    }
     return 0;
+}
+
+static inline int gameblock_read_ntscaug6(McMgr *self, void *buf)
+{
+    iosMcHandlerRead(self, buf, 25596);
+    systemStatus[11] = (IosMcProductFile + self->port)->soundMode;
+    soundOutputModeSet((IosMcProductFile + self->port)->outputMode);
+    soundOutputModeSet(ico_opt_output_card(soundOutputModeGet()));
+    iosPadActRequestEnable = (IosMcProductFile + self->port)->vibration;
+    *(McBlk *)iosPadConfCustom.bit = *(McBlk *)(IosMcProductFile + self->port)->padConf;
+    return self->result;
 }
 
 static inline int gameblock_read(McMgr *self, void *buf)
 {
+    if (ICO_NTSCAUG6) {
+        return gameblock_read_ntscaug6(self, buf);
+    }
     iosMcHandlerRead(self, buf, 25588);
     systemStatus[11] = (IosMcProductFile + self->port)->soundMode;
     soundOutputModeSet((IosMcProductFile + self->port)->outputMode);
@@ -228,8 +337,25 @@ typedef struct { /* field names derived */
     char c[17];
 } McName; /* derived name */
 
+static inline void iosMcMgrGetInfo_ntscaug6(McMgr *mp)
+{
+    while (sceMcGetInfo(mp->port, mp->slot, &mp->type, &mp->free, &mp->format) > 0) {
+        debug_StdPrintfDummy("iosMcMgrGetInfo: request busy\n");
+    }
+
+    iosMcMgrSync(mp);
+
+    if (mp->result != 0 && mp->result >= -10) {
+        mp->cardState = mp->result;
+    }
+}
+
 static void iosMcMgrGetInfo(McMgr *mp)
 {
+    if (ICO_NTSCAUG6) {
+        iosMcMgrGetInfo_ntscaug6(mp);
+        return;
+    }
     int r;
 
     while ((r = sceMcGetInfo(mp->port, mp->slot, &mp->type, &mp->free, &mp->format)) != 0) {
@@ -523,16 +649,18 @@ retry:
     }
 
     if (mp->flags.ll & 2) {
-        *(McName *)mp->path =
-            *(McName *)PAL_JPN_KORCN("/BESCES-50760ico", "/BISCPS-11003ico", "/BISCPS-56001ico");
+        *(McName *)mp->path = *(McName *)PAL_JPN_KOR_NTSCAUG6_CN(
+            "/BESCES-50760ico", "/BISCPS-11003ico", "/BISCPS-56001ico", "/BASCUS-97113ico",
+            "/BISCPS-55001ico");
         iosMcMgrMkdir(mp);
         if (mp->result != 0 && mp->result != -4) {
             return;
         }
     }
 
-    *(McName *)mp->dirName =
-        *(McName *)PAL_JPN_KORCN("/BESCES-50760ico", "/BISCPS-11003ico", "/BISCPS-56001ico");
+    *(McName *)mp->dirName = *(McName *)PAL_JPN_KOR_NTSCAUG6_CN(
+        "/BESCES-50760ico", "/BISCPS-11003ico", "/BISCPS-56001ico", "/BASCUS-97113ico",
+        "/BISCPS-55001ico");
     iosMcMgrChdir(mp);
 
     if (mp->result != 0) {
