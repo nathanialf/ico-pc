@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../core/region.h" /* ico_region: the June 2001 demo draws its own VU programs */
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "rd_passring.h"
@@ -594,6 +595,11 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
     if (f->camera.freeCamera) {
         /* photo mode: behind-eye triangles clipped, not dropped */
         vcb.draw[2] |= ICO_VU_BEHIND_EYE;
+    }
+    if (ico_region == ICO_REGION_JUN26) {
+        /* the demo's cluster, mesh, normal_c and normal_l programs
+         * (vu_common.hlsli g_vuVariant); nothing reads it yet */
+        vcb.draw[2] |= ICO_VU_JUN26;
     }
     if (rd__vu_extended()) {
         /* a triangle the region test drops is clipped unless it belongs
