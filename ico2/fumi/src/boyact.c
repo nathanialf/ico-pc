@@ -8168,7 +8168,7 @@ static void actBoyStart_jun26(GObj *self)
     }
 
     /* the demo hands the boy the stick at layout 2702 when he comes in empty-handed */
-    if (*(void **)(work + 0x130) == 0) {
+    if (((Act *)work)->weapon == 0) { /* PC port: the demo's Act word at 0x130 is its weapon */
         GObj *stick = isysGObjSearchFromObjLayoutID(2702);
 
         if (stick != 0) {
