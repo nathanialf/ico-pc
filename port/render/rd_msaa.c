@@ -146,8 +146,8 @@ uint8_t rd__msaa_close_note(int cause)
         return (uint8_t)(l + 1);
     }
     static const char *const kWhy[RD_MSAA_CLOSE_END] = {
-        "a read or copy of the scene's colour or depth (a texture read, a copy, a DATE snapshot, "
-        "the fog's depth read)",
+        ("a read or copy of the scene's colour or depth (a texture read, a copy, a DATE snapshot, "
+         "the fog's depth read)"),
         "the shadow count's pass: the scene's depth with another colour",
         "a pass on the scene's colour with another depth"};
     char lists[64];
