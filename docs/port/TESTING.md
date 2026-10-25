@@ -938,10 +938,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 ### port/ui/test
 
 - `credits_headless.py`: Extras > Credits in the headless game (`credits_headless`).
-- `font_coverage_test.c`: every character of the seven languages has a glyph in Arimo, in Noto
-  Sans JP's subset or in Noto Sans KR's, a Japanese character the second font's own and a Hangul
-  one the third's (`font_coverage`); `font_corpus/` holds the per-language text, `ja.txt` and
-  `ko.txt` the Japanese and Korean menus' text that no table holds.
+- `font_coverage_test.c`: every character of the eight languages has a glyph in Arimo, in Noto
+  Sans JP's subset, in Noto Sans KR's or in Noto Sans TC's, a Japanese character the second font's
+  own, a Hangul one the third's and a Chinese-only ideograph the fourth's, the Chinese face first
+  or last by the language (`font_coverage`); `font_corpus/` holds the per-language text, `ja.txt`,
+  `ko.txt` and `zh.txt` the Japanese, Korean and Chinese menus' text that no table holds.
 - `font_edge_test.c`: the port's plain text at the output's resolution on a device (`font_edge`).
 - `gallery_sweep.py`: every stream and a sample of every bank in one headless run
   (`gallery_sweep`).
@@ -949,12 +950,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `--region jpn` or `--region kor` (`--jpn` is `--region jpn`), the European and that disc's 105
   `adpcmFile` paths compared row for row, then the list from that disc's tables and image
   (`gallery_jpn`, `gallery_kor`).
-- `menu_region_test.c` (`text|look <slug>`): the Japanese and Korean discs' menus: the region's
+- `menu_region_test.c` (`text|look <slug>`): the Japanese, Korean and Asian discs' menus: the region's
   layouts, rows and glyph rows against that disc's ELF tables, no row from the menu text table
-  (`menu_text_jpn`, `menu_text_kor`); with the disc's image, the glyph rectangles' ink, the
-  sheets' light ink held to `kSheetInk[UI_SHEET_JA]` or `kSheetInk[UI_SHEET_KO]`, and the port's
-  words' boxes against the disc's rows (`menu_look_jpn`, `menu_look_kor`; the Korean ink 252.8
-  fill, 41.8 rim, measured on the disc).
+  (`menu_text_jpn`, `menu_text_kor`, `menu_text_cn`); with the disc's image, the glyph rectangles'
+  ink, the sheets' light ink held to `kSheetInk[UI_SHEET_JA]`, `kSheetInk[UI_SHEET_KO]` or
+  `kSheetInk[UI_SHEET_ZH]`, and the port's words' boxes against the disc's rows (`menu_look_jpn`,
+  `menu_look_kor`, `menu_look_cn`; the Korean ink 252.8 fill, 41.8 rim, measured on the disc; the
+  Asian disc's expectation is the Japanese numbers until `menu_look_cn` has been run on it).
 - `menu_look_test.c`: the menus' Arimo text against the game's menu sheets from the disc
   (`menu_look`); `menu_sheets.c`/`.h` decode the sheets.
 - `menu_text_test.c`: the game's menu words and the port's rows drawn in the sheets' look; the
@@ -1301,7 +1303,8 @@ tables: `layout_asserts` (a program compiled from the generated asserts), `layou
 `font_audit`, `font_subset_ja` (`tools/subset_font_ja.py --check`: the Japanese font's recorded
 code points are the tables', its cmap the recorded ones and, with fontTools 4.63.0 and the
 download from `tools/fetch_deps.sh`, the committed file byte for byte the tool's output),
-`font_subset_ko` (`tools/subset_font_ko.py --check`, the same for the Korean font) and
+`font_subset_ko` (`tools/subset_font_ko.py --check`, the same for the Korean font),
+`font_subset_zh` (`tools/subset_font_zh.py --check`, the same for the Chinese font) and
 `content_table_chains`, `content_table_chains_jpn` (`--version jpn`: the Japanese disc's boot
 ELF, tables and groups) and `content_table_chains_kor` (`--version kor`; `port/test/CMakeLists.txt`),
 `data_desc_fresh` (with the audit of MotionDef's bit reads), `tables_manifest`,
@@ -1349,9 +1352,10 @@ hand.
   settings cases go in `port/ui/test/settings_extra_test.c` (its header). `settings_render` draws
   every screen, `menu_text` the rows in the sheets' look, and `font_audit` (every code point inside the
   font subsets, `tools/font_audit.py`) and `font_coverage` (a glyph for each) check the row's text
-  in the seven languages; `strings_complete` fails until every table has the new strings. A new
+  in the eight languages; `strings_complete` fails until every table has the new strings. A new
   Japanese character needs `tools/subset_font_ja.py` run again (`font_subset_ja` fails until it
-  is), a new Hangul syllable `tools/subset_font_ko.py` (`font_subset_ko`). A gameplay option also needs `options`
+  is), a new Hangul syllable `tools/subset_font_ko.py` (`font_subset_ko`), a new character of the Chinese
+  table `tools/subset_font_zh.py` (`font_subset_zh`). A gameplay option also needs `options`
   (`port/game/test/options_test.c`).
 - A new config key: `config` (the reader, writer and precedence, `port/config/test/config_test.c`),
   `host_config` when `ico-pc.ini` maps it (`port/platform/host_config.c`, `ini_map`), `settings`
