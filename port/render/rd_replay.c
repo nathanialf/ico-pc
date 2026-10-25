@@ -1635,10 +1635,12 @@ static void msaaEnd(struct Replay *r, int cause)
     const bool rule = s_ms.colorLive && s_ms.depthLive && g_rd.fs[RD_FS_MSAA_RESOLVE].id;
     rd__perf_pass(s_cl, RD_PERF_PASS_MSAA, RD_TARGET_SCENE + 1u, ts->tw, ts->th, RD_PERF_POST_MSAA);
     rd__perf_post(s_cl, RD_PERF_POST_MSAA); /* the resolves' GPU time */
-    if (rule) {
-        rd__msaa_resolve(s_cl, ts, s_ms.color, &s_ms.colorState, s_ms.depth, &s_ms.depthState,
-                         s_ms.samples, s_ms.hasClear, s_ms.clearDepth);
-    } else {
+    /* the rule's pass, or (its pipeline or group not made: rd__msaa_resolve
+     * logs it once and records nothing) the colour resolve and the depth
+     * resolve */
+    if (!rule ||
+        !rd__msaa_resolve(s_cl, ts, s_ms.color, &s_ms.colorState, s_ms.depth, &s_ms.depthState,
+                          s_ms.samples, s_ms.hasClear, s_ms.clearDepth)) {
         if (s_ms.colorLive) {
             rd__transition(s_cl, s_ms.color, &s_ms.colorState, RHI_STATE_COPY_SRC);
             rd__transition(s_cl, ts->color, &ts->colorState, RHI_STATE_COPY_DST);
