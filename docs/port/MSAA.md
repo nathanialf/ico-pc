@@ -112,3 +112,26 @@ than without anti-aliasing, the silhouettes still anti-aliased), beside the epoc
 `rd_crack_msaa` (`port/render/test/rd_crack_test.c` `msaa`): along the crack the MSAA4 picture
 holds at most 5 % of the clear's-depth texels of the frame without anti-aliasing, and the slit
 wider than a pixel keeps the clear's fog.
+
+## Measurements
+
+Lavapipe (Mesa's CPU Vulkan driver, the only GPU in the build container) on the issue-102 dump
+(`frame-20261015-161933-v4251.rddump`, 1376x896 at Enhanced 2x), `rd_replay_tool ... --stats
+--pass-times`, three runs each, the machine otherwise loaded by one agent (load average 2.4-3.4):
+
+| --aa | the resolve | `gpu:` total |
+| --- | --- | --- |
+| before (two resolves a picture, 2026-10-23) msaa4 | `MSAA resolve 2.0`: pass 4 colour resolve 9.1-9.9 ms, pass 6 depth resolve 7.9-8.4 ms (17.3 ms together) | 539-546 ms |
+| after, msaa4 | `MSAA resolve 1.0`: pass 5, one draw, 31.3-34.7 ms | 803-850 ms |
+| after, off | no resolve | 604-738 ms |
+
+On the CPU driver the one covered-majority pass costs about twice the two native resolves it
+replaces: `vkCmdResolveImage` is a copy there, while `msaa_resolve_ps` reads four colour and four
+depth samples per pixel and takes the integer mean. That is the wrong machine to judge it on: on a
+GPU a 1376x896 fullscreen pass with eight loads per pixel is a fraction of a millisecond, and
+the saving is the second resolve, the stencil clear's extra pass and the fog reading a depth
+that no longer holds the clear along cracks. The real measure is the 10 s summary on a player's
+machine (`window: msaa: N samples, resolves R per replay ...` and the `effects:` line's
+`MSAA resolve` entry): R must read 1.0 on gameplay frames (the double resolve read 1.0-1.8), and
+the entry's cost is the number to compare between releases. Lavapipe offers 1 and 4 samples
+only, so `--aa msaa2` draws as off there; the MSAA 2x numbers come from the rc on a Mac or a PC.
