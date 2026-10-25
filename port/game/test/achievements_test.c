@@ -24,6 +24,23 @@
 #include "popup.h"
 #include "region.h" /* port/core: the selected disc and its keys */
 #define R (ico_region_cur())
+/* the stages the achievements name, the selected disc's (region.h
+   ach_stages, in achievements.c's AS_* order; each disc's row resolved by
+   its stageData name: gate st04a, grave st18a, windmill st09a, symmetry_L
+   st04b, taki st02a, gondola st20a, watertower st10r, symmetry_R st05b,
+   cliff st22a, queen st25a, beach st27a) */
+#define ST_GATE (R->ach_stages[0])
+#define ST_GRAVE (R->ach_stages[1])
+#define ST_WINDMILL (R->ach_stages[2])
+#define ST_SYMMETRY_L (R->ach_stages[3])
+#define ST_WATERFALL (R->ach_stages[4])
+#define ST_GONDOLA (R->ach_stages[5])
+#define ST_WATERTOWER (R->ach_stages[6])
+#define ST_SYMMETRY_R (R->ach_stages[7])
+#define ST_CLIFF (R->ach_stages[8])
+#define ST_QUEEN (R->ach_stages[9])
+#define ST_BEACH (R->ach_stages[10])
+_Static_assert(ICO_REGION_ACH_STAGES == 11, "the eleven stages above, achievements.c's AS_*");
 #include "strings.h"
 
 static int failures;
@@ -151,10 +168,11 @@ static IcoAchState st(const char *id)
     return ico_ach_state(i);
 }
 
-/* a new game from the title: stage 1, then gflag 382 */
+/* a new game from the title: the title's stage (1 on every disc), then the
+   disc's New Game flag (382 on the European disc) */
 static void new_game(void)
 {
-    g.stage_no = 1;
+    g.stage_no = R->stage_title;
     flag(R->gflag_new_game, 0);
     ticks(1);
     flag(R->gflag_new_game, 1);
@@ -219,7 +237,7 @@ static void test_view(void)
     int n;
 
     start("view");
-    g.stage_no = 15;
+    g.stage_no = ST_WINDMILL;
     g.stage_name = "st09a (WINDMILL)";
     g.game_clear = 1;
     g.mc_preview[2] = 50 * 3725; /* frames at 50 a second: 1 h 2 min 5 s */
@@ -229,7 +247,7 @@ static void test_view(void)
     flag(100, 1);
     ticks(1);
     CHECK(ico_gs_valid());
-    CHECK(ico_gs_stage() == 15);
+    CHECK(ico_gs_stage() == ST_WINDMILL);
     CHECK(strcmp(ico_gs_stage_name(), "st09a (WINDMILL)") == 0);
     CHECK(ico_gs_stage_entered());
     CHECK(ico_gs_flag(100) && ico_gs_flag_rose(100) && !ico_gs_flag(101));
@@ -510,22 +528,39 @@ static void test_each(void)
     g.girl_present = 1;
     EXPECT_UNLOCK("hand_in_hand", (g.hand_held = 1, ticks(1)));
     g.hand_held = 0;
-    EXPECT_UNLOCK("gate", stage(11));
-    EXPECT_UNLOCK("windmill", stage(15));
-    EXPECT_UNLOCK("graveyard", stage(13));
-    EXPECT_UNLOCK("waterfall", stage(22));
-    EXPECT_UNLOCK("gondola", stage(25));
-    EXPECT_UNLOCK("water_tower", stage(26));
-    EXPECT_UNLOCK("cliff", stage(31));
-    stage(18);
+    EXPECT_UNLOCK("gate", stage(ST_GATE));
+    EXPECT_UNLOCK("windmill", stage(ST_WINDMILL));
+    EXPECT_UNLOCK("graveyard", stage(ST_GRAVE));
+    EXPECT_UNLOCK("waterfall", stage(ST_WATERFALL));
+    EXPECT_UNLOCK("gondola", stage(ST_GONDOLA));
+    EXPECT_UNLOCK("water_tower", stage(ST_WATERTOWER));
+    EXPECT_UNLOCK("cliff", stage(ST_CLIFF));
+    stage(ST_SYMMETRY_L);
     CHECK(st("east_and_west") == ICO_ACH_LOCKED);
-    EXPECT_UNLOCK("east_and_west", stage(27));
-    EXPECT_UNLOCK("queen", stage(37));
-    EXPECT_UNLOCK("queen_defeated", (flag(338, 1), ticks(1)));
-    flag(338, 0);
-    EXPECT_UNLOCK("shore", stage(39));
-    EXPECT_UNLOCK("shore_secret", (flag(354, 1), ticks(1)));
-    flag(354, 0);
+    EXPECT_UNLOCK("east_and_west", stage(ST_SYMMETRY_R));
+    EXPECT_UNLOCK("queen", stage(ST_QUEEN));
+    /* the disc's queen flag (st25a.c actSt25aQueenDeadChk: gflagOn 338 on
+       the European, Japanese, Korean and Asian discs, 307 on the North
+       American, 306 on the August 2001 preview, 292 on the June 2001 demo) */
+    EXPECT_UNLOCK("queen_defeated", (flag(R->gflag_queen_dead, 1), ticks(1)));
+    flag(R->gflag_queen_dead, 0);
+    EXPECT_UNLOCK("shore", stage(ST_BEACH));
+    if (R->gflag_beach_secret >= 0) {
+        EXPECT_UNLOCK("shore_secret", (flag(R->gflag_beach_secret, 1), ticks(1)));
+        flag(R->gflag_beach_secret, 0);
+    } else {
+        /* the 2001 discs' actSt27aEndChk sets no flag for a held item
+           (end.c: gflagOn 323, 322 and 308 only, the European arm's
+           gflagOn(354) under GetCharHeldItem 3 is not in them): the
+           European disc's flag does not unlock it (achievements.c logs
+           "this disc has no beach secret" once) */
+        flag(354, 1);
+        ticks(2);
+        CHECK(st("shore_secret") == ICO_ACH_LOCKED);
+        CHECK(file_count("[unlocked.shore_secret]") == 0);
+        flag(354, 0);
+        ticks(1);
+    }
 
     EXPECT_UNLOCK("first_shadow", kills(1));
     kills_until_one_short(25);
@@ -618,7 +653,12 @@ static void test_each(void)
         int i, l;
 
         for (i = 0; i < ico_ach_count(); i++) {
-            CHECK(st(ico_ach_id(i)) == ICO_ACH_UNLOCKED); /* all unlocked above */
+            /* all unlocked above, but the beach secret on a disc without one */
+            if (R->gflag_beach_secret < 0 && strcmp(ico_ach_id(i), "shore_secret") == 0) {
+                CHECK(st(ico_ach_id(i)) == ICO_ACH_LOCKED);
+            } else {
+                CHECK(st(ico_ach_id(i)) == ICO_ACH_UNLOCKED);
+            }
             for (l = 0; l < UI_LANG_COUNT; l++) {
                 CHECK(ui_str_in((UiLang)l, (UiStrId)ico_ach_title_str(i))[0] != '\0');
                 CHECK(ui_str_in((UiLang)l, (UiStrId)ico_ach_desc_str(i))[0] != '\0');
@@ -634,7 +674,7 @@ static void test_suspended(void)
     start("suspended");
     /* developer mode: nothing unlocks, no counter advances, no popup */
     ico_opt_set_developer_mode(1);
-    stage(15);
+    stage(ST_WINDMILL);
     kills(3);
     g.hand_held = 1;
     ticks(5);
@@ -646,12 +686,12 @@ static void test_suspended(void)
     /* switched off in the same run: still suspended */
     ico_opt_set_developer_mode(0);
     stage(16);
-    stage(15);
+    stage(ST_WINDMILL);
     kills(1);
     CHECK(st("windmill") == ICO_ACH_LOCKED && stats().enemies == 0);
     /* a new run without it: progress resumes and unlocks, once */
     new_game();
-    stage(15);
+    stage(ST_WINDMILL);
     kills(1);
     CHECK(st("windmill") == ICO_ACH_UNLOCKED && st("first_shadow") == ICO_ACH_UNLOCKED);
     CHECK(stats().enemies == 1 && file_count("[unlocked.windmill]") == 1);
@@ -660,28 +700,33 @@ static void test_suspended(void)
        of the run, as developer mode does */
     new_game();
     ico_credits_set_active(1);
-    stage(39);
+    stage(ST_BEACH);
     CHECK(st("shore") == ICO_ACH_LOCKED);
     ico_credits_set_active(0);
     stage(38);
-    stage(39);
+    stage(ST_BEACH);
     CHECK(st("shore") == ICO_ACH_LOCKED);
     new_game();
-    stage(39);
+    stage(ST_BEACH);
     CHECK(st("shore") == ICO_ACH_UNLOCKED);
     /* start_stage suspends too */
 #ifndef _WIN32
     new_game();
-    setenv("ICO_START_STAGE", "37", 1);
-    stage(37);
+    {
+        char queen[16];
+
+        snprintf(queen, sizeof(queen), "%d", ST_QUEEN);
+        setenv("ICO_START_STAGE", queen, 1);
+    }
+    stage(ST_QUEEN);
     kills(1);
     CHECK(st("queen") == ICO_ACH_LOCKED && stats().enemies == 1);
     unsetenv("ICO_START_STAGE");
     ticks(1);
-    stage(37);
+    stage(ST_QUEEN);
     CHECK(st("queen") == ICO_ACH_LOCKED); /* the run is still suspended */
     new_game();
-    stage(37);
+    stage(ST_QUEEN);
     CHECK(st("queen") == ICO_ACH_UNLOCKED);
 #endif
 }
@@ -692,12 +737,12 @@ static void test_yorda_safe_counts(void)
     start("yorda_safe");
     new_game();
     ico_opt_set_yorda_safe(1);
-    stage(11);
+    stage(ST_GATE);
     CHECK(st("gate") == ICO_ACH_UNLOCKED);
     kills(25);
     CHECK(stats().enemies == 25 && st("shadows_25") == ICO_ACH_UNLOCKED);
-    stage(18);
-    stage(27);
+    stage(ST_SYMMETRY_L);
+    stage(ST_SYMMETRY_R);
     CHECK(st("east_and_west") == ICO_ACH_UNLOCKED);
     CHECK(file_count("[unlocked.gate]") == 1);
     CHECK(!ico_gs_run_suspended());
@@ -717,8 +762,8 @@ static void test_persistence(void)
     start("persist");
     new_game();
     g.mc_preview[2] = 50 * 754;
-    stage(11);
-    stage(15);
+    stage(ST_GATE);
+    stage(ST_WINDMILL);
     kills(3);
     save_on(77);
     g.girl_present = 1;
@@ -753,7 +798,7 @@ static void test_persistence(void)
     /* unlocked ones stay unlocked: no second record, no popup */
     s_pushes = 0;
     ico_gs_set_sampler(sampler);
-    g.stage_no = 11;
+    g.stage_no = ST_GATE;
     ticks(2);
     CHECK(s_pushes == 0);
     CHECK(file_count("[unlocked.gate]") == 1);
@@ -807,7 +852,7 @@ static void test_run_slots(void)
     start("runslots");
     new_game();
     opening_parts(0, 0x07u);
-    g.stage_no = 11;
+    g.stage_no = ST_GATE;
     ico_gs_signal(ICO_GS_EV_YORDA_GRABBED, 5);
     ico_gs_signal(ICO_GS_EV_GAME_OVER, 0);
     ico_gs_signal(ICO_GS_EV_GAME_OVER, 0);
@@ -914,7 +959,7 @@ static void test_run_counts(void)
 
     start("runcounts");
     new_game();
-    g.stage_no = 11;
+    g.stage_no = ST_GATE;
     ticks(1);
     kills(3);
     CHECK(ico_gs_run_enemies() == 3 && ico_gs_enemies_killed() == 3);
@@ -944,12 +989,12 @@ static void test_run_counts(void)
     CHECK(ico_gs_run_enemies() == 4);
 
     /* the title ends the run; the session's counts stay */
-    stage(1);
+    stage(R->stage_title);
     CHECK(ico_gs_run_saves() == 0 && ico_gs_run_enemies() == 0);
     CHECK(ico_gs_saves() == 0 && ico_gs_enemies_killed() == 1);
     /* a New Game starts from nothing */
     new_game();
-    g.stage_no = 11;
+    g.stage_no = ST_GATE;
     ticks(1);
     kills(2);
     save_on(331);
@@ -1001,7 +1046,7 @@ static void test_run_counts(void)
         CHECK(ico_ach_slot_loaded(7, 71u) == 1);
         new_game();
         CHECK(!ico_gs_run_partial());
-        g.stage_no = 11;
+        g.stage_no = ST_GATE;
         ticks(1);
         save_slot(7, 72u);
         CHECK(ico_ach_slot_loaded(7, 72u) == 1 && !ico_gs_run_partial());
@@ -1009,6 +1054,20 @@ static void test_run_counts(void)
 }
 
 /* --- the two discs ------------------------------------------------------------ */
+
+/* a visited set as achievements.toml writes it (achievements.c hex_set: the
+   128 bits as 32 hex digits, stage 0 the lowest bit) with stages a, b, c */
+static void stages_hex(char *out, size_t size, int a, int b, int c)
+{
+    unsigned long long w[2] = {0, 0};
+    const int s3[3] = {a, b, c};
+    int i;
+
+    for (i = 0; i < 3; i++) {
+        w[s3[i] >> 6] |= 1ull << (s3[i] & 63);
+    }
+    snprintf(out, size, "%016llx%016llx", w[1], w[0]);
+}
 
 /* The file holds both discs: each disc's visited stages and per-slot runs
    are its own keys (its stage rows and its saves are its own), the
@@ -1024,7 +1083,14 @@ static void test_discs(void)
     const char *otherPfx = ico_region_at(other)->key_prefix;
     char key[96];
     char want[128];
+    char mine[40];
     IcoToml *t;
+
+    /* the set this disc writes below: stage 2 (fresh_world), its gate and
+       its windmill; 0x8804 with the European numbers 2, 11 and 15 */
+    stages_hex(mine, sizeof(mine), 2, 11, 15);
+    CHECK(strcmp(mine, "00000000000000000000000000008804") == 0);
+    stages_hex(mine, sizeof(mine), 2, ST_GATE, ST_WINDMILL);
 
     /* the popup gap is 5 s of Main ticks: 125 at 25 Hz (the European
        disc's 50 Hz mode), 150 at 30 Hz (60 Hz: the Japanese disc, and the
@@ -1035,9 +1101,9 @@ static void test_discs(void)
     ticks(1);
     CHECK(ico_gs_tick_hz() == 30 && ico_ach_popup_gap_ticks() == 150);
     s_pushes = 0;
-    g.stage_no = 11; /* gate: shown now */
+    g.stage_no = ST_GATE; /* gate: shown now */
     ticks(1);
-    g.stage_no = 13; /* grave: waits the gap */
+    g.stage_no = ST_GRAVE; /* grave: waits the gap */
     ticks(1);
     CHECK(s_pushes == 1 && ico_ach_pending_popups() == 1);
     ticks(150 - 2);
@@ -1077,20 +1143,20 @@ static void test_discs(void)
     ticks(1);
     /* one set of unlocks: the other disc's gate is this disc's too */
     CHECK(st("gate") == ICO_ACH_UNLOCKED);
-    g.stage_no = 11;
+    g.stage_no = ST_GATE;
     ticks(2);
     CHECK(s_pushes == 0);
     /* the other disc's slot 3 is not this disc's slot 3 */
     CHECK(ico_ach_slot_loaded(3, 4660u) == 0);
-    /* this disc visits stage 15 and saves slot 5 */
-    g.stage_no = 15;
+    /* this disc visits its windmill and saves slot 5 */
+    g.stage_no = ST_WINDMILL;
     ticks(1);
     CHECK(st("windmill") == ICO_ACH_UNLOCKED);
     save_slot(5, 85u);
     ico_ach_flush();
-    /* its own keys: stages 2, 11 and 15 (0x8804) in its set, the other
-       disc's set and slot as they were */
-    snprintf(want, sizeof(want), "\nstages%s = \"00000000000000000000000000008804\"", meSfx);
+    /* its own keys: stages 2, its gate and its windmill in its set, the
+       other disc's set and slot as they were */
+    snprintf(want, sizeof(want), "\nstages%s = \"%s\"", meSfx, mine);
     CHECK(file_count(want) == 1);
     snprintf(want, sizeof(want), "\nstages%s = \"00000000000000000000000000000001\"", otherSfx);
     CHECK(file_count(want) == 1);
@@ -1129,7 +1195,7 @@ static void test_discs(void)
     ico_ach_flush();
     snprintf(want, sizeof(want), "\nstages%s = \"00000000000000000000000000000009\"", otherSfx);
     CHECK(file_count(want) == 1);
-    snprintf(want, sizeof(want), "\nstages%s = \"00000000000000000000000000008804\"", meSfx);
+    snprintf(want, sizeof(want), "\nstages%s = \"%s\"", meSfx, mine);
     CHECK(file_count(want) == 1);
     ico_region = me;
     remove(s_path);
@@ -1145,11 +1211,11 @@ static void test_popups(void)
     start("popups");
     s_pushes = 0;
     /* three at once: one popup now, the next after the gap */
-    g.stage_no = 11;
+    g.stage_no = ST_GATE;
     ticks(1);
-    g.stage_no = 15;
+    g.stage_no = ST_WINDMILL;
     ticks(1);
-    g.stage_no = 13;
+    g.stage_no = ST_GRAVE;
     ticks(1);
     CHECK(s_pushes == 1);
     CHECK(strcmp(s_last_title, ui_str_in(UI_LANG_EN, UI_STR_ACH_GATE)) == 0);
@@ -1169,7 +1235,7 @@ static void test_popups(void)
     CHECK(s_pushes == 3 && ico_ach_pending_popups() == 0);
     /* the language at popup time */
     ui_set_language(UI_LANG_DE);
-    g.stage_no = 22;
+    g.stage_no = ST_WATERFALL;
     ticks(ico_ach_popup_gap_ticks());
     CHECK(strcmp(s_last_title, "Der Wasserfall") == 0);
     ui_set_language(UI_LANG_EN);
@@ -1211,7 +1277,7 @@ static void test_popups(void)
     s_pushes = 0;
     fresh_world();
     ticks(1);
-    g.stage_no = 31;
+    g.stage_no = ST_CLIFF;
     ticks(ico_ach_popup_gap_ticks() * 2);
     CHECK(st("cliff") == ICO_ACH_UNLOCKED);
     CHECK(s_pushes == 0 && ico_ach_pending_popups() == 0);
