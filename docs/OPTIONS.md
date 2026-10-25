@@ -420,7 +420,9 @@ Options once you have finished the game:
 
 The list of achievements and what each one asks. Secret ones show as ???
 until you earn them. You cannot earn achievements while Developer mode is
-on.
+on. One secret achievement cannot be earned on the North American disc,
+the August 2001 preview or the June 2001 demo: those versions of the game
+do not have what it asks for.
 
 **Achievement pop-ups**, the first row of the list, is on until you turn
 it off. Off stops the pop-up when you earn an achievement. You still earn
@@ -438,7 +440,8 @@ Character Customization, Game variants and Achievement pop-ups.
 - **Models:** the model viewer. Look closely at the characters and some
   objects, and play their animations. [The viewer's controls](CONTROLS.md#look-at-the-models).
 - **Credits:** watch the ending credits again. It unlocks once you have
-  finished the game.
+  finished the game. The June 2001 magazine demo has no ending credits on
+  its disc, so Credits does not play on it.
 - **Character Customization:** change the colours of Ico and Yorda.
   [Details below](#character-customization).
 - **Game variants:** change how the game plays.
