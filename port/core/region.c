@@ -88,13 +88,43 @@ int ico_region_key_suffixed(const char *base, char *out, int size)
 
 int ico_region_stage(int pal_stage)
 {
-    /* memoryPAL (58) and memoryPAL576 (59): the European table's only rows
-       the Japanese one lacks (the Korean and Asian discs' stageData is the
-       Japanese one) */
-    if ((ico_region == ICO_REGION_JPN || ico_region == ICO_REGION_KOR ||
-         ico_region == ICO_REGION_CN) &&
-        pal_stage >= 58) {
-        return pal_stage - 2;
+    if (ico_region == ICO_REGION_PAL || pal_stage < 0) {
+        return pal_stage;
     }
-    return pal_stage;
+    if (ico_region == ICO_REGION_JUN26) {
+        /* the June 2001 demo's own order (its stageData, 103 rows): rows
+           0..49 (03t4demo) as PAL; then its 04a4demo (50), which PAL has
+           not, so 04b4demo .. memory (PAL 50..57) are one higher; no
+           memoryPAL, memoryPAL576 (58, 59) or staff3 (62); staff1, staff2
+           (PAL 60, 61) at 59, 60, end (63) at 61, temp .. itou_boss (64..86)
+           two lower; no itou_st03t (87); boss_test .. the E3 rows (88..105)
+           three lower */
+        if (pal_stage <= 49) {
+            return pal_stage;
+        }
+        if (pal_stage <= 57) {
+            return pal_stage + 1;
+        }
+        if (pal_stage == 60 || pal_stage == 61) {
+            return pal_stage - 1;
+        }
+        if (pal_stage == 63) {
+            return 61;
+        }
+        if (pal_stage >= 64 && pal_stage <= 86) {
+            return pal_stage - 2;
+        }
+        if (pal_stage >= 88 && pal_stage <= 105) {
+            return pal_stage - 3;
+        }
+        return -1; /* 58, 59, 62, 87: no row on the demo */
+    }
+    /* the Japanese, Korean and Asian discs, the North American disc and the
+       August 2001 preview: the 104-row stageData without memoryPAL (58) and
+       memoryPAL576 (59), the European table's only rows they lack, so the
+       rows from staff1 on are two lower */
+    if (pal_stage == 58 || pal_stage == 59) {
+        return -1;
+    }
+    return pal_stage >= 60 ? pal_stage - 2 : pal_stage;
 }

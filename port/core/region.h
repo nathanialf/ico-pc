@@ -228,10 +228,12 @@ int ico_region_key_prefixed(const char *section, const char *base, char *out, in
 int ico_region_key_suffixed(const char *base, char *out, int size);
 
 /* A stageData row the port names by its European number, on the selected
-   disc: rows 0..57 are the same on both, and the Japanese table has no
-   memoryPAL (58) or memoryPAL576 (59), so the rows from staff1 on are two
-   lower there (58 and 59 themselves have no Japanese row; the port names
-   neither). */
+   disc, matched by stage name: rows 0..57 are the same on the European,
+   Japanese, Korean, Asian, North American and August 2001 discs, and those
+   tables have no memoryPAL (58) or memoryPAL576 (59), so the rows from
+   staff1 on are two lower there; the June 2001 demo has an order of its own
+   (region.c). -1 for a row the disc has not (58 and 59 off the European
+   disc; staff3 and itou_st03t on the demo too). */
 int ico_region_stage(int pal_stage);
 
 #ifdef __cplusplus
