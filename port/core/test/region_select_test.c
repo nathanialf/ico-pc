@@ -172,9 +172,21 @@ static void test_consistency(void)
         const IcoRegionInfo *r = ico_region_at(i);
         int g;
 
-        CHECK(strcmp(r->pack_serial, r->disc_id) == 0);
-        /* the save directory: B + E (Europe) or I (Japan, Korea) + the serial + "ico" */
-        CHECK(strlen(r->mc_save_dir) == 15 && strncmp(r->mc_save_dir + 2, r->disc_id, 10) == 0 &&
+        const int aug6 = strcmp(r->slug, "aug6") == 0;
+        const int jun26 = strcmp(r->slug, "jun26") == 0;
+
+        /* the pack folder is the disc's serial (PCSX2's); the August 2001
+           preview has no product code and shares the North American disc's
+           folder, SCUS-97113 (region_aug6.c) */
+        CHECK(strcmp(r->pack_serial, aug6 ? "SCUS-97113" : r->disc_id) == 0);
+        /* the save directory: B + E (Europe), I (Japan, Korea, Asia, the demo) or A (the
+           North American disc and the preview) + the serial + "ico".  The preview
+           (BASCUS-97113ico) and the June 2001 demo (BISCUS-97113ico) keep the
+           North American game's serial in the name (mcard.c's own literal), not
+           the demo disc's SCUS-97158 */
+        CHECK(strlen(r->mc_save_dir) == 15 && r->mc_save_dir[0] == 'B' &&
+              strchr("EIA", r->mc_save_dir[1]) != NULL &&
+              strncmp(r->mc_save_dir + 2, jun26 ? "SCUS-97113" : r->pack_serial, 10) == 0 &&
               strcmp(r->mc_save_dir + 12, "ico") == 0);
         CHECK(r->stage_credits < r->stage_count && r->stage_end < r->stage_count &&
               r->start_stage_max == r->stage_count - 1 && r->last_shipped_stage < r->stage_count);
