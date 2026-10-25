@@ -78,6 +78,8 @@ extern int mpegPlayReturnStage;
 extern int optionScreenMode, optionControlType, girlControlMode;
 extern int iosPadActRequestEnable;
 extern int s_resets, s_sounds[3], s_leaves;
+/* la_host_resume_play calls (Options closed into the game) */
+extern int s_resumes;
 extern int s_newGames;
 extern int s_mcSaveSlots; /* 1: the Save screen (empty slots pickable), 0: Load */
 extern int s_outputMode, s_outputSets;
