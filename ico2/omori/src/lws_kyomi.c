@@ -94,6 +94,10 @@ GObj *CreateKyomiGObj(int no)
 /* the hint timers, a window onto the per-hint elapsed-time array */
 static float *hintTimers; /* derived name */
 
+/* PC port: port/game/variants.h: 0 with Options > Extras > Game variants > No
+   hints on (and on the discs without hints) */
+extern int ico_hints_on(void);
+
 static void LwsKyomiGeo_ntscaug6jun26(GObj *gobj)
 {
     brainSubLevelGop(gobj, 0.1f);
@@ -118,6 +122,13 @@ void LwsKyomiGeo(GObj *gobj)
             }
             break;
         }
+    }
+    /* PC port: No hints: the hint is never the stage's waiting one, so its
+       timer stands still and a hint animation already playing is stopped
+       (below); the hints' finished and asleep flags, which the stage
+       scripts set and the save keeps, are untouched */
+    if (!ico_hints_on()) {
+        hint->flags &= ~1;
     }
     if (hint->no != -1) {
         fin = stage_CheckAnimationFinish(hint->anim);
