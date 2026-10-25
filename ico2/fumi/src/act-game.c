@@ -2348,7 +2348,7 @@ static void ACTGame_BeforeFunc_ntsc(GObj *self)
         ACTGame_GirlBeforeFunc(self);
     }
 
-    if (((struct GObj *)self)->labelId == PAL_JPNKORCN(0xEAD, 3734)) {
+    if (((struct GObj *)self)->labelId == 3453) {
         if ((60 - systemStatus[0] * 10) / systemStatus[1] * 2 < s->frame) {
             if (!(((char *)girlGObj) != 0 && GOBJ_ACT(((char *)girlGObj))->actMode == 107 &&
                   GOBJ_ACT(girlGObj)->carrier == self)) {
