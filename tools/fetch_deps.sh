@@ -41,6 +41,9 @@
 #   deps/noto-sans-kr/     Noto Sans KR (SIL OFL 1.1), the variable font the
 #                          port's Korean text subset is made from
 #                          (tools/subset_font_ko.py); never built or shipped
+#   deps/noto-sans-tc/     Noto Sans TC (SIL OFL 1.1), the variable font the
+#                          port's Chinese text subset is made from
+#                          (tools/subset_font_zh.py); never built or shipped
 #   deps/spirv-cross/      SPIRV-Cross (Apache-2.0 OR MIT) built from source at
 #                          the Vulkan SDK tag: the shader toolchain's SPIR-V to
 #                          GLSL translator for the OpenGL backend
@@ -61,12 +64,13 @@
 #   LIBMPEG2_TAG, LIBMPEG2_COMMIT, LIBMPEG2_TAR_SHA256
 #   LIBCHDR_TAG, LIBCHDR_COMMIT, LIBCHDR_TAR_SHA256, ZSTD_LICENSE_SHA256
 #   SKIP_SDL3_LINUX=1, SKIP_SDL3_MINGW=1, SKIP_VALIDATION_LAYER=1, SKIP_DXC=1, SKIP_SPIRV_CROSS=1,
-#   SKIP_LIBMPEG2=1, SKIP_LIBCHDR=1, SKIP_NOTO_JP=1, SKIP_NOTO_KR=1,
+#   SKIP_LIBMPEG2=1, SKIP_LIBCHDR=1, SKIP_NOTO_JP=1, SKIP_NOTO_KR=1, SKIP_NOTO_TC=1,
 #   SKIP_APPIMAGE=1
 #   APPIMAGETOOL_VERSION, APPIMAGETOOL_SHA256, APPIMAGE_RUNTIME_VERSION,
 #   APPIMAGE_RUNTIME_SHA256 (the host architecture's assets)
 #   NOTO_JP_COMMIT, NOTO_JP_SHA256, NOTO_JP_OFL_SHA256
 #   NOTO_KR_COMMIT, NOTO_KR_SHA256, NOTO_KR_OFL_SHA256
+#   NOTO_TC_COMMIT, NOTO_TC_SHA256, NOTO_TC_OFL_SHA256
 #   DEB_SNAPSHOT     snapshot.debian.org fallback for the Debian packages
 #   ICO_CMAKE        the CMake used for the SDL3 source build (default: the
 #                    pinned one in tools/toolchain/cmake, else the PATH's)
@@ -863,6 +867,33 @@ else
     cp "$TMP/NotoSansKR-OFL.txt" "$NOTO_KR_DIR/OFL.txt"
     echo "$NOTO_KR_COMMIT" > "$NOTO_KR_DIR/.ico-release"
     echo "==> Noto Sans KR at $NOTO_KR_DIR"
+fi
+
+# --- 8b. Noto Sans TC (the port's Chinese text) --------------------------------
+# google/fonts (SIL OFL 1.1) ofl/notosanstc/NotoSansTC[wght].ttf and its
+# OFL.txt at commit b950a7257470b900078f2bf3223823a8602de7e1 (2022-12-09,
+# "Noto Sans TC Hotfix2", the file's last change): the source
+# tools/subset_font_zh.py makes the vendored subset
+# port/assets/fonts/NotoSansTC-Regular-subset.ttf from; the build reads only
+# the subset, so a build never needs this download.
+NOTO_TC_COMMIT="${NOTO_TC_COMMIT:-b950a7257470b900078f2bf3223823a8602de7e1}"
+NOTO_TC_SHA256="${NOTO_TC_SHA256:-864727d210d54f2537bbe23b3a839436c3992af72de9322af5270897246bd44f}"
+NOTO_TC_OFL_SHA256="${NOTO_TC_OFL_SHA256:-1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9}"
+NOTO_TC_DIR="$DEST/noto-sans-tc"
+if [[ "${SKIP_NOTO_TC:-0}" == "1" ]]; then
+    echo "==> SKIP_NOTO_TC=1; not fetching Noto Sans TC"
+elif stamped "$NOTO_TC_DIR" "$NOTO_TC_COMMIT"; then
+    echo "==> Noto Sans TC already at $NOTO_TC_DIR"
+else
+    base="https://raw.githubusercontent.com/google/fonts/${NOTO_TC_COMMIT}/ofl/notosanstc"
+    fetch "${base}/NotoSansTC%5Bwght%5D.ttf" "$NOTO_TC_SHA256" "$TMP/NotoSansTC-wght.ttf"
+    fetch "${base}/OFL.txt" "$NOTO_TC_OFL_SHA256" "$TMP/NotoSansTC-OFL.txt"
+    rm -rf "$NOTO_TC_DIR"
+    mkdir -p "$NOTO_TC_DIR"
+    cp "$TMP/NotoSansTC-wght.ttf" "$NOTO_TC_DIR/NotoSansTC[wght].ttf"
+    cp "$TMP/NotoSansTC-OFL.txt" "$NOTO_TC_DIR/OFL.txt"
+    echo "$NOTO_TC_COMMIT" > "$NOTO_TC_DIR/.ico-release"
+    echo "==> Noto Sans TC at $NOTO_TC_DIR"
 fi
 # --- 9. SPIRV-Cross (build tool) ------------------------------------------------
 # KhronosGroup/SPIRV-Cross (Apache-2.0 OR MIT) at the Vulkan SDK tag the
