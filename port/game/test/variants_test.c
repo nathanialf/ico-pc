@@ -11,7 +11,8 @@
  * disc, the enemy row reader on the disc's tables (ico2/sugipon/src/
  * enemyKind.c, compiled in: the disc's own row while nothing is chosen,
  * American = the USA life with the disc's dodge, aggression = the battle
- * type, never past the table: the June 2001 demo's 18 rows) and the restart
+ * type, never past the table: the June 2001 demo's 18 rows, which are never
+ * mapped by index; American is not offered on the demo: test_offered) and the restart
  * life's playthrough index (a copy of enemy_act.c getEnemyRestartLife's).
  *
  *   variants_test DIR [REGION]
@@ -36,6 +37,12 @@ static int failures;
     } while (0)
 
 static char s_path[512];
+
+/* the June 2001 demo is selected (American is not offered there) */
+static int on_jun26(void)
+{
+    return strcmp(ico_region_cur()->slug, "jun26") == 0;
+}
 
 /* config.toml with TEXT as its body (NULL: no file), options reloaded */
 static void use_config(const char *text)
@@ -119,6 +126,9 @@ static void test_round_trip(void)
         for (int want = 0; want < n; want++) {
             int v;
 
+            if (!ico_variant_offered((IcoVariantId)id, want)) {
+                continue; /* American on the June 2001 demo: test_offered */
+            }
             use_config(NULL);
             v = ico_variant_get((IcoVariantId)id);
             /* step forward to value WANT (wrapping); the shipped value needs
@@ -168,7 +178,9 @@ static void test_file_words(void)
 {
     use_config("[variants]\nshade_toughness = \"american\"\naggression = \"bold_quick\"\n"
                "barrier_hits = 7\none_hit = true\nno_hints = true\n");
-    CHECK(ico_variant_shade_toughness() == ICO_TOUGHNESS_AMERICAN);
+    /* the June 2001 demo reads American as Original (test_offered) */
+    CHECK(ico_variant_shade_toughness() ==
+          (on_jun26() ? ICO_TOUGHNESS_ORIGINAL : ICO_TOUGHNESS_AMERICAN));
     CHECK(ico_variant_aggression() == ICO_AGGRESSION_BOLD_QUICK);
     CHECK(ico_variant_barrier_hits() == 7);
     CHECK(ico_variant_one_hit() == 1 && ico_variant_no_hints() == 1);
@@ -365,30 +377,49 @@ static void test_enemy_def(void)
                                 enemyKindRows_ntsc, -1) == &enemyKind_pal[44]);
     CHECK(enemyKind_jun26[17].model == 1425 && enemyKind_jun26[0].model == 12);
     /* American on the European table: the USA life, scale and fly and battle
-       types, the European model, dodge and parameter row */
+       types, the European model, dodge and parameter row (not on the June 2001
+       demo, where American reads as Original: the disc's rows) */
     ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_AMERICAN);
-    r = ico_variant_enemy_def(enemyKind_pal, enemyKindRows_pal, enemyKind_ntsc, enemyKindRows_ntsc,
-                              1);
-    CHECK(r != &enemyKind_pal[1]);
-    CHECK(r->life == 400.0f && enemyKind_pal[1].life == 200.0f);
-    CHECK(r->dodge == 350.0f && r->paraIndex == 1 && r->model == 22 && r->particle == -1);
-    CHECK(r->float0C == enemyKind_pal[1].float0C);
-    r = ico_variant_enemy_def(enemyKind_pal, enemyKindRows_pal, enemyKind_ntsc, enemyKindRows_ntsc,
-                              2);
-    CHECK(r->scale == 0.9f && r->life == 400.0f && r->dodge == 350.0f);
-    r = ico_variant_enemy_def(enemyKind_pal, enemyKindRows_pal, enemyKind_ntsc, enemyKindRows_ntsc,
-                              5);
-    CHECK(r->life == 400.0f && r->flyType == enemyKind_ntsc[5].flyType &&
-          r->battleType == enemyKind_ntsc[5].battleType && r->dodge == 400.0f);
-    /* a row of the disc's "no model" stays whole */
-    CHECK(ico_variant_enemy_def(enemyKind_pal, enemyKindRows_pal, enemyKind_ntsc,
-                                enemyKindRows_ntsc, 17) == &enemyKind_pal[17]);
-    CHECK(ico_variant_enemy_def(enemyKind_jun26, enemyKindRows_jun26, enemyKind_ntsc,
-                                enemyKindRows_ntsc, 14) == &enemyKind_jun26[14]);
-    /* the June 2001 demo's Shadow rows take the USA row of their index */
-    r = ico_variant_enemy_def(enemyKind_jun26, enemyKindRows_jun26, enemyKind_ntsc,
-                              enemyKindRows_ntsc, 1);
-    CHECK(r->life == 400.0f && r->model == 13);
+    if (on_jun26()) {
+        CHECK(ico_variant_shade_toughness() == ICO_TOUGHNESS_ORIGINAL);
+        for (int k = 0; k < enemyKindRows_pal; k++) {
+            CHECK(ico_variant_enemy_def(enemyKind_pal, enemyKindRows_pal, enemyKind_ntsc,
+                                        enemyKindRows_ntsc, k) == &enemyKind_pal[k]);
+        }
+        for (int k = 0; k < enemyKindRows_jun26; k++) {
+            CHECK(ico_variant_enemy_def(enemyKind_jun26, enemyKindRows_jun26, enemyKind_ntsc,
+                                        enemyKindRows_ntsc, k) == &enemyKind_jun26[k]);
+        }
+        ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_NO_PLUS);
+        CHECK(ico_variant_enemy_def(enemyKind_jun26, enemyKindRows_jun26, enemyKind_ntsc,
+                                    enemyKindRows_ntsc, 1) == &enemyKind_jun26[1]);
+    } else {
+        r = ico_variant_enemy_def(enemyKind_pal, enemyKindRows_pal, enemyKind_ntsc,
+                                  enemyKindRows_ntsc, 1);
+        CHECK(r != &enemyKind_pal[1]);
+        CHECK(r->life == 400.0f && enemyKind_pal[1].life == 200.0f);
+        CHECK(r->dodge == 350.0f && r->paraIndex == 1 && r->model == 22 && r->particle == -1);
+        CHECK(r->float0C == enemyKind_pal[1].float0C);
+        r = ico_variant_enemy_def(enemyKind_pal, enemyKindRows_pal, enemyKind_ntsc,
+                                  enemyKindRows_ntsc, 2);
+        CHECK(r->scale == 0.9f && r->life == 400.0f && r->dodge == 350.0f);
+        r = ico_variant_enemy_def(enemyKind_pal, enemyKindRows_pal, enemyKind_ntsc,
+                                  enemyKindRows_ntsc, 5);
+        CHECK(r->life == 400.0f && r->flyType == enemyKind_ntsc[5].flyType &&
+              r->battleType == enemyKind_ntsc[5].battleType && r->dodge == 400.0f);
+        /* a row of the disc's "no model" stays whole */
+        CHECK(ico_variant_enemy_def(enemyKind_pal, enemyKindRows_pal, enemyKind_ntsc,
+                                    enemyKindRows_ntsc, 17) == &enemyKind_pal[17]);
+        CHECK(ico_variant_enemy_def(enemyKind_jun26, enemyKindRows_jun26, enemyKind_ntsc,
+                                    enemyKindRows_ntsc, 14) == &enemyKind_jun26[14]);
+        /* the June 2001 demo's 18 rows are kinds of their own (not the USA
+           disc's first 18): never mapped by index, every row the demo's own */
+        for (int k = 0; k < enemyKindRows_jun26; k++) {
+            CHECK(ico_variant_enemy_def(enemyKind_jun26, enemyKindRows_jun26, enemyKind_ntsc,
+                                        enemyKindRows_ntsc, k) == &enemyKind_jun26[k]);
+        }
+        CHECK(enemyKind_jun26[1].model == 13);
+    }
     /* Not tougher later: the disc's rows */
     ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_NO_PLUS);
     CHECK(ico_variant_enemy_def(enemyKind_pal, enemyKindRows_pal, enemyKind_ntsc,
@@ -438,7 +469,45 @@ static void test_restart_life(void)
         CHECK(restart_index(c) == 38);
     }
     ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_AMERICAN);
-    CHECK(restart_index(3) == 38);
+    /* (Original on the June 2001 demo: the factor of the playthrough) */
+    CHECK(restart_index(3) == (on_jun26() ? 41 : 38));
+    use_config(NULL);
+}
+
+/* Shadow toughness American is offered on every disc but the June 2001 demo
+   (its enemy rows are its own): there a config "american" reads as Original,
+   a set of it gives Original, and the row steps Original <-> Not tougher
+   later; every other value of every variant is offered everywhere */
+static void test_offered(void)
+{
+    const int demo = on_jun26();
+
+    CHECK(ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_AMERICAN) == !demo);
+    CHECK(ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_ORIGINAL) == 1);
+    CHECK(ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_NO_PLUS) == 1);
+    CHECK(ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_COUNT) == 0);
+    CHECK(ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, -1) == 0);
+    for (int id = 1; id < ICO_VARIANT_COUNT; id++) {
+        for (int v = 0; v < ico_variant_count((IcoVariantId)id); v++) {
+            CHECK(ico_variant_offered((IcoVariantId)id, v) == 1);
+        }
+    }
+    use_config(NULL);
+    CHECK(ico_variant_step(ICO_VARIANT_SHADE_TOUGHNESS, 1) ==
+          (demo ? ICO_TOUGHNESS_NO_PLUS : ICO_TOUGHNESS_AMERICAN));
+    CHECK(strcmp(ico_config_get_string("variants.shade_toughness", ""),
+                 demo ? "no_plus" : "american") == 0);
+    CHECK(ico_variant_step(ICO_VARIANT_SHADE_TOUGHNESS, 1) ==
+          (demo ? ICO_TOUGHNESS_ORIGINAL : ICO_TOUGHNESS_NO_PLUS));
+    CHECK(ico_variant_step(ICO_VARIANT_SHADE_TOUGHNESS, -1) ==
+          (demo ? ICO_TOUGHNESS_NO_PLUS : ICO_TOUGHNESS_AMERICAN));
+    CHECK(ico_variant_step(ICO_VARIANT_SHADE_TOUGHNESS, -1) == ICO_TOUGHNESS_ORIGINAL);
+    ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_AMERICAN);
+    CHECK(ico_variant_shade_toughness() ==
+          (demo ? ICO_TOUGHNESS_ORIGINAL : ICO_TOUGHNESS_AMERICAN));
+    use_config("[variants]\nshade_toughness = \"american\"\n");
+    CHECK(ico_variant_shade_toughness() ==
+          (demo ? ICO_TOUGHNESS_ORIGINAL : ICO_TOUGHNESS_AMERICAN));
     use_config(NULL);
 }
 
@@ -460,6 +529,7 @@ int main(int argc, char **argv)
     test_hints();
     test_enemy_def();
     test_restart_life();
+    test_offered();
     remove(s_path);
     if (failures != 0) {
         fprintf(stderr, "variants_test: %d failure(s)\n", failures);
