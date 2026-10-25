@@ -486,6 +486,15 @@ that block, as the development build's Motion Viewer plays them (`ico2/sugipon/s
 (`objMenu`)) (`port/game/model_viewer_table.c` (`mv_models`, `mv_blocks`)). Only numbers are in the
 table; the names are the port's strings.
 
+A model's host stage is its European `stageData` row, mapped by stage name on the other discs
+(`ico_region_stage`). On the June 2001 demo, whose `DATA.DF` holds 49 of the retail discs'
+entries, a model whose host stage's pack (`stageData[n].dataFile` + `.DF`) is not in `DATA.DF`
+(`ico_df_has`, `port/data/df_pack.h`) is refused before the stage switch, from the list, from
+Characters and from the character switch (`model_viewer.c` `modelStageOnDisc`; such a stage loads
+nothing and dies building its objects): `model_viewer: the model not opened: "<name>" lives on
+stage N (<stage>), whose pack <FILE>.DF is not in this disc's DATA.DF (SCUS-97158)`, or `... has no
+stage on this disc` for a European row the demo has not. The other discs are not asked.
+
 The list holds the motions of the block the stage can play (`ico_mv_motion_playable`,
 `port/game/model_viewer_motion.c`): a plain motion (`blendKind` 320) needs its data loaded or to be
 the stage's own (`area` 0); a node-blend motion needs every partner of its `blendMotionKind` list
