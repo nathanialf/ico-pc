@@ -4186,6 +4186,17 @@ static void varErrRelease(char *out, size_t n)
     }
 }
 
+/* the game's switches and debug menu opener, as debug_VariableInit binds
+   them (ico_variants_bind_debug), here plain ints and a counter */
+static struct {
+    int oneHit, dodge, battle, demoCam, hand, opens;
+} s_varDbg;
+
+static void varMenuOpen(void)
+{
+    s_varDbg.opens++;
+}
+
 /* the note row starting with prefix, its text on one line contains want */
 static int varNoteHas(const char *prefix, const char *want)
 {
@@ -4206,13 +4217,17 @@ static int varNoteHas(const char *prefix, const char *want)
    every row (the value text, the [variants] key, the saved file), each
    row's note and whether it says achievements go off, the achievements rule,
    and the Debug menu row (hidden without Developer mode; a press marks the
-   menu used and calls the hook, whose stub logs once).  who: the disc */
+   menu used; with nothing bound it says so and Options stays, with the
+   game's opener bound it opens the menu once and Options closes: to the
+   title from the title, into the game, as the pause menu's Back, from the
+   pause menu).  who: the disc; *debugPressed counts the opener's calls over
+   the runs */
 static void testVariantsPage(const char *who, int title, int *debugPressed)
 {
-    static const char *const kLabels[10] = {"Shade toughness",
+    static const char *const kLabels[10] = {"Shadow toughness",
                                             "One hit per swing",
-                                            "Shades never dodge",
-                                            "Shade aggression",
+                                            "Shadows never dodge",
+                                            "Shadow aggression",
                                             "No hints",
                                             "Queen barrier",
                                             "No cutscene look-around",
@@ -4221,7 +4236,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                                             "Back"};
     static const char *const kDefaults[8] = {"Original", "Off",    "Off", "Their own",
                                              "Off",      "5 hits", "Off", "Off"};
-    char p[1100], log[1024];
+    char p[1100], log[4096];
 
     /* the rows are read in English on every disc (the Japanese, Korean and
        Asian discs default to their own text): the config's choice, kept
@@ -4269,7 +4284,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
           "%s: no Debug menu row without Developer mode", who);
     checkPageFits(UI_PAGE_VARIANTS, "Game variants (nine rows)");
 
-    /* Shade toughness: Original, American, Not tougher later, around, both ways */
+    /* Shadow toughness: Original, American, Not tougher later, around, both ways */
     lt_ext_layout(varL)->curItem = lb[0];
     frame(0);
     press(0x2000);
@@ -4289,7 +4304,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
           "%s: Left wraps to Not tougher later", who);
     CHECK(!ico_variants_suspend_achievements(), "%s: Toughness keeps the achievements", who);
     press(0x2000);
-    CHECK(varNoteHas("American: every Shade as tough as on the North American disc",
+    CHECK(varNoteHas("American: every Shadow as tough as on the North American disc",
                      "no tougher on later playthroughs. Achievements stay on."),
           "%s: the toughness note, achievements stay on", who);
 
@@ -4340,7 +4355,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
         int suspends;
     } kSw[] = {
         {1, ICO_VARIANT_ONE_HIT, "variants.one_hit", "Each swing of Ico", 1},
-        {2, ICO_VARIANT_NEVER_DODGE, "variants.never_dodge", "The Shades never step aside", 1},
+        {2, ICO_VARIANT_NEVER_DODGE, "variants.never_dodge", "The Shadows never step aside", 1},
         {4, ICO_VARIANT_NO_HINTS, "variants.no_hints", "Yorda gives no hints", 0},
         {6, ICO_VARIANT_NO_CUTSCENE_LOOK, "variants.no_cutscene_look", "The right stick no longer",
          0},
@@ -4389,7 +4404,8 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     }
 
     /* Developer mode shows the Debug menu row; a press marks it used and
-       calls the hook (ico_variants_open_debug_menu), whose stub logs once */
+       calls the hook (ico_variants_open_debug_menu), which opens the menu
+       through the opener the game binds (debug.c debug_MenuOpen) */
     press(0x10);
     CHECK(settle(exL, 60), "%s: Back to Extras", who);
     ico_opt_set_developer_mode(1);
@@ -4413,24 +4429,56 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, 0);
     CHECK(!ico_variants_suspend_achievements() || ico_opt_developer_mode(),
           "%s: nothing but Developer mode suspends before the press", who);
+    /* nothing bound (no game here): said, and Options stays */
+    ico_variants_bind_debug(NULL, NULL, NULL, NULL, NULL, NULL);
     varErrCapture();
     press(lt_ext_confirm_button()); /* Circle on the Japanese-program discs */
     varErrRelease(log, sizeof(log));
     CHECK(strstr(log, "variants: the Debug menu is opened from Options") != NULL,
           "%s: the press is logged (\"%s\")", who, log);
-    if (!*debugPressed) {
-        CHECK(strstr(log, "variants: the debug menu hook is not wired yet") != NULL,
-              "%s: the stub hook logs once (\"%s\")", who, log);
-        *debugPressed = 1;
-    } else {
-        CHECK(strstr(log, "not wired yet") == NULL, "%s: the stub does not log twice", who);
-    }
+    CHECK(strstr(log, "variants: the Debug menu cannot open: the game has not bound it") != NULL,
+          "%s: unbound, the press says so (\"%s\")", who, log);
+    CHECK(current_layout_id == varL, "%s: unbound, Options stays on Game variants (%d)", who,
+          current_layout_id);
+    CHECK(ico_variants_suspend_achievements() == 1, "%s: the Debug menu pressed: achievements off",
+          who);
+    ico_variants_debug_menu_clear();
+
+    /* the game's switches and opener bound (as debug_VariableInit does): the
+       press opens the menu once and Options closes */
+    s_varDbg.oneHit = 0;
+    s_varDbg.dodge = 0;
+    s_varDbg.battle = 3;
+    s_varDbg.demoCam = 0;
+    s_varDbg.hand = 1;
+    const int opens = s_varDbg.opens;
+    const int resumes = s_resumes;
+    ico_variants_bind_debug(&s_varDbg.oneHit, &s_varDbg.dodge, &s_varDbg.battle, &s_varDbg.demoCam,
+                            &s_varDbg.hand, varMenuOpen);
+    CHECK(s_varDbg.oneHit == 0 && s_varDbg.dodge == 0 && s_varDbg.battle == 3 &&
+              s_varDbg.demoCam == 0 && s_varDbg.hand == 1,
+          "%s: bound at the shipped values: the game's switches untouched", who);
+    lt_ext_layout(varL)->curItem = lb[8];
+    frame(0);
+    varErrCapture();
+    press(lt_ext_confirm_button()); /* Circle on the Japanese-program discs */
+    varErrRelease(log, sizeof(log));
+    CHECK(s_varDbg.opens == opens + 1, "%s: the press opens the game's menu once (%d)", who,
+          s_varDbg.opens - opens);
+    *debugPressed += s_varDbg.opens - opens;
+    CHECK(strstr(log, title ? "settings: Options closed for the Debug menu (to the title)"
+                            : "settings: Options closed for the Debug menu (back to the game)") !=
+              NULL,
+          "%s: Options closes (\"%s\")", who, log);
+    CHECK(settle(title ? fxLayout(13) : fxLayout(54), 60), "%s: Options closed into %s (%d)", who,
+          title ? "the title" : "the game", current_layout_id);
+    CHECK(s_resumes == resumes + (title ? 0 : 1),
+          "%s: the pause menu's Back (the sound resumed) only from the pause menu", who);
     CHECK(ico_variants_suspend_achievements() == 1, "%s: the Debug menu opened: achievements off",
           who);
     ico_variants_debug_menu_clear();
+    ico_variants_bind_debug(NULL, NULL, NULL, NULL, NULL, NULL);
     ico_opt_set_developer_mode(0);
-    press(0x10);
-    CHECK(settle(exL, 60), "%s: Back to Extras at the end", who);
     useConfig("version = 1\n");
     ico_opt_reload();
 }
@@ -4440,6 +4488,7 @@ static void testVariants(void)
     int debugPressed = 0;
     testVariantsPage("pal", 1, &debugPressed);
     testVariantsPage("pal", 0, &debugPressed);
+    CHECK(debugPressed == 2, "pal: the Debug menu opened once per entry (%d)", debugPressed);
 }
 
 /* the same on the Japanese or Korean disc (ctests settings_extra_jpn,
@@ -4450,6 +4499,7 @@ static void testVariantsOtherDisc(const char *slug)
     CHECK(ico_region_select(slug) == 0, "the %s disc selected", slug);
     testVariantsPage(slug, 1, &debugPressed);
     testVariantsPage(slug, 0, &debugPressed);
+    CHECK(debugPressed == 2, "%s: the Debug menu opened once per entry (%d)", slug, debugPressed);
     ico_opt_set_ui_language(-1);
     CHECK(ico_region_select("pal") == 0, "the European disc again");
     ui_settings_apply_language();
