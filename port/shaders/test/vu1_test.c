@@ -3279,6 +3279,72 @@ static int gpuTests(void)
     return 0;
 }
 
+/* The June 2001 demo's programs (tools/test/vu1/jun26_vs_pal.md): the state
+ * carries which text it runs, the draw's constant block says so with its own
+ * flag, and the semantic differences have hand traces to come. */
+static void testVariantPlumbing(void)
+{
+    Vu1Ref r;
+    memset(&r, 0x5A, sizeof(r));
+    vu1ref_init(&r);
+    if (r.variant != VU1_VARIANT_PAL || VU1_VARIANT_PAL != 0 || VU1_VARIANT_JUN26 != 1) {
+        FAILF("variant: vu1ref_init leaves %d, PAL is 0 and JUN26 is 1\n", r.variant);
+    }
+    vu1ref_set_variant(&r, VU1_VARIANT_JUN26);
+    if (r.variant != VU1_VARIANT_JUN26) {
+        FAILF("variant: vu1ref_set_variant(JUN26) leaves %d\n", r.variant);
+    }
+    vu1ref_set_variant(&r, 7);
+    if (r.variant != VU1_VARIANT_PAL) {
+        FAILF("variant: a value out of range gives %d, not PAL\n", r.variant);
+    }
+    if (strcmp(vu1_variant_name(VU1_VARIANT_PAL), "pal") != 0 ||
+        strcmp(vu1_variant_name(VU1_VARIANT_JUN26), "jun26") != 0 ||
+        strcmp(vu1_variant_name(-1), "?") != 0) {
+        FAILF("variant: names %s, %s, %s\n", vu1_variant_name(0), vu1_variant_name(1),
+              vu1_variant_name(-1));
+    }
+    /* state is the same in both texts: the SET_* uploads do not look at the variant */
+    Vu1Ref a, b;
+    float m[4][4] = {{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}, {13, 14, 15, 16}};
+    vu1ref_init(&a);
+    vu1ref_init(&b);
+    vu1ref_set_variant(&b, VU1_VARIANT_JUN26);
+    vu1ref_mesh_set_matrix(&a, m);
+    vu1ref_mesh_set_matrix(&b, m);
+    if (memcmp(a.vf, b.vf, sizeof(a.vf)) != 0 || memcmp(a.mem, b.mem, sizeof(a.mem)) != 0) {
+        FAILF("variant: SET_MESH_MATRIX differs between the variants\n");
+    }
+    /* the flag in IcoVuCB.draw[2] (vu_common.hlsli VU_F_JUN26 / g_vuVariant): its own bit,
+     * beside the others, and the block keeps its 816 bytes */
+    const uint32_t others[] = {ICO_VU_CLIP_MASK, ICO_VU_PROBE,    ICO_VU_CUT_ONLY,
+                               ICO_VU_KICK_ONLY, ICO_VU_EXTENDED, ICO_VU_BEHIND_EYE,
+                               ICO_VU_TICKS};
+    if (ICO_VU_JUN26 != 1024u) {
+        FAILF("variant: ICO_VU_JUN26 is %u, vu_common.hlsli says 1024\n", (unsigned)ICO_VU_JUN26);
+    }
+    for (size_t i = 0; i < sizeof(others) / sizeof(others[0]); i++) {
+        if ((others[i] & (uint32_t)ICO_VU_JUN26) != 0u) {
+            FAILF("variant: ICO_VU_JUN26 shares a bit with flag 0x%x\n", (unsigned)others[i]);
+        }
+    }
+    if (sizeof(IcoVuCB) != 816) {
+        FAILF("variant: IcoVuCB is %zu bytes, not 816\n", sizeof(IcoVuCB));
+    }
+    /* the hand traces of the June 2001 text, to be written with the shader branches
+     * (VU-JUN26): named here so the list is in the test's output; none is run */
+    static const char *const pending[] = {
+        "mesh lit (code 22), jun26_vs_pal.md mesh #2: UV offset (mem[2].xy) on vertex 2..n",
+        "mesh lit, the same trace as PAL on vertex 1 and the batch's kick",
+        "mesh lit with specular, unlit: the PAL traces hold (scheduling only)",
+        "normal_c, normal_l: the PAL traces hold (scheduling only)",
+        "cluster: the PAL traces hold (scheduling only)",
+    };
+    for (size_t i = 0; i < sizeof(pending) / sizeof(pending[0]); i++) {
+        printf("  jun26 hand trace SKIPPED (VU-JUN26): %s\n", pending[i]);
+    }
+}
+
 int main(void)
 {
     buildScene();
@@ -3293,6 +3359,7 @@ int main(void)
     traceStrip();
     traceRegion();
     checkLayout();
+    testVariantPlumbing();
     int cpuFailures = failures;
     printf("vu1_test: hand traces and layout: %s\n", cpuFailures ? "FAILED" : "ok");
     int g = gpuTests();
