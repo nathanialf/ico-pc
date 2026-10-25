@@ -150,6 +150,8 @@ struct IosMemPart *ios_partition_common, *ios_partition_seki, *ios_partition_oom
 void *dmaVif;
 char *matrixptr;
 int systemStatus[12];
+/* main.c's; only the 2001 builds' chain test in clothAnimation.c reads it */
+PadState pad[16];
 int buffer_ID;
 int debug_bounding_flag, debug_specular_flag, debug_shadow_flag, debug_window_flag;
 int debug_disp_mesh = 1, debug_disp_particle = 1;
