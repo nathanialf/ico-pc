@@ -97,6 +97,16 @@ void la_host_leave(void)
     s_leaves++;
 }
 
+/* layout_action.c: the pause menu's Back before la_game_loop (Game variants >
+   Debug menu closes Options into the game) */
+int s_resumes;
+
+void la_host_resume_play(void)
+{
+    s_resumes++;
+    s_leaves++;
+}
+
 int s_newGames;
 int s_mcSaveSlots;
 
