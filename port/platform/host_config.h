@@ -31,7 +31,8 @@
  *   saves=PATH       the memory card folder (port/save):
  *                    the game's files are PATH/BESCES-50760ico/ (the
  *                    European disc; PATH/BISCPS-11003ico/ for the Japanese
- *                    one, PATH/BISCPS-56001ico/ for the Korean one);
+ *                    one, PATH/BISCPS-56001ico/ for the Korean one, and each other disc's own
+ *                    in the same way: port/core/region.h mc_save_dir);
  *                    default memcard beside the per-user folder
  *   saves2=PATH      a second card folder, the card in port 1; absent or
  *                    empty: port 1 has no card (the original behaviour)
