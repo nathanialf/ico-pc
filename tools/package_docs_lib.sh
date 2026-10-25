@@ -46,11 +46,15 @@ portable=1'
 # with # or ; are notes. Everything works without editing this file.
 #
 # iso: the full path of your disc image of ICO, the European disc
-# (SCES-50760), the Japanese disc (SCPS-11003) or the Korean disc
-# (SCPS-56001): a .iso, a .chd, or a
+# (SCES-50760), the Japanese disc (SCPS-11003), the Korean disc
+# (SCPS-56001), the North American disc (SCUS-97113), the Asian disc
+# (SCPS-55001), the August 2001 preview disc or the June 2001 magazine demo
+# (SCUS-97158): a .iso, a .chd, or a
 # .bin with its .cue, for example iso=C:\\Games\\Ico_PAL.iso . A file named
 # Ico_PAL.iso, Ico_PAL.chd, Ico_PAL.bin or Ico_PAL.cue (European disc), or
-# the same with Ico_JPN (Japanese disc) or Ico_KOR (Korean disc), next to
+# the same with Ico_JPN (Japanese disc), Ico_KOR (Korean disc), Ico_USA (North
+# American disc), Ico_CN (Asian disc), Ico_AUG6 (August 2001 preview) or
+# Ico_JUN26 (June 2001 magazine demo), next to
 # the program is used before this line. Leave it empty and the first start asks for the image, then
 # saves your choice here. The image is read once, to copy the game's data
 # into your user folder (%APPDATA%\\ico-pc\\ico-pc); later starts do not
@@ -65,15 +69,18 @@ watchdog=30
 
 $portable_block
 
-# texture packs: see textures\\SCES-50760\\replacements\\README.txt (European
-# disc), textures\\SCPS-11003\\replacements\\README.txt (Japanese disc) or
-# textures\\SCPS-56001\\replacements\\README.txt (Korean disc) next to the
-# program.
+# texture packs: see the README.txt in textures\\SCES-50760\\replacements
+# (European disc), textures\\SCPS-11003\\replacements (Japanese disc),
+# textures\\SCPS-56001\\replacements (Korean disc),
+# textures\\SCUS-97113\\replacements (North American disc and August 2001
+# preview), textures\\SCUS-97158\\replacements (June 2001 magazine demo) or
+# textures\\SCPS-55001\\replacements (Asian disc) next to the program.
 #
 # Everything else (display, sound, controls, gameplay, texture packs) is in
 # the in-game Options menu, which saves it to config.toml in your user
-# folder. With a problem report, say which disc you play (the European, the
-# Japanese or the Korean) and send the newest logs\\report-<date>.zip from next to
+# folder. With a problem report, say which disc you play (the European,
+# Japanese, Korean, North American or Asian disc, the August 2001 preview or
+# the June 2001 magazine demo) and send the newest logs\\report-<date>.zip from next to
 # the program (or logs\\ico-pc.log).
 INI
     else
@@ -82,11 +89,15 @@ INI
 # with # or ; are notes. Everything works without editing this file.
 #
 # iso: the full path of your disc image of ICO, the European disc
-# (SCES-50760), the Japanese disc (SCPS-11003) or the Korean disc
-# (SCPS-56001): a .iso, a .chd, or a
+# (SCES-50760), the Japanese disc (SCPS-11003), the Korean disc
+# (SCPS-56001), the North American disc (SCUS-97113), the Asian disc
+# (SCPS-55001), the August 2001 preview disc or the June 2001 magazine demo
+# (SCUS-97158): a .iso, a .chd, or a
 # .bin with its .cue, for example iso=/home/deck/Games/Ico_PAL.iso . A file
 # named Ico_PAL.iso, Ico_PAL.chd, Ico_PAL.bin or Ico_PAL.cue (European
-# disc), or the same with Ico_JPN (Japanese disc) or Ico_KOR (Korean disc),
+# disc), or the same with Ico_JPN (Japanese disc), Ico_KOR (Korean disc),
+# Ico_USA (North American disc), Ico_CN (Asian disc), Ico_AUG6 (August 2001
+# preview) or Ico_JUN26 (June 2001 magazine demo),
 # next to ico_pc is used before this line.
 # Leave it empty and the first start asks for the image (the file window
 # comes from your desktop, or from the small program zenity), then saves
@@ -103,14 +114,18 @@ watchdog=30
 
 $portable_block
 
-# texture packs: see textures/SCES-50760/replacements/README.txt (European
-# disc), textures/SCPS-11003/replacements/README.txt (Japanese disc) or
-# textures/SCPS-56001/replacements/README.txt (Korean disc) next to ico_pc.
+# texture packs: see the README.txt in textures/SCES-50760/replacements
+# (European disc), textures/SCPS-11003/replacements (Japanese disc),
+# textures/SCPS-56001/replacements (Korean disc),
+# textures/SCUS-97113/replacements (North American disc and August 2001
+# preview), textures/SCUS-97158/replacements (June 2001 magazine demo) or
+# textures/SCPS-55001/replacements (Asian disc) next to ico_pc.
 #
 # Everything else (display, sound, controls, gameplay, texture packs) is in
 # the in-game Options menu, which saves it to config.toml in your user
-# folder. With a problem report, say which disc you play (the European, the
-# Japanese or the Korean) and send the newest logs/report-<date>.zip from next to
+# folder. With a problem report, say which disc you play (the European,
+# Japanese, Korean, North American or Asian disc, the August 2001 preview or
+# the June 2001 magazine demo) and send the newest logs/report-<date>.zip from next to
 # ico_pc (or logs/ico-pc.log).
 INI
     fi
