@@ -411,26 +411,51 @@ static void test_engine_failure(void)
 
 /* the region's numbers the playback runs on: STAFF1, the ending's song, the
    empty layout a scene switches to (port/core/region.h) */
-static void test_region(int jpn)
+static void test_region(void)
 {
-    /* jpn: the Japanese program (the Japanese and Korean discs share STAFF1 58, scene 52 and the
-       151050 ms roll: region_kor.c's rows copy region_jpn.c's, TARGETS.md "Korean retail") */
-    CHECK(ICO_CREDITS_STAGE == (jpn ? 58 : 60));
+    /* each disc's numbers as its region file states them, literal here (not
+       read back from the table under test), in config/regions.txt's order:
+       STAFF1, the empty scene layout, the roll's offset in the song, the
+       song's adpcmFile row, the exit row into STAFF1, the boy's record.  The
+       Japanese, Korean and Asian discs share the Japanese program's numbers
+       (region_kor.c's and region_cn.c's rows copy region_jpn.c's); the North
+       American, August 2001 and June 2001 discs differ in the exit, the boy
+       and, on the demo, the song and STAFF1 (TARGETS.md) */
+    static const struct {
+        int stage, scene, roll_ms, song, exit, boy;
+    } want[] = {
+        {60, 55, 151080, 47, 216, 54}, /* pal */
+        {58, 52, 151050, 47, 216, 54}, /* jpn */
+        {58, 52, 151050, 47, 216, 54}, /* kor */
+        {58, 51, 151050, 47, 212, 51}, /* ntsc */
+        {58, 51, 151050, 47, 212, 50}, /* aug6 */
+        {59, 51, 151050, 46, 212, 47}, /* jun26 */
+        {58, 52, 151050, 47, 216, 54}, /* cn */
+    };
+
+    const int n = (int)(sizeof(want) / sizeof(want[0]));
+
+    CHECK(n == ICO_REGION_COUNT);
+    if (ico_region < 0 || ico_region >= n) {
+        CHECK(0);
+        return;
+    }
+    CHECK(ICO_CREDITS_STAGE == want[ico_region].stage);
     CHECK(ICO_CREDITS_TITLE_STAGE == 1);
-    CHECK(ico_region_cur()->credits_song == 47);
-    CHECK(ico_region_cur()->layout_scene == (jpn ? 52 : 55));
-    CHECK(ico_region_cur()->credits_roll_ms == (jpn ? 151050 : 151080));
-    CHECK(ico_region_cur()->credits_entrance_exit == 216 &&
-          ico_region_cur()->credits_boy_label == 54);
+    CHECK(ico_region_cur()->credits_song == want[ico_region].song);
+    CHECK(ico_region_cur()->layout_scene == want[ico_region].scene);
+    CHECK(ico_region_cur()->credits_roll_ms == want[ico_region].roll_ms);
+    CHECK(ico_region_cur()->credits_entrance_exit == want[ico_region].exit &&
+          ico_region_cur()->credits_boy_label == want[ico_region].boy);
 }
 
 int main(int argc, char **argv)
 {
-    /* credits_test DIR [SLUG]: that disc's region (ctests credits_jpn, credits_kor) */
+    /* credits_test DIR [SLUG]: that disc's region (ctests credits_<slug>) */
     if (argc > 2) {
         CHECK(ico_region_select(argv[2]) == 0);
     }
-    test_region(!ICO_PAL);
+    test_region();
     test_roll();
     test_lock(argc > 1 ? argv[1] : ".");
     test_engine_failure();
