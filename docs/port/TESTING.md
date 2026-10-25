@@ -269,7 +269,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   The same runs exist for the other four discs (`options_ntsc`, `options_aug6`, `options_jun26`,
   `options_cn`), and likewise `variants_<slug>`, `achievements_<slug>` and `credits_<slug>` for
   `ntsc`, `aug6`, `jun26` and `cn`. `credits_test.c` holds each of the seven discs' STAFF1, scene
-  layout, roll offset, song, exit and boy record as literals (`test_region`); `achievements_test.c`
+  layout, roll offset, song, exit, boy record and whether DATA.DF holds the staff scenes' packs as
+  literals (`test_region`), checks the boy at the disc's own entrance, and on the June 2001 demo
+  (no packs) checks the start is refused with nothing kept, switched or moved
+  (`test_engine_refused`); `achievements_test.c` drives each disc's achievement stages, queen flag
+  and beach-secret flag from its region row (on the three 2001 discs, which have no beach secret,
+  it checks the European flag 354 does not unlock it and the rest of the list does unlock);
+  `achievements_test.c`
   holds each disc's retail addresses, peek-row count and story-flag and preview sizes
   (`kPeekWant`, checked against `gamestate.c`'s tables, which are written from
   `config/symbol_addrs.<slug>.data.txt`: the North American, August 2001 and June 2001 discs have
