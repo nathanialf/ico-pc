@@ -229,10 +229,10 @@ or number that is no value reads as the default and is logged once.
 
 | key | type | default | meaning |
 | --- | --- | --- | --- |
-| `shade_toughness` | string | `"original"` | `"original"` (the disc's table), `"american"` (every Shade as tough as on the North American disc, and no tougher on later playthroughs) or `"no_plus"` (the disc's Shades, no tougher on later playthroughs) |
-| `one_hit` | bool | `false` | a swing hurts a Shade only once (`debug_one_hit_only`); suspends achievements |
-| `never_dodge` | bool | `false` | the Shades never dodge (`debug_ignore_dodge`); suspends achievements |
-| `aggression` | string | `"own"` | `"own"` (each Shade's own), `"bold_patient"`, `"bold_quick"`, `"wary_patient"` or `"wary_quick"` (`debug_enemy_battle_type`) |
+| `shade_toughness` | string | `"original"` | `"original"` (the disc's table), `"american"` (every Shadow as tough as on the North American disc, and no tougher on later playthroughs) or `"no_plus"` (the disc's Shadows, no tougher on later playthroughs) |
+| `one_hit` | bool | `false` | a swing hurts a Shadow only once (`debug_one_hit_only`); suspends achievements |
+| `never_dodge` | bool | `false` | the Shadows never dodge (`debug_ignore_dodge`); suspends achievements |
+| `aggression` | string | `"own"` | `"own"` (each Shadow's own), `"bold_patient"`, `"bold_quick"`, `"wary_patient"` or `"wary_quick"` (`debug_enemy_battle_type`) |
 | `no_hints` | bool | `false` | no hints, as on the North American disc |
 | `barrier_hits` | int | absent (not in the template) | `5` or `7`: the hits the Queen's barrier takes; absent, the disc's own (`7` on `jun26`, else `5`); the Settings row writes it |
 | `no_cutscene_look` | bool | `false` | no camera look-around in cutscenes |
@@ -240,7 +240,9 @@ or number that is no value reads as the default and is logged once.
 
 The Debug menu row has no key: its press marks the Debug menu used until the options are reloaded,
 which suspends achievements too (`ico_variants_suspend_achievements`, read by `gamestate.c` beside
-developer mode).
+developer mode), opens the game's debug menu and closes Options. Where the game reads each key, and
+what it changes, is in [GAME_FEATURES.md](GAME_FEATURES.md#game-variants); a change on the page
+takes effect at once (`ico_variants_apply`).
 
 ### [mirror]
 
