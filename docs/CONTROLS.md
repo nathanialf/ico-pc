@@ -14,8 +14,8 @@ bottom face button is always Cross, whether your pad is an Xbox,
 PlayStation or Switch pad. In the menus the gamepad's four face buttons
 and the d-pad always go by position, even after you change them under
 Remap controls: the bottom button confirms, the top button goes back, and
-the d-pad moves (on the Japanese and Korean discs the right button confirms and the
-bottom one goes back, see [The Japanese and Korean discs](#the-japanese-and-korean-discs)). Start,
+the d-pad moves (on the Japanese, Korean and Asian discs the right button confirms and the
+bottom one goes back, see [The Japanese, Korean and Asian discs](#the-japanese-korean-and-asian-discs)). Start,
 Select, the shoulder buttons, the triggers and the
 stick presses follow your changes everywhere, unless you move one of them
 onto a face button or the d-pad. Then the game follows your change in
@@ -68,10 +68,10 @@ another action, the two actions swap. If the action you changed had no
 button on that device, the other action is left without one.
 The game's own **Button configuration** applies on top of your changes.
 
-## The Japanese and Korean discs
+## The Japanese, Korean and Asian discs
 
-On the Japanese disc (SCPS-11003) and the Korean disc (SCPS-56001) the menus
-swap two buttons, as the Japanese and Korean PS2 releases did: **Circle confirms and Cross goes back**.
+On the Japanese disc (SCPS-11003), the Korean disc (SCPS-56001) and the Asian
+disc (SCPS-55001) the menus swap two buttons, as those PS2 releases did: **Circle confirms and Cross goes back**.
 This covers the game's own menus and the
 ones this port adds (Options, the title screen's extras, the model viewer,
 Character Customization), and the button pictures in the menus' hints
@@ -91,11 +91,15 @@ In photo mode, Circle saves a picture, and Cross, Triangle or Start
 leaves. The mouse still saves with the left button and leaves with the
 right one.
 
-The **Circle goes back** row is not in Options with the Japanese or Korean
-disc, since Circle confirms there.
+The **Circle goes back** row is not in Options with the Japanese, Korean or
+Asian disc, since Circle confirms there.
 
 Where this page says to press Cross in a menu, press Circle on the
-Japanese or Korean disc, and where it says Circle goes back, press Cross.
+Japanese, Korean or Asian disc, and where it says Circle goes back, press Cross.
+
+The European disc, the North American disc, the August 2001 preview disc and
+the June 2001 magazine demo confirm with Cross and go back with Triangle, as
+this page describes everywhere else.
 
 ## Look around with the mouse
 
