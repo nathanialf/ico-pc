@@ -41,7 +41,12 @@ names it on stderr ("pending the merge") and still passes, and once the file exi
 until the script moves it into its programmer's list. Each source lands in the list of its programmer directory
 (`ICO_SOURCES_common` ... `ICO_SOURCES_sugipon`, in `ICO_PROGRAMMERS` order), except the ones under
 `ico2/ito/mpeg/` (`EE_ONLY_DIRS`), which go to `ICO_EE_ONLY_SOURCES`: the PS2 movie player, nine
-files `port/fmv` replaces, listed so the inventory stays complete and never compiled. The 73
+files `port/fmv` replaces, listed so the inventory stays complete and never compiled. One file
+outside that directory goes there too (`EE_ONLY_FILES`): `ico2/common/src/demoDisc.c`, the June
+2001 demo's `sceDemoStart` and `sceDemoEnd` (libscedemo), which read the magazine menu's arguments
+and reload the menu's ELF with `LoadExecPS2`. The port has no menu: `port/game/demo_host.c` holds a
+`sceDemoStart` that hands `main.c` the port's own settings (the language from `[game] language`, the
+aspect from `[video] aspect`, play mode and timeouts 0, a DVD), and nothing calls `sceDemoEnd`. The 73
 `ICO_DATA_MEMBERS` are the data-only members (see [Data tables](#data-tables)). `sce/` and
 `ico2/vusrc/` never enter the lists. Configure runs `tools/gen_sources.py --check` and prints a
 warning when the file is stale (`CMakeLists.txt`); rerun the script after editing the link order.
