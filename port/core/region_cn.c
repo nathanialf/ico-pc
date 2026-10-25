@@ -24,9 +24,10 @@
  * the ids the code names, which are the Japanese ones (layout_action.c:
  * lt_mask_property(n + 105) under the Japanese/Asian arm, 99 only under
  * VERSION_KOR). The disc's menu sheets are lettered in Traditional Chinese
- * (Tex_menu01/option.tm2: the option screen, the memory card screens), a
- * language the port has no text for yet: ui_lang_default and menu_sheet
- * below are stand-ins until a text package measures the sheets.
+ * (Tex_menu01/option.tm2: the option screen, the memory card screens), and
+ * the port's text is Chinese on it (port/ui/strings_zh.c, UI_LANG_ZH); the
+ * sheets' look over the port's words (UI_SHEET_ZH) starts from the Japanese
+ * sheets' numbers until ctest menu_look_cn measures the disc.
  */
 #include "region.h"
 
@@ -47,12 +48,8 @@ const IcoRegionInfo ico_region_info_cn = {
     .has_50hz_row = 0,      /* NTSC only: no 50 Hz branches (docs/TARGETS.md) */
     .has_game_language = 0, /* kanbanBootMcCheck has no language step; jimaku.c
                                no per-language subtitles */
-    .ui_lang_default = 0,   /* UI_LANG_EN: the port has no Chinese text yet (the disc's is
-                               Traditional Chinese); English is its fallback */
-    .menu_sheet = 5,        /* UI_SHEET_JA: a stand-in for the look over Tex_menu01's
-                               Traditional Chinese sheets, which are not measured yet
-                               (strings_complete wants a sheet from 5 up on a disc with
-                               no game language) */
+    .ui_lang_default = 7,   /* UI_LANG_ZH: the port's text Traditional Chinese, as the disc's */
+    .menu_sheet = 7,        /* UI_SHEET_ZH: Tex_menu01's Traditional Chinese sheets */
     .fixed_60hz = 1,        /* NTSC only: systemStatus starts 0, 60 Hz (a 30 Hz Main tick) */
     .pad_confirm = 0x20,    /* Circle: la_boot_confirm_memory_card under the JPN/KOR/CN arm */
     .pad_back = 0x40,       /* Cross: layout_action.c, as the Japanese and Korean discs */
