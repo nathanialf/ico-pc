@@ -217,7 +217,7 @@ void ico_opt_set_circle_back(int on)
 }
 
 /* [ui] language's names, UiLang order (port/ui/strings.h) */
-static const char *const kUiLanguages[] = {"en", "fr", "de", "it", "es", "ja", "ko"};
+static const char *const kUiLanguages[] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh"};
 #define UI_LANGUAGES ((int)(sizeof(kUiLanguages) / sizeof(kUiLanguages[0])))
 
 int ico_opt_ui_language(void)
@@ -235,7 +235,7 @@ int ico_opt_ui_language(void)
         if (s_ui_language < 0 && v != NULL && strcmp(v, "auto") != 0) {
             fprintf(
                 stderr,
-                "options: [ui] language = \"%s\" is not one of auto, en, fr, de, it, es, ja, ko\n",
+                "options: [ui] language = \"%s\" is not one of auto, en, fr, de, it, es, ja, ko, zh\n",
                 v);
         }
     }
