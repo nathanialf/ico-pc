@@ -36,7 +36,10 @@ and every character outside Arimo's subset (embed_font.cmake's "# subset:"
 line) of the string tables (port/ui/strings_*.c), the model viewer's names
 (port/game/model_viewer_table.c) and the corpus (port/ui/test/font_corpus/
 *.txt, '#' lines are provenance), but Hangul (font_audit.HANGUL: the Korean
-text's font holds it).
+text's font holds it) and the Chinese table's and corpus' own characters
+(strings_zh.c, zh.txt: the Chinese text's font, tools/subset_font_zh.py,
+holds them, as the Traditional forms; the language names in the other
+tables, 繁體中文, are in this font).
 """
 import argparse
 import glob
@@ -60,9 +63,12 @@ FONTTOOLS_VERSION = "4.63.0"
 def used_outside_arimo():
     arimo = font_audit.parse_ranges(font_audit.cmake_ranges(CMAKE))
     files = sorted(glob.glob(os.path.join(ROOT, "port/ui/strings_*.c")))
+    files = [p for p in files if os.path.basename(p) != "strings_zh.c"]
     files.append(os.path.join(ROOT, "port/game/model_viewer_table.c"))
     texts = [lit for p in files for lit in font_audit.literals(p)]
     for p in sorted(glob.glob(os.path.join(ROOT, "port/ui/test/font_corpus/*.txt"))):
+        if os.path.basename(p) == "zh.txt":
+            continue
         with open(p, encoding="utf-8") as f:
             texts += [l.rstrip("\r\n") for l in f if not l.startswith("#")]
     out = set()
