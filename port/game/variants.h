@@ -111,6 +111,13 @@ int ico_variant_step(IcoVariantId id, int dir);
    ("original", "no_plus", "true", "7", ...) */
 const char *ico_variant_key(IcoVariantId id);
 const char *ico_variant_value_name(IcoVariantId id, int index);
+/* 1 when value index of id is offered on the selected disc: every value but
+   Shadow toughness American on the June 2001 demo, whose enemy rows are
+   kinds of its own (PC port: a by-index copy of the USA rows would change
+   unrelated Shadows). A config "american" there reads as Original with a log
+   line, ico_variant_set gives Original for it, and ico_variant_step passes
+   over it (Original <-> Not tougher later). The indices stay the enum's. */
+int ico_variant_offered(IcoVariantId id, int index);
 
 /* 1 while a variant that switches achievements off is in force: One hit per
    swing, Shadows never dodge, Cutscene cameras ignored, or the Debug menu

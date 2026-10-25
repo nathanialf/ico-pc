@@ -112,6 +112,26 @@ static int shipped_barrier(void)
     return r != NULL && r->slug != NULL && strcmp(r->slug, "jun26") == 0 ? 1 : 0;
 }
 
+/* PC port: the June 2001 demo's enemy table is its own 18 rows (other kinds,
+   models and roles than the North American disc's first 18: ico2/sugipon/src/
+   enemyKind.c enemyKind_jun26), so a by-index copy of the USA rows would
+   make ground Shadows fly and redraw a scale-4 kind at 1.1: American is not
+   offered there */
+static int american_offered(void)
+{
+    const IcoRegionInfo *r = ico_region_cur();
+    return !(r != NULL && r->slug != NULL && strcmp(r->slug, "jun26") == 0);
+}
+
+int ico_variant_offered(IcoVariantId id, int index)
+{
+    if (index < 0 || index >= ico_variant_count(id)) {
+        return 0;
+    }
+    return id != ICO_VARIANT_SHADE_TOUGHNESS || index != ICO_TOUGHNESS_AMERICAN ||
+           american_offered();
+}
+
 static int word_index(const char *const *names, int n, const char *word, int def, const char *key)
 {
     for (int i = 0; i < n; i++) {
@@ -144,6 +164,11 @@ static void load(void)
     s_value[ICO_VARIANT_SHADE_TOUGHNESS] = word_index(
         kToughness, ICO_TOUGHNESS_COUNT,
         ico_config_get_string("variants.shade_toughness", kToughness[0]), 0, "shade_toughness");
+    if (!ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, s_value[ICO_VARIANT_SHADE_TOUGHNESS])) {
+        fprintf(stderr, "variants: shade_toughness = american is not offered on the June 2001 demo "
+                        "(its enemy rows are its own); using original\n");
+        s_value[ICO_VARIANT_SHADE_TOUGHNESS] = ICO_TOUGHNESS_ORIGINAL;
+    }
     s_value[ICO_VARIANT_ONE_HIT] = ico_config_get_bool("variants.one_hit", 0) != 0;
     s_value[ICO_VARIANT_NEVER_DODGE] = ico_config_get_bool("variants.never_dodge", 0) != 0;
     s_value[ICO_VARIANT_AGGRESSION] =
@@ -174,7 +199,8 @@ int ico_variant_get(IcoVariantId id)
         return 0;
     }
     load();
-    return s_value[id];
+    /* a value read before the disc was chosen and not offered on it */
+    return ico_variant_offered(id, s_value[id]) ? s_value[id] : 0;
 }
 
 void ico_variant_set(IcoVariantId id, int index)
@@ -185,6 +211,9 @@ void ico_variant_set(IcoVariantId id, int index)
     }
     load();
     s_value[id] = index < 0 ? 0 : index >= n ? n - 1 : index;
+    if (!ico_variant_offered(id, s_value[id])) {
+        s_value[id] = 0; /* American on the June 2001 demo: Original */
+    }
     ico_variants_apply();
 }
 
@@ -305,9 +334,13 @@ const EnemyDef *ico_variant_enemy_def(const EnemyDef *disc, int rows, const Enem
     row = &disc[kind];
     load();
     /* American: the USA disc's row of the same kind, but a row of the disc's
-       "no model" (its table's last row's model) keeps the disc's */
+       "no model" (its table's last row's model) keeps the disc's. Only on a
+       table of the same kinds, row for row (the same row count): never on
+       the June 2001 demo, whose 18 rows are kinds of its own (PC port:
+       american_offered) */
     american = s_value[ICO_VARIANT_SHADE_TOUGHNESS] == ICO_TOUGHNESS_AMERICAN && usa != NULL &&
-               kind < usaRows && row->model != disc[rows - 1].model;
+               american_offered() && rows == usaRows && kind < usaRows &&
+               row->model != disc[rows - 1].model;
     battle = kBattleType[s_value[ICO_VARIANT_AGGRESSION]];
     if ((!american && battle < 0) || kind >= ENEMY_ROWS_MAX) {
         return row; /* the disc's own row, as the game read it */
@@ -337,7 +370,12 @@ int ico_variant_step(IcoVariantId id, int dir)
         return 0;
     }
     load();
-    v = ((s_value[id] + dir) % n + n) % n;
+    v = s_value[id];
+    do {
+        /* past a value this disc does not offer (American on the June 2001
+           demo: Original <-> Not tougher later) */
+        v = ((v + dir) % n + n) % n;
+    } while (!ico_variant_offered(id, v) && v != s_value[id] && dir != 0);
     ico_variant_set(id, v);
     snprintf(path, sizeof(path), "variants.%s", kKeys[id]);
     if (id == ICO_VARIANT_BARRIER_HITS) {
@@ -412,9 +450,14 @@ int ico_variants_suspend_achievements(void)
 
 int ico_variants_debug_menu_pressed(void)
 {
+    /* marked used (achievements off until a reload) only when it opens: an
+       unbound press changes nothing */
+    if (!ico_variants_open_debug_menu()) {
+        return 0;
+    }
     s_debug_menu_used = 1;
     fprintf(stderr, "variants: the Debug menu is opened from Options\n");
-    return ico_variants_open_debug_menu();
+    return 1;
 }
 
 void ico_variants_debug_menu_clear(void)
