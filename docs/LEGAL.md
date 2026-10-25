@@ -197,10 +197,16 @@ every disc (Options > Extras > Game variants), which needs that table
 without the North American disc. The table holds only numbers, one row per
 enemy kind: the model and particle ids, the life, the scale, the dodge range
 and the attribute bits. It holds no names, text or layouts, and it is written
-as source a developer would write, not as bytes. It comes in three forms in
-the port's record layout: the European disc's table (the Japanese and Korean
-discs' are the same), the North American disc's (the preview's is the same),
-and the June 2001 demo's. It is the only exception:
+as source a developer would write, not as bytes. It comes in five forms in
+the port's record layout, one per version of the game: the European disc's,
+the Japanese disc's (the Korean and Asian discs use it too), the North
+American disc's, the August 2001 preview's and the June 2001 demo's. The
+first four have the same 45 enemy kinds; the European and Japanese tables
+differ from each other, and the North American and preview tables from each
+other, only in two rows (17 and 44) that hold the id of each disc's own "no
+model" entry (1552, 1548, 1515 and 1510), because those ids point into each
+disc's own model list. The demo's table has 18 rows of its own, with other
+models. It is the only exception:
 every other data member is still filled from the user's own disc at start-up
 and never committed, and `tools/check_no_rom.sh` is unchanged for them.
 
