@@ -1540,7 +1540,7 @@ static void actSt04lCrest2Sub(GObj *volatile self)
 
 static void actSt04lCrest2Main_ntsc(GObj *volatile self)
 {
-    if (current_stage_no == PAL_NTSC(19, 0)) {
+    if (current_stage_no == 19) {
         while (scpIsTorchLightOn(1030) == 0 || scpIsTorchLightOn(1031) == 0 || gflagChk(159) == 0) {
             _ACTWait(1);
         }
@@ -1624,7 +1624,7 @@ static void actSt04lCrest2Main_ntsc(GObj *volatile self)
 
 static void actSt04lCrest2Main_jun26(GObj *volatile self)
 {
-    if (current_stage_no == 0) {
+    if (current_stage_no == 19) {
         while (scpIsTorchLightOn(977) == 0 || scpIsTorchLightOn(978) == 0 || gflagChk(152) == 0) {
             _ACTWait(1);
         }
@@ -1708,7 +1708,7 @@ static void actSt04lCrest2Main_jun26(GObj *volatile self)
 
 static void actSt04lCrest2Main_aug6(GObj *volatile self)
 {
-    if (current_stage_no == PAL_AUG6(19, 0)) {
+    if (current_stage_no == 19) {
         while (scpIsTorchLightOn(1027) == 0 || scpIsTorchLightOn(1028) == 0 || gflagChk(159) == 0) {
             _ACTWait(1);
         }

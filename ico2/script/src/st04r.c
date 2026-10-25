@@ -1514,7 +1514,7 @@ static void actSt04rCrest2Main_ntsc(GObj *volatile self)
 
 static void actSt04rCrest2Main_jun26(GObj *volatile self)
 {
-    if (current_stage_no == PAL_JUN26(28, 0)) {
+    if (current_stage_no == 28) {
         while (scpIsTorchLightOn(1243) == 0 || scpIsTorchLightOn(1244) == 0 || gflagChk(217) == 0) {
             _ACTWait(1);
         }
