@@ -1410,7 +1410,7 @@ static void actEnemyRestart_jun26(GObj *self, float *pos, float *dir, int kind, 
     } else {
         sub->mother = 0;
     }
-    sub->mail = (ActMail *)&actIntrList[72];
+    sub->mail = (ActMail *)&actIntrList[70];
     ACTSendMailCorrect(self, mail);
     InitMotionGeoInfo(&GOBJ_SUB(self)->root, pos[0], pos[1], pos[2], 0.0f, 0.0f, 0.0f);
     ResetEnemyPositionInfo(self);
@@ -1778,7 +1778,7 @@ static void actEnemyKidnapEnd_jun26(GObj *volatile self)
             stgmgrNextStagePreLoadForceStageSet(gFlagSaveStage);
             if ((60 - systemStatus[0] * 10) / systemStatus[1] * 3 < sub->modeFrame) {
                 backStageTsuresariReturn();
-                _ACTWait(PAL_JUN26(0, 58));
+                _ACTWait(0);
             }
         }
         if (5 <= sub->modeFrame) {
@@ -2890,7 +2890,7 @@ static void CheckEnemyBrainMode_jun26(char *self, int *outMode, ICO_WORD_PTR(GOb
         *outMode = -1;
         return;
     }
-    if (((((Act *)sub)->flags20.ll >> 34) & 1) == 0) {
+    if (((((Act *)sub)->flags20.ll >> 32) & 1) == 0) {
         goto no_bit;
     }
     ((Act *)sub)->flags20.ll &= ~(1ULL << 32);
@@ -2931,10 +2931,10 @@ static void CheckEnemyBrainMode_ntscaug6(char *self, int *outMode, ICO_WORD_PTR(
         *outMode = -1;
         return;
     }
-    if (((((Act *)sub)->flags20.ll >> 34) & 1) == 0) {
+    if (((((Act *)sub)->flags20.ll >> 32) & 1) == 0) {
         goto no_bit;
     }
-    ((Act *)sub)->flags20.ll &= ~(PAL_NTSCAUG6(1ULL << 34, 1ULL << 32));
+    ((Act *)sub)->flags20.ll &= ~(1ULL << 32);
     mode = -2;
     goto store;
 no_bit:
@@ -5741,14 +5741,14 @@ static void actEnemyStart_jun26(GObj *self)
         act->flags18.ll = act->flags18.ll & ~(1LL << 32);
     }
     _ACTWait(1);
-    act->mainMail = (ActMail *)&actIntrList[67];
+    act->mainMail = (ActMail *)&actIntrList[65];
     if (debug_brain_flag != 0) {
         actCreateSubThread((void *)subEnemyBrainMain, 20);
     }
     actCreateSubThread((void *)subEnemyControl, 21);
     actCreateSubThread((void *)subEnemyCollision, 21);
     actCreateSubThread((void *)subCommonIdle, 21);
-    act->mail = (ActMail *)&actIntrList[72];
+    act->mail = (ActMail *)&actIntrList[70];
     *(ActKind *)&act->actKind = ACT_KIND_ENEMY;
     life = GetEnemyDefLife(self);
     act->life = act->maxLife = life;
