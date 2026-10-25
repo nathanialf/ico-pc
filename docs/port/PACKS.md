@@ -184,9 +184,11 @@ of "%s" (%ux%u); it waits for a later frame (reported once)` (`port/render/rd_re
 
 ## The shipped README
 
-The release packages stage seven folders with a `README.txt` in each, because a zip keeps only
+The release packages stage thirteen folders with a `README.txt` in each, because a zip keeps only
 files and the note is what keeps the folder: `textures/<serial>/replacements/` and
-`models/<serial>/replacements/` for each of `SCES-50760`, `SCPS-11003` and `SCPS-56001`, and
+`models/<serial>/replacements/` for each pack folder (`pkg_serials`: `SCES-50760`, `SCPS-11003`,
+`SCPS-56001`, `SCUS-97113` [the North American disc and the August 2001 preview],
+`SCUS-97158` and `SCPS-55001`), and
 `reshade/` (`tools/package_textures_lib.sh`
 (`pkg_stage_folder_notes`, `pkg_note_rels`)). The textures note says the folder is for texture
 packs and playing needs nothing in it; to copy a pack keeping its own folders so its files end up
@@ -377,12 +379,13 @@ checks the cancel flag between items and sets its final state last, after the ma
 | `textures: export not started: %s` | `texpack_export_begin` refused (one running, no dump folder, no disc, the disc not mountable again, no thread) |
 | `textures: export failed: the disc's DATA.DF could not be read` | the worker's index could not be built |
 
-The checked-in sheets: `docs/textures/europe.csv`, `japan.csv` and `korea.csv` (named for the
+The checked-in sheets: `docs/textures/europe.csv`, `japan.csv`, `korea.csv`, `usa.csv`, `asia.csv`,
+`preview-2001-08.csv` and `demo-2001-06.csv` (named for the
 region, since `tools/check_no_rom.sh` refuses a path with a disc serial in it) hold one row per
 level-alone name of the disc, in the order the names first appear: the replacement file name, the
 level's size, the format in words, the first texture that carries the name (`object/sdf/` dropped),
 every place that uses it (the stage or character folder, the menu folder, the subtitle file), how
-many other textures carry it, for the Japanese and Korean discs whether the European disc has the
+many other textures carry it, for every disc but the European one whether the European disc has the
 name, and notes (a smaller level of a bigger texture, a CLUT scroll, no name). A texture with no
 name (24-bit CLUT) is a row with an empty file column. They are generated, not written by hand
 (`docs/textures/README.md` explains the columns to pack makers). To regenerate (nothing here starts
@@ -393,9 +396,14 @@ build-host/linux-x64/port/render/texpack_disc_test <image>        # writes texpa
 python3 -I tools/texture_catalog.py <names.txt> --serial SCES-50760 --out docs/textures/europe.csv
 python3 -I tools/texture_catalog.py <names.txt> --serial SCPS-11003 --out docs/textures/japan.csv --european <PAL names.txt>
 python3 -I tools/texture_catalog.py <names.txt> --serial SCPS-56001 --out docs/textures/korea.csv --european <PAL names.txt>
+python3 -I tools/texture_catalog.py <names.txt> --serial SCUS-97113 --out docs/textures/usa.csv --european <PAL names.txt>
+python3 -I tools/texture_catalog.py <names.txt> --serial SCPS-55001 --out docs/textures/asia.csv --european <PAL names.txt>
+python3 -I tools/texture_catalog.py <names.txt> --serial SCUS-97113 --out docs/textures/preview-2001-08.csv --european <PAL names.txt>
+python3 -I tools/texture_catalog.py <names.txt> --serial SCUS-97158 --out docs/textures/demo-2001-06.csv --european <PAL names.txt>
 ```
 
-Run `texpack_disc_test` on `Ico_PAL.iso`, `Ico_JPN.iso` and `Ico_KOR.iso`; `--check` regenerates in
+Run `texpack_disc_test` on `Ico_PAL.iso`, `Ico_JPN.iso`, `Ico_KOR.iso`, `Ico_USA.iso`, `Ico_CN.iso`,
+`Ico_AUG6.iso` and `Ico_JUN26.iso`; `--check` regenerates in
 memory and exits 1 when the file on disk differs. The names files are not in the repository, so the
 check is for maintainers, not CI; a texture names change (`texpack_candidates`, the walk's rules)
 means regenerating. A disc added later is one more run with its serial. The European sheet is
