@@ -266,6 +266,18 @@ static int c_fast(void)
 
 static int c_secret(void)
 {
+    /* the 2001 builds have no beach secret (region.h: -1): the achievement is out of reach
+       there, said once */
+    if (GF_BEACH_SECRET < 0) {
+        static int s_said = 0;
+
+        if (!s_said) {
+            s_said = 1;
+            fprintf(stderr, "achievements: this disc has no beach secret; that achievement "
+                            "cannot be earned\n");
+        }
+        return 0;
+    }
     return ico_gs_flag(GF_BEACH_SECRET);
 }
 
