@@ -37,11 +37,9 @@ typedef struct AttackPack { /* field names derived */
 } __attribute__((aligned(16))) AttackPack; /* derived name */
 
 /* the zeroed template every pack starts from; group and group2 start at -1 */
-static const AttackPack attackPackInit_pal = {0, 0, {0, 0}, 0, 0, -1, -1}; /* derived name */
-
-static const AttackPack attackPackInit_ntscaug6 = {0, 0, {0, 0}, 0, -1, -1}; /* derived name */
-
-#define attackPackInit (*PAL_NTSCAUG6(&attackPackInit_pal, &attackPackInit_ntscaug6))
+/* PC port: one template on every disc: the 2001 builds' pack has no spare field, so their
+   initializer's -1 pair is group and group2, as here */
+static const AttackPack attackPackInit = {0, 0, {0, 0}, 0, 0, -1, -1}; /* derived name */
 
 #include "attackhit.h"
 #include <libvu0.h>

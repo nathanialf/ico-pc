@@ -25,6 +25,8 @@
 #include "Matrix.h"
 #include "ios.h"
 #include "Texture.h"
+#include "debug_exception.h" /* PC port: the preview's assert, declared */
+#include <assert.h>
 
 #ifdef ICO_RD
 

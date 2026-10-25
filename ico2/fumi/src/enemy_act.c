@@ -2176,32 +2176,6 @@ static inline int enemyPickupCheckGirl(GObj *self) /* derived name */
 
 static void actEnemyPickupBegin_ntsc(GObj *volatile self)
 {
-    inline int pickupCheckGirl(void) /* derived name */
-    {
-        float buf[4];
-        int ang;
-        int mode;
-
-        if (_ACTGame_SearchGObj(self, girlGObj, 170.0f, 100.0f, 45, buf) != 0) {
-            ang = _RotyGV(buf, test_CURRENTORIENT((girlGObj)));
-            ang = (ang < 0) ? -ang : ang;
-            mode = 2;
-            if (ang <= 89) {
-                mode = 1;
-            }
-        } else {
-            mode = 0;
-        }
-#ifdef DEBUG
-        {
-            float pos[4];
-
-            GetRootProjectionPosOfGObj(pos, (char *)girlGObj));
-            scePrintf("pickup check %d girl %f %f %f\n", mode, pos[0], pos[1], pos[2]);
-        }
-#endif
-        return mode;
-    }
     float *dir = (float *)GOBJ_ACT(self)->dir;
     float *girl = test_CURRENTROOT((girlGObj));
     float *me = test_CURRENTROOT(self);
@@ -2210,7 +2184,9 @@ static void actEnemyPickupBegin_ntsc(GObj *volatile self)
     _OrientXZGV(dir, girl, me);
     SetMotionDirection((void *)self, dir);
     while (1) {
-        mode = pickupCheckGirl();
+        /* PC port: the file-scope helper, the 2001 builds' nested one's body (clang has no
+           nested functions) */
+        mode = enemyPickupCheckGirl(self);
         if (mode < 3 && mode != 0) {
             if (actEnemyForceSwitchToCarry((void *)self) != 0) {
                 ACTGame_InsertCamera_GirlIsPinch();
@@ -2227,32 +2203,6 @@ static void actEnemyPickupBegin_ntsc(GObj *volatile self)
 
 static void actEnemyPickupBegin_aug6(GObj *volatile self)
 {
-    inline int pickupCheckGirl(void) /* derived name */
-    {
-        float buf[4];
-        int ang;
-        int mode;
-
-        if (_ACTGame_SearchGObj(self, girlGObj, 170.0f, 100.0f, 45, buf) != 0) {
-            ang = _RotyGV(buf, test_CURRENTORIENT((girlGObj)));
-            ang = (ang < 0) ? -ang : ang;
-            mode = 2;
-            if (ang <= 89) {
-                mode = 1;
-            }
-        } else {
-            mode = 0;
-        }
-#ifdef DEBUG
-        {
-            float pos[4];
-
-            GetRootProjectionPosOfGObj(pos, (char *)girlGObj));
-            scePrintf("pickup check %d girl %f %f %f\n", mode, pos[0], pos[1], pos[2]);
-        }
-#endif
-        return mode;
-    }
     float *dir = (float *)GOBJ_ACT(self)->dir;
     float *girl = test_CURRENTROOT((girlGObj));
     float *me = test_CURRENTROOT(self);
@@ -2261,7 +2211,9 @@ static void actEnemyPickupBegin_aug6(GObj *volatile self)
     _OrientXZGV(dir, girl, me);
     SetMotionDirection((void *)self, dir);
     while (1) {
-        mode = pickupCheckGirl();
+        /* PC port: the file-scope helper, the 2001 builds' nested one's body (clang has no
+           nested functions) */
+        mode = enemyPickupCheckGirl(self);
         if (mode < 3 && mode != 0) {
             if (actEnemyForceSwitchToCarry((void *)self) != 0) {
                 ACTGame_InsertCamera_GirlIsPinch();

@@ -729,8 +729,10 @@ inline void RestoreReviveCount(GObj *gobj)
         int lim = ((g->flags >> 5) & 0x1F) + 1;
         n = (lim < n) ? lim : n;
         g->reviveCount = n;
+        /* the preview tests the object's address, not its label (never 3415); PC port: at the
+           host pointer's width */
         if (PAL_JPNKORCN_NTSC_AUG6(gobj->labelId == 3757, gobj->labelId == 3734,
-                                   gobj->labelId == 3453, (int)gobj == 3415)) {
+                                   gobj->labelId == 3453, (size_t)gobj == 3415)) {
             g->reviveCount = (g->reviveCount < 0) ? 0 : ((g->reviveCount > 1) ? 1 : g->reviveCount);
         }
     }

@@ -2165,7 +2165,7 @@ static void GetCloth4D_ntscaug6(Cloth4D *c, float x, float y)
     int *rows[nx];
     Sub15C *obj;
     Cloth4DCfg *cfg;
-    int *rows2;
+    ICO_WORD *rows2;
     int nx2;
     int ny2;
     Vec16 *plane;
@@ -2182,7 +2182,7 @@ static void GetCloth4D_ntscaug6(Cloth4D *c, float x, float y)
     if (motionKind[obj->ctrl.motion].flags.bits.clothPlane) {
         plane = &obj->root.plane;
         cfg = c->cfg;
-        rows2 = (int *)c->pos;
+        rows2 = (ICO_WORD *)c->pos; /* PC port: the host row pointers, as PAL */
         nx2 = cfg->nx - (cfg->wrap != 0);
         ny2 = cfg->ny;
         for (i2 = 0; i2 < nx2; i2++) {

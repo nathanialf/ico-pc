@@ -41,6 +41,7 @@
 #include "act-env.h"
 #include "item.h"
 #include "wireLetter.h"
+#include "lineManager.h" /* PC port: DrawLine, declared (the 2001 builds' way marker) */
 
 static void _girlBrainHide_MakeHidePoint(float *p, float dist);
 static int isEnterHideadv(void);

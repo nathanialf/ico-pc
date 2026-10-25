@@ -17,6 +17,7 @@
 #include "main.h"
 #include "script.h"
 #include "ico_gamestate.h" /* port: achievement signals */
+#include "s_init.h"        /* PC port: soundDataClose, declared (the 2001 builds call it) */
 
 /* .sbss: titleSubEnd and demoSubEnd are the flags a title or demo sub-thread
    raises when it is done and its parent waits on, titleSubAdpcm and demoAdpcm

@@ -3510,6 +3510,8 @@ static inline int SwapBoyWeapon(void *oldW, void *newW, void *boy) /* derived na
     return 1;
 }
 
+/* as in camera-root.h, which this TU does not include (GetCurrentCameraSet2 differs) */
+extern void InsertCamera_SetNoraml(float *pos, float *tgt, int frames, int cutType);
 /* returns float * here, int * in camera-root.h */
 extern float *GetCurrentCameraSet2(void);
 
@@ -3534,7 +3536,8 @@ static void OtherStageGirlPinchCamera_After(float t)
             InsertCamera_SetNoraml(GetCurrentCameraSet2(), pinchBoyPosLate, 5, 1);
         } else if (ICO_AUG6) {
             _InterGV(pinchBoyPosLate, pinchBoyPosLate, pinchCameraPos, 1.0f, 8.0f);
-            InsertCamera_SetNoraml(GetCurrentCameraSet2(), pinchBoyPosLate, 5);
+            /* PC port: the preview's takes no cut type; the twin's is unused */
+            InsertCamera_SetNoraml(GetCurrentCameraSet2(), pinchBoyPosLate, 5, 0);
         } else {
             PrivInsCamSet(test_CURRENTROOT(boyGObj), pinchCameraPos, boyGObj,
                           (60 - systemStatus[0] * 10) / systemStatus[1] * 100 / 60,
@@ -6306,9 +6309,6 @@ inline int RequestStageChangeKidnapEnd(int stage, int targetId)
     return rv;
 }
 
-/* as in camera-root.h, which this TU does not include (GetCurrentCameraSet2 differs) */
-extern void InsertCamera_SetNoraml(float *pos, float *tgt, int frames, int cutType);
-
 void SetStatusBoy_OtherStageGirlPinch(void)
 {
     float buf[4];
@@ -7256,10 +7256,11 @@ inline void afterBoyRescueGirlBhang(GObj *volatile self)
     ACTGame_DisconnectHand();
 }
 
-static inline void subBoyBrainMain_aug6(GObj *volatile self)
+/* PC port: the preview's boy brain only waits; its unused read of the object's Act (from the
+   int argument, a truncated pointer on the host) is left out */
+static inline void subBoyBrainMain_aug6(int arg)
 {
-    Act *sub = GOBJ_ACT(self);
-
+    (void)arg;
     while (1) {
         _ACTWait(1);
     }
