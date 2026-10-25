@@ -107,7 +107,7 @@
 /* crack_count_ps's block (blit.hlsl CRACK_BLOCK) */
 #define CRACK_BLOCK 16u
 
-enum { SKIP_MSAA, SKIP_DEPTH, SKIP_PIPES, SKIP_MEMORY, SKIP_COUNT };
+enum { SKIP_MSAA, SKIP_DEPTH, SKIP_PIPES, SKIP_MEMORY, SKIP_PASS, SKIP_COUNT };
 
 static const char *const kSkipWhy[SKIP_COUNT] = {
     ("MSAA is asked for (its resolve gives a crack's pixel the surfaces beside it unless "
@@ -115,6 +115,7 @@ static const char *const kSkipWhy[SKIP_COUNT] = {
     "the scene's depth cannot be sampled on this device",
     "its shaders or pipelines are missing",
     "no memory for the copies of the scene's colour and depth",
+    "the scene pass the fog keeps could not be begun after the copies",
 };
 
 /* why the switch is what it is (the state line) */
@@ -347,13 +348,15 @@ void rd__crack_fill_block(void)
     }
     const uint64_t *k = s_cf.bSkip;
     /* MSAA is a choice (its own line once a run); the others are not */
-    if (k[SKIP_DEPTH] | k[SKIP_PIPES] | k[SKIP_MEMORY]) {
+    if (k[SKIP_DEPTH] | k[SKIP_PIPES] | k[SKIP_MEMORY] | k[SKIP_PASS]) {
         rd__log("crack fill: %llu fogged replays above 1x not filled (%llu under MSAA, %llu "
                 "without a sampleable depth, %llu without its pipelines, %llu without memory for "
-                "its copies)",
-                (unsigned long long)(k[SKIP_MSAA] + k[SKIP_DEPTH] + k[SKIP_PIPES] + k[SKIP_MEMORY]),
+                "its copies, %llu with the fog's pass not begun)",
+                (unsigned long long)(k[SKIP_MSAA] + k[SKIP_DEPTH] + k[SKIP_PIPES] + k[SKIP_MEMORY] +
+                                     k[SKIP_PASS]),
                 (unsigned long long)k[SKIP_MSAA], (unsigned long long)k[SKIP_DEPTH],
-                (unsigned long long)k[SKIP_PIPES], (unsigned long long)k[SKIP_MEMORY]);
+                (unsigned long long)k[SKIP_PIPES], (unsigned long long)k[SKIP_MEMORY],
+                (unsigned long long)k[SKIP_PASS]);
     }
     s_cf.bFilled = s_cf.bCounted = s_cf.bPixels = s_cf.bFolded = 0;
     s_cf.bMax = 0;
@@ -509,6 +512,7 @@ static bool fillWork(Replay *r, RdTargetRec *tc, RdDepthCopy *copy, RhiPipeline 
                               false);
         r->perfPost = RD_PERF_POST_CRACK;
         if (!r->passOpen) {
+            skip(SKIP_PASS, tc);
             return false; /* not begun: nothing drawn */
         }
         fold = r->passColor == scene && r->passDepth == scene && r->passDepthReadable;
