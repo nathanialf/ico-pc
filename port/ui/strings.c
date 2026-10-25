@@ -16,7 +16,7 @@ static int s_sheetLang = -1; /* -1: follows s_lang (ui_sheet_language) */
 
 static const char *const *const s_tables[UI_LANG_COUNT] = {
     ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it,
-    ui_strings_es, ui_strings_ja, ui_strings_ko,
+    ui_strings_es, ui_strings_ja, ui_strings_ko, ui_strings_zh,
 };
 
 void ui_set_language(UiLang lang)
