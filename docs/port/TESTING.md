@@ -20,6 +20,7 @@ tests a change needs. How to run `ctest` is [../BUILDING.md](../BUILDING.md#test
 | `tools/native_frame_check.py`, `tools/native_frame_dumps.txt`, `docs/native_frame_baseline.json` | the native-frame gates, their dump list and their baseline |
 | `tools/coverage_check.py`, `tools/coverage_corpus.txt` | the regression renders and their corpus |
 | `port/render/tools/rd_replay_tool.c` | the replay tool |
+| `tools/vu_variant_diff.py`, `tools/vu_variant_equiv.py`, `tools/test/vu1/` | the June 2001 demo's VU1 programs against the retail ones: the diff, its per-hunk table, the symbolic comparison |
 | `port/platform/hotkeys.h`, `port/platform/dump_zip.h`, `port/render/rd_dump.c` | F12, the aspect sweep, the dump format |
 | `port/input/pad_script.h`, `port/input/input_record.h`, `port/platform/trace_host.h` | pad scripts, recordings, the trace |
 | `tools/dev_build.sh` | build a few targets of one checkout and run a few tests |
@@ -948,6 +949,17 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 
 ### port/test
 
+- `vu1_variant_table`, `vu1_variant_diff`, `vu1_variant_equiv` (`tools/vu_variant_diff.py`,
+  `tools/vu_variant_equiv.py`, `tools/test/vu1/`): the June 2001 demo's `cluster`, `mesh`, `normal_c`
+  and `normal_l` programs differ from the retail ones in 17 hunks, one of them semantic (the lit mesh
+  loop's UV offset on every vertex). `vu1_variant_table` needs no decomp: the diff's hunks, the rows of
+  `jun26_vs_pal.md`, `VU1_JUN26_SEMANTIC_DIFFS` (`vu1_ref.h`) and the draw flag (`ICO_VU_JUN26`,
+  `VU_F_JUN26`) agree. The other two run the decomp's `.vsm` text through `cpp` (the cache variable
+  `ICO_DECOMP_DIR`, skipped, 77, without it or without `cpp`) and compare the diff and the symbolic
+  executor's per-routine verdicts (`jun26_vs_pal_equiv.txt`: same output quadwords on every clip path,
+  or the first quadword that differs) byte for byte with the committed files. `vu1_test.c`'s
+  `testVariantPlumbing` holds the state's variant, its names, the flag's bit and the block's size, and
+  names the demo's hand traces that are still to be written.
 - `layout_asserts.c`: the generated struct layout asserts, which hold at compile time
   (`layout_asserts`).
 - `gs_blend_test.c` is a standalone CPU program on the GS blender's drift, not a ctest.
