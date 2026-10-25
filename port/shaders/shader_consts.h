@@ -440,10 +440,15 @@ enum {
     ICO_VU_BEHIND_EYE = 256, /* region test and particle window: a failing triangle or
                                * sprite is GPU-clipped, not dropped, in either preset
                                * (photo mode's free camera, RdCamera.freeCamera) */
-    ICO_VU_TICKS = 512       /* region test: the draw is seen through a camera blended
+    ICO_VU_TICKS = 512,      /* region test: the draw is seen through a camera blended
                               * between two ticks' (IcoVuCB.ticks): a triangle the rule
                               * drops is drawn, clipped, when the rule draws it at either
                               * tick's camera (vu_common.hlsli vu_region_rule) */
+    ICO_VU_JUN26 = 1024      /* the running disc is the June 2001 demo: its cluster, mesh,
+                              * normal_c and normal_l programs are the draw's (vu_common.hlsli
+                              * g_vuVariant 1; port/render/vu1_ref/vu1_ref.h VU1_VARIANT_JUN26).
+                              * Set by rd_replay_vu.c from ico_region; the shaders do not read
+                              * it yet */
 };
 
 /* The native frame's constants (port/include/ico_frame.h ICO_FRAME_BASE_W,

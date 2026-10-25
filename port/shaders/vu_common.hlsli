@@ -170,6 +170,13 @@ StructuredBuffer<float4> vu_stream : ICO_REG(t0, 1);
 // camera is drawn, clipped, when either tick showed it on the frame
 // (vu_region_rule)
 #define VU_F_TICKS 512u
+// The June 2001 demo's own cluster, mesh, normal_c and normal_l programs
+// (rd_replay_vu.c sets it from ico_region): g_vuVariant is 1, else 0 (the
+// retail text).  The programs differ in schedule and in the places
+// tools/test/vu1/jun26_vs_pal.md lists; a shader branches on g_vuVariant at
+// each of those.  No shader reads it yet.
+#define VU_F_JUN26 1024u
+#define g_vuVariant (((vu_draw.z & VU_F_JUN26) != 0u) ? 1u : 0u)
 // The marks of a triangle k-2, k-1, k (shader_consts.h ICO_VU_MARK_*,
 // rd_mesh.c RdMeshRec.kickMark): a byte a kick after the mesh's vertices
 // in the stream, where vu_mark says.
