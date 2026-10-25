@@ -9,14 +9,14 @@
  *
  *   [variants] shade_toughness
  *                          "original"   "original" (the disc's table),
- *                                       "american" (every Shade as tough as
+ *                                       "american" (every Shadow as tough as
  *                                       on the North American disc, and no
  *                                       tougher on later playthroughs) or
- *                                       "no_plus" (the disc's Shades, no
+ *                                       "no_plus" (the disc's Shadows, no
  *                                       tougher on later playthroughs)
  *   [variants] one_hit      false  one hit per swing (debug_one_hit_only)
- *   [variants] never_dodge  false  the Shades never dodge (debug_ignore_dodge)
- *   [variants] aggression  "own"   "own" (each Shade's own), "bold_patient",
+ *   [variants] never_dodge  false  the Shadows never dodge (debug_ignore_dodge)
+ *   [variants] aggression  "own"   "own" (each Shadow's own), "bold_patient",
  *                                  "bold_quick", "wary_patient" or
  *                                  "wary_quick" (debug_enemy_battle_type)
  *   [variants] no_hints     false  no hints (the North American disc has none)
@@ -29,16 +29,27 @@
  *                          false  the cutscenes' cameras are ignored
  *                                  (debug_ignore_demo_camera)
  *
- * This file is the page's half: the values, their config keys and the
- * achievements rule.  The game hooks that read them (enemy.c, attackhit.c,
- * queen.c, the hint code, the camera) are another change; until they are
- * wired the page changes the keys and nothing else.
+ * The game reads them in three ways (docs/port/GAME_FEATURES.md "Game
+ * variants" names every site):
+ *   - debug switches the game already has (One hit per swing, Shadows never
+ *     dodge, Shadow aggression, Ignore cutscene cameras, and No cutscene
+ *     look-around as debug_hand_camera 0, the USA disc's value): debug.c's
+ *     debug_VariableInit binds them (ico_variants_bind_debug) and
+ *     ico_variants_apply writes them at the bind, at every reload and on every
+ *     change; a variant at its shipped value leaves its switch as the game
+ *     set it (and puts back the game's value when it is switched off);
+ *   - the enemy table: enemy.c reads every enemyKind row through
+ *     ico_variant_enemy_def (Shadow toughness American, Shadow aggression);
+ *     enemy_act.c's restart life reads ico_variant_shade_toughness;
+ *   - local reads: ico_hints_on (lws_kyomi.c, girl.c), ico_variant_barrier_hits
+ *     (queen.c).
+ * With every row at its shipped value the game runs as before.
  *
  * Achievements are suspended (ico_variants_suspend_achievements, read by
- * gamestate.c beside developer mode) while One hit per swing, Shades never
+ * gamestate.c beside developer mode) while One hit per swing, Shadows never
  * dodge or Cutscene cameras ignored is on, and from the Debug menu's being
  * opened until the options are reloaded or ico_variants_debug_menu_clear.
- * Shade toughness, aggression, No hints, the barrier and the look-around do
+ * Shadow toughness, aggression, No hints, the barrier and the look-around do
  * not suspend them.
  */
 #ifndef ICO_PORT_GAME_VARIANTS_H
@@ -68,7 +79,7 @@ typedef enum IcoVariantToughness {
 } IcoVariantToughness;
 
 typedef enum IcoVariantAggression {
-    ICO_AGGRESSION_OWN = 0, /* the Shade's own; the game sets nothing */
+    ICO_AGGRESSION_OWN = 0, /* the Shadow's own; the game sets nothing */
     ICO_AGGRESSION_BOLD_PATIENT,
     ICO_AGGRESSION_BOLD_QUICK,
     ICO_AGGRESSION_WARY_PATIENT,
@@ -102,23 +113,57 @@ const char *ico_variant_key(IcoVariantId id);
 const char *ico_variant_value_name(IcoVariantId id, int index);
 
 /* 1 while a variant that switches achievements off is in force: One hit per
-   swing, Shades never dodge, Cutscene cameras ignored, or the Debug menu
+   swing, Shadows never dodge, Cutscene cameras ignored, or the Debug menu
    opened.  Logs "variants: achievements are off ..." when that changes. */
 int ico_variants_suspend_achievements(void);
 
 /* The Debug menu row (shown with Developer mode on) was pressed: marks the
    Debug menu used (achievements suspended) and calls
-   ico_variants_open_debug_menu. */
-void ico_variants_debug_menu_pressed(void);
+   ico_variants_open_debug_menu; returns what it returns (1: the menu is
+   open, the caller closes Options). */
+int ico_variants_debug_menu_pressed(void);
 void ico_variants_debug_menu_clear(void);
 
-/* The host hook behind the row: opens the game's debug menu and closes
-   Options.  Implemented with the game hooks; until then a stub in
-   variants.c that logs once. */
-void ico_variants_open_debug_menu(void);
+/* Opens the game's debug menu through the opener the game bound
+   (debug.c debug_MenuOpen: menuState as SELECT sets it in developer mode);
+   0 and a log line when nothing is bound (the game has not started, or a
+   test without the game). */
+int ico_variants_open_debug_menu(void);
 
-/* Back to the config's values (ico_opt_reload calls it). */
+/* Back to the config's values (ico_opt_reload calls it), then
+   ico_variants_apply. */
 void ico_variants_reload(void);
+
+/* The game's half (ico2/common/src/debug.c debug_VariableInit, after the
+   retail values and the developer's option file are set): where the debug
+   switches the variants hold are, and the debug menu's opener.  Each NULL
+   unbinds (tests).  Logs once per bind and applies. */
+void ico_variants_bind_debug(int *one_hit, int *ignore_dodge, int *battle_type,
+                             int *ignore_demo_camera, int *hand_camera, void (*menu_open)(void));
+
+/* Writes the bound switches from the values in force (variants.h above) and
+   logs "variants: applied ..." with every value and every switch.  Called at
+   the bind, by ico_variants_reload and by ico_variant_set (so by every step
+   of the page). */
+void ico_variants_apply(void);
+
+/* 1 when the disc has a hint system (not the USA disc nor the two 2001
+   builds) and No hints is off: lws_kyomi.c's hint timers and girl.c's hint
+   voice read it. */
+int ico_hints_on(void);
+
+#ifdef ENEMY_H
+/* The enemy table row the game reads for kind (enemy.c, every reader of
+   enemyKind): the disc's own row while Shadow toughness is not American and
+   Shadow aggression is the Shadow's own; otherwise a copy with the USA table's
+   life, scale, fly type and battle type (American: the disc's model,
+   particle, fly acceleration, dodge range and parameter row, and a row of
+   the disc's "no model" left whole) and the chosen battle type
+   (aggression).  A kind outside 0 .. rows-1 reads the last row (logged
+   once): the June 2001 demo's table has 18 rows, the others 45. */
+const EnemyDef *ico_variant_enemy_def(const EnemyDef *disc, int rows, const EnemyDef *usa,
+                                      int usaRows, int kind);
+#endif
 
 #ifdef __cplusplus
 }
