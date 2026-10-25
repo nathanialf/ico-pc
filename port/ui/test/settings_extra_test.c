@@ -10,6 +10,7 @@
 #include "popup.h"
 #include "pointer.h"
 #include "ui_mouse.h"
+#include "ui_internal.h" /* ui__font_chinese_first */
 #include "ui_lang.h"
 #include "../../core/region.h"
 #include "photo_mode.h"
@@ -3597,7 +3598,7 @@ static void testMenuLanguage(void)
     CHECK(strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE), "Automatisch") == 0 ||
               ui_settings_value_text(UI_OPT_MENU_LANGUAGE)[0] != '\0',
           "the row's value: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
-    /* Auto, en, fr, de, it, es, ja, ko, Auto */
+    /* Auto, en, fr, de, it, es, ja, ko, zh, Auto */
     ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
     CHECK(ico_opt_ui_language() == UI_LANG_EN && ui_get_language() == UI_LANG_EN &&
               ui_sheet_language() == UI_LANG_DE,
@@ -3624,6 +3625,14 @@ static void testMenuLanguage(void)
                  "\xED\x95\x9C\xEA\xB5\xAD\xEC\x96\xB4") == 0,
           "the row names Korean in Korean: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
     ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
+    CHECK(ico_opt_ui_language() == UI_LANG_ZH && ui_get_language() == UI_LANG_ZH &&
+              ui_sheet_language() == UI_LANG_IT && ui__font_chinese_first(),
+          "Chinese menus over the Italian game (%d, %d)", ui_get_language(), ui_sheet_language());
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE),
+                 "\xE7\xB9\x81\xE9\xAB\x94\xE4\xB8\xAD\xE6\x96\x87") == 0,
+          "the row names Chinese in Chinese: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
+    ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
+    CHECK(!ui__font_chinese_first(), "Auto: the Japanese face is first again");
     CHECK(ico_opt_ui_language() == -1 && ui_get_language() == UI_LANG_IT, "Auto again: Italian");
     CHECK(ui_settings_save() == 0, "saved");
     NonLinearCameraMove = 2;
