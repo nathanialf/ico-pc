@@ -152,7 +152,7 @@ OFF(LtProperty, texV, 0x68);
 SIZE(LtProperty, 0x70); /* comment */
 #endif
 
-/* LtProp: runtime, ico2/common/include/layout_texture.h:86 */
+/* LtProp: runtime, ico2/common/include/layout_texture.h:87 */
 #if ICO_LAYOUT_EE
 OFF(LtProp, first, 0x0);
 OFF(LtProp, last, 0x4);
@@ -1071,7 +1071,7 @@ OFF(McMgr, mask, 0x9C0);
 SIZE(McMgr, 0xA00); /* comment */
 #endif
 
-/* HandClInfo: runtime, ico2/fumi/include/act-game.h:18 */
+/* HandClInfo: runtime, ico2/fumi/include/act-game.h:21 */
 #if ICO_LAYOUT_EE
 OFF(HandClInfo, on, 0x0);
 OFF(HandClInfo, hit, 0x1);
@@ -1084,7 +1084,7 @@ OFF(HandClInfo, pad22, 0x22);
 OFF(HandClInfo, orient2, 0x30);
 #endif
 
-/* ActEffRec: runtime, ico2/fumi/include/act-game.h:32 */
+/* ActEffRec: runtime, ico2/fumi/include/act-game.h:35 */
 #if ICO_LAYOUT_EE
 OFF(ActEffRec, pos, 0x0);
 OFF(ActEffRec, dir, 0x10);
@@ -1094,7 +1094,7 @@ OFF(ActEffRec, kind, 0x28);
 OFF(ActEffRec, pad2C, 0x2C);
 #endif
 
-/* ActWork: runtime, ico2/fumi/include/act-game.h:44 */
+/* ActWork: runtime, ico2/fumi/include/act-game.h:47 */
 #if ICO_LAYOUT_EE
 OFF(ActWork, paraTbl, 0x0);
 OFF(ActWork, pad158, 0x158);
@@ -1214,7 +1214,7 @@ OFF(ActWork, frameHist, 0x928);
 OFF(ActWork, prevHist, 0x950);
 #endif
 
-/* LookTarget: overlay, ico2/fumi/include/act-game.h:281 */
+/* LookTarget: overlay, ico2/fumi/include/act-game.h:285 */
 OFF(LookTarget, kind, 0x0);
 SIZE(LookTarget, 0xC); /* comment */
 
@@ -1319,11 +1319,11 @@ OFF(PackKind, func, 0x20);
 SIZE(PackKind, 0x24); /* comment */
 #endif
 
-/* IdlingDef: overlay, ico2/fumi/include/commonact.h:54 */
+/* IdlingDef: overlay, ico2/fumi/include/commonact.h:62 */
 OFF(IdlingDef, motion, 0x0);
 SIZE(IdlingDef, 0xC); /* comment */
 
-/* IdleRangeRec: overlay, ico2/fumi/include/commonact.h:62 */
+/* IdleRangeRec: overlay, ico2/fumi/include/commonact.h:71 */
 OFF(IdleRangeRec, idleMotion, 0x0);
 OFF(IdleRangeRec, orientRow, 0x4);
 OFF(IdleRangeRec, orientRow2, 0x8);
@@ -1331,7 +1331,7 @@ OFF(IdleRangeRec, orientFirst, 0xC);
 OFF(IdleRangeRec, orientEnd, 0x10);
 SIZE(IdleRangeRec, 0x14); /* comment */
 
-/* ClingRec: overlay, ico2/fumi/include/commonact.h:74 */
+/* ClingRec: overlay, ico2/fumi/include/commonact.h:84 */
 OFF(ClingRec, rot, 0x0);
 OFF(ClingRec, pos, 0xC);
 OFF(ClingRec, mode, 0x18);
@@ -1339,7 +1339,7 @@ OFF(ClingRec, motion, 0x1C);
 OFF(ClingRec, node, 0x20);
 SIZE(ClingRec, 0x24); /* comment */
 
-/* BecPair: overlay, ico2/fumi/include/commonact.h:85 */
+/* BecPair: overlay, ico2/fumi/include/commonact.h:96 */
 OFF(BecPair, mot, 0x0);
 OFF(BecPair, req, 0x4);
 SIZE(BecPair, 0x8); /* comment */
@@ -1492,12 +1492,12 @@ OFF(FcFloorEnt, attr, 0x60);
 OFF(FcFloorEnt, pad64, 0x64);
 SIZE(FcFloorEnt, 0x70); /* comment */
 
-/* EscapeRange: overlay, ico2/fumi/include/girl_act.h:66 */
+/* EscapeRange: overlay, ico2/fumi/include/girl_act.h:70 */
 OFF(EscapeRange, lo, 0x0);
 OFF(EscapeRange, hi, 0x4);
 SIZE(EscapeRange, 0x8); /* comment */
 
-/* EscortPoint: overlay, ico2/fumi/include/girl_act.h:73 */
+/* EscortPoint: overlay, ico2/fumi/include/girl_act.h:77 */
 OFF(EscortPoint, pos, 0x0);
 OFF(EscortPoint, area, 0xC);
 OFF(EscortPoint, point, 0x10);
@@ -1675,7 +1675,7 @@ OFF(IosPadStick, dz, 0x10);
 OFF(IosPadStick, mag, 0x14);
 #endif
 
-/* PadAct: runtime, ico2/fumi/include/pad.h:103 */
+/* PadAct: runtime, ico2/fumi/include/pad.h:104 */
 #if ICO_LAYOUT_EE
 OFF(PadAct, key, 0x0);
 OFF(PadAct, box, 0x4);
@@ -1686,7 +1686,7 @@ OFF(PadAct, tick, 0x12);
 OFF(PadAct, volume, 0x14);
 #endif
 
-/* PadActDef: overlay, ico2/fumi/include/pad.h:137 */
+/* PadActDef: overlay, ico2/fumi/include/pad.h:140 */
 OFF(PadActDef, word0, 0x0);
 OFF(PadActDef, voice, 0x4);
 OFF(PadActDef, life, 0x6);
@@ -2158,7 +2158,7 @@ OFF(EffectArg, d.hi, 0x8);
 SIZE(EffectArg, 0x10); /* comment */
 #endif
 
-/* WarpRec: overlay, ico2/script/include/script.h:149 */
+/* WarpRec: overlay, ico2/script/include/script.h:171 */
 OFF(WarpRec, arrive2, 0x0);
 OFF(WarpRec, arrive1, 0x10);
 OFF(WarpRec, arrive0, 0x20);
@@ -2465,7 +2465,7 @@ OFF(EnemySet, n, 0x4);
 SIZE(EnemySet, 0x8); /* config */
 #endif
 
-/* LightMatrix: runtime, ico2/seki/include/Light.h:24 */
+/* LightMatrix: runtime, ico2/seki/include/Light.h:25 */
 #if ICO_LAYOUT_EE
 OFF(LightMatrix, normal, 0x0);
 OFF(LightMatrix, color, 0x40);
@@ -2475,7 +2475,7 @@ OFF(LightMatrix, ambient, 0xE0);
 OFF(LightMatrix, mode, 0xF0);
 #endif
 
-/* ObjLight: overlay, ico2/seki/include/Light.h:35 */
+/* ObjLight: overlay, ico2/seki/include/Light.h:36 */
 OFF(ObjLight, col, 0x0);
 OFF(ObjLight, range, 0xC);
 SIZE(ObjLight, 0x10); /* comment */
@@ -2790,12 +2790,12 @@ OFF(struct Cloth4D, collision, 0x2F8);
 SIZE(struct Cloth4D, 0x300); /* config */
 #endif
 
-/* EnemyKindRange: overlay, ico2/sugipon/include/enemy.h:16 */
+/* EnemyKindRange: overlay, ico2/sugipon/include/enemy.h:18 */
 OFF(EnemyKindRange, first, 0x0);
 OFF(EnemyKindRange, last, 0x4);
 SIZE(EnemyKindRange, 0x8); /* comment */
 
-/* EnemyDef: overlay, ico2/sugipon/include/enemy.h:25 */
+/* EnemyDef: overlay, ico2/sugipon/include/enemy.h:27 */
 OFF(EnemyDef, model, 0x0);
 OFF(EnemyDef, particle, 0x4);
 OFF(EnemyDef, life, 0x8);
@@ -3113,7 +3113,7 @@ OFF(PoolMesh, row, 0x18);
 OFF(PoolMesh, color, 0x1C);
 #endif
 
-/* SpiderKindRec: overlay, ico2/sugipon/include/spider.h:20 */
+/* SpiderKindRec: overlay, ico2/sugipon/include/spider.h:21 */
 OFF(SpiderKindRec, jump, 0x0);
 OFF(SpiderKindRec, layout, 0xC);
 OFF(SpiderKindRec, count, 0x10);
@@ -3183,7 +3183,7 @@ SIZE(FumbleRow, 0x18); /* comment */
 SIZE(HandModeCmd, 0x8); /* config */
 #endif
 
-/* GamesysObjInfo: save, ico2/common/include/backStage.h:23 */
+/* GamesysObjInfo: save, ico2/common/include/backStage.h:25 */
 SIZE(GamesysObjInfo, 0x40); /* config */
 
 /* Host sizes the game's code depends on.  The EE ClipWork is 0xC0 bytes; the host one
