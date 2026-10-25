@@ -121,7 +121,7 @@ Lavapipe (Mesa's CPU Vulkan driver, the only GPU in the build container) on the 
 
 | --aa | the resolve | `gpu:` total |
 | --- | --- | --- |
-| before (two resolves a picture, 2026-10-23) msaa4 | `MSAA resolve 2.0`: pass 4 colour resolve 9.1-9.9 ms, pass 6 depth resolve 7.9-8.4 ms (17.3 ms together) | 539-546 ms |
+| before (two resolves a picture, 2026-10-23) msaa4 | `MSAA resolve 2.0`: pass 4, the first full MSAA resolve, 9.1-9.9 ms; pass 6, the second full MSAA resolve (the double-resolve bug), 7.9-8.4 ms (17.3 ms together) | 539-546 ms |
 | after, msaa4 | `MSAA resolve 1.0`: pass 5, one draw, 31.3-34.7 ms | 803-850 ms |
 | after, off | no resolve | 604-738 ms |
 
