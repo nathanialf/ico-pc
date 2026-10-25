@@ -23,7 +23,7 @@ Yes. Open **Options > Controls > Hold type** and choose **B (toggle)**.
 Then one press of R1 takes her hand and another press lets go. **A (hold)**
 is the other choice, where her hand stays held only while R1 is down.
 
-The European, Japanese and Korean discs start on A. The North American disc
+The European, Japanese, Korean and Asian discs start on A. The North American disc
 has no such choice and always worked as B. The row shows from the title
 screen as well as the pause menu, and it is kept in your settings, so it
 stays as you set it for every save.
@@ -92,18 +92,18 @@ The game is running and only the picture is missing. That points to the
 graphics driver. Update it from the maker's site (NVIDIA, AMD or Intel),
 then start the game again. If the picture is still black, send a report as
 described in [When something goes wrong](TROUBLESHOOTING.md#send-a-problem-report)
-and attach the log and say which disc you play, the European or the
-Japanese.
+and attach the log and say which disc you play (the European, Japanese, Korean, North American or Asian disc, the August 2001 preview or the June 2001 magazine demo).
 
 ## How do I use a texture pack?
 
 A texture pack is a set of sharper pictures that fans made to replace the
 game's own. The game comes with a `textures` folder for one.
 
-1. Copy the pack's `SCES-50760` folder (a pack for the European disc) or
-   `SCPS-11003` folder (a pack for the Japanese disc) or `SCPS-56001` folder
-   (a pack for the Korean disc) into the `textures`
-   folder beside the program. On Windows that is inside the `x64` folder.
+1. Copy the pack's folder for your disc into the `textures` folder beside the
+   program: `SCES-50760` (the European disc), `SCPS-11003` (Japanese),
+   `SCPS-56001` (Korean), `SCUS-97113` (the North American disc and the August
+   2001 preview), `SCUS-97158` (the June 2001 magazine demo) or `SCPS-55001`
+   (Asian). On Windows that is inside the `x64` folder.
    On a Mac or an iPhone the download has no such folder: [the full
    guide](TEXTURE_PACKS.md) shows where to make one.
 2. Start the game.
@@ -223,14 +223,21 @@ it.
 
 ## Which disc image works?
 
-The European release of ICO, numbered SCES-50760, the Japanese release,
-numbered SCPS-11003, or the Korean release, numbered SCPS-56001, as a `.iso`,
-`.chd` or `.bin` file (a `.cue` file that
-points to the `.bin` works too). The Japanese release is a CD, so its image
-is usually a `.bin` with a `.cue`. The American release and later editions
-do not work. If the image is not one of the three, the game says so in a
-message when you start it, and the log says so too.
-[What is different between the three](../README.md#the-three-discs).
+One of the seven: the European release of ICO, numbered SCES-50760, the
+Japanese release (SCPS-11003), the Korean release (SCPS-56001), the North
+American release (SCUS-97113), the Asian release (SCPS-55001), the August 2001
+preview disc, or the June 2001 magazine demo (SCUS-97158). The image is a
+`.iso`, `.chd` or `.bin` file (a `.cue` file that points to the `.bin` works
+too). The Japanese, North American and preview discs are CDs, so their images
+are usually a `.bin` with a `.cue`. Other editions do not work. If the image
+is not one of the seven, the game says so in a message when you start it, and
+the log says so too.
+[What is different between the seven](../README.md#the-seven-discs).
+
+The magazine demo needs the **whole** disc image: the magazine's disc holds
+other games and demos besides ICO, and the program finds ICO's part inside the
+image. A copy of just ICO's files will not do. The first start keeps only
+ICO's part (about 280 MB) and the image can go afterwards.
 
 ## Can I play more than one disc?
 
@@ -240,7 +247,9 @@ does not touch the others.
 
 To add another disc, give the game its image the same way as the first
 time: on Windows and Linux, put it beside the program named `Ico_PAL.iso`
-(European), `Ico_JPN.iso` (Japanese) or `Ico_KOR.iso` (Korean), or put its full path on the `iso=`
+(European), `Ico_JPN.iso` (Japanese), `Ico_KOR.iso` (Korean), `Ico_USA.iso`
+(North American), `Ico_CN.iso` (Asian), `Ico_AUG6.iso` (August 2001 preview) or
+`Ico_JUN26.iso` (June 2001 magazine demo), or put its full path on the `iso=`
 line of `ico-pc.ini`; on an iPhone, copy it into ICO's Documents folder
 with that name. The first disc's image can stay where it is: when more
 than one image is there, the game starts a disc that is not set up yet and
@@ -251,15 +260,15 @@ On an Android phone the file picker only opens while no disc is set up,
 so it does not ask for another disc. Do one of these:
 
 - With a USB cable or the Files app, copy the image into the game's
-  folder (`Android/data/com.defnf.icopc/files`), named `Ico_JPN.iso`
-  (Japanese), `Ico_KOR.iso` (Korean) or `Ico_PAL.iso` (European), and start
-  the game.
-- Set `disc` in the `[game]` part of `config.toml` in that folder to
-  `"jpn"`, `"kor"` or `"pal"`. The next start opens the file picker for that disc.
+  folder (`Android/data/com.defnf.icopc/files`), named as in the list above
+  (`Ico_JPN.iso` for the Japanese disc and so on), and start the game.
+- Set `disc` in the `[game]` part of `config.toml` in that folder to your
+  disc's word (listed below). The next start opens the file picker for that disc.
 
 To keep one disc whichever images are around, set `disc` in the `[game]`
-part of `config.toml` to `"pal"` (European), `"jpn"` (Japanese) or `"kor"`
-(Korean); `"auto"` lets the game choose.
+part of `config.toml` to `"pal"` (European), `"jpn"` (Japanese), `"kor"`
+(Korean), `"ntsc"` (North American), `"cn"` (Asian), `"aug6"` (August 2001
+preview) or `"jun26"` (June 2001 magazine demo); `"auto"` lets the game choose.
 With more than one disc set up, the **Disc** row in Options does the same
 ([more](OPTIONS.md#language)).
 
@@ -281,5 +290,5 @@ there. On a computer you can also close the window.
 
 Look at [When something goes wrong](TROUBLESHOOTING.md). It explains the
 error messages and how to send a useful report. In the report, say which
-disc you play, the European or the Japanese, and attach the newest file
+disc you play (the European, Japanese, Korean, North American or Asian disc, the August 2001 preview or the June 2001 magazine demo), and attach the newest file
 in the `logs` folder that starts with `report-` (or `ico-pc.log`).
