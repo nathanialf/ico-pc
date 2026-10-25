@@ -3374,7 +3374,8 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_ACH_POPUPS, UI_STR_ACH_POPUPS_ALSO_NOTE);
         break;
     case UI_PAGE_VARIANTS:
-        /* each row says whether it switches achievements off */
+        /* each row says whether it switches achievements off (the disc's
+           own notes on the 2001 discs: refreshPage, variantNote) */
         addNote(pg, UI_OPT_VAR_TOUGHNESS, UI_STR_OPT_VAR_TOUGHNESS_NOTE);
         addNote(pg, UI_OPT_VAR_ONE_HIT, UI_STR_OPT_VAR_ONE_HIT_NOTE);
         addNote(pg, UI_OPT_VAR_NEVER_DODGE, UI_STR_OPT_VAR_NEVER_DODGE_NOTE);
@@ -5447,6 +5448,26 @@ static int gfxProc(const Row *r, int flags)
     return 0;
 }
 
+/* PC port: a Game variants row's note on the running disc. The June 2001
+   demo offers no American toughness (port/game/variants.h
+   ico_variant_offered: its Shadows are its own), and the three 2001 discs
+   have no hints (variants.c ico_hints_on) and no cutscene look-around (the
+   game's debug_VariableInit leaves debug_hand_camera 0 on them), so those
+   two rows say they change nothing there */
+static int variantNote(int opt, int strId)
+{
+    if (opt == UI_OPT_VAR_TOUGHNESS && ICO_JUN26) {
+        return UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO;
+    }
+    if (opt == UI_OPT_VAR_NO_HINTS && ICO_NTSCAUG6JUN26) {
+        return UI_STR_OPT_VAR_NO_HINTS_NOTE_2001;
+    }
+    if (opt == UI_OPT_VAR_NO_LOOK && ICO_NTSCAUG6JUN26) {
+        return UI_STR_OPT_VAR_NO_LOOK_NOTE_2001;
+    }
+    return strId;
+}
+
 static void refreshPage(Page *pg, int id, int cur)
 {
     if (pg->isList) {
@@ -5490,6 +5511,13 @@ static void refreshPage(Page *pg, int id, int cur)
             if (running && r->note >= 0) {
                 texExportNote(r->note, &st);
             }
+        }
+        if (r->opt == UI_OPT_VAR_TOUGHNESS) {
+            r->noteStr = variantNote(r->opt, UI_STR_OPT_VAR_TOUGHNESS_NOTE);
+        } else if (r->opt == UI_OPT_VAR_NO_HINTS) {
+            r->noteStr = variantNote(r->opt, UI_STR_OPT_VAR_NO_HINTS_NOTE);
+        } else if (r->opt == UI_OPT_VAR_NO_LOOK) {
+            r->noteStr = variantNote(r->opt, UI_STR_OPT_VAR_NO_LOOK_NOTE);
         }
         if (r->opt == UI_OPT_TOUCH_EDIT) {
             /* locked: Cross does nothing, the note says why */
