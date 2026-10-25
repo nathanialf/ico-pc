@@ -13,6 +13,7 @@
  *   <files>/ico.o2r                    the extracted game data (European disc)
  *   <files>/ico-jpn.o2r                the same of the Japanese disc
  *   <files>/memcard/                   the memory cards
+ *   <files>/memcard-preview/           the August 2001 preview disc's own card
  *   <files>/logs/ico-pc.log            the log (+ perf csv, pad recordings)
  *   <files>/dumps/
  *   <files>/drivers/                   driver zips dropped by hand (Add from the
