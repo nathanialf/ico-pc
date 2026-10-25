@@ -1,0 +1,445 @@
+--- cluster (PAL)
++++ cluster (JUN26)
+@@ cluster #1 -450,4 +450,11 @@ NOCLIP_CLUSTER_1_SPEC
+ NOCLIP_CLUSTER_1_SPEC:
+ nop sq.xyzw vf26, 2(vi03)
++nop b NEXT_CLUSTER_1_SPEC
++nop nop
++CLIP_CLUSTER_1_SPEC:
++nop iaddiu vi07, vi00, 3
++CLIP_CLUSTER_1_SPEC_SET:
++nop sq.xyzw vf27, 2(vi03)
++NEXT_CLUSTER_1_SPEC:
+ add.xy vf24, vf24, vf25 ibne vi06, vi00, LOOP_CLUSTER_1_SPEC
+ nop iaddiu vi03, vi03, 3
+@@ cluster #2 -456,12 +463,2 @@ NOCLIP_CLUSTER_1_SPEC
+ nop b BEGIN_CLUSTER_1_SPEC
+ nop nop
+-CLIP_CLUSTER_1_SPEC:
+-nop iaddiu vi07, vi00, 3
+-CLIP_CLUSTER_1_SPEC_SET:
+-nop sq.xyzw vf27, 2(vi03)
+-add.xy vf24, vf24, vf25 ibne vi06, vi00, LOOP_CLUSTER_1_SPEC
+-nop iaddiu vi03, vi03, 3
+-nop xgkick vi01
+-nop nop
+-nop b BEGIN_CLUSTER_1_SPEC
+-nop nop
+--- mesh (PAL)
++++ mesh (JUN26)
+@@ mesh #1 -145,9 +145,9 @@ START_MESH_LIGHT
+ nop lqi.xyzw vf18, (vi02++)
+ nop lq.xyzw vf23, 2(vi00)
+-sub.w vf21, vf21, vf21 lq.xyzw vf16, 1(vi02)
+-nop lq.xyzw vf15, 0(vi02)
+-nop lq.xyzw vf17, 2(vi02)
+-nop iaddiu vi02, vi02, 3
+-mulax.xyzw acc, vf05, vf16x nop
++LOOP_MESH_LIGHT:
++sub.w vf21, vf21, vf21 lqi.xyzw vf15, (vi02++)
++nop lqi.xyzw vf16, (vi02++)
++nop lqi.xyzw vf17, (vi02++)
++mulax.xyzw acc, vf05, vf16x iaddi vi04, vi04, -1
+ madday.xyzw acc, vf06, vf16y nop
+ maddaz.xyzw acc, vf07, vf16z nop
+@@ mesh #2 -158,31 +158,28 @@ START_MESH_LIGHT
+ maddw.xyzw vf28, vf04, vf00w nop
+ maxx.xyzw vf29, vf29, vf00x nop
+-add.xy vf17, vf17, vf23 nop
+-nop nop
+-nop div q, vf00w, vf28w
+ nop nop
+ nop nop
+-LOOP_MESH_LIGHT:
+-mulax.xyzw acc, vf09, vf29x lqi.xyzw vf15, (vi02++)
+-madday.xyzw acc, vf10, vf29y lqi.xyzw vf16, (vi02++)
++add.xy vf17, vf17, vf23 div q, vf00w, vf28w
++mulax.xyzw acc, vf09, vf29x nop
++madday.xyzw acc, vf10, vf29y nop
+ maddaz.xyzw acc, vf11, vf29z nop
+-maddw.xyzw vf29, vf12, vf29w iaddi vi04, vi04, -1
++maddw.xyzw vf29, vf12, vf29w nop
++nop nop
++nop nop
+ mulq.xyz vf28, vf28, q waitq
+-mulq.xyz vf21, vf17, q nop
+-mulax.xyzw acc, vf01, vf15x move.w vf22, vf18
+ mul.xyz vf22, vf18, vf29 loi 1132396544
+-madday.xyzw acc, vf02, vf15y lqi.xyzw vf17, (vi02++)
+-ftoi4.xyz vf19, vf28 sq.xyzw vf21, 0(vi03)
+-ftoi4.xyz vf20, vf28 nop
++mulq.xyz vf21, vf17, q move.w vf22, vf18
++nop nop
++ftoi4.xyz vf19, vf28 nop
++ftoi4.xyz vf20, vf28 sq.xyzw vf21, 0(vi03)
+ minii.xyzw vf22, vf22, i nop
+ sub.xyw vf00, vf13, vf28 nop
+ sub.xyw vf00, vf28, vf14 nop
+-maddaz.xyzw acc, vf03, vf15z nop
++nop nop
+ ftoi0.xyzw vf22, vf22 iaddi vi05, vi05, -1
+-maddw.xyzw vf28, vf04, vf00w fmand vi14, vi07
+-mulax.xyzw acc, vf05, vf16x fmand vi14, vi14
+-madday.xyzw acc, vf06, vf16y nop
+-maddaz.xyzw acc, vf07, vf16z ibne vi14, vi07, CLIP_MESH_LIGHT
+-maddw.xyzw vf29, vf08, vf16w sq.xyzw vf22, 1(vi03)
++nop fmand vi14, vi07
++nop fmand vi14, vi14
++nop ibne vi14, vi07, CLIP_MESH_LIGHT
++nop sq.xyzw vf22, 1(vi03)
+ nop ibgtz vi05, CLIP_MESH_LIGHT_SET
+ nop sq.xyzw vf19, 2(vi03)
+@@ mesh #3 -194,7 +191,7 @@ CLIP_MESH_LIGHT_SET
+ nop sq.xyzw vf20, 2(vi03)
+ CLIP_MESH_LIGHT_END:
+-nop div q, vf00w, vf28w
+-maxx.xyzw vf29, vf29, vf00x ibne vi04, vi00, LOOP_MESH_LIGHT
+ nop iaddiu vi03, vi03, 3
++nop ibne vi04, vi00, LOOP_MESH_LIGHT
++nop nop
+ nop xgkick vi01
+ END_MESH_LIGHT:
+@@ mesh #4 -221,9 +218,9 @@ START_MESH_LIGHT_SPEC
+ nop lqi.xyzw vf18, (vi02++)
+ nop lq.xyzw vf23, 2(vi00)
+-sub.w vf21, vf21, vf21 lq.xyzw vf16, 1(vi02)
+-nop lq.xyzw vf15, 0(vi02)
+-nop lq.xyzw vf17, 2(vi02)
+-nop iaddiu vi02, vi02, 3
+-mulax.xyzw acc, vf05, vf16x nop
++LOOP_MESH_LIGHT_SPEC:
++sub.w vf21, vf21, vf21 lqi.xyzw vf15, (vi02++)
++nop lqi.xyzw vf16, (vi02++)
++nop lqi.xyzw vf17, (vi02++)
++mulax.xyzw acc, vf05, vf16x iaddi vi04, vi04, -1
+ madday.xyzw acc, vf06, vf16y nop
+ maddaz.xyzw acc, vf07, vf16z nop
+@@ mesh #5 -234,34 +231,32 @@ START_MESH_LIGHT_SPEC
+ maddw.xyzw vf28, vf04, vf00w nop
+ maxx.xyzw vf29, vf29, vf00x nop
+-add.xy vf17, vf17, vf23 nop
+-nop nop
+-nop div q, vf00w, vf28w
+ nop nop
+ nop nop
+-LOOP_MESH_LIGHT_SPEC:
+-mulax.xyzw acc, vf09, vf29x iaddi vi04, vi04, -1
+-madday.xyzw acc, vf10, vf29y lqi.xyzw vf15, (vi02++)
+-maddaz.xyzw acc, vf11, vf29z lqi.xyzw vf16, (vi02++)
++add.xy vf17, vf17, vf23 div q, vf00w, vf28w
++mulax.xyzw acc, vf09, vf29x nop
++madday.xyzw acc, vf10, vf29y nop
++maddaz.xyzw acc, vf11, vf29z nop
+ maddw.xyzw vf29, vf12, vf29w nop
++nop nop
++nop nop
+ mulq.xyz vf28, vf28, q waitq
++mul.xyz vf29, vf29, vf29 nop
+ mulq.xyz vf21, vf17, q nop
+-mulax.xyzw acc, vf01, vf15x lqi.xyzw vf17, (vi02++)
+-mul.xyz vf29, vf29, vf29 nop
++nop nop
+ ftoi4.xyz vf19, vf28 move.w vf22, vf18
++mul[i].xyz vf22, vf18, vf29 loi 1132396544
+ ftoi4.xyz vf20, vf28 sq.xyzw vf21, 0(vi03)
+ sub.xyw vf00, vf13, vf28 nop
+-mul.xyz vf22, vf18, vf29 loi 1132396544
+ sub.xyw vf00, vf28, vf14 nop
+-madday.xyzw acc, vf02, vf15y nop
+-maddaz.xyzw acc, vf03, vf15z fmand vi14, vi07
+ minii.xyzw vf22, vf22, i nop
+-maddw.xyzw vf28, vf04, vf00w fmand vi14, vi14
+-mulax.xyzw acc, vf05, vf16x nop
+-madday.xyzw acc, vf06, vf16y nop
++nop nop
++nop fmand vi14, vi07
++nop fmand vi14, vi14
+ ftoi0.xyzw vf22, vf22 iaddi vi05, vi05, -1
+-maddaz.xyzw acc, vf07, vf16z div q, vf00w, vf28w
+-maddw.xyzw vf29, vf08, vf16w nop
+-add.xy vf17, vf17, vf23 ibne vi14, vi07, CLIP_MESH_LIGHT_SPEC
++nop nop
++nop nop
++nop ibne vi14, vi07, CLIP_MESH_LIGHT_SPEC
+ nop sq.xyzw vf22, 1(vi03)
++nop nop
+ nop ibgtz vi05, CLIP_MESH_LIGHT_SPEC_SET
+ nop sq.xyzw vf19, 2(vi03)
+@@ mesh #6 -273,5 +268,5 @@ CLIP_MESH_LIGHT_SPEC_SET
+ nop sq.xyzw vf20, 2(vi03)
+ CLIP_MESH_LIGHT_SPEC_END:
+-maxx.xyzw vf29, vf29, vf00x iaddiu vi03, vi03, 3
++nop iaddiu vi03, vi03, 3
+ nop ibne vi04, vi00, LOOP_MESH_LIGHT_SPEC
+ nop nop
+@@ mesh #7 -300,30 +295,27 @@ START_MESH_NOLIGHT
+ nop lqi.xyzw vf18, (vi02++)
+ nop lq.xyzw vf23, 2(vi00)
++LOOP_MESH_NOLIGHT:
+ sub.w vf21, vf21, vf21 lqi.xyzw vf15, (vi02++)
+ nop lqi.xyzw vf17, (vi02++)
++mulax.xyzw acc, vf01, vf15x iaddi vi04, vi04, -1
++madday.xyzw acc, vf02, vf15y nop
++maddaz.xyzw acc, vf03, vf15z move.xyzw vf22, vf18
++maddw.xyzw vf28, vf04, vf00w nop
+ nop nop
+ nop nop
+-mulax.xyzw acc, vf01, vf15x nop
+-madday.xyzw acc, vf02, vf15y nop
+-maddaz.xyzw acc, vf03, vf15z nop
+-maddw.xyzw vf28, vf04, vf00w nop
+-nop lqi.xyzw vf15, (vi02++)
++ftoi0.xyzw vf22, vf22 nop
++add.xy vf17, vf17, vf23 div q, vf00w, vf28w
++mulq.xyz vf28, vf28, q waitq
++mulq.xyz vf21, vf17, q sq.xyzw vf22, 1(vi03)
+ nop nop
+ nop nop
+-add.xy vf17, vf17, vf23 div q, vf00w, vf28w
+-LOOP_MESH_NOLIGHT:
+-ftoi0.xyzw vf22, vf18 move.w vf29, vf28
+-mulq.xyz vf29, vf28, q waitq
+-mulq.xyz vf21, vf17, q iaddi vi05, vi05, -1
+-mulax.xyzw acc, vf01, vf15x lqi.xyzw vf17, (vi02++)
+-madday.xyzw acc, vf02, vf15y sq.xyzw vf22, 1(vi03)
+-sub.xyw vf00, vf13, vf29 iaddi vi04, vi04, -1
+-sub.xyw vf00, vf29, vf14 sq.xyzw vf21, 0(vi03)
+-maddaz.xyzw acc, vf03, vf15z nop
+-maddw.xyzw vf28, vf04, vf00w lqi.xyzw vf15, (vi02++)
+-ftoi4.xyz vf19, vf29 fmand vi14, vi07
+-ftoi4.xyz vf20, vf29 fmand vi14, vi14
+-add.xy vf17, vf17, vf23 ibne vi14, vi07, CLIP_MESH_NOLIGHT
+-nop div q, vf00w, vf28w
++sub.xyw vf00, vf13, vf28 nop
++sub.xyw vf00, vf28, vf14 sq.xyzw vf21, 0(vi03)
++ftoi4.xyz vf19, vf28 nop
++ftoi4.xyz vf20, vf28 iaddi vi05, vi05, -1
++nop fmand vi14, vi07
++nop fmand vi14, vi14
++nop ibne vi14, vi07, CLIP_MESH_NOLIGHT
++nop nop
+ nop ibgtz vi05, CLIP_MESH_NOLIGHT_SET
+ nop sq.xyzw vf19, 2(vi03)
+--- normal_c (PAL)
++++ normal_c (JUN26)
+@@ normal_c #1 -187,5 +187,5 @@ START_NORMAL_C
+ sub.w vf21, vf21, vf21 lq.xyzw vf17, 1(vi02)
+ nop lq.xyzw vf18, 2(vi02)
+-nop move.z vf23, vf00
++nop nop
+ mulax.xyzw acc, vf01, vf15x nop
+ madday.xyzw acc, vf02, vf15y nop
+@@ normal_c #2 -193,42 +193,40 @@ START_NORMAL_C
+ maddw.xyzw vf28, vf04, vf00w nop
+ sub.w vf00, vf17, vf00 lq.xyzw vf15, 3(vi02)
+-add.xyz vf21, vf17, vf23 iaddiu vi07, vi00, 208
++nop iaddiu vi07, vi00, 208
+ nop nop
+ nop div q, vf00w, vf28w
+ nop fsand vi15, 2
+-nop nop
+-mulax.xyzw acc, vf01, vf15x nop
+-madday.xyzw acc, vf02, vf15y nop
+ LOOP_NORMAL_C:
+-maddaz.xyzw acc, vf03, vf15z lq.xyzw vf17, 4(vi02)
+-maddw.xyzw vf29, vf04, vf00w ibeq vi15, vi00, CONT_NORMAL_C
+-nop iaddi vi04, vi04, -1
++add.xy vf17, vf17, vf23 lq.xyzw vf25, 4(vi02)
++mulax.xyzw acc, vf01, vf15x iaddiu vi02, vi02, 3
++madday.xyzw acc, vf02, vf15y ibeq vi15, vi00, CONT_NORMAL_C
++maddaz.xyzw acc, vf03, vf15z iaddi vi04, vi04, -1
+ nop iaddiu vi05, vi00, 3
+ CONT_NORMAL_C:
+-mulq.xyz vf28, vf28, q iaddi vi05, vi05, -1
+-mulq.xyz vf21, vf21, q iaddiu vi02, vi02, 3
++mulq.xyz vf28, vf28, q waitq
++mulq.xyz vf21, vf17, q iaddi vi05, vi05, -1
+ ftoi0.xyzw vf22, vf18 lq.xyzw vf24, 3(vi02)
+-sub.w vf00, vf17, vf00 div q, vf00w, vf29w
++sub.w vf00, vf25, vf00 lq.xyzw vf17, 1(vi02)
+ sub.xyw vf00, vf13, vf28 lq.xyzw vf18, 2(vi02)
+ sub.xyw vf00, vf28, vf14 sq.xyzw vf21, 0(vi03)
+-ftoi4.xyz vf19, vf28 sq.xyzw vf22, 1(vi03)
++ftoi4.xyz vf19, vf28 nop
+ ftoi4.xyz vf20, vf28 fsand vi15, 2
+-mulw.xyzw vf15, vf24, vf00w fmand vi14, vi07
+-mulw.xyzw vf28, vf29, vf00w fmand vi14, vi14
+-add.xyz vf21, vf17, vf23 ibne vi14, vi07, CLIP_NORMAL_C
+-nop iaddiu vi03, vi03, 3
++maddw.xyzw vf28, vf04, vf00w fmand vi14, vi07
++mulw.xyzw vf15, vf24, vf00w fmand vi14, vi14
++nop sq.xyzw vf22, 1(vi03)
++nop ibne vi14, vi07, CLIP_NORMAL_C
++nop div q, vf00w, vf28w
+ nop ibgtz vi05, CLIP_NORMAL_C_SET
+ nop nop
+-mulax.xyzw acc, vf01, vf15x ibne vi04, vi00, LOOP_NORMAL_C
+-madday.xyzw acc, vf02, vf15y sq.xyzw vf19, -1(vi03)
+-nop xgkick vi01
+-nop nop
+-nop b BEGIN_NORMAL_C
++nop sq.xyzw vf19, 2(vi03)
++nop b NEXT_NORMAL_C
+ nop nop
+ CLIP_NORMAL_C:
+ nop iaddiu vi05, vi00, 3
+ CLIP_NORMAL_C_SET:
+-mulax.xyzw acc, vf01, vf15x ibne vi04, vi00, LOOP_NORMAL_C
+-madday.xyzw acc, vf02, vf15y sq.xyzw vf20, -1(vi03)
++nop sq.xyzw vf20, 2(vi03)
++NEXT_NORMAL_C:
++nop ibne vi04, vi00, LOOP_NORMAL_C
++nop iaddiu vi03, vi03, 3
+ nop xgkick vi01
+ nop nop
+@@ normal_c #3 -256,8 +254,7 @@ START_NORMAL_C_NOCLIP
+ nop mfir.w vf19, vi00
+ nop mfir.w vf20, vi14
+-nop lq.xyzw vf15, 0(vi02)
+-sub.w vf21, vf21, vf21 lq.xyzw vf17, 1(vi02)
++sub.w vf21, vf21, vf21 lq.xyzw vf15, 0(vi02)
++nop lq.xyzw vf17, 1(vi02)
+ nop lq.xyzw vf18, 2(vi02)
+-nop move.z vf23, vf00
+ mulax.xyzw acc, vf01, vf15x nop
+ madday.xyzw acc, vf02, vf15y nop
+@@ normal_c #4 -265,28 +262,28 @@ START_NORMAL_C_NOCLIP
+ maddw.xyzw vf28, vf04, vf00w nop
+ sub.w vf00, vf17, vf00 lq.xyzw vf15, 3(vi02)
+-nop iaddiu vi07, vi00, 208
++add.xy vf17, vf17, vf23 nop
+ nop nop
+ nop div q, vf00w, vf28w
+-add.xyz vf21, vf17, vf23 fsand vi15, 2
+-nop nop
+-mulax.xyzw acc, vf01, vf15x nop
++nop fsand vi15, 2
+ LOOP_NORMAL_C_NOCLIP:
+-madday.xyzw acc, vf02, vf15y lq.xyzw vf17, 4(vi02)
++mulax.xyzw acc, vf01, vf15x lq.xyzw vf25, 4(vi02)
++madday.xyzw acc, vf02, vf15y iaddiu vi02, vi02, 3
+ maddaz.xyzw acc, vf03, vf15z ibeq vi15, vi00, CONT_NORMAL_C_NOCLIP
+-maddw.xyzw vf29, vf04, vf00w iaddiu vi02, vi02, 3
++nop iaddi vi04, vi04, -1
+ nop iaddiu vi05, vi00, 3
+ CONT_NORMAL_C_NOCLIP:
+-mulq.xyz vf28, vf28, q iaddi vi05, vi05, -1
+-mulq.xyz vf21, vf21, q lq.xyzw vf24, 3(vi02)
+-ftoi0.xyzw vf22, vf18 iaddi vi04, vi04, -1
+-ftoi4.xyz vf19, vf28 div q, vf00w, vf29w
+-sub.w vf00, vf17, vf00 lq.xyzw vf18, 2(vi02)
+-ftoi4.xyz vf20, vf28 sqi.xyzw vf21, (vi03++)
+-mulw.xyzw vf15, vf24, vf00w sqi.xyzw vf22, (vi03++)
+-mulw.xyzw vf28, vf29, vf00w ibgtz vi05, CLIP_NORMAL_C_NOCLIP_SET
+-nop fsand vi15, 2
++mulq.xyz vf29, vf28, q iaddi vi05, vi05, -1
++mulq.xyz vf21, vf17, q lq.xyzw vf24, 3(vi02)
++ftoi0.xyzw vf22, vf18 ibgtz vi05, CLIP_NORMAL_C_NOCLIP_SET
++sub.w vf00, vf25, vf00 lq.xyzw vf17, 1(vi02)
++maddw.xyzw vf28, vf04, vf00w lq.xyzw vf18, 2(vi02)
++ftoi4.xyz vf19, vf29 sq.xyzw vf21, 0(vi03)
++mulw.xyzw vf15, vf24, vf00w sq.xyzw vf22, 1(vi03)
++add.xy vf17, vf17, vf23 fsand vi15, 2
++nop div q, vf00w, vf28w
++nop sq.xyzw vf19, 2(vi03)
++nop ibne vi04, vi00, LOOP_NORMAL_C_NOCLIP
++nop iaddiu vi03, vi03, 3
+ NOCLIP_NORMAL_C_NOCLIP_SET:
+-add.xyz vf21, vf17, vf23 ibne vi04, vi00, LOOP_NORMAL_C_NOCLIP
+-mulax.xyzw acc, vf01, vf15x sqi.xyzw vf19, (vi03++)
+ nop xgkick vi01
+ nop nop
+@@ normal_c #5 -294,6 +291,12 @@ NOCLIP_NORMAL_C_NOCLIP_SET
+ nop nop
+ CLIP_NORMAL_C_NOCLIP_SET:
+-add.xyz vf21, vf17, vf23 ibne vi04, vi00, LOOP_NORMAL_C_NOCLIP
+-mulax.xyzw acc, vf01, vf15x sqi.xyzw vf20, (vi03++)
++maddw.xyzw vf28, vf04, vf00w lq.xyzw vf18, 2(vi02)
++ftoi4.xyz vf20, vf29 sq.xyzw vf21, 0(vi03)
++mulw.xyzw vf15, vf24, vf00w sq.xyzw vf22, 1(vi03)
++add.xy vf17, vf17, vf23 fsand vi15, 2
++nop div q, vf00w, vf28w
++nop sq.xyzw vf20, 2(vi03)
++nop ibne vi04, vi00, LOOP_NORMAL_C_NOCLIP
++nop iaddiu vi03, vi03, 3
+ nop xgkick vi01
+ nop nop
+--- normal_l (PAL)
++++ normal_l (JUN26)
+@@ normal_l #1 -191,5 +191,5 @@ START_NORMAL_L
+ nop sq.xyzw vf29, 0(vi01)
+ nop iaddiu vi14, vi14, 1
+-nop iaddi vi03, vi01, -2
++nop iaddiu vi03, vi01, 1
+ nop mfir.w vf19, vi00
+ nop mfir.w vf20, vi14
+@@ normal_l #2 -210,9 +210,8 @@ START_NORMAL_L
+ maddw.xyzw vf28, vf04, vf00w nop
+ add.xy vf17, vf17, vf23 nop
+-nop nop
+-mulax.xyzw acc, vf09, vf29x nop
+-madday.xyzw acc, vf10, vf29y div q, vf00w, vf28w
+ LOOP_NORMAL_L:
+-maddaz.xyzw acc, vf11, vf29z iaddiu vi02, vi02, 4
++mulax.xyzw acc, vf09, vf29x div q, vf00w, vf28w
++madday.xyzw acc, vf10, vf29y iaddiu vi02, vi02, 4
++maddaz.xyzw acc, vf11, vf29z iaddi vi04, vi04, -1
+ maddw.xyzw vf29, vf12, vf29w ibeq vi15, vi00, CONT_NORMAL_L
+ nop lq.xyzw vf16, 1(vi02)
+@@ normal_l #3 -222,35 +221,36 @@ CONT_NORMAL_L
+ mulq.xyz vf21, vf17, q lq.xyzw vf15, 0(vi02)
+ maxx.xyzw vf29, vf29, vf00x lq.xyzw vf17, 2(vi02)
+-mulax.xyzw acc, vf05, vf16x iaddi vi04, vi04, -1
+-sub.xyw vf00, vf13, vf28 iaddiu vi03, vi03, 3
++mulax.xyzw acc, vf05, vf16x nop
++sub.xyw vf00, vf13, vf28 nop
+ sub.xyw vf00, vf28, vf14 sq.xyzw vf21, 0(vi03)
+ mul.xyz vf18, vf18, vf29 loi 1132396544
+-madday.xyzw acc, vf06, vf16y move.xyzw vf30, vf28
++madday.xyzw acc, vf06, vf16y nop
+ maddaz.xyzw acc, vf07, vf16z fmand vi14, vi07
+ maddw.xyzw vf29, vf08, vf16w fmand vi14, vi14
+-minii.xyzw vf22, vf18, i iaddi vi05, vi05, -1
+-mulax.xyzw acc, vf01, vf15x lq.xyzw vf18, 3(vi02)
++minii.xyzw vf22, vf18, i nop
++ftoi4.xyz vf19, vf28 lq.xyzw vf18, 3(vi02)
++ftoi4.xyz vf20, vf28 nop
++mulax.xyzw acc, vf01, vf15x nop
++ftoi0.xyzw vf22, vf22 nop
+ sub.w vf00, vf17, vf00 nop
+-madday.xyzw acc, vf02, vf15y nop
+-ftoi0.xyzw vf22, vf22 nop
++madday.xyzw acc, vf02, vf15y iaddi vi05, vi05, -1
+ maddaz.xyzw acc, vf03, vf15z nop
++maxx.xyzw vf29, vf29, vf00x sq.xyzw vf22, 1(vi03)
+ maddw.xyzw vf28, vf04, vf00w fsand vi15, 2
+-maxx.xyzw vf29, vf29, vf00x nop
+-ftoi4.xyz vf20, vf30 sq.xyzw vf22, 1(vi03)
+-ftoi4.xyz vf19, vf30 ibne vi14, vi07, CLIP_NORMAL_L
+-add.xy vf17, vf17, vf23 div q, vf00w, vf28w
++add.xy vf17, vf17, vf23 ibne vi14, vi07, CLIP_NORMAL_L
++nop nop
+ nop ibgtz vi05, CLIP_NORMAL_L_SET
+ nop nop
+ NOCLIP_NORMAL_L:
+-mulax.xyzw acc, vf09, vf29x ibne vi04, vi00, LOOP_NORMAL_L
+-madday.xyzw acc, vf10, vf29y sq.xyzw vf19, 2(vi03)
+-nop xgkick vi01
+-nop b BEGIN_NORMAL_L
++nop sq.xyzw vf19, 2(vi03)
++nop b NEXT_NORMAL_L
+ nop nop
+ CLIP_NORMAL_L:
+ nop iaddiu vi05, vi00, 3
+ CLIP_NORMAL_L_SET:
+-mulax.xyzw acc, vf09, vf29x ibne vi04, vi00, LOOP_NORMAL_L
+-madday.xyzw acc, vf10, vf29y sq.xyzw vf20, 2(vi03)
++nop sq.xyzw vf20, 2(vi03)
++NEXT_NORMAL_L:
++nop ibne vi04, vi00, LOOP_NORMAL_L
++nop iaddiu vi03, vi03, 3
+ nop xgkick vi01
+ nop b BEGIN_NORMAL_L
+--- particle (PAL)
++++ particle (JUN26)
+# particle: identical in both variants

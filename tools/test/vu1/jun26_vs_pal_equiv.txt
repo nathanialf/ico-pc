@@ -1,0 +1,10 @@
+cluster   START_CLUSTER_0          same on 256 paths (4 vertices)
+cluster   START_CLUSTER_0_SPEC     same on 256 paths (4 vertices)
+cluster   START_CLUSTER_1_SPEC     same on 256 paths (4 vertices)
+mesh      START_MESH_LIGHT         DIFFERENT: output quad 256, component xy
+mesh      START_MESH_LIGHT_SPEC    same on 16 paths (4 vertices)
+mesh      START_MESH_NOLIGHT       same on 16 paths (4 vertices)
+normal_c  START_NORMAL_C           same on 256 paths (4 vertices)
+normal_c  START_NORMAL_C_NOCLIP    same on 16 paths (4 vertices)
+normal_l  START_NORMAL_L           same on 256 paths (4 vertices)
+normal_l  START_NORMAL_L_SPEC      same on 256 paths (4 vertices)
