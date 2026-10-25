@@ -684,10 +684,11 @@ int main(int argc, char **argv)
     {
         /* the item that starts without a card, and one that checks again:
            the European 41 (step 302; 40 stands for any other item), the
-           Japanese 11 and the Korean and Asian 5 (step 101's PAL_KORCN(11, 5)), each
-           checked against the other disc's value */
-        const int startItem = !s_jpn ? 41 : ICO_KORCN ? 5 : 11;
-        const int retryItem = !s_jpn ? 40 : ICO_KORCN ? 11 : 5;
+           Japanese and Asian 11 and the Korean 5 (step 101's PAL_KORNTSCAUG6JUN26(11, 5):
+           the Asian ELF's kanbanBootMcCheck at 0x1B94F8 loads 11 where the Korean one
+           at 0x1B9528 loads 5), each checked against the other disc's value */
+        const int startItem = !s_jpn ? 41 : ICO_KOR ? 5 : 11;
+        const int retryItem = !s_jpn ? 40 : ICO_KOR ? 11 : 5;
         bootNoCard("no card", CARD_NONE, startItem, retryItem);
         bootNoCard("a full card", CARD_FULL, startItem, retryItem);
         bootSkipNoCard("Skip the opening, no card", CARD_NONE, startItem, retryItem);
