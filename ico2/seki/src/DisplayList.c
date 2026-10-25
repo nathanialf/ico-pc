@@ -54,11 +54,17 @@ static int dlStackDepth = 0; /* derived name */
 static int dlPriorityStack[8]; /* derived name */
 
 /* The size of each priority's list buffer. */
-static const int dlBufferSize[13] = {
+static const int dlBufferSize_pal[13] = {
     /* derived name */
     81920, 14336, 30720, 4096, 16384, 65536, 40960, 12288, 26624, 14336, 4096, 28672, 86016,
 };
 
+static const int dlBufferSize_ntscaug6[13] = {
+    /* derived name */
+    81920, 14336, 30720, 4096, 16384, 49152, 40960, 12288, 26624, 14336, 4096, 32768, 98304,
+};
+
+#define dlBufferSize PAL_NTSCAUG6(dlBufferSize_pal, dlBufferSize_ntscaug6)
 /* PC port: each list buffer gets DL_HOST_PAD bytes past
    the EE's size. Nothing checks the fill on the EE (dl_CheckDLOverflow is
    compiled out, DL_DEBUG): the test stage 88 (STGBOSS_TEST) fills list 10
@@ -131,8 +137,9 @@ void dl_Init(void)
     dlStackDepth = 0;
     for (i = 0; i < 2; i++) {
         for (j = 0; j < 13; j++) {
-            dlBufferHead[i][j] = (ICO_WORD)ICO_UNCACHED_ACCEL(ICO_ADDR(iosMallocDebug(
-                ios_partition_common, dlBufferSize[j] + DL_HOST_PAD, __FILE__, 393)));
+            dlBufferHead[i][j] = (ICO_WORD)ICO_UNCACHED_ACCEL(
+                ICO_ADDR(iosMallocDebug(ios_partition_common, dlBufferSize[j] + DL_HOST_PAD,
+                                        __FILE__, PAL_NTSC(393, 387))));
         }
     }
     dlBank = 0;
@@ -250,8 +257,8 @@ void dl_PushPriority(void)
         dlPriorityStack[dlStackDepth - 1] = dlPriority;
     } else {
         debug_StdPrintfDummy("dl_PushPriority:Stack Overflow.\n");
-        debug_assert(__FILE__, 534);
-        __assert(__FILE__, 534, "FALSE");
+        debug_assert(__FILE__, LN(534, 534, 534, 526, 526, 575, 534));
+        __assert(__FILE__, LN(534, 534, 534, 526, 526, 575, 534), "FALSE");
     }
 }
 
@@ -268,8 +275,8 @@ void dl_PopPriority(void)
 #endif
     } else {
         debug_StdPrintfDummy("dl_PopPriority:Stack Underflow.\n");
-        debug_assert(__FILE__, 552);
-        __assert(__FILE__, 552, "FALSE");
+        debug_assert(__FILE__, PAL_NTSCAUG6(552, 544));
+        __assert(__FILE__, PAL_NTSCAUG6(552, 544), "FALSE");
     }
 }
 

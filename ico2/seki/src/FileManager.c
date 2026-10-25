@@ -56,7 +56,7 @@ static inline void PrintLoad(char *fname, void **adr, int size) /* derived name 
         *adr, size);
 }
 
-static int file_LoadCDFile(void **adr, char *fname, int area)
+static int file_LoadCDFile_ntsc(void **adr, char *fname, int area)
 {
     char path[256];
     sceCdlFILE fp;
@@ -105,15 +105,15 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
     case 2:
     case 4:
         *adr = iosMallocDebug(ios_partition_seki, asize, "src/FileManager.c",
-                              LN(349, 331, 331, 349, 349, 349, 331));
+                              LN(349, 331, 331, 312, 312, 306, 331));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
                              ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_seki->start) *
-                                 100.0f / 10059776.0f);
+                                 100.0f / 10092544.0f);
         break;
     case 1:
         *adr = iosMallocDebug(ios_partition_sugipon, asize, "src/FileManager.c",
-                              LN(357, 339, 339, 357, 357, 357, 339));
+                              LN(357, 339, 339, 320, 320, 314, 339));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", asize * 100.0f / 524288.0f,
                              ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_sugipon->start) *
@@ -121,7 +121,7 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
         break;
     case 3:
         *adr = iosMallocDebug(ios_partition_smotion, asize, "src/FileManager.c",
-                              LN(366, 348, 348, 366, 366, 366, 348));
+                              LN(366, 348, 348, 329, 329, 323, 348));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to static motion area.(%2.1f%%/%2.1f%%)\n",
                              asize * 100.0f / 1179648.0f,
@@ -130,7 +130,7 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
         break;
     case 5:
         *adr = iosMallocDebug(ios_partition_dmotion, asize, "src/FileManager.c",
-                              LN(375, 357, 357, 375, 375, 375, 357));
+                              LN(375, 357, 357, 338, 338, 332, 357));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to dynamic motion area.(%2.1f%%/%2.1f%%)\n",
                              asize * 100.0f / 3670016.0f,
@@ -139,7 +139,7 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
         break;
     case 6:
         *adr = iosMallocDebug(ios_partition_hara, asize, "src/FileManager.c",
-                              LN(384, 366, 366, 384, 384, 384, 366));
+                              LN(384, 366, 366, 347, 347, 341, 366));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
                              ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_hara->start) *
@@ -147,7 +147,7 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
         break;
     case 7:
         *adr = iosMallocDebug(ios_partition_oomori, asize, "src/FileManager.c",
-                              LN(392, 374, 374, 392, 392, 392, 374));
+                              LN(392, 374, 374, 355, 355, 349, 374));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
                              ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_oomori->start) *
@@ -155,19 +155,18 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
         break;
     case 8:
         *adr = iosMallocDebug(ios_partition_horagai, asize, "src/FileManager.c",
-                              LN(400, 382, 382, 400, 400, 400, 382));
+                              LN(400, 382, 382, 363, 363, 357, 382));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to horagai-area.\n");
         break;
     case 9:
         *adr = iosMallocDebug(ios_partition_sound, asize, "src/FileManager.c",
-                              LN(405, 387, 387, 405, 405, 405, 387));
+                              LN(405, 387, 387, 368, 368, 362, 387));
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to sound-area.\n");
         break;
     case 10:
-        *adr = iosMallocDebug(ios_partition_sound_semi, asize, "src/FileManager.c",
-                              LN(410, 392, 392, 410, 410, 410, 392));
+        *adr = iosMallocDebug(ios_partition_sound_semi, asize, "src/FileManager.c", 373);
         PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to sound_semi-area.\n");
         break;
@@ -224,8 +223,362 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
     }
 
     if (err != 0) {
-        debug_assert("src/FileManager.c", LN(440, 422, 422, 440, 440, 440, 422));
-        __assert("src/FileManager.c", LN(440, 422, 422, 440, 440, 440, 422), "FALSE");
+        debug_assert("src/FileManager.c", LN(440, 422, 422, 403, 403, 397, 422));
+        __assert("src/FileManager.c", LN(440, 422, 422, 403, 403, 397, 422), "FALSE");
+    }
+    return size;
+}
+
+static int file_LoadCDFile_aug6(void **adr, char *fname, int area)
+{
+    char path[256];
+    sceCdlFILE fp;
+    CdRMode mode;
+    char *d;
+    char *s;
+    int c;
+    int t;
+    int size;
+    int asize;
+    int sec;
+    int err;
+
+    path[0] = '\\';
+    d = &path[1];
+    s = fname;
+    do {
+        c = *s;
+        if (c == '/') {
+            *d = '\\';
+            d++;
+            continue;
+        }
+        t = c - 'a' + 'A';
+        if (!islower(c))
+            t = c;
+        *d = t;
+        d++;
+    } while (*s++ != 0);
+    strcat(path, ";1");
+
+    while (sceCdDiskReady(0) == 6)
+        ;
+    if (sceCdSearchFile(&fp, path) == 0) {
+        debug_StdPrintfDummy("file_LoadCDFile:file is not exists? (%s)\n", fname);
+        debug_StdPrintfDummy("file_LoadCDFile:file is not exists? (%s)\n", path);
+        return -1;
+    }
+
+    size = fp.size;
+    asize = (size / 2048 + 1) * 2048;
+
+    switch (area) {
+    default:
+    case 0:
+    case 2:
+    case 4:
+        *adr = iosMallocDebug(ios_partition_seki, asize, "src/FileManager.c",
+                              LN(349, 331, 331, 312, 312, 306, 331));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_seki->start) *
+                                 100.0f / 10092544.0f);
+        break;
+    case 1:
+        *adr = iosMallocDebug(ios_partition_sugipon, asize, "src/FileManager.c",
+                              LN(357, 339, 339, 320, 320, 314, 339));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", asize * 100.0f / 524288.0f,
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_sugipon->start) *
+                                 100.0f / 524288.0f);
+        break;
+    case 3:
+        *adr = iosMallocDebug(ios_partition_smotion, asize, "src/FileManager.c",
+                              LN(366, 348, 348, 329, 329, 323, 348));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to static motion area.(%2.1f%%/%2.1f%%)\n",
+                             asize * 100.0f / 1179648.0f,
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_smotion->start) *
+                                 100.0f / 1179648.0f);
+        break;
+    case 5:
+        *adr = iosMallocDebug(ios_partition_dmotion, asize, "src/FileManager.c",
+                              LN(375, 357, 357, 338, 338, 332, 357));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to dynamic motion area.(%2.1f%%/%2.1f%%)\n",
+                             asize * 100.0f / 3670016.0f,
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_dmotion->start) *
+                                 100.0f / 3670016.0f);
+        break;
+    case 6:
+        *adr = iosMallocDebug(ios_partition_hara, asize, "src/FileManager.c",
+                              LN(384, 366, 366, 347, 347, 341, 366));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_hara->start) *
+                                 100.0f);
+        break;
+    case 7:
+        *adr = iosMallocDebug(ios_partition_oomori, asize, "src/FileManager.c",
+                              LN(392, 374, 374, 355, 355, 349, 374));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_oomori->start) *
+                                 100.0f / 262144.0f);
+        break;
+    case 8:
+        *adr = iosMallocDebug(ios_partition_horagai, asize, "src/FileManager.c",
+                              LN(400, 382, 382, 363, 363, 357, 382));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to horagai-area.\n");
+        break;
+    case 9:
+        *adr = iosMallocDebug(ios_partition_sound, asize, "src/FileManager.c",
+                              LN(405, 387, 387, 368, 368, 362, 387));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to sound-area.\n");
+        break;
+    case 10:
+        *adr = iosMallocDebug(ios_partition_sound_semi, asize, "src/FileManager.c",
+                              LN(410, 392, 392, 410, 373, 367, 392));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to sound_semi-area.\n");
+        break;
+    }
+
+    mode.trycount = 0;
+    mode.spindlctrl = 1;
+    mode.datapattern = 0;
+    sec = (size - 1) / 2048 + 1;
+
+    FlushCache(0);
+    sceCdRead(fp.lsn, sec, *adr, &mode);
+    while (sceCdSync(0))
+        ;
+    while (sceCdDiskReady(0) == 6)
+        ;
+
+    err = sceCdGetError();
+    switch (err) {
+    case 0x32:
+        debug_StdPrintfDummy("file_LoadCDFile:Reach to CD end.\n");
+        break;
+    case 0x31:
+        debug_StdPrintfDummy("file_LoadCDFile:Open tray at reading.\n");
+        break;
+    case 0x30:
+        debug_StdPrintfDummy("file_LoadCDFile:Read error.\n");
+        break;
+    case 0x14:
+        debug_StdPrintfDummy("file_LoadCDFile:Invalid Disc.\n");
+        break;
+    case 0x21:
+        debug_StdPrintfDummy("file_LoadCDFile:Invalid transfer length.\n");
+        break;
+    case 0x20:
+        debug_StdPrintfDummy("file_LoadCDFile:Invalid transfer address.\n");
+        break;
+    case 0x13:
+        debug_StdPrintfDummy("file_LoadCDFile:Not ready.\n");
+        break;
+    case 0x12:
+        debug_StdPrintfDummy("file_LoadCDFile:No Disc.\n");
+        break;
+    case 0x11:
+        debug_StdPrintfDummy("file_LoadCDFile:Tray is opened.\n");
+        break;
+    case 0x10:
+        debug_StdPrintfDummy("Undefined command.\n");
+    case 0x01:
+        debug_StdPrintfDummy("file_LoadCDFile:Aborted.\n");
+        break;
+    case -1:
+        debug_StdPrintfDummy("file_LoadCDFile:Fail\n");
+    }
+
+    if (err != 0) {
+        debug_assert("src/FileManager.c", LN(440, 422, 422, 403, 403, 397, 422));
+        __assert("src/FileManager.c", LN(440, 422, 422, 403, 403, 397, 422), "FALSE");
+    }
+    return size;
+}
+
+static int file_LoadCDFile(void **adr, char *fname, int area)
+{
+    if (ICO_NTSC) {
+        return file_LoadCDFile_ntsc(adr, fname, area);
+    }
+    if (ICO_AUG6) {
+        return file_LoadCDFile_aug6(adr, fname, area);
+    }
+    char path[256];
+    sceCdlFILE fp;
+    CdRMode mode;
+    char *d;
+    char *s;
+    int c;
+    int t;
+    int size;
+    int asize;
+    int sec;
+    int err;
+
+    path[0] = '\\';
+    d = &path[1];
+    s = fname;
+    do {
+        c = *s;
+        if (c == '/') {
+            *d = '\\';
+            d++;
+            continue;
+        }
+        t = c - 'a' + 'A';
+        if (!islower(c))
+            t = c;
+        *d = t;
+        d++;
+    } while (*s++ != 0);
+    strcat(path, ";1");
+
+    while (sceCdDiskReady(0) == 6)
+        ;
+    if (sceCdSearchFile(&fp, path) == 0) {
+        debug_StdPrintfDummy("file_LoadCDFile:file is not exists? (%s)\n", fname);
+        debug_StdPrintfDummy("file_LoadCDFile:file is not exists? (%s)\n", path);
+        return -1;
+    }
+
+    size = fp.size;
+    asize = (size / 2048 + 1) * 2048;
+
+    switch (area) {
+    default:
+    case 0:
+    case 2:
+    case 4:
+        *adr = iosMallocDebug(ios_partition_seki, asize, "src/FileManager.c",
+                              LN(349, 331, 331, 312, 312, 306, 331));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_seki->start) *
+                                 100.0f / 10059776.0f);
+        break;
+    case 1:
+        *adr = iosMallocDebug(ios_partition_sugipon, asize, "src/FileManager.c",
+                              LN(357, 339, 339, 320, 320, 314, 339));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", asize * 100.0f / 524288.0f,
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_sugipon->start) *
+                                 100.0f / 524288.0f);
+        break;
+    case 3:
+        *adr = iosMallocDebug(ios_partition_smotion, asize, "src/FileManager.c",
+                              LN(366, 348, 348, 329, 329, 323, 348));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to static motion area.(%2.1f%%/%2.1f%%)\n",
+                             asize * 100.0f / 1179648.0f,
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_smotion->start) *
+                                 100.0f / 1179648.0f);
+        break;
+    case 5:
+        *adr = iosMallocDebug(ios_partition_dmotion, asize, "src/FileManager.c",
+                              LN(375, 357, 357, 338, 338, 332, 357));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to dynamic motion area.(%2.1f%%/%2.1f%%)\n",
+                             asize * 100.0f / 3670016.0f,
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_dmotion->start) *
+                                 100.0f / 3670016.0f);
+        break;
+    case 6:
+        *adr = iosMallocDebug(ios_partition_hara, asize, "src/FileManager.c",
+                              LN(384, 366, 366, 347, 347, 341, 366));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_hara->start) *
+                                 100.0f);
+        break;
+    case 7:
+        *adr = iosMallocDebug(ios_partition_oomori, asize, "src/FileManager.c",
+                              LN(392, 374, 374, 355, 355, 349, 374));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_oomori->start) *
+                                 100.0f / 327680.0f);
+        break;
+    case 8:
+        *adr = iosMallocDebug(ios_partition_horagai, asize, "src/FileManager.c",
+                              LN(400, 382, 382, 363, 363, 357, 382));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to horagai-area.\n");
+        break;
+    case 9:
+        *adr = iosMallocDebug(ios_partition_sound, asize, "src/FileManager.c",
+                              LN(405, 387, 387, 368, 368, 362, 387));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to sound-area.\n");
+        break;
+    case 10:
+        *adr = iosMallocDebug(ios_partition_sound_semi, asize, "src/FileManager.c",
+                              LN(410, 392, 392, 410, 373, 367, 392));
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to sound_semi-area.\n");
+        break;
+    }
+
+    mode.trycount = 0;
+    mode.spindlctrl = 1;
+    mode.datapattern = 0;
+    sec = (size - 1) / 2048 + 1;
+
+    FlushCache(0);
+    sceCdRead(fp.lsn, sec, *adr, &mode);
+    while (sceCdSync(0))
+        ;
+    while (sceCdDiskReady(0) == 6)
+        ;
+
+    err = sceCdGetError();
+    switch (err) {
+    case 0x32:
+        debug_StdPrintfDummy("file_LoadCDFile:Reach to CD end.\n");
+        break;
+    case 0x31:
+        debug_StdPrintfDummy("file_LoadCDFile:Open tray at reading.\n");
+        break;
+    case 0x30:
+        debug_StdPrintfDummy("file_LoadCDFile:Read error.\n");
+        break;
+    case 0x14:
+        debug_StdPrintfDummy("file_LoadCDFile:Invalid Disc.\n");
+        break;
+    case 0x21:
+        debug_StdPrintfDummy("file_LoadCDFile:Invalid transfer length.\n");
+        break;
+    case 0x20:
+        debug_StdPrintfDummy("file_LoadCDFile:Invalid transfer address.\n");
+        break;
+    case 0x13:
+        debug_StdPrintfDummy("file_LoadCDFile:Not ready.\n");
+        break;
+    case 0x12:
+        debug_StdPrintfDummy("file_LoadCDFile:No Disc.\n");
+        break;
+    case 0x11:
+        debug_StdPrintfDummy("file_LoadCDFile:Tray is opened.\n");
+        break;
+    case 0x10:
+        debug_StdPrintfDummy("Undefined command.\n");
+    case 0x01:
+        debug_StdPrintfDummy("file_LoadCDFile:Aborted.\n");
+        break;
+    case -1:
+        debug_StdPrintfDummy("file_LoadCDFile:Fail\n");
+    }
+
+    if (err != 0) {
+        debug_assert("src/FileManager.c", LN(440, 422, 422, 403, 403, 397, 422));
+        __assert("src/FileManager.c", LN(440, 422, 422, 403, 403, 397, 422), "FALSE");
     }
     return size;
 }

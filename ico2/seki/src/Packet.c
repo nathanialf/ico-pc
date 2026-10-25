@@ -482,8 +482,8 @@ static void pac_error(char *name, int type)
         debug_Assert("IN %s\n%s:No Weight Vertex exist(s).\n", pacWork.name, name);
         break;
     }
-    debug_assert("src/Packet.c", 684);
-    __assert("src/Packet.c", 684, "0");
+    debug_assert("src/Packet.c", LN(684, 684, 684, 684, 681, 645, 684));
+    __assert("src/Packet.c", LN(684, 684, 684, 684, 681, 645, 684), "0");
 }
 
 /* PC port: strips of the title logo's letters that the disc data stores in
@@ -752,8 +752,8 @@ static int pac_makeClusterStrip(PObjPart *obj, short *strip, int num)
         *pacWork.cursor.f++ = w[1].weight;
         if (w[0].no >= 60 || w[1].no >= 60) {
             debug_StdPrintfDummy("over 60 skeltons exist.\n");
-            debug_assert("src/Packet.c", 917);
-            __assert("src/Packet.c", 917, "0");
+            debug_assert("src/Packet.c", LN(917, 917, 917, 917, 914, 917, 917));
+            __assert("src/Packet.c", LN(917, 917, 917, 917, 914, 917, 917), "0");
         }
         if (((int)(pacWork.state.l >> 3) & 1) && v[4] != -1) {
             *pacWork.cursor.f++ = *(float *)(uv + v[4] * 16) * obj->texDefs[v[7]].scaleU;
@@ -766,8 +766,8 @@ static int pac_makeClusterStrip(PObjPart *obj, short *strip, int num)
         if (((int)(pacWork.state.l >> 4) & 1) && v[5] != -1) {
             if (col == 0) {
                 debug_StdPrintfDummy("color table not exists.\n");
-                debug_assert("src/Packet.c", 936);
-                __assert("src/Packet.c", 936, "0");
+                debug_assert("src/Packet.c", LN(936, 936, 936, 936, 933, 936, 936));
+                __assert("src/Packet.c", LN(936, 936, 936, 936, 933, 936, 936), "0");
             }
             *pacWork.cursor.f++ = (float)(unsigned char)col[v[5] * 4];
             *pacWork.cursor.f++ = (float)(unsigned char)col[v[5] * 4 + 1];
@@ -939,8 +939,8 @@ static void pac_continueTag(PObjMaterial *mat, PObjTexInfo *tex)
     ctx = &pacWork;
     if (((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4 == 1) {
         debug_StdPrintfDummy("pac_continueTag:Packet too small. %d\n", 0);
-        debug_assert("src/Packet.c", 1147);
-        __assert("src/Packet.c", 1147, "0");
+        debug_assert("src/Packet.c", LN(1147, 1147, 1147, 1147, 1144, 1147, 1147));
+        __assert("src/Packet.c", LN(1147, 1147, 1147, 1147, 1144, 1147, 1147), "0");
     }
     pac_setVifCode(((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4);
     pac_setGifTag(mat, tex,
@@ -962,8 +962,8 @@ static void pac_checkDivide(int num, PObjMaterial *mat, PObjTexInfo *tex)
     ctx = &pacWork;
     if (ctx->counts.w[0] * num > limit) {
         debug_StdPrintfDummy("Original Strip Too Long. Size %d\n", ctx->counts.w[0] * num);
-        debug_assert("src/Packet.c", 1172);
-        __assert("src/Packet.c", 1172, "0");
+        debug_assert("src/Packet.c", LN(1172, 1172, 1172, 1172, 1169, 1172, 1172));
+        __assert("src/Packet.c", LN(1172, 1172, 1172, 1172, 1169, 1172, 1172), "0");
     }
     qwc = ((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4;
     if (qwc + ctx->counts.w[0] * num > limit) {
@@ -1138,8 +1138,8 @@ static int pac_makeStrip(char **out, PObjPart *obj, PObjGroup *tbl, int matno, i
             buf,
             "IN OBJECT \"%s\"\nHUGE PACKET (SIZE:0x%x) APPEARED\nMAYBE INFLATE MEMORY AREA WAS BROKEN.\n",
             ctx->name, packetSize);
-        debug_assertMessage("src/Packet.c", 1362, buf);
-        __assert("src/Packet.c", 1362, "e");
+        debug_assertMessage("src/Packet.c", LN(1362, 1362, 1362, 1362, 1359, 1300, 1362), buf);
+        __assert("src/Packet.c", LN(1362, 1362, 1362, 1362, 1359, 1300, 1362), "e");
     }
     if (size > 0) {
         if (malloc_GetPartition() == 0) {

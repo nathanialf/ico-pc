@@ -5,6 +5,7 @@
 #include "Matrix.h"
 #include "GifPacket.h"
 #include "Texture.h"
+#include "region.h"
 
 #ifdef ICO_RD
 
@@ -15,7 +16,7 @@
 
 /* each character's first and last column in its 20-pixel cell of the "font"
    texture, {0, 0} where the font has no glyph */
-static signed char fontKerning[128][2] = {
+static signed char fontKerning_pal[128][2] = {
     /* derived name */
     {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},
     {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},
@@ -31,6 +32,25 @@ static signed char fontKerning[128][2] = {
     {5, 14}, {5, 14}, {5, 14}, {5, 14}, {6, 13}, {6, 14}, {6, 13}, {5, 14}, {4, 14}, {2, 17},
     {4, 15}, {4, 14}, {5, 14}, {6, 12}, {8, 11}, {7, 13}, {5, 15}, {2, 16},
 };
+
+static signed char fontKerning_ntscaug6[128][2] = {
+    /* derived name */
+    {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},
+    {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},
+    {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},
+    {0, 0},  {0, 0},  {0, 0},  {8, 10}, {7, 10}, {3, 15}, {4, 13}, {2, 15}, {3, 15}, {6, 11},
+    {6, 11}, {6, 11}, {3, 13}, {3, 14}, {8, 10}, {6, 11}, {8, 10}, {5, 13}, {4, 13}, {7, 11},
+    {4, 13}, {4, 13}, {4, 13}, {4, 13}, {4, 13}, {4, 12}, {4, 13}, {5, 13}, {8, 10}, {7, 10},
+    {5, 13}, {5, 12}, {5, 13}, {4, 13}, {2, 15}, {2, 15}, {4, 13}, {3, 14}, {3, 14}, {4, 13},
+    {4, 13}, {3, 14}, {4, 14}, {8, 9},  {5, 12}, {3, 14}, {4, 13}, {3, 14}, {3, 14}, {2, 14},
+    {4, 13}, {3, 15}, {4, 14}, {4, 13}, {3, 14}, {3, 14}, {3, 14}, {1, 16}, {3, 14}, {3, 14},
+    {4, 13}, {6, 11}, {3, 15}, {6, 11}, {5, 12}, {4, 13}, {0, 0},  {4, 13}, {4, 13}, {4, 13},
+    {4, 13}, {4, 13}, {5, 12}, {4, 13}, {5, 13}, {8, 10}, {6, 11}, {5, 13}, {8, 9},  {2, 15},
+    {5, 13}, {4, 13}, {4, 12}, {5, 13}, {6, 11}, {5, 12}, {6, 12}, {5, 13}, {4, 13}, {2, 16},
+    {4, 13}, {4, 13}, {5, 12}, {6, 11}, {8, 9},  {6, 11}, {4, 13}, {0, 0},
+};
+
+#define fontKerning PAL_NTSCAUG6(fontKerning_pal, fontKerning_ntscaug6)
 
 /* The .sdata run: the alignment a "{L}", "{R}" or "{C}" escape selects and the
    colour a "{#rrggbbaa}" escape sets, then the texture name at its use. */
@@ -152,7 +172,10 @@ static inline float drawOne(float px, float py, int u, int v, int cw, int dp1,
 {
     float fcw = (float)cw, fh = (float)(fontw * 640 / ScreenWidth); /* UI */
     int gsofs = 0x8000;
-    int uv[4] = {u * 16, v * 16, (u + dp1 + 1) * 16, (v + 20) * 16}, iv[4];
+    /* the 2001 builds' glyph rectangle: the drawn width and the font's height */
+    int uv[4] = {u * 16, v * 16, (u + PAL_NTSCAUG6(dp1, cw) + 1) * 16,
+                 (v + PAL_NTSCAUG6(20, fontw)) * 16},
+        iv[4];
     float pos[4] = {px, py, fcw, fh};
     int ofs[4] = {-ScreenWidth / 2 * 16, -ScreenHeight / 4 * 16, 0, 0}; /* UI */
 

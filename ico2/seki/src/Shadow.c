@@ -243,6 +243,10 @@ static int killShadow = 0; /* derived name */
 
 static int killShadowRequest = 0; /* derived name */
 
+/* the colour shadow_Reset fills the shadow buffer with, read a byte at a time;
+   const, as GsBase.c's keepFrameColor: the reads depend on no packet store */
+static const unsigned char shadowFillColor[4] = {0}; /* derived name */
+
 /* The shadow display opens, fills and closes a PATH1 packet of its own
  * through PacketBufferStruct (DmaPacket.h), whose packet addresses are one
  * pointer union. */
@@ -636,7 +640,7 @@ static void shadow_EntryClusterShadow(Sub15C *o, float len)
     _InitCurrentMatrix();
     shadow_getShadowVectorAverage(v, o);
     _ScaleVectorXYZ(sa, v, len);
-    _ScaleVectorXYZ(sb, v, 4.0f);
+    _ScaleVectorXYZ(sb, v, PAL_NTSCAUG6(4.0f, 4.5f));
 
     for (i = 0; i < o->nodeNum; i++) {
         _SetCurrentMatrix((char *)o->nodeMtx + i * 0x40);
@@ -700,8 +704,60 @@ static inline void applyCurrentMatrixV(void *dst, void *src) /* derived name */
     ico_apply_matrix_w1((float *)dst, (const float (*)[4])ico_current_matrix, (const float *)src);
 }
 
+static void shadow_EntryNormalShadow_ntscaug6(Sub15C *o, int idx, float len)
+{
+    float v[4];
+    float sa[4];
+    float sb[4];
+    PObjModel *x = o->shadow;
+    int i;
+    int j;
+    PObjPart *p;
+
+    shadow_getShadowVectorAverage(v, o);
+    _ScaleVectorXYZ(sa, v, len);
+    _ScaleVectorXYZ(sb, v, 4.5f);
+    _SetCurrentMatrix((char *)o->nodeMtx + idx * 0x40);
+    _MulCurrentMatrixL(matrixptr + 0x80);
+
+    p = x->parts;
+    for (i = 0; i < x->partCount; i++, p++) {
+        for (j = 0; j < p->vtxCount; j++) {
+            applyCurrentMatrixV(p->vtxSave + j * 16, p->vtx + j * 16);
+        }
+        for (j = 0; j < p->vtxCount; j++) {
+            _AddVectorXYZ(p->nrmSave + j * 16, p->vtxSave + j * 16, sa);
+            _AddVectorXYZ(p->vtxSave + j * 16, p->vtxSave + j * 16, sb);
+        }
+    }
+
+    p = x->parts;
+    for (i = 0; i < x->partCount; i++, p++) {
+        VECTOR *va = (VECTOR *)p->vtxSave;
+        VECTOR *vb = (VECTOR *)p->nrmSave;
+
+        for (j = 0; j < p->vtxCount; j++) {
+            if (1.0f <= va[j].z && 1.0f <= vb[j].z) {
+            } else if (va[j].z < 1.0f && vb[j].z < 1.0f) {
+                vb[j].w = -1.0f;
+                va[j].w = -1.0f;
+            } else if (vb[j].z < 1.0f) {
+                _InterVectorXYZ(&vb[j], &va[j], &vb[j],
+                                1.0f - (va[j].z - 1.0f) / (va[j].z - vb[j].z));
+            } else if (va[j].z < 1.0f) {
+                _InterVectorXYZ(&va[j], &vb[j], &va[j],
+                                1.0f - (vb[j].z - 1.0f) / (vb[j].z - va[j].z));
+            }
+        }
+    }
+}
+
 static void shadow_EntryNormalShadow(Sub15C *o, int idx, float len)
 {
+    if (ICO_NTSCAUG6) {
+        shadow_EntryNormalShadow_ntscaug6(o, idx, len);
+        return;
+    }
     float v[4];
     float sa[4];
     float sb[4];
@@ -1092,9 +1148,9 @@ static inline unsigned long long *emitVolumeStrip(unsigned long long *p,
     for (i = 0; i < 10; i++, sgn = -sgn, p++) {
         k = order[i];
         if (volumeStripFaceZ(i) * sgn < 0.0f) {
-            *p++ = 0x3F80000080040404LL;
+            *p++ = PAL_NTSCAUG6(0x3F80000080040404LL, 0x3F80000080080808LL);
         } else {
-            *p++ = 0x3F80000080FCFCFCLL;
+            *p++ = PAL_NTSCAUG6(0x3F80000080FCFCFCLL, 0x3F80000080F8F8F8LL);
         }
         v = vi[k];
         *p = (long long)v[0] | ((long long)v[1] << 16) | ((long long)v[2] << 32);
@@ -1103,6 +1159,31 @@ static inline unsigned long long *emitVolumeStrip(unsigned long long *p,
 #endif
     }
     return p;
+}
+
+/* Whether the model's bounding box, blown up about its centre by the
+ * shadow's length, is on the screen (the 2001 builds'). */
+static inline int shadowVolumeOnScreen(PObjModel *x, float len) /* derived name */
+{
+    VECTOR box[8];
+    VECTOR center;
+    VECTOR d;
+    VECTOR *b = (VECTOR *)x->boxes;
+    float scale = len * 1.41421356f;
+    int i;
+
+    _UnitVector(&center);
+    for (i = 0; i < 8; i++) {
+        _AddVectorXYZ(&center, &center, &b[i]);
+    }
+    _ScaleVectorXYZ(&center, &center, 0.125f);
+    for (i = 0; i < 8; i++) {
+        _SubVector(&d, &b[i], &center);
+        _ScaleVector(&d, &d, scale);
+        _AddVector(&box[i], &b[i], &d);
+    }
+    _SetCurrentMatrix(matrixptr + 0x300);
+    return gsb_ClipBox((float *)box);
 }
 
 static void __GetCameraPos(VECTOR *pos)
@@ -1156,6 +1237,10 @@ void shadow_RenderVolume(Sub15C *o)
     }
     if (len != x->shadowLength && 0.0f < x->shadowLength) {
         len = x->shadowLength;
+    }
+    /* the 2001 builds skip a volume whose stretched box is off the screen */
+    if (ICO_NTSCAUG6 && shadowVolumeOnScreen(x, len) == 0) {
+        return;
     }
     __GetCameraPos(&cam);
     GetRootPositionByDObj(&pos, o);
@@ -1265,6 +1350,10 @@ void shadow_RenderVolumeMulti(Sub15C *o, int idx)
     }
     if (len != x->shadowLength && 0.0f < x->shadowLength) {
         len = x->shadowLength;
+    }
+    /* the 2001 builds skip a volume whose stretched box is off the screen */
+    if (ICO_NTSCAUG6 && shadowVolumeOnScreen(x, len) == 0) {
+        return;
     }
     __GetCameraPos(&cam);
     GetRootPositionByDObj(&pos, o);
@@ -1477,8 +1566,18 @@ inline void shadow_SetLength(Sub15C *o, float len)
     }
 }
 
+static inline void shadow_Init_aug6(void)
+{
+    killShadow = 0;
+    killShadowRequest = 0;
+}
+
 inline void shadow_Init(void)
 {
+    if (ICO_AUG6) {
+        shadow_Init_aug6();
+        return;
+    }
     GObj *obj;
     killShadow = 0;
     killShadowRequest = 0;

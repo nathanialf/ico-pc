@@ -200,15 +200,19 @@ void gsb_Init(void *db)
         omode = 3;
         break;
     }
-    if (!ICO_JPNKORCN) {
+    if (!ICO_JPNKORNTSCAUG6CN) {
         sceGsResetGraph(0, systemStatus[1] == 1, omode, 1);
     }
     /* FRAME: the native width; the latch below sets this boot's (the stub
        records nothing, port/null/gfx_null.c) */
     sceGsSetDefDBuff(db, 0, gsFrame.w, ScreenHeight, 2, 0x30, fbClear);
     gsb_SetFrame(db, 0, 0, 0x30, 2);
-    if (ICO_JPNKORCN) {
+    if (ICO_NTSCAUG6) {
         sceGsResetGraph(0, systemStatus[1] == 1, omode, 1);
+    } else {
+        if (ICO_JPNKORCN) {
+            sceGsResetGraph(0, systemStatus[1] == 1, omode, 1);
+        }
     }
     sceGsSyncV(0);
     buffer_ID = 0;
@@ -219,8 +223,14 @@ void gsb_Init(void *db)
     }
     /* PC port: the 50/60 Hz switch changes the frame size: the
        native frame is latched for it (rd's scene-sized targets follow) */
-    gsbHostFrameLatch();
-    gsb_SetVSMatrix(ScreenWidth, ScreenHeight, 512.0f); /* SCALE: the full screen */
+    if (ICO_AUG6) {
+        gsbHostFrameLatch();
+        gsb_SetVSMatrix(ScreenWidth, ScreenHeight, 512.0f); /* SCALE: the full screen */
+        shadow_Init();
+    } else {
+        gsbHostFrameLatch();
+        gsb_SetVSMatrix(ScreenWidth, ScreenHeight, 512.0f); /* SCALE: the full screen */
+    }
     zoomTarget = 1.0f;
     zoomSpeed = 1000.0f;
     zoomCurrent = 1.0f;
@@ -382,8 +392,87 @@ static void gsb_Reduction_jpn(void)
  * half height frame in black and then draws it back over itself through the
  * texture at 0x800 in the reduction tint, and last the tint this stage's
  * current target asks for. */
+static void gsb_Reduction_ntscaug6(void)
+{
+    if (ICO_JPNKORCN) {
+        gsb_Reduction_jpn();
+        return;
+    }
+
+    /* PC port: the frame's extents in this packet are FRAME: the native
+       width fw and its FBW (gsFrame.fbw, (fw + 63) / 64); 512 and 8 at 4:3,
+       the same words as ever.  The scissor keeps its 2 .. fw - 3 columns, the
+       UV its 8 .. fw * 16 + 8 (inside the 16 bits the decoder reads on a wide
+       frame); TEX0's TW is ceil(log2 fw) (9 at 4:3) so those UVs stay on
+       the texture */
+    const int fw = gsFrame.w;
+    long long pk[44] = {
+        0x1000000000008015LL,
+        0xE,
+        0,
+        0x4A,
+        0x8000000048LL,
+        0x42,
+        (long long)(gsFrame.fbw & 0x3F) << 16,
+        0x4C,
+        ((long long)(0x800 - fw / 2) << 4) | ((long long)(0x800 - ScreenHeight / 4) << 36),
+        0x18,
+        ((long long)(fw - 1) << 16) | ((long long)(ScreenHeight / 2 - 1) << 48),
+        0x40,
+        0x106,
+        0,
+        0,
+        1,
+        (long long)(-fw / 2 * 16 + 0x8000 - 4) |
+            ((long long)(-ScreenHeight / 4 * 16 + 0x8000 - 4) << 16) | (-1LL << 32),
+        5,
+        (long long)(-fw / 2 * 16 + 0x8000 + fw * 16 - 4) |
+            ((long long)(-ScreenHeight / 4 * 16 + 0x8000 + ScreenHeight / 2 * 16 - 4) << 16) |
+            (-1LL << 32),
+        5,
+        ((long long)(fw - 3) << 16) | 2 | ((long long)(ScreenHeight / 2 - 1) << 48),
+        0x40,
+        ((long long)gsFrame.fbw << 14) | ((long long)ico_frame_tw(fw) << 26) | 0x640000800LL,
+        6,
+        0x60,
+        0x14,
+        0x30000,
+        0x47,
+        0x1300000C0LL,
+        0x4E,
+        0x116,
+        0,
+        (long long)reductionRed |
+            ((long long)reductionBlue << 16 | (long long)reductionGreen << 8 | 0x80000000LL),
+        1,
+        0x80008,
+        3,
+        (long long)(-fw / 2 * 16 + 0x8000 - 4) |
+            ((long long)(-ScreenHeight / 4 * 16 + 0x8000 - 4) << 16) | (-1LL << 32),
+        5,
+        (long long)(fw * 16 + 8) | ((long long)(ScreenHeight * 16 + 8) << 16),
+        3,
+        (long long)(-fw / 2 * 16 + 0x8000 + fw * 16 - 4) |
+            ((long long)(-ScreenHeight / 4 * 16 + 0x8000 + ScreenHeight / 2 * 16 - 4) << 16) |
+            (-1LL << 32),
+        5,
+        ((long long)fw << 16) | ((long long)ScreenHeight << 48),
+        0x40,
+    };
+
+    FlushCache(0);
+    sceGsSyncPath(0, 0);
+    reductionRed = fbKeep ? 128 : GlobalStageSetting.reductionCol[0];
+    reductionGreen = fbKeep ? 128 : GlobalStageSetting.reductionCol[1];
+    reductionBlue = fbKeep ? 128 : GlobalStageSetting.reductionCol[2];
+}
+
 void gsb_Reduction(void)
 {
+    if (ICO_NTSCAUG6) {
+        gsb_Reduction_ntscaug6();
+        return;
+    }
     if (ICO_JPNKORCN) {
         gsb_Reduction_jpn();
         return;
@@ -641,7 +730,7 @@ static void gsb_fade(void)
     }
 #else
     gif_StartPacketPri(0xB);
-    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, 1, 0);
+    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, PAL_NTSCAUG6(1, 0), 0);
     gif_SetGsReg(0x47, 0x30000);
     gif_SetGsReg(0x4E, 0x1300000C0LL);
     setGsReg(0x49, 0);
@@ -701,7 +790,8 @@ static void gsb_scissorOnDemo(void)
     unsigned char col[4];
     int i;
 
-    if (current_layout_id == PAL_JPNKORCN(55, 52) && scissorLastState != current_layout_id) {
+    if (current_layout_id == PAL_JPNKORCN_NTSCAUG6(55, 52, 51) &&
+        scissorLastState != current_layout_id) {
         scissorStep = 2.5f;
     } else if (scissorLastState != current_layout_id) {
         scissorStep = -2.5f;
@@ -842,8 +932,94 @@ extern void gif_SpriteSensitiveOrg(GsbRect *r, long long z, GsbRect *uv, GsbColo
  * (n + 63) / 64 of those widths: ico_frame_x returns its argument at 4:3, so
  * every rect, size and register word is the PS2's there.  The window build
  * returns before the packet (rd_post records the same passes). */
+static void gsb_antiAlias_ntscaug6(void)
+{
+    GsbColor col = {128, 128, 128, 128};
+    GsbRect s0 = {4, 4, ico_frame_x(&gsFrame, 8192), 8192};
+    GsbRect s1 = {4, 4, ico_frame_x(&gsFrame, 4096), 4096};
+    GsbRect s2 = {4, 4, ico_frame_x(&gsFrame, 2048), 2048};
+    GsbRect d0 = {-ico_frame_x(&gsFrame, 4096) - 4, -4100, ico_frame_x(&gsFrame, 8192), 8192};
+    GsbRect d1 = {-ico_frame_x(&gsFrame, 2048) - 4, -2052, ico_frame_x(&gsFrame, 4096), 4096};
+    GsbRect d2 = {-ico_frame_x(&gsFrame, 1024) - 4, -1028, ico_frame_x(&gsFrame, 2048), 2048};
+    const int w0 = ico_frame_x(&gsFrame, 256); /* the first copy's width */
+    const int w1 = ico_frame_x(&gsFrame, 128); /* the second's */
+    int lv[2] = {GlobalStageSetting.antiLevel0, GlobalStageSetting.antiLevel1};
+
+    /* PC port: Options > Effects > Screen softening off */
+    if (!ico_video_effect_softening()) {
+        return;
+    }
+    if (lv[0] == 0 && lv[1] == 0) {
+        return;
+    }
+#ifdef ICO_RD
+    /* PC port: rd_post(RD_POST_AA_DOWNSAMPLE) then
+       rd_post(RD_POST_AA_COMPOSITE) record this function's writes and
+       sprites in list 10, in the same order */
+    (void)col;
+    (void)s0;
+    (void)s1;
+    (void)s2;
+    (void)d0;
+    (void)d1;
+    (void)d2;
+    dl_SetDLPriority(10);
+    {
+        RdPostParams pp;
+
+        memset(&pp, 0, sizeof(pp));
+        pp.lines = lv[1] != 0 ? 2 : 1;
+        rd_post(RD_POST_AA_DOWNSAMPLE, &pp);
+        memset(&pp, 0, sizeof(pp));
+        pp.rgba[0] = (unsigned char)lv[0];
+        pp.rgba[1] = (unsigned char)lv[1];
+        rd_post(RD_POST_AA_COMPOSITE, &pp);
+    }
+    return;
+#endif
+    gif_StartPacketPri(10);
+    gif_SetZTest(0);
+    gif_SetZWrite(0);
+    gif_SetDrawEnviroment(0x2800, 0, w0, 256, 0, 0);
+    gif_SetGsReg(6, 0x800 | ((long long)gsFrame.fbw << 14) |
+                        ((long long)tex_GetTWTH(gsFrame.w) << 26) |
+                        ((long long)tex_GetTWTH(512) << 30) | ((long long)1 << 34));
+    gif_SetAlpha(0, 2, 128);
+    gif_SpriteSensitiveOrg(&d1, 0, &s0, &col, 0);
+    if (lv[1] != 0) {
+        gif_SetGsReg(6, 0x2800 | ((long long)((w0 + 63) / 64) << 14) |
+                            ((long long)tex_GetTWTH(w0) << 26) |
+                            ((long long)tex_GetTWTH(256) << 30) | ((long long)1 << 34));
+        gif_SetDrawEnviroment(0x2C00, 0, w1, 128, 0, 0);
+        gif_SpriteSensitiveOrg(&d2, 0, &s1, &col, 0);
+    }
+    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, 512, 0, 0);
+    if (lv[1] != 0) {
+        gif_SetAlpha(1, 2, lv[1]);
+        gif_SetGsReg(6, 0x2C00 | ((long long)((w1 + 63) / 64) << 14) |
+                            ((long long)tex_GetTWTH(w1) << 26) |
+                            ((long long)tex_GetTWTH(128) << 30) | ((long long)1 << 34));
+        gif_SpriteSensitiveOrg(&d0, 0, &s2, &col, 1);
+    }
+    if (lv[0] != 0) {
+        gif_SetAlpha(1, 2, lv[0]);
+        gif_SetGsReg(6, 0x2800 | ((long long)((w0 + 63) / 64) << 14) |
+                            ((long long)tex_GetTWTH(w0) << 26) |
+                            ((long long)tex_GetTWTH(256) << 30) | ((long long)1 << 34));
+        gif_SpriteSensitiveOrg(&d0, 0, &s1, &col, 1);
+    }
+    gif_SetZWrite(1);
+    gif_SetZTest(1);
+    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, 0, 0); /* FRAME */
+    gif_EndPacket();
+}
+
 static void gsb_antiAlias(void)
 {
+    if (ICO_NTSCAUG6) {
+        gsb_antiAlias_ntscaug6();
+        return;
+    }
     GsbColor col = {128, 128, 128, 128};
     GsbRect s0 = {4, 4, ico_frame_x(&gsFrame, 8192), 8192};
     GsbRect s1 = {4, 4, ico_frame_x(&gsFrame, 4096), 4096};
@@ -996,7 +1172,7 @@ void gsb_MakeCommonMatrix(void)
     GifPkWord *q;
     int i;
 
-    if (game_pause == 0) {
+    if (PAL_AUG6(game_pause, graphics_ready) == 0) {
         return;
     }
     i = 0;
@@ -1053,11 +1229,60 @@ void gsb_MakeCommonMatrix(void)
 #endif
 }
 
+static int postEffectReady; /* defined below, with gsb_PostEffect */
+
+static void gsb_SetGsDefault_ntscaug6(void)
+{
+    DpkCtl *d = &PacketBufferStruct;
+    GifPkWord *p = (GifPkWord *)d->ptr.d;
+
+    d->gif.c = 0;
+    d->tail.c = (char *)p;
+    d->dma.c = (char *)p;
+    d->end.c = 0;
+    p[0].d = 0x10000000;
+    d->ptr.c = (char *)p + 8;
+    p[1].w[0] = 0x3000100;
+    d->ptr.c = (char *)p + 0xC;
+    p[1].w[1] = 0x2000180;
+    d->ptr.c = (char *)p + 0x10;
+    d->tail.c = (char *)p + 0x10;
+    p[2].d = 0x60000000;
+    d->ptr.c = (char *)p + 0x18;
+    p[3].w[0] = 0;
+    d->ptr.c = (char *)p + 0x1C;
+    p[3].w[1] = 0;
+    d->ptr.c = (char *)p + 0x20;
+    dl_SetDLPriority(0);
+    dl_OpenDma(5, d->dma.c, 0);
+    dl_CloseDma();
+    gsb_MakeCommonMatrix();
+    gsb_setNormalReg(0);
+    gsb_setSemitransReg(1);
+    gsb_setSemitransReg(2);
+    gsb_setParticleReg(6);
+    gsb_setSpecularReg(4);
+    gsb_setNormalReg(7);
+    gsb_setNormalReg(8);
+    gsb_setNormalReg(9);
+    gsb_setNormalReg(0xA);
+    gsb_setNormalReg(0xB);
+    gsb_setNormalReg(0xC);
+    postEffectReady = 0;
+    shadow_Reset();
+    postEffectReady = 1;
+    FullScreenEffectBefore();
+}
+
 /* Open the frame's first display list: one DMA tag, the two VIF words that
  * hand path 1 to the GS, a second tag for the register run, and then the
  * default register set for each of the thirteen contexts. */
 static void gsb_SetGsDefault(void)
 {
+    if (ICO_NTSCAUG6) {
+        gsb_SetGsDefault_ntscaug6();
+        return;
+    }
     DpkCtl *d = &PacketBufferStruct;
     GifPkWord *p = (GifPkWord *)d->ptr.d;
 
@@ -1197,12 +1422,66 @@ inline void gsb_ResetFilmNoise(void)
 /* set by gsb_UpdateGSSystem once the frame is up, tested by gsb_PostEffect */
 static int postEffectReady = 0; /* derived name */
 
+static int gsb_PostEffect_ntscaug6(void)
+{
+    if (debug_font_flag & 1) {
+        debug_Printf(0xA, ScreenHeight / 2 - 8, 0xCCCCCC00, "LID:%3d / FADE%d:%3.0f(%d)",
+                     current_layout_id, fadeStatus, fadeLevel, fadeColor[3]);
+    }
+    if (systemStatus[0x18 / 4] != 0 && (debug_font_flag & 1)) {
+        debug_Printf(0x230, ScreenHeight / 2 - 8, 0xCCCCCC00, "L");
+    }
+    if (systemStatus[0x14 / 4] != 0 && (debug_font_flag & 1)) {
+        debug_Printf(0x23A, ScreenHeight / 2 - 8, 0xCCCCCC00, "P");
+    }
+    if (postEffectReady != 0) {
+        shadow_Draw();
+        fog_DrawFog();
+    }
+#ifdef ICO_RD
+    /* PC port: photo mode's Deja vu, the deja vision's film reel specks
+       and its two veil layers drawn here into list 5 (after the fog, before
+       the motion blur and the aura and softening passes, as stage 40 draws
+       them); nothing otherwise */
+    if (ico_photo_deja()) {
+        ico_photo_view_veil();
+    }
+#endif
+    MotionBlur();
+#ifdef ICO_RD
+    if (gsb_filmMode() != 0) {
+        gsb_filmNoise();
+    }
+#else
+#endif
+    gsb_controlBrightness();
+    FullScreenEffectAfter();
+    if (fbKeep != 0) {
+        gsb_KeepFrameBuffer();
+        if (debug_font_flag & 1) {
+            debug_Printf(0x226, ScreenHeight / 2 - 8, 0xCCCCCC00, "K");
+        }
+    }
+    if (staffRollStartFlag != 0) {
+        staffRollMain();
+        if (staffRollStartFlag != 0) {
+            gsb_scissorOnDemo();
+        }
+    }
+    gsb_antiAlias();
+    gsb_fade();
+    return fbKeep;
+}
+
 /* Everything the frame still owes after the scene is drawn: the debug read
  * outs, the full screen effect, the shadow and fog passes, the motion blur,
  * the anti alias pass, the film grain and the brightness step, the kept frame
  * buffer, the staff roll and last the fade and the demo scissor. */
 static int gsb_PostEffect(void)
 {
+    if (ICO_NTSCAUG6) {
+        return gsb_PostEffect_ntscaug6();
+    }
     if (debug_font_flag & 1) {
         debug_Printf(0xA, ScreenHeight / 2 - 8, 0xCCCCCC00, "LID:%3d / FADE%d:%3.0f(%d)",
                      current_layout_id, fadeStatus, fadeLevel, fadeColor[3]);
@@ -1390,9 +1669,13 @@ void gsb_InitGSSystem(void)
     resetmallocseki();
     pac_Init();
     reg_Init();
-    shadow_Init();
+    if (!ICO_AUG6) {
+        shadow_Init();
+    }
     gsSystemReady = 1;
-    screenOffsetX = screenOffsetY = 0;
+    if (!ICO_NTSCAUG6) {
+        screenOffsetX = screenOffsetY = 0;
+    }
 }
 
 /* Six zero words between gsb_InitGSSystem's flag and gsb_SyncGSSystem's
@@ -1428,15 +1711,137 @@ inline int gsb_SyncGSSystem(void)
         return 1;
     }
     syncRetry = 0;
-    gsb_PostEffect();
+    if (!ICO_NTSCAUG6) {
+        gsb_PostEffect();
+    }
     return 0;
 }
 
 /* One frame boundary: take the field parity from the GS CSR, run the
  * reduction pass, flip the double buffer and hand the display list back
  * either swapped or cleared, then reopen the frame's register set. */
+static void gsb_UpdateGSSystem_ntsc(int keep)
+{
+    (void)keep; /* PC port: the European parameter, unused here */
+    sceGsDrawEnv *draw;
+
+    odd_even = 0; /* GS_CSR field bit: no GS on the host */
+    gsb_PostEffect();
+    gsb_Reduction();
+    if (gsSystemReady == 0) {
+        dl_Clear();
+        return;
+    }
+    debug_FlushFont();
+    frame_count++;
+    buffer_ID = frame_count & 1;
+    FlushCache(0);
+    sceGsSwapDBuff(&db, buffer_ID);
+#ifdef ICO_RD
+    gsbHostFlip();
+#endif
+    /* PC port: the camera of the tick just ended, the next tick's cull's
+       earlier camera */
+    gsbHostCullFlip();
+    if (buffer_ID != 0) {
+        draw = &db.draw1;
+    } else {
+        draw = &db.draw0;
+    }
+    sceGsSetHalfOffset(draw, (short)(int)((float)screen_offset_x + 2048.0f),
+                       (short)(int)((float)screen_offset_y + 2048.0f), odd_even == 0);
+#ifdef ICO_RD
+    gsbHostSetHalfOffset();
+#endif
+    tex_ResetVram();
+#ifdef ICO_RD
+    if (keep == 0) {
+        gsbHostReduction();
+    }
+#endif
+    /* PC port: the next tick's native frame, before the next frame opens */
+    gsbHostFrameLatch();
+    if (keep == 0) {
+        dl_Swap();
+    } else {
+        dl_Clear();
+    }
+#ifdef ICO_RD
+    gsbHostFrameHead();
+#endif
+    gsb_SetGsDefault();
+    if (staffRollStartFlag == 0) {
+        gsb_scissorOnDemo();
+    }
+    currentScreenWidth = GlobalTimer;
+    light_ResetLight();
+}
+
+static void gsb_UpdateGSSystem_aug6(int keep)
+{
+    (void)keep; /* PC port: the European parameter, unused here */
+    sceGsDrawEnv *draw;
+
+    odd_even = 0; /* GS_CSR field bit: no GS on the host */
+    gsb_PostEffect();
+    gsb_Reduction();
+    if (gsSystemReady == 0) {
+        dl_Clear();
+        return;
+    }
+    debug_FlushFont();
+    frame_count++;
+    buffer_ID = frame_count & 1;
+    FlushCache(0);
+    sceGsSwapDBuff(&db, buffer_ID);
+#ifdef ICO_RD
+    gsbHostFlip();
+#endif
+    /* PC port: the camera of the tick just ended, the next tick's cull's
+       earlier camera */
+    gsbHostCullFlip();
+    if (buffer_ID != 0) {
+        draw = &db.draw1;
+    } else {
+        draw = &db.draw0;
+    }
+    sceGsSetHalfOffset(draw, (short)(int)((float)screen_offset_x + 2048.0f),
+                       (short)(int)((float)screen_offset_y + 2048.0f), odd_even == 0);
+#ifdef ICO_RD
+    gsbHostSetHalfOffset();
+#endif
+    tex_ResetVram();
+#ifdef ICO_RD
+    if (keep == 0) {
+        gsbHostReduction();
+    }
+#endif
+    /* PC port: the next tick's native frame, before the next frame opens */
+    gsbHostFrameLatch();
+    if (keep == 0) {
+        dl_Swap();
+    } else {
+        dl_Clear();
+    }
+#ifdef ICO_RD
+    gsbHostFrameHead();
+#endif
+    gsb_SetGsDefault();
+    if (staffRollStartFlag == 0) {
+        gsb_scissorOnDemo();
+    }
+}
+
 void gsb_UpdateGSSystem(int keep)
 {
+    if (ICO_NTSC) {
+        gsb_UpdateGSSystem_ntsc(keep);
+        return;
+    }
+    if (ICO_AUG6) {
+        gsb_UpdateGSSystem_aug6(keep);
+        return;
+    }
     sceGsDrawEnv *draw;
 
     odd_even = 0; /* GS_CSR field bit: no GS on the host */
@@ -1575,7 +1980,11 @@ static void gsbHostFrameLatch(void)
 #define VS_DIV(a, b) ps2_div((a), (b))
 
 /* the 1500 unit screen the projection proj is scaled to */
-static const float vsScreenSize[] = {1500.0f, 1500.0f, 0.0f, 0.0f}; /* derived name */
+static const float vsScreenSize_pal[] = {1500.0f, 1500.0f, 0.0f, 0.0f}; /* derived name */
+
+static const float vsScreenSize_ntscaug6[] = {768.0f, 768.0f, 0.0f, 0.0f}; /* derived name */
+
+#define vsScreenSize PAL_NTSCAUG6(vsScreenSize_pal, vsScreenSize_ntscaug6)
 
 /* Build the view matrices from the record gsb_SetVSMatrix fills (vs[0] the
  * zoom, vs[1] and vs[2] the aspect terms, vs[3] and vs[4] the centre, vs[5]
@@ -1652,31 +2061,33 @@ static void gsb_SetVSMatrixSub(float *screen, float *proj, float *projHalf, floa
     projHalf[11] = 1.0f;
     projHalf[15] = 0.0f;
 
-    _UnitMatrix(m1);
-    m1[0] = 500.0f;
-    m1[5] = 500.0f;
-    m1[10] = 0.0f;
-    m1[15] = 0.0f;
-    m1[14] = 1.0f;
-    m1[11] = 1.0f;
+    if (!ICO_NTSCAUG6) {
+        _UnitMatrix(m1);
+        m1[0] = 500.0f;
+        m1[5] = 500.0f;
+        m1[10] = 0.0f;
+        m1[15] = 0.0f;
+        m1[14] = 1.0f;
+        m1[11] = 1.0f;
 
-    _UnitMatrix(m0);
-    /* clang-format off */
-    m0[0] = vs[1]; m0[5] = vs[2]; m0[10] = zf;
-    m0[12] = vs[3]; m0[13] = vs[4]; m0[14] = zn;
-    /* clang-format on */
-    _MulMatrix(matrixptr + 0x640, m0, m1);
+        _UnitMatrix(m0);
+        /* clang-format off */
+        m0[0] = vs[1]; m0[5] = vs[2]; m0[10] = zf;
+        m0[12] = vs[3]; m0[13] = vs[4]; m0[14] = zn;
+        /* clang-format on */
+        _MulMatrix(matrixptr + 0x640, m0, m1);
 
-    rx = vs[7] * v[0] / 500.0f;
-    ry = vs[7] * v[1] / 500.0f;
-    _UnitMatrix(m1);
-    m1[0] = (vs[7] + vs[7]) / (rx + rx);
-    m1[5] = (vs[7] + vs[7]) / (ry + ry);
-    m1[10] = (vs[8] + vs[7]) / (vs[8] - vs[7]);
-    m1[14] = vs[8] * vs[7] * -2.0f / (vs[8] - vs[7]);
-    m1[11] = 1.0f;
-    m1[15] = 0.0f;
-    _CopyMatrix(matrixptr + 0x680, m1);
+        rx = vs[7] * v[0] / 500.0f;
+        ry = vs[7] * v[1] / 500.0f;
+        _UnitMatrix(m1);
+        m1[0] = (vs[7] + vs[7]) / (rx + rx);
+        m1[5] = (vs[7] + vs[7]) / (ry + ry);
+        m1[10] = (vs[8] + vs[7]) / (vs[8] - vs[7]);
+        m1[14] = vs[8] * vs[7] * -2.0f / (vs[8] - vs[7]);
+        m1[11] = 1.0f;
+        m1[15] = 0.0f;
+        _CopyMatrix(matrixptr + 0x680, m1);
+    }
 }
 
 /* The view record gsb_SetVSMatrixSub builds the view and screen matrices
@@ -1694,7 +2105,7 @@ void gsb_SetVSMatrix(int w, int h, float d)
     float zoom;
 
     center_X = center_Y = 2048.0f;
-    if (ICO_JPNKORCN) {
+    if (ICO_JPNKORNTSCAUG6CN) {
         currentFocusDistance = d;
     } else {
         if (d == 0.0f) {
@@ -1720,9 +2131,11 @@ void gsb_SetVSMatrix(int w, int h, float d)
     zoom = (float)GlobalStageSetting.viewScale * zoomCurrent * d * (float)debug_zoom_per *
            (float)ScreenWidth / 640.0f / 100.0f / 100.0f;
     vsParam[0] = zoom;
-    if (!ICO_JPNKORCN) {
-        if (debug_snapshot_reserve != 0 || (pad[1].now & 0x800) != 0) {
-            vsParam[0] = zoom * (float)debug_snapshot_num / 100.0f;
+    if (!ICO_NTSCAUG6) {
+        if (!ICO_JPNKORCN) {
+            if (debug_snapshot_reserve != 0 || (pad[1].now & 0x800) != 0) {
+                vsParam[0] = zoom * (float)debug_snapshot_num / 100.0f;
+            }
         }
     }
     tex_UpdateMipMapLevel((float)GlobalStageSetting.viewScale * zoomCurrent *
@@ -2561,7 +2974,7 @@ inline int gsb_LoadStageSettings(void)
         debug_StdPrintfDummy("gsb_LoadStageSettings: host file open error.\n");
     } else {
         debug_StdPrintfDummy("Load stage settings file. %s\n", buf);
-        sceRead(fd, &GlobalStageSetting, 0x1D0);
+        sceRead(fd, &GlobalStageSetting, PAL_NTSCAUG6(0x1D0, 0x130));
         debugSceClose(fd);
     }
     return -1;
@@ -2592,8 +3005,27 @@ static void appendLogFile(void)
     debug_StdPrintfDummy(logBuf);
 }
 
+static inline int gsb_SaveStageSettings_ntscaug6(void)
+{
+    char buf[256];
+    int fd;
+    sprintf(buf, "object/stagesetting/%s.ssb", stageData[stage_no].key2);
+    fd = debugSceOpen(buf, 0x602);
+    if (fd < 0) {
+        debug_StdPrintfDummy("gsb_SaveStageSettings: host file open error.\n");
+    } else {
+        sceWrite(fd, &GlobalStageSetting, 0x130);
+        debug_StdPrintfDummy("Save stage settings file. %s\n", buf);
+        debugSceClose(fd);
+    }
+    return -1;
+}
+
 inline int gsb_SaveStageSettings(void)
 {
+    if (ICO_NTSCAUG6) {
+        return gsb_SaveStageSettings_ntscaug6();
+    }
     char buf[256];
     int fd;
     if (otherEditingLocked == 0) {
@@ -2881,8 +3313,89 @@ static int stageSettingRow = 0; /* derived name */ /* the highlighted row */
 /* The stage setting page of the debug menu: twenty one editable words of the
  * stage record, the pad keys that walk and change them, and the key that dumps
  * the page to the log. */
+static int gsb_StageSettingTool_ntscaug6(void)
+{
+    int i;
+    int ret = 0;
+
+    debug_PrintfDummy(10, 50, 0xFF800000, "StageSetting Tool");
+
+    for (i = 0; i < 17; i++) {
+        if (stageSettingItems[i].min == 0 && stageSettingItems[i].max == 1) {
+            debug_PrintfDummy(18, (i + 1) * 8 + 50,
+                              stageSettingRowColor[(stageSettingRow == i) ? 1 : 0], "%s : %s",
+                              stageSettingItems[i].name,
+                              stageSettingOnOffText[*(int *)stageSettingItems[i].val]);
+        } else {
+            debug_PrintfDummy(18, (i + 1) * 8 + 50,
+                              stageSettingRowColor[(stageSettingRow == i) ? 1 : 0], "%s : %d",
+                              stageSettingItems[i].name, *(int *)stageSettingItems[i].val);
+        }
+    }
+
+    if (pad[0].rep & 0x4000) {
+        if (++stageSettingRow >= 17) {
+            stageSettingRow = 0;
+        }
+    }
+    if (pad[0].rep & 0x1000) {
+        if (--stageSettingRow < 0) {
+            stageSettingRow = 16;
+        }
+    }
+    if (pad[0].rep & 0x2000) {
+        int v = *(int *)stageSettingItems[stageSettingRow].val +
+                stageSettingItems[stageSettingRow].step;
+
+        *(int *)stageSettingItems[stageSettingRow].val = v;
+        if (stageSettingItems[stageSettingRow].max < v) {
+            *(int *)stageSettingItems[stageSettingRow].val = stageSettingItems[stageSettingRow].min;
+        }
+        if (stageSettingItems[stageSettingRow].fn != 0) {
+            stageSettingItems[stageSettingRow].fn(0);
+        }
+    }
+    if (pad[0].rep & 0x8000) {
+        int v = *(int *)stageSettingItems[stageSettingRow].val -
+                stageSettingItems[stageSettingRow].step;
+
+        *(int *)stageSettingItems[stageSettingRow].val = v;
+        if (v < stageSettingItems[stageSettingRow].min) {
+            *(int *)stageSettingItems[stageSettingRow].val = stageSettingItems[stageSettingRow].max;
+        }
+        if (stageSettingItems[stageSettingRow].fn != 0) {
+            stageSettingItems[stageSettingRow].fn(0);
+        }
+    }
+    if (pad[0].flags & 0x10) {
+        *(int *)stageSettingItems[stageSettingRow].val = stageSettingItems[stageSettingRow].def;
+    }
+    if (pad[0].flags & 0x20) {
+        for (i = 0; i < 17; i++) {
+            if (stageSettingItems[i].min == 0 && stageSettingItems[i].max == 1) {
+                debug_StdPrintfDummy("StageSetting %s => %s\n", stageSettingItems[i].name,
+                                     stageSettingOnOffText[*(int *)stageSettingItems[i].val]);
+            } else {
+                debug_StdPrintfDummy("StageSetting %s => %d\n", stageSettingItems[i].name,
+                                     *(int *)stageSettingItems[i].val);
+            }
+        }
+        ret = 1;
+    }
+    if (pad[0].flags & 0x40) {
+        ret = -1;
+    }
+    if (ret != 0) {
+        stageSettingRow = 0;
+    }
+    return ret;
+}
+
 int gsb_StageSettingTool(void)
 {
+    if (ICO_NTSCAUG6) {
+        return gsb_StageSettingTool_ntscaug6();
+    }
     int i;
     int ret = 0;
 
@@ -3133,7 +3646,7 @@ static GsbMenuItem lockedMenu[] = {
     {"LOCK OTHER EDITING", lockOtherEditing, 0},
 }; /* derived name */
 
-static GsbMenuItem stageSettingMenu[] = {
+static GsbMenuItem stageSettingMenu_pal[] = {
     {"Light Tool", light_Tool, 0},
     {"Shadow Tool", shadow_Tool, 0},
     {"Fog Tool", fog_FogTool, 0},
@@ -3147,6 +3660,17 @@ static GsbMenuItem stageSettingMenu[] = {
     {"UnLock Quit", unlockOtherEditing, 0},
 }; /* derived name */
 
+static GsbMenuItem stageSettingMenu_ntscaug6[] = {
+    {"Light Tool", light_Tool},
+    {"Shadow Tool", shadow_Tool},
+    {"Fog Tool", fog_FogTool},
+    {"Other Settings", gsb_StageSettingTool},
+    {"Load Settings", gsb_LoadStageSettings},
+    {"Save Settings", gsb_SaveStageSettings},
+}; /* derived name */
+
+#define stageSettingMenu PAL_NTSCAUG6(stageSettingMenu_pal, stageSettingMenu_ntscaug6)
+
 /* the unselected and selected row colours, as filmNoiseRowColor */
 static const unsigned int menuRowColor[] = {0xFFFFFF00, 0xFF000000}; /* derived name */
 
@@ -3155,8 +3679,43 @@ static int menuCursor = 0; /* derived name */
 
 static int menuSelected = -1; /* derived name */
 
+static int gsb_StageSetting_ntscaug6(void)
+{
+    int i;
+    if (menuSelected >= 0) {
+        if (stageSettingMenu[menuSelected].fn != 0) {
+            int r = stageSettingMenu[menuSelected].fn(0);
+            if (r == -1) {
+                menuSelected = r;
+            }
+            return 0;
+        }
+    }
+    for (i = 0; i < 6; i++) {
+        debug_PrintfDummy(18, (i + 1) * 8 + 50, menuRowColor[(menuCursor == i) ? 1 : 0], "%s",
+                          stageSettingMenu[i].name);
+    }
+    if (pad[0].rep & 0x4000) {
+        menuCursor++;
+        if (menuCursor >= 6)
+            menuCursor = 0;
+    }
+    if (pad[0].rep & 0x1000) {
+        menuCursor--;
+        if (menuCursor < 0)
+            menuCursor = 5;
+    }
+    if (pad[0].flags & 0x20) {
+        menuSelected = menuCursor;
+    }
+    return (pad[0].flags & 0x40) ? -1 : 0;
+}
+
 int gsb_StageSetting(void)
 {
+    if (ICO_NTSCAUG6) {
+        return gsb_StageSetting_ntscaug6();
+    }
     int i;
     editingSettings = 1;
     if (menuSelected >= 0) {

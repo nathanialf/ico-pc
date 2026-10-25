@@ -16,7 +16,7 @@
    numbers, the tag and polygon counts, the packet size (the byte count in the
    low 24 bits, the clip type in the top byte), the next packet of the model
    and its DMA data. */
-typedef struct PacHeader {  /* field names derived */
+typedef struct PacHeader { /* field names derived */
     sceVu0FVECTOR box[8];   /* 0x00 */
     short mat;              /* 0x80 */
     short texSlot;          /* 0x82 */

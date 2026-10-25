@@ -90,8 +90,8 @@ static void light_killLinkLight(Light *p)
     if (p == 0) {
         /* "the light is NULL" */
         debug_StdPrintfDummy("Light:NULLになってんで\n");
-        debug_assert("src/Light.c", 424);
-        __assert("src/Light.c", 424, "0");
+        debug_assert("src/Light.c", LN(424, 424, 424, 424, 397, 386, 424));
+        __assert("src/Light.c", LN(424, 424, 424, 424, 397, 386, 424), "0");
     }
     if (p->next != 0) {
         p->next->prev = p->prev;
@@ -112,8 +112,8 @@ static void light_killLinkAmbient(AmbientVolume *p)
     if (p == 0) {
         /* "the ambient volume is NULL" */
         debug_StdPrintfDummy("AmbientVolume:NULLになってんで\n");
-        debug_assert("src/Light.c", 451);
-        __assert("src/Light.c", 451, "0");
+        debug_assert("src/Light.c", LN(451, 451, 451, 451, 424, 451, 451));
+        __assert("src/Light.c", LN(451, 451, 451, 451, 424, 451, 451), "0");
     }
     if (p->next != 0) {
         p->next->prev = p->prev;
@@ -191,7 +191,7 @@ Light *light_AddLight(GObj *self, int b, int kind)
             return 0;
         }
         q = (Light *)iosMallocDebug(ios_partition_seki, sizeof(Light) > 80 ? sizeof(Light) : 80,
-                                    "src/Light.c", 620);
+                                    "src/Light.c", PAL_AUG6(620, 593));
         self->dobj->lightId = b;
         q->owner = self;
         q->kind = kind;
@@ -216,7 +216,7 @@ Light *light_AddLight(GObj *self, int b, int kind)
         Light *r;
 
         r = (Light *)iosMallocDebug(ios_partition_seki, sizeof(Light) > 80 ? sizeof(Light) : 80,
-                                    "src/Light.c", 685);
+                                    "src/Light.c", PAL_AUG6(685, 658));
         r->kind = kind;
         r->scale = 1.0f;
         r->range = 32768.0f;
@@ -225,8 +225,8 @@ Light *light_AddLight(GObj *self, int b, int kind)
     }
     default:
         debug_StdPrintfDummy("Added Light is illegal.\n");
-        debug_assert("src/Light.c", 705);
-        __assert("src/Light.c", 705, "0");
+        debug_assert("src/Light.c", PAL_AUG6(705, 678));
+        __assert("src/Light.c", PAL_AUG6(705, 678), "0");
     }
     return 0;
 }

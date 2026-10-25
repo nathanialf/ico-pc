@@ -257,14 +257,14 @@ static int tex_loadImage(ICO_WORD addr, TexData *tex, int idx, short dbp, short 
     default:
         /* "tex_loadImage:" + EUC-JP "the texture format cannot be told apart" + ".\n" */
         debug_StdPrintfDummy("tex_loadImage:判別できないテクスチャフォーマットです.\n");
-        debug_assert("src/Texture.c", 645);
-        __assert("src/Texture.c", 645, "0");
+        debug_assert("src/Texture.c", PAL_NTSCAUG6(645, 611));
+        __assert("src/Texture.c", PAL_NTSCAUG6(645, 611), "0");
     }
     if (size > 0x20000) {
         /* "tex_loadImage:" + EUC-JP "the texture size is too large" + ".\n" */
         debug_StdPrintfDummy("tex_loadImage:テクスチャのサイズが大きすぎます.\n");
-        debug_assert("src/Texture.c", 650);
-        __assert("src/Texture.c", 650, "0");
+        debug_assert("src/Texture.c", PAL_NTSCAUG6(650, 616));
+        __assert("src/Texture.c", PAL_NTSCAUG6(650, 616), "0");
     }
 #ifdef ICO_RD
     /* PC port: no image transfer.  The texture cache decodes the
@@ -717,8 +717,8 @@ static void tex_setTexReg(Tim2Picture *pic, TexData *t, int levels, int lv, int 
     default:
         /* EUC-JP: "a texture type that is neither DIRECT nor CLUT was specified" + ".\n" */
         debug_StdPrintfDummy("DIRECTでもCLUTでもないテクスチャタイプが指定されました.\n");
-        debug_assert("src/Texture.c", 788);
-        __assert("src/Texture.c", 788, "0");
+        debug_assert("src/Texture.c", PAL_NTSCAUG6(788, 738));
+        __assert("src/Texture.c", PAL_NTSCAUG6(788, 738), "0");
         break;
     }
 #ifdef ICO_RD
@@ -833,8 +833,8 @@ static int tex_transTM2(Tim2Picture *pic, TexData *t, int id, int pri)
     if (8 <= levels) {
         /* "tex_transTM2:" + EUC-JP "there are too many mipmap textures" + ".\n" */
         debug_StdPrintfDummy("tex_transTM2:ミップマップテクスチャの枚数が多すぎます.\n");
-        debug_assert("src/Texture.c", 886);
-        __assert("src/Texture.c", 886, "FALSE");
+        debug_assert("src/Texture.c", PAL_NTSCAUG6(886, 835));
+        __assert("src/Texture.c", PAL_NTSCAUG6(886, 835), "FALSE");
     }
     dl_SetDLPriority(pri);
     switch (pic->imageType) {
@@ -867,8 +867,8 @@ static int tex_transTM2(Tim2Picture *pic, TexData *t, int id, int pri)
         /* EUC-JP "the texture is corrupt" + ".\"%s\"I:%d C:%d iadr:%p cadr:%p hadr:%p\n" */
         debug_StdPrintfDummy("テクスチャが壊れています.\"%s\"I:%d C:%d iadr:%p cadr:%p hadr:%p\n",
                              t, pic->imageType, pic->clutType, t->lv[0].addr, t->clut.addr, t);
-        debug_assert("src/Texture.c", 919);
-        __assert("src/Texture.c", 919, "FALSE");
+        debug_assert("src/Texture.c", PAL_NTSCAUG6(919, 868));
+        __assert("src/Texture.c", PAL_NTSCAUG6(919, 868), "FALSE");
         break;
     }
     texTable[id].rec.ext.transDone[pri] = 1;
@@ -1012,8 +1012,8 @@ static void tex_setRegisters(Tim2Picture *pic, TexData *t)
     default:
         debug_StdPrintfDummy("テクスチャが壊れています.\"%s\"I:%d C:%d iadr:%p cadr:%p hadr:%p\n",
                              t, pic->imageType, pic->clutType, t->lv[0].addr, t->clut.addr, t);
-        debug_assert("src/Texture.c", 1066);
-        __assert("src/Texture.c", 1066, "FALSE");
+        debug_assert("src/Texture.c", PAL_NTSCAUG6(1066, 1014));
+        __assert("src/Texture.c", PAL_NTSCAUG6(1066, 1014), "FALSE");
     }
 
     /* a second switch on the same field */
@@ -1106,8 +1106,8 @@ static void tex_initTM2(Tim2Picture *pic, TexData *t)
     default:
         debug_StdPrintfDummy("テクスチャが壊れています.\"%s\"I:%d C:%d iadr:%p cadr:%p hadr:%p\n",
                              t, pic->imageType, pic->clutType, t->lv[0].addr, t->clut.addr, t);
-        debug_assert("src/Texture.c", 1143);
-        __assert("src/Texture.c", 1143, "FALSE");
+        debug_assert("src/Texture.c", PAL_NTSCAUG6(1143, 1091));
+        __assert("src/Texture.c", PAL_NTSCAUG6(1143, 1091), "FALSE");
         break;
     }
     tex_setRegisters(pic, t);
@@ -1304,8 +1304,8 @@ static void tex_makeTexturePacket(void *file, TexData *t)
             debug_StdPrintfDummy(
                 "tex_makeTexturePacket:テクスチャのユーザースペースフォーマットが異常です.'%s'\n",
                 t);
-            debug_assert("src/Texture.c", 1392);
-            __assert("src/Texture.c", 1392, "0");
+            debug_assert("src/Texture.c", PAL_NTSCAUG6(1392, 1340));
+            __assert("src/Texture.c", PAL_NTSCAUG6(1392, 1340), "0");
         }
         t->ext.file = *ext;
         t->ext.animated = 1;
@@ -1330,8 +1330,8 @@ static void tex_makeTexturePacket(void *file, TexData *t)
         sprintf(buf, "TEXTURE BROKEN. \"%s\"\n    I:%d C:%d iadr:%p cadr:%p hadr:%p\n", t->name,
                 pic->imageType, pic->clutType, t->lv[0].addr, t->clut.addr, t);
         debug_StdPrintfDummy(buf);
-        debug_assertMessage("src/Texture.c", 1427, buf);
-        __assert("src/Texture.c", 1427, "e");
+        debug_assertMessage("src/Texture.c", PAL_NTSCAUG6(1427, 1375), buf);
+        __assert("src/Texture.c", PAL_NTSCAUG6(1427, 1375), "e");
         break;
     }
 }
@@ -1430,8 +1430,8 @@ static int tex_initTextureSub(char *name, void *pkt)
     if (200 <= texCount) {
         /* EUC-JP "there are too many textures, make the texture list region bigger" */
         debug_StdPrintfDummy("テクスチャが多すぎます.テクスチャリスト領域を増やしてください\n");
-        debug_assert("src/Texture.c", 1523);
-        __assert("src/Texture.c", 1523, "0");
+        debug_assert("src/Texture.c", PAL_NTSCAUG6(1523, 1471));
+        __assert("src/Texture.c", PAL_NTSCAUG6(1523, 1471), "0");
     }
     return no;
 }
@@ -1453,8 +1453,8 @@ int tex_LoadTexturePart(char *name, int area)
     } else {
         /* EUC-JP: texture "%s" not found. */
         debug_StdPrintfDummy("テクスチャ \"%s\" がみつかりません.\n", buf);
-        debug_assert("src/Texture.c", 1590);
-        __assert("src/Texture.c", 1590, "FALSE");
+        debug_assert("src/Texture.c", PAL_NTSCAUG6(1590, 1538));
+        __assert("src/Texture.c", PAL_NTSCAUG6(1590, 1538), "FALSE");
         return -1;
     }
 }
@@ -1483,8 +1483,8 @@ int tex_TransTexture(int id, int ret)
             /* the same message with ". %d:%s\n" */
             debug_StdPrintfDummy("tex_TransTexture:テクスチャの転送に失敗しました. %d:%s\n", id, t);
         }
-        debug_assert("src/Texture.c", 1685);
-        __assert("src/Texture.c", 1685, "FALSE");
+        debug_assert("src/Texture.c", PAL_NTSCAUG6(1685, 1633));
+        __assert("src/Texture.c", PAL_NTSCAUG6(1685, 1633), "FALSE");
     }
     if (ret != 0) {
         textures++;
@@ -1793,10 +1793,14 @@ static inline void resetVramPri(int pri) /* derived name */
 
     dl_SetDLPriority(pri);
 
-    if (headTbp[pri] != 0) {
-        vramPri[pri].texAddr = headTbp[pri];
-    } else {
+    if (ICO_NTSCAUG6) {
         vramPri[pri].texAddr = 0x2800;
+    } else {
+        if (headTbp[pri] != 0) {
+            vramPri[pri].texAddr = headTbp[pri];
+        } else {
+            vramPri[pri].texAddr = 0x2800;
+        }
     }
     vramPri[pri].clutAddr = 0x3E80;
     vramPri[pri].lastTex = -1;
@@ -1814,7 +1818,9 @@ void tex_ResetVram(void)
     int i;
 
     for (i = 0; i < 13; i++) {
-        headTbp[i] = 0;
+        if (!ICO_NTSCAUG6) {
+            headTbp[i] = 0;
+        }
         resetVramPri(i);
     }
     if (systemStatus[5] == 0) {
@@ -2447,6 +2453,9 @@ void tex_UpdateMipMapLevel(float lv)
             l = 0;
             mmag = 1;
             mmin = GlobalStageSetting.texSampleMode;
+        }
+        if (ICO_NTSCAUG6) {
+            k = k * lv / 80.0f; /* the 2001 builds scale the mipmap K by the level */
         }
         tex->pkt.tex1.data = ((long long)(mxl - 1) << 2) | ((long long)mmag << 5) |
                              ((long long)mmin << 6) | ((long long)l << 19) | ((long long)k << 32);

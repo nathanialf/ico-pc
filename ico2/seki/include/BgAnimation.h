@@ -154,7 +154,7 @@ typedef struct BgaAnim { /* field names derived */
    allocates. */
 typedef struct BgaHeader { /* field names derived */
     char magic[4];
-    int group;                 /* 0x04 */
+    int group; /* 0x04 */
     char pad8[2];
     signed char mode;          /* 0x0A */
     char cut;                  /* 0x0B */

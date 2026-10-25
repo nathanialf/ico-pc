@@ -28,6 +28,9 @@ typedef struct FogClutPacket { /* field names derived */
     unsigned int vifEnd[4];    /* 0x420 */
 } FogClutPacket;               /* derived name */
 
+/* a DMA source, so quadword aligned */
+static FogClutPacket fogClutPacket __attribute__((aligned(16))); /* derived name */
+
 static FogClutPacket fogClutPacket; /* derived name */
 
 void fog_MakeFogClut(void)
@@ -424,7 +427,9 @@ void fog_DrawFog(void)
     }
     FOG_SET_GSREG(78, ((long long)0x3000 << 16) | 0xC0);
 
-    FOG_SET_FRAME(64, gsFrame.w, ScreenHeight, screenOffsetX, screenOffsetY);
+    if (!ICO_NTSCAUG6) {
+        FOG_SET_FRAME(64, gsFrame.w, ScreenHeight, screenOffsetX, screenOffsetY);
+    }
     FOG_END_PACKET();
 #endif
 }
