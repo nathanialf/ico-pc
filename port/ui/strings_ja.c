@@ -668,4 +668,10 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_DEBUG_MENU] = "デバッグメニュー",
     [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] =
         "ゲーム本来のデバッグメニューです（開発者向け）。実績が無効になります。",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO] =
+        "このデモには北米版がありません。影が北米版ディスクと同じではないためです。強くならない：2周目以降も強くなりません。実績はそのままです。",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] =
+        "このバージョンにはヒントがないため、変わりません。実績はそのままです。",
+    [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
+        "このバージョンではもともとムービー中に見回せないため、変わりません。実績はそのままです。",
 };

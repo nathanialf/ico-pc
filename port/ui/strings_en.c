@@ -665,4 +665,10 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_DEBUG_MENU] = "Debug menu",
     [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] =
         "The game’s own debug menu, for developers. Switches achievements off.",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO] =
+        "American is not offered on this demo: its Shadows are not the North American disc’s. Not tougher later: no tougher on later playthroughs. Achievements stay on.",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] =
+        "This version of the game gives no hints, so this changes nothing. Achievements stay on.",
+    [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
+        "This version of the game has no look-around in cutscenes, so this changes nothing. Achievements stay on.",
 };

@@ -669,4 +669,10 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_DEBUG_MENU] = "Menu di debug",
     [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] =
         "Il menu di debug del gioco, per sviluppatori. Disattiva gli obiettivi.",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO] =
+        "Americana non è disponibile in questa demo: le sue ombre non sono quelle del disco nordamericano. Senza aumenti: non più resistenti nelle partite successive. Gli obiettivi restano attivi.",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] =
+        "Questa versione del gioco non dà suggerimenti, quindi non cambia nulla. Gli obiettivi restano attivi.",
+    [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
+        "In questa versione del gioco la visuale non si muove durante i filmati, quindi non cambia nulla. Gli obiettivi restano attivi.",
 };

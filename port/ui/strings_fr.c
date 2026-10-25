@@ -673,4 +673,10 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_DEBUG_MENU] = "Menu de débogage",
     [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] =
         "Le menu de débogage du jeu, pour les développeurs. Désactive les succès.",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO] =
+        "Américain n’est pas proposé sur cette démo : ses ombres ne sont pas celles du disque nord-américain. Sans durcissement : les ombres ne durcissent pas aux parties suivantes. Les succès restent actifs.",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] =
+        "Cette version du jeu ne donne aucun indice : cela ne change rien. Les succès restent actifs.",
+    [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
+        "Dans cette version du jeu, on ne peut pas regarder autour pendant les cinématiques : cela ne change rien. Les succès restent actifs.",
 };

@@ -674,4 +674,10 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_DEBUG_MENU] = "Debug-Menü",
     [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] =
         "Das Debug-Menü des Spiels, für Entwickler. Schaltet die Erfolge ab.",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO] =
+        "Amerikanisch gibt es auf dieser Demo nicht: ihre Schatten sind nicht die der nordamerikanischen Disc. Ohne Verschärfung: in späteren Durchgängen nicht zäher. Die Erfolge bleiben aktiv.",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] =
+        "Diese Version des Spiels gibt keine Hinweise, also ändert das nichts. Die Erfolge bleiben aktiv.",
+    [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
+        "In dieser Version des Spiels kann man sich in Zwischensequenzen nicht umsehen, also ändert das nichts. Die Erfolge bleiben aktiv.",
 };

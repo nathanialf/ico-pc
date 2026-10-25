@@ -649,4 +649,10 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
         "過場動畫可能看起來怪異，遊戲可能顯示原本不打算讓您看到的地方。會關閉成就。",
     [UI_STR_OPT_VAR_DEBUG_MENU] = "除錯選單",
     [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] = "遊戲本身的除錯選單，供開發者使用。會關閉成就。",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO] =
+        "這張試玩光碟沒有「美版」：它的影子和北美版光碟不同。「之後不變強」：之後的遊玩也不會變得更強。成就維持開啟。",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] =
+        "這個版本的遊戲沒有提示，所以不會有任何改變。成就維持開啟。",
+    [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
+        "這個版本的過場動畫本來就不能環顧四周，所以不會有任何改變。成就維持開啟。",
 };

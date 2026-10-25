@@ -798,6 +798,13 @@ typedef enum UiStrId {
     UI_STR_OPT_VAR_IGNORE_CAMS_NOTE,
     UI_STR_OPT_VAR_DEBUG_MENU,
     UI_STR_OPT_VAR_DEBUG_MENU_NOTE,
+    /* PC port: the notes of three rows on the 2001 discs: Shadow toughness on
+       the June 2001 demo (American is not offered: its Shadows are its own),
+       and No hints and No cutscene look-around on the three 2001 discs
+       (those versions have neither, so the rows change nothing there) */
+    UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO,
+    UI_STR_OPT_VAR_NO_HINTS_NOTE_2001,
+    UI_STR_OPT_VAR_NO_LOOK_NOTE_2001,
     UI_STR_COUNT
 } UiStrId;
 

@@ -667,4 +667,10 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
         "컷신이 이상하게 보일 수 있으며, 게임이 보여 주려던 적 없는 곳이 나올 수 있습니다. 업적이 꺼집니다.",
     [UI_STR_OPT_VAR_DEBUG_MENU] = "디버그 메뉴",
     [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] = "게임 자체의 디버그 메뉴입니다(개발자용). 업적이 꺼집니다.",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO] =
+        "이 데모에서는 북미판을 고를 수 없습니다. 그림자가 북미판 디스크와 같지 않습니다. 강해지지 않음: 이후 플레이에서도 강해지지 않습니다. 업적은 그대로 유지됩니다.",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] =
+        "이 버전에는 힌트가 없어서 효과가 없습니다. 업적은 그대로 유지됩니다.",
+    [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
+        "이 버전은 컷신 중에 둘러볼 수 없어서 효과가 없습니다. 업적은 그대로 유지됩니다.",
 };

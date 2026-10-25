@@ -669,4 +669,10 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_DEBUG_MENU] = "Menú de depuración",
     [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] =
         "El menú de depuración del juego, para desarrolladores. Desactiva los logros.",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO] =
+        "Americana no está disponible en esta demo: sus sombras no son las del disco norteamericano. Sin aumento: no más resistentes en las partidas siguientes. Los logros siguen activos.",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] =
+        "Esta versión del juego no da pistas, así que no cambia nada. Los logros siguen activos.",
+    [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
+        "En esta versión del juego la cámara no se mueve durante las escenas, así que no cambia nada. Los logros siguen activos.",
 };
