@@ -2876,6 +2876,10 @@ void GirlGeo(GObj *gobj)
 
 static void GirlAI_ntscaug6jun26(GObj *gobj) {}
 
+/* PC port: port/game/variants.h: 0 with Options > Extras > Game variants > No
+   hints on */
+extern int ico_hints_on(void);
+
 void GirlAI(GObj *gobj)
 {
     if (ICO_NTSCAUG6JUN26) {
@@ -2893,13 +2897,17 @@ void GirlAI(GObj *gobj)
                 debug_StdPrintfDummy("reset hint2 voice ready\n");
                 scpGirlHintVoiceCancel();
             }
-            scpGirlHintVoiceReady(101);
+            if (ico_hints_on()) { /* PC port: No hints: no hint voice */
+                scpGirlHintVoiceReady(101);
+            }
             cloth->hint1Ready = 1;
             debug_StdPrintfDummy("hint1 voice ready\n");
         }
         if (cloth->hint1Ready != 0 && cloth->hint1Played == 0 &&
             47.0f < GOBJ_SUB(gobj)->ctrl.animFrame) {
-            scpGirlHintVoicePlay();
+            if (ico_hints_on()) { /* PC port: No hints */
+                scpGirlHintVoicePlay();
+            }
             cloth->hint1Played = 1;
             debug_StdPrintfDummy("hint1 voice play\n");
         }
@@ -2910,13 +2918,17 @@ void GirlAI(GObj *gobj)
                 debug_StdPrintfDummy("reset hint1 voice ready\n");
                 scpGirlHintVoiceCancel();
             }
-            scpGirlHintVoiceReady(103);
+            if (ico_hints_on()) { /* PC port: No hints */
+                scpGirlHintVoiceReady(103);
+            }
             cloth->hint2Ready = 1;
             debug_StdPrintfDummy("hint2 voice ready\n");
         }
         if (cloth->hint2Ready != 0 && cloth->hint2Played == 0 &&
             107.0f < GOBJ_SUB(gobj)->ctrl.animFrame) {
-            scpGirlHintVoicePlay();
+            if (ico_hints_on()) { /* PC port: No hints */
+                scpGirlHintVoicePlay();
+            }
             cloth->hint2Played = 1;
             debug_StdPrintfDummy("hint2 voice play\n");
         }
