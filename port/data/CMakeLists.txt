@@ -229,7 +229,7 @@ endif()
 # chosen disc image (port/platform/android/iso_import.c), on Linux with SDL's
 # memory streams for the content:// one: the copy byte for byte with its
 # progress, a cancel leaving nothing, a write failure's reason, the space
-# arithmetic, the 4.4 GB demo's boxes in the seven languages. The Linux window build only; SDL3 is found after this
+# arithmetic, the 4.4 GB demo's boxes in the eight languages. The Linux window build only; SDL3 is found after this
 # directory (port/rhi), so the target is made at the end of the configure.
 function(_ico_data_iso_import_test)
     if(NOT TARGET SDL3::SDL3-shared)
