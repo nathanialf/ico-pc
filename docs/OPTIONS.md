@@ -486,16 +486,16 @@ rows that switch them off do so for as long as they are on, like Developer
 mode, so you cannot earn an achievement by accident while playing a changed
 game. Turn them off again and achievements come back.
 
-- **Shade toughness:** **Original** keeps your disc's Shades. **American**
-  makes every Shade as tough as on the North American disc, and no tougher on
-  later playthroughs. **Not tougher later** keeps your disc's Shades but they
+- **Shadow toughness:** **Original** keeps your disc's Shadows. **American**
+  makes every Shadow as tough as on the North American disc, and no tougher on
+  later playthroughs. **Not tougher later** keeps your disc's Shadows but they
   do not get tougher on later playthroughs. Achievements stay on.
-- **One hit per swing:** a swing of Ico's weapon can hurt a Shade only once.
+- **One hit per swing:** a swing of Ico's weapon can hurt a Shadow only once.
   Switches achievements off.
-- **Shades never dodge:** Shades never step aside from Ico's swings.
+- **Shadows never dodge:** Shadows never step aside from Ico's swings.
   Switches achievements off.
-- **Shade aggression:** how the Shades fight. **Their own** leaves each
-  Shade as the game made it. The other four make them all **Bold** or
+- **Shadow aggression:** how the Shadows fight. **Their own** leaves each
+  Shadow as the game made it. The other four make them all **Bold** or
   **Wary**, and **patient** or **quick**. Achievements stay on.
 - **No hints:** Yorda gives no hints about where to go, as on the North
   American disc. Achievements stay on.
@@ -508,8 +508,10 @@ game. Turn them off again and achievements come back.
   Cutscenes can look wrong, and the game may show places it never meant you to
   see. Switches achievements off.
 - **Debug menu** (only while [Developer mode](#developer-mode) is on): opens
-  the game's own debug menu, made for the people who built the game. Switches
-  achievements off.
+  the game's own debug menu, made for the people who built the game. Options
+  closes and the menu opens over the game, or over the title screen if you
+  came from there; it works as the Select button opens it in Developer mode.
+  Switches achievements off.
 
 The same choices are kept in `config.toml`, under the heading `[variants]`.
 
