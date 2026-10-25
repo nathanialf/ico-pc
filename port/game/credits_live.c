@@ -86,9 +86,11 @@ extern int RequestStageChangeSimple(int no, float speed, float wait, unsigned ch
 #define BOY_LABEL (ico_region_cur()->credits_boy_label)         /* 54 on every disc */
 #define BOY_KIND 1
 
-/* the story flags: gflag.c's 50-byte bitmap (the same on every disc) */
-#define GFLAG_COUNT 400
-_Static_assert(GFLAG_COUNT == 400, "region.h gflag_count: 400 on every disc");
+/* the story flags: gflag.c's bitmap, 400 flags on the European, Japanese, Korean and Asian
+   discs, 368 on the USA disc and the August 2001 preview, 352 on the June 2001 demo
+   (region.h gflag_count); kept at the largest, walked to the disc's count */
+#define GFLAG_MAX 400
+#define GFLAG_COUNT (ico_region_cur()->gflag_count)
 /* Main ticks the stage change may take before it counts as failed (the
    load of STAFF1 takes a few hundred): REACH_TICKS with no stage change
    running, REACH_LIMIT whatever runs; then RETURN_TICKS for the title's
@@ -103,7 +105,7 @@ _Static_assert(GFLAG_COUNT == 400, "region.h gflag_count: 400 on every disc");
 enum { PH_IDLE, PH_SWITCHING, PH_PLAYING, PH_RETURNING };
 
 static int s_phase = PH_IDLE;
-static unsigned char s_flags[GFLAG_COUNT];
+static unsigned char s_flags[GFLAG_MAX];
 static int s_gameClear;
 static char s_world[SAVE_IMAGE];
 static char s_checkpoint[SAVE_IMAGE];
