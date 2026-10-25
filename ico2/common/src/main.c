@@ -30,6 +30,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ico_gamestate.h" /* port: achievement signals */
+#include "pad.h"
+#include <libcdvd.h>
+#include <sound.h>
+#include <sifrpc.h>
 
 /* main.c's .data globals, each with an initialiser. systemStatus starts in PAL
    mode (word 0) at a frame step of 2 (word 1); the Japanese and Korean ELFs
@@ -102,6 +106,14 @@ static char soundThreadStack[8192] __attribute__((aligned(16))); /* derived name
 
 static IosMsgWord schedulerMsgBuff[8]; /* derived name */
 
+/* the pad handle and the two stick readings sampleModeNoContTimeOutMain reads each frame
+   for the demo disc's idle countdown */
+static IosPadCtx demoIdlePad; /* derived name */
+
+static IosPadStick demoIdleStickL; /* derived name */
+
+static IosPadStick demoIdleStickR; /* derived name */
+
 /* the six threads Emergency_DestroyAllThread tears down, every thread boot
    starts except idle; first in this object's .rodata, ahead of Main's
    strings, so it is defined here with the records it points at */
@@ -113,6 +125,10 @@ static void scheduler(void);
 /* motionOrientManager.h carries MotOriName and declares no movieFile */
 extern char movieFile[];
 int movie_abort_check(void);
+/* the development build's Main also called debug_Menu, debug_SetBar and
+   debug_SetBar2 and carried a frame-step block; this build has none of
+   them. */
+void Main(void);
 /* port/platform: the vsync busy-wait (sched.h) and the INTC raise
    (kernel_host.h) */
 void ico_sched_spin_vsync(void);
@@ -228,11 +244,163 @@ static void ico_dev_switch_stage(void)
     }
 }
 
+static void Main_jun26(void)
+{
+    int n;
+
+    debug_StdPrintfDummy("VSYNC_TIMING    : \x1b[33m%s\x1b[m\n",
+                         systemStatus[0] == 0 ? "NTSC" : "PAL");
+    debug_StdPrintfDummy("FRAME_STEP      : \x1b[33m%d\x1b[m\n", systemStatus[1]);
+    debug_StdPrintfDummy("SYSTEM_FRAMERATE: \x1b[33m%d\x1b[m\n",
+                         (60 - systemStatus[0] * 10) / systemStatus[1]);
+    *T0_COUNT = 0;
+    stage_no = 0;
+    exit_no = 0;
+    interlace = 1;
+    GlobalTimer = 0;
+    systemFault = 0;
+    lock_execIcoMisc = 0;
+    n = debug_TryToGetStartStage();
+    /* PC port: a stage whose data file the retail disc does not hold
+       (STGNOCD_*, the development stages, and STGONLYSAMPLE_*, the E3 sample
+       stages: 64 to 87, 89, 90, 92 to 102) loads nothing and dies building
+       its objects. Refused as debug_SelectStageMain refuses the NOCD_ rows;
+       the boot runs instead. */
+    if (n > 1 && n < 104 &&
+        (strstr(stageData[n].dataFile, "NOCD_") != 0 ||
+         strstr(stageData[n].dataFile, "ONLYSAMPLE_") != 0)) {
+        ico_diag_milestone("start_stage %d (%s) refused: its data file %s is not on the disc; "
+                           "booting normally",
+                           n, stageData[n].name, stageData[n].dataFile);
+        n = -1;
+    }
+    thisIsYourStartStage = n < 104 ? n : 103;
+    if (thisIsYourStartStage <= 0) {
+        thisIsYourStartStage = 1;
+    }
+    /* PC port: the boot's language and 50/60 Hz screens are skipped
+       (kanbanBoot.c): the values they stored are set here, on every boot,
+       before stage 1 loads (ReadTextureFile, charFileManager.c, keeps the
+       language textures of NonLinearCameraMove's language only) and before
+       gsb_InitGSSystem starts the GS in the mode, so the boot needs no
+       reload and no gsResetFunc. [game] language, else the system's;
+       [video] video_mode, else 60 Hz. */
+    systemStatus[0] = ico_boot_video_mode();
+    NonLinearCameraMove = ico_boot_language();
+    debug_VariableInit();
+    InitDelayFree();
+    debug_StdPrintfDummy("Main() in\n");
+    debug_StdPrintfDummy("Main() in\n");
+    debug_StdPrintfDummy("IosPadLock %d\n", IosPadLock);
+    WaitSema(IosPadLock);
+    DeleteSema(IosPadLock);
+    debug_StdPrintfDummy("IosstgMgrLock %d\n", IosStgMgrLock);
+    WaitSema(IosStgMgrLock);
+    DeleteSema(IosStgMgrLock);
+    /* the demo disc always opens on stage 92 */
+    thisIsYourStartStage = 92;
+    ico_host_milestone("Main: past IosPadLock and IosStgMgrLock");
+    stgmgrForceSwitchWithFade(thisIsYourStartStage, 255.0f, 16.0f);
+    iosThreadCancelWakeup(0);
+    systemStatus[5] = 0;
+    _InitRandom(1.2345678f);
+    gsb_InitGSSystem();
+    debug_StdPrintfDummy("main start\n");
+    ico_host_milestone("Main: gsb_InitGSSystem done, entering the loop");
+    while (1) {
+        iosThreadCancelWakeup(0);
+        iosThreadSleep();
+        if (mpegPlay != 0) {
+            /* derived: ret is zeroed where it is declared, as movie_abort_check
+               does; movie_proc's result replaces the zero, so it leaves no
+               word, but loop.c counts it, which keeps the -2 below in the
+               loop (pinned) */
+            int ret = 0;
+            if (mpegInitDone == 0) {
+                continue;
+            }
+            if (iosCdvdBackGroundMgrRunning != 0) {
+                continue;
+            }
+            ios_partition_mpeg = ios_partition_isys;
+            AdpcmStreamFree();
+            soundAllocIopFree();
+            movie_init(&movieFile[mpegPlay * 0x20], 720, 480, 36, 12, soundOutputModeGet() == 1,
+                       mpegPlayInitColor);
+            ret = movie_proc(movie_abort_check);
+            ico_gs_signal(ICO_GS_EV_FMV_END, ret == 1);
+            sceGsSyncV(0);
+            soundAllocIopHeap();
+            AdpcmStreamHeap();
+            ACTGame_SetActors_Debug(mpegPlayReturnStage, 1);
+            gsb_Init(&db);
+            mpegPlay = 0;
+            stgmgrForceSwitchWithFade(mpegPlayReturnStage, 255.0f, mpegPlayFadeInSpeed);
+            if (ret == 1) {
+                stage_after_skipping_demo = 0xFFFFFFFE;
+            }
+            continue;
+        }
+        MakeCollisionDependGObjList();
+        MakeCharGObjList();
+        ExecKeyInput();
+        /* PC port: developer mode
+           restores the development build's debug menu call, here after the
+           pad is read and before ExecIcoMisc's layout code can clear
+           pad[0].flags.  SELECT opens the menu; until then debug_Menu only
+           reads the pad.  Off: not called, as in retail. */
+        if (ico_opt_developer_mode()) {
+            debug_Menu();
+        }
+        /* [dev] switch_to (above): the exit taken here, after the pad is
+           read, as a script or the boy's exit floor would in this tick */
+        ico_dev_switch_stage();
+        /* PC port: the mouse pointer in the menus, after the pad
+           read and before the layouts: a hover moves the cursor, a click
+           or the wheel adds its button to this tick's pad
+           (port/ui/ui_mouse.h) */
+        ui_mouse_tick();
+        /* PC port: the model viewer's tick, after the pad read
+           and before the layouts and the objects (port/game/model_viewer.h) */
+        ico_mv_tick();
+        ExecIcoMisc();
+        /* PC port: whether the title's logo is drawn this
+           tick, after the layouts ran and before the objects are drawn */
+        ico_title_logo_update();
+        if (lock_execIcoMisc == 0) {
+            stage_CalcAnimationNoParent();
+        }
+        iosOmMain();
+        if (lock_execIcoMisc == 0) {
+            stage_CalcAnimationParent();
+        }
+        /* PC port (photo mode): the paused game drawn from photo
+           mode's camera, set where the camera's update sets it in play
+           (after the objects, before the draw); its own camera back on
+           leaving (port/game/photo_view.h) */
+        ico_photo_view_tick();
+        iosOmCreateDL();
+        ExecDelayFree();
+        frameReady = 1;
+        ico_host_main_tick();
+        if (systemFault != 0) {
+            break;
+        }
+    }
+    while (1) {
+        iosThreadSleep();
+    }
+}
+
 /* the development build's Main also called debug_Menu, debug_SetBar and
    debug_SetBar2 and carried a frame-step block; the retail build compiled
    them out. */
 void Main(void)
 {
+    if (ICO_JUN26) {
+        Main_jun26();
+        return;
+    }
     int ret;
     int n;
 
@@ -435,8 +603,72 @@ static void idle(void)
 /* vsyncs counted toward systemStatus[1], the frame step */
 static int frameStepCount = 0; /* derived name */
 
+static void scheduler_jun26(void)
+{
+    IosMsgWord msg[4];
+
+    debug_StdPrintfDummy("scheduler() in\n");
+    iosMsgQueueCreate(&SchedulerMsgQ, schedulerMsgBuff, 8);
+    iosMsgSetEvent(2, &SchedulerMsgQ, 2);
+    ico_host_milestone("scheduler: vsync event set");
+    while (1) {
+        iosMsgRecv(&SchedulerMsgQ, msg, 1);
+        if (msg[0] == 2) {
+            vsyncCount++;
+            frameStepCount++;
+            if (frameStepCount >= systemStatus[1] && stageManagerFreeResourceFlag == 0) {
+                if (frameReady > 0) {
+                    if (mpegPlay != 0) {
+                        frameReady = 0;
+                        goto wake;
+                    }
+                    if (gsb_SyncGSSystem() != 0) {
+                        goto skip;
+                    }
+                    gsb_UpdateGSSystem(0);
+                    if (systemStatus[5] != 0) {
+                        if (iosCdvdDiskStatusGet() != 0) {
+                            frameReady = 0;
+                            goto wake;
+                        }
+                    }
+                    GlobalTimer++;
+                }
+                frameReady = 0;
+            wake:
+                iosThreadCancelWakeup(&mainThread);
+                if (iosThreadWakeup(&mainThread) < 0) {
+                    /* failed to start the main thread */
+                    debug_StdPrintfDummy("メーンスレッドの起動失敗しました\n");
+                }
+                frameStepCount = 0;
+            }
+        skip:
+            iosThreadWakeup(&soundThread);
+            if (IosMcLock >= 0) {
+                SignalSema(IosMcLock);
+            }
+            if (IosCdvdMgrSleep != 0 && (mpegPlay == 0 || iosCdvdBackGroundMgrRunning != 0)) {
+                iosThreadWakeup(&cdvdThread);
+            }
+            if (stgMgrWakeupRequest != 0) {
+                iosThreadWakeup(&stageManagerThread);
+            }
+        } else {
+            /* an unknown message arrived */
+            debug_StdPrintfDummy("不明なメッセージの着信を確認しました in Scheduler\n");
+        }
+    }
+    /* unreachable: the loop above never exits */
+    debug_StdPrintfDummy("scheduler() out\n");
+}
+
 static void scheduler(void)
 {
+    if (ICO_JUN26) {
+        scheduler_jun26();
+        return;
+    }
     IosMsgWord msg[4];
 
     debug_StdPrintfDummy("scheduler() in\n");
@@ -573,13 +805,153 @@ int movie_abort_check(void)
     return ret;
 }
 
-void demoEnd(void) {}
+/* the demo disc's idle countdown: sampleModeNoContTimeOutMain counts it
+   down each frame the pads are idle and resets it on input;
+   sampleModeStageInit and sampleModeExec set it */
+static int demoIdleTimeout; /* derived name */
+
+/* the demo disc's frames for one second: 60 on NTSC, 50 on PAL, over the
+   frame step */
+#define FRAME_RATE ((60 - systemStatus[0] * 10) / systemStatus[1]) /* derived name */
+
+static void demoEnd_jun26(void)
+{
+    /* PC port: on the PS2 the demo's end wakes the boot thread, which hands the disc back to
+       the magazine menu; the port goes back to the demo's first stage with a fade instead */
+    static int said = 0;
+
+    if (!said) {
+        said = 1;
+        ico_diag_milestone("demo: the demo ended; back to its first stage (the PS2 hands the disc "
+                           "back to the magazine menu here)");
+    }
+    InterStageSwitchLock = 0;
+    gflagInit();
+    stgmgrForceSwitchWithFade(thisIsYourStartStage < 1 ? 1 : thisIsYourStartStage, 4.0f, 4.0f);
+}
+
+void demoEnd(void)
+{
+    if (ICO_JUN26) {
+        demoEnd_jun26();
+        return;
+    }
+}
+
+/* PC port: demoEnd under another name, for e3.c, which keeps a static flag named demoEnd */
+void ico_main_demo_end(void)
+{
+    demoEnd();
+}
+
+/* counts the idle timeout down while nobody touches the pad, and winds it
+   back to four minutes on any button or stick */
+/* PC port: pad.c's */
+int iosPadEnableGet(void);
+
+void sampleModeNoContTimeOutMain(void)
+{
+    if (iosPadEnableGet() == 0) {
+        demoIdleTimeout = FRAME_RATE * 240;
+        return;
+    }
+    iosPadRead(&demoIdlePad);
+    iosPadGetStick(&demoIdlePad, &demoIdleStickL, 0, 2, 2, 0);
+    iosPadGetStick(&demoIdlePad, &demoIdleStickR, 1, 2, 2, 0);
+    if (demoIdlePad.trg != 0 || demoIdleStickL.mag > 0.1f || demoIdleStickR.mag > 0.1f) {
+        demoIdleTimeout = FRAME_RATE * 240;
+    } else {
+        demoIdleTimeout--;
+    }
+}
+
+/* the two ways out of the demo: to stage 101, and to stage 102 when the
+   timeout runs out or the player quits; the movie returns to stage 92 */
+void sampleModeDemoEnd(void)
+{
+    systemStatus[5] = 1;
+    mpegPlayReturnStage = 92;
+    InterStageSwitchLock++;
+    stgmgrForceSwitchWithFade(101, 4.0f, 4.0f);
+}
+
+void sampleModeDemoEndTimeOut(void)
+{
+    systemStatus[5] = 1;
+    mpegPlayReturnStage = 92;
+    InterStageSwitchLock++;
+    stgmgrForceSwitchWithFade(102, 4.0f, 4.0f);
+}
+
+void sampleModeStageInit(void)
+{
+    iosPadConnect(&demoIdlePad, 0, 0, &iosPadConfDefault);
+    demoIdleTimeout = FRAME_RATE * 240;
+}
+
+void sampleModeExec(void)
+{
+    /* PC port: the four-minute idle exit hands the disc back to the magazine menu on the PS2;
+       the port has no menu and does not run it */
+    static int said = 0;
+
+    if (!said) {
+        said = 1;
+        ico_diag_milestone("demo: the four-minute idle exit is not run on the port");
+    }
+}
 
 /* the boot thread's kernel id */
 static int bootThreadId; /* derived name */
 
+/* demoDisc.c's pair (the Aug-6 map's libscedemo.o, at the same offsets):
+   the first keeps the arguments the magazine menu started the game with and
+   reads the disc's settings out of them, the second reloads the menu with
+   them */
+void sceDemoStart(int argc, char **argv, unsigned short *language, unsigned short *aspect,
+                  unsigned short *playmode, unsigned short *toInactive, unsigned short *toTotal,
+                  unsigned short *mediaType);
+
+void sceDemoEnd(int status);
+/* thread.c defines it `inline` with no header declaration */
+void iosThreadAllQuit(int self);
+
+static int main_jun26(void)
+{
+    unsigned short language;
+    unsigned short aspect;
+    unsigned short playmode;
+    unsigned short toInactive;
+    unsigned short toTotal;
+    unsigned short mediaType;
+
+    /* PC port: the demo's settings come from the port (port/game/demo_host.c), not from the
+       magazine menu's arguments */
+    sceDemoStart(0, 0, &language, &aspect, &playmode, &toInactive, &toTotal, &mediaType);
+    debug_StdPrintfDummy("l %d a %d pm %d toa %d tot %d\n", language, aspect, playmode, toInactive,
+                         toTotal);
+    debug_StdPrintfDummy("MEDIA TYpE %d\n", mediaType);
+    sampleModeStageInit();
+    if (mediaType == 0) {
+        iosCdvdMediaType = 1;
+    } else {
+        iosCdvdMediaType = 2;
+    }
+    debug_StdPrintfDummy("main\n");
+    debug_StdPrintfDummy("main\n");
+    ChangeThreadPriority(GetThreadId(), 14);
+    bootThreadId = GetThreadId();
+    boot();
+    /* PC port: the demo's shutdown and its hand-back to the magazine menu (sceDemoEnd) are
+       not run: the port's own Quit ends the program */
+    return 0;
+}
+
 int main(void)
 {
+    if (ICO_JUN26) {
+        return main_jun26();
+    }
     debug_StdPrintfDummy("main\n");
     debug_StdPrintfDummy("main\n");
     ChangeThreadPriority(GetThreadId(), 14);

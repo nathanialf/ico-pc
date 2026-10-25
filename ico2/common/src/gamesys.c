@@ -55,11 +55,13 @@ char stamp_str_pal[] = "12/12/01 17:53:37";
 /* each disc compares its own build stamp against the save area's */
 char stamp_str_ntsc[] = "08/18/01 22:22:20";
 
-char stamp_str_aug6jun26[] = "08/07/01 14:51:53";
+char stamp_str_aug6[] = "08/07/01 14:51:53";
+
+char stamp_str_jun26[] = "06/26/01 20:00:06";
 
 #define stamp_str                                                                                  \
-    PAL_JPN_KORCN_NTSC_AUG6JUN26(stamp_str_pal, stamp_str_jpn, stamp_str_kor, stamp_str_ntsc,      \
-                                 stamp_str_aug6jun26)
+    PAL_JPN_KORCN_NTSC_AUG6_JUN26(stamp_str_pal, stamp_str_jpn, stamp_str_kor, stamp_str_ntsc,     \
+                                  stamp_str_aug6, stamp_str_jun26)
 
 void *gameSysMemoryFuncList[] = {
     gamesysVersionLoad,
@@ -114,12 +116,12 @@ void gamesysObjInfoInit(void)
 {
     int i;
 
-    for (i = 0; i <= 181; i++) {
+    for (i = 0; i <= PAL_JUN26(181, 121); i++) {
         gameSysObjInfo[i].no = 0;
         gameSysObjInfo[i].stage = 0xFFFF;
     }
 
-    memset((char *)gamesysStageExitTime, 0, PAL_JPNKORNTSCAUG6JUN26CN(0x1A8, 0x1A0));
+    memset((char *)gamesysStageExitTime, 0, PAL_JPNKORNTSCAUG6CN_JUN26(0x1A8, 0x1A0, 412));
     backStageProcessInit();
 }
 
@@ -141,18 +143,20 @@ void gamesysObjInfoSave(GamesysMemCursor *h)
     save = (int)(*(long long *)(p + 0x40) >> 1) & 1;
     *(long long *)(p + 0x40) = *(long long *)(p + 0x40) | 2;
 
-    gamesysMemoryHandlerWrite(h, p, 0x2D80);
+    gamesysMemoryHandlerWrite(h, p, PAL_JUN26(0x2D80, 7808));
 
     *(long long *)(p + 0x40) = (*(long long *)(p + 0x40) & -3) | ((long long)save << 1);
 
-    gamesysMemoryHandlerWrite(h, gamesysStageExitTime, PAL_JPNKORNTSCAUG6JUN26CN(0x1A8, 0x1A0));
+    gamesysMemoryHandlerWrite(h, gamesysStageExitTime,
+                              PAL_JPNKORNTSCAUG6CN_JUN26(0x1A8, 0x1A0, 412));
 }
 
 void gamesysObjInfoLoad(GamesysMemCursor *h)
 {
     gamesysMemoryHandlerRead(h, &gamesysTimeCount, 4);
-    gamesysMemoryHandlerRead(h, gameSysObjInfo, 0x2D80);
-    gamesysMemoryHandlerRead(h, gamesysStageExitTime, PAL_JPNKORNTSCAUG6JUN26CN(0x1A8, 0x1A0));
+    gamesysMemoryHandlerRead(h, gameSysObjInfo, PAL_JUN26(0x2D80, 7808));
+    gamesysMemoryHandlerRead(h, gamesysStageExitTime,
+                             PAL_JPNKORNTSCAUG6CN_JUN26(0x1A8, 0x1A0, 412));
 }
 
 /* unsigned */
@@ -160,10 +164,43 @@ static unsigned short gamesysGirlStage = 0; /* derived name */
 
 int gamesysAnotherStageTsuresari = 0;
 
+static inline GamesysObjInfo *
+gamesysObjInfoOldestSearch_jun26(GamesysObjInfoReq *req) /* derived name */
+{
+    GamesysObjInfo *p;
+    int i;
+    int k;
+    unsigned int t;
+
+    p = gamesysObjInfoSearch(req, 0);
+    if (p == 0) {
+        k = -1;
+        t = 0xFFFFFFFF;
+        for (i = req->start; i < req->end; i++) {
+            p = &gameSysObjInfo[i];
+            if ((unsigned int)p->time < t && req->stage != stage_no &&
+                req->stage != gamesysGirlStage) {
+                t = p->time;
+                k = i;
+            }
+        }
+        if (k < 0) {
+            debug_StdPrintfDummy("gamesysObjInfoEmptyAreaSearch not area found");
+            return 0;
+        }
+        p = &gameSysObjInfo[k];
+    }
+    ((GamesysObjInfoFlag *)p)->flag &= ~2;
+    return p;
+}
+
 /* gamesysObjInfoEmptyAreaSearch's body: search for an empty record, else the
  * oldest one, clear flag bit 1, return it; called after a search by number. */
 static inline GamesysObjInfo *gamesysObjInfoOldestSearch(GamesysObjInfoReq *req) /* derived name */
 {
+    if (ICO_JUN26) {
+        return gamesysObjInfoOldestSearch_jun26(req);
+    }
     GamesysObjInfo *p;
     int i;
     int k;
@@ -240,7 +277,7 @@ GamesysObjInfo *gamesysObjInfoBaseSet(GObj *self, int stage)
         break;
     default:
         r->start = 42;
-        r->end = 182;
+        r->end = PAL_JUN26(182, 122);
         break;
     }
 
@@ -251,9 +288,11 @@ GamesysObjInfo *gamesysObjInfoBaseSet(GObj *self, int stage)
         p->rot[1] =
             -((float)(int)(_GetDirection(dir) / 3.14159274f * 180.0f) * 3.14159274f / 180.0f);
         p->rot[0] = p->rot[2] = 0.0f;
-        if (self->kind == 0x11 && stage_no == 0xB) {
-            p->rot[1] =
-                (float)(int)(_GetDirection(dir) / 3.14159274f * 180.0f) * 3.14159274f / 180.0f;
+        if (!ICO_JUN26) {
+            if (self->kind == 0x11 && stage_no == 0xB) {
+                p->rot[1] =
+                    (float)(int)(_GetDirection(dir) / 3.14159274f * 180.0f) * 3.14159274f / 180.0f;
+            }
         }
         if (self->kind == 0xE) {
             memset((char *)v, 0, 0x10);
@@ -263,7 +302,9 @@ GamesysObjInfo *gamesysObjInfoBaseSet(GObj *self, int stage)
             sceVu0ApplyMatrix(v, m, v);
             p->rot[1] =
                 (float)(int)(_GetDirection(v) / 3.14159274f * 180.0f) * 3.14159274f / 180.0f;
-            p->rot[0] = -atan2f(v[1], _Sqrt(1.0f - v[1] * v[1]));
+            if (!ICO_JUN26) {
+                p->rot[0] = -atan2f(v[1], _Sqrt(1.0f - v[1] * v[1]));
+            }
         }
     } else {
         debug_StdPrintfDummy("gamesys: gamesysObjInfoPosSet:%d - %d \n", req.start, req.end);
@@ -271,8 +312,18 @@ GamesysObjInfo *gamesysObjInfoBaseSet(GObj *self, int stage)
     return p;
 }
 
+static void gamesysBackStageProcess_jun26(void)
+{
+    gamesysTimeCount++;
+    backStageProcessMain();
+}
+
 void gamesysBackStageProcess(void)
 {
+    if (ICO_JUN26) {
+        gamesysBackStageProcess_jun26();
+        return;
+    }
     if (gameSysObjInfo[1].no == PAL_NTSC_AUG6JUN26(148, 131, 130)) {
         gamesysGirlStage = gameSysObjInfo[1].stage;
     }
@@ -384,7 +435,7 @@ void gamesysObjInfoStageInitFlagCls(void)
 {
     long long mask = -2LL;
     long long *p = (long long *)gameSysObjInfo;
-    int i = 0xB5;
+    int i = PAL_JUN26(0xB5, 121);
     do {
         *p &= mask;
         p = (long long *)((char *)p + 0x40);
@@ -396,7 +447,7 @@ void gamesysObjInfoStageInitPosSaveUnlock(void)
 {
     long long mask = -3LL;
     long long *p = (long long *)gameSysObjInfo;
-    int i = 0xB5;
+    int i = PAL_JUN26(0xB5, 121);
     do {
         *p &= mask;
         p = (long long *)((char *)p + 0x40);
@@ -453,7 +504,7 @@ static inline void gamesysObjInfoReqSet(GamesysObjInfoReq *req, int no, int kind
         break;
     default:
         req->start = 0x2A;
-        req->end = 0xB6;
+        req->end = PAL_JUN26(0xB6, 122);
         break;
     }
 }
@@ -554,7 +605,7 @@ void gamesysMemoryLoad(void **tbl, void *mem, void *arg)
         ((void (*)(void *, void *))tbl[0])(&cur, arg);
         tbl += 2;
     }
-    gflagOn(PAL_NTSC_AUG6JUN26(394, 361, 360));
+    gflagOn(PAL_NTSC_AUG6_JUN26(394, 361, 360, 343));
 }
 
 int gamesysVersionDiff = 0;

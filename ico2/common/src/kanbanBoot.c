@@ -204,8 +204,261 @@ static int kanbanBootMcCheck_jpn(void)
     return ret;
 }
 
+static int kanbanBootMcCheck_jun26(void)
+{
+    McMgr *mc = &bootMcReq;
+    McProductFile *r;
+    int *lp;
+    int lang;
+    int ret = 0;
+
+    return kanbanBootMcCheck_jpn();
+
+    switch (mcCheckStep) {
+    case 0:
+        bootKanbanSub = 0;
+        /* fallthrough */
+    case 1:
+        mcPort = 0;
+        mcKanbanId = PAL_JUN26(3, 1);
+        mcCheckStep++;
+        /* fallthrough */
+    case 2:
+        fbKeep = 1;
+        mc->port = mcPort;
+        mc->slot = 0;
+        mc->flags.ll &= ~2;
+        iosMcChdirProduct(mc);
+        mcCheckStep++;
+        /* fallthrough */
+    case 3:
+        if (iosMcSync(mc) != 0) {
+            mcCheckStep++;
+        }
+        break;
+    case 4:
+        if (mc->type == 2) {
+            mcKanbanId = 0;
+            if (mc->result == 0 && bootKanbanDone == 0) {
+                mcCheckStep = 95;
+                break;
+            }
+            if (mc->format == 0 || mc->result == 0 || mc->free >= 256) {
+                mcCheckStep = 100;
+                break;
+            }
+            mcKanbanId = PAL_JUN26(4, 2);
+        }
+        if (mcPort == 0) {
+            mcPort = 1;
+            mcCheckStep = 2;
+        } else {
+            mcCheckStep = 90;
+        }
+        break;
+    case 90:
+        if (mcKanbanId == 3) {
+            if (--mcRetryCount > 0) {
+                mcCheckStep = 1;
+                break;
+            }
+        }
+        mcRetryCount = 0;
+        mcCheckStep = 100;
+        break;
+    case 95:
+        iosMcLoadProductBlock(mc);
+        mcCheckStep++;
+        break;
+    case 96:
+        if (iosMcSync(mc) == 0) {
+            break;
+        }
+        if (mc->result != 0) {
+            mcCheckStep = 100;
+            break;
+        }
+        /* PC port: the card's language and video mode are not applied: the
+           ones main.c set stay (the config's, which the Settings menu
+           writes), with no gsResetFunc and no reload (step 97 -> 190); on
+           to the end through step 100's wait */
+        mcCheckStep = 100;
+        break;
+        mcCheckStep++;
+        r = &IosMcProductFile[mc->port];
+        NonLinearCameraMove = r->cameraMove;
+        systemStatus[0] = r->palMode;
+        gsResetFunc(0);
+        break;
+    case 97:
+        if (systemStatus[6] != 0) {
+            break;
+        }
+        mcCheckStep = 190;
+        break;
+    case 100:
+        if (systemStatus[6] != 0) {
+            break;
+        }
+        mcCheckStep = 101;
+        break;
+    case 101:
+        /* PC port: no language screen (main.c set the language), so no
+           reload of stage 1 and no second card check (step 200 -> 202 ->
+           1): straight to the end, with the card's state this check found */
+        bootKanbanDone = 1;
+        mcCheckStep = 300;
+        break;
+        if (bootKanbanDone != 0) {
+            mcCheckStep = 300;
+            break;
+        }
+        mcKanbanId = -1;
+        lang = sceScfGetLanguage();
+        lp = &texLayout[0].defaultItem;
+        switch (lang) {
+        case 1:
+            *lp = 26;
+            break;
+        case 2:
+            *lp = 27;
+            break;
+        case 3:
+            *lp = 30;
+            break;
+        case 4:
+            *lp = 28;
+            break;
+        case 5:
+            *lp = 29;
+            break;
+        }
+        bootKanban = kanbanReqAdd(0, 2);
+        mcCheckStep++;
+        break;
+    case 102:
+        if (bootKanban->key != 1) {
+            break;
+        }
+        switch (bootKanban->layout->curItem) {
+        case 26:
+            NonLinearCameraMove = 2;
+            break;
+        case 27:
+            NonLinearCameraMove = 3;
+            break;
+        case 28:
+            NonLinearCameraMove = 4;
+            break;
+        case 29:
+            NonLinearCameraMove = 5;
+            break;
+        case 30:
+            NonLinearCameraMove = 6;
+            break;
+        }
+        kanbanReqDelFade(bootKanban);
+        mcCheckStep = 190;
+        bootKanbanDone = 1;
+        break;
+    case 190:
+        mcCheckStep = 191;
+        break;
+    case 191:
+        stgmgrForceSwitchWithFade(1, 255.0f, 0.0f);
+        lt_switch_layout(7);
+        /* fallthrough */
+    case 192:
+    case 193:
+        mcCheckStep++;
+        break;
+    case 194:
+        if (systemStatus[6] != 0) {
+            break;
+        }
+        if (mcKanbanId != 0) {
+            mcCheckStep = 200;
+        } else {
+            mcCheckStep = 300;
+        }
+        isysGObjActiveLink(0, 1);
+        break;
+    case 200:
+        bootKanban = kanbanReqAdd(1, 2);
+        bootVideoMode = systemStatus[0];
+        mcCheckStep++;
+        break;
+    case 201:
+        switch (bootKanban->layout->curItem) {
+        case 33:
+            systemStatus[0] = 1;
+            break;
+        case 34:
+            systemStatus[0] = 0;
+            break;
+        }
+        if (bootVideoMode != systemStatus[0]) {
+            bootVideoMode = systemStatus[0];
+            gsResetFunc(0);
+        }
+        if (bootKanban->key != 1) {
+            break;
+        }
+        kanbanReqDelFade(bootKanban);
+        mcCheckStep++;
+        break;
+    case 202:
+        if (mcKanbanId != 0) {
+            mcCheckStep = 1;
+        } else {
+            mcCheckStep = 300;
+        }
+        isysGObjActiveLink(0, 1);
+        break;
+    case 300:
+        if (mcKanbanId == 0) {
+            mcCheckStep = -1;
+            break;
+        }
+        mcCheckStep = 301;
+        /* fallthrough */
+    case 301:
+        fbKeep = 0;
+        bootKanban = kanbanReqAdd(PAL_JUN26(5, 3), 2);
+        if (bootKanbanSub != 0) {
+            kanbanReqDel(bootKanbanSub);
+        }
+        bootKanbanSub = kanbanReqAdd(mcKanbanId, 1);
+        mcCheckStep++;
+        break;
+    case 302:
+        if (bootKanban->key != 1) {
+            break;
+        }
+        if (bootKanban->layout->curItem == PAL_JUN26(41, 5)) {
+            mcCheckStep = -1;
+            kanbanReqDelFade(bootKanbanSub);
+            kanbanReqDelFade(bootKanban);
+            break;
+        }
+        kanbanReqDel(bootKanban);
+        mcCheckStep = 1;
+        break;
+    default:
+        /* PC port: with Skip the opening the keep stays (or, after a card
+           warning, is taken again) until step 7 */
+        fbKeep = bootSkipOpening ? 1 : 0;
+        ret = 1;
+        break;
+    }
+    return ret;
+}
+
 static int kanbanBootMcCheck(void)
 {
+    if (ICO_JUN26) {
+        return kanbanBootMcCheck_jun26();
+    }
     McMgr *mc = &bootMcReq;
     McProductFile *r;
     int *lp;
@@ -466,8 +719,72 @@ static int waitTimer; /* derived name */ /* frames left on that sign */
 /* port/platform/diag_host.c: logs the two steps when they change */
 void ico_host_kanban_step(int boot_step, int mc_check_step);
 
+static void kanbanBootMain_jun26(void)
+{
+    ico_host_kanban_step(bootStep, mcCheckStep);
+    switch (bootStep) {
+    case 0:
+        isysGObjActiveLink(0, 1);
+        systemStatus[5] = 0;
+        mcCheckStep = 0;
+        bootSkipOpening = ico_opt_skip_opening() != 0; /* PC port */
+        bootStep++;
+        /* fallthrough */
+    case 1:
+        if (bootStarted == 0) {
+            break;
+        }
+        bootStep++;
+        /* fallthrough */
+    case 2:
+        /* PC port: Skip the opening puts up no presents sign */
+        waitKanban = bootSkipOpening ? 0 : kanbanReqAdd(0, 1);
+        bootStep++;
+        break;
+    case 3:
+        /* PC port: and no wait with Skip the opening */
+        waitTimer = bootSkipOpening ? 0 : (60 - systemStatus[0] * 10) / systemStatus[1] * 3;
+        fbKeep = 0;
+        bootStep++;
+        /* fallthrough */
+    case 4:
+        waitTimer--;
+        if (waitTimer != -1) {
+            break;
+        }
+        bootStep++;
+        /* fallthrough */
+    case 5:
+        if (systemStatus[6] != 0) {
+            return;
+        }
+        bootStep++;
+        break;
+    case 6:
+        kanbanReqAllDelFade();
+        bootStep++;
+        break;
+    case 7:
+        /* PC port: with Skip the opening (no presents sign) the wait is for
+           a card warning's signs, and the keep ends with the boot */
+        if (waitKanban != 0 ? waitKanban->layout != 0 : bootWarningUp()) {
+            return;
+        }
+        kanbanBootEnd = 1;
+        if (bootSkipOpening) {
+            fbKeep = 0;
+        }
+        bootStep++;
+        break;
+    }
+}
+
 void kanbanBootMain(void)
 {
+    if (ICO_JUN26) {
+        kanbanBootMain_jun26();
+        return;
+    }
     ico_host_kanban_step(bootStep, mcCheckStep);
     switch (bootStep) {
     case 0:

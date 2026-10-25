@@ -67,6 +67,8 @@ struct McPreview { /* field names derived */
 }; /* derived name */
 
 #include "ee_view.h"
+#include "frameDependSequence.h"
+#include "matrixDrive.h"
 
 /* PC port: the menus copy a save's preview whole out of and into the card's
    product file (McFileInfo); the host layouts must agree
@@ -127,6 +129,47 @@ static AdpcmOpenReq voiceOpenReq; /* derived name */
 
 static signed char keepFlags[20]; /* derived name */
 
+/* pad idx's trigger bit for the action, with the cursor sound it plays:
+   circle (decide), triangle (cancel), left and right */
+inline int PSH_POSITIVE(int idx) /* derived name */
+{
+    if (pad[idx].flags & 0x40) {
+        ExecuteSEPackage(0, 91);
+        return 1;
+    }
+    return 0;
+}
+
+int lt_ext_back_buttons(void);
+
+/* PC port: the back buttons are the port's (Triangle and its aliases, port/ui/layout_ext.h) */
+inline int PSH_NEGATIVE(int idx) /* derived name */
+{
+    if (pad[idx].flags & lt_ext_back_buttons()) {
+        ExecuteSEPackage(0, 92);
+        return 1;
+    }
+    return 0;
+}
+
+inline int PSH_LEFT(int idx) /* derived name */
+{
+    if (pad[idx].flags & 0x8000) {
+        ExecuteSEPackage(0, 90);
+        return 1;
+    }
+    return 0;
+}
+
+inline int PSH_RIGHT(int idx) /* derived name */
+{
+    if (pad[idx].flags & 0x2000) {
+        ExecuteSEPackage(0, 90);
+        return 1;
+    }
+    return 0;
+}
+
 void POSITIVE_SE(void)
 {
     soundSeDefPlay(PAL_NTSCAUG6JUN26(412, 400), 0xFFFFFFFE, 0, 0);
@@ -159,6 +202,13 @@ void la_TESTFUNCTION(void)
 {
     debug_StdPrintfDummy("sync end\n");
 }
+
+/* the busy mark progressive_bar draws beside its bar: a line through a
+   7-by-7 box, one of four turns a step (its two ends per turn) */
+static sceVu0IVECTOR barLine[4][2] = {{{0, 3, 0, 0}, {7, 3, 0, 0}},
+                                      {{0, 0, 0, 0}, {7, 7, 0, 0}},
+                                      {{3, 0, 0, 0}, {3, 7, 0, 0}},
+                                      {{7, 0, 0, 0}, {0, 7, 0, 0}}}; /* derived name */
 
 /* .data: the game-flag ids the load carries across gflagInit.  The list
    holds five ids and the key-config tables follow it; the keep/restore loops
@@ -316,8 +366,123 @@ int layout_boot_flag = 0;
 
 int enable_game_pause = 1;
 
+/* the current port and port 0's card flags, printed; nothing calls it */
+void _la_print_port_flags(void) /* derived name */
+{
+    debug_StdPrintfDummy("current:%d ec:%d  p2:%d  fo:%d  fr:%d  ed:%d\n", curPort,
+                         mcPortInfo[0].flags.bit.card, mcPortInfo[0].flags.bit.ps2Card,
+                         mcPortInfo[0].flags.bit.formatted, mcPortInfo[0].flags.bit.hasSpace,
+                         mcPortInfo[0].flags.bit.hasSave);
+}
+
+static int _la_memory_card_check_jun26(McMgr *p, int step)
+{
+    int r;
+    int i;
+
+    curPortInfo = &mcPortInfo[p->port];
+    switch (step) {
+    case 0:
+        curPortInfo->fileMask = 0;
+        p->slot = 0;
+        memset(&mcPortInfo[p->port], 0, 8);
+        p->result = 0;
+        iosMcGetInfo(p);
+        mcLastResult = 0;
+        step++;
+        break;
+    case 10:
+        iosMcLoadProductBlock(p);
+        step++;
+        break;
+    case 20:
+        strcpy(MC_PATH(p), "game.");
+        iosMcGetBlockSaveInfo(p);
+        step++;
+        break;
+    case 1:
+    case 11:
+    case 21:
+        if (iosMcSync(p)) {
+            step++;
+        }
+        break;
+    case 12:
+    case 22:
+        r = _la_mcard_error_check(p);
+        if (r > 0) {
+            step++;
+        }
+        if (r >= 0) {
+            return step;
+        }
+        mcLastResult = p->result;
+        if (p->result == -9 || r == -2) {
+            curPortInfo->flags.w = (int)curPortInfo->flags.w & ~0x20;
+            curPortInfo->flags.w = (int)curPortInfo->flags.w & ~2;
+            curPortInfo->flags.w = (int)curPortInfo->flags.w & ~1;
+        }
+        /* falls through */
+    case 2:
+        step++;
+        break;
+    case 3:
+        switch (p->type) {
+        case 0:
+            return 99;
+        case 1:
+        case 3:
+            curPortInfo->flags.w |= 1;
+            return 99;
+        case 2:
+            curPortInfo->flags.w |= 3;
+            break;
+        }
+        switch (p->format) {
+        case 0:
+            return 99;
+        case 1:
+            curPortInfo->flags.w |= 8;
+            break;
+        }
+        if (p->free >= 400) {
+            curPortInfo->flags.w |= 0x10;
+        } else {
+            curPortInfo->flags.w = (int)curPortInfo->flags.w & ~0x10;
+        }
+        step = 10;
+        break;
+    case 13:
+        step = 20;
+        break;
+    case 23:
+        if (p->dirCount >= 11) {
+            debug_StdPrintfDummy(
+                "debug_mcLoadMainBlock:既に設定された数以上のデータを保存してる\n");
+        }
+        for (i = 0; i < 10; i++) {
+            if ((1 << i) & p->mask) {
+                break;
+            }
+        }
+        step = 99;
+        if (i == 10) {
+            break;
+        }
+        if (p->dirCount == 10) {
+            curPortInfo->flags.w |= 0x20;
+            curPortInfo->fileMask = p->mask;
+        }
+        break;
+    }
+    return step;
+}
+
 static int _la_memory_card_check(McMgr *p, int step)
 {
+    if (ICO_JUN26) {
+        return _la_memory_card_check_jun26(p, step);
+    }
     int r;
     int i;
 
@@ -620,8 +785,69 @@ static int portNewStep = 0; /* derived name */
 
 static int portNewRestart = 1; /* derived name */
 
+static int _la_set_current_port_new_jun26(McMgr *p, int first)
+{
+    int r = 0;
+    int v;
+
+    if (first) {
+        portNewStep = 0;
+        curPort = -1;
+    }
+    switch (portNewStep) {
+    case 0:
+    case 2:
+        curPort++;
+        portNewRestart = 1;
+        portNewStep++;
+        break;
+    case 1:
+        port0LockResult = _la_set_current_port_lock_2(p, portNewRestart);
+        portNewRestart = 0;
+        if (port0LockResult == 0) {
+            break;
+        }
+        portNewStep++;
+        break;
+    case 3:
+        port1LockResult = _la_set_current_port_lock_2(p, portNewRestart);
+        portNewRestart = 0;
+        if (port1LockResult == 0) {
+            break;
+        }
+        portNewStep++;
+        break;
+    case 4:
+        v = ((mcPortInfo[0].flags.w >> 1) & 1) && ((mcPortInfo[1].flags.w >> 1) & 1);
+        mcPortInfo[0].flags.bit.bothPs2 = mcPortInfo[1].flags.bit.bothPs2 = v;
+        v = ((mcPortInfo[0].flags.w >> 5) & 1) && ((mcPortInfo[1].flags.w >> 5) & 1);
+        mcPortInfo[0].flags.bit.bothSave = mcPortInfo[1].flags.bit.bothSave = v;
+        if (port0LockResult == 1) {
+            curPort = 0;
+            r = 1;
+        } else if (port1LockResult == 1) {
+            curPort = 1;
+            r = 1;
+        } else {
+            if ((mcPortInfo[0].flags.w & 1) == 0 && mcPortInfo[1].flags.bit.card == 1) {
+                curPort = 1;
+            } else {
+                curPort = 0;
+            }
+            r = -1;
+        }
+        p->port = curPort;
+        curPortInfo = &mcPortInfo[curPort];
+        break;
+    }
+    return r;
+}
+
 static int _la_set_current_port_new(McMgr *p, int first)
 {
+    if (ICO_JUN26) {
+        return _la_set_current_port_new_jun26(p, first);
+    }
     int r = 0;
     int v;
 
@@ -708,8 +934,19 @@ inline int la_boot_no_free_area(int first, int item)
     return item;
 }
 
+static inline int la_boot_confirm_memory_card_jun26(void)
+{
+    if (PSH_POSITIVE(0)) {
+        return lt_link_layout(0);
+    }
+    return -1;
+}
+
 inline int la_boot_confirm_memory_card(void)
 {
+    if (ICO_JUN26) {
+        return la_boot_confirm_memory_card_jun26();
+    }
     if (pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) {
         return lt_link_layout(0);
     }
@@ -763,7 +1000,36 @@ static int la_vibe_select_ntsc(void)
     return 9;
 }
 
-static int la_vibe_select_aug6jun26(void)
+inline static int la_vibe_select_jun26(void)
+{
+    if (lt_fade_status() == 2 && (pad[0].flags & 0x40)) {
+        soundSeDefPlay(403, 0xFFFFFFFF, 0, 0);
+        switch (lt_current_property_item() +
+                0) { /* JPN property ids 30 lower, KOR property ids 36 lower */
+        case 8:
+            iosPadActRequestEnable = 1;
+            break;
+        case 9:
+            iosPadActRequestEnable = 0;
+            break;
+        }
+        if (ui_new_game_screen_layout() >= 0) {
+            return la_host_new_game_screen(); /* the New Game screen, then the start */
+        }
+        gflagInit();
+        systemStatus[4] = 0;
+        gflagOn(333);
+        return -1;
+    }
+    if (PSH_NEGATIVE(0)) {
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 9;
+    }
+    return -1;
+}
+
+static int la_vibe_select_aug6(void)
 {
     if (lt_fade_status() == 2 && (pad[0].flags & PAL_JPNKORCN(0x840, 0x820))) {
         soundSeDefPlay(403, 0xFFFFFFFF, 0, 0);
@@ -804,11 +1070,14 @@ static int la_vibe_select_aug6jun26(void)
 
 int la_vibe_select(void)
 {
+    if (ICO_JUN26) {
+        return la_vibe_select_jun26();
+    }
     if (ICO_NTSC) {
         return la_vibe_select_ntsc();
     }
-    if (ICO_AUG6JUN26) {
-        return la_vibe_select_aug6jun26();
+    if (ICO_AUG6) {
+        return la_vibe_select_aug6();
     }
     if (lt_fade_status() == 2 && (pad[0].flags & PAL_JPNKORCN(0x840, 0x820))) {
         soundSeDefPlay(415, 0xFFFFFFFF, 0, 0);
@@ -883,7 +1152,7 @@ inline int la_scei_logo(int first)
         systemStatus[5] = 1;
         iosPadEnable();
         isysGObjActiveLink(0, 0);
-        gflagOff(PAL_NTSC_AUG6JUN26(386, 353, 352));
+        gflagOff(PAL_NTSC_AUG6_JUN26(386, 353, 352, 337));
         if (layout_boot_flag == 0) {
             layout_boot_flag = 1;
         }
@@ -966,7 +1235,67 @@ static int la_title_continue_or_new_ntsc(int first)
     return -1;
 }
 
-static int la_title_continue_or_new_aug6jun26(int first)
+static int la_title_continue_or_new_jun26(int first)
+{
+    if (first) {
+        continueIcoMiscLock = GlobalTimer;
+        iosPadEnable();
+        isysGObjActiveLink(0, 1);
+        systemStatus[5] = 0;
+        gflagOff(333);
+        ico_opt_mirror_reset(); /* the title belongs to no run */
+        if (gflagChk(336) == 0) {
+            gflagOn(336);
+        }
+        continueDecided = 0;
+    }
+    if (continueDecided != 0) {
+        lt_item_select_disable = 0;
+        lt_mask_property(14, 0);
+        lt_mask_property(15, 0);
+    } else {
+        lt_item_select_disable = 1;
+        lt_mask_property(14, 1);
+        lt_mask_property(15, 1);
+    }
+    ui_settings_title_mask(continueDecided == 0);
+    /* PC port: not on the Settings row, whose Cross default_item_select
+       takes (it opens the menu) */
+    if (continueDecided != 0 && (pad[0].flags & 0x840) &&
+        lt_fade_status() == 2 LA_HOST_NOT_SETTINGS_ROW) {
+        soundSeDefPlay(402, 0xFFFFFFFF, 0, 0);
+        switch (lt_current_property_item() +
+                0) { /* JPN property ids 29 lower, KOR property ids 35 lower */
+        case 14:
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 17;
+        case 15:
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 6;
+        }
+    }
+    switch (_la_set_current_port_2(&mc, first)) {
+    case 0:
+        break;
+    case 1:
+        if ((curPortInfo->flags.w & 0x22) == 2) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 10;
+        }
+        continueDecided = 1;
+        break;
+    case -1:
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 10;
+    }
+    return -1;
+}
+
+static int la_title_continue_or_new_aug6(int first)
 {
     if (first) {
         opTitleLogoMode = 1;
@@ -1034,11 +1363,14 @@ static int la_title_continue_or_new_aug6jun26(int first)
 
 int la_title_continue_or_new(int first)
 {
+    if (ICO_JUN26) {
+        return la_title_continue_or_new_jun26(first);
+    }
     if (ICO_NTSC) {
         return la_title_continue_or_new_ntsc(first);
     }
-    if (ICO_AUG6JUN26) {
-        return la_title_continue_or_new_aug6jun26(first);
+    if (ICO_AUG6) {
+        return la_title_continue_or_new_aug6(first);
     }
     if (first) {
         opTitleLogoMode = 1;
@@ -1107,8 +1439,61 @@ int la_title_continue_or_new(int first)
 
 static int newGameDecided = 0; /* derived name */
 
+static int la_title_new_game_only_jun26(int first)
+{
+    if (first) {
+        newGameIcoMiscLock = GlobalTimer;
+        iosPadEnable();
+        isysGObjActiveLink(0, 1);
+        systemStatus[5] = 0;
+        gflagOff(333);
+        ico_opt_mirror_reset(); /* the title belongs to no run */
+        if (gflagChk(336) == 0) {
+            gflagOn(336);
+        }
+        newGameDecided = 0;
+        lastPort = -1;
+    }
+    if (newGameDecided != 0) {
+        lt_item_select_disable = 0;
+        lt_mask_property(16, 0);
+    } else {
+        lt_item_select_disable = 1;
+        lt_mask_property(16, 1);
+    }
+    ui_settings_title_mask(newGameDecided == 0);
+    /* PC port: not on the Settings row, whose Cross default_item_select
+       takes (it opens the menu) */
+    if (newGameDecided != 0 && (pad[0].flags & 0x840) &&
+        lt_fade_status() == 2 LA_HOST_NOT_SETTINGS_ROW) {
+        soundSeDefPlay(PAL_JUN26(414, 402), 0xFFFFFFFF, 0, 0);
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 6;
+    }
+    switch (_la_set_current_port_2(&mc, first)) {
+    case 0:
+        break;
+    case -1:
+        newGameDecided = 1;
+        break;
+    case 1:
+        if ((curPortInfo->flags.w >> 5) & 1) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 9;
+        }
+        newGameDecided = 1;
+        break;
+    }
+    return -1;
+}
+
 int la_title_new_game_only(int first)
 {
+    if (ICO_JUN26) {
+        return la_title_new_game_only_jun26(first);
+    }
     if (first) {
         opTitleLogoMode = 1;
         newGameIcoMiscLock = PAL_AUG6JUN26(lock_execIcoMisc, GlobalTimer);
@@ -1176,7 +1561,33 @@ static int fileMoved = 0; /* derived name */
 
 static int fileFirst = 1; /* derived name */
 
-static inline int la_mc_saved_file_select_ntscaug6jun26(int item)
+static inline int la_mc_saved_file_select_jun26(int item)
+{
+    int i = item - 27;
+
+    do {
+        if (pad[0].flags & 0x1000) {
+            i += 5;
+        } else if (pad[0].flags & 0x4000) {
+            i -= 5;
+        } else if (pad[0].flags & 0x8000) {
+            i -= 1;
+        } else if (pad[0].flags & 0x2000) {
+            i += 1;
+        } else if (IosMcProductFile[filePort].file[i].stage == 0xFFFFFFFF) {
+            i++;
+        }
+        if (i < 0) {
+            i += 10;
+        }
+        if (i >= 10) {
+            i -= 10;
+        }
+    } while (IosMcProductFile[filePort].file[i].stage == 0xFFFFFFFF);
+    return i + 27;
+}
+
+static inline int la_mc_saved_file_select_ntscaug6(int item)
 {
     int i = item - 27;
     int old = i;
@@ -1209,8 +1620,11 @@ static inline int la_mc_saved_file_select_ntscaug6jun26(int item)
 
 static inline int la_mc_saved_file_select(int item)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return la_mc_saved_file_select_ntscaug6jun26(item);
+    if (ICO_JUN26) {
+        return la_mc_saved_file_select_jun26(item);
+    }
+    if (ICO_NTSCAUG6) {
+        return la_mc_saved_file_select_ntscaug6(item);
     }
     int i = item - PAL_JPNCN_KOR(62, 33, 27);
     int old = i;
@@ -1383,11 +1797,19 @@ static void _la_mask_preview_info(void)
 /* the frames a second, 60 or 50 by the video mode, over the field rate */
 #define FRAME_RATE ((60 - systemStatus[0] * 10) / systemStatus[1]) /* derived name */
 
+static inline void playTime_jun26(struct McPreview *p, int *hour, int *min,
+                                  int *sec) /* derived name */
+{
+    *sec = (p->playTime / FRAME_RATE) % 60;
+    *min = (p->playTime / (FRAME_RATE * 60)) % 60;
+    *hour = (p->playTime / (FRAME_RATE * 3600)) % 100;
+}
+
 /* the play time of a save record split into hours, minutes and seconds and
    clamped to 99:59:59, inlined into _la_set_preview_info, la_load_processing
    and la_system_save_processing; the last two leave the results unused */
-static inline void playTime_aug6jun26(struct McPreview *p, int *hour, int *min,
-                                      int *sec) /* derived name */
+static inline void playTime_aug6(struct McPreview *p, int *hour, int *min,
+                                 int *sec) /* derived name */
 {
     int frames = p->playTime;
 
@@ -1403,8 +1825,12 @@ static inline void playTime_aug6jun26(struct McPreview *p, int *hour, int *min,
 
 static inline void playTime(struct McPreview *p, int *hour, int *min, int *sec) /* derived name */
 {
-    if (ICO_AUG6JUN26) {
-        playTime_aug6jun26(p, hour, min, sec);
+    if (ICO_JUN26) {
+        playTime_jun26(p, hour, min, sec);
+        return;
+    }
+    if (ICO_AUG6) {
+        playTime_aug6(p, hour, min, sec);
         return;
     }
     int frames = p->playTime;
@@ -1420,8 +1846,62 @@ static inline void playTime(struct McPreview *p, int *hour, int *min, int *sec) 
     }
 }
 
+static void _la_set_preview_info_jun26(void)
+{
+    int hour;
+    int min;
+    int sec;
+    int n;
+
+    _la_mask_preview_info();
+
+    if (((fileMask >> curFile) & 1) == 0) {
+        return;
+    }
+    if (IosMcProductFile[filePort].file[curFile].stage == 0xFFFFFFFF) {
+        return;
+    }
+
+    playTime(&previewInfo, &hour, &min, &sec);
+    if (hour >= 100) {
+        hour = 99;
+        min = 59;
+        sec = 59;
+    }
+
+    hour = ((hour / 10 + 9) % 10) * 10 + (hour % 10 + 9) % 10;
+    min = ((min / 10 + 9) % 10) * 10 + (min % 10 + 9) % 10;
+    sec = ((sec / 10 + 9) % 10) * 10 + (sec % 10 + 9) % 10;
+
+    lt_mask_property(41 + hour / 10, 0);
+    lt_mask_property(51 + hour % 10, 0);
+    lt_mask_property(61 + min / 10, 0);
+    lt_mask_property(71 + min % 10, 0);
+    lt_mask_property(81 + sec / 10, 0);
+    lt_mask_property(91 + sec % 10, 0);
+    lt_mask_property(39, 0);
+    lt_mask_property(40, 0);
+
+    n = previewInfo.stage;
+    if (n >= 3 && n < 56) {
+        switch (previewInfo.sofa + 42) { /* the demo's ids 42 lower */
+        case 329:
+            n = 39;
+            break;
+        case 331:
+            n = 40;
+            break;
+        }
+        lt_mask_property(n + 98, 0);
+    }
+}
+
 static void _la_set_preview_info(void)
 {
+    if (ICO_JUN26) {
+        _la_set_preview_info_jun26();
+        return;
+    }
     int hour;
     int min;
     int sec;
@@ -1567,7 +2047,26 @@ int la_load_game_memory_card_check(int first)
     return -1;
 }
 
-static int la_mc_load_current_slot_select_ntscaug6jun26(void)
+static int la_mc_load_current_slot_select_jun26(void)
+{
+    _la_mask_preview_info();
+    if (PSH_POSITIVE(0)) {
+        curPort = lt_current_property_item() - 151;
+        lastPort = curPort;
+        curPortInfo = &mcPortInfo[curPort];
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 16;
+    }
+    if (PSH_NEGATIVE(0)) {
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 9;
+    }
+    return -1;
+}
+
+static int la_mc_load_current_slot_select_ntscaug6(void)
 {
     _la_mask_preview_info();
     if (pad[0].flags & 0x40) {
@@ -1590,8 +2089,11 @@ static int la_mc_load_current_slot_select_ntscaug6jun26(void)
 
 inline int la_mc_load_current_slot_select(void)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return la_mc_load_current_slot_select_ntscaug6jun26();
+    if (ICO_JUN26) {
+        return la_mc_load_current_slot_select_jun26();
+    }
+    if (ICO_NTSCAUG6) {
+        return la_mc_load_current_slot_select_ntscaug6();
     }
     _la_mask_preview_info();
     if (pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) {
@@ -1616,8 +2118,103 @@ static int loadCardChanged = 1; /* derived name */
 
 static int loadFileChosen = 0; /* derived name */
 
+static int la_mc_load_file_select_jun26(int first, int item)
+{
+    int r;
+
+    if (first) {
+        fileMask = 0;
+        lastPort = filePort = curPort;
+        loadFileChosen = 0;
+    }
+
+    if (fileMask != 0) {
+        _la_set_preview_info();
+        lt_mask_property(38, 1);
+        lt_mask_property(37, 1);
+        lt_mask_property(160, 0);
+        lt_mask_property(161, 0);
+    } else {
+        _la_mask_preview_info();
+        lt_mask_property(38, 0);
+        lt_mask_property(37, 0);
+        lt_mask_property(160, 1);
+        lt_mask_property(161, 1);
+    }
+    lt_set_item_select_func((ICO_WORD_PTR(LtSelectFn))la_mc_saved_file_select);
+
+    if (PSH_NEGATIVE(0)) {
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 9;
+    }
+
+    if ((fileMask != 0 || loadFileChosen != 0) && PSH_POSITIVE(0)) {
+        if (IosMcProductFile[filePort].file[item].stage != 0xFFFFFFFF) {
+            selectFile = item;
+            lastPort = filePort;
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 18;
+        }
+    }
+
+    r = _la_set_current_port_lock_2(&mc, first);
+    switch (r) {
+    case -1:
+        if (((curPortInfo->flags.w >> 1) & 1) == 0) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 19;
+        }
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 20;
+    case 1:
+        if (((curPortInfo->flags.w >> 1) & 1) == 0) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 19;
+        }
+        if ((curPortInfo->flags.w & 0x22) == 2) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 20;
+        }
+        break;
+    case 0:
+    default:
+        return -1;
+    }
+
+    if (fileMask != 0) {
+        if (loadCardChanged == 0) {
+            if (((curPortInfo->flags.w >> 6) & 1) != 0) {
+                debug_StdPrintfDummy("1 to 2\n");
+                lt_set_item_select_func(0);
+                actionStarted = 0;
+                return 14;
+            }
+        } else if (((curPortInfo->flags.w >> 6) & 1) == 0) {
+            debug_StdPrintfDummy("2 to 1\n");
+            loadCardChanged = (curPortInfo->flags.w >> 6) & 1;
+        }
+    } else {
+        loadCardChanged = (curPortInfo->flags.w >> 6) & 1;
+        fileMask = curPortInfo->fileMask;
+        actionStarted = r;
+        if ((curPortInfo->flags.w & 0xA) == 2) {
+            loadFileChosen = r;
+        }
+    }
+    return -1;
+}
+
 int la_mc_load_file_select(int first, int item)
 {
+    if (ICO_JUN26) {
+        return la_mc_load_file_select_jun26(first, item);
+    }
     int r;
 
     if (first) {
@@ -1710,8 +2307,43 @@ int la_mc_load_file_select(int first, int item)
     return -1;
 }
 
+static int la_load_confirm_no_memory_card_jun26(int first)
+{
+    if (first) {
+        _la_mask_preview_info();
+    }
+    if (PSH_POSITIVE(0)) {
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 10;
+    }
+    switch (_la_set_current_port_lock_2(&mc, first)) {
+    case 0:
+        break;
+    case -1:
+        if ((curPortInfo->flags.w >> 1) & 1) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 17;
+        }
+        lock2Restart = 1;
+        break;
+    case 1:
+        if ((curPortInfo->flags.w >> 1) & 1) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 17;
+        }
+        break;
+    }
+    return -1;
+}
+
 int la_load_confirm_no_memory_card(int first)
 {
+    if (ICO_JUN26) {
+        return la_load_confirm_no_memory_card_jun26(first);
+    }
     if (first) {
         _la_mask_preview_info();
     }
@@ -1776,8 +2408,43 @@ int la_load_confirm_no_memory_card(int first)
     return -1;
 }
 
+static int la_load_confirm_no_data_jun26(int first)
+{
+    if (first) {
+        _la_mask_preview_info();
+    }
+    if (PSH_POSITIVE(0)) {
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 10;
+    }
+    switch (_la_set_current_port_lock_2(&mc, first)) {
+    case 0:
+        break;
+    case -1:
+        if (((curPortInfo->flags.w >> 1) & 1) == 0) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 19;
+        }
+        lock2Restart = 1;
+        break;
+    case 1:
+        if ((curPortInfo->flags.w >> 5) & 1) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 17;
+        }
+        break;
+    }
+    return -1;
+}
+
 int la_load_confirm_no_data(int first)
 {
+    if (ICO_JUN26) {
+        return la_load_confirm_no_data_jun26(first);
+    }
     if (first) {
         _la_mask_preview_info();
     }
@@ -1886,8 +2553,107 @@ static inline void gflagRestoreState(void) /* derived name */
 
 static int loadStep = 0; /* derived name */
 
+static int la_load_processing_jun26(int first)
+{
+    int err;
+    int hour;
+    int min;
+    int sec;
+
+    debug_StdPrintfDummy("load processing\n");
+    if (first) {
+        loadStep = 0;
+    }
+
+    switch (loadStep) {
+    case 0:
+        strcpy(mc.path, "game.");
+        mc.fileNo = selectFile;
+        mc.port = curPort;
+        mc.slot = 0;
+        iosMcGetBlockSaveInfo(&mc);
+        loadStep++;
+        break;
+    case 1:
+    case 3:
+        if (iosMcSync(&mc) != 0) {
+            loadStep++;
+        }
+        break;
+    case 2:
+        loadStep++;
+        break;
+    case 9:
+        gflagKeepState();
+        gflagInit();
+        gamesysMemoryLoad(gameSysMemoryFuncList, gameSysMainSaveBuff, 0);
+        gflagRestoreState();
+        systemStatus[3] = 1;
+        systemStatus[4] = 1;
+        /* falls through */
+    case 6:
+        debug_StdPrintfDummy("case %d\n", loadStep);
+        err = _la_mcard_error_check(&mc);
+        if (err > 0) {
+            loadStep++;
+            debug_StdPrintfDummy("McLoad phase:%d  %x\n", loadStep, err);
+            debug_StdPrintfDummy("phase++\n");
+            return -1;
+        }
+        debug_StdPrintfDummy("through\n");
+        debug_StdPrintfDummy("chk:%d\n", err);
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 42;
+    case 4:
+        debug_StdPrintfDummy("case 4\n");
+        if (((1 << mc.fileNo) & mc.mask) == 0) {
+            loadStep = 20;
+        } else {
+            iosMcLoadProductBlock(&mc);
+            loadStep++;
+        }
+        break;
+    case 5:
+    case 8:
+        debug_StdPrintfDummy("case %d\n", loadStep);
+        if (iosMcSync(&mc) != 0) {
+            loadStep++;
+        }
+        break;
+    case 7:
+        debug_StdPrintfDummy("case %d\n", loadStep);
+        debug_StdPrintfDummy("=== LoadGameBlock ===\n");
+        iosMcLoadGameBlock(&mc, gameSysMainSaveBuff);
+        loadStep++;
+        break;
+    case 10:
+        debug_StdPrintfDummy("case 10\n");
+        loadStep = 0;
+        *(struct McPreview *)IosMcPreviewInfo =
+            *(struct McPreview *)&IosMcProductFile[mc.port].file[mc.fileNo];
+        playTime((struct McPreview *)IosMcPreviewInfo, &hour, &min, &sec);
+        ico_mirror_slot_loaded(mc.fileNo, (unsigned int)mc.sum); /* the slot's mirror flag */
+        ico_ach_slot_loaded(mc.fileNo, (unsigned int)mc.sum);    /* the slot's achievement run */
+        debug_StdPrintfDummy("stage no %d\n", gFlagSaveStage);
+        seEnvForceClose = 1;
+        soundDataSegAllClose(0, 2);
+        stgmgrForceSwitchWithFade(gFlagSaveStage, 0.5f, 4.0f);
+        ACTGame_SetActors_Debug(gFlagSaveStage, 0);
+        return -1;
+    case 20:
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 17;
+    }
+    return -1;
+}
+
 int la_load_processing(int first)
 {
+    if (ICO_JUN26) {
+        return la_load_processing_jun26(first);
+    }
     int err;
     int hour;
     int min;
@@ -1994,8 +2760,19 @@ int la_load_processing(int first)
     return -1;
 }
 
+static inline int la_general_mc_confirm_jun26(void)
+{
+    if (PSH_POSITIVE(0)) {
+        return lt_current_property_item();
+    }
+    return -1;
+}
+
 inline int la_general_mc_confirm(void)
 {
+    if (ICO_JUN26) {
+        return la_general_mc_confirm_jun26();
+    }
     if (pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) {
         return lt_current_property_item();
     }
@@ -2022,7 +2799,45 @@ static int saveVoiceOpened = 0; /* derived name */
 
 static int saveVoiceWait = 0; /* derived name */
 
-static int la_mc_confirm_save_file_ntscaug6jun26(int first, int item)
+static int la_mc_confirm_save_file_jun26(int first, int item)
+{
+    lt_mask_property(140, 1);
+    lt_mask_property(141, 1);
+    if (first) {
+        systemStatus[5] = 1;
+        if (fightSoundProcessRequestStatus() == 0) {
+            fightSoundProcessRequestPause();
+            fightSoundStopped = 1;
+        }
+        saveVoice = openLayoutVoice(24);
+        CheckPoint();
+    }
+    _la_mask_preview_info();
+    if (saveVoice != 0) {
+        layoutVoice = soundDataOpenSync(&voiceOpenReq);
+        if (layoutVoice != (SqEntry *)0xFFFFFFFF) {
+            saveVoice = 0;
+            if (layoutVoice != 0) {
+                AdpcmPlay(layoutVoice->stream);
+            }
+        }
+        return -1;
+    }
+    switch (item) {
+    case 183:
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 26;
+    case 184:
+        systemStatus[5] = 0;
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 50;
+    }
+    return -1;
+}
+
+static int la_mc_confirm_save_file_ntscaug6(int first, int item)
 {
     int i;
 
@@ -2094,8 +2909,11 @@ static int la_mc_confirm_save_file_ntscaug6jun26(int first, int item)
 
 int la_mc_confirm_save_file(int first, int item)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return la_mc_confirm_save_file_ntscaug6jun26(first, item);
+    if (ICO_JUN26) {
+        return la_mc_confirm_save_file_jun26(first, item);
+    }
+    if (ICO_NTSCAUG6) {
+        return la_mc_confirm_save_file_ntscaug6(first, item);
     }
     int i;
 
@@ -2247,8 +3065,29 @@ int la_save_game_memory_card_check(int first)
     return -1;
 }
 
+static inline int la_mc_save_current_slot_select_jun26(void)
+{
+    if (PSH_POSITIVE(0)) {
+        curPort = lt_current_property_item() - 151;
+        lastPort = curPort;
+        curPortInfo = &mcPortInfo[curPort];
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 29;
+    }
+    if (PSH_NEGATIVE(0)) {
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 25;
+    }
+    return -1;
+}
+
 inline int la_mc_save_current_slot_select(void)
 {
+    if (ICO_JUN26) {
+        return la_mc_save_current_slot_select_jun26();
+    }
     if (pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) {
         POSITIVE_SE();
         curPort = lt_current_property_item() - PAL_JPNCN_KOR_NTSCAUG6JUN26(186, 158, 152, 151);
@@ -2296,13 +3135,76 @@ extern void gif_SetAlpha(long long alpha, long long mode, long long fix);
 
 extern void gif_Sprite(SprRect *r, long long z, SprRect *uv, SprCol *col, int prim);
 extern void gif_EndPacket(void);
+/* gif_Line's z words go as 32-bit unsigned ints here too (lui/ori) */
+extern void gif_Line(int *v0, int *v1, unsigned int z0, unsigned int z1, SprCol *col, int prim);
 
 static int barStep = 0; /* derived name */
 
 static int barFrame = 0; /* derived name */
 
+static void progressive_bar_jun26(void)
+{
+    int n;
+    sceVu0IVECTOR p0;
+    sceVu0IVECTOR p1;
+
+    if (fbKeep != 0) {
+        return;
+    }
+    if (systemStatus[7] <= 0) {
+        return;
+    }
+    n = systemStatus[8];
+    gif_StartPacketPri(12);
+    gif_SetZWrite(0);
+    gif_SetZTest(0);
+    gif_SetAlpha(1, 2, 64);
+    {
+        SprRect frame = {80, 6, -160, 6};
+        SprCol frameCol = {128, 128, 128, 32};
+
+        gif_Sprite(&frame, 0xFFFFFFFF, 0, &frameCol, 1);
+    }
+    {
+        SprRect back = {78, 7, -156, 4};
+        SprCol backCol = {0, 0, 0, 32};
+
+        gif_Sprite(&back, 0xFFFFFFFF, 0, &backCol, 1);
+    }
+    {
+        int w = (float)barStep / (float)barTotal * -160.0f;
+        SprRect bar = {-80 - w, 8, w, 2};
+        SprCol barCol = {64, 255, 64, 32};
+
+        gif_Sprite(&bar, 0xFFFFFFFF, 0, &barCol, 1);
+    }
+    {
+        SprCol lineCol = {128, 128, 128, 32};
+
+        CopyIVector(p0, barLine[barFrame % 4][0]);
+        CopyIVector(p1, barLine[barFrame % 4][1]);
+        p0[0] += 252;
+        p1[0] += 252;
+        p0[1] += 17;
+        p1[1] += 17;
+        gif_Line(p0, p1, 0xFFFFFFFF, 0xFFFFFFFF, &lineCol, 1);
+    }
+    gif_SetZTest(1);
+    gif_SetZWrite(1);
+    gif_SetAlpha(1, 4, 128);
+    gif_EndPacket();
+    if (n != barLastStep) {
+        barLastStep = n;
+        barFrame++;
+    }
+}
+
 static void progressive_bar(void)
 {
+    if (ICO_JUN26) {
+        progressive_bar_jun26();
+        return;
+    }
     int n;
 
     if (fbKeep != 0) {
@@ -2350,8 +3252,104 @@ static void progressive_bar(void)
 
 static int saveCardChanged = 1; /* derived name */
 
+static int la_mc_save_file_select_jun26(int first, int item)
+{
+    int r;
+
+    if (first) {
+        fileMask = 0;
+        lastPort = filePort = curPort;
+        saveSelectReady = 0;
+        barTotal = 2;
+        barStep = 0;
+    }
+
+    if (actionStarted != 0) {
+        _la_set_preview_info();
+        lt_mask_property(38, 1);
+        lt_mask_property(37, 1);
+        lt_mask_property(208, 0);
+        lt_mask_property(209, 0);
+    } else {
+        lt_mask_property(38, 0);
+        lt_mask_property(37, 0);
+        lt_mask_property(208, 1);
+        lt_mask_property(209, 1);
+    }
+
+    if (actionStarted != 0) {
+        if (PSH_NEGATIVE(0)) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 25;
+        }
+    }
+
+    if ((fileMask != 0 || saveSelectReady != 0) && PSH_POSITIVE(0)) {
+        selectFile = item;
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 30;
+    }
+
+    r = _la_set_current_port_lock_2(&mc, first);
+    switch (r) {
+    case -1:
+        if (((curPortInfo->flags.w >> 1) & 1) == 0) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 27;
+        }
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 28;
+    case 1:
+        if (((mcPortInfo[filePort].flags.w >> 1) & 1) == 0) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 25;
+        }
+        if (fileMask != 0) {
+            if (saveCardChanged == 0) {
+                if (((curPortInfo->flags.w >> 2) & 1) != 0) {
+                    lt_set_item_select_func(0);
+                    actionStarted = 0;
+                    return 15;
+                }
+            } else if (((curPortInfo->flags.w >> 2) & 1) == 0) {
+                saveCardChanged = 0;
+            }
+        } else {
+            saveCardChanged = (curPortInfo->flags.w >> 2) & 1;
+            if ((curPortInfo->flags.w >> 3) & 1) {
+                debug_StdPrintfDummy("format 2\n");
+                saveSelectReady = r;
+            } else if ((curPortInfo->flags.w & 0xA) == 2) {
+                debug_StdPrintfDummy("unformat 2\n");
+                if (filePort == curPort) {
+                    actionStarted = r;
+                }
+                saveSelectReady = r;
+                return -1;
+            }
+        }
+        if (filePort == curPort) {
+            fileMask = curPortInfo->fileMask;
+            actionStarted = 1;
+        }
+        break;
+    case 0:
+    default:
+        return -1;
+    }
+    return -1;
+}
+
 int la_mc_save_file_select(int first, int item)
 {
+    if (ICO_JUN26) {
+        return la_mc_save_file_select_jun26(first, item);
+    }
     int r;
 
     if (first) {
@@ -2445,8 +3443,40 @@ int la_mc_save_file_select(int first, int item)
     return -1;
 }
 
+static inline int la_save_confirm_no_memory_card_jun26(int first)
+{
+    if (PSH_POSITIVE(0)) {
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 25;
+    }
+    switch (_la_set_current_port_lock_2(&mc, first)) {
+    case 0:
+        break;
+    case -1:
+        if ((curPortInfo->flags.w >> 1) & 1) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 26;
+        }
+        lock2Restart = 1;
+        break;
+    case 1:
+        if ((curPortInfo->flags.w >> 1) & 1) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 26;
+        }
+        break;
+    }
+    return -1;
+}
+
 inline int la_save_confirm_no_memory_card(int first)
 {
+    if (ICO_JUN26) {
+        return la_save_confirm_no_memory_card_jun26(first);
+    }
     if (PSH_POSITIVE_OR_NEGATIVE(0)) {
         NEGATIVE_SE();
         lt_set_item_select_func(0);
@@ -2475,8 +3505,40 @@ inline int la_save_confirm_no_memory_card(int first)
     return -1;
 }
 
+static inline int la_save_confirm_no_free_area_jun26(int first)
+{
+    if (PSH_POSITIVE(0)) {
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 25;
+    }
+    switch (_la_set_current_port_lock_2(&mc, first)) {
+    case 0:
+        break;
+    case -1:
+        if (((curPortInfo->flags.w >> 1) & 1) == 0) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 27;
+        }
+        lock2Restart = 1;
+        break;
+    case 1:
+        if ((curPortInfo->flags.w >> 4) & 1) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 26;
+        }
+        break;
+    }
+    return -1;
+}
+
 inline int la_save_confirm_no_free_area(int first)
 {
+    if (ICO_JUN26) {
+        return la_save_confirm_no_free_area_jun26(first);
+    }
     if (PSH_POSITIVE_OR_NEGATIVE(0)) {
         NEGATIVE_SE();
         lt_set_item_select_func(0);
@@ -2505,8 +3567,52 @@ inline int la_save_confirm_no_free_area(int first)
     return -1;
 }
 
+static int la_save_start_check_jun26(int first)
+{
+    switch (_la_set_current_port_lock_2(&mc, first)) {
+    case 0:
+        break;
+    case -1:
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 26;
+    case 1:
+        if (filePort != curPort) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 40;
+        }
+        if ((curPortInfo->flags.w & 0xA) == 2) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 32;
+        }
+        if ((curPortInfo->fileMask >> selectFile) & 1) {
+            if (IosMcProductFile[filePort].file[selectFile].stage != 0xFFFFFFFF) {
+                lt_set_item_select_func(0);
+                actionStarted = 0;
+                return 31;
+            }
+            if (curPortInfo->fileMask != 0) {
+                debug_StdPrintfDummy("already exist save data\n");
+                lt_set_item_select_func(0);
+                actionStarted = 0;
+                return 34;
+            }
+        }
+        debug_StdPrintfDummy("new save. system data making..\n");
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 35;
+    }
+    return -1;
+}
+
 int la_save_start_check(int first)
 {
+    if (ICO_JUN26) {
+        return la_save_start_check_jun26(first);
+    }
     switch (_la_set_current_port_lock_2(&mc, first)) {
     case 0:
         break;
@@ -2551,7 +3657,56 @@ int la_save_start_check(int first)
     return -1;
 }
 
-static int la_save_confirm_overwrite_ntscaug6jun26(int first, int item)
+static int la_save_confirm_overwrite_jun26(int first, int item)
+{
+    if (first) {
+        filePort = curPort;
+    }
+    fileMask = 0x3FF;
+    _la_set_preview_info();
+    switch (item) {
+    case 183:
+    case 187:
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 34;
+    case 184:
+    case 188:
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 29;
+    }
+    switch (_la_set_current_port_lock_2(&mc, first)) {
+    case 0:
+        break;
+    case -1:
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 27;
+    case 1:
+        if (saveCardChanged == 0) {
+            if (((curPortInfo->flags.w >> 2) & 1) == 0) {
+                break;
+            }
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 15;
+        }
+        if ((curPortInfo->flags.w >> 2) & 1) {
+            break;
+        }
+        saveCardChanged = 0;
+        if (filePort == curPort) {
+            break;
+        }
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 26;
+    }
+    return -1;
+}
+
+static int la_save_confirm_overwrite_ntscaug6(int first, int item)
 {
     if (first) {
         filePort = curPort;
@@ -2610,8 +3765,11 @@ static int la_save_confirm_overwrite_ntscaug6jun26(int first, int item)
 
 int la_save_confirm_overwrite(int first, int item)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return la_save_confirm_overwrite_ntscaug6jun26(first, item);
+    if (ICO_JUN26) {
+        return la_save_confirm_overwrite_jun26(first, item);
+    }
+    if (ICO_NTSCAUG6) {
+        return la_save_confirm_overwrite_ntscaug6(first, item);
     }
     if (first) {
         filePort = curPort;
@@ -2668,7 +3826,54 @@ int la_save_confirm_overwrite(int first, int item)
     return -1;
 }
 
-static int la_format_confirm_ntscaug6jun26(int first, int item)
+static int la_format_confirm_jun26(int first, int item)
+{
+    if (first) {
+        filePort = curPort;
+    }
+    switch (item) {
+    case 183:
+    case 187:
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 33;
+    case 184:
+    case 188:
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 29;
+    }
+    switch (_la_set_current_port_lock_2(&mc, first)) {
+    case 0:
+        break;
+    case -1:
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 27;
+    case 1:
+        if (saveCardChanged == 0) {
+            if (((curPortInfo->flags.w >> 2) & 1) == 0) {
+                break;
+            }
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 15;
+        }
+        if ((curPortInfo->flags.w >> 2) & 1) {
+            break;
+        }
+        saveCardChanged = 0;
+        if (filePort == curPort) {
+            break;
+        }
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 26;
+    }
+    return -1;
+}
+
+static int la_format_confirm_ntscaug6(int first, int item)
 {
     if (first) {
         filePort = curPort;
@@ -2725,8 +3930,11 @@ static int la_format_confirm_ntscaug6jun26(int first, int item)
 
 int la_format_confirm(int first, int item)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return la_format_confirm_ntscaug6jun26(first, item);
+    if (ICO_JUN26) {
+        return la_format_confirm_jun26(first, item);
+    }
+    if (ICO_NTSCAUG6) {
+        return la_format_confirm_ntscaug6(first, item);
     }
     if (first) {
         filePort = curPort;
@@ -3148,7 +4356,26 @@ static int la_end_confirm_ntsc(void)
     return -1;
 }
 
-static int la_end_confirm_aug6jun26(void)
+inline static int la_end_confirm_jun26(void)
+{
+    if (PSH_POSITIVE(0)) {
+        debug_StdPrintfDummy("%d\n", lt_current_property_item());
+        switch (lt_current_property_item() +
+                0) { /* JPN property ids 23 lower, KOR property ids 29 lower */
+        case 239:
+        case 373:
+            gflagInit();
+            sampleModeDemoEndTimeOut();
+        case 240:
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 37;
+        }
+    }
+    return -1;
+}
+
+static int la_end_confirm_aug6(void)
 {
     int item;
 
@@ -3198,11 +4425,14 @@ static int la_end_confirm_aug6jun26(void)
 
 int la_end_confirm(void)
 {
+    if (ICO_JUN26) {
+        return la_end_confirm_jun26();
+    }
     if (ICO_NTSC) {
         return la_end_confirm_ntsc();
     }
-    if (ICO_AUG6JUN26) {
-        return la_end_confirm_aug6jun26();
+    if (ICO_AUG6) {
+        return la_end_confirm_aug6();
     }
     int item;
 
@@ -3254,8 +4484,19 @@ int la_end_confirm(void)
     return -1;
 }
 
+static inline int la_save_confirm_yesno_jun26(void)
+{
+    if (PSH_NEGATIVE(0)) {
+        return lt_current_property_item();
+    }
+    return -1;
+}
+
 inline int la_save_confirm_yesno(void)
 {
+    if (ICO_JUN26) {
+        return la_save_confirm_yesno_jun26();
+    }
     if (pad[0].flags & PAL_JPNKORCN(0x10, 0x40)) {
         return lt_current_property_item();
     }
@@ -3345,8 +4586,21 @@ int la_delete_processing(int first)
     return -1;
 }
 
+static inline int la_delete_confirm_complete_jun26(void)
+{
+    if (PSH_NEGATIVE(0)) {
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 26;
+    }
+    return -1;
+}
+
 inline int la_delete_confirm_complete(void)
 {
+    if (ICO_JUN26) {
+        return la_delete_confirm_complete_jun26();
+    }
     int ret;
     if ((pad[0].flags & PAL_JPNKORCN(LA_BACK, 0x40)) == 0)
         goto fail;
@@ -3402,8 +4656,40 @@ static inline void releaseGameLoopCursor(void) /* derived name */
 
 int laoutActionPauseRequest = 0;
 
+static inline int la_game_loop_jun26(int first)
+{
+    IosMcPreviewInfo[1]++; /* the August preview counts the play time here */
+    if (first) {
+        if (fightSoundStopped != 0) {
+            fightSoundProcessRequestStart();
+            fightSoundStopped = 0;
+        }
+        releaseGameLoopCursor();
+        systemStatus[2] = 1;
+        systemStatus[5] = 0;
+        iosPadEnable();
+        isysGObjActiveLink(0, 1);
+        layoutActPushStartNew = 0;
+    }
+    if ((pad[0].flags & 0x800) || layoutActPushStartNew != 0) {
+        if (enable_game_pause == 0) {
+            return -1;
+        }
+        systemStatus[5] = 1;
+        layoutActPushStartNew = 0;
+        adpcmPauseRequest(1);
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 53;
+    }
+    return -1;
+}
+
 int la_game_loop(int first)
 {
+    if (ICO_JUN26) {
+        return la_game_loop_jun26(first);
+    }
     if (ICO_AUG6JUN26) {
         IosMcPreviewInfo[1]++; /* the August preview counts the play time here */
     }
@@ -3456,8 +4742,32 @@ inline int la_game_demo_pause(int first)
     return PAL_JPNKORCN_NTSCAUG6JUN26(0x37, 0x34, 51);
 }
 
+static inline int la_game_demo_jun26(int first)
+{
+    if (first) {
+        iosPadDisable();
+    }
+    if ((pad[0].flags & 0x800) && gflagChk(339)) {
+        debug_StdPrintfDummy("push start\n");
+        gflagOff(339);
+        title_demo_mode ^= 1;
+        nextStage = stage_after_skipping_demo;
+        stgmgrForceSwitchWithFade(nextStage, 8.0f, 4.0f);
+        if (stage_after_skipping_demo == 0xFFFFFFFF) {
+            stage_after_skipping_demo = 1;
+        }
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 59;
+    }
+    return -1;
+}
+
 inline int la_game_demo(int first)
 {
+    if (ICO_JUN26) {
+        return la_game_demo_jun26(first);
+    }
     if (first) {
         if (stage_no == 1) {
             iosPadDisable();
@@ -3489,7 +4799,7 @@ static inline int la_game_pause_ntsc(int first)
         return -1;
     }
     if (((pad[0].flags & 0x40) && lt_current_property_item() == 264) ||
-        (pad[0].flags & 0x800 | LA_BACK)) {
+        (pad[0].flags & (0x800 | LA_BACK))) {
         NEGATIVE_SE();
         adpcmPauseRequest(0);
         lt_set_item_select_func(0);
@@ -3499,7 +4809,21 @@ static inline int la_game_pause_ntsc(int first)
     return -1;
 }
 
-static inline int la_game_pause_aug6jun26(int first)
+static inline int la_game_pause_jun26(int first)
+{
+    if (first) {
+        systemStatus[5] = 1;
+    }
+    if ((pad[0].flags & 0x800) || ((pad[0].flags & 0x40) && lt_current_property_item() == 264)) {
+        adpcmPauseRequest(0);
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 50;
+    }
+    return -1;
+}
+
+static inline int la_game_pause_aug6(int first)
 {
     if (first) {
         systemStatus[5] = 1;
@@ -3508,7 +4832,7 @@ static inline int la_game_pause_aug6jun26(int first)
         return -1;
     }
     if (((pad[0].flags & 0x40) && lt_current_property_item() == 264) ||
-        (pad[0].flags & 0x800 | LA_BACK)) {
+        (pad[0].flags & (0x800 | LA_BACK))) {
         NEGATIVE_SE();
         adpcmPauseRequest(0);
         lt_set_item_select_func(0);
@@ -3520,11 +4844,14 @@ static inline int la_game_pause_aug6jun26(int first)
 
 inline int la_game_pause(int first)
 {
+    if (ICO_JUN26) {
+        return la_game_pause_jun26(first);
+    }
     if (ICO_NTSC) {
         return la_game_pause_ntsc(first);
     }
-    if (ICO_AUG6JUN26) {
-        return la_game_pause_aug6jun26(first);
+    if (ICO_AUG6) {
+        return la_game_pause_aug6(first);
     }
     if (first) {
         systemStatus[5] = 1;
@@ -3550,7 +4877,49 @@ static int gameOverVoice = 0; /* derived name */
 
 static int gameOverVoiceOpened = 0; /* derived name */
 
-static int la_game_over_continue_ntscaug6jun26(int first)
+static int la_game_over_continue_jun26(int first)
+{
+    if (first) {
+        iosPadEnable();
+        systemStatus[5] = 1;
+        soundSePlayModeStop(1);
+        soundSePlayModeStop(0);
+        gameOverVoice = openLayoutVoice(48);
+    }
+    if (gameOverVoice != 0) {
+        layoutVoice = soundDataOpenSync(&voiceOpenReq);
+        if (layoutVoice != (SqEntry *)ICO_INVALID_PTR) {
+            gameOverVoice = 0;
+            if (layoutVoice != 0) {
+                AdpcmPlay(layoutVoice->stream);
+                return -1;
+            }
+        }
+    } else {
+        switch (lt_current_property_item() +
+                0) { /* JPN property ids 23 lower, KOR property ids 29 lower */
+        case 378:
+            if (PSH_POSITIVE(0)) {
+                systemStatus[4] = 1;
+                nextStage = gFlagSaveStage;
+                releaseGameLoopCursor();
+                lt_set_item_select_func(0);
+                actionStarted = 0;
+                return 59;
+            }
+            break;
+        case 379:
+            if (PSH_POSITIVE(0)) {
+                gflagInit();
+                sampleModeDemoEndTimeOut();
+            }
+            break;
+        }
+    }
+    return -1;
+}
+
+static int la_game_over_continue_ntscaug6(int first)
 {
     if (first) {
         enable_game_pause = 1;
@@ -3609,8 +4978,11 @@ static int la_game_over_continue_ntscaug6jun26(int first)
 
 int la_game_over_continue(int first)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return la_game_over_continue_ntscaug6jun26(first);
+    if (ICO_JUN26) {
+        return la_game_over_continue_jun26(first);
+    }
+    if (ICO_NTSCAUG6) {
+        return la_game_over_continue_ntscaug6(first);
     }
     if (first) {
         if (fadeStatus != 0) {
@@ -3732,7 +5104,74 @@ static inline int keyAssignIndex(int v) /* derived name */
 
 static int keyConfigMask = 0xFF; /* derived name */
 
-static int la_key_config_ntscaug6jun26(int first)
+static int la_key_config_jun26(int first)
+{
+    int i;
+    int sel;
+    int m;
+    int k;
+    int n;
+
+    sel = lt_current_property_item() - 285;
+    if (first) {
+        for (i = 0; i < 16; i++) {
+            if ((keyConfigMask >> i) & 1) {
+                keyConfigSlot[keyCodeIndex(iosPadConfCustom.bit[i])] = keyCodeIndex(1 << i);
+            }
+        }
+    }
+    if (sel >= 0 && sel < 6) {
+        m = pad[0].flags & keyConfigMask;
+        if (m != 0 && m == pad[0].flags) {
+            k = keyCodeIndex(m);
+            if (k != -1) {
+                n = keyAssignIndex(m);
+                if (n != -1) {
+                    keyConfigSlot[n] = keyConfigSlot[sel];
+                }
+                keyConfigSlot[sel] = k;
+            }
+        }
+    }
+    keyconfigMaskAll();
+    for (i = 0; i < 6; i++) {
+        lt_mask_property(i * 8 + 291 + keyConfigSlot[i], 0);
+    }
+    if (PSH_POSITIVE(0)) {
+        if (lt_current_property_item() == 340) {
+            for (i = 7; i >= 0; i--) {
+                keyConfigSlot[i] = i;
+            }
+        }
+        if (lt_current_property_item() == 339) {
+            for (i = 0; i < 16; i++) {
+                iosPadConfCustom.bit[i] = 0;
+            }
+            for (i = 0; i < 8; i++) {
+                iosPadConfCustom.bit[keyBitIndex(keyConfigCode[keyConfigSlot[i]])] =
+                    keyConfigCode[i];
+            }
+            keyconfigMaskAll();
+            for (i = 0; i < 6; i++) {
+                lt_default_mask_property(i * 8 + 291 + keyConfigSlot[i], 0);
+                lt_mask_property(i * 8 + 291 + keyConfigSlot[i], 0);
+            }
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            /* PC port: back to Settings > Controls, which opens this
+               screen now that the Options screen (58) is not reached */
+            return ui_settings_key_config_back();
+        }
+    }
+    if (pad[0].flags & 0x800) {
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 50;
+    }
+    return -1;
+}
+
+static int la_key_config_ntscaug6(int first)
 {
     int i;
     int sel;
@@ -3808,8 +5247,11 @@ static int la_key_config_ntscaug6jun26(int first)
 
 int la_key_config(int first)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return la_key_config_ntscaug6jun26(first);
+    if (ICO_JUN26) {
+        return la_key_config_jun26(first);
+    }
+    if (ICO_NTSCAUG6) {
+        return la_key_config_ntscaug6(first);
     }
     int i;
     int sel;
@@ -3909,8 +5351,58 @@ static const int choiceItem_pal[4] = {321, 322, 328, 329}; /* derived name */
 
 /* not reached on the port on any disc (the pause menu's Options opens Settings), so the USA
    disc's and the August 2001 preview's own Options screen is not carried */
+/* PC port: the USA disc's and the August 2001 preview's option screen, their own text (two
+   rows: the sound output and the vibration, and the back item) */
+static int la_game_option_ntscaug6(void)
+{
+    int mode;
+
+    mode = soundOutputModeGet();
+    if ((pad[0].flags & 0x40) != 0) {
+        switch (lt_current_property_item()) {
+        case 269:
+            POSITIVE_SE();
+            if (mode == 0) {
+                mode = 1;
+            } else {
+                mode = 0;
+            }
+            soundOutputModeSet(mode);
+            ico_opt_output_toggled(mode); /* PC port: the output mode is kept in config.toml */
+            break;
+        case 274:
+            POSITIVE_SE();
+            iosPadActRequestEnable ^= 1;
+            break;
+        case 281:
+            NEGATIVE_SE();
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 53;
+        }
+    }
+    if (mode == 0) {
+        lt_default_mask_property(272, 0);
+        lt_default_mask_property(273, 1);
+    } else {
+        lt_default_mask_property(272, 1);
+        lt_default_mask_property(273, 0);
+    }
+    if (iosPadActRequestEnable != 0) {
+        lt_default_mask_property(277, 0);
+        lt_default_mask_property(278, 1);
+    } else {
+        lt_default_mask_property(277, 1);
+        lt_default_mask_property(278, 0);
+    }
+    return -1;
+}
+
 int la_game_option(void)
 {
+    if (ICO_NTSCAUG6) {
+        return la_game_option_ntscaug6();
+    }
     int mode;
     int cur;
     int sel;
@@ -4032,8 +5524,40 @@ static inline void clearAdjustScreenMarks(void) /* derived name */
     }
 }
 
+static int la_adjust_screen_jun26(void)
+{
+    if (PSH_LEFT(0)) {
+        if (systemStatus[11] > 0) {
+            systemStatus[11]--;
+        }
+    } else if (PSH_RIGHT(0)) {
+        if (systemStatus[11] < 14) {
+            systemStatus[11]++;
+        }
+    }
+    if (PSH_NEGATIVE(0)) {
+        systemStatus[11] = 7;
+    }
+    clearAdjustScreenMarks();
+    lt_default_mask_property(systemStatus[11] + 344, 0);
+    if (PSH_POSITIVE(0)) {
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 54;
+    }
+    if (pad[0].flags & 0x800) {
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 50;
+    }
+    return -1;
+}
+
 int la_adjust_screen(void)
 {
+    if (ICO_JUN26) {
+        return la_adjust_screen_jun26();
+    }
     int v;
 
     if (ICO_KOR) {

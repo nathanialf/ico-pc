@@ -46,7 +46,8 @@ typedef struct { /* field names derived */
    positions of the fifteen entrances stgmgrNextStagePreLoadEntry collects.
    The Japanese ELF aligns it to 64 bytes for the CD's DMA; the host's reads
    need no alignment, so every region takes the European definition. */
-char stagePreLoadBuff[896 * 2048] = {0};
+/* PC port: the June 2001 demo preloads 1024 sectors (0x200000): the larger size on every disc */
+char stagePreLoadBuff[1024 * 2048] = {0};
 
 IosMsgQueue stageMgrMsgQ = {0};
 
@@ -281,8 +282,87 @@ int stagePreLoadLsn = 0;
 
 int stagePreLoadSectorCnt = 0;
 
+static int stgmgrNextStagePreLoad_jun26(CdvdBgReq *bg)
+{
+    float root[4];
+    float d[4];
+    int size;
+    int stage = 0;
+    int i;
+    float dist;
+
+    if (stagePreLoadWait++ < 15) {
+        return 0;
+    }
+    stagePreLoadWait = 0;
+    if (iosCdvdBackGroundMgrEntryNum() >= 3 && stagePreLoadNoCancel == 0) {
+        return 0;
+    }
+    switch (stagePreLoadMode) {
+    case 0: {
+        int best = -1;
+
+        if (boyGObj == 0) {
+            return 0;
+        }
+        GetRootPosition(root, boyGObj);
+        for (i = 0; i < stageExitDataCnt; i++) {
+            StgSlot *e;
+
+            _SubVector(d, root, stageExitData[i].pos);
+            dist = _InnerProduct(d, d);
+            e = &stageExitData[i];
+            e->dist = dist;
+            if (best == -1) {
+                best = i;
+                stage = e->stage;
+            } else if (dist < (&stageExitData[best])->dist) {
+                best = i;
+                stage = e->stage;
+            }
+        }
+        goto check;
+    }
+    case 1:
+        stage = stagePreLoadForceStageNo;
+        goto check;
+    }
+    /* The DEBUG build's report and hold, see stgPreLoadDebugHook: the hold
+       repeats the checks and the report; the switch arms enter it at the
+       checks. */
+    do {
+    check:
+        if (stage == 0 || stage == stagePreLoadStageNo || stageData[stage].mpegNo != 0) {
+            return 0;
+        }
+        stgPreLoadDebugHook();
+    } while (stgPreLoadDebugHold());
+    {
+        int readSize;
+        int ret;
+
+        strcpy(bg->name, GetDataFileName(stage, 1));
+        ret = -1;
+        iosCdvdChgFileName(bg->name);
+        stagePreLoadLsn = bg->lsn = iosCdvdGetFileLsn(bg->name, &size);
+        size = (size + 0x7FF) / 0x800 * 0x800;
+        readSize = size > 0x200000 ? 0x200000 : size;
+        debug_StdPrintfDummy("preload %s move %d total %d reset %d\n", bg, readSize, size,
+                             size - readSize);
+        bg->pos = 0;
+        ret = iosCdvdBackGroundRead(bg, stagePreLoadBuff, readSize);
+        debug_StdPrintfDummy("done");
+        stagePreLoadSectorCnt = readSize >> 11;
+        stagePreLoadStageNo = stage;
+    }
+    return 0;
+}
+
 static int stgmgrNextStagePreLoad(CdvdBgReq *bg)
 {
+    if (ICO_JUN26) {
+        return stgmgrNextStagePreLoad_jun26(bg);
+    }
     float root[4];
     float d[4];
     int size;

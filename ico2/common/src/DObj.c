@@ -438,8 +438,43 @@ static inline void makeSlotTable(Sub15C *d) /* derived name */
     }
 }
 
+static Sub15C *CSVSYSTEM_InitDObj_jun26(int id, SObjSimpleSetting *lay)
+{
+    Sub15C *d;
+
+    /* the record is a runtime Sub15C here (wider than the EE's 0x880): the
+       same all-zero start with the template's non-zero words by name */
+    d = iosMallocDebug(ios_partition_seki, sizeof(Sub15C), __FILE__, 462);
+    memset(d, 0, sizeof(Sub15C));
+    d->parent.node = -1;
+    d->disp = 1;
+    d->colRotate = 1;
+    d->cylinderOn = 1;
+    d->modelId = 1510;
+    d->accessary = -1;
+    if (id != 1425) {
+        CSVSYSTEM_ReadCharFiles(d, id);
+    }
+    debug_StdPrintfDummy("\x1b[35mALLOCED DOBJ\x1b[m\n");
+    if (d->model != 0 || d->skel != 0) {
+        initPolygonState(d, lay);
+    }
+    debug_StdPrintfDummy("\x1b[35mINITED POLYGONSTATE\x1b[m\n");
+    initGeometryState(d, lay);
+    debug_StdPrintfDummy("\x1b[35mINITED GEOMETRYSTATE\x1b[m\n");
+    if (d->skel != 0) {
+        initInitialInverseMatrix(d);
+        makeSlotTable(d);
+    }
+    debug_StdPrintfDummy("\x1b[35mEND OF INIT DOBJ\x1b[m\n");
+    return d;
+}
+
 Sub15C *CSVSYSTEM_InitDObj(int id, SObjSimpleSetting *lay)
 {
+    if (ICO_JUN26) {
+        return CSVSYSTEM_InitDObj_jun26(id, lay);
+    }
     Sub15C *d;
 
     /* the record is a runtime Sub15C here (wider than the EE's 0x880): the

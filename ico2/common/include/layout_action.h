@@ -26,6 +26,13 @@ extern int layoutActPushStartNew;
 /* the memory-card request block the layout actions and the debug menu
    drive */
 extern McMgr mc;
+/* The pad trigger tests and the layout actions the texture layout's tables
+   call, each an `inline` definition, in the order of their out-of-line copies
+   at the end of the object (first-declaration order). */
+int PSH_POSITIVE(int idx);
+int PSH_NEGATIVE(int idx);
+int PSH_LEFT(int idx);
+int PSH_RIGHT(int idx);
 /* The layout actions the texture layout's tables call, each an `inline`
    definition, in the order of their out-of-line copies at the end of the
    object (first-declaration order). */
@@ -35,8 +42,6 @@ int la_boot_no_free_area(int first, int item);
 int la_boot_confirm_memory_card(void);
 int la_scei_logo(int first);
 int la_title_demo(void);
-
-
 int la_mc_file_select(int first);
 int la_mc_preview_info(void);
 int la_mc_current_slot(void);

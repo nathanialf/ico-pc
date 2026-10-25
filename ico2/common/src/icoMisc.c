@@ -73,6 +73,15 @@ static int partitionFreeColor[4] = {255, 128, 64, 128}; /* derived name */
 
 static int partitionUsedColor[4] = {64, 128, 255, 128}; /* derived name */
 
+/* DispLoadProgress's spinner: four strokes, each two points on a 7 x 7 grid */
+static int loadSpinLine[4][2][4] = {
+    /* derived name */
+    {{0, 3}, {7, 3}},
+    {{0, 0}, {7, 7}},
+    {{3, 0}, {3, 7}},
+    {{7, 0}, {0, 7}},
+};
+
 /* GifPacket.h's entry points, which this TU does not include: its call
    passes gif_MakeSpriteNoTexture's z as a 32-bit unsigned int, where the
    header takes a long long */
@@ -112,7 +121,7 @@ static __inline__ void partitionBarDebugDisp(void) /* derived name */
 #endif
 }
 
-static void disp_memory_partition_bar(void)
+static void disp_memory_partition_bar_jun26(void)
 {
     IosMemPart *parts[5] = {ios_partition_isys, ios_partition_s2motion, ios_partition_smotion,
                             ios_partition_common, 0};
@@ -176,8 +185,106 @@ static void disp_memory_partition_bar(void)
                         buf,
                         "DISP_MEMORY_PARTITION_BAR():\n\tINVALID MEMORY FREE AREA INDICATED IN PARTITION \"%s\"\n\tMALLOCED MEMORY'S NEXT_FREE: %p\n",
                         p->name, e);
-                    debug_assertMessage(__FILE__, LN(609, 609, 609, 572, 566, 541, 609), buf);
-                    __assert(__FILE__, LN(609, 609, 609, 572, 566, 541, 609), "e");
+                    debug_assertMessage(__FILE__, 541, buf);
+                    __assert(__FILE__, 541, "e");
+                }
+            } while (e != 0);
+        }
+        gif_SetAlpha(0, 2, 112);
+        gif_SetAlpha(1, 2, 112);
+        st.y = ed.y = (ScreenHeight / 2 + i * 18 + 1907) << 4;
+        st.x = (int)(((float)(-(ScreenWidth >> 1) + 130) + 2048.0f) * 16.0f);
+        ed.x = (int)((float)st.x +
+                     (float)(total - used) * (float)(ScreenWidth - 200) / (float)max * 16.0f);
+        Draw2DLine((int *)&st, (int *)&ed, partitionFreeColor, -1);
+        x = (int)(((float)(-(ScreenWidth >> 1) + 130) + 2048.0f) * 16.0f);
+        st.x = (int)((float)x + (float)total * (float)(ScreenWidth - 200) / (float)max * 16.0f);
+        ed.x = (int)((float)x +
+                     (float)(total - used) * (float)(ScreenWidth - 200) / (float)max * 16.0f);
+        Draw2DLine((int *)&st, (int *)&ed, partitionUsedColor, -1);
+    }
+    gif_SetAlpha(1, 4, 128);
+    partitionBarDebugDisp();
+    /* a draw in white, compiled out of the retail build (the call derived) */
+    gif_EndPacket();
+    for (i = 0; parts[i] != 0; i++) {
+        p = parts[i];
+        debug_PrintfDummy(ScreenWidth / 2 - (ScreenWidth >> 1) + 30,
+                          (ScreenHeight / 2 - 150 + ScreenHeight / 2 + i * 18) / 2, 0xFFFFFF80,
+                          "%10s", p->name);
+    }
+}
+
+static void disp_memory_partition_bar(void)
+{
+    if (ICO_JUN26) {
+        disp_memory_partition_bar_jun26();
+        return;
+    }
+    IosMemPart *parts[5] = {ios_partition_isys, ios_partition_s2motion, ios_partition_smotion,
+                            ios_partition_common, 0};
+    D2Pos st;
+    D2Pos ed;
+    char buf[1024];
+    IosMemPart *p;
+    IosMemNode *e;
+    int i = 0;
+    int j;
+    int k;
+    int size;
+    int total;
+    int used;
+    int max;
+    int x;
+
+    if (fbKeep != 0) {
+        return;
+    }
+    max = 0;
+    gif_StartPacketPri(12);
+    for (; parts[i] != 0; i++) {
+        p = parts[i];
+        size = p->end - p->start + 0x10;
+        if (max < size) {
+            max = size;
+        }
+    }
+    st.z = ed.z = 0;
+    st.w = ed.w = 0;
+    st.y = (ScreenHeight / 2 + 1898) << 4;
+    ed.y = st.y + 1280;
+    if (debug_bar_flag == 2) {
+        gif_SetAlpha(1, 2, 32);
+        gif_MakeSpriteNoTexture((-(ScreenWidth >> 1) + 2178) << 4, (ScreenHeight / 2 + 1898) << 4,
+                                (ScreenWidth - 200) << 4, 768, 0xFFFFFFFF, &partitionBarTint, 1);
+    }
+    gif_SetAlpha(1, 2, 112);
+    for (j = 0, k = 0; j < max; j += 0x100000) {
+        st.x = ed.x = (int)(((float)(-(ScreenWidth >> 1) + 130) + 2048.0f) * 16.0f +
+                            (float)j * (float)(ScreenWidth - 200) / (float)max * 16.0f);
+        if (k % 10) {
+            Draw2DLine((int *)&st, (int *)&ed, partitionUsedColor, -1);
+        } else {
+            Draw2DLine((int *)&st, (int *)&ed, partitionFreeColor, -1);
+        }
+        k++;
+    }
+    for (i = 0; parts[i] != 0; i++) {
+        used = 0;
+        p = parts[i];
+        e = p->head;
+        total = p->end - p->start + 0x10;
+        if (e != 0) {
+            do {
+                used += e->size << 4;
+                e = e->free_next;
+                if (e != 0 && !ico_arena_contains(e, 0)) {
+                    sprintf(
+                        buf,
+                        "DISP_MEMORY_PARTITION_BAR():\n\tINVALID MEMORY FREE AREA INDICATED IN PARTITION \"%s\"\n\tMALLOCED MEMORY'S NEXT_FREE: %p\n",
+                        p->name, e);
+                    debug_assertMessage(__FILE__, LN(609, 609, 609, 572, 566, 566, 609), buf);
+                    __assert(__FILE__, LN(609, 609, 609, 572, 566, 566, 609), "e");
                 }
             } while (e != 0);
         }
@@ -243,14 +350,184 @@ static void disp_memory_partition(void)
     }
 }
 
+/* the first two words of the TU's .sdata after its strings (0x67A998): the
+   load spinner's frame (bumped each time the load count moves) and a word no
+   June function reads */
+static int loadSpinFrame = 0; /* derived name */
+
 static void *prevCameraPos = 0; /* derived name */
 
 static int seEnvMute = 0; /* derived name */
 
+/* a screen rectangle as gif_Sprite takes it */
+typedef struct { /* field names derived */
+    int x;
+    int y;
+    int w;
+    int h;
+} LoadRect; /* derived name */
+
+/* .sbss: the load count DispLoadProgress last saw */
+static int prevMiscValue; /* derived name */
+
+extern void gif_Sprite(LoadRect *r, unsigned int z, LoadRect *uv, MiscColor *col, int prim);
+extern void gif_Line(int *v0, int *v1, unsigned int z0, unsigned int z1, MiscColor *col, int prim);
+/* The load progress bar and its spinner: a grey frame, a dark well and a green
+   bar of systemStatus[8] out of systemStatus[7] loads, then one of four
+   two-point strokes, the next each time the load count moves.  Nothing calls
+   it in this build. */
+/* PC port: GifPacket.c's */
+void gif_SetZWrite(int on);
+void gif_SetZTest(int on);
+
+void DispLoadProgress(void) /* derived name */
+{
+    int p0[4];
+    int p1[4];
+    int cur;
+
+    if (fbKeep != 0) {
+        return;
+    }
+    if (systemStatus[7] <= 0) {
+        return;
+    }
+    cur = systemStatus[8];
+    gif_StartPacketPri(12);
+    gif_SetZWrite(0);
+    gif_SetZTest(0);
+    gif_SetAlpha(1, 2, 64);
+    {
+        LoadRect r = {-260, 10, 520, 6};
+        MiscColor c = {128, 128, 128, 32};
+
+        gif_Sprite(&r, 0xFFFFFFFF, 0, &c, 1);
+    }
+    {
+        LoadRect r = {-258, 11, 516, 4};
+        MiscColor c = {0, 0, 0, 32};
+
+        gif_Sprite(&r, 0xFFFFFFFF, 0, &c, 1);
+    }
+    {
+        LoadRect r = {-256, 12, systemStatus[8] * 512 / systemStatus[7], 2};
+        MiscColor c = {64, 255, 64, 32};
+
+        gif_Sprite(&r, 0xFFFFFFFF, 0, &c, 1);
+    }
+    {
+        MiscColor c = {128, 128, 128, 32};
+
+        CopyIVector(p0, loadSpinLine[loadSpinFrame % 4][0]);
+        CopyIVector(p1, loadSpinLine[loadSpinFrame % 4][1]);
+        p0[0] += 252;
+        p1[0] += 252;
+        p0[1] += 17;
+        p1[1] += 17;
+        gif_Line(p0, p1, 0xFFFFFFFF, 0xFFFFFFFF, &c, 1);
+    }
+    gif_SetZTest(1);
+    gif_SetZWrite(1);
+    gif_SetAlpha(1, 4, 128);
+    gif_EndPacket();
+    if (cur != prevMiscValue) {
+        prevMiscValue = cur;
+        loadSpinFrame++;
+    }
+}
+
 static int diskErrorBlink = 0; /* derived name */
+
+static void ExecIcoMisc_jun26(void)
+{
+    void *cam;
+
+    if (debug_mem_partition_flag == 1) {
+        disp_memory_partition();
+    }
+    if (debug_seslotdisp_flag == 1) {
+        debug_SESlotDisp();
+    }
+    if (iosCdvdDiskStatusGet() != 0) {
+        if (diskErrorBlink++ < 15) {
+            debug_PrintfDummy(250, 100, 0xFF000000, "DISK ERROR");
+        } else if (diskErrorBlink >= 31) {
+            diskErrorBlink = 0;
+        }
+    }
+    if (iopBuffOver != 0) {
+        debug_PrintfDummy(250, 100, 0xFF000000, "IOP BUFF OVER -%d bytes", iopBuffOver);
+    }
+    if (debug_memory_bar != 0) {
+        disp_memory_partition_bar();
+    }
+    if (lock_execIcoMisc == 0) {
+        if (iosCdvdDiskStatusGet() == 0) {
+            exec_layout_texture();
+        }
+    }
+    if (kanbanCommonRead != 0) {
+        if (stage_no == 1 || stage_no == 92) {
+            kanbanBootMain();
+        }
+    }
+    kanbanExec();
+#ifdef ICO_RD
+    kanbanTitleCover(); /* PC port: the cover over a stage change to the title */
+#endif
+    if (lock_execIcoMisc != 0) {
+        return;
+    }
+    if (systemStatus[5] == 0) {
+        ExecParticleEffects();
+        ExecStreamMotionManager();
+        ExecWindManager();
+        soundSeEnvMasterVolRate = scpSeEnvMasterVolRate;
+        ExecSpiderGroupManager();
+        ExecGameOverEffect();
+    } else if (scpSeEnvMasterVolRate > 0.5f) {
+        soundSeEnvMasterVolRate = 0.5f;
+    }
+    if (systemStatus[6] == 0) {
+        gamesysBackStageProcess();
+        if (debug_wallcheck_flag == 1) {
+            warpGirlOutStage(stage_no, 1);
+        }
+        cam = GetCameraPos();
+        if (prevCameraPos == 0) {
+            if (cam != 0) {
+                soundSeEnvPlay();
+            }
+        }
+        prevCameraPos = cam;
+        if (cam != 0) {
+            soundReqTickProc();
+        }
+        fightSoundProcess();
+    }
+    eBrainProcess();
+    sampleModeExec();
+    if (fall_death_active != 0) {
+        if (boyGObj != 0) {
+            if (GOBJ_SUB(boyGObj)->ctrl.fallHeight > 1000.0f) {
+                lt_switch_layout(58);
+            }
+        }
+        if (girlGObj != 0) {
+            if (GOBJ_SUB(girlGObj)->ctrl.fallHeight > 1000.0f) {
+                lt_switch_layout(58);
+            }
+        }
+    }
+    jimakuDisp(&jimaku_msg);
+}
 
 void ExecIcoMisc(void)
 {
+    if (ICO_JUN26) {
+        ExecIcoMisc_jun26();
+        return;
+    }
     int total;
     int used;
     void *cam;
@@ -389,8 +666,150 @@ static int loadedMotionSeg = -1; /* derived name */
 /* .sbss: the frame stamp the load-time report below prints */
 static int load_time; /* derived name */
 
+static void InitIcoMisc_jun26(int *arg)
+{
+    int stage = *arg;
+    int i;
+    int j;
+    int id;
+    int found;
+    int pack;
+    char *fname;
+
+    debugMoveMode = 0;
+    motionFrameUpdate = 1;
+
+    InitializeStaticBlur();
+    InitStreamMotionManager();
+    InitSpiderGroupManager();
+
+    if (systemStatus[3] != 0 && systemStatus[4] != 0) {
+        gamesysMemoryLoad(gameSysMemoryFuncList, gameSysMainSaveBuff, 0);
+        systemStatus[4] = 0;
+    }
+    if (thisIsYourStartStage != 1 && setActorsDebugPending != 0) {
+        ACTGame_SetActors_Debug(stage, 0);
+        setActorsDebugPending = 0;
+    }
+    debug_StdPrintfDummy("Init Object Light\n");
+    light_InitLight();
+    InitStageLight(stage);
+    enemy_Initialize();
+    debug_StdPrintfDummy("Init Packing Data\n");
+    load_time = frame_count;
+    if (charFileManagerReady == 0) {
+        InitCharFileManager();
+    } else {
+        ResetCharFileManager();
+    }
+    charFileManagerReady = 1;
+    debug_StdPrintfDummy("InitCharFIleManager out\n");
+    pack = LoadFileType;
+    if (commonPackLoaded == 0) {
+        debugCdvdLoadInfoSegInit(0);
+        iosCdvdLoadPackFile(pack, GetDataFileName(-1, pack), 0);
+        kanbanInit(0);
+        kanbanBootInit();
+        commonPackLoaded = 1;
+    }
+    if (loadedMotionSeg != stageData[stage].mot) {
+        /* case 1 shares the default arm */
+        switch (stageData[stage].mot) {
+        case 1:
+        default:
+            fname = GetDataFileName2("MOTION1", pack);
+            break;
+        case 2:
+            fname = GetDataFileName2("MOTION2", pack);
+            break;
+        case 3:
+            fname = GetDataFileName2("MOTION3", pack);
+            break;
+        }
+        if (loadedMotionSeg != -1) {
+            /* "this stage uses a different motion segment from the previous one" */
+            debug_StdPrintfDummy(
+                "\033[33mこのステージは前のステージと異なるモーションセグメントを使用します。\033[m\n");
+            ResetStatic2MotionManager(loadedMotionSeg);
+        }
+        iosMallocResetPartition(ios_partition_s2motion);
+        iosCdvdLoadPackFile(pack, fname, 0);
+        loadedMotionSeg = stageData[stage].mot;
+    }
+    debug_StdPrintfDummy("iosCdvdLoadPackFile\n");
+    debugCdvdLoadInfoSegInit(1);
+    iosCdvdLoadPackFile(pack, GetDataFileName(stage, pack), 1);
+    if (stage_no == 92) {
+        kanbanBootStart();
+    }
+    load_time = frame_count - load_time;
+    debug_StdPrintfDummy("InitWayPointSystem\n");
+    InitWayPointSystem();
+    debug_StdPrintfDummy("MakeFogClut\n");
+    fog_MakeFogClut();
+    debug_StdPrintfDummy("InitParticleEffects\n");
+    InitParticleEffects();
+    InitStageMultiBgaManager();
+    debug_StdPrintfDummy("InitSceneObjects( %d )\n", stage);
+    InitSceneObjects(stage);
+    InitWindManager(stage);
+    debug_StdPrintfDummy("%s\n", stageData[stage_no].name);
+    init_layout_texture(stage);
+
+    found = 0;
+    for (i = 0; i < 1165; i++) {
+        for (j = 0; j < 5; j++) {
+            id = motionKind[i].ent[j].id;
+            if (id > 0xFFFF) {
+                continue;
+            }
+            if (motionEffKind[id].done) {
+                continue;
+            }
+            if (id == 19) {
+                continue;
+            }
+            if (GetParticleEffectPackage(motionEffKind[id].pkg)[1] != 1) {
+                continue;
+            }
+            /* "the particle %s that %s calls is emitted forever" */
+            debug_StdPrintfDummy(
+                "\"\033[33m%s\033[m\"が呼ぶパーティクル\"\033[33m%s\033[m\"は永久発生です\n",
+                motionKind[i].name, particleEffectFile[motionEffKind[id].pkg].name);
+            found = 1;
+        }
+    }
+    if (found != 0) {
+        /* "it runs, but left going it eats up memory: change the data to one
+           that does not loop" */
+        debug_StdPrintfDummy(
+            "\033[36m動作はさせますが続けているとメモリの\n資源を食いつくします\nループではないものにデータを修正してください\033[m\n");
+    }
+    debug_StdPrintfDummy("Init Stage Animation\n");
+    stage_Init();
+    debug_StdPrintfDummy("Init Object Action\n");
+    ObjAction_Init();
+    InitStageChange();
+    lock_execIcoMisc = 0;
+    debug_StdPrintfDummy("load time %f sec\n", load_time / 60.0f);
+    sndInit(stage);
+    iosPadActInit();
+    if (stageData[stage_no].initproc != 0) {
+        stageData[stage_no].initproc();
+    }
+    MakeCollisionDependGObjList();
+    gamesysObjInfoStageInitPosSaveUnlock();
+    systemStatus[5] = 0;
+    systemStatus[6] = 0;
+    iosThreadDestroy(0);
+}
+
 void InitIcoMisc(int *arg)
 {
+    if (ICO_JUN26) {
+        InitIcoMisc_jun26(arg);
+        return;
+    }
     int stage = *arg;
     int i;
     int j;

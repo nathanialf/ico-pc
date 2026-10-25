@@ -119,8 +119,8 @@ static int staffRollNameOut(void)
         }
         /* staff roll: out of area */
         debug_StdPrintfDummy("staff roll 領域不足\n");
-        debug_assert(__FILE__, LN(192, 189, 189, 189, 189, 165, 189));
-        __assert(__FILE__, LN(192, 189, 189, 189, 189, 165, 189), "0");
+        debug_assert(__FILE__, LN(192, 189, 189, 189, 189, 189, 189));
+        __assert(__FILE__, LN(192, 189, 189, 189, 189, 189, 189), "0");
     found:
 
         e = &rollLines[i];

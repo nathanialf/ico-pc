@@ -303,8 +303,134 @@ static inline void MoveNextStage_Get(SObjSimpleSetting *a, int kind) /* derived 
     }
 }
 
+static void initSceneGObj_jun26(int stage, int no)
+{
+    SObjSimpleSetting a;
+    GenGeo *gen = &objLayout[no];
+    ObjKindEnt *lay = &objKindData[gen->kind];
+    GamesysObjInfo *info = gamesysObjInfoGet(gen->kind, no);
+    int mdl = gen->mdl;
+    int st;
+    GObj *gobj;
+    float ry;
+    int sno;
+    long long pri;
+    unsigned short fld;
+
+    if (info != 0) {
+        sno = info->stage;
+        if (sno != stage) {
+            return;
+        }
+
+        ((GamesysObjInfoFlag *)info)->flag |= 1;
+
+        if (stageData[sno].flag0 == 1 && gamesysGirlStageGet() != sno) {
+            switch (gen->kind) {
+            case 4:
+                ReturnEnemyToGenerator(no);
+            case 15:
+            case 33:
+                gamesysObjInfoCls(gen->kind, no);
+                info = 0;
+                break;
+            }
+        }
+    }
+
+    debug_StdPrintfDummy("try layout index=[%d] model_id=[%d]------------\n", no, mdl);
+
+    st = 0;
+
+    if (lay->layouted != 0) {
+        /* one statement: a constructor built in a temporary and assigned
+           (the construct ico2/ito/src/lightning.c uses for its
+           LightningVtx) */
+        a = (SObjSimpleSetting){
+            {-gen->pos[0], -gen->pos[1], -gen->pos[2], 1.0f},
+            {gen->rot[0] * 3.1415927f / 180.0f, 0.0f, gen->rot[2] * 3.1415927f / 180.0f, 0.0f},
+            {gen->scale[0], gen->scale[1], gen->scale[2], 1.0f},
+            gen->initArg};
+
+        ry = gen->rot[1];
+        if (ry > 180.0f) {
+            ry -= 360.0f;
+        }
+        if (gen->rot[1] < -180.0f) {
+            ry += 360.0f;
+        }
+        a.rot[1] = ry * 3.1415927f / 180.0f;
+
+        if (info != 0) {
+            if (lay->infoInit != 0) {
+                lay->infoInit(&a, info);
+            } else {
+                a.pos[0] = info->pos[0];
+                a.pos[1] = info->pos[1];
+                a.pos[2] = info->pos[2];
+                a.rot[0] = info->rot[0];
+                a.rot[1] = info->rot[1];
+                a.rot[2] = info->rot[2];
+                st = info->work[0];
+            }
+        }
+
+        MoveNextStage_Get(&a, gen->kind);
+
+        gobj = CreateLayoutedGObj(gen->kind, mdl, gen->accessary, gen->light & 0x1F, &a, no,
+                                  (gen->flags >> 14) & 7, 0);
+
+        fld = gen->procPri;
+        pri = 0x1800;
+        if (fld != 0) {
+            pri = (long long)fld << 10;
+        }
+
+        if (gen->proc != 0) {
+            /* PC port: the model viewer's host stage starts no
+               script; its objects stay as they were loaded */
+            if (ico_mv_active == 0 || stage == 1) {
+                isysGObjProcAddS(gobj, gen->proc, 0, 0x13, pri);
+            }
+        } else if (lay->start != 0) {
+            isysGObjProcAddS(gobj, lay->start, 0, 0x13, pri);
+        }
+
+        if (gen->kind == 1) {
+            boyGObj = gobj;
+        }
+        if (gen->kind == 2) {
+            girlGObj = gobj;
+        }
+
+        if (info != 0 && lay->infoLoad != 0) {
+            lay->infoLoad(gobj, info);
+        }
+
+        if (st == 4) {
+            backStageGirlTargetEnemyGop = gobj;
+        }
+
+        if (gen->outGObj != 0) {
+            *gen->outGObj = (char *)gobj;
+        }
+
+        brainStatusDefaultSet(&brainGirl, gobj, no);
+
+        eBrainStatusSet(gobj, gen->kind);
+
+        ActSetStartBrainStatus(gobj, st);
+    }
+
+    MakeCollisionDependGObjList();
+}
+
 static void initSceneGObj(int stage, int no)
 {
+    if (ICO_JUN26) {
+        initSceneGObj_jun26(stage, no);
+        return;
+    }
     SObjSimpleSetting a;
     GenGeo *gen = &objLayout[no];
     ObjKindEnt *lay = &objKindData[gen->kind];
@@ -453,8 +579,8 @@ static void initParentLink(int id)
             /* tried to make "%s" a parent-child link, but the parent cannot be found */
             debug_StdPrintfDummy("\"%s\"の親子関係づけをしようとしましたが、親が見つかりません。\n",
                                  lay);
-            debug_assert(__FILE__, LN(511, 511, 511, 496, 496, 511, 511));
-            __assert(__FILE__, LN(511, 511, 511, 496, 496, 511, 511), "0");
+            debug_assert(__FILE__, LN(511, 511, 511, 496, 496, 493, 511));
+            __assert(__FILE__, LN(511, 511, 511, 496, 496, 493, 511), "0");
         }
     }
 }
@@ -491,7 +617,7 @@ static inline void initGamesysSceneGObjs(int stage) /* derived name */
     GamesysObjInfoFlag *p = (GamesysObjInfoFlag *)gameSysObjInfo;
     int i;
 
-    for (i = 0; i <= 181; i++, p++) {
+    for (i = 0; i <= PAL_JUN26(181, 121); i++, p++) {
         if (p->info.no != 0 && (p->flag & 1) == 0 && p->info.stage == stage) {
             initSceneGObj(stage, p->info.no);
         }
@@ -503,8 +629,53 @@ static void initWayData(int stage)
     ExtractWayData(stage);
 }
 
+static void InitSceneObjects_jun26(int stage)
+{
+    GObj *cam;
+
+    ResetGObjProc();
+    boyGObj = girlGObj = 0;
+    boyPad = 0;
+    gameover_flag = 0;
+
+    debug_StdPrintfDummy("[\033[42m scene %d \033[m ]\n", stage);
+
+    brainInit();
+    ACTGameView_Init();
+
+    gamesysObjInfoStageInitFlagCls();
+
+    backStageGirlTargetEnemyGop = 0;
+    fightSoundProcessRequestStart();
+
+    cam = InitCameraGObjs(stage, 0, 1);
+
+    initSceneGObjRange(stage, 2, 6);
+    initSceneGObjRange(stage, stageData[stage].labelTop, stageData[stage].labelEnd);
+    initGamesysSceneGObjs(stage);
+
+    if (girlGObj != 0) {
+        isysGObjMoveAfterGObj(girlGObj, cam);
+    }
+    if (boyGObj != 0) {
+        isysGObjMoveAfterGObj(boyGObj, cam);
+    }
+
+    setEnemyGeneratorDispFlag();
+
+    InitCamera();
+
+    initWayData(stage);
+
+    MakeExitAttributeIndex();
+}
+
 void InitSceneObjects(int stage)
 {
+    if (ICO_JUN26) {
+        InitSceneObjects_jun26(stage);
+        return;
+    }
     GObj *cam;
 
     ResetGObjProc();
@@ -567,7 +738,7 @@ int HotInitSceneObjects(int a0)
                 ObjKindEnt *e = &objKindData[idx];
                 void (*fn)(GObj *);
                 if (e->before != 0) {
-                    iosOmSendMail(node, PAL_AUG6JUN26(0x2F, 46), node);
+                    iosOmSendMail(node, PAL_AUG6_JUN26(0x2F, 46, 45), node);
                 }
                 fn = e->hotInit;
                 if (fn != 0) {

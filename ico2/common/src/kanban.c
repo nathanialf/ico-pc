@@ -132,7 +132,28 @@ static inline char *get_texture_base_name(char *src) /* derived name */
     return p;
 }
 
-static inline int get_texture_no_of_property_ntscaug6jun26(int idx) /* derived name */
+static inline int get_texture_no_of_property_jun26(int idx) /* derived name */
+{
+    int n;
+    const char *src; /* const in the Japanese build: the same code */
+    char *name;
+    int no;
+
+    n = texProperty[idx].texFileNo;
+    src = texFile[n].path;
+    name = get_texture_base_name((char *)src);
+
+    no = tex_GetTextureNo(name);
+
+    if (no < 0) {
+        debug_StdPrintfDummy("no texture loaded.(%s)\n", src);
+        debug_assert(__FILE__, 255);
+        __assert(__FILE__, 255, "0");
+    }
+    return no;
+}
+
+static inline int get_texture_no_of_property_ntscaug6(int idx) /* derived name */
 {
     int n;
     const char *src; /* const in the Japanese build: the same code */
@@ -155,8 +176,11 @@ static inline int get_texture_no_of_property_ntscaug6jun26(int idx) /* derived n
 
 static inline int get_texture_no_of_property(int idx) /* derived name */
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return get_texture_no_of_property_ntscaug6jun26(idx);
+    if (ICO_JUN26) {
+        return get_texture_no_of_property_jun26(idx);
+    }
+    if (ICO_NTSCAUG6) {
+        return get_texture_no_of_property_ntscaug6(idx);
     }
     int n;
     char *src; /* const in the Japanese build: the same code */

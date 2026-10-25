@@ -85,6 +85,7 @@ static int ltHostSelectDisabled;
    never reach an extension index, and keeps the plain arrays. */
 
 #include "layout_ext.h"
+#include "frameDependSequence.h"
 
 /* PC port: the Settings menu's port layouts and the game rows that lead
    to them (port/ui/settings.h), built once the tables are loaded */
@@ -353,7 +354,52 @@ static void default_item_select_ntsc(int no)
     }
 }
 
-static void default_item_select_aug6jun26(int no)
+static void default_item_select_jun26(int no)
+{
+    LtProp *p = &LT_LAYOUT(no);
+    LtProperty *e = &LT_PROP(p->curItem);
+
+    if (p->curItem < 0) {
+        return;
+    }
+    if (lt_item_select_disable != 0) {
+        return;
+    }
+    if (fadeCallback == 0) {
+        if ((pad[0].flags & 0x1000) && e->upItem >= 0) {
+            p->curItem = e->upItem;
+        } else if ((pad[0].flags & 0x4000) && e->downItem >= 0) {
+            p->curItem = e->downItem;
+        } else if ((pad[0].flags & 0x8000) && e->leftItem >= 0) {
+            p->curItem = e->leftItem;
+        } else if ((pad[0].flags & 0x2000) && e->rightItem >= 0) {
+            p->curItem = e->rightItem;
+        }
+    } else {
+        p->curItem = ((int (*)(int))fadeCallback)(p->curItem);
+        fadeCallback = 0;
+    }
+
+    if (pad[0].flags & 0x40) {
+        if (e->right >= 0) {
+            if (fadeState == 2) {
+                ExecuteSEPackage(0, 91);
+                lt_switch_layout_3(e->right);
+                return;
+            }
+        }
+    }
+    if (pad[0].flags & LT_BACK_BUTTONS) {
+        if (e->left >= 0) {
+            if (fadeState == 2) {
+                ExecuteSEPackage(0, 92);
+                lt_switch_layout_3(e->left);
+            }
+        }
+    }
+}
+
+static void default_item_select_aug6(int no)
 {
     LtProp *p = &LT_LAYOUT(no);
     LtProperty *e = &LT_PROP(p->curItem);
@@ -409,12 +455,16 @@ static void default_item_select_aug6jun26(int no)
 
 static void default_item_select(int no)
 {
+    if (ICO_JUN26) {
+        default_item_select_jun26(no);
+        return;
+    }
     if (ICO_NTSC) {
         default_item_select_ntsc(no);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        default_item_select_aug6jun26(no);
+    if (ICO_AUG6) {
+        default_item_select_aug6(no);
         return;
     }
     LtProp *p = &LT_LAYOUT(no);
@@ -1145,8 +1195,8 @@ static inline int lt_texture_no_of_property_ntscaug6jun26(int idx) /* derived na
 
     if (no < 0) {
         debug_StdPrintfDummy("no texture loaded.(%s)\n", src);
-        debug_assert(__FILE__, 1054);
-        __assert(__FILE__, 1054, "0");
+        debug_assert(__FILE__, PAL_JUN26(1054, 981));
+        __assert(__FILE__, PAL_JUN26(1054, 981), "0");
     }
     return no;
 }

@@ -390,8 +390,8 @@ PObj *AllocPObj(ObjHdr *h, char *name, int n)
 
         if (o->magic != *(int *)"OBJH") {
             debug_StdPrintfDummy("allocPObj:Invalid Object.\n");
-            debug_assert(__FILE__, LN(249, 249, 249, 249, 249, 308, 249));
-            __assert(__FILE__, LN(249, 249, 249, 249, 249, 308, 249), "FALSE");
+            debug_assert(__FILE__, LN(249, 249, 249, 249, 249, 249, 249));
+            __assert(__FILE__, LN(249, 249, 249, 249, 249, 249, 249), "FALSE");
         }
 
         o->vtx += ICO_EEW(h);
