@@ -4,22 +4,27 @@
 # sourced by package_win.sh and package_linux.sh and by
 # tools/test/package_textures_test.sh. Functions only.
 
-# the serial folders: one per disc the game plays, the European (SCES-50760),
-# the Japanese (SCPS-11003) and the Korean (SCPS-56001); the game reads the
-# one of the disc it plays
-pkg_serials=(SCES-50760 SCPS-11003 SCPS-56001)
+# the serial folders: one per pack folder the game reads, the European
+# (SCES-50760), the Japanese (SCPS-11003), the Korean (SCPS-56001), the North
+# American (SCUS-97113, which the August 2001 preview shares: its region row's
+# pack_serial), the June 2001 magazine demo (SCUS-97158) and the Asian
+# (SCPS-55001); the game reads the one of the disc it plays
+pkg_serials=(SCES-50760 SCPS-11003 SCPS-56001 SCUS-97113 SCUS-97158 SCPS-55001)
 
 # pkg_disc_name <serial>: the disc's name in the notes
 pkg_disc_name() {
     case "$1" in
         SCPS-11003) echo "the Japanese disc" ;;
         SCPS-56001) echo "the Korean disc" ;;
+        SCUS-97113) echo "the North American disc or the August 2001 preview disc" ;;
+        SCUS-97158) echo "the June 2001 magazine demo" ;;
+        SCPS-55001) echo "the Asian disc" ;;
         *) echo "the European disc" ;;
     esac
 }
 
 # pkg_other_discs <serial>: the other discs' names for the notes, "the
-# Japanese disc (SCPS-11003) or the Korean disc (SCPS-56001)"
+# Japanese disc (SCPS-11003), the Korean disc (SCPS-56001), ... or the Asian disc (SCPS-55001)"
 pkg_other_discs() {
     local s out="" n=0 total=$(( ${#pkg_serials[@]} - 1 ))
     for s in "${pkg_serials[@]}"; do
@@ -52,6 +57,9 @@ pkg_other_dirs() {
 pkg_textures_rel="textures/SCES-50760/replacements"
 pkg_textures_rel_jpn="textures/SCPS-11003/replacements"
 pkg_textures_rel_kor="textures/SCPS-56001/replacements"
+pkg_textures_rel_usa="textures/SCUS-97113/replacements"
+pkg_textures_rel_jun26="textures/SCUS-97158/replacements"
+pkg_textures_rel_cn="textures/SCPS-55001/replacements"
 
 # pkg_note_eol <file> <crlf|lf>: the notes are written with the Linux
 # wording and forward slashes in their paths (no other slash appears in
@@ -99,9 +107,14 @@ TXT
 pkg_models_rel="models/SCES-50760/replacements"
 pkg_models_rel_jpn="models/SCPS-11003/replacements"
 pkg_models_rel_kor="models/SCPS-56001/replacements"
+pkg_models_rel_usa="models/SCUS-97113/replacements"
+pkg_models_rel_jun26="models/SCUS-97158/replacements"
+pkg_models_rel_cn="models/SCPS-55001/replacements"
 pkg_reshade_rel="reshade"
 pkg_note_rels=("$pkg_textures_rel" "$pkg_textures_rel_jpn" "$pkg_textures_rel_kor"
-    "$pkg_models_rel" "$pkg_models_rel_jpn" "$pkg_models_rel_kor" "$pkg_reshade_rel")
+    "$pkg_textures_rel_usa" "$pkg_textures_rel_jun26" "$pkg_textures_rel_cn"
+    "$pkg_models_rel" "$pkg_models_rel_jpn" "$pkg_models_rel_kor"
+    "$pkg_models_rel_usa" "$pkg_models_rel_jun26" "$pkg_models_rel_cn" "$pkg_reshade_rel")
 
 # pkg_stage_models_readme <dir> <crlf|lf> [serial]: writes
 # <dir>/models/<serial>/replacements/README.txt (serial SCES-50760 when none
@@ -164,8 +177,8 @@ TXT
     pkg_note_eol "$d/README.txt" "$eol"
 }
 
-# pkg_stage_folder_notes <dir> <crlf|lf>: the five folders and their notes
-# (textures and models for each disc, and reshade)
+# pkg_stage_folder_notes <dir> <crlf|lf>: the folders and their notes
+# (textures and models for each serial folder, and reshade)
 pkg_stage_folder_notes() {
     local serial
     for serial in "${pkg_serials[@]}"; do
