@@ -2042,3 +2042,4 @@ ico2/sugipon/src/weapon.c	torchOnOfWeaponSE	torchOnOfWeaponSE_jun26
 ico2/sugipon/src/weapon.c	InitWeaponGeo	InitWeaponGeo_jun26
 ico2/sugipon/src/weapon.c	WeaponDL	WeaponDL_jun26
 ico2/sugipon/src/weapon.c	LightTorchOnOfWeapon	LightTorchOnOfWeapon_jun26
+ico2/common/src/layout_action.c	la_game_option	la_game_option_jun26

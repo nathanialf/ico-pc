@@ -1521,7 +1521,7 @@ int la_title_new_game_only(int first)
        takes (it opens the menu) */
     if (newGameDecided != 0 && (pad[0].flags & PAL_JPNKORCN(0x840, 0x820)) &&
         lt_fade_status() == 2 LA_HOST_NOT_SETTINGS_ROW) {
-        soundSeDefPlay(414, 0xFFFFFFFF, 0, 0);
+        soundSeDefPlay(PAL_NTSCAUG6JUN26(414, 402), 0xFFFFFFFF, 0, 0);
         lt_continue_selected = 1;
         opTitleLogoMode = 2;
         if (!ICO_NTSCAUG6JUN26) {
@@ -5398,10 +5398,53 @@ static int la_game_option_ntscaug6(void)
     return -1;
 }
 
+/* PC port: the June 2001 demo's option screen (upstream's JUN26 arm): the sound output and the
+   vibration rows, no back item */
+static int la_game_option_jun26(void)
+{
+    int mode;
+
+    mode = soundOutputModeGet();
+    if (PSH_POSITIVE(0)) {
+        switch (lt_current_property_item()) {
+        case 269:
+            if (mode == 0) {
+                mode = 1;
+            } else {
+                mode = 0;
+            }
+            soundOutputModeSet(mode);
+            ico_opt_output_toggled(mode); /* PC port: the output mode is kept in config.toml */
+            break;
+        case 274:
+            iosPadActRequestEnable ^= 1;
+            break;
+        }
+    }
+    if (mode == 0) {
+        lt_default_mask_property(272, 0);
+        lt_default_mask_property(273, 1);
+    } else {
+        lt_default_mask_property(272, 1);
+        lt_default_mask_property(273, 0);
+    }
+    if (iosPadActRequestEnable != 0) {
+        lt_default_mask_property(277, 0);
+        lt_default_mask_property(278, 1);
+    } else {
+        lt_default_mask_property(277, 1);
+        lt_default_mask_property(278, 0);
+    }
+    return -1;
+}
+
 int la_game_option(void)
 {
     if (ICO_NTSCAUG6) {
         return la_game_option_ntscaug6();
+    }
+    if (ICO_JUN26) {
+        return la_game_option_jun26();
     }
     int mode;
     int cur;
