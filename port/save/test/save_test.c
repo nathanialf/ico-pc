@@ -43,8 +43,9 @@
  * cameraMove or palMode) and no option words after the game block:
  * ntsc, the North American disc, BASCUS-97113ico, previews of stage,
  * play time, sofa and an unread word, a 25,596-byte game block (game.00N
- * 25,600 bytes); aug6, the August 2001 preview, the same directory (the
- * discs share it, as on the PS2) and file size, previews of stage, cleared,
+ * 25,600 bytes); aug6, the August 2001 preview, the same directory name
+ * (PC port: in a card folder of its own, memcard-preview, since its records
+ * are not the North American disc's) and file size, previews of stage, cleared,
  * play time and sofa; jun26, the June 2001 demo, BISCUS-97113ico, the aug6
  * record, a 20,480-byte game block (game.00N 20,484 bytes) and icon files
  * that carry a 4-byte sum and are written only when absent. Their load leaves
@@ -84,6 +85,7 @@
 #include "cdvd.h"
 #include "mc_host.h"
 #include "mc_import.h"
+#include "host_config.h" /* ico_host_card_dir_beside */
 /* the region table (port/core/region.h, by its path: the game's include
    directories hold the game's own region.h) */
 #include "../../core/region.h"
@@ -820,6 +822,32 @@ static void driver(void *arg)
     CHECK(strcmp(ico_region_info_cn.mc_save_dir, iOSMcSaveSeg_cn[0]) == 0);
     CHECK(strcmp(iOSMcSaveSeg_ntscaug6[0], "BASCUS-97113ico") == 0);
     CHECK(strcmp(iOSMcSaveSeg_jun26[0], "BISCUS-97113ico") == 0);
+    /* PC port: the August 2001 preview names the North American disc's
+       directory with records of its own layout, so its card is a folder of
+       its own beside the configured one (memcard-preview); every other disc
+       shares the card folder */
+    {
+        char d[64];
+        int r;
+
+        for (r = 0; r < ico_region_count(); r++) {
+            const char *sfx = ico_region_at(r)->mc_card_suffix;
+
+            CHECK(r == ICO_REGION_AUG6 ? sfx != NULL && strcmp(sfx, "-preview") == 0 : sfx == NULL);
+        }
+        snprintf(d, sizeof(d), "memcard");
+        CHECK(ico_host_card_dir_beside(d, sizeof(d), ico_region_info_aug6.mc_card_suffix) == 0 &&
+              strcmp(d, "memcard-preview") == 0);
+        snprintf(d, sizeof(d), "cards//");
+        CHECK(ico_host_card_dir_beside(d, sizeof(d), "-preview") == 0 &&
+              strcmp(d, "cards-preview") == 0);
+        snprintf(d, sizeof(d), "memcard");
+        CHECK(ico_host_card_dir_beside(d, 12, "-preview") == -1 && strcmp(d, "memcard") == 0);
+        CHECK(ico_host_card_dir_beside(d, sizeof(d), NULL) == 0 && strcmp(d, "memcard") == 0);
+        if (ICO_AUG6) {
+            printf("part B: the preview's card folder is <card>-preview (memcard-preview)\n");
+        }
+    }
     printf("part B: the %s disc, %s/, a product file of %d + 4 bytes\n", ico_region_cur()->slug,
            PRODUCT, PSIZE);
     rm_card(CARD_B);
@@ -1692,6 +1720,9 @@ static void test_import(const char *cli)
             home = r;
         }
     }
+    /* a BASCUS-97113ico folder imports as the North American disc's, on the
+       preview too (a retail card holds only that disc's saves) */
+    CHECK(!ICO_AUG6 || home == ICO_REGION_NTSC);
     otherRegion = home == 0 ? 1 : 0;
     lo = home < otherRegion ? home : otherRegion;
     hi = home < otherRegion ? otherRegion : home;
