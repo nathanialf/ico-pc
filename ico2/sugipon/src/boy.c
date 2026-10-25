@@ -409,8 +409,23 @@ static __inline__ void setClothDetail(void *cloth, float x, float wt) /* derived
     GetCloth4DWithDetail(cloth, x, 0.98f, 1.0f, wt);
 }
 
+static void execClothes_ntscaug6(GObj *gobj)
+{
+    BoyWork *w = GOBJ_SUB(gobj)->work;
+
+    GetCloth4D((Cloth4D *)w->mantle, 3.0f, 0.98f);
+    GetCloth4D((Cloth4D *)w->tape, 3.0f, 0.98f);
+    GetCloth4D((Cloth4D *)w->tapeB, 3.0f, 0.98f);
+    GetCloth4D((Cloth4D *)w->tapeBoro1, 3.0f, 0.98f);
+    GetCloth4D((Cloth4D *)w->tapeBoro2, 3.0f, 0.98f);
+}
+
 static void execClothes(GObj *gobj)
 {
+    if (ICO_NTSCAUG6) {
+        execClothes_ntscaug6(gobj);
+        return;
+    }
     BoyWork *w = GOBJ_SUB(gobj)->work;
 
     if (w->wet != 0) {
@@ -434,6 +449,9 @@ static void execClothes(GObj *gobj)
 }
 
 /* the one LightLineExt InitLightLineGeo fills */
+extern LightLineExt _llExtGeo;
+
+/* the one LightLineExt InitLightLineGeo fills */
 static LightLineExt lightLineExt; /* derived name */
 
 LightLineExt *InitLightLineGeo(GObj *gobj, float *pos)
@@ -444,14 +462,24 @@ LightLineExt *InitLightLineGeo(GObj *gobj, float *pos)
     int n;
     float f;
 
-    llExtGeo = &lightLineExt;
-    llExtGeo->phase = iosMallocDebug(ios_partition_sugipon, 0x190, "src/boy.c", 161);
-    llExtGeo->speed = iosMallocDebug(ios_partition_sugipon, 0x190, "src/boy.c", 162);
-    llExtGeo->line = iosMallocDebug(ios_partition_sugipon, 100 * sizeof(LLVec *), "src/boy.c", 163);
+    if (ICO_NTSCAUG6) {
+        llExtGeo = &_llExtGeo;
+        llExtGeo->phase = iosMallocDebug(ios_partition_sugipon, 0x190, "src/boy.c", 135);
+        llExtGeo->speed = iosMallocDebug(ios_partition_sugipon, 0x190, "src/boy.c", 136);
+        llExtGeo->line =
+            iosMallocDebug(ios_partition_sugipon, 100 * sizeof(LLVec *), "src/boy.c", 137);
+    } else {
+        llExtGeo = &lightLineExt;
+        llExtGeo->phase = iosMallocDebug(ios_partition_sugipon, 0x190, "src/boy.c", 161);
+        llExtGeo->speed = iosMallocDebug(ios_partition_sugipon, 0x190, "src/boy.c", 162);
+        llExtGeo->line =
+            iosMallocDebug(ios_partition_sugipon, 100 * sizeof(LLVec *), "src/boy.c", 163);
+    }
     for (i = 0; i < 100; i++) {
         llExtGeo->phase[i] = 0.0f;
         llExtGeo->speed[i] = random_unit() * 0.1f + 0.01f;
-        llExtGeo->line[i] = iosMallocDebug(ios_partition_sugipon, 0x140, "src/boy.c", 168);
+        llExtGeo->line[i] =
+            iosMallocDebug(ios_partition_sugipon, 0x140, "src/boy.c", PAL_NTSCAUG6(168, 142));
         CopyVector(llExtGeo->line[i], &v);
         llExtGeo->line[i][0].x += (float)((i - 0x32) * 5);
         for (j = 1; j < 20; j++) {
@@ -580,8 +608,84 @@ static ClothHangCfg tapeHang[3] = {
     {-1, 0.0f, 0.0f, 0.0f, 0, {0}, 0.0f, 0.0f, {0}, 0.0f, 0.0f, {0}},
 }; /* derived name */
 
+static BoyWork *InitBoyGeo_ntsc(GObj *gobj, void *csv)
+{
+    BoyWork *w;
+    BoyWork *p;
+
+    w = iosMallocDebug(ios_partition_sugipon, sizeof(BoyWork), "src/boy.c", 254);
+    /* the work word, stored and read back as char * */
+    ICO_RAW(char *, *(char **)(((char *)gobj) + 0x15C), 0x830, GOBJ_SUB(gobj)->work) = (char *)w;
+    p = (BoyWork *)ICO_RAW(char *, *(char **)(((char *)gobj) + 0x15C), 0x830, GOBJ_SUB(gobj)->work);
+    p->mantle = (char *)InitCloth4D(gobj, &mantleMesh, mantleHang);
+    p->tape = (char *)InitCloth4D(gobj, &tapeMesh, tapeHang);
+    p->tapeB = (char *)InitCloth4D(gobj, &tapeBMesh, 0);
+    p->tapeBoro1 = (char *)InitCloth4D(gobj, &tapeBoro1Mesh, 0);
+    p->tapeBoro2 = (char *)InitCloth4D(gobj, &tapeBoro2Mesh, 0);
+    ICO_RAW(int, *(char **)(((char *)gobj) + 0x15C), 0x554, GOBJ_SUB(gobj)->ctrl.sideWallCheck) = 1;
+    w->crown0 = (char *)CSVSYSTEM_InitDObj(1, csv);
+    w->crown1 = (char *)CSVSYSTEM_InitDObj(11, csv);
+    w->crown2 = (char *)CSVSYSTEM_InitDObj(12, csv);
+    (ICO_RAW(BoyWork *, *(char **)(((char *)gobj) + 0x15C), 0x830, (BoyWork *)GOBJ_SUB(gobj)->work))
+        ->crown = 0;
+    sceVu0UnitMatrix(ICO_RAWP(char *, w->crown0, 0x20, (char *)((Sub15C *)w->crown0)->matrix));
+    InitMotionOrient(gobj, 0, 1216, 0, 0xC, 0);
+    InitLightLineGeo(gobj, csv);
+    SetLodLevel(gobj, 2);
+    w->stone = 0;
+    w->stoneAnim = 0;
+    w->refl.nrow = 20;
+    w->refl.ncol = 20;
+    w->refl.sizeX = 300.0f;
+    w->refl.sizeZ = 300.0f;
+    w->refl.color = 0x80808080;
+    InitLimitedPoolReflactionMesh(&w->refl);
+    return w;
+}
+
+static BoyWork *InitBoyGeo_aug6(GObj *gobj, void *csv)
+{
+    BoyWork *w;
+    BoyWork *p;
+
+    w = iosMallocDebug(ios_partition_sugipon, sizeof(BoyWork), "src/boy.c", 254);
+    /* the work word, stored and read back as char * */
+    ICO_RAW(char *, *(char **)(((char *)gobj) + 0x15C), 0x830, GOBJ_SUB(gobj)->work) = (char *)w;
+    p = (BoyWork *)ICO_RAW(char *, *(char **)(((char *)gobj) + 0x15C), 0x830, GOBJ_SUB(gobj)->work);
+    p->mantle = (char *)InitCloth4D(gobj, &mantleMesh, mantleHang);
+    p->tape = (char *)InitCloth4D(gobj, &tapeMesh, tapeHang);
+    p->tapeB = (char *)InitCloth4D(gobj, &tapeBMesh, 0);
+    p->tapeBoro1 = (char *)InitCloth4D(gobj, &tapeBoro1Mesh, 0);
+    p->tapeBoro2 = (char *)InitCloth4D(gobj, &tapeBoro2Mesh, 0);
+    ICO_RAW(int, *(char **)(((char *)gobj) + 0x15C), 0x554, GOBJ_SUB(gobj)->ctrl.sideWallCheck) = 1;
+    w->crown0 = (char *)CSVSYSTEM_InitDObj(1, csv);
+    w->crown1 = (char *)CSVSYSTEM_InitDObj(11, csv);
+    w->crown2 = (char *)CSVSYSTEM_InitDObj(12, csv);
+    (ICO_RAW(BoyWork *, *(char **)(((char *)gobj) + 0x15C), 0x830, (BoyWork *)GOBJ_SUB(gobj)->work))
+        ->crown = 0;
+    sceVu0UnitMatrix(ICO_RAWP(char *, w->crown0, 0x20, (char *)((Sub15C *)w->crown0)->matrix));
+    InitMotionOrient(gobj, 0, 1195, 0, 12, 0);
+    InitLightLineGeo(gobj, csv);
+    SetLodLevel(gobj, 2);
+    w->stone = 0;
+    w->stoneAnim = 0;
+    w->refl.nrow = 20;
+    w->refl.ncol = 20;
+    w->refl.sizeX = 300.0f;
+    w->refl.sizeZ = 300.0f;
+    w->refl.color = 0x80808080;
+    InitLimitedPoolReflactionMesh(&w->refl);
+    return w;
+}
+
 BoyWork *InitBoyGeo(GObj *gobj, void *csv)
 {
+    if (ICO_NTSC) {
+        return InitBoyGeo_ntsc(gobj, csv);
+    }
+    if (ICO_AUG6) {
+        return InitBoyGeo_aug6(gobj, csv);
+    }
     BoyWork *w;
     BoyWork *p;
     int i;
@@ -660,6 +764,8 @@ static int girlSyncMarkerColor[4] = {64, 96, 128, 128}; /* derived name */
 
 static int boySyncMarkerColor[4] = {255, 96, 64, 128}; /* derived name */
 
+LightLineExt _llExtGeo = {0, 0, 0};
+
 static LightLineExt lightLineExt = {0, 0, 0}; /* derived name */
 
 static void synchronizeMotionOutputOriginForGirl(GObj *gobj)
@@ -673,7 +779,7 @@ static void synchronizeMotionOutputOriginForGirl(GObj *gobj)
 
     if (girlGObj != 0) {
         p = motSyncPairs;
-        for (i = 0; i < 5; i++) {
+        for (i = 0; i < PAL_NTSC(5, 7); i++) {
             if (GOBJ_SUB(girlGObj)->ctrl.motion == p->girl) {
                 okA = 1;
             }
@@ -734,8 +840,49 @@ static void actionOfWater(GObj *gobj)
     }
 }
 
+static void BoyGeo_ntsc(GObj *gobj)
+{
+    HandManager(gobj);
+    ExecMotionOrient(gobj);
+    synchronizeMotionOutputOriginForGirl(gobj);
+    execClothes(gobj);
+    ExecuteSlipProc(gobj);
+    SetActressLight(gobj, 35, 44, 408);
+    if (CylinderCollision(gobj, 4, 50.0f, 50.0f, 0.7f) != 0) {
+        iosOmSendMail(gobj, 6, gobj);
+    }
+    CylinderCollision(gobj, 2, ACTGame_FLAG_TETSUNAGI() != 0 ? 15.0f : 30.0f, 50.0f, 0.7f);
+}
+
+static void BoyGeo_aug6(GObj *gobj)
+{
+    float pos[4];
+
+    HandManager(gobj);
+    ExecMotionOrient(gobj);
+    execClothes(gobj);
+    ExecuteSlipProc(gobj);
+    SetActressLight(gobj, 35, 44, 407);
+    if (CylinderCollision(gobj, 4, 50.0f, 50.0f, 0.7f) != 0) {
+        iosOmSendMail(gobj, 6, gobj);
+    }
+    CylinderCollision(gobj, 2, ACTGame_FLAG_TETSUNAGI() != 0 ? 15.0f : 30.0f, 50.0f, 0.7f);
+    GetRootPosition(pos, gobj);
+    if (debug_font_flag & 1) {
+        debug_Printf(10, 30, 0x80C0FF00, "X:%.1f Y:%.1f Z:%.1f", -pos[0], -pos[1], -pos[2]);
+    }
+}
+
 void BoyGeo(GObj *gobj)
 {
+    if (ICO_NTSC) {
+        BoyGeo_ntsc(gobj);
+        return;
+    }
+    if (ICO_AUG6) {
+        BoyGeo_aug6(gobj);
+        return;
+    }
     HandManager(gobj);
     ExecMotionOrient(gobj);
     synchronizeMotionOutputOriginForGirl(gobj);
@@ -818,14 +965,17 @@ void BoyDL(GObj *gobj)
         GetRootPosition(pos, gobj);
         GetRootQuaternion(quat, gobj);
         RotQuaternionY(quat, -32768);
-        r = (int)stage_PlayBgAnimation(PAL_JPNKORCN(488, 484), (float)w->stoneAnim, pos, quat);
+        r = (int)stage_PlayBgAnimation(PAL_JPNKORCN_NTSC_AUG6(488, 484, 424, 423),
+                                       (float)w->stoneAnim, pos, quat);
         if (systemStatus[5] == 0 && r != -1) {
             w->stoneAnim = r;
         }
     } else {
         p2o_SetDefaultEnviroment();
         p2o_DispVU1(gobj);
-        dispSubParts(gobj);
+        if (!ICO_NTSCAUG6) {
+            dispSubParts(gobj);
+        }
         dispCrown(gobj);
         dispClothes(gobj);
     }
@@ -836,5 +986,7 @@ void BoyDL(GObj *gobj)
         SetLimitedPoolReflactionMesh(m, sub->ctrl.pool, gobj);
         DispLimitedPoolReflactionMesh(m);
     }
-    DispWaterDot(w->waterDot);
+    if (!ICO_NTSCAUG6) {
+        DispWaterDot(w->waterDot);
+    }
 }

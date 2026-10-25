@@ -57,7 +57,7 @@ int UpdatePointBlur(PointBlur *p, void *mtx, void *tint, float f)
     float scale;
     GifColor *t;
 
-    if (currentScreenWidth != 0 || GlobalTimer != 0) {
+    if (PAL_AUG6(currentScreenWidth != 0 || GlobalTimer != 0, NonLinearCameraMove != 0)) {
         p->dirty = 1;
     }
     if (p->dirty == 0) {
@@ -155,24 +155,28 @@ EnemyEye *InitEnemyEye(int num, int mode, int pri)
 {
     EnemyEye *p;
 
-    p = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(EnemyEye, 96), "src/enemyParts.c", 137);
+    p = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(EnemyEye, 96), "src/enemyParts.c",
+                       PAL_AUG6(137, 136));
     *p = enemyEyeTemplate;
 
-    p->dobj[0] = CSVSYSTEM_InitDObj(PAL_JPNKORCN(1322, 1318), &InitialSObjSimpleSetting);
+    p->dobj[0] = CSVSYSTEM_InitDObj(PAL_JPNKORCN_NTSC_AUG6(1322, 1318, 1286, 1281),
+                                    &InitialSObjSimpleSetting);
     p->dobj[0]->nodes->flags.ll |= 1;
     p->dobj[0]->nodes->fade = 1e-5f;
     p->dobj[0]->nodes->flags.ll |= 4;
     p->dobj[0]->nodes->scale[0] = p->dobj[0]->nodes->scale[1] = p->dobj[0]->nodes->scale[2] = 3.0f;
     p->dobj[0]->dispType = 2;
 
-    p->dobj[1] = CSVSYSTEM_InitDObj(PAL_JPNKORCN(1323, 1319), &InitialSObjSimpleSetting);
+    p->dobj[1] = CSVSYSTEM_InitDObj(PAL_JPNKORCN_NTSC_AUG6(1323, 1319, 1287, 1282),
+                                    &InitialSObjSimpleSetting);
     p->dobj[1]->nodes->flags.ll |= 1;
     p->dobj[1]->nodes->fade = 1e-5f;
     p->dobj[1]->nodes->flags.ll &= ~4;
     p->dobj[1]->nodes->scale[0] = p->dobj[0]->nodes->scale[1] = p->dobj[0]->nodes->scale[2] = 3.0f;
     p->dobj[1]->dispType = 2;
 
-    p->dobj[2] = CSVSYSTEM_InitDObj(PAL_JPNKORCN(1324, 1320), &InitialSObjSimpleSetting);
+    p->dobj[2] = CSVSYSTEM_InitDObj(PAL_JPNKORCN_NTSC_AUG6(1324, 1320, 1288, 1283),
+                                    &InitialSObjSimpleSetting);
     p->dobj[2]->nodes->flags.ll |= 1;
     p->dobj[2]->nodes->fade = 1e-5f;
     p->dobj[2]->nodes->flags.ll &= ~4;
@@ -186,7 +190,7 @@ EnemyEye *InitEnemyEye(int num, int mode, int pri)
     return p;
 }
 
-EnemyFootPrintHead *InitEnemyFootPrint(int num)
+static EnemyFootPrintHead *InitEnemyFootPrint_ntsc(int num)
 {
     EnemyFootPrintHead *p;
     Sub15C *d;
@@ -198,7 +202,7 @@ EnemyFootPrintHead *InitEnemyFootPrint(int num)
     *p = footPrintHeadTemplate;
     p->num = num;
     p->buf = iosMallocDebug(ios_partition_sugipon, num << 5, "src/enemyParts.c", 229);
-    d = CSVSYSTEM_InitDObj(PAL_JPNKORCN(1295, 1291), &InitialSObjSimpleSetting);
+    d = CSVSYSTEM_InitDObj(1259, &InitialSObjSimpleSetting);
     p->dobj = d;
     if (d->nodeMtx != 0) {
         iosFree((void *)ICO_PHYS(d->nodeMtx));
@@ -217,6 +221,68 @@ EnemyFootPrintHead *InitEnemyFootPrint(int num)
         iosFree((void *)ICO_PHYS(ICO_ADDR(p->dobj->nodes)));
     }
     p->dobj->nodes = iosMallocDebug(ios_partition_seki, num * 80, "src/enemyParts.c", 232);
+    for (i = 0; i < num; i++) {
+        p->dobj->nodes[i].flags.ll &= ~1;
+        p->dobj->nodes[i].flags.ll &= ~2;
+        p->dobj->nodes[i].pos[0] = 0.0f;
+        p->dobj->nodes[i].pos[1] = 0.0f;
+        p->dobj->nodes[i].pos[2] = 0.0f;
+        p->dobj->nodes[i].pos[3] = 1.0f;
+        p->dobj->nodes[i].flags.ll &= ~4;
+        p->dobj->nodes[i].fade = 0;
+        p->dobj->nodes[i].alpha = 1.0f;
+        *(short *)((char *)&p->dobj->nodes[i].flags + 2) = 0;
+        p->dobj->nodes[i].scale[0] = 1.0f;
+        p->dobj->nodes[i].scale[1] = 1.0f;
+        p->dobj->nodes[i].scale[2] = 1.0f;
+    }
+    p->dobj->dispType = 2;
+    for (j = 0; j < num; j++) {
+        p->buf[j] = footPrintVtxTemplate;
+        p->dobj->nodes[j].flags.ll |= 1;
+        p->dobj->nodes[j].fade = 1.0f;
+        p->dobj->nodes[j].flags.ll &= ~4;
+        p->dobj->nodes[j].scale[0] = p->dobj->nodes[j].scale[1] = p->dobj->nodes[j].scale[2] = 0.0f;
+    }
+    return p;
+}
+
+EnemyFootPrintHead *InitEnemyFootPrint(int num)
+{
+    if (ICO_NTSC) {
+        return InitEnemyFootPrint_ntsc(num);
+    }
+    EnemyFootPrintHead *p;
+    Sub15C *d;
+    int i;
+    int j;
+
+    p = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(EnemyFootPrintHead, 0x10),
+                       "src/enemyParts.c", PAL_AUG6(226, 224));
+    *p = footPrintHeadTemplate;
+    p->num = num;
+    p->buf =
+        iosMallocDebug(ios_partition_sugipon, num << 5, "src/enemyParts.c", PAL_AUG6(229, 227));
+    d = CSVSYSTEM_InitDObj(PAL_JPNKORCN_AUG6(1295, 1291, 1254), &InitialSObjSimpleSetting);
+    p->dobj = d;
+    if (d->nodeMtx != 0) {
+        iosFree((void *)ICO_PHYS(d->nodeMtx));
+    }
+    if (p->dobj->nodeQuat != 0) {
+        iosFree((void *)ICO_PHYS(p->dobj->nodeQuat));
+    }
+    p->dobj->nodeMtx = 0;
+    p->dobj->nodeQuat = 0;
+    p->dobj->nodeMtx = (ICO_WORD)iosMallocDebug(ios_partition_seki, num << 6, "src/enemyParts.c",
+                                                PAL_AUG6(232, 230));
+    p->dobj->nodeQuat = (ICO_WORD)iosMallocDebug(ios_partition_seki, num << 4, "src/enemyParts.c",
+                                                 PAL_AUG6(232, 230));
+    p->dobj->nodeNum = num;
+    if ((ICO_WORD)p->dobj->nodes != 0) {
+        iosFree((void *)ICO_PHYS(ICO_ADDR(p->dobj->nodes)));
+    }
+    p->dobj->nodes =
+        iosMallocDebug(ios_partition_seki, num * 80, "src/enemyParts.c", PAL_AUG6(232, 230));
     for (i = 0; i < num; i++) {
         p->dobj->nodes[i].flags.ll &= ~1;
         p->dobj->nodes[i].flags.ll &= ~2;
@@ -332,7 +398,11 @@ int UpdateEnemyEye(EnemyEye *self, void *m, float rate)
 int DispEnemyEye(EnemyEye *self)
 {
     _CopyMatrix((void *)self->dobj[0]->nodeMtx, self->mtx);
-    reg_DispMultiPri(self->dobj[0], 10);
+    if (ICO_AUG6) {
+        p2o_DispVU1DObj(self->dobj[0]);
+    } else {
+        reg_DispMultiPri(self->dobj[0], 10);
+    }
     if (self->blurOn != 0) {
         PointBlur *fobj = self->blur;
         gif_StartPacketPri(fobj->pri);

@@ -51,7 +51,7 @@ typedef union { /* field names derived */
    off, on the host the field it holds (Sub15C's prefix is wider on a 64-bit
    host). */
 #define FLAG_NODE_WORD(o, off, field) ICO_RAW(char *, o, off, *(char **)&(o)->field)
-#define FLAG_ALLOC_NODES(o, num) /* derived name */                                                \
+#define FLAG_ALLOC_NODES(o, num, line) /* derived name */                                          \
     {                                                                                              \
         int n;                                                                                     \
         if ((o)->nodeMtx != 0) {                                                                   \
@@ -60,17 +60,17 @@ typedef union { /* field names derived */
         if ((o)->nodeQuat != 0) {                                                                  \
             iosFree((void *)ICO_PHYS((o)->nodeQuat));                                              \
         }                                                                                          \
-        FLAG_NODE_WORD(o, 0xC, nodeMtx) = 0;                                                       \
-        FLAG_NODE_WORD(o, 0x10, nodeQuat) = 0;                                                     \
-        FLAG_NODE_WORD(o, 0xC, nodeMtx) =                                                          \
-            iosMallocDebug(ios_partition_seki, (num) * 64, __FILE__, __LINE__);                    \
-        FLAG_NODE_WORD(o, 0x10, nodeQuat) =                                                        \
-            iosMallocDebug(ios_partition_seki, (num) * 16, __FILE__, __LINE__);                    \
+        FLAG_NODE_WORD(o, 0xC, nodeMtx) = 0;                                                         \
+        FLAG_NODE_WORD(o, 0x10, nodeQuat) = 0;                                                        \
+        FLAG_NODE_WORD(o, 0xC, nodeMtx) =                                                            \
+            iosMallocDebug(ios_partition_seki, (num) * 64, __FILE__, line);                        \
+        FLAG_NODE_WORD(o, 0x10, nodeQuat) =                                                           \
+            iosMallocDebug(ios_partition_seki, (num) * 16, __FILE__, line);                        \
         (o)->nodeNum = (num);                                                                      \
         if ((o)->nodes != 0) {                                                                     \
             iosFree((void *)ICO_PHYS(ICO_ADDR((o)->nodes)));                                       \
         }                                                                                          \
-        (o)->nodes = iosMallocDebug(ios_partition_seki, (num) * 80, __FILE__, __LINE__);           \
+        (o)->nodes = iosMallocDebug(ios_partition_seki, (num) * 80, __FILE__, line);               \
         for (n = 0; n < (num); n++) {                                                              \
             float zero = 0.0f;                                                                     \
             (o)->nodes[n].flags.ll &= ~1;                                                          \

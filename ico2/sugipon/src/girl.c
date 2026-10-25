@@ -53,8 +53,37 @@ typedef struct GirlWork { /* field names derived */
 } GirlWork;               /* derived name */
 
 /* file-static: boy.c has a global function of the same name */
+static void execClothes_ntscaug6(GObj *gobj)
+{
+    GirlWork *w;
+
+    w = GOBJ_SUB(gobj)->work;
+    if (w->cloth12Disp != 0) {
+        if ((void *)w->cloth1 != 0) {
+            GetCloth4D((void *)w->cloth1, 4.0f, 0.98f);
+        }
+        if ((void *)w->cloth2 != 0) {
+            GetCloth4D((void *)w->cloth2, 4.0f, 0.98f);
+        }
+    }
+    if (w->cloth0Disp != 0) {
+        if ((void *)w->cloth0 != 0) {
+            GetCloth4D((void *)w->cloth0, 3.0f, 0.98f);
+        }
+    }
+    if (w->cloth3Disp != 0) {
+        if ((void *)w->cloth3 != 0) {
+            GetCloth4D((void *)w->cloth3, 4.0f, 0.98f);
+        }
+    }
+}
+
 static void execClothes(GObj *gobj)
 {
+    if (ICO_NTSCAUG6) {
+        execClothes_ntscaug6(gobj);
+        return;
+    }
     float q[4];
     GirlWork *w;
     int n;
@@ -132,8 +161,86 @@ static void dispCrown(GObj *gobj, Sub15C *acc)
 }
 
 /* file-static: boy.c has a global function of the same name */
+static void dispClothes_ntsc(GObj *gobj)
+{
+    GirlWork *w;
+    char *x;
+    char *y;
+
+    w = GOBJ_SUB(gobj)->work;
+    x = (char *)GOBJ_SUB(gobj)->lightMtx;
+    y = x + 0x40;
+    if (w->cloth12Disp != 0) {
+        if (w->cloth1 != 0) {
+            DispCloth4D((void *)w->cloth1, y, x);
+        }
+        if (w->cloth2 != 0) {
+            DispCloth4D((void *)w->cloth2, y, x);
+        }
+    }
+    if (w->cloth0Disp != 0) {
+        if (GOBJ_SUB(gobj)->ctrl.motion < 627) {
+            if (GOBJ_SUB(gobj)->ctrl.motion >= 624) {
+                goto skip;
+            }
+        }
+        if (w->cloth0 != 0) {
+            DispCloth4D((void *)w->cloth0, y, x);
+        }
+    skip:;
+    }
+    if (w->cloth3Disp != 0) {
+        if (w->cloth3 != 0) {
+            DispCloth4D((void *)w->cloth3, y, x);
+        }
+    }
+}
+
+static void dispClothes_aug6(GObj *gobj)
+{
+    GirlWork *w;
+    char *x;
+    char *y;
+
+    w = GOBJ_SUB(gobj)->work;
+    x = (char *)GOBJ_SUB(gobj)->lightMtx;
+    y = x + 0x40;
+    if (w->cloth12Disp != 0) {
+        if (w->cloth1 != 0) {
+            DispCloth4D((void *)w->cloth1, y, x);
+        }
+        if (w->cloth2 != 0) {
+            DispCloth4D((void *)w->cloth2, y, x);
+        }
+    }
+    if (w->cloth0Disp != 0) {
+        if (GOBJ_SUB(gobj)->ctrl.motion < 629) {
+            if (GOBJ_SUB(gobj)->ctrl.motion >= 626) {
+                goto skip;
+            }
+        }
+        if (w->cloth0 != 0) {
+            DispCloth4D((void *)w->cloth0, y, x);
+        }
+    skip:;
+    }
+    if (w->cloth3Disp != 0) {
+        if (w->cloth3 != 0) {
+            DispCloth4D((void *)w->cloth3, y, x);
+        }
+    }
+}
+
 static void dispClothes(GObj *gobj)
 {
+    if (ICO_NTSC) {
+        dispClothes_ntsc(gobj);
+        return;
+    }
+    if (ICO_AUG6) {
+        dispClothes_aug6(gobj);
+        return;
+    }
     GirlWork *w;
     char *x;
     char *y;
@@ -554,11 +661,19 @@ static Cloth4DCol clothMeshF8Cols[21] = {
      {1.955f, -12.029f, -0.068f, 0.0f}},
 }; /* derived name */
 
-static Cloth4DCol clothMeshF10Cols[15];
+static Cloth4DCol clothMeshF10Cols_pal[15];
 
-static Cloth4DCfg clothMeshF10 = {
-    15, 5, 0, 0, 0x59, 0x59, 0x59, 0x80, "g_hair9", clothMeshF10Cols, 10.768f, 0,
+static Cloth4DCol clothMeshF10Cols_ntscaug6[15];
+
+static Cloth4DCfg clothMeshF10_pal = {
+    15, 5, 0, 0, 0x59, 0x59, 0x59, 0x80, "g_hair9", clothMeshF10Cols_pal, 10.768f, 0,
 }; /* derived name */
+
+static Cloth4DCfg clothMeshF10_ntscaug6 = {
+    15, 5, 0, 0, 0x59, 0x59, 0x59, 0x80, "g_hair9", clothMeshF10Cols_ntscaug6, 10.676f, 0,
+}; /* derived name */
+
+#define clothMeshF10 (*PAL_NTSCAUG6(&clothMeshF10_pal, &clothMeshF10_ntscaug6))
 
 static float clothMeshF10Uv[15][5][2] = {
     {{0.712f, 0.628f}, {0.717f, 0.473f}, {0.723f, 0.318f}, {0.728f, 0.163f}, {0.734f, 0.008f}},
@@ -578,7 +693,7 @@ static float clothMeshF10Uv[15][5][2] = {
     {{0.86f, 0.691f}, {0.835f, 0.519f}, {0.809f, 0.347f}, {0.784f, 0.176f}, {0.759f, 0.004f}},
 }; /* derived name */
 
-static Cloth4DCol clothMeshF10Cols[15] = {
+static Cloth4DCol clothMeshF10Cols_pal[15] = {
     {2.726f,
      {0},
      {-7.163f, 152.858f, -2.987f, 1.0f},
@@ -746,20 +861,214 @@ static Cloth4DCol clothMeshF10Cols[15] = {
      {0.024f, -2.726f, -0.029f, 0.0f}},
 }; /* derived name */
 
-static Cloth4DCol clothMeshF14Cols[4];
-
-static Cloth4DCfg clothMeshF14 = {
-    4, 3, 0, 0, 0x59, 0x59, 0x59, 0x80, "g_hair9", clothMeshF14Cols, 2.597f, 0,
+static Cloth4DCol clothMeshF10Cols_ntscaug6[15] = {
+    {2.887f,
+     {0},
+     {-7.092f, 153.447f, -4.165f, 1.0f},
+     {-0.852f, -0.2f, 0.484f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF10Uv[13],
+     {0},
+     {-0.086f, -2.873f, 0.265f, 0.0f}},
+    {2.265f,
+     {0},
+     {-8.424f, 155.071f, -5.847f, 1.0f},
+     {-0.926f, -0.04f, 0.375f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF10Uv[12],
+     {0},
+     {-0.245f, -2.251f, -0.047f, 0.0f}},
+    {2.05f,
+     {0},
+     {-9.216f, 156.34f, -7.842f, 1.0f},
+     {-0.974f, 0.205f, 0.098f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF10Uv[8],
+     {0},
+     {-0.344f, -2.019f, -0.086f, 0.0f}},
+    {2.495f,
+     {0},
+     {-8.695f, 157.607f, -10.626f, 1.0f},
+     {-0.944f, 0.252f, -0.211f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF10Uv[2],
+     {0},
+     {-0.208f, -2.478f, -0.199f, 0.0f}},
+    {3.129f,
+     {0},
+     {-7.502f, 158.579f, -13.789f, 1.0f},
+     {-0.829f, 0.301f, -0.472f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF10Uv[10],
+     {0},
+     {-0.166f, -3.084f, -0.502f, 0.0f}},
+    {4.252f,
+     {0},
+     {-4.943f, 159.364f, -16.245f, 1.0f},
+     {-0.588f, 0.307f, -0.748f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF10Uv[3],
+     {0},
+     {-0.408f, -4.143f, -0.866f, 0.0f}},
+    {5.409f,
+     {0},
+     {-2.302f, 159.619f, -17.458f, 1.0f},
+     {-0.364f, 0.282f, -0.888f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF10Uv[11],
+     {0},
+     {-0.397f, -5.239f, -1.284f, 0.0f}},
+    {5.957f,
+     {0},
+     {0.0f, 159.474f, -18.179f, 1.0f},
+     {0.0f, 0.277f, -0.961f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF10Uv[1],
+     {0},
+     {0.0f, -5.738f, -1.601f, 0.0f}},
+    {5.409f,
+     {0},
+     {2.302f, 159.619f, -17.458f, 1.0f},
+     {0.364f, 0.282f, -0.888f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF10Uv[0],
+     {0},
+     {0.397f, -5.239f, -1.284f, 0.0f}},
+    {4.252f,
+     {0},
+     {4.943f, 159.364f, -16.245f, 1.0f},
+     {0.588f, 0.307f, -0.748f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF10Uv[5],
+     {0},
+     {0.408f, -4.143f, -0.866f, 0.0f}},
+    {3.129f,
+     {0},
+     {7.502f, 158.579f, -13.789f, 1.0f},
+     {0.827f, 0.298f, -0.476f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF10Uv[6],
+     {0},
+     {0.166f, -3.084f, -0.502f, 0.0f}},
+    {2.495f,
+     {0},
+     {8.695f, 157.607f, -10.626f, 1.0f},
+     {0.958f, 0.26f, -0.12f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF10Uv[4],
+     {0},
+     {0.208f, -2.478f, -0.199f, 0.0f}},
+    {2.05f,
+     {0},
+     {9.216f, 156.34f, -7.842f, 1.0f},
+     {0.972f, 0.186f, 0.146f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF10Uv[9],
+     {0},
+     {0.344f, -2.019f, -0.086f, 0.0f}},
+    {2.265f,
+     {0},
+     {8.424f, 155.071f, -5.847f, 1.0f},
+     {0.926f, -0.04f, 0.375f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF10Uv[14],
+     {0},
+     {0.245f, -2.251f, -0.047f, 0.0f}},
+    {2.887f,
+     {0},
+     {7.092f, 153.447f, -4.165f, 1.0f},
+     {0.852f, -0.2f, 0.484f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF10Uv[7],
+     {0},
+     {0.086f, -2.873f, 0.265f, 0.0f}},
 }; /* derived name */
 
-static float clothMeshF14Uv[4][3][2] = {
+#define clothMeshF10Cols PAL_NTSCAUG6(clothMeshF10Cols_pal, clothMeshF10Cols_ntscaug6)
+
+static Cloth4DCol clothMeshF14Cols_pal[4];
+
+static Cloth4DCol clothMeshF14Cols_ntscaug6[9];
+
+#define clothMeshF14Cols PAL_NTSCAUG6(clothMeshF14Cols_pal, clothMeshF14Cols_ntscaug6)
+
+static Cloth4DCfg clothMeshF14_pal = {
+    4, 3, 0, 0, 0x59, 0x59, 0x59, 0x80, "g_hair9", clothMeshF14Cols_pal, 2.597f, 0,
+}; /* derived name */
+
+static Cloth4DCfg clothMeshF14_ntscaug6 = {
+    9, 3, 0, 0, 0x59, 0x59, 0x59, 0x80, "g_hair9", clothMeshF14Cols_ntscaug6, 9.462f, 0,
+}; /* derived name */
+
+#define clothMeshF14 (*PAL_NTSCAUG6(&clothMeshF14_pal, &clothMeshF14_ntscaug6))
+
+static float clothMeshF14Uv_pal[4][3][2] = {
     {{0.016f, 0.44f}, {0.013f, 0.711f}, {0.01f, 0.982f}},
     {{0.516f, 0.464f}, {0.509f, 0.725f}, {0.503f, 0.987f}},
     {{0.982f, 0.479f}, {0.984f, 0.733f}, {0.987f, 0.987f}},
     {{0.516f, 0.464f}, {0.509f, 0.725f}, {0.503f, 0.987f}},
 }; /* derived name */
 
-static Cloth4DCol clothMeshF14Cols[4] = {
+static float clothMeshF14Uv_ntscaug6[9][3][2] = {
+    {{0.99f, 0.542f}, {0.987f, 0.275f}, {0.984f, 0.008f}},
+    {{0.99f, 0.542f}, {0.987f, 0.275f}, {0.984f, 0.008f}},
+    {{0.768f, 0.523f}, {0.76f, 0.268f}, {0.753f, 0.013f}},
+    {{0.768f, 0.523f}, {0.76f, 0.268f}, {0.753f, 0.013f}},
+    {{0.305f, 0.508f}, {0.307f, 0.259f}, {0.31f, 0.01f}},
+    {{0.557f, 0.51f}, {0.544f, 0.26f}, {0.531f, 0.01f}},
+    {{0.557f, 0.51f}, {0.544f, 0.26f}, {0.531f, 0.01f}},
+    {{0.073f, 0.497f}, {0.078f, 0.255f}, {0.083f, 0.013f}},
+    {{0.305f, 0.508f}, {0.307f, 0.259f}, {0.31f, 0.01f}},
+}; /* derived name */
+
+#define clothMeshF14Uv PAL_NTSCAUG6(clothMeshF14Uv_pal, clothMeshF14Uv_ntscaug6)
+
+static Cloth4DCol clothMeshF14Cols_pal[4] = {
     {5.548f,
      {0},
      {-7.637f, 157.297f, -4.864f, 1.0f},
@@ -768,7 +1077,7 @@ static Cloth4DCol clothMeshF14Cols[4] = {
      1.0f,
      -1,
      0.0f,
-     clothMeshF14Uv[0],
+     clothMeshF14Uv_pal[0],
      {0},
      {-0.237f, -3.374f, 4.398f, 0.0f}},
     {6.099f,
@@ -779,7 +1088,7 @@ static Cloth4DCol clothMeshF14Cols[4] = {
      1.0f,
      -1,
      0.0f,
-     clothMeshF14Uv[1],
+     clothMeshF14Uv_pal[1],
      {0},
      {0.0f, -3.745f, 4.813f, 0.0f}},
     {5.36f,
@@ -790,7 +1099,7 @@ static Cloth4DCol clothMeshF14Cols[4] = {
      1.0f,
      -1,
      0.0f,
-     clothMeshF14Uv[2],
+     clothMeshF14Uv_pal[2],
      {0},
      {0.0f, -3.461f, 4.093f, 0.0f}},
     {3.807f,
@@ -801,10 +1110,114 @@ static Cloth4DCol clothMeshF14Cols[4] = {
      1.0f,
      -1,
      0.0f,
-     clothMeshF14Uv[3],
+     clothMeshF14Uv_pal[3],
      {0},
      {0.0f, -2.501f, 2.87f, 0.0f}},
 }; /* derived name */
+
+static Cloth4DCol clothMeshF14Cols_ntscaug6[9] = {
+    {3.212f,
+     {0},
+     {-8.098f, 154.294f, -6.906f, 1.0f},
+     {-0.728f, 0.272f, 0.63f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF14Uv_ntscaug6[0],
+     {0},
+     {0.5f, -2.944f, -1.184f, 0.0f}},
+    {2.488f,
+     {0},
+     {-7.896f, 152.007f, -10.583f, 1.0f},
+     {-0.047f, -0.53f, -0.847f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF14Uv_ntscaug6[3],
+     {0},
+     {0.472f, -2.242f, -0.969f, 0.0f}},
+    {3.168f,
+     {0},
+     {-6.306f, 151.903f, -12.825f, 1.0f},
+     {-0.566f, -0.67f, -0.48f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF14Uv_ntscaug6[6],
+     {0},
+     {0.453f, -2.8f, -1.411f, 0.0f}},
+    {3.178f,
+     {0},
+     {-3.611f, 151.666f, -15.01f, 1.0f},
+     {-0.479f, -0.63f, -0.611f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF14Uv_ntscaug6[8],
+     {0},
+     {0.123f, -3.044f, -0.905f, 0.0f}},
+    {3.594f,
+     {0},
+     {0.0f, 151.462f, -16.169f, 1.0f},
+     {-0.0f, -0.636f, -0.772f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF14Uv_ntscaug6[7],
+     {0},
+     {0.0f, -3.507f, -0.788f, 0.0f}},
+    {3.178f,
+     {0},
+     {3.611f, 151.666f, -15.01f, 1.0f},
+     {0.479f, -0.63f, -0.612f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF14Uv_ntscaug6[4],
+     {0},
+     {-0.123f, -3.044f, -0.905f, 0.0f}},
+    {3.168f,
+     {0},
+     {6.306f, 151.903f, -12.825f, 1.0f},
+     {0.567f, -0.669f, -0.48f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF14Uv_ntscaug6[5],
+     {0},
+     {-0.453f, -2.8f, -1.411f, 0.0f}},
+    {2.488f,
+     {0},
+     {7.896f, 152.007f, -10.583f, 1.0f},
+     {0.05f, -0.528f, -0.848f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF14Uv_ntscaug6[2],
+     {0},
+     {-0.472f, -2.242f, -0.969f, 0.0f}},
+    {3.212f,
+     {0},
+     {8.098f, 154.294f, -6.906f, 1.0f},
+     {0.729f, 0.271f, 0.629f, 0.0f},
+     35,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshF14Uv_ntscaug6[1],
+     {0},
+     {-0.5f, -2.944f, -1.184f, 0.0f}},
+}; /* derived name */
+
+#define clothMeshF14Cols PAL_NTSCAUG6(clothMeshF14Cols_pal, clothMeshF14Cols_ntscaug6)
 
 static Cloth4DCol clothMeshF18Cols[7];
 
@@ -1103,6 +1516,440 @@ static Cloth4DCol clothMeshF20Cols[13] = {
      clothMeshF20Uv[8],
      {0},
      {-0.086f, -0.624f, -0.193f, 0.0f}},
+}; /* derived name */
+
+/* a fifth game mesh, the test poncho at 21 by 9, which no code of this
+   build reads */
+static Cloth4DCol clothMeshPonchoCols[21];
+
+static Cloth4DCfg clothMeshPoncho = {
+    21, 9, 1, 0, 0x59, 0x59, 0x59, 0x80, "g_poncho_test03", clothMeshPonchoCols, 7.05f, 0,
+}; /* derived name */
+
+static float clothMeshPonchoUv[21][9][2] = {
+    {{0.514f, 0.559f},
+     {0.513f, 0.496f},
+     {0.512f, 0.433f},
+     {0.511f, 0.37f},
+     {0.511f, 0.307f},
+     {0.51f, 0.244f},
+     {0.509f, 0.181f},
+     {0.509f, 0.118f},
+     {0.508f, 0.056f}},
+    {{0.532f, 0.569f},
+     {0.531f, 0.504f},
+     {0.531f, 0.44f},
+     {0.53f, 0.375f},
+     {0.53f, 0.311f},
+     {0.53f, 0.247f},
+     {0.529f, 0.182f},
+     {0.529f, 0.118f},
+     {0.528f, 0.054f}},
+    {{0.476f, 0.56f},
+     {0.477f, 0.497f},
+     {0.478f, 0.434f},
+     {0.479f, 0.371f},
+     {0.48f, 0.308f},
+     {0.48f, 0.246f},
+     {0.481f, 0.183f},
+     {0.482f, 0.12f},
+     {0.483f, 0.057f}},
+    {{0.554f, 0.571f},
+     {0.556f, 0.507f},
+     {0.557f, 0.442f},
+     {0.559f, 0.377f},
+     {0.56f, 0.312f},
+     {0.561f, 0.247f},
+     {0.563f, 0.182f},
+     {0.564f, 0.117f},
+     {0.566f, 0.052f}},
+    {{0.542f, 0.565f},
+     {0.543f, 0.5f},
+     {0.544f, 0.436f},
+     {0.544f, 0.372f},
+     {0.545f, 0.308f},
+     {0.546f, 0.244f},
+     {0.547f, 0.18f},
+     {0.547f, 0.115f},
+     {0.548f, 0.051f}},
+    {{0.583f, 0.574f},
+     {0.583f, 0.508f},
+     {0.583f, 0.442f},
+     {0.583f, 0.376f},
+     {0.583f, 0.31f},
+     {0.583f, 0.244f},
+     {0.583f, 0.177f},
+     {0.583f, 0.111f},
+     {0.583f, 0.045f}},
+    {{0.604f, 0.586f},
+     {0.603f, 0.519f},
+     {0.602f, 0.452f},
+     {0.601f, 0.385f},
+     {0.6f, 0.317f},
+     {0.598f, 0.25f},
+     {0.597f, 0.183f},
+     {0.596f, 0.115f},
+     {0.595f, 0.048f}},
+    {{0.44f, 0.559f},
+     {0.442f, 0.496f},
+     {0.444f, 0.433f},
+     {0.446f, 0.37f},
+     {0.449f, 0.307f},
+     {0.451f, 0.244f},
+     {0.453f, 0.181f},
+     {0.455f, 0.118f},
+     {0.457f, 0.056f}},
+    {{0.422f, 0.569f},
+     {0.424f, 0.505f},
+     {0.426f, 0.441f},
+     {0.428f, 0.377f},
+     {0.43f, 0.314f},
+     {0.432f, 0.25f},
+     {0.434f, 0.186f},
+     {0.436f, 0.122f},
+     {0.437f, 0.059f}},
+    {{0.4f, 0.571f},
+     {0.4f, 0.507f},
+     {0.4f, 0.443f},
+     {0.399f, 0.379f},
+     {0.399f, 0.314f},
+     {0.399f, 0.25f},
+     {0.398f, 0.186f},
+     {0.398f, 0.121f},
+     {0.398f, 0.057f}},
+    {{0.412f, 0.565f},
+     {0.413f, 0.501f},
+     {0.413f, 0.437f},
+     {0.414f, 0.374f},
+     {0.415f, 0.31f},
+     {0.416f, 0.247f},
+     {0.416f, 0.183f},
+     {0.417f, 0.12f},
+     {0.418f, 0.056f}},
+    {{0.372f, 0.574f},
+     {0.373f, 0.509f},
+     {0.374f, 0.444f},
+     {0.376f, 0.379f},
+     {0.377f, 0.314f},
+     {0.378f, 0.249f},
+     {0.379f, 0.185f},
+     {0.38f, 0.12f},
+     {0.381f, 0.055f}},
+    {{0.352f, 0.586f},
+     {0.353f, 0.52f},
+     {0.355f, 0.453f},
+     {0.356f, 0.386f},
+     {0.357f, 0.32f},
+     {0.359f, 0.253f},
+     {0.36f, 0.186f},
+     {0.362f, 0.119f},
+     {0.363f, 0.053f}},
+    {{0.287f, 0.553f},
+     {0.287f, 0.49f},
+     {0.287f, 0.426f},
+     {0.287f, 0.362f},
+     {0.287f, 0.299f},
+     {0.287f, 0.235f},
+     {0.287f, 0.171f},
+     {0.287f, 0.108f},
+     {0.287f, 0.044f}},
+    {{0.246f, 0.574f},
+     {0.244f, 0.508f},
+     {0.242f, 0.442f},
+     {0.241f, 0.376f},
+     {0.239f, 0.31f},
+     {0.237f, 0.244f},
+     {0.235f, 0.178f},
+     {0.234f, 0.112f},
+     {0.232f, 0.046f}},
+    {{0.26f, 0.56f},
+     {0.259f, 0.496f},
+     {0.258f, 0.431f},
+     {0.256f, 0.367f},
+     {0.255f, 0.302f},
+     {0.254f, 0.238f},
+     {0.253f, 0.173f},
+     {0.252f, 0.109f},
+     {0.251f, 0.044f}},
+    {{0.274f, 0.553f},
+     {0.274f, 0.489f},
+     {0.274f, 0.425f},
+     {0.274f, 0.362f},
+     {0.274f, 0.298f},
+     {0.275f, 0.234f},
+     {0.275f, 0.171f},
+     {0.275f, 0.107f},
+     {0.275f, 0.044f}},
+    {{0.329f, 0.574f},
+     {0.331f, 0.508f},
+     {0.332f, 0.442f},
+     {0.334f, 0.376f},
+     {0.336f, 0.31f},
+     {0.338f, 0.244f},
+     {0.339f, 0.178f},
+     {0.341f, 0.112f},
+     {0.343f, 0.046f}},
+    {{0.315f, 0.56f},
+     {0.316f, 0.496f},
+     {0.317f, 0.431f},
+     {0.318f, 0.367f},
+     {0.319f, 0.302f},
+     {0.321f, 0.238f},
+     {0.322f, 0.173f},
+     {0.323f, 0.109f},
+     {0.324f, 0.044f}},
+    {{0.301f, 0.553f},
+     {0.301f, 0.489f},
+     {0.301f, 0.425f},
+     {0.301f, 0.362f},
+     {0.301f, 0.298f},
+     {0.3f, 0.234f},
+     {0.3f, 0.171f},
+     {0.3f, 0.107f},
+     {0.3f, 0.044f}},
+    {{0.223f, 0.586f},
+     {0.222f, 0.519f},
+     {0.22f, 0.452f},
+     {0.219f, 0.385f},
+     {0.218f, 0.317f},
+     {0.217f, 0.25f},
+     {0.216f, 0.183f},
+     {0.215f, 0.115f},
+     {0.214f, 0.048f}},
+}; /* derived name */
+
+static Cloth4DCol clothMeshPonchoCols[21] = {
+    {7.617f,
+     {0},
+     {10.733f, 94.532f, -11.823f, 1.0f},
+     {0.68f, 0.452f, -0.578f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[6],
+     {0},
+     {1.222f, -7.518f, -0.043f, 0.0f}},
+    {7.354f,
+     {0},
+     {13.455f, 93.107f, -8.005f, 1.0f},
+     {0.903f, 0.385f, -0.189f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[5],
+     {0},
+     {1.282f, -7.241f, 0.121f, 0.0f}},
+    {7.264f,
+     {0},
+     {13.148f, 92.837f, -1.574f, 1.0f},
+     {0.828f, 0.344f, 0.443f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[3],
+     {0},
+     {1.117f, -7.178f, -0.035f, 0.0f}},
+    {7.079f,
+     {0},
+     {10.803f, 92.068f, 0.303f, 1.0f},
+     {0.529f, 0.166f, 0.832f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[4],
+     {0},
+     {0.833f, -7.027f, 0.204f, 0.0f}},
+    {7.077f,
+     {0},
+     {8.773f, 92.511f, 1.328f, 1.0f},
+     {0.382f, 0.172f, 0.908f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[1],
+     {0},
+     {0.439f, -7.048f, 0.458f, 0.0f}},
+    {6.916f,
+     {0},
+     {5.35f, 91.38f, 2.136f, 1.0f},
+     {0.15f, 0.097f, 0.984f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[0],
+     {0},
+     {0.224f, -6.882f, 0.647f, 0.0f}},
+    {6.931f,
+     {0},
+     {0.021f, 91.557f, 2.655f, 1.0f},
+     {0.0f, 0.073f, 0.997f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[2],
+     {0},
+     {-0.003f, -6.885f, 0.791f, 0.0f}},
+    {6.916f,
+     {0},
+     {-5.35f, 91.38f, 2.136f, 1.0f},
+     {-0.15f, 0.097f, 0.984f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[7],
+     {0},
+     {-0.224f, -6.882f, 0.647f, 0.0f}},
+    {7.077f,
+     {0},
+     {-8.773f, 92.511f, 1.328f, 1.0f},
+     {-0.382f, 0.172f, 0.908f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[8],
+     {0},
+     {-0.439f, -7.048f, 0.458f, 0.0f}},
+    {7.079f,
+     {0},
+     {-10.803f, 92.068f, 0.303f, 1.0f},
+     {-0.529f, 0.166f, 0.832f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[10],
+     {0},
+     {-0.833f, -7.027f, 0.204f, 0.0f}},
+    {7.265f,
+     {0},
+     {-13.148f, 92.837f, -1.574f, 1.0f},
+     {-0.828f, 0.344f, 0.443f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[9],
+     {0},
+     {-1.117f, -7.178f, -0.035f, 0.0f}},
+    {7.356f,
+     {0},
+     {-13.455f, 93.107f, -8.005f, 1.0f},
+     {-0.903f, 0.385f, -0.189f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[11],
+     {0},
+     {-1.282f, -7.243f, 0.121f, 0.0f}},
+    {7.618f,
+     {0},
+     {-10.733f, 94.532f, -11.823f, 1.0f},
+     {-0.68f, 0.452f, -0.578f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[12],
+     {0},
+     {-1.22f, -7.519f, -0.026f, 0.0f}},
+    {7.517f,
+     {0},
+     {-7.797f, 93.152f, -15.507f, 1.0f},
+     {-0.333f, 0.471f, -0.817f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[17],
+     {0},
+     {-1.064f, -7.441f, -0.046f, 0.0f}},
+    {7.319f,
+     {0},
+     {-5.073f, 91.587f, -16.371f, 1.0f},
+     {0.037f, 0.321f, -0.946f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[18],
+     {0},
+     {-0.757f, -7.273f, -0.309f, 0.0f}},
+    {7.187f,
+     {0},
+     {-2.34f, 90.712f, -16.141f, 1.0f},
+     {-0.03f, 0.264f, -0.964f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[19],
+     {0},
+     {-0.158f, -7.171f, -0.444f, 0.0f}},
+    {7.189f,
+     {0},
+     {0.021f, 90.814f, -16.956f, 1.0f},
+     {0.001f, 0.233f, -0.973f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[13],
+     {0},
+     {-0.003f, -7.176f, -0.437f, 0.0f}},
+    {7.187f,
+     {0},
+     {2.34f, 90.712f, -16.141f, 1.0f},
+     {0.031f, 0.264f, -0.964f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[16],
+     {0},
+     {0.158f, -7.171f, -0.444f, 0.0f}},
+    {7.318f,
+     {0},
+     {5.073f, 91.587f, -16.371f, 1.0f},
+     {-0.037f, 0.321f, -0.946f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[15],
+     {0},
+     {0.757f, -7.272f, -0.309f, 0.0f}},
+    {7.519f,
+     {0},
+     {7.797f, 93.152f, -15.507f, 1.0f},
+     {0.333f, 0.471f, -0.817f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[14],
+     {0},
+     {1.067f, -7.443f, -0.074f, 0.0f}},
+    {7.617f,
+     {0},
+     {10.733f, 94.532f, -11.823f, 1.0f},
+     {0.68f, 0.452f, -0.578f, 0.0f},
+     40,
+     1.0f,
+     -1,
+     0.0f,
+     clothMeshPonchoUv[20],
+     {0},
+     {1.222f, -7.518f, -0.043f, 0.0f}},
 }; /* derived name */
 
 static Cloth4DCol demoClothMeshF10Cols[15];
@@ -1692,11 +2539,19 @@ static ClothHangCfg clothHangF8[3] = {
     {-1, 0.0f, 0.0f, 0.0f, 0, {0}, 0.0f, 0.0f, {0}, 0.0f, 0.0f, {0}},
 }; /* derived name */
 
-static ClothHangCfg clothHangF10[3] = {
+static ClothHangCfg clothHangF10_pal[3] = {
     {1, -3.0f, 15.0f, 10.0f, 35, {0}, 0.0f, 4.0f, {0}, 1.0f, -1.0f, {0}},
     {1, -5.0f, 8.0f, 5.0f, 34, {0}, 0.0f, 0.0f, {0}, 1.0f, -1.0f, {0}},
     {-1, 0.0f, 0.0f, 0.0f, 0, {0}, 0.0f, 0.0f, {0}, 0.0f, 0.0f, {0}},
 }; /* derived name */
+
+static ClothHangCfg clothHangF10_ntscaug6[3] = {
+    {1, -3.0f, 15.0f, 10.0f, 35, {0}, 0.0f, 2.0f, {0}, 1.0f, -1.0f, {0}},
+    {1, -5.0f, 8.0f, 5.0f, 34, {0}, 0.0f, 0.0f, {0}, 1.0f, -1.0f, {0}},
+    {-1, 0.0f, 0.0f, 0.0f, 0, {0}, 0.0f, 0.0f, {0}, 0.0f, 0.0f, {0}},
+}; /* derived name */
+
+#define clothHangF10 PAL_NTSCAUG6(clothHangF10_pal, clothHangF10_ntscaug6)
 
 static ClothHangCfg clothHangF18[2] = {
     {1, 0.0f, 10.0f, 8.0f, 35, {0}, 5.0f, 3.5f, {0}, 1.0f, -1.0f, {0}},
@@ -1763,8 +2618,88 @@ static inline void setGirlClothSetting(int lv)
     }
 }
 
+static void *InitGirlGeo_ntsc(GObj *gobj, SObjSimpleSetting *csv)
+{
+    GirlWork *w;
+    int kind;
+
+    w = iosMallocDebug(ios_partition_sugipon, sizeof(GirlWork), __FILE__, 892);
+    kind = csv->obj;
+    w->cloth3 = 0;
+    w->cloth2 = 0;
+    w->cloth0 = 0;
+    w->cloth1 = 0;
+    w->kind = kind;
+    /* the work pointer, stored as a word */
+    *(ICO_WORD *)&GOBJ_SUB(gobj)->work = (ICO_WORD)w;
+    switch (kind) {
+    case 1:
+        w->cloth1 = (ICO_WORD)InitCloth4D(gobj, &demoClothMeshF10, 0);
+        w->cloth2 = (ICO_WORD)InitCloth4D(gobj, &demoClothMeshF14, 0);
+        w->cloth3 = (ICO_WORD)InitCloth4D(gobj, &demoClothMeshF20, 0);
+        break;
+    case 2:
+        break;
+    default:
+        w->cloth1 = (ICO_WORD)InitCloth4D(gobj, &clothMeshF10, clothHangF10);
+        w->cloth0 = (ICO_WORD)InitCloth4D(gobj, &clothMeshF8, clothHangF8);
+        w->cloth2 = (ICO_WORD)InitCloth4D(gobj, &clothMeshF14, clothHangF10);
+        w->cloth3 = (ICO_WORD)InitCloth4D(gobj, &clothMeshF20, clothHangF20);
+        break;
+    }
+    ((GirlWork *)GOBJ_SUB(gobj)->work)->cloth0Disp = 1;
+    ((GirlWork *)GOBJ_SUB(gobj)->work)->cloth12Disp = 1;
+    ((GirlWork *)GOBJ_SUB(gobj)->work)->cloth3Disp = 1;
+    InitMotionOrient(gobj, 1216, 1820, 12, 24, 514);
+    SetLodLevel(gobj, 2);
+    return w;
+}
+
+static void *InitGirlGeo_aug6(GObj *gobj, SObjSimpleSetting *csv)
+{
+    GirlWork *w;
+    int kind;
+
+    w = iosMallocDebug(ios_partition_sugipon, sizeof(GirlWork), __FILE__, 892);
+    kind = csv->obj;
+    w->cloth3 = 0;
+    w->cloth2 = 0;
+    w->cloth0 = 0;
+    w->cloth1 = 0;
+    w->kind = kind;
+    /* the work pointer, stored as a word */
+    *(ICO_WORD *)&GOBJ_SUB(gobj)->work = (ICO_WORD)w;
+    switch (kind) {
+    case 1:
+        w->cloth1 = (ICO_WORD)InitCloth4D(gobj, &demoClothMeshF10, 0);
+        w->cloth2 = (ICO_WORD)InitCloth4D(gobj, &demoClothMeshF14, 0);
+        w->cloth3 = (ICO_WORD)InitCloth4D(gobj, &demoClothMeshF20, 0);
+        break;
+    case 2:
+        break;
+    default:
+        w->cloth1 = (ICO_WORD)InitCloth4D(gobj, &clothMeshF10, clothHangF10);
+        w->cloth0 = (ICO_WORD)InitCloth4D(gobj, &clothMeshF8, clothHangF8);
+        w->cloth2 = (ICO_WORD)InitCloth4D(gobj, &clothMeshF14, clothHangF10);
+        w->cloth3 = (ICO_WORD)InitCloth4D(gobj, &clothMeshF20, clothHangF20);
+        break;
+    }
+    ((GirlWork *)GOBJ_SUB(gobj)->work)->cloth0Disp = 1;
+    ((GirlWork *)GOBJ_SUB(gobj)->work)->cloth12Disp = 1;
+    ((GirlWork *)GOBJ_SUB(gobj)->work)->cloth3Disp = 1;
+    InitMotionOrient(gobj, 1195, 1797, 12, 24, 514);
+    SetLodLevel(gobj, 2);
+    return w;
+}
+
 void *InitGirlGeo(GObj *gobj, SObjSimpleSetting *csv)
 {
+    if (ICO_NTSC) {
+        return InitGirlGeo_ntsc(gobj, csv);
+    }
+    if (ICO_AUG6) {
+        return InitGirlGeo_aug6(gobj, csv);
+    }
     GirlWork *w;
     ICO_WORD p;
     int kind;
@@ -1827,7 +2762,7 @@ void GirlGeo(GObj *gobj)
 
     HandManager(gobj);
     ExecMotionOrient(gobj);
-    SetActressLight(gobj, 35, 44, PAL_JPNKORCN(470, 466));
+    SetActressLight(gobj, 35, 44, PAL_JPNKORCN_NTSC_AUG6(470, 466, 407, 406));
     if (CylinderCollision(gobj, 4, 50.0f, 50.0f, 0.0f)) {
         iosOmSendMail(gobj, 6, gobj);
     }
@@ -1852,8 +2787,14 @@ void GirlGeo(GObj *gobj)
     execClothes(gobj);
 }
 
+static void GirlAI_ntscaug6(GObj *gobj) {}
+
 void GirlAI(GObj *gobj)
 {
+    if (ICO_NTSCAUG6) {
+        GirlAI_ntscaug6(gobj);
+        return;
+    }
     Sub15C *work = GOBJ_SUB(gobj);
     int mode = work->ctrl.motion;
     GirlWork *cloth = work->work;

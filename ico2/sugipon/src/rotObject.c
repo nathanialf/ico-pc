@@ -46,15 +46,24 @@ typedef struct RotObjMemory { /* field names derived */
     int turnCount; /* 0x4 */
 } RotObjMemory;    /* derived name */
 
+static void moveStartSE_ntscaug6(GObj *self)
+{
+    ExecuteSEPackage(self, 51);
+}
+
 static void moveStartSE(GObj *self)
 {
+    if (ICO_NTSCAUG6) {
+        moveStartSE_ntscaug6(self);
+        return;
+    }
     ExecuteSEPackage(self, 53);
 }
 
 static void moveEndSE(GObj *self)
 {
     StopSEPackage(self);
-    ExecuteSEPackage(self, 58);
+    ExecuteSEPackage(self, PAL_NTSCAUG6(58, 56));
 }
 
 void RotObjectGeo(GObj *self)
@@ -64,6 +73,15 @@ void RotObjectGeo(GObj *self)
         p->saveCount = 0;
         gamesysObjInfoUniqDataSet(self);
     }
+}
+
+static void getRootMatrix(void *dst, GObj *gobj)
+{
+    RotObjWork *w = GOBJ_SUB(gobj)->work;
+
+    GetRootMatrix(MatrixDrive_GetMatrix(), gobj);
+    MatrixDrive_RotMatrixY(w->angle);
+    CopyMatrix(dst, MatrixDrive_GetMatrix());
 }
 
 static inline void getRotObjectDriveMatrix(GObj *gobj, void *dst) /* derived name */
@@ -130,7 +148,11 @@ int MoveRotObjectWithHoldPoint(GObj *bar, float *hold, void *self, float *dir, f
         w->turnCount = 0;
         return 0;
     }
-    getRotObjectDriveMatrix(bar, m);
+    if (ICO_AUG6) {
+        getRootMatrix(m, bar);
+    } else {
+        getRotObjectDriveMatrix(bar, m);
+    }
     {
         float v[4];
         float o[4];
@@ -152,8 +174,12 @@ int MoveRotObjectWithHoldPoint(GObj *bar, float *hold, void *self, float *dir, f
             return 0;
     }
     ang = -atan2f(sl, len);
-    ang *= w->rate;
-    k = len * 0.01f * w->armScale;
+    if (ICO_NTSCAUG6) {
+        k = len * 0.01f;
+    } else {
+        ang *= w->rate;
+        k = len * 0.01f * w->armScale;
+    }
     if (k > 1.0f)
         k = 1.0f;
     k *= k;
@@ -217,7 +243,11 @@ void GetRotObjectGlobalHoldGeometry(void *pos, void *dir, GObj *bar, void *holdP
 {
     float m[16];
 
-    getRotObjectDriveMatrix(bar, m);
+    if (ICO_AUG6) {
+        getRootMatrix(m, bar);
+    } else {
+        getRotObjectDriveMatrix(bar, m);
+    }
     sceVu0ApplyMatrix(pos, m, holdPos);
     sceVu0ApplyMatrix(dir, m, holdDir);
     /* the function's name trace, switched off */
@@ -226,8 +256,38 @@ void GetRotObjectGlobalHoldGeometry(void *pos, void *dir, GObj *bar, void *holdP
     }
 }
 
+static RotObjWork *InitRotObjectGeo_ntscaug6(GObj *gobj, SObjSimpleSetting *src)
+{
+    RotObjWork *p = iosMallocDebug(ios_partition_sugipon, sizeof(RotObjWork), rotObjectFile, 55);
+
+    p->saveCount = rotObjectPhase;
+    rotObjectPhase = (rotObjectPhase + 1) % 30;
+
+    CopyVector(p->pos, src->pos);
+    p->kind = src->obj;
+    p->pos[3] = 1.0f;
+    p->angle = (short)(int)(src->rot[1] * 32768.0f / 180.0f);
+    p->turnCount = 0;
+    p->limitMax = p->limitMin = 0.0f;
+    p->lock = 0;
+
+    if (p->kind == 3) {
+        p->limitMax = src->scale[2];
+        p->limitMin = src->scale[0];
+        CopyVector(((SubHandle *)&gobj->dobj)->sub->root.pos, ZeroPoint);
+    }
+    {
+        struct DObjNode *q = GOBJ_SUB(gobj)->nodes;
+        q->scale[0] = q->scale[1] = q->scale[2] = 1.0f;
+    }
+    return p;
+}
+
 RotObjWork *InitRotObjectGeo(GObj *gobj, SObjSimpleSetting *src)
 {
+    if (ICO_NTSCAUG6) {
+        return InitRotObjectGeo_ntscaug6(gobj, src);
+    }
     RotObjWork *p = iosMallocDebug(ios_partition_sugipon, sizeof(RotObjWork), rotObjectFile, 57);
 
     p->saveCount = rotObjectPhase;
@@ -265,7 +325,11 @@ void GetRotObjectGameSysObjInfoExtData(short *angle, int *turnCount, GamesysObjI
 
 void RotObjectDL(GObj *gobj)
 {
-    getRotObjectDriveMatrix(gobj, (void *)GOBJ_SUB(gobj)->nodeMtx);
+    if (ICO_AUG6) {
+        getRootMatrix((void *)GOBJ_SUB(gobj)->nodeMtx, gobj);
+    } else {
+        getRotObjectDriveMatrix(gobj, (void *)GOBJ_SUB(gobj)->nodeMtx);
+    }
     p2o_DispVU1(gobj);
 }
 
@@ -284,7 +348,11 @@ int GetRotObjectZPlusDirection(GObj *gobj)
     float m[16];
     float v[4];
 
-    getRotObjectDriveMatrix(gobj, m);
+    if (ICO_AUG6) {
+        getRootMatrix(m, gobj);
+    } else {
+        getRotObjectDriveMatrix(gobj, m);
+    }
     sceVu0ApplyMatrix(v, m, zPlusVector);
     v[1] = 0.0f;
     sceVu0Normalize(v, v);

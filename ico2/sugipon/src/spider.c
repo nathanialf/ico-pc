@@ -17,6 +17,7 @@
 #include "main.h"
 #include "GifPacket.h"
 #include "ios.h"
+#include "fieldCollision.h"
 
 /* the file name and the two group-wake messages */
 static const char spiderFile[] = __FILE__; /* derived name */
@@ -103,7 +104,7 @@ static inline void wakeSpiderGroup(GObj *self) /* derived name */
 void WakeUpLayoutedSpiders(GObj *self)
 {
     wakeSpiderGroup(self);
-    ExecuteSEPackage(self, 106);
+    ExecuteSEPackage(self, PAL_NTSCAUG6(106, 101));
 }
 
 static inline void setSpiderGroupHost(GObj *self, GObj *host) /* derived name */
@@ -145,6 +146,46 @@ static inline int callSpidersToGirl(GObj *self) /* derived name */
         setSpiderGroupHost(self, girlGObj);
         return 1;
     }
+    return 0;
+}
+
+/* where the group is called to (the August preview's): the girl's feet, else the floor under
+   the members' centre */
+int getCallPoint(float *out, GObj *self)
+{
+    ClipWork cw;
+    float pos[4];
+    SpiderWork *w;
+    int i;
+    int n;
+
+    w = GOBJ_SUB(self)->work;
+    if (girlGObj != 0) {
+        GetRootPosition(out, girlGObj);
+        out[1] -= GOBJ_SUB(girlGObj)->root.height;
+        return 1;
+    }
+    CopyVector(cw.pt[0], ZeroPoint);
+    for (i = 0, n = 0; i < w->n; i++, n++) {
+        if (w->members[i] != 0) {
+            GetRootPosition(pos, w->members[i]);
+            _AddVectorXYZ(cw.pt[0], cw.pt[0], pos);
+        }
+    }
+    if (n != 0) {
+        _ScaleVectorXYZ(cw.pt[0], cw.pt[0], 1.0f / (float)n);
+        CopyVector(cw.pt[1], cw.pt[0]);
+        cw.pt[0][1] -= 100.0f;
+        cw.pt[1][1] += 1000.0f;
+        ClipFloor(&cw);
+        if (cw.floor.elem != 0) {
+            CopyVector(out, cw.pt[2]);
+        } else {
+            CopyVector(out, cw.pt[0]);
+        }
+        return 1;
+    }
+    debug_StdPrintfDummy("%f, %f, %f\n", cw.pt[0][0], cw.pt[0][1], cw.pt[0][2]);
     return 0;
 }
 
@@ -221,7 +262,7 @@ void SpiderLayoutGeo(GObj *self)
         if (w->wakeFrom != -1) {
             wakeSpiderGroup(self);
             for (i = w->wakeFrom; i < w->n; i++) {
-                iosOmSendMail(w->members[i], 223, w->members[i]);
+                iosOmSendMail(w->members[i], PAL_NTSC_AUG6(223, 207, 204), w->members[i]);
                 SetAP1VisualState(w->members[i], 0);
             }
             w->state = 1;
@@ -389,8 +430,19 @@ static inline GObj *DeleteSpiderFromLayoutGroup_inl(GObj *gp, int idx) /* derive
     return r;
 }
 
+static GObj *DeleteSpiderFromLayoutGroup_aug6(GObj *self, int idx)
+{
+    GObj **arr = ((SpiderWork *)GOBJ_SUB(self)->work)->members;
+    GObj *r = arr[idx];
+    arr[idx] = 0;
+    return r;
+}
+
 GObj *DeleteSpiderFromLayoutGroup(GObj *self, int idx)
 {
+    if (ICO_AUG6) {
+        return DeleteSpiderFromLayoutGroup_aug6(self, idx);
+    }
     return DeleteSpiderFromLayoutGroup_inl(self, idx);
 }
 

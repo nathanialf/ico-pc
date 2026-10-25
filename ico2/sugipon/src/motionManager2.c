@@ -32,9 +32,70 @@ typedef struct StreamShapeHdr { /* field names derived */
     unsigned char shapeNum;
 } StreamShapeHdr; /* derived name */
 
+static int GetWaterReaction_ntscaug6(float *outH, int *outFlag, ClipWork *info, float *pos,
+                                     float *vel, float h0, float h1, float h2, float scaleIn,
+                                     float amp)
+{
+    float drain[4];
+    float waterH;
+    float scale;
+    float r;
+    GObj *pool;
+    int attr;
+
+    if (outFlag != 0) {
+        *outFlag = 0;
+    }
+    if (info->floor.elem != 0) {
+        attr = GetFloorAttribute(info);
+        if (CompareAttribute(attr, 0x40) | CompareAttribute(attr, 0x50)) {
+            scale = scaleIn;
+            pool = info->floor.o.obj;
+            waterH = GetPoolGlobalHeightDetail(pool, pos);
+            GetPoolGlobalDrainVector(drain, pool);
+            if (outFlag != 0) {
+                if (1.0000001e-06f < VectorLengthSquare(drain)) {
+                    *outFlag = 1;
+                }
+            }
+            if (waterH < h0) {
+                vel[1] = vel[1] + amp;
+            } else if (waterH < h1) {
+                vel[1] = vel[1] + amp * (h1 - waterH) / (h1 - h0);
+            } else if (waterH < h2) {
+                r = (waterH - h1) / (h2 - h1);
+                vel[1] = vel[1] +
+                         (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f *
+                              (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1])) +
+                          amp * (1.0f - r)) *
+                             r;
+            } else {
+                vel[1] =
+                    vel[1] + 60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f *
+                                 (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+                scale = 1.0f;
+                CopyVector(drain, ZeroVector);
+            }
+            vel[0] = vel[0] * scale;
+            vel[1] = vel[1] * scale;
+            vel[2] = vel[2] * scale;
+            sceVu0AddVector(vel, vel, drain);
+            AddVectorXYZ(pos, pos, vel);
+            if (outH != 0) {
+                *outH = waterH;
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int GetWaterReaction(float *outH, int *outFlag, ClipWork *info, float *pos, float *vel, float h0,
                      float h1, float h2, float scaleIn, float amp)
 {
+    if (ICO_NTSCAUG6) {
+        return GetWaterReaction_ntscaug6(outH, outFlag, info, pos, vel, h0, h1, h2, scaleIn, amp);
+    }
     float drain[4];
     float waterH;
     float scale;
@@ -936,7 +997,9 @@ void InitMotionGeoInfo(struct MotRoot *self, float x, float y, float z, float rx
     RotQuaternionY(self->quat, -(int)(ry * 10430.378f));
     RotQuaternionX(self->quat, -(int)(rx * 10430.378f));
     RotQuaternionZ(self->quat, (short)-(int)(rz * 10430.378f));
-    RegularizeQuaternion(self->quat);
+    if (!ICO_AUG6) {
+        RegularizeQuaternion(self->quat);
+    }
     adjustMotionHeightToNearestField(self, self->pos);
     SetSimplePlane(self->plane.f, 0.0f, -1.0f, 0.0f, y);
     CopyVector(self->footPos, self->pos);
@@ -989,6 +1052,8 @@ static void dispSkeltonHierarchy(int node)
         dispSkeltonHierarchy(skelNodes[node].sibling);
     }
 }
+
+static inline int getSkeltonFocusNode(GObj *self, int focus); /* derived name */
 
 /* SetSkeltonDispSwitch's switch for DispSkelton's debug draw */
 static int skeltonDispSwitch = 0; /* derived name */
@@ -1068,8 +1133,13 @@ void SlopeIKControl(GObj *self, char *mot, float *v, Vec4 *vel, int n)
     if (ik->rootUpdateMode < 3) {
         if (ik->rootUpdateMode > 0) {
             if (sub->slopeIK != 0) {
-                n0 = GOBJ_SUB(self)->focusNodes[49];
-                n1 = GOBJ_SUB(self)->focusNodes[45];
+                if (ICO_AUG6) {
+                    n0 = getSkeltonFocusNode(self, 49);
+                    n1 = getSkeltonFocusNode(self, 45);
+                } else {
+                    n0 = GOBJ_SUB(self)->focusNodes[49];
+                    n1 = GOBJ_SUB(self)->focusNodes[45];
+                }
                 if (n0 != -1 && n1 != -1) {
                     SkelNode *skel = GOBJ_SUB(self)->skel;
 
@@ -1183,8 +1253,16 @@ int GetPureVerticalPlaneOfCurrentPosition(void *plane0, void *plane1, float *pts
         }
     }
     if (bestIdx == -1) {
-        debug_assertMessage(motMan2File, 1360, "!!");
-        __assert(motMan2File, 1360, "e");
+        if (ICO_NTSC) {
+            debug_assertMessage(motMan2File, 1358, "!!");
+            __assert(motMan2File, 1358, "e");
+        } else if (ICO_AUG6) {
+            debug_assertMessage(__FILE__, LN(1353, 1353, 1353, 1353, 1353, 1353, 1353), "!!");
+            __assert(__FILE__, LN(1353, 1353, 1353, 1353, 1353, 1353, 1353), "e");
+        } else {
+            debug_assertMessage(motMan2File, 1360, "!!");
+            __assert(motMan2File, 1360, "e");
+        }
     }
     if (plane0 != 0) {
         SetSimplePlane(plane0, best[0], best[1], best[2],
@@ -1761,8 +1839,55 @@ int GetCollisionOfLastActiveField(GObj *self)
     return self->dobj->root.lastField;
 }
 
+static int CheckFieldContact_ntscaug6(ClipWork *info, GObj *self, float *pos, float lim)
+{
+    float h;
+    float dy;
+    float ph;
+    float d;
+    int attr;
+
+    if (info->floor.elem != 0) {
+        h = GOBJ_SUB(self)->root.move[1];
+        dy = info->pt[2][1] - pos[1];
+        attr = GetFloorAttribute(info);
+        if (CompareAttribute(attr, 0x40) | CompareAttribute(attr, 0x50)) {
+            if (h >= 0.0f) {
+                ph = GetPoolGlobalHeight(info->floor.o.obj);
+                d = info->pt[2][1] - ph;
+                if (dy < lim) {
+                    if (d > 0.0f) {
+                        if ((GOBJ_SUB(self)->ctrl.contactFlags & 1) == 0 && h > 5.0f) {
+                            SetFallDownSplash(info->floor.o.obj, self);
+                            GOBJ_SUB(self)->ctrl.contactFlags |= 1;
+                        }
+                    }
+                    return 1;
+                }
+                if (d > 0.0f) {
+                    if (ph - pos[1] < lim * 0.8f) {
+                        if ((GOBJ_SUB(self)->ctrl.contactFlags & 1) == 0 && h > 5.0f) {
+                            SetFallDownSplash(info->floor.o.obj, self);
+                            GOBJ_SUB(self)->ctrl.contactFlags |= 1;
+                        }
+                        return 2;
+                    }
+                }
+            }
+        } else {
+            if (dy < lim) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 int CheckFieldContact(ClipWork *info, GObj *self, float *pos, float lim)
 {
+    if (ICO_NTSCAUG6) {
+        return CheckFieldContact_ntscaug6(info, self, pos, lim);
+    }
     float h;
     float dy;
     float ph;
@@ -1838,8 +1963,28 @@ void DebugDisp1CollisionWithColor(WallCfg *cfg, void *color)
 /* the body of GetSkeltonFocusNode, which SetMotionBlendlessNode, the two
    GetDifferenceFromWall*Plane and the node fix mode setter inline and
    GetSkeltonFocusNode calls */
+static inline int getSkeltonFocusNode_aug6(GObj *self, int focus) /* derived name */
+{
+    Sub15C *sub = GOBJ_SUB(self);
+
+    if (sub == 0 || sub->focusNodes == 0 || sub->focusNodes[focus] >= sub->skelNodeNum) {
+        /* EUC-JP: "whoever sees this message, please contact Sugiyama" */
+        debug_StdPrintfDummy(
+            "このメッセージを見たひとは杉山まで連絡ください: GetSkeltonFocusNode SKEL=NULL\n");
+        debug_assertMessage(
+            __FILE__, 515,
+            "GetSkeltonFocusNode:\n PLEASE CALL SUGIYAMA\n GOBJ==NULL Or SKEL==NULL "
+            "Or RETURNID>=NBSKELS\n");
+        __assert(__FILE__, 515, "e");
+    }
+    return GOBJ_SUB(self)->focusNodes[focus];
+}
+
 static inline int getSkeltonFocusNode(GObj *self, int focus) /* derived name */
 {
+    if (ICO_AUG6) {
+        return getSkeltonFocusNode_aug6(self, focus);
+    }
     return GOBJ_SUB(self)->focusNodes[focus];
 }
 
@@ -1987,24 +2132,62 @@ int GetStreamShapeMotion(float *dst, StreamShapeHdr *hdr)
     return 0;
 }
 
+static float GetDifferenceFromWallUpperField_aug6(GObj *self, int node)
+{
+    struct MotRoot *r = &self->dobj->root;
+    int idx = getSkeltonFocusNode(self, node);
+    return GetYDistanceFromPlane(r->cliffPlane,
+                                 (float *)((char *)GOBJ_SUB(self)->nodeMtx + idx * 0x40 + 0x30));
+}
+
 float GetDifferenceFromWallUpperField(GObj *self, int node)
 {
+    if (ICO_AUG6) {
+        return GetDifferenceFromWallUpperField_aug6(self, node);
+    }
     Sub15C *e = self->dobj;
     int idx = (e->focusNodes)[node];
     return GetYDistanceFromPlane(e->root.cliffPlane,
                                  (float *)((char *)e->nodeMtx + idx * 0x40 + 0x30));
 }
 
+static float GetDifferenceFromLastField_aug6(GObj *self, int node)
+{
+    struct MotRoot *r = &self->dobj->root;
+    int idx = getSkeltonFocusNode(self, node);
+    return GetYDistanceFromPlane(r->plane.f,
+                                 (float *)((char *)GOBJ_SUB(self)->nodeMtx + idx * 0x40 + 0x30));
+}
+
 float GetDifferenceFromLastField(GObj *self, int node)
 {
+    if (ICO_AUG6) {
+        return GetDifferenceFromLastField_aug6(self, node);
+    }
     Sub15C *e = self->dobj;
     int idx = (e->focusNodes)[node];
     return GetYDistanceFromPlane(e->root.plane.f,
                                  (float *)((char *)e->nodeMtx + idx * 0x40 + 0x30));
 }
 
+static float GetDifferenceFromLowerField_aug6(GObj *self, int node)
+{
+    ClipWork buf;
+    int idx;
+
+    idx = getSkeltonFocusNode(self, node);
+    GetLowerPlaneCollision(&buf, (float *)((char *)GOBJ_SUB(self)->nodeMtx + idx * 0x40 + 0x30));
+    if (buf.floor.elem == 0) {
+        return 3.40282347e+38f;
+    }
+    return buf.pt[2][1] - buf.pt[0][1];
+}
+
 float GetDifferenceFromLowerField(GObj *self, int node)
 {
+    if (ICO_AUG6) {
+        return GetDifferenceFromLowerField_aug6(self, node);
+    }
     ClipWork buf;
     Sub15C *ctrl;
     int idx;

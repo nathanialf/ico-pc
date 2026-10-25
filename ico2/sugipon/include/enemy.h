@@ -8,14 +8,16 @@
 #ifndef ENEMY_H
 #define ENEMY_H
 
+#include "region.h"
+
 struct GObj;
 
 /* enemy-random-def: one random enemy kind range, 8 bytes, for the kinds from
    0x10000 on: the first and the last row of randomEnemyVariationKind the
    kind draws from. */
-typedef struct { /* field names derived */
-    int first;   /* 0x00 */
-    int last;    /* 0x04 */
+typedef struct {  /* field names derived */
+    int first;    /* 0x00 */
+    int last;     /* 0x04 */
 } EnemyKindRange; /* derived name */
 
 /* enemy-def: one enemy kind, 0x1C bytes, by kind: the model and the particle
@@ -34,7 +36,12 @@ typedef struct {    /* field names derived */
     unsigned int battleType : 2;
 } EnemyDef; /* derived name */
 
-extern const EnemyDef enemyKind[];
+/* one table per disc (enemyKind.c), in the European record */
+extern const EnemyDef enemyKind_pal[];
+extern const EnemyDef enemyKind_jpn[];
+extern const EnemyDef enemyKind_ntsc[];
+extern const EnemyDef enemyKind_aug6[];
+#define enemyKind PAL_JPNKORCN_NTSC_AUG6(enemyKind_pal, enemyKind_jpn, enemyKind_ntsc, enemyKind_aug6)
 extern const EnemyKindRange randomEnemyKind[];
 extern const int randomEnemyVariationKind[];
 int CanThisEnemyFly(struct GObj *self);

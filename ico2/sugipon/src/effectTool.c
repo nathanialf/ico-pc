@@ -38,7 +38,7 @@ static char *alphaTypeName[] = {"BLEND", "ADD", "SUB"}; /* derived name */
 
 static char *upperLimitName[] = {"OFF", "ON"}; /* derived name */
 
-static EffParamDef effParam[] = {
+static EffParamDef effParam_pal[] = {
     {"U OFFSET", 0x80, 0, 0, 0, 0, 3},
     {"V OFFSET", 0x84, 0, 0, 0, 0, 3},
     {"DRAIN TYPE", 4, drainTypeName, 0, 1, 0, 1},
@@ -74,6 +74,43 @@ static EffParamDef effParam[] = {
     {"LIMIT HEIGHT", 0x98, 0, 0, 0, -100000, 100000},
     {0},
 }; /* derived name */
+
+static EffParamDef effParam_ntscaug6[] = {
+    {"U OFFSET", 0x80, 0, 0, 0, 0, 3},
+    {"V OFFSET", 0x84, 0, 0, 0, 0, 3},
+    {"DRAIN TYPE", 4, drainTypeName, 0, 1, 0, 1},
+    {"ALPHA TYPE", 8, alphaTypeName, 0, 0, 0, 2},
+    {"CONE ANGLE", 12, 0, 3, 0, 0, 360},
+    {"WIND EFFECT", 0x90, 0, 1, 0, 0, 10},
+    {"VELOCITY", 16, 0, 1, 0, 0, 100},
+    {"VEL RND RATIO", 20, 0, 1, 0, 0, 1},
+    {"VEL ACCEL    ", 24, 0, 1, 0, 0, 2},
+    {"GRAVITY ACC", 28, 0, 1, 0, -10, 10},
+    {"ROT BASE", 0x88, 0, 2, 0, -180, 180},
+    {"ROT BASE RND", 0x8C, 0, 1, 0, 0, 1},
+    {"ROT GROW", 32, 0, 2, 0, -180, 180},
+    {"ROT GROW RND", 36, 0, 1, 0, 0, 1},
+    {"ROT GROW ACC", 40, 0, 1, 0, 0, 2},
+    {"SIZE BASE", 44, 0, 1, 0, 0, 50},
+    {"SIZE BASE RND", 48, 0, 1, 0, 0, 1},
+    {"SIZE GROW", 52, 0, 1, 0, -50, 50},
+    {"SIZE GROW RND", 56, 0, 1, 0, 0, 1},
+    {"SIZE GROW ACC", 60, 0, 1, 0, 0, 1},
+    {"NB POLYGONS", 64, 0, 0, 1, 1, 80},
+    {"LIFE SPAN", 68, 0, 0, 0, 0, 1000},
+    {"LIFE SPAN RND", 72, 0, 1, 0, 0, 1},
+    {"BIRTH RATE", 76, 0, 1, 0, 0, 100},
+    {"FADE BASE", 80, 0, 1, 0, 0, 1},
+    {"FADE BASE RND", 84, 0, 1, 0, 0, 1},
+    {"FADE OUT", 88, 0, 0, 0, 0, 1000},
+    {"FADE OUT RND", 92, 0, 1, 0, 0, 1},
+    {"COLOR R", 0x70, 0, 0, 0, 0, 255},
+    {"COLOR G", 0x74, 0, 0, 0, 0, 255},
+    {"COLOR B", 0x78, 0, 0, 0, 0, 255},
+    {0},
+}; /* derived name */
+
+#define effParam PAL_NTSCAUG6(effParam_pal, effParam_ntscaug6)
 
 static void _dispParam(int *pkg, int idx, int x, int y, int col)
 {
@@ -127,7 +164,11 @@ static int holdCount = 0; /* derived name */
    at */
 static int effectToolDirty[64]; /* derived name */
 
-static float effectToolPos[4]; /* derived name */
+static float effectToolPos_pal[4]; /* derived name */
+
+static sceVu0FVECTOR effectToolPos_aug6; /* derived name */
+
+#define effectToolPos PAL_AUG6(effectToolPos_pal, effectToolPos_aug6)
 
 static int editParam(int id, int sel)
 {
@@ -459,7 +500,7 @@ static inline void initEffectTool(void) /* derived name */
     CameraSetMode(1);
     scpBoyControlReadDisable = 1;
     debug_StdPrintfDummy("initialize\n");
-    for (i = 0x3C; i >= 0; i--) {
+    for (i = PAL_NTSCAUG6(0x3C, 52); i >= 0; i--) {
         effectToolDirty[i] = 0;
     }
 }
@@ -532,7 +573,8 @@ static int execEffectTool(void)
     default:
     case 0:
         r = debug_SelectCsvWindow("Effect Tools: PUSH 2-CON'\202' TO SAVE SELECTED DATA", 10, 0x32,
-                                  0xB, particleEffectFile, 0x50, 0, 0, 0x3D, &effectId);
+                                  0xB, particleEffectFile, 0x50, 0, 0, PAL_NTSCAUG6(0x3D, 53),
+                                  &effectId);
         if (effectId != lastEffectId) {
             setQ(q);
             if (effectHandle != -1) {
@@ -551,12 +593,12 @@ static int execEffectTool(void)
         if (pad[1].rep & 0x1000) {
             effectId--;
             if (effectId < 0) {
-                effectId = 0x3C;
+                effectId = PAL_NTSCAUG6(0x3C, 52);
             }
         }
         if (pad[1].rep & 0x4000) {
             effectId++;
-            if (effectId >= 0x3D) {
+            if (effectId >= PAL_NTSCAUG6(0x3D, 53)) {
                 effectId = 0;
             }
         }

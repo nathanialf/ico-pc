@@ -66,28 +66,28 @@ typedef struct {       /* field names derived */
 
 void torchOnOfWeaponSE(GObj *torch)
 {
-    ExecuteSEPackage(torch, 66);
+    ExecuteSEPackage(torch, PAL_NTSCAUG6(66, 64));
 }
 
 void torchOffOfWeaponSE(GObj *torch)
 {
     StopSEPackage(torch);
-    ExecuteSEPackage(torch, 67);
+    ExecuteSEPackage(torch, PAL_NTSCAUG6(67, 65));
 }
 
 void weaponHitReactionSE(GObj *g)
 {
-    ExecuteSEPackage(g, 68);
+    ExecuteSEPackage(g, PAL_NTSCAUG6(68, 66));
 }
 
 void weaponFumbleSE(GObj *g)
 {
-    ExecuteSEPackage(g, 92);
+    ExecuteSEPackage(g, PAL_NTSCAUG6(92, 87));
 }
 
 void weaponStickSE(GObj *g)
 {
-    ExecuteSEPackage(g, 93);
+    ExecuteSEPackage(g, PAL_NTSCAUG6(93, 88));
 }
 
 static inline void releaseWeaponHolder(WeaponWork *w) /* derived name */
@@ -196,7 +196,7 @@ int ReleaseWeaponWithFumbleSequential(GObj *g)
     return 0;
 }
 
-static WeaponWork swordWorkTemplate = {
+static WeaponWork swordWorkTemplate_pal = {
     0,
     0,
     0,
@@ -228,6 +228,34 @@ static WeaponWork swordWorkTemplate = {
     {0},
     {0.0f, 0.0f, 0.0f, 1.0f},
 }; /* derived name */
+
+static WeaponWork swordWorkTemplate_ntscaug6 = {
+    0,
+    0,
+    0,
+    -1,
+    {{0.0f, 0.0f, 0.0f, 1.0f},
+     {0.0f, 0.0f, 0.0f, 1.0f},
+     {0.0f, 0.0f, 0.0f, 1.0f},
+     {0.0f, 0.0f, 0.0f, 1.0f}},
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0.0f,
+    {0},
+    {0.0f, 0.0f, 0.0f, 1.0f},
+    {0.0f, 0.0f, 0.0f, 1.0f},
+    {0.0f, 0.0f, 0.0f, 1.0f},
+    0,
+    0,
+    0.0f,
+    0.0f,
+}; /* derived name */
+
+#define swordWorkTemplate (*PAL_NTSCAUG6(&swordWorkTemplate_pal, &swordWorkTemplate_ntscaug6))
 
 /* the offsets the two path helpers below set the z of and push along */
 static float pathOfsFwd[4] = {0.0f, 0.0f, 1.0f, 1.0f}; /* derived name */
@@ -486,7 +514,9 @@ static void getGeometry(GObj *g)
             CopyQuaternion(rq, quat);
         }
         UpdateRootMatrix(g);
-        setWeaponOffsetMode(g, 0);
+        if (!ICO_NTSCAUG6) {
+            setWeaponOffsetMode(g, 0);
+        }
     } else {
         switch (w->state) {
         default:
@@ -568,7 +598,8 @@ static void initializeQueenzSword(GObj *g, int index, SObjSimpleSetting *lay)
     r.obj = (lay->obj & 0xFF00) ? 5 : 4;
 
     w->count = 1;
-    w->objs = iosMallocDebug(ios_partition_sugipon, 1 * sizeof(GObj *), __FILE__, 759);
+    w->objs = iosMallocDebug(ios_partition_sugipon, 1 * sizeof(GObj *), __FILE__,
+                             PAL_NTSC_AUG6(759, 711, 712));
 
     for (i = 0; i < 1; i++) {
         /* PC port: a division by the literal 0: 0 / 0 for the only sword,
@@ -582,15 +613,121 @@ static void initializeQueenzSword(GObj *g, int index, SObjSimpleSetting *lay)
 
     r2 = *lay;
     r2.obj = 13;
-    o2 = CreateLayoutedGObj(46, 11, -1, 0, &r2, -1, 7, 0);
+    o2 = CreateLayoutedGObj(PAL_NTSCAUG6(46, 45), PAL_NTSCAUG6(11, 9), -1, 0, &r2, -1, 7, 0);
     GOBJ_SUB(o2)->parent = lnk;
     w->sword = o2;
 }
 
 typedef float WeaponVec[4] __attribute__((aligned(8))); /* derived name */
 
+static void *InitWeaponGeo_ntsc(GObj *g, SObjSimpleSetting *lay)
+{
+    WeaponWork *w = iosMallocDebug(ios_partition_sugipon, sizeof(WeaponWork), __FILE__, 772);
+    int i;
+
+    GOBJ_SUB(g)->work = w;
+
+    *w = swordWorkTemplate;
+    w->kind = lay->obj & 0xFF;
+
+    for (i = 0; i < GOBJ_SUB(g)->nodeNum; i++) {
+        switch (w->kind) {
+        case 0:
+            break;
+
+        case 1: {
+            ObjNode lnk = {g, i};
+            WeaponVec v = {0.0f, 0.0f, weaponKind[w->kind].length, 1.0f};
+            GObj *o;
+            SObjSimpleSetting r = *lay;
+
+            r.obj = (lay->obj & 0xFF00) != 0;
+            o = CreateLayoutedGObj(10, 69, -1, 1, &r, -1, 7, 1);
+            LinkParentOfDObj(o, &lnk);
+            CopyVector(GOBJ_SUB(o)->root.pos, v);
+            SetTorchLife(o, (60 - systemStatus[0] * 10) / systemStatus[1] * 15, 0);
+            w->count = 1;
+            w->objs = iosMallocDebug(ios_partition_sugipon, 1 * sizeof(GObj *), __FILE__, 800);
+            w->objs[0] = o;
+            w->buf = iosMallocDebug(ios_partition_sugipon, 352, __FILE__, 808);
+            break;
+        }
+
+        case 5:
+            initializeQueenzSword(g, i, lay);
+            w->buf = iosMallocDebug(ios_partition_sugipon, 352, __FILE__, 813);
+            break;
+
+        case 7:
+            w->buf = iosMallocDebug(ios_partition_sugipon, 352, __FILE__, 817);
+            break;
+
+        default:
+            w->buf = iosMallocDebug(ios_partition_sugipon, 352, __FILE__, 821);
+            break;
+        }
+    }
+    return w;
+}
+
+static void *InitWeaponGeo_aug6(GObj *g, SObjSimpleSetting *lay)
+{
+    WeaponWork *w = iosMallocDebug(ios_partition_sugipon, sizeof(WeaponWork), __FILE__, 773);
+    int i;
+
+    GOBJ_SUB(g)->work = w;
+
+    *w = swordWorkTemplate;
+    w->kind = lay->obj & 0xFF;
+
+    for (i = 0; i < GOBJ_SUB(g)->nodeNum; i++) {
+        switch (w->kind) {
+        case 0:
+            break;
+
+        case 1: {
+            ObjNode lnk = {g, i};
+            WeaponVec v = {0.0f, 0.0f, weaponKind[w->kind].length, 1.0f};
+            GObj *o;
+            SObjSimpleSetting r = *lay;
+
+            r.obj = (lay->obj & 0xFF00) != 0;
+            o = CreateLayoutedGObj(10, 68, -1, 1, &r, -1, 7, 1);
+            LinkParentOfDObj(o, &lnk);
+            CopyVector(GOBJ_SUB(o)->root.pos, v);
+            SetTorchLife(o, (60 - systemStatus[0] * 10) / systemStatus[1] * 15, 0);
+            w->count = 1;
+            w->objs = iosMallocDebug(ios_partition_sugipon, 1 * sizeof(GObj *), __FILE__, 801);
+            w->objs[0] = o;
+            w->buf = iosMallocDebug(ios_partition_sugipon, 352, __FILE__, 809);
+            break;
+        }
+
+        case 5:
+            initializeQueenzSword(g, i, lay);
+            w->buf = iosMallocDebug(ios_partition_sugipon, 352, __FILE__, 814);
+            break;
+
+        case 7:
+            w->buf = iosMallocDebug(ios_partition_sugipon, 352, __FILE__, 818);
+            break;
+
+        default:
+            w->buf = iosMallocDebug(ios_partition_sugipon, 352, __FILE__, 822);
+            break;
+        }
+    }
+    return w;
+}
+
 void *InitWeaponGeo(GObj *g, SObjSimpleSetting *lay)
 {
+    if (ICO_NTSC) {
+        return InitWeaponGeo_ntsc(g, lay);
+    }
+    if (ICO_AUG6) {
+        return InitWeaponGeo_aug6(g, lay);
+    }
     WeaponWork *w = iosMallocDebug(ios_partition_sugipon, sizeof(WeaponWork), __FILE__, 820);
     int i;
 
@@ -832,8 +969,18 @@ typedef union { /* field names derived */
     int i[4][4];
 } WeaponMatrix; /* derived name */
 
+static void WeaponGeo_ntscaug6(GObj *g)
+{
+    getGeometry(g);
+    checkHit(g);
+}
+
 void WeaponGeo(GObj *g)
 {
+    if (ICO_NTSCAUG6) {
+        WeaponGeo_ntscaug6(g);
+        return;
+    }
     WeaponWork *w = GOBJ_SUB(g)->work;
     int kind;
     int i;
@@ -905,8 +1052,89 @@ void WeaponGeo(GObj *g)
     }
 }
 
+static void WeaponDL_ntscaug6(GObj *g)
+{
+    WeaponWork *w = GOBJ_SUB(g)->work;
+
+    switch (w->kind) {
+    default:
+        p2o_SetDefaultEnviroment();
+        p2o_DispVU1(g);
+        break;
+    case 7:
+        dispInsectNet(g);
+        break;
+    case 0:
+        break;
+    }
+    if (w->state == 1 ||
+        (w->holder != 0 && motionKind[w->holder->dobj->ctrl.motion].flags2.bits.weaponSwing)) {
+        float q1[4];
+        float q2[4];
+        float d[4];
+        float p[4];
+        Sub15C *e = GOBJ_SUB(g);
+
+        GetInverseQuaternion(q1, e->root.itemQuat);
+        MultiQuaternion(q1, e->root.quat, q1);
+        SubVectorXYZ(d, e->root.pos, e->root.move);
+        if (weaponKind[w->kind].blur != -1) {
+            const WeaponDef *k = &weaponKind[w->kind];
+            GifColor c = {k->color[0], k->color[1], k->color[2], k->color[3]};
+            float m[4][4];
+            float n[4];
+            float a[4];
+            float b[4];
+            char *base = w->buf;
+            int i;
+            float ang;
+
+            GetMatrixFromQuaternion(m, q1);
+            _ApplyMatrix(a, m, ZUnitVector);
+            GetMatrixFromQuaternion(m, e->root.quat);
+            _ApplyMatrix(b, m, ZUnitVector);
+            _OuterProduct(n, b, a);
+            _NormalizeVector(n, n);
+            ang = GetTableArcCos(_InnerProduct(a, b));
+            _ScaleVectorXYZ(a, a, k->length);
+            a[3] = 1.0f;
+            for (i = 0; i < 11; i++) {
+                float rr = (float)i / 10.0f;
+
+                SetQuaternionByAxisRotateVWithNoRegularize(q2, (short)(ang * (float)i / 10.0f), n);
+                sceVu0InterVector(p, e->root.pos, d, rr);
+                GetMatrixFromQuaternionPos(m, q2, p);
+                CopyVector(base + i * 32, m[3]);
+                sceVu0ApplyMatrix(base + (i * 32 + 16), m, a);
+            }
+            _SetCurrentMatrix(matrixptr + 0x100);
+            gif_StartPacketPri(2);
+            switch (k->blur) {
+            case 0:
+            default:
+                gif_SetAlpha(1, 7, 128);
+                break;
+            case 1:
+                gif_SetAlpha(1, 5, 128);
+                break;
+            case 2:
+                gif_SetAlpha(1, 6, 128);
+                break;
+            }
+            gif_SetZTest(1);
+            gif_SetZWrite(1);
+            gif_DrawStripF(base, c, 22, 1);
+            gif_EndPacket();
+        }
+    }
+}
+
 void WeaponDL(GObj *g)
 {
+    if (ICO_NTSCAUG6) {
+        WeaponDL_ntscaug6(g);
+        return;
+    }
     WeaponWork *w = GOBJ_SUB(g)->work;
 
     switch (w->kind) {
@@ -966,9 +1194,13 @@ GObj *CheckSwapableWeapon(GObj *self, float dist)
         if (g->active == 0)
             continue;
 
-        wp = w->tipPos;
-        if (stage_no == 4 && g->labelId != 128)
-            continue;
+        if (ICO_NTSCAUG6) {
+            wp = (float *)((char *)GOBJ_SUB(g)->nodeMtx + 48);
+        } else {
+            wp = w->tipPos;
+            if (stage_no == 4 && g->labelId != 128)
+                continue;
+        }
 
         d = distance_squared(pos, wp);
         if (d < best) {
@@ -1094,7 +1326,8 @@ void *InitDemoQueensSword(GObj *g, SObjSimpleSetting *lay)
     WeaponWork *w;
     int i;
 
-    w = (WeaponWork *)iosMallocDebug(ios_partition_sugipon, sizeof(WeaponWork), __FILE__, 802);
+    w = (WeaponWork *)iosMallocDebug(ios_partition_sugipon, sizeof(WeaponWork), __FILE__,
+                                     LN(802, 802, 802, 754, 755, 802, 802));
     GOBJ_SUB(g)->work = w;
     *w = swordWorkTemplate;
     for (i = 0; i < GOBJ_SUB(g)->nodeNum; i++) {

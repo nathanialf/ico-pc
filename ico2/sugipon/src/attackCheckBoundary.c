@@ -23,7 +23,8 @@ inline float GetAttackCheckBoundaryRadius(GObj *self);
 
 static inline GObj *createAttackCheckBoundaryGObj(SObjSimpleSetting *lay) /* derived name */
 {
-    return CreateLayoutedGObj(63, 75, -1, 0, lay, -1, 7, 1);
+    return CreateLayoutedGObj(PAL_NTSC_AUG6(63, 62, 61), PAL_NTSC_AUG6(75, 69, 68), -1, 0, lay, -1,
+                              7, 1);
 }
 
 /* The 12-byte work record this function allocates and the other members
@@ -115,8 +116,108 @@ inline void actAttackCheckBoundaryStart(GObj *self)
     p->flags18.ll |= 1LL << 32;
 }
 
+static void AttackCheckBoundaryBeforeFunc_ntsc(GObj *self)
+{
+    IosMailBox *box = &self->mailBox;
+    IosMail *e = box->mail;
+    int i;
+
+    for (i = 0; i < box->num; i++, e++) {
+        if (e->type == 13) {
+            if (e->arg == boyGObj) {
+                AcbWork *b = GOBJ_SUB(self)->work;
+                void *g = GetBoyWeaponGObj();
+
+                if (g != 0) {
+                    if (CheckWeaponKind(g) == 5 || CheckWeaponKind(g) == 4 ||
+                        CheckWeaponKind(g) == 6) {
+                        if (*b->handle < 2) {
+                            GOBJ_SUB(g)->ctrl.wallAttr = b->attr;
+                            ExecuteSEPackage(g, 71);
+                            b->hit = 2;
+                            *b->handle = 2;
+                            /* " - cut by the sword" */
+                            debug_StdPrintfDummy(" - 剣で切られた\n");
+                        }
+                        goto done;
+                    }
+                }
+                if (*b->handle <= 0) {
+                    ActSendMail_WithAdditionalData(boyGObj, 193, self, &b->attr);
+                    b->hit = 1;
+                    *b->handle = 1;
+                    /* " - cannot cut" */
+                    debug_StdPrintfDummy(" - きれない\n");
+                }
+            }
+        done:
+            {
+                Act *q = GOBJ_ACT(self);
+
+                q->attacker = 0;
+                q->hit = 0;
+            }
+        }
+    }
+    box->num = 0;
+}
+
+static void AttackCheckBoundaryBeforeFunc_aug6(GObj *self)
+{
+    IosMailBox *box = &self->mailBox;
+    IosMail *e = box->mail;
+    int i;
+
+    for (i = 0; i < box->num; i++, e++) {
+        if (e->type == 13) {
+            if (e->arg == boyGObj) {
+                AcbWork *b = GOBJ_SUB(self)->work;
+                void *g = GetBoyWeaponGObj();
+
+                if (g != 0) {
+                    if (CheckWeaponKind(g) == 5 || CheckWeaponKind(g) == 4 ||
+                        CheckWeaponKind(g) == 6) {
+                        if (*b->handle < 2) {
+                            GOBJ_SUB(g)->ctrl.wallAttr = b->attr;
+                            ExecuteSEPackage(g, 71);
+                            b->hit = 2;
+                            *b->handle = 2;
+                            /* " - cut by the sword" */
+                            debug_StdPrintfDummy(" - 剣で切られた\n");
+                        }
+                        goto done;
+                    }
+                }
+                if (*b->handle <= 0) {
+                    ActSendMail_WithAdditionalData(boyGObj, 190, self, &b->attr);
+                    b->hit = 1;
+                    *b->handle = 1;
+                    /* " - cannot cut" */
+                    debug_StdPrintfDummy(" - きれない\n");
+                }
+            }
+        done:
+            {
+                Act *q = GOBJ_ACT(self);
+
+                q->attacker = 0;
+                q->hit = 0;
+            }
+        }
+    }
+    box->num = 0;
+}
+
 void AttackCheckBoundaryBeforeFunc(GObj *self)
 {
+    if (ICO_NTSC) {
+        AttackCheckBoundaryBeforeFunc_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        AttackCheckBoundaryBeforeFunc_aug6(self);
+        return;
+    }
     IosMailBox *box = &self->mailBox;
     IosMail *e = box->mail;
     int i;
@@ -191,12 +292,14 @@ AcbMgr *InitAttackCheckBoundaryManagerGeo(GObj *self, SObjSimpleSetting *lay)
     GObj *g;
 
     rec = &layoutClothDef[lay->obj];
-    mgr = (AcbMgr *)iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(AcbMgr, 16), __FILE__, 180);
+    mgr = (AcbMgr *)iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(AcbMgr, 16), __FILE__,
+                                   PAL_NTSC(180, 173));
     mgr->prev = mgr->cur;
     mgr->cur = 0;
     mgr->count = rec->count;
-    mgr->list = (AcbEntry *)iosMallocDebug(ios_partition_sugipon,
-                                           mgr->count * ICO_MAX_SIZE(AcbEntry, 8), __FILE__, 189);
+    mgr->list =
+        (AcbEntry *)iosMallocDebug(ios_partition_sugipon, mgr->count * ICO_MAX_SIZE(AcbEntry, 8),
+                                   __FILE__, PAL_NTSC(189, 182));
     v0[0] = rec->pt[0][0];
     v0[1] = -rec->pt[0][1];
     v0[2] = rec->pt[0][2];

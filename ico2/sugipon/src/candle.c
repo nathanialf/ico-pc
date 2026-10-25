@@ -41,8 +41,30 @@ ICO_WORD InitCandleGeo(void *self, void *mtx)
     return (ICO_WORD)flame;
 }
 
+static void CandleGeo_ntscaug6(void *self)
+{
+    Sub15C *w = GOBJ_SUB(self);
+    CandleFlame *flame = w->work;
+    int i;
+
+    if (w->disp != 0 && w->nodeNum >= 2) {
+        for (i = 0; i < w->nodeNum; i++) {
+            CopyMatrix(MatrixDrive_GetMatrix(), (char *)GOBJ_SUB(self)->nodeMtx + i * 64);
+            MatrixDrive_TransMatrix(0.0f, -40.0f, 0.0f);
+            if (flame[i].effect != -1) {
+                SetParticleEffectGeometry(flame[i].effect, MatrixDrive_GetMatrix()[3],
+                                          IdentityQuaternion);
+            }
+        }
+    }
+}
+
 void CandleGeo(void *self)
 {
+    if (ICO_NTSCAUG6) {
+        CandleGeo_ntscaug6(self);
+        return;
+    }
     Sub15C *w = GOBJ_SUB(self);
     CandleFlame *flame = w->work;
     /* the release pass reads the display object through its own handle */

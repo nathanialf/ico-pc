@@ -98,11 +98,17 @@ static void setEnemyParticleObject(GObj *self, int pid)
     EnemyPosEntry *v;
     EnemyPosEntry *q;
 
-    size = (p->scale[0] + p->scale[1] + p->scale[2]) * 32.0f * 0.33333f * 0.5f * 10.0f;
-    parts = (PrimParticle **)iosMallocDebug(ios_partition_sugipon, n * sizeof(PrimParticle *),
-                                            "src/enemy.c", 130);
+    if (ICO_NTSCAUG6) {
+        size = (p->scale[0] + p->scale[1] + p->scale[2]) * 32.0f * 0.33333f * 0.5f;
+        parts = (PrimParticle **)iosMallocDebug(ios_partition_sugipon, n * sizeof(PrimParticle *),
+                                                "src/enemy.c", 105);
+    } else {
+        size = (p->scale[0] + p->scale[1] + p->scale[2]) * 32.0f * 0.33333f * 0.5f * 10.0f;
+        parts = (PrimParticle **)iosMallocDebug(ios_partition_sugipon, n * sizeof(PrimParticle *),
+                                                "src/enemy.c", 130);
+    }
     w->particle = parts;
-    fl = (int *)iosMallocDebug(ios_partition_sugipon, n * 4, "src/enemy.c", 132);
+    fl = (int *)iosMallocDebug(ios_partition_sugipon, n * 4, "src/enemy.c", PAL_NTSCAUG6(132, 107));
     w->flag = fl;
     clearEnemyParticleFlags(fl, n);
     for (i = 0; i < n; i++) {
@@ -127,8 +133,9 @@ static void setEnemyParticleObject(GObj *self, int pid)
         if (parts[i] == 0) {
             /* EUC-JP: "cannot reserve the memory for the enemy soldier particles" */
             debug_StdPrintfDummy("敵兵のパーティクルのメモリを確保できません\n");
-            debug_assertMessage("src/enemy.c", 177, "CAN'T ALLOCATE ENEMY'S PARTICLE MEMORY\n");
-            __assert("src/enemy.c", 177, "e");
+            debug_assertMessage("src/enemy.c", PAL_NTSCAUG6(177, 152),
+                                "CAN'T ALLOCATE ENEMY'S PARTICLE MEMORY\n");
+            __assert("src/enemy.c", PAL_NTSCAUG6(177, 152), "e");
         }
         for (cnt = 0; q->w > -1.0f && cnt < 80; cnt++, q++) {
             n4 = rand() % 4;
@@ -438,7 +445,8 @@ static inline int enemyInitPartsList(GObj *self, SObjSimpleSetting *param) /* de
     /* the work-record entry is read as an int and cast */
     w = (EnemyWork *)SUBOF(self)->work;
 
-    parts = (int *)iosMallocDebug(ios_partition_sugipon, n * 4, "src/enemy.c", 285);
+    parts = (int *)iosMallocDebug(ios_partition_sugipon, n * 4, "src/enemy.c",
+                                  LN(285, 285, 285, 260, 260, 258, 285));
     w->broken = parts;
     clearEnemyParticleFlags(parts, n);
     w->kind = kind;
@@ -452,7 +460,8 @@ void *InitEnemyGeo(GObj *self, SObjSimpleSetting *param)
     int kind;
     int no;
 
-    w = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(EnemyWork, 0x54), "src/enemy.c", 641);
+    w = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(EnemyWork, 0x54), "src/enemy.c",
+                       PAL_NTSC_AUG6(641, 605, 597));
     SUBOF(self)->work = w;
     w->word1C = 0;
     w->eye0 = InitEnemyEye(10, 0, 10);
@@ -466,11 +475,19 @@ void *InitEnemyGeo(GObj *self, SObjSimpleSetting *param)
     w->short40 = 0;
     w->wing = 0.0f;
     w->timer = 0;
-    w->flyXZAccel = 1.0f;
+    if (!ICO_NTSCAUG6) {
+        w->flyXZAccel = 1.0f;
+    }
     kind = enemyInitPartsList(self, param);
     w->def = kind;
-    w->flyXZAccel = enemyKind[kind].float0C;
-    InitMotionOrient(self, 0x84A, 0x967, 0x18, 0x24, 0x342);
+    if (ICO_NTSC) {
+        InitMotionOrient(self, 1820, 2105, 24, 36, 788);
+    } else if (ICO_AUG6) {
+        InitMotionOrient(self, 1797, 2080, 24, 36, 790);
+    } else {
+        w->flyXZAccel = enemyKind[kind].float0C;
+        InitMotionOrient(self, 0x84A, 0x967, 0x18, 0x24, 0x342);
+    }
     no = enemyVariation;
     SUBOF(self)->ctrl.variation = no;
     enemyVariation = (no + 2) % 10;
@@ -510,11 +527,18 @@ void EnemyGeo(GObj *self)
         Sub15C *s = GOBJ_SUB(self);
         if (s->ctrl.landed != 0) {
             if (w->footSwitch != 0) {
-                if (!(s->ctrl.motion == 0x3A1 || s->ctrl.motion == 0x3A2)) {
+                if (ICO_NTSCAUG6) {
                     GetProjectionOfPlane(
                         buf, s->root.plane.f,
                         (float *)((char *)s->nodeMtx + s->root.standNode * 0x40 + 0x30));
                     EntryEnemyFootPrint(w->foot, buf);
+                } else {
+                    if (!(s->ctrl.motion == 0x3A1 || s->ctrl.motion == 0x3A2)) {
+                        GetProjectionOfPlane(
+                            buf, s->root.plane.f,
+                            (float *)((char *)s->nodeMtx + s->root.standNode * 0x40 + 0x30));
+                        EntryEnemyFootPrint(w->foot, buf);
+                    }
                 }
             }
         }
@@ -694,8 +718,29 @@ int EnemyGetNSafeParts(GObj *self)
     return cnt;
 }
 
+static void EnemyDeleteParticle_aug6(GObj *self, float *dir, short *list)
+{
+    Sub15C *sub = self->dobj;
+    EnemyWork *w = sub->work;
+    int i;
+    int n;
+
+    n = 3;
+    for (i = 0; list[i] >= 0 && n > 0; i++) {
+        if ((w->broken)[list[i]] == 0) {
+            (w->broken)[list[i]] = 1;
+            enemySetParticle(8, (char *)sub->nodeMtx + list[i] * 64 + 48, dir);
+            n--;
+        }
+    }
+}
+
 void EnemyDeleteParticle(GObj *self, float *dir, short *list)
 {
+    if (ICO_AUG6) {
+        EnemyDeleteParticle_aug6(self, dir, list);
+        return;
+    }
     Sub15C *sub = self->dobj;
     int i;
     int n;
@@ -715,7 +760,8 @@ void SetEnemyHitGeometryAction(GObj *self, int on)
 
 int InitDemoMotionGeo(GObj *self)
 {
-    InitMotionOrient(self, 2122, 2407, -1, -1, 983);
+    InitMotionOrient(self, PAL_NTSC_AUG6(2122, 1820, 1797), PAL_NTSC_AUG6(2407, 2105, 2080), -1, -1,
+                     PAL_NTSC_AUG6(983, 922, 924));
     SetLodLevel(self, 0);
     self->active = 0;
     return 0;
@@ -723,7 +769,8 @@ int InitDemoMotionGeo(GObj *self)
 
 void HotInitDemoMotionGeo(GObj *self)
 {
-    InitMotionOrient(self, 2122, 2407, -1, -1, 983);
+    InitMotionOrient(self, PAL_NTSC_AUG6(2122, 1820, 1797), PAL_NTSC_AUG6(2407, 2105, 2080), -1, -1,
+                     PAL_NTSC_AUG6(983, 922, 924));
     SetLodLevel(self, 0);
     self->active = 0;
 }

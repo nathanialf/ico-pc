@@ -36,13 +36,59 @@ inline GirlForceFieldWork *InitGirlForceFieldGeo(GObj *self, SObjSimpleSetting *
     return w;
 }
 
-inline void GirlForceFieldGeo(void) {}
-
 /* the action table the layout rows select into */
 extern OaRecB objAction[];
 
+static void GirlForceFieldGeo_aug6(GObj *self)
+{
+    float pos[4];
+    float quat[4];
+    float gpos[4];
+    GirlForceFieldWork *w = GOBJ_SUB(self)->work;
+    float d2;
+    float ratio;
+
+    UpdateRootMatrix(self);
+    GetRootPosition(pos, self);
+
+    if (girlGObj != 0) {
+        GetRootPosition(gpos, girlGObj);
+        d2 = distance_squared(gpos, pos);
+        if (d2 < w->radius * w->radius) {
+            ratio = 1.0f - FSqrt(d2) * w->invRadius;
+            ratio = ratio < 0.0f ? 0.0f : ratio;
+
+            GetRootQuaternion(quat, self);
+            w->frame = (int)stage_PlayBgAnimationDissolve(
+                objAction[objLayout[self->labelId].action].baseMode, pos, quat, (float)w->frame,
+                ratio);
+            return;
+        }
+    }
+    w->frame = 0;
+}
+
+/* PC port: the geo step takes the object, which only the August preview's reads (that build
+   dissolves in the geo step and draws nothing in the display list step, the European program
+   the other way round) */
+inline void GirlForceFieldGeo(GObj *self)
+{
+    if (ICO_AUG6) {
+        GirlForceFieldGeo_aug6(self);
+    }
+}
+
+static inline void GirlForceFieldDL_aug6(GObj *self)
+{
+    (void)self;
+}
+
 void GirlForceFieldDL(GObj *self)
 {
+    if (ICO_AUG6) {
+        GirlForceFieldDL_aug6(self);
+        return;
+    }
     float pos[4];
     float quat[4];
     float gpos[4];

@@ -76,17 +76,17 @@ typedef struct {                        /* field names derived */
 
 static void bombSparkStartSE(GObj *gobj)
 {
-    ExecuteSEPackage(gobj, 50);
+    ExecuteSEPackage(gobj, PAL_NTSCAUG6(50, 48));
 }
 
 static void bombSparkSE(GObj *gobj)
 {
-    ExecuteSEPackage(gobj, 51);
+    ExecuteSEPackage(gobj, PAL_NTSCAUG6(51, 49));
 }
 
 static void bombExplodeSE(GObj *gobj)
 {
-    ExecuteSEPackage(gobj, 52);
+    ExecuteSEPackage(gobj, PAL_NTSCAUG6(52, 50));
 }
 
 /* whether the item is a bomb; HoldItem, StopItemExplodeAnimationAll and
@@ -106,8 +106,8 @@ void HoldItem(GObj *gobj, GObj *holder)
     if (gobj == 0) {
         /* lost sight of the small barrel but is still trying to grab it */
         debug_StdPrintfDummy("小樽を見失ったのにつかもうとしてます。\n");
-        debug_assert(__FILE__, 356);
-        __assert(__FILE__, 356, "0");
+        debug_assert(__FILE__, LN(356, 356, 356, 344, 344, 312, 356));
+        __assert(__FILE__, LN(356, 356, 356, 344, 344, 312, 356), "0");
     }
     p = GOBJ_SUB(gobj)->work;
     p->released = 0;
@@ -135,6 +135,9 @@ static inline void setItemDead(GObj *gobj) /* derived name */
     p->dead = 1;
     gobj->active = 0;
 }
+
+/* a direction along -X, which no code of this build reads */
+static float itemNegXAxis[4] = {-1.0f, 0.0f, 0.0f, 0.0f}; /* derived name */
 
 static ItemWork emptyItemWork = {0,    0, 0,   0,       0, 0, {0}, {0.0f, 0.0f, 0.0f, 1.0f},
                                  0.0f, 0, {0}, {0, 300}}; /* derived name */
@@ -193,7 +196,7 @@ void ThrowItem(GObj *gobj, void *vel)
     p->released = 1;
     p->held = 0;
     p->thrown = 1;
-    if (ICO_JPNKORCN) {
+    if (ICO_JPNKORNTSCAUG6CN) {
         CopyVector(GOBJ_SUB(gobj)->root.move, vel);
     } else {
         _ScaleVectorXYZ(
@@ -222,7 +225,8 @@ char *InitItemGeo(GObj *gobj, ItemLayout *layout)
     ObjNode link;
     ItemLayout lay;
     Sub15C *w = GOBJ_SUB(gobj);
-    ItemWork *p = iosMallocDebug(ios_partition_sugipon, sizeof(ItemWork), __FILE__, 446);
+    ItemWork *p = iosMallocDebug(ios_partition_sugipon, sizeof(ItemWork), __FILE__,
+                                 LN(446, 446, 446, 434, 434, 382, 446));
 
     GOBJ_SUB(gobj)->work = p;
     *p = emptyItemWork;
@@ -236,7 +240,7 @@ char *InitItemGeo(GObj *gobj, ItemLayout *layout)
         link.node = 0;
         lay = *layout;
         lay.kind = 2;
-        g = CreateLayoutedGObj(10, 75, -1, 1, &lay, -1, 7, 0);
+        g = CreateLayoutedGObj(10, PAL_NTSC_AUG6(75, 69, 68), -1, 1, &lay, -1, 7, 0);
         SetTorchChainReactionFlag(g, 1);
         LinkParentOfDObj(g, &link);
         CopyVector(GOBJ_SUB(g)->root.pos, itemDropOfs);
@@ -251,8 +255,61 @@ char *InitItemGeo(GObj *gobj, ItemLayout *layout)
 /* The holder's display object is read again at every site through the
    SubHandle union, then its node matrices (64 bytes a node) and quaternions
    (16 bytes a node); q is a plain four-float scratch. */
+static void carriedItemGeo_ntscaug6(GObj *gobj)
+{
+    Vec16 pos;
+    sceVu0FVECTOR q;
+    sceVu0FMATRIX m;
+    Vec16 wpos;
+    Vec16 rot;
+    Vec16 up;
+    unsigned short ang[2];
+    Vec16 adj;
+    ItemWork *rec = GOBJ_SUB(gobj)->work;
+
+    if (((SubHandle *)&((GObj *)rec->holder)->dobj)->sub->ctrl.frameFlag2 != 0) {
+        _ApplyMatrix(&pos,
+                     (char *)((SubHandle *)&((GObj *)rec->holder)->dobj)->sub->nodeMtx +
+                         GetSkeltonFocusNode((GObj *)rec->holder, 22) * 64,
+                     carryOfsOther);
+        CopyQuaternion(q, (char *)((SubHandle *)&((GObj *)rec->holder)->dobj)->sub->nodeQuat +
+                              GetSkeltonFocusNode((GObj *)rec->holder, 22) * 16);
+        RotQuaternionX(q, 16384);
+        SetRootQuaternion(gobj, q);
+    } else {
+        int node = GetSkeltonFocusNode((GObj *)rec->holder, 1);
+
+        CopyVector(&wpos, (char *)((SubHandle *)&((GObj *)rec->holder)->dobj)->sub->nodeMtx +
+                              GetSkeltonFocusNode((GObj *)rec->holder, 22) * 64 + 48);
+        MatrixDrive_SetTransposeMatrix(
+            m, (char *)((SubHandle *)&((GObj *)rec->holder)->dobj)->sub->nodeMtx + node * 64);
+        _ApplyMatrix(q, m, &wpos);
+        q[2] = 0.0f;
+        _ApplyMatrix(
+            &pos, (char *)((SubHandle *)&((GObj *)rec->holder)->dobj)->sub->nodeMtx + node * 64, q);
+        memset(&up, 0, 16);
+        up.f[1] = -1.0f;
+        sceVu0ApplyMatrix(&up,
+                          (char *)((SubHandle *)&((GObj *)rec->holder)->dobj)->sub->nodeMtx +
+                              GetSkeltonFocusNode((GObj *)rec->holder, 44) * 64,
+                          &up);
+        MatrixDrive_GetTurnZAngleYX(&ang[0], &ang[1], up.f[0], up.f[1], up.f[2]);
+        CopyQuaternion(&rot, rec->rot);
+        SetIdentityQuaternion(&adj);
+        RotQuaternionY(&adj, -ang[0]);
+        RotQuaternionX(&adj, ang[1]);
+        MultiQuaternion(&rot, &adj, &rot);
+        SetRootQuaternion(gobj, &rot);
+    }
+    SetDirectRootPosition(gobj, &pos);
+}
+
 static void carriedItemGeo(GObj *gobj)
 {
+    if (ICO_NTSCAUG6) {
+        carriedItemGeo_ntscaug6(gobj);
+        return;
+    }
     Vec16 pos;
     sceVu0FVECTOR q;
     sceVu0FMATRIX m;
@@ -316,8 +373,54 @@ static void carriedItemGeo(GObj *gobj)
 
 /* start the break animation of a broken item; BreakItemFromOutside and
    BreakItemWithAttackHit use it */
+static inline int entryBreakBgAnimation_ntsc(int id, float *pos, float *dir,
+                                             int arg) /* derived name */
+{
+    (void)arg; /* PC port: the European parameter, unused here */
+    float rot[4];
+    float d[4];
+
+    if (id != 815) {
+        memset(&rot, 0, 16);
+        rot[3] = 1.0f;
+        CopyVector(d, dir);
+        d[1] = 0.0f;
+        _NormalizeVector(d, d);
+        RotQuaternionY(&rot, GetTableArcTan2(d[0], d[2]));
+        EntryStageMultiBgaManager(id, pos, &rot);
+        return 1;
+    }
+    return 0;
+}
+
+static inline int entryBreakBgAnimation_aug6(int id, float *pos, float *dir,
+                                             int arg) /* derived name */
+{
+    (void)arg; /* PC port: the European parameter, unused here */
+    float rot[4];
+    float d[4];
+
+    if (id != 814) {
+        memset(&rot, 0, 16);
+        rot[3] = 1.0f;
+        CopyVector(d, dir);
+        d[1] = 0.0f;
+        _NormalizeVector(d, d);
+        RotQuaternionY(&rot, GetTableArcTan2(d[0], d[2]));
+        EntryStageMultiBgaManager(id, pos, &rot);
+        return 1;
+    }
+    return 0;
+}
+
 static inline int entryBreakBgAnimation(int id, float *pos, float *dir, int arg) /* derived name */
 {
+    if (ICO_NTSC) {
+        return entryBreakBgAnimation_ntsc(id, pos, dir, arg);
+    }
+    if (ICO_AUG6) {
+        return entryBreakBgAnimation_aug6(id, pos, dir, arg);
+    }
     float rot[4];
     float d[4];
 
@@ -350,7 +453,7 @@ static inline int breakItemOnWallHit(GObj *gobj, float len, float *pos,
     if (5.0f < len) {
         int id = itemKind[p->kind].stayAnim;
 
-        if (id != PAL_JPNKORCN(972, 949)) {
+        if (id != PAL_JPNKORCN_NTSC_AUG6(972, 949, 815, 814)) {
             memset(&rot, 0, 16);
             rot[3] = 1.0f;
             CopyVector(d, vel);
@@ -358,8 +461,12 @@ static inline int breakItemOnWallHit(GObj *gobj, float len, float *pos,
             _NormalizeVector(d, d);
             RotQuaternionY(&rot, GetTableArcTan2(d[0], d[2]));
             _ScaleVectorXYZ(sv, vel, 0.3f);
-            EntryStageMultiBgaManagerSensitiveWithStay(id, pos, &rot, sv,
-                                                       itemKind[p->kind].stayMode);
+            if (ICO_NTSCAUG6) {
+                EntryStageMultiBgaManagerSensitive(id, pos, &rot, sv);
+            } else {
+                EntryStageMultiBgaManagerSensitiveWithStay(id, pos, &rot, sv,
+                                                           itemKind[p->kind].stayMode);
+            }
             SetParticleEffect(10, pos, &rot);
         }
         if ((itemKind + p->kind)->flags & 1) {
@@ -378,15 +485,20 @@ static inline int breakItemOnFloorHit(GObj *gobj, float len, float *pos,
     ItemWork *p = GOBJ_SUB(gobj)->work;
 
     if (10.0f < len) {
-        entryBreakBgAnimation(itemKind[p->kind].breakAnim, pos, vel, itemKind[p->kind].breakMode);
+        if (ICO_NTSCAUG6) {
+            entryBreakBgAnimation(itemKind[p->kind].breakAnim, pos, vel, 0);
+        } else {
+            entryBreakBgAnimation(itemKind[p->kind].breakAnim, pos, vel,
+                                  itemKind[p->kind].breakMode);
+        }
         if ((itemKind + p->kind)->flags & 1) {
-            ExecuteSEPackage(gobj, 43);
+            ExecuteSEPackage(gobj, PAL_NTSCAUG6(43, 42));
             return 1;
         }
     }
     if (p->thrown == 0) {
         p->thrown = 1;
-        ExecuteSEPackage(gobj, 48);
+        ExecuteSEPackage(gobj, PAL_NTSCAUG6(48, 46));
         return 0;
     }
     if (5.0f < len) {
@@ -404,6 +516,9 @@ static void floatGeo(float t, GObj *gobj, float *vel, ItemWork *p, float *pos)
     GetSlerpQuaternion(GOBJ_SUB(gobj)->root.itemQuat, GOBJ_SUB(gobj)->root.itemQuat,
                        IdentityQuaternion, t);
     RegularizeQuaternion(GOBJ_SUB(gobj)->root.itemQuat);
+    if (ICO_NTSCAUG6) {
+        return; /* the 2001 builds have no push from the waves' walls */
+    }
     CopyVector(w.pt[0], pos);
     CopyVector(w.pt[1], w.pt[0]);
     w.radius = 200.0f;
@@ -421,8 +536,191 @@ static void floatGeo(float t, GObj *gobj, float *vel, ItemWork *p, float *pos)
     }
 }
 
+static void uncarriedItemGeo_ntscaug6(GObj *gobj)
+{
+    ObjNode link;  /* 0x00 */
+    float pos[4];  /* 0x10 */
+    float npos[4]; /* 0x20 */
+    float vel[4];  /* 0x30 */
+    ItemWork *p;   /* 0x40 */
+
+    float q[4];  /* 0x50 */
+    ClipWork cw; /* 0x60 */
+    int linked = 0;
+    float len0;
+    float len;
+    float spd;
+    float grav;
+    float rate;
+
+    p = GOBJ_SUB(gobj)->work;
+    GOBJ_SUB(gobj)->ctrl.wallAttr = 0;
+    GOBJ_SUB(gobj)->ctrl.floorAttr = 0;
+    CopyVector(vel, GOBJ_SUB(gobj)->root.move);
+    len0 = VectorLength(vel);
+    UnlinkParentOfDObj(gobj);
+    GetRootPosition(pos, gobj);
+    vel[1] += ITEM_DT * 0.5f * ITEM_DT;
+    if (p->inPool == 1) {
+        float d = pos[1] - GOBJ_SUB(gobj)->ctrl.waterY;
+
+        if (d < 0.0f ? -d < 20.0f : d < 20.0f) {
+            float r = (d + 20.0f) / 40.0f;
+
+            vel[1] -= ITEM_DT * 0.5f * ITEM_DT * 1.2f * r;
+            floatGeo(1.0f - r * 0.08f, gobj, vel, p, pos);
+        } else if (0.0f < d) {
+            vel[1] -= ITEM_DT * 0.5f * ITEM_DT * 1.2f;
+            rate = 0.92f;
+            floatGeo(rate, gobj, vel, p, pos);
+        }
+    }
+    sceVu0AddVector(npos, pos, vel);
+    GetRootQuaternion(q, gobj);
+    MultiQuaternion(q, GOBJ_SUB(gobj)->root.itemQuat, q);
+    RegularizeQuaternion(q);
+    SetRootQuaternion(gobj, q);
+    CopyVector(cw.pt[0], pos);
+    CopyVector(cw.pt[1], npos);
+    cw.radius = 20.0f;
+    ClipWall(&cw);
+    if (cw.wall.elem != 0) {
+        GOBJ_SUB(gobj)->ctrl.wallAttr = GetWallAttribute(&cw);
+        GetReflectionElement(&cw, 0.8f, 0.8f);
+        CopyVector(npos, cw.reflect.pos);
+        CopyVector(vel, cw.reflect.dir);
+        if (breakItemOnWallHit(gobj, VectorLength(cw.reflect.bounce), npos, vel)) {
+            setItemDead(gobj);
+        }
+    }
+    CopyVector(cw.pt[0], pos);
+    CopyVector(cw.pt[1], pos);
+    cw.pt[0][1] -= 20.0f;
+    cw.pt[1][1] += 20.0f;
+    ClipFloor(&cw);
+    if (cw.floor.elem != 0) {
+        CopyVector(pos, cw.pt[2]);
+        pos[1] -= 20.0f;
+    }
+    CopyVector(cw.pt[0], pos);
+    CopyVector(cw.pt[1], npos);
+    cw.pt[0][1] += 20.0f;
+    cw.pt[1][1] += 20.0f;
+    ClipFloor(&cw);
+    if (cw.floor.elem != 0) {
+        float axis[4];
+
+        GOBJ_SUB(gobj)->ctrl.floorAttr = GetFloorAttribute(&cw);
+        GetReflectionElement(&cw, 0.8f, 0.7f);
+        CopyVector(npos, cw.reflect.pos);
+        CopyVector(vel, cw.reflect.dir);
+        npos[1] -= 20.0f;
+        sceVu0OuterProduct(axis, cw.normal.f, cw.reflect.slide);
+        SetQuaternionByAxisRotate(GOBJ_SUB(gobj)->root.itemQuat,
+                                  (short)(int)(-VectorLength(cw.reflect.slide) * 521.5189209f),
+                                  axis[0], axis[1], axis[2]);
+        len = VectorLength(cw.reflect.bounce);
+        if (breakItemOnFloorHit(gobj, len, npos, vel)) {
+            setItemDead(gobj);
+        }
+        linked = 2;
+        link = cw.floor.o;
+    } else {
+        CopyVector(cw.pt[1], pos);
+        CopyVector(cw.pt[0], pos);
+        cw.pt[0][1] -= 20.0f;
+        cw.pt[1][1] += 20.0f;
+        cw.radius = 0;
+        ClipFloor(&cw);
+        if (cw.floor.elem != 0) {
+            float n[4];
+            float sv[4];
+
+            CopyVector(npos, cw.pt[2]);
+            npos[1] = cw.pt[2][1] - 21.0f;
+            cw.normal.f[3] = 0;
+            linked = 1;
+            CopyVector(n, cw.normal.f);
+            sceVu0ScaleVector(sv, n, GetDistanceFromPlane(cw.normal.f, vel) * -2.0f);
+            AddVectorXYZ(vel, vel, sv);
+            link = cw.floor.o;
+        } else {
+            cw.pt[1][1] += 10000.0f;
+            ClipFloor(&cw);
+            if (CheckFieldContact(&cw, gobj, npos, 20.0f) == 2) {
+                if (p->inPool != 1) {
+                    GOBJ_SUB(gobj)->ctrl.waterY = GetPoolGlobalHeight(cw.floor.o.obj);
+                    GetPoolGlobalDrainVector(p->drain, cw.floor.o.obj);
+                }
+                GOBJ_SUB(gobj)->ctrl.waterDepth = cw.pt[2][1] - GOBJ_SUB(gobj)->ctrl.waterY;
+                p->inPool = 1;
+            }
+        }
+    }
+    spd = VectorLength(vel);
+    grav = ITEM_DT * 0.5f * ITEM_DT;
+    if (len0 + (grav + grav) < spd) {
+        CopyVector(npos, pos);
+        p->released = 0;
+        /* emergency stop 2 */
+        debug_StdPrintfDummy("緊急停止2(%f←%f)\n", spd, len0);
+        p->holder = 0;
+        p->sleep = 0;
+    }
+    if (LimitExistGeometry(npos, vel)) {
+        p->released = 0;
+        p->holder = 0;
+        p->sleep = 0;
+        /* emergency stop 3 */
+        debug_StdPrintfDummy("緊急停止3\n");
+    }
+    npos[3] = 1.0f;
+    SetDirectRootPosition(gobj, npos);
+    CopyVector(GOBJ_SUB(gobj)->root.move, vel);
+    if (p->holder != 0) {
+        if (VectorLengthSquare(vel) > 100.0f) {
+            AttackCenter((GObj *)p->holder, -1, npos, 0, 20.0f);
+        }
+    }
+    if (p->sleep != 0) {
+        p->sleep = p->sleep - 1;
+    }
+    if (linked != 0) {
+        if (p->spin < 8.0f && p->sleep == 0) {
+            int n = p->spinCount + 1;
+
+            p->spinCount = n;
+            if (n >= 6) {
+                p->spinCount = 0;
+                p->released = 0;
+                /* vibration sleep */
+                debug_StdPrintfDummy("振動睡眠\n");
+            }
+            p->spin = spd;
+        } else {
+            p->spin = 0;
+            p->spinCount = 0;
+        }
+    }
+    {
+        float v = p->spin;
+
+        if (v < spd) {
+            v = spd;
+        }
+        p->spin = v;
+    }
+    if (p->released == 0 && linked != 0) {
+        LinkParentOfDObj(gobj, &link);
+    }
+}
+
 static void uncarriedItemGeo(GObj *gobj)
 {
+    if (ICO_NTSCAUG6) {
+        uncarriedItemGeo_ntscaug6(gobj);
+        return;
+    }
     ObjNode link;  /* 0x00 */
     float pos[4];  /* 0x10 */
     float npos[4]; /* 0x20 */
@@ -636,17 +934,34 @@ static void execBombGeo(GObj *gobj)
         break;
     case 2:
         rec->fuse.animMode = 0;
-        stage_SetLoopFlag(PAL_JPNKORCN(511, 507), 0);
-        stage_SetFrameStep(PAL_JPNKORCN(511, 507), 1);
-        GetRootPosition(q->pos, gobj);
-        _AttackCenter(gobj, 17, q->pos, 0, 200.0f, 0);
+        if (ICO_NTSC) {
+            stage_SetLoopFlag(440, 0);
+            stage_SetFrameStep(440, 1);
+            GetRootPosition(q->pos, gobj);
+            AttackCenter(gobj, 17, q->pos, 0, 100.0f);
+        } else if (ICO_AUG6) {
+            stage_SetLoopFlag(439, 0);
+            stage_SetFrameStep(439, 1);
+            GetRootPosition(q->pos, gobj);
+            AttackCenter(gobj, 17, q->pos, 0, 100.0f);
+        } else if (ICO_JPNKORCN) {
+            stage_SetLoopFlag(507, 0);
+            stage_SetFrameStep(507, 1);
+            GetRootPosition(q->pos, gobj);
+            _AttackCenter(gobj, 17, q->pos, 0, 200.0f, 0);
+        } else {
+            stage_SetLoopFlag(511, 0);
+            stage_SetFrameStep(511, 1);
+            GetRootPosition(q->pos, gobj);
+            _AttackCenter(gobj, 17, q->pos, 0, 200.0f, 0);
+        }
         LightTorchOff(q->torch);
         q->torch->active = 0;
         rec->released = 0;
         StopSEPackage(gobj);
         bombExplodeSE(gobj);
-        stage_KillPlayBgAnimationIfOverMaxCount(PAL_JPNKORCN(511, 507), 1);
-        q->anim = stage_MakePlayBgAnimation(PAL_JPNKORCN(511, 507));
+        stage_KillPlayBgAnimationIfOverMaxCount(PAL_JPNKORCN_NTSC_AUG6(511, 507, 440, 439), 1);
+        q->anim = stage_MakePlayBgAnimation(PAL_JPNKORCN_NTSC_AUG6(511, 507, 440, 439));
         q->anim->frame = 1.0f;
         _CopyVector(q->anim->pos, q->pos);
         CopyQuaternion(q->anim->rot, IdentityQuaternion);
@@ -655,6 +970,12 @@ static void execBombGeo(GObj *gobj)
         break;
     case 3:
         rec->released = 0;
+        if (ICO_NTSCAUG6) {
+            if (stage_DispBgAnimation(&q->anim) != 0) {
+                q->state = 4;
+                setItemDead(gobj);
+            }
+        }
         break;
     case 4:
         break;
@@ -711,8 +1032,10 @@ void ItemDL(GObj *gobj)
 {
     ItemWork *p = GOBJ_SUB(gobj)->work;
 
-    if (IsItemKindBomb(gobj)) {
-        checkBombExplodeEnd(gobj);
+    if (!ICO_NTSCAUG6) {
+        if (IsItemKindBomb(gobj)) {
+            checkBombExplodeEnd(gobj);
+        }
     }
     if (p->dead == 1) {
         return;
@@ -757,10 +1080,19 @@ int BreakItemFromOutside(GObj *gobj)
         p->fuse.state = 2;
     } else {
         GetRootPosition(pos, gobj);
-        entryBreakBgAnimation(itemKind[p->kind].dropAnim, pos, ZeroVector, 0);
-        ExecuteSEPackage(gobj, 43);
+        if (ICO_NTSCAUG6) {
+            entryBreakBgAnimation(itemKind[p->kind].dropAnim, pos, ZeroVector, 0);
+            ExecuteSEPackage(gobj, 42);
+        } else {
+            entryBreakBgAnimation(itemKind[p->kind].dropAnim, pos, ZeroVector, 0);
+            ExecuteSEPackage(gobj, 43);
+        }
         if (GetItemKindInline(gobj) == 6) {
-            _AttackCenter(gobj, 17, pos, 0, 200.0f, 0);
+            if (ICO_NTSCAUG6) {
+                AttackCenter(gobj, 17, pos, 0, 100.0f);
+            } else {
+                _AttackCenter(gobj, 17, pos, 0, 200.0f, 0);
+            }
         }
         setItemDead(gobj);
     }

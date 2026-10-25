@@ -16,8 +16,10 @@ static inline int getFloorLimitValue(int attr) /* derived name */
     if (type == 1) {
         return 0;
     }
-    if (type == 15 && (stage_no == 19 || stage_no == 28)) {
-        type = 20;
+    if (!ICO_NTSCAUG6) {
+        if (type == 15 && (stage_no == 19 || stage_no == 28)) {
+            type = 20;
+        }
     }
     return type * 100;
 }

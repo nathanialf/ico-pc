@@ -133,8 +133,28 @@ static void orientDebug(void *self, int idx, int y)
     }
 }
 
+static inline void checkMotionKind_ntscaug6(int i, int j) /* derived name */
+{
+    if (motionKind[i].blendKind != 228) {
+        char buf[256];
+
+        /* EUC-JP: "the node-blending motion (%s) uses a node-blending motion again" */
+        debug_StdPrintfDummy(
+            "ノードを混ぜるモーション(%s)が、\n再度ノードを混ぜるモーションを利用しています。\n",
+            motionKind[j].name);
+        sprintf(buf, "NODE BLEND MOTION \"%s\" REFERS\nNODE BLEND MOTION RECURSIVELY.\n",
+                motionKind[j].name);
+        debug_assertMessage(__FILE__, 152, buf);
+        __assert(__FILE__, 152, "e");
+    }
+}
+
 static inline void checkMotionKind(int i, int j) /* derived name */
 {
+    if (ICO_NTSCAUG6) {
+        checkMotionKind_ntscaug6(i, j);
+        return;
+    }
     if (motionKind[i].blendKind != 320) {
         char buf[256];
 
@@ -154,7 +174,7 @@ int GetNbMotionFrames(int id)
     int m;
     int n;
 
-    if (motionKind[id].blendKind == 320) {
+    if (motionKind[id].blendKind == PAL_NTSCAUG6(320, 228)) {
         return *motionTable[id];
     }
     m = blendMotionKind[motionKind[id].blendKind].motion;
@@ -170,7 +190,7 @@ float GetMotionPlaySpeedRatio(int id)
 {
     int m;
 
-    if (motionKind[id].blendKind == 320) {
+    if (motionKind[id].blendKind == PAL_NTSCAUG6(320, 228)) {
         return motionKind[id].playSpeedRatio;
     }
     m = blendMotionKind[motionKind[id].blendKind].motion;
@@ -221,9 +241,28 @@ static __inline__ void clearFrameTriggerState(void *self) /* derived name */
 
 /* three range tests; shiftMotionData and UpdateFrameCounter both inline
  * them */
+static __inline__ int checkFrameInRange_ntscaug6(int mot, float t) /* derived name */
+{
+    if ((float)motionKind[mot].triggerStart < t && t < (float)motionKind[mot].triggerEnd) {
+        return 1;
+    }
+    return 0;
+}
+
 static __inline__ int checkFrameInRange(int mot, float t) /* derived name */
 {
+    if (ICO_NTSCAUG6) {
+        return checkFrameInRange_ntscaug6(mot, t);
+    }
     if ((float)motionKind[mot].triggerStart <= t && t <= (float)motionKind[mot].triggerEnd) {
+        return 1;
+    }
+    return 0;
+}
+
+static __inline__ int checkFrameInRange2_ntscaug6(int mot, float t, float t2) /* derived name */
+{
+    if ((float)motionKind[mot].trigger2Start < t2 && t < (float)motionKind[mot].trigger2End) {
         return 1;
     }
     return 0;
@@ -231,6 +270,9 @@ static __inline__ int checkFrameInRange(int mot, float t) /* derived name */
 
 static __inline__ int checkFrameInRange2(int mot, float t, float t2) /* derived name */
 {
+    if (ICO_NTSCAUG6) {
+        return checkFrameInRange2_ntscaug6(mot, t, t2);
+    }
     if ((float)motionKind[mot].trigger2Start <= t2 && t <= (float)motionKind[mot].trigger2End) {
         return 1;
     }
@@ -276,7 +318,7 @@ int UpdateFrameCounter(void *self)
     if (motionFrameUpdate == 1) {
         t = w->speedRatio * motionKind[w->motion].playSpeedRatio * w->playRate *
             (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f);
-        if (!ICO_JPNKORCN) {
+        if (!ICO_JPNKORNTSCAUG6CN) {
             if (systemStatus[0] != 0) {
                 t = t * motionKind[w->motion].palSpeedRatio;
             }
@@ -353,7 +395,7 @@ inline MotionOrientEntry *GetMotionOrient(int i, int n, int id, int kind)
             if (motionOrient[i].id == id) {
                 return &motionOrient[i];
             }
-            if (motionOrient[i].id == 1146) {
+            if (motionOrient[i].id == PAL_NTSC_AUG6(1146, 1085, 1087)) {
                 found = i;
             }
         }
@@ -371,7 +413,7 @@ inline MotionOrientEntry *getMotionOrient(int i, int n, int id, int kind)
     if (p != 0) {
         return p;
     }
-    return &motionOrient[2467];
+    return &motionOrient[PAL_NTSC_AUG6(2467, 2165, 2138)];
 }
 
 static void sendStateMail(void *self)
@@ -476,7 +518,7 @@ static inline int searchMotionShift(void *self, int id, int cur) /* derived name
         for (i = 0; (m->shiftReq)[i] != -1; i++) {
             if ((m->shiftReq)[i] == id) {
                 if ((m->shiftNext)[i] == cur) {
-                    return 0x479;
+                    return PAL_NTSC_AUG6(0x479, 1084, 1086);
                 }
                 return (m->shiftNext)[i];
             }
@@ -490,7 +532,7 @@ static __inline__ int searchAltMotion(int req) /* derived name */
 {
     int i;
 
-    for (i = 0; i < 6; i++) {
+    for (i = 0; i < PAL_NTSCAUG6(6, 3); i++) {
         if (mirrorMotionTable[i].req == req) {
             return mirrorMotionTable[i].alt;
         }
@@ -584,8 +626,8 @@ static void shiftMotionOrientEndFunc(void *self)
         /* EUC-JP: "the SE internal processing seems wrong for some reason; report it to Sugiyama" */
         debug_StdPrintfDummy(
             "何らかの理由でSEの内部処理がおかしいようです。杉山に報告してください。\n");
-        debug_assert(__FILE__, LN(745, 739, 739, 745, 745, 745, 739));
-        __assert(__FILE__, LN(745, 739, 739, 745, 745, 745, 739), "0");
+        debug_assert(__FILE__, LN(745, 739, 739, 739, 739, 740, 739));
+        __assert(__FILE__, LN(745, 739, 739, 739, 739, 740, 739), "0");
     }
     StopSEPackageWithGroupVariation(self, 0);
     StopSEPackageWithGroupVariation(self, 1);
@@ -670,7 +712,9 @@ static void shiftMotionOrientBeginFunc(void *self, int motion, int request, int 
         }
     }
     CopyBlendMotionDataSource(self, ang);
-    StopFDSVibration(MOWORK(self)->fdsFlags);
+    if (!ICO_NTSCAUG6) {
+        StopFDSVibration(MOWORK(self)->fdsFlags);
+    }
     InitFrameDependSequence(MOWORK(self)->fdsFlags);
     clearFrameTriggerState(self);
 }
@@ -694,7 +738,7 @@ static inline int checkMotionShiftReady(struct MotCtrl *m, MotionOrientEntry *p)
     }
     kind = p->nextId;
     m->orientReq = kind;
-    if (kind == 0x479) {
+    if (kind == PAL_NTSC_AUG6(0x479, 1084, 1086)) {
         if (m->frameEnd == 0) {
             goto fail;
         }
@@ -715,7 +759,7 @@ static int normalMotionShift(void *self, int force)
     MotionOrientEntry *p = getMotionOrient(w->oriFrom, w->oriTo, w->request, w->orientKind);
 
     if (force == 0) {
-        if (p->id == 1146) {
+        if (p->id == PAL_NTSC_AUG6(1146, 1085, 1087)) {
             return 0;
         }
     }
@@ -725,11 +769,11 @@ static int normalMotionShift(void *self, int force)
         int next;
         int r = -1; /* no pairing found; the else arm searches with it as cur */
 
-        if (kind == 0x479) {
+        if (kind == PAL_NTSC_AUG6(0x479, 1084, 1086)) {
             kind = p->id;
             mode = 5;
             r = searchMotionShift(self, kind, w->motion);
-            if (r == -1 || r == 0x479) {
+            if (r == -1 || r == PAL_NTSC_AUG6(0x479, 1084, 1086)) {
                 return 0;
             }
             next = r;
@@ -746,8 +790,48 @@ static int normalMotionShift(void *self, int force)
 
 /* parallelMotionOrient is 54 rows of five words, keyed on the current and
  * the requested motion. */
+static inline MotionOrientEntry *findParallelMotion_ntsc(int cur, int next) /* derived name */
+{
+    int i;
+
+    if (cur == next) {
+        return &motionOrient[2165];
+    }
+    for (i = 0; i < 41; i++) {
+        if (parallelMotionOrient[i].id == cur) {
+            if (parallelMotionOrient[i].kind == next) {
+                return (MotionOrientEntry *)&parallelMotionOrient[i];
+            }
+        }
+    }
+    return 0;
+}
+
+static inline MotionOrientEntry *findParallelMotion_aug6(int cur, int next) /* derived name */
+{
+    int i;
+
+    if (cur == next) {
+        return &motionOrient[2138];
+    }
+    for (i = 0; i < 41; i++) {
+        if (parallelMotionOrient[i].id == cur) {
+            if (parallelMotionOrient[i].kind == next) {
+                return (MotionOrientEntry *)&parallelMotionOrient[i];
+            }
+        }
+    }
+    return 0;
+}
+
 static inline MotionOrientEntry *findParallelMotion(int cur, int next) /* derived name */
 {
+    if (ICO_NTSC) {
+        return findParallelMotion_ntsc(cur, next);
+    }
+    if (ICO_AUG6) {
+        return findParallelMotion_aug6(cur, next);
+    }
     int i;
 
     if (cur == next) {
@@ -780,7 +864,7 @@ static int parallelMotionShift(void *self)
                 shiftMotionOrientBeginFunc(self, p->nextId, m->request, p->shiftMode);
                 return 1;
             }
-        } else if (next != 0x479) {
+        } else if (next != PAL_NTSC_AUG6(0x479, 1084, 1086)) {
             MotionOrientEntry e = {m->motion, m->orientKind, next, m->shiftFrom, m->shiftMode};
 
             if (checkMotionShiftReady(&MOWORK(self)->ctrl, &e) != 0) {
@@ -830,7 +914,8 @@ char *SetMotionRequest(void *self, int mot, MotOriReq req)
             (debug_mot_debug_target == 1 && self == girlGObj) ||
             (debug_mot_debug_target == 2 && self == isysGObjSearchFromObjKindID_begin(32)) ||
             (debug_mot_debug_target == 3 && self == isysGObjSearchFromObjKindID_begin(4)) ||
-            (debug_mot_debug_target == 4 && self == isysGObjSearchFromObjKindID_begin(47))) {
+            (debug_mot_debug_target == 4 &&
+             self == isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(47, 46)))) {
             if (ignoreCount != 0 && debug_window_flag != 0) {
                 debug_PrintFontWindow(0xC0FF20, "\n ");
             }
@@ -844,7 +929,8 @@ char *SetMotionRequest(void *self, int mot, MotOriReq req)
                 (debug_mot_debug_target == 1 && self == girlGObj) ||
                 (debug_mot_debug_target == 2 && self == isysGObjSearchFromObjKindID_begin(32)) ||
                 (debug_mot_debug_target == 3 && self == isysGObjSearchFromObjKindID_begin(4)) ||
-                (debug_mot_debug_target == 4 && self == isysGObjSearchFromObjKindID_begin(47))) {
+                (debug_mot_debug_target == 4 &&
+                 self == isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(47, 46)))) {
                 MotOriSpin spin = {{"-", "\\", "|", "/"}};
 
                 if (ignoreMotion != mot && ignoreCount != 0) {
@@ -884,7 +970,7 @@ inline void SetParallelMotionTable(void *self, int *next, int *req, int from, in
     struct MotCtrl *m = &GOBJ_SUB(self)->ctrl;
     int old = m->orientKind;
 
-    m->orientKind = 269;
+    m->orientKind = PAL_NTSC_AUG6(269, 237, 235);
     SetParallelMotionTableWithNoRequest(self, next, req);
     m->shiftFrom = from;
     m->shiftMode = mode;
@@ -905,7 +991,8 @@ static void getNodeBlendedFloatingMotion(StreamElem *dst, float *root, int id, i
     int prev = -1;
     SkelNode *skel = MOWORK(self)->skel;
 
-    for (i = 0, j = motionKind[id].blendKind; blendMotionKind[j].motion != 0x47B; i++, j++) {
+    for (i = 0, j = motionKind[id].blendKind;
+         blendMotionKind[j].motion != PAL_NTSC_AUG6(0x47B, 1086, 1088); i++, j++) {
         int node = blendMotionKind[j].motion;
 
         checkMotionKind(node, id);
@@ -957,8 +1044,8 @@ static inline void assertMotionLoaded(struct MotCtrl *w, int *md) /* derived nam
 
         sprintf(buf, "THE MOTION \"%s\"(%d)\nDID NOT LOAD IN THIS STAGE\nOR IS INVALID ID.\n",
                 motionKind[w->motion].name, w->motion);
-        debug_assertMessage(__FILE__, LN(1275, 1269, 1269, 1275, 1275, 1275, 1269), buf);
-        __assert(__FILE__, LN(1275, 1269, 1269, 1275, 1275, 1275, 1269), "e");
+        debug_assertMessage(__FILE__, LN(1275, 1269, 1269, 1268, 1262, 1275, 1269), buf);
+        __assert(__FILE__, LN(1275, 1269, 1269, 1268, 1262, 1275, 1269), "e");
     }
 }
 
@@ -977,8 +1064,8 @@ static inline void assertMotionNodeCount(struct MotCtrl *w, int *md, int n) /* d
             buf,
             "THE NUMBER OF NODE DATAS OF MOTION\n\"%s\"(%d SKELTONS) DOES NOT MATCH\nTHE NUMBER OF SKELTON NODES(%d SKELTONS)\n",
             motionKind[w->motion].name, i - 1, n);
-        debug_assertMessage(__FILE__, LN(1287, 1281, 1281, 1287, 1287, 1287, 1281), buf);
-        __assert(__FILE__, LN(1287, 1281, 1281, 1287, 1287, 1287, 1281), "e");
+        debug_assertMessage(__FILE__, LN(1287, 1281, 1281, 1280, 1274, 1287, 1281), buf);
+        __assert(__FILE__, LN(1287, 1281, 1281, 1280, 1274, 1287, 1281), "e");
     }
 }
 
@@ -993,8 +1080,381 @@ static inline void rotateNodes(char *m, SkelNode *s, void *q) /* derived name */
     } while (i != -1);
 }
 
+static void getMotionGeometry_ntsc(void *self)
+{
+    SkelNode *skel = MOWORK(self)->skel;
+    struct MotRoot *mo = &MOWORK(self)->root;
+    struct MotCtrl *w = &MOWORK(self)->ctrl;
+    int n = MOWORK(self)->skelNodeNum;
+    char *blendless = MOWORK(self)->blendless;
+    StreamElem mot[n];
+    float scale = MOWORK(self)->nodes->scale[0];
+    int *md = motionTable[w->motion];
+
+    if (motionKind[w->motion].blendKind == 228) {
+        assertMotionLoaded(w, md);
+        assertMotionNodeCount(w, md, n);
+    }
+    RegularizeQuaternion(MOWORK(self)->root.quat);
+    MatrixDrive_PushMatrix();
+    {
+        Vec16 v;
+        Vec16 rv;
+
+        /* PC port: neither root-position call writes w (see below); 0
+           rather than whatever the host's frame left there */
+        v.f[3] = 0.0f;
+        rv.f[3] = 0.0f;
+        if (motionKind[w->motion].blendKind == 228) {
+            GetFloatingMotion(mot, w->animFrame, v.f, md, n, blendless, skel);
+            GetFloatingMotionRootPos(rv.f, md, w->lastFrame);
+        } else {
+            getNodeBlendedFloatingMotion(mot, v.f, w->motion, n, blendless, self, w->animFrame);
+            getMotionRootPos(w, rv.f);
+        }
+        if (w->motion == 101) {
+            v.f[0] = v.f[0] + 1.0f;
+        }
+        sceVu0ScaleVector(&v, &v, scale);
+        /* PC port: a root position blended between two frames
+           (GetBlendedMotionRootPos) gets x, y and z only, so w is the stack
+           word an earlier call left in v (and in rv). VU0 scales an
+           exponent-255 word as a number, saturating at +-Fmax, and the root
+           update's sceVu0ApplyMatrix multiplies it by the zero translation
+           row, so rootMove's x, y and z are the rotation alone; a host NaN
+           there gave NaN in all three (a shadow carrying the girl, stage 4).
+           Read it as the PS2 does. */
+        v.f[3] = ps2_operand(v.f[3]);
+        if (w->animFrame < w->lastFrame) {
+            CopyVector(mo->step, ZeroVector);
+        } else {
+            sceVu0ScaleVector(&rv, &rv, scale);
+            rv.f[3] = ps2_operand(rv.f[3]);
+            sceVu0SubVector(mo->step, &v, &rv);
+        }
+        if (w->noAlt != 0) {
+            MakeMirrorMotion(mot, skel);
+        }
+        if (w->catchBoy != 0) {
+            SlopeIKControl(self, mot, v.f, mo->step, n);
+        }
+        {
+            Vec16 fv;
+            Vec16 tv;
+            Vec16 tmp;
+            float len;
+            float ang;
+            float r;
+            int flag;
+            int k;
+
+            len = VectorLength(mo->move) *
+                  ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 60.0f);
+            CopyVector(&fv, w->dir);
+            CopyVector(&tv, w->lastDir);
+            if (MOWORK(self)->parent.obj != 0) {
+                sceVu0ApplyMatrix(&fv,
+                                  (char *)MOWORK(MOWORK(self)->parent.obj)->nodeMtx +
+                                      MOWORK(self)->parent.node * 0x40,
+                                  &fv);
+                sceVu0ApplyMatrix(&tv,
+                                  (char *)MOWORK(MOWORK(self)->parent.obj)->nodeMtx +
+                                      MOWORK(self)->parent.node * 0x40,
+                                  &tv);
+            }
+            ang = acosf(tv.f[0] * fv.f[0] + tv.f[2] * fv.f[2]) *
+                  ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 60.0f * 10430.378f);
+            if (0.0f < tv.f[0] * fv.f[2] - tv.f[2] * fv.f[0]) {
+                ang = -ang;
+            }
+            r = ang * 0.1f * len * len;
+            if (6144.0f < r) {
+                r = 6144.0f;
+            }
+            if (r < -6144.0f) {
+                r = -6144.0f;
+            }
+            if (debug_now_motion_viewer == 0) {
+                float t = 60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.2f;
+                /* two statements with an int between them: both line maps have
+                 * code on both lines, the narrowing to short on the second, and
+                 * the expression-table size the spill-slot order needs counts it */
+                int tw = mo->twist * (1.0f - t);
+                mo->twist = (short)tw + r * t;
+            }
+            if (w->rootUpdateMode == 20) {
+                Vec16 up;
+                float mtx[4][4];
+                Vec16 rot;
+                short a;
+
+                tmp = mo->plane;
+                GetMatrixFromQuaternion((char *)mtx, mo->quat);
+                _ApplyMatrix(&up, mtx, ZUnitVector);
+                tmp.f[3] = 0.0f;
+                slopeVector[1] = GetYDistanceFromPlane(tmp.f, up.f);
+                slopeVector[2] = 1.0f;
+                _NormalizeVector(slopeVector, slopeVector);
+                a = GetTableArcTan2(slopeVector[1], slopeVector[2]);
+                SetIdentityQuaternion(&rot);
+                RotQuaternionX(&rot, a);
+                rotateNodes(mot, skel, &rot);
+            }
+            flag = 0;
+            if (debug_motion_interporate != 0) {
+                flag = w->blendFrames >= w->blendCount;
+            }
+            k = motionKind[w->motion].stepNode;
+            if (flag != 0) {
+                /* PC port: shiftMotionData sets blendFrames to 0 for a
+                   shift shorter than one frame at this rate; the guard
+                   then passes only with blendCount 0 (a record not yet
+                   shifted), where 0 / 0 is +Fmax on the EE and NaN under
+                   IEEE */
+                float s = ps2_div((float)w->blendCount, (float)w->blendFrames);
+
+                GetBlendedMotion(MOWORK(self)->motionBuf, tmp.f, mot, v.f, MOWORK(self)->blendBuf,
+                                 MOWORK(self)->localPos, s, blendless, n);
+                mo->radius = mo->radiusFrom * (1.0f - s) + mo->radiusTo * s;
+                GetGeometryOfMotion(self, mot, MOWORK(self)->motionBuf, v.f, s, mo->step, k);
+            } else {
+                CopyMotion(MOWORK(self)->motionBuf, mot, n);
+                mo->radius = mo->radiusTo;
+                GetGeometryOfMotion(self, mot, MOWORK(self)->motionBuf, v.f, 1.0f, mo->step,
+                                    w->justShifted ? k : -1);
+            }
+            SetIdentityQuaternion(&tmp);
+            RotQuaternionX(&tmp, -32768);
+            RotQuaternionY(&tmp, -32768);
+            MultiQuaternion(&tmp, &tmp, skel->quat);
+            GetInverseQuaternion(&tmp, &tmp);
+            MultiQuaternion(mo->motionQuat, mot[0].q, &tmp);
+            CopyVector(w->lastDir, w->dir);
+        }
+    }
+    MatrixDrive_PopMatrix();
+    if (w->mailDelay <= 0) {
+        w->mailDelay = w->mailDelay + 1;
+    } else {
+        sendStateMail(self);
+    }
+    DispSkelton(self, mot);
+    ExecFrameDependSequence(self);
+    execFrameTrigger(self);
+    UpdateFrameCounter(self);
+    if (stage_no == 16 && MOWORK(self)->ctrl.wallHit != 0) {
+        void *g = isysGObjSearchFromObjLayoutID(806);
+
+        if (g != 0) {
+            void *o;
+            void *t;
+
+            if ((void *)MOWORK(self)->root.wall.o.obj == g) {
+                g = isysGObjSearchFromObjLayoutID(807);
+            }
+            o = MOWORK(g)->parent.obj;
+            t = (void *)MOWORK(self)->root.wall.o.obj;
+            if (((GObj *)o)->kind == 17) {
+                if (o == t) {
+                    MOWORK(self)->ctrl.wallFloorHeight = 3.40282347e+38f;
+                    MOWORK(self)->ctrl.wallTopHeight = 3.40282347e+38f;
+                }
+            }
+        }
+    }
+}
+
+static void getMotionGeometry_aug6(void *self)
+{
+    SkelNode *skel = MOWORK(self)->skel;
+    struct MotRoot *mo = &MOWORK(self)->root;
+    struct MotCtrl *w = &MOWORK(self)->ctrl;
+    int n = MOWORK(self)->skelNodeNum;
+    char *blendless = MOWORK(self)->blendless;
+    StreamElem mot[n];
+    float scale = MOWORK(self)->nodes->scale[0];
+    int *md = motionTable[w->motion];
+
+    if (motionKind[w->motion].blendKind == 228) {
+        assertMotionLoaded(w, md);
+        assertMotionNodeCount(w, md, n);
+    }
+    MatrixDrive_PushMatrix();
+    {
+        Vec16 v;
+        Vec16 rv;
+
+        /* PC port: neither root-position call writes w (see below); 0
+           rather than whatever the host's frame left there */
+        v.f[3] = 0.0f;
+        rv.f[3] = 0.0f;
+        if (motionKind[w->motion].blendKind == 228) {
+            GetFloatingMotion(mot, w->animFrame, v.f, md, n, blendless, skel);
+            GetFloatingMotionRootPos(rv.f, md, w->lastFrame);
+        } else {
+            getNodeBlendedFloatingMotion(mot, v.f, w->motion, n, blendless, self, w->animFrame);
+            getMotionRootPos(w, rv.f);
+        }
+        sceVu0ScaleVector(&v, &v, scale);
+        /* PC port: a root position blended between two frames
+           (GetBlendedMotionRootPos) gets x, y and z only, so w is the stack
+           word an earlier call left in v (and in rv). VU0 scales an
+           exponent-255 word as a number, saturating at +-Fmax, and the root
+           update's sceVu0ApplyMatrix multiplies it by the zero translation
+           row, so rootMove's x, y and z are the rotation alone; a host NaN
+           there gave NaN in all three (a shadow carrying the girl, stage 4).
+           Read it as the PS2 does. */
+        v.f[3] = ps2_operand(v.f[3]);
+        if (w->animFrame < w->lastFrame) {
+            CopyVector(mo->step, ZeroVector);
+        } else {
+            sceVu0ScaleVector(&rv, &rv, scale);
+            rv.f[3] = ps2_operand(rv.f[3]);
+            sceVu0SubVector(mo->step, &v, &rv);
+        }
+        if (w->noAlt != 0) {
+            MakeMirrorMotion(mot, skel);
+        }
+        if (w->catchBoy != 0) {
+            SlopeIKControl(self, (char *)mot, v.f, (Vec4 *)mo->step, n);
+        }
+        {
+            Vec16 fv;
+            Vec16 tv;
+            Vec16 tmp;
+            float len;
+            float ang;
+            float r;
+            int flag;
+            int k;
+
+            len = VectorLength(mo->move) *
+                  ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 60.0f);
+            CopyVector(&fv, w->dir);
+            CopyVector(&tv, w->lastDir);
+            if (MOWORK(self)->parent.obj != 0) {
+                sceVu0ApplyMatrix(&fv,
+                                  (char *)MOWORK(MOWORK(self)->parent.obj)->nodeMtx +
+                                      MOWORK(self)->parent.node * 0x40,
+                                  &fv);
+                sceVu0ApplyMatrix(&tv,
+                                  (char *)MOWORK(MOWORK(self)->parent.obj)->nodeMtx +
+                                      MOWORK(self)->parent.node * 0x40,
+                                  &tv);
+            }
+            ang = acosf(tv.f[0] * fv.f[0] + tv.f[2] * fv.f[2]) *
+                  ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 60.0f * 10430.378f);
+            if (0.0f < tv.f[0] * fv.f[2] - tv.f[2] * fv.f[0]) {
+                ang = -ang;
+            }
+            r = ang * 0.1f * len * len;
+            if (6144.0f < r) {
+                r = 6144.0f;
+            }
+            if (r < -6144.0f) {
+                r = -6144.0f;
+            }
+            if (debug_now_motion_viewer == 0) {
+                float t = 60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.2f;
+
+                /* two statements with an int between them: the August TRFILE
+                 * and PAL's listing have code on both lines, the narrowing to
+                 * short on the second */
+                int tw = mo->twist * (1.0f - t);
+                mo->twist = (short)tw + r * t;
+            }
+            if (w->rootUpdateMode == 20) {
+                Vec16 up;
+                float mtx[4][4];
+                Vec16 rot;
+                short a;
+
+                tmp = mo->plane;
+                GetMatrixFromQuaternion((char *)mtx, mo->quat);
+                _ApplyMatrix(&up, mtx, ZUnitVector);
+                tmp.f[3] = 0.0f;
+                slopeVector[1] = GetYDistanceFromPlane(tmp.f, up.f);
+                slopeVector[2] = 1.0f;
+                _NormalizeVector(slopeVector, slopeVector);
+                a = GetTableArcTan2(slopeVector[1], slopeVector[2]);
+                SetIdentityQuaternion(&rot);
+                RotQuaternionX(&rot, a);
+                rotateNodes(mot, skel, &rot);
+            }
+            flag = 0;
+            if (debug_motion_interporate != 0) {
+                flag = w->blendFrames >= w->blendCount;
+            }
+            k = motionKind[w->motion].stepNode;
+            if (flag != 0) {
+                /* PC port: shiftMotionData sets blendFrames to 0 for a
+                   shift shorter than one frame at this rate; the guard
+                   then passes only with blendCount 0 (a record not yet
+                   shifted), where 0 / 0 is +Fmax on the EE and NaN under
+                   IEEE */
+                float s = ps2_div((float)w->blendCount, (float)w->blendFrames);
+
+                GetBlendedMotion(MOWORK(self)->motionBuf, tmp.f, mot, v.f, MOWORK(self)->blendBuf,
+                                 MOWORK(self)->localPos, s, blendless, n);
+                mo->radius = mo->radiusFrom * (1.0f - s) + mo->radiusTo * s;
+                GetGeometryOfMotion(self, mot, MOWORK(self)->motionBuf, v.f, s, mo->step, k);
+            } else {
+                CopyMotion(MOWORK(self)->motionBuf, mot, n);
+                mo->radius = mo->radiusTo;
+                GetGeometryOfMotion(self, mot, MOWORK(self)->motionBuf, v.f, 1.0f, mo->step,
+                                    w->justShifted ? k : -1);
+            }
+            SetIdentityQuaternion(&tmp);
+            RotQuaternionX(&tmp, -32768);
+            RotQuaternionY(&tmp, -32768);
+            MultiQuaternion(&tmp, &tmp, skel->quat);
+            GetInverseQuaternion(&tmp, &tmp);
+            MultiQuaternion(mo->motionQuat, mot[0].q, &tmp);
+            CopyVector(w->lastDir, w->dir);
+        }
+    }
+    MatrixDrive_PopMatrix();
+    if (w->mailDelay <= 0) {
+        w->mailDelay = w->mailDelay + 1;
+    } else {
+        sendStateMail(self);
+    }
+    DispSkelton(self, mot);
+    ExecFrameDependSequence(self);
+    execFrameTrigger(self);
+    UpdateFrameCounter(self);
+    if (stage_no == 16 && MOWORK(self)->ctrl.wallHit != 0) {
+        void *g = isysGObjSearchFromObjLayoutID(805);
+
+        if (g != 0) {
+            void *o;
+            void *t;
+
+            if ((void *)MOWORK(self)->root.wall.o.obj == g) {
+                g = isysGObjSearchFromObjLayoutID(806);
+            }
+            o = MOWORK(g)->parent.obj;
+            t = (void *)MOWORK(self)->root.wall.o.obj;
+            if (((GObj *)o)->kind == 17) {
+                if (o == t) {
+                    MOWORK(self)->ctrl.wallFloorHeight = 3.40282347e+38f;
+                    MOWORK(self)->ctrl.wallTopHeight = 3.40282347e+38f;
+                }
+            }
+        }
+    }
+}
+
 static void getMotionGeometry(void *self)
 {
+    if (ICO_NTSC) {
+        getMotionGeometry_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        getMotionGeometry_aug6(self);
+        return;
+    }
     SkelNode *skel = MOWORK(self)->skel;
     struct MotRoot *mo = &MOWORK(self)->root;
     struct MotCtrl *w = &MOWORK(self)->ctrl;
@@ -1205,7 +1665,7 @@ static void getShapeGeometry(void *self)
 {
     struct MotCtrl *m = &GOBJ_SUB(self)->ctrl;
 
-    if (motionKind[m->motion].blendKind == 320) {
+    if (motionKind[m->motion].blendKind == PAL_NTSCAUG6(320, 228)) {
         void *mot = motionTable[m->motion];
 
         if (CheckMotionIncludeFacialData(mot) == 0) {
@@ -1291,8 +1751,32 @@ static inline int getStreamVec(void *self, void *sm, float *v, void *mot) /* der
     return 0;
 }
 
+static void getStreamMotionGeometry_ntscaug6(void *self, void *sm)
+{
+    float v[4];
+    StreamElem mot[MOWORK(self)->skelNodeNum];
+    float s = MOWORK(self)->nodes->scale[0];
+
+    if (GetStreamMotion(mot, v, sm, MOWORK(self)->skel) != 0) {
+        if (MOWORK(self)->streamScale != 0) {
+            _ScaleVectorXYZ(v, v, s);
+        }
+        v[0] -= MOWORK(self)->streamOfs[0];
+        v[1] -= MOWORK(self)->streamOfs[1];
+        v[2] += MOWORK(self)->streamOfs[2];
+        GetGeometryOfMotion(self, mot, mot, v, 1.0f, ZeroVector, -1);
+        CopyMotion(MOWORK(self)->motionBuf, mot, MOWORK(self)->skelNodeNum);
+        CopyVector(MOWORK(self)->motionPos, v);
+        DispSkelton(self, mot);
+    }
+}
+
 static void getStreamMotionGeometry(void *self, void *sm)
 {
+    if (ICO_NTSCAUG6) {
+        getStreamMotionGeometry_ntscaug6(self, sm);
+        return;
+    }
     float v[4];
     StreamElem mot[MOWORK(self)->skelNodeNum];
 
@@ -1387,8 +1871,22 @@ static void getStreamShapeGeometry(void *self, void *sm)
     }
 }
 
+static void getStreamMotion_ntscaug6(void *self)
+{
+    int s = MOWORK(self)->ctrl.stream;
+    char a[GetDataSizeOfStreamMotion(s)];
+
+    GetStreamMotionData(a, s);
+    getStreamMotionGeometry(self, a);
+    getStreamShapeGeometry(self, a);
+}
+
 static void getStreamMotion(void *self)
 {
+    if (ICO_NTSCAUG6) {
+        getStreamMotion_ntscaug6(self);
+        return;
+    }
     int s = MOWORK(self)->ctrl.stream;
     char a[GetDataSizeOfStreamMotion(s)];
     float t = GetStreamMotionData(a, s);
@@ -1414,7 +1912,7 @@ void ExecMotionOrient(void *self)
         debug_StdPrintfDummy("\033[36mモーション置き換え機能が停止しています。\033[m: %p\n", self);
     }
     if (w->stream == -1) {
-        if (w->orientKind != 269) {
+        if (w->orientKind != PAL_NTSC_AUG6(269, 237, 235)) {
             normalMotionShift(self, 0);
         } else {
             parallelMotionShift(self);
@@ -1423,7 +1921,8 @@ void ExecMotionOrient(void *self)
             (debug_mot_debug_target == 1 && self == girlGObj) ||
             (debug_mot_debug_target == 2 && self == isysGObjSearchFromObjKindID_begin(32)) ||
             (debug_mot_debug_target == 3 && self == isysGObjSearchFromObjKindID_begin(4)) ||
-            (debug_mot_debug_target == 4 && self == isysGObjSearchFromObjKindID_begin(47))) {
+            (debug_mot_debug_target == 4 &&
+             self == isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(47, 46)))) {
             if (w->shifted != 0) {
                 if (ignoreCount != 0 && debug_window_flag != 0) {
                     debug_PrintFontWindow(0xC0FF20, "\n ");
@@ -1466,8 +1965,8 @@ void SetNodeRotationLimitDataTable(void *self, int from, int to)
             /* EUC-JP: "the node the node rotation limit data names is not in the skeleton" */
             debug_StdPrintfDummy(
                 "ノード回転リミットデータの示すノードがスケルトン中にありません。\n");
-            debug_assert(__FILE__, LN(1838, 1832, 1832, 1838, 1838, 1838, 1832));
-            __assert(__FILE__, LN(1838, 1832, 1832, 1838, 1838, 1838, 1832), "0");
+            debug_assert(__FILE__, LN(1838, 1832, 1832, 1756, 1744, 1838, 1832));
+            __assert(__FILE__, LN(1838, 1832, 1832, 1756, 1744, 1838, 1832), "0");
         }
         /* a 4-byte word cannot hold the row's address: the row, one-based
            (motMan_getFinalMatrix.c.inc reads it back) */
@@ -1517,16 +2016,16 @@ inline int ExecuteSlipProc(GObj *self)
     if (e->ctrl.lastSlipFlags != e->ctrl.slipFlags) {
         StopSEPackageWithGroupVariation(self, 1);
         if (GOBJ_SUB(self)->ctrl.slipFlags & 0x100000) {
-            ExecuteSEPackageWithGroupVariation(self, 114, 1);
+            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6(114, 109), 1);
         }
         if (GOBJ_SUB(self)->ctrl.slipFlags & 0x200000) {
-            ExecuteSEPackageWithGroupVariation(self, 116, 1);
+            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6(116, 111), 1);
         }
         if (GOBJ_SUB(self)->ctrl.slipFlags & 0x400000) {
-            ExecuteSEPackageWithGroupVariation(self, 118, 1);
+            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6(118, 113), 1);
         }
         if (GOBJ_SUB(self)->ctrl.slipFlags & 0x800000) {
-            ExecuteSEPackageWithGroupVariation(self, 120, 1);
+            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6(120, 115), 1);
         }
     }
     return 1;

@@ -56,8 +56,46 @@ extern void seMail(GObj *self, int id);
 /* port/game/options.h: the model viewer is up */
 extern int ico_mv_active;
 
+static int playSE_ntscaug6(int no)
+{
+    if (no == 0) {
+        return 1;
+    }
+    if (((GObj *)fdsGObj)->drawMask != 0) {
+        int ret;
+
+        if (fdsVolume > 0.95f) {
+            ret = soundSeDefPlay(no, fdsGroup, (float *)(GOBJ_SUB(fdsGObj)->nodeMtx + 0x30), 1);
+        } else {
+            ret = soundSeDefPlayWithVolumeRate(
+                no, fdsGroup, (float *)(GOBJ_SUB(fdsGObj)->nodeMtx + 0x30), 1, fdsVolume);
+        }
+
+        seMail((GObj *)fdsGObj, no);
+        if (ret == -2) {
+            if (debug_seslotdisp_flag != 0) {
+                /* EUC-JP: "SE \"%s\" is not loaded" */
+                debug_StdPrintfDummy("SE \033[36m\"%s\"\033[m はロードされていません\n",
+                                     &seDef[no]);
+            }
+            return 0;
+        }
+        if (ret < 0) {
+            return 1;
+        }
+        if (debug_seslotdisp_flag != 0) {
+            debug_StdPrintfDummy("SE \033[33m\"%s\"\033[m CALLED with GROUP:\033[33m%d\033[m\n",
+                                 &seDef[no], fdsGroup);
+        }
+    }
+    return 1;
+}
+
 static int playSE(int no)
 {
+    if (ICO_NTSCAUG6) {
+        return playSE_ntscaug6(no);
+    }
     int ret;
 
     if (no != 0) {
@@ -96,8 +134,116 @@ static int playSE(int no)
     return 1;
 }
 
+/* .sbss and .bss: the debug tally playSERandomID prints, the number of
+   picks so far and how many times each entry was picked. */
+static int seRandomPicks; /* derived name */
+
+static int seRandomPickCount[50]; /* derived name */
+
+static int playSERandomID_ntsc(int no, void *entry)
+{
+    (void)entry; /* PC port: the European parameter, unused here */
+    float rest;
+    float rnd;
+    float share;
+    float acc;
+    int nshare;
+    int n;
+    int i;
+
+    rest = 100.0f;
+    nshare = 0;
+    for (n = 0; n < randomSEKind[no + n].se; n++) {
+        if (randomSEKind[no + n].rate < 0.0f) {
+            nshare++;
+        } else {
+            rest -= randomSEKind[no + n].rate;
+        }
+    }
+    rnd = crt_random_unit() * 0.99999f;
+    acc = 0.0f;
+    share = 0.0f;
+    if (acc <= rest && nshare != 0) {
+        share = rest < acc ? acc : rest / (float)nshare;
+    }
+    for (i = 0; i < n; i++) {
+        float w = randomSEKind[no + i].rate;
+        if (w < 0.0f) {
+            w = share;
+        }
+        acc += w * 0.01f;
+        if (rnd < acc) {
+            return execSE(randomSEKind[no + i].se, 0);
+        }
+    }
+    return execSE(randomSEKind[no].se, 0);
+}
+
+static int playSERandomID_aug6(int no, void *entry)
+{
+    (void)entry; /* PC port: the European parameter, unused here */
+    float rest;
+    float rnd;
+    float share;
+    float acc;
+    int nshare;
+    int n;
+    int i;
+
+    rest = 100.0f;
+    nshare = 0;
+    for (n = 0; n < randomSEKind[no + n].se; n++) {
+        if (randomSEKind[no + n].rate < 0.0f) {
+            nshare++;
+        } else {
+            rest -= randomSEKind[no + n].rate;
+        }
+    }
+    rnd = crt_random_unit() * 0.99999f;
+    acc = 0.0f;
+    share = 0.0f;
+    if (acc <= rest && nshare != 0) {
+        share = rest < acc ? acc : rest / (float)nshare;
+    }
+    for (i = 0; i < n; i++) {
+        float w;
+
+        if (randomSEKind[no + i].rate < 0.0f) {
+            w = share;
+        } else {
+            w = randomSEKind[no + i].rate;
+        }
+        acc += w * 0.01f;
+        if (rnd < acc) {
+            /* the draw trace for the random SE 0x1000D */
+            if (debug_seslotdisp_flag != 0 && no + 0x10000 == 0x1000D) {
+                int j;
+
+                seRandomPickCount[i]++;
+                seRandomPicks++;
+                /* EUC-JP: "call %d: " */
+                debug_StdPrintfDummy("%d回目: ", seRandomPicks);
+                for (j = 0; j < n; j++) {
+                    debug_StdPrintfDummy(
+                        "%s%d(%1.1f%%)\033[m ", j == i ? "\033[36m" : "", seRandomPickCount[j],
+                        (float)seRandomPickCount[j] * 100.0f / (float)seRandomPicks);
+                }
+                debug_StdPrintfDummy("\n");
+            }
+            return execSE(randomSEKind[no + i].se, 0);
+        }
+    }
+    return execSE(randomSEKind[no].se, 0);
+}
+
 static int playSERandomID(int no, void *entry)
 {
+    if (ICO_NTSC) {
+        return playSERandomID_ntsc(no, entry);
+    }
+    if (ICO_AUG6) {
+        return playSERandomID_aug6(no, entry);
+    }
     float rest;
     float rnd;
     float share;
@@ -134,8 +280,46 @@ static int playSERandomID(int no, void *entry)
     return execSE(randomSEKind[no].se, entry);
 }
 
+static int playSEConditionID_ntscaug6(int no, void *entry)
+{
+    (void)entry; /* PC port: the European parameter, unused here */
+    int (*fn)(GObj *, int);
+    const SECondEntry *p;
+
+    switch (motSECondKind[no].kind) {
+    case 0:
+    default:
+        fn = CheckFloorAttribute;
+        break;
+    case 1:
+        fn = CheckWallAttribute;
+        break;
+    case 2:
+        fn = checkWaterDepth;
+        break;
+    case 3:
+        fn = checkModelDataID;
+        break;
+    }
+    if (motSECondKind[no].kind != -1) {
+        p = &motSECondKind[no];
+        do {
+            if (p->cond == -1 || fn((GObj *)fdsGObj, p->cond) != 0) {
+                if (execSE(p->se, 0) != 0) {
+                    return 1;
+                }
+            }
+            p++;
+        } while (p->kind != -1);
+    }
+    return 0;
+}
+
 static int playSEConditionID(int no, void *entry)
 {
+    if (ICO_NTSCAUG6) {
+        return playSEConditionID_ntscaug6(no, entry);
+    }
     int (*fn)(GObj *, int);
     const SECondEntry *p;
 
@@ -171,8 +355,28 @@ static int playSEConditionID(int no, void *entry)
     return 0;
 }
 
+static inline int execSE_ntscaug6(int no, void *entry)
+{
+    (void)entry; /* PC port: the European parameter, unused here */
+    if (no <= 0xFFFF) {
+        return playSE(no);
+    } else if (no <= 0x1FFFF) {
+        return playSERandomID(no - 0x10000, 0);
+    } else {
+        return playSEConditionID(no - 0x20000, 0);
+    }
+    /* the bad-ID report, switched off */
+    if (0) {
+        /* EUC-JP: "an SE with a strange ID(%d) was called" */
+        debug_StdPrintfDummy("おかしなID(%d)のSEがコールされました\n", no);
+    }
+}
+
 static inline int execSE(int no, void *entry)
 {
+    if (ICO_NTSCAUG6) {
+        return execSE_ntscaug6(no, entry);
+    }
     if (no <= 0xFFFF) {
         return playSE(no);
     } else if (no <= 0x1FFFF) {
@@ -233,15 +437,79 @@ static void playEff(int no)
     if (flags & 1) {
         EntryStageMultiBgaManager(motionEffKind[no].eff, pos, q);
     } else {
-        if (stage_no == 0x21 && pos[0] < -4500.0f) {
-            return;
+        if (!ICO_NTSCAUG6) {
+            if (stage_no == 0x21 && pos[0] < -4500.0f) {
+                return;
+            }
         }
         SetParticleEffect(motionEffKind[no].eff, pos, q);
     }
 }
 
+static int execEff(int no, void *entry);
+
+static int execEff_ntscaug6(int no, void *entry)
+{
+    (void)entry; /* PC port: the European parameter, unused here */
+    int (*fn)(GObj *, int);
+    const VibCondEntry *p;
+    int idx;
+    int j;
+    int eff;
+    int k;
+    int n;
+
+    if (no <= 0xFFFF) {
+        if (no == 19) {
+            goto done;
+        }
+        playEff(no);
+        goto done;
+    }
+    if (no <= 0x1FFFF) {
+        idx = no - 0x10000;
+        k = idx + 1;
+        n = 0;
+        if (randomEffKind[idx] != 19) {
+            do {
+                n++;
+            } while (randomEffKind[k++] != 19);
+        }
+        execEff(randomEffKind[idx + (int)(((float)n - 1e-05f) * crt_random_unit())], 0);
+        goto done;
+    }
+    j = no - 0x20000;
+    switch (motEffCondKind[j].kind) {
+    case 0:
+    default:
+        fn = CheckFloorAttribute;
+        break;
+    case 2:
+        fn = checkWaterDepth;
+        break;
+    }
+    if (motEffCondKind[j].kind != -1) {
+        p = &motEffCondKind[j];
+        do {
+            if (p->cond == -1 || fn((GObj *)fdsGObj, p->cond) != 0) {
+                eff = p->actId;
+                goto call;
+            }
+            p++;
+        } while (p->kind != -1);
+    }
+    eff = 19;
+call:
+    execEff(eff, 0);
+done:
+    return 1;
+}
+
 static int execEff(int no, void *entry)
 {
+    if (ICO_NTSCAUG6) {
+        return execEff_ntscaug6(no, entry);
+    }
     int (*fn)(GObj *, int);
     const VibCondEntry *p;
     int idx;
@@ -330,8 +598,71 @@ static inline void fireFDSSlot(float t, int no, void *entry, int *done,
     }
 }
 
+static inline void fireSESlots(void) /* derived name */
+{
+    int i;
+
+    for (i = 0; i < 12; i++) {
+        if (fdsFlags->seDone[i] == 0) {
+            fireFDSSlot(fdsRecord->se[i].t, fdsRecord->se[i].no, 0, &fdsFlags->seDone[i], execSE);
+        }
+    }
+}
+
+static inline void fireVibSlots(void) /* derived name */
+{
+    int i;
+
+    for (i = 0; i < 1; i++) {
+        if (fdsFlags->vibDone[i] == 0) {
+            fireFDSSlot(fdsRecord->vib[i].t, fdsRecord->vib[i].no, 0, &fdsFlags->vibDone[i],
+                        execVib);
+        }
+    }
+}
+
+static inline void fireEffSlots(void) /* derived name */
+{
+    int i;
+
+    for (i = 0; i < 5; i++) {
+        if (fdsFlags->effDone[i] == 0) {
+            fireFDSSlot(fdsRecord->eff[i].t, fdsRecord->eff[i].no, 0, &fdsFlags->effDone[i],
+                        execEff);
+        }
+    }
+}
+
+static inline void fireWeaponSlot(void) /* derived name */
+{
+    if (fdsFlags->weaponDone == 0) {
+        fireFDSSlot(fdsRecord->weaponFrame, 0, 0, &fdsFlags->weaponDone, execWeaponLightOff);
+    }
+}
+
+static void ExecFrameDependSequence_ntscaug6(GObj *gobj)
+{
+    fdsGObj = (char *)gobj;
+    fdsLayout = &GOBJ_SUB(gobj)->ctrl;
+    fdsWork = &GOBJ_SUB(gobj)->root;
+    fdsFlags = (FDSFlags *)GOBJ_SUB(gobj)->fdsFlags;
+    fdsRecord = &motionKind[fdsLayout->motion];
+    fdsVolume = 1.0f;
+
+    fireSESlots();
+    fireVibSlots();
+    fireEffSlots();
+    if (GOBJ_SUB(gobj)->ctrl.pickedWeapon != 0) {
+        fireWeaponSlot();
+    }
+}
+
 void ExecFrameDependSequence(GObj *gobj)
 {
+    if (ICO_NTSCAUG6) {
+        ExecFrameDependSequence_ntscaug6(gobj);
+        return;
+    }
     Sub15C *w;
     struct MotCtrl *p;
     int i;
@@ -421,7 +752,11 @@ static void executeSEPackageByGObj(GObj *gobj, int no, int grp)
     id = setSEEnvironment(gobj, grp);
     p = findSEPackage(no, id);
     for (i = 0; i < 2; i++) {
-        execSE(p[i], 0);
+        if (ICO_NTSCAUG6) {
+            execSE(p[i], 0);
+        } else {
+            execSE(p[i], 0);
+        }
     }
 }
 
@@ -476,8 +811,19 @@ void StopSEPackage(GObj *gobj)
     StopSEPackageWithGroupVariation(gobj, 0);
 }
 
+static inline void InitFrameDependSequence_ntscaug6(void *flags)
+{
+    static FDSFlags clear = {{0}}; /* derived name */
+
+    *(FDSFlags *)flags = clear;
+}
+
 void InitFrameDependSequence(void *flags)
 {
+    if (ICO_NTSCAUG6) {
+        InitFrameDependSequence_ntscaug6(flags);
+        return;
+    }
     FDSFlags *f = flags;
     int i;
 
@@ -540,8 +886,18 @@ static inline int checkWeaponType(GObj *gobj, int kind)
     return 0;
 }
 
+static inline int execVib_ntscaug6(int no, void *entry)
+{
+    (void)entry; /* PC port: the European parameter, unused here */
+    iosPadActRequest(boyPad, no);
+    return 1;
+}
+
 static inline int execVib(int no, void *entry)
 {
+    if (ICO_NTSCAUG6) {
+        return execVib_ntscaug6(no, entry);
+    }
     if (no <= 0xFFFF) {
         if (no > 0) {
             iosPadActRequest(boyPad, no);
@@ -554,8 +910,27 @@ static inline int execVib(int no, void *entry)
 
 /* a frame slot's handler: fireFDSSlot passes the slot's number and entry,
    which it does not read */
+static inline int execWeaponLightOff_ntscaug6(int no, void *entry)
+{
+    (void)entry; /* PC port: the European parameter, unused here */
+    Sub15C *p;
+    GObj *q;
+    p = GOBJ_SUB(fdsGObj);
+    q = p->ctrl.pickedWeapon;
+    if (q != 0) {
+        if (CheckWeaponKind(q) == 1) {
+            Sub15C *r = GOBJ_SUB(fdsGObj);
+            LightTorchOffOfWeapon(r->ctrl.pickedWeapon);
+        }
+    }
+    return 1;
+}
+
 static inline int execWeaponLightOff(int no, void *entry)
 {
+    if (ICO_NTSCAUG6) {
+        return execWeaponLightOff_ntscaug6(no, entry);
+    }
     Sub15C *p;
     GObj *q;
     p = GOBJ_SUB(fdsGObj);

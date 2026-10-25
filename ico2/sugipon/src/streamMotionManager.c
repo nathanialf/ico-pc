@@ -100,7 +100,8 @@ static inline void _setEntryOffsets(void) /* derived name */
     int i;
 
     for (i = 0; i < streamNum; i++) {
-        streamEntry[i].cur = streamEntry[i].next = (ringRead + off) % 163840;
+        streamEntry[i].cur = PAL_NTSCAUG6(streamEntry[i].next = (ringRead + off) % 163840,
+                                          (ringRead + off) % 163840);
         off += streamEntry[i].size;
     }
 }
@@ -188,8 +189,96 @@ static int _infoUpdate_jpn(void)
     return 0;
 }
 
+static int _infoUpdate_ntsc(void)
+{
+    int i;
+
+    if (ICO_JPNKORCN) {
+        return _infoUpdate_jpn();
+    }
+
+    if (headerRead == 0) {
+        if (_checkRing(4096)) {
+            headerSize = 0;
+            for (i = 0; i < streamNum; i++) {
+                int a = ringRead + headerSize;
+
+                streamEntry[i].nodeNum = *(unsigned char *)(ringBuf + (a + 2) % 163840);
+                streamEntry[i].shapeNum = *(unsigned char *)(ringBuf + (a + 3) % 163840);
+                streamEntry[i].size = 16 + streamEntry[i].nodeNum * 8 + streamEntry[i].shapeNum * 4;
+                headerSize += streamEntry[i].size;
+            }
+            headerRead = 1;
+        } else {
+            /* the data had not arrived in time when the stream motion started */
+            debug_StdPrintfDummy(
+                "ストリームモーション開始時にデータの転送が間に合っていませんでした。\n");
+            iosCdvdStDelayCnt++;
+            return 0;
+        }
+    }
+    if (_checkRing(headerSize)) {
+        _setEntryOffsets();
+        if (*(unsigned char *)(ringBuf + ringRead) != 0) {
+            return 1;
+        }
+        _advanceRing(headerSize);
+    } else {
+        /* the stream motion data transfer is not keeping up */
+        debug_StdPrintfDummy("ストリームモーションのデータ転送が間に合っていません。\n");
+        iosCdvdStDelayCnt++;
+    }
+    return 0;
+}
+
+static int _infoUpdate_aug6(void)
+{
+    int i;
+
+    if (ICO_JPNKORCN) {
+        return _infoUpdate_jpn();
+    }
+
+    if (headerRead == 0) {
+        if (_checkRing(4096)) {
+            headerSize = 0;
+            for (i = 0; i < streamNum; i++) {
+                int a = ringRead + headerSize;
+
+                streamEntry[i].nodeNum = *(unsigned char *)(ringBuf + (a + 2) % 163840);
+                streamEntry[i].shapeNum = *(unsigned char *)(ringBuf + (a + 3) % 163840);
+                streamEntry[i].size = 16 + streamEntry[i].nodeNum * 8 + streamEntry[i].shapeNum * 4;
+                headerSize += streamEntry[i].size;
+            }
+            headerRead = 1;
+        } else {
+            /* the data had not arrived in time when the stream motion started */
+            debug_StdPrintfDummy(
+                "ストリームモーション開始時にデータの転送が間に合っていませんでした。\n");
+            return 0;
+        }
+    }
+    if (_checkRing(headerSize)) {
+        _setEntryOffsets();
+        if (*(unsigned char *)(ringBuf + ringRead) != 0) {
+            return 1;
+        }
+        _advanceRing(headerSize);
+    } else {
+        /* the stream motion data transfer is not keeping up */
+        debug_StdPrintfDummy("ストリームモーションのデータ転送が間に合っていません。\n");
+    }
+    return 0;
+}
+
 static int _infoUpdate(void)
 {
+    if (ICO_NTSC) {
+        return _infoUpdate_ntsc();
+    }
+    if (ICO_AUG6) {
+        return _infoUpdate_aug6();
+    }
     int top;
     int n;
     int i;
@@ -307,7 +396,11 @@ void ClearStreamMotionEntry(GObj *gobj)
 }
 
 /* the cleared entry every slot is reset to */
-static SMotion emptyEntry = {0, 0, -1, -1, -1, {0}, 0}; /* derived name */
+static SMotion emptyEntry_pal = {0, 0, -1, -1, -1, {0}, 0}; /* derived name */
+
+static SMotion emptyEntry_ntscaug6 = {0, 0, -1, -1, {0}, 0}; /* derived name */
+
+#define emptyEntry (*PAL_NTSCAUG6(&emptyEntry_pal, &emptyEntry_ntscaug6))
 
 static void _deleteStreamMotionManager(void)
 {
@@ -329,12 +422,25 @@ static void _deleteStreamMotionManager(void)
     readState = 0;
     ringRead = 0;
     ringWrite = 0;
-    streamIdle = 1;
+    if (!ICO_AUG6) {
+        streamIdle = 1;
+    }
     headerRead = 0;
     headerSize = 0;
     ringUsed = 0;
-    framePlayed = 0;
-    frameTime = 0;
+    if (ICO_AUG6) {
+        if (ringBuf != 0) {
+            iosFree(ringBuf);
+            iosFree(readBufRaw);
+            readBufRaw = 0;
+            ringBuf = 0;
+            readBuf = 0;
+        }
+    } else if (ICO_NTSC) {
+    } else {
+        framePlayed = 0;
+        frameTime = 0;
+    }
     if (bgMgrId != 0) {
         bgMgrId = 0;
     }
@@ -398,8 +504,38 @@ typedef struct { /* field names derived */
 /* the four bytes GetStreamMotionData hands back while no data has arrived */
 static const char streamDummyHead[] = {0, 0xFF, 0, 0}; /* derived name */
 
+static void GetStreamMotionData_ntscaug6(char *dst, int no)
+{
+    int off;
+    int size;
+    int over;
+
+    if (streamEntry[no].cur < 0) {
+        *(StreamMotionHead *)dst = *(const StreamMotionHead *)streamDummyHead;
+        /* "tried to get the stream motion before the data has arrived" */
+        debug_StdPrintfDummy(
+            "データがまだ来ていないのにストリームモーションの取得をしようとしました\n");
+        return;
+    }
+    off = streamEntry[no].cur;
+    size = streamEntry[no].size;
+    over = off + size - 163840;
+    if (over > 0) {
+        int first = 163840 - off;
+
+        memcpy(dst, ringBuf + off, first);
+        memcpy(dst + first, ringBuf, over);
+    } else {
+        memcpy(dst, ringBuf + off, size);
+    }
+}
+
 inline float GetStreamMotionData(char *dst, int no)
 {
+    if (ICO_NTSCAUG6) {
+        GetStreamMotionData_ntscaug6(dst, no);
+        return 0.0f; /* PC port: the 2001 builds' returns nothing, and their callers read nothing */
+    }
     if (streamEntry[no].cur < 0) {
         *(StreamMotionHead *)dst = *(const StreamMotionHead *)streamDummyHead;
         /* "tried to get the stream motion before the data has arrived" */
@@ -548,8 +684,14 @@ inline int EntryStreamMotion(GObj *gobj)
     return no;
 }
 
+static inline void InitStreamMotionManager_aug6(void) {}
+
 inline void InitStreamMotionManager(void)
 {
+    if (ICO_AUG6) {
+        InitStreamMotionManager_aug6();
+        return;
+    }
     readBufRaw = 0;
     ringBuf = 0;
     readBuf = 0;

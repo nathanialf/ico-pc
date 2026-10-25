@@ -63,8 +63,23 @@ inline void EntryStageMultiBgaManagerWithStay(int kind, void *pos, void *rot, in
     }
 }
 
+static void EntryStageMultiBgaManager_ntscaug6(int kind, void *pos, void *rot)
+{
+    stageBgaAnim[stageBgaCount] = stage_MakePlayBgAnimation(kind);
+    _CopyVector(stageBgaAnim[stageBgaCount]->pos, pos);
+    CopyQuaternion(stageBgaAnim[stageBgaCount]->rot, rot);
+    EntryMultiBgaManager(stageBga, stageBgaCount++, kind, pos, rot);
+    if (stageBgaCount >= 30) {
+        stageBgaCount = 0;
+    }
+}
+
 inline void EntryStageMultiBgaManager(int kind, void *pos, void *rot)
 {
+    if (ICO_NTSCAUG6) {
+        EntryStageMultiBgaManager_ntscaug6(kind, pos, rot);
+        return;
+    }
     EntryStageMultiBgaManagerWithStay(kind, pos, rot, 0);
 }
 
@@ -87,13 +102,70 @@ inline void EntryStageMultiBgaManagerSensitiveWithStay(int kind, void *pos, void
     }
 }
 
+static void EntryStageMultiBgaManagerSensitive_ntscaug6(int kind, void *pos, void *rot, void *vel)
+{
+    stageBgaAnim[stageBgaCount] = stage_MakePlayBgAnimation(kind);
+    _CopyVector(stageBgaAnim[stageBgaCount]->pos, pos);
+    CopyQuaternion(stageBgaAnim[stageBgaCount]->rot, rot);
+    EntryMultiBgaManagerSensitive(stageBga, stageBgaCount++, kind, pos, rot, vel);
+    if (stageBgaCount >= 30) {
+        stageBgaCount = 0;
+    }
+}
+
 inline void EntryStageMultiBgaManagerSensitive(int kind, void *pos, void *rot, void *vel)
 {
+    if (ICO_NTSCAUG6) {
+        EntryStageMultiBgaManagerSensitive_ntscaug6(kind, pos, rot, vel);
+        return;
+    }
     EntryStageMultiBgaManagerSensitiveWithStay(kind, pos, rot, vel, 0);
+}
+
+static void DispStageMultiBgaManager_ntsc(void)
+{
+    int i;
+
+    for (i = 0; i < 30; i++) {
+        if (stageBgaAnim[i] == 0) {
+            continue;
+        }
+        if (stage_DispBgAnimation(&stageBgaAnim[i])) {
+            stageBgaAnim[i] = 0;
+            continue;
+        }
+        if (systemStatus[5] == 0) {
+            _AddVector(stageBgaAnim[i]->pos, stageBgaAnim[i]->pos, stageBga[i].vel);
+        }
+    }
+}
+
+static void DispStageMultiBgaManager_aug6(void)
+{
+    int i;
+
+    for (i = 0; i < 30; i++) {
+        if (stageBgaAnim[i] == 0) {
+            continue;
+        }
+        if (stage_DispBgAnimation(&stageBgaAnim[i])) {
+            stageBgaAnim[i] = 0;
+            continue;
+        }
+        _AddVector(stageBgaAnim[i]->pos, stageBgaAnim[i]->pos, stageBga[i].vel);
+    }
 }
 
 void DispStageMultiBgaManager(void)
 {
+    if (ICO_NTSC) {
+        DispStageMultiBgaManager_ntsc();
+        return;
+    }
+    if (ICO_AUG6) {
+        DispStageMultiBgaManager_aug6();
+        return;
+    }
     int i;
 
     for (i = 0; i < 30; i++) {

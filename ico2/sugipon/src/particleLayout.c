@@ -15,14 +15,25 @@ inline int *InitParticleLayoutGeo(GObj *self, int *layout)
 inline void DeleteParticleLayout(GObj *self)
 {
     int *q = GOBJ_SUB(self)->work;
-    if (q[0] != -1) {
+
+    if (ICO_NTSCAUG6) {
         DeleteParticleEffect(q[0]);
-        q[0] = -1;
+    } else {
+        if (q[0] != -1) {
+            DeleteParticleEffect(q[0]);
+            q[0] = -1;
+        }
     }
 }
 
+static inline void ParticleLayoutGeo_ntscaug6(GObj *self) {}
+
 void ParticleLayoutGeo(GObj *self)
 {
+    if (ICO_NTSCAUG6) {
+        ParticleLayoutGeo_ntscaug6(self);
+        return;
+    }
     int *q = GOBJ_SUB(self)->work;
     if (q[0] == -1) {
         return;

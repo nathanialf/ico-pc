@@ -228,7 +228,7 @@ AP1Work *InitAP1(GObj *self, SObjSimpleSetting *arg)
     }
     applyPartOrients(self);
     if (p->skel == 0) {
-        d = CSVSYSTEM_InitDObj(7, arg);
+        d = CSVSYSTEM_InitDObj(PAL_NTSCAUG6(7, 5), arg);
         p->arm[0] = d;
         if (d->nodeMtx != 0) {
             iosFree((void *)ICO_PHYS(d->nodeMtx));
@@ -265,7 +265,7 @@ AP1Work *InitAP1(GObj *self, SObjSimpleSetting *arg)
             }
         }
         p->arm[0]->dispType = 2;
-        d = CSVSYSTEM_InitDObj(8, arg);
+        d = CSVSYSTEM_InitDObj(PAL_NTSCAUG6(8, 6), arg);
         p->arm[1] = d;
         if (d->nodeMtx != 0) {
             iosFree((void *)ICO_PHYS(d->nodeMtx));
@@ -616,7 +616,9 @@ static int rolling(GObj *self)
                 if (col->wall.elem != 0) {
                     GOBJ_SUB(self)->ctrl.floorAttr = GetWallAttribute(col);
                 }
-                if (CheckWallAttribute(self, 0x50) != 0) {
+                if (PAL_NTSCAUG6(CheckWallAttribute(self, 0x50) != 0,
+                                 CheckWallAttribute(self, 0x40) != 0 ||
+                                     CheckWallAttribute(self, 0x50) != 0)) {
                     if (GetPoolGlobalHeight(col->wall.o.obj) <
                         GOBJ_SUB(self)->root.pos[1] + 50.0f) {
                         iosOmSendMail(self, 0x26, self);
@@ -627,7 +629,9 @@ static int rolling(GObj *self)
                 ClipWork *col = &ap1RollClip;
                 if (col->floor.elem != 0) {
                     GOBJ_SUB(self)->ctrl.floorAttr = GetFloorAttribute(col);
-                    if (CheckFloorAttribute(self, 0x50) != 0) {
+                    if (PAL_NTSCAUG6(CheckFloorAttribute(self, 0x50) != 0,
+                                     CheckFloorAttribute(self, 0x40) != 0 ||
+                                         CheckFloorAttribute(self, 0x50) != 0)) {
                         if (GetPoolGlobalHeight(col->floor.o.obj) <
                             GOBJ_SUB(self)->root.pos[1] + 50.0f) {
                             iosOmSendMail(self, 0x26, self);
@@ -683,6 +687,7 @@ static void calcSubMission(GObj *self)
     Vec4A_P_1 atk;
     int i;
     int ang;
+    int dbg = 0; /* the function's local debug switch, off (case 1) */
 
     CopyMatrix(MatrixDrive_GetMatrix(), p->mtx);
     MatrixDrive_RotMatrixZ(0x4000);
@@ -704,6 +709,18 @@ static void calcSubMission(GObj *self)
             w.m[1] -= (t < 0.5f) ? t * 2.0f * 20.0f : (1.0f - t) * 2.0f * 20.0f;
             _ApplyMatrix(&q, p->root, &w);
             _InterVectorXYZ(&part->pos, &q, &part->pos, t);
+            if (ICO_NTSCAUG6) {
+                /* the local debug switch's window: a dump of the root matrix
+                   the step is placed in.  Pinned: three to five instructions
+                   here at the first GCSE pass (its expression table of 219
+                   buckets orders the three spilled frame addresses as the ROM
+                   has them); the August TRFILE and PAL's have three code-less
+                   lines (664-666) in its place.  Not pinned: the body's text,
+                   which is derived. */
+                if (dbg) {
+                    debug_DispMatrix((int *)p->root);
+                }
+            }
             if ((part->count += 1) >= 10) {
                 part->state = 0;
             }
@@ -725,7 +742,7 @@ static void calcSubMission(GObj *self)
             _InterVectorXYZ(&part->pos, &dir, &part->pos, t);
             MatrixDrive_PopMatrix();
             if ((part->count += 1) >= 10) {
-                ExecuteSEPackage(self, 0x68);
+                ExecuteSEPackage(self, PAL_NTSCAUG6(0x68, 99));
                 CopyVector(&part->home, (char *)ap1PartOffset + i * 0x10);
                 part->state = 1;
                 part->count = 0;
@@ -760,7 +777,8 @@ static void calcSubMission(GObj *self)
         CopyVector(MatrixDrive_GetMatrix()[3], &save);
 
         if (p->skel != 0) {
-            _MulMatrix((char *)GOBJ_SUB(self)->nodeMtx + ((&p->focus[1])[i * 2] << 6),
+            _MulMatrix((char *)GOBJ_SUB(self)->nodeMtx +
+                           (PAL_NTSCAUG6((&p->focus[1])[i * 2], p->focus[i * 2 + 1]) << 6),
                        MatrixDrive_GetMatrix(), ap1ArmScale);
         } else {
             _MulMatrix((char *)p->arm[0]->nodeMtx + (i << 6), MatrixDrive_GetMatrix(), ap1ArmScale);
@@ -782,11 +800,16 @@ static void calcSubMission(GObj *self)
         if (part->state == 2) {
             atk = attackCenterOffset;
             _ApplyMatrix(&atk, MatrixDrive_GetMatrix(), &atk);
-            _AttackCenter(self, -1, atk.m, 0, 30.0f, 0);
+            if (ICO_NTSCAUG6) {
+                AttackCenter(self, -1, atk.m, 0, 30.0f);
+            } else {
+                _AttackCenter(self, -1, atk.m, 0, 30.0f, 0);
+            }
         }
 
         if (p->skel != 0) {
-            _MulMatrix((char *)GOBJ_SUB(self)->nodeMtx + ((&p->focus[2])[i * 2] << 6),
+            _MulMatrix((char *)GOBJ_SUB(self)->nodeMtx +
+                           (PAL_NTSCAUG6((&p->focus[2])[i * 2], p->focus[i * 2 + 2]) << 6),
                        MatrixDrive_GetMatrix(), ap1ArmScale);
         } else {
             _MulMatrix((char *)p->arm[1]->nodeMtx + (i << 6), MatrixDrive_GetMatrix(), ap1ArmScale);
@@ -1000,7 +1023,10 @@ check:
 
 GObj *MakeAP1GObj(SObjSimpleSetting *setting)
 {
-    return CreateLayoutedGObj(62, spiderDef[setting->obj].layout, -1, 0, setting, 0, 7, 1);
+    return PAL_NTSC_AUG6(
+        CreateLayoutedGObj(62, spiderDef[setting->obj].layout, -1, 0, setting, 0, 7, 1),
+        CreateLayoutedGObj(61, spiderDef[setting->obj].layout, -1, 0, setting, -1, 7, 1),
+        CreateLayoutedGObj(60, spiderDef[setting->obj].layout, -1, 0, setting, -1, 7, 1));
 }
 
 ICO_WORD_PTR(char *) GetAP1Mode(GObj *self)

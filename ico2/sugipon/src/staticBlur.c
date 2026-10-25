@@ -545,7 +545,7 @@ static void reduceCopyAlphaChannelOfWork1ToWork0(void)
     /* FRAME UV (the aura's buffer), WORK rect (Work0, W / 2 x 128) */
     int suv[4] = {blurUv[0] + 16, blurUv[1] + 16, gsFrame.w * 16 + blurUv[2],
                   ScreenHeight * 16 + blurUv[3]};
-    int srect[4] = {blurUv[4] - SB_X(2048), blurUv[5] - 1032, SB_X(4096),
+    int srect[4] = {blurUv[4] - SB_X(2048), blurUv[5] - PAL_NTSCAUG6(1032, 1024), SB_X(4096),
                     systemStatus[0] == 0 ? 1792 : 2048};
 
     gif_SetGsReg(6, workBase[1] | SB_TEX0_W(512) | 0x640000000LL);
@@ -586,7 +586,8 @@ static void pasteFeedBackAreaToFB(int *rect) /* derived name */
 
 static void copyCurrentFBToFeedBackArea(void)
 {
-    if (systemStatus[0] == 0) {
+    /* the August preview does not clear the feedback area's bottom strip */
+    if (!ICO_AUG6 && systemStatus[0] == 0) {
         SprUV a = {-SB_X(1024), 768, SB_X(2048), 256};
 
         gif_SetDrawEnviroment(0x3F00, 0, SB_X(128), 128, 0, 0);
@@ -811,8 +812,10 @@ static void auraInspireAfter(int mode)
         }
         break;
     }
-    if (GlobalTimer) {
-        pasteFeedBackAreaToWork0();
+    if (!ICO_NTSCAUG6) {
+        if (GlobalTimer) {
+            pasteFeedBackAreaToWork0();
+        }
     }
 
     gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, 0, 0);
@@ -843,7 +846,8 @@ static void fillWork2(int mode, int *rect)
     gif_SetZTest(0);
     gif_SetZWrite(0);
 
-    {
+    /* the 2001 builds clear no strip past work buffer 2 */
+    if (!ICO_NTSCAUG6) {
         unsigned char col[4] = {0, 0, 0, 192};
         SprUV r = {-SB_X(2048), -512, SB_X(4096), 1024};
 
@@ -1157,7 +1161,7 @@ void makeFullScreenFlareAfter(int mode)
 
     pasteWork0ToFB();
 
-    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, 0, 0);
+    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, PAL_NTSCAUG6(0, 1), 0);
 
     gif_EndPacket();
 }
@@ -1338,7 +1342,13 @@ void depthField(float depth, float width, float rate)
         pasteToFB(depth + width * i * 0.25f, i * 0.25f);
     }
     pasteToFB(depth + width, 1.0f);
+    if (ICO_NTSC) {
+        gif_SetDrawEnviroment(0x800, 0, ScreenWidth, ScreenHeight, 1, 0);
+    }
 
+    if (ICO_AUG6) {
+        gif_SetDrawEnviroment(0x800, 0, ScreenWidth, ScreenHeight, 1, 0);
+    }
     gif_EndPacket();
 }
 
@@ -1349,8 +1359,58 @@ void GetSunWorldPos(float *pos)
 
 static int motionBlurAlpha = 0; /* derived name */
 
+/* frames the motion blur still skips after a non-linear camera move */
+static int motionBlurSkip = 0; /* derived name */
+
+static void MotionBlur_aug6(void)
+{
+    SprCol col = {{128, 128, 128, 128}};
+    SprUV uv = {4, 4, gsFrame.w * 16, ScreenHeight / 2 * 16};
+    SprUV rect = {-gsFrame.w / 2 * 16 - 4, -ScreenHeight / 2 * 16 - 4, gsFrame.w * 16,
+                  ScreenHeight * 16};
+
+    if (motionBlurAlpha == 0) {
+        return;
+    }
+    /* PC port: Options > Effects > Motion blur off */
+    if (!ico_video_effect_motion_blur()) {
+        return;
+    }
+    if (motionBlurSkip != 0) {
+        motionBlurSkip--;
+        return;
+    }
+    if (NonLinearCameraMove != 0) {
+        motionBlurSkip = 1;
+    }
+    if (debug_font_flag & 1) {
+        debug_Printf(300, 40, 0xFFFFFF00, "MBLUR %d", motionBlurAlpha);
+    }
+
+    SB_KIND(RD_POST_MOTION_BLUR);
+    gif_StartPacketPri(7);
+
+    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, 0, 0);
+
+    gif_SetGsReg(6, SB_TEX0_W(512) | 0x640100000LL);
+    gif_SetGsReg(0x3B, 0x8000000080LL);
+    gif_SetGsReg(0x47, 0x3000C);
+
+    gif_SetZWrite(0);
+    gif_SetAlpha(1, 2, motionBlurAlpha);
+    gif_SpriteSensitiveOrg(&rect, -1, &uv, &col, 1);
+    gif_SetZWrite(1);
+
+    gif_SetGsReg(0x47, 0x5000D);
+    gif_EndPacket();
+}
+
 void MotionBlur(void)
 {
+    if (ICO_AUG6) {
+        MotionBlur_aug6();
+        return;
+    }
     SprCol col = {{128, 128, 128, 128}};
     SprUV uv = {4, 4, gsFrame.w * 16, ScreenHeight / 2 * 16};
     SprUV rect = {-gsFrame.w / 2 * 16 - 4, -ScreenHeight / 2 * 16 - 4, gsFrame.w * 16,
@@ -1643,18 +1703,23 @@ void FullScreenEffectBefore(void)
         if (debug_font_flag & 1)
             debug_Printf(250, 40, 0xFFFFFF00, "SUN");
 
+    if (ICO_AUG6) {
+        colorSetting(); /* the August preview sets the effect colours each frame here */
+    }
     workBase[0] = 0x2800;
     workBase[1] = 0x2A00;
     workBase[2] = 0x2E00;
     workBase[3] = 0x3000;
 
-    if (ICO_JPNKORCN) {
-        tex_LockHeadTBP(0x3800, 8);
-    } else {
-        if (systemStatus[0] == 1) {
-            tex_LockHeadTBP(0x3A00, 8);
-        } else {
+    if (!ICO_NTSCAUG6) {
+        if (ICO_JPNKORCN) {
             tex_LockHeadTBP(0x3800, 8);
+        } else {
+            if (systemStatus[0] == 1) {
+                tex_LockHeadTBP(0x3A00, 8);
+            } else {
+                tex_LockHeadTBP(0x3800, 8);
+            }
         }
     }
 
@@ -1757,8 +1822,10 @@ void FullScreenEffectAfter(void)
     depthFadeStart = GlobalStageSetting.depthFieldStart;
     depthFadeWidth = GlobalStageSetting.depthFieldWidth;
 
-    tex_UnlockHeadTBP(7);
-    tex_UnlockHeadTBP(8);
+    if (!ICO_NTSCAUG6) {
+        tex_UnlockHeadTBP(7);
+        tex_UnlockHeadTBP(8);
+    }
 }
 
 /* declared here: matrixDrive.h is not included */

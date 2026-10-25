@@ -1,10 +1,12 @@
 #include "debug.h"
 #include "memory.h"
 #include "debug_exception.h"
+#include "region.h"
 #include <assert.h>
 
 /* three frames of pointers queued for a delayed iosFree */
-static void *delayFreeBuffer[3][384]; /* derived name */
+static void
+    *delayFreeBuffer[3][384]; /* derived name; the 2001 builds use 256 and 128 of each frame */
 
 /* the frame being filled and its entry count */
 static int delayFreeNo = 0; /* derived name */
@@ -17,7 +19,7 @@ static inline void ClearDelayFreeBuffer(int no) /* derived name */
 {
     int i;
 
-    for (i = 384 - 1; i >= 0; i--) {
+    for (i = PAL_NTSC_AUG6(384, 256, 128) - 1; i >= 0; i--) {
         delayFreeBuffer[no][i] = 0;
     }
 }
@@ -53,7 +55,7 @@ inline void ExecDelayFree(void)
 void EntryDelayFree(void *p)
 {
     delayFreeBuffer[delayFreeNo][delayFreeCount++] = p;
-    if (delayFreeCount >= 384) {
+    if (delayFreeCount >= PAL_NTSC_AUG6(384, 256, 128)) {
         debug_StdPrintfDummy("[33mERROR!!! TOO MANY DELAY FREE LIST ENTRY!!! EXIT...[m\n");
         debug_assert("src/delayFreeManager.c", 51);
         __assert("src/delayFreeManager.c", 51, "0");

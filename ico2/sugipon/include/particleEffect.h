@@ -61,16 +61,16 @@ typedef struct PEPackage {  /* field names derived */
 typedef struct PEPartRec { /* field names derived */
     int alive;             /* 0x00, 0 once the particle has run out */
     int spin;              /* 0x04 */
-    long long pad08; /* 0x08 */
-    float pos[4];    /* 0x10 */
-    float vel[4];    /* 0x20 */
-    short spinX;     /* 0x30 */
-    short spinY;     /* 0x32 */
-    float size;      /* 0x34 */
-    float sizeStep;  /* 0x38 */
-    float alpha;     /* 0x3C */
-    float alphaStep; /* 0x40 */
-    int life;        /* 0x44 */
+    long long pad08;       /* 0x08 */
+    float pos[4];          /* 0x10 */
+    float vel[4];          /* 0x20 */
+    short spinX;           /* 0x30 */
+    short spinY;           /* 0x32 */
+    float size;            /* 0x34 */
+    float sizeStep;        /* 0x38 */
+    float alpha;           /* 0x3C */
+    float alphaStep;       /* 0x40 */
+    int life;              /* 0x44 */
     char pad48[8];
     int col[4]; /* 0x50 */
     float u;    /* 0x60 */

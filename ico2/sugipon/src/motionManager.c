@@ -130,19 +130,43 @@ static sceVu0IVECTOR dirColor = {0xFF, 0x60, 0x40, 0x80}; /* derived name */
 
 static sceVu0IVECTOR dirColor2 = {0x00, 0x60, 0xFF, 0x80}; /* derived name */
 
-static float ikXAxis[4]; /* derived name */
+static float ikXAxis_pal[4]; /* derived name */
 
-static float ikBendQuat[4]; /* derived name */
+static sceVu0FVECTOR ikXAxis_aug6; /* derived name */
+
+#define ikXAxis PAL_AUG6(ikXAxis_pal, ikXAxis_aug6)
+
+static float ikBendQuat_pal[4]; /* derived name */
+
+static sceVu0FVECTOR ikBendQuat_aug6; /* derived name */
+
+#define ikBendQuat PAL_AUG6(ikBendQuat_pal, ikBendQuat_aug6)
 
 static float naturalMatrix[16]; /* derived name */
 
-static float naturalTrans[4]; /* derived name */
+static float naturalTrans_pal[4]; /* derived name */
 
-static float rootMove[4]; /* derived name */
+static sceVu0FVECTOR naturalTrans_aug6; /* derived name */
 
-static float rootStep[4]; /* derived name */
+#define naturalTrans PAL_AUG6(naturalTrans_pal, naturalTrans_aug6)
 
-static float rootDelta[4]; /* derived name */
+static float rootMove_pal[4]; /* derived name */
+
+static sceVu0FVECTOR rootMove_aug6; /* derived name */
+
+#define rootMove PAL_AUG6(rootMove_pal, rootMove_aug6)
+
+static float rootStep_pal[4]; /* derived name */
+
+static sceVu0FVECTOR rootStep_aug6; /* derived name */
+
+#define rootStep PAL_AUG6(rootStep_pal, rootStep_aug6)
+
+static float rootDelta_pal[4]; /* derived name */
+
+static sceVu0FVECTOR rootDelta_aug6; /* derived name */
+
+#define rootDelta PAL_AUG6(rootDelta_pal, rootDelta_aug6)
 
 /* The skeleton the motion being computed belongs to: its node array and its
    object.  Declared here for the functions above; the definitions follow
@@ -482,8 +506,141 @@ static void checkWallState(int flag)
     }
 }
 
+static void checkCliffState_ntscaug6(int first)
+{
+    (void)first; /* PC port: the European parameter, unused here */
+    ClipWork buf;
+    float mv[4];
+    ClipWork *p;
+    float k;
+
+    memset(&buf, 0, sizeof(buf));
+    p = &buf;
+    k = ((GObj *)skelGObj == boyGObj) ? -20.0f : 0.0f;
+    cliffCheckBase[2] = k;
+    MatrixDrive_PushMatrix();
+    MatrixDrive_TransMatrixV(cliffCheckBase);
+    CopyVector(p, (void *)(MatrixDrive_GetMatrix()[3]));
+    sceVu0ApplyMatrix(p->pt[1], MatrixDrive_GetMatrix(), cliffCheckAhead);
+    _ApplyMatrix(mv, MatrixDrive_GetMatrix(), ZUnitVector);
+    MatrixDrive_PopMatrix();
+    if (hitColRayDisp != 0) {
+        DrawCollisionRay(p);
+    }
+    ClipWallR(p);
+    if (p->wall.elem != 0) {
+        float wv[4];
+        float sc[4];
+        float hit[4];
+        ClipWork fp;
+        float plane[4];
+        WallCfg pl;
+        WallCfg t;
+        float d;
+        float dd;
+
+        GetWallVector(wv, p);
+        sceVu0ScaleVector(sc, wv, 300.0f);
+        AddVectorXYZ(p->pt[1], p, sc);
+        ClipWallR(p);
+        if (hitColRayDisp != 0) {
+            DrawCollisionRay(p);
+        }
+        if (p->wall.elem != 0) {
+            sceVu0ScaleVector(sc, wv, 10.0f);
+            sceVu0AddVector(fp.pt[1], p->pt[2], sc);
+            CopyVector(&fp, fp.pt[1]);
+            pl = (t.o = p->wall.o, t.elem = p->wall.elem, t);
+            GetPureVerticalPlane(plane, 0, 0, &pl, 0);
+            d = GetDistanceFromPlane(plane, p->pt[2]);
+            fp.pt[0][1] += d - 10.0f;
+            ClipFloor(&fp);
+            if (hitColRayDisp != 0) {
+                DrawCollisionRay(&fp);
+            }
+            CopyVector(hit, p->pt[2]);
+            if (fp.floor.elem == 0) {
+                float dv[4];
+                float nv[4];
+                ClipWork w2;
+                float ip;
+
+                CopyVector(dv, wv);
+                sc[1] = 0.0f;
+                _NormalizeVector(nv, dv);
+                ip = _InnerProduct(nv, mv);
+                skelMotCtrl->cliffDist = GetPointDistance(p->pt[2], p) + k * ip;
+                skelMotCtrl->cliffWallHit = 1;
+                /* the wall-hit word is copied as the pointer it is, as
+                   checkWallState reads it */
+                skelRoot->cliffWall.elem = p->wall.elem;
+                skelRoot->cliffWall.o = p->wall.o;
+                skelRoot->cliffWallCount = -1;
+                w2 = *p;
+                d = GetPointDistance(p->pt[2], p);
+                _ScaleVector(sc, wv, d + 10.0f);
+                _AddVectorXYZ((w2.pt[1]), &w2, sc);
+                w2.pt[0][1] = w2.pt[0][1] - 30.0f;
+                w2.pt[1][1] = w2.pt[1][1] - 30.0f;
+                ClipWall(&w2);
+                if (hitColRayDisp != 0) {
+                    DrawCollisionRay(&w2);
+                }
+                if (w2.wall.elem == 0) {
+                    skelMotCtrl->cliffEdge = 1;
+                    skelMotCtrl->flags |= 0x10;
+                }
+            }
+            skelMotCtrl->pureCliffAttr = skelMotCtrl->wallAttr = GetWallAttribute(p);
+            GetOrientOfWall(skelMotCtrl->cliffNormal, p->wall.elem, &p->wall.o);
+            if (skelMotCtrl->cliffDist < 30.0f) {
+                sceVu0ScaleVector(sc, wv, 10.0f);
+                SubVectorXYZ(p, hit, sc);
+                sceVu0ScaleVector(sc, wv, 300.0f);
+                AddVectorXYZ(p->pt[1], p, sc);
+                ClipWall(p);
+                if (hitColRayDisp != 0) {
+                    DrawCollisionRay(p);
+                }
+                if (p->wall.elem != 0) {
+                    dd = distance_squared(p->pt[2], p);
+                    skelMotCtrl->cliffBack = 1;
+                    d = FSqrt(dd);
+                    skelMotCtrl->wallDist = d;
+                    sceVu0ScaleVector(sc, wv, 10.0f);
+                    AddVectorXYZ(p, p->pt[2], sc);
+                    CopyVector(p->pt[1], p);
+                    p->pt[1][1] = p->pt[1][1] - 10000.0f;
+                    ClipFloorR(p);
+                    if (hitColRayDisp != 0) {
+                        DrawCollisionRay(p);
+                    }
+                    if (p->floor.elem != 0) {
+                        skelMotCtrl->wallFloorHeight = (p->pt[2][1] - p->pt[0][1]) + 10.0f;
+                    }
+                }
+            }
+            sceVu0ScaleVector(sc, wv, 10.0f);
+            AddVectorXYZ(p, hit, sc);
+            CopyVector(p->pt[1], p);
+            p->pt[1][1] = p->pt[1][1] + 10000.0f;
+            ClipFloorIH(p);
+            if (hitColRayDisp != 0) {
+                DrawCollisionRay(p);
+            }
+            if (p->floor.elem != 0) {
+                skelMotCtrl->cliffHeight = (p->pt[2][1] - p->pt[0][1]) + 10.0f;
+            }
+        }
+    }
+}
+
 static void checkCliffState(int first)
 {
+    if (ICO_NTSCAUG6) {
+        checkCliffState_ntscaug6(first);
+        return;
+    }
     ClipWork buf;
     float mv[4];
     ClipWork *p;
@@ -625,7 +782,11 @@ static void _checkCliffAndWall(void)
     if (skelMotCtrl->cliffWallCheck == 1 ||
         (skelMotCtrl->cliffWallCheck == 2 && skelMotCtrl->variation == 0)) {
         MatrixDrive_PushMatrix();
-        checkCliffState(1);
+        if (ICO_NTSCAUG6) {
+            checkCliffState(0);
+        } else {
+            checkCliffState(1);
+        }
         MatrixDrive_PopMatrix();
     }
     if (skelMotCtrl->cliffWallCheck == 1 ||
@@ -657,7 +818,11 @@ static void _checkCliffAndWall(void)
                 MatrixDrive_GetMatrix()[0][0] = MatrixDrive_GetMatrix()[2][2] = v[2];
                 MatrixDrive_GetMatrix()[0][2] = -v[0];
                 MatrixDrive_GetMatrix()[2][0] = -MatrixDrive_GetMatrix()[0][2];
-                checkCliffState(0);
+                if (ICO_NTSCAUG6) {
+                    checkCliffState(0);
+                } else {
+                    checkCliffState(0);
+                }
                 MatrixDrive_PopMatrix();
             }
         }
@@ -674,8 +839,8 @@ static void _checkCliffAndWall(void)
         }
     }
     if (GOBJ_SUB(skelGObj)->ctrl.wallHit != 0 && GOBJ_SUB(skelGObj)->root.wall.elem == 0) {
-        debug_assertMessage(__FILE__, 822, "NOT ENTRY WCL\n");
-        __assert(__FILE__, 822, "e");
+        debug_assertMessage(__FILE__, LN(822, 822, 822, 816, 816, 788, 822), "NOT ENTRY WCL\n");
+        __assert(__FILE__, LN(822, 822, 822, 816, 816, 788, 822), "e");
     }
 }
 
@@ -768,7 +933,7 @@ static void _getGeometryOfMotion(ObjNode *out, int second)
     CopyVector((void *)v, (void *)skelMotCtrl->dir);
     SetIdentityQuaternion(q);
     sceVu0Normalize((void *)v, (void *)v);
-    RotQuaternionY(q, atan2f(v[0], v[2]) * 10430.378f);
+    RotQuaternionY(q, PAL_AUG6(atan2f(v[0], v[2]) * 10430.378f, GetTableArcTan2(v[0], v[2])));
     CopyQuaternion(skelRoot->quat, q);
     GetMatrixFromQuaternion((void *)MatrixDrive_GetMatrix(), skelRoot->quat);
     SetCurrentQuaternion(skelRoot->quat);
@@ -794,7 +959,9 @@ static void _getGeometryOfMotion(ObjNode *out, int second)
         skelRoot->lifting = 0;
         skelRoot->lift[0] = 0.0f;
         skelRoot->lift[1] = 0.0f;
-        CopyVector(skelRoot->up, skelRoot->pos);
+        if (!ICO_AUG6) {
+            CopyVector(skelRoot->up, skelRoot->pos);
+        }
     }
 
     if (skelMotCtrl->stream != -1) {
@@ -810,8 +977,8 @@ static void _getGeometryOfMotion(ObjNode *out, int second)
                 buf,
                 "MAY BE MOTION ORIENT DATA WAS BROKEN\n(MOTIONNAME:\"%s\" ID:%d: rootUpdateMode:%d)\n",
                 skelMotDef->name, pm->motion, pm->rootUpdateMode);
-            debug_assertMessage(__FILE__, 997, buf);
-            __assert(__FILE__, 997, "e");
+            debug_assertMessage(__FILE__, LN(997, 997, 997, 991, 989, 961, 997), buf);
+            __assert(__FILE__, LN(997, 997, 997, 991, 989, 997, 997), "e");
         } break;
         case 1:
         case 20:
@@ -936,7 +1103,7 @@ static void execPositionReserver(GObj *self, ObjNode m)
         }
     }
     if (debug_skel_flag != 0) {
-        if ((GObj *)skelGObj == boyGObj) {
+        if ((GObj *)skelGObj == PAL_NTSCAUG6(boyGObj, girlGObj)) {
             CopyVector(buf2, skelRoot->savePos);
             _UnitMatrix(MatrixDrive_GetMatrix());
             if (m.obj != 0) {
@@ -944,9 +1111,9 @@ static void execPositionReserver(GObj *self, ObjNode m)
                 MatrixDrive_TransMatrixV(buf2);
                 gif_StartPacketPri(11);
                 if (GOBJ_SUB(self)->ctrl.posReserve == 1) {
-                    prim_DispWireSphere(50.0f, reserverColor, 16, 8);
+                    prim_DispWireSphere(PAL_AUG6(50.0f, 5.0f), reserverColor, 16, 8);
                 } else {
-                    prim_DispWireSphere(50.0f, reserverColor2, 16, 8);
+                    prim_DispWireSphere(PAL_AUG6(50.0f, 5.0f), reserverColor2, 16, 8);
                 }
                 gif_EndPacket();
             }

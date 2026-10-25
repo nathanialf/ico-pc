@@ -30,11 +30,11 @@ typedef struct { /* field names derived */
 } ExW; /* derived name */
 
 /* the points of one chain InitChains builds, 0x1A0 bytes */
-typedef struct { /* field names derived */
+typedef struct {     /* field names derived */
     float (*pos)[4]; /* 0x0, the chain's points */
     float (*vel)[4]; /* 0x4, their velocities */
     float *len;      /* 0x8, one a point, the step down the chain */
-    int exNum;   /* 0xC, the extended weights in use */
+    int exNum;       /* 0xC, the extended weights in use */
     ExW ex[5];
 } ChainNode; /* derived name */
 

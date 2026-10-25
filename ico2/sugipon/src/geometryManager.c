@@ -240,11 +240,11 @@ void LocalizeGeometry(GObj *gobj, ObjNode *link)
     m = &sub->root;
     if (sub->parent.obj != 0) {
         debug_assertMessage(
-            "src/geometryManager.c", 371,
+            "src/geometryManager.c", LN(371, 371, 371, 371, 355, 359, 371),
             "Fatal error! Geometry localize function called with GObj\n    that already have parent.\nExit...\n");
-        __assert("src/geometryManager.c", 371, "e");
-        debug_assert("src/geometryManager.c", 372);
-        __assert("src/geometryManager.c", 372, "0");
+        __assert("src/geometryManager.c", LN(371, 371, 371, 371, 355, 359, 371), "e");
+        debug_assert("src/geometryManager.c", LN(372, 372, 372, 372, 356, 360, 372));
+        __assert("src/geometryManager.c", LN(372, 372, 372, 372, 356, 360, 372), "0");
     }
 
     m->pos[3] = 1.0f;
@@ -391,7 +391,11 @@ loop:
 }
 
 /* the object kinds the character list builder accepts, -1 terminated */
-static int charGObjKinds[5] = {1, 2, 4, 47, -1}; /* derived name */
+static int charGObjKinds_pal[5] = {1, 2, 4, 47, -1}; /* derived name */
+
+static int charGObjKinds_ntscaug6[5] = {1, 2, 4, 46, -1}; /* derived name */
+
+#define charGObjKinds PAL_NTSCAUG6(charGObjKinds_pal, charGObjKinds_ntscaug6)
 
 /* the live character objects the cylinder check walks */
 static GObj *charGObjList[64]; /* derived name */
@@ -424,9 +428,9 @@ void MakeCharGObjList(void)
         if (isCharGObj(o) != 0) {
             charGObjList[charGObjCount++] = o;
             if (charGObjCount > 64) {
-                debug_assertMessage("src/geometryManager.c", 558,
+                debug_assertMessage("src/geometryManager.c", LN(558, 558, 558, 558, 542, 546, 558),
                                     "TOO MANY CHARACTERS EXIST ON THIS STAGE(>64)\n");
-                __assert("src/geometryManager.c", 558, "e");
+                __assert("src/geometryManager.c", LN(558, 558, 558, 558, 558, 558, 558), "e");
             }
         }
         o = isysGObjGetExist_next(o);

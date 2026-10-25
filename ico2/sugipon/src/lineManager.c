@@ -203,14 +203,21 @@ int _getLine(float *o1, float *o2, float *from, float *to)
 
     if (sortByY(o1, o2))
         rev = !rev;
-    if (2048.0f + vsHeight * 0.5f <= o1[1])
+    if (2048.0f + PAL_AUG6(vsHeight, currentScreenHeight) * 0.5f <= o1[1])
         return -1;
-    if (o2[1] <= 2048.0f - vsHeight * 0.5f)
+    if (o2[1] <= 2048.0f - PAL_AUG6(vsHeight, currentScreenHeight) * 0.5f)
         return -1;
-    if (o1[1] < 2048.0f - vsHeight * 0.5f)
-        clipAtY(o1, o1, o2, 2048.0f - vsHeight * 0.5f);
-    if (2048.0f + vsHeight * 0.5f < o2[1])
-        clipAtY(o2, o1, o2, 2048.0f + vsHeight * 0.5f);
+    if (ICO_AUG6) {
+        if (o1[1] < 2048.0f - currentScreenHeight * 0.5f)
+            clipAtY(o1, o1, o2, 2048.0f - currentScreenHeight * 0.5f);
+        if (2048.0f + currentScreenHeight * 0.5f < o2[1])
+            clipAtY(o2, o1, o2, 2048.0f + currentScreenHeight * 0.5f);
+    } else {
+        if (o1[1] < 2048.0f - vsHeight * 0.5f)
+            clipAtY(o1, o1, o2, 2048.0f - vsHeight * 0.5f);
+        if (2048.0f + vsHeight * 0.5f < o2[1])
+            clipAtY(o2, o1, o2, 2048.0f + vsHeight * 0.5f);
+    }
     return rev;
 }
 
