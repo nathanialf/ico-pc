@@ -277,8 +277,8 @@ void HandManager(GObj *obj)
     float t = 1.0f;
 
     if (debug_now_motion_viewer == 0) {
-        ResetHandTarget(obj, PAL_AUG6JUN26(0x310, 768));
-        ResetHandTarget(obj, PAL_AUG6JUN26(0x2B0, 672));
+        ResetHandTarget(obj, 0x310);
+        ResetHandTarget(obj, 0x2B0);
         if (GOBJ_SUB(obj)->root.handIK != 0) {
             const MotionDef *rec = &motionKind[GOBJ_SUB(obj)->ctrl.motion];
             _handManager(obj, &GOBJ_SUB(obj)->root.hand0,
