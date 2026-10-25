@@ -16,14 +16,17 @@ the `textures` folder. It is already there, with a short note inside it.
 
 Each disc has its own folder for packs, named after the number printed on
 the disc: `SCES-50760` for the European disc, `SCPS-11003` for the
-Japanese disc and `SCPS-56001` for the Korean disc. A pack goes in the
-folder of the disc it was made for, and of these three folders the game
+Japanese disc, `SCPS-56001` for the Korean disc, `SCUS-97113` for the North
+American disc and the August 2001 preview disc (which has no number of its
+own and shares this folder), `SCUS-97158` for the June 2001 magazine demo and
+`SCPS-55001` for the Asian disc. A pack goes in the
+folder of the disc it was made for, and of these six folders the game
 reads only the one of the disc you play.
 The other places below (`models/replacements`, and files loose in
 `models`) are read for every disc, so a pack there shows on any disc.
 The steps below use
-the European disc's folder; for the Japanese disc, read `SCPS-11003`
-instead of `SCES-50760` (`SCPS-56001` for the Korean disc).
+the European disc's folder; for another disc, read its number from the
+list above instead of `SCES-50760`.
 
 1. Open the `models` folder beside the program. On Windows it is inside
    the `x64` folder:
@@ -32,10 +35,13 @@ instead of `SCES-50760` (`SCPS-56001` for the Korean disc).
    x64\models\SCES-50760\replacements\
    x64\models\SCPS-11003\replacements\
    x64\models\SCPS-56001\replacements\
+   x64\models\SCUS-97113\replacements\
+   x64\models\SCUS-97158\replacements\
+   x64\models\SCPS-55001\replacements\
    ```
 
    On Linux and the Steam Deck it is `models/SCES-50760/replacements/`
-   (or `models/SCPS-11003/replacements/` or `models/SCPS-56001/replacements/`)
+   (and the same with the other discs' numbers)
    next to `ico_pc`. On a Mac or an iPhone there is no such folder in the
    download: make it in the folder with your saves, as below. On Android,
    [the Android guide](ANDROID.md#where-your-files-are) says where it goes.
@@ -99,8 +105,9 @@ these notes are written for it.
      many files it saved and where.
 
 The files go in `models/SCES-50760/dumps` (European disc) or
-`models/SCPS-11003/dumps` (Japanese disc) or
-`models/SCPS-56001/dumps` (Korean disc) in the folder with your saves.
+`models/SCPS-11003/dumps` (Japanese disc),
+`models/SCPS-56001/dumps` (Korean disc), and under the other discs' numbers
+the same way, in the folder with your saves.
 Make a pack from the dumps of the disc it is for.
 
 You cannot earn achievements while Developer mode is on, so turn it off
@@ -135,7 +142,8 @@ chunks. All pieces of one file use the same texture.
    track, for example `sword-3f9a07c2b1d4e865.glb`.
 5. Put it in `models/SCES-50760/replacements` (or
    `models/SCPS-11003/replacements` for the Japanese disc,
-   `models/SCPS-56001/replacements` for the Korean disc) and start the
+   `models/SCPS-56001/replacements` for the Korean disc, and so on with the
+   other discs' numbers) and start the
    game.
 
 ### What you can change
