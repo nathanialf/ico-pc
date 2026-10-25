@@ -340,6 +340,17 @@ if(TARGET ico_pc)
                            ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
     target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_photo_view_live>)
 endif()
+# demo_host.c: the June 2001 demo's sceDemoStart (the magazine menu's settings,
+# here the port's), which common/src/main.c calls on that disc; port code, in
+# the program only (ico2/common/src/demoDisc.c, the PS2's, is not built)
+if(TARGET ico_pc)
+    add_library(ico_demo_host OBJECT demo_host.c)
+    target_include_directories(ico_demo_host PRIVATE "${ICO_COMPAT_DIR}"
+                               "${CMAKE_SOURCE_DIR}/port/platform")
+    target_compile_options(ico_demo_host PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_link_libraries(ico_demo_host PRIVATE ico_options ico_config)
+    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_demo_host>)
+endif()
 # title_logo_test: the title's logo hidden under Settings and
 # Extras from the title, never by the pause menu's, and shown again on the
 # title's menu; the game's globals and the menus' answers stubbed. CPU only.
