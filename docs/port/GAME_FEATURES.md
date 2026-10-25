@@ -253,7 +253,7 @@ flag is: `la_save_processing` calls `ico_ach_slot_saved` and `la_load_processing
 `ico_ach_slot_loaded` (`ico2/common/src/layout_action.c`). The visited stages and the slots are
 per disc, as the stage rows and the saves are: `stats.stages` and `run.slot_N_*` for the European
 disc, `stats.stages_jpn` and `run.jpn_slot_N_*` for the Japanese one, `stats.stages_kor` and `run.kor_slot_N_*` for the Korean one; the unlocks and the other
-counters are one set for the player ([SAVES.md](SAVES.md#three-discs); `port/game/achievements.c`
+counters are one set for the player ([SAVES.md](SAVES.md#the-seven-discs); `port/game/achievements.c`
 (`run_key`, `write_file`, `read_file`)). The ctests `achievements`, `achievements_jpn` and `achievements_kor` run the
 same program with each disc selected (`port/game/test/achievements_test.c`, `test_discs`).
 
