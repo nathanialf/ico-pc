@@ -502,10 +502,10 @@ static void test_cn_values(void)
     NUM(pause_last, 274);
     NUM(stage_count, 104);
     NUM(layout_count, 76);
-    /* the menu sheets are Traditional Chinese, which the port has no text or measured look for:
-       English and the Japanese sheets' look stand in until a text package replaces them */
-    NUM(ui_lang_default, 0);
-    NUM(menu_sheet, 5);
+    /* the menu sheets are Traditional Chinese: the port's text is too (UI_LANG_ZH), over its own
+       sheets' look (UI_SHEET_ZH, the Japanese sheets' numbers until menu_look_cn measures them) */
+    NUM(ui_lang_default, 7);
+    NUM(menu_sheet, 7);
     SAME(has_50hz_row);
     SAME(has_game_language);
     SAME(fixed_60hz);
