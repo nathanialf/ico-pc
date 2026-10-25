@@ -770,7 +770,7 @@ static const char *image_name(int k, char *out, size_t size)
     return out;
 }
 
-/* config.toml [game] disc: the disc it pins ("pal", "jpn", "kor"), or NULL for
+/* config.toml [game] disc: the disc it pins (a slug of config/regions.txt), or NULL for
    "auto" (the default; an unknown value is logged as auto) */
 static const IcoDiscInfo *disc_setting(void)
 {
