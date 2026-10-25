@@ -865,8 +865,19 @@ the Japanese program with Korean text, and every bullet below holds on it as wel
 row numbers (the title's copyright line is rows 12 and 13 there), its own sheets (`UI_SHEET_KO`)
 and Korean in place of Japanese where a bullet names the language; the Korean disc has not been
 run in the port yet, so those numbers are checked by the tests (`ui_kor`, `settings_kor` and the
-other `_kor` rows of [TESTING.md](TESTING.md)) and by reading its tables, not by play. On the
-Japanese disc:
+other `_kor` rows of [TESTING.md](TESTING.md)) and by reading its tables, not by play. The Asian
+disc (`region_cn.c`) is the Korean program on the Japanese disc's records: Circle confirms as there,
+and its menu sheets are Traditional Chinese, which the port has no text or measured look for, so its
+Menu language starts on English (`ui_lang_default` 0) and the Japanese sheets' look stands in
+(`menu_sheet` `UI_SHEET_JA`); `ui_cn`, `settings_cn` and the other `_cn` rows run its numbers. The
+North American disc, the August 2001 preview and the June 2001 demo (`region_ntsc.c`, `region_aug6.c`,
+`region_jun26.c`) are PAL's text with their own lines: Cross confirms and Triangle goes back as on
+the European disc, 60 Hz only and no game language (so the Video mode, Language rows are not shown and
+the Menu language starts on English), with the English sheets' look the European one. Their layout, row
+and stage numbers are their own, read from their rows, and none of the three has been run in the
+port yet. The Model viewer's model ids (`mv_id_column`) are PAL's on these three until their
+modelData columns are derived (`tools/gen_mv_region.py` aligns whole rows, and these discs' rows carry
+two path strings PAL's do not). On the Japanese disc:
 
 - **Buttons.** Circle confirms and Cross goes back in the game's menus (`pad_confirm` 0x20,
   `pad_back` 0x40). The port follows: `lt_ext_back_buttons` is Cross alone and `[game]
@@ -892,8 +903,10 @@ Japanese disc:
   each region's `archive_name` in the per-user folder or beside the program, the same test
   `main_host.c`'s `mount_game_data` makes for `ico_host_choose_disc`) to
   `ui_settings_set_disc_handler`, asked once after each call. Its values, `UI_STR_DISC_PAL`,
-  `UI_STR_DISC_JPN` and `UI_STR_DISC_KOR` ("Europe (SCES-50760)", "Japan (SCPS-11003)", "Korea
-  (SCPS-56001)" in English), step through
+  `UI_STR_DISC_JPN`, `UI_STR_DISC_KOR`, `UI_STR_DISC_NTSC`, `UI_STR_DISC_AUG6`, `UI_STR_DISC_JUN26`
+  and `UI_STR_DISC_CN` ("Europe (SCES-50760)", "Japan (SCPS-11003)", "Korea (SCPS-56001)", "USA
+  (SCUS-97113)", "Preview 2001-08", "Demo 2001-06 (SCUS-97158)", "Asia (SCPS-55001)" in English; the
+  four newest are the same Latin text in every language, "Asia" translated where it differs), step through
   `config/regions.txt`'s rows and write `[game] disc` (`ico_config_disc_pin`), read at the next
   start; with no pin the row shows the disc playing, which with several discs' data and no pin is the
   one the next start picks (the disc played last). Its note is `UI_STR_DISC_NOTE` ("Takes effect at
