@@ -15,14 +15,21 @@
   a graphics driver package instead, which only helps on a phone with an
   Adreno chip (most phones with a Qualcomm Snapdragon processor; see
   [Using a different graphics driver](#using-a-different-graphics-driver)).
-- **Your own disc image of ICO**, the European release (SCES-50760), the
-  Japanese release (SCPS-11003) or the Korean release (SCPS-56001), as a `.iso`, `.chd` or `.bin` file,
-  copied onto the phone or tablet. The Japanese release is a CD, so its
-  image is usually a `.bin` with a `.cue` beside it: copy the `.bin`.
+- **Your own disc image of ICO**: the European release (SCES-50760), the
+  Japanese release (SCPS-11003), the Korean release (SCPS-56001), the North
+  American release (SCUS-97113), the Asian release (SCPS-55001), the August
+  2001 preview disc or the June 2001 magazine demo (SCUS-97158), as a `.iso`, `.chd` or `.bin` file,
+  copied onto the phone or tablet. The Japanese, North American and preview
+  discs are CDs, so their images are usually a `.bin` with a `.cue` beside it:
+  copy the `.bin`.
   [What a disc image is](../README.md#what-you-need), and
-  [what differs between the three discs](../README.md#the-three-discs).
+  [what differs between the seven discs](../README.md#the-seven-discs).
 - **Free space** for the first start: the size of the disc image plus
-  about 1.2 GB. Once the game is set up, it needs about 1 GB.
+  about 1.2 GB. Once the game is set up, it needs about 1 GB. The June 2001
+  magazine demo is the exception: its image is the whole magazine disc, about
+  4.4 GB, so the first start needs about 5.6 GB free. The screen says so while
+  it copies, and says how much is needed when there is not enough. The demo
+  setup keeps only ICO's part of the image (about 280 MB).
 
 ## Install it
 
@@ -54,17 +61,17 @@ first ([where it is](#where-your-files-are)).
    what was prepared before the update is thrown away. Later starts skip it or
    show it only for a moment. If you
    close the game during it, the next start shows it again.
-2. The game asks you to choose your ICO disc image, the European release
-   (SCES-50760), the Japanese release (SCPS-11003) or the Korean release
-   (SCPS-56001), and opens your
+2. The game asks you to choose your ICO disc image (any of the seven discs
+   above), and opens your
    phone's file picker. Find your disc image and tap it. The picker shows
    every file, so make sure you pick the `.iso`, `.chd` or `.bin` of the
    disc. If you have a `.bin` and a `.cue` (the usual form of the
-   Japanese disc), pick the `.bin`: a `.cue` on its own is not the disc.
+   Japanese disc), pick the `.bin`: a `.cue` on its own is not the disc. For
+   the magazine demo, pick the whole magazine image.
    On a phone without the system's own file picker, the game opens
    another file manager app instead, if one is installed.
 3. The game copies the image into its own folder, naming the copy
-   `Ico_PAL`, `Ico_JPN` or `Ico_KOR` and the file's ending, after the disc it is. The screen says **Copying
+   `Ico_PAL`, `Ico_JPN`, `Ico_KOR`, `Ico_USA`, `Ico_CN`, `Ico_AUG6` or `Ico_JUN26` and the file's ending, after the disc it is. The screen says **Copying
    the disc image into the app**, with a bar. With a big image this can take
    a few minutes. At the end it says **Saving the copy** for a few seconds
    while the phone finishes writing the file.
@@ -89,10 +96,10 @@ Once the game is set up, it deletes its copy of the disc image to give the
 space back. Your own file, where you picked it from, is not touched.
 
 **Skipping the picker.** You can also copy the disc image into the game's
-folder yourself, named `Ico_PAL.iso` (or `Ico_PAL.chd` or `Ico_PAL.bin`)
-for the European disc, `Ico_JPN.iso` (or `Ico_JPN.chd` or
-`Ico_JPN.bin`) for the Japanese disc, or `Ico_KOR.iso` (or `Ico_KOR.chd` or
-`Ico_KOR.bin`) for the Korean disc. The game then uses it without
+folder yourself, named for your disc: `Ico_PAL` (European), `Ico_JPN`
+(Japanese), `Ico_KOR` (Korean), `Ico_USA` (North American), `Ico_CN` (Asian),
+`Ico_AUG6` (August 2001 preview) or `Ico_JUN26` (June 2001 magazine demo),
+with the ending `.iso`, `.chd` or `.bin`. The game then uses it without
 asking. It deletes that file too once it is set up.
 
 **Keeping the copy.** Most people do not need this. If you want the disc
@@ -109,8 +116,10 @@ keep_image=1
    now exists.
 2. On a computer, make the text file with Notepad or any text editor.
 3. With the USB cable, copy `ico-pc.ini` and your disc image, named
-   `Ico_PAL.iso` (European disc), `Ico_JPN.iso` (Japanese disc) or
-   `Ico_KOR.iso` (Korean disc), into
+   `Ico_PAL.iso` (European disc), `Ico_JPN.iso` (Japanese disc),
+   `Ico_KOR.iso` (Korean disc), `Ico_USA.iso` (North American disc),
+   `Ico_CN.iso` (Asian disc), `Ico_AUG6.iso` (August 2001 preview) or
+   `Ico_JUN26.iso` (June 2001 magazine demo), into
    the game's folder, and start the game again.
 
 ## Where your files are
@@ -128,7 +137,9 @@ In that folder:
 
 - `memcard` holds your saves: the European disc's in `BESCES-50760ico`,
   the Japanese disc's in `BISCPS-11003ico`, the Korean disc's in
-  `BISCPS-56001ico`.
+  `BISCPS-56001ico`, the Asian disc's in `BISCPS-55001ico`, the North American
+  disc's and the August 2001 preview's in `BASCUS-97113ico` and the June 2001
+  magazine demo's in `BISCUS-97113ico`.
 - `drivers` is where a graphics driver zip goes when the file picker will
   not open ([Using a different graphics
   driver](#using-a-different-graphics-driver)). The game makes the folder
@@ -139,18 +150,22 @@ In that folder:
   with `loss-` and ends in `.zip` (the three newest are kept).
 - `textures/SCES-50760/replacements` is where a
   [texture pack](TEXTURE_PACKS.md) for the European disc goes, and
-  `textures/SCPS-11003/replacements` one for the Japanese disc and
-  `textures/SCPS-56001/replacements` one for the Korean disc. The game
+  `textures/SCPS-11003/replacements` one for the Japanese disc,
+  `textures/SCPS-56001/replacements` one for the Korean disc,
+  `textures/SCPS-55001/replacements` one for the Asian disc,
+  `textures/SCUS-97113/replacements` one for the North American disc and the
+  August 2001 preview, and `textures/SCUS-97158/replacements` one for the June
+  2001 magazine demo. The game
   makes the folder for the disc you play when it starts.
-- `textures/SCES-50760/dumps` (and `SCPS-11003`, `SCPS-56001` for the other
-  discs) holds the pictures saved by **Options > Extras > Export textures**
+- `textures/SCES-50760/dumps` (and the other discs' folders named above) holds the pictures saved by **Options > Extras > Export textures**
   and by Dump textures, with a list named `manifest.txt`. You can copy them
   to a computer with the USB cable to draw new ones. The export takes about
   160 MB for the European disc.
 - `models/SCES-50760/replacements` is where a
   [model pack](MODEL_PACKS.md) for the European disc goes, and
   `models/SCPS-11003/replacements` one for the Japanese disc and
-  `models/SCPS-56001/replacements` one for the Korean disc. Make these
+  `models/SCPS-56001/replacements` one for the Korean disc (the other discs'
+  folders have the names listed for textures above). Make these
   folders yourself.
 - `screenshots` holds the pictures you take in photo mode.
 - `dumps` holds the pictures saved for a bug report
