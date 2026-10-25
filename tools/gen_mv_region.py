@@ -44,7 +44,7 @@ TABLE = ROOT / "port" / "game" / "model_viewer_table.c"
 ROW = re.compile(r"\{(UI_STR_MV_\w+),\s*(\d+),\s*(-?\d+),")
 # the column each non-PAL disc reads (model_viewer_table.c mv_id_column), and
 # the slug whose disc --write may rewrite it from
-COLUMN = {"jpn": "jpn_id", "kor": "jpn_id"}
+COLUMN = {"jpn": "jpn_id", "kor": "jpn_id", "cn": "jpn_id"}
 COLUMN_OWNER = {"jpn_id": "jpn"}
 
 
