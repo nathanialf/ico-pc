@@ -75,6 +75,13 @@ typedef struct IcoRegionInfo {
     /* --- the memory card --------------------------------------------- */
     const char *mc_save_dir; /* fumi/ios/mcard.c's product directory */
     int mc_product_size;     /* the bytes of McProductFile the disc's game writes */
+    /* PC port: NULL for a disc whose directory sits in the card folder all
+       discs share; else the suffix of the card folder of its own beside it
+       (port/platform/host_config.h ico_host_card_dir_beside): the August
+       2001 preview's "-preview", since it names the North American disc's
+       directory with records of another layout (port/save/mc_host.c
+       sceMcInit) */
+    const char *mc_card_suffix;
 
     /* --- the game's options ------------------------------------------- */
     int has_50hz_row;      /* the game offers 50/60 Hz (the port's row too) */

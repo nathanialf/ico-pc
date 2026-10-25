@@ -40,11 +40,17 @@ const IcoRegionInfo ico_region_info_aug6 = {
     .key_suffix = "_aug6",
 
     .mc_save_dir = "BASCUS-97113ico", /* ico2/fumi/ios/mcard.c iOSMcSaveSeg[0], as the North
-                                         American disc (the port keeps the saves apart by slug) */
+                                         American disc (its card folder is its own: below) */
     .mc_product_size = 0x18C,         /* typedef.h McProductFile: file[20] 0x140, soundMode,
                                          outputMode, vibration, padConf[64] (0x14C):
                                          mcard.c product_write's sizeof; no cameraMove or
                                          palMode, no 8-byte member */
+    /* PC port: the preview's card is a folder of its own, memcard-preview
+       beside memcard: its records are not the North American disc's (mcard.c
+       product file summaries stage, cleared, playTime, sofa against stage,
+       playTime, sofa, word10; story flags from 300 on one lower, gflag_new_game
+       348 against 349), so one card would mix them */
+    .mc_card_suffix = "-preview",
 
     .has_50hz_row = 0,      /* NTSC only: main.c systemStatus starts {0, 2, ...}, nothing sets
                                word 0 (no 50 Hz video mode) */
