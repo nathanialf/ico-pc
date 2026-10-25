@@ -197,6 +197,10 @@ static Sub15C *veilObject(void)
 {
     GObj *g;
 
+    if (VEIL_MODEL < 0) {
+        return 0; /* the disc has no sandstorm model in its deja objects */
+    }
+
     for (g = isysGObjSearchFromObjKindID_begin(VEIL_KIND); g != 0;
          g = isysGObjSearchFromObjKindID_next(g)) {
         Sub15C *d = g->dobj;
@@ -259,7 +263,9 @@ static Sub15C *veilObject(void)
 #define REEL_SLOTS 4  /* nodes an object (noiseE has 3) */
 #define REEL_NOISE 5  /* noiseA .. noiseE */
 
-/* noiseA.p2o .. noiseE.p2o (objTableScene rows 1253 to 1257) */
+/* noiseA.p2o .. noiseE.p2o (objTableScene rows 1253 to 1257), the five model ids before
+   sandstorm.p2o's; the USA disc's are 1558 to 1562, before its sandstorm (1563), but that disc has
+   no reel row (REEL_ROW -1), so the table is the European disc's */
 static const int kReelModel[REEL_NOISE] = {1609, 1610, 1611, 1612, 1613};
 
 typedef struct {
@@ -420,6 +426,19 @@ static void reelTick(void)
 
     if (!ico_photo_deja() || stage_no == VEIL_STAGE) {
         reelStop();
+        return;
+    }
+    if (REEL_ROW < 0) {
+        /* the disc's stageTable has no film_noise_l4.bga (the USA disc, the 2001
+           previews): no reel to replay */
+        static int s_noReelRow = 0;
+
+        reelStop();
+        if (!s_noReelRow) {
+            s_noReelRow = 1;
+            fprintf(stderr, "photo: Deja vu: this disc has no film noise animation; no scratches "
+                            "drawn\n");
+        }
         return;
     }
     p = stage_HostBgaHeader(REEL_ROW);
