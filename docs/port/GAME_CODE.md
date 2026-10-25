@@ -324,6 +324,9 @@ disc (SCPS-56001) is a build of the Japanese program, so most of its blocks are 
 `#if defined(VERSION_JPN) || defined(VERSION_KOR)`, with `#ifdef VERSION_KOR` nested inside one
 where the Korean text differs (its
 [docs/TARGETS.md](https://github.com/nathanialf/ico/blob/main/docs/TARGETS.md) "Korean retail"). The
+Asian disc (SCPS-55001, `VERSION_CN`) is a build of the Korean program in nearly every function (its
+TARGETS.md "Asian retail": 5693 of 5727 paired functions equal the Korean build's), so its shared
+arms read `ICO_KORCN` and `ICO_JPNKORCN` and its own lines `#ifdef VERSION_CN` inside them. The
 three 2001 builds (the USA disc SCUS-97113, `VERSION_NTSC`; the August 6 prototype, `VERSION_AUG6`;
 the June 26 magazine demo SCUS-97158, `VERSION_JUN26`) are PAL's text with their own lines, nested
 in the arm of an earlier target's block where one already stands, up to five deep, and never as
@@ -335,7 +338,9 @@ region; [CONVENTIONS.md](CONVENTIONS.md#region-forms) gives the forms.
 
 `config/regions.txt` has one row per target in a fixed order: `slug upstream-macro disc-id
 boot-elf product-name`, row 0 the European disc (`pal`, macro `-`), row 1 the Japanese disc (`jpn
-VERSION_JPN SCPS-11003 SCPS_110.03`). `tools/region_blocks.py gen-header` writes
+VERSION_JPN SCPS-11003 SCPS_110.03`); the seven rows are `pal jpn kor ntsc aug6 jun26 cn`, in the
+order upstream's `LN` takes its arguments (the targets in the order they were added), so a new
+target is always the last row. `tools/region_blocks.py gen-header` writes
 `ico2/common/include/region.h` from it (`gen_header`): `extern int ico_region`, `ICO_REGION_<SLUG>`
 (the row index) and `ICO_REGION_COUNT`, `ICO_<SLUG>` (`ico_region == ICO_REGION_<SLUG>`), and for
 every set of two or more non-PAL rows a predicate named by the set: a set's name is its rows'
@@ -633,8 +638,12 @@ against one converted line, and the next merge has an upstream commit as its bas
    boot ELF and its SHA-1s, DATA.DF manifest, archive name, and the image base `Ico_<SLUG>` from
    which `main_host.c` builds the image names it looks for beside the program, `.iso`, `.chd`,
    `.bin`, `.cue`), `port/core/region_<slug>.c` above, and the Settings Disc row's value strings
-   (`port/ui/settings.c`, whose `_Static_assert(ICO_REGION_COUNT == 2 ...)` fails the build until
-   they are added); the disc choice (`ico_host_choose_disc`, `find_beside` with
+   (`port/ui/settings.c`, whose `_Static_assert(ICO_REGION_COUNT == 7 ...)` fails the build until
+   they are added), `s_peek_tables` in `port/game/gamestate.c` (the retail globals the achievements
+   read, resolved by name from `config/symbol_addrs.<slug>.data.txt`; a global a disc lacks is left
+   out: the North American, August 2001 and June 2001 discs have no `gFlagGameClear`, and their
+   story flags are `gFlag`, 46, 46 and 44 bytes) and `mv_id_column` in
+   `port/game/model_viewer_table.c`; the disc choice (`ico_host_choose_disc`, `find_beside` with
    `ico_host_choose_image`) takes any number of rows.
 3. Data: the target's EE layout file `config/ee_layout.<slug>.txt`, symbol tables, table manifest,
    descriptor set `port/data/gen/<slug>/` and its entry in `ico_table_sets[]`, defaults for the
@@ -646,8 +655,12 @@ against one converted line, and the next merge has an upstream commit as its bas
    (step 3) with its base (`pal` for a target that is PAL's text with its own lines, as the three
    2001 targets are; the Korean row's was `jpn`). The hand list takes the same patterns, twins with `_<set>`
    names.
-5. The per-region tests take the slug as a parameter and gain one `add_test` line each; a strings
-   table only when the target brings a menu language.
+5. The per-region tests take the slug as a parameter and gain one `add_test` line each (or a slug
+   in a `foreach` list: `port/game/CMakeLists.txt`, `port/ui/CMakeLists.txt`,
+   `port/save/CMakeLists.txt`, `port/data/CMakeLists.txt`), and a row in the tests that hold the
+   target's numbers as literals (`kPeekWant` in `achievements_test.c`, `test_region` in
+   `credits_test.c`, `region_select_test.c`); a strings table only when the target brings a menu
+   language.
 6. One integration build, then a check on that disc.
 
 ## EUC-JP sources
