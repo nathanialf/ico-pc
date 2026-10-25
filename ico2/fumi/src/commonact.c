@@ -4672,8 +4672,7 @@ void actCommonBar(GObj *volatile self)
     ori[1] = *(float *)((char *)test_CURRENTORIENT(self) + 4);
     ori[2] = *(float *)((char *)test_CURRENTORIENT(self) + 8);
     GetRotObjectHoldPoint(hold, hold2,
-                          PAL_JUN26(&GOBJ_WORK(self)->intrReq.a.wall,
-                                    &((SubHandle *)((char *)self + 0x15C))->sub->root.wall),
+                          PAL_JUN26(&GOBJ_WORK(self)->intrReq.a.wall, &GOBJ_SUB(self)->root.wall),
                           (void *)self);
     s->barObj = (ICO_WORD_PTR(GObj *))bar;
     s->after = (void *)afterCommonBar;
@@ -6285,7 +6284,7 @@ static void actCommonFly_jun26(GObj *volatile self)
         CopyVector(dir, d);
         dir[1] = 0.0f;
         if (cnt == 0) {
-            memset(&cc, 0, 0xC0);
+            memset(&cc, 0, ICO_MAX_SIZE(ClipWork, 0xC0));
             acc = 0.0f;
             CopyVector(cc.pt[0], mtx[3]);
             CopyVector(cc.pt[1], tp);
