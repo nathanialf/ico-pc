@@ -235,10 +235,10 @@ function(_ico_data_iso_import_test)
     if(NOT TARGET SDL3::SDL3-shared)
         return()
     endif()
-    # the seven string tables (port/ui, plain data): the boxes' words in each language;
+    # the eight string tables (port/ui, plain data): the boxes' words in each language;
     # port/ui's "strings.h" by -iquote, so <strings.h> stays the C library's
     set(_iso_import_tables)
-    foreach(_lang en fr de it es ja ko)
+    foreach(_lang en fr de it es ja ko zh)
         list(APPEND _iso_import_tables "${CMAKE_SOURCE_DIR}/port/ui/strings_${_lang}.c")
     endforeach()
     add_executable(iso_import_test "${CMAKE_SOURCE_DIR}/port/data/test/iso_import_test.c"
