@@ -189,6 +189,8 @@ function(ico_settings_test name main_c)
         # that disc's numbers, from its region row)
         add_test(NAME ${_test}_jpn COMMAND ${name} "${CMAKE_CURRENT_BINARY_DIR}" jpn)
         add_test(NAME ${_test}_kor COMMAND ${name} "${CMAKE_CURRENT_BINARY_DIR}" kor)
+        # and the Asian disc's (the Korean program on the Japanese records)
+        add_test(NAME ${_test}_cn COMMAND ${name} "${CMAKE_CURRENT_BINARY_DIR}" cn)
     endif()
 endfunction()
 ico_settings_test(settings_test test/settings_test.c)
@@ -205,6 +207,7 @@ if(ICO_RUN_TESTS)
     # this directory: never in parallel
     set_tests_properties(settings settings_extras settings_extra settings_jpn settings_extras_jpn
                          settings_extra_jpn settings_kor settings_extras_kor settings_extra_kor
+                         settings_cn settings_extras_cn settings_extra_cn
                          PROPERTIES RESOURCE_LOCK settings_toml)
 endif()
 
@@ -243,7 +246,9 @@ if(ICO_RUN_TESTS)
                                       "${ICO_BASE_ELF_JPN}" "${ICO_DISC_IMAGE_JPN}")
     add_test(NAME gallery_kor COMMAND gallery_test --region kor "${ICO_BASE_ELF}"
                                       "${ICO_BASE_ELF_KOR}" "${ICO_DISC_IMAGE_KOR}")
-    set_tests_properties(gallery_jpn gallery_kor PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME gallery_cn COMMAND gallery_test --region cn "${ICO_BASE_ELF}"
+                                      "${ICO_BASE_ELF_CN}" "${ICO_DISC_IMAGE_CN}")
+    set_tests_properties(gallery_jpn gallery_kor gallery_cn PROPERTIES SKIP_RETURN_CODE 77)
     # the gallery in the headless game: needs the disc image and the
     # headless program
     if(TARGET ico_pc AND ICO_HEADLESS AND Python3_EXECUTABLE)
@@ -297,7 +302,7 @@ if(ICO_RUN_TESTS)
         set(_mv_py "${CMAKE_SOURCE_DIR}/.venv/bin/python")
     endif()
     if(_mv_py)
-        foreach(_slug jpn kor)
+        foreach(_slug jpn kor cn)
             string(TOUPPER "${_slug}" _up)
             add_test(NAME model_viewer_${_slug}
                      COMMAND "${_mv_py}" "${CMAKE_SOURCE_DIR}/tools/gen_mv_region.py" --check
@@ -622,6 +627,7 @@ if(ICO_RUN_TESTS)
     # the glyphs and the pad convention on the Japanese and Korean discs (CPU)
     add_test(NAME ui_jpn COMMAND ui_test jpn WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME ui_kor COMMAND ui_test kor WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    add_test(NAME ui_cn COMMAND ui_test cn WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME settings_render COMMAND settings_render "${CMAKE_CURRENT_BINARY_DIR}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(settings_render PROPERTIES RESOURCE_LOCK settings_toml)
@@ -631,7 +637,9 @@ if(ICO_RUN_TESTS)
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME settings_render_kor COMMAND settings_render "${CMAKE_CURRENT_BINARY_DIR}" kor
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
-    set_tests_properties(settings_render_jpn settings_render_kor PROPERTIES
+    add_test(NAME settings_render_cn COMMAND settings_render "${CMAKE_CURRENT_BINARY_DIR}" cn
+             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(settings_render_jpn settings_render_kor settings_render_cn PROPERTIES
                          RESOURCE_LOCK settings_toml SKIP_RETURN_CODE 77)
     add_test(NAME menu_text COMMAND menu_text_test "${ICO_DISC_IMAGE}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
