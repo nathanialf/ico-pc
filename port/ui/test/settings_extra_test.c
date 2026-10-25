@@ -4445,6 +4445,16 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     for (int k = 0; k < 4; k++) {
         frame(0);
     }
+    if (demo) {
+        /* the June 2001 demo: no Debug menu row even with Developer mode
+           (its debug tables are the preview's), said once */
+        CHECK(lt_ext_prop(lb[8])->defaultMask,
+              "%s: no Debug menu row on the demo, even with Developer mode", who);
+        ico_opt_set_developer_mode(0);
+        useConfig("version = 1\n");
+        ico_opt_reload();
+        return;
+    }
     CHECK(!lt_ext_prop(lb[8])->defaultMask, "%s: the Debug menu row with Developer mode on", who);
     checkPageFits(UI_PAGE_VARIANTS, "Game variants (ten rows)");
     CHECK(strcmp(lt_ext_row_text(lb[8]), "Debug menu") == 0 && lv[8] < 0,
@@ -4529,7 +4539,9 @@ static void testVariantsOtherDisc(const char *slug)
     CHECK(ico_region_select(slug) == 0, "the %s disc selected", slug);
     testVariantsPage(slug, 1, &debugPressed);
     testVariantsPage(slug, 0, &debugPressed);
-    CHECK(debugPressed == 2, "%s: the Debug menu opened once per entry (%d)", slug, debugPressed);
+    /* (none on the June 2001 demo: no Debug menu row there) */
+    CHECK(debugPressed == (strcmp(slug, "jun26") == 0 ? 0 : 2),
+          "%s: the Debug menu opened once per entry (%d)", slug, debugPressed);
     ico_opt_set_ui_language(-1);
     CHECK(ico_region_select("pal") == 0, "the European disc again");
     ui_settings_apply_language();
