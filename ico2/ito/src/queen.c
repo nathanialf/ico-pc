@@ -2256,6 +2256,11 @@ static inline float WrapRad(float a) /* derived name */
     return a;
 }
 
+/* PC port: port/game/variants.h: Options > Extras > Game variants > Queen
+   barrier, the hits that break the barrier: the disc's own (5, and 7 on the
+   June 2001 demo) unless chosen */
+extern int ico_variant_barrier_hits(void);
+
 static void QueenBarrierGeo_jun26(GObj *g)
 {
     QVec pos;
@@ -2339,7 +2344,7 @@ static void QueenBarrierGeo_jun26(GObj *g)
         qw->wait = 18;
         ExecuteSEPackage(g, 81);
         w->damage = w->damage + 1;
-        if (w->damage >= 7) {
+        if (w->damage >= ico_variant_barrier_hits()) { /* PC port: 7 */
             GetRootMatrix(&m3, g);
             sceVu0CopyVector(&m3.w, &pos);
             CopyMatrix((void *)GOBJ_SUB(g)->nodeMtx, &m3);
@@ -2440,7 +2445,7 @@ void QueenBarrierGeo(GObj *g)
         qw->wait = 18;
         ExecuteSEPackage(g, PAL_NTSCAUG6JUN26(95, 90));
         w->damage = w->damage + 1;
-        if (w->damage >= 5) {
+        if (w->damage >= ico_variant_barrier_hits()) { /* PC port: 5 */
             GetRootMatrix(&m3, g);
             sceVu0CopyVector(&m3.w, &pos);
             CopyMatrix((void *)GOBJ_SUB(g)->nodeMtx, &m3);
@@ -2459,7 +2464,9 @@ void QueenBarrierDL(GObj *g)
 {
     QueenBarrierWork *b = GOBJ_SUB(g)->work;
     if (b->active) {
-        queen_barrier_disp_proc(g, 1.0f - b->damage / PAL_JUN26(5.0f, 7.0f));
+        /* PC port: the hits of the Queen barrier variant (5, 7 on the June
+           2001 demo, as shipped) */
+        queen_barrier_disp_proc(g, 1.0f - b->damage / (float)ico_variant_barrier_hits());
     }
 }
 
