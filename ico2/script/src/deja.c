@@ -19,17 +19,17 @@ static ActMail _mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail _mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail _mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail _mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define _mes PAL_NTSC_AUG6(_mes_pal, _mes_ntsc, _mes_aug6)
+#define _mes PAL_NTSC_AUG6JUN26(_mes_pal, _mes_ntsc, _mes_aug6jun26)
 
 static ActMail after_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail after_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail after_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail after_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define after_mes PAL_NTSC_AUG6(after_mes_pal, after_mes_ntsc, after_mes_aug6)
+#define after_mes PAL_NTSC_AUG6JUN26(after_mes_pal, after_mes_ntsc, after_mes_aug6jun26)
 
 /* .sbss: the demo's own end flag, raised by the handler the wait loop below
    is spinning for. */
@@ -58,13 +58,13 @@ inline void actDeja(GObj *volatile self)
     _ACTWait(1);
 
     if (gflagChk(6) == 0) {
-        lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(55, 52, 51));
+        lt_switch_layout(PAL_JPNKORCN_NTSCAUG6JUN26(55, 52, 51));
         scpBoyControlReadDisable = 1;
         scpFadeOut(255.0f, 0, 0, 0);
-        stage_SetAnimation(PAL_JPNKORCN_NTSCAUG6(72, 68, 59), 0, 0);
+        stage_SetAnimation(PAL_JPNKORCN_NTSCAUG6JUN26(72, 68, 59), 0, 0);
         _mes[0].func = actDejaChk;
         act->mail = _mes;
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
         _ACTWait(0);
     }
 }
@@ -72,8 +72,8 @@ inline void actDeja(GObj *volatile self)
 void actDejaChk(GObj *volatile self)
 {
     gflagOn(6);
-    scpSearchGobj(PAL_NTSC_AUG6(2548, 2340, 2311))->active = 0;
-    scpSearchGobj(PAL_NTSC_AUG6(2549, 2341, 2312))->active = 0;
+    scpSearchGobj(PAL_NTSC_AUG6JUN26(2548, 2340, 2311))->active = 0;
+    scpSearchGobj(PAL_NTSC_AUG6JUN26(2549, 2341, 2312))->active = 0;
     actCreateSubThread(actEnemySleep, 21);
     scpAdpcmPlayRequestFunc(12, &deja, 0, 1, 1);
     while (deja == 0) {
@@ -94,7 +94,7 @@ void actDejaChk(GObj *volatile self)
         if (ICO_NTSC) {
             shadow_DispCancel(68, 0);
             scpAdpcmFadeClose(deja, 128);
-        } else if (ICO_AUG6) {
+        } else if (ICO_AUG6JUN26) {
             shadow_DispCancel(67, 0);
             scpAdpcmFadeClose(deja, 128);
         } else {
@@ -187,7 +187,7 @@ static void actDejaDemo_ntsc(GObj *volatile self)
     demoEnd = 1;
 }
 
-static void actDejaDemo_aug6(GObj *volatile self)
+static void actDejaDemo_aug6jun26(GObj *volatile self)
 {
     stgmgrNextStagePreLoadForceStageSet(exitData[stageData[stage_no].ent[0]].nextStage);
     scpPlayStart(boyGObj);
@@ -274,8 +274,8 @@ void actDejaDemo(GObj *volatile self)
         actDejaDemo_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actDejaDemo_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actDejaDemo_aug6jun26(self);
         return;
     }
     stgmgrNextStagePreLoadForceStageSet(exitData[stageData[stage_no].ent[0]].nextStage);
@@ -365,23 +365,23 @@ void actDejaAfter(GObj *volatile self)
 
     ScpCallCameraOff();
     if (gflagChk(7) == 0 && gflagChk(6) != 0) {
-        stage_SetAnimation(PAL_NTSCAUG6(32, 31), 0, -1);
-        stage_SetAnimation(PAL_NTSCAUG6(26, 25), 0, -1);
-        stage_SetAnimation(PAL_NTSCAUG6(35, 34), 0, 0);
-        stage_SetAnimation(PAL_NTSCAUG6(33, 32), 0, 0);
-        stage_SetAnimation(PAL_NTSCAUG6(36, 35), 0, 0);
-        stage_SetAnimation(PAL_NTSCAUG6(38, 37), 0, 0);
+        stage_SetAnimation(PAL_NTSCAUG6JUN26(32, 31), 0, -1);
+        stage_SetAnimation(PAL_NTSCAUG6JUN26(26, 25), 0, -1);
+        stage_SetAnimation(PAL_NTSCAUG6JUN26(35, 34), 0, 0);
+        stage_SetAnimation(PAL_NTSCAUG6JUN26(33, 32), 0, 0);
+        stage_SetAnimation(PAL_NTSCAUG6JUN26(36, 35), 0, 0);
+        stage_SetAnimation(PAL_NTSCAUG6JUN26(38, 37), 0, 0);
         after_mes[0].func = actDejaAfterChk;
         act->mail = after_mes;
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
         _ACTWait(0);
     } else {
-        stage_SetAnimation(PAL_NTSCAUG6(32, 31), 0, -1);
-        stage_SetAnimation(PAL_NTSCAUG6(26, 25), 0, -1);
-        stage_SetAnimation(PAL_NTSCAUG6(35, 34), 0, 0);
-        stage_SetAnimation(PAL_NTSCAUG6(33, 32), 0, 0);
-        stage_SetAnimation(PAL_NTSCAUG6(36, 35), 0, 0);
-        stage_SetAnimation(PAL_NTSCAUG6(38, 37), 0, 0);
+        stage_SetAnimation(PAL_NTSCAUG6JUN26(32, 31), 0, -1);
+        stage_SetAnimation(PAL_NTSCAUG6JUN26(26, 25), 0, -1);
+        stage_SetAnimation(PAL_NTSCAUG6JUN26(35, 34), 0, 0);
+        stage_SetAnimation(PAL_NTSCAUG6JUN26(33, 32), 0, 0);
+        stage_SetAnimation(PAL_NTSCAUG6JUN26(36, 35), 0, 0);
+        stage_SetAnimation(PAL_NTSCAUG6JUN26(38, 37), 0, 0);
     }
 }
 
@@ -416,7 +416,7 @@ static void actDejaAfterChk_ntsc(GObj *volatile self)
     _ACTWait(0);
 }
 
-static void actDejaAfterChk_aug6(GObj *volatile self)
+static void actDejaAfterChk_aug6jun26(GObj *volatile self)
 {
     Vec16 target;
     Vec16 dir;
@@ -453,8 +453,8 @@ void actDejaAfterChk(GObj *volatile self)
         actDejaAfterChk_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actDejaAfterChk_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actDejaAfterChk_aug6jun26(self);
         return;
     }
     Vec16 target;

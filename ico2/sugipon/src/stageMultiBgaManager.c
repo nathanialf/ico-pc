@@ -63,7 +63,7 @@ inline void EntryStageMultiBgaManagerWithStay(int kind, void *pos, void *rot, in
     }
 }
 
-static void EntryStageMultiBgaManager_ntscaug6(int kind, void *pos, void *rot)
+static void EntryStageMultiBgaManager_ntscaug6jun26(int kind, void *pos, void *rot)
 {
     stageBgaAnim[stageBgaCount] = stage_MakePlayBgAnimation(kind);
     _CopyVector(stageBgaAnim[stageBgaCount]->pos, pos);
@@ -76,8 +76,8 @@ static void EntryStageMultiBgaManager_ntscaug6(int kind, void *pos, void *rot)
 
 inline void EntryStageMultiBgaManager(int kind, void *pos, void *rot)
 {
-    if (ICO_NTSCAUG6) {
-        EntryStageMultiBgaManager_ntscaug6(kind, pos, rot);
+    if (ICO_NTSCAUG6JUN26) {
+        EntryStageMultiBgaManager_ntscaug6jun26(kind, pos, rot);
         return;
     }
     EntryStageMultiBgaManagerWithStay(kind, pos, rot, 0);
@@ -102,7 +102,8 @@ inline void EntryStageMultiBgaManagerSensitiveWithStay(int kind, void *pos, void
     }
 }
 
-static void EntryStageMultiBgaManagerSensitive_ntscaug6(int kind, void *pos, void *rot, void *vel)
+static void EntryStageMultiBgaManagerSensitive_ntscaug6jun26(int kind, void *pos, void *rot,
+                                                             void *vel)
 {
     stageBgaAnim[stageBgaCount] = stage_MakePlayBgAnimation(kind);
     _CopyVector(stageBgaAnim[stageBgaCount]->pos, pos);
@@ -115,8 +116,8 @@ static void EntryStageMultiBgaManagerSensitive_ntscaug6(int kind, void *pos, voi
 
 inline void EntryStageMultiBgaManagerSensitive(int kind, void *pos, void *rot, void *vel)
 {
-    if (ICO_NTSCAUG6) {
-        EntryStageMultiBgaManagerSensitive_ntscaug6(kind, pos, rot, vel);
+    if (ICO_NTSCAUG6JUN26) {
+        EntryStageMultiBgaManagerSensitive_ntscaug6jun26(kind, pos, rot, vel);
         return;
     }
     EntryStageMultiBgaManagerSensitiveWithStay(kind, pos, rot, vel, 0);
@@ -140,7 +141,7 @@ static void DispStageMultiBgaManager_ntsc(void)
     }
 }
 
-static void DispStageMultiBgaManager_aug6(void)
+static void DispStageMultiBgaManager_aug6jun26(void)
 {
     int i;
 
@@ -162,8 +163,8 @@ void DispStageMultiBgaManager(void)
         DispStageMultiBgaManager_ntsc();
         return;
     }
-    if (ICO_AUG6) {
-        DispStageMultiBgaManager_aug6();
+    if (ICO_AUG6JUN26) {
+        DispStageMultiBgaManager_aug6jun26();
         return;
     }
     int i;

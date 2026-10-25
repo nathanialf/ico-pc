@@ -44,7 +44,7 @@ void brainInit(void)
     b->cur = 0;
     b->spMode = 0;
     b->spCount = 0;
-    for (i = 0; i < PAL_NTSCAUG6(40, 20); i++) {
+    for (i = 0; i < PAL_NTSCAUG6JUN26(40, 20); i++) {
         b->tgt[i].gobj = 0;
     }
     b->threshold = 0.0f;
@@ -59,7 +59,7 @@ void OverrideBrainStatusByGObj(Brain *b, GObj *gobj, float levelCap, float rate,
     BrainTarget *t;
     int i;
 
-    for (i = 0; i < PAL_NTSCAUG6(40, 20); i++) {
+    for (i = 0; i < PAL_NTSCAUG6JUN26(40, 20); i++) {
         if (b->tgt[i].gobj == gobj) {
             t = &b->tgt[i];
             t->levelCap = levelCap;
@@ -73,8 +73,9 @@ void OverrideBrainStatusByGObj(Brain *b, GObj *gobj, float levelCap, float rate,
     debug_StdPrintfDummy("ブレインレベルのオーバーライドに失敗しました\n");
 }
 
-static inline BrainTarget *brainSetTargetSub_ntscaug6(Brain *b, GObj *gobj, float levelCap,
-                                                      float capStep, float rate) /* derived name */
+static inline BrainTarget *brainSetTargetSub_ntscaug6jun26(Brain *b, GObj *gobj, float levelCap,
+                                                           float capStep,
+                                                           float rate) /* derived name */
 {
     BrainTarget *t;
     int i;
@@ -136,9 +137,10 @@ void brainStatusDefaultSet(Brain *b, GObj *gobj, int idx)
     /* bit 20 of the layout row's flags puts the object in the girl's brain */
     if ((d->flags >> 20) & 1) {
         if (objKindData[k].brainLevel != 0) {
-            if (ICO_NTSCAUG6) {
-                brainSetTargetSub_ntscaug6(b, gobj, (float)objKindData[k].brainLevel,
-                                           objKindData[k].brainCapStep, objKindData[k].brainRate);
+            if (ICO_NTSCAUG6JUN26) {
+                brainSetTargetSub_ntscaug6jun26(b, gobj, (float)objKindData[k].brainLevel,
+                                                objKindData[k].brainCapStep,
+                                                objKindData[k].brainRate);
             } else {
                 brainSetTargetSub(b, gobj, (float)objKindData[k].brainLevel, k);
             }
@@ -178,11 +180,11 @@ void brainLevelProcess(Brain *b)
 {
     int i;
 
-    b->threshold = b->threshold - _ACTGame_GetParamF(PAL_NTSCAUG6(24, 22)) * 0.1f;
+    b->threshold = b->threshold - _ACTGame_GetParamF(PAL_NTSCAUG6JUN26(24, 22)) * 0.1f;
     if (b->threshold < b->minThreshold) {
         b->threshold = b->minThreshold;
     }
-    for (i = 0; i < PAL_NTSCAUG6(40, 20); i++) {
+    for (i = 0; i < PAL_NTSCAUG6JUN26(40, 20); i++) {
         BrainTarget *t = &b->tgt[i];
 
         if (t->gobj == 0) {
@@ -197,9 +199,9 @@ void brainLevelProcess(Brain *b)
             continue;
         }
         if (t != b->cur && ico_dcmp(ico_f2d(t->level), ICO_D(1.9)) > 0 && girlGObj != 0 &&
-            ((int)(PAL_NTSC_AUG6(GOBJ_ACT(girlGObj)->flags20.ll >> 27,
-                                 GOBJ_ACT(girlGObj)->flags20.ll >> 14,
-                                 GOBJ_ACT(girlGObj)->flags20.ll >> 11)) &
+            ((int)(PAL_NTSC_AUG6JUN26(GOBJ_ACT(girlGObj)->flags20.ll >> 27,
+                                      GOBJ_ACT(girlGObj)->flags20.ll >> 14,
+                                      GOBJ_ACT(girlGObj)->flags20.ll >> 11)) &
              1)) {
             float r;
             /* 3.40282347e+38f is FLT_MAX */
@@ -258,7 +260,7 @@ void brainGetTarget(Brain *b)
     int lv;
     int i;
 
-    for (i = 0; i < PAL_NTSCAUG6(40, 20); i++) {
+    for (i = 0; i < PAL_NTSCAUG6JUN26(40, 20); i++) {
         if (b->tgt[i].gobj == 0) {
             continue;
         }
@@ -296,7 +298,7 @@ void brainGetTarget(Brain *b)
 
     if ((60 - systemStatus[0] * 10) / systemStatus[1] / 3 < b->spCount) {
         best = b->cur;
-        for (i = 0; i < PAL_NTSCAUG6(40, 20); i++) {
+        for (i = 0; i < PAL_NTSCAUG6JUN26(40, 20); i++) {
             t = &b->tgt[i];
             if (t == best) {
                 idx = i;
@@ -335,7 +337,7 @@ void brainGetTarget(Brain *b)
 
 BrainTarget *brainStatusSet(Brain *b, GObj *gobj, float levelCap, float capStep, float rate)
 {
-    return brainSetTargetSub_ntscaug6(b, gobj, levelCap, capStep, rate);
+    return brainSetTargetSub_ntscaug6jun26(b, gobj, levelCap, capStep, rate);
 }
 
 void brainStatusDel(char *self)
@@ -365,7 +367,7 @@ void brainClsTargetLevel(Brain *b)
     if (t->levelCap < t->level) {
         t->levelCap = t->level;
     }
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         *(int *)&t->lookOnly &= ~0x10000;
     }
     brainSetTargetTimer(t);
@@ -404,7 +406,7 @@ void brainAddLevelGop(GObj *gobj, float lv)
 {
     int i;
 
-    for (i = 0; i < PAL_NTSCAUG6(40, 20); i++) {
+    for (i = 0; i < PAL_NTSCAUG6JUN26(40, 20); i++) {
         if (brainGirl.tgt[i].gobj == gobj) {
             brainAddLevel(&brainGirl.tgt[i], lv);
         }
@@ -423,7 +425,7 @@ void brainSubLevelGop(GObj *gobj, float lv)
     ICO_WORD_PTR(BrainTarget *) tgt = BRAIN_TGT_ADDR(brain);
     int i;
 
-    for (i = 0; i < PAL_NTSCAUG6(40, 20); i++) {
+    for (i = 0; i < PAL_NTSCAUG6JUN26(40, 20); i++) {
         if (((BrainTarget *)tgt)[i].gobj == gobj) {
             float r;
             ((BrainTarget *)tgt)[i].level = ((BrainTarget *)tgt)[i].level - lv;
@@ -446,7 +448,7 @@ void brainSetLevelGop(GObj *gobj, float lv, int lookOnly, int alwaysSeen)
     ICO_WORD_PTR(BrainTarget *) tgt = BRAIN_TGT_ADDR(brain);
     int i;
 
-    for (i = 0; i < PAL_NTSCAUG6(40, 20); i++) {
+    for (i = 0; i < PAL_NTSCAUG6JUN26(40, 20); i++) {
         if (((BrainTarget *)tgt)[i].gobj == gobj) {
             ((BrainTarget *)tgt)[i].lookOnly = lookOnly;
             ((BrainTarget *)tgt)[i].alwaysSeen = alwaysSeen;
@@ -482,7 +484,7 @@ int brainDecTargetTimer(GObj *gobj)
     BrainTarget *e;
     int i;
 
-    for (i = 0; i < PAL_NTSCAUG6(40, 20); i++) {
+    for (i = 0; i < PAL_NTSCAUG6JUN26(40, 20); i++) {
         if (((BrainTarget *)tgt)[i].gobj == gobj) {
             e = &((BrainTarget *)tgt)[i];
             goto found;

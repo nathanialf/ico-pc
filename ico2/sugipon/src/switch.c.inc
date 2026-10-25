@@ -3,12 +3,12 @@
 
 void switchOnSE(GObj *self)
 {
-    ExecuteSEPackage(self, PAL_NTSCAUG6(63, 61));
+    ExecuteSEPackage(self, PAL_NTSCAUG6JUN26(63, 61));
 }
 
 void switchReleaseSE(GObj *self)
 {
-    ExecuteSEPackage(self, PAL_NTSCAUG6(64, 62));
+    ExecuteSEPackage(self, PAL_NTSCAUG6JUN26(64, 62));
 }
 
 inline void SetSwitchTriggerFunc(GObj *lever, int (*func)(GObj *, int))

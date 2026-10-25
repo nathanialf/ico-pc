@@ -43,7 +43,7 @@ static void fightSoundProcessMain(void)
     if (systemStatus[5] == 0 && fightSoundPause != 1) {
         if (boyGObj != 0) {
             cond = 0;
-            if (_ACTCharStatus_Check(boyGObj, PAL_NTSCAUG6(17, 15)) != 0) {
+            if (_ACTCharStatus_Check(boyGObj, PAL_NTSCAUG6JUN26(17, 15)) != 0) {
                 cond = 1;
             }
         }

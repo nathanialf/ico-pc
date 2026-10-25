@@ -32,9 +32,9 @@ typedef struct StreamShapeHdr { /* field names derived */
     unsigned char shapeNum;
 } StreamShapeHdr; /* derived name */
 
-static int GetWaterReaction_ntscaug6(float *outH, int *outFlag, ClipWork *info, float *pos,
-                                     float *vel, float h0, float h1, float h2, float scaleIn,
-                                     float amp)
+static int GetWaterReaction_ntscaug6jun26(float *outH, int *outFlag, ClipWork *info, float *pos,
+                                          float *vel, float h0, float h1, float h2, float scaleIn,
+                                          float amp)
 {
     float drain[4];
     float waterH;
@@ -93,8 +93,9 @@ static int GetWaterReaction_ntscaug6(float *outH, int *outFlag, ClipWork *info, 
 int GetWaterReaction(float *outH, int *outFlag, ClipWork *info, float *pos, float *vel, float h0,
                      float h1, float h2, float scaleIn, float amp)
 {
-    if (ICO_NTSCAUG6) {
-        return GetWaterReaction_ntscaug6(outH, outFlag, info, pos, vel, h0, h1, h2, scaleIn, amp);
+    if (ICO_NTSCAUG6JUN26) {
+        return GetWaterReaction_ntscaug6jun26(outH, outFlag, info, pos, vel, h0, h1, h2, scaleIn,
+                                              amp);
     }
     float drain[4];
     float waterH;
@@ -997,7 +998,7 @@ void InitMotionGeoInfo(struct MotRoot *self, float x, float y, float z, float rx
     RotQuaternionY(self->quat, -(int)(ry * 10430.378f));
     RotQuaternionX(self->quat, -(int)(rx * 10430.378f));
     RotQuaternionZ(self->quat, (short)-(int)(rz * 10430.378f));
-    if (!ICO_AUG6) {
+    if (!ICO_AUG6JUN26) {
         RegularizeQuaternion(self->quat);
     }
     adjustMotionHeightToNearestField(self, self->pos);
@@ -1133,7 +1134,7 @@ void SlopeIKControl(GObj *self, char *mot, float *v, Vec4 *vel, int n)
     if (ik->rootUpdateMode < 3) {
         if (ik->rootUpdateMode > 0) {
             if (sub->slopeIK != 0) {
-                if (ICO_AUG6) {
+                if (ICO_AUG6JUN26) {
                     n0 = getSkeltonFocusNode(self, 49);
                     n1 = getSkeltonFocusNode(self, 45);
                 } else {
@@ -1256,7 +1257,7 @@ int GetPureVerticalPlaneOfCurrentPosition(void *plane0, void *plane1, float *pts
         if (ICO_NTSC) {
             debug_assertMessage(motMan2File, 1358, "!!");
             __assert(motMan2File, 1358, "e");
-        } else if (ICO_AUG6) {
+        } else if (ICO_AUG6JUN26) {
             debug_assertMessage(__FILE__, LN(1353, 1353, 1353, 1353, 1353, 1353, 1353), "!!");
             __assert(__FILE__, LN(1353, 1353, 1353, 1353, 1353, 1353, 1353), "e");
         } else {
@@ -1839,7 +1840,7 @@ int GetCollisionOfLastActiveField(GObj *self)
     return self->dobj->root.lastField;
 }
 
-static int CheckFieldContact_ntscaug6(ClipWork *info, GObj *self, float *pos, float lim)
+static int CheckFieldContact_ntscaug6jun26(ClipWork *info, GObj *self, float *pos, float lim)
 {
     float h;
     float dy;
@@ -1885,8 +1886,8 @@ static int CheckFieldContact_ntscaug6(ClipWork *info, GObj *self, float *pos, fl
 
 int CheckFieldContact(ClipWork *info, GObj *self, float *pos, float lim)
 {
-    if (ICO_NTSCAUG6) {
-        return CheckFieldContact_ntscaug6(info, self, pos, lim);
+    if (ICO_NTSCAUG6JUN26) {
+        return CheckFieldContact_ntscaug6jun26(info, self, pos, lim);
     }
     float h;
     float dy;
@@ -1963,7 +1964,7 @@ void DebugDisp1CollisionWithColor(WallCfg *cfg, void *color)
 /* the body of GetSkeltonFocusNode, which SetMotionBlendlessNode, the two
    GetDifferenceFromWall*Plane and the node fix mode setter inline and
    GetSkeltonFocusNode calls */
-static inline int getSkeltonFocusNode_aug6(GObj *self, int focus) /* derived name */
+static inline int getSkeltonFocusNode_aug6jun26(GObj *self, int focus) /* derived name */
 {
     Sub15C *sub = GOBJ_SUB(self);
 
@@ -1982,8 +1983,8 @@ static inline int getSkeltonFocusNode_aug6(GObj *self, int focus) /* derived nam
 
 static inline int getSkeltonFocusNode(GObj *self, int focus) /* derived name */
 {
-    if (ICO_AUG6) {
-        return getSkeltonFocusNode_aug6(self, focus);
+    if (ICO_AUG6JUN26) {
+        return getSkeltonFocusNode_aug6jun26(self, focus);
     }
     return GOBJ_SUB(self)->focusNodes[focus];
 }
@@ -2132,7 +2133,7 @@ int GetStreamShapeMotion(float *dst, StreamShapeHdr *hdr)
     return 0;
 }
 
-static float GetDifferenceFromWallUpperField_aug6(GObj *self, int node)
+static float GetDifferenceFromWallUpperField_aug6jun26(GObj *self, int node)
 {
     struct MotRoot *r = &self->dobj->root;
     int idx = getSkeltonFocusNode(self, node);
@@ -2142,8 +2143,8 @@ static float GetDifferenceFromWallUpperField_aug6(GObj *self, int node)
 
 float GetDifferenceFromWallUpperField(GObj *self, int node)
 {
-    if (ICO_AUG6) {
-        return GetDifferenceFromWallUpperField_aug6(self, node);
+    if (ICO_AUG6JUN26) {
+        return GetDifferenceFromWallUpperField_aug6jun26(self, node);
     }
     Sub15C *e = self->dobj;
     int idx = (e->focusNodes)[node];
@@ -2151,7 +2152,7 @@ float GetDifferenceFromWallUpperField(GObj *self, int node)
                                  (float *)((char *)e->nodeMtx + idx * 0x40 + 0x30));
 }
 
-static float GetDifferenceFromLastField_aug6(GObj *self, int node)
+static float GetDifferenceFromLastField_aug6jun26(GObj *self, int node)
 {
     struct MotRoot *r = &self->dobj->root;
     int idx = getSkeltonFocusNode(self, node);
@@ -2161,8 +2162,8 @@ static float GetDifferenceFromLastField_aug6(GObj *self, int node)
 
 float GetDifferenceFromLastField(GObj *self, int node)
 {
-    if (ICO_AUG6) {
-        return GetDifferenceFromLastField_aug6(self, node);
+    if (ICO_AUG6JUN26) {
+        return GetDifferenceFromLastField_aug6jun26(self, node);
     }
     Sub15C *e = self->dobj;
     int idx = (e->focusNodes)[node];
@@ -2170,7 +2171,7 @@ float GetDifferenceFromLastField(GObj *self, int node)
                                  (float *)((char *)e->nodeMtx + idx * 0x40 + 0x30));
 }
 
-static float GetDifferenceFromLowerField_aug6(GObj *self, int node)
+static float GetDifferenceFromLowerField_aug6jun26(GObj *self, int node)
 {
     ClipWork buf;
     int idx;
@@ -2185,8 +2186,8 @@ static float GetDifferenceFromLowerField_aug6(GObj *self, int node)
 
 float GetDifferenceFromLowerField(GObj *self, int node)
 {
-    if (ICO_AUG6) {
-        return GetDifferenceFromLowerField_aug6(self, node);
+    if (ICO_AUG6JUN26) {
+        return GetDifferenceFromLowerField_aug6jun26(self, node);
     }
     ClipWork buf;
     Sub15C *ctrl;

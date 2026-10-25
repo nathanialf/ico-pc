@@ -242,7 +242,7 @@ void Main(void)
     debug_StdPrintfDummy("SYSTEM_FRAMERATE: \x1b[33m%d\x1b[m\n",
                          (60 - systemStatus[0] * 10) / systemStatus[1]);
     *T0_COUNT = 0;
-    if (!ICO_JPNKORNTSCAUG6CN) {
+    if (!ICO_JPNKORNTSCAUG6JUN26CN) {
         NonLinearCameraMove = 3;
     }
     stage_no = 0;
@@ -257,7 +257,7 @@ void Main(void)
        stages: 64 to 87, 89, 90, 92 to 102) loads nothing and dies building
        its objects. Refused as debug_SelectStageMain refuses the NOCD_ rows;
        the boot runs instead. */
-    if (n > 1 && n < PAL_JPNKORNTSCAUG6CN(106, 104) &&
+    if (n > 1 && n < PAL_JPNKORNTSCAUG6JUN26CN(106, 104) &&
         (strstr(stageData[n].dataFile, "NOCD_") != 0 ||
          strstr(stageData[n].dataFile, "ONLYSAMPLE_") != 0)) {
         ico_diag_milestone("start_stage %d (%s) refused: its data file %s is not on the disc; "
@@ -265,7 +265,8 @@ void Main(void)
                            n, stageData[n].name, stageData[n].dataFile);
         n = -1;
     }
-    thisIsYourStartStage = n < PAL_JPNKORNTSCAUG6CN(106, 104) ? n : PAL_JPNKORNTSCAUG6CN(105, 103);
+    thisIsYourStartStage =
+        n < PAL_JPNKORNTSCAUG6JUN26CN(106, 104) ? n : PAL_JPNKORNTSCAUG6JUN26CN(105, 103);
     if (thisIsYourStartStage <= 0) {
         thisIsYourStartStage = 1;
     }
@@ -299,7 +300,7 @@ void Main(void)
     while (1) {
         iosThreadCancelWakeup(0);
         iosThreadSleep();
-        if (!ICO_JPNKORNTSCAUG6CN) {
+        if (!ICO_JPNKORNTSCAUG6JUN26CN) {
             gsb_ResetSnap();
         }
         if (mpegPlay != 0) {
@@ -313,7 +314,7 @@ void Main(void)
             AdpcmStreamFree();
             soundAllocIopFree();
             movie_init(&movieFile[mpegPlay * 0x20], 720,
-                       PAL_JPNKORNTSCAUG6CN(systemStatus[0] ? 576 : 480, 480), 36, 12,
+                       PAL_JPNKORNTSCAUG6JUN26CN(systemStatus[0] ? 576 : 480, 480), 36, 12,
                        soundOutputModeGet() == 1, mpegPlayInitColor);
             ret = movie_proc(movie_abort_check);
             ico_gs_signal(ICO_GS_EV_FMV_END, ret == 1);
@@ -321,7 +322,7 @@ void Main(void)
             soundAllocIopHeap();
             AdpcmStreamHeap();
             ACTGame_SetActors_Debug(mpegPlayReturnStage, 1);
-            if (!ICO_NTSCAUG6) {
+            if (!ICO_NTSCAUG6JUN26) {
                 gsb_UpdateGSSystem(1);
                 gsb_UpdateGSSystem(1);
             }
@@ -360,12 +361,12 @@ void Main(void)
         /* PC port: whether the title's logo is drawn this
            tick, after the layouts ran and before the objects are drawn */
         ico_title_logo_update();
-        if (PAL_AUG6(graphics_ready, lock_execIcoMisc) == 0) {
+        if (PAL_AUG6JUN26(graphics_ready, lock_execIcoMisc) == 0) {
             stage_ResetAnimation();
             stage_CalcAnimationNoParent();
         }
         iosOmMain();
-        if (PAL_AUG6(graphics_ready, lock_execIcoMisc) == 0) {
+        if (PAL_AUG6JUN26(graphics_ready, lock_execIcoMisc) == 0) {
             stage_CalcAnimationParent();
         }
         /* PC port (photo mode): the paused game drawn from photo
@@ -375,7 +376,7 @@ void Main(void)
         ico_photo_view_tick();
         iosOmCreateDL();
         ExecDelayFree();
-        if (!ICO_JPNKORNTSCAUG6CN) {
+        if (!ICO_JPNKORNTSCAUG6JUN26CN) {
             gsb_TakeSnap();
         }
         frameReady = 1;
@@ -439,7 +440,7 @@ static void scheduler(void)
     IosMsgWord msg[4];
 
     debug_StdPrintfDummy("scheduler() in\n");
-    if (!ICO_AUG6) {
+    if (!ICO_AUG6JUN26) {
         sceGsSyncV(0);
     }
     iosMsgQueueCreate(&SchedulerMsgQ, schedulerMsgBuff, 8);
@@ -468,7 +469,7 @@ static void scheduler(void)
                             goto wake;
                         }
                     }
-                    if (ICO_AUG6) {
+                    if (ICO_AUG6JUN26) {
                         GlobalTimer++;
                     } else {
                         lock_execIcoMisc++;
@@ -495,7 +496,7 @@ static void scheduler(void)
             if (stgMgrWakeupRequest != 0) {
                 iosThreadWakeup(&stageManagerThread);
             }
-            if (!ICO_AUG6) {
+            if (!ICO_AUG6JUN26) {
                 la_playtime_count();
             }
         } else {

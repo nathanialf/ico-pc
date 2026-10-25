@@ -32,14 +32,15 @@ extern int ico_region;
 /* A set of rows that share one arm upstream (`#if defined(VERSION_A) || defined(VERSION_B)`),
  * named by its slugs concatenated in table order. */
 #define ICO_JPNKOR (ICO_JPN || ICO_KOR)
-#define ICO_NTSCAUG6 (ICO_NTSC || ICO_AUG6)
-#define ICO_JPNNTSCAUG6 (ICO_JPN || ICO_NTSC || ICO_AUG6)
-#define ICO_KORNTSCAUG6 (ICO_KOR || ICO_NTSC || ICO_AUG6)
+#define ICO_AUG6JUN26 (ICO_AUG6 || ICO_JUN26)
+#define ICO_NTSCAUG6JUN26 (ICO_NTSC || ICO_AUG6 || ICO_JUN26)
+#define ICO_JPNNTSCAUG6JUN26 (ICO_JPN || ICO_NTSC || ICO_AUG6 || ICO_JUN26)
+#define ICO_KORNTSCAUG6JUN26 (ICO_KOR || ICO_NTSC || ICO_AUG6 || ICO_JUN26)
 #define ICO_JPNCN (ICO_JPN || ICO_CN)
 #define ICO_KORCN (ICO_KOR || ICO_CN)
 #define ICO_JPNKORCN (ICO_JPN || ICO_KOR || ICO_CN)
 #define ICO_JPNKORNTSCCN (ICO_JPN || ICO_KOR || ICO_NTSC || ICO_CN)
-#define ICO_JPNKORNTSCAUG6CN (ICO_JPN || ICO_KOR || ICO_NTSC || ICO_AUG6 || ICO_CN)
+#define ICO_JPNKORNTSCAUG6JUN26CN (ICO_JPN || ICO_KOR || ICO_NTSC || ICO_AUG6 || ICO_JUN26 || ICO_CN)
 
 /* Selector macros: the first argument is the PAL arm (upstream's #else), then one arm per
  * named region set in table order (a set of rows sharing an arm is one argument:
@@ -51,38 +52,43 @@ extern int ico_region;
 #define PAL_JPNKOR(pal, jpnkor) (ICO_JPNKOR ? (jpnkor) : (pal))
 #define PAL_JPN_KOR(pal, jpn, kor) (ICO_KOR ? (kor) : ICO_JPN ? (jpn) : (pal))
 #define PAL_NTSC(pal, ntsc) (ICO_NTSC ? (ntsc) : (pal))
-#define PAL_AUG6(pal, aug6) (ICO_AUG6 ? (aug6) : (pal))
-#define PAL_NTSCAUG6(pal, ntscaug6) (ICO_NTSCAUG6 ? (ntscaug6) : (pal))
-#define PAL_NTSC_AUG6(pal, ntsc, aug6) (ICO_AUG6 ? (aug6) : ICO_NTSC ? (ntsc) : (pal))
-#define PAL_JPNNTSCAUG6(pal, jpnntscaug6) (ICO_JPNNTSCAUG6 ? (jpnntscaug6) : (pal))
-#define PAL_KORNTSCAUG6(pal, korntscaug6) (ICO_KORNTSCAUG6 ? (korntscaug6) : (pal))
 #define PAL_JUN26(pal, jun26) (ICO_JUN26 ? (jun26) : (pal))
+#define PAL_AUG6JUN26(pal, aug6jun26) (ICO_AUG6JUN26 ? (aug6jun26) : (pal))
+#define PAL_NTSCAUG6JUN26(pal, ntscaug6jun26) (ICO_NTSCAUG6JUN26 ? (ntscaug6jun26) : (pal))
+#define PAL_NTSC_AUG6JUN26(pal, ntsc, aug6jun26) (ICO_AUG6JUN26 ? (aug6jun26) : ICO_NTSC ? (ntsc) : (pal))
+#define PAL_JPNNTSCAUG6JUN26(pal, jpnntscaug6jun26) (ICO_JPNNTSCAUG6JUN26 ? (jpnntscaug6jun26) : (pal))
+#define PAL_KORNTSCAUG6JUN26(pal, korntscaug6jun26) (ICO_KORNTSCAUG6JUN26 ? (korntscaug6jun26) : (pal))
 #define PAL_KORCN(pal, korcn) (ICO_KORCN ? (korcn) : (pal))
 #define PAL_JPNKORCN(pal, jpnkorcn) (ICO_JPNKORCN ? (jpnkorcn) : (pal))
 #define PAL_JPN_KORCN(pal, jpn, korcn) (ICO_KORCN ? (korcn) : ICO_JPN ? (jpn) : (pal))
 #define PAL_JPNCN_KOR(pal, jpncn, kor) (ICO_KOR ? (kor) : ICO_JPNCN ? (jpncn) : (pal))
 #define PAL_JPNKORNTSCCN(pal, jpnkorntsccn) (ICO_JPNKORNTSCCN ? (jpnkorntsccn) : (pal))
 #define PAL_JPNKORCN_NTSC(pal, jpnkorcn, ntsc) (ICO_NTSC ? (ntsc) : ICO_JPNKORCN ? (jpnkorcn) : (pal))
-#define PAL_JPNKORCN_AUG6(pal, jpnkorcn, aug6) (ICO_AUG6 ? (aug6) : ICO_JPNKORCN ? (jpnkorcn) : (pal))
-#define PAL_JPNKORNTSCAUG6CN(pal, jpnkorntscaug6cn) (ICO_JPNKORNTSCAUG6CN ? (jpnkorntscaug6cn) : (pal))
-#define PAL_JPNKORNTSCCN_AUG6(pal, jpnkorntsccn, aug6) \
-    (ICO_AUG6 ? (aug6) : ICO_JPNKORNTSCCN ? (jpnkorntsccn) : (pal))
-#define PAL_JPNKORCN_NTSCAUG6(pal, jpnkorcn, ntscaug6) \
-    (ICO_NTSCAUG6 ? (ntscaug6) : ICO_JPNKORCN ? (jpnkorcn) : (pal))
-#define PAL_JPNCN_KORNTSCAUG6(pal, jpncn, korntscaug6) \
-    (ICO_KORNTSCAUG6 ? (korntscaug6) : ICO_JPNCN ? (jpncn) : (pal))
-#define PAL_JPNKORCN_NTSC_AUG6(pal, jpnkorcn, ntsc, aug6) \
-    (ICO_AUG6 ? (aug6) : ICO_NTSC ? (ntsc) : ICO_JPNKORCN ? (jpnkorcn) : (pal))
-#define PAL_JPNCN_KOR_NTSCAUG6(pal, jpncn, kor, ntscaug6) \
-    (ICO_NTSCAUG6 ? (ntscaug6) : ICO_KOR ? (kor) : ICO_JPNCN ? (jpncn) : (pal))
-#define PAL_JPN_KOR_NTSCAUG6_CN(pal, jpn, kor, ntscaug6, cn) \
-    (ICO_CN ? (cn) : ICO_NTSCAUG6 ? (ntscaug6) : ICO_KOR ? (kor) : ICO_JPN ? (jpn) : (pal))
-#define PAL_JPN_KORCN_NTSC_AUG6(pal, jpn, korcn, ntsc, aug6) \
-    (ICO_AUG6 ? (aug6) : ICO_NTSC ? (ntsc) : ICO_KORCN ? (korcn) : ICO_JPN ? (jpn) : (pal))
-#define PAL_JPNCN_KOR_NTSC_AUG6(pal, jpncn, kor, ntsc, aug6) \
-    (ICO_AUG6 ? (aug6) : ICO_NTSC ? (ntsc) : ICO_KOR ? (kor) : ICO_JPNCN ? (jpncn) : (pal))
-#define PAL_JPN_KOR_NTSC_AUG6_CN(pal, jpn, kor, ntsc, aug6, cn) \
-    (ICO_CN ? (cn) : ICO_AUG6 ? (aug6) : ICO_NTSC ? (ntsc) : ICO_KOR ? (kor) : \
+#define PAL_JPNKORCN_AUG6JUN26(pal, jpnkorcn, aug6jun26) \
+    (ICO_AUG6JUN26 ? (aug6jun26) : ICO_JPNKORCN ? (jpnkorcn) : (pal))
+#define PAL_JPNKORNTSCAUG6JUN26CN(pal, jpnkorntscaug6jun26cn) \
+    (ICO_JPNKORNTSCAUG6JUN26CN ? (jpnkorntscaug6jun26cn) : (pal))
+#define PAL_JPNKORNTSCCN_AUG6JUN26(pal, jpnkorntsccn, aug6jun26) \
+    (ICO_AUG6JUN26 ? (aug6jun26) : ICO_JPNKORNTSCCN ? (jpnkorntsccn) : (pal))
+#define PAL_JPNKORCN_NTSCAUG6JUN26(pal, jpnkorcn, ntscaug6jun26) \
+    (ICO_NTSCAUG6JUN26 ? (ntscaug6jun26) : ICO_JPNKORCN ? (jpnkorcn) : (pal))
+#define PAL_JPNCN_KORNTSCAUG6JUN26(pal, jpncn, korntscaug6jun26) \
+    (ICO_KORNTSCAUG6JUN26 ? (korntscaug6jun26) : ICO_JPNCN ? (jpncn) : (pal))
+#define PAL_JPNKORCN_NTSC_AUG6JUN26(pal, jpnkorcn, ntsc, aug6jun26) \
+    (ICO_AUG6JUN26 ? (aug6jun26) : ICO_NTSC ? (ntsc) : ICO_JPNKORCN ? (jpnkorcn) : (pal))
+#define PAL_JPNCN_KOR_NTSCAUG6JUN26(pal, jpncn, kor, ntscaug6jun26) \
+    (ICO_NTSCAUG6JUN26 ? (ntscaug6jun26) : ICO_KOR ? (kor) : ICO_JPNCN ? (jpncn) : (pal))
+#define PAL_JPN_KOR_NTSCAUG6JUN26_CN(pal, jpn, kor, ntscaug6jun26, cn) \
+    (ICO_CN ? (cn) : ICO_NTSCAUG6JUN26 ? (ntscaug6jun26) : ICO_KOR ? (kor) : ICO_JPN ? (jpn) : \
+     (pal))
+#define PAL_JPN_KORCN_NTSC_AUG6JUN26(pal, jpn, korcn, ntsc, aug6jun26) \
+    (ICO_AUG6JUN26 ? (aug6jun26) : ICO_NTSC ? (ntsc) : ICO_KORCN ? (korcn) : ICO_JPN ? (jpn) : \
+     (pal))
+#define PAL_JPNCN_KOR_NTSC_AUG6JUN26(pal, jpncn, kor, ntsc, aug6jun26) \
+    (ICO_AUG6JUN26 ? (aug6jun26) : ICO_NTSC ? (ntsc) : ICO_KOR ? (kor) : ICO_JPNCN ? (jpncn) : \
+     (pal))
+#define PAL_JPN_KOR_NTSC_AUG6JUN26_CN(pal, jpn, kor, ntsc, aug6jun26, cn) \
+    (ICO_CN ? (cn) : ICO_AUG6JUN26 ? (aug6jun26) : ICO_NTSC ? (ntsc) : ICO_KOR ? (kor) : \
      ICO_JPN ? (jpn) : (pal))
 #define PAL_JPN_KOR_NTSC_AUG6_JUN26_CN(pal, jpn, kor, ntsc, aug6, jun26, cn) \
     (ICO_CN ? (cn) : ICO_JUN26 ? (jun26) : ICO_AUG6 ? (aug6) : ICO_NTSC ? (ntsc) : \

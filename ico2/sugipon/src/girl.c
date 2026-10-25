@@ -53,7 +53,7 @@ typedef struct GirlWork { /* field names derived */
 } GirlWork;               /* derived name */
 
 /* file-static: boy.c has a global function of the same name */
-static void execClothes_ntscaug6(GObj *gobj)
+static void execClothes_ntscaug6jun26(GObj *gobj)
 {
     GirlWork *w;
 
@@ -80,8 +80,8 @@ static void execClothes_ntscaug6(GObj *gobj)
 
 static void execClothes(GObj *gobj)
 {
-    if (ICO_NTSCAUG6) {
-        execClothes_ntscaug6(gobj);
+    if (ICO_NTSCAUG6JUN26) {
+        execClothes_ntscaug6jun26(gobj);
         return;
     }
     float q[4];
@@ -196,7 +196,7 @@ static void dispClothes_ntsc(GObj *gobj)
     }
 }
 
-static void dispClothes_aug6(GObj *gobj)
+static void dispClothes_aug6jun26(GObj *gobj)
 {
     GirlWork *w;
     char *x;
@@ -237,8 +237,8 @@ static void dispClothes(GObj *gobj)
         dispClothes_ntsc(gobj);
         return;
     }
-    if (ICO_AUG6) {
-        dispClothes_aug6(gobj);
+    if (ICO_AUG6JUN26) {
+        dispClothes_aug6jun26(gobj);
         return;
     }
     GirlWork *w;
@@ -663,17 +663,17 @@ static Cloth4DCol clothMeshF8Cols[21] = {
 
 static Cloth4DCol clothMeshF10Cols_pal[15];
 
-static Cloth4DCol clothMeshF10Cols_ntscaug6[15];
+static Cloth4DCol clothMeshF10Cols_ntscaug6jun26[15];
 
 static Cloth4DCfg clothMeshF10_pal = {
     15, 5, 0, 0, 0x59, 0x59, 0x59, 0x80, "g_hair9", clothMeshF10Cols_pal, 10.768f, 0,
 }; /* derived name */
 
-static Cloth4DCfg clothMeshF10_ntscaug6 = {
-    15, 5, 0, 0, 0x59, 0x59, 0x59, 0x80, "g_hair9", clothMeshF10Cols_ntscaug6, 10.676f, 0,
+static Cloth4DCfg clothMeshF10_ntscaug6jun26 = {
+    15, 5, 0, 0, 0x59, 0x59, 0x59, 0x80, "g_hair9", clothMeshF10Cols_ntscaug6jun26, 10.676f, 0,
 }; /* derived name */
 
-#define clothMeshF10 (*PAL_NTSCAUG6(&clothMeshF10_pal, &clothMeshF10_ntscaug6))
+#define clothMeshF10 (*PAL_NTSCAUG6JUN26(&clothMeshF10_pal, &clothMeshF10_ntscaug6jun26))
 
 static float clothMeshF10Uv[15][5][2] = {
     {{0.712f, 0.628f}, {0.717f, 0.473f}, {0.723f, 0.318f}, {0.728f, 0.163f}, {0.734f, 0.008f}},
@@ -861,7 +861,7 @@ static Cloth4DCol clothMeshF10Cols_pal[15] = {
      {0.024f, -2.726f, -0.029f, 0.0f}},
 }; /* derived name */
 
-static Cloth4DCol clothMeshF10Cols_ntscaug6[15] = {
+static Cloth4DCol clothMeshF10Cols_ntscaug6jun26[15] = {
     {2.887f,
      {0},
      {-7.092f, 153.447f, -4.165f, 1.0f},
@@ -1029,23 +1029,23 @@ static Cloth4DCol clothMeshF10Cols_ntscaug6[15] = {
      {0.086f, -2.873f, 0.265f, 0.0f}},
 }; /* derived name */
 
-#define clothMeshF10Cols PAL_NTSCAUG6(clothMeshF10Cols_pal, clothMeshF10Cols_ntscaug6)
+#define clothMeshF10Cols PAL_NTSCAUG6JUN26(clothMeshF10Cols_pal, clothMeshF10Cols_ntscaug6jun26)
 
 static Cloth4DCol clothMeshF14Cols_pal[4];
 
-static Cloth4DCol clothMeshF14Cols_ntscaug6[9];
+static Cloth4DCol clothMeshF14Cols_ntscaug6jun26[9];
 
-#define clothMeshF14Cols PAL_NTSCAUG6(clothMeshF14Cols_pal, clothMeshF14Cols_ntscaug6)
+#define clothMeshF14Cols PAL_NTSCAUG6JUN26(clothMeshF14Cols_pal, clothMeshF14Cols_ntscaug6jun26)
 
 static Cloth4DCfg clothMeshF14_pal = {
     4, 3, 0, 0, 0x59, 0x59, 0x59, 0x80, "g_hair9", clothMeshF14Cols_pal, 2.597f, 0,
 }; /* derived name */
 
-static Cloth4DCfg clothMeshF14_ntscaug6 = {
-    9, 3, 0, 0, 0x59, 0x59, 0x59, 0x80, "g_hair9", clothMeshF14Cols_ntscaug6, 9.462f, 0,
+static Cloth4DCfg clothMeshF14_ntscaug6jun26 = {
+    9, 3, 0, 0, 0x59, 0x59, 0x59, 0x80, "g_hair9", clothMeshF14Cols_ntscaug6jun26, 9.462f, 0,
 }; /* derived name */
 
-#define clothMeshF14 (*PAL_NTSCAUG6(&clothMeshF14_pal, &clothMeshF14_ntscaug6))
+#define clothMeshF14 (*PAL_NTSCAUG6JUN26(&clothMeshF14_pal, &clothMeshF14_ntscaug6jun26))
 
 static float clothMeshF14Uv_pal[4][3][2] = {
     {{0.016f, 0.44f}, {0.013f, 0.711f}, {0.01f, 0.982f}},
@@ -1054,7 +1054,7 @@ static float clothMeshF14Uv_pal[4][3][2] = {
     {{0.516f, 0.464f}, {0.509f, 0.725f}, {0.503f, 0.987f}},
 }; /* derived name */
 
-static float clothMeshF14Uv_ntscaug6[9][3][2] = {
+static float clothMeshF14Uv_ntscaug6jun26[9][3][2] = {
     {{0.99f, 0.542f}, {0.987f, 0.275f}, {0.984f, 0.008f}},
     {{0.99f, 0.542f}, {0.987f, 0.275f}, {0.984f, 0.008f}},
     {{0.768f, 0.523f}, {0.76f, 0.268f}, {0.753f, 0.013f}},
@@ -1066,7 +1066,7 @@ static float clothMeshF14Uv_ntscaug6[9][3][2] = {
     {{0.305f, 0.508f}, {0.307f, 0.259f}, {0.31f, 0.01f}},
 }; /* derived name */
 
-#define clothMeshF14Uv PAL_NTSCAUG6(clothMeshF14Uv_pal, clothMeshF14Uv_ntscaug6)
+#define clothMeshF14Uv PAL_NTSCAUG6JUN26(clothMeshF14Uv_pal, clothMeshF14Uv_ntscaug6jun26)
 
 static Cloth4DCol clothMeshF14Cols_pal[4] = {
     {5.548f,
@@ -1115,7 +1115,7 @@ static Cloth4DCol clothMeshF14Cols_pal[4] = {
      {0.0f, -2.501f, 2.87f, 0.0f}},
 }; /* derived name */
 
-static Cloth4DCol clothMeshF14Cols_ntscaug6[9] = {
+static Cloth4DCol clothMeshF14Cols_ntscaug6jun26[9] = {
     {3.212f,
      {0},
      {-8.098f, 154.294f, -6.906f, 1.0f},
@@ -1124,7 +1124,7 @@ static Cloth4DCol clothMeshF14Cols_ntscaug6[9] = {
      1.0f,
      -1,
      0.0f,
-     clothMeshF14Uv_ntscaug6[0],
+     clothMeshF14Uv_ntscaug6jun26[0],
      {0},
      {0.5f, -2.944f, -1.184f, 0.0f}},
     {2.488f,
@@ -1135,7 +1135,7 @@ static Cloth4DCol clothMeshF14Cols_ntscaug6[9] = {
      1.0f,
      -1,
      0.0f,
-     clothMeshF14Uv_ntscaug6[3],
+     clothMeshF14Uv_ntscaug6jun26[3],
      {0},
      {0.472f, -2.242f, -0.969f, 0.0f}},
     {3.168f,
@@ -1146,7 +1146,7 @@ static Cloth4DCol clothMeshF14Cols_ntscaug6[9] = {
      1.0f,
      -1,
      0.0f,
-     clothMeshF14Uv_ntscaug6[6],
+     clothMeshF14Uv_ntscaug6jun26[6],
      {0},
      {0.453f, -2.8f, -1.411f, 0.0f}},
     {3.178f,
@@ -1157,7 +1157,7 @@ static Cloth4DCol clothMeshF14Cols_ntscaug6[9] = {
      1.0f,
      -1,
      0.0f,
-     clothMeshF14Uv_ntscaug6[8],
+     clothMeshF14Uv_ntscaug6jun26[8],
      {0},
      {0.123f, -3.044f, -0.905f, 0.0f}},
     {3.594f,
@@ -1168,7 +1168,7 @@ static Cloth4DCol clothMeshF14Cols_ntscaug6[9] = {
      1.0f,
      -1,
      0.0f,
-     clothMeshF14Uv_ntscaug6[7],
+     clothMeshF14Uv_ntscaug6jun26[7],
      {0},
      {0.0f, -3.507f, -0.788f, 0.0f}},
     {3.178f,
@@ -1179,7 +1179,7 @@ static Cloth4DCol clothMeshF14Cols_ntscaug6[9] = {
      1.0f,
      -1,
      0.0f,
-     clothMeshF14Uv_ntscaug6[4],
+     clothMeshF14Uv_ntscaug6jun26[4],
      {0},
      {-0.123f, -3.044f, -0.905f, 0.0f}},
     {3.168f,
@@ -1190,7 +1190,7 @@ static Cloth4DCol clothMeshF14Cols_ntscaug6[9] = {
      1.0f,
      -1,
      0.0f,
-     clothMeshF14Uv_ntscaug6[5],
+     clothMeshF14Uv_ntscaug6jun26[5],
      {0},
      {-0.453f, -2.8f, -1.411f, 0.0f}},
     {2.488f,
@@ -1201,7 +1201,7 @@ static Cloth4DCol clothMeshF14Cols_ntscaug6[9] = {
      1.0f,
      -1,
      0.0f,
-     clothMeshF14Uv_ntscaug6[2],
+     clothMeshF14Uv_ntscaug6jun26[2],
      {0},
      {-0.472f, -2.242f, -0.969f, 0.0f}},
     {3.212f,
@@ -1212,12 +1212,12 @@ static Cloth4DCol clothMeshF14Cols_ntscaug6[9] = {
      1.0f,
      -1,
      0.0f,
-     clothMeshF14Uv_ntscaug6[1],
+     clothMeshF14Uv_ntscaug6jun26[1],
      {0},
      {-0.5f, -2.944f, -1.184f, 0.0f}},
 }; /* derived name */
 
-#define clothMeshF14Cols PAL_NTSCAUG6(clothMeshF14Cols_pal, clothMeshF14Cols_ntscaug6)
+#define clothMeshF14Cols PAL_NTSCAUG6JUN26(clothMeshF14Cols_pal, clothMeshF14Cols_ntscaug6jun26)
 
 static Cloth4DCol clothMeshF18Cols[7];
 
@@ -2545,13 +2545,13 @@ static ClothHangCfg clothHangF10_pal[3] = {
     {-1, 0.0f, 0.0f, 0.0f, 0, {0}, 0.0f, 0.0f, {0}, 0.0f, 0.0f, {0}},
 }; /* derived name */
 
-static ClothHangCfg clothHangF10_ntscaug6[3] = {
+static ClothHangCfg clothHangF10_ntscaug6jun26[3] = {
     {1, -3.0f, 15.0f, 10.0f, 35, {0}, 0.0f, 2.0f, {0}, 1.0f, -1.0f, {0}},
     {1, -5.0f, 8.0f, 5.0f, 34, {0}, 0.0f, 0.0f, {0}, 1.0f, -1.0f, {0}},
     {-1, 0.0f, 0.0f, 0.0f, 0, {0}, 0.0f, 0.0f, {0}, 0.0f, 0.0f, {0}},
 }; /* derived name */
 
-#define clothHangF10 PAL_NTSCAUG6(clothHangF10_pal, clothHangF10_ntscaug6)
+#define clothHangF10 PAL_NTSCAUG6JUN26(clothHangF10_pal, clothHangF10_ntscaug6jun26)
 
 static ClothHangCfg clothHangF18[2] = {
     {1, 0.0f, 10.0f, 8.0f, 35, {0}, 5.0f, 3.5f, {0}, 1.0f, -1.0f, {0}},
@@ -2655,7 +2655,7 @@ static void *InitGirlGeo_ntsc(GObj *gobj, SObjSimpleSetting *csv)
     return w;
 }
 
-static void *InitGirlGeo_aug6(GObj *gobj, SObjSimpleSetting *csv)
+static void *InitGirlGeo_aug6jun26(GObj *gobj, SObjSimpleSetting *csv)
 {
     GirlWork *w;
     int kind;
@@ -2697,8 +2697,8 @@ void *InitGirlGeo(GObj *gobj, SObjSimpleSetting *csv)
     if (ICO_NTSC) {
         return InitGirlGeo_ntsc(gobj, csv);
     }
-    if (ICO_AUG6) {
-        return InitGirlGeo_aug6(gobj, csv);
+    if (ICO_AUG6JUN26) {
+        return InitGirlGeo_aug6jun26(gobj, csv);
     }
     GirlWork *w;
     ICO_WORD p;
@@ -2762,7 +2762,7 @@ void GirlGeo(GObj *gobj)
 
     HandManager(gobj);
     ExecMotionOrient(gobj);
-    SetActressLight(gobj, 35, 44, PAL_JPNKORCN_NTSC_AUG6(470, 466, 407, 406));
+    SetActressLight(gobj, 35, 44, PAL_JPNKORCN_NTSC_AUG6JUN26(470, 466, 407, 406));
     if (CylinderCollision(gobj, 4, 50.0f, 50.0f, 0.0f)) {
         iosOmSendMail(gobj, 6, gobj);
     }
@@ -2787,12 +2787,12 @@ void GirlGeo(GObj *gobj)
     execClothes(gobj);
 }
 
-static void GirlAI_ntscaug6(GObj *gobj) {}
+static void GirlAI_ntscaug6jun26(GObj *gobj) {}
 
 void GirlAI(GObj *gobj)
 {
-    if (ICO_NTSCAUG6) {
-        GirlAI_ntscaug6(gobj);
+    if (ICO_NTSCAUG6JUN26) {
+        GirlAI_ntscaug6jun26(gobj);
         return;
     }
     Sub15C *work = GOBJ_SUB(gobj);

@@ -579,7 +579,7 @@ static const DbgOpt debugOption_pal[76] = {
    seven sizes and counts snapshots up from 0); every other row is the same. */
 /* the USA disc's and the August 2001 preview's option list is the Japanese build's less
    seven rows; their SnapSize takes the Japanese names (snapshot as the Japanese disc's) */
-#define debugOption PAL_JPNKORNTSCAUG6CN(debugOption_pal, debugOption_jpn)
+#define debugOption PAL_JPNKORNTSCAUG6JUN26CN(debugOption_pal, debugOption_jpn)
 
 /* the font window's line count */
 static int fontWindowLine = 0; /* derived name */
@@ -1002,7 +1002,7 @@ static void debug_SaveDebugOptionFile(void)
     if (fd) {
         debug_StdPrintfDummy("debug_SaveDebugOptionFile: host file open error.\n");
     } else {
-        for (i = 0; i < PAL_NTSC_AUG6(76, 69, 67); i++) {
+        for (i = 0; i < PAL_NTSC_AUG6JUN26(76, 69, 67); i++) {
             sprintf(buf, "#%s\n", debugOption[i].name);
             sceWrite(fd, buf, strlen(buf));
             sprintf(buf, "%d\n", *debugOption[i].val);
@@ -1069,12 +1069,12 @@ static int debug_GetDebugOption(void)
         } while (++i < size);
     done:
         debugSceClose(fd);
-        if (cnt != PAL_NTSC_AUG6(76, 69, 67)) {
+        if (cnt != PAL_NTSC_AUG6JUN26(76, 69, 67)) {
             fd = -1;
             debug_StdPrintfDummy("debug_GetDebugOption:Found Debug Option file, But illegal.\n");
         } else {
             debug_StdPrintfDummy("Found Debug Option file.\n");
-            for (i = 0; i < PAL_NTSC_AUG6(76, 69, 67); i++) {
+            for (i = 0; i < PAL_NTSC_AUG6JUN26(76, 69, 67); i++) {
                 debug_StdPrintfDummy("%s => %d\n", debugOption[i].name, *debugOption[i].val);
             }
         }
@@ -1133,12 +1133,12 @@ void debug_VariableInit(void)
     debug_zoom_per = 100;
     debug_debug_bar_start_item = 0;
     debug_ripple_roughness = 25;
-    debug_snapshot_num = PAL_JPNKORCN_NTSCAUG6(100, 1, 0);
+    debug_snapshot_num = PAL_JPNKORCN_NTSCAUG6JUN26(100, 1, 0);
     debug_snapshot_size = 0;
     debug_snapshot_format = 0;
     debug_ambient_volume = 0;
     debug_cloth_info = 0;
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         debug_hair_tight_level = 20;
         debug_hair_gravity_level = 0;
         debug_hair_bend_angle = 256;
@@ -1174,7 +1174,7 @@ void debug_VariableInit(void)
         debug_one_hit_only = 0;
         debug_ignore_dodge = 0;
         game_pause = 0;
-    } else if (ICO_AUG6) {
+    } else if (ICO_AUG6JUN26) {
         debug_lwskyomi_lookonly = 1;
         graphics_ready = 0;
     } else {
@@ -1189,7 +1189,7 @@ void debug_VariableInit(void)
         game_pause = 0;
     }
     ChangeFieldCollisionDebugMode(0);
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         ChangeGirlControlMode(debug_girl_pad_control);
     }
     /* PC port: in developer mode, [dev] debug_option non-zero loads
@@ -1340,7 +1340,7 @@ static int debug_Load_ntsc(char **dst, char *name, int kind)
     return size;
 }
 
-static int debug_Load_aug6(char **dst, char *name, int kind)
+static int debug_Load_aug6jun26(char **dst, char *name, int kind)
 {
     char buf[256];
     int size;
@@ -1443,8 +1443,8 @@ int debug_Load(char **dst, char *name, int kind)
     if (ICO_NTSC) {
         return debug_Load_ntsc(dst, name, kind);
     }
-    if (ICO_AUG6) {
-        return debug_Load_aug6(dst, name, kind);
+    if (ICO_AUG6JUN26) {
+        return debug_Load_aug6jun26(dst, name, kind);
     }
     char buf[256];
     int size;
@@ -1550,10 +1550,10 @@ typedef unsigned long long GifTag[2] __attribute__((aligned(16))); /* derived na
    debug_exception's fontTag */
 static GifTag debugFontTag_pal = {0x2000400000008000LL, 0x51}; /* derived name */
 
-static unsigned long long debugFontTag_ntscaug6[2] = {0x2000400000008000LL,
-                                                      0x51}; /* derived name */
+static unsigned long long debugFontTag_ntscaug6jun26[2] = {0x2000400000008000LL,
+                                                           0x51}; /* derived name */
 
-#define debugFontTag PAL_NTSCAUG6(debugFontTag_pal, debugFontTag_ntscaug6)
+#define debugFontTag PAL_NTSCAUG6JUN26(debugFontTag_pal, debugFontTag_ntscaug6jun26)
 
 /* PC port: the glyph packets live in this buffer, not
    in the stage partition.  On the PS2 debug_Init (every stage_initialize,
@@ -2005,7 +2005,7 @@ static void debug_brainBar(void)
     gif_StartPacketPri(11);
     gif_SetAlpha(1, 2, c3.a);
     brain = &brainGirl;
-    for (i = 0; i < PAL_NTSCAUG6(40, 20); i++) {
+    for (i = 0; i < PAL_NTSCAUG6JUN26(40, 20); i++) {
         b.x = 300;
         a.y = b.y = y;
         if (brain->tgt[i].gobj == 0) {
@@ -2022,7 +2022,7 @@ static void debug_brainBar(void)
             col = &c1;
         }
         gif_Line(&a.x, &b.x, 0xFFFFFFFFU, 0xFFFFFFFFU, col, 1);
-        if (brain->tgt[i].gobj->kind == PAL_NTSC_AUG6(0x3D, 0x3C, 59)) {
+        if (brain->tgt[i].gobj->kind == PAL_NTSC_AUG6JUN26(0x3D, 0x3C, 59)) {
             /* a.z is never written: the copy reads it uninitialised */
             c.x = a.x;
             c.y = a.y;
@@ -2130,7 +2130,7 @@ static void debug_DrawBar(void)
     int len;
 
     flip = 0;
-    scale = 1.0f / (270000.0f / PAL_JPNKORNTSCAUG6CN((float)((60 - systemStatus[0] * 10) / systemStatus[1]), 30.0f));
+    scale = 1.0f / (270000.0f / PAL_JPNKORNTSCAUG6JUN26CN((float)((60 - systemStatus[0] * 10) / systemStatus[1]), 30.0f));
 
 
 
@@ -2147,7 +2147,7 @@ static void debug_DrawBar(void)
     sh = debug_debug_bar_multiply;
 
     gif_StartPacketPri(12);
-    gif_SetDrawEnviroment(2048, 0, ScreenWidth, ScreenHeight, PAL_NTSCAUG6(1, 0), 0);
+    gif_SetDrawEnviroment(2048, 0, ScreenWidth, ScreenHeight, PAL_NTSCAUG6JUN26(1, 0), 0);
 
     gif_SetZWrite(0);
     gif_SetZTest(0);
@@ -2361,7 +2361,7 @@ void debug_DispBar(void)
     int va;
     int vb;
     int n;
-    inv = 1.0f / (270000.0f / PAL_JPNKORNTSCAUG6CN((float)((60 - systemStatus[0] * 10) / systemStatus[1]), 30.0f));
+    inv = 1.0f / (270000.0f / PAL_JPNKORNTSCAUG6JUN26CN((float)((60 - systemStatus[0] * 10) / systemStatus[1]), 30.0f));
     vb = (float)(debugBars[debugBarCount - 1].count * 100) * inv;
     va = (float)(drawTimerCount * 100) * inv;
 
@@ -2452,7 +2452,7 @@ static void debug_WriteBMP(int fd, int w, int h, unsigned int *src)
     hdr.biYPelsPerMeter = 0;
     hdr.biClrUsed = 0;
     hdr.biClrImportant = 0;
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         /* both arms store the same: the test's load and its 1 stay in the ROM
            (aug6 TRFILE debug.c:2885-2891, the 2886-2888 lines code-less) */
         if (debug_snapshot_size == 1) {
@@ -2506,7 +2506,7 @@ int debug_SnapShot(int idx)
     size = ScreenWidth * ScreenHeight * 4;
     /* the European disc's SnapSize 0 is None; the Japanese disc's is
        Normal (debugSnapSizeName_jpn), which takes one like every size */
-    if (!ICO_JPNKORCN && !ICO_NTSCAUG6 && debug_snapshot_size == 0) {
+    if (!ICO_JPNKORCN && !ICO_NTSCAUG6JUN26 && debug_snapshot_size == 0) {
         return -1;
     }
     /* PC port: the PS2 stored the scene buffer
@@ -2843,8 +2843,8 @@ static int debug_Mode(void)
     debug_PrintfDummy(10, 50, 0xFFFFFF00u, "DEBUG MODE");
     debug_PrintfDummy(138, 50, 0x00FFFF00u, "Push '\202' to save debug options.");
 
-    i = (modeSelect + PAL_NTSC_AUG6(70, 63, 61)) % PAL_NTSC_AUG6(76, 69, 67);
-    end = (modeSelect + PAL_NTSC_AUG6(83, 76, 74)) % PAL_NTSC_AUG6(76, 69, 67);
+    i = (modeSelect + PAL_NTSC_AUG6JUN26(70, 63, 61)) % PAL_NTSC_AUG6JUN26(76, 69, 67);
+    end = (modeSelect + PAL_NTSC_AUG6JUN26(83, 76, 74)) % PAL_NTSC_AUG6JUN26(76, 69, 67);
     j = 1;
     while (i != end) {
         if (debugOption[i].strs != 0) {
@@ -2852,15 +2852,15 @@ static int debug_Mode(void)
         } else {
             debug_PrintfDummy(18, j * 8 + 50, modeSelect == i ? (((modeBlink >> 3) & 1) ? blinkColor[0] : debugOption[i].col) : debugOption[i].col, "%c%s : %d", modeSelect == i ? 62 : 32, debugOption[i].name, *debugOption[i].val);
         }
-        if (++i == PAL_NTSC_AUG6(76, 69, 67)) i = 0;
+        if (++i == PAL_NTSC_AUG6JUN26(76, 69, 67)) i = 0;
         j++;
     }
 
     if (pad[0].rep & 0x4000) {
-        if (++modeSelect >= PAL_NTSC_AUG6(76, 69, 67)) modeSelect = 0;
+        if (++modeSelect >= PAL_NTSC_AUG6JUN26(76, 69, 67)) modeSelect = 0;
     }
     if (pad[0].rep & 0x1000) {
-        if (--modeSelect < 0) modeSelect = PAL_NTSC_AUG6(75, 68, 66);
+        if (--modeSelect < 0) modeSelect = PAL_NTSC_AUG6JUN26(75, 68, 66);
     }
     if (pad[0].rep & 0x2000) {
         if (++*debugOption[modeSelect].val > debugOption[modeSelect].max)
@@ -2875,7 +2875,7 @@ static int debug_Mode(void)
             debugOption[modeSelect].func(*debugOption[modeSelect].val);
     }
     if (pad[0].flags & 0x20) {
-        for (i = 0; i < PAL_NTSC_AUG6(76, 69, 67); i++) {
+        for (i = 0; i < PAL_NTSC_AUG6JUN26(76, 69, 67); i++) {
             if (debugOption[i].min == 0 && debugOption[i].max == 1)
                 debug_StdPrintfDummy("debug%s => %s\n", debugOption[i].name, modeValueName[*debugOption[i].val]);
             else
@@ -3090,10 +3090,10 @@ static int debug_SelectStageMain(int ret, int stage)
                 seEnvForceClose = on;
                 enable_game_pause = on;
                 kanbanInit(0);
-                gflagOn(PAL_NTSC_AUG6(394, 361, 360));
+                gflagOn(PAL_NTSC_AUG6JUN26(394, 361, 360));
                 scpBoyControlReadDisable = 0;
                 stgmgrForceSwitch(stage);
-                gflagOff(PAL_NTSC_AUG6(388, 355, 354));
+                gflagOff(PAL_NTSC_AUG6JUN26(388, 355, 354));
                 ACTGame_SetActors_Debug(stage, on);
             }
         }
@@ -3103,7 +3103,7 @@ static int debug_SelectStageMain(int ret, int stage)
 
 int debug_SelectStage(void)
 {
-    return debug_SelectStageMain(PAL_JPNKORNTSCCN_AUG6(debug_SelectCsvWindowWithLine("stage select", 10, 80, 11, stageData,
+    return debug_SelectStageMain(PAL_JPNKORNTSCCN_AUG6JUN26(debug_SelectCsvWindowWithLine("stage select", 10, 80, 11, stageData,
                                                                404, 0x20, 0, 106, &stageSelectNo), debug_SelectCsvWindowWithLine("stage select", 10, 80, 11, stageData, 404, 0x20, 0, 104, &stageSelectNo), debug_SelectCsvWindowWithLine("stage select", 10, 80, 11, stageData, sizeof(StgPre), 0x20, 0, 104, &stageSelectNo)),
                                  stageSelectNo);
 }
@@ -3442,7 +3442,7 @@ static int debug_mcLoadMainBlock(McMgr *mc)
         break;
     case 9:
         gamesysMemoryLoad(gameSysMemoryFuncList, gameSysMainSaveBuff, 0);
-        if (!ICO_AUG6) {
+        if (!ICO_AUG6JUN26) {
             scpBoyControlReadDisable = 0;
         }
         loadState++;
@@ -3615,7 +3615,7 @@ int debug_SETest(int reset)
         seHandle = -1;
     }
     r = debug_SelectCsvWindowWithLineColor("SE LIST", 0xA, 0x3C, 0xA, seDef, 0x3C, 0,
-                                               0, PAL_NTSC_AUG6(0x592, 0x56D, 1389), &seSelect, debug_SETest_color);
+                                               0, PAL_NTSC_AUG6JUN26(0x592, 0x56D, 1389), &seSelect, debug_SETest_color);
     if (r > 0) {
         seHandle = soundSeDefPlay(seSelect, 0, (float *)(GOBJ_SUB(boyGObj)->nodeMtx + 0x30), 1);
         return 0;
@@ -3692,7 +3692,7 @@ inline int debug_AdpcmTest(int first)
     if (first != 0) {
         adpcmHandle = -1;
     }
-    r = debug_SelectCsvWindow("ADPCM LIST", 10, PAL_NTSC(0x3C, 60), 10, adpcmFile, PAL_NTSC(0x40, 64), 0, 0, PAL_NTSCAUG6(0x69, 96), &adpcmSelect);
+    r = debug_SelectCsvWindow("ADPCM LIST", 10, PAL_NTSC(0x3C, 60), 10, adpcmFile, PAL_NTSC(0x40, 64), 0, 0, PAL_NTSCAUG6JUN26(0x69, 96), &adpcmSelect);
     if (r > 0) {
         if (adpcmSelect != 0) {
             scpAdpcmPlayRequestFunc(adpcmSelect, 0, 1, 1, 1);
@@ -3795,7 +3795,7 @@ inline int debug_hintStart(void)
     return 1;
 }
 
-static inline int debug_ListActGobj_ntscaug6(DbgGobjEnt *list) /* derived name */
+static inline int debug_ListActGobj_ntscaug6jun26(DbgGobjEnt *list) /* derived name */
 {
     void *g;
     int n = 0;
@@ -3816,8 +3816,8 @@ static inline int debug_ListActGobj_ntscaug6(DbgGobjEnt *list) /* derived name *
 
 static inline int debug_ListActGobj(DbgGobjEnt *list) /* derived name */
 {
-    if (ICO_NTSCAUG6) {
-        return debug_ListActGobj_ntscaug6(list);
+    if (ICO_NTSCAUG6JUN26) {
+        return debug_ListActGobj_ntscaug6jun26(list);
     }
     void *g;
     int n = 0;
@@ -4187,10 +4187,10 @@ DbgMenuItem debugMenu[27] = {
 /* the open bug list debug_MenuHelp prints beside the menu */
 static char *debugMenuHelp_pal[] = {"B2850   TOO HARD TO PICK UP LASER", "B2890   ILLEGAL CAGE CHAIN DYNAMICS", 0}; /* derived name */
 
-static char *debugMenuHelp_ntscaug6[] = {"B1897   SPIDER ALIVE", "B2373   ENEMY FAIL FLY", "B2421   FLARE CLAMP FAIL",
+static char *debugMenuHelp_ntscaug6jun26[] = {"B1897   SPIDER ALIVE", "B2373   ENEMY FAIL FLY", "B2421   FLARE CLAMP FAIL",
                                 "A553/A580/B2432 THROUGH FLOOR @ SLOPE", 0}; /* derived name */
 
-#define debugMenuHelp PAL_NTSCAUG6(debugMenuHelp_pal, debugMenuHelp_ntscaug6)
+#define debugMenuHelp PAL_NTSCAUG6JUN26(debugMenuHelp_pal, debugMenuHelp_ntscaug6jun26)
 
 /* the menu's blink counter, state, cursor and the argument its entry gets */
 static int menuBlink = 0; /* derived name */
@@ -4204,7 +4204,7 @@ static int menuArg = 0; /* derived name */
 static inline void debug_MenuBlink(void) /* derived name */
 {
     if (menuBlink >> 4) {
-        debug_PrintfDummy(220, 60, 0x80C0FF80u, "DISC VER.%s %s", PAL_JPNCN_KOR_NTSC_AUG6("Jan 17 2002", "Nov  2 2001", "Jan  9 2002", "Aug 20 2001", "Aug  7 2001"), PAL_JPN_KOR_NTSC_AUG6_CN("15:37:26", "17:26:01", "19:03:40", "22:01:44", "15:03:20", "19:35:51"));
+        debug_PrintfDummy(220, 60, 0x80C0FF80u, "DISC VER.%s %s", PAL_JPNCN_KOR_NTSC_AUG6JUN26("Jan 17 2002", "Nov  2 2001", "Jan  9 2002", "Aug 20 2001", "Aug  7 2001"), PAL_JPN_KOR_NTSC_AUG6JUN26_CN("15:37:26", "17:26:01", "19:03:40", "22:01:44", "15:03:20", "19:35:51"));
     }
     menuBlink++;
     if (menuBlink >= 0x41) {
@@ -4251,7 +4251,7 @@ void debug_Menu(void)
     }
     state = menuState;
     if (state == 1) {
-        r = debug_SelectCsvWindow("DEBUG MENU", 0xA, 0x32, 0xB, debugMenu, 0xC, 0, 1, PAL_NTSC_AUG6(0x1B, 0x1A, 26),
+        r = debug_SelectCsvWindow("DEBUG MENU", 0xA, 0x32, 0xB, debugMenu, 0xC, 0, 1, PAL_NTSC_AUG6JUN26(0x1B, 0x1A, 26),
                                   &menuSelect);
         switch (r) {
         case 0:

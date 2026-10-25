@@ -36,7 +36,7 @@ void SetLodLevel(GObj *self, int lv)
             objKindData[n].name, lodNameTable[lv]);
     }
     SetMotionBlendlessNode(self, lodNodeTable[lv]);
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         p = self->dobj;
         if (p != 0) {
             if (p->lodFunc != 0) {

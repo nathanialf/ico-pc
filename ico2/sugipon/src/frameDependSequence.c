@@ -56,7 +56,7 @@ extern void seMail(GObj *self, int id);
 /* port/game/options.h: the model viewer is up */
 extern int ico_mv_active;
 
-static int playSE_ntscaug6(int no)
+static int playSE_ntscaug6jun26(int no)
 {
     if (no == 0) {
         return 1;
@@ -93,8 +93,8 @@ static int playSE_ntscaug6(int no)
 
 static int playSE(int no)
 {
-    if (ICO_NTSCAUG6) {
-        return playSE_ntscaug6(no);
+    if (ICO_NTSCAUG6JUN26) {
+        return playSE_ntscaug6jun26(no);
     }
     int ret;
 
@@ -179,7 +179,7 @@ static int playSERandomID_ntsc(int no, void *entry)
     return execSE(randomSEKind[no].se, 0);
 }
 
-static int playSERandomID_aug6(int no, void *entry)
+static int playSERandomID_aug6jun26(int no, void *entry)
 {
     (void)entry; /* PC port: the European parameter, unused here */
     float rest;
@@ -241,8 +241,8 @@ static int playSERandomID(int no, void *entry)
     if (ICO_NTSC) {
         return playSERandomID_ntsc(no, entry);
     }
-    if (ICO_AUG6) {
-        return playSERandomID_aug6(no, entry);
+    if (ICO_AUG6JUN26) {
+        return playSERandomID_aug6jun26(no, entry);
     }
     float rest;
     float rnd;
@@ -280,7 +280,7 @@ static int playSERandomID(int no, void *entry)
     return execSE(randomSEKind[no].se, entry);
 }
 
-static int playSEConditionID_ntscaug6(int no, void *entry)
+static int playSEConditionID_ntscaug6jun26(int no, void *entry)
 {
     (void)entry; /* PC port: the European parameter, unused here */
     int (*fn)(GObj *, int);
@@ -317,8 +317,8 @@ static int playSEConditionID_ntscaug6(int no, void *entry)
 
 static int playSEConditionID(int no, void *entry)
 {
-    if (ICO_NTSCAUG6) {
-        return playSEConditionID_ntscaug6(no, entry);
+    if (ICO_NTSCAUG6JUN26) {
+        return playSEConditionID_ntscaug6jun26(no, entry);
     }
     int (*fn)(GObj *, int);
     const SECondEntry *p;
@@ -355,7 +355,7 @@ static int playSEConditionID(int no, void *entry)
     return 0;
 }
 
-static inline int execSE_ntscaug6(int no, void *entry)
+static inline int execSE_ntscaug6jun26(int no, void *entry)
 {
     (void)entry; /* PC port: the European parameter, unused here */
     if (no <= 0xFFFF) {
@@ -374,8 +374,8 @@ static inline int execSE_ntscaug6(int no, void *entry)
 
 static inline int execSE(int no, void *entry)
 {
-    if (ICO_NTSCAUG6) {
-        return execSE_ntscaug6(no, entry);
+    if (ICO_NTSCAUG6JUN26) {
+        return execSE_ntscaug6jun26(no, entry);
     }
     if (no <= 0xFFFF) {
         return playSE(no);
@@ -437,7 +437,7 @@ static void playEff(int no)
     if (flags & 1) {
         EntryStageMultiBgaManager(motionEffKind[no].eff, pos, q);
     } else {
-        if (!ICO_NTSCAUG6) {
+        if (!ICO_NTSCAUG6JUN26) {
             if (stage_no == 0x21 && pos[0] < -4500.0f) {
                 return;
             }
@@ -448,7 +448,7 @@ static void playEff(int no)
 
 static int execEff(int no, void *entry);
 
-static int execEff_ntscaug6(int no, void *entry)
+static int execEff_ntscaug6jun26(int no, void *entry)
 {
     (void)entry; /* PC port: the European parameter, unused here */
     int (*fn)(GObj *, int);
@@ -507,8 +507,8 @@ done:
 
 static int execEff(int no, void *entry)
 {
-    if (ICO_NTSCAUG6) {
-        return execEff_ntscaug6(no, entry);
+    if (ICO_NTSCAUG6JUN26) {
+        return execEff_ntscaug6jun26(no, entry);
     }
     int (*fn)(GObj *, int);
     const VibCondEntry *p;
@@ -640,7 +640,7 @@ static inline void fireWeaponSlot(void) /* derived name */
     }
 }
 
-static void ExecFrameDependSequence_ntscaug6(GObj *gobj)
+static void ExecFrameDependSequence_ntscaug6jun26(GObj *gobj)
 {
     fdsGObj = (char *)gobj;
     fdsLayout = &GOBJ_SUB(gobj)->ctrl;
@@ -659,8 +659,8 @@ static void ExecFrameDependSequence_ntscaug6(GObj *gobj)
 
 void ExecFrameDependSequence(GObj *gobj)
 {
-    if (ICO_NTSCAUG6) {
-        ExecFrameDependSequence_ntscaug6(gobj);
+    if (ICO_NTSCAUG6JUN26) {
+        ExecFrameDependSequence_ntscaug6jun26(gobj);
         return;
     }
     Sub15C *w;
@@ -752,7 +752,7 @@ static void executeSEPackageByGObj(GObj *gobj, int no, int grp)
     id = setSEEnvironment(gobj, grp);
     p = findSEPackage(no, id);
     for (i = 0; i < 2; i++) {
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
             execSE(p[i], 0);
         } else {
             execSE(p[i], 0);
@@ -811,7 +811,7 @@ void StopSEPackage(GObj *gobj)
     StopSEPackageWithGroupVariation(gobj, 0);
 }
 
-static inline void InitFrameDependSequence_ntscaug6(void *flags)
+static inline void InitFrameDependSequence_ntscaug6jun26(void *flags)
 {
     static FDSFlags clear = {{0}}; /* derived name */
 
@@ -820,8 +820,8 @@ static inline void InitFrameDependSequence_ntscaug6(void *flags)
 
 void InitFrameDependSequence(void *flags)
 {
-    if (ICO_NTSCAUG6) {
-        InitFrameDependSequence_ntscaug6(flags);
+    if (ICO_NTSCAUG6JUN26) {
+        InitFrameDependSequence_ntscaug6jun26(flags);
         return;
     }
     FDSFlags *f = flags;
@@ -886,7 +886,7 @@ static inline int checkWeaponType(GObj *gobj, int kind)
     return 0;
 }
 
-static inline int execVib_ntscaug6(int no, void *entry)
+static inline int execVib_ntscaug6jun26(int no, void *entry)
 {
     (void)entry; /* PC port: the European parameter, unused here */
     iosPadActRequest(boyPad, no);
@@ -895,8 +895,8 @@ static inline int execVib_ntscaug6(int no, void *entry)
 
 static inline int execVib(int no, void *entry)
 {
-    if (ICO_NTSCAUG6) {
-        return execVib_ntscaug6(no, entry);
+    if (ICO_NTSCAUG6JUN26) {
+        return execVib_ntscaug6jun26(no, entry);
     }
     if (no <= 0xFFFF) {
         if (no > 0) {
@@ -910,7 +910,7 @@ static inline int execVib(int no, void *entry)
 
 /* a frame slot's handler: fireFDSSlot passes the slot's number and entry,
    which it does not read */
-static inline int execWeaponLightOff_ntscaug6(int no, void *entry)
+static inline int execWeaponLightOff_ntscaug6jun26(int no, void *entry)
 {
     (void)entry; /* PC port: the European parameter, unused here */
     Sub15C *p;
@@ -928,8 +928,8 @@ static inline int execWeaponLightOff_ntscaug6(int no, void *entry)
 
 static inline int execWeaponLightOff(int no, void *entry)
 {
-    if (ICO_NTSCAUG6) {
-        return execWeaponLightOff_ntscaug6(no, entry);
+    if (ICO_NTSCAUG6JUN26) {
+        return execWeaponLightOff_ntscaug6jun26(no, entry);
     }
     Sub15C *p;
     GObj *q;

@@ -129,17 +129,17 @@ static signed char keepFlags[20]; /* derived name */
 
 void POSITIVE_SE(void)
 {
-    soundSeDefPlay(PAL_NTSCAUG6(412, 400), 0xFFFFFFFE, 0, 0);
+    soundSeDefPlay(PAL_NTSCAUG6JUN26(412, 400), 0xFFFFFFFE, 0, 0);
 }
 
 void NEGATIVE_SE(void)
 {
-    soundSeDefPlay(PAL_NTSCAUG6(413, 401), 0xFFFFFFFE, 0, 0);
+    soundSeDefPlay(PAL_NTSCAUG6JUN26(413, 401), 0xFFFFFFFE, 0, 0);
 }
 
 void CUR_SE(void)
 {
-    soundSeDefPlay(PAL_NTSCAUG6(411, 399), 0xFFFFFFFE, 0, 0);
+    soundSeDefPlay(PAL_NTSCAUG6JUN26(411, 399), 0xFFFFFFFE, 0, 0);
 }
 
 inline int PSH_POSITIVE_OR_NEGATIVE(int idx)
@@ -330,7 +330,7 @@ static int _la_memory_card_check(McMgr *p, int step)
         p->result = 0;
         iosMcGetInfo(p);
         mcLastResult = 0;
-        if (!ICO_NTSCAUG6) {
+        if (!ICO_NTSCAUG6JUN26) {
             (IosMcProductFile + p->port)->serial = 0;
             (IosMcProductFile + p->port)->fileNo = 0;
         }
@@ -693,7 +693,7 @@ inline int la_boot_memory_card_check(void)
     layout_boot_flag = 1;
     lt_set_item_select_func(0);
     actionStarted = 0;
-    return PAL_JPNKORCN_NTSCAUG6(0x37, 0x34, 0x33);
+    return PAL_JPNKORCN_NTSCAUG6JUN26(0x37, 0x34, 0x33);
 }
 
 inline int la_boot_no_memory_card(int first, int item)
@@ -763,7 +763,7 @@ static int la_vibe_select_ntsc(void)
     return 9;
 }
 
-static int la_vibe_select_aug6(void)
+static int la_vibe_select_aug6jun26(void)
 {
     if (lt_fade_status() == 2 && (pad[0].flags & PAL_JPNKORCN(0x840, 0x820))) {
         soundSeDefPlay(403, 0xFFFFFFFF, 0, 0);
@@ -807,8 +807,8 @@ int la_vibe_select(void)
     if (ICO_NTSC) {
         return la_vibe_select_ntsc();
     }
-    if (ICO_AUG6) {
-        return la_vibe_select_aug6();
+    if (ICO_AUG6JUN26) {
+        return la_vibe_select_aug6jun26();
     }
     if (lt_fade_status() == 2 && (pad[0].flags & PAL_JPNKORCN(0x840, 0x820))) {
         soundSeDefPlay(415, 0xFFFFFFFF, 0, 0);
@@ -879,11 +879,11 @@ inline int la_scei_logo(int first)
 {
     if (first) {
         stgmgrNextStagePreLoadForceStageSet(0);
-        logoIcoMiscLock = PAL_AUG6(lock_execIcoMisc, GlobalTimer);
+        logoIcoMiscLock = PAL_AUG6JUN26(lock_execIcoMisc, GlobalTimer);
         systemStatus[5] = 1;
         iosPadEnable();
         isysGObjActiveLink(0, 0);
-        gflagOff(PAL_NTSC_AUG6(386, 353, 352));
+        gflagOff(PAL_NTSC_AUG6JUN26(386, 353, 352));
         if (layout_boot_flag == 0) {
             layout_boot_flag = 1;
         }
@@ -966,7 +966,7 @@ static int la_title_continue_or_new_ntsc(int first)
     return -1;
 }
 
-static int la_title_continue_or_new_aug6(int first)
+static int la_title_continue_or_new_aug6jun26(int first)
 {
     if (first) {
         opTitleLogoMode = 1;
@@ -1037,8 +1037,8 @@ int la_title_continue_or_new(int first)
     if (ICO_NTSC) {
         return la_title_continue_or_new_ntsc(first);
     }
-    if (ICO_AUG6) {
-        return la_title_continue_or_new_aug6(first);
+    if (ICO_AUG6JUN26) {
+        return la_title_continue_or_new_aug6jun26(first);
     }
     if (first) {
         opTitleLogoMode = 1;
@@ -1111,14 +1111,14 @@ int la_title_new_game_only(int first)
 {
     if (first) {
         opTitleLogoMode = 1;
-        newGameIcoMiscLock = PAL_AUG6(lock_execIcoMisc, GlobalTimer);
+        newGameIcoMiscLock = PAL_AUG6JUN26(lock_execIcoMisc, GlobalTimer);
         iosPadEnable();
         isysGObjActiveLink(0, 1);
         systemStatus[5] = 0;
-        gflagOff(PAL_NTSC_AUG6(382, 349, 348));
+        gflagOff(PAL_NTSC_AUG6JUN26(382, 349, 348));
         ico_opt_mirror_reset(); /* the title belongs to no run */
-        if (gflagChk(PAL_NTSC_AUG6(385, 352, 351)) == 0) {
-            gflagOn(PAL_NTSC_AUG6(385, 352, 351));
+        if (gflagChk(PAL_NTSC_AUG6JUN26(385, 352, 351)) == 0) {
+            gflagOn(PAL_NTSC_AUG6JUN26(385, 352, 351));
         }
         newGameDecided = 0;
         lt_continue_selected = 0;
@@ -1126,10 +1126,10 @@ int la_title_new_game_only(int first)
     }
     if (newGameDecided != 0) {
         lt_item_select_disable = 0;
-        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(51, 22, 16), 0);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6JUN26(51, 22, 16), 0);
     } else {
         lt_item_select_disable = 1;
-        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(51, 22, 16), 1);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6JUN26(51, 22, 16), 1);
     }
     ui_settings_title_mask(newGameDecided == 0);
     /* PC port: not on the Settings row, whose Cross default_item_select
@@ -1139,12 +1139,12 @@ int la_title_new_game_only(int first)
         soundSeDefPlay(414, 0xFFFFFFFF, 0, 0);
         lt_continue_selected = 1;
         opTitleLogoMode = 2;
-        if (!ICO_NTSCAUG6) {
+        if (!ICO_NTSCAUG6JUN26) {
             gFlagGameClear = 0;
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORNTSCAUG6CN(9, 6);
+        return PAL_JPNKORNTSCAUG6JUN26CN(9, 6);
     }
     switch (_la_set_current_port_2(&mc, first)) {
     case 0:
@@ -1156,7 +1156,7 @@ int la_title_new_game_only(int first)
         if ((curPortInfo->flags.w >> 5) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORNTSCAUG6CN(0xC, 9);
+            return PAL_JPNKORNTSCAUG6JUN26CN(0xC, 9);
         }
         newGameDecided = 1;
         break;
@@ -1176,7 +1176,7 @@ static int fileMoved = 0; /* derived name */
 
 static int fileFirst = 1; /* derived name */
 
-static inline int la_mc_saved_file_select_ntscaug6(int item)
+static inline int la_mc_saved_file_select_ntscaug6jun26(int item)
 {
     int i = item - 27;
     int old = i;
@@ -1209,8 +1209,8 @@ static inline int la_mc_saved_file_select_ntscaug6(int item)
 
 static inline int la_mc_saved_file_select(int item)
 {
-    if (ICO_NTSCAUG6) {
-        return la_mc_saved_file_select_ntscaug6(item);
+    if (ICO_NTSCAUG6JUN26) {
+        return la_mc_saved_file_select_ntscaug6jun26(item);
     }
     int i = item - PAL_JPNCN_KOR(62, 33, 27);
     int old = i;
@@ -1264,7 +1264,7 @@ static inline int mcFileNoOfPort(void) /* derived name */
     return mcCurrentFileNo();
 }
 
-static inline int la_mc_file_select_ntscaug6(int first)
+static inline int la_mc_file_select_ntscaug6jun26(int first)
 {
     int i;
 
@@ -1292,8 +1292,8 @@ static inline int la_mc_file_select_ntscaug6(int first)
 
 int la_mc_file_select(int first)
 {
-    if (ICO_NTSCAUG6) {
-        return la_mc_file_select_ntscaug6(first);
+    if (ICO_NTSCAUG6JUN26) {
+        return la_mc_file_select_ntscaug6jun26(first);
     }
     int i;
 
@@ -1337,7 +1337,7 @@ int la_mc_file_select(int first)
 
 /* the discs' bodies differ only in the property ids, 29 lower on the
    Japanese disc and 35 lower on the Korean one, as in _la_set_preview_info */
-static inline void _la_mask_preview_info_ntscaug6(void)
+static inline void _la_mask_preview_info_ntscaug6jun26(void)
 {
     int i;
 
@@ -1358,8 +1358,8 @@ static inline void _la_mask_preview_info_ntscaug6(void)
 
 static void _la_mask_preview_info(void)
 {
-    if (ICO_NTSCAUG6) {
-        _la_mask_preview_info_ntscaug6();
+    if (ICO_NTSCAUG6JUN26) {
+        _la_mask_preview_info_ntscaug6jun26();
         return;
     }
     int i;
@@ -1386,8 +1386,8 @@ static void _la_mask_preview_info(void)
 /* the play time of a save record split into hours, minutes and seconds and
    clamped to 99:59:59, inlined into _la_set_preview_info, la_load_processing
    and la_system_save_processing; the last two leave the results unused */
-static inline void playTime_aug6(struct McPreview *p, int *hour, int *min,
-                                 int *sec) /* derived name */
+static inline void playTime_aug6jun26(struct McPreview *p, int *hour, int *min,
+                                      int *sec) /* derived name */
 {
     int frames = p->playTime;
 
@@ -1403,8 +1403,8 @@ static inline void playTime_aug6(struct McPreview *p, int *hour, int *min,
 
 static inline void playTime(struct McPreview *p, int *hour, int *min, int *sec) /* derived name */
 {
-    if (ICO_AUG6) {
-        playTime_aug6(p, hour, min, sec);
+    if (ICO_AUG6JUN26) {
+        playTime_aug6jun26(p, hour, min, sec);
         return;
     }
     int frames = p->playTime;
@@ -1442,7 +1442,7 @@ static void _la_set_preview_info(void)
     min = ((min / 10 + 9) % 10) * 10 + (min % 10 + 9) % 10;
     sec = ((sec / 10 + 9) % 10) * 10 + (sec % 10 + 9) % 10;
 
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         lt_mask_property(41 + hour / 10, 0);
         lt_mask_property(51 + hour % 10, 0);
         lt_mask_property(61 + min / 10, 0);
@@ -1463,14 +1463,14 @@ static void _la_set_preview_info(void)
     }
 
     n = previewInfo.stage;
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         if (n == PAL_JPNKORCN(63, 61)) {
             n = 38;
         }
     }
     if (n >= 3 && n < 56) {
         switch (previewInfo.sofa +
-                PAL_NTSC_AUG6(0, 30, 31)) { /* NTSC ids 30 lower, AUG6 ids 31 lower */
+                PAL_NTSC_AUG6JUN26(0, 30, 31)) { /* NTSC ids 30 lower, AUG6 ids 31 lower */
         case 329:
             n = 39;
             break;
@@ -1478,7 +1478,7 @@ static void _la_set_preview_info(void)
             n = 40;
             break;
         }
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
             lt_mask_property(n + 98, 0);
         } else {
             lt_mask_property(n + PAL_JPNCN_KOR(134, 105, 99), 0);
@@ -1502,8 +1502,8 @@ inline int la_mc_preview_info(void)
 
 inline int la_mc_current_slot(void)
 {
-    lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(176, 147, 141, 140), curPort);
-    lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(177, 148, 142, 141), curPort ^ 1);
+    lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6JUN26(176, 147, 141, 140), curPort);
+    lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6JUN26(177, 148, 142, 141), curPort ^ 1);
     return -1;
 }
 
@@ -1521,7 +1521,7 @@ static inline void setLoadGameStartItem(void) /* derived name */
 int la_load_game_memory_card_check(int first)
 {
     _la_mask_preview_info();
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         lt_mask_property(140, 1);
         lt_mask_property(141, 1);
     } else {
@@ -1536,38 +1536,38 @@ int la_load_game_memory_card_check(int first)
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x16, 0x13, 19);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x16, 0x13, 19);
     case -1:
         if ((curPortInfo->flags.w >> 1) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x17, 0x14, 20);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x17, 0x14, 20);
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x16, 0x13, 19);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x16, 0x13, 19);
     case 1:
         if ((curPortInfo->flags.w >> 6) & 1) {
-            if (!ICO_NTSCAUG6) {
+            if (!ICO_NTSCAUG6JUN26) {
                 setLoadGameStartItem();
             }
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x11, 0xE, 14);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x11, 0xE, 14);
         }
         if ((curPortInfo->flags.w >> 5) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x13, 0x10, 16);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x13, 0x10, 16);
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x17, 0x14, 20);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x17, 0x14, 20);
     }
     return -1;
 }
 
-static int la_mc_load_current_slot_select_ntscaug6(void)
+static int la_mc_load_current_slot_select_ntscaug6jun26(void)
 {
     _la_mask_preview_info();
     if (pad[0].flags & 0x40) {
@@ -1590,8 +1590,8 @@ static int la_mc_load_current_slot_select_ntscaug6(void)
 
 inline int la_mc_load_current_slot_select(void)
 {
-    if (ICO_NTSCAUG6) {
-        return la_mc_load_current_slot_select_ntscaug6();
+    if (ICO_NTSCAUG6JUN26) {
+        return la_mc_load_current_slot_select_ntscaug6jun26();
     }
     _la_mask_preview_info();
     if (pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) {
@@ -1628,16 +1628,16 @@ int la_mc_load_file_select(int first, int item)
 
     if (fileMask != 0) {
         _la_set_preview_info();
-        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(73, 44, 38), 1);
-        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(72, 43, 37), 1);
-        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(195, 167, 161, 160), 0);
-        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(196, 168, 162, 161), 0);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6JUN26(73, 44, 38), 1);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6JUN26(72, 43, 37), 1);
+        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6JUN26(195, 167, 161, 160), 0);
+        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6JUN26(196, 168, 162, 161), 0);
     } else {
         _la_mask_preview_info();
-        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(73, 44, 38), 0);
-        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(72, 43, 37), 0);
-        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(195, 167, 161, 160), 1);
-        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(196, 168, 162, 161), 1);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6JUN26(73, 44, 38), 0);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6JUN26(72, 43, 37), 0);
+        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6JUN26(195, 167, 161, 160), 1);
+        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6JUN26(196, 168, 162, 161), 1);
     }
     lt_set_item_select_func((ICO_WORD_PTR(LtSelectFn))la_mc_saved_file_select);
 
@@ -1645,7 +1645,7 @@ int la_mc_load_file_select(int first, int item)
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORNTSCAUG6CN(12, 9);
+        return PAL_JPNKORNTSCAUG6JUN26CN(12, 9);
     }
 
     if ((fileMask != 0 || loadFileChosen != 0) && (pad[0].flags & PAL_JPNKORCN(0x40, 0x20))) {
@@ -1655,7 +1655,7 @@ int la_mc_load_file_select(int first, int item)
             lastPort = filePort;
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORNTSCAUG6CN(21, 18);
+            return PAL_JPNKORNTSCAUG6JUN26CN(21, 18);
         }
     }
 
@@ -1665,21 +1665,21 @@ int la_mc_load_file_select(int first, int item)
         if (((curPortInfo->flags.w >> 1) & 1) == 0) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORNTSCAUG6CN(22, 19);
+            return PAL_JPNKORNTSCAUG6JUN26CN(22, 19);
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORNTSCAUG6CN(23, 20);
+        return PAL_JPNKORNTSCAUG6JUN26CN(23, 20);
     case 1:
         if (((curPortInfo->flags.w >> 1) & 1) == 0) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORNTSCAUG6CN(22, 19);
+            return PAL_JPNKORNTSCAUG6JUN26CN(22, 19);
         }
         if ((curPortInfo->flags.w & 0x22) == 2) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORNTSCAUG6CN(23, 20);
+            return PAL_JPNKORNTSCAUG6JUN26CN(23, 20);
         }
         break;
     case 0:
@@ -1693,7 +1693,7 @@ int la_mc_load_file_select(int first, int item)
                 debug_StdPrintfDummy("1 to 2\n");
                 lt_set_item_select_func(0);
                 actionStarted = 0;
-                return PAL_JPNKORNTSCAUG6CN(17, 14);
+                return PAL_JPNKORNTSCAUG6JUN26CN(17, 14);
             }
         } else if (((curPortInfo->flags.w >> 6) & 1) == 0) {
             debug_StdPrintfDummy("2 to 1\n");
@@ -1719,7 +1719,7 @@ int la_load_confirm_no_memory_card(int first)
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0xD, 0xA, 10);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0xD, 0xA, 10);
     }
     switch (_la_set_current_port_lock_2(&mc, first)) {
     case 0:
@@ -1731,7 +1731,7 @@ int la_load_confirm_no_memory_card(int first)
                 actionStarted = 0;
                 return 20;
             }
-        } else if (ICO_AUG6) {
+        } else if (ICO_AUG6JUN26) {
             if ((curPortInfo->flags.w & 0x12) == 2) {
                 lt_set_item_select_func(0);
                 actionStarted = 0;
@@ -1747,7 +1747,7 @@ int la_load_confirm_no_memory_card(int first)
         if ((curPortInfo->flags.w >> 1) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x14, 0x11, 17);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x14, 0x11, 17);
         }
         lock2Restart = 1;
         break;
@@ -1758,7 +1758,7 @@ int la_load_confirm_no_memory_card(int first)
                 actionStarted = 0;
                 return 20;
             }
-        } else if (ICO_AUG6) {
+        } else if (ICO_AUG6JUN26) {
         } else {
             if ((curPortInfo->flags.w & 0x32) == 2 || (curPortInfo->flags.w & 0x22) == 2) {
                 lt_set_item_select_func(0);
@@ -1769,7 +1769,7 @@ int la_load_confirm_no_memory_card(int first)
         if ((curPortInfo->flags.w >> 1) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x14, 0x11, 17);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x14, 0x11, 17);
         }
         break;
     }
@@ -1785,7 +1785,7 @@ int la_load_confirm_no_data(int first)
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0xD, 0xA, 10);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0xD, 0xA, 10);
     }
     switch (_la_set_current_port_lock_2(&mc, first)) {
     case 0:
@@ -1794,7 +1794,7 @@ int la_load_confirm_no_data(int first)
         if (((curPortInfo->flags.w >> 1) & 1) == 0) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x16, 0x13, 19);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x16, 0x13, 19);
         }
         lock2Restart = 1;
         break;
@@ -1802,7 +1802,7 @@ int la_load_confirm_no_data(int first)
         if ((curPortInfo->flags.w >> 5) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x14, 0x11, 17);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x14, 0x11, 17);
         }
         break;
     }
@@ -1819,31 +1819,31 @@ int la_load_start_check(int first)
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x2E, 0x2B, 42);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x2E, 0x2B, 42);
     case -1:
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x2E, 0x2B, 42);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x2E, 0x2B, 42);
     case 1:
         if (filePort != curPort) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x2E, 0x2B, 42);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x2E, 0x2B, 42);
         }
         if ((curPortInfo->flags.w & 3) != 3) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x16, 0x13, 19);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x16, 0x13, 19);
         }
         if ((curPortInfo->fileMask >> selectFile) & 1) {
             fileMask = 0x3FF;
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x19, 0x16, 22);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x19, 0x16, 22);
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x17, 0x14, 20);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x17, 0x14, 20);
     }
     return -1;
 }
@@ -1930,7 +1930,7 @@ int la_load_processing(int first)
         debug_StdPrintfDummy("chk:%d\n", err);
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(46, 43, 42);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(46, 43, 42);
     case 4:
         debug_StdPrintfDummy("case 4\n");
         if (((1 << mc.fileNo) & mc.mask) == 0) {
@@ -1965,7 +1965,7 @@ int la_load_processing(int first)
         *(struct McPreview *)IosMcPreviewInfo =
             *(struct McPreview *)&IosMcProductFile[mc.port].file[mc.fileNo];
         playTime((struct McPreview *)IosMcPreviewInfo, &hour, &min, &sec);
-        if (!ICO_NTSCAUG6) {
+        if (!ICO_NTSCAUG6JUN26) {
             loadSerial = mcSetFileNo(mc.port, mc.fileNo);
         }
         ico_mirror_slot_loaded(mc.fileNo, (unsigned int)mc.sum); /* the slot's mirror flag */
@@ -1976,7 +1976,7 @@ int la_load_processing(int first)
             titleAdpcm->stream->fadeStep = 0x40;
         }
         titleAdpcm = 0;
-        if (!ICO_NTSCAUG6) {
+        if (!ICO_NTSCAUG6JUN26) {
             if (gflagChk(395)) {
                 lt_set_item_select_func(0);
                 actionStarted = 0;
@@ -1989,7 +1989,7 @@ int la_load_processing(int first)
     case 20:
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORNTSCAUG6CN(20, 17);
+        return PAL_JPNKORNTSCAUG6JUN26CN(20, 17);
     }
     return -1;
 }
@@ -2022,7 +2022,7 @@ static int saveVoiceOpened = 0; /* derived name */
 
 static int saveVoiceWait = 0; /* derived name */
 
-static int la_mc_confirm_save_file_ntscaug6(int first, int item)
+static int la_mc_confirm_save_file_ntscaug6jun26(int first, int item)
 {
     int i;
 
@@ -2094,8 +2094,8 @@ static int la_mc_confirm_save_file_ntscaug6(int first, int item)
 
 int la_mc_confirm_save_file(int first, int item)
 {
-    if (ICO_NTSCAUG6) {
-        return la_mc_confirm_save_file_ntscaug6(first, item);
+    if (ICO_NTSCAUG6JUN26) {
+        return la_mc_confirm_save_file_ntscaug6jun26(first, item);
     }
     int i;
 
@@ -2192,7 +2192,7 @@ static inline void setSaveGameStartItem(void) /* derived name */
 int la_save_game_memory_card_check(int first)
 {
     _la_mask_preview_info();
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         lt_mask_property(140, 1);
         lt_mask_property(141, 1);
     } else {
@@ -2208,41 +2208,41 @@ int la_save_game_memory_card_check(int first)
         debug_StdPrintfDummy("fail\n");
         if ((curPortInfo->flags.w & 3) == 3) {
             if ((curPortInfo->flags.w >> 2) & 1) {
-                if (!ICO_NTSCAUG6) {
+                if (!ICO_NTSCAUG6JUN26) {
                     setSaveGameStartItem();
                 }
                 lt_set_item_select_func(0);
                 actionStarted = 0;
-                return PAL_JPNKORCN_NTSCAUG6(0x12, 0xF, 15);
+                return PAL_JPNKORCN_NTSCAUG6JUN26(0x12, 0xF, 15);
             }
             if (((curPortInfo->flags.w >> 4) & 1) == 0) {
                 lt_set_item_select_func(0);
                 actionStarted = 0;
-                return PAL_JPNKORCN_NTSCAUG6(0x20, 0x1D, 28);
+                return PAL_JPNKORCN_NTSCAUG6JUN26(0x20, 0x1D, 28);
             }
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x1F, 0x1C, 27);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x1F, 0x1C, 27);
     case 1:
         debug_StdPrintfDummy("sucess :%d %d %d\n", (curPortInfo->flags.w >> 5) & 1,
                              (curPortInfo->flags.w >> 4) & 1, (curPortInfo->flags.w & 0xA) == 2);
         if ((curPortInfo->flags.w >> 2) & 1) {
-            if (!ICO_NTSCAUG6) {
+            if (!ICO_NTSCAUG6JUN26) {
                 setSaveGameStartItem();
             }
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x12, 0xF, 15);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x12, 0xF, 15);
         }
         if ((curPortInfo->flags.w & 0x30) != 0 || (curPortInfo->flags.w & 0xA) == 2) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x21, 0x1E, 29);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x21, 0x1E, 29);
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x20, 0x1D, 28);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x20, 0x1D, 28);
     }
     return -1;
 }
@@ -2251,18 +2251,18 @@ inline int la_mc_save_current_slot_select(void)
 {
     if (pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) {
         POSITIVE_SE();
-        curPort = lt_current_property_item() - PAL_JPNCN_KOR_NTSCAUG6(186, 158, 152, 151);
+        curPort = lt_current_property_item() - PAL_JPNCN_KOR_NTSCAUG6JUN26(186, 158, 152, 151);
         lastPort = curPort;
         curPortInfo = &mcPortInfo[curPort];
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x21, 0x1E, 29);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x21, 0x1E, 29);
     }
     if (pad[0].flags & PAL_JPNKORCN(LA_BACK, 0x40)) {
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x1C, 0x19, 25);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x1C, 0x19, 25);
     }
     return -1;
 }
@@ -2317,20 +2317,23 @@ static void progressive_bar(void)
     gif_SetZTest(0);
     gif_SetAlpha(1, 2, 64);
     {
-        SprRect frame = {80, PAL_JPNKORNTSCAUG6CN(11, 6), -160, PAL_JPNKORNTSCAUG6CN(5, 6)};
+        SprRect frame = {80, PAL_JPNKORNTSCAUG6JUN26CN(11, 6), -160,
+                         PAL_JPNKORNTSCAUG6JUN26CN(5, 6)};
         SprCol frameCol = {128, 128, 128, 32};
 
         gif_Sprite(&frame, 0xFFFFFFFF, 0, &frameCol, 1);
     }
     {
-        SprRect back = {78, PAL_JPNKORNTSCAUG6CN(12, 7), -156, PAL_JPNKORNTSCAUG6CN(3, 4)};
+        SprRect back = {78, PAL_JPNKORNTSCAUG6JUN26CN(12, 7), -156,
+                        PAL_JPNKORNTSCAUG6JUN26CN(3, 4)};
         SprCol backCol = {0, 0, 0, 32};
 
         gif_Sprite(&back, 0xFFFFFFFF, 0, &backCol, 1);
     }
     {
         int w = (float)barStep / (float)barTotal * -160.0f;
-        SprRect bar = {-80 - w, PAL_JPNKORNTSCAUG6CN(13, 8), w, PAL_JPNKORNTSCAUG6CN(1, 2)};
+        SprRect bar = {-80 - w, PAL_JPNKORNTSCAUG6JUN26CN(13, 8), w,
+                       PAL_JPNKORNTSCAUG6JUN26CN(1, 2)};
         SprCol barCol = {64, 255, 64, 32};
 
         gif_Sprite(&bar, 0xFFFFFFFF, 0, &barCol, 1);
@@ -2361,15 +2364,15 @@ int la_mc_save_file_select(int first, int item)
 
     if (actionStarted != 0) {
         _la_set_preview_info();
-        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(73, 44, 38), 1);
-        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(72, 43, 37), 1);
-        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(239, 216, 210, 208), 0);
-        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(240, 217, 211, 209), 0);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6JUN26(73, 44, 38), 1);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6JUN26(72, 43, 37), 1);
+        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6JUN26(239, 216, 210, 208), 0);
+        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6JUN26(240, 217, 211, 209), 0);
     } else {
-        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(73, 44, 38), 0);
-        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(72, 43, 37), 0);
-        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(239, 216, 210, 208), 1);
-        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(240, 217, 211, 209), 1);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6JUN26(73, 44, 38), 0);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6JUN26(72, 43, 37), 0);
+        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6JUN26(239, 216, 210, 208), 1);
+        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6JUN26(240, 217, 211, 209), 1);
     }
 
     if (actionStarted != 0) {
@@ -2377,7 +2380,7 @@ int la_mc_save_file_select(int first, int item)
             NEGATIVE_SE();
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORNTSCAUG6CN(28, 25);
+            return PAL_JPNKORNTSCAUG6JUN26CN(28, 25);
         }
     }
 
@@ -2386,7 +2389,7 @@ int la_mc_save_file_select(int first, int item)
         selectFile = item;
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(34, 31, 30);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(34, 31, 30);
     }
 
     r = _la_set_current_port_lock_2(&mc, first);
@@ -2395,23 +2398,23 @@ int la_mc_save_file_select(int first, int item)
         if (((curPortInfo->flags.w >> 1) & 1) == 0) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(31, 28, 27);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(31, 28, 27);
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(32, 29, 28);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(32, 29, 28);
     case 1:
         if (((mcPortInfo[filePort].flags.w >> 1) & 1) == 0) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORNTSCAUG6CN(28, 25);
+            return PAL_JPNKORNTSCAUG6JUN26CN(28, 25);
         }
         if (fileMask != 0) {
             if (saveCardChanged == 0) {
                 if (((curPortInfo->flags.w >> 2) & 1) != 0) {
                     lt_set_item_select_func(0);
                     actionStarted = 0;
-                    return PAL_JPNKORNTSCAUG6CN(18, 15);
+                    return PAL_JPNKORNTSCAUG6JUN26CN(18, 15);
                 }
             } else if (((curPortInfo->flags.w >> 2) & 1) == 0) {
                 saveCardChanged = 0;
@@ -2448,7 +2451,7 @@ inline int la_save_confirm_no_memory_card(int first)
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x1C, 0x19, 25);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x1C, 0x19, 25);
     }
     switch (_la_set_current_port_lock_2(&mc, first)) {
     case 0:
@@ -2457,7 +2460,7 @@ inline int la_save_confirm_no_memory_card(int first)
         if ((curPortInfo->flags.w >> 1) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x1E, 0x1B, 26);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x1E, 0x1B, 26);
         }
         lock2Restart = 1;
         break;
@@ -2465,7 +2468,7 @@ inline int la_save_confirm_no_memory_card(int first)
         if ((curPortInfo->flags.w >> 1) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x1E, 0x1B, 26);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x1E, 0x1B, 26);
         }
         break;
     }
@@ -2478,7 +2481,7 @@ inline int la_save_confirm_no_free_area(int first)
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x1C, 0x19, 25);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x1C, 0x19, 25);
     }
     switch (_la_set_current_port_lock_2(&mc, first)) {
     case 0:
@@ -2487,7 +2490,7 @@ inline int la_save_confirm_no_free_area(int first)
         if (((curPortInfo->flags.w >> 1) & 1) == 0) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x1F, 0x1C, 27);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x1F, 0x1C, 27);
         }
         lock2Restart = 1;
         break;
@@ -2495,7 +2498,7 @@ inline int la_save_confirm_no_free_area(int first)
         if ((curPortInfo->flags.w >> 4) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x1E, 0x1B, 26);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x1E, 0x1B, 26);
         }
         break;
     }
@@ -2511,44 +2514,44 @@ int la_save_start_check(int first)
         if (((curPortInfo->flags.w >> 1) & 1) == 0) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x1F, 0x1C, 27);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x1F, 0x1C, 27);
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x1E, 0x1B, 26);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x1E, 0x1B, 26);
     case 1:
         if (filePort != curPort) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x2C, 0x29, 40);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x2C, 0x29, 40);
         }
         if ((curPortInfo->flags.w & 0xA) == 2) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x24, 0x21, 32);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x24, 0x21, 32);
         }
         if ((curPortInfo->fileMask >> selectFile) & 1) {
             if (IosMcProductFile[filePort].file[selectFile].stage != 0xFFFFFFFF) {
                 lt_set_item_select_func(0);
                 actionStarted = 0;
-                return PAL_JPNKORCN_NTSCAUG6(0x23, 0x20, 31);
+                return PAL_JPNKORCN_NTSCAUG6JUN26(0x23, 0x20, 31);
             }
             if (curPortInfo->fileMask != 0) {
                 debug_StdPrintfDummy("already exist save data\n");
                 lt_set_item_select_func(0);
                 actionStarted = 0;
-                return PAL_JPNKORCN_NTSCAUG6(0x26, 0x23, 34);
+                return PAL_JPNKORCN_NTSCAUG6JUN26(0x26, 0x23, 34);
             }
         }
         debug_StdPrintfDummy("new save. system data making..\n");
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x27, 0x24, 35);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x27, 0x24, 35);
     }
     return -1;
 }
 
-static int la_save_confirm_overwrite_ntscaug6(int first, int item)
+static int la_save_confirm_overwrite_ntscaug6jun26(int first, int item)
 {
     if (first) {
         filePort = curPort;
@@ -2607,8 +2610,8 @@ static int la_save_confirm_overwrite_ntscaug6(int first, int item)
 
 int la_save_confirm_overwrite(int first, int item)
 {
-    if (ICO_NTSCAUG6) {
-        return la_save_confirm_overwrite_ntscaug6(first, item);
+    if (ICO_NTSCAUG6JUN26) {
+        return la_save_confirm_overwrite_ntscaug6jun26(first, item);
     }
     if (first) {
         filePort = curPort;
@@ -2665,7 +2668,7 @@ int la_save_confirm_overwrite(int first, int item)
     return -1;
 }
 
-static int la_format_confirm_ntscaug6(int first, int item)
+static int la_format_confirm_ntscaug6jun26(int first, int item)
 {
     if (first) {
         filePort = curPort;
@@ -2722,8 +2725,8 @@ static int la_format_confirm_ntscaug6(int first, int item)
 
 int la_format_confirm(int first, int item)
 {
-    if (ICO_NTSCAUG6) {
-        return la_format_confirm_ntscaug6(first, item);
+    if (ICO_NTSCAUG6JUN26) {
+        return la_format_confirm_ntscaug6jun26(first, item);
     }
     if (first) {
         filePort = curPort;
@@ -2806,12 +2809,12 @@ inline int la_format_processing(int first)
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x2D, 0x2A, 41);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x2D, 0x2A, 41);
     case 4:
         formatStep++;
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x27, 0x24, 35);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x27, 0x24, 35);
     }
     return -1;
 }
@@ -2888,12 +2891,12 @@ int la_system_save_processing(int first)
         curPortInfo->flags.w |= 0x80;
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(44, 41, 40);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(44, 41, 40);
     case 4:
         for (i = 0; i < 10; i++) {
             IosMcProductFile[mc.port].file[i].stage = 0xFFFFFFFF;
         }
-        if (!ICO_NTSCAUG6) {
+        if (!ICO_NTSCAUG6JUN26) {
             while ((IosMcProductFile[mc.port].serial = mcMakeSerial()) == 0)
                 ;
         }
@@ -2922,7 +2925,7 @@ int la_system_save_processing(int first)
         if (systemSaveRetry >= 10) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(38, 35, 34);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(38, 35, 34);
         }
         break;
     }
@@ -2987,10 +2990,10 @@ int la_save_processing(int first)
         debug_StdPrintfDummy("save error? %d\n", saveStep);
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(44, 41, 40);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(44, 41, 40);
     case 4:
         IosMcPreviewInfo[0] = stage_no;
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
             IosMcPreviewInfo[2] = GetSaveSofaLayoutID();
         } else {
             IosMcPreviewInfo[3] = GetSaveSofaLayoutID();
@@ -2999,7 +3002,7 @@ int la_save_processing(int first)
         *(struct McPreview *)&IosMcProductFile[mc.port].file[mc.fileNo] =
             *(struct McPreview *)IosMcPreviewInfo;
         playTime((struct McPreview *)IosMcPreviewInfo, &hour, &min, &sec);
-        if (!ICO_NTSCAUG6) {
+        if (!ICO_NTSCAUG6JUN26) {
             (IosMcProductFile + mc.port)->fileNo = mc.fileNo;
             if ((IosMcProductFile + mc.port)->serial ==
                 (IosMcProductFile + (mc.port ^ 1))->serial) {
@@ -3033,12 +3036,12 @@ int la_save_processing(int first)
         saveStep = 0;
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(41, 38, 37);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(41, 38, 37);
     }
     return -1;
 }
 
-static inline int la_save_confirm_complete_ntscaug6(int first, int item)
+static inline int la_save_confirm_complete_ntscaug6jun26(int first, int item)
 {
     if (first) {
         previewInfo = *(struct McPreview *)IosMcPreviewInfo;
@@ -3066,8 +3069,8 @@ static inline int la_save_confirm_complete_ntscaug6(int first, int item)
 
 inline int la_save_confirm_complete(int first, int item)
 {
-    if (ICO_NTSCAUG6) {
-        return la_save_confirm_complete_ntscaug6(first, item);
+    if (ICO_NTSCAUG6JUN26) {
+        return la_save_confirm_complete_ntscaug6jun26(first, item);
     }
     if (first) {
         previewInfo = *(struct McPreview *)IosMcPreviewInfo;
@@ -3145,7 +3148,7 @@ static int la_end_confirm_ntsc(void)
     return -1;
 }
 
-static int la_end_confirm_aug6(void)
+static int la_end_confirm_aug6jun26(void)
 {
     int item;
 
@@ -3198,8 +3201,8 @@ int la_end_confirm(void)
     if (ICO_NTSC) {
         return la_end_confirm_ntsc();
     }
-    if (ICO_AUG6) {
-        return la_end_confirm_aug6();
+    if (ICO_AUG6JUN26) {
+        return la_end_confirm_aug6jun26();
     }
     int item;
 
@@ -3277,16 +3280,16 @@ inline int la_delete_start_check(int first)
     case -1:
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x1E, 0x1B, 26);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x1E, 0x1B, 26);
     case 1:
         if ((curPortInfo->fileMask >> selectFile) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN_NTSCAUG6(0x31, 0x2E, 45);
+            return PAL_JPNKORCN_NTSCAUG6JUN26(0x31, 0x2E, 45);
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x21, 0x1E, 29);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x21, 0x1E, 29);
     }
     return -1;
 }
@@ -3294,16 +3297,16 @@ inline int la_delete_start_check(int first)
 inline int la_delete_confirm(int first, int item)
 {
     switch (item +
-            PAL_JPNCN_KOR_NTSCAUG6(
+            PAL_JPNCN_KOR_NTSCAUG6JUN26(
                 0, 24, 30, 31)) { /* JPNCN ids 24 lower, KOR ids 30 lower, NTSCAUG6 ids 31 lower */
     case 214:
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x32, 0x2F, 46);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x32, 0x2F, 46);
     case 215:
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x1E, 0x1B, 26);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x1E, 0x1B, 26);
     }
     return -1;
 }
@@ -3337,7 +3340,7 @@ int la_delete_processing(int first)
     case 5:
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x33, 0x30, 47);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x33, 0x30, 47);
     }
     return -1;
 }
@@ -3349,7 +3352,7 @@ inline int la_delete_confirm_complete(void)
         goto fail;
     lt_set_item_select_func(0);
     actionStarted = 0;
-    ret = PAL_JPNKORCN_NTSCAUG6(0x1E, 0x1B, 26);
+    ret = PAL_JPNKORCN_NTSCAUG6JUN26(0x1E, 0x1B, 26);
     goto out;
 fail:
     ret = -1;
@@ -3401,7 +3404,7 @@ int laoutActionPauseRequest = 0;
 
 int la_game_loop(int first)
 {
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         IosMcPreviewInfo[1]++; /* the August preview counts the play time here */
     }
     if (first) {
@@ -3427,7 +3430,7 @@ int la_game_loop(int first)
         if (enable_game_pause == 0) {
             return -1;
         }
-        if (gflagChk(PAL_NTSC_AUG6(338, 307, 306)) != 0) {
+        if (gflagChk(PAL_NTSC_AUG6JUN26(338, 307, 306)) != 0) {
             return -1;
         }
         systemStatus[5] = 1;
@@ -3435,7 +3438,7 @@ int la_game_loop(int first)
         adpcmPauseRequest(1);
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x39, 0x36, 53);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x39, 0x36, 53);
     }
     return -1;
 }
@@ -3450,7 +3453,7 @@ inline int la_game_demo_pause(int first)
     }
     lt_set_item_select_func(0);
     actionStarted = 0;
-    return PAL_JPNKORCN_NTSCAUG6(0x37, 0x34, 51);
+    return PAL_JPNKORCN_NTSCAUG6JUN26(0x37, 0x34, 51);
 }
 
 inline int la_game_demo(int first)
@@ -3460,9 +3463,9 @@ inline int la_game_demo(int first)
             iosPadDisable();
         }
     }
-    if ((pad[0].flags & 0x800) && gflagChk(PAL_NTSC_AUG6(388, 355, 354))) {
+    if ((pad[0].flags & 0x800) && gflagChk(PAL_NTSC_AUG6JUN26(388, 355, 354))) {
         debug_StdPrintfDummy("push start\n");
-        gflagOff(PAL_NTSC_AUG6(388, 355, 354));
+        gflagOff(PAL_NTSC_AUG6JUN26(388, 355, 354));
         title_demo_mode ^= 1;
         nextStage = stage_after_skipping_demo;
         stgmgrForceSwitchWithFade(nextStage, 8.0f, 4.0f);
@@ -3471,7 +3474,7 @@ inline int la_game_demo(int first)
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x3F, 0x3C, 59);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x3F, 0x3C, 59);
     }
     return -1;
 }
@@ -3496,7 +3499,7 @@ static inline int la_game_pause_ntsc(int first)
     return -1;
 }
 
-static inline int la_game_pause_aug6(int first)
+static inline int la_game_pause_aug6jun26(int first)
 {
     if (first) {
         systemStatus[5] = 1;
@@ -3520,8 +3523,8 @@ inline int la_game_pause(int first)
     if (ICO_NTSC) {
         return la_game_pause_ntsc(first);
     }
-    if (ICO_AUG6) {
-        return la_game_pause_aug6(first);
+    if (ICO_AUG6JUN26) {
+        return la_game_pause_aug6jun26(first);
     }
     if (first) {
         systemStatus[5] = 1;
@@ -3547,7 +3550,7 @@ static int gameOverVoice = 0; /* derived name */
 
 static int gameOverVoiceOpened = 0; /* derived name */
 
-static int la_game_over_continue_ntscaug6(int first)
+static int la_game_over_continue_ntscaug6jun26(int first)
 {
     if (first) {
         enable_game_pause = 1;
@@ -3606,8 +3609,8 @@ static int la_game_over_continue_ntscaug6(int first)
 
 int la_game_over_continue(int first)
 {
-    if (ICO_NTSCAUG6) {
-        return la_game_over_continue_ntscaug6(first);
+    if (ICO_NTSCAUG6JUN26) {
+        return la_game_over_continue_ntscaug6jun26(first);
     }
     if (first) {
         if (fadeStatus != 0) {
@@ -3683,8 +3686,8 @@ static inline void keyconfigMaskAll(void) /* derived name */
     int i;
 
     for (i = 0; i < 48; i++) {
-        lt_mask_property(i + PAL_JPNCN_KOR_NTSCAUG6(342, 319, 313, 291), 1);
-        lt_default_mask_property(i + PAL_JPNCN_KOR_NTSCAUG6(342, 319, 313, 291), 1);
+        lt_mask_property(i + PAL_JPNCN_KOR_NTSCAUG6JUN26(342, 319, 313, 291), 1);
+        lt_default_mask_property(i + PAL_JPNCN_KOR_NTSCAUG6JUN26(342, 319, 313, 291), 1);
     }
 }
 
@@ -3729,7 +3732,7 @@ static inline int keyAssignIndex(int v) /* derived name */
 
 static int keyConfigMask = 0xFF; /* derived name */
 
-static int la_key_config_ntscaug6(int first)
+static int la_key_config_ntscaug6jun26(int first)
 {
     int i;
     int sel;
@@ -3805,8 +3808,8 @@ static int la_key_config_ntscaug6(int first)
 
 int la_key_config(int first)
 {
-    if (ICO_NTSCAUG6) {
-        return la_key_config_ntscaug6(first);
+    if (ICO_NTSCAUG6JUN26) {
+        return la_key_config_ntscaug6jun26(first);
     }
     int i;
     int sel;
@@ -4025,7 +4028,7 @@ static inline void clearAdjustScreenMarks(void) /* derived name */
     int i;
 
     for (i = 0; i < 15; i++) {
-        lt_default_mask_property(i + PAL_JPNCN_KOR_NTSCAUG6(395, 372, 366, 344), 1);
+        lt_default_mask_property(i + PAL_JPNCN_KOR_NTSCAUG6JUN26(395, 372, 366, 344), 1);
     }
 }
 
@@ -4037,7 +4040,7 @@ int la_adjust_screen(void)
         texLayout[55].defaultItem = 295;
     } else if (ICO_JPNCN) {
         texLayout[55].defaultItem = 301;
-    } else if (ICO_NTSCAUG6) {
+    } else if (ICO_NTSCAUG6JUN26) {
     } else {
         texLayout[58].defaultItem = 324;
     }
@@ -4060,12 +4063,12 @@ int la_adjust_screen(void)
         systemStatus[11] = 7;
     }
     clearAdjustScreenMarks();
-    lt_default_mask_property(systemStatus[11] + PAL_JPNCN_KOR_NTSCAUG6(395, 372, 366, 344), 0);
+    lt_default_mask_property(systemStatus[11] + PAL_JPNCN_KOR_NTSCAUG6JUN26(395, 372, 366, 344), 0);
     if (pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) {
         POSITIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN_NTSCAUG6(0x3A, 0x37, 54);
+        return PAL_JPNKORCN_NTSCAUG6JUN26(0x3A, 0x37, 54);
     }
     return -1;
 }

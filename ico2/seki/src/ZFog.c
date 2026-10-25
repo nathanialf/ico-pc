@@ -427,7 +427,7 @@ void fog_DrawFog(void)
     }
     FOG_SET_GSREG(78, ((long long)0x3000 << 16) | 0xC0);
 
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         FOG_SET_FRAME(64, gsFrame.w, ScreenHeight, screenOffsetX, screenOffsetY);
     }
     FOG_END_PACKET();

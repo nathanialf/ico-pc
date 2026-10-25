@@ -95,7 +95,7 @@ int stageSEtaimatsu(SeSlot *self)
     float *campos;
     int i;
 
-    if (gflagChk(PAL_NTSC_AUG6(389, 356, 355))) {
+    if (gflagChk(PAL_NTSC_AUG6JUN26(389, 356, 355))) {
         return 0;
     }
     campos = (float *)GetCameraPos();
@@ -119,9 +119,9 @@ int stageSEtaimatsu(SeSlot *self)
         }
         id = self->env->se;
         if ((i & 1) == 0) {
-            id -= PAL_NTSCAUG6(426, 414);
+            id -= PAL_NTSCAUG6JUN26(426, 414);
         } else {
-            id -= PAL_NTSCAUG6(428, 416);
+            id -= PAL_NTSCAUG6JUN26(428, 416);
         }
         if ((unsigned int)id >= 2) {
             continue;
@@ -155,7 +155,7 @@ static float river06aLevel; /* derived name */
  * stageSE06ariver */
 static inline int SEFadeOut(SeSlot *self, float *lvl) /* derived name */
 {
-    float v = *lvl - PAL_NTSCAUG6(riverFadeSpeed, 0.005f);
+    float v = *lvl - PAL_NTSCAUG6JUN26(riverFadeSpeed, 0.005f);
 
     *lvl = v;
     self->volumeRate = v;
@@ -174,12 +174,12 @@ int stageSE04eriver(SeSlot *self)
     float r;
 
     if (stage_no == 21) {
-        if (gflagChk(PAL_NTSCAUG6(230, 205))) {
+        if (gflagChk(PAL_NTSCAUG6JUN26(230, 205))) {
             return SEFadeOut(self, &river04eLevelA);
         }
         river04eLevelA = 1.0f;
     } else {
-        if (gflagChk(PAL_NTSCAUG6(231, 206))) {
+        if (gflagChk(PAL_NTSCAUG6JUN26(231, 206))) {
             return SEFadeOut(self, &river04eLevelB);
         }
         river04eLevelB = 1.0f;
@@ -213,12 +213,12 @@ int stageSE06ariver(SeSlot *self)
 {
     float *p = (float *)GetCameraPos();
 
-    if (gflagChk(PAL_NTSCAUG6(106, 95))) {
+    if (gflagChk(PAL_NTSCAUG6JUN26(106, 95))) {
         return SEFadeOut(self, &river06aLevel);
     }
     river06aLevel = 1.0f;
     if (p[0] < 300.0f && 848.0f < p[2]) {
-        if (gflagChk(PAL_NTSCAUG6(107, 96)) == 0) {
+        if (gflagChk(PAL_NTSCAUG6JUN26(107, 96)) == 0) {
             self->volumeRate = 0.05f;
         } else {
             self->volumeRate = 0.4f;
@@ -346,7 +346,7 @@ int stageSE02ataki(SeSlot *self)
     p[0] = 785.0f;
     p[2] = 482.0f;
     self->stereoRate = 0.5f;
-    if (gflagChk(PAL_NTSCAUG6(106, 95))) {
+    if (gflagChk(PAL_NTSCAUG6JUN26(106, 95))) {
         self->volumeRate = 0.0f;
     }
     return 1;
@@ -359,7 +359,7 @@ int stageSE02atakib(SeSlot *self)
     p[1] = 1786.0f;
     p[2] = 482.0f;
     self->stereoRate = 0.5f;
-    if (gflagChk(PAL_NTSCAUG6(106, 95))) {
+    if (gflagChk(PAL_NTSCAUG6JUN26(106, 95))) {
         self->volumeRate = 0.0f;
     }
     return 1;
@@ -392,7 +392,7 @@ int stageSE04agate(SeSlot *self)
     if (x < -1300.0f) {
         return 0;
     }
-    if (gflagChk(PAL_NTSCAUG6(140, 126)) == 0) {
+    if (gflagChk(PAL_NTSCAUG6JUN26(140, 126)) == 0) {
         return 0;
     }
     if (x < 750.0f) {
@@ -444,11 +444,11 @@ int stageSE04eriverDown(SeSlot *self)
     float x = ((float *)GetCameraPos(self))[2];
     float f;
     if (stage_no == 21) {
-        if (gflagChk(PAL_NTSCAUG6(230, 205))) {
+        if (gflagChk(PAL_NTSCAUG6JUN26(230, 205))) {
             return 0;
         }
     } else {
-        if (gflagChk(PAL_NTSCAUG6(231, 206))) {
+        if (gflagChk(PAL_NTSCAUG6JUN26(231, 206))) {
             return 0;
         }
     }

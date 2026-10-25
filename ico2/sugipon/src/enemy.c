@@ -98,7 +98,7 @@ static void setEnemyParticleObject(GObj *self, int pid)
     EnemyPosEntry *v;
     EnemyPosEntry *q;
 
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         size = (p->scale[0] + p->scale[1] + p->scale[2]) * 32.0f * 0.33333f * 0.5f;
         parts = (PrimParticle **)iosMallocDebug(ios_partition_sugipon, n * sizeof(PrimParticle *),
                                                 "src/enemy.c", 105);
@@ -108,7 +108,8 @@ static void setEnemyParticleObject(GObj *self, int pid)
                                                 "src/enemy.c", 130);
     }
     w->particle = parts;
-    fl = (int *)iosMallocDebug(ios_partition_sugipon, n * 4, "src/enemy.c", PAL_NTSCAUG6(132, 107));
+    fl = (int *)iosMallocDebug(ios_partition_sugipon, n * 4, "src/enemy.c",
+                               PAL_NTSCAUG6JUN26(132, 107));
     w->flag = fl;
     clearEnemyParticleFlags(fl, n);
     for (i = 0; i < n; i++) {
@@ -133,9 +134,9 @@ static void setEnemyParticleObject(GObj *self, int pid)
         if (parts[i] == 0) {
             /* EUC-JP: "cannot reserve the memory for the enemy soldier particles" */
             debug_StdPrintfDummy("敵兵のパーティクルのメモリを確保できません\n");
-            debug_assertMessage("src/enemy.c", PAL_NTSCAUG6(177, 152),
+            debug_assertMessage("src/enemy.c", PAL_NTSCAUG6JUN26(177, 152),
                                 "CAN'T ALLOCATE ENEMY'S PARTICLE MEMORY\n");
-            __assert("src/enemy.c", PAL_NTSCAUG6(177, 152), "e");
+            __assert("src/enemy.c", PAL_NTSCAUG6JUN26(177, 152), "e");
         }
         for (cnt = 0; q->w > -1.0f && cnt < 80; cnt++, q++) {
             n4 = rand() % 4;
@@ -461,7 +462,7 @@ void *InitEnemyGeo(GObj *self, SObjSimpleSetting *param)
     int no;
 
     w = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(EnemyWork, 0x54), "src/enemy.c",
-                       PAL_NTSC_AUG6(641, 605, 597));
+                       PAL_NTSC_AUG6JUN26(641, 605, 597));
     SUBOF(self)->work = w;
     w->word1C = 0;
     w->eye0 = InitEnemyEye(10, 0, 10);
@@ -475,14 +476,14 @@ void *InitEnemyGeo(GObj *self, SObjSimpleSetting *param)
     w->short40 = 0;
     w->wing = 0.0f;
     w->timer = 0;
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         w->flyXZAccel = 1.0f;
     }
     kind = enemyInitPartsList(self, param);
     w->def = kind;
     if (ICO_NTSC) {
         InitMotionOrient(self, 1820, 2105, 24, 36, 788);
-    } else if (ICO_AUG6) {
+    } else if (ICO_AUG6JUN26) {
         InitMotionOrient(self, 1797, 2080, 24, 36, 790);
     } else {
         w->flyXZAccel = enemyKind[kind].float0C;
@@ -527,7 +528,7 @@ void EnemyGeo(GObj *self)
         Sub15C *s = GOBJ_SUB(self);
         if (s->ctrl.landed != 0) {
             if (w->footSwitch != 0) {
-                if (ICO_NTSCAUG6) {
+                if (ICO_NTSCAUG6JUN26) {
                     GetProjectionOfPlane(
                         buf, s->root.plane.f,
                         (float *)((char *)s->nodeMtx + s->root.standNode * 0x40 + 0x30));
@@ -718,7 +719,7 @@ int EnemyGetNSafeParts(GObj *self)
     return cnt;
 }
 
-static void EnemyDeleteParticle_aug6(GObj *self, float *dir, short *list)
+static void EnemyDeleteParticle_aug6jun26(GObj *self, float *dir, short *list)
 {
     Sub15C *sub = self->dobj;
     EnemyWork *w = sub->work;
@@ -737,8 +738,8 @@ static void EnemyDeleteParticle_aug6(GObj *self, float *dir, short *list)
 
 void EnemyDeleteParticle(GObj *self, float *dir, short *list)
 {
-    if (ICO_AUG6) {
-        EnemyDeleteParticle_aug6(self, dir, list);
+    if (ICO_AUG6JUN26) {
+        EnemyDeleteParticle_aug6jun26(self, dir, list);
         return;
     }
     Sub15C *sub = self->dobj;
@@ -760,8 +761,9 @@ void SetEnemyHitGeometryAction(GObj *self, int on)
 
 int InitDemoMotionGeo(GObj *self)
 {
-    InitMotionOrient(self, PAL_NTSC_AUG6(2122, 1820, 1797), PAL_NTSC_AUG6(2407, 2105, 2080), -1, -1,
-                     PAL_NTSC_AUG6(983, 922, 924));
+    InitMotionOrient(self, PAL_NTSC_AUG6JUN26(2122, 1820, 1797),
+                     PAL_NTSC_AUG6JUN26(2407, 2105, 2080), -1, -1,
+                     PAL_NTSC_AUG6JUN26(983, 922, 924));
     SetLodLevel(self, 0);
     self->active = 0;
     return 0;
@@ -769,8 +771,9 @@ int InitDemoMotionGeo(GObj *self)
 
 void HotInitDemoMotionGeo(GObj *self)
 {
-    InitMotionOrient(self, PAL_NTSC_AUG6(2122, 1820, 1797), PAL_NTSC_AUG6(2407, 2105, 2080), -1, -1,
-                     PAL_NTSC_AUG6(983, 922, 924));
+    InitMotionOrient(self, PAL_NTSC_AUG6JUN26(2122, 1820, 1797),
+                     PAL_NTSC_AUG6JUN26(2407, 2105, 2080), -1, -1,
+                     PAL_NTSC_AUG6JUN26(983, 922, 924));
     SetLodLevel(self, 0);
     self->active = 0;
 }

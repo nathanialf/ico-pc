@@ -279,7 +279,7 @@ void ExecIcoMisc(void)
     if (debug_memory_bar != 0) {
         disp_memory_partition_bar();
     }
-    if (PAL_AUG6(graphics_ready, lock_execIcoMisc) == 0) {
+    if (PAL_AUG6JUN26(graphics_ready, lock_execIcoMisc) == 0) {
         if (iosCdvdDiskStatusGet() == 0) {
             exec_layout_texture();
         }
@@ -293,7 +293,7 @@ void ExecIcoMisc(void)
 #ifdef ICO_RD
     kanbanTitleCover(); /* PC port: the cover over a stage change to the title */
 #endif
-    if (PAL_AUG6(graphics_ready, lock_execIcoMisc) != 0) {
+    if (PAL_AUG6JUN26(graphics_ready, lock_execIcoMisc) != 0) {
         return;
     }
     if (systemStatus[5] == 0) {
@@ -305,7 +305,7 @@ void ExecIcoMisc(void)
         ExecGameOverEffect();
         seEnvMute = 0;
     } else {
-        if (current_layout_id == PAL_JPNKORNTSCAUG6CN(28, 25)) {
+        if (current_layout_id == PAL_JPNKORNTSCAUG6JUN26CN(28, 25)) {
             seEnvMute = 1;
         }
         if (seEnvMute != 0) {
@@ -328,7 +328,7 @@ void ExecIcoMisc(void)
         prevCameraPos = cam;
         if (cam != 0) {
             soundReqTickProc();
-            if (!ICO_NTSCAUG6) {
+            if (!ICO_NTSCAUG6JUN26) {
                 scpGirlHintVoiceTickProc(cam);
             }
         }
@@ -338,12 +338,12 @@ void ExecIcoMisc(void)
     if (fall_death_active != 0) {
         if (boyGObj != 0) {
             if (GOBJ_SUB(boyGObj)->ctrl.fallHeight > 1000.0f) {
-                lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(62, 59, 58));
+                lt_switch_layout(PAL_JPNKORCN_NTSCAUG6JUN26(62, 59, 58));
             }
         }
         if (girlGObj != 0) {
             if (GOBJ_SUB(girlGObj)->ctrl.fallHeight > 1000.0f) {
-                lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(62, 59, 58));
+                lt_switch_layout(PAL_JPNKORCN_NTSCAUG6JUN26(62, 59, 58));
             }
         }
     }
@@ -409,7 +409,7 @@ void InitIcoMisc(int *arg)
 
     if (systemStatus[3] != 0 && systemStatus[4] != 0) {
         gamesysMemoryLoad(gameSysMemoryFuncList, gameSysMainSaveBuff, 0);
-        if (!ICO_AUG6) {
+        if (!ICO_AUG6JUN26) {
             scpBoyControlReadDisable = 0;
         }
         systemStatus[4] = 0;
@@ -477,7 +477,7 @@ void InitIcoMisc(int *arg)
     debug_StdPrintfDummy("InitParticleEffects\n");
     InitParticleEffects();
     InitStageMultiBgaManager();
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         InitializeWaterDot();
     }
     debug_StdPrintfDummy("InitSceneObjects( %d )\n", stage);
@@ -487,8 +487,8 @@ void InitIcoMisc(int *arg)
     init_layout_texture(stage);
 
     found = 0;
-    for (i = 0; i < PAL_NTSC_AUG6(1145, 1084, 1086); i++) {
-        for (j = 0; j < PAL_NTSCAUG6(12, 5); j++) {
+    for (i = 0; i < PAL_NTSC_AUG6JUN26(1145, 1084, 1086); i++) {
+        for (j = 0; j < PAL_NTSCAUG6JUN26(12, 5); j++) {
             id = motionKind[i].ent[j].id;
             if (id > 0xFFFF) {
                 continue;
@@ -496,7 +496,7 @@ void InitIcoMisc(int *arg)
             if (motionEffKind[id].done) {
                 continue;
             }
-            if (id == PAL_NTSCAUG6(24, 19)) {
+            if (id == PAL_NTSCAUG6JUN26(24, 19)) {
                 continue;
             }
             if (GetParticleEffectPackage(motionEffKind[id].pkg)[1] != 1) {
@@ -516,14 +516,14 @@ void InitIcoMisc(int *arg)
             "\033[36m動作はさせますが続けているとメモリの\n資源を食いつくします\nループではないものにデータを修正してください\033[m\n");
     }
     debug_StdPrintfDummy("Init Stage Animation\n");
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         gsb_ResetFilmNoise();
     }
     stage_Init();
     debug_StdPrintfDummy("Init Object Action\n");
     ObjAction_Init();
     InitStageChange();
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         lock_execIcoMisc = 0;
     } else {
         graphics_ready = 0;

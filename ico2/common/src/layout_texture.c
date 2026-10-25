@@ -242,7 +242,7 @@ static inline void lt_draw_layout(int no) /* derived name */
     int last = LT_LAYOUT(no).last;
 
     for (; i < last; i++) {
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
             display_texture(no, &LT_PROP(i));
         } else {
             if (lt_property_visible(i)) {
@@ -269,7 +269,7 @@ static inline void lt_switch_layout_7(int no) /* derived name */
     }
 }
 
-static inline void lt_switch_layout_3_ntscaug6(int no) /* derived name */
+static inline void lt_switch_layout_3_ntscaug6jun26(int no) /* derived name */
 {
     if ((fadeState == 2 && no != current_layout_id) || no == 58) {
         nextLayout = no;
@@ -284,8 +284,8 @@ static inline void lt_switch_layout_3_ntscaug6(int no) /* derived name */
 
 static inline void lt_switch_layout_3(int no) /* derived name */
 {
-    if (ICO_NTSCAUG6) {
-        lt_switch_layout_3_ntscaug6(no);
+    if (ICO_NTSCAUG6JUN26) {
+        lt_switch_layout_3_ntscaug6jun26(no);
         return;
     }
     if ((fadeState == 2 && no != current_layout_id) || no == PAL_JPNKORCN(62, 59)) {
@@ -353,7 +353,7 @@ static void default_item_select_ntsc(int no)
     }
 }
 
-static void default_item_select_aug6(int no)
+static void default_item_select_aug6jun26(int no)
 {
     LtProp *p = &LT_LAYOUT(no);
     LtProperty *e = &LT_PROP(p->curItem);
@@ -413,8 +413,8 @@ static void default_item_select(int no)
         default_item_select_ntsc(no);
         return;
     }
-    if (ICO_AUG6) {
-        default_item_select_aug6(no);
+    if (ICO_AUG6JUN26) {
+        default_item_select_aug6jun26(no);
         return;
     }
     LtProp *p = &LT_LAYOUT(no);
@@ -497,7 +497,7 @@ static inline void lt_reset_property_chain(int no) /* derived name */
 
 /* the layout fade's state machine; fadeState is read and written as the
    file static itself, as in the rest of this TU */
-static void texture_fading_ntscaug6(LtProp *p)
+static void texture_fading_ntscaug6jun26(LtProp *p)
 {
     unsigned char *col = ltCursorColor;
     int *cur;
@@ -574,8 +574,8 @@ static void texture_fading_ntscaug6(LtProp *p)
 
 static void texture_fading(LtProp *p)
 {
-    if (ICO_NTSCAUG6) {
-        texture_fading_ntscaug6(p);
+    if (ICO_NTSCAUG6JUN26) {
+        texture_fading_ntscaug6jun26(p);
         return;
     }
     unsigned char *col = ltCursorColor;
@@ -762,11 +762,11 @@ static void display_texture(int no, LtProperty *e)
     sel = (e == &LT_PROP(LT_LAYOUT(LT_CUR_NO).curItem));
     /* the USA disc and the August 2001 preview sparkle every selected item, in grey */
     if (sel && lt_item_select_disable == 0 && fadeState == 2 &&
-        (ICO_NTSCAUG6 || e->selectable == 0)) {
+        (ICO_NTSCAUG6JUN26 || e->selectable == 0)) {
         SprCol pcol;
 
         memset(&pcol, 0, sizeof(pcol));
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
             pcol.r = 128;
             pcol.g = 128;
             pcol.b = 128;
@@ -781,7 +781,7 @@ static void display_texture(int no, LtProperty *e)
         for (i = 0; i < box.w * box.h / 1200; i++) {
             u.pt[0] = box.x + rand() % box.w;
             u.pt[1] = box.y + rand() % box.h;
-            pcol.a = rand() % 127 + PAL_NTSCAUG6(0, 32);
+            pcol.a = rand() % 127 + PAL_NTSCAUG6JUN26(0, 32);
             gif_PointOffset(u.pt, 0x800000, &pcol, 1);
         }
         LT_FULL_END(full);
@@ -810,7 +810,7 @@ static void display_texture(int no, LtProperty *e)
         gif_SetZTest(0);
         gif_SetZWrite(0);
         gif_SetAlpha(1, 7, 0);
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
             /* the 2001 builds' sprite: inset at the top only, no filter register */
             box.y = box.y + 8;
             box.h = box.h - 8;
@@ -832,7 +832,7 @@ static void display_texture(int no, LtProperty *e)
         u.col.r = ~GlobalStageSetting.reductionCol[0];
         u.col.g = ~GlobalStageSetting.reductionCol[1];
         u.col.b = ~GlobalStageSetting.reductionCol[2];
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
             /* the 2001 builds store the reduced colour into the cursor or highlight
                colour itself and draw with it: no darkening, no dimming, no glow */
             if (e->fade_cancel == 0) {
@@ -861,7 +861,7 @@ static void display_texture(int no, LtProperty *e)
                 u.col.b = 0;
             }
         }
-        if (!ICO_NTSCAUG6 && LT_LAYOUT(LT_CUR_NO).curItem != e->ownerItem) {
+        if (!ICO_NTSCAUG6JUN26 && LT_LAYOUT(LT_CUR_NO).curItem != e->ownerItem) {
             if (e->selectable != 0 && sel == 0 && (flag != 0 || e->ownerItem >= 0)) {
                 u.col.r = u.col.r * 0.5f;
                 u.col.g = u.col.g * 0.5f;
@@ -880,7 +880,7 @@ static void display_texture(int no, LtProperty *e)
         LT_HOST_KEY(e, 1); /* the glow sprites */
 
 #undef LT_CUR_NO
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
         } else if (e->selectable != 0 && sel != 0 && fadeState == 8) {
             float t = (float)fadeCount / (float)fadeLength;
 
@@ -920,7 +920,7 @@ static inline void lt_draw_primary_sprite(SprCol *col) /* derived name */
     gif_EndPacket();
 }
 
-static void display_primary_texture_layout_ntscaug6(int no, int sel)
+static void display_primary_texture_layout_ntscaug6jun26(int no, int sel)
 {
     SprCol col;
     LtProp *p = &LT_LAYOUT(no);
@@ -943,8 +943,8 @@ static void display_primary_texture_layout_ntscaug6(int no, int sel)
 
 static void display_primary_texture_layout(int no, int sel)
 {
-    if (ICO_NTSCAUG6) {
-        display_primary_texture_layout_ntscaug6(no, sel);
+    if (ICO_NTSCAUG6JUN26) {
+        display_primary_texture_layout_ntscaug6jun26(no, sel);
         return;
     }
     SprCol col;
@@ -1001,7 +1001,7 @@ void exec_layout_texture(void)
     int j;
     int k;
 
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         if (frame_count - selectFrame == 0 || frame_count - selectFrame == 1) {
             pad[0].flags = 0;
         }
@@ -1130,7 +1130,7 @@ static inline char *lt_texture_base_name(char *src) /* derived name */
     return p;
 }
 
-static inline int lt_texture_no_of_property_ntscaug6(int idx) /* derived name */
+static inline int lt_texture_no_of_property_ntscaug6jun26(int idx) /* derived name */
 {
     int n;
     const char *src; /* const in the Japanese build: the same code */
@@ -1153,8 +1153,8 @@ static inline int lt_texture_no_of_property_ntscaug6(int idx) /* derived name */
 
 static inline int lt_texture_no_of_property(int idx) /* derived name */
 {
-    if (ICO_NTSCAUG6) {
-        return lt_texture_no_of_property_ntscaug6(idx);
+    if (ICO_NTSCAUG6JUN26) {
+        return lt_texture_no_of_property_ntscaug6jun26(idx);
     }
     int n;
     char *src; /* const in the Japanese build: the same code */
@@ -1207,23 +1207,23 @@ void init_layout_texture(int stage)
     if (stage == 1) {
         gflagInit();
         if (layout_boot_flag == 0) {
-            current_layout_id = PAL_JPNKORNTSCAUG6CN(7, 4);
+            current_layout_id = PAL_JPNKORNTSCAUG6JUN26CN(7, 4);
         } else if (mpegPlayReturnStage == stage) {
             mpegPlayReturnStage = 0;
             if (stage_after_skipping_demo == 0xFFFFFFFE) {
                 title_demo_mode = title_demo_mode ^ 1;
-                current_layout_id = PAL_JPNKORNTSCAUG6CN(13, 10);
+                current_layout_id = PAL_JPNKORNTSCAUG6JUN26CN(13, 10);
             } else if (stage_after_skipping_demo == 0xFFFFFFFF) {
-                current_layout_id = PAL_JPNKORNTSCAUG6CN(10, 7);
+                current_layout_id = PAL_JPNKORNTSCAUG6JUN26CN(10, 7);
                 title_demo_mode = title_demo_mode ^ 1;
             } else {
-                current_layout_id = PAL_JPNKORNTSCAUG6CN(13, 10);
+                current_layout_id = PAL_JPNKORNTSCAUG6JUN26CN(13, 10);
             }
         } else {
-            current_layout_id = PAL_JPNKORNTSCAUG6CN(13, 10);
+            current_layout_id = PAL_JPNKORNTSCAUG6JUN26CN(13, 10);
         }
     } else {
-        current_layout_id = PAL_JPNKORCN_NTSCAUG6(54, 51, 50);
+        current_layout_id = PAL_JPNKORCN_NTSCAUG6JUN26(54, 51, 50);
     }
     lt_init_stage_textures(stage);
     LT_LAYOUT(current_layout_id).curItem = LT_LAYOUT(current_layout_id).defaultItem;
@@ -1234,13 +1234,14 @@ void init_layout_texture(int stage)
 
 inline void lt_switch_layout(int no)
 {
-    if ((fadeState == 2 && no != current_layout_id) || no == PAL_JPNKORCN_NTSCAUG6(62, 59, 58)) {
+    if ((fadeState == 2 && no != current_layout_id) ||
+        no == PAL_JPNKORCN_NTSCAUG6JUN26(62, 59, 58)) {
         nextLayout = no;
         display_texture_fade_cancel_chk(current_layout_id, no);
         if (fadeType == 1) {
             fadeState = 5;
         } else {
-            if (!ICO_NTSCAUG6) {
+            if (!ICO_NTSCAUG6JUN26) {
                 nextFadeState = 3;
             }
             fadeState = 3;

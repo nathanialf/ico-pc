@@ -99,7 +99,7 @@ void funcGirlHandDisconnect(void)
 inline void afterGirlHand50(GObj *volatile self)
 {
     debug_StdPrintfDummy("girl after func\n");
-    iosOmSendMail(boyGObj, PAL_NTSC_AUG6(0x60, 89, 88), isysCurrentGObj);
+    iosOmSendMail(boyGObj, PAL_NTSC_AUG6JUN26(0x60, 89, 88), isysCurrentGObj);
     ACTGame_DisconnectHand();
 }
 
@@ -119,7 +119,7 @@ inline void actGirlHand50(GObj *volatile self)
     } while ((sub->readyFlags & 0x10) == 0);
     debug_StdPrintfDummy("girl error flg get\n");
     for (;;) {
-        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x60, 89, 88));
+        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x60, 89, 88));
         _ACTWait(1);
     }
 }
@@ -130,35 +130,36 @@ void motGirlHand50(GObj *volatile self)
 
     debug_StdPrintfDummy("enter motGirlHand50\n");
     while (1) {
-        iosOmSendMail(boyGObj, PAL_NTSC_AUG6(0x5C, 85, 84), isysCurrentGObj);
+        iosOmSendMail(boyGObj, PAL_NTSC_AUG6JUN26(0x5C, 85, 84), isysCurrentGObj);
         if (sub->readyFlags & 1)
             break;
         _ACTWait(1);
     }
-    while (GOBJ_SUB(self)->ctrl.motion < PAL_NTSCAUG6(0x214, 514) ||
-           !(GOBJ_SUB(self)->ctrl.motion < PAL_NTSC_AUG6(0x21B, 521, 519))) {
+    while (GOBJ_SUB(self)->ctrl.motion < PAL_NTSCAUG6JUN26(0x214, 514) ||
+           !(GOBJ_SUB(self)->ctrl.motion < PAL_NTSC_AUG6JUN26(0x21B, 521, 519))) {
         sub->motReq = SetMotionRequest((void *)self, 1, sub->env.motOriReq);
         _ACTWait(1);
     }
     _ACTWait(1);
     while (1) {
-        iosOmSendMail(boyGObj, PAL_NTSC_AUG6(0x5D, 86, 85), isysCurrentGObj);
+        iosOmSendMail(boyGObj, PAL_NTSC_AUG6JUN26(0x5D, 86, 85), isysCurrentGObj);
         if (sub->readyFlags & 2)
             break;
         _ACTWait(1);
     }
-    if ((((int)(PAL_NTSCAUG6(sub->flags18.ll >> 44, sub->flags18.ll >> 39))) & 1) == 0) {
-        iosOmSendMail(boyGObj, PAL_NTSCAUG6(0x10, 16), isysCurrentGObj);
+    if ((((int)(PAL_NTSCAUG6JUN26(sub->flags18.ll >> 44, sub->flags18.ll >> 39))) & 1) == 0) {
+        iosOmSendMail(boyGObj, PAL_NTSCAUG6JUN26(0x10, 16), isysCurrentGObj);
         ACTSendMailCorrect((void *)self, 7);
     }
-    iosOmSendMail(boyGObj, PAL_NTSC_AUG6(0x5E, 87, 86), isysCurrentGObj);
-    sub->motReq = SetMotionRequest((void *)self, PAL_NTSC_AUG6(0x5E, 85, 84), sub->env.motOriReq);
+    iosOmSendMail(boyGObj, PAL_NTSC_AUG6JUN26(0x5E, 87, 86), isysCurrentGObj);
+    sub->motReq =
+        SetMotionRequest((void *)self, PAL_NTSC_AUG6JUN26(0x5E, 85, 84), sub->env.motOriReq);
     while ((((struct MotCtrl *)sub->motReq)->frameEnd & 1) == 0) {
         _ACTWait(1);
     }
     sub->after = 0;
     for (;;) {
-        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x47, 67, 66));
+        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x47, 67, 66));
         _ACTWait(1);
     }
 }
@@ -166,7 +167,7 @@ void motGirlHand50(GObj *volatile self)
 inline void afterGirlHand100(GObj *volatile self)
 {
     debug_StdPrintfDummy("girl after func\n");
-    iosOmSendMail(boyGObj, PAL_NTSC_AUG6(0x65, 94, 93), isysCurrentGObj);
+    iosOmSendMail(boyGObj, PAL_NTSC_AUG6JUN26(0x65, 94, 93), isysCurrentGObj);
     ACTGame_DisconnectHand();
 }
 
@@ -175,7 +176,7 @@ inline void actGirlHand100(GObj *volatile self)
     Act *sub = GOBJ_ACT(self);
 
     debug_StdPrintfDummy("enter actGirlHand100\n");
-    sub->actMode = PAL_NTSCAUG6(0x53, 80);
+    sub->actMode = PAL_NTSCAUG6JUN26(0x53, 80);
     sub->after = (void *)afterGirlHand100;
     sub->readyFlags = 0;
     do {
@@ -183,7 +184,7 @@ inline void actGirlHand100(GObj *volatile self)
     } while ((sub->readyFlags & 0x10) == 0);
     debug_StdPrintfDummy("girl error flg get\n");
     for (;;) {
-        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x65, 94, 93));
+        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x65, 94, 93));
         _ACTWait(1);
     }
 }
@@ -194,40 +195,41 @@ void motGirlHand100(GObj *volatile self)
 
     debug_StdPrintfDummy("enter motGirlHand100\n");
     while (1) {
-        iosOmSendMail(boyGObj, PAL_NTSC_AUG6(0x61, 90, 89), isysCurrentGObj);
+        iosOmSendMail(boyGObj, PAL_NTSC_AUG6JUN26(0x61, 90, 89), isysCurrentGObj);
         if (sub->readyFlags & 1)
             break;
         _ACTWait(1);
     }
-    while (GOBJ_SUB(self)->ctrl.motion < PAL_NTSC_AUG6(0x214, 0x202, 514) ||
-           !(GOBJ_SUB(self)->ctrl.motion < PAL_NTSC_AUG6(0x21B, 0x209, 519))) {
+    while (GOBJ_SUB(self)->ctrl.motion < PAL_NTSC_AUG6JUN26(0x214, 0x202, 514) ||
+           !(GOBJ_SUB(self)->ctrl.motion < PAL_NTSC_AUG6JUN26(0x21B, 0x209, 519))) {
         sub->motReq = SetMotionRequest((void *)self, 1, sub->env.motOriReq);
         _ACTWait(1);
     }
     _ACTWait(1);
     while (1) {
-        iosOmSendMail(boyGObj, PAL_NTSC_AUG6(0x62, 91, 90), isysCurrentGObj);
+        iosOmSendMail(boyGObj, PAL_NTSC_AUG6JUN26(0x62, 91, 90), isysCurrentGObj);
         if (sub->readyFlags & 2)
             break;
         _ACTWait(1);
     }
-    iosOmSendMail(boyGObj, PAL_NTSC_AUG6(0x63, 92, 91), isysCurrentGObj);
-    sub->motReq = SetMotionRequest((void *)self, PAL_NTSC_AUG6(0x65, 92, 91), sub->env.motOriReq);
-    while (GOBJ_SUB(self)->ctrl.motion < PAL_NTSC_AUG6(0x214, 0x202, 514) ||
-           !(GOBJ_SUB(self)->ctrl.motion < PAL_NTSC_AUG6(0x21B, 0x209, 519))) {
+    iosOmSendMail(boyGObj, PAL_NTSC_AUG6JUN26(0x63, 92, 91), isysCurrentGObj);
+    sub->motReq =
+        SetMotionRequest((void *)self, PAL_NTSC_AUG6JUN26(0x65, 92, 91), sub->env.motOriReq);
+    while (GOBJ_SUB(self)->ctrl.motion < PAL_NTSC_AUG6JUN26(0x214, 0x202, 514) ||
+           !(GOBJ_SUB(self)->ctrl.motion < PAL_NTSC_AUG6JUN26(0x21B, 0x209, 519))) {
         sub->motReq = SetMotionRequest((void *)self, 1, sub->env.motOriReq);
         _ACTWait(1);
     }
     _ACTWait(1);
     while (1) {
-        iosOmSendMail(boyGObj, PAL_NTSC_AUG6(0x64, 93, 92), isysCurrentGObj);
+        iosOmSendMail(boyGObj, PAL_NTSC_AUG6JUN26(0x64, 93, 92), isysCurrentGObj);
         if (sub->readyFlags & 8)
             break;
         _ACTWait(1);
     }
     sub->after = 0;
     for (;;) {
-        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x47, 67, 66));
+        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x47, 67, 66));
         _ACTWait(1);
     }
 }
@@ -235,7 +237,7 @@ void motGirlHand100(GObj *volatile self)
 inline void afterGirlHand200(GObj *volatile self)
 {
     debug_StdPrintfDummy("girl after func\n");
-    iosOmSendMail(boyGObj, PAL_NTSC_AUG6(0x6A, 99, 98), isysCurrentGObj);
+    iosOmSendMail(boyGObj, PAL_NTSC_AUG6JUN26(0x6A, 99, 98), isysCurrentGObj);
     ACTGame_DisconnectHand();
 }
 
@@ -244,7 +246,7 @@ inline void actGirlHand200(GObj *volatile self)
     Act *sub = GOBJ_ACT(self);
 
     debug_StdPrintfDummy("enter actGirlHand200\n");
-    sub->actMode = PAL_NTSCAUG6(0x54, 81);
+    sub->actMode = PAL_NTSCAUG6JUN26(0x54, 81);
     sub->after = (void *)afterGirlHand200;
     sub->readyFlags = 0;
     do {
@@ -252,7 +254,7 @@ inline void actGirlHand200(GObj *volatile self)
     } while ((sub->readyFlags & 0x10) == 0);
     debug_StdPrintfDummy("girl error flg get\n");
     for (;;) {
-        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x6A, 99, 98));
+        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x6A, 99, 98));
         _ACTWait(1);
     }
 }
@@ -268,43 +270,44 @@ void motGirlHand200(GObj *volatile self)
         if (n <= 0)
             goto expired;
         n--;
-        iosOmSendMail(boyGObj, PAL_NTSC_AUG6(0x66, 95, 94), isysCurrentGObj);
+        iosOmSendMail(boyGObj, PAL_NTSC_AUG6JUN26(0x66, 95, 94), isysCurrentGObj);
         if (sub->readyFlags & 1)
             break;
         _ACTWait(1);
     }
     goto held;
 expired:
-    ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x6A, 99, 98));
+    ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x6A, 99, 98));
     debug_StdPrintfDummy("%s sync error\n",
                          (void *)self == (void *)((int *)boyGObj) ? "boy" : "girl");
 held:
-    while (GOBJ_SUB(self)->ctrl.motion < PAL_NTSC_AUG6(0x214, 0x202, 514) ||
-           !(GOBJ_SUB(self)->ctrl.motion < PAL_NTSC_AUG6(0x21B, 0x209, 519))) {
+    while (GOBJ_SUB(self)->ctrl.motion < PAL_NTSC_AUG6JUN26(0x214, 0x202, 514) ||
+           !(GOBJ_SUB(self)->ctrl.motion < PAL_NTSC_AUG6JUN26(0x21B, 0x209, 519))) {
         sub->motReq = SetMotionRequest((void *)self, 1, sub->env.motOriReq);
         _ACTWait(1);
     }
     _ACTWait(1);
     while (1) {
-        iosOmSendMail(boyGObj, PAL_NTSC_AUG6(0x67, 96, 95), isysCurrentGObj);
+        iosOmSendMail(boyGObj, PAL_NTSC_AUG6JUN26(0x67, 96, 95), isysCurrentGObj);
         if (sub->readyFlags & 2)
             break;
         _ACTWait(1);
     }
-    iosOmSendMail(boyGObj, PAL_NTSC_AUG6(0x68, 97, 96), isysCurrentGObj);
-    sub->motReq = SetMotionRequest((void *)self, PAL_NTSC_AUG6(0x66, 93, 92), sub->env.motOriReq);
+    iosOmSendMail(boyGObj, PAL_NTSC_AUG6JUN26(0x68, 97, 96), isysCurrentGObj);
+    sub->motReq =
+        SetMotionRequest((void *)self, PAL_NTSC_AUG6JUN26(0x66, 93, 92), sub->env.motOriReq);
     while ((((struct MotCtrl *)sub->motReq)->frameEnd & 1) == 0) {
         _ACTWait(1);
     }
     while (1) {
-        iosOmSendMail(boyGObj, PAL_NTSC_AUG6(0x69, 98, 97), isysCurrentGObj);
+        iosOmSendMail(boyGObj, PAL_NTSC_AUG6JUN26(0x69, 98, 97), isysCurrentGObj);
         if (sub->readyFlags & 8)
             break;
         _ACTWait(1);
     }
     sub->after = 0;
     for (;;) {
-        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x47, 67, 66));
+        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x47, 67, 66));
         _ACTWait(1);
     }
 }
@@ -440,9 +443,10 @@ static int othersKindList_pal[3] = {4, 62, -1}; /* derived name */
 
 static int othersKindList_ntsc[3] = {4, 61, -1}; /* derived name */
 
-static int othersKindList_aug6[3] = {4, 60, -1}; /* derived name */
+static int othersKindList_aug6jun26[3] = {4, 60, -1}; /* derived name */
 
-#define othersKindList PAL_NTSC_AUG6(othersKindList_pal, othersKindList_ntsc, othersKindList_aug6)
+#define othersKindList                                                                             \
+    PAL_NTSC_AUG6JUN26(othersKindList_pal, othersKindList_ntsc, othersKindList_aug6jun26)
 
 /* The TU's .bss: sort_list's index/distance pairs and its copy of the sorted
    positions, CorrectList's compaction scratch and the runaway candidate list
@@ -487,7 +491,7 @@ static inline void ACTGame_GirlBeforeFunc_ntsc(GObj *self)
     }
 }
 
-static inline void ACTGame_GirlBeforeFunc_aug6(GObj *self)
+static inline void ACTGame_GirlBeforeFunc_aug6jun26(GObj *self)
 {
     Act *s;
 
@@ -505,8 +509,8 @@ inline void ACTGame_GirlBeforeFunc(GObj *self)
         ACTGame_GirlBeforeFunc_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        ACTGame_GirlBeforeFunc_aug6(self);
+    if (ICO_AUG6JUN26) {
+        ACTGame_GirlBeforeFunc_aug6jun26(self);
         return;
     }
     float boyPos[4];
@@ -553,8 +557,8 @@ static inline void ATGoalTurnSendMail(GObj *self) /* derived name */
 {
     Act *act = GOBJ_ACT(self);
     int mail = -1;
-    int slow[2] = {PAL_NTSC_AUG6(231, 215, 212), PAL_NTSC_AUG6(242, 226, 223)};
-    int fast[2] = {PAL_NTSC_AUG6(232, 216, 213), PAL_NTSC_AUG6(243, 227, 224)};
+    int slow[2] = {PAL_NTSC_AUG6JUN26(231, 215, 212), PAL_NTSC_AUG6JUN26(242, 226, 223)};
+    int fast[2] = {PAL_NTSC_AUG6JUN26(232, 216, 213), PAL_NTSC_AUG6JUN26(243, 227, 224)};
     int idx = 0;
 
     switch (goalTurnReq.prio) {
@@ -821,7 +825,7 @@ static void girlBrainMain_MakeOthersList(void)
         if (brain_val.others.num != 0 && brain_val.others.ent[0].dist < 600.0f) {
             GOBJ_ACT(girlGObj)->flags20.ll |= 8;
         }
-    } else if (ICO_AUG6) {
+    } else if (ICO_AUG6JUN26) {
     } else {
         if (brain_val.others.num != 0 && brain_val.others.ent[0].dist < 600.0f) {
             GOBJ_ACT(girlGObj)->flags20.ll |= 0x1000;
@@ -851,8 +855,8 @@ static void girlBrainMain_MakeOthersList(void)
 static char *groupRelationName[4] = {"FALSE", "OTHERGROUP", "SAMEGROUP",
                                      "DIRECT"}; /* derived name */
 
-static inline unsigned char girlBrainHideCheckIntercept_ntscaug6(float *from, float *to,
-                                                                 GirlListEnt *list, int n)
+static inline unsigned char girlBrainHideCheckIntercept_ntscaug6jun26(float *from, float *to,
+                                                                      GirlListEnt *list, int n)
 {
     float d[4];
     float m[16];
@@ -888,8 +892,8 @@ static inline unsigned char girlBrainHideCheckIntercept_ntscaug6(float *from, fl
 
 static int girlBrainHideCheckIntercept(float *from, float *to, GirlListEnt *list, int n)
 {
-    if (ICO_NTSCAUG6) {
-        return girlBrainHideCheckIntercept_ntscaug6(from, to, list, n);
+    if (ICO_NTSCAUG6JUN26) {
+        return girlBrainHideCheckIntercept_ntscaug6jun26(from, to, list, n);
     }
     float d[4];
     float m[16];
@@ -1030,7 +1034,7 @@ out:
 
 /* the brain target pass, inlined into girlBrainMain_DecideMode and into
    subGirlBrainMain */
-static inline void *girlBrainGetTarget_ntscaug6(void) /* derived name */
+static inline void *girlBrainGetTarget_ntscaug6jun26(void) /* derived name */
 {
     Brain *b = &brainGirl;
     void *obj = 0;
@@ -1044,8 +1048,8 @@ static inline void *girlBrainGetTarget_ntscaug6(void) /* derived name */
 
 static inline void *girlBrainGetTarget(void) /* derived name */
 {
-    if (ICO_NTSCAUG6) {
-        return girlBrainGetTarget_ntscaug6();
+    if (ICO_NTSCAUG6JUN26) {
+        return girlBrainGetTarget_ntscaug6jun26();
     }
     int *flag = &brain_val.targetFlag;
     Brain *b = &brainGirl;
@@ -1117,7 +1121,7 @@ static inline float girlBrainGetTypeRatio(int type) /* derived name */
 static __inline void setNext(int *next, int m)
 {
     /* the 2001 builds take the mode whatever girlControlMode is */
-    if (!ICO_NTSCAUG6 && girlControlMode != 0 && girlBrainModeTable[m].flag != 0) {
+    if (!ICO_NTSCAUG6JUN26 && girlControlMode != 0 && girlBrainModeTable[m].flag != 0) {
         return;
     }
     *next = m;
@@ -1269,7 +1273,7 @@ static int girlBrainMain_DecideMode_ntsc(int mode, int *next)
     return *next == 1 ? changed : warned;
 }
 
-static int girlBrainMain_DecideMode_aug6(int mode, int *next)
+static int girlBrainMain_DecideMode_aug6jun26(int mode, int *next)
 {
     float gpos[4];
     float opos[4];
@@ -1398,8 +1402,8 @@ static int girlBrainMain_DecideMode(int mode, int *next)
     if (ICO_NTSC) {
         return girlBrainMain_DecideMode_ntsc(mode, next);
     }
-    if (ICO_AUG6) {
-        return girlBrainMain_DecideMode_aug6(mode, next);
+    if (ICO_AUG6JUN26) {
+        return girlBrainMain_DecideMode_aug6jun26(mode, next);
     }
     float gpos[4];
     float opos[4];
@@ -2009,7 +2013,7 @@ static void subGirlBrainMain_ntsc(GObj *volatile self)
     }
 }
 
-static void subGirlBrainMain_aug6(GObj *volatile self)
+static void subGirlBrainMain_aug6jun26(GObj *volatile self)
 {
     float sk[4];
     Act *act = GOBJ_ACT(self);
@@ -2411,8 +2415,8 @@ void subGirlBrainMain(GObj *volatile self)
         subGirlBrainMain_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        subGirlBrainMain_aug6(self);
+    if (ICO_AUG6JUN26) {
+        subGirlBrainMain_aug6jun26(self);
         return;
     }
     float sk[4];
@@ -2998,7 +3002,7 @@ static void subGirlBrain_Pulledup_ntsc(GObj *volatile self)
     }
 }
 
-static void subGirlBrain_Pulledup_aug6(GObj *volatile self)
+static void subGirlBrain_Pulledup_aug6jun26(GObj *volatile self)
 {
     float self_pos[4];
     float boy_pos[4];
@@ -3087,8 +3091,8 @@ void subGirlBrain_Pulledup(GObj *volatile self)
         subGirlBrain_Pulledup_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        subGirlBrain_Pulledup_aug6(self);
+    if (ICO_AUG6JUN26) {
+        subGirlBrain_Pulledup_aug6jun26(self);
         return;
     }
     float self_pos[4];
@@ -3257,16 +3261,16 @@ static void girlBrainHide_GoalTurn(float *dir, unsigned char sendMail)
         if (_RotyGV(eye, dir) > 0) {
             debug_StdPrintfDummy("turnL mail\n");
             if (sendMail) {
-                ACTSendMailCorrect(girl, PAL_NTSC_AUG6(0xEC, 220, 217));
+                ACTSendMailCorrect(girl, PAL_NTSC_AUG6JUN26(0xEC, 220, 217));
             } else {
-                ACTSendMailCorrect(girl, PAL_NTSC_AUG6(0xEE, 222, 219));
+                ACTSendMailCorrect(girl, PAL_NTSC_AUG6JUN26(0xEE, 222, 219));
             }
         } else {
             debug_StdPrintfDummy("turnR mail\n");
             if (sendMail) {
-                ACTSendMailCorrect(girl, PAL_NTSC_AUG6(0xEB, 219, 216));
+                ACTSendMailCorrect(girl, PAL_NTSC_AUG6JUN26(0xEB, 219, 216));
             } else {
-                ACTSendMailCorrect(girl, PAL_NTSC_AUG6(0xED, 221, 218));
+                ACTSendMailCorrect(girl, PAL_NTSC_AUG6JUN26(0xED, 221, 218));
             }
         }
     }
@@ -3275,7 +3279,7 @@ static void girlBrainHide_GoalTurn(float *dir, unsigned char sendMail)
 /* A static inline: hands the girl's sub a move direction at the full run
    ratio.  `run` is declared ahead of the two loads, as this TU's
    girlBrainSetWalkRatio declares its own run/walk ratios. */
-static inline void girlBrainSetMoveDir_ntscaug6(float *d, float run) /* derived name */
+static inline void girlBrainSetMoveDir_ntscaug6jun26(float *d, float run) /* derived name */
 {
     Act *s;
 
@@ -3328,7 +3332,7 @@ static int isHideRecheck(float *from, float *to, float *root, float *rad)
     return 0;
 }
 
-static void subGirlBrain_Hide_ntscaug6(GObj *volatile self)
+static void subGirlBrain_Hide_ntscaug6jun26(GObj *volatile self)
 {
     float hp[4];
     float cand[4];
@@ -3382,7 +3386,7 @@ static void subGirlBrain_Hide_ntscaug6(GObj *volatile self)
 
             _OrientXZGV(dir, cand, brain_val.girlPos);
             g = self;
-            girlBrainSetMoveDir_ntscaug6(dir, 1.0f);
+            girlBrainSetMoveDir_ntscaug6jun26(dir, 1.0f);
             _ACTCharStatus_Set(g, 6, -1.0f, 0);
         }
         _ACTWait(1);
@@ -3391,8 +3395,8 @@ static void subGirlBrain_Hide_ntscaug6(GObj *volatile self)
 
 void subGirlBrain_Hide(GObj *volatile self)
 {
-    if (ICO_NTSCAUG6) {
-        subGirlBrain_Hide_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        subGirlBrain_Hide_ntscaug6jun26(self);
         return;
     }
     float hp[4];
@@ -3833,7 +3837,7 @@ static void subGirlBrain_Escape_ntsc(GObj *volatile self)
     }
 }
 
-static void subGirlBrain_Escape_aug6(GObj *volatile self)
+static void subGirlBrain_Escape_aug6jun26(GObj *volatile self)
 {
     float pos[4];
     float ppos[4];
@@ -3971,8 +3975,8 @@ void subGirlBrain_Escape(GObj *volatile self)
         subGirlBrain_Escape_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        subGirlBrain_Escape_aug6(self);
+    if (ICO_AUG6JUN26) {
+        subGirlBrain_Escape_aug6jun26(self);
         return;
     }
     float pos[4];
@@ -4180,7 +4184,7 @@ static void Danger_Gondola(GObj *self);
 static void Danger_Box(GObj *self);
 static void Danger_Rotobject(GObj *self);
 
-static inline void subGirlBrain_DangerEnv_ntscaug6(GObj *volatile self)
+static inline void subGirlBrain_DangerEnv_ntscaug6jun26(GObj *volatile self)
 {
     switch (dangerEnv.kind) {
     case 1:
@@ -4198,8 +4202,8 @@ static inline void subGirlBrain_DangerEnv_ntscaug6(GObj *volatile self)
 
 inline void subGirlBrain_DangerEnv(GObj *volatile self)
 {
-    if (ICO_NTSCAUG6) {
-        subGirlBrain_DangerEnv_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        subGirlBrain_DangerEnv_ntscaug6jun26(self);
         return;
     }
     switch (dangerEnv.kind) {
@@ -4260,7 +4264,7 @@ static int Danger_Bomb_GetSafePosition(float rad, float *dst, float *center, flo
     return found;
 }
 
-static void Danger_Bomb_ntscaug6(GObj *self)
+static void Danger_Bomb_ntscaug6jun26(GObj *self)
 {
     float goal[4];
     float girl[4];
@@ -4333,8 +4337,8 @@ retry:
 
 static void Danger_Bomb(GObj *self)
 {
-    if (ICO_NTSCAUG6) {
-        Danger_Bomb_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        Danger_Bomb_ntscaug6jun26(self);
         return;
     }
     float goal[4];
@@ -4503,12 +4507,12 @@ retry:
             r = p;
             debug_NMarker(goal, 0xFF, 0, 0, 100.0f);
             f = sub->wayFlags;
-            if (((int)PAL_NTSCAUG6(f >> 16, f >> 17) & 1)) {
+            if (((int)PAL_NTSCAUG6JUN26(f >> 16, f >> 17) & 1)) {
                 turn = 0;
             }
             if (!r) {
                 turn = 1;
-            } else if (((int)PAL_NTSCAUG6(f >> 17, f >> 16) & 1)) {
+            } else if (((int)PAL_NTSCAUG6JUN26(f >> 17, f >> 16) & 1)) {
                 turn = 1;
             } else if (sub->wayGoalDist < 50.0f) {
                 turn = 1;
@@ -4687,12 +4691,12 @@ static void Danger_Box(GObj *self)
         p = ACTWayMove_NextDetail(self, sub->dir, goal, 0, 0);
         r2 = p;
         f = sub->wayFlags;
-        if (((int)PAL_NTSCAUG6(f >> 16, f >> 17) & 1)) {
+        if (((int)PAL_NTSCAUG6JUN26(f >> 16, f >> 17) & 1)) {
             turn = 0;
         }
         if (!r2) {
             turn = 1;
-        } else if (((int)PAL_NTSCAUG6(f >> 17, f >> 16) & 1)) {
+        } else if (((int)PAL_NTSCAUG6JUN26(f >> 17, f >> 16) & 1)) {
             turn = 1;
         } else if (sub->wayGoalDist < 50.0f) {
             turn = 1;
@@ -4819,7 +4823,7 @@ void subGirlBrain_HideAdvance(GObj *volatile self)
     for (;;) {
         brain_val.hideAdvWait = (60 - systemStatus[0] * 10) / systemStatus[1];
         GetRootProjectionPosOfGObj(boy_pos, boyGObj);
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
             hit = ACTWayMove_NextDetail((void *)self, sub->dir, boy_pos, 0, 0);
         } else {
             p = ACTWayMove_NextDetail((void *)self, sub->dir, boy_pos, 0, 0);
@@ -4935,7 +4939,7 @@ static unsigned char wayTestBegin = 1; /* derived name */
 
 static unsigned char wayTestMoving = 0; /* derived name */
 
-static void WayTest_ntscaug6(void)
+static void WayTest_ntscaug6jun26(void)
 {
     /* .sbss, girl_act.o's first word: how many frames in a row WayTest has
        seen the girl's heading swing by more than 90 units */
@@ -4996,8 +5000,8 @@ static void WayTest_ntscaug6(void)
 
 void WayTest(void)
 {
-    if (ICO_NTSCAUG6) {
-        WayTest_ntscaug6();
+    if (ICO_NTSCAUG6JUN26) {
+        WayTest_ntscaug6jun26();
         return;
     }
     /* .sbss, girl_act.o's first word: how many frames in a row WayTest has
@@ -5326,7 +5330,7 @@ static void subGirlControl_ntsc(GObj *volatile self)
     }
 }
 
-static void subGirlControl_aug6(GObj *volatile self)
+static void subGirlControl_aug6jun26(GObj *volatile self)
 {
     /* the stick direction in world coordinates */
     float dir[4];
@@ -5551,8 +5555,8 @@ void subGirlControl(GObj *volatile self)
         subGirlControl_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        subGirlControl_aug6(self);
+    if (ICO_AUG6JUN26) {
+        subGirlControl_aug6jun26(self);
         return;
     }
     float dir[4];
@@ -5787,7 +5791,7 @@ void subGirlControl(GObj *volatile self)
 
 extern int fptodp(float v);
 
-static void subGirlCollision_aug6(GObj *volatile self)
+static void subGirlCollision_aug6jun26(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
     float ori[4];
@@ -6173,8 +6177,8 @@ void subGirlCollision(GObj *volatile self)
         subGirlCollision_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        subGirlCollision_aug6(self);
+    if (ICO_AUG6JUN26) {
+        subGirlCollision_aug6jun26(self);
         return;
     }
     Act *sub = GOBJ_ACT(self);
@@ -6383,10 +6387,10 @@ inline int NotNeedBackHand(void)
     GObj *g = girlGObj;
     Act *w = GOBJ_ACT(g);
 
-    if ((((int)(PAL_NTSCAUG6(w->flags18.ll >> 40, w->flags18.ll >> 36))) & 1) == 0) {
+    if ((((int)(PAL_NTSCAUG6JUN26(w->flags18.ll >> 40, w->flags18.ll >> 36))) & 1) == 0) {
         return 1;
     }
-    if (w->actMode == PAL_NTSCAUG6(0x45, 69) && handmgr.near90 != 0 && handmgr.still == 0) {
+    if (w->actMode == PAL_NTSCAUG6JUN26(0x45, 69) && handmgr.near90 != 0 && handmgr.still == 0) {
         return 1;
     }
     return 0;
@@ -6398,7 +6402,7 @@ inline void afterGirlHand(ICO_WORD_PTR(GObj *) self)
     ACTGame_DisconnectHand();
     debug_StdPrintfDummy("after func\n");
     iosPadActStop(7);
-    if (!ICO_AUG6) {
+    if (!ICO_AUG6JUN26) {
         ACTWay_SetBeginPositionIllegal((GObj *)local);
     }
 }
@@ -6412,7 +6416,7 @@ GirlStand handmgr = {0};
 /* the USA disc's and the August 2001 preview's GetBoyMode (their nested helper of actGirlHand
    and actGirlHang): no hand-off for the boy's states 13, 14 and 15, motion 85 (the preview's 84)
    as the European 0x5E, and the third return word for the other motions */
-static void GetBoyMode_ntscaug6(int *mode, int *p1, int *p2, int *p3)
+static void GetBoyMode_ntscaug6jun26(int *mode, int *p1, int *p2, int *p3)
 {
     MotionDef *rec;
     *mode = GOBJ_ACT(boyGObj)->actMode;
@@ -6455,7 +6459,7 @@ static void GetBoyMode_ntscaug6(int *mode, int *p1, int *p2, int *p3)
         }
         break;
     case 36:
-        if (GOBJ_ACT(boyGObj)->intrMot == PAL_AUG6(85, 84)) {
+        if (GOBJ_ACT(boyGObj)->intrMot == PAL_AUG6JUN26(85, 84)) {
             *p2 = 1;
         } else {
             *p3 = 1;
@@ -6473,8 +6477,8 @@ static void GetBoyMode_ntscaug6(int *mode, int *p1, int *p2, int *p3)
 static void GetBoyMode(int *mode, int *p1, int *p2, int *p3)
 {
     MotionDef *rec;
-    if (ICO_NTSCAUG6) {
-        GetBoyMode_ntscaug6(mode, p1, p2, p3);
+    if (ICO_NTSCAUG6JUN26) {
+        GetBoyMode_ntscaug6jun26(mode, p1, p2, p3);
         return;
     }
     *mode = GOBJ_ACT(boyGObj)->actMode;
@@ -6829,7 +6833,7 @@ static void actGirlHand_ntsc(GObj *volatile self)
     }
 }
 
-static void actGirlHand_aug6(GObj *volatile self)
+static void actGirlHand_aug6jun26(GObj *volatile self)
 {
     float look[4];
     float d[4];
@@ -7129,8 +7133,8 @@ void actGirlHand(GObj *volatile self)
         actGirlHand_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actGirlHand_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actGirlHand_aug6jun26(self);
         return;
     }
     float look[4];
@@ -7455,7 +7459,7 @@ void actGirlPulledReady(GObj *volatile self)
     }
     while (1) {
         if (!PAIR_IsStatus_BOY_PULL()) {
-            ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x50, 76, 75));
+            ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x50, 76, 75));
         }
         _ACTWait(1);
     }
@@ -7487,17 +7491,17 @@ void actGirlPulledGo(GObj *volatile self)
     SetMotionNodeFixModeParameter(girlGObj, boyGObj, 2, 6, q, 0.0f, 0.0f, 0.0f, 1.0f);
     while (1) {
         if (!PAIR_IsStatus_BOY_PULL()) {
-            ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x53, 78, 77));
-            ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x54, 79, 78));
+            ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x53, 78, 77));
+            ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x54, 79, 78));
         } else {
             m = GOBJ_ACT(((int *)boyGObj))->actMode;
             if (m == 2 || m == 3) {
-                ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x55, 80, 79));
-                ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x56, 81, 80));
+                ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x55, 80, 79));
+                ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x56, 81, 80));
             }
             if (ICO_NTSC) {
                 ACTSendMailCorrect((void *)self, 82);
-            } else if (ICO_AUG6) {
+            } else if (ICO_AUG6JUN26) {
                 ACTSendMailCorrect((void *)self, 81);
             } else {
                 if ((60 - systemStatus[0] * 10) / systemStatus[1] * 2 < s->modeFrame) {
@@ -7526,7 +7530,7 @@ void actGirlDitch3mReady(GObj *volatile self)
     }
     while (1) {
         if (!PAIR_IsStatus_BOY_DITCH()) {
-            ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x18E, 368, 364));
+            ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x18E, 368, 364));
         }
         _ACTWait(1);
     }
@@ -7559,7 +7563,7 @@ inline void actGirlDitch3mExec(GObj *volatile self)
             i++;
             go = i < 3;
         }
-        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x193, 373, 369));
+        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x193, 373, 369));
         _ACTWait(1);
     }
 }
@@ -7569,7 +7573,7 @@ inline void actGirlHangG3M(GObj *volatile self)
     ACTWay_SetBeginPositionIllegal(self);
     for (;;) {
         if (!PAIR_IsStatus_BOY_DITCH()) {
-            ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x194, 374, 370));
+            ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x194, 374, 370));
         }
         _ACTWait(1);
     }
@@ -7636,7 +7640,7 @@ static inline void actGirlHang_ntsc(GObj *volatile self)
     }
 }
 
-static inline void actGirlHang_aug6(GObj *volatile self)
+static inline void actGirlHang_aug6jun26(GObj *volatile self)
 {
     /* June's actor pointer, kept from when the test read the actor's
        interrupt words (TRFILE line 3518: the volatile load stays) */
@@ -7661,8 +7665,8 @@ inline void actGirlHang(GObj *volatile self)
         actGirlHang_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actGirlHang_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actGirlHang_aug6jun26(self);
         return;
     }
     Act *s = GOBJ_ACT(self);
@@ -7705,7 +7709,7 @@ static inline void actGirlBHang_ntsc(GObj *volatile self)
     }
 }
 
-static inline void actGirlBHang_aug6(GObj *volatile self)
+static inline void actGirlBHang_aug6jun26(GObj *volatile self)
 {
     Act *s = GOBJ_ACT(self);
     int rope = 0;
@@ -7728,8 +7732,8 @@ inline void actGirlBHang(GObj *volatile self)
         actGirlBHang_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actGirlBHang_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actGirlBHang_aug6jun26(self);
         return;
     }
     Act *s = GOBJ_ACT(self);
@@ -7756,14 +7760,14 @@ inline void actGirlBecall(GObj *volatile self)
         _ACTLookTarget_Set((void *)self, boyGObj, 0, 5, 1);
         _ACTWait(1);
     }
-    ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(252, 236, 233));
+    ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(252, 236, 233));
     _ACTWait(0);
 }
 
 inline void actGirlAttractAction(GObj *volatile self)
 {
     for (;;) {
-        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(340, 318, 314));
+        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(340, 318, 314));
         _ACTWait(1);
     }
 }
@@ -7805,7 +7809,7 @@ static void actGirlReadyMove_ntsc(GObj *volatile self)
     }
 }
 
-static void actGirlReadyMove_aug6(GObj *volatile self)
+static void actGirlReadyMove_aug6jun26(GObj *volatile self)
 {
     float dst[4];
     float dir[4];
@@ -7835,8 +7839,8 @@ void actGirlReadyMove(GObj *volatile self)
         actGirlReadyMove_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actGirlReadyMove_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actGirlReadyMove_aug6jun26(self);
         return;
     }
     float dst[4];
@@ -7922,7 +7926,7 @@ static void actGirlRescueDst_ntsc(GObj *volatile self)
     }
 }
 
-static void actGirlRescueDst_aug6(GObj *volatile self)
+static void actGirlRescueDst_aug6jun26(GObj *volatile self)
 {
     float dir[4];
     float q[4];
@@ -7979,8 +7983,8 @@ void actGirlRescueDst(GObj *volatile self)
         actGirlRescueDst_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actGirlRescueDst_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actGirlRescueDst_aug6jun26(self);
         return;
     }
     float dir[4];
@@ -8054,7 +8058,7 @@ inline void actGirlSupportGBBegin(GObj *volatile self)
         boy[1] = girl[1];
         _MoveGV(dst, girl, boy, 20.0f);
         SetDirectRootPositionNoFitting((void *)self, dst);
-        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x17E, 354, 350));
+        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x17E, 354, 350));
         _ACTWait(1);
     }
 }
@@ -8064,8 +8068,8 @@ static inline unsigned char isGirlSupportGBStatus(void) /* derived name */
 {
     unsigned int st = (unsigned int)GOBJ_ACT(((int *)boyGObj))->actMode;
 
-    if (st < PAL_NTSCAUG6(0x6B, 104)) {
-        if (PAL_NTSCAUG6(0x68, 101) <= st) {
+    if (st < PAL_NTSCAUG6JUN26(0x6B, 104)) {
+        if (PAL_NTSCAUG6JUN26(0x68, 101) <= st) {
             return 1;
         }
     }
@@ -8076,7 +8080,7 @@ inline void actGirlSupportGBLoop(GObj *volatile self)
 {
     for (;;) {
         if (!isGirlSupportGBStatus()) {
-            ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x180, 356, 352));
+            ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x180, 356, 352));
         }
         _ACTWait(1);
     }
@@ -8085,7 +8089,7 @@ inline void actGirlSupportGBLoop(GObj *volatile self)
 inline void actGirlSupportGBEnd(GObj *volatile self)
 {
     for (;;) {
-        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(199, 183, 180));
+        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(199, 183, 180));
         _ACTWait(1);
     }
 }
@@ -8123,7 +8127,7 @@ void actGirlSupportBGBegin(GObj *volatile self)
         if (i++ < 6) {
             _InterGV(dst, v1, v2, (float)i, (float)(5 - i));
         }
-        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6(0x184, 360, 356));
+        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x184, 360, 356));
         _ACTWait(1);
     }
 }
@@ -8167,7 +8171,7 @@ static void actGirlStart_ntsc(void *self)
     _ACTWait(0);
 }
 
-static void actGirlStart_aug6(void *self)
+static void actGirlStart_aug6jun26(void *self)
 {
     char *p;
 
@@ -8210,8 +8214,8 @@ void actGirlStart(void *self)
         actGirlStart_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actGirlStart_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actGirlStart_aug6jun26(self);
         return;
     }
     char *p;
@@ -8258,7 +8262,7 @@ void GirlAct_BoyAndMeCollisionMail(void *self)
     float myPos[4];
     float ang;
 
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x10D, 253, 250));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x10D, 253, 250));
 
     if (GOBJ_ACT(boyGObj)->actMode == 1) {
         return;
@@ -8272,16 +8276,16 @@ void GirlAct_BoyAndMeCollisionMail(void *self)
     ang = _RotyGV(vec, test_CURRENTORIENT(self));
 
     if ((ang < 0.0f ? -ang : ang) < 45.0f) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x10E, 254, 251));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x10E, 254, 251));
         return;
     } else if ((ang < 0.0f ? -ang : ang) > 135.0f) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x10F, 255, 252));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x10F, 255, 252));
         return;
     } else if (ang > 45.0f) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x110, 256, 253));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x110, 256, 253));
         return;
     } else {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x111, 257, 254));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x111, 257, 254));
     }
 }
 
@@ -8290,8 +8294,8 @@ static inline unsigned char isGirlEscortStatus(void) /* derived name */
     Act *s = GOBJ_ACT(girlGObj);
     int mode = s->actMode;
     const ActModeRec *attr = &actModeTbl[mode];
-    if (PAL_NTSCAUG6(attr->escort && mode != 0x6F && ((int)(s->flags20.ll >> 46) & 1),
-                     attr->escort && brain_val.curMode == 1)) {
+    if (PAL_NTSCAUG6JUN26(attr->escort && mode != 0x6F && ((int)(s->flags20.ll >> 46) & 1),
+                          attr->escort && brain_val.curMode == 1)) {
         return 1;
     }
     return 0;
@@ -8301,7 +8305,7 @@ static inline const EscortPoint *searchEscortPoint(int area, int point) /* deriv
 {
     const EscortPoint *p;
     int i;
-    for (i = 0; i < PAL_NTSCAUG6(98, 92); i++) {
+    for (i = 0; i < PAL_NTSCAUG6JUN26(98, 92); i++) {
         p = &autoEscortData[i];
         if (p->area == area && p->point == point) {
             return p;
@@ -8341,7 +8345,7 @@ inline int isMustCheckCylinder(void *a, void *b)
 {
     if ((a == (void *)((int *)boyGObj) && b == (void *)girlGObj) ||
         (a == (void *)girlGObj && b == (void *)((int *)boyGObj))) {
-        if (GOBJ_ACT(girlGObj)->actMode == PAL_NTSCAUG6(0x51, 78)) {
+        if (GOBJ_ACT(girlGObj)->actMode == PAL_NTSCAUG6JUN26(0x51, 78)) {
             return 1;
         }
     }

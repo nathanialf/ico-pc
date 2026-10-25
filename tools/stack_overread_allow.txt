@@ -33,9 +33,9 @@ ico2/fumi/src/act-env.c:ACTGetEnvironment_ntsc:p60:write-only the USA disc's twi
 ico2/fumi/src/act-env.c:ACTGetEnvironment_ntsc:p70:write-only the USA disc's twin of ACTGetEnvironment: the same dead GetRootPosition into a 16-byte vector; it writes 16 bytes into 16.
 ico2/fumi/src/boyact.c:actBoyItemAfter:dir:write-only the 2001 builds' item-after loop scales the orientation into dir and never reads it; the scale writes 16 bytes into 16.
 ico2/fumi/src/commonact.c:actCommonBackhand_ntsc:frame:write-only the USA disc's twin of actCommonBackhand: the same dead int store.
-ico2/fumi/src/commonact.c:actCommonBackhand_aug6:frame:write-only the August preview's twin of actCommonBackhand: the same dead int store.
+ico2/fumi/src/commonact.c:actCommonBackhand_aug6jun26:frame:write-only the August preview's twin of actCommonBackhand: the same dead int store.
 ico2/ito/src/act_bird.c:subBirdBrainMain_ntsc:q:write-only the USA disc's twin of subBirdBrainMain: the same dead q[1] store.
-ico2/ito/src/act_bird.c:subBirdBrainMain_aug6:q:write-only the August preview's twin of subBirdBrainMain: the same dead q[1] store.
+ico2/ito/src/act_bird.c:subBirdBrainMain_aug6jun26:q:write-only the August preview's twin of subBirdBrainMain: the same dead q[1] store.
 ico2/omori/src/camera-ico2.c:monitorMonitorCamera_ntsc:vDiff:write-only the USA disc's twin of monitorMonitorCamera: the same dead vector store; every call on it stays inside its 16 bytes.
-ico2/omori/src/camera-ico2.c:monitorMonitorCamera_aug6:vDiff:write-only the August preview's twin of monitorMonitorCamera: the same dead vector store; every call on it stays inside its 16 bytes.
-ico2/sugipon/src/box.c:AlignBox_aug6:npos:write-only the August preview's AlignBox copies the root position into npos and never reads it; the copy writes 16 bytes into 16.
+ico2/omori/src/camera-ico2.c:monitorMonitorCamera_aug6jun26:vDiff:write-only the August preview's twin of monitorMonitorCamera: the same dead vector store; every call on it stays inside its 16 bytes.
+ico2/sugipon/src/box.c:AlignBox_aug6jun26:npos:write-only the August preview's AlignBox copies the root position into npos and never reads it; the copy writes 16 bytes into 16.

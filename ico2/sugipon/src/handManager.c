@@ -99,13 +99,13 @@ static void connectToTarget(GObj *obj, HandRec *hw, int na, int nb, int nc)
         GetMatrixFromQuaternion(m, q);
         _SubVector(v, (char *)GOBJ_SUB(tgt)->nodeMtx + (nb << 6) + 0x30,
                    (char *)GOBJ_SUB(obj)->nodeMtx + (na << 6) + 0x30);
-        if (!ICO_NTSCAUG6) {
+        if (!ICO_NTSCAUG6JUN26) {
             sb = v[0] * v[0] + v[2] * v[2];
         }
         _NormalizeVector(v, v);
         _ScaleVector(v, v, sa);
         _ApplyMatrix(v, m, v);
-        if (!ICO_NTSCAUG6) {
+        if (!ICO_NTSCAUG6JUN26) {
             CopyVector(w, v);
             w[1] = 0.0f;
             if (sb < VectorLengthSquare(w)) {
@@ -170,7 +170,7 @@ static inline int PutHandOnLadder(HandRec *hw, int node) /* derived name */
     if (hw->ikReached == 0) {
         return 0;
     }
-    ExecuteSEPackage(hw->obj, PAL_NTSCAUG6(102, 97));
+    ExecuteSEPackage(hw->obj, PAL_NTSCAUG6JUN26(102, 97));
     return 1;
 }
 

@@ -133,7 +133,7 @@ static void orientDebug(void *self, int idx, int y)
     }
 }
 
-static inline void checkMotionKind_ntscaug6(int i, int j) /* derived name */
+static inline void checkMotionKind_ntscaug6jun26(int i, int j) /* derived name */
 {
     if (motionKind[i].blendKind != 228) {
         char buf[256];
@@ -151,8 +151,8 @@ static inline void checkMotionKind_ntscaug6(int i, int j) /* derived name */
 
 static inline void checkMotionKind(int i, int j) /* derived name */
 {
-    if (ICO_NTSCAUG6) {
-        checkMotionKind_ntscaug6(i, j);
+    if (ICO_NTSCAUG6JUN26) {
+        checkMotionKind_ntscaug6jun26(i, j);
         return;
     }
     if (motionKind[i].blendKind != 320) {
@@ -174,7 +174,7 @@ int GetNbMotionFrames(int id)
     int m;
     int n;
 
-    if (motionKind[id].blendKind == PAL_NTSCAUG6(320, 228)) {
+    if (motionKind[id].blendKind == PAL_NTSCAUG6JUN26(320, 228)) {
         return *motionTable[id];
     }
     m = blendMotionKind[motionKind[id].blendKind].motion;
@@ -190,7 +190,7 @@ float GetMotionPlaySpeedRatio(int id)
 {
     int m;
 
-    if (motionKind[id].blendKind == PAL_NTSCAUG6(320, 228)) {
+    if (motionKind[id].blendKind == PAL_NTSCAUG6JUN26(320, 228)) {
         return motionKind[id].playSpeedRatio;
     }
     m = blendMotionKind[motionKind[id].blendKind].motion;
@@ -241,7 +241,7 @@ static __inline__ void clearFrameTriggerState(void *self) /* derived name */
 
 /* three range tests; shiftMotionData and UpdateFrameCounter both inline
  * them */
-static __inline__ int checkFrameInRange_ntscaug6(int mot, float t) /* derived name */
+static __inline__ int checkFrameInRange_ntscaug6jun26(int mot, float t) /* derived name */
 {
     if ((float)motionKind[mot].triggerStart < t && t < (float)motionKind[mot].triggerEnd) {
         return 1;
@@ -251,8 +251,8 @@ static __inline__ int checkFrameInRange_ntscaug6(int mot, float t) /* derived na
 
 static __inline__ int checkFrameInRange(int mot, float t) /* derived name */
 {
-    if (ICO_NTSCAUG6) {
-        return checkFrameInRange_ntscaug6(mot, t);
+    if (ICO_NTSCAUG6JUN26) {
+        return checkFrameInRange_ntscaug6jun26(mot, t);
     }
     if ((float)motionKind[mot].triggerStart <= t && t <= (float)motionKind[mot].triggerEnd) {
         return 1;
@@ -260,7 +260,8 @@ static __inline__ int checkFrameInRange(int mot, float t) /* derived name */
     return 0;
 }
 
-static __inline__ int checkFrameInRange2_ntscaug6(int mot, float t, float t2) /* derived name */
+static __inline__ int checkFrameInRange2_ntscaug6jun26(int mot, float t,
+                                                       float t2) /* derived name */
 {
     if ((float)motionKind[mot].trigger2Start < t2 && t < (float)motionKind[mot].trigger2End) {
         return 1;
@@ -270,8 +271,8 @@ static __inline__ int checkFrameInRange2_ntscaug6(int mot, float t, float t2) /*
 
 static __inline__ int checkFrameInRange2(int mot, float t, float t2) /* derived name */
 {
-    if (ICO_NTSCAUG6) {
-        return checkFrameInRange2_ntscaug6(mot, t, t2);
+    if (ICO_NTSCAUG6JUN26) {
+        return checkFrameInRange2_ntscaug6jun26(mot, t, t2);
     }
     if ((float)motionKind[mot].trigger2Start <= t2 && t <= (float)motionKind[mot].trigger2End) {
         return 1;
@@ -318,7 +319,7 @@ int UpdateFrameCounter(void *self)
     if (motionFrameUpdate == 1) {
         t = w->speedRatio * motionKind[w->motion].playSpeedRatio * w->playRate *
             (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f);
-        if (!ICO_JPNKORNTSCAUG6CN) {
+        if (!ICO_JPNKORNTSCAUG6JUN26CN) {
             if (systemStatus[0] != 0) {
                 t = t * motionKind[w->motion].palSpeedRatio;
             }
@@ -395,7 +396,7 @@ inline MotionOrientEntry *GetMotionOrient(int i, int n, int id, int kind)
             if (motionOrient[i].id == id) {
                 return &motionOrient[i];
             }
-            if (motionOrient[i].id == PAL_NTSC_AUG6(1146, 1085, 1087)) {
+            if (motionOrient[i].id == PAL_NTSC_AUG6JUN26(1146, 1085, 1087)) {
                 found = i;
             }
         }
@@ -413,7 +414,7 @@ inline MotionOrientEntry *getMotionOrient(int i, int n, int id, int kind)
     if (p != 0) {
         return p;
     }
-    return &motionOrient[PAL_NTSC_AUG6(2467, 2165, 2138)];
+    return &motionOrient[PAL_NTSC_AUG6JUN26(2467, 2165, 2138)];
 }
 
 static void sendStateMail(void *self)
@@ -518,7 +519,7 @@ static inline int searchMotionShift(void *self, int id, int cur) /* derived name
         for (i = 0; (m->shiftReq)[i] != -1; i++) {
             if ((m->shiftReq)[i] == id) {
                 if ((m->shiftNext)[i] == cur) {
-                    return PAL_NTSC_AUG6(0x479, 1084, 1086);
+                    return PAL_NTSC_AUG6JUN26(0x479, 1084, 1086);
                 }
                 return (m->shiftNext)[i];
             }
@@ -532,7 +533,7 @@ static __inline__ int searchAltMotion(int req) /* derived name */
 {
     int i;
 
-    for (i = 0; i < PAL_NTSCAUG6(6, 3); i++) {
+    for (i = 0; i < PAL_NTSCAUG6JUN26(6, 3); i++) {
         if (mirrorMotionTable[i].req == req) {
             return mirrorMotionTable[i].alt;
         }
@@ -712,7 +713,7 @@ static void shiftMotionOrientBeginFunc(void *self, int motion, int request, int 
         }
     }
     CopyBlendMotionDataSource(self, ang);
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         StopFDSVibration(MOWORK(self)->fdsFlags);
     }
     InitFrameDependSequence(MOWORK(self)->fdsFlags);
@@ -738,7 +739,7 @@ static inline int checkMotionShiftReady(struct MotCtrl *m, MotionOrientEntry *p)
     }
     kind = p->nextId;
     m->orientReq = kind;
-    if (kind == PAL_NTSC_AUG6(0x479, 1084, 1086)) {
+    if (kind == PAL_NTSC_AUG6JUN26(0x479, 1084, 1086)) {
         if (m->frameEnd == 0) {
             goto fail;
         }
@@ -759,7 +760,7 @@ static int normalMotionShift(void *self, int force)
     MotionOrientEntry *p = getMotionOrient(w->oriFrom, w->oriTo, w->request, w->orientKind);
 
     if (force == 0) {
-        if (p->id == PAL_NTSC_AUG6(1146, 1085, 1087)) {
+        if (p->id == PAL_NTSC_AUG6JUN26(1146, 1085, 1087)) {
             return 0;
         }
     }
@@ -769,11 +770,11 @@ static int normalMotionShift(void *self, int force)
         int next;
         int r = -1; /* no pairing found; the else arm searches with it as cur */
 
-        if (kind == PAL_NTSC_AUG6(0x479, 1084, 1086)) {
+        if (kind == PAL_NTSC_AUG6JUN26(0x479, 1084, 1086)) {
             kind = p->id;
             mode = 5;
             r = searchMotionShift(self, kind, w->motion);
-            if (r == -1 || r == PAL_NTSC_AUG6(0x479, 1084, 1086)) {
+            if (r == -1 || r == PAL_NTSC_AUG6JUN26(0x479, 1084, 1086)) {
                 return 0;
             }
             next = r;
@@ -807,7 +808,7 @@ static inline MotionOrientEntry *findParallelMotion_ntsc(int cur, int next) /* d
     return 0;
 }
 
-static inline MotionOrientEntry *findParallelMotion_aug6(int cur, int next) /* derived name */
+static inline MotionOrientEntry *findParallelMotion_aug6jun26(int cur, int next) /* derived name */
 {
     int i;
 
@@ -829,8 +830,8 @@ static inline MotionOrientEntry *findParallelMotion(int cur, int next) /* derive
     if (ICO_NTSC) {
         return findParallelMotion_ntsc(cur, next);
     }
-    if (ICO_AUG6) {
-        return findParallelMotion_aug6(cur, next);
+    if (ICO_AUG6JUN26) {
+        return findParallelMotion_aug6jun26(cur, next);
     }
     int i;
 
@@ -864,7 +865,7 @@ static int parallelMotionShift(void *self)
                 shiftMotionOrientBeginFunc(self, p->nextId, m->request, p->shiftMode);
                 return 1;
             }
-        } else if (next != PAL_NTSC_AUG6(0x479, 1084, 1086)) {
+        } else if (next != PAL_NTSC_AUG6JUN26(0x479, 1084, 1086)) {
             MotionOrientEntry e = {m->motion, m->orientKind, next, m->shiftFrom, m->shiftMode};
 
             if (checkMotionShiftReady(&MOWORK(self)->ctrl, &e) != 0) {
@@ -915,7 +916,7 @@ char *SetMotionRequest(void *self, int mot, MotOriReq req)
             (debug_mot_debug_target == 2 && self == isysGObjSearchFromObjKindID_begin(32)) ||
             (debug_mot_debug_target == 3 && self == isysGObjSearchFromObjKindID_begin(4)) ||
             (debug_mot_debug_target == 4 &&
-             self == isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(47, 46)))) {
+             self == isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46)))) {
             if (ignoreCount != 0 && debug_window_flag != 0) {
                 debug_PrintFontWindow(0xC0FF20, "\n ");
             }
@@ -930,7 +931,7 @@ char *SetMotionRequest(void *self, int mot, MotOriReq req)
                 (debug_mot_debug_target == 2 && self == isysGObjSearchFromObjKindID_begin(32)) ||
                 (debug_mot_debug_target == 3 && self == isysGObjSearchFromObjKindID_begin(4)) ||
                 (debug_mot_debug_target == 4 &&
-                 self == isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(47, 46)))) {
+                 self == isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46)))) {
                 MotOriSpin spin = {{"-", "\\", "|", "/"}};
 
                 if (ignoreMotion != mot && ignoreCount != 0) {
@@ -970,7 +971,7 @@ inline void SetParallelMotionTable(void *self, int *next, int *req, int from, in
     struct MotCtrl *m = &GOBJ_SUB(self)->ctrl;
     int old = m->orientKind;
 
-    m->orientKind = PAL_NTSC_AUG6(269, 237, 235);
+    m->orientKind = PAL_NTSC_AUG6JUN26(269, 237, 235);
     SetParallelMotionTableWithNoRequest(self, next, req);
     m->shiftFrom = from;
     m->shiftMode = mode;
@@ -992,7 +993,7 @@ static void getNodeBlendedFloatingMotion(StreamElem *dst, float *root, int id, i
     SkelNode *skel = MOWORK(self)->skel;
 
     for (i = 0, j = motionKind[id].blendKind;
-         blendMotionKind[j].motion != PAL_NTSC_AUG6(0x47B, 1086, 1088); i++, j++) {
+         blendMotionKind[j].motion != PAL_NTSC_AUG6JUN26(0x47B, 1086, 1088); i++, j++) {
         int node = blendMotionKind[j].motion;
 
         checkMotionKind(node, id);
@@ -1264,7 +1265,7 @@ static void getMotionGeometry_ntsc(void *self)
     }
 }
 
-static void getMotionGeometry_aug6(void *self)
+static void getMotionGeometry_aug6jun26(void *self)
 {
     SkelNode *skel = MOWORK(self)->skel;
     struct MotRoot *mo = &MOWORK(self)->root;
@@ -1451,8 +1452,8 @@ static void getMotionGeometry(void *self)
         getMotionGeometry_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        getMotionGeometry_aug6(self);
+    if (ICO_AUG6JUN26) {
+        getMotionGeometry_aug6jun26(self);
         return;
     }
     SkelNode *skel = MOWORK(self)->skel;
@@ -1665,7 +1666,7 @@ static void getShapeGeometry(void *self)
 {
     struct MotCtrl *m = &GOBJ_SUB(self)->ctrl;
 
-    if (motionKind[m->motion].blendKind == PAL_NTSCAUG6(320, 228)) {
+    if (motionKind[m->motion].blendKind == PAL_NTSCAUG6JUN26(320, 228)) {
         void *mot = motionTable[m->motion];
 
         if (CheckMotionIncludeFacialData(mot) == 0) {
@@ -1751,7 +1752,7 @@ static inline int getStreamVec(void *self, void *sm, float *v, void *mot) /* der
     return 0;
 }
 
-static void getStreamMotionGeometry_ntscaug6(void *self, void *sm)
+static void getStreamMotionGeometry_ntscaug6jun26(void *self, void *sm)
 {
     float v[4];
     StreamElem mot[MOWORK(self)->skelNodeNum];
@@ -1773,8 +1774,8 @@ static void getStreamMotionGeometry_ntscaug6(void *self, void *sm)
 
 static void getStreamMotionGeometry(void *self, void *sm)
 {
-    if (ICO_NTSCAUG6) {
-        getStreamMotionGeometry_ntscaug6(self, sm);
+    if (ICO_NTSCAUG6JUN26) {
+        getStreamMotionGeometry_ntscaug6jun26(self, sm);
         return;
     }
     float v[4];
@@ -1871,7 +1872,7 @@ static void getStreamShapeGeometry(void *self, void *sm)
     }
 }
 
-static void getStreamMotion_ntscaug6(void *self)
+static void getStreamMotion_ntscaug6jun26(void *self)
 {
     int s = MOWORK(self)->ctrl.stream;
     char a[GetDataSizeOfStreamMotion(s)];
@@ -1883,8 +1884,8 @@ static void getStreamMotion_ntscaug6(void *self)
 
 static void getStreamMotion(void *self)
 {
-    if (ICO_NTSCAUG6) {
-        getStreamMotion_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        getStreamMotion_ntscaug6jun26(self);
         return;
     }
     int s = MOWORK(self)->ctrl.stream;
@@ -1912,7 +1913,7 @@ void ExecMotionOrient(void *self)
         debug_StdPrintfDummy("\033[36mモーション置き換え機能が停止しています。\033[m: %p\n", self);
     }
     if (w->stream == -1) {
-        if (w->orientKind != PAL_NTSC_AUG6(269, 237, 235)) {
+        if (w->orientKind != PAL_NTSC_AUG6JUN26(269, 237, 235)) {
             normalMotionShift(self, 0);
         } else {
             parallelMotionShift(self);
@@ -1922,7 +1923,7 @@ void ExecMotionOrient(void *self)
             (debug_mot_debug_target == 2 && self == isysGObjSearchFromObjKindID_begin(32)) ||
             (debug_mot_debug_target == 3 && self == isysGObjSearchFromObjKindID_begin(4)) ||
             (debug_mot_debug_target == 4 &&
-             self == isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(47, 46)))) {
+             self == isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46)))) {
             if (w->shifted != 0) {
                 if (ignoreCount != 0 && debug_window_flag != 0) {
                     debug_PrintFontWindow(0xC0FF20, "\n ");
@@ -2016,16 +2017,16 @@ inline int ExecuteSlipProc(GObj *self)
     if (e->ctrl.lastSlipFlags != e->ctrl.slipFlags) {
         StopSEPackageWithGroupVariation(self, 1);
         if (GOBJ_SUB(self)->ctrl.slipFlags & 0x100000) {
-            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6(114, 109), 1);
+            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6JUN26(114, 109), 1);
         }
         if (GOBJ_SUB(self)->ctrl.slipFlags & 0x200000) {
-            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6(116, 111), 1);
+            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6JUN26(116, 111), 1);
         }
         if (GOBJ_SUB(self)->ctrl.slipFlags & 0x400000) {
-            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6(118, 113), 1);
+            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6JUN26(118, 113), 1);
         }
         if (GOBJ_SUB(self)->ctrl.slipFlags & 0x800000) {
-            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6(120, 115), 1);
+            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6JUN26(120, 115), 1);
         }
     }
     return 1;

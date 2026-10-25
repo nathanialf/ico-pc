@@ -245,7 +245,7 @@ static void backStageProcessOutStage_ntsc(void)
     }
 }
 
-static void backStageProcessOutStage_aug6(void)
+static void backStageProcessOutStage_aug6jun26(void)
 {
     Vec16 a;
     Vec16 b;
@@ -357,8 +357,8 @@ void backStageProcessOutStage(void)
         backStageProcessOutStage_ntsc();
         return;
     }
-    if (ICO_AUG6) {
-        backStageProcessOutStage_aug6();
+    if (ICO_AUG6JUN26) {
+        backStageProcessOutStage_aug6jun26();
         return;
     }
     Vec16 a;
@@ -539,7 +539,7 @@ static void backStageProcessMain_ntsc(void)
     }
 }
 
-static void backStageProcessMain_aug6(void)
+static void backStageProcessMain_aug6jun26(void)
 {
     Vec16 pos;
     Vec16 rot;
@@ -617,8 +617,8 @@ void backStageProcessMain(void)
         backStageProcessMain_ntsc();
         return;
     }
-    if (ICO_AUG6) {
-        backStageProcessMain_aug6();
+    if (ICO_AUG6JUN26) {
+        backStageProcessMain_aug6jun26();
         return;
     }
     Vec16 pos;
@@ -782,7 +782,7 @@ void backStageProcessInStage(float arg)
         if (gamesysStageExitTime[stage_no] == 0) {
             return;
         }
-        if (gflagChk(PAL_NTSC_AUG6(390, 357, 356)) != 0) {
+        if (gflagChk(PAL_NTSC_AUG6JUN26(390, 357, 356)) != 0) {
             return;
         }
     }
@@ -791,11 +791,11 @@ void backStageProcessInStage(float arg)
         range = limit;
     }
     if (backStageGirlTargetEnemyGop == 0 && IsGirlEscortedInCurrentStage() == 0 &&
-        gflagChk(PAL_NTSC_AUG6(394, 361, 360)) == 0 && gameSysObjInfo[1].stage == stage_no &&
+        gflagChk(PAL_NTSC_AUG6JUN26(394, 361, 360)) == 0 && gameSysObjInfo[1].stage == stage_no &&
         warpGirlInStageSet == 0) {
         /* the heroine is not held, so the position is changed at random */
         debug_StdPrintfDummy("ヒロイン捕まっていないのでランダムで位置変更");
-        if (gflagChk(PAL_NTSC_AUG6(391, 358, 357)) == 0) {
+        if (gflagChk(PAL_NTSC_AUG6JUN26(391, 358, 357)) == 0) {
             kidnapWarpToWaypoint(girlGObj, range);
         }
     }
@@ -805,7 +805,7 @@ void backStageProcessInStage(float arg)
             if (backStageGirlTargetEnemyGop != gobj) {
                 /* the heroine is not held */
                 debug_StdPrintfDummy("ヒロイン捕まってない");
-                if (gflagChk(PAL_NTSC_AUG6(391, 358, 357)) == 0 &&
+                if (gflagChk(PAL_NTSC_AUG6JUN26(391, 358, 357)) == 0 &&
                     InqCapsuleGhostBossStage() == 0) {
                     kidnapWarpToWaypoint(gobj, range);
                 }

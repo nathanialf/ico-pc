@@ -32,7 +32,7 @@ void BoySekikaTexScroll(void);
 /* st25a.o .data: the queen-appear actor mail list, per disc */
 extern ActMail queen_appear_mes_pal[];
 extern ActMail queen_appear_mes_ntsc[];
-extern ActMail queen_appear_mes_aug6[];
-#define queen_appear_mes PAL_NTSC_AUG6(queen_appear_mes_pal, queen_appear_mes_ntsc, queen_appear_mes_aug6)
+extern ActMail queen_appear_mes_aug6jun26[];
+#define queen_appear_mes PAL_NTSC_AUG6JUN26(queen_appear_mes_pal, queen_appear_mes_ntsc, queen_appear_mes_aug6jun26)
 
 #endif /* ST25A_H */

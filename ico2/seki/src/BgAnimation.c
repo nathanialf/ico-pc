@@ -474,7 +474,7 @@ static void bga_ApplyDObject_ntsc(BgaDObjEnt *p, GObj **objs, int n, int no)
     }
 }
 
-static void bga_ApplyDObject_aug6(BgaDObjEnt *p, GObj **objs, int n, int no)
+static void bga_ApplyDObject_aug6jun26(BgaDObjEnt *p, GObj **objs, int n, int no)
 {
     (void)no; /* PC port: the European parameter, unused here */
     char buf[1024];
@@ -550,8 +550,8 @@ void bga_ApplyDObject(BgaDObjEnt *p, GObj **objs, int n, int no)
         bga_ApplyDObject_ntsc(p, objs, n, no);
         return;
     }
-    if (ICO_AUG6) {
-        bga_ApplyDObject_aug6(p, objs, n, no);
+    if (ICO_AUG6JUN26) {
+        bga_ApplyDObject_aug6jun26(p, objs, n, no);
         return;
     }
     char buf[1024];
@@ -859,7 +859,7 @@ static void bga_GetMotion_jpn(float *pos, float *rot, float *col, BgaPtMotion *m
    unwrapped value and the sine its wrong sign on arm64 (the opening's
    trunk shot was seen mirrored).  The int is in range; its
    conversion to short wraps as the EE's and gcc's code did. */
-static void bga_GetMotion_aug6(float *pos, int *rot, float *col, BgaPtMotion *m)
+static void bga_GetMotion_aug6jun26(float *pos, int *rot, float *col, BgaPtMotion *m)
 {
     BgaPtKey *k;
     BgaPtKey *k1;
@@ -1000,8 +1000,8 @@ static void bga_GetMotion_aug6(float *pos, int *rot, float *col, BgaPtMotion *m)
 
 static void bga_GetMotion(float *pos, int *rot, float *col, BgaPtMotion *m)
 {
-    if (ICO_AUG6) {
-        bga_GetMotion_aug6(pos, rot, col, m);
+    if (ICO_AUG6JUN26) {
+        bga_GetMotion_aug6jun26(pos, rot, col, m);
         return;
     }
     BgaPtKey *k;
@@ -1513,7 +1513,7 @@ static float bga_GetExtMotion(BgaExtMotion *m)
     int i;
     int d;
 
-    if (ICO_JPNKORNTSCAUG6CN) {
+    if (ICO_JPNKORNTSCAUG6JUN26CN) {
         f = m->frame * (30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
     } else {
         f = m->frame;
@@ -1604,7 +1604,7 @@ static void bga_GetGizmoMotion(BgaMotion *m, float *dst)
     int i;
     int d;
 
-    if (ICO_JPNKORNTSCAUG6CN) {
+    if (ICO_JPNKORNTSCAUG6JUN26CN) {
         f = m->frame * (30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
     } else {
         f = m->frame;
@@ -1853,7 +1853,7 @@ static void bga_calcEnvelope(BgaDObjEnt *p, float dt, float w, int cut, int loop
                 BGA_OBJ(Sub15C *, p->u.obj)->nodes[p->num].fade =
                     bga_GetExtMotion(ICO_EEPTR(BgaExtMotion *, e->data));
                 BGA_OBJ(Sub15C *, p->u.obj)->nodes[p->num].flags.ll |= 1;
-                if (ICO_JPNKORNTSCAUG6CN) {
+                if (ICO_JPNKORNTSCAUG6JUN26CN) {
                     bga_updateMotionFrame(ICO_EEPTR(BgaExtMotion *, e->data), dt, 0, w, loop);
                 } else {
                     bga_stepEnvelope(e, dt, loop);
@@ -1867,7 +1867,7 @@ static void bga_calcEnvelope(BgaDObjEnt *p, float dt, float w, int cut, int loop
                               (float)ScreenWidth / 2.66f;
                 }
             }
-            if (ICO_JPNKORNTSCAUG6CN) {
+            if (ICO_JPNKORNTSCAUG6JUN26CN) {
                 bga_updateMotionFrame(ICO_EEPTR(BgaExtMotion *, e->data), dt, 0, w, loop);
             } else {
                 bga_stepEnvelope(e, dt, loop);
@@ -1879,7 +1879,7 @@ static void bga_calcEnvelope(BgaDObjEnt *p, float dt, float w, int cut, int loop
             case 6:
             case 11:
                 *(float *)(BGA_OBJ(char *, p->u.obj) + 0x30) = v;
-                if (ICO_JPNKORNTSCAUG6CN) {
+                if (ICO_JPNKORNTSCAUG6JUN26CN) {
                     bga_updateMotionFrame(ICO_EEPTR(BgaExtMotion *, e->data), dt, 0, w, loop);
                 } else {
                     bga_stepEnvelope(e, dt, loop);
@@ -1888,7 +1888,7 @@ static void bga_calcEnvelope(BgaDObjEnt *p, float dt, float w, int cut, int loop
             case 8:
             case 9:
                 *(float *)(BGA_OBJ(char *, p->u.obj) + 0x80) = v;
-                if (ICO_JPNKORNTSCAUG6CN) {
+                if (ICO_JPNKORNTSCAUG6JUN26CN) {
                     bga_updateMotionFrame(ICO_EEPTR(BgaExtMotion *, e->data), dt, 0, w, loop);
                 } else {
                     bga_stepEnvelope(e, dt, loop);
@@ -1902,7 +1902,7 @@ static void bga_calcEnvelope(BgaDObjEnt *p, float dt, float w, int cut, int loop
             case 6:
             case 11:
                 *(float *)(BGA_OBJ(char *, p->u.obj) + 0x34) = v;
-                if (ICO_JPNKORNTSCAUG6CN) {
+                if (ICO_JPNKORNTSCAUG6JUN26CN) {
                     bga_updateMotionFrame(ICO_EEPTR(BgaExtMotion *, e->data), dt, 0, w, loop);
                 } else {
                     bga_stepEnvelope(e, dt, loop);
@@ -1917,7 +1917,7 @@ static void bga_calcEnvelope(BgaDObjEnt *p, float dt, float w, int cut, int loop
             if (p->u.obj != 0) {
                 bga_GetGizmoMotion(ICO_EEPTR(BgaMotion *, e->data),
                                    BGA_OBJ(Sub15C *, p->u.obj)->morphWeight);
-                if (ICO_JPNKORNTSCAUG6CN) {
+                if (ICO_JPNKORNTSCAUG6JUN26CN) {
                     bga_updateMotionFrame(ICO_EEPTR(BgaExtMotion *, e->data), dt, 0, w, loop);
                 } else {
                     bga_stepEnvelope(e, dt, loop);
@@ -1949,7 +1949,7 @@ static void bga_calcEnvelope(BgaDObjEnt *p, float dt, float w, int cut, int loop
    table lookup.  The VU0 block is the _TransCurrentMatrix body followed by
    the three _RotCurrentMatrix* bodies with the cos/sin pairs already in
    $vf21..$vf26; $vf27..$vf29 hold the vmr32 chain so it is built once. */
-static void _RotTransCurrentMatrixYXZ_aug6(void *t, int *rot)
+static void _RotTransCurrentMatrixYXZ_aug6jun26(void *t, int *rot)
 {
     _TransCurrentMatrix(t);
     _RotCurrentMatrixY(rot[1]);
@@ -1959,8 +1959,8 @@ static void _RotTransCurrentMatrixYXZ_aug6(void *t, int *rot)
 
 static void _RotTransCurrentMatrixYXZ(void *t, int *rot)
 {
-    if (ICO_AUG6) {
-        _RotTransCurrentMatrixYXZ_aug6(t, rot);
+    if (ICO_AUG6JUN26) {
+        _RotTransCurrentMatrixYXZ_aug6jun26(t, rot);
         return;
     }
     float cx, cy, cz, sx, sy, sz;
@@ -2109,7 +2109,8 @@ static void bga_CalcObject(BgaDObjEnt *d, float dt, float frame, int cut, int pl
 
 /* the August preview's object step: the European samplers' angles, the particle spawned
    before its place is kept, no lightning or particle pause, the camera matrix set at a cut */
-static void bga_CalcObject_aug6(BgaDObjEnt *d, float dt, float frame, int cut, int play, int loop)
+static void bga_CalcObject_aug6jun26(BgaDObjEnt *d, float dt, float frame, int cut, int play,
+                                     int loop)
 {
     BgaPtMotion *m = (BgaPtMotion *)&d->motion;
     int save;
@@ -2291,8 +2292,8 @@ static void bga_CalcObject_aug6(BgaDObjEnt *d, float dt, float frame, int cut, i
 
 static void bga_CalcObject(BgaDObjEnt *d, float dt, float frame, int cut, int play, int loop)
 {
-    if (ICO_AUG6) {
-        bga_CalcObject_aug6(d, dt, frame, cut, play, loop);
+    if (ICO_AUG6JUN26) {
+        bga_CalcObject_aug6jun26(d, dt, frame, cut, play, loop);
         return;
     }
     BgaPtMotion *m = (BgaPtMotion *)&d->motion;
@@ -2600,7 +2601,7 @@ static void bga_resetObjectCounter(BgaCntNode *o, float f, int loop)
 {
     BgaCountEnt *e;
 
-    if (ICO_JPNKORNTSCAUG6CN) {
+    if (ICO_JPNKORNTSCAUG6JUN26CN) {
         bga_resetObjectCounter_jpn(o, f, loop);
         return;
     }
@@ -2669,7 +2670,7 @@ static void bga_SetFrame_ntsc(BgaHeader *p, int frame, int mode, int loop)
     bga_CalcAnimation(p, loop, 1);
 }
 
-static void bga_SetFrame_aug6(BgaHeader *p, int frame, int mode, int loop)
+static void bga_SetFrame_aug6jun26(BgaHeader *p, int frame, int mode, int loop)
 {
     float f;
     int start;
@@ -2728,8 +2729,8 @@ void bga_SetFrame(BgaHeader *p, int frame, int mode, int loop)
         bga_SetFrame_ntsc(p, frame, mode, loop);
         return;
     }
-    if (ICO_AUG6) {
-        bga_SetFrame_aug6(p, frame, mode, loop);
+    if (ICO_AUG6JUN26) {
+        bga_SetFrame_aug6jun26(p, frame, mode, loop);
         return;
     }
     float f;
@@ -2903,7 +2904,7 @@ static void bga_CalcAnimation_ntsc(BgaHeader *p, int loop, int reset)
     }
 }
 
-static void bga_CalcAnimation_aug6(BgaHeader *p, int loop, int reset)
+static void bga_CalcAnimation_aug6jun26(BgaHeader *p, int loop, int reset)
 {
     float m[4][4];
     float rm[4][4];
@@ -3002,8 +3003,8 @@ void bga_CalcAnimation(BgaHeader *p, int loop, int reset)
         bga_CalcAnimation_ntsc(p, loop, reset);
         return;
     }
-    if (ICO_AUG6) {
-        bga_CalcAnimation_aug6(p, loop, reset);
+    if (ICO_AUG6JUN26) {
+        bga_CalcAnimation_aug6jun26(p, loop, reset);
         return;
     }
     float m[4][4];
@@ -3202,7 +3203,7 @@ static void bga_CalcSdfCamera_ntsc(char *data, int loop)
     p->frame += 1.0f;
 }
 
-static void bga_CalcSdfCamera_aug6(char *data, int loop)
+static void bga_CalcSdfCamera_aug6jun26(char *data, int loop)
 {
     BgaSdfCam *p = (BgaSdfCam *)data;
     BgaSdfKey *k0;
@@ -3293,8 +3294,8 @@ void bga_CalcSdfCamera(char *data, int loop)
         bga_CalcSdfCamera_ntsc(data, loop);
         return;
     }
-    if (ICO_AUG6) {
-        bga_CalcSdfCamera_aug6(data, loop);
+    if (ICO_AUG6JUN26) {
+        bga_CalcSdfCamera_aug6jun26(data, loop);
         return;
     }
     BgaSdfCam *p = (BgaSdfCam *)data;
@@ -3458,8 +3459,8 @@ static void bga_addLightning_ntsc(int kind, BgaLightningDef *def, float *vec, in
     }
 }
 
-static void bga_addLightning_aug6(int kind, BgaLightningDef *def, float *vec, int id, int t0,
-                                  float f)
+static void bga_addLightning_aug6jun26(int kind, BgaLightningDef *def, float *vec, int id, int t0,
+                                       float f)
 {
     BgaLightning *p;
 
@@ -3534,8 +3535,8 @@ static void bga_addLightning(int kind, BgaLightningDef *def, float *vec, int id,
         bga_addLightning_ntsc(kind, def, vec, id, t0, f);
         return;
     }
-    if (ICO_AUG6) {
-        bga_addLightning_aug6(kind, def, vec, id, t0, f);
+    if (ICO_AUG6JUN26) {
+        bga_addLightning_aug6jun26(kind, def, vec, id, t0, f);
         return;
     }
     BgaLightning *p;
@@ -3754,7 +3755,7 @@ static void bga_DispLightning_ntsc(void)
     }
 }
 
-static void bga_DispLightning_aug6(void)
+static void bga_DispLightning_aug6jun26(void)
 {
     BgaLightning *p;
     BgaLightningDef *g;
@@ -3868,8 +3869,8 @@ void bga_DispLightning(void)
         bga_DispLightning_ntsc();
         return;
     }
-    if (ICO_AUG6) {
-        bga_DispLightning_aug6();
+    if (ICO_AUG6JUN26) {
+        bga_DispLightning_aug6jun26();
         return;
     }
     BgaLightning *p;
@@ -4028,7 +4029,7 @@ inline void bga_SetCamFrame(char *data, int frame, int mode, int loop)
             GlobalTimer = mode;
             _CopyVector(bgaLastCameraPos, bgaCameraMatrix[3]);
         }
-    } else if (ICO_AUG6) {
+    } else if (ICO_AUG6JUN26) {
         NonLinearCameraMove = 1;
     } else {
         if (mode == 1) {
@@ -4040,13 +4041,13 @@ inline void bga_SetCamFrame(char *data, int frame, int mode, int loop)
         }
     }
     if (frame == -1) {
-        p->frame = PAL_JPNKORNTSCAUG6CN(bga_palFrame(p->num), p->num);
+        p->frame = PAL_JPNKORNTSCAUG6JUN26CN(bga_palFrame(p->num), p->num);
     } else {
-        p->frame = PAL_JPNKORNTSCAUG6CN(bga_palFrame(frame), frame);
+        p->frame = PAL_JPNKORNTSCAUG6JUN26CN(bga_palFrame(frame), frame);
     }
 }
 
-static inline int bga_CheckAnimationFinish_ntscaug6(BgaHeader *p)
+static inline int bga_CheckAnimationFinish_ntscaug6jun26(BgaHeader *p)
 {
     float f = p->end;
     int r = 0;
@@ -4060,8 +4061,8 @@ static inline int bga_CheckAnimationFinish_ntscaug6(BgaHeader *p)
 
 inline int bga_CheckAnimationFinish(BgaHeader *p)
 {
-    if (ICO_NTSCAUG6) {
-        return bga_CheckAnimationFinish_ntscaug6(p);
+    if (ICO_NTSCAUG6JUN26) {
+        return bga_CheckAnimationFinish_ntscaug6jun26(p);
     }
     float f = p->end;
     float t = p->frame;
@@ -4084,7 +4085,7 @@ inline int bga_CheckAnimationFinish(BgaHeader *p)
     return r;
 }
 
-static inline int bga_CheckAnimationFrame_ntscaug6(BgaHeader *p, int frame, int reset)
+static inline int bga_CheckAnimationFrame_ntscaug6jun26(BgaHeader *p, int frame, int reset)
 {
     float f = frame;
     int r = 0;
@@ -4106,8 +4107,8 @@ static inline int bga_CheckAnimationFrame_ntscaug6(BgaHeader *p, int frame, int 
 
 inline int bga_CheckAnimationFrame(BgaHeader *p, int frame, int reset)
 {
-    if (ICO_NTSCAUG6) {
-        return bga_CheckAnimationFrame_ntscaug6(p, frame, reset);
+    if (ICO_NTSCAUG6JUN26) {
+        return bga_CheckAnimationFrame_ntscaug6jun26(p, frame, reset);
     }
     float f = frame;
     float t = p->frame;
@@ -4133,7 +4134,7 @@ inline int bga_CheckAnimationFrame(BgaHeader *p, int frame, int reset)
     return r;
 }
 
-static inline int bga_CheckAnimationFrameIn_ntscaug6(BgaHeader *p, int in, int out)
+static inline int bga_CheckAnimationFrameIn_ntscaug6jun26(BgaHeader *p, int in, int out)
 {
     float a = in;
     int r = 0;
@@ -4154,8 +4155,8 @@ static inline int bga_CheckAnimationFrameIn_ntscaug6(BgaHeader *p, int in, int o
 
 inline int bga_CheckAnimationFrameIn(BgaHeader *p, int in, int out)
 {
-    if (ICO_NTSCAUG6) {
-        return bga_CheckAnimationFrameIn_ntscaug6(p, in, out);
+    if (ICO_NTSCAUG6JUN26) {
+        return bga_CheckAnimationFrameIn_ntscaug6jun26(p, in, out);
     }
     float a = in;
     float t = p->frame;
@@ -4175,7 +4176,7 @@ inline int bga_CheckAnimationFrameIn(BgaHeader *p, int in, int out)
     return r;
 }
 
-static inline int bga_CheckSdfCameraFinish_ntscaug6(char *data)
+static inline int bga_CheckSdfCameraFinish_ntscaug6jun26(char *data)
 {
     BgaSdfCam *p = (BgaSdfCam *)data;
     float f = p->num;
@@ -4185,8 +4186,8 @@ static inline int bga_CheckSdfCameraFinish_ntscaug6(char *data)
 
 inline int bga_CheckSdfCameraFinish(char *data)
 {
-    if (ICO_NTSCAUG6) {
-        return bga_CheckSdfCameraFinish_ntscaug6(data);
+    if (ICO_NTSCAUG6JUN26) {
+        return bga_CheckSdfCameraFinish_ntscaug6jun26(data);
     }
     BgaSdfCam *p = (BgaSdfCam *)data;
     float f = p->num;
@@ -4202,7 +4203,7 @@ inline int bga_CheckSdfCameraFinish(char *data)
     }
 }
 
-static inline int bga_CheckSdfCameraFrame_ntscaug6(char *data, int frame, int reset)
+static inline int bga_CheckSdfCameraFrame_ntscaug6jun26(char *data, int frame, int reset)
 {
     BgaSdfCam *p = (BgaSdfCam *)data;
     float f = frame;
@@ -4217,8 +4218,8 @@ static inline int bga_CheckSdfCameraFrame_ntscaug6(char *data, int frame, int re
 
 inline int bga_CheckSdfCameraFrame(char *data, int frame, int reset)
 {
-    if (ICO_NTSCAUG6) {
-        return bga_CheckSdfCameraFrame_ntscaug6(data, frame, reset);
+    if (ICO_NTSCAUG6JUN26) {
+        return bga_CheckSdfCameraFrame_ntscaug6jun26(data, frame, reset);
     }
     BgaSdfCam *p = (BgaSdfCam *)data;
     float f = frame;
@@ -4240,7 +4241,7 @@ inline int bga_CheckSdfCameraFrame(char *data, int frame, int reset)
     return r;
 }
 
-static inline int bga_CheckSdfCameraFrameIn_ntscaug6(char *data, int in, int out)
+static inline int bga_CheckSdfCameraFrameIn_ntscaug6jun26(char *data, int in, int out)
 {
     BgaSdfCam *p = (BgaSdfCam *)data;
     float a = in;
@@ -4262,8 +4263,8 @@ static inline int bga_CheckSdfCameraFrameIn_ntscaug6(char *data, int in, int out
 
 inline int bga_CheckSdfCameraFrameIn(char *data, int in, int out)
 {
-    if (ICO_NTSCAUG6) {
-        return bga_CheckSdfCameraFrameIn_ntscaug6(data, in, out);
+    if (ICO_NTSCAUG6JUN26) {
+        return bga_CheckSdfCameraFrameIn_ntscaug6jun26(data, in, out);
     }
     BgaSdfCam *p = (BgaSdfCam *)data;
     float t = p->frame;

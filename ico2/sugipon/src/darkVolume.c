@@ -495,7 +495,7 @@ static void sonic(void *pos, float t)
     dvSetGsReg(0x4A, 0);
     dvSetGsReg(0x3B, 0x8000008080LL);
     dvSetGsReg(0x14, 0x60);
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         dvSetFrame(0x40, gsFrame.w, ScreenHeight, 0, 0);
     } else {
         dvSetFrame(0x40, gsFrame.w, ScreenHeight, screenOffsetX, screenOffsetY);
@@ -580,7 +580,7 @@ static void sonic(void *pos, float t)
 
             dvSetGsReg(0x46, 1);
             dvSetGsReg(0x4A, 0);
-            if (ICO_NTSCAUG6) {
+            if (ICO_NTSCAUG6JUN26) {
                 dvSetFrame(0x40, gsFrame.w, ScreenHeight, 0, 0);
             } else {
                 dvSetFrame(0x40, gsFrame.w, ScreenHeight, screenOffsetX, screenOffsetY);
@@ -733,7 +733,7 @@ static void darkVolume(void *pos, float radius, float ratio, float edge)
     dvSetGsReg(0x4A, 0);
     dvSetGsReg(0x3B, 0x8000008080LL);
     dvSetGsReg(0x14, 0x60);
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         dvSetFrame(0x1000040, gsFrame.w, ScreenHeight, 0, 0);
     } else {
         dvSetFrame(0x1000040, gsFrame.w, ScreenHeight, screenOffsetX, screenOffsetY);
@@ -827,11 +827,11 @@ static inline void setGameOverEffect(float *center, float speed) /* derived name
 inline void StartGameOverEffect(float *center, float speed)
 {
     if (girlGObj != 0) {
-        ExecuteSEPackage(girlGObj, PAL_NTSCAUG6(0x7A, 117));
-        ExecuteSEPackage(girlGObj, PAL_NTSCAUG6(0x7B, 118));
-        ExecuteSEPackage(girlGObj, PAL_NTSCAUG6(0x7C, 119));
-        ExecuteSEPackage(girlGObj, PAL_NTSCAUG6(0x7D, 120));
-        ExecuteSEPackage(girlGObj, PAL_NTSCAUG6(0x7E, 121));
+        ExecuteSEPackage(girlGObj, PAL_NTSCAUG6JUN26(0x7A, 117));
+        ExecuteSEPackage(girlGObj, PAL_NTSCAUG6JUN26(0x7B, 118));
+        ExecuteSEPackage(girlGObj, PAL_NTSCAUG6JUN26(0x7C, 119));
+        ExecuteSEPackage(girlGObj, PAL_NTSCAUG6JUN26(0x7D, 120));
+        ExecuteSEPackage(girlGObj, PAL_NTSCAUG6JUN26(0x7E, 121));
     }
     setGameOverEffect(center, speed);
 }
@@ -884,7 +884,7 @@ void DispGameOverEffect(void)
                  g = isysGObjSearchFromObjKindID_next(g)) {
                 sendGameOverMail(g, r2);
             }
-            for (g = isysGObjSearchFromObjKindID_begin(PAL_NTSC_AUG6(62, 61, 60)); g != 0;
+            for (g = isysGObjSearchFromObjKindID_begin(PAL_NTSC_AUG6JUN26(62, 61, 60)); g != 0;
                  g = isysGObjSearchFromObjKindID_next(g)) {
                 sendGameOverMail(g, r2);
             }
@@ -959,15 +959,15 @@ void InitGameOverEffect(void)
     CopyVector(darkVolumeCenter, ZeroPoint);
 }
 
-static int InitDarkVolumeGeo_ntscaug6(GObj *self)
+static int InitDarkVolumeGeo_ntscaug6jun26(GObj *self)
 {
     return 0;
 }
 
 inline int InitDarkVolumeGeo(GObj *self)
 {
-    if (ICO_NTSCAUG6) {
-        return InitDarkVolumeGeo_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        return InitDarkVolumeGeo_ntscaug6jun26(self);
     }
     *(int *)GOBJ_SUB(self)->nodeMtx = 0;
     return 0;
@@ -978,12 +978,12 @@ void SetupDarkVolume(void *pos, float radius, float edge)
     darkVolume(pos, radius, 1.0f, edge);
 }
 
-static void DarkVolumeGeo_ntscaug6(GObj *self) {}
+static void DarkVolumeGeo_ntscaug6jun26(GObj *self) {}
 
 void DarkVolumeGeo(GObj *self)
 {
-    if (ICO_NTSCAUG6) {
-        DarkVolumeGeo_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        DarkVolumeGeo_ntscaug6jun26(self);
         return;
     }
     float *p;

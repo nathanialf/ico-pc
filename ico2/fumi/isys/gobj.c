@@ -92,7 +92,7 @@ static __inline__ void kindTableRemove(GObj *g) /* derived name */
 {
     int kind = g->kind;
     GObj *p;
-    if ((unsigned int)(kind - 1) < PAL_NTSC_AUG6(69, 67, 66)) {
+    if ((unsigned int)(kind - 1) < PAL_NTSC_AUG6JUN26(69, 67, 66)) {
         p = gobjKindHead[kind];
         if (p == g) {
             gobjKindHead[kind] = g->kindNext;
@@ -359,7 +359,7 @@ inline void isysGObjKindTableAdd(GObj *g, int kind)
         }
     }
     g->kind = kind;
-    if ((unsigned int)kind < PAL_NTSC_AUG6(70, 68, 67)) {
+    if ((unsigned int)kind < PAL_NTSC_AUG6JUN26(70, 68, 67)) {
         if (gobjKindHead[kind] == 0) {
             gobjKindHead[kind] = g;
         } else {
@@ -485,7 +485,7 @@ inline void *isysGObjSearchFromObjKindID_begin(int kind)
     if (debugKindOld != 0) {
         return searchGObjOfObjKind(gobjTable - 1, kind);
     }
-    if ((unsigned int)(kind - 1) < PAL_NTSC_AUG6(69, 67, 66)) {
+    if ((unsigned int)(kind - 1) < PAL_NTSC_AUG6JUN26(69, 67, 66)) {
         return gobjKindHead[kind];
     }
     return 0;

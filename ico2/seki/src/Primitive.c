@@ -976,8 +976,8 @@ void prim_DispParticle(PrimParticle *p, void *mtx)
             /* "the specified texture number is invalid" */
             debug_StdPrintfDummy("prim_DispParticle:指定したテクスチャ番号が異常です. %s:%d\n",
                                  p->name, p->tex);
-            debug_assert("src/Primitive.c", PAL_NTSC_AUG6(1020, 1036, 1008));
-            __assert("src/Primitive.c", PAL_NTSC_AUG6(1020, 1036, 1008), "FALSE");
+            debug_assert("src/Primitive.c", PAL_NTSC_AUG6JUN26(1020, 1036, 1008));
+            __assert("src/Primitive.c", PAL_NTSC_AUG6JUN26(1020, 1036, 1008), "FALSE");
             return;
         }
         if (p->num < 0x51) {
@@ -1108,8 +1108,8 @@ void prim_DispWireBox(float *sz, void *col)
     }
 }
 
-static PrimParticle *prim_InitParticle_aug6(int num, float x, float y, float z, int a1, char *name,
-                                            int a3)
+static PrimParticle *prim_InitParticle_aug6jun26(int num, float x, float y, float z, int a1,
+                                                 char *name, int a3)
 {
     PrimQw hd = {{0x5000400000000000LL, 0x52521}};
     Prim3DVec cl0 = {1024.0f, 1024.0f, 0.0f, 1.0f};
@@ -1202,8 +1202,8 @@ static PrimParticle *prim_InitParticle_aug6(int num, float x, float y, float z, 
 
 PrimParticle *prim_InitParticle(int num, float x, float y, float z, int a1, char *name, int a3)
 {
-    if (ICO_AUG6) {
-        return prim_InitParticle_aug6(num, x, y, z, a1, name, a3);
+    if (ICO_AUG6JUN26) {
+        return prim_InitParticle_aug6jun26(num, x, y, z, a1, name, a3);
     }
     return prim_InitParticleByPartition(num, x, y, z, a1, name, a3, ios_partition_oomori);
 }

@@ -393,9 +393,9 @@ loop:
 /* the object kinds the character list builder accepts, -1 terminated */
 static int charGObjKinds_pal[5] = {1, 2, 4, 47, -1}; /* derived name */
 
-static int charGObjKinds_ntscaug6[5] = {1, 2, 4, 46, -1}; /* derived name */
+static int charGObjKinds_ntscaug6jun26[5] = {1, 2, 4, 46, -1}; /* derived name */
 
-#define charGObjKinds PAL_NTSCAUG6(charGObjKinds_pal, charGObjKinds_ntscaug6)
+#define charGObjKinds PAL_NTSCAUG6JUN26(charGObjKinds_pal, charGObjKinds_ntscaug6jun26)
 
 /* the live character objects the cylinder check walks */
 static GObj *charGObjList[64]; /* derived name */

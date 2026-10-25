@@ -246,7 +246,7 @@ static int ChangeMailInLadder_ntsc(GObj *self, int mail)
     return ret;
 }
 
-static int ChangeMailInLadder_aug6(GObj *self, int mail)
+static int ChangeMailInLadder_aug6jun26(GObj *self, int mail)
 {
     float p[4];
     float q[4];
@@ -303,8 +303,8 @@ static int ChangeMailInLadder(GObj *self, int mail)
     if (ICO_NTSC) {
         return ChangeMailInLadder_ntsc(self, mail);
     }
-    if (ICO_AUG6) {
-        return ChangeMailInLadder_aug6(self, mail);
+    if (ICO_AUG6JUN26) {
+        return ChangeMailInLadder_aug6jun26(self, mail);
     }
     float p[4];
     float q[4];
@@ -389,7 +389,7 @@ static inline int GetHitDirIdx(GObj *self) /* derived name */
     return 0;
 }
 
-static int _ACTCorrectMsg_aug6(GObj *self, int msg, void *param)
+static int _ACTCorrectMsg_aug6jun26(GObj *self, int msg, void *param)
 {
     float pos[4];
     Act *sk = GOBJ_ACT(self);
@@ -942,8 +942,8 @@ int _ACTCorrectMsg(GObj *self, int msg, void *param)
     if (ICO_NTSC) {
         return _ACTCorrectMsg_ntsc(self, msg, param);
     }
-    if (ICO_AUG6) {
-        return _ACTCorrectMsg_aug6(self, msg, param);
+    if (ICO_AUG6JUN26) {
+        return _ACTCorrectMsg_aug6jun26(self, msg, param);
     }
     float pos[4];
     Act *sk = GOBJ_ACT(self);
@@ -1289,7 +1289,7 @@ static int intrMotion_ntsc[392] = {
     0,   0,   162, 163, 164, 95,  165, 1,   166, 167, 168, 169, 167, 106, 1,   0,   0,   0,   0,
     0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0}; /* derived name */
 
-static int intrMotion_aug6[388] = {
+static int intrMotion_aug6jun26[388] = {
     0,   0,   0,   0,   0,   0,   104, 104, 54,  0,   1,   0,   0,   0,   0,   194, 195, 0,   0,
     0,   76,  77,  0,   143, 106, 147, 151, 1,   17,  19,  20,  0,   0,   0,   118, 0,   -1,  -1,
     129, 236, -1,  110, 144, 145, 0,   0,   0,   108, 107, 132, 133, 134, 232, 233, 4,   1,   4,
@@ -1312,7 +1312,7 @@ static int intrMotion_aug6[388] = {
     162, 94,  163, 1,   164, 165, 166, 167, 165, 105, 1,   0,   0,   0,   0,   0,   0,   0,   0,
     0,   0,   0,   0,   0,   0,   0,   0}; /* derived name */
 
-#define intrMotion PAL_NTSC_AUG6(intrMotion_pal, intrMotion_ntsc, intrMotion_aug6)
+#define intrMotion PAL_NTSC_AUG6JUN26(intrMotion_pal, intrMotion_ntsc, intrMotion_aug6jun26)
 
 static int ACTGetOrientFromIntrK_ntsc(GObj *self, int k, MotOriReq *out, int arg)
 {
@@ -1420,7 +1420,7 @@ static int ACTGetOrientFromIntrK_ntsc(GObj *self, int k, MotOriReq *out, int arg
     return ret;
 }
 
-static int ACTGetOrientFromIntrK_aug6(GObj *self, int k, MotOriReq *out, int arg)
+static int ACTGetOrientFromIntrK_aug6jun26(GObj *self, int k, MotOriReq *out, int arg)
 {
     Act *s = GOBJ_ACT(self);
     MotOriTarget tmp;
@@ -1531,8 +1531,8 @@ int ACTGetOrientFromIntrK(GObj *self, int k, MotOriReq *out, int arg)
     if (ICO_NTSC) {
         return ACTGetOrientFromIntrK_ntsc(self, k, out, arg);
     }
-    if (ICO_AUG6) {
-        return ACTGetOrientFromIntrK_aug6(self, k, out, arg);
+    if (ICO_AUG6JUN26) {
+        return ACTGetOrientFromIntrK_aug6jun26(self, k, out, arg);
     }
     Act *s = GOBJ_ACT(self);
     MotOriTarget tmp;
@@ -1645,7 +1645,7 @@ static inline void setIntrFlags(IntrMail *intr) /* derived name */
 {
     IntrMail *p;
 
-    for (p = intr; p != 0 && (short)p->kind != PAL_NTSC_AUG6(429, 396, 392); p++) {
+    for (p = intr; p != 0 && (short)p->kind != PAL_NTSC_AUG6JUN26(429, 396, 392); p++) {
         p->flags |= 0x40000;
     }
 }
@@ -1655,9 +1655,9 @@ static inline void correctIntrList(IntrMail *intr, IntrMail *corr) /* derived na
     IntrMail *ip;
     IntrMail *q;
 
-    for (q = corr; q != 0 && (short)q->kind != PAL_NTSC_AUG6(429, 396, 392); q++) {
+    for (q = corr; q != 0 && (short)q->kind != PAL_NTSC_AUG6JUN26(429, 396, 392); q++) {
         if (q->mode == -1) {
-            for (ip = intr; ip != 0 && (short)ip->kind != PAL_NTSC_AUG6(429, 396, 392); ip++) {
+            for (ip = intr; ip != 0 && (short)ip->kind != PAL_NTSC_AUG6JUN26(429, 396, 392); ip++) {
                 if (ip->kind == q->kind) {
                     ip->flags &= ~0x40000;
                     debug_StdPrintfDummy("off!!\n");
@@ -1689,7 +1689,7 @@ static void ACTRunIntrCorrect_ntsc(GObj *self, IntrMail *intr, IntrMail *corr)
     }
 }
 
-static void ACTRunIntrCorrect_aug6(GObj *self, IntrMail *intr, IntrMail *corr)
+static void ACTRunIntrCorrect_aug6jun26(GObj *self, IntrMail *intr, IntrMail *corr)
 {
     Act *s = GOBJ_ACT(self);
     char *rec;
@@ -1717,8 +1717,8 @@ void ACTRunIntrCorrect(GObj *self, IntrMail *intr, IntrMail *corr)
         ACTRunIntrCorrect_ntsc(self, intr, corr);
         return;
     }
-    if (ICO_AUG6) {
-        ACTRunIntrCorrect_aug6(self, intr, corr);
+    if (ICO_AUG6JUN26) {
+        ACTRunIntrCorrect_aug6jun26(self, intr, corr);
         return;
     }
     char *rec;
@@ -1764,7 +1764,7 @@ void WithMailFunc_AttackFail(GObj *self)
     }
 }
 
-static void WithMailFunc_AttackRejectInQueen_ntscaug6(GObj *self)
+static void WithMailFunc_AttackRejectInQueen_ntscaug6jun26(GObj *self)
 {
     Act *s = GOBJ_ACT(self);
     GObj *w = s->weapon;
@@ -1782,8 +1782,8 @@ static void WithMailFunc_AttackRejectInQueen_ntscaug6(GObj *self)
 
 void WithMailFunc_AttackRejectInQueen(GObj *self)
 {
-    if (ICO_NTSCAUG6) {
-        WithMailFunc_AttackRejectInQueen_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        WithMailFunc_AttackRejectInQueen_ntscaug6jun26(self);
         return;
     }
     Act *s = GOBJ_ACT(self);
@@ -1949,14 +1949,14 @@ void actCommonRope(GObj *volatile self)
         LockChainGeo(s->chain);
         switch (CollisCheckInRope((void *)self, s->chain)) {
         case 1:
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xA8, 156, 154));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xA8, 156, 154));
             break;
         case 2:
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xA7, 155, 153));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xA7, 155, 153));
             break;
         }
         if (chainFloorHit(self, &work)) {
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xA9, 157, 155));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xA9, 157, 155));
         }
         if (step >= 0) {
             if (step == nsteps) {
@@ -1978,7 +1978,7 @@ void actCommonRope(GObj *volatile self)
             if (ICO_NTSC) {
                 ActSendMail_WithAdditionalData(self, 142, (void *)self,
                                                GOBJ_ACT(self)->enemy->climbOrient);
-            } else if (ICO_AUG6) {
+            } else if (ICO_AUG6JUN26) {
                 ActSendMail_WithAdditionalData(self, 140, (void *)self,
                                                GOBJ_ACT(self)->enemy->climbOrient);
             } else {
@@ -2016,7 +2016,7 @@ void motCommonRopeTurnR(GObj *volatile self)
         deg += 5;
         if (i % wait == 0) {
             setCorrectOrientOfChain((void *)self);
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x150, 314, 310));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x150, 314, 310));
         }
         _ACTWait(1);
     }
@@ -2039,7 +2039,7 @@ void motCommonRopeTurnL(GObj *volatile self)
         deg += 5;
         if (i % wait == 0) {
             setCorrectOrientOfChain((void *)self);
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x150, 314, 310));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x150, 314, 310));
         }
         _ACTWait(1);
     }
@@ -2135,7 +2135,7 @@ static void actCommonRopeClimbEnd1_ntsc(GObj *volatile self)
     }
 }
 
-static void actCommonRopeClimbEnd1_aug6(GObj *volatile self)
+static void actCommonRopeClimbEnd1_aug6jun26(GObj *volatile self)
 {
     ClimbEndRec c;
     ClimbVec4 dir;
@@ -2207,8 +2207,8 @@ void actCommonRopeClimbEnd1(GObj *volatile self)
         actCommonRopeClimbEnd1_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actCommonRopeClimbEnd1_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actCommonRopeClimbEnd1_aug6jun26(self);
         return;
     }
     ClimbEndRec c;
@@ -2338,7 +2338,7 @@ static void actCommonRopeCliff_ntsc(GObj *volatile self)
     }
 }
 
-static void actCommonRopeCliff_aug6(GObj *volatile self)
+static void actCommonRopeCliff_aug6jun26(GObj *volatile self)
 {
     float dst[4];
     float root[4];
@@ -2374,8 +2374,8 @@ void actCommonRopeCliff(GObj *volatile self)
         actCommonRopeCliff_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actCommonRopeCliff_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actCommonRopeCliff_aug6jun26(self);
         return;
     }
     float dst[4];
@@ -2493,7 +2493,7 @@ static inline void chainUpdate(GObj *gobj, float *sk, float *out, float *lo,
 
 /* the 2001 builds' cage helpers (GNU nested functions there): the move goes down 100 as well
    as up 200, and the boy hangs 15 (not 20) before the chain */
-static inline void initCage_ntscaug6(GObj *o, int down) /* derived name */
+static inline void initCage_ntscaug6jun26(GObj *o, int down) /* derived name */
 {
     initCage(o);
     if (down) {
@@ -2501,8 +2501,8 @@ static inline void initCage_ntscaug6(GObj *o, int down) /* derived name */
     }
 }
 
-static inline void cageMove_ntscaug6(GObj *cage, GObj *o, float *dst, float *lo, float *hi,
-                                     float *res, float x, float y, float z) /* derived name */
+static inline void cageMove_ntscaug6jun26(GObj *cage, GObj *o, float *dst, float *lo, float *hi,
+                                          float *res, float x, float y, float z) /* derived name */
 {
     dst[0] = x;
     dst[1] = y;
@@ -2514,7 +2514,7 @@ static inline void cageMove_ntscaug6(GObj *cage, GObj *o, float *dst, float *lo,
     ACTSetPositionNodeWithFitting(o, 0x23, res, 1.0f);
 }
 
-static void TestCageUpDown_ntscaug6(GObj *cage, GObj *gobj)
+static void TestCageUpDown_ntscaug6jun26(GObj *cage, GObj *gobj)
 {
     float vA[4];
     float vB[4];
@@ -2535,32 +2535,32 @@ static void TestCageUpDown_ntscaug6(GObj *cage, GObj *gobj)
     case 117:
         if (GOBJ_ACT(gobj)->actMode == 63) {
             if (cageUpDown.last != mot) {
-                initCage_ntscaug6(gobj, 1);
+                initCage_ntscaug6jun26(gobj, 1);
             }
             _InterGV(vA, cageUpDown.a, cageUpDown.b, (float)cageUpDown.cnt,
                      (float)(cageUpDown.lim - cageUpDown.cnt));
-            cageMove_ntscaug6(cage, gobj, vF, vG, vH, vE, vA[0], vA[1], vA[2]);
+            cageMove_ntscaug6jun26(cage, gobj, vF, vG, vH, vE, vA[0], vA[1], vA[2]);
             cageUpDown.cnt = cageUpDown.cnt + 1;
         } else {
             if (cageUpDown.last != mot) {
-                initCage_ntscaug6(gobj, 1);
+                initCage_ntscaug6jun26(gobj, 1);
             }
             _InterGV(vA, cageUpDown.a, cageUpDown.b, (float)cageUpDown.cnt,
                      (float)(cageUpDown.lim - cageUpDown.cnt));
             vA[1] = vA[1] < vB[1] ? vB[1] : (vC[1] < vA[1] ? vC[1] : vA[1]);
-            cageMove_ntscaug6(cage, gobj, vF, vG, vH, vE, vA[0], vA[1], vA[2]);
+            cageMove_ntscaug6jun26(cage, gobj, vF, vG, vH, vE, vA[0], vA[1], vA[2]);
             cageUpDown.cnt = cageUpDown.cnt + 1;
         }
         break;
     case 119:
     case 120:
         if (cageUpDown.last != mot) {
-            initCage_ntscaug6(gobj, 0);
+            initCage_ntscaug6jun26(gobj, 0);
         }
         _InterGV(vA, cageUpDown.a, cageUpDown.b, (float)cageUpDown.cnt,
                  (float)(cageUpDown.lim - cageUpDown.cnt));
         vA[1] = vA[1] < vB[1] ? vB[1] : (vC[1] < vA[1] ? vC[1] : vA[1]);
-        cageMove_ntscaug6(cage, gobj, vF, vG, vH, vE, vA[0], vA[1], vA[2]);
+        cageMove_ntscaug6jun26(cage, gobj, vF, vG, vH, vE, vA[0], vA[1], vA[2]);
         cageUpDown.cnt = cageUpDown.cnt + 1;
         break;
     default:
@@ -2577,8 +2577,8 @@ static void TestCageUpDown_ntscaug6(GObj *cage, GObj *gobj)
 
 static void TestCageUpDown(GObj *cage, GObj *gobj)
 {
-    if (ICO_NTSCAUG6) {
-        TestCageUpDown_ntscaug6(cage, gobj);
+    if (ICO_NTSCAUG6JUN26) {
+        TestCageUpDown_ntscaug6jun26(cage, gobj);
         return;
     }
     float vA[4];
@@ -2673,7 +2673,7 @@ void actCommonRopeSpecial(GObj *volatile self)
 
     s = GOBJ_ACT(self);
     cage = s->env.cageObj.obj;
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         if (cage != 0) {
             GOBJ_WORK(self)->ropeCage = cage;
         } else {
@@ -2690,7 +2690,7 @@ void actCommonRopeSpecial(GObj *volatile self)
     found = ropeSpecialWallHit(&p1, &hit);
     GOBJ_SUB(self)->root.ropeState = 0;
     while (1) {
-        if (GOBJ_SUB(self)->ctrl.motion == PAL_NTSCAUG6(118, 116)) {
+        if (GOBJ_SUB(self)->ctrl.motion == PAL_NTSCAUG6JUN26(118, 116)) {
             s->flags20.ll &= ~(1ULL << 11);
         }
         GetSkeltonPosition(pos.f, self, 35);
@@ -2700,9 +2700,9 @@ void actCommonRopeSpecial(GObj *volatile self)
                          (int)*(float *)((char *)test_CURRENTROOT((void *)self) + 4), (int)p2.f[1]);
         }
         if (*(float *)((char *)test_CURRENTROOT((void *)self) + 4) > p2.f[1] - 30.0f) {
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
         }
-        if (found && pos.f[1] < p1.f[1] + PAL_NTSCAUG6(60.0f, 10.0f)) {
+        if (found && pos.f[1] < p1.f[1] + PAL_NTSCAUG6JUN26(60.0f, 10.0f)) {
             GOBJ_ACT(self)->enemy->climbObj = cage;
             GetOrientOfWall((char *)GOBJ_ACT(self)->enemy->climbOrient, hit.wall, &hit.wallSrc);
             GOBJ_ACT(self)->enemy->climbPos[0] = p1.f[0];
@@ -2710,7 +2710,7 @@ void actCommonRopeSpecial(GObj *volatile self)
             GOBJ_ACT(self)->enemy->climbPos[2] = p1.f[2];
             GOBJ_ACT(self)->enemy->climbPos[1] -= 100.0f;
             GOBJ_ACT(self)->enemy->climbCol = hit;
-            ActSendMail_WithAdditionalData(self, PAL_NTSC_AUG6(0xB0, 163, 161), (void *)self,
+            ActSendMail_WithAdditionalData(self, PAL_NTSC_AUG6JUN26(0xB0, 163, 161), (void *)self,
                                            GOBJ_ACT(self)->enemy->climbOrient);
         }
         TestCageUpDown(cage, (void *)self);
@@ -2763,12 +2763,12 @@ static inline void correctLeverHoldPoint(GObj *self, GObj *lev) /* derived name 
             GetFloorLeverGlobalHoldPoint(w, lev);
         } else if (lev->kind < 26) {
             GetWallLeverGlobalHoldPoint(w, lev);
-            if (!ICO_NTSCAUG6) {
+            if (!ICO_NTSCAUG6JUN26) {
                 debug_StdPrintfDummy("%f, %f, %f\n", w[0], w[1], w[2]);
             }
         }
     }
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         /* this build has no ...NoFittingWithNodePointXZ (0x1561B0 jal 0x102A10) */
         SetDirectRootPositionNoFittingWithNodePoint(self, 22, w, 0.2f);
     } else {
@@ -2787,7 +2787,7 @@ void actCommonLever(GObj *volatile self)
     p[1] = s->env.pullPos[1];
     p[2] = s->env.pullPos[2];
     p[1] = test_CURRENTROOT((void *)self)[1];
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         SetDirectRootPositionNoFitting((void *)self, s->env.pullPos);
     } else {
         SetDirectRootPositionNoFittingWithNodePointXZ((void *)self, 0x2C, s->env.pullPos, 1.0f);
@@ -2850,7 +2850,7 @@ inline void actCommonDamage(GObj *volatile self)
         _ACTWait(360);
     }
     for (;;) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
         _ACTWait(1);
     }
 }
@@ -2881,7 +2881,7 @@ static void actCommonDown_ntsc(GObj *volatile self)
     }
 }
 
-static void actCommonDown_aug6(GObj *volatile self)
+static void actCommonDown_aug6jun26(GObj *volatile self)
 {
     float v[4];
     Act *s = GOBJ_ACT(self);
@@ -2913,8 +2913,8 @@ void actCommonDown(GObj *volatile self)
         actCommonDown_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actCommonDown_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actCommonDown_aug6jun26(self);
         return;
     }
     float v[4];
@@ -2952,13 +2952,14 @@ static inline void dieNotifyObjects(GObj *self) /* derived name */
 {
     void *g;
 
-    if (self->labelId == PAL_JPNKORCN_NTSC_AUG6(3757, 3734, 3453, 3415)) {
-        gamesysObjInfoCls(4, PAL_JPNKORCN_NTSC_AUG6(0xEAD, 3734, 3453, 3415));
-        gamesysObjInfoCls(PAL_JPNKORCN(0x21, 33), PAL_JPNKORCN_NTSC_AUG6(0xEAE, 3735, 3454, 3416));
+    if (self->labelId == PAL_JPNKORCN_NTSC_AUG6JUN26(3757, 3734, 3453, 3415)) {
+        gamesysObjInfoCls(4, PAL_JPNKORCN_NTSC_AUG6JUN26(0xEAD, 3734, 3453, 3415));
+        gamesysObjInfoCls(PAL_JPNKORCN(0x21, 33),
+                          PAL_JPNKORCN_NTSC_AUG6JUN26(0xEAE, 3735, 3454, 3416));
     }
-    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(0x2F, 46));
+    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(0x2F, 46));
     if (g == 0) {
-        g = isysGObjSearchFromObjKindID_begin(PAL_NTSC_AUG6(0x41, 64, 63));
+        g = isysGObjSearchFromObjKindID_begin(PAL_NTSC_AUG6JUN26(0x41, 64, 63));
     }
     if (self->kind == 4 && g != 0) {
         iosOmSendMail(g, 0x12, self);
@@ -2972,7 +2973,7 @@ void actCommonDie(GObj *volatile self)
     float t;
     int corpse;
 
-    if (s->intrKind == PAL_AUG6(44, 43)) {
+    if (s->intrKind == PAL_AUG6JUN26(44, 43)) {
         corpse = 1;
     } else {
         corpse = 0;
@@ -2986,7 +2987,7 @@ void actCommonDie(GObj *volatile self)
         if (self->labelId == 3453) {
             ResetReviveCountEnemy(self);
         }
-    } else if (ICO_AUG6) {
+    } else if (ICO_AUG6JUN26) {
     } else {
         if (self->labelId == PAL_JPNKORCN(3757, 3734)) {
             ResetReviveCountEnemy(self);
@@ -3144,7 +3145,7 @@ inline void actCommonRevive(GObj *volatile self)
     EnemySetfAppearAll((void *)self);
     for (;;) {
         ResetEnemyPositionInfo((void *)self);
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
         _ACTWait(1);
     }
 }
@@ -3177,14 +3178,14 @@ void actCommonStone(GObj *volatile self)
         case 1:
             break;
         case 2:
-            _ACTParaStatus_Set(self, PAL_NTSCAUG6(0x26, 33));
+            _ACTParaStatus_Set(self, PAL_NTSCAUG6JUN26(0x26, 33));
             break;
         default:
-            _ACTParaStatus_Set(self, PAL_NTSCAUG6(0x27, 34));
+            _ACTParaStatus_Set(self, PAL_NTSCAUG6JUN26(0x27, 34));
             break;
         }
         if (GOBJ_ACT(self)->enemy->liftLevel < 0) {
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
             GOBJ_ACT(self)->enemy->stoneLevel = 0;
         }
         if (ICO_RAW(int, s, 0x4C, GOBJ_ACT(self)->modeFrame) >= 0x3D &&
@@ -3192,7 +3193,7 @@ void actCommonStone(GObj *volatile self)
             ACT_LAYOUT_GAMEOVER();
             _ACTWait(0);
         }
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x70, 105, 104));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x70, 105, 104));
         _ACTWait(1);
     }
 }
@@ -3216,7 +3217,7 @@ static inline void actCommonSofa_ntsc(GObj *volatile self)
     }
 }
 
-static inline void actCommonSofa_aug6(GObj *volatile self)
+static inline void actCommonSofa_aug6jun26(GObj *volatile self)
 {
     Act *s = GOBJ_ACT(self);
 
@@ -3240,8 +3241,8 @@ void actCommonSofa(GObj *volatile self)
         actCommonSofa_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actCommonSofa_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actCommonSofa_aug6jun26(self);
         return;
     }
     Act *s = GOBJ_ACT(self);
@@ -3448,7 +3449,7 @@ static void actCommonBox_ntsc(GObj *volatile self)
     }
 }
 
-static void actCommonBox_aug6(GObj *volatile self)
+static void actCommonBox_aug6jun26(GObj *volatile self)
 {
     GObj *box;
     Act *s = GOBJ_ACT(self);
@@ -3555,8 +3556,8 @@ void actCommonBox(GObj *volatile self)
         actCommonBox_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actCommonBox_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actCommonBox_aug6jun26(self);
         return;
     }
     GObj *box;
@@ -3823,7 +3824,7 @@ typedef struct { /* field names derived */
     unsigned short f18E;
 } MotRecJ; /* derived name */
 
-static void actCommonJump_aug6(GObj *volatile self)
+static void actCommonJump_aug6jun26(GObj *volatile self)
 {
     float dir[4];
     Act *s = GOBJ_ACT(self);
@@ -3906,8 +3907,8 @@ void actCommonJump(GObj *volatile self)
         actCommonJump_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actCommonJump_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actCommonJump_aug6jun26(self);
         return;
     }
     float dir[4];
@@ -3981,7 +3982,7 @@ static inline int IsFallStuckOnStep(GObj *self, int state, int mot, int need,
     int i, n, d;
 
     for (i = 0, n = 1, q = (int *)((ActWork *)s->work)->frameHist; i < 10; i++, q++) {
-        if (q[-10] == state && (mot == PAL_NTSC_AUG6(418, 388, 384) || mot == q[10])) {
+        if (q[-10] == state && (mot == PAL_NTSC_AUG6JUN26(418, 388, 384) || mot == q[10])) {
             if (n >= need) {
                 d = s->frame - *q;
 
@@ -4110,7 +4111,7 @@ static void actCommonFall_ntsc(GObj *volatile self)
     }
 }
 
-static void actCommonFall_aug6(GObj *volatile self)
+static void actCommonFall_aug6jun26(GObj *volatile self)
 {
     float pa[4];
     float pb[4];
@@ -4217,8 +4218,8 @@ void actCommonFall(GObj *volatile self)
         actCommonFall_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actCommonFall_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actCommonFall_aug6jun26(self);
         return;
     }
     float pa[4];
@@ -4420,9 +4421,9 @@ static inline float calcFlyAccel(float *a, float *b) /* derived name */
     _SubVector(d, a, b);
     h = d[1];
     d[1] = 0.0f;
-    h +=
-        -VectorLength(d) *
-        (stage_no == PAL_JPNKORNTSCAUG6CN(86, 84) || stage_no == 3 || stage_no == 46 ? 2.5f : 0.5f);
+    h += -VectorLength(d) *
+         (stage_no == PAL_JPNKORNTSCAUG6JUN26CN(86, 84) || stage_no == 3 || stage_no == 46 ? 2.5f
+                                                                                           : 0.5f);
     return clampUnit(h * 0.005f);
 }
 
@@ -4523,8 +4524,8 @@ static inline void FlyStep(GObj *self, Act *act, int checkStuck, float lenSq, fl
 {
     if (*needInit) {
         RequestFlyClip((ClipColReq *)act->flyClip,
-                       (checkStuck && !ICO_NTSCAUG6) ? ClipCollisionWithField : ClipCollision, mat,
-                       root);
+                       (checkStuck && !ICO_NTSCAUG6JUN26) ? ClipCollisionWithField : ClipCollision,
+                       mat, root);
         *needInit = 0;
     } else if (((ClipColReq *)act->flyClip)->done) {
         if (((ClipColReq *)act->flyClip)->clip.wall.elem ||
@@ -4540,8 +4541,8 @@ static inline void FlyStep(GObj *self, Act *act, int checkStuck, float lenSq, fl
             *acc = calcFlyAccel(root, mat[3]);
         }
         RequestFlyClip((ClipColReq *)act->flyClip,
-                       (checkStuck && !ICO_NTSCAUG6) ? ClipCollisionWithField : ClipCollision, mat,
-                       root);
+                       (checkStuck && !ICO_NTSCAUG6JUN26) ? ClipCollisionWithField : ClipCollision,
+                       mat, root);
     }
     {
         FlyLimitInfo info;
@@ -4570,7 +4571,7 @@ static inline void FlyStep(GObj *self, Act *act, int checkStuck, float lenSq, fl
                 if (w.wall.elem) {
                     MatrixDrive_PushMatrix();
                     CopyMatrix(MatrixDrive_GetMatrix(), mat);
-                    if (!ICO_NTSCAUG6 && (stage_no == 19 || stage_no == 28)) {
+                    if (!ICO_NTSCAUG6JUN26 && (stage_no == 19 || stage_no == 28)) {
                         MatrixDrive_RotMatrixY(-24576);
                     } else {
                         MatrixDrive_RotMatrixY(4096);
@@ -4634,7 +4635,8 @@ static int completeEmergency(GObj *self, float spd, int *cnt104)
                              VectorLengthSquare((char *)GOBJ_SUB(self)->root.move), spd);
     }
     /* the 2001 builds have no slower emergency end on stages 86, 3 and 46 */
-    if (ICO_NTSCAUG6 || (stage_no != PAL_JPNKORCN(86, 84) && stage_no != 3 && stage_no != 46)) {
+    if (ICO_NTSCAUG6JUN26 ||
+        (stage_no != PAL_JPNKORCN(86, 84) && stage_no != 3 && stage_no != 46)) {
         if (VectorLengthSquare((char *)GOBJ_SUB(self)->root.move) < 50.0f && spd < 1000.0f) {
             return 1;
         }
@@ -4843,7 +4845,7 @@ static void flyCoreLoop_ntsc(GObj *self, GObj *target, int checkStuck)
     }
 }
 
-static void flyCoreLoop_aug6(GObj *self, GObj *target, int checkStuck)
+static void flyCoreLoop_aug6jun26(GObj *self, GObj *target, int checkStuck)
 {
     int cnt104 = 0; /* PC port: completeEmergency's European counter, unused by these builds */
     Act *act = GOBJ_ACT(self);
@@ -4986,8 +4988,8 @@ static void flyCoreLoop(GObj *self, GObj *target, int checkStuck)
         flyCoreLoop_ntsc(self, target, checkStuck);
         return;
     }
-    if (ICO_AUG6) {
-        flyCoreLoop_aug6(self, target, checkStuck);
+    if (ICO_AUG6JUN26) {
+        flyCoreLoop_aug6jun26(self, target, checkStuck);
         return;
     }
     Act *act = GOBJ_ACT(self);
@@ -5136,7 +5138,7 @@ void actCommonFly(GObj *volatile self)
     GObj *target;
     GObj *gen = 0;
 
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         s->flags18.ll &= ~(1ULL << 57);
     }
     ACT_AFTER_PROC(s) = actAfterFly;
@@ -5158,7 +5160,7 @@ void actCommonFly(GObj *volatile self)
     SetEnemyFootPrintSwitch(self, 0);
 
     flyCoreLoop(self, target,
-                (girlGObj != 0 && GOBJ_ACT(girlGObj)->actMode == PAL_NTSCAUG6(111, 107) &&
+                (girlGObj != 0 && GOBJ_ACT(girlGObj)->actMode == PAL_NTSCAUG6JUN26(111, 107) &&
                  GOBJ_ACT(girlGObj)->carrier == self) ||
                     debug_fly_limit_test != 0);
 }
@@ -5208,8 +5210,8 @@ void actCommonLadder(GObj *volatile self)
     if (self == boyGObj) {
         GOBJ_ACT(self)->hit = 1;
     }
-    if (PAL_NTSC_AUG6(mot == 127 || mot == 128 || mot == 123, mot == 113 || mot == 114,
-                      mot == 111 || mot == 112)) {
+    if (PAL_NTSC_AUG6JUN26(mot == 127 || mot == 128 || mot == 123, mot == 113 || mot == 114,
+                           mot == 111 || mot == 112)) {
         while (1) {
             if (self == boyGObj && GOBJ_SUB(self)->ctrl.animFrame > 40.0f) {
                 break;
@@ -5270,7 +5272,7 @@ void actCommonLadder(GObj *volatile self)
                 if (self != boyGObj) {
                     ACTSendMailCorrect(self, 133);
                 }
-            } else if (ICO_AUG6) {
+            } else if (ICO_AUG6JUN26) {
                 ACTSendMailCorrect(self, 131);
             } else {
                 ACTSendMailCorrect(self, 0x8E);
@@ -5281,7 +5283,7 @@ void actCommonLadder(GObj *volatile self)
         }
         if (self == boyGObj && girlGObj != 0 && GOBJ_ACT(girlGObj)->actMode == 38) {
             if (_DistSqGV(test_CURRENTROOT((void *)self), test_CURRENTROOT(girlGObj)) < 3600.0f) {
-                ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x31, 49, 48));
+                ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x31, 49, 48));
             }
         }
         if (self == boyGObj || self == girlGObj) {
@@ -5293,7 +5295,7 @@ void actCommonLadder(GObj *volatile self)
                 if (o->active != 0) {
                     if (GOBJ_ACT(o)->actMode == 38 &&
                         _DistSqGV(pos, test_CURRENTROOT(o)) < 6400.0f) {
-                        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x31, 49, 48));
+                        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x31, 49, 48));
                         break;
                     }
                 }
@@ -5313,7 +5315,7 @@ inline void actCommonCliffdown(GObj *volatile self)
     debug_StdPrintfDummy("enter actCommonCliffdown\n");
     SetMotionDirection(self, s->env.cliffOrient);
     for (;;) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
         _ACTWait(1);
     }
 }
@@ -5349,7 +5351,7 @@ inline void actCommonDodge(GObj *volatile self)
         if (id != 0) {
             SetMotionDirectionWithLimit((void *)self, dir, 10.0f, 90.0f);
         }
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
         _ACTWait(1);
     }
 }
@@ -5364,12 +5366,12 @@ inline void actCommonGuard(GObj *volatile self)
         EBRAIN_SEND_MES((void *)self, 6);
         ACTGame_LwsEffect_Guard((void *)self);
     }
-    iosOmSendMail(boyGObj, PAL_NTSC_AUG6(0x11C, 268, 265), self);
-    if (s->intrKind == PAL_NTSC_AUG6(282, 266, 263)) {
+    iosOmSendMail(boyGObj, PAL_NTSC_AUG6JUN26(0x11C, 268, 265), self);
+    if (s->intrKind == PAL_NTSC_AUG6JUN26(282, 266, 263)) {
         ACTSetPositionWithFitting((void *)self, test_CURRENTROOT((void *)self));
     }
     for (;;) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
         _ACTWait(1);
     }
 }
@@ -5385,21 +5387,21 @@ void actCommonEdgeHang(GObj *volatile self)
     ACTAdjustPlane(self, &GOBJ_WORK(self)->intrReq.a.wall);
     while (1) {
         if (CheckWallAttributeEdegWall(self) == 0) {
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xE2, 210, 207));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xE2, 210, 207));
         }
         if (-GOBJ_SUB(self)->ctrl.cliffDepth > 250.0f) {
-            ACTSendMailCorrect(self, PAL_NTSCAUG6(0x18, 24));
+            ACTSendMailCorrect(self, PAL_NTSCAUG6JUN26(0x18, 24));
         }
         if (stageData[stage_no].flag2) {
             memset(&work, 0, ICO_MAX_SIZE(ClipWork, 0xC0));
-            GetSkeltonPosition(work.pt[0], self, PAL_NTSCAUG6(0x2C, 44));
-            GetSkeltonPosition(p1, self, PAL_NTSCAUG6(0x33, 51));
-            GetSkeltonPosition(p2, self, PAL_NTSCAUG6(0x2F, 47));
+            GetSkeltonPosition(work.pt[0], self, PAL_NTSCAUG6JUN26(0x2C, 44));
+            GetSkeltonPosition(p1, self, PAL_NTSCAUG6JUN26(0x33, 51));
+            GetSkeltonPosition(p2, self, PAL_NTSCAUG6JUN26(0x2F, 47));
             sceVu0AddVector(work.pt[1], p1, p2);
             sceVu0ScaleVector(work.pt[1], work.pt[1], 0.5f);
             ClipFloor(&work);
             if (work.floor.elem != 0) {
-                ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xE2, 210, 207));
+                ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xE2, 210, 207));
             }
         }
         _ACTWait(1);
@@ -5500,7 +5502,7 @@ static int SetMotionDirectionSmooze_ntsc(GObj *self, float *dir, float s)
     return ret;
 }
 
-static int SetMotionDirectionSmooze_aug6(GObj *self, float *dir, float s)
+static int SetMotionDirectionSmooze_aug6jun26(GObj *self, float *dir, float s)
 {
     float v[4];
     int ret = 0;
@@ -5541,8 +5543,8 @@ int SetMotionDirectionSmooze(GObj *self, float *dir, float s)
     if (ICO_NTSC) {
         return SetMotionDirectionSmooze_ntsc(self, dir, s);
     }
-    if (ICO_AUG6) {
-        return SetMotionDirectionSmooze_aug6(self, dir, s);
+    if (ICO_AUG6JUN26) {
+        return SetMotionDirectionSmooze_aug6jun26(self, dir, s);
     }
     float v[4];
     Act *sub = GOBJ_ACT(self);
@@ -5585,7 +5587,7 @@ int SetMotionDirectionSmooze(GObj *self, float *dir, float s)
 /* motionOrientManager.h declares none of the motion tables */
 extern MotOriName motionOriKind[];
 
-static void _ACTDebugPrint_ntscaug6(GObj *self)
+static void _ACTDebugPrint_ntscaug6jun26(GObj *self)
 {
     Act *sub;
     char *w;
@@ -5651,8 +5653,8 @@ static void _ACTDebugPrint_ntscaug6(GObj *self)
 
 void _ACTDebugPrint(GObj *self)
 {
-    if (ICO_NTSCAUG6) {
-        _ACTDebugPrint_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        _ACTDebugPrint_ntscaug6jun26(self);
         return;
     }
     Act *sub;
@@ -5728,7 +5730,7 @@ static void ACTSendMailCorrect_ntsc(GObj *self, int mail)
     iosOmSendMail(self, mail, self);
 }
 
-static void ACTSendMailCorrect_aug6(GObj *self, int mail)
+static void ACTSendMailCorrect_aug6jun26(GObj *self, int mail)
 {
     Act *s = GOBJ_ACT(self);
     if ((mail == 166 || mail == 171) && self->kind == 1) {
@@ -5748,8 +5750,8 @@ void ACTSendMailCorrect(GObj *self, int mail)
         ACTSendMailCorrect_ntsc(self, mail);
         return;
     }
-    if (ICO_AUG6) {
-        ACTSendMailCorrect_aug6(self, mail);
+    if (ICO_AUG6JUN26) {
+        ACTSendMailCorrect_aug6jun26(self, mail);
         return;
     }
     Act *s = GOBJ_ACT(self);
@@ -5841,7 +5843,7 @@ static void _ACTCommonMailTest_ntsc(GObj *self, int stopCnt, int walkCnt, int ru
     }
 }
 
-static void _ACTCommonMailTest_aug6(GObj *self, int stopCnt, int walkCnt, int runCnt)
+static void _ACTCommonMailTest_aug6jun26(GObj *self, int stopCnt, int walkCnt, int runCnt)
 {
     Act *s;
     int ret = 0;
@@ -5924,8 +5926,8 @@ void _ACTCommonMailTest(GObj *self, int stopCnt, int walkCnt, int runCnt)
         _ACTCommonMailTest_ntsc(self, stopCnt, walkCnt, runCnt);
         return;
     }
-    if (ICO_AUG6) {
-        _ACTCommonMailTest_aug6(self, stopCnt, walkCnt, runCnt);
+    if (ICO_AUG6JUN26) {
+        _ACTCommonMailTest_aug6jun26(self, stopCnt, walkCnt, runCnt);
         return;
     }
     Act *s;
@@ -6036,7 +6038,7 @@ static __inline__ unsigned char requestBecarryMotion(GObj *self, int mot, int wa
 {
     Act *sub = GOBJ_ACT(self);
     const BecPair *tbl = pairMotion;
-    const BecPair *end = tbl + PAL_NTSCAUG6(31, 33);
+    const BecPair *end = tbl + PAL_NTSCAUG6JUN26(31, 33);
     const BecPair *p;
     int save0;
     int save1;
@@ -6051,7 +6053,8 @@ static __inline__ unsigned char requestBecarryMotion(GObj *self, int mot, int wa
         save1 = motionOrient[n].w[4];
         motionOrient[n].w[2] = p->req;
         motionOrient[n].w[4] = wait;
-        SetMotionRequest(self, PAL_NTSC_AUG6(268, 236, 234), *(MotOriReq *)&sub->env.motOriReq);
+        SetMotionRequest(self, PAL_NTSC_AUG6JUN26(268, 236, 234),
+                         *(MotOriReq *)&sub->env.motOriReq);
         motionOrient[n].w[2] = save0;
         motionOrient[n].w[4] = save1;
         return 1;
@@ -6162,7 +6165,7 @@ static void actCommonBecarry_ntsc(GObj *volatile self)
     }
 }
 
-static void actCommonBecarry_aug6(GObj *volatile self)
+static void actCommonBecarry_aug6jun26(GObj *volatile self)
 {
     Act *s = GOBJ_ACT(self);
     int cur = -1;
@@ -6249,8 +6252,8 @@ void actCommonBecarry(GObj *volatile self)
         actCommonBecarry_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actCommonBecarry_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actCommonBecarry_aug6jun26(self);
         return;
     }
     Act *s = GOBJ_ACT(self);
@@ -6315,7 +6318,8 @@ static inline void SetIdleMotionRange(int k, int mot, int mot2) /* derived name 
     int n4 = actDataTbl[k].orientEnd;
     int i;
 
-    if (mot != PAL_NTSC_AUG6(1147, 1086, 1088) && mot2 != PAL_NTSC_AUG6(1147, 1086, 1088)) {
+    if (mot != PAL_NTSC_AUG6JUN26(1147, 1086, 1088) &&
+        mot2 != PAL_NTSC_AUG6JUN26(1147, 1086, 1088)) {
         motionOrient[n1].w[2] = mot;
         motionOrient[n2].w[2] = mot2;
         for (i = n3; i < n4; i++) {
@@ -6360,17 +6364,18 @@ void subCommonIdle(GObj *volatile self)
         cur = GOBJ_SUB(self)->ctrl.motion;
         if ((self == boyGObj && scpBoyControlReadDisable != 0) ||
             GOBJ_WORK(self)->noInterpTimer > 0 ||
-            ((int)PAL_NTSC_AUG6(s->flags20.ll >> 44, s->flags20.ll >> 27, s->flags20.ll >> 20) &
+            ((int)PAL_NTSC_AUG6JUN26(s->flags20.ll >> 44, s->flags20.ll >> 27,
+                                     s->flags20.ll >> 20) &
              1)) {
             timer = 0;
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(180, 167, 165));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(180, 167, 165));
         } else if (s->actMode != 1 && s->actMode != 69) {
             timer = 0;
-        } else if ((int)PAL_NTSC_AUG6(s->flags18.ll >> 62, s->flags18.ll >> 53,
-                                      s->flags18.ll >> 52) &
+        } else if ((int)PAL_NTSC_AUG6JUN26(s->flags18.ll >> 62, s->flags18.ll >> 53,
+                                           s->flags18.ll >> 52) &
                    1) {
             timer = 0;
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(180, 167, 165));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(180, 167, 165));
         } else {
             if (self == boyGObj && ACTGame_FLAG_TETSUNAGI()) {
                 base = 9;
@@ -6382,8 +6387,8 @@ void subCommonIdle(GObj *volatile self)
                 n = same;
             }
             if (cur == m0) {
-                if (!(PAL_NTSC_AUG6((s->flags20.ll >> 45), (int)(s->flags20.ll >> 28),
-                                    (int)(s->flags20.ll >> 21)) &
+                if (!(PAL_NTSC_AUG6JUN26((s->flags20.ll >> 45), (int)(s->flags20.ll >> 28),
+                                         (int)(s->flags20.ll >> 21)) &
                       1)) {
                     timer = timer + 1;
                 }
@@ -6392,16 +6397,16 @@ void subCommonIdle(GObj *volatile self)
                         timer) {
                         idx = base + n;
                         if (idx >= lim ||
-                            idlingDef[idx].motion[k] == PAL_NTSC_AUG6(1147, 1086, 1088)) {
+                            idlingDef[idx].motion[k] == PAL_NTSC_AUG6JUN26(1147, 1086, 1088)) {
                             idx = base;
                         }
                         SetIdleMotionRange(k, idlingDef[idx].motion[k], idlingDef[idx].motion[k]);
-                        ACTSendMailCorrect(self, PAL_NTSC_AUG6(179, 166, 164));
+                        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(179, 166, 164));
                     }
                 } else {
                     if (((60 - systemStatus[0] * 10) / systemStatus[1]) * 3 < timer) {
                         SetIdleMotionRange(k, idlingDef[base].motion[k], idlingDef[base].motion[k]);
-                        ACTSendMailCorrect(self, PAL_NTSC_AUG6(179, 166, 164));
+                        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(179, 166, 164));
                     }
                 }
             } else {
@@ -6420,16 +6425,16 @@ void subCommonIdle(GObj *volatile self)
                     } else {
                         nxt = m0;
                     }
-                    if (nxt == PAL_NTSC_AUG6(1147, 1086, 1088)) {
+                    if (nxt == PAL_NTSC_AUG6JUN26(1147, 1086, 1088)) {
                         nxt = m0;
                     }
-                    if (!ICO_AUG6) {
+                    if (!ICO_AUG6JUN26) {
                         if (self == girlGObj && nxt == m0) {
                             nxt = idlingDef[0].motion[k];
                         }
                     }
                     SetIdleMotionRange(k, idlingDef[found].motion[k], nxt);
-                    ACTSendMailCorrect(self, PAL_NTSC_AUG6(179, 166, 164));
+                    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(179, 166, 164));
                 }
             }
         }
@@ -6482,17 +6487,17 @@ void actCommonTurn(GObj *volatile self)
             GetSkeltonOrient(o, self, 1);
             if (_AbsRotyGV(t, o) < 60) {
                 if (s->stick.mag != 0.0f) {
-                    ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xF0, 224, 221));
+                    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xF0, 224, 221));
                 }
-                ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xF1, 225, 222));
+                ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xF1, 225, 222));
             }
         } else {
             if ((d < 0 ? -d : d) < 15) {
-                ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xF1, 225, 222));
+                ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xF1, 225, 222));
             }
         }
         switch (((unsigned int)s->intrKind) +
-                PAL_NTSC_AUG6(0, 16, 19)) { /* NTSC ids 16 lower, AUG6 ids 19 lower */
+                PAL_NTSC_AUG6JUN26(0, 16, 19)) { /* NTSC ids 16 lower, AUG6 ids 19 lower */
         case 0xE7:
         case 0xE9:
             GOBJ_WORK(self)->turnTimer = (60 - systemStatus[0] * 10) / systemStatus[1];
@@ -6532,7 +6537,7 @@ static void actCommonBackhand_ntsc(GObj *volatile self)
     }
 }
 
-static void actCommonBackhand_aug6(GObj *volatile self)
+static void actCommonBackhand_aug6jun26(GObj *volatile self)
 {
     float v[4];
     float dir[4];
@@ -6564,8 +6569,8 @@ void actCommonBackhand(GObj *volatile self)
         actCommonBackhand_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actCommonBackhand_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actCommonBackhand_aug6jun26(self);
         return;
     }
     float v[4];
@@ -6614,13 +6619,13 @@ void actCommonSlowrun(GObj *volatile self)
         ((IntFloatSR *)p[1])[1].f = *(float *)((i2 << 6) + GOBJ_SUB(boyGObj)->nodeMtx + 0x34);
         ((IntFloatSR *)p[1])[2].f = *(float *)((i2 << 6) + GOBJ_SUB(boyGObj)->nodeMtx + 0x38);
         if (((motionKind + GOBJ_SUB(girlGObj)->ctrl.motion)->flags.word >> 29) & 1) {
-            if (ICO_AUG6) {
+            if (ICO_AUG6JUN26) {
                 SetDirectRootPositionNoFittingWithNodePoint((void *)self, 6, p[0], 0.2f);
             } else {
                 SetDirectRootPositionNoFittingWithNodePointXZ((void *)self, 6, p[0], 0.2f);
             }
         } else {
-            if (ICO_AUG6) {
+            if (ICO_AUG6JUN26) {
                 SetDirectRootPositionNoFittingWithNodePoint((void *)self, 6, p[0], 0.1f);
             } else {
                 SetDirectRootPositionNoFittingWithNodePointXZ((void *)self, 6, p[0], 0.1f);
@@ -6660,7 +6665,7 @@ void ACT_LAYOUT_GAMEOVER(void)
     if (gameover_layout_flag == 0) {
         gameover_layout_flag = 1;
         ico_gs_signal(ICO_GS_EV_GAME_OVER, 0);
-        lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(62, 59, 58));
+        lt_switch_layout(PAL_JPNKORCN_NTSCAUG6JUN26(62, 59, 58));
     }
 }
 
@@ -6685,11 +6690,11 @@ inline int _ACTMotDirSmzDirect(GObj *self, float *dir)
     s->dir[2] = dir[2];
     return SetMotionDirectionSmooze(
         self, dir,
-        (float)PAL_NTSC_AUG6((self == girlGObj && girlControlMode != 0
-                                  ? (motionKind + GOBJ_SUB(self)->ctrl.motion)->girlDirFrames
-                                  : (motionKind + GOBJ_SUB(self)->ctrl.motion)->dirFrames),
-                             motionKind[GOBJ_SUB(self)->ctrl.motion].dirFrames,
-                             motionKind[FALL_SUB(self)->ctrl.motion].dirFrames));
+        (float)PAL_NTSC_AUG6JUN26((self == girlGObj && girlControlMode != 0
+                                       ? (motionKind + GOBJ_SUB(self)->ctrl.motion)->girlDirFrames
+                                       : (motionKind + GOBJ_SUB(self)->ctrl.motion)->dirFrames),
+                                  motionKind[GOBJ_SUB(self)->ctrl.motion].dirFrames,
+                                  motionKind[FALL_SUB(self)->ctrl.motion].dirFrames));
 }
 
 inline void WithMailFunc_Idling(GObj *self)
@@ -6727,7 +6732,7 @@ inline void actCommonReviveAir(GObj *volatile self)
     SetDirectRootPositionNoFitting((void *)self, (char *)&GOBJ_ACT(self)->restartPosX);
     EnemySetfAppearAll((void *)self);
     for (;;) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xE2, 210, 207));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xE2, 210, 207));
         _ACTWait(1);
     }
 }
@@ -6736,13 +6741,13 @@ inline void actCommonOne(GObj *volatile self)
 {
     Act *s = GOBJ_ACT(self);
 
-    if (s->intrKind == PAL_NTSC_AUG6(416, 386, 382)) {
+    if (s->intrKind == PAL_NTSC_AUG6JUN26(416, 386, 382)) {
         if (*(int *)&s->soundFlag & 1) {
             s->soundWait = ((60 - systemStatus[0] * 10) / systemStatus[1]) * 5;
         }
     }
     for (;;) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
         _ACTWait(1);
     }
 }
@@ -6763,7 +6768,7 @@ inline void actCommonCatchFire(GObj *volatile self)
             LightTorchOnOfWeapon(s->weapon);
             lit = 1;
         }
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
         _ACTWait(1);
     }
 }
@@ -6779,7 +6784,7 @@ inline void actCommonCatchFireBomb(GObj *volatile self)
             LightTorchOn(s->env.bombObj);
             lit = 1;
         }
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
         _ACTWait(1);
     }
 }
@@ -6795,7 +6800,7 @@ inline void actCommonPutFire(GObj *volatile self)
             LightTorchOn(s->env.torchRevObj);
             lit = 1;
         }
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
         _ACTWait(1);
     }
 }
@@ -6804,7 +6809,7 @@ inline void actCommonBoxReverbe(GObj *volatile self)
 {
     _ACTWait(40);
     for (;;) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
         _ACTWait(1);
     }
 }
@@ -6821,7 +6826,7 @@ inline void actCommonClimb(GObj *volatile self)
 {
     ACTAdjustPlane(self, &GOBJ_WORK(self)->intrReq.a.wall);
     for (;;) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
         _ACTWait(1);
     }
 }
@@ -6839,20 +6844,20 @@ inline void actCommonLadderBellow(GObj *volatile self)
     int attr[4];
 
     while (1) {
-        GetSkeltonPosition(p, self, PAL_NTSCAUG6(0x2C, 44));
+        GetSkeltonPosition(p, self, PAL_NTSCAUG6JUN26(0x2C, 44));
         sceVu0ScaleVector(dir, test_CURRENTORIENT(self), 50.0f);
         sceVu0AddVector(q, p, dir);
         if (ACTCheckCollis_CI(p, q, attr, &hit) != 0) {
             if (CompareAttribute(attr[0], 0x3000) != 0) {
-                ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x91, 135, 133));
+                ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x91, 135, 133));
                 GOBJ_WORK(self)->bellowWall3000.wall = hit;
             }
             if (CompareAttribute(attr[0], 0x400) != 0) {
-                ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x90, 134, 132));
+                ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x90, 134, 132));
                 GOBJ_WORK(self)->bellowWall400.wall = hit;
             }
         }
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xE2, 210, 207));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xE2, 210, 207));
         _ACTWait(1);
     }
 }
@@ -6861,7 +6866,7 @@ inline void actCommonLadderBellowHang(GObj *volatile self)
 {
     for (;;) {
         if (!CheckWallAttribute((void *)self, 0x3000) && !CheckWallAttribute((void *)self, 0x400)) {
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xE2, 210, 207));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xE2, 210, 207));
         }
         _ACTWait(1);
     }
@@ -6870,9 +6875,9 @@ inline void actCommonLadderBellowHang(GObj *volatile self)
 inline void actCommonEdge(GObj *volatile self)
 {
     for (;;) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x150, 314, 310));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x150, 314, 310));
         if (-GOBJ_SUB(self)->ctrl.cliffDepth > 250.0f) {
-            ACTSendMailCorrect(self, PAL_NTSCAUG6(0x18, 24));
+            ACTSendMailCorrect(self, PAL_NTSCAUG6JUN26(0x18, 24));
         }
         _ACTWait(1);
     }
@@ -6903,9 +6908,9 @@ inline void actCommonFallDamage(GObj *volatile self)
     for (;;) {
         if (self == boyGObj && girlGObj != 0) {
             brainSetSpMode();
-            iosOmSendMail(girlGObj, PAL_NTSC_AUG6(0x3D, 58, 57), self);
+            iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x3D, 58, 57), self);
         }
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
         _ACTWait(1);
     }
 }
@@ -6935,7 +6940,7 @@ inline void actCommonRopeTouchWall(GObj *volatile self)
 
     while (1) {
         if (((60 - systemStatus[0] * 10) / systemStatus[1]) / 2 < s->modeFrame) {
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xAA, 158, 156));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xAA, 158, 156));
         }
         _ACTWait(1);
     }
@@ -6962,10 +6967,10 @@ inline void actCommonRopeSwing(GObj *volatile self)
     while (1) {
         switch (CollisCheckInRope((void *)self, s->chain)) {
         case 1:
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xA8, 156, 154));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xA8, 156, 154));
             break;
         case 2:
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xA7, 155, 153));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xA7, 155, 153));
             break;
         }
         UnLockChainGeo(s->chain);
@@ -7000,7 +7005,7 @@ static inline int isRopeDownEndOnFloor_ntsc(GObj *self) /* derived name */
     return 0;
 }
 
-static inline int isRopeDownEndOnFloor_aug6(GObj *self) /* derived name */
+static inline int isRopeDownEndOnFloor_aug6jun26(GObj *self) /* derived name */
 {
     ClipWork work;
     MotionDef *rec = &motionKind[GOBJ_SUB(self)->ctrl.motion];
@@ -7022,8 +7027,8 @@ static inline int isRopeDownEndOnFloor(GObj *self) /* derived name */
     if (ICO_NTSC) {
         return isRopeDownEndOnFloor_ntsc(self);
     }
-    if (ICO_AUG6) {
-        return isRopeDownEndOnFloor_aug6(self);
+    if (ICO_AUG6JUN26) {
+        return isRopeDownEndOnFloor_aug6jun26(self);
     }
     ClipWork work;
     MotionDef *rec = &motionKind[GOBJ_SUB(self)->ctrl.motion];
@@ -7044,7 +7049,7 @@ inline void actCommonRopeDownEnd(GObj *volatile self)
 {
     while (1) {
         if (isRopeDownEndOnFloor(self)) {
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xA9, 157, 155));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xA9, 157, 155));
         }
         _ACTWait(1);
     }
@@ -7073,7 +7078,7 @@ static inline void actCommonRopeJump_ntsc(GObj *volatile self)
     }
 }
 
-static inline void actCommonRopeJump_aug6(GObj *volatile self)
+static inline void actCommonRopeJump_aug6jun26(GObj *volatile self)
 {
     Act *s = GOBJ_ACT(self);
 
@@ -7091,8 +7096,8 @@ inline void actCommonRopeJump(GObj *volatile self)
         actCommonRopeJump_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actCommonRopeJump_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actCommonRopeJump_aug6jun26(self);
         return;
     }
     Act *s = GOBJ_ACT(self);
@@ -7112,7 +7117,7 @@ inline void actCommonRopeJump(GObj *volatile self)
 inline void actCommonRopeJumpBefore(GObj *volatile self)
 {
     for (;;) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xBD, 176, 174));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xBD, 176, 174));
         _ACTWait(1);
     }
 }
@@ -7122,15 +7127,15 @@ typedef struct { /* field names derived */
     int f18;
 } RopeTurnSpWork; /* derived name */
 
-static inline void actCommonRopeTurnSpecial_ntscaug6(GObj *volatile self)
+static inline void actCommonRopeTurnSpecial_ntscaug6jun26(GObj *volatile self)
 {
     _ACTWait(0);
 }
 
 inline void actCommonRopeTurnSpecial(GObj *volatile self)
 {
-    if (ICO_NTSCAUG6) {
-        actCommonRopeTurnSpecial_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        actCommonRopeTurnSpecial_ntscaug6jun26(self);
         return;
     }
     Vec4u base;
@@ -7154,7 +7159,7 @@ inline void actCommonRopeTurnSpecial(GObj *volatile self)
 inline void actCommonRopeClimbEnd2(GObj *volatile self)
 {
     for (;;) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
         _ACTWait(1);
     }
 }
@@ -7174,7 +7179,7 @@ inline void actCommonCornered(GObj *volatile self)
 inline void actCommonLookaround(GObj *volatile self)
 {
     for (;;) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
         _ACTWait(1);
     }
 }
@@ -7188,7 +7193,7 @@ inline void actCommonTurnWarn(GObj *volatile self)
     while (1) {
         int d;
 
-        if (s->curMot != PAL_NTSC_AUG6(0x10D, 237, 235)) {
+        if (s->curMot != PAL_NTSC_AUG6JUN26(0x10D, 237, 235)) {
             prev = s->curMot;
         } else {
             s->motReq = SetMotionRequest((void *)self, prev, s->env.motOriReq);
@@ -7196,7 +7201,7 @@ inline void actCommonTurnWarn(GObj *volatile self)
         GetRootMotionOrient(q, self);
         d = _RotyGV(&GOBJ_WORK(self)->hideDirX, q);
         if ((d < 0 ? -d : d) < 0xF) {
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xF5, 229, 226));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xF5, 229, 226));
         }
         _ACTWait(1);
     }
@@ -7213,7 +7218,7 @@ inline void actCommonTurnStrict(GObj *volatile self)
         GetRootMotionOrient(q, self);
         d = _RotyGV(t, q);
         if ((d < 0 ? -d : d) < 0xF) {
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xF4, 228, 225));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xF4, 228, 225));
         }
         _ACTWait(1);
     }
@@ -7224,7 +7229,7 @@ inline void actCommonPPipe(GObj *volatile self)
     _ACTWait(0);
 }
 
-static inline void actCommonHandrail_ntscaug6(GObj *volatile self)
+static inline void actCommonHandrail_ntscaug6jun26(GObj *volatile self)
 {
     for (;;) {
         _ACTWait(1);
@@ -7233,8 +7238,8 @@ static inline void actCommonHandrail_ntscaug6(GObj *volatile self)
 
 inline void actCommonHandrail(GObj *volatile self)
 {
-    if (ICO_NTSCAUG6) {
-        actCommonHandrail_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        actCommonHandrail_ntscaug6jun26(self);
         return;
     }
     Act *s = GOBJ_ACT(self);
@@ -7259,7 +7264,7 @@ inline void motCommonBoxPush(GObj *volatile self)
 
     s->pushDir = 1;
     while (1) {
-        if (ICO_JPNKORNTSCAUG6CN) {
+        if (ICO_JPNKORNTSCAUG6JUN26CN) {
             actMotDirToWall(self);
         } else {
             if (IsThisBoxTruck(s->box) == 0) {
@@ -7278,7 +7283,7 @@ inline void motCommonBoxPull(GObj *volatile self)
 
     s->pushDir = -1;
     while (1) {
-        if (ICO_JPNKORNTSCAUG6CN) {
+        if (ICO_JPNKORNTSCAUG6JUN26CN) {
             actMotDirToWall(self);
         } else {
             if (IsThisBoxTruck(s->box) == 0) {
@@ -7317,9 +7322,9 @@ inline void motCommonLadderUp(GObj *volatile self)
         GOBJ_ACT(self)->pushDir = 1; /* LadderMotWork's 0x38 */
         switch (GOBJ_ACT(self)->enemy->ladderUpStep) {
         case 1:
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x89, 129, 128));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x89, 129, 128));
         case 2:
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x8A, 130, 129));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x8A, 130, 129));
             break;
         }
         _ACTWait(1);
@@ -7339,9 +7344,9 @@ inline void motCommonLadderDown(GObj *volatile self)
         GOBJ_ACT(self)->pushDir = -1; /* LadderMotWork's 0x38 */
         switch (GOBJ_ACT(self)->enemy->ladderDownStep) {
         case 1:
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x89, 129, 128));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x89, 129, 128));
         case 2:
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0x8A, 130, 129));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x8A, 130, 129));
             break;
         }
         _ACTWait(1);
@@ -7355,13 +7360,15 @@ inline void motCommonSlip(GObj *volatile self)
     while (1) {
         long long f = (long long)s->wish1.ll;
 
-        if (!((((int)(PAL_NTSCAUG6(f >> 16, f >> 9)) & 1) &&
-               ((int)(PAL_NTSCAUG6((long long)s->wish3.ll >> 16, (long long)s->wish3.ll >> 9)) &
+        if (!((((int)(PAL_NTSCAUG6JUN26(f >> 16, f >> 9)) & 1) &&
+               ((int)(PAL_NTSCAUG6JUN26((long long)s->wish3.ll >> 16,
+                                        (long long)s->wish3.ll >> 9)) &
                 1)) ||
-              (((int)(PAL_NTSCAUG6(f >> 17, f >> 10)) & 1) &&
-               ((int)(PAL_NTSCAUG6((long long)s->wish3.ll >> 17, (long long)s->wish3.ll >> 10)) &
+              (((int)(PAL_NTSCAUG6JUN26(f >> 17, f >> 10)) & 1) &&
+               ((int)(PAL_NTSCAUG6JUN26((long long)s->wish3.ll >> 17,
+                                        (long long)s->wish3.ll >> 10)) &
                 1)))) {
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6(0xC7, 183, 180));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
         }
         _ACTWait(1);
     }
@@ -7384,7 +7391,7 @@ static inline void motCommonRopejumpDircorrect_ntsc(GObj *volatile self)
     }
 }
 
-static inline void motCommonRopejumpDircorrect_aug6(GObj *volatile self)
+static inline void motCommonRopejumpDircorrect_aug6jun26(GObj *volatile self)
 {
     Act *s = GOBJ_ACT(self);
 
@@ -7400,8 +7407,8 @@ inline void motCommonRopejumpDircorrect(GObj *volatile self)
         motCommonRopejumpDircorrect_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        motCommonRopejumpDircorrect_aug6(self);
+    if (ICO_AUG6JUN26) {
+        motCommonRopejumpDircorrect_aug6jun26(self);
         return;
     }
     float v[4];
@@ -7441,7 +7448,7 @@ static inline void motCommonRopeTurnSpecialR_ntsc(GObj *volatile self)
     }
 }
 
-static inline void motCommonRopeTurnSpecialR_aug6(GObj *volatile self)
+static inline void motCommonRopeTurnSpecialR_aug6jun26(GObj *volatile self)
 {
     int i = 0;
     int base = (int)(_GetDirection(test_CURRENTORIENT(self)) / 3.1415927f * 180.0f);
@@ -7469,8 +7476,8 @@ inline void motCommonRopeTurnSpecialR(GObj *volatile self)
         motCommonRopeTurnSpecialR_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        motCommonRopeTurnSpecialR_aug6(self);
+    if (ICO_AUG6JUN26) {
+        motCommonRopeTurnSpecialR_aug6jun26(self);
         return;
     }
     int i = 0;
@@ -7515,7 +7522,7 @@ static inline void motCommonRopeTurnSpecialL_ntsc(GObj *volatile self)
     }
 }
 
-static inline void motCommonRopeTurnSpecialL_aug6(GObj *volatile self)
+static inline void motCommonRopeTurnSpecialL_aug6jun26(GObj *volatile self)
 {
     int i = 0;
     int base = (int)(_GetDirection(test_CURRENTORIENT(self)) / 3.1415927f * 180.0f);
@@ -7543,8 +7550,8 @@ inline void motCommonRopeTurnSpecialL(GObj *volatile self)
         motCommonRopeTurnSpecialL_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        motCommonRopeTurnSpecialL_aug6(self);
+    if (ICO_AUG6JUN26) {
+        motCommonRopeTurnSpecialL_aug6jun26(self);
         return;
     }
     int i = 0;
@@ -7610,7 +7617,7 @@ inline void extraCommonNull(GObj *volatile self)
 inline void extraCommonCall(GObj *volatile self)
 {
     if (girlGObj) {
-        iosOmSendMail(girlGObj, PAL_NTSC_AUG6(0x44, 64, 63), isysCurrentGObj);
+        iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x44, 64, 63), isysCurrentGObj);
     }
     for (;;) {
         _ACTWait(1);
@@ -7675,15 +7682,15 @@ inline int IsCorrectPosition(GObj *self)
 /* the orient and the position these two accessors hand back */
 static float commonOrient_pal[4]; /* derived name */
 
-static sceVu0FVECTOR commonOrient_ntscaug6; /* derived name */
+static sceVu0FVECTOR commonOrient_ntscaug6jun26; /* derived name */
 
-#define commonOrient PAL_NTSCAUG6(commonOrient_pal, commonOrient_ntscaug6)
+#define commonOrient PAL_NTSCAUG6JUN26(commonOrient_pal, commonOrient_ntscaug6jun26)
 
 static float commonPos_pal[4]; /* derived name */
 
-static sceVu0FVECTOR commonPos_ntscaug6; /* derived name */
+static sceVu0FVECTOR commonPos_ntscaug6jun26; /* derived name */
 
-#define commonPos PAL_NTSCAUG6(commonPos_pal, commonPos_ntscaug6)
+#define commonPos PAL_NTSCAUG6JUN26(commonPos_pal, commonPos_ntscaug6jun26)
 
 inline float *test_CURRENTORIENT(GObj *self)
 {
@@ -7728,7 +7735,7 @@ static inline float *test_CURRENTROOT_ntsc(GObj *self)
     }
 }
 
-static inline float *test_CURRENTROOT_aug6(GObj *self)
+static inline float *test_CURRENTROOT_aug6jun26(GObj *self)
 {
     float buf[4];
     float *p;
@@ -7757,8 +7764,8 @@ inline float *test_CURRENTROOT(GObj *self)
     if (ICO_NTSC) {
         return test_CURRENTROOT_ntsc(self);
     }
-    if (ICO_AUG6) {
-        return test_CURRENTROOT_aug6(self);
+    if (ICO_AUG6JUN26) {
+        return test_CURRENTROOT_aug6jun26(self);
     }
     float buf[4];
     float *p;
@@ -7827,8 +7834,8 @@ inline void actAfterForceRopeSwing(GObj *volatile self)
 {
     Act *s = GOBJ_ACT(self);
     if (s->chain == 0) {
-        debug_assert("src/commonact.c", PAL_NTSC_AUG6(1653, 1577, 1549));
-        __assert("src/commonact.c", PAL_NTSC_AUG6(1653, 1577, 1549), "ROPE_GOBJ!=NULL");
+        debug_assert("src/commonact.c", PAL_NTSC_AUG6JUN26(1653, 1577, 1549));
+        __assert("src/commonact.c", PAL_NTSC_AUG6JUN26(1653, 1577, 1549), "ROPE_GOBJ!=NULL");
     }
     UnLockChainGeo(s->chain);
 }
@@ -7891,7 +7898,7 @@ static inline void actAfterJump(GObj *volatile self)
     GOBJ_ACT(g)->flags20.ll |= (PAL_NTSC(1ULL << 31, 1ULL << 18));
 }
 
-static inline void actAfterFall_aug6(GObj *volatile self)
+static inline void actAfterFall_aug6jun26(GObj *volatile self)
 {
     GOBJ_ACT(self)->flags20.ll &= ~(1ULL << 18);
 }
@@ -7911,8 +7918,8 @@ inline void actAfterFall(GObj *volatile self)
         actAfterFall_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actAfterFall_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actAfterFall_aug6jun26(self);
         return;
     }
     Act *s = GOBJ_ACT(self);
@@ -7927,7 +7934,7 @@ typedef struct { /* field names derived */
     unsigned long long status;
 } FlySub; /* derived name */
 
-static inline void actAfterFly_aug6(GObj *volatile self)
+static inline void actAfterFly_aug6jun26(GObj *volatile self)
 {
     GOBJ_ACT(self)->flags18.ll |= (1ULL << 63);
     SetEnemyFootPrintSwitch(self, 1);
@@ -7936,8 +7943,8 @@ static inline void actAfterFly_aug6(GObj *volatile self)
 
 inline void actAfterFly(GObj *volatile self)
 {
-    if (ICO_AUG6) {
-        actAfterFly_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actAfterFly_aug6jun26(self);
         return;
     }
     Act *s = GOBJ_ACT(self);

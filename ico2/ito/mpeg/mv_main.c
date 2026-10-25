@@ -106,7 +106,7 @@ static inline int audioIsPreset(void) /* derived name */
     return movieHasAudio ? audioDecIsPreset(&audioDec) : 1;
 }
 
-static int readMpeg_aug6(VideoDec *dec, ReadBuf *rb, char *strf, int (*poll)(void))
+static int readMpeg_aug6jun26(VideoDec *dec, ReadBuf *rb, char *strf, int (*poll)(void))
 {
     void *p;
     int eof;
@@ -178,8 +178,8 @@ term:
 
 static int readMpeg(VideoDec *dec, ReadBuf *rb, char *strf, int (*poll)(void))
 {
-    if (ICO_AUG6) {
-        return readMpeg_aug6(dec, rb, strf, poll);
+    if (ICO_AUG6JUN26) {
+        return readMpeg_aug6jun26(dec, rb, strf, poll);
     }
     void *p;
     int eof;
@@ -270,7 +270,7 @@ static int initAll(char *name, int imageW, int imageH, int dbx, int dby, int mon
     struct ThreadParam th;
     int ret = 0;
 
-    if (!ICO_AUG6) {
+    if (!ICO_AUG6JUN26) {
         moviePauseCount = 0;
     }
     videoDec.intcHandler = -1;

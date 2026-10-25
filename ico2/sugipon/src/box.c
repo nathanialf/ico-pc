@@ -156,9 +156,9 @@ static void initFallDown(GObj *self)
         DivQuaternion(GOBJ_SUB(self)->root.motionQuat, GOBJ_SUB(self)->root.motionQuat,
                       GOBJ_SUB(self)->root.baseQuat);
         GetMatrixFromQuaternionPos(p->mtx[0], GOBJ_SUB(self)->root.baseQuat, (char *)pos);
-        GOBJ_SUB(self)->ctrl.motion = PAL_NTSC_AUG6(1143, 1082, 1084);
+        GOBJ_SUB(self)->ctrl.motion = PAL_NTSC_AUG6JUN26(1143, 1082, 1084);
     } else {
-        GOBJ_SUB(self)->ctrl.motion = PAL_NTSC_AUG6(1143, 1082, 1084);
+        GOBJ_SUB(self)->ctrl.motion = PAL_NTSC_AUG6JUN26(1143, 1082, 1084);
         GetRootQuaternion(GOBJ_SUB(self)->root.baseQuat, self);
     }
 }
@@ -171,7 +171,7 @@ static int checkFieldContact(GObj *self, float lim)
     int r;
 
     GetRootPosition(pos, self);
-    if (ICO_JPNKORNTSCAUG6CN) {
+    if (ICO_JPNKORNTSCAUG6JUN26CN) {
         GetLowerPlaneCollision(&w, pos);
     } else {
         CopyVector(v, pos);
@@ -249,7 +249,7 @@ typedef struct { /* field names derived */
     int hit;
 } BoxWallRec; /* derived name */
 
-static int execNormalMove_aug6(GObj *self, int stop)
+static int execNormalMove_aug6jun26(GObj *self, int stop)
 {
     ClipWork stopWork;
     float pos[4];
@@ -348,8 +348,8 @@ static int execNormalMove_aug6(GObj *self, int stop)
 
 static int execNormalMove(GObj *self, int stop)
 {
-    if (ICO_AUG6) {
-        return execNormalMove_aug6(self, stop);
+    if (ICO_AUG6JUN26) {
+        return execNormalMove_aug6jun26(self, stop);
     }
     ClipWork stopWork;
     float pos[4];
@@ -505,7 +505,7 @@ static inline void alignPosition(GObj *self, float *dst, float *src, float grid)
     CopyVector(dst, npos);
 }
 
-static inline int AlignBox_aug6(GObj *self, float grid)
+static inline int AlignBox_aug6jun26(GObj *self, float grid)
 {
     float pos[4];
     float npos[4];
@@ -529,8 +529,8 @@ static inline int AlignBox_aug6(GObj *self, float grid)
 
 int AlignBox(GObj *self, float grid)
 {
-    if (ICO_AUG6) {
-        return AlignBox_aug6(self, grid);
+    if (ICO_AUG6JUN26) {
+        return AlignBox_aug6jun26(self, grid);
     }
     float pos[4];
     float quat[4];
@@ -640,7 +640,7 @@ static void initWheels_ntsc(GObj *self, SObjSimpleSetting *lay)
     }
 }
 
-static void initWheels_aug6(GObj *self, SObjSimpleSetting *lay)
+static void initWheels_aug6jun26(GObj *self, SObjSimpleSetting *lay)
 {
     BoxWork *w = GOBJ_SUB(self)->work;
     int i;
@@ -738,8 +738,8 @@ static void initWheels(GObj *self, SObjSimpleSetting *lay)
         initWheels_ntsc(self, lay);
         return;
     }
-    if (ICO_AUG6) {
-        initWheels_aug6(self, lay);
+    if (ICO_AUG6JUN26) {
+        initWheels_aug6jun26(self, lay);
         return;
     }
     BoxWork *w = GOBJ_SUB(self)->work;
@@ -1123,7 +1123,7 @@ static BoxWork boxWorkInit_ntsc = {
     {0},
 }; /* derived name */
 
-static BoxWork boxWorkInit_aug6 = {
+static BoxWork boxWorkInit_aug6jun26 = {
     0,
     0,
     {0},
@@ -1171,7 +1171,8 @@ static BoxWork boxWorkInit_aug6 = {
     {0.0f, 0.0f, 0.0f, 1.0f},
 }; /* derived name */
 
-#define boxWorkInit (*PAL_NTSC_AUG6(&boxWorkInit_pal, &boxWorkInit_ntsc, &boxWorkInit_aug6))
+#define boxWorkInit                                                                                \
+    (*PAL_NTSC_AUG6JUN26(&boxWorkInit_pal, &boxWorkInit_ntsc, &boxWorkInit_aug6jun26))
 
 /* the Y axis the side plane is built from */
 static float yAxis[4] = {0.0f, 1.0f, 0.0f, 0.0f}; /* derived name */
@@ -1304,7 +1305,7 @@ static int routeRearColor[4] = {255, 128, 0, 128}; /* derived name */
 /* 10430.378 is 32768 / pi, the radian-to-angle-table factor.  The
    quaternion's initialiser is mostly zero, and each wheel offset is a VECTOR
    record built by an initialiser, as onPathInitialize's are. */
-static int onPath_ntscaug6(GObj *self)
+static int onPath_ntscaug6jun26(GObj *self)
 {
     BoxWork *p = GOBJ_SUB(self)->work;
     float front[4];
@@ -1384,8 +1385,8 @@ static int onPath_ntscaug6(GObj *self)
 
 static int onPath(GObj *self)
 {
-    if (ICO_NTSCAUG6) {
-        return onPath_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        return onPath_ntscaug6jun26(self);
     }
     BoxWork *p = GOBJ_SUB(self)->work;
     Vec4 front;
@@ -1511,7 +1512,7 @@ static int playAnimationCore(GObj *self)
     sceVu0SubVector(&GOBJ_SUB(self)->root.move[0], pos, GOBJ_SUB(self)->root.last);
     CopyVector(GOBJ_SUB(self)->root.last, pos);
     SetRootPosition(self, pos);
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         ExecFrameDependSequence(self);
     }
     return UpdateFrameCounter(self);
@@ -1789,7 +1790,7 @@ static void execFloating(GObj *self)
             cw.pt[0][1] = w->waterHeight[0];
             EntryStageMultiBgaManager(487, cw.pt[0], IdentityQuaternion);
         }
-    } else if (ICO_NTSCAUG6) {
+    } else if (ICO_NTSCAUG6JUN26) {
     } else {
         if (w->floatPhase == 0) {
             CopyVector(cw.pt[0], pos);
@@ -1815,7 +1816,7 @@ static void initFloating(GObj *self)
     CopyVector(p->tiltVel, ZeroVector);
     GetRootPosition(p->lastPos, self);
     CopyVector(GOBJ_SUB(self)->ctrl.dir, floatInitFacing);
-    p->floatPhase = PAL_NTSCAUG6(0, rand());
+    p->floatPhase = PAL_NTSCAUG6JUN26(0, rand());
     execFloating(self);
 }
 
@@ -1860,7 +1861,7 @@ static void initLanding(GObj *self)
     GetRootPosition(pos, self);
     CopyVector(&GOBJ_SUB(self)->root.move[0], ZeroVector);
     *(int *)&GOBJ_SUB(self)->ctrl.animFrame = 0;
-    GOBJ_SUB(self)->ctrl.motion = PAL_NTSC_AUG6(1144, 1083, 1085);
+    GOBJ_SUB(self)->ctrl.motion = PAL_NTSC_AUG6JUN26(1144, 1083, 1085);
     if (p->wall.elem != 0) {
         float d;
 
@@ -2010,7 +2011,7 @@ static void action_ntsc(GObj *self)
     }
 }
 
-static void action_aug6(GObj *self)
+static void action_aug6jun26(GObj *self)
 {
     /* the float view carries the up vector */
     Vec4u v;
@@ -2052,8 +2053,8 @@ static void action(GObj *self)
         action_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        action_aug6(self);
+    if (ICO_AUG6JUN26) {
+        action_aug6jun26(self);
         return;
     }
     /* the float view carries the up vector */
@@ -2182,7 +2183,7 @@ static inline void setupClipWork(ClipWork *w, GObj *obj, float *dir, float len,
     _AddVectorXYZ(w->pt[1], w->pt[0], t);
 }
 
-static inline int checkBoxStopWall_aug6(GObj *obj, float *dir) /* derived name */
+static inline int checkBoxStopWall_aug6jun26(GObj *obj, float *dir) /* derived name */
 {
     ClipWork w;
     float t[4];
@@ -2202,8 +2203,8 @@ static inline int checkBoxStopWall_aug6(GObj *obj, float *dir) /* derived name *
 
 static inline int checkBoxStopWall(GObj *obj, float *dir) /* derived name */
 {
-    if (ICO_AUG6) {
-        return checkBoxStopWall_aug6(obj, dir);
+    if (ICO_AUG6JUN26) {
+        return checkBoxStopWall_aug6jun26(obj, dir);
     }
     ClipWork w;
     int r = 1;
@@ -2450,7 +2451,7 @@ static inline int checkItemHit(GObj *obj, float *dir) /* derived name */
     return _checkItemCollision(to);
 }
 
-static int moveBoxAutoMatic_ntscaug6(GObj *self, int dir)
+static int moveBoxAutoMatic_ntscaug6jun26(GObj *self, int dir)
 {
     static float pushPlusZ[4] = {0.0f, 0.0f, 0.5f, 0.0f};   /* derived name */
     static float pushMinusZ[4] = {0.0f, 0.0f, -0.5f, 0.0f}; /* derived name */
@@ -2489,8 +2490,8 @@ static int moveBoxAutoMatic_ntscaug6(GObj *self, int dir)
 
 static int moveBoxAutoMatic(GObj *self, int dir)
 {
-    if (ICO_NTSCAUG6) {
-        return moveBoxAutoMatic_ntscaug6(self, dir);
+    if (ICO_NTSCAUG6JUN26) {
+        return moveBoxAutoMatic_ntscaug6jun26(self, dir);
     }
     /* the Japanese build's v and v2 are static constants, the push without
        the frame-rate scale w */
@@ -2535,8 +2536,8 @@ static int moveBoxAutoMatic(GObj *self, int dir)
     return r;
 }
 
-static int MoveBoxWithHoldPoint_aug6(GObj *self, float *holdPoint, GObj *holder, int focus,
-                                     float *dir)
+static int MoveBoxWithHoldPoint_aug6jun26(GObj *self, float *holdPoint, GObj *holder, int focus,
+                                          float *dir)
 {
     float plane[4];
     float nv[4];
@@ -2685,8 +2686,8 @@ int MoveBoxWithHoldPoint(GObj *self, float *holdPoint, GObj *holder, int focus, 
     if (ICO_NTSC) {
         return MoveBoxWithHoldPoint_ntsc(self, holdPoint, holder, focus, dir);
     }
-    if (ICO_AUG6) {
-        return MoveBoxWithHoldPoint_aug6(self, holdPoint, holder, focus, dir);
+    if (ICO_AUG6JUN26) {
+        return MoveBoxWithHoldPoint_aug6jun26(self, holdPoint, holder, focus, dir);
     }
     float plane[4];
     float nv[4];
@@ -2939,7 +2940,7 @@ static BoxWork *InitBoxGeo_ntsc(GObj *self, SObjSimpleSetting *lay)
     return w;
 }
 
-static BoxWork *InitBoxGeo_aug6(GObj *self, SObjSimpleSetting *lay)
+static BoxWork *InitBoxGeo_aug6jun26(GObj *self, SObjSimpleSetting *lay)
 {
     BoxWork *w = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(BoxWork, 416), __FILE__,
                                 LN(2017, 2003, 2003, 1964, 1905, 2017, 2003));
@@ -3026,8 +3027,8 @@ BoxWork *InitBoxGeo(GObj *self, SObjSimpleSetting *lay)
     if (ICO_NTSC) {
         return InitBoxGeo_ntsc(self, lay);
     }
-    if (ICO_AUG6) {
-        return InitBoxGeo_aug6(self, lay);
+    if (ICO_AUG6JUN26) {
+        return InitBoxGeo_aug6jun26(self, lay);
     }
     BoxWork *w = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(BoxWork, 416), __FILE__,
                                 LN(2017, 2003, 2003, 1964, 1905, 2017, 2003));

@@ -59,12 +59,12 @@ static const int dlBufferSize_pal[13] = {
     81920, 14336, 30720, 4096, 16384, 65536, 40960, 12288, 26624, 14336, 4096, 28672, 86016,
 };
 
-static const int dlBufferSize_ntscaug6[13] = {
+static const int dlBufferSize_ntscaug6jun26[13] = {
     /* derived name */
     81920, 14336, 30720, 4096, 16384, 49152, 40960, 12288, 26624, 14336, 4096, 32768, 98304,
 };
 
-#define dlBufferSize PAL_NTSCAUG6(dlBufferSize_pal, dlBufferSize_ntscaug6)
+#define dlBufferSize PAL_NTSCAUG6JUN26(dlBufferSize_pal, dlBufferSize_ntscaug6jun26)
 /* PC port: each list buffer gets DL_HOST_PAD bytes past
    the EE's size. Nothing checks the fill on the EE (dl_CheckDLOverflow is
    compiled out, DL_DEBUG): the test stage 88 (STGBOSS_TEST) fills list 10
@@ -275,8 +275,8 @@ void dl_PopPriority(void)
 #endif
     } else {
         debug_StdPrintfDummy("dl_PopPriority:Stack Underflow.\n");
-        debug_assert(__FILE__, PAL_NTSCAUG6(552, 544));
-        __assert(__FILE__, PAL_NTSCAUG6(552, 544), "FALSE");
+        debug_assert(__FILE__, PAL_NTSCAUG6JUN26(552, 544));
+        __assert(__FILE__, PAL_NTSCAUG6JUN26(552, 544), "FALSE");
     }
 }
 

@@ -160,7 +160,7 @@ void stage_ApplyData(char *name, char *data)
                 for (j = 0; j < 2; j++) {
                     id = ent->anim[j];
                     obj = &stageTable[id];
-                    if (id != PAL_JPNKORCN_NTSC_AUG6(972, 949, 815, 814)) {
+                    if (id != PAL_JPNKORCN_NTSC_AUG6JUN26(972, 949, 815, 814)) {
                         if (strcmp(name, obj->path) == 0) {
                             if (strncmp(data, "BGA", 3) == 0) {
                                 obj->data = bga_InitData(data);
@@ -394,7 +394,7 @@ static int stage_Init_ntsc(void)
     return stageAnimCount;
 }
 
-static int stage_Init_aug6(void)
+static int stage_Init_aug6jun26(void)
 {
     const StgObjDat *p = 0;
     const int *tbl[2] = {&stageData[stage_no].animLayoutFirst, &stageData[stage_no].labelTop};
@@ -601,8 +601,8 @@ int stage_Init(void)
     if (ICO_NTSC) {
         return stage_Init_ntsc();
     }
-    if (ICO_AUG6) {
-        return stage_Init_aug6();
+    if (ICO_AUG6JUN26) {
+        return stage_Init_aug6jun26();
     }
     const StgObjDat *p = 0;
     const int *tbl[2] = {&stageData[stage_no].animLayoutFirst, &stageData[stage_no].labelTop};
@@ -955,7 +955,7 @@ inline int stage_CheckAnimationFrameIn(int key, int in, int out)
 void stage_ResetAnimation(void)
 {
     bga_ResetAnimation();
-    if (!ICO_AUG6) {
+    if (!ICO_AUG6JUN26) {
         if (systemStatus[5] != 0)
             return;
         light_KillAllFixLight();
@@ -967,7 +967,7 @@ void stage_CalcAnimationNoParent(void)
     int i;
     StageAnim *e;
 
-    if (PAL_AUG6(graphics_ready, lock_execIcoMisc) != 0) {
+    if (PAL_AUG6JUN26(graphics_ready, lock_execIcoMisc) != 0) {
         return;
     }
     if (stageAnimCount == 0) {
@@ -998,7 +998,7 @@ void stage_CalcAnimationNoParent(void)
                     char *o = (char *)e->obj[k];
 
                     GOBJ_SUB(o)->disp = 0;
-                    if (!ICO_JPNKORNTSCAUG6CN) {
+                    if (!ICO_JPNKORNTSCAUG6JUN26CN) {
                         if (GOBJ_SUB(o)->nodeNum != 0) {
                             *(int *)GOBJ_SUB(o)->nodeMtx = 0;
                         }
@@ -1009,7 +1009,7 @@ void stage_CalcAnimationNoParent(void)
             case 0:
                 break;
             case 1:
-                if (!ICO_NTSCAUG6) {
+                if (!ICO_NTSCAUG6JUN26) {
                     if (!ICO_JPNKORCN) {
                         if (lock != 0) {
                             if (debug_font_flag & 1) {
@@ -1046,7 +1046,7 @@ void stage_CalcAnimationParent(void)
     StageAnim *e;
     BgaHeader *entry2;
 
-    if (PAL_AUG6(graphics_ready, lock_execIcoMisc) != 0) {
+    if (PAL_AUG6JUN26(graphics_ready, lock_execIcoMisc) != 0) {
         return;
     }
     if (stageAnimCount == 0) {
@@ -1075,7 +1075,7 @@ void stage_CalcAnimationParent(void)
             for (k = 0; k < e->flags.b.count; k++) {
                 char *o = (char *)e->obj[k];
                 GOBJ_SUB(o)->disp = 0;
-                if (!ICO_JPNKORNTSCAUG6CN) {
+                if (!ICO_JPNKORNTSCAUG6JUN26CN) {
                     if (GOBJ_SUB(o)->nodeNum != 0) {
                         *(int *)GOBJ_SUB(o)->nodeMtx = 0;
                     }
@@ -1096,7 +1096,7 @@ void stage_CalcAnimationParent(void)
     bga_SetUniqAnimationFlag(0);
 }
 
-static void stage_DispAnimation_aug6(void)
+static void stage_DispAnimation_aug6jun26(void)
 {
     int i;
     StageAnim *e;
@@ -1140,8 +1140,8 @@ static void stage_DispAnimation_aug6(void)
 
 void stage_DispAnimation(void)
 {
-    if (ICO_AUG6) {
-        stage_DispAnimation_aug6();
+    if (ICO_AUG6JUN26) {
+        stage_DispAnimation_aug6jun26();
         return;
     }
     int i;
@@ -1300,7 +1300,7 @@ void stage_SetScale(int key, float scale)
     }
 }
 
-static float stage_PlayBgAnimation_aug6(int key, float t, void *v, void *q)
+static float stage_PlayBgAnimation_aug6jun26(int key, float t, void *v, void *q)
 {
     int i;
     int k;
@@ -1359,8 +1359,8 @@ static float stage_PlayBgAnimation_aug6(int key, float t, void *v, void *q)
 
 float stage_PlayBgAnimation(int key, float t, void *v, void *q)
 {
-    if (ICO_AUG6) {
-        return stage_PlayBgAnimation_aug6(key, t, v, q);
+    if (ICO_AUG6JUN26) {
+        return stage_PlayBgAnimation_aug6jun26(key, t, v, q);
     }
     int i;
     int k;
@@ -1480,7 +1480,7 @@ static float stage_PlayBgAnimationDissolve_ntsc(int key, void *v, void *q, float
     return r;
 }
 
-static float stage_PlayBgAnimationDissolve_aug6(int key, void *v, void *q, float t, float dv)
+static float stage_PlayBgAnimationDissolve_aug6jun26(int key, void *v, void *q, float t, float dv)
 {
     int i;
     int k;
@@ -1546,8 +1546,8 @@ float stage_PlayBgAnimationDissolve(int key, void *v, void *q, float t, float dv
     if (ICO_NTSC) {
         return stage_PlayBgAnimationDissolve_ntsc(key, v, q, t, dv);
     }
-    if (ICO_AUG6) {
-        return stage_PlayBgAnimationDissolve_aug6(key, v, q, t, dv);
+    if (ICO_AUG6JUN26) {
+        return stage_PlayBgAnimationDissolve_aug6jun26(key, v, q, t, dv);
     }
     int i;
     int k;
@@ -1614,7 +1614,7 @@ float stage_PlayBgAnimationDissolve(int key, void *v, void *q, float t, float dv
     return r;
 }
 
-static BgaPlayNode *stage_MakePlayBgAnimation_aug6(int key)
+static BgaPlayNode *stage_MakePlayBgAnimation_aug6jun26(int key)
 {
     int i;
     int found = -1;
@@ -1674,8 +1674,8 @@ static BgaPlayNode *stage_MakePlayBgAnimation_aug6(int key)
 
 BgaPlayNode *stage_MakePlayBgAnimation(int key)
 {
-    if (ICO_AUG6) {
-        return stage_MakePlayBgAnimation_aug6(key);
+    if (ICO_AUG6JUN26) {
+        return stage_MakePlayBgAnimation_aug6jun26(key);
     }
     int i;
     int found = -1;
@@ -1753,7 +1753,7 @@ void stage_KillPlayBgAnimation(BgaPlayNode **self)
     if (bgaPlayList != 0) {
         bgaPlayList->prev = 0;
     }
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         bgaPlayCount--;
     }
     freeseki(*self);

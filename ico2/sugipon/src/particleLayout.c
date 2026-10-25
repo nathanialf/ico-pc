@@ -16,7 +16,7 @@ inline void DeleteParticleLayout(GObj *self)
 {
     int *q = GOBJ_SUB(self)->work;
 
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         DeleteParticleEffect(q[0]);
     } else {
         if (q[0] != -1) {
@@ -26,12 +26,12 @@ inline void DeleteParticleLayout(GObj *self)
     }
 }
 
-static inline void ParticleLayoutGeo_ntscaug6(GObj *self) {}
+static inline void ParticleLayoutGeo_ntscaug6jun26(GObj *self) {}
 
 void ParticleLayoutGeo(GObj *self)
 {
-    if (ICO_NTSCAUG6) {
-        ParticleLayoutGeo_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        ParticleLayoutGeo_ntscaug6jun26(self);
         return;
     }
     int *q = GOBJ_SUB(self)->work;

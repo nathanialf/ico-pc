@@ -463,7 +463,7 @@ inline void ResetCollisionPC(void)
 
 void DispCollisionPC(void)
 {
-    if (PAL_AUG6(game_pause, graphics_ready) == 0) {
+    if (PAL_AUG6JUN26(game_pause, graphics_ready) == 0) {
         return;
     }
     pcTime = 0 - pcTime; /* no EE timer 0 on the host */

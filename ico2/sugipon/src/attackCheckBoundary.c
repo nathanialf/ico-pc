@@ -23,8 +23,8 @@ inline float GetAttackCheckBoundaryRadius(GObj *self);
 
 static inline GObj *createAttackCheckBoundaryGObj(SObjSimpleSetting *lay) /* derived name */
 {
-    return CreateLayoutedGObj(PAL_NTSC_AUG6(63, 62, 61), PAL_NTSC_AUG6(75, 69, 68), -1, 0, lay, -1,
-                              7, 1);
+    return CreateLayoutedGObj(PAL_NTSC_AUG6JUN26(63, 62, 61), PAL_NTSC_AUG6JUN26(75, 69, 68), -1, 0,
+                              lay, -1, 7, 1);
 }
 
 /* The 12-byte work record this function allocates and the other members
@@ -162,7 +162,7 @@ static void AttackCheckBoundaryBeforeFunc_ntsc(GObj *self)
     box->num = 0;
 }
 
-static void AttackCheckBoundaryBeforeFunc_aug6(GObj *self)
+static void AttackCheckBoundaryBeforeFunc_aug6jun26(GObj *self)
 {
     IosMailBox *box = &self->mailBox;
     IosMail *e = box->mail;
@@ -214,8 +214,8 @@ void AttackCheckBoundaryBeforeFunc(GObj *self)
         AttackCheckBoundaryBeforeFunc_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        AttackCheckBoundaryBeforeFunc_aug6(self);
+    if (ICO_AUG6JUN26) {
+        AttackCheckBoundaryBeforeFunc_aug6jun26(self);
         return;
     }
     IosMailBox *box = &self->mailBox;

@@ -301,7 +301,7 @@ static void ACTGetWish_FromPad_ntsc(GObj *self, float *dir)
     }
 }
 
-static void ACTGetWish_FromPad_aug6(GObj *self, float *dir)
+static void ACTGetWish_FromPad_aug6jun26(GObj *self, float *dir)
 {
     float v[4];
     float u[4];
@@ -572,8 +572,8 @@ void ACTGetWish_FromPad(GObj *self, float *dir)
         ACTGetWish_FromPad_ntsc(self, dir);
         return;
     }
-    if (ICO_AUG6) {
-        ACTGetWish_FromPad_aug6(self, dir);
+    if (ICO_AUG6JUN26) {
+        ACTGetWish_FromPad_aug6jun26(self, dir);
         return;
     }
     float v[4];

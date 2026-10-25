@@ -27,11 +27,11 @@ static TorchGeoWork emptyTorchWork_pal = {
     0, {0}, {0.0f, 0.0f, 0.0f, 1.0f}, 0, 0, 65536, 65536, 0, {-1, -1, -1, -1, -1}, {0},
 }; /* derived name */
 
-static TorchGeoWork emptyTorchWork_ntscaug6 = {
+static TorchGeoWork emptyTorchWork_ntscaug6jun26 = {
     0, 0, 0, 65536, 0, {-1, -1, -1, -1, -1},
 }; /* derived name */
 
-#define emptyTorchWork (*PAL_NTSCAUG6(&emptyTorchWork_pal, &emptyTorchWork_ntscaug6))
+#define emptyTorchWork (*PAL_NTSCAUG6JUN26(&emptyTorchWork_pal, &emptyTorchWork_ntscaug6jun26))
 
 #include "torch.h"
 #include <libvu0.h>
@@ -52,7 +52,7 @@ inline void SetTorchChainReactionFlag(GObj *torch, int flag)
 void torchOffSE(GObj *torch)
 {
     StopSEPackage(torch);
-    ExecuteSEPackage(torch, PAL_NTSCAUG6(67, 65));
+    ExecuteSEPackage(torch, PAL_NTSCAUG6JUN26(67, 65));
 }
 
 void LightTorchOn(GObj *gobj)
@@ -83,7 +83,7 @@ void LightTorchOn(GObj *gobj)
         if (n > 0) {
             return;
         }
-        if (ICO_AUG6) {
+        if (ICO_AUG6JUN26) {
             w->effect[1] = SetParticleEffect(21, pos, IdentityQuaternion);
             w->effect[4] = SetParticleEffect(19, pos, IdentityQuaternion);
         } else {
@@ -94,12 +94,12 @@ void LightTorchOn(GObj *gobj)
         }
         break;
     case 4:
-        w->effect[0] =
-            PAL_AUG6(SetParticleEffectByPartition(23, pos, IdentityQuaternion, ios_partition_seki),
-                     SetParticleEffect(23, pos, IdentityQuaternion));
+        w->effect[0] = PAL_AUG6JUN26(
+            SetParticleEffectByPartition(23, pos, IdentityQuaternion, ios_partition_seki),
+            SetParticleEffect(23, pos, IdentityQuaternion));
         break;
     default:
-        if (ICO_AUG6) {
+        if (ICO_AUG6JUN26) {
             w->effect[3] = SetParticleEffect(7, pos, IdentityQuaternion);
             w->effect[0] = SetParticleEffect(5, pos, IdentityQuaternion);
             w->effect[1] = SetParticleEffect(9, pos, IdentityQuaternion);
@@ -224,7 +224,7 @@ inline void SetTorchLife(GObj *torch, int life, int fadeTime)
     TorchGeoWork *p = GOBJ_SUB(torch)->work;
     p->life = life;
     /* the 2001 builds' SetTorchLife takes the life alone and sets no fade */
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         return;
     }
     p->fadeStart = life - fadeTime;
@@ -250,7 +250,7 @@ inline TorchGeoWork *InitTorchGeo(GObj *self, SObjSimpleSetting *lay)
     return p;
 }
 
-static inline GObj *CheckTorchChainReaction_ntscaug6(GObj *self, float dist)
+static inline GObj *CheckTorchChainReaction_ntscaug6jun26(GObj *self, float dist)
 {
     float pos[4];
     float pos2[4];
@@ -275,8 +275,8 @@ static inline GObj *CheckTorchChainReaction_ntscaug6(GObj *self, float dist)
 
 inline GObj *CheckTorchChainReaction(GObj *self, float dist)
 {
-    if (ICO_NTSCAUG6) {
-        return CheckTorchChainReaction_ntscaug6(self, dist);
+    if (ICO_NTSCAUG6JUN26) {
+        return CheckTorchChainReaction_ntscaug6jun26(self, dist);
     }
     float pos[4];
     float pos2[4];
@@ -361,7 +361,7 @@ static inline int chainReactionBlocked(GObj *gobj, GObj *other) /* derived name 
 
     b = GOBJ_SUB(gobj)->parent.obj;
     a = GOBJ_SUB(other)->parent.obj;
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         if (girlGObj != 0) {
             q = GOBJ_ACT(girlGObj);
             if (b != 0 && b == q->curItem) {
@@ -432,7 +432,7 @@ static void TorchGeo_ntsc(GObj *gobj)
     }
 }
 
-static void TorchGeo_aug6(GObj *gobj)
+static void TorchGeo_aug6jun26(GObj *gobj)
 {
     TorchGeoWork *w;
     Sub15C *sub;
@@ -478,8 +478,8 @@ void TorchGeo(GObj *gobj)
         TorchGeo_ntsc(gobj);
         return;
     }
-    if (ICO_AUG6) {
-        TorchGeo_aug6(gobj);
+    if (ICO_AUG6JUN26) {
+        TorchGeo_aug6jun26(gobj);
         return;
     }
     TorchGeoWork *w;

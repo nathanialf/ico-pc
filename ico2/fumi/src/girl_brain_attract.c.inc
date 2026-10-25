@@ -83,7 +83,7 @@ static int ATGoalTurnMail_ntsc(void *actor, float *dir, int node)
     return ret;
 }
 
-static int ATGoalTurnMail_aug6(void *actor, float *dir, int node)
+static int ATGoalTurnMail_aug6jun26(void *actor, float *dir, int node)
 {
     (void)node; /* PC port: the European parameter, unused here */
     float o1[4];
@@ -132,8 +132,8 @@ static int ATGoalTurnMail(void *actor, float *dir, int node)
     if (ICO_NTSC) {
         return ATGoalTurnMail_ntsc(actor, dir, node);
     }
-    if (ICO_AUG6) {
-        return ATGoalTurnMail_aug6(actor, dir, node);
+    if (ICO_AUG6JUN26) {
+        return ATGoalTurnMail_aug6jun26(actor, dir, node);
     }
     float o1[4];
     float v[4];
@@ -269,11 +269,11 @@ static GirlAttractParam attractObjParam_pal = {0,   {0},    {0},   0,
 static GirlAttractParam attractObjParam_ntsc = {0,   {0},    {0},   0,
                                                 316, 100.0f, 100.0f}; /* derived name */
 
-static GirlAttractParam attractObjParam_aug6 = {0,   {0},    {0},   0,
-                                                312, 100.0f, 100.0f}; /* derived name */
+static GirlAttractParam attractObjParam_aug6jun26 = {0,   {0},    {0},   0,
+                                                     312, 100.0f, 100.0f}; /* derived name */
 
 #define attractObjParam                                                                            \
-    (*PAL_NTSC_AUG6(&attractObjParam_pal, &attractObjParam_ntsc, &attractObjParam_aug6))
+    (*PAL_NTSC_AUG6JUN26(&attractObjParam_pal, &attractObjParam_ntsc, &attractObjParam_aug6jun26))
 
 static GirlAttractParam attractSofaParam_pal = {0, {0}, {0}, 68, 267, 50.0f, 100.0f,
                                                 1, {0}, {0}, 0,  {0}, 200.0f}; /* derived name */
@@ -281,11 +281,12 @@ static GirlAttractParam attractSofaParam_pal = {0, {0}, {0}, 68, 267, 50.0f, 100
 static GirlAttractParam attractSofaParam_ntsc = {0, {0}, {0}, 62, 251, 50.0f, 100.0f,
                                                  1, {0}, {0}, 0,  {0}, 200.0f}; /* derived name */
 
-static GirlAttractParam attractSofaParam_aug6 = {0, {0}, {0}, 61, 248, 50.0f, 100.0f,
-                                                 1, {0}, {0}, 0,  {0}, 200.0f}; /* derived name */
+static GirlAttractParam attractSofaParam_aug6jun26 = {
+    0, {0}, {0}, 61, 248, 50.0f, 100.0f, 1, {0}, {0}, 0, {0}, 200.0f}; /* derived name */
 
 #define attractSofaParam                                                                           \
-    (*PAL_NTSC_AUG6(&attractSofaParam_pal, &attractSofaParam_ntsc, &attractSofaParam_aug6))
+    (*PAL_NTSC_AUG6JUN26(&attractSofaParam_pal, &attractSofaParam_ntsc,                            \
+                         &attractSofaParam_aug6jun26))
 
 static GirlAttractParam attractBoyParam_pal = {0,   {0},    {0},  0,
                                                338, 100.0f, 70.0f}; /* derived name */
@@ -293,11 +294,11 @@ static GirlAttractParam attractBoyParam_pal = {0,   {0},    {0},  0,
 static GirlAttractParam attractBoyParam_ntsc = {0,   {0},    {0},  0,
                                                 316, 100.0f, 70.0f}; /* derived name */
 
-static GirlAttractParam attractBoyParam_aug6 = {0,   {0},    {0},  0,
-                                                312, 100.0f, 70.0f}; /* derived name */
+static GirlAttractParam attractBoyParam_aug6jun26 = {0,   {0},    {0},  0,
+                                                     312, 100.0f, 70.0f}; /* derived name */
 
 #define attractBoyParam                                                                            \
-    (*PAL_NTSC_AUG6(&attractBoyParam_pal, &attractBoyParam_ntsc, &attractBoyParam_aug6))
+    (*PAL_NTSC_AUG6JUN26(&attractBoyParam_pal, &attractBoyParam_ntsc, &attractBoyParam_aug6jun26))
 
 /* former nested helpers of subGirlBrain_Attract; they read cnt, sub and cur
    through the static chain, which are now passed explicitly */
@@ -707,7 +708,7 @@ restart:
     }
 }
 
-static void subGirlBrain_Attract_aug6(GObj *volatile self)
+static void subGirlBrain_Attract_aug6jun26(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
 
@@ -1081,8 +1082,8 @@ restart:
 
 void subGirlBrain_Attract(GObj *volatile self)
 {
-    if (ICO_AUG6) {
-        subGirlBrain_Attract_aug6(self);
+    if (ICO_AUG6JUN26) {
+        subGirlBrain_Attract_aug6jun26(self);
         return;
     }
     if (ICO_NTSC) {

@@ -144,7 +144,7 @@ inline int soundReverbDepthGet(void)
 
 void soundAllocIopHeap(void)
 {
-    int r = iosSifAllocIopHeapDebug(0x78000, __FILE__, PAL_AUG6(254, 230));
+    int r = iosSifAllocIopHeapDebug(0x78000, __FILE__, PAL_AUG6JUN26(254, 230));
     soundIopHeapAddrs = r;
     if (r < 0) {
         debug_StdPrintfDummy("\nCan't alloc heap \n");
@@ -167,7 +167,7 @@ static inline int seChAlloc(SqEntry *req) /* derived name */
     int i;
 
     for (i = 0; i < 48; i++) {
-        bit = PAL_AUG6(one, 1) << i;
+        bit = PAL_AUG6JUN26(one, 1) << i;
         if ((seChMask & bit) == 0) {
             goto found;
         }
@@ -186,7 +186,7 @@ found:
    _soundSeDefStop's copy recomputes the request word's address from it. */
 static inline void seReqChClear(SqEntry *req, int ch) /* derived name */
 {
-    long long bit = PAL_AUG6((long long)1, 1) << ch;
+    long long bit = PAL_AUG6JUN26((long long)1, 1) << ch;
 
     if ((req->seMask & bit) != 0) {
         req->seMask &= ~bit;
@@ -394,13 +394,13 @@ inline int soundBufAdpcmChAlloc(SqEntry *self, int *chp)
     long long bit = 1;
 
     for (ch = 0; ch < 64U; ch++) {
-        if ((adpcmChMask & (PAL_AUG6(bit, 1) << ch)) == 0)
+        if ((adpcmChMask & (PAL_AUG6JUN26(bit, 1) << ch)) == 0)
             goto found;
     }
-    debug_assert(__FILE__, PAL_AUG6(500, 487));
-    __assert(__FILE__, PAL_AUG6(500, 487), "0");
+    debug_assert(__FILE__, PAL_AUG6JUN26(500, 487));
+    __assert(__FILE__, PAL_AUG6JUN26(500, 487), "0");
 found:
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         self->spu.chMask |= 1 << ch;
         adpcmChMask |= 1 << ch;
     } else {
@@ -409,8 +409,8 @@ found:
     }
     if (ch >= 5) {
         debug_StdPrintfDummy("soundBufAdpcmChAlloc over\n");
-        debug_assert(__FILE__, PAL_AUG6(504, 491));
-        __assert(__FILE__, PAL_AUG6(504, 491), "0");
+        debug_assert(__FILE__, PAL_AUG6JUN26(504, 491));
+        __assert(__FILE__, PAL_AUG6JUN26(504, 491), "0");
     }
     *chp = ch;
     if (ch < 0) {
@@ -525,7 +525,7 @@ void soundDataClose(SqEntry *self)
     case 1:
         i = 0;
         while (self->seMask != 0) {
-            if (PAL_AUG6((int)((self->seMask >> i) & 1), self->seMask & (1 << i))) {
+            if (PAL_AUG6JUN26((int)((self->seMask >> i) & 1), self->seMask & (1 << i))) {
                 h = seSlotTbl[i].handle;
                 SgBgmStop(h, 1);
                 SgBgmClose(h);
@@ -1010,7 +1010,7 @@ static int _soundSeDefPlay(int kind, unsigned int owner, float *pos, int playMod
         return -2;
     }
     def = &seList[*kp];
-    if (kind == 0 || kind >= PAL_NTSCAUG6(1426, 1389)) {
+    if (kind == 0 || kind >= PAL_NTSCAUG6JUN26(1426, 1389)) {
         return -2;
     }
     key.b.bank = 11;
@@ -1231,7 +1231,7 @@ inline void soundSeKindBuild(void)
     unsigned short num;
     char *e;
 
-    for (i = PAL_NTSCAUG6(1419, 1388); i >= 0; i--) {
+    for (i = PAL_NTSCAUG6JUN26(1419, 1388); i >= 0; i--) {
         seKind[i] = 0;
     }
 
@@ -1239,7 +1239,7 @@ inline void soundSeKindBuild(void)
         e = (char *)&soundDataTbl[i];
         if (*(unsigned short *)(e + 2) == 11) {
             num = *(unsigned short *)e;
-            for (j = 0; j < PAL_NTSCAUG6(3837, 3806); j++) {
+            for (j = 0; j < PAL_NTSCAUG6JUN26(3837, 3806); j++) {
                 const SeKind *p = &seList[j];
                 if (p->num == num) {
                     seKind[p->idx] = j;
@@ -1303,7 +1303,7 @@ void soundSeEnvPlay(void)
     }
 }
 
-static void soundSeEnvNotUseClose_aug6(int a, int b)
+static void soundSeEnvNotUseClose_aug6jun26(int a, int b)
 {
     const SeBank *p = 0;
     SeSlot *e;
@@ -1404,8 +1404,8 @@ static void soundSeEnvNotUseClose_aug6(int a, int b)
 
 void soundSeEnvNotUseClose(int a, int b)
 {
-    if (ICO_AUG6) {
-        soundSeEnvNotUseClose_aug6(a, b);
+    if (ICO_AUG6JUN26) {
+        soundSeEnvNotUseClose_aug6jun26(a, b);
         return;
     }
     const SeBank *p = 0;
@@ -1472,8 +1472,8 @@ void soundSeEnvNotUseClose(int a, int b)
             }
             if (ok != 0 && seList[seKind[e->src->kind]].num >= 7 && a != 10) {
                 soundSeDefStopNoRelease((e->num << 8) | m);
-            } else if (e->src != &seDef[PAL_NTSCAUG6(415, 403)] &&
-                       e->src != &seDef[PAL_NTSCAUG6(414, 402)]) {
+            } else if (e->src != &seDef[PAL_NTSCAUG6JUN26(415, 403)] &&
+                       e->src != &seDef[PAL_NTSCAUG6JUN26(414, 402)]) {
                 soundSeDefStop((e->num << 8) | m);
             }
         }
@@ -1499,8 +1499,8 @@ void soundSeEnvNotUseClose(int a, int b)
 
         if (r != 0 && r->mode == 0 && s->env != 0) {
             x = *(int *)s->env;
-            if (x < PAL_NTSCAUG6(430, 418)) {
-                if (x >= PAL_NTSCAUG6(426, 414)) {
+            if (x < PAL_NTSCAUG6JUN26(430, 418)) {
+                if (x >= PAL_NTSCAUG6JUN26(426, 414)) {
                     soundSeDefStop((s->num << 8) | m);
                 }
             }

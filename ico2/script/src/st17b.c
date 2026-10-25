@@ -13,15 +13,15 @@ static ActMail check_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail check_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail check_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail check_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define check_mes PAL_NTSC_AUG6(check_mes_pal, check_mes_ntsc, check_mes_aug6)
+#define check_mes PAL_NTSC_AUG6JUN26(check_mes_pal, check_mes_ntsc, check_mes_aug6jun26)
 
 static ActMail intro_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail intro_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail intro_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define intro_mes PAL_AUG6(intro_mes_ntsc, intro_mes_aug6)
+#define intro_mes PAL_AUG6JUN26(intro_mes_ntsc, intro_mes_aug6jun26)
 
 /* .sdata: the lightning stream handle. */
 struct SqEntry *lightning2 = 0;
@@ -41,12 +41,12 @@ void actSt17bCheck(GObj *volatile self)
 
     _ACTWait(1);
     ScpCallCameraSetTarget(14990.0f, 7074.0f, -4694.0f);
-    scpAdpcmPlayRequestFunc(PAL_NTSCAUG6(94, 92), &lightning2, 1, 0, 1);
+    scpAdpcmPlayRequestFunc(PAL_NTSCAUG6JUN26(94, 92), &lightning2, 1, 0, 1);
 
-    if (gflagChk(PAL_NTSCAUG6(36, 33)) == 0) {
+    if (gflagChk(PAL_NTSCAUG6JUN26(36, 33)) == 0) {
         check_mes[0].func = actSt17bCheckChk;
         act->mail = check_mes;
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
         _ACTWait(0);
     }
 }
@@ -60,7 +60,7 @@ void actSt17bIntro(GObj *volatile self)
     if (gflagChk(34) == 0) {
         intro_mes[0].func = actSt17bIntroChk;
         act->mail = intro_mes;
-        ACTSendMailCorrect(self, PAL_AUG6(397, 393));
+        ACTSendMailCorrect(self, PAL_AUG6JUN26(397, 393));
         _ACTWait(0);
     }
 }
@@ -69,7 +69,7 @@ void actSt17bCheckChk(GObj *volatile self)
 {
     _ACTWait(1);
     CheckPoint();
-    gflagOn(PAL_NTSCAUG6(34, 32));
+    gflagOn(PAL_NTSCAUG6JUN26(34, 32));
 }
 
 void actSt17bIntroChk(GObj *volatile self)
@@ -80,8 +80,8 @@ void actSt17bIntroChk(GObj *volatile self)
     lt_switch_layout(51);
     scpBoyControlReadDisable = 1;
     gflagOn(34);
-    stage_SetAnimation(PAL_AUG6(116, 115), 1, 0);
-    while (stage_CheckAnimationFinish(PAL_AUG6(116, 115)) == 0) {
+    stage_SetAnimation(PAL_AUG6JUN26(116, 115), 1, 0);
+    while (stage_CheckAnimationFinish(PAL_AUG6JUN26(116, 115)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);

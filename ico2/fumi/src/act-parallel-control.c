@@ -54,7 +54,7 @@ static void ActPara_MakeTbl_ntsc(int *tbl, int mask, int n)
     }
 }
 
-static void ActPara_MakeTbl_aug6(int *tbl, int mask, int n)
+static void ActPara_MakeTbl_aug6jun26(int *tbl, int mask, int n)
 {
     int i;
     int j;
@@ -79,8 +79,8 @@ void ActPara_MakeTbl(int *tbl, unsigned long long mask, int n)
         ActPara_MakeTbl_ntsc(tbl, mask, n);
         return;
     }
-    if (ICO_AUG6) {
-        ActPara_MakeTbl_aug6(tbl, mask, n);
+    if (ICO_AUG6JUN26) {
+        ActPara_MakeTbl_aug6jun26(tbl, mask, n);
         return;
     }
     int i;
@@ -103,7 +103,7 @@ void ActPara_MakeTbl(int *tbl, unsigned long long mask, int n)
 void ActPara_InitSystem(void)
 {
     int i;
-    for (i = 0; i <= PAL_NTSCAUG6(85, 70); i++) {
+    for (i = 0; i <= PAL_NTSCAUG6JUN26(85, 70); i++) {
         parallelIds[i] = parallelMotionTbl[i].motion[0];
     }
     /* a compiled-out overflow check: its message and __FILE__ stay in .rodata

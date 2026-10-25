@@ -43,7 +43,7 @@ static void RotateAccordingToStick_PatternThree(float *pitch, float *yaw, float 
     x = v[0];
     y = v[2];
 
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         if (len < 0.1f)
             spd = handCameraRate * 0.008726646f * _ACTGame_GetParamF(16);
         else
@@ -90,7 +90,7 @@ static void RotateAccordingToStick_PatternThree(float *pitch, float *yaw, float 
     *yaw += db;
 }
 
-static inline void SetCurrentInfo_ntscaug6(void *eye, void *at)
+static inline void SetCurrentInfo_ntscaug6jun26(void *eye, void *at)
 {
     float *p = handCameraWork;
     float v[4];
@@ -118,8 +118,8 @@ static inline void SetCurrentInfo_ntscaug6(void *eye, void *at)
 
 static void SetCurrentInfo(void *eye, void *at)
 {
-    if (ICO_NTSCAUG6) {
-        SetCurrentInfo_ntscaug6(eye, at);
+    if (ICO_NTSCAUG6JUN26) {
+        SetCurrentInfo_ntscaug6jun26(eye, at);
         return;
     }
     float *p = handCameraWork;
@@ -231,8 +231,8 @@ inline void SetLimitHandCameraCorrect(float limitP, float limitV)
     handCameraWork[6] = limitV;
 }
 
-static inline void HandCameraCorrect_ntscaug6(void *eye, void *at, float stickX, float stickZ,
-                                              float rate)
+static inline void HandCameraCorrect_ntscaug6jun26(void *eye, void *at, float stickX, float stickZ,
+                                                   float rate)
 {
     float *p = handCameraWork;
     float savedYawLimit = p[5];
@@ -262,8 +262,8 @@ static inline void HandCameraCorrect_ntscaug6(void *eye, void *at, float stickX,
 
 void HandCameraCorrect(void *eye, void *at, int mode, float stickX, float stickZ, float rate)
 {
-    if (ICO_NTSCAUG6) {
-        HandCameraCorrect_ntscaug6(eye, at, stickX, stickZ, rate);
+    if (ICO_NTSCAUG6JUN26) {
+        HandCameraCorrect_ntscaug6jun26(eye, at, stickX, stickZ, rate);
         return;
     }
     float *p = handCameraWork;

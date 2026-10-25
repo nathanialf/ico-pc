@@ -144,7 +144,7 @@ static inline void relabel_way_groups(void) /* derived name */
     int n = 0;
     int i;
 
-    for (i = 0; i < PAL_AUG6(94, 64); i++) {
+    for (i = 0; i < PAL_AUG6JUN26(94, 64); i++) {
         if (way_group[i].used == 1) {
             sprintf(debugWayGroupSelect[n].s, "% 2d (% 2d) ", n, way_group[i].count);
             if (way_group[i].bridge == 1) {
@@ -168,7 +168,7 @@ static int group_select(void)
     state = selectState;
     if (state == 0) {
         relabel_way_groups();
-        for (i = 0; i < PAL_AUG6(94, 64); i++) {
+        for (i = 0; i < PAL_AUG6JUN26(94, 64); i++) {
             e = &way_group[i];
             if (e->used == 1) {
                 if (i == current_select_gid) {
@@ -616,7 +616,7 @@ static void way_toolDL(GObj *self)
     SetVObjRT(&m, wayWorkPos);
     DrawVObj(0, &wayColorCursor);
 
-    for (i = 0; i < PAL_AUG6(94, 64); i++) {
+    for (i = 0; i < PAL_AUG6JUN26(94, 64); i++) {
         e = &way_group[i];
         if (e->used == 1) {
             if (e->active != 0) {

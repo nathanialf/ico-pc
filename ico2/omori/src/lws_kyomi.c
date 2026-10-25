@@ -43,7 +43,7 @@ static GObj *CreateKyomiGObj_ntsc(int no)
     return gobj;
 }
 
-static GObj *CreateKyomiGObj_aug6(int no)
+static GObj *CreateKyomiGObj_aug6jun26(int no)
 {
     (void)no; /* PC port: the European parameter, unused here */
     float lay[16];
@@ -63,8 +63,8 @@ GObj *CreateKyomiGObj(int no)
     if (ICO_NTSC) {
         return CreateKyomiGObj_ntsc(no);
     }
-    if (ICO_AUG6) {
-        return CreateKyomiGObj_aug6(no);
+    if (ICO_AUG6JUN26) {
+        return CreateKyomiGObj_aug6jun26(no);
     }
     float lay[16];
     GObj *gobj;
@@ -94,15 +94,15 @@ GObj *CreateKyomiGObj(int no)
 /* the hint timers, a window onto the per-hint elapsed-time array */
 static float *hintTimers; /* derived name */
 
-static void LwsKyomiGeo_ntscaug6(GObj *gobj)
+static void LwsKyomiGeo_ntscaug6jun26(GObj *gobj)
 {
     brainSubLevelGop(gobj, 0.1f);
 }
 
 void LwsKyomiGeo(GObj *gobj)
 {
-    if (ICO_NTSCAUG6) {
-        LwsKyomiGeo_ntscaug6(gobj);
+    if (ICO_NTSCAUG6JUN26) {
+        LwsKyomiGeo_ntscaug6jun26(gobj);
         return;
     }
     struct HintInfo *hint;

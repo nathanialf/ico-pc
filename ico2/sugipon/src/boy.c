@@ -409,7 +409,7 @@ static __inline__ void setClothDetail(void *cloth, float x, float wt) /* derived
     GetCloth4DWithDetail(cloth, x, 0.98f, 1.0f, wt);
 }
 
-static void execClothes_ntscaug6(GObj *gobj)
+static void execClothes_ntscaug6jun26(GObj *gobj)
 {
     BoyWork *w = GOBJ_SUB(gobj)->work;
 
@@ -422,8 +422,8 @@ static void execClothes_ntscaug6(GObj *gobj)
 
 static void execClothes(GObj *gobj)
 {
-    if (ICO_NTSCAUG6) {
-        execClothes_ntscaug6(gobj);
+    if (ICO_NTSCAUG6JUN26) {
+        execClothes_ntscaug6jun26(gobj);
         return;
     }
     BoyWork *w = GOBJ_SUB(gobj)->work;
@@ -462,7 +462,7 @@ LightLineExt *InitLightLineGeo(GObj *gobj, float *pos)
     int n;
     float f;
 
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         llExtGeo = &_llExtGeo;
         llExtGeo->phase = iosMallocDebug(ios_partition_sugipon, 0x190, "src/boy.c", 135);
         llExtGeo->speed = iosMallocDebug(ios_partition_sugipon, 0x190, "src/boy.c", 136);
@@ -479,7 +479,7 @@ LightLineExt *InitLightLineGeo(GObj *gobj, float *pos)
         llExtGeo->phase[i] = 0.0f;
         llExtGeo->speed[i] = random_unit() * 0.1f + 0.01f;
         llExtGeo->line[i] =
-            iosMallocDebug(ios_partition_sugipon, 0x140, "src/boy.c", PAL_NTSCAUG6(168, 142));
+            iosMallocDebug(ios_partition_sugipon, 0x140, "src/boy.c", PAL_NTSCAUG6JUN26(168, 142));
         CopyVector(llExtGeo->line[i], &v);
         llExtGeo->line[i][0].x += (float)((i - 0x32) * 5);
         for (j = 1; j < 20; j++) {
@@ -643,7 +643,7 @@ static BoyWork *InitBoyGeo_ntsc(GObj *gobj, void *csv)
     return w;
 }
 
-static BoyWork *InitBoyGeo_aug6(GObj *gobj, void *csv)
+static BoyWork *InitBoyGeo_aug6jun26(GObj *gobj, void *csv)
 {
     BoyWork *w;
     BoyWork *p;
@@ -683,8 +683,8 @@ BoyWork *InitBoyGeo(GObj *gobj, void *csv)
     if (ICO_NTSC) {
         return InitBoyGeo_ntsc(gobj, csv);
     }
-    if (ICO_AUG6) {
-        return InitBoyGeo_aug6(gobj, csv);
+    if (ICO_AUG6JUN26) {
+        return InitBoyGeo_aug6jun26(gobj, csv);
     }
     BoyWork *w;
     BoyWork *p;
@@ -854,7 +854,7 @@ static void BoyGeo_ntsc(GObj *gobj)
     CylinderCollision(gobj, 2, ACTGame_FLAG_TETSUNAGI() != 0 ? 15.0f : 30.0f, 50.0f, 0.7f);
 }
 
-static void BoyGeo_aug6(GObj *gobj)
+static void BoyGeo_aug6jun26(GObj *gobj)
 {
     float pos[4];
 
@@ -879,8 +879,8 @@ void BoyGeo(GObj *gobj)
         BoyGeo_ntsc(gobj);
         return;
     }
-    if (ICO_AUG6) {
-        BoyGeo_aug6(gobj);
+    if (ICO_AUG6JUN26) {
+        BoyGeo_aug6jun26(gobj);
         return;
     }
     HandManager(gobj);
@@ -965,7 +965,7 @@ void BoyDL(GObj *gobj)
         GetRootPosition(pos, gobj);
         GetRootQuaternion(quat, gobj);
         RotQuaternionY(quat, -32768);
-        r = (int)stage_PlayBgAnimation(PAL_JPNKORCN_NTSC_AUG6(488, 484, 424, 423),
+        r = (int)stage_PlayBgAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(488, 484, 424, 423),
                                        (float)w->stoneAnim, pos, quat);
         if (systemStatus[5] == 0 && r != -1) {
             w->stoneAnim = r;
@@ -973,7 +973,7 @@ void BoyDL(GObj *gobj)
     } else {
         p2o_SetDefaultEnviroment();
         p2o_DispVU1(gobj);
-        if (!ICO_NTSCAUG6) {
+        if (!ICO_NTSCAUG6JUN26) {
             dispSubParts(gobj);
         }
         dispCrown(gobj);
@@ -986,7 +986,7 @@ void BoyDL(GObj *gobj)
         SetLimitedPoolReflactionMesh(m, sub->ctrl.pool, gobj);
         DispLimitedPoolReflactionMesh(m);
     }
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         DispWaterDot(w->waterDot);
     }
 }

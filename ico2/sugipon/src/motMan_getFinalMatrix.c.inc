@@ -343,7 +343,7 @@ static inline void getRotOfDir(float *q, float *v) /* derived name */
     MultiCurrentQuaternion(q);                                                                     \
     GetMatrixFromQuaternionRotElem(MatrixDrive_GetMatrix(), GetCurrentQuaternion())
 
-static void _getFinalMatrix_ntscaug6(int id)
+static void _getFinalMatrix_ntscaug6jun26(int id)
 {
     SkelNode *node = &skelNode[id];
     char *elem = skelMotion + id * 32;
@@ -1064,8 +1064,8 @@ static void _getFinalMatrix_ntscaug6(int id)
 
 static void _getFinalMatrix(int id)
 {
-    if (ICO_NTSCAUG6) {
-        _getFinalMatrix_ntscaug6(id);
+    if (ICO_NTSCAUG6JUN26) {
+        _getFinalMatrix_ntscaug6jun26(id);
         return;
     }
     SkelNode *node = &skelNode[id];

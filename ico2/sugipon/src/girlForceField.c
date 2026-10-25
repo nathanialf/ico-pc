@@ -39,7 +39,7 @@ inline GirlForceFieldWork *InitGirlForceFieldGeo(GObj *self, SObjSimpleSetting *
 /* the action table the layout rows select into */
 extern OaRecB objAction[];
 
-static void GirlForceFieldGeo_aug6(GObj *self)
+static void GirlForceFieldGeo_aug6jun26(GObj *self)
 {
     float pos[4];
     float quat[4];
@@ -73,20 +73,20 @@ static void GirlForceFieldGeo_aug6(GObj *self)
    the other way round) */
 inline void GirlForceFieldGeo(GObj *self)
 {
-    if (ICO_AUG6) {
-        GirlForceFieldGeo_aug6(self);
+    if (ICO_AUG6JUN26) {
+        GirlForceFieldGeo_aug6jun26(self);
     }
 }
 
-static inline void GirlForceFieldDL_aug6(GObj *self)
+static inline void GirlForceFieldDL_aug6jun26(GObj *self)
 {
     (void)self;
 }
 
 void GirlForceFieldDL(GObj *self)
 {
-    if (ICO_AUG6) {
-        GirlForceFieldDL_aug6(self);
+    if (ICO_AUG6JUN26) {
+        GirlForceFieldDL_aug6jun26(self);
         return;
     }
     float pos[4];

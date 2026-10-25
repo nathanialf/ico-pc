@@ -266,13 +266,13 @@ static void effect_end_func(int id)
 {
     CapsuleRec *e;
 
-    if (isysGObjSearchFromObjKindID_begin(PAL_NTSC_AUG6(65, 64, 63)) != 0) {
+    if (isysGObjSearchFromObjKindID_begin(PAL_NTSC_AUG6JUN26(65, 64, 63)) != 0) {
         e = &capsule[GetParticleEffectData(id)->user.capsule];
-        pbga_start(&e->bga, PAL_JPNKORCN_NTSC_AUG6(552, 548, 481, 480));
+        pbga_start(&e->bga, PAL_JPNKORCN_NTSC_AUG6JUN26(552, 548, 481, 480));
         _CopyVector(e->bga->pos, e->pos);
         CopyQuaternion(e->bga->rot, e->quat);
         e->state = 2;
-        ExecuteSEPackage(0, PAL_NTSCAUG6(101, 96));
+        ExecuteSEPackage(0, PAL_NTSCAUG6JUN26(101, 96));
     }
 }
 
@@ -312,7 +312,7 @@ void bossCtrlBeforeFunc(GObj *self)
                     }
                 }
             }
-            ExecuteSEPackage(self, PAL_NTSCAUG6(100, 95));
+            ExecuteSEPackage(self, PAL_NTSCAUG6JUN26(100, 95));
         }
     }
     q->num = 0;
@@ -321,7 +321,7 @@ void bossCtrlBeforeFunc(GObj *self)
 inline int InqCapsuleGhostBossStage(void)
 {
     int r = 0;
-    if (stage_no == PAL_JPNKORNTSCAUG6CN(86, 84) || stage_no == 3 || stage_no == 46)
+    if (stage_no == PAL_JPNKORNTSCAUG6JUN26CN(86, 84) || stage_no == 3 || stage_no == 46)
         r = 1;
     return r;
 }
@@ -351,7 +351,7 @@ static void BossEnemyFunc_ntsc(void *self)
     }
 }
 
-static void BossEnemyFunc_aug6(void *self)
+static void BossEnemyFunc_aug6jun26(void *self)
 {
     if (gflag[0] != 0 && InqCapsuleGhostBossStage() != 0) {
         _ACTSetEnemyDisappearSpeed(self, 6.0f);
@@ -382,8 +382,8 @@ void BossEnemyFunc(void *self)
         BossEnemyFunc_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        BossEnemyFunc_aug6(self);
+    if (ICO_AUG6JUN26) {
+        BossEnemyFunc_aug6jun26(self);
         return;
     }
     if (gflag[0] != 0 && InqCapsuleGhostBossStage() != 0) {
@@ -422,7 +422,7 @@ static inline void sendEnemyAway(GObj *o) /* derived name */
     pos[2] = pos[1] = pos[0] = 4294967296.0f;
     pos[3] = 0.0f;
     SetRootPosition(o, pos);
-    if (!ICO_AUG6) {
+    if (!ICO_AUG6JUN26) {
         GOBJ_SUB(o)->disp = 0;
     }
 }
@@ -476,7 +476,7 @@ static void gene_enemy(volatile ICO_WORD gobj)
     for (;; _ACTWait(1)) {
         total = 0;
         alive = 0;
-        if (stage_no == PAL_JPNKORNTSCAUG6CN(86, 84)) {
+        if (stage_no == PAL_JPNKORNTSCAUG6JUN26CN(86, 84)) {
             if ((pad[0].flags & 0x40) != 0) {
                 gflag[0] = 1;
             }
@@ -530,12 +530,12 @@ static void gene_enemy(volatile ICO_WORD gobj)
                 if (r >= 0) {
                     GetParticleEffectData(r)->user.done = flag;
                     SetParticleEffectClipEnableFlag(r, 0);
-                    ExecuteSEPackage((GObj *)gobj, PAL_NTSCAUG6(99, 94));
+                    ExecuteSEPackage((GObj *)gobj, PAL_NTSCAUG6JUN26(99, 94));
                     while (*flag == 0) {
                         _ACTWait(1);
                     }
                 }
-                if (ICO_AUG6) {
+                if (ICO_AUG6JUN26) {
                     SetRootPosition(o, pos);
                 } else {
                     putEnemyAt(o, pos);
@@ -578,7 +578,7 @@ void BossCtrlGeo(void *self)
         scpWakeupEnemyAll();
     else
         scpSleepEnemyAll();
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         n = 0;
         base = capsule;
         for (k = 0; k < 53; k++) {
@@ -713,7 +713,7 @@ static void BossCtrlDL_ntsc(void)
     }
 }
 
-static inline void BossCtrlDL_aug6(void) {}
+static inline void BossCtrlDL_aug6jun26(void) {}
 
 void BossCtrlDL(void)
 {
@@ -721,8 +721,8 @@ void BossCtrlDL(void)
         BossCtrlDL_ntsc();
         return;
     }
-    if (ICO_AUG6) {
-        BossCtrlDL_aug6();
+    if (ICO_AUG6JUN26) {
+        BossCtrlDL_aug6jun26();
         return;
     }
     CapsuleRec *base;
@@ -761,7 +761,7 @@ inline int InqCapsuleGhostBossEnd(void)
     unsigned int cnt = 0;
     void *o;
 
-    if (isysGObjSearchFromObjKindID_begin(PAL_NTSC_AUG6(65, 64, 63)) != 0) {
+    if (isysGObjSearchFromObjKindID_begin(PAL_NTSC_AUG6JUN26(65, 64, 63)) != 0) {
         CapsuleRec *base = capsule;
         unsigned int i = 0;
         do {

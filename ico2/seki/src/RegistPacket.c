@@ -282,8 +282,8 @@ static void reg_setShape(Sub15C *o, int idx, int flag, PacHeader *pkt, PObjMater
                         if (m->index >= s->vtxCount) {
                             debug_StdPrintfDummy("reg_setShape:illegal vertex index. %d/%d\n",
                                                  m->index, s->vtxCount);
-                            debug_assert("src/RegistPacket.c", PAL_NTSC_AUG6(635, 629, 590));
-                            __assert("src/RegistPacket.c", PAL_NTSC_AUG6(635, 629, 590), "0");
+                            debug_assert("src/RegistPacket.c", PAL_NTSC_AUG6JUN26(635, 629, 590));
+                            __assert("src/RegistPacket.c", PAL_NTSC_AUG6JUN26(635, 629, 590), "0");
                         }
                         t = s->vtx;
                         t += m->index * 0x10;
@@ -300,15 +300,15 @@ static void reg_setShape(Sub15C *o, int idx, int flag, PacHeader *pkt, PObjMater
                         if (m->index >= s->nrmCount) {
                             debug_StdPrintfDummy("reg_setShape:illegal normal index. %d/%d\n",
                                                  m->index, s->nrmCount);
-                            debug_assert("src/RegistPacket.c", PAL_NTSC_AUG6(642, 636, 597));
-                            __assert("src/RegistPacket.c", PAL_NTSC_AUG6(642, 636, 597), "0");
+                            debug_assert("src/RegistPacket.c", PAL_NTSC_AUG6JUN26(642, 636, 597));
+                            __assert("src/RegistPacket.c", PAL_NTSC_AUG6JUN26(642, 636, 597), "0");
                         }
                         t = s->nrm;
                         t += m->index * 0x10;
                         _AddVectorXYZ(t, t, vec);
                     } else {
-                        debug_assert("src/RegistPacket.c", PAL_NTSC_AUG6(647, 641, 602));
-                        __assert("src/RegistPacket.c", PAL_NTSC_AUG6(647, 641, 602), "0");
+                        debug_assert("src/RegistPacket.c", PAL_NTSC_AUG6JUN26(647, 641, 602));
+                        __assert("src/RegistPacket.c", PAL_NTSC_AUG6JUN26(647, 641, 602), "0");
                     }
                 nextbone:
                     m++;
@@ -605,7 +605,7 @@ static char *reg_setNMatrixPacket(Sub15C *o, int idx)
        alone (the PS2's own rule; Shadow.c clips the volume) */
     if (gsb_ClipBox(box) == 0) {
         REG_CULL_DROP(o, -1, 2);
-        if (!ICO_AUG6) {
+        if (!ICO_AUG6JUN26) {
             if (o->shadow != 0) {
                 light_MakeLightMatrix(o, idx);
             }
@@ -747,8 +747,10 @@ static char *reg_setMMatrixPacket(Sub15C *o, int idx)
             _SetTransCurrentMatrix(o->nodes[idx].pos);
         }
         _GetCurrentMatrix(matrixptr + 0x180);
-        _MulMatrix(matrixptr + 0x140, matrixptr + PAL_NTSCAUG6(0x640, 0xC0), matrixptr + 0x180);
-        _MulMatrix(matrixptr + 0x300, matrixptr + PAL_NTSCAUG6(0x680, 0x240), matrixptr + 0x180);
+        _MulMatrix(matrixptr + 0x140, matrixptr + PAL_NTSCAUG6JUN26(0x640, 0xC0),
+                   matrixptr + 0x180);
+        _MulMatrix(matrixptr + 0x300, matrixptr + PAL_NTSCAUG6JUN26(0x680, 0x240),
+                   matrixptr + 0x180);
     } else if ((w->flags.ll & 4) != 0) {
         RegMtx um2;
 
@@ -796,7 +798,7 @@ static char *reg_setMMatrixPacket(Sub15C *o, int idx)
        caller (reg_dispMObj) */
     if (gsb_ClipBox(box) == 0) {
         REG_CULL_DROP(o, idx, 2);
-        if (!ICO_AUG6) {
+        if (!ICO_AUG6JUN26) {
             if (o->shadow != 0) {
                 light_MakeLightMatrix(o, idx);
             }
@@ -1473,7 +1475,7 @@ static void reg_dispCObj(Sub15C *o)
     }
 }
 
-static void reg_dispPoint_aug6(PacLine *node, float alpha, int idx, int flag)
+static void reg_dispPoint_aug6jun26(PacLine *node, float alpha, int idx, int flag)
 {
     float fv[4];
     int iv[4];
@@ -1598,8 +1600,8 @@ static void reg_dispPoint_aug6(PacLine *node, float alpha, int idx, int flag)
 
 static void reg_dispPoint(PacLine *node, float alpha, int idx, int flag)
 {
-    if (ICO_AUG6) {
-        reg_dispPoint_aug6(node, alpha, idx, flag);
+    if (ICO_AUG6JUN26) {
+        reg_dispPoint_aug6jun26(node, alpha, idx, flag);
         return;
     }
     float fv[4];
@@ -1749,7 +1751,7 @@ typedef union { /* field names derived */
     unsigned int u;
 } RegFloatBits; /* derived name */
 
-static void reg_dispLine_aug6(PacLine *node, float alpha)
+static void reg_dispLine_aug6jun26(PacLine *node, float alpha)
 {
     float fv0[4];
     float fv1[4];
@@ -1887,8 +1889,8 @@ static void reg_dispLine_aug6(PacLine *node, float alpha)
 
 static void reg_dispLine(PacLine *node, float alpha)
 {
-    if (ICO_AUG6) {
-        reg_dispLine_aug6(node, alpha);
+    if (ICO_AUG6JUN26) {
+        reg_dispLine_aug6jun26(node, alpha);
         return;
     }
     float fv0[4];
@@ -2030,7 +2032,7 @@ static void reg_dispLine(PacLine *node, float alpha)
     }
 }
 
-static void reg_dispPointLineObj_aug6(Sub15C *o)
+static void reg_dispPointLineObj_aug6jun26(Sub15C *o)
 {
     PObjModel *mdl;
     PObjGroup *grp;
@@ -2083,8 +2085,8 @@ static void reg_dispPointLineObj_aug6(Sub15C *o)
 
 static void reg_dispPointLineObj(Sub15C *o)
 {
-    if (ICO_AUG6) {
-        reg_dispPointLineObj_aug6(o);
+    if (ICO_AUG6JUN26) {
+        reg_dispPointLineObj_aug6jun26(o);
         return;
     }
     PObjModel *mdl;

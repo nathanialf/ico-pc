@@ -53,13 +53,13 @@ MvMenuEnt objMenu_ntsc[] = {
     {"QueenMotion", 46, 1011, 1073, 2105, 2119},
 };
 
-MvMenuEnt objMenu_aug6[] = {
+MvMenuEnt objMenu_aug6jun26[] = {
     {"BoyMotion", 1, 0, 514, 0, 1195},           {"GirlMotion", 2, 514, 790, 1195, 1797},
     {"Enemy1Motion", 4, 790, 924, 1797, 2080},   {"BirdMotion", 32, 1075, 1084, 2094, 2138},
     {"QueenMotion", 46, 1013, 1075, 2080, 2094},
 };
 
-#define objMenu PAL_NTSC_AUG6(objMenu_pal, objMenu_ntsc, objMenu_aug6)
+#define objMenu PAL_NTSC_AUG6JUN26(objMenu_pal, objMenu_ntsc, objMenu_aug6jun26)
 
 static int objSel = 0; /* derived name */
 
@@ -86,7 +86,8 @@ static inline int countMotionKinds(int id, int from, int to) /* derived name */
     int i;
 
     for (i = from; i < to; i++) {
-        if (motionOrient[i].id == id || motionOrient[i].id == PAL_NTSC_AUG6(1146, 1085, 1087)) {
+        if (motionOrient[i].id == id ||
+            motionOrient[i].id == PAL_NTSC_AUG6JUN26(1146, 1085, 1087)) {
             n++;
         }
     }
@@ -101,11 +102,12 @@ static inline int makeMotionKindList(MvMenuEnt *ent, int base) /* derived name *
     int i;
     int k;
 
-    list = iosMallocDebug(ios_partition_sugipon, n * 8, __FILE__, PAL_NTSCAUG6(93, 92));
+    list = iosMallocDebug(ios_partition_sugipon, n * 8, __FILE__, PAL_NTSCAUG6JUN26(93, 92));
     if (n) {
         k = 0;
         for (i = from; i < to; i++) {
-            if (motionOrient[i].id == id || motionOrient[i].id == PAL_NTSC_AUG6(1146, 1085, 1087)) {
+            if (motionOrient[i].id == id ||
+                motionOrient[i].id == PAL_NTSC_AUG6JUN26(1146, 1085, 1087)) {
                 int kind = motionOrient[i].kind;
 
                 list[k].kind = kind;
@@ -212,7 +214,7 @@ static int objMenuProc(void)
             viewObj->dobj->ctrl.shiftStop = 0;
         }
         viewObj = isysGObjSearchFromObjKindID_begin(objMenu[objSel].kind);
-        if (!ICO_NTSCAUG6) {
+        if (!ICO_NTSCAUG6JUN26) {
             if (objMenu[objSel].kind == 4) {
                 for (; viewObj != 0; viewObj = isysGObjSearchFromObjKindID_next(viewObj)) {
                     if (isEnemyActive(viewObj)) {
@@ -279,7 +281,7 @@ static int motKindMenuProc(void)
     int cur;
 
     dispMotFrameProgress(mot, ForMotionViewer_GetCurrentAnimationFrame(viewObj));
-    ret = PAL_JPNKORCN_NTSCAUG6(
+    ret = PAL_JPNKORCN_NTSCAUG6JUN26(
         debug_SelectCsvWindowWithLine(ent->name, 10, 70, 6, &motionKind[ent->motFirst], 404, 192, 0,
                                       ent->motLast - ent->motFirst, &motSel, 0),
         debug_SelectCsvWindowWithLine(ent->name, 10, 70, 6, &motionKind[ent->motFirst], 400, 192, 0,
@@ -288,7 +290,7 @@ static int motKindMenuProc(void)
                                       ent->motLast - ent->motFirst, &motSel, 0));
     base = motSel;
     cur = base + ent->motFirst;
-    if (motionKind[cur].area != 0 && motionKind[cur].blendKind == PAL_NTSCAUG6(320, 228) &&
+    if (motionKind[cur].area != 0 && motionKind[cur].blendKind == PAL_NTSCAUG6JUN26(320, 228) &&
         motionTable[cur] == 0) {
         base = 0;
         if (((blinkCount >> 4) & 3) != 0) {
@@ -363,10 +365,10 @@ static int motOriMenuProc(void)
         for (i = 0; i < 10; i++) {
             ori = GetMotionOrient(ent->oriFrom, ent->oriTo, m, oriCsv.rows[oriCsv.sel].kind);
             debug_PrintfDummy(430, i * 8 + 90,
-                              (i == 0 || m == PAL_NTSC_AUG6(1145, 1084, 1086)) ? 0x00FFFF00
-                                                                               : 0xFFFFFF00,
+                              (i == 0 || m == PAL_NTSC_AUG6JUN26(1145, 1084, 1086)) ? 0x00FFFF00
+                                                                                    : 0xFFFFFF00,
                               "%c %s", m == now ? 62 : 32, motionKind[m].name);
-            if (m == PAL_NTSC_AUG6(1145, 1084, 1086)) {
+            if (m == PAL_NTSC_AUG6JUN26(1145, 1084, 1086)) {
                 break;
             }
             if (ori == 0) {

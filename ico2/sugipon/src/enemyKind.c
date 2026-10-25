@@ -99,7 +99,7 @@ const EnemyDef enemyKind_ntsc[] = {
 }; /* derived name */
 
 /* the August 2001 preview */
-const EnemyDef enemyKind_aug6[] = {
+const EnemyDef enemyKind_aug6jun26[] = {
     {19, -1, 200.0f, 0.0f, 1.0f, 0.0f, 0, 0, 3},  {18, -1, 400.0f, 0.0f, 1.0f, 0.0f, 0, 0, 3},
     {17, -1, 400.0f, 0.0f, 0.9f, 0.0f, 0, 0, 3},  {20, -1, 400.0f, 0.0f, 0.9f, 0.0f, 0, 0, 2},
     {28, -1, 400.0f, 0.0f, 1.0f, 0.0f, 0, 0, 2},  {31, -1, 400.0f, 0.0f, 1.1f, 0.0f, 0, 0, 2},

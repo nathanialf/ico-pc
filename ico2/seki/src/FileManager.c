@@ -229,7 +229,7 @@ static int file_LoadCDFile_ntsc(void **adr, char *fname, int area)
     return size;
 }
 
-static int file_LoadCDFile_aug6(void **adr, char *fname, int area)
+static int file_LoadCDFile_aug6jun26(void **adr, char *fname, int area)
 {
     char path[256];
     sceCdlFILE fp;
@@ -408,8 +408,8 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
     if (ICO_NTSC) {
         return file_LoadCDFile_ntsc(adr, fname, area);
     }
-    if (ICO_AUG6) {
-        return file_LoadCDFile_aug6(adr, fname, area);
+    if (ICO_AUG6JUN26) {
+        return file_LoadCDFile_aug6jun26(adr, fname, area);
     }
     char path[256];
     sceCdlFILE fp;

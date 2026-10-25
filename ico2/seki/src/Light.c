@@ -191,7 +191,7 @@ Light *light_AddLight(GObj *self, int b, int kind)
             return 0;
         }
         q = (Light *)iosMallocDebug(ios_partition_seki, sizeof(Light) > 80 ? sizeof(Light) : 80,
-                                    "src/Light.c", PAL_AUG6(620, 593));
+                                    "src/Light.c", PAL_AUG6JUN26(620, 593));
         self->dobj->lightId = b;
         q->owner = self;
         q->kind = kind;
@@ -216,7 +216,7 @@ Light *light_AddLight(GObj *self, int b, int kind)
         Light *r;
 
         r = (Light *)iosMallocDebug(ios_partition_seki, sizeof(Light) > 80 ? sizeof(Light) : 80,
-                                    "src/Light.c", PAL_AUG6(685, 658));
+                                    "src/Light.c", PAL_AUG6JUN26(685, 658));
         r->kind = kind;
         r->scale = 1.0f;
         r->range = 32768.0f;
@@ -225,8 +225,8 @@ Light *light_AddLight(GObj *self, int b, int kind)
     }
     default:
         debug_StdPrintfDummy("Added Light is illegal.\n");
-        debug_assert("src/Light.c", PAL_AUG6(705, 678));
-        __assert("src/Light.c", PAL_AUG6(705, 678), "0");
+        debug_assert("src/Light.c", PAL_AUG6JUN26(705, 678));
+        __assert("src/Light.c", PAL_AUG6JUN26(705, 678), "0");
     }
     return 0;
 }

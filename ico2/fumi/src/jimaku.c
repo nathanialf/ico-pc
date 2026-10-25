@@ -194,7 +194,7 @@ static int jimakuHandler(CdvdBgReq *self, JimakuArg *p)
     return 0;
 }
 
-static void jimakuMgrBegin_ntscaug6(JimakuArg *p)
+static void jimakuMgrBegin_ntscaug6jun26(JimakuArg *p)
 {
     JimakuSub *sub = &p->sub;
     int i;
@@ -236,8 +236,8 @@ static void jimakuMgrBegin_ntscaug6(JimakuArg *p)
 
 static void jimakuMgrBegin(JimakuArg *p)
 {
-    if (ICO_NTSCAUG6) {
-        jimakuMgrBegin_ntscaug6(p);
+    if (ICO_NTSCAUG6JUN26) {
+        jimakuMgrBegin_ntscaug6jun26(p);
         return;
     }
     JimakuSub *sub = &p->sub;
@@ -329,7 +329,7 @@ static void jimakuMgrNext(JimakuArg *p)
     sprintf(buf, "jimaku%02d.tm2", (sub->n + 1) % 4);
     g->node->tex = tex_InitTexture(buf, g->node->buf);
     tex_SetSamplingType(tex_GetTextureData(g->node->tex), 1, 1);
-    g->node->stamp = PAL_AUG6(lock_execIcoMisc, GlobalTimer);
+    g->node->stamp = PAL_AUG6JUN26(lock_execIcoMisc, GlobalTimer);
     if (g->node->tex == -1) {
         debug_StdPrintfDummy("already exist\n");
         debug_assert(__FILE__, LN(688, 655, 658, 626, 626, 598, 658));
@@ -494,7 +494,7 @@ static void jimakuDisp_ntsc(JimakuArg *msg)
     }
 }
 
-static void jimakuDisp_aug6(JimakuArg *msg)
+static void jimakuDisp_aug6jun26(JimakuArg *msg)
 {
     struct jWayGroup *g = &jimakuRing[msg->sub.n];
     int c;
@@ -582,8 +582,8 @@ void jimakuDisp(JimakuArg *msg)
         jimakuDisp_ntsc(msg);
         return;
     }
-    if (ICO_AUG6) {
-        jimakuDisp_aug6(msg);
+    if (ICO_AUG6JUN26) {
+        jimakuDisp_aug6jun26(msg);
         return;
     }
     if (ICO_CN) {

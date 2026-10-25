@@ -82,7 +82,7 @@ void SetFlag4PointFixID(GObj *self, int turns, int id)
 static ClothCfg flagCfg = {8, 50.0f, 10, 0, 0, 0, 5.0f}; /* derived name */
 
 /* clang-format off */
-static char *InitFlagGeo_ntscaug6(char *self, char *arg)
+static char *InitFlagGeo_ntscaug6jun26(char *self, char *arg)
 {
     char *p = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(FlagWork, 20), __FILE__, LN(87, 87, 87, 31, 31, 31, 87));
     Vec4Flag v[4];
@@ -188,8 +188,8 @@ static char *InitFlagGeo_ntscaug6(char *self, char *arg)
 
 char *InitFlagGeo(char *self, char *arg)
 {
-    if (ICO_NTSCAUG6) {
-        return InitFlagGeo_ntscaug6(self, arg);
+    if (ICO_NTSCAUG6JUN26) {
+        return InitFlagGeo_ntscaug6jun26(self, arg);
     }
     char *p = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(FlagWork, 20), __FILE__, LN(87, 87, 87, 31, 31, 31, 87));
     Vec4Flag v[4];
@@ -334,7 +334,7 @@ char *InitFlagGeo(char *self, char *arg)
 
 /* clang-format on */
 
-static void FlagGeo_ntscaug6(GObj *self)
+static void FlagGeo_ntscaug6jun26(GObj *self)
 {
     FlagWork *gd;
     ClothSet *o;
@@ -366,8 +366,8 @@ static void FlagGeo_ntscaug6(GObj *self)
 
 void FlagGeo(GObj *self)
 {
-    if (ICO_NTSCAUG6) {
-        FlagGeo_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        FlagGeo_ntscaug6jun26(self);
         return;
     }
     FlagWork *gd;
@@ -401,7 +401,7 @@ void FlagGeo(GObj *self)
     }
 }
 
-static void FlagDL_ntscaug6(GObj *self)
+static void FlagDL_ntscaug6jun26(GObj *self)
 {
     Vec4Flag l0;
     Vec4Flag l10;
@@ -454,8 +454,8 @@ static void FlagDL_ntscaug6(GObj *self)
 
 void FlagDL(GObj *self)
 {
-    if (ICO_NTSCAUG6) {
-        FlagDL_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        FlagDL_ntscaug6jun26(self);
         return;
     }
     Vec4Flag l0;

@@ -82,7 +82,7 @@ void actCreateMotionThread(void (*func)(), int pri, GProc **proc)
     }
 }
 
-static inline GProc *actCreateSubThread_ntscaug6(void (*func)(), int pri)
+static inline GProc *actCreateSubThread_ntscaug6jun26(void (*func)(), int pri)
 {
     GProc *p;
 
@@ -103,8 +103,8 @@ static inline GProc *actCreateSubThread_ntscaug6(void (*func)(), int pri)
 
 GProc *actCreateSubThread(void (*func)(), int pri)
 {
-    if (ICO_NTSCAUG6) {
-        return actCreateSubThread_ntscaug6(func, pri);
+    if (ICO_NTSCAUG6JUN26) {
+        return actCreateSubThread_ntscaug6jun26(func, pri);
     }
     unsigned short fld;
     GProc *p;
@@ -232,7 +232,7 @@ void actInitialize_ext_charcter(GObj *self)
 {
     Act *g = GOBJ_ACT(self);
     char *p = (char *)iosMallocDebug(ios_partition_seki, sizeof(EnemyBattleWork), __FILE__,
-                                     PAL_NTSC_AUG6(885, 850, 844));
+                                     PAL_NTSC_AUG6JUN26(885, 850, 844));
 
     memset(p, 0, sizeof(EnemyBattleWork));
     g->enemy = (EnemyBattleWork *)p;
@@ -289,7 +289,7 @@ static inline void actInitialize_only_charcter_ntsc(char *self)
     }
 }
 
-static inline void actInitialize_only_charcter_aug6(char *self)
+static inline void actInitialize_only_charcter_aug6jun26(char *self)
 {
     Act *g = GOBJ_ACT(self);
     char *p =
@@ -319,8 +319,8 @@ void actInitialize_only_charcter(char *self)
         actInitialize_only_charcter_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actInitialize_only_charcter_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actInitialize_only_charcter_aug6jun26(self);
         return;
     }
     Act *g = GOBJ_ACT(self);
@@ -414,7 +414,7 @@ static Act *actInitialize_ntsc(GObj *self)
     return w;
 }
 
-static Act *actInitialize_aug6(GObj *self)
+static Act *actInitialize_aug6jun26(GObj *self)
 {
     Act *w = (Act *)iosMallocDebug(ios_partition_seki, ICO_MAX_SIZE(Act, 0x850), __FILE__, 892);
 
@@ -484,8 +484,8 @@ Act *actInitialize(GObj *self)
     if (ICO_NTSC) {
         return actInitialize_ntsc(self);
     }
-    if (ICO_AUG6) {
-        return actInitialize_aug6(self);
+    if (ICO_AUG6JUN26) {
+        return actInitialize_aug6jun26(self);
     }
     Act *w = (Act *)iosMallocDebug(ios_partition_seki, ICO_MAX_SIZE(Act, 0x850), __FILE__, 934);
 
@@ -585,7 +585,7 @@ static IntrMail *act_check_intr_list(void *self, IntrMail *m, void **out)
     int i;
 
     if (m != 0) {
-        while ((short)m->kind != PAL_NTSC_AUG6(429, 396, 392)) {
+        while ((short)m->kind != PAL_NTSC_AUG6JUN26(429, 396, 392)) {
             if ((m->flags >> 18) & 1) {
                 for (i = 0; i < k->n; i++) {
                     int mot;
@@ -677,7 +677,7 @@ static void act_check_mail_ntsc(void *self, IntrMail *m)
     }
 }
 
-static void act_check_mail_aug6(void *self, IntrMail *m)
+static void act_check_mail_aug6jun26(void *self, IntrMail *m)
 {
     IntrList *k = ICO_RAWP(IntrList *, self, 0x54, (IntrList *)&((GObj *)self)->mailBox);
     Act *w = GOBJ_ACT(self);
@@ -741,8 +741,8 @@ static void act_check_mail(void *self, IntrMail *m)
         act_check_mail_ntsc(self, m);
         return;
     }
-    if (ICO_AUG6) {
-        act_check_mail_aug6(self, m);
+    if (ICO_AUG6JUN26) {
+        act_check_mail_aug6jun26(self, m);
         return;
     }
     IntrList *k = ICO_RAWP(IntrList *, self, 0x54, (IntrList *)&((GObj *)self)->mailBox);
@@ -848,7 +848,7 @@ void BeforeFunc(GObj *self)
         w->flags20.ll &= ~(1LL << 28);
         w->flags20.ll &= ~(1LL << 3);
         w->flags20.ll &= ~(1LL << 18);
-    } else if (ICO_AUG6) {
+    } else if (ICO_AUG6JUN26) {
         w->flags18.ll &= ~(1LL << 47);
         w->flags18.ll &= ~(1LL << 52);
         w->flags18.ll &= ~(1LL << 53);
@@ -969,7 +969,7 @@ void BeforeFunc(GObj *self)
         if (intr->accept != 0) {
             intr->accept((char *)self, ent->id, ent->f4);
         }
-        if (!ICO_NTSCAUG6) {
+        if (!ICO_NTSCAUG6JUN26) {
             ACTAcceptMail(self, (short)intr->kind);
         }
     }

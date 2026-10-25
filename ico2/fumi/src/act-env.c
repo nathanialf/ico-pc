@@ -102,7 +102,7 @@ static inline int getDitchCarryMode(void) /* derived name */
     return 0;
 }
 
-static inline int getDitchCarryModeStage8_ntscaug6(void) /* derived name */
+static inline int getDitchCarryModeStage8_ntscaug6jun26(void) /* derived name */
 {
     void *a;
     void *b;
@@ -122,8 +122,8 @@ static inline int getDitchCarryModeStage8_ntscaug6(void) /* derived name */
 
 static inline int getDitchCarryModeStage8(void) /* derived name */
 {
-    if (ICO_NTSCAUG6) {
-        return getDitchCarryModeStage8_ntscaug6();
+    if (ICO_NTSCAUG6JUN26) {
+        return getDitchCarryModeStage8_ntscaug6jun26();
     }
     if (stage_no == 8) {
         return getDitchCarryMode();
@@ -169,8 +169,8 @@ static void getDitchDistTbl_ntsc(float **tbl, float *range, int *sofa, float *po
     }
 }
 
-static inline void getDitchDistTbl_aug6(float **tbl, float *range, int *sofa, float *pos, void *obj,
-                                        int *carry)
+static inline void getDitchDistTbl_aug6jun26(float **tbl, float *range, int *sofa, float *pos,
+                                             void *obj, int *carry)
 {
     (void)range; /* PC port: the European parameter; the 2001 builds have no range */
     int mode;
@@ -210,8 +210,8 @@ static void getDitchDistTbl(float **tbl, float *range, int *sofa, float *pos, vo
         getDitchDistTbl_ntsc(tbl, range, sofa, pos, obj, carry);
         return;
     }
-    if (ICO_AUG6) {
-        getDitchDistTbl_aug6(tbl, range, sofa, pos, obj, carry);
+    if (ICO_AUG6JUN26) {
+        getDitchDistTbl_aug6jun26(tbl, range, sofa, pos, obj, carry);
         return;
     }
     VECTOR v;
@@ -284,8 +284,8 @@ static void getDitchDistTbl(float **tbl, float *range, int *sofa, float *pos, vo
     }
 }
 
-static int GetDitchPosition_ntscaug6(float *out, float *org, float *dir, float d0, float d1,
-                                     float h)
+static int GetDitchPosition_ntscaug6jun26(float *out, float *org, float *dir, float d0, float d1,
+                                          float h)
 {
     (void)h; /* PC port: the European parameter, unused here */
     ClipWork work;
@@ -327,8 +327,8 @@ static int GetDitchPosition_ntscaug6(float *out, float *org, float *dir, float d
 
 static int GetDitchPosition(float *out, float *org, float *dir, float d0, float d1, float h)
 {
-    if (ICO_NTSCAUG6) {
-        return GetDitchPosition_ntscaug6(out, org, dir, d0, d1, h);
+    if (ICO_NTSCAUG6JUN26) {
+        return GetDitchPosition_ntscaug6jun26(out, org, dir, d0, d1, h);
     }
     ClipWork work;
     float tmp[4];
@@ -419,7 +419,7 @@ static void DebugActOrientFlag_ntsc(unsigned int *f)
     }
 }
 
-static void DebugActOrientFlag_aug6(unsigned int *f)
+static void DebugActOrientFlag_aug6jun26(unsigned int *f)
 {
     OrientFlagRow tbl[16] = {
         {(f[1] >> 11) & 1, "climb_50  "},   {(f[1] >> 12) & 1, "climb_100 "},
@@ -453,8 +453,8 @@ void DebugActOrientFlag(unsigned int *f)
         DebugActOrientFlag_ntsc(f);
         return;
     }
-    if (ICO_AUG6) {
-        DebugActOrientFlag_aug6(f);
+    if (ICO_AUG6JUN26) {
+        DebugActOrientFlag_aug6jun26(f);
         return;
     }
     OrientFlagRow tbl[16] = {
@@ -486,13 +486,13 @@ void DebugActOrientFlag(unsigned int *f)
 inline void ACTSetEnvAllmighty(GObj *self)
 {
     Act *s = GOBJ_ACT(self);
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         s->wish0.ll |= (1ULL << 37);
     }
     s->wish0.ll |= (1ULL << 38);
     s->wish0.ll |= (1ULL << 39);
     s->wish0.ll |= (1ULL << 40);
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         s->wish0.ll |= (1ULL << 42);
         s->wish0.ll |= (1ULL << 43);
         if (ACTGame_FLAG_TETSUNAGI()) {
@@ -604,7 +604,7 @@ static inline unsigned char ditchProbe(GObj *o, float h) /* derived name */
     s = GOBJ_ACT(o);
     if (o == boyGObj && stageData[stage_no].flag2 && (s->actMode == 4 || s->actMode == 5)) {
         memset(&work, 0, ICO_MAX_SIZE(ClipWork, 0xC0));
-        GetSkeltonPosition(work.pt[0], o, PAL_NTSCAUG6(0x2C, 44));
+        GetSkeltonPosition(work.pt[0], o, PAL_NTSCAUG6JUN26(0x2C, 44));
         work.pt[1][0] = work.pt[0][0];
         work.pt[1][2] = work.pt[0][2];
         work.pt[1][1] = work.pt[0][1] + 200.0f;
@@ -1718,7 +1718,7 @@ static void ACTGetEnvironment_ntsc(void *self, void *dir, float *orient, EnvFlag
     }
 }
 
-static void ACTGetEnvironment_aug6(void *self, void *dir, float *orient, EnvFlag *flags, ActEnv *env)
+static void ACTGetEnvironment_aug6jun26(void *self, void *dir, float *orient, EnvFlag *flags, ActEnv *env)
 {
     float prj[4];
     float pos[4];
@@ -2696,8 +2696,8 @@ void ACTGetEnvironment(void *self, void *dir, float *orient, EnvFlag *flags, Act
         ACTGetEnvironment_ntsc(self, dir, orient, flags, env);
         return;
     }
-    if (ICO_AUG6) {
-        ACTGetEnvironment_aug6(self, dir, orient, flags, env);
+    if (ICO_AUG6JUN26) {
+        ACTGetEnvironment_aug6jun26(self, dir, orient, flags, env);
         return;
     }
     float prj[4];

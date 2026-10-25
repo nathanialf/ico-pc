@@ -139,7 +139,7 @@ static inline int GetAttackKindIndex(Sub15C *p) /* derived name */
     int id = p->ctrl.motion;
     int i;
 
-    for (i = 0; i < PAL_NTSCAUG6(20, 19); i++) {
+    for (i = 0; i < PAL_NTSCAUG6JUN26(20, 19); i++) {
         if (id == attackData[i].motion) {
             return i;
         }
@@ -184,7 +184,7 @@ static void MakeAttackPack_Actor(AttackPack *pack, GObj *gobj, GObj *weapon)
         }
         wk = CheckWeaponKind(weapon);
         WeaponCurPos(weapon, pack->center, pack->from, pack->to);
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
             pack->radius0 = weaponKind[wk].radius;
             pack->radius1 = 20.0f;
             pack->power = attackData[k].power * weaponKind[wk].power;
@@ -215,7 +215,7 @@ static void MakeAttackPack_Actor(AttackPack *pack, GObj *gobj, GObj *weapon)
         pack->from[0] = v0[0];
         pack->from[1] = v0[1];
         pack->from[2] = v0[2];
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
             pack->to[0] = v0[0];
             pack->to[1] = v0[1];
             pack->to[2] = v0[2];
@@ -252,8 +252,8 @@ static void MakeAttackPack_Actor(AttackPack *pack, GObj *gobj, GObj *weapon)
 }
 
 /* shared by _AttackCenter and AttackCenter_WithDir */
-static inline void SetupAttackPack_ntscaug6(AttackPack *pack, GObj *gop, int group, float *pos,
-                                            float *ofs, float radius) /* derived name */
+static inline void SetupAttackPack_ntscaug6jun26(AttackPack *pack, GObj *gop, int group, float *pos,
+                                                 float *ofs, float radius) /* derived name */
 {
     *pack = attackPackInit;
 
@@ -289,8 +289,8 @@ static inline void SetupAttackPack_ntscaug6(AttackPack *pack, GObj *gop, int gro
 static inline void SetupAttackPack(AttackPack *pack, GObj *gop, int group, float *pos, float *ofs,
                                    float radius) /* derived name */
 {
-    if (ICO_NTSCAUG6) {
-        SetupAttackPack_ntscaug6(pack, gop, group, pos, ofs, radius);
+    if (ICO_NTSCAUG6JUN26) {
+        SetupAttackPack_ntscaug6jun26(pack, gop, group, pos, ofs, radius);
         return;
     }
     *pack = attackPackInit;
@@ -345,14 +345,15 @@ static const AttackGroupTable attackGroupTable_ntsc = {
     /* derived name */
     {{1, 0}, {4, 1}, {46, 1}, {53, 1}, {52, 1}, {52, 1}, {61, 1}, {2, 3}, {62, 1}, {-1, 0}}};
 
-static const AttackGroupTable attackGroupTable_aug6 = {
+static const AttackGroupTable attackGroupTable_aug6jun26 = {
     /* derived name */
     {{1, 0}, {4, 1}, {46, 1}, {53, 1}, {52, 1}, {52, 1}, {60, 1}, {2, 3}, {61, 1}, {-1, 0}}};
 
 #define attackGroupTable                                                                           \
-    (*PAL_NTSC_AUG6(&attackGroupTable_pal, &attackGroupTable_ntsc, &attackGroupTable_aug6))
+    (*PAL_NTSC_AUG6JUN26(&attackGroupTable_pal, &attackGroupTable_ntsc,                            \
+                         &attackGroupTable_aug6jun26))
 
-static int AttackCheckSameGroup_ntscaug6(GObj *self, GObj *other, GObj *third)
+static int AttackCheckSameGroup_ntscaug6jun26(GObj *self, GObj *other, GObj *third)
 {
     (void)third; /* PC port: the European parameter, unused here */
     AttackGroupTable tbl = attackGroupTable;
@@ -381,8 +382,8 @@ static int AttackCheckSameGroup_ntscaug6(GObj *self, GObj *other, GObj *third)
 
 static int AttackCheckSameGroup(GObj *self, GObj *other, GObj *third)
 {
-    if (ICO_NTSCAUG6) {
-        return AttackCheckSameGroup_ntscaug6(self, other, third);
+    if (ICO_NTSCAUG6JUN26) {
+        return AttackCheckSameGroup_ntscaug6jun26(self, other, third);
     }
     AttackGroupTable tbl = attackGroupTable;
     unsigned int g0 = 2;
@@ -490,7 +491,7 @@ static void AttackMail_ntsc(GObj *self, AttackPack *pack)
     }
 }
 
-static void AttackMail_aug6(GObj *self, AttackPack *pack)
+static void AttackMail_aug6jun26(GObj *self, AttackPack *pack)
 {
     float v0[4];
     float v1[4];
@@ -553,8 +554,8 @@ static void AttackMail(GObj *self, AttackPack *pack)
         AttackMail_ntsc(self, pack);
         return;
     }
-    if (ICO_AUG6) {
-        AttackMail_aug6(self, pack);
+    if (ICO_AUG6JUN26) {
+        AttackMail_aug6jun26(self, pack);
         return;
     }
     float v0[4];
@@ -705,7 +706,7 @@ static int AttackCheckHit_ntsc(AttackPack *pack, GObj *gobj, short *out)
     return j;
 }
 
-static int AttackCheckHit_aug6(AttackPack *pack, GObj *gobj, short *out)
+static int AttackCheckHit_aug6jun26(AttackPack *pack, GObj *gobj, short *out)
 {
     float w[4];
     unsigned char flags[112];
@@ -792,8 +793,8 @@ static int AttackCheckHit(AttackPack *pack, GObj *gobj, short *out)
     if (ICO_NTSC) {
         return AttackCheckHit_ntsc(pack, gobj, out);
     }
-    if (ICO_AUG6) {
-        return AttackCheckHit_aug6(pack, gobj, out);
+    if (ICO_AUG6JUN26) {
+        return AttackCheckHit_aug6jun26(pack, gobj, out);
     }
     float w[4];
     unsigned char flags[112];
@@ -932,7 +933,7 @@ static GObj *AttackGenerate_ntsc(AttackPack *pack)
         if (g->active == 0) {
             continue;
         }
-        if (AttackCheckSameGroup_ntscaug6(pack->actor, g, 0) != 0) {
+        if (AttackCheckSameGroup_ntscaug6jun26(pack->actor, g, 0) != 0) {
             continue;
         }
         debug_StdPrintfDummy("group ok\n");
@@ -977,7 +978,7 @@ static GObj *AttackGenerate_ntsc(AttackPack *pack)
     return hit;
 }
 
-static GObj *AttackGenerate_aug6(AttackPack *pack)
+static GObj *AttackGenerate_aug6jun26(AttackPack *pack)
 {
     GObj *g;
     GObj *hit;
@@ -991,7 +992,7 @@ static GObj *AttackGenerate_aug6(AttackPack *pack)
         if (g->active == 0) {
             continue;
         }
-        if (AttackCheckSameGroup_ntscaug6(pack->actor, g, 0) != 0) {
+        if (AttackCheckSameGroup_ntscaug6jun26(pack->actor, g, 0) != 0) {
             continue;
         }
         debug_StdPrintfDummy("group ok\n");
@@ -1034,8 +1035,8 @@ static GObj *AttackGenerate(AttackPack *pack)
     if (ICO_NTSC) {
         return AttackGenerate_ntsc(pack);
     }
-    if (ICO_AUG6) {
-        return AttackGenerate_aug6(pack);
+    if (ICO_AUG6JUN26) {
+        return AttackGenerate_aug6jun26(pack);
     }
     GObj *g;
     GObj *hit;

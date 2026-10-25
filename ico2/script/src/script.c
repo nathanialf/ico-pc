@@ -99,9 +99,10 @@ static AdpcmReq adpcmReq[2]; /* derived name */
 
 static float scriptCameraTarget_pal[4]; /* derived name */
 
-static sceVu0FVECTOR scriptCameraTarget_ntscaug6; /* derived name */
+static sceVu0FVECTOR scriptCameraTarget_ntscaug6jun26; /* derived name */
 
-#define scriptCameraTarget PAL_NTSCAUG6(scriptCameraTarget_pal, scriptCameraTarget_ntscaug6)
+#define scriptCameraTarget                                                                         \
+    PAL_NTSCAUG6JUN26(scriptCameraTarget_pal, scriptCameraTarget_ntscaug6jun26)
 
 /* sugipon's motionKind (MotionDef, motionOrientManager.h), read here through
    this file's own view of the record */
@@ -122,65 +123,69 @@ ActMail scpInterDoorUpLever1_pal[2] = {{406, scpDoorTypeUpSwitch}, {429}};
 
 ActMail scpInterDoorUpLever1_ntsc[2] = {{376, scpDoorTypeUpSwitch}, {396}};
 
-ActMail scpInterDoorUpLever1_aug6[2] = {{372, scpDoorTypeUpSwitch}, {392}};
+ActMail scpInterDoorUpLever1_aug6jun26[2] = {{372, scpDoorTypeUpSwitch}, {392}};
 
 #define scpInterDoorUpLever1                                                                       \
-    PAL_NTSC_AUG6(scpInterDoorUpLever1_pal, scpInterDoorUpLever1_ntsc, scpInterDoorUpLever1_aug6)
+    PAL_NTSC_AUG6JUN26(scpInterDoorUpLever1_pal, scpInterDoorUpLever1_ntsc,                        \
+                       scpInterDoorUpLever1_aug6jun26)
 
 ActMail scpInterDoorUpLever2_pal[2] = {{407, scpDoorTypeUpSwitch}, {429}};
 
 ActMail scpInterDoorUpLever2_ntsc[2] = {{377, scpDoorTypeUpSwitch}, {396}};
 
-ActMail scpInterDoorUpLever2_aug6[2] = {{373, scpDoorTypeUpSwitch}, {392}};
+ActMail scpInterDoorUpLever2_aug6jun26[2] = {{373, scpDoorTypeUpSwitch}, {392}};
 
 #define scpInterDoorUpLever2                                                                       \
-    PAL_NTSC_AUG6(scpInterDoorUpLever2_pal, scpInterDoorUpLever2_ntsc, scpInterDoorUpLever2_aug6)
+    PAL_NTSC_AUG6JUN26(scpInterDoorUpLever2_pal, scpInterDoorUpLever2_ntsc,                        \
+                       scpInterDoorUpLever2_aug6jun26)
 
 static ActMail doorTypeUp_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail doorTypeUp_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail doorTypeUp_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail doorTypeUp_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define doorTypeUp_mes PAL_NTSC_AUG6(doorTypeUp_mes_pal, doorTypeUp_mes_ntsc, doorTypeUp_mes_aug6)
+#define doorTypeUp_mes                                                                             \
+    PAL_NTSC_AUG6JUN26(doorTypeUp_mes_pal, doorTypeUp_mes_ntsc, doorTypeUp_mes_aug6jun26)
 
 static ActMail doorTypeUpSwitchDown_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail doorTypeUpSwitchDown_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail doorTypeUpSwitchDown_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail doorTypeUpSwitchDown_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
 #define doorTypeUpSwitchDown_mes                                                                   \
-    PAL_NTSC_AUG6(doorTypeUpSwitchDown_mes_pal, doorTypeUpSwitchDown_mes_ntsc,                     \
-                  doorTypeUpSwitchDown_mes_aug6)
+    PAL_NTSC_AUG6JUN26(doorTypeUpSwitchDown_mes_pal, doorTypeUpSwitchDown_mes_ntsc,                \
+                       doorTypeUpSwitchDown_mes_aug6jun26)
 
 static ActMail doorTypeUpSwitchUp_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail doorTypeUpSwitchUp_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail doorTypeUpSwitchUp_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail doorTypeUpSwitchUp_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
 #define doorTypeUpSwitchUp_mes                                                                     \
-    PAL_NTSC_AUG6(doorTypeUpSwitchUp_mes_pal, doorTypeUpSwitchUp_mes_ntsc,                         \
-                  doorTypeUpSwitchUp_mes_aug6)
+    PAL_NTSC_AUG6JUN26(doorTypeUpSwitchUp_mes_pal, doorTypeUpSwitchUp_mes_ntsc,                    \
+                       doorTypeUpSwitchUp_mes_aug6jun26)
 
 static ActMail doorTypeUpDown_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail doorTypeUpDown_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail doorTypeUpDown_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail doorTypeUpDown_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
 #define doorTypeUpDown_mes                                                                         \
-    PAL_NTSC_AUG6(doorTypeUpDown_mes_pal, doorTypeUpDown_mes_ntsc, doorTypeUpDown_mes_aug6)
+    PAL_NTSC_AUG6JUN26(doorTypeUpDown_mes_pal, doorTypeUpDown_mes_ntsc,                            \
+                       doorTypeUpDown_mes_aug6jun26)
 
 static ActMail doorTypeUpUp_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail doorTypeUpUp_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail doorTypeUpUp_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail doorTypeUpUp_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
 #define doorTypeUpUp_mes                                                                           \
-    PAL_NTSC_AUG6(doorTypeUpUp_mes_pal, doorTypeUpUp_mes_ntsc, doorTypeUpUp_mes_aug6)
+    PAL_NTSC_AUG6JUN26(doorTypeUpUp_mes_pal, doorTypeUpUp_mes_ntsc, doorTypeUpUp_mes_aug6jun26)
 
 /* the 0x30-byte wood-bridge table entry at woodBoxTbl: an object id, the
    trigger `kind` that selects which axis test runs, the bridge end offset the
@@ -248,7 +253,7 @@ extern int CheckReadyAllSwitches(void);
 /* Before flag 332 this hands the actor queen_appear_mes and posts it; after
  * it, it shows object 2149, plays its motion and starts the face shadow
  * scrolls and the stage animations. */
-static inline void actSubSekizoSe_aug6(GObj *volatile self)
+static inline void actSubSekizoSe_aug6jun26(GObj *volatile self)
 {
     int h = soundSeDefPlay(1193, 0, 0, 1);
     _ACTWait((int)((60 - systemStatus[0] * 10) / systemStatus[1] * 9.5f));
@@ -257,8 +262,8 @@ static inline void actSubSekizoSe_aug6(GObj *volatile self)
 
 inline void actSubSekizoSe(GObj *volatile self)
 {
-    if (ICO_AUG6) {
-        actSubSekizoSe_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actSubSekizoSe_aug6jun26(self);
         return;
     }
     GObj *x = self;
@@ -539,22 +544,22 @@ void scpPlayMot(GObj *self, int mot)
     int id = -1;
 
     if (self == boyGObj) {
-        id = PAL_NTSC_AUG6(1281, 1214, 1193);
+        id = PAL_NTSC_AUG6JUN26(1281, 1214, 1193);
     } else if (self == girlGObj) {
-        id = PAL_NTSC_AUG6(2118, 1816, 1793);
-    } else if (self == isysGObjSearchFromObjLayoutID(PAL_NTSC_AUG6(2149, 1966, 1942))) {
-        id = PAL_NTSC_AUG6(2413, 2111, 2086);
+        id = PAL_NTSC_AUG6JUN26(2118, 1816, 1793);
+    } else if (self == isysGObjSearchFromObjLayoutID(PAL_NTSC_AUG6JUN26(2149, 1966, 1942))) {
+        id = PAL_NTSC_AUG6JUN26(2413, 2111, 2086);
     } else if (((GObj *)self)->kind == 4) {
-        id = PAL_NTSC_AUG6(2405, 2103, 2078);
+        id = PAL_NTSC_AUG6JUN26(2405, 2103, 2078);
     }
 
     if (id < 0) {
-        InitMotionOrient(self, PAL_NTSC_AUG6(2122, 1820, 1797), PAL_NTSC_AUG6(2407, 2105, 2080), -1,
-                         -1, mot);
+        InitMotionOrient(self, PAL_NTSC_AUG6JUN26(2122, 1820, 1797),
+                         PAL_NTSC_AUG6JUN26(2407, 2105, 2080), -1, -1, mot);
         return;
     }
     ControlMotionOrient(id, mot);
-    act->motReq = SetMotionRequest(self, PAL_NTSC_AUG6(268, 236, 234), act->env.motOriReq);
+    act->motReq = SetMotionRequest(self, PAL_NTSC_AUG6JUN26(268, 236, 234), act->env.motOriReq);
 }
 
 inline void scpPlayMotReq(GObj *self, int mot)
@@ -578,19 +583,19 @@ void scpPlayJump(GObj *self, int orient)
 {
     ACTItemForceDrop(self);
     GOBJ_ACT(self)->enemy->jumpOrient = orient;
-    iosOmSendMail(self, PAL_AUG6(45, 44), self);
+    iosOmSendMail(self, PAL_AUG6JUN26(45, 44), self);
 }
 
 void scpPlayStart(GObj *self)
 {
     ACTItemForceDrop(self);
-    iosOmSendMail(self, PAL_AUG6(46, 45), self);
+    iosOmSendMail(self, PAL_AUG6JUN26(46, 45), self);
     SetLodLevel(self, 0);
 }
 
 void scpPlayEnd(GObj *self)
 {
-    iosOmSendMail(self, PAL_AUG6(47, 46), self);
+    iosOmSendMail(self, PAL_AUG6JUN26(47, 46), self);
     SetLodLevel(self, 2);
 }
 
@@ -841,7 +846,7 @@ inline void scpDoorTypeUp(GObj *volatile self)
     }
     doorTypeUp_mes[0].func = scpDoorTypeUpMain;
     act->mail = doorTypeUp_mes;
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -862,12 +867,12 @@ inline void scpDoorTypeUpSwitch(GObj *volatile self)
     if (gflagChk(act->doorFlag) != 0) {
         doorTypeUpSwitchDown_mes[0].func = scpDoorTypeUpDown;
         act->mail = doorTypeUpSwitchDown_mes;
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
         _ACTWait(0);
     }
     doorTypeUpSwitchUp_mes[0].func = scpDoorTypeUpUp;
     act->mail = doorTypeUpSwitchUp_mes;
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -913,7 +918,7 @@ void scpDoorTypeUpUp(GObj *volatile self)
     Camctrl_ExitEveRock();
     doorTypeUpUp_mes[0].func = scpDoorTypeUpMain;
     act->mail = doorTypeUpUp_mes;
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -937,7 +942,7 @@ found:
     adpcmReq[i].loopNum = loopNum;
     adpcmReq[i].ch = ch;
     adpcmReq[i].play = play;
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         adpcmReq[i].cancel = 0;
     }
 }
@@ -1042,7 +1047,7 @@ static void scpSubAdpcmPlay_ntsc(GObj *volatile self)
     }
 }
 
-static void scpSubAdpcmPlay_aug6(GObj *volatile self)
+static void scpSubAdpcmPlay_aug6jun26(GObj *volatile self)
 {
     AdpcmOpenReq work;
     int i;
@@ -1106,8 +1111,8 @@ void scpSubAdpcmPlay(GObj *volatile self)
         scpSubAdpcmPlay_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        scpSubAdpcmPlay_aug6(self);
+    if (ICO_AUG6JUN26) {
+        scpSubAdpcmPlay_aug6jun26(self);
         return;
     }
     AdpcmOpenReq work;
@@ -1224,23 +1229,23 @@ static inline int scpGirlHintVoiceChk(void) /* derived name */
 inline void scpDeamon(GObj *volatile self)
 {
     debug_StdPrintfDummy("deamon start");
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         girlHintVoice = 0;
     }
     startStagePauseDisableTimer = 0;
-    if (stage_no == 11 && gflagChk(PAL_NTSCAUG6(137, 123)) == 0) {
+    if (stage_no == 11 && gflagChk(PAL_NTSCAUG6JUN26(137, 123)) == 0) {
         scpSeEnvMasterVolRate = 0.0f;
     } else {
         scpSeEnvMasterVolRate = 1.0f;
     }
-    gflagOff(PAL_NTSC_AUG6(389, 356, 355));
+    gflagOff(PAL_NTSC_AUG6JUN26(389, 356, 355));
     _ACTWait(1);
     actCreateSubThread(scpSubAdpcmPlay, 21);
     _ACTWait(3);
     StabilizeAllLayoutedCage();
     _ACTWait(1);
     backStageProcessInStage(0.0f);
-    gflagOff(PAL_NTSC_AUG6(394, 361, 360));
+    gflagOff(PAL_NTSC_AUG6JUN26(394, 361, 360));
 }
 
 void scpGirlHintVoiceReady(int kind)
@@ -1697,8 +1702,8 @@ static void scpSekizou_ntsc(GObj *self, int flag, int anim, int anim2, int kind,
     scpBoyControlReadDisable = 0;
 }
 
-static void scpSekizou_aug6(GObj *self, int flag, int anim, int anim2, int kind, float bx, float by,
-                            float bz, float gx, float gy, float gz)
+static void scpSekizou_aug6jun26(GObj *self, int flag, int anim, int anim2, int kind, float bx,
+                                 float by, float bz, float gx, float gy, float gz)
 {
     if (gflagChk(flag) != 0) {
         stage_SetAnimation(anim, 0, -1);
@@ -1783,8 +1788,8 @@ void scpSekizou(GObj *self, int flag, int anim, int anim2, int kind, float bx, f
         scpSekizou_ntsc(self, flag, anim, anim2, kind, bx, by, bz, gx, gy, gz);
         return;
     }
-    if (ICO_AUG6) {
-        scpSekizou_aug6(self, flag, anim, anim2, kind, bx, by, bz, gx, gy, gz);
+    if (ICO_AUG6JUN26) {
+        scpSekizou_aug6jun26(self, flag, anim, anim2, kind, bx, by, bz, gx, gy, gz);
         return;
     }
     int fade = 0;
@@ -1988,8 +1993,8 @@ void _SCPBoySupportGirl(float x0, float y0, float z0, float x1, float y1, float 
     if (wc != 0) {
         GOBJ_ACT(boyGObj)->env.supportReq.b.wall = *wc;
         GOBJ_ACT(girlGObj)->env.supportReq.a.wall = *wc;
-        iosOmSendMail(boyGObj, PAL_NTSC_AUG6(385, 357, 353), boyGObj);
-        iosOmSendMail(girlGObj, PAL_NTSC_AUG6(386, 358, 354), boyGObj);
+        iosOmSendMail(boyGObj, PAL_NTSC_AUG6JUN26(385, 357, 353), boyGObj);
+        iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(386, 358, 354), boyGObj);
     }
 }
 
@@ -1997,18 +2002,18 @@ inline int _SCPMoveCharactorByWay(GObj *self, ICO_WORD tgt, float *dir, float sp
 {
     Act *act = GOBJ_ACT(self);
 
-    act->flags18.ll |= PAL_NTSCAUG6(1ULL << 47, 1ULL << 42);
+    act->flags18.ll |= PAL_NTSCAUG6JUN26(1ULL << 47, 1ULL << 42);
     ACTCharctrl_Lock(self);
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6(262, 246, 243));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(262, 246, 243));
     ACTWayExec_Position(self, tgt, dir, speed, flags);
-    act->flags18.ll &= ~(PAL_NTSCAUG6(1ULL << 47, 1ULL << 42));
+    act->flags18.ll &= ~(PAL_NTSCAUG6JUN26(1ULL << 47, 1ULL << 42));
     ACTCharctrl_Unlock(self);
     return 0;
 }
 
 void _SCPMoveCharactorByWay_Cancel(GObj *self)
 {
-    GOBJ_ACT(self)->flags18.ll &= ~(PAL_NTSCAUG6(1ULL << 47, 1ULL << 42));
+    GOBJ_ACT(self)->flags18.ll &= ~(PAL_NTSCAUG6JUN26(1ULL << 47, 1ULL << 42));
     ACTCharctrl_Unlock(self);
 }
 
@@ -2053,11 +2058,11 @@ void scpSekizouCheckPoint(void)
         gamesysObjInfoPosSetStage(girlGObj, GOBJ_ACT(girlGObj)->infoPos, 0, stage_no);
     }
     gamesysObjInfoPosSetStage(boyGObj, GOBJ_ACT(boyGObj)->infoPos, 0, stage_no);
-    was = gflagChk(PAL_NTSC_AUG6(381, 348, 347));
-    gflagOn(PAL_NTSC_AUG6(381, 348, 347));
+    was = gflagChk(PAL_NTSC_AUG6JUN26(381, 348, 347));
+    gflagOn(PAL_NTSC_AUG6JUN26(381, 348, 347));
     CheckPoint();
     if (was == 0) {
-        gflagOff(PAL_NTSC_AUG6(381, 348, 347));
+        gflagOff(PAL_NTSC_AUG6JUN26(381, 348, 347));
     }
 }
 
@@ -2101,7 +2106,7 @@ inline void scpWakeupEnemyAll(void)
          g = isysGObjSearchFromObjKindID_next(g)) {
         iosOmSendMail(g, 31, g);
     }
-    for (g = isysGObjSearchFromObjKindID_begin(PAL_NTSC_AUG6(62, 61, 60)); g != 0;
+    for (g = isysGObjSearchFromObjKindID_begin(PAL_NTSC_AUG6JUN26(62, 61, 60)); g != 0;
          g = isysGObjSearchFromObjKindID_next(g)) {
         iosOmSendMail(g, 31, g);
     }
@@ -2138,7 +2143,7 @@ inline void scpSleepEnemyAll(void)
          g = isysGObjSearchFromObjKindID_next(g)) {
         iosOmSendMail(g, 32, g);
     }
-    for (g = isysGObjSearchFromObjKindID_begin(PAL_NTSC_AUG6(62, 61, 60)); g != 0;
+    for (g = isysGObjSearchFromObjKindID_begin(PAL_NTSC_AUG6JUN26(62, 61, 60)); g != 0;
          g = isysGObjSearchFromObjKindID_next(g)) {
         iosOmSendMail(g, 32, g);
     }
@@ -2162,7 +2167,7 @@ inline void scpKillEnemyAll(void)
         iosOmSendMail(g, 38, g);
         objLayout[g->labelId].reviveCount = 0;
     }
-    for (g = isysGObjSearchFromObjKindID_begin(PAL_NTSC_AUG6(62, 61, 60)); g != 0;
+    for (g = isysGObjSearchFromObjKindID_begin(PAL_NTSC_AUG6JUN26(62, 61, 60)); g != 0;
          g = isysGObjSearchFromObjKindID_next(g)) {
         iosOmSendMail(g, 38, g);
     }
@@ -2247,7 +2252,7 @@ inline void ScpCallCameraOff(void)
 {
     GObj *g = boyGObj;
     if (g != 0) {
-        GOBJ_ACT(g)->flags20.ll &= ~(PAL_NTSC_AUG6(1ULL << 23, 1ULL << 12, 1ULL << 9));
+        GOBJ_ACT(g)->flags20.ll &= ~(PAL_NTSC_AUG6JUN26(1ULL << 23, 1ULL << 12, 1ULL << 9));
     }
 }
 
@@ -2255,7 +2260,7 @@ inline void ScpCallCameraOn(void)
 {
     GObj *g = boyGObj;
     if (g != 0) {
-        GOBJ_ACT(g)->flags20.ll |= PAL_NTSC_AUG6(0x800000, 0x1000, 0x200);
+        GOBJ_ACT(g)->flags20.ll |= PAL_NTSC_AUG6JUN26(0x800000, 0x1000, 0x200);
     }
 }
 
@@ -2273,7 +2278,7 @@ static inline void ScpCallCameraSetTarget_ntsc(float x, float y, float z)
     }
 }
 
-static inline void ScpCallCameraSetTarget_aug6(float x, float y, float z)
+static inline void ScpCallCameraSetTarget_aug6jun26(float x, float y, float z)
 {
     /* the camera target is the NEGATED point, as a homogeneous vector */
     float pos[4] = {-x, -y, -z, 1.0f};
@@ -2293,8 +2298,8 @@ inline void ScpCallCameraSetTarget(float x, float y, float z)
         ScpCallCameraSetTarget_ntsc(x, y, z);
         return;
     }
-    if (ICO_AUG6) {
-        ScpCallCameraSetTarget_aug6(x, y, z);
+    if (ICO_AUG6JUN26) {
+        ScpCallCameraSetTarget_aug6jun26(x, y, z);
         return;
     }
     /* the camera target is the NEGATED point, as a homogeneous vector */
@@ -2314,7 +2319,7 @@ inline void ScpCallCameraTargetOff(void)
 {
     GObj *g = boyGObj;
     if (g != 0) {
-        GOBJ_ACT(g)->flags20.ll &= ~(PAL_NTSC_AUG6(3ULL << 24, 1ULL << 13, 1ULL << 10));
+        GOBJ_ACT(g)->flags20.ll &= ~(PAL_NTSC_AUG6JUN26(3ULL << 24, 1ULL << 13, 1ULL << 10));
     }
 }
 
@@ -2373,7 +2378,7 @@ inline int scpActStatusDeathFall(GObj *self)
     }
 
     sub = GOBJ_SUB(self);
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         if (stage_no == 34) {
             if (_ACTGame_GetParamF(2) - 200.0f < sub->ctrl.groundHeight) {
                 return 1;

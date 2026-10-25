@@ -101,7 +101,7 @@ void dispClear(MvDispEnv *self, unsigned int col)
     r.x = 0;
     r.y = 0;
     r.w = self->width << 4;
-    r.h = ((self->height + 31) / 32 * 64 + self->height * PAL_JPNKORNTSCAUG6CN(2, 3)) << 4;
+    r.h = ((self->height + 31) / 32 * 64 + self->height * PAL_JPNKORNTSCAUG6JUN26CN(2, 3)) << 4;
 
     p = setGIFtag((int *)uncached_accel_addr((int)mvClearPacket), 14, 1, 0, 0, 0, 1, 4);
     setClearSprite(p, &r, col);
@@ -113,7 +113,7 @@ void dispClear(MvDispEnv *self, unsigned int col)
     sceGsSyncPath(0, 0);
 }
 
-static void setDispEnv_ntscaug6(MvDispEnv *self, int imageW, int imageH, int dbx, int dby)
+static void setDispEnv_ntscaug6jun26(MvDispEnv *self, int imageW, int imageH, int dbx, int dby)
 {
     int *p;
     int w = imageW;
@@ -145,8 +145,8 @@ static void setDispEnv_ntscaug6(MvDispEnv *self, int imageW, int imageH, int dbx
 
 void setDispEnv(MvDispEnv *self, int imageW, int imageH, int dbx, int dby)
 {
-    if (ICO_NTSCAUG6) {
-        setDispEnv_ntscaug6(self, imageW, imageH, dbx, dby);
+    if (ICO_NTSCAUG6JUN26) {
+        setDispEnv_ntscaug6jun26(self, imageW, imageH, dbx, dby);
         return;
     }
     int *p;
@@ -211,7 +211,7 @@ void dispCreate(MvDispEnv *self, int imageW, int imageH, int dbx, int dby)
     *(volatile int *)&dispField = 0;
     *(volatile int *)&dispSyncBusy = 0;
     sceGsSyncV(0);
-    sceGsResetGraph(0, 1, PAL_JPNKORNTSCAUG6CN(systemStatus[0] != 0 ? 3 : 2, 2), 1);
+    sceGsResetGraph(0, 1, PAL_JPNKORNTSCAUG6JUN26CN(systemStatus[0] != 0 ? 3 : 2, 2), 1);
     sceGsResetPath();
     setDispEnv(self, imageW, imageH, dbx, dby);
     sendDispEnv(self);
@@ -306,8 +306,8 @@ static void dispSetTags_ntsc(MvDispEnv *self, int src, int image, int field, int
     setTexSprite(p, &r2, &uv2);
 }
 
-static void dispSetTags_aug6(MvDispEnv *self, int src, int image, int field, int x, int y, int w,
-                             int h, int texW, int texH)
+static void dispSetTags_aug6jun26(MvDispEnv *self, int src, int image, int field, int x, int y,
+                                  int w, int h, int texW, int texH)
 {
     MvRect r;
     MvRect uv;
@@ -399,8 +399,8 @@ void dispSetTags(MvDispEnv *self, int src, int image, int field, int x, int y, i
         dispSetTags_ntsc(self, src, image, field, x, y, w, h, texW, texH);
         return;
     }
-    if (ICO_AUG6) {
-        dispSetTags_aug6(self, src, image, field, x, y, w, h, texW, texH);
+    if (ICO_AUG6JUN26) {
+        dispSetTags_aug6jun26(self, src, image, field, x, y, w, h, texW, texH);
         return;
     }
     MvRect r;

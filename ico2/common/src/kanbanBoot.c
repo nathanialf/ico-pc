@@ -154,7 +154,7 @@ static int kanbanBootMcCheck_jpn(void)
             mcPort = 1;
             mcCheckStep = 2;
         } else {
-            mcCheckStep = ICO_NTSCAUG6 ? 100 : 90;
+            mcCheckStep = ICO_NTSCAUG6JUN26 ? 100 : 90;
         }
         break;
     case 90:
@@ -181,9 +181,9 @@ static int kanbanBootMcCheck_jpn(void)
         if (bootKanban->key != 1) {
             break;
         }
-        if (bootKanban->layout->curItem == PAL_KORNTSCAUG6(11, 5)) {
+        if (bootKanban->layout->curItem == PAL_KORNTSCAUG6JUN26(11, 5)) {
             mcCheckStep = -1;
-            if (!ICO_NTSCAUG6) {
+            if (!ICO_NTSCAUG6JUN26) {
                 kanbanReqDelFade(bootKanbanSub);
                 kanbanReqDelFade(bootKanban);
             }
@@ -212,7 +212,7 @@ static int kanbanBootMcCheck(void)
     int lang;
     int ret = 0;
 
-    if (ICO_JPNKORNTSCAUG6CN) {
+    if (ICO_JPNKORNTSCAUG6JUN26CN) {
         return kanbanBootMcCheck_jpn();
     }
 
@@ -488,7 +488,7 @@ void kanbanBootMain(void)
         }
         kanbanReqAllDelFade();
         /* PC port: Skip the opening puts up no presents sign */
-        waitKanban = bootSkipOpening ? 0 : kanbanReqAdd(PAL_JPNKORNTSCAUG6CN(2, 0), 1);
+        waitKanban = bootSkipOpening ? 0 : kanbanReqAdd(PAL_JPNKORNTSCAUG6JUN26CN(2, 0), 1);
         bootStep++;
         break;
     case 3:

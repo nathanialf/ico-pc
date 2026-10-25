@@ -20,9 +20,9 @@ static ActMail sword_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail sword_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail sword_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail sword_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define sword_mes PAL_NTSC_AUG6(sword_mes_pal, sword_mes_ntsc, sword_mes_aug6)
+#define sword_mes PAL_NTSC_AUG6JUN26(sword_mes_pal, sword_mes_ntsc, sword_mes_aug6jun26)
 
 static ActMail demoCam_mes[2] = {{430}, {429}}; /* derived name */
 
@@ -70,7 +70,7 @@ static void actSt24aSwordChk_ntsc(GObj *volatile self)
     scpBoyControlReadDisable = 0;
 }
 
-static void actSt24aSwordChk_aug6(GObj *volatile self)
+static void actSt24aSwordChk_aug6jun26(GObj *volatile self)
 {
     float v[4];
     float dir[4];
@@ -112,8 +112,8 @@ void actSt24aSwordChk(GObj *volatile self)
         actSt24aSwordChk_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actSt24aSwordChk_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actSt24aSwordChk_aug6jun26(self);
         return;
     }
     float v[4];
@@ -201,10 +201,10 @@ void actSt24aSword(GObj *volatile self)
 
     ScpCallCameraSetTarget(363.0f, 1307.0f, -3297.0f);
 
-    if (gflagChk(PAL_NTSC_AUG6(329, 300, 299)) == 0) {
+    if (gflagChk(PAL_NTSC_AUG6JUN26(329, 300, 299)) == 0) {
         sword_mes[0].func = actSt24aSwordChk;
         act->mail = sword_mes;
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
         _ACTWait(0);
     }
 }
@@ -215,7 +215,7 @@ void actSt24aSaku(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
-    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(151, 147, 131, 130), 0, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(151, 147, 131, 130), 0, 0);
 }
 
 void actSt24aDemoCam(GObj *volatile self)

@@ -33,7 +33,7 @@ static signed char fontKerning_pal[128][2] = {
     {4, 15}, {4, 14}, {5, 14}, {6, 12}, {8, 11}, {7, 13}, {5, 15}, {2, 16},
 };
 
-static signed char fontKerning_ntscaug6[128][2] = {
+static signed char fontKerning_ntscaug6jun26[128][2] = {
     /* derived name */
     {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},
     {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},
@@ -50,7 +50,7 @@ static signed char fontKerning_ntscaug6[128][2] = {
     {4, 13}, {4, 13}, {5, 12}, {6, 11}, {8, 9},  {6, 11}, {4, 13}, {0, 0},
 };
 
-#define fontKerning PAL_NTSCAUG6(fontKerning_pal, fontKerning_ntscaug6)
+#define fontKerning PAL_NTSCAUG6JUN26(fontKerning_pal, fontKerning_ntscaug6jun26)
 
 /* The .sdata run: the alignment a "{L}", "{R}" or "{C}" escape selects and the
    colour a "{#rrggbbaa}" escape sets, then the texture name at its use. */
@@ -173,8 +173,8 @@ static inline float drawOne(float px, float py, int u, int v, int cw, int dp1,
     float fcw = (float)cw, fh = (float)(fontw * 640 / ScreenWidth); /* UI */
     int gsofs = 0x8000;
     /* the 2001 builds' glyph rectangle: the drawn width and the font's height */
-    int uv[4] = {u * 16, v * 16, (u + PAL_NTSCAUG6(dp1, cw) + 1) * 16,
-                 (v + PAL_NTSCAUG6(20, fontw)) * 16},
+    int uv[4] = {u * 16, v * 16, (u + PAL_NTSCAUG6JUN26(dp1, cw) + 1) * 16,
+                 (v + PAL_NTSCAUG6JUN26(20, fontw)) * 16},
         iv[4];
     float pos[4] = {px, py, fcw, fh};
     int ofs[4] = {-ScreenWidth / 2 * 16, -ScreenHeight / 4 * 16, 0, 0}; /* UI */

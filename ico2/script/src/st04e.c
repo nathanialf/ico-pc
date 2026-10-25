@@ -36,26 +36,27 @@ static ActMail waterMain_mes_pal[2] = {{406, actSt04eWaterSwitch}, {429}}; /* de
 
 static ActMail waterMain_mes_ntsc[2] = {{376, actSt04eWaterSwitch}, {396}}; /* derived name */
 
-static ActMail waterMain_mes_aug6[2] = {{372, actSt04eWaterSwitch}, {392}}; /* derived name */
+static ActMail waterMain_mes_aug6jun26[2] = {{372, actSt04eWaterSwitch}, {392}}; /* derived name */
 
-#define waterMain_mes PAL_NTSC_AUG6(waterMain_mes_pal, waterMain_mes_ntsc, waterMain_mes_aug6)
+#define waterMain_mes                                                                              \
+    PAL_NTSC_AUG6JUN26(waterMain_mes_pal, waterMain_mes_ntsc, waterMain_mes_aug6jun26)
 
 static ActMail water_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail water_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail water_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail water_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define water_mes PAL_NTSC_AUG6(water_mes_pal, water_mes_ntsc, water_mes_aug6)
+#define water_mes PAL_NTSC_AUG6JUN26(water_mes_pal, water_mes_ntsc, water_mes_aug6jun26)
 
 static ActMail waterSwitch_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail waterSwitch_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail waterSwitch_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail waterSwitch_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
 #define waterSwitch_mes                                                                            \
-    PAL_NTSC_AUG6(waterSwitch_mes_pal, waterSwitch_mes_ntsc, waterSwitch_mes_aug6)
+    PAL_NTSC_AUG6JUN26(waterSwitch_mes_pal, waterSwitch_mes_ntsc, waterSwitch_mes_aug6jun26)
 
 static ActMail hint1_mes[2] = {{430}, {429}}; /* derived name */
 
@@ -101,7 +102,7 @@ static void actSt04eWaterStop_ntsc(GObj *volatile self)
     SetWayGroupActive(5, 1);
 }
 
-static void actSt04eWaterStop_aug6(GObj *volatile self)
+static void actSt04eWaterStop_aug6jun26(GObj *volatile self)
 {
     lt_switch_layout(51);
 
@@ -137,8 +138,8 @@ void actSt04eWaterStop(GObj *volatile self)
         actSt04eWaterStop_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actSt04eWaterStop_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actSt04eWaterStop_aug6jun26(self);
         return;
     }
     GProc *th;
@@ -301,7 +302,7 @@ static void actSt04eWater_ntsc(GObj *volatile self)
     }
 }
 
-static void actSt04eWater_aug6(GObj *volatile self)
+static void actSt04eWater_aug6jun26(GObj *volatile self)
 {
     GObj *x = self;
     Act *act = actInitialize(self);
@@ -325,8 +326,8 @@ void actSt04eWater(GObj *volatile self)
         actSt04eWater_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actSt04eWater_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actSt04eWater_aug6jun26(self);
         return;
     }
     GObj *x = self;
@@ -367,11 +368,11 @@ void actSt04eWaterSwitch(GObj *volatile self)
 
     waterSwitch_mes[0].func = actSt04eWaterStop;
     sub->mail = waterSwitch_mes;
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
     _ACTWait(0);
 }
 
-static void actSt04eWaterFlagOn_ntscaug6(GObj *volatile self)
+static void actSt04eWaterFlagOn_ntscaug6jun26(GObj *volatile self)
 {
     _ACTWait(
         ico_d2i(ico_dmul(ico_i2d((60 - systemStatus[0] * 10) / systemStatus[1]), ICO_D(11.0))));
@@ -380,8 +381,8 @@ static void actSt04eWaterFlagOn_ntscaug6(GObj *volatile self)
 
 void actSt04eWaterFlagOn(GObj *volatile self)
 {
-    if (ICO_NTSCAUG6) {
-        actSt04eWaterFlagOn_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        actSt04eWaterFlagOn_ntscaug6jun26(self);
         return;
     }
     int t = ico_d2i(ico_dmul(ico_i2d((60 - systemStatus[0] * 10) / systemStatus[1]), ICO_D(6.0)));

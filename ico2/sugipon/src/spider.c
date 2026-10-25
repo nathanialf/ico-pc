@@ -104,7 +104,7 @@ static inline void wakeSpiderGroup(GObj *self) /* derived name */
 void WakeUpLayoutedSpiders(GObj *self)
 {
     wakeSpiderGroup(self);
-    ExecuteSEPackage(self, PAL_NTSCAUG6(106, 101));
+    ExecuteSEPackage(self, PAL_NTSCAUG6JUN26(106, 101));
 }
 
 static inline void setSpiderGroupHost(GObj *self, GObj *host) /* derived name */
@@ -262,7 +262,7 @@ void SpiderLayoutGeo(GObj *self)
         if (w->wakeFrom != -1) {
             wakeSpiderGroup(self);
             for (i = w->wakeFrom; i < w->n; i++) {
-                iosOmSendMail(w->members[i], PAL_NTSC_AUG6(223, 207, 204), w->members[i]);
+                iosOmSendMail(w->members[i], PAL_NTSC_AUG6JUN26(223, 207, 204), w->members[i]);
                 SetAP1VisualState(w->members[i], 0);
             }
             w->state = 1;
@@ -430,7 +430,7 @@ static inline GObj *DeleteSpiderFromLayoutGroup_inl(GObj *gp, int idx) /* derive
     return r;
 }
 
-static GObj *DeleteSpiderFromLayoutGroup_aug6(GObj *self, int idx)
+static GObj *DeleteSpiderFromLayoutGroup_aug6jun26(GObj *self, int idx)
 {
     GObj **arr = ((SpiderWork *)GOBJ_SUB(self)->work)->members;
     GObj *r = arr[idx];
@@ -440,8 +440,8 @@ static GObj *DeleteSpiderFromLayoutGroup_aug6(GObj *self, int idx)
 
 GObj *DeleteSpiderFromLayoutGroup(GObj *self, int idx)
 {
-    if (ICO_AUG6) {
-        return DeleteSpiderFromLayoutGroup_aug6(self, idx);
+    if (ICO_AUG6JUN26) {
+        return DeleteSpiderFromLayoutGroup_aug6jun26(self, idx);
     }
     return DeleteSpiderFromLayoutGroup_inl(self, idx);
 }

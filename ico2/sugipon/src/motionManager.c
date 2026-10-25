@@ -132,41 +132,41 @@ static sceVu0IVECTOR dirColor2 = {0x00, 0x60, 0xFF, 0x80}; /* derived name */
 
 static float ikXAxis_pal[4]; /* derived name */
 
-static sceVu0FVECTOR ikXAxis_aug6; /* derived name */
+static sceVu0FVECTOR ikXAxis_aug6jun26; /* derived name */
 
-#define ikXAxis PAL_AUG6(ikXAxis_pal, ikXAxis_aug6)
+#define ikXAxis PAL_AUG6JUN26(ikXAxis_pal, ikXAxis_aug6jun26)
 
 static float ikBendQuat_pal[4]; /* derived name */
 
-static sceVu0FVECTOR ikBendQuat_aug6; /* derived name */
+static sceVu0FVECTOR ikBendQuat_aug6jun26; /* derived name */
 
-#define ikBendQuat PAL_AUG6(ikBendQuat_pal, ikBendQuat_aug6)
+#define ikBendQuat PAL_AUG6JUN26(ikBendQuat_pal, ikBendQuat_aug6jun26)
 
 static float naturalMatrix[16]; /* derived name */
 
 static float naturalTrans_pal[4]; /* derived name */
 
-static sceVu0FVECTOR naturalTrans_aug6; /* derived name */
+static sceVu0FVECTOR naturalTrans_aug6jun26; /* derived name */
 
-#define naturalTrans PAL_AUG6(naturalTrans_pal, naturalTrans_aug6)
+#define naturalTrans PAL_AUG6JUN26(naturalTrans_pal, naturalTrans_aug6jun26)
 
 static float rootMove_pal[4]; /* derived name */
 
-static sceVu0FVECTOR rootMove_aug6; /* derived name */
+static sceVu0FVECTOR rootMove_aug6jun26; /* derived name */
 
-#define rootMove PAL_AUG6(rootMove_pal, rootMove_aug6)
+#define rootMove PAL_AUG6JUN26(rootMove_pal, rootMove_aug6jun26)
 
 static float rootStep_pal[4]; /* derived name */
 
-static sceVu0FVECTOR rootStep_aug6; /* derived name */
+static sceVu0FVECTOR rootStep_aug6jun26; /* derived name */
 
-#define rootStep PAL_AUG6(rootStep_pal, rootStep_aug6)
+#define rootStep PAL_AUG6JUN26(rootStep_pal, rootStep_aug6jun26)
 
 static float rootDelta_pal[4]; /* derived name */
 
-static sceVu0FVECTOR rootDelta_aug6; /* derived name */
+static sceVu0FVECTOR rootDelta_aug6jun26; /* derived name */
 
-#define rootDelta PAL_AUG6(rootDelta_pal, rootDelta_aug6)
+#define rootDelta PAL_AUG6JUN26(rootDelta_pal, rootDelta_aug6jun26)
 
 /* The skeleton the motion being computed belongs to: its node array and its
    object.  Declared here for the functions above; the definitions follow
@@ -506,7 +506,7 @@ static void checkWallState(int flag)
     }
 }
 
-static void checkCliffState_ntscaug6(int first)
+static void checkCliffState_ntscaug6jun26(int first)
 {
     (void)first; /* PC port: the European parameter, unused here */
     ClipWork buf;
@@ -637,8 +637,8 @@ static void checkCliffState_ntscaug6(int first)
 
 static void checkCliffState(int first)
 {
-    if (ICO_NTSCAUG6) {
-        checkCliffState_ntscaug6(first);
+    if (ICO_NTSCAUG6JUN26) {
+        checkCliffState_ntscaug6jun26(first);
         return;
     }
     ClipWork buf;
@@ -782,7 +782,7 @@ static void _checkCliffAndWall(void)
     if (skelMotCtrl->cliffWallCheck == 1 ||
         (skelMotCtrl->cliffWallCheck == 2 && skelMotCtrl->variation == 0)) {
         MatrixDrive_PushMatrix();
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
             checkCliffState(0);
         } else {
             checkCliffState(1);
@@ -818,7 +818,7 @@ static void _checkCliffAndWall(void)
                 MatrixDrive_GetMatrix()[0][0] = MatrixDrive_GetMatrix()[2][2] = v[2];
                 MatrixDrive_GetMatrix()[0][2] = -v[0];
                 MatrixDrive_GetMatrix()[2][0] = -MatrixDrive_GetMatrix()[0][2];
-                if (ICO_NTSCAUG6) {
+                if (ICO_NTSCAUG6JUN26) {
                     checkCliffState(0);
                 } else {
                     checkCliffState(0);
@@ -933,7 +933,7 @@ static void _getGeometryOfMotion(ObjNode *out, int second)
     CopyVector((void *)v, (void *)skelMotCtrl->dir);
     SetIdentityQuaternion(q);
     sceVu0Normalize((void *)v, (void *)v);
-    RotQuaternionY(q, PAL_AUG6(atan2f(v[0], v[2]) * 10430.378f, GetTableArcTan2(v[0], v[2])));
+    RotQuaternionY(q, PAL_AUG6JUN26(atan2f(v[0], v[2]) * 10430.378f, GetTableArcTan2(v[0], v[2])));
     CopyQuaternion(skelRoot->quat, q);
     GetMatrixFromQuaternion((void *)MatrixDrive_GetMatrix(), skelRoot->quat);
     SetCurrentQuaternion(skelRoot->quat);
@@ -959,7 +959,7 @@ static void _getGeometryOfMotion(ObjNode *out, int second)
         skelRoot->lifting = 0;
         skelRoot->lift[0] = 0.0f;
         skelRoot->lift[1] = 0.0f;
-        if (!ICO_AUG6) {
+        if (!ICO_AUG6JUN26) {
             CopyVector(skelRoot->up, skelRoot->pos);
         }
     }
@@ -1103,7 +1103,7 @@ static void execPositionReserver(GObj *self, ObjNode m)
         }
     }
     if (debug_skel_flag != 0) {
-        if ((GObj *)skelGObj == PAL_NTSCAUG6(boyGObj, girlGObj)) {
+        if ((GObj *)skelGObj == PAL_NTSCAUG6JUN26(boyGObj, girlGObj)) {
             CopyVector(buf2, skelRoot->savePos);
             _UnitMatrix(MatrixDrive_GetMatrix());
             if (m.obj != 0) {
@@ -1111,9 +1111,9 @@ static void execPositionReserver(GObj *self, ObjNode m)
                 MatrixDrive_TransMatrixV(buf2);
                 gif_StartPacketPri(11);
                 if (GOBJ_SUB(self)->ctrl.posReserve == 1) {
-                    prim_DispWireSphere(PAL_AUG6(50.0f, 5.0f), reserverColor, 16, 8);
+                    prim_DispWireSphere(PAL_AUG6JUN26(50.0f, 5.0f), reserverColor, 16, 8);
                 } else {
-                    prim_DispWireSphere(PAL_AUG6(50.0f, 5.0f), reserverColor2, 16, 8);
+                    prim_DispWireSphere(PAL_AUG6JUN26(50.0f, 5.0f), reserverColor2, 16, 8);
                 }
                 gif_EndPacket();
             }

@@ -205,8 +205,8 @@ void ReadShadowModelFile(void *h, ICO_WORD name, int size, int id, int kind, int
     PObj_FreeImageTables();
 }
 
-static void ReadTextureFile_ntscaug6(void *h, char *name, int size, int id, int kind, int word08,
-                                     int seg)
+static void ReadTextureFile_ntscaug6jun26(void *h, char *name, int size, int id, int kind,
+                                          int word08, int seg)
 {
     int rv;
     char *buf;
@@ -231,8 +231,8 @@ static void ReadTextureFile_ntscaug6(void *h, char *name, int size, int id, int 
 
 void ReadTextureFile(void *h, char *name, int size, int id, int kind, int word08, int seg)
 {
-    if (ICO_NTSCAUG6) {
-        ReadTextureFile_ntscaug6(h, name, size, id, kind, word08, seg);
+    if (ICO_NTSCAUG6JUN26) {
+        ReadTextureFile_ntscaug6jun26(h, name, size, id, kind, word08, seg);
         return;
     }
     int rv = 0;
@@ -440,18 +440,21 @@ void ReadMotionFile(void *h, char *name, int size, int id, int kind, int word08,
     }
     switch (motionKind[id].area) {
     case 0:
-        motionTable[id] = iosMallocDebug(ios_partition_smotion, size, __FILE__,
-                                         PAL_NTSCAUG6(LN(515, 502, 502, 502, 502, 473, 502), 502));
+        motionTable[id] =
+            iosMallocDebug(ios_partition_smotion, size, __FILE__,
+                           PAL_NTSCAUG6JUN26(LN(515, 502, 502, 502, 502, 473, 502), 502));
         break;
     case 4:
-        motionTable[id] = iosMallocDebug(ios_partition_dmotion, size, __FILE__,
-                                         PAL_NTSCAUG6(LN(518, 505, 505, 505, 505, 476, 505), 505));
+        motionTable[id] =
+            iosMallocDebug(ios_partition_dmotion, size, __FILE__,
+                           PAL_NTSCAUG6JUN26(LN(518, 505, 505, 505, 505, 476, 505), 505));
         if (motionTable[id] == 0) {
             /* not enough memory in the dynamic motion area */
             debug_StdPrintfDummy("ダイナミックモーション領域のメモリが足りません。\n");
-            debug_assertMessage(__FILE__, PAL_NTSCAUG6(LN(521, 508, 508, 521, 521, 521, 508), 508),
+            debug_assertMessage(__FILE__,
+                                PAL_NTSCAUG6JUN26(LN(521, 508, 508, 521, 521, 521, 508), 508),
                                 "LACK OF DYNAMIC MOTION MEMORY.\n");
-            __assert(__FILE__, PAL_NTSCAUG6(LN(521, 508, 508, 521, 521, 521, 508), 508), "e");
+            __assert(__FILE__, PAL_NTSCAUG6JUN26(LN(521, 508, 508, 521, 521, 521, 508), 508), "e");
         }
         break;
     default:
@@ -460,9 +463,10 @@ void ReadMotionFile(void *h, char *name, int size, int id, int kind, int word08,
         if (motionTable[id] == 0) {
             /* not enough memory in the motion swap area */
             debug_StdPrintfDummy("モーションスワップ領域のメモリが足りません。\n");
-            debug_assertMessage(__FILE__, PAL_NTSCAUG6(LN(529, 516, 516, 529, 529, 529, 516), 516),
+            debug_assertMessage(__FILE__,
+                                PAL_NTSCAUG6JUN26(LN(529, 516, 516, 529, 529, 529, 516), 516),
                                 "LACK OF SWAP MOTION MEMORY.\n");
-            __assert(__FILE__, PAL_NTSCAUG6(LN(529, 516, 516, 529, 529, 529, 516), 516), "e");
+            __assert(__FILE__, PAL_NTSCAUG6JUN26(LN(529, 516, 516, 529, 529, 529, 516), 516), "e");
         }
         break;
     }

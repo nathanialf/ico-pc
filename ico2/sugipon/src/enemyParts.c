@@ -57,7 +57,7 @@ int UpdatePointBlur(PointBlur *p, void *mtx, void *tint, float f)
     float scale;
     GifColor *t;
 
-    if (PAL_AUG6(currentScreenWidth != 0 || GlobalTimer != 0, NonLinearCameraMove != 0)) {
+    if (PAL_AUG6JUN26(currentScreenWidth != 0 || GlobalTimer != 0, NonLinearCameraMove != 0)) {
         p->dirty = 1;
     }
     if (p->dirty == 0) {
@@ -156,10 +156,10 @@ EnemyEye *InitEnemyEye(int num, int mode, int pri)
     EnemyEye *p;
 
     p = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(EnemyEye, 96), "src/enemyParts.c",
-                       PAL_AUG6(137, 136));
+                       PAL_AUG6JUN26(137, 136));
     *p = enemyEyeTemplate;
 
-    p->dobj[0] = CSVSYSTEM_InitDObj(PAL_JPNKORCN_NTSC_AUG6(1322, 1318, 1286, 1281),
+    p->dobj[0] = CSVSYSTEM_InitDObj(PAL_JPNKORCN_NTSC_AUG6JUN26(1322, 1318, 1286, 1281),
                                     &InitialSObjSimpleSetting);
     p->dobj[0]->nodes->flags.ll |= 1;
     p->dobj[0]->nodes->fade = 1e-5f;
@@ -167,7 +167,7 @@ EnemyEye *InitEnemyEye(int num, int mode, int pri)
     p->dobj[0]->nodes->scale[0] = p->dobj[0]->nodes->scale[1] = p->dobj[0]->nodes->scale[2] = 3.0f;
     p->dobj[0]->dispType = 2;
 
-    p->dobj[1] = CSVSYSTEM_InitDObj(PAL_JPNKORCN_NTSC_AUG6(1323, 1319, 1287, 1282),
+    p->dobj[1] = CSVSYSTEM_InitDObj(PAL_JPNKORCN_NTSC_AUG6JUN26(1323, 1319, 1287, 1282),
                                     &InitialSObjSimpleSetting);
     p->dobj[1]->nodes->flags.ll |= 1;
     p->dobj[1]->nodes->fade = 1e-5f;
@@ -175,7 +175,7 @@ EnemyEye *InitEnemyEye(int num, int mode, int pri)
     p->dobj[1]->nodes->scale[0] = p->dobj[0]->nodes->scale[1] = p->dobj[0]->nodes->scale[2] = 3.0f;
     p->dobj[1]->dispType = 2;
 
-    p->dobj[2] = CSVSYSTEM_InitDObj(PAL_JPNKORCN_NTSC_AUG6(1324, 1320, 1288, 1283),
+    p->dobj[2] = CSVSYSTEM_InitDObj(PAL_JPNKORCN_NTSC_AUG6JUN26(1324, 1320, 1288, 1283),
                                     &InitialSObjSimpleSetting);
     p->dobj[2]->nodes->flags.ll |= 1;
     p->dobj[2]->nodes->fade = 1e-5f;
@@ -258,12 +258,12 @@ EnemyFootPrintHead *InitEnemyFootPrint(int num)
     int j;
 
     p = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(EnemyFootPrintHead, 0x10),
-                       "src/enemyParts.c", PAL_AUG6(226, 224));
+                       "src/enemyParts.c", PAL_AUG6JUN26(226, 224));
     *p = footPrintHeadTemplate;
     p->num = num;
-    p->buf =
-        iosMallocDebug(ios_partition_sugipon, num << 5, "src/enemyParts.c", PAL_AUG6(229, 227));
-    d = CSVSYSTEM_InitDObj(PAL_JPNKORCN_AUG6(1295, 1291, 1254), &InitialSObjSimpleSetting);
+    p->buf = iosMallocDebug(ios_partition_sugipon, num << 5, "src/enemyParts.c",
+                            PAL_AUG6JUN26(229, 227));
+    d = CSVSYSTEM_InitDObj(PAL_JPNKORCN_AUG6JUN26(1295, 1291, 1254), &InitialSObjSimpleSetting);
     p->dobj = d;
     if (d->nodeMtx != 0) {
         iosFree((void *)ICO_PHYS(d->nodeMtx));
@@ -274,15 +274,15 @@ EnemyFootPrintHead *InitEnemyFootPrint(int num)
     p->dobj->nodeMtx = 0;
     p->dobj->nodeQuat = 0;
     p->dobj->nodeMtx = (ICO_WORD)iosMallocDebug(ios_partition_seki, num << 6, "src/enemyParts.c",
-                                                PAL_AUG6(232, 230));
+                                                PAL_AUG6JUN26(232, 230));
     p->dobj->nodeQuat = (ICO_WORD)iosMallocDebug(ios_partition_seki, num << 4, "src/enemyParts.c",
-                                                 PAL_AUG6(232, 230));
+                                                 PAL_AUG6JUN26(232, 230));
     p->dobj->nodeNum = num;
     if ((ICO_WORD)p->dobj->nodes != 0) {
         iosFree((void *)ICO_PHYS(ICO_ADDR(p->dobj->nodes)));
     }
     p->dobj->nodes =
-        iosMallocDebug(ios_partition_seki, num * 80, "src/enemyParts.c", PAL_AUG6(232, 230));
+        iosMallocDebug(ios_partition_seki, num * 80, "src/enemyParts.c", PAL_AUG6JUN26(232, 230));
     for (i = 0; i < num; i++) {
         p->dobj->nodes[i].flags.ll &= ~1;
         p->dobj->nodes[i].flags.ll &= ~2;
@@ -398,7 +398,7 @@ int UpdateEnemyEye(EnemyEye *self, void *m, float rate)
 int DispEnemyEye(EnemyEye *self)
 {
     _CopyMatrix((void *)self->dobj[0]->nodeMtx, self->mtx);
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         p2o_DispVU1DObj(self->dobj[0]);
     } else {
         reg_DispMultiPri(self->dobj[0], 10);

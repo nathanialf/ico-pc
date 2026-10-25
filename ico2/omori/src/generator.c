@@ -158,7 +158,7 @@ void GetGeneratorSafePosition(float *dst, GObj *gobj)
     {
         float probe[4];
 
-        for (i = 0; i < PAL_NTSCAUG6(7, 6); i++) {
+        for (i = 0; i < PAL_NTSCAUG6JUN26(7, 6); i++) {
             const SafePosOffset *e = &generatorSubPosition[i];
 
             if (e->kind != gobj->labelId) {
@@ -215,7 +215,7 @@ static inline void switch_MainStatus_ntsc(GObj *gobj, unsigned char st)
     }
 }
 
-static inline void switch_MainStatus_aug6(GObj *gobj, unsigned char st)
+static inline void switch_MainStatus_aug6jun26(GObj *gobj, unsigned char st)
 {
     float pos[4];
     GenWork *w = GOBJ_SUB(gobj)->work;
@@ -250,8 +250,8 @@ static void switch_MainStatus(GObj *gobj, unsigned char st)
         switch_MainStatus_ntsc(gobj, st);
         return;
     }
-    if (ICO_AUG6) {
-        switch_MainStatus_aug6(gobj, st);
+    if (ICO_AUG6JUN26) {
+        switch_MainStatus_aug6jun26(gobj, st);
         return;
     }
     float pos[4];
@@ -445,7 +445,7 @@ static GObj *IsNeedGeneratorHard_ntsc(GObj *mother)
     return 0;
 }
 
-static GObj *IsNeedGeneratorHard_aug6(GObj *mother)
+static GObj *IsNeedGeneratorHard_aug6jun26(GObj *mother)
 {
     GObj *g;
     int single = 0;
@@ -533,8 +533,8 @@ static GObj *IsNeedGeneratorHard(GObj *mother)
     if (ICO_NTSC) {
         return IsNeedGeneratorHard_ntsc(mother);
     }
-    if (ICO_AUG6) {
-        return IsNeedGeneratorHard_aug6(mother);
+    if (ICO_AUG6JUN26) {
+        return IsNeedGeneratorHard_aug6jun26(mother);
     }
     GenWork *w = GOBJ_SUB(mother)->work;
     GObj *g;
@@ -654,8 +654,8 @@ inline GObj *IsEnableCallEnemy(GObj *self)
         int no = g->labelId;
         GenGeo *gg = &objLayout[no];
 
-        if (self != 0 && self->labelId == PAL_JPNKORCN_NTSC_AUG6(3758, 3735, 3454, 3416) &&
-            no != PAL_JPNKORCN_NTSC_AUG6(3757, 3734, 3453, 3415)) {
+        if (self != 0 && self->labelId == PAL_JPNKORCN_NTSC_AUG6JUN26(3758, 3735, 3454, 3416) &&
+            no != PAL_JPNKORCN_NTSC_AUG6JUN26(3757, 3734, 3453, 3415)) {
             continue;
         }
         if (objLayout[no].parent != 0 && self != 0 && objLayout[no].parent != self->labelId) {
@@ -731,8 +731,8 @@ inline void RestoreReviveCount(GObj *gobj)
         g->reviveCount = n;
         /* the preview tests the object's address, not its label (never 3415); PC port: at the
            host pointer's width */
-        if (PAL_JPNKORCN_NTSC_AUG6(gobj->labelId == 3757, gobj->labelId == 3734,
-                                   gobj->labelId == 3453, (size_t)gobj == 3415)) {
+        if (PAL_JPNKORCN_NTSC_AUG6JUN26(gobj->labelId == 3757, gobj->labelId == 3734,
+                                        gobj->labelId == 3453, (size_t)gobj == 3415)) {
             g->reviveCount = (g->reviveCount < 0) ? 0 : ((g->reviveCount > 1) ? 1 : g->reviveCount);
         }
     }
@@ -825,7 +825,7 @@ static int GetMotherGenerator_ntsc(int label)
     return ret;
 }
 
-static int GetMotherGenerator_aug6(int label)
+static int GetMotherGenerator_aug6jun26(int label)
 {
     int x;
     int st;
@@ -875,8 +875,8 @@ int GetMotherGenerator(int label)
     if (ICO_NTSC) {
         return GetMotherGenerator_ntsc(label);
     }
-    if (ICO_AUG6) {
-        return GetMotherGenerator_aug6(label);
+    if (ICO_AUG6JUN26) {
+        return GetMotherGenerator_aug6jun26(label);
     }
     int info[2];
     int x;
@@ -932,7 +932,7 @@ inline void SetMotherGenerator(int no, int label)
     int i;
     int cnt;
 
-    if (no == PAL_JPNKORCN_NTSC_AUG6(3757, 3734, 3453, 3415)) {
+    if (no == PAL_JPNKORCN_NTSC_AUG6JUN26(3757, 3734, 3453, 3415)) {
         return;
     }
     cnt = 0;
@@ -953,7 +953,7 @@ inline void Generator_Init(void)
 {
     int i;
 
-    for (i = 0; i < PAL_JPNKORCN_NTSC_AUG6(3759, 3736, 3455, 3417); i++) {
+    for (i = 0; i < PAL_JPNKORCN_NTSC_AUG6JUN26(3759, 3736, 3455, 3417); i++) {
         GenGeo *g = &objLayout[i];
         unsigned int x = g->flags & 0xFFDFFFFF;
         unsigned int y = x & 0xFFFBFFFF;
@@ -994,7 +994,7 @@ inline int *GetbufpGeneratorPacket(void)
 
 inline int GetsizeGeneratorPacket(void)
 {
-    return PAL_JPNKORCN_NTSC_AUG6(11277, 11208, 10365, 10251);
+    return PAL_JPNKORCN_NTSC_AUG6JUN26(11277, 11208, 10365, 10251);
 }
 
 void ReadGeneratorPacket(void)
@@ -1002,7 +1002,7 @@ void ReadGeneratorPacket(void)
     unsigned char *p = (unsigned char *)GetbufpGeneratorPacket();
     int i;
 
-    for (i = 0; i < PAL_JPNKORCN_NTSC_AUG6(3759, 3736, 3455, 3417); i++) {
+    for (i = 0; i < PAL_JPNKORCN_NTSC_AUG6JUN26(3759, 3736, 3455, 3417); i++) {
         GenGeo *g = &objLayout[i];
         unsigned int b = *p++;
         unsigned int x = (b >> 4) << 10;
@@ -1011,14 +1011,14 @@ void ReadGeneratorPacket(void)
         g->flags = (g->flags & ~0x200000) | ((b & 1) << 21);
     }
 
-    for (i = 0; i < PAL_JPNKORCN_NTSC_AUG6(3759, 3736, 3455, 3417); i++) {
+    for (i = 0; i < PAL_JPNKORCN_NTSC_AUG6JUN26(3759, 3736, 3455, 3417); i++) {
         GenGeo *g = &objLayout[i];
         char c = *(char *)p++;
 
         g->flags = (g->flags & ~0x40000) | ((c & 1) << 18);
     }
 
-    for (i = 0; i < PAL_JPNKORCN_NTSC_AUG6(3759, 3736, 3455, 3417); i++) {
+    for (i = 0; i < PAL_JPNKORCN_NTSC_AUG6JUN26(3759, 3736, 3455, 3417); i++) {
         objLayout[i].reviveCount = (char)*p;
         p++;
     }
@@ -1029,15 +1029,15 @@ void MakeGeneratorPacket(void)
     char *p = (char *)GetbufpGeneratorPacket();
     int i;
 
-    for (i = 0; i < PAL_JPNKORCN_NTSC_AUG6(3759, 3736, 3455, 3417); i++) {
+    for (i = 0; i < PAL_JPNKORCN_NTSC_AUG6JUN26(3759, 3736, 3455, 3417); i++) {
         *p++ = (((int)(objLayout[i].flags << 18) >> 28) << 4) | ((objLayout[i].flags >> 21) & 1);
     }
 
-    for (i = 0; i < PAL_JPNKORCN_NTSC_AUG6(3759, 3736, 3455, 3417); i++) {
+    for (i = 0; i < PAL_JPNKORCN_NTSC_AUG6JUN26(3759, 3736, 3455, 3417); i++) {
         *p++ = (objLayout[i].flags >> 18) & 1;
     }
 
-    for (i = 0; i < PAL_JPNKORCN_NTSC_AUG6(3759, 3736, 3455, 3417); i++) {
+    for (i = 0; i < PAL_JPNKORCN_NTSC_AUG6JUN26(3759, 3736, 3455, 3417); i++) {
         *p++ = objLayout[i].reviveCount;
     }
 }
@@ -1055,7 +1055,7 @@ static inline void SetInfoSpKidnapEnemy_ntsc(short *work)
     info->reviveCount = 0;
 }
 
-static inline void SetInfoSpKidnapEnemy_aug6(short *work)
+static inline void SetInfoSpKidnapEnemy_aug6jun26(short *work)
 {
     GenGeo *info = &objLayout[3415]; /* the kidnap enemy's layout record */
     info->flags |= 0x200000;
@@ -1068,8 +1068,8 @@ inline void SetInfoSpKidnapEnemy(short *work)
         SetInfoSpKidnapEnemy_ntsc(work);
         return;
     }
-    if (ICO_AUG6) {
-        SetInfoSpKidnapEnemy_aug6(work);
+    if (ICO_AUG6JUN26) {
+        SetInfoSpKidnapEnemy_aug6jun26(work);
         return;
     }
     GenGeo *info = &objLayout[PAL_JPNKORCN(3757, 3734)]; /* the kidnap enemy's layout record */
@@ -1204,7 +1204,7 @@ static inline GenWork *InitGeneratorGeo_ntsc(GObj *gobj, SObjSimpleSetting *src)
     return p;
 }
 
-static inline GenWork *InitGeneratorGeo_aug6(GObj *gobj, SObjSimpleSetting *src)
+static inline GenWork *InitGeneratorGeo_aug6jun26(GObj *gobj, SObjSimpleSetting *src)
 {
     GenWork *p = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(GenWork, 112), __FILE__, 1087);
     int i;
@@ -1243,8 +1243,8 @@ inline GenWork *InitGeneratorGeo(GObj *gobj, SObjSimpleSetting *src)
     if (ICO_NTSC) {
         return InitGeneratorGeo_ntsc(gobj, src);
     }
-    if (ICO_AUG6) {
-        return InitGeneratorGeo_aug6(gobj, src);
+    if (ICO_AUG6JUN26) {
+        return InitGeneratorGeo_aug6jun26(gobj, src);
     }
     GenWork *p = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(GenWork, 112), __FILE__, 1230);
     int i;
@@ -1343,7 +1343,7 @@ static inline void CallEnemyFromGenerator(GObj *gobj, float *pos, float *dir) /*
     }
 }
 
-static void GeneratorGeo_aug6(GObj *gobj)
+static void GeneratorGeo_aug6jun26(GObj *gobj)
 {
     GenWork *w = GOBJ_SUB(gobj)->work;
     int hard = 0;
@@ -1555,8 +1555,8 @@ void GeneratorGeo(GObj *gobj)
         GeneratorGeo_ntsc(gobj);
         return;
     }
-    if (ICO_AUG6) {
-        GeneratorGeo_aug6(gobj);
+    if (ICO_AUG6JUN26) {
+        GeneratorGeo_aug6jun26(gobj);
         return;
     }
     GenWork *w = GOBJ_SUB(gobj)->work;
@@ -1701,12 +1701,17 @@ void GeneratorDL(GObj *gobj)
     SetGeneratorBgaRootPosition(gobj, tbl);
 
     if (w->active) {
-        DispMultiBgaManagerWithKind(PAL_JPNKORCN_NTSC_AUG6(508, 504, 437, 436), w->bga[1].p, 1);
+        DispMultiBgaManagerWithKind(PAL_JPNKORCN_NTSC_AUG6JUN26(508, 504, 437, 436), w->bga[1].p,
+                                    1);
     } else {
-        DispMultiBgaManagerWithKind(PAL_JPNKORCN_NTSC_AUG6(507, 503, 436, 435), w->bga[0].p, 1);
-        DispMultiBgaManagerWithKind(PAL_JPNKORCN_NTSC_AUG6(508, 504, 437, 436), w->bga[1].p, 1);
-        DispMultiBgaManagerWithKind(PAL_JPNKORCN_NTSC_AUG6(509, 505, 438, 437), w->bga[2].p, 1);
-        DispMultiBgaManagerWithKind(PAL_JPNKORCN_NTSC_AUG6(506, 502, 435, 434), w->bga[3].p, 1);
+        DispMultiBgaManagerWithKind(PAL_JPNKORCN_NTSC_AUG6JUN26(507, 503, 436, 435), w->bga[0].p,
+                                    1);
+        DispMultiBgaManagerWithKind(PAL_JPNKORCN_NTSC_AUG6JUN26(508, 504, 437, 436), w->bga[1].p,
+                                    1);
+        DispMultiBgaManagerWithKind(PAL_JPNKORCN_NTSC_AUG6JUN26(509, 505, 438, 437), w->bga[2].p,
+                                    1);
+        DispMultiBgaManagerWithKind(PAL_JPNKORCN_NTSC_AUG6JUN26(506, 502, 435, 434), w->bga[3].p,
+                                    1);
     }
 
     idx = w->cur;

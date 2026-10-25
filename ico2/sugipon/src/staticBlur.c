@@ -545,7 +545,7 @@ static void reduceCopyAlphaChannelOfWork1ToWork0(void)
     /* FRAME UV (the aura's buffer), WORK rect (Work0, W / 2 x 128) */
     int suv[4] = {blurUv[0] + 16, blurUv[1] + 16, gsFrame.w * 16 + blurUv[2],
                   ScreenHeight * 16 + blurUv[3]};
-    int srect[4] = {blurUv[4] - SB_X(2048), blurUv[5] - PAL_NTSCAUG6(1032, 1024), SB_X(4096),
+    int srect[4] = {blurUv[4] - SB_X(2048), blurUv[5] - PAL_NTSCAUG6JUN26(1032, 1024), SB_X(4096),
                     systemStatus[0] == 0 ? 1792 : 2048};
 
     gif_SetGsReg(6, workBase[1] | SB_TEX0_W(512) | 0x640000000LL);
@@ -587,7 +587,7 @@ static void pasteFeedBackAreaToFB(int *rect) /* derived name */
 static void copyCurrentFBToFeedBackArea(void)
 {
     /* the August preview does not clear the feedback area's bottom strip */
-    if (!ICO_AUG6 && systemStatus[0] == 0) {
+    if (!ICO_AUG6JUN26 && systemStatus[0] == 0) {
         SprUV a = {-SB_X(1024), 768, SB_X(2048), 256};
 
         gif_SetDrawEnviroment(0x3F00, 0, SB_X(128), 128, 0, 0);
@@ -812,7 +812,7 @@ static void auraInspireAfter(int mode)
         }
         break;
     }
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         if (GlobalTimer) {
             pasteFeedBackAreaToWork0();
         }
@@ -847,7 +847,7 @@ static void fillWork2(int mode, int *rect)
     gif_SetZWrite(0);
 
     /* the 2001 builds clear no strip past work buffer 2 */
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         unsigned char col[4] = {0, 0, 0, 192};
         SprUV r = {-SB_X(2048), -512, SB_X(4096), 1024};
 
@@ -1161,7 +1161,7 @@ void makeFullScreenFlareAfter(int mode)
 
     pasteWork0ToFB();
 
-    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, PAL_NTSCAUG6(0, 1), 0);
+    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, PAL_NTSCAUG6JUN26(0, 1), 0);
 
     gif_EndPacket();
 }
@@ -1346,7 +1346,7 @@ void depthField(float depth, float width, float rate)
         gif_SetDrawEnviroment(0x800, 0, ScreenWidth, ScreenHeight, 1, 0);
     }
 
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         gif_SetDrawEnviroment(0x800, 0, ScreenWidth, ScreenHeight, 1, 0);
     }
     gif_EndPacket();
@@ -1362,7 +1362,7 @@ static int motionBlurAlpha = 0; /* derived name */
 /* frames the motion blur still skips after a non-linear camera move */
 static int motionBlurSkip = 0; /* derived name */
 
-static void MotionBlur_aug6(void)
+static void MotionBlur_aug6jun26(void)
 {
     SprCol col = {{128, 128, 128, 128}};
     SprUV uv = {4, 4, gsFrame.w * 16, ScreenHeight / 2 * 16};
@@ -1407,8 +1407,8 @@ static void MotionBlur_aug6(void)
 
 void MotionBlur(void)
 {
-    if (ICO_AUG6) {
-        MotionBlur_aug6();
+    if (ICO_AUG6JUN26) {
+        MotionBlur_aug6jun26();
         return;
     }
     SprCol col = {{128, 128, 128, 128}};
@@ -1703,7 +1703,7 @@ void FullScreenEffectBefore(void)
         if (debug_font_flag & 1)
             debug_Printf(250, 40, 0xFFFFFF00, "SUN");
 
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         colorSetting(); /* the August preview sets the effect colours each frame here */
     }
     workBase[0] = 0x2800;
@@ -1711,7 +1711,7 @@ void FullScreenEffectBefore(void)
     workBase[2] = 0x2E00;
     workBase[3] = 0x3000;
 
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         if (ICO_JPNKORCN) {
             tex_LockHeadTBP(0x3800, 8);
         } else {
@@ -1822,7 +1822,7 @@ void FullScreenEffectAfter(void)
     depthFadeStart = GlobalStageSetting.depthFieldStart;
     depthFadeWidth = GlobalStageSetting.depthFieldWidth;
 
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         tex_UnlockHeadTBP(7);
         tex_UnlockHeadTBP(8);
     }

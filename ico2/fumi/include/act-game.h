@@ -243,7 +243,7 @@ void _GetRootObjectOrient(void *orient, struct GObj *obj);
 void ACTItemForceDrop(struct GObj *self);
 inline void GetOtherStageGirlOrient(float *orient, float *root);
 int ACTChkAttackIgnore_BOY(struct GObj *self, struct GObj *actor);
-int ACTChkAttackIgnore_BOY_aug6(struct GObj *self, struct GObj *actor); /* boyact.c */
+int ACTChkAttackIgnore_BOY_aug6jun26(struct GObj *self, struct GObj *actor); /* boyact.c */
 int ACTChkAttackIgnore_GIRL(struct GObj *self, struct GObj *actor);
 int ACTChkAttackIgnore_ENEMY(struct GObj *self, struct GObj *actor);
 unsigned char ACTCheckCollis_VIEW(float f, void *p0, void *p1, void *actor);

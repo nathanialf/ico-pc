@@ -66,28 +66,28 @@ typedef struct {       /* field names derived */
 
 void torchOnOfWeaponSE(GObj *torch)
 {
-    ExecuteSEPackage(torch, PAL_NTSCAUG6(66, 64));
+    ExecuteSEPackage(torch, PAL_NTSCAUG6JUN26(66, 64));
 }
 
 void torchOffOfWeaponSE(GObj *torch)
 {
     StopSEPackage(torch);
-    ExecuteSEPackage(torch, PAL_NTSCAUG6(67, 65));
+    ExecuteSEPackage(torch, PAL_NTSCAUG6JUN26(67, 65));
 }
 
 void weaponHitReactionSE(GObj *g)
 {
-    ExecuteSEPackage(g, PAL_NTSCAUG6(68, 66));
+    ExecuteSEPackage(g, PAL_NTSCAUG6JUN26(68, 66));
 }
 
 void weaponFumbleSE(GObj *g)
 {
-    ExecuteSEPackage(g, PAL_NTSCAUG6(92, 87));
+    ExecuteSEPackage(g, PAL_NTSCAUG6JUN26(92, 87));
 }
 
 void weaponStickSE(GObj *g)
 {
-    ExecuteSEPackage(g, PAL_NTSCAUG6(93, 88));
+    ExecuteSEPackage(g, PAL_NTSCAUG6JUN26(93, 88));
 }
 
 static inline void releaseWeaponHolder(WeaponWork *w) /* derived name */
@@ -229,7 +229,7 @@ static WeaponWork swordWorkTemplate_pal = {
     {0.0f, 0.0f, 0.0f, 1.0f},
 }; /* derived name */
 
-static WeaponWork swordWorkTemplate_ntscaug6 = {
+static WeaponWork swordWorkTemplate_ntscaug6jun26 = {
     0,
     0,
     0,
@@ -255,7 +255,8 @@ static WeaponWork swordWorkTemplate_ntscaug6 = {
     0.0f,
 }; /* derived name */
 
-#define swordWorkTemplate (*PAL_NTSCAUG6(&swordWorkTemplate_pal, &swordWorkTemplate_ntscaug6))
+#define swordWorkTemplate                                                                          \
+    (*PAL_NTSCAUG6JUN26(&swordWorkTemplate_pal, &swordWorkTemplate_ntscaug6jun26))
 
 /* the offsets the two path helpers below set the z of and push along */
 static float pathOfsFwd[4] = {0.0f, 0.0f, 1.0f, 1.0f}; /* derived name */
@@ -514,7 +515,7 @@ static void getGeometry(GObj *g)
             CopyQuaternion(rq, quat);
         }
         UpdateRootMatrix(g);
-        if (!ICO_NTSCAUG6) {
+        if (!ICO_NTSCAUG6JUN26) {
             setWeaponOffsetMode(g, 0);
         }
     } else {
@@ -599,7 +600,7 @@ static void initializeQueenzSword(GObj *g, int index, SObjSimpleSetting *lay)
 
     w->count = 1;
     w->objs = iosMallocDebug(ios_partition_sugipon, 1 * sizeof(GObj *), __FILE__,
-                             PAL_NTSC_AUG6(759, 711, 712));
+                             PAL_NTSC_AUG6JUN26(759, 711, 712));
 
     for (i = 0; i < 1; i++) {
         /* PC port: a division by the literal 0: 0 / 0 for the only sword,
@@ -613,7 +614,8 @@ static void initializeQueenzSword(GObj *g, int index, SObjSimpleSetting *lay)
 
     r2 = *lay;
     r2.obj = 13;
-    o2 = CreateLayoutedGObj(PAL_NTSCAUG6(46, 45), PAL_NTSCAUG6(11, 9), -1, 0, &r2, -1, 7, 0);
+    o2 = CreateLayoutedGObj(PAL_NTSCAUG6JUN26(46, 45), PAL_NTSCAUG6JUN26(11, 9), -1, 0, &r2, -1, 7,
+                            0);
     GOBJ_SUB(o2)->parent = lnk;
     w->sword = o2;
 }
@@ -670,7 +672,7 @@ static void *InitWeaponGeo_ntsc(GObj *g, SObjSimpleSetting *lay)
     return w;
 }
 
-static void *InitWeaponGeo_aug6(GObj *g, SObjSimpleSetting *lay)
+static void *InitWeaponGeo_aug6jun26(GObj *g, SObjSimpleSetting *lay)
 {
     WeaponWork *w = iosMallocDebug(ios_partition_sugipon, sizeof(WeaponWork), __FILE__, 773);
     int i;
@@ -725,8 +727,8 @@ void *InitWeaponGeo(GObj *g, SObjSimpleSetting *lay)
     if (ICO_NTSC) {
         return InitWeaponGeo_ntsc(g, lay);
     }
-    if (ICO_AUG6) {
-        return InitWeaponGeo_aug6(g, lay);
+    if (ICO_AUG6JUN26) {
+        return InitWeaponGeo_aug6jun26(g, lay);
     }
     WeaponWork *w = iosMallocDebug(ios_partition_sugipon, sizeof(WeaponWork), __FILE__, 820);
     int i;
@@ -969,7 +971,7 @@ typedef union { /* field names derived */
     int i[4][4];
 } WeaponMatrix; /* derived name */
 
-static void WeaponGeo_ntscaug6(GObj *g)
+static void WeaponGeo_ntscaug6jun26(GObj *g)
 {
     getGeometry(g);
     checkHit(g);
@@ -977,8 +979,8 @@ static void WeaponGeo_ntscaug6(GObj *g)
 
 void WeaponGeo(GObj *g)
 {
-    if (ICO_NTSCAUG6) {
-        WeaponGeo_ntscaug6(g);
+    if (ICO_NTSCAUG6JUN26) {
+        WeaponGeo_ntscaug6jun26(g);
         return;
     }
     WeaponWork *w = GOBJ_SUB(g)->work;
@@ -1052,7 +1054,7 @@ void WeaponGeo(GObj *g)
     }
 }
 
-static void WeaponDL_ntscaug6(GObj *g)
+static void WeaponDL_ntscaug6jun26(GObj *g)
 {
     WeaponWork *w = GOBJ_SUB(g)->work;
 
@@ -1131,8 +1133,8 @@ static void WeaponDL_ntscaug6(GObj *g)
 
 void WeaponDL(GObj *g)
 {
-    if (ICO_NTSCAUG6) {
-        WeaponDL_ntscaug6(g);
+    if (ICO_NTSCAUG6JUN26) {
+        WeaponDL_ntscaug6jun26(g);
         return;
     }
     WeaponWork *w = GOBJ_SUB(g)->work;
@@ -1194,7 +1196,7 @@ GObj *CheckSwapableWeapon(GObj *self, float dist)
         if (g->active == 0)
             continue;
 
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
             wp = (float *)((char *)GOBJ_SUB(g)->nodeMtx + 48);
         } else {
             wp = w->tipPos;

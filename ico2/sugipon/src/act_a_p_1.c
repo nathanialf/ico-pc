@@ -98,7 +98,8 @@ static int standAI(GObj *self)
 {
     Act *p = GOBJ_ACT(self);
 
-    if ((int)(PAL_NTSC_AUG6(p->flags20.ll >> 21, p->flags20.ll >> 10, p->flags20.ll >> 7)) & 1) {
+    if ((int)(PAL_NTSC_AUG6JUN26(p->flags20.ll >> 21, p->flags20.ll >> 10, p->flags20.ll >> 7)) &
+        1) {
         short r = boyYaw;
         r = r > 2048 ? 2048 : (r < -2048 ? -2048 : r);
         AP1Turn(self, r);
@@ -236,7 +237,7 @@ static int walkAI_ntsc(GObj *self)
     return AP1MotReq(self, 1) ? 1 : -1;
 }
 
-static int walkAI_aug6(GObj *self)
+static int walkAI_aug6jun26(GObj *self)
 {
     Act *p = GOBJ_ACT(self);
 
@@ -332,8 +333,8 @@ static int walkAI(GObj *self)
     if (ICO_NTSC) {
         return walkAI_ntsc(self);
     }
-    if (ICO_AUG6) {
-        return walkAI_aug6(self);
+    if (ICO_AUG6JUN26) {
+        return walkAI_aug6jun26(self);
     }
     Act *p = GOBJ_ACT(self);
 
@@ -572,7 +573,7 @@ static void subAP1BrainMain_ntsc(GObj *volatile self)
     }
 }
 
-static void subAP1BrainMain_aug6(GObj *volatile self)
+static void subAP1BrainMain_aug6jun26(GObj *volatile self)
 {
     AP1Vec boy;
     AP1Vec look;
@@ -649,8 +650,8 @@ void subAP1BrainMain(GObj *volatile self)
         subAP1BrainMain_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        subAP1BrainMain_aug6(self);
+    if (ICO_AUG6JUN26) {
+        subAP1BrainMain_aug6jun26(self);
         return;
     }
     AP1Vec smooth = {0.0f, 0.0f, 0.0f, 1.0f};
@@ -815,14 +816,14 @@ static inline void AP1SetHold(GObj *self) /* derived name */
 {
     Act *p = GOBJ_ACT(self);
 
-    p->flags20.ll |= PAL_NTSC_AUG6(0x200000, 0x400, 0x80);
+    p->flags20.ll |= PAL_NTSC_AUG6JUN26(0x200000, 0x400, 0x80);
 }
 
 static inline void AP1ClrHold(GObj *self) /* derived name */
 {
     Act *p = GOBJ_ACT(self);
 
-    p->flags20.ll &= ~PAL_NTSC_AUG6(0x200000, 0x400, 0x80);
+    p->flags20.ll &= ~PAL_NTSC_AUG6JUN26(0x200000, 0x400, 0x80);
 }
 
 static void AP1BeforeFunc_ntsc(GObj *self)
@@ -872,7 +873,7 @@ static void AP1BeforeFunc_ntsc(GObj *self)
     q->num = 0;
 }
 
-static void AP1BeforeFunc_aug6(GObj *self)
+static void AP1BeforeFunc_aug6jun26(GObj *self)
 {
     AP1MailQueue *q = ICO_RAWP(AP1MailQueue *, self, 0x54, (AP1MailQueue *)&self->mailBox);
     AP1MailEntry *e = q->e;
@@ -925,8 +926,8 @@ void AP1BeforeFunc(GObj *self)
         AP1BeforeFunc_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        AP1BeforeFunc_aug6(self);
+    if (ICO_AUG6JUN26) {
+        AP1BeforeFunc_aug6jun26(self);
         return;
     }
     AP1MailQueue *q = ICO_RAWP(AP1MailQueue *, self, 0x54, (AP1MailQueue *)&self->mailBox);

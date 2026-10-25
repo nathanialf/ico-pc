@@ -31,7 +31,7 @@ inline void ObjAction_Init(void)
 static inline void objActionCorrectFlag(OaRecB *p) /* derived name */
 {
     if ((p->flags & 1) == 1u) {
-        p->mode = PAL_JPNKORCN_NTSC_AUG6(972, 949, 815, 814);
+        p->mode = PAL_JPNKORCN_NTSC_AUG6JUN26(972, 949, 815, 814);
     }
 }
 
@@ -42,7 +42,7 @@ static inline void objActionCorrectMode_ntsc(OaRecB *p) /* derived name */
     }
 }
 
-static inline void objActionCorrectMode_aug6(OaRecB *p) /* derived name */
+static inline void objActionCorrectMode_aug6jun26(OaRecB *p) /* derived name */
 {
     if (p->mode == 814) {
         p->mode = p->baseMode;
@@ -55,8 +55,8 @@ static inline void objActionCorrectMode(OaRecB *p) /* derived name */
         objActionCorrectMode_ntsc(p);
         return;
     }
-    if (ICO_AUG6) {
-        objActionCorrectMode_aug6(p);
+    if (ICO_AUG6JUN26) {
+        objActionCorrectMode_aug6jun26(p);
         return;
     }
     if (p->mode == PAL_JPNKORCN(972, 949)) {
@@ -91,7 +91,7 @@ inline void ObjAction_MailCenter(GObj *gobj, int step)
     const ObjActMailEnt *e;
     int n;
 
-    for (i = 0; i < PAL_NTSCAUG6(33, 31); i++) {
+    for (i = 0; i < PAL_NTSCAUG6JUN26(33, 31); i++) {
         e = &objTrigger[i];
         if (gobj->labelId != e->labelId)
             continue;

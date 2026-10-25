@@ -46,15 +46,15 @@ typedef struct RotObjMemory { /* field names derived */
     int turnCount; /* 0x4 */
 } RotObjMemory;    /* derived name */
 
-static void moveStartSE_ntscaug6(GObj *self)
+static void moveStartSE_ntscaug6jun26(GObj *self)
 {
     ExecuteSEPackage(self, 51);
 }
 
 static void moveStartSE(GObj *self)
 {
-    if (ICO_NTSCAUG6) {
-        moveStartSE_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        moveStartSE_ntscaug6jun26(self);
         return;
     }
     ExecuteSEPackage(self, 53);
@@ -63,7 +63,7 @@ static void moveStartSE(GObj *self)
 static void moveEndSE(GObj *self)
 {
     StopSEPackage(self);
-    ExecuteSEPackage(self, PAL_NTSCAUG6(58, 56));
+    ExecuteSEPackage(self, PAL_NTSCAUG6JUN26(58, 56));
 }
 
 void RotObjectGeo(GObj *self)
@@ -148,7 +148,7 @@ int MoveRotObjectWithHoldPoint(GObj *bar, float *hold, void *self, float *dir, f
         w->turnCount = 0;
         return 0;
     }
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         getRootMatrix(m, bar);
     } else {
         getRotObjectDriveMatrix(bar, m);
@@ -174,7 +174,7 @@ int MoveRotObjectWithHoldPoint(GObj *bar, float *hold, void *self, float *dir, f
             return 0;
     }
     ang = -atan2f(sl, len);
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         k = len * 0.01f;
     } else {
         ang *= w->rate;
@@ -243,7 +243,7 @@ void GetRotObjectGlobalHoldGeometry(void *pos, void *dir, GObj *bar, void *holdP
 {
     float m[16];
 
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         getRootMatrix(m, bar);
     } else {
         getRotObjectDriveMatrix(bar, m);
@@ -256,7 +256,7 @@ void GetRotObjectGlobalHoldGeometry(void *pos, void *dir, GObj *bar, void *holdP
     }
 }
 
-static RotObjWork *InitRotObjectGeo_ntscaug6(GObj *gobj, SObjSimpleSetting *src)
+static RotObjWork *InitRotObjectGeo_ntscaug6jun26(GObj *gobj, SObjSimpleSetting *src)
 {
     RotObjWork *p = iosMallocDebug(ios_partition_sugipon, sizeof(RotObjWork), rotObjectFile, 55);
 
@@ -285,8 +285,8 @@ static RotObjWork *InitRotObjectGeo_ntscaug6(GObj *gobj, SObjSimpleSetting *src)
 
 RotObjWork *InitRotObjectGeo(GObj *gobj, SObjSimpleSetting *src)
 {
-    if (ICO_NTSCAUG6) {
-        return InitRotObjectGeo_ntscaug6(gobj, src);
+    if (ICO_NTSCAUG6JUN26) {
+        return InitRotObjectGeo_ntscaug6jun26(gobj, src);
     }
     RotObjWork *p = iosMallocDebug(ios_partition_sugipon, sizeof(RotObjWork), rotObjectFile, 57);
 
@@ -325,7 +325,7 @@ void GetRotObjectGameSysObjInfoExtData(short *angle, int *turnCount, GamesysObjI
 
 void RotObjectDL(GObj *gobj)
 {
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         getRootMatrix((void *)GOBJ_SUB(gobj)->nodeMtx, gobj);
     } else {
         getRotObjectDriveMatrix(gobj, (void *)GOBJ_SUB(gobj)->nodeMtx);
@@ -348,7 +348,7 @@ int GetRotObjectZPlusDirection(GObj *gobj)
     float m[16];
     float v[4];
 
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         getRootMatrix(m, gobj);
     } else {
         getRotObjectDriveMatrix(gobj, m);

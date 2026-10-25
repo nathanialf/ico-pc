@@ -887,7 +887,7 @@ static void scale_m34(LVec *dst, void *src, float f)
 
 static void effect_end_func(int no)
 {
-    GObj *g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(47, 46));
+    GObj *g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46));
     GObj *weapon = GOBJ_ACT(boyGObj)->weapon;
 
     if (g != 0) {
@@ -1002,7 +1002,7 @@ static void queenBeforeFunc_ntsc(GObj *g)
     act->env.motOriReq = *(MotOriReq *)&GOBJ_SUB(g)->root.wall;
 }
 
-static void queenBeforeFunc_aug6(GObj *g)
+static void queenBeforeFunc_aug6jun26(GObj *g)
 {
     QVec pos;
     QVec target;
@@ -1050,8 +1050,8 @@ void queenBeforeFunc(GObj *g)
         queenBeforeFunc_ntsc(g);
         return;
     }
-    if (ICO_AUG6) {
-        queenBeforeFunc_aug6(g);
+    if (ICO_AUG6JUN26) {
+        queenBeforeFunc_aug6jun26(g);
         return;
     }
     QVec pos;
@@ -1114,8 +1114,8 @@ static const int genEnemyLayoutSt25_pal[6] = {2152, 2153, 2154,
 static const int genEnemyLayoutSt25_ntsc[6] = {1969, 1970, 1971,
                                                1972, 1973, 1974}; /* derived name */
 
-static const int genEnemyLayoutSt25_aug6[6] = {1945, 1946, 1947,
-                                               1948, 1949, 1950}; /* derived name */
+static const int genEnemyLayoutSt25_aug6jun26[6] = {1945, 1946, 1947,
+                                                    1948, 1949, 1950}; /* derived name */
 
 static const int genEnemyLayoutDefault_jpn[6] = {3512, 3513, 3514,
                                                  3515, 3516, 3517}; /* derived name */
@@ -1126,8 +1126,8 @@ static const int genEnemyLayoutDefault_pal[6] = {3535, 3536, 3537,
 static const int genEnemyLayoutDefault_ntsc[6] = {3264, 3265, 3266,
                                                   3267, 3268, 3269}; /* derived name */
 
-static const int genEnemyLayoutDefault_aug6[6] = {3234, 3235, 3236,
-                                                  3237, 3238, 3239}; /* derived name */
+static const int genEnemyLayoutDefault_aug6jun26[6] = {3234, 3235, 3236,
+                                                       3237, 3238, 3239}; /* derived name */
 
 /* one table per disc, the Japanese disc's default layout ids 23 lower */
 static const QueenGenTable genEnemyTable_jpn[2] = {
@@ -1148,15 +1148,15 @@ static const QueenGenTable genEnemyTable_ntsc[2] = {
     {6, genEnemyLayoutDefault_ntsc},
 };
 
-static const QueenGenTable genEnemyTable_aug6[2] = {
+static const QueenGenTable genEnemyTable_aug6jun26[2] = {
     /* derived name */
-    {6, genEnemyLayoutSt25_aug6},
-    {6, genEnemyLayoutDefault_aug6},
+    {6, genEnemyLayoutSt25_aug6jun26},
+    {6, genEnemyLayoutDefault_aug6jun26},
 };
 
 #define genEnemyTable                                                                              \
-    PAL_JPNKORCN_NTSC_AUG6(genEnemyTable_pal, genEnemyTable_jpn, genEnemyTable_ntsc,               \
-                           genEnemyTable_aug6)
+    PAL_JPNKORCN_NTSC_AUG6JUN26(genEnemyTable_pal, genEnemyTable_jpn, genEnemyTable_ntsc,          \
+                                genEnemyTable_aug6jun26)
 
 static const char genEnemyStatFmt[] = "n_enemy_max:%d n_enemy:%d counter:%d"; /* derived name */
 
@@ -1180,7 +1180,7 @@ void gene_enemy(volatile ICO_WORD g)
     int k;
     GObj *obj;
 
-    o = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(54, 53));
+    o = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(54, 53));
     num = (o != 0) ? ((QueenBarrierWork *)GOBJ_SUB(o)->work)->damage : 0;
     tbl = (stage_no == 37) ? &genEnemyTable[0] : &genEnemyTable[1];
 
@@ -1219,7 +1219,7 @@ void gene_enemy(volatile ICO_WORD g)
                             Generator_Call(obj);
                             _ACTWait(1);
                             while (stage_CheckAnimationFinish(
-                                       PAL_JPNKORCN_NTSC_AUG6(506, 502, 435, 434)) == 0) {
+                                       PAL_JPNKORCN_NTSC_AUG6JUN26(506, 502, 435, 434)) == 0) {
                                 _ACTWait(1);
                             }
                             for (k = 0; k <= wait; k++) {
@@ -1317,10 +1317,10 @@ static inline void QueenStartAttack_inl(int flag) /* derived name */
 {
     GObj *g;
 
-    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(47, 46));
+    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46));
     ((QueenWork *)GOBJ_SUB(g)->work)->st.f.attack = flag;
 
-    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(54, 53));
+    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(54, 53));
     while (g != 0) {
         ((QueenBarrierWork *)GOBJ_SUB(g)->work)->active = 1;
         g = isysGObjSearchFromObjKindID_next(g);
@@ -1483,7 +1483,7 @@ static void subQueenBrainMain_ntsc(volatile ICO_WORD g)
     }
 }
 
-static void subQueenBrainMain_aug6(volatile ICO_WORD g)
+static void subQueenBrainMain_aug6jun26(volatile ICO_WORD g)
 {
     QueenStatus st;
     QVec rootPos;
@@ -1636,8 +1636,8 @@ void subQueenBrainMain(volatile ICO_WORD g)
         subQueenBrainMain_ntsc(g);
         return;
     }
-    if (ICO_AUG6) {
-        subQueenBrainMain_aug6(g);
+    if (ICO_AUG6JUN26) {
+        subQueenBrainMain_aug6jun26(g);
         return;
     }
     QueenStatus st;
@@ -1800,10 +1800,10 @@ static const int barrierLayoutSt25_pal[] = {2150}; /* derived name */
 
 static const int barrierLayoutSt25_ntsc[] = {1967}; /* derived name */
 
-static const int barrierLayoutSt25_aug6[] = {1943}; /* derived name */
+static const int barrierLayoutSt25_aug6jun26[] = {1943}; /* derived name */
 
 #define barrierLayoutSt25                                                                          \
-    PAL_NTSC_AUG6(barrierLayoutSt25_pal, barrierLayoutSt25_ntsc, barrierLayoutSt25_aug6)
+    PAL_NTSC_AUG6JUN26(barrierLayoutSt25_pal, barrierLayoutSt25_ntsc, barrierLayoutSt25_aug6jun26)
 
 static const int barrierLayoutDefault_jpn[] = {3504}; /* derived name */
 
@@ -1856,8 +1856,8 @@ void *InitQueenGeo(GObj *g)
     w->cloth = InitCloth4D(g, &queenClothMesh, queenClothHang);
     w->cloth2 = InitCloth4D(g, &queenClothMesh2, 0);
     ext->work = w;
-    InitMotionOrient(g, PAL_NTSC_AUG6(2407, 2105, 2080), PAL_NTSC_AUG6(2421, 2119, 2094), 12, 24,
-                     PAL_NTSC_AUG6(1072, 1011, 1013));
+    InitMotionOrient(g, PAL_NTSC_AUG6JUN26(2407, 2105, 2080), PAL_NTSC_AUG6JUN26(2421, 2119, 2094),
+                     12, 24, PAL_NTSC_AUG6JUN26(1072, 1011, 1013));
     SetLodLevel(g, 2);
     actInitialize(g);
     actInitialize_ext_charcter(g);
@@ -1868,7 +1868,7 @@ void QueenGeo(GObj *g)
 {
     QueenWork *w;
 
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         ExecMotionOrient(g);
         SetActressLight(g, 35, 44, 408);
     } else if (ICO_JPNKORCN) {
@@ -1902,7 +1902,7 @@ void QueenDL(GObj *g)
 {
     QueenWork *w;
 
-    if (!ICO_AUG6) {
+    if (!ICO_AUG6JUN26) {
         if (boyGObj != 0) {
             ACTDispLwsBoyStonize_InQueenStage(boyGObj);
         }
@@ -1948,7 +1948,7 @@ void QueenBarrierGeo(GObj *g)
     memset(&pos, 0, sizeof(pos));
     pos.f[1] = 2000.0f;
     w = GOBJ_SUB(g)->work;
-    queen = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(47, 46));
+    queen = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46));
     qw = GOBJ_SUB(queen)->work;
     if (stage_no == 37) {
         tbl = barrierLayoutSt25;
@@ -2009,14 +2009,14 @@ void QueenBarrierGeo(GObj *g)
             LightTorchOffOfWeapon(weapon);
         }
         qw->wait = 18;
-        ExecuteSEPackage(g, PAL_NTSCAUG6(95, 90));
+        ExecuteSEPackage(g, PAL_NTSCAUG6JUN26(95, 90));
         w->damage = w->damage + 1;
         if (w->damage >= 5) {
             GetRootMatrix(&m3, g);
             sceVu0CopyVector(&m3.w, &pos);
             CopyMatrix((void *)GOBJ_SUB(g)->nodeMtx, &m3);
             w->active = 0;
-            ExecuteSEPackage(boyGObj, PAL_NTSCAUG6(98, 93));
+            ExecuteSEPackage(boyGObj, PAL_NTSCAUG6JUN26(98, 93));
         }
     }
     if (qw->wait > 0) {
@@ -2209,7 +2209,7 @@ static void QueenBallGeo_ntsc(GObj *g)
     }
 }
 
-static void QueenBallGeo_aug6(GObj *g)
+static void QueenBallGeo_aug6jun26(GObj *g)
 {
     /* the root matrix */
     float m[4][4];
@@ -2314,8 +2314,8 @@ void QueenBallGeo(GObj *g)
         QueenBallGeo_ntsc(g);
         return;
     }
-    if (ICO_AUG6) {
-        QueenBallGeo_aug6(g);
+    if (ICO_AUG6JUN26) {
+        QueenBallGeo_aug6jun26(g);
         return;
     }
     /* the root matrix */
@@ -2465,7 +2465,7 @@ static void QueenBallDL_ntsc(GObj *g)
     }
 }
 
-static void QueenBallDL_aug6(GObj *g)
+static void QueenBallDL_aug6jun26(GObj *g)
 {
     QVec selfPos;
     QVec queenPos;
@@ -2514,8 +2514,8 @@ void QueenBallDL(GObj *g)
         QueenBallDL_ntsc(g);
         return;
     }
-    if (ICO_AUG6) {
-        QueenBallDL_aug6(g);
+    if (ICO_AUG6JUN26) {
+        QueenBallDL_aug6jun26(g);
         return;
     }
     QVec ballPos;
@@ -2572,7 +2572,7 @@ void actQueenStart(GObj *g)
     actCreateSubThread(subQueenControl, 21);
     actCreateSubThread(gene_enemy, 21);
     ICO_RAW(QueenVal, sub, 0x130, *(QueenVal *)&sub->motReq).motReq =
-        SetMotionRequest(g, PAL_NTSC_AUG6(270, 238, 236), sub->env.motOriReq);
+        SetMotionRequest(g, PAL_NTSC_AUG6JUN26(270, 238, 236), sub->env.motOriReq);
     GOBJ_SUB(g)->cylinderOn = 1;
 }
 
@@ -2580,10 +2580,10 @@ void QueenStartAttack(void)
 {
     GObj *g;
 
-    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(47, 46));
+    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46));
     ((QueenWork *)GOBJ_SUB(g)->work)->st.f.attack = 1;
 
-    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(54, 53));
+    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(54, 53));
     while (g != 0) {
         ((QueenBarrierWork *)GOBJ_SUB(g)->work)->active = 1;
         g = isysGObjSearchFromObjKindID_next(g);
@@ -2592,13 +2592,13 @@ void QueenStartAttack(void)
 
 int QueenInqDead(void)
 {
-    GObj *g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(47, 46));
+    GObj *g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46));
     return ((QueenWork *)GOBJ_SUB(g)->work)->st.f.dead;
 }
 
 int QueenBoysWeaponPower(void)
 {
-    GObj *g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(47, 46));
+    GObj *g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46));
     return ((QueenWork *)GOBJ_SUB(g)->work)->power;
 }
 
@@ -2612,7 +2612,7 @@ int QueenBarrierInqBreakable(void)
     QueenWork *b;
     int ret = 0;
 
-    b = GOBJ_SUB(isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6(47, 46)))->work;
+    b = GOBJ_SUB(isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46)))->work;
     if (b->power > 0 || b->wait > 0) {
         ret = 1;
     }
@@ -2643,7 +2643,7 @@ static void queenBarrierBeforeFunc_ntsc(GObj *g)
     q->num = 0;
 }
 
-static void queenBarrierBeforeFunc_aug6(GObj *g)
+static void queenBarrierBeforeFunc_aug6jun26(GObj *g)
 {
     GObjMailQueue *q = (GObjMailQueue *)&g->mailBox;
     QueenBarrierWork *w = GOBJ_SUB(g)->work;
@@ -2668,8 +2668,8 @@ void queenBarrierBeforeFunc(GObj *g)
         queenBarrierBeforeFunc_ntsc(g);
         return;
     }
-    if (ICO_AUG6) {
-        queenBarrierBeforeFunc_aug6(g);
+    if (ICO_AUG6JUN26) {
+        queenBarrierBeforeFunc_aug6jun26(g);
         return;
     }
     GObjMailQueue *q = (GObjMailQueue *)&g->mailBox;
@@ -2754,7 +2754,7 @@ static void queenBallBeforeFunc_ntsc(GObj *g)
     q->num = 0;
 }
 
-static void queenBallBeforeFunc_aug6(GObj *g)
+static void queenBallBeforeFunc_aug6jun26(GObj *g)
 {
     GObjMailQueue *q = (GObjMailQueue *)&g->mailBox;
     QueenBallWork *w = GOBJ_SUB(g)->work;
@@ -2780,8 +2780,8 @@ void queenBallBeforeFunc(GObj *g)
         queenBallBeforeFunc_ntsc(g);
         return;
     }
-    if (ICO_AUG6) {
-        queenBallBeforeFunc_aug6(g);
+    if (ICO_AUG6JUN26) {
+        queenBallBeforeFunc_aug6jun26(g);
         return;
     }
     GObjMailQueue *q = (GObjMailQueue *)&g->mailBox;

@@ -640,7 +640,7 @@ static void shadow_EntryClusterShadow(Sub15C *o, float len)
     _InitCurrentMatrix();
     shadow_getShadowVectorAverage(v, o);
     _ScaleVectorXYZ(sa, v, len);
-    _ScaleVectorXYZ(sb, v, PAL_NTSCAUG6(4.0f, 4.5f));
+    _ScaleVectorXYZ(sb, v, PAL_NTSCAUG6JUN26(4.0f, 4.5f));
 
     for (i = 0; i < o->nodeNum; i++) {
         _SetCurrentMatrix((char *)o->nodeMtx + i * 0x40);
@@ -704,7 +704,7 @@ static inline void applyCurrentMatrixV(void *dst, void *src) /* derived name */
     ico_apply_matrix_w1((float *)dst, (const float (*)[4])ico_current_matrix, (const float *)src);
 }
 
-static void shadow_EntryNormalShadow_ntscaug6(Sub15C *o, int idx, float len)
+static void shadow_EntryNormalShadow_ntscaug6jun26(Sub15C *o, int idx, float len)
 {
     float v[4];
     float sa[4];
@@ -754,8 +754,8 @@ static void shadow_EntryNormalShadow_ntscaug6(Sub15C *o, int idx, float len)
 
 static void shadow_EntryNormalShadow(Sub15C *o, int idx, float len)
 {
-    if (ICO_NTSCAUG6) {
-        shadow_EntryNormalShadow_ntscaug6(o, idx, len);
+    if (ICO_NTSCAUG6JUN26) {
+        shadow_EntryNormalShadow_ntscaug6jun26(o, idx, len);
         return;
     }
     float v[4];
@@ -1148,9 +1148,9 @@ static inline unsigned long long *emitVolumeStrip(unsigned long long *p,
     for (i = 0; i < 10; i++, sgn = -sgn, p++) {
         k = order[i];
         if (volumeStripFaceZ(i) * sgn < 0.0f) {
-            *p++ = PAL_NTSCAUG6(0x3F80000080040404LL, 0x3F80000080080808LL);
+            *p++ = PAL_NTSCAUG6JUN26(0x3F80000080040404LL, 0x3F80000080080808LL);
         } else {
-            *p++ = PAL_NTSCAUG6(0x3F80000080FCFCFCLL, 0x3F80000080F8F8F8LL);
+            *p++ = PAL_NTSCAUG6JUN26(0x3F80000080FCFCFCLL, 0x3F80000080F8F8F8LL);
         }
         v = vi[k];
         *p = (long long)v[0] | ((long long)v[1] << 16) | ((long long)v[2] << 32);
@@ -1239,7 +1239,7 @@ void shadow_RenderVolume(Sub15C *o)
         len = x->shadowLength;
     }
     /* the 2001 builds skip a volume whose stretched box is off the screen */
-    if (ICO_NTSCAUG6 && shadowVolumeOnScreen(x, len) == 0) {
+    if (ICO_NTSCAUG6JUN26 && shadowVolumeOnScreen(x, len) == 0) {
         return;
     }
     __GetCameraPos(&cam);
@@ -1352,7 +1352,7 @@ void shadow_RenderVolumeMulti(Sub15C *o, int idx)
         len = x->shadowLength;
     }
     /* the 2001 builds skip a volume whose stretched box is off the screen */
-    if (ICO_NTSCAUG6 && shadowVolumeOnScreen(x, len) == 0) {
+    if (ICO_NTSCAUG6JUN26 && shadowVolumeOnScreen(x, len) == 0) {
         return;
     }
     __GetCameraPos(&cam);
@@ -1566,7 +1566,7 @@ inline void shadow_SetLength(Sub15C *o, float len)
     }
 }
 
-static inline void shadow_Init_aug6(void)
+static inline void shadow_Init_aug6jun26(void)
 {
     killShadow = 0;
     killShadowRequest = 0;
@@ -1574,8 +1574,8 @@ static inline void shadow_Init_aug6(void)
 
 inline void shadow_Init(void)
 {
-    if (ICO_AUG6) {
-        shadow_Init_aug6();
+    if (ICO_AUG6JUN26) {
+        shadow_Init_aug6jun26();
         return;
     }
     GObj *obj;

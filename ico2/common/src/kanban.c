@@ -132,7 +132,7 @@ static inline char *get_texture_base_name(char *src) /* derived name */
     return p;
 }
 
-static inline int get_texture_no_of_property_ntscaug6(int idx) /* derived name */
+static inline int get_texture_no_of_property_ntscaug6jun26(int idx) /* derived name */
 {
     int n;
     const char *src; /* const in the Japanese build: the same code */
@@ -155,8 +155,8 @@ static inline int get_texture_no_of_property_ntscaug6(int idx) /* derived name *
 
 static inline int get_texture_no_of_property(int idx) /* derived name */
 {
-    if (ICO_NTSCAUG6) {
-        return get_texture_no_of_property_ntscaug6(idx);
+    if (ICO_NTSCAUG6JUN26) {
+        return get_texture_no_of_property_ntscaug6jun26(idx);
     }
     int n;
     char *src; /* const in the Japanese build: the same code */
@@ -191,7 +191,7 @@ static inline void init_textures_of_property_range(int first, int last) /* deriv
 
 /* the USA disc's and the August 2001 preview's key read: the buttons are read after any
    move, and Triangle (2) wins over Cross (1) */
-static inline int kanban_layout_key_ntscaug6(LtProp *pr) /* derived name */
+static inline int kanban_layout_key_ntscaug6jun26(LtProp *pr) /* derived name */
 {
     int ret;
     unsigned long long button;
@@ -222,8 +222,8 @@ static inline int kanban_layout_key(LtProp *pr) /* derived name */
     int ret = 0;
     LtProperty *e = &texProperty[pr->curItem];
 
-    if (ICO_NTSCAUG6) {
-        return kanban_layout_key_ntscaug6(pr);
+    if (ICO_NTSCAUG6JUN26) {
+        return kanban_layout_key_ntscaug6jun26(pr);
     }
     if ((pad[0].flags & 0x1000) && e->upItem > 0) {
         pr->curItem = e->upItem;
@@ -363,7 +363,7 @@ static void init_textures_of_specified_property(int first, int last)
     int no;
 
     for (i = first; i < last; i++) {
-        if (!ICO_NTSCAUG6) {
+        if (!ICO_NTSCAUG6JUN26) {
             if (!ICO_JPNKORCN) {
                 debug_StdPrintfDummy("propertyId %d\n", i);
             }
@@ -381,13 +381,13 @@ void kanbanInit(int no)
     if (no != 0) {
         init_textures_of_property_range(stageData[no].layoutFirst, stageData[no].layoutLast);
     } else {
-        init_textures_of_property_range(0, PAL_JPNKORNTSCAUG6CN(1, 4));
+        init_textures_of_property_range(0, PAL_JPNKORNTSCAUG6JUN26CN(1, 4));
         kanbanReqAllDel();
         kanbanCommonRead = 1;
     }
 }
 
-static void display_texture_ntscaug6(LtProp *pr, LtProperty *e, KanbanCol *col)
+static void display_texture_ntscaug6jun26(LtProp *pr, LtProperty *e, KanbanCol *col)
 {
     int uv[4];
     int r[4];
@@ -462,8 +462,8 @@ static void display_texture_ntscaug6(LtProp *pr, LtProperty *e, KanbanCol *col)
 
 static void display_texture(LtProp *pr, LtProperty *e, KanbanCol *col)
 {
-    if (ICO_NTSCAUG6) {
-        display_texture_ntscaug6(pr, e, col);
+    if (ICO_NTSCAUG6JUN26) {
+        display_texture_ntscaug6jun26(pr, e, col);
         return;
     }
     int uv[4];
@@ -575,7 +575,7 @@ static int fade_exec(Kanban *p)
     return ret;
 }
 
-static void display_layout_ntscaug6(Kanban *k)
+static void display_layout_ntscaug6jun26(Kanban *k)
 {
     LtProp *pr;
     int i;
@@ -598,8 +598,8 @@ static void display_layout_ntscaug6(Kanban *k)
 
 static void display_layout(Kanban *k)
 {
-    if (ICO_NTSCAUG6) {
-        display_layout_ntscaug6(k);
+    if (ICO_NTSCAUG6JUN26) {
+        display_layout_ntscaug6jun26(k);
         return;
     }
     LtProp *pr;

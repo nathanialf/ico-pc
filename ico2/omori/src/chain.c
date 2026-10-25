@@ -293,13 +293,13 @@ static void chain_simulate_term_swingready(GObj *gobj)
         debug_Printf(10, chainDebugY, 0x0FFFFFFF, "chain_simulate_term_swingready\n");
     }
     if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(0.5)) < 0) {
-        cw->pdl.ampSpeed = PAL_JPNKORNTSCAUG6CN(
+        cw->pdl.ampSpeed = PAL_JPNKORNTSCAUG6JUN26CN(
             -0.29999998f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.01f);
     } else if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(1.0)) < 0) {
-        cw->pdl.ampSpeed = PAL_JPNKORNTSCAUG6CN(
+        cw->pdl.ampSpeed = PAL_JPNKORNTSCAUG6JUN26CN(
             -1.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.05f);
     } else {
-        cw->pdl.ampSpeed = PAL_JPNKORNTSCAUG6CN(
+        cw->pdl.ampSpeed = PAL_JPNKORNTSCAUG6JUN26CN(
             -4.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.15f);
     }
     chain_simulate_term_simple(gobj);
@@ -319,19 +319,19 @@ static void chain_simulate_term_swingstart(GObj *gobj)
 
     if (h < 20.0f) {
         if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(0.3)) < 0) {
-            cw->pdl.ampSpeed = PAL_JPNKORNTSCAUG6CN(
+            cw->pdl.ampSpeed = PAL_JPNKORNTSCAUG6JUN26CN(
                 -0.29999998f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.01f);
         } else if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(1.0)) < 0) {
-            cw->pdl.ampSpeed = PAL_JPNKORNTSCAUG6CN(
+            cw->pdl.ampSpeed = PAL_JPNKORNTSCAUG6JUN26CN(
                 -6.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.2f);
         } else {
-            cw->pdl.ampSpeed = PAL_JPNKORNTSCAUG6CN(
+            cw->pdl.ampSpeed = PAL_JPNKORNTSCAUG6JUN26CN(
                 -9.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.3f);
         }
     } else {
-        if (PAL_JPNKORNTSCAUG6CN(ico_dcmp(ico_f2d(h), ICO_D(20.0)) >= 0 &&
-                                     ico_dcmp(ico_f2d(h), ICO_D(21.5)) < 0,
-                                 h == 20.0f)) {
+        if (PAL_JPNKORNTSCAUG6JUN26CN(ico_dcmp(ico_f2d(h), ICO_D(20.0)) >= 0 &&
+                                          ico_dcmp(ico_f2d(h), ICO_D(21.5)) < 0,
+                                      h == 20.0f)) {
             cw->pdl.phase = 0.0f;
             cw->pdl.ampLimit = 360.0f;
         }
@@ -340,9 +340,9 @@ static void chain_simulate_term_swingstart(GObj *gobj)
 
         cw->pdl.phase =
             cw->pdl.phase - 1.0f +
-            PAL_JPNKORCN_NTSCAUG6(cw->pdl.cycle * 0.5f / 41.0f * 30.0f /
-                                      (float)((60 - systemStatus[0] * 10) / systemStatus[1]),
-                                  cw->pdl.cycle * 0.5f / 40.0f, cw->pdl.cycle * 0.5f / 30.0f);
+            PAL_JPNKORCN_NTSCAUG6JUN26(cw->pdl.cycle * 0.5f / 41.0f * 30.0f /
+                                           (float)((60 - systemStatus[0] * 10) / systemStatus[1]),
+                                       cw->pdl.cycle * 0.5f / 40.0f, cw->pdl.cycle * 0.5f / 30.0f);
     }
     chain_simulate_term_simple(gobj);
 }
@@ -454,7 +454,7 @@ static void chain_simulate_hangstart(GObj *gobj)
         chainDebugY = chainDebugY + 10;
         debug_Printf(10, chainDebugY, 0x0FFFFFFF, "chain_simulate_hangstart\n");
     }
-    cw->pdl.ampSpeed = PAL_JPNKORNTSCAUG6CN(
+    cw->pdl.ampSpeed = PAL_JPNKORNTSCAUG6JUN26CN(
         -1.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]), -0.05f);
     chain_simulate_term_simple(gobj);
 }
@@ -812,7 +812,7 @@ static ChainRecord *InitChainGeo_ntsc(GObj *gobj, ChainGeoReq *req)
     return cw;
 }
 
-static ChainRecord *InitChainGeo_aug6(GObj *gobj, ChainGeoReq *req)
+static ChainRecord *InitChainGeo_aug6jun26(GObj *gobj, ChainGeoReq *req)
 {
     ChainRecord *cw;
     int n;
@@ -937,8 +937,8 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
     if (ICO_NTSC) {
         return InitChainGeo_ntsc(gobj, req);
     }
-    if (ICO_AUG6) {
-        return InitChainGeo_aug6(gobj, req);
+    if (ICO_AUG6JUN26) {
+        return InitChainGeo_aug6jun26(gobj, req);
     }
     ChainRecord *cw;
     int n;
@@ -1122,7 +1122,7 @@ extern ChainParaRow motionKind[];
 static void TestChainUpDown(GObj *gobj, GObj *boy);
 
 /* the simulation mode the boy's motion selects, for ChainGeo */
-static inline int GetChainSimulateMode_ntscaug6(GObj *gobj) /* derived name */
+static inline int GetChainSimulateMode_ntscaug6jun26(GObj *gobj) /* derived name */
 {
     ChainRecord *cw = GOBJ_SUB(gobj)->work;
     int mode = 1;
@@ -1164,8 +1164,8 @@ static inline int GetChainSimulateMode_ntscaug6(GObj *gobj) /* derived name */
 
 static inline int GetChainSimulateMode(GObj *gobj) /* derived name */
 {
-    if (ICO_NTSCAUG6) {
-        return GetChainSimulateMode_ntscaug6(gobj);
+    if (ICO_NTSCAUG6JUN26) {
+        return GetChainSimulateMode_ntscaug6jun26(gobj);
     }
     ChainRecord *cw = GOBJ_SUB(gobj)->work;
     int mode = 1;
@@ -1216,8 +1216,8 @@ static inline int GetChainSimulateMode(GObj *gobj) /* derived name */
 
 /* the hand-proximity probe down the chain, for ChainGeo; the caller reads the
  * result as one byte */
-static inline unsigned char isChainHitByHand_aug6(GObj *gobj, float *p, float *v, float *o,
-                                                  float lim) /* derived name */
+static inline unsigned char isChainHitByHand_aug6jun26(GObj *gobj, float *p, float *v, float *o,
+                                                       float lim) /* derived name */
 {
     (void)lim; /* PC port: the European parameter, unused here */
     ChainRecord *cw = GOBJ_SUB(gobj)->work;
@@ -1252,8 +1252,8 @@ static inline unsigned char isChainHitByHand_aug6(GObj *gobj, float *p, float *v
 static inline unsigned char isChainHitByHand(GObj *gobj, float *p, float *v, float *o,
                                              float lim) /* derived name */
 {
-    if (ICO_AUG6) {
-        return isChainHitByHand_aug6(gobj, p, v, o, lim);
+    if (ICO_AUG6JUN26) {
+        return isChainHitByHand_aug6jun26(gobj, p, v, o, lim);
     }
     ChainRecord *cw = GOBJ_SUB(gobj)->work;
     float d[4];
@@ -1454,7 +1454,7 @@ static void ChainGeo_ntsc(GObj *gobj)
     }
 }
 
-static void ChainGeo_aug6(GObj *gobj)
+static void ChainGeo_aug6jun26(GObj *gobj)
 {
     float p[4];
     float v[4];
@@ -1476,7 +1476,7 @@ static void ChainGeo_aug6(GObj *gobj)
 
     if (boyGObj != 0) {
         GetRootPositionHandExtra(boyGObj, p);
-        if (isChainHitByHand_aug6(gobj, p, v, test_CURRENTORIENT(boyGObj), 0.0f)) {
+        if (isChainHitByHand_aug6jun26(gobj, p, v, test_CURRENTORIENT(boyGObj), 0.0f)) {
             iosOmSendMail(boyGObj, 21, gobj);
         }
         if (_DistSqGV(p, cw->rootPos) < 900.0f) {
@@ -1623,8 +1623,8 @@ void ChainGeo(GObj *gobj)
         ChainGeo_ntsc(gobj);
         return;
     }
-    if (ICO_AUG6) {
-        ChainGeo_aug6(gobj);
+    if (ICO_AUG6JUN26) {
+        ChainGeo_aug6jun26(gobj);
         return;
     }
     float p[4];
@@ -1946,7 +1946,7 @@ static inline void SetChainClimbNodePoint(GObj *obj, ChainClimbWork *rec) /* der
     rec->node[0] = *(float *)(n * 64 + ((ChainExtPtr *)&obj->dobj)->sub->nodeMtx + 48); rec->node[1] = *(float *)(n * 64 + ((ChainExtPtr *)&obj->dobj)->sub->nodeMtx + 52); rec->node[2] = *(float *)(n * 64 + ((ChainExtPtr *)&obj->dobj)->sub->nodeMtx + 56);
 }
 
-static inline float *PushChainClimbRoot_ntscaug6(GObj *obj, float *pos, float *out, float fwd) /* derived name */
+static inline float *PushChainClimbRoot_ntscaug6jun26(GObj *obj, float *pos, float *out, float fwd) /* derived name */
 {
     /* pushes the root out from the chain point along the orientation and
      * returns the pushed point, which no caller reads.  The work vector is
@@ -2014,7 +2014,7 @@ static inline int GetChainClimbMode(GObj *boy, int motion) /* derived name */
 }
 
 /* the 2001 builds' climb mode (a GNU nested function there) */
-static inline int GetChainClimbMode_ntscaug6(GObj *boy, int motion) /* derived name */
+static inline int GetChainClimbMode_ntscaug6jun26(GObj *boy, int motion) /* derived name */
 {
     int mode = -1;
     switch (motion) {
@@ -2038,7 +2038,7 @@ static inline int GetChainClimbMode_ntscaug6(GObj *boy, int motion) /* derived n
     return mode;
 }
 
-static void TestChainUpDown_ntscaug6(GObj *gobj, GObj *boy)
+static void TestChainUpDown_ntscaug6jun26(GObj *gobj, GObj *boy)
 {
 
     float v[4], org[4], w[4];
@@ -2051,7 +2051,7 @@ static void TestChainUpDown_ntscaug6(GObj *gobj, GObj *boy)
      * ChainExtPtr union as in the node-point helper.
      */
 
-    int mode = GetChainClimbMode_ntscaug6(boy, GOBJ_SUB(boy)->ctrl.motion);
+    int mode = GetChainClimbMode_ntscaug6jun26(boy, GOBJ_SUB(boy)->ctrl.motion);
 
     switch (mode) {
     case 4: {
@@ -2070,7 +2070,7 @@ static void TestChainUpDown_ntscaug6(GObj *gobj, GObj *boy)
 
         v[1] = v[1] < cw->rootPos[1] ? cw->rootPos[1] : (cw->endPos[1] < v[1] ? cw->endPos[1] : v[1]);
 
-        PushChainClimbRoot_ntscaug6(boy, v, w, -15.0f);
+        PushChainClimbRoot_ntscaug6jun26(boy, v, w, -15.0f);
 
         ((ChainClimbWork *)chainClimb)->phase = ((ChainClimbWork *)chainClimb)->phase + 1;
 
@@ -2099,7 +2099,7 @@ static void TestChainUpDown_ntscaug6(GObj *gobj, GObj *boy)
 
         v[1] = v[1] < cw->node2Pos[1] ? cw->node2Pos[1] : (cw->endPos[1] < v[1] ? cw->endPos[1] : v[1]);
 
-        PushChainClimbRoot_ntscaug6(boy, v, w, -15.0f);
+        PushChainClimbRoot_ntscaug6jun26(boy, v, w, -15.0f);
 
         ((ChainClimbWork *)chainClimb)->phase = ((ChainClimbWork *)chainClimb)->phase + 1;
 
@@ -2127,7 +2127,7 @@ static void TestChainUpDown_ntscaug6(GObj *gobj, GObj *boy)
 
         v[1] = v[1] < cw->node2Pos[1] ? cw->node2Pos[1] : (cw->endPos[1] < v[1] ? cw->endPos[1] : v[1]);
 
-        PushChainClimbRoot_ntscaug6(boy, v, org, -15.0f);
+        PushChainClimbRoot_ntscaug6jun26(boy, v, org, -15.0f);
         ((ChainClimbWork *)chainClimb)->phase = ((ChainClimbWork *)chainClimb)->phase + 1;
         PlumbPointUpdateChain(gobj, v);
     } break;
@@ -2157,8 +2157,8 @@ static void TestChainUpDown_ntscaug6(GObj *gobj, GObj *boy)
 
 static void TestChainUpDown(GObj *gobj, GObj *boy)
 {
-    if (ICO_NTSCAUG6) {
-        TestChainUpDown_ntscaug6(gobj, boy);
+    if (ICO_NTSCAUG6JUN26) {
+        TestChainUpDown_ntscaug6jun26(gobj, boy);
         return;
     }
     float v[4], org[4], w[4], d[4], hw[4], hd[4];
@@ -2514,9 +2514,9 @@ void _GetCorrectOrientOfChain(float *out, GObj *gobj, float *dir)
     }
 }
 
-static inline void chain_sub_simulate_aug6(GObj *gobj, ChainNode *nd, int from, int to,
-                                           unsigned char flag, int flag2, float grav, float len,
-                                           float damp)
+static inline void chain_sub_simulate_aug6jun26(GObj *gobj, ChainNode *nd, int from, int to,
+                                                unsigned char flag, int flag2, float grav,
+                                                float len, float damp)
 {
     float d[4];
     float t[4];
@@ -2558,8 +2558,8 @@ static inline void chain_sub_simulate_aug6(GObj *gobj, ChainNode *nd, int from, 
 static void chain_sub_simulate(GObj *gobj, ChainNode *nd, int from, int to, unsigned char flag,
                                int flag2, float grav, float len, float damp)
 {
-    if (ICO_AUG6) {
-        chain_sub_simulate_aug6(gobj, nd, from, to, flag, flag2, grav, len, damp);
+    if (ICO_AUG6JUN26) {
+        chain_sub_simulate_aug6jun26(gobj, nd, from, to, flag, flag2, grav, len, damp);
         return;
     }
     float d[4];

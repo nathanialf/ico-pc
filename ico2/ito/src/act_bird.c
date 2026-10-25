@@ -141,7 +141,7 @@ static void birdBeforeFunc_ntsc(GObj *self)
     act->env.motOriReq = *(MotOriReq *)&GOBJ_SUB(self)->root.wall;
 }
 
-static void birdBeforeFunc_aug6(GObj *self)
+static void birdBeforeFunc_aug6jun26(GObj *self)
 {
     Act *act = GOBJ_ACT(self);
     BirdWork *w = GOBJ_SUB(self)->work;
@@ -218,8 +218,8 @@ void birdBeforeFunc(GObj *self)
         birdBeforeFunc_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        birdBeforeFunc_aug6(self);
+    if (ICO_AUG6JUN26) {
+        birdBeforeFunc_aug6jun26(self);
         return;
     }
     Act *act = GOBJ_ACT(self);
@@ -909,7 +909,7 @@ static void subBirdBrainMain_ntsc(void *volatile gobj)
     }
 }
 
-static void subBirdBrainMain_aug6(void *volatile gobj)
+static void subBirdBrainMain_aug6jun26(void *volatile gobj)
 {
     float startPos[4];
     float lastPos[4];
@@ -1431,8 +1431,8 @@ void subBirdBrainMain(void *volatile gobj)
         subBirdBrainMain_ntsc(gobj);
         return;
     }
-    if (ICO_AUG6) {
-        subBirdBrainMain_aug6(gobj);
+    if (ICO_AUG6JUN26) {
+        subBirdBrainMain_aug6jun26(gobj);
         return;
     }
     float startPos[4];
@@ -1959,7 +1959,7 @@ void subBirdBrainMain(void *volatile gobj)
     }
 }
 
-static inline void subBirdControl_aug6(void *volatile gobj)
+static inline void subBirdControl_aug6jun26(void *volatile gobj)
 {
     _ACTWait(1);
     while (1) {
@@ -1971,8 +1971,8 @@ static inline void subBirdControl_aug6(void *volatile gobj)
 
 inline void subBirdControl(void *volatile gobj)
 {
-    if (ICO_AUG6) {
-        subBirdControl_aug6(gobj);
+    if (ICO_AUG6JUN26) {
+        subBirdControl_aug6jun26(gobj);
         return;
     }
     _ACTWait(1);
@@ -1999,7 +1999,7 @@ inline void actBirdStart(void *gobj)
     actCreateSubThread(subBirdBrainMain, 20);
     actCreateSubThread(subBirdControl, 21);
     actCreateSubThread(subBirdCollision, 21);
-    act->motReq = SetMotionRequest(gobj, PAL_NTSC_AUG6(270, 238, 236), act->env.motOriReq);
+    act->motReq = SetMotionRequest(gobj, PAL_NTSC_AUG6JUN26(270, 238, 236), act->env.motOriReq);
 }
 
 static void Debug_WireString_Bird(float *pos, char *fmt, ...)
@@ -2064,7 +2064,7 @@ void BirdDL(void *gobj)
             w->bga = 0;
         }
     }
-    if (stage_no == PAL_JPNKORNTSCAUG6CN(84, 82)) {
+    if (stage_no == PAL_JPNKORNTSCAUG6JUN26CN(84, 82)) {
         lightning_test();
     }
 }
@@ -2073,12 +2073,13 @@ inline BirdWork *InitBirdGeo(GObj *gobj, void *home)
 {
     BirdWork *w;
 
-    w = iosMallocDebug(ios_partition_sugipon, sizeof(BirdWork), __FILE__, PAL_AUG6(978, 959));
+    w = iosMallocDebug(ios_partition_sugipon, sizeof(BirdWork), __FILE__, PAL_AUG6JUN26(978, 959));
     memset(w, 0, sizeof(BirdWork));
     CopyVector(w->home, home);
     w->scared = 0;
-    InitMotionOrient(gobj, PAL_NTSC_AUG6(2421, 2119, 2094), PAL_NTSC_AUG6(2467, 2165, 2138), -1, -1,
-                     PAL_NTSC_AUG6(1134, 1073, 1075));
+    InitMotionOrient(gobj, PAL_NTSC_AUG6JUN26(2421, 2119, 2094),
+                     PAL_NTSC_AUG6JUN26(2467, 2165, 2138), -1, -1,
+                     PAL_NTSC_AUG6JUN26(1134, 1073, 1075));
 
     GOBJ_SUB(gobj)->ctrl.floorFit = 1;
     GOBJ_SUB(gobj)->ctrl.cliffWallCheck = 0;
@@ -2090,7 +2091,7 @@ inline BirdWork *InitBirdGeo(GObj *gobj, void *home)
     ((IntFloat *)&GOBJ_SUB(gobj)->ctrl.lastFrame)->f =
         ((IntFloat *)&GOBJ_SUB(gobj)->ctrl.animFrame)->f;
     GOBJ_SUB(gobj)->ctrl.waterDrag = 0;
-    if (!ICO_AUG6) {
+    if (!ICO_AUG6JUN26) {
         SetLodLevel(gobj, 3);
     }
     return w;

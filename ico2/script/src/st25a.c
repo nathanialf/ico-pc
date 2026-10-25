@@ -102,24 +102,25 @@ static ActMail queen_before_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail queen_before_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail queen_before_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail queen_before_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
 #define queen_before_mes                                                                           \
-    PAL_NTSC_AUG6(queen_before_mes_pal, queen_before_mes_ntsc, queen_before_mes_aug6)
+    PAL_NTSC_AUG6JUN26(queen_before_mes_pal, queen_before_mes_ntsc, queen_before_mes_aug6jun26)
 
 ActMail queen_appear_mes_pal[2] = {{430}, {429}};
 
 ActMail queen_appear_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-ActMail queen_appear_mes_aug6[2] = {{393}, {392}}; /* derived name */
+ActMail queen_appear_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
 static ActMail queen_talk_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail queen_talk_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail queen_talk_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail queen_talk_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define queen_talk_mes PAL_NTSC_AUG6(queen_talk_mes_pal, queen_talk_mes_ntsc, queen_talk_mes_aug6)
+#define queen_talk_mes                                                                             \
+    PAL_NTSC_AUG6JUN26(queen_talk_mes_pal, queen_talk_mes_ntsc, queen_talk_mes_aug6jun26)
 
 static ActMail queen_dead_ready_mes_pal[2] = {{430}, {429}}; /* derived name */
 
@@ -131,18 +132,19 @@ static ActMail queen_dead_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail queen_dead_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail queen_dead_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail queen_dead_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define queen_dead_mes PAL_NTSC_AUG6(queen_dead_mes_pal, queen_dead_mes_ntsc, queen_dead_mes_aug6)
+#define queen_dead_mes                                                                             \
+    PAL_NTSC_AUG6JUN26(queen_dead_mes_pal, queen_dead_mes_ntsc, queen_dead_mes_aug6jun26)
 
 static ActMail queen_attack_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail queen_attack_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail queen_attack_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail queen_attack_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
 #define queen_attack_mes                                                                           \
-    PAL_NTSC_AUG6(queen_attack_mes_pal, queen_attack_mes_ntsc, queen_attack_mes_aug6)
+    PAL_NTSC_AUG6JUN26(queen_attack_mes_pal, queen_attack_mes_ntsc, queen_attack_mes_aug6jun26)
 
 static ActMail elev_up_mes[2] = {{430}, {429}}; /* derived name */
 
@@ -167,36 +169,36 @@ void actSt25aQueenAppear(GObj *volatile self)
     Act *act = (Act *)actInitialize(self);
 
     _ACTWait(1);
-    if (gflagChk(PAL_AUG6(302, 301)) == 0) {
+    if (gflagChk(PAL_AUG6JUN26(302, 301)) == 0) {
         ScpCallCameraSetTarget(3834.0f, -888.0f, 0.0f);
-        scpSearchGobj(PAL_AUG6(1966, 1942))->active = 0;
-        stage_SetLoopFlag(PAL_AUG6(484, 483), 0);
+        scpSearchGobj(PAL_AUG6JUN26(1966, 1942))->active = 0;
+        stage_SetLoopFlag(PAL_AUG6JUN26(484, 483), 0);
         queen_appear_mes[0].func = actSt25aQueenAppearChk;
         act->mail = queen_appear_mes;
-        ACTSendMailCorrect(self, PAL_AUG6(397, 393));
+        ACTSendMailCorrect(self, PAL_AUG6JUN26(397, 393));
         _ACTWait(0);
         return;
     }
-    scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(46, 0, PAL_AUG6(484, 483), 0);
-    scpSearchGobj(PAL_AUG6(1966, 1942))->active = 1;
-    scpPlayMot(scpSearchGobj(PAL_AUG6(1966, 1942)), PAL_AUG6(1043, 1045));
+    scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(46, 0, PAL_AUG6JUN26(484, 483), 0);
+    scpSearchGobj(PAL_AUG6JUN26(1966, 1942))->active = 1;
+    scpPlayMot(scpSearchGobj(PAL_AUG6JUN26(1966, 1942)), PAL_AUG6JUN26(1043, 1045));
     tex_SetUVScroll(faceShadowTex, 0.0f, 0.0f, 0.25f, 0.0625f, 0.8f, 0.8f, 1);
     tex_SetUVScroll(faceShadowTex00, 0.0f, 0.0f, 0.25f, 0.0625f, 0.45f, 0.45f, 1);
     ScpCallCameraSetTarget(3834.0f, -888.0f, 0.0f);
-    stage_SetAnimation(PAL_AUG6(135, 134), 0, -1);
-    stage_SetAnimation(PAL_AUG6(138, 137), 1, 0);
+    stage_SetAnimation(PAL_AUG6JUN26(135, 134), 0, -1);
+    stage_SetAnimation(PAL_AUG6JUN26(138, 137), 1, 0);
 }
 
 void actSt25aQueenAppearChk(GObj *volatile self)
 {
     while (scpTriggerFloorAttr(boyGObj, 0x2000000) == 0 ||
-           gflagChk(PAL_NTSC_AUG6(331, 301, 300)) == 0) {
+           gflagChk(PAL_NTSC_AUG6JUN26(331, 301, 300)) == 0) {
         _ACTWait(1);
     }
     if (ICO_NTSC) {
         enable_game_pause = 0;
         gflagOn(302);
-    } else if (ICO_AUG6) {
+    } else if (ICO_AUG6JUN26) {
         gflagOn(301);
     } else {
         enable_game_pause = 0;
@@ -217,21 +219,22 @@ void actConte11(GObj *volatile self)
     Vec4St25A ofs;
     float dir[4];
 
-    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(55, 52, 51));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6JUN26(55, 52, 51));
     scpPlayStart(boyGObj);
 
-    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(764, 760, 690, 689), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(764, 760, 690, 689), 1, 0);
 
-    scpPlayMot(boyGObj, PAL_NTSCAUG6(400, 394));
-    scpSearchGobj(PAL_NTSC_AUG6(2149, 1966, 1942))->active = 1;
-    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2149, 1966, 1942)), PAL_NTSC_AUG6(1104, 1043, 1045));
+    scpPlayMot(boyGObj, PAL_NTSCAUG6JUN26(400, 394));
+    scpSearchGobj(PAL_NTSC_AUG6JUN26(2149, 1966, 1942))->active = 1;
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6JUN26(2149, 1966, 1942)),
+               PAL_NTSC_AUG6JUN26(1104, 1043, 1045));
 
     _ACTWait(1);
-    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(156, 152, 135, 134), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(156, 152, 135, 134), 1, 0);
 
     if (ICO_NTSC) {
         scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(46, 0, 484, 0);
-    } else if (ICO_AUG6) {
+    } else if (ICO_AUG6JUN26) {
         stage_SetLoopFlag(483, 1);
         stage_SetAnimation(483, 1, 0);
     } else {
@@ -241,7 +244,7 @@ void actConte11(GObj *volatile self)
     if (ICO_NTSC) {
         stage_SetLoopFlag(484, 1);
         stage_SetAnimation(484, 1, 0);
-    } else if (ICO_AUG6) {
+    } else if (ICO_AUG6JUN26) {
         scpLinkBGAtoKindTargetSkeltonWithLocalRotationFlag(46, 0, 483, 0);
     } else {
         stage_SetLoopFlag(PAL_JPNKORCN(555, 551), 1);
@@ -251,12 +254,12 @@ void actConte11(GObj *volatile self)
     tex_SetUVScroll(faceShadowTex, 0.0f, 0.0f, 0.25f, 0.0625f, 0.99f, 0.99f, 1);
     tex_SetUVScroll(faceShadowTex00, 0.0f, 0.0f, 0.25f, 0.0625f, 0.1f, 0.1f, 1);
 
-    while (PAL_JPNKORCN_NTSC_AUG6(
+    while (PAL_JPNKORCN_NTSC_AUG6JUN26(
                stage_ContinueAnimation(764, 765), stage_ContinueAnimation(760, 761),
                stage_ContinueAnimation(690, 691), stage_ContinueAnimation(689, 690)) == 0) {
         _ACTWait(1);
     }
-    while (stage_CheckAnimationFrame(PAL_JPNKORCN_NTSC_AUG6(765, 761, 691, 690), 10, 0) == 0) {
+    while (stage_CheckAnimationFrame(PAL_JPNKORCN_NTSC_AUG6JUN26(765, 761, 691, 690), 10, 0) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
@@ -264,7 +267,8 @@ void actConte11(GObj *volatile self)
     tex_SetUVScroll(faceShadowTex, 0.0f, 0.0f, 0.25f, 0.0625f, 0.8f, 0.8f, 1);
     tex_SetUVScroll(faceShadowTex00, 0.0f, 0.0f, 0.25f, 0.0625f, 0.45f, 0.45f, 1);
 
-    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2149, 1966, 1942)), PAL_NTSC_AUG6(1105, 1044, 1046));
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6JUN26(2149, 1966, 1942)),
+               PAL_NTSC_AUG6JUN26(1105, 1044, 1046));
 
     scpPlayMot(boyGObj, 0);
     ofs = sekikaOfs;
@@ -272,14 +276,14 @@ void actConte11(GObj *volatile self)
     scpPlayMotDir(boyGObj, dir);
 
     SetCameraFlag_LwsCutBack();
-    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6(765, 761, 691, 690)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6JUN26(765, 761, 691, 690)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     scpSekizouCheckPoint();
 
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         lt_switch_layout(PAL_JPNKORCN(54, 51));
 
         _ACTWait(60);
@@ -291,7 +295,7 @@ void actConte11(GObj *volatile self)
     if (ICO_NTSC) {
         lt_switch_layout(50);
         enable_game_pause = 1;
-    } else if (ICO_AUG6) {
+    } else if (ICO_AUG6JUN26) {
         lt_switch_layout(50);
     } else {
         enable_game_pause = 1;
@@ -324,13 +328,13 @@ void actSt25aQueenTalkChk(GObj *volatile self)
     conte12 = sd2 = 0;
 
     while (scpTriggerFloorAttr(boyGObj, 0x3000000) == 0 ||
-           gflagChk(PAL_NTSC_AUG6(332, 302, 301)) == 0) {
+           gflagChk(PAL_NTSC_AUG6JUN26(332, 302, 301)) == 0) {
         _ACTWait(1);
     }
 
     iosPadActStopAll();
 
-    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(55, 52, 51));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6JUN26(55, 52, 51));
     scpBoyControlReadDisable = 1;
 
     scpPlayMotReq(boyGObj, 1);
@@ -343,9 +347,9 @@ void actSt25aQueenTalkChk(GObj *volatile self)
         _ACTWait(1);
     }
 
-    gflagOn(PAL_NTSC_AUG6(333, 303, 302));
+    gflagOn(PAL_NTSC_AUG6JUN26(333, 303, 302));
 
-    scpAdpcmPlayRequestFunc(PAL_NTSCAUG6(40, 39), &conte12, 1, 1, 1);
+    scpAdpcmPlayRequestFunc(PAL_NTSCAUG6JUN26(40, 39), &conte12, 1, 1, 1);
     while (conte12 == 0) {
         _ACTWait(1);
     }
@@ -365,7 +369,7 @@ void actSt25aQueenTalkChk(GObj *volatile self)
     if (cancel != 0) {
         if (ICO_NTSC) {
             scpAdpcmFadeClose(conte12, 256);
-        } else if (ICO_AUG6) {
+        } else if (ICO_AUG6JUN26) {
             scpAdpcmFadeClose(conte12, 192);
         } else {
             scpAdpcmFadeCloseFunc(&conte12, 256);
@@ -393,7 +397,7 @@ void actSt25aQueenTalkChk(GObj *volatile self)
         DeleteBoyWeapon();
         if (ICO_NTSC) {
             scpLinkBGAtoLayoutedTarget(1975, 423);
-        } else if (ICO_AUG6) {
+        } else if (ICO_AUG6JUN26) {
             scpLinkBGAtoLayoutedTarget(1951, 422);
         } else {
             scpLinkBGAtoLayoutedTarget(2158, PAL_JPNKORCN(487, 483));
@@ -402,7 +406,7 @@ void actSt25aQueenTalkChk(GObj *volatile self)
         if (ICO_NTSC) {
             scpSearchGobj(1975)->active = 1;
             stage_SetAnimation(136, -1, -2);
-        } else if (ICO_AUG6) {
+        } else if (ICO_AUG6JUN26) {
             scpSearchGobj(1951)->active = 1;
             stage_SetAnimation(135, -1, -2);
         } else {
@@ -415,7 +419,7 @@ void actSt25aQueenTalkChk(GObj *volatile self)
             stage_SetAnimation(485, 0, -1);
             stage_SetAnimation(489, 0, -1);
             stage_SetAnimation(490, 0, -1);
-        } else if (ICO_AUG6) {
+        } else if (ICO_AUG6JUN26) {
             stage_SetAnimation(484, 0, -1);
             stage_SetAnimation(488, 0, -1);
             stage_SetAnimation(489, 0, -1);
@@ -432,7 +436,7 @@ void actSt25aQueenTalkChk(GObj *volatile self)
             }
         }
 
-        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(801, 797, 727, 726), 1, -1);
+        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(801, 797, 727, 726), 1, -1);
         jimakuUndisp(&jimaku_msg);
 
         w.v[0] = cancelBoyPos;
@@ -440,7 +444,7 @@ void actSt25aQueenTalkChk(GObj *volatile self)
 
         if (eventDone == 0) {
             QueenStartAttack();
-            gflagOn(PAL_NTSC_AUG6(334, 304, 303));
+            gflagOn(PAL_NTSC_AUG6JUN26(334, 304, 303));
         }
 
         _ACTWait(1);
@@ -448,22 +452,23 @@ void actSt25aQueenTalkChk(GObj *volatile self)
         scpFadeIn(3.0f);
     }
 
-    gflagOn(PAL_NTSC_AUG6(335, 305, 304));
+    gflagOn(PAL_NTSC_AUG6JUN26(335, 305, 304));
 
-    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6(2149, 1966, 1942)), PAL_NTSC_AUG6(1072, 1011, 1013));
-    scpPlayPosSet(scpSearchGobj(PAL_NTSC_AUG6(2149, 1966, 1942)), 1650.0f, 625.0f, 0.0f);
+    scpPlayMot(scpSearchGobj(PAL_NTSC_AUG6JUN26(2149, 1966, 1942)),
+               PAL_NTSC_AUG6JUN26(1072, 1011, 1013));
+    scpPlayPosSet(scpSearchGobj(PAL_NTSC_AUG6JUN26(2149, 1966, 1942)), 1650.0f, 625.0f, 0.0f);
 
     memset(w.v[1].f, 0, 16);
     w.v[1].f[3] = 1.0f;
     sceVu0SubVector(w.v[2].f, w.v[1].f,
-                    test_CURRENTROOT(scpSearchGobj(PAL_NTSC_AUG6(2149, 1966, 1942))));
-    scpPlayMotDir(scpSearchGobj(PAL_NTSC_AUG6(2149, 1966, 1942)), w.v[2].f);
-    scpPlayEnd(scpSearchGobj(PAL_NTSC_AUG6(2149, 1966, 1942)));
+                    test_CURRENTROOT(scpSearchGobj(PAL_NTSC_AUG6JUN26(2149, 1966, 1942))));
+    scpPlayMotDir(scpSearchGobj(PAL_NTSC_AUG6JUN26(2149, 1966, 1942)), w.v[2].f);
+    scpPlayEnd(scpSearchGobj(PAL_NTSC_AUG6JUN26(2149, 1966, 1942)));
 
     scpPlayMot(boyGObj, 0);
     scpPlayEnd(boyGObj);
     scpBoyControlReadDisable = 0;
-    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(54, 51, 50));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6JUN26(54, 51, 50));
 
     CameraSetCameraSet(51);
 
@@ -471,13 +476,13 @@ void actSt25aQueenTalkChk(GObj *volatile self)
         _ACTWait(1);
     }
 
-    scpAdpcmPlayRequestFunc(PAL_NTSCAUG6(41, 40), &sd2, 1, 0, 1);
+    scpAdpcmPlayRequestFunc(PAL_NTSCAUG6JUN26(41, 40), &sd2, 1, 0, 1);
 
-    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(159, 155, 138, 137), -1, -2);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(159, 155, 138, 137), -1, -2);
 
-    stage_SetLoopFlag(PAL_JPNKORCN_NTSC_AUG6(160, 156, 139, 138), 1);
+    stage_SetLoopFlag(PAL_JPNKORCN_NTSC_AUG6JUN26(160, 156, 139, 138), 1);
 
-    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(160, 156, 139, 138), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(160, 156, 139, 138), 1, 0);
 }
 
 static void actConte12_ntsc(GObj *volatile self)
@@ -607,7 +612,7 @@ static void actConte12_ntsc(GObj *volatile self)
     _ACTWait(0);
 }
 
-static void actConte12_aug6(GObj *volatile self)
+static void actConte12_aug6jun26(GObj *volatile self)
 {
     conte12Flag = 0;
 
@@ -739,8 +744,8 @@ void actConte12(GObj *volatile self)
         actConte12_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actConte12_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actConte12_aug6jun26(self);
         return;
     }
     conte12Flag = 0;
@@ -1144,7 +1149,7 @@ static void actSt25aQueenDeadChk_ntsc(GObj *volatile self)
     RequestStageChange(4, boyGObj, 0, 1.0f, 8.0f);
 }
 
-static void actSt25aQueenDeadChk_aug6(GObj *volatile self)
+static void actSt25aQueenDeadChk_aug6jun26(GObj *volatile self)
 {
     unsigned int i;
 
@@ -1288,8 +1293,8 @@ void actSt25aQueenDeadChk(GObj *volatile self)
         actSt25aQueenDeadChk_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actSt25aQueenDeadChk_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actSt25aQueenDeadChk_aug6jun26(self);
         return;
     }
     while (QueenInqDead() == 0) {
@@ -1555,7 +1560,7 @@ static void actSt25aQueenBefore_ntsc(GObj *volatile self)
     }
 }
 
-static void actSt25aQueenBefore_aug6(GObj *volatile self)
+static void actSt25aQueenBefore_aug6jun26(GObj *volatile self)
 {
     GObj *x = self;
     Act *sub = actInitialize(self);
@@ -1576,8 +1581,8 @@ void actSt25aQueenBefore(GObj *volatile self)
         actSt25aQueenBefore_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actSt25aQueenBefore_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actSt25aQueenBefore_aug6jun26(self);
         return;
     }
     GObj *x = self;
@@ -1604,11 +1609,11 @@ void actSt25aQueenTalk(GObj *volatile self)
 
     fightSoundProcessRequestPause();
 
-    if (gflagChk(PAL_NTSC_AUG6(333, 303, 302)) == 0) {
-        scpSearchGobj(PAL_NTSC_AUG6(2158, 1975, 1951))->active = 0;
+    if (gflagChk(PAL_NTSC_AUG6JUN26(333, 303, 302)) == 0) {
+        scpSearchGobj(PAL_NTSC_AUG6JUN26(2158, 1975, 1951))->active = 0;
         queen_talk_mes[0].func = actSt25aQueenTalkChk;
         sub->mail = queen_talk_mes;
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
         _ACTWait(0);
     }
 }
@@ -1635,7 +1640,7 @@ void actSt25aQueenDead(GObj *volatile self)
 
     queen_dead_mes[0].func = actSt25aQueenDeadChk;
     sub->mail = queen_dead_mes;
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -1648,7 +1653,7 @@ void actItouQueenAttack(GObj *volatile self)
 
     queen_attack_mes[0].func = actItouQueenAttackChk;
     sub->mail = queen_attack_mes;
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -1681,8 +1686,8 @@ void actSwordEff(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
-    scpLinkBGAtoLayoutedTarget(PAL_NTSC_AUG6(2098, 1926, 1902),
-                               PAL_JPNKORCN_NTSC_AUG6(487, 483, 423, 422));
+    scpLinkBGAtoLayoutedTarget(PAL_NTSC_AUG6JUN26(2098, 1926, 1902),
+                               PAL_JPNKORCN_NTSC_AUG6JUN26(487, 483, 423, 422));
 }
 
 void actSwordEffXL(GObj *volatile self)
@@ -1693,10 +1698,10 @@ void actSwordEffXL(GObj *volatile self)
     _ACTWait(1);
 
     if (scpGameStat_BoyWeaponkind() == 5) {
-        scpLinkBGAtoLayoutedTarget(PAL_NTSC_AUG6(2098, 1926, 1902),
-                                   PAL_JPNKORCN_NTSC_AUG6(487, 483, 423, 422));
+        scpLinkBGAtoLayoutedTarget(PAL_NTSC_AUG6JUN26(2098, 1926, 1902),
+                                   PAL_JPNKORCN_NTSC_AUG6JUN26(487, 483, 423, 422));
     } else {
-        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(487, 483, 423, 422), -1, -2);
+        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(487, 483, 423, 422), -1, -2);
     }
 }
 
@@ -1706,9 +1711,9 @@ void actSt25aQueenBeforeChk(GObj *volatile self)
     while (scpTriggerFloorAttr(boyGObj, 0x1000000) == 0) {
         _ACTWait(1);
     }
-    gflagOn(PAL_NTSC_AUG6(331, 301, 300));
+    gflagOn(PAL_NTSC_AUG6JUN26(331, 301, 300));
     jimakuBegin(&jimaku_msg);
-    scpAdpcmPlayRequestFunc(PAL_NTSCAUG6(39, 38), &conte11, 1, 1, 0);
+    scpAdpcmPlayRequestFunc(PAL_NTSCAUG6JUN26(39, 38), &conte11, 1, 1, 0);
 }
 
 void actConte11Jimaku(GObj *volatile self)
@@ -1767,8 +1772,8 @@ void actSt25aQueenDeadEvent(int x)
 void actItouQueenAttackChk(GObj *volatile self)
 {
     while (1) {
-        while (ForMotionViewer_GetCurrentMotion(scpSearchGobj(PAL_JPNKORCN_NTSC_AUG6(
-                   3526, 3503, 3255, 3225))) != PAL_NTSC_AUG6(1078, 1017, 1019)) {
+        while (ForMotionViewer_GetCurrentMotion(scpSearchGobj(PAL_JPNKORCN_NTSC_AUG6JUN26(
+                   3526, 3503, 3255, 3225))) != PAL_NTSC_AUG6JUN26(1078, 1017, 1019)) {
             _ACTWait(1);
         }
         tex_SetUVScroll(queenBallScrTexture, 0.0f, 0.0f, 0.001f, 0.01f, 0.99f, 0.99f, 1);

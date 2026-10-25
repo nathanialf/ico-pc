@@ -180,7 +180,7 @@ void ConvertCameraSet(CameraSet2 *dst, union CameraSetIn *src)
     dst->rotY = atan2f(dir[0], dir[2]) * 32768.0f / 3.14159265f;
     dst->rotX = atan2f(dir[1], FSqrt(dir[0] * dir[0] + dir[2] * dir[2])) * -32768.0f / 3.14159265f;
     dst->fov = in.f[8];
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         dst->rotZ = 0;
     }
 }
@@ -198,7 +198,7 @@ static void MakeMatrixFromCameraSet2(void *dst, CameraSet2 *cs)
     MatrixDrive_PopMatrix();
 }
 
-static void MakeCameraMatrix_ntscaug6(CameraSet2 *cs)
+static void MakeCameraMatrix_ntscaug6jun26(CameraSet2 *cs)
 {
     MatrixDrive_PushMatrix();
     sceVu0UnitMatrix(MatrixDrive_GetMatrix());
@@ -218,8 +218,8 @@ static void MakeCameraMatrix_ntscaug6(CameraSet2 *cs)
 
 void MakeCameraMatrix(CameraSet2 *cs)
 {
-    if (ICO_NTSCAUG6) {
-        MakeCameraMatrix_ntscaug6(cs);
+    if (ICO_NTSCAUG6JUN26) {
+        MakeCameraMatrix_ntscaug6jun26(cs);
         return;
     }
     float mat[16];
@@ -447,12 +447,13 @@ static InsertCameraWork insertCameraClear_ntsc = {
     /* derived name */
     0, 0, {0}, {0.0f, 0.0f, 0.0f}, {0}, {0.0f, 0.0f, 0.0f}, {0}, 0, 1, 0, 0, {0}};
 
-static InsertCameraWork insertCameraClear_aug6 = {
+static InsertCameraWork insertCameraClear_aug6jun26 = {
     /* derived name */
     0, 0, {0}, {0.0f, 0.0f, 0.0f}, {0}, {0.0f, 0.0f, 0.0f}, {0}, 0, 1, 0, {0}};
 
 #define insertCameraClear                                                                          \
-    (*PAL_NTSC_AUG6(&insertCameraClear_pal, &insertCameraClear_ntsc, &insertCameraClear_aug6))
+    (*PAL_NTSC_AUG6JUN26(&insertCameraClear_pal, &insertCameraClear_ntsc,                          \
+                         &insertCameraClear_aug6jun26))
 
 /* clear the insert-camera request */
 static inline void InsertCamera_Clear(void) /* derived name */
@@ -488,7 +489,7 @@ void InitCamera(void)
     zoomRequest = 0;
     lwsCutBack = 0;
     CameraCalclated_f = 0;
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         InsertCameraWorkingFlag = 0;
         FixViewInGameCameraFlag = 0;
         debug_zoom_per = 100;
@@ -525,7 +526,7 @@ static inline void Camctrl_Exec(void) /* derived name */
     float pos[4];
     int last;
 
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         if (camctrl.pri != 0) {
             insertCameraBlendTimer = 0;
         }
@@ -538,7 +539,7 @@ static inline void Camctrl_Exec(void) /* derived name */
         if (ICO_NTSC) {
             gamecamCutBack = last;
             InsertCameraWorkingFlag = last;
-        } else if (ICO_AUG6) {
+        } else if (ICO_AUG6JUN26) {
             gamecamCutBack = last;
         } else {
             insertCameraBlendTimer = (60 - systemStatus[0] * 10) / systemStatus[1];
@@ -577,12 +578,12 @@ static inline void InsertCamera_Step(void) /* derived name */
         if (insertCamera.count < insertCamera.frames) {
             insertCamera.count = insertCamera.count + 1;
             zoomRequest = insertCamera.zoom;
-            if (!ICO_NTSCAUG6) {
+            if (!ICO_NTSCAUG6JUN26) {
                 zoomBlend = insertCamera.blend;
             }
         } else {
             insertCamera.enable = 0;
-            gamecamCutBack = PAL_NTSCAUG6(insertCamera.cutBack, 1);
+            gamecamCutBack = PAL_NTSCAUG6JUN26(insertCamera.cutBack, 1);
         }
     }
 }
@@ -774,7 +775,7 @@ static void SetCameraMatrix_ntsc(GObj *self)
     }
 }
 
-static void SetCameraMatrix_aug6(GObj *self)
+static void SetCameraMatrix_aug6jun26(GObj *self)
 {
     float m[16];
     GObj *gobj;
@@ -955,8 +956,8 @@ void SetCameraMatrix(GObj *self)
         SetCameraMatrix_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        SetCameraMatrix_aug6(self);
+    if (ICO_AUG6JUN26) {
+        SetCameraMatrix_aug6jun26(self);
         return;
     }
     float m[16];
@@ -1297,7 +1298,7 @@ void InsertCamera_Set(float *pos, float *tgt, int frames)
         insertCamera.tgt[2] = tgt[2];
         insertCamera.enable = 1;
         insertCamera.cut = 1;
-        if (ICO_AUG6) {
+        if (ICO_AUG6JUN26) {
             insertCamera.zoom = 1;
         } else if (ICO_NTSC) {
             insertCamera.cutType = 0;
@@ -1325,7 +1326,7 @@ static void InsertCamera_SetNoraml_ntsc(float *pos, float *tgt, int frames, int 
     }
 }
 
-static void InsertCamera_SetNoraml_aug6(float *pos, float *tgt, int frames, int cutType)
+static void InsertCamera_SetNoraml_aug6jun26(float *pos, float *tgt, int frames, int cutType)
 {
     (void)cutType; /* PC port: the European parameter, unused here */
     if (InsertCamera_isEnable()) {
@@ -1345,8 +1346,8 @@ void InsertCamera_SetNoraml(float *pos, float *tgt, int frames, int cutType)
         InsertCamera_SetNoraml_ntsc(pos, tgt, frames, cutType);
         return;
     }
-    if (ICO_AUG6) {
-        InsertCamera_SetNoraml_aug6(pos, tgt, frames, cutType);
+    if (ICO_AUG6JUN26) {
+        InsertCamera_SetNoraml_aug6jun26(pos, tgt, frames, cutType);
         return;
     }
     if (InsertCamera_isEnable()) {
@@ -1380,7 +1381,7 @@ void InsertCamera_SetDetail(float *pos, float *tgt, int frames, int cutType, int
     }
 }
 
-static void InsertCamera_Exec_aug6(float *cam, int *cut, int *enable)
+static void InsertCamera_Exec_aug6jun26(float *cam, int *cut, int *enable)
 {
     *cut = 0;
     *enable = 0;
@@ -1402,9 +1403,9 @@ static void InsertCamera_Exec_aug6(float *cam, int *cut, int *enable)
 
 void InsertCamera_Exec(float *cam, int *cut, int *cutType, int *enable)
 {
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         *cutType = 0; /* PC port: the August preview has no cut type */
-        InsertCamera_Exec_aug6(cam, cut, enable);
+        InsertCamera_Exec_aug6jun26(cam, cut, enable);
         return;
     }
     *cut = 0;

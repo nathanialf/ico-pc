@@ -45,7 +45,7 @@ int audioDecCreate(AudioDec *self, int mono, int volume)
     self->iopPos = 0;
     self->word50 = 0;
 
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         /* the IOP side buffer is the sound system's heap block (s_init.c) */
         self->iopBuf = soundIopHeapAddrs;
         debug_StdPrintfDummy("adrs %d\n", soundIopHeapAddrs);

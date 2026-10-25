@@ -75,7 +75,7 @@ static EffParamDef effParam_pal[] = {
     {0},
 }; /* derived name */
 
-static EffParamDef effParam_ntscaug6[] = {
+static EffParamDef effParam_ntscaug6jun26[] = {
     {"U OFFSET", 0x80, 0, 0, 0, 0, 3},
     {"V OFFSET", 0x84, 0, 0, 0, 0, 3},
     {"DRAIN TYPE", 4, drainTypeName, 0, 1, 0, 1},
@@ -110,7 +110,7 @@ static EffParamDef effParam_ntscaug6[] = {
     {0},
 }; /* derived name */
 
-#define effParam PAL_NTSCAUG6(effParam_pal, effParam_ntscaug6)
+#define effParam PAL_NTSCAUG6JUN26(effParam_pal, effParam_ntscaug6jun26)
 
 static void _dispParam(int *pkg, int idx, int x, int y, int col)
 {
@@ -166,9 +166,9 @@ static int effectToolDirty[64]; /* derived name */
 
 static float effectToolPos_pal[4]; /* derived name */
 
-static sceVu0FVECTOR effectToolPos_aug6; /* derived name */
+static sceVu0FVECTOR effectToolPos_aug6jun26; /* derived name */
 
-#define effectToolPos PAL_AUG6(effectToolPos_pal, effectToolPos_aug6)
+#define effectToolPos PAL_AUG6JUN26(effectToolPos_pal, effectToolPos_aug6jun26)
 
 static int editParam(int id, int sel)
 {
@@ -500,7 +500,7 @@ static inline void initEffectTool(void) /* derived name */
     CameraSetMode(1);
     scpBoyControlReadDisable = 1;
     debug_StdPrintfDummy("initialize\n");
-    for (i = PAL_NTSCAUG6(0x3C, 52); i >= 0; i--) {
+    for (i = PAL_NTSCAUG6JUN26(0x3C, 52); i >= 0; i--) {
         effectToolDirty[i] = 0;
     }
 }
@@ -573,7 +573,7 @@ static int execEffectTool(void)
     default:
     case 0:
         r = debug_SelectCsvWindow("Effect Tools: PUSH 2-CON'\202' TO SAVE SELECTED DATA", 10, 0x32,
-                                  0xB, particleEffectFile, 0x50, 0, 0, PAL_NTSCAUG6(0x3D, 53),
+                                  0xB, particleEffectFile, 0x50, 0, 0, PAL_NTSCAUG6JUN26(0x3D, 53),
                                   &effectId);
         if (effectId != lastEffectId) {
             setQ(q);
@@ -593,12 +593,12 @@ static int execEffectTool(void)
         if (pad[1].rep & 0x1000) {
             effectId--;
             if (effectId < 0) {
-                effectId = PAL_NTSCAUG6(0x3C, 52);
+                effectId = PAL_NTSCAUG6JUN26(0x3C, 52);
             }
         }
         if (pad[1].rep & 0x4000) {
             effectId++;
-            if (effectId >= PAL_NTSCAUG6(0x3D, 53)) {
+            if (effectId >= PAL_NTSCAUG6JUN26(0x3D, 53)) {
                 effectId = 0;
             }
         }

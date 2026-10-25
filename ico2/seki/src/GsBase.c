@@ -200,14 +200,14 @@ void gsb_Init(void *db)
         omode = 3;
         break;
     }
-    if (!ICO_JPNKORNTSCAUG6CN) {
+    if (!ICO_JPNKORNTSCAUG6JUN26CN) {
         sceGsResetGraph(0, systemStatus[1] == 1, omode, 1);
     }
     /* FRAME: the native width; the latch below sets this boot's (the stub
        records nothing, port/null/gfx_null.c) */
     sceGsSetDefDBuff(db, 0, gsFrame.w, ScreenHeight, 2, 0x30, fbClear);
     gsb_SetFrame(db, 0, 0, 0x30, 2);
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         sceGsResetGraph(0, systemStatus[1] == 1, omode, 1);
     } else {
         if (ICO_JPNKORCN) {
@@ -223,7 +223,7 @@ void gsb_Init(void *db)
     }
     /* PC port: the 50/60 Hz switch changes the frame size: the
        native frame is latched for it (rd's scene-sized targets follow) */
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         gsbHostFrameLatch();
         gsb_SetVSMatrix(ScreenWidth, ScreenHeight, 512.0f); /* SCALE: the full screen */
         shadow_Init();
@@ -392,7 +392,7 @@ static void gsb_Reduction_jpn(void)
  * half height frame in black and then draws it back over itself through the
  * texture at 0x800 in the reduction tint, and last the tint this stage's
  * current target asks for. */
-static void gsb_Reduction_ntscaug6(void)
+static void gsb_Reduction_ntscaug6jun26(void)
 {
     if (ICO_JPNKORCN) {
         gsb_Reduction_jpn();
@@ -469,8 +469,8 @@ static void gsb_Reduction_ntscaug6(void)
 
 void gsb_Reduction(void)
 {
-    if (ICO_NTSCAUG6) {
-        gsb_Reduction_ntscaug6();
+    if (ICO_NTSCAUG6JUN26) {
+        gsb_Reduction_ntscaug6jun26();
         return;
     }
     if (ICO_JPNKORCN) {
@@ -730,7 +730,7 @@ static void gsb_fade(void)
     }
 #else
     gif_StartPacketPri(0xB);
-    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, PAL_NTSCAUG6(1, 0), 0);
+    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, PAL_NTSCAUG6JUN26(1, 0), 0);
     gif_SetGsReg(0x47, 0x30000);
     gif_SetGsReg(0x4E, 0x1300000C0LL);
     setGsReg(0x49, 0);
@@ -790,7 +790,7 @@ static void gsb_scissorOnDemo(void)
     unsigned char col[4];
     int i;
 
-    if (current_layout_id == PAL_JPNKORCN_NTSCAUG6(55, 52, 51) &&
+    if (current_layout_id == PAL_JPNKORCN_NTSCAUG6JUN26(55, 52, 51) &&
         scissorLastState != current_layout_id) {
         scissorStep = 2.5f;
     } else if (scissorLastState != current_layout_id) {
@@ -932,7 +932,7 @@ extern void gif_SpriteSensitiveOrg(GsbRect *r, long long z, GsbRect *uv, GsbColo
  * (n + 63) / 64 of those widths: ico_frame_x returns its argument at 4:3, so
  * every rect, size and register word is the PS2's there.  The window build
  * returns before the packet (rd_post records the same passes). */
-static void gsb_antiAlias_ntscaug6(void)
+static void gsb_antiAlias_ntscaug6jun26(void)
 {
     GsbColor col = {128, 128, 128, 128};
     GsbRect s0 = {4, 4, ico_frame_x(&gsFrame, 8192), 8192};
@@ -1016,8 +1016,8 @@ static void gsb_antiAlias_ntscaug6(void)
 
 static void gsb_antiAlias(void)
 {
-    if (ICO_NTSCAUG6) {
-        gsb_antiAlias_ntscaug6();
+    if (ICO_NTSCAUG6JUN26) {
+        gsb_antiAlias_ntscaug6jun26();
         return;
     }
     GsbColor col = {128, 128, 128, 128};
@@ -1172,7 +1172,7 @@ void gsb_MakeCommonMatrix(void)
     GifPkWord *q;
     int i;
 
-    if (PAL_AUG6(game_pause, graphics_ready) == 0) {
+    if (PAL_AUG6JUN26(game_pause, graphics_ready) == 0) {
         return;
     }
     i = 0;
@@ -1231,7 +1231,7 @@ void gsb_MakeCommonMatrix(void)
 
 static int postEffectReady; /* defined below, with gsb_PostEffect */
 
-static void gsb_SetGsDefault_ntscaug6(void)
+static void gsb_SetGsDefault_ntscaug6jun26(void)
 {
     DpkCtl *d = &PacketBufferStruct;
     GifPkWord *p = (GifPkWord *)d->ptr.d;
@@ -1279,8 +1279,8 @@ static void gsb_SetGsDefault_ntscaug6(void)
  * default register set for each of the thirteen contexts. */
 static void gsb_SetGsDefault(void)
 {
-    if (ICO_NTSCAUG6) {
-        gsb_SetGsDefault_ntscaug6();
+    if (ICO_NTSCAUG6JUN26) {
+        gsb_SetGsDefault_ntscaug6jun26();
         return;
     }
     DpkCtl *d = &PacketBufferStruct;
@@ -1422,7 +1422,7 @@ inline void gsb_ResetFilmNoise(void)
 /* set by gsb_UpdateGSSystem once the frame is up, tested by gsb_PostEffect */
 static int postEffectReady = 0; /* derived name */
 
-static int gsb_PostEffect_ntscaug6(void)
+static int gsb_PostEffect_ntscaug6jun26(void)
 {
     if (debug_font_flag & 1) {
         debug_Printf(0xA, ScreenHeight / 2 - 8, 0xCCCCCC00, "LID:%3d / FADE%d:%3.0f(%d)",
@@ -1479,8 +1479,8 @@ static int gsb_PostEffect_ntscaug6(void)
  * buffer, the staff roll and last the fade and the demo scissor. */
 static int gsb_PostEffect(void)
 {
-    if (ICO_NTSCAUG6) {
-        return gsb_PostEffect_ntscaug6();
+    if (ICO_NTSCAUG6JUN26) {
+        return gsb_PostEffect_ntscaug6jun26();
     }
     if (debug_font_flag & 1) {
         debug_Printf(0xA, ScreenHeight / 2 - 8, 0xCCCCCC00, "LID:%3d / FADE%d:%3.0f(%d)",
@@ -1669,11 +1669,11 @@ void gsb_InitGSSystem(void)
     resetmallocseki();
     pac_Init();
     reg_Init();
-    if (!ICO_AUG6) {
+    if (!ICO_AUG6JUN26) {
         shadow_Init();
     }
     gsSystemReady = 1;
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         screenOffsetX = screenOffsetY = 0;
     }
 }
@@ -1711,7 +1711,7 @@ inline int gsb_SyncGSSystem(void)
         return 1;
     }
     syncRetry = 0;
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         gsb_PostEffect();
     }
     return 0;
@@ -1777,7 +1777,7 @@ static void gsb_UpdateGSSystem_ntsc(int keep)
     light_ResetLight();
 }
 
-static void gsb_UpdateGSSystem_aug6(int keep)
+static void gsb_UpdateGSSystem_aug6jun26(int keep)
 {
     (void)keep; /* PC port: the European parameter, unused here */
     sceGsDrawEnv *draw;
@@ -1838,8 +1838,8 @@ void gsb_UpdateGSSystem(int keep)
         gsb_UpdateGSSystem_ntsc(keep);
         return;
     }
-    if (ICO_AUG6) {
-        gsb_UpdateGSSystem_aug6(keep);
+    if (ICO_AUG6JUN26) {
+        gsb_UpdateGSSystem_aug6jun26(keep);
         return;
     }
     sceGsDrawEnv *draw;
@@ -1982,9 +1982,9 @@ static void gsbHostFrameLatch(void)
 /* the 1500 unit screen the projection proj is scaled to */
 static const float vsScreenSize_pal[] = {1500.0f, 1500.0f, 0.0f, 0.0f}; /* derived name */
 
-static const float vsScreenSize_ntscaug6[] = {768.0f, 768.0f, 0.0f, 0.0f}; /* derived name */
+static const float vsScreenSize_ntscaug6jun26[] = {768.0f, 768.0f, 0.0f, 0.0f}; /* derived name */
 
-#define vsScreenSize PAL_NTSCAUG6(vsScreenSize_pal, vsScreenSize_ntscaug6)
+#define vsScreenSize PAL_NTSCAUG6JUN26(vsScreenSize_pal, vsScreenSize_ntscaug6jun26)
 
 /* Build the view matrices from the record gsb_SetVSMatrix fills (vs[0] the
  * zoom, vs[1] and vs[2] the aspect terms, vs[3] and vs[4] the centre, vs[5]
@@ -2061,7 +2061,7 @@ static void gsb_SetVSMatrixSub(float *screen, float *proj, float *projHalf, floa
     projHalf[11] = 1.0f;
     projHalf[15] = 0.0f;
 
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         _UnitMatrix(m1);
         m1[0] = 500.0f;
         m1[5] = 500.0f;
@@ -2105,7 +2105,7 @@ void gsb_SetVSMatrix(int w, int h, float d)
     float zoom;
 
     center_X = center_Y = 2048.0f;
-    if (ICO_JPNKORNTSCAUG6CN) {
+    if (ICO_JPNKORNTSCAUG6JUN26CN) {
         currentFocusDistance = d;
     } else {
         if (d == 0.0f) {
@@ -2131,7 +2131,7 @@ void gsb_SetVSMatrix(int w, int h, float d)
     zoom = (float)GlobalStageSetting.viewScale * zoomCurrent * d * (float)debug_zoom_per *
            (float)ScreenWidth / 640.0f / 100.0f / 100.0f;
     vsParam[0] = zoom;
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         if (!ICO_JPNKORCN) {
             if (debug_snapshot_reserve != 0 || (pad[1].now & 0x800) != 0) {
                 vsParam[0] = zoom * (float)debug_snapshot_num / 100.0f;
@@ -2974,7 +2974,7 @@ inline int gsb_LoadStageSettings(void)
         debug_StdPrintfDummy("gsb_LoadStageSettings: host file open error.\n");
     } else {
         debug_StdPrintfDummy("Load stage settings file. %s\n", buf);
-        sceRead(fd, &GlobalStageSetting, PAL_NTSCAUG6(0x1D0, 0x130));
+        sceRead(fd, &GlobalStageSetting, PAL_NTSCAUG6JUN26(0x1D0, 0x130));
         debugSceClose(fd);
     }
     return -1;
@@ -3005,7 +3005,7 @@ static void appendLogFile(void)
     debug_StdPrintfDummy(logBuf);
 }
 
-static inline int gsb_SaveStageSettings_ntscaug6(void)
+static inline int gsb_SaveStageSettings_ntscaug6jun26(void)
 {
     char buf[256];
     int fd;
@@ -3023,8 +3023,8 @@ static inline int gsb_SaveStageSettings_ntscaug6(void)
 
 inline int gsb_SaveStageSettings(void)
 {
-    if (ICO_NTSCAUG6) {
-        return gsb_SaveStageSettings_ntscaug6();
+    if (ICO_NTSCAUG6JUN26) {
+        return gsb_SaveStageSettings_ntscaug6jun26();
     }
     char buf[256];
     int fd;
@@ -3313,7 +3313,7 @@ static int stageSettingRow = 0; /* derived name */ /* the highlighted row */
 /* The stage setting page of the debug menu: twenty one editable words of the
  * stage record, the pad keys that walk and change them, and the key that dumps
  * the page to the log. */
-static int gsb_StageSettingTool_ntscaug6(void)
+static int gsb_StageSettingTool_ntscaug6jun26(void)
 {
     int i;
     int ret = 0;
@@ -3393,8 +3393,8 @@ static int gsb_StageSettingTool_ntscaug6(void)
 
 int gsb_StageSettingTool(void)
 {
-    if (ICO_NTSCAUG6) {
-        return gsb_StageSettingTool_ntscaug6();
+    if (ICO_NTSCAUG6JUN26) {
+        return gsb_StageSettingTool_ntscaug6jun26();
     }
     int i;
     int ret = 0;
@@ -3660,7 +3660,7 @@ static GsbMenuItem stageSettingMenu_pal[] = {
     {"UnLock Quit", unlockOtherEditing, 0},
 }; /* derived name */
 
-static GsbMenuItem stageSettingMenu_ntscaug6[] = {
+static GsbMenuItem stageSettingMenu_ntscaug6jun26[] = {
     {"Light Tool", light_Tool},
     {"Shadow Tool", shadow_Tool},
     {"Fog Tool", fog_FogTool},
@@ -3669,7 +3669,7 @@ static GsbMenuItem stageSettingMenu_ntscaug6[] = {
     {"Save Settings", gsb_SaveStageSettings},
 }; /* derived name */
 
-#define stageSettingMenu PAL_NTSCAUG6(stageSettingMenu_pal, stageSettingMenu_ntscaug6)
+#define stageSettingMenu PAL_NTSCAUG6JUN26(stageSettingMenu_pal, stageSettingMenu_ntscaug6jun26)
 
 /* the unselected and selected row colours, as filmNoiseRowColor */
 static const unsigned int menuRowColor[] = {0xFFFFFF00, 0xFF000000}; /* derived name */
@@ -3679,7 +3679,7 @@ static int menuCursor = 0; /* derived name */
 
 static int menuSelected = -1; /* derived name */
 
-static int gsb_StageSetting_ntscaug6(void)
+static int gsb_StageSetting_ntscaug6jun26(void)
 {
     int i;
     if (menuSelected >= 0) {
@@ -3713,8 +3713,8 @@ static int gsb_StageSetting_ntscaug6(void)
 
 int gsb_StageSetting(void)
 {
-    if (ICO_NTSCAUG6) {
-        return gsb_StageSetting_ntscaug6();
+    if (ICO_NTSCAUG6JUN26) {
+        return gsb_StageSetting_ntscaug6jun26();
     }
     int i;
     editingSettings = 1;

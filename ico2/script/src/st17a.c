@@ -24,66 +24,67 @@ static ActMail linkTest_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail linkTest_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail linkTest_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail linkTest_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define linkTest_mes PAL_NTSC_AUG6(linkTest_mes_pal, linkTest_mes_ntsc, linkTest_mes_aug6)
+#define linkTest_mes PAL_NTSC_AUG6JUN26(linkTest_mes_pal, linkTest_mes_ntsc, linkTest_mes_aug6jun26)
 
 static ActMail doorInit_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail doorInit_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail doorInit_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail doorInit_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define doorInit_mes PAL_NTSC_AUG6(doorInit_mes_pal, doorInit_mes_ntsc, doorInit_mes_aug6)
+#define doorInit_mes PAL_NTSC_AUG6JUN26(doorInit_mes_pal, doorInit_mes_ntsc, doorInit_mes_aug6jun26)
 
 static ActMail doorDown_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail doorDown_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail doorDown_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail doorDown_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define doorDown_mes PAL_NTSC_AUG6(doorDown_mes_pal, doorDown_mes_ntsc, doorDown_mes_aug6)
+#define doorDown_mes PAL_NTSC_AUG6JUN26(doorDown_mes_pal, doorDown_mes_ntsc, doorDown_mes_aug6jun26)
 
 static ActMail doorUp_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail doorUp_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail doorUp_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail doorUp_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define doorUp_mes PAL_NTSC_AUG6(doorUp_mes_pal, doorUp_mes_ntsc, doorUp_mes_aug6)
+#define doorUp_mes PAL_NTSC_AUG6JUN26(doorUp_mes_pal, doorUp_mes_ntsc, doorUp_mes_aug6jun26)
 
 static ActMail doorUpChk_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail doorUpChk_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail doorUpChk_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail doorUpChk_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define doorUpChk_mes PAL_NTSC_AUG6(doorUpChk_mes_pal, doorUpChk_mes_ntsc, doorUpChk_mes_aug6)
+#define doorUpChk_mes                                                                              \
+    PAL_NTSC_AUG6JUN26(doorUpChk_mes_pal, doorUpChk_mes_ntsc, doorUpChk_mes_aug6jun26)
 
 /* actSt17aDoorDownChk's record */
 static ActMail door_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail door_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail door_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail door_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define door_mes PAL_NTSC_AUG6(door_mes_pal, door_mes_ntsc, door_mes_aug6)
+#define door_mes PAL_NTSC_AUG6JUN26(door_mes_pal, door_mes_ntsc, door_mes_aug6jun26)
 
 static ActMail hasi_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail hasi_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail hasi_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail hasi_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define hasi_mes PAL_NTSC_AUG6(hasi_mes_pal, hasi_mes_ntsc, hasi_mes_aug6)
+#define hasi_mes PAL_NTSC_AUG6JUN26(hasi_mes_pal, hasi_mes_ntsc, hasi_mes_aug6jun26)
 
 static ActMail intro_mes_pal[2] = {{430}, {429}}; /* derived name */
 
 static ActMail intro_mes_ntsc[2] = {{397}, {396}}; /* derived name */
 
-static ActMail intro_mes_aug6[2] = {{393}, {392}}; /* derived name */
+static ActMail intro_mes_aug6jun26[2] = {{393}, {392}}; /* derived name */
 
-#define intro_mes PAL_NTSC_AUG6(intro_mes_pal, intro_mes_ntsc, intro_mes_aug6)
+#define intro_mes PAL_NTSC_AUG6JUN26(intro_mes_pal, intro_mes_ntsc, intro_mes_aug6jun26)
 
 static ActMail hint1_mes[2] = {{430}, {429}}; /* derived name */
 
@@ -103,9 +104,10 @@ static const ConstVec hasiChkGirlDir = {{10000.0f, 0.0f, 0.0f, 1.0f}}; /* derive
 
 static const ConstVec hasiChkGirlWay_ntsc = {{3830.0f, -2072.0f, 1113.0f, 0.0f}}; /* derived name */
 
-static const ConstVec hasiChkGirlWay_aug6 = {{3882.0f, -2072.0f, 1112.0f, 0.0f}}; /* derived name */
+static const ConstVec hasiChkGirlWay_aug6jun26 = {
+    {3882.0f, -2072.0f, 1112.0f, 0.0f}}; /* derived name */
 
-#define hasiChkGirlWay (*PAL_AUG6(&hasiChkGirlWay_ntsc, &hasiChkGirlWay_aug6))
+#define hasiChkGirlWay (*PAL_AUG6JUN26(&hasiChkGirlWay_ntsc, &hasiChkGirlWay_aug6jun26))
 
 void actSt17aDoor(GObj *volatile self)
 {
@@ -113,29 +115,29 @@ void actSt17aDoor(GObj *volatile self)
     Act *act = actInitialize(self);
     _ACTWait(1);
 
-    if (gflagChk(PAL_NTSCAUG6(32, 30)) == 0) {
-        stage_SetLoopFlag(PAL_JPNKORCN_NTSC_AUG6(131, 127, 111, 110), 1);
-        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(131, 127, 111, 110), 1, 0);
+    if (gflagChk(PAL_NTSCAUG6JUN26(32, 30)) == 0) {
+        stage_SetLoopFlag(PAL_JPNKORCN_NTSC_AUG6JUN26(131, 127, 111, 110), 1);
+        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(131, 127, 111, 110), 1, 0);
 
         doorInit_mes[0].func = actSt17aDoorUpChk;
         act->mail = doorInit_mes;
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
         _ACTWait(0);
     } else if (scpTriggerBall(self, boyGObj, 200.0f) != 0 ||
                ((void *)girlGObj != 0 && scpTriggerBall(self, (void *)girlGObj, 400.0f) != 0)) {
-        stage_SetLoopFlag(PAL_JPNKORCN_NTSC_AUG6(131, 127, 111, 110), 1);
-        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(131, 127, 111, 110), 1, 0);
+        stage_SetLoopFlag(PAL_JPNKORCN_NTSC_AUG6JUN26(131, 127, 111, 110), 1);
+        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(131, 127, 111, 110), 1, 0);
 
         _ACTWait(60);
         doorDown_mes[0].func = actSt17aDoorDownChk;
         act->mail = doorDown_mes;
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
         _ACTWait(0);
     } else {
-        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(129, 125, 109, 108), 0, 0);
+        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(129, 125, 109, 108), 0, 0);
         doorUp_mes[0].func = actSt17aDoorUpChk;
         act->mail = doorUp_mes;
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
         _ACTWait(0);
     }
 }
@@ -156,30 +158,30 @@ void actSt17aDoorUpChk(GObj *volatile self)
 
     scpWakeupItemWithBoundary(6573.0f, -2077.0f, 1089.0f, 100.0f);
 
-    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(129, 125, 109, 108), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(129, 125, 109, 108), 1, 0);
 
     buf[0] = doorChkSePos.d[0];
     buf[1] = doorChkSePos.d[1];
-    soundSeDefPlay(PAL_NTSCAUG6(1220, 1196), 0, (float *)buf, 1);
+    soundSeDefPlay(PAL_NTSCAUG6JUN26(1220, 1196), 0, (float *)buf, 1);
     _ACTWait(30);
 
-    h = soundSeDefPlay(PAL_NTSCAUG6(1221, 1197), 0, (float *)buf, 1);
+    h = soundSeDefPlay(PAL_NTSCAUG6JUN26(1221, 1197), 0, (float *)buf, 1);
     _ACTWait(60);
     soundSeDefStop(h);
 
-    soundSeDefPlay(PAL_NTSCAUG6(1222, 1198), 0, (float *)buf, 1);
+    soundSeDefPlay(PAL_NTSCAUG6JUN26(1222, 1198), 0, (float *)buf, 1);
 
-    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6(129, 125, 109, 108)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6JUN26(129, 125, 109, 108)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
-    stage_SetLoopFlag(PAL_JPNKORCN_NTSC_AUG6(131, 127, 111, 110), 1);
-    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(131, 127, 111, 110), 1, 0);
+    stage_SetLoopFlag(PAL_JPNKORCN_NTSC_AUG6JUN26(131, 127, 111, 110), 1);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(131, 127, 111, 110), 1, 0);
 
     doorUpChk_mes[0].func = actSt17aDoorDownChk;
     sub->mail = doorUpChk_mes;
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -199,29 +201,29 @@ void actSt17aDoorDownChk(GObj *volatile self)
 
     scpWakeupItemWithBoundary(6573.0f, -2077.0f, 1089.0f, 100.0f);
 
-    stage_SetLoopFlag(PAL_JPNKORCN_NTSC_AUG6(131, 127, 111, 110), 0);
+    stage_SetLoopFlag(PAL_JPNKORCN_NTSC_AUG6JUN26(131, 127, 111, 110), 0);
 
-    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(130, 126, 110, 109), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(130, 126, 110, 109), 1, 0);
 
     buf[0] = doorChkSePos.d[0];
     buf[1] = doorChkSePos.d[1];
-    soundSeDefPlay(PAL_NTSCAUG6(1220, 1196), 0, (float *)buf, 1);
+    soundSeDefPlay(PAL_NTSCAUG6JUN26(1220, 1196), 0, (float *)buf, 1);
     _ACTWait(30);
 
-    h = soundSeDefPlay(PAL_NTSCAUG6(1221, 1197), 0, (float *)buf, 1);
-    _ACTWait(PAL_AUG6(38, 30));
+    h = soundSeDefPlay(PAL_NTSCAUG6JUN26(1221, 1197), 0, (float *)buf, 1);
+    _ACTWait(PAL_AUG6JUN26(38, 30));
     soundSeDefStop(h);
 
-    soundSeDefPlay(PAL_NTSCAUG6(1222, 1198), 0, (float *)buf, 1);
+    soundSeDefPlay(PAL_NTSCAUG6JUN26(1222, 1198), 0, (float *)buf, 1);
 
-    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6(130, 126, 110, 109)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSC_AUG6JUN26(130, 126, 110, 109)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
 
     door_mes[0].func = actSt17aDoorUpChk;
     sub->mail = door_mes;
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -291,7 +293,7 @@ static void actSt17aHasiChk_ntsc(GObj *volatile self)
     _ACTWait(1);
 }
 
-static void actSt17aHasiChk_aug6(GObj *volatile self)
+static void actSt17aHasiChk_aug6jun26(GObj *volatile self)
 {
     long long buf[2];
     ConstVec pos;
@@ -362,8 +364,8 @@ void actSt17aHasiChk(GObj *volatile self)
         actSt17aHasiChk_ntsc(self);
         return;
     }
-    if (ICO_AUG6) {
-        actSt17aHasiChk_aug6(self);
+    if (ICO_AUG6JUN26) {
+        actSt17aHasiChk_aug6jun26(self);
         return;
     }
     if ((void *)girlGObj == 0) {
@@ -543,7 +545,7 @@ void actLinkTest(GObj *volatile self)
 
     linkTest_mes[0].func = actLinkTestChk;
     act->mail = linkTest_mes;
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
     _ACTWait(0);
 }
 
@@ -556,7 +558,7 @@ void actSt17aSekizo(GObj *volatile self)
 
     if (ICO_NTSC) {
         scpSekizou(self, 30, 69, 110, 18, 6450.0f, -2100.0f, 1000.0f, 6450.0f, -2100.0f, 1100.0f);
-    } else if (ICO_AUG6) {
+    } else if (ICO_AUG6JUN26) {
         scpSekizou(self, 30, 69, 109, 18, 6450.0f, -2100.0f, 1000.0f, 6450.0f, -2100.0f, 1100.0f);
     } else {
         scpSekizou(self, 32, PAL_JPNKORCN(82, 78), PAL_JPNKORCN(130, 126), 18, 6450.0f, -2100.0f,
@@ -570,17 +572,17 @@ void actSt17aHasi(GObj *volatile self)
     Act *act = actInitialize(self);
     _ACTWait(1);
 
-    if (gflagChk(PAL_NTSCAUG6(33, 31)) == 0) {
-        scpSearchGobj(PAL_NTSC_AUG6(244, 221, 220))->active = 0;
-        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(132, 128, 112, 111), 0, 0);
+    if (gflagChk(PAL_NTSCAUG6JUN26(33, 31)) == 0) {
+        scpSearchGobj(PAL_NTSC_AUG6JUN26(244, 221, 220))->active = 0;
+        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(132, 128, 112, 111), 0, 0);
         SetWayGroupActive(3, 1);
         hasi_mes[0].func = actSt17aHasiChk;
         act->mail = hasi_mes;
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
         _ACTWait(0);
     } else {
-        scpSearchGobj(PAL_NTSC_AUG6(243, 220, 219))->active = 0;
-        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6(132, 128, 112, 111), 0, -1);
+        scpSearchGobj(PAL_NTSC_AUG6JUN26(243, 220, 219))->active = 0;
+        stage_SetAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(132, 128, 112, 111), 0, -1);
     }
 }
 
@@ -590,10 +592,10 @@ void actSt17aIntro(GObj *volatile self)
     Act *act = actInitialize(self);
     _ACTWait(1);
 
-    if (gflagChk(PAL_NTSCAUG6(34, 32)) == 0) {
+    if (gflagChk(PAL_NTSCAUG6JUN26(34, 32)) == 0) {
         intro_mes[0].func = actSt17aIntroChk;
         act->mail = intro_mes;
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6(430, 397, 393));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(430, 397, 393));
         _ACTWait(0);
     }
 }
@@ -704,7 +706,7 @@ SqEntry *cam = 0;
 
 void actSt17aIntroChk(GObj *volatile self)
 {
-    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(55, 52, 51));
+    lt_switch_layout(PAL_JPNKORCN_NTSCAUG6JUN26(55, 52, 51));
     scpBoyControlReadDisable = 1;
     if (ICO_NTSC) {
         gflagOn(32);
@@ -713,7 +715,7 @@ void actSt17aIntroChk(GObj *volatile self)
             actCreateSubThread(actSt17aGirlWay, 21);
         }
         scpAdpcmPlayRequestFunc(51, &cam, 1, 1, 1);
-    } else if (ICO_AUG6) {
+    } else if (ICO_AUG6JUN26) {
         gflagOn(32);
         if (girlGObj != 0) {
             iosOmSendMail(girlGObj, 58, boyGObj);
@@ -725,17 +727,17 @@ void actSt17aIntroChk(GObj *volatile self)
         scpAdpcmPlayRequestFunc(53, &cam, 1, 1, 1);
     }
     _ACTWait(1);
-    stage_SetAnimation(PAL_JPNKORCN_NTSCAUG6(83, 79, 70), 1, 0);
+    stage_SetAnimation(PAL_JPNKORCN_NTSCAUG6JUN26(83, 79, 70), 1, 0);
     SetCameraFlag_LwsCutBack();
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         actCreateSubThread(actSt17aIntroCancel, 21);
     }
 
-    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSCAUG6(83, 79, 70)) == 0) {
+    while (stage_CheckAnimationFinish(PAL_JPNKORCN_NTSCAUG6JUN26(83, 79, 70)) == 0) {
         _ACTWait(1);
     }
     _ACTWait(1);
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         lt_switch_layout(50);
         scpBoyControlReadDisable = 0;
     } else {

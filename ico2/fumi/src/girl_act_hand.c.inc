@@ -83,7 +83,7 @@ void HandMgr_Print(void)
     }
 }
 
-static void HandMgr_Speed_ntscaug6(GObj *self, float f)
+static void HandMgr_Speed_ntscaug6jun26(GObj *self, float f)
 {
     float lim = 1.5f;
     int m;
@@ -122,8 +122,8 @@ static void HandMgr_Speed_ntscaug6(GObj *self, float f)
 
 void HandMgr_Speed(GObj *self, float f)
 {
-    if (ICO_NTSCAUG6) {
-        HandMgr_Speed_ntscaug6(self, f);
+    if (ICO_NTSCAUG6JUN26) {
+        HandMgr_Speed_ntscaug6jun26(self, f);
         return;
     }
     float lim = 1.5f;

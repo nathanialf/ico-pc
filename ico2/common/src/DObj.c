@@ -451,16 +451,16 @@ Sub15C *CSVSYSTEM_InitDObj(int id, SObjSimpleSetting *lay)
     d->disp = 1;
     d->colRotate = 1;
     d->cylinderOn = 1;
-    d->modelId = PAL_JPNKORCN_NTSC_AUG6(1552, 1548, 1515, 1510);
+    d->modelId = PAL_JPNKORCN_NTSC_AUG6JUN26(1552, 1548, 1515, 1510);
     d->accessary = -1;
-    if (id != PAL_JPNKORCN_NTSC_AUG6(1552, 1548, 1515, 1510)) {
+    if (id != PAL_JPNKORCN_NTSC_AUG6JUN26(1552, 1548, 1515, 1510)) {
         CSVSYSTEM_ReadCharFiles(d, id);
     }
     debug_StdPrintfDummy("\x1b[35mALLOCED DOBJ\x1b[m\n");
     if (d->model != 0 || d->skel != 0) {
         initPolygonState(d, lay);
     }
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         debug_StdPrintfDummy(" ------------------ allocate DOBJ %p: POBJ: %p\n", d, d->model);
     }
     debug_StdPrintfDummy("\x1b[35mINITED POLYGONSTATE\x1b[m\n");

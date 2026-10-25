@@ -40,8 +40,8 @@ typedef struct {    /* field names derived */
 extern const EnemyDef enemyKind_pal[];
 extern const EnemyDef enemyKind_jpn[];
 extern const EnemyDef enemyKind_ntsc[];
-extern const EnemyDef enemyKind_aug6[];
-#define enemyKind PAL_JPNKORCN_NTSC_AUG6(enemyKind_pal, enemyKind_jpn, enemyKind_ntsc, enemyKind_aug6)
+extern const EnemyDef enemyKind_aug6jun26[];
+#define enemyKind PAL_JPNKORCN_NTSC_AUG6JUN26(enemyKind_pal, enemyKind_jpn, enemyKind_ntsc, enemyKind_aug6jun26)
 extern const EnemyKindRange randomEnemyKind[];
 extern const int randomEnemyVariationKind[];
 int CanThisEnemyFly(struct GObj *self);

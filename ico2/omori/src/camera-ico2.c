@@ -204,7 +204,7 @@ inline void SetCameraTargetPosition(void *target, void *eye, float fov)
     monitorCamera.work.ext.f[0] = fov;
 }
 
-static void ico2camera_GetTargetPos_aug6(unsigned char flag)
+static void ico2camera_GetTargetPos_aug6jun26(unsigned char flag)
 {
     GObj *p1;
     GObj *p2;
@@ -280,8 +280,8 @@ static void ico2camera_GetTargetPos_aug6(unsigned char flag)
 
 static void ico2camera_GetTargetPos(int reset)
 {
-    if (ICO_AUG6) {
-        ico2camera_GetTargetPos_aug6(reset);
+    if (ICO_AUG6JUN26) {
+        ico2camera_GetTargetPos_aug6jun26(reset);
         return;
     }
     unsigned char flag = reset;
@@ -397,7 +397,7 @@ static int ico2camera_GetGroupNearest(float *query)
     return result;
 }
 
-static void initMonitorCamera_aug6(unsigned char init)
+static void initMonitorCamera_aug6jun26(unsigned char init)
 {
     (void)init; /* PC port: the European parameter, unused here */
     monitorCamera.active = 1;
@@ -406,8 +406,8 @@ static void initMonitorCamera_aug6(unsigned char init)
 
 static void initMonitorCamera(unsigned char init)
 {
-    if (ICO_AUG6) {
-        initMonitorCamera_aug6(init);
+    if (ICO_AUG6JUN26) {
+        initMonitorCamera_aug6jun26(init);
         return;
     }
     monitorCamera.active = 1;
@@ -529,7 +529,7 @@ static void monitorMonitorCamera_ntsc(CamWork *cam, CamWork *out)
     monitorCamera.dbgA[2] = vDbg[2];
 }
 
-static void monitorMonitorCamera_aug6(CamWork *cam, CamWork *out)
+static void monitorMonitorCamera_aug6jun26(CamWork *cam, CamWork *out)
 {
     float vDiff[4];
     float vDbg[4];
@@ -645,8 +645,8 @@ static void monitorMonitorCamera(CamWork *cam, CamWork *out)
         monitorMonitorCamera_ntsc(cam, out);
         return;
     }
-    if (ICO_AUG6) {
-        monitorMonitorCamera_aug6(cam, out);
+    if (ICO_AUG6JUN26) {
+        monitorMonitorCamera_aug6jun26(cam, out);
         return;
     }
     float vDiff[4];
@@ -1114,7 +1114,7 @@ void ReflectCameraSetBinary(CamGroup *src, int count)
 
 void InitIco2Camera(void)
 {
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         cameraFrames = 0;
     }
     cameraSetBuf = 0;
@@ -1370,7 +1370,7 @@ static void SetCameraMatrix_Ico2_ntsc(int flag)
     SetWSMatrix(&cw);
 }
 
-static void SetCameraMatrix_Ico2_aug6(int f8)
+static void SetCameraMatrix_Ico2_aug6jun26(int f8)
 {
     CamWork cw = monitorCamera.work;
     float vA[4];
@@ -1528,8 +1528,8 @@ void SetCameraMatrix_Ico2(int flag)
         SetCameraMatrix_Ico2_ntsc(flag);
         return;
     }
-    if (ICO_AUG6) {
-        SetCameraMatrix_Ico2_aug6(flag);
+    if (ICO_AUG6JUN26) {
+        SetCameraMatrix_Ico2_aug6jun26(flag);
         return;
     }
     CamWork cw = monitorCamera.work;

@@ -100,8 +100,8 @@ static inline void _setEntryOffsets(void) /* derived name */
     int i;
 
     for (i = 0; i < streamNum; i++) {
-        streamEntry[i].cur = PAL_NTSCAUG6(streamEntry[i].next = (ringRead + off) % 163840,
-                                          (ringRead + off) % 163840);
+        streamEntry[i].cur = PAL_NTSCAUG6JUN26(streamEntry[i].next = (ringRead + off) % 163840,
+                                               (ringRead + off) % 163840);
         off += streamEntry[i].size;
     }
 }
@@ -231,7 +231,7 @@ static int _infoUpdate_ntsc(void)
     return 0;
 }
 
-static int _infoUpdate_aug6(void)
+static int _infoUpdate_aug6jun26(void)
 {
     int i;
 
@@ -276,8 +276,8 @@ static int _infoUpdate(void)
     if (ICO_NTSC) {
         return _infoUpdate_ntsc();
     }
-    if (ICO_AUG6) {
-        return _infoUpdate_aug6();
+    if (ICO_AUG6JUN26) {
+        return _infoUpdate_aug6jun26();
     }
     int top;
     int n;
@@ -398,9 +398,9 @@ void ClearStreamMotionEntry(GObj *gobj)
 /* the cleared entry every slot is reset to */
 static SMotion emptyEntry_pal = {0, 0, -1, -1, -1, {0}, 0}; /* derived name */
 
-static SMotion emptyEntry_ntscaug6 = {0, 0, -1, -1, {0}, 0}; /* derived name */
+static SMotion emptyEntry_ntscaug6jun26 = {0, 0, -1, -1, {0}, 0}; /* derived name */
 
-#define emptyEntry (*PAL_NTSCAUG6(&emptyEntry_pal, &emptyEntry_ntscaug6))
+#define emptyEntry (*PAL_NTSCAUG6JUN26(&emptyEntry_pal, &emptyEntry_ntscaug6jun26))
 
 static void _deleteStreamMotionManager(void)
 {
@@ -422,13 +422,13 @@ static void _deleteStreamMotionManager(void)
     readState = 0;
     ringRead = 0;
     ringWrite = 0;
-    if (!ICO_AUG6) {
+    if (!ICO_AUG6JUN26) {
         streamIdle = 1;
     }
     headerRead = 0;
     headerSize = 0;
     ringUsed = 0;
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         if (ringBuf != 0) {
             iosFree(ringBuf);
             iosFree(readBufRaw);
@@ -504,7 +504,7 @@ typedef struct { /* field names derived */
 /* the four bytes GetStreamMotionData hands back while no data has arrived */
 static const char streamDummyHead[] = {0, 0xFF, 0, 0}; /* derived name */
 
-static void GetStreamMotionData_ntscaug6(char *dst, int no)
+static void GetStreamMotionData_ntscaug6jun26(char *dst, int no)
 {
     int off;
     int size;
@@ -532,8 +532,8 @@ static void GetStreamMotionData_ntscaug6(char *dst, int no)
 
 inline float GetStreamMotionData(char *dst, int no)
 {
-    if (ICO_NTSCAUG6) {
-        GetStreamMotionData_ntscaug6(dst, no);
+    if (ICO_NTSCAUG6JUN26) {
+        GetStreamMotionData_ntscaug6jun26(dst, no);
         return 0.0f; /* PC port: the 2001 builds' returns nothing, and their callers read nothing */
     }
     if (streamEntry[no].cur < 0) {
@@ -684,12 +684,12 @@ inline int EntryStreamMotion(GObj *gobj)
     return no;
 }
 
-static inline void InitStreamMotionManager_aug6(void) {}
+static inline void InitStreamMotionManager_aug6jun26(void) {}
 
 inline void InitStreamMotionManager(void)
 {
-    if (ICO_AUG6) {
-        InitStreamMotionManager_aug6();
+    if (ICO_AUG6JUN26) {
+        InitStreamMotionManager_aug6jun26();
         return;
     }
     readBufRaw = 0;

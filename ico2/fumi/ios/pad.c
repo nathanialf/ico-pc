@@ -246,7 +246,7 @@ static int controler_stable_check_ntsc(IosPadDevRec *dev)
     return phase;
 }
 
-static int controler_stable_check_aug6(IosPadDevRec *dev)
+static int controler_stable_check_aug6jun26(IosPadDevRec *dev)
 {
     int port = dev->port;
     int slot = dev->slot;
@@ -420,8 +420,8 @@ static int controler_stable_check(IosPadDevRec *dev)
     if (ICO_NTSC) {
         return controler_stable_check_ntsc(dev);
     }
-    if (ICO_AUG6) {
-        return controler_stable_check_aug6(dev);
+    if (ICO_AUG6JUN26) {
+        return controler_stable_check_aug6jun26(dev);
     }
     int port = dev->port;
     int slot = dev->slot;
@@ -634,7 +634,7 @@ int iosPadDevInit(void *desc)
         dev->port = i;
         dev->slot = 0;
         dev->phase = 0;
-        dev->error = PAL_NTSCAUG6(0xFFFFFFFFu, 1);
+        dev->error = PAL_NTSCAUG6JUN26(0xFFFFFFFFu, 1);
         dev->state = 0xFFFF;
         if (scePadPortOpen(i, 0, dev->dmaBuf) == 0) {
             debug_StdPrintfDummy("ERROR: scePadPortOpen port%d slot%d\n", i, 0);
@@ -648,7 +648,7 @@ int iosPadDevInit(void *desc)
 
 static void iosPadActTickProc(void);
 
-static int iosPadDevReadFunc_ntscaug6(void)
+static int iosPadDevReadFunc_ntscaug6jun26(void)
 {
     int i;
 
@@ -742,8 +742,8 @@ static int iosPadDevReadFunc_cn(void)
 
 static int iosPadDevReadFunc(void)
 {
-    if (ICO_NTSCAUG6) {
-        return iosPadDevReadFunc_ntscaug6();
+    if (ICO_NTSCAUG6JUN26) {
+        return iosPadDevReadFunc_ntscaug6jun26();
     }
     if (ICO_CN) {
         return iosPadDevReadFunc_cn();
@@ -803,7 +803,7 @@ static int iosPadDevReadFunc(void)
 /* PC port: port/input/pad_host.c */
 unsigned int ico_pad_menu_word(const void *libpad_buf);
 
-static int iosPadRead_ntscaug6(IosPadCtx *ctx)
+static int iosPadRead_ntscaug6jun26(IosPadCtx *ctx)
 {
     IosPadDevRec *dev = ctx->dev;
     IosPadBuf *prev;
@@ -875,8 +875,8 @@ static int iosPadRead_ntscaug6(IosPadCtx *ctx)
 
 int iosPadRead(IosPadCtx *ctx)
 {
-    if (ICO_NTSCAUG6) {
-        return iosPadRead_ntscaug6(ctx);
+    if (ICO_NTSCAUG6JUN26) {
+        return iosPadRead_ntscaug6jun26(ctx);
     }
     IosPadDevRec *dev = ctx->dev;
     IosPadBuf *prev;
@@ -1127,8 +1127,8 @@ int iosPadConnect(IosPadCtx *ctx, int a1, int port, PadConf *conf)
     return 0;
 }
 
-static int iosPadGetStick_ntscaug6(IosPadCtx *ctx, void *out, int mode, int a3, int a4,
-                                   int simulate)
+static int iosPadGetStick_ntscaug6jun26(IosPadCtx *ctx, void *out, int mode, int a3, int a4,
+                                        int simulate)
 {
     IosPadStick *st = out;
     IosPadDevRec *rec = ctx->dev;
@@ -1183,8 +1183,8 @@ static int iosPadGetStick_ntscaug6(IosPadCtx *ctx, void *out, int mode, int a3, 
 
 int iosPadGetStick(IosPadCtx *ctx, void *st, int mode, int a3, int a4, int simulate)
 {
-    if (ICO_NTSCAUG6) {
-        return iosPadGetStick_ntscaug6(ctx, st, mode, a3, a4, simulate);
+    if (ICO_NTSCAUG6JUN26) {
+        return iosPadGetStick_ntscaug6jun26(ctx, st, mode, a3, a4, simulate);
     }
     int rv;
     _PushVu0Registers();

@@ -76,17 +76,17 @@ typedef struct {                        /* field names derived */
 
 static void bombSparkStartSE(GObj *gobj)
 {
-    ExecuteSEPackage(gobj, PAL_NTSCAUG6(50, 48));
+    ExecuteSEPackage(gobj, PAL_NTSCAUG6JUN26(50, 48));
 }
 
 static void bombSparkSE(GObj *gobj)
 {
-    ExecuteSEPackage(gobj, PAL_NTSCAUG6(51, 49));
+    ExecuteSEPackage(gobj, PAL_NTSCAUG6JUN26(51, 49));
 }
 
 static void bombExplodeSE(GObj *gobj)
 {
-    ExecuteSEPackage(gobj, PAL_NTSCAUG6(52, 50));
+    ExecuteSEPackage(gobj, PAL_NTSCAUG6JUN26(52, 50));
 }
 
 /* whether the item is a bomb; HoldItem, StopItemExplodeAnimationAll and
@@ -196,7 +196,7 @@ void ThrowItem(GObj *gobj, void *vel)
     p->released = 1;
     p->held = 0;
     p->thrown = 1;
-    if (ICO_JPNKORNTSCAUG6CN) {
+    if (ICO_JPNKORNTSCAUG6JUN26CN) {
         CopyVector(GOBJ_SUB(gobj)->root.move, vel);
     } else {
         _ScaleVectorXYZ(
@@ -240,7 +240,7 @@ char *InitItemGeo(GObj *gobj, ItemLayout *layout)
         link.node = 0;
         lay = *layout;
         lay.kind = 2;
-        g = CreateLayoutedGObj(10, PAL_NTSC_AUG6(75, 69, 68), -1, 1, &lay, -1, 7, 0);
+        g = CreateLayoutedGObj(10, PAL_NTSC_AUG6JUN26(75, 69, 68), -1, 1, &lay, -1, 7, 0);
         SetTorchChainReactionFlag(g, 1);
         LinkParentOfDObj(g, &link);
         CopyVector(GOBJ_SUB(g)->root.pos, itemDropOfs);
@@ -255,7 +255,7 @@ char *InitItemGeo(GObj *gobj, ItemLayout *layout)
 /* The holder's display object is read again at every site through the
    SubHandle union, then its node matrices (64 bytes a node) and quaternions
    (16 bytes a node); q is a plain four-float scratch. */
-static void carriedItemGeo_ntscaug6(GObj *gobj)
+static void carriedItemGeo_ntscaug6jun26(GObj *gobj)
 {
     Vec16 pos;
     sceVu0FVECTOR q;
@@ -306,8 +306,8 @@ static void carriedItemGeo_ntscaug6(GObj *gobj)
 
 static void carriedItemGeo(GObj *gobj)
 {
-    if (ICO_NTSCAUG6) {
-        carriedItemGeo_ntscaug6(gobj);
+    if (ICO_NTSCAUG6JUN26) {
+        carriedItemGeo_ntscaug6jun26(gobj);
         return;
     }
     Vec16 pos;
@@ -393,8 +393,8 @@ static inline int entryBreakBgAnimation_ntsc(int id, float *pos, float *dir,
     return 0;
 }
 
-static inline int entryBreakBgAnimation_aug6(int id, float *pos, float *dir,
-                                             int arg) /* derived name */
+static inline int entryBreakBgAnimation_aug6jun26(int id, float *pos, float *dir,
+                                                  int arg) /* derived name */
 {
     (void)arg; /* PC port: the European parameter, unused here */
     float rot[4];
@@ -418,8 +418,8 @@ static inline int entryBreakBgAnimation(int id, float *pos, float *dir, int arg)
     if (ICO_NTSC) {
         return entryBreakBgAnimation_ntsc(id, pos, dir, arg);
     }
-    if (ICO_AUG6) {
-        return entryBreakBgAnimation_aug6(id, pos, dir, arg);
+    if (ICO_AUG6JUN26) {
+        return entryBreakBgAnimation_aug6jun26(id, pos, dir, arg);
     }
     float rot[4];
     float d[4];
@@ -453,7 +453,7 @@ static inline int breakItemOnWallHit(GObj *gobj, float len, float *pos,
     if (5.0f < len) {
         int id = itemKind[p->kind].stayAnim;
 
-        if (id != PAL_JPNKORCN_NTSC_AUG6(972, 949, 815, 814)) {
+        if (id != PAL_JPNKORCN_NTSC_AUG6JUN26(972, 949, 815, 814)) {
             memset(&rot, 0, 16);
             rot[3] = 1.0f;
             CopyVector(d, vel);
@@ -461,7 +461,7 @@ static inline int breakItemOnWallHit(GObj *gobj, float len, float *pos,
             _NormalizeVector(d, d);
             RotQuaternionY(&rot, GetTableArcTan2(d[0], d[2]));
             _ScaleVectorXYZ(sv, vel, 0.3f);
-            if (ICO_NTSCAUG6) {
+            if (ICO_NTSCAUG6JUN26) {
                 EntryStageMultiBgaManagerSensitive(id, pos, &rot, sv);
             } else {
                 EntryStageMultiBgaManagerSensitiveWithStay(id, pos, &rot, sv,
@@ -485,20 +485,20 @@ static inline int breakItemOnFloorHit(GObj *gobj, float len, float *pos,
     ItemWork *p = GOBJ_SUB(gobj)->work;
 
     if (10.0f < len) {
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
             entryBreakBgAnimation(itemKind[p->kind].breakAnim, pos, vel, 0);
         } else {
             entryBreakBgAnimation(itemKind[p->kind].breakAnim, pos, vel,
                                   itemKind[p->kind].breakMode);
         }
         if ((itemKind + p->kind)->flags & 1) {
-            ExecuteSEPackage(gobj, PAL_NTSCAUG6(43, 42));
+            ExecuteSEPackage(gobj, PAL_NTSCAUG6JUN26(43, 42));
             return 1;
         }
     }
     if (p->thrown == 0) {
         p->thrown = 1;
-        ExecuteSEPackage(gobj, PAL_NTSCAUG6(48, 46));
+        ExecuteSEPackage(gobj, PAL_NTSCAUG6JUN26(48, 46));
         return 0;
     }
     if (5.0f < len) {
@@ -516,7 +516,7 @@ static void floatGeo(float t, GObj *gobj, float *vel, ItemWork *p, float *pos)
     GetSlerpQuaternion(GOBJ_SUB(gobj)->root.itemQuat, GOBJ_SUB(gobj)->root.itemQuat,
                        IdentityQuaternion, t);
     RegularizeQuaternion(GOBJ_SUB(gobj)->root.itemQuat);
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         return; /* the 2001 builds have no push from the waves' walls */
     }
     CopyVector(w.pt[0], pos);
@@ -536,7 +536,7 @@ static void floatGeo(float t, GObj *gobj, float *vel, ItemWork *p, float *pos)
     }
 }
 
-static void uncarriedItemGeo_ntscaug6(GObj *gobj)
+static void uncarriedItemGeo_ntscaug6jun26(GObj *gobj)
 {
     ObjNode link;  /* 0x00 */
     float pos[4];  /* 0x10 */
@@ -717,8 +717,8 @@ static void uncarriedItemGeo_ntscaug6(GObj *gobj)
 
 static void uncarriedItemGeo(GObj *gobj)
 {
-    if (ICO_NTSCAUG6) {
-        uncarriedItemGeo_ntscaug6(gobj);
+    if (ICO_NTSCAUG6JUN26) {
+        uncarriedItemGeo_ntscaug6jun26(gobj);
         return;
     }
     ObjNode link;  /* 0x00 */
@@ -939,7 +939,7 @@ static void execBombGeo(GObj *gobj)
             stage_SetFrameStep(440, 1);
             GetRootPosition(q->pos, gobj);
             AttackCenter(gobj, 17, q->pos, 0, 100.0f);
-        } else if (ICO_AUG6) {
+        } else if (ICO_AUG6JUN26) {
             stage_SetLoopFlag(439, 0);
             stage_SetFrameStep(439, 1);
             GetRootPosition(q->pos, gobj);
@@ -960,8 +960,8 @@ static void execBombGeo(GObj *gobj)
         rec->released = 0;
         StopSEPackage(gobj);
         bombExplodeSE(gobj);
-        stage_KillPlayBgAnimationIfOverMaxCount(PAL_JPNKORCN_NTSC_AUG6(511, 507, 440, 439), 1);
-        q->anim = stage_MakePlayBgAnimation(PAL_JPNKORCN_NTSC_AUG6(511, 507, 440, 439));
+        stage_KillPlayBgAnimationIfOverMaxCount(PAL_JPNKORCN_NTSC_AUG6JUN26(511, 507, 440, 439), 1);
+        q->anim = stage_MakePlayBgAnimation(PAL_JPNKORCN_NTSC_AUG6JUN26(511, 507, 440, 439));
         q->anim->frame = 1.0f;
         _CopyVector(q->anim->pos, q->pos);
         CopyQuaternion(q->anim->rot, IdentityQuaternion);
@@ -970,7 +970,7 @@ static void execBombGeo(GObj *gobj)
         break;
     case 3:
         rec->released = 0;
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
             if (stage_DispBgAnimation(&q->anim) != 0) {
                 q->state = 4;
                 setItemDead(gobj);
@@ -1032,7 +1032,7 @@ void ItemDL(GObj *gobj)
 {
     ItemWork *p = GOBJ_SUB(gobj)->work;
 
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         if (IsItemKindBomb(gobj)) {
             checkBombExplodeEnd(gobj);
         }
@@ -1080,7 +1080,7 @@ int BreakItemFromOutside(GObj *gobj)
         p->fuse.state = 2;
     } else {
         GetRootPosition(pos, gobj);
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
             entryBreakBgAnimation(itemKind[p->kind].dropAnim, pos, ZeroVector, 0);
             ExecuteSEPackage(gobj, 42);
         } else {
@@ -1088,7 +1088,7 @@ int BreakItemFromOutside(GObj *gobj)
             ExecuteSEPackage(gobj, 43);
         }
         if (GetItemKindInline(gobj) == 6) {
-            if (ICO_NTSCAUG6) {
+            if (ICO_NTSCAUG6JUN26) {
                 AttackCenter(gobj, 17, pos, 0, 100.0f);
             } else {
                 _AttackCenter(gobj, 17, pos, 0, 200.0f, 0);

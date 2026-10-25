@@ -36,7 +36,7 @@ static void DetourCheck(GObj *self, float *out)
     if (debug_girl_detour_flag == 0) {
         return;
     }
-    GetSkeltonOrient(orient, self, PAL_NTSCAUG6(0x2C, 44));
+    GetSkeltonOrient(orient, self, PAL_NTSCAUG6JUN26(0x2C, 44));
     if (GOBJ_WORK(self)->wayHold != 0) {
         out[0] = GOBJ_WORK(self)->wayDirX;
         out[1] = GOBJ_WORK(self)->wayDirY;
@@ -63,7 +63,7 @@ static void DetourCheck(GObj *self, float *out)
     cur[0] = test_CURRENTROOT(self)[0];
     cur[1] = test_CURRENTROOT(self)[1];
     cur[2] = test_CURRENTROOT(self)[2];
-    GetSkeltonOrient(o2, self, PAL_NTSCAUG6(0x2C, 44));
+    GetSkeltonOrient(o2, self, PAL_NTSCAUG6JUN26(0x2C, 44));
     for (i = 0; detourAngle[i] != 0; i++) {
         dir[0] = o2[0];
         dir[1] = o2[1];
@@ -84,7 +84,7 @@ static void DetourCheck(GObj *self, float *out)
 /* motionOrientManager.h declares none of the motion tables */
 extern MotionDef motionKind[];
 
-static int checkPositionIllegal_ntscaug6(GObj *self, float *pos)
+static int checkPositionIllegal_ntscaug6jun26(GObj *self, float *pos)
 {
     float v[4];
     float r[4];
@@ -115,8 +115,8 @@ static int checkPositionIllegal_ntscaug6(GObj *self, float *pos)
 
 static int checkPositionIllegal(GObj *self, float *pos)
 {
-    if (ICO_NTSCAUG6) {
-        return checkPositionIllegal_ntscaug6(self, pos);
+    if (ICO_NTSCAUG6JUN26) {
+        return checkPositionIllegal_ntscaug6jun26(self, pos);
     }
     float v[4];
     float r[4];
@@ -219,7 +219,7 @@ static inline WayPoint *RequestWayBegin(char *self, float *goal, float *from, WV
         *way = ws->way;
         return w;
     }
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         w = GetWay_begin(from, way, goal);
     } else {
         if (self == (char *)girlGObj) {
@@ -298,7 +298,7 @@ int ACTWayMove_BeginDetail(GObj *self, float *goal, float *from, void *tgt, void
     int ret = 0;
     WayPoint *w;
 
-    if (!ICO_AUG6) {
+    if (!ICO_AUG6JUN26) {
         /* disabled in retail: the way-begin-position (WBP) report */
         if (0) {
             debug_StdPrintfDummy("WBP <<begin>>\n");
@@ -307,7 +307,7 @@ int ACTWayMove_BeginDetail(GObj *self, float *goal, float *from, void *tgt, void
     home = &act->way;
     way = *home;
     wp = &way;
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         act->wayFlags &= ~0x10000;
     } else {
         act->wayFlags &= ~0x20000;
@@ -344,7 +344,7 @@ int ACTWayMove_BeginDetail(GObj *self, float *goal, float *from, void *tgt, void
     act->wayState.flags &= ~0x1E0000;
     act->wayDetailFlag = 0;
     GOBJ_WORK(self)->wayHold = 0;
-    if (!ICO_AUG6) {
+    if (!ICO_AUG6JUN26) {
         if (act->way.chk.start != 0 && act->way.chk.cross == 0) {
             if (_DistxzSqGV(act->way.chk.start->pos, goal) < 40000.0f) {
                 act->wayFlags |= 0x40000;
@@ -397,8 +397,8 @@ _Static_assert(sizeof(WayStep) ==
    carries, and its GetRootProjectionPosOfGObj / IsThisBoxTruck call forms do
    not fit motionManager2.h and box.h */
 
-static int ACTWayMove_NextDetail_aug6(GObj *self, float *node, float *goal, unsigned char d,
-                                      unsigned char e)
+static int ACTWayMove_NextDetail_aug6jun26(GObj *self, float *node, float *goal, unsigned char d,
+                                           unsigned char e)
 {
     (void)e; /* PC port: the European parameter, unused here */
     float pos[4];
@@ -806,8 +806,8 @@ int ACTWayMove_NextDetail(GObj *self, float *node, float *goal, unsigned char d,
     if (ICO_NTSC) {
         return ACTWayMove_NextDetail_ntsc(self, node, goal, d, e);
     }
-    if (ICO_AUG6) {
-        return ACTWayMove_NextDetail_aug6(self, node, goal, d, e);
+    if (ICO_AUG6JUN26) {
+        return ACTWayMove_NextDetail_aug6jun26(self, node, goal, d, e);
     }
     float pos[4];
     Act *act = GOBJ_ACT(self);
@@ -1046,7 +1046,8 @@ static unsigned char way_flag(int flags, int mask) /* derived name */
     return 0;
 }
 
-static int ACTWayExec_Position_aug6(GObj *self, ICO_WORD tgt, float *dir, float speed, int flags)
+static int ACTWayExec_Position_aug6jun26(GObj *self, ICO_WORD tgt, float *dir, float speed,
+                                         int flags)
 {
     Act *w = GOBJ_ACT(self);
     char *node;
@@ -1098,8 +1099,8 @@ static int ACTWayExec_Position_aug6(GObj *self, ICO_WORD tgt, float *dir, float 
 
 int ACTWayExec_Position(GObj *self, ICO_WORD tgt, float *dir, float speed, int flags)
 {
-    if (ICO_AUG6) {
-        return ACTWayExec_Position_aug6(self, tgt, dir, speed, flags);
+    if (ICO_AUG6JUN26) {
+        return ACTWayExec_Position_aug6jun26(self, tgt, dir, speed, flags);
     }
     Act *w = GOBJ_ACT(self);
     char *node;

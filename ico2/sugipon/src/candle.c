@@ -41,7 +41,7 @@ ICO_WORD InitCandleGeo(void *self, void *mtx)
     return (ICO_WORD)flame;
 }
 
-static void CandleGeo_ntscaug6(void *self)
+static void CandleGeo_ntscaug6jun26(void *self)
 {
     Sub15C *w = GOBJ_SUB(self);
     CandleFlame *flame = w->work;
@@ -61,8 +61,8 @@ static void CandleGeo_ntscaug6(void *self)
 
 void CandleGeo(void *self)
 {
-    if (ICO_NTSCAUG6) {
-        CandleGeo_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        CandleGeo_ntscaug6jun26(self);
         return;
     }
     Sub15C *w = GOBJ_SUB(self);

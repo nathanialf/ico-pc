@@ -242,7 +242,7 @@ void InitStageLight(int stage)
     GlobalStageSetting.antiLevel0 = 24;
     GlobalStageSetting.antiLevel1 = 24;
 
-    if (!ICO_NTSCAUG6) {
+    if (!ICO_NTSCAUG6JUN26) {
         for (i = 0; i < 4; i++) {
             int *row = (int *)&GlobalStageSetting + i * 4;
 
@@ -510,7 +510,7 @@ void InitSceneObjects(int stage)
     ResetGObjProc();
     boyGObj = girlGObj = 0;
     boyPad = 0;
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         gameover_flag = 0;
         gameover_layout_flag = 0;
     } else {
@@ -567,7 +567,7 @@ int HotInitSceneObjects(int a0)
                 ObjKindEnt *e = &objKindData[idx];
                 void (*fn)(GObj *);
                 if (e->before != 0) {
-                    iosOmSendMail(node, PAL_AUG6(0x2F, 46), node);
+                    iosOmSendMail(node, PAL_AUG6JUN26(0x2F, 46), node);
                 }
                 fn = e->hotInit;
                 if (fn != 0) {

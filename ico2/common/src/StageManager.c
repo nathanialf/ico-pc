@@ -57,7 +57,7 @@ StgSlot stageExitData[15] = {0};
 static IosMsgWord stageMgrMsgBuf; /* derived name */
 
 /* the USA disc's and the August 2001 preview's queue holds four messages */
-static IosMsgWord stageMgrMsgBuf_ntscaug6[4]; /* derived name */
+static IosMsgWord stageMgrMsgBuf_ntscaug6jun26[4]; /* derived name */
 
 static int stagePreLoadForceStageNo; /* derived name */
 
@@ -106,7 +106,7 @@ static void stop_free_resources(void)
     int i;
 
     debug_StdPrintfDummy("----- MASK LINK -----\n");
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         graphics_ready = 0;
     } else {
         game_pause = 0;
@@ -134,7 +134,7 @@ static void stop_free_resources(void)
     iosMallocResetPartition(ios_partition_seki);
     iosMallocResetPartition(ios_partition_sugipon);
     iosMallocResetPartition(ios_partition_dmotion);
-    if (!ICO_AUG6) {
+    if (!ICO_AUG6JUN26) {
         iosMallocResetPartition(ios_partition_oomori);
     }
     iosMallocResetPartition(ios_partition_isys);
@@ -211,7 +211,7 @@ static void start_stage_Load_thread(int stage)
         stage_initialize();
         stageManagerFreeResourceFlag = 0;
         iosThreadCancelWakeup(0);
-        if (ICO_NTSCAUG6) {
+        if (ICO_NTSCAUG6JUN26) {
             SetMotionBlur(GlobalStageSetting.motionBlur);
         } else {
             gsb_SetMotionBlur();
@@ -222,7 +222,7 @@ static void start_stage_Load_thread(int stage)
         iosThreadStart(INITICOMISC_THREAD);
         flags = INITICOMISC_FLAGS;
         debug_StdPrintfDummy("auto stack %d\n", (int)flags & 1);
-        if (ICO_AUG6) {
+        if (ICO_AUG6JUN26) {
             graphics_ready = 1;
         } else {
             game_pause = 1;
@@ -415,8 +415,8 @@ void StageManager(void)
     StgMgrMsg *msg;
 
     debug_StdPrintfDummy("stage manager() in\n");
-    if (ICO_NTSCAUG6) {
-        iosMsgQueueCreate(&stageMgrMsgQ, stageMgrMsgBuf_ntscaug6, 4);
+    if (ICO_NTSCAUG6JUN26) {
+        iosMsgQueueCreate(&stageMgrMsgQ, stageMgrMsgBuf_ntscaug6jun26, 4);
     } else {
         iosMsgQueueCreate(&stageMgrMsgQ, &stageMgrMsgBuf, 1);
     }
@@ -466,7 +466,7 @@ void StageManager(void)
             ico_stage_change_to = msg->stage; /* PC port: kanbanTitleCover's target */
 #endif
             exit_stage(msg->stage);
-            lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(0x35, 50, 49));
+            lt_switch_layout(PAL_JPNKORCN_NTSCAUG6JUN26(0x35, 50, 49));
             systemStatus[6] = 1;
             systemStatus[5] = 1;
             stgMgrWakeupRequest = 1;
@@ -531,13 +531,13 @@ void stgmgrForceSwitch(int stage)
 {
     stageMgrMsg.cmd = 0;
     stageMgrMsg.stage = stage;
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         lock_execIcoMisc = 1;
     } else {
         graphics_ready = 1;
     }
     stageMgrMsg.fadeOut = 0;
-    iosMsgSend(&stageMgrMsgQ, (IosMsgWord)&stageMgrMsg, PAL_NTSCAUG6(1, 0));
+    iosMsgSend(&stageMgrMsgQ, (IosMsgWord)&stageMgrMsg, PAL_NTSCAUG6JUN26(1, 0));
 }
 
 void stgmgrForceSwitchWithFade(int stage, float fadeIn, float fadeOut)
@@ -559,7 +559,7 @@ void stgmgrForceSwitchWithFadeColor(int stage, float fadeIn, float fadeOut, unsi
     if (ICO_NTSC) {
         graphics_ready = 1;
         iosMsgSend(&stageMgrMsgQ, (IosMsgWord)&stageMgrMsg, 0);
-    } else if (ICO_AUG6) {
+    } else if (ICO_AUG6JUN26) {
         lock_execIcoMisc = 1;
         iosMsgSend(&stageMgrMsgQ, (IosMsgWord)&stageMgrMsg, 0);
     } else {

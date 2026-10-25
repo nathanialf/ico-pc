@@ -209,7 +209,7 @@ static void mc_product_to_2001(const McProductFile *p, unsigned char *d)
         const McFileInfo *f = &p->file[i];
 
         w[0] = (int)f->stage;
-        if (ICO_AUG6) {
+        if (ICO_AUG6JUN26) {
             w[1] = f->cleared;
             w[2] = f->playTime;
             w[3] = f->sofa;
@@ -236,7 +236,7 @@ static void mc_product_from_2001(McProductFile *p, const unsigned char *d)
 
         memcpy(w, d + i * 16, 16);
         f->stage = (unsigned int)w[0];
-        if (ICO_AUG6) {
+        if (ICO_AUG6JUN26) {
             f->cleared = w[1];
             f->playTime = w[2];
             f->sofa = w[3];
@@ -259,14 +259,14 @@ static inline int product_write(McMgr *self)
     (IosMcProductFile + self->port)->vibration = iosPadActRequestEnable;
     if (ICO_JPNKORCN) {
         (IosMcProductFile + self->port)->controlType = optionControlType;
-    } else if (ICO_NTSCAUG6) {
+    } else if (ICO_NTSCAUG6JUN26) {
     } else {
         (IosMcProductFile + self->port)->controlType = optionControlType;
         (IosMcProductFile + self->port)->cameraMove = NonLinearCameraMove;
         (IosMcProductFile + self->port)->palMode = systemStatus[0];
     }
     *(McBlk *)(IosMcProductFile + self->port)->padConf = *(McBlk *)iosPadConfCustom.bit;
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         mc_product_2001_note();
         mc_product_to_2001(IosMcProductFile + self->port, mcProduct2001);
         iosMcHandlerWrite(self, mcProduct2001, MC_PRODUCT_FILE_2001_SIZE);
@@ -280,7 +280,7 @@ static inline int product_write(McMgr *self)
 static inline int product_read(McMgr *self)
 {
     int idx = self->port;
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         mc_product_2001_note();
         iosMcHandlerRead(self, mcProduct2001, MC_PRODUCT_FILE_2001_SIZE);
         mc_product_from_2001(&IosMcProductFile[idx], mcProduct2001);
@@ -293,7 +293,7 @@ static inline int product_read(McMgr *self)
 
 static inline int gameblock_write(McMgr *self, void *buf)
 {
-    if (ICO_NTSCAUG6) {
+    if (ICO_NTSCAUG6JUN26) {
         iosMcHandlerWrite(self, buf, 25596);
     } else {
         iosMcHandlerWrite(self, buf, 25588);
@@ -303,7 +303,7 @@ static inline int gameblock_write(McMgr *self, void *buf)
     return 0;
 }
 
-static inline int gameblock_read_ntscaug6(McMgr *self, void *buf)
+static inline int gameblock_read_ntscaug6jun26(McMgr *self, void *buf)
 {
     iosMcHandlerRead(self, buf, 25596);
     systemStatus[11] = (IosMcProductFile + self->port)->soundMode;
@@ -316,8 +316,8 @@ static inline int gameblock_read_ntscaug6(McMgr *self, void *buf)
 
 static inline int gameblock_read(McMgr *self, void *buf)
 {
-    if (ICO_NTSCAUG6) {
-        return gameblock_read_ntscaug6(self, buf);
+    if (ICO_NTSCAUG6JUN26) {
+        return gameblock_read_ntscaug6jun26(self, buf);
     }
     iosMcHandlerRead(self, buf, 25588);
     systemStatus[11] = (IosMcProductFile + self->port)->soundMode;
@@ -337,7 +337,7 @@ typedef struct { /* field names derived */
     char c[17];
 } McName; /* derived name */
 
-static inline void iosMcMgrGetInfo_ntscaug6(McMgr *mp)
+static inline void iosMcMgrGetInfo_ntscaug6jun26(McMgr *mp)
 {
     while (sceMcGetInfo(mp->port, mp->slot, &mp->type, &mp->free, &mp->format) > 0) {
         debug_StdPrintfDummy("iosMcMgrGetInfo: request busy\n");
@@ -352,8 +352,8 @@ static inline void iosMcMgrGetInfo_ntscaug6(McMgr *mp)
 
 static void iosMcMgrGetInfo(McMgr *mp)
 {
-    if (ICO_NTSCAUG6) {
-        iosMcMgrGetInfo_ntscaug6(mp);
+    if (ICO_NTSCAUG6JUN26) {
+        iosMcMgrGetInfo_ntscaug6jun26(mp);
         return;
     }
     int r;
@@ -649,7 +649,7 @@ retry:
     }
 
     if (mp->flags.ll & 2) {
-        *(McName *)mp->path = *(McName *)PAL_JPN_KOR_NTSCAUG6_CN(
+        *(McName *)mp->path = *(McName *)PAL_JPN_KOR_NTSCAUG6JUN26_CN(
             "/BESCES-50760ico", "/BISCPS-11003ico", "/BISCPS-56001ico", "/BASCUS-97113ico",
             "/BISCPS-55001ico");
         iosMcMgrMkdir(mp);
@@ -658,7 +658,7 @@ retry:
         }
     }
 
-    *(McName *)mp->dirName = *(McName *)PAL_JPN_KOR_NTSCAUG6_CN(
+    *(McName *)mp->dirName = *(McName *)PAL_JPN_KOR_NTSCAUG6JUN26_CN(
         "/BESCES-50760ico", "/BISCPS-11003ico", "/BISCPS-56001ico", "/BASCUS-97113ico",
         "/BISCPS-55001ico");
     iosMcMgrChdir(mp);

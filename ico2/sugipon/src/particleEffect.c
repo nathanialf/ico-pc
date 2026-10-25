@@ -59,9 +59,9 @@ static PEffect particleEffects[128]; /* derived name */
 
 static int particleParams_pal[61 * 40]; /* derived name */
 
-static int particleParams_ntscaug6[53 * 40]; /* derived name */
+static int particleParams_ntscaug6jun26[53 * 40]; /* derived name */
 
-#define particleParams PAL_NTSCAUG6(particleParams_pal, particleParams_ntscaug6)
+#define particleParams PAL_NTSCAUG6JUN26(particleParams_pal, particleParams_ntscaug6jun26)
 
 /* the free-slot search, inlined at its one call site */
 static inline int searchFreeParticleEffect(void) /* derived name */
@@ -129,9 +129,9 @@ static PEPartRec blankParticle = {
 
 static PEffect emptyEffect_pal = {0, 0, 1, 0, 0, 0, 0}; /* derived name */
 
-static PEffect emptyEffect_ntscaug6 = {0, 1, 0, 0, 0, 0}; /* derived name */
+static PEffect emptyEffect_ntscaug6jun26 = {0, 1, 0, 0, 0, 0}; /* derived name */
 
-#define emptyEffect (*PAL_NTSCAUG6(&emptyEffect_pal, &emptyEffect_ntscaug6))
+#define emptyEffect (*PAL_NTSCAUG6JUN26(&emptyEffect_pal, &emptyEffect_ntscaug6jun26))
 
 /* The scratch vector the spread offset is written into and the current
    matrix is applied to; its definition follows the default package. */
@@ -149,7 +149,8 @@ static inline float sugiSignedRandom(void) /* derived name */
     return sugiRandom() * 2.0f - 1.0f;
 }
 
-static inline void _setParticleEffect_ntscaug6(PEPartRec *out, PEPackage *pkg, char *m, float k)
+static inline void _setParticleEffect_ntscaug6jun26(PEPartRec *out, PEPackage *pkg, char *m,
+                                                    float k)
 {
     (void)k; /* PC port: the European parameter, unused here */
     PEPartRec *w;
@@ -191,8 +192,8 @@ static inline void _setParticleEffect_ntscaug6(PEPartRec *out, PEPackage *pkg, c
 
 static void _setParticleEffect(PEPartRec *out, PEPackage *pkg, char *m, float k)
 {
-    if (ICO_NTSCAUG6) {
-        _setParticleEffect_ntscaug6(out, pkg, m, k);
+    if (ICO_NTSCAUG6JUN26) {
+        _setParticleEffect_ntscaug6jun26(out, pkg, m, k);
         return;
     }
     PEPartRec *w;
@@ -336,7 +337,7 @@ static ICO_WORD setParticleEffect_ntsc(PEGeo *self, PEPackage *pkg, struct IosMe
     return (ICO_WORD)self->parts;
 }
 
-static ICO_WORD setParticleEffect_aug6(PEGeo *self, PEPackage *pkg, struct IosMemPart *part)
+static ICO_WORD setParticleEffect_aug6jun26(PEGeo *self, PEPackage *pkg, struct IosMemPart *part)
 {
     (void)part; /* PC port: the European parameter, unused here */
     float m[16];
@@ -403,8 +404,8 @@ static ICO_WORD setParticleEffect(PEGeo *self, PEPackage *pkg, struct IosMemPart
     if (ICO_NTSC) {
         return setParticleEffect_ntsc(self, pkg, part);
     }
-    if (ICO_AUG6) {
-        return setParticleEffect_aug6(self, pkg, part);
+    if (ICO_AUG6JUN26) {
+        return setParticleEffect_aug6jun26(self, pkg, part);
     }
     float m[16];
     PEPartRec *p;
@@ -507,7 +508,7 @@ static inline int updateParticle(PEGeo *self, float *m) /* derived name */
     if (PEWORK.life < 0) {
         if (pkg->mode == 1) {
             MatrixDrive_PushMatrix();
-            if (ICO_NTSCAUG6) {
+            if (ICO_NTSCAUG6JUN26) {
                 _setParticleEffect(&PEWORK, pkg, (char *)m, 0);
             } else {
                 _setParticleEffect(&PEWORK, pkg, (char *)m, self->rate);
@@ -520,7 +521,7 @@ static inline int updateParticle(PEGeo *self, float *m) /* derived name */
     return 1;
 }
 
-static int execParticleEffect_ntscaug6(PEGeo *self)
+static int execParticleEffect_ntscaug6jun26(PEGeo *self)
 {
     float m[16];
     PEPartRec *part;
@@ -580,8 +581,8 @@ static int execParticleEffect_ntscaug6(PEGeo *self)
 
 static int execParticleEffect(PEGeo *self)
 {
-    if (ICO_NTSCAUG6) {
-        return execParticleEffect_ntscaug6(self);
+    if (ICO_NTSCAUG6JUN26) {
+        return execParticleEffect_ntscaug6jun26(self);
     }
     float m[16];
     PEPartRec *part;
@@ -838,7 +839,7 @@ static inline void updateParticleVectors(int no) /* derived name */
     }
 }
 
-static inline void ExecParticleEffect_ntscaug6(int no)
+static inline void ExecParticleEffect_ntscaug6jun26(int no)
 {
     int (*proc)(PEGeo *);
 
@@ -868,8 +869,8 @@ static inline void ExecParticleEffect_ntscaug6(int no)
 
 void ExecParticleEffect(int no)
 {
-    if (ICO_NTSCAUG6) {
-        ExecParticleEffect_ntscaug6(no);
+    if (ICO_NTSCAUG6JUN26) {
+        ExecParticleEffect_ntscaug6jun26(no);
         return;
     }
     int (*proc)(PEGeo *);
@@ -923,7 +924,7 @@ static void ResetParticleEffectPackages_ntsc(int *pkg)
     }
 }
 
-static void ResetParticleEffectPackages_aug6(int *pkg)
+static void ResetParticleEffectPackages_aug6jun26(int *pkg)
 {
     PEVector pos;
     PEQuaternion quat;
@@ -949,8 +950,8 @@ void ResetParticleEffectPackages(int *pkg)
         ResetParticleEffectPackages_ntsc(pkg);
         return;
     }
-    if (ICO_AUG6) {
-        ResetParticleEffectPackages_aug6(pkg);
+    if (ICO_AUG6JUN26) {
+        ResetParticleEffectPackages_aug6jun26(pkg);
         return;
     }
     PEVector pos;
@@ -1074,7 +1075,7 @@ static inline int SetParticleEffect_inl(int no, void *pos, void *quat) /* derive
     return SetParticleEffectByPartition(no, pos, quat, ios_partition_oomori);
 }
 
-static int SetParticleEffect_aug6(int no, void *pos, void *quat)
+static int SetParticleEffect_aug6jun26(int no, void *pos, void *quat)
 {
     int id;
 
@@ -1111,8 +1112,8 @@ static int SetParticleEffect_aug6(int no, void *pos, void *quat)
 
 int SetParticleEffect(int no, void *pos, void *quat)
 {
-    if (ICO_AUG6) {
-        return SetParticleEffect_aug6(no, pos, quat);
+    if (ICO_AUG6JUN26) {
+        return SetParticleEffect_aug6jun26(no, pos, quat);
     }
     return SetParticleEffect_inl(no, pos, quat);
 }
@@ -1121,7 +1122,7 @@ int SetParticleEffectActiveSensing(int no, void *pos, void *quat)
 {
     int id;
 
-    id = PAL_AUG6(SetParticleEffect_inl(no, pos, quat), SetParticleEffect(no, pos, quat));
+    id = PAL_AUG6JUN26(SetParticleEffect_inl(no, pos, quat), SetParticleEffect(no, pos, quat));
     if (id != -1) {
         particleEffects[id].sensing = 1;
         particleEffects[id].sensPos = pos;
@@ -1178,7 +1179,7 @@ void DisableParticleEffectGeometryControl(int id)
 int GetParticleIDWithName(char *name)
 {
     int i;
-    for (i = 0; i < PAL_NTSCAUG6(61, 53); i++) {
+    for (i = 0; i < PAL_NTSCAUG6JUN26(61, 53); i++) {
         if (strcmp(particleEffectFile[i].name, name) == 0) {
             return i;
         }

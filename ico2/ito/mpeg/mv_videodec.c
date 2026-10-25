@@ -69,12 +69,12 @@ int videoDecCreate(VideoDec *self)
 {
     int p;
 
-    p = alloc_zeroed(PAL_JPNKORNTSCAUG6CN(1868288, 1557248), 64);
+    p = alloc_zeroed(PAL_JPNKORNTSCAUG6JUN26CN(1868288, 1557248), 64);
     self->buf = p;
     if (p == 0) {
         return -1;
     }
-    sceMpegCreate(&self->mpeg, (void *)p, PAL_JPNKORNTSCAUG6CN(1868288, 1557248));
+    sceMpegCreate(&self->mpeg, (void *)p, PAL_JPNKORNTSCAUG6JUN26CN(1868288, 1557248));
     sceMpegAddCallback(&self->mpeg, 0, mpegError, 0);
     sceMpegAddCallback(&self->mpeg, 1, mpegNodata, self);
     sceMpegAddCallback(&self->mpeg, 2, mpegStopDMA, self);
@@ -179,7 +179,8 @@ static int decBitStrm0(VideoDec *dec, MvDispEnv *disp, VoBuf *vo)
         while ((p = voBufGetData(vo)) == 0) {
             switchThread();
         }
-        if (sceMpegGetPicture(&dec->mpeg, (unsigned int)p, PAL_JPNKORNTSCAUG6CN(1620, 1350)) < 0) {
+        if (sceMpegGetPicture(&dec->mpeg, (unsigned int)p, PAL_JPNKORNTSCAUG6JUN26CN(1620, 1350)) <
+            0) {
             ErrMessage("sceMpegGetPicture() decode error");
             ret = -1;
             break;

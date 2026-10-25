@@ -450,7 +450,7 @@ inline void AdpcmStreamHeap(void)
     }
 }
 
-static void AdpcmStreamInit_aug6(void)
+static void AdpcmStreamInit_aug6jun26(void)
 {
     int i;
     int *p;
@@ -478,8 +478,8 @@ static void AdpcmStreamInit_aug6(void)
 
 inline void AdpcmStreamInit(void)
 {
-    if (ICO_AUG6) {
-        AdpcmStreamInit_aug6();
+    if (ICO_AUG6JUN26) {
+        AdpcmStreamInit_aug6jun26();
         return;
     }
     int i;

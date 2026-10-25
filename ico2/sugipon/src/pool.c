@@ -122,7 +122,7 @@ static RdGridSt poolHostRippleSt = RD_GRID_ST_RIPPLE;
 
 static void falldownSE(GObj *self)
 {
-    ExecuteSEPackage(self, PAL_NTSCAUG6(86, 81));
+    ExecuteSEPackage(self, PAL_NTSCAUG6JUN26(86, 81));
 }
 
 /* The whole drawing area as a sprite rectangle in GS primitive coordinates,
@@ -289,7 +289,7 @@ void SetFallDownSplash(GObj *pool, GObj *self)
     float tmp[4];
     PoolWork *w = GOBJ_SUB(pool)->work;
 
-    if (ICO_AUG6) {
+    if (ICO_AUG6JUN26) {
         if (w == 0) {
             debug_assertMessage("src/pool.c", LN(254, 254, 254, 254, 254, 254, 254),
                                 "ATR_DWATER or ATR_WATER assigned to NON POOL.\n");
@@ -306,8 +306,8 @@ void SetFallDownSplash(GObj *pool, GObj *self)
         setNodePursueParticleEffectWithUpperLimit(48, self, 47, pos[1]);
     }
 
-    stage_SetLoopFlag(PAL_JPNKORCN_NTSC_AUG6(499, 495, 429, 428), 0);
-    stage_SetFrameStep(PAL_JPNKORCN_NTSC_AUG6(499, 495, 429, 428), 1);
+    stage_SetLoopFlag(PAL_JPNKORCN_NTSC_AUG6JUN26(499, 495, 429, 428), 0);
+    stage_SetFrameStep(PAL_JPNKORCN_NTSC_AUG6JUN26(499, 495, 429, 428), 1);
 
     EntryMultiBgaManagerNoKind(w->splash, w->splashNo, pos);
     w->splashNo = (w->splashNo + 1) % 2;
@@ -344,7 +344,7 @@ static int poolRideFunc(ObjNode *on, GObj *rider);
 char *InitPoolGeo(char *self, SObjSimpleSetting *lay)
 {
     PoolWork *w = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(PoolWork, 224), "src/pool.c",
-                                 PAL_NTSC_AUG6(316, 315, 309));
+                                 PAL_NTSC_AUG6JUN26(316, 315, 309));
     int i;
     int j;
     int k;
@@ -362,11 +362,11 @@ char *InitPoolGeo(char *self, SObjSimpleSetting *lay)
         w->step = lay->scale[1];
 
         w->height = iosMallocDebug(ios_partition_sugipon, w->nx * sizeof(float *), "src/pool.c",
-                                   PAL_NTSC_AUG6(330, 329, 323));
+                                   PAL_NTSC_AUG6JUN26(330, 329, 323));
 
         for (i = 0; i < w->nx; i++) {
             w->height[i] = iosMallocDebug(ios_partition_sugipon, w->ny * 4, "src/pool.c",
-                                          PAL_NTSC_AUG6(334, 333, 327));
+                                          PAL_NTSC_AUG6JUN26(334, 333, 327));
         }
 
         w->surface = prim_InitMesh3D(w->ny, w->nx, 1, 0x1C, (lay->obj & 0xFFFFFF00) | 0x80, 1);
@@ -375,7 +375,7 @@ char *InitPoolGeo(char *self, SObjSimpleSetting *lay)
 
         w->phase = 0;
         w->wire = iosMallocDebug(ios_partition_sugipon, w->nx * sizeof(Prim3DVec *), "src/pool.c",
-                                 PAL_NTSC_AUG6(357, 356, 350));
+                                 PAL_NTSC_AUG6JUN26(357, 356, 350));
 
         for (j = 0; j < w->nx; j++) {
             w->wire[j] = w->reflect->pos + j * w->ny;
@@ -388,7 +388,7 @@ char *InitPoolGeo(char *self, SObjSimpleSetting *lay)
 
         w->rippleNo = 0;
 
-        if (GOBJ_SUB(self)->accessary != PAL_NTSCAUG6(26, 21)) {
+        if (GOBJ_SUB(self)->accessary != PAL_NTSCAUG6JUN26(26, 21)) {
             SObjSimpleSetting obj = InitialSObjSimpleSetting;
 
             obj.pos[0] = -accessary[GOBJ_SUB(self)->accessary].pivot[0];
@@ -730,7 +730,7 @@ static void dispPool(GObj *self)
     copyToWork(4);
     gif_SetGsReg(6, workVram | ico_frame_tex0_w(&gsFrame, 0x100) | 0x600000000LL);
 
-    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, PAL_NTSCAUG6(1, 0), 0);
+    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, PAL_NTSCAUG6JUN26(1, 0), 0);
 
     gif_SetGsReg(0x14, 0x60);
     gif_SetZWrite(0);
@@ -768,7 +768,7 @@ static void dispPool(GObj *self)
     CopyMatrix(m3, (char *)(matrixptr + 0x200));
     CopyMatrix(m4, (char *)(matrixptr + 0x340));
 
-    if (ICO_JPNKORNTSCAUG6CN) {
+    if (ICO_JPNKORNTSCAUG6JUN26CN) {
         debug_snapshot_reserve--;
     }
     gsb_SetVSMatrix(0xCC, 0xCC, (float)currentFocusDistance);
@@ -792,7 +792,7 @@ static void dispPool(GObj *self)
         CopyMatrix(MatrixDrive_GetMatrix(), &w->dobj->matrix);
         /* the spinning stage is 101 on the European disc, 99 on the Japanese
            one (stages from 58 two lower); stage 15 is the same on both */
-        if (stage_no == PAL_JPNKORNTSCAUG6CN(101, 99)) {
+        if (stage_no == PAL_JPNKORNTSCAUG6JUN26CN(101, 99)) {
             MatrixDrive_RotMatrixZ((w->spin << 16) / 1600);
         } else if (stage_no == 15) {
             MatrixDrive_RotMatrixZ(-(w->spin << 16) / 1600);
@@ -824,13 +824,13 @@ static void dispPool(GObj *self)
 #endif
     vsWidth = ScreenWidth; /* SCALE: gsb_SetVSMatrix's full-screen record */
     vsHeight = ScreenHeight;
-    if (ICO_JPNKORNTSCAUG6CN) {
+    if (ICO_JPNKORNTSCAUG6JUN26CN) {
         debug_snapshot_reserve++;
     }
 
     gif_SetGsReg(6, workVram | ico_frame_tex0_w(&gsFrame, 0x100) | 0x600000000LL);
 
-    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, PAL_NTSCAUG6(1, 0), 0);
+    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, PAL_NTSCAUG6JUN26(1, 0), 0);
 
     gif_SetGsReg(0x14, 0x60);
     gif_SetZWrite(0);
@@ -850,7 +850,7 @@ static void dispPool(GObj *self)
 #endif
 
     gif_StartPacketPri(4);
-    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, PAL_NTSCAUG6(1, 0), 0);
+    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, PAL_NTSCAUG6JUN26(1, 0), 0);
 
     gif_SetGsReg(0x14, 0x60);
     gif_SetZWrite(0);
@@ -871,8 +871,8 @@ void PoolDL(GObj *self)
 {
     PoolWork *w = GOBJ_SUB(self)->work;
 
-    DispMultiBgaManagerWithKind(PAL_JPNKORCN_NTSC_AUG6(498, 494, 428, 427), w->bga, 10);
-    DispMultiBgaManagerWithKind(PAL_JPNKORCN_NTSC_AUG6(499, 495, 429, 428), w->splash, 2);
+    DispMultiBgaManagerWithKind(PAL_JPNKORCN_NTSC_AUG6JUN26(498, 494, 428, 427), w->bga, 10);
+    DispMultiBgaManagerWithKind(PAL_JPNKORCN_NTSC_AUG6JUN26(499, 495, 429, 428), w->splash, 2);
     if (systemStatus[5] == 0) {
         w->phase =
             (short)(int)((float)w->phase +
@@ -992,7 +992,7 @@ void SetLimitedPoolReflactionMesh(PoolMesh *refl, GObj *pool, GObj *obj)
     int i;
     int j;
 
-    if (ICO_AUG6 && w == 0) {
+    if (ICO_AUG6JUN26 && w == 0) {
         /* "a water attribute is set where there is no water (it may hang)": the August
            preview's guard */
         debug_StdPrintfDummy("水域じゃないところに水アトリビュートがついてます(ハングの可能性)\n");
@@ -1070,7 +1070,7 @@ void DispLimitedPoolReflactionMesh(PoolMesh *refl)
     gif_StartPacketPri(4);
     copyToWork(4);
     gif_SetGsReg(6, workVram | ico_frame_tex0_w(&gsFrame, 0x100) | 0x600000000LL);
-    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, PAL_NTSCAUG6(1, 0), 0);
+    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, PAL_NTSCAUG6JUN26(1, 0), 0);
     gif_SetGsReg(0x14, 0x60);
     gif_SetZWrite(0);
     gif_SetZTest(1);
@@ -1094,7 +1094,7 @@ void DispLimitedPoolReflactionMesh(PoolMesh *refl)
 
 void PoolGeo(void) {}
 
-static inline float GetPoolGlobalHeight_aug6(GObj *pool)
+static inline float GetPoolGlobalHeight_aug6jun26(GObj *pool)
 {
     PoolWork *w = GOBJ_SUB(pool)->work;
 
@@ -1108,13 +1108,13 @@ static inline float GetPoolGlobalHeight_aug6(GObj *pool)
 
 float GetPoolGlobalHeight(GObj *pool)
 {
-    if (ICO_AUG6) {
-        return GetPoolGlobalHeight_aug6(pool);
+    if (ICO_AUG6JUN26) {
+        return GetPoolGlobalHeight_aug6jun26(pool);
     }
     return ((PoolWork *)GOBJ_SUB(pool)->work)->pos[1];
 }
 
-static inline float GetPoolGlobalHeightDetail_aug6(GObj *pool, float *pos)
+static inline float GetPoolGlobalHeightDetail_aug6jun26(GObj *pool, float *pos)
 {
     PoolWork *p = GOBJ_SUB(pool)->work;
     float inv;
@@ -1139,8 +1139,8 @@ static inline float GetPoolGlobalHeightDetail_aug6(GObj *pool, float *pos)
 
 float GetPoolGlobalHeightDetail(GObj *pool, float *pos)
 {
-    if (ICO_AUG6) {
-        return GetPoolGlobalHeightDetail_aug6(pool, pos);
+    if (ICO_AUG6JUN26) {
+        return GetPoolGlobalHeightDetail_aug6jun26(pool, pos);
     }
     PoolWork *p = GOBJ_SUB(pool)->work;
     float inv;

@@ -19,7 +19,7 @@ static inline void ClearDelayFreeBuffer(int no) /* derived name */
 {
     int i;
 
-    for (i = PAL_NTSC_AUG6(384, 256, 128) - 1; i >= 0; i--) {
+    for (i = PAL_NTSC_AUG6JUN26(384, 256, 128) - 1; i >= 0; i--) {
         delayFreeBuffer[no][i] = 0;
     }
 }
@@ -55,7 +55,7 @@ inline void ExecDelayFree(void)
 void EntryDelayFree(void *p)
 {
     delayFreeBuffer[delayFreeNo][delayFreeCount++] = p;
-    if (delayFreeCount >= PAL_NTSC_AUG6(384, 256, 128)) {
+    if (delayFreeCount >= PAL_NTSC_AUG6JUN26(384, 256, 128)) {
         debug_StdPrintfDummy("[33mERROR!!! TOO MANY DELAY FREE LIST ENTRY!!! EXIT...[m\n");
         debug_assert("src/delayFreeManager.c", 51);
         __assert("src/delayFreeManager.c", 51, "0");

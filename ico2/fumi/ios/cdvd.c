@@ -305,12 +305,13 @@ static inline void iosCdvdDiskReadyBlock(void)
     if (sceCdDiskReady(1) != 2) {
         sceCdlFILE fp;
         char file[32];
-        strcpy(file, PAL_JPN_KOR_NTSCAUG6_CN("SCES_507.60", "SCPS_110.03", "SCPS_560.01",
-                                             "SCUS_971.13", "SCPS_550.01"));
+        strcpy(file, PAL_JPN_KOR_NTSCAUG6JUN26_CN("SCES_507.60", "SCPS_110.03", "SCPS_560.01",
+                                                  "SCUS_971.13", "SCPS_550.01"));
         iosCdvdChgFileName(file);
         debug_StdPrintfDummy("wait insert ico disk %s %s\n",
-                             PAL_JPN_KOR_NTSCAUG6_CN("SCES_507.60", "SCPS_110.03", "SCPS_560.01",
-                                                     "SCUS_971.13", "SCPS_550.01"),
+                             PAL_JPN_KOR_NTSCAUG6JUN26_CN("SCES_507.60", "SCPS_110.03",
+                                                          "SCPS_560.01", "SCUS_971.13",
+                                                          "SCPS_550.01"),
                              file);
         do {
             sceCdDiskReady(0);
@@ -840,7 +841,7 @@ void iosCdvdManager(void)
 
     /* JPN, the USA disc and the August 2001 preview: a PlayStation 2 CD; KOR and CN a DVD,
        as PAL */
-    cdDiskType = PAL_JPNNTSCAUG6(20, 18);
+    cdDiskType = PAL_JPNNTSCAUG6JUN26(20, 18);
     sceCdInit(0);
     sceCdMmode(iosCdvdMediaType);
     sceFsReset();
@@ -1026,8 +1027,8 @@ static void cdWait(int *busy)
                 systemStatus[0x14 / 4] = 1;
                 cdWaitParamSet = 1;
             }
-            strcpy(file, PAL_JPN_KOR_NTSCAUG6_CN("SCES_507.60", "SCPS_110.03", "SCPS_560.01",
-                                                 "SCUS_971.13", "SCPS_550.01"));
+            strcpy(file, PAL_JPN_KOR_NTSCAUG6JUN26_CN("SCES_507.60", "SCPS_110.03", "SCPS_560.01",
+                                                      "SCUS_971.13", "SCPS_550.01"));
             chgFileName(file);
             r = sceCdDiskReady(1);
             if (r == 2 && sceCdGetDiskType() == cdDiskType && sceCdSearchFile(&fp, file) != 0) {

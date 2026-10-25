@@ -55,7 +55,7 @@ static const StageOrientDef stageOrientDefs_pal[41] = {
     {"E3_st13b", 3.14159f, {-24850.0f, -430.0f, 450.0f}, {-24850.0f, -900.0f, 450.0f}},
 };
 
-static const StageOrientDef stageOrientDefs_ntscaug6[35] = {
+static const StageOrientDef stageOrientDefs_ntscaug6jun26[35] = {
     /* derived name */
     {"st47a", 0.0f, {200.0f, -350.0f, -950.0f}, {0.0f, -1750.0f, 0.0f}},
     {"st18a", -3.14159f, {-4850.0f, -1650.0f, 3075.0f}, {-2600.0f, -950.0f, 1375.0f}},
@@ -94,7 +94,7 @@ static const StageOrientDef stageOrientDefs_ntscaug6[35] = {
     {"st27a", 1.5708f, {27325.0f, -12310.0f, 77370.0f}, {29200.0f, -12400.0f, 77500.0f}},
 };
 
-#define stageOrientDefs PAL_NTSCAUG6(stageOrientDefs_pal, stageOrientDefs_ntscaug6)
+#define stageOrientDefs PAL_NTSCAUG6JUN26(stageOrientDefs_pal, stageOrientDefs_ntscaug6jun26)
 
 /* the orient index each stage resolves to, -1 where the stage has none; the
    European size, larger than the Japanese ELF's 104 */
@@ -109,12 +109,13 @@ inline void StageOrientInit(void)
     int i, j;
     char buf[64];
 
-    for (i = 0; i < PAL_JPNKORNTSCAUG6CN(106, 104); i++) {
+    for (i = 0; i < PAL_JPNKORNTSCAUG6JUN26CN(106, 104); i++) {
         sscanf(stageData[i].name, "%s", buf);
         stageOrientIdx[i] = -1;
-        for (j = 0; j < PAL_NTSCAUG6(sizeof(stageOrientDefs_pal) / sizeof(stageOrientDefs_pal[0]),
-                                     sizeof(stageOrientDefs_ntscaug6) /
-                                         sizeof(stageOrientDefs_ntscaug6[0]));
+        for (j = 0;
+             j < PAL_NTSCAUG6JUN26(sizeof(stageOrientDefs_pal) / sizeof(stageOrientDefs_pal[0]),
+                                   sizeof(stageOrientDefs_ntscaug6jun26) /
+                                       sizeof(stageOrientDefs_ntscaug6jun26[0]));
              j++) {
             if (strcmp(buf, stageOrientDefs[j].name) == 0) {
                 stageOrientIdx[i] = j;
