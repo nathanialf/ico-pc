@@ -178,10 +178,15 @@ if(ICO_RUN_TESTS)
     # and on the Korean disc, which runs the Japanese program's check
     add_test(NAME kanban_boot_kor COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" kor)
     # and the Asian disc, the same program (kanbanBootMcCheck_jpn).  The North
-    # American, August 2001 and June 2001 discs have their own boot check
-    # (kanbanBoot.c's VERSION_NTSC/AUG6/JUN26 arms): their runs follow the
-    # merged game code's steps
+    # American disc and the August 2001 preview run that check too, without its
+    # retries and with the Korean disc's "continue" item (kanban_boot_ntsc,
+    # kanban_boot_aug6).  The June 2001 demo's boot has no card check at all
+    # (kanbanBootMain_jun26): kanban_boot_jun26 runs its sign, its wait and its
+    # end, with any card
     add_test(NAME kanban_boot_cn COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" cn)
+    add_test(NAME kanban_boot_ntsc COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" ntsc)
+    add_test(NAME kanban_boot_aug6 COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" aug6)
+    add_test(NAME kanban_boot_jun26 COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" jun26)
 endif()
 
 # The hand records Ico and Yorda hold hands with
