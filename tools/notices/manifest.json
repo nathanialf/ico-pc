@@ -181,6 +181,13 @@
       "texts": [{"file": "port/assets/fonts/NotoSansKR-OFL.txt"}]
     },
     {
+      "name": "Noto Sans TC Regular (font)",
+      "version": "google/fonts commit b950a7257470b900078f2bf3223823a8602de7e1, wght 400 instance subset to the port's Chinese text (a modified version, OFL 1.1 section 3)",
+      "licence": "SIL Open Font License 1.1",
+      "used_for": "the port's own text in Traditional Chinese (the Asian disc's menu language), and where the other fonts have no glyph, embedded in the program",
+      "texts": [{"file": "port/assets/fonts/NotoSansTC-OFL.txt"}]
+    },
+    {
       "name": "minicoro",
       "version": "v0.2.0, unmodified",
       "licence": "Unlicense or MIT-0",
