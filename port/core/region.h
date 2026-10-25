@@ -171,6 +171,12 @@ typedef struct IcoRegionInfo {
                                   (credits_live.c SONG_AT_ROLL_MS) */
     int credits_entrance_exit; /* exitData row into STAFF1 */
     int credits_boy_label;     /* the boy's object record */
+    /* 1: the disc's DATA.DF holds the staff scenes' packs (STGSTAFF1.DF,
+       STGSTAFF2.DF, STGSTAFF3.DF: stageData's dataFile of STAFF1 ..), so
+       Extras > Credits can play them; 0: it does not (the June 2001 demo's
+       49 entries), and the playback refuses with a logged reason
+       (credits_live.c begin) */
+    int credits_staff_packs;
 
     /* --- sound (the gallery) --------------------------------------------- */
     int n_adpcm, n_sefile, n_sedef, n_selist, n_seenv;
