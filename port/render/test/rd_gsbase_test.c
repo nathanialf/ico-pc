@@ -144,6 +144,24 @@ PadState pad[16];
 
 int buffer_ID, frame_count, stage_no, GlobalTimer, game_pause;
 
+/* GsBase.c's June 2001 demo arm of gsb_MakeCommonMatrix (and the 2001 builds' pause test) name
+   these; the European path this test runs never reaches them */
+int graphics_ready;
+
+void GetSunWorldPos(float *pos)
+{
+    pos[0] = pos[1] = pos[2] = 0.0f;
+    pos[3] = 1.0f;
+}
+
+void _SetCameraMatrix(void *dst, void *pos, void *dir, void *up)
+{
+    (void)dst;
+    (void)pos;
+    (void)dir;
+    (void)up;
+}
+
 int screen_offset_x, screen_offset_y, optionScreenMode, odd_even;
 
 char *matrixptr;
