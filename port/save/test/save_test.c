@@ -35,8 +35,24 @@
  * disc's only); kor, the Korean disc, BISCPS-56001ico and the Japanese
  * record (0x1E8, region_kor.c mc_product_size); cn, the Asian disc,
  * BISCPS-55001ico and the same 0x1E8 record. game.00N is 25,600 bytes on
- * all. Part C also imports a card holding two discs' directories (the
- * selected one and another), each into its own folder.
+ * all of those.
+ *
+ * The three 2001 discs keep a record of their own on the card (0x18C bytes,
+ * mcard.c mc_product_to_2001: twenty 16-byte previews, then sound mode, output
+ * mode, vibration and the 64 pad bytes; no controlType, fileNo, serial,
+ * cameraMove or palMode) and no option words after the game block:
+ * ntsc, the North American disc, BASCUS-97113ico, previews of stage,
+ * play time, sofa and an unread word, a 25,596-byte game block (game.00N
+ * 25,600 bytes); aug6, the August 2001 preview, the same directory (the
+ * discs share it, as on the PS2) and file size, previews of stage, cleared,
+ * play time and sofa; jun26, the June 2001 demo, BISCUS-97113ico, the aug6
+ * record, a 20,480-byte game block (game.00N 20,484 bytes) and icon files
+ * that carry a 4-byte sum and are written only when absent. Their load leaves
+ * optionControlType, optionScreenMode, girlControlMode, the record's
+ * fileNo/serial and the European-only words alone.
+ *
+ * Part C also imports a card holding two discs' directories (the selected
+ * one and another), each into its own folder.
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -87,6 +103,10 @@
 #include "sched.h"
 
 static int fails;
+
+/* mcard.c's save segment names per disc (mcard.h declares the first two) */
+extern char *iOSMcSaveSeg_kor[], *iOSMcSaveSeg_ntscaug6[], *iOSMcSaveSeg_jun26[],
+    *iOSMcSaveSeg_cn[];
 
 #define CHECK(cond)                                                                                \
     do {                                                                                           \
@@ -154,7 +174,11 @@ void soundOutputModeSet(int mode)
 
 /* the icon files' directory entries (name, size): the disc's, which the
    port gets from the data tables */
-const IconFile iconFile[] = {{"", 0}, {"icon.sys", 964}, {"boy_blk.ico", 3000}};
+const IconFile iconFile[] = {{"", 0},
+                             {"icon.sys", 964},
+                             {"boy_blk.ico", 3000},
+                             {"boy_blk.ico", 3000},
+                             {"boy_blk.ico", 3000}};
 
 /* --- cdvd.c's background manager, as mcdata.c uses it ---------------------------
  *
@@ -274,15 +298,33 @@ static void bg_manager(void)
 #define CARD_M "save_test_card_m"
 /* the selected disc's save directory (fumi/ios/mcard.c's product name, the
    region table's mc_save_dir: BESCES-50760ico, BISCPS-11003ico,
-   BISCPS-56001ico, BISCPS-55001ico) and its product file's size before the 4-byte sum
-   (mc_product_size: 0x1F0, the Japanese, Korean and Asian discs' 0x1E8, the first
-   0x1E8 bytes of the same record) */
+   BISCPS-56001ico, BISCPS-55001ico, BASCUS-97113ico, BISCUS-97113ico) and its product
+   file's size before the 4-byte sum (mc_product_size: 0x1F0, the Japanese, Korean and
+   Asian discs' 0x1E8, the first 0x1E8 bytes of the same record, the 2001 discs' own
+   0x18C) */
 #define PRODUCT (ico_region_cur()->mc_save_dir)
 #define PSIZE (ico_region_cur()->mc_product_size)
-/* the game block, 25,588 bytes, then optionScreenMode and girlControlMode
-   and the sum: the same on both discs (gameblock_write has no region
-   block upstream, fumi/ios/mcard.c:182-188) */
-#define GAME_FILE 25600
+
+/* the game block as the disc writes it (fumi/ios/mcard.c gameblock_write): 25,588
+   bytes then optionScreenMode and girlControlMode on the European, Japanese,
+   Korean and Asian discs, 25,596 bytes alone on the North American and August
+   2001 discs, 20,480 bytes alone on the June 2001 demo; the sum follows */
+static int game_block_bytes(void)
+{
+    return ICO_JUN26 ? 20480 : ICO_NTSCAUG6JUN26 ? 25596 : 25588;
+}
+
+static int game_file_bytes(void)
+{
+    return game_block_bytes() + (ICO_NTSCAUG6JUN26 ? 0 : 8) + 4;
+}
+
+/* the demo's icon files end in the 4-byte sum (iosMcMgrSaveSeg_jun26 writes it
+   on every segment); the other discs' do not */
+static int icon_sum_bytes(void)
+{
+    return ICO_JUN26 ? 4 : 0;
+}
 
 static long file_size(const char *path)
 {
@@ -721,7 +763,9 @@ static void do_save_on(int port, int fileNo, void *buf)
     wait_request();
     iosMcSaveIconBlock(&req);
     wait_request();
-    CHECK(req.result == 0);
+    /* the demo's icon save ends on a segment whose file is already there and
+       leaves sceMcGetDir's entry count in the result (not an error) */
+    CHECK(ICO_JUN26 ? req.result >= 0 : req.result == 0);
     iosMcSaveProductBlock(&req);
     wait_request();
     CHECK(req.result == 0);
@@ -737,8 +781,8 @@ static void do_save(int fileNo, void *buf)
 
 static void driver(void *arg)
 {
-    static unsigned char buf[25588];
-    static unsigned char back[25588];
+    static unsigned char buf[25600];
+    static unsigned char back[25600];
     static unsigned char file[26000];
     static unsigned char again[26000];
     static unsigned char want[26000];
@@ -756,6 +800,26 @@ static void driver(void *arg)
     CHECK(ico_region_info_jpn.mc_product_size == (int)offsetof(McProductFile, cameraMove));
     CHECK(ico_region_info_kor.mc_product_size == (int)offsetof(McProductFile, cameraMove));
     CHECK(ico_region_info_cn.mc_product_size == (int)offsetof(McProductFile, cameraMove));
+    /* the three 2001 discs' record is its own 0x18C bytes: twenty 16-byte previews, the
+       sound mode, the output mode, the vibration, the 64 pad bytes (mcard.c
+       mc_product_to_2001; typedef.h's McProductFile keeps the European layout in
+       memory, where soundMode sits at 0x190 after twenty 20-byte previews) */
+    CHECK(ico_region_info_ntsc.mc_product_size == 0x18C);
+    CHECK(ico_region_info_aug6.mc_product_size == 0x18C);
+    CHECK(ico_region_info_jun26.mc_product_size == 0x18C);
+    CHECK(0x18C == 20 * 16 + 3 * 4 + (int)sizeof(((McProductFile *)0)->padConf));
+    CHECK(offsetof(McProductFile, soundMode) == 0x190 && offsetof(McProductFile, padConf) == 0x1A0);
+    CHECK(ICO_NTSCAUG6JUN26 == (PSIZE == 0x18C));
+    /* every row's save directory is the game's own name for it */
+    CHECK(strcmp(ico_region_info_pal.mc_save_dir, iOSMcSaveSeg_pal[0]) == 0);
+    CHECK(strcmp(ico_region_info_jpn.mc_save_dir, iOSMcSaveSeg_jpn[0]) == 0);
+    CHECK(strcmp(ico_region_info_kor.mc_save_dir, iOSMcSaveSeg_kor[0]) == 0);
+    CHECK(strcmp(ico_region_info_ntsc.mc_save_dir, iOSMcSaveSeg_ntscaug6[0]) == 0);
+    CHECK(strcmp(ico_region_info_aug6.mc_save_dir, iOSMcSaveSeg_ntscaug6[0]) == 0);
+    CHECK(strcmp(ico_region_info_jun26.mc_save_dir, iOSMcSaveSeg_jun26[0]) == 0);
+    CHECK(strcmp(ico_region_info_cn.mc_save_dir, iOSMcSaveSeg_cn[0]) == 0);
+    CHECK(strcmp(iOSMcSaveSeg_ntscaug6[0], "BASCUS-97113ico") == 0);
+    CHECK(strcmp(iOSMcSaveSeg_jun26[0], "BISCUS-97113ico") == 0);
     printf("part B: the %s disc, %s/, a product file of %d + 4 bytes\n", ico_region_cur()->slug,
            PRODUCT, PSIZE);
     rm_card(CARD_B);
@@ -785,21 +849,24 @@ static void driver(void *arg)
        block are then all zeros but for their layout */
     memset(buf, 0, sizeof(buf));
     do_save(1, buf);
-    CHECK(file_size(cpath(CARD_B, "icon.sys")) == 964);
-    CHECK(file_size(cpath(CARD_B, "boy_blk.ico")) == 3000);
+    CHECK(file_size(cpath(CARD_B, "icon.sys")) == 964 + icon_sum_bytes());
+    CHECK(file_size(cpath(CARD_B, "boy_blk.ico")) == 3000 + icon_sum_bytes());
     n = slurp(cpath(CARD_B, PRODUCT), file, sizeof(file));
     CHECK(n == PSIZE + 4);
     memset(want, 0, sizeof(want));
     CHECK(n == PSIZE + 4 && memcmp(file, want, (size_t)PSIZE + 4) == 0);
     n = slurp(cpath(CARD_B, "game.001"), file, sizeof(file));
-    CHECK(n == 25588 + 4 + 4 + 4); /* the block, the two option words, the sum */
-    CHECK(n == GAME_FILE && memcmp(file, want, GAME_FILE) == 0);
+    /* the block, the two option words (not on the 2001 discs), the sum */
+    CHECK(n == game_block_bytes() + (ICO_NTSCAUG6JUN26 ? 0 : 8) + 4);
+    CHECK(n == game_file_bytes() && memcmp(file, want, (size_t)game_file_bytes()) == 0);
     /* the icon files are the disc's bytes as mcdata.c's background read
        hands them to the handler (a 2048-byte rounded read, the file's size
-       written), and have no sum */
+       written), and have no sum (the demo's end in the sum of their bytes) */
     n = slurp(cpath(CARD_B, "icon.sys"), file, sizeof(file));
-    CHECK(n == 964);
-    for (i = 0; i < n; i++) {
+    CHECK(n == 964 + icon_sum_bytes());
+    CHECK(icon_sum_bytes() == 0 || (uint32_t)(file[964] | file[965] << 8 | file[966] << 16 |
+                                              (uint32_t)file[967] << 24) == sum_bytes(file, 964));
+    for (i = 0; i < 964 && i < n; i++) {
         if (file[i] != icon_byte("icon.sys", i)) {
             printf("FAIL icon.sys byte %d is %u, not %u\n", i, file[i], icon_byte("icon.sys", i));
             fails++;
@@ -807,8 +874,10 @@ static void driver(void *arg)
         }
     }
     n = slurp(cpath(CARD_B, "boy_blk.ico"), file, sizeof(file));
-    CHECK(n == 3000);
-    for (i = 0; i < n; i++) {
+    CHECK(n == 3000 + icon_sum_bytes());
+    CHECK(icon_sum_bytes() == 0 || (uint32_t)(file[3000] | file[3001] << 8 | file[3002] << 16 |
+                                              (uint32_t)file[3003] << 24) == sum_bytes(file, 3000));
+    for (i = 0; i < 3000 && i < n; i++) {
         if (file[i] != icon_byte("boy_blk.ico", i)) {
             printf("FAIL boy_blk.ico byte %d is %u, not %u\n", i, file[i],
                    icon_byte("boy_blk.ico", i));
@@ -816,7 +885,10 @@ static void driver(void *arg)
             break;
         }
     }
-    CHECK(bgReads >= 2 && bgMisaligned == 0);
+    /* the demo reads each file whole into a buffer it allocates (the 16-byte
+       aligned partition here), and its second and third boy_blk.ico segments find
+       the file already on the card: two reads */
+    CHECK(ICO_JUN26 ? bgReads == 2 : (bgReads >= 2 && bgMisaligned == 0));
     CHECK(bgReq[0].name[0] == 0 && bgReq[1].name[0] == 0); /* closed */
 
     /* the card now has the save: the load menu sees slot 1 */
@@ -852,39 +924,63 @@ static void driver(void *arg)
     do_save(1, buf);
 
     memset(want, 0, sizeof(want));
-    le32(want + 0x00, 7);
-    le32(want + 0x04, 1);
-    le32(want + 0x08, 1234);
-    le32(want + 0x0C, 5);
-    le32(want + 19 * 20, 0xFFFFFFFFu);
-    le32(want + 0x190, 2);
-    le32(want + 0x194, 1);
-    le32(want + 0x198, 1);
-    le32(want + 0x19C, 3);
-    for (i = 0; i < 16; i++) {
-        le32(want + 0x1A0 + 4 * i, 0x100 + i);
-    }
-    le32(want + 0x1E0, 1);
-    le32(want + 0x1E4, 0xCAFE);
-    if (PSIZE == (int)sizeof(McProductFile)) {
-        /* the European disc's last two words; the Japanese and Korean
-           discs' record (mc_product_size 0x1E8) ends before them and its
-           file is the same bytes up to 0x1E8 */
-        le32(want + 0x1E8, 4);
-        le32(want + 0x1EC, 1);
+    if (ICO_NTSCAUG6JUN26) {
+        /* the disc's own record: 16-byte previews, then the three options and
+           the pad bytes at 0x140 (no controlType, fileNo, serial, cameraMove,
+           palMode) */
+        le32(want + 0x00, 7);
+        if (ICO_AUG6JUN26) {
+            le32(want + 0x04, 1); /* cleared */
+            le32(want + 0x08, 1234);
+            le32(want + 0x0C, 5);
+        } else {
+            le32(want + 0x04, 1234); /* the USA disc has no cleared word */
+            le32(want + 0x08, 5);
+        }
+        le32(want + 19 * 16, 0xFFFFFFFFu);
+        le32(want + 0x140, 2);
+        le32(want + 0x144, 1);
+        le32(want + 0x148, 1);
+        for (i = 0; i < 16; i++) {
+            le32(want + 0x14C + 4 * i, 0x100 + i);
+        }
+    } else {
+        le32(want + 0x00, 7);
+        le32(want + 0x04, 1);
+        le32(want + 0x08, 1234);
+        le32(want + 0x0C, 5);
+        le32(want + 19 * 20, 0xFFFFFFFFu);
+        le32(want + 0x190, 2);
+        le32(want + 0x194, 1);
+        le32(want + 0x198, 1);
+        le32(want + 0x19C, 3);
+        for (i = 0; i < 16; i++) {
+            le32(want + 0x1A0 + 4 * i, 0x100 + i);
+        }
+        le32(want + 0x1E0, 1);
+        le32(want + 0x1E4, 0xCAFE);
+        if (PSIZE == (int)sizeof(McProductFile)) {
+            /* the European disc's last two words; the Japanese and Korean
+               discs' record (mc_product_size 0x1E8) ends before them and its
+               file is the same bytes up to 0x1E8 */
+            le32(want + 0x1E8, 4);
+            le32(want + 0x1EC, 1);
+        }
     }
     le32(want + PSIZE, sum_bytes(want, PSIZE));
     n = slurp(cpath(CARD_B, PRODUCT), file, sizeof(file));
     CHECK(n == PSIZE + 4 && memcmp(file, want, (size_t)PSIZE + 4) == 0);
 
     memset(want, 0, sizeof(want));
-    memcpy(want, buf, 25588);
-    le32(want + 25588, 0x01020304);
-    le32(want + 25592, 0x0A0B0C0D);
-    le32(want + 25596, sum_bytes(want, 25596));
+    memcpy(want, buf, (size_t)game_block_bytes());
+    if (!ICO_NTSCAUG6JUN26) {
+        le32(want + 25588, 0x01020304);
+        le32(want + 25592, 0x0A0B0C0D);
+    }
+    le32(want + game_file_bytes() - 4, sum_bytes(want, game_file_bytes() - 4));
     n = slurp(cpath(CARD_B, "game.001"), file, sizeof(file));
-    CHECK(n == 25600 && memcmp(file, want, 25600) == 0);
-    memcpy(again, file, 25600);
+    CHECK(n == game_file_bytes() && memcmp(file, want, (size_t)game_file_bytes()) == 0);
+    memcpy(again, file, (size_t)game_file_bytes());
 
     /* reload on a fresh run: the product file's options and the game block
        come back, the checksums agree */
@@ -906,7 +1002,21 @@ static void driver(void *arg)
     wait_request();
     CHECK(req.result == 0);
     CHECK(IosMcProductFile[0].file[0].stage == 7 && IosMcProductFile[0].file[0].playTime == 1234);
-    if (PSIZE != (int)sizeof(McProductFile)) {
+    if (ICO_NTSCAUG6JUN26) {
+        /* the 2001 record holds the previews and the options only: the USA
+           disc's has no cleared word, the others' no unread word; the record's
+           fileNo, serial, controlType, cameraMove and palMode stay as cleared */
+        CHECK(IosMcProductFile[0].file[0].sofa == 5);
+        CHECK(IosMcProductFile[0].file[0].cleared == (ICO_AUG6JUN26 ? 1 : 0));
+        CHECK(IosMcProductFile[0].file[0].word10 == 0);
+        CHECK(IosMcProductFile[0].file[19].stage == 0xFFFFFFFFu);
+        CHECK(IosMcProductFile[0].soundMode == 2 && IosMcProductFile[0].outputMode == 1);
+        CHECK(IosMcProductFile[0].vibration == 1);
+        CHECK(IosMcProductFile[0].fileNo == 0 && IosMcProductFile[0].serial == 0);
+        CHECK(IosMcProductFile[0].controlType == 0 && IosMcProductFile[0].cameraMove == 0);
+        CHECK(IosMcProductFile[0].palMode == 0);
+        CHECK(((int *)IosMcProductFile[0].padConf)[15] == 0x10F);
+    } else if (PSIZE != (int)sizeof(McProductFile)) {
         /* not on the Japanese or Korean disc's card: left as they were */
         CHECK(IosMcProductFile[0].serial == 0xCAFE && IosMcProductFile[0].palMode == 0);
         CHECK(IosMcProductFile[0].cameraMove == 0);
@@ -918,12 +1028,19 @@ static void driver(void *arg)
     iosMcLoadGameBlock(&req, back);
     wait_request();
     CHECK(req.result == 0);
-    CHECK(memcmp(back, buf, sizeof(buf)) == 0);
+    CHECK(memcmp(back, buf, (size_t)game_block_bytes()) == 0);
     CHECK(systemStatus[11] == 2 && soundOutputMode == 1 && iosPadActRequestEnable == 1);
-    /* the card's controlType (3 here) is written but not read back: the
-       variable is [gameplay] hold_type's (no config: hold, 0) */
-    CHECK(optionControlType == 0 && optionScreenMode == 0x01020304);
-    CHECK(girlControlMode == 0x0A0B0C0D && iosPadConfCustom.bit[15] == 0x10F);
+    if (ICO_NTSCAUG6JUN26) {
+        /* the 2001 discs keep no option words and no controlType on the card:
+           the game's load leaves the three alone (as cleared above) */
+        CHECK(optionControlType == 0 && optionScreenMode == 0 && girlControlMode == 0);
+        CHECK(iosPadConfCustom.bit[15] == 0x10F);
+    } else {
+        /* the card's controlType (3 here) is written but not read back: the
+           variable is [gameplay] hold_type's (no config: hold, 0) */
+        CHECK(optionControlType == 0 && optionScreenMode == 0x01020304);
+        CHECK(girlControlMode == 0x0A0B0C0D && iosPadConfCustom.bit[15] == 0x10F);
+    }
     /* with hold_type = "toggle" in the config, a load makes it 1 */
     {
         FILE *cf = fopen("save_test_hold.toml", "wb");
@@ -939,7 +1056,8 @@ static void driver(void *arg)
         req.fileNo = 1;
         iosMcLoadGameBlock(&req, back);
         wait_request();
-        CHECK(req.result == 0 && optionControlType == 1);
+        /* (the 2001 discs' load has no such line: it stays 0) */
+        CHECK(req.result == 0 && optionControlType == (ICO_NTSCAUG6JUN26 ? 0 : 1));
         remove("save_test_hold.toml");
         ico_config_reset("/nonexistent/save_test.toml", "/nonexistent/save_test.ini");
         ico_opt_reload();
@@ -948,7 +1066,7 @@ static void driver(void *arg)
     /* re-save the loaded state: the same files, byte for byte */
     do_save(1, back);
     n = slurp(cpath(CARD_B, "game.001"), file, sizeof(file));
-    CHECK(n == 25600 && memcmp(file, again, 25600) == 0);
+    CHECK(n == game_file_bytes() && memcmp(file, again, (size_t)game_file_bytes()) == 0);
     n = slurp(cpath(CARD_B, PRODUCT), file, sizeof(file));
     CHECK(n == PSIZE + 4);
 
@@ -1017,10 +1135,10 @@ static void driver(void *arg)
         memset(back, 0, sizeof(back));
         iosMcLoadGameBlock(&req, back);
         wait_request();
-        CHECK(req.result == 0 && memcmp(back, buf, sizeof(buf)) == 0);
+        CHECK(req.result == 0 && memcmp(back, buf, (size_t)game_block_bytes()) == 0);
         /* a re-save goes into that folder, not a second one */
         do_save(3, back);
-        CHECK(file_size(cpath_cased(CARD_B, "game.003")) == 25600);
+        CHECK(file_size(cpath_cased(CARD_B, "game.003")) == game_file_bytes());
         if (folds) {
             CHECK(stat(cpath(CARD_B, NULL), &st) != 0);
         }
@@ -1066,19 +1184,20 @@ static void driver(void *arg)
         memset(back, 0, sizeof(back));
         iosMcLoadGameBlock(&req, back);
         wait_request();
-        CHECK(req.result == 0 && memcmp(back, buf, sizeof(buf)) == 0);
+        CHECK(req.result == 0 && memcmp(back, buf, (size_t)game_block_bytes()) == 0);
         if (!asRoot) {
             req.port = 0;
             strcpy(req.path, "game.");
             req.fileNo = 3;
             iosMcSaveIconBlock(&req);
             wait_request();
-            CHECK(req.result < 0);
+            /* the demo's icon files are on the card: nothing to write */
+            CHECK(ICO_JUN26 ? req.result >= 0 : req.result < 0);
             iosMcSaveGameBlock(&req, back);
             wait_request();
             CHECK(req.result < 0);
             n = slurp(cpath(CARD_B, "game.003"), file, sizeof(file));
-            CHECK(n == 25600);
+            CHECK(n == game_file_bytes());
         }
         printf("part B: a card folder that cannot be written: the load works%s\n",
                asRoot ? " (root: the refused save is not checked)" : ", the save is refused");
@@ -1106,7 +1225,7 @@ static void driver(void *arg)
     CHECK(req.result == -14 && req.type == 2 && req.format == 1 && req.free >= 360);
     memset(buf, 0, sizeof(buf));
     do_save_on(1, 4, buf);
-    CHECK(file_size(cpath(CARD_C, "game.004")) == 25600);
+    CHECK(file_size(cpath(CARD_C, "game.004")) == game_file_bytes());
     CHECK(file_size(cpath(CARD_C, PRODUCT)) == PSIZE + 4);
     CHECK(file_size(cpath(CARD_B, "game.004")) < 0);
     req.port = 1;
@@ -1123,7 +1242,7 @@ static void driver(void *arg)
     req.fileNo = 4;
     iosMcLoadGameBlock(&req, back);
     wait_request();
-    CHECK(req.result == 0 && memcmp(back, buf, sizeof(buf)) == 0);
+    CHECK(req.result == 0 && memcmp(back, buf, (size_t)game_block_bytes()) == 0);
     ico_mc_host_set_port_root(1, NULL);
     {
         char path[64];
@@ -1740,11 +1859,11 @@ static void test_import(const char *cli)
 }
 
 /* save_test SLUG MC_IMPORT: SLUG the region to play (config/regions.txt,
-   pal, jpn, kor or cn), MC_IMPORT tools/mc_import (ctest passes both) */
+   pal, jpn, kor, ntsc, aug6, jun26 or cn), MC_IMPORT tools/mc_import (ctest passes both) */
 int main(int argc, char **argv)
 {
     if (argc < 2 || ico_region_select(argv[1]) != 0) {
-        printf("FAIL usage: save_test pal|jpn|kor|cn MC_IMPORT\n");
+        printf("FAIL usage: save_test pal|jpn|kor|ntsc|aug6|jun26|cn MC_IMPORT\n");
         return 1;
     }
     printf("save_test: the %s disc (%s)\n", ico_region_cur()->slug, ico_region_cur()->disc_id);
