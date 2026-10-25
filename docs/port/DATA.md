@@ -22,7 +22,7 @@ disc's boot ELF, and the port's own reads of DATA.DF. The repository holds no di
 | `port/data/sifdev_host.c` | `sceOpen` and the other sifdev file calls, for the development kit's `host0:` device |
 | `port/data/iop_ram.h`, `iop_ram.c` | `ico_iop_ram`, the 2 MB of IOP RAM, and the IOP heap allocator |
 | `port/data/tables.h`, `tables.c` | the runtime loader of the 73 data tables |
-| `port/data/gen/` | the generated table definitions (`table_defs.c`), descriptor types (`table_desc.h`), the sets' list (`table_sets.c`, `tables.cmake`) and one descriptor set per disc (`pal/`, `jpn/`, `kor/`, and `ntsc/` and `aug6/` ahead of their rows: `table_desc.c`, `ee_symbols.c`, `tables.cmake`) |
+| `port/data/gen/` | the generated table definitions (`table_defs.c`), descriptor types (`table_desc.h`), the sets' list (`table_sets.c`, `tables.cmake`) and one descriptor set per disc (`pal/`, `jpn/`, `kor/`, `ntsc/`, `aug6/`, `jun26/`, `cn/`: `table_desc.c`, `ee_symbols.c`, `tables.cmake`) |
 | `port/data/df_pack.h`, `df_pack.c` | reads of DATA.DF's loose files and pack members for the port's own screens |
 | `port/data/json.h`, `json.c` | the JSON reader (`ico_json`) |
 | `port/data/chdr_miniz_names.h` | prefixes the second miniz copy inside libchdr |
@@ -82,36 +82,38 @@ A backend (`IcoVfsBackend`) has `mount`, `unmount`, `lookup` (a normalized path)
 separators and the `;<version>` suffix, maps `\` to `/` and upper-cases (`port/data/vfs.h`
 (`IcoVfsBackend`, `ico_vfs_normalize`)).
 
-## The three discs
+## The seven discs
 
-The port plays three discs, one row each of `config/regions.txt` (the region module,
+The port plays seven discs, one row each of `config/regions.txt` (the region module,
 [GAME_CODE.md](GAME_CODE.md#regions)); `ico_discs` (`port/data/discs.c`) holds what the disc
 layer needs of each, in the same order (the `region_select` test checks the slug, disc id, boot
-file and product name of every row against the table):
+file and product name of every row against the table). One line per disc (the values are
+`discs.c`'s):
 
-| | European disc | Japanese disc | Korean disc |
-| --- | --- | --- | --- |
-| slug, disc id, boot file | `pal`, `SCES-50760`, `SCES_507.60` | `jpn`, `SCPS-11003`, `SCPS_110.03` | `kor`, `SCPS-56001`, `SCPS_560.01` |
-| image SHA-1, size | `1017b53f6e80f41f823369b0be1d8c69f7e16dc6`, 907,706,368 bytes | `95ee72becbc7fba85e9c0f6aa6fc932c705b37b3`, 559,693,824 bytes | `156b63e5824b03e60e0d45c4e86fc424d9e1dd1b`, 873,332,736 bytes |
-| boot ELF SHA-1 | `da3644c54c26fe760f3b6a591a5fc2eab396ed2b` | `580da1dcc4c239a1608a10300e7e220fe5d35525` | `f9b00596d133c698df20c8ffe4ca2d7107e236bb` |
-| DATA.DF | 867,184,640 bytes, 193 members, directory CRC-32 `0xfb82eea7` | 553,443,328 bytes, 183 members, directory CRC-32 `0xfc60bbaf` | 552,286,208 bytes (the span from the archive's header on, see below), 183 members, directory CRC-32 `0xa8ab2e74` |
-| archive, image name | `ico.o2r`, `Ico_PAL.<ext>` | `ico-jpn.o2r`, `Ico_JPN.<ext>` | `ico-kor.o2r`, `Ico_KOR.<ext>` |
-| media, `sceCdGetDiskType` | DVD, `0x14` (`SCECdPS2DVD`) | CD, `0x12` (`SCECdPS2CD`) | DVD, `0x14` |
-| DATA.DF shift (`df_lsn_shift`) | 0 | 0 | 153,600 sectors |
+| disc | slug, disc id, boot file | image SHA-1, size | boot ELF SHA-1 | DATA.DF | archive, image name | media (`sceCdGetDiskType`), shift |
+| --- | --- | --- | --- | --- | --- | --- |
+| European | `pal`, `SCES-50760`, `SCES_507.60` | `1017b53f6e80f41f823369b0be1d8c69f7e16dc6`, 907,706,368 bytes | `da3644c54c26fe760f3b6a591a5fc2eab396ed2b` | 867,184,640 bytes, 193 members, directory CRC-32 `0xfb82eea7` | `ico.o2r`, `Ico_PAL.<ext>` | DVD `0x14`, 0 |
+| Japanese | `jpn`, `SCPS-11003`, `SCPS_110.03` | `95ee72becbc7fba85e9c0f6aa6fc932c705b37b3`, 559,693,824 bytes | `580da1dcc4c239a1608a10300e7e220fe5d35525` | 553,443,328 bytes, 183 members, `0xfc60bbaf` | `ico-jpn.o2r`, `Ico_JPN.<ext>` | CD `0x12`, 0 |
+| Korean | `kor`, `SCPS-56001`, `SCPS_560.01` | `156b63e5824b03e60e0d45c4e86fc424d9e1dd1b`, 873,332,736 bytes | `f9b00596d133c698df20c8ffe4ca2d7107e236bb` | 552,286,208 bytes (the span from the archive's header on, see below), 183 members, `0xa8ab2e74` | `ico-kor.o2r`, `Ico_KOR.<ext>` | DVD `0x14`, 153,600 sectors |
+| North American | `ntsc`, `SCUS-97113`, `SCUS_971.13` | `28851296e5179b7209c2a36fb64005350c9843d6`, 556,095,488 bytes | `a4d8fc1948fb2da2395f3863a94a3b93de55de14` | 539,367,424 bytes, 172 members, `0xb9279388` | `ico-ntsc.o2r`, `Ico_USA.<ext>` | CD `0x12`, 0 |
+| August 2001 preview | `aug6`, `PROTO-20010806` (the disc has no product code: the row's own id), `SCUS_971.13` | `59b31fd8086cc256516c2b0c90bfefedc4fb50b1`, 555,812,864 bytes | `5d169c281756a8bde712704fa0cb9eb984693cd6` | 540,295,168 bytes, 172 members, `0x686d8685` | `ico-aug6.o2r`, `Ico_AUG6.<ext>` | CD `0x12`, 0 |
+| June 2001 magazine demo | `jun26`, `SCUS-97158`, `SCUS_971.58` (the menu; the game is `SCPS_000.00` in the `CUS97113` folder) | none (the image is the whole magazine disc, 4,386,521,088 bytes) | `95c3d438185c3b75303b68719cfd48c84f2f8bfa` | 271,493,120 bytes, 49 members, `0x7c0a429b` | `ico-jun26.o2r`, `Ico_JUN26.<ext>` | DVD `0x14`, 0 |
+| Asian | `cn`, `SCPS-55001`, `SCPS_550.01` | `9bc77511b08a78dd9f7f3ddabde07fb5682c51b1`, 873,889,792 bytes | `f3e784b6811af2de9570be5575d6db5962300bcd` | 552,847,360 bytes (the span from the archive's header on, as the Korean disc), 183 members, `0xe3f7de26` | `ico-cn.o2r`, `Ico_CN.<ext>` | DVD `0x14`, 153,600 sectors |
 
 Which disc an image is comes from its `SYSTEM.CNF`: the `BOOT2` line's file, normalized
 (`SCPS_110.03`), is looked up by `ico_disc_identify` (`extract.h`); `ico_extract_identify` does
 this for an image path. A boot file one row has is answered from the directory alone, so the
 program knows the disc before it hashes anything. When two rows boot with one file (`SCUS_971.13`: the North
-American disc and the August 2001 preview, once their rows exist): there the boot ELF (`elf_path`, 4 MB) is hashed and
+American disc and the August 2001 preview): there the boot ELF (`elf_path`, 4 MB) is hashed and
 the row with that `elf_sha1` is the disc (`ico_disc_by_boot_elf`), logged once. The magazine demo
 boots its menu `SCUS_971.58` and its game lives in the `CUS97113` folder (`game_dir`, `df_path`);
 its row has no image hash (`iso_sha1` is NULL) and is accepted by the ELF and DATA.DF rule only.
 The row's values then verify the image. An image whose boot file is none of the rows', or that is not an
 unmodified copy of its row's disc, gets one box text everywhere (`ICO_WRONG_DISC_TEXT`,
 `extract.h`: the extractor, `main_host.c`, the Android import); one that cannot be read gets
-`ICO_UNREADABLE_DISC_TEXT`. `LIBSD.IRX` and `SNDN2DRV.IRX` are byte-identical on all three discs
-([AUDIO.md](AUDIO.md#values-read-from-the-disc)).
+`ICO_UNREADABLE_DISC_TEXT`. `LIBSD.IRX` and `SNDN2DRV.IRX` are byte-identical on the European,
+Japanese and Korean discs ([AUDIO.md](AUDIO.md#values-read-from-the-disc)); the other discs' are read
+from their own images (the magazine demo's are its own, of other sizes).
 
 ### The Korean disc's DATA.DF shift
 
