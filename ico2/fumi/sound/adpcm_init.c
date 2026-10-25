@@ -175,8 +175,8 @@ found:
         p->chAttr = 0x40000;
         break;
     default:
-        debug_assert(adpcmSrcFile, LN(381, 381, 381, 378, 335, 381, 381));
-        __assert(adpcmSrcFile, LN(381, 381, 381, 378, 335, 381, 381), "0");
+        debug_assert(adpcmSrcFile, LN(381, 381, 381, 378, 335, 335, 381));
+        __assert(adpcmSrcFile, LN(381, 381, 381, 378, 335, 335, 381), "0");
     }
     p->mask = 0;
     for (j = 0; j < p->n; j++) {
@@ -267,8 +267,43 @@ found:
     return adpcmIopBase + i * 0x5C000;
 }
 
+static inline void AdpcmOpen_jun26(AdpcmOpenReq *self, int no, int ch, int loopNum)
+{
+    int req;
+
+    debug_StdPrintfDummy("AdpcmOpen id%d \n", no);
+    req = (no & 0xFFFF) | 0x110000;
+    if (soundDataAreaSearch(&req) != 0) {
+        self->bg = 0;
+        if (no == adpcmStartNo) {
+            adpcmStartNo = -1; /* PC port: already open, not kept */
+        }
+        return;
+    }
+    self->ch = ch;
+    self->id = no;
+    self->iopBuf = AdpcmIopBuffAlloc();
+    if (self->iopBuf != 0) {
+        self->bg = iosCdvdBackGroundMgrAdd((char *)&adpcmFile[no], adpcmOpenProc, self,
+                                           adpcmOpenDiskNotReady, 0, self, 0, 0);
+        if (no == adpcmStartNo) {
+            iosCdvdBackGroundMgrSeek(self->bg, adpcmStartBytes); /* PC port */
+        }
+    } else {
+        self->bg = 0;
+        if (no == adpcmStartNo) {
+            adpcmStartNo = -1; /* PC port: not opened, not kept */
+        }
+    }
+    self->loopNum = loopNum;
+}
+
 void AdpcmOpen(AdpcmOpenReq *self, int no, int ch, int loopNum)
 {
+    if (ICO_JUN26) {
+        AdpcmOpen_jun26(self, no, ch, loopNum);
+        return;
+    }
     int req;
 
     debug_StdPrintfDummy("AdpcmOpen id%d \n", no);
@@ -305,8 +340,8 @@ static inline void AdpcmIopBuffFree(AdpcmStream *self) /* derived name */
     int no = (adr - adpcmIopBase) / 0x5C000;
 
     if (no >= 3) {
-        debug_assert(adpcmSrcFile, LN(143, 143, 143, 143, 125, 143, 143));
-        __assert(adpcmSrcFile, LN(143, 143, 143, 143, 125, 143, 143), "0");
+        debug_assert(adpcmSrcFile, LN(143, 143, 143, 143, 125, 125, 143));
+        __assert(adpcmSrcFile, LN(143, 143, 143, 143, 125, 125, 143), "0");
     }
     adpcmIopBuffUsed[no] = 0;
 }
@@ -334,8 +369,8 @@ void AdpcmClose(SqEntry *obj)
                 goto found;
             }
         }
-        debug_assert(adpcmSrcFile, LN(605, 605, 605, 600, 557, 605, 605));
-        __assert(adpcmSrcFile, LN(605, 605, 605, 600, 557, 605, 605), "0");
+        debug_assert(adpcmSrcFile, LN(605, 605, 605, 600, 557, 555, 605));
+        __assert(adpcmSrcFile, LN(605, 605, 605, 600, 557, 555, 605), "0");
     found:
         /* PC port: a stream whose fade ran out is closed "fade",
            one closed by a call (or by AdpcmFadingCloseNow) "now" */

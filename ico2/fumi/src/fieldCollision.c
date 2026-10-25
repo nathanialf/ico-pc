@@ -120,7 +120,7 @@ ObjNode InitialObjPointer = {0, -1};
 
 static int colObjListNum = 0; /* derived name */
 
-void MakeCollisionDependGObjList(void)
+static void MakeCollisionDependGObjList_jun26(void)
 {
     GObj *g;
     Sub15C *sub;
@@ -135,9 +135,35 @@ void MakeCollisionDependGObjList(void)
         }
     }
     if (colObjListNum >= 0x100) {
-        debug_assertMessage(__FILE__, LN(533, 533, 533, 533, 533, 523, 533),
+        debug_assertMessage(__FILE__, 523, "TOO MANY COLLISION DEPEND GOBJS\n");
+        __assert(__FILE__, 523, "e");
+    }
+    /* a debug dump of the list, compiled out of the retail build; its label
+     * table and format stay in the data */
+}
+
+void MakeCollisionDependGObjList(void)
+{
+    if (ICO_JUN26) {
+        MakeCollisionDependGObjList_jun26();
+        return;
+    }
+    GObj *g;
+    Sub15C *sub;
+
+    colObjListNum = 0;
+    for (g = isysGObjGetExist_begin(); g != 0; g = isysGObjGetExist_next(g)) {
+        sub = GOBJ_SUB(g);
+        if ((char *)sub != 0 && sub->colData != 0 && g->active != 0 && g->labelType == 1 &&
+            g->labelId >= 0 && sub->disp != 0) {
+            colObjList[colObjListNum] = g;
+            colObjListNum = colObjListNum + 1;
+        }
+    }
+    if (colObjListNum >= 0x100) {
+        debug_assertMessage(__FILE__, LN(533, 533, 533, 533, 533, 533, 533),
                             "TOO MANY COLLISION DEPEND GOBJS\n");
-        __assert(__FILE__, LN(533, 533, 533, 533, 533, 523, 533), "e");
+        __assert(__FILE__, LN(533, 533, 533, 533, 533, 533, 533), "e");
     }
     /* a debug dump of the list, compiled out of the retail build; its label
      * table and format stay in the data */
@@ -193,8 +219,162 @@ static __inline__ float FcAbsF(float v) /* derived name */
     return v;
 }
 
+static int clip_wall_1_jun26(ClipWork *ray, FcWallEnt *wall, int flip, int useh)
+{
+    FcWallEnt *e;
+    float pa[4];
+    float pb[4];
+    float pc[4];
+    float d[4];
+    float out[4];
+    float h;
+    float lo;
+    float hi;
+    float nx;
+    float nz;
+    float mx;
+    float hh;
+    float t1;
+    float t2;
+    float *n;
+
+    h = 0.0f;
+    if (useh) {
+        h = ray->radius;
+    }
+    lo = -h;
+    hi = FC_ADD(wall->height, h);
+    n = FC_WALL_NORMAL(wall);
+    nx = n[0];
+    nz = n[1];
+    mx = -nx;
+
+    sceVu0CopyVector((int *)out, (int *)ray->pt[2]);
+
+    d[0] = FC_SUB(out[0], wall->pt[0][0]);
+    d[1] = out[1];
+    d[2] = FC_SUB(out[2], wall->pt[0][2]);
+    pb[2] = FC_ADD(FC_MUL(d[0], nx), FC_MUL(d[2], nz));
+    if (flip) {
+        pb[2] = -pb[2];
+    }
+    if (ray->radius < pb[2]) {
+        return 0;
+    }
+    pb[0] = FC_SUB(FC_MUL(d[0], nz), FC_MUL(d[2], nx));
+    pb[1] = d[1];
+    /* the start point reads the wall through a pointer of its own */
+    e = wall;
+    d[0] = FC_SUB(ray->pt[0][0], e->pt[0][0]);
+    d[1] = ray->pt[0][1];
+    d[2] = FC_SUB(ray->pt[0][2], e->pt[0][2]);
+    pa[2] = FC_ADD(FC_MUL(d[0], nx), FC_MUL(d[2], nz));
+    if (flip) {
+        pa[2] = -pa[2];
+    }
+    if (pa[2] <= 0.0f) {
+        return 0;
+    }
+    pa[0] = FC_SUB(FC_MUL(d[0], nz), FC_MUL(d[2], nx));
+    pa[1] = d[1];
+    if (pa[0] < lo && pb[0] < lo) {
+        return 0;
+    }
+    if (hi < pa[0] && hi < pb[0]) {
+        return 0;
+    }
+    if (FcAbsF(FC_SUB(pb[2], pa[2])) < 1.0f) {
+        if (ray->slideCount > 0) {
+            pc[0] = pb[0];
+            pc[1] = pb[1];
+            pb[2] = FC_ADD(ray->radius, 1.0f);
+        } else if (pa[0] < 0.0f) {
+            pc[0] = lo;
+            if (FcAbsF(FC_SUB(pb[0], pa[0])) < 5.0f) {
+                pc[1] = pa[1];
+            } else {
+                pc[1] = FC_ADD(
+                    FC_DIV(FC_MUL(FC_SUB(pb[1], pa[1]), FC_SUB(lo, pa[0])), FC_SUB(pb[0], pa[0])),
+                    pa[1]);
+            }
+            pb[2] = pa[2];
+        } else if (e->height < pa[0]) {
+            pc[0] = hi;
+            if (FcAbsF(FC_SUB(pb[0], pa[0])) < 5.0f) {
+                pc[1] = pa[1];
+            } else {
+                pc[1] = FC_ADD(
+                    FC_DIV(FC_MUL(FC_SUB(pb[1], pa[1]), FC_SUB(hi, pa[0])), FC_SUB(pb[0], pa[0])),
+                    pa[1]);
+            }
+            pb[2] = pa[2];
+        } else {
+            pc[0] = pa[0];
+            pc[1] = pa[1];
+            pb[2] = FC_ADD(ray->radius, 1.0f);
+        }
+        pb[0] = pc[0];
+        pb[1] = pc[1];
+        ray->slideCount++;
+    } else {
+        if (pa[2] < ray->radius) {
+            hh = pa[2];
+            ray->slideCount++;
+        } else {
+            hh = ray->radius;
+        }
+        if (pa[0] != pb[0] && 5.0f < _GetLengthXZ(pa, pb)) {
+            pc[0] = FC_ADD(FC_DIV(FC_MUL(FC_SUB(pb[0], pa[0]), FC_SUB(pa[2], hh)),
+                                  FcAbsF(FC_SUB(pb[2], pa[2]))),
+                           pa[0]);
+        } else {
+            pc[0] = pa[0];
+        }
+        if (pc[0] < lo || hi < pc[0]) {
+            return 0;
+        }
+        if (pa[1] != pb[1] && 5.0f < _GetLengthXZ(pa, pb)) {
+            pc[1] = FC_ADD(FC_DIV(FC_MUL(FC_SUB(pb[1], pa[1]), FC_SUB(pa[2], hh)),
+                                  FcAbsF(FC_SUB(pb[2], pa[2]))),
+                           pa[1]);
+        } else {
+            pc[1] = pa[1];
+        }
+        pb[0] = pc[0];
+        pb[1] = pc[1];
+        pb[2] = FC_ADD(ray->radius, 1.0f);
+    }
+    if (pb[1] < e->pt[0][1] && pb[1] < e->pt[1][1]) {
+        return 0;
+    }
+    if (e->pt[2][1] < pb[1] && e->pt[3][1] < pb[1]) {
+        return 0;
+    }
+    if (pb[1] <
+        FC_ADD(FC_DIV(FC_MUL(FC_SUB(e->pt[1][1], e->pt[0][1]), pb[0]), e->height), e->pt[0][1])) {
+        return 0;
+    }
+    if (FC_ADD(FC_DIV(FC_MUL(FC_SUB(e->pt[3][1], e->pt[2][1]), pb[0]), e->height), e->pt[2][1]) <
+        pb[1]) {
+        return 0;
+    }
+    if (flip) {
+        pb[2] = -pb[2];
+    }
+    t2 = FC_SUB(FC_MUL(pb[0], nz), FC_MUL(pb[2], mx));
+    out[1] = pb[1];
+    t1 = FC_ADD(FC_MUL(pb[0], mx), FC_MUL(pb[2], nz));
+    out[0] = FC_ADD(t2, e->pt[0][0]);
+    out[2] = FC_ADD(t1, e->pt[0][2]);
+    sceVu0CopyVector((int *)ray->pt[2], (int *)out);
+    return 1;
+}
+
 static int clip_wall_1(ClipWork *ray, FcWallEnt *wall, int flip, int useh)
 {
+    if (ICO_JUN26) {
+        return clip_wall_1_jun26(ray, wall, flip, useh);
+    }
     FcWallEnt *e;
     float pa[4];
     float pb[4];
@@ -1191,6 +1371,13 @@ inline int ChangeFieldCollisionDebugMode(int drawRay)
         clipFloorFunc = __ClipFloorWithDrawRay;
     }
     return 0;
+}
+
+/* sets the object filter the callback clip modes test; nothing in this build
+   calls it */
+inline void SetCollisionFilter(int (*filter)(void *obj)) /* derived name */
+{
+    colFilter = filter;
 }
 
 inline void ClipWallDebug(ClipWork *work)

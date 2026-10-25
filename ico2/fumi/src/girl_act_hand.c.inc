@@ -92,7 +92,7 @@ static void HandMgr_Speed_ntscaug6jun26(GObj *self, float f)
         lim = 2.0f;
     }
     f = f < 1.0f ? 1.0f : (lim < f ? lim : f);
-    f = f < 1.0f ? 1.0f : (_ACTGame_GetParamF(8) < f ? _ACTGame_GetParamF(8) : f);
+    f = f < 1.0f ? 1.0f : (_ACTGame_GetParamF(PAL_JUN26(8, 7)) < f ? _ACTGame_GetParamF(PAL_JUN26(8, 7)) : f);
     ACTGame_SetMotionPlaySpeedRatio_Reserve((void *)self, f, 2);
     m = GOBJ_ACT(boyGObj)->actMode;
     if ((unsigned int)m < 4) {
@@ -102,7 +102,7 @@ static void HandMgr_Speed_ntscaug6jun26(GObj *self, float f)
             if (one < f) {
                 f = one - (f - one);
             }
-            r = f < _ACTGame_GetParamF(7) ? _ACTGame_GetParamF(7) : (one < f ? one : f);
+            r = f < _ACTGame_GetParamF(PAL_JUN26(7, 6)) ? _ACTGame_GetParamF(PAL_JUN26(7, 6)) : (one < f ? one : f);
             ACTGame_SetMotionPlaySpeedRatio_Reserve((void *)self, r, 2);
         }
     }

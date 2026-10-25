@@ -525,7 +525,11 @@ typedef struct { /* field names derived */
 } __attribute__((aligned(8))) WayVec; /* derived name */
 
 /* way_tool.o .data +0x210: the nine RGBA packets the tool draws with. */
-static WayCol wayColorSelected = {{0xFF, 0xFF, 0xFF, 0xFF}}; /* derived name */
+static WayCol wayColorSelected_pal = {{0xFF, 0xFF, 0xFF, 0xFF}}; /* derived name */
+
+static WayCol wayColorSelected_jun26 = {{0xFF, 0x08, 0x08, 0xFF}}; /* derived name */
+
+#define wayColorSelected (*PAL_JUN26(&wayColorSelected_pal, &wayColorSelected_jun26))
 
 static WayCol wayColorLinked = {{0xFF, 0x08, 0xFF, 0xFF}}; /* derived name */
 
@@ -575,8 +579,25 @@ static void draw_way_group(int g, WayCol *col)
     while (p != 0) {
         q = p->pos;
         SetVObjRT(&m, q);
-        set_way_point_color(p, col);
-        DrawVObj(0, &wayDrawCol);
+        if (ICO_JUN26) {
+            if (p->escape != 0) {
+                /* both arms draw the linked colour: the demo still loads the
+                   index for the selection test ahead of the one call the two
+                   arms share (the arms are derived) */
+                if (p->index == wayPointSel) {
+                    DrawVObj(0, &wayColorLinked);
+                } else {
+                    DrawVObj(0, &wayColorLinked);
+                }
+            } else if (p->index == wayPointSel) {
+                DrawVObj(0, &wayColorSelected);
+            } else {
+                DrawVObj(0, col);
+            }
+        } else {
+            set_way_point_color(p, col);
+            DrawVObj(0, &wayDrawCol);
+        }
         if (p->next != 0) {
             gif_StartPacketPri(11);
             sceVu0UnitMatrix(MatrixDrive_GetMatrix());

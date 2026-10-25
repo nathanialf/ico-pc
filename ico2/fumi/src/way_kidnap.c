@@ -12,6 +12,10 @@
 #include "Matrix.h"
 #include "main.h"
 
+/* an initialised word nothing reads, first in this build's .sdata (the later
+   builds have no such word) */
+static int wayKidnapUnusedWord = 0; /* derived name */
+
 /* the count of positions add_wp_pos has collected, the flag that stops it
    while WayRangeSearch measures a path, and the range search's limit mode */
 static int wpPosCount = 0; /* derived name */
@@ -41,10 +45,17 @@ static WayPoint *searchNodes[275]; /* derived name */
 
 static char edgeDone[94]; /* derived name */
 
-static float wpPosVec[128][4]; /* derived name */
+static float wpPosVec_pal[128][4]; /* derived name */
+
+static sceVu0FVECTOR wpPosVec_jun26[128]; /* derived name */
+
+#define wpPosVec PAL_JUN26(wpPosVec_pal, wpPosVec_jun26)
 
 /* 276 entries, one more than the loops' 275 */
 static WpPosEntry wpPosInfo[276]; /* derived name */
+
+#define WP_GOAL_CHECK 1 /* derived name */
+#define WP_GOAL_CHECK 0 /* derived name */
 
 static void add_wp_pos(WayPoint *wp, float *pos, float len)
 {
@@ -54,7 +65,9 @@ static void add_wp_pos(WayPoint *wp, float *pos, float len)
     fzShowV(pos);
 
     wpPosInfo[wpPosCount].wp = wp;
-    wpPosInfo[wpPosCount].len = len;
+    if (!ICO_JUN26) {
+        wpPosInfo[wpPosCount].len = len;
+    }
     sceVu0CopyVector(wpPosVec[wpPosCount++], pos);
 }
 
@@ -81,8 +94,90 @@ inline int CopyWpPos(float dst[][4], int from, int to)
     return 0;
 }
 
+static float WayLengthOfPos_Pos_jun26(float *pos0, float *pos1)
+{
+    float cur[4];
+    float dst[4];
+    WVTObj w;
+    WayPoint *wp;
+    WayPoint *wp0;
+    WayPoint *wp1;
+    float len;
+    int i;
+
+    len = 0.0f;
+
+    w.guideFirst = -1;
+    w.nearWp = 0;
+    sceVu0CopyVector(cur, pos0);
+    sceVu0CopyVector(dst, pos1);
+    wp0 = visible_waypoint_of_all(cur);
+    wp1 = visible_waypoint_of_all(dst);
+
+    ClearWpPos();
+    add_wp_pos(0, cur, len);
+
+    wp = GetWay_begin(dst, &w, cur);
+    if (wp == 0) {
+        goto fail;
+    }
+    if (w.pathKind == 2) {
+        goto fail;
+    }
+    if (wayRangeLimit == 0 && w.pathKind == 1) {
+        goto fail;
+    }
+
+    len += _GetLength(cur, wp->pos);
+    add_wp_pos(wp0, wp0->pos, len);
+
+    sceVu0CopyVector(cur, wp->pos);
+
+    for (i = 0;;) {
+        if (++i >= 101) {
+            goto fail;
+        }
+        if (wp == wp1) {
+            goto found;
+        }
+        wp = GetWay_next(&w, cur);
+
+        if (w.reached != 0) {
+            wp = GetWay_begin(dst, &w, cur);
+            if (wp == 0) {
+                goto fail;
+            }
+
+            sceVu0CopyVector(cur, wp->pos);
+        } else {
+            len += _GetLength(cur, wp->pos);
+
+            add_wp_pos(wp, wp->pos, len);
+            sceVu0CopyVector(cur, wp->pos);
+        }
+    }
+
+fail:
+    ClearWpPos();
+
+    return -1.0f;
+
+found:
+    len += _GetLength(pos1, wp1->pos);
+    add_wp_pos(0, dst, len);
+    if (dst[0] < -200.0f) {
+        debug_StdPrintfDummy("cannot_reach:%d\n", w.flag6C);
+        debug_StdPrintfDummy("cannot_reach_kidnap:%d\n", w.pathKind);
+    }
+
+    return len;
+}
+
 float WayLengthOfPos_Pos(float *pos0, float *pos1)
 {
+    if (ICO_JUN26) {
+        return WayLengthOfPos_Pos_jun26(pos0, pos1);
+    }
     float cur[4];
     float dst[4];
     WVTObj w;
@@ -223,8 +318,66 @@ static inline void WayRangeSearch(float *pos, float range, WpPosEntry *e, int li
     wayRangeLimit = 0;
 }
 
+static int WayPointWithRangeFromPos_jun26(float *pos, float range, int mode)
+{
+    WpPosEntry e;
+    int n;
+    int i;
+
+    switch (mode) {
+    case 0:
+    default:
+        WayRangeSearch(pos, range, &e, 0, 0);
+        break;
+
+    case 1:
+        WayRangeSearch(pos, range, &e, 0, 1);
+
+        n = NumOfWpPos();
+        qsort(&wpPosInfo[1], n - 2, sizeof(WpPosEntry), wpsort_compfnc);
+        i = 1;
+        /* Drop the goal, the last entry, which has no way point (the start,
+           entry 0, has none either: hence 1..n-2). The DEBUG build walks
+           back to it past any entry after it; retail drops one entry. What
+           the bytes pin: the decrement inside a loop with no exit test and
+           no back edge (the loop notes weight n's allocation over i's, as
+           the demo's s0/s1). What they cannot pin: the DEBUG test's text. */
+        do {
+            n--;
+        } while (WP_GOAL_CHECK && n > 0 && wpPosInfo[n].wp != 0);
+        for (; i < n; i++) {
+            sceVu0CopyVector(wpPosVec[i], wpPosInfo[i].wp->pos);
+        }
+        break;
+
+    case 2:
+        WayRangeSearch(pos, range, &e, 1, 0);
+        break;
+
+    case 3:
+        WayRangeSearch(pos, range, &e, 1, 1);
+
+        n = NumOfWpPos();
+        qsort(&wpPosInfo[1], n - 2, sizeof(WpPosEntry), wpsort_compfnc);
+        i = 1;
+        /* the goal, as in case 1 */
+        do {
+            n--;
+        } while (WP_GOAL_CHECK && n > 0 && wpPosInfo[n].wp != 0);
+        for (; i < n; i++) {
+            sceVu0CopyVector(wpPosVec[i], wpPosInfo[i].wp->pos);
+        }
+        break;
+    }
+
+    return NumOfWpPos();
+}
+
 int WayPointWithRangeFromPos(float *pos, float range, int mode)
 {
+    if (ICO_JUN26) {
+        return WayPointWithRangeFromPos_jun26(pos, range, mode);
+    }
     WpPosEntry e;
     int n;
     int i;

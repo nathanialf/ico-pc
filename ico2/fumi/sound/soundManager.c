@@ -46,8 +46,19 @@ void sndBgmReadyNextStage(int a, int b)
 
 int sndInitBgmCancelFlag;
 
+static void sndInit_jun26(int idx)
+{
+    soundSeKindBuild();
+    adpcmPauseRequest(0);
+    soundReverbDepthSet(stageData[idx].reverbDepth);
+}
+
 void sndInit(int idx)
 {
+    if (ICO_JUN26) {
+        sndInit_jun26(idx);
+        return;
+    }
     short attrOff;
     soundSeKindBuild();
     adpcmPauseRequest(0);

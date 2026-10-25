@@ -93,7 +93,7 @@ inline int CreateWayPoint(float *pos)
 {
     int i;
 
-    for (i = 0; i < PAL_AUG6JUN26(275, 215); i++) {
+    for (i = 0; i < PAL_AUG6_JUN26(275, 215, 192); i++) {
         WayPoint *node = &way_point[i];
 
         if (node->used == 0) {
@@ -349,7 +349,7 @@ inline WayGroup *WayBridgeVar_next(WayGroup *g)
 inline WayPoint *WayPoint_begin(void)
 {
     WayPoint *p = way_point - 1;
-    WayPoint *end = way_point - 1 + PAL_AUG6JUN26(275, 215);
+    WayPoint *end = way_point - 1 + PAL_AUG6_JUN26(275, 215, 192);
     if (p == 0)
         goto ret0;
     if (p == end)
@@ -421,7 +421,7 @@ void InitWayPointSystem(void)
 {
     int i;
 
-    for (i = 0; i < PAL_AUG6JUN26(275, 215); i++) {
+    for (i = 0; i < PAL_AUG6_JUN26(275, 215, 192); i++) {
         WayPoint *node = &way_point[i];
 
         node->used = 0;

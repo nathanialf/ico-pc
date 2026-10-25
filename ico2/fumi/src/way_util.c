@@ -35,6 +35,28 @@ static const int axisColor[3][4] = {
     {0, 0, 128, 128},
 }; /* derived name */
 
+/* the sort tables of visible_waypoint_of_all_except_gid and
+   visible_waypoint_of_all_except_temp: this build sorts into file statics
+   (no iosMallocDebug, no _ThreadVersion) */
+static WpSortEnt visibleSortGid[192]; /* derived name */
+
+static WpSortEnt visibleSortTemp[192]; /* derived name */
+
+/* the group search's work: shortest_path uses wgDist and wgPrev, GetWgAll
+   wgDist2 and wgPrev2, both the visited flags and the cost table (this build
+   has no WayUtilWork block) */
+static char wgVisited[65]; /* derived name */
+
+static int wgDist[65]; /* derived name */
+
+static int wgPrev[65]; /* derived name */
+
+static int wgDist2[65]; /* derived name */
+
+static int wgPrev2[65]; /* derived name */
+
+static int wgCost[64][64]; /* derived name */
+
 /* The body of visible_waypoint_of_all_except_gid and of its _ThreadVersion,
    one shared static inline helper taking the thread flag: the thread build
    keeps the _ACTWait arms. */
@@ -98,8 +120,56 @@ static inline WayPoint *visible_waypoint_of_all_except_gid_sub(float *pos, int g
     return ret;
 }
 
+static WayPoint *visible_waypoint_of_all_except_gid_jun26(float *pos, int gid)
+{
+    float buf[4];
+    ClipWork cb;
+    WayPoint *wp;
+    WayPoint *ret;
+    int n;
+    int i;
+
+    n = 0;
+    for (wp = WayPoint_begin(); wp != 0; wp = WayPoint_next(wp)) {
+        if (wp->group != gid) {
+            float d;
+
+            sceVu0SubVector(buf, wp->pos, pos);
+            d = fzMagnitudefv(buf);
+            visibleSortGid[n].wp = wp;
+            visibleSortGid[n].d = d;
+            n++;
+        }
+    }
+
+    qsort(visibleSortGid, n, sizeof(WpSortEnt), wpsort_compfnc);
+    cb.radius = 0.0f;
+
+    ret = 0;
+    for (i = 0; i < n; i++) {
+        wp = visibleSortGid[i].wp;
+        sceVu0CopyVector(cb.pt[0], pos);
+        sceVu0CopyVector(cb.pt[1], wp->pos);
+        cb.pt[0][1] -= 75.0f;
+        cb.pt[1][1] -= 75.0f;
+        ClipWall(&cb);
+        if (cb.wall.elem == 0) {
+            ClipWallField(&cb);
+            if (cb.wall.elem == 0) {
+                ret = wp;
+                break;
+            }
+        }
+    }
+
+    return ret;
+}
+
 WayPoint *visible_waypoint_of_all_except_gid(float *pos, int gid)
 {
+    if (ICO_JUN26) {
+        return visible_waypoint_of_all_except_gid_jun26(pos, gid);
+    }
     return visible_waypoint_of_all_except_gid_sub(pos, gid, 0);
 }
 
@@ -172,8 +242,58 @@ static inline WayPoint *visible_waypoint_of_all_except_temp_sub(float *pos, int 
     return ret;
 }
 
+static WayPoint *visible_waypoint_of_all_except_temp_jun26(float *pos, int gid)
+{
+    float buf[4];
+    ClipWork cb;
+    WayPoint *wp;
+    WayPoint *ret;
+    int n;
+    int i;
+
+    n = 0;
+    for (wp = WayPoint_begin(); wp != 0; wp = WayPoint_next(wp)) {
+        int g = wp->group;
+
+        if (way_group[g].temp == 0 || g == gid) {
+            float d;
+
+            sceVu0SubVector(buf, wp->pos, pos);
+            d = fzMagnitudefv(buf);
+            visibleSortTemp[n].wp = wp;
+            visibleSortTemp[n].d = d;
+            n++;
+        }
+    }
+
+    qsort(visibleSortTemp, n, sizeof(WpSortEnt), wpsort_compfnc);
+    cb.radius = 0.0f;
+
+    ret = 0;
+    for (i = 0; i < n; i++) {
+        wp = visibleSortTemp[i].wp;
+        sceVu0CopyVector(cb.pt[0], pos);
+        sceVu0CopyVector(cb.pt[1], wp->pos);
+        cb.pt[0][1] -= 75.0f;
+        cb.pt[1][1] -= 75.0f;
+        ClipWall(&cb);
+        if (cb.wall.elem == 0) {
+            ClipWallField(&cb);
+            if (cb.wall.elem == 0) {
+                ret = wp;
+                break;
+            }
+        }
+    }
+
+    return ret;
+}
+
 WayPoint *visible_waypoint_of_all_except_temp(float *pos, int gid)
 {
+    if (ICO_JUN26) {
+        return visible_waypoint_of_all_except_temp_jun26(pos, gid);
+    }
     return visible_waypoint_of_all_except_temp_sub(pos, gid, 0);
 }
 
@@ -454,8 +574,70 @@ static inline int shortest_path_sub(int from, int to, WgAll *w, int thread) /* d
     return i;
 }
 
+static int shortest_path_jun26(int from, int to)
+{
+    WayGroup *p;
+    int i, j;
+    int next, best;
+
+    for (i = 0; i < 64; i++) {
+        for (j = 63; j >= 0; j--) {
+            wgCost[i][j] = 0x7FFFFFFF;
+        }
+    }
+
+    for (p = WayBridge_begin(); p != 0; p = WayBridge_next(p)) {
+        int g1 = way_point[p->end[0]].group;
+        int g2 = way_point[p->end[1]].group;
+        int b = p->index;
+
+        wgCost[g1][b] = 1;
+        wgCost[g2][b] = 1;
+        wgCost[b][g1] = 1;
+        wgCost[b][g2] = 1;
+    }
+
+    for (i = 0; i < 64; i++) {
+        wgVisited[i] = 0;
+        wgDist[i] = 0x7FFFFFFF;
+    }
+
+    wgDist[to] = 0;
+    next = to;
+    do {
+        i = next;
+        best = 0x7FFFFFFF;
+        wgVisited[i] = 1;
+        for (j = 0; j < 64; j++) {
+            if (wgVisited[j]) {
+                continue;
+            }
+            if (wgCost[i][j] < 0x7FFFFFFF && wgDist[i] + wgCost[i][j] < wgDist[j]) {
+                wgDist[j] = wgDist[i] + wgCost[i][j];
+                wgPrev[j] = i;
+            }
+            if (wgDist[j] < best) {
+                best = wgDist[j];
+                next = j;
+            }
+        }
+    } while (best < 0x7FFFFFFF);
+
+    if (wgDist[from] >= 0x7FFFFFFF) {
+        return -1;
+    }
+    i = from;
+    while (wgPrev[i] != to) {
+        i = wgPrev[i];
+    }
+    return i;
+}
+
 int shortest_path(int from, int to, WgAll *w)
 {
+    if (ICO_JUN26) {
+        return shortest_path_jun26(from, to);
+    }
     return shortest_path_sub(from, to, w, 0);
 }
 
@@ -464,8 +646,70 @@ int shortest_path_ThreadVersion(int from, int to, WgAll *w)
     return shortest_path_sub(from, to, w, 1);
 }
 
+static int GetWgAll_jun26(int from, int to)
+{
+    WayGroup *p;
+    int i, j;
+    int next, best;
+
+    for (i = 0; i < 64; i++) {
+        for (j = 63; j >= 0; j--) {
+            wgCost[i][j] = 0x7FFFFFFF;
+        }
+    }
+
+    for (p = WayBridgeAll_begin(); p != 0; p = WayBridgeAll_next(p)) {
+        int g1 = way_point[p->end[0]].group;
+        int g2 = way_point[p->end[1]].group;
+        int b = p->index;
+
+        wgCost[g1][b] = 1;
+        wgCost[g2][b] = 1;
+        wgCost[b][g1] = 1;
+        wgCost[b][g2] = 1;
+    }
+
+    for (i = 0; i < 64; i++) {
+        wgVisited[i] = 0;
+        wgDist2[i] = 0x7FFFFFFF;
+    }
+
+    wgDist2[to] = 0;
+    next = to;
+    do {
+        i = next;
+        best = 0x7FFFFFFF;
+        wgVisited[i] = 1;
+        for (j = 0; j < 64; j++) {
+            if (wgVisited[j]) {
+                continue;
+            }
+            if (wgCost[i][j] < 0x7FFFFFFF && wgDist2[i] + wgCost[i][j] < wgDist2[j]) {
+                wgDist2[j] = wgDist2[i] + wgCost[i][j];
+                wgPrev2[j] = i;
+            }
+            if (wgDist2[j] < best) {
+                best = wgDist2[j];
+                next = j;
+            }
+        }
+    } while (best < 0x7FFFFFFF);
+
+    if (wgDist2[from] >= 0x7FFFFFFF) {
+        return -1;
+    }
+    i = from;
+    while (wgPrev2[i] != to) {
+        i = wgPrev2[i];
+    }
+    return i;
+}
+
 int GetWgAll(int from, int to, WgAll *w)
 {
+    if (ICO_JUN26) {
+        return GetWgAll_jun26(from, to);
+    }
     char *visited = w->visited;
     int *prev = w->prev2;
     int *dist = w->dist2;
@@ -1073,8 +1317,25 @@ inline WayPoint *waypoint_connect_group_side_bridge(WayGroup *bridge, int gid)
     return 0;
 }
 
+static inline int NearestWgFromTarget_jun26(int cur, int end)
+{
+    while (1) {
+        if (wgDist[cur] != 0x7FFFFFFF) {
+            if (way_group[cur].bridge == 0)
+                break;
+        }
+        if (cur == end)
+            break;
+        cur = wgPrev2[cur];
+    }
+    return cur;
+}
+
 inline int NearestWgFromTarget(int cur, int end, WgAll *w)
 {
+    if (ICO_JUN26) {
+        return NearestWgFromTarget_jun26(cur, end);
+    }
     int *dist = w->dist;
     int *prev = w->prev2;
     while (1) {

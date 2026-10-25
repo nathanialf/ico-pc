@@ -46,7 +46,15 @@ char *iOSMcSaveSeg_jpn[6] = {"BISCPS-11003ico", "icon.sys",    "boy_blk.ico",
 char *iOSMcSaveSeg_kor[6] = {"BISCPS-56001ico", "icon.sys",    "boy_blk.ico",
                              "boy_blk.ico",     "boy_blk.ico", "game."};
 
-#define iOSMcSaveSeg PAL_JPN_KORCN(iOSMcSaveSeg_pal, iOSMcSaveSeg_jpn, iOSMcSaveSeg_kor)
+char *iOSMcSaveSeg_ntscaug6[6] = {"BASCUS-97113ico", "icon.sys",    "boy_blk.ico",
+                                  "boy_blk.ico",     "boy_blk.ico", "game."};
+
+char *iOSMcSaveSeg_jun26[6] = {"BISCUS-97113ico", "icon.sys",    "boy_blk.ico",
+                               "boy_blk.ico",     "boy_blk.ico", "game."};
+
+#define iOSMcSaveSeg                                                                               \
+    PAL_JPN_KORCN_NTSCAUG6_JUN26(iOSMcSaveSeg_pal, iOSMcSaveSeg_jpn, iOSMcSaveSeg_kor,             \
+                                 iOSMcSaveSeg_ntscaug6, iOSMcSaveSeg_jun26)
 
 static int mcLockCount = 0; /* derived name */
 
@@ -291,8 +299,17 @@ static inline int product_read(McMgr *self)
     return self->result;
 }
 
+static inline int gameblock_write_jun26(McMgr *self, void *buf)
+{
+    iosMcHandlerWrite(self, buf, 20480);
+    return 0;
+}
+
 static inline int gameblock_write(McMgr *self, void *buf)
 {
+    if (ICO_JUN26) {
+        return gameblock_write_jun26(self, buf);
+    }
     if (ICO_NTSCAUG6JUN26) {
         iosMcHandlerWrite(self, buf, 25596);
     } else {
@@ -303,7 +320,18 @@ static inline int gameblock_write(McMgr *self, void *buf)
     return 0;
 }
 
-static inline int gameblock_read_ntscaug6jun26(McMgr *self, void *buf)
+static inline int gameblock_read_jun26(McMgr *self, void *buf)
+{
+    iosMcHandlerRead(self, buf, 20480);
+    systemStatus[11] = (IosMcProductFile + self->port)->soundMode;
+    soundOutputModeSet((IosMcProductFile + self->port)->outputMode);
+    soundOutputModeSet(ico_opt_output_card(soundOutputModeGet()));
+    iosPadActRequestEnable = (IosMcProductFile + self->port)->vibration;
+    *(McBlk *)iosPadConfCustom.bit = *(McBlk *)(IosMcProductFile + self->port)->padConf;
+    return self->result;
+}
+
+static inline int gameblock_read_ntscaug6(McMgr *self, void *buf)
 {
     iosMcHandlerRead(self, buf, 25596);
     systemStatus[11] = (IosMcProductFile + self->port)->soundMode;
@@ -316,8 +344,11 @@ static inline int gameblock_read_ntscaug6jun26(McMgr *self, void *buf)
 
 static inline int gameblock_read(McMgr *self, void *buf)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return gameblock_read_ntscaug6jun26(self, buf);
+    if (ICO_JUN26) {
+        return gameblock_read_jun26(self, buf);
+    }
+    if (ICO_NTSCAUG6) {
+        return gameblock_read_ntscaug6(self, buf);
     }
     iosMcHandlerRead(self, buf, 25588);
     systemStatus[11] = (IosMcProductFile + self->port)->soundMode;
@@ -649,18 +680,18 @@ retry:
     }
 
     if (mp->flags.ll & 2) {
-        *(McName *)mp->path = *(McName *)PAL_JPN_KOR_NTSCAUG6JUN26_CN(
+        *(McName *)mp->path = *(McName *)PAL_JPN_KOR_NTSCAUG6_JUN26_CN(
             "/BESCES-50760ico", "/BISCPS-11003ico", "/BISCPS-56001ico", "/BASCUS-97113ico",
-            "/BISCPS-55001ico");
+            "/BISCUS-97113ico", "/BISCPS-55001ico");
         iosMcMgrMkdir(mp);
         if (mp->result != 0 && mp->result != -4) {
             return;
         }
     }
 
-    *(McName *)mp->dirName = *(McName *)PAL_JPN_KOR_NTSCAUG6JUN26_CN(
+    *(McName *)mp->dirName = *(McName *)PAL_JPN_KOR_NTSCAUG6_JUN26_CN(
         "/BESCES-50760ico", "/BISCPS-11003ico", "/BISCPS-56001ico", "/BASCUS-97113ico",
-        "/BISCPS-55001ico");
+        "/BISCUS-97113ico", "/BISCPS-55001ico");
     iosMcMgrChdir(mp);
 
     if (mp->result != 0) {
@@ -695,8 +726,91 @@ int IosMcPreviewInfo[6] = {0};
 
 IosMsgQueue McMsgQ = {0};
 
+static void iosMcMgrSaveSeg_jun26(McMgr *mp, char *suffix)
+{
+    int r = 0;
+    int i;
+    McSegEnt *e;
+
+    mp->flags.ll = mp->flags.ll | 2;
+    iosMcMgrChdirProduct(mp);
+
+    if (mp->result != 0) {
+        return;
+    }
+
+    if (mp->segment > 0 && mp->segment < 5) {
+        strcpy(mp->path, "*");
+
+        iosMcMgrGetDir(mp);
+
+        for (i = 0; i < mp->dirCount; i++) {
+            if (strcmp(iOSMcSaveSeg[mp->segment], mp->dir[i].EntryName) == 0) {
+                return;
+            }
+        }
+    }
+
+    mp->openMode = 0x203;
+    strcpy(mp->path, iOSMcSaveSeg[mp->segment]);
+
+    if (suffix != 0) {
+        strcat(mp->path, suffix);
+    }
+
+    iosMcMgrOpen(mp);
+
+    if (mp->result < 0) {
+        return;
+    }
+
+    for (i = 0; i < sizeof(iOSMcSaveList) / sizeof(iOSMcSaveList[0]); i++) {
+        e = &iOSMcSaveList[i];
+        if (e->id != mp->segment) {
+            continue;
+        }
+        if (e->save == 0) {
+            continue;
+        }
+        if (e->save(mp, mp->segArg) < 0) {
+            r = -15;
+            break;
+        }
+    }
+
+    if (r == 0) {
+        if (mp->pos != 0) {
+            mp->size = mp->pos;
+            iosMcMgrWrite(mp, mp->buf);
+
+            if (mp->result < 0) {
+                return;
+            }
+
+            mp->pos = 0;
+        }
+
+        mp->size = 4;
+        debug_StdPrintfDummy("write checkSum: %d\n", mp->sum);
+        iosMcMgrWrite(mp, &mp->sum);
+    }
+
+    sceMcFlush(mp->fd);
+    iosMcMgrSync(mp);
+
+    iosMcMgrClose(mp);
+
+    if (r != 0) {
+        mp->result = r;
+    }
+}
+
 static void iosMcMgrSaveSeg(McMgr *mp, char *suffix)
 {
+    if (ICO_JUN26) {
+        iosMcMgrSaveSeg_jun26(mp, suffix);
+        return;
+    }
     int r = 0;
     unsigned int i;
     McSegEnt *e;
@@ -769,8 +883,79 @@ flush:
     }
 }
 
+static void iosMcMgrLoadSeg_jun26(McMgr *mp, char *suffix)
+{
+    int r = 0;
+    int i;
+    McSegEnt *e;
+
+    mp->flags.ll = mp->flags.ll & -3;
+    iosMcMgrChdirProduct(mp);
+
+    if (mp->result != 0) {
+        return;
+    }
+
+    mp->openMode = 1;
+    strcpy(mp->path, iOSMcSaveSeg[mp->segment]);
+
+    if (suffix != 0) {
+        strcat(mp->path, suffix);
+    }
+
+    iosMcMgrOpen(mp);
+
+    if (mp->result < 0) {
+        return;
+    }
+
+    for (i = 0; i < sizeof(iOSMcSaveList) / sizeof(iOSMcSaveList[0]); i++) {
+        e = &iOSMcSaveList[i];
+        if (e->id != mp->segment) {
+            continue;
+        }
+        if (e->load == 0) {
+            continue;
+        }
+        debug_StdPrintfDummy("call read_func\n");
+        if (e->load(mp, mp->segArg) < 0) {
+            r = -15;
+            break;
+        }
+    }
+
+    if (r == 0) {
+        while (sceMcSeek(mp->fd, -4, 2) > 0) {
+            debug_StdPrintfDummy("sceMcSeek: request busy\n");
+        }
+
+        iosMcMgrSync(mp);
+
+        mp->size = 4;
+        iosMcMgrRead(mp, &mp->readSum);
+
+        if (mp->result < 0) {
+            return;
+        }
+
+        if (mp->sum != mp->readSum) {
+            r = -16;
+        }
+    }
+
+    iosMcMgrClose(mp);
+
+    if (r != 0) {
+        mp->result = r;
+    }
+}
+
 static void iosMcMgrLoadSeg(McMgr *mp, char *suffix)
 {
+    if (ICO_JUN26) {
+        iosMcMgrLoadSeg_jun26(mp, suffix);
+        return;
+    }
     int r = 0;
     unsigned int i;
     McSegEnt *e;
@@ -845,8 +1030,43 @@ static __inline__ void iosMcMgrSaveIconDebugResult(int result) /* derived name *
 #endif
 }
 
+static void iosMcMgrSaveIcon_jun26(McMgr *mp) /* derived name */
+{
+    mp->segment = 1;
+    mp->segArg = &iconFile[1];
+    iosMcMgrSaveSeg(mp, 0);
+
+    if (mp->result < 0) {
+        return;
+    }
+
+    mp->segment = 2;
+    mp->segArg = &iconFile[2];
+    iosMcMgrSaveSeg(mp, 0);
+
+    if (mp->result < 0) {
+        return;
+    }
+
+    mp->segment = 3;
+    mp->segArg = &iconFile[3];
+    iosMcMgrSaveSeg(mp, 0);
+
+    if (mp->result < 0) {
+        return;
+    }
+
+    mp->segment = 4;
+    mp->segArg = &iconFile[4];
+    iosMcMgrSaveSeg(mp, 0);
+}
+
 static inline void iosMcMgrSaveIcon(McMgr *mp) /* derived name */
 {
+    if (ICO_JUN26) {
+        iosMcMgrSaveIcon_jun26(mp);
+        return;
+    }
     mp->segment = 1;
     mp->segArg = &iconFile[1];
     iosMcMgrSaveSeg(mp, 0);

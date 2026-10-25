@@ -232,7 +232,7 @@ void actInitialize_ext_charcter(GObj *self)
 {
     Act *g = GOBJ_ACT(self);
     char *p = (char *)iosMallocDebug(ios_partition_seki, sizeof(EnemyBattleWork), __FILE__,
-                                     PAL_NTSC_AUG6JUN26(885, 850, 844));
+                                     PAL_NTSC_AUG6_JUN26(885, 850, 844, 791));
 
     memset(p, 0, sizeof(EnemyBattleWork));
     g->enemy = (EnemyBattleWork *)p;
@@ -289,7 +289,24 @@ static inline void actInitialize_only_charcter_ntsc(char *self)
     }
 }
 
-static inline void actInitialize_only_charcter_aug6jun26(char *self)
+static inline void actInitialize_only_charcter_jun26(char *self)
+{
+    Act *g = GOBJ_ACT(self);
+    char *p =
+        (char *)iosMallocDebug(ios_partition_seki, ICO_MAX_SIZE(ActWork, 0x980), __FILE__, 812);
+    ActWork *q;
+
+    memset(p, 0, ICO_MAX_SIZE(ActWork, 0x980));
+    g->work = p;
+    q = GOBJ_WORK(self);
+    q->defIkRate0 = GOBJ_SUB(self)->root.ikRate0;
+    q->defIkRate1 = GOBJ_SUB(self)->root.ikRate1;
+    q->defIkRate2 = GOBJ_SUB(self)->root.ikRate2;
+    q->escortOffset = -1.0f;
+    q->disappearSpeed = 1.0f;
+}
+
+static inline void actInitialize_only_charcter_aug6(char *self)
 {
     Act *g = GOBJ_ACT(self);
     char *p =
@@ -315,12 +332,16 @@ static inline void actInitialize_only_charcter_aug6jun26(char *self)
 
 void actInitialize_only_charcter(char *self)
 {
+    if (ICO_JUN26) {
+        actInitialize_only_charcter_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actInitialize_only_charcter_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actInitialize_only_charcter_aug6jun26(self);
+    if (ICO_AUG6) {
+        actInitialize_only_charcter_aug6(self);
         return;
     }
     Act *g = GOBJ_ACT(self);
@@ -414,7 +435,67 @@ static Act *actInitialize_ntsc(GObj *self)
     return w;
 }
 
-static Act *actInitialize_aug6jun26(GObj *self)
+static Act *actInitialize_jun26(GObj *self)
+{
+    Act *w = (Act *)iosMallocDebug(ios_partition_seki, ICO_MAX_SIZE(Act, 0x850), __FILE__, 828);
+    int i;
+
+    self->act = w;
+    memset(w, 0, ICO_MAX_SIZE(Act, 0x850));
+
+    w->actProc = (struct GProc *)isysCurrentGObjProcess;
+    w->brainProc = 0;
+    w->motProc = 0;
+    w->motProc2 = 0;
+    w->after = 0;
+    ACT_AFTER_PROC(w) = 0;
+    w->enemy = 0;
+    w->work = 0;
+    w->frame = 0;
+
+    w->flags18.ll |= 1LL << 32;
+    w->flags18.ll &= ~(1LL << 34);
+    w->flags18.ll &= ~(1LL << 35);
+    w->flags18.ll |= 1LL << 37;
+    w->flags18.ll &= ~(1LL << 38);
+    w->flags18.ll |= 1LL << 40;
+    w->flags18.ll &= ~(1LL << 41);
+    w->flags18.ll |= 1LL << 42;
+    w->flags18.ll |= 1LL << 43;
+    w->flags18.ll &= ~(1LL << 45);
+    w->flags18.ll &= ~(1LL << 46);
+
+    w->handFreeFrame = 0;
+    w->actMode = 0;
+    w->pushDir = 0;
+    w->modeFrame = 0;
+    w->wayMode = 0;
+    w->way.nearWp = 0;
+    w->way.reached = 0;
+    w->actKind = -1;
+    w->way.guideFirst = -1;
+    w->way.fromWp = 0;
+    w->mainMail = 0;
+    w->mail = 0;
+    w->motReq = 0;
+    w->reserved = 0;
+    w->carried = 0;
+    w->brainTarget = 0;
+    w->weapon = 0;
+    w->curItem = 0;
+    w->brainAim = 0;
+    w->infoPos = 0;
+    w->brainStatus = 0;
+    w->mother = 0;
+
+    w->attacker = 0;
+    w->hit = 0;
+    w->padConf = iosPadConfDefault;
+
+    return w;
+}
+
+static Act *actInitialize_aug6(GObj *self)
 {
     Act *w = (Act *)iosMallocDebug(ios_partition_seki, ICO_MAX_SIZE(Act, 0x850), __FILE__, 892);
 
@@ -481,11 +562,14 @@ static Act *actInitialize_aug6jun26(GObj *self)
 
 Act *actInitialize(GObj *self)
 {
+    if (ICO_JUN26) {
+        return actInitialize_jun26(self);
+    }
     if (ICO_NTSC) {
         return actInitialize_ntsc(self);
     }
-    if (ICO_AUG6JUN26) {
-        return actInitialize_aug6jun26(self);
+    if (ICO_AUG6) {
+        return actInitialize_aug6(self);
     }
     Act *w = (Act *)iosMallocDebug(ios_partition_seki, ICO_MAX_SIZE(Act, 0x850), __FILE__, 934);
 
@@ -577,8 +661,51 @@ typedef struct { /* field names derived */
     IntrEnt ent[1];
 } IntrList; /* derived name */
 
+static IntrMail *act_check_intr_list_jun26(void *self, IntrMail *m, void **out)
+{
+    Act *w = GOBJ_ACT(self);
+    IntrList *k = (IntrList *)(self + 0x54);
+    MotOriReq buf;
+    int i;
+
+    if (m != 0) {
+        for (; (short)m->kind != 376; m++) {
+            if ((m->flags >> 18) & 1) {
+                for (i = 0; i < k->n; i++) {
+                    int mot;
+                    char *p;
+                    if (w->reserved != 0 && w->reservedMail != k->ent[i].id) {
+                        continue;
+                    }
+                    if (k->ent[i].id != (short)m->kind) {
+                        continue;
+                    }
+                    mot = ACTGetOrientFromIntrK(self, k->ent[i].id, &buf, i);
+                    p = SetMotionRequest(self, mot, buf);
+                    w->motReq = p;
+                    if (ICO_RAW(int, p, 0xC, ((struct MotCtrl *)p)->shifted) == 0 &&
+                        (ICO_RAW(unsigned short, m, 0x16, (unsigned short)(m->flags >> 16)) & 1) ==
+                            0 &&
+                        (w->actMode != 0 || m->mode == 0)) {
+                        continue;
+                    }
+                    w->intrMot = mot;
+                    w->intrArg = k->ent[i].f4;
+                    ICO_RAW(char *, w, 0x30, w->intrData) = (char *)GetMailAdditionalData(self, i);
+                    *out = &k->ent[i];
+                    return m;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 static IntrMail *act_check_intr_list(void *self, IntrMail *m, void **out)
 {
+    if (ICO_JUN26) {
+        return act_check_intr_list_jun26(self, m, out);
+    }
     IntrList *k = ICO_RAWP(IntrList *, self, 0x54, (IntrList *)&((GObj *)self)->mailBox);
     Act *w = GOBJ_ACT(self);
     MotOriReq buf;
@@ -677,7 +804,59 @@ static void act_check_mail_ntsc(void *self, IntrMail *m)
     }
 }
 
-static void act_check_mail_aug6jun26(void *self, IntrMail *m)
+static void act_check_mail_jun26(void *self, IntrMail *m)
+{
+    IntrList *k = ICO_RAWP(IntrList *, self, 0x54, (IntrList *)&((GObj *)self)->mailBox);
+    Act *w = GOBJ_ACT(self);
+    int i;
+    int id;
+
+    if (m == 0) {
+        debug_StdPrintfDummy("intr list is null\n");
+        return;
+    }
+    while ((short)m->kind != 376) {
+        if ((m->flags >> 18) & 1) {
+            for (i = 0; i < k->n; i++) {
+                id = k->ent[i].id;
+                if (id == (short)m->kind) {
+                    if (m->handler != 0) {
+                        m->handler(self, id, k->ent[i].f4);
+                    }
+                }
+                switch (id) {
+                case 243:
+                    w->flags18.ll |= 0x8000LL << 45;
+                    break;
+                case 31:
+                    w->flags18.ll |= 0x8000LL << 42;
+                    break;
+                case 32:
+                    w->flags18.ll |= 0x8000LL << 43;
+                    break;
+                case 56:
+                    w->flags18.ll |= 0x8000LL << 36;
+                    break;
+                case 375:
+                    GOBJ_ACT(self)->enemy->word2B0 = 0;
+                    break;
+                case 15:
+                    w->flags18.ll |= 0x8000LL << 38;
+                    break;
+                case 16:
+                    w->flags18.ll |= 0x8000LL << 37;
+                    break;
+                case 7:
+                    w->flags20.ll |= 0x40;
+                    break;
+                }
+            }
+        }
+        m++;
+    }
+}
+
+static void act_check_mail_aug6(void *self, IntrMail *m)
 {
     IntrList *k = ICO_RAWP(IntrList *, self, 0x54, (IntrList *)&((GObj *)self)->mailBox);
     Act *w = GOBJ_ACT(self);
@@ -737,12 +916,16 @@ static void act_check_mail_aug6jun26(void *self, IntrMail *m)
 
 static void act_check_mail(void *self, IntrMail *m)
 {
+    if (ICO_JUN26) {
+        act_check_mail_jun26(self, m);
+        return;
+    }
     if (ICO_NTSC) {
         act_check_mail_ntsc(self, m);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        act_check_mail_aug6jun26(self, m);
+    if (ICO_AUG6) {
+        act_check_mail_aug6(self, m);
         return;
     }
     IntrList *k = ICO_RAWP(IntrList *, self, 0x54, (IntrList *)&((GObj *)self)->mailBox);
@@ -815,8 +998,122 @@ typedef struct { /* field names derived */
     unsigned int w[4];
 } IntrSkip; /* derived name */
 
+static void BeforeFunc_jun26(GObj *self)
+{
+    Act *w = GOBJ_ACT(self);
+    char *mb = (char *)&((struct GObj *)self)->mailBox;
+    IntrMail *intr;
+    void *act;
+    IntrEnt *ent;
+    int i;
+
+    w->intrArg = 0;
+    w->intrData = 0;
+    w->modeFrame += 1;
+    w->frame += 1;
+    w->flags18.ll &= ~(1LL << 46);
+    w->flags18.ll &= ~(1LL << 51);
+    w->flags18.ll &= ~(1LL << 52);
+    w->flags18.ll &= ~(1LL << 53);
+    w->flags18.ll &= ~(1LL << 54);
+    w->flags18.ll &= ~(1LL << 55);
+    w->flags18.ll &= ~(1LL << 56);
+    w->flags18.ll &= ~(1LL << 57);
+    w->flags18.ll &= ~(1LL << 58);
+    w->flags18.ll &= ~(1LL << 60);
+    w->flags18.ll &= ~(1LL << 62);
+    w->flags20.ll &= ~(1LL << 2);
+    w->flags20.ll &= ~(1LL << 6);
+    w->gobj80 = 0;
+    w->gobj84 = 0;
+    if (self == (void *)boyGObj) {
+        ActWork *p = GOBJ_WORK(self);
+
+        ((ActFloat *)&GOBJ_SUB(self)->root.ikRate0)->f = p->defIkRate0;
+        ((ActFloat *)&GOBJ_SUB(self)->root.ikRate1)->f = p->defIkRate1;
+        ((ActFloat *)&GOBJ_SUB(self)->root.ikRate2)->f = p->defIkRate2;
+    }
+    if (w->msgBlockTimer != 0) {
+        w->msgBlockTimer -= 1;
+    }
+    {
+        IntrMail *mails[5] = {&actIntrList[0], &actIntrList[3], (IntrMail *)w->mail,
+                              (IntrMail *)w->mainMail, (IntrMail *)ICO_INVALID_PTR};
+        IntrSkip skip = {{0, 1, 0, 1}};
+
+        ACTSendMailCorrect(self, actModeTbl[w->actMode].mail);
+        for (i = 0; i < *(int *)(mb + 4); i++) {
+            ((IntrList *)mb)->ent[i].id =
+                _ACTCorrectMsg(self, ICO_RAW(int, mb, 8 + i * 8, ((IosMailBox *)mb)->mail[i].type),
+                               ICO_RAW(void *, mb, 0xC + i * 8, ((IosMailBox *)mb)->mail[i].arg));
+        }
+        ACTRunIntrCorrect(self, mails[1], mails[2]);
+        for (i = 0; mails[i] != (IntrMail *)ICO_INVALID_PTR; i++) {
+            act_check_mail(self, mails[i]);
+        }
+        intr = 0;
+        for (i = 0; mails[i] != (IntrMail *)ICO_INVALID_PTR; i++) {
+            if (skip.w[i] == 0 || actModeTbl[w->actMode].skipMarked == 0) {
+                intr = act_check_intr_list(self, mails[i], (void **)&ent);
+                if (intr != 0) {
+                    break;
+                }
+            }
+        }
+    }
+    w->curMot = GOBJ_SUB(self)->ctrl.orientKind;
+    if ((((&motionKind[GOBJ_SUB(self)->ctrl.motion])->flags.word >> 1) & 1) != 0 &&
+        GOBJ_SUB(self)->ctrl.animFrame < 3.0f) {
+        w->flags20.ll |= 1LL << 2;
+    }
+    if (intr != 0) {
+        w->intrKind = (short)intr->kind;
+        act = (void *)actModeTbl[intr->mode].ent[w->actKind].act;
+        if (act != 0) {
+            after_func_exec(self, w->actMode, intr->mode);
+            if (ACT_AFTER_PROC(w) != 0) {
+                ACT_AFTER_PROC(w)((GObj *)self);
+                ACT_AFTER_PROC(w) = 0;
+            }
+            w->modeFrame = 0;
+            for (i = 1; i < 2; i++) {
+                GOBJ_WORK(self)->modeHist[i] = GOBJ_WORK(self)->modeHist[i - 1];
+            }
+            GOBJ_WORK(self)->modeHist[0] = w->actMode;
+            w->actMode = intr->mode;
+            w->flags18.ll = (w->flags18.ll & ~(1LL << 34)) |
+                            ((unsigned long long)actModeTbl[w->actMode].saveInfo << 34);
+            w->flags18.ll = (w->flags18.ll & ~(1LL << 44)) |
+                            ((unsigned long long)actModeTbl[intr->mode].holdDir << 44);
+            w->flags18.ll &= ~(1LL << 63);
+            w->mail = (ActMail *)&actIntrList[actModeTbl[w->actMode].intrList];
+            actChangeActMain(isysCurrentGObj, act, &w->actProc);
+        }
+        if (intr->motion != 0) {
+            w->pushDir = 0;
+            actCreateMotionThread(intr->motion, 21, &w->motProc);
+        }
+        if (intr->extra != 0) {
+            actCreateMotionThread(intr->extra, 22, &w->motProc2);
+        }
+        if (intr->accept != 0) {
+            intr->accept((char *)self, ent->id, ent->f4);
+        }
+    }
+    w->soundFlag &= ~1;
+    w->reserved = 0;
+    *(int *)(mb + 4) = 0;
+    ClearMailAdditionalData(self);
+    ACTGame_BeforeFunc(self);
+    entesty = 100;
+}
+
 void BeforeFunc(GObj *self)
 {
+    if (ICO_JUN26) {
+        BeforeFunc_jun26(self);
+        return;
+    }
     Act *w = GOBJ_ACT(self);
     char *mb = (char *)&((struct GObj *)self)->mailBox;
     IntrMail *intr;
@@ -929,7 +1226,7 @@ void BeforeFunc(GObj *self)
     w->curMot = GOBJ_SUB(self)->ctrl.orientKind;
     if ((((&motionKind[GOBJ_SUB(self)->ctrl.motion])->flags.word >> 1) & 1) != 0 &&
         GOBJ_SUB(self)->ctrl.animFrame < 3.0f) {
-        w->flags20.ll |= 1LL << 18;
+        w->flags20.ll |= PAL_NTSC_AUG6(1LL << 18, 1LL << 7, 1LL << 4);
     }
     if (intr != 0) {
         old = w->intrKind;
@@ -951,11 +1248,13 @@ void BeforeFunc(GObj *self)
             GOBJ_WORK(self)->frameHist[0] = w->frame;
             GOBJ_WORK(self)->prevHist[0] = old;
             w->actMode = intr->mode;
-            w->flags18.ll = (w->flags18.ll & ~(1LL << 39)) |
-                            ((unsigned long long)actModeTbl[w->actMode].bit10 << 39);
-            w->flags18.ll = (w->flags18.ll & ~(1LL << 50)) |
-                            ((unsigned long long)actModeTbl[intr->mode].bit12 << 50);
-            w->flags20.ll &= ~(1LL << 11);
+            w->flags18.ll = (w->flags18.ll & ~(PAL_NTSCAUG6(1LL << 39, 1LL << 35))) |
+                            ((unsigned long long)actModeTbl[w->actMode].bit10 *
+                             PAL_NTSCAUG6((1ULL << 39), (1ULL << 35)));
+            w->flags18.ll = (w->flags18.ll & ~(PAL_NTSCAUG6(1LL << 50, 1LL << 45))) |
+                            ((unsigned long long)actModeTbl[intr->mode].bit12 *
+                             PAL_NTSCAUG6((1ULL << 50), (1ULL << 45)));
+            w->flags20.ll &= ~(PAL_NTSC_AUG6(1LL << 11, 1LL << 2, 1LL << 1));
             w->mail = (ActMail *)&actIntrList[actModeTbl[w->actMode].intrList];
             actChangeActMain(isysCurrentGObj, act, &w->actProc);
         }
@@ -981,11 +1280,187 @@ void BeforeFunc(GObj *self)
     entesty = 100;
 }
 
+static void ACTDebugMove_jun26(GObj *self, int a1)
+{
+    float dir[4];
+    float pos[4];
+    IosPadStick st;
+    Act *ext;
+    SkelNode *p;
+    float h;
+    int mode = 1;
+
+    ext = GOBJ_ACT(self);
+    p = GOBJ_SUB(self)->skel;
+    h = (p != 0) ? p->pos[1] : 0.0f;
+    DisableChangeRootUpdateMode(self);
+    SetRootUpdateMode(self, 0);
+    while (((ext->pad.now & 1) != 0 || mode == 1) && self == CurrentTargetGObj) {
+        _ACTWait(1);
+        iosPadRead(&ext->pad);
+        iosPadGetStick(&ext->pad, &ext->stick, 0, 2, 2, 0);
+        iosPadGetStick(&ext->pad, &st, 1, 2, 2, 0);
+        if (0.001f < ext->stick.mag) {
+            ConvertStickToAbsCoord(dir, &ext->stick);
+        }
+        GetRootPosition(pos, self);
+        pos[0] += dir[0] * ext->stick.mag * 32.0f;
+        pos[2] += dir[2] * ext->stick.mag * 32.0f;
+        if (0.001f < st.mag) {
+            mode = 1;
+        }
+        switch (mode) {
+        case 0: {
+            ClipWork w;
+
+            if ((ext->pad.trg & 0x200) != 0) {
+                sceVu0CopyVector(w.pt[0], pos);
+                sceVu0CopyVector(w.pt[1], pos);
+                w.pt[1][1] -= 10000.0f;
+                ClipFloorR(&w);
+                if (w.floor.elem != 0) {
+                    pos[1] = w.pt[2][1] - h;
+                    break;
+                }
+            }
+            sceVu0CopyVector(w.pt[0], pos);
+            sceVu0CopyVector(w.pt[1], pos);
+            w.pt[0][1] -= 10.0f;
+            w.pt[1][1] += 10000.0f;
+            ClipFloor(&w);
+            if (w.floor.elem == 0) {
+                sceVu0CopyVector(w.pt[0], pos);
+                sceVu0CopyVector(w.pt[1], pos);
+                w.pt[1][1] -= 10000.0f;
+                ClipFloorR(&w);
+                if (w.floor.elem == 0) {
+                    break;
+                }
+            }
+            pos[1] = w.pt[2][1] - h;
+            break;
+        }
+        case 1:
+            if ((ext->pad.trg & 0x200) != 0) {
+                SetRootUpdateMode(self, 1);
+                mode = 0;
+            } else {
+                pos[1] += st.dz * st.mag * 32.0f;
+            }
+            break;
+        }
+        SetDirectRootPosition(self, pos);
+        {
+            ClipWork w;
+
+            GetLowerPlaneCollision(&w, pos);
+            if (w.floor.elem != 0 && CompareAttribute(w.attr, 0x800) == 0 &&
+                CompareAttribute(w.attr, 0x900) == 0) {
+                ClipWork w2;
+
+                sceVu0CopyVector(w2.pt[0], pos);
+                sceVu0CopyVector(w2.pt[1], pos);
+                w2.pt[1][1] += 10000.0f;
+                ClipFloor(&w2);
+                if (w2.floor.elem != 0) {
+                    sceVu0IVECTOR col = {32, 32, 255, 128};
+
+                    w2.pt[0][1] += 200.0f;
+                    gif_StartPacketPri(11);
+                    MatrixDrive_PushMatrix();
+                    gif_SetAlpha(1, 5, 128);
+                    gif_SetZWrite(0);
+                    gif_SetZTest(1);
+                    sceVu0UnitMatrix(MatrixDrive_GetMatrix());
+                    DrawLineG(w2.pt[0], col, w2.pt[2], col, 0);
+                    MatrixDrive_PopMatrix();
+                    gif_EndPacket();
+                }
+            } else {
+                SetSimplePlane((float *)&GOBJ_SUB(self)->root.plane, 0.0f, -1.0f, 0.0f, pos[1] + h);
+                CopyVector((char *)GOBJ_SUB(self)->root.footPos, pos);
+                GOBJ_SUB(self)->root.footPos[1] += h;
+            }
+        }
+        debug_PrintfDummy(10, 185, 0xFFFFFF00u, "LW's coord:");
+        debug_PrintfDummy(20, 195, 0xFFFFFF00u, "POS X:%8.2f Y:%8.2f Z:%8.2f", -pos[0], -pos[1],
+                          -pos[2]);
+        {
+            ClipWork w3;
+
+            sceVu0CopyVector(w3.pt[0], pos);
+            sceVu0CopyVector(w3.pt[1], pos);
+            w3.pt[0][1] -= 200.0f;
+            w3.pt[1][1] += 200.0f;
+            ClipFloor(&w3);
+            gif_StartPacketPri(11);
+            gif_SetAlpha(1, 5, 128);
+            gif_SetZWrite(0);
+            gif_SetZTest(1);
+            MatrixDrive_PushMatrix();
+            sceVu0UnitMatrix(MatrixDrive_GetMatrix());
+            {
+                sceVu0IVECTOR col2 = {128, 128, 128, 128};
+                float q1[4];
+                float q2[4];
+                float q3[4];
+                float q4[4];
+
+                CopyVector(q1, pos);
+                CopyVector(q2, pos);
+                CopyVector(q3, pos);
+                CopyVector(q4, pos);
+                q1[0] -= 200.0f;
+                q2[0] += 200.0f;
+                q3[2] -= 200.0f;
+                q4[2] += 200.0f;
+                DrawLineG(w3.pt[0], col2, w3.pt[1], col2, 0);
+                DrawLineG(q1, col2, q2, col2, 0);
+                DrawLineG(q3, col2, q4, col2, 0);
+            }
+            MatrixDrive_PopMatrix();
+            gif_EndPacket();
+            /* compiled out: draw the five clip lines in blue */
+            if (0) {
+                ClipWork w4;
+                sceVu0IVECTOR col = {0, 64, 255, 128};
+                Vec4 pt[5];
+                int i;
+
+                for (i = 0; i < 5; i++) {
+                    DrawLineG(w4.pt[0], col, pt[i].f, col, 0);
+                }
+            }
+        }
+    }
+    {
+        ClipWork w3;
+
+        sceVu0CopyVector(w3.pt[0], pos);
+        sceVu0CopyVector(w3.pt[1], pos);
+        w3.pt[0][1] -= 10.0f;
+        w3.pt[1][1] += 10000.0f;
+        ClipFloor(&w3);
+        if (w3.floor.elem != 0 && CompareAttribute(w3.attr, 0x800) == 0 &&
+            CompareAttribute(w3.attr, 0x900) == 0) {
+            pos[1] = w3.pt[2][1] - h;
+            SetDirectRootPosition(self, pos);
+            EnableChangeRootUpdateMode(self);
+            AdjustMotionHeightToNearestField(self);
+        }
+    }
+    EnableChangeRootUpdateMode(self);
+}
+
 /* this TU passes the packet priority that the prototype in
    seki/include/GifPacket.h leaves out */
 
 void ACTDebugMove(GObj *self, int a1)
 {
+    if (ICO_JUN26) {
+        ACTDebugMove_jun26(self, a1);
+        return;
+    }
     float dir[4];
     float pos[4];
     IosPadStick st;

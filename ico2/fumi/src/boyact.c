@@ -220,7 +220,152 @@ static void findChainInJump_ntsc(void *self)
     }
 }
 
-static void findChainInJump_aug6jun26(void *self)
+static void findChainInJump_jun26(void *self)
+{
+    float p[4];
+    float q[4];
+    float w[4];
+    float sk[4];
+    float rt[4];
+    float lp[4];
+    float lv[4];
+    float mtx[16];
+    float hp0[4];
+    float hp1[4];
+    float cp[4];
+    float ce[4];
+    float pos[4];
+    float hx[4];
+    float cp2[4];
+    float ce2[4];
+    Act *sub;
+    void *g;
+    void *cage;
+    float r;
+    float r2;
+    float ang;
+    int rside = 0;
+    int lside = 0;
+
+    sub = GOBJ_ACT(self);
+    r = CHAINROW(self)->flags.bits.chainHang ? 300.0f : 100.0f;
+    r2 = CHAINROW(self)->flags.bits.chainHang ? 90.0f : 120.0f;
+
+    for (g = isysGObjSearchFromObjKindID_begin(0x15); g != 0;
+         g = isysGObjSearchFromObjKindID_next(g)) {
+        if (((GObj *)g)->active != 0) {
+            GetRootPosition(p, g);
+            q[0] = p[0];
+            q[1] = p[1];
+            q[2] = p[2];
+            q[1] += GetChainLength(g) + 50.0f;
+            if (_DistxzSqGV(test_CURRENTROOT(self), p) < r * r &&
+                p[1] < test_CURRENTROOT(self)[1] && test_CURRENTROOT(self)[1] < q[1]) {
+                _OrientXZGV(rt, p, test_CURRENTROOT(self));
+                ang = (float)_RotyGV(rt, test_CURRENTORIENT(self));
+                if ((ang < 0.0f ? -ang : ang) < r2) {
+                    if (sub->actMode == 4) {
+                        if (0.0f < ang) {
+                            rside = 1;
+                        } else {
+                            lside = 1;
+                        }
+                    }
+                }
+                GetSkeltonPosition(sk, self, 18);
+                w[0] = 0.0f;
+                w[1] = sk[1] - p[1];
+                w[2] = 0.0f;
+                break;
+            }
+        }
+    }
+
+    rt[0] = test_CURRENTROOT(self)[0];
+    rt[1] = test_CURRENTROOT(self)[1];
+    rt[2] = test_CURRENTROOT(self)[2];
+    GetMatrixDirectionToZ(mtx, test_CURRENTORIENT(self));
+    lp[0] = p[0];
+    lp[1] = p[1];
+    lp[2] = p[2];
+    sceVu0SubVector(lv, (float *)lp, (float *)rt);
+    lv[3] = 0.0f;
+    sceVu0ApplyMatrix(lv, mtx, lv);
+
+    if ((rside != 0 || lside != 0) && (lv[2] < 0.0f ? -lv[2] : lv[2]) < 150.0f) {
+        RequestChangeHandMode(self, 0, 2, 1, g, 0, w);
+        RequestChangeHandMode(self, 1, 2, 1, g, 0, w);
+    } else {
+        RequestChangeHandMode(self, 0, 2, 0, 0, 0, 0);
+        RequestChangeHandMode(self, 1, 2, 0, 0, 0, 0);
+    }
+
+    /* the European text serves both discs: the Japanese reads the same flags2 bit by name
+       (chainIkRate, its bit 6, which config/motion_bits.jpn.txt maps to bit 5), the same
+       ikRate words at its own offsets, and sets 0.8 with no 50 Hz step */
+    if ((rside != 0 || lside != 0) && ((CHAINROW(self)->flags2.word >> 5) & 1) != 0) {
+        float sp = (!ICO_JPNKORNTSCAUG6JUN26CN && systemStatus[0] == 1) ? 0.5f : 0.8f;
+
+        ((BoyVal *)&GOBJ_SUB(self)->root.ikRate0)->f = sp;
+        ((BoyVal *)&GOBJ_SUB(self)->root.ikRate1)->f = sp;
+        ((BoyVal *)&GOBJ_SUB(self)->root.ikRate2)->f = sp;
+    }
+
+    if (rside != 0 || lside != 0) {
+        _ACTCharStatus_Set(self, 14, -1.0f, (ICO_WORD)g);
+    }
+
+    if (rside != 0) {
+        GetSkeltonPosition(hp0, self, 22);
+        if ((lv[0] < 0.0f ? -lv[0] : lv[0]) < 60.0f && (lv[2] < 0.0f ? -lv[2] : lv[2]) < 100.0f) {
+            iosOmSendMail(self, 20, g);
+        }
+    }
+
+    if (lside != 0) {
+        GetSkeltonPosition(hp1, self, 6);
+        if ((lv[0] < 0.0f ? -lv[0] : lv[0]) < 60.0f && (lv[2] < 0.0f ? -lv[2] : lv[2]) < 100.0f) {
+            iosOmSendMail(self, 20, g);
+        }
+    }
+
+    if (g != 0 && sub->actMode == 65) {
+        GetSkeltonPosition(hp0, self, 6);
+        GetChainNearestNodePosition(hp1, g, hp0);
+        if ((hp0[1] - hp1[1] < 0.0f ? -(hp0[1] - hp1[1]) : (hp0[1] - hp1[1])) < 5.0f) {
+            iosOmSendMail(self, 20, g);
+        }
+    }
+
+    if (sub->actMode == 65) {
+        void *o;
+
+        cage = 0;
+        pos[0] = test_CURRENTROOT(self)[0];
+        pos[1] = test_CURRENTROOT(self)[1];
+        pos[2] = test_CURRENTROOT(self)[2];
+        for (o = isysGObjSearchFromObjKindID_begin(42); o != 0;
+             o = isysGObjSearchFromObjKindID_next(o)) {
+            if (((GObj *)o)->active != 0) {
+                GetCageChainPoint(cp, ce, o);
+                if (_DistxzSqGV(test_CURRENTROOT(self), cp) < 4.9e+03f && ce[1] > pos[1]) {
+                    cage = o;
+                    break;
+                }
+            }
+        }
+        if (cage != 0) {
+            GetRootPositionHandExtra(self, hx);
+            GetCageChainPoint(cp2, ce2, cage);
+            if (cp2[1] + 150.0f < hx[1]) {
+                ACTSendMailCorrect(self, 156);
+                ACTSendMailCorrect(self, 155);
+            }
+        }
+    }
+}
+
+static void findChainInJump_aug6(void *self)
 {
     float p[4];
     float q[4];
@@ -368,12 +513,16 @@ static void findChainInJump_aug6jun26(void *self)
 
 static void findChainInJump(void *self)
 {
+    if (ICO_JUN26) {
+        findChainInJump_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         findChainInJump_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        findChainInJump_aug6jun26(self);
+    if (ICO_AUG6) {
+        findChainInJump_aug6(self);
         return;
     }
     float p[4];
@@ -582,7 +731,7 @@ inline void afterBoyHand50(GObj *volatile self)
 {
     debug_StdPrintfDummy("boy after func\n");
     if (girlGObj != 0) {
-        iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x60, 89, 88), isysCurrentGObj);
+        iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x60, 89, 88, 87), isysCurrentGObj);
     }
 }
 
@@ -591,7 +740,7 @@ inline void actBoyHand50(GObj *volatile self)
     Act *sub = GOBJ_ACT(self);
 
     debug_StdPrintfDummy("enter actBoyHand50\n");
-    sub->actMode = PAL_NTSCAUG6JUN26(0x52, 79);
+    sub->actMode = PAL_NTSCAUG6_JUN26(0x52, 79, 78);
     sub->after = (void *)afterBoyHand50;
     sub->readyFlags = 0;
     while ((sub->readyFlags & 0x10) == 0) {
@@ -599,7 +748,7 @@ inline void actBoyHand50(GObj *volatile self)
     }
     debug_StdPrintfDummy("boy error flg get\n");
     while (1) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x60, 89, 88));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0x60, 89, 88, 87));
         _ACTWait(1);
     }
 }
@@ -611,7 +760,7 @@ void motBoyHand50(GObj *volatile self)
     debug_StdPrintfDummy("enter motBoyHand50\n");
     while (1) {
         if (girlGObj != 0) {
-            iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x5C, 85, 84), isysCurrentGObj);
+            iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x5C, 85, 84, 83), isysCurrentGObj);
         }
         if (sub->readyFlags & 1) {
             break;
@@ -624,7 +773,7 @@ void motBoyHand50(GObj *volatile self)
     _ACTWait(1);
     while (1) {
         if (girlGObj != 0) {
-            iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x5D, 86, 85), isysCurrentGObj);
+            iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x5D, 86, 85, 84), isysCurrentGObj);
         }
         if (sub->readyFlags & 2) {
             break;
@@ -634,7 +783,7 @@ void motBoyHand50(GObj *volatile self)
     _ACTWait(45);
     sub->after = 0;
     while (1) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x47, 67, 66));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0x47, 67, 66, 65));
         _ACTWait(1);
     }
 }
@@ -656,7 +805,7 @@ inline void afterBoyHand100(GObj *volatile self)
 {
     debug_StdPrintfDummy("boy after func\n");
     if (girlGObj != 0) {
-        iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x65, 94, 93), isysCurrentGObj);
+        iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x65, 94, 93, 92), isysCurrentGObj);
     }
 }
 
@@ -665,7 +814,7 @@ inline void actBoyHand100(GObj *volatile self)
     Act *sub = GOBJ_ACT(self);
 
     debug_StdPrintfDummy("enter actBoyHand100\n");
-    sub->actMode = PAL_NTSCAUG6JUN26(0x53, 80);
+    sub->actMode = PAL_NTSCAUG6_JUN26(0x53, 80, 79);
     sub->after = (void *)afterBoyHand100;
     sub->readyFlags = 0;
     while ((sub->readyFlags & 0x10) == 0) {
@@ -673,7 +822,7 @@ inline void actBoyHand100(GObj *volatile self)
     }
     debug_StdPrintfDummy("boy error\n");
     while (1) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x65, 94, 93));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0x65, 94, 93, 92));
         _ACTWait(1);
     }
 }
@@ -690,7 +839,7 @@ void motBoyHand100(GObj *volatile self)
         if (0 < n) {
             n--;
             if (girlGObj != 0) {
-                iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x61, 90, 89), isysCurrentGObj);
+                iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x61, 90, 89, 88), isysCurrentGObj);
             }
             if ((sub->readyFlags & 1) == 0) {
                 goto cont;
@@ -701,7 +850,7 @@ void motBoyHand100(GObj *volatile self)
     cont:
         _ACTWait(1);
     }
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x65, 94, 93));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0x65, 94, 93, 92));
     debug_StdPrintfDummy("%s sync error\n", (void *)self == boyGObj ? "boy" : "girl");
 done:
     while (GOBJ_SUB(self)->ctrl.motion < 0 || 2 <= GOBJ_SUB(self)->ctrl.motion) {
@@ -709,15 +858,15 @@ done:
     }
     _ACTWait(1);
     sub->motReq =
-        SetMotionRequest((void *)self, PAL_NTSC_AUG6JUN26(0x65, 92, 91), sub->env.motOriReq);
-    sub->motReq =
-        SetMotionRequest((void *)self, PAL_NTSC_AUG6JUN26(0xA4, 145, 143), sub->env.motOriReq);
+        SetMotionRequest((void *)self, PAL_NTSC_AUG6_JUN26(0x65, 92, 91, 88), sub->env.motOriReq);
+    sub->motReq = SetMotionRequest((void *)self, PAL_NTSC_AUG6_JUN26(0xA4, 145, 143, 139),
+                                   sub->env.motOriReq);
     while ((((struct MotCtrl *)sub->motReq)->frameEnd & 1) == 0) {
         _ACTWait(1);
     }
     while (1) {
         if (girlGObj != 0) {
-            iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x62, 91, 90), isysCurrentGObj);
+            iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x62, 91, 90, 89), isysCurrentGObj);
         }
         if (sub->readyFlags & 2) {
             break;
@@ -725,13 +874,13 @@ done:
         _ACTWait(1);
     }
     sub->motReq =
-        SetMotionRequest((void *)self, PAL_NTSC_AUG6JUN26(0x65, 92, 91), sub->env.motOriReq);
+        SetMotionRequest((void *)self, PAL_NTSC_AUG6_JUN26(0x65, 92, 91, 88), sub->env.motOriReq);
     while ((((struct MotCtrl *)sub->motReq)->frameEnd & 1) == 0) {
         _ACTWait(1);
     }
     while (1) {
         if (girlGObj != 0) {
-            iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x64, 93, 92), isysCurrentGObj);
+            iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x64, 93, 92, 91), isysCurrentGObj);
         }
         if (sub->readyFlags & 8) {
             break;
@@ -740,7 +889,7 @@ done:
     }
     sub->after = 0;
     while (1) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x47, 67, 66));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0x47, 67, 66, 65));
         _ACTWait(1);
     }
 }
@@ -749,7 +898,7 @@ inline void afterBoyHand200(GObj *volatile self)
 {
     debug_StdPrintfDummy("boy after func\n");
     if (girlGObj != 0) {
-        iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x6A, 99, 98), isysCurrentGObj);
+        iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x6A, 99, 98, 97), isysCurrentGObj);
     }
 }
 
@@ -758,7 +907,7 @@ inline void actBoyHand200(GObj *volatile self)
     Act *sub = GOBJ_ACT(self);
 
     debug_StdPrintfDummy("enter actBoyHand200\n");
-    sub->actMode = PAL_NTSCAUG6JUN26(0x54, 81);
+    sub->actMode = PAL_NTSCAUG6_JUN26(0x54, 81, 80);
     sub->after = (void *)afterBoyHand200;
     sub->readyFlags = 0;
     while ((sub->readyFlags & 0x10) == 0) {
@@ -766,7 +915,7 @@ inline void actBoyHand200(GObj *volatile self)
     }
     debug_StdPrintfDummy("boy error\n");
     while (1) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x6A, 99, 98));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0x6A, 99, 98, 97));
         _ACTWait(1);
     }
 }
@@ -783,7 +932,7 @@ void motBoyHand200(GObj *volatile self)
         if (0 < n) {
             n--;
             if (girlGObj != 0) {
-                iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x66, 95, 94), isysCurrentGObj);
+                iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x66, 95, 94, 93), isysCurrentGObj);
             }
             if ((sub->readyFlags & 1) == 0) {
                 goto cont;
@@ -794,7 +943,7 @@ void motBoyHand200(GObj *volatile self)
     cont:
         _ACTWait(1);
     }
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x6A, 99, 98));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0x6A, 99, 98, 97));
     debug_StdPrintfDummy("%s sync error\n", (void *)self == boyGObj ? "boy" : "girl");
 done:
     while (GOBJ_SUB(self)->ctrl.motion < 0 || 2 <= GOBJ_SUB(self)->ctrl.motion) {
@@ -802,20 +951,20 @@ done:
     }
     _ACTWait(1);
     sub->motReq =
-        SetMotionRequest((void *)self, PAL_NTSC_AUG6JUN26(0x66, 93, 92), sub->env.motOriReq);
+        SetMotionRequest((void *)self, PAL_NTSC_AUG6_JUN26(0x66, 93, 92, 89), sub->env.motOriReq);
     while ((((struct MotCtrl *)sub->motReq)->frameEnd & 1) == 0) {
         _ACTWait(1);
     }
     sub->motReq =
-        SetMotionRequest((void *)self, PAL_NTSC_AUG6JUN26(0x66, 93, 92), sub->env.motOriReq);
-    sub->motReq =
-        SetMotionRequest((void *)self, PAL_NTSC_AUG6JUN26(0xA4, 145, 143), sub->env.motOriReq);
+        SetMotionRequest((void *)self, PAL_NTSC_AUG6_JUN26(0x66, 93, 92, 89), sub->env.motOriReq);
+    sub->motReq = SetMotionRequest((void *)self, PAL_NTSC_AUG6_JUN26(0xA4, 145, 143, 139),
+                                   sub->env.motOriReq);
     while ((((struct MotCtrl *)sub->motReq)->frameEnd & 1) == 0) {
         _ACTWait(1);
     }
     while (1) {
         if (girlGObj != 0) {
-            iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x67, 96, 95), isysCurrentGObj);
+            iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x67, 96, 95, 94), isysCurrentGObj);
         }
         if (sub->readyFlags & 2) {
             break;
@@ -823,13 +972,13 @@ done:
         _ACTWait(1);
     }
     sub->motReq =
-        SetMotionRequest((void *)self, PAL_NTSC_AUG6JUN26(0x66, 93, 92), sub->env.motOriReq);
+        SetMotionRequest((void *)self, PAL_NTSC_AUG6_JUN26(0x66, 93, 92, 89), sub->env.motOriReq);
     while ((((struct MotCtrl *)sub->motReq)->frameEnd & 1) == 0) {
         _ACTWait(1);
     }
     while (1) {
         if (girlGObj != 0) {
-            iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x69, 98, 97), isysCurrentGObj);
+            iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x69, 98, 97, 96), isysCurrentGObj);
         }
         if (sub->readyFlags & 8) {
             break;
@@ -838,7 +987,7 @@ done:
     }
     sub->after = 0;
     while (1) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x47, 67, 66));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0x47, 67, 66, 65));
         _ACTWait(1);
     }
 }
@@ -880,8 +1029,8 @@ static void handoff_heroin_aug6jun26(void)
 
     if (girlGObj != 0) {
         if (GOBJ_SUB(girlGObj)->root.hand0.mode == 6) {
-            iosOmSendMail(girlGObj, 58, isysCurrentGObj);
-            ACTSendMailCorrect(boy, 231);
+            iosOmSendMail(girlGObj, PAL_JUN26(58, 57), isysCurrentGObj);
+            ACTSendMailCorrect(boy, PAL_JUN26(231, 226));
         } else if (_DistxzGV(test_CURRENTROOT(boy), test_CURRENTROOT(girlGObj)) < 100.0f &&
                    ABSF(ABSF(BOYGIRL_DY())) < 100.0f) {
             GetHeightOfFieldPlaneDifference(boyGObj, girlGObj);
@@ -950,7 +1099,11 @@ typedef struct { /* field names derived */
    ClipWall work record's wall pair and the wall it hit */
 static WallCfg sofaWallHit; /* derived name */
 
-static int attrWallHit[3]; /* derived name */
+static int attrWallHit_pal[3]; /* derived name */
+
+static sceVu0IVECTOR attrWallHit_jun26; /* derived name */
+
+#define attrWallHit PAL_JUN26(attrWallHit_pal, attrWallHit_jun26)
 
 static long long
     boyInfo[24]; /* BoyInfo (below) is wider with 8-byte pointers: 0x60 bytes on the EE */
@@ -967,7 +1120,7 @@ static void CheckCollisionAttr_ntscaug6jun26(void *self)
     if (ico_door_grace_active()) {
         ico_door_grace_tick();
     }
-    if (_ACTGame_GetParamF(2) < stage->ctrl.groundHeight) {
+    if (_ACTGame_GetParamF(PAL_JUN26(2, 1)) < stage->ctrl.groundHeight) {
         return;
     }
     if (GOBJ_ACT(self)->actMode == 22) {
@@ -1175,6 +1328,15 @@ static BgaEntry boyBgaTable_pal[] = {
     {-1},
 }; /* derived name */
 
+static BgaEntry boyBgaTable_jun26[] = {
+    /* derived name */
+    {380, 0.0f, 7.0f, 1, 70, 1, 1, 1.0f},
+    {381, 0.0f, 0.0f, 0, 70, 0, 1, 1.0f},
+    {385, 0.0f, 0.0f, 0, 0, 0, 0, -1.0f},
+    {386, -10.0f, 23.0f, 1, 70, 1, 1, -1.0f},
+    {-1},
+}; /* derived name */
+
 static BgaEntry boyBgaTable_jpn[] = {
     /* derived name */
     {476, 0.0f, 7.0f, 1, 70, 1, 1, 1.0f},
@@ -1184,7 +1346,7 @@ static BgaEntry boyBgaTable_jpn[] = {
     {-1},
 }; /* derived name */
 
-#define boyBgaTable PAL_JPNKORCN(boyBgaTable_pal, boyBgaTable_jpn)
+#define boyBgaTable PAL_JPNKORCN_JUN26(boyBgaTable_pal, boyBgaTable_jpn, boyBgaTable_jun26)
 
 /* PrivInsCam's initial value: subBoyCollision copies it whole into
    privInsCam. */
@@ -1210,7 +1372,7 @@ static void UpdateGeo(void *self, BgaEntry *p)
         dir[1] = test_CURRENTORIENT(self)[1];
         dir[2] = test_CURRENTORIENT(self)[2];
     } else {
-        obj = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46));
+        obj = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6_JUN26(47, 46, 45));
         _OrientXZGV(dir, test_CURRENTROOT(obj), test_CURRENTROOT(self));
     }
     sceVu0ScaleVector(dir, dir, p->f10);
@@ -1285,8 +1447,47 @@ static int sitCount; /* derived name */
 
 static void *beliftGirl; /* derived name */
 
+static void E3_StageStartBoy_jun26(void *self)
+{
+    float buf[4];
+    int w1;
+    int w2;
+    int w3;
+
+    if (startWithGirl != 0) {
+        sceVu0ScaleVector(buf, test_CURRENTORIENT(self), 100.0f);
+        sceVu0AddVector(buf, buf, test_CURRENTROOT(self));
+        SetDirectRootPosition(self, buf);
+    }
+    if (gflagChk(332)) {
+        gflagOff(332);
+        return;
+    }
+    if (GetStageStartInfo(self, 0, 0, &w1, &w2, &w3) == 0) {
+        return;
+    }
+    if (startOnSofa != 0) {
+        return;
+    }
+    if (startWaitCancel != 0) {
+        return;
+    }
+    _ACTWait(3);
+    GetStageStartInfo(self, 0, 0, &w1, &w2, &w3);
+    _ACTWait(w1);
+    scpPlayStart(self);
+    scpPlayMotReq(self, 7);
+    _ACTWait(w2);
+    scpPlayEnd(self);
+    _ACTWait(w3);
+}
+
 static void E3_StageStartBoy(void *self)
 {
+    if (ICO_JUN26) {
+        E3_StageStartBoy_jun26(self);
+        return;
+    }
     float buf[4];
     int w1;
     int w2;
@@ -1442,7 +1643,619 @@ int test_rope_slope = 0;
 
 float add_rope_val = 0.0f;
 
-static void subBoyControl_aug6jun26(GObj *volatile self)
+static void subBoyControl_jun26(GObj *volatile self)
+{
+    float stick[4];
+    float wish[4];
+    float sabs[4];
+    float dir[4];
+    int c0;
+    int c1;
+    int c2;
+    Act *s = GOBJ_ACT(self);
+    void *g;
+    int slow;
+    float d;
+    float dist;
+    int dbg = 0; /* local debug switch, see the test after the stick loop */
+
+    memset(stick, 0, 16);
+    c0 = 0;
+    c1 = 0;
+    c2 = 0;
+    memset(wish, 0, 16);
+    iosPadConnect(&s->pad, 0, 0, &iosPadConfCustom);
+    boyPad = &s->pad;
+    E3_StageStartBoy((void *)self);
+    layoutActPushStartNew = 0;
+    while (1) {
+        for (;;) {
+            if (((int)(s->flags18.ll >> 42) & 1) == 0) {
+                goto noStick;
+            }
+            if (scpBoyControlReadDisable == 0 && GOBJ_WORK(self)->pinchFrames == 0) {
+                iosPadRead(&s->pad);
+                if (s->pad.dev->error == 1) {
+                    layoutActPushStartNew = 1;
+                } else {
+                    layoutActPushStartNew = 0;
+                }
+                /* the option word's low byte */
+                iosPadGetStick(&s->pad, &s->stick, 0, 2, 2, (unsigned char)debug_stick_simulate);
+                if (debug_stick_input) {
+                    if (debug_font_flag & 1) {
+                        debug_Printf(10, 170, 0x0FFFFFFF, "L = %f\n", fptodp(s->stick.mag));
+                    }
+                }
+                ableBoyControl = 1;
+            } else {
+                s->pad.rel = 0;
+                s->stick.x = s->stick.y = 127;
+                s->pad.trg = 0;
+                s->pad.now = 0;
+                s->stick.mag = 0.0f;
+                ableBoyControl = 0;
+            }
+            _GetMotionDirection(dir, (void *)self);
+            correctStick(dir, &s->stick);
+            if (s->pad.trg & 1) {
+                BridgeBox();
+            }
+            g = isysGObjSearchFromObjLayoutID(2);
+            if (s->wayMode == 1) {
+                float tgt[4];
+                float pos[4];
+
+                GetRootPosition(tgt, g);
+                GetRootPosition(pos, (void *)self);
+                if (GetWay_begin(tgt, &s->way, pos) == 0) {
+                    s->wayMode = 0;
+                } else {
+                    s->wayMode = 2;
+                }
+                break;
+            }
+            if (s->wayMode == 2) {
+                switch (s->way.reached) {
+                case 0: {
+                    float root[4];
+
+                    GetRootPosition(root, (void *)self);
+                    GetWay_next(&s->way, root);
+                    sceVu0CopyVector(stick, s->way.nrm);
+                    s->stick.mag = 1.0f;
+                    break;
+                }
+                case 1: {
+                    float p0[4];
+                    float p1[4];
+                    ClipWork work;
+
+                    GetRootPosition(p0, (void *)self);
+                    GetRootPosition(p1, g);
+                    work.radius = 10.0f;
+                    sceVu0CopyVector(work.pt[0], p0);
+                    sceVu0CopyVector(work.pt[1], p1);
+                    ClipWall(&work);
+                    if (work.wall.elem != 0) {
+                        s->wayMode = 1;
+                    }
+                    dist = fzMagnitude2fv(p1, p0);
+                    p1[0] = p1[0] - p0[0];
+                    p1[1] = 0.0f;
+                    p1[2] = p1[2] - p0[2];
+                    sceVu0Normalize(stick, p1);
+                    if (dist < 120.0f) {
+                        ACTSendMailCorrect(self, 177);
+                        s->wayMode = 0;
+                    } else if (dist < 850.0f) {
+                        s->stick.mag = (dist - 100.0f) / 750.0f;
+                    } else {
+                        s->stick.mag = 1.0f;
+                    }
+                    break;
+                }
+                }
+                break;
+            }
+            if (0.1f < s->stick.mag) {
+                float cam[4];
+
+                sabs[0] = stick[0];
+                sabs[1] = stick[1];
+                sabs[2] = stick[2];
+                ConvertStickToAbsCoord(stick, &s->stick);
+                cam[0] = (float)(s->stick.x - 128);
+                cam[1] = 0.0f;
+                cam[2] = (float)(s->stick.y - 128);
+                snapStickToCamera(stick, wish, sabs, cam);
+                wish[0] = cam[0];
+                wish[1] = cam[1];
+                wish[2] = cam[2];
+                {
+                    float ori[4];
+
+                    GetRootMotionOrient(ori, (void *)self);
+                    s->stick.angle = _RotyGV(stick, ori);
+                }
+            } else {
+                s->stick.angle = 0;
+                s->stick.mag = 0.0f;
+            }
+            if ((void *)self == CurrentTargetGObj) {
+                break;
+            }
+            _ACTWait(1);
+        }
+        /* a local debug switch, off: the cursor_control idiom of way_tool.c,
+           moving the current target object; the August TRFILE (2052-2056)
+           and the PAL listing (2323-2327) have five code-less lines after
+           the loop's brace, this block's length; the text is derived */
+        if (dbg) {
+            if ((void *)self == CurrentTargetGObj && (s->pad.trg & 1)) {
+                ACTDebugMove(self, 1);
+            }
+        }
+        s->dir[0] = stick[0];
+        s->dir[1] = stick[1];
+        s->dir[2] = stick[2];
+    noStick:
+        {
+            static int slowWalkTimer = 0; /* derived name */
+
+            slow = 0;
+            if (s->actMode == 1) {
+                if (GOBJ_SUB(self)->ctrl.motion == 0 || GOBJ_SUB(self)->ctrl.motion == 1 ||
+                    GOBJ_SUB(self)->ctrl.motion == 2) {
+                    if (0.5f < s->stick.mag) {
+                        slowWalkTimer = (60 - systemStatus[0] * 10) / systemStatus[1] / 5;
+                    }
+                }
+            }
+            if (0 < slowWalkTimer) {
+                slowWalkTimer--;
+                slow = 1;
+            }
+        }
+        if (slow && 0.5f < s->stick.mag) {
+            s->stick.mag = 0.5f;
+        }
+        c0++;
+        if (0.1f < s->stick.mag) {
+            c0 = 0;
+        }
+        if (0.1f < s->stick.mag && (s->stick.mag < 0.99f || (s->pad.now & 0x20))) {
+            c1++;
+        } else {
+            c1 = 0;
+        }
+        if (0.1f < s->stick.mag &&
+            !(0.1f < s->stick.mag && (s->stick.mag < 0.99f || (s->pad.now & 0x20)))) {
+            c2++;
+        } else {
+            c2 = 0;
+        }
+        _ACTCommonMailTest(self, c0, c1, c2);
+        switch (s->actMode) {
+        case 1:
+            ACTSendMailCorrect(self, 177);
+            break;
+        case 2:
+            ACTSendMailCorrect(self, 163);
+            break;
+        case 3:
+            ACTSendMailCorrect(self, 168);
+            break;
+        case 29:
+            if (s->pad.trg & 0x40) {
+                if (100.0f < GetDifferenceFromLowerField(self, 44)) {
+                    ACTSendMailCorrect(self, 267);
+                } else {
+                    ACTSendMailCorrect(self, 202);
+                }
+            }
+            if ((0.1f < s->stick.mag && (unsigned int)(s->stick.angle + 45) < 91) ||
+                (s->pad.trg & 0x10)) {
+                ACTSendMailCorrect(self, 177);
+            }
+            if (0.1f < s->stick.mag && (unsigned int)(s->stick.angle - 46) < 89) {
+                ACTSendMailCorrect(self, 299);
+            }
+            if (0.1f < s->stick.mag && !(s->stick.angle < -134) && s->stick.angle < -45) {
+                ACTSendMailCorrect(self, 300);
+            }
+            ACTSendMailCorrect(self, 301);
+            break;
+        case 26:
+            if (0.1f < s->stick.mag && !((unsigned int)(s->stick.angle + 134) < 269)) {
+                GOBJ_WORK(self)->fallDir[0] = s->dir[0];
+                GOBJ_WORK(self)->fallDir[1] = s->dir[1];
+                GOBJ_WORK(self)->fallDir[2] = s->dir[2];
+                ACTSendMailCorrect(self, 282);
+            }
+            break;
+        case 27: {
+            int back = 0;
+
+            if (0.1f < s->stick.mag) {
+                int r = _RotyGV(stick, GOBJ_WORK(self)->hangOrient);
+
+                r = r < 0 ? -r : r;
+                back = r >= 136;
+                if (back && GetMotionFrameFlag1((void *)self)) {
+                    ACTSendMailCorrect(self, 276);
+                }
+            }
+            if (0.1f < s->stick.mag && !((unsigned int)(s->stick.angle + 134) < 269)) {
+                ACTSendMailCorrect(self, 275);
+            }
+            if (s->pad.trg & 0x40) {
+                ACTSendMailCorrect(self, 202);
+            }
+            if (back || (s->pad.trg & 0x10)) {
+                ACTSendMailCorrect(self, 177);
+            }
+            if (0.1f < s->stick.mag && (unsigned int)(s->stick.angle - 46) < 89) {
+                ACTSendMailCorrect(self, 299);
+            }
+            if (0.1f < s->stick.mag && !(s->stick.angle < -134) && s->stick.angle < -45) {
+                ACTSendMailCorrect(self, 300);
+            }
+            ACTSendMailCorrect(self, 267);
+            break;
+        }
+        case 28:
+            if (s->pad.trg & 0x40) {
+                ACTSendMailCorrect(self, 202);
+            }
+            if (0.1f < s->stick.mag && (unsigned int)(s->stick.angle - 46) < 89) {
+                ACTSendMailCorrect(self, 299);
+            }
+            if (0.1f < s->stick.mag && !(s->stick.angle < -134) && s->stick.angle < -45) {
+                ACTSendMailCorrect(self, 300);
+            }
+            ACTSendMailCorrect(self, 301);
+            break;
+        case 30:
+            if (s->pad.trg & 0x40) {
+                ACTSendMailCorrect(self, 202);
+            } else if (s->pad.trg & 0x10) {
+                ACTSendMailCorrect(self, 177);
+            }
+            if (0.1f < s->stick.mag && (unsigned int)(s->stick.angle - 46) < 89) {
+                ACTSendMailCorrect(self, 299);
+            }
+            if (0.1f < s->stick.mag && !(s->stick.angle < -134) && s->stick.angle < -45) {
+                ACTSendMailCorrect(self, 300);
+            }
+            ACTSendMailCorrect(self, 301);
+            break;
+        case 31:
+            if (0.1f < s->stick.mag && (unsigned int)(s->stick.angle - 46) < 89) {
+                ACTSendMailCorrect(self, 299);
+            }
+            if (0.1f < s->stick.mag && !(s->stick.angle < -134) && s->stick.angle < -45) {
+                ACTSendMailCorrect(self, 300);
+            }
+            ACTSendMailCorrect(self, 301);
+            break;
+        case 33:
+            if (s->pad.trg & 0x40) {
+                ACTSendMailCorrect(self, 202);
+            }
+            break;
+        case 40:
+            if ((s->pad.trg & 0x10) || s->stick.y - 128 < -100) {
+                ACTSendMailCorrect(self, 274);
+            }
+            if (s->pad.trg & 0x40) {
+                ACTSendMailCorrect(self, 202);
+            }
+            break;
+        case 34:
+            if (s->pad.trg & 0x40) {
+                ACTSendMailCorrect(self, 202);
+            } else if (s->pad.trg & 0x10) {
+                ACTSendMailCorrect(self, 273);
+            }
+            if (0.1f < s->stick.mag && (unsigned int)(s->stick.angle - 46) < 89) {
+                ACTSendMailCorrect(self, 299);
+            }
+            if (0.1f < s->stick.mag && !(s->stick.angle < -134) && s->stick.angle < -45) {
+                ACTSendMailCorrect(self, 300);
+            }
+            ACTSendMailCorrect(self, 301);
+            break;
+        case 35:
+            if (s->pad.trg & 0x40) {
+                ACTSendMailCorrect(self, 202);
+            }
+            if (s->pad.trg & 0x10) {
+                ACTSendMailCorrect(self, 171);
+            }
+            if (0.1f < s->stick.mag && (unsigned int)(s->stick.angle - 46) < 89) {
+                ACTSendMailCorrect(self, 299);
+            }
+            if (0.1f < s->stick.mag && !(s->stick.angle < -134) && s->stick.angle < -45) {
+                ACTSendMailCorrect(self, 300);
+            }
+            break;
+        case 52: {
+            int near = 1;
+            int front = 1;
+            float gpos[4];
+            float tpos[4];
+            float ori[4];
+            float vec[4];
+            void *obj = s->env.pullParent;
+
+            if (obj != 0 && girlGObj != 0) {
+                gpos[0] = test_CURRENTROOT(girlGObj)[0];
+                gpos[1] = test_CURRENTROOT(girlGObj)[1];
+                gpos[2] = test_CURRENTROOT(girlGObj)[2];
+                GetRootPosition(tpos, obj);
+                ori[0] = test_CURRENTORIENT((void *)self)[0];
+                ori[1] = test_CURRENTORIENT((void *)self)[1];
+                ori[2] = test_CURRENTORIENT((void *)self)[2];
+                _OrientXZGV(vec, gpos, tpos);
+                if (_DistSqGV(tpos, gpos) < 250000.0f &&
+                    CheckFloorAttribute(girlGObj, 0xA000000) != 0) {
+                    if (0.0f < sceVu0InnerProduct(ori, vec)) {
+                        near = 0;
+                    } else {
+                        front = 0;
+                    }
+                }
+            }
+            if (s->pad.now & 0x20) {
+                if (near && 0.1f < s->stick.mag && (unsigned int)(s->stick.angle + 90) < 181) {
+                    ACTSendMailCorrect(self, 119);
+                    break;
+                }
+                if (front && 0.1f < s->stick.mag && !((unsigned int)(s->stick.angle + 89) < 179)) {
+                    ACTSendMailCorrect(self, 118);
+                    break;
+                }
+                ACTSendMailCorrect(self, 301);
+                break;
+            }
+            ACTSendMailCorrect(self, 301);
+            ACTSendMailCorrect(self, 177);
+            break;
+        }
+        case 53:
+            if ((60 - systemStatus[0] * 10) / systemStatus[1] * 90 / 60 > s->modeFrame) {
+                ACTSendMailCorrect(self, 124);
+                break;
+            }
+            ACTSendMailCorrect(self, 301);
+            ACTSendMailCorrect(self, 177);
+            break;
+        case 54:
+            if (s->pad.now & 0x20) {
+                if (0.1f < s->stick.mag) {
+                    ACTSendMailCorrect(self, 124);
+                    if (s->pad.now & 8) {
+                        ACTSendMailCorrect(self, 60);
+                    }
+                } else {
+                    ACTSendMailCorrect(self, 301);
+                }
+            } else {
+                ACTSendMailCorrect(self, 177);
+            }
+            break;
+        case 32:
+        case 38: {
+            /* the actor, read at the head of this arm; the DEBUG build's report
+               reads it */
+            GObj *obj = self;
+
+            if (((int)(*(unsigned long long *)&GOBJ_ACT(self)->enemy->word298 >> 1) & 1) &&
+                !(s->stick.y - 128 < 101)) {
+                ACTSendMailCorrect(self, 296);
+            } else if ((GOBJ_ACT(self)->enemy->word298 & 1) && s->stick.y - 128 < -100) {
+                ACTSendMailCorrect(self, 295);
+            } else {
+                ACTSendMailCorrect(self, 301);
+            }
+            if (s->pad.trg & 8) {
+                ACTSendMailCorrect(self, 60);
+            }
+#ifdef DEBUG
+            scePrintf("boy %08x stick %d\n", obj, s->stick.y - 128);
+#endif
+            break;
+        }
+        case 43:
+            if (0.95f < s->stick.mag) {
+                ACTSendMailCorrect(self, 198);
+                break;
+            }
+            ACTSendMailCorrect(self, 301);
+            break;
+        case 44:
+            if (0.95f < s->stick.mag) {
+                ACTSendMailCorrect(self, 197);
+                break;
+            }
+            ACTSendMailCorrect(self, 301);
+            break;
+        case 49:
+            if (s->pad.now & 0x20) {
+                switch (s->pushDir) {
+                case 1:
+                    if (0.1f < s->stick.mag && (unsigned int)(s->stick.angle + 90) < 181) {
+                        ACTSendMailCorrect(self, 297);
+                    } else {
+                        ACTSendMailCorrect(self, 301);
+                    }
+                    break;
+                case -1:
+                    if (0.1f < s->stick.mag && !((unsigned int)(s->stick.angle + 89) < 179)) {
+                        ACTSendMailCorrect(self, 298);
+                    } else {
+                        ACTSendMailCorrect(self, 301);
+                    }
+                    break;
+                default:
+                    if (0.1f < s->stick.mag && (unsigned int)(s->stick.angle + 90) < 181) {
+                        ACTSendMailCorrect(self, 297);
+                    } else if (0.1f < s->stick.mag &&
+                               !((unsigned int)(s->stick.angle + 89) < 179)) {
+                        ACTSendMailCorrect(self, 298);
+                    } else {
+                        ACTSendMailCorrect(self, 301);
+                    }
+                    break;
+                }
+            } else {
+                ACTSendMailCorrect(self, 301);
+                ACTSendMailCorrect(self, 177);
+            }
+            break;
+        case 51:
+            if (s->pad.now & 0x20) {
+                if (0.1f < s->stick.mag && (unsigned int)(s->stick.angle + 90) < 181) {
+                    ACTSendMailCorrect(self, 297);
+                } else if (0.1f < s->stick.mag && !((unsigned int)(s->stick.angle + 89) < 179)) {
+                    ACTSendMailCorrect(self, 298);
+                } else {
+                    ACTSendMailCorrect(self, 301);
+                }
+            } else {
+                ACTSendMailCorrect(self, 177);
+            }
+            break;
+        case 113:
+            if (s->pad.trg & 0x20) {
+                ACTSendMailCorrect(self, 178);
+                break;
+            }
+            if (0.1f < s->stick.mag &&
+                !(0.1f < s->stick.mag && (s->stick.mag < 0.99f || (s->pad.now & 0x20)))) {
+                ACTSendMailCorrect(self, 168);
+                break;
+            }
+            if (0.1f < s->stick.mag && (s->stick.mag < 0.99f || (s->pad.now & 0x20))) {
+                ACTSendMailCorrect(self, 163);
+                break;
+            }
+            ACTSendMailCorrect(self, 301);
+            break;
+        case 58:
+            switch (GetChainSlope()) {
+            case 0:
+                ACTSendMailCorrect(self, 148);
+                break;
+            case 1:
+                ACTSendMailCorrect(self, 134);
+                break;
+            case 2:
+                ACTSendMailCorrect(self, 135);
+                break;
+            case 3:
+                ACTSendMailCorrect(self, 136);
+                break;
+            case 4:
+                ACTSendMailCorrect(self, 137);
+                break;
+            }
+            if (GOBJ_SUB(self)->ctrl.motion == 142) {
+                d = 1.0f;
+            } else if (s->pad.now & 0x20) {
+                d = 1.0f;
+            } else {
+                d = 0.0f;
+            }
+            SaveBoyOrientForScript();
+            add_rope_val = d;
+            if (s->pad.now & 0x20) {
+                IncreasePdlChain(s->chain);
+            } else {
+                DecreasePdlChain(s->chain);
+            }
+            break;
+        case 60:
+            if (!(s->stick.y - 128 < 101)) {
+                ACTSendMailCorrect(self, 202);
+            }
+            if (s->stick.y - 128 < -100) {
+                ACTSendMailCorrect(self, 143);
+            }
+            if (s->pad.now & 0x20) {
+                ACTSendMailCorrect(self, 144);
+            }
+            break;
+        case 20:
+        case 21:
+            if (girlGObj != 0) {
+                iosOmSendMail(girlGObj, 57, isysCurrentGObj);
+            }
+            break;
+        case 104:
+            if (s->pad.now & 8) {
+                break;
+            }
+            ACTSendMailCorrect(self, 177);
+            break;
+        case 101:
+            if (0.1f < s->stick.mag && (unsigned int)(s->stick.angle + 45) < 91) {
+                ACTSendMailCorrect(self, 332);
+            }
+            if (0.1f < s->stick.mag && !((unsigned int)(s->stick.angle + 134) < 269)) {
+                ACTSendMailCorrect(self, 202);
+            }
+            break;
+        case 45:
+            if (0.1f < s->stick.mag) {
+                ACTSendMailCorrect(self, 108);
+                ACTSendMailCorrect(self, 107);
+            }
+            if (s->pad.now & 8) {
+                ACTSendMailCorrect(self, 107);
+                brainAddLevelGirl(10.0f);
+            }
+            if (s->modeFrame == 0 && ((int)(s->flags18.ll >> 36) & 1)) {
+                brainAddLevelGirl(1000.0f);
+            }
+            break;
+        case 23:
+            if (0.1f < s->stick.mag && (unsigned int)(s->stick.angle + 45) < 91) {
+                ACTSendMailCorrect(self, 297);
+                break;
+            }
+            if (0.1f < s->stick.mag && !((unsigned int)(s->stick.angle + 134) < 269)) {
+                ACTSendMailCorrect(self, 298);
+                break;
+            }
+            if (0.1f < s->stick.mag && (unsigned int)(s->stick.angle - 46) < 89) {
+                ACTSendMailCorrect(self, 299);
+                break;
+            }
+            if (0.1f < s->stick.mag && !(s->stick.angle < -134) && s->stick.angle < -45) {
+                ACTSendMailCorrect(self, 300);
+            }
+            break;
+        case 111:
+            if (0.1f < s->stick.mag &&
+                !(0.1f < s->stick.mag && (unsigned int)(s->stick.angle + 75) < 151)) {
+                ACTSendMailCorrect(self, 240);
+            }
+            break;
+        case 90:
+            if (GOBJ_ACT(self)->enemy->floorAttrOff != 0) {
+                ACTSendMailCorrect(self, 319);
+                break;
+            }
+            ACTSendMailCorrect(self, 301);
+            break;
+        }
+        _ACTWait(1);
+    }
+}
+
+static void subBoyControl_aug6(GObj *volatile self)
 {
     float stick[4];
     float wish[4];
@@ -2713,12 +3526,16 @@ static void subBoyControl_ntsc(GObj *volatile self)
 
 void subBoyControl(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        subBoyControl_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         subBoyControl_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        subBoyControl_aug6jun26(self);
+    if (ICO_AUG6) {
+        subBoyControl_aug6(self);
         return;
     }
     float stick[4];
@@ -3434,14 +4251,40 @@ static void InitSwapWeapon(void *self)
         BOYINFO.f30 = -row->pos[0];
         BOYINFO.f34 = -row->pos[1];
         BOYINFO.f38 = -row->pos[2];
-        BOYINFO.f40 = row->rot[0] * 3.1415927f / 180.0f;
-        BOYINFO.f44 = row->rot[1] * 3.1415927f / 180.0f;
-        BOYINFO.f48 = row->rot[2] * 3.1415927f / 180.0f;
+        if (ICO_JUN26) {
+            BOYINFO.f40 = row->rot[0];
+            BOYINFO.f44 = row->rot[1];
+            BOYINFO.f48 = row->rot[2];
+        } else {
+            BOYINFO.f40 = row->rot[0] * 3.1415927f / 180.0f;
+            BOYINFO.f44 = row->rot[1] * 3.1415927f / 180.0f;
+            BOYINFO.f48 = row->rot[2] * 3.1415927f / 180.0f;
+        }
+    }
+}
+
+static void PutWeapon_jun26(void)
+{
+    char *p = (char *)boyInfo;
+    struct MotRoot *root;
+
+    if (BOYINFO.weapon != 0) {
+        root = &GOBJ_SUB(BOYINFO.weapon)->root;
+        InitMotionGeoInfo(
+            root, BOYINFO.f30, BOYINFO.f34, BOYINFO.f38, 0.0f,
+            -((int)(_GetDirection(test_CURRENTORIENT(boyGObj)) / 3.1415927f * 180.0f) * 3.1415927f /
+              180.0f),
+            0.0f);
+        UpdateRootMatrix(BOYINFO.weapon);
     }
 }
 
 static void PutWeapon(void)
 {
+    if (ICO_JUN26) {
+        PutWeapon_jun26();
+        return;
+    }
     char *p = (char *)boyInfo;
 
     if (BOYINFO.weapon != 0) {
@@ -3456,7 +4299,34 @@ static void PutWeapon(void)
     }
 }
 
-static inline int SwapBoyWeapon_aug6jun26(void *oldW, void *newW, void *boy) /* derived name */
+static inline int SwapBoyWeapon_jun26(void *oldW, void *newW, void *boy) /* derived name */
+{
+    Act *sub = GOBJ_ACT(boy);
+
+    if (oldW == newW) {
+        return 0;
+    }
+    if (newW == 0) {
+        debug_assert(__FILE__, 2475);
+        __assert(__FILE__, 2475, "next");
+        return 0;
+    }
+    PickupWeapon(newW, boy, 0x16);
+    ((int *)boyInfo)[0] = ICO_RAW(int, newW, 0x8, ((GObj *)newW)->labelId);
+    sub->weapon = newW;
+
+    if (oldW == 0) {
+        return 1;
+    }
+    ReleaseWeapon(oldW);
+    PutWeapon();
+    gamesysObjInfoPosSetStage(oldW, 0, 0, stage_no);
+    debug_StdPrintfDummy("%d -> %d\n", ICO_RAW(int, oldW, 0x8, ((GObj *)oldW)->labelId),
+                         ICO_RAW(int, newW, 0x8, ((GObj *)newW)->labelId));
+    return 1;
+}
+
+static inline int SwapBoyWeapon_aug6(void *oldW, void *newW, void *boy) /* derived name */
 {
     Act *sub = GOBJ_ACT(boy);
 
@@ -3486,8 +4356,11 @@ static inline int SwapBoyWeapon_aug6jun26(void *oldW, void *newW, void *boy) /* 
 /* a static helper inlined into SetBoyWeaponGObj and afterBoyTakeWeapon */
 static inline int SwapBoyWeapon(void *oldW, void *newW, void *boy) /* derived name */
 {
-    if (ICO_AUG6JUN26) {
-        return SwapBoyWeapon_aug6jun26(oldW, newW, boy);
+    if (ICO_JUN26) {
+        return SwapBoyWeapon_jun26(oldW, newW, boy);
+    }
+    if (ICO_AUG6) {
+        return SwapBoyWeapon_aug6(oldW, newW, boy);
     }
     Act *sub = GOBJ_ACT(boy);
 
@@ -3556,11 +4429,16 @@ static void OtherStageGirlPinchCamera_After(float t)
 
 void ACTDispLwsBoyStonize_InQueenStage(void *self)
 {
-    BoyBgaManager(self, PAL_JPNKORCN(0x1E0, 476), (char *)&GOBJ_ACT(self)->enemy->stonePair);
-    BoyBgaManager(self, PAL_JPNKORCN(0x1E1, 477), (char *)&GOBJ_ACT(self)->enemy->word2A4);
-    BoyBgaManager(self, PAL_JPNKORCN(0x1E5, 481), (char *)&GOBJ_ACT(self)->enemy->word2B0);
-    BoyBgaManager(self, PAL_JPNKORCN(0x1E5, 481), (char *)&GOBJ_ACT(self)->enemy->stoneHitWeapon);
-    BoyBgaManager(self, PAL_JPNKORCN(0x1E6, 482), (char *)&GOBJ_ACT(self)->enemy->stoneHitNoWeapon);
+    BoyBgaManager(self, PAL_JPNKORCN_NTSC(0x1E0, 476, 416),
+                  (char *)&GOBJ_ACT(self)->enemy->stonePair);
+    BoyBgaManager(self, PAL_JPNKORCN_NTSC(0x1E1, 477, 417),
+                  (char *)&GOBJ_ACT(self)->enemy->word2A4);
+    BoyBgaManager(self, PAL_JPNKORCN_NTSC(0x1E5, 481, 421),
+                  (char *)&GOBJ_ACT(self)->enemy->word2B0);
+    BoyBgaManager(self, PAL_JPNKORCN_NTSC(0x1E5, 481, 421),
+                  (char *)&GOBJ_ACT(self)->enemy->stoneHitWeapon);
+    BoyBgaManager(self, PAL_JPNKORCN_NTSC(0x1E6, 482, 422),
+                  (char *)&GOBJ_ACT(self)->enemy->stoneHitNoWeapon);
 }
 
 /* the USA disc's and the August 2001 preview's packet is six words of these eight */
@@ -4093,7 +4971,329 @@ static void subBoyCollision_ntsc(GObj *volatile self)
     }
 }
 
-static void subBoyCollision_aug6jun26(GObj *volatile self)
+static void subBoyCollision_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    int camOn;
+    int hang;
+    int hangBit;
+    int dbg = 0; /* local debug switch, see the test after the helper's SetRootPosition */
+
+    while (sub->motReq == 0) {
+        _ACTWait(1);
+    }
+    if (200.0f < GetDifferenceFromLowerField(self, 44)) {
+        ACTSendMailCorrect(self, 7);
+    }
+    while (1) {
+        float vec[4];
+
+        camOn = 0;
+        if (0 < GOBJ_WORK(self)->pinchFrames) {
+            _ACTCharStatus_Set((void *)self, 27, -1.0f, 0);
+            GOBJ_WORK(self)->pinchFrames -= 1;
+        }
+        findChainInJump((void *)self);
+        CheckCollisionAttr((void *)self);
+        ACTGame_CommonLoop((void *)self);
+        BoyBgaManager(self, 380, (char *)&GOBJ_ACT(self)->enemy->stonePair);
+        BoyBgaManager(self, 381, (char *)&GOBJ_ACT(self)->enemy->word2A4);
+        BoyBgaManager(self, 385, (char *)&GOBJ_ACT(self)->enemy->word2B0);
+        BoyBgaManager(self, 385, (char *)&GOBJ_ACT(self)->enemy->stoneHitWeapon);
+        BoyBgaManager(self, 386, (char *)&GOBJ_ACT(self)->enemy->stoneHitNoWeapon);
+
+        hangBit = ((int)(sub->flags18.ll >> 44) & 1);
+        hang = 1;
+        if (((int)(sub->flags20.ll >> 2) & 1) == 0) {
+            hang = hangBit;
+        }
+        if (hang == 0) {
+            if (0.1f < sub->stick.mag && sub->actMode != 110) {
+                SetMotionDirectionSmooze(self, sub->dir,
+                                         (float)motionKind[GOBJ_SUB(self)->ctrl.motion].dirFrames);
+            }
+        }
+        CommonAttackCenter((void *)self);
+        ACTGame_SaveActorInformation(self);
+        if (ACTGame_CheckItemMotion(self) == 0) {
+            afterCommonItem(self);
+        }
+        if (*(unsigned int *)&sub->actMode < 4 && sub->actMode != 0) {
+            if (sub->pad.trg & 0x20) {
+                ICO_WORD hit;
+
+                searchGObj((void *)self, 19, 45, &hit, vec, 100.0f);
+            }
+        }
+        switch (sub->actMode) {
+        case 28:
+            if (((int)(sub->wish1.ll >> 1) & 1) && ((int)(sub->wish2.ll >> 33) & 1)) {
+                ACTSendMailCorrect(self, 177);
+            }
+            break;
+        case 57:
+            SaveBoyOrientForScript();
+            add_rope_val = 0.0f;
+            if (sub->pad.now & 0x20) {
+                ACTSendMailCorrect(self, 147);
+                ACTSendMailCorrect(self, 203);
+            } else {
+                if (sub->stick.y - 0x80 < -100) {
+                    ACTSendMailCorrect(self, 295);
+                } else if (100 < sub->stick.y - 0x80) {
+                    ACTSendMailCorrect(self, 296);
+                    if (isBottomOfChain(sub->chain)) {
+                        ACTSendMailCorrect(self, 142);
+                    }
+                } else if (GOBJ_SUB(self)->ctrl.motion == 125) {
+                    float bodyori[4];
+                    int cor;
+                    int ry;
+
+                    GetCorrectOrientOfChain(vec, (void *)self);
+                    SetMotionDirection((void *)self, vec);
+                    if (GetChainDirCorrectVal((void *)sub->chain, &cor) != 0) {
+                        if (sub->stick.x - 0x80 < -100) {
+                            ACTSendMailCorrect(self, 145);
+                        }
+                        if (100 < sub->stick.x - 0x80) {
+                            ACTSendMailCorrect(self, 146);
+                        }
+                    } else {
+                        if (sub->stick.x - 0x80 < -100) {
+                            ry = 5;
+                        } else {
+                            ry = 0;
+                        }
+                        if (100 < sub->stick.x - 0x80) {
+                            ry = -5;
+                        }
+                        bodyori[0] = test_CURRENTORIENT((void *)self)[0];
+                        bodyori[1] = test_CURRENTORIENT((void *)self)[1];
+                        bodyori[2] = test_CURRENTORIENT((void *)self)[2];
+                        _ApplyRyGV(bodyori, (float)ry * 3.1415927f / 180.0f);
+                        SetMotionDirection((void *)self, bodyori);
+                    }
+                }
+                ACTSendMailCorrect(self, 301);
+            }
+            break;
+        case 66:
+            if (((int)(sub->flags18.ll >> 63) & 1) == 0) {
+                if (sub->stick.y - 0x80 < -100) {
+                    ACTSendMailCorrect(self, 295);
+                }
+                if (100 < sub->stick.y - 0x80) {
+                    ACTSendMailCorrect(self, 296);
+                }
+            }
+            if (GOBJ_SUB(self)->ctrl.motion == 125) {
+                int ry;
+
+                if (sub->stick.x - 0x80 < -100) {
+                    ry = 5;
+                } else {
+                    ry = 0;
+                }
+                if (100 < sub->stick.x - 0x80) {
+                    ry = -5;
+                }
+                vec[0] = test_CURRENTORIENT((void *)self)[0];
+                vec[1] = test_CURRENTORIENT((void *)self)[1];
+                vec[2] = test_CURRENTORIENT((void *)self)[2];
+                _ApplyRyGV(vec, (float)ry * 3.1415927f / 180.0f);
+                SetMotionDirection((void *)self, vec);
+            }
+            ACTSendMailCorrect(self, 301);
+            break;
+        /* an empty arm: without a seventh label gcc writes a compare tree, and
+           the demo has a 67-slot table from 1; an empty arm's slot holds the
+           switch exit like every default slot, so the table does not show its
+           value (38 and 39 give the same object): 38 is the USA's label */
+        case 38:
+            break;
+        case 55:
+        case 67:
+            if (((int)(sub->wish0.ll >> 45) & 1) && ((int)(sub->wish2.ll >> 13) & 1)) {
+                if (girlGObj != 0) {
+                    iosOmSendMail(girlGObj, 57, isysCurrentGObj);
+                }
+                ACTSendMailCorrect(self, 226);
+            } else if (NotNeedBackHand() ||
+                       (GOBJ_ACT(girlGObj)->intrMot != 81 && GOBJ_ACT(girlGObj)->intrMot != 88 &&
+                        (60 - systemStatus[0] * 10) / systemStatus[1] * 2 < sub->modeFrame)) {
+                if (((int)(sub->wish0.ll >> 46) & 1) && ((int)(sub->wish2.ll >> 14) & 1)) {
+                    ACTSendMailCorrect(self, 226);
+                } else {
+                    ACTSendMailCorrect(self, 225);
+                }
+            }
+            break;
+            /* the table runs from 1, with this arm empty */
+        case 1:
+            break;
+        }
+        {
+            float front[4];
+            int work[4];
+            int scr[4];
+            int tgt[4];
+            int ofs[4];
+
+            if (((int)(sub->wish0.ll >> 44) & 1) == 0 || ((int)(sub->wish2.ll >> 12) & 1) == 0) {
+                girlLookStarted = 0;
+                girlLookInScreen = 0;
+            }
+            if (girlGObj != 0 && GOBJ_ACT(girlGObj)->actMode == 68) {
+                sceVu0ScaleVector(front, test_CURRENTORIENT((void *)self), 200.0f);
+                front[1] = 0.0f;
+                sceVu0AddVector(front, test_CURRENTROOT((void *)self), front);
+                _ACTLookTarget_Set((void *)self, 0, front, 1, 1);
+            }
+            if (((int)(sub->wish0.ll >> 44) & 1) && ((int)(sub->wish2.ll >> 12) & 1)) {
+                if (girlLookStarted == 0) {
+                    girlLookStarted = 1;
+                    if (girlGObj != 0) {
+                        girlLookInScreen =
+                            (0.0f < IsPointIsInScreenWide(work, test_CURRENTROOT(girlGObj)))
+                                ? 1
+                                : 0; /* PC port: the wide picture (poly-flat.c) */
+                    }
+                }
+                if (girlGObj != 0) {
+                    float d = _DistGV(test_CURRENTROOT(boyGObj), test_CURRENTROOT(girlGObj));
+
+                    if (d < _ACTGame_GetParamF(2)) {
+                        _ACTParaStatus_Set((void *)self, 24);
+                        _ACTCharStatus_Set((void *)self, 28, -1.0f, 0);
+                    } else if (d < _ACTGame_GetParamF(3)) {
+                        _ACTParaStatus_Set((void *)self, 23);
+                        _ACTCharStatus_Set((void *)self, 30, -1.0f, 0);
+                    } else {
+                        _ACTParaStatus_Set((void *)self, 22);
+                        _ACTCharStatus_Set((void *)self, 29, -1.0f, 0);
+                    }
+                } else {
+                    _ACTParaStatus_Set((void *)self, 22);
+                    _ACTCharStatus_Set((void *)self, 29, -1.0f, 0);
+                }
+                if (girlGObj != 0) {
+                    _ACTLookTarget_Set((void *)self, girlGObj, 0, 4, 2);
+                    if (girlLookInScreen == 0) {
+                        Camctrl_SetTarget(self, girlGObj, 1);
+                    }
+                }
+            }
+            {
+                int i;
+                float near = 3.40282347e+38f; /* FLT_MAX */
+
+                *(ObjKindList *)work = collisionKinds;
+                for (i = 0; work[i] != -1; i++) {
+                    void *g;
+
+                    for (g = isysGObjSearchFromObjKindID_begin(work[i]); g != 0;
+                         g = isysGObjSearchFromObjKindID_next(g)) {
+                        if ((int)(GOBJ_ACT(g)->flags18.ll >> 32) & 1) {
+                            float d = _DistGV(test_CURRENTROOT((void *)self), test_CURRENTROOT(g));
+
+                            if (d < near) {
+                                near = d;
+                            }
+                        }
+                    }
+                }
+                if (ACTGame_NoWeapon((void *)self) == 0) {
+                    if (near < 1000.0f) {
+                        _ACTParaStatus_Set((void *)self, 2);
+                    }
+                    if (near < 300.0f) {
+                        _ACTParaStatus_Set((void *)self, 3);
+                    }
+                }
+                if (near < 1000.0f) {
+                    _ACTCharStatus_Set((void *)self, 13, near, 0);
+                }
+            }
+            if (_ACTParaStatus_Check((void *)self, 3) || _ACTParaStatus_Check((void *)self, 2)) {
+                if (_ACTParaStatus_Check((void *)self, 23)) {
+                    _ACTParaStatus_Set((void *)self, 26);
+                }
+                if (_ACTParaStatus_Check((void *)self, 22)) {
+                    _ACTParaStatus_Set((void *)self, 25);
+                }
+            }
+            if (ACTGame_NoWeapon((void *)self)) {
+                _ACTParaStatus_Set((void *)self, 4);
+            }
+            ACTParaStatus_Exec((void *)self);
+            {
+                void *w;
+
+                if (girlGObj == 0 && (w = searchWeapon()) != 0) {
+                    if ((sub->pad.now & 0x8) == 0) {
+                        weaponLookInScreen = 0;
+                        weaponLookStarted = 0;
+                    } else {
+                        if (weaponLookStarted == 0) {
+                            weaponLookInScreen =
+                                (0.0f < IsPointIsInScreenWide(work, test_CURRENTROOT(w)))
+                                    ? 1
+                                    : 0; /* PC port: the wide picture (poly-flat.c) */
+                        }
+                        weaponLookStarted = 1;
+                        Camctrl_SetTarget(self, w, 1);
+                        camOn = 1;
+                    }
+                }
+            }
+            if (camOn == 0 && girlGObj == 0) {
+                void *lo = isysGObjSearchFromObjLayoutID(4);
+
+                if ((sub->pad.now & 0x8) && lo != 0) {
+                    GetOtherStageGirlOrient((float *)ofs, GetCurrentCameraSet2());
+                    ((float *)tgt)[0] = test_CURRENTROOT(boyGObj)[0];
+                    ((float *)tgt)[1] = test_CURRENTROOT(boyGObj)[1];
+                    ((float *)tgt)[2] = test_CURRENTROOT(boyGObj)[2];
+                    ((float *)scr)[0] = ((float *)GetCurrentCameraSet2())[0];
+                    ((float *)scr)[1] = ((float *)GetCurrentCameraSet2())[1];
+                    ((float *)scr)[2] = ((float *)GetCurrentCameraSet2())[2];
+                    sceVu0ScaleVector(ofs, ofs, _DistGV((float *)scr, (float *)tgt));
+                    sceVu0AddVector(work, scr, ofs);
+                    SetRootPosition(lo, work);
+                    /* a local debug switch, off (see dbg in the declarations): mark
+                       the helper position just set */
+                    if (dbg) {
+                        debug_NMarker((float *)work, 255, 0, 0, 100.0f);
+                    }
+                    Camctrl_SetTarget(self, lo, 1);
+                }
+            }
+        }
+        ACTLookTargetSystem_Exec((void *)self);
+        if (boyGObj != 0 && girlGObj != 0 && GOBJ_ACT(boyGObj)->actMode == 45 &&
+            GOBJ_ACT(girlGObj)->actMode == GOBJ_ACT(boyGObj)->actMode) {
+            if (60 < sitCount++) {
+                if (sitLayoutDone == 0) {
+                    lt_switch_layout(25);
+                    sitLayoutDone = 1;
+                }
+            }
+        } else {
+            sitLayoutDone = 0;
+            sitCount = 0;
+        }
+        if ((_ACTCharStatus_Check((void *)self, 29) || _ACTCharStatus_Check((void *)self, 30)) &&
+            girlGObj != 0) {
+            iosOmSendMail(girlGObj, 56, isysCurrentGObj);
+        }
+        sub->flags18.ll = (sub->flags18.ll & ~0x1000000000LL) |
+                          ((unsigned long long)(ACTGame_FLAG_TETSUNAGI() & 1) << 36);
+        _ACTWait(1);
+    }
+}
+
+static void subBoyCollision_aug6(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
     int camOn;
@@ -4451,12 +5651,16 @@ static void subBoyCollision_aug6jun26(GObj *volatile self)
 
 void subBoyCollision(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        subBoyCollision_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         subBoyCollision_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        subBoyCollision_aug6jun26(self);
+    if (ICO_AUG6) {
+        subBoyCollision_aug6(self);
         return;
     }
     Act *sub = GOBJ_ACT(self);
@@ -5113,8 +6317,37 @@ static void actBoyAttack_ntsc(GObj *volatile self)
     }
 }
 
+static void actBoyAttack_jun26(GObj *volatile self)
+{
+    char *sub = (char *)GOBJ_ACT(self);
+    int mot = ((Act *)sub)->frame;
+    float vec[4];
+
+    ((Act *)sub)->attackGroup = mot;
+    debug_StdPrintfDummy("attack sub id [%d]\n", mot);
+    debug_StdPrintfDummy("enter actBoyAttack\n");
+    _ACTWait(2);
+    searchEnemy((void *)self, &((Act *)sub)->attackTurn, vec);
+    while (1) {
+        if (((Act *)sub)->attackTurn) {
+            if (ACTGame_NoWeapon(self)) {
+                SetMotionDirectionWithLimit((void *)self, vec, 5.0f, 45.0f);
+            } else {
+                SetMotionDirectionWithLimit((void *)self, vec, 10.0f, 90.0f);
+            }
+        }
+        ACTSendMailCorrect(self, 177);
+        BoyAttackCenter(self);
+        _ACTWait(1);
+    }
+}
+
 void actBoyAttack(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actBoyAttack_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actBoyAttack_ntsc(self);
         return;
@@ -5169,10 +6402,10 @@ void actBoyTakeWeaponReady(GObj *volatile self)
         } else if (_AbsRotyGV(test_CURRENTORIENT((void *)self), dir) < 0x1E) {
             _ACTMotDirSmzDirect((void *)self, dir);
         } else {
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xCC, 188, 185));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0xCC, 188, 185, 182));
         }
         if ((60 - systemStatus[0] * 10) / systemStatus[1] * 2 < n++) {
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xCC, 188, 185));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0xCC, 188, 185, 182));
         }
         _ACTWait(1);
     }
@@ -5199,7 +6432,7 @@ void actBoyTakeWeapon(GObj *volatile self)
     _OrientXZGV(dir, p, test_CURRENTROOT((void *)self));
     SetMotionDirection((void *)self, dir);
     while (1) {
-        if (GOBJ_SUB(self)->ctrl.motion == PAL_NTSCAUG6JUN26(0xE6, 226)) {
+        if (GOBJ_SUB(self)->ctrl.motion == PAL_NTSCAUG6_JUN26(0xE6, 226, 236)) {
             if (15.0f < GOBJ_SUB(self)->ctrl.animFrame && GOBJ_SUB(self)->ctrl.animFrame < 48.0f &&
                 !picked) {
                 PickupWeapon(BOYINFO.nextWeapon, (void *)self, 6);
@@ -5208,7 +6441,7 @@ void actBoyTakeWeapon(GObj *volatile self)
             if (30.0f < GOBJ_SUB(self)->ctrl.animFrame && !put) {
                 if (BOYINFO.weapon != 0) {
                     ReleaseWeapon(BOYINFO.weapon);
-                    ExecuteSEPackage(BOYINFO.weapon, PAL_NTSCAUG6JUN26(0x50, 76));
+                    ExecuteSEPackage(BOYINFO.weapon, PAL_NTSCAUG6_JUN26(0x50, 76, 68));
                 }
                 PutWeapon();
                 put = 1;
@@ -5227,7 +6460,7 @@ void actBoyTakeWeapon(GObj *volatile self)
                 }
             }
         }
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0xC7, 183, 180, 177));
         _ACTWait(1);
     }
 }
@@ -5251,7 +6484,21 @@ static inline void actBoyCliffHesitate_ntsc(GObj *volatile self)
     }
 }
 
-static inline void actBoyCliffHesitate_aug6jun26(GObj *volatile self)
+static inline void actBoyCliffHesitate_jun26(GObj *volatile self)
+{
+    while (1) {
+        if (girlGObj != 0) {
+            brainSetSpMode();
+            if (girlGObj != 0) {
+                iosOmSendMail(girlGObj, 56, isysCurrentGObj);
+            }
+        }
+        ACTSendMailCorrect(self, 268);
+        _ACTWait(1);
+    }
+}
+
+static inline void actBoyCliffHesitate_aug6(GObj *volatile self)
 {
     ACTAdjustPlane(self, &GOBJ_WORK(self)->intrReq.b.wall);
     GetOrientOfWall(ICO_RAWP(char *, BOY_WALL(self), 0x8D0, (char *)GOBJ_WORK(self)->cliffOrient),
@@ -5270,12 +6517,16 @@ static inline void actBoyCliffHesitate_aug6jun26(GObj *volatile self)
 
 void actBoyCliffHesitate(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actBoyCliffHesitate_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actBoyCliffHesitate_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actBoyCliffHesitate_aug6jun26(self);
+    if (ICO_AUG6) {
+        actBoyCliffHesitate_aug6(self);
         return;
     }
     int hit = 0;
@@ -5310,11 +6561,11 @@ inline void actBoyCall(GObj *volatile self)
     sub->actMode = 9;
     _ACTWait(2);
     if (girlGObj != 0) {
-        iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x41, 61, 60), isysCurrentGObj);
+        iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x41, 61, 60, 59), isysCurrentGObj);
     }
     while (1) {
         if ((sub->pad.now & 8) == 0) {
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0xC7, 183, 180, 177));
         }
         _ACTWait(1);
     }
@@ -5324,7 +6575,7 @@ inline void actBoyCall(GObj *volatile self)
 void actBoyItem(GObj *volatile self)
 {
     while (1) {
-        ACTSendMailCorrect(self, PAL_AUG6JUN26(183, 180));
+        ACTSendMailCorrect(self, PAL_AUG6_JUN26(183, 180, 177));
         _ACTWait(1);
     }
 }
@@ -5336,7 +6587,7 @@ void actBoyItemAfter(GObj *volatile self)
     debug_StdPrintfDummy("enter actBoyItemAfter\n");
     while (1) {
         sceVu0ScaleVector(dir, test_CURRENTORIENT(self), 15.0f);
-        ACTSendMailCorrect(self, PAL_AUG6JUN26(183, 180));
+        ACTSendMailCorrect(self, PAL_AUG6_JUN26(183, 180, 177));
         _ACTWait(1);
     }
 }
@@ -5372,16 +6623,16 @@ static inline void ACTSendMail_PULLUP_GO_aug6jun26(void)
 
     switch (sub->env.cliffSel) {
     case 100:
-        ACTSendMailCorrect(g, 69);
-        sub->orientMot = 96;
+        ACTSendMailCorrect(g, PAL_JUN26(69, 68));
+        sub->orientMot = PAL_JUN26(96, 93);
         break;
     case 200:
-        ACTSendMailCorrect(g, 69);
-        sub->orientMot = 98;
+        ACTSendMailCorrect(g, PAL_JUN26(69, 68));
+        sub->orientMot = PAL_JUN26(98, 95);
         break;
     case 300:
-        ACTSendMailCorrect(g, 69);
-        sub->orientMot = 100;
+        ACTSendMailCorrect(g, PAL_JUN26(69, 68));
+        sub->orientMot = PAL_JUN26(100, 97);
         break;
     }
 }
@@ -5430,21 +6681,21 @@ static inline void ACTSendMail_PULLUP_START(void) /* derived name */
     switch (sub->env.cliffSel) {
     case 0x64:
         if (girlGObj != 0) {
-            iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x51, 77, 76), isysCurrentGObj);
+            iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x51, 77, 76, 75), isysCurrentGObj);
         }
-        GOBJ_ACT(girlGObj)->orientMot = PAL_NTSC_AUG6JUN26(0x65, 92, 91);
+        GOBJ_ACT(girlGObj)->orientMot = PAL_NTSC_AUG6_JUN26(0x65, 92, 91, 88);
         break;
     case 0xC8:
         if (girlGObj != 0) {
-            iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x51, 77, 76), isysCurrentGObj);
+            iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x51, 77, 76, 75), isysCurrentGObj);
         }
-        GOBJ_ACT(girlGObj)->orientMot = PAL_NTSC_AUG6JUN26(0x66, 93, 92);
+        GOBJ_ACT(girlGObj)->orientMot = PAL_NTSC_AUG6_JUN26(0x66, 93, 92, 89);
         break;
     case 0x12C:
         if (girlGObj != 0) {
-            iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x51, 77, 76), isysCurrentGObj);
+            iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x51, 77, 76, 75), isysCurrentGObj);
         }
-        GOBJ_ACT(girlGObj)->orientMot = PAL_NTSC_AUG6JUN26(0x67, 94, 93);
+        GOBJ_ACT(girlGObj)->orientMot = PAL_NTSC_AUG6_JUN26(0x67, 94, 93, 90);
         break;
     }
 }
@@ -5465,7 +6716,21 @@ static int pullup_check_heroin_position_ntsc(void)
     return 0;
 }
 
-static int pullup_check_heroin_position_aug6jun26(void)
+static inline unsigned char pullup_check_heroin_position_jun26(void)
+{
+    float buf[4];
+    Act *s = GOBJ_ACT(boyGObj);
+
+    sceVu0SubVector(buf, test_CURRENTROOT(girlGObj), test_CURRENTROOT(boyGObj));
+    if (0.0f < sceVu0InnerProduct(buf, s->env.cliffOrient) &&
+        _DistxzGV(s->env.cliffStepPos, test_CURRENTROOT(girlGObj)) < 100.0f &&
+        ((unsigned int)(GOBJ_ACT(girlGObj)->flags18.ll >> 47) & 1)) {
+        return 1;
+    }
+    return 0;
+}
+
+static int pullup_check_heroin_position_aug6(void)
 {
     float buf[4];
     Act *s = GOBJ_ACT(boyGObj);
@@ -5483,11 +6748,14 @@ static int pullup_check_heroin_position_aug6jun26(void)
 
 static int pullup_check_heroin_position(void)
 {
+    if (ICO_JUN26) {
+        return pullup_check_heroin_position_jun26();
+    }
     if (ICO_NTSC) {
         return pullup_check_heroin_position_ntsc();
     }
-    if (ICO_AUG6JUN26) {
-        return pullup_check_heroin_position_aug6jun26();
+    if (ICO_AUG6) {
+        return pullup_check_heroin_position_aug6();
     }
     float buf[4];
     float p1[4];
@@ -5524,8 +6792,24 @@ static int pullup_check_heroin_position(void)
     return 0;
 }
 
+static inline unsigned char ditch_check_heroin_position_jun26(void)
+{
+    float buf[4];
+    Act *s = GOBJ_ACT(boyGObj);
+
+    sceVu0SubVector(buf, test_CURRENTROOT(girlGObj), test_CURRENTROOT(boyGObj));
+    if (0.0f < sceVu0InnerProduct(buf, (float *)s->env.cliffOrient) &&
+        _DistxzGV((char *)s->env.ditchPos, test_CURRENTROOT(girlGObj)) < 60.0f) {
+        return 1;
+    }
+    return 0;
+}
+
 static int ditch_check_heroin_position(void)
 {
+    if (ICO_JUN26) {
+        return ditch_check_heroin_position_jun26();
+    }
     float buf[4];
     Act *s = GOBJ_ACT(boyGObj);
 
@@ -5584,7 +6868,36 @@ static void actBoyPullupReady_ntsc(GObj *volatile self)
     }
 }
 
-static void actBoyPullupReady_aug6jun26(GObj *volatile self)
+static void actBoyPullupReady_jun26(GObj *volatile self)
+{
+    float mv[4];
+    Act *sub = GOBJ_ACT(self);
+
+    sceVu0ScaleVector(mv, sub->env.cliffOrient, -30.0f);
+    sceVu0AddVector(mv, sub->env.cliffStepPos, mv);
+    StartCorrectPosition(self, mv, 0, 0, 20.0f);
+    while (IsCorrectPosition(self)) {
+        ContinueCorrectPosition(self);
+        _ACTWait(1);
+    }
+    while (1) {
+        _ACTCharStatus_Set(self, 24, -1.0f, 0);
+        if ((sub->pad.now & 8) == 0) {
+            ACTSendMailCorrect(self, 67);
+        } else if (pullup_check_heroin_position()) {
+            if (PAIR_IsStatus_GIRL_PULL() == 0) {
+                if (girlGObj != 0) {
+                    iosOmSendMail(girlGObj, 73, isysCurrentGObj);
+                }
+            } else if (IsCorrectPosition(girlGObj) == 0) {
+                ACTSendMail_PULLUP_GO();
+            }
+        }
+        _ACTWait(1);
+    }
+}
+
+static void actBoyPullupReady_aug6(GObj *volatile self)
 {
     float mv[4];
 
@@ -5616,12 +6929,16 @@ static void actBoyPullupReady_aug6jun26(GObj *volatile self)
 
 void actBoyPullupReady(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actBoyPullupReady_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actBoyPullupReady_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actBoyPullupReady_aug6jun26(self);
+    if (ICO_AUG6) {
+        actBoyPullupReady_aug6(self);
         return;
     }
     float mv[4];
@@ -5659,8 +6976,33 @@ void actBoyPullupReady(GObj *volatile self)
 #define BOY_PULLUP_MOVING(sub) /* derived name */                                                  \
     (0.1f < (sub)->stick.mag && ((sub)->stick.mag < 0.99f || ((sub)->pad.now & 0x20)))
 
+static void actBoyPullupGo_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+
+    ACTSendMail_PULLUP_START();
+    while (1) {
+        if ((sub->pad.trg & 8) || PAIR_IsStatus_GIRL_PULL() == 0) {
+            ACTSendMailCorrect(self, 69);
+        } else {
+            if (0.1f < sub->stick.mag && !BOY_PULLUP_MOVING(sub)) {
+                ACTSendMailCorrect(self, 70);
+            } else if (BOY_PULLUP_MOVING(sub)) {
+                ACTSendMailCorrect(self, 71);
+            } else {
+                ACTSendMailCorrect(self, 72);
+            }
+        }
+        _ACTWait(1);
+    }
+}
+
 void actBoyPullupGo(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actBoyPullupGo_jun26(self);
+        return;
+    }
     Act *sub = GOBJ_ACT(self);
 
     ACTSendMail_PULLUP_START();
@@ -5682,8 +7024,95 @@ void actBoyPullupGo(GObj *volatile self)
 
 extern void InsertCamera_Set(float *pos, float *tgt, int frames);
 
+static void actBoyBelift_jun26(GObj *volatile self)
+{
+    /* the quaternion is reached through a union, the form actEnemyKidnapEnd
+       (enemy_act.c) gives the same memset-and-w=1 idiom */
+    union { /* field names derived */
+        float f[4];
+    } q;
+
+    float cam[4];
+    float boypos[4];
+    float p[4];
+    float girlpos[4];
+    float dir[4];
+    float ofs[4];
+    float hit[4];
+    GObj *girl = GOBJ_ACT(self)->intrArg;
+    float ratio;
+    int mode;
+    int lv;
+    float dist;
+
+    memset(&q, 0, 0x10);
+    q.f[3] = 1.0f;
+    ratio = 1.0f;
+    if (GOBJ_ACT(girl)->enemy->liftKind == 3) {
+        ratio = 0.2f;
+    }
+    mode = GOBJ_ACT(girl)->enemy->liftKind == 3 ? 0 : 2;
+    BOY_EXT_F(self, liftObj, liftedObj) = girl;
+    beliftGirl = girl;
+    BOY_EXT_F(self, liftLevel, liftLevel) = 10;
+    if (GOBJ_ACT(girl)->enemy->liftKind == 3) {
+        RotQuaternionX(q.f, 0x4000);
+    }
+    SetMotionNodeFixModeParameter((void *)self, girl, mode, 0x16, q.f, 0.0f, 0.0f, 0.0f, ratio);
+    cam[0] = GetCurrentCameraSet2()[0];
+    cam[1] = GetCurrentCameraSet2()[1];
+    cam[2] = GetCurrentCameraSet2()[2];
+    _ACTWait(1);
+    while (1) {
+        if (GOBJ_ACT(girl)->enemy->liftKind == 3 && (unsigned int)GOBJ_ACT(girl)->actMode == 93) {
+            lv = BOY_EXT_F(self, liftLevel, liftLevel);
+            lv = lv < 0 ? 0 : (10.0f < lv ? 10.0f : lv);
+            lv = lv * 0.5f;
+            dist = lv * 100.0f + 500.0f;
+            GetSkeltonPosition(boypos, boyGObj, 35);
+            GetSkeltonPosition(girlpos, girl, 35);
+            _OrientXZGV(dir, girlpos, boypos);
+            sceVu0ScaleVector(ofs, dir, -dist);
+            sceVu0AddVector(p, ofs, boypos);
+            if (_DistSqGV(p, cam) < 2500.0f) {
+                _InterGV(p, cam, p, 1.0f, 1.0f);
+            } else {
+                _MoveGV(p, cam, p, 50.0f);
+            }
+            if (ACTCheckCollis_WF(50.0f, girlpos, p, 0, hit)) {
+                p[0] = hit[0];
+                p[1] = hit[1];
+                p[2] = hit[2];
+            }
+            cam[0] = p[0];
+            cam[1] = p[1];
+            cam[2] = p[2];
+            GetSkeltonPosition(girlpos, boyGObj, 44);
+            sceVu0ScaleVector(p, p, -1.0f);
+            sceVu0ScaleVector(girlpos, girlpos, -1.0f);
+            InsertCamera_Set(p, girlpos, (60 - systemStatus[0] * 10) / systemStatus[1] / 6);
+        }
+        switch (((unsigned int)GOBJ_ACT(girl)->actMode) + 4) { /* the demo's ids 4 lower */
+        case 0x61:
+        case 0x62:
+            break;
+        default:
+            ACTSendMailCorrect(self, 202);
+            debug_StdPrintfDummy("enemy error body slam[%s]\n",
+                                 actModeTbl[(unsigned int)GOBJ_ACT(girl)->actMode].name);
+            break;
+        }
+        _ACTWait(1);
+    }
+}
+
 void actBoyBelift(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actBoyBelift_jun26(self);
+        return;
+    }
+
     /* the quaternion is reached through a union, the form actEnemyKidnapEnd
        (enemy_act.c) gives the same memset-and-w=1 idiom */
     union { /* field names derived */
@@ -5798,7 +7227,28 @@ static inline void actBoyReadyMove_ntsc(GObj *volatile self)
     }
 }
 
-static inline void actBoyReadyMove_aug6jun26(GObj *volatile self)
+static inline void actBoyReadyMove_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    BoyMoveOrder ord = *(BoyMoveOrder *)((char *)GOBJ_ACT(self)->intrData);
+
+    while (1) {
+        _ACTMotDirSmzDirect((void *)self, ord.dir);
+        if (ord.fix) {
+            sub->wish2.ll |= 0x20000000000LL;
+            sub->wish2.ll |= 0x80000000LL;
+        }
+        if (ord.frames-- < 0) {
+            ACTSendMailCorrect(self, 240);
+        }
+        if (_DistxzSqGV(test_CURRENTROOT((void *)self), &ord) < ord.range * ord.range) {
+            ACTSendMailCorrect(self, 240);
+        }
+        _ACTWait(1);
+    }
+}
+
+static inline void actBoyReadyMove_aug6(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
     BoyMoveOrder ord = *(BoyMoveOrder *)((char *)GOBJ_ACT(self)->intrData);
@@ -5821,12 +7271,16 @@ static inline void actBoyReadyMove_aug6jun26(GObj *volatile self)
 
 void actBoyReadyMove(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actBoyReadyMove_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actBoyReadyMove_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actBoyReadyMove_aug6jun26(self);
+    if (ICO_AUG6) {
+        actBoyReadyMove_aug6(self);
         return;
     }
     Act *sub = GOBJ_ACT(self);
@@ -5857,8 +7311,57 @@ void actBoyReadyMove(GObj *volatile self)
     }
 }
 
+static void actBoyRescueReady_jun26(GObj *volatile self)
+{
+    GObj *g = GOBJ_ACT(self)->enemy->rescueObj;
+    float p[4];
+    float q[4];
+    float step[4];
+    float dir[4];
+    float tmp[4];
+    float np[4];
+    int cnt = (60 - systemStatus[0] * 10) / systemStatus[1] / 3;
+    int rest;
+
+    p[0] = test_CURRENTROOT((void *)self)[0];
+    p[1] = test_CURRENTROOT((void *)self)[1];
+    p[2] = test_CURRENTROOT((void *)self)[2];
+    q[0] = test_CURRENTROOT(g)[0];
+    q[1] = test_CURRENTROOT(g)[1];
+    q[2] = test_CURRENTROOT(g)[2];
+    _OrientXZGV(dir, q, p);
+    sceVu0ScaleVector(tmp, dir, -60.0f);
+    sceVu0AddVector(GOBJ_ACT(self)->enemy->rescueBoyPos, q, tmp);
+    sceVu0ScaleVector(tmp, dir, 0.0f);
+    sceVu0AddVector(GOBJ_ACT(self)->enemy->rescueGirlPos, q, tmp);
+    GOBJ_ACT(self)->enemy->rescueGirlPos[1] += 50.0f;
+    SetMotionDirection((void *)self, dir);
+    sceVu0SubVector(step, GOBJ_ACT(self)->enemy->rescueBoyPos, (float *)p);
+    sceVu0ScaleVector(step, step, 1.0f / (float)cnt);
+    rest = cnt;
+    while (1) {
+        if (0 < rest) {
+            sceVu0AddVector(np, test_CURRENTROOT((void *)self), step);
+            np[1] = test_CURRENTROOT((void *)self)[1];
+            SetDirectRootPosition((void *)self, np);
+        }
+        rest--;
+        if (motionKind[GOBJ_SUB(self)->ctrl.motion].playMode == 1 ||
+            (GOBJ_SUB(self)->ctrl.ctrlFlags & 0x16) || GOBJ_SUB(self)->ctrl.frameEnd != 0) {
+            if (girlGObj != 0) {
+                iosOmSendMail(girlGObj, 308, isysCurrentGObj);
+            }
+        }
+        _ACTWait(1);
+    }
+}
+
 void actBoyRescueReady(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actBoyRescueReady_jun26(self);
+        return;
+    }
     GObj *g = GOBJ_ACT(self)->enemy->rescueObj;
     float p[4];
     float q[4];
@@ -6034,7 +7537,76 @@ static void actBoyDitch3mReady_ntsc(GObj *volatile self)
     }
 }
 
-static void actBoyDitch3mReady_aug6jun26(GObj *volatile self)
+static void actBoyDitch3mReady_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    int a;
+    int b;
+
+    _ACTWait(1);
+    while (1) {
+        a = 1;
+        switch ((unsigned int)GOBJ_ACT(girlGObj)->actMode) {
+        case 4:
+        case 86: {
+            float p[4];
+            float q[4];
+
+            p[0] = test_CURRENTROOT(boyGObj)[0];
+            p[1] = test_CURRENTROOT(boyGObj)[1];
+            p[2] = test_CURRENTROOT(boyGObj)[2];
+            q[0] = test_CURRENTROOT(girlGObj)[0];
+            q[1] = test_CURRENTROOT(girlGObj)[1];
+            q[2] = test_CURRENTROOT(girlGObj)[2];
+            if (_DistxzSqGV(p, q) < 250000.0f) {
+                if (p[1] + 300.0f < q[1]) {
+                } else {
+                    a = 0;
+                }
+            }
+            break;
+        }
+        }
+
+        if (a != 0 && (sub->pad.now & 8) == 0) {
+            ACTSendMailCorrect(self, 344);
+        } else {
+            if (ditch_check_heroin_position() != 0) {
+                if (girlGObj != 0) {
+                    iosOmSendMail(girlGObj, 346, isysCurrentGObj);
+                }
+            }
+            if (IsCorrectPosition(girlGObj) == 0) {
+                if (girlGObj != 0) {
+                    iosOmSendMail(girlGObj, 347, isysCurrentGObj);
+                }
+            }
+            if (GOBJ_ACT(girlGObj)->actMode == 4) {
+                float dy;
+
+                b = 0;
+                dy = test_CURRENTROOT(girlGObj)[1] - test_CURRENTROOT(boyGObj)[1];
+                if (_DistxzSqGV(test_CURRENTROOT(boyGObj), test_CURRENTROOT(girlGObj)) < 10000.0f &&
+                    ABSF(BOYGIRL_DY()) < 100.0f) {
+                    b = 1;
+                }
+                if (_DistxzSqGV(test_CURRENTROOT(boyGObj), test_CURRENTROOT(girlGObj)) < 78400.0f &&
+                    ABSF(BOYGIRL_DY()) < 200.0f && 50.0f < dy && dy < 200.0f) {
+                    b = 1;
+                }
+                if (b != 0) {
+                    if (girlGObj != 0) {
+                        iosOmSendMail(girlGObj, 349, isysCurrentGObj);
+                    }
+                    ACTSendMailCorrect(self, 345);
+                }
+            }
+        }
+        _ACTWait(1);
+    }
+}
+
+static void actBoyDitch3mReady_aug6(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
     float p[4];
@@ -6117,12 +7689,16 @@ static void actBoyDitch3mReady_aug6jun26(GObj *volatile self)
 
 void actBoyDitch3mReady(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actBoyDitch3mReady_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actBoyDitch3mReady_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actBoyDitch3mReady_aug6jun26(self);
+    if (ICO_AUG6) {
+        actBoyDitch3mReady_aug6(self);
         return;
     }
     Act *sub = GOBJ_ACT(self);
@@ -6304,7 +7880,9 @@ inline int RequestStageChangeKidnapEnd(int stage, int targetId)
 {
     int rv = 0;
     if (boyGObj != 0) {
-        rv = RequestStageChangeSimple(stage, 0.25f, 4.0f, 0, 0, 0) & 0xFF;
+        rv = RequestStageChangeSimple(stage, PAL_JUN26(0.25f, 16.0f), PAL_JUN26(4.0f, 16.0f), 0, 0,
+                                      0) &
+             0xFF;
         if (rv != 0) {
             Vec16 buf = {{-1000000.0f, 0.0f, 0.0f}};
 
@@ -6316,8 +7894,46 @@ inline int RequestStageChangeKidnapEnd(int stage, int targetId)
     return rv;
 }
 
+static void SetStatusBoy_OtherStageGirlPinch_jun26(void)
+{
+    float buf[4];
+    float pos[4];
+    float tgt[4];
+    float tmp[4];
+    float head[4];
+    float hit[4];
+    GObj *g = boyGObj;
+    ActWork *w;
+    float t;
+    int frames;
+
+    t = (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
+    GetOtherStageGirlOrient(buf, GetCurrentCameraSet2());
+    w = GOBJ_WORK(g);
+    frames = (int)t;
+    w->pinchFrames = frames;
+    w->pinchPosX = buf[0];
+    w->pinchPosY = buf[1];
+    w->pinchPosZ = buf[2];
+    GetSkeltonPosition(head, g, 35);
+    sceVu0ScaleVector(tmp, buf, -100.0f);
+    sceVu0AddVector(pos, head, tmp);
+    if (ACTCheckCollis_W(10.0f, head, pos, 0, hit, 0, 0)) {
+        pos[0] = head[0];
+        pos[1] = head[1] - 50.0f;
+        pos[2] = head[2];
+    }
+    sceVu0ScaleVector(tmp, buf, 300.0f);
+    sceVu0AddVector(tgt, head, tmp);
+    InsertCamera_SetNoraml(pos, tgt, frames, 0);
+}
+
 void SetStatusBoy_OtherStageGirlPinch(void)
 {
+    if (ICO_JUN26) {
+        SetStatusBoy_OtherStageGirlPinch_jun26();
+        return;
+    }
     float buf[4];
     float cam[4];
     float pos[4];
@@ -6407,7 +8023,7 @@ static void actBoyStart_ntsc(GObj *self)
 
     CurrentTargetGObj = (void *)self;
 
-    ((Act *)work)->life = _ACTGame_GetParamF(0x13);
+    ((Act *)work)->life = _ACTGame_GetParamF(PAL_NTSC(0x13, 17));
     ((Act *)work)->actKind = 0;
 
     if (BOYINFO.boyID != 0) {
@@ -6468,7 +8084,7 @@ static void actBoyStart_ntsc(GObj *self)
 
     startWaitCancel = 0;
 
-    ((Act *)work)->mainMail = (ActMail *)&actIntrList[74];
+    ((Act *)work)->mainMail = (ActMail *)&actIntrList[PAL_NTSC(74, 67)];
 
     actCreateSubThread(subBoyBrainMain, 20);
     gopp_subBoyControl = (void *)actCreateSubThread(subBoyControl, 21);
@@ -6487,7 +8103,147 @@ static void actBoyStart_ntsc(GObj *self)
     _ACTWait(0);
 }
 
-static void actBoyStart_aug6jun26(GObj *self)
+static void actBoyStart_jun26(GObj *self)
+{
+    char *work;
+    void *g;
+
+    girlEscortedInStage = BOYINFO.escort;
+    BOYINFO.escort = 0;
+
+    ((int *)boyInfo)[4] = -1;
+    /* PC port ([gameplay] door_fix): an exit taken holding hands
+       into this stage starts the arrival grace, 3 seconds of game frames
+       (the frame rate expression the game uses below) */
+    ico_door_grace_begin(stage_no, 3 * ((60 - systemStatus[0] * 10) / systemStatus[1]));
+
+    ableBoyControl = 0;
+    startWithGirl = 0;
+    startWaitCancel = 0;
+    startOnSofa = 0;
+    sitLayoutDone = 0;
+
+    sitCount = 0;
+    debug_StdPrintfDummy("actBoyStart:%p\n", self);
+
+    work = (char *)actInitialize(self);
+    ((Act *)work)->addData = attrWallHit;
+
+    GetRootPosition((char *)&((Act *)work)->camRootX, (void *)self);
+
+    actInitialize_ext_charcter(self);
+    actInitialize_only_charcter((char *)self);
+    actInitialize_geo(self);
+
+    GOBJ_ACT(self)->enemy->sofaWakeTime =
+        (int)(_ACTGame_GetParamF(27) * (float)((60 - systemStatus[0] * 10) / systemStatus[1]) /
+              60.0f);
+    ACTGame_LwsEffectInit(self);
+
+    ((Act *)work)->heldItem.i = 0;
+    ((Act *)work)->nextItem.i = 0;
+
+    gopp_subBoyControl = 0;
+    ACTParaStatus_Init(self);
+    _ACTCharStatus_Init((int **)self);
+
+    _ACTWait(1);
+
+    CurrentTargetGObj = (void *)self;
+
+    ((Act *)work)->life = _ACTGame_GetParamF(14);
+    ((Act *)work)->actKind = 0;
+
+    if (BOYINFO.boyID != 0) {
+        g = isysGObjSearchFromObjLayoutID(BOYINFO.boyID);
+        if (g != 0) {
+            PickupWeapon(g, (void *)self, 22);
+            ((Act *)work)->weapon = g;
+            if (BOYINFO.torch) {
+                LightTorchOnOfWeapon(g);
+            }
+        } else {
+            BOYINFO.boyID = 0;
+        }
+    }
+
+    /* the demo hands the boy the stick at layout 2702 when he comes in empty-handed */
+    if (*(void **)(work + 0x130) == 0) {
+        GObj *stick = isysGObjSearchFromObjLayoutID(2702);
+
+        if (stick != 0) {
+            Act *sub = GOBJ_ACT(self);
+
+            PickupWeapon(stick, (void *)self, 22);
+            sub->weapon = stick;
+            BOYINFO.boyID = stick->labelId;
+        }
+    }
+    if (BOYINFO.girlID != 0) {
+        g = isysGObjSearchFromObjLayoutID(BOYINFO.girlID);
+        if (g != 0) {
+            ACTSendMailCorrect(self, 51);
+            ((Act *)work)->nextItem.p = ((Act *)work)->curItem = g;
+        } else {
+            BOYINFO.girlID = 0;
+        }
+        startWithGirl = 1;
+    }
+
+    if (BOYINFO.layoutID != 0) {
+        g = isysGObjSearchFromObjLayoutID(BOYINFO.layoutID);
+        if (g != 0) {
+            Vec16 p0 = {{0.0f, 0.0f, -50.0f, 1.0f}};
+            Vec16 p1 = {{0.0f, 0.0f, 50.0f, 1.0f}};
+            ClipWork cw;
+
+            CopyMatrix(MatrixDrive_GetMatrix(), (void *)GOBJ_SUB(g)->nodeMtx);
+            MatrixDrive_TransMatrix(0.0f, -50.0f, 0.0f);
+            sceVu0ApplyMatrix(cw.pt[0], MatrixDrive_GetMatrix(), &p0);
+            sceVu0ApplyMatrix(cw.pt[1], MatrixDrive_GetMatrix(), &p1);
+            cw.radius = 0.0f;
+            ClipWall(&cw);
+            if (cw.wall.elem == 0) {
+                /* "!!! cannot find the sofa's wall !!!" */
+                debug_StdPrintfDummy("！！！ソファの壁を見付けることができません！！！\n");
+            } else {
+                startOnSofa = 1;
+                sitLayoutDone = 1;
+                sofaWallHit.o = cw.wall.o;
+                sofaWallHit.elem = cw.wall.elem;
+                ActSendMail_WithAdditionalData((void *)self, 52, (void *)self, &sofaWallHit);
+                if (BOYINFO.bit32 && girlGObj != 0) {
+                    ActSendMail_WithAdditionalData(girlGObj, 52, girlGObj, &sofaWallHit);
+                }
+            }
+        } else {
+            BOYINFO.layoutID = 0;
+        }
+    }
+
+    startWaitCancel = 0;
+
+    ((Act *)work)->mainMail = (ActMail *)&actIntrList[67];
+
+    actCreateSubThread(subBoyBrainMain, 20);
+    gopp_subBoyControl = (void *)actCreateSubThread(subBoyControl, 21);
+    actCreateSubThread(subBoyCollision, 21);
+    actCreateSubThread(subCommonIdle, 21);
+    scpBoyControlReadDisable = 0;
+
+    ((Act *)work)->mail = (ActMail *)&actIntrList[70];
+    ACTSendMailCorrect(self, 177);
+
+    _ACTWait(1);
+
+    if (BOYINFO.fire && girlGObj != 0) {
+        iosOmSendMail(girlGObj, 58, self);
+        debug_StdPrintfDummy("hand connect start\n");
+    }
+    _ACTWait(0);
+}
+
+static void actBoyStart_aug6(GObj *self)
 {
     char *work;
     void *g;
@@ -6535,7 +8291,7 @@ static void actBoyStart_aug6jun26(GObj *self)
 
     CurrentTargetGObj = (void *)self;
 
-    ((Act *)work)->life = _ACTGame_GetParamF(0x13);
+    ((Act *)work)->life = _ACTGame_GetParamF(PAL_AUG6(0x13, 17));
     ((Act *)work)->actKind = 0;
 
     if (BOYINFO.boyID != 0) {
@@ -6596,7 +8352,7 @@ static void actBoyStart_aug6jun26(GObj *self)
 
     startWaitCancel = 0;
 
-    ((Act *)work)->mainMail = (ActMail *)&actIntrList[74];
+    ((Act *)work)->mainMail = (ActMail *)&actIntrList[PAL_AUG6(74, 67)];
 
     actCreateSubThread(subBoyBrainMain, 20);
     gopp_subBoyControl = (void *)actCreateSubThread(subBoyControl, 21);
@@ -6617,12 +8373,16 @@ static void actBoyStart_aug6jun26(GObj *self)
 
 void actBoyStart(GObj *self)
 {
+    if (ICO_JUN26) {
+        actBoyStart_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actBoyStart_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actBoyStart_aug6jun26(self);
+    if (ICO_AUG6) {
+        actBoyStart_aug6(self);
         return;
     }
     char *work;
@@ -6765,8 +8525,23 @@ inline void *GetBoyWeaponGObj(void)
     return 0;
 }
 
+static inline void actBoyStand_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+
+    debug_StdPrintfDummy("enter actBoyStand\n");
+    sub->actMode = 1;
+    while (1) {
+        _ACTWait(1);
+    }
+}
+
 inline void actBoyStand(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actBoyStand_jun26(self);
+        return;
+    }
     MotionDef *row = GOBJ_SUB(self)->ctrl.motion + motionKind;
 
     if ((row->flags.word >> 8) & 1) {
@@ -6777,22 +8552,62 @@ inline void actBoyStand(GObj *volatile self)
     }
 }
 
+static inline void actBoyHang_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+
+    debug_StdPrintfDummy("enter actBoyHang\n");
+    sub->actMode = 28;
+    _ACTWait(0);
+}
+
 inline void actBoyHang(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actBoyHang_jun26(self);
+        return;
+    }
     char *g = (char *)self;
     ACTAdjustPlane(self, &GOBJ_WORK(g)->intrReq.a.wall);
+    _ACTWait(0);
+}
+
+static inline void actBoyBHang_jun26(GObj *volatile self)
+{
     _ACTWait(0);
 }
 
 inline void actBoyBHang(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actBoyBHang_jun26(self);
+        return;
+    }
     char *g = (char *)self;
     ACTAdjustPlane(self, &GOBJ_WORK(g)->intrReq.a.wall);
     _ACTWait(0);
 }
 
+static inline void actBoyHangBefore_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+
+    GOBJ_WORK(self)->hangOrient[0] = sub->env.cliffOrient[0];
+    GOBJ_WORK(self)->hangOrient[1] = sub->env.cliffOrient[1];
+    GOBJ_WORK(self)->hangOrient[2] = sub->env.cliffOrient[2];
+    GOBJ_WORK(self)->cliffReq.a = sub->env.motOriReq.b;
+    while (1) {
+        ACTSendMailCorrect(self, 268);
+        _ACTWait(1);
+    }
+}
+
 inline void actBoyHangBefore(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actBoyHangBefore_jun26(self);
+        return;
+    }
     Act *sub = GOBJ_ACT(self);
 
     ACTAdjustPlane(self, &GOBJ_WORK(self)->intrReq.b.wall);
@@ -6812,7 +8627,7 @@ inline void actBoyBeslam(GObj *volatile self)
 
     sceVu0ScaleVector(p, test_CURRENTORIENT(beliftGirl), 30.0f);
     while (1) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x13A, 295, 292));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0x13A, 295, 292, 283));
         _ACTWait(1);
     }
 }
@@ -6820,7 +8635,7 @@ inline void actBoyBeslam(GObj *volatile self)
 inline void actBoyRescueSrc(GObj *volatile self)
 {
     while (1) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0xC7, 183, 180, 177));
         _ACTWait(1);
     }
 }
@@ -6829,9 +8644,9 @@ inline void actBoySupportGBBegin(GObj *volatile self)
 {
     while (1) {
         if (girlGObj != 0) {
-            iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x17D, 353, 349), isysCurrentGObj);
+            iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x17D, 353, 349, 333), isysCurrentGObj);
         }
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x17B, 351, 347));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0x17B, 351, 347, 331));
         _ACTWait(1);
     }
 }
@@ -6839,8 +8654,8 @@ inline void actBoySupportGBBegin(GObj *volatile self)
 static inline unsigned char IsBoyStatus_SupportGB(void) /* derived name */
 {
     unsigned int st = (unsigned int)GOBJ_ACT(girlGObj)->actMode;
-    if (st < PAL_NTSCAUG6JUN26(0x6B, 104)) {
-        if (st >= PAL_NTSCAUG6JUN26(0x68, 101)) {
+    if (st < PAL_NTSCAUG6_JUN26(0x6B, 104, 103)) {
+        if (st >= PAL_NTSCAUG6_JUN26(0x68, 101, 100)) {
             return 1;
         }
     }
@@ -6851,7 +8666,7 @@ inline void actBoySupportGBLoop(GObj *volatile self)
 {
     while (1) {
         if (!IsBoyStatus_SupportGB()) {
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xE2, 210, 207));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0xE2, 210, 207, 202));
         }
         _ACTWait(1);
     }
@@ -6861,9 +8676,9 @@ inline void actBoySupportGBEnd(GObj *volatile self)
 {
     while (1) {
         if (girlGObj != 0) {
-            iosOmSendMail(girlGObj, PAL_NTSC_AUG6JUN26(0x17F, 355, 351), isysCurrentGObj);
+            iosOmSendMail(girlGObj, PAL_NTSC_AUG6_JUN26(0x17F, 355, 351, 335), isysCurrentGObj);
         }
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0xC7, 183, 180, 177));
         _ACTWait(1);
     }
 }
@@ -6871,7 +8686,7 @@ inline void actBoySupportGBEnd(GObj *volatile self)
 inline void actBoySupportBGBegin(GObj *volatile self)
 {
     while (1) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x183, 359, 355));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0x183, 359, 355, 339));
         _ACTWait(1);
     }
 }
@@ -6879,13 +8694,35 @@ inline void actBoySupportBGBegin(GObj *volatile self)
 inline void actBoyDitch3mExec(GObj *volatile self)
 {
     while (1) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x190, 370, 366));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0x190, 370, 366, 350));
+        _ACTWait(1);
+    }
+}
+
+static inline void actBoyHangG3M_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+
+    while (1) {
+        if (sub->pad.trg & 8) {
+            ACTSendMailCorrect(self, 351);
+            ACTGame_DisconnectHand();
+        } else if (0.1f < sub->stick.mag) {
+            ACTSendMailCorrect(self, 352);
+            if (girlGObj != 0) {
+                iosOmSendMail(girlGObj, 355, isysCurrentGObj);
+            }
+        }
         _ACTWait(1);
     }
 }
 
 inline void actBoyHangG3M(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actBoyHangG3M_jun26(self);
+        return;
+    }
     Act *sub = GOBJ_ACT(self);
 
     if (!ICO_NTSCAUG6JUN26) {
@@ -6927,7 +8764,11 @@ inline void DeleteBoyWeapon(void)
             ReleaseWeapon((void *)sub->weapon);
             memset(&buf, 0, 0x10);
             buf.f[0] = 10000000.0f;
-            SetDirectRootPositionNoFitting((void *)sub->weapon, buf.f);
+            if (ICO_JUN26) {
+                SetDirectRootPosition((void *)sub->weapon, buf.f);
+            } else {
+                SetDirectRootPositionNoFitting((void *)sub->weapon, buf.f);
+            }
             gamesysObjInfoPosSetStage(sub->weapon, 0, 0, stage_no);
             ((GObj *)sub->weapon)->active = 0;
         }
@@ -6940,10 +8781,10 @@ inline void DeleteBoyWeapon(void)
 inline int isLiftBoyEnable(void)
 {
     unsigned int st = (unsigned int)GOBJ_ACT(boyGObj)->actMode;
-    if (st >= PAL_NTSCAUG6JUN26(0x60, 93)) {
+    if (st >= PAL_NTSCAUG6_JUN26(0x60, 93, 92)) {
         return 1;
     }
-    if (st < PAL_NTSCAUG6JUN26(0x5E, 91)) {
+    if (st < PAL_NTSCAUG6_JUN26(0x5E, 91, 90)) {
         return 1;
     }
     return 0;
@@ -6985,8 +8826,8 @@ inline int IsBoyStatus_EnemyMustWait(void)
     unsigned int st;
 
     if (boyGObj == 0) {
-        debug_assert(__FILE__, LN(5795, 5779, 5779, 5211, 5123, 5795, 5779));
-        __assert(__FILE__, LN(5795, 5779, 5779, 5211, 5123, 5795, 5779), "0");
+        debug_assert(__FILE__, LN(5795, 5779, 5779, 5211, 5123, 4630, 5779));
+        __assert(__FILE__, LN(5795, 5779, 5779, 5211, 5123, 4630, 5779), "0");
         return 0;
     }
     sub = GOBJ_ACT(boyGObj);
@@ -7238,7 +9079,7 @@ static int boyActUnusedWord = -1; /* derived name */
 inline void actBoyJump(GObj *volatile self)
 {
     while (1) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xBD, 176, 174));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0xBD, 176, 174, 171));
         _ACTWait(1);
     }
 }

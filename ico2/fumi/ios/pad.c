@@ -246,7 +246,165 @@ static int controler_stable_check_ntsc(IosPadDevRec *dev)
     return phase;
 }
 
-static int controler_stable_check_aug6jun26(IosPadDevRec *dev)
+static int controler_stable_check_jun26(IosPadDevRec *dev)
+{
+    int port = dev->port;
+    int slot = dev->slot;
+    int prev = dev->state;
+    int phase = dev->phase;
+    int cnt = dev->errCount;
+    int id = dev->lastTermId;
+    int state;
+    int mode;
+    int exid;
+    int i;
+
+    state = scePadGetState(port, slot);
+    if ((unsigned int)state < 8) {
+        if (state != prev) {
+            debug_StdPrintfDummy("pad:port:%d slot:%d %s\n", port, slot, padStateName[state]);
+        }
+    } else {
+        debug_StdPrintfDummy("pad:?%d\n", state);
+    }
+    if (state == 0) {
+        cnt = 0;
+        phase = 0;
+    }
+    switch (phase) {
+    case 0:
+        if (state != 6 && state != 2) {
+            break;
+        }
+        mode = scePadInfoMode(port, slot, 1, 0);
+        debug_StdPrintfDummy("pad id:%d\n", mode);
+        if (mode == 0) {
+            break;
+        }
+        exid = scePadInfoMode(port, slot, 2, 0);
+        debug_StdPrintfDummy("pad: exid %d\n", exid);
+        if (exid >= 1) {
+            mode = exid;
+        }
+        switch (mode) {
+        default:
+            debug_StdPrintfDummy("pad:default 0x%x\n", mode);
+            phase = 99;
+            break;
+        case 4:
+            debug_StdPrintfDummy("pad:4\n");
+            phase = 40;
+            break;
+        case 7:
+            debug_StdPrintfDummy("pad:7\n");
+            phase = 70;
+            break;
+        }
+        debug_StdPrintfDummy("pad:%03x\n", mode);
+        break;
+    case 40:
+        if (scePadInfoMode(port, slot, 4, -1) == 0) {
+            phase = 99;
+            break;
+        }
+        phase++;
+    case 41:
+        debug_StdPrintfDummy("pad:41\n");
+        if (scePadSetMainMode(port, slot, 1, 3) == 1) {
+            phase++;
+        }
+        break;
+    case 42:
+        debug_StdPrintfDummy("pad:42\n");
+        if (scePadGetReqState(port, slot) == 1) {
+            phase--;
+        }
+        if (scePadGetReqState(port, slot) != 0) {
+            break;
+        }
+        phase = 0;
+        debug_StdPrintfDummy("pad:switch to ANALOG mode\n");
+        break;
+    case 70:
+        debug_StdPrintfDummy("pad:70\n");
+        if (scePadInfoPressMode(port, slot) == 1) {
+            phase++;
+        } else {
+            phase = 75;
+        }
+        break;
+    case 71:
+        debug_StdPrintfDummy("pad:71\n");
+        if (scePadEnterPressMode(port, slot) == 1) {
+            phase++;
+        }
+        break;
+    case 72:
+        debug_StdPrintfDummy("pad:72\n");
+        if (scePadGetReqState(port, slot) == 1) {
+            phase--;
+        }
+        if (scePadGetReqState(port, slot) != 0) {
+            break;
+        }
+        phase = 75;
+        debug_StdPrintfDummy("pad:switch to PRESSURE SENSE mode\n");
+        break;
+    case 75:
+        debug_StdPrintfDummy("pad:75\n");
+        if (scePadInfoAct(port, slot, -1, 0) == 0) {
+            phase = 99;
+        }
+        dev->act[0] = 0;
+        dev->act[1] = 1;
+        for (i = 2; i < 6; i++) {
+            dev->act[i] = 255;
+        }
+        if (scePadSetActAlign(port, slot, dev->act) != 0) {
+            phase++;
+        }
+        break;
+    case 76:
+        debug_StdPrintfDummy("pad:76\n");
+        if (scePadGetState(port, slot) != 5) {
+            phase = 99;
+        }
+        break;
+    default:
+        if (state == 7) {
+            cnt++;
+            dev->state = prev;
+            dev->phase = -1;
+            dev->errCount = cnt;
+            dev->lastTermId = id;
+            debug_assert(__FILE__, 404);
+            __assert(__FILE__, 404, "0");
+            return -1;
+        }
+        if (state == 6 || state == 2) {
+            unsigned char data[32];
+
+            if (scePadRead(port, slot, data) != 0) {
+                padTermId = data[1];
+            }
+            /* the line after assigns id again; the object keeps this arm's
+               own copy of the assignment */
+            if (id != 0 && padTermId != id) {
+                phase = 0;
+                id = padTermId;
+            }
+            dev->termId = id = padTermId;
+        }
+        break;
+    }
+    dev->state = state;
+    dev->phase = phase;
+    dev->errCount = cnt;
+    dev->lastTermId = id;
+    return phase;
+}
+
+static int controler_stable_check_aug6(IosPadDevRec *dev)
 {
     int port = dev->port;
     int slot = dev->slot;
@@ -388,8 +546,8 @@ static int controler_stable_check_aug6jun26(IosPadDevRec *dev)
             dev->phase = -1;
             dev->errCount = cnt;
             dev->lastTermId = id;
-            debug_assert(__FILE__, LN(468, 465, 468, 468, 422, 404, 465));
-            __assert(__FILE__, LN(468, 465, 468, 468, 422, 404, 465), "0");
+            debug_assert(__FILE__, LN(468, 465, 468, 468, 422, 422, 465));
+            __assert(__FILE__, LN(468, 465, 468, 468, 422, 422, 465), "0");
             return -1;
         }
         if (state == 6 || state == 2) {
@@ -417,11 +575,14 @@ static int controler_stable_check_aug6jun26(IosPadDevRec *dev)
 
 static int controler_stable_check(IosPadDevRec *dev)
 {
+    if (ICO_JUN26) {
+        return controler_stable_check_jun26(dev);
+    }
     if (ICO_NTSC) {
         return controler_stable_check_ntsc(dev);
     }
-    if (ICO_AUG6JUN26) {
-        return controler_stable_check_aug6jun26(dev);
+    if (ICO_AUG6) {
+        return controler_stable_check_aug6(dev);
     }
     int port = dev->port;
     int slot = dev->slot;
@@ -591,8 +752,8 @@ static int controler_stable_check(IosPadDevRec *dev)
             dev->phase = -1;
             dev->errCount = cnt;
             dev->lastTermId = id;
-            debug_assert(__FILE__, LN(468, 465, 468, 468, 422, 404, 465));
-            __assert(__FILE__, LN(468, 465, 468, 468, 422, 404, 465), "0");
+            debug_assert(__FILE__, LN(468, 465, 468, 468, 422, 422, 465));
+            __assert(__FILE__, LN(468, 465, 468, 468, 422, 422, 465), "0");
             return -1;
         }
         if (state == 6 || state == 2) {
@@ -624,8 +785,8 @@ int iosPadDevInit(void *desc)
 
     if (scePadInit(0) != 1) {
         debug_StdPrintfDummy("pad:init error\n");
-        debug_assert(__FILE__, LN(553, 550, 553, 508, 508, 553, 550));
-        __assert(__FILE__, LN(553, 550, 553, 508, 508, 553, 550), "0");
+        debug_assert(__FILE__, LN(553, 550, 553, 508, 508, 490, 550));
+        __assert(__FILE__, LN(553, 550, 553, 508, 508, 490, 550), "0");
         return 0;
     }
     for (i = 0; i < 2; i++) {
@@ -638,8 +799,8 @@ int iosPadDevInit(void *desc)
         dev->state = 0xFFFF;
         if (scePadPortOpen(i, 0, dev->dmaBuf) == 0) {
             debug_StdPrintfDummy("ERROR: scePadPortOpen port%d slot%d\n", i, 0);
-            debug_assert(__FILE__, LN(569, 566, 569, 523, 523, 569, 566));
-            __assert(__FILE__, LN(569, 566, 569, 523, 523, 569, 566), "0");
+            debug_assert(__FILE__, LN(569, 566, 569, 523, 523, 505, 566));
+            __assert(__FILE__, LN(569, 566, 569, 523, 523, 505, 566), "0");
         }
     }
     iosPadConfCustom = iosPadConfDefault;

@@ -18,8 +18,8 @@ static char omSpeedName[8][8] = {"STOP", "1/1",   "1/2",  "1/3",
 
 void iosOmInit(void)
 {
-    isysGObjInit(320);
-    isysGObjProcessInit(1280);
+    isysGObjInit(PAL_JUN26(320, 288));
+    isysGObjProcessInit(PAL_JUN26(1280, 1152));
     isysGObjDlInit();
     return isysGObjCameraDlInit();
 }

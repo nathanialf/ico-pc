@@ -102,7 +102,15 @@ static inline int getDitchCarryMode(void) /* derived name */
     return 0;
 }
 
-static inline int getDitchCarryModeStage8_ntscaug6jun26(void) /* derived name */
+static inline int getDitchCarryModeStage8_jun26(void) /* derived name */
+{
+    if (stage_no == 8) {
+        return getDitchCarryMode();
+    }
+    return 0;
+}
+
+static inline int getDitchCarryModeStage8_ntscaug6(void) /* derived name */
 {
     void *a;
     void *b;
@@ -122,8 +130,11 @@ static inline int getDitchCarryModeStage8_ntscaug6jun26(void) /* derived name */
 
 static inline int getDitchCarryModeStage8(void) /* derived name */
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return getDitchCarryModeStage8_ntscaug6jun26();
+    if (ICO_JUN26) {
+        return getDitchCarryModeStage8_jun26();
+    }
+    if (ICO_NTSCAUG6) {
+        return getDitchCarryModeStage8_ntscaug6();
     }
     if (stage_no == 8) {
         return getDitchCarryMode();
@@ -284,8 +295,32 @@ static void getDitchDistTbl(float **tbl, float *range, int *sofa, float *pos, vo
     }
 }
 
-static int GetDitchPosition_ntscaug6jun26(float *out, float *org, float *dir, float d0, float d1,
-                                          float h)
+static inline unsigned char GetDitchPosition_jun26(float *out, float *org, float *dir, float d0,
+                                                   float d1, float h)
+{
+    (void)h; /* PC port: the European parameter, unused here */
+    ClipWork work;
+    float tmp[4];
+
+    sceVu0ScaleVector(tmp, dir, d0 + d1);
+    sceVu0AddVector(work.pt[0], org, tmp);
+    work.pt[1][0] = work.pt[0][0];
+    work.pt[1][1] = work.pt[0][1];
+    work.pt[1][2] = work.pt[0][2];
+    work.pt[0][1] -= 100.0f;
+    work.pt[1][1] += 100.0f;
+    ClipFloor(&work);
+    if (work.floor.elem != 0) {
+        out[0] = work.pt[2][0];
+        out[1] = work.pt[2][1];
+        out[2] = work.pt[2][2];
+        return 1;
+    }
+    return 0;
+}
+
+static int GetDitchPosition_ntscaug6(float *out, float *org, float *dir, float d0, float d1,
+                                     float h)
 {
     (void)h; /* PC port: the European parameter, unused here */
     ClipWork work;
@@ -327,8 +362,11 @@ static int GetDitchPosition_ntscaug6jun26(float *out, float *org, float *dir, fl
 
 static int GetDitchPosition(float *out, float *org, float *dir, float d0, float d1, float h)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return GetDitchPosition_ntscaug6jun26(out, org, dir, d0, d1, h);
+    if (ICO_JUN26) {
+        return GetDitchPosition_jun26(out, org, dir, d0, d1, h);
+    }
+    if (ICO_NTSCAUG6) {
+        return GetDitchPosition_ntscaug6(out, org, dir, d0, d1, h);
     }
     ClipWork work;
     float tmp[4];
@@ -419,7 +457,35 @@ static void DebugActOrientFlag_ntsc(unsigned int *f)
     }
 }
 
-static void DebugActOrientFlag_aug6jun26(unsigned int *f)
+static void DebugActOrientFlag_jun26(unsigned int *f)
+{
+    OrientFlagRow tbl[16] = {
+        {(f[1] >> 8) & 1, "climb_50  "},    {(f[1] >> 9) & 1, "climb_100 "},
+        {(f[1] >> 10) & 1, "climb_200 "},   {(f[1] >> 11) & 1, "climb_300 "},
+        {(f[1] >> 26) & 1, "hold_box  "},   {(f[2] >> 3) & 1, "hang_hand "},
+        {(f[2] >> 4) & 1, "hang_breas"},    {(f[2] >> 12) & 1, "ladder_up "},
+        {(f[2] >> 13) & 1, "ladder_dow"},   {(f[2] >> 19) & 1, "down_cliff"},
+        {(f[2] >> 20) & 1, "walk_wall"},    {(f[2] >> 22) & 1, "walk_stair"},
+        {(f[2] >> 23) & 1, "pulledup_50 "}, {(f[2] >> 24) & 1, "pulledup_100"},
+        {(f[2] >> 25) & 1, "pulledup_200"}, {-1},
+    };
+    int y = 40;
+    int i;
+
+    for (i = 0; tbl[i].on != -1; i++) {
+        if (tbl[i].on) {
+            if (debug_font_flag & 1) {
+                debug_Printf(10, y += 8, 0x0FFFFFFF, "%s=on\n", tbl[i].name);
+            }
+        } else {
+            if (debug_font_flag & 1) {
+                debug_Printf(10, y += 8, 0x0FFFFFFF, "%s=off\n", tbl[i].name);
+            }
+        }
+    }
+}
+
+static void DebugActOrientFlag_aug6(unsigned int *f)
 {
     OrientFlagRow tbl[16] = {
         {(f[1] >> 11) & 1, "climb_50  "},   {(f[1] >> 12) & 1, "climb_100 "},
@@ -449,12 +515,16 @@ static void DebugActOrientFlag_aug6jun26(unsigned int *f)
 
 void DebugActOrientFlag(unsigned int *f)
 {
+    if (ICO_JUN26) {
+        DebugActOrientFlag_jun26(f);
+        return;
+    }
     if (ICO_NTSC) {
         DebugActOrientFlag_ntsc(f);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        DebugActOrientFlag_aug6jun26(f);
+    if (ICO_AUG6) {
+        DebugActOrientFlag_aug6(f);
         return;
     }
     OrientFlagRow tbl[16] = {
@@ -483,8 +553,37 @@ void DebugActOrientFlag(unsigned int *f)
     }
 }
 
+static inline void ACTSetEnvAllmighty_jun26(GObj *self)
+{
+    Act *s = GOBJ_ACT(self);
+    s->wish0.ll |= (1ULL << 37);
+    s->wish0.ll |= (1ULL << 38);
+    s->wish0.ll |= (1ULL << 39);
+    s->wish0.ll |= (1ULL << 40);
+    s->wish0.ll |= (1ULL << 42);
+    s->wish0.ll |= (1ULL << 43);
+    if (ACTGame_FLAG_TETSUNAGI()) {
+        s->flags18.ll &= ~(1ULL << 37);
+        s->handFreeFrame = 0;
+    } else {
+        if ((int)(s->flags18.ll >> 37) & 1)
+            s->wish0.ll |= (1ULL << 44);
+        s->handFreeFrame += 1;
+    }
+    s->wish0.ll |= (1ULL << 47);
+    s->wish0.ll |= (1ULL << 48);
+    s->wish0.ll |= (1ULL << 49);
+    s->wish0.ll |= (1ULL << 50);
+    s->wish0.ll |= (1ULL << 46);
+    s->wish1.ll |= (1ULL << 33);
+}
+
 inline void ACTSetEnvAllmighty(GObj *self)
 {
+    if (ICO_JUN26) {
+        ACTSetEnvAllmighty_jun26(self);
+        return;
+    }
     Act *s = GOBJ_ACT(self);
     if (ICO_NTSCAUG6JUN26) {
         s->wish0.ll |= (1ULL << 37);
@@ -604,7 +703,7 @@ static inline unsigned char ditchProbe(GObj *o, float h) /* derived name */
     s = GOBJ_ACT(o);
     if (o == boyGObj && stageData[stage_no].flag2 && (s->actMode == 4 || s->actMode == 5)) {
         memset(&work, 0, ICO_MAX_SIZE(ClipWork, 0xC0));
-        GetSkeltonPosition(work.pt[0], o, PAL_NTSCAUG6JUN26(0x2C, 44));
+        GetSkeltonPosition(work.pt[0], o, PAL_NTSCAUG6(0x2C, 44));
         work.pt[1][0] = work.pt[0][0];
         work.pt[1][2] = work.pt[0][2];
         work.pt[1][1] = work.pt[0][1] + 200.0f;
@@ -1718,7 +1817,872 @@ static void ACTGetEnvironment_ntsc(void *self, void *dir, float *orient, EnvFlag
     }
 }
 
-static void ACTGetEnvironment_aug6jun26(void *self, void *dir, float *orient, EnvFlag *flags, ActEnv *env)
+static void ACTGetEnvironment_jun26(void *self, void *dir, float *orient, EnvFlag *flags, ActEnv *env)
+{
+    float prj[4];
+    float pos[4];
+
+    Act *sub = GOBJ_ACT(self);
+    GObj *obj = GOBJ_SUB(self)->root.wall.o.obj;
+    GObj *parent = GOBJ_SUB(self)->parent.obj;
+    float dist = ICO_RAW(float, sub->motReq, 0x138, ((struct MotCtrl *)sub->motReq)->wallDist);
+    float hgt =
+        -ICO_RAW(float, sub->motReq, 0x130, ((struct MotCtrl *)sub->motReq)->wallFloorHeight);
+    float wallh = -GOBJ_SUB(self)->ctrl.wallTopHeight;
+    float hh = ICO_RAW(float, sub->motReq, 0x114, ((struct MotCtrl *)sub->motReq)->cliffDist);
+    float f26 = ICO_RAW(float, sub->motReq, 0x110, ((struct MotCtrl *)sub->motReq)->cliffHeight);
+    int v1D8 = 1;
+    int v1DC = 1;
+    int v1E0;
+    int v1E4 = 0;
+    int v1E8 = 0;
+    int wallHit = GOBJ_SUB(self)->ctrl.wallHit;
+    int fieldWallHit = GOBJ_SUB(self)->ctrl.fieldWallHit;
+    GObj *v1EC = 0;
+    float k;
+    float kk;
+    float kd;
+    int g;
+
+    GObj *o;
+
+    memset(prj, 0, 16);
+    if ((char *)GOBJ_SUB(self)->root.wall.elem == 0) {
+        fieldWallHit = 0;
+        wallHit = 0;
+    }
+    if (fieldWallHit == 0 && wallHit == 0)
+        dist = 3.40282347e+38f /* FLT_MAX */;
+    if (GOBJ_SUB(self)->ctrl.cliffEdge == 0)
+        hh = 3.40282347e+38f /* FLT_MAX */;
+    if ((int)(sub->flags18.ll >> 46) & 1)
+        v1D8 = 0;
+    if (GOBJ_SUB(self)->ctrl.groundHeight > _ACTGame_GetParamF(1)) {
+        v1D8 = 0;
+        v1DC = 0;
+    }
+    GetRootProjectionPosOfGObj(prj, self);
+    GetRootPosition(pos, self);
+    env->motOriReq = *(MotOriReq *)&GOBJ_SUB(self)->root.wall;
+    sub->flags18.ll &= ~(1ULL << 38);
+    sub->flags18.ll &= ~(1ULL << 39);
+    sub->flags18.ll &= ~(1ULL << 59);
+    if ((int)sub->flags20.ll & 1) {
+        k = 100.0f;
+        v1E0 = 0;
+    } else {
+        k = 300.0f;
+        v1E0 = 1;
+    }
+    if (self == girlGObj)
+        v1E0 = 0;
+    {
+        float p40[4], p50[4], p60[4], p70[4], p80[4];
+
+        for (o = isysGObjSearchFromObjKindID_begin(42); o != 0;
+             o = isysGObjSearchFromObjKindID_next(o)) {
+            if (o->active) {
+                GetCageChainPoint(p40, p50, o);
+                if (_DistxzSqGV(test_CURRENTROOT(self), p40) < 4900.0f && p50[1] > pos[1]) {
+                    v1EC = o;
+                    env->cageObj.obj = o;
+                    break;
+                }
+            }
+        }
+        if (v1EC != 0) {
+            GetRootPositionHandExtra(self, p60);
+            GetCageChainPoint(p70, p80, v1EC);
+            if (p70[1] + 50.0f < p60[1])
+                flags[0].w |= 0x800000;
+            if (((p60[1] - p70[1]) < 0.0f ? -(p60[1] - p70[1]) : (p60[1] - p70[1])) < 100.0f)
+                flags[0].w |= 0x1000000;
+            debug_NMarker(p80, 0, 0xFF, 0, 100.0f);
+            debug_NMarker(p70, 0, 0, 0xFF, 100.0f);
+        }
+    }
+    if (wallHit != 0) {
+        if (CheckPureWallAttribute(self, 0x300))
+            hgt = wallh = 3.40282347e+38f /* FLT_MAX */;
+    }
+    if (GOBJ_SUB(self)->ctrl.cliffEdge) {
+        if (CheckPureCliffAttribute(self, 0x300))
+            hh = 3.40282347e+38f /* FLT_MAX */;
+    }
+    if ((fieldWallHit != 0 || wallHit != 0) && (char *)GOBJ_SUB(self)->root.wall.elem != 0) {
+        GetOrientOfWall(env->wallOrient, GOBJ_SUB(self)->root.wall.elem, &GOBJ_SUB(self)->root.wall.o);
+        env->wallOrient[3] = 1.0f;
+        if (wallHit != 0) {
+            float p60[4];
+            int c1 = 1;
+            int c2 = 1;
+            int r;
+
+            if (ACTGame_FLAG_TETSUNAGI()) {
+                if (self == boyGObj)
+                    c2 = 0;
+                if (self == girlGObj)
+                    c1 = 0;
+            }
+            GetSkeltonOrient(p60, self, 44);
+            r = rotyFromBack(p60, env->wallOrient);
+            if (c2 && 30 < r)
+                flags[0].w |= 0x10;
+            if (c1 && r < -30)
+                flags[0].w |= 8;
+        }
+        if (fieldWallHit != 0) {
+            if (dist < k) {
+                int ry = absRotyFromBack(dir, env->wallOrient);
+
+                sub->flags18.ll |= (1ULL << 49);
+                if (dist < 60.0f && ry < 30)
+                    sub->flags18.ll |= (1ULL << 48);
+            }
+        }
+    }
+    if (wallHit == 0 && GOBJ_SUB(self)->ctrl.sideWall) {
+        if (GOBJ_SUB(self)->ctrl.sideWallDist < 100.0f) {
+            if (absRotyFromBack(dir, GOBJ_SUB(self)->ctrl.sideWallNormal) < 40) {
+                sub->flags18.ll |= (1ULL << 38);
+                sub->flags18.ll |= (1ULL << 39);
+            }
+        }
+    }
+    if (dist != 3.40282347e+38f /* FLT_MAX */ && wallHit != 0 && v1D8) {
+        void *ori2 = test_CURRENTORIENT(self);
+        int wallDeg;
+
+        wallDeg = absRotyFromBack(ori2, env->wallOrient);
+        env->wallWord = ((FcWallEnt *)env->motOriReq.a.wall.elem)->attr;
+        env->wallObj = obj;
+        flags[0].w |= 1;
+        if (hgt < wallh && hgt != -3.40282347e+38f /* -FLT_MAX */)
+            hgt = wallh;
+        if (dist < k && 40.0f <= PosOrFar(hgt))
+            sub->flags18.ll |= (1ULL << 49);
+        if (dist < 300.0f && PosOrFar(hgt) <= 250.0f)
+            flags[0].w |= 2;
+        if (CheckWallAttributeNotYorda(self,0xB000, 1) || CheckWallAttributeNotYorda(self,0xE000, 1) ||
+            CheckWallAttributeNotYorda(self,0xC000, 0) || CheckWallAttributeNotYorda(self,0xD000, 1) ||
+            CheckWallAttributeNotYorda(self, 0x1000, 1) || CheckWallAttributeNotYorda(self,0x3000, 0))
+            hgt = wallh;
+        if (self == girlGObj && CheckPureWallAttribute(self, 0x7000)) {
+            wallh = 3.40282347e+38f /* FLT_MAX */;
+            hgt = wallh;
+            if (ACTGame_FLAG_TETSUNAGI() &&
+                test_CURRENTROOT((girlGObj))[1] >
+                    test_CURRENTROOT(boyGObj)[1] + 50.0f) {
+                float p60[4], p70[4], p80[4];
+                float p90[4][4];
+
+                sceVu0ScaleVector(p60, env->wallOrient, -1.0f);
+                GetMatrixDirectionToZ(p90[0], p60);
+                sceVu0SubVector(p70, test_CURRENTROOT(boyGObj),
+                                test_CURRENTROOT((girlGObj)));
+                p70[3] = 0.0f;
+                sceVu0ApplyMatrix(p80, p90, p70);
+                if (dist < p80[2])
+                    sub->flags20.ll |= (1ULL << 3);
+            }
+        }
+        /* the August 2001 preview also stores the wall's height and attribute in two Act
+           words no code reads (envWallHeight, envWallAttr): not carried */
+        if (dist < 40.0f) {
+            sub->flags18.ll |= (1ULL << 38);
+            if (136 <= _AbsRotyGV(test_CURRENTORIENT(self), env))
+                sub->flags18.ll |= (1ULL << 39);
+        }
+        {
+            float p60[4];
+            int t7 = 90.0f < hgt && hgt < 110.0f;
+            int t3;
+            char t16;
+            char t17;
+            MotionDef *row;
+
+            row = &motionKind[GOBJ_SUB(self)->ctrl.motion];
+            g = 1;
+            if ((row->modeBits.word >> 19) & 7) {
+                kk = 60.0f;
+            } else if ((row->flags.word >> 28) & 1) {
+                kk = 50.0f;
+            } else {
+                kk = 40.0f;
+            }
+            if (dist < 120.0f && t7) {
+                sceVu0ScaleVector(p60, env->wallOrient, dist);
+                sceVu0AddVector((float *)GOBJ_WORK(self)->effRec[1].pos,
+                                pos, p60);
+                sceVu0ScaleVector((float *)GOBJ_WORK(self)->effRec[1].dir,
+                                  env->wallOrient, -1.0f);
+                GOBJ_WORK(self)->effRec[1].power = 40.0f;
+                GOBJ_WORK(self)->effRec[1].frames = 20;
+                GOBJ_WORK(self)->effRec[1].kind = 1;
+                flags[0].w |= 0x20000000;
+            }
+            if (self == girlGObj && _ACTCharStatus_Check(self, 24)) {
+                sceVu0SubVector(p60, test_CURRENTROOT((girlGObj)),
+                                test_CURRENTROOT(boyGObj));
+                p60[1] = 0.0f;
+                if (sceVu0InnerProduct(p60, test_CURRENTORIENT(boyGObj)) < 100.0f) {
+                    int t = 0;
+
+                    if (obj->kind == 17)
+                        t = (GOBJ_SUB(boyGObj)->parent.obj != 0 &&
+                             obj != GOBJ_SUB(boyGObj)->parent.obj);
+                    else
+                        t = 0;
+                    if (!t)
+                        g = 0;
+                }
+            }
+            t3 = 10.0f < hgt && hgt < 75.0f;
+            t17 = 75.0f < hgt && hgt < 150.0f;
+            t16 = 150.0f < hgt && hgt < 250.0f;
+            if (dist < kk && g) {
+                if (t3) {
+                    if (CheckPureWallAttribute(self, 0xA00))
+                        flags[1].w |= 0x200;
+                    else
+                        flags[1].w |= 0x100;
+                }
+                if (t17)
+                    flags[1].w |= 0x200;
+                if (t16)
+                    flags[1].w |= 0x400;
+                if (sub->wish1.ll & 0xF00) {
+                    if (((int)(sub->wish1.ll >> 10) & 1) &&
+                        ((struct GObj *)self)->kind == 4)
+                        wallContactPosEnemy(self, env->wallOrient, dist, sub->env.wallPos);
+                    else
+                        wallContactPos(self, env->wallOrient, dist, sub->env.wallPos);
+                }
+                if (80.0f < hgt && hgt < 180.0f) {
+                    if (obj->kind == 17)
+                        flags[1].w |= 0x2000;
+                    else
+                        flags[1].w |= 0x1000;
+                }
+                if (CheckPureWallAttribute(self, 0x2000) && 80.0f < wallh && wallh < 180.0f)
+                    flags[0].w |= 0x80000000;
+            }
+            if (dist < 50.0f) {
+                if (obj->kind == 16) {
+                    GetSofaPosition(self, obj);
+                    debug_NMarker(sub->env.sofaPos, 0, 0xFF, 0, 100.0f);
+                    if (_DistxzSqGV(prj, sub->env.sofaPos) < 900.0f) {
+                        flags[0].w |= 0x40000000;
+                        env->sofaObj.i = (ICO_WORD)obj;
+                    }
+                }
+        if (obj->kind == 17 && IsThisBoxTruck(obj) != 7 && !CheckWallAttribute(self, 0xB00)) {
+            float p70[4];
+
+            flags[1].w |= 0x8000000;
+            env->boxObj = obj;
+            if (CanHoldBox(obj) && GetBoxHoldPoint(p70, obj, self)) {
+                flags[1].w |= 0x4000000;
+                env->holdBoxObj = obj;
+            }
+        }
+        if (obj->kind == 18 && CheckWallAttribute(self, 0x700)) {
+            flags[1].w |= 0x10000000;
+            env->barObj = obj;
+        }
+        if (obj->kind == 23 && CheckPureWallAttribute(self, 0x500)) {
+            flags[1].w |= 0x20000000;
+            env->pullParent = parent;
+            env->pullObj = obj;
+            pullPosition(env->pullPos, self, obj, 5.0f);
+        }
+        if (obj->kind == 22 && CheckWallAttribute(self, 0x500) &&
+            CanFloorLeverPull(obj)) {
+            flags[1].w |= 0x40000000;
+            env->pullObj = obj;
+            pullPosition(env->pullPos, self, obj, 5.0f);
+        }
+        if (obj->kind == 24 && CheckWallAttribute(self, 0x600) &&
+            CanWallLeverPull(obj)) {
+            flags[1].w |= 0x80000000;
+            env->pullObj = obj;
+            pullPosition(env->pullPos, self, obj, 30.0f);
+        }
+        if (obj->kind == 25 && CheckWallAttribute(self, 0x600) &&
+            CanWallLeverPull(obj)) {
+            flags[2].w |= 1;
+            env->pullObj = obj;
+            pullPosition(env->pullPos, self, obj, 30.0f);
+        }
+    }
+    if (dist < 40.0f) {
+        if (CheckWallAttribute(self, 0x400) || CheckPureWallAttribute(self, 0x400)) {
+            flags[2].w |= 0x1000;
+            env->edgeOrient[0] = env->wallOrient[0];
+            env->edgeOrient[1] = env->wallOrient[1];
+            env->edgeOrient[2] = env->wallOrient[2];
+            collisCenterOwn(env->edgePos, self, 0);
+            {
+                float p70[4];
+
+                sceVu0ScaleVector(p70, env->wallOrient, 30.0f);
+                sceVu0AddVector(env->edgePos, env->edgePos, p70);
+            }
+            env->edgePos[3] = 1.0f;
+        }
+        if (CheckWallAttribute(self, 0xC000)) {
+            flags[2].w |= 0x80;
+        }
+    }
+    switch (((int)(&motionKind[GOBJ_SUB(self)->ctrl.motion])->modeBits.word << 11) >> 30) {
+    default:
+        kd = 60.0f;
+        break;
+    case -1:
+        if (CheckWallAttributeNotYorda(self, 0x1000, 1)) {
+            kd = 30.0f;
+        } else {
+            kd = GetCorrectDistance(wallDeg, motionKind[GOBJ_SUB(self)->ctrl.motion].clipRadius + 2.0f);
+        }
+        kd = (kd < 0.0f) ? 0.0f : ((30.0f < kd) ? 30.0f : kd);
+        break;
+    case 1:
+        kd = 150.0f;
+        break;
+    }
+    if (dist < kd) {
+        int c130 = (130.0f <= hgt && hgt < 170.0f);
+        char c60a = (60.0f < hgt && hgt < 100.0f);
+        int c60b = (60.0f < hgt && hgt < 150.0f);
+        int c60c = (60.0f < hgt && hgt < 230.0f);
+
+        if (CheckWallAttribute(self, 0xB000))
+            flags[2].bit.b5 = c60b;
+        else if (CheckWallAttribute(self, 0xE000))
+            flags[2].bit.b6 = c60b;
+        else if (CheckWallAttribute(self, 0xD000))
+            flags[2].bit.b9 = c60b;
+        else if (CheckWallAttribute(self, 0x1000))
+            flags[2].bit.b10 = c60b;
+        else if (CheckWallAttribute(self, 0x3000))
+            flags[2].bit.b11 = c60b;
+        else if (GOBJ_SUB(self)->root.cliffFloor) {
+            flags[2].bit.b4 = c60a;
+            flags[2].bit.b3 = c130;
+            if (obj->kind == 42)
+                flags[2].bit.b3 = c60c;
+        }
+    }
+    if (dist < 50.0f && absRotyFromBack(orient, env->wallOrient) < 40 &&
+        (self == boyGObj || (130.0f < hgt && obj->kind != 16)))
+        ((Act *)sub )->wish2.ll |= (1ULL << 52);
+    if (((int)(((Act *)sub )->wish2.ll >> 52) & 1) && 65.0f < PosOrFar(hgt) &&
+        (float)wallDeg < 30.0f)
+        ((Act *)sub )->wish0.ll |= (1ULL << 41);
+    if (dist < 60.0f) {
+        int e = ((float)wallDeg < 30.0f) ? 1 : 0;
+
+        if (obj->kind == 52) {
+            if (!QueenBarrierInqBreakable())
+                ((Act *)sub )->wish0.ll |= (1ULL << 58);
+        } else
+            ((Act *)sub)->wish0.ll |= (1ULL << 57);
+        if (230.0f < PosOrFar(hgt) && !CheckWallAttribute(self, 0x400)) {
+            if (e)
+                ((Act *)sub)->wish0.ll |= (1ULL << 59);
+        }
+    }
+    if (((struct GObj *)self)->kind == 4 && GOBJ_ACT(self)->enemy->liftKind == 3 &&
+        dist < 180.0f && GOBJ_SUB(self)->root.cliffFloor) {
+        if (40.0f <= hgt && hgt < 300.0f)
+            flags[1].w |= 0x20000;
+        else if (300.0f <= hgt && hgt < 500.0f)
+            flags[1].w |= 0x40000;
+        else if (500.0f <= hgt && hgt < 700.0f)
+            flags[1].w |= 0x80000;
+    }
+        }
+    }
+    if (hh != 3.40282347e+38f /* FLT_MAX */ && GOBJ_SUB(self)->ctrl.cliffEdge && v1DC) {
+        int r;
+
+        GetOrientOfCliffOfGObj(env->cliffOrient, self);
+        env->cliffOrient[3] = 1.0f;
+        r = absRotyFromScaled(test_CURRENTORIENT(self), env->cliffOrient, 1.0f);
+        if (sub->actMode == 41)
+            flags[1].w |= 1;
+        if (hh < k && 40.0f <= f26)
+            sub->flags18.ll |= (1ULL << 50);
+        if (hh < 300.0f && 100.0f <= f26) {
+            flags[0].w |= 4;
+            env->cliffHeight = hh;
+        }
+        switch ((unsigned int)sub->actMode) {
+        case 2:
+            if (hh < 20.0f && 180.0f < f26) {
+                flags[2].bit.b19 = v1E0;
+                {
+                    float p60[4], p70[4];
+
+                    p60[0] = ((float *)orient)[0];
+                    p60[1] = ((float *)orient)[1];
+                    p60[2] = ((float *)orient)[2];
+                    sceVu0ScaleVector(p60, p60, hh);
+                    GetRootPosition(p70, self);
+                    sceVu0AddVector(env->cliffEdgePos, p70, p60);
+                    if (5.0f < hh && CheckFloorAttribute(self, 0xF000) && 20.0f < (float)r) {
+                        float d = (15.0f - hh) * 5.0f / 15.0f;
+                        float s;
+                        float p80[4], p90[4];
+
+                        s = (d < 0.0f) ? 0.0f : ((5.0f < d) ? 5.0f : d);
+                        sceVu0ScaleVector(p90, env->cliffOrient, -s);
+                        sceVu0AddVector(p80, test_CURRENTROOT(self), p90);
+                        env->cliffBackPos[0] = p80[0];
+                        env->cliffBackPos[1] = p80[1];
+                        env->cliffBackPos[2] = p80[2];
+                        flags[2].w |= 0x40000000;
+                        flags[2].w &= ~0x80000;
+                    }
+                }
+            }
+            break;
+        case 1:
+        case 42:
+        case 15:
+            if (hh < 40.0f && 1000.0f < f26)
+                flags[2].w |= 0x40000;
+            break;
+        case 3:
+            if (hh < 40.0f && 1000.0f < f26) {
+                flags[2].bit.b19 = v1E0;
+                flags[2].w |= 0x40000;
+                {
+                    float p60[4], p70[4];
+
+                    p60[0] = ((float *)orient)[0];
+                    p60[1] = ((float *)orient)[1];
+                    p60[2] = ((float *)orient)[2];
+                    sceVu0ScaleVector(p60, p60, hh + 10.0f);
+                    GetRootPosition(p70, self);
+                    sceVu0AddVector(env->cliffEdgePos, p70, p60);
+                    if (5.0f < hh && CheckFloorAttribute(self, 0xF000) && 20.0f < (float)r) {
+                        float d = (25.0f - hh) * 5.0f / 25.0f;
+                        float s;
+                        float p80[4], p90[4];
+
+                        s = (d < 0.0f) ? 0.0f : ((5.0f < d) ? 5.0f : d);
+                        sceVu0ScaleVector(p90, env->cliffOrient, -s);
+                        sceVu0AddVector(p80, test_CURRENTROOT(self), p90);
+                        env->cliffBackPos[0] = p80[0];
+                        env->cliffBackPos[1] = p80[1];
+                        env->cliffBackPos[2] = p80[2];
+                        flags[2].w |= 0x40000000;
+                        flags[2].w &= ~0x80000;
+                        flags[2].w &= ~0x40000;
+                    }
+                }
+            }
+            break;
+        }
+        if (ACTGame_FLAG_TETSUNAGI() && hh < 40.0f && 1000.0f < f26) {
+            env->cliffContact = *(MotOriReq *)&GOBJ_SUB(self)->root.wall;
+            flags[0].w |= 0x400000;
+        }
+        if (hh < 40.0f) {
+            if (CheckPureCliffAttribute(self, 0x400) && 60.0f < f26) {
+                env->edgeOrient[0] = env->cliffOrient[0];
+                env->edgeOrient[1] = env->cliffOrient[1];
+                env->edgeOrient[2] = env->cliffOrient[2];
+                flags[2].w |= 0x2000;
+                collisCenterOwn(env->edgePos, self, 1);
+                env->edgePos[3] = 1.0f;
+            }
+            if (CheckPureCliffAttribute(self, 0xC000))
+                flags[2].w |= 0x100;
+        }
+        if (hh < 25.0f && v1E0) {
+            if (f26 < 55.0f)
+                sub->wish1.ll |= (1ULL << 14);
+            else if (f26 < 105.0f)
+                sub->wish1.ll |= (1ULL << 15);
+            else if (f26 < 205.0f)
+                sub->wish1.ll |= (1ULL << 16);
+        }
+
+        {
+        float p60[4], p70[4], p80[4], p90[4];
+        int sel;
+        int v200;
+        int v204;
+        float lim;
+        float hdif;
+
+        if (girlGObj != 0 && self == boyGObj && hh < 200.0f &&
+            !ACTGame_FLAG_TETSUNAGI() && !CheckPureCliffAttribute(self, 0x7000) &&
+            !CheckPureCliffAttribute(self, 0x400)) {
+            float pA0[4], pB0[4];
+            float pC0[4][4];
+            float p100[4], p110[4], p120[4], p130[4], p140[4], p150[4], p160[4], p170[4];
+
+            v200 = 1;
+            hdif = -GetHeightOfFieldPlaneDifference(boyGObj, girlGObj);
+            if (!(hh < 60.0f))
+                v200 = 0;
+            v204 = 1;
+            sel = 0;
+            lim = 3.40282347e+38f /* FLT_MAX */;
+            GetRootPosition(p60, boyGObj);
+            GetRootPosition(p70, girlGObj);
+            if (f26 < 55.0f) {
+            } else if (f26 < 155.0f) {
+                lim = 80.0f;
+                sel = 100;
+            } else if (f26 < 255.0f) {
+                lim = 160.0f;
+                sel = 200;
+            } else if (f26 < 355.0f) {
+                sel = 300;
+                lim = 160.0f;
+            }
+            if (stage_no == 7) {
+                GetRootProjectionPosOfGObj(p80, girlGObj);
+                if (sel == 200) {
+                    if (!(180.0f < p80[1] - prj[1]))
+                        v204 = 0;
+                    if (prj[0] * p80[0] < 0.0f)
+                        v204 = 0;
+                }
+            }
+            /* the low-step flag is declared once the root positions are
+               taken: the demo's spill slots run v200, v204, &p60, v208 (aug6
+               keeps the same order), so v208's register is numbered after
+               the &p60 argument's; the block's spelling is not pinned */
+            {
+            int v208 = (sel < 200);
+
+            if (!v208) {
+                pA0[0] = prj[0];
+                pA0[1] = prj[1];
+                pA0[2] = prj[2];
+                sceVu0ScaleVector(p90, env->cliffOrient, hh + 50.0f);
+                sceVu0AddVector(pB0, pA0, p90);
+                pB0[1] = pB0[1] + f26;
+                GetMatrixDirectionToZ(pC0[0], env->cliffOrient);
+                for (o = isysGObjSearchFromObjKindID_begin(0x11); o != 0;
+                     o = isysGObjSearchFromObjKindID_next(o)) {
+                    if (o->active && IsThisBoxTruck(o) != 7) {
+                        p100[0] = test_CURRENTROOT(o)[0];
+                        p100[1] = test_CURRENTROOT(o)[1];
+                        p100[2] = test_CURRENTROOT(o)[2];
+                        if (_DistxzSqGV(pB0, p100) < 10000.0f &&
+                            !(100.0f < ((pB0[1] - p100[1]) < 0.0f ? -(pB0[1] - p100[1])
+                                                                  : (pB0[1] - p100[1])))) {
+                            sceVu0SubVector(p110, pos, p100);
+                            p110[3] = 0.0f;
+                            sceVu0ApplyMatrix(p120, pC0, p110);
+                            if (p120[0] < -30.0f || 40.0f < p120[0]) {
+                                v204 = 0;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if (sel != 0 && lim < hdif && _DistxzSqGV(p60, p70) < 2250000.0f && v204) {
+                GetRootPosition(p140, self);
+                sceVu0ScaleVector(p130, env->cliffOrient, hh);
+                sceVu0AddVector(env->cliffStepPos, p140, p130);
+                GetRootPosition(p160, self);
+                sceVu0ScaleVector(p150, env->cliffOrient, hh - 30.0f);
+                sceVu0AddVector((float *)GOBJ_WORK(self)->effRec[0].pos, p160, p150);
+                ((float *)GOBJ_WORK(self)->effRec[0].dir)[0] = env->cliffOrient[0];
+                ((float *)GOBJ_WORK(self)->effRec[0].dir)[1] = env->cliffOrient[1];
+                ((float *)GOBJ_WORK(self)->effRec[0].dir)[2] = env->cliffOrient[2];
+                GOBJ_WORK(self)->effRec[0].power = 30.0f;
+                GOBJ_WORK(self)->effRec[0].frames = 20;
+                GOBJ_WORK(self)->effRec[0].kind = 0;
+                sub->wish0.ll |= (1ULL << 60);
+                if (v200) {
+                    if (stage_no == 97) {
+                        GObj *box = isysGObjSearchFromObjKindID_begin(17);
+
+                        if (box != 0 &&
+                            _DistxzSqGV(test_CURRENTROOT(box), test_CURRENTROOT(self)) < 22500.0f &&
+                            !v208 && sel <= 300 &&
+                            test_CURRENTROOT(box)[1] > test_CURRENTROOT(self)[1] &&
+                            100.0f < ((test_CURRENTROOT(box)[1] - test_CURRENTROOT(self)[1]) < 0.0f
+                                          ? -(test_CURRENTROOT(box)[1] - test_CURRENTROOT(self)[1])
+                                          : (test_CURRENTROOT(box)[1] - test_CURRENTROOT(self)[1]))) {
+                            sceVu0ScaleVector(p170, env->cliffOrient, -50.0f);
+                            sel = 200;
+                            sceVu0AddVector(env->cliffStepPos, test_CURRENTROOT(box), p170);
+                        }
+                        env->cliffSel = sel;
+                    } else
+                        env->cliffSel = sel; /* stored on both paths: the words keep
+                                                one store (jump2 cross-jumps them),
+                                                the allocator counts both and sorts
+                                                env ahead of the front search's
+                                                &p90; spelling not pinned */
+                    switch (sel) {
+                    case 100:
+                        sub->wish1.ll |= (1ULL << 56);
+                        break;
+                    case 200:
+                        sub->wish1.ll |= (1ULL << 57);
+                        break;
+                    case 300:
+                        sub->wish1.ll |= (1ULL << 58);
+                        break;
+                    default:
+                        debug_assert("src/act-env.c", 1972);
+                        __assert("src/act-env.c", 1972, "0");
+                        break;
+                    }
+                }
+            }
+            }
+        }
+        if (girlGObj != 0 && self == boyGObj && hh < 80.0f && 350.0f < f26 &&
+            !ACTGame_FLAG_TETSUNAGI() &&
+            !(_DistSqGV(test_CURRENTROOT(boyGObj), test_CURRENTROOT((girlGObj))) <
+              10000.0f) &&
+            (GOBJ_ACT(girlGObj)->actMode == 4 ||
+             !(_DistxzSqGV(test_CURRENTROOT(boyGObj), test_CURRENTROOT((girlGObj))) <
+               (hh + 100.0f) * (hh + 100.0f))) &&
+            !(_DistxzSqGV(test_CURRENTROOT(boyGObj), test_CURRENTROOT((girlGObj))) < 40000.0f &&
+              300.0f < GetHeightOfFieldPlaneDifference(girlGObj, boyGObj))) {
+            _OrientXZGV(p80, test_CURRENTROOT((girlGObj)), test_CURRENTROOT(boyGObj));
+            if (_AbsRotyGV(p80, env->cliffOrient) < 80) {
+                if (GetDitchPosition(p90, pos, env->cliffOrient, hh, 150.0f, 0.0f) ||
+                    GetDitchPosition(p90, pos, env->cliffOrient, hh, 215.0f, 0.0f) ||
+                    GetDitchPosition(p90, pos, env->cliffOrient, hh, 315.0f, 0.0f)) {
+                    env->ditchPos[0] = p90[0];
+                    env->ditchPos[1] = p90[1];
+                    env->ditchPos[2] = p90[2];
+                    sub->wish1.ll |= (1ULL << 61);
+                }
+            }
+        }
+        if (hh < 30.0f) {
+            GObj *found = 0;
+            float p150[4], p160[4], p180[4], p190[4], p1A0[4];
+
+            p90[0] = env->cliffOrient[0];
+            p90[1] = env->cliffOrient[1];
+            p90[2] = env->cliffOrient[2];
+            _ApplyRyGV(p90, 1.5707964f);
+            for (o = isysGObjSearchFromObjKindID_begin(0x15); o != 0;
+                 o = isysGObjSearchFromObjKindID_next(o)) {
+                float d;
+
+                GetRootPosition(p160, o);
+                sceVu0SubVector(p150, p160, prj);
+                d = sceVu0InnerProduct(p150, p90);
+                if (_DistSqGV(prj, p160) < 4900.0f && (d < 0.0f ? -d : d) < 30.0f) {
+                    found = o;
+                    break;
+                }
+            }
+            if (v1EC != 0) {
+                sceVu0SubVector(p180, test_CURRENTROOT(v1EC), pos);
+                p180[1] = 0.0f;
+                if (0.0f < sceVu0InnerProduct(p180, env->cliffOrient))
+                    found = v1EC;
+            }
+            if (found != 0) {
+                sub->wish1.ll |= (1ULL << 49);
+                env->frontObj = found;
+                p1A0[0] = test_CURRENTROOT(found)[0];
+                p1A0[1] = test_CURRENTROOT(found)[1];
+                p1A0[2] = test_CURRENTROOT(found)[2];
+                sceVu0ScaleVector(p190, env->cliffOrient, -20.0f);
+                sceVu0AddVector((float *)&GOBJ_ACT(self)->enemy->ropeCliffX, p1A0, p190);
+                GOBJ_ACT(self)->enemy->ropeCliffY = pos[1];
+            }
+        }
+        }
+    }
+    CheckFloorAttribute(self, 0x200);
+    if (self == girlGObj && sub->actMode == 68) {
+        float hd = -GetHeightOfFieldPlaneDifference(boyGObj, self);
+
+        if (((int)(((Act *)sub )->wish1.ll >> 8) & 1) && 5.0f < hd) {
+            ((Act *)sub )->wish2.ll |= (1ULL << 55);
+            ((Act *)sub )->wish2.ll |= (1ULL << 59);
+        }
+        if (((int)(((Act *)sub )->wish1.ll >> 9) & 1) && 60.0f < hd) {
+            if (GOBJ_ACT(boyGObj)->actMode == 55)
+                ((Act *)sub )->wish2.ll |= (1ULL << 60);
+        }
+        if (((int)(((Act *)sub )->wish1.ll >> 10) & 1) && 195.0f < hd)
+            envDebugPrint();
+    }
+    /* the loop cursor starts at the actor */
+    o = self;
+    if (girlGObj != 0) {
+        sub->wish0.ll |= (1ULL << 45);
+    }
+    if (sub->heldItem.p != 0)
+        sub->wish1.ll |= (1ULL << 34);
+    if (self == boyGObj && sub->actMode != 14) {
+        GObj *w;
+
+        if (sub->weapon != 0)
+            w = CheckSwapableWeapon(sub->weapon, 150.0f);
+        else
+            w = CheckSwapableWeapon(self, 150.0f);
+        if (w != 0) {
+            float p60[4], p70[4];
+
+            env->swapWeapon = w;
+            sub->wish0.ll |= (1ULL << 52);
+            p60[0] = test_CURRENTROOT(w)[0];
+            p60[1] = test_CURRENTROOT(w)[1];
+            p60[2] = test_CURRENTROOT(w)[2];
+            _OrientXZGV(p70, p60, pos);
+            if ((_AbsRotyGV(p70, orient) < 45 && _DistxzSqGV(p60, pos) < 6400.0f) ||
+                (45 <= _AbsRotyGV(p70, orient) && _DistxzSqGV(p60, pos) < 900.0f)) {
+                sub->wish0.ll |= (1ULL << 51);
+                env->swapWeapon = w;
+            }
+        }
+    }
+    if ((unsigned int)sub->actMode < 0x3B) {
+        if (0x39 <= (unsigned int)sub->actMode) {
+        float c0, c4, c8;
+
+        GetChainPendulum(sub->chain, &c0, &c4, &c8);
+        if (0.0f < c0)
+            ((Act *)sub )->wish1.ll |= (1ULL << 47);
+        else
+            ((Act *)sub )->wish1.ll |= (1ULL << 48);
+        }
+    }
+    if (self == boyGObj && girlGObj != 0 &&
+        GOBJ_ACT(girlGObj)->actMode == 106) {
+        GObj *h = GOBJ_ACT(girlGObj)->carrier;
+
+        if (GOBJ_ACT(h)->actMode == 99 && GetMotionFrameFlag1(h)) {
+            float p60[4];
+
+            if (_ACTGame_SearchGObj(self, (girlGObj), 200.0f, 400.0f, 0x78, p60)) {
+                GObj *n = ACTGame_GetNearestGObj(pos, 0x21);
+
+                if (_DistxzSqGV(pos, test_CURRENTROOT(n)) < 22500.0f) {
+                    sub->wish0.ll |= (1ULL << 53);
+                    GOBJ_ACT(self)->enemy ->rescueObj = n;
+                }
+            }
+        }
+    }
+    if (CheckFloorAttribute(self, 0x800) || CheckFloorAttribute(self, 0x900))
+        ((Act *)sub )->wish1.ll |= 0x100;
+    if (CheckFloorAttribute(self, 0x800000)) {
+        float p60[4];
+
+        sceVu0Normalize(p60,(char *)&GOBJ_SUB(self)->root.plane);
+        GOBJ_ACT(self)->enemy->slipDirX = p60[0];
+        GOBJ_ACT(self)->enemy->slipDirY = p60[1];
+        GOBJ_ACT(self)->enemy->slipDirZ = p60[2];
+        if (0.0f < sceVu0InnerProduct(test_CURRENTORIENT(self), p60)) {
+            sub->wish1.ll |= 0x40;
+            GOBJ_ACT(self)->enemy ->slipFront = 0;
+        } else {
+            sub->wish1.ll |= 0x80;
+            GOBJ_ACT(self)->enemy ->slipFront = 1;
+        }
+    }
+    if (CheckFloorAttribute(self, 0x40)) {
+        sub->wish1.ll |= 4;
+        debug_StdPrintfDummy("water\n");
+    }
+    if (CheckFloorAttribute(self, 0x50)) {
+        if (GOBJ_SUB(self)->ctrl.waterDepth > 135.0f) {
+            ((Act *)sub )->wish1.ll |= 0x2000;
+            debug_StdPrintfDummy("enter water\n");
+        }
+        if (GOBJ_SUB(self)->ctrl.waterDepth < 130.0f) {
+            ((Act *)sub )->wish1.ll |= 0x4000;
+            debug_StdPrintfDummy("exit water\n");
+        }
+    }
+    if (self == boyGObj) {
+        float p70[4];
+        GObj *t30 = 0;
+        GObj *t19 = 0;
+        GObj *t23 = 0;
+        GObj *c;
+        ICO_WORD_PTR(GObj *) x;
+        int n;
+        float rad;
+        MotionDef *row = &motionKind[GOBJ_SUB(self)->ctrl.motion];
+
+        rad = ((row->modeBits.word >> 19) & 7) ? 100.0f : 90.0f;
+        c = CheckTorchChainReaction(self, 200.0f);
+        if (c != 0) {
+            GetRootPosition(p70, c);
+            if (_DistxzSqGV(prj, p70) < rad * rad && p70[1] < prj[1] &&
+                _FrontGV(p70, prj, test_CURRENTORIENT(self), 45)) {
+                if (((p70[1] - prj[1]) < 0.0f ? -(p70[1] - prj[1]) : (p70[1] - prj[1])) <
+                        200.0f &&
+                    p70[1] < prj[1]) {
+                    _OrientXZGV(env->torchOrient, p70, prj);
+                    t23 = c;
+                    t30 = t23;
+                }
+            }
+        }
+        c = CheckTorchChainReactionReverse(self, 200.0f);
+        if (c != 0) {
+            GetRootPosition(p70, c);
+            if (_DistxzSqGV(prj, p70) < 12100.0f && p70[1] < prj[1] &&
+                _FrontGV(p70, prj, test_CURRENTORIENT(self), 45)) {
+                if (((p70[1] - prj[1]) < 0.0f ? -(p70[1] - prj[1]) : (p70[1] - prj[1])) <
+                        200.0f &&
+                    p70[1] < prj[1]) {
+                    _OrientXZGV(env->torchRevOrient, p70, prj);
+                    t19 = c;
+                    env->torchRevObj = t19;
+                }
+            }
+        }
+        if (!ACTGame_NoWeapon(self)) {
+            x = ACTGame_isWeaponEnableCatchfire(sub->weapon);
+            if (x != 0) {
+                if (!IsTorchLightOn((GObj *)x)) {
+                    if (t30 != 0)
+                        ((Act *)sub )->wish1.ll |= 0x4000000;
+                } else {
+                    if (t19 != 0)
+                        ((Act *)sub )->wish1.ll |= 0x10000000;
+                }
+            }
+        }
+        if (sub->heldItem.p != 0) {
+            GObj *b = GetBombTorchGObj(sub->heldItem.p);
+
+            if (t23 != 0 && b != 0 && !IsTorchLightOn(b)) {
+                env->bombObj = b;
+                sub->wish1.ll |= 0x1000000;
+            }
+        }
+        n = 0;
+        if (GOBJ_SUB(self)->ctrl.upperWall) {
+            if (GOBJ_SUB(self)->ctrl.upperWallDist < 50.0f)
+                n = 1;
+        }
+        if (!n)
+            sub->wish1.ll |= 2;
+    }
+    if (((unsigned int)flags[1].w >> 27) & 1) {
+        ICO_RAW(int,*(char **)(ICO_RAW(char *, self, 0x164, ((struct GObj *)self)->act) + 0x650) , 0x2C4,GOBJ_ACT(self)->enemy ->holdObj) = (ICO_WORD_PTR(GObj *))obj;
+        GetBoxHoldPoint(ICO_RAWP(float *, GOBJ_ACT(self)->enemy, 0x2D0, GOBJ_ACT(self)->enemy->holdPoint), obj, self);
+    }
+}
+
+static void ACTGetEnvironment_aug6(void *self, void *dir, float *orient, EnvFlag *flags, ActEnv *env)
 {
     float prj[4];
     float pos[4];
@@ -2692,12 +3656,16 @@ static void ACTGetEnvironment_aug6jun26(void *self, void *dir, float *orient, En
 
 void ACTGetEnvironment(void *self, void *dir, float *orient, EnvFlag *flags, ActEnv *env)
 {
+    if (ICO_JUN26) {
+        ACTGetEnvironment_jun26(self, dir, orient, flags, env);
+        return;
+    }
     if (ICO_NTSC) {
         ACTGetEnvironment_ntsc(self, dir, orient, flags, env);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        ACTGetEnvironment_aug6jun26(self, dir, orient, flags, env);
+    if (ICO_AUG6) {
+        ACTGetEnvironment_aug6(self, dir, orient, flags, env);
         return;
     }
     float prj[4];

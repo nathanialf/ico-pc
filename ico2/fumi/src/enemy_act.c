@@ -210,8 +210,24 @@ typedef enum { ACT_KIND_NONE = -1, ACT_KIND_GIRL = 1, ACT_KIND_ENEMY = 2 } ActKi
 
 #define ENEMY_START_WORK(self) ((int)GOBJ_ACT(self)->enemy) /* derived name */
 
+static inline int IsEnemyBrainToGenerator_jun26(GObj *self, GObj **out)
+{
+    Act *b = GOBJ_ACT(self);
+    if (b->enemy->mode != 5)
+        return 0;
+    *out = ((ActWork *)b->work)->genTarget;
+    if (*out == 0) {
+        debug_assert("src/enemy_act.c", 600);
+        __assert("src/enemy_act.c", 600, "*generator_gop!=NULL");
+    }
+    return 1;
+}
+
 inline int IsEnemyBrainToGenerator(GObj *self, GObj **out)
 {
+    if (ICO_JUN26) {
+        return IsEnemyBrainToGenerator_jun26(self, out);
+    }
     Act *b = GOBJ_ACT(self);
     if (b->enemy->mode != 5)
         return 0;
@@ -226,7 +242,7 @@ inline int IsEnemyBrainToGenerator(GObj *self, GObj **out)
             __assert("src/enemy_act.c", LN(762, 762, 762, 762, 762, 762, 762),
                      "*generator_gop!=NULL");
         } else if (ICO_AUG6JUN26) {
-            debug_assert("src/enemy_act.c", LN(2161, 2158, 2158, 2161, 744, 2161, 2158));
+            debug_assert("src/enemy_act.c", LN(2161, 2158, 2158, 2161, 744, 744, 2158));
             __assert("src/enemy_act.c", LN(744, 744, 744, 744, 744, 744, 744),
                      "*generator_gop!=NULL");
         } else {
@@ -243,7 +259,7 @@ inline int IsEnemyBrainToBoy(GObj *self)
     EnemyBattleWork *sub2;
     if ((char *)girlGObj != 0) {
         Act *sub_d = GOBJ_ACT(girlGObj);
-        if (sub_d->actMode != PAL_NTSCAUG6JUN26(0x6F, 107))
+        if (sub_d->actMode != PAL_NTSCAUG6_JUN26(0x6F, 107, 106))
             return 0;
     }
     sub = GOBJ_ACT(self);
@@ -271,8 +287,8 @@ static void setBattleStatus(GObj *self)
         GOBJ_ACT(self)->enemy->flags.ll |= 2LL;
         break;
     default:
-        debug_assert("src/enemy_act.c", PAL_JPNKORCN_NTSC_AUG6JUN26(0x36B, 872, 804, 786));
-        __assert("src/enemy_act.c", PAL_JPNKORCN_NTSC_AUG6JUN26(0x36B, 872, 804, 786), "0");
+        debug_assert("src/enemy_act.c", PAL_JPNKORCN_NTSC_AUG6_JUN26(0x36B, 872, 804, 786, 642));
+        __assert("src/enemy_act.c", PAL_JPNKORCN_NTSC_AUG6_JUN26(0x36B, 872, 804, 786, 642), "0");
     }
 }
 
@@ -443,8 +459,109 @@ static inline void enemyPollHitNodes(GObj *self) /* derived name */
     }
 }
 
+static void subEnemyControl_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    float pos[4];
+    float dir[4];
+    int runCnt = 0;
+    int walkCnt = 0;
+    int stopCnt = 0;
+
+    iosPadConnect(&sub->pad, 0, 1, &sub->padConf);
+    while (1) {
+        enemyPollHitNodes(self);
+        /* the stick poll loop, subBoyControl's shape, repeating only under the
+           DEBUG hold (retail breaks after one pass) */
+        for (;;) {
+            if (((int)((sub->flags18.ll >> 42))) & 1) {
+                if (self == CurrentTargetGObj) {
+                    iosPadConnect(&sub->pad, 0, 0, &sub->padConf);
+                    iosPadRead(&sub->pad);
+                    iosPadGetStick(&sub->pad, &sub->stick, 0, 2, 2, 0);
+                    _GetMotionDirection(dir, self);
+                    sub->stick.angle = CorrectStickInfo(dir, &sub->stick);
+                    if (0.001f < sub->stick.mag) {
+                        ConvertStickToAbsCoord(pos, &sub->stick);
+                        sub->dir[0] = pos[0];
+                        sub->dir[1] = pos[1];
+                        sub->dir[2] = pos[2];
+                    }
+                } else if (self == CurrentTargetGObjSub) {
+                    iosPadConnect(&sub->pad, 0, 1, &sub->padConf);
+                } else {
+                    iosPadConnect(&sub->pad, 0, 1, &sub->padConf);
+                }
+            }
+            if (!ENEMY_DEBUG_HOLD) {
+                break;
+            }
+            _ACTWait(1);
+        }
+        /* the whole counter update */
+        stopCnt++;
+        if (0.1f < sub->stick.mag) {
+            stopCnt = 0;
+        }
+        if (0.1f < sub->stick.mag && (sub->stick.mag < 0.99f || (sub->pad.now & 0x20))) {
+            walkCnt++;
+        } else {
+            walkCnt = 0;
+        }
+        /* moving and not walking, with the walking predicate repeated whole
+           inside the negation, as commonact.c's _ACTCommonMailTest writes
+           it */
+        if (0.1f < sub->stick.mag &&
+            !(0.1f < sub->stick.mag && (sub->stick.mag < 0.99f || (sub->pad.now & 0x20)))) {
+            runCnt++;
+        } else {
+            runCnt = 0;
+        }
+        pos[0] = sub->dir[0];
+        pos[1] = sub->dir[1];
+        pos[2] = sub->dir[2];
+        _ACTCommonMailTest(self, stopCnt, walkCnt, runCnt);
+        switch (sub->actMode) {
+        case 1:
+            ACTSendMailCorrect((void *)self, 177);
+            break;
+        case 2:
+            if (0.1f < sub->stick.mag && (sub->stick.mag < 0.99f || (sub->pad.now & 0x20)) &&
+                !(walkCnt < 4)) {
+                if (CheckFloorAttribute(self, 0x200)) {
+                    ACTSendMailCorrect((void *)self, 164);
+                } else {
+                    ACTSendMailCorrect((void *)self, 163);
+                }
+            }
+            break;
+        case 3:
+            ACTSendMailCorrect((void *)self, 168);
+            break;
+        /* a fifth case label, its value unknown: every index from 4 to 37 of
+           the jump table goes to the break */
+        case 4:
+            break;
+        case 38:
+            if (100 < sub->stick.y - 128) {
+                ACTSendMailCorrect((void *)self, 296);
+            } else if (sub->stick.y - 128 < -100) {
+                ACTSendMailCorrect((void *)self, 295);
+            } else {
+                ACTSendMailCorrect((void *)self, 301);
+            }
+            break;
+        }
+        _ACTWait(1);
+    }
+}
+
 void subEnemyControl(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        subEnemyControl_jun26(self);
+        return;
+    }
     Act *sub = GOBJ_ACT(self);
     float pos[4];
     float dir[4];
@@ -562,13 +679,13 @@ static inline unsigned char enemyCheckTurnAngle(GObj *self) /* derived name */
         s->env.turnDir.f[1] = cur[1];
         s->env.turnDir.f[2] = cur[2];
         if (ang > 0) {
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xE8, 216, 213));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0xE8, 216, 213, 208));
         } else {
-            ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xE7, 215, 212));
+            ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0xE7, 215, 212, 207));
         }
         return 1;
     } else if (aang < 0xF) {
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0xF1, 225, 222));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0xF1, 225, 222, 217));
     }
     return 0;
 }
@@ -581,7 +698,7 @@ static inline unsigned char isEnemyCarriedByGirl(GObj *self) /* derived name */
         return 0;
     }
     gsub = GOBJ_ACT(girlGObj);
-    if ((char *)gsub == 0 || gsub->actMode != PAL_NTSCAUG6JUN26(0x6F, 107)) {
+    if ((char *)gsub == 0 || gsub->actMode != PAL_NTSCAUG6_JUN26(0x6F, 107, 106)) {
         return 0;
     }
     if (gsub->carrier == self) {
@@ -671,7 +788,83 @@ static void subEnemyCollision_ntsc(GObj *volatile self)
     }
 }
 
-static void subEnemyCollision_aug6jun26(GObj *volatile self)
+static void subEnemyCollision_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+
+    while (sub->motReq == 0) {
+        _ACTWait(1);
+    }
+    while (1) {
+        float *dir = sub->dir;
+        if (actEnemyFlagCheckActive(self) != 0) {
+            sub->flags18.ll = (long long)sub->flags18.ll | (1LL << 32);
+        } else {
+            sub->flags18.ll = (long long)sub->flags18.ll & ~(1LL << 32);
+        }
+        if (GOBJ_ACT(self)->enemy->paraStatus != 0) {
+            _ACTParaStatus_Set(self, GOBJ_ACT(self)->enemy->paraStatus);
+        }
+        if (GOBJ_ACT(self)->enemy->liftKind == 3) {
+            GOBJ_ACT(self)->enemy->slowTimer -= 1;
+            if (0 < GOBJ_ACT(self)->enemy->slowTimer) {
+                float rate = (60 - GOBJ_ACT(self)->enemy->slowTimer) / 60.0f;
+                float speed = (rate < 0.1f) ? 0.1f : ((1.0f < rate) ? 1.0f : rate);
+                ACTGame_SetMotionPlaySpeedRatio_Reserve(self, speed, 8);
+            }
+        }
+        ACTGame_CommonLoop((void *)self);
+        CommonAttackCenter(self);
+        if (GOBJ_ACT(self)->enemy->liftKind == 3) {
+            boss_effect_process(self);
+        }
+        if (sub->actMode == 5 && 300.0f < GOBJ_SUB(self)->ctrl.groundHeight) {
+            FlyMail((void *)self);
+        }
+        if (sub->stick.mag != 0.0f) {
+            enemyCheckTurnAngle(self);
+        }
+        if (0.1f < sub->stick.mag && sub->actMode != 110) {
+            SetMotionDirectionSmooze(self, dir,
+                                     (float)motionKind[GOBJ_SUB(self)->ctrl.motion].dirFrames);
+        }
+        if (actEnemyFlagCheckDead(self) == 0) {
+            ACTGame_SaveActorInformation(self);
+        }
+        if (sub->actMode != 107) {
+            /* the actor-entry parameter, reloaded for the DEBUG build's state
+               report */
+            GObj *obj = self;
+#ifdef DEBUG
+            scePrintf("enemy %08x state %x\n", obj, sub->actMode);
+#endif
+        }
+        if (sub->actMode != 22) {
+            if (0x16 < (unsigned int)sub->actMode) {
+                if (sub->actMode == 28) {
+                    if (0.1f < sub->stick.mag &&
+                        (sub->stick.angle < -134 || 134 < sub->stick.angle)) {
+                        ACTSendMailCorrect((void *)self, 202);
+                    } else if (0.1f < sub->stick.mag &&
+                               (-45 <= sub->stick.angle && sub->stick.angle <= 45)) {
+                        if ((pad[0].now & 4) == 0) {
+                            ACTSendMailCorrect((void *)self, 177);
+                        }
+                    }
+                    ACTSendMailCorrect((void *)self, 301);
+                }
+            }
+        }
+        DispMultiBgaManagerWithKind(398, GOBJ_WORK(self)->bga, 1);
+        ACTParaStatus_Exec((void *)self);
+        if (isEnemyActive(self) == 0 && isEnemyCarriedByGirl(self)) {
+            afterCommonCarry(self);
+        }
+        _ACTWait(1);
+    }
+}
+
+static void subEnemyCollision_aug6(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
 
@@ -754,12 +947,16 @@ static void subEnemyCollision_aug6jun26(GObj *volatile self)
 
 void subEnemyCollision(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        subEnemyCollision_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         subEnemyCollision_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        subEnemyCollision_aug6jun26(self);
+    if (ICO_AUG6) {
+        subEnemyCollision_aug6(self);
         return;
     }
     Act *sub = GOBJ_ACT(self);
@@ -936,9 +1133,9 @@ void actEnemyAttack(GObj *volatile self)
             hit = 1;
         }
         if (hit != 0) {
-            ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0xCD, 189, 186));
+            ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6_JUN26(0xCD, 189, 186, 183));
         }
-        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
+        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6_JUN26(0xC7, 183, 180, 177));
         EnemyAttackCenter(self);
         _ACTWait(1);
     }
@@ -963,7 +1160,11 @@ inline void funcEnemyAiGetGirl(GObj *self)
 inline void actEnemyHyde(GObj *self)
 {
     sceVu0FVECTOR hide = {0.0f, 0.0f, -1000000.0f};
-    SetDirectRootPositionNoFitting(self, hide);
+    if (ICO_JUN26) {
+        SetDirectRootPosition(self, hide);
+    } else {
+        SetDirectRootPositionNoFitting(self, hide);
+    }
     ResetEnemyPositionInfo(self);
     actEnemyFlagOnFree(self);
 }
@@ -992,8 +1193,20 @@ inline int actEnemyFlagCheckDead(GObj *self)
     return (g->flags >> 18) & 1;
 }
 
+static inline int isEnemyActive_jun26(GObj *self)
+{
+    if (self == 0 || self->kind != 4) {
+        debug_assert("src/enemy_act.c", 1835);
+        __assert("src/enemy_act.c", 1835, "ASSERTMSG__GOP_IS_NOT_ENEMY(gop)");
+    }
+    return actEnemyFlagCheckActive(self);
+}
+
 inline int isEnemyActive(GObj *self)
 {
+    if (ICO_JUN26) {
+        return isEnemyActive_jun26(self);
+    }
     if (self == 0 || self->kind != 4) {
         if (ICO_JPNKORCN) {
             debug_assert("src/enemy_act.c", LN(2084, 2084, 2084, 2084, 2084, 2084, 2084));
@@ -1004,7 +1217,7 @@ inline int isEnemyActive(GObj *self)
             __assert("src/enemy_act.c", LN(2002, 2002, 2002, 2002, 2002, 2002, 2002),
                      "ASSERTMSG__GOP_IS_NOT_ENEMY(gop)");
         } else if (ICO_AUG6JUN26) {
-            debug_assert("src/enemy_act.c", LN(2161, 2158, 2158, 2161, 1984, 2161, 2158));
+            debug_assert("src/enemy_act.c", LN(2161, 2158, 2158, 2161, 1984, 1984, 2158));
             __assert("src/enemy_act.c", LN(1984, 1984, 1984, 1984, 1984, 1984, 1984),
                      "ASSERTMSG__GOP_IS_NOT_ENEMY(gop)");
         } else {
@@ -1139,7 +1352,67 @@ static void actEnemyRestart_ntsc(GObj *self, float *pos, float *dir, int kind, G
     eBrainSendMes(self, 4);
 }
 
-static void actEnemyRestart_aug6jun26(GObj *self, float *pos, float *dir, int kind, GObj *mother)
+static void actEnemyRestart_jun26(GObj *self, float *pos, float *dir, int kind, GObj *mother)
+{
+    Act *sub;
+    int mail;
+    int idx;
+    float life;
+
+    sub = GOBJ_ACT(self);
+    mail = 48;
+    switch (kind) {
+    case 0:
+        pos[1] = pos[1] + GOBJ_ACT(self)->enemy->bodySize * 100.0f;
+        break;
+    case 1:
+        mail = 49;
+        break;
+    case 2:
+        mail = 50;
+        break;
+    }
+    RandomizeEnemy(self);
+    idx = 0;
+    switch (GetEnemyBattleType(self)) {
+    case 0:
+        break;
+    case 1:
+        idx = 1;
+        break;
+    case 2:
+        idx = 2;
+        break;
+    case 3:
+        idx = 3;
+        break;
+    default:
+        debug_assert("src/enemy_act.c", 1899);
+        __assert("src/enemy_act.c", 1899, "0");
+    }
+    GOBJ_ACT(self)->enemy->battleType = idx;
+    setBattleStatus(self);
+    life = GetEnemyDefLife(self);
+    sub->maxLife = life;
+    sub->life = life;
+    sub->wayMode = 0;
+    if (mother != 0) {
+        sub->mother = mother;
+    } else {
+        sub->mother = 0;
+    }
+    sub->mail = (ActMail *)&actIntrList[72];
+    ACTSendMailCorrect(self, mail);
+    InitMotionGeoInfo(&GOBJ_SUB(self)->root, pos[0], pos[1], pos[2], 0.0f, 0.0f, 0.0f);
+    ResetEnemyPositionInfo(self);
+    sub->restartPosX = pos[0];
+    sub->restartPosY = pos[1];
+    sub->restartPosZ = pos[2];
+    SetMotionDirection(self, dir);
+    eBrainSendMes(self, 4);
+}
+
+static void actEnemyRestart_aug6(GObj *self, float *pos, float *dir, int kind, GObj *mother)
 {
     Act *sub;
     int mail;
@@ -1178,8 +1451,8 @@ static void actEnemyRestart_aug6jun26(GObj *self, float *pos, float *dir, int ki
         idx = 3;
         break;
     default:
-        debug_assert("src/enemy_act.c", LN(2161, 2158, 2158, 2161, 2048, 1899, 2158));
-        __assert("src/enemy_act.c", LN(2161, 2158, 2158, 2161, 2048, 1899, 2158), "0");
+        debug_assert("src/enemy_act.c", LN(2161, 2158, 2158, 2161, 2048, 2048, 2158));
+        __assert("src/enemy_act.c", LN(2161, 2158, 2158, 2161, 2048, 2048, 2158), "0");
     }
     GOBJ_ACT(self)->enemy->battleType = idx;
     setBattleStatus(self);
@@ -1206,12 +1479,16 @@ static void actEnemyRestart_aug6jun26(GObj *self, float *pos, float *dir, int ki
 
 void actEnemyRestart(GObj *self, float *pos, float *dir, int kind, GObj *mother)
 {
+    if (ICO_JUN26) {
+        actEnemyRestart_jun26(self, pos, dir, kind, mother);
+        return;
+    }
     if (ICO_NTSC) {
         actEnemyRestart_ntsc(self, pos, dir, kind, mother);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actEnemyRestart_aug6jun26(self, pos, dir, kind, mother);
+    if (ICO_AUG6) {
+        actEnemyRestart_aug6(self, pos, dir, kind, mother);
         return;
     }
     float v[4];
@@ -1257,8 +1534,8 @@ void actEnemyRestart(GObj *self, float *pos, float *dir, int kind, GObj *mother)
         idx = 3;
         break;
     default:
-        debug_assert("src/enemy_act.c", LN(2161, 2158, 2158, 2161, 2048, 1899, 2158));
-        __assert("src/enemy_act.c", LN(2161, 2158, 2158, 2161, 2048, 1899, 2158), "0");
+        debug_assert("src/enemy_act.c", LN(2161, 2158, 2158, 2161, 2048, 2048, 2158));
+        __assert("src/enemy_act.c", LN(2161, 2158, 2158, 2161, 2048, 2048, 2158), "0");
     }
     GOBJ_ACT(self)->enemy->battleType = idx;
     setBattleStatus(self);
@@ -1300,7 +1577,11 @@ static void PairSetGeometry(void *me, void *pair, float dist)
     _OrientXZGV(dir, p1, p0);
     sceVu0ScaleVector(ofs, dir, dist);
     sceVu0AddVector(p1, p0, ofs);
-    SetDirectRootPositionNoFitting(pair, (char *)p1);
+    if (ICO_JUN26) {
+        SetDirectRootPosition(pair, p1);
+    } else {
+        SetDirectRootPositionNoFitting(pair, (char *)p1);
+    }
     GOBJ_ACT(me)->dir[0] = dir[0];
     GOBJ_ACT(me)->dir[1] = dir[1];
     GOBJ_ACT(me)->dir[2] = dir[2];
@@ -1309,8 +1590,39 @@ static void PairSetGeometry(void *me, void *pair, float dist)
     SetMotionDirection(pair, (float *)GOBJ_ACT(pair)->dir);
 }
 
+static int actEnemyForceSwitchToCarry_jun26(void *self)
+{
+    float q[4];
+    Act *sub = GOBJ_ACT(self);
+
+    if ((char *)girlGObj == 0) {
+        return 0;
+    }
+    if (ACTReserveTarget(girlGObj, self, 231) == 0) {
+        return 0;
+    }
+    if (GOBJ_ACT(girlGObj)->actMode == 106) {
+        return 0;
+    }
+    PairSetGeometry(self, (char *)girlGObj, 50.0f);
+    memset(q, 0, 0x10);
+    q[3] = 1.0f;
+    RotQuaternionY(q, -0x8000);
+    SetMotionNodeFixModeParameter(girlGObj, self, 2, GOBJ_ACT(self)->enemy->clingNode, q, 18.0f,
+                                  0.0f, 0.0f, 1.0f);
+    sub->carried = girlGObj;
+    GOBJ_ACT(girlGObj)->carrier = self;
+    ico_gs_signal(ICO_GS_EV_YORDA_GRABBED, ((GObj *)self)->labelId);
+    eBrainSendMes(self, 9);
+    eBrainSendMes(self, 7);
+    return 1;
+}
+
 static int actEnemyForceSwitchToCarry(void *self)
 {
+    if (ICO_JUN26) {
+        return actEnemyForceSwitchToCarry_jun26(self);
+    }
     float q[4];
     Act *sub = GOBJ_ACT(self);
 
@@ -1358,7 +1670,7 @@ inline int ACTEnemyForceSwitchToCarry(GObj *self)
     if (r != 0) {
         _BrainMode_SetDirect(self, 0, 0);
     }
-    ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x104, 244, 241));
+    ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0x104, 244, 241, 235));
     return r;
 }
 
@@ -1406,7 +1718,109 @@ inline void actEnemyNest(GObj *volatile self)
 
 static int kidnapEndCount = 0; /* derived name: cleared as actEnemyKidnapEnd starts its wait */
 
-static void actEnemyKidnapEnd_aug6jun26(GObj *volatile self)
+/* PC port: layout_texture.c's */
+void lt_switch_layout(int no);
+
+static void actEnemyKidnapEnd_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    float mypos[4];
+    float gpos[4];
+
+    union { /* field names derived */
+        float f[4];
+        ICO_WORD i[4];
+    } q;
+
+    int revived = 0;
+    GObj *target = 0;
+    GObj *g;
+    float best;
+    float d;
+
+    if (gflagChk(342) == 0) {
+        ACTGame_InsertCamera_GirlIsPinch();
+    }
+    g = isysGObjSearchFromObjKindID_begin(33);
+    best = 10000.0f;
+    mypos[0] = test_CURRENTROOT((void *)self)[0];
+    mypos[1] = test_CURRENTROOT((void *)self)[1];
+    mypos[2] = test_CURRENTROOT((void *)self)[2];
+    while (g != 0) {
+        GetRootPosition(gpos, g);
+        d = _DistGV(mypos, gpos);
+        if (d < best) {
+            best = d;
+            target = g;
+        }
+        g = isysGObjSearchFromObjKindID_next(g);
+    }
+    if (target != 0) {
+        memset(&q, 0, 0x10);
+        q.f[3] = 1.0f;
+        EntryMultiBgaManager(GOBJ_WORK(self)->bga, 0, -1, test_CURRENTROOT(target), q.f);
+    }
+    gflagOn(342);
+    while (1) {
+        if (((int)((long long)sub->flags20.ll >> 5)) & 1) {
+            ACTGame_SetMotionPlaySpeedRatio_Reserve(self, 0.0001f, 9);
+        }
+        if (gflagChk(341) != 0) {
+            stgmgrNextStagePreLoadForceStageSet(gFlagSaveStage);
+            if ((60 - systemStatus[0] * 10) / systemStatus[1] * 3 < sub->modeFrame) {
+                backStageTsuresariReturn();
+                _ACTWait(PAL_JUN26(0, 58));
+            }
+        }
+        if (5 <= sub->modeFrame) {
+            if (GOBJ_ACT(girlGObj)->actMode != 106 || GOBJ_ACT(girlGObj)->carrier != self) {
+                if (revived == 0) {
+                    revived = 1;
+                    RestoreReviveCount(self);
+                }
+                sub->infoPos = 0;
+                gamesysObjInfoPosSetStage(self, 0, 0, stage_no);
+            }
+        }
+        if (GOBJ_SUB(self)->ctrl.motion == 938) {
+            /* the girl's record and her action are read before the tests,
+               with the carried action's id in a local (as the USA build) */
+            Act *gsub = GOBJ_ACT(girlGObj);
+            int act = gsub->actMode;
+            int carriedAct = 106;
+
+            if (50.0f < GOBJ_SUB(self)->ctrl.animFrame) {
+                if ((((int)((long long)sub->flags20.ll >> 5)) & 1) == 0) {
+                    if (act == carriedAct && gsub->carrier == self) {
+                        if (target != 0) {
+                            /* q, the identity quaternion above, is
+                               reused as stage_SetParentOfGObj's parent
+                               record (the target object, then 0); the
+                               flag and the record's first word are stored
+                               through volatile views, the object only
+                               after the flag */
+                            *(volatile int *)&gameover_flag = 1;
+                            *(volatile int *)&q.i[0] = (ICO_WORD)target;
+                            q.i[1] = 0;
+                            stage_SetParentOfGObj(394, &q);
+                            stage_SetAnimation(394, 1, 0);
+                            while (stage_CheckAnimationFinish(394) == 0) {
+                                _ACTWait(1);
+                            }
+                            _ACTWait(1);
+                        }
+                        lt_switch_layout(58);
+                    } else {
+                        ACTSendMailCorrect(self, 310);
+                    }
+                }
+            }
+        }
+        _ACTWait(1);
+    }
+}
+
+static void actEnemyKidnapEnd_aug6(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
     float mypos[4];
@@ -1667,12 +2081,16 @@ static void actEnemyKidnapEnd_ntsc(GObj *volatile self)
 
 void actEnemyKidnapEnd(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actEnemyKidnapEnd_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actEnemyKidnapEnd_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actEnemyKidnapEnd_aug6jun26(self);
+    if (ICO_AUG6) {
+        actEnemyKidnapEnd_aug6(self);
         return;
     }
     Act *sub = GOBJ_ACT(self);
@@ -1897,7 +2315,46 @@ static void actEnemyKidnapBegin_ntsc(GObj *volatile self)
     }
 }
 
-static void actEnemyKidnapBegin_aug6jun26(GObj *volatile self)
+static void actEnemyKidnapBegin_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    float *dir = sub->dir;
+    int mail = 312;
+    int mode;
+
+    while (1) {
+        if (GOBJ_SUB(self)->ctrl.motion == 931) {
+            _OrientXZGV(dir, test_CURRENTROOT((girlGObj)), test_CURRENTROOT(self));
+            if (0.1f < sub->stick.mag && sub->actMode != 110) {
+                SetMotionDirectionSmooze((void *)self, dir,
+                                         (float)motionKind[GOBJ_SUB(self)->ctrl.motion].dirFrames);
+            }
+            mode = enemyKidnapCheckGirl(self);
+            switch (mode) {
+            case 1:
+                mail = 313;
+                /* fallthrough */
+            case 2:
+                if (actEnemyForceSwitchToCarry((void *)self) != 0) {
+                    if (mode == 1) {
+                        sceVu0ScaleVector(GOBJ_ACT(girlGObj)->dir, GOBJ_ACT(girlGObj)->dir, -1.0f);
+                        SetMotionDirection((void *)((char *)girlGObj), GOBJ_ACT(girlGObj)->dir);
+                    }
+                    ACTGame_InsertCamera_GirlIsPinch();
+                    while (1) {
+                        ACTSendMailCorrect((void *)self, mail);
+                        _ACTWait(1);
+                    }
+                }
+                break;
+            }
+            ACTSendMailCorrect((void *)self, 314);
+        }
+        _ACTWait(1);
+    }
+}
+
+static void actEnemyKidnapBegin_aug6(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
     float *dir = (float *)sub->dir;
@@ -1940,12 +2397,16 @@ static void actEnemyKidnapBegin_aug6jun26(GObj *volatile self)
 
 void actEnemyKidnapBegin(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actEnemyKidnapBegin_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actEnemyKidnapBegin_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actEnemyKidnapBegin_aug6jun26(self);
+    if (ICO_AUG6) {
+        actEnemyKidnapBegin_aug6(self);
         return;
     }
     Act *sub = GOBJ_ACT(self);
@@ -2050,8 +2511,109 @@ static inline void enemyBodyliftClearBoy(char *self) /* derived name */
     GOBJ_SUB(self)->root.lookMode = 0;
 }
 
+static void actEnemyBodylift_jun26(GObj *volatile self)
+{
+    float dir[4];
+    float pos[4];
+    float bpos[4];
+    float mtx[16];
+    float lv[4];
+    Act *sub;
+    int hit;
+
+    sub = GOBJ_ACT(self);
+    hit = 0;
+    GOBJ_ACT(self)->enemy->flags.ll &= ~4LL;
+    _OrientXZGV(dir, bodyliftTarget[0], test_CURRENTROOT(self));
+    sub->after = (void *)afterEnemyBodylift;
+    if (GOBJ_ACT(self)->enemy->liftKind != 3) {
+        _OrientXZGV(sub->dir, test_CURRENTROOT(((void *)boyGObj)), test_CURRENTROOT(self));
+        SetMotionDirection((void *)self, sub->dir);
+    }
+    for (;;) {
+        GOBJ_ACT(self)->enemy->flags.ll &= ~4LL;
+        if (GOBJ_ACT(self)->enemy->liftKind == 3) {
+            if (GOBJ_ACT(boyGObj)->actMode == 90) {
+                enemyBodyliftClearBoy((char *)self);
+            } else {
+                MoveChestForCatchBoy(self);
+            }
+        }
+        GetSkeltonPosition(pos, self, 22);
+        bpos[0] = test_CURRENTROOT(((void *)boyGObj))[0];
+        bpos[1] = test_CURRENTROOT(((void *)boyGObj))[1];
+        bpos[2] = test_CURRENTROOT(((void *)boyGObj))[2];
+        if (GOBJ_ACT(self)->enemy->liftKind == 3) {
+            sceVu0SubVector(lv, test_CURRENTROOT(((void *)boyGObj)), pos);
+            GetMatrixDirectionToZ(mtx, test_CURRENTORIENT(self));
+            lv[3] = 0.0f;
+            sceVu0ApplyMatrix(lv, mtx, lv);
+            if (((lv[0] < 0.0f) ? -lv[0] : lv[0]) < 100.0f &&
+                ((lv[1] < 0.0f) ? -lv[1] : lv[1]) < 100.0f && -300.0f < lv[2] && lv[2] < 200.0f) {
+                hit = 1;
+            }
+        } else {
+            if (_DistSqGV(pos, bpos) < GOBJ_ACT(self)->enemy->bodySize * 45.0f *
+                                           (GOBJ_ACT(self)->enemy->bodySize * 45.0f)) {
+                hit = 1;
+            }
+        }
+        if (GOBJ_SUB(self)->ctrl.motion == 972) {
+            if (GOBJ_ACT(boyGObj)->actMode == 90 &&
+                GOBJ_ACT(boyGObj)->enemy->liftedObj == (ICO_WORD)self &&
+                GOBJ_ACT(self)->enemy->liftKind == 3 &&
+                !(0 < GOBJ_ACT(boyGObj)->enemy->liftLevel)) {
+                if (GetMotionFrameFlag1((void *)self) != 0) {
+                    ACTSendMailCorrect((void *)self, 328);
+                    iosOmSendMail(((void *)boyGObj), 202, self);
+                }
+                if (GetMotionFrameFlag2((void *)self) != 0) {
+                    ACTSendMailCorrect((void *)self, 329);
+                    iosOmSendMail(((void *)boyGObj), 202, self);
+                }
+            }
+        } else {
+            if (GetMotionFrameFlag1((void *)self) != 0 && hit != 0) {
+                iosOmSendMail(((void *)boyGObj), 320, self);
+            }
+            if (GetMotionFrameFlag2((void *)self) != 0) {
+                _OrientXZGV(bpos, test_CURRENTROOT(((void *)boyGObj)), test_CURRENTROOT(self));
+                _ACTMotDirSmzDirect((void *)self, bpos);
+            }
+        }
+        if (GOBJ_ACT(boyGObj)->actMode == 90 &&
+            GOBJ_ACT(boyGObj)->enemy->liftedObj == ICO_ADDR(self)) {
+            if (GOBJ_ACT(self)->enemy->liftKind == 3) {
+                if (GOBJ_SUB(self)->ctrl.motion == 972) {
+                    _ACTMotDirSmzDirect((void *)self, dir);
+                    if (_AbsRotyGV(test_CURRENTORIENT(self), dir) < 5) {
+                        GOBJ_ACT(self)->enemy->flags.ll |= 4LL;
+                    }
+                    if ((((int)(GOBJ_ACT(self)->enemy->flags.ll >> 2)) & 1) == 0) {
+                        ACTGame_SetMotionPlaySpeedRatio_Reserve(self, 0.1f, 8);
+                    }
+                }
+                if (0 < GOBJ_ACT(boyGObj)->enemy->liftLevel) {
+                    ACTSendMailCorrect((void *)self, 326);
+                } else {
+                    ACTSendMailCorrect((void *)self, 327);
+                }
+            } else {
+                ACTSendMailCorrect((void *)self, 324);
+            }
+        } else {
+            ACTSendMailCorrect((void *)self, 177);
+        }
+        _ACTWait(1);
+    }
+}
+
 void actEnemyBodylift(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        actEnemyBodylift_jun26(self);
+        return;
+    }
     float dir[4];
     float pos[4];
     float bpos[4];
@@ -2128,9 +2690,9 @@ void actEnemyBodylift(GObj *volatile self)
 
 inline void actEnemyBodyslamFail(GObj *volatile self)
 {
-    iosOmSendMail(((void *)boyGObj), PAL_NTSC_AUG6JUN26(0xE2, 210, 207), self);
+    iosOmSendMail(((void *)boyGObj), PAL_NTSC_AUG6_JUN26(0xE2, 210, 207, 202), self);
     while (1) {
-        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
+        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6_JUN26(0xC7, 183, 180, 177));
         _ACTWait(1);
     }
 }
@@ -2139,7 +2701,7 @@ inline void actEnemyBodyslam(GObj *volatile self)
 {
     iosOmSendMail(((void *)boyGObj), GOBJ_ACT(self)->enemy->bodyslamMail, self);
     while (1) {
-        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0xC7, 183, 180));
+        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6_JUN26(0xC7, 183, 180, 177));
         _ACTWait(1);
     }
 }
@@ -2219,12 +2781,12 @@ static void actEnemyPickupBegin_aug6jun26(GObj *volatile self)
             if (actEnemyForceSwitchToCarry((void *)self) != 0) {
                 ACTGame_InsertCamera_GirlIsPinch();
                 while (1) {
-                    ACTSendMailCorrect((void *)self, 333);
+                    ACTSendMailCorrect((void *)self, PAL_JUN26(333, 317));
                     _ACTWait(1);
                 }
             }
         }
-        ACTSendMailCorrect((void *)self, 334);
+        ACTSendMailCorrect((void *)self, PAL_JUN26(334, 318));
         _ACTWait(1);
     }
 }
@@ -2264,8 +2826,8 @@ void actEnemyPickupBegin(GObj *volatile self)
 
 inline void actEnemyCarry(GObj *volatile self)
 {
-    debug_assert("src/enemy_act.c", PAL_JPNKORCN_NTSC_AUG6JUN26(0xB75, 2930, 2803, 2763));
-    __assert("src/enemy_act.c", PAL_JPNKORCN_NTSC_AUG6JUN26(0xB75, 2930, 2803, 2763), "0");
+    debug_assert("src/enemy_act.c", PAL_JPNKORCN_NTSC_AUG6_JUN26(0xB75, 2930, 2803, 2763, 2542));
+    __assert("src/enemy_act.c", PAL_JPNKORCN_NTSC_AUG6_JUN26(0xB75, 2930, 2803, 2763, 2542), "0");
 }
 
 inline int EnemyBrainStatus_Boy(GObj *self)
@@ -2291,8 +2853,47 @@ static inline int getEnemyBrainMes(char *self, ICO_WORD_PTR(GObj *) * data) /* d
     return t->status;
 }
 
-static void CheckEnemyBrainMode_ntscaug6jun26(char *self, int *outMode,
-                                              ICO_WORD_PTR(GObj *) * outData)
+static void CheckEnemyBrainMode_jun26(char *self, int *outMode, ICO_WORD_PTR(GObj *) * outData)
+{
+    char *sub = ICO_RAW(char *, self, 0x164, (char *)GOBJ_ACT(self));
+    int mode;
+
+    *outData = 0;
+    if (((Act *)sub)->carried != 0 && motionKind[GOBJ_SUB(self)->ctrl.motion].word100 == 0) {
+        *outMode = -1;
+        return;
+    }
+    if (((((Act *)sub)->flags18.ll >> 43) & 1) == 0) {
+        *outMode = -1;
+        return;
+    }
+    if (actEnemyFlagCheckActive((GObj *)self) == 0) {
+        *outMode = -1;
+        return;
+    }
+    switch (*(unsigned int *)&((Act *)sub)->actMode) {
+    case 19:
+    case 20:
+    case 21:
+    case 22:
+    case 109:
+    case 110:
+        *outMode = -1;
+        return;
+    }
+    if (((((Act *)sub)->flags20.ll >> 34) & 1) == 0) {
+        goto no_bit;
+    }
+    ((Act *)sub)->flags20.ll &= ~(1ULL << 32);
+    mode = -2;
+    goto store;
+no_bit:
+    mode = getEnemyBrainMes(self, outData);
+store:
+    *outMode = mode;
+}
+
+static void CheckEnemyBrainMode_ntscaug6(char *self, int *outMode, ICO_WORD_PTR(GObj *) * outData)
 {
     char *sub = ICO_RAW(char *, self, 0x164, (char *)GOBJ_ACT(self));
     int mode;
@@ -2324,7 +2925,7 @@ static void CheckEnemyBrainMode_ntscaug6jun26(char *self, int *outMode,
     if (((((Act *)sub)->flags20.ll >> 34) & 1) == 0) {
         goto no_bit;
     }
-    ((Act *)sub)->flags20.ll &= ~(1ULL << 34);
+    ((Act *)sub)->flags20.ll &= ~(PAL_NTSCAUG6(1ULL << 34, 1ULL << 32));
     mode = -2;
     goto store;
 no_bit:
@@ -2335,8 +2936,12 @@ store:
 
 static void CheckEnemyBrainMode(char *self, int *outMode, ICO_WORD_PTR(GObj *) * outData)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        CheckEnemyBrainMode_ntscaug6jun26(self, outMode, outData);
+    if (ICO_JUN26) {
+        CheckEnemyBrainMode_jun26(self, outMode, outData);
+        return;
+    }
+    if (ICO_NTSCAUG6) {
+        CheckEnemyBrainMode_ntscaug6(self, outMode, outData);
         return;
     }
     char *sub = ICO_RAW(char *, self, 0x164, (char *)GOBJ_ACT(self));
@@ -2584,7 +3189,97 @@ static void subEnemyBrainMain_ntsc(GObj *volatile self)
     }
 }
 
-static void subEnemyBrainMain_aug6jun26(GObj *volatile self)
+static void subEnemyBrainMain_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    int mode;
+    ICO_WORD_PTR(GObj *) data;
+
+    GOBJ_ACT(self)->enemy->reqMode = GOBJ_ACT(self)->enemy->mode = 0;
+    GOBJ_ACT(self)->enemy->waitCount = 2;
+    _ACTWait(1);
+    _ACTWait(1);
+    _ACTWait(1);
+    switch (sub->brainStatus) {
+    case 4:
+        if ((char *)girlGObj != 0) {
+            eBrainSendMes(self, 9);
+            eBrainSendMes(self, 7);
+            sub->motReq = SetMotionRequest(self, 219, sub->env.motOriReq);
+            actEnemyForceSwitchToCarry((void *)self);
+            if (gflagChk(342) != 0) {
+                sub->motReq = SetMotionRequest(self, 220, sub->env.motOriReq);
+            }
+        }
+        break;
+    case 1:
+        if ((char *)girlGObj != 0 &&
+            ACTCheckViewCl((void *)self, (char *)girlGObj, test_CURRENTROOT((girlGObj)), 360,
+                           3.40282347e+38f /* FLT_MAX */) != 0) {
+            eBrainSendMes(self, 2);
+        } else {
+            eBrainSendMes(self, 1);
+        }
+        break;
+    case 2:
+        if ((char *)girlGObj != 0) {
+            eBrainSendMes(self, 2);
+        }
+        break;
+    case 5:
+        eBrainSendMes(self, 3);
+        break;
+    }
+    while (1) {
+        CheckEnemyBrainMode((char *)self, &mode, &data);
+        BrainMode_Requset(self, mode, data);
+        if (GOBJ_ACT(self)->enemy->reqMode != GOBJ_ACT(self)->enemy->mode ||
+            (((int)(sub->flags18.ll >> 61)) & 1) != 0) {
+            sub->flags18.ll &= ~(1LL << 61);
+            GOBJ_ACT(self)->enemy->mode = GOBJ_ACT(self)->enemy->reqMode;
+            GOBJ_ACT(self)->enemy->target = GOBJ_ACT(self)->enemy->flags.w.reqTarget.gobj;
+            sub->brainTarget = (GObj *)GOBJ_ACT(self)->enemy->target;
+            sub->brainAim = brainModeTable[GOBJ_ACT(self)->enemy->mode].aim;
+            sub->infoPos = brainModeTable[GOBJ_ACT(self)->enemy->mode].infoPos;
+            if (sub->infoPos == 4) {
+                gamesysObjInfoPosSetStage(self, 4, 0, stage_no);
+            }
+            actChangeActBrain(isysCurrentGObj,
+                              (void *)brainModeTable[GOBJ_ACT(self)->enemy->mode].brain,
+                              &sub->brainProc);
+        }
+        if (sub->carried != 0) {
+            _ACTCharStatus_Set((void *)self, 12, -1.0f, 0);
+        }
+        if (GOBJ_ACT(self)->enemy->waitCount != 0) {
+            GOBJ_ACT(self)->enemy->waitCount -= 1;
+        }
+        if (brainModeTable[GOBJ_ACT(self)->enemy->mode].stoppable != 0 &&
+            (((int)(sub->flags18.ll >> 58)) & 1)) {
+            char *g = *(char **)(char *)sub;
+
+            isysGObjProcPause(g);
+            sub->flags20.ll |= 32LL;
+            sub->stick.mag = 0;
+            ((int *)sub->dir)[0] = 0;
+            ((int *)sub->dir)[1] = 0;
+            ((int *)sub->dir)[2] = 0;
+            sub->stick.y = 127;
+            sub->stick.x = 127;
+            while (1) {
+                if (((int)(sub->flags18.ll >> 57)) & 1) {
+                    isysGObjProcActive(g);
+                    sub->flags20.ll &= ~32LL;
+                    break;
+                }
+                _ACTWait(1);
+            }
+        }
+        _ACTWait(1);
+    }
+}
+
+static void subEnemyBrainMain_aug6(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
     int mode;
@@ -2712,12 +3407,16 @@ static void subEnemyBrainMain_aug6jun26(GObj *volatile self)
 
 void subEnemyBrainMain(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        subEnemyBrainMain_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         subEnemyBrainMain_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        subEnemyBrainMain_aug6jun26(self);
+    if (ICO_AUG6) {
+        subEnemyBrainMain_aug6(self);
         return;
     }
     Act *sub = GOBJ_ACT(self);
@@ -2851,8 +3550,25 @@ void subEnemyBrainMain(GObj *volatile self)
     }
 }
 
+static inline void afterCommonCarry_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    iosOmSendMail(sub->carried, 46, self);
+    GOBJ_SUB(sub->carried)->disp = 1;
+    ACTGameCollisionOn((void *)sub->carried);
+    gflagOff(342);
+    sub->carried = 0;
+    if (sub->actMode == 5) {
+        eBrainSendMes(self, 4);
+    }
+}
+
 inline void afterCommonCarry(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        afterCommonCarry_jun26(self);
+        return;
+    }
     Act *sub = GOBJ_ACT(self);
     GObj *girl = girlGObj;
     GObj *obj = self;
@@ -2878,7 +3594,7 @@ inline void afterCommonCarry(GObj *volatile self)
 
 inline void funcEnemyCarryFail(GObj *self)
 {
-    GOBJ_ACT(self)->flags20.ll |= (1ULL << 34);
+    GOBJ_ACT(self)->flags20.ll |= (PAL_NTSCAUG6JUN26(1ULL << 34, 1ULL << 32));
 }
 
 inline void subEnemyBrain_Idle(GObj *volatile self)
@@ -2917,8 +3633,36 @@ inline void subEnemyBrain_Await(GObj *volatile self)
     }
 }
 
+static inline void subEnemyBrain_FindGirl_jun26(GObj *volatile self)
+{
+    Act *sub = GOBJ_ACT(self);
+    int i;
+
+    for (i = 0; i < (60 - systemStatus[0] * 10) / systemStatus[1] / 2; i++) {
+        ICO_RAW(int, sub, 0x34C, ((int *)&sub->stick)[5]) = 0;
+        ((int *)sub->dir)[0] = 0;
+        ICO_RAW(int, sub, 0x124, ((int *)sub->dir)[1]) = 0;
+        ((int *)sub->dir)[2] = 0;
+        ACTSendMailCorrect((void *)self, 206);
+        if (sub->actMode == 70) {
+            break;
+        }
+        _ACTWait(1);
+    }
+    for (i = 0; i < (60 - systemStatus[0] * 10) / systemStatus[1] * 250 / 60; i++) {
+        _DoAwait(self);
+        _ACTWait(1);
+    }
+    eBrainSendMes(self, 1);
+    _ACTWait(0);
+}
+
 inline void subEnemyBrain_FindGirl(GObj *volatile self)
 {
+    if (ICO_JUN26) {
+        subEnemyBrain_FindGirl_jun26(self);
+        return;
+    }
     Act *sub = GOBJ_ACT(self);
     int i;
 
@@ -2986,11 +3730,11 @@ static inline void subEnemyBrain_ToGenerator_aug6jun26(GObj *self)
         ((int *)sub->dir)[1] = 0;
         ((int *)sub->dir)[2] = 0;
         _ACTWait(30);
-        ACTSendMailCorrect((void *)gobj, 237);
+        ACTSendMailCorrect((void *)gobj, PAL_JUN26(237, 232));
         _ACTWait(0);
     }
     while (1) {
-        ACTSendMailCorrect((void *)gobj, 326);
+        ACTSendMailCorrect((void *)gobj, PAL_JUN26(326, 315));
         _ACTWait(1);
     }
 }
@@ -3067,10 +3811,28 @@ static inline unsigned char IsBoyStatus_NotDanger_ntscaug6jun26(void)
     return 0;
 }
 
+static inline void enemyDodgeSendMail_jun26(GObj *self) /* derived name */
+{
+    Act *sub = GOBJ_ACT(self);
+
+    if (EnemyUtil_isOtherStatus(self, 0) != 0) {
+        return;
+    }
+    if (((int)(_GetRandom() * 10.0f)) & 1) {
+        ACTSendMailCorrect(self, 185);
+    }
+    ACTSendMailCorrect(self, 183);
+    sub->flags18.ll |= 1LL << 62;
+}
+
 /* A static inline.  `sub` is computed inside the helper; in enemy_dodge the
    caller already holds it. */
 static inline void enemyDodgeSendMail(GObj *self) /* derived name */
 {
+    if (ICO_JUN26) {
+        enemyDodgeSendMail_jun26(self);
+        return;
+    }
     Act *sub = GOBJ_ACT(self);
 
     if (EnemyUtil_isOtherStatus(self, 0) != 0) {
@@ -3153,7 +3915,7 @@ static void enemy_dodge_aug6jun26(GObj *self)
             if (sub->enemy->sizeClass != 0 && (((int)(sub->enemy->flags.ll >> 1)) & 1) == 0) {
                 enemyDodgeSendMail(self);
             } else {
-                ACTSendMailCorrect(self, 256);
+                ACTSendMailCorrect(self, PAL_JUN26(256, 249));
             }
         }
     }
@@ -3406,8 +4168,29 @@ inline void EnemyUtil_TurnToBoy(GObj *self, GObj *tgt, int smooze)
     }
 }
 
+static inline ICO_WORD_PTR(GObj *) EnemyUtil_isOtherStatus_jun26(GObj *self, int mode)
+{
+    GObj *g;
+    for (g = isysGObjSearchFromObjKindID_begin(4); g != 0;
+         g = isysGObjSearchFromObjKindID_next(g)) {
+        if (g != self) {
+            Act *sub = GOBJ_ACT(g);
+            if (sub->actMode == 15) {
+                return ICO_ADDR(g);
+            }
+            if (((int)((sub->flags18.ll >> 62))) & 1) {
+                return ICO_ADDR(g);
+            }
+        }
+    }
+    return 0;
+}
+
 inline ICO_WORD_PTR(GObj *) EnemyUtil_isOtherStatus(GObj *self, int mode)
 {
+    if (ICO_JUN26) {
+        return EnemyUtil_isOtherStatus_jun26(self, mode);
+    }
     GObj *g;
     for (g = isysGObjSearchFromObjKindID_begin(4); g != 0;
          g = isysGObjSearchFromObjKindID_next(g)) {
@@ -3885,7 +4668,7 @@ static void subEnemyBrain_ToBoy_aug6jun26(GObj *volatile self)
         mode = 0;
         r = (int)(random_unit() * 10.0f) % 100;
         debug_StdPrintfDummy("**toboy function start :: count=[%d]\n", cnt++);
-        ret = _ApproachTarget(self, boy, (char *)sub->dir, NakaBoss,
+        ret = _ApproachTarget(self, boy, (char *)sub->dir, PAL_JUN26(NakaBoss, 0),
                               battleRangeScale_ntscaug6jun26(self, 220.0f, 1.0f), 0);
         v[0] = test_CURRENTROOT((void *)self)[0];
         v[1] = test_CURRENTROOT((void *)self)[1];
@@ -3937,7 +4720,9 @@ static void subEnemyBrain_ToBoy_aug6jun26(GObj *volatile self)
                 sub->dir[1] = 0.0f;
                 sub->dir[2] = 0.0f;
                 _DoAwait(self);
-                NakaBoss(self, 0, 0.0f);
+                if (!ICO_JUN26) {
+                    NakaBoss(self, 0, 0.0f);
+                }
                 _ACTWait(1);
             }
             debug_StdPrintfDummy("await end\n");
@@ -3949,26 +4734,28 @@ static void subEnemyBrain_ToBoy_aug6jun26(GObj *volatile self)
         }
     result:
         debug_StdPrintfDummy("toboy ra is [%d]\n", mode);
-        if (stage_no == 84 || stage_no == 3 || stage_no == 46) {
-            if (mode == 4 || mode == 5) {
-                mode = 3;
+        if (!ICO_JUN26) {
+            if (stage_no == 84 || stage_no == 3 || stage_no == 46) {
+                if (mode == 4 || mode == 5) {
+                    mode = 3;
+                }
             }
         }
         switch (mode - 1) {
         case 0:
-            ACTSendMailCorrect(self, 237);
+            ACTSendMailCorrect(self, PAL_JUN26(237, 232));
             break;
         case 1:
             break;
         case 2:
             if (IsBoyStatus_NotDanger_ntscaug6jun26() != 0) {
                 if ((char *)girlGObj != 0) {
-                    if (GOBJ_ACT(girlGObj)->actMode != 107) {
+                    if (GOBJ_ACT(girlGObj)->actMode != PAL_JUN26(107, 106)) {
                         break;
                     }
                 }
             }
-            ACTSendMailCorrect(self, 256);
+            ACTSendMailCorrect(self, PAL_JUN26(256, 249));
             break;
         case 3:
             if (isNearestEnemyToBoy(self, boyGObj, w) && EnemyUtil_isOtherStatus(self, 0) == 0) {
@@ -3991,7 +4778,9 @@ static void subEnemyBrain_ToBoy_aug6jun26(GObj *volatile self)
                 }
             }
             _DoAwait(self);
-            NakaBoss(self, 0, 0.0f);
+            if (!ICO_JUN26) {
+                NakaBoss(self, 0, 0.0f);
+            }
             _ACTWait(1);
         }
     }
@@ -4219,7 +5008,7 @@ void subEnemyBrain_ToGirl(GObj *volatile self)
         sub->dir[2] = 0.0f;
         _ACTWait(30);
         eBrainSendMes((void *)self, 5);
-        ACTSendMailCorrect(self, PAL_NTSC_AUG6JUN26(0x100, 240, 237));
+        ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0x100, 240, 237, 232));
         _ACTWait(0);
     }
     while (1) {
@@ -4289,14 +5078,55 @@ end:
     return ret;
 }
 
+static void FlyMail_jun26(void *self)
+{
+    int flyLow = 0;
+    int flyHigh = 0;
+    GObj *gen;
+
+    if (GOBJ_ACT(self)->frame < 12) {
+        return;
+    }
+    switch (CanThisEnemyFly(self)) {
+    case 1:
+        flyLow = 1;
+        break;
+    case 2:
+        flyLow = 1;
+        flyHigh = 1;
+        break;
+    }
+    if (isEnemyActive(self) == 0) {
+        return;
+    }
+    if (IsEnemyBrainToGenerator(self, &gen)) {
+        if (flyHigh == 0 && debug_enemy_fly_with_girl == 0) {
+            return;
+        }
+        ACTSendMailCorrect(self, 30);
+    } else {
+        if (flyLow == 0) {
+            return;
+        }
+        ACTSendMailCorrect(self, 29);
+    }
+}
+
 inline int FlyMail(void *self)
 {
+    if (ICO_JUN26) {
+        FlyMail_jun26(self);
+        return 0;
+    }
     int x = GOBJ_ACT(self)->frame;
     if (x < 0xC) {
         return -1;
     }
     return flyMailCore(self);
 }
+
+static int _ApproachTarget_Way(GObj *self, void *tgt, void *pos, void *fn, float range,
+                               unsigned char flag);
 
 /* a static inline, expanded twice inside _ApproachTarget_Way */
 static inline unsigned char waitEnemyFly(GObj *self) /* derived name */
@@ -4425,8 +5255,73 @@ static int _ApproachTarget_Way_ntsc(GObj *self, void *tgt, void *pos, void *fn, 
     }
 }
 
-static int _ApproachTarget_Way_aug6jun26(GObj *self, void *tgt, void *pos, void *fn, float range,
-                                         unsigned char flag)
+static int _ApproachTarget_Way_jun26(GObj *self, void *tgt, void *pos, void *fn, float range,
+                                     unsigned char flag)
+{
+    float p0[4];
+    float p1[4];
+    Act *sub = GOBJ_ACT(self);
+    int i;
+
+    GetRootProjectionPosOfGObj(p0, tgt);
+    GetRootProjectionPosOfGObj(p1, self);
+    for (i = 0; i < 20; i++) {
+        if (IsSelectID_EnemyCtrl(ICO_RAW(int, self, 8, ((GObj *)self)->labelId)) != 0) {
+            break;
+        }
+        _ACTWait(1);
+    }
+    if (ACTWayMove_BeginDetail(self, p1, p0, tgt, 0, 0) == 0) {
+        FlyMail(self);
+        return 0;
+    }
+    while (1) {
+        GetRootProjectionPosOfGObj(p0, tgt);
+        GetRootProjectionPosOfGObj(p1, self);
+        if (!(_DistSqGV(p1, p0) < 1440000.0f) ||
+            240.0f < ((p1[1] - p0[1] < 0.0f) ? -(p1[1] - p0[1]) : (p1[1] - p0[1]))) {
+            FlyMail(self);
+        }
+        if (fn != 0) {
+            ((void (*)(GObj *, void *, float))fn)(
+                self, tgt, _DistGV(test_CURRENTROOT(self), test_CURRENTROOT(tgt)));
+        }
+        if (sub->actMode == 6) {
+            _ACTWait(1);
+            continue;
+        }
+        if (ACTWayMove_NextDetail(self, pos, p0, 0, 0) == 0) {
+            return 0;
+        }
+        *(float *)((char *)pos + 0) = sub->wayNodeX;
+        *(float *)((char *)pos + 4) = sub->wayNodeY;
+        *(float *)((char *)pos + 8) = sub->wayNodeZ;
+        if (((int)(((ActStatusWord *)&sub->wayFlags)->q >> 16)) & 1) {
+            FlyMail(self);
+        }
+        if ((((int)(((ActStatusWord *)&sub->wayFlags)->q >> 16)) & 1) == 0 &&
+            sub->wayGoalDist < range && sub->wayGoalHeight < 100.0f &&
+            ((sub->wayGoalHeight < 0.0f) ? -sub->wayGoalHeight : sub->wayGoalHeight) < 200.0f) {
+            return 1;
+        }
+        if (sub->wayGoalDist < 200.0f) {
+            sub->stick.mag = 0.5f;
+        } else if (ACTWay_IsMustWalkFromWay(self) != 0) {
+            sub->stick.mag = 0.5f;
+        } else {
+            sub->stick.mag = 1.0f;
+        }
+        if (flag != 0) {
+            SetMotionDirection(self, (float *)sub->dir);
+            flag = 0;
+        }
+        _ACTWait(1);
+    }
+    /* disabled in retail: the motion-request timer and mail reports */
+}
+
+static int _ApproachTarget_Way_aug6(GObj *self, void *tgt, void *pos, void *fn, float range,
+                                    unsigned char flag)
 {
     float p0[4];
     float p1[4];
@@ -4525,11 +5420,14 @@ static int _ApproachTarget_Way_aug6jun26(GObj *self, void *tgt, void *pos, void 
 static int _ApproachTarget_Way(GObj *self, void *tgt, void *pos, void *fn, float range,
                                unsigned char flag)
 {
+    if (ICO_JUN26) {
+        return _ApproachTarget_Way_jun26(self, tgt, pos, fn, range, flag);
+    }
     if (ICO_NTSC) {
         return _ApproachTarget_Way_ntsc(self, tgt, pos, fn, range, flag);
     }
-    if (ICO_AUG6JUN26) {
-        return _ApproachTarget_Way_aug6jun26(self, tgt, pos, fn, range, flag);
+    if (ICO_AUG6) {
+        return _ApproachTarget_Way_aug6(self, tgt, pos, fn, range, flag);
     }
     float p0[4];
     float p1[4];
@@ -4653,8 +5551,24 @@ inline int isEnemyKidnapEnable(GObj *self)
     return actEnemyFlagCheckActive(self);
 }
 
+static inline int GetEnemyType_jun26(float x, float y, float z)
+{
+    float size[5] = {0.6f, 1.1f, 2.2f, 9.9f, -1.0f};
+    int i;
+
+    for (i = 0; 0.0f < size[i]; i++) {
+        if (x < size[i]) {
+            return i;
+        }
+    }
+    return 3;
+}
+
 inline int GetEnemyType(float x, float y, float z)
 {
+    if (ICO_JUN26) {
+        return GetEnemyType_jun26(x, y, z);
+    }
     return 1;
 }
 
@@ -4759,7 +5673,88 @@ static void actEnemyStart_ntsc(GObj *self)
     _ACTWait(0);
 }
 
-static void actEnemyStart_aug6jun26(GObj *self)
+static void actEnemyStart_jun26(GObj *self)
+{
+    Act *act;
+    int alive;
+    float life;
+
+    debug_StdPrintfDummy("actEnemyStart:%p\n", self);
+    act = actInitialize(self);
+    actInitialize_ext_charcter(self);
+    actInitialize_only_charcter((char *)self);
+    actInitialize_geo(self);
+    ACTGame_LwsEffectInit(self);
+    ACTParaStatus_Init(self);
+    _ACTCharStatus_Init((int **)self);
+    GOBJ_WORK(self)->bga = InitMultiBgaManager(1);
+    {
+        EnemyStartRec p[4] = {
+            {0, 30, 18, 90, 0, _ACTGame_GetParamF(15), 321.0f, 1},
+            {1, 0, 18, 50, 0, _ACTGame_GetParamF(16), 321.0f, 0},
+            {2, 29, 22, 25, 50, _ACTGame_GetParamF(17), 321.0f, 0},
+            {2, 28, 22, 0, 100, 3.40282347e+38f /* FLT_MAX */, 322.0f, 1},
+        };
+        unsigned long long bit;
+        float size = GOBJ_SUB(self)->nodes->scale[0];
+        int kind = GetEnemyType(size, 0.0f, 0.0f); /* y and z are not read */
+
+        GOBJ_ACT(self)->enemy->bodySize = size;
+        GOBJ_ACT(self)->enemy->liftKind = kind;
+        GOBJ_ACT(self)->enemy->sizeClass = p[kind].sizeClass;
+        GOBJ_ACT(self)->enemy->paraStatus = p[kind].paraStatus;
+        GOBJ_ACT(self)->enemy->clingNode = p[kind].clingNode;
+        GOBJ_ACT(self)->enemy->attackChance = p[kind].attackChance;
+        GOBJ_ACT(self)->enemy->attackChance2 = p[kind].attackChance2;
+        act->maxLife = p[kind].maxLife;
+        GOBJ_ACT(self)->enemy->bodyslamMail = (int)p[kind].bodyslamMail;
+        GOBJ_ACT(self)->enemy->bossLife = 3;
+        bit = p[kind].noGuard;
+        act->flags18.ll = (act->flags18.ll & ~(1ULL << 45)) | ((bit & 1) << 45);
+    }
+    if (GOBJ_ACT(self)->enemy->liftKind == 3) {
+        ICO_RAW(float, (ICO_RAWP(EnemySubSlot *, self, 0x15C, (EnemySubSlot *)&self->dobj))->p,
+                0x45C, GOBJ_SUB(self)->root.ikRate0) = 0.05f;
+        ICO_RAW(float, (ICO_RAWP(EnemySubSlot *, self, 0x15C, (EnemySubSlot *)&self->dobj))->p,
+                0x460, GOBJ_SUB(self)->root.handRate) = 0.05f;
+        ICO_RAW(float, (ICO_RAWP(EnemySubSlot *, self, 0x15C, (EnemySubSlot *)&self->dobj))->p,
+                0x464, GOBJ_SUB(self)->root.ikRate1) = 0.05f;
+        ICO_RAW(float, (ICO_RAWP(EnemySubSlot *, self, 0x15C, (EnemySubSlot *)&self->dobj))->p,
+                0x468, GOBJ_SUB(self)->root.ikRate2) = 0.05f;
+    }
+    GOBJ_ACT(self)->enemy->battleType = debug_enemy_battle_type;
+    setBattleStatus(self);
+    alive = 0;
+    if (actEnemyFlagCheckDead(self) != 0) {
+        alive = 1;
+    }
+    if (alive != 0) {
+        act->flags18.ll = act->flags18.ll & ~(1LL << 32);
+    }
+    _ACTWait(1);
+    act->mainMail = (ActMail *)&actIntrList[67];
+    if (debug_brain_flag != 0) {
+        actCreateSubThread((void *)subEnemyBrainMain, 20);
+    }
+    actCreateSubThread((void *)subEnemyControl, 21);
+    actCreateSubThread((void *)subEnemyCollision, 21);
+    actCreateSubThread((void *)subCommonIdle, 21);
+    act->mail = (ActMail *)&actIntrList[72];
+    *(ActKind *)&act->actKind = ACT_KIND_ENEMY;
+    life = GetEnemyDefLife(self);
+    act->life = act->maxLife = life;
+    if (life < 10.0f) {
+        act->life = act->maxLife = 10.0f;
+    }
+    act->wayMode = 0;
+    ACTSendMailCorrect(self, 177);
+    if (alive != 0) {
+        actEnemyHyde(self);
+    }
+    _ACTWait(0);
+}
+
+static void actEnemyStart_aug6(GObj *self)
 {
     Act *act;
     int alive;
@@ -4841,12 +5836,16 @@ static void actEnemyStart_aug6jun26(GObj *self)
 
 void actEnemyStart(GObj *self)
 {
+    if (ICO_JUN26) {
+        actEnemyStart_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         actEnemyStart_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        actEnemyStart_aug6jun26(self);
+    if (ICO_AUG6) {
+        actEnemyStart_aug6(self);
         return;
     }
     Act *act;
@@ -4939,9 +5938,10 @@ static void subEnemyBrain_Irregular_ntscaug6jun26(GObj *volatile self)
 {
     /* the EE read the doubleword at Act 0x20 through a view of the Act:
        Act.flags20 */
-    GOBJ_ACT(self)->flags20.ll &= ~(
+    GOBJ_ACT(self)->flags20.ll &= ~PAL_NTSCAUG6JUN26(
+        1ULL << 34,
         1ULL
-        << 34); /* PC port: the carry-failed bit (the 2001 builds keep it in bit 32 of the word at 0x150) */
+            << 32); /* PC port: the carry-failed bit (the 2001 builds keep it in bit 32 of the word at 0x150) */
     eBrainSendMes(self, 4);
     if (isEnemyCarriedByGirl(self)) {
         afterCommonCarry(self);
@@ -4984,8 +5984,10 @@ void subEnemyBrain_Attack(GObj *volatile self)
         _ACTWait(1);
     }
     for (i = 0; i < (60 - systemStatus[0] * 10) / systemStatus[1] * 100 / 60; i++) {
-        if (i < (60 - systemStatus[0] * 10) / systemStatus[1] * 50 / 60) {
-            enemyDodgeSendMail(self);
+        if (!ICO_JUN26) {
+            if (i < (60 - systemStatus[0] * 10) / systemStatus[1] * 50 / 60) {
+                enemyDodgeSendMail(self);
+            }
         }
         _DoAwait(self);
         if ((60 - systemStatus[0] * 10) / systemStatus[1] * 80 / 60 < i) {
@@ -5011,13 +6013,13 @@ void subEnemyBrain_Cling(GObj *volatile self)
     sub->dir[1] = v[1];
     sub->dir[2] = v[2];
     SetMotionDirection((void *)self, v);
-    ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0xC2, 181, 178));
+    ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6_JUN26(0xC2, 181, 178, 175));
     _ACTWait(1);
     _ACTWait(1);
     while (1) {
         if (sub->actMode == 4 || sub->actMode == PAL_NTSCAUG6JUN26(0x10, 16)) {
             if (_DistSqGV(test_CURRENTROOT((GObj *)tgt), test_CURRENTROOT(self)) < 3600.0f) {
-                ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0xD0, 192, 189));
+                ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6_JUN26(0xD0, 192, 189, 186));
             }
         } else {
             _ACTWait(30);
@@ -5034,7 +6036,7 @@ inline void subEnemyBrain_Shoulder(GObj *volatile self)
     float *me = test_CURRENTROOT(self);
     _OrientXZGV(dir, girl, me);
     SetMotionDirection((void *)self, dir);
-    ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x162, 326, 322));
+    ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6_JUN26(0x162, 326, 322, 311));
     while (1) {
         _ACTWait(120);
         _BrainMode_SetDirect(self, 0, 0);
@@ -5043,7 +6045,7 @@ inline void subEnemyBrain_Shoulder(GObj *volatile self)
 
 inline void subEnemyBrain_Pickup(GObj *volatile self)
 {
-    ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x16C, 336, 332));
+    ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6_JUN26(0x16C, 336, 332, 316));
     while (1) {
         _ACTWait(120);
         _BrainMode_SetDirect(self, 0, 0);
@@ -5053,9 +6055,9 @@ inline void subEnemyBrain_Pickup(GObj *volatile self)
 inline void subEnemyBrain_Bodyslam(GObj *volatile self)
 {
     if (GOBJ_ACT(self)->enemy->liftKind == 3) {
-        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x175, 345, 341));
+        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6_JUN26(0x175, 345, 341, 325));
     } else {
-        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6JUN26(0x173, 343, 339));
+        ACTSendMailCorrect((void *)self, PAL_NTSC_AUG6_JUN26(0x173, 343, 339, 323));
     }
     while (1) {
         _ACTWait(120);

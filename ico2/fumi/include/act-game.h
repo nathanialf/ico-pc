@@ -8,11 +8,10 @@
 #ifndef ACT_GAME_H
 #define ACT_GAME_H
 
-
 #include "typedef.h" /* WayRequest, which ActWork carries at 0x580 (JPN, KOR and CN 0x570) */
-
 #include "typedef.h" /* WayRequest, which ActWork carries at 0x580 (JPN and KOR 0x570) */
 #include "clipCollisionManager.h"
+#include "typedef.h" /* WayRequest, which ActWork carries */
 
 struct GObj;
 
@@ -175,6 +174,9 @@ typedef struct ActWork { /* field names derived */
 
 /* act-game.c's `inline` functions, in the order of their definitions'
  * out-of-line copies at the end of the object (first-declaration order). */
+void WithMailFunc_AttackReject(struct GObj *self);
+/* act-game.c's `inline` functions, in the order of their definitions'
+ * out-of-line copies at the end of the object (first-declaration order). */
 int ACTNotNeedCameraOffset(struct GObj *self);
 void ACTGameCollisionOn(volatile int *self);
 void ACTGameCollisionOff(volatile int *self);
@@ -217,9 +219,7 @@ int ACTGameView_Check(struct GObj *self, struct GObj *obj);
 int ACTGameViewSimple_Check(struct GObj *self, struct GObj *obj);
 int ACTGame_GetMotOrientFromWeapon(struct GObj *weapon);
 unsigned char ACTGame_NoWeapon(struct GObj *self);
-
 inline int ACTGame_isWeaponCombustible(GObj *self);
-
 struct GObj *ACTGame_GetNearestGObj(float *pos, int kind);
 void ACTLookTarget_Init(struct GObj *self);
 int _ACTLookTarget_Set(struct GObj *self, struct GObj *target, float *pos, int pri, int mode);

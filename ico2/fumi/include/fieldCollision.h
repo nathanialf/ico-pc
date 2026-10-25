@@ -37,9 +37,9 @@ typedef struct FcWallEnt { /* field names derived */
     float height;          /* 0x40 */
     short angle;           /* 0x44 */
     char pad46[2];
-    int attr;                      /* 0x48 */
-    ICO_EEWORD(float *) normal;    /* 0x4C */
-} FcWallEnt;                       /* derived name */
+    int attr;                   /* 0x48 */
+    ICO_EEWORD(float *) normal; /* 0x4C */
+} FcWallEnt;                    /* derived name */
 
 #define FC_WALL_NORMAL(w) ICO_EEPTR(float *, (w)->normal)
 
@@ -53,14 +53,14 @@ typedef struct FcWallEnt { /* field names derived */
  * reads it as FuzioCtx on the EE. */
 typedef struct FcColl { /* field names derived */
     char pad0[8];
-    int count;               /* 0x08, the wall count */
-    int nfloor;              /* 0x0C, the floor count */
-    ICO_EEWORD(int) wcl;     /* 0x10 */
-    ICO_EEWORD(int) fcl;     /* 0x14 */
-    ICO_EEWORD(int) wblk;    /* 0x18 */
-    ICO_EEWORD(int) fblk;    /* 0x1C */
-    ICO_EEWORD(int) ofs;     /* 0x20 */
-} FcColl;                    /* derived name */
+    int count;            /* 0x08, the wall count */
+    int nfloor;           /* 0x0C, the floor count */
+    ICO_EEWORD(int) wcl;  /* 0x10 */
+    ICO_EEWORD(int) fcl;  /* 0x14 */
+    ICO_EEWORD(int) wblk; /* 0x18 */
+    ICO_EEWORD(int) fblk; /* 0x1C */
+    ICO_EEWORD(int) ofs;  /* 0x20 */
+} FcColl;                 /* derived name */
 
 typedef struct { /* field names derived */
     float x, y, z, w;
@@ -102,7 +102,7 @@ void ClipFloorIH(ClipWork *work);
 void ClipFloorCheckCB(ClipWork *work, ICO_WORD_PTR(ClipFilterFn) filter);
 void ClipCollision(ClipWork *self);
 int ChangeFieldCollisionDebugMode(int drawRay);
-
+void SetCollisionFilter(int (*filter)(void *obj)); /* derived name */
 void LoadCollision(void **self, char *fname);
 void DrawCollision(int mode);
 int ClipPlane(ClipWork *work);
@@ -118,10 +118,8 @@ float GetYProjectionOfPlane(float *plane, float *pos);
 void ResetCollisionPC(void);
 int PositionOfExit(float *pos, int attr);
 void GetGlobalWallPlane(float *plane, WallCfg *wall);
-
 /* compiled in place */
 void ClipFloorByGObj(ClipWork *work, struct GObj *gobj);
-
 void DrawCollisionRay(ClipWork *ray);
 void DrawGObjFloorCollision(struct GObj *gobj, int col);
 void DrawGObjWallCollision(struct GObj *gobj, int col);

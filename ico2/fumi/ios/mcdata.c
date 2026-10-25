@@ -1,7 +1,10 @@
+#include "region.h" /* PC port: the demo's arms test the disc */
 #include "cdvd.h"
 #include "mcdata.h"
 #include "thread.h"
 #include "mcard.h"
+#include "memory.h"
+#include "ios.h"
 
 struct McIconWork { /* field names derived */
     int remain;
@@ -13,10 +16,19 @@ struct McIconWork { /* field names derived */
    on has finished */
 static int mcDataDone; /* derived name */
 
+static inline int _iosMcIconWriteIconsys_jun26(CdvdBgReq *self, struct McIconWork *p)
+{
+    iosCdvdBackGroundRead(self, p->buf, p->size);
+    return 1;
+}
+
 /* Background-read callback: pulls the icon file off the disc a chunk at a
    time into a 64-byte aligned buffer and waits for the writer to drain it. */
 static inline int _iosMcIconWriteIconsys(CdvdBgReq *self, struct McIconWork *p)
 {
+    if (ICO_JUN26) {
+        return _iosMcIconWriteIconsys_jun26(self, p);
+    }
     char buf[51200 + 64];
     char *ptr;
     int size;
@@ -44,8 +56,30 @@ static inline int _iosMcIconWriteIconsys(CdvdBgReq *self, struct McIconWork *p)
     return 1;
 }
 
+static inline int iosMcIconWriteIconsys_jun26(struct McMgr *self, const IconFile *p)
+{
+    struct McIconWork work;
+    CdvdBgReq *hdl;
+
+    work.size = (p->size + 2047) / 2048 * 2048;
+    work.buf = iosMallocDebug(ios_partition_sound, work.size, __FILE__, 115);
+
+    hdl = iosCdvdBackGroundMgrAdd(p->name, _iosMcIconWriteIconsys, &work, 0, 0, 0, 0, 0);
+
+    while (hdl->readFunc != 0) {
+        iosMcMgrSync(self);
+    }
+    iosCdvdBackGroundMgrDelete(hdl);
+    iosMcHandlerWrite(self, work.buf, p->size);
+    iosFree(work.buf);
+    return 0;
+}
+
 inline int iosMcIconWriteIconsys(struct McMgr *self, const IconFile *p)
 {
+    if (ICO_JUN26) {
+        return iosMcIconWriteIconsys_jun26(self, p);
+    }
     struct McIconWork work;
     CdvdBgReq *hdl;
     int total = 0;

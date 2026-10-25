@@ -305,13 +305,14 @@ static inline void iosCdvdDiskReadyBlock(void)
     if (sceCdDiskReady(1) != 2) {
         sceCdlFILE fp;
         char file[32];
-        strcpy(file, PAL_JPN_KOR_NTSCAUG6JUN26_CN("SCES_507.60", "SCPS_110.03", "SCPS_560.01",
-                                                  "SCUS_971.13", "SCPS_550.01"));
+        strcpy(file, PAL_JPN_KOR_NTSCAUG6_JUN26_CN("SCES_507.60", "SCPS_110.03", "SCPS_560.01",
+                                                   "SCUS_971.13", "CUS97113\\SCUS_971.13",
+                                                   "SCPS_550.01"));
         iosCdvdChgFileName(file);
         debug_StdPrintfDummy("wait insert ico disk %s %s\n",
-                             PAL_JPN_KOR_NTSCAUG6JUN26_CN("SCES_507.60", "SCPS_110.03",
-                                                          "SCPS_560.01", "SCUS_971.13",
-                                                          "SCPS_550.01"),
+                             PAL_JPN_KOR_NTSCAUG6_JUN26_CN("SCES_507.60", "SCPS_110.03",
+                                                           "SCPS_560.01", "SCUS_971.13",
+                                                           "CUS97113\\SCUS_971.13", "SCPS_550.01"),
                              file);
         do {
             sceCdDiskReady(0);
@@ -498,7 +499,7 @@ static void iosCdvdMgrLoad(IosCdvdHandle *self)
 void temp_loadfunc(IosCdvdHandle *self, char *name, int size, int id, int kind, int word08, int seg)
 {
     void *p = (void *)iosMallocDebug(ios_partition_seki, size, __FILE__,
-                                     LN(1102, 1092, 1102, 828, 802, 790, 1102));
+                                     LN(1102, 1092, 1102, 828, 802, 802, 1102));
 
     iosCdvdHandlerRead(self, p, size);
     debug_StdPrintfDummy("temp_loadfunc::%s  (size:%d)(segid=%d)\n", name, size, seg);
@@ -605,7 +606,7 @@ static void iosCdvdMgrPackLoad(IosCdvdHandle *self)
         systemStatus[8] = 0;
         size = *num * sizeof(PackEnt);
         ent = (PackEnt *)iosMallocDebug(ios_partition_seki, size, __FILE__,
-                                        LN(1174, 1164, 1174, 898, 872, 860, 1174));
+                                        LN(1174, 1164, 1174, 898, 872, 872, 1174));
         iosCdvdHandlerRead(self, ent, size);
         pk = ent;
         for (seg = 0; seg < *num; seg++, pk++) {
@@ -820,7 +821,12 @@ typedef struct { /* field names derived */
 static void iosCdvdUnifileInfoGet(void)
 {
     unifileHandle.ctl.ll &= ~1LL;
-    *(CdvdName16 *)unifileHandle.name = *(CdvdName16 *)"DFDATAS/DATA.DF";
+    if (ICO_JUN26) {
+        /* the demo's DATA.DF is in its game folder (upstream's JUN26 arm) */
+        strcpy(unifileHandle.name, "CUS97113/DFDATAS/DATA.DF");
+    } else {
+        *(CdvdName16 *)unifileHandle.name = *(CdvdName16 *)"DFDATAS/DATA.DF";
+    }
     unifileHandle.handler = unifile_read_func;
     iosCdvdMgrLoad(&unifileHandle);
 }
@@ -841,7 +847,7 @@ void iosCdvdManager(void)
 
     /* JPN, the USA disc and the August 2001 preview: a PlayStation 2 CD; KOR and CN a DVD,
        as PAL */
-    cdDiskType = PAL_JPNNTSCAUG6JUN26(20, 18);
+    cdDiskType = PAL_JPNNTSCAUG6(20, 18); /* PC port: the demo is a DVD in the port's disc table */
     sceCdInit(0);
     sceCdMmode(iosCdvdMediaType);
     sceFsReset();
@@ -1027,8 +1033,9 @@ static void cdWait(int *busy)
                 systemStatus[0x14 / 4] = 1;
                 cdWaitParamSet = 1;
             }
-            strcpy(file, PAL_JPN_KOR_NTSCAUG6JUN26_CN("SCES_507.60", "SCPS_110.03", "SCPS_560.01",
-                                                      "SCUS_971.13", "SCPS_550.01"));
+            strcpy(file, PAL_JPN_KOR_NTSCAUG6_JUN26_CN("SCES_507.60", "SCPS_110.03", "SCPS_560.01",
+                                                       "SCUS_971.13", "CUS97113\\SCUS_971.13",
+                                                       "SCPS_550.01"));
             chgFileName(file);
             r = sceCdDiskReady(1);
             if (r == 2 && sceCdGetDiskType() == cdDiskType && sceCdSearchFile(&fp, file) != 0) {

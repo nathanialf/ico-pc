@@ -285,9 +285,54 @@ static int ACTWayMove_BeginDetail_ntsc(GObj *self, float *goal, float *from, voi
     return ret;
 }
 
+static inline int ACTWayMove_BeginDetail_jun26(GObj *self, float *goal, float *from, void *tgt,
+                                               void *e)
+{
+    WVTObj way;
+    Act *act = GOBJ_ACT(self);
+    WVTObj *home;
+    WVTObj *wp;
+    int ret = 0;
+
+    home = &act->way;
+    way = *home;
+    wp = &way;
+    act->wayFlags &= ~0x10000;
+    if (GetWay_begin(from, wp, goal) != 0) {
+        act->wayState.st[1] = 0;
+        if (wp->flag3C == 0) {
+            if (WayMove_CheckCollis(goal, from, tgt, e) == 0) {
+                act->wayState.st[1] = 1;
+                DeleteGuideWay(wp);
+                ret = 3;
+            } else {
+                ret = 2;
+            }
+        } else {
+            ret = 1;
+        }
+        *home = way;
+        act->wayLast = 0;
+        act->wayTarget = (void *)tgt;
+        act->wayFromX = from[0];
+        act->wayFromY = from[1];
+        act->wayFromZ = from[2];
+        act->wayState.st[0] = 1;
+    } else {
+        act->wayState.st[0] = 0;
+    }
+    act->wayState.flags &= ~0x10000;
+    act->wayState.flags &= ~0x1E0000;
+    act->wayDetailFlag = 0;
+    return ret;
+}
+
 int ACTWayMove_BeginDetail(GObj *self, float *goal, float *from, void *tgt, void *e,
                            unsigned char sub)
 {
+    if (ICO_JUN26) {
+        return ACTWayMove_BeginDetail_jun26(self, goal, from, tgt, e);
+    }
     if (ICO_NTSC) {
         return ACTWayMove_BeginDetail_ntsc(self, goal, from, tgt, e, sub);
     }
@@ -393,12 +438,162 @@ _Static_assert(sizeof(WayStep) ==
                    __builtin_offsetof(Act, wayLast) - __builtin_offsetof(Act, wayNodeX),
                "WayStep is not Act's wayNodeX to wayLast");
 
+static int ACTWayMove_NextDetail_jun26(GObj *self, float *node, float *goal, unsigned char e)
+{
+    (void)e; /* PC port: the European parameter, unused here */
+    float pos[4];
+    Act *act = GOBJ_ACT(self);
+    WVTObj *way;
+    int w;
+    WayPoint *wp;
+    int r;
+    unsigned char ok;
+    int n;
+
+    *(WayStep *)&act->wayNodeX = wayStepClear;
+    act->wayNodeX = node[0];
+    act->wayNodeY = node[1];
+    act->wayNodeZ = node[2];
+    if (act->wayState.st[0] == 0) {
+        /* EUC-JP, "there is no route" */
+        debug_StdPrintfDummy("ルートがありません\n");
+    }
+    GetRootProjectionPosOfGObj(pos, self);
+    if (((int)(act->wayState.flags >> 16) & 1) == 0) {
+        if (_DistGV(goal, (char *)&act->wayFromX) > 300.0f) {
+            if (((int)(act->wayState.flags >> 17) & 0xF) == 0) {
+                if (act->actMode != 38) {
+                    w = ACTWayMove_BeginDetail(self, pos, goal, act->wayTarget, 0, 0);
+                    act->wayFlags |= 0x20000;
+                    if (w == 0) {
+                        return 0;
+                    }
+                }
+            }
+        }
+    }
+    if (act->way.flag6C != 0) {
+        if (act->way.chk.start != 0 && _DistSqGV(act->way.chk.start->pos, pos) < 10000.0f) {
+            float d = pos[1] - act->way.chk.start->pos[1];
+
+            if (d < 0.0f ? -d < 150.0f : d < 150.0f) {
+                act->wayFlags |= 0x10000;
+            }
+        }
+    }
+    if (act->actMode == 38) {
+        float v0[4];
+        float v1[4];
+
+        {
+            sceVu0CopyVector(v0, act->way.nrm);
+            sceVu0CopyVector(v1, (float *)act->env.edgeOrient);
+            v0[1] = v1[1] = 0.0f;
+            if (sceVu0InnerProduct(v0, v1) > 0.0f) {
+                act->stick.y = 255;
+            } else {
+                act->stick.y = 0;
+            }
+            act->stick.mag = 1.0f;
+            act->wayState.st[1] = 0;
+            if (self == girlGObj && goal[1] - act->wayFromY > 150.0f && pos[1] < goal[1]) {
+                if (((int)(act->wayState.flags >> 17) & 0xF) == 0) {
+                    act->wayDetailFlag = (60 - systemStatus[0] * 10) / systemStatus[1] * 90 / 60;
+                }
+                act->wayState.flags = (act->wayState.flags & ~0x1E0000) | 0x40000;
+                act->wayDetailX = ((float *)act->env.edgeOrient)[0];
+                act->wayDetailY = ((float *)act->env.edgeOrient)[1];
+                act->wayDetailZ = ((float *)act->env.edgeOrient)[2];
+            }
+            if (act->wayDetailFlag-- > 0) {
+                act->stick.y = 128;
+            } else if (((int)(act->wayState.flags >> 17) & 0xF) != 0) {
+                act->stick.y = 255;
+            }
+        }
+    } else {
+        n = (int)(act->wayState.flags >> 17) & 0xF;
+        if (n > 0) {
+            act->wayState.flags =
+                (act->wayState.flags & ~0x1E0000) | ((long long)((n - 1) & 0xF) << 17);
+            if (((int)(act->wayState.flags >> 17) & 0xF) == 0) {
+                goto restart;
+            }
+            act->stick.mag = 1.0f;
+            act->wayNodeX = act->wayDetailX;
+            act->wayNodeY = act->wayDetailY;
+            act->wayNodeZ = act->wayDetailZ;
+            node[0] = act->wayNodeX;
+            node[1] = act->wayNodeY;
+            node[2] = act->wayNodeZ;
+            return 1;
+        }
+    }
+    switch (act->wayState.st[1]) {
+    case 0:
+        *(short *)&act->wayFlags = 1;
+        way = &act->way;
+        wp = GetWay_next(way, pos);
+        if (wp != 0) {
+            if (act->wayLast != wp) {
+                if (act->wayLast != 0) {
+                    if (act->way.guideFirst <= 0) {
+                        *(short *)&act->wayFlags = 1;
+                    }
+                }
+                act->wayLast = wp;
+            }
+        }
+        act->wayNodeX = act->way.nrm[0];
+        act->wayNodeY = act->way.nrm[1];
+        act->wayNodeZ = act->way.nrm[2];
+        if (act->way.flag3C == 0 && WayMove_CheckCollis(pos, goal, act->wayTarget, 0) == 0 &&
+            act->actMode != 38) {
+            act->wayState.st[1] = 1;
+            DeleteGuideWay(way);
+            *(short *)&act->wayFlags = 2;
+        }
+        break;
+    case 1:
+        *(short *)&act->wayFlags = 2;
+        ok = WayMove_CheckCollis(pos, goal, act->wayTarget, 0);
+        if (stage_no == 8) {
+            if (self == girlGObj && wallGObj_ACTCheckCollis_WAY != 0 &&
+                ICO_RAW(int, wallGObj_ACTCheckCollis_WAY, 0xC,
+                        ((GObj *)wallGObj_ACTCheckCollis_WAY)->kind) == 17 &&
+                IsThisBoxTruck(wallGObj_ACTCheckCollis_WAY) != 7 &&
+                _DistSqGV(goal, test_CURRENTROOT(wallGObj_ACTCheckCollis_WAY)) < 40000.0f &&
+                _DistxzSqGV(pos, test_CURRENTROOT(wallGObj_ACTCheckCollis_WAY)) < 40000.0f) {
+                ok = 0;
+            }
+        }
+        if (ok != 0) {
+            goto restart;
+        }
+        _OrientXZGV((float *)&act->wayNodeX, goal, pos);
+        act->wayGoalDist = _DistxzGV(goal, pos);
+        act->wayGoalHeight = goal[1] - pos[1];
+        break;
+    }
+    if (act->way.reached == 0) {
+        goto done;
+    }
+restart:
+    *(short *)&act->wayFlags = 3;
+    r = ACTWayMove_BeginDetail(self, pos, goal, act->wayTarget, 0, 0);
+    if (r == 0) {
+        return 0;
+    }
+done:
+    return 1;
+}
+
 /* this TU's uses of the gv distance helpers do not fit the void returns gv.h
    carries, and its GetRootProjectionPosOfGObj / IsThisBoxTruck call forms do
    not fit motionManager2.h and box.h */
 
-static int ACTWayMove_NextDetail_aug6jun26(GObj *self, float *node, float *goal, unsigned char d,
-                                           unsigned char e)
+static int ACTWayMove_NextDetail_aug6(GObj *self, float *node, float *goal, unsigned char d,
+                                      unsigned char e)
 {
     (void)e; /* PC port: the European parameter, unused here */
     float pos[4];
@@ -803,11 +998,14 @@ done:
 
 int ACTWayMove_NextDetail(GObj *self, float *node, float *goal, unsigned char d, unsigned char e)
 {
+    if (ICO_JUN26) {
+        return ACTWayMove_NextDetail_jun26(self, node, goal, e);
+    }
     if (ICO_NTSC) {
         return ACTWayMove_NextDetail_ntsc(self, node, goal, d, e);
     }
-    if (ICO_AUG6JUN26) {
-        return ACTWayMove_NextDetail_aug6jun26(self, node, goal, d, e);
+    if (ICO_AUG6) {
+        return ACTWayMove_NextDetail_aug6(self, node, goal, d, e);
     }
     float pos[4];
     Act *act = GOBJ_ACT(self);
@@ -1046,8 +1244,57 @@ static unsigned char way_flag(int flags, int mask) /* derived name */
     return 0;
 }
 
-static int ACTWayExec_Position_aug6jun26(GObj *self, ICO_WORD tgt, float *dir, float speed,
-                                         int flags)
+static int ACTWayExec_Position_jun26(GObj *self, ICO_WORD tgt, float *dir, float speed, int flags)
+{
+    Act *w = GOBJ_ACT(self);
+    char *node;
+    float d2[4];
+    float p2[4];
+    float v[4];
+    float f;
+
+    if (way_flag(flags, 1)) {
+        sceVu0ScaleVector(v, dir, -1.0f);
+    } else {
+        v[0] = dir[0];
+        v[1] = dir[1];
+        v[2] = dir[2];
+    }
+    d2[0] = v[0];
+    d2[1] = v[1];
+    d2[2] = v[2];
+    GetRootProjectionPosOfGObj(p2, self);
+    if (ACTWayMove_BeginDetail(self, p2, d2, (void *)tgt, 0, 0) == 0) {
+        return 0;
+    }
+    node = (char *)w->dir;
+    for (;;) {
+        d2[0] = v[0];
+        d2[1] = v[1];
+        d2[2] = v[2];
+        GetRootProjectionPosOfGObj(p2, self);
+        if (ACTWayMove_NextDetail(self, (float *)node, d2, 0, 0) == 0) {
+            return 0;
+        }
+        f = w->wayGoalDist;
+        w->dir[0] = w->wayNodeX;
+        w->dir[1] = w->wayNodeY;
+        w->dir[2] = w->wayNodeZ;
+        if (f < speed) {
+            if (w->wayGoalHeight < 100.0f) {
+                return 1;
+            }
+        }
+        if (f < 200.0f || way_flag(flags, 2)) {
+            w->stick.mag = 0.5f;
+        } else {
+            w->stick.mag = 1.0f;
+        }
+        _ACTWait(1);
+    }
+}
+
+static int ACTWayExec_Position_aug6(GObj *self, ICO_WORD tgt, float *dir, float speed, int flags)
 {
     Act *w = GOBJ_ACT(self);
     char *node;
@@ -1099,8 +1346,11 @@ static int ACTWayExec_Position_aug6jun26(GObj *self, ICO_WORD tgt, float *dir, f
 
 int ACTWayExec_Position(GObj *self, ICO_WORD tgt, float *dir, float speed, int flags)
 {
-    if (ICO_AUG6JUN26) {
-        return ACTWayExec_Position_aug6jun26(self, tgt, dir, speed, flags);
+    if (ICO_JUN26) {
+        return ACTWayExec_Position_jun26(self, tgt, dir, speed, flags);
+    }
+    if (ICO_AUG6) {
+        return ACTWayExec_Position_aug6(self, tgt, dir, speed, flags);
     }
     Act *w = GOBJ_ACT(self);
     char *node;
@@ -1159,8 +1409,23 @@ int ACTWayExec_Position(GObj *self, ICO_WORD tgt, float *dir, float speed, int f
     }
 }
 
+static inline int ACTWay_IsMustWalkFromWay_jun26(GObj *self)
+{
+    WayPoint *w = GOBJ_ACT(self)->way.chk.cur;
+    float d;
+
+    d = w->float2C;
+    if (d != 0.0f) {
+        return _DistxzSqGV(w->pos, test_CURRENTROOT(self)) < d * d;
+    }
+    return 0;
+}
+
 int ACTWay_IsMustWalkFromWay(GObj *self)
 {
+    if (ICO_JUN26) {
+        return ACTWay_IsMustWalkFromWay_jun26(self);
+    }
     WayPoint *w = GOBJ_ACT(self)->way.chk.cur;
     float d;
 

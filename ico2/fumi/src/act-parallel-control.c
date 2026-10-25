@@ -14,14 +14,14 @@ static int resolve(int v, int n) /* derived name */
         int m = idx;
         int k = 0;
 
-        if (randomMotionKind[m] != 0x47B) {
+        if (randomMotionKind[m] != PAL_NTSC_AUG6_JUN26(0x47B, 1086, 1088, 1167)) {
             do {
                 m++;
                 k++;
-            } while (randomMotionKind[m] != 0x47B);
+            } while (randomMotionKind[m] != PAL_NTSC_AUG6_JUN26(0x47B, 1086, 1088, 1167));
         }
         if (k == 0) {
-            v = 0x47B;
+            v = PAL_NTSC_AUG6_JUN26(0x47B, 1086, 1088, 1167);
         } else {
             int e = idx + n % k;
 
@@ -62,10 +62,10 @@ static void ActPara_MakeTbl_aug6jun26(int *tbl, int mask, int n)
 
     for (i = 0; i < 37; i++) {
         if (((mask >> i) & 1) == 1) {
-            for (j = 0; j < 71; j++) {
+            for (j = 0; j < PAL_JUN26(71, 68); j++) {
                 val = parallelMotionTbl[j].motion[i];
                 val = resolve(val, n);
-                if (val != 1088) {
+                if (val != PAL_JUN26(1088, 1167)) {
                     tbl[j] = val;
                 }
             }
@@ -100,8 +100,22 @@ void ActPara_MakeTbl(int *tbl, unsigned long long mask, int n)
     }
 }
 
+static void ActPara_InitSystem_jun26(void)
+{
+    int i;
+    for (i = 0; i <= 67; i++) {
+        parallelIds[i] = parallelMotionTbl[i].motion[0];
+    }
+    /* a compiled-out overflow check: its message and __FILE__ stay in .rodata
+       and its "0" in .sdata */
+}
+
 void ActPara_InitSystem(void)
 {
+    if (ICO_JUN26) {
+        ActPara_InitSystem_jun26();
+        return;
+    }
     int i;
     for (i = 0; i <= PAL_NTSCAUG6JUN26(85, 70); i++) {
         parallelIds[i] = parallelMotionTbl[i].motion[0];
