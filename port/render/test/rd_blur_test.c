@@ -233,6 +233,8 @@ PadState pad[16];
 int systemStatus[12];
 int GlobalTimer;
 int currentScreenWidth;
+/* main.c's; only the 2001 builds' MotionBlur twins read it */
+int NonLinearCameraMove;
 float ZeroPoint[4];
 
 static unsigned char s_heap[8u << 20] __attribute__((aligned(16)));
