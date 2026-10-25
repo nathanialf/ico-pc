@@ -16,8 +16,8 @@ that copies an existing PS2 save into a card folder. The game's own card code
 | `port/save/mc_import.h`, `mc_import.c` | the importer: a raw card image or a `.psu` archive into a card folder |
 | `tools/mc_import.c` | `mc_import`, the command-line importer |
 | `port/platform/host_config.c` | `ico_host_saves_dir`, `ico_host_saves2_dir`: where the card folders are |
-| `port/save/CMakeLists.txt` | `ico_save` (the card), `ico_save_import` (the importer), the `mc_import` tool, the `save`, `save_jpn`, `save_kor` and `save_cn` tests |
-| `port/save/test/save_test.c` | the `save`, `save_jpn`, `save_kor` and `save_cn` tests |
+| `port/save/CMakeLists.txt` | `ico_save` (the card), `ico_save_import` (the importer), the `mc_import` tool, the `save`, `save_jpn`, `save_kor`, `save_cn`, `save_ntsc`, `save_aug6` and `save_jun26` tests |
+| `port/save/test/save_test.c` | the same tests |
 | `port/core/region_<slug>.c` (seven rows) | each disc's save directory (`mc_save_dir`) and product record size (`mc_product_size`) |
 | `ico2/fumi/ios/mcard.c`, `mcdata.c` | the game's side: the card manager thread, the save and load steps, the icon files |
 
@@ -79,9 +79,9 @@ discs' saves side by side and no disc sees another's (`port/core/region.h`
 | Japanese, SCPS-11003 | `BISCPS-11003ico` | 0x1E8 bytes and a 4-byte sum, 492 bytes | 25,600 bytes |
 | Korean, SCPS-56001 | `BISCPS-56001ico` | 0x1E8 bytes and a 4-byte sum, 492 bytes | 25,600 bytes |
 | Asian, SCPS-55001 | `BISCPS-55001ico` | 0x1E8 bytes and a 4-byte sum, 492 bytes | 25,600 bytes |
-| North American, SCUS-97113 | `BASCUS-97113ico` | 0x18C bytes and a 4-byte sum | not pinned yet |
-| August 2001 preview | `BASCUS-97113ico` (the North American disc's) | 0x18C bytes and a 4-byte sum | not pinned yet |
-| June 2001 demo, SCUS-97158 | `BISCUS-97113ico` | 0x18C bytes and a 4-byte sum | not pinned yet |
+| North American, SCUS-97113 | `BASCUS-97113ico` | 0x18C bytes and a 4-byte sum, 400 bytes | 25,600 bytes (25,596-byte block) |
+| August 2001 preview | `BASCUS-97113ico` (the North American disc's) | 0x18C bytes and a 4-byte sum, 400 bytes | 25,600 bytes (25,596-byte block) |
+| June 2001 demo, SCUS-97158 | `BISCUS-97113ico` | 0x18C bytes and a 4-byte sum, 400 bytes | 20,484 bytes (20,480-byte block) |
 
 The product file is the game's `McProductFile` record (`ico2/common/include/typedef.h`): twenty
 file summaries, the sound, output, vibration and control options, the pad configuration, the
@@ -123,6 +123,19 @@ two discs' saves are one set of files, while their `[mirror]` and `achievements.
 apart (`ntsc_`, `aug6_`). The importer tells a directory by the first row that has it, so a card
 holding that directory reports the North American disc. The demo's directory carries the North
 American game's serial, `BISCUS-97113ico` (mcard.c's literal), not the demo disc's `SCUS-97158`.
+
+On the card these three discs write the record through `mc_product_to_2001` (`mcard.c`): the
+twenty previews at 16-byte steps (`stage`, `playTime`, `sofa`, the unread word on the North American
+disc; `stage`, `cleared`, `playTime`, `sofa` on the preview and the demo), the sound mode at 0x140,
+the output mode at 0x144, the vibration at 0x148 and the pad bytes at 0x14C; the memory record
+keeps the European layout. Their game block has no option words after it: 25,596 bytes on the
+North American disc and the preview, 20,480 bytes on the demo (`gameblock_write`), then the sum.
+All three ship `icon/icon.sys` (964 bytes) and `icon/boy_blk.ico` (95,624 bytes; the symbol tables'
+`iconFile` entries) and save them as `icon.sys` and `boy_blk.ico`. The demo writes each file
+with the 4-byte sum after it, writes its second and third `boy_blk.ico` segments as no-ops (a
+listing finds the file), and never rewrites an icon file that is already on the card
+(`iosMcMgrSaveSeg_jun26`, `iosMcMgrSaveIcon_jun26`). The demo's disc holds a second icon record,
+`mcIconSys` (CRC 0x32533E32), that nothing reads; the tests do not touch it.
 `region_select_test` holds this rule. How the merged `mcard.c` lays this record out in memory is the
 game-code merge's; `save_test`'s part B, which lays the product file out byte by byte, has no run
 for these three discs until that is known.
@@ -267,7 +280,8 @@ tool is built by `port/save/CMakeLists.txt` and kept in every build (`cmake/IcoT
 ## Tests
 
 `port/save/test/save_test.c` is the ctests `save` (the European disc), `save_jpn` (the
-Japanese disc), `save_kor` (the Korean disc) and `save_cn` (the Asian disc): its first argument is the region's slug, which it selects
+Japanese disc), `save_kor` (the Korean disc), `save_cn` (the Asian disc), `save_ntsc` (the North
+American disc), `save_aug6` (the August 2001 preview) and `save_jun26` (the June 2001 demo): its first argument is the region's slug, which it selects
 (`ico_region_select`), so every part runs with that disc's directory and product file size. Each
 runs on temporary card folders in its own working directory, on simulated vsyncs, and needs no
 game data (`port/save/test/save_test.c`, header comment; `port/save/CMakeLists.txt`):
@@ -278,10 +292,14 @@ game data (`port/save/test/save_test.c`, header comment; `port/save/CMakeLists.t
 - `test_mcard`: `ico2/fumi/ios/mcard.c` and `mcdata.c` themselves, compiled unchanged with the
   game's options on the scheduler, driven through the `iosMc*` entry points as `kanbanBoot.c` and
   `layout_action.c` drive them; the bytes left in the card folder are checked against a
-  hand-laid-out expectation: the product file is `mc_product_size` bytes and its sum (0x1F0 or
-  0x1E8), the same bytes up to 0x1E8 on the Japanese and Korean discs, `cameraMove` and `palMode` written and read
-  back on the European disc only, and `game.00N` 25,600 bytes on all. A stand-in for the game's
-  background disc read supplies the icon files.
+  hand-laid-out expectation: the product file is `mc_product_size` bytes and its sum (0x1F0, 0x1E8
+  or 0x18C), the same bytes up to 0x1E8 on the Japanese, Korean and Asian discs, `cameraMove` and
+  `palMode` written and read back on the European disc only, the 16-byte-preview record of the
+  three 2001 discs (with the `cleared` word on the preview and the demo only, and `fileNo`,
+  `serial` and the options of the European record not coming back), and `game.00N` 25,600 bytes
+  (20,484 on the demo). A stand-in for the game's background disc read supplies the icon files; the
+  demo's carry the sum and a second save leaves them alone. The test also pins each row's
+  `mc_save_dir` to mcard.c's `iOSMcSaveSeg_*` literal and 0x18C to 20 × 16 + 3 × 4 + 64.
 - `test_import`: the importer on synthetic card images (plain and with ECC spares) and a synthetic
   `.psu`, the game's files read back through the folder card byte for byte, other games' entries
   skipped and named; the other disc's `.psu` imported beside the selected disc's save; a card image
@@ -289,5 +307,5 @@ game data (`port/save/test/save_test.c`, header comment; `port/save/CMakeLists.t
   is the test's second argument) on the same files, and the directories it prints; and the second
   card in port 1.
 
-Run them with `ctest --preset linux-x64 -R '^save(_jpn|_kor)?$'`; it needs the `mc_import` target, which every
+Run them with `ctest --preset linux-x64 -R '^save(_jpn|_kor|_cn|_ntsc|_aug6|_jun26)?$'`; it needs the `mc_import` target, which every
 build keeps (`cmake/IcoTests.cmake` (`ICO_KEEP_IN_ALL`)).
