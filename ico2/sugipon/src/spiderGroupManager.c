@@ -110,9 +110,9 @@ void EntrySpiderGroupManager(GObj *gobj)
         p->active = 0;
     } else {
         debug_assertMessage(
-            "src/spiderGroupManager.c", 85,
+            "src/spiderGroupManager.c", LN(85, 85, 85, 85, 86, 86, 85),
             "No valid enemy layout data for spider.\n(Lack of enemy layout for spider revive.)\n");
-        __assert("src/spiderGroupManager.c", 85, "e");
+        __assert("src/spiderGroupManager.c", LN(85, 85, 85, 85, 86, 86, 85), "e");
     }
     spiderGroups[spiderGroupCount].rev = (ICO_WORD_PTR(GObj *))p;
     spiderGroupCount = spiderGroupCount + 1;
@@ -155,7 +155,7 @@ static int tryToRevive(void)
                             if (DirectCallEnemy(p, 0, pos, ZUnitVector, 0) == 0) {
                                 return 0;
                             }
-                            ExecuteSEPackage(p, 107);
+                            ExecuteSEPackage(p, PAL_NTSCAUG6(107, 102));
                             for (m = 0; m < 5; m++) {
                                 SetAP1DeadStatus(DeleteSpiderFromLayoutGroup(
                                     spiderPairs[m].group, spiderPairs[m].spider));

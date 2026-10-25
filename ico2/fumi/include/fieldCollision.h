@@ -102,6 +102,7 @@ void ClipFloorIH(ClipWork *work);
 void ClipFloorCheckCB(ClipWork *work, ICO_WORD_PTR(ClipFilterFn) filter);
 void ClipCollision(ClipWork *self);
 int ChangeFieldCollisionDebugMode(int drawRay);
+
 void LoadCollision(void **self, char *fname);
 void DrawCollision(int mode);
 int ClipPlane(ClipWork *work);
@@ -117,8 +118,10 @@ float GetYProjectionOfPlane(float *plane, float *pos);
 void ResetCollisionPC(void);
 int PositionOfExit(float *pos, int attr);
 void GetGlobalWallPlane(float *plane, WallCfg *wall);
+
 /* compiled in place */
 void ClipFloorByGObj(ClipWork *work, struct GObj *gobj);
+
 void DrawCollisionRay(ClipWork *ray);
 void DrawGObjFloorCollision(struct GObj *gobj, int col);
 void DrawGObjWallCollision(struct GObj *gobj, int col);

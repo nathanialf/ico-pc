@@ -69,17 +69,19 @@ inline void *mallocseki(int size)
 
     if (mallocPartition == -1) {
         debug_StdPrintfDummy("set partition first!\n");
-        debug_assert("src/Basic.c", 372);
-        __assert("src/Basic.c", 372, "0");
+        debug_assert("src/Basic.c", LN(372, 372, 372, 372, 372, 366, 372));
+        __assert("src/Basic.c", LN(372, 372, 372, 372, 372, 366, 372), "0");
     }
 
     switch (mallocPartition) {
     case 0:
         mallocTotal += size + 0x30;
-        ptr = iosMallocDebug(ios_partition_common, size, "src/Basic.c", 379);
+        ptr = iosMallocDebug(ios_partition_common, size, "src/Basic.c",
+                             LN(379, 379, 379, 379, 379, 373, 379));
         break;
     case 1:
-        ptr = iosMallocDebug(ios_partition_seki, size, "src/Basic.c", 382);
+        ptr = iosMallocDebug(ios_partition_seki, size, "src/Basic.c",
+                             LN(382, 382, 382, 382, 382, 376, 382));
         break;
     }
     return ptr;

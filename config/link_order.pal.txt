@@ -322,7 +322,7 @@ ico2/ito/mpeg/mv_sub.c
 ico2/ito/mpeg/mv_vibuf.c
 ico2/common/src/GobjProc.c
 data:blend-motion-def
-data:enemy-def
+ico2/sugipon/src/enemyKind.c
 data:enemy-model-grp
 data:enemy-model-tbl
 data:enemy-random-def

@@ -11,6 +11,7 @@
 #include "typedef.h"
 
 void actSt04eWaterFlagOn(GObj *volatile self);
+
 void actSt04eWaterMain(GObj *volatile self);
 void actSt04eWaterStop(GObj *volatile self);
 void actSt04eWaterSwitch(GObj *volatile self);

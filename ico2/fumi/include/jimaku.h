@@ -20,7 +20,7 @@ typedef struct JimakuSub { /* field names derived */
     int jump;              /* 0x44 */
     void *cur;             /* 0x48 */
     void *bg;              /* 0x4C */
-} JimakuSub; /* derived name */
+} JimakuSub;               /* derived name */
 
 /* the subtitle request jimakuManager reads */
 typedef struct JimakuArg { /* field names derived */
@@ -28,7 +28,7 @@ typedef struct JimakuArg { /* field names derived */
     char pad4[4];
     int done;      /* 0x08 */
     JimakuSub sub; /* 0x0C */
-} JimakuArg; /* derived name */
+} JimakuArg;       /* derived name */
 
 /* jimaku.c's `inline` functions, in the order of their definitions'
  * out-of-line copies at the end of the object (first-declaration order). */
@@ -51,6 +51,7 @@ void jimakuDisp(JimakuArg *msg);
 typedef struct {   /* field names derived */
     char path[32]; /* 0x00, "text/data_EG01.jim" ... */
 } JimakuFileName;  /* derived name */
+
 extern const JimakuFileName jimakuFileName[];
 
 #endif /* JIMAKU_H */

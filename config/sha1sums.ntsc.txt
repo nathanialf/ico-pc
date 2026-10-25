@@ -1,0 +1,7 @@
+# Format: <SHA-1>  <filename>
+# NTSC BRANCH (ntsc). ICO USA retail disc SLUS-20218 (VER 1.00); boot ELF SCUS_971.13.
+# Files live under baserom/ntsc/ (gitignored); the names below are basenames.
+# baseelf.elf: EE boot ELF extracted from the retail USA disc.
+# baseelf.rom: objcopy -O binary --gap-fill=0x00 view; build/ico.rom must have this SHA-1.
+a4d8fc1948fb2da2395f3863a94a3b93de55de14  baseelf.elf
+fbf50c75cd5911273511c4f9af90503ff8423582  baseelf.rom

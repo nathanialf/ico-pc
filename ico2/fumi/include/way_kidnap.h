@@ -15,6 +15,7 @@
 int NumOfWpPos(void);
 int CopyWpPos(float dst[][4], int from, int to);
 float WayLengthOfPos_Pos(float *pos0, float *pos1);
+
 struct GObj;
 
 float WayLengthOfGObj_Pos(struct GObj *obj, float *pos);
@@ -24,6 +25,7 @@ int WayPointWithRangeFromPos(float *pos, float range, int mode);
 struct WVTObj;
 
 int WayPointWithRangeFromPos2(float *pos, struct WVTObj *w, float *dst, int chk);
+
 int WayPointWithRangeFromGObj(struct GObj *obj, float f);
 struct GObj *NearestEnemyFromGirl(float *len);
 

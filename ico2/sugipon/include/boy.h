@@ -16,7 +16,7 @@ struct GObj;
 typedef struct { /* field names derived */
     int girl;    /* 0x00 */
     int boy;     /* 0x04 */
-} MotSyncPair; /* derived name */
+} MotSyncPair;   /* derived name */
 
 extern MotSyncPair motSyncPairs[]; /* derived name */
 
@@ -26,9 +26,9 @@ extern MotSyncPair motSyncPairs[]; /* derived name */
 struct LightLineExt;
 
 extern struct LightLineExt *llExtGeo;
+
 void SelectBoyCrown(struct GObj *self, int crown);
 void LightLineGeo(void);
 void SetBoyStonizedVisual(struct GObj *self);
-
 
 #endif /* BOY_H */

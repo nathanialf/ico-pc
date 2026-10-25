@@ -16,6 +16,11 @@ void actBossCtrlStart(void *gobj);
 ICO_WORD InitBossCtrlGeo(void *gobj);
 void CapsuleGhostBossStart(void);
 int InqCapsuleGhostBossEnd(void);
+
+/* declared ahead of the file's gene_eff_end_func prototype: Aug 6 emits it
+   (0x195B40) before gene_eff_end_func (0x195B48) */
+void BossCtrlDL(void);
+
 void BossCtrlGeo(void *self);
 void itou_boss_gflag_init(void);
 

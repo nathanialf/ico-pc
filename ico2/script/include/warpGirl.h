@@ -10,12 +10,11 @@
 
 /* warpGirl.o's globals */
 extern int warpGirlInStageSet;
-extern int warpGirlId;
 
+extern int warpGirlId;
 /* warpGirl.c's `inline` functions, in the order of their definitions'
  * out-of-line copies at the end of the object (first-declaration order). */
 void warpGirlInit(void);
-
 void warpGirlInStage(int stageNo);
 void warpGirlOutStage(int stage, int noSet);
 

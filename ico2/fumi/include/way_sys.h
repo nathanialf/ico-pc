@@ -16,7 +16,9 @@ WayPoint *GetWay_begin(float *from, WVTObj *w, float *goal);
 void BridgeBox(void);
 inline void DeleteGuideWay(WVTObj *o);
 WayPoint *GetWay_next(WVTObj *w, float *pos);
+
 WayPoint *_FUNC_GetWay_begin(float *from, WVTObj *w, float *goal, int threaded);
+
 int GetNearNigePointN(void *out, int num, WVTObj *w, float *pos);
 
 #endif /* WAY_SYS_H */

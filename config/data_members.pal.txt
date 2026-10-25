@@ -159,7 +159,7 @@ rodata staffroll_dat 0x61df60 0x61ee30 -
 # blend-motion-def: C:motionOrientManager.c blendMotionKind (symbol_addrs); rows end with the 0x47b terminator at 0x624880. ROM span 0x1410 != MAIN.MAP 0xe50 (+1472 B)
 rodata blend-motion-def 0x623470 0x624880 blendMotionKind@0x0
 # enemy-def: C:enemy.c EnemyDef D_00624880. ROM span 0x4f0 != MAIN.MAP 0x384 (+364 B)
-rodata enemy-def 0x624880 0x624d70 enemyKind@0x0
+# enemy-def is committed source since 2026-10-24, ico2/sugipon/src/enemyKind.c (the one exception to the data-member rule, docs/LEGAL.md); its run is 0x624880..0x624d70.
 # enemy-model-grp: C:sceneManager.c EnemyMdlRec D_00624D70. size = MAIN.MAP 0x190
 rodata enemy-model-grp 0x624d70 0x624f00 enemymodelGroup@0x0
 # enemy-model-tbl: C:sceneManager.c int D_00624F00; + map 0x64 aligned 8 = enemy-random-def. size = MAIN.MAP 0x64 + 4 B fill before next

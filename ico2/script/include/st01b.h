@@ -15,6 +15,7 @@ extern unsigned int st01b_yure;
 extern unsigned char st01b_yure_vol;
 void actSt01bEneChk(GObj *volatile self);
 void actSt01bFloorChk(GObj *volatile self);
+
 void actSt01bWayOffChk(GObj *volatile self);
 void actSt01bWayOnChk(GObj *volatile self);
 

@@ -1,0 +1,7 @@
+# Format: <SHA-1>  <filename>
+# Target jun26. ICO Jun-26-2001 demo disc (SCUS-97158).
+# Files live under baserom/jun26/ (gitignored); the names below are basenames.
+# baseelf.elf: EE boot ELF extracted from the Jun-26-2001 demo disc.
+# baseelf.rom: objcopy -O binary --gap-fill=0x00 view; build/jun26/ico.rom must have this SHA-1.
+95c3d438185c3b75303b68719cfd48c84f2f8bfa  baseelf.elf
+e5d6dd3c156ed5489a4d2e7bbf4707cd58d0dccc  baseelf.rom

@@ -9,7 +9,9 @@
 #define GEOMETRYMANAGER_H
 
 struct GObj;
+
 struct ObjNode;
+
 struct Sub15C;
 
 int CylinderCollision(struct GObj *self, int group, float r, float h, float s);

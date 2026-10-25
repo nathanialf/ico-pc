@@ -16,10 +16,10 @@ typedef struct { /* field names derived */
 
 /* one sign on screen: a texture layout drawn over a backdrop, faded in and
    out, kept in a list ordered by priority (kanbanReqAdd) */
-typedef struct Kanban {  /* field names derived */
-    LtProp *layout;      /* 0x00, the texLayout row shown, 0 for a free entry */
-    int pri;             /* 0x04, the list is kept in ascending order of it */
-    int key;             /* 0x08, this frame's key: 1 cross, 2 triangle (JPN and KOR 1 circle, 2 cross), 0 none */
+typedef struct Kanban { /* field names derived */
+    LtProp *layout;     /* 0x00, the texLayout row shown, 0 for a free entry */
+    int pri;            /* 0x04, the list is kept in ascending order of it */
+    int key; /* 0x08, this frame's key: 1 cross, 2 triangle (JPN, KOR and CN 1 circle, 2 cross), 0 none */
     int flags;           /* 0x0C, bit 0: fading out */
     float alpha;         /* 0x10, 0 to 127 */
     KanbanCol col;       /* 0x14 */
@@ -28,7 +28,9 @@ typedef struct Kanban {  /* field names derived */
 } Kanban;                /* derived name */
 
 void kanbanReqDel(Kanban *self);
+
 void kanbanReqDelFade(Kanban *self);
+
 void kanbanReqAllDel(void);
 void kanbanReqAllDelFade(void);
 void kanbanExec(void);

@@ -65,7 +65,6 @@ row stage-anim-model rodata 0x00600498 0x00602fa0 crc32=0x1417638b
 row stage-anim rodata 0x00602fa0 0x00618d4c crc32=0x64200078
 row stream-motion-def rodata 0x00618d50 0x00618f30 crc32=0x32045764
 row blend-motion-def rodata 0x00623470 0x00624880 crc32=0x1556cbdd
-row enemy-def rodata 0x00624880 0x00624d70 crc32=0xb88b84c0
 row enemy-model-grp rodata 0x00624d70 0x00624f00 crc32=0xf457d89a
 row enemy-model-tbl rodata 0x00624f00 0x00624f64 crc32=0x1904a0b8
 row enemy-random-def rodata 0x00624f68 0x00625018 crc32=0xb73c3d5d

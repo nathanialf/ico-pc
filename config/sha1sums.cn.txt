@@ -1,0 +1,7 @@
+# Format: <SHA-1>  <filename>
+# Target cn. ICO Asian retail disc (SCPS-55001).
+# Files live under baserom/cn/ (gitignored); the names below are basenames.
+# baseelf.elf: EE boot ELF extracted from the Asian retail disc.
+# baseelf.rom: objcopy -O binary --gap-fill=0x00 view; build/cn/ico.rom must have this SHA-1.
+f3e784b6811af2de9570be5575d6db5962300bcd  baseelf.elf
+d4b1294e86c063f2c34a86333eb5f2f2ed2de42a  baseelf.rom

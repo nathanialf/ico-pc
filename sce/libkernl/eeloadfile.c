@@ -6,7 +6,8 @@
 
 /* eeloadfile.o's .data: -1 until _lf_bind has bound the loadfile server, then
    the stamp _lf_version accepts besides the library's own (its four dots are
-   the member's first .rodata, 0x636710). */
+   the member's first .rodata, 0x636710; Aug-6 prototype 0x628830, Jun-26 demo
+   0x676280). */
 static int lf_bind_state = -1; /* derived name */
 
 static char *lf_stamp = "...."; /* derived name */

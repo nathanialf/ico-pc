@@ -4,7 +4,7 @@
 
 int strFileOpen(char *self, char *name)
 {
-    strcpy(self + 0x38, name);
+    strcpy(self + PAL_NTSCAUG6(0x38, 0x34), name);
     iosCdvdDirectStOpen((struct IosCdvdHandle *)self);
     return 1;
 }

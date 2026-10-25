@@ -49,7 +49,8 @@ static inline WayPoint *visible_waypoint_of_all_except_gid_sub(float *pos, int g
     int n;
     int i;
 
-    tbl = iosMallocDebug(ios_partition_sugipon, 275 * sizeof(WpSortEnt), wayUtilFile, 313);
+    tbl = iosMallocDebug(ios_partition_sugipon, PAL_AUG6(275, 215) * sizeof(WpSortEnt), wayUtilFile,
+                         313);
 
     n = 0;
     for (wp = WayPoint_begin(); wp != 0; wp = WayPoint_next(wp)) {
@@ -120,7 +121,8 @@ static inline WayPoint *visible_waypoint_of_all_except_temp_sub(float *pos, int 
     int n;
     int i;
 
-    tbl = iosMallocDebug(ios_partition_sugipon, 275 * sizeof(WpSortEnt), wayUtilFile, 383);
+    tbl = iosMallocDebug(ios_partition_sugipon, PAL_AUG6(275, 215) * sizeof(WpSortEnt), wayUtilFile,
+                         383);
 
     n = 0;
     for (wp = WayPoint_begin(); wp != 0; wp = WayPoint_next(wp)) {
@@ -264,8 +266,8 @@ inline int direction_across_bridge(WayGroup *bridge, int gid)
     e2 = &way_point[bridge->end[1]];
     if (e2->group != gid) {
         debug_StdPrintfDummy("abnormal bridge\n");
-        debug_assert(wayUtilFile, 706);
-        __assert(wayUtilFile, 706, "0");
+        debug_assert(wayUtilFile, LN(706, 706, 706, 706, 706, 663, 706));
+        __assert(wayUtilFile, LN(706, 706, 706, 706, 706, 663, 706), "0");
     }
     return 0;
 }
@@ -340,16 +342,21 @@ WgAll *WayUtilWorkAlloc(void)
     WgAll *p = iosMallocDebug(ios_partition_sugipon, sizeof(WgAll), wayUtilFile, 857);
     int **q;
     int i;
-    p->visited = iosMallocDebug(ios_partition_sugipon, 95, wayUtilFile, 859);
-    p->costBuf = iosMallocDebug(ios_partition_sugipon, 94 * 94 * sizeof(int), wayUtilFile, 860);
-    p->prev = iosMallocDebug(ios_partition_sugipon, 95 * sizeof(int), wayUtilFile, 861);
-    p->prev2 = iosMallocDebug(ios_partition_sugipon, 95 * sizeof(int), wayUtilFile, 862);
-    p->dist = iosMallocDebug(ios_partition_sugipon, 95 * sizeof(int), wayUtilFile, 863);
-    p->dist2 = iosMallocDebug(ios_partition_sugipon, 95 * sizeof(int), wayUtilFile, 864);
-    q = iosMallocDebug(ios_partition_sugipon, 94 * sizeof(int *), wayUtilFile, 866);
+    p->visited = iosMallocDebug(ios_partition_sugipon, PAL_AUG6(95, 65), wayUtilFile, 859);
+    p->costBuf = iosMallocDebug(
+        ios_partition_sugipon, PAL_AUG6(94, 64) * PAL_AUG6(94, 64) * sizeof(int), wayUtilFile, 860);
+    p->prev =
+        iosMallocDebug(ios_partition_sugipon, PAL_AUG6(95, 65) * sizeof(int), wayUtilFile, 861);
+    p->prev2 =
+        iosMallocDebug(ios_partition_sugipon, PAL_AUG6(95, 65) * sizeof(int), wayUtilFile, 862);
+    p->dist =
+        iosMallocDebug(ios_partition_sugipon, PAL_AUG6(95, 65) * sizeof(int), wayUtilFile, 863);
+    p->dist2 =
+        iosMallocDebug(ios_partition_sugipon, PAL_AUG6(95, 65) * sizeof(int), wayUtilFile, 864);
+    q = iosMallocDebug(ios_partition_sugipon, PAL_AUG6(94, 64) * sizeof(int *), wayUtilFile, 866);
     p->cost = q;
-    for (i = 0; i < 94; i++) {
-        q[i] = p->costBuf + i * 94;
+    for (i = 0; i < PAL_AUG6(94, 64); i++) {
+        q[i] = p->costBuf + i * PAL_AUG6(94, 64);
     }
     return p;
 }
@@ -379,8 +386,8 @@ static inline int shortest_path_sub(int from, int to, WgAll *w, int thread) /* d
     int i, j;
     int next, best;
 
-    for (i = 0; i < 94; i++) {
-        for (j = 93; j >= 0; j--) {
+    for (i = 0; i < PAL_AUG6(94, 64); i++) {
+        for (j = PAL_AUG6(93, 63); j >= 0; j--) {
             cost[i][j] = 0x7FFFFFFF;
         }
     }
@@ -404,7 +411,7 @@ static inline int shortest_path_sub(int from, int to, WgAll *w, int thread) /* d
         _ACTWait(1);
     }
 
-    for (i = 0; i < 94; i++) {
+    for (i = 0; i < PAL_AUG6(94, 64); i++) {
         visited[i] = 0;
         dist[i] = 0x7FFFFFFF;
     }
@@ -419,7 +426,7 @@ static inline int shortest_path_sub(int from, int to, WgAll *w, int thread) /* d
         i = next;
         best = 0x7FFFFFFF;
         visited[i] = 1;
-        for (j = 0; j < 94; j++) {
+        for (j = 0; j < PAL_AUG6(94, 64); j++) {
             if (visited[j]) {
                 continue;
             }
@@ -465,8 +472,8 @@ int GetWgAll(int from, int to, WgAll *w)
     int i, j;
     int next, best;
 
-    for (i = 0; i < 94; i++) {
-        for (j = 93; j >= 0; j--) {
+    for (i = 0; i < PAL_AUG6(94, 64); i++) {
+        for (j = PAL_AUG6(93, 63); j >= 0; j--) {
             cost[i][j] = 0x7FFFFFFF;
         }
     }
@@ -482,7 +489,7 @@ int GetWgAll(int from, int to, WgAll *w)
         cost[b][g2] = 1;
     }
 
-    for (i = 0; i < 94; i++) {
+    for (i = 0; i < PAL_AUG6(94, 64); i++) {
         visited[i] = 0;
         dist[i] = 0x7FFFFFFF;
     }
@@ -493,7 +500,7 @@ int GetWgAll(int from, int to, WgAll *w)
         i = next;
         best = 0x7FFFFFFF;
         visited[i] = 1;
-        for (j = 0; j < 94; j++) {
+        for (j = 0; j < PAL_AUG6(94, 64); j++) {
             if (visited[j]) {
                 continue;
             }
@@ -970,7 +977,7 @@ inline WayPoint *visible_waypoint_from_gobj(void *dobj, int handle)
 inline WayPoint *get_wp_nearest_bridge_side_me(int arg0, int arg1)
 {
     int i;
-    for (i = 0; i < 94; i++) {
+    for (i = 0; i < PAL_AUG6(94, 64); i++) {
         WayGroup *g = &way_group[i];
         WayPoint *a;
         WayPoint *b;
@@ -991,7 +998,7 @@ inline WayPoint *get_wp_nearest_bridge_side_me(int arg0, int arg1)
 inline WayPoint *get_wp_nearest_bridge_side_bridge(int arg0, int arg1)
 {
     int i;
-    for (i = 0; i < 94; i++) {
+    for (i = 0; i < PAL_AUG6(94, 64); i++) {
         WayGroup *g = &way_group[i];
         WayPoint *a;
         WayPoint *b;

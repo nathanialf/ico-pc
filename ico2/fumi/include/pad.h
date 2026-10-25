@@ -95,6 +95,7 @@ typedef struct IosPadStick { /* field names derived */
 
 int iosPadActRequest(IosPadCtx *pad, int id);
 void iosPadActStop(int key);
+
 void iosPadActStopAll(void);
 
 /* One actuator request iosPadActRequest hands out: its key, the player
@@ -117,6 +118,8 @@ int iosPadDevInit(void *desc);
 int iosPadDevRead(void);
 void iosPadDisable(void);
 void iosPadEnable(void);
+
+
 /* out is an IosPadStick; way_tool hands it a 32-byte buffer (its .bss
    layout fixes the size) */
 int iosPadGetStick(IosPadCtx *pad, void *out, int mode, int a3, int a4, int simulate);

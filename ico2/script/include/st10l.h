@@ -17,13 +17,16 @@ extern struct SqEntry *floor10l;
 extern struct SqEntry *st10l_gondola_up;
 extern struct SqEntry *st10l_gondola_down;
 extern struct SqEntry *chain10l;
+
 void actSt10lBoxAChk(GObj *volatile self);
 void actSt10lBoxBChk(GObj *volatile self);
 void actSt10lBoxChk(GObj *volatile self);
 void actSt10lChainMain(GObj *volatile self);
 void actSt10lChainMove(GObj *volatile self);
 void actSt10lChainSwitch(GObj *volatile self);
+
 void actSt10lEneCam1Chk(GObj *volatile self);
+
 void actSt10lEneCam2Chk(GObj *volatile self);
 void actSt10lEneCam3Chk(GObj *volatile self);
 void actSt10lFloorLeft(GObj *volatile self);

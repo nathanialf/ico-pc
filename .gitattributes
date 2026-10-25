@@ -71,4 +71,6 @@ ico2/fumi/src/act-parallel-control.c working-tree-encoding=EUC-JP
 ico2/fumi/src/boyact.c working-tree-encoding=EUC-JP
 ico2/sugipon/src/box.c working-tree-encoding=EUC-JP
 ico2/sugipon/src/frameDependSequence.c working-tree-encoding=EUC-JP
+ico2/sugipon/src/pool.c working-tree-encoding=EUC-JP
+ico2/sugipon/src/particleEffect.c working-tree-encoding=EUC-JP
 ico2/sugipon/src/motionFileManager.c working-tree-encoding=EUC-JP

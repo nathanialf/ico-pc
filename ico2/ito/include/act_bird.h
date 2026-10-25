@@ -18,7 +18,7 @@ typedef struct BirdWork { /* field names derived */
     float scarer[4];      /* 0x20, where that sender stood */
     BgaPlayNode *bga;     /* 0x30, the take-off's play node */
     char pad34[12];       /* 0x34 */
-} BirdWork; /* derived name */
+} BirdWork;               /* derived name */
 
 float vector_angle_degree(void *a, void *b);
 void subBirdControl(void *volatile gobj);
@@ -26,6 +26,8 @@ void subBirdCollision(void *volatile gobj);
 void actBirdStart(void *gobj);
 BirdWork *InitBirdGeo(struct GObj *gobj, void *home);
 void BirdAI(void);
+
+
 void _ACTSendMailToBirdAll(int mail, void *data);
 void _ACTSendMailToBird(void *obj, int mail, void *data);
 void subBirdBrainMain(void *gobj);

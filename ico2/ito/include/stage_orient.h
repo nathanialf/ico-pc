@@ -8,7 +8,7 @@
 #ifndef STAGE_ORIENT_H
 #define STAGE_ORIENT_H
 
-#include "typedef.h"   /* VECTOR */
+#include "typedef.h" /* VECTOR */
 
 void StageOrientInit(void);
 int StageOrientGet(VECTOR *ret, int stA, int stB);

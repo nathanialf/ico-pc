@@ -8,13 +8,14 @@
 #ifndef ACT_ENV_H
 #define ACT_ENV_H
 
-
 struct GObj;
+
 /* act-env.c's `inline` functions, in the order of their definitions'
  * out-of-line copies at the end of the object (first-declaration order). */
 void ACTSetEnvAllmighty(struct GObj *self);
 void GetSofaPosition(struct GObj *self, struct GObj *sofa);
 void GetCollisCenterPositionSimple(void *out, void *obj, void *corners);
+
 int CheckWallAttributeEdegWall(struct GObj *obj);
 
 /* ACTGetEnvironment's flag words (the caller passes the actor's status block

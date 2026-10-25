@@ -26,13 +26,14 @@ typedef struct { /* field names derived */
  * first-declaration order, so this is the order motionManager.c's inline tail has. */
 void SetHitCollisionDisplay(int a, int b);
 int ResetMotionProgramInterpInfo(struct GObj *self, int focus);
+
 int SetDirectMotionProgramInterpInfo(struct GObj *self, int focus, float rate);
+
 void GetGeometryOfMotion(void *self, void *m0, void *m1, float *v, float r, float *step, int k);
 void EditRotEmphasys(void);
 void landingFieldAction(ClipWork *w);
 void SkelTest(GObj *self);
 void SkelTestGeo(GObj *self);
-
 void GetMatrixOfMotion(GObj *self, char *tbl, void *ofs);
 
 #endif /* MOTIONMANAGER_H */

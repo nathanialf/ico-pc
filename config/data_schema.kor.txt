@@ -114,7 +114,6 @@ stage-anim-model rodata StgObjDat ico2/seki/include/StageAnimation.h 1357 objTab
 stage-anim rodata StageAnimDef ico2/seki/include/StageAnimation.h 950 stageTable@0
 stream-motion-def rodata StreamMotionFile ico2/sugipon/include/streamMotionManager.h 10 streamMotion@0
 blend-motion-def rodata MotOriSub ico2/sugipon/include/motionOrientManager.h 321 blendMotionKind@0
-enemy-def rodata EnemyDef ico2/sugipon/include/enemy.h 45 enemyKind@0 hex=attr
 enemy-model-grp rodata EnemyMdlRec ico2/common/include/sceneManager.h 10 enemymodelGroup@0
 enemy-model-tbl rodata int ico2/common/include/sceneManager.h 25 enemymodelTable@0
 enemy-random-def rodata EnemyKindRange ico2/sugipon/include/enemy.h 22 randomEnemyKind@0

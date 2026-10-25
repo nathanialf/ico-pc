@@ -13,7 +13,6 @@
 #define attackData attackData_header_decl
 #define autoEscortData autoEscortData_header_decl
 #define blendMotionKind blendMotionKind_header_decl
-#define enemyKind enemyKind_header_decl
 #define enemymodelGroup enemymodelGroup_header_decl
 #define enemymodelTable enemymodelTable_header_decl
 #define exitData exitData_header_decl
@@ -78,8 +77,8 @@
 #include "ico2/fumi/include/pad.h"
 #include "ico2/seki/include/StageAnimation.h"
 #include "ico2/sugipon/include/streamMotionManager.h"
-#include "ico2/sugipon/include/enemy.h"
 #include "ico2/common/include/sceneManager.h"
+#include "ico2/sugipon/include/enemy.h"
 #include "ico2/sugipon/include/attackCheckBoundary.h"
 #include "ico2/omori/include/objact.h"
 #include "ico2/sugipon/include/particleEffect.h"
@@ -139,7 +138,6 @@
 #undef attackData
 #undef autoEscortData
 #undef blendMotionKind
-#undef enemyKind
 #undef enemymodelGroup
 #undef enemymodelTable
 #undef exitData
@@ -230,7 +228,6 @@ extern StgObjDat objTableScene[];
 extern StageAnimDef stageTable[];
 extern StreamMotionFile streamMotion[];
 extern MotOriSub blendMotionKind[];
-extern EnemyDef enemyKind[];
 extern EnemyMdlRec enemymodelGroup[];
 extern int enemymodelTable[];
 extern EnemyKindRange randomEnemyKind[];
@@ -1212,20 +1209,6 @@ _Static_assert(sizeof((((MotOriSub *)0)->node)) == 4, "MotOriSub.node: size");
 _Static_assert(sizeof((((MotOriSub *)0)->rate)) == 4, "MotOriSub.rate: size");
 _Static_assert(sizeof((((MotOriSub *)0)->frames)) == 4, "MotOriSub.frames: size");
 
-_Static_assert(sizeof(EnemyDef) == 28, "EnemyDef: EE size");
-_Static_assert(offsetof(EnemyDef, model) == 0, "EnemyDef.model: EE offset");
-_Static_assert(offsetof(EnemyDef, particle) == 4, "EnemyDef.particle: EE offset");
-_Static_assert(offsetof(EnemyDef, life) == 8, "EnemyDef.life: EE offset");
-_Static_assert(offsetof(EnemyDef, float0C) == 12, "EnemyDef.float0C: EE offset");
-_Static_assert(offsetof(EnemyDef, scale) == 16, "EnemyDef.scale: EE offset");
-_Static_assert(offsetof(EnemyDef, dodge) == 20, "EnemyDef.dodge: EE offset");
-_Static_assert(sizeof((((EnemyDef *)0)->model)) == 4, "EnemyDef.model: size");
-_Static_assert(sizeof((((EnemyDef *)0)->particle)) == 4, "EnemyDef.particle: size");
-_Static_assert(sizeof((((EnemyDef *)0)->life)) == 4, "EnemyDef.life: size");
-_Static_assert(sizeof((((EnemyDef *)0)->float0C)) == 4, "EnemyDef.float0C: size");
-_Static_assert(sizeof((((EnemyDef *)0)->scale)) == 4, "EnemyDef.scale: size");
-_Static_assert(sizeof((((EnemyDef *)0)->dodge)) == 4, "EnemyDef.dodge: size");
-
 _Static_assert(sizeof(EnemyMdlRec) == 40, "EnemyMdlRec: EE size");
 _Static_assert(offsetof(EnemyMdlRec, name) == 0, "EnemyMdlRec.name: EE offset");
 _Static_assert(offsetof(EnemyMdlRec, first) == 32, "EnemyMdlRec.first: EE offset");
@@ -1628,21 +1611,6 @@ static void set_StgPre_49(void *r, uint32_t v)
 static void set_StgPre_50(void *r, uint32_t v)
 {
     ((StgPre *)r)->flag3 = v;
-}
-
-static void set_EnemyDef_6(void *r, uint32_t v)
-{
-    ((EnemyDef *)r)->paraIndex = (int32_t)v;
-}
-
-static void set_EnemyDef_7(void *r, uint32_t v)
-{
-    ((EnemyDef *)r)->flyType = v;
-}
-
-static void set_EnemyDef_8(void *r, uint32_t v)
-{
-    ((EnemyDef *)r)->battleType = v;
 }
 
 static const IcoTableField fields_AccessaryRec[] = {
@@ -2640,24 +2608,6 @@ static const IcoTableField fields_MotOriSub[] = {
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_EnemyDef[] = {
-    {"model", offsetof(EnemyDef, model), sizeof((((EnemyDef *)0)->model)), 0, 4, 1, ICO_TF_INT, 1,
-     0, 0, NULL, NULL, 0},
-    {"particle", offsetof(EnemyDef, particle), sizeof((((EnemyDef *)0)->particle)), 4, 4, 1,
-     ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
-    {"life", offsetof(EnemyDef, life), sizeof((((EnemyDef *)0)->life)), 8, 4, 1, ICO_TF_FLOAT, 0, 0,
-     0, NULL, NULL, 0},
-    {"float0C", offsetof(EnemyDef, float0C), sizeof((((EnemyDef *)0)->float0C)), 12, 4, 1,
-     ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
-    {"scale", offsetof(EnemyDef, scale), sizeof((((EnemyDef *)0)->scale)), 16, 4, 1, ICO_TF_FLOAT,
-     0, 0, 0, NULL, NULL, 0},
-    {"dodge", offsetof(EnemyDef, dodge), sizeof((((EnemyDef *)0)->dodge)), 20, 4, 1, ICO_TF_FLOAT,
-     0, 0, 0, NULL, NULL, 0},
-    {"paraIndex", 0, 0, 24, 4, 1, ICO_TF_BITS, 1, 0, 8, set_EnemyDef_6, NULL, 0},
-    {"flyType", 0, 0, 24, 4, 1, ICO_TF_BITS, 0, 8, 2, set_EnemyDef_7, NULL, 0},
-    {"battleType", 0, 0, 24, 4, 1, ICO_TF_BITS, 0, 10, 2, set_EnemyDef_8, NULL, 0},
-};
-
 static const IcoTableField fields_EnemyMdlRec[] = {
     {"name", offsetof(EnemyMdlRec, name), sizeof((((EnemyMdlRec *)0)->name)[0]), 0, 1, 32,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
@@ -2978,9 +2928,6 @@ static const IcoTableRecord record_StreamMotionFile = {
 static const IcoTableRecord record_MotOriSub = {
     "MotOriSub", sizeof(MotOriSub), 16, fields_MotOriSub,
     sizeof(fields_MotOriSub) / sizeof(fields_MotOriSub[0])};
-static const IcoTableRecord record_EnemyDef = {"EnemyDef", sizeof(EnemyDef), 28, fields_EnemyDef,
-                                               sizeof(fields_EnemyDef) /
-                                                   sizeof(fields_EnemyDef[0])};
 static const IcoTableRecord record_EnemyMdlRec = {
     "EnemyMdlRec", sizeof(EnemyMdlRec), 40, fields_EnemyMdlRec,
     sizeof(fields_EnemyMdlRec) / sizeof(fields_EnemyMdlRec[0])};
@@ -3141,8 +3088,6 @@ static const IcoTableRow rows_pal[] = {
      0, 10, &record_StreamMotionFile, (void *)streamMotion, 10, ICO_TID_streamMotion},
     {"blend-motion-def", "blendMotionKind", ICO_TABLE_RODATA, 0x00623470u, 0x00624880u, 0x1556CBDDu,
      0, 321, &record_MotOriSub, (void *)blendMotionKind, 321, ICO_TID_blendMotionKind},
-    {"enemy-def", "enemyKind", ICO_TABLE_RODATA, 0x00624880u, 0x00624D70u, 0xB88B84C0u, 0, 45,
-     &record_EnemyDef, (void *)enemyKind, 45, ICO_TID_enemyKind},
     {"enemy-model-grp", "enemymodelGroup", ICO_TABLE_RODATA, 0x00624D70u, 0x00624F00u, 0xF457D89Au,
      0, 10, &record_EnemyMdlRec, (void *)enemymodelGroup, 10, ICO_TID_enemymodelGroup},
     {"enemy-model-tbl", "enemymodelTable", ICO_TABLE_RODATA, 0x00624F00u, 0x00624F64u, 0x1904A0B8u,
@@ -3182,9 +3127,9 @@ static const IcoTableRow rows_pal[] = {
      &record_WaySrcGrp, (void *)wayGroupSheet, 723, ICO_TID_wayGroupSheet},
 };
 
-_Static_assert(sizeof(rows_pal) / sizeof(rows_pal[0]) == 76, "pal: rows");
+_Static_assert(sizeof(rows_pal) / sizeof(rows_pal[0]) == 75, "pal: rows");
 
 /* the European disc (SCES-50760): config/regions.txt's row 0 */
 const IcoTableSet ico_table_set_pal = {
     "pal", "SCES-50760",     "SCES_507.60", "the European disc", rows_pal,
-    76,    ico_ee_funcs_pal, 913,           ico_ee_objects_pal,  1};
+    75,    ico_ee_funcs_pal, 913,           ico_ee_objects_pal,  1};

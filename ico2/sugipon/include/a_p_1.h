@@ -19,6 +19,7 @@ int AP1Turn(struct GObj *self, short angle);
 ICO_WORD_PTR(char *) GetAP1Mode(struct GObj *self);
 int GetAP1SpecType(struct GObj *self);
 struct GObj *MakeAP1GObj(SObjSimpleSetting *setting);
+
 void SetAP1VisualState(struct GObj *self, int visible);
 
 #endif /* A_P_1_H */

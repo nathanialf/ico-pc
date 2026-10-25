@@ -96,7 +96,7 @@ typedef struct { /* field names derived */
     /* 0x188 */ PrimParticleObj *objs[2];
     /* 0x190 */ void *vtx;     /* the vertices of the buffer being drawn (objs + 0x70) */
     /* 0x194 */ void *vtxNext; /* the vertices of the other buffer */
-} PrimParticle;              /* derived name */
+} PrimParticle;                /* derived name */
 
 void prim_DeleteParticle(PrimParticle *p);
 #ifdef ICO_RD

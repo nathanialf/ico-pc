@@ -15,9 +15,11 @@ void gflagOn(int bit_idx);
 
 /* gflag.o's .sdata: the game-clear state and the save's stage */
 extern int gFlagGameClear;
+
 extern int gFlagSaveStage;
 
 struct GamesysMemCursor;
+
 void gflagSave(struct GamesysMemCursor *fp);
 void gflagLoad(struct GamesysMemCursor *fp);
 

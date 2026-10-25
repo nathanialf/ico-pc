@@ -15,7 +15,7 @@ ClusterMicroProgram:
 	DMAend
 ;
 ; One of ICO's five VU1 microprograms (PAL 0x00289BD0, JPN 0x00287AE0, KOR
-; 0x00287B60, 3520 bytes), sent to VU1 by mc_TransMicroCode (MicroCode.o): a
+; 0x00287B60, Asian 0x00287B20, USA 0x0026F5E0, Aug-6 prototype 0x0026B970, 3520 bytes; Jun-26 demo 0x00257C60, 3488 bytes), sent to VU1 by mc_TransMicroCode (MicroCode.o): a
 ; DMAret tag whose VIF half carries MPG 0, the program, then a DMAend tag.
 ; dvp-as writes the tags, a new MPG every 256 instructions and the .DVP
 ; overlay tables. Each overlay is named with the hash of the file and the line
@@ -24,6 +24,8 @@ ClusterMicroProgram:
 ; in an include.
 ;
 ; Re-derived from published VU0/VU1 documentation; .vutext is identical
-; in the Aug-6-2001 prototype and the USA, PAL, Japanese and Korean retail.
+; in the Aug-6-2001 prototype and the USA, PAL, Japanese, Korean and Asian retail;
+; the Jun-26-2001 demo's differs after the start of its second overlay (the
+; demo's block in cluster.vsm, which cpp reads with the target defined).
 ; The labels are the DVP assembler's own, from the PAL listing's .vutext table
 ; (spelled _$NAME there, the copy dvp-as makes), each at the listing's address.

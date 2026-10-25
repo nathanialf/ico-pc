@@ -1,0 +1,7 @@
+# Format: <SHA-1>  <filename>
+# AUG6 BRANCH (aug6). ICO Aug-6-2001 prototype disc (VER 1.00, VMODE NTSC); boot ELF SCUS_971.13.
+# Files live under baserom/aug6/ (gitignored); the names below are basenames.
+# baseelf.elf: EE boot ELF extracted from the prototype disc.
+# baseelf.rom: objcopy -O binary --gap-fill=0x00 view; build/ico.rom must have this SHA-1.
+5d169c281756a8bde712704fa0cb9eb984693cd6  baseelf.elf
+2b4d7de41966ff38d061b4c985de45fc212e2fb2  baseelf.rom

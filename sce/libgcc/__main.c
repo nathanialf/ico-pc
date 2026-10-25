@@ -28,7 +28,7 @@ void __do_global_ctors(void)
     } while (0);
 }
 
-/* libgcc2.c's SYMBOL__MAIN: the flag is the member's whole .bss, VMA 0x736168, 4 B. */
+/* libgcc2.c's SYMBOL__MAIN: the flag is the member's whole .bss, VMA 0x736168 (USA 0x71EB68, Aug-6 prototype 0x7181E8, Jun-26 demo 0x76CBE8), 4 B. */
 void __main(void)
 {
     /* Support recursive calls to `main': run initializers just once.  */

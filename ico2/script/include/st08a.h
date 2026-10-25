@@ -15,6 +15,7 @@ void actSt08aDoorSwitch(GObj *volatile self);
 void actSt08aDoorUp(GObj *volatile self);
 void actSt08aEne1Chk(GObj *volatile self);
 void actSt08aEne2Chk(GObj *volatile self);
+
 void actSt08aIntroChk(GObj *volatile self);
 
 #endif /* ST08A_H */

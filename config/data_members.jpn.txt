@@ -170,7 +170,7 @@ rodata staffroll_dat 0x617310 0x6181f0 -
 # blend-motion-def: code: getMotionGeometry, getNodeBlendedFloatingMotion read it. span 0x1410 = PAL; content same
 rodata blend-motion-def 0x61c728 0x61db38 blendMotionKind@0x0
 # enemy-def: code: CanThisEnemyFly, GetEnemyBattleType, GetEnemyDefDodgeRange+4 read it. span 0x4f0 = PAL; content changed-content
-rodata enemy-def 0x61db38 0x61e028 enemyKind@0x0
+# enemy-def is committed source since 2026-10-24, ico2/sugipon/src/enemyKind.c (the one exception to the data-member rule, docs/LEGAL.md); its run is 0x61db38..0x61e028.
 # enemy-model-grp: code: GetRealModelId read it. span 0x190 = PAL; content same
 rodata enemy-model-grp 0x61e028 0x61e1b8 enemymodelGroup@0x0
 # enemy-model-tbl: code: GetRealModelId read it. span 0x64 = PAL; content same

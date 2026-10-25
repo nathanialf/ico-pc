@@ -15,7 +15,6 @@
 #define attackData attackData_header_decl
 #define autoEscortData autoEscortData_header_decl
 #define blendMotionKind blendMotionKind_header_decl
-#define enemyKind enemyKind_header_decl
 #define enemymodelGroup enemymodelGroup_header_decl
 #define enemymodelTable enemymodelTable_header_decl
 #define exitData exitData_header_decl
@@ -80,8 +79,8 @@
 #include "ico2/fumi/include/pad.h"
 #include "ico2/seki/include/StageAnimation.h"
 #include "ico2/sugipon/include/streamMotionManager.h"
-#include "ico2/sugipon/include/enemy.h"
 #include "ico2/common/include/sceneManager.h"
+#include "ico2/sugipon/include/enemy.h"
 #include "ico2/sugipon/include/attackCheckBoundary.h"
 #include "ico2/omori/include/objact.h"
 #include "ico2/sugipon/include/particleEffect.h"
@@ -141,7 +140,6 @@
 #undef attackData
 #undef autoEscortData
 #undef blendMotionKind
-#undef enemyKind
 #undef enemymodelGroup
 #undef enemymodelTable
 #undef exitData
@@ -232,7 +230,6 @@ StgObjDat objTableScene[1377];
 StageAnimDef stageTable[973];
 StreamMotionFile streamMotion[10];
 MotOriSub blendMotionKind[321];
-EnemyDef enemyKind[45];
 EnemyMdlRec enemymodelGroup[10];
 int enemymodelTable[25];
 EnemyKindRange randomEnemyKind[22];

@@ -61,7 +61,6 @@ set(ICO_TABLE_SYMBOLS
     stageTable
     streamMotion
     blendMotionKind
-    enemyKind
     enemymodelGroup
     enemymodelTable
     randomEnemyKind

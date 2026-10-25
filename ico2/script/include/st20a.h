@@ -14,10 +14,12 @@ struct SqEntry;
 
 /* st20a.o's .sdata globals */
 extern struct SqEntry *brg20a;
+
 extern struct SqEntry *gondola_up;
 extern struct SqEntry *gondola_down;
 extern unsigned int st20a_yure;
 extern unsigned char st20a_yure_vol;
+
 void actSt20aBridgeDown(GObj *volatile self);
 void actSt20aBridgeMain(GObj *volatile self);
 void actSt20aBridgeSwitch(GObj *volatile self);

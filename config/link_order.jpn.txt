@@ -340,7 +340,7 @@ ico2/sugipon/src/waterDot.c  # moved from after torch.c: JPN .text and data put 
 ico2/sugipon/src/windmill.c  # moved from after windManager.c: the three functions of its sizes follow waterDot.c in the JPN .text
 ico2/common/src/GobjProc.c
 data:blend-motion-def
-data:enemy-def
+ico2/sugipon/src/enemyKind.c
 data:enemy-model-grp
 data:enemy-model-tbl
 data:enemy-random-def

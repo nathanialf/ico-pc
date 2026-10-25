@@ -1,10 +1,10 @@
 # cmake/IcoSources.cmake: written by tools/gen_sources.py from the union of
-# config/link_order.*.txt (pal jpn kor). Do not edit; rerun the script.
+# config/link_order.*.txt (pal jpn kor cn ntsc aug6 jun26). Do not edit; rerun the script.
 # Order is the retail link's (pal's first).
 
 set(ICO_PROGRAMMERS common fumi ito omori script seki sugipon)
 
-# ico2/common: 19 non-renderer sources
+# ico2/common: 20 non-renderer sources
 set(ICO_SOURCES_common
     ico2/common/src/main.c
     ico2/common/src/DObj.c
@@ -25,6 +25,7 @@ set(ICO_SOURCES_common
     ico2/common/src/staffroll.c
     ico2/common/src/GobjProc.c
     ico2/common/src/PObj.c
+    ico2/common/src/demoDisc.c
 )
 
 # ico2/fumi: 41 non-renderer sources
@@ -180,7 +181,7 @@ set(ICO_SOURCES_seki
     ico2/seki/src/EnemyInit.c
 )
 
-# ico2/sugipon: 62 non-renderer sources
+# ico2/sugipon: 63 non-renderer sources
 set(ICO_SOURCES_sugipon
     ico2/sugipon/src/delayFreeManager.c
     ico2/sugipon/src/geometryManager.c
@@ -244,6 +245,7 @@ set(ICO_SOURCES_sugipon
     ico2/sugipon/src/windmill.c
     ico2/sugipon/src/wireLetter.c
     ico2/sugipon/src/worm.c
+    ico2/sugipon/src/enemyKind.c
 )
 
 # 9 PS2-only sources (replaced on the host by port/; never compiled here)
@@ -263,8 +265,9 @@ set(ICO_EE_ONLY_SOURCES
 set(ICO_PENDING_SOURCES
 )
 
-# 73 data-only members of the union, build/data/<member>.c (tools/gen_data_c.py)
+# 122 data-only members of the union, build/data/<member>.c (tools/gen_data_c.py)
 set(ICO_DATA_MEMBERS
+    mc-icon-sys
     accessary
     act-data-tbl
     act-intrlist
@@ -310,8 +313,56 @@ set(ICO_DATA_MEMBERS
     tex-property
     weapon-def
     staffroll_dat
+    enemy-model02-kindlist
+    enemy-model02-kinds
+    enemy-model02-pos
+    enemy-model02-set
+    enemy-model02-list
+    enemy-model03-kindlist
+    enemy-model03-kinds
+    enemy-model03-pos
+    enemy-model03-set
+    enemy-model03-list
+    enemy-model04-kindlist
+    enemy-model04-kinds
+    enemy-model04-pos
+    enemy-model04-set
+    enemy-model04-list
+    enemy-model05-kindlist
+    enemy-model05-kinds
+    enemy-model05-pos
+    enemy-model05-set
+    enemy-model05b-kindlist
+    enemy-model05b-kinds
+    enemy-model05b-pos
+    enemy-model05b-set
+    enemy-model05-list
+    enemy-model06-kindlist
+    enemy-model06-kinds
+    enemy-model06-pos
+    enemy-model06-set
+    enemy-model06-list
+    enemy-model07-kindlist
+    enemy-model07-kinds
+    enemy-model07-pos
+    enemy-model07-set
+    enemy-model07-list
+    enemy-model08-kindlist
+    enemy-model08-kinds
+    enemy-model08-pos
+    enemy-model08-set
+    enemy-model08-list
+    enemy-model09-kindlist
+    enemy-model09-kinds
+    enemy-model09-pos
+    enemy-model09-set
+    enemy-model09b-kindlist
+    enemy-model09b-kinds
+    enemy-model09b-pos
+    enemy-model09b-set
+    enemy-model09-list
+    enemy-set-table
     blend-motion-def
-    enemy-def
     enemy-model-grp
     enemy-model-tbl
     enemy-random-def

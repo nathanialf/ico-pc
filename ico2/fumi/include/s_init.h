@@ -193,7 +193,7 @@ typedef struct SeSlot { /* field names derived */
  * seSegLast covers. Reader: ico2/fumi/sound/s_init.c (soundSeEnvNotUseClose:
  * the first loaded bank of each stage, compared by name), ico2/common/src/
  * charFileManager.c (ReadSoundBdFile). */
-typedef struct SeBank {      /* field names derived */
+typedef struct SeBank { /* field names derived */
     char hdPath[48];         /* 0x00, the .hd header file */
     char bdPath[48];         /* 0x30, the .bd body file */
     unsigned int loaded : 1; /* 0x60 bit 0, set while the bank is loaded */

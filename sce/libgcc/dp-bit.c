@@ -45,7 +45,8 @@ static __inline__ int iszero_d(fp_number_type_d *x)
 }
 
 /* fp-bit.c's nan(): the NaN this build hands back for inf - inf; its static is the
-   member's whole .bss, VMA 0x736170, 0x18 B. */
+   member's whole .bss, VMA 0x736170 (USA 0x71EB70, Aug-6 prototype 0x7181F0, Jun-26 demo
+   0x76CBF0), 0x18 B. */
 static __inline__ fp_number_type_d *nan_d(void)
 {
     static fp_number_type_d thenan;

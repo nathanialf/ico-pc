@@ -3,12 +3,12 @@
 
 void switchOnSE(GObj *self)
 {
-    ExecuteSEPackage(self, 63);
+    ExecuteSEPackage(self, PAL_NTSCAUG6(63, 61));
 }
 
 void switchReleaseSE(GObj *self)
 {
-    ExecuteSEPackage(self, 64);
+    ExecuteSEPackage(self, PAL_NTSCAUG6(64, 62));
 }
 
 inline void SetSwitchTriggerFunc(GObj *lever, int (*func)(GObj *, int))
@@ -229,8 +229,9 @@ inline int CanWallLeverPull(GObj *lev)
 
 inline LeverGeoWork *InitWallLeverGeo(GObj *self, SObjSimpleSetting *lay)
 {
-    LeverGeoWork *g = (LeverGeoWork *)iosMallocDebug(ios_partition_sugipon, sizeof(LeverGeoWork),
-                                                     "src/switch.c", 300);
+    LeverGeoWork *g =
+        (LeverGeoWork *)iosMallocDebug(ios_partition_sugipon, sizeof(LeverGeoWork), "src/switch.c",
+                                       LN(300, 300, 300, 300, 300, 299, 300));
     *g = leverGeoInit;
     if (lay->obj != 0) {
         g->linked = 1;

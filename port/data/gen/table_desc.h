@@ -106,7 +106,6 @@ typedef enum IcoTableId {
     ICO_TID_stageTable,
     ICO_TID_streamMotion,
     ICO_TID_blendMotionKind,
-    ICO_TID_enemyKind,
     ICO_TID_enemymodelGroup,
     ICO_TID_enemymodelTable,
     ICO_TID_randomEnemyKind,
@@ -297,7 +296,6 @@ extern const IcoTableSet *const ico_table_sets[ICO_TABLE_SET_COUNT];
     X(stageTable)                                                                                  \
     X(streamMotion)                                                                                \
     X(blendMotionKind)                                                                             \
-    X(enemyKind)                                                                                   \
     X(enemymodelGroup)                                                                             \
     X(enemymodelTable)                                                                             \
     X(randomEnemyKind)                                                                             \

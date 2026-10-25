@@ -11,6 +11,7 @@
 #include <libvu0.h>
 
 struct GObj;
+
 struct Sub15C;
 
 /* the per-object light matrix record at *(Sub15C + 0x874) (typedef.h's
@@ -22,20 +23,20 @@ struct Sub15C;
  * against 4, Packet.c hands it to pac_makePacket and RegistPacket.c gates the
  * light packet on it.  The members are the libvu0 vector and matrix types. */
 typedef struct LightMatrix { /* field names derived */
-    sceVu0FMATRIX normal;  /* 0x00 */
-    sceVu0FMATRIX color;   /* 0x40 */
-    sceVu0FVECTOR dir[3];  /* 0x80 */
-    sceVu0FVECTOR col[3];  /* 0xB0 */
-    sceVu0FVECTOR ambient; /* 0xE0 */
-    int mode;              /* 0xF0 */
-} LightMatrix; /* derived name */
+    sceVu0FMATRIX normal;    /* 0x00 */
+    sceVu0FMATRIX color;     /* 0x40 */
+    sceVu0FVECTOR dir[3];    /* 0x80 */
+    sceVu0FVECTOR col[3];    /* 0xB0 */
+    sceVu0FVECTOR ambient;   /* 0xE0 */
+    int mode;                /* 0xF0 */
+} LightMatrix;               /* derived name */
 
 /* obj-light: one object light, 0x10 bytes. Reader: ico2/seki/src/Light.c
  * (float [][4]: the colour scaled by 1/256). */
 typedef struct {  /* field names derived */
     float col[3]; /* 0x00, 0..255 */
     float range;  /* 0x0C */
-} ObjLight; /* derived name */
+} ObjLight;       /* derived name */
 
 /* the object light table light_AddLight indexes by the object's light number */
 extern const ObjLight objectLight[];
@@ -51,7 +52,9 @@ void light_KillAllFixLight(void);
 void light_MakeLightMatrix(struct Sub15C *self, int idx);
 void light_resetFlatLight(void);
 int light_Tool(void);
+
 void light_ResetLight(void);
+
 void light_InitLight(void);
 
 #endif /* LIGHT_H */

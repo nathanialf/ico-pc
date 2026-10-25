@@ -15,7 +15,7 @@ NormalLMicroProgram:
 	DMAend
 ;
 ; One of ICO's five VU1 microprograms (PAL 0x0028CA60, JPN 0x0028A970, KOR
-; 0x0028A9F0, 7328 bytes), sent to VU1 by mc_TransMicroCode (MicroCode.o): a
+; 0x0028A9F0, Asian 0x0028A9B0, USA 0x00272470, Aug-6 prototype 0x0026E800, 7328 bytes; Jun-26 demo 0x0025AAA0, 7328 bytes), sent to VU1 by mc_TransMicroCode (MicroCode.o): a
 ; DMAret tag whose VIF half carries MPG 0, the program, then a DMAend tag.
 ; dvp-as writes the tags, a new MPG every 256 instructions and the .DVP
 ; overlay tables. Each overlay is named with the hash of the file and the line
@@ -24,6 +24,15 @@ NormalLMicroProgram:
 ; in an include.
 ;
 ; Re-derived from published VU0/VU1 documentation; .vutext is identical
-; in the Aug-6-2001 prototype and the USA, PAL, Japanese and Korean retail.
+; in the Aug-6-2001 prototype and the USA, PAL, Japanese, Korean and Asian retail.
+; The Jun-26-2001 demo's program is its own instruction stream (the loops are
+; scheduled otherwise), held in normal_l.vsm as the demo's blocks, which cpp
+; reads with the target and LN defined. dvp-as names a continuation overlay
+; after the .vsm line of its first instruction, taken from cpp's line markers,
+; and the base ELF carries the name: the second overlay starts at line 243 of
+; both texts, the demo's one instruction later, so the two instructions each
+; have a `#line LN(...) ""` before them giving the line each target has them
+; at (mesh.dsm on the form; the third and fourth overlays start in
+; scissorcommcut.h, at the include's own lines).
 ; The labels are the DVP assembler's own, from the PAL listing's .vutext table
 ; (spelled _$NAME there, the copy dvp-as makes), each at the listing's address.
