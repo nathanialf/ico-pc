@@ -50,8 +50,11 @@ if(ICO_RUN_TESTS)
     # test's card folders sit in the working directory: save (the European
     # disc, BESCES-50760ico) and save_jpn (the Japanese disc,
     # BISCPS-11003ico, a 0x1E8-byte product file) and save_kor (the Korean
-    # disc, BISCPS-56001ico, the same 0x1E8 record)
-    foreach(_slug pal jpn kor)
+    # disc, BISCPS-56001ico, the same 0x1E8 record) and save_cn (the Asian disc,
+    # BISCPS-55001ico, the same).  The North American, August 2001 and June
+    # 2001 discs (0x18C-byte product file, a different record) follow the
+    # merged mcard.c: save_test part B lays out that record
+    foreach(_slug pal jpn kor cn)
         if(_slug STREQUAL "pal")
             set(_name save)
         else()
