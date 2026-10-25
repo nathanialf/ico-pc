@@ -104,6 +104,9 @@ int systemStatus[12];
 
 int frame_count, stage_no, game_pause, enable_game_pause, girlControlMode;
 
+/* main.c's; debug_VariableInit clears it on the 2001 builds only */
+int graphics_ready;
+
 int gFlagGameClear, debugAdpcmOn, debugKindOld, seEnvForceClose, scpBoyControlReadDisable;
 
 int mpegPlayReturnStage;
