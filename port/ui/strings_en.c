@@ -592,6 +592,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_EXPORT_TEXTURES_FAILED] = "Could not export textures",
     [UI_STR_EXPORT_TEXTURES_FAILED_BODY] = "The folder %s\ncould not be written",
     [UI_STR_LANG_KO] = "한국어",
+    [UI_STR_LANG_ZH] = "繁體中文",
     /* Controls > Touch screen and the touch layout editor */
     [UI_STR_SECTION_TOUCH] = "Touch screen",
     [UI_STR_OPT_TOUCH_EDIT] = "Edit layout",
