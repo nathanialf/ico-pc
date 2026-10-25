@@ -1270,6 +1270,10 @@ inline ICO_WORD_PTR(GObj *) actEnemy_GetClingTarget(GObj *self)
     return 0;
 }
 
+/* PC port: port/game/variants.h: Shadow toughness (0 Original, 1 American,
+   2 not tougher later) */
+extern int ico_variant_shade_toughness(void);
+
 /* A static inline shared by actEnemyRestart and actEnemyStart.  `max` is a
    local holding 43. */
 static inline float getEnemyRestartLife(GObj *self) /* derived name */
@@ -1277,6 +1281,11 @@ static inline float getEnemyRestartLife(GObj *self) /* derived name */
     int max = 43;
     int idx = gFlagGameClear + 38;
 
+    /* PC port: Shadow toughness American or Not tougher later: the factor of
+       the first playthrough on every playthrough (the USA disc's has none) */
+    if (ico_variant_shade_toughness() != 0) {
+        idx = 38;
+    }
     idx = (idx < 38) ? 38 : ((idx <= max) ? idx : max);
     return GetEnemyDefLife(self) * _ACTGame_GetParamF(idx);
 }
