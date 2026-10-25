@@ -5605,6 +5605,16 @@ void la_host_leave(void)
     actionStarted = 0;
 }
 
+/* PC port: what the pause menu's Back does before it returns la_game_loop
+   (la_game_pause and its twins), for the port's Settings procs that close
+   the menu into the game (Game variants > Debug menu); the caller returns
+   the region's la_game_loop */
+void la_host_resume_play(void)
+{
+    adpcmPauseRequest(0);
+    la_host_leave();
+}
+
 /* PC port: Settings > Gameplay > Film effect, what la_game_option does
    when row 300 changes the mode: the old mode's stage animation stopped, the
    new one's started */
