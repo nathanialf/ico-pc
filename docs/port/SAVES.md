@@ -16,9 +16,9 @@ that copies an existing PS2 save into a card folder. The game's own card code
 | `port/save/mc_import.h`, `mc_import.c` | the importer: a raw card image or a `.psu` archive into a card folder |
 | `tools/mc_import.c` | `mc_import`, the command-line importer |
 | `port/platform/host_config.c` | `ico_host_saves_dir`, `ico_host_saves2_dir`: where the card folders are |
-| `port/save/CMakeLists.txt` | `ico_save` (the card), `ico_save_import` (the importer), the `mc_import` tool, the `save`, `save_jpn` and `save_kor` tests |
-| `port/save/test/save_test.c` | the `save`, `save_jpn` and `save_kor` tests |
-| `port/core/region_pal.c`, `region_jpn.c`, `region_kor.c` | each disc's save directory (`mc_save_dir`) and product record size (`mc_product_size`) |
+| `port/save/CMakeLists.txt` | `ico_save` (the card), `ico_save_import` (the importer), the `mc_import` tool, the `save`, `save_jpn`, `save_kor` and `save_cn` tests |
+| `port/save/test/save_test.c` | the `save`, `save_jpn`, `save_kor` and `save_cn` tests |
+| `port/core/region_<slug>.c` (seven rows) | each disc's save directory (`mc_save_dir`) and product record size (`mc_product_size`) |
 | `ico2/fumi/ios/mcard.c`, `mcdata.c` | the game's side: the card manager thread, the save and load steps, the icon files |
 
 ## The card
@@ -37,15 +37,16 @@ The files are stored byte for byte as the card holds them, in PCSX2's folder-car
 `<card>/<save directory>/` holding `icon.sys`, `boy_blk.ico`, the product file named after the
 directory and the save files `game.000` onward, the names the game itself uses
 (`port/save/mc_host.c`, header comment; `ico2/fumi/ios/mcard.c` (`iOSMcSaveSeg`)). The directory
-is the disc's (see [Three discs](#three-discs)): `BESCES-50760ico` for the European disc,
-`BISCPS-11003ico` for the Japanese one, `BISCPS-56001ico` for the Korean one. The host names no directory and checks no file's size; it
+is the disc's (see [The seven discs](#the-seven-discs)): `BESCES-50760ico` for the European disc,
+`BISCPS-11003ico` for the Japanese one, `BISCPS-56001ico` for the Korean one, and one for each of
+the other four discs (the table below). The host names no directory and checks no file's size; it
 stores what the game writes. Nothing else is written, and nothing at
 all before the game's first `sceMcMkdir`: until then a card folder that does not exist is an
 empty card, and `sceMcMkdir` creates the card folder and any missing parent
 (`port/save/mc_host.c` (`sceMcGetDir`, `sceMcMkdir`, `make_root`)). The PC-only facts about a
 save, the mirror-mode flag of each slot and the achievements' run state, live outside the card,
 in `config.toml`'s `[mirror]` and `achievements.toml`, keyed by the slot and the save block's
-checksum, one set of keys per disc ([Three discs](#three-discs), [CONFIG.md](CONFIG.md);
+checksum, one set of keys per disc ([The seven discs](#the-seven-discs), [CONFIG.md](CONFIG.md);
 `port/game/options.h`, `ico_mirror_slot_saved`; `port/game/achievements.h`,
 `ico_ach_slot_saved`).
 
@@ -66,7 +67,7 @@ macOS ignore case themselves (`port/save/mc_host.c` (`fold_case`)).
 marks the port unformatted until the next `sceMcFormat` (`port/save/mc_host.c` (`sceMcFormat`,
 `sceMcUnformat`)).
 
-## Three discs
+## The seven discs
 
 Each disc saves into its own directory on the card, as on a PS2, so one card folder holds the
 discs' saves side by side and no disc sees another's (`port/core/region.h`
@@ -77,6 +78,10 @@ discs' saves side by side and no disc sees another's (`port/core/region.h`
 | European, SCES-50760 | `BESCES-50760ico` | 0x1F0 bytes and a 4-byte sum, 500 bytes | 25,600 bytes |
 | Japanese, SCPS-11003 | `BISCPS-11003ico` | 0x1E8 bytes and a 4-byte sum, 492 bytes | 25,600 bytes |
 | Korean, SCPS-56001 | `BISCPS-56001ico` | 0x1E8 bytes and a 4-byte sum, 492 bytes | 25,600 bytes |
+| Asian, SCPS-55001 | `BISCPS-55001ico` | 0x1E8 bytes and a 4-byte sum, 492 bytes | 25,600 bytes |
+| North American, SCUS-97113 | `BASCUS-97113ico` | 0x18C bytes and a 4-byte sum | not pinned yet |
+| August 2001 preview | `BASCUS-97113ico` (the North American disc's) | 0x18C bytes and a 4-byte sum | not pinned yet |
+| June 2001 demo, SCUS-97158 | `BISCUS-97113ico` | 0x18C bytes and a 4-byte sum | not pinned yet |
 
 The product file is the game's `McProductFile` record (`ico2/common/include/typedef.h`): twenty
 file summaries, the sound, output, vibration and control options, the pad configuration, the
@@ -102,6 +107,26 @@ save layout is told apart by `mc_product_size`, never by the disc's slug. A Japa
 Korean one: the two directories are separate, and a save copied from one folder to the other is not
 converted or checked for the other disc.
 
+The Asian disc (SCPS-55001) is the Korean program: its card is the Korean one under another name
+(`BISCPS-55001ico`, the same 0x1E8-byte record; `port/core/region_cn.c`, `key_prefix` `cn_`, `key_suffix`
+`_cn`; the directory is mcard.c's `VERSION_CN` literal).
+
+The other three discs (the North American disc, the August 2001 preview and the June 2001 demo) use a
+shorter product file, 0x18C bytes (`mc_product_size`): upstream's `McProductFile` for them is twenty
+16-byte file summaries (0x140), then the sound, output and vibration options and the 64-byte pad
+configuration, with no `controlType`, current file, serial, `cameraMove` or `palMode` (upstream's
+`ico2/common/include/typedef.h`, its `VERSION_NTSC`/`AUG6`/`JUN26` arm; the file summary differs
+inside it: the North American disc's has `playTime`, `sofa` and an unread word, the preview's and the
+demo's a `cleared` word, `playTime` and `sofa`). The North American disc and the preview write the
+same directory, `BASCUS-97113ico`: on a PS2 they share a card folder and the port keeps that, so the
+two discs' saves are one set of files, while their `[mirror]` and `achievements.toml` keys stay
+apart (`ntsc_`, `aug6_`). The importer tells a directory by the first row that has it, so a card
+holding that directory reports the North American disc. The demo's directory carries the North
+American game's serial, `BISCUS-97113ico` (mcard.c's literal), not the demo disc's `SCUS-97158`.
+`region_select_test` holds this rule. How the merged `mcard.c` lays this record out in memory is the
+game-code merge's; `save_test`'s part B, which lays the product file out byte by byte, has no run
+for these three discs until that is known.
+
 A real card's saves need no conversion: a card or archive with any of the directories imports into the
 card folder as it is ([Importing a PS2 save](#importing-a-ps2-save)). There is no exporter. The
 card folder is the export format: PCSX2 reads it as a folder memory card, and tools such as mymc
@@ -109,8 +134,8 @@ copy a directory from it to a card image or a `.psu`.
 
 The PC-only facts kept beside a save are per disc too, since slot N of one disc is not slot N of
 the other: `config.toml`'s `[mirror] slot_N` and `slot_N_sum` for the European disc and
-`jpn_slot_N` and `jpn_slot_N_sum` for the Japanese one, `kor_slot_N` and `kor_slot_N_sum` for the Korean one, and `achievements.toml`'s `run.slot_N_*`,
-`run.jpn_slot_N_*` and `run.kor_slot_N_*` (`port/core/region.h` (`key_prefix`, `ico_region_key_prefixed`);
+`jpn_slot_N` and `jpn_slot_N_sum` for the Japanese one, `kor_slot_N` and `kor_slot_N_sum` for the Korean one (and `ntsc_`, `aug6_`, `jun26_`, `cn_` for the others), and `achievements.toml`'s `run.slot_N_*`,
+`run.jpn_slot_N_*` and `run.kor_slot_N_*` (and the others) (`port/core/region.h` (`key_prefix`, `ico_region_key_prefixed`);
 `port/game/options.c` (`slot_keys`); `port/game/achievements.c` (`run_key`)). The visited stages
 are `stats.stages`, `stats.stages_jpn` and `stats.stages_kor` (the discs number their stages differently,
 `key_suffix`, `ico_region_key_suffixed`); the unlocks and the other counters are one set for the
@@ -242,7 +267,7 @@ tool is built by `port/save/CMakeLists.txt` and kept in every build (`cmake/IcoT
 ## Tests
 
 `port/save/test/save_test.c` is the ctests `save` (the European disc), `save_jpn` (the
-Japanese disc) and `save_kor` (the Korean disc): its first argument is the region's slug, which it selects
+Japanese disc), `save_kor` (the Korean disc) and `save_cn` (the Asian disc): its first argument is the region's slug, which it selects
 (`ico_region_select`), so every part runs with that disc's directory and product file size. Each
 runs on temporary card folders in its own working directory, on simulated vsyncs, and needs no
 game data (`port/save/test/save_test.c`, header comment; `port/save/CMakeLists.txt`):
