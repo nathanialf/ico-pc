@@ -34,11 +34,13 @@ goes on with the date and time, ending in `.zip` (for example
 before, your settings and a short summary, so it is the one file a
 problem report needs. The message the game shows names it. The five
 newest are kept. Whenever you report a problem, also say which disc you
-play, the European, the Japanese or the Korean.
+play (the European, Japanese, Korean, North American or Asian disc, the August 2001 preview or the June 2001 magazine demo).
 
 The first lines of the log say which version of the game you have and
 which disc it is playing (SCES-50760 for the European disc, SCPS-11003 for
-the Japanese disc, SCPS-56001 for the Korean disc). The log also records your display settings, every
+the Japanese disc, SCPS-56001 for the Korean disc, SCUS-97113 for the North
+American disc, SCPS-55001 for the Asian disc, PROTO-20010806 for the August
+2001 preview, SCUS-97158 for the June 2001 magazine demo). The log also records your display settings, every
 change you make to them, and
 every 10 seconds how fast the game is running (every second for 30 seconds
 after you press F11). When something goes wrong, it says what.
@@ -141,7 +143,7 @@ under [Error messages](#error-messages)): it keeps a copy of the picture
 it was drawing for the report, and on a phone the next start has the
 graphics driver check every read for that start. If it happens again, report it and attach the
 newest file in `logs` that starts with `report-` (the message names it),
-and say which disc you play, the European, the Japanese or the Korean.
+and say which disc you play (the European, Japanese, Korean, North American or Asian disc, the August 2001 preview or the June 2001 magazine demo).
 
 ## The music stops
 
@@ -273,7 +275,7 @@ does not work, send a [problem report](#send-a-problem-report) with
    [issues page](https://github.com/nathanialf/ico-pc/issues).
 2. Say what happened and what you were doing.
 3. Say which version of the game you have, and whether you play the
-   European, the Japanese or the Korean disc. A downloaded release shows its version
+   the European, Japanese, Korean, North American or Asian disc, the August 2001 preview or the June 2001 magazine demo. A downloaded release shows its version
    in the top-right corner of the Options menu's first page, and the log
    says both at the top.
 4. Attach the newest file in `logs` that starts with `report-`, when the
@@ -350,15 +352,21 @@ mean.
 **"No ICO disc image was found or chosen."** The game needs your disc
 image the first time. Start it again and choose the file, or put the image
 beside the program named `Ico_PAL.iso` for the European disc,
-`Ico_JPN.iso` for the Japanese disc or `Ico_KOR.iso` for the Korean disc (on Windows inside the `x64`
+`Ico_JPN.iso` for the Japanese disc, `Ico_KOR.iso` for the Korean disc,
+`Ico_USA.iso` for the North American disc, `Ico_CN.iso` for the Asian disc,
+`Ico_AUG6.iso` for the August 2001 preview or `Ico_JUN26.iso` for the June 2001
+magazine demo (on Windows inside the `x64`
 folder; on a Mac, add a line `iso=` with the image's full path to
 `ico-pc.ini` in the user folder instead,
 [where that is](PORTABLE_MODE.md#where-your-saves-are)).
 
-**"... is not a disc image this port plays."** The file is not the
-European release of ICO (SCES-50760), the Japanese release
-(SCPS-11003) or the Korean release (SCPS-56001), or it is damaged or changed. The American release and other
-editions do not work. 
+**"... is not a disc image this port plays."** The file is not one of the
+seven discs (the European release of ICO, SCES-50760, the Japanese release
+SCPS-11003, the Korean release SCPS-56001, the North American release
+SCUS-97113, the Asian release SCPS-55001, the August 2001 preview disc and the
+June 2001 magazine demo SCUS-97158), or it is damaged or changed. Other
+editions do not work. For the magazine demo the file must be the **whole**
+magazine disc image: a copy of only ICO's files is not recognised.
 
 **"Cannot read the disc image ..."** The file is incomplete or not a disc
 image. A `.chd` must be complete on its own: one made as a difference from
@@ -368,8 +376,9 @@ choose the `.bin` of the data track. With a `.cue`, its `.bin` must be in
 the same folder, under the name the `.cue` gives it.
 
 **"Could not extract the game's data ..."** There is not enough free space
-(about 1 GB is needed for each disc you set up), or the disc image is
-incomplete. Free some space and try again.
+(about 1 GB is needed for each disc you set up; on an Android phone the
+June 2001 magazine demo needs about 5.6 GB, because its 4.4 GB image is copied
+into the app first), or the disc image is incomplete. Free some space and try again.
 
 **"The game's data just written to ... cannot be read back."** The copy of
 the game's files that the first start made is damaged. Delete the file the
@@ -457,7 +466,7 @@ carries on where it left off (it gives up after a few starts). Then the
 game starts as usual, whatever it found. If you report the problem, attach
 the newest file in `logs` that starts with `report-` (it holds the `loss-`
 file) together with the log of the start after it, and say which disc
-you play, the European, the Japanese or the Korean.
+you play (the European, Japanese, Korean, North American or Asian disc, the August 2001 preview or the June 2001 magazine demo).
 
 **"The game checked why the graphics stopped last time, and the graphics
 driver needs a fresh start now."** The check above stopped the graphics
@@ -555,7 +564,7 @@ graphics card (or the graphics driver) stopped responding: the game then
 keeps a copy of the picture as it does whenever the graphics stop (see
 [Error messages](#error-messages)).
 Send the newest file in `logs` that starts with `report-`, and say which
-disc you play, the European, the Japanese or the Korean.
+disc you play (the European, Japanese, Korean, North American or Asian disc, the August 2001 preview or the June 2001 magazine demo).
 With [ReShade](RESHADE.md) loaded, the game gives itself 60 seconds to
 start as well, as ReShade takes a while to get ready.
 
@@ -611,11 +620,11 @@ works without it. Keep the AppImage in a folder you can write to, because
 
 The window that asks for your disc image comes from your desktop's own
 file window, or from the small program `zenity`. If no window shows up,
-put the image beside `ico_pc` (or beside the AppImage) named `Ico_PAL.iso` (or `Ico_PAL.chd`,
-`Ico_PAL.bin` or `Ico_PAL.cue`) for the European disc, `Ico_JPN.iso`
-(or `Ico_JPN.chd`, `Ico_JPN.bin` or `Ico_JPN.cue`) for the Japanese disc, or
-`Ico_KOR.iso` (or `Ico_KOR.chd`, `Ico_KOR.bin` or `Ico_KOR.cue`) for the
-Korean disc, instead.
+put the image beside `ico_pc` (or beside the AppImage), named `Ico_PAL`
+(European disc), `Ico_JPN` (Japanese), `Ico_KOR` (Korean), `Ico_USA` (North
+American), `Ico_CN` (Asian), `Ico_AUG6` (August 2001 preview) or `Ico_JUN26`
+(June 2001 magazine demo) and ending in `.iso`, `.chd`, `.bin` or `.cue`,
+instead.
 
 While the game runs, it asks your desktop not to lock the screen or put the
 computer to sleep. If the computer still goes to sleep while you play with a
@@ -630,8 +639,10 @@ game uses).
    `-linux.tar.gz` download into a folder there.
 2. Start it (the AppImage, or `ico_pc`) once in Desktop Mode, so it can ask
    for your disc image and set itself up. Or put the image beside it named
-   `Ico_PAL.iso` (European disc), `Ico_JPN.iso` (Japanese disc) or
-   `Ico_KOR.iso` (Korean disc) and skip
+   `Ico_PAL.iso` (European disc), `Ico_JPN.iso` (Japanese disc),
+   `Ico_KOR.iso` (Korean disc), `Ico_USA.iso` (North American disc),
+   `Ico_CN.iso` (Asian disc), `Ico_AUG6.iso` (August 2001 preview) or
+   `Ico_JUN26.iso` (June 2001 magazine demo) and skip
    the question.
 3. Close Steam, start the game, and choose Options > Extras > Add to Steam on the
    title screen
