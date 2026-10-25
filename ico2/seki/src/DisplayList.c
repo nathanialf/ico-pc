@@ -257,8 +257,8 @@ void dl_PushPriority(void)
         dlPriorityStack[dlStackDepth - 1] = dlPriority;
     } else {
         debug_StdPrintfDummy("dl_PushPriority:Stack Overflow.\n");
-        debug_assert(__FILE__, LN(534, 534, 534, 526, 526, 575, 534));
-        __assert(__FILE__, LN(534, 534, 534, 526, 526, 575, 534), "FALSE");
+        debug_assert(__FILE__, LN(534, 534, 534, 526, 526, 526, 534));
+        __assert(__FILE__, LN(534, 534, 534, 526, 526, 526, 534), "FALSE");
     }
 }
 

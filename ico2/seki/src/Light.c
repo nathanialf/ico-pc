@@ -85,13 +85,13 @@ static int lightCount; /* derived name */
    light_resetFlatLight clears */
 static int flatLightNum = 0; /* derived name */
 
-static void light_killLinkLight(Light *p)
+static void light_killLinkLight_jun26(Light *p)
 {
     if (p == 0) {
         /* "the light is NULL" */
         debug_StdPrintfDummy("Light:NULLになってんで\n");
-        debug_assert("src/Light.c", LN(424, 424, 424, 424, 397, 386, 424));
-        __assert("src/Light.c", LN(424, 424, 424, 424, 397, 386, 424), "0");
+        debug_assert("src/Light.c", 386);
+        __assert("src/Light.c", 386, "0");
     }
     if (p->next != 0) {
         p->next->prev = p->prev;
@@ -107,13 +107,41 @@ static void light_killLinkLight(Light *p)
     freeseki(p);
 }
 
+static void light_killLinkLight(Light *p)
+{
+    if (ICO_JUN26) {
+        light_killLinkLight_jun26(p);
+        return;
+    }
+    if (p == 0) {
+        /* "the light is NULL" */
+        debug_StdPrintfDummy("Light:NULLになってんで\n");
+        debug_assert("src/Light.c", LN(424, 424, 424, 424, 397, 397, 424));
+        __assert("src/Light.c", LN(424, 424, 424, 424, 397, 397, 424), "0");
+    }
+    if (p->next != 0) {
+        p->next->prev = p->prev;
+    } else {
+        lastLight = (ICO_WORD)p->prev;
+    }
+    if (p->prev != 0) {
+        p->prev->next = p->next;
+    }
+    if (lastLight != 0) {
+        ((Light *)lastLight)->next = 0;
+    }
+    freeseki(p);
+}
+
+static void light_killLinkAmbient(AmbientVolume *p);
+
 static void light_killLinkAmbient(AmbientVolume *p)
 {
     if (p == 0) {
         /* "the ambient volume is NULL" */
         debug_StdPrintfDummy("AmbientVolume:NULLになってんで\n");
-        debug_assert("src/Light.c", LN(451, 451, 451, 451, 424, 451, 451));
-        __assert("src/Light.c", LN(451, 451, 451, 451, 424, 451, 451), "0");
+        debug_assert("src/Light.c", LN(451, 451, 451, 451, 424, 413, 451));
+        __assert("src/Light.c", LN(451, 451, 451, 451, 424, 413, 451), "0");
     }
     if (p->next != 0) {
         p->next->prev = p->prev;
@@ -149,8 +177,93 @@ static inline void light_setLinkLight(Light *p) /* derived name */
 
 inline void light_resetFlatLight(void);
 
+static Light *light_AddLight_jun26(GObj *self, int b, int kind)
+{
+    int i;
+    float d;
+    const ObjLight *t;
+
+    switch (kind) {
+    case 0: {
+        Light *l;
+
+        if (flatLightNum != 0) {
+            debug_StdPrintfDummy("Flat Lights already exist.\n");
+            light_resetFlatLight();
+            return 0;
+        }
+        for (i = 0; i < 3; i++) {
+            l = &flatLight[i];
+            _CopyVector(l->col, GlobalStageSetting.flatLightCol[i]);
+            _NormalizeVector(l->dir, GlobalStageSetting.flatLightDir[i]);
+            l->scale = 1.0f;
+            l->range = 0.0f;
+            l->falloff = 1.0f;
+            d = (l->col[0] + l->col[1] + l->col[2]) * 0.3333f;
+            if (d < 0.0f) {
+                d = -d;
+            }
+            l->strength = d;
+            light_setLinkLight(l);
+            flatLightSlot[(flatLightNum)++] = (ICO_WORD)l;
+        }
+        return 0;
+    }
+    case 1: {
+        Light *q;
+
+        if (b == 0) {
+            return 0;
+        }
+        if (self->dobj == 0) {
+            return 0;
+        }
+        q = (Light *)iosMallocDebug(ios_partition_seki, sizeof(Light) > 80 ? sizeof(Light) : 80,
+                                    "src/Light.c", 581);
+        self->dobj->lightId = b;
+        q->owner = self;
+        q->kind = kind;
+        t = &objectLight[b];
+        q->col[0] = t->col[0] * 0.00390625f;
+        q->col[1] = t->col[1] * 0.00390625f;
+        q->col[2] = t->col[2] * 0.00390625f;
+        q->col[3] = 1.0f;
+        q->scale = 1.0f;
+        q->range = (0.0f < t->range) ? t->range : 1.0f;
+        q->falloff = 1.0f;
+        d = q->col[0] + q->col[1] + q->col[2];
+        if (d < 0.0f) {
+            d = -d;
+        }
+        q->strength = d;
+        light_setLinkLight(q);
+        return q;
+    }
+    case 2:
+    case 3: {
+        Light *r;
+
+        r = (Light *)iosMallocDebug(ios_partition_seki, sizeof(Light) > 80 ? sizeof(Light) : 80,
+                                    "src/Light.c", 646);
+        r->kind = kind;
+        r->scale = 1.0f;
+        r->range = 32768.0f;
+        light_setLinkLight(r);
+        return r;
+    }
+    default:
+        debug_StdPrintfDummy("Added Light is illegal.\n");
+        debug_assert("src/Light.c", 666);
+        __assert("src/Light.c", 666, "0");
+    }
+    return 0;
+}
+
 Light *light_AddLight(GObj *self, int b, int kind)
 {
+    if (ICO_JUN26) {
+        return light_AddLight_jun26(self, b, kind);
+    }
     int i;
     float d;
     const ObjLight *t;
@@ -1029,6 +1142,128 @@ int light_Tool(void)
     return ret;
 }
 
+/* the reflection test's mesh: a 15 by 15 grid facing -z, built by
+   light_InitReflectTest and drawn by light_ReflectTest */
+static Mesh3D *reflectMesh; /* derived name */
+
+void light_InitReflectTest(void) /* derived name */
+{
+    int i;
+    int j;
+    int idx;
+    Prim3DVec *pos;
+    Prim3DVec *nrm;
+    Prim3DVec *st;
+
+    reflectMesh = prim_InitMesh3D(15, 15, 0, 28, 0x80808080, 0);
+    pos = reflectMesh->pos;
+    nrm = reflectMesh->nrm;
+    st = reflectMesh->st;
+    for (i = 0; i < 15; i++) {
+        for (j = 0; j < 15; j++) {
+            idx = i * 15 + j;
+            pos[idx].x = ((float)j - 7.5f) * 20.0f;
+            pos[idx].y = ((float)i - 7.5f) * 20.0f;
+            pos[idx].z = 0.0f;
+            pos[idx].w = 1.0f;
+            nrm[idx].x = nrm[idx].y = 0.0f;
+            nrm[idx].z = -1.0f;
+            nrm[idx].w = 1.0f;
+            st[idx].x = (float)j / 14.0f;
+            st[idx].y = (float)i / 14.0f;
+        }
+    }
+    prim_UpdateMesh3D(reflectMesh, 9, 0);
+    prim_UpdateMesh3D(reflectMesh, 9, 1);
+}
+
+/* the reflection test: the mesh spun by the frame count (held still while
+   pad button 0x20 is down) and in front of the camera, its texture
+   coordinates the sun-camera view of each vertex's reflected eye ray */
+/* PC port: staticBlur.c's and Texture.c's */
+void GetSunWorldPos(float *pos);
+int tex_TransTexture(int id, int ret);
+
+void light_ReflectTest(void) /* derived name */
+{
+    sceVu0FMATRIX rot;
+    sceVu0FMATRIX world;
+    sceVu0FMATRIX view;
+    sceVu0FMATRIX inv;
+    sceVu0FVECTOR trans = {0.0f, -200.0f, 0.0f};
+    float up[4];
+    float sun[4];
+    float eye[4];
+    sceVu0FMATRIX cam;
+    float pos[4];
+    float nrm[4];
+    float ray[4];
+    float tmp[4];
+    float ref[4];
+    Prim3DVec *p;
+    Prim3DVec *n;
+    short angle;
+    int i;
+    int j;
+    int idx;
+
+    angle = frame_count * 256;
+    if (pad[0].now & 0x20) {
+        angle = 0;
+    }
+    _InitCurrentMatrix();
+    _TransCurrentMatrix(trans);
+    _RotCurrentMatrixY(angle);
+    _MulCurrentMatrixL(matrixptr + 0x80);
+    _GetCurrentMatrix(world);
+    _MulCurrentMatrixL(matrixptr + 0xC0);
+    _GetCurrentMatrix(view);
+    memset(up, 0, 16);
+    up[1] = 1.0f;
+    GetSunWorldPos(sun);
+    _ScaleVector(eye, sun, 1000000.0f);
+    _SetCameraMatrix(cam, eye, sun, up);
+    _UnitVector(cam[3]);
+    _InversMatrix(inv, matrixptr + 0x80);
+    _UnitVector(inv[3]);
+    _MulMatrix(inv, cam, inv);
+    _CopyMatrix(rot, world);
+    _UnitVector(rot[3]);
+    for (i = 0; i < 15; i++) {
+        for (j = 0; j < 15; j++) {
+            idx = i * 15 + j;
+            p = reflectMesh->pos;
+            n = reflectMesh->nrm;
+            _ApplyMatrix(pos, world, &p[idx]);
+            _NormalizeVector(pos, pos);
+            _ScaleVectorXYZ(ray, pos, -1.0f);
+            _ApplyMatrix(nrm, rot, &n[idx]);
+            _ScaleVectorXYZ(tmp, nrm, _InnerProduct(ray, nrm) * 2.0f);
+            _AddVectorXYZ(ref, tmp, pos);
+            ref[3] = 1.0f;
+            _ApplyMatrix(ref, inv, ref);
+            ref[2] *= 2.0f;
+            ref[0] += ref[2];
+            ref[1] += ref[2];
+            reflectMesh->st[idx].x = ref[0] * 0.125f + 0.25f;
+            reflectMesh->st[idx].y = ref[1] * 0.125f + 0.25f;
+            reflectMesh->st[idx].z = 1.0f;
+            reflectMesh->st[idx].w = 0.0f;
+        }
+    }
+    prim_UpdateMesh3D(reflectMesh, 8, buffer_ID);
+    gif_StartPacketPriPath1(4);
+    gif_SetGsReg(8, 0);
+    gif_SetGsReg(71, 0x50000);
+    gif_SetGsReg(66, (128LL << 32) | 0x62);
+    gif_SetGsReg(78, 0x300000C0);
+    gif_EndPacketPath1();
+    _SetCurrentMatrix(view);
+    texturetranssize += tex_TransTexture(58, 4);
+    prim_DispMesh3D(reflectMesh, 0, 0, 58);
+    debug_StdPrintfDummy("reflection test\n");
+}
+
 void light_InitLight(void)
 {
     lastLight = 0;
@@ -1053,7 +1288,9 @@ void light_KillAllFixLight(void)
         }
         p = p->prev;
     }
-    lightCount = 0;
+    if (!ICO_JUN26) {
+        lightCount = 0;
+    }
 }
 
 void light_KillAllAmbient(void)

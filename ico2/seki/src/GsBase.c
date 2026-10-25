@@ -558,7 +558,11 @@ void gsb_Reduction(void)
 }
 
 /* the colour the kept frame is drawn back in */
-static const unsigned char keepFrameColor[4] = {112, 112, 112, 128}; /* derived name */
+static const unsigned char keepFrameColor_pal[4] = {112, 112, 112, 128}; /* derived name */
+
+static const unsigned char keepFrameColor_jun26[4] = {128, 128, 128, 128}; /* derived name */
+
+#define keepFrameColor PAL_JUN26(keepFrameColor_pal, keepFrameColor_jun26)
 
 /* as in GifPacket.h, which this TU does not include */
 extern void gif_EndPacket(void);
@@ -811,7 +815,7 @@ static void gsb_scissorOnDemo(void)
         if (debug_font_flag & 1) {
             debug_Printf(0x21C, ScreenHeight / 2 - 8, 0xCCCCCC00, "D");
         }
-        dl_SetDLPriority(11);
+        dl_SetDLPriority(PAL_NTSCAUG6JUN26(11, 12));
         /* PC port: Options > Effects > Cinematic bars off skips the bars
            (and the subtitle dimming that rides on them); the ramp above still runs */
         if (ico_video_effect_cinematic_bars()) {
@@ -834,9 +838,9 @@ static void gsb_scissorOnDemo(void)
             gif_StartPacketPriPath1(dl_GetPri());
             memset(col, 0, 4);
             col[3] = 0x80;
-            gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, 1, 0);
+            gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, PAL_NTSCAUG6JUN26(1, 0), 0);
             gif_SetGsReg(0x47, 0x30000);
-            gif_SetGsReg(0x4E, 0x300000C0);
+            gif_SetGsReg(0x4E, PAL_NTSCAUG6JUN26(0x300000C0, 5100273856));
             gif_SetGsReg(0x49, 0);
             gif_SetGsReg(0x42, ((long long)(int)scissorLevel << 32) | 0x64);
             for (i = 0; i < 2; i++) {
@@ -896,7 +900,8 @@ static void gsb_controlBrightness(void)
             gif_SetAlpha(1, 7, 0);
             /* PC port: FRAME (the native width) */
             gif_MakeSpriteNoTexture((0x800 - gsFrame.w / 2) << 4, (0x800 - ScreenHeight / 2) << 4,
-                                    gsFrame.w << 4, ScreenHeight << 4, 0xFFFFFFFE, col, 1);
+                                    gsFrame.w << 4, ScreenHeight << 4,
+                                    PAL_NTSCAUG6JUN26(0xFFFFFFFE, 4294967295), col, 1);
             gif_EndPacketPath1();
         }
 #endif
@@ -1125,7 +1130,7 @@ static void gsb_setSemitransReg(int ctx)
     gif_SetGsReg(0x47, 0x5140D);
     gif_SetGsReg(0x4E, 0x300000C0);
     gif_SetGsReg(0x4A, 0);
-    gif_SetGsReg(0x3B, 0x810000807FLL);
+    gif_SetGsReg(0x3B, PAL_JUN26(0x810000807FLL, 0x8000000080LL));
     gif_EndPacketPath1();
 }
 
@@ -1163,11 +1168,88 @@ static const struct { /* field names derived */
     {0x8000, 0x302EC000, 0x512, 0},
 };
 
+static void gsb_MakeCommonMatrix_jun26(void)
+{
+    float pos[4];
+    float up[4] = {0.0f, 1.0f, 0.0f, 0.0f};
+    float sun[4];
+    float sunMatrix[4][4];
+    float invView[4][4];
+    GifPkWord *p;
+    GifPkWord *q;
+    int i;
+
+    if (graphics_ready == 0) {
+        return;
+    }
+    i = 0;
+    _MulMatrix(matrixptr + 0x100, matrixptr + 0xC0, matrixptr + 0x80);
+    _MulMatrix(matrixptr + 0x200, matrixptr + 0x1C0, matrixptr + 0x80);
+    _InversMatrix(matrixptr + 0x2C0, matrixptr + 0x80);
+    /* PC port: the cull's matrix and the view and projection it is made of */
+    gsbHostCullBuilt();
+    GetSunWorldPos(sun);
+    _ScaleVector(pos, sun, 1000000.0f);
+    _SetCameraMatrix(sunMatrix, pos, sun, up);
+    _UnitVector(sunMatrix[3]);
+    _CopyMatrix(invView, matrixptr + 0x2C0);
+    _UnitVector(invView[3]);
+    p = (GifPkWord *)PacketBufferStruct.ptr.d;
+    PacketBufferStruct.gif.c = 0;
+    PacketBufferStruct.dma.c = (char *)p;
+    PacketBufferStruct.end.c = 0;
+    PacketBufferStruct.tail.c = (char *)p;
+    p[0].d = 0x10000011;
+    PacketBufferStruct.ptr.c = (char *)p + 8;
+    p[1].w[0] = 0x13000000;
+    PacketBufferStruct.ptr.c = (char *)p + 0xC;
+    PacketBufferStruct.gif.c = (char *)p + 0xC;
+    p[1].w[1] = 0x6C100000;
+    PacketBufferStruct.ptr.c = (char *)p + 0x10;
+    _CopyMatrix((char *)p + 0x10, &commonMatrixHead);
+    PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
+    _CopyMatrix(PacketBufferStruct.ptr.d, matrixptr + 0x100);
+    PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
+    _CopyMatrix(PacketBufferStruct.ptr.d, matrixptr + 0x280);
+    PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
+    _MulMatrix(PacketBufferStruct.ptr.d, sunMatrix, invView);
+    q = (GifPkWord *)PacketBufferStruct.ptr.d;
+    PacketBufferStruct.ptr.c = (char *)q + 0x40;
+    q[8].w[0] = 0x13000000;
+    PacketBufferStruct.ptr.c = (char *)q + 0x44;
+    q[8].w[1] = 0;
+    PacketBufferStruct.ptr.c = (char *)q + 0x48;
+    q[9].w[0] = 0;
+    PacketBufferStruct.ptr.c = (char *)q + 0x4C;
+    q[9].w[1] = 0;
+    PacketBufferStruct.ptr.c = (char *)q + 0x50;
+    PacketBufferStruct.tail.c = (char *)q + 0x50;
+    q[10].d = 0x60000000;
+    PacketBufferStruct.ptr.c = (char *)q + 0x58;
+    q[11].w[0] = 0;
+    PacketBufferStruct.ptr.c = (char *)q + 0x5C;
+    q[11].w[1] = 0;
+    PacketBufferStruct.ptr.c = (char *)q + 0x60;
+    do {
+        dl_SetDLPriority(i);
+        i++;
+        dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
+        dl_CloseDma();
+    } while (i < 0xD);
+#ifdef ICO_RD
+    gsbHostCommon();
+#endif
+}
+
 /* Build the frame's common matrix packet: the three view matrices the stage
  * needs, the inverse of the view, and the display list that uploads them to
  * VU memory, opened once for each of the thirteen list priorities. */
 void gsb_MakeCommonMatrix(void)
 {
+    if (ICO_JUN26) {
+        gsb_MakeCommonMatrix_jun26();
+        return;
+    }
     GifPkWord *p;
     GifPkWord *q;
     int i;
@@ -1636,8 +1718,47 @@ static void gsbHostReduction(void)
 /* gsb_InitGSSystem's first call brings every module up */
 static int firstGsInit = 1; /* derived name */
 
+static void gsb_InitGSSystem_jun26(void)
+{
+    screen_offset_y = 0;
+    screen_offset_x = 0;
+    /* PC port: a stage's first tick has no earlier camera to cull against */
+    gsbHostCullForget();
+    if (firstGsInit != 0) {
+        sceGsResetPath();
+        sceVpu0Reset();
+        debug_StdPrintfDummy("dma init\n");
+        dma_init();
+        debug_StdPrintfDummy("matrix init\n");
+        matrix_init();
+        debug_StdPrintfDummy("texture init\n");
+        tex_Init();
+        debug_StdPrintfDummy("gs init\n");
+        sceGsSyncV(0);
+        gsb_Init(&db);
+        sceGsSyncV(0);
+        dl_Init();
+#ifdef ICO_RD
+        gsbHostFrameHead();
+#endif
+        firstGsInit = 0;
+    } else {
+        debug_StdPrintfDummy("dma init\n");
+        dma_init();
+        debug_StdPrintfDummy("texture init\n");
+        tex_Init();
+    }
+    resetmallocseki();
+    pac_Init();
+    gsSystemReady = 1;
+}
+
 void gsb_InitGSSystem(void)
 {
+    if (ICO_JUN26) {
+        gsb_InitGSSystem_jun26();
+        return;
+    }
     screen_offset_y = 0;
     screen_offset_x = 0;
     /* PC port: a stage's first tick has no earlier camera to cull against */
@@ -2095,6 +2216,44 @@ static void gsb_SetVSMatrixSub(float *screen, float *proj, float *projHalf, floa
  * planes. */
 static float vsParam[10]; /* derived name */
 
+static void gsb_SetVSMatrix_jun26(int w, int h, float d)
+{
+    float zoom;
+
+    center_X = center_Y = 2048.0f;
+    currentFocusDistance = d;
+    /* PC port (photo mode): the full-screen camera's distance (SCALE: the
+       full screen is w == ScreenWidth at every aspect) */
+    if (w == ScreenWidth && h == ScreenHeight) {
+        gsbViewD = d;
+    }
+    vsWidth = w;
+    vsHeight = h;
+    if (zoomTarget != zoomCurrent) {
+        zoomCurrent = zoomCurrent + (zoomTarget - zoomCurrent) * zoomSpeed * 0.001f;
+    }
+    if (staffRollStartFlag != 0) {
+        center_X = center_X - staffRollCenterOffsetX;
+    }
+    /* PC port: ScreenWidth here and down to vsParam[2] is SCALE */ zoom =
+        (float)GlobalStageSetting.viewScale * zoomCurrent * d * (float)ScreenWidth / 640.0f /
+        100.0f;
+    vsParam[0] = zoom;
+    vsParam[3] = center_X;
+    vsParam[4] = center_Y;
+    vsParam[5] = 1.0f;
+    vsParam[6] = 536870880.0f;
+    vsParam[1] = (float)w / (float)ScreenWidth;
+    vsParam[7] = 2.0f;
+    vsParam[8] = 262144.0f;
+    vsParam[2] =
+        (float)ScreenHeight * 4.0f / ((float)ScreenWidth * 3.0f) * (float)h / (float)ScreenHeight;
+    gsb_SetVSMatrixSub((float *)(matrixptr + 0xC0), (float *)(matrixptr + 0x1C0),
+                       (float *)(matrixptr + 0x240), (float *)(matrixptr + 0x340), vsParam);
+    gsbHostCullMargin((float *)(matrixptr + 0x240));
+    gsbHostCullMargin((float *)(matrixptr + 0x680));
+}
+
 /* Set the view and screen matrices for a frame of w by h at depth d: the
  * centre is the screen middle less the staff roll offset, the zoom eases
  * towards its target by a thousandth of the step, and the view record at
@@ -2102,6 +2261,10 @@ static float vsParam[10]; /* derived name */
  * planes gsb_SetVSMatrixSub builds the matrices from. */
 void gsb_SetVSMatrix(int w, int h, float d)
 {
+    if (ICO_JUN26) {
+        gsb_SetVSMatrix_jun26(w, h, d);
+        return;
+    }
     float zoom;
 
     center_X = center_Y = 2048.0f;
@@ -2168,6 +2331,8 @@ void gsb_SetVSMatrix(int w, int h, float d)
     }
 }
 
+/* the sign of a, as a factor */
+#define SIGN(a) ((a) < 0.0f ? -1.0f : ((a) > 0.0f ? 1.0f : 0.0f)) /* derived name */
 /* PC port: the native and in-between cull.  Two projections cull:
    projHalf (matrixptr+0x240), the projection of the visible screen that
    +0x280 (gsb_MakeCommonMatrix) and RegistPacket.c's per-object +0x300 are
@@ -2937,7 +3102,7 @@ int gsb_ClipBox(float *p)
         all &= df;
         any |= cf;
     }
-    if (all & 0x2F) {
+    if (all & PAL_JUN26(0x2F, 512)) {
         return 0;
     }
     if ((any & 0x2F) == 0) {

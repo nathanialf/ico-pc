@@ -9,8 +9,8 @@
 #define ENEMYINIT_H
 
 float (*enemy_GetPositionTable(int idx, int sub_idx))[4];
-void enemy_Initialize(void);
 
+void enemy_Initialize(void);
 extern int EnemyKindNum;
 
 /* PC port: the enemy set records are declared here, not in EnemyInit.c, as
@@ -41,6 +41,11 @@ typedef struct EnemySet { /* field names derived */
 } EnemySet;               /* derived name */
 
 extern struct EnemyModelSet enemy_enemymodel01_enemymodel04;
+/* the stages' set lists and their counts, enemy_Initialize's table: the
+   data members enemy-model02-kindlist .. enemy-set-table that follow
+   EnemyInit.o in the link */
+extern EnemySet enemySetTable[]; /* derived name */
+
 /* PC port: enemymodel01 (EnemyInit.c) is declared nowhere else, as upstream's
    June 2001 demo arm has it: the June 2001 demo's enemySetTable (a data table)
    points at it */

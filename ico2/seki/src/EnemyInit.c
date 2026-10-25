@@ -9,7 +9,8 @@ int EnemyKindNum = 0;
 
 /* One row per enemy set and one slot per enemy kind, each holding the
    position table enemy_Initialize allocates for that kind, or 0. */
-static float (*enemyPositionTable[1][27])[4]; /* derived name */
+/* PC port: nine rows, the June 2001 demo's count (the European program's one row is row 0) */
+static float (*enemyPositionTable[9][27])[4]; /* derived name */
 
 typedef ICO_QW Qw128; /* derived name */
 
@@ -821,7 +822,10 @@ EnemyModelSet enemy_enemymodel01_enemymodel04 = {enemymodel01Kinds, 27, enemymod
 EnemyModelSet *enemymodel01[] = {&enemy_enemymodel01_enemymodel04, 0};
 
 /* the stages' set lists and their counts, enemy_Initialize's table */
-static EnemySet enemySetTable[] = {{enemymodel01, 1}}; /* derived name */
+static EnemySet enemySetTable_pal[] = {{enemymodel01, 1}}; /* derived name */
+
+/* PC port: the June 2001 demo reads its own nine rows, the data table the loader fills */
+#define enemySets PAL_JUN26(enemySetTable_pal, enemySetTable)
 
 /* Debug report of the number of positions enemy_Initialize copied, built only
    under DEBUG. */
@@ -848,12 +852,12 @@ void enemy_Initialize(void)
        retail build never reads it */
     int copyNum = 0;
 
-    EnemyKindNum = 1;
+    EnemyKindNum = PAL_JUN26(1, 9);
     for (e = 0; e < EnemyKindNum; e++) {
-        tbl = enemySetTable[e].list;
+        tbl = enemySets[e].list;
         for (k = 0; k < kindNum; k++) {
             cnt[k] = 0;
-            for (i = 0; i < enemySetTable[e].n; i++) {
+            for (i = 0; i < enemySets[e].n; i++) {
                 for (j = 0; j < tbl[i]->kindNum; j++) {
                     /* the set's j-th EnemyKindRec, as {list, kind} words */
                     ENEMY_REC_DECL(rec, tbl[i], j);
@@ -876,7 +880,7 @@ void enemy_Initialize(void)
                 continue;
             }
             dst = enemyPositionTable[e][k];
-            for (i = 0; i < enemySetTable[e].n; i++) {
+            for (i = 0; i < enemySets[e].n; i++) {
                 for (j = 0; j < tbl[i]->kindNum; j++) {
                     ENEMY_REC_DECL(rec, tbl[i], j);
 

@@ -401,12 +401,174 @@ void shadow_Reset(void)
         }                                                                                          \
     }
 
+static void shadow_Draw_jun26(void)
+{
+    if (killShadow == 1) {
+        return;
+    }
+    if (debug_fullscreen_effect == 0) {
+        return;
+    }
+    if (debug_shadow_flag >= 2) {
+        return;
+    }
+    if (debug_font_flag & 1) {
+        debug_Printf(500, ScreenHeight / 2 - 8, 0xCCCCCC00u, "S");
+    }
+    {
+        /* the four level tables, this block's statics */
+        /* the frame buffer pointer of each shadow mipmap level */
+        static const unsigned int levelFbp[4] = {0x142, 0x1C2, 0x1E2, 0x1EA}; /* derived name */
+        /* the texture base pointer of each shadow mipmap level */
+        static const unsigned int levelTbp[4] = {0x2840, 0x3840, 0x3C40, 0x3D40}; /* derived name */
+        /* the sprite corner and size of each level in 12.4 screen units */
+        static const int levelRect[4][4] = {{-4100, -4100, 8192, 8192},
+                                            {-2052, -2052, 4096, 4096},
+                                            {-1028, -1028, 2048, 2048},
+                                            {-516, -516, 1024, 1024}}; /* derived name */
+        /* the sprite texture rectangle of each level at the 512 pixel default */
+        static const int levelUV[4][4] = {{4, 4, 8192, 8192},
+                                          {4, 4, 4096, 4096},
+                                          {4, 4, 2048, 2048},
+                                          {4, 4, 1024, 1024}}; /* derived name */
+        /* PC port: FRAME, the native width (512 at 4:3): level i is
+           gsFrame.w >> i across (the count, then SHADOW0..2: the PS2's
+           sizes per 512 columns, rd_core.c namedTargetDesc) and 512 >> i
+           high, its UV spans its width; every UV stays in 4 .. 40964,
+           non-negative and inside the 16 bits spriteUV packs and the
+           decoder reads on a wide frame */
+        int rect[4][4] = {{4, 4, gsFrame.w * 16, ScreenHeight * 16},
+                          {4, 4, gsFrame.w * 8, ScreenHeight * 8},
+                          {4, 4, gsFrame.w * 4, ScreenHeight * 4},
+                          {4, 4, gsFrame.w * 2, ScreenHeight * 2}};
+        int off[4] = {-(gsFrame.w >> 1) * 16, -(ScreenHeight >> 1) * 16, gsFrame.w * 16,
+                      ScreenHeight * 16};
+        /* the chain's rects and UVs at the frame's width: level i + 1's
+           sprite levelRect[i + 1] across its own width (x base -(w / 2) *
+           16 - 4, the -4 a delta), level i's UV levelUV[i] across its */
+        int chainRect[4][4];
+        int chainUV[4][4];
+        unsigned char col[4] = {128, 128, 128, GlobalStageSetting.shadowDepth};
+        int dbg = 0; /* local debug switch, see the test in the upward loop */
+        int i;
+        char *c;
+        char *q;
+
+        dl_SetDLPriority(3);
+        gifStartPacketPath1(c);
+        setGsReg(0x47, 0x30000);
+        setGsReg(0x4E, 0xC0 | ((long long)0x30 << 24) | ((long long)1 << 32));
+        setGsReg(0x46, 1);
+        setGsReg(0x4A, 0);
+        setGsReg(0x3B, 0x8080 | ((long long)0x80 << 32));
+        setGsReg(0x14, 0x60);
+#ifdef ICO_RD
+        shadowHostDrawBegin();
+#endif
+
+        for (i = 0; i < 4; i++) {
+            const int lw = ico_frame_x(&gsFrame, 512 >> i); /* gsFrame.w >> i */
+
+            chainRect[i][0] = -(lw / 2) * 16 + (levelRect[i][0] + (512 >> i) / 2 * 16);
+            chainRect[i][1] = levelRect[i][1];
+            chainRect[i][2] = lw * 16;
+            chainRect[i][3] = levelRect[i][3];
+            chainUV[i][0] = levelUV[i][0];
+            chainUV[i][1] = levelUV[i][1];
+            chainUV[i][2] = lw * 16;
+            chainUV[i][3] = levelUV[i][3];
+        }
+        for (i = 0; i < 3; i++) {
+            /* PC port: FRAME across, the PS2's height; TEX0's TBW and TW of
+               level i's width (ico_frame_tex0_w: (512 >> i) / 64 and 9 - i
+               at 4:3), its TH the PS2's */
+            setFrame(levelFbp[i + 1], gsFrame.w >> (i + 1), 512 >> (i + 1), 0, 0);
+            if (i == 0) {
+                *PacketBufferStruct.ptr.d++ = levelTbp[i] | ico_frame_tex0_w(&gsFrame, 512 >> i) |
+                                              ((long long)1 << 20) | ((long long)(9 - i) << 30) |
+                                              ((long long)0x8000 << 19);
+                *PacketBufferStruct.ptr.d++ = 0x06;
+            } else {
+                *PacketBufferStruct.ptr.d++ = levelTbp[i] | ico_frame_tex0_w(&gsFrame, 512 >> i) |
+                                              ((long long)(9 - i) << 30) |
+                                              ((long long)0x8000 << 19);
+                *PacketBufferStruct.ptr.d++ = 0x06;
+            }
+            spriteUV(chainRect[i + 1], chainUV[i], col, 0x116);
+#ifdef ICO_RD
+            shadowHostChain(i, chainRect[i + 1], chainUV[i], col);
+#endif
+        }
+
+        setFrame(0x40, gsFrame.w, ScreenHeight, 0, 0);
+        setGsReg(0x42, 0x44);
+        setGsReg(0x47, 0x34000);
+#ifdef ICO_RD
+        shadowHostCompositeBegin();
+#endif
+
+        for (i = 3; i > 0; i--) {
+            unsigned char col2[4] = {GlobalStageSetting.shadowColR, GlobalStageSetting.shadowColG,
+                                     GlobalStageSetting.shadowColB,
+                                     GlobalStageSetting.shadowBlend[i]};
+
+            /* a local debug switch, off: draw every level in mid grey */
+            if (dbg) {
+                col2[0] = col2[1] = col2[2] = col2[3] = 0x80;
+            }
+            *PacketBufferStruct.ptr.d++ = levelTbp[i] | ico_frame_tex0_w(&gsFrame, 512 >> i) |
+                                          ((long long)(9 - i) << 30) | ((long long)0x8000 << 19);
+            *PacketBufferStruct.ptr.d++ = 0x06;
+            setGsReg(0x14, 0x60);
+            spriteUV(off, rect[i], col2, 0x156);
+#ifdef ICO_RD
+            shadowHostComposite(i, off, rect[i], col2);
+#endif
+        }
+
+        setGsReg(0x4E, 0x300000C0);
+        setGsReg(0x47, 0x50000);
+        setFrame(0x40, gsFrame.w, ScreenHeight, screenOffsetX, screenOffsetY);
+#ifdef ICO_RD
+        shadowHostDrawEnd();
+#endif
+
+        ((GifPkWord *)PacketBufferStruct.end.c)->d =
+            (unsigned int)(((unsigned int)(PacketBufferStruct.ptr.c - PacketBufferStruct.end.c) >>
+                            4) -
+                           1) |
+            0x1000000000008000LL;
+        ((GifPkWord *)PacketBufferStruct.gif.c)->w[0] =
+            ((unsigned int)(PacketBufferStruct.ptr.c - PacketBufferStruct.gif.c) >> 4) | 0x50000000;
+        ((GifPkWord *)PacketBufferStruct.tail.c)->d =
+            (unsigned int)((((unsigned int)(PacketBufferStruct.ptr.c - PacketBufferStruct.tail.c) >>
+                             4) -
+                            1) |
+                           0x10000000);
+        q = PacketBufferStruct.ptr.c;
+        PacketBufferStruct.tail.c = q;
+        ((GifPkWord *)q)->d = 0x60000000;
+        PacketBufferStruct.ptr.c = (q + 8);
+        ((GifPkWord *)(q + 8))->w[0] = 0;
+        PacketBufferStruct.ptr.c = (q + 0xC);
+        ((GifPkWord *)(q + 8))->w[1] = 0;
+        PacketBufferStruct.ptr.c = (q + 0x10);
+        dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
+        dl_CloseDma();
+    }
+    tex_UnlockHeadTBP(3);
+}
+
 /* the 12.4 window offsets XYOFFSET_1 is programmed with for the screen pass */
 /* the debug flag word: bit 0 turns the on-screen labels on */
 /* "S", the one character label this pass prints */
 
 void shadow_Draw(void)
 {
+    if (ICO_JUN26) {
+        shadow_Draw_jun26();
+        return;
+    }
     if (debug_font_flag & 1) {
         debug_Printf(500, ScreenHeight / 2 - 8, 0xCCCCCC00u, "S");
     }
@@ -1117,12 +1279,60 @@ static inline int volumeVertsOutOfRange(int *vi) /* derived name */
     return 0;
 }
 
+static inline unsigned long long *emitVolumeStrip_jun26(unsigned long long *p,
+                                                        float sign) /* derived name */
+{
+    int order[20] = {0, 1, 3, 4, 5, 1, 2, 0, 5, 3, 3, 4, 0, 1, 2, 4, 5, 3, 2, 0};
+    /* line strips in the debug view (debug_shadow_flag 2), else triangle strips */
+    int prim = debug_shadow_flag == 2 ? 2 : 4;
+    int vi[6][4];
+    int i;
+    int k;
+    int *v;
+    /* the running sign is a local copy, so the caller's winding sign is
+     * never written */
+    float sgn = sign;
+
+    storeVolumeVerts(vi);
+    if (volumeVertsOutOfRange(&vi[0][0])) {
+        return p;
+    }
+    p[0] = 0x1000000000008001LL;
+    p[1] = 0xE;
+    p[2] = prim | 0x140;
+    p[3] = 0;
+    p[4] = 0x240000000000800ALL;
+    p[5] = 0x51;
+    p += 6;
+    /* the for steps the index, flips the sign and steps the vertex word's
+     * pointer; the colour word steps its own pointer in each arm */
+    for (i = 0; i < 10; i++, sgn = -sgn, p++) {
+        k = order[i];
+        if (debug_shadow_flag == 2) {
+            *p++ = 0x3F80000040808080LL;
+        } else if (volumeStripFaceZ(i) * sgn < 0.0f) {
+            *p++ = 0x3F80000080080808LL;
+        } else {
+            *p++ = 0x3F80000080F8F8F8LL;
+        }
+        v = vi[k];
+        *p = (long long)v[0] | ((long long)v[1] << 16) | ((long long)v[2] << 32);
+#ifdef ICO_RD
+        shadowHostStripPos(i, v, (unsigned char)p[-1] == 0x04);
+#endif
+    }
+    return p;
+}
+
 /* One shadow volume strip. Ten positions of a triangle strip
  * over the six projected vertices, each position carrying the front or the
  * back stencil colour its facing picks. */
 static inline unsigned long long *emitVolumeStrip(unsigned long long *p,
                                                   float sign) /* derived name */
 {
+    if (ICO_JUN26) {
+        return emitVolumeStrip_jun26(p, sign);
+    }
     int order[20] = {0, 1, 3, 4, 5, 1, 2, 0, 5, 3, 3, 4, 0, 1, 2, 4, 5, 3, 2, 0};
     int vi[6][4];
     int i;
@@ -1210,8 +1420,173 @@ typedef struct ShadowRun { /* field names derived */
     char pad6[10];
 } ShadowRun; /* derived name */
 
+/* set to 0 by shadow_RenderVolume and to 1 by shadow_RenderVolumeMulti; no reader */
+static int shadowMulti = 0; /* derived name */
+
+static void shadow_RenderVolume_jun26(Sub15C *o)
+{
+    VECTOR pos;
+    VECTOR cam;
+    PObjModel *x = o->shadow;
+    float len = o->model->shadowLength;
+    unsigned long long *p;
+    unsigned long long *start;
+    char *c;
+    char *q;
+    PObjPart *part;
+    ShadowRun *e;
+    VECTOR *top;
+    VECTOR *bot;
+    int i;
+    unsigned int j;
+    int k;
+    int n;
+    int state;
+    float sgn;
+    float r;
+
+    if (killShadow == 1) {
+        return;
+    }
+    if (debug_shadow_flag == 3) {
+        return;
+    }
+    /* the 2001 builds skip a volume whose stretched box is off the screen */
+    if (ICO_NTSCAUG6JUN26 && debug_fullscreen_effect == 0) {
+        return;
+    }
+    shadowMulti = 0;
+    __GetCameraPos(&cam);
+    GetRootPositionByDObj(&pos, o);
+    _GetLength(&pos, &cam);
+    if (o->dispType == 1) {
+        shadow_EntryClusterShadow(o, len);
+    } else {
+        shadow_EntryNormalShadow(o, 0, len);
+    }
+    if (debug_shadow_flag != 2) {
+        dl_SetDLPriority(3);
+#ifdef ICO_RD
+        shadowHostBegin(o);
+#endif
+    } else {
+        /* shadow_Reset's packet, testing the other way */
+        char *c;
+        char *p;
+        char *q;
+
+        dl_SetDLPriority(11);
+        gifStartPacketPath1(c);
+        setGsReg(0x47, 0x51000);
+        ((GifPkWord *)PacketBufferStruct.end.c)->d =
+            (unsigned int)(((unsigned int)(PacketBufferStruct.ptr.c - PacketBufferStruct.end.c) >>
+                            4) -
+                           1) |
+            0x1000000000008000LL;
+        ((GifPkWord *)PacketBufferStruct.gif.c)->w[0] =
+            (((unsigned int)(PacketBufferStruct.ptr.c - PacketBufferStruct.gif.c) >> 4) << 16) |
+            0x6C008000;
+        p = PacketBufferStruct.ptr.c;
+        ((GifPkWord *)p)->w[0] = 0x15000000;
+        p += 4;
+        PacketBufferStruct.ptr.c = p;
+        ((GifPkWord *)p)->w[0] = 0;
+        PacketBufferStruct.ptr.c = (p + 4);
+        ((GifPkWord *)(p + 4))->w[0] = 0;
+        PacketBufferStruct.ptr.c = (p + 8);
+        ((GifPkWord *)(p + 8))->w[0] = 0;
+        PacketBufferStruct.ptr.c = (p + 0xC);
+        ((GifPkWord *)PacketBufferStruct.tail.c)->d =
+            (unsigned int)((((unsigned int)(PacketBufferStruct.ptr.c - PacketBufferStruct.tail.c) >>
+                             4) -
+                            1) |
+                           0x10000000);
+        q = PacketBufferStruct.ptr.c;
+        PacketBufferStruct.tail.c = q;
+        ((GifPkWord *)q)->d = 0x60000000;
+        PacketBufferStruct.ptr.c = (q + 8);
+        ((GifPkWord *)(q + 8))->w[0] = 0;
+        PacketBufferStruct.ptr.c = (q + 0xC);
+        ((GifPkWord *)(q + 8))->w[1] = 0;
+        PacketBufferStruct.ptr.c = (q + 0x10);
+        dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
+        dl_CloseDma();
+    }
+    shadow_getShadowVectorAverage(&pos, o);
+    loadVolumeMatrix(&pos);
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.gif.c = 0;
+    PacketBufferStruct.dma.c = c;
+    PacketBufferStruct.end.c = 0;
+    PacketBufferStruct.tail.c = c;
+    PacketBufferStruct.ptr.c = (c + 8);
+    ((GifPkWord *)(c + 8))->w[0] = 0x11000000;
+    PacketBufferStruct.gif.c = c + 0xC;
+    PacketBufferStruct.ptr.c = (c + 0x10);
+    p = PacketBufferStruct.ptr.d;
+    start = p;
+    for (i = 0; i < x->partCount; i++) {
+        part = &x->parts[i];
+        top = (VECTOR *)part->vtxSave;
+        bot = (VECTOR *)part->nrmSave;
+        for (j = 0; j < part->stripCount; j++) {
+            e = ((ShadowRun **)part->strips)[j];
+            while ((n = (e++)->count) != 0) {
+                sgn = e->count != 0 ? 1.0f : -1.0f;
+                state = clipVolumeHead(&top[e[0].vtx], &bot[e[0].vtx], &top[e[1].vtx],
+                                       &bot[e[1].vtx], sgn);
+                e += 2;
+                for (k = 2; k < n; k++) {
+                    if (top[e->vtx].w == -1.0f) {
+                        state = 3;
+                    } else if (state) {
+                        state--;
+                    }
+                    r = clipVolumeEdge(&top[e->vtx], &bot[e->vtx], sgn);
+                    if (0.0f <= r) {
+                        if (state == 0) {
+                            p = emitVolumeStrip(p, sgn);
+                        }
+                    } else if (top[e->vtx].w == -1.0f) {
+                        state = 3;
+                    }
+                    sgn = -sgn;
+                    e++;
+                }
+            }
+        }
+    }
+    PacketBufferStruct.ptr.d = p;
+    ((GifPkWord *)PacketBufferStruct.tail.c)->d =
+        (unsigned int)((((unsigned int)((char *)p - PacketBufferStruct.tail.c) >> 4) - 1) |
+                       0x10000000);
+    ((GifPkWord *)PacketBufferStruct.gif.c)->w[0] =
+        ((unsigned int)(PacketBufferStruct.ptr.c - PacketBufferStruct.gif.c) >> 4) | 0x50000000;
+    q = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = q;
+    ((GifPkWord *)q)->d = 0x60000000;
+    PacketBufferStruct.ptr.c = (q + 8);
+    ((GifPkWord *)(q + 8))->w[0] = 0;
+    PacketBufferStruct.ptr.c = (q + 0xC);
+    ((GifPkWord *)(q + 8))->w[1] = 0;
+    PacketBufferStruct.ptr.c = (q + 0x10);
+    if (p - start > 0) {
+        dl_SetDLPriority(dl_GetPri());
+#ifdef ICO_RD
+        shadowHostFlush();
+#endif
+        dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
+        dl_CloseDma();
+    }
+    dl_SetDLPriority(0);
+}
+
 void shadow_RenderVolume(Sub15C *o)
 {
+    if (ICO_JUN26) {
+        shadow_RenderVolume_jun26(o);
+        return;
+    }
     VECTOR pos;
     VECTOR cam;
     PObjModel *x = o->shadow;
@@ -1323,8 +1698,166 @@ void shadow_RenderVolume(Sub15C *o)
     dl_SetDLPriority(0);
 }
 
+static void shadow_RenderVolumeMulti_jun26(Sub15C *o, int idx)
+{
+    VECTOR pos;
+    VECTOR cam;
+    PObjModel *x = o->shadow;
+    float len = o->model->shadowLength;
+    unsigned long long *p;
+    unsigned long long *start;
+    char *c;
+    char *q;
+    PObjPart *part;
+    ShadowRun *e;
+    VECTOR *top;
+    VECTOR *bot;
+    int i;
+    unsigned int j;
+    int k;
+    int n;
+    int state;
+    float sgn;
+    float r;
+
+    if (killShadow == 1) {
+        return;
+    }
+    if (debug_shadow_flag == 3) {
+        return;
+    }
+    /* the 2001 builds skip a volume whose stretched box is off the screen */
+    if (ICO_NTSCAUG6JUN26 && debug_fullscreen_effect == 0) {
+        return;
+    }
+    shadowMulti = 1;
+    __GetCameraPos(&cam);
+    GetRootPositionByDObj(&pos, o);
+    _GetLength(&pos, &cam);
+    shadow_EntryNormalShadow(o, idx, len);
+    if (debug_shadow_flag != 2) {
+        dl_SetDLPriority(3);
+#ifdef ICO_RD
+        shadowHostBegin(o);
+#endif
+    } else {
+        /* shadow_Reset's packet, testing the other way */
+        char *c;
+        char *p;
+        char *q;
+
+        dl_SetDLPriority(11);
+        gifStartPacketPath1(c);
+        setGsReg(0x47, 0x51000);
+        ((GifPkWord *)PacketBufferStruct.end.c)->d =
+            (unsigned int)(((unsigned int)(PacketBufferStruct.ptr.c - PacketBufferStruct.end.c) >>
+                            4) -
+                           1) |
+            0x1000000000008000LL;
+        ((GifPkWord *)PacketBufferStruct.gif.c)->w[0] =
+            (((unsigned int)(PacketBufferStruct.ptr.c - PacketBufferStruct.gif.c) >> 4) << 16) |
+            0x6C008000;
+        p = PacketBufferStruct.ptr.c;
+        ((GifPkWord *)p)->w[0] = 0x15000000;
+        p += 4;
+        PacketBufferStruct.ptr.c = p;
+        ((GifPkWord *)p)->w[0] = 0;
+        PacketBufferStruct.ptr.c = (p + 4);
+        ((GifPkWord *)(p + 4))->w[0] = 0;
+        PacketBufferStruct.ptr.c = (p + 8);
+        ((GifPkWord *)(p + 8))->w[0] = 0;
+        PacketBufferStruct.ptr.c = (p + 0xC);
+        ((GifPkWord *)PacketBufferStruct.tail.c)->d =
+            (unsigned int)((((unsigned int)(PacketBufferStruct.ptr.c - PacketBufferStruct.tail.c) >>
+                             4) -
+                            1) |
+                           0x10000000);
+        q = PacketBufferStruct.ptr.c;
+        PacketBufferStruct.tail.c = q;
+        ((GifPkWord *)q)->d = 0x60000000;
+        PacketBufferStruct.ptr.c = (q + 8);
+        ((GifPkWord *)(q + 8))->w[0] = 0;
+        PacketBufferStruct.ptr.c = (q + 0xC);
+        ((GifPkWord *)(q + 8))->w[1] = 0;
+        PacketBufferStruct.ptr.c = (q + 0x10);
+        dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
+        dl_CloseDma();
+    }
+    shadow_getShadowVectorAverage(&pos, o);
+    loadVolumeMatrix(&pos);
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.gif.c = 0;
+    PacketBufferStruct.dma.c = c;
+    PacketBufferStruct.end.c = 0;
+    PacketBufferStruct.tail.c = c;
+    PacketBufferStruct.ptr.c = (c + 8);
+    ((GifPkWord *)(c + 8))->w[0] = 0x11000000;
+    PacketBufferStruct.gif.c = c + 0xC;
+    PacketBufferStruct.ptr.c = (c + 0x10);
+    p = PacketBufferStruct.ptr.d;
+    start = p;
+    for (i = 0; i < x->partCount; i++) {
+        part = &x->parts[i];
+        top = (VECTOR *)part->vtxSave;
+        bot = (VECTOR *)part->nrmSave;
+        for (j = 0; j < part->stripCount; j++) {
+            e = ((ShadowRun **)part->strips)[j];
+            while ((n = (e++)->count) != 0) {
+                sgn = e->count != 0 ? 1.0f : -1.0f;
+                state = clipVolumeHead(&top[e[0].vtx], &bot[e[0].vtx], &top[e[1].vtx],
+                                       &bot[e[1].vtx], sgn);
+                e += 2;
+                for (k = 2; k < n; k++) {
+                    if (top[e->vtx].w == -1.0f) {
+                        state = 3;
+                    } else if (state) {
+                        state--;
+                    }
+                    r = clipVolumeEdge(&top[e->vtx], &bot[e->vtx], sgn);
+                    if (0.0f <= r) {
+                        if (state == 0) {
+                            p = emitVolumeStrip(p, sgn);
+                        }
+                    } else if (top[e->vtx].w == -1.0f) {
+                        state = 3;
+                    }
+                    sgn = -sgn;
+                    e++;
+                }
+            }
+        }
+    }
+    PacketBufferStruct.ptr.d = p;
+    ((GifPkWord *)PacketBufferStruct.tail.c)->d =
+        (unsigned int)((((unsigned int)((char *)p - PacketBufferStruct.tail.c) >> 4) - 1) |
+                       0x10000000);
+    ((GifPkWord *)PacketBufferStruct.gif.c)->w[0] =
+        ((unsigned int)(PacketBufferStruct.ptr.c - PacketBufferStruct.gif.c) >> 4) | 0x50000000;
+    q = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = q;
+    ((GifPkWord *)q)->d = 0x60000000;
+    PacketBufferStruct.ptr.c = (q + 8);
+    ((GifPkWord *)(q + 8))->w[0] = 0;
+    PacketBufferStruct.ptr.c = (q + 0xC);
+    ((GifPkWord *)(q + 8))->w[1] = 0;
+    PacketBufferStruct.ptr.c = (q + 0x10);
+    if (p - start > 0) {
+        dl_SetDLPriority(dl_GetPri());
+#ifdef ICO_RD
+        shadowHostFlush();
+#endif
+        dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
+        dl_CloseDma();
+    }
+    dl_SetDLPriority(0);
+}
+
 void shadow_RenderVolumeMulti(Sub15C *o, int idx)
 {
+    if (ICO_JUN26) {
+        shadow_RenderVolumeMulti_jun26(o, idx);
+        return;
+    }
     VECTOR pos;
     VECTOR cam;
     PObjModel *x = o->shadow;
@@ -1453,8 +1986,88 @@ _Static_assert(sizeof(ShadowPoly) == 16, "ShadowPoly is the file's 0x10-byte ent
 
 _Static_assert(sizeof(ClusterPoly) == 16, "ClusterPoly is the file's 0x10-byte entry");
 
+static void shadow_MakeObjectData_jun26(PObjModel *mdl)
+{
+    int i;
+    int j;
+    int l;
+    /* zeroed here and again after each polygon, so the scan starts from a
+     * value carried round the loop */
+    int m = 0;
+    int n;
+    int c;
+    PObjPart *p;
+    ShadowVtx *q;
+    ShadowPoly *r;
+    ShadowVtx *t;
+    ShadowRun **s;
+    ShadowRun *u;
+
+    for (i = 0; i < mdl->partCount; i++) {
+        p = &mdl->parts[i];
+        if (mdl->disp != 0) { /* PC port: the demo's clstNum (0x30) is the host's 0x2F */
+            p->vtxSave = mallocseki(p->vtxCount * 16);
+            p->nrmSave = mallocseki(p->vtxCount * 16);
+            q = (ShadowVtx *)mallocseki(p->vtxCount * 16);
+            for (j = 0; j < p->vtxCount; j++) {
+                _CopyVector(&q[j], p->vtx + j * 16);
+            }
+            p->vtx = (char *)q;
+
+            r = (ShadowPoly *)mallocseki(p->polyCount * 16);
+            for (j = 0; j < p->polyCount; j++) {
+                r[j] = ((ShadowPoly *)p->polys)[j];
+                while (ICO_EEPTR(ShadowVtx *, r[j].pts)[m]._0 != -1) {
+                    m++;
+                }
+                t = (ShadowVtx *)mallocseki((m + 1) * 16);
+                r[j].pts = ICO_EEW(t);
+                for (l = 0; l < m + 1; l++) {
+                    *t++ = ICO_EEPTR(ShadowVtx *, ((ShadowPoly *)p->polys)[j].pts)[l];
+                }
+                m = 0;
+            }
+            p->polys = r;
+        } else {
+            p->vtxSave = mallocseki(p->vtxCount * 16);
+            p->nrmSave = mallocseki(p->vtxCount * 16);
+            q = (ShadowVtx *)mallocseki(p->vtxCount * 16);
+            for (j = 0; j < p->vtxCount; j++) {
+                _CopyVector(&q[j], p->vtx + j * 16);
+            }
+            p->vtx = (char *)q;
+        }
+
+        s = (ShadowRun **)mallocseki(p->stripCount * sizeof(ShadowRun *));
+        /* the strip pass reuses the outer loop's own index, so the outer
+         * loop steps on from where this one ended */
+        for (i = 0; i < p->stripCount; i++) {
+            u = ((ShadowRun **)p->strips)[i];
+            n = 0;
+            for (;;) {
+                c = u->count;
+                if (c == 0) {
+                    break;
+                }
+                u += c + 1;
+                n += c + 1;
+            }
+            n++;
+            s[i] = (ShadowRun *)mallocseki(n * 16);
+            for (j = 0; j < n; j++) {
+                s[i][j] = ((ShadowRun **)p->strips)[i][j];
+            }
+        }
+        p->strips = s;
+    }
+}
+
 void shadow_MakeObjectData(PObjModel *mdl)
 {
+    if (ICO_JUN26) {
+        shadow_MakeObjectData_jun26(mdl);
+        return;
+    }
     int i;
     int j;
     int l;

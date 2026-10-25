@@ -466,8 +466,8 @@ static int reg_clipPacketBoundingBox(PacHeader *pk)
         break;
     default:
         debug_StdPrintfDummy("illegal clip type. %d\n", type);
-        debug_assert("src/RegistPacket.c", LN(821, 821, 821, 815, 776, 821, 821));
-        __assert("src/RegistPacket.c", LN(821, 821, 821, 815, 776, 821, 821), "0");
+        debug_assert("src/RegistPacket.c", LN(821, 821, 821, 815, 776, 776, 821));
+        __assert("src/RegistPacket.c", LN(821, 821, 821, 815, 776, 776, 821), "0");
         break;
     }
     if (debug_bounding_flag & 2) {
@@ -928,8 +928,8 @@ static void reg_setCMatrixPacket(Sub15C *o, float alpha, int prilist)
         reg_setCMatrixPacket_light(o);
     } else {
         debug_StdPrintfDummy("no light calc cluster model %s\n", o->model);
-        debug_assert("src/RegistPacket.c", LN(1238, 1238, 1238, 1230, 1181, 1238, 1238));
-        __assert("src/RegistPacket.c", LN(1238, 1238, 1238, 1230, 1181, 1238, 1238), "0");
+        debug_assert("src/RegistPacket.c", LN(1238, 1238, 1238, 1230, 1181, 1181, 1238));
+        __assert("src/RegistPacket.c", LN(1238, 1238, 1238, 1230, 1181, 1181, 1238), "0");
     }
     {
         char *c = PacketBufferStruct.ptr.c;

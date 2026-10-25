@@ -5,6 +5,12 @@
 #include "Matrix.h"
 #include "GifPacket.h"
 #include "Texture.h"
+
+/* .sbss: raised at the start and after a space or an opening mark: the next
+   capital letter stays a capital; any other character drops it, and font_Print
+   prints a capital that follows as lower case */
+static int fontWordTop; /* derived name */
+
 #include "region.h"
 
 #ifdef ICO_RD
@@ -33,7 +39,7 @@ static signed char fontKerning_pal[128][2] = {
     {4, 15}, {4, 14}, {5, 14}, {6, 12}, {8, 11}, {7, 13}, {5, 15}, {2, 16},
 };
 
-static signed char fontKerning_ntscaug6jun26[128][2] = {
+static signed char fontKerning_ntscaug6[128][2] = {
     /* derived name */
     {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},
     {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},
@@ -50,7 +56,24 @@ static signed char fontKerning_ntscaug6jun26[128][2] = {
     {4, 13}, {4, 13}, {5, 12}, {6, 11}, {8, 9},  {6, 11}, {4, 13}, {0, 0},
 };
 
-#define fontKerning PAL_NTSCAUG6JUN26(fontKerning_pal, fontKerning_ntscaug6jun26)
+static signed char fontKerning_jun26[128][2] = {
+    /* derived name */
+    {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},
+    {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},
+    {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},  {0, 0},
+    {0, 0},  {0, 0},  {0, 0},  {7, 11}, {9, 11}, {6, 12}, {5, 12}, {3, 14}, {3, 14}, {9, 11},
+    {7, 13}, {5, 11}, {8, 12}, {6, 12}, {7, 9},  {7, 11}, {7, 9},  {5, 12}, {5, 13}, {6, 11},
+    {4, 12}, {4, 12}, {4, 13}, {4, 13}, {5, 12}, {5, 13}, {4, 13}, {5, 13}, {7, 10}, {7, 10},
+    {7, 11}, {6, 12}, {7, 11}, {6, 12}, {4, 14}, {2, 13}, {3, 13}, {4, 14}, {3, 14}, {4, 13},
+    {4, 14}, {4, 14}, {2, 15}, {6, 12}, {4, 13}, {3, 15}, {4, 12}, {0, 17}, {2, 15}, {4, 14},
+    {4, 14}, {4, 14}, {3, 13}, {5, 13}, {5, 15}, {4, 15}, {5, 16}, {2, 18}, {2, 15}, {5, 15},
+    {3, 14}, {6, 13}, {7, 10}, {5, 12}, {6, 11}, {2, 13}, {0, 0},  {4, 13}, {4, 13}, {5, 12},
+    {4, 14}, {5, 12}, {6, 14}, {4, 13}, {4, 13}, {7, 11}, {5, 11}, {4, 13}, {7, 11}, {1, 15},
+    {4, 13}, {4, 13}, {4, 13}, {4, 13}, {6, 13}, {5, 12}, {6, 13}, {4, 13}, {5, 13}, {2, 16},
+    {4, 13}, {3, 13}, {4, 13}, {7, 13}, {4, 11}, {5, 11}, {6, 12}, {0, 0},
+};
+
+#define fontKerning PAL_NTSCAUG6_JUN26(fontKerning_pal, fontKerning_ntscaug6, fontKerning_jun26)
 
 /* The .sdata run: the alignment a "{L}", "{R}" or "{C}" escape selects and the
    colour a "{#rrggbbaa}" escape sets, then the texture name at its use. */

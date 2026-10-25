@@ -58,10 +58,17 @@ static float bgaHostChainScale;
    (0,0,0,1.0f) vectors then four words); bgaParticlePos is the (0,0,0,1.0f)
    position vector bga_ApplyDObject hands to
    SetParticleEffectActiveSensing. */
-static BgaAnim bgaAnimDefault = {
+static BgaAnim bgaAnimDefault_pal = {
     /* derived name */
     {0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, 0, -1, 1, 0,
 };
+
+static BgaAnim bgaAnimDefault_jun26 = {
+    /* derived name */
+    {0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, 0, -1, 0, 0,
+};
+
+#define bgaAnimDefault (*PAL_JUN26(&bgaAnimDefault_pal, &bgaAnimDefault_jun26))
 
 static float bgaParticlePos[4] = {0.0f, 0.0f, 0.0f, 1.0f}; /* derived name */
 
@@ -167,7 +174,7 @@ static inline void bga_makeRootList(BgaHeader *p) /* derived name */
     } while (1);
 }
 
-char *bga_InitData(char *data)
+static char *bga_InitData_jun26(char *data)
 {
     BgaHeader *p = (BgaHeader *)data;
     BgaDObjEnt *d;
@@ -177,8 +184,98 @@ char *bga_InitData(char *data)
 
     if (strncmp(p->magic, "BGA", 3) != 0) {
         debug_StdPrintfDummy("this is not bga file.\n");
-        debug_assert(__FILE__, LN(952, 911, 911, 903, 806, 711, 911));
-        __assert(__FILE__, LN(952, 911, 911, 903, 806, 711, 911), "FALSE");
+        debug_assert(__FILE__, 711);
+        __assert(__FILE__, 711, "FALSE");
+    }
+    p->dobjs += ICO_EEW(p);
+    p->mode = -1;
+    p->anim = BGA_W(mallocseki(sizeof(BgaAnim)));
+    *BGA_ANIM(p) = bgaAnimDefault;
+    d = ICO_EEPTR(BgaDObjEnt *, p->dobjs);
+    while (1) {
+        d->motion += ICO_EEW(p);
+        if (d->env != 0) {
+            i = 0;
+            d->env += ICO_EEW(p);
+            while (ICO_EEPTR(BgaEnvEnt *, d->env)[i].data != 0) {
+                ICO_EEPTR(BgaEnvEnt *, d->env)[i].data += ICO_EEW(p);
+                switch (ICO_EEPTR(BgaEnvEnt *, d->env)[i].type) {
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                    *ICO_EEPTR(int *, ICO_EEPTR(BgaEnvEnt *, d->env)[i].data) += ICO_EEW(p);
+                    break;
+                case 6:
+                    *ICO_EEPTR(int *, ICO_EEPTR(BgaEnvEnt *, d->env)[i].data) += ICO_EEW(p);
+                    for (j = 0;
+                         j < ICO_EEPTR(BgaMotion *, ICO_EEPTR(BgaEnvEnt *, d->env)[i].data)->n;
+                         j++) {
+                        float sum = 0.0f;
+                        float scale = 1.0f;
+                        float *v =
+                            ICO_EEPTR(BgaKey *,
+                                      ICO_EEPTR(BgaMotion *, ICO_EEPTR(BgaEnvEnt *, d->env)[i].data)
+                                          ->key)[j]
+                                .v;
+
+                        for (k = 0; k < 6; k++) {
+                            if (v[k] < 0.0f) {
+                                sum -= v[k];
+                            } else {
+                                sum += v[k];
+                            }
+                        }
+                        if (sum != 0.0f) {
+                            scale = 1.0f / sum;
+                        }
+                        for (k = 0; k < 6; k++) {
+                            float t = v[k] * scale;
+
+                            if (t < 0.0f) {
+                                v[k] = v[k] * -t;
+                            } else {
+                                v[k] = v[k] * t;
+                            }
+                        }
+                    }
+                    break;
+                case 4:
+                case 5:
+                case 7:
+                case 8:
+                case 9:
+                    break;
+                }
+                i++;
+            }
+        }
+        if (d->u.next == 0) {
+            break;
+        }
+        d->u.next += ICO_EEW(p);
+        d = ICO_EEPTR(BgaDObjEnt *, d->u.next);
+    }
+    bga_makeRootList(p);
+    bga_linkTree(p);
+    return data;
+}
+
+char *bga_InitData(char *data)
+{
+    if (ICO_JUN26) {
+        return bga_InitData_jun26(data);
+    }
+    BgaHeader *p = (BgaHeader *)data;
+    BgaDObjEnt *d;
+    int i;
+    unsigned int j;
+    int k;
+
+    if (strncmp(p->magic, "BGA", 3) != 0) {
+        debug_StdPrintfDummy("this is not bga file.\n");
+        debug_assert(__FILE__, LN(952, 911, 911, 903, 806, 806, 911));
+        __assert(__FILE__, LN(952, 911, 911, 903, 806, 806, 911), "FALSE");
     }
     p->dobjs += ICO_EEW(p);
     p->mode = -1;
@@ -260,8 +357,8 @@ inline char *bga_InitSdfCamera(char *data)
 
     if (strncmp(p->id, "SDF", 3) != 0) {
         debug_StdPrintfDummy("this is not sdf camera file.\n");
-        debug_assert(__FILE__, LN(1045, 1004, 1004, 1045, 1045, 1045, 1004));
-        __assert(__FILE__, LN(1045, 1004, 1004, 1045, 1045, 1045, 1004), "FALSE");
+        debug_assert(__FILE__, LN(1045, 1004, 1004, 1045, 1045, 803, 1004));
+        __assert(__FILE__, LN(1045, 1004, 1004, 1045, 1045, 803, 1004), "FALSE");
     }
     return data;
 }
@@ -330,7 +427,7 @@ _Static_assert(__builtin_offsetof(BgaLightEnv, outer) == 0x60, "BgaLightEnv.oute
 
 _Static_assert(__builtin_offsetof(BgaLightEnv, size) == 0x70, "BgaLightEnv.size at 0x70");
 
-static void bga_initLightEnvelope(BgaDObjEnt *p)
+static void bga_initLightEnvelope_jun26(BgaDObjEnt *p)
 {
     BgaEnvEnt *e;
     unsigned char *d;
@@ -352,8 +449,8 @@ static void bga_initLightEnvelope(BgaDObjEnt *p)
                     BGA_OBJ(struct BgaLightEnv *, p->u.light)->col[3] = 1.0f;
                 } else {
                     debug_Assert("Light Object not exists.\n");
-                    debug_assert(__FILE__, LN(1089, 1048, 1048, 1040, 943, 1089, 1048));
-                    __assert(__FILE__, LN(1089, 1048, 1048, 1040, 943, 847, 1048), "0");
+                    debug_assert(__FILE__, 847);
+                    __assert(__FILE__, 847, "0");
                 }
                 break;
             case 7:
@@ -366,8 +463,8 @@ static void bga_initLightEnvelope(BgaDObjEnt *p)
                     BGA_OBJ(struct BgaLightEnv *, p->u.light)->col2[3] = 1.0f;
                 } else {
                     debug_Assert("Shadow Object not exists.\n");
-                    debug_assert(__FILE__, LN(1109, 1068, 1068, 1060, 963, 1109, 1068));
-                    __assert(__FILE__, LN(1109, 1068, 1068, 1060, 963, 1109, 1068), "0");
+                    debug_assert(__FILE__, 867);
+                    __assert(__FILE__, 867, "0");
                 }
                 break;
             }
@@ -390,8 +487,8 @@ static void bga_initLightEnvelope(BgaDObjEnt *p)
                     BGA_OBJ(struct BgaLightEnv *, p->u.light)->outer[2] =
                         1.0f / (((float *)d)[5] * 50.0f);
                 } else {
-                    debug_assert(__FILE__, LN(1141, 1100, 1100, 1092, 995, 1141, 1100));
-                    __assert(__FILE__, LN(1141, 1100, 1100, 1092, 995, 1141, 1100), "0");
+                    debug_assert(__FILE__, 899);
+                    __assert(__FILE__, 899, "0");
                 }
                 break;
             }
@@ -403,6 +500,86 @@ static void bga_initLightEnvelope(BgaDObjEnt *p)
         e++;
     }
 }
+
+static void bga_initLightEnvelope(BgaDObjEnt *p)
+{
+    if (ICO_JUN26) {
+        bga_initLightEnvelope_jun26(p);
+        return;
+    }
+    BgaEnvEnt *e;
+    unsigned char *d;
+
+    e = ICO_EEPTR(BgaEnvEnt *, p->env);
+    if (e == 0) {
+        return;
+    }
+    while ((d = ICO_EEPTR(unsigned char *, e->data)) != 0) {
+        switch (e->type) {
+        case 4:
+            switch (p->type) {
+            case 6:
+            case 11:
+                if (p->u.light != 0) {
+                    BGA_OBJ(struct BgaLightEnv *, p->u.light)->col[0] = (float)d[0] / 255.0f;
+                    BGA_OBJ(struct BgaLightEnv *, p->u.light)->col[1] = (float)d[1] / 255.0f;
+                    BGA_OBJ(struct BgaLightEnv *, p->u.light)->col[2] = (float)d[2] / 255.0f;
+                    BGA_OBJ(struct BgaLightEnv *, p->u.light)->col[3] = 1.0f;
+                } else {
+                    debug_Assert("Light Object not exists.\n");
+                    debug_assert(__FILE__, LN(1089, 1048, 1048, 1040, 943, 943, 1048));
+                    __assert(__FILE__, LN(1089, 1048, 1048, 1040, 943, 943, 1048), "0");
+                }
+                break;
+            case 7:
+            case 8:
+            case 9:
+                if (p->u.light != 0) {
+                    BGA_OBJ(struct BgaLightEnv *, p->u.light)->col2[0] = (float)d[0] / 255.0f;
+                    BGA_OBJ(struct BgaLightEnv *, p->u.light)->col2[1] = (float)d[1] / 255.0f;
+                    BGA_OBJ(struct BgaLightEnv *, p->u.light)->col2[2] = (float)d[2] / 255.0f;
+                    BGA_OBJ(struct BgaLightEnv *, p->u.light)->col2[3] = 1.0f;
+                } else {
+                    debug_Assert("Shadow Object not exists.\n");
+                    debug_assert(__FILE__, LN(1109, 1068, 1068, 1060, 963, 963, 1068));
+                    __assert(__FILE__, LN(1109, 1068, 1068, 1060, 963, 963, 1068), "0");
+                }
+                break;
+            }
+            break;
+        case 5:
+            switch (p->type) {
+            case 8:
+            case 9:
+                if (p->u.light != 0) {
+                    BGA_OBJ(struct BgaLightEnv *, p->u.light)->inner[0] =
+                        1.0f / (((float *)d)[0] * 50.0f);
+                    BGA_OBJ(struct BgaLightEnv *, p->u.light)->inner[1] =
+                        1.0f / (((float *)d)[1] * 50.0f);
+                    BGA_OBJ(struct BgaLightEnv *, p->u.light)->inner[2] =
+                        1.0f / (((float *)d)[2] * 50.0f);
+                    BGA_OBJ(struct BgaLightEnv *, p->u.light)->outer[0] =
+                        1.0f / (((float *)d)[3] * 50.0f);
+                    BGA_OBJ(struct BgaLightEnv *, p->u.light)->outer[1] =
+                        1.0f / (((float *)d)[4] * 50.0f);
+                    BGA_OBJ(struct BgaLightEnv *, p->u.light)->outer[2] =
+                        1.0f / (((float *)d)[5] * 50.0f);
+                } else {
+                    debug_assert(__FILE__, LN(1141, 1100, 1100, 1092, 995, 995, 1100));
+                    __assert(__FILE__, LN(1141, 1100, 1100, 1092, 995, 995, 1100), "0");
+                }
+                break;
+            }
+            break;
+        /* the next envelope type, nothing to do */
+        case 6:
+            break;
+        }
+        e++;
+    }
+}
+
+void bga_ApplyDObject(BgaDObjEnt *p, GObj **objs, int n, int no);
 
 static void bga_ApplyDObject_ntsc(BgaDObjEnt *p, GObj **objs, int n, int no)
 {
@@ -474,7 +651,77 @@ static void bga_ApplyDObject_ntsc(BgaDObjEnt *p, GObj **objs, int n, int no)
     }
 }
 
-static void bga_ApplyDObject_aug6jun26(BgaDObjEnt *p, GObj **objs, int n, int no)
+static void bga_ApplyDObject_jun26(BgaDObjEnt *p, GObj **objs, int n, int no)
+{
+    (void)no; /* PC port: the European parameter, unused here */
+    char buf[1024];
+    int i;
+
+    switch (p->type) {
+    case 13:
+        i = GetParticleIDWithName(p->name);
+        if (i != -1) {
+            p->u.obj = BGA_OBJW(iosMallocDebug(ios_partition_seki, 48, __FILE__, 935));
+            BGA_OBJ(BgaParticleEnt *, p->u.obj)->u.b.id = i;
+            BGA_OBJ(BgaParticleEnt *, p->u.obj)->u.b.loop =
+                GetParticleLoopFlag(BGA_OBJ(BgaParticleEnt *, p->u.obj)->u.b.id);
+            if (BGA_OBJ(BgaParticleEnt *, p->u.obj)->u.b.loop) {
+                BGA_OBJ(BgaParticleEnt *, p->u.obj)->u.b.eff =
+                    SetParticleEffectActiveSensing(BGA_OBJ(BgaParticleEnt *, p->u.obj)->u.b.id,
+                                                   bgaParticlePos, IdentityQuaternion);
+            } else {
+                BGA_OBJ(BgaParticleEnt *, p->u.obj)->u.b.eff = -1;
+            }
+            break;
+        }
+    case 1:
+    case 2:
+    case 5:
+        p->u.obj = 0;
+        break;
+    case 0:
+    case 4:
+    case 10:
+        p->u.obj = 0;
+        for (i = 0; i < n; i++) {
+            if (BGA_GEOM_NAME(BGA_GOBJ_GEOM(objs[i])) == 0) {
+                sprintf(buf, "OBJECT FILE \"%s\" NOT EXISTS.\n", p->name);
+                /* "model data file [%s] does not exist" */
+                debug_StdPrintfDummy("モデルデータファイル[%s]がありません.\n\n", p->name);
+                debug_assertMessage(__FILE__, 959, buf);
+                __assert(__FILE__, 959, "e");
+            }
+            if (strcmp(BGA_GEOM_NAME(BGA_GOBJ_GEOM(objs[i])), p->name) == 0) {
+                p->u.obj = BGA_OBJW(BGA_GOBJ_GEOM(objs[i]));
+                p->num = BGA_GOBJ_GEOM(objs[i])->nodeNum++;
+            }
+        }
+        break;
+    case 7:
+        p->u.obj = BGA_OBJW(light_AddAmbientObject(0));
+        bga_initLightEnvelope(p);
+        break;
+    case 8:
+        p->u.obj = BGA_OBJW(light_AddAmbientObject(2));
+        bga_initLightEnvelope(p);
+        break;
+    case 9:
+        p->u.obj = BGA_OBJW(light_AddAmbientObject(1));
+        bga_initLightEnvelope(p);
+        break;
+    case 12:
+        p->u.obj = BGA_OBJW(CreateKyomiGObj(0));
+        break;
+    }
+    if (p->child) {
+        bga_ApplyDObject(ICO_EEPTR(BgaDObjEnt *, p->child), objs, n, 0);
+    }
+    if (p->sibling) {
+        bga_ApplyDObject(ICO_EEPTR(BgaDObjEnt *, p->sibling), objs, n, 0);
+    }
+}
+
+static void bga_ApplyDObject_aug6(BgaDObjEnt *p, GObj **objs, int n, int no)
 {
     (void)no; /* PC port: the European parameter, unused here */
     char buf[1024];
@@ -546,12 +793,16 @@ static void bga_ApplyDObject_aug6jun26(BgaDObjEnt *p, GObj **objs, int n, int no
 
 void bga_ApplyDObject(BgaDObjEnt *p, GObj **objs, int n, int no)
 {
+    if (ICO_JUN26) {
+        bga_ApplyDObject_jun26(p, objs, n, no);
+        return;
+    }
     if (ICO_NTSC) {
         bga_ApplyDObject_ntsc(p, objs, n, no);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        bga_ApplyDObject_aug6jun26(p, objs, n, no);
+    if (ICO_AUG6) {
+        bga_ApplyDObject_aug6(p, objs, n, no);
         return;
     }
     char buf[1024];
@@ -1712,6 +1963,10 @@ static int bgaCameraActive; /* derived name */
 
 static short bgaRollZ; /* derived name */
 
+/* the walked object's depth (its position's z), which bga_CalcObject stores
+   per object and no function reads */
+static float bgaObjectWork; /* derived name */
+
 static float bgaCameraMatrix[4][4]; /* derived name */
 
 static float bgaLastCameraPos[4]; /* derived name */
@@ -1831,6 +2086,89 @@ static inline void bga_stepEnvelope(BgaEnvEnt *e, float dt, int loop) /* derived
     }
 }
 
+static void bga_calcEnvelope_jun26(BgaDObjEnt *p, float dt, float w, int cut, int loop)
+{
+    BgaEnvEnt *e;
+    float v;
+
+    e = ICO_EEPTR(BgaEnvEnt *, p->env);
+    if (e == 0) {
+        return;
+    }
+    for (; e->data != 0; e++) {
+        switch (e->type) {
+        case 0:
+            if (p->u.obj != 0) {
+                BGA_OBJ(Sub15C *, p->u.obj)->nodes[p->num].fade =
+                    bga_GetExtMotion(ICO_EEPTR(BgaExtMotion *, e->data));
+                BGA_OBJ(Sub15C *, p->u.obj)->nodes[p->num].flags.ll |= 1;
+                bga_updateMotionFrame(ICO_EEPTR(BgaExtMotion *, e->data), dt, 0, w, loop);
+            }
+            break;
+        case 1:
+            if (bgaCameraActive != 0) {
+                if (cut != 0) {
+                    bgaZoom = bga_GetExtMotion(ICO_EEPTR(BgaExtMotion *, e->data)) *
+                              (float)ScreenWidth / 2.66f;
+                }
+            }
+            bga_updateMotionFrame(ICO_EEPTR(BgaExtMotion *, e->data), dt, 0, w, loop);
+            break;
+        case 2:
+            v = bga_GetExtMotion(ICO_EEPTR(BgaExtMotion *, e->data));
+            switch (p->type) {
+            case 6:
+            case 11:
+                *(float *)(BGA_OBJ(char *, p->u.obj) + 0x30) = v;
+                bga_updateMotionFrame(ICO_EEPTR(BgaExtMotion *, e->data), dt, 0, w, loop);
+                break;
+            case 8:
+            case 9:
+                *(float *)(BGA_OBJ(char *, p->u.obj) + 0x80) = v;
+                bga_updateMotionFrame(ICO_EEPTR(BgaExtMotion *, e->data), dt, 0, w, loop);
+                break;
+            }
+            break;
+        case 3:
+            v = bga_GetExtMotion(ICO_EEPTR(BgaExtMotion *, e->data));
+            switch (p->type) {
+            case 6:
+            case 11:
+                *(float *)(BGA_OBJ(char *, p->u.obj) + 0x34) = v;
+                bga_updateMotionFrame(ICO_EEPTR(BgaExtMotion *, e->data), dt, 0, w, loop);
+                break;
+            }
+            break;
+        case 4:
+        case 5:
+            break;
+        case 6:
+            if (p->u.obj != 0) {
+                bga_GetGizmoMotion(ICO_EEPTR(BgaMotion *, e->data),
+                                   BGA_OBJ(Sub15C *, p->u.obj)->morphWeight);
+                bga_updateMotionFrame(ICO_EEPTR(BgaExtMotion *, e->data), dt, 0, w, loop);
+            }
+            break;
+        case 7:
+            bgaPivot[0] = ICO_EEPTR(BgaWord *, e->data)[0].f;
+            bgaPivot[1] = -ICO_EEPTR(BgaWord *, e->data)[1].f;
+            bgaPivot[2] = ICO_EEPTR(BgaWord *, e->data)[2].f;
+            bgaPivot[3] = 1.0f;
+            bgaPivotFlag = 1;
+            break;
+        case 8:
+        case 9:
+            p->u.obj = e->data;
+            break;
+        default:
+            debug_StdPrintfDummy("Illegal Envelope Type : %p(%d)\n", e, e->type);
+            debug_assert(__FILE__, 1496);
+            __assert(__FILE__, 1496, "0");
+            break;
+        }
+    }
+}
+
 /* Apply a node's envelopes: each entry's type says
  * what its motion drives, the node work record's float for the object, the
  * SDF camera zoom, a light's two parameters, the gizmo, the light vector or
@@ -1839,6 +2177,10 @@ static inline void bga_stepEnvelope(BgaEnvEnt *e, float dt, int loop) /* derived
  * with its entry and type and asserted. */
 static void bga_calcEnvelope(BgaDObjEnt *p, float dt, float w, int cut, int loop)
 {
+    if (ICO_JUN26) {
+        bga_calcEnvelope_jun26(p, dt, w, cut, loop);
+        return;
+    }
     BgaEnvEnt *e;
     float v;
 
@@ -1937,8 +2279,8 @@ static void bga_calcEnvelope(BgaDObjEnt *p, float dt, float w, int cut, int loop
             break;
         default:
             debug_StdPrintfDummy("Illegal Envelope Type : %p(%d)\n", e, e->type);
-            debug_assert(__FILE__, LN(2116, 1685, 1685, 1677, 1600, 2116, 1685));
-            __assert(__FILE__, LN(2116, 1685, 1685, 1677, 1600, 2116, 1685), "0");
+            debug_assert(__FILE__, LN(2116, 1685, 1685, 1677, 1600, 1600, 1685));
+            __assert(__FILE__, LN(2116, 1685, 1685, 1677, 1600, 1600, 1685), "0");
             break;
         }
     }
@@ -2107,10 +2449,190 @@ static inline void bga_stepMotion(BgaExtMotion *m, float dt, int reset) /* deriv
 
 static void bga_CalcObject(BgaDObjEnt *d, float dt, float frame, int cut, int play, int loop);
 
+static void bga_CalcObject_jun26(BgaDObjEnt *d, float dt, float frame, int cut, int play, int loop)
+{
+    BgaPtMotion *m = (BgaPtMotion *)&d->motion;
+    int save;
+    float s;
+
+    bga_GetMotion(bgaPos, bgaRot, bgaScale, m);
+
+    switch (d->type) {
+    case 6:
+        d->u.obj = BGA_OBJW((systemStatus[5] == 0) ? (void *)light_AddLight(0, 0, 2)
+                                                   : (void *)&bgaDummyLight);
+        bga_initLightEnvelope(d);
+        break;
+    case 11:
+        d->u.obj = BGA_OBJW((systemStatus[5] == 0) ? (void *)light_AddLight(0, 0, 3)
+                                                   : (void *)&bgaDummyLight);
+        bga_initLightEnvelope(d);
+        break;
+    }
+    bgaPivotFlag = 0;
+
+    bga_calcEnvelope(d, dt, frame, cut, loop);
+    PushQuaternion();
+    _PushCurrentMatrix();
+    save = bgaRollZ;
+    if (bgaPivotFlag != 0) {
+        _PushCurrentMatrix();
+        _TransCurrentMatrix(bgaPivot);
+        _RotTransCurrentMatrixYXZ(bgaPos, bgaRot);
+        _ScaleVectorXYZ(bgaPivot, bgaPivot, -1.0f);
+        _TransCurrentMatrix(bgaPivot);
+        _ScaleCurrentMatrix(bgaScale[0], bgaScale[1], bgaScale[2]);
+        _GetCurrentMatrix(bgaPivotMatrix);
+        _PopCurrentMatrix();
+    }
+    _RotTransCurrentMatrixYXZ(bgaPos, bgaRot);
+    RotCurrentQuaternionY((short)bgaRot[1]);
+    RotCurrentQuaternionX((short)bgaRot[0]);
+    RotCurrentQuaternionZ((short)bgaRot[2]);
+    bgaRollZ -= (unsigned short)bgaRot[2];
+    bgaObjectWork = bgaPos[2];
+
+    switch (d->type) {
+    case 8:
+    case 9:
+        if (d->u.obj != 0) {
+            /* the volume's size at its 0x70, which BgaObj's rscale misses on
+               the host (see BGA_GEOM_MTX) */
+            BGA_OBJ(BgaLightEnv *, d->u.obj)->size[0] = 1.0f / bgaScale[0];
+            BGA_OBJ(BgaLightEnv *, d->u.obj)->size[1] = 1.0f / bgaScale[1];
+            BGA_OBJ(BgaLightEnv *, d->u.obj)->size[2] = 1.0f / bgaScale[2];
+            _GetCurrentMatrix(BGA_OBJ(void *, d->u.obj));
+        }
+        break;
+    case 6:
+    case 11:
+        if (d->u.obj != 0) {
+            _GetCurrentMatrixTrans(BGA_OBJ(void *, d->u.obj));
+        }
+        break;
+    case 12:
+        _GetCurrentMatrixTrans(bgaPos);
+        SetParamKyomiGObj(BGA_OBJ(void *, d->u.obj), bgaPos, bgaScale);
+        break;
+    case 13:
+        if (d->u.obj == 0) {
+            /* "unknown particle" */
+            debug_StdPrintfDummy("不明なパーティクル\n");
+            break;
+        }
+        if (bgaUniqAnimationFlag == 0 && BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.loop) {
+            /* "a PBGA-type animation cannot use looping particles" */
+            debug_StdPrintfDummy(
+                "PBGAタイプのアニメーションではループのパーティクルは使用できません.\n");
+            break;
+        }
+        _GetCurrentMatrixTrans(bgaPos);
+        /* the August preview spawns the particle first and then keeps a live one's place */
+        s = bgaScale[0] + bgaScale[1] + bgaScale[2];
+        if (4.0f < s) {
+            BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.eff =
+                SetParticleEffectActiveSensing(BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.id,
+                                               BGA_OBJ(BgaParticleEnt *, d->u.obj)->pos,
+                                               BGA_OBJ(BgaParticleEnt *, d->u.obj)->quat);
+        } else if (0.0f < s) {
+            BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.eff = SetParticleEffect(
+                BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.id, bgaPos, GetCurrentQuaternion());
+        }
+        if (BGA_OBJ(BgaParticleEnt *, d->u.obj)->u.b.eff != -1) {
+            CopyQuaternion(BGA_OBJ(BgaParticleEnt *, d->u.obj)->quat, GetCurrentQuaternion());
+            _CopyVector(BGA_OBJ(BgaParticleEnt *, d->u.obj)->pos, bgaPos);
+        }
+        break;
+    case 14:
+    case 15:
+        if (play != 0) {
+            _GetCurrentMatrixTrans(bgaPos);
+            bga_addLightning(d->type, BGA_OBJ(void *, d->u.obj), bgaPos,
+                             BGA_OBJ(BgaObj *, d->u.obj)->id, bgaScale[1] == 0.0f, bgaScale[0]);
+        }
+        break;
+    case 16:
+        if (play != 0) {
+            _GetCurrentMatrixTrans(bgaPos);
+            bga_addLightning(d->type, BGA_OBJ(void *, d->u.obj), bgaPos,
+                             BGA_OBJ(BgaObj *, d->u.obj)->id, 0, 0.0f);
+        }
+        break;
+    case 1:
+#ifdef ICO_RD
+        /* PC port: Natural chains: the listed Null moves its links along the
+           chain instead of scaling them (rd_chain_null) */
+        if (bgaHostChain != 0 && d->num == bgaHostChain->null) {
+            bgaHostChainScale = bgaScale[bgaHostChain->axis];
+            if (bgaHostNatural) {
+                float sc[3];
+                float t[4];
+
+                rd_chain_null(bgaHostChain, bgaScale, sc, t);
+                _ScaleCurrentMatrix(sc[0], sc[1], sc[2]);
+                _TransCurrentMatrix(t);
+                break;
+            }
+        }
+#endif
+        _ScaleCurrentMatrix(bgaScale[0], bgaScale[1], bgaScale[2]);
+        break;
+    case 7:
+        break;
+    default:
+        _ScaleCurrentMatrix(bgaScale[0], bgaScale[1], bgaScale[2]);
+        if (d->u.obj != 0) {
+            if (bgaPivotFlag != 0) {
+                _CopyMatrix(&BGA_GEOM_MTX(d->u.obj)[d->num], bgaPivotMatrix);
+            } else {
+                _GetCurrentMatrix(&BGA_GEOM_MTX(d->u.obj)[d->num]);
+            }
+            BGA_GEOM_WORK(d->u.obj)[d->num].flags.b.screenPos = (d->type == 10);
+            if (BGA_GEOM_WORK(d->u.obj)[d->num].flags.b.screenPos) {
+                _GetCurrentMatrixTrans(BGA_GEOM_WORK(d->u.obj)[d->num].pos);
+            }
+            BGA_GEOM_WORK(d->u.obj)[d->num].flags.b.billboard = (d->type == 4);
+            BGA_GEOM_WORK(d->u.obj)[d->num].flags.b.rotZ = bgaRollZ;
+            CopyQuaternion(BGA_GEOM_QUAT(d->u.obj)[d->num], GetCurrentQuaternion());
+#ifdef ICO_RD
+            /* PC port: Natural chains: a link of the listed Null gets its
+               clip plane (rd_chain_link), or loses it with the option off */
+            if (bgaHostChain != 0 && d->parent == bgaHostChain->null) {
+                uint8_t code = 0;
+                float off = 0.0f;
+
+                if (bgaHostNatural) {
+                    rd_chain_link(bgaHostChain, bgaHostChainScale, bgaPos[bgaHostChain->axis],
+                                  &code, &off);
+                }
+                rd_chain_note(BGA_OBJ(void *, d->u.obj), d->num, code, off);
+            }
+#endif
+        }
+        if (cut != 0 && d->type == 2) {
+            if (debug_font_flag & 1) {
+                debug_Printf(600, ScreenHeight / 2 - 8, 0xCCCCCC00, "LWS");
+            }
+            bga_SetCameraMatrix();
+        }
+        break;
+    }
+
+    if (d->child != 0) {
+        bga_CalcObject(ICO_EEPTR(BgaDObjEnt *, d->child), dt, frame, cut, play, loop);
+    }
+    bgaRollZ = save;
+    _PopCurrentMatrix();
+    PopQuaternion();
+    if (d->sibling != 0) {
+        bga_CalcObject(ICO_EEPTR(BgaDObjEnt *, d->sibling), dt, frame, cut, play, loop);
+    }
+    bga_updateMotionFrame((BgaExtMotion *)m, dt, 0, frame, loop);
+}
+
 /* the August preview's object step: the European samplers' angles, the particle spawned
    before its place is kept, no lightning or particle pause, the camera matrix set at a cut */
-static void bga_CalcObject_aug6jun26(BgaDObjEnt *d, float dt, float frame, int cut, int play,
-                                     int loop)
+static void bga_CalcObject_aug6(BgaDObjEnt *d, float dt, float frame, int cut, int play, int loop)
 {
     BgaPtMotion *m = (BgaPtMotion *)&d->motion;
     int save;
@@ -2292,8 +2814,12 @@ static void bga_CalcObject_aug6jun26(BgaDObjEnt *d, float dt, float frame, int c
 
 static void bga_CalcObject(BgaDObjEnt *d, float dt, float frame, int cut, int play, int loop)
 {
-    if (ICO_AUG6JUN26) {
-        bga_CalcObject_aug6jun26(d, dt, frame, cut, play, loop);
+    if (ICO_JUN26) {
+        bga_CalcObject_jun26(d, dt, frame, cut, play, loop);
+        return;
+    }
+    if (ICO_AUG6) {
+        bga_CalcObject_aug6(d, dt, frame, cut, play, loop);
         return;
     }
     BgaPtMotion *m = (BgaPtMotion *)&d->motion;
@@ -2602,7 +3128,8 @@ static void bga_resetObjectCounter(BgaCntNode *o, float f, int loop)
     BgaCountEnt *e;
 
     if (ICO_JPNKORNTSCAUG6JUN26CN) {
-        bga_resetObjectCounter_jpn(o, f, loop);
+        /* PC port: the June 2001 demo's takes no loop and passes 0 */
+        bga_resetObjectCounter_jpn(o, f, ICO_JUN26 ? 0 : loop);
         return;
     }
 
@@ -2670,7 +3197,48 @@ static void bga_SetFrame_ntsc(BgaHeader *p, int frame, int mode, int loop)
     bga_CalcAnimation(p, loop, 1);
 }
 
-static void bga_SetFrame_aug6jun26(BgaHeader *p, int frame, int mode, int loop)
+static void bga_SetFrame_jun26(BgaHeader *p, int frame, int mode, int loop)
+{
+    float f;
+    int start;
+
+    if (p->cut) {
+        bgaCameraActive = mode;
+    }
+    start = p->start;
+    if (start < 0) {
+        start = 0;
+    }
+    switch (frame) {
+    case 0:
+        p->frame =
+            ((float)start * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f));
+        p->mode = mode;
+        break;
+    case -1:
+        p->frame = p->end * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f);
+        p->mode = mode;
+        break;
+    case -2:
+        p->frame = (float)start * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f);
+        p->mode = -1;
+        return;
+    default:
+        f = (float)frame;
+        p->frame = (f * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f));
+        if ((frame < start)) {
+            p->frame =
+                ((float)start * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f));
+        } else if (p->end < f) {
+            p->frame = (p->end * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f));
+        }
+        p->mode = mode;
+        break;
+    }
+    bga_CalcAnimation(p, loop, 1);
+}
+
+static void bga_SetFrame_aug6(BgaHeader *p, int frame, int mode, int loop)
 {
     float f;
     int start;
@@ -2725,12 +3293,16 @@ static void bga_SetFrame_aug6jun26(BgaHeader *p, int frame, int mode, int loop)
 
 void bga_SetFrame(BgaHeader *p, int frame, int mode, int loop)
 {
+    if (ICO_JUN26) {
+        bga_SetFrame_jun26(p, frame, mode, loop);
+        return;
+    }
     if (ICO_NTSC) {
         bga_SetFrame_ntsc(p, frame, mode, loop);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        bga_SetFrame_aug6jun26(p, frame, mode, loop);
+    if (ICO_AUG6) {
+        bga_SetFrame_aug6(p, frame, mode, loop);
         return;
     }
     float f;
@@ -2904,7 +3476,81 @@ static void bga_CalcAnimation_ntsc(BgaHeader *p, int loop, int reset)
     }
 }
 
-static void bga_CalcAnimation_aug6jun26(BgaHeader *p, int loop, int reset)
+static void bga_CalcAnimation_jun26(BgaHeader *p, int loop, int reset)
+{
+    float m[4][4];
+    BgaCntNode *o;
+    int i;
+    int f1;
+    int f2;
+
+    if (p->mode == -1) {
+        return;
+    }
+
+    GetMatrixFromQuaternionPos(m, BGA_ANIM(p)->quat, BGA_ANIM(p)->pos);
+    if (BGA_ANIM(p)->obj) {
+        _SetCurrentMatrix(BGA_AOBJ_MTX(BGA_ANIM(p)->obj)[BGA_ANIM(p)->idx]);
+    } else {
+        _InitCurrentMatrix();
+    }
+    _MulCurrentMatrixR(m);
+
+    if (BGA_ANIM(p)->obj) {
+        CopyQuaternion(GetCurrentQuaternion(), BGA_AOBJ_QUAT(BGA_ANIM(p)->obj)[BGA_ANIM(p)->idx]);
+    } else {
+        SetIdentityQuaternion(GetCurrentQuaternion());
+    }
+    MultiQuaternion(GetCurrentQuaternion(), GetCurrentQuaternion(), BGA_ANIM(p)->quat);
+
+#ifdef ICO_RD
+    /* PC port: Natural chains (rd_chain.h): this animation's listed chain */
+    bgaHostChain = rd_chain_find(p->group);
+    bgaHostNatural = bgaHostChain != 0 && ico_opt_natural_chains();
+#endif
+    for (i = 0;; i++) {
+        f2 = (p->mode == 1);
+        f1 = p->cut && f2;
+        o = (BgaCntNode *)BGA_ROOT(p, i);
+        if (o == 0) {
+            break;
+        }
+        PushQuaternion();
+        _PushCurrentMatrix();
+        if (reset) {
+            bga_resetObjectCounter(o, p->frame, 0);
+        }
+        bga_CalcObject((BgaDObjEnt *)o, p->step, p->frame, f1, f2, loop);
+        _PopCurrentMatrix();
+        PopQuaternion();
+    }
+#ifdef ICO_RD
+    bgaHostChain = 0;
+#endif
+
+    if (reset) {
+        return;
+    }
+
+    if (p->mode == 1) {
+        p->frame += p->step;
+        if ((p->end * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) <
+             p->frame)) {
+            if (loop == 0) {
+                p->frame =
+                    (p->end * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f));
+                p->mode = 0;
+                if (p->cut) {
+                    bgaCameraActive = 0;
+                }
+            } else {
+                p->frame = 0.0f;
+            }
+        }
+    }
+}
+
+static void bga_CalcAnimation_aug6(BgaHeader *p, int loop, int reset)
 {
     float m[4][4];
     float rm[4][4];
@@ -2999,12 +3645,16 @@ static void bga_CalcAnimation_aug6jun26(BgaHeader *p, int loop, int reset)
 
 void bga_CalcAnimation(BgaHeader *p, int loop, int reset)
 {
+    if (ICO_JUN26) {
+        bga_CalcAnimation_jun26(p, loop, reset);
+        return;
+    }
     if (ICO_NTSC) {
         bga_CalcAnimation_ntsc(p, loop, reset);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        bga_CalcAnimation_aug6jun26(p, loop, reset);
+    if (ICO_AUG6) {
+        bga_CalcAnimation_aug6(p, loop, reset);
         return;
     }
     float m[4][4];
@@ -3203,7 +3853,96 @@ static void bga_CalcSdfCamera_ntsc(char *data, int loop)
     p->frame += 1.0f;
 }
 
-static void bga_CalcSdfCamera_aug6jun26(char *data, int loop)
+static void bga_CalcSdfCamera_jun26(char *data, int loop)
+{
+    BgaSdfCam *p = (BgaSdfCam *)data;
+    BgaSdfKey *k0;
+    BgaSdfKey *k1;
+    float fr;
+    float t;
+    int i;
+    int i1;
+
+    if (p->mode == -1) {
+        return;
+    }
+    if ((p->frame * (30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1])) >=
+         (float)p->num)) {
+        if (loop == 0) {
+            p->frame =
+                ((float)p->num * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f));
+            p->mode = 0;
+            if (bgaCameraActive != 0) {
+                bgaCameraActive = 0;
+            }
+            return;
+        }
+        p->frame = 0.0f;
+    }
+    if (debug_font_flag & 1) {
+        debug_Printf(
+            550, ScreenHeight / 2 - 8, 0xCCCCCC00, "%d/%d",
+            (int)(p->frame * (30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]))),
+            p->num);
+    }
+
+    _PushCurrentMatrix();
+    fr = (p->frame * (30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1])));
+    i = (int)fr;
+    i1 = i + 1;
+    if (i > p->num - 1) {
+        i = p->num - 1;
+    }
+    if (i1 > p->num - 1) {
+        i1 = p->num - 1;
+    }
+    k0 = &p->key[i];
+    k1 = &p->key[i1];
+    t = fr - (float)i;
+    {
+        VECTOR at;
+        VECTOR pos;
+        VECTOR pos0 = {k0->pos[0], k0->pos[1], k0->pos[2], 1.0f};
+        VECTOR at0 = {k0->at[0], k0->at[1], k0->at[2], 1.0f};
+        VECTOR pos1 = {k1->pos[0], k1->pos[1], k1->pos[2], 1.0f};
+        VECTOR at1 = {k1->at[0], k1->at[1], k1->at[2], 1.0f};
+        VECTOR up;
+        VECTOR dir;
+        float roll0;
+        float fov0;
+        float roll1;
+        float fov1;
+        float roll;
+        float fov;
+        short a;
+
+        memset(&up, 0, sizeof(up));
+        up.y = 1.0f;
+        fov0 = k0->fov;
+        roll0 = k0->roll;
+        fov1 = k1->fov;
+        roll1 = k1->roll;
+        _InterVectorXYZ(&pos, &pos0, &pos1, 1.0f - t);
+        _InterVectorXYZ(&at, &at0, &at1, 1.0f - t);
+        fov = fov0 * (1.0f - t) + fov1 * t;
+        roll = roll0 * (1.0f - t) + roll1 * t;
+        dir.x = at.x - pos.x;
+        dir.y = at.y - pos.y;
+        dir.z = at.z - pos.z;
+        dir.w = 0.0f;
+        _NormalizeVector(&dir, &dir);
+        _InitCurrentMatrix();
+        _RotCurrentMatrixZ((short)(int)(roll * 182.04445f));
+        _ApplyCurrentMatrix(&up, &up);
+        _SetCameraMatrix(bgaCameraMatrix, &pos, &dir, &up);
+        a = (short)(int)(fov * 3.1415927f / 360.0f * 10430.378f);
+        bgaZoom = 224.0f / (GetTableSin(a) / GetTableCos(a));
+        _PopCurrentMatrix();
+    }
+    p->frame += 1.0f;
+}
+
+static void bga_CalcSdfCamera_aug6(char *data, int loop)
 {
     BgaSdfCam *p = (BgaSdfCam *)data;
     BgaSdfKey *k0;
@@ -3290,12 +4029,16 @@ static void bga_CalcSdfCamera_aug6jun26(char *data, int loop)
 
 void bga_CalcSdfCamera(char *data, int loop)
 {
+    if (ICO_JUN26) {
+        bga_CalcSdfCamera_jun26(data, loop);
+        return;
+    }
     if (ICO_NTSC) {
         bga_CalcSdfCamera_ntsc(data, loop);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        bga_CalcSdfCamera_aug6jun26(data, loop);
+    if (ICO_AUG6) {
+        bga_CalcSdfCamera_aug6(data, loop);
         return;
     }
     BgaSdfCam *p = (BgaSdfCam *)data;
@@ -3487,8 +4230,8 @@ static void bga_addLightning_aug6jun26(int kind, BgaLightningDef *def, float *ve
             }
             default:
                 debug_StdPrintfDummy("illegal lightning data set.\n");
-                debug_assert(__FILE__, 2258);
-                __assert(__FILE__, 2258, "0");
+                debug_assert(__FILE__, PAL_JUN26(2258, 2092));
+                __assert(__FILE__, PAL_JUN26(2258, 2092), "0");
                 return;
             }
         }
@@ -3496,7 +4239,7 @@ static void bga_addLightning_aug6jun26(int kind, BgaLightningDef *def, float *ve
     /* the EE allocates 352 bytes for the 0x158-byte record; a 64-bit host's
        record is larger */
     p = iosMallocDebug(ios_partition_seki, sizeof(BgaLightning) > 352 ? sizeof(BgaLightning) : 352,
-                       __FILE__, 2266);
+                       __FILE__, PAL_JUN26(2266, 2100));
     p->next = bgaLightningList;
     p->id = id;
     p->n = 1;
@@ -3523,8 +4266,8 @@ static void bga_addLightning_aug6jun26(int kind, BgaLightningDef *def, float *ve
     }
     default:
         debug_StdPrintfDummy("illegal lightning data set.\n");
-        debug_assert(__FILE__, 2291);
-        __assert(__FILE__, 2291, "0");
+        debug_assert(__FILE__, PAL_JUN26(2291, 2125));
+        __assert(__FILE__, PAL_JUN26(2291, 2125), "0");
         break;
     }
 }
@@ -3573,7 +4316,7 @@ static void bga_addLightning(int kind, BgaLightningDef *def, float *vec, int id,
     /* the EE allocates 352 bytes for the 0x158-byte record; a 64-bit host's
        record is larger */
     p = iosMallocDebug(ios_partition_seki, sizeof(BgaLightning) > 352 ? sizeof(BgaLightning) : 352,
-                       __FILE__, LN(2968, 2510, 2510, 2525, 2266, 2100, 2510));
+                       __FILE__, LN(2968, 2510, 2510, 2525, 2266, 2266, 2510));
     p->next = bgaLightningList;
     p->id = id;
     p->n = 1;
@@ -3755,7 +4498,70 @@ static void bga_DispLightning_ntsc(void)
     }
 }
 
-static void bga_DispLightning_aug6jun26(void)
+static void bga_DispLightning_jun26(void)
+{
+    BgaLightning *p;
+    BgaLightningDef *g;
+    GObj *o;
+    int cnt;
+    BgaLightningCol col;
+
+    cnt = 0;
+    for (p = bgaLightningList; p != 0; p = p->next) {
+        g = p->def;
+        if (g == 0) {
+            debug_StdPrintfDummy(
+                "Lightning data does not found! maybe, start point < end point.\n");
+            debug_assert(__FILE__, 2155);
+            __assert(__FILE__, 2155, "0");
+            continue;
+        }
+        col = bga_lightningColor(g);
+        if (p->t0 != 0) {
+            continue;
+        }
+        switch (g->kind) {
+        case 1:
+            o = isysGObjSearchFromObjKindID_begin(2);
+            _CopyVector(&p->seg[p->n++], (char *)GOBJ_SUB(o)->nodeMtx + (g->node << 6) + 0x30);
+            DrawLightningN(p->n, p->seg, &col, g->stepMin, g->stepMax, g->swayStepMin,
+                           g->swayStepMax, g->turnMin, g->turnMax, g->swayLimit, g->width,
+                           g->texLen, p->frame, g->c);
+            break;
+        case 2:
+            o = isysGObjSearchFromObjKindID_begin(45);
+            _CopyVector(&p->seg[p->n++], (char *)GOBJ_SUB(o)->nodeMtx + (g->node << 6) + 0x30);
+            DrawLightningN(p->n, p->seg, &col, g->stepMin, g->stepMax, g->swayStepMin,
+                           g->swayStepMax, g->turnMin, g->turnMax, g->swayLimit, g->width,
+                           g->texLen, p->frame, g->c);
+            break;
+        case 0:
+            for (o = isysGObjSearchFromObjKindID_begin(4); o != 0;
+                 o = isysGObjSearchFromObjKindID_next(o)) {
+                cnt++;
+                if (cnt >= 9) {
+                    break;
+                }
+                if (isEnemyHyde(o) == 0 && ((GObj *)o)->active != 0) {
+                    _CopyVector(&p->seg[p->n++],
+                                (char *)GOBJ_SUB(o)->nodeMtx + (g->node << 6) + 0x30);
+                    DrawLightningN(p->n, p->seg, &col, g->stepMin, g->stepMax, g->swayStepMin,
+                                   g->swayStepMax, g->turnMin, g->turnMax, g->swayLimit, g->width,
+                                   g->texLen, p->frame, g->c);
+                }
+            }
+            break;
+        default:
+            DrawLightningN(p->n, p->seg, &col, g->stepMin, g->stepMax, g->swayStepMin,
+                           g->swayStepMax, g->turnMin, g->turnMax, g->swayLimit, g->width,
+                           g->texLen, p->frame, g->c);
+            break;
+        }
+    }
+    bga_InitBGA();
+}
+
+static void bga_DispLightning_aug6(void)
 {
     BgaLightning *p;
     BgaLightningDef *g;
@@ -3865,12 +4671,16 @@ static void bga_DispLightning_aug6jun26(void)
 
 void bga_DispLightning(void)
 {
+    if (ICO_JUN26) {
+        bga_DispLightning_jun26();
+        return;
+    }
     if (ICO_NTSC) {
         bga_DispLightning_ntsc();
         return;
     }
-    if (ICO_AUG6JUN26) {
-        bga_DispLightning_aug6jun26();
+    if (ICO_AUG6) {
+        bga_DispLightning_aug6();
         return;
     }
     BgaLightning *p;
@@ -4015,11 +4825,32 @@ inline int bga_GetCameraMatrix(void *p)
     } else {
         bgaZoom = 0;
     }
-    return v != 0 && bgaCameraForceOff == 0;
+    if (ICO_JUN26) {
+        return v;
+    } else {
+        return v != 0 && bgaCameraForceOff == 0;
+    }
+}
+
+static inline void bga_SetCamFrame_jun26(char *data, int frame, int mode, int loop)
+{
+    BgaSdfCam *p = (BgaSdfCam *)data;
+
+    p->mode = mode;
+    bgaCameraActive = 1;
+    if (frame == -1) {
+        p->frame = p->num;
+    } else {
+        p->frame = frame;
+    }
 }
 
 inline void bga_SetCamFrame(char *data, int frame, int mode, int loop)
 {
+    if (ICO_JUN26) {
+        bga_SetCamFrame_jun26(data, frame, mode, loop);
+        return;
+    }
     BgaSdfCam *p = (BgaSdfCam *)data;
 
     p->mode = mode;
@@ -4085,7 +4916,31 @@ inline int bga_CheckAnimationFinish(BgaHeader *p)
     return r;
 }
 
-static inline int bga_CheckAnimationFrame_ntscaug6jun26(BgaHeader *p, int frame, int reset)
+static inline int bga_CheckAnimationFrame_jun26(BgaHeader *p, int frame, int reset)
+{
+    float f = frame;
+    int r = 0;
+
+    if (ICO_JPNKORCN) {
+        if (f * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) <= p->frame ||
+            p->mode != 1) {
+            r = 1;
+        }
+    } else if (f * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) < p->frame ||
+               p->mode != 1) {
+        r = 1;
+    }
+    if (r && reset) {
+        if (p->cut) {
+            bgaCameraActive = 0;
+            bgaZoom = 0;
+        }
+        p->mode = 0;
+    }
+    return r;
+}
+
+static inline int bga_CheckAnimationFrame_ntscaug6(BgaHeader *p, int frame, int reset)
 {
     float f = frame;
     int r = 0;
@@ -4107,8 +4962,11 @@ static inline int bga_CheckAnimationFrame_ntscaug6jun26(BgaHeader *p, int frame,
 
 inline int bga_CheckAnimationFrame(BgaHeader *p, int frame, int reset)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return bga_CheckAnimationFrame_ntscaug6jun26(p, frame, reset);
+    if (ICO_JUN26) {
+        return bga_CheckAnimationFrame_jun26(p, frame, reset);
+    }
+    if (ICO_NTSCAUG6) {
+        return bga_CheckAnimationFrame_ntscaug6(p, frame, reset);
     }
     float f = frame;
     float t = p->frame;
@@ -4203,7 +5061,22 @@ inline int bga_CheckSdfCameraFinish(char *data)
     }
 }
 
-static inline int bga_CheckSdfCameraFrame_ntscaug6jun26(char *data, int frame, int reset)
+static inline int bga_CheckSdfCameraFrame_jun26(char *data, int frame, int reset)
+{
+    BgaSdfCam *p = (BgaSdfCam *)data;
+    float f = frame;
+    int r;
+
+    r = f * ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0f) <= p->frame;
+    if (r && reset) {
+        bgaCameraActive = 0;
+        p->mode = 0;
+        bgaZoom = 0;
+    }
+    return r;
+}
+
+static inline int bga_CheckSdfCameraFrame_ntscaug6(char *data, int frame, int reset)
 {
     BgaSdfCam *p = (BgaSdfCam *)data;
     float f = frame;
@@ -4218,8 +5091,11 @@ static inline int bga_CheckSdfCameraFrame_ntscaug6jun26(char *data, int frame, i
 
 inline int bga_CheckSdfCameraFrame(char *data, int frame, int reset)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return bga_CheckSdfCameraFrame_ntscaug6jun26(data, frame, reset);
+    if (ICO_JUN26) {
+        return bga_CheckSdfCameraFrame_jun26(data, frame, reset);
+    }
+    if (ICO_NTSCAUG6) {
+        return bga_CheckSdfCameraFrame_ntscaug6(data, frame, reset);
     }
     BgaSdfCam *p = (BgaSdfCam *)data;
     float f = frame;
@@ -4290,8 +5166,31 @@ inline void bga_SetCameraForceOff(void)
     bgaCameraForceOff = 1;
 }
 
+static inline void bga_InitBGA_jun26(void)
+{
+    BgaLightning *p;
+
+    p = bgaLightningList;
+    bgaLightningList = 0;
+#ifdef ICO_RD
+    rd_chain_reset(); /* PC port: Natural chains: a new stage's objects */
+#endif
+    if (p == 0) {
+        return;
+    }
+    do {
+        BgaLightning *next = p->next;
+        freeseki(p);
+        p = next;
+    } while (p != 0);
+}
+
 inline void bga_InitBGA(void)
 {
+    if (ICO_JUN26) {
+        bga_InitBGA_jun26();
+        return;
+    }
     bgaCameraForceOff = 0;
     bgaLightningList = 0;
 #ifdef ICO_RD
