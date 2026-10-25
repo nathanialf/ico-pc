@@ -25,12 +25,17 @@ In the user folder:
 - `memcard` is your memory card. It holds your saves, as normal files.
   PCSX2 can keep a memory card as a folder in the same way, so saves can
   move between the two. The European disc's saves are in the folder
-  `BESCES-50760ico` inside it, the Japanese disc's in `BISCPS-11003ico`
-  and the Korean disc's in `BISCPS-56001ico`, as on a PS2 memory card, so
-  they never mix.
+  `BESCES-50760ico` inside it, the Japanese disc's in `BISCPS-11003ico`,
+  the Korean disc's in `BISCPS-56001ico`, the Asian disc's in
+  `BISCPS-55001ico`, the June 2001 magazine demo's in `BISCUS-97113ico` and the
+  North American disc's in `BASCUS-97113ico`, as on a PS2 memory card, so
+  they do not mix. The one exception: the August 2001 preview disc uses the
+  same folder as the North American disc (`BASCUS-97113ico`), as the two
+  discs did on a PS2, so playing one after the other uses the same save
+  files, and a save made on one can be overwritten from the other.
 - `config.toml` holds your settings.
 - The game's own data, copied from your disc image at the first start: one
-  large file for each disc you set up (European, Japanese or Korean).
+  large file for each disc you set up.
 - `screenshots` holds the pictures you take in photo mode.
 - Your achievements, and any texture or model pack you put there.
 
@@ -142,13 +147,15 @@ tools/mc_import --to ~/.local/share/ico-pc/ico-pc/memcard Mcd001.ps2
 ```
 
 It only takes ICO's save and leaves other games alone. It works for a save
-of the European disc, of the Japanese disc and of the Korean disc, and puts each in the
+of any of the seven discs, and puts each in the
 folder for its disc. It will not replace a save that is already there unless you add
 `--overwrite`.
 
 From a PCSX2 memory card kept as a folder, you do not need the tool. Copy
-the `BESCES-50760ico` folder (European disc) or the `BISCPS-11003ico`
-folder (Japanese disc) or the `BISCPS-56001ico` folder (Korean disc) into `memcard`.
+your disc's folder into `memcard`: `BESCES-50760ico` (European disc),
+`BISCPS-11003ico` (Japanese disc), `BISCPS-56001ico` (Korean disc),
+`BISCPS-55001ico` (Asian disc), `BASCUS-97113ico` (North American disc or August
+2001 preview) or `BISCUS-97113ico` (June 2001 magazine demo).
 
 After importing, check that the game lists the save.
 
