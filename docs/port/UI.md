@@ -13,9 +13,9 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/ui/settings.h`, `settings.c` | the Settings menu: the pages, the entry rows, the New Game and Quit screens, the values and their setters, the saves |
 | `port/ui/ui_list.h`, `ui_list.c` | the scrolling list pages (Achievements, Remap, Music) |
 | `port/ui/ui_hint.h`, `ui_hint.c` | a line of button prompts (glyphs and words) |
-| `port/ui/strings.h`, `strings.c`, `strings_{en,fr,de,it,es,ja,ko}.c` | the UI strings, one table per language; the serial notes; the Japanese and Korean line-break rules |
+| `port/ui/strings.h`, `strings.c`, `strings_{en,fr,de,it,es,ja,ko,zh}.c` | the UI strings, one table per language; the serial notes; the Japanese, Chinese and Korean line-break rules |
 | `port/ui/ui_lang.h`, `ui_lang.c` | the port text's language from `[ui] language` and the running disc |
-| `port/ui/font.h`, `font.c` | Arimo, then Noto Sans JP, then Noto Sans KR, through stb_truetype: atlases, measuring, plain text, the presentation overlay mode, the sheet rasteriser |
+| `port/ui/font.h`, `font.c` | Arimo, then Noto Sans JP, then Noto Sans KR, then Noto Sans TC (first of the three while the language is Chinese), through stb_truetype: atlases, measuring, plain text, the presentation overlay mode, the sheet rasteriser |
 | `port/ui/menu_font.h`, `menu_font.c` | the menus' text in the look of the game's menu sheets: strip pages, inks, rims |
 | `port/ui/menu_text.h`, `menu_text.c` | the table of the game's menu words, measured from the PAL sheets |
 | `port/ui/ui_internal.h` | font.c's and menu_font.c's internals shared with `ui_host.c` and the tests |
@@ -25,6 +25,8 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `tools/subset_font_ja.py` | makes and checks the second font's subset |
 | `port/assets/fonts/NotoSansKR-Regular-subset.ttf`, `NotoSansKR-OFL.txt` | the third font (the Hangul the other two lack) and its licence |
 | `tools/subset_font_ko.py` | makes and checks the third font's subset |
+| `port/assets/fonts/NotoSansTC-Regular-subset.ttf`, `NotoSansTC-OFL.txt` | the fourth font (the Chinese table's ideographs) and its licence |
+| `tools/subset_font_zh.py` | makes and checks the fourth font's subset |
 | `port/ui/popup.h`, `popup.c` | the notification popups |
 | `port/ui/touch_ui.h`, `touch_ui.c` | the touch overlay's drawing |
 | `port/ui/ui_mouse.h`, `ui_mouse.c`, `ui_mouse_geom.h`, `ui_mouse_geom.c` | the mouse pointer in menus: the glue and the arithmetic |
@@ -388,23 +390,23 @@ without a host and on the pause menu).
 ## Strings and languages
 
 Every word the port draws is a `UiStrId` into one table per language, `strings_en.c`, `fr`, `de`,
-`it`, `es`, `ja` and `ko`, `UI_LANG_COUNT` tables of `UI_STR_COUNT` UTF-8 entries written with designated
+`it`, `es`, `ja`, `ko` and `zh`, `UI_LANG_COUNT` tables of `UI_STR_COUNT` UTF-8 entries written with designated
 initialisers; the tables also hold the game's own menu words (`UI_STR_MT_*`) as each disc's sheets
 letter them (`port/ui/strings.h`, header comment). `ui_str` answers in the current language and
 falls back to English for a missing entry (`port/ui/strings.c` (`ui_str_in`)); ctest
 `strings_complete` fails on a missing or empty entry, and on an entry whose printf conversions are
 not the English one's, so the fallback never shows (`port/ui/test/strings_complete_test.c`). Every
 table names the languages in their own words (English, Français, Deutsch, Italiano, Español,
-日本語, 한국어), so a player finds theirs whatever the menus are in.
+日本語, 한국어, 繁體中文), so a player finds theirs whatever the menus are in.
 
 The first five languages, `UI_LANG_PAL_COUNT`, are the European disc's, in the order of the game's
-language numbers; Japanese (`UI_LANG_JA`) and Korean (`UI_LANG_KO`) are the port's own text, the
-Japanese and Korean discs' words being their sheets. The current language is set by `ui_settings_apply_language`, which every screen of the
+language numbers; Japanese (`UI_LANG_JA`), Korean (`UI_LANG_KO`) and Traditional Chinese (`UI_LANG_ZH`) are the
+port's own text, the Japanese, Korean and Asian discs' words being their sheets. The current language is set by `ui_settings_apply_language`, which every screen of the
 port calls before it draws its words (`settingsProc`, `ui_host.c`'s sync, photo mode, the model
 viewer, the New Game and Quit screens, the pause menu's lines; also `select_disc`, since on
 Android the UI is up before the disc is chosen): the language of the rule below
 (`ui_set_language`) and the sheet language (`ui_set_sheet_language`: the disc's region row's
-`menu_sheet`, `UI_SHEET_JA` on the Japanese disc and `UI_SHEET_KO` on the Korean one, else, -1,
+`menu_sheet`, `UI_SHEET_JA` on the Japanese disc, `UI_SHEET_KO` on the Korean one and `UI_SHEET_ZH` on the Asian one, else, -1,
 the game's own language; `port/core/region.h` (`IcoRegionInfo`)) (`port/ui/settings.h` (`ui_settings_apply_language`);
 `port/ui/ui_host.c` (`sync`); `port/platform/main_host.c` (`select_disc`)). The game's own
 language is `NonLinearCameraMove`, 2..6 after the boot on the European disc (English, French,
@@ -414,11 +416,11 @@ menus follow at once while the menu language is Auto, and writes `[game] languag
 the row is not shown there and the port never writes the word (`gameLanguage` is -1); `Main` sets it
 from `ico_boot_language`, which gives 0 on that disc (`port/config/sysconf.c`), so it stays 0.
 
-The menu language, `[ui] language` (`auto`, `en`, `fr`, `de`, `it`, `es`, `ja` or `ko`;
+The menu language, `[ui] language` (`auto`, `en`, `fr`, `de`, `it`, `es`, `ja`, `ko` or `zh`;
 `port/game/options.h` (`ico_opt_ui_language`)), is resolved by `ui_settings_resolve_language`: a
 chosen language wins on every disc; `auto`, the default, follows the disc: the language its region
 row names (`IcoRegionInfo.ui_lang_default`: `UI_LANG_JA` on the Japanese disc, `UI_LANG_KO` on the
-Korean one), else the game's own language on a disc whose game picks one
+Korean one, `UI_LANG_ZH` on the Asian one), else the game's own language on a disc whose game picks one
 (`IcoRegionInfo.has_game_language`, the European disc, whose row names none, -1), else English.
 The two region fields are plain numbers (`port/core` does not include `port/ui`'s headers);
 `strings_complete` holds every row's to the `UiLang` and sheet ids. The host's system language is not consulted
@@ -427,7 +429,7 @@ tests).
 
 The sheet language is kept apart from the port text's: the language of the sheets the game's
 menus show, one of the European disc's five, `UI_SHEET_JA` (the Japanese disc's sheets) or
-`UI_SHEET_KO` (the Korean disc's; `UI_LANG_SHEET_COUNT` in all). The look of the port's text in the sheets' style and the game's
+`UI_SHEET_KO` (the Korean disc's) or `UI_SHEET_ZH` (the Asian disc's; `UI_LANG_SHEET_COUNT` in all, 8; `UI_SHEET_JA_TITLE`, the Japanese title's geometry, is 8 too, not a sheet language). The look of the port's text in the sheets' style and the game's
 menu words follow it whatever the port's text is in; until `ui_set_sheet_language` is called it
 follows the port's language while that is a European one, else English (`port/ui/strings.h`
 (`ui_set_sheet_language`, `ui_sheet_language`)).
@@ -485,6 +487,22 @@ PlayStation buttons the bare marks as in the Japanese table, the sticks 왼쪽 �
 prompt names is 돌아가기. A placeholder takes a noun after it (`%s 폴더를`), so no particle
 depends on the serial's last sound.
 
+The Chinese table (`strings_zh.c`, Traditional Chinese as written in Taiwan) does the same with
+the Asian disc's sheets (`Tex_menu01`, decoded from SCPS-55001's archive; the numerals, SLOT 1 and
+2, L1 to R2 and the button glyphs are kept as on the Japanese sheets, and a Japanese よろしいですか?
+is left on the memory card sheet, which the port does not draw): 選項 (Options), 返回 (back),
+按鈕設定 (the button configuration), 牽手設定 (the hold type), 聲音, 立體聲 and 單聲道, 調整明暗度
+with 用方向按鈕調整明暗度, 跳躍, 攻擊, 行動, 手放開, 牽手 / 呼喚, 焦點 (zoom), 回到預設, 暗淡 and 明亮,
+決定 (confirm), 是 and 否, 震動功能 with 開 and 關, 重新開始 and 途中開始 (the title), 遊玩人數 with 1人
+and 2人, 回到遊戲 and 遊戲終了 (the pause menu's other rows), the memory card messages with their line
+breaks (記憶卡(PS2專用) / 並未插在主機上, 您要保存嗎?, 存取中, 資料保存失敗) and the stage sheet's place
+names (舊橋, 臺車 1, 正門, 西方偶像階梯, 沙灘). Its own rows are in the plain formal register the
+sheets use (您…嗎?, 請…), the achievements' descriptions as goals (抵達…。), the PlayStation buttons
+the bare marks as in the Japanese table, and ASCII brackets for the disc's own words but fullwidth
+punctuation (，。？！：) in the port's sentences, which break between any two ideographs and never
+before the closing marks, as the Japanese text does (`ui_break_before`). Ico and Yorda stay in
+Latin letters, as the sheets never spell them. The language is named 繁體中文 in every table.
+
 ## Text: the font and the sheet look
 
 ### The font
@@ -505,9 +523,19 @@ takes the same glyphs. A character neither has (Hangul) is drawn from a third em
 subset of Noto Sans KR Regular (SIL OFL 1.1; `port/assets/fonts/NotoSansKR-Regular-subset.ttf`
 into `ui_font_ko_ttf[]`, 84,372 bytes, 655 code points: the Hangul of every table, 한국어 being
 in all of them, and the Korean table's other characters outside Arimo), scaled to Arimo's em in
-the same way (`koK`; `port/ui/font.c` (`fontGlyph`)). The order is Arimo, Noto Sans JP, Noto Sans
-KR for every language, so a character two fonts hold (the button marks, the CJK punctuation) comes
-from the same font whatever the language, and the Japanese text draws exactly as before. The fonts
+the same way (`koK`; `port/ui/font.c` (`fontGlyph`)). A fourth, a subset of Noto Sans TC Regular
+(SIL OFL 1.1; `port/assets/fonts/NotoSansTC-Regular-subset.ttf` into `ui_font_zh_ttf[]`, 219,264
+bytes, 893 code points: the Chinese table's and corpus' characters outside Arimo, Hangul left to
+Noto Sans KR), holds the ideographs of the Chinese table (`zhK`). The order is Arimo, Noto Sans JP,
+Noto Sans KR, Noto Sans TC, so a character two fonts hold (the button marks, the CJK punctuation)
+comes from the same font whatever the language, and the Japanese and Korean text draw exactly as
+before, except that while the port's language is Chinese (`ui_settings_apply_language` calls
+`ui__font_prefer_chinese`) Noto Sans TC comes right after Arimo: a code point both Chinese and
+Japanese text use (返, 選) is then drawn in its Traditional form, not the Japanese font's. The
+glyph cache keeps both (its key carries the face order's bit), and the menus' strips are hashed
+with it, so changing the Menu language between Japanese and Chinese draws each anew. The language
+name 繁體中文 every table holds is in the Japanese subset too (`subset_font_ja.py` reads every table
+but the Chinese one), so it is drawn from one font in every language. The fonts
 are for the port's own text only: every word of the game's is the disc's own picture, on every
 disc.
 
@@ -533,6 +561,13 @@ ASCII, the CJK punctuation, the fullwidth forms, the button marks, every Hangul 
 tables, the model viewer's names and the corpus, and every other character of the Korean table and
 `font_corpus/ko.txt` outside Arimo's subset, and writes the `subset-ko:` line of
 `embed_font.cmake`; `--check` (ctest `font_subset_ko`) makes the same three comparisons.
+
+The Chinese subset likewise: `tools/fetch_deps.sh` (section 8b, `SKIP_NOTO_TC=1` skips it) fetches
+the variable `NotoSansTC[wght].ttf` of `google/fonts` at a pinned commit into
+`tools/toolchain/deps/noto-sans-tc/`; `tools/subset_font_zh.py` makes the wght 400 subset of ASCII,
+the CJK punctuation, the fullwidth forms, the button marks, and every character of the Chinese
+table and `font_corpus/zh.txt` outside Arimo's subset but Hangul, and writes the `subset-zh:` line
+of `embed_font.cmake`; `--check` (ctest `font_subset_zh`) makes the same three comparisons.
 
 `font.c` rasterises it with stb_truetype into 8-bit coverage atlases, one set per pixel size, built
 on demand; up to 32 size sets live at once, the one drawn least recently going once 4
@@ -610,10 +645,11 @@ being fcfcfc on these sheets where the European ones have ffffff; rim 34.3, a bl
 English sheets' 24; one antialiasing step where the European sheets have three, which the shared
 `ICO_SHEET_LEVELS` covers; `{1, 34, 252, 1, 0}`; and `UI_SHEET_KO`, the Korean disc's,
 `{1, 42, 253, 1, 0}`, measured by `menu_look_kor` on the disc's title, mc04 and option words: fill
-252.8, rim 41.8 (the off-line estimate was 250.7 / 42.9)), and a change restyles the
+252.8, rim 41.8 (the off-line estimate was 250.7 / 42.9); and `UI_SHEET_ZH`, the Asian disc's, the
+Japanese numbers `{1, 34, 252, 1, 0}` until `menu_look_cn` has measured SCPS-55001), and a change restyles the
 pages without rasterising again (`port/ui/menu_font.h` (`ui_menu_sheet_ink`, `ui_menu_item_ink`)).
 
-### The Japanese and Korean sheets' geometry
+### The Japanese, Korean and Chinese sheets' geometry
 
 The European sheets' lettering is Arimo's as it is (em 1, width 1, `UI_MENU_BOLD_X`/`Y`); the
 Japanese and Korean discs' is thinner than Noto Sans JP and KR at the menus' em and set
@@ -639,6 +675,14 @@ words together. Disc and port (width x height): 옵션 32 x 14 and 32 x 13, 게�
 116 x 13, 새로 시작하기 116 x 13 and 118 x 14, 불러오기 72 x 14 and 71 x 14: every height within
 a texel and every width within 10 %. `menu_look_kor` holds the numbers on the
 disc.
+
+The Asian disc's sheets (`UI_SHEET_ZH`, Traditional Chinese: 選項, 返回, 按鈕設定, 重新開始, 途中開始,
+回到遊戲, 遊戲終了) have one geometry for every screen like the Korean disc's; its first numbers are
+the Japanese sheets' (`ZH_GEO_*` = `JA_GEO_*`: em 0.98, width 0.86, gap 1.5, weight 0.15), not yet
+measured: the sheets are decoded and the words read, but `menu_look_cn` has not run on SCPS-55001
+(it needs the disc image; `ICO_MENU_LOOK_JPN_FIT=1` searches the numbers, as for the others), so
+its geometry gate and `kSheetInk[UI_SHEET_ZH]` hold the Japanese numbers until its output replaces
+them (`kInkExpect`, `ZH_GEO_*`, `kSheetInk`).
 
 ### The game's own menu words
 
@@ -867,9 +911,9 @@ and Korean in place of Japanese where a bullet names the language; the Korean di
 run in the port yet, so those numbers are checked by the tests (`ui_kor`, `settings_kor` and the
 other `_kor` rows of [TESTING.md](TESTING.md)) and by reading its tables, not by play. The Asian
 disc (`region_cn.c`) is the Korean program on the Japanese disc's records: Circle confirms as there,
-and its menu sheets are Traditional Chinese, which the port has no text or measured look for, so its
-Menu language starts on English (`ui_lang_default` 0) and the Japanese sheets' look stands in
-(`menu_sheet` `UI_SHEET_JA`); `ui_cn`, `settings_cn` and the other `_cn` rows run its numbers. The
+and its menu sheets are Traditional Chinese, so its Menu language starts on Chinese
+(`ui_lang_default` `UI_LANG_ZH`) over its own sheets' look (`menu_sheet` `UI_SHEET_ZH`, the Japanese
+numbers until measured); `ui_cn`, `settings_cn` and the other `_cn` rows run its numbers. The
 North American disc, the August 2001 preview and the June 2001 demo (`region_ntsc.c`, `region_aug6.c`,
 `region_jun26.c`) are PAL's text with their own lines: Cross confirms and Triangle goes back as on
 the European disc, 60 Hz only and no game language (so the Video mode, Language rows are not shown and
@@ -994,17 +1038,19 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   string drawable, the hook through the real `layout_texture.c`.
 - `menu_look` (`test/menu_look_test.c`, `test/menu_sheets.c`): the menus' strips against the
   player's sheets through the sheet shader's CPU reference; pins the sheet constants.
-- `menu_text_jpn`, `menu_look_jpn`, `menu_text_kor`, `menu_look_kor` (`test/menu_region_test.c`
-  with a slug, and `test/menu_sheets.c`): over the disc's boot ELF's tables (`ICO_BASE_ELF_JPN`,
-  `ICO_BASE_ELF_KOR`), the region's layouts by their procedures, the title, pause and memory card
+- `menu_text_jpn`, `menu_look_jpn`, `menu_text_kor`, `menu_look_kor`, `menu_text_cn`,
+  `menu_look_cn` (`test/menu_region_test.c` with a slug, and `test/menu_sheets.c`): over the disc's
+  boot ELF's tables (`ICO_BASE_ELF_JPN`, `ICO_BASE_ELF_KOR`, `ICO_BASE_ELF_CN`), the region's layouts by their procedures, the title, pause and memory card
   rows, the glyph rows' rectangles and heights, no row drawn from the menu text table; with the
-  disc's image (`ICO_DISC_IMAGE_JPN`, `ICO_DISC_IMAGE_KOR`) each glyph rectangle's ink, the pause
-  and title words' fill and rim, `kSheetInk[UI_SHEET_JA]` or `kSheetInk[UI_SHEET_KO]` held to
+  disc's image (`ICO_DISC_IMAGE_JPN`, `ICO_DISC_IMAGE_KOR`, `ICO_DISC_IMAGE_CN`) each glyph
+  rectangle's ink, the pause and title words' fill and rim, `kSheetInk[UI_SHEET_JA]`,
+  `kSheetInk[UI_SHEET_KO]` or `kSheetInk[UI_SHEET_ZH]` held to
   them, and the port's words' box against the disc's rows. 77 without them.
 - `font_coverage` (`test/font_coverage_test.c`, `test/font_corpus/`): every character the port
-  draws, in the seven languages, has a glyph in one of the three fonts; a Japanese character is
-  Noto Sans JP's own glyph, a Hangul one Noto Sans KR's. `font_audit`, `font_subset_ja` and
-  `font_subset_ko` (`port/test/CMakeLists.txt`) check the subsets' recorded code points without
+  draws, in the eight languages, has a glyph in one of the four fonts; a Japanese character is
+  Noto Sans JP's own glyph, a Hangul one Noto Sans KR's, a Chinese-only ideograph Noto Sans TC's,
+  and the face order follows the language (`ui__font_prefer_chinese`). `font_audit`,
+  `font_subset_ja`, `font_subset_ko` and `font_subset_zh` (`port/test/CMakeLists.txt`) check the subsets' recorded code points without
   a build.
 - `font_edge` (`test/font_edge_test.c`): plain text on the output at Enhanced 1080p and 4K, and
   the overlay unmirrored.
