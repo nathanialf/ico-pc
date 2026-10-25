@@ -156,6 +156,9 @@ extern int systemStatus[]; /* common/src/main.c: [0] the video mode word */
 #define ICO_ANDROID_UI 1
 #include "strings.h" /* port/ui: the first start's copy texts (UI_STR_ISO_*) */
 #include "ui_lang.h" /* port/ui: their language before a disc is chosen */
+/* port/ui/font.c (ui_internal.h, which pulls rd.h): the Chinese faces first
+   for shared ideographs while the port's text is Chinese */
+void ui__font_prefer_chinese(int on);
 #endif
 
 #if defined(__linux__) && !defined(__ANDROID__) && !defined(ICO_HEADLESS)
@@ -1234,6 +1237,9 @@ static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, i
     /* the copy's words in the player's [ui] language when one is set; otherwise English
        until the disc, which decides the language, is read (select_disc) */
     ui_set_language(ui_lang_resolve(ico_opt_ui_language(), -1, 0, 2));
+    /* and a Chinese choice draws the ideographs it shares with Japanese in
+       their Chinese forms, as settings.c sets it once a disc is read */
+    ui__font_prefer_chinese(ui_get_language() == UI_LANG_ZH);
     {
         const IcoIsoImportTexts texts = {ui_str(UI_STR_ISO_NEED_SPACE),
                                          ui_str(UI_STR_ISO_COPY_FAILED)};
@@ -1565,7 +1571,9 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
         given != NULL ? (int)(given - ico_discs) : -1, have,
         last_disc() != NULL ? (int)(last_disc() - ico_discs) : -1, ICO_REGION_COUNT, &rule)];
     {
-        char there[64] = "";
+        /* every disc's id ("PROTO-20010806" the longest) with ", ": about 86
+           characters for all seven */
+        char there[160] = "";
 
         for (d = 0; d < ICO_REGION_COUNT; d++) {
             if (have & (1u << d)) {
