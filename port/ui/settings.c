@@ -64,6 +64,8 @@ extern void CUR_SE(void);        /* layout_action.c: the menus' sounds */
 extern void POSITIVE_SE(void);
 extern void NEGATIVE_SE(void);
 extern void la_host_leave(void); /* layout_action.c (ICO_HOST) */
+/* layout_action.c: what the pause menu's Back does before la_game_loop */
+extern void la_host_resume_play(void);
 /* fumi/sound/s_init.c: the PS2's stereo (0) or mono (1) output */
 extern int soundOutputModeGet(void);
 extern void soundOutputModeSet(int mode);
@@ -4823,6 +4825,25 @@ static int leaveTo(int pageId, int to)
     return to;
 }
 
+/* Options closes for the game's debug menu (Game variants > Debug menu),
+   what changed saved: from the title back to the title, the cursor on the
+   row that opened Options; from the pause menu into the game, as the pause
+   menu's Back does (la_game_pause: the sound resumed, la_game_loop) */
+static int closeForDebugMenu(void)
+{
+    ui_settings_save();
+    if (onTitle()) {
+        la_host_leave();
+        gameCursorOn(s_origin,
+                     s_entryRow[s_origin == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12]);
+        fprintf(stderr, "settings: Options closed for the Debug menu (to the title)\n");
+        return s_origin;
+    }
+    la_host_resume_play();
+    fprintf(stderr, "settings: Options closed for the Debug menu (back to the game)\n");
+    return ico_region_cur()->layout_play;
+}
+
 static int parentLayout(const Page *pg)
 {
     return pg->parent >= 0 ? s_pages[pg->parent].layout : s_origin;
@@ -5667,9 +5688,12 @@ static int settingsProc(int first, int item)
         }
         if ((flags & PAD_OK) && r->opt == UI_OPT_VAR_DEBUG_MENU) {
             /* Game variants > Debug menu: marks it used (achievements off)
-               and calls the hook that opens the game's menu */
+               and opens the game's menu (debug.c debug_MenuOpen); Options
+               closes so the menu has the pad */
             POSITIVE_SE();
-            ico_variants_debug_menu_pressed();
+            if (ico_variants_debug_menu_pressed()) {
+                return closeForDebugMenu();
+            }
         }
         if ((flags & PAD_OK) && r->opt == UI_OPT_REPORT_PICTURE) {
             POSITIVE_SE();
