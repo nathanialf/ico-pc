@@ -147,7 +147,9 @@ uint32_t rd__replay_msaa_want(void);
  * rd__msaa_resolve: one pass of msaa_resolve_ps into SCENE's (ts) colour and
  * depth (DONT_CARE loads, the stencil loaded and kept) from SCENE_MS's
  * colour and depth (samples each, put in SHADER_READ), the covered-majority
- * rule against clearDepth when hasClear (else off, a line once a run).
+ * rule against clearDepth when hasClear (else off, a line once a run);
+ * false, with nothing recorded and a line once, when its pipeline or its
+ * texture group cannot be made (the caller resolves another way).
  * rd__msaa_close_note: where the epoch closed (the list in force, or the
  * replay's end), its line once a list and cause; returns
  * RdPerfRecord.msaaCloseAt's value */
@@ -159,7 +161,7 @@ enum {
     RD_MSAA_CLOSE_COUNT
 };
 
-void rd__msaa_resolve(RhiCommandList cl, RdTargetRec *ts, RhiTexture color, RhiState *colorState,
+bool rd__msaa_resolve(RhiCommandList cl, RdTargetRec *ts, RhiTexture color, RhiState *colorState,
                       RhiTexture depth, RhiState *depthState, uint32_t samples, bool hasClear,
                       float clearDepth);
 uint8_t rd__msaa_close_note(int cause);
